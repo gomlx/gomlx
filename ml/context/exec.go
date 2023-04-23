@@ -1,0 +1,501 @@
+/*
+ *	Copyright 2023 Jan Pfeifer
+ *
+ *	Licensed under the Apache License, Version 2.0 (the "License");
+ *	you may not use this file except in compliance with the License.
+ *	You may obtain a copy of the License at
+ *
+ *	http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *	Unless required by applicable law or agreed to in writing, software
+ *	distributed under the License is distributed on an "AS IS" BASIS,
+ *	WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *	See the License for the specific language governing permissions and
+ *	limitations under the License.
+ */
+
+package context
+
+import (
+	"fmt"
+	"github.com/pkg/errors"
+	"github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/types/tensor"
+	"log"
+	"reflect"
+	"runtime"
+	"sync"
+)
+
+// ContextExecGraphFn is a type parameter for accepted function types for NewExec constructor.
+type ContextExecGraphFn interface {
+	// With 0 outputs (when only used for the side effects like updating variables):
+	func(*Context, *Node) |
+		func(*Context, *Node, *Node) |
+		func(*Context, *Node, *Node, *Node) |
+		func(*Context, *Node, *Node, *Node, *Node) |
+		func(*Context, *Node, *Node, *Node, *Node, *Node) |
+		func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) |
+
+		// With 1 output:
+		func(*Context, *Node) *Node | func(*Context, *Node, *Node) *Node |
+		func(*Context, *Node, *Node, *Node) *Node |
+		func(*Context, *Node, *Node, *Node, *Node) *Node |
+		func(*Context, *Node, *Node, *Node, *Node, *Node) *Node |
+		func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) *Node |
+
+		// With 2 outputs:
+		func(*Context, *Node) (*Node, *Node) | func(*Context, *Node, *Node) (*Node, *Node) |
+		func(*Context, *Node, *Node, *Node) (*Node, *Node) |
+		func(*Context, *Node, *Node, *Node, *Node) (*Node, *Node) |
+		func(*Context, *Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
+		func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
+
+		// With 3 outputs:
+		func(*Context, *Node) (*Node, *Node, *Node) |
+		func(*Context, *Node, *Node) (*Node, *Node, *Node) |
+		func(*Context, *Node, *Node, *Node) (*Node, *Node, *Node) |
+		func(*Context, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
+		func(*Context, *Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
+		func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
+
+		// With a slice of nodes as output:
+		func(*Context, *Node) []*Node | func(*Context, *Node, *Node) []*Node |
+		func(*Context, *Node, *Node, *Node) []*Node |
+		func(*Context, *Node, *Node, *Node, *Node) []*Node |
+		func(*Context, *Node, *Node, *Node, *Node, *Node) []*Node |
+		func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) []*Node |
+
+		// Taking a slice of *Node in the input:
+		func(*Context, []*Node) |
+		func(*Context, []*Node) *Node |
+		func(*Context, []*Node) (*Node, *Node) |
+		func(*Context, []*Node) (*Node, *Node, *Node) |
+		func(*Context, []*Node) []*Node |
+
+		// Taking no Node, but just the Graph as input:
+		func(*Context, *Graph) |
+		func(*Context, *Graph) *Node |
+		func(*Context, *Graph) (*Node, *Node) |
+		func(*Context, *Graph) (*Node, *Node, *Node) |
+		func(*Context, *Graph) []*Node
+}
+
+// Exec creates and executes computation graphs that take as input a
+// Context as needed based on the inputs shapes, to allow the function
+// to access (both read and set) variables and everything in the Context.
+// Otherwise very similar to graph.Exec.
+//
+// It simplifies the process of executing a graph building
+// function with real values.
+//
+// For example, assume you wrote:
+//
+//	def LogitsGraph(ctx *context.Context, inputs *Node) *Node {
+//	    logits := layers.Dense(ctx.In("dense0", inputs, 5))
+//		logits = layers.Dense(ctx.In("dense1", logits, 5))
+//		logits = Sigmoid(logits)
+//		return logits
+//	}
+//
+// And then with Exec one can do:
+//
+//	 ctx := context.NewContext(manager)
+//		var logitsFn = context.NewExec(manager, ctx, LogitsGraph)
+//		batch := [][]float32{ {1, 2, 3}, {4, 5, 6} } // 2 examples with 3 features (shape=[2,3])
+//		fmt.Printf("Logits(%v) = %v\n", batch, logitsFn.Call(batch)[0].Value())
+//
+// Call method always outputs a slice with all the outputs, even when there are no outputs (in
+// which case it returns nil). Call takes as input the materialized values (tensors) you want
+// to execute the graph with -- you don't need to path the *Context of *Graph to Call, those
+// are filled automatically by Exec.
+//
+// Notice ctxGraphFn, the function that builds the computation graph, is only called the
+// first time Call is used -- so it's slower the first time, since it has to compile the graph.
+// After that the execution is much faster. But that means that changes to Context.SetParams()
+// or Context.SetGraphParams() after the frist execution will not have any effect.
+//
+// Exec also manages updates to variables automatically. Example: we implement a counter,
+// which takes no input values (just the *Graph object), it just creates a variable
+// if not there yet, increments it and returns its value.
+//
+// ```
+//
+//	 ctx := context.NewContext(manager)
+//	 counter := context.NewExec(manager, ctx, func(ctx *context.Context, g *Graph) *Node {
+//		  dtype := types.Int64
+//		  counterVar := ctx.WithInitializer(initializers.Zeros).VariableWithShape("counter", types.MakeShape(dtype))
+//		  counterNode := counterVar.ValueGraph(graph)
+//		  counterNode = Add(counterNode, OnesLike(counterNode))
+//		  counterVar.SetValueGraph(counterNode)
+//		  return counterNode
+//		})
+//	 fmt.Printf("%s\n", counter.Call()[0])  // == 1
+//	 fmt.Printf("%s\n", counter.Call()[0])  // == 2
+//	 fmt.Printf("%s\n", ctx.InspectVariable(ctx.Scope(), "counter").Value())  // == 2
+//
+// ```
+//
+// Behind the scenes it automatically adds the used variables (Variable.ValueGraph)
+// as side inputs, and the updated variables (Variable.SetValueGraph) as extra
+// outputs of the graph, and during the graph execution it automatically
+// use these values to update the materialized variable values in Context variables.
+// It will also automatically initialize Context variables when needed.
+//
+// Notice, like with graph.Exec, the need to build different graphs for different
+// shapes can be expensive when sizes of the inputs varies a lot. The usual solution
+// is to use shapes with size in a power scale (for instance powers of 2) and masking
+// of tensors for unused slices. For safety concerns there are a maximum number of different
+// instantiations of the graph. It can be set or disabled with SetMaxCache.
+//
+// Errors in Call are returned inside the returned tensors.
+//
+// There is concurrency safety with the cache of Graphs, but XLA concurrency is
+// not documented. TODO: figure it out.
+type Exec struct {
+	manager *graph.Manager
+	context *Context
+	exec    *graph.Exec
+
+	// Original function that takes ctx and the converted closure
+	// that only takes *Node as input.
+	ctxGraphFn, graphFn                       any
+	inputIsGraph, inputAsSlice, outputAsSlice bool
+
+	// changedVars is map of the GraphId of the graphs built to their list
+	// of modified variables: we assume that building the graph for different
+	// shapes may
+	changedVars   map[graph.GraphId][]*Variable
+	muChangedVars sync.Mutex
+}
+
+// NewExecAny constructs an Exec object that uses the given ctxGraphFn to build
+// computation graphs with a Context. ctxGraphFn must take a *Context input
+// parameter followed by one or more *Node parameters as input and return one
+// or more *Node. Alternatively it can, instead of *Node inputs, take a *Graph
+// object -- if effectively no tensors will be used as input.
+//
+// The Context ctx passed will be passed to all computation graph construction calls
+// (ctxGraphFn), as well as during the graph execution later. If set to nil, it automatically
+// creates a new one.
+//
+// Before the execution of a graph, if needed, it initializes the variables in the context. And
+// updated variables in the graph are updated also during execution. More details see
+// Exec.
+//
+// If any input or output parameter of ctxGraphFn is not a *Node (except the *Context and optionally
+// a *Graph), or if there are no inputs or outputs, it returns an error.
+func NewExecAny(manager *Manager, ctx *Context, ctxGraphFn any) (*Exec, error) {
+	if ctx == nil {
+		ctx = NewContext(manager)
+	}
+	e := &Exec{
+		manager:     manager,
+		context:     ctx,
+		ctxGraphFn:  ctxGraphFn,
+		changedVars: make(map[graph.GraphId][]*Variable),
+	}
+	ctxGraphFnT := reflect.TypeOf(ctxGraphFn)
+	if ctxGraphFnT.Kind() != reflect.Func {
+		return nil, errors.Errorf("ctxGraphFn must be a function")
+	}
+	var node *Node
+	nodeType := reflect.TypeOf(node)
+	contextType := reflect.TypeOf(ctx)
+	var tmpGraph *Graph
+	graphType := reflect.TypeOf(tmpGraph)
+
+	// Must have at least 2 arguments, and the first must be of type *Context.
+	if ctxGraphFnT.NumIn() < 2 {
+		return nil, errors.Errorf("at least *Context and one input argument required")
+	}
+	if ctxGraphFnT.In(0) != contextType {
+		return nil, errors.Errorf("the first argument for ctxGraphFn must be a *Context, got %s instead", ctxGraphFnT.In(0))
+	}
+
+	// Check other arguments.
+	for ii := 1; ii < ctxGraphFnT.NumIn(); ii++ {
+		if ctxGraphFnT.In(ii).Kind() == reflect.Slice && ctxGraphFnT.In(ii).Elem() == nodeType {
+			// Case 1: []*Node
+			if ctxGraphFnT.NumIn() != 2 {
+				return nil, errors.Errorf("[]*Node parameters are only accepted if they are the only input besides the Context, got function type %s instead", ctxGraphFnT)
+			}
+			e.inputAsSlice = true
+			break
+		}
+		if ctxGraphFnT.In(ii) == graphType {
+			// Case 2: *Graph
+			if ctxGraphFnT.NumIn() != 2 {
+				return nil, errors.Errorf("*Graph argument is only accepted if it is the only input besides the Context, got function type %s instead", ctxGraphFnT)
+			}
+			e.inputIsGraph = true
+			break
+		}
+		if ctxGraphFnT.In(ii) != nodeType {
+			return nil, errors.Errorf("input parameter %d is not of type *Node", ii)
+		}
+	}
+	for ii := 0; ii < ctxGraphFnT.NumOut(); ii++ {
+		if ctxGraphFnT.Out(ii).Kind() == reflect.Slice && ctxGraphFnT.Out(ii).Elem() == nodeType {
+			if ctxGraphFnT.NumOut() != 1 {
+				return nil, errors.Errorf("[]*Node parameters are only accepted as output if they are the only output, got function type %s instead", ctxGraphFnT)
+			}
+			e.outputAsSlice = true
+			break
+		}
+		if ctxGraphFnT.Out(ii) != nodeType {
+			return nil, errors.Errorf("output parameter %d is not of type *Node", ii)
+		}
+	}
+
+	e.buildGraphFn()
+	var err error
+	e.exec, err = graph.NewExecAny(manager, e.graphFn)
+	if err != nil {
+		return nil, err
+	}
+	funcName := runtime.FuncForPC(reflect.ValueOf(ctxGraphFn).Pointer()).Name()
+	e.exec.SetName(fmt.Sprintf("Context.Exec:%s", funcName))
+	e.exec.SetSideParamsHook(e.setSideParams)
+	return e, nil
+}
+
+// buildGraphFn constructs a function graphFn that can be passed to the wrapped Exec.
+// This function is a closure that will call the ctxGraphFn provided by the user with the
+// extra *context.Context argument, plus it prepends the output with the updated values --
+// so it can behind the scenes update the variables to the user.
+func (e *Exec) buildGraphFn() {
+	ctxGraphFnT := reflect.TypeOf(e.ctxGraphFn)
+	numIn := ctxGraphFnT.NumIn() - 1
+	var node *Node
+	nodeT := reflect.TypeOf(node)
+	var nodeSlice []*Node
+	nodeSliceT := reflect.TypeOf(nodeSlice)
+	var tmpGraph *Graph
+	graphT := reflect.TypeOf(tmpGraph)
+
+	// Build input types for new graphFn: same as ctxGraphFn, but without the Context.
+	var inT []reflect.Type
+	if e.inputIsGraph {
+		// Only input is a graph.
+		inT = []reflect.Type{graphT}
+	} else if e.inputAsSlice {
+		// Only input is a []*Node.
+		inT = []reflect.Type{nodeSliceT}
+	} else {
+		inT = make([]reflect.Type, numIn)
+		for ii := 0; ii < numIn; ii++ {
+			inT[ii] = nodeT
+		}
+	}
+
+	// Output types for new graphFn: it is converted to a []*Node, because we will prepend
+	// the changes of variables as extra outputs.
+	outT := []reflect.Type{nodeSliceT}
+
+	// Builds function that will be called without Context, by computation.Exec. It will take as
+	// input a slice of *Node (or only a *computation.Graph), and as output also a slice of *Node.
+	graphFnT := reflect.FuncOf(inT, outT, false)
+	e.graphFn = reflect.MakeFunc(graphFnT, func(args []reflect.Value) (results []reflect.Value) {
+		// Inputs for the original ctxGraphFn: we prepend the context to the arguments.
+		argsWithContext := make([]reflect.Value, len(args)+1)
+		argsWithContext[0] = reflect.ValueOf(e.context)
+		copy(argsWithContext[1:], args)
+
+		// Call ctxGraphFn, results will be a slice of *Node.
+		ctxGraphFnResults := reflect.ValueOf(e.ctxGraphFn).Call(argsWithContext)
+
+		// Find the graph.
+		var g *Graph
+		if e.inputIsGraph {
+			g = args[0].Interface().(*Graph)
+		} else if e.inputAsSlice {
+			nodes := args[0].Interface().([]*Node)
+			g = nodes[0].Graph()
+		} else {
+			node := args[0].Interface().(*Node)
+			g = node.Graph()
+		}
+		graphId := g.GraphId()
+
+		// Find variables that were changed, and their updated graph values (*Node).
+		var changedVars []*Variable
+		var allValues []*Node
+		e.context.EnumerateVariables(func(v *Variable) {
+			if v.ChangedInGraph(g) {
+				changedVars = append(changedVars, v)
+				allValues = append(allValues, v.ValueGraph(g))
+			}
+		})
+		{
+			// Save list of variables changed.
+			e.muChangedVars.Lock()
+			e.changedVars[graphId] = changedVars
+			e.muChangedVars.Unlock()
+		}
+		// Append ctxGraphFnResults to allValues.
+		if e.outputAsSlice {
+			// cxtGraphResults returns one value, a []*Node, easy to append.
+			allValues = append(allValues, ctxGraphFnResults[0].Interface().([]*Node)...)
+		} else {
+			// Append one result at a time (it's ok if there are no results).
+			for _, r := range ctxGraphFnResults {
+				allValues = append(allValues, r.Interface().(*Node))
+			}
+		}
+
+		// results will be a []*Node, which will hold all the values.
+		results = []reflect.Value{reflect.ValueOf(allValues)}
+
+		// Mark context for reuse, after the first time it is used.
+		if !e.context.reuse {
+			e.context = e.context.Reuse()
+		}
+		return
+	}).Interface()
+}
+
+// Finalize clears the cache, finalizing the graphs. The Exec object shouldn't be
+// used after that.
+func (e *Exec) Finalize() {
+	e.exec.Finalize()
+}
+
+// setSideParams is used by computation.Exec.SetSideParamsHook to set up
+// the variable values as parameters just before graph execution.
+func (e *Exec) setSideParams(graph *Graph, tensors []*tensor.Device) {
+	// Initialize variables if needed.
+	if e.context.NeedsInitialization() {
+		e.context.InitializeVariables()
+	}
+	e.context.execPopulateGraphParamsSlice(graph, tensors)
+}
+
+// SetNodeLogger with the function to be called for the nodes
+// marked for logging during execution. If set to nil
+// nothing will be logged.
+func (e *Exec) SetNodeLogger(loggerFn graph.LoggerFn) {
+	e.exec.SetNodeLogger(loggerFn)
+}
+
+// GetNodeLogger returns the currently registered LoggerFn.
+func (e *Exec) GetNodeLogger() graph.LoggerFn {
+	return e.exec.GetNodeLogger()
+}
+
+// NewExec constructs an Exec object that uses the given ctxGraphFn to build
+// computation graphs with a Context. ctxGraphFn must take a *Context input
+// parameter followed by one or more *Node parameters as input and return one
+// or more *Node.
+//
+// The Context ctx passed will be passed to all computation graph construction calls
+// (ctxGraphFn), as well as during the graph execution later. If set to nil, it automatically
+// creates a new one.
+//
+// Before the execution of a graph, if needed, it initializes the variables in the context.
+//
+// This is a generic wrapper around NewExecAny that check that types are
+// correct (but doesn't support all possible types of ctxGraphFn).
+func NewExec[F ContextExecGraphFn](manager *Manager, ctx *Context, ctxGraphFn F) *Exec {
+	e, err := NewExecAny(manager, ctx, ctxGraphFn)
+	if err != nil {
+		log.Fatalf("Failed to create Exec object: %+v", err)
+	}
+	return e
+}
+
+// InDevice sets the device num to be used by graphs constructed by Exec.
+// This should be called before any invocations of Call().
+// It returns a reference to itself so calls can be cascaded.
+func (e *Exec) InDevice(deviceNum int) *Exec {
+	e.exec.InDevice(deviceNum)
+	return e
+}
+
+// WithName sets the name of Exec, used to provide the name to graphs created.
+// This should be called before any invocations of Call().
+// It returns a reference to itself so calls can be cascaded.
+func (e *Exec) WithName(name string) *Exec {
+	e.exec.SetName(name)
+	return e
+}
+
+// Name returns the Exec name, a string used as prefix for Graph construction.
+func (e *Exec) Name() string {
+	return e.exec.Name()
+}
+
+// SetMaxCache sets the maximum size of the cache.
+// Set it to -1 to have unlimited cache size.
+// It returns a reference to itself so calls can be cascaded.
+func (e *Exec) SetMaxCache(maxCacheSize int) *Exec {
+	e.exec.SetMaxCache(maxCacheSize)
+	return e
+}
+
+// Context returns the associated Context object, usually created
+// during the creation of the Exec object. It can be set to something
+// different with SetContext().
+func (e *Exec) Context() *Context {
+	return e.context
+}
+
+// SetContext associates the given Context to the Exec object. Should
+// be called before the first Call is made.
+// Notice that only after the first time context is used to build a graph,
+// it is set to Reuse. If the Context variables were already created,
+// it should be marked with Context.Reuse.
+// It returns a reference to itself so calls can be cascaded.
+func (e *Exec) SetContext(context *Context) *Exec {
+	e.context = context
+	return e
+}
+
+// Call parses the arguments into tensors (if they are not yet) and executes
+// the graph corresponding to the shapes of the arguments.
+//
+// Notice Context shouldn't be passed by Call, it will use automatically the context
+// stored in context.Exec -- you can change it with SetContext.
+//
+// If a graph does not yet exist one is created, compiled and cached for the shapes.
+// It passes the context to the registered ctxGraphFn. After the very first invocation of Call
+// the context is marked as Context.Reuse().
+//
+// It returns the outputs in a slice, even if there is only one output.
+func (e *Exec) Call(args ...any) []tensor.Tensor {
+	outputs, _ := e.CallWithGraph(args...)
+	return outputs
+}
+
+// CallWithGraph is similar to Call, but it also returns the computation graph used
+// in the call. Since Exec creates different computation graphs for different set of
+// parameters, this can help disambiguate in case the user needs to use the Graph for
+// something else.
+//
+// Notice the returned *Graph may be nil, if it failed to parse the arguments and find
+// the corresponding computation graph.
+func (e *Exec) CallWithGraph(args ...any) ([]tensor.Tensor, *Graph) {
+	outputs, g := e.exec.CallWithGraph(args...)
+	if g == nil {
+		// Error during execution, it will be set in all outputs, return as is.
+		return outputs, nil
+	}
+	if !g.Ok() {
+		return outputs, g
+	}
+	if len(outputs) == 0 {
+		g.SetErrorf("No outputs from ModelFn function for %q", e.Name())
+		return outputs, g
+	}
+
+	// Separate the changed variables new values and set the variables accordingly.
+	e.muChangedVars.Lock()
+	changedVars := e.changedVars[g.GraphId()]
+	e.muChangedVars.Unlock()
+	//fmt.Printf("%d outputs, %d variables\n", len(outputs), len(changedVars))
+	for ii, v := range changedVars {
+		//fmt.Printf("\t%s: %d\n", v.ParameterName(), ii)
+		v.SetValue(outputs[ii])
+	}
+	return outputs[len(changedVars):], g
+}

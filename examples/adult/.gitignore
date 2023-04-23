@@ -1,0 +1,7 @@
+adult.data
+adult.test
+*.png
+*.tsv
+
+# Checkpoint directories
+model_*

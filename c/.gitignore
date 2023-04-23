@@ -1,0 +1,12 @@
+bazel-bin
+bazel-c
+bazel-out
+bazel-mnt
+bazel-testlogs
+
+# openxla_xla_bazelrc is pulled automatically the first time.
+openxla_xla_bazelrc
+openxla_xla_bazelrc.version
+
+# Local temporary files.
+.cache

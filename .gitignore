@@ -1,0 +1,21 @@
+# GoLand IDE
+.idea
+
+# Python tests
+venv
+
+# Go files for development / debugging.
+go.work
+go.work.sum
+*.test
+
+# Jupyter tmp files
+.ipynb_checkpoints
+Untitled.ipynb
+
+# Links to C-generated code.
+bazel-bin
+bazel-c
+bazel-out
+bazel-mnt
+bazel-testlogs

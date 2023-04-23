@@ -1,0 +1,397 @@
+/*
+ *	Copyright 2023 Jan Pfeifer
+ *
+ *	Licensed under the Apache License, Version 2.0 (the "License");
+ *	you may not use this file except in compliance with the License.
+ *	You may obtain a copy of the License at
+ *
+ *	http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *	Unless required by applicable law or agreed to in writing, software
+ *	distributed under the License is distributed on an "AS IS" BASIS,
+ *	WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *	See the License for the specific language governing permissions and
+ *	limitations under the License.
+ */
+
+package graph
+
+import (
+	"github.com/gomlx/gomlx/types/shapes"
+)
+
+// This file contains derived practical calculations that often used.
+
+// Scalar returns a constant scalar with the given value.
+func Scalar(g *Graph, dtype shapes.DType, value float64) *Node {
+	if !g.Ok() {
+		return g.InvalidNode()
+	}
+	return Const(g, shapes.CastAsDType(value, dtype))
+}
+
+// ScalarZero returns a scalar constant 0 for the given DType.
+func ScalarZero(g *Graph, dtype shapes.DType) *Node {
+	return Scalar(g, dtype, 0)
+}
+
+// ScalarOne returns a scalar constant 1 for the given DType.
+func ScalarOne(g *Graph, dtype shapes.DType) *Node {
+	return Scalar(g, dtype, 1)
+}
+
+// MulScalar converts scalar to a constant with x's DType and returns `x * scalar`
+// with proper broadcasting.
+func MulScalar(x *Node, scalar float64) *Node {
+	g := x.Graph()
+	if !g.Ok() {
+		return g.InvalidNode()
+	}
+	return Mul(x, Scalar(g, x.DType(), scalar))
+}
+
+// Square returns x^2 point-wise. Same as `Mul(x, x)`.
+func Square(x *Node) *Node {
+	return Mul(x, x)
+}
+
+// AddScalar converts scalar to a constant with x's DType and returns `x + scalar`
+// with proper broadcasting.
+func AddScalar(x *Node, scalar float64) *Node {
+	g := x.Graph()
+	if !g.Ok() {
+		return g.InvalidNode()
+	}
+	return Add(Const(g, shapes.CastAsDType(scalar, x.DType())), x)
+}
+
+func lowestForDType(g *Graph, dtype shapes.DType) *Node {
+	return Const(g, shapes.LowestValueForDType(dtype))
+}
+
+// OnesLike returns a tensor with the same shape of x, filled with 1's.
+func OnesLike(x *Node) *Node {
+	if !x.Ok() || !x.Graph().Ok() {
+		return x.Graph().InvalidNode()
+	}
+	return Ones(x.Graph(), x.Shape())
+}
+
+// Ones creates a computation with the same shape as the input, but with the value 1.
+// It's implemented indirectly using other nodes.
+func Ones(g *Graph, shape shapes.Shape) *Node {
+	if !g.Ok() {
+		return g.InvalidNode()
+	}
+	scalar := ScalarOne(g, shape.DType)
+	if scalar == nil {
+		return nil
+	}
+	return BroadcastPrefix(scalar, shape.Dimensions)
+}
+
+// ZerosLike returns a tensor with the same shape of x, filled with 0's.
+func ZerosLike(x *Node) *Node {
+	if !x.Ok() || !x.Graph().Ok() {
+		return x.Graph().InvalidNode()
+	}
+	return Zeros(x.Graph(), x.Shape())
+}
+
+// Zeros creates a computation with the same shape as the input, but with the value 0.
+// It's implemented indirectly using other nodes.
+func Zeros(g *Graph, shape shapes.Shape) *Node {
+	if !g.Ok() {
+		return g.InvalidNode()
+	}
+	return BroadcastPrefix(ScalarZero(g, shape.DType), shape.Dimensions)
+}
+
+// OneMinus returns (1-x).
+func OneMinus(x *Node) *Node {
+	g := x.Graph()
+	if !g.Ok() || !x.Ok() {
+		return g.InvalidNode()
+	}
+	return Sub(ScalarOne(g, x.DType()), x)
+}
+
+// MinusOne returns (x-1).
+func MinusOne(x *Node) *Node {
+	g := x.Graph()
+	if !g.Ok() || !x.Ok() {
+		return g.InvalidNode()
+	}
+	return Sub(x, ScalarOne(g, x.DType()))
+}
+
+// OnePlus returns (1+x).
+func OnePlus(x *Node) *Node {
+	g := x.Graph()
+	if !g.Ok() || !x.Ok() {
+		return g.InvalidNode()
+	}
+	return Add(ScalarOne(g, x.DType()), x)
+}
+
+// Inverse returns (1/x).
+func Inverse(x *Node) *Node {
+	g := x.Graph()
+	if !g.Ok() || !x.Ok() {
+		return g.InvalidNode()
+	}
+	return Div(ScalarOne(g, x.DType()), x)
+}
+
+// SignPlusOrMinus return +1 or -1 whether x >= 0 or x < 0. It's similar to Sign, but
+// where 0s are considered positive.
+func SignPlusOrMinus(x *Node) *Node {
+	g := x.Graph()
+	if !g.Ok() || !x.Ok() {
+		return g.InvalidNode()
+	}
+	half := Const(g, shapes.CastAsDType(0.5, x.shape.DType))
+	return Sign(Add(Sign(x), half))
+}
+
+// PositiveIndicator returns 1 where x >= 0, 0 otherwise. See also StrictlyPositiveIndicator.
+// E.g: PositiveIndicator({1.0, 0.0001, 0, -0.2, -3.0}) -> [1, 1, 1, 0, 0], with the same shape/dtype as x.
+func PositiveIndicator(x *Node) *Node {
+	g := x.Graph()
+	if !g.Ok() || !x.Ok() {
+		return g.InvalidNode()
+	}
+	one := ScalarOne(g, x.DType())
+	return Sign(Add(Sign(x), one))
+}
+
+// StrictlyPositiveIndicator returns 1 where x > 0, 0 otherwise.
+// E.g: StrictlyPositiveIndicator({1.0, 0.0001, 0, -0.2, -3.0}) -> [1, 1, 0, 0, 0], with the same shape/dtype as x.
+func StrictlyPositiveIndicator(x *Node) *Node {
+	g := x.Graph()
+	if !g.Ok() || !x.Ok() {
+		return g.InvalidNode()
+	}
+	one := ScalarOne(g, x.DType())
+	return Add(Sign(Sub(Sign(x), one)), one)
+}
+
+// Clip is a short cut to `Min(max, Max(x, min))`, which returns the values of x cliped between
+// min and max.
+func Clip(x, min, max *Node) *Node {
+	return Min(max, Max(x, min))
+}
+
+// OneHot converts an integer numbers representing indices to it's "one-hot" representation, that is an expanded
+// tensor with the indices position set to 1, and the other positions set to 0. The returned tensor has one extra
+// dimension at the end.
+// For example `OneHot([][]INT64{1, 0, 3}, 4, types.Float32)` returns  `[][]F32{{0, 1, 0, 0}, {1, 0, 0, 0}, {0, 0, 0, 1}}`
+// TODO: implement with Select once it's implemented, since it's likely going to be faster (TensorFlow uses that).
+func OneHot(indices *Node, depth int, dtype shapes.DType) *Node {
+	g := indices.Graph()
+	if !g.Ok() || !indices.Ok() {
+		return g.InvalidNode()
+	}
+	if !indices.shape.DType.IsInt() {
+		g.SetErrorf("invalid indices dtype (%s), it must be integer", indices.shape.DType)
+		return g.InvalidNode()
+	}
+
+	// Add an expanded dimension at the end, which will contain the one-hot representation.
+	indices = ExpandDims(indices, -1)
+
+	// The target shape will expand the indices dimension (last/innermost one) to depth.
+	targetShape := indices.shape.Copy()
+	targetShape.Dimensions[targetShape.Rank()-1] = depth
+	targetShape.DType = dtype
+
+	// scatterIndices must create the full indices (for all dimensions, not only for the last being set to 1).
+	// * Create one sub-id per leading dimension on indices.
+	// * ConcatenateDimensions them, along with the indices themselves (the last dimension).
+	// * Flatten them.
+	parts := make([]*Node, 0, indices.shape.Rank())
+	for dimIdx := 0; dimIdx < indices.shape.Rank()-1; dimIdx++ {
+		parts = append(parts, Iota(g, indices.shape, dimIdx))
+	}
+	parts = append(parts, indices)
+	scatterIndices := Concatenate(parts, -1)
+	scatterIndices = Reshape(scatterIndices, indices.shape.Size(), indices.shape.Rank())
+	ones := Ones(g, shapes.Make(dtype, indices.shape.Size()))
+	return Scatter(scatterIndices, ones, targetShape)
+
+	//// ones will have the same shape as the sindices, but with the dtype set to the desired type.
+	//onesShape := indices.shape.Copy()
+	//onesShape.DType = dtype
+	//ones := Ones(g, onesShape)
+	//return Scatter(indices, ones, targetShape)
+}
+
+// ReduceAndKeep applies the given reduction function but regenerate the reduced dimensions with size 1.
+func ReduceAndKeep(x *Node, reduceFn func(x *Node, reduceAxes ...int) *Node, reduceAxes ...int) *Node {
+	g := x.Graph()
+	if !g.Ok() || !x.Ok() {
+		return g.InvalidNode()
+	}
+	rank := x.Rank()
+	reduceAxes = convertNegativeDimensionsAndSort(rank, reduceAxes)
+	reduced := reduceFn(x, reduceAxes...)
+	shapeWithRecoveredDims := x.Shape().Copy()
+	for ii := 0; ii < rank && len(reduceAxes) > 0; ii++ {
+		if ii == reduceAxes[0] {
+			shapeWithRecoveredDims.Dimensions[ii] = 1
+			reduceAxes = reduceAxes[1:]
+		}
+	}
+	return Reshape(reduced, shapeWithRecoveredDims.Dimensions...)
+}
+
+// ReduceAndKeepMasked applies the given masked reduction function but regenerates the reduced
+// dimensions with size 1.
+func ReduceAndKeepMasked(x, mask *Node, reduceFn func(x, mask *Node, reduceAxes ...int) *Node, reduceAxes ...int) *Node {
+	g := x.Graph()
+	if !g.Ok() || !x.Ok() {
+		return g.InvalidNode()
+	}
+	rank := x.Rank()
+	reduceAxes = convertNegativeDimensionsAndSort(rank, reduceAxes)
+	reduced := reduceFn(x, mask, reduceAxes...)
+	shapeWithRecoveredDims := x.Shape().Copy()
+	for ii := 0; ii < rank && len(reduceAxes) > 0; ii++ {
+		if ii == reduceAxes[0] {
+			shapeWithRecoveredDims.Dimensions[ii] = 1
+			reduceAxes = reduceAxes[1:]
+		}
+	}
+	return Reshape(reduced, shapeWithRecoveredDims.Dimensions...)
+}
+
+// Softmax computes softmax activations. It's the equivalent to
+// ```
+//
+//	Exp(logits) / ExpandDims(ReduceSum(Exp(logits), -1), -1)
+//
+// ```
+//
+// But implemented in a numerical stable way.
+//
+// The list axes defines which axes is it supposed to run the softmax over
+// (the axes that will be summed over). If no axes are given, it is assumed to
+// be [-1], meaning, the last axes.
+func Softmax(logits *Node, axes ...int) *Node {
+	g := logits.Graph()
+	if !g.Ok() || !logits.Ok() {
+		return g.InvalidNode()
+	}
+	if !logits.shape.DType.IsFloat() {
+		g.SetErrorf("invalid logits dtype (%s), it must be float", logits.shape.DType)
+		return g.InvalidNode()
+	}
+	if len(axes) == 0 {
+		axes = []int{-1}
+	}
+	max := StopGradient(ReduceAndKeep(logits, ReduceMax, axes...))
+	normalizedLogits := Sub(logits, max)
+	numerator := Exp(normalizedLogits)
+	denominator := ReduceAndKeep(numerator, ReduceSum, axes...)
+	return Div(numerator, denominator)
+}
+
+// MaskedSoftmax computes softmax activations. It's the equivalent to
+// ```
+//
+//	Exp(logits) / ExpandDims(ReduceSum(Exp(logits), -1), -1)
+//
+// ```
+//
+// But implemented in a numerical stable way.
+//
+// The list axes defines which axes is it supposed to run the softmax over
+// (the axes that will be summed over). If no axes are given, it is assumed to
+// be [-1], meaning, the last axes.
+//
+// It ignores values for which the corresponding mask is false, and will return 0 for
+// those fields. mask and logits must have the same shape.
+func MaskedSoftmax(logits, mask *Node, axes ...int) *Node {
+	g := logits.Graph()
+	if !g.Ok() || !logits.Ok() {
+		return g.InvalidNode()
+	}
+	if !logits.shape.DType.IsFloat() {
+		g.SetErrorf("invalid logits dtype (%s), it must be float", logits.shape.DType)
+		return g.InvalidNode()
+	}
+	if len(axes) == 0 {
+		axes = []int{-1}
+	}
+	max := StopGradient(ReduceAndKeepMasked(logits, mask, ReduceMaskedMax, axes...))
+	zeros := ZerosLike(logits)
+	normalizedLogits := Sub(logits, max)
+	normalizedLogits = Where(mask, normalizedLogits, zeros)
+	numerator := Exp(normalizedLogits)
+	numerator = Where(mask, numerator, zeros)
+	// Apply mask on numerator, setting softmax to zero where masked.
+	denominator := ReduceAndKeep(numerator, ReduceSum, axes...)
+	result := Div(numerator, denominator)
+	result = Where(mask, result, zeros)
+	return result
+}
+
+// L1Norm returns the L1 norm.
+func L1Norm(x *Node) *Node {
+	return ReduceAllSum(Abs(x))
+}
+
+// L2Norm returns the L2 Norm (same as euclidean length) of x, given by Sqrt(\Sum{x_i^2}).
+func L2Norm(x *Node) *Node {
+	return Sqrt(ReduceAllSum(Mul(x, x)))
+}
+
+// LowerTriangular returns a lower-triangular boolean square matrix of shape `[dim, dim]`.
+//
+// This can be combined with `Where` to select values of any arbitrary other matrix.
+func LowerTriangular(g *Graph, dim int) *Node {
+	if !g.Ok() {
+		return g.InvalidNode()
+	}
+	shapeInt := shapes.Make(shapes.I64, dim, dim)
+	rows := Iota(g, shapeInt, 0)
+	cols := Iota(g, shapeInt, 1)
+	return LessOrEqual(cols, rows)
+}
+
+// UpperTriangular returns a upper-triangular boolean square matrix of shape `[dim, dim]`.
+//
+// This can be combined with `Where` to select values of any arbitrary other matrix.
+func UpperTriangular(g *Graph, dim int) *Node {
+	if !g.Ok() {
+		return g.InvalidNode()
+	}
+	shapeInt := shapes.Make(shapes.I64, dim, dim)
+	rows := Iota(g, shapeInt, 0)
+	cols := Iota(g, shapeInt, 1)
+	return GreaterOrEqual(cols, rows)
+}
+
+// Diagonal returns a diagonal boolean square matrix of shape `[dim, dim]`.
+//
+// This can be combined with `Where` to select values of any arbitrary other matrix.
+func Diagonal(g *Graph, dim int) *Node {
+	if !g.Ok() {
+		return g.InvalidNode()
+	}
+	shapeInt := shapes.Make(shapes.I64, dim, dim)
+	rows := Iota(g, shapeInt, 0)
+	cols := Iota(g, shapeInt, 1)
+	return Equal(cols, rows)
+}
+
+// DiagonalWithValue returns a diagonal matrix of shape `[dim, dim]` with
+// scalar in the diagonal and zero elsewhere.
+func DiagonalWithValue(scalar *Node, dim int) *Node {
+	g := scalar.Graph()
+	if !g.Ok() {
+		return g.InvalidNode()
+	}
+	matrix := BroadcastPrefix(scalar, []int{dim, dim})
+	return Where(Diagonal(g, dim), matrix, ZerosLike(matrix))
+}
