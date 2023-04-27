@@ -17,11 +17,12 @@
 package data
 
 import (
-	"github.com/stretchr/testify/require"
-	"github.com/gomlx/gomlx/types/tensor"
 	"io"
 	"sync/atomic"
 	"testing"
+
+	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/stretchr/testify/require"
 )
 
 type testDS struct {
@@ -35,12 +36,7 @@ var (
 func (ds *testDS) Name() string { return "testDS" }
 func (ds *testDS) Reset()       { ds.count.Store(0) }
 func (ds *testDS) Yield() (spec any, inputs []tensor.Tensor, labels []tensor.Tensor, err error) {
-	value := ds.count.Load()
-	if value >= testDSMaxValue {
-		err = io.EOF
-		return
-	}
-	value = ds.count.Add(1)
+	value := ds.count.Add(1)
 	if value > testDSMaxValue {
 		err = io.EOF
 		return
@@ -64,7 +60,7 @@ func TestNewParallelDataset(t *testing.T) {
 			require.Len(t, inputs, 1, "Expected Dataset to yield 1 input tensor")
 			count++
 		}
-		require.Equal(t, testDSMaxValue, count, "Number of yielded batches.")
+		require.Equalf(t, testDSMaxValue, count, "Number of yielded batches first loop, cacheSize=%d.", cacheSize)
 		count = 0
 		pDS.Reset()
 		for {
@@ -76,6 +72,6 @@ func TestNewParallelDataset(t *testing.T) {
 			require.Len(t, inputs, 1, "Expected Dataset to yield 1 input tensor")
 			count++
 		}
-		require.Equal(t, testDSMaxValue, count, "Number of yielded batches at second loop.")
+		require.Equal(t, testDSMaxValue, count, "Number of yielded batches at second loop, cacheSize=%d.", cacheSize)
 	}
 }
