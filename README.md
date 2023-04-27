@@ -75,11 +75,11 @@ And likely it would work in Macs --> contributions are very welcome, I don't hav
 
 ### Linux packages dependencies.
 
-The library depends on the following libraries:
+The library depends on the following libraries to compile and run:
 
 * `libunwind8`: usually available in most Linux systems.
 * `liblzma5`: compression library, also usually available.
-* TC Malloc, usually packaged as `libgoogle-perftools4`: fast malloc version, and memory debugging tools.
+* TC Malloc, usually packaged as `libgoogle-perftools-dev`: fast malloc version, and memory debugging tools.
 
 Typically, this can be installed with:
 
