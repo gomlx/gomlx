@@ -53,7 +53,9 @@ Likely it would work in Macs with some work --> contributions are very welcome, 
 
 ### Pre-built docker
 
-The easiest to start playing with it, it's just pulling the docker image that has GoMLX + [JupyterLab](https://jupyterlab.readthedocs.io/) + [GoNB](https://github.com/janpfeifer/gonb)(a Go kernel) pre-installed.
+The easiest to start playing with it, it's just pulling the docker image that has **GoMLX** + [JupyterLab](https://jupyterlab.readthedocs.io/) + [GoNB](https://github.com/janpfeifer/gonb) (a Go kernel for Jupyter) and 
+[NVidia's CUDA runtime](https://hub.docker.com/layers/nvidia/cuda/11.8.0-cudnn8-runtime-ubuntu22.04/images/sha256-08aed54a213b52e9cb658760b6d985db2f4c5f7e8f11ac45ec66b5c746237823?context=explore)
+(for optional support of GPU) pre-installed -- it is ~5Gb to download.
 
 From a directory you want to make visible in Jupyter, do:
 > For GPU support add the flag `--gpus all` to the `docker run` command bellow.
@@ -63,7 +65,7 @@ docker pull janpfeifer/gomlx_jupyterlab
 docker run -it --rm -p 8888:8888 -v "${PWD}":/home/gomlx/work janpfeifer/gomlx_jupyterlab:latest
 ```
 
-And then open your browser in the `localhost:8888` link it will display in the termianl -- it will include a secret token needed.
+It will display an URL starting with `127.0.0.1:8888` in the terminal (it will include a secret token needed) that you can open in your browser.
 
 You can open and interact with the tutorial from there, it is included in the docker under the directory `Projects/gomlx/examples/tutorial`.
 
@@ -118,7 +120,7 @@ not too hard to read (except the bindings to C/XLA, which were done very adhoc).
 
 Finally, feel free to ask questions: time allowing (when not in work) I'm always happy to help -- I created [groups.google.com/g/gomlx-discuss](https://groups.google.com/g/gomlx-discuss).
 
-## Long-term Goals_
+## Long-term Goals
 
 1. Building and training models in Go -- as opposed to Python (or some other language) -- with focus on:
    - Being simple to read and reason about, leading the user to a correct and transparent mental
@@ -130,25 +132,24 @@ Finally, feel free to ask questions: time allowing (when not in work) I'm always
      versions or something custom.
    - Up-to-date documentation: if the documentation is not there or if it's badly written, it's as 
      if the code was not there either.
-   - Clear and actuable error reporting: 
+   - Clear and actuable error reporting
+1. To be a productive research and educational platform to experiment with new ML ideas and learn.
+   - Support mirrored training on multiple devices and various forms of distributed training (model and/or data
+     parallelism) in particular to support for large language models and similarly large model training.
 1. To be a robust and reliable platform for production. Some sub-goals:
    - Support modern accelerator hardware like TPUs and GPUs.
    - Save models to industry tools like [TensorFlow Serving](https://www.tensorflow.org/tfx/guide/serving).
    - Import pre-trained models from
-     [Hugging Face Hub](https://huggingface.co/models) and [TensorFlow Hub](https://www.tensorflow.org/hub).
+     [Hugging Face Hub](https://huggingface.co/models) and [TensorFlow Hub](https://www.tensorflow.org/hub) where possible.
    - Compile models to binary as in C-libraries and/or WebAssembly, to be linked and consumed (inference) anywhere
      (any language).
-1. To be a productive research and educational platform to learn and try new ML ideas:
-   - As composable and decoupled as possible, to allow anything to be tweaked and replaced without much hassle.
-   - Simple to read and well documented for anyone wanting to see how things are done. 
-   - Support mirrored training on multiple devices and various forms of distributed training (model and/or data
-     parallelism) in particular to support for large language models and similarly large model training.
 
 ## Collaborating
 
 The project is looking forward contributions for anyone interested. Many parts are not yet set 
 in stone, so there is plenty of space for improvements and re-designs for those interested
-and with good experience in Go, Machine Learning and APIs in general.
+and with good experience in Go, Machine Learning and APIs in general. See the [TODO file](docs/TODO.md)
+for inspiration.
 
 No governance guidelines have been established yet, this also needs work.
 
