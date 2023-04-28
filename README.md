@@ -10,9 +10,9 @@ a just-in-time compiler of numeric computations to CPU, GPU and TPU.
 It was developed primarily as a platform to easily experiment with ML ideas, and to
 allow one to use Go for ML. Hopefully it can grow beyond that -- see Long-Term Goals below.
 
-It strives to be being simple to read and reason about, leading the 
+It strives to be **simple to read and reason about**, leading the 
 user to correct and transparent mental model of what is going on (no surprises). At the cost of
- more typing (more verbose) at times.
+more typing (more verbose) at times.
 
 Documentation is kept up-to-date (if it is not well documented, it is as if the code is not there)
 and error messages are useful and try to make it easy to solve issues (a good guideline is described in
@@ -25,6 +25,8 @@ Section 2 of [Yggdrasil Decision Forests paper](https://arxiv.org/pdf/2212.02934
 **GoMLX** is a working proof-of-concept, with many important components of an ML framework in place, 
 from the bottom to the top of the stack. But only still a narrow slice of what a major ML library/framework should provide 
 (like TensorFlow, Jax or PyTorch).
+
+It includes:
 
 * XLA integration for model training and evaluation -- including GPU (and presumably TPU, but never tested so likely 
   not working).
@@ -54,7 +56,7 @@ Likely it would work in Macs with some work --> contributions are very welcome, 
 The easiest to start playing with it, it's just pulling the docker image that has GoMLX + [JupyterLab](https://jupyterlab.readthedocs.io/) + [GoNB](https://github.com/janpfeifer/gonb)(a Go kernel) pre-installed.
 
 From a directory you want to make visible in Jupyter, do:
-> For GPU support add the flag `--gpus all`.
+> For GPU support add the flag `--gpus all` to the `docker run` command bellow.
 
 ```bash
 docker pull janpfeifer/gomlx_jupyterlab
@@ -97,8 +99,9 @@ tar xzvf .../path/to/gomlx_xla-v0.0.1.tar.gz
 
 Latest version in [github.com/gomlx/gomlx/releases/download/v0.0.1/gomlx_xla-v0.0.1-linux-amd64.tar.gz](https://github.com/gomlx/gomlx/releases/download/v0.0.1/gomlx_xla-v0.0.1-linux-amd64.tar.gz).
 
-This should be enough for most installations. If CGO is not finding the library, you may need to configure
-some environment variables.
+This should be enough for most installations. If [CGO](https://pkg.go.dev/cmd/cgo) is not finding the library,
+you may need to configure some environment variables (`LD_LIBRARY_PATH`, `CGO_CPPFLAGS`, `CGO_LDFLAGS`) to include
+the corresponding directories under `/usr/local` (most linux distributions won't need this).
 
 After that, just import it as with any Go library.
 
@@ -115,7 +118,7 @@ not too hard to read (except the bindings to C/XLA, which were done very adhoc).
 
 Finally, feel free to ask questions: time allowing (when not in work) I'm always happy to help -- I created [groups.google.com/g/gomlx-discuss](https://groups.google.com/g/gomlx-discuss).
 
-## Long-term Goals
+## Long-term Goals_
 
 1. Building and training models in Go -- as opposed to Python (or some other language) -- with focus on:
    - Being simple to read and reason about, leading the user to a correct and transparent mental
