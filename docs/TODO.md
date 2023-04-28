@@ -20,8 +20,12 @@ Split by functionality, the most "desirable" TODOs are:
 
 ## Infrastructure
 
+* Inference-only version: for now to run predictions one has to also import the whole engine and XLA machinery. 
+  * Ahead-Of-Time (AOT) compilation of a computation graph to a library that doesn't require linking 
+    the whole XLA. This can be the "official" save for inference method. Notice compiled graph will
+    work only on the hardware it was compiled for. See [discussion in OpenXLA](https://groups.google.com/a/openxla.org/g/openxla-discuss/c/0RXscLOHWtc).
 * Docker:
-  * Dockerfile and a docker with Jupyter, GoNB and GoMLX.
+  * (**Done in v0.0.2**) Dockerfile and a docker with Jupyter, GoNB and GoMLX.
   * Dockerfile for a devel version, with everything needed to compile the C++ bindings.
 * Jupyter(-lab) Notebook/Colab integration: -- now implemented in GoNB. Missing features for GoMLX support:
   * Easy, automatic save/cache values of Tensors, so programs can be coded progressively without needing
@@ -31,9 +35,6 @@ Split by functionality, the most "desirable" TODOs are:
     start-up time, perfect for development.
 * More supported data types (`DType`).
 * Saving/Loading models:
-  * Ahead-Of-Time (AOT) compilation of a computation graph to a library that doesn't require linking 
-    the whole XLA. This can be the "official" save for inference method. Notice compiled graph will
-    work only on the hardware it was compiled for. See [discussion in OpenXLA](https://groups.google.com/a/openxla.org/g/openxla-discuss/c/0RXscLOHWtc).
   * Exporting to TensorFLow's "SavedModel" format -- so models can leverage all the production tools
     from TensorFlow -- using same mechanism as Jax is using, by converting code to StableHLO intermediary
     language -- that conversion is done already.
