@@ -53,7 +53,9 @@ Likely it would work in Macs with some work --> contributions are very welcome, 
 
 ### Pre-built docker
 
-The easiest to start playing with it, it's just pulling the docker image that has GoMLX + [JupyterLab](https://jupyterlab.readthedocs.io/) + [GoNB](https://github.com/janpfeifer/gonb)(a Go kernel) pre-installed.
+The easiest to start playing with it, it's just pulling the docker image that has **GoMLX** + [JupyterLab](https://jupyterlab.readthedocs.io/) + [GoNB](https://github.com/janpfeifer/gonb)(a Go kernel) and 
+[NVidia's CUDA runtime](https://hub.docker.com/layers/nvidia/cuda/11.8.0-cudnn8-runtime-ubuntu22.04/images/sha256-08aed54a213b52e9cb658760b6d985db2f4c5f7e8f11ac45ec66b5c746237823?context=explore)
+(for optional support of GPU) pre-installed -- it is ~5Gb to download.
 
 From a directory you want to make visible in Jupyter, do:
 > For GPU support add the flag `--gpus all` to the `docker run` command bellow.
@@ -63,7 +65,7 @@ docker pull janpfeifer/gomlx_jupyterlab
 docker run -it --rm -p 8888:8888 -v "${PWD}":/home/gomlx/work janpfeifer/gomlx_jupyterlab:latest
 ```
 
-And then open your browser in the `localhost:8888` link it will display in the termianl -- it will include a secret token needed.
+It will display an URL starting with `127.0.0.1:8888` in the terminal (it will include a secret token needed) that you can open in your browser.
 
 You can open and interact with the tutorial from there, it is included in the docker under the directory `Projects/gomlx/examples/tutorial`.
 
