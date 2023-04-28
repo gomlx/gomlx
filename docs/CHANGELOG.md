@@ -1,5 +1,9 @@
 # GoMLX changelog
 
+## Next release
+
+* Updated `docker/jupyterlab` for the v0.1.0 release. 
+
 ## v0.1.0, 2023-04-28
 
 * Updated OpenXLA/XLA dependency to the current at 2023-04-28.
