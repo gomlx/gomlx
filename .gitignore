@@ -22,3 +22,4 @@ bazel-testlogs
 
 # VSCode files
 .Trash*
+gomlx.code-workspace
