@@ -5,13 +5,14 @@ Simplest way to run it, go to **a directory you want to be made visible for the 
 will store your Go notebook files -- and run:
 
 ```bash
-docker run -it --rm -p 8888:8888 -v "${PWD}":/home/gomlx/work janpfeifer/gomlx_jupyterlab:latest
+docker pull janpfeifer/gomlx_jupyterlab:latest
+docker run -it --rm -p 8888:8888 -v "${PWD}":/home/jovyan/work janpfeifer/gomlx_jupyterlab:latest
 ```
 
 If you have GPU(s) and want to make them accessible, use instead:
 
 ```bash
-docker run -it --gpus all --rm -p 8888:8888 -v "${PWD}":/home/gomlx/work janpfeifer/gomlx_jupyterlab:latest
+docker run -it --gpus all --rm -p 8888:8888 -v "${PWD}":/home/jovyan/work janpfeifer/gomlx_jupyterlab:latest
 ```
 
 The command will output the `localhost:8888` link you can use -- it will include the secret token to connect to Jupyter.

@@ -61,8 +61,8 @@ From a directory you want to make visible in Jupyter, do:
 > For GPU support add the flag `--gpus all` to the `docker run` command bellow.
 
 ```bash
-docker pull janpfeifer/gomlx_jupyterlab
-docker run -it --rm -p 8888:8888 -v "${PWD}":/home/gomlx/work janpfeifer/gomlx_jupyterlab:latest
+docker pull janpfeifer/gomlx_jupyterlab:latest
+docker run -it --rm -p 8888:8888 -v "${PWD}":/home/jovyan/work janpfeifer/gomlx_jupyterlab:latest
 ```
 
 It will display a URL starting with `127.0.0.1:8888` in the terminal (it will include a secret token needed) that you can open in your browser.
