@@ -23,14 +23,33 @@
 // Shape and DType are used both by the concrete tensor values (see tensor package) and when
 // working on the computation graph (see graph package).
 //
-// **Asserts**: When coding ML models, one delicate part is keeping tabs on the shape of
+// ## Glossary
+//
+//   - Rank: number of axes (dimensions) of a Tensor.
+//   - Axis: is the index of a dimension on a multi-dimensional Tensor. Sometimes used
+//     interchangeably with Dimension, but here we try to refer to a dimension index as "axis"
+//     (plural axes), and its size as its dimension.
+//   - Dimension: the size of a multi-dimensions Tensor in one of its axes. See example below:
+//   - DType: the data type of the unit element in a tensor.
+//   - Scalar: is a shape where there are no axes (or dimensions), only a single value
+//     of the associated DType.
+//
+// Example: The multi-dimensional array `[][]int32{{0, 1, 2}, {3, 4, 5}}` if converted to a Tensor
+// would have shape `(int32)[2 3]`. We say it has rank 2 (so 2 axes), axis 0 has
+// dimension 2, and axis 1 has dimension 3. This shape could be created with
+// `shapes.Make(int32, 2, 3)`.
+//
+// ## Asserts
+//
+// When coding ML models, one delicate part is keeping tabs on the shape of
 // the nodes of the graphs -- unfortunately there is no compile-time checking of values,
 // so validation only happens in runtime. To facilitate, and also to serve as code documentation,
 // this package provides two variations of _assert_ funtionality. Examples:
 //
-//  1. `AssertRank` and `AssertDims` checks that the rank and dimensions of the given
-//     object (that has a `Shape` method) match, otherwise it panics. The `-1` means
-//     the dimension is unchecked (it can be anything).
+// `AssertRank` and `AssertDims` checks that the rank and dimensions of the given
+//
+//	object (that has a `Shape` method) match, otherwise it panics. The `-1` means
+//	the dimension is unchecked (it can be anything).
 //
 // ```
 //
@@ -45,22 +64,8 @@
 //
 // ```
 //
-// **Glossary**:
-//   - **Rank**: number of axes (dimensions) of a Tensor.
-//   - **Axis**: is the index of a dimension on a multi-dimensional Tensor. Sometimes used
-//     interchangeably with Dimension, but here we try to refer to a dimension index as "axis"
-//     (plural axes), and its size as its dimension.
-//   - **Dimension**: the size of a multi-dimensions Tensor in one of its axes. See example below:
-//   - **DType**: the data type of the unit element in a tensor.
-//   - **Scalar**: is a shape where there are no axes (or dimensions), only a single value
-//     of the associated DType.
-//
-// Example:
-//
-//	The multi-dimensional array `[][]int32{{0, 1, 2}, {3, 4, 5}}` if converted to a Tensor
-//	would have shape `(int32)[2 3]`. We say it has **rank 2** (so 2 axes), **axis 0** has
-//	**dimension 2**, and **axis 1** has **dimension 3**. This shape could be created with
-//	`shapes.Make(int32, 2, 3)`.
+// If you don't want to panic, but instead return an error through the `graph.Graph`, you can
+// use the `Node.AssertDims()` method. So it would loook like `logits.AssertDims(batchSize, -1)`.
 package shapes
 
 import (

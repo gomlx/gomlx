@@ -89,12 +89,12 @@ RUN pip3 install jupyterlab
 #######################################################################################################
 
 # Copy the GoMLX source code, which includes the examples, that can be interesting to
-# look at.
+# look at. Also make a copy of the tutorial at the root directory for quick access.
 USER ${NB_UID}
-COPY --chown=${NB_UID}:${NB_GID} . "${HOME}/gomlx"
+COPY --link --chown=${NB_UID}:${NB_GID} . "${HOME}/Projects/gomlx"
 
 # Run tests -- only on "Host" since GPU in docker build is not working.
-WORKDIR "${HOME}/gomlx"
+WORKDIR "${HOME}/Projects/gomlx"
 RUN go test ./...
 
 # I have no idea why, but using CUDA/CuDNN with XLA the very first time is very slow. It takes a couple of minutes
@@ -119,6 +119,7 @@ RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 # Back to home directory.
 USER ${NB_USER}
 WORKDIR "${HOME}"
+EXPOSE 8888/tcp
 CMD ["jupyter-lab", "--no-browser", "--ip=0.0.0.0"]
 ENTRYPOINT []
 
