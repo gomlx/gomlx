@@ -18,11 +18,12 @@ package graph_test
 
 import (
 	"fmt"
-	"github.com/stretchr/testify/require"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"math"
 	"runtime/debug"
 	"testing"
@@ -370,9 +371,9 @@ func testGradients[T interface{ float32 | float64 }](t *testing.T, name string, 
 	}
 	exec := NewExec(manager, fn)
 	var zero T
-	results := exec.Call(zero)
-	if results[0].Error() != nil {
-		t.Fatalf("Failed %s: %+v", name, results[0].Error())
+	results, err := exec.Call(zero)
+	assert.NoErrorf(t, err, "Failed %s", name) // Failed test, but keep test running.
+	if err != nil {
 		return
 	}
 	fmt.Printf("\toutput=%v\n", results[0].Local().GoStr())

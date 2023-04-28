@@ -83,10 +83,10 @@ package graph
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/gomlx/gomlx/xla"
+	"github.com/pkg/errors"
 	"strings"
 )
 
@@ -385,9 +385,9 @@ func (g *Graph) RunError(params ParamsMap) (*tensor.Device, error) {
 
 // RunWithTensors is a slightly faster execution path for the graph, but inputs
 // must be provided already in Device tensors and in order.
-func (g *Graph) RunWithTensors(params []*tensor.Device) *tensor.Device {
+func (g *Graph) RunWithTensors(params []*tensor.Device) (*tensor.Device, error) {
 	if !g.Ok() {
-		return tensor.DeviceWithError(errors.WithMessage(g.Error(), "graph in error, cannot be executed"))
+		return nil, errors.WithMessage(g.Error(), "graph in error, cannot be executed")
 	}
 	deviceParams := make([]*xla.OnDeviceBuffer, 0, len(params))
 	for _, param := range params {
@@ -395,9 +395,10 @@ func (g *Graph) RunWithTensors(params []*tensor.Device) *tensor.Device {
 	}
 	result, err := g.comp.Run(deviceParams)
 	if err != nil {
-		return tensor.DeviceWithError(errors.Wrap(err, "failed RunWithTensors()"))
+		return nil, errors.Wrap(err, "failed RunWithTensors()")
 	}
-	return tensor.FromShapedBuffer(result)
+	deviceT := tensor.FromShapedBuffer(result)
+	return deviceT, deviceT.Error()
 }
 
 // Run runs the graph with the given parameters, and optionally the output node to calculate.

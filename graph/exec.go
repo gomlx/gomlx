@@ -18,9 +18,9 @@ package graph
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/pkg/errors"
 	"log"
 	"reflect"
 	"runtime"
@@ -330,10 +330,11 @@ func (e *Exec) errorResult(err error) []tensor.Tensor {
 // Call parses the arguments into tensors (if they are not yet) and executes
 // the graph corresponding to the shapes of the arguments. If a graph does
 // not yet exist one is created, compiled and cached for the shapes.
-// It returns the outputs in a slice, even if there is only one output.
-func (e *Exec) Call(args ...any) []tensor.Tensor {
-	results, _ := e.CallWithGraph(args...)
-	return results
+//
+// It returns the outputs in a slice, even if there is only one output, or an error.
+func (e *Exec) Call(args ...any) ([]tensor.Tensor, error) {
+	results, _, err := e.CallWithGraph(args...)
+	return results, err
 }
 
 // CallWithGraph is similar to Call, but it also returns the computation graph used
@@ -341,14 +342,14 @@ func (e *Exec) Call(args ...any) []tensor.Tensor {
 // parameters, this can help disambiguate in case the user needs to use the Graph for
 // something else.
 //
-// Notice the returned *Graph may be nil, if it failed to parse the arguments and find
-// the corresponding computation graph.
-func (e *Exec) CallWithGraph(args ...any) ([]tensor.Tensor, *Graph) {
+// It returns the outputs in a slice, even if there is only one output, and the graph used
+// to execute the computation or an error.
+func (e *Exec) CallWithGraph(args ...any) (results []tensor.Tensor, g *Graph, err error) {
 	if !e.inputAsSlice && len(args) != e.numInputs {
-		return e.errorResult(
-			errors.Errorf(
-				"# of arguments to call (%d) don't match # arguments to graph function (%d) for %q",
-				len(args), e.numInputs, e.Name())), nil
+		err = errors.Errorf(
+			"# of arguments to call (%d) don't match # arguments to g function (%d) for %q",
+			len(args), e.numInputs, e.Name())
+		return
 	}
 
 	// Convert args to tensors.
@@ -357,7 +358,8 @@ func (e *Exec) CallWithGraph(args ...any) ([]tensor.Tensor, *Graph) {
 	for ii := range args {
 		deviceT := anyToDeviceTensor(e.manager, e.deviceNum, args[ii])
 		if !deviceT.Ok() {
-			return e.errorResult(deviceT.Error()), nil
+			err = deviceT.Error()
+			return
 		}
 		tensors = append(tensors, deviceT)
 		argsShapes = append(argsShapes, deviceT.Shape())
@@ -366,56 +368,69 @@ func (e *Exec) CallWithGraph(args ...any) ([]tensor.Tensor, *Graph) {
 	// Get or build the graph.
 	entry := e.findCacheEntry(argsShapes)
 	if entry == nil {
-		return e.errorResult(errors.Errorf(
-			"maximum cache size reached for %q, cannot create another graph -- "+
-				"a new computation graph needs to be created+compiled for each different shape of "+
+		err = errors.Errorf(
+			"maximum cache size reached for %q, cannot create another g -- "+
+				"a new computation g needs to be created+compiled for each different shape of "+
 				"the input, consider using padding, or if this is not a concern change "+
-				"the cache size with exec.SetMaxCache()", e.Name())), nil
+				"the cache size with exec.SetMaxCache()", e.Name())
+		return
 	}
-	graph := entry.graph
-	if !graph.Ok() {
-		return e.errorResult(errors.WithMessagef(graph.Error(), "failed to build %q computation graph", e.Name())), graph
+	g = entry.graph
+	if !g.Ok() {
+		err = errors.WithMessagef(g.Error(), "failed to build %q computation g", e.Name())
+		return
 	}
 
 	// Set extra input parameters created by the graph.
-	if graph.NumParameters() > len(args) {
-		tmp := make([]*tensor.Device, graph.NumParameters())
+	if g.NumParameters() > len(args) {
+		tmp := make([]*tensor.Device, g.NumParameters())
 		copy(tmp, tensors)
 		tensors = tmp
 	}
 	if e.setSideParams != nil {
-		e.setSideParams(graph, tensors)
+		e.setSideParams(g, tensors)
 	}
-	if graph.NumParameters() > len(args) {
+	if g.NumParameters() > len(args) {
 		for ii, t := range tensors {
 			if t == nil || !t.Ok() {
-				return e.errorResult(errors.Errorf("parameter %d (%q) is nil or invalid, maybe a variable value not set as a parameter, cannot execute graph",
-					ii, graph.ParameterByIndex(ii).ParameterName())), graph
+				err = errors.Errorf("parameter %d (%q) is nil or invalid, maybe a variable value not set as a"+
+					"parameter, cannot execute g", ii, g.ParameterByIndex(ii).ParameterName())
+				return
 			}
 		}
 	}
 
 	// Execute graph.
-	outputT := graph.RunWithTensors(tensors)
-	if !outputT.Ok() {
-		return e.errorResult(errors.WithMessagef(outputT.Error(), "failed to execute graph")), graph
+	var outputT *tensor.Device
+	outputT, err = g.RunWithTensors(tensors)
+	if err != nil {
+		err = errors.WithMessagef(err, "failed to execute graph")
+		return
 	}
 	if entry.numOutputs == 1 {
-		return []tensor.Tensor{outputT}, graph
+		results = []tensor.Tensor{outputT}
+	} else if entry.numOutputs > 1 {
+		outputsDevice := outputT.SplitTuple()
+		results = make([]tensor.Tensor, len(outputsDevice))
+		for ii := range outputsDevice {
+			results[ii] = outputsDevice[ii]
+		}
+		outputT.Finalize()
 	}
-	outputsDevice := outputT.SplitTuple()
-	outputs := make([]tensor.Tensor, len(outputsDevice))
-	for ii := range outputsDevice {
-		outputs[ii] = outputsDevice[ii]
-	}
-	outputT.Finalize()
 
 	// Call logger on logged nodes, even if no node is marked for logging (it serves as a hook).
 	numGraphFnOutputs := entry.numOutputs - len(entry.loggedMessages)
 	if e.loggerFn != nil {
-		e.loggerFn(entry.loggedMessages, outputs[numGraphFnOutputs:])
+		var loggerResults []tensor.Tensor
+		if len(entry.loggedMessages) > 0 {
+			loggerResults = results[numGraphFnOutputs:]
+		}
+		e.loggerFn(entry.loggedMessages, loggerResults)
 	}
-	return outputs[:numGraphFnOutputs], graph
+	if len(results) != numGraphFnOutputs {
+		results = results[:numGraphFnOutputs]
+	}
+	return
 }
 
 // createAndCacheGraph creates and compiles the graph for the arguments with the given

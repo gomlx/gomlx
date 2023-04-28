@@ -14,12 +14,18 @@ This slows down development, since it requires running the programs to check the
 graph types and values.
 
 One recommendation here is to execute the graph building (and not necessarily execution) early in the 
-program execution. So this can be iterated fast.
+program execution -- before data preprocessing for instance. So this can be iterated fast.
 
 Now there are issues that happen (and can be caught) during graph building
 and others that happen only during graph execution, later on. One can think that the graph building code is 
 being executed in two different modes, and for convenience we often split the concept of "runtime" for those
 into **"graph building time"** and **"graph execution time"**.
+
+> **Note**: This is not as big an issue in practice as some characterize it. As an anecdote TensorFlow 2.0
+> adoption of "eager execution mode", to hide the graph building behind the scenes, caused more problems than
+> it solved -- developing models in TensorFlow 1.0 was generally simpler and faster
+> (in terms of developer speed). But this is a longer topic (and confounded by other aspects that were
+> improved in TensorFlow 2.0/Keras).
 
 ## Delayed Error Handling
 
@@ -33,7 +39,7 @@ This is not aligned with the standard Go strategy of checking errors at every st
 checking for error at every operation would seriously hinder readability of the code building 
 computation graphs.
 
-The user may check for errors whenever seems appropriate. In particular worth checking errors before
+The user may check for errors whenever deemed appropriate. In particular worth checking errors before
 things that relies on results having a certain shape (like a slice).
 
 This may change in the future: if someone comes up with a better idea of if in a future version of Go

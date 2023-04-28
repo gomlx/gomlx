@@ -30,7 +30,7 @@ It includes:
 
 * XLA integration for model training and evaluation -- including GPU (and presumably TPU, but never tested so likely 
   not working).
-* Autograd: automatic differentiation -- only gradients for now, no Jacobians.
+* Autograd: automatic differentiation -- only gradients for now, no jacobian.
 * Context: automatic variable management for ML models.
 * ML layers library with some of the most popular machine learning "layers": dense (simple FFN layer),  
   activation functions, Layer Normalization, Batch Normalization, Convolutions, Pooling, Dropout, Multi-Head-Attention
@@ -54,7 +54,7 @@ Likely it would work in Macs with some work --> contributions are very welcome, 
 ### Pre-built docker
 
 The easiest to start playing with it, it's just pulling the docker image that has **GoMLX** + [JupyterLab](https://jupyterlab.readthedocs.io/) + [GoNB](https://github.com/janpfeifer/gonb) (a Go kernel for Jupyter) and 
-[NVidia's CUDA runtime](https://hub.docker.com/layers/nvidia/cuda/11.8.0-cudnn8-runtime-ubuntu22.04/images/sha256-08aed54a213b52e9cb658760b6d985db2f4c5f7e8f11ac45ec66b5c746237823?context=explore)
+[Nvidia's CUDA runtime](https://hub.docker.com/layers/nvidia/cuda/11.8.0-cudnn8-runtime-ubuntu22.04/images/sha256-08aed54a213b52e9cb658760b6d985db2f4c5f7e8f11ac45ec66b5c746237823?context=explore)
 (for optional support of GPU) pre-installed -- it is ~5Gb to download.
 
 From a directory you want to make visible in Jupyter, do:
@@ -65,7 +65,7 @@ docker pull janpfeifer/gomlx_jupyterlab
 docker run -it --rm -p 8888:8888 -v "${PWD}":/home/gomlx/work janpfeifer/gomlx_jupyterlab:latest
 ```
 
-It will display an URL starting with `127.0.0.1:8888` in the terminal (it will include a secret token needed) that you can open in your browser.
+It will display a URL starting with `127.0.0.1:8888` in the terminal (it will include a secret token needed) that you can open in your browser.
 
 You can open and interact with the tutorial from there, it is included in the docker under the directory `Projects/gomlx/examples/tutorial`.
 
@@ -113,7 +113,7 @@ More on building the C library, see [docs/building.md](docs/building.md).
 
 See the [tutorial here](examples/tutorial/tutorial.ipynb). It covers a bit of everything. 
 
-After that look at the demos in the [examples/](examples/) directory.
+After that look at the demos in the [examples/](https://github.com/gomlx/gomlx/tree/main/examples) directory.
 
 The library itself is well documented (pls open issues if something is missing), and the code is
 not too hard to read (except the bindings to C/XLA, which were done very adhoc). Godoc available in [pkg.go.dev](https://pkg.go.dev/github.com/gomlx/gomlx).
@@ -132,11 +132,11 @@ Finally, feel free to ask questions: time allowing (when not in work) I'm always
      versions or something custom.
    - Up-to-date documentation: if the documentation is not there or if it's badly written, it's as 
      if the code was not there either.
-   - Clear and actuable error reporting
-1. To be a productive research and educational platform to experiment with new ML ideas and learn.
+   - Clear and actionable error reporting
+2. To be a productive research and educational platform to experiment with new ML ideas and learn.
    - Support mirrored training on multiple devices and various forms of distributed training (model and/or data
      parallelism) in particular to support for large language models and similarly large model training.
-1. To be a robust and reliable platform for production. Some sub-goals:
+3. To be a robust and reliable platform for production. Some sub-goals:
    - Support modern accelerator hardware like TPUs and GPUs.
    - Save models to industry tools like [TensorFlow Serving](https://www.tensorflow.org/tfx/guide/serving).
    - Import pre-trained models from
@@ -159,5 +159,5 @@ No governance guidelines have been established yet, this also needs work.
 * [TODO](docs/TODO.md)
 * [Error Handling](docs/error_handling.md)
 * [Building C/XLA Bindings](docs/building.md)
-* [Barebones Graph Execution](docs/barebones.md)
+* [Bare-bones Graph Execution](docs/barebones.md)
 * [Developing](docs/developing.md)

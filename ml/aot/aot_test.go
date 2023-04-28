@@ -18,11 +18,11 @@ package aot
 
 import (
 	"fmt"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/gomlx/gomlx/xla"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"os"
 	"testing"
 )
@@ -39,7 +39,8 @@ func TestAOTCompileModel(t *testing.T) {
 
 	// Build graph with inputs shaped float32[3]. We don't care about the results,
 	// actually we are only interested on the graph.
-	_, g := exec.CallWithGraph([]float32{0.0, 0.0}, []float32{1.0, 1.0})
+	_, g, err := exec.CallWithGraph([]float32{0.0, 0.0}, []float32{1.0, 1.0})
+	require.NoError(t, err)
 	fmt.Printf("Graph:\n%s\n\n", g)
 	fmt.Printf("StableHLO version: %s\n", xla.StableHLOCurrentVersion())
 	stableHLO, err := g.ConvertToStableHLO()
@@ -52,7 +53,7 @@ func TestAOTCompileModel(t *testing.T) {
 	require.NoError(t, err)
 	err = stableHLO.Serialize(fStableHLO.Fd(), xla.StableHLOCurrentVersion())
 	require.NoError(t, err)
-	fStableHLO.Close()
+	_ = fStableHLO.Close()
 	fmt.Printf("StableHLO serialized to %s\n", fStableHLO.Name())
 
 	var serialized []byte

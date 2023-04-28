@@ -21,6 +21,7 @@ import (
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/stretchr/testify/require"
 	"testing"
 )
 
@@ -36,7 +37,8 @@ func testDC(t *testing.T, manager *Manager, dc *DataCollector) {
 		t.Fatalf("Fail to attach DataCollector to executor: %+v", err)
 	}
 	for ii := 0; ii < 5; ii++ {
-		result := e.Call(ii)
+		result, err := e.Call(ii)
+		require.NoError(t, err)
 		got := tensor.ToScalar[int](result[0])
 		want := ii * 10
 		if got != want {

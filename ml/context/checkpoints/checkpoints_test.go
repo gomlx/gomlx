@@ -22,13 +22,14 @@ package checkpoints
 
 import (
 	"fmt"
-	"github.com/stretchr/testify/assert"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"os"
 	"testing"
 )
@@ -52,9 +53,9 @@ func TestCheckpoints(t *testing.T) {
 		fmt.Printf("Checkpoint directory: %s\n", dir)
 		e := context.NewExec(manager, ctx, testGraphFn)
 		for ii := 0; ii < 10; ii++ {
-			result := e.Call()[0]
-			assert.NoError(t, result.Error(), "Executing test graph")
-			globalStep := tensor.ToScalar[float64](result.Local())
+			results, err := e.Call()
+			require.NoError(t, err, "Executing test graph")
+			globalStep := tensor.ToScalar[float64](results[0].Local())
 			assert.Equal(t, float64(ii)+1, globalStep, "LoopStep")
 			assert.NoError(t, checkpoint.Save(), "Saving checkpoint")
 		}
@@ -86,9 +87,9 @@ func TestCheckpoints(t *testing.T) {
 
 		// Re-execute testGraphFn: it should load global step at 10, increment and return it at 11.
 		e := context.NewExec(manager, ctx, testGraphFn)
-		result := e.Call()[0]
-		assert.NoError(t, result.Error(), "Executing test graph")
-		globalStep := tensor.ToScalar[float64](result.Local())
+		results, err := e.Call()
+		require.NoError(t, err, "Executing test graph")
+		globalStep := tensor.ToScalar[float64](results[0].Local())
 		assert.Equal(t, 11.0, globalStep, "Re-loaded global step")
 		assert.NoError(t, checkpoint.Save(), "Saving checkpoint")
 

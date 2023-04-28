@@ -18,12 +18,13 @@ package adult
 
 import (
 	"fmt"
-	"github.com/google/uuid"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/google/uuid"
+	"github.com/pkg/errors"
 	"io"
 	"log"
 	"math/rand"
@@ -141,8 +142,11 @@ func (b *Dataset) Yield() (spec any, inputs, labels []tensor.Tensor, err error) 
 	}
 
 	// Execute to generate data.
-	inputsAndLabels := b.exec.Call(indicesT)
-	err = inputsAndLabels[0].Error()
+	var inputsAndLabels []tensor.Tensor
+	inputsAndLabels, err = b.exec.Call(indicesT)
+	if err != nil {
+		err = errors.WithMessage(err, "While generating a batch of data")
+	}
 	inputs = inputsAndLabels[:len(inputsAndLabels)-1]
 	labels = inputsAndLabels[len(inputsAndLabels)-1:]
 	return

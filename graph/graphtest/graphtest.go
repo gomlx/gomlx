@@ -19,9 +19,9 @@ package graphtest
 
 import (
 	"fmt"
-	"github.com/stretchr/testify/require"
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/types/slices"
+	"github.com/stretchr/testify/require"
 	"testing"
 )
 
@@ -44,10 +44,8 @@ func RunTestGraphFn(t *testing.T, testName string, graphFn TestGraphFn, want []a
 		return all
 	}
 	exec := graph.NewExec(manager, wrapperFn)
-	inputsAndOutputs, g := exec.CallWithGraph()
-	require.Truef(t, g.Ok(), "%s: failed to run graph with %+v", testName, g.Error())
-	require.Truef(t, inputsAndOutputs[0].Ok(), "%s: failed to run graph with %+v", testName, inputsAndOutputs[0].Error())
-
+	inputsAndOutputs, err := exec.Call()
+	require.NoErrorf(t, err, "%s: failed to execute graph", testName)
 	inputs := inputsAndOutputs[:numInputs]
 	outputs := inputsAndOutputs[numInputs:]
 

@@ -25,6 +25,7 @@ import (
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/stretchr/testify/require"
 	"testing"
 )
 
@@ -41,20 +42,18 @@ func TestExec(t *testing.T) {
 
 	// First graph build, variable should be initialized.
 	x := [][]float64{{1, 1, 1}}
-	gotTensor := oneLayer.Call(x)[0]
-	if gotTensor.Error() != nil {
-		t.Fatalf("Failed to evaluate oneLayer(%v): %+v", x, gotTensor.Error())
-	}
+	results, err := oneLayer.Call(x)
+	require.NoErrorf(t, err, "Failed to evaluate oneLayer(%v)", x)
+	gotTensor := results[0]
 	got := gotTensor.Value().([][]float64)[0][0]
 	if got == 0 {
 		t.Fatalf("Failed evaluating oneLayer(%v) returned 0, but weights should have been randomly initialized", x)
 	}
 
 	// Second call should reuse the graph, and yield same result.
-	gotTensor = oneLayer.Call(x)[0]
-	if gotTensor.Error() != nil {
-		t.Fatalf("Failed to evaluate oneLayer(%v) a second time: %+v", x, gotTensor.Error())
-	}
+	results, err = oneLayer.Call(x)
+	require.NoErrorf(t, err, "Failed to evaluate oneLayer(%v) a second time", x)
+	gotTensor = results[0]
 	got2 := gotTensor.Value().([][]float64)[0][0]
 	if got2 != got {
 		t.Fatalf("Second call to oneLayer(%v) returned %f, but first returned %f", x, got, got2)
@@ -62,7 +61,9 @@ func TestExec(t *testing.T) {
 
 	// Different batch size, should generate new graph, but yield same result.
 	x = [][]float64{{1, 1, 1}, {2, 2, 2}}
-	gotTensor = oneLayer.Call(x)[0]
+	results, err = oneLayer.Call(x)
+	require.NoErrorf(t, err, "Failed to evaluate oneLayer(%v) on a different batch size", x)
+	gotTensor = results[0]
 	if gotTensor.Error() != nil {
 		t.Fatalf("Failed to evaluate oneLayer(%v) on a different batch size: %+v", x, gotTensor.Error())
 	}
@@ -74,10 +75,10 @@ func TestExec(t *testing.T) {
 	// If X changes the inner dimension, then the layers.DenseWithBias would require different shaped variables, which should
 	// fail to build.
 	x = [][]float64{{1, 1, 1, 1}}
-	gotTensor = oneLayer.Call(x)[0]
-	if gotTensor.Error() == nil {
-		t.Fatalf("oneLayer(%v) leads to a graph with differently shaped variables should have failed, got %v instead",
-			x, gotTensor.Value())
+	results, err = oneLayer.Call(x)
+	if err == nil {
+		// Check for err == nil first, otherwise results[0] will fail.
+		require.Errorf(t, err, "oneLayer(%v) leads to a graph with differently shaped variables should have failed, got %v instead", x, results[0].Value())
 	}
 }
 
@@ -94,10 +95,9 @@ func TestExecWithSlices(t *testing.T) {
 
 	// First execution builds graph and should initialize variables (weights) randomly.
 	x := [][]float64{{1, 1, 1}}
-	gotTensor := oneLayer.Call(x)[0]
-	if gotTensor.Error() != nil {
-		t.Fatalf("Failed to evaluate oneLayer(%v): %+v", x, gotTensor.Error())
-	}
+	results, err := oneLayer.Call(x)
+	require.NoErrorf(t, err, "Failed to evaluate oneLayer(%v)", x)
+	gotTensor := results[0]
 	got := gotTensor.Value().([][]float64)
 	fmt.Printf("\toneLayer(%v)=%v\n", x, got)
 	if got[0][0] == 0 {
@@ -107,10 +107,9 @@ func TestExecWithSlices(t *testing.T) {
 	// Second execution: two tensors that if concatenated will be the same as the previous run. Since the context
 	// and hence the variables are the same, it should evaluate to exact same value.
 	oneElementOfX := [][]float64{{1}}
-	gotTensor = oneLayer.Call(oneElementOfX, oneElementOfX, oneElementOfX)[0]
-	if gotTensor.Error() != nil {
-		t.Fatalf("Failed to evaluate oneLayer(%v, %v, %v): %+v", oneElementOfX, oneElementOfX, oneElementOfX, gotTensor.Error())
-	}
+	results, err = oneLayer.Call(oneElementOfX, oneElementOfX, oneElementOfX)
+	require.NoErrorf(t, err, "Failed to evaluate oneLayer(%v, %v, %v): %+v", oneElementOfX, oneElementOfX, oneElementOfX)
+	gotTensor = results[0]
 	got2 := gotTensor.Value().([][]float64)
 	fmt.Printf("\toneLayer(%v, %v, %v)=%v\n", oneElementOfX, oneElementOfX, oneElementOfX, got)
 	if !slices.DeepSliceCmp(got, got2, slices.Equal[float64]) {
@@ -130,15 +129,16 @@ func TestExecWithVariableUpdates(t *testing.T) {
 		counterVar.SetValueGraph(counterNode)
 		return counterNode
 	})
-	gotTensor := counter.Call()[0]
-	if !gotTensor.Ok() {
-		t.Fatalf("Failed to run counter graph: %+v", gotTensor.Error())
-	}
+	results, err := counter.Call()
+	require.NoError(t, err, "Failed to run counter graph")
+	gotTensor := results[0]
 	got := tensor.ToScalar[int](gotTensor)
 	if got != 1 {
 		t.Fatalf("Wanted first counter value to be 1, got %d instead", got)
 	}
-	gotTensor = counter.Call()[0]
+	results, err = counter.Call()
+	require.NoError(t, err, "Failed to run counter graph")
+	gotTensor = results[0]
 	if !gotTensor.Ok() {
 		t.Fatalf("Failed to run counter graph: %+v", gotTensor.Error())
 	}

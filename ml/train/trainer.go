@@ -24,12 +24,12 @@ package train
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/pkg/errors"
 	"io"
 )
 
@@ -325,17 +325,20 @@ func (r *Trainer) callGraphFn(
 	}
 	if lengths, found := r.inputsAndLabelsLenPerInfo[spec]; found {
 		if len(inputs) != lengths[0] || len(labels) != lengths[1] {
-			return nil, errors.Errorf("inputs (%d) and labels (%d) lengths are different "+
+			err = errors.Errorf("inputs (%d) and labels (%d) lengths are different "+
 				"than with previous call (%d and %d) for the given spec %+v", len(inputs), len(labels),
 				lengths[0], lengths[1], spec)
+			return
 		}
 	}
 	for ii, input := range inputs {
 		if input == nil {
-			return nil, errors.Errorf("inputs[%d] is nil!?", ii)
+			err = errors.Errorf("inputs[%d] is nil!?", ii)
+			return
 		}
 		if input.Error() != nil {
-			return nil, errors.Wrapf(input.Error(), "invalid inputs[%d], with error %v", ii, input.Error())
+			err = errors.Wrapf(input.Error(), "invalid inputs[%d], with error %v", ii, input.Error())
+			return
 		}
 	}
 
@@ -353,26 +356,21 @@ func (r *Trainer) callGraphFn(
 	exec, found := execsMap[spec]
 	if !found {
 		exec, err = r.createExecutor(spec, len(inputs), len(labels), graphFn)
-		execsMap[spec] = exec
 		if err != nil {
-			return nil, err
+			return
 		}
+		execsMap[spec] = exec
 	}
 
 	// Run trainStepExecMap and check everything went fine.
-	var g *graph.Graph
-	metrics, g = exec.CallWithGraph(inputsAndLabels...)
-	if !g.Ok() {
-		return nil, errors.WithMessage(g.Error(), "failed to execute step")
-	}
-	if !r.context.Ok() {
-		return nil, errors.WithMessage(r.context.Error(), "failed to execute step")
+	metrics, err = exec.Call(inputsAndLabels...)
+	if err != nil {
+		err = errors.WithMessage(err, "failed to execute train/eval step")
+		return
 	}
 	if len(metrics) == 0 {
-		return nil, errors.Errorf("no metrics calculate metric in step")
-	}
-	if metrics[0].Error() != nil {
-		return metrics, errors.WithMessage(metrics[0].Error(), "failed to calculate metric in step")
+		err = errors.Errorf("no metrics calculate metric in step")
+		return
 	}
 	return
 }

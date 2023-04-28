@@ -18,9 +18,9 @@ package graph
 
 import (
 	"fmt"
-	"github.com/stretchr/testify/require"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
+	"github.com/stretchr/testify/require"
 	"testing"
 )
 
@@ -205,9 +205,8 @@ func TestGradDotGeneralXLABatchContracting(t *testing.T) {
 			}
 
 			exec := NewExec(manager, testFn)
-			parts := exec.Call()
-			require.NotEmpty(t, parts, "Executing TestGradDotGeneralXLA returned empty")
-			require.Truef(t, parts[0].Ok(), "Executing TestGradDotGeneralXLA: %+v", parts[0].Error())
+			parts, err := exec.Call()
+			require.NoError(t, err, "Executing TestGradDotGeneralXLA failed")
 			fmt.Printf("Executing TestGradDotGeneralXLA:\n")
 			for ii, name := range []string{"lhs", "rhs", "dot", "grad_lhs", "grad_rhs"} {
 				fmt.Printf("\t%s: %s\n", name, parts[ii].Local().GoStr())
@@ -284,9 +283,8 @@ func TestGradDotGeneralXLABatchContractingCrossing(t *testing.T) {
 			}
 
 			exec := NewExec(manager, testFn)
-			parts := exec.Call()
-			require.NotEmpty(t, parts, "Executing TestGradDotGeneralXLA returned empty")
-			require.Truef(t, parts[0].Ok(), "Executing TestGradDotGeneralXLA: %+v", parts[0].Error())
+			parts, err := exec.Call()
+			require.NoError(t, err, "Executing TestGradDotGeneralXLA failed")
 			fmt.Printf("Executing TestGradDotGeneralXLA:\n")
 			for ii, name := range []string{"lhs", "rhs", "dot", "grad_lhs", "grad_rhs"} {
 				fmt.Printf("\t%s: %s\n", name, parts[ii].Local().GoStr())

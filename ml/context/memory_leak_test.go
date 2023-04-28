@@ -22,6 +22,7 @@ import (
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/gomlx/gomlx/xla"
+	"github.com/stretchr/testify/require"
 	"testing"
 )
 
@@ -82,7 +83,8 @@ func TestMemoryLeaksCtxExec(t *testing.T) {
 			for xV := 0.0; xV < 100.0; xV += 1 {
 				for size := 1; size <= 100; size++ {
 					inputT := tensor.FromValue(slices.SliceWithValue(size, xV))
-					results := exec.Call(inputT)
+					results, err := exec.Call(inputT)
+					require.NoErrorf(t, err, "Failed to execute computation: xV=%g, size=%d", xV, size)
 					totalT := results[0]
 					varUpdates := results[1:]
 					if totalT.Error() != nil {
