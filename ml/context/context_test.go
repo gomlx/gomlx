@@ -18,12 +18,13 @@ package context
 
 import (
 	"fmt"
-	"github.com/stretchr/testify/assert"
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"testing"
 )
 
@@ -152,10 +153,8 @@ func TestContext_SetLoader(t *testing.T) {
 	if !ctx.Ok() {
 		t.Fatalf("Failed to create context.Exec: %+v", ctx.Error())
 	}
-	results := e.Call()
-	if !results[0].Ok() {
-		t.Fatalf("Failed to run context.Exec: %+v", results[0].Error())
-	}
+	results, err := e.Call()
+	require.NoError(t, err, "Failed to run context.Exec")
 	gotV0 := tensor.ToScalar[float32](results[0])
 	gotV1 := tensor.ToScalar[int](results[1])
 	if gotV0 != 2 || gotV1 != 3 {

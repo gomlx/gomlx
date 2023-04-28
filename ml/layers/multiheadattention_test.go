@@ -18,8 +18,6 @@ package layers
 
 import (
 	"fmt"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/ctxtest"
@@ -31,6 +29,8 @@ import (
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"io"
 	"math"
 	"math/rand"
@@ -206,6 +206,7 @@ func TestMultiHeadAttentionTraining(t *testing.T) {
 		evalDS := &attentionTestDataset{}
 		*evalDS = *trainDS
 		evalDS.batchSize = 1
+		var results []tensor.Tensor
 
 		modelFn := buildSyntheticAttentionModelFn(false)
 		inferenceFn := func(ctx *context.Context, inputs []*Node) *Node {
@@ -217,8 +218,8 @@ func TestMultiHeadAttentionTraining(t *testing.T) {
 			require.NoErrorf(t, err, "Failed datasets: %+v", err)
 			fmt.Printf("\nInput:\t%v\n", inputs[0].Value())
 			fmt.Printf("Label:\t%v\n", labels[0].Value())
-			results := inferenceExec.Call(inputs[0])
-			require.NoErrorf(t, results[0].Error(), "Failed inference: %+v", err)
+			results, err = inferenceExec.Call(inputs[0])
+			require.NoErrorf(t, err, "Failed inference: %+v", err)
 			tmp := results[0].Value().([][]float32)[0]
 			var rounded []int
 			for _, v := range tmp {

@@ -17,11 +17,12 @@
 package optimizers
 
 import (
-	"github.com/stretchr/testify/assert"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"math"
 	"testing"
 )
@@ -38,10 +39,8 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 	})
 
 	for ii := 0; ii < 100; ii++ {
-		_ = cosineExec.Call()
-		if !ctx.Ok() {
-			t.Fatalf("Failed to execute graph: %+v", ctx.Error())
-		}
+		_, err := cosineExec.Call()
+		require.NoErrorf(t, err, "cosineExec.Call failed to execute graph for ii=%d", ii)
 
 		// Checks correct step number.
 		stepVar := ctx.InspectVariable("/optimizers/cosine", GlobalStepVariableName)

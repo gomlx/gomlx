@@ -1,11 +1,12 @@
 # Building
 
-### **gomlx_xla** building
+### **gomlx_xla** C library building
 
-The **gomlx_xla** includes together the whole XLA and parts of TensorFlow, and requires to compilation of
-all of that. So the first time it is built it can take quite a while (~30 minutes).
+The **gomlx_xla** library includes [OpenXLA/XLA](https://github.com/openxla/xla/) and some glue Go-C library.
 
-Compiling, in particular with GPU support has lots of TensorFlow/XLA dependencies, and the easiest
+XLA includes lots of things, including the whole LLVM, and it can take quite a while (~30 minutes) to compile.
+
+Compiling, in particular with GPU support has lots dependencies, and the easiest
 way is to use TensorFlow devel docker (see
 [TensorFlow instructions](https://www.tensorflow.org/install/source#docker_linux_builds))
 image `tensorflow/tensorflow:devel` to build it.
@@ -42,7 +43,8 @@ Once inside the docker, we still need to install one extra required library, `tc
 $ apt install google-perftools libgoogle-perftools-dev:amd64
 ```
 
-**Need to install Bazelisk**, so it can use newest version of BAZEL.
+**It also requires the installation [Bazelisk](https://github.com/bazelbuild/bazelisk)**, so it can use
+the newest version of [Bazel](https://bazel.build/).
 
 Finally, to train use the sequence bellow. It will create a local `.cache` directory, which will be
 visible from outside the docker and set it to be used for compilation (final built files will be there).
@@ -61,7 +63,8 @@ If you used the `--output .cache` option to `bazel.sh`, these files will be acce
 docker inside the `gomlx/c/.cache` directory, you'll have to manually translate the `blaze-bin` link
 to translate it.
 
-If you are developing on the C++ side, you may want to [commit the docker](https://docs.docker.com/engine/reference/commandline/commit/),
+If you are developing on the C++ side, you may want to 
+[commit the docker](https://docs.docker.com/engine/reference/commandline/commit/),
 to a new image, so you don't need to run the `apt` commands every time you start the docker again.
 
-
+TODO: create the `docker/devel` Dockerfile with everything needed instead.

@@ -20,10 +20,10 @@ package ctxtest
 
 import (
 	"fmt"
-	"github.com/stretchr/testify/require"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/types/slices"
+	"github.com/stretchr/testify/require"
 	"testing"
 )
 
@@ -47,9 +47,8 @@ func RunTestGraphFn(t *testing.T, testName string, graphFn TestContextGraphFn, w
 		return all
 	}
 	exec := context.NewExec(manager, ctx, wrapperFn)
-	inputsAndOutputs, g := exec.CallWithGraph()
-	require.Truef(t, g.Ok(), "%s: failed to run graph with %+v", testName, g.Error())
-	require.Truef(t, inputsAndOutputs[0].Ok(), "%s: failed to run graph with %+v", testName, inputsAndOutputs[0].Error())
+	inputsAndOutputs, _, err := exec.CallWithGraph()
+	require.NoErrorf(t, err, "%s: failed to run graph with %+v", testName)
 
 	inputs := inputsAndOutputs[:numInputs]
 	outputs := inputsAndOutputs[numInputs:]

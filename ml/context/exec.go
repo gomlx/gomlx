@@ -18,9 +18,9 @@ package context
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/pkg/errors"
 	"log"
 	"reflect"
 	"runtime"
@@ -461,10 +461,10 @@ func (e *Exec) SetContext(context *Context) *Exec {
 // It passes the context to the registered ctxGraphFn. After the very first invocation of Call
 // the context is marked as Context.Reuse().
 //
-// It returns the outputs in a slice, even if there is only one output.
-func (e *Exec) Call(args ...any) []tensor.Tensor {
-	outputs, _ := e.CallWithGraph(args...)
-	return outputs
+// It returns the outputs in a slice, even if there is only one output, or an error.
+func (e *Exec) Call(args ...any) ([]tensor.Tensor, error) {
+	outputs, _, err := e.CallWithGraph(args...)
+	return outputs, err
 }
 
 // CallWithGraph is similar to Call, but it also returns the computation graph used
@@ -472,20 +472,25 @@ func (e *Exec) Call(args ...any) []tensor.Tensor {
 // parameters, this can help disambiguate in case the user needs to use the Graph for
 // something else.
 //
-// Notice the returned *Graph may be nil, if it failed to parse the arguments and find
-// the corresponding computation graph.
-func (e *Exec) CallWithGraph(args ...any) ([]tensor.Tensor, *Graph) {
-	outputs, g := e.exec.CallWithGraph(args...)
-	if g == nil {
-		// Error during execution, it will be set in all outputs, return as is.
-		return outputs, nil
+// It returns the outputs in a slice, even if there is only one output, and the graph used
+// to execute the computation or an error.
+func (e *Exec) CallWithGraph(args ...any) (outputs []tensor.Tensor, g *Graph, err error) {
+	if !e.context.Ok() {
+		err = errors.WithMessage(e.context.Error(), "Context already contains error, can't execute")
+		return
 	}
-	if !g.Ok() {
-		return outputs, g
+	outputs, g, err = e.exec.CallWithGraph(args...)
+	if !e.context.Ok() {
+		err = errors.WithMessage(e.context.Error(), "Context contains error, failed to execute probably when building graph")
+		return
+	}
+	if err != nil {
+		// Error during execution, it will be set in all outputs, return as is.
+		return
 	}
 	if len(outputs) == 0 {
-		g.SetErrorf("No outputs from ModelFn function for %q", e.Name())
-		return outputs, g
+		err = errors.Errorf("No outputs from ModelFn function for %q", e.Name())
+		return
 	}
 
 	// Separate the changed variables new values and set the variables accordingly.
@@ -497,5 +502,6 @@ func (e *Exec) CallWithGraph(args ...any) ([]tensor.Tensor, *Graph) {
 		//fmt.Printf("\t%s: %d\n", v.ParameterName(), ii)
 		v.SetValue(outputs[ii])
 	}
-	return outputs[len(changedVars):], g
+	outputs = outputs[len(changedVars):]
+	return
 }

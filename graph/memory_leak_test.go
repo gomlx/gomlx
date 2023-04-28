@@ -21,6 +21,7 @@ import (
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/gomlx/gomlx/xla"
+	"github.com/stretchr/testify/require"
 	"testing"
 	"time"
 )
@@ -145,11 +146,9 @@ func TestMemoryLeaksExec(t *testing.T) {
 			// Tests for various parameters.
 			for xV := float64(0); xV < 100; xV += 1 {
 				for size := 1; size <= 100; size++ {
-					results := exec.Call(slices.SliceWithValue(size, xV), float64(size))
+					results, err := exec.Call(slices.SliceWithValue(size, xV), float64(size))
+					require.NoError(t, err, "Failed to execute computation")
 					addedT, reducedT := results[0], results[1]
-					if addedT.Error() != nil {
-						t.Fatalf("Failed to execute computation: %+v", addedT.Error())
-					}
 					if addedT.Rank() != 1 && addedT.Shape().Dimensions[0] != size {
 						t.Errorf("Unexpected shape %s for size %d, value %f", addedT.Shape(), size, xV)
 					}

@@ -8,6 +8,8 @@ Split by functionality, the most "desirable" TODOs are:
 
 ## Modeling
 
+* Random: make randomization state as a side input -- as it should be, so XLA functions are purely functional.
+  Maybe follow Jax implementation ?
 * CNNs: add SeparableConv2D. The goal would be to have an exact ResNet50 working.
 * GNN Layer: tbd., but is one of the recent hotness, it would be nice to have a GNN layer/scheme available as well.
 * FFT operation for FNets. The op is simple enough, the gradient I'm not sure how yet.
@@ -17,6 +19,10 @@ Split by functionality, the most "desirable" TODOs are:
   * Have a few of the standard models available: ResNet50 (older but a good reference), ViT, BERT, Chinchilla.
   * Have a clear story importing models from Hugging Face (at least of one type, like TF or Jax, since they
     also use XLA).
+* Computation Graph extensions and manipulation tools: there are good reasons for someone to want to 
+  change the Graph (splitting the graph for batch processing or distribution) or create arbitrary 
+  extensions to it (custom operations in Go or C/C++) and be able to differentiate through those. 
+  This is something that needs some design and thought. 
 
 ## Infrastructure
 

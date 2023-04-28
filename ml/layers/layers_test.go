@@ -19,13 +19,13 @@ package layers
 import (
 	"flag"
 	"fmt"
-	"github.com/stretchr/testify/require"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/stretchr/testify/require"
 	"gonum.org/v1/plot/plotter"
 	"gonum.org/v1/plot/vg"
 	"testing"
@@ -119,12 +119,11 @@ func testSimpleFunc(t *testing.T, name string, input any,
 	manager := BuildManager().MustDone()
 	ctx := context.NewContext(manager).WithInitializer(IotaP1Initializer)
 	exec := context.NewExec(manager, ctx, fn)
-	output := exec.Call(input)
-	require.NotEmptyf(t, output, "%s: failed to exec graph: %+v", name, ctx.Error())
-	require.Truef(t, output[0].Ok(), "%s: failed to exec graph: %+v", name, output[0].Error())
-	fmt.Printf("\t%s(%v) = %s\n", name, input, output[0].Local().GoStr())
-	require.Truef(t, slices.SlicesInDelta(output[0].Local().Value(), want, slices.Epsilon),
-		"%s(%v): want=%v, got=%v", name, input, want, output[0].Local().GoStr())
+	outputs, err := exec.Call(input)
+	require.NoError(t, err, "%s: failed to exec graph", name)
+	fmt.Printf("\t%s(%v) = %s\n", name, input, outputs[0].Local().GoStr())
+	require.Truef(t, slices.SlicesInDelta(outputs[0].Local().Value(), want, slices.Epsilon),
+		"%s(%v): want=%v, got=%v", name, input, want, outputs[0].Local().GoStr())
 }
 
 func TestDense2(t *testing.T) {

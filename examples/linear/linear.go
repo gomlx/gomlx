@@ -70,7 +70,8 @@ func initCoefficients(manager *Manager, numVariables int) (coefficients, bias te
 		bias = RngNormal(Const(g, BiasMu), Const(g, BiasSigma), MakeShape(F64))
 		return
 	})
-	results := e.Call()
+	results, err := e.Call()
+	MustNoError(err)
 	coefficients, bias = results[0], results[1]
 	return
 }
@@ -94,7 +95,8 @@ func buildExamples(manager *Manager, coef, bias tensor.Tensor, numExamples int, 
 		}
 		return
 	})
-	examples := e.Call(coef, bias)
+	examples, err := e.Call(coef, bias)
+	MustNoError(err)
 	inputs, labels = examples[0], examples[1]
 	MustOk(inputs)
 	return
