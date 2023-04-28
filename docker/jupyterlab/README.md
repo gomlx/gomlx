@@ -42,6 +42,11 @@ docker build -t janpfeifer/gomlx_jupyterlab:latest -f docker/jupyterlab/Dockerfi
       $(docker container ls --latest --quiet) janpfeifer/gomlx_jupyterlab:latest
 ```
 
+Finally, to push the image:
+
+```bash
+docker push janpfeifer/gomlx_jupyterlab:latest
+```
 ### TODOs
 
 - Create a version without CUDA, to save space for those not using it.
