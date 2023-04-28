@@ -21,9 +21,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"github.com/pkg/errors"
-	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/types/tensor"
 	"io"
 	"log"
 	"net/http"
@@ -34,6 +31,10 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+
+	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/pkg/errors"
 )
 
 // FileExists returns true if file or directory exists.
@@ -321,6 +322,7 @@ func (impl *parallelDatasetImpl) startGoRoutines() {
 					return
 				}
 				if err != nil {
+					log.Printf("Error: %+v", err)
 					// Fatal error, stop everything.
 					impl.muErr.Lock()
 					if impl.err != nil {
@@ -400,12 +402,18 @@ func (pd *ParallelDataset) Yield() (spec any, inputs []tensor.Tensor, labels []t
 		err = impl.err
 		impl.muErr.Unlock()
 		return
-	case <-impl.epochFinished:
-		// No more records, until Reset() is called.
-		err = io.EOF
-		return
 	case unit = <-impl.cache:
 		// We got a new batch
+	case <-impl.epochFinished:
+		// No more records being produced (until Reset() is called), but we still need to exhaust the cache.
+		select {
+		case unit = <-impl.cache:
+			// We got a new batch, simply continue.
+		default:
+			// Generation exausted, and no more records in cache.
+			err = io.EOF
+			return
+		}
 	}
 	spec, inputs, labels = unit.spec, unit.inputs, unit.labels
 
