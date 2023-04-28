@@ -19,3 +19,6 @@ bazel-c
 bazel-out
 bazel-mnt
 bazel-testlogs
+
+# VSCode files
+.Trash*
