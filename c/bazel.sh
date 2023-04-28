@@ -49,12 +49,15 @@ set -vex
 BAZEL=${BAZEL:-bazel}  # Bazel version > 5.
 PYTHON=${PYTHON:-python}  # Python, version should be > 3.7.
 
+# Check the OpenXLA version (commit hash) changed, and if so, download an
+# updated `openxla_xla_bazelrc` file from github.
+# TODO: include a sha256 verification of the file as well.
 if ! grep -q "OPENXLA_XLA_COMMIT_HASH" WORKSPACE ; then
   echo "Did not find OPENXLA_XLA_COMMIT_HASH in WORKSPACE file!?"
   exit 1
 fi
 OPENXLA_XLA_COMMIT_HASH="$(
-  grep -E "OPENXLA_XLA_COMMIT_HASH[[:space:]]*=" WORKSPACE |\
+  grep -E "^OPENXLA_XLA_COMMIT_HASH[[:space:]]*=" WORKSPACE |\
     sed -n 's/^[^"]*"\([^"]*\)".*/\1/p'
 )"
 OPENXLA_BAZELRC="openxla_xla_bazelrc"

@@ -92,7 +92,7 @@ char *number_to_string(int n) {
 
 bool XlaStatusOk(XlaStatus *status) { return XlaStatusCast(status)->ok(); }
 char *XlaStatusErrorMessage(XlaStatus *status) {
-    return c_str(XlaStatusCast(status)->error_message().c_str());
+    return c_str(XlaStatusCast(status)->message().data());
 }
 
 int XlaStatusCode(XlaStatus *status) {

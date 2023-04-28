@@ -1,8 +1,8 @@
 # GoMLX changelog
 
+## v0.1.0
 
-## v0.0.2
-
+* Added `docker/devel` for development and building the Go/C++ bridge library.
 * Changed `Exec.Call` method to return an error directly.
 * Added `docker/` subdirectory.
 * Added `docker/jupyterlab`: docker that includes JupyterLab and GoNB for quick getting started. Available in [janpfeifer/gomlx_jupyterlab](https://hub.docker.com/repository/docker/janpfeifer/gomlx_jupyterlab/general) for now.
