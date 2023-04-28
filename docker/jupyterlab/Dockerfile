@@ -9,7 +9,7 @@ ARG GO_VERSION=1.20.3
 # User, home directory and basics.
 #######################################################################################################
 
-ARG NB_USER="gomlx"
+ARG NB_USER="jovyan"
 ARG NB_UID=1000
 ARG NB_GID=100
 
@@ -23,7 +23,7 @@ USER root
 RUN apt-get update --yes \
     && apt-get install -y --no-install-recommends wget vim
 
-# Create NB_USER (gomlx) and its home directory.
+# Create NB_USER (jovyan) and its home directory.
 RUN useradd --create-home --uid ${NB_UID} --gid ${NB_GID} --shell /bin/bash ${NB_USER}
 ENV HOME /home/${NB_USER}
 

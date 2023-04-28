@@ -175,7 +175,7 @@ StatusOr UnserializeStableHLO(VectorData *serialized) {
     StatusOr r{0, 0};
     std::unique_ptr<StableHLOHolder> holder(new StableHLOHolder());
     holder->context.reset(new mlir::MLIRContext());
-    mlir::BaseScopedDiagnosticHandler diagnostic(&context);  // Error collector.
+    mlir::BaseScopedDiagnosticHandler diagnostic(holder->context.get());  // Error collector.
     mlir::OwningOpRef<mlir::ModuleOp> module = mlir::stablehlo::deserializePortableArtifact(
         llvm::StringRef(static_cast<const char *>(serialized->data), serialized->count), holder->context.get());
 
