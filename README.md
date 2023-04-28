@@ -148,7 +148,7 @@ Finally, feel free to ask questions: time allowing (when not in work) I'm always
 
 The project is looking forward contributions for anyone interested. Many parts are not yet set 
 in stone, so there is plenty of space for improvements and re-designs for those interested
-and with good experience in Go, Machine Learning and APIs in general. See the (TODO)[docs/TODO.md]
+and with good experience in Go, Machine Learning and APIs in general. See the [TODO](docs/TODO.md)
 for inspiration.
 
 No governance guidelines have been established yet, this also needs work.
