@@ -7,6 +7,7 @@
 * Added `docker/jupyterlab`: docker that includes JupyterLab and GoNB for quick getting started. Available in [janpfeifer/gomlx_jupyterlab](https://hub.docker.com/repository/docker/janpfeifer/gomlx_jupyterlab/general) for now.
 * Fixed various documentations.
 * Tutorial clean up and added links.
+* Fixed cache issue in `ParallelDataset`.
 
 ## v0.0.1
 
