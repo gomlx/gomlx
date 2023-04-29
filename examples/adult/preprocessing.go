@@ -19,9 +19,6 @@ package adult
 import (
 	"encoding/gob"
 	"fmt"
-	"github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/ml/data"
-	"github.com/gomlx/gomlx/types/tensor"
 	"log"
 	"math/rand"
 	"os"
@@ -29,6 +26,10 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/ml/data"
+	"github.com/gomlx/gomlx/types/tensor"
 
 	"github.com/go-gota/gota/dataframe"
 	"github.com/go-gota/gota/series"
@@ -38,6 +39,7 @@ import (
 // This file contains all functions need for preparation of the Adult dataset,
 // including vocabulary and quantiles building (preprocessing).
 
+// Various URLs and file names for Adult-UCI dataset.
 const (
 	AdultDatasetDataURL  = "https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data"
 	AdultDatasetDataFile = "adult.data"
@@ -63,6 +65,10 @@ func ValueNoError[T any](v T, err error) T {
 	return v
 }
 
+// DownloadDataset downloads the Adult dataset files into `dir`. It `log.Fatal` if
+// it fails. Verbosity files >= 1 will print what it's doing.
+//
+// If files are already downloaded it does nothing -- except if `force` is set to true.
 func DownloadDataset(dir string, force bool, verbosity int) {
 	if verbosity >= 1 {
 		fmt.Printf("Downloading datasets:\n")
@@ -102,10 +108,13 @@ const (
 )
 
 var (
+	// AdultFieldNames in the dataset.
 	AdultFieldNames = []string{
 		"age", "workclass", WeightCol, EducationTypeCol, EducationYearsCol, "marital-status", "occupation", "relationship",
 		"race", "sex", "capital-gain", "capital-loss", "hours-per-week", "native-country", LabelCol,
 	}
+
+	// AdultFieldTypes maps the field (column) name to its format.
 	AdultFieldTypes = map[string]series.Type{
 		"age":             series.Float,
 		"workclass":       series.String,
@@ -136,7 +145,9 @@ var (
 	junkLine = "|1x3 Cross validator\n"
 )
 
-// LoadDataFrame and returns a DataFrame.
+// LoadDataFrame and returns a DataFrame. `path` is the name of the downloaded file.
+//
+// Considering using LoadAndPreprocessData instead.
 func LoadDataFrame(path string) dataframe.DataFrame {
 	contents, err := os.ReadFile(path)
 	if err != nil {
@@ -155,6 +166,15 @@ func LoadDataFrame(path string) dataframe.DataFrame {
 
 // LoadAndPreprocessData all in one function call for data preprocessing for the Adult Dataset.
 // Information and data available in the global Data.
+//
+// Parameters:
+// - dir: where to store downloaded files. By default if they are already downloaded they will be reused.
+// - numQuantiles: number of quantiles to generate for the continuous datasets. They can be used for piecewise-linear calibration.
+// - forceDownload: will download data from the internet even if already downloaded.
+// - verbosity: set to a value >= 1 to print out what it's doing.
+//
+// The results are stored in the global variable `Data`.
+//
 // It panics in case of error.
 func LoadAndPreprocessData(dir string, numQuantiles int, forceDownload bool, verbosity int) {
 	dir = data.ReplaceTildeInDir(dir) // "~/..." -> "${HOME}/..."
@@ -176,7 +196,7 @@ func LoadAndPreprocessData(dir string, numQuantiles int, forceDownload bool, ver
 		PopulateQuantiles(df, numQuantiles)
 		if verbosity >= 2 {
 			// Print a sample of the unprocessed data.
-			PrintDataframe(df)
+			PrintFeatures(df)
 		}
 		Data.Train = ConvertDataFrameToRawData(df)
 
@@ -216,6 +236,8 @@ type QuantileTable []float32
 // Data holds all the data (train and test), and the required information
 // collected statically (i.e., non machine learned) from the training dataset
 // (we don't look at test to generate these).
+//
+// It is filled out by LoadAndPreprocessData.
 var Data struct {
 	// VocabulariesFeatures is a list of feature names for the vocabularies stored in Vocabularies.
 	VocabulariesFeatures []string
@@ -245,11 +267,15 @@ var Data struct {
 // The `numQuantiles` is the only preprocessing parameter that affects the result. We use
 // it as part of the filename to make sure we don't re-use data generated for different
 // `numQuantiles`.
+//
+// Considering using LoadAndPreprocessData instead.
 func BinaryFilePath(dir string, numQuantiles int) string {
 	return path.Join(dir, fmt.Sprintf("adult_data-%d_quantiles.bin", numQuantiles))
 }
 
 // SaveBinaryData saves the global Data structure in binary format, for faster access.
+//
+// Considering using LoadAndPreprocessData instead.
 func SaveBinaryData(dir string, numQuantiles int) (err error) {
 	filePath := BinaryFilePath(dir, numQuantiles)
 	var f *os.File
@@ -274,6 +300,8 @@ func SaveBinaryData(dir string, numQuantiles int) (err error) {
 
 // LoadBinaryData saves the global Data structure in binary format, for faster access.
 // It returns true if data was avaialable and loaded.
+//
+// Considering using LoadAndPreprocessData instead.
 func LoadBinaryData(dir string, numQuantiles int) (found bool, err error) {
 	filePath := BinaryFilePath(dir, numQuantiles)
 	found, err = FileExists(filePath)
@@ -342,7 +370,7 @@ func PopulateVocabularies(df dataframe.DataFrame) {
 
 var ()
 
-// PopulateQuantiles with up to numQuantiles for each Float column.
+// PopulateQuantiles with up to numQuantiles for each tloat column.
 func PopulateQuantiles(df dataframe.DataFrame, numQuantiles int) {
 	// Important: loop through AdultFieldNames to have a stable ordering.
 	for _, featureName := range AdultFieldNames {
@@ -497,7 +525,8 @@ func (r *RawData) CreateTensors(manager *graph.Manager) *TensorData {
 	}
 }
 
-func PrintDataframe(df dataframe.DataFrame) {
+// PrintFeatures prints information on the vacabularies and quantiles about the features.
+func PrintFeatures(df dataframe.DataFrame) {
 	fmt.Println(df)
 	fmt.Printf("Vocabularies:\n")
 	for ii, featureName := range Data.VocabulariesFeatures {
@@ -516,6 +545,7 @@ func PrintDataframe(df dataframe.DataFrame) {
 	}
 }
 
+// PrintRawData prints positivity ratio and and some samples.
 func PrintRawData(r *RawData) {
 	var positive, positiveWeighted, totalWeight float32
 	for rowNum := 0; rowNum < r.NumRows; rowNum++ {
