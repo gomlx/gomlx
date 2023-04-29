@@ -1,9 +1,8 @@
 FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
 
 LABEL maintainer="pfeifer@gmail.com"
-ARG GOMLX_VERSION=v0.1.0
-ARG GO_VERSION=1.20.3
 
+ARG GO_VERSION=1.20.3
 
 #######################################################################################################
 # User, home directory and basics.
@@ -66,7 +65,7 @@ RUN apt-get update --yes \
     && apt-get install --yes --no-install-recommends gcc libunwind8 liblzma5 libgoogle-perftools-dev
 
 WORKDIR "/usr/local"
-RUN wget --quiet --output-document=- "https://github.com/gomlx/gomlx/releases/download/v0.0.1/gomlx_xla-v0.0.1-linux-amd64.tar.gz" | tar -xz
+RUN wget --quiet --output-document=- "https://github.com/gomlx/gomlx/releases/latest/download/gomlx_xla-linux-amd64.tar.gz" | tar -xz
 ENV LD_LIBRARY_PATH /usr/local/lib:${LD_LIBRARY_PATH}
 
 

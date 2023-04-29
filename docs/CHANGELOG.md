@@ -1,8 +1,11 @@
 # GoMLX changelog
 
-## Next release
+## v0.1.1, 2023-04-29
 
-* Updated `docker/jupyterlab` for the v0.1.0 release. 
+* Small fixes to example notebooks.
+* Added documentation to the various dataset libraries.
+* Renamed release asset not to include the version name to simplify downloading the latest one.
+* Updated `docker/jupyterlab` for the new release. 
 
 ## v0.1.0, 2023-04-28
 

@@ -14,10 +14,31 @@
  *	limitations under the License.
  */
 
+// Package adult provides a `Dataset`, a `train.Dataset` implementation for
+// UCI Adult Census dataset. See attached notebook (using GoNB) for details
+// and examples on how to use it.
+//
+// Mostly one will want to use `LoadAndPreprocessData` to download and preprocess
+// the data, the singleton `Data` to access it, and `NewDataset` to create datasets
+// for training and evaluating.
+//
+// It also provides preprocessing functionality:
+//
+// - Downloading and caching of the dataset.
+// - List of column names organized by types (`AdultFieldNames` and `AdultFieldTypes`)
+// - Vocabularies for categorical features.
+// - Quantiles for continuous features.
+// - Pretty print somes stats.
+//
+// It uses github.com/go-gota/gota.
 package adult
 
 import (
 	"fmt"
+	"io"
+	"log"
+	"math/rand"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/train"
@@ -25,9 +46,6 @@ import (
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
-	"io"
-	"log"
-	"math/rand"
 )
 
 // Dataset implements a train.Dataset that samples random batches.
@@ -158,7 +176,17 @@ func (b *Dataset) Reset() {
 	return
 }
 
-// NewDataset creates a batch of numExamples.
+// NewDataset creates a new `train.Dataset` (can be used for training) for the
+// MCI Adult dataset.
+//
+// The `data` should be set with either `adult.Data.Train` or “adult.Data.Test`,
+// after it is loaded with `LoadAndPreprocessData`.
+//
+// If a batch size is given it draws batches randomly, with replacement.
+//
+// If a batch size is not given, it returns a batch with the full epoch in one read
+// and after that returns io.EOF, for evaluation. Notice the full epoch is small for
+// this dataset.
 func NewDataset(name string, data *RawData, manager *Manager, batchSize int) *Dataset {
 	b := &Dataset{
 		name:          name,
