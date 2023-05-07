@@ -52,9 +52,9 @@ func TestFromValue(t *testing.T) {
 	cmpShapes(t, shape, wantShape, err)
 
 	// Test for invalid dtypes.
-	shape, err = shapeForValue([][]int32{{3}})
+	shape, err = shapeForValue([][]uint16{{3}})
 	if shape.DType != shapes.InvalidDType {
-		t.Fatalf("Wanted InvalidDType for int32, instead got %q", shape.DType)
+		t.Fatalf("Wanted InvalidDType for uint16, instead got %q", shape.DType)
 	}
 	if err == nil {
 		t.Fatalf("Should have returned error for unsupported DType")
@@ -142,6 +142,7 @@ func testValueOf[T shapes.Number](t *testing.T) {
 func TestValueOf(t *testing.T) {
 	// No conversion of different types, just from tensor.Local to a Go slice.
 	testValueOf[int](t)
+	testValueOf[int32](t)
 	testValueOf[float32](t)
 	testValueOf[float64](t)
 

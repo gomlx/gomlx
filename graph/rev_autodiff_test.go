@@ -382,7 +382,7 @@ func testGradients[T interface{ float32 | float64 }](t *testing.T, name string, 
 		fmt.Printf("\tgrad(f)/grad(x_%d): got=%v\n", ii, got.GoStr())
 		if !slices.DeepSliceCmp(got.Value(), want, slices.Close[T]) {
 			t.Log(string(debug.Stack()))
-			t.Errorf("grad f(x)/x_%d: want %v, got %v", ii, want, got.GoStr())
+			t.Errorf("grad f(x)/x_%d: want (%T) %v, got %v", ii, want, want, got.GoStr())
 		}
 	}
 }
@@ -492,5 +492,21 @@ func TestStopGradient(t *testing.T) {
 		}, []any{
 			[]float64{3, 3, 3},
 			[]float64{0, 0, 0},
+		})
+}
+
+func TestGradientGatherSlices(t *testing.T) {
+	testGradients[float32](t, "gradient_gradient_slices",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			input := IotaFull(g, shapes.Make(shapes.F32, 3, 2, 4))
+			start := Const(g, [][]int32{{0, 1}, {1, 2}})
+			sizes := []int{1, 2} // Take a sub-matrix
+			output = GatherSlices(input, []int{1, 2}, start, sizes)
+			return output, []*Node{input}
+		}, []any{
+			[][][]float32{
+				{{0, 1, 1, 0}, {0, 0, 1, 1}},
+				{{0, 1, 1, 0}, {0, 0, 1, 1}},
+				{{0, 1, 1, 0}, {0, 0, 1, 1}}},
 		})
 }

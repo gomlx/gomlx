@@ -23,7 +23,7 @@ import (
 
 // DType indicates the type of the unit element of a Tensor (or its representation in
 // a computation graph). It enumerates the known data types. So far only
-// Bool, Int32, Int64, Float32 and Float64 work.
+// Bool, Int32, Int64, Float32 and Float64 are supported.
 //
 // The values of DType must match "tensorflow/compiler/xla/xla_data.pb.h", hence it needs
 // to be an int32.
@@ -63,6 +63,7 @@ const (
 const PRED = Bool
 
 const (
+	I32 = Int32
 	I64 = Int64
 	F32 = Float32
 	F64 = Float64
@@ -75,24 +76,24 @@ func (dtype DType) IsFloat() bool {
 
 // IsInt returns whether dtype is a supported integer type -- float types not yet supported will return false.
 func (dtype DType) IsInt() bool {
-	return dtype == Int64
+	return dtype == Int64 || dtype == Int32
 }
 
 func (dtype DType) IsSupported() bool {
-	return dtype == Bool || dtype == Float32 || dtype == Float64 || dtype == Int64
+	return dtype == Bool || dtype == Float32 || dtype == Float64 || dtype == Int64 || dtype == Int32
 }
 
 // Supported represents the Go types that are supported by the graph package. Used as a Generics constraint.
 // See also Number.
 type Supported interface {
-	bool | float32 | float64 | int
+	bool | float32 | float64 | int | int32
 }
 
 // Number represents the Go numeric types that are supported by graph package. Used as a Generics constraint.
 // Notice that "int" becomes int64 in the implementation. Since it needs a 1:1 mapping, it doesn't support the native
 // (Go) int64 type.
 type Number interface {
-	float32 | float64 | int
+	float32 | float64 | int | int32
 }
 
 // GoFloat represent a continuous Go numeric type, supported by GoMLX.
@@ -104,16 +105,16 @@ type GoFloat interface {
 // generics constraints definitions, so we enumerate up to 7 levels of slices. Feel free to add
 // more if needed, the implementation will work with any arbitrary number.
 type MultiDimensionSlice interface {
-	bool | int | float32 | float64 |
-		[]bool | []int | []float32 | []float64 |
-		[][]bool | [][]int | [][]float32 | [][]float64 |
-		[][][]bool | [][][]int | [][][]float32 | [][][]float64 |
-		[][][][]bool | [][][][]int | [][][][]float32 | [][][][]float64 |
-		[][][][][]bool | [][][][][]int | [][][][][]float32 | [][][][][]float64 |
-		[][][][][][]bool | [][][][][][]int | [][][][][][]float32 | [][][][][][]float64 |
-		[][][][][][][]bool | [][][][][][][]int | [][][][][][][]float32 | [][][][][][][]float64 |
-		[][][][][][][][]bool | [][][][][][][][]int | [][][][][][][][]float32 | [][][][][][][][]float64 |
-		[][][][][][][][][]bool | [][][][][][][][][]int | [][][][][][][][][]float32 | [][][][][][][][][]float64
+	bool | int | int32 | float32 | float64 |
+		[]bool | []int | []int32 | []float32 | []float64 |
+		[][]bool | [][]int | [][]int32 | [][]float32 | [][]float64 |
+		[][][]bool | [][][]int | [][][]int32 | [][][]float32 | [][][]float64 |
+		[][][][]bool | [][][][]int | [][][][]int32 | [][][][]float32 | [][][][]float64 |
+		[][][][][]bool | [][][][][]int | [][][][][]int32 | [][][][][]float32 | [][][][][]float64 |
+		[][][][][][]bool | [][][][][][]int | [][][][][][]int32 | [][][][][][]float32 | [][][][][][]float64 |
+		[][][][][][][]bool | [][][][][][][]int | [][][][][][][]int32 | [][][][][][][]float32 | [][][][][][][]float64 |
+		[][][][][][][][]bool | [][][][][][][][]int | [][][][][][][][]int32 | [][][][][][][][]float32 | [][][][][][][][]float64 |
+		[][][][][][][][][]bool | [][][][][][][][][]int | [][][][][][][][][]int32 | [][][][][][][][][]float32 | [][][][][][][][][]float64
 }
 
 func DTypeGeneric[T Supported]() DType {
@@ -125,6 +126,8 @@ func DTypeGeneric[T Supported]() DType {
 		return Float64
 	case int:
 		return Int64
+	case int32:
+		return Int32
 	case bool:
 		return Bool
 	}
@@ -135,6 +138,8 @@ func DTypeForType(t reflect.Type) DType {
 	switch t.Kind() {
 	case reflect.Int:
 		return Int64
+	case reflect.Int32:
+		return Int32
 	case reflect.Float32:
 		return Float32
 	case reflect.Float64:
@@ -149,6 +154,8 @@ func TypeForDType(dtype DType) reflect.Type {
 	switch dtype {
 	case Int64:
 		return reflect.TypeOf(int(0))
+	case Int32:
+		return reflect.TypeOf(int32(0))
 	case Float32:
 		return reflect.TypeOf(float32(0))
 	case Float64:
@@ -196,6 +203,8 @@ func LowestValueForDType(dtype DType) any {
 	switch dtype {
 	case Int64:
 		return math.MinInt64
+	case Int32:
+		return math.MinInt32
 	case Float32:
 		return float32(math.Inf(-1))
 	case Float64:

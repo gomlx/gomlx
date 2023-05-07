@@ -17,6 +17,7 @@
 package graph
 
 import (
+	"fmt"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/xla"
 )
@@ -637,27 +638,82 @@ func sliceVJP(node, v *Node, _ shapes.Shape) []*Node {
 // gatherVJP generates the adjoint gradient term for  GatherXL node. It works only for simple gather operations,
 // in particular it works with graph.Gather.
 func gatherVJP(node, v *Node, _ shapes.Shape) []*Node {
-	serialized := node.serializedNode
-	indicesAreSorted := serialized.Ints[5] > 0
-	_ = indicesAreSorted
-	/* TODO: check that values are compatible with Gather() and return an error if not.
-	indexVectorDim := serialized.Ints[0]
-	pos := 6
-	extractSlice := func(lenIdx int) []int {
-		len := serialized.Ints[lenIdx]
-		from := pos
-		pos += len
-		return serialized.Ints[from:pos]
+	g := node.Graph()
+
+	// TODO: check that values are compatible with Gather() and return an error if not.
+	input := node.inputs[0]
+	indices := node.inputs[1]
+	inputShape := input.Shape()
+	indexVectorDim, offsetDims, collapsedSliceDims, startIndexMap, sliceSizes, indicesAreSorted, err := deserializeGatherXLA(node.serializedNode)
+	_ = offsetDims // We don't need it here.
+	if err != nil {
+		g.SetError(err)
+		return nil
 	}
-	offsetDims := extractSlice(1)
-	collapsedSliceDims := extractSlice(2)
-	startIndexMap := extractSlice(3)
-	sliceSizes := extractSlice(4)
-	*/
-	return []*Node{
-		Scatter(node.inputs[1], v, node.inputs[0].shape),
-		nil, // No gradients for indices.
+
+	// Gather() case: sliceSizes is 1 for the first dimensions, and full in the last. Plus the initial
+	// dimensions are all collapsed.
+	if len(sliceSizes) != inputShape.Rank() {
+		g.SetErrorf("gradient from Gather with len(sliceSizes) != input.Rank() not defined -- sliceSizes=%v, input.Shape()=%s",
+			sliceSizes, inputShape)
+		return nil
 	}
+	isSimpleGather := true // Whether all indexed axes are at the start, and slices are the full dimension.
+	for axis, inputSize := range inputShape.Dimensions {
+		if axis < len(collapsedSliceDims) {
+			if collapsedSliceDims[axis] != axis {
+				isSimpleGather = false
+				break
+			}
+			if sliceSizes[axis] != 1 {
+				isSimpleGather = false
+				break
+			}
+		} else {
+			// For non-collapsed axes, we expect the slice to be the full dimension.
+			if sliceSizes[axis] != inputSize {
+				isSimpleGather = false
+				break
+			}
+		}
+	}
+	if isSimpleGather {
+		return []*Node{
+			Scatter(indices, v, inputShape),
+			nil, // No gradients for indices.
+		}
+	}
+
+	// GatherSlices(): sliceSizes are variable, but there are no collapsedSliceDims.
+	fmt.Printf("\tgatherVJP: operand=%s, start=%s, indexVectorDim=%d, offsetDims=%v, collapsedSliceDims=%v, startIndexMap=%v, sliceSizes=%v\n",
+		input.shape, indices.shape, indexVectorDim, offsetDims, collapsedSliceDims, startIndexMap, sliceSizes)
+
+	isGatherSlices := len(collapsedSliceDims) == 0
+	if isGatherSlices {
+		// Find scatterXLA parameters to reverse the GatherSlice:
+		operand := ZerosLike(input)
+		startIndices := indices
+		outputPrefixRank := startIndices.Rank() - 1 // Prefix dimensions of the output of the GatherSlice.
+		updates := v
+		fmt.Printf("\tgatherVJP: updates=%s\n", updates.shape)
+
+		// updateWindowsDims: one per every dimension of the input, offset by the initial outputPrefixRank.
+		updateWindowsDims := make([]int, 0, inputShape.Rank())
+		for ii := 0; ii < inputShape.Rank(); ii++ {
+			updateWindowsDims = append(updateWindowsDims, ii+outputPrefixRank)
+		}
+		var insertedWindowDims []int              // Empty, since the original GatherSlice don's have any collapsedSliceDims.
+		scatterDimsToOperandDims := startIndexMap // Same map used in GatherSlice.
+		uniqueIndices := false                    // We don't make any assumptions here. Likely the slices will overlap.
+		return []*Node{
+			scatterXLA(operand, startIndices, updates, indexVectorDim, updateWindowsDims, insertedWindowDims, scatterDimsToOperandDims,
+				indicesAreSorted, uniqueIndices),
+			nil, // No gradients for indices.
+		}
+	}
+
+	g.SetErrorf("xlaGather operation for which no gradient was defined. Please use only Gather() or GatherSlices().")
+	return nil
 }
 
 // batchNormVJP generates the gradient with respect to the operand and the scale and offset

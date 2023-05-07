@@ -1,5 +1,12 @@
 # GoMLX changelog
 
+## Next
+
+* Added ops: GatherSlices (and its gradient), EinsumAxes, MaxScalar, MinScalar.
+* Added Interpolate operation -- for series/image/videos resizing.
+* Added support for int32 (`shapes.I32`).
+* Added Set[] to `types` package.
+
 ## v0.1.1, 2023-04-29
 
 * Small fixes to example notebooks.
