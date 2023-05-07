@@ -18,11 +18,12 @@ package graph
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
+	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/gomlx/gomlx/xla"
+	"github.com/pkg/errors"
 	"reflect"
 	"sort"
 	"strings"
@@ -1361,7 +1362,125 @@ func Gather(params, indices *Node) *Node {
 	// Make no assumptions about indices being sorted or unique.
 	// TODO: add version where these can be set.
 	return gatherXLA(params, indices, indexVectorDim, offsetDims, collapsedSliceDims, startIndexMap, sliceSizes,
-		false, false)
+		false)
+}
+
+// GatherSlices from inputs. Each axis listed in slicedAxes have corresponding start position and size for each
+// slice indexed by `start` (a graph Node, can be dynamically generated in the graph) and `sizes`, which will
+// define the output final shape, and must be statically given.
+//
+// Axes in slicedAxes can be given as negative numbers, which are taken from the the end of the input rank --
+// that is axis -1 means the last axis in the input. Axes not given in slicedAxes (and in `start` and `sizes`)
+// are taken in full length.
+//
+// Axes in slicedAxes must be given sorted in increasing order.
+//
+// The output has a rank equal to the prefixing rank of `start` (== `start.Rank()-1`) plus the rank of `input`.
+// And the shape will depend on the sizes of the slices.
+//
+//   - TODO:
+//     Add an option to support batch axes, present in both the input and in the start indices. This
+//     will need to automatically concatenate the batch index in the start Node as a iota of each
+//     batch example, and add the size 1 slice. This can be done manually today.
+//
+// Example:
+//
+//		x := IotaFull(g, shapes.Make(shapes.F64, 3, 10, 10))  // 300 in total.
+//		start := Const(g, [][]int32{{0, 3}, {1, 2}})  // 2 slices
+//		sizes := []int{1, 3}
+//		slices := GatherSlices(x, []int{1,2}, start, sizes)  // Axis=0 is taken in full.
+//	    slices.AssertDims(2, 3, 1, 2)  // 2 slices, Axis=0 taken in full (3), and each slice of dimensions (1, 2).
+//		// Result would be [][][][]int32{{{0, 1, 2, 3, 4}}, {{30, 31, 32, 33, 34}}, {{40, 41, 42, 43, 44}}}
+func GatherSlices(input *Node, slicedAxes []int, start *Node, sizes []int) (gathered *Node) {
+	g := validateGraphFromInputs(input, start)
+	gathered = g.InvalidNode()
+	if !g.Ok() {
+		return
+	}
+	if input.shape.IsScalar() || input.shape.IsTuple() {
+		g.SetErrorf("cannot GatherSlices from scalar or tuple, input shape is %s", input.Shape())
+		return
+	}
+	if !start.shape.DType.IsInt() {
+		g.SetErrorf("GatherSlices requires start indices to have an integer type, got shape %q instead", start.Shape())
+		return
+	}
+	if start.shape.IsScalar() {
+		start = ExpandDims(start, 0)
+	}
+
+	// Check ranks are compatible.
+	inputRank := input.Rank()
+	startRank := start.Rank()
+	numSlicedAxes := len(slicedAxes)
+	if len(sizes) != numSlicedAxes {
+		g.SetErrorf("GatherSlices requires one value in sizes for each axis marked as slicedAxes -- slicedAxes=%v, sizes=%v", slicedAxes, sizes)
+		return
+	}
+	if start.shape.Dimensions[startRank-1] != numSlicedAxes {
+		g.SetErrorf("GatherSlices requires the last axis of `start` to be the same dimension as the slicedAxes, "+
+			"so it takes one index value per axis to be sliced -- slicedAxes=%v, start.Shape()=%s",
+			slicedAxes, start.Shape())
+		return
+	}
+	outputPrefixRank := startRank - 1
+
+	// Validate slicedAxes and normalizes it (replacing negative axis to their corresponding ones).
+	{
+		seen := types.MakeSet[int](numSlicedAxes)
+		normalized := make([]int, 0, numSlicedAxes)
+		for ii, axis := range slicedAxes {
+			if axis < 0 {
+				axis = inputRank + axis
+			}
+			if axis < 0 || axis >= inputRank {
+				g.SetErrorf("GatherSlices got an invalid axis (%d) selected for slicing, input.Shape()=%s, slicedAxes=%v",
+					slicedAxes[ii], input.Shape(), slicedAxes)
+				return
+			}
+			if seen.Has(axis) {
+				g.SetErrorf("GatherSlices got an axis (%d) selected twice for slicing, input.Shape()=%s, slicedAxes=%v",
+					slicedAxes[ii], input.Shape(), slicedAxes)
+				return
+			}
+			if ii > 0 && axis < normalized[ii-1] {
+				g.SetErrorf("GatherSlices got an axis (%d) out-of-order, slicedAxes (%v) must be given in increasing order "+
+					"(and `sizes` and `start` must match that order)",
+					slicedAxes[ii], slicedAxes)
+				return
+			}
+			seen.Insert(axis)
+			normalized = append(normalized, axis)
+		}
+		slicedAxes = normalized
+	}
+
+	// Construct call to gatherXLA:
+	// * indexVectorDim indicates the axis in the start that has the indices: it's always the last one.
+	indexVectorDim := startRank - 1
+	// * startIndexMap holds the axis in the input that are pointed by `start`. These are exactly the normalized slicedAxes.
+	startIndexMap := slicedAxes
+	// * sliceSizes must be defined for each input axis, and are either given in `sizes` or are assumed to be the full dimension
+	//   of the input.
+	sliceSizes := input.shape.Copy().Dimensions // Start with a copy of the full dimensions of the input.
+	for ii, size := range sizes {
+		axis := slicedAxes[ii]
+		sliceSizes[axis] = size
+	}
+
+	// * offsetDims must point for each input axis that is not collapsed, the output Node. Since we don't collapse any of the
+	//   input dimensions, all the input axes need to be mapped. Notice that this preserves the order of the axis given by
+	//   the input (the order in `slicedAxes` will be ignored).
+	offsetDims := make([]int, 0, numSlicedAxes)
+	var collapsedSliceDims []int // Left empty.
+	for ii := 0; ii < inputRank; ii++ {
+		axis := ii + outputPrefixRank
+		offsetDims = append(offsetDims, axis)
+	}
+
+	// Make no assumptions about indices being sorted or unique.
+	// TODO: add version where these can be set.
+	return gatherXLA(input, start, indexVectorDim, offsetDims, collapsedSliceDims, startIndexMap, sliceSizes, false)
 }
 
 // GatherWithBatchDims values in params from pointer in indices. It works exactly the same as tensorflow's gather_nd
@@ -1483,6 +1602,10 @@ func boolToInt(b bool) int {
 	}
 }
 
+func intToBool(i int) bool {
+	return i != 0
+}
+
 // Scatter sums up the slices in updates into a new tensor of the given shape, at the locations pointed by indices.
 // It does the opposite of Gather.
 func Scatter(indices, updates *Node, shape shapes.Shape) *Node {
@@ -1557,7 +1680,8 @@ func ScatterAdd(operand, indices, updates *Node) *Node {
 		true, true)
 }
 
-// Concatenate results on the given dimension.
+// Concatenate results on the given axis. A negative axis will be counted from
+// the end -- so `axis==-1` means the last axis.
 func Concatenate(operands []*Node, axis int) *Node {
 	g := validateGraphFromInputs(operands...)
 	if !g.Ok() {

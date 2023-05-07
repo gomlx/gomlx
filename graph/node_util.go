@@ -395,3 +395,15 @@ func DiagonalWithValue(scalar *Node, dim int) *Node {
 	matrix := BroadcastPrefix(scalar, []int{dim, dim})
 	return Where(Diagonal(g, dim), matrix, ZerosLike(matrix))
 }
+
+// Clamp returns the `Min(Max(x, min), max)`, that is, `x` clamped between the values `min` and `max`.
+// Broadcast as usual.
+//
+// TODO: Use XLA Clamp op instead of Min, Max.
+func Clamp(min, x, max *Node) *Node {
+	g := x.Graph()
+	if !g.Ok() {
+		return g.InvalidNode()
+	}
+	return Min(Max(min, x), max)
+}

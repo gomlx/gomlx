@@ -68,7 +68,7 @@ func TestGatherXLA(t *testing.T) {
 		/* offsetDims */ []int{1},
 		/* collapsed_slice_dims */ []int{0},
 		/* start_index_map */ []int{0},
-		/* slice_sizes */ []int{1, 3}, false, false)
+		/* slice_sizes */ []int{1, 3}, false)
 	g.MustCompile(gather)
 	if g.Error() != nil {
 		t.Fatalf("Failed to create graph: %v", g.Error())

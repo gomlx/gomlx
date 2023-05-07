@@ -17,9 +17,11 @@
 package graph
 
 import (
+	"fmt"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/xla"
+	"github.com/pkg/errors"
 )
 
 // This file includes internal operations to wrap XLA ops. They are wrapped
@@ -83,16 +85,23 @@ func SliceWithStridesXLA(x *Node, starts, limits, strides []int) *Node {
 
 // gatherXLA is a powerful but cumbersome Gather operation offered by XLA. See Gather for the simpler version.
 // Full details in https://www.tensorflow.org/xla/operation_semantics#gather.
-// Its gradient is not defined for every case, prefer instead using Gather below.
-// Not exported for now, hopefully Gather and GatherWithBatchDims will suffice.
-func gatherXLA(operand, startIndices *Node, indexVectorDim int, offsetDims, collapsedSliceDims, startIndexMap, sliceSizes []int, indicesAreSorted, indicesAreUnique bool) *Node {
+// Its gradient is not defined for every case, use Gather and GatherSlices below.
+// indices_are_unique are always set to false.
+//
+// Not exported for now, hopefully Gather and GatherSlices will suffice.
+func gatherXLA(operand, startIndices *Node, indexVectorDim int, offsetDims, collapsedSliceDims, startIndexMap, sliceSizes []int, indicesAreSorted bool) *Node {
 	g := validateGraphFromInputs(operand, startIndices)
 	if !g.Ok() {
 		return g.InvalidNode()
 	}
 
+	fmt.Printf("\tgatherXLA: operand=%s, start=%s, indexVectorDim=%d, offsetDims=%v, collapsedSliceDims=%v, startIndexMap=%v, sliceSizes=%v\n",
+		operand.shape, startIndices.shape, indexVectorDim, offsetDims, collapsedSliceDims, startIndexMap, sliceSizes)
+
 	// Encoding of the values as follows. IMPORTANT: this code needs to be in sync with corresponding
-	// decoding code in c/gomlx/computation.cpp, in function ComputationAddOp, under GatherNode case.
+	// decoding code in c/gomlx/computation.cpp, in function ComputationAddOp, under GatherNode case,
+	// and with deserializeGatherXLA below.
+	//
 	//  * 6 first elements store the various parameters and lengths:
 	ints := make([]int, 6+len(offsetDims)+len(collapsedSliceDims)+len(startIndexMap)+len(sliceSizes))
 	ints[0] = indexVectorDim
@@ -101,7 +110,6 @@ func gatherXLA(operand, startIndices *Node, indexVectorDim int, offsetDims, coll
 	ints[3] = len(startIndexMap)
 	ints[4] = len(sliceSizes)
 	ints[5] = boolToInt(indicesAreSorted)
-	_ = indicesAreUnique
 
 	//  * Copy sequentially the contents of the 3 int arrays:
 	pos := 6
@@ -117,14 +125,41 @@ func gatherXLA(operand, startIndices *Node, indexVectorDim int, offsetDims, coll
 	}, []*Node{operand, startIndices})
 }
 
+// deserializeGatherXLA unpacks the parameters passed to xlaGather.
+func deserializeGatherXLA(serialized *xla.SerializedNode) (
+	indexVectorDim int, offsetDims, collapsedSliceDims, startIndexMap,
+	sliceSizes []int, indicesAreSorted bool, err error) {
+	if serialized.Type != xla.GatherNode {
+		err = errors.Errorf("wrong node type (%s) for unserlizeGatherXLA", serialized.Type)
+		return
+	}
+	ints := serialized.Ints
+	indexVectorDim = ints[0]
+	indicesAreSorted = intToBool(ints[5])
+
+	pos := 6
+	extractSlice := func(lenIdx int) []int {
+		length := serialized.Ints[lenIdx]
+		from := pos
+		pos += length
+		return ints[from:pos]
+	}
+	offsetDims = extractSlice(1)
+	collapsedSliceDims = extractSlice(2)
+	startIndexMap = extractSlice(3)
+	sliceSizes = extractSlice(4)
+	return
+}
+
 // scatterXLA is a powerful but cumbersome Scatter operation offered by XLA. See Scatter for the simpler version.
 // Full details in https://www.tensorflow.org/xla/operation_semantics#scatter.
-// Its gradient is not defined for every case, prefer instead using Gather below.
-// Not exported for now, hopefully Scatter and ScatterWithBatchDims will suffice.
-func scatterXLA(operand *Node, scatterIndices *Node, updates *Node,
-	indexVectorDim int,
-	updateWindowDims, insertedWindowDims, scatterDimsToOperandDims []int,
+// Its gradient is not defined for every case, prefer instead using Scatter and ScatterAdd below.
+// Not exported for now, hopefully Scatter and ScatterAdd will suffice.
+func scatterXLA(operand, scatterIndices, updates *Node,
+	indexVectorDim int, updateWindowDims, insertedWindowDims, scatterDimsToOperandDims []int,
 	indicesAreSorted, uniqueIndices bool) *Node {
+	fmt.Printf("\tscatterXLA: operand=%s, scatterIndices=%s, updates=%s, indexVectorDim=%d, updateWindowDims=%v, insertedWindowDims=%v, scatterDimsToOperandDims=%v, indicesAreSorted=%v, uniqueIndices=%v\n",
+		operand.shape, scatterIndices.shape, updates.shape, indexVectorDim, updateWindowDims, insertedWindowDims, scatterDimsToOperandDims, indicesAreSorted, uniqueIndices)
 	g := validateGraphFromInputs(operand, scatterIndices, updates)
 	if !g.Ok() {
 		return g.InvalidNode()
