@@ -1443,13 +1443,13 @@ func GatherSlices(input *Node, slicedAxes []int, start *Node, sizes []int) (gath
 					slicedAxes[ii], input.Shape(), slicedAxes)
 				return
 			}
+			seen.Insert(axis)
 			if ii > 0 && axis < normalized[ii-1] {
 				g.SetErrorf("GatherSlices got an axis (%d) out-of-order, slicedAxes (%v) must be given in increasing order "+
 					"(and `sizes` and `start` must match that order)",
 					slicedAxes[ii], slicedAxes)
 				return
 			}
-			seen.Insert(axis)
 			normalized = append(normalized, axis)
 		}
 		slicedAxes = normalized
@@ -1841,7 +1841,8 @@ func TransposeAllDims(x *Node, permutation ...int) *Node {
 }
 
 // Einsum evaluates the "Einstein summation" various types of products (inner/outer/batched)
-// between 2 tensors, on arbitrary dimensions.
+// between 2 tensors, on arbitrary dimensions. This version uses a textual description on
+// how to manipulate the axes. See EinsumAxes for a version where the axes are given numerically.
 //
 // This is inspired on numpy's Einsum, a description of which can be seen in
 // https://stackoverflow.com/questions/26089893/understanding-numpys-einsum/33641428#33641428.
@@ -2022,4 +2023,101 @@ func (e einsumOperandDesc) axisIndex(axis rune) int {
 		}
 	}
 	return -1
+}
+
+// EinsumAxes evaluates the "Einstein summation" various types of products (inner/outer/batched)
+// between 2 tensors, on arbitrary dimensions. Similar to Einsum, but it uses the explicit numeric
+// axis, as opposed to a textual description.
+//
+// There are two operands: `lhs` (left-hand-side) and `rhs` (right-hand-side). The default for
+// every axis is to do a cross product, and the resulting tensor will have the concatenated shape (`lhs`
+// dimensions first then `rhs` dimensions).
+//
+// One can specify contractionAxes, pairs of axes (each pair with one index in the lhs and rhs operands)
+// to be contracted: these dimensions will multiplied and summed one at a time. That's what happens in
+// the usual "dot product".
+//
+// One can also specify batchAxes, pairs of axes (each pair with one index in the lhs and rhs operands)
+// to be considered as independently, as a batch dimension. These dimensions will show up in the same
+// position as the `lhs`.
+//
+// Examples:
+//
+//   - `EinsumAxes(matrixA, matrixB, [][2]int{{1, 0}}, nil)` performs the usual matrix multiplication, where
+//     we contract the axis 1 of `matrixA` with the axis 0 of `matrixB`.
+//   - `EinsumAxes(batchedMatrixA, batchedMatrixB, [][2]int{{2, 1}}, [][2]int{{0, 0}})` is similar, but we
+//     use the axis 0 of both inputs as a batch, and following 2 axes as a matrix multiplication.
+//   - `EinsumAxes(vectorA, vectorB, nil, nil)` performs an outer (cross) product -- no contractions, no batch.
+//   - `EinsumAxes(vectorA, vectorB, [][2]int{{0, 0}}, nil)` performs a dot product and returns a scalar.
+func EinsumAxes(lhs, rhs *Node, contractingAxes, batchAxes [][2]int) (output *Node) {
+	g := lhs.Graph()
+	output = g.InvalidNode()
+	if !g.Ok() {
+		return
+	}
+	if !lhs.Ok() {
+		g.SetErrorf("EinsumAxes left-hand-side operand is in an error state")
+		return g.InvalidNode()
+	}
+	if !rhs.Ok() {
+		g.SetErrorf("EinsumAxes right-hand-side operand is in an error state")
+		return g.InvalidNode()
+	}
+
+	// Create function to process both, contractingAxes and batchAxes.
+	lhsSeen := types.MakeSet[int](rhs.Rank())
+	rhsSeen := types.MakeSet[int](rhs.Rank())
+	normalizePairs := func(name string, pairs [][2]int) (lhsAxes, rhsAxes []int) {
+		if len(pairs) == 0 {
+			return
+		}
+		lhsAxes = make([]int, 0, len(contractingAxes))
+		rhsAxes = make([]int, 0, len(contractingAxes))
+		for _, pair := range pairs {
+			lhsAxis, rhsAxis := pair[0], pair[1]
+			// Convert negative axis to distance from last (-1 is the last axis).
+			if lhsAxis < 0 {
+				lhsAxis = lhs.Rank() + lhsAxis
+			}
+			if rhsAxis < 0 {
+				rhsAxis = rhs.Rank() + rhsAxis
+			}
+			// Check if axis are valid.
+			if lhsAxis < 0 || lhsAxis >= lhs.Rank() {
+				g.SetErrorf("EinsumAxes %s has out-of-bound axis for left-hand-side operand: %v", name, pairs)
+				return
+			}
+			if lhsSeen.Has(lhsAxis) {
+				g.SetErrorf("EinsumAxes %s axis for left-hand-side operand is duplicate -- each axis can only be contracted or batch once: %v", name, pairs)
+				return
+			}
+			lhsSeen.Insert(lhsAxis)
+			if rhsAxis < 0 || rhsAxis >= rhs.Rank() {
+				g.SetErrorf("EinsumAxes %s has out-of-bound axis for right-hand-side operand: %v", name, pairs)
+				return
+			}
+			if rhsSeen.Has(rhsAxis) {
+				g.SetErrorf("EinsumAxes %s axis for right-hand-side operand is duplicate -- each axis can only be contracted or batch once: %v", name, pairs)
+				return
+			}
+			rhsSeen.Insert(rhsAxis)
+
+			lhsAxes = append(lhsAxes, lhsAxis)
+			rhsAxes = append(rhsAxes, rhsAxis)
+		}
+		return
+	}
+
+	lhsContractingAxes, rhsContractingAxes := normalizePairs("contractingAxes", contractingAxes)
+	if !g.Ok() {
+		return
+	}
+	lhsBatchAxes, rhsBatchAxes := normalizePairs("batchAxes", batchAxes)
+	if !g.Ok() {
+		return
+	}
+
+	// Execute dotGeneralXLA
+	output = dotGeneralXLA(lhs, lhsContractingAxes, lhsBatchAxes, rhs, rhsContractingAxes, rhsBatchAxes)
+	return
 }

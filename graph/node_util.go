@@ -65,6 +65,24 @@ func AddScalar(x *Node, scalar float64) *Node {
 	return Add(Const(g, shapes.CastAsDType(scalar, x.DType())), x)
 }
 
+// MaxScalar converts scalar to a constant with x's DType and returns element-wise `Max(x, scalar)`.
+func MaxScalar(x *Node, scalar float64) *Node {
+	g := x.Graph()
+	if !g.Ok() {
+		return g.InvalidNode()
+	}
+	return Max(x, Const(g, shapes.CastAsDType(scalar, x.DType())))
+}
+
+// MinScalar converts scalar to a constant with x's DType and returns element-wise `Min(x, scalar)`.
+func MinScalar(x *Node, scalar float64) *Node {
+	g := x.Graph()
+	if !g.Ok() {
+		return g.InvalidNode()
+	}
+	return Min(x, Const(g, shapes.CastAsDType(scalar, x.DType())))
+}
+
 func lowestForDType(g *Graph, dtype shapes.DType) *Node {
 	return Const(g, shapes.LowestValueForDType(dtype))
 }
@@ -176,7 +194,7 @@ func StrictlyPositiveIndicator(x *Node) *Node {
 	return Add(Sign(Sub(Sign(x), one)), one)
 }
 
-// Clip is a short cut to `Min(max, Max(x, min))`, which returns the values of x cliped between
+// Clip is a short cut to `Min(max, Max(x, min))`, which returns the values of x clipped between
 // min and max.
 func Clip(x, min, max *Node) *Node {
 	return Min(max, Max(x, min))
@@ -394,16 +412,4 @@ func DiagonalWithValue(scalar *Node, dim int) *Node {
 	}
 	matrix := BroadcastPrefix(scalar, []int{dim, dim})
 	return Where(Diagonal(g, dim), matrix, ZerosLike(matrix))
-}
-
-// Clamp returns the `Min(Max(x, min), max)`, that is, `x` clamped between the values `min` and `max`.
-// Broadcast as usual.
-//
-// TODO: Use XLA Clamp op instead of Min, Max.
-func Clamp(min, x, max *Node) *Node {
-	g := x.Graph()
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
-	return Min(Max(min, x), max)
 }

@@ -17,7 +17,6 @@
 package graph
 
 import (
-	"fmt"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/xla"
@@ -95,8 +94,8 @@ func gatherXLA(operand, startIndices *Node, indexVectorDim int, offsetDims, coll
 		return g.InvalidNode()
 	}
 
-	fmt.Printf("\tgatherXLA: operand=%s, start=%s, indexVectorDim=%d, offsetDims=%v, collapsedSliceDims=%v, startIndexMap=%v, sliceSizes=%v\n",
-		operand.shape, startIndices.shape, indexVectorDim, offsetDims, collapsedSliceDims, startIndexMap, sliceSizes)
+	//fmt.Printf("\tgatherXLA: operand=%s, start=%s, indexVectorDim=%d, offsetDims=%v, collapsedSliceDims=%v, startIndexMap=%v, sliceSizes=%v\n",
+	//	operand.shape, startIndices.shape, indexVectorDim, offsetDims, collapsedSliceDims, startIndexMap, sliceSizes)
 
 	// Encoding of the values as follows. IMPORTANT: this code needs to be in sync with corresponding
 	// decoding code in c/gomlx/computation.cpp, in function ComputationAddOp, under GatherNode case,
@@ -158,8 +157,8 @@ func deserializeGatherXLA(serialized *xla.SerializedNode) (
 func scatterXLA(operand, scatterIndices, updates *Node,
 	indexVectorDim int, updateWindowDims, insertedWindowDims, scatterDimsToOperandDims []int,
 	indicesAreSorted, uniqueIndices bool) *Node {
-	fmt.Printf("\tscatterXLA: operand=%s, scatterIndices=%s, updates=%s, indexVectorDim=%d, updateWindowDims=%v, insertedWindowDims=%v, scatterDimsToOperandDims=%v, indicesAreSorted=%v, uniqueIndices=%v\n",
-		operand.shape, scatterIndices.shape, updates.shape, indexVectorDim, updateWindowDims, insertedWindowDims, scatterDimsToOperandDims, indicesAreSorted, uniqueIndices)
+	//fmt.Printf("\tscatterXLA: operand=%s, scatterIndices=%s, updates=%s, indexVectorDim=%d, updateWindowDims=%v, insertedWindowDims=%v, scatterDimsToOperandDims=%v, indicesAreSorted=%v, uniqueIndices=%v\n",
+	//	operand.shape, scatterIndices.shape, updates.shape, indexVectorDim, updateWindowDims, insertedWindowDims, scatterDimsToOperandDims, indicesAreSorted, uniqueIndices)
 	g := validateGraphFromInputs(operand, scatterIndices, updates)
 	if !g.Ok() {
 		return g.InvalidNode()
