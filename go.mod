@@ -1,11 +1,13 @@
 module github.com/gomlx/gomlx
 
-go 1.19
+go 1.20
 
 require (
+	github.com/disintegration/imaging v1.6.2
 	github.com/erkkah/margaid v0.3.0
+	github.com/go-gota/gota v0.12.0
 	github.com/google/uuid v1.3.0
-	github.com/janpfeifer/gonb v0.5.1
+	github.com/janpfeifer/gonb v0.6.0
 	github.com/pkg/errors v0.9.1
 	github.com/schollz/progressbar/v3 v3.13.1
 	github.com/stretchr/testify v1.8.1
@@ -16,10 +18,8 @@ require (
 require (
 	github.com/ajstarks/svgo v0.0.0-20180226025133-644b8db467af // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/disintegration/imaging v1.6.2 // indirect
 	github.com/fogleman/gg v1.3.0 // indirect
 	github.com/go-fonts/liberation v0.1.1 // indirect
-	github.com/go-gota/gota v0.12.0 // indirect
 	github.com/go-latex/latex v0.0.0-20210118124228-b3d85cf34e07 // indirect
 	github.com/gofrs/uuid v4.4.0+incompatible // indirect
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
