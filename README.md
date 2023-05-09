@@ -89,17 +89,17 @@ Second you need the pre-compiled GoMLX+XLA C library, included in each release. 
 ~500Mb (with GPU and TPU, it statically links most of what it needs) -- for Just-In-Time (JIT)
 compilation it includes the whole [LLVM compiler](http://llvm.org). 
 
+Latest version in [github.com/gomlx/gomlx/releases/latest/download/gomlx_xla-linux-amd64.tar.gz](https://github.com/gomlx/gomlx/releases/latest/download/gomlx_xla-linux-amd64.tar.gz).
+
 The contents are a `libgomlx_xla.so` file and a few `.h` files
 needed for the compilation of GoMLX. They are separated on two top level directories `/lib` and `/include`, and for
 now the recommended way is to just *untar* them in `/usr/local`, which is usually in the default
-path for inclusion and dynamic library loading. For instance:
+path for inclusion and dynamic library loading. So you can do:
 
 ```bash
 cd /usr/local
-tar xzvf .../path/to/gomlx_xla-v0.0.1.tar.gz
+tar xzvf .../path/to/gomlx_xla-linux-amd64.tar.gz
 ```
-
-Latest version in [github.com/gomlx/gomlx/releases/download/v0.0.1/gomlx_xla-v0.0.1-linux-amd64.tar.gz](https://github.com/gomlx/gomlx/releases/download/v0.0.1/gomlx_xla-v0.0.1-linux-amd64.tar.gz).
 
 This should be enough for most installations. If [CGO](https://pkg.go.dev/cmd/cgo) is not finding the library,
 you may need to configure some environment variables (`LD_LIBRARY_PATH`, `CGO_CPPFLAGS`, `CGO_LDFLAGS`) to include

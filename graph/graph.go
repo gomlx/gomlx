@@ -112,6 +112,8 @@ type Graph struct {
 	parameterNameToHandle map[string]ParameterHandle
 
 	traced bool
+
+	scalars scalarCache
 }
 
 // NodeXlaHandle is used by the underlying XLA implementation.
@@ -149,6 +151,7 @@ func newGraph(m *Manager, name string, graphId GraphId, deviceNum int) *Graph {
 		comp:                  xla.NewComputation(m.client, name),
 		deviceNum:             deviceNum,
 		parameterNameToHandle: make(map[string]ParameterHandle),
+		scalars:               make(scalarCache),
 	}
 }
 
@@ -560,5 +563,28 @@ func (g *Graph) LoggedNodes() (nodes []*Node) {
 			nodes = append(nodes, node)
 		}
 	}
+	return
+}
+
+// scalarCache provides a cache of a scalar value -- the key always use a float64 -- to
+// its pre-created *Node. It helps avoid creating duplicate nodes for common values.
+//
+// I keeps a cache for each dtype of the scalar.
+type scalarCache map[shapes.DType]map[float64]*Node
+
+// getScalarConst either creates a scalar constant or returns a previously created returned
+// from the cache. It shouldn't be called directly by users, rather Scalar and Const use it.
+func (g *Graph) getScalarConst(dtype shapes.DType, value float64) (output *Node) {
+	dtypeMap, found := g.scalars[dtype]
+	if !found {
+		dtypeMap = make(map[float64]*Node)
+		g.scalars[dtype] = dtypeMap
+	}
+	output, found = dtypeMap[value]
+	if found {
+		return
+	}
+	output = Const(g, shapes.CastAsDType(value, dtype))
+	dtypeMap[value] = output
 	return
 }
