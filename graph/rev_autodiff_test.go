@@ -30,10 +30,7 @@ import (
 )
 
 func TestGradientAdd(t *testing.T) {
-	manager, err := BuildManager().Done()
-	if err != nil {
-		t.Fatalf("Failed to build Manager: %v", err)
-	}
+	manager := buildTestManager()
 	g := manager.NewGraph("TestDense")
 	c1 := Const(g, []float32{1, 2})
 	c2 := Const(g, []float32{10})
@@ -80,10 +77,7 @@ func TestGradientAdd(t *testing.T) {
 }
 
 func TestGradientDot(t *testing.T) {
-	manager, err := BuildManager().Done()
-	if err != nil {
-		t.Fatalf("Failed to build Manager: %v", err)
-	}
+	manager := buildTestManager()
 
 	// vector x vector case: simple dot product.
 	{
@@ -248,7 +242,7 @@ func TestGradientSlice(t *testing.T) {
 }
 
 func TestGradientGather(t *testing.T) {
-	manager := BuildManager().MustDone()
+	manager := buildTestManager()
 	{ // Trivial scalar gather.
 		fmt.Println("\tGather(): trivial scalar gather.")
 		g := manager.NewGraph("")
@@ -357,7 +351,7 @@ type gradTestFunc func(g *Graph) (output *Node, nodesForGrad []*Node)
 //
 // It will print out the inputs and outputs to help debugging.
 func testGradients[T interface{ float32 | float64 }](t *testing.T, name string, testFn gradTestFunc, wantForGrad []any) {
-	manager := BuildManager().MustDone()
+	manager := buildTestManager()
 	fmt.Printf("%s:\n", name)
 	// Create a function that can be used by computation.Exec.
 	fn := func(placeholder *Node) []*Node {

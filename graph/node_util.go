@@ -27,7 +27,17 @@ func Scalar(g *Graph, dtype shapes.DType, value float64) *Node {
 	if !g.Ok() {
 		return g.InvalidNode()
 	}
-	return Const(g, shapes.CastAsDType(value, dtype))
+	return g.getScalarConst(dtype, value)
+	// Const(g, shapes.CastAsDType(value, dtype))
+}
+
+// FillScalar creates a Node with a value with the given shape, filled with the given value.
+// It's implemented indirectly using other nodes.
+func FillScalar(g *Graph, shape shapes.Shape, value float64) *Node {
+	if !g.Ok() {
+		return g.InvalidNode()
+	}
+	return BroadcastPrefix(Scalar(g, shape.DType, value), shape.Dimensions)
 }
 
 // ScalarZero returns a scalar constant 0 for the given DType.
@@ -62,7 +72,7 @@ func AddScalar(x *Node, scalar float64) *Node {
 	if !g.Ok() {
 		return g.InvalidNode()
 	}
-	return Add(Const(g, shapes.CastAsDType(scalar, x.DType())), x)
+	return Add(x, Scalar(g, x.DType(), scalar))
 }
 
 // MaxScalar converts scalar to a constant with x's DType and returns element-wise `Max(x, scalar)`.
@@ -71,7 +81,7 @@ func MaxScalar(x *Node, scalar float64) *Node {
 	if !g.Ok() {
 		return g.InvalidNode()
 	}
-	return Max(x, Const(g, shapes.CastAsDType(scalar, x.DType())))
+	return Max(x, Scalar(g, x.DType(), scalar))
 }
 
 // MinScalar converts scalar to a constant with x's DType and returns element-wise `Min(x, scalar)`.
@@ -80,7 +90,7 @@ func MinScalar(x *Node, scalar float64) *Node {
 	if !g.Ok() {
 		return g.InvalidNode()
 	}
-	return Min(x, Const(g, shapes.CastAsDType(scalar, x.DType())))
+	return Min(x, Scalar(g, x.DType(), scalar))
 }
 
 func lowestForDType(g *Graph, dtype shapes.DType) *Node {
@@ -168,7 +178,7 @@ func SignPlusOrMinus(x *Node) *Node {
 	if !g.Ok() || !x.Ok() {
 		return g.InvalidNode()
 	}
-	half := Const(g, shapes.CastAsDType(0.5, x.shape.DType))
+	half := Scalar(g, x.DType(), 0.5)
 	return Sign(Add(Sign(x), half))
 }
 

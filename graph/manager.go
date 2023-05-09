@@ -19,6 +19,7 @@ package graph
 import (
 	"fmt"
 	"github.com/gomlx/gomlx/xla"
+	"os"
 )
 
 // GetPlatforms lists the available platforms. Returns `([]string, error)`.
@@ -44,6 +45,17 @@ func BuildManager() *ManagerBuilder {
 // be selected from one returned by GetPlatforms.
 func (b *ManagerBuilder) Platform(p string) *ManagerBuilder {
 	b.platform = p
+	return b
+}
+
+// WithDefaultPlatform takes the given platform if one is not overwritten with GOMLX_PLATFORM.
+// This is useful for testing, where one wants to force something except if explicitly overwritten.
+func (b *ManagerBuilder) WithDefaultPlatform(p string) *ManagerBuilder {
+	b.platform = p
+	platform, found := os.LookupEnv(xla.DefaultPlatformEnv)
+	if found {
+		b.platform = platform
+	}
 	return b
 }
 

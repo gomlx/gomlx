@@ -28,7 +28,7 @@ type graphFnOneInputToTest func(g *Graph) (input, output *Node)
 
 func testFuncOneInput(t *testing.T, testName string, graphFn graphFnOneInputToTest, want any) {
 	fmt.Printf("%s\n", testName)
-	manager := BuildManager().MustDone()
+	manager := buildTestManager()
 	g := manager.NewGraph(testName)
 	input, output := graphFn(g)
 	g.Compile(input, output)
@@ -45,7 +45,7 @@ func testFuncOneInput(t *testing.T, testName string, graphFn graphFnOneInputToTe
 }
 
 func TestSliceXLA(t *testing.T) {
-	manager := BuildManager().MustDone()
+	manager := buildTestManager()
 	g := manager.NewGraph("iota0")
 	numbers := Iota(g, shapes.Make(shapes.F64, 9), 0)
 	numbers = ReshapeWithShape(numbers, shapes.Make(shapes.F64, 3, 3))
@@ -59,7 +59,7 @@ func TestSliceXLA(t *testing.T) {
 }
 
 func TestGatherXLA(t *testing.T) {
-	manager := BuildManager().MustDone()
+	manager := buildTestManager()
 	g := manager.NewGraph("iota0")
 	// numbers=(Float64)[5 3]: [[0 1 2] [3 4 5] [6 7 8] [9 10 11] [12 13 14]]
 	numbers := ReshapeWithShape(Iota(g, shapes.Make(shapes.F64, 5*3), 0), shapes.Make(shapes.F64, 5, 3))
@@ -158,7 +158,7 @@ func reversePermutation(permutation []int) []int {
 }
 
 func TestGradDotGeneralXLABatchContracting(t *testing.T) {
-	manager := BuildManager().MustDone()
+	manager := buildTestManager()
 
 	dimensions := []int{2, 3, 4}
 	lhsPermutations := allPermutations(len(dimensions))
@@ -235,7 +235,7 @@ func TestGradDotGeneralXLABatchContracting(t *testing.T) {
 }
 
 func TestGradDotGeneralXLABatchContractingCrossing(t *testing.T) {
-	manager := BuildManager().MustDone()
+	manager := buildTestManager()
 
 	lhsDimensions := []int{4, 2, 5}
 	rhsDimensions := []int{4, 3, 5}

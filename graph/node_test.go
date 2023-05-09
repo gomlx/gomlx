@@ -36,6 +36,11 @@ var (
 	F64       = shapes.Float64
 )
 
+// buildTestManager using "Host" by default -- can be overwritten by GOMLX_PLATFORM environment variable.
+func buildTestManager() *Manager {
+	return BuildManager().WithDefaultPlatform("Host").MustDone()
+}
+
 type graphFnOneInputToTest func(g *Graph) (input, output *Node)
 
 // testFuncOneInput makes it easy to test a function with one input and one output. It
@@ -43,7 +48,7 @@ type graphFnOneInputToTest func(g *Graph) (input, output *Node)
 // result is as expected.
 func testFuncOneInput(t *testing.T, testName string, graphFn graphFnOneInputToTest, want any) {
 	fmt.Printf("%s\n", testName)
-	manager := BuildManager().MustDone()
+	manager := buildTestManager()
 	g := manager.NewGraph(testName)
 	input, output := graphFn(g)
 	g.Compile(input, output)
@@ -62,10 +67,7 @@ func testFuncOneInput(t *testing.T, testName string, graphFn graphFnOneInputToTe
 func TestConstant(t *testing.T) {
 	platforms, _ := GetPlatforms()
 	fmt.Printf("Platforms: %v\n", platforms)
-	manager, err := BuildManager().Done()
-	if err != nil {
-		t.Fatalf("Failed to build Manager: %v", err)
-	}
+	manager := buildTestManager()
 	{
 		g := manager.NewGraph("")
 		n := Const(g, 5)
@@ -109,10 +111,7 @@ func compileRunTransfer(t *testing.T, g *Graph, msg string) *tensor.Local {
 }
 
 func TestAdd(t *testing.T) {
-	manager, err := BuildManager().Done()
-	if err != nil {
-		t.Fatalf("Failed to build Manager: %v", err)
-	}
+	manager := buildTestManager()
 	{
 		// Test scalars.
 		g := manager.NewGraph("")
@@ -244,10 +243,7 @@ func testTupleParameter(t *testing.T, manager *Manager) {
 }
 
 func TestParameter(t *testing.T) {
-	manager, err := BuildManager().Done()
-	if err != nil {
-		t.Fatalf("Failed to build Manager: %v", err)
-	}
+	manager := buildTestManager()
 
 	// Test passing of values.
 	{
@@ -292,10 +288,7 @@ type TwoArgsTestCase[T shapes.Number] struct {
 }
 
 func TestTwoArgsOps(t *testing.T) {
-	manager, err := BuildManager().Done()
-	if err != nil {
-		t.Fatalf("Failed to build Manager: %v", err)
-	}
+	manager := buildTestManager()
 
 	{
 		casesFloat32 := []TwoArgsTestCase[float32]{
@@ -394,10 +387,7 @@ type OneArgTestCase[T shapes.Number] struct {
 }
 
 func TestOneArgOps(t *testing.T) {
-	manager, err := BuildManager().Done()
-	if err != nil {
-		t.Fatalf("Failed to build Manager: %v", err)
-	}
+	manager := buildTestManager()
 
 	casesFloat64 := []OneArgTestCase[float64]{
 		{Abs, func(x float64) float64 { return math.Abs(x) }},
@@ -480,7 +470,7 @@ func mustCompileAndRun(g *Graph) any {
 }
 
 func TestDot(t *testing.T) {
-	manager := BuildManager().MustDone()
+	manager := buildTestManager()
 	g := manager.NewGraph("Dot")
 
 	// Shape: [batch=4, dims=3]
@@ -499,7 +489,7 @@ func TestDot(t *testing.T) {
 }
 
 func TestBroadcast(t *testing.T) {
-	manager := BuildManager().MustDone()
+	manager := buildTestManager()
 	{
 		g := manager.NewGraph("")
 		input := Const(g, 7)
@@ -543,10 +533,10 @@ func TestBroadcast(t *testing.T) {
 }
 
 func TestFill(t *testing.T) {
-	manager := BuildManager().MustDone()
+	manager := buildTestManager()
 	{
-		g := manager.NewGraph("Fill")
-		Fill(g, shapes.Make(shapes.Int64, 3, 1), 4)
+		g := manager.NewGraph("FillScalar")
+		FillScalar(g, shapes.Make(shapes.Int64, 3, 1), 4.0)
 		got := mustCompileAndRun(g)
 		want := [][]int{{4}, {4}, {4}}
 		if !slices.DeepSliceCmp(got, want, slices.Equal[int]) {
@@ -587,7 +577,7 @@ func reduceSumGraph(t *testing.T, m *Manager, reduceDims []int) *Graph {
 }
 
 func TestReduceSum(t *testing.T) {
-	manager := BuildManager().MustDone()
+	manager := buildTestManager()
 	cases := []struct {
 		dims []int
 		want any
@@ -641,7 +631,7 @@ func TestReduceMaskedMax(t *testing.T) {
 }
 
 func TestReshape(t *testing.T) {
-	manager := BuildManager().MustDone()
+	manager := buildTestManager()
 	{
 		g := manager.NewGraph("")
 		input := Const(g, [][][]float32{{{1.1, 1.2}}}) // Shape [1, 1, 2]
@@ -657,7 +647,7 @@ func TestReshape(t *testing.T) {
 }
 
 func TestTuple(t *testing.T) {
-	manager := BuildManager().MustDone()
+	manager := buildTestManager()
 	{
 		g := manager.NewGraph("")
 		a := Const(g, []float32{1.1, 1.2})
@@ -729,7 +719,7 @@ func rngUniform(manager *Manager) *Graph {
 }
 
 func TestRng(t *testing.T) {
-	manager := BuildManager().MustDone()
+	manager := buildTestManager()
 	testCases := []struct {
 		fn   func(*Manager) *Graph
 		name string
@@ -761,7 +751,7 @@ func TestRng(t *testing.T) {
 }
 
 func TestIota(t *testing.T) {
-	manager := BuildManager().MustDone()
+	manager := buildTestManager()
 	{
 		g := manager.NewGraph("iota0")
 		Iota(g, MakeShape(F64, 2, 2), 0)
@@ -839,7 +829,7 @@ func TestPad(t *testing.T) {
 }
 
 func TestGather(t *testing.T) {
-	manager := BuildManager().MustDone()
+	manager := buildTestManager()
 	{ // Trivial scalar gather.
 		fmt.Println("\tGather(): trivial scalar gather.")
 		g := manager.NewGraph("")
@@ -948,7 +938,7 @@ func TestGatherSlices(t *testing.T) {
 }
 
 func TestIndicesForShape(t *testing.T) {
-	manager := BuildManager().MustDone()
+	manager := buildTestManager()
 	g := manager.NewGraph("")
 	shape := MakeShape(F64, 2, 3, 4)
 	numbers := IndicesForShape(g, shape)
@@ -965,7 +955,7 @@ func TestIndicesForShape(t *testing.T) {
 }
 
 func TestScatter(t *testing.T) {
-	manager := BuildManager().MustDone()
+	manager := buildTestManager()
 	{ // Trivial scalar scatter.
 		fmt.Println("\tScatter(): trivial scalar scatter.")
 		g := manager.NewGraph("")
@@ -1007,7 +997,7 @@ func TestScatter(t *testing.T) {
 }
 
 func TestConcatenate(t *testing.T) {
-	manager := BuildManager().MustDone()
+	manager := buildTestManager()
 	{
 		fmt.Println("\tConcatenate(): 1D concatenation.")
 		g := manager.NewGraph("")

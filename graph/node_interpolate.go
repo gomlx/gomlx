@@ -149,6 +149,7 @@ func (c *InterpolationConfig) Done() (output *Node) {
 		outputShape.Dimensions[axis] = s
 		interpolationDims = append(interpolationDims, s)
 	}
+	numAxesToInterpolate := len(axisToInterpolateList)
 
 	// Find slices and weights for each interpolation axis:
 	spanStarts := make([]*Node, 0, len(axisToInterpolateList))
@@ -191,7 +192,7 @@ func (c *InterpolationConfig) Done() (output *Node) {
 		if c.isBilinear {
 			spanSize = scalarMin(inSize, 3)
 		}
-		upperBound := MulScalar(OnesLike(spanStart), float64(inSize-spanSize))
+		upperBound := Scalar(g, dtype, float64(inSize-spanSize))
 		if !c.isBilinear && !c.halfPixelCenters {
 			spanStart = Min(spanStart, upperBound)
 		} else {
@@ -202,23 +203,26 @@ func (c *InterpolationConfig) Done() (output *Node) {
 		// Broadcast spanStart to common shape so it can be combined with other interpolation axes.
 		// The final shape will be [interpolationDims..., 1].
 		broadcastSpanStart := ConvertType(spanStart, shapes.I32)
-		for ii := 0; ii < axisIdx; ii++ {
-			broadcastSpanStart = ExpandDims(broadcastSpanStart, 0)
+		{
+			spanExpandAxes := make([]int, 0, numAxesToInterpolate)
+			for axis := 0; axis < axisIdx; axis++ {
+				spanExpandAxes = append(spanExpandAxes, axis)
+			}
+			for axis := axisIdx + 1; axis < numAxesToInterpolate; axis++ {
+				spanExpandAxes = append(spanExpandAxes, axis)
+			}
+			spanExpandAxes = append(spanExpandAxes, numAxesToInterpolate) // Last dimension with the start index.
+			broadcastSpanStart = ExpandAndBroadcast(broadcastSpanStart, append(interpolationDims, 1), spanExpandAxes)
 		}
-		for ii := axisIdx + 1; ii < len(axisToInterpolateList); ii++ {
-			broadcastSpanStart = ExpandDims(broadcastSpanStart, -1)
-		}
-		broadcastSpanStart = BroadcastToDims(broadcastSpanStart, interpolationDims...)
-		broadcastSpanStart = ExpandDims(broadcastSpanStart, -1) // One last index of size 1, we will concatenate on this new axis.
 		spanStarts = append(spanStarts, broadcastSpanStart)
 
 		// Weights
 		var weight *Node
 		if c.isBilinear {
 			weight = Sub(spanStart, sampleFraction)
-			weight = BroadcastToDims(ExpandDims(weight, -1), outSize, spanSize)
-			offset := Iota(g, shapes.Make(dtype, 1, spanSize), 1)
-			weight = Add(weight, offset)
+			weight = ExpandAndBroadcast(weight, []int{outSize, spanSize}, []int{-1})
+			offset := Iota(g, shapes.Make(dtype, spanSize), 0)
+			weight = Add(weight, ExpandAndBroadcast(offset, []int{outSize, spanSize}, []int{0}))
 			if c.halfPixelCenters {
 				weight = AddScalar(weight, 0.5)
 			}
@@ -234,9 +238,7 @@ func (c *InterpolationConfig) Done() (output *Node) {
 
 	// gatheredElements will be shaped [interpolationDims..., spanSizes...]
 	spanStart := Concatenate(spanStarts, -1)
-
 	gatheredElements := GatherSlices(input, axisToInterpolateList, spanStart, spanSizes)
-	_ = gatheredElements
 
 	// weightsCrosses of all the weights
 	var weightsCrosses *Node
@@ -247,39 +249,38 @@ func (c *InterpolationConfig) Done() (output *Node) {
 		}
 		weightsCrosses = EinsumAxes(weightsCrosses, w, nil, nil)
 	}
-	numAxisToInterpolate := len(axisToInterpolateList)
 	// weightCrosses will be shaped [I_0_dim, I_0_span_size, I_1_dim, I_1_span_size ...]: two
 	// axes per interpolation axis the first one with the target dimension of the interpolation
 	// and the second with the size of the span used for interpolating.
-	weightsCrosses.AssertRank(2 * numAxisToInterpolate)
+	weightsCrosses.AssertRank(2 * numAxesToInterpolate)
 
 	// Now we need an Einsum with the gatheredElements, where we contract the gathered spans and
 	// we "batch" (meaning they are matched) the interpolated sizes.
-	contractingAxes := make([][2]int, 0, numAxisToInterpolate)
-	batchAxes := make([][2]int, 0, numAxisToInterpolate)
+	contractingAxes := make([][2]int, 0, numAxesToInterpolate)
+	batchAxes := make([][2]int, 0, numAxesToInterpolate)
 	nextWeightsFullAxis := 0
 	nextWeightsSpanAxis := 1
 	for axis := 0; axis < gatheredElements.Rank(); axis++ {
-		if axis < numAxisToInterpolate {
+		if axis < numAxesToInterpolate {
 			// Matching target interpolated dimensions.
-			batchAxes = append(batchAxes, [2]int{axis, nextWeightsFullAxis})
+			batchAxes = append(batchAxes, [2]int{nextWeightsFullAxis, axis})
 			nextWeightsFullAxis += 2
 		} else {
-			axisInInput := axis - numAxisToInterpolate
+			axisInInput := axis - numAxesToInterpolate
 			if axisToInterpolateMap[axisInInput] {
 				// This axis is just the span gathered / weights, which we need to contract (reduce_sum):
-				contractingAxes = append(contractingAxes, [2]int{axis, nextWeightsSpanAxis})
+				contractingAxes = append(contractingAxes, [2]int{nextWeightsSpanAxis, axis})
 				nextWeightsSpanAxis += 2
 			}
 		}
 	}
-	output = EinsumAxes(gatheredElements, weightsCrosses, contractingAxes, batchAxes)
+	output = EinsumAxes(weightsCrosses, gatheredElements, contractingAxes, batchAxes)
 	output.AssertRank(input.Rank()) // Same rank, but interpolated and wrongly transposed.
 
 	// Now we need to transpose the interpolated dimensions, that are upfront (at the leading dimensions),
 	// back to their original locations.
 	transposeDims := make([]int, 0, input.Rank())
-	interpolatedAxis, unchangedAxis := 0, numAxisToInterpolate
+	interpolatedAxis, unchangedAxis := 0, numAxesToInterpolate // numAxesToInterpolate
 	for ii := 0; ii < input.Rank(); ii++ {
 		if axisToInterpolateMap[ii] {
 			transposeDims = append(transposeDims, interpolatedAxis)

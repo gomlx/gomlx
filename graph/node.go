@@ -1015,21 +1015,6 @@ func SplitTuple(tuple *Node) []*Node {
 	return nodes
 }
 
-// Fill creates a Node with a value with the given shape, filled with the given value.
-// It's implemented indirectly using other nodes.
-func Fill[T shapes.Number](g *Graph, shape shapes.Shape, value T) *Node {
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
-	valueDType := shapes.DTypeGeneric[T]()
-	if valueDType != shape.DType {
-		g.SetErrorf("call Fill using value of dtype %q, but shape DType was %q", valueDType, shape.DType)
-		return nil
-	}
-	scalar := Const(g, value)
-	return BroadcastPrefix(scalar, shape.Dimensions)
-}
-
 // reduceHelper helps implements all the Reduce<X> functions.
 func reduceHelper(x, init *Node, reduceAxes []int, nodeType xla.NodeType) *Node {
 	g := validateGraphFromInputs(x)
@@ -1934,6 +1919,9 @@ func TransposeAllDims(x *Node, permutation ...int) *Node {
 //
 // * lhs -> left-hand-side operand.
 // * rhs -> right-hand-side operand.
+//
+// Important note: the order of the operands can have dramatic impact on the speed of the multiplications.
+// consider trying both sides.
 func Einsum(equation string, lhs, rhs *Node) *Node {
 	//fmt.Printf("Einsum(%s, %s, %s)\n", equation, lhs.Shape(), rhs.Shape())
 	g := lhs.Graph()
@@ -2115,6 +2103,9 @@ func (e einsumOperandDesc) axisIndex(axis rune) int {
 //     use the axis 0 of both inputs as a batch, and following 2 axes as a matrix multiplication.
 //   - `EinsumAxes(vectorA, vectorB, nil, nil)` performs an outer (cross) product -- no contractions, no batch.
 //   - `EinsumAxes(vectorA, vectorB, [][2]int{{0, 0}}, nil)` performs a dot product and returns a scalar.
+//
+// Important note: the order of the operands can have dramatic impact on the speed of the multiplications.
+// consider trying both sides.
 func EinsumAxes(lhs, rhs *Node, contractingAxes, batchAxes [][2]int) (output *Node) {
 	g := lhs.Graph()
 	output = g.InvalidNode()

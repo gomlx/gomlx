@@ -34,7 +34,7 @@ func EuclideanDistance(a, b *Node) *Node {
 }
 
 func TestExec(t *testing.T) {
-	manager := BuildManager().MustDone()
+	manager := buildTestManager()
 	dist := NewExec(manager, EuclideanDistance).SetMaxCache(10)
 	fmt.Printf("\tExec name: %s\n", dist.Name())
 	testForDim := func(dim int) {
@@ -118,7 +118,7 @@ func addScalarTest(x *Node) *Node {
 }
 
 func TestExecWithSideParams(t *testing.T) {
-	manager := BuildManager().MustDone()
+	manager := buildTestManager()
 	scalar := tensor.FromValue(3.0).Device(manager, manager.DefaultDeviceNum())
 	setSideParams := func(g *Graph, tensors []*tensor.Device) {
 		node := g.ParameterByName(scalarParamName)
@@ -163,7 +163,7 @@ func addSubGraph(a, b *Node) []*Node {
 }
 
 func TestExecWithSlices(t *testing.T) {
-	manager := BuildManager().MustDone()
+	manager := buildTestManager()
 	concat, err := NewExecAny(manager, concatGraph)
 	if err != nil {
 		t.Fatalf("Failed to create concatGraph: %+v", err)
@@ -214,7 +214,7 @@ func concatWithLoggedFirstNodeGraph(nodes []*Node) *Node {
 }
 
 func TestExecWithLogger(t *testing.T) {
-	manager := BuildManager().MustDone()
+	manager := buildTestManager()
 
 	concat, err := NewExecAny(manager, concatWithLoggedFirstNodeGraph)
 	if err != nil {
@@ -248,7 +248,7 @@ func TestExecWithLogger(t *testing.T) {
 }
 
 func TestExecWithNoInputs(t *testing.T) {
-	manager := BuildManager().MustDone()
+	manager := buildTestManager()
 	matrixInitFn := NewExec(manager, func(g *Graph) *Node {
 		return IotaFull(g, shapes.Make(shapes.Int64, 3, 3))
 	})
