@@ -2,7 +2,7 @@
 
 ## Next
 
-* Added ops: GatherSlices (and its gradient), EinsumAxes, MaxScalar, MinScalar.
+* Added ops: GatherSlices (and its gradient), EinsumAxes, MaxScalar, MinScalar, ExpandAndBroadcast.
 * Added Interpolate operation -- for series/image/videos resizing.
 * Added support for int32 (`shapes.I32`).
 * Added Set[] to `types` package.
