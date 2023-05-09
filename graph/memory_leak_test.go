@@ -14,10 +14,11 @@
  *	limitations under the License.
  */
 
-package graph
+package graph_test
 
 import (
 	"fmt"
+	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/gomlx/gomlx/xla"
@@ -83,10 +84,7 @@ func TestMemoryLeaksLiteral(t *testing.T) {
 // TestMemoryLeaksShapedBuffer creates and destroys tensor.Device objects (xla.OnDeviceBuffer), and checks that memory
 // doesn't get out of control.
 func TestMemoryLeaksShapedBuffer(t *testing.T) {
-	manager, err := BuildManager().Done()
-	if err != nil {
-		t.Fatalf("Failed to create Manager: %+v", err)
-	}
+	manager := buildTestManager()
 
 	fn := func() {
 		// Tests for various parameters.
@@ -128,10 +126,7 @@ func TestMemoryLeaksShapedBuffer(t *testing.T) {
 // TestMemoryLeaksExec creates and executes a simple computation graph at different shape sizes. It then destroys
 // the returning tensor.Device objects (xla.OnDeviceBuffer), and checks that memory doesn't get out of control.
 func TestMemoryLeaksExec(t *testing.T) {
-	manager, err := BuildManager().Done()
-	if err != nil {
-		t.Fatalf("Failed to create Manager: %+v", err)
-	}
+	manager := buildTestManager()
 
 	graphFn := func(x, y *Node) (*Node, *Node) {
 		added := Add(x, y)

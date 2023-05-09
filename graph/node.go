@@ -644,13 +644,71 @@ func BroadcastPrefix(x *Node, dims []int) *Node {
 	}, []*Node{x})
 }
 
+// ExpandAndBroadcast combines ExpandDims and Broadcast of `x`, broadcasting it to the shape
+// given in newDimensions. Only new expanded axes or axes with dimension 1 can be broadcast
+// to new dimensions.
+//
+// newDimensions should have a rank larger than the rank of x, and the new axes in newDimensions
+// should be listed in expandedAxes. In other words: `x.Rank() + len(expandedAxes) == len(newDimensions)`.
+//
+// For example:
+//
+//		  x = Const(g, []int32{10, 20})
+//	   ExpandAndBroadcast(x, []int{2, 2}, []int{0})  // -> [][]int32{{10, 20}, {10, 20}}
+//	   ExpandAndBroadcast(x, []int{2, 2}, []int{0})  // -> [][]int32{{10, 10}, {20, 20}}
+func ExpandAndBroadcast(x *Node, newDimensions []int, expandedAxes []int) (output *Node) {
+	g := validateGraphFromInputs(x)
+	output = g.InvalidNode()
+	if !g.Ok() {
+		return
+	}
+	if x.Rank()+len(expandedAxes) != len(newDimensions) {
+		g.SetErrorf("there must be exactly one expandedAxes (%v) for each new axis in newDimensions (%v) -- x.shape=%s",
+			expandedAxes, newDimensions, x.shape)
+		return
+	}
+
+	// Verify values of expandedAxis and create a map of the expanded axis.
+	expandedMap := make([]bool, len(newDimensions))
+	for ii, axis := range expandedAxes {
+		if axis < 0 {
+			axis = len(newDimensions) + axis
+		}
+		if axis < 0 || axis >= len(newDimensions) {
+			g.SetErrorf("expandedAxes (%v) defines a value out-of-range (%d-th value -> %d), they must be between 0 and len(newDimensions)=%d",
+				expandedAxes, ii, axis, len(newDimensions))
+			return
+		}
+		if expandedMap[axis] {
+			g.SetErrorf("expandedAxes (%v) repeats an axis (%d-th value -> %d), they must be all unique and between 0 and len(newDimensions)=%d",
+				expandedAxes, ii, axis, len(newDimensions))
+			return
+		}
+		expandedMap[axis] = true
+	}
+
+	var preservedAxes []int
+	if !x.Shape().IsScalar() {
+		preservedAxes = make([]int, 0, x.Rank())
+		for axis := 0; axis < len(newDimensions); axis++ {
+			if !expandedMap[axis] {
+				preservedAxes = append(preservedAxes, axis)
+			}
+		}
+	}
+
+	return broadcastInDim(x, shapes.Make(x.DType(), newDimensions...), preservedAxes)
+}
+
 // broadcastInDim broadcasts x to an output with the given shape.
 // broadcastDims are the dimensions to be broadcasting into, i.e., the
 // i-th dimension of x is mapped to the broadcastDim[i]-th dimension of the output.
 // This also requires that the i-th input dimension is either 1 or is the same as the
 // output dimension it's broadcasting into.
 //
-// For example, say operand x = s32[2]{1, 2}; shape = s32[2,2]:
+// This is part the XLA API, prefer using BroadcastAndExpand instead.
+//
+// For example, say operand `x = (s32)[2]{1, 2}`; shape = `(s32)[2,2]`:
 //   - Specifying []int{1} as broadcast_dimension will generate output
 //     {{1, 2},
 //     {1, 2}}
@@ -659,11 +717,15 @@ func BroadcastPrefix(x *Node, dims []int) *Node {
 //     {{1 , 1},
 //     {2 , 2}}
 //
-// Not fully exposed because gradient is not fully defined, only for the case where broadcastDims are
-// the in-order axes of shape (== Iota(shape.Rank())) and shape.Rank() == x.Rank().
+// This interface is cumbersome, so instead we expose
 func broadcastInDim(x *Node, shape shapes.Shape, broadcastDims []int) *Node {
 	g := validateGraphFromInputs(x)
 	if !g.Ok() {
+		return g.InvalidNode()
+	}
+	if x.Rank() != len(broadcastDims) {
+		g.SetErrorf("there must be one broadcastDim for each axis of x in broadcastInDim, but x.shape=%s and broadcastDims=%v",
+			x.shape, broadcastDims)
 		return g.InvalidNode()
 	}
 	return newNode(g, &xla.SerializedNode{
@@ -676,6 +738,8 @@ func broadcastInDim(x *Node, shape shapes.Shape, broadcastDims []int) *Node {
 // BroadcastToShape broadcasts x to the given shape. They must both have the
 // same rank, and the dimensions in x being broadcast (that is, where its corresponding
 // dimension is shape is different) must be of size 1.
+//
+// One exception is if x is a scalar, in which case it can be broadcast to any shape.
 func BroadcastToShape(x *Node, shape shapes.Shape) *Node {
 	g := validateGraphFromInputs(x)
 	if !g.Ok() {
@@ -689,8 +753,10 @@ func BroadcastToShape(x *Node, shape shapes.Shape) *Node {
 		// Assume nothing to do.
 		return x
 	}
+
 	if x.shape.IsScalar() {
-		x = ReshapeWithShape(x, ms(shape.DType, slices.SliceWithValue(shape.Rank(), 1)...))
+		return broadcastInDim(x, shape, nil)
+		//x = ReshapeWithShape(x, ms(shape.DType, slices.SliceWithValue(shape.Rank(), 1)...))
 	}
 	broadcastDims := make([]int, shape.Rank())
 	for ii := 0; ii < shape.Rank(); ii++ {
@@ -947,21 +1013,6 @@ func SplitTuple(tuple *Node) []*Node {
 		}
 	}
 	return nodes
-}
-
-// Fill creates a Node with a value with the given shape, filled with the given value.
-// It's implemented indirectly using other nodes.
-func Fill[T shapes.Number](g *Graph, shape shapes.Shape, value T) *Node {
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
-	valueDType := shapes.DTypeGeneric[T]()
-	if valueDType != shape.DType {
-		g.SetErrorf("call Fill using value of dtype %q, but shape DType was %q", valueDType, shape.DType)
-		return nil
-	}
-	scalar := Const(g, value)
-	return BroadcastPrefix(scalar, shape.Dimensions)
 }
 
 // reduceHelper helps implements all the Reduce<X> functions.
@@ -1868,6 +1919,9 @@ func TransposeAllDims(x *Node, permutation ...int) *Node {
 //
 // * lhs -> left-hand-side operand.
 // * rhs -> right-hand-side operand.
+//
+// Important note: the order of the operands can have dramatic impact on the speed of the multiplications.
+// consider trying both sides.
 func Einsum(equation string, lhs, rhs *Node) *Node {
 	//fmt.Printf("Einsum(%s, %s, %s)\n", equation, lhs.Shape(), rhs.Shape())
 	g := lhs.Graph()
@@ -2049,6 +2103,9 @@ func (e einsumOperandDesc) axisIndex(axis rune) int {
 //     use the axis 0 of both inputs as a batch, and following 2 axes as a matrix multiplication.
 //   - `EinsumAxes(vectorA, vectorB, nil, nil)` performs an outer (cross) product -- no contractions, no batch.
 //   - `EinsumAxes(vectorA, vectorB, [][2]int{{0, 0}}, nil)` performs a dot product and returns a scalar.
+//
+// Important note: the order of the operands can have dramatic impact on the speed of the multiplications.
+// consider trying both sides.
 func EinsumAxes(lhs, rhs *Node, contractingAxes, batchAxes [][2]int) (output *Node) {
 	g := lhs.Graph()
 	output = g.InvalidNode()

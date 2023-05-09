@@ -736,40 +736,43 @@ func transposeVJP(node, v *Node, _ shapes.Shape) []*Node {
 	return []*Node{TransposeAllDims(v, permutations...)}
 }
 
-// broadcastInDimVJP generates the "vector dot jacobian" w.r.t. the input of broadcast. One just needs to reduce
-// the broadcast dimensions.
-//
-// For now it's only defined for the simple cases where broadcastDims are
-// the in-order axes of shape (== Iota(shape.Rank())) and shape.Rank() == x.Rank().
+// broadcastInDimVJP generates the "vector dot jacobian" w.r.t. the input of broadcast.
+// One just needs to reduce the broadcast dimensions.
 func broadcastInDimVJP(node, v *Node, _ shapes.Shape) []*Node {
 	g := node.Graph()
 	x := node.inputs[0]
+	outputShape := v.Shape()
 	shape := node.serializedNode.Shape
 	broadcastDims := node.serializedNode.Ints
 
-	if x.Rank() != shape.Rank() || x.Rank() != len(broadcastDims) {
-		g.SetErrorf("gradient of broadcastInDim (used by Broadcast* operations) is only defined for " +
-			"cases where the input shape has the same rank as the output, and where there is no transposition of " +
-			"axes")
+	if x.Rank() != len(broadcastDims) {
+		g.SetErrorf("there must be a broadcastDim for each axis in x, instead got x.shape=%s and broadcastDims=%v",
+			x.shape, broadcastDims)
 		return nil
 	}
-	var dimsToReduce []int
-	for ii, dim := range broadcastDims {
-		if ii != dim {
-			g.SetErrorf("gradient of broadcastInDim (used by Broadcast* operations) is only defined for " +
-				"cases where the input shape has the same rank as the output, and where there is no transposition of " +
-				"axes")
-			return nil
-		}
-		if x.Shape().Dimensions[ii] != shape.Dimensions[ii] {
-			if x.Shape().Dimensions[ii] != 1 {
+
+	axesPreserved := make([]bool, outputShape.Rank())
+	for inputAxis, outputAxis := range broadcastDims {
+		if x.Shape().Dimensions[inputAxis] == shape.Dimensions[outputAxis] {
+			axesPreserved[outputAxis] = true
+		} else {
+			if x.Shape().Dimensions[inputAxis] != 1 {
 				g.SetErrorf("unexpected broadcast from shape %s to shape %s at axis %d -- don't know how to calculate gradient",
-					x.Shape(), shape, ii)
+					x.Shape(), shape, inputAxis)
 				return nil
 			}
-			dimsToReduce = append(dimsToReduce, ii)
 		}
 	}
-
-	return []*Node{ReduceAndKeep(v, ReduceSum, dimsToReduce...)}
+	dimsToReduce := make([]int, 0, outputShape.Rank())
+	for axis, preserved := range axesPreserved {
+		if !preserved {
+			dimsToReduce = append(dimsToReduce, axis)
+		}
+	}
+	gradWrtX := ReduceSum(v, dimsToReduce...)
+	if gradWrtX.Rank() != x.Rank() {
+		// X had some axes of dimension 1 that were reduced, we simply reshape it here.
+		gradWrtX = Reshape(gradWrtX, x.Shape().Dimensions...)
+	}
+	return []*Node{gradWrtX}
 }

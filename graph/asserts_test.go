@@ -17,14 +17,13 @@
 package graph_test
 
 import (
-	"github.com/stretchr/testify/require"
-	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/stretchr/testify/require"
 	"testing"
 )
 
 func TestAsserts(t *testing.T) {
-	manager := BuildManager().MustDone()
+	manager := buildTestManager()
 	g := manager.NewGraph("TestAssertGraph")
 	node := g.Parameter("node", shapes.Make(shapes.F32, 3, 2))
 	scalar := g.Parameter("scalar", shapes.Make(shapes.I64))

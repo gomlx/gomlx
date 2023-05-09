@@ -16,6 +16,8 @@
 
 package graph
 
+// This file has tests that run as part of the graph package -- so with internal visibility.
+
 import (
 	"fmt"
 	"github.com/gomlx/gomlx/types/shapes"
@@ -31,8 +33,13 @@ func mustCompileAndRun(g *Graph) any {
 	return got
 }
 
+// buildTestManager using "Host" by default -- can be overwritten by GOMLX_PLATFORM environment variable.
+func buildTestManager() *Manager {
+	return BuildManager().WithDefaultPlatform("Host").MustDone()
+}
+
 func TestBroadcastInDim(t *testing.T) {
-	manager := BuildManager().MustDone()
+	manager := buildTestManager()
 	{
 		g := manager.NewGraph("")
 		input := Const(g, [][][]float32{{{1.1, 1.2}}}) // Shape [1, 1, 2]
