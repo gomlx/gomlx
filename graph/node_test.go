@@ -525,6 +525,21 @@ func TestBroadcast(t *testing.T) {
 			t.Errorf("Wanted %v, got %v", want, got)
 		}
 	}
+
+	// Using now the new testFuncOneInput testing tool:
+	testFuncOneInput(t, "ExpandAndBroadcast()",
+		func(g *Graph) (input, output *Node) {
+			input = Const(g, []int32{10, 20})
+			output = ExpandAndBroadcast(input, []int{2, 2}, []int{0})
+			return
+		}, [][]int32{{10, 20}, {10, 20}})
+	testFuncOneInput(t, "ExpandAndBroadcast()",
+		func(g *Graph) (input, output *Node) {
+			input = Const(g, []int32{10, 20})
+			output = ExpandAndBroadcast(input, []int{2, 2}, []int{1})
+			return
+		}, [][]int32{{10, 10}, {20, 20}})
+
 }
 
 func TestFill(t *testing.T) {

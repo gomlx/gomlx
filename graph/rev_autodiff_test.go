@@ -496,7 +496,7 @@ func TestStopGradient(t *testing.T) {
 }
 
 func TestGradientGatherSlices(t *testing.T) {
-	testGradients[float32](t, "gradient_gradient_slices",
+	testGradients[float32](t, "gradient_gather_slices",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			input := IotaFull(g, shapes.Make(shapes.F32, 3, 2, 4))
 			start := Const(g, [][]int32{{0, 1}, {1, 2}})
@@ -509,4 +509,32 @@ func TestGradientGatherSlices(t *testing.T) {
 				{{0, 1, 1, 0}, {0, 0, 1, 1}},
 				{{0, 1, 1, 0}, {0, 0, 1, 1}}},
 		})
+}
+
+// TestGradientBroadcastInDim test the underlying XLA's broadcastInDim operator, since
+// it powers BroadcastToShape, BroadcastToDims and ExpandAndBroadcast operators.
+func TestGradientBroadcastInDim(t *testing.T) {
+	testGradients[float32](t, "broadcastInDim: scalar to shape",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			input := Const(g, float32(1))
+			output = BroadcastToDims(input, 2, 2)
+			output = Mul(output, OnePlus(IotaFull(g, output.Shape())))
+			return output, []*Node{input}
+		}, []any{float32(10)})
+
+	testGradients[float32](t, "broadcastInDim: with expansion (a)",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			input := Const(g, []float32{10, 20})
+			output = ExpandAndBroadcast(input, []int{2, 2}, []int{0})
+			output = Mul(output, OnePlus(IotaFull(g, output.Shape())))
+			return output, []*Node{input}
+		}, []any{[]float32{4, 6}})
+
+	testGradients[float32](t, "broadcastInDim: with expansion (b)",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			input := Const(g, []float32{10, 20})
+			output = ExpandAndBroadcast(input, []int{2, 2}, []int{1})
+			output = Mul(output, OnePlus(IotaFull(g, output.Shape())))
+			return output, []*Node{input}
+		}, []any{[]float32{3, 7}})
 }
