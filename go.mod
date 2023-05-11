@@ -3,6 +3,7 @@ module github.com/gomlx/gomlx
 go 1.20
 
 require (
+	github.com/daniellowtw/matlab v0.0.0-20190528220746-1ed1d96a6637
 	github.com/disintegration/imaging v1.6.2
 	github.com/erkkah/margaid v0.3.0
 	github.com/go-gota/gota v0.12.0

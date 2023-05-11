@@ -21,6 +21,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/schollz/progressbar/v3"
 	"io"
 	"log"
 	"net/http"
@@ -87,8 +88,83 @@ func ValidateChecksum(path, checkHash string) error {
 	return nil
 }
 
+// ByteCountIEC converts a byte count to string using the appropriate unit (B, Kb, MiB, GiB, ...).
+// It uses the binary prefix system from IEC -- so powers of 1024 (as opposed to powers 1000).
+func ByteCountIEC(count int64) string {
+	const unit = 1024
+	if count < unit {
+		return fmt.Sprintf("%d B", count)
+	}
+	div, exp := int64(unit), 0
+	for n := count / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %ciB", float64(count)/float64(div), "KMGTPE"[exp])
+}
+
+// copyBytesBar copies bytes from an io.Reader to an io.Writer while displaying a progressbar.
+// It requires knowing the contentLength.
+type copyBytesBar struct {
+	w                             io.Writer
+	bar                           *progressbar.ProgressBar
+	contentLength, amountWritten  int64
+	barUnit, numUnits, addedUnits int64
+}
+
+// newCopyBytesBar creates a new copyBytesBar. It requires knowing the contentLength.
+func newCopyBytesBar(w io.Writer, contentLength int64) *copyBytesBar {
+	bar := &copyBytesBar{w: w}
+	bar.barUnit = 1
+	for contentLength > bar.barUnit*1024*1024 {
+		bar.barUnit *= 1024
+	}
+	bar.numUnits = (contentLength + bar.barUnit - 1) / bar.barUnit
+	bar.bar = progressbar.NewOptions(int(bar.numUnits),
+		progressbar.OptionSetDescription(fmt.Sprintf("%s", ByteCountIEC(contentLength))),
+		progressbar.OptionUseANSICodes(true),
+		progressbar.OptionEnableColorCodes(true),
+		progressbar.OptionSetTheme(progressbar.Theme{
+			Saucer:        "[green]=[reset]",
+			SaucerHead:    "[green]>[reset]",
+			SaucerPadding: ".",
+			BarStart:      "[",
+			BarEnd:        "]",
+		}),
+	)
+	return bar
+}
+
+// Write implements io.Write, while updating the progress bar.
+func (bar *copyBytesBar) Write(p []byte) (n int, err error) {
+	n, err = bar.w.Write(p)
+	bar.amountWritten += int64(n)
+	toUnits := bar.amountWritten / bar.barUnit
+	if toUnits > bar.addedUnits {
+		_ = bar.bar.Add(int(toUnits - bar.addedUnits))
+		bar.addedUnits = toUnits
+	}
+	return
+}
+
+// CopyWithProgressBar is similar to io.Copy, but updates the progress bar with the amount
+// of data copied.
+//
+// It requires knowing the amount of data to copy up-front.
+func CopyWithProgressBar(dst io.Writer, src io.Reader, contentLength int64) (n int64, err error) {
+	bar := newCopyBytesBar(dst, contentLength)
+	n, err = io.Copy(bar, src)
+	if bar.addedUnits < bar.numUnits {
+		_ = bar.bar.Add(int(bar.numUnits - bar.addedUnits))
+	}
+	_ = bar.bar.Close()
+	fmt.Println()
+	return
+}
+
 // Download file from url and save at given path.
-func Download(url, path string) (size int64, err error) {
+// Optionally, use showProgressBar.
+func Download(url, path string, showProgressBar bool) (size int64, err error) {
 	var file *os.File
 	file, err = os.Create(path)
 	if err != nil {
@@ -105,7 +181,12 @@ func Download(url, path string) (size int64, err error) {
 	if err != nil {
 		return 0, errors.Wrapf(err, "failed downloading %q", url)
 	}
-	size, err = io.Copy(file, resp.Body)
+
+	if showProgressBar {
+		size, err = CopyWithProgressBar(file, resp.Body, resp.ContentLength)
+	} else {
+		size, err = io.Copy(file, resp.Body)
+	}
 	if err != nil {
 		return 0, errors.Wrapf(err, "downloading %q to %q", url, path)
 	}
@@ -128,11 +209,10 @@ func DownloadIfMissing(url, path, checkHash string) error {
 	if !FileExists(path) {
 		// Download compressed file first.
 		fmt.Printf("Downloading %s ...\n", url)
-		_, err := Download(url, path)
+		_, err := Download(url, path, true)
 		if err != nil {
 			return err
 		}
-		fmt.Println("\tDone.")
 	}
 	if checkHash == "" {
 		return nil
@@ -144,7 +224,7 @@ func DownloadIfMissing(url, path, checkHash string) error {
 func Untar(baseDir, tarFile string) error {
 	baseDir = ReplaceTildeInDir(baseDir)
 	compressionFlag := ""
-	if strings.HasSuffix(tarFile, ".gz") {
+	if strings.HasSuffix(tarFile, ".gz") || strings.HasSuffix(tarFile, ".tgz") {
 		compressionFlag = "z"
 	} else if strings.HasSuffix(tarFile, ".bz2") {
 		compressionFlag = "j"
@@ -162,15 +242,15 @@ func Untar(baseDir, tarFile string) error {
 // if the target directory is missing.
 //
 // If checkHash is provided, it checks that the file has the hash or fail.
-func DownloadAndUntarIfMissing(url, baseDir, tarFile, dataDir, checkHash string) error {
+func DownloadAndUntarIfMissing(url, baseDir, tarFile, targetUntarDir, checkHash string) error {
 	baseDir = ReplaceTildeInDir(baseDir)
 	if !path.IsAbs(tarFile) {
 		tarFile = path.Join(baseDir, tarFile)
 	}
-	if !path.IsAbs(dataDir) {
-		dataDir = path.Join(baseDir, dataDir)
+	if !path.IsAbs(targetUntarDir) {
+		targetUntarDir = path.Join(baseDir, targetUntarDir)
 	}
-	if FileExists(dataDir) {
+	if FileExists(targetUntarDir) {
 		return nil
 	}
 	err := DownloadIfMissing(url, tarFile, checkHash)
@@ -181,8 +261,8 @@ func DownloadAndUntarIfMissing(url, baseDir, tarFile, dataDir, checkHash string)
 	if err != nil {
 		return err
 	}
-	if !FileExists(dataDir) {
-		return errors.Errorf("downloaded from %q and untar'ed %q, but didn't get directory %q", url, tarFile, dataDir)
+	if !FileExists(targetUntarDir) {
+		return errors.Errorf("downloaded from %q and untar'ed %q, but didn't get directory %q", url, tarFile, targetUntarDir)
 	}
 	return nil
 }
@@ -284,7 +364,7 @@ func NewParallelDataset(ds train.Dataset, parallelism, bufferSize int) *Parallel
 	}
 	impl.config = *pd
 	pd.impl = impl
-	// If the ParallelDataset GC'ed, stop all parallel goroutines.
+	// If the ParallelDataset is garbage collected, stop all parallel goroutines.
 	runtime.SetFinalizer(pd, func(pd *ParallelDataset) {
 		if pd.impl != nil {
 			close(pd.impl.stopDataset)
@@ -410,7 +490,7 @@ func (pd *ParallelDataset) Yield() (spec any, inputs []tensor.Tensor, labels []t
 		case unit = <-impl.cache:
 			// We got a new batch, simply continue.
 		default:
-			// Generation exausted, and no more records in cache.
+			// Generation exhausted, and no more records in cache.
 			err = io.EOF
 			return
 		}

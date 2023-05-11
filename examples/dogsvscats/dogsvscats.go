@@ -20,12 +20,12 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"github.com/pkg/errors"
-	"github.com/schollz/progressbar/v3"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/pkg/errors"
+	"github.com/schollz/progressbar/v3"
 	"hash/crc32"
 	"image"
 	"image/color"
@@ -84,7 +84,7 @@ var (
 	_        = NumValid
 )
 
-// Download Dogs vs Cats Dataset to current directory, unzips it, and checks for mal-formed files (there are a few).
+// Download Dogs vs Cats Dataset to baseDir, unzips it, and checks for mal-formed files (there are a few).
 func Download(baseDir string) error {
 	zipFilePath := path.Join(baseDir, LocalZipFile)
 	targetZipPath := path.Join(baseDir, LocalZipDir)
