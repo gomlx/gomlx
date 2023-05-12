@@ -1889,7 +1889,7 @@ func TransposeAllDims(x *Node, permutation ...int) *Node {
 // between 2 tensors, on arbitrary dimensions. This version uses a textual description on
 // how to manipulate the axes. See EinsumAxes for a version where the axes are given numerically.
 //
-// This is inspired on numpy's Einsum, a description of which can be seen in
+// This is inspired on numpy Einsum, a description of which can be seen in
 // https://stackoverflow.com/questions/26089893/understanding-numpys-einsum/33641428#33641428.
 //
 // The equation string describes what it to be made with each dimension, for each operand,
