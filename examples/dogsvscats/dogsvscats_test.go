@@ -76,7 +76,7 @@ func BenchmarkDataset(b *testing.B) {
 			}
 			b.Run(name, func(b *testing.B) {
 				if useParallelism {
-					ds = data.NewParallelDataset(ds, 0, 10)
+					ds = data.CustomParallel(ds).Buffer(10).Start()
 				}
 				for ii := 0; ii < b.N; ii++ {
 					_, _, _, err := ds.Yield()

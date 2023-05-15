@@ -28,13 +28,18 @@ import (
 // TestGraphFn should build its own inputs, and return both inputs and outputs
 type TestGraphFn func(g *graph.Graph) (inputs, outputs []*graph.Node)
 
+// BuildTestManager using "Host" by default -- can be overwritten by GOMLX_PLATFORM environment variable.
+func BuildTestManager() *graph.Manager {
+	return graph.BuildManager().WithDefaultPlatform("Host").MustDone()
+}
+
 // RunTestGraphFn tests a graph building function graphFn by executing it and comparing
 // its output(s) to the values in want, reporting back any errors in t.
 //
 // delta is the margin of value on the difference of output and want values that are acceptable.
 // Values of delta <= 0 means only exact equality is accepted.
 func RunTestGraphFn(t *testing.T, testName string, graphFn TestGraphFn, want []any, delta float64) {
-	manager := graph.BuildManager().MustDone()
+	manager := BuildTestManager()
 
 	var numInputs, numOutputs int
 	wrapperFn := func(g *graph.Graph) []*graph.Node {

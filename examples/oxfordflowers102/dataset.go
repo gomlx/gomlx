@@ -3,10 +3,14 @@ package oxfordflowers102
 import (
 	"github.com/disintegration/imaging"
 	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
+	timage "github.com/gomlx/gomlx/types/tensor/image"
 	"github.com/pkg/errors"
 	"image"
+	"io"
 	"math"
+	"math/rand"
 	"sync"
 )
 
@@ -15,9 +19,12 @@ import (
 //
 // To do batching or shuffling, use
 type Dataset struct {
-	next int
-	size int
-	mu   sync.Mutex
+	next     int
+	size     int
+	shuffle  []int
+	toTensor *timage.ToTensorConfig
+
+	mu sync.Mutex
 }
 
 // NewDataset returns a Dataset for one epoch that yields
@@ -26,8 +33,39 @@ type Dataset struct {
 //
 // The images are resized and cropped to `size x size` pixel,
 // cut from the middle.
-func NewDataset(size int) train.Dataset {
-	return &Dataset{size: size}
+func NewDataset(dtype shapes.DType, size int) *Dataset {
+	return &Dataset{
+		size:     size,
+		toTensor: timage.ToTensor(dtype),
+	}
+}
+
+// Assert *Dataset implements train.Dataset
+var _ train.Dataset = &Dataset{}
+
+// Shuffle will shuffle the order of the images. This should be called before the
+// start of an epoch.
+//
+// Once shuffled, every time the dataset is reset, it is reshuffled.
+func (ds *Dataset) Shuffle() {
+	ds.mu.Lock()
+	ds.shuffleLocked()
+	ds.mu.Unlock()
+}
+
+func (ds *Dataset) shuffleLocked() {
+	if ds.shuffle == nil {
+		ds.shuffle = make([]int, NumExamples)
+	}
+	for ii := 0; ii < NumExamples; ii++ {
+		newPos := rand.Intn(ii + 1)
+		if newPos == ii {
+			ds.shuffle[ii] = ii
+		} else {
+			// Swap position with the new example.
+			ds.shuffle[newPos], ds.shuffle[ii] = ii, ds.shuffle[newPos]
+		}
+	}
 }
 
 // nextIndex returns the next index and increments it.
@@ -41,6 +79,9 @@ func (ds *Dataset) nextIndex() (index int) {
 		return
 	}
 	ds.next++
+	if ds.shuffle != nil {
+		index = ds.shuffle[index]
+	}
 	if ds.next >= NumExamples {
 		ds.next = -1 // Indicates the end of epoch.
 	}
@@ -64,6 +105,10 @@ func (ds *Dataset) Name() string {
 func (ds *Dataset) Yield() (spec any, inputs []tensor.Tensor, labels []tensor.Tensor, err error) {
 	spec = ds
 	index := ds.nextIndex()
+	if index == -1 {
+		err = io.EOF
+		return
+	}
 	img, label, err := ReadExample(index)
 	if err != nil {
 		err = errors.WithMessagef(err, "failed to read image/label #%d", index)
@@ -96,7 +141,7 @@ func (ds *Dataset) Yield() (spec any, inputs []tensor.Tensor, labels []tensor.Te
 		img = imaging.Crop(img, image.Rect(0, start, ds.size, start+ds.size))
 	}
 
-	inputs = []tensor.Tensor{tensor.FromValue(index)}
+	inputs = []tensor.Tensor{ds.toTensor.Single(img), tensor.FromValue(index)}
 	labels = []tensor.Tensor{tensor.FromValue(label)}
 	return
 }
@@ -105,5 +150,6 @@ func (ds *Dataset) Yield() (spec any, inputs []tensor.Tensor, labels []tensor.Te
 func (ds *Dataset) Reset() {
 	ds.mu.Lock()
 	ds.next = 0
+	ds.shuffleLocked()
 	ds.mu.Unlock()
 }

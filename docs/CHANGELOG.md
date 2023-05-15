@@ -6,6 +6,7 @@
 * Added Interpolate operation -- for series/image/videos resizing.
 * Added support for int32 (`shapes.I32`).
 * Added Set[] to `types` package.
+* Added `types/tensor/image` with image conversion tools to/from tensors.
 
 ## v0.1.1, 2023-04-29
 

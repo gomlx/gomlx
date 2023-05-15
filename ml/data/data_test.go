@@ -17,6 +17,7 @@
 package data
 
 import (
+	"github.com/gomlx/gomlx/graph/graphtest"
 	"io"
 	"sync/atomic"
 	"testing"
@@ -41,15 +42,15 @@ func (ds *testDS) Yield() (spec any, inputs []tensor.Tensor, labels []tensor.Ten
 		err = io.EOF
 		return
 	}
-	inputs = []tensor.Tensor{nil} // One nil element.
-	return                        // As if a batch was returned.
+	inputs = []tensor.Tensor{tensor.FromAnyValue(int(value))} // One nil element.
+	return                                                    // As if a batch was returned.
 }
 
 // TestNewParallelDataset with and without cache.
-func TestNewParallelDataset(t *testing.T) {
+func TestParallelDataset(t *testing.T) {
 	for _, cacheSize := range []int{0, 10} {
 		ds := &testDS{}
-		pDS := NewParallelDataset(ds, 0, cacheSize)
+		pDS := CustomParallel(ds).Parallelism(0).Buffer(cacheSize).Start()
 		count := int64(0)
 		for {
 			_, inputs, _, err := pDS.Yield()
@@ -73,5 +74,38 @@ func TestNewParallelDataset(t *testing.T) {
 			count++
 		}
 		require.Equal(t, testDSMaxValue, count, "Number of yielded batches at second loop, cacheSize=%d.", cacheSize)
+	}
+}
+
+// TestNewParallelDataset with and without cache.
+func TestBatchedDataset(t *testing.T) {
+	manager := graphtest.BuildTestManager()
+	ds := &testDS{}
+	batchSize := 3
+	numFullBatches := int(testDSMaxValue) / batchSize
+	for ii := 0; ii < 2; ii++ {
+		dropIncompleteBatch := ii == 0
+		batched := Batched(manager, ds, batchSize, true, dropIncompleteBatch)
+		wantNumBatches := numFullBatches + 1
+		if dropIncompleteBatch {
+			wantNumBatches--
+		}
+		count := 0
+		for {
+			_, inputs, _, err := batched.Yield()
+			if err == io.EOF {
+				break
+			}
+			require.NoError(t, err, "Test failed with unexpected error")
+			require.Len(t, inputs, 1, "Expected Dataset to yield 1 input tensor")
+			if dropIncompleteBatch || count < numFullBatches {
+				require.Equalf(t, batchSize, inputs[0].Shape().Dimensions[0], "Batch #%d has shape %s",
+					count, inputs[0].Shape())
+			}
+			count++
+			require.LessOrEqualf(t, count, wantNumBatches, "Expected at most %d batches in epoch (dropIncompleteBatch=%v), dataset yielding more than that",
+				wantNumBatches, dropIncompleteBatch)
+		}
+		ds.Reset()
 	}
 }

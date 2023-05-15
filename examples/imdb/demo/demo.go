@@ -136,9 +136,9 @@ func trainModel() {
 	testEvalDS = imdb.NewDataset("test-eval", imdb.Test, *flagMaxLen, *flagBatchSize, DType, false, nil)
 
 	// Parallelize generation of batches.
-	trainDS = data.NewParallelDataset(trainDS, 0, 0)
-	trainEvalDS = data.NewParallelDataset(trainEvalDS, 0, 0)
-	testEvalDS = data.NewParallelDataset(testEvalDS, 0, 0)
+	trainDS = data.Parallel(trainDS)
+	trainEvalDS = data.Parallel(trainEvalDS)
+	testEvalDS = data.Parallel(testEvalDS)
 
 	// Metrics we are interested.
 	meanAccuracyMetric := metrics.NewMeanBinaryLogitsAccuracy("Mean Accuracy", "#acc")

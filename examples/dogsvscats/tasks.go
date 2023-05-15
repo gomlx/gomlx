@@ -158,7 +158,7 @@ func CreateDatasets(config *Configuration) (trainDS, trainEvalDS, validationEval
 			config.NumFolds, config.TrainFolds, config.FoldsSeed,
 			config.ModelImageSize, config.ModelImageSize, config.AngleStdDev, config.FlipRandomly, config.DType)
 		if config.UseParallelism {
-			trainDS = data.NewParallelDataset(trainDS, 0, config.BufferSize)
+			trainDS = data.CustomParallel(trainDS).Buffer(config.BufferSize).Start()
 		}
 	}
 
@@ -171,7 +171,7 @@ func CreateDatasets(config *Configuration) (trainDS, trainEvalDS, validationEval
 			config.NumFolds, config.TrainFolds, config.FoldsSeed,
 			config.ModelImageSize, config.ModelImageSize, 0, false, config.DType)
 		if config.UseParallelism {
-			trainEvalDS = data.NewParallelDataset(trainEvalDS, 0, config.BufferSize)
+			trainEvalDS = data.CustomParallel(trainEvalDS).Buffer(config.BufferSize).Start()
 		}
 	}
 
@@ -184,7 +184,7 @@ func CreateDatasets(config *Configuration) (trainDS, trainEvalDS, validationEval
 			config.NumFolds, config.TrainFolds, config.FoldsSeed,
 			config.ModelImageSize, config.ModelImageSize, 0, false, config.DType)
 		if config.UseParallelism {
-			validationEvalDS = data.NewParallelDataset(validationEvalDS, 0, config.BufferSize)
+			validationEvalDS = data.CustomParallel(validationEvalDS).Buffer(config.BufferSize).Start()
 		}
 	}
 	return

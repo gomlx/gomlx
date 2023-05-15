@@ -1,8 +1,10 @@
 package data
 
 import (
+	"fmt"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/pkg/errors"
 	"io"
 	"log"
 	"runtime"
@@ -10,15 +12,15 @@ import (
 )
 
 // ParallelDataset is a wrapper around a `train.Dataset` that parallelize calls to Yield.
-// See details in NewParallelDataset.
+// See details in CustomParallel.
 type ParallelDataset struct {
 	Dataset train.Dataset
 
-	// Parallelism is the number of goroutines started generating examples.
-	Parallelism int
+	// parallelism is the number of goroutines started generating examples.
+	parallelism int
 
-	// BufferSize is the size of the cache of pre-generated batches.
-	BufferSize int
+	// extraBufferSize is the size of the cache of pre-generated batches.
+	extraBufferSize int
 
 	// impl is the actual implementation.
 	impl *parallelDatasetImpl
@@ -46,31 +48,98 @@ type parallelDatasetImpl struct {
 	epochFinished, stopEpoch, stopDataset chan struct{}
 }
 
-// NewParallelDataset starts building a ParallelDataset that can be used to parallelize any
-// train.Dataset, as long as the underlying dataset ds is thread-safe.
+// Parallel parallelizes any tread-safe train.Dataset.
 //
-// parallelism is the number of goroutines to start, each calling `ds.Yield()` in parallel
-// to accelerate the generation of batches. Set to 0, and it will use the number of cores in
-// the system plus 1.
-//
-// bufferSize is the space reserved to keep pre-generated batches. This is on top of the batches
-// being generated in each goroutine.
+// It uses CustomParallel and automatically starts it with the default
+// parameters.
 //
 // To avoid leaking goroutines, call ParallelDataset.Cancel when exiting.
-func NewParallelDataset(ds train.Dataset, parallelism, bufferSize int) *ParallelDataset {
-	if parallelism == 0 {
-		parallelism = runtime.NumCPU() + 1
+//
+// Example:
+//
+//		var ds train.Dataset
+//		ds = NewMyDataset(...)
+//	 	ds = data.Parallel(ds)
+//	    MyTrainFunc(ds)
+func Parallel(ds train.Dataset) *ParallelDataset {
+	pds := CustomParallel(ds)
+	return pds.Buffer(pds.parallelism).Start()
+}
+
+// CustomParallel builds a ParallelDataset that can be used to parallelize any
+// train.Dataset, as long as the underlying dataset ds is thread-safe.
+//
+// ParallelDataset can be further configured (see SetParallelism and Buffer),
+// and then one has to call Start before actually using the Dataset.
+//
+// To avoid leaking goroutines, call ParallelDataset.Cancel when exiting.
+//
+// Example:
+//
+//		var ds train.Dataset
+//		ds = NewMyDataset(...)
+//	 	ds = data.CustomParallel(ds).Buffer(10).Start()
+//	 	MyTrainFunc(ds)
+func CustomParallel(ds train.Dataset) *ParallelDataset {
+	pd := &ParallelDataset{
+		Dataset: ds,
+	}
+	pd.Parallelism(0)
+	return pd
+}
+
+// Parallelism is the number of goroutines to start, each calling `ds.Yield()` in parallel
+// to accelerate the generation of batches. If set to 0 (the default), and it will use the
+// number of cores in the system plus 1.
+//
+// It also allocates a buffer (in a Go channel) for each goroutine.
+//
+// This must be called before a call to Start.
+//
+// It returns the updated ParallelDataset, so calls can be cascaded.
+func (pd *ParallelDataset) Parallelism(n int) *ParallelDataset {
+	if pd.impl != nil {
+		log.Printf("ParallelDataset invalid configuration change after Start has been called.")
+		return nil
+	}
+	if n == 0 {
+		n = runtime.NumCPU() + 1
+	}
+	pd.parallelism = n
+	return pd
+}
+
+// Buffer reserved in the channel that collects the parallel yields.
+// Notice there is already a intrinsic buffering that happens
+//
+// This must be called before a call to Start.
+//
+// It returns the updated ParallelDataset, so calls can be cascaded.
+func (pd *ParallelDataset) Buffer(n int) *ParallelDataset {
+	if pd.impl != nil {
+		log.Printf("ParallelDataset invalid configuration change after Start has been called.")
+		return nil
+	}
+	pd.extraBufferSize = n
+	return pd
+}
+
+// Start indicates that the dataset is finished to be configured, and starts
+// being a valid Dataset.
+//
+// After Start its configuration can no longer be changed.
+//
+// It returns the updated ParallelDataset, so calls can be cascaded.
+func (pd *ParallelDataset) Start() *ParallelDataset {
+	if pd.impl != nil {
+		log.Printf("ParallelDataset.Start called more than once!?")
+		return nil
 	}
 	impl := &parallelDatasetImpl{
-		cache:       make(chan yieldUnit, bufferSize),
+		cache:       make(chan yieldUnit, pd.extraBufferSize),
 		stopDataset: make(chan struct{}),
+		config:      *pd, // Copy.
 	}
-	pd := &ParallelDataset{
-		Dataset:     ds,
-		Parallelism: parallelism,
-		BufferSize:  bufferSize,
-	}
-	impl.config = *pd
 	pd.impl = impl
 	// If the ParallelDataset is garbage collected, stop all parallel goroutines.
 	runtime.SetFinalizer(pd, func(pd *ParallelDataset) {
@@ -89,7 +158,7 @@ func (impl *parallelDatasetImpl) startGoRoutines() {
 	impl.epochFinished = make(chan struct{})
 	impl.stopEpoch = make(chan struct{})
 	var wg sync.WaitGroup
-	for ii := 0; ii < impl.config.Parallelism; ii++ {
+	for ii := 0; ii < impl.config.parallelism; ii++ {
 		// Start all goroutines.
 		wg.Add(1)
 		go func(impl *parallelDatasetImpl) {
@@ -151,12 +220,16 @@ func (impl *parallelDatasetImpl) startGoRoutines() {
 
 // Name implements train.Dataset.
 func (pd *ParallelDataset) Name() string {
-	return pd.Dataset.Name()
+	return fmt.Sprintf("%s [CustomParallel]", pd.Dataset.Name())
 }
 
 // Reset implements train.Dataset.
 func (pd *ParallelDataset) Reset() {
 	impl := pd.impl
+	if impl == nil {
+		log.Printf("ParallelDataset.Reset was called before it was started with ParallelDataset.Start")
+		return
+	}
 	impl.muErr.Lock()
 	close(impl.stopEpoch) // Indicate to goroutines to stop generating batches.
 	impl.muErr.Unlock()
@@ -182,6 +255,10 @@ func (pd *ParallelDataset) Reset() {
 // Yield implements train.Dataset.
 func (pd *ParallelDataset) Yield() (spec any, inputs []tensor.Tensor, labels []tensor.Tensor, err error) {
 	impl := pd.impl
+	if impl == nil {
+		err = errors.Errorf("ParallelDataset.Yield was called before it was started with ParallelDataset.Start")
+		return
+	}
 	var unit yieldUnit
 	select {
 	case <-impl.stopDataset:
