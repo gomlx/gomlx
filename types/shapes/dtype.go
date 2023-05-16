@@ -150,6 +150,7 @@ func DTypeForType(t reflect.Type) DType {
 	return InvalidDType
 }
 
+// TypeForDType returns the Go `reflect.Type` corresponding to the tensor DType.
 func TypeForDType(dtype DType) reflect.Type {
 	switch dtype {
 	case Int64:
@@ -164,6 +165,17 @@ func TypeForDType(dtype DType) reflect.Type {
 		return reflect.TypeOf(true)
 	}
 	return reflect.TypeOf(nil)
+}
+
+// Type returns the Go `reflect.Type` corresponding to the tensor DType.
+func (dtype DType) Type() reflect.Type {
+	return TypeForDType(dtype)
+}
+
+// Memory returns the number of bytes in Go used to store the given DType.
+func (dtype DType) Memory() int64 {
+	t := TypeForDType(dtype)
+	return int64(t.Size())
 }
 
 // CastAsDType casts a numeric value to the corresponding for the DType.

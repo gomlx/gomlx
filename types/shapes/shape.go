@@ -130,6 +130,12 @@ func (s Shape) Size() (size int) {
 	return
 }
 
+// Memory returns the number of bytes for that would be used in Go to store the given data -- the actual
+// memory may depend on the device implementation in some cases (e.g. bool).
+func (s Shape) Memory() int64 {
+	return s.DType.Memory() * int64(s.Size())
+}
+
 // MakeTuple returns a shape representing a tuple of elements with the given shapes.
 func MakeTuple(elements []Shape) Shape {
 	return Shape{DType: Tuple, TupleShapes: elements}
