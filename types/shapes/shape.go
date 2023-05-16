@@ -69,7 +69,10 @@
 package shapes
 
 import (
+	"encoding/gob"
 	"fmt"
+	"github.com/pkg/errors"
+	"io"
 	"reflect"
 	"strings"
 )
@@ -186,6 +189,69 @@ func (s Shape) Copy() (s2 Shape) {
 			s2.TupleShapes = append(s2.TupleShapes, subShape)
 		}
 	}
+	return
+}
+
+// Serialize shape in binary format.
+func (s Shape) Serialize(writer io.Writer) (err error) {
+	enc := gob.NewEncoder(writer)
+	defer func() {
+		if err != nil {
+			err = errors.Wrapf(err, "failed to encode Shape %s", s)
+		}
+	}()
+
+	err = enc.Encode(s.DType)
+	if err != nil {
+		return
+	}
+	err = enc.Encode(s.Dimensions)
+	if err != nil {
+		return
+	}
+	err = enc.Encode(len(s.TupleShapes))
+	if err != nil {
+		return
+	}
+	for _, subShape := range s.TupleShapes {
+		err = subShape.Serialize(writer)
+		if err != nil {
+			return
+		}
+	}
+	return
+}
+
+// Deserialize a Shape from the reader. Returns new Shape or an error.
+func Deserialize(reader io.Reader) (s Shape, err error) {
+	dec := gob.NewDecoder(reader)
+	defer func() {
+		if err != nil {
+			err = errors.Wrapf(err, "failed to decode Shape %s", s)
+		}
+	}()
+
+	err = dec.Decode(&s.DType)
+	if err != nil {
+		return
+	}
+	err = dec.Decode(&s.Dimensions)
+	if err != nil {
+		return
+	}
+	var numTuples int
+	err = dec.Decode(&numTuples)
+	if err != nil {
+		return
+	}
+	s.TupleShapes = make([]Shape, numTuples)
+	for ii := range s.TupleShapes {
+		s.TupleShapes[ii], err = Deserialize(reader)
+		if err != nil {
+			return
+		}
+	}
+	err = nil
 	return
 }
 

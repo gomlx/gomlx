@@ -64,10 +64,11 @@ package tensor
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/xla"
+	"github.com/pkg/errors"
+	"io"
 	"reflect"
 )
 
@@ -208,6 +209,48 @@ func (local *Local) Bytes() []byte {
 		return nil
 	}
 	return local.literal.Bytes()
+}
+
+// Serialize Local tensor in binary format -- not portable for platforms that have different type of number encoding.
+func (local *Local) Serialize(writer io.Writer) (err error) {
+	if !local.Ok() {
+		return errors.Errorf("tensor.Local is in an invalid state")
+	}
+	err = local.shape.Serialize(writer)
+	if err != nil {
+		return
+	}
+	data := local.Bytes()
+	n, err := writer.Write(data) // Write in raw mode, so not portable.
+	if err != nil {
+		err = errors.Wrapf(err, "failed to write tensor.Local data")
+		return
+	}
+	if n != len(data) {
+		err = errors.Errorf("failed to write all data tensor.Local data (%d out of %d were written)", n, len(data))
+		return
+	}
+	return
+}
+
+// Deserialize a Tensor from the reader. Returns new tensor.Local or an error.
+func Deserialize(reader io.Reader) (local *Local, err error) {
+	shape, err := shapes.Deserialize(reader)
+	if err != nil {
+		return
+	}
+	local = FromShape(shape)
+	data := local.Bytes()
+	n, err := reader.Read(data)
+	if err != nil {
+		err = errors.Wrapf(err, "failed to read tensor.Local data")
+		return
+	}
+	if n != len(data) {
+		err = errors.Errorf("failed to read all data tensor.Local data (%d out of %d were read)", n, len(data))
+		return
+	}
+	return
 }
 
 // Scalar returns the scalar value contained in the Local. It will return a zero value

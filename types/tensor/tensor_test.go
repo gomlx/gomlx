@@ -17,10 +17,12 @@
 package tensor
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/xla"
+	"github.com/stretchr/testify/require"
 	"reflect"
 	"testing"
 )
@@ -241,4 +243,16 @@ func TestTuples(t *testing.T) {
 	if !reflect.DeepEqual(splits[1].Value(), elem1) {
 		t.Errorf("Tuple[1] transferred back: got %v, wanted %v", splits[1].Value(), elem1)
 	}
+}
+
+func TestSerialize(t *testing.T) {
+	values := [][]float64{{2}, {3}, {5}, {7}, {11}}
+	localT := FromValue(values)
+	buf := &bytes.Buffer{}
+	require.NoError(t, localT.Serialize(buf))
+	buf = bytes.NewBuffer(buf.Bytes())
+	var err error
+	localT, err = Deserialize(buf)
+	require.NoError(t, err)
+	require.Equal(t, values, ValueOf[[][]float64](localT))
 }
