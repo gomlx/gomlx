@@ -49,6 +49,9 @@ func OnDeviceBufferCount() int64 {
 }
 
 func newOnDeviceBuffer(client *Client, cBuffer *C.OnDeviceBuffer) *OnDeviceBuffer {
+	if cBuffer == nil {
+		panic(fmt.Sprintf("Invalid (nil) cBuffer for client %v\n", client))
+	}
 	atomic.AddInt64(&OnDeviceBufferCountAllocated, 1)
 	cShape := C.OnDeviceBufferShape(cBuffer)
 	shape := ShapeFromCShape(cShape)
