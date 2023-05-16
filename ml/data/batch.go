@@ -29,7 +29,7 @@ func (e *batchElement) FinalizeAll() {
 // batchedDataset implements train.Dataset and batches results from the underlying
 // BaseDataset.
 //
-// See details in Batched, the function used to create it.
+// See details in Batch, the function used to create it.
 type batchedDataset struct {
 	manager *Manager
 	ds      train.Dataset // Source Dataset.
@@ -43,17 +43,21 @@ type batchedDataset struct {
 	batchExec *Exec // Batch tensors.
 }
 
-// Batched creates dataset that batches `ds` into batches of size `batchSize`.
+// Batch creates dataset that batches `ds` into batches of size `batchSize`.
 //
 // It uses GoMLX to batch the tensors themselves, so it takes a graph.Manager as its first
 // parameter. Also, it means that it yields examples already stored "on device" -- whichever
 // the platform Manager was configured with.
 //
-// Typically, Batched can benefit from ReadAhead, so while training or evaluation of batch
-// is happening, the next batch is being built. Consider using ReadAhead on the Batched dataset,
+// Typically, Batch can benefit from ReadAhead, so while training or evaluation of batch
+// is happening, the next batch is being built. Consider using ReadAhead on the Batch dataset,
 // even with a buffer of only 1.
 //
 // Args:
+//   - `manager`: will be used to create the graph that actually does the batching.
+//   - `ds`: the dataset to be batched.
+//   - `batch_size`: size of each batch, except when there are no more examples, in which
+//     case batches can be smaller (except if `dropIncompleteBatch` was selected).
 //   - `createLeadingAxis`: usually set to true, it will create a new leading
 //     axis that becomes the batch dimension. Otherwise, it simply concatenates the individual
 //     results at the axis 0 -- this can be used for instance to increase the size of a batch.
@@ -62,8 +66,8 @@ type batchedDataset struct {
 //     a partial batch -- with a different shape this may trigger the re-compilation of a graph.
 //     Usually desirable for evaluation, but not desirable for training.
 //
-// Returns a `train.Dataset`.
-func Batched(manager *Manager, ds train.Dataset, batchSize int, createLeadingAxis, dropIncompleteBatch bool) train.Dataset {
+// Returns a `train.Dataset` that yields batched examples.
+func Batch(manager *Manager, ds train.Dataset, batchSize int, createLeadingAxis, dropIncompleteBatch bool) train.Dataset {
 	batched := &batchedDataset{
 		manager:             manager,
 		ds:                  ds,
@@ -77,7 +81,7 @@ func Batched(manager *Manager, ds train.Dataset, batchSize int, createLeadingAxi
 
 // Name implements train.Dataset. It returns the dataset name.
 func (ds *batchedDataset) Name() string {
-	return fmt.Sprintf("%s [Batched]", ds.ds.Name())
+	return fmt.Sprintf("%s [Batch]", ds.ds.Name())
 }
 
 // Reset implements train.Dataset.
@@ -256,6 +260,9 @@ func (ds *batchedDataset) batchTensorsGraph(inputs []*Node) *Node {
 		inputs = newInputs
 	}
 	// Batch dimension is by convention the very first.
+	if len(inputs) == 1 {
+		return inputs[0]
+	}
 	return Concatenate(inputs, 0)
 }
 
