@@ -358,7 +358,7 @@ func (e *Exec) CallWithGraph(args ...any) (results []tensor.Tensor, g *Graph, er
 	for ii := range args {
 		deviceT := anyToDeviceTensor(e.manager, e.deviceNum, args[ii])
 		if !deviceT.Ok() {
-			err = deviceT.Error()
+			err = errors.WithMessagef(deviceT.Error(), "failed to convert argument #%d to device(%d): %v", ii, e.deviceNum, args[ii])
 			return
 		}
 		tensors = append(tensors, deviceT)
