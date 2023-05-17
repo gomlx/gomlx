@@ -17,7 +17,11 @@
 package data
 
 import (
+	"bytes"
+	"fmt"
 	"github.com/gomlx/gomlx/graph/graphtest"
+	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/slices"
 	"io"
 	"sync/atomic"
 	"testing"
@@ -77,7 +81,6 @@ func TestParallelDataset(t *testing.T) {
 	}
 }
 
-// TestNewParallelDataset with and without cache.
 func TestBatchedDataset(t *testing.T) {
 	manager := graphtest.BuildTestManager()
 	ds := &testDS{}
@@ -85,7 +88,7 @@ func TestBatchedDataset(t *testing.T) {
 	numFullBatches := int(testDSMaxValue) / batchSize
 	for ii := 0; ii < 2; ii++ {
 		dropIncompleteBatch := ii == 0
-		batched := Batched(manager, ds, batchSize, true, dropIncompleteBatch)
+		batched := Batch(manager, ds, batchSize, true, dropIncompleteBatch)
 		wantNumBatches := numFullBatches + 1
 		if dropIncompleteBatch {
 			wantNumBatches--
@@ -108,4 +111,148 @@ func TestBatchedDataset(t *testing.T) {
 		}
 		ds.Reset()
 	}
+}
+
+type testSlicesDS struct {
+	numExamples, next int
+}
+
+func (ds *testSlicesDS) Name() string { return "testSlicesDS" }
+func (ds *testSlicesDS) Reset()       { ds.next = 0 }
+func (ds *testSlicesDS) Yield() (spec any, inputs []tensor.Tensor, labels []tensor.Tensor, err error) {
+	if ds.next >= ds.numExamples {
+		err = io.EOF
+		return
+	}
+	spec = ds
+	input := make([]int, 3)
+	label := make([]int, 3)
+	for ii := range input {
+		input[ii] = ds.next*len(input) + ii
+		label[ii] = -input[ii]
+	}
+	inputs = []tensor.Tensor{tensor.FromValue(input)}
+	labels = []tensor.Tensor{tensor.FromValue(label)}
+	ds.next += 1
+	return
+}
+
+func TestInMemoryDataset(t *testing.T) {
+	manager := graphtest.BuildTestManager()
+	ds := &testSlicesDS{numExamples: 17}
+	const bytesPerValue = 8 // int uses shapes.Int64, 8 bytes per value.
+	const valuesPerExample = 3
+
+	// Test as if each element is int[3]
+	mds, err := InMemory(manager, ds, false)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(mds.inputsAndLabelsData))
+	require.Equal(t, 1, mds.numInputsTensors)
+	require.Equal(t, ds.numExamples, mds.numExamples)
+	require.Equal(t, int64(2*ds.numExamples*valuesPerExample*bytesPerValue), mds.Memory())
+	require.True(t, shapes.Make(shapes.I64, ds.numExamples, valuesPerExample).Eq(mds.inputsAndLabelsData[0].Shape()))
+	require.True(t, shapes.Make(shapes.I64, ds.numExamples, valuesPerExample).Eq(mds.inputsAndLabelsData[0].Shape()))
+
+	// Test as if ds provided a batch of 3 elements each time.
+	ds.Reset()
+	mds, err = InMemory(manager, ds, true)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(mds.inputsAndLabelsData))
+	require.Equal(t, 1, mds.numInputsTensors)
+	require.Equal(t, ds.numExamples*valuesPerExample, mds.numExamples)
+	require.Equal(t, int64(2*ds.numExamples*valuesPerExample*bytesPerValue), mds.Memory())
+	require.True(t, shapes.Make(shapes.I64, ds.numExamples*valuesPerExample).Eq(mds.inputsAndLabelsData[0].Shape()))
+	require.True(t, shapes.Make(shapes.I64, ds.numExamples*valuesPerExample).Eq(mds.inputsAndLabelsData[0].Shape()))
+
+	// Read one element at a time: repeat 4 times, the last two are randomized.
+	for repeat := 0; repeat < 4; repeat++ {
+		fmt.Printf("\tRepeat %d:\n", repeat)
+		count := 0
+		if repeat == 2 {
+			mds.RandomWithReplacement()
+		} else if repeat == 3 {
+			mds.Shuffle()
+		}
+		isRandomized := false
+		for {
+			_, inputs, labels, err := mds.Yield()
+			if err == io.EOF {
+				break
+			}
+			require.NoError(t, err)
+			require.Less(t, count, ds.numExamples*valuesPerExample)
+
+			input := tensor.ToScalar[int](inputs[0])
+			label := tensor.ToScalar[int](labels[0])
+			if repeat < 2 {
+				// In-order:
+				require.Equal(t, count, input)
+				require.Equal(t, -count, label)
+			} else {
+				// Randomized:
+				isRandomized = isRandomized || ((count != input) || (-count != label))
+			}
+			count++
+		}
+		if repeat >= 2 {
+			// Check that it was randomized: chances of happening in order are astronomically low (mds.NumExamples() factorial).
+			require.True(t, isRandomized)
+		}
+		require.Equal(t, count, ds.numExamples*valuesPerExample)
+
+		// Test that mds keeps exhausted.
+		_, _, _, err = mds.Yield()
+		require.True(t, io.EOF == err)
+		mds.Reset()
+	}
+
+	// Read in-memory dataset in batches: there are 51 examples, a batch of 50 should return only one batch if
+	// dropping incomplete.
+	mds = mds.Copy().BatchSize(50, true) // This should also reset shuffling/random sampling.
+	_, inputs, labels, err := mds.Yield()
+	require.NoError(t, err)
+	input := tensor.ValueOf[[]int](inputs[0].Local())
+	label := tensor.ValueOf[[]int](labels[0].Local())
+	want := slices.IotaSlice(0, 50)
+	require.Equal(t, want, input)
+	for ii := range want {
+		want[ii] = -want[ii]
+	}
+	require.Equal(t, want, label)
+	_, inputs, labels, err = mds.Yield()
+	require.True(t, err == io.EOF) // Not enough examples for a second batch.
+
+	// Restart batch reading, this time allowing incomplete batches.
+	mds.Reset()
+	mds.BatchSize(50, false)
+	_, _, _, err = mds.Yield()
+	require.NoError(t, err)
+	_, inputs, labels, err = mds.Yield() // Second batch will have size 1.
+	require.NoError(t, err)
+	input = tensor.ValueOf[[]int](inputs[0].Local())
+	label = tensor.ValueOf[[]int](labels[0].Local())
+	require.Equal(t, []int{50}, input)
+	require.Equal(t, []int{-50}, label)
+
+	// Serialize and deserialize, check that we recover it.
+	buf := &bytes.Buffer{}
+	require.NoError(t, mds.Serialize(buf))
+	buf = bytes.NewBuffer(buf.Bytes())
+	mds, err = DeserializeInMemory(manager, buf)
+	require.NoError(t, mds.Serialize(buf))
+
+	// Check that the recovered InMemoryDataset yields the same.
+	mds = mds.BatchSize(50, true)
+	_, inputs, labels, err = mds.Yield()
+	require.NoError(t, err)
+	input = tensor.ValueOf[[]int](inputs[0].Local())
+	label = tensor.ValueOf[[]int](labels[0].Local())
+	want = slices.IotaSlice(0, 50)
+	require.Equal(t, want, input)
+	for ii := range want {
+		want[ii] = -want[ii]
+	}
+	require.Equal(t, want, label)
+	_, inputs, labels, err = mds.Yield()
+	require.True(t, err == io.EOF) // Not enough examples for a second batch.
 }
