@@ -72,7 +72,6 @@ import (
 	"encoding/gob"
 	"fmt"
 	"github.com/pkg/errors"
-	"io"
 	"reflect"
 	"strings"
 )
@@ -192,29 +191,25 @@ func (s Shape) Copy() (s2 Shape) {
 	return
 }
 
-// Serialize shape in binary format.
-func (s Shape) Serialize(writer io.Writer) (err error) {
-	enc := gob.NewEncoder(writer)
-	defer func() {
+// GobSerialize shape in binary format.
+func (s Shape) GobSerialize(encoder *gob.Encoder) (err error) {
+	enc := func(e any) {
 		if err != nil {
-			err = errors.Wrapf(err, "failed to encode Shape %s", s)
+			return
 		}
-	}()
-
-	err = enc.Encode(s.DType)
-	if err != nil {
-		return
+		err = encoder.Encode(e)
+		if err != nil {
+			err = errors.Wrapf(err, "failed to serialize Shape %s", s)
+		}
 	}
-	err = enc.Encode(s.Dimensions)
-	if err != nil {
-		return
-	}
-	err = enc.Encode(len(s.TupleShapes))
+	enc(s.DType)
+	enc(s.Dimensions)
+	enc(len(s.TupleShapes))
 	if err != nil {
 		return
 	}
 	for _, subShape := range s.TupleShapes {
-		err = subShape.Serialize(writer)
+		err = subShape.GobSerialize(encoder)
 		if err != nil {
 			return
 		}
@@ -222,36 +217,31 @@ func (s Shape) Serialize(writer io.Writer) (err error) {
 	return
 }
 
-// Deserialize a Shape from the reader. Returns new Shape or an error.
-func Deserialize(reader io.Reader) (s Shape, err error) {
-	dec := gob.NewDecoder(reader)
-	defer func() {
+// GobDeserialize a Shape. Returns new Shape or an error.
+func GobDeserialize(decoder *gob.Decoder) (s Shape, err error) {
+	dec := func(data any) {
 		if err != nil {
-			err = errors.Wrapf(err, "failed to decode Shape %s", s)
+			return
 		}
-	}()
-
-	err = dec.Decode(&s.DType)
-	if err != nil {
-		return
+		err = decoder.Decode(data)
+		if err != nil {
+			err = errors.Wrapf(err, "failed to deserialize Shape")
+		}
 	}
-	err = dec.Decode(&s.Dimensions)
-	if err != nil {
-		return
-	}
+	dec(&s.DType)
+	dec(&s.Dimensions)
 	var numTuples int
-	err = dec.Decode(&numTuples)
+	dec(&numTuples)
 	if err != nil {
 		return
 	}
 	s.TupleShapes = make([]Shape, numTuples)
 	for ii := range s.TupleShapes {
-		s.TupleShapes[ii], err = Deserialize(reader)
+		s.TupleShapes[ii], err = GobDeserialize(decoder)
 		if err != nil {
 			return
 		}
 	}
-	err = nil
 	return
 }
 

@@ -18,6 +18,7 @@ package tensor
 
 import (
 	"bytes"
+	"encoding/gob"
 	"fmt"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
@@ -249,10 +250,11 @@ func TestSerialize(t *testing.T) {
 	values := [][]float64{{2}, {3}, {5}, {7}, {11}}
 	localT := FromValue(values)
 	buf := &bytes.Buffer{}
-	require.NoError(t, localT.Serialize(buf))
-	buf = bytes.NewBuffer(buf.Bytes())
+	enc := gob.NewEncoder(buf)
+	require.NoError(t, localT.GobSerialize(enc))
 	var err error
-	localT, err = Deserialize(buf)
+	dec := gob.NewDecoder(buf)
+	localT, err = GobDeserialize(dec)
 	require.NoError(t, err)
 	require.Equal(t, values, ValueOf[[][]float64](localT))
 }

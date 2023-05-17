@@ -18,6 +18,7 @@ package data
 
 import (
 	"bytes"
+	"encoding/gob"
 	"fmt"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/types/shapes"
@@ -236,10 +237,11 @@ func TestInMemoryDataset(t *testing.T) {
 
 	// Serialize and deserialize, check that we recover it.
 	buf := &bytes.Buffer{}
-	require.NoError(t, mds.Serialize(buf))
-	buf = bytes.NewBuffer(buf.Bytes())
-	mds, err = DeserializeInMemory(manager, buf)
-	require.NoError(t, mds.Serialize(buf))
+	enc := gob.NewEncoder(buf)
+	require.NoError(t, mds.GobSerialize(enc))
+	dec := gob.NewDecoder(buf)
+	mds, err = GobDeserializeInMemory(manager, dec)
+	require.NoError(t, err)
 
 	// Check that the recovered InMemoryDataset yields the same.
 	mds = mds.BatchSize(50, true)

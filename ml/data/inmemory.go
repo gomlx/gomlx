@@ -92,6 +92,7 @@ func InMemory(manager *Manager, ds train.Dataset, dsIsBatched bool) (mds *InMemo
 		manager:               manager,
 		randomNumberGenerator: rand.New(rand.NewSource(time.Now().UnixNano())),
 		gatherExec:            NewExec(manager, gatherFromDataTensorsGraph),
+		name:                  ds.Name(),
 	}
 	err = mds.readDataset(ds, dsIsBatched)
 	if err != nil {
@@ -511,12 +512,11 @@ func (mds *InMemoryDataset) FinalizeAll() {
 	mds.inputsAndLabelsData = nil
 }
 
-// Serialize in-memory content to the writer.
+// GobSerialize in-memory content to the encoder.
 //
 // Only the underlying data is serialized. The graph.Manager or the sampling configuration is not serialized.
 // The contents of the `spec` (see WithSpec) is also not serialized.
-func (mds *InMemoryDataset) Serialize(writer io.Writer) (err error) {
-	encoder := gob.NewEncoder(writer)
+func (mds *InMemoryDataset) GobSerialize(encoder *gob.Encoder) (err error) {
 	enc := func(data any) {
 		if err != nil {
 			return
@@ -526,16 +526,20 @@ func (mds *InMemoryDataset) Serialize(writer io.Writer) (err error) {
 			err = errors.Wrapf(err, "failed to Serialize InMemoryDataset")
 		}
 	}
+	numInputsAndLabels := int32(len(mds.inputsAndLabelsData))
 	enc(mds.name)
 	enc(mds.numExamples)
-	enc(len(mds.inputsAndLabelsData))
+	enc(numInputsAndLabels)
 	enc(mds.numInputsTensors)
 	if err != nil {
 		return
 	}
+
 	for _, data := range mds.inputsAndLabelsData {
+		// TODO: check if Local tensor already existed before, in which case
+		//       don't Finalize it after use.
 		local := data.Local()
-		err = local.Serialize(writer)
+		err = local.GobSerialize(encoder)
 		if err != nil {
 			return err
 		}
@@ -544,13 +548,12 @@ func (mds *InMemoryDataset) Serialize(writer io.Writer) (err error) {
 	return
 }
 
-// DeserializeInMemory dataset from the reader. It requires a `graph.Manager` to properly be recreated.
+// GobDeserializeInMemory dataset from the decoder. It requires a `graph.Manager` to properly be recreated.
 //
 // No sampling configuration is recovered, and the InMemoryDataset created is sequential (no random sampling)
 // that reads through only one epoch. The random number generator is also newly initialized (see
 // InMemoryDataset.WithRand).
-func DeserializeInMemory(manager *Manager, reader io.Reader) (mds *InMemoryDataset, err error) {
-	decoder := gob.NewDecoder(reader)
+func GobDeserializeInMemory(manager *Manager, decoder *gob.Decoder) (mds *InMemoryDataset, err error) {
 	dec := func(data any) {
 		if err != nil {
 			return
@@ -560,38 +563,35 @@ func DeserializeInMemory(manager *Manager, reader io.Reader) (mds *InMemoryDatas
 			err = errors.Wrapf(err, "failed to DeserializeInMemory")
 		}
 	}
-
 	mds = &InMemoryDataset{
 		manager:               manager,
 		randomNumberGenerator: rand.New(rand.NewSource(time.Now().UnixNano())),
 		gatherExec:            NewExec(manager, gatherFromDataTensorsGraph),
 	}
+
+	var numInputsAndLabels int32
 	dec(&mds.name)
 	dec(&mds.numExamples)
-	var numInputsAndLabelsData int
-	dec(&numInputsAndLabelsData)
+	dec(&numInputsAndLabels)
 	dec(&mds.numInputsTensors)
 	if err != nil {
 		return
 	}
-	mds.inputsAndLabelsData = make([]tensor.Tensor, 0, numInputsAndLabelsData)
+	mds.inputsAndLabelsData = make([]tensor.Tensor, 0, numInputsAndLabels)
+
 	var local *tensor.Local
-	for ii := 0; ii < numInputsAndLabelsData; ii++ {
-		local, err = tensor.Deserialize(reader)
-		fmt.Printf("  Data read: %v\n", local.Value())
+	for ii := 0; ii < int(numInputsAndLabels); ii++ {
+		local, err = tensor.GobDeserialize(decoder)
 		if err != nil {
+			return
+		}
+		if local.Error() != nil {
+			err = local.Error()
 			return
 		}
 		onDevice := local.Device(manager, manager.DefaultDeviceNum())
 		mds.inputsAndLabelsData = append(mds.inputsAndLabelsData, onDevice)
 		local.Finalize() // Release the local copy that is no longer needed.
-	}
-
-	for ii, data := range mds.inputsAndLabelsData {
-		t := data.Device(mds.manager, mds.manager.DefaultDeviceNum())
-		if t.Error() != nil {
-			log.Fatalf("Cannot convert data %d to device: %+v", ii, t.Error())
-		}
 	}
 	return
 }

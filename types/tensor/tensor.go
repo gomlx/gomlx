@@ -63,12 +63,12 @@
 package tensor
 
 import (
+	"encoding/gob"
 	"fmt"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/xla"
 	"github.com/pkg/errors"
-	"io"
 	"reflect"
 )
 
@@ -211,43 +211,34 @@ func (local *Local) Bytes() []byte {
 	return local.literal.Bytes()
 }
 
-// Serialize Local tensor in binary format -- not portable for platforms that have different type of number encoding.
-func (local *Local) Serialize(writer io.Writer) (err error) {
+// GobSerialize Local tensor in binary format.
+func (local *Local) GobSerialize(encoder *gob.Encoder) (err error) {
 	if !local.Ok() {
 		return errors.Errorf("tensor.Local is in an invalid state")
 	}
-	err = local.shape.Serialize(writer)
+	err = local.shape.GobSerialize(encoder)
 	if err != nil {
 		return
 	}
 	data := local.Bytes()
-	n, err := writer.Write(data) // Write in raw mode, so not portable.
+	err = encoder.Encode(data)
 	if err != nil {
 		err = errors.Wrapf(err, "failed to write tensor.Local data")
-		return
-	}
-	if n != len(data) {
-		err = errors.Errorf("failed to write all data tensor.Local data (%d out of %d were written)", n, len(data))
-		return
 	}
 	return
 }
 
-// Deserialize a Tensor from the reader. Returns new tensor.Local or an error.
-func Deserialize(reader io.Reader) (local *Local, err error) {
-	shape, err := shapes.Deserialize(reader)
+// GobDeserialize a Tensor from the reader. Returns new tensor.Local or an error.
+func GobDeserialize(decoder *gob.Decoder) (local *Local, err error) {
+	shape, err := shapes.GobDeserialize(decoder)
 	if err != nil {
 		return
 	}
 	local = FromShape(shape)
 	data := local.Bytes()
-	n, err := reader.Read(data)
+	err = decoder.Decode(&data)
 	if err != nil {
 		err = errors.Wrapf(err, "failed to read tensor.Local data")
-		return
-	}
-	if n != len(data) {
-		err = errors.Errorf("failed to read all data tensor.Local data (%d out of %d were read)", n, len(data))
 		return
 	}
 	return
