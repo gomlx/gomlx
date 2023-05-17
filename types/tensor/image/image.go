@@ -85,6 +85,8 @@ func toTensorImpl(tt *ToTensorConfig, images []image.Image, batch bool) (t *tens
 		t = toTensorGenericsImpl[int32](tt, images, false)
 	case shapes.Int64:
 		t = toTensorGenericsImpl[int](tt, images, false)
+	case shapes.UInt8:
+		t = toTensorGenericsImpl[uint8](tt, images, false)
 	default:
 		log.Printf("image.ToTensor does not support dtype %s", tt.dtype)
 		t = nil
@@ -105,10 +107,7 @@ func toTensorGenericsImpl[T shapes.Number](tt *ToTensorConfig, images []image.Im
 
 	convertToDType := func(val uint32) T {
 		// color.RGBA() returns 16 bits values packaged in uint32.
-		// FutureWork: it will require a specialized version for types like
-		//   uint16 or uint8. Also for large values of tt.maxValue, which may
-		//   lead to overflow for integer values here.
-		return T(val) * T(tt.maxValue) / T(0xFFFF)
+		return T(math.Round(float64(val) * tt.maxValue / float64(0xFFFF)))
 	}
 
 	for imgIdx, img := range images {
