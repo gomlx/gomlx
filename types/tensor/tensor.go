@@ -635,7 +635,7 @@ func AnyValueOf(local *Local) (result any) {
 	//return sliceV.Interface()
 }
 
-// convertDataToSlices take data as a flat slice and convert to a multi-dimensional slices with the given dimensions.
+// convertDataToSlices take data as a flat slice and convert to a multidimensional slices with the given dimensions.
 func convertDataToSlices(dataV reflect.Value, dimensions ...int) reflect.Value {
 	if len(dimensions) <= 1 {
 		return dataV
@@ -955,7 +955,7 @@ func (device *Device) splitTupleImpl(returnError bool) ([]*Device, error) {
 	return deviceTensors, nil
 }
 
-// cache stores links to materializations of the tensor (local or on device).
+// cache stores links to materialization of the tensor (local or on device).
 type cache struct {
 	local *Local
 
@@ -1099,10 +1099,13 @@ func (c *cache) Device(hasClient HasClient, deviceNum int) *Device {
 
 	local := c.local
 	if local == nil || local.Empty() {
-		if local != nil && local.Error() != nil {
-			return DeviceWithError(local.Error())
-		}
-		return DeviceWithError(errors.Errorf("cannot convert empty tensor.Local to tensor.Device"))
+		// TODO: implement transfer between devices. A simplest first version would be to
+		//       first transfer to local.
+		return DeviceWithError(errors.Errorf(
+			"cannot convert empty tensor.Local to tensor.Device -- " +
+				"maybe tensor exists on device in different clientId (Manager), and " +
+				"transfer between different devices not yet supported, but you can transfer " +
+				"tensor to a tensor.Local first and then to a tensor.Device on the new Manager"))
 	}
 	cid := client.Id
 	if local.error != nil {
@@ -1112,7 +1115,10 @@ func (c *cache) Device(hasClient HasClient, deviceNum int) *Device {
 			error:     fmt.Errorf("tensor.Device transferred from bad Local: %w", local.error),
 		})
 	}
-	device := &Device{deviceNum: deviceNum}
+	device := &Device{
+		clientId:  cid,
+		deviceNum: deviceNum,
+	}
 	device.shapedBuffer, device.error = local.literal.ToOnDeviceBuffer(client, deviceNum)
 	c.AddDevice(device)
 	if device.error != nil {
