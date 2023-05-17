@@ -9,6 +9,7 @@ import (
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/pkg/errors"
+	"golang.org/x/exp/constraints"
 	"io"
 	"log"
 	"math/rand"
@@ -194,6 +195,7 @@ func (mds *InMemoryDataset) readDataset(ds train.Dataset, dsIsBatched bool) (err
 
 		// Append data.
 		for ii, t := range inputsAndLabels {
+			t = t.Device(mds.manager, mds.manager.DefaultDeviceNum())
 			allData[ii] = append(allData[ii], t)
 		}
 		count++
@@ -205,41 +207,63 @@ func (mds *InMemoryDataset) readDataset(ds train.Dataset, dsIsBatched bool) (err
 	err = nil
 
 	// Graph building function to concatenate results.
+	alreadyBatched := dsIsBatched // Changes after the first round of concatenating.
 	concatenateFn := func(parts []*Node) *Node {
-		if !dsIsBatched {
+		if !alreadyBatched {
 			newParts := make([]*Node, 0, len(parts))
 			for _, input := range parts {
 				newParts = append(newParts, ExpandDims(input, 0))
 			}
 			parts = newParts
 		}
-		// Batch dimension is by convention the very first.
 		if len(parts) == 1 {
 			return parts[0]
 		}
+		// Batch dimension is by convention the very first.
 		return Concatenate(parts, 0)
 	}
 	concatenateExec := NewExec(mds.manager, concatenateFn)
+	// Set large cache, since there can be quite a few cycles times the number
+	// of elements.
+	concatenateExec.SetMaxCache(512)
 
-	// Concatenate each element of inputsAndLabels.
+	// Concatenate each element of inputsAndLabels across all examples: this is done by consecutively
+	// concatenating at most `MaxElementsToConcat` elements at a time (XLA doesn't handle well very large
+	// computation graphs.
+	const MaxExamplesToConcat = 16
 	mds.inputsAndLabelsData = make([]tensor.Tensor, 0, len(allData))
 	convertToAny := func(t tensor.Tensor) any { return t }
-	for ii, allExamples := range allData {
-		examplesAsAny := slices.Map[tensor.Tensor, any](allExamples, convertToAny)
-		results, newErr := concatenateExec.Call(examplesAsAny...)
-		err = newErr
-		if err != nil {
-			err = errors.WithMessagef(err, "while concatenating %s examples into large tensor", getElementDesc(ii))
-			return
+	for len(allData[0]) > 1 {
+		newAllData := make([][]tensor.Tensor, len(allData))
+		for ii, allExamples := range allData {
+			numConcatenations := (len(allExamples) + MaxExamplesToConcat - 1) / MaxExamplesToConcat
+			newAllExamples := make([]tensor.Tensor, numConcatenations)
+			for jj := 0; jj < numConcatenations; jj++ {
+				// Take MaxExamplesToConcat examples at a time.
+				start := jj * MaxExamplesToConcat
+				end := minN(start+MaxExamplesToConcat, len(allExamples))
+				examplesAsAny := slices.Map[tensor.Tensor, any](allExamples[start:end], convertToAny)
+				results, newErr := concatenateExec.Call(examplesAsAny...)
+				err = newErr
+				if err != nil {
+					err = errors.WithMessagef(err, "while concatenating %s examples into large tensor", getElementDesc(ii))
+					return
+				}
+				newAllExamples[jj] = results[0]
+			}
+			// Immediately free the resources no longer needed.
+			for _, t := range allExamples {
+				t.FinalizeAll()
+			}
+			newAllData[ii] = newAllExamples
 		}
-		mds.inputsAndLabelsData = append(mds.inputsAndLabelsData, results[0])
+		allData = newAllData
+		alreadyBatched = true // If input was not already batched, now it is.
 	}
 
-	// Help the garbage collection by freeing all tensor associated memory for the parts.
+	// Fully concatenated is in the last remaining batch for each element.
 	for _, allExamples := range allData {
-		for _, example := range allExamples {
-			example.FinalizeAll()
-		}
+		mds.inputsAndLabelsData = append(mds.inputsAndLabelsData, allExamples[0])
 	}
 	return
 }
@@ -594,4 +618,18 @@ func GobDeserializeInMemory(manager *Manager, decoder *gob.Decoder) (mds *InMemo
 		local.Finalize() // Release the local copy that is no longer needed.
 	}
 	return
+}
+
+func maxN[T constraints.Ordered](a, b T) T {
+	if a < b {
+		return b
+	}
+	return a
+}
+
+func minN[T constraints.Ordered](a, b T) T {
+	if b < a {
+		return b
+	}
+	return a
 }
