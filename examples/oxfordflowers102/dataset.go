@@ -1,7 +1,11 @@
 package oxfordflowers102
 
 import (
+	"encoding/gob"
+	"fmt"
 	"github.com/disintegration/imaging"
+	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
@@ -11,7 +15,10 @@ import (
 	"io"
 	"math"
 	"math/rand"
+	"os"
+	"path"
 	"sync"
+	"time"
 )
 
 // Dataset implements train.Dataset, and yields one image at a time.
@@ -90,7 +97,7 @@ func (ds *Dataset) nextIndex() (index int) {
 
 // Name implements train.Dataset interface.
 func (ds *Dataset) Name() string {
-	return "Oxford Flowers 102 Raw Dataset"
+	return "Oxford Flowers 102"
 }
 
 // Yield implements train.Dataset interface.
@@ -152,4 +159,68 @@ func (ds *Dataset) Reset() {
 	ds.next = 0
 	ds.shuffleLocked()
 	ds.mu.Unlock()
+}
+
+// InMemoryDataset creates a `data.InMemoryDataset` with the Oxford Flowers 102, of the given `size` for both, height
+// and width -- image is resized and then cropped at the center.
+//
+// A cache version is automatically saved at the baseDir, if it is not empty. And if a cache file is found, it is
+// used, instead of re-reading and processing all the images.
+//
+// One has to first call DownloadAndParse, otherwise it will immediately fail.
+func InMemoryDataset(manager *Manager, baseDir string, size int) (mds *data.InMemoryDataset, err error) {
+	var f *os.File
+	if baseDir != "" {
+		baseDir = data.ReplaceTildeInDir(baseDir) // If dir starts with "~", it is replaced.
+		inMemoryCacheFile := path.Join(baseDir, fmt.Sprintf("cached_images_%dx%d.bin", size, size))
+
+		defer func() {
+			if err != nil {
+				err = errors.WithMessagef(err, "File with cache: %q", inMemoryCacheFile)
+			}
+		}()
+
+		f, err = os.Open(inMemoryCacheFile)
+		if err == nil {
+			// Reads from cached file.
+			dec := gob.NewDecoder(f)
+			mds, err = data.GobDeserializeInMemory(manager, dec)
+			return
+		}
+		if !os.IsNotExist(err) {
+			return
+		}
+
+		// Prepare cache file for saving.
+		f, err = os.Create(inMemoryCacheFile)
+		if err != nil {
+			return
+		}
+	}
+
+	if NumExamples == 0 {
+		err = errors.Errorf("Oxford Flowers 102 dataset hasn't been initialized yet, please call oxfordflowers102.DownloadAndParse() first")
+	}
+
+	// Create InMemoryDataset.
+	start := time.Now()
+	fmt.Printf("Creating InMemoryDataset with images cropped and scaled to %dx%d...\n", size, size)
+	ds := NewDataset(shapes.UInt8, size)
+	mds, err = data.InMemory(manager, data.Parallel(ds), false)
+	elapsed := time.Since(start)
+	fmt.Printf("\t- %s to process dataset.\n", elapsed)
+	if err != nil {
+		return
+	}
+
+	// Save to cache.
+	if f != nil {
+		enc := gob.NewEncoder(f)
+		err = mds.GobSerialize(enc)
+		if err != nil {
+			return
+		}
+		err = f.Close()
+	}
+	return
 }
