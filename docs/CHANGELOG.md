@@ -1,6 +1,6 @@
 # GoMLX changelog
 
-## Next
+## v0.2.0, 2023-05-18
 
 * Added Oxford Flowers 102 Dataset example (no model yet).
 * Added Datasets tools: Parallel (improved), Batch, InMemory.
