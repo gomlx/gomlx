@@ -38,7 +38,7 @@ var (
 
 // buildTestManager using "Host" by default -- can be overwritten by GOMLX_PLATFORM environment variable.
 func buildTestManager() *Manager {
-	return BuildManager().WithDefaultPlatform("Host").MustDone()
+	return graphtest.BuildTestManager()
 }
 
 type graphFnOneInputToTest func(g *Graph) (input, output *Node)

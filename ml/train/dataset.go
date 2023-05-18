@@ -42,9 +42,9 @@ type Dataset interface {
 	// of a new computation graph and new JIT (just-in-time) compilation. There is a finite-sized cache,
 	// and this can become inefficient -- it may spend more time JIT compiling than executing code. Consider
 	// instead using padding for things that have variable length. And if there are various such elements,
-	// consider padding to powers of 2 (or some other base) to limint the number of shapes that will be used.
+	// consider padding to powers of 2 (or some other base) to limit the number of shapes that will be used.
 	//
-	// Yield also returns an opaque `spec` object that is normaly simply passed to the model function
+	// Yield also returns an opaque `spec` object that is normally simply passed to the model function
 	// -- it can simply be nil. The `spec` usually is static (always the same) for a dataset. E.g.: the field names
 	// and types of a generic CSV file reader.
 	//
@@ -60,8 +60,8 @@ type Dataset interface {
 	// If using Loop.RunSteps for training having an infinite dataset stream is ok. But careful
 	// not to use Loop.RunEpochs on a dataset configured to loop indefinitely.
 	//
-	// Optionally it can return an error. If the error is io.EOF the training/evaluation terminates
-	// normally, as it indicates end of data for finite datasets.
+	// Optionally it can return an error. If the error is `io.EOF` the training/evaluation terminates
+	// normally, as it indicates end of data for finite datasets -- the end of the epoch.
 	//
 	// Any other errors should interrupt the training/evaluation and be returned to the user.
 	Yield() (spec any, inputs []tensor.Tensor, labels []tensor.Tensor, err error)

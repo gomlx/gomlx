@@ -80,7 +80,7 @@ func DownloadDataset(dir string, force bool, verbosity int) {
 	for _, urlAndPath := range dataNames {
 		filePath := path.Join(dir, urlAndPath.path)
 		if force {
-			_, err := data.Download(urlAndPath.url, filePath)
+			_, err := data.Download(urlAndPath.url, filePath, true)
 			AssertNoError(err)
 			AssertNoError(data.ValidateChecksum(filePath, urlAndPath.checkSum))
 		} else {

@@ -69,7 +69,9 @@
 package shapes
 
 import (
+	"encoding/gob"
 	"fmt"
+	"github.com/pkg/errors"
 	"reflect"
 	"strings"
 )
@@ -130,6 +132,12 @@ func (s Shape) Size() (size int) {
 	return
 }
 
+// Memory returns the number of bytes for that would be used in Go to store the given data -- the actual
+// memory may depend on the device implementation in some cases (e.g. bool).
+func (s Shape) Memory() int64 {
+	return s.DType.Memory() * int64(s.Size())
+}
+
 // MakeTuple returns a shape representing a tuple of elements with the given shapes.
 func MakeTuple(elements []Shape) Shape {
 	return Shape{DType: Tuple, TupleShapes: elements}
@@ -178,6 +186,60 @@ func (s Shape) Copy() (s2 Shape) {
 		s2.TupleShapes = make([]Shape, 0, len(s.TupleShapes))
 		for _, subShape := range s.TupleShapes {
 			s2.TupleShapes = append(s2.TupleShapes, subShape)
+		}
+	}
+	return
+}
+
+// GobSerialize shape in binary format.
+func (s Shape) GobSerialize(encoder *gob.Encoder) (err error) {
+	enc := func(e any) {
+		if err != nil {
+			return
+		}
+		err = encoder.Encode(e)
+		if err != nil {
+			err = errors.Wrapf(err, "failed to serialize Shape %s", s)
+		}
+	}
+	enc(s.DType)
+	enc(s.Dimensions)
+	enc(len(s.TupleShapes))
+	if err != nil {
+		return
+	}
+	for _, subShape := range s.TupleShapes {
+		err = subShape.GobSerialize(encoder)
+		if err != nil {
+			return
+		}
+	}
+	return
+}
+
+// GobDeserialize a Shape. Returns new Shape or an error.
+func GobDeserialize(decoder *gob.Decoder) (s Shape, err error) {
+	dec := func(data any) {
+		if err != nil {
+			return
+		}
+		err = decoder.Decode(data)
+		if err != nil {
+			err = errors.Wrapf(err, "failed to deserialize Shape")
+		}
+	}
+	dec(&s.DType)
+	dec(&s.Dimensions)
+	var numTuples int
+	dec(&numTuples)
+	if err != nil {
+		return
+	}
+	s.TupleShapes = make([]Shape, numTuples)
+	for ii := range s.TupleShapes {
+		s.TupleShapes[ii], err = GobDeserialize(decoder)
+		if err != nil {
+			return
 		}
 	}
 	return

@@ -63,6 +63,7 @@ const (
 const PRED = Bool
 
 const (
+	U8  = UInt8
 	I32 = Int32
 	I64 = Int64
 	F32 = Float32
@@ -76,24 +77,24 @@ func (dtype DType) IsFloat() bool {
 
 // IsInt returns whether dtype is a supported integer type -- float types not yet supported will return false.
 func (dtype DType) IsInt() bool {
-	return dtype == Int64 || dtype == Int32
+	return dtype == Int64 || dtype == Int32 || dtype == UInt8
 }
 
 func (dtype DType) IsSupported() bool {
-	return dtype == Bool || dtype == Float32 || dtype == Float64 || dtype == Int64 || dtype == Int32
+	return dtype == Bool || dtype == Float32 || dtype == Float64 || dtype == Int64 || dtype == Int32 || dtype == UInt8
 }
 
 // Supported represents the Go types that are supported by the graph package. Used as a Generics constraint.
 // See also Number.
 type Supported interface {
-	bool | float32 | float64 | int | int32
+	bool | float32 | float64 | int | int32 | uint8
 }
 
 // Number represents the Go numeric types that are supported by graph package. Used as a Generics constraint.
 // Notice that "int" becomes int64 in the implementation. Since it needs a 1:1 mapping, it doesn't support the native
 // (Go) int64 type.
 type Number interface {
-	float32 | float64 | int | int32
+	float32 | float64 | int | int32 | uint8
 }
 
 // GoFloat represent a continuous Go numeric type, supported by GoMLX.
@@ -106,15 +107,15 @@ type GoFloat interface {
 // more if needed, the implementation will work with any arbitrary number.
 type MultiDimensionSlice interface {
 	bool | int | int32 | float32 | float64 |
-		[]bool | []int | []int32 | []float32 | []float64 |
-		[][]bool | [][]int | [][]int32 | [][]float32 | [][]float64 |
-		[][][]bool | [][][]int | [][][]int32 | [][][]float32 | [][][]float64 |
-		[][][][]bool | [][][][]int | [][][][]int32 | [][][][]float32 | [][][][]float64 |
-		[][][][][]bool | [][][][][]int | [][][][][]int32 | [][][][][]float32 | [][][][][]float64 |
-		[][][][][][]bool | [][][][][][]int | [][][][][][]int32 | [][][][][][]float32 | [][][][][][]float64 |
-		[][][][][][][]bool | [][][][][][][]int | [][][][][][][]int32 | [][][][][][][]float32 | [][][][][][][]float64 |
-		[][][][][][][][]bool | [][][][][][][][]int | [][][][][][][][]int32 | [][][][][][][][]float32 | [][][][][][][][]float64 |
-		[][][][][][][][][]bool | [][][][][][][][][]int | [][][][][][][][][]int32 | [][][][][][][][][]float32 | [][][][][][][][][]float64
+		[]bool | []int | []uint8 | []int32 | []float32 | []float64 |
+		[][]bool | [][]int | [][]uint8 | [][]int32 | [][]float32 | [][]float64 |
+		[][][]bool | [][][]int | [][][]uint8 | [][][]int32 | [][][]float32 | [][][]float64 |
+		[][][][]bool | [][][][]int | [][][][]uint8 | [][][][]int32 | [][][][]float32 | [][][][]float64 |
+		[][][][][]bool | [][][][][]int | [][][][][]uint8 | [][][][][]int32 | [][][][][]float32 | [][][][][]float64 |
+		[][][][][][]bool | [][][][][][]int | [][][][][][]uint8 | [][][][][][]int32 | [][][][][][]float32 | [][][][][][]float64 |
+		[][][][][][][]bool | [][][][][][][]int | [][][][][][][]uint8 | [][][][][][][]int32 | [][][][][][][]float32 | [][][][][][][]float64 |
+		[][][][][][][][]bool | [][][][][][][][]int | [][][][][][][][]uint8 | [][][][][][][][]int32 | [][][][][][][][]float32 | [][][][][][][][]float64 |
+		[][][][][][][][][]bool | [][][][][][][][][]int | [][][][][][][][][]uint8 | [][][][][][][][][]int32 | [][][][][][][][][]float32 | [][][][][][][][][]float64
 }
 
 func DTypeGeneric[T Supported]() DType {
@@ -130,6 +131,8 @@ func DTypeGeneric[T Supported]() DType {
 		return Int32
 	case bool:
 		return Bool
+	case uint8:
+		return UInt8
 	}
 	return InvalidDType
 }
@@ -146,10 +149,13 @@ func DTypeForType(t reflect.Type) DType {
 		return Float64
 	case reflect.Bool:
 		return Bool
+	case reflect.Uint8:
+		return UInt8
 	}
 	return InvalidDType
 }
 
+// TypeForDType returns the Go `reflect.Type` corresponding to the tensor DType.
 func TypeForDType(dtype DType) reflect.Type {
 	switch dtype {
 	case Int64:
@@ -162,8 +168,21 @@ func TypeForDType(dtype DType) reflect.Type {
 		return reflect.TypeOf(float64(0))
 	case Bool:
 		return reflect.TypeOf(true)
+	case UInt8:
+		return reflect.TypeOf(uint8(0))
 	}
 	return reflect.TypeOf(nil)
+}
+
+// Type returns the Go `reflect.Type` corresponding to the tensor DType.
+func (dtype DType) Type() reflect.Type {
+	return TypeForDType(dtype)
+}
+
+// Memory returns the number of bytes in Go used to store the given DType.
+func (dtype DType) Memory() int64 {
+	t := TypeForDType(dtype)
+	return int64(t.Size())
 }
 
 // CastAsDType casts a numeric value to the corresponding for the DType.
@@ -211,6 +230,8 @@ func LowestValueForDType(dtype DType) any {
 		return math.Inf(-1)
 	case Bool:
 		return false
+	case UInt8:
+		return 0
 	}
 	return math.NaN()
 }

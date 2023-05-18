@@ -2,10 +2,15 @@
 
 ## Next
 
+* Added Oxford Flowers 102 Dataset example (no model yet).
+* Added Datasets tools: Parallel (improved), Batch, InMemory.
 * Added ops: GatherSlices (and its gradient), EinsumAxes, MaxScalar, MinScalar, ExpandAndBroadcast.
 * Added Interpolate operation -- for series/image/videos resizing.
-* Added support for int32 (`shapes.I32`).
+* Added support for int32 (`shapes.I32`) and uint8 (`shapes.UInt8` or `shapes.U8` for short).
 * Added Set[] to `types` package.
+* Added `types/tensor/image` with image conversion tools to/from tensors.
+* Added Serialize and Deserialize for `tensor.Local` and `Shape`.
+* Fixed issue with `tensor.Device` not using the correct clientId.
 
 ## v0.1.1, 2023-04-29
 

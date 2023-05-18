@@ -161,7 +161,7 @@ type execCacheEntry struct {
 	loggedMessages []string // Messages for logged nodes.
 }
 
-const DefaultExecMaxCacheSize = 10
+const DefaultExecMaxCacheSize = 32
 
 // NewExecAny constructs an Exec object that uses the given graphFn to build
 // computation graphs. graphFn take only *Node parameters as input and
@@ -358,7 +358,7 @@ func (e *Exec) CallWithGraph(args ...any) (results []tensor.Tensor, g *Graph, er
 	for ii := range args {
 		deviceT := anyToDeviceTensor(e.manager, e.deviceNum, args[ii])
 		if !deviceT.Ok() {
-			err = deviceT.Error()
+			err = errors.WithMessagef(deviceT.Error(), "failed to convert argument #%d to device(%d): %v", ii, e.deviceNum, args[ii])
 			return
 		}
 		tensors = append(tensors, deviceT)
@@ -369,10 +369,10 @@ func (e *Exec) CallWithGraph(args ...any) (results []tensor.Tensor, g *Graph, er
 	entry := e.findCacheEntry(argsShapes)
 	if entry == nil {
 		err = errors.Errorf(
-			"maximum cache size reached for %q, cannot create another g -- "+
+			"maximum cache size of %d reached for %q, cannot create another g -- "+
 				"a new computation g needs to be created+compiled for each different shape of "+
 				"the input, consider using padding, or if this is not a concern change "+
-				"the cache size with exec.SetMaxCache()", e.Name())
+				"the cache size with exec.SetMaxCache()", e.maxCacheSize, e.Name())
 		return
 	}
 	g = entry.graph

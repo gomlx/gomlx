@@ -45,7 +45,7 @@ import (
 )
 
 var (
-	flagDataDir     = flag.String("data", "~/tmp/dogs_vs_cats", "Directory to cache downloaded and generated dataset files.")
+	flagDataDir     = flag.String("data", "~/tmp/dogs_vs_cats", "Directory to cache downloaded dataset and save checkpoints.")
 	flagPreGenerate = flag.Bool("pre", false, "Pre-generate preprocessed image data to speed up training.")
 
 	// ML Manager creation:

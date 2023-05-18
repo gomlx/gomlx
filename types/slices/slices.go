@@ -22,8 +22,10 @@ import (
 	"golang.org/x/exp/constraints"
 	"math"
 	"reflect"
+	"runtime"
 	"sort"
 	"strings"
+	"sync"
 )
 
 // DeepSliceCmp returns false if the slices given are of different shapes, or if the given cmpFn on each element
@@ -301,3 +303,42 @@ func IotaSlice(start, len int) (slice []int) {
 }
 
 const Epsilon = 1e-4
+
+// Map executes the given function sequentially for every element on in, and returns a mapped slice.
+func Map[In, Out any](in []In, fn func(e In) Out) (out []Out) {
+	out = make([]Out, len(in))
+	for ii, e := range in {
+		out[ii] = fn(e)
+	}
+	return
+}
+
+// MapParallel executes the given function for every element of `in` with at most `runtime.NumCPU` goroutines. The
+// execution order is not guaranteed, but in the end `out[ii] = fn(in[ii])` for every element.
+func MapParallel[In, Out any](in []In, fn func(e In) Out) (out []Out) {
+	if len(in) <= 1 {
+		return Map(in, fn)
+	}
+	out = make([]Out, len(in))
+	goroutines := runtime.NumCPU()
+	if goroutines > len(in) {
+		goroutines = len(in)
+	}
+	indices := make(chan int, goroutines)
+	var wg sync.WaitGroup
+	for ii := 0; ii < goroutines; ii++ {
+		wg.Add(1)
+		go func() {
+			for ii := range indices {
+				out[ii] = fn(in[ii])
+			}
+			wg.Done()
+		}()
+	}
+	for ii := 0; ii < len(in); ii++ {
+		indices <- ii
+	}
+	close(indices)
+	wg.Wait()
+	return
+}

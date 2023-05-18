@@ -63,11 +63,12 @@
 package tensor
 
 import (
+	"encoding/gob"
 	"fmt"
-	"github.com/pkg/errors"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/xla"
+	"github.com/pkg/errors"
 	"reflect"
 )
 
@@ -208,6 +209,39 @@ func (local *Local) Bytes() []byte {
 		return nil
 	}
 	return local.literal.Bytes()
+}
+
+// GobSerialize Local tensor in binary format.
+func (local *Local) GobSerialize(encoder *gob.Encoder) (err error) {
+	if !local.Ok() {
+		return errors.Errorf("tensor.Local is in an invalid state")
+	}
+	err = local.shape.GobSerialize(encoder)
+	if err != nil {
+		return
+	}
+	data := local.Bytes()
+	err = encoder.Encode(data)
+	if err != nil {
+		err = errors.Wrapf(err, "failed to write tensor.Local data")
+	}
+	return
+}
+
+// GobDeserialize a Tensor from the reader. Returns new tensor.Local or an error.
+func GobDeserialize(decoder *gob.Decoder) (local *Local, err error) {
+	shape, err := shapes.GobDeserialize(decoder)
+	if err != nil {
+		return
+	}
+	local = FromShape(shape)
+	data := local.Bytes()
+	err = decoder.Decode(&data)
+	if err != nil {
+		err = errors.Wrapf(err, "failed to read tensor.Local data")
+		return
+	}
+	return
 }
 
 // Scalar returns the scalar value contained in the Local. It will return a zero value
@@ -592,7 +626,7 @@ func AnyValueOf(local *Local) (result any) {
 	//return sliceV.Interface()
 }
 
-// convertDataToSlices take data as a flat slice and convert to a multi-dimensional slices with the given dimensions.
+// convertDataToSlices take data as a flat slice and convert to a multidimensional slices with the given dimensions.
 func convertDataToSlices(dataV reflect.Value, dimensions ...int) reflect.Value {
 	if len(dimensions) <= 1 {
 		return dataV
@@ -912,7 +946,7 @@ func (device *Device) splitTupleImpl(returnError bool) ([]*Device, error) {
 	return deviceTensors, nil
 }
 
-// cache stores links to materializations of the tensor (local or on device).
+// cache stores links to materialization of the tensor (local or on device).
 type cache struct {
 	local *Local
 
@@ -1056,10 +1090,13 @@ func (c *cache) Device(hasClient HasClient, deviceNum int) *Device {
 
 	local := c.local
 	if local == nil || local.Empty() {
-		if local != nil && local.Error() != nil {
-			return DeviceWithError(local.Error())
-		}
-		return DeviceWithError(errors.Errorf("cannot convert empty tensor.Local to tensor.Device"))
+		// TODO: implement transfer between devices. A simplest first version would be to
+		//       first transfer to local.
+		return DeviceWithError(errors.Errorf(
+			"cannot convert empty tensor.Local to tensor.Device -- " +
+				"maybe tensor exists on device in different clientId (Manager), and " +
+				"transfer between different devices not yet supported, but you can transfer " +
+				"tensor to a tensor.Local first and then to a tensor.Device on the new Manager"))
 	}
 	cid := client.Id
 	if local.error != nil {
@@ -1069,7 +1106,10 @@ func (c *cache) Device(hasClient HasClient, deviceNum int) *Device {
 			error:     fmt.Errorf("tensor.Device transferred from bad Local: %w", local.error),
 		})
 	}
-	device := &Device{deviceNum: deviceNum}
+	device := &Device{
+		clientId:  cid,
+		deviceNum: deviceNum,
+	}
 	device.shapedBuffer, device.error = local.literal.ToOnDeviceBuffer(client, deviceNum)
 	c.AddDevice(device)
 	if device.error != nil {

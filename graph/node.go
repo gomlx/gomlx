@@ -33,11 +33,6 @@ const (
 	MaxSizeToPrint = 5
 )
 
-var (
-	// Aliases:
-	ms = shapes.Make
-)
-
 // Node implements Node and is a standard node implementation that using a xla.SerializedNode definition
 // can be used by most ops (node types).
 //
@@ -356,7 +351,7 @@ func IotaFull(g *Graph, shape shapes.Shape) *Node {
 	if !g.Ok() {
 		return g.InvalidNode()
 	}
-	return ReshapeWithShape(Iota(g, ms(shape.DType, shape.Size()), 0), shape)
+	return ReshapeWithShape(Iota(g, shapes.Make(shape.DType, shape.Size()), 0), shape)
 }
 
 // validateGraphFromInputs checks that all inputs are of the same Graph and that
@@ -756,7 +751,6 @@ func BroadcastToShape(x *Node, shape shapes.Shape) *Node {
 
 	if x.shape.IsScalar() {
 		return broadcastInDim(x, shape, nil)
-		//x = ReshapeWithShape(x, ms(shape.DType, slices.SliceWithValue(shape.Rank(), 1)...))
 	}
 	broadcastDims := make([]int, shape.Rank())
 	for ii := 0; ii < shape.Rank(); ii++ {
@@ -856,7 +850,7 @@ func Reshape(x *Node, dimensions ...int) *Node {
 		g.SetErrorf("total requested size %d (dimensions=%v) doesnt match original size %d (dimensions %v)",
 			newSize, dimensions, totalSize, x.Shape().Dimensions)
 	}
-	return ReshapeWithShape(x, ms(x.shape.DType, dimensions...))
+	return ReshapeWithShape(x, shapes.Make(x.shape.DType, dimensions...))
 }
 
 // ReshapeWithShape reshapes x to the dimensions given by shape. Total size cannot change, neither
@@ -1291,7 +1285,7 @@ func Slice(x *Node, axesRanges ...AxisRangeDef) *Node {
 	return SliceWithStridesXLA(x, starts, limits, strides)
 }
 
-// PadAxis defines the amount of padding preciding one axis (Start), at the end of axis (End)
+// PadAxis defines the amount of padding preceding one axis (Start), at the end of axis (End)
 // or in between the inputs (Interior). This is used as parameter for the Pad function.
 type PadAxis struct {
 	Start, End, Interior int
@@ -1577,7 +1571,7 @@ func GatherWithBatchDims(params, indices *Node, batchDims int) *Node {
 
 	// If indices is a scalar, simply convert it to shape `[1]`.
 	if indices.Shape().IsScalar() {
-		indices = ReshapeWithShape(indices, ms(indices.DType(), 1))
+		indices = ReshapeWithShape(indices, shapes.Make(indices.DType(), 1))
 		if !g.Ok() {
 			return g.InvalidNode()
 		}
@@ -1609,7 +1603,7 @@ func GatherWithBatchDims(params, indices *Node, batchDims int) *Node {
 				batchDims, params.shape, indices.shape)
 			return g.InvalidNode()
 		}
-		batchIndices := IndicesForShape(g, ms(types.Int64, indices.shape.Dimensions[0:batchDims]))
+		batchIndices := IndicesForShape(g, shapes.Make(types.Int64, indices.shape.Dimensions[0:batchDims]))
 		// Now batchIndices need to be broadcast to each id for the gather.
 		... TODO: flatten batchIndices, broadcast it, and concatenate to a flattenedIndices, and
 		... then reshape back. After that, just call the simpler Gather().
@@ -1630,9 +1624,9 @@ func IndicesForShape(g *Graph, shape shapes.Shape) *Node {
 		g.SetErrorf("can't generate IndicesForShape for scalars (shape=%s)", shape)
 		return g.InvalidNode()
 	}
-	indices := Iota(g, ms(shapes.Int64, shape.Size()), 0)                             // [shape.Size()]
-	indices = ExpandDims(indices, -1)                                                 // [shape.Size(), 1]
-	indices = BroadcastToShape(indices, ms(shapes.Int64, shape.Size(), shape.Rank())) // [shape.Size(), shape.Rank()]
+	indices := Iota(g, shapes.Make(shapes.Int64, shape.Size()), 0)                             // [shape.Size()]
+	indices = ExpandDims(indices, -1)                                                          // [shape.Size(), 1]
+	indices = BroadcastToShape(indices, shapes.Make(shapes.Int64, shape.Size(), shape.Rank())) // [shape.Size(), shape.Rank()]
 
 	dividers := make([]int, shape.Rank())
 	dividers[shape.Rank()-1] = 1
@@ -1895,7 +1889,7 @@ func TransposeAllDims(x *Node, permutation ...int) *Node {
 // between 2 tensors, on arbitrary dimensions. This version uses a textual description on
 // how to manipulate the axes. See EinsumAxes for a version where the axes are given numerically.
 //
-// This is inspired on numpy's Einsum, a description of which can be seen in
+// This is inspired on numpy Einsum, a description of which can be seen in
 // https://stackoverflow.com/questions/26089893/understanding-numpys-einsum/33641428#33641428.
 //
 // The equation string describes what it to be made with each dimension, for each operand,
@@ -2026,8 +2020,6 @@ func Einsum(equation string, lhs, rhs *Node) *Node {
 	if len(outputCrossAxes) > 0 {
 		dotOutputDesc = append(dotOutputDesc, outputCrossAxes...)
 	}
-	//fmt.Printf("\tlhs: shape=%s, contracting=%v, batch=%v\n", lhs.Shape(), lhsContractingAxes, lhsBatchAxes)
-	//fmt.Printf("\trhs: shape=%s, contracting=%v, batch=%v\n", rhs.Shape(), rhsContractingAxes, rhsBatchAxes)
 
 	output := dotGeneralXLA(lhs, lhsContractingAxes, lhsBatchAxes,
 		rhs, rhsContractingAxes, rhsBatchAxes)
