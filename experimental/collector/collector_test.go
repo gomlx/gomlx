@@ -20,7 +20,6 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
-	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
@@ -39,7 +38,7 @@ func testDC(t *testing.T, manager *Manager, dc *DataCollector) {
 	for ii := 0; ii < 5; ii++ {
 		result, err := e.Call(ii)
 		require.NoError(t, err)
-		got := tensor.ToScalar[int](result[0])
+		got := result[0].Value().(int)
 		want := ii * 10
 		if got != want {
 			t.Fatalf("wrong execution result: wanted %d, got %d", want, got)

@@ -27,7 +27,6 @@ import (
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"os"
@@ -55,7 +54,7 @@ func TestCheckpoints(t *testing.T) {
 		for ii := 0; ii < 10; ii++ {
 			results, err := e.Call()
 			require.NoError(t, err, "Executing test graph")
-			globalStep := tensor.ToScalar[float64](results[0].Local())
+			globalStep := results[0].Local().Value().(float64)
 			assert.Equal(t, float64(ii)+1, globalStep, "LoopStep")
 			assert.NoError(t, checkpoint.Save(), "Saving checkpoint")
 		}
@@ -89,7 +88,7 @@ func TestCheckpoints(t *testing.T) {
 		e := context.NewExec(manager, ctx, testGraphFn)
 		results, err := e.Call()
 		require.NoError(t, err, "Executing test graph")
-		globalStep := tensor.ToScalar[float64](results[0].Local())
+		globalStep := results[0].Local().Value().(float64)
 		assert.Equal(t, 11.0, globalStep, "Re-loaded global step")
 		assert.NoError(t, checkpoint.Save(), "Saving checkpoint")
 

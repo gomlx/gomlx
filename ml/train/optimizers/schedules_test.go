@@ -20,7 +20,6 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"math"
@@ -47,7 +46,7 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 		if stepVar == nil {
 			t.Fatalf("Learning rate variable not created in scope %q, name %q", "/optimizers/cosine", GlobalStepVariableName)
 		}
-		step := tensor.ToScalar[float32](stepVar.Value().Local())
+		step := stepVar.Value().Local().Value().(float32)
 		assert.Equal(t, float32(ii+1), step)
 
 		// Checks learning rate is following cosine formulation.
@@ -55,7 +54,7 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 		if lrVar == nil {
 			t.Fatalf("Learning rate variable not created in scope %q, name %q", "/optimiziers", LearningRateKey)
 		}
-		lr := tensor.ToScalar[float32](lrVar.Value().Local())
+		lr := lrVar.Value().Local().Value().(float32)
 		cycle := float64(ii) / 50.0
 		wantLR := (math.Cos((cycle-math.Floor(cycle))*math.Pi) + 1.0) / 2.0
 		wantLR = wantLR*(1.0-0.001) + 0.001

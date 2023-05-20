@@ -77,7 +77,7 @@ type InMemoryDataset struct {
 // InMemory creates dataset that reads the whole contents of `ds` into memory.
 //
 // It uses GoMLX to batch the tensors themselves, so it takes a graph.Manager as its first
-// parameter. Data will be cached in the platform (device) the Manager was configured with.
+// parameter. Flat will be cached in the platform (device) the Manager was configured with.
 //
 // Args:
 //   - `manager`: will be used to create the graph that does the caching and the ca actually does the batching.
@@ -400,7 +400,7 @@ func (mds *InMemoryDataset) Yield() (spec any, inputs []tensor.Tensor, labels []
 		indicesAndData = append(indicesAndData, indices[0])
 	} else {
 		// Indices are shaped [batch_size, 1].
-		indicesT := tensor.FromDataAndDimensions(indices, len(indices), 1)
+		indicesT := tensor.FromFlatDataAndDimensions(indices, len(indices), 1)
 		if !indicesT.Ok() {
 			panic("indices not ok!")
 		}

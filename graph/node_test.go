@@ -126,7 +126,7 @@ func TestAdd(t *testing.T) {
 			t.Fatalf("Add invalid shape %s, wanted %s", n.Shape(), wantShape)
 		}
 		local := compileRunTransfer(t, g, "scalar Graph")
-		got := tensor.ToScalar[int](local)
+		got := local.Value().(int)
 		if got != 12 {
 			fmt.Printf("%s\n", g)
 			fmt.Printf("\tResult: %d %s\n", got, local.Shape())
@@ -147,7 +147,7 @@ func TestAdd(t *testing.T) {
 			t.Fatalf("Add invalid shape %s, wanted %s", n.Shape(), wantShape)
 		}
 		local := compileRunTransfer(t, g, "[2, 2] Graph")
-		got := tensor.ValueOf[[][]float32](local)
+		got := local.Value().([][]float32)
 		want := [][]float32{{11.1, 11.2}, {21.3, 21.4}}
 		if !reflect.DeepEqual(got, want) {
 			fmt.Printf("%s\n", g)
@@ -169,7 +169,7 @@ func TestAdd(t *testing.T) {
 			t.Fatalf("Add invalid shape %s, wanted %s", n.Shape(), wantShape)
 		}
 		local := compileRunTransfer(t, g, "[2, 2] Graph")
-		got := tensor.ValueOf[[][]float32](local)
+		got := local.Value().([][]float32)
 		want := [][]float32{{2.1, 2.2}, {11.3, 11.4}}
 		if !reflect.DeepEqual(got, want) {
 			fmt.Printf("%s\n", g)
@@ -191,7 +191,7 @@ func TestAdd(t *testing.T) {
 			t.Fatalf("Add invalid shape %s, wanted %s", n.Shape(), wantShape)
 		}
 		local := compileRunTransfer(t, g, "[2, 2] Graph")
-		got := tensor.ValueOf[[][]float32](local)
+		got := local.Value().([][]float32)
 		want := [][]float32{{2.1, 2.2}, {2.3, 2.4}}
 		if !reflect.DeepEqual(got, want) {
 			fmt.Printf("%s\n", g)
@@ -232,7 +232,7 @@ func testTupleParameter(t *testing.T, manager *Manager) {
 				t.Fatalf("Failed to run for xy=%s: %v", xyV, err)
 			}
 			local := global.Local()
-			got := tensor.ToScalar[float64](local)
+			got := local.Value().(float64)
 			want := xV*xV + 2*yV
 			if got != want {
 				fmt.Printf("%s\n", g)
@@ -269,7 +269,7 @@ func TestParameter(t *testing.T) {
 					t.Fatalf("Failed to run for x=%f, y=%f: %v", xV, yV, err)
 				}
 				local := global.Local()
-				got := tensor.ToScalar[float32](local)
+				got := local.Value().(float32)
 				if got != xV+yV {
 					fmt.Printf("%s\n", g)
 					t.Errorf("%f + %f : got %s, wanted %f", xV, yV, local, xV+yV)
@@ -329,7 +329,7 @@ func TestTwoArgsOps(t *testing.T) {
 				t.Fatalf("Add invalid shape %s, wanted %s", n.Shape(), wantShape)
 			}
 			local := compileRunTransfer(t, g, "[2, 2] Graph")
-			got := tensor.ValueOf[[][]float32](local)
+			got := local.Value().([][]float32)
 			want := [][]float32{{11, 12}, {13, 14}}
 			for _, s1 := range want {
 				for ii := range s1 {
@@ -365,7 +365,7 @@ func TestTwoArgsOps(t *testing.T) {
 				t.Fatalf("Add invalid shape %s, wanted %s", n.Shape(), wantShape)
 			}
 			local := compileRunTransfer(t, g, "[2, 2] Graph")
-			got := tensor.ValueOf[[][]int](local)
+			got := local.Value().([][]int)
 			want := [][]int{{11, 12}, {13, 14}}
 			for _, s1 := range want {
 				for ii := range s1 {
@@ -427,7 +427,7 @@ func TestOneArgOps(t *testing.T) {
 			t.Fatalf("Add invalid shape %s, wanted %s", n.Shape(), wantShape)
 		}
 		local := compileRunTransfer(t, g, "[2, 2] graph for one-arg operation")
-		got := tensor.ValueOf[[][]float64](local)
+		got := local.Value().([][]float64)
 		want := [][]float64{{0, 0}, {0, 0}}
 		for i0, x0Slice := range xSlices {
 			for i1, value := range x0Slice {
@@ -685,7 +685,7 @@ func TestTuple(t *testing.T) {
 				t.Errorf("Failed to split Device tuple: %v", tupleT.error)
 			}
 			want := []any{[]float32{1.1, 1.2}, 5}
-			if !types.DeepSliceCmp(splits[0].Local().Value(), want[0], types.Equal[float32]) || tensor.ToScalar[int](splits[1].Local()) != 5 {
+			if !types.DeepSliceCmp(splits[0].Local().Value(), want[0], types.Equal[float32]) || splits[1].Local().Value().(int) != 5 {
 				fmt.Printf("%s\n", g)
 				fmt.Printf("\tResult=(%v, %v)\n", splits[0].Local().Value(), splits[1].Local().Value())
 				t.Fatalf("Wanted %v", want)
@@ -696,7 +696,7 @@ func TestTuple(t *testing.T) {
 			if splits == nil {
 				t.Errorf("Failed to split result tuple a second time: %v", tupleT.error)
 			}
-			if !types.DeepSliceCmp(splits[0].Local().Value(), want[0], types.Equal[float32]) || tensor.ToScalar[int](splits[1].Local()) != 5 {
+			if !types.DeepSliceCmp(splits[0].Local().Value(), want[0], types.Equal[float32]) || splits[1].Local().Value().(int) != 5 {
 				fmt.Printf("\tResult=(%v, %v)\n", splits[0].Local().Value(), splits[1].Local().Value())
 				t.Errorf("Failed at 2nd split of tuple: wanted %v", want)
 			}

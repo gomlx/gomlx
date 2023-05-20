@@ -319,7 +319,7 @@ func (e *Exec) GetNodeLogger() LoggerFn {
 // errorResult creates a device tensor with the given error and replicate it
 // for every output.
 func (e *Exec) errorResult(err error) []tensor.Tensor {
-	t := tensor.DeviceWithError(err)
+	t := tensor.MakeDeviceWithError(err)
 	res := make([]tensor.Tensor, e.numOutputs)
 	for ii := range res {
 		res[ii] = t

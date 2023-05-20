@@ -24,7 +24,6 @@ import (
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
-	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
@@ -132,7 +131,7 @@ func TestExecWithVariableUpdates(t *testing.T) {
 	results, err := counter.Call()
 	require.NoError(t, err, "Failed to run counter graph")
 	gotTensor := results[0]
-	got := tensor.ToScalar[int](gotTensor)
+	got := gotTensor.Value().(int)
 	if got != 1 {
 		t.Fatalf("Wanted first counter value to be 1, got %d instead", got)
 	}
@@ -142,7 +141,7 @@ func TestExecWithVariableUpdates(t *testing.T) {
 	if !gotTensor.Ok() {
 		t.Fatalf("Failed to run counter graph: %+v", gotTensor.Error())
 	}
-	got = tensor.ToScalar[int](gotTensor)
+	got = gotTensor.Value().(int)
 	if got != 2 {
 		t.Fatalf("Wanted second counter value to be 2, got %d instead", got)
 	}

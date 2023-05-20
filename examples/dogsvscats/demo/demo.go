@@ -67,7 +67,7 @@ var (
 	flagNumHiddenLayers = flag.Int("hidden_layers", 3, "Number of hidden layers, stacked with residual connection.")
 	flagNumNodes        = flag.Int("num_nodes", 128, "Number of nodes in hidden layers.")
 
-	// Data augmentation hyperparameters:
+	// Flat augmentation hyperparameters:
 	flagAngleStdDev  = flag.Float64("angle", 5.0, "Standard deviation of noise used to rotate the image. Disabled if --augment=false.")
 	flagFlipRandomly = flag.Bool("flip", true, "Randomly flip the image horizontally. Disabled if --augment=false.")
 

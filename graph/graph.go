@@ -382,7 +382,7 @@ func (g *Graph) RunError(params ParamsMap) (*tensor.Device, error) {
 	if err != nil {
 		return nil, err
 	}
-	deviceT := tensor.FromShapedBuffer(result)
+	deviceT := tensor.InternalNewDevice(result)
 	return deviceT, deviceT.Error()
 }
 
@@ -400,7 +400,7 @@ func (g *Graph) RunWithTensors(params []*tensor.Device) (*tensor.Device, error) 
 	if err != nil {
 		return nil, errors.Wrap(err, "failed RunWithTensors()")
 	}
-	deviceT := tensor.FromShapedBuffer(result)
+	deviceT := tensor.InternalNewDevice(result)
 	return deviceT, deviceT.Error()
 }
 
@@ -413,7 +413,7 @@ func (g *Graph) RunWithTensors(params []*tensor.Device) (*tensor.Device, error) 
 func (g *Graph) Run(params ParamsMap) *tensor.Device {
 	deviceT, err := g.RunError(params)
 	if err != nil {
-		return tensor.DeviceWithError(errors.Wrap(err, "failed Graph.Run()"))
+		return tensor.MakeDeviceWithError(errors.Wrap(err, "failed Graph.Run()"))
 	}
 	return deviceT
 }

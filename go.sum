@@ -137,6 +137,8 @@ github.com/janpfeifer/gonb v0.6.0 h1:FaF2s3zYu947HRgAQRnQkbV0ESmqjEVXW2qjSgY1w0E
 github.com/janpfeifer/gonb v0.6.0/go.mod h1:F1RbndBrkM5byWgv5BKv0gHtvcdBxNhpkZAwHVMg1Yw=
 github.com/janpfeifer/gonb v0.6.1 h1:h+d7ZcwwhreXyhPlpESXr2/aEnRp3oivu0bqmXT1sZg=
 github.com/janpfeifer/gonb v0.6.1/go.mod h1:F1RbndBrkM5byWgv5BKv0gHtvcdBxNhpkZAwHVMg1Yw=
+github.com/janpfeifer/gonb v0.6.3 h1:vwNc0diU05YSe44D2regULhCfPvTC0Gwor1Mb6FiFLo=
+github.com/janpfeifer/gonb v0.6.3/go.mod h1:F1RbndBrkM5byWgv5BKv0gHtvcdBxNhpkZAwHVMg1Yw=
 github.com/jellevandenhooff/dkim v0.0.0-20150330215556-f50fe3d243e1 h1:ujPKutqRlJtcfWk6toYVYagwra7HQHbXOaS171b4Tg8=
 github.com/jellevandenhooff/dkim v0.0.0-20150330215556-f50fe3d243e1/go.mod h1:E0B/fFc00Y+Rasa88328GlI/XbtyysCtTHZS8h7IrBU=
 github.com/json-iterator/go v1.1.6 h1:MrUvLMLTMxbqFJ9kzlvat/rYZqZnW3u4wkLzWTaFwKs=

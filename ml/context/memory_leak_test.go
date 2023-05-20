@@ -94,7 +94,7 @@ func TestMemoryLeaksCtxExec(t *testing.T) {
 					if totalL.Error() != nil {
 						t.Fatalf("Failed total: %+v", totalL.Error())
 					}
-					total := tensor.ToScalar[float64](totalT.Local())
+					total := totalT.Local().Value().(float64)
 					want := 100.0 * (float64(count) + float64(size)*xV)
 					//want := float64(float32(100.0) * (float32(10) + float32(size)*xV))
 					//want := 2 * (1000.0 + float64(size)*float64(xV))
@@ -109,7 +109,7 @@ func TestMemoryLeaksCtxExec(t *testing.T) {
 						fmt.Printf("\n*****\nre-read value=%g\n*******\n\n", data[0])
 						fmt.Printf("Variables:\n")
 						exec.Context().EnumerateVariables(func(v *Variable) {
-							fmt.Printf("\t%s: %v\n", v.name, tensor.ValueOf[[]float32](v.Value().Local()))
+							fmt.Printf("\t%s: %v\n", v.name, v.Value().Local().Value().([]float32))
 						})
 						t.Errorf("Unexpected total %s, wanted %f for xV=%f, size=%d, count=%d", totalT.Local().GoStr(), want,
 							xV, size, count)
@@ -120,9 +120,9 @@ func TestMemoryLeaksCtxExec(t *testing.T) {
 					inputT.FinalizeAll()
 
 					_ = varUpdates
-					update := tensor.ValueOf[[]float32](varUpdates[0].Local())
+					update := varUpdates[0].Local().Value().([]float64)
 					for ii := range update {
-						if update[ii] != float32(count) {
+						if update[ii] != float64(count) {
 							t.Fatalf("Failed for count %d: got update=%v", count, update)
 						}
 					}

@@ -61,11 +61,11 @@ package checkpoints
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/pkg/errors"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/pkg/errors"
 	"os"
 	"path/filepath"
 	"sort"
@@ -370,9 +370,12 @@ func (h *Handler) loadCheckpoint(baseName string) error {
 	h.variableValues = make(map[string]*tensor.Local, len(h.serialized.Variables))
 	for _, varInfo := range h.serialized.Variables {
 		localT := tensor.FromShape(shapes.Make(varInfo.DType, varInfo.Dimensions...))
-		rawBytes := localT.Bytes()
+		dataRef := localT.AcquireData()
+		rawBytes := dataRef.Bytes()
 		var n int
 		n, err = varFile.Read(rawBytes)
+		dataRef.Release()
+
 		if err != nil {
 			return errors.Wrapf(err, "%s: failed to read variable contents of checkpoint data file %s at position %d", h, varFileName, varInfo.Pos)
 		}
@@ -432,7 +435,9 @@ func (h *Handler) Save() error {
 	// * Closure to save the contents of a variable.
 	saveVar := func(name string, value *tensor.Local) error {
 		shape := value.Shape()
-		rawData := value.Bytes()
+		dataRef := value.AcquireData()
+		defer dataRef.Release()
+		rawData := dataRef.Bytes()
 		n, err := varFile.Write(rawData)
 		if err != nil {
 			return errors.Wrapf(err, "%s: failed to write variable %s", h, name)

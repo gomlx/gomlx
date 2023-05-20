@@ -224,8 +224,8 @@ func TestGradientConvolve(t *testing.T) {
 			output = Convolve(input, kernel).NoPadding().Strides(2).Done()
 			return output, []*Node{input, kernel}
 		}, []any{
-			tensor.FromValueAndDimensions(0.0, 2, 8, 7, 3).Value(),
-			tensor.FromValueAndDimensions(0.0, 1, 1, 3, 6).Value(),
+			tensor.FromScalarAndDimensions(0.0, 2, 8, 7, 3).Value(),
+			tensor.FromScalarAndDimensions(0.0, 1, 1, 3, 6).Value(),
 		})
 
 	testGradients[float64](t, "Gradient 2D Convolve().NoPadding().Dilations(2): shape check",
@@ -235,7 +235,7 @@ func TestGradientConvolve(t *testing.T) {
 			output = Convolve(input, kernel).NoPadding().Dilations(2).Done()
 			return output, []*Node{input, kernel}
 		}, []any{
-			tensor.FromValueAndDimensions(0.0, 2, 5, 5, 3).Value(),
-			tensor.FromValueAndDimensions(0.0, 2, 2, 3, 6).Value(),
+			tensor.FromScalarAndDimensions(0.0, 2, 5, 5, 3).Value(),
+			tensor.FromScalarAndDimensions(0.0, 2, 2, 3, 6).Value(),
 		})
 }

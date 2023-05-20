@@ -207,7 +207,7 @@ func TestPieceWiseLinearCalibration(t *testing.T) {
 					panic("Failed to run computation graph")
 				}
 				result := tuple.SplitTuple()[1].Local()
-				return float64(tensor.ValueOf[float32](result))
+				return float64(result.Value().(float32))
 			}
 
 			plotComputation("weights", -10, 110, calibration)

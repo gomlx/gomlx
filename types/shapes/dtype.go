@@ -19,6 +19,7 @@ package shapes
 import (
 	"math"
 	"reflect"
+	"unsafe"
 )
 
 // DType indicates the type of the unit element of a Tensor (or its representation in
@@ -137,6 +138,25 @@ func DTypeGeneric[T Supported]() DType {
 	return InvalidDType
 }
 
+// ConvertTo converts any scalar (typically returned by `tensor.Local.Value()`) of the
+// supported dtypes to `T`.
+// Returns 0 if value is not a scalar or not a supported number (e.g: bool).
+func ConvertTo[T Number](value any) T {
+	switch v := value.(type) {
+	case float32:
+		return T(v)
+	case float64:
+		return T(v)
+	case int:
+		return T(v)
+	case int32:
+		return T(v)
+	case uint8:
+		return T(v)
+	}
+	return T(0)
+}
+
 func DTypeForType(t reflect.Type) DType {
 	switch t.Kind() {
 	case reflect.Int:
@@ -153,6 +173,27 @@ func DTypeForType(t reflect.Type) DType {
 		return UInt8
 	}
 	return InvalidDType
+}
+
+// UnsafeSliceForDType creates a slice of the corresponding dtype
+// and casts it to any. It uses unsafe.Slice. `len` is the number
+// of `DType` elements (not the number of bytes).
+func UnsafeSliceForDType(dtype DType, unsafePtr unsafe.Pointer, len int) any {
+	switch dtype {
+	case Int64:
+		return unsafe.Slice((*int)(unsafePtr), len)
+	case Int32:
+		return unsafe.Slice((*int32)(unsafePtr), len)
+	case Float32:
+		return unsafe.Slice((*float32)(unsafePtr), len)
+	case Float64:
+		return unsafe.Slice((*float64)(unsafePtr), len)
+	case Bool:
+		return unsafe.Slice((*bool)(unsafePtr), len)
+	case UInt8:
+		return unsafe.Slice((*uint8)(unsafePtr), len)
+	}
+	return nil
 }
 
 // TypeForDType returns the Go `reflect.Type` corresponding to the tensor DType.

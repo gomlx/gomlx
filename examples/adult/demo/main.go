@@ -21,7 +21,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/pkg/errors"
 	"github.com/gomlx/gomlx/examples/adult"
 	"github.com/gomlx/gomlx/examples/notebook/bashkernel"
 	"github.com/gomlx/gomlx/examples/notebook/bashkernel/chartjs"
@@ -38,6 +37,7 @@ import (
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/pkg/errors"
 	"log"
 	"path"
 )
@@ -179,17 +179,17 @@ func attachPlot(loop *train.Loop, sampler *adult.Dataset) {
 		Y2Title:    "Accuracy",
 	}
 	// Attach itself to `loop`, it will run the function passed numPlotPoints times distributed evenly in the training loop.
-	train.NTimesDuringLoop(loop, numPlotPoints, "Data for plotting", 0, func(loop *train.Loop, metrics []tensor.Tensor) error {
+	train.NTimesDuringLoop(loop, numPlotPoints, "Flat for plotting", 0, func(loop *train.Loop, metrics []tensor.Tensor) error {
 		x := float64(loop.LoopStep)
-		lossData.AddPoint(0, x, tensor.ToScalar[float64](metrics[1]))
-		lossData.AddPoint(1, x, tensor.ToScalar[float64](metrics[2]))
+		lossData.AddPoint(0, x, metrics[1].Value().(float64))
+		lossData.AddPoint(1, x, metrics[2].Value().(float64))
 		// Run evaluation on test dataset.
 		evalMetrics, err := loop.Trainer.Eval(sampler)
 		if err != nil {
 			return errors.WithMessagef(err, "Evaluating on test for global_step=%d", loop.LoopStep)
 		}
-		lossData.AddPoint(2, x, tensor.ToScalar[float64](evalMetrics[0]))
-		lossData.AddPoint(3, x, tensor.ToScalar[float64](evalMetrics[1]))
+		lossData.AddPoint(2, x, evalMetrics[0].Value().(float64))
+		lossData.AddPoint(3, x, evalMetrics[1].Value().(float64))
 		return nil
 	})
 	loop.OnEnd("Plotting", 100, func(loop *train.Loop, metrics []tensor.Tensor) error {

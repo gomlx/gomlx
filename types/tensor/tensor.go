@@ -14,73 +14,54 @@
  *	limitations under the License.
  */
 
-// Package tensor provides a `Tensor` interface with 2 different implementations: `Local` and `Device`.
+// Package tensor provides a `Tensor` interface with 2 different implementations: `Local` and `Device`, they
+// differ on where their values are stored: in the local (host) CPU, or on an accelerator device (TPU, GPU, but
+// could be also the CPU if no accelerators are available).
+//
+// The main use of tensors are to be used as input and output of GoMLX computation graph.
 //
 // Tensors are multidimensional arrays (from scalar with 0 dimensions, to arbitrarily large dimensions), defined
 // by their shape (a data type and its axes dimensions) and their actual content. As a special case, a Tensor can
 // also be a tuple of multiple tensors.
 //
 // This implementation uses `gomlx.types.Shape` to represent the shape, and (for now) only explicitly supports dense
-// representations of the data. There are two types of `Tensor` implementation: `Local` and `Device`. Both are wrappers
-// to XLA underlying data representations, but can be used from Go. Mostly they are means to interact with the graph
-// computation.
-//
-// `Device` means a tensor that is stored in wherever the computation is run (GPU, TPU or on the host
-// itself). `Local` is a tensor in the current local process (still, they are stored in C++ to interact
-// with XLA). When one wants to print or save a tensor, it needs to be converted to `Local`. When one
-// feed a tensor to a computational graph execution, it is converted to `Device`.
-//
-// Device tensors are considered immutable, with one exception: decomposing tuples destroy them (a
-// implementation choice of the underlying C++ XLA implementation).
+// representations of the data. The underlying implementation of both `Local` and `Device` implementation are wrappers
+// to similar XLA data representations.
 //
 // Transferring tensors to/from local/device areas has a cost, and should be avoided. For example,
 // while training weights of an ML model, one generally does not need to transfer those weights to local -- just at
 // the end of training to save the model weights. Because the tensors are immutable, the transferring is
 // cached, so if `Tensor.Local()` or `Tensor.Device()` is called multiple times, the price is paid only once.
 //
-// In addition, tensors (both `Local` and `Device`) can be tuples of other tensors -- a recursive definition that
-// allow for nested values. This seems to be an XLA mechanism to return several values in one -- documentation there
-// is not very clear.
+// To facilitate managing this, this package also implements a cache system whereas a Local or Device tensor caches
+// references to their counterparts -- notice there may be multiple Device tensors (one for each device). This is
+// all exposed through the Tensor interface.
 //
-// Tensors are not yet concurrency safe. You have to handle race conditions to prevent simultaneous changes.
-// TODO: add the necessary locking mechanisms.
+// Concurrency: the cache system is safe from concurrency point of view. But management of the conflicting uses of
+// the content of the tensors themselves is left for the users -- TODO: this needs to be improved.
 //
-// **Advanced**: On storage and mutability:
-//
-// This is somewhat inefficient for large tensors: there are potentially 3 copies (or more) of values floating around:
-// the "Device" data, stored in the accelerator; the "Local" data stored on the program C++ heap; the Go values.
-// This is still a work in progress on ways to avoid extra copies floating around. In the short term there are the
-// following "unstable" (the API may change) options:
-//
-//   - Call `Finalize()` or `FinalizeAll()` on tensors that one is no longer needed. This immediately frees the
-//     resources, and doesn't wait for the garbage collector. Notice that the Local/Device tensors create links to each
-//     other for cache purpose, so if let for the garbage collector they will only be freed once both are no longer used.
-//   - For `Local` tensors, the functions `Local.ValueOf()`, `Local.Data() returns pointers to the underlying C++ data.
-//     One can mutate them directly (the values, not the slice lengths), for instance if loading value from disk, one
-//     can avoid an extra copy of the data in Go by loading directly to the C++ data. If you mutate them, then also call
-//     ClearCache(), since a corresponding Device will become out of date -- before you feed the modified Local tensor
-//     to another graph run.
+// See details on the documentation of Tensor, Device and Local structures.
 package tensor
 
 import (
-	"encoding/gob"
 	"fmt"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/xla"
 	"github.com/pkg/errors"
 	"reflect"
+	"sync"
 )
 
 // Tensor represents a multidimensional arrays (from scalar with 0 dimensions, to arbitrarily large dimensions), defined
-// by their shape (a data type and its axes dimensions) and their actual content. As a special case, a Tensor can
+// by their shape (a data type and its axes' dimensions) and their actual content. As a special case, a Tensor can
 // also be a tuple of multiple tensors.
 //
 // Tensor can be implemented by a tensor.Local or tensor.Device, which reflects whether the data is stored in the local
 // CPU on or the device actually running the computation: an accelerator like a GPU or the CPU as well.
 //
 // Local and Device tensors can be converted to each other -- there is a transferring cost to that. There is a cache
-// system to prevent duplicate transfers, but it assumes immutability -- call ClearCache after mutating a Local tensor.
+// system to prevent duplicate transfers, but it assumes immutability -- call Local.ClearCache after mutating a
+// Local tensor. Device tensors are immutable.
 //
 // More details in the `tensor` package documentation.
 type Tensor interface {
@@ -116,8 +97,8 @@ type Tensor interface {
 	// Ok returns whether the tensor is in an invalid state.
 	Ok() bool
 
-	// FinalizeAll immediately frees the dat of all versions of the Tensor -- Local or on Device, and make the
-	// tensor invalid.
+	// FinalizeAll immediately frees the data from all versions of the Tensor -- Local or on Device, and make the
+	// tensor invalid. This calls Finalize on the cached Local and all Device tensors.
 	FinalizeAll()
 }
 
@@ -133,563 +114,6 @@ var (
 // graph.Manager.
 type HasClient interface {
 	Client() *xla.Client
-}
-
-// Local represents a multidimensional array of one of the supported types (see shapes.Number).
-// It can be from a scalar to an arbitrary rank (number of dimensions). See Shape() to
-// get information about its dimensions and the underlying DType. Finally, it can also hold a tuple
-// of tensors (recursive definition).
-//
-// It implements the generic Tensor interface, and provides some specialized functionality that assumes
-// the data is local -- all derived from the Data() method, which returns a pointer to the underlying data directly.
-//
-// A Local tensor needs to be made Device before being fed (as input) to a computation graph. Conversely,
-// the output of computation graphs are Device that need to be converted to Local to introspect/manipulate
-// the values in Go.
-//
-// Local is not thread safe, if using it concurrently, you will have to protect the access.
-type Local struct {
-	*cache
-
-	// literal contains a locally (in C++ heap) stored tensor.
-	literal *xla.Literal
-	shape   shapes.Shape
-
-	// error that may have occurred during construction/conversion/operation.
-	error error
-}
-
-// Shape of Local, includes DType.
-func (local *Local) Shape() shapes.Shape { return local.shape }
-
-// DType returns the DType of the tensor's shape.
-func (local *Local) DType() shapes.DType {
-	return local.shape.DType
-}
-
-// Rank returns the rank fo the tensor's shape.
-func (local *Local) Rank() int { return local.shape.Rank() }
-
-// IsTuple returns whether Local is a tuple.
-func (local *Local) IsTuple() bool { return !local.Empty() && local.shape.IsTuple() }
-
-// Empty returns whether Local is holding no data. It's similar
-// to a "nil" state for Local.
-func (local *Local) Empty() bool {
-	return local == nil || local.literal.IsNil()
-}
-
-// Ok returns whether local is both not empty and is not in error.
-func (local *Local) Ok() bool {
-	return !local.Empty() && local.error == nil
-}
-
-// Error returns the message that caused an error state.
-func (local *Local) Error() error {
-	if local == nil {
-		return errors.New("local tensor is nil")
-	}
-	return local.error
-}
-
-// Data returns a slice with the consecutive data of the corresponding DType type.
-// Consider the generic function Data[L]() if you know the type upfront.
-//
-// It returns nil is Local tensor is in an invalid state, or if it is a tuple.
-func (local *Local) Data() any {
-	if !local.Ok() || local.IsTuple() {
-		return nil
-	}
-	return local.literal.Data()
-}
-
-// Bytes returns the same memory as Data, but the raw slice of bytes, with the proper size in bytes.
-func (local *Local) Bytes() []byte {
-	if !local.Ok() || local.IsTuple() {
-		return nil
-	}
-	return local.literal.Bytes()
-}
-
-// GobSerialize Local tensor in binary format.
-func (local *Local) GobSerialize(encoder *gob.Encoder) (err error) {
-	if !local.Ok() {
-		return errors.Errorf("tensor.Local is in an invalid state")
-	}
-	err = local.shape.GobSerialize(encoder)
-	if err != nil {
-		return
-	}
-	data := local.Bytes()
-	err = encoder.Encode(data)
-	if err != nil {
-		err = errors.Wrapf(err, "failed to write tensor.Local data")
-	}
-	return
-}
-
-// GobDeserialize a Tensor from the reader. Returns new tensor.Local or an error.
-func GobDeserialize(decoder *gob.Decoder) (local *Local, err error) {
-	shape, err := shapes.GobDeserialize(decoder)
-	if err != nil {
-		return
-	}
-	local = FromShape(shape)
-	data := local.Bytes()
-	err = decoder.Decode(&data)
-	if err != nil {
-		err = errors.Wrapf(err, "failed to read tensor.Local data")
-		return
-	}
-	return
-}
-
-// Scalar returns the scalar value contained in the Local. It will return a zero value
-// if the shape is not scalar.
-func (local *Local) Scalar() any {
-	if !local.Ok() || local.IsTuple() {
-		return nil
-	}
-	if !local.shape.IsScalar() {
-		// Build a zero value.
-		tType := shapes.TypeForDType(local.shape.DType)
-		vPtr := reflect.New(tType)
-		v := reflect.Indirect(vPtr)
-		return v.Interface()
-	}
-
-	// Get the first value of the data.
-	data := local.Data()
-	dataV := reflect.ValueOf(data)
-	return dataV.Index(0).Interface()
-}
-
-// Value returns a multidimensional slice (except if shape is a scalar) containing the values, cast to type any.
-// Same as AnyValueOf(t).
-func (local *Local) Value() any {
-	return AnyValueOf(local)
-}
-
-// MaxStringSize is the largest Local tensor that is actually returned by String() is requested.
-var MaxStringSize = 500
-
-// String converts to string, if not too large.
-func (local *Local) String() string {
-	return local.StringN(MaxStringSize)
-}
-
-// StringN converts to string, displaying at most n elements.
-// TODO: nice pretty-print version, even for large tensors.
-func (local *Local) StringN(n int) string {
-	if local.error != nil {
-		return fmt.Sprintf("tensor.Local.error=%v", local.error)
-	}
-	if local.IsTuple() {
-		return fmt.Sprintf("Tuple(%d elements)", local.shape.TupleSize())
-	}
-	if local.shape.Size() <= n {
-		return fmt.Sprintf("%s: %v", local.shape, local.Value())
-	}
-	dataV := reflect.ValueOf(local.Data())
-	dataV = dataV.Slice(0, n)
-	return fmt.Sprintf("%s: (... too large, %d values ..., first %d values: %v)",
-		local.shape, local.shape.Size(), n, dataV.Interface())
-}
-
-// GoStr converts to string, using a Go-syntax representation that can be copied&pasted back to code.
-func (local *Local) GoStr() string {
-	if local.error != nil {
-		return fmt.Sprintf("tensor.Local.error=%v", local.error)
-	}
-	if local.IsTuple() {
-		return fmt.Sprintf("Tuple(%d elements)", local.shape.TupleSize())
-	}
-	value := local.Value()
-	if local.shape.IsScalar() {
-		return fmt.Sprintf("%s: %v", local.shape, value)
-	}
-	return fmt.Sprintf("%s: %s", local.shape, slices.SliceToGoStr(value))
-}
-
-// SplitTuple splits the Tuple tensor into its components. This unfortunately destroys the current Local,
-// emptying it.
-func (local *Local) SplitTuple() (tensors []*Local, err error) {
-	if !local.Ok() || !local.IsTuple() {
-		return nil, fmt.Errorf("tensor not a tuple")
-	}
-	if local.literal.IsNil() {
-		return nil, fmt.Errorf("tensor local data (Literal) is empty, maybe it was already decomposed")
-	}
-	literals := local.literal.SplitTuple()
-	tensors = make([]*Local, 0, len(literals))
-	for _, literal := range literals {
-		t := &Local{
-			cache:   &cache{},
-			shape:   literal.Shape(),
-			literal: literal,
-		}
-		t.cache.local = t
-		tensors = append(tensors, t)
-	}
-
-	// Underlying literal is destroyed anyway.
-	local.literal.Finalize()
-	local.error = fmt.Errorf("tensor.Local destroyed when decomposing the tuple")
-	local.shape = shapes.Shape{}
-	local.ClearCache()
-
-	// De-register itself from the cache of globals
-	return tensors, nil
-}
-
-// MakeLocalTuple compose local tensors into a Tuple. The individual tensors are destroyed in the process,
-// as the tuple takes ownership of its parts.
-func MakeLocalTuple(tensors ...*Local) *Local {
-	numElements := len(tensors)
-	literals := make([]*xla.Literal, 0, numElements)
-	elementsShapes := make([]shapes.Shape, 0, numElements)
-	for _, t := range tensors {
-		if t.Empty() {
-			return nil
-		}
-		literals = append(literals, t.literal)
-		elementsShapes = append(elementsShapes, t.Shape())
-	}
-	tuple := &Local{
-		cache:   &cache{},
-		shape:   shapes.MakeTuple(elementsShapes),
-		literal: xla.NewLiteralTuple(literals),
-	}
-	tuple.cache.local = tuple
-	for _, t := range tensors {
-		t.Finalize()
-	}
-	return tuple
-}
-
-// MakeLocalTupleAny composes values into local tensor. Values can be any value that can be converted
-// to a *Local tensor, or a *Local tensor. Similar to MakeLocalTuple, but more permissible.
-func MakeLocalTupleAny(values ...any) *Local {
-	tensors := make([]*Local, 0, len(values))
-	for ii, value := range values {
-		local := FromAnyValue(value)
-		if !local.Ok() {
-			return &Local{
-				error: fmt.Errorf("failed converting %d-th element of tuple: %w", ii, local.error),
-			}
-		}
-		tensors = append(tensors, local)
-	}
-	return MakeLocalTuple(tensors...)
-}
-
-// ClearCache disconnect the local tensor to any corresponding shapedBuffer data. See discussion on storage and mutability
-// on the package documentation.
-func (local *Local) ClearCache() {
-	local.cache.ClearLocal()
-
-	// Create a new cache with itself only.
-	cache := &cache{}
-	cache.AddLocal(local)
-}
-
-// Literal returns the internal storage of the Local value. Internal only, used only by new Op implementations.
-func (local *Local) Literal() *xla.Literal {
-	if local.Empty() {
-		return nil
-	}
-	return local.literal
-}
-
-// Finalize releases the memory associated with the local tensor. It becomes Empty() = true.
-// It mutates the tensor, but it's handy in case one is dealing with large data. See discussion on storage and
-// mutability on the package documentation.
-func (local *Local) Finalize() {
-	local.ClearCache()
-	local.literal.Finalize()
-	local.shape = shapes.Shape{}
-	local.error = nil
-}
-
-// FinalizeAll releases the memory associated with all copies of the tensor (local and on device),
-// and mark them as empty.
-func (local *Local) FinalizeAll() {
-	local.cache.FinalizeAll()
-}
-
-// layoutStrides return the strides for each dimension.
-func (local *Local) layoutStrides() (strides []int) {
-	rank := local.shape.Rank()
-	if rank == 0 {
-		return
-	}
-	strides = make([]int, rank)
-	currentStride := 1
-	for dim := rank - 1; dim >= 0; dim-- {
-		strides[dim] = currentStride
-		currentStride *= local.shape.Dimensions[dim]
-	}
-	return
-}
-
-// FromValue returns a Local tensor constructed from the given multi-dimension slice (or scalar).
-func FromValue[S shapes.MultiDimensionSlice](value S) *Local {
-	return FromAnyValue(value)
-}
-
-// LocalWithError creates a local tensor with the given error.
-func LocalWithError(err error) *Local {
-	localT := &Local{error: err}
-	cache := &cache{}
-	cache.AddLocal(localT)
-	return localT
-}
-
-// FromShape creates a Local tensor with the given shape, with the data uninitialized.
-func FromShape(shape shapes.Shape) (local *Local) {
-	local = &Local{shape: shape}
-	local.literal = xla.NewLiteralFromShape(local.shape)
-	if local.Empty() {
-		return LocalWithError(errors.New("failed to create XLA literal"))
-	}
-	cache := &cache{}
-	cache.AddLocal(local)
-	return
-}
-
-// FromValueAndDimensions creates a local tensor with the given dimensions, filled with the
-// given value replicated everywhere. The DType is inferred from the value.
-func FromValueAndDimensions[T shapes.Supported](value T, dimensions ...int) (local *Local) {
-	shape := shapes.Make(shapes.DTypeForType(reflect.TypeOf(value)), dimensions...)
-	local = FromShape(shape)
-	dataV := reflect.ValueOf(local.Data())
-	valueV := reflect.ValueOf(value)
-	for ii := 0; ii < shape.Size(); ii++ {
-		dataV.Index(ii).Set(valueV)
-	}
-	return
-}
-
-// FromDataAndDimensions creates a local tensor with the given dimensions, filled with the
-// given flat values. The DType is inferred from the values.
-func FromDataAndDimensions[T shapes.Supported](data []T, dimensions ...int) (local *Local) {
-	var tmp T
-	shape := shapes.Make(shapes.DTypeForType(reflect.TypeOf(tmp)), dimensions...)
-	if len(data) != shape.Size() {
-		return LocalWithError(errors.Errorf("FromDataAndDimensions(): data size is %d, but dimensions size is %d", len(data), shape.Size()))
-	}
-	local = FromShape(shape)
-	dataV := reflect.ValueOf(local.Data())
-	reflect.Copy(dataV, reflect.ValueOf(data))
-	return
-}
-
-// FromAnyValue is a non-generic version of FromValue. The input is expected to be either a scalar or a slice of
-// slices with homogeneous dimensions. If the input happens to already be a Local, it is returned.
-func FromAnyValue(value any) (local *Local) {
-	var ok bool
-	if local, ok = value.(*Local); ok {
-		// Input is already a Local.
-		return
-	}
-	local = &Local{}
-	shape, err := shapeForValue(value)
-	if err != nil {
-		return LocalWithError(errors.Wrapf(err, "cannot create shape from %T", value))
-	}
-	local = FromShape(shape)
-	dataV := reflect.ValueOf(local.Data())
-	if local.shape.Rank() == 0 {
-		// S is a scalar type.
-		elem := dataV.Index(0)
-		elem.Set(reflect.ValueOf(value))
-		return
-	}
-
-	// Copy over multi-dimensional slice recursively.
-	copySlicesRecursively(dataV, reflect.ValueOf(value), local.layoutStrides())
-	return
-}
-
-// copySlicesRecursively copy values on a multi-dimension slice to a flat data slice
-// assuming the strides for each dimension.
-func copySlicesRecursively(data reflect.Value, mdSlice reflect.Value, strides []int) {
-	if len(strides) == 1 {
-		// Last level of slice, just copy over the slice.
-		reflect.Copy(data, mdSlice)
-		return
-	}
-
-	numElements := mdSlice.Len()
-	subStrides := strides[1:]
-	for ii := 0; ii < numElements; ii++ {
-		start := ii * strides[0]
-		end := (ii + 1) * strides[0]
-		subData := data.Slice(start, end)
-		copySlicesRecursively(subData, mdSlice.Index(ii), subStrides)
-	}
-	return
-}
-
-// Data returns the flattened data for the given Local. Returns nil
-// if the DType of the tensor is not compatible with the requested number type.
-func Data[T shapes.Number](t *Local) []T {
-	if t.IsTuple() {
-		return nil
-	}
-	if t.shape.DType != shapes.DTypeGeneric[T]() {
-		return nil
-	}
-	data, err := xla.DataFromLiteral[T](t.literal)
-	if err != nil {
-		return nil
-	}
-	return data
-}
-
-// ValueOf constructs a multi-dimension-slice from the Local. Returns nil (or the zero value
-// for the type T) if the Local has an error or is not compatible (shape or DType).
-//
-// ValueOf will do conversions of type, if possible. Example: let's say t is a [5]int local tensor. One can call
-// `ValueOf[[]float64](t)` and get a Go `[]float64` back of size 5.
-//
-// The slices themselves shouldn't be modified -- the underlying storage is not
-// owned by Go, and tensor objects are supposed to be immutable. See discussion on data storage
-// and exceptions to mutability on the package description if you really need to mutate its values.
-func ValueOf[T shapes.MultiDimensionSlice](local *Local) (result T) {
-	if local.Empty() || local.IsTuple() {
-		return
-	}
-	if local.error != nil {
-		return
-	}
-	depth, dtype, baseType := depthDTypeAndBaseType(reflect.TypeOf(result))
-	_ = baseType
-	if dtype == shapes.InvalidDType || depth != local.shape.Rank() {
-		return
-	}
-	if dtype == local.DType() {
-		// No conversion needed.
-		return AnyValueOf(local).(T)
-	}
-
-	// Check that type is convertible.
-	if !shapes.TypeForDType(local.DType()).ConvertibleTo(baseType) {
-		return
-	}
-
-	// Convert the data as one large slice and then split into slices.
-	numElements := local.Shape().Size()
-	dataV := reflect.ValueOf(local.Data())
-	newDataV := reflect.MakeSlice(reflect.SliceOf(baseType), local.Shape().Size(), numElements)
-	for ii := 0; ii < numElements; ii++ {
-		element := dataV.Index(ii)
-		newElement := newDataV.Index(ii)
-		newElement.Set(element.Convert(baseType))
-	}
-
-	// Use same recursion as AnyValueOf to return the appropriate slice.
-	return convertDataToSlices(newDataV, local.Shape().Dimensions...).Interface().(T)
-}
-
-// AnyValueOf constructs a multi-dimension-slice from the Local tensor, and returns it
-// as type `any` (`interface{}`). Works the same way as `ValueOf` without the
-// generics interface.
-//
-// If local holds an error, returns the error.
-//
-// The slices themselves shouldn't be modified -- the underlying storage is not
-// owned by Go, and tensor objects are supposed to be immutable. See discussion on data storage
-// and exceptions to mutability on the package description if you really need to mutate its values.
-func AnyValueOf(local *Local) (result any) {
-	if local == nil {
-		return errors.WithStack(errors.Errorf("tensor.Local is nil, no value associated"))
-	}
-	if local.error != nil {
-		return local.error
-	}
-	if local.IsTuple() {
-		return errors.WithStack(errors.Errorf("tensor.Local is a tuple (shape %s), unable to generate a value", local.Shape()))
-	}
-	rank := local.shape.Rank()
-	if rank == 0 {
-		return local.Scalar()
-	}
-
-	dataV := reflect.ValueOf(local.Data())
-	return convertDataToSlices(dataV, local.Shape().Dimensions...).Interface()
-	//resultT := types.TypeForDType(local.shape.DType)
-	//for range local.shape.Dimensions {
-	//	resultT = reflect.SliceOf(resultT)
-	//}
-	//sliceV := createSlicesRecursively(resultT, dataV, local.shape.Dimensions, local.layoutStrides())
-	//return sliceV.Interface()
-}
-
-// convertDataToSlices take data as a flat slice and convert to a multidimensional slices with the given dimensions.
-func convertDataToSlices(dataV reflect.Value, dimensions ...int) reflect.Value {
-	if len(dimensions) <= 1 {
-		return dataV
-	}
-	resultT := dataV.Type().Elem()
-	for range dimensions {
-		resultT = reflect.SliceOf(resultT)
-	}
-	strides := make([]int, len(dimensions))
-	currentStride := 1
-	for dim := len(dimensions) - 1; dim >= 0; dim-- {
-		strides[dim] = currentStride
-		currentStride *= dimensions[dim]
-	}
-	return createSlicesRecursively(resultT, dataV, dimensions, strides)
-}
-
-// createSlicesRecursively recursively creates slices copy values on a multi-dimension slice to a flat data slice
-// assuming the strides for each dimension.
-func createSlicesRecursively(resultT reflect.Type, data reflect.Value, dimensions []int, strides []int) reflect.Value {
-	if len(strides) == 1 {
-		// Last level of slice, just copy over the slice (not the data, just the slice).
-		return data
-	}
-
-	numElements := dimensions[0]
-	slice := reflect.MakeSlice(resultT, numElements, numElements)
-
-	subStrides := strides[1:]
-	subDimensions := dimensions[1:]
-	subResultT := resultT.Elem()
-	for ii := 0; ii < numElements; ii++ {
-		start := ii * strides[0]
-		end := (ii + 1) * strides[0]
-		subData := data.Slice(start, end)
-		subSlice := createSlicesRecursively(subResultT, subData, subDimensions, subStrides)
-		slice.Index(ii).Set(subSlice)
-	}
-	return slice
-}
-
-// ToScalar returns the scalar stored in the Tensor. If Tensor is a Device tensor, transfer it
-// locally -- presumably a small value. Returns 0 if the DType
-// given is incompatible, or if the Local is not a scalar.
-//
-// Notice the Tensor DType doesn't need to be exactly the corresponding to the type parameter T.
-// If they are different it will be automatically converted. E.g:
-// `ToScalar[float64](<some types.Int64 tensor>)` will also work and return a `types.Int64` value
-// converted to float64.
-func ToScalar[T shapes.Number](t Tensor) (result T) {
-	if t.Error() != nil || t.Shape().IsTuple() {
-		return
-	}
-	vAny := t.Local().Scalar()
-	resultT := reflect.TypeOf(result)
-	if reflect.TypeOf(vAny) == resultT {
-		return vAny.(T)
-	}
-	rValue := reflect.ValueOf(vAny)
-	if !rValue.CanConvert(resultT) {
-		return
-	}
-	return rValue.Convert(resultT).Interface().(T)
 }
 
 func shapeForValue(v any) (shape shapes.Shape, err error) {
@@ -742,212 +166,9 @@ func depthDTypeAndBaseType(t reflect.Type) (int, shapes.DType, reflect.Type) {
 
 }
 
-// Zeros returns a zero initialized Local of the given shape (including DType).
-func Zeros(shape shapes.Shape) *Local {
-	local := &Local{
-		shape:   shape,
-		literal: xla.NewLiteralWithZeros(shape),
-	}
-	cache := &cache{}
-	cache.AddLocal(local)
-	return local
-}
-
-// Device represents a tensor (or tuple) stored on device. The object doesn't offer much functionality,
-// except re-use it as input to a graph execution, or converting to a `Local` copy.
-//
-// To create it, either create a Local tensor first and then convert, or use the output of
-// the execution of a computation graph -- they return Device tensors.
-//
-// It implements the Tensor interface.
-type Device struct {
-	*cache
-
-	shape shapes.Shape
-
-	shapedBuffer *xla.OnDeviceBuffer
-	clientId     xla.ClientId
-	deviceNum    int
-
-	// error reports back any error during the creation or transfer of this Tensor.
-	error error
-}
-
-// Empty returns whether Local is holding no data or is in an error state. It's similar
-// to a "nil" state for Local.
-func (device *Device) Empty() bool {
-	return device == nil || device.shapedBuffer.IsNil()
-}
-
-// Ok returns whether the shapedBuffer is not empty and has no error.
-func (device *Device) Ok() bool {
-	return !device.Empty() && device.error == nil
-}
-
-// Error returns the message that caused an error state.
-func (device *Device) Error() error {
-	if device == nil {
-		return errors.New("device tensor is nil")
-	}
-	if device.error != nil {
-		return device.error
-	}
-	if device.Empty() {
-		return errors.New("device tensor is holds no data!?")
-	}
-	return device.error
-}
-
-// String converts to string, by converting (transferring) the tensor to local and then using Local.String().
-func (device *Device) String() string {
-	if device.error != nil {
-		return fmt.Sprintf("tensor.Device.error=%v", device.error)
-	}
-	if device.IsTuple() {
-		return fmt.Sprintf("Tuple(%d elements)", device.shape.TupleSize())
-	}
-	if device.shape.Size() < MaxStringSize {
-		return device.Local().String()
-	}
-	return fmt.Sprintf("%s: (... too large, %d values ...)", device.shape, device.shape.Size())
-}
-
-// Shape returns the shape of the Device.
-func (device *Device) Shape() shapes.Shape {
-	if !device.Ok() {
-		return shapes.Shape{}
-	}
-	return device.shape
-}
-
-// DType returns the DType of the tensor's shape.
-func (device *Device) DType() shapes.DType {
-	return device.shape.DType
-}
-
-// Rank returns the rank fo the tensor's shape.
-func (device *Device) Rank() int {
-	return device.shape.Rank()
-}
-
-// Value returns a multidimensional slice (except if shape is a scalar) containing the values.
-// If there isn't yet a cached local copy of tensor, it first copies the tensor from the device
-// to a local tensor.
-func (device *Device) Value() any {
-	return device.Local().Value()
-}
-
-// FromShapedBuffer creates a Device tensor from XLA's OnDeviceBuffer structure. Internal implementation,
-// most users don't need to use this.
-func FromShapedBuffer(buffer *xla.OnDeviceBuffer) (deviceT *Device) {
-	if buffer == nil {
-		deviceT = &Device{error: fmt.Errorf("invalid (nil) underlying OnDeviceBuffer")}
-	} else {
-		deviceT = &Device{
-			shapedBuffer: buffer,
-			clientId:     buffer.Client().Id,
-			shape:        buffer.Shape(),
-			deviceNum:    buffer.DeviceOrdinal(),
-		}
-	}
-	cache := &cache{}
-	cache.AddDevice(deviceT)
-	return
-}
-
-// DeviceWithError creates a device tensor with the given error.
-func DeviceWithError(err error) *Device {
-	deviceT := &Device{error: err}
-	cache := &cache{}
-	cache.AddDevice(deviceT)
-	return deviceT
-}
-
-// ShapedBuffer returns the underlying XLA structure. Internal usage only.
-func (device *Device) ShapedBuffer() *xla.OnDeviceBuffer {
-	if device.Empty() {
-		return nil
-	}
-	return device.shapedBuffer
-}
-
-// IsTuple returns whether Local is a tuple.
-func (device *Device) IsTuple() bool { return !device.Empty() && device.shape.IsTuple() }
-
-// Finalize releases the memory associated with the shapedBuffer. It becomes empty.
-// It mutates the tensor, but it's handy in case one is dealing with large data. See discussion on storage and
-// mutability on the package documentation.
-func (device *Device) Finalize() {
-	device.ClearCache()
-	device.shapedBuffer.Finalize()
-	device.shape = shapes.Shape{}
-	device.error = nil
-}
-
-// FinalizeAll releases the memory associated with all copies of the tensor (local and on device),
-// and mark them as empty.
-func (device *Device) FinalizeAll() {
-	device.cache.FinalizeAll()
-}
-
-// ClearCache disconnects the device tensor to any corresponding local data. See discussion on storage and mutability
-// on the package documentation.
-func (device *Device) ClearCache() {
-	device.cache.ClearDevice(device)
-
-	// Create a new cache with itself only.
-	cache := &cache{}
-	cache.AddDevice(device)
-}
-
-// SplitTupleError splits a device tensor into its elements. In case of error, return the error.
-//
-// This makes the current device tensor invalid.
-func (device *Device) SplitTupleError() ([]*Device, error) {
-	if !device.Ok() {
-		return nil, fmt.Errorf("cannot split device tensor that has error: %w", device.error)
-	}
-	if !device.IsTuple() {
-		return nil, fmt.Errorf("cannot split device tensor that is not a tuple")
-	}
-	return device.splitTupleImpl(true)
-}
-
-// SplitTuple splits a device tensor into its elements. In case of error returns nil, or
-// individual tuple element errors are reported in the tensors themselves.
-//
-// This makes the current device tensor invalid.
-func (device *Device) SplitTuple() []*Device {
-	if !device.Ok() {
-		return nil
-	}
-	if !device.IsTuple() {
-		return nil
-	}
-	parts, _ := device.splitTupleImpl(false)
-	return parts
-}
-
-func (device *Device) splitTupleImpl(returnError bool) ([]*Device, error) {
-	deviceTensors := make([]*Device, 0, device.shape.TupleSize())
-	for ii := 0; ii < device.shape.TupleSize(); ii++ {
-		subDeviceT, err := device.shapedBuffer.SubTree([]int{ii})
-		if err == nil {
-			deviceTensors = append(deviceTensors, FromShapedBuffer(subDeviceT))
-		} else {
-			if returnError {
-				return nil, fmt.Errorf("failed generating split %d: %w", ii, err)
-			}
-			deviceTensors = append(deviceTensors,
-				DeviceWithError(errors.Wrapf(err, "failed extracting split %d", ii)))
-		}
-	}
-	device.FinalizeAll()
-	return deviceTensors, nil
-}
-
 // cache stores links to materialization of the tensor (local or on device).
 type cache struct {
+	mu    sync.Mutex
 	local *Local
 
 	// Maps ClientId->Map of deviceNum->Device tensor.
@@ -956,17 +177,30 @@ type cache struct {
 
 // FinalizeAll will finalize (free) all associated data.
 func (c *cache) FinalizeAll() {
+	// Get the list of local and device tensors to finalize.
+	c.mu.Lock()
 	if c == nil {
+		c.mu.Unlock()
 		return
 	}
 	local := c.local
+	if local != nil && local.cache == c {
+		local.cache = nil
+	}
+	c.local = nil
 	var devices []*Device
 	for _, tensorsPerDevice := range c.onDevices {
 		for _, d := range tensorsPerDevice {
+			if d.cache == c {
+				d.cache = nil
+			}
 			devices = append(devices, d)
 		}
 	}
+	c.onDevices = nil
+	c.mu.Unlock()
 
+	// Cache was cleared and unlocked, now we call Finalize on each tensor separately.
 	if local != nil {
 		local.Finalize()
 	}
@@ -977,6 +211,13 @@ func (c *cache) FinalizeAll() {
 
 // AddDevice to the internal cache, and returns itself for convenience.
 func (c *cache) AddDevice(device *Device) *Device {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.lockedAddDevice(device)
+}
+
+// lockedAddDevice implements AddDevice, and assumes cache.mu is already locked.
+func (c *cache) lockedAddDevice(device *Device) *Device {
 	device.cache = c
 	if !device.Ok() {
 		return device
@@ -995,6 +236,12 @@ func (c *cache) AddDevice(device *Device) *Device {
 
 // ClearDevice from cache, and leaves the device tensor passed without a cache.
 func (c *cache) ClearDevice(device *Device) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if device == nil {
 		return
 	}
@@ -1017,6 +264,16 @@ func (c *cache) ClearDevice(device *Device) {
 
 // AddLocal to cache and returns the local tensor for convenience.
 func (c *cache) AddLocal(local *Local) *Local {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.local = local
+	local.cache = c
+	return local
+}
+
+// lockedAddLocal is the same as AddLocal, but assumes cache is already locked.
+func (c *cache) lockedAddLocal(local *Local) *Local {
 	c.local = local
 	local.cache = c
 	return local
@@ -1024,7 +281,13 @@ func (c *cache) AddLocal(local *Local) *Local {
 
 // ClearLocal cache, and leaves the local cached tensor without a cache.
 func (c *cache) ClearLocal() {
-	if c.local != nil {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.local.cache == c {
 		c.local.cache = nil
 	}
 	c.local = nil
@@ -1032,6 +295,9 @@ func (c *cache) ClearLocal() {
 
 // Local will transfer data from the Device storage to a Local tensor.
 func (c *cache) Local() *Local {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if c == nil {
 		return nil
 	}
@@ -1060,7 +326,7 @@ func (c *cache) Local() *Local {
 				}
 				return c.local
 			}
-			return c.AddLocal(&Local{
+			return c.lockedAddLocal(&Local{
 				shape:   literal.Shape(),
 				literal: literal,
 			})
@@ -1074,6 +340,9 @@ func (c *cache) Local() *Local {
 // is cached for future calls.
 // This is used for instance to transfer parameters when executing a graph.
 func (c *cache) Device(hasClient HasClient, deviceNum int) *Device {
+	c.mu.Lock()
+	// TODO: maybe do this more fine-grained: it may make sense to transfer to several devices in parallel (?).
+	defer c.mu.Unlock()
 	if c == nil {
 		return nil
 	}
@@ -1092,7 +361,7 @@ func (c *cache) Device(hasClient HasClient, deviceNum int) *Device {
 	if local == nil || local.Empty() {
 		// TODO: implement transfer between devices. A simplest first version would be to
 		//       first transfer to local.
-		return DeviceWithError(errors.Errorf(
+		return MakeDeviceWithError(errors.Errorf(
 			"cannot convert empty tensor.Local to tensor.Device -- " +
 				"maybe tensor exists on device in different clientId (Manager), and " +
 				"transfer between different devices not yet supported, but you can transfer " +
@@ -1100,7 +369,7 @@ func (c *cache) Device(hasClient HasClient, deviceNum int) *Device {
 	}
 	cid := client.Id
 	if local.error != nil {
-		return c.AddDevice(&Device{
+		return c.lockedAddDevice(&Device{
 			clientId:  cid,
 			deviceNum: deviceNum,
 			error:     fmt.Errorf("tensor.Device transferred from bad Local: %w", local.error),
@@ -1111,7 +380,7 @@ func (c *cache) Device(hasClient HasClient, deviceNum int) *Device {
 		deviceNum: deviceNum,
 	}
 	device.shapedBuffer, device.error = local.literal.ToOnDeviceBuffer(client, deviceNum)
-	c.AddDevice(device)
+	c.lockedAddDevice(device)
 	if device.error != nil {
 		return device
 	}

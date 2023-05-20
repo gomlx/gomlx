@@ -342,3 +342,31 @@ func MapParallel[In, Out any](in []In, fn func(e In) Out) (out []Out) {
 	wg.Wait()
 	return
 }
+
+// Max scans the slice and returns the maximum value.
+func Max[T constraints.Ordered](slice []T) (max T) {
+	if len(slice) == 0 {
+		return
+	}
+	max = slice[0]
+	for _, v := range slice {
+		if max < v {
+			max = v
+		}
+	}
+	return
+}
+
+// Min scans the slice and returns the smallest value.
+func Min[T constraints.Ordered](slice []T) (min T) {
+	if len(slice) == 0 {
+		return
+	}
+	min = slice[0]
+	for _, v := range slice {
+		if v < min {
+			min = v
+		}
+	}
+	return
+}

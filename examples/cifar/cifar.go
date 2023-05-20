@@ -20,12 +20,12 @@ package cifar
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/pkg/errors"
 	"image"
 	"io"
 	"math/rand"
@@ -276,10 +276,9 @@ func (ds *Dataset) Shapes() (inputs []shapes.Shape, labels shapes.Shape) {
 // Yield implements train.Dataset. It returns a pointer to the Dataset itself as `spec`.
 func (ds *Dataset) Yield() (spec any, inputs, labels []tensor.Tensor, err error) {
 	indicesT := tensor.FromShape(ds.indicesShape)
-	indices := tensor.Data[int](indicesT)
-	labelsT := tensor.FromShape(ds.indicesShape)
-	batchLabelsData := tensor.Data[int](labelsT)
-
+	indicesRef := indicesT.AcquireData()
+	defer indicesRef.Release()
+	indices := tensor.FlatFromRef[int](indicesRef)
 	if ds.random {
 		// Training, always use random indices.
 		for ii := range indices {
@@ -298,11 +297,19 @@ func (ds *Dataset) Yield() (spec any, inputs, labels []tensor.Tensor, err error)
 	}
 
 	// Gather labels.
-	allLabelsData := tensor.Data[int](ds.labels.Local())
+	allLabelsRef := ds.labels.Local().AcquireData()
+	defer allLabelsRef.Release()
+	allLabelsData := tensor.FlatFromRef[int](allLabelsRef)
+
+	batchLabelsT := tensor.FromShape(ds.indicesShape)
+	batchLabelsRef := batchLabelsT.AcquireData()
+	defer batchLabelsRef.Release()
+	batchLabelsData := tensor.FlatFromRef[int](batchLabelsRef)
 	for ii, index := range indices {
 		batchLabelsData[ii] = allLabelsData[index]
 	}
-	return ds, []tensor.Tensor{indicesT}, []tensor.Tensor{labelsT}, nil
+
+	return ds, []tensor.Tensor{indicesT}, []tensor.Tensor{batchLabelsT}, nil
 }
 
 // Reset implements train.Dataset and, for an evaluation dataset, restarts it.

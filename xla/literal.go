@@ -25,7 +25,8 @@ import (
 	"errors"
 	"fmt"
 	"github.com/gomlx/gomlx/types/shapes"
-	"reflect"
+	"log"
+	"sync"
 	"sync/atomic"
 	"unsafe"
 )
@@ -94,6 +95,8 @@ func ShapeFromCShape(cShape *C.Shape) (shape shapes.Shape) {
 	return
 }
 
+var muMem sync.Mutex
+
 // NewLiteralFromShape returns a new Literal with the given shape and uninitialized data.
 func NewLiteralFromShape(shape shapes.Shape) *Literal {
 	cLiteral := Malloc[C.Literal]()
@@ -101,7 +104,18 @@ func NewLiteralFromShape(shape shapes.Shape) *Literal {
 	cLiteral.shape = CShapeFromShape(shape)
 	cLiteral.size = C.int64_t(shape.Size())
 	C.MakeXlaLiteralFromShape(cLiteral)
+	if int(cLiteral.size) != shape.Size() {
+		log.Fatalf("Allocating xla::Literal with shape %s resulted in size %d, wanted size %d", shape, cLiteral.size, shape.Size())
+	}
 	return newLiteral(cLiteral)
+}
+
+// Refresh will re-read the data pointer and size information from the C++ interface. Mostly used for debugging.
+func (l *Literal) Refresh() {
+	if l.cLiteralPtr == nil {
+		return
+	}
+	C.XlaLiteralRefreshData(l.cLiteralPtr)
 }
 
 func NewLiteralWithZeros(shape shapes.Shape) *Literal {
@@ -133,7 +147,7 @@ func newLiteral(literalPtr *C.Literal) *Literal {
 	return l
 }
 
-// NewLiteralTuple creates a tuple from the individual literals. Data is copied.
+// NewLiteralTuple creates a tuple from the individual literals. Flat is copied.
 func NewLiteralTuple(literals []*Literal) *Literal {
 	cLiterals := MallocArrayAndSet[*C.Literal](len(literals),
 		func(idx int) *C.Literal { return literals[idx].cLiteralPtr })
@@ -172,22 +186,16 @@ func (l *Literal) SplitTuple() []*Literal {
 
 // Data returns a slice of the data for the corresponding DType (see package types).
 // The underlying data is not owned/managed by Go, but it is mutable.
+//
+// Notice if the Literal goes out-of-scope and is finalized, the underlying data gets freed without
+// Go knowing about , and the returned slice may become invalid. Careful to make sure Literal doesn't
+// get out of scope --
 func (l *Literal) Data() any {
 	if l.IsNil() {
 		return nil
 	}
 	rawData := unsafe.Pointer(l.cLiteralPtr.data)
-	dtype := l.shape.DType
-	t := shapes.TypeForDType(dtype)
-	sliceT := reflect.SliceOf(t)
-	sliceVPtr := reflect.New(sliceT)
-	slicePtr := unsafe.Pointer(sliceVPtr.Pointer())
-	sliceHeader := (*reflect.SliceHeader)(slicePtr)
-	sliceHeader.Data = uintptr(rawData)
-	sliceHeader.Len = int(l.cLiteralPtr.size)
-	sliceHeader.Cap = int(l.cLiteralPtr.size)
-	sliceV := reflect.Indirect(sliceVPtr)
-	return sliceV.Interface()
+	return shapes.UnsafeSliceForDType(l.shape.DType, rawData, int(l.cLiteralPtr.size))
 }
 
 // Bytes returns the same memory as Data, but the raw slice of bytes, with the proper size.
@@ -203,7 +211,11 @@ func (l *Literal) Bytes() []byte {
 }
 
 // DataFromLiteral returns a pointer to the raw data on the literal (without consideration
-// of shape).
+// of shape). The data can be mutated.
+//
+// The slices themselves shouldn't be modified -- the underlying storage is not
+// owned by Go, and tensor objects are supposed to be immutable. See discussion on data storage
+// and exceptions to mutability on the package description if you really need to mutate its values.
 func DataFromLiteral[T shapes.Number](l *Literal) ([]T, error) {
 	if l.IsNil() {
 		return nil, errors.New("empty literal, not underlying literal reference")

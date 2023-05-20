@@ -20,7 +20,6 @@ import (
 	"fmt"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -73,12 +72,12 @@ func TestNewMeanBinaryAccuracy(t *testing.T) {
 	totalVar := ctx.InspectVariable(metricScope, "total")
 	require.NoErrorf(t, ctx.Error(), "Variable \"total\" was not created in %s / total", metricScope)
 	require.NotNilf(t, totalVar, "Variable \"total\" was not created in %s / total", metricScope)
-	total := tensor.ToScalar[float32](totalVar.Value().Local())
+	total := totalVar.Value().Local().Value().(float32)
 	assert.Equal(t, float32(2), total, "MeanBinaryAccuracy total value")
 
 	weightVar := ctx.InspectVariable(metricScope, "weight")
 	require.NotNilf(t, weightVar, "Variable \"weight\" was not created in %s / total", metricScope)
-	weight := tensor.ToScalar[float32](weightVar.Value().Local())
+	weight := weightVar.Value().Local().Value().(float32)
 	assert.Equal(t, float32(6), weight, "MeanBinaryAccuracy weight value")
 
 	// Second batch:
@@ -91,8 +90,8 @@ func TestNewMeanBinaryAccuracy(t *testing.T) {
 
 	// Zeros the state.
 	require.NoError(t, accMetric.Reset(ctx), "Failed to Reset() metric")
-	total = tensor.ToScalar[float32](totalVar.Value().Local())
-	weight = tensor.ToScalar[float32](weightVar.Value().Local())
+	total = totalVar.Value().Local().Value().(float32)
+	weight = weightVar.Value().Local().Value().(float32)
 	assert.Zero(t, total, "Expected total variable to be 0 after Reset()")
 	assert.Zero(t, weight, "Expected weight variable to be 0 after Reset()")
 }
