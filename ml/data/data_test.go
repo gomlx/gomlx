@@ -51,7 +51,7 @@ func (ds *testDS) Yield() (spec any, inputs []tensor.Tensor, labels []tensor.Ten
 	return                                                    // As if a batch was returned.
 }
 
-// TestNewParallelDataset with and without cache.
+// TestNewParallelDataset with and without buffer.
 func TestParallelDataset(t *testing.T) {
 	for _, cacheSize := range []int{0, 10} {
 		ds := &testDS{}

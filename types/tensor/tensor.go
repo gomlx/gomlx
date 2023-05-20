@@ -94,7 +94,7 @@ type Tensor interface {
 	// Error returns the message that caused an error state.
 	Error() error
 
-	// Ok returns whether the tensor is in an invalid state.
+	// Ok returns whether the tensor is in an invalid state or empty.
 	Ok() bool
 
 	// FinalizeAll immediately frees the data from all versions of the Tensor -- Local or on Device, and make the
