@@ -1,8 +1,8 @@
 FROM tensorflow/tensorflow:devel-gpu
 
 LABEL maintainer="pfeifer@gmail.com"
-ARG GOMLX_VERSION=v0.1.0
-ARG GO_VERSION=1.20.3
+ARG GOMLX_VERSION=v0.2.1
+ARG GO_VERSION=1.20.4
 
 # Fix: https://github.com/hadolint/hadolint/wiki/DL4006
 # Fix: https://github.com/koalaman/shellcheck/wiki/SC3014

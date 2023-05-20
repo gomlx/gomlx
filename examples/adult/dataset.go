@@ -19,7 +19,7 @@
 // and examples on how to use it.
 //
 // Mostly one will want to use `LoadAndPreprocessData` to download and preprocess
-// the data, the singleton `Data` to access it, and `NewDataset` to create datasets
+// the data, the singleton `Flat` to access it, and `NewDataset` to create datasets
 // for training and evaluating.
 //
 // It also provides preprocessing functionality:
@@ -146,16 +146,18 @@ func (b *Dataset) Yield() (spec any, inputs, labels []tensor.Tensor, err error) 
 		if b.evalExhausted {
 			return nil, nil, nil, io.EOF
 		}
-		indicesT = tensor.Zeros(shapes.Make(shapes.I64))
+		indicesT = tensor.FromValue(int(0))
 		b.evalExhausted = true
 
 	} else {
 		// Indices are a random samples with replacement.
 		indicesT = tensor.FromShape(b.indicesShape)
-		indices := tensor.Data[int](indicesT)
-		numRows := b.data.LabelsTensor.Shape().Dimensions[0]
+		indicesRef := indicesT.AcquireData()
+		defer indicesRef.Release()
+		indices := tensor.FlatFromRef[int](indicesRef)
+		numExamples := b.data.LabelsTensor.Shape().Dimensions[0]
 		for ii := range indices {
-			indices[ii] = rand.Intn(numRows)
+			indices[ii] = rand.Intn(numExamples)
 		}
 	}
 
@@ -179,7 +181,7 @@ func (b *Dataset) Reset() {
 // NewDataset creates a new `train.Dataset` (can be used for training) for the
 // MCI Adult dataset.
 //
-// The `data` should be set with either `adult.Data.Train` or “adult.Data.Test`,
+// The `data` should be set with either `adult.Flat.Train` or “adult.Flat.Test`,
 // after it is loaded with `LoadAndPreprocessData`.
 //
 // If a batch size is given it draws batches randomly, with replacement.

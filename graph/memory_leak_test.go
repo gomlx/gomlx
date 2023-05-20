@@ -96,7 +96,7 @@ func TestMemoryLeaksShapedBuffer(t *testing.T) {
 					t.Fatalf("Failed to convert xla.Literal to xla.OnDeviceBuffer: %+v", err)
 				}
 				l.Finalize()
-				d := tensor.FromShapedBuffer(sb)
+				d := tensor.InternalNewDevice(sb)
 				d.Finalize()
 			}
 		}
@@ -147,7 +147,7 @@ func TestMemoryLeaksExec(t *testing.T) {
 					if addedT.Rank() != 1 && addedT.Shape().Dimensions[0] != size {
 						t.Errorf("Unexpected shape %s for size %d, value %f", addedT.Shape(), size, xV)
 					}
-					reduced := tensor.ToScalar[float64](reducedT.Local())
+					reduced := reducedT.Local().Value().(float64)
 					want := float64(size) * (xV + float64(size))
 					if reduced != want {
 						t.Errorf("Unexpected reduced sum %s, wanted %f", reducedT.Local().GoStr(), want)

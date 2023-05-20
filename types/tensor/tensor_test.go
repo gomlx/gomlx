@@ -23,6 +23,7 @@ import (
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/xla"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"reflect"
 	"testing"
@@ -80,20 +81,20 @@ func TestFromValue(t *testing.T) {
 		if local.Empty() {
 			t.Fatalf("Failed to build scalar local tensor: got IsNil Local tensor")
 		}
-		got := ToScalar[int](local)
+		got := local.Value().(int)
 		if got != want {
 			t.Fatalf("Local read out got %d, wanted %d", got, want)
 		}
 	}
 
-	// Test correct setting of 1D slice, dtype=float32
+	// Test correct setting of 1D slice, dtype=float64
 	{
 		want := []float64{2, 5}
 		local := FromValue(want)
 		if local.error != nil {
 			t.Fatalf("Failed to build scalar local: %v", err)
 		}
-		got, _ := local.Data().([]float64)
+		got, _ := local.Flat().([]float64)
 		if !slices.DeepSliceCmp(want, got, slices.Equal[float64]) {
 			t.Fatalf("Local read out got %v, wanted %v", got, want)
 		}
@@ -106,7 +107,7 @@ func TestFromValue(t *testing.T) {
 		if local.error != nil {
 			t.Fatalf("Failed to build scalar local: %v", err)
 		}
-		got, _ := local.Data().([]float32)
+		got, _ := local.Flat().([]float32)
 		if !slices.DeepSliceCmp(want, got, slices.Equal[float32]) {
 			t.Fatalf("Local read out got %v, wanted %v", got, want)
 		}
@@ -119,11 +120,25 @@ func TestFromValue(t *testing.T) {
 		if local.error != nil {
 			t.Fatalf("Failed to build scalar local: %v", err)
 		}
-		got, _ := local.Data().([]bool)
+		got, _ := local.Flat().([]bool)
 		if !reflect.DeepEqual(want, got) {
 			t.Fatalf("Local read out got %v, wanted %v", got, want)
 		}
 	}
+}
+
+func TestLocal_CopyFlat(t *testing.T) {
+	want := []float32{1, 2, 3, 10, 11, 12}
+	local := FromValue([][]float32{{1, 2, 3}, {10, 11, 12}})
+	require.NoError(t, local.Error())
+	dst := make([]float32, len(want))
+	require.NoError(t, local.CopyFlat(dst))
+	require.Equal(t, want, dst)
+
+	// Check failures:
+	require.Error(t, local.CopyFlat(dst[:1])) // Wrong size.
+	dst64 := make([]float64, len(want))
+	require.Error(t, local.CopyFlat(dst64)) // Wrong type.
 }
 
 // We test using FromAnyValue and AnyValueOf, due to Go generics limitations. See discussion in:
@@ -136,7 +151,7 @@ func testValueOf[T shapes.Number](t *testing.T) {
 	if local.error != nil {
 		t.Fatalf("Failed to build scalar local tensor: %v", local.error)
 	}
-	got, _ := AnyValueOf(local).([][]T)
+	got, _ := local.Value().([][]T)
 	if !reflect.DeepEqual(want, got) {
 		t.Fatalf("Local read out got %v, wanted %v", got, want)
 	}
@@ -144,40 +159,11 @@ func testValueOf[T shapes.Number](t *testing.T) {
 
 func TestValueOf(t *testing.T) {
 	// No conversion of different types, just from tensor.Local to a Go slice.
-	testValueOf[int](t)
+	testValueOf[uint8](t)
 	testValueOf[int32](t)
+	testValueOf[int](t)
 	testValueOf[float32](t)
 	testValueOf[float64](t)
-
-	// Test conversion
-	t0 := FromValue([][]float32{{1, 2}, {3, 4}})
-
-	if got, want := ValueOf[[][]float64](t0), [][]float64{{1, 2}, {3, 4}}; !reflect.DeepEqual(got, want) {
-		t.Errorf("Failed to convert (float32) %v to (float64) %v got (%s) %v", t0, want, reflect.TypeOf(got), got)
-	}
-	if got := ValueOf[[][][]int](t0); got != nil {
-		// Wrong rank, should have returned nil.
-		t.Errorf("Converting (float32) %v to [][][]64 returned (%s) %v!?", t0, reflect.TypeOf(got), got)
-	}
-	if got, want := ValueOf[[][]int](t0), [][]int{{1, 2}, {3, 4}}; !reflect.DeepEqual(got, want) {
-		t.Errorf("Failed to convert (float32) %v to (int) %v got (%s) %v", t0, want, reflect.TypeOf(got), got)
-	}
-}
-
-func TestToScalar(t *testing.T) {
-	// Test conversion among different types.
-	t0 := FromValue(3)
-	if got := ToScalar[int](t0); got != 3 {
-		t.Errorf("Failed to convert %s to int(3), got %d", t0, got)
-	}
-	if got := ToScalar[float64](t0); got != 3.0 {
-		t.Errorf("Failed to convert %s to float64(3), got %f", t0, got)
-	}
-
-	t1 := FromValue(float32(5))
-	if got := ToScalar[int](t1); got != 5 {
-		t.Errorf("Failed to convert %s to int(5), got %d", t1, got)
-	}
 }
 
 func TestTuples(t *testing.T) {
@@ -197,8 +183,8 @@ func TestTuples(t *testing.T) {
 	for ii, split := range splits {
 		fmt.Printf("\tSplit %d: %s\n", ii, split)
 	}
-	if ToScalar[float64](splits[0]) != elem0 {
-		t.Errorf("Tuple[0] transferred back: got %f, wanted %f", ToScalar[float64](splits[0]), elem0)
+	if splits[0].Value().(float64) != elem0 {
+		t.Errorf("Tuple[0] transferred back: got %f, wanted %f", splits[0].Value().(float64), elem0)
 	}
 	if !reflect.DeepEqual(splits[1].Value(), elem1) {
 		t.Errorf("Tuple[1] transferred back: got %v, wanted %v", splits[1].Value(), elem1)
@@ -210,19 +196,15 @@ func TestTuples(t *testing.T) {
 	if !deviceT.Shape().Eq(localT.shape) {
 		t.Fatalf("Local tuple shape is %q, shapedBuffer is %q", localT.Shape(), deviceT.Shape())
 	}
-	fmt.Printf("deviceT.ToString()=%s\n", deviceT.ShapedBuffer().String())
+	fmt.Printf("deviceT.ShapedBuffer().ToString()=%s\n", deviceT.ShapedBuffer().String())
 
 	// Split on device.
 	deviceSplits, err := deviceT.SplitTupleError()
 	if err != nil {
 		t.Fatalf("Failed to split tuple on device: %v", err)
 	}
-	if ToScalar[float64](deviceSplits[0].Local()) != elem0 {
-		t.Errorf("Tuple[0] on device: got %f, wanted %f", ToScalar[float64](deviceSplits[0].Local()), elem0)
-	}
-	if !reflect.DeepEqual(deviceSplits[1].Local().Value(), elem1) {
-		t.Errorf("Tuple[1] on device: got %v, wanted %v", deviceSplits[1].Local().Value(), elem1)
-	}
+	assert.Equalf(t, elem0, deviceSplits[0].Local().Value(), "Tuple[0] on device")
+	assert.Equalf(t, elem1, deviceSplits[1].Local().Value(), "Tuple[1] on device")
 
 	// Convert back to localT: recreate remote tuple, then clear the cache (otherwise it will simply use
 	// the previous localT value), and re-convert to local.
@@ -238,8 +220,8 @@ func TestTuples(t *testing.T) {
 	for ii, split := range splits {
 		fmt.Printf("\tSplit %d: %s\n", ii, split)
 	}
-	if ToScalar[float64](splits[0]) != elem0 {
-		t.Errorf("Tuple[0] transferred back: got %f, wanted %f", ToScalar[float64](splits[0]), elem0)
+	if splits[0].Value().(float64) != elem0 {
+		t.Errorf("Tuple[0] transferred back: got %f, wanted %f", splits[0].Value().(float64), elem0)
 	}
 	if !reflect.DeepEqual(splits[1].Value(), elem1) {
 		t.Errorf("Tuple[1] transferred back: got %v, wanted %v", splits[1].Value(), elem1)
@@ -256,5 +238,5 @@ func TestSerialize(t *testing.T) {
 	dec := gob.NewDecoder(buf)
 	localT, err = GobDeserialize(dec)
 	require.NoError(t, err)
-	require.Equal(t, values, ValueOf[[][]float64](localT))
+	require.Equal(t, values, localT.Value().([][]float64))
 }

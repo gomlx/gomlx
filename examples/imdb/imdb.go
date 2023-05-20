@@ -24,12 +24,12 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
-	"github.com/pkg/errors"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/pkg/errors"
 	"io"
 	"math/rand"
 	"os"
@@ -480,8 +480,10 @@ func (ds *Dataset) Yield() (spec any, inputs, labels []tensor.Tensor, err error)
 	// From now on ds is immutable, and it can be run concurrently.
 
 	// Build input tensor.
-	input := tensor.FromValueAndDimensions(0, ds.BatchSize, ds.MaxLen)
-	inputData := tensor.Data[int](input)
+	input := tensor.FromScalarAndDimensions(0, ds.BatchSize, ds.MaxLen)
+	inputRef := input.AcquireData()
+	defer inputRef.Release()
+	inputData := tensor.FlatFromRef[int](inputRef)
 	labelsData := make([]int, ds.BatchSize)
 	for batchIdx, datasetIdx := range examplesIdx {
 		ex := ds.Examples[datasetIdx]
@@ -528,7 +530,9 @@ func InputToString(input tensor.Tensor, batchIdx int) string {
 		return fmt.Sprintf("invalid batch idx %d: input shape is %s", batchIdx, input.Shape())
 	}
 	maxLen := input.Shape().Dimensions[1]
-	inputData := tensor.Data[int](input.Local())
+	localRef := input.Local().AcquireData()
+	defer localRef.Release()
+	inputData := tensor.FlatFromRef[int](localRef)
 	start := batchIdx * maxLen
 	parts := make([]string, 0, maxLen)
 	for _, tokenId := range inputData[start : start+maxLen] {

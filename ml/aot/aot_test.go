@@ -94,6 +94,6 @@ func TestAOTCompileModel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create NewAOTExecutable: %+v", err)
 	}
-	result := tensor.FromShapedBuffer(buf)
+	result := tensor.InternalNewDevice(buf)
 	fmt.Printf("Final result: %s\n", result.Local().GoStr())
 }

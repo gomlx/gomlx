@@ -29,11 +29,11 @@ import (
 	"bytes"
 	"fmt"
 	mg "github.com/erkkah/margaid"
-	"github.com/janpfeifer/gonb/gonbui"
-	errors "github.com/pkg/errors"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/janpfeifer/gonb/gonbui"
+	errors "github.com/pkg/errors"
 	"strings"
 )
 
@@ -79,7 +79,7 @@ func New(width, height int, evalDatasets ...train.Dataset) *Plots {
 type Plot struct {
 	MetricType string
 
-	// Data maps a plot name to
+	// Flat maps a plot name to
 	PerName map[string]*mg.Series
 
 	// allPoints collects all points from all series, to configure the axis.
@@ -108,7 +108,7 @@ func (ps *Plots) Attach(loop *train.Loop, numPoints int) {
 			// Training metrics are pre-generated and given.
 			step := float64(loop.LoopStep)
 			for ii, desc := range loop.Trainer.TrainMetrics() {
-				ps.AddPoint("Train: "+desc.Name(), desc.MetricType(), step, tensor.ToScalar[float64](metrics[ii]))
+				ps.AddPoint("Train: "+desc.Name(), desc.MetricType(), step, metrics[ii].Value().(float64))
 			}
 
 			// Eval metrics, if given
@@ -118,7 +118,7 @@ func (ps *Plots) Attach(loop *train.Loop, numPoints int) {
 					return err
 				}
 				for ii, desc := range loop.Trainer.EvalMetrics() {
-					ps.AddPoint(fmt.Sprintf("Eval on %s: %s", ds.Name(), desc.Name()), desc.MetricType(), step, tensor.ToScalar[float64](evalMetrics[ii]))
+					ps.AddPoint(fmt.Sprintf("Eval on %s: %s", ds.Name(), desc.Name()), desc.MetricType(), step, evalMetrics[ii].Value().(float64))
 				}
 			}
 

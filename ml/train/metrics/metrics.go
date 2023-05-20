@@ -19,12 +19,12 @@ package metrics
 
 import (
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/pkg/errors"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/google/uuid"
+	"github.com/pkg/errors"
 )
 
 // Interface for a Metric.
@@ -324,7 +324,7 @@ func BinaryAccuracyGraph(labels, predictions []*Node) *Node {
 }
 
 func accuracyPPrint(value tensor.Tensor) string {
-	return fmt.Sprintf("%.2f%%", tensor.ToScalar[float64](value)*100.0)
+	return fmt.Sprintf("%.2f%%", shapes.ConvertTo[float64](value.Value())*100.0)
 }
 
 // NewMeanBinaryAccuracy returns a new binary accuracy metric with the given names.

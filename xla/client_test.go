@@ -42,9 +42,9 @@ func TestBuildClient(t *testing.T) {
 			shape, data := o.Result()
 			wantShape := []int64{3}
 			wantData := []float32{10.5, 21, 32}
-			fmt.Printf("\tGot: Shape=%v, Data=%v\n", shape, data)
+			fmt.Printf("\tGot: Shape=%v, Flat=%v\n", shape, data)
 			if !reflect.DeepEqual(shape, wantShape) || !reflect.DeepEqual(data, wantData) {
-				fmt.Printf("Want: Shape=%v, Data=%v\n", wantShape, wantData)
+				fmt.Printf("Want: Shape=%v, Flat=%v\n", wantShape, wantData)
 			}
 		*/
 	}

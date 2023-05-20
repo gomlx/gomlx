@@ -1,5 +1,11 @@
 # GoMLX changelog
 
+## v0.2.1, 2023-05-20
+
+* Tensors: clean up, fixed memory race (with Go's GC not knowing about and C++ pointers), improved 
+  docs and test.
+* Created tests from the Adult, Cifar, "Dog vs Cats" and Imdb demos.
+
 ## v0.2.0, 2023-05-18
 
 * Added Oxford Flowers 102 Dataset example (no model yet).

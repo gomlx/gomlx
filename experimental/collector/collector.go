@@ -20,14 +20,14 @@ package collector
 
 import (
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/pkg/errors"
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/google/uuid"
+	"github.com/pkg/errors"
 	"strings"
 )
 
@@ -126,7 +126,7 @@ type HasNodeLogger interface {
 //
 // Once set up, you can mark the graph.Node to collect in your graph building function with Collect.
 // Each time the graph is executed, the data points are collected. When ready (after training), one
-// can get the collected data with Data.
+// can get the collected data with Flat.
 func NewDataCollector() *DataCollector {
 	return &DataCollector{
 		tag:  fmt.Sprintf("<DataCollector id=%s>", uuid.NewString()),
@@ -252,7 +252,7 @@ func (c *DataCollector) collectMessagesAndValues(messages []string, values []ten
 	for ii, msg := range messages {
 		if strings.HasPrefix(msg, c.tag) && strings.HasSuffix(msg, dataCollectorTagClose) {
 			series := msg[len(c.tag) : len(msg)-len(dataCollectorTagClose)]
-			value := shapes.CastAsDType(values[ii].Local().Scalar(), shapes.Float64).(float64)
+			value := shapes.CastAsDType(values[ii].Local().Value(), shapes.Float64).(float64)
 			c.storeValue(series, value)
 		} else {
 			// Keep message/value.

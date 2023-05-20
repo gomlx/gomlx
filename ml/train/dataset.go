@@ -18,7 +18,7 @@ package train
 
 import "github.com/gomlx/gomlx/types/tensor"
 
-// Dataset for a train.Trainer provides the data, one batch at a time. Data consists of a slice of tensor.Tensor
+// Dataset for a train.Trainer provides the data, one batch at a time. Flat consists of a slice of tensor.Tensor
 // for `inputs` and for `labels`.
 //
 // Dataset has to also provide a Dataset.Name() and a dataset `spec`, which usually is the same for

@@ -51,7 +51,7 @@ func (ds *testDS) Yield() (spec any, inputs []tensor.Tensor, labels []tensor.Ten
 	return                                                    // As if a batch was returned.
 }
 
-// TestNewParallelDataset with and without cache.
+// TestNewParallelDataset with and without buffer.
 func TestParallelDataset(t *testing.T) {
 	for _, cacheSize := range []int{0, 10} {
 		ds := &testDS{}
@@ -183,8 +183,8 @@ func TestInMemoryDataset(t *testing.T) {
 			require.NoError(t, err)
 			require.Less(t, count, ds.numExamples*valuesPerExample)
 
-			input := tensor.ToScalar[int](inputs[0])
-			label := tensor.ToScalar[int](labels[0])
+			input := inputs[0].Value().(int)
+			label := labels[0].Value().(int)
 			if repeat < 2 {
 				// In-order:
 				require.Equal(t, count, input)
@@ -212,8 +212,8 @@ func TestInMemoryDataset(t *testing.T) {
 	mds = mds.Copy().BatchSize(50, true) // This should also reset shuffling/random sampling.
 	_, inputs, labels, err := mds.Yield()
 	require.NoError(t, err)
-	input := tensor.ValueOf[[]int](inputs[0].Local())
-	label := tensor.ValueOf[[]int](labels[0].Local())
+	input := inputs[0].Local().Value().([]int)
+	label := labels[0].Local().Value().([]int)
 	want := slices.IotaSlice(0, 50)
 	require.Equal(t, want, input)
 	for ii := range want {
@@ -230,8 +230,8 @@ func TestInMemoryDataset(t *testing.T) {
 	require.NoError(t, err)
 	_, inputs, labels, err = mds.Yield() // Second batch will have size 1.
 	require.NoError(t, err)
-	input = tensor.ValueOf[[]int](inputs[0].Local())
-	label = tensor.ValueOf[[]int](labels[0].Local())
+	input = inputs[0].Local().Value().([]int)
+	label = labels[0].Local().Value().([]int)
 	require.Equal(t, []int{50}, input)
 	require.Equal(t, []int{-50}, label)
 
@@ -247,8 +247,8 @@ func TestInMemoryDataset(t *testing.T) {
 	mds = mds.BatchSize(50, true)
 	_, inputs, labels, err = mds.Yield()
 	require.NoError(t, err)
-	input = tensor.ValueOf[[]int](inputs[0].Local())
-	label = tensor.ValueOf[[]int](labels[0].Local())
+	input = inputs[0].Local().Value().([]int)
+	label = labels[0].Local().Value().([]int)
 	want = slices.IotaSlice(0, 50)
 	require.Equal(t, want, input)
 	for ii := range want {

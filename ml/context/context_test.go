@@ -99,15 +99,15 @@ func TestContextVariablesInitialization(t *testing.T) {
 	fmt.Printf("\tv0=%v\n", v0.Value().Local())
 	fmt.Printf("\tv1=%v\n", v1.Value().Local())
 	fmt.Printf("\tv2=%v\n", v2.Value().Local())
-	t0 := tensor.ToScalar[float32](v0.Value().Local())
+	t0 := v0.Value().Local().Value().(float32)
 	if t0 < 1.5 || t0 > 2.5 {
 		t.Errorf("Expected RandomUniformFn initialization > 1.5, < 2.5, instead got %f", t0)
 	}
-	t1 := tensor.ValueOf[[]float64](v1.Value().Local())
+	t1 := v1.Value().Local().Value().([]float64)
 	if t1[0] == 0 || t1[1] == 0 {
 		t.Errorf("Expected RandomNormalFn initialization to be random, got %v intead", t1)
 	}
-	t2 := tensor.ValueOf[[][]int](v2.Value().Local())
+	t2 := v2.Value().Local().Value().([][]int)
 	if !slices.DeepSliceCmp([][]int{{0}, {0}, {0}}, t2, slices.Equal[int]) {
 		t.Errorf("Expected Zeros initialization to yield zeros, got %v instead", t2)
 	}
@@ -155,8 +155,8 @@ func TestContext_SetLoader(t *testing.T) {
 	}
 	results, err := e.Call()
 	require.NoError(t, err, "Failed to run context.Exec")
-	gotV0 := tensor.ToScalar[float32](results[0])
-	gotV1 := tensor.ToScalar[int](results[1])
+	gotV0 := results[0].Value().(float32)
+	gotV1 := results[1].Value().(int)
 	if gotV0 != 2 || gotV1 != 3 {
 		t.Errorf("Got x,y = (%f, %d), wanted (2.0, 3)", gotV0, gotV1)
 	}

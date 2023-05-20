@@ -20,11 +20,11 @@ package context
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
 	ml "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/pkg/errors"
 	"log"
 	"reflect"
 	"strings"
@@ -507,7 +507,7 @@ func (ctx *Context) ExecSetVariablesInParams(params ml.ParamsMap, graph *ml.Grap
 	ctx.EnumerateVariables(func(v *Variable) {
 		if v.InUseByGraph(graph) {
 			if v.value == nil {
-				params[v.ParamNode(graph)] = tensor.LocalWithError(
+				params[v.ParamNode(graph)] = tensor.MakeLocalWithError(
 					fmt.Errorf("variable %q not initialized", v.ParameterName()))
 				return
 			}
@@ -640,7 +640,7 @@ func valueToTensor(value any) tensor.Tensor {
 		return tensorValue
 	}
 	if node, ok := value.(*Node); ok {
-		return tensor.DeviceWithError(errors.Errorf(
+		return tensor.MakeDeviceWithError(errors.Errorf(
 			"trying to feed a computation graph node (`*computation.Node`) as a concrete value will not work, "+
 				"you have to provide a Go value or a tensor here -- *Node provided: %s", node))
 	}

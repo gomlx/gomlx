@@ -21,13 +21,10 @@ import (
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
-	"image"
 	"log"
 	"math/rand"
 	"os"
 	"path"
-	"reflect"
 	"time"
 )
 
@@ -51,6 +48,7 @@ type Configuration struct {
 	// DataDir, where downloaded and generated data is stored.
 	DataDir string
 
+	// DType of the images when converted to Tensor.
 	DType shapes.DType
 
 	// BatchSize for batches.
@@ -153,6 +151,9 @@ func CreateDatasets(config *Configuration) (trainDS, trainEvalDS, validationEval
 	if _, err := os.Stat(trainPath); err == nil && !config.ForceOriginal {
 		trainDS = NewPreGeneratedDataset("train", trainPath, config.BatchSize, true,
 			config.ModelImageSize, config.ModelImageSize, config.DType)
+		if config.UseParallelism {
+			trainDS = data.CustomParallel(trainDS).Buffer(config.BufferSize).Start()
+		}
 	} else {
 		trainDS = NewDataset("train", config.DataDir, config.BatchSize, true, shuffle,
 			config.NumFolds, config.TrainFolds, config.FoldsSeed,
@@ -188,30 +189,4 @@ func CreateDatasets(config *Configuration) (trainDS, trainEvalDS, validationEval
 		}
 	}
 	return
-}
-
-// TensorToGoImage converts image(s) in a tensor.Tensor to a image.Image object.
-func TensorToGoImage(config *Configuration, images tensor.Tensor, exampleNum int) *image.NRGBA {
-	width, height, depth := config.ModelImageSize, config.ModelImageSize, 4 // 4 channels, RGBA
-	shapeDims := images.Shape().Dimensions
-	if images.Rank() != 4 || shapeDims[0] <= exampleNum || shapeDims[1] != config.ModelImageSize || shapeDims[2] != config.ModelImageSize || shapeDims[3] != 4 {
-		log.Fatalf("Received images tensor shaped %s, cannot access image %d of size (%d x %d x %d)",
-			images.Shape(), exampleNum, config.ModelImageSize, config.ModelImageSize, 4)
-	}
-	img := image.NewNRGBA(image.Rect(0, 0, width, height))
-	tensorData := reflect.ValueOf(images.Local().Data())
-	imageSize := width * height * depth
-	tensorPos := exampleNum * imageSize
-	floatT := reflect.TypeOf(float32(0))
-	for h := 0; h < height; h++ {
-		for w := 0; w < width; w++ {
-			for d := 0; d < 4; d++ {
-				v := tensorData.Index(tensorPos)
-				f := v.Convert(floatT).Interface().(float32)
-				tensorPos++
-				img.Pix[h*img.Stride+w*4+d] = uint8(f * 255)
-			}
-		}
-	}
-	return img
 }

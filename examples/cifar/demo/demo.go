@@ -71,7 +71,7 @@ var (
 	images10, labels10, images100, labels100 tensor.Tensor
 )
 
-// Data type used for the demo.
+// Flat type used for the demo.
 var dtype = shapes.Float32
 
 const EvalBatchSize = 2000 // Can be larger than training, more efficient.

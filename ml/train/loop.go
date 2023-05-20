@@ -18,8 +18,8 @@ package train
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
 	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/pkg/errors"
 	"io"
 	"sort"
 )
@@ -74,6 +74,9 @@ type Loop struct {
 	// and semantics/type of their values are not specified by loop.
 	SharedData map[string]any
 
+	// finalize inputs and labels after they are used.
+	finalizeInputs bool
+
 	// Registered hooks.
 	onStart *priorityHooks[*hookWithName[OnStartFn]]
 	onStep  *priorityHooks[*hookWithName[OnStepFn]]
@@ -83,15 +86,27 @@ type Loop struct {
 // NewLoop creates a new training loop trainer.
 func NewLoop(trainer *Trainer) *Loop {
 	return &Loop{
-		Trainer:    trainer,
-		SharedData: make(map[string]any),
-		onStart:    newPriorityHooks[*hookWithName[OnStartFn]](),
-		onStep:     newPriorityHooks[*hookWithName[OnStepFn]](),
-		onEnd:      newPriorityHooks[*hookWithName[OnEndFn]](),
+		Trainer:        trainer,
+		SharedData:     make(map[string]any),
+		onStart:        newPriorityHooks[*hookWithName[OnStartFn]](),
+		onStep:         newPriorityHooks[*hookWithName[OnStepFn]](),
+		onEnd:          newPriorityHooks[*hookWithName[OnEndFn]](),
+		finalizeInputs: false,
 	}
 }
 
+// FreeInputs configure the loop to free the inputs yielded by the dataset immediately -- as opposed to
+// wait for garbage collection. This can increase efficiency and be required for large inputs,
+// but if the inputs are being reused, this will break.
+//
+// It returns loop itself after it has been configured, so calls can be cascaded.
+func (loop *Loop) FreeInputs() *Loop {
+	loop.finalizeInputs = true
+	return loop
+}
+
 // start of loop, called by all looping methods.
+//
 // It calls the appropriate hooks.
 func (loop *Loop) start(ds Dataset) (err error) {
 	loop.onStart.Enumerate(func(hook *hookWithName[OnStartFn]) {
@@ -110,6 +125,29 @@ func (loop *Loop) start(ds Dataset) (err error) {
 // step of loop, called by all looping methods.
 // It calls the appropriate hooks.
 func (loop *Loop) step(spec any, inputs, labels []tensor.Tensor) (metrics []tensor.Tensor, err error) {
+	checkTensor := func(t tensor.Tensor) {
+		if t.Ok() {
+			return
+		}
+		var msg string
+		if loop.finalizeInputs {
+			msg = " -- loop is configured to free the dataset input after each step, this may be interfering with contents"
+		}
+		err = errors.Wrapf(t.Error(), "invalid input/label, cannot train%s", msg)
+	}
+	for _, inputT := range inputs {
+		checkTensor(inputT)
+		if err != nil {
+			return
+		}
+	}
+	for _, labelT := range labels {
+		checkTensor(labelT)
+		if err != nil {
+			return
+		}
+	}
+
 	metrics, err = loop.Trainer.TrainStep(spec, inputs, labels)
 	if err != nil {
 		return nil, err
@@ -126,6 +164,16 @@ func (loop *Loop) step(spec any, inputs, labels []tensor.Tensor) (metrics []tens
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	// Immediately release used inputs and labels.
+	if loop.finalizeInputs {
+		for _, t := range inputs {
+			t.FinalizeAll()
+		}
+		for _, t := range labels {
+			t.FinalizeAll()
+		}
 	}
 	return
 }

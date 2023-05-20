@@ -24,6 +24,7 @@ import (
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
+	timage "github.com/gomlx/gomlx/types/tensor/image"
 	"github.com/pkg/errors"
 	"github.com/schollz/progressbar/v3"
 	"hash/crc32"
@@ -200,6 +201,7 @@ type Dataset struct {
 	flipRandomly  bool
 	rng           *rand.Rand
 	dtype         shapes.DType
+	toTensor      *timage.ToTensorConfig
 
 	// Dataset sampling strategy.
 	batchSize int
@@ -210,11 +212,13 @@ type Dataset struct {
 	folds     []int
 	foldsSeed int32
 
+	// muCountersSelection protects shuffle, counters and selection.
+	muCountersSelection sync.Mutex
+
 	// Index of current position in whole data.
-	counters            [2]int
-	selection           [2][]int // Pre-generated shuffle selection of the data.
-	shuffle             *rand.Rand
-	muCountersSelection sync.Mutex // Protects shuffle, counters and selection.
+	counters  [2]int
+	selection [2][]int // Pre-generated shuffle selection of the data.
+	shuffle   *rand.Rand
 }
 
 var (
@@ -251,6 +255,7 @@ func NewDataset(name, baseDir string, batchSize int, infinite bool, shuffle *ran
 		flipRandomly: flipRandomly,
 		rng:          rand.New(rand.NewSource(time.Now().UTC().UnixNano())),
 		dtype:        dtype,
+		toTensor:     timage.ToTensor(dtype).WithAlpha(),
 
 		batchSize: batchSize,
 		infinite:  infinite,
@@ -362,26 +367,31 @@ func (ds *Dataset) yieldIndices() (dogsAndCats [2][]int, err error) {
 	return
 }
 
-// YieldImages yields a batch of images, and their labels (Dog or Cat). These are
+// YieldImages yields a batch of images, their labels (Dog or Cat) and their indices. These are
 // the raw images that can be used for displaying. See Yield below to get tensors
 // that can be used for training.
-func (ds *Dataset) YieldImages() (images []image.Image, labels []DorOrCat, err error) {
+func (ds *Dataset) YieldImages() (images []image.Image, labels []DorOrCat, indices []int, err error) {
 	// It uses Dataset.yieldIndices to select which images to return. This function then
 	// reads / scales / augment the images.
 	dogsAndCats, err := ds.yieldIndices()
 	if err != nil {
-		return nil, nil, err
+		return
 	}
-	images = make([]image.Image, 0, len(dogsAndCats[0])+len(dogsAndCats[1]))
-	labels = make([]DorOrCat, 0, len(dogsAndCats[0])+len(dogsAndCats[1]))
+	numExamples := len(dogsAndCats[0]) + len(dogsAndCats[1])
+	images = make([]image.Image, 0, numExamples)
+	labels = make([]DorOrCat, 0, numExamples)
+	indices = make([]int, 0, numExamples)
 	for ii, imgSet := range dogsAndCats {
 		subDir := ImgSubDirs[ii]
 		for _, imgIdx := range imgSet {
+			indices = append(indices, imgIdx)
 			labels = append(labels, DorOrCat(ii))
 			imgPath := path.Join(ds.BaseDir, LocalZipDir, subDir, fmt.Sprintf("%d.jpg", imgIdx))
-			img, err := GetImageFromFilePath(imgPath)
+			var img image.Image
+			img, err = GetImageFromFilePath(imgPath)
 			if err != nil {
-				return nil, nil, errors.Wrapf(err, "while reading %s image %d", subDir, imgIdx)
+				err = errors.Wrapf(err, "while reading %s image %d", subDir, imgIdx)
+				return
 			}
 			img = ds.Augment(img)
 			img = ResizeWithPadding(img, ds.width, ds.height)
@@ -402,34 +412,25 @@ func (ds *Dataset) Augment(img image.Image) image.Image {
 	return img
 }
 
-// Yield one batch or an error. It must always yield batches with the same number of inputs and
-// shapes.
+var muT sync.Mutex
+
+// Yield implements `train.Dataset`. It returns:
 //
-// Notice having an infinite stream is ok for training, if the trainer is given a finite
-// number of steps to run.
-//
-// It should return a slice of inputs (even if there is just one tensor), and one labels tensor.
-// Optionally it can return an error. If the error is io.EOF the training/evaluation terminates
-// normally, as it indicates end of data for finite datasets.
-//
-// Any other errors should interrupt the training/evaluation and be returned to the user.
+//   - spec: not used, left as nil.
+//   - inputs: two tensors, the first is the images batch (shaped `[batch_size, height, width, depth==4]`) and
+//     the second holds the indices of the images as int (I64), shaped `[batch_size]`.
 func (ds *Dataset) Yield() (spec any, inputs, labels []tensor.Tensor, err error) {
+	muT.Lock()
+	defer muT.Unlock()
+
 	var images []image.Image
 	var labelsAsTypes []DorOrCat
-	images, labelsAsTypes, err = ds.YieldImages()
+	var indices []int
+	images, labelsAsTypes, indices, err = ds.YieldImages()
 	if err != nil {
-		return nil, nil, nil, err
+		return
 	}
-	var t *tensor.Local
-	switch ds.dtype {
-	case shapes.Float32:
-		t = ImagesToTensor[float32](images)
-	case shapes.Float64:
-		t = ImagesToTensor[float64](images)
-	default:
-		log.Fatalf("Unsupported DType %s", ds.dtype)
-	}
-	inputs = []tensor.Tensor{t}
+	inputs = []tensor.Tensor{ds.toTensor.Batch(images), tensor.FromValue(indices)}
 	labels = []tensor.Tensor{tensor.FromAnyValue(shapes.CastAsDType(labelsAsTypes, ds.dtype))}
 	return
 }
@@ -510,43 +511,6 @@ func ResizeWithPadding(img image.Image, width, height int) image.Image {
 	return img
 }
 
-// ImagesToTensor converts a batch of images to a tensor.Local with 4 channels: R,G,B and A. It assumes
-// all images have the exact same size.
-func ImagesToTensor[T shapes.Number](imgs []image.Image) (t *tensor.Local) {
-	var zero T
-	imgSize := imgs[0].Bounds().Size()
-	t = tensor.FromShape(shapes.Make(shapes.DTypeForType(reflect.TypeOf(zero)), len(imgs), imgSize.Y, imgSize.X, 4))
-	tensorData := t.Data().([]T)
-	pos := 0
-
-	convertToDType := func(val uint32) T {
-		// color.RGBA() returns 16 bits values packaged in uint32.
-		return T(val) / T(0xFFFF)
-	}
-
-	for imgIdx, img := range imgs {
-		if !img.Bounds().Size().Eq(imgSize) {
-			t.Finalize()
-			return tensor.LocalWithError(errors.Errorf(
-				"image[%d] has size %s, but image[0] has size %s -- they must all be the same",
-				imgIdx, img.Bounds().Size(), imgSize))
-		}
-		for y := 0; y < imgSize.X; y++ {
-			for x := 0; x < imgSize.Y; x++ {
-				r, g, b, a := img.At(x, y).RGBA()
-				for _, channel := range []uint32{r, g, b, a} {
-					tensorData[pos] = convertToDType(channel)
-					pos++
-				}
-			}
-		}
-	}
-	if pos != t.Shape().Size() {
-		log.Fatalf("Incorrect number of values set.")
-	}
-	return
-}
-
 // Save will generate numEpochs of the dataset, with configured augmentations and resizing, and save to
 // the given file. If dataset is set to infinite it fails.
 //
@@ -601,7 +565,7 @@ func (ds *Dataset) Save(writer io.Writer, numEpochs int, verbose bool) error {
 				var images []image.Image
 				var labels []DorOrCat
 				for {
-					images, labels, err = ds.YieldImages()
+					images, labels, _, err = ds.YieldImages()
 					if err != nil {
 						break
 					}
@@ -672,8 +636,6 @@ func (ds *Dataset) Save(writer io.Writer, numEpochs int, verbose bool) error {
 
 // PreGeneratedDataset implements train.Dataset by reading the images from the pre-generated (scaled and
 // optionally augmented) images data. See Dataset.Save for saving these pre-generated files.
-//
-// TODO: we could parallelize the reading with the conversion.
 type PreGeneratedDataset struct {
 	name          string
 	filePath      string
@@ -690,6 +652,7 @@ type PreGeneratedDataset struct {
 // Assert PreGeneratedDataset is a train.Dataset.
 var _ train.Dataset = &PreGeneratedDataset{}
 
+// NewPreGeneratedDataset creates a PreGeneratedDataset that yields dogsvscats images and labels.
 func NewPreGeneratedDataset(name, filePath string, batchSize int, infinite bool, width, height int, dtype shapes.DType) *PreGeneratedDataset {
 	pds := &PreGeneratedDataset{
 		name:      name,
@@ -704,7 +667,7 @@ func NewPreGeneratedDataset(name, filePath string, batchSize int, infinite bool,
 	batchBytes := pds.batchSize * pds.entrySize()
 	pds.buffer = make([]byte, batchBytes)
 	pds.labelsAsTypes = make([]DorOrCat, pds.batchSize)
-	pds.Reset()
+	pds.Reset() // Sets pds.openedFile with the opened filePath.
 	return pds
 }
 
@@ -777,7 +740,9 @@ func (pds *PreGeneratedDataset) Reset() {
 func BytesToTensor[T shapes.Number](buffer []byte, numImages, width, height int) (t *tensor.Local) {
 	var zero T
 	t = tensor.FromShape(shapes.Make(shapes.DTypeForType(reflect.TypeOf(zero)), numImages, height, width, 4))
-	tensorData := t.Data().([]T)
+	ref := t.AcquireData()
+	defer ref.Release()
+	tensorData := tensor.FlatFromRef[T](ref)
 	dataPos := 0
 	bufferPos := 0
 

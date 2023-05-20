@@ -19,8 +19,8 @@ package chartjs
 import (
 	"encoding/hex"
 	"fmt"
-	"github.com/pkg/errors"
 	"github.com/gomlx/gomlx/examples/notebook/bashkernel"
+	"github.com/pkg/errors"
 	"math/rand"
 	"strings"
 	"text/template"
@@ -201,7 +201,7 @@ function Create{{.ChartVar}}(Chart) {
 		type: 'line',
 		data: {
 			datasets: [
-{{with .Data}}
+{{with .Flat}}
 {{range .Lines}}
 				{
 				label: '{{.Label}}',

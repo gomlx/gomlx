@@ -19,7 +19,7 @@ type ParallelDataset struct {
 	// parallelism is the number of goroutines started generating examples.
 	parallelism int
 
-	// extraBufferSize is the size of the cache of pre-generated batches.
+	// extraBufferSize is the size of the buffer of pre-generated batches.
 	extraBufferSize int
 
 	// impl is the actual implementation.
@@ -27,6 +27,9 @@ type ParallelDataset struct {
 
 	// keepAlive is used only to keep ParallelDataset alive in the middle of long calls.
 	keepAlive int64
+
+	// set to true once controller is started
+	started bool
 }
 
 type yieldUnit struct {
@@ -44,11 +47,11 @@ type parallelDatasetImpl struct {
 	err   error
 	muErr sync.Mutex
 
-	cache                                 chan yieldUnit
+	buffer                                chan yieldUnit
 	epochFinished, stopEpoch, stopDataset chan struct{}
 }
 
-// Parallel parallelizes any tread-safe train.Dataset.
+// Parallel parallelizes yield calls of any tread-safe train.Dataset.
 //
 // It uses CustomParallel and automatically starts it with the default
 // parameters.
@@ -136,7 +139,7 @@ func (pd *ParallelDataset) Start() *ParallelDataset {
 		return nil
 	}
 	impl := &parallelDatasetImpl{
-		cache:       make(chan yieldUnit, pd.extraBufferSize),
+		buffer:      make(chan yieldUnit, pd.extraBufferSize),
 		stopDataset: make(chan struct{}),
 		config:      *pd, // Copy.
 	}
@@ -195,7 +198,7 @@ func (impl *parallelDatasetImpl) startGoRoutines() {
 					return
 				case <-impl.stopDataset:
 					return
-				case impl.cache <- unit:
+				case impl.buffer <- unit:
 					// Batch generated and cached, move to next.
 					continue
 				}
@@ -203,7 +206,7 @@ func (impl *parallelDatasetImpl) startGoRoutines() {
 		}(impl)
 	}
 
-	// Start controller job.
+	// Start the controller job.
 	go func() {
 		wg.Wait()
 		impl.muErr.Lock()
@@ -220,7 +223,7 @@ func (impl *parallelDatasetImpl) startGoRoutines() {
 
 // Name implements train.Dataset.
 func (pd *ParallelDataset) Name() string {
-	return fmt.Sprintf("%s [CustomParallel]", pd.Dataset.Name())
+	return fmt.Sprintf("%s [Parallelized]", pd.Dataset.Name())
 }
 
 // Reset implements train.Dataset.
@@ -230,17 +233,23 @@ func (pd *ParallelDataset) Reset() {
 		log.Printf("ParallelDataset.Reset was called before it was started with ParallelDataset.Start")
 		return
 	}
+
+	// Indicate to readers to stop generating data, and drain whatever is still in the buffer.
 	impl.muErr.Lock()
 	close(impl.stopEpoch) // Indicate to goroutines to stop generating batches.
 	impl.muErr.Unlock()
-	select {
-	case <-impl.stopDataset:
-		// Return immediately, do nothing.
-		return
-	case <-impl.cache:
-		// Discard remaining entries in cache.
-	case <-impl.epochFinished:
-		// All finished, we can move on.
+drainDataset: //
+	for {
+		select {
+		case <-impl.stopDataset:
+			// Return immediately, do nothing.
+			return
+		case <-impl.epochFinished:
+			// All finished, we can move on.
+			break drainDataset
+		case <-impl.buffer:
+			// Discard remaining entries that were in the buffer.
+		}
 	}
 
 	// Reset underlying dataset and start again.
@@ -267,15 +276,15 @@ func (pd *ParallelDataset) Yield() (spec any, inputs []tensor.Tensor, labels []t
 		err = impl.err
 		impl.muErr.Unlock()
 		return
-	case unit = <-impl.cache:
+	case unit = <-impl.buffer:
 		// We got a new batch
 	case <-impl.epochFinished:
-		// No more records being produced (until Reset() is called), but we still need to exhaust the cache.
+		// No more records being produced (until Reset() is called), but we still need to exhaust the buffer.
 		select {
-		case unit = <-impl.cache:
+		case unit = <-impl.buffer:
 			// We got a new batch, simply continue.
 		default:
-			// Generation exhausted, and no more records in cache.
+			// Generation exhausted, and no more records in buffer.
 			err = io.EOF
 			return
 		}

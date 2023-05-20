@@ -173,7 +173,7 @@ func LoadDataFrame(path string) dataframe.DataFrame {
 // - forceDownload: will download data from the internet even if already downloaded.
 // - verbosity: set to a value >= 1 to print out what it's doing.
 //
-// The results are stored in the global variable `Data`.
+// The results are stored in the global variable `Flat`.
 //
 // It panics in case of error.
 func LoadAndPreprocessData(dir string, numQuantiles int, forceDownload bool, verbosity int) {
@@ -518,10 +518,10 @@ type TensorData struct {
 // CreateTensors of dataset, for faster ML interaction.
 func (r *RawData) CreateTensors(manager *graph.Manager) *TensorData {
 	return &TensorData{
-		CategoricalTensor: tensor.FromDataAndDimensions(r.Categorical, r.NumRows, r.NumCategorical),
-		ContinuousTensor:  tensor.FromDataAndDimensions(r.Continuous, r.NumRows, r.NumContinuous),
-		WeightsTensor:     tensor.FromDataAndDimensions(r.Weights, r.NumRows, 1),
-		LabelsTensor:      tensor.FromDataAndDimensions(r.Labels, r.NumRows, 1),
+		CategoricalTensor: tensor.FromFlatDataAndDimensions(r.Categorical, r.NumRows, r.NumCategorical),
+		ContinuousTensor:  tensor.FromFlatDataAndDimensions(r.Continuous, r.NumRows, r.NumContinuous),
+		WeightsTensor:     tensor.FromFlatDataAndDimensions(r.Weights, r.NumRows, 1),
+		LabelsTensor:      tensor.FromFlatDataAndDimensions(r.Labels, r.NumRows, 1),
 	}
 }
 
