@@ -1,14 +1,18 @@
 # GoMLX changelog
 
-## v0.2.0, 2023-05-20
+## v0.2.1, 2023-05-20
+
+* Tensors: clean up, fixed memory race (with Go's GC not knowing about and C++ pointers), improved 
+  docs and test.
+* Created tests from the Adult, Cifar, "Dog vs Cats" and Imdb demos.
+
+## v0.2.0, 2023-05-18
 
 * Added Oxford Flowers 102 Dataset example (no model yet).
-* Created tests from the Adult, Cifar, "Dog vs Cats" and Imdb demos.
 * Added Datasets tools: Parallel (improved), Batch, InMemory.
 * Added ops: GatherSlices (and its gradient), EinsumAxes, MaxScalar, MinScalar, ExpandAndBroadcast.
 * Added Interpolate operation -- for series/image/videos resizing.
 * Added support for int32 (`shapes.I32`) and uint8 (`shapes.UInt8` or `shapes.U8` for short).
-* Tensors: clean up, fixed memory race (with Go's GC not knowing about and C++ pointers), improved docs and test.  
 * Added Set[] to `types` package.
 * Added `types/tensor/image` with image conversion tools to/from tensors.
 * Added Serialize and Deserialize for `tensor.Local` and `Shape`.
