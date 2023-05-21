@@ -325,7 +325,7 @@ func (r *Trainer) callGraphFn(
 	}
 	if lengths, found := r.inputsAndLabelsLenPerInfo[spec]; found {
 		if len(inputs) != lengths[0] || len(labels) != lengths[1] {
-			err = errors.Errorf("inputs (%d) and labels (%d) lengths are different "+
+			err = errors.Errorf("dataset yields inputs (%d) and labels (%d) with lengths different "+
 				"than with previous call (%d and %d) for the given spec %+v", len(inputs), len(labels),
 				lengths[0], lengths[1], spec)
 			return
