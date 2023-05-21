@@ -423,6 +423,7 @@ func (ds *Dataset) Yield() (spec any, inputs, labels []tensor.Tensor, err error)
 	muT.Lock()
 	defer muT.Unlock()
 
+	spec = ds // spec is a pointer to the Dataset.
 	var images []image.Image
 	var labelsAsTypes []DorOrCat
 	var indices []int
@@ -681,6 +682,7 @@ func (pds *PreGeneratedDataset) entrySize() int {
 // Yield implements train.Dataset.
 func (pds *PreGeneratedDataset) Yield() (spec any, inputs, labels []tensor.Tensor, err error) {
 	retries := 0
+	spec = pds
 	for { // Loop in case pds.infinite is true, and we retry at end of file.
 		if pds.err != nil {
 			return nil, nil, nil, pds.err

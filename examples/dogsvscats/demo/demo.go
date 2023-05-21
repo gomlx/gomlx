@@ -62,6 +62,7 @@ var (
 	flagLearningRate     = flag.Float64("learning_rate", 0.0001, "Initial learning rate.")
 	flagL2Regularization = flag.Float64("l2_reg", 0, "L2 regularization on kernels. It doesn't interact well with --batch_norm.")
 	flagNormalization    = flag.String("norm", "layer", fmt.Sprintf("Type of layer normalization to use. Valid values: %q.", slices.SortedKeys(layers.KnownNormalizers)))
+	flagEval             = flag.Bool("eval", true, "Whether to evaluate trained model on test data in the end.")
 
 	// Flat part of model, after convolutions and models being flattened:
 	flagNumHiddenLayers = flag.Int("hidden_layers", 3, "Number of hidden layers, stacked with residual connection.")
@@ -162,9 +163,11 @@ func trainModel(config *dogsvscats.Configuration) {
 	AssertNoError(err)
 
 	// Finally print an evaluation on train and test datasets.
-	fmt.Println()
-	err = commandline.ReportEval(trainer, trainEvalDS, validationEvalDS)
-	AssertNoError(err)
+	if *flagEval {
+		fmt.Println()
+		err = commandline.ReportEval(trainer, trainEvalDS, validationEvalDS)
+		AssertNoError(err)
+	}
 }
 
 func normalizeImage(ctx *context.Context, x *Node) *Node {

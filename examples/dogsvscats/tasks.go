@@ -149,7 +149,7 @@ func CreateDatasets(config *Configuration) (trainDS, trainEvalDS, validationEval
 	shuffle := rand.New(rand.NewSource(time.Now().UTC().UnixNano()))
 	trainPath := path.Join(config.DataDir, PreGeneratedTrainFileName)
 	if _, err := os.Stat(trainPath); err == nil && !config.ForceOriginal {
-		trainDS = NewPreGeneratedDataset("train", trainPath, config.BatchSize, true,
+		trainDS = NewPreGeneratedDataset("train [Pre]", trainPath, config.BatchSize, true,
 			config.ModelImageSize, config.ModelImageSize, config.DType)
 		if config.UseParallelism {
 			trainDS = data.CustomParallel(trainDS).Buffer(config.BufferSize).Start()
@@ -165,7 +165,7 @@ func CreateDatasets(config *Configuration) (trainDS, trainEvalDS, validationEval
 
 	trainEvalPath := path.Join(config.DataDir, PreGeneratedTrainEvalFileName)
 	if _, err := os.Stat(trainEvalPath); err == nil && !config.ForceOriginal {
-		trainEvalDS = NewPreGeneratedDataset("train-eval", trainEvalPath, config.BatchSize, false,
+		trainEvalDS = NewPreGeneratedDataset("train-eval [Pre]", trainEvalPath, config.BatchSize, false,
 			config.ModelImageSize, config.ModelImageSize, config.DType)
 	} else {
 		trainEvalDS = NewDataset("train-eval", config.DataDir, config.BatchSize, false, nil,
@@ -178,7 +178,7 @@ func CreateDatasets(config *Configuration) (trainDS, trainEvalDS, validationEval
 
 	validPath := path.Join(config.DataDir, PreGeneratedValidationFileName)
 	if _, err := os.Stat(validPath); err == nil && !config.ForceOriginal {
-		validationEvalDS = NewPreGeneratedDataset("valid-eval", validPath, config.BatchSize, false,
+		validationEvalDS = NewPreGeneratedDataset("valid-eval [Pre]", validPath, config.BatchSize, false,
 			config.ModelImageSize, config.ModelImageSize, config.DType)
 	} else {
 		validationEvalDS = NewDataset("valid-eval", config.DataDir, config.BatchSize, false, nil,

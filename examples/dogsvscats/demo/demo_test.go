@@ -5,9 +5,10 @@ import (
 	"testing"
 )
 
-func TestMain(t *testing.T) {
+func TestDemo(t *testing.T) {
 	flag.Parse()
 	*flagNumSteps = 10
 	*flagPlatform = "Host"
+	*flagEval = false
 	main()
 }
