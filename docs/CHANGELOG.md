@@ -1,5 +1,10 @@
 # GoMLX changelog
 
+## Next
+
+* Skip evaluation during test of demos.
+* Fixed dogsvscat demo's inconsistent mixed datasets issue, by yielding a correct spec.
+
 ## v0.2.1, 2023-05-20
 
 * Tensors: clean up, fixed memory race (with Go's GC not knowing about and C++ pointers), improved 
