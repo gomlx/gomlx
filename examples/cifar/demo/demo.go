@@ -56,6 +56,7 @@ var (
 	flagNumSteps     = flag.Int("steps", 2000, "Number of gradient descent steps to perform")
 	flagBatchSize    = flag.Int("batch", 100, "Batch size for training")
 	flagLearningRate = flag.Float64("learning_rate", 0.0001, "Initial learning rate.")
+	flagEval         = flag.Bool("eval", true, "Whether to evaluate the model on the validation data in the end.")
 
 	// Model hyperparameters:
 	flagNumHiddenLayers  = flag.Int("hidden_layers", 8, "Number of hidden layers, stacked with residual connection.")
@@ -141,9 +142,11 @@ func trainModel() {
 	AssertNoError(err)
 
 	// Finally print an evaluation on train and test datasets.
-	fmt.Println()
-	err = commandline.ReportEval(trainer, evalOnTestDS, evalOnTrainDS)
-	AssertNoError(err)
+	if *flagEval {
+		fmt.Println()
+		err = commandline.ReportEval(trainer, evalOnTestDS, evalOnTrainDS)
+		AssertNoError(err)
+	}
 
 	// Release memory -- not really needed since we are exiting, just for the example.
 	cifar.ResetCache()
