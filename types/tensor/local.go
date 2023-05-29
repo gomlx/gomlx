@@ -8,6 +8,7 @@ import (
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/xla"
 	"github.com/pkg/errors"
+	"io"
 	"reflect"
 	"runtime"
 )
@@ -388,6 +389,23 @@ func GobDeserialize(decoder *gob.Decoder) (local *Local, err error) {
 		return
 	}
 	return
+}
+
+// Save the Local tensor to the given writer w.
+func (local *Local) Save(w io.Writer) (err error) {
+	enc := gob.NewEncoder(w)
+	return local.GobSerialize(enc)
+}
+
+// Load a Local tensor from the given reader r.
+//
+// Notice it uses `encoding/gob` package, which uses buffering when reading, so it will read-ahead on r. In other words,
+// it assumes it's the only thing in this reader: this works well if the tensor is the only thing in a file,
+// but not if it's a file that holds other things. Use GobSerialize/GobDeserialize directly if you need to store several
+// things in a file.
+func Load(r io.Reader) (local *Local, err error) {
+	dec := gob.NewDecoder(r)
+	return GobDeserialize(dec)
 }
 
 // MaxStringSize is the largest Local tensor that is actually returned by String() is requested.
