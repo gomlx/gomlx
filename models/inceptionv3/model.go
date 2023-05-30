@@ -186,6 +186,9 @@ func ModelGraph(ctx *context.Context, baseDir string, image *Node) *Node {
 	return x
 }
 
+// conv2DWithBatchNorm adds a 2D convolution, followed by batch normalization and an activation. In addition,
+// it reads the weights for the layers (convolution and batch normalization) from the downloaded `.h5` file
+// with the InceptionV3 pre-trained model.
 func conv2DWithBatchNorm(ctx *context.Context, kw *kerasWeights, x *Node, kernelFilters, kernelHeight, kernelWidth int,
 	strides []int, padding bool) (output *Node) {
 	g := x.Graph()
@@ -195,9 +198,9 @@ func conv2DWithBatchNorm(ctx *context.Context, kw *kerasWeights, x *Node, kernel
 	}
 
 	// 2D Convolution:
-	convCfg := layers.Convolution(kw.ReadNextConv2D(ctx, g), x).CurrentScope().ChannelsAfter().
-		UseBias(false).
-		Filters(kernelFilters).KernelSizePerDim(kernelHeight, kernelWidth)
+	ctxWithWeights := kw.ReadNextConv2D(ctx, g) // Create a new context scope and read weights from `.h5` file.
+	convCfg := layers.Convolution(ctxWithWeights, x).CurrentScope().ChannelsAfter().
+		Filters(kernelFilters).UseBias(false).KernelSizePerDim(kernelHeight, kernelWidth)
 	if len(strides) > 0 {
 		convCfg = convCfg.StridePerDim(strides...)
 	}
@@ -212,9 +215,8 @@ func conv2DWithBatchNorm(ctx *context.Context, kw *kerasWeights, x *Node, kernel
 	}
 
 	// Batch Normalization:
-	bnAxis := 3 // we assume "channels after", this is the channel axis.
-	x = layers.BatchNormalization(kw.ReadNextBatchNormalization(ctx, g), x, bnAxis).
-		CurrentScope().Scale(false).Done()
+	ctxWithWeights = kw.ReadNextBatchNormalization(ctx, g) // Create a new context scope and read weights from `.h5` file.
+	x = layers.BatchNormalization(ctxWithWeights, x, kw.channelsAxis).CurrentScope().Scale(false).Done()
 	if !g.Ok() {
 		return
 	}
@@ -274,6 +276,7 @@ func (kw *kerasWeights) ReadNextConv2D(ctx *context.Context, graph *Graph) (ctxI
 		return
 	}
 
+	// Set scope name to something similar to the original model layer names (cosmetic only).
 	if kw.conv2dCount == 0 {
 		ctxInScope = ctx.In("conv2d")
 	} else {
@@ -303,6 +306,7 @@ func (kw *kerasWeights) ReadNextBatchNormalization(ctx *context.Context, graph *
 		return
 	}
 
+	// Set scope name to something similar to the original model layer names (cosmetic only).
 	if kw.batchNormCount == 0 {
 		ctxInScope = ctx.In("batch_normalization")
 	} else {
