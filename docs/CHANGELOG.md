@@ -7,6 +7,7 @@
 * Added HDF5 support.
 * Skip evaluation during test of demos.
 * Fixed dogsvscat demo's inconsistent mixed datasets issue, by yielding a correct spec.
+* Added SumPool and MeanPool
 
 ## v0.2.1, 2023-05-20
 

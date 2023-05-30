@@ -60,6 +60,26 @@ func MulScalar(x *Node, scalar float64) *Node {
 	return Mul(x, Scalar(g, x.DType(), scalar))
 }
 
+// DivScalar converts scalar to a constant with x's DType and returns `x / scalar`
+// with proper broadcasting.
+//
+// For float DType's, DivScalar instead uses MulScalar(x, 1/scalar).
+func DivScalar(x *Node, scalar float64) *Node {
+	g := x.Graph()
+	if !g.Ok() {
+		return g.InvalidNode()
+	}
+	if scalar == 0 {
+		g.SetErrorf("division by zero in DivScalar")
+		return g.InvalidNode()
+	}
+	if x.DType().IsFloat() {
+		// Multiply by 1/scalar instead:
+		return MulScalar(x, 1.0/float64(scalar))
+	}
+	return Div(x, Scalar(g, x.DType(), scalar))
+}
+
 // Square returns x^2 point-wise. Same as `Mul(x, x)`.
 func Square(x *Node) *Node {
 	return Mul(x, x)

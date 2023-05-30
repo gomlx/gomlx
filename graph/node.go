@@ -1292,7 +1292,7 @@ type PadAxis struct {
 }
 
 // Pad injects padding on the start, end or interior (in between each element) of the given operand.
-// There must be at most `operand.Rank()` axesConfig values. Missing PadAxis are assumed to zeros,
+// There must be at most `operand.Rank()` axesConfig values. Missing PadAxis are assumed to be zeros,
 // that is, no padding for those axes.
 func Pad(operand, fillValue *Node, axesConfig ...PadAxis) *Node {
 	g := validateGraphFromInputs(operand, fillValue)

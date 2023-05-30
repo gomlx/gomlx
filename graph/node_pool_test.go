@@ -17,6 +17,7 @@
 package graph_test
 
 import (
+	"fmt"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/types/shapes"
 	"testing"
@@ -71,7 +72,6 @@ func TestGradientMaxPool(t *testing.T) {
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			input := Add(IotaFull(g, MakeShape(shapes.Float32, 1, 6, 1)), Const(g, float32(1.0)))
 			output = MaxPool(input).NoPadding().Window(3).Strides(1).Done()
-			output.SetLogged("output")
 			scale := Add(IotaFull(g, output.Shape()), Const(g, float32(1.0)))
 			output = Mul(output, scale)
 			return output, []*Node{input}
@@ -101,6 +101,117 @@ func TestGradientMaxPool(t *testing.T) {
 				{{0}, {1}, {0}, {1}, {0}},
 				{{0}, {0}, {0}, {0}, {0}},
 				{{0}, {1}, {0}, {1}, {0}},
+				{{0}, {0}, {0}, {0}, {0}},
+			}},
+		})
+}
+
+// TestSumPool only tests that the correct reduction is applied. Windows and strides are already
+// tested with TestMaxPool.
+func TestSumPool(t *testing.T) {
+	testFuncOneInput(t, "SumPool(...)",
+		func(g *Graph) (input, output *Node) {
+			channelA := IotaFull(g, MakeShape(shapes.Float64, 1, 3, 3, 1))
+			channelB := Mul(channelA, Const(g, 0.1))
+			input = Concatenate([]*Node{channelA, channelB}, -1)
+			output = SumPool(input).Window(3).ChannelsAfter().NoPadding().Done()
+			return
+		}, [][][][]float64{{{{36, 3.6}}}})
+}
+
+// TestGradientSumPool only tests that the correct gradient for the reduction is applied. More fine-grained testing
+// is done in TestGradientMeanPool, which we can verify the result with Tensorflow.
+func TestGradientSumPool(t *testing.T) {
+	testGradients[float32](t, "Gradient 1D SumPool() -- scaled output",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			input := Add(IotaFull(g, MakeShape(shapes.Float32, 1, 6, 1)), Const(g, float32(1.0)))
+			output = SumPool(input).NoPadding().Window(3).Strides(1).Done()
+			scale := Add(IotaFull(g, output.Shape()), ScalarOne(g, shapes.F32))
+			output = Mul(output, scale)
+			return output, []*Node{input}
+		}, []any{
+			[][][]float32{{{1}, {3}, {6}, {9}, {7}, {4}}},
+		})
+}
+
+// TestMeanPool only tests that the correct reduction and normalization are applied. Windows and strides are already
+// tested with TestMaxPool.
+func TestMeanPool(t *testing.T) {
+	testFuncOneInput(t, "MeanPool(...).ChannelsAfter().NoPadding()",
+		func(g *Graph) (input, output *Node) {
+			channelA := IotaFull(g, MakeShape(shapes.Float64, 1, 3, 3, 1))
+			channelB := Mul(channelA, Const(g, 0.1))
+			input = Concatenate([]*Node{channelA, channelB}, -1)
+			output = MeanPool(input).Window(3).ChannelsAfter().NoPadding().Done()
+			return
+		}, [][][][]float64{{{{4, 0.4}}}})
+
+	fmt.Println()
+	testFuncOneInput(t, "MeanPool(...).ChannelsAfter().PadSame().",
+		func(g *Graph) (input, output *Node) {
+			channelA := IotaFull(g, MakeShape(shapes.Float64, 1, 3, 3, 1))
+			channelB := Mul(channelA, Const(g, 0.1))
+			input = Concatenate([]*Node{channelA, channelB}, -1)
+			input = Concatenate([]*Node{input, input}, 0) // Batch of 2.
+			output = MeanPool(input).Window(3).ChannelsAfter().PadSame().Strides(1).Done()
+			return
+		}, [][][][]float64{{
+			{{2.0, 0.20}, {2.5, 0.25}, {3.0, 0.30}},
+			{{3.5, 0.35}, {4.0, 0.40}, {4.5, 0.45}},
+			{{5.0, 0.50}, {5.5, 0.55}, {6.0, 0.60}},
+		}, {
+			{{2.0, 0.20}, {2.5, 0.25}, {3.0, 0.30}},
+			{{3.5, 0.35}, {4.0, 0.40}, {4.5, 0.45}},
+			{{5.0, 0.50}, {5.5, 0.55}, {6.0, 0.60}},
+		}})
+}
+
+// TestGradientMeanPool can leverage `tensorflow.nn.pool` with "AVG" type. Results should be identical.
+func TestGradientMeanPool(t *testing.T) {
+	testGradients[float32](t, "Gradient 1D MeanPool() -- scaled output",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			input := Add(IotaFull(g, MakeShape(shapes.Float32, 1, 6, 1)), Const(g, float32(1.0)))
+			output = MeanPool(input).NoPadding().Window(3).Strides(1).Done()
+			scale := Add(IotaFull(g, output.Shape()), ScalarOne(g, shapes.F32))
+			output = Mul(output, scale)
+			return output, []*Node{input}
+		}, []any{
+			[][][]float32{{{1.0 / 3.0}, {1.0}, {2.0}, {3.0}, {2.0 + 1.0/3.0}, {4.0 / 3.0}}},
+		})
+	fmt.Println()
+
+	testGradients[float32](t, "Gradient 2D MeanPool(...).Window(3).ChannelsFirst().PadSame().Strides(1)",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			channelA := IotaFull(g, MakeShape(shapes.Float32, 1, 1, 3, 3))
+			channelB := Mul(channelA, Const(g, float32(0.1)))
+			input := Concatenate([]*Node{channelA, channelB}, 1)
+			output = MeanPool(input).ChannelsFirst().Window(3).PadSame().Strides(1).Done()
+			return output, []*Node{input}
+		}, []any{
+			[][][][]float32{{{
+				{0.6944445, 1.1111112, 0.6944445},
+				{1.1111112, 1.7777778, 1.1111112},
+				{0.6944445, 1.1111112, 0.6944445},
+			}, {
+				{0.6944445, 1.1111112, 0.6944445},
+				{1.1111112, 1.7777778, 1.1111112},
+				{0.6944445, 1.1111112, 0.6944445},
+			}}},
+		})
+	fmt.Println()
+
+	// The results below should reflect that the last column and row are not used in the output.
+	testGradients[float64](t, "Gradient 2D MeanPool(...).Window(2)",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			input := IotaFull(g, MakeShape(shapes.Float64, 1, 5, 5, 1))
+			output = MeanPool(input).Window(2).Done()
+			return output, []*Node{input}
+		}, []any{
+			[][][][]float64{{
+				{{0.25}, {0.25}, {0.25}, {0.25}, {0}},
+				{{0.25}, {0.25}, {0.25}, {0.25}, {0}},
+				{{0.25}, {0.25}, {0.25}, {0.25}, {0}},
+				{{0.25}, {0.25}, {0.25}, {0.25}, {0}},
 				{{0}, {0}, {0}, {0}, {0}},
 			}},
 		})
