@@ -39,6 +39,7 @@ type ConvBuilder struct {
 	strides        []int
 	padSame        bool
 	dilations      []int
+	newScope       bool
 }
 
 // Convolution prepares a convolution on x with the given kernel for arbitrary
@@ -57,9 +58,10 @@ type ConvBuilder struct {
 // `[batch, input_channels, <spatial_dimensions...>]` instead.
 func Convolution(ctx *context.Context, x *Node) *ConvBuilder {
 	conv := &ConvBuilder{
-		ctx:   ctx.In("conv"),
-		graph: x.Graph(),
-		x:     x,
+		ctx:      ctx,
+		graph:    x.Graph(),
+		x:        x,
+		newScope: true,
 	}
 	conv.numSpatialDims = x.Rank() - 2
 	if conv.numSpatialDims < 0 {
@@ -190,7 +192,7 @@ func (conv *ConvBuilder) StridePerDim(strides ...int) *ConvBuilder {
 // Dilations sets the dilations of the convolution. It sets the same value for every dimension.
 // The default is 1.
 //
-// Specifies the kernel up-sampling rate. In the literature, the same parameter
+// It specifies the kernel up-sampling rate. In the literature, the same parameter
 // is sometimes called input stride or dilation. The effective kernel size used for the convolution
 // will be `kernel_shape + (kernel_shape - 1) * (dilation - 1)`, obtained by inserting (dilation-1) zeros
 // between consecutive elements of the original filter in the spatial dimension.
@@ -226,12 +228,27 @@ func (conv *ConvBuilder) DilationPerDim(dilations ...int) *ConvBuilder {
 	return conv
 }
 
+// CurrentScope configures the convolution not to create a sub-scope for the kernel weights it needs,
+// and instead use the current one provided in Convolution.
+//
+// By default, Convolution will create a sub-scope named "conv".
+func (conv *ConvBuilder) CurrentScope() *ConvBuilder {
+	conv.newScope = false
+	return conv
+}
+
 // Done indicates that the Convolution layer is finished being configured. It then
 // creates the convolution and it's kernels (variables) and returns the resulting
 // Node.
 func (conv *ConvBuilder) Done() *Node {
 	if !conv.graph.Ok() {
 		return conv.graph.InvalidNode()
+	}
+
+	// Default is to create a sub-scope for the convolution variables.
+	ctxInScope := conv.ctx
+	if conv.newScope {
+		ctxInScope = ctxInScope.In("conv")
 	}
 
 	if len(conv.kernelSize) == 0 || conv.filters <= 0 {
@@ -281,7 +298,7 @@ func (conv *ConvBuilder) Done() *Node {
 		kernelShape.Dimensions = append(kernelShape.Dimensions, inputChannels)
 		kernelShape.Dimensions = append(kernelShape.Dimensions, conv.filters)
 	}
-	kernelVar := conv.ctx.VariableWithShape("weights", kernelShape)
+	kernelVar := ctxInScope.VariableWithShape("weights", kernelShape)
 	kernel := kernelVar.ValueGraph(conv.graph)
 	convOpts := Convolve(conv.x, kernel).StridePerDim(conv.strides...)
 	if conv.channelsFirst {
@@ -304,7 +321,7 @@ func (conv *ConvBuilder) Done() *Node {
 
 	// Create and apply bias.
 	if conv.bias {
-		biasVar := conv.ctx.VariableWithShape("biases", shapes.Make(dtype, conv.filters))
+		biasVar := ctxInScope.VariableWithShape("biases", shapes.Make(dtype, conv.filters))
 		bias := biasVar.ValueGraph(conv.graph)
 		expandedDims := slices.SliceWithValue(output.Rank(), 1)
 		if conv.channelsFirst {
@@ -317,11 +334,11 @@ func (conv *ConvBuilder) Done() *Node {
 	}
 
 	// Add regularization.
-	if l2any, found := conv.ctx.GetParam(L2RegularizationKey); found {
+	if l2any, found := ctxInScope.GetParam(L2RegularizationKey); found {
 		l2 := l2any.(float64)
 		if l2 > 0 {
 			l2Node := Const(conv.graph, shapes.CastAsDType(l2, dtype))
-			AddL2Regularization(conv.ctx, l2Node, kernel)
+			AddL2Regularization(ctxInScope, l2Node, kernel)
 		}
 	}
 	return output
