@@ -19,6 +19,7 @@ package graph
 import (
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
+	timage "github.com/gomlx/gomlx/types/tensor/image"
 	"github.com/gomlx/gomlx/xla"
 )
 
@@ -36,31 +37,35 @@ type ConvolutionBuilder struct {
 	padSame                           bool
 	inputDilation, filterDilation     []int
 	filterGroupCount, batchGroupCount int
-	axes                              ConvolveAxesConfig
+
+	channelsAxisConfig timage.ChannelsAxisConfig
+	axes               ConvolveAxesConfig
 }
 
 // Convolve prepares a convolution on x with the given kernel for arbitrary
 // number of spatial dimensions (1D, 2D, 3D, etc.).
 //
-// It is very flexible and to ease setting its parameters it returns a
-// ConvolutionBuilder for configuration. Once it is set up
-// call `ConvolutionBuilder.Done` and it will return the convolved
-// x. Browse through ConvolutionBuilder to see the capabilities, and the defaults.
+// It returns a ConvolutionBuilder object that can be further configured. Once the
+// configuration is finished, call `ConvolutionBuilder.Done` and it will return
+// the convolved x. Browse through ConvolutionBuilder to see its capabilities
+// and defaults.
 //
 // The shape of x should be `[batch, <spatial_dimensions...>, input_channels]` if
-// configured with `ConvolutionBuilder.ChannelsLast()`, the default. If one
-// sets `ConvolutionBuilder.ChannelsFirst()`, the shape should be
+// configured with `ConvolutionBuilder.ChannelsAxis(timage.ChannelsLast)`, the default.
+// If one sets `ConvolutionBuilder.ChannelsAxis(timage.ChannelsFirst)`, the shape should be
 // `[batch, input_channels, <spatial_dimensions...>]` instead.
 //
+// Note: `timage` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
+//
 // The shape of kernel should be `[<spatial_dimensions...>, input_channels, output_channels]` if
-// configured with `ConvolutionBuilder.ChannelsLast()`, the default. If one
-// sets `ConvolutionBuilder.ChannelsFirst()`, the shape should be
+// configured with `ConvolutionBuilder.ChannelsAxis(timage.ChannelsLast)`, the default. If one
+// sets `ConvolutionBuilder.ChannelsAxis(timage.ChannelsFirst)`, the shape should be
 // `[input_channels, <spatial_dimensions...>, output_channels]` instead.
 //
 // Notice x and kernel must have the same rank.
 //
-// We follow the Keras convention of calling the depth/feature/channels dimension
-// **channels** and likewise we use **kernel** instead of filters (but they mean the same).
+// We follow the Keras convention of calling the "depth" or "feature" or "channels" dimension
+// "channels". Likewise, we use "kernel" instead of "filters" -- but they mean the same.
 func Convolve(x, kernel *Node) *ConvolutionBuilder {
 	conv := &ConvolutionBuilder{
 		graph:            validateGraphFromInputs(x, kernel),
@@ -78,7 +83,7 @@ func Convolve(x, kernel *Node) *ConvolutionBuilder {
 		conv.graph.SetErrorf("Input x (rank %d) must have same rank as the kernel (rank %d) -- x has a batch dimension, "+
 			"and kernel has an output_channels dimension", x.Rank(), kernel.Rank())
 	}
-	return conv.ChannelsAfter().NoPadding()
+	return conv.ChannelsAxis(timage.ChannelsLast).NoPadding()
 }
 
 // gatherSlice returns a slice of int values by gathering values from the params slices indexed by indices.
@@ -91,49 +96,47 @@ func gatherSlice(indices, params []int) (slice []int) {
 	return
 }
 
-// ChannelsFirst specify the order of the dimensions for x and kernel.
-// The default is ChannelsAfter, and for more fine control see AxesConfig.
+// ChannelsAxis configures the axis for the channels (aka. "depth" or "features") dimension. The default is
+// `timage.ChannelsLast`, meaning the "channels" dimension comes last.
 //
-// If this is set x should be shaped `[batch, channels, <spatial_dimensions...>]`, and
-// kernel should be shaped `[channels, <spatial_dimensions...>, output_channels]`.
-func (conv *ConvolutionBuilder) ChannelsFirst() *ConvolutionBuilder {
-	conv.axes.InputBatch = 0
-	conv.axes.InputChannel = 1
-	conv.axes.InputSpatial = slices.IotaSlice(2, conv.numSpatialDims)
-
-	conv.axes.KernelInputChannel = 0
-	conv.axes.KernelSpatial = slices.IotaSlice(1, conv.numSpatialDims)
-	conv.axes.KernelOutputChannel = conv.numSpatialDims + 1
-
-	conv.axes.OutputBatch = 0
-	conv.axes.OutputChannel = 1
-	conv.axes.OutputSpatial = slices.IotaSlice(2, conv.numSpatialDims)
-	return conv
-}
-
-// ChannelsAfter specify the order of the dimensions for x and kernel.
-// This is the default. For more fine control see AxesConfig.
+// Note: `timage` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
 //
-// If this is set x should be shaped `[batch, <spatial_dimensions...>, channels]`, and
-// kernel should be shaped `[<spatial_dimensions...>, channels, output_channels]`.
-func (conv *ConvolutionBuilder) ChannelsAfter() *ConvolutionBuilder {
+// For more fine-control, see AxesConfig.
+//
+// It returns the modified Config object, so calls can be cascaded.
+func (conv *ConvolutionBuilder) ChannelsAxis(channelsAxisConfig timage.ChannelsAxisConfig) *ConvolutionBuilder {
+	conv.channelsAxisConfig = channelsAxisConfig
 	conv.axes.InputBatch = 0
-	conv.axes.InputSpatial = slices.IotaSlice(1, conv.numSpatialDims)
-	conv.axes.InputChannel = conv.numSpatialDims + 1
+	conv.axes.InputChannel = timage.GetChannelsAxis(conv.x, channelsAxisConfig)
+	conv.axes.InputSpatial = timage.GetSpatialAxes(conv.x, channelsAxisConfig)
 
-	conv.axes.KernelInputChannel = conv.numSpatialDims
-	conv.axes.KernelOutputChannel = conv.numSpatialDims + 1
-	conv.axes.KernelSpatial = slices.IotaSlice(0, conv.numSpatialDims)
+	switch channelsAxisConfig {
+	case timage.ChannelsFirst:
+		conv.axes.KernelInputChannel = 0
+		conv.axes.KernelSpatial = slices.IotaSlice(1, conv.numSpatialDims)
+		conv.axes.KernelOutputChannel = conv.numSpatialDims + 1
 
-	conv.axes.OutputBatch = 0
-	conv.axes.OutputSpatial = slices.IotaSlice(1, conv.numSpatialDims)
-	conv.axes.OutputChannel = conv.numSpatialDims + 1
+		conv.axes.OutputBatch = 0
+		conv.axes.OutputChannel = 1
+		conv.axes.OutputSpatial = slices.IotaSlice(2, conv.numSpatialDims)
+
+	case timage.ChannelsLast:
+		conv.axes.KernelInputChannel = conv.numSpatialDims
+		conv.axes.KernelOutputChannel = conv.numSpatialDims + 1
+		conv.axes.KernelSpatial = slices.IotaSlice(0, conv.numSpatialDims)
+
+		conv.axes.OutputBatch = 0
+		conv.axes.OutputSpatial = slices.IotaSlice(1, conv.numSpatialDims)
+		conv.axes.OutputChannel = conv.numSpatialDims + 1
+	}
 	return conv
 }
 
 // AxesConfig specify the exact configuration of the axes on the input (x/input and kernel) and output of
 // the Convolve operation. This is advanced (and may not be supported in every backend), but it's powerful.
-// Consider using ChannelsAfter or ChannelsFirst instead. The default is ChannelsAfter.
+// Consider using `ConvolutionBuilder.ChannelsAxis` instead.
+//
+// The default is `ChannelsAxis(timage.ChannelsLast)`.
 func (conv *ConvolutionBuilder) AxesConfig(axes ConvolveAxesConfig) *ConvolutionBuilder {
 	conv.axes = axes
 	return conv
@@ -142,7 +145,7 @@ func (conv *ConvolutionBuilder) AxesConfig(axes ConvolveAxesConfig) *Convolution
 // Strides sets the strides of the convolution. It sets the same value for every dimension.
 // The default is 1.
 //
-// The stride is how many steps to move after a convolution. A value of 2 will half the input
+// The stride is how many steps to move after a convolution. A value of 2 will halve the input
 // size, since a convolution will be done at every other position, and so on. It can be defined
 // separately per dimension.
 //
@@ -220,10 +223,11 @@ func (conv *ConvolutionBuilder) PaddingPerDim(paddings [][2]int) *ConvolutionBui
 	return conv
 }
 
-// Dilations sets the dilations of the convolution. It sets the same value for every dimension.
+// Dilations sets the dilations of the convolution: the same value is used for every dimension.
+//
 // The default is 1.
 //
-// Specifies the kernel up-sampling rate. In the literature, the same parameter
+// It specifies the kernel up-sampling rate. In the literature, the same parameter
 // is sometimes called input stride or dilation. The effective kernel size used for the convolution
 // will be `kernel_shape + (kernel_shape - 1) * (dilation - 1)`, obtained by inserting (dilation-1) zeros
 // between consecutive elements of the original filter in the spatial dimension.
@@ -240,7 +244,7 @@ func (conv *ConvolutionBuilder) Dilations(dilation int) *ConvolutionBuilder {
 // DilationPerDim sets the kernel dilations for each spatial dimension of the convolution.
 // The default is 1 for every dimension.
 //
-// Specifies the kernel up-sampling rate. In the literature, the same parameter
+// It specifies the kernel up-sampling rate. In the literature, the same parameter
 // is sometimes called input stride or dilation. The effective kernel size used for the convolution
 // will be `kernel_shape + (kernel_shape - 1) * (dilation - 1)`, obtained by inserting (dilation-1) zeros
 // between consecutive elements of the original filter in the spatial dimension.
