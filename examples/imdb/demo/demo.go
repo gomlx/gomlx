@@ -318,21 +318,21 @@ func Conv1DGraph(ctx *context.Context, embed, mask *Node) *Node {
 		ctx := ctx.In("conv1")
 		embed = Activation(embed)
 		embed = layers.Dropout(ctx, embed, ConstAsDType(g, DType, *flagDropoutRate))
-		embed = layers.Convolution(ctx, embed).ChannelsAfter().KernelSize(7).Filters(*flagTokenEmbeddingSize).Strides(3).Done()
+		embed = layers.Convolution(ctx, embed).KernelSize(7).Filters(*flagTokenEmbeddingSize).Strides(3).Done()
 		AssertNoError(g.Error())
 		embed = Normalize(ctx, embed)
 	}
 	{
 		ctx := ctx.In("conv2")
 		embed = Activation(embed)
-		embed = layers.Convolution(ctx, embed).ChannelsAfter().KernelSize(7).Filters(*flagTokenEmbeddingSize).Strides(3).Done()
+		embed = layers.Convolution(ctx, embed).KernelSize(7).Filters(*flagTokenEmbeddingSize).Strides(3).Done()
 		AssertNoError(g.Error())
 		embed = Normalize(ctx, embed)
 	}
 	return embed
 }
 
-// TransformerGraph is the part of the model that takes the word/token embeddings to a tranformed
+// TransformerGraph is the part of the model that takes the word/token embeddings to a transformed
 // embedding through attention ready to be pooled and read out.
 func TransformerGraph(ctx *context.Context, tokens, embed, mask *Node) *Node {
 	var newEmbed *Node
