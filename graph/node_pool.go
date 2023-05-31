@@ -19,6 +19,7 @@ package graph
 import (
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
+	timage "github.com/gomlx/gomlx/types/tensor/image"
 	"github.com/gomlx/gomlx/xla"
 )
 
@@ -32,6 +33,7 @@ type PoolBuilder struct {
 	x                    *Node
 	reductionType        xla.NodeType
 	numSpatialDims       int
+	channelsAxisConfig   timage.ChannelsAxisConfig
 	spatialAxes          []int // Indices of spatial axes.
 	channelsAxis         int
 	windowSizes, strides []int
@@ -52,16 +54,18 @@ type PoolBuilder struct {
 // The window sizes must be set with PoolBuilder.Window or PoolBuilder.WindowPerDim.
 //
 // The shape of x should be `[batch, <spatial_dimensions...>, input_channels]` if
-// configured with `PoolBuilder.ChannelsLast()`, the default. If one
-// sets `PoolBuilder.ChannelsFirst()`, the shape should be
+// configured with `PoolBuilder.ChannelsAxis(timage.ChannelsLast)`, the default. If one
+// sets `PoolBuilder.ChannelsAxis(timage.ChannelsFirst)`, the shape should be
 // `[batch, input_channels, <spatial_dimensions...>]` instead.
 //
-// The shape of kernel should be `[<spatial_dimensions...>, input_channels, output_channels]` if
-// configured with `PoolBuilder.ChannelsLast()`, the default. If one
-// sets `PoolBuilder.ChannelsFirst()`, the shape should be
-// `[input_channels, <spatial_dimensions...>, output_channels]` instead.
-//
 // The "channels" axis is also known as depth or feature axis.
+//
+// Note: `timage` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
+//
+// The shape of kernel should be `[<spatial_dimensions...>, input_channels, output_channels]` if
+// configured with `PoolBuilder.ChannelsAxis(timage.ChannelsLast)`, the default. If one
+// sets `PoolBuilder.ChannelsAxis(timage.Channels)`, the shape should be
+// `[input_channels, <spatial_dimensions...>, output_channels]` instead.
 func MaxPool(x *Node) *PoolBuilder {
 	return makePoolBuilder(x, xla.ReduceMaxNode)
 }
@@ -78,16 +82,18 @@ func MaxPool(x *Node) *PoolBuilder {
 // The window sizes must be set with PoolBuilder.Window or PoolBuilder.WindowPerDim.
 //
 // The shape of x should be `[batch, <spatial_dimensions...>, input_channels]` if
-// configured with `PoolBuilder.ChannelsLast()`, the default. If one
-// sets `PoolBuilder.ChannelsFirst()`, the shape should be
+// configured with `PoolBuilder.ChannelsAxis(timage.ChannelsLast)`, the default. If one
+// sets `PoolBuilder.ChannelsAxis(timage.ChannelsFirst)`, the shape should be
 // `[batch, input_channels, <spatial_dimensions...>]` instead.
 //
-// The shape of kernel should be `[<spatial_dimensions...>, input_channels, output_channels]` if
-// configured with `PoolBuilder.ChannelsLast()`, the default. If one
-// sets `PoolBuilder.ChannelsFirst()`, the shape should be
-// `[input_channels, <spatial_dimensions...>, output_channels]` instead.
-//
 // The "channels" axis is also known as depth or feature axis.
+//
+// Note: `timage` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
+//
+// The shape of kernel should be `[<spatial_dimensions...>, input_channels, output_channels]` if
+// configured with `PoolBuilder.ChannelsAxis(timage.ChannelsLast)`, the default. If one
+// sets `PoolBuilder.ChannelsAxis(timage.Channels)`, the shape should be
+// `[input_channels, <spatial_dimensions...>, output_channels]` instead.
 func SumPool(x *Node) *PoolBuilder {
 	return makePoolBuilder(x, xla.ReduceSumNode)
 }
@@ -104,16 +110,18 @@ func SumPool(x *Node) *PoolBuilder {
 // The window sizes must be set with PoolBuilder.Window or PoolBuilder.WindowPerDim.
 //
 // The shape of x should be `[batch, <spatial_dimensions...>, input_channels]` if
-// configured with `PoolBuilder.ChannelsLast()`, the default. If one
-// sets `PoolBuilder.ChannelsFirst()`, the shape should be
+// configured with `PoolBuilder.ChannelsAxis(timage.ChannelsLast)`, the default. If one
+// sets `PoolBuilder.ChannelsAxis(timage.ChannelsFirst)`, the shape should be
 // `[batch, input_channels, <spatial_dimensions...>]` instead.
 //
-// The shape of kernel should be `[<spatial_dimensions...>, input_channels, output_channels]` if
-// configured with `PoolBuilder.ChannelsLast()`, the default. If one
-// sets `PoolBuilder.ChannelsFirst()`, the shape should be
-// `[input_channels, <spatial_dimensions...>, output_channels]` instead.
-//
 // The "channels" axis is also known as depth or feature axis.
+//
+// Note: `timage` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
+//
+// The shape of kernel should be `[<spatial_dimensions...>, input_channels, output_channels]` if
+// configured with `PoolBuilder.ChannelsAxis(timage.ChannelsLast)`, the default. If one
+// sets `PoolBuilder.ChannelsAxis(timage.Channels)`, the shape should be
+// `[input_channels, <spatial_dimensions...>, output_channels]` instead.
 func MeanPool(x *Node) *PoolBuilder {
 	pool := makePoolBuilder(x, xla.ReduceSumNode)
 	pool.isMean = true
@@ -135,32 +143,19 @@ func makePoolBuilder(x *Node, reductionType xla.NodeType) *PoolBuilder {
 		pool.graph.SetErrorf("Input x must have rank >= 3, shaped by default as [batch, <spatial_dimensions...>, channels] (alternatively channels come first), "+
 			"but x rank is %d", x.Rank())
 	}
-	return pool.ChannelsAfter().NoPadding()
+	return pool.ChannelsAxis(timage.ChannelsLast).NoPadding()
 }
 
-// ChannelsFirst specify the order of the axes for x.
-// The default is ChannelsAfter.
+// ChannelsAxis configures the axis for the channels (aka. "depth" or "features") dimension. The default is
+// `timage.ChannelsLast`, meaning the "channels" dimension comes last.
 //
-// If this is set x should be shaped `[batch, channels, <spatial_dimensions...>]`.
-func (pool *PoolBuilder) ChannelsFirst() *PoolBuilder {
-	if !pool.graph.Ok() {
-		return pool
-	}
-	pool.spatialAxes = slices.IotaSlice(2, pool.numSpatialDims)
-	pool.channelsAxis = 1
-	return pool
-}
-
-// ChannelsAfter specify the order of the axes for x and kernel.
-// This is the default.
+// Note: `timage` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
 //
-// If this is set x should be shaped `[batch, <spatial_dimensions...>, channels]`.
-func (pool *PoolBuilder) ChannelsAfter() *PoolBuilder {
-	if !pool.graph.Ok() {
-		return pool
-	}
-	pool.spatialAxes = slices.IotaSlice(1, pool.numSpatialDims)
-	pool.channelsAxis = pool.x.Rank() - 1 // Last axis.
+// It returns the modified Config object, so calls can be cascaded.
+func (pool *PoolBuilder) ChannelsAxis(channelsAxisConfig timage.ChannelsAxisConfig) *PoolBuilder {
+	pool.channelsAxisConfig = channelsAxisConfig
+	pool.channelsAxis = timage.GetChannelsAxis(pool.x, channelsAxisConfig)
+	pool.spatialAxes = timage.GetSpatialAxes(pool.x, channelsAxisConfig)
 	return pool
 }
 
