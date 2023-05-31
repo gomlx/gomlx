@@ -6,190 +6,372 @@ import (
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
+	timage "github.com/gomlx/gomlx/types/tensor/image"
 	"github.com/pkg/errors"
 	"os"
 	"path"
 )
 
-// ModelGraph implements the pre-trained inception model.
+// BuildGraph for InceptionV3 model.
 //
-// Before calling this, call DownloadAndUnpackWeights to make sure the weights are there.
+// For a model with pre-trained weights, call Config.PreTrained.
+//
+// It returns a Config object that can be further configured.
+// Once the configuration is finished, call `Done` and it will return the embedding
+// (or classification) of the given image.
 //
 // Parameters:
 //   - ctx: context.Context where variables are created and loaded. Variables
 //     will be re-used if they were already created before in the current scope.
-//     That means one can call ModelGraph more than once, and have the same
-//     model be used for more than one input -- for instance for 2-tower models.
+//     That means one can call BuildGraph more than once, and have the same
+//     model be used for more than one input -- for instance, for 2-tower models.
 //     To instantiate more than one model with different weights, just use
-//     the context in different scope.
-//   - baseDir: Directory where the weights for the model were downloaded and unpacked.
-//     Same value passed to DownloadAndUnpackWeights.
-func ModelGraph(ctx *context.Context, baseDir string, image *Node) *Node {
-	// conv2DWithBatchNorm(ctx, kw, img_input, 32, 3, 3, strides=(2, 2), padding="valid"):
-	kw := &kerasWeights{
-		baseDir:      data.ReplaceTildeInDir(baseDir),
-		channelsAxis: image.Rank() - 1, // Only supported value for now (`ChannelsAfter` configuration).
+//     the context in a different scope.
+//   - Image: image tensor (`*Node`) on which to apply the model. There must be
+//     3 channels, and they must be scaled from -1.0 to 1.0 -- see PreprocessImage
+//     to scale image accordingly if needed. If using ClassificationTop(true),
+//     the images must be of size 299x299.
+//
+// The original model has weights in `shapes.F32`. If the image has
+// a different `DType`, it will try to convert the weights and work the model
+// fully on the image's `DType`. This hasn't been extensively tested, so no
+// guarantees of quality.
+//
+// The implementation follows closely the definition in
+// https://github.com/keras-team/keras/blob/v2.12.0/keras/applications/inception_v3.py
+func BuildGraph(ctx *context.Context, image *Node) *Config {
+	cfg := &Config{
+		ctx:                ctx,
+		image:              image,
+		trainableVariables: true,
+	}
+	cfg.ChannelsAxis(timage.ChannelsLast)
+	return cfg
+}
+
+// Config for instantiating an InceptionV3 model.
+// After the configuration is set, call Done, and it will build the InceptionV3
+// graph with the loaded variables.
+//
+// See Build to construct a Config object and a usage example.
+type Config struct {
+	ctx     *context.Context
+	image   *Node
+	baseDir string
+
+	channelsAxisConfig timage.ChannelsAxisConfig
+	channelsAxis       int
+	spatialAxes        []int
+	trainableVariables bool
+
+	includeTop bool
+	pooling    Pooling
+
+	conv2dCount, batchNormCount int
+}
+
+// PreTrained configures the graph to load the pre-trained weights.
+// It takes as an argument `baseDir`, the directory where the weights have been
+// downloaded with DownloadAndUnpackWeights -- use the same value used there.
+//
+// The default is not to use the pre-trained weights, which will build an untrained InceptionV3 graph.
+//
+// It returns the modified Config object, so calls can be cascaded.
+func (cfg *Config) PreTrained(baseDir string) *Config {
+	cfg.baseDir = data.ReplaceTildeInDir(baseDir)
+	return cfg
+}
+
+// Trainable configures whether the variables created will be set as trainable or not -- see `context.Variable`.
+//
+// If using pre-trained weights as frozen values, set this to false -- and considering using `StopGradient()` on the
+// value returned by Done, to prevent any gradients from even propagating.
+// It's an error to configure this to false if not using pre-trained weights (see PreTrained).
+//
+// The default is true, which allows for fine-tuning of the InceptionV3 model.
+//
+// It returns the modified Config object, so calls can be cascaded.
+func (cfg *Config) Trainable(trainable bool) *Config {
+	cfg.trainableVariables = trainable
+	return cfg
+}
+
+// ChannelsAxis configures the axis for the channels (aka. "depth" or "features") dimension.
+// The default is `timage.ChannelsLast`, meaning the "channels" dimension comes last.
+//
+// Note: `timage` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
+//
+// It returns the modified Config object, so calls can be cascaded.
+func (cfg *Config) ChannelsAxis(channelsAxisConfig timage.ChannelsAxisConfig) *Config {
+	cfg.channelsAxisConfig = channelsAxisConfig
+	cfg.channelsAxis = timage.GetChannelsAxis(cfg.image, channelsAxisConfig)
+	cfg.spatialAxes = timage.GetSpatialAxes(cfg.image, channelsAxisConfig)
+	return cfg
+}
+
+// ClassificationTop configures whether to use the very top classification
+// layer at the top of the model.
+//
+// Typically, if using only the embeddings, set this to false.
+// If actually classifying Inception images, you can set this to true, and it will
+// include a last linear layer, and it will return the logits layer for each of the
+// Inception 1000 classes.
+//
+// This is only useful if PreTrained weights are configured.
+//
+// It returns the modified Config object, so calls can be cascaded.
+func (cfg *Config) ClassificationTop(useTop bool) *Config {
+	cfg.includeTop = useTop
+	return cfg
+}
+
+// Pooling to be used at the top of the model
+type Pooling int
+
+//go:generate stringer -type=Pooling
+
+const (
+	NoPooling Pooling = iota
+	MaxPooling
+	MeanPooling
+)
+
+// SetPooling configures whether to use a MaxPool at the very top of the model.
+//
+// If set to NoPooling, the default, it returns a 4D tensor, with 2048 channels
+// (see ChannelsAxis for order of axis).
+// If set to MaxPooling or MeanPooling, it will pool the last spatial dimensions, either using Max or Mean.
+//
+// This is only used if not using ClassificationTop.
+//
+// It returns the modified Config object, so calls can be cascaded.
+func (cfg *Config) SetPooling(pooling Pooling) *Config {
+	cfg.pooling = pooling
+	return cfg
+}
+
+// Done builds the graph based on the configuration set.
+func (cfg *Config) Done() (output *Node) {
+	ctx := cfg.ctx
+	x := cfg.image
+
+	// Sanity checking:
+	g := x.Graph()
+	output = g.InvalidNode()
+	if !g.Ok() {
+		return
+	}
+	if cfg.baseDir == "" && !cfg.trainableVariables {
+		g.SetErrorf("inceptionv3.BuildGraph(): cannot have Trainable(false) if not using pre-trained weights")
+		return
+	}
+	if x.Rank() != 4 {
+		g.SetErrorf("inceptionv3.BuildGraph(): input image tensor must be of rank 3: e.g.: [batch_size, ..., channels], got shape %s instead", x.Shape())
+		return
+	}
+	if x.DType() != shapes.F32 {
+		g.SetErrorf("inceptionv3.BuildGraph(): only Float32 supported at this time, got dtype %s instead", x.DType())
+		return
+	}
+	if x.Shape().Dimensions[cfg.channelsAxis] != 3 {
+		g.SetErrorf("inceptionv3.BuildGraph(): image must have 3 channels, scaled from -1.0 to 1.0, got shape %s instead", x.Shape())
+		return
+	}
+	if cfg.includeTop {
+		if cfg.baseDir == "" {
+			g.SetErrorf("inceptionv3.BuildGraph(): classification top is only available is using pre-trained weights, see PreTrained method")
+			return
+		}
+		spatialAxes := timage.GetSpatialAxes(x, cfg.channelsAxisConfig)
+		for _, spatialAxis := range spatialAxes {
+			if x.Shape().Dimensions[spatialAxis] != 299 {
+				g.SetErrorf("inceptionv3.BuildGraph(): image dimensions must be 299x299 if using classification top,  got shape %s instead", x.Shape())
+				return
+			}
+		}
 	}
 
-	// The implementation follows closely the definition in
-	// https://github.com/keras-team/keras/blob/v2.12.0/keras/applications/inception_v3.py
-	x := image
-	x = conv2DWithBatchNorm(ctx, kw, x, 32, 3, 3, []int{2, 2}, false)
-	x = conv2DWithBatchNorm(ctx, kw, x, 32, 3, 3, nil, false)
-	x = conv2DWithBatchNorm(ctx, kw, x, 64, 3, 3, nil, true)
-	x = MaxPool(x).ChannelsAfter().Window(3).Strides(2).NoPadding().Done()
+	// Build model:
+	x = cfg.conv2DWithBatchNorm(ctx, x, 32, 3, 3, []int{2, 2}, false)
+	x = cfg.conv2DWithBatchNorm(ctx, x, 32, 3, 3, nil, false)
+	x = cfg.conv2DWithBatchNorm(ctx, x, 64, 3, 3, nil, true)
+	x = MaxPool(x).ChannelsAxis(cfg.channelsAxisConfig).Window(3).Strides(2).NoPadding().Done()
 
-	x = conv2DWithBatchNorm(ctx, kw, x, 80, 1, 1, nil, false)
-	x = conv2DWithBatchNorm(ctx, kw, x, 192, 3, 3, nil, false)
-	x = MaxPool(x).ChannelsAfter().Window(3).Strides(2).NoPadding().Done()
+	x = cfg.conv2DWithBatchNorm(ctx, x, 80, 1, 1, nil, false)
+	x = cfg.conv2DWithBatchNorm(ctx, x, 192, 3, 3, nil, false)
+	x = MaxPool(x).ChannelsAxis(cfg.channelsAxisConfig).Window(3).Strides(2).NoPadding().Done()
 
 	// Mixed sizes convolutions 0: 35x35x256 or 7x7x256 (depending on image size)
-	branch1x1 := conv2DWithBatchNorm(ctx, kw, x, 64, 1, 1, nil, true)
+	branch1x1 := cfg.conv2DWithBatchNorm(ctx, x, 64, 1, 1, nil, true)
 	_ = branch1x1
 
-	branch5x5 := conv2DWithBatchNorm(ctx, kw, x, 48, 1, 1, nil, true)
-	branch5x5 = conv2DWithBatchNorm(ctx, kw, branch5x5, 64, 5, 5, nil, true)
+	branch5x5 := cfg.conv2DWithBatchNorm(ctx, x, 48, 1, 1, nil, true)
+	branch5x5 = cfg.conv2DWithBatchNorm(ctx, branch5x5, 64, 5, 5, nil, true)
 
-	branch3x3Dbl := conv2DWithBatchNorm(ctx, kw, x, 64, 1, 1, nil, true)
-	branch3x3Dbl = conv2DWithBatchNorm(ctx, kw, branch3x3Dbl, 96, 3, 3, nil, true)
-	branch3x3Dbl = conv2DWithBatchNorm(ctx, kw, branch3x3Dbl, 96, 3, 3, nil, true)
+	branch3x3Dbl := cfg.conv2DWithBatchNorm(ctx, x, 64, 1, 1, nil, true)
+	branch3x3Dbl = cfg.conv2DWithBatchNorm(ctx, branch3x3Dbl, 96, 3, 3, nil, true)
+	branch3x3Dbl = cfg.conv2DWithBatchNorm(ctx, branch3x3Dbl, 96, 3, 3, nil, true)
 
-	branchPool := MeanPool(x).Window(3).Strides(1).PadSame().Done()
-	branchPool = conv2DWithBatchNorm(ctx, kw, branchPool, 32, 1, 1, nil, true)
-	x = Concatenate([]*Node{branch1x1, branch5x5, branch3x3Dbl, branchPool}, kw.channelsAxis)
+	branchPool := MeanPool(x).ChannelsAxis(cfg.channelsAxisConfig).Window(3).Strides(1).PadSame().Done()
+	branchPool = cfg.conv2DWithBatchNorm(ctx, branchPool, 32, 1, 1, nil, true)
+	x = Concatenate([]*Node{branch1x1, branch5x5, branch3x3Dbl, branchPool}, cfg.channelsAxis)
 
 	// Mixed convolutions 1: 35x35x288 or 7x7x288
-	branch1x1 = conv2DWithBatchNorm(ctx, kw, x, 64, 1, 1, nil, true)
+	branch1x1 = cfg.conv2DWithBatchNorm(ctx, x, 64, 1, 1, nil, true)
 
-	branch5x5 = conv2DWithBatchNorm(ctx, kw, x, 48, 1, 1, nil, true)
-	branch5x5 = conv2DWithBatchNorm(ctx, kw, branch5x5, 64, 5, 5, nil, true)
+	branch5x5 = cfg.conv2DWithBatchNorm(ctx, x, 48, 1, 1, nil, true)
+	branch5x5 = cfg.conv2DWithBatchNorm(ctx, branch5x5, 64, 5, 5, nil, true)
 
-	branch3x3Dbl = conv2DWithBatchNorm(ctx, kw, x, 64, 1, 1, nil, true)
-	branch3x3Dbl = conv2DWithBatchNorm(ctx, kw, branch3x3Dbl, 96, 3, 3, nil, true)
-	branch3x3Dbl = conv2DWithBatchNorm(ctx, kw, branch3x3Dbl, 96, 3, 3, nil, true)
+	branch3x3Dbl = cfg.conv2DWithBatchNorm(ctx, x, 64, 1, 1, nil, true)
+	branch3x3Dbl = cfg.conv2DWithBatchNorm(ctx, branch3x3Dbl, 96, 3, 3, nil, true)
+	branch3x3Dbl = cfg.conv2DWithBatchNorm(ctx, branch3x3Dbl, 96, 3, 3, nil, true)
 
-	branchPool = MeanPool(x).Window(3).Strides(1).PadSame().Done()
-	branchPool = conv2DWithBatchNorm(ctx, kw, branchPool, 64, 1, 1, nil, true)
-	x = Concatenate([]*Node{branch1x1, branch5x5, branch3x3Dbl, branchPool}, kw.channelsAxis)
+	branchPool = MeanPool(x).ChannelsAxis(cfg.channelsAxisConfig).Window(3).Strides(1).PadSame().Done()
+	branchPool = cfg.conv2DWithBatchNorm(ctx, branchPool, 64, 1, 1, nil, true)
+	x = Concatenate([]*Node{branch1x1, branch5x5, branch3x3Dbl, branchPool}, cfg.channelsAxis)
 
 	// Mixed convolutions 2: 35x35x288 or 7x7x288
-	branch1x1 = conv2DWithBatchNorm(ctx, kw, x, 64, 1, 1, nil, true)
+	branch1x1 = cfg.conv2DWithBatchNorm(ctx, x, 64, 1, 1, nil, true)
 
-	branch5x5 = conv2DWithBatchNorm(ctx, kw, x, 48, 1, 1, nil, true)
-	branch5x5 = conv2DWithBatchNorm(ctx, kw, branch5x5, 64, 5, 5, nil, true)
+	branch5x5 = cfg.conv2DWithBatchNorm(ctx, x, 48, 1, 1, nil, true)
+	branch5x5 = cfg.conv2DWithBatchNorm(ctx, branch5x5, 64, 5, 5, nil, true)
 
-	branch3x3Dbl = conv2DWithBatchNorm(ctx, kw, x, 64, 1, 1, nil, true)
-	branch3x3Dbl = conv2DWithBatchNorm(ctx, kw, branch3x3Dbl, 96, 3, 3, nil, true)
-	branch3x3Dbl = conv2DWithBatchNorm(ctx, kw, branch3x3Dbl, 96, 3, 3, nil, true)
+	branch3x3Dbl = cfg.conv2DWithBatchNorm(ctx, x, 64, 1, 1, nil, true)
+	branch3x3Dbl = cfg.conv2DWithBatchNorm(ctx, branch3x3Dbl, 96, 3, 3, nil, true)
+	branch3x3Dbl = cfg.conv2DWithBatchNorm(ctx, branch3x3Dbl, 96, 3, 3, nil, true)
 
-	branchPool = MeanPool(x).Window(3).Strides(1).PadSame().Done()
-	branchPool = conv2DWithBatchNorm(ctx, kw, branchPool, 64, 1, 1, nil, true)
-	x = Concatenate([]*Node{branch1x1, branch5x5, branch3x3Dbl, branchPool}, kw.channelsAxis)
+	branchPool = MeanPool(x).ChannelsAxis(cfg.channelsAxisConfig).Window(3).Strides(1).PadSame().Done()
+	branchPool = cfg.conv2DWithBatchNorm(ctx, branchPool, 64, 1, 1, nil, true)
+	x = Concatenate([]*Node{branch1x1, branch5x5, branch3x3Dbl, branchPool}, cfg.channelsAxis)
 
 	// Mixed convolutions 3:
-	branch3x3 := conv2DWithBatchNorm(ctx, kw, x, 384, 3, 3, []int{2, 2}, false)
+	branch3x3 := cfg.conv2DWithBatchNorm(ctx, x, 384, 3, 3, []int{2, 2}, false)
 
-	branch3x3Dbl = conv2DWithBatchNorm(ctx, kw, x, 64, 1, 1, nil, true)
-	branch3x3Dbl = conv2DWithBatchNorm(ctx, kw, branch3x3Dbl, 96, 3, 3, nil, true)
-	branch3x3Dbl = conv2DWithBatchNorm(ctx, kw, branch3x3Dbl, 96, 3, 3, []int{2, 2}, false)
+	branch3x3Dbl = cfg.conv2DWithBatchNorm(ctx, x, 64, 1, 1, nil, true)
+	branch3x3Dbl = cfg.conv2DWithBatchNorm(ctx, branch3x3Dbl, 96, 3, 3, nil, true)
+	branch3x3Dbl = cfg.conv2DWithBatchNorm(ctx, branch3x3Dbl, 96, 3, 3, []int{2, 2}, false)
 
-	branchPool = MaxPool(x).ChannelsAfter().Window(3).Strides(2).NoPadding().Done()
-	x = Concatenate([]*Node{branch3x3, branch3x3Dbl, branchPool}, kw.channelsAxis)
+	branchPool = MaxPool(x).ChannelsAxis(cfg.channelsAxisConfig).Window(3).Strides(2).NoPadding().Done()
+	x = Concatenate([]*Node{branch3x3, branch3x3Dbl, branchPool}, cfg.channelsAxis)
 
 	// Mixed convolutions 4: 768 channels
-	branch1x1 = conv2DWithBatchNorm(ctx, kw, x, 192, 1, 1, nil, true)
+	branch1x1 = cfg.conv2DWithBatchNorm(ctx, x, 192, 1, 1, nil, true)
 
-	branch7x7 := conv2DWithBatchNorm(ctx, kw, x, 128, 1, 1, nil, true)
-	branch7x7 = conv2DWithBatchNorm(ctx, kw, branch7x7, 128, 1, 7, nil, true)
-	branch7x7 = conv2DWithBatchNorm(ctx, kw, branch7x7, 192, 7, 1, nil, true)
+	branch7x7 := cfg.conv2DWithBatchNorm(ctx, x, 128, 1, 1, nil, true)
+	branch7x7 = cfg.conv2DWithBatchNorm(ctx, branch7x7, 128, 1, 7, nil, true)
+	branch7x7 = cfg.conv2DWithBatchNorm(ctx, branch7x7, 192, 7, 1, nil, true)
 
-	branch7x7Dbl := conv2DWithBatchNorm(ctx, kw, x, 128, 1, 1, nil, true)
-	branch7x7Dbl = conv2DWithBatchNorm(ctx, kw, branch7x7Dbl, 128, 7, 1, nil, true)
-	branch7x7Dbl = conv2DWithBatchNorm(ctx, kw, branch7x7Dbl, 128, 1, 7, nil, true)
-	branch7x7Dbl = conv2DWithBatchNorm(ctx, kw, branch7x7Dbl, 128, 7, 1, nil, true)
-	branch7x7Dbl = conv2DWithBatchNorm(ctx, kw, branch7x7Dbl, 192, 1, 7, nil, true)
+	branch7x7Dbl := cfg.conv2DWithBatchNorm(ctx, x, 128, 1, 1, nil, true)
+	branch7x7Dbl = cfg.conv2DWithBatchNorm(ctx, branch7x7Dbl, 128, 7, 1, nil, true)
+	branch7x7Dbl = cfg.conv2DWithBatchNorm(ctx, branch7x7Dbl, 128, 1, 7, nil, true)
+	branch7x7Dbl = cfg.conv2DWithBatchNorm(ctx, branch7x7Dbl, 128, 7, 1, nil, true)
+	branch7x7Dbl = cfg.conv2DWithBatchNorm(ctx, branch7x7Dbl, 192, 1, 7, nil, true)
 
-	branchPool = MeanPool(x).Window(3).Strides(1).PadSame().Done()
-	branchPool = conv2DWithBatchNorm(ctx, kw, branchPool, 192, 1, 1, nil, true)
+	branchPool = MeanPool(x).ChannelsAxis(cfg.channelsAxisConfig).Window(3).Strides(1).PadSame().Done()
+	branchPool = cfg.conv2DWithBatchNorm(ctx, branchPool, 192, 1, 1, nil, true)
 
-	x = Concatenate([]*Node{branch1x1, branch7x7, branch7x7Dbl, branchPool}, kw.channelsAxis)
+	x = Concatenate([]*Node{branch1x1, branch7x7, branch7x7Dbl, branchPool}, cfg.channelsAxis)
 
 	// Mixed convolutions 5 & 6: 768 channels
 	for ii := 0; ii < 2; ii++ {
-		branch1x1 = conv2DWithBatchNorm(ctx, kw, x, 192, 1, 1, nil, true)
+		branch1x1 = cfg.conv2DWithBatchNorm(ctx, x, 192, 1, 1, nil, true)
 
-		branch7x7 = conv2DWithBatchNorm(ctx, kw, x, 160, 1, 1, nil, true)
-		branch7x7 = conv2DWithBatchNorm(ctx, kw, branch7x7, 160, 1, 7, nil, true)
-		branch7x7 = conv2DWithBatchNorm(ctx, kw, branch7x7, 192, 7, 1, nil, true)
+		branch7x7 = cfg.conv2DWithBatchNorm(ctx, x, 160, 1, 1, nil, true)
+		branch7x7 = cfg.conv2DWithBatchNorm(ctx, branch7x7, 160, 1, 7, nil, true)
+		branch7x7 = cfg.conv2DWithBatchNorm(ctx, branch7x7, 192, 7, 1, nil, true)
 
-		branch7x7Dbl = conv2DWithBatchNorm(ctx, kw, x, 160, 1, 1, nil, true)
-		branch7x7Dbl = conv2DWithBatchNorm(ctx, kw, branch7x7Dbl, 160, 7, 1, nil, true)
-		branch7x7Dbl = conv2DWithBatchNorm(ctx, kw, branch7x7Dbl, 160, 1, 7, nil, true)
-		branch7x7Dbl = conv2DWithBatchNorm(ctx, kw, branch7x7Dbl, 160, 7, 1, nil, true)
-		branch7x7Dbl = conv2DWithBatchNorm(ctx, kw, branch7x7Dbl, 192, 1, 7, nil, true)
+		branch7x7Dbl = cfg.conv2DWithBatchNorm(ctx, x, 160, 1, 1, nil, true)
+		branch7x7Dbl = cfg.conv2DWithBatchNorm(ctx, branch7x7Dbl, 160, 7, 1, nil, true)
+		branch7x7Dbl = cfg.conv2DWithBatchNorm(ctx, branch7x7Dbl, 160, 1, 7, nil, true)
+		branch7x7Dbl = cfg.conv2DWithBatchNorm(ctx, branch7x7Dbl, 160, 7, 1, nil, true)
+		branch7x7Dbl = cfg.conv2DWithBatchNorm(ctx, branch7x7Dbl, 192, 1, 7, nil, true)
 
-		branchPool = MeanPool(x).Window(3).Strides(1).PadSame().Done()
-		branchPool = conv2DWithBatchNorm(ctx, kw, branchPool, 192, 1, 1, nil, true)
-		x = Concatenate([]*Node{branch1x1, branch7x7, branch7x7Dbl, branchPool}, kw.channelsAxis)
+		branchPool = MeanPool(x).ChannelsAxis(cfg.channelsAxisConfig).Window(3).Strides(1).PadSame().Done()
+		branchPool = cfg.conv2DWithBatchNorm(ctx, branchPool, 192, 1, 1, nil, true)
+		x = Concatenate([]*Node{branch1x1, branch7x7, branch7x7Dbl, branchPool}, cfg.channelsAxis)
 	}
 
 	// Mixed convolutions 7: 768 channels
-	branch1x1 = conv2DWithBatchNorm(ctx, kw, x, 192, 1, 1, nil, true)
+	branch1x1 = cfg.conv2DWithBatchNorm(ctx, x, 192, 1, 1, nil, true)
 
-	branch7x7 = conv2DWithBatchNorm(ctx, kw, x, 192, 1, 1, nil, true)
-	branch7x7 = conv2DWithBatchNorm(ctx, kw, branch7x7, 192, 1, 7, nil, true)
-	branch7x7 = conv2DWithBatchNorm(ctx, kw, branch7x7, 192, 7, 1, nil, true)
+	branch7x7 = cfg.conv2DWithBatchNorm(ctx, x, 192, 1, 1, nil, true)
+	branch7x7 = cfg.conv2DWithBatchNorm(ctx, branch7x7, 192, 1, 7, nil, true)
+	branch7x7 = cfg.conv2DWithBatchNorm(ctx, branch7x7, 192, 7, 1, nil, true)
 
-	branch7x7Dbl = conv2DWithBatchNorm(ctx, kw, x, 192, 1, 1, nil, true)
-	branch7x7Dbl = conv2DWithBatchNorm(ctx, kw, branch7x7Dbl, 192, 7, 1, nil, true)
-	branch7x7Dbl = conv2DWithBatchNorm(ctx, kw, branch7x7Dbl, 192, 1, 7, nil, true)
-	branch7x7Dbl = conv2DWithBatchNorm(ctx, kw, branch7x7Dbl, 192, 7, 1, nil, true)
-	branch7x7Dbl = conv2DWithBatchNorm(ctx, kw, branch7x7Dbl, 192, 1, 7, nil, true)
+	branch7x7Dbl = cfg.conv2DWithBatchNorm(ctx, x, 192, 1, 1, nil, true)
+	branch7x7Dbl = cfg.conv2DWithBatchNorm(ctx, branch7x7Dbl, 192, 7, 1, nil, true)
+	branch7x7Dbl = cfg.conv2DWithBatchNorm(ctx, branch7x7Dbl, 192, 1, 7, nil, true)
+	branch7x7Dbl = cfg.conv2DWithBatchNorm(ctx, branch7x7Dbl, 192, 7, 1, nil, true)
+	branch7x7Dbl = cfg.conv2DWithBatchNorm(ctx, branch7x7Dbl, 192, 1, 7, nil, true)
 
-	branchPool = MeanPool(x).Window(3).Strides(1).PadSame().Done()
-	branchPool = conv2DWithBatchNorm(ctx, kw, branchPool, 192, 1, 1, nil, true)
-	x = Concatenate([]*Node{branch1x1, branch7x7, branch7x7Dbl, branchPool}, kw.channelsAxis)
+	branchPool = MeanPool(x).ChannelsAxis(cfg.channelsAxisConfig).Window(3).Strides(1).PadSame().Done()
+	branchPool = cfg.conv2DWithBatchNorm(ctx, branchPool, 192, 1, 1, nil, true)
+	x = Concatenate([]*Node{branch1x1, branch7x7, branch7x7Dbl, branchPool}, cfg.channelsAxis)
 
 	// Mixed convolutions 8: 768 channels
-	branch3x3 = conv2DWithBatchNorm(ctx, kw, x, 192, 1, 1, nil, true)
-	branch3x3 = conv2DWithBatchNorm(ctx, kw, branch3x3, 320, 3, 3, []int{2, 2}, false)
+	branch3x3 = cfg.conv2DWithBatchNorm(ctx, x, 192, 1, 1, nil, true)
+	branch3x3 = cfg.conv2DWithBatchNorm(ctx, branch3x3, 320, 3, 3, []int{2, 2}, false)
 
-	branch7x7x3 := conv2DWithBatchNorm(ctx, kw, x, 192, 1, 1, nil, true)
-	branch7x7x3 = conv2DWithBatchNorm(ctx, kw, branch7x7x3, 192, 1, 7, nil, true)
-	branch7x7x3 = conv2DWithBatchNorm(ctx, kw, branch7x7x3, 192, 7, 1, nil, true)
-	branch7x7x3 = conv2DWithBatchNorm(ctx, kw, branch7x7x3, 192, 3, 3, []int{2, 2}, false)
+	branch7x7x3 := cfg.conv2DWithBatchNorm(ctx, x, 192, 1, 1, nil, true)
+	branch7x7x3 = cfg.conv2DWithBatchNorm(ctx, branch7x7x3, 192, 1, 7, nil, true)
+	branch7x7x3 = cfg.conv2DWithBatchNorm(ctx, branch7x7x3, 192, 7, 1, nil, true)
+	branch7x7x3 = cfg.conv2DWithBatchNorm(ctx, branch7x7x3, 192, 3, 3, []int{2, 2}, false)
 
-	branchPool = MaxPool(x).Window(3).Strides(2).NoPadding().Done()
-	x = Concatenate([]*Node{branch3x3, branch7x7x3, branchPool}, kw.channelsAxis)
+	branchPool = MaxPool(x).ChannelsAxis(cfg.channelsAxisConfig).Window(3).Strides(2).NoPadding().Done()
+	x = Concatenate([]*Node{branch3x3, branch7x7x3, branchPool}, cfg.channelsAxis)
 
 	// Mixed convolutions 9 & 10: 2048 channels
 	for ii := 0; ii < 2; ii++ {
-		branch1x1 = conv2DWithBatchNorm(ctx, kw, x, 320, 1, 1, nil, true)
+		branch1x1 = cfg.conv2DWithBatchNorm(ctx, x, 320, 1, 1, nil, true)
 
-		branch3x3 = conv2DWithBatchNorm(ctx, kw, x, 384, 1, 1, nil, true)
-		branch3x3Branch1 := conv2DWithBatchNorm(ctx, kw, branch3x3, 384, 1, 3, nil, true)
-		branch3x3Branch2 := conv2DWithBatchNorm(ctx, kw, branch3x3, 384, 3, 1, nil, true)
-		branch3x3 = Concatenate([]*Node{branch3x3Branch1, branch3x3Branch2}, kw.channelsAxis)
+		branch3x3 = cfg.conv2DWithBatchNorm(ctx, x, 384, 1, 1, nil, true)
+		branch3x3Branch1 := cfg.conv2DWithBatchNorm(ctx, branch3x3, 384, 1, 3, nil, true)
+		branch3x3Branch2 := cfg.conv2DWithBatchNorm(ctx, branch3x3, 384, 3, 1, nil, true)
+		branch3x3 = Concatenate([]*Node{branch3x3Branch1, branch3x3Branch2}, cfg.channelsAxis)
 
-		branch3x3Dbl = conv2DWithBatchNorm(ctx, kw, x, 448, 1, 1, nil, true)
-		branch3x3Dbl = conv2DWithBatchNorm(ctx, kw, branch3x3Dbl, 384, 3, 3, nil, true)
-		branch3x3DblBranch1 := conv2DWithBatchNorm(ctx, kw, branch3x3Dbl, 384, 1, 3, nil, true)
-		branch3x3DblBranch2 := conv2DWithBatchNorm(ctx, kw, branch3x3Dbl, 384, 3, 1, nil, true)
-		branch3x3Dbl = Concatenate([]*Node{branch3x3DblBranch1, branch3x3DblBranch2}, kw.channelsAxis)
+		branch3x3Dbl = cfg.conv2DWithBatchNorm(ctx, x, 448, 1, 1, nil, true)
+		branch3x3Dbl = cfg.conv2DWithBatchNorm(ctx, branch3x3Dbl, 384, 3, 3, nil, true)
+		branch3x3DblBranch1 := cfg.conv2DWithBatchNorm(ctx, branch3x3Dbl, 384, 1, 3, nil, true)
+		branch3x3DblBranch2 := cfg.conv2DWithBatchNorm(ctx, branch3x3Dbl, 384, 3, 1, nil, true)
+		branch3x3Dbl = Concatenate([]*Node{branch3x3DblBranch1, branch3x3DblBranch2}, cfg.channelsAxis)
 
-		branchPool = MeanPool(x).Window(3).Strides(1).PadSame().Done()
-		branchPool = conv2DWithBatchNorm(ctx, kw, branchPool, 192, 1, 1, nil, true)
-		x = Concatenate([]*Node{branch1x1, branch3x3, branch3x3Dbl, branchPool}, kw.channelsAxis)
+		branchPool = MeanPool(x).ChannelsAxis(cfg.channelsAxisConfig).Window(3).Strides(1).PadSame().Done()
+		branchPool = cfg.conv2DWithBatchNorm(ctx, branchPool, 192, 1, 1, nil, true)
+		x = Concatenate([]*Node{branch1x1, branch3x3, branch3x3Dbl, branchPool}, cfg.channelsAxis)
 	}
 
-	return x
+	if cfg.includeTop {
+		// Returns the logits at the top, for the 1000 classes.
+		x = ReduceMean(x, cfg.spatialAxes...) // Global mean pooling across spatial dimensions, shape=[batch_size, 2048].
+		ctxWithWeights := cfg.readPredictionsWeights(ctx, g)
+		x = layers.DenseWithBias(ctxWithWeights, x, 1000)
+
+	} else {
+		// Embeddings
+		switch cfg.pooling {
+		case NoPooling:
+			// No-op.
+		case MaxPooling:
+			// Global pooling across spatial dimensions, shape=[batch_size, 2048].
+			x = ReduceMax(x, cfg.spatialAxes...)
+		case MeanPooling:
+			// Global pooling across spatial dimensions, shape=[batch_size, 2048].
+			x = ReduceMean(x, cfg.spatialAxes...)
+		default:
+			g.SetErrorf("inceptionv3.BuildGraph(): invalid pooling option %s", cfg.pooling)
+			return
+		}
+	}
+	output = x
+	return
 }
 
 // conv2DWithBatchNorm adds a 2D convolution, followed by batch normalization and an activation. In addition,
 // it reads the weights for the layers (convolution and batch normalization) from the downloaded `.h5` file
 // with the InceptionV3 pre-trained model.
-func conv2DWithBatchNorm(ctx *context.Context, kw *kerasWeights, x *Node, kernelFilters, kernelHeight, kernelWidth int,
+func (cfg *Config) conv2DWithBatchNorm(ctx *context.Context, x *Node, kernelFilters, kernelHeight, kernelWidth int,
 	strides []int, padding bool) (output *Node) {
 	g := x.Graph()
 	output = g.InvalidNode()
@@ -198,8 +380,8 @@ func conv2DWithBatchNorm(ctx *context.Context, kw *kerasWeights, x *Node, kernel
 	}
 
 	// 2D Convolution:
-	ctxWithWeights := kw.ReadNextConv2D(ctx, g) // Create a new context scope and read weights from `.h5` file.
-	convCfg := layers.Convolution(ctxWithWeights, x).CurrentScope().ChannelsAfter().
+	ctxWithWeights := cfg.readNextConv2D(ctx, g) // Create a new context scope and read weights from `.h5` file.
+	convCfg := layers.Convolution(ctxWithWeights, x).CurrentScope().ChannelsAxis(cfg.channelsAxisConfig).
 		Filters(kernelFilters).UseBias(false).KernelSizePerDim(kernelHeight, kernelWidth)
 	if len(strides) > 0 {
 		convCfg = convCfg.StridePerDim(strides...)
@@ -215,8 +397,8 @@ func conv2DWithBatchNorm(ctx *context.Context, kw *kerasWeights, x *Node, kernel
 	}
 
 	// Batch Normalization:
-	ctxWithWeights = kw.ReadNextBatchNormalization(ctx, g) // Create a new context scope and read weights from `.h5` file.
-	x = layers.BatchNormalization(ctxWithWeights, x, kw.channelsAxis).CurrentScope().Scale(false).Done()
+	ctxWithWeights = cfg.readNextBatchNormalization(ctx, g) // Create a new context scope and read weights from `.h5` file.
+	x = layers.BatchNormalization(ctxWithWeights, x, cfg.channelsAxis).CurrentScope().Scale(false).Done()
 	if !g.Ok() {
 		return
 	}
@@ -228,30 +410,21 @@ func conv2DWithBatchNorm(ctx *context.Context, kw *kerasWeights, x *Node, kernel
 	return
 }
 
-// kerasWeights manages the retrieval of keras weights.
-//
-// It understands and translates the naming used by keras and maps to the
-// correct unpacked tensors. It requires layers to be "read" in the exact
-// same order as they were created in Keras.
-//
-// See ReadNextConv2D, ReadNextBatchNorm
-type kerasWeights struct {
-	baseDir                     string
-	channelsAxis                int
-	conv2dCount, batchNormCount int
-}
-
-// LoadTensorToVariable loads the tensor from a file named tensorFileName, under the unpacking directory and
+// loadTensorToVariable loads the tensor from a file named tensorFileName, under the unpacking directory and
 // moves contents to a variable named `variableName`.
 //
 // Any errors are set in the graph.
-func (kw *kerasWeights) LoadTensorToVariable(ctx *context.Context, graph *Graph, tensorFileName, variableName string) {
-	//fmt.Printf("Loading %s to %s::%s\n", tensorFileName, ctx.Scope(), variableName)
+func (cfg *Config) loadTensorToVariable(ctx *context.Context, graph *Graph, tensorFileName, variableName string) {
+	if cfg.baseDir == "" {
+		// Do not use pre-trained weights.
+		return
+	}
+
 	if ctx.InspectVariable(ctx.Scope(), variableName) != nil {
 		// Assume it's already correctly loaded.
 		return
 	}
-	tensorPath := path.Join(kw.baseDir, UnpackedWeightsName, tensorFileName)
+	tensorPath := path.Join(cfg.baseDir, UnpackedWeightsName, tensorFileName)
 	f, err := os.Open(tensorPath)
 	if err != nil {
 		graph.SetError(errors.Wrapf(err, "inceptionv3.ModelGraph(): failed to read weights from %q", tensorPath))
@@ -264,73 +437,100 @@ func (kw *kerasWeights) LoadTensorToVariable(ctx *context.Context, graph *Graph,
 	}
 
 	// We don't need the value, since the layer will re-load it.
-	_ = ctx.VariableWithValue(variableName, local)
+	v := ctx.VariableWithValue(variableName, local)
+	if !cfg.trainableVariables {
+		v.Trainable = false
+	}
 }
 
-// ReadNextConv2D enters a new scope and initializes it with the pre-trained weights for the next Conv2D layer.
+// readNextConv2D enters a new scope and initializes it with the pre-trained weights for the next Conv2D layer.
 //
 // It returns the modified scope to be used in `layers.Convolution`.
-func (kw *kerasWeights) ReadNextConv2D(ctx *context.Context, graph *Graph) (ctxInScope *context.Context) {
+func (cfg *Config) readNextConv2D(ctx *context.Context, graph *Graph) (ctxInScope *context.Context) {
 	ctxInScope = ctx
 	if !graph.Ok() {
 		return
 	}
 
 	// Set scope name to something similar to the original model layer names (cosmetic only).
-	if kw.conv2dCount == 0 {
+	if cfg.conv2dCount == 0 {
 		ctxInScope = ctx.In("conv2d")
 	} else {
-		ctxInScope = ctx.In(fmt.Sprintf("conv2d_%d", kw.conv2dCount))
+		ctxInScope = ctx.In(fmt.Sprintf("conv2d_%d", cfg.conv2dCount))
 	}
-	kw.conv2dCount += 1
+	cfg.conv2dCount += 1
 
 	// h5 names start with 1 instead of 0 (!!)
-	h5Name := fmt.Sprintf("conv2d_%d/conv2d_%d/kernel:0", kw.conv2dCount, kw.conv2dCount)
-	kw.LoadTensorToVariable(ctxInScope, graph, h5Name, "weights")
+	h5Name := fmt.Sprintf("conv2d_%d/conv2d_%d/kernel:0", cfg.conv2dCount, cfg.conv2dCount)
+	cfg.loadTensorToVariable(ctxInScope, graph, h5Name, "weights")
 	if !graph.Ok() {
 		return
 	}
 
-	// Context has variable set already, mark context for reuse.
-	ctxInScope = ctxInScope.Reuse()
+	// If PreTrained is configured, Context has the variable set already. Disable checking variable existence.
+	ctxInScope = ctxInScope.Checked(false)
 	return
 }
 
-// ReadNextBatchNormalization enters a new scope and initializes it with the pre-trained weights for the next
+// readPredictionsWeights enters a new scope and initializes it with the pre-trained dense weights for
+// the top predictions layer.
+//
+// It returns the modified scope to use for `layers.DenseWithBias`.
+func (cfg *Config) readPredictionsWeights(ctx *context.Context, graph *Graph) (ctxInScope *context.Context) {
+	ctxInScope = ctx.In("predictions")
+	if !graph.Ok() {
+		return
+	}
+	ctxTmp := ctxInScope.In("dense") // layers.Dense will create a sub-scope, which we need to match.
+	cfg.loadTensorToVariable(ctxTmp, graph, "predictions/predictions/kernel:0", "weights")
+	if !graph.Ok() {
+		return
+	}
+	cfg.loadTensorToVariable(ctxTmp, graph, "predictions/predictions/bias:0", "biases")
+	if !graph.Ok() {
+		return
+	}
+
+	ctxInScope = ctxInScope.Checked(false)
+	return
+}
+
+// readNextBatchNormalization enters a new scope and initializes it with the pre-trained weights for the next
 // batch normalization layer.
 //
-// It returns the modified scope to use for `BatchNormalization`.
-func (kw *kerasWeights) ReadNextBatchNormalization(ctx *context.Context, graph *Graph) (ctxInScope *context.Context) {
+// It returns the modified scope to use for `layers.BatchNormalization`.
+func (cfg *Config) readNextBatchNormalization(ctx *context.Context, graph *Graph) (ctxInScope *context.Context) {
 	ctxInScope = ctx
 	if !graph.Ok() {
 		return
 	}
 
 	// Set scope name to something similar to the original model layer names (cosmetic only).
-	if kw.batchNormCount == 0 {
+	if cfg.batchNormCount == 0 {
 		ctxInScope = ctx.In("batch_normalization")
 	} else {
-		ctxInScope = ctx.In(fmt.Sprintf("batch_normalization_%d", kw.batchNormCount))
+		ctxInScope = ctx.In(fmt.Sprintf("batch_normalization_%d", cfg.batchNormCount))
 	}
-	kw.batchNormCount += 1
+	cfg.batchNormCount += 1
 
 	// h5 names start with 1 instead of 0 (!!)
-	h5Group := fmt.Sprintf("batch_normalization_%d/batch_normalization_%d/", kw.conv2dCount, kw.conv2dCount)
-	kw.LoadTensorToVariable(ctxInScope, graph, h5Group+"moving_mean:0", "mean")
+	h5Group := fmt.Sprintf("batch_normalization_%d/batch_normalization_%d/", cfg.conv2dCount, cfg.conv2dCount)
+	cfg.loadTensorToVariable(ctxInScope, graph, h5Group+"moving_mean:0", "mean")
 	if !graph.Ok() {
 		return
 	}
-	kw.LoadTensorToVariable(ctxInScope, graph, h5Group+"moving_variance:0", "variance")
+	cfg.loadTensorToVariable(ctxInScope, graph, h5Group+"moving_variance:0", "variance")
 	if !graph.Ok() {
 		return
 	}
-	kw.LoadTensorToVariable(ctxInScope, graph, h5Group+"beta:0", "offset")
+	cfg.loadTensorToVariable(ctxInScope, graph, h5Group+"beta:0", "offset")
 	if !graph.Ok() {
 		return
 	}
 
-	// Context will have mixed usage: some variables will be reused, some (like the "avg_weight") will be dynamically
-	// created. So we mark context as unchecked.
+	// Context will have mixed usage: some variables will be reused, some (like the "avg_weight")
+	// will be dynamically created.
+	// So we mark the context as unchecked.
 	ctxInScope = ctxInScope.Checked(false)
 	return
 }
