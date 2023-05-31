@@ -18,6 +18,8 @@ import (
 // coming last (last axis) or first (first axis after batch axis).
 type ChannelsAxisConfig uint8
 
+//go:generate stringer -type=ChannelsAxisConfig
+
 const (
 	ChannelsFirst ChannelsAxisConfig = iota
 	ChannelsLast
@@ -33,7 +35,7 @@ func GetChannelsAxis(image shapes.HasShape, config ChannelsAxisConfig) int {
 	case ChannelsLast:
 		return image.Shape().Rank() - 1
 	default:
-		klog.Errorf("GetChannelsAxis(image, %v): invalid ChannelsAxisConfig!?", config)
+		klog.Errorf("GetChannelsAxis(image, %s): invalid ChannelsAxisConfig!?", config)
 		return -1
 	}
 }
