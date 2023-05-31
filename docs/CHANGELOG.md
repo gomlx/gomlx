@@ -2,12 +2,13 @@
 
 ## Next
 
-* Inception V3: downloading weights, 
+* Inception V3 model: including downloading pre-trained weights and various configurations.
 * Tensors: added Load, Save for Local tensors.
 * Added HDF5 support.
 * Skip evaluation during test of demos.
 * Fixed dogsvscat demo's inconsistent mixed datasets issue, by yielding a correct spec.
 * Added SumPool and MeanPool
+* Changed API for defining images channels axis configuration (in pooling and convolution operations). 
 
 ## v0.2.1, 2023-05-20
 
