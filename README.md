@@ -1,6 +1,6 @@
-# GoMLX -- Full-featured ML Framework (Jax for Go)
+# GoMLX -- A full-featured ML Framework (Jax for Go)
 
-GoMLX is a fast and easy-to-use set of ML libraries and tools, it can be seen as TensorFlow/Jax/PyTorch for Go.
+GoMLX is a fast and easy-to-use set of ML libraries and tools. It can be seen as a TensorFlow/Jax/PyTorch for Go.
 
 It is built on top of [OpenXLA](https://github.com/openxla/xla),
 a just-in-time compiler of numeric computations to CPU, GPU and TPU. 
