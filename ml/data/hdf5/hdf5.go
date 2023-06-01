@@ -239,7 +239,7 @@ func (ds *Hdf5Dataset) ToTensor() (local *tensor.Local, err error) {
 	localData := localRef.Bytes()
 	if len(loadedData) != len(localData) {
 		err = errors.Errorf("for shape %s: loaded %d bytes, but tensor uses %d bytes -- not sure how to load it!?",
-			len(loadedData), len(localData))
+			ds.Shape, len(loadedData), len(localData))
 		local = nil
 		return
 	}
