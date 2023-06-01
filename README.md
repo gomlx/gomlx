@@ -1,6 +1,6 @@
-# GoMLX -- Full-featured ML Framework (Jax for Go)
+# GoMLX -- A full-featured ML Framework (Jax for Go)
 
-GoMLX is a fast and easy-to-use set of ML libraries and tools, it can be seen as TensorFlow/Jax/PyTorch for Go.
+GoMLX is a fast and easy-to-use set of ML libraries and tools. It can be seen as a TensorFlow/Jax/PyTorch for Go.
 
 It is built on top of [OpenXLA](https://github.com/openxla/xla),
 a just-in-time compiler of numeric computations to CPU, GPU and TPU. 
@@ -83,6 +83,7 @@ The library depends on the following libraries to compile and run:
 * `libunwind8`: usually available in most Linux systems.
 * `liblzma5`: compression library, also usually available.
 * TC Malloc, usually packaged as `libgoogle-perftools-dev`: fast malloc version, and memory debugging tools.
+* `hdf5-tools`: access to `.h5` file format, used by hold pre-trained weights for some some models. 
 
 Typically, this can be installed with:
 

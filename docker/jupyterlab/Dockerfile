@@ -20,7 +20,7 @@ USER root
 
 # Update apt and install basic utils
 RUN apt-get update --yes \
-    && apt-get install -y --no-install-recommends wget vim unzip
+    && apt-get install -y --no-install-recommends wget vim unzip hdf5-tools
 
 # Create NB_USER (jovyan) and its home directory.
 RUN useradd --create-home --uid ${NB_UID} --gid ${NB_GID} --shell /bin/bash ${NB_USER}

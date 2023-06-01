@@ -35,6 +35,7 @@ Due to a couple of issues with NVidia drivers and Docker runtime selection durin
 
 So what we do is, after the image is built, immediately run a test train and commit the changed container to the image. We have to then also add a change to set update `CMD`, otherwise it will rewrite the `CMD` with our test script.
 
+
 ```bash
 docker build -t janpfeifer/gomlx_jupyterlab:latest -f docker/jupyterlab/Dockerfile . \
   && docker run --gpus all -it janpfeifer/gomlx_jupyterlab:latest bash -c 'cd Projects/gomlx/examples/linear ; go run . --platform=CUDA' \
@@ -43,11 +44,14 @@ docker build -t janpfeifer/gomlx_jupyterlab:latest -f docker/jupyterlab/Dockerfi
       $(docker container ls --latest --quiet) janpfeifer/gomlx_jupyterlab:latest
 ```
 
-Finally, to push the image:
+Finally, to push the image, set the variable `version` to the desired version and do:
 
 ```bash
-docker push janpfeifer/gomlx_jupyterlab:latest
+docker tag janpfeifer/gomlx_jupyterlab:latest janpfeifer/gomlx_jupyterlab:${version} \
+  && docker push janpfeifer/gomlx_jupyterlab:latest \
+  && docker push janpfeifer/gomlx_jupyterlab:${version}
 ```
+
 ### TODOs
 
 - Create a version without CUDA, to save space for those not using it.
