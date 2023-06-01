@@ -157,13 +157,21 @@ func CopyWithProgressBar(dst io.Writer, src io.Reader, contentLength int64) (n i
 	return
 }
 
-// Download file from url and save at given path.
+// Download file from url and save at given path. Attempts to create directory
+// if it doesn't yet exist.
+//
 // Optionally, use showProgressBar.
-func Download(url, path string, showProgressBar bool) (size int64, err error) {
+func Download(url, filePath string, showProgressBar bool) (size int64, err error) {
+	filePath = ReplaceTildeInDir(filePath)
+	err = os.MkdirAll(path.Dir(filePath), 0777)
+	if err != nil && !os.IsExist(err) {
+		err = errors.Wrapf(err, "Failed to create the directory for the path: %q", path.Dir(filePath))
+		return
+	}
 	var file *os.File
-	file, err = os.Create(path)
+	file, err = os.Create(filePath)
 	if err != nil {
-		return 0, errors.Wrapf(err, "failed creating file %q", path)
+		return 0, errors.Wrapf(err, "failed creating file %q", filePath)
 	}
 	client := http.Client{
 		CheckRedirect: func(r *http.Request, via []*http.Request) error {
@@ -183,11 +191,11 @@ func Download(url, path string, showProgressBar bool) (size int64, err error) {
 		size, err = io.Copy(file, resp.Body)
 	}
 	if err != nil {
-		return 0, errors.Wrapf(err, "downloading %q to %q", url, path)
+		return 0, errors.Wrapf(err, "downloading %q to %q", url, filePath)
 	}
 	err = file.Close()
 	if err != nil {
-		return 0, errors.Wrapf(err, "failed closing %q", path)
+		return 0, errors.Wrapf(err, "failed closing %q", filePath)
 	}
 	err = resp.Body.Close()
 	if err != nil {
@@ -200,11 +208,12 @@ func Download(url, path string, showProgressBar bool) (size int64, err error) {
 // from the given URL.
 //
 // If checkHash is provided, it checks that the file has the hash or fail.
-func DownloadIfMissing(url, path, checkHash string) error {
-	if !FileExists(path) {
+func DownloadIfMissing(url, filePath, checkHash string) error {
+	filePath = ReplaceTildeInDir(filePath)
+	if !FileExists(filePath) {
 		// Download compressed file first.
 		fmt.Printf("Downloading %s ...\n", url)
-		_, err := Download(url, path, true)
+		_, err := Download(url, filePath, true)
 		if err != nil {
 			return err
 		}
@@ -212,7 +221,7 @@ func DownloadIfMissing(url, path, checkHash string) error {
 	if checkHash == "" {
 		return nil
 	}
-	return ValidateChecksum(path, checkHash)
+	return ValidateChecksum(filePath, checkHash)
 }
 
 // Untar file, using decompression flags according to suffix: .gz for gzip, bz2 for bzip2.

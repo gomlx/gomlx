@@ -20,37 +20,38 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
+	timage "github.com/gomlx/gomlx/types/tensor/image"
 	"testing"
 )
 
 func TestConvolve(t *testing.T) {
-	testFuncOneInput(t, "Convolve(...).ChannelsFirst().NoPadding()",
+	testFuncOneInput(t, "Convolve(...).ChannelsAxis(timage.ChannelsFirst).NoPadding()",
 		func(g *Graph) (input, output *Node) {
 			channelA := Iota(g, MakeShape(shapes.Float32, 1, 1, 3, 3), 2)
 			channelB := Mul(channelA, Const(g, float32(0.1)))
 			input = Concatenate([]*Node{channelA, channelB}, 1)
 			kernel := Ones(g, MakeShape(shapes.Float32, 2, 3, 3, 1))
-			output = Convolve(input, kernel).ChannelsFirst().NoPadding().Done()
+			output = Convolve(input, kernel).ChannelsAxis(timage.ChannelsFirst).NoPadding().Done()
 			return
 		}, [][][][]float32{{{{9.9}}}})
 
-	testFuncOneInput(t, "Convolve(...).ChannelsAfter().NoPadding()",
+	testFuncOneInput(t, "Convolve(...).ChannelsAxis(timage.ChannelsLast).NoPadding()",
 		func(g *Graph) (input, output *Node) {
 			channelA := Iota(g, MakeShape(shapes.Float64, 1, 3, 3, 1), 2)
 			channelB := Mul(channelA, Const(g, 0.1))
 			input = Concatenate([]*Node{channelA, channelB}, -1)
 			kernel := Ones(g, MakeShape(shapes.Float64, 3, 3, 2, 1))
-			output = Convolve(input, kernel).ChannelsAfter().NoPadding().Done()
+			output = Convolve(input, kernel).ChannelsAxis(timage.ChannelsLast).NoPadding().Done()
 			return
 		}, [][][][]float64{{{{9.9}}}})
 
-	testFuncOneInput(t, "Convolve(...).ChannelsFirst().PadSame()",
+	testFuncOneInput(t, "Convolve(...).ChannelsAxis(timage.ChannelsFirst).PadSame()",
 		func(g *Graph) (input, output *Node) {
 			channelA := Iota(g, MakeShape(shapes.Float32, 1, 1, 3, 3), 2)
 			channelB := Mul(channelA, Const(g, float32(0.1)))
 			input = Concatenate([]*Node{channelA, channelB}, 1)
 			kernel := Ones(g, MakeShape(shapes.Float32, 2, 3, 3, 1))
-			output = Convolve(input, kernel).ChannelsFirst().PadSame().Done()
+			output = Convolve(input, kernel).ChannelsAxis(timage.ChannelsFirst).PadSame().Done()
 			return
 		}, [][][][]float32{{{{2.2, 3.3, 2.2}, {6.6, 9.9, 6.6}, {6.6, 9.9, 6.6}}}})
 

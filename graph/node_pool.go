@@ -19,23 +19,27 @@ package graph
 import (
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
+	timage "github.com/gomlx/gomlx/types/tensor/image"
 	"github.com/gomlx/gomlx/xla"
 )
 
 // This file contains all parts of the {Max|Sum|Prod}Pool implementation.
 
 // PoolBuilder is a helper to build a pool computation.
-// Create it with {Max|Sum|Prod}Pool, set the desired parameters and
+// Create it with {Max|Sum|Mean|Prod}Pool, set the desired parameters and
 // when set, call `IsNil()`.
 type PoolBuilder struct {
 	graph                *Graph
 	x                    *Node
 	reductionType        xla.NodeType
 	numSpatialDims       int
+	channelsAxisConfig   timage.ChannelsAxisConfig
 	spatialAxes          []int // Indices of spatial axes.
+	channelsAxis         int
 	windowSizes, strides []int
 	paddings             [][2]int
 	padSame              bool
+	isMean               bool // Divide by number of elements later if mean.
 }
 
 // MaxPool prepares a max pooling on x with the given kernel for arbitrary
@@ -50,56 +54,108 @@ type PoolBuilder struct {
 // The window sizes must be set with PoolBuilder.Window or PoolBuilder.WindowPerDim.
 //
 // The shape of x should be `[batch, <spatial_dimensions...>, input_channels]` if
-// configured with `PoolBuilder.ChannelsLast()`, the default. If one
-// sets `PoolBuilder.ChannelsFirst()`, the shape should be
+// configured with `PoolBuilder.ChannelsAxis(timage.ChannelsLast)`, the default. If one
+// sets `PoolBuilder.ChannelsAxis(timage.ChannelsFirst)`, the shape should be
 // `[batch, input_channels, <spatial_dimensions...>]` instead.
 //
-// The shape of kernel should be `[<spatial_dimensions...>, input_channels, output_channels]` if
-// configured with `PoolBuilder.ChannelsLast()`, the default. If one
-// sets `PoolBuilder.ChannelsFirst()`, the shape should be
-// `[input_channels, <spatial_dimensions...>, output_channels]` instead.
+// The "channels" axis is also known as depth or feature axis.
 //
-// We follow the Keras convention of calling the depth/feature/channels dimension
-// **channels**.
+// Note: `timage` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
+//
+// The shape of kernel should be `[<spatial_dimensions...>, input_channels, output_channels]` if
+// configured with `PoolBuilder.ChannelsAxis(timage.ChannelsLast)`, the default. If one
+// sets `PoolBuilder.ChannelsAxis(timage.Channels)`, the shape should be
+// `[input_channels, <spatial_dimensions...>, output_channels]` instead.
 func MaxPool(x *Node) *PoolBuilder {
+	return makePoolBuilder(x, xla.ReduceMaxNode)
+}
+
+// SumPool prepares a sum pooling on x with the given kernel for arbitrary
+// number of spatial dimensions (1D, 2D, 3D, etc.). It returns the sum value
+// for the selected window, on given strides.
+//
+// It is very flexible and to ease setting its parameters it returns a
+// PoolBuilder for configuration. Once it is set up
+// call `PoolBuilder.Done` and it will return the pooled
+// x. Browse through PoolBuilder to see the capabilities, and the defaults.
+//
+// The window sizes must be set with PoolBuilder.Window or PoolBuilder.WindowPerDim.
+//
+// The shape of x should be `[batch, <spatial_dimensions...>, input_channels]` if
+// configured with `PoolBuilder.ChannelsAxis(timage.ChannelsLast)`, the default. If one
+// sets `PoolBuilder.ChannelsAxis(timage.ChannelsFirst)`, the shape should be
+// `[batch, input_channels, <spatial_dimensions...>]` instead.
+//
+// The "channels" axis is also known as depth or feature axis.
+//
+// Note: `timage` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
+//
+// The shape of kernel should be `[<spatial_dimensions...>, input_channels, output_channels]` if
+// configured with `PoolBuilder.ChannelsAxis(timage.ChannelsLast)`, the default. If one
+// sets `PoolBuilder.ChannelsAxis(timage.Channels)`, the shape should be
+// `[input_channels, <spatial_dimensions...>, output_channels]` instead.
+func SumPool(x *Node) *PoolBuilder {
+	return makePoolBuilder(x, xla.ReduceSumNode)
+}
+
+// MeanPool prepares a mean pooling on x with the given kernel for arbitrary
+// number of spatial dimensions (1D, 2D, 3D, etc.). It returns the mean value
+// for the selected window, on given strides.
+//
+// It is very flexible and to ease setting its parameters it returns a
+// PoolBuilder for configuration. Once it is set up
+// call `PoolBuilder.Done` and it will return the pooled
+// x. Browse through PoolBuilder to see the capabilities, and the defaults.
+//
+// The window sizes must be set with PoolBuilder.Window or PoolBuilder.WindowPerDim.
+//
+// The shape of x should be `[batch, <spatial_dimensions...>, input_channels]` if
+// configured with `PoolBuilder.ChannelsAxis(timage.ChannelsLast)`, the default. If one
+// sets `PoolBuilder.ChannelsAxis(timage.ChannelsFirst)`, the shape should be
+// `[batch, input_channels, <spatial_dimensions...>]` instead.
+//
+// The "channels" axis is also known as depth or feature axis.
+//
+// Note: `timage` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
+//
+// The shape of kernel should be `[<spatial_dimensions...>, input_channels, output_channels]` if
+// configured with `PoolBuilder.ChannelsAxis(timage.ChannelsLast)`, the default. If one
+// sets `PoolBuilder.ChannelsAxis(timage.Channels)`, the shape should be
+// `[input_channels, <spatial_dimensions...>, output_channels]` instead.
+func MeanPool(x *Node) *PoolBuilder {
+	pool := makePoolBuilder(x, xla.ReduceSumNode)
+	pool.isMean = true
+	return pool
+}
+
+func makePoolBuilder(x *Node, reductionType xla.NodeType) *PoolBuilder {
 	g := validateGraphFromInputs(x)
 	pool := &PoolBuilder{
 		graph:         g,
 		x:             x,
-		reductionType: xla.ReduceMaxNode,
+		reductionType: reductionType,
 	}
 	if !g.Ok() {
 		return pool
 	}
 	pool.numSpatialDims = x.Rank() - 2
 	if pool.numSpatialDims <= 0 {
-		pool.graph.SetErrorf("Input x must have rank >= 3, shaped by default as [batch, <spatial_dimensions...>, channels], "+
+		pool.graph.SetErrorf("Input x must have rank >= 3, shaped by default as [batch, <spatial_dimensions...>, channels] (alternatively channels come first), "+
 			"but x rank is %d", x.Rank())
 	}
-	return pool.ChannelsAfter().NoPadding()
+	return pool.ChannelsAxis(timage.ChannelsLast).NoPadding()
 }
 
-// ChannelsFirst specify the order of the axes for x.
-// The default is ChannelsAfter.
+// ChannelsAxis configures the axis for the channels (aka. "depth" or "features") dimension. The default is
+// `timage.ChannelsLast`, meaning the "channels" dimension comes last.
 //
-// If this is set x should be shaped `[batch, channels, <spatial_dimensions...>]`.
-func (pool *PoolBuilder) ChannelsFirst() *PoolBuilder {
-	if !pool.graph.Ok() {
-		return pool
-	}
-	pool.spatialAxes = slices.IotaSlice(2, pool.numSpatialDims)
-	return pool
-}
-
-// ChannelsAfter specify the order of the axes for x and kernel.
-// This is the default.
+// Note: `timage` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
 //
-// If this is set x should be shaped `[batch, <spatial_dimensions...>, channels]`.
-func (pool *PoolBuilder) ChannelsAfter() *PoolBuilder {
-	if !pool.graph.Ok() {
-		return pool
-	}
-	pool.spatialAxes = slices.IotaSlice(1, pool.numSpatialDims)
+// It returns the modified Config object, so calls can be cascaded.
+func (pool *PoolBuilder) ChannelsAxis(channelsAxisConfig timage.ChannelsAxisConfig) *PoolBuilder {
+	pool.channelsAxisConfig = channelsAxisConfig
+	pool.channelsAxis = timage.GetChannelsAxis(pool.x, channelsAxisConfig)
+	pool.spatialAxes = timage.GetSpatialAxes(pool.x, channelsAxisConfig)
 	return pool
 }
 
@@ -135,10 +191,10 @@ func (pool *PoolBuilder) WindowPerDim(sizes ...int) *PoolBuilder {
 
 // Strides sets the strides of the pooling. It sets the same value for every spatial dimension.
 //
-// The default is the same value as teh window size (set with Window or WindowPerDim).
+// The default is the same value as the window size (set with Window or WindowPerDim).
 //
-// The stride is how many steps to move after the pooling of a window. A value of 2 will half the input
-// size, since the pooling will be done at every other position, and so on. It can be defined
+// The stride is how many steps to move after the pooling of a window. A value of 2 will halve the
+// input size, since the pooling will be done at every other position, and so on. It can be defined
 // separately per dimension with StridePerDim.
 //
 // One cannot use strides and dilation at the same time.
@@ -155,7 +211,7 @@ func (pool *PoolBuilder) Strides(strides int) *PoolBuilder {
 
 // StridePerDim sets the strides for each spatial dimension of the pooling.
 //
-// The default is the same value as teh window size (set with Window or WindowPerDim).
+// The default is the same value as the window size (set with Window or WindowPerDim).
 //
 // The stride is how many steps to move after a pooling. A value of 2 will half the input
 // size, since a pooling will be done at every other position, and so on. It can be defined
@@ -274,13 +330,46 @@ func (pool *PoolBuilder) Done() *Node {
 			paddings[axis] = spatialPaddings[ii]
 		}
 	}
-
-	return reduceWindowXLA(pool.x, pool.reductionType,
+	pooled := reduceWindowXLA(pool.x, pool.reductionType,
 		windowDimensions, strides, nil, nil, paddings)
+
+	// Take the mean.
+	if pool.isMean && pool.reductionType == xla.ReduceSumNode {
+		if len(paddings) == 0 {
+			// If no padding, the number of elements to take the mean is fixed:
+			totalWindowSize := 1
+			for _, s := range pool.windowSizes {
+				totalWindowSize *= s
+			}
+			pooled = DivScalar(pooled, float64(totalWindowSize))
+		} else {
+			pooled = takeMeanOfContributions(pool.x, pooled, pool.channelsAxis, windowDimensions, strides, paddings)
+		}
+	}
+
+	return pooled
+}
+
+// takeMeanOfContributions divides the pooled sum by the number of contributions at each position.
+func takeMeanOfContributions(x, pooledSum *Node, channelsAxis int, windowDimensions, strides []int, paddings [][2]int) *Node {
+	// We need to normalize the sum by the number of elements that were actually used, ignoring the padding.
+	// We use a similar reduceWindowXLA configuration, but as input a tensor with 1s and dropping the
+	// batch and channels axes, since they will are the same.
+	shapeNoBatchOrChannels := x.shape.Copy()
+	shapeNoBatchOrChannels.Dimensions[0] = 1
+	shapeNoBatchOrChannels.Dimensions[channelsAxis] = 1
+	ones := Ones(x.graph, shapeNoBatchOrChannels)
+	pooledOnes := reduceWindowXLA(ones, xla.ReduceSumNode,
+		windowDimensions, strides, nil, nil, paddings)
+	pooledOnes = StopGradient(pooledOnes)
+	return Div(pooledSum, pooledOnes)
 }
 
 // reduceWindowXLA runs a reduction function, here limited to the value given by reductionType,
 // it can be either ReduceMaxNode, ReduceSumNode or ReduceMultiplyNode.
+//
+// The parameter windowDimensions must be setand have a value for each axis. The parameters `strides`, `baseDilations`
+// and `windowDilations` and `paddings` can be left as nil if not used.
 func reduceWindowXLA(x *Node, reductionType xla.NodeType, windowDimensions, strides, baseDilations, windowDilations []int, paddings [][2]int) *Node {
 	g := validateGraphFromInputs(x)
 	if !g.Ok() {
@@ -292,7 +381,7 @@ func reduceWindowXLA(x *Node, reductionType xla.NodeType, windowDimensions, stri
 		g.SetErrorf("windowSizes (length %d) must have same length as rank of input x (rank %d)", len(windowDimensions), rank)
 		return g.InvalidNode()
 	}
-	if len(strides) != rank {
+	if len(strides) != 0 && len(strides) != rank {
 		g.SetErrorf("strides (length %d) must have same length as rank of input x (rank %d)", len(strides), rank)
 		return g.InvalidNode()
 	}
@@ -315,14 +404,19 @@ func reduceWindowXLA(x *Node, reductionType xla.NodeType, windowDimensions, stri
 			reductionType, xla.ReduceMaxNode, xla.ReduceSumNode, xla.ReduceMultiplyNode)
 	}
 
+	// `strides` must always have rank elements. It defaults to 1.
+	if strides == nil {
+		strides = slices.SliceWithValue[int](rank, 1)
+	}
+
 	// Encode parameters in ints.
 	ints := make([]int, 0, 4+2*rank+len(baseDilations)+len(windowDilations)+2*len(paddings))
 	encode := func(values ...int) {
 		ints = append(ints, values...)
 	}
 	encode(rank, len(baseDilations), len(windowDilations), len(paddings))
-	encode(windowDimensions...)
-	encode(strides...)
+	encode(windowDimensions...) // rank elements.
+	encode(strides...)          // rank elements.
 	encode(baseDilations...)
 	encode(windowDilations...)
 	for _, pair := range paddings {
@@ -334,14 +428,17 @@ func reduceWindowXLA(x *Node, reductionType xla.NodeType, windowDimensions, stri
 	//fmt.Printf("\twindowDimensions=%v\n", windowDimensions)
 	//fmt.Printf("\tstrides=%v\n", strides)
 	//fmt.Printf("\tpaddings=%v\n", paddings)
-	//fmt.Println()
 
 	// Create graph new node.
-	return newNode(g, &xla.SerializedNode{
+	output := newNode(g, &xla.SerializedNode{
 		Type: xla.ReduceWindowNode,
 		Int:  int(reductionType),
 		Ints: ints,
 	}, []*Node{x, init})
+
+	//fmt.Printf("\toutput shape=%s\n", output.shape)
+	//fmt.Println()
+	return output
 }
 
 // selectAndScatterWithGeneralPaddingXLA selects (largest) element from a window and scatter to those positions
@@ -395,8 +492,8 @@ func reduceWindowVJP(node, v *Node, _ shapes.Shape) []*Node {
 	x := node.inputs[0]
 	initValue := node.inputs[1]
 	reductionType := xla.NodeType(node.serializedNode.Int)
-	if reductionType != xla.ReduceMaxNode {
-		g.SetErrorf("ReduceWindow gradient only defined for ReduceMax operation, instead got %s", reductionType)
+	if reductionType != xla.ReduceMaxNode && reductionType != xla.ReduceSumNode {
+		g.SetErrorf("ReduceWindow gradient only defined for ReduceMax or ReduceSum operation, instead got %s", reductionType)
 		return nil
 	}
 
@@ -414,7 +511,15 @@ func reduceWindowVJP(node, v *Node, _ shapes.Shape) []*Node {
 
 	rank := decode()
 	lenBaseDilations := decode()
+	if lenBaseDilations > 0 {
+		g.SetErrorf("reduceWindow(%s) does not define a gradient if using baseDilations", reductionType)
+		return nil
+	}
 	lenWindowDilations := decode()
+	if lenWindowDilations > 0 {
+		g.SetErrorf("reduceWindow(%s) does not define a gradient if using windowDilations", reductionType)
+		return nil
+	}
 	lenPaddings := decode()
 
 	windowDimensions := decodeN(rank)
@@ -435,6 +540,7 @@ func reduceWindowVJP(node, v *Node, _ shapes.Shape) []*Node {
 		return nil
 	}
 
+	//fmt.Printf("Grad(reduceWindow(%s):\n", reductionType)
 	//fmt.Printf("\tx.shape=%s\n", x.Shape())
 	//fmt.Printf("\tnode.shape=%s\n", node.Shape())
 	//fmt.Printf("\tv.shape=%s\n", v.Shape())
@@ -442,6 +548,76 @@ func reduceWindowVJP(node, v *Node, _ shapes.Shape) []*Node {
 	//fmt.Printf("\tstrides=%v\n", strides)
 	//fmt.Printf("\tpaddings=%v\n", paddings)
 
-	vjpX := selectAndScatterWithGeneralPaddingXLA(x, v, windowDimensions, strides, paddings)
+	var vjpX *Node
+	if reductionType == xla.ReduceMaxNode {
+		vjpX = selectAndScatterWithGeneralPaddingXLA(x, v, windowDimensions, strides, paddings)
+	} else if reductionType == xla.ReduceSumNode {
+		vjpX = dilateConvolveToMatchSumPooling(x, v, windowDimensions, strides, paddings)
+	} else {
+		g.SetErrorf("ReduceWindow gradient only defined for ReduceMax or ReduceSum operation, instead got %s", reductionType)
+		return nil
+	}
+	//fmt.Println()
 	return []*Node{vjpX, ZerosLike(initValue)}
+}
+
+// dilateConvolveToMatchSumPooling convolves the `backProp` to match `x`.
+//
+// Since the convolution would be with a kernel of 1s we instead use `graph.Pad` and reduceWindowXLA instead.
+func dilateConvolveToMatchSumPooling(x, backProp *Node, windowDimensions, strides []int, paddings [][2]int) *Node {
+	g := validateGraphFromInputs(x, backProp)
+	if !g.Ok() {
+		return g.InvalidNode()
+	}
+	dtype := x.DType()
+	rank := x.Rank()
+	if len(windowDimensions) != rank {
+		g.SetErrorf("windowSizes (length %d) must have same length as rank of input x (rank %d)", len(windowDimensions), rank)
+		return g.InvalidNode()
+	}
+	if len(strides) != rank {
+		g.SetErrorf("strides (length %d) must have same length as rank of input x (rank %d)", len(strides), rank)
+		return g.InvalidNode()
+	}
+	if len(paddings) > 0 && len(paddings) != rank {
+		g.SetErrorf("paddings (length %d) if given must have same length as rank of input x (rank %d)", len(paddings), rank)
+		return g.InvalidNode()
+	}
+
+	// Configure the padding needed to expand the backprop.
+	padConfig := make([]PadAxis, rank)
+	for axis := range padConfig {
+		conf := &padConfig[axis]
+
+		// pad due to window size.
+		windowSize := windowDimensions[axis] // for this axis.
+		conf.Start = (windowSize - 1) / 2    // For even sized kernels, the padding is asymmetric.
+		conf.End = windowSize / 2
+
+		// pad due to strides.
+		conf.Interior = strides[axis] - 1
+		conf.Start += strides[axis] / 2
+		conf.End += (strides[axis] - 1) / 2
+
+		// Remove pad that was used originally, since we don't want to re-generate the original padding.
+		if len(paddings) > 0 {
+			// Notice the padding can go negative, which will trim the element from the start/end.
+			conf.Start -= paddings[axis][0]
+			conf.End -= paddings[axis][1]
+		}
+	}
+	//fmt.Printf("\tpadConfig=%+v\n", padConfig)
+	expanded := Pad(backProp, ScalarZero(g, dtype), padConfig...)
+	//expanded.SetLogged("expanded grad:")
+	//fmt.Printf("\texpanded=%s\n", expanded.shape)
+	paddingsConv := make([][2]int, rank)
+	for axis := range paddingsConv {
+		windowSize := windowDimensions[axis]         // for this axis.
+		paddingsConv[axis][0] = (windowSize - 1) / 2 // For even sized kernels, the padding is asymmetric.
+		paddingsConv[axis][1] = windowSize / 2
+	}
+	//fmt.Printf("\tpaddingsConv=%v\n", paddingsConv)
+	output := reduceWindowXLA(expanded, xla.ReduceSumNode, windowDimensions, nil, nil, nil, paddingsConv)
+	//fmt.Printf("\tgrad=%s\n", output.shape)
+	return output
 }

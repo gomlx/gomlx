@@ -17,11 +17,11 @@
 package layers
 
 import (
-	"github.com/pkg/errors"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/pkg/errors"
 )
 
 // BatchNormBuilder is a helper to build a batch normalization computation. Create it with BatchNormalization, set the
@@ -32,6 +32,7 @@ type BatchNormBuilder struct {
 	featureAxis       int
 	momentum, epsilon float64
 	center, scale     bool
+	newScope          bool
 }
 
 // BatchNormalization performs a batch normalization layer on the input. It includes a scaling and offset factor,
@@ -53,7 +54,7 @@ type BatchNormBuilder struct {
 // capabilities, and the defaults.
 //
 // Batch normalization behaves differently during training and inference: during training it normalizes over
-// the batch (so it likely won't work well for very small batch sizes) and in inference it normalizes
+// the batch (so it likely won't work well for very small batch sizes), and in inference, it normalizes
 // using the collected moving average of the mean and variance.
 //
 // Based on paper "Batch Normalization: Accelerating Deep Network Training by Reducing
@@ -64,18 +65,19 @@ type BatchNormBuilder struct {
 // 2. Support selection of multiple features axes.
 func BatchNormalization(ctx *context.Context, x *Node, featureAxis int) *BatchNormBuilder {
 	return &BatchNormBuilder{
-		ctx:         ctx.In("batch_normalization"),
+		ctx:         ctx,
 		x:           x,
 		featureAxis: featureAxis,
 		momentum:    0.99,
 		epsilon:     1e-3,
 		center:      true,
 		scale:       true,
+		newScope:    true,
 	}
 }
 
-// Momentum sets the moment of the moving average of the mean and variance maintained during training. This averaged mean
-// and variance is used during inference for normalization. The default is 0.99.
+// Momentum sets the moment of the moving average of the mean and variance maintained during training. This averaged
+// mean and variance is used during inference for normalization. The default is 0.99.
 func (builder *BatchNormBuilder) Momentum(value float64) *BatchNormBuilder {
 	builder.momentum = value
 	return builder
@@ -88,23 +90,41 @@ func (builder *BatchNormBuilder) Epsilon(value float64) *BatchNormBuilder {
 }
 
 // Center defines whether the batch normalization tries to center the input by adding a learned offset. Default to true.
+//
+// This is also called the β (beta) parameter.
 func (builder *BatchNormBuilder) Center(value bool) *BatchNormBuilder {
 	builder.center = value
 	return builder
 }
 
 // Scale defines whether the batch normalization tries to scale the input by adding a learned scale. Default to true.
+//
+// This is also called the	γ (gamma) parameter.
 func (builder *BatchNormBuilder) Scale(value bool) *BatchNormBuilder {
 	builder.scale = value
 	return builder
 }
 
+// CurrentScope configures the convolution not to create a sub-scope for the kernel weights it needs,
+// and instead use the current one provided in Convolution.
+//
+// By default, Convolution will create a sub-scope named "conv".
+func (builder *BatchNormBuilder) CurrentScope() *BatchNormBuilder {
+	builder.newScope = false
+	return builder
+}
+
 // Done finishes configuring the BatchNormalization and generates the graph computation to normalize the input.
 func (builder *BatchNormBuilder) Done() *Node {
-	ctx := builder.ctx
 	x := builder.x
 	g := x.Graph()
 	dtype := x.DType()
+
+	// Creates new scope for variables.
+	if builder.newScope {
+		builder.ctx = builder.ctx.In("batch_normalization")
+	}
+	ctx := builder.ctx
 
 	if !g.Ok() {
 		return g.InvalidNode()

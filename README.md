@@ -1,29 +1,33 @@
-# GoMLX -- Accelerated ML Libraries for Go
+# GoMLX -- Full-featured ML Framework (Jax for Go)
 
-GoMLX is a fast and easy-to-use set of ML libraries built on top of [OpenXLA](https://github.com/openxla/xla),
-a just-in-time compiler of numeric computations to CPU, GPU and TPU.
+GoMLX is a fast and easy-to-use set of ML libraries and tools, it can be seen as TensorFlow/Jax/PyTorch for Go.
+
+It is built on top of [OpenXLA](https://github.com/openxla/xla),
+a just-in-time compiler of numeric computations to CPU, GPU and TPU. 
+It's the same engine that powers Google's 
+[Jax](https://github.com/google/jax) and [TensorFlow](https://tensorflow.org/), and it has the same speed in many
+cases.
 
 ## Quick Start: see our [tutorial](examples/tutorial/tutorial.ipynb), or a [guided example for Kaggle Dogs Vs Cats using GoMLX](examples/dogsvscats/dogsvscats.ipynb).
 
-**This under development, and should be considered experimental for now.**
+![GoMLX Gopher](docs/gomlx_gopher.jpg)
 
 It was developed primarily as a platform to easily experiment with ML ideas, and to
 allow one to use Go for ML. Hopefully it can grow beyond that -- see Long-Term Goals below.
 
 It strives to be **simple to read and reason about**, leading the 
-user to correct and transparent mental model of what is going on (no surprises). At the cost of
-more typing (more verbose) at times.
+user to correct and transparent mental model of what is going on (no surprises) -- aligned with Go philosophy.
+At the cost of more typing (more verbose) at times.
 
 Documentation is kept up-to-date (if it is not well documented, it is as if the code is not there)
-and error messages are useful and try to make it easy to solve issues (a good guideline is described in
-Section 2 of [Yggdrasil Decision Forests paper](https://arxiv.org/pdf/2212.02934.pdf)). 
+and error messages are useful and try to make it easy to solve issues.
 
-![GoMLX Gopher](docs/gomlx_gopher.jpg)
+**Still under development, and should be considered experimental for now.**
 
 ## Overview
 
-**GoMLX** is a working proof-of-concept, with many important components of an ML framework in place, 
-from the bottom to the top of the stack. But only still a narrow slice of what a major ML library/framework should provide 
+**GoMLX** has many important components of an ML framework in place, 
+from the bottom to the top of the stack. But it is still only a slice of what a major ML library/framework should provide 
 (like TensorFlow, Jax or PyTorch).
 
 It includes:
@@ -43,13 +47,14 @@ It includes:
 * Various losses and metrics.
 * Examples: Synthetic linear model; Adult/Census model; Cifar-10 demo; Dogs & Cats classifier demo; IMDB Movie Review 
   demo. 
+* Pre-Trained models to use: InceptionV3 (image model) -- more to come.
 * Docker with integrated JupyterLab and GoNB (a Go kernel)
 
 ## Installation
 
 For now Linux only. It does work well also in WSL (Windows Subsystem for Linux) in Windows or using Docker. 
 
-Likely it would work in Macs with some work --> contributions are very welcome, I don't have a Mac. It will likely work in Docker, but not natively supporting M1/M2.
+Likely it would work in Macs with some work --> contributions are very welcome, I don't have a Mac. It will likely work in Docker for Mac, but not natively supporting M1/M2.
 
 ### Pre-built docker
 

@@ -4,13 +4,62 @@ package image
 
 import (
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/pkg/errors"
 	"image"
+	"k8s.io/klog/v2"
 	"log"
 	"math"
 	"reflect"
 )
+
+// ChannelsAxisConfig indicates if a tensor with an image has the channels axis
+// coming last (last axis) or first (first axis after batch axis).
+type ChannelsAxisConfig uint8
+
+//go:generate stringer -type=ChannelsAxisConfig
+
+const (
+	ChannelsFirst ChannelsAxisConfig = iota
+	ChannelsLast
+)
+
+// GetChannelsAxis from a given image tensor and configuration. It assumes the
+// leading axis is for the batch dimension. So it either returns 1 or
+// `image.Rank()-1`.
+func GetChannelsAxis(image shapes.HasShape, config ChannelsAxisConfig) int {
+	switch config {
+	case ChannelsFirst:
+		return 1
+	case ChannelsLast:
+		return image.Shape().Rank() - 1
+	default:
+		klog.Errorf("GetChannelsAxis(image, %s): invalid ChannelsAxisConfig!?", config)
+		return -1
+	}
+}
+
+// GetSpatialAxes from a given image tensor and configuration. It assumes the
+// leading axis is for the batch dimension.
+//
+// Example: if image has shape `[batch_dim, height, width, channels]`, it will
+// return `[]int{1, 2}`.
+func GetSpatialAxes(image shapes.HasShape, config ChannelsAxisConfig) (spatialAxes []int) {
+	numSpatialDims := image.Shape().Rank() - 2
+	if numSpatialDims <= 0 {
+		return
+	}
+	switch config {
+	case ChannelsFirst:
+		spatialAxes = slices.IotaSlice(2, numSpatialDims)
+	case ChannelsLast:
+		spatialAxes = slices.IotaSlice(1, numSpatialDims)
+	default:
+		klog.Errorf("GetSpatialAxes(image, %v): invalid ChannelsAxisConfig!?", config)
+	}
+	return
+}
 
 // ToTensorConfig holds the configuration returned by the ToTensor function. Once
 // configured, use Single or Batch to actually convert.
