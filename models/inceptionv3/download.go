@@ -1,15 +1,3 @@
-// Package inceptionv3 provides a pre-trained InceptionV3 model, or simply it's structure.
-//
-// This library creates the model architecture and optionally loads the pre-trained
-// weights from Google. It can be used with or without the top-layer.
-//
-// Reference:
-// - Rethinking the Inception Architecture for Computer Vision (CVPR 2016), http://arxiv.org/abs/1512.00567
-//
-// Based on Keras implementation:
-//
-// - Source: [github.com/keras-team/keras/keras/applications/inception_v3.py])https://github.com/keras-team/keras/blob/v2.12.0/keras/applications/inception_v3.py)
-// - Documentation: https://keras.io/api/applications/inceptionv3/
 package inceptionv3
 
 import (

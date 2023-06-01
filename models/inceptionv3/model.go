@@ -1,3 +1,46 @@
+/*
+Package inceptionv3 provides a pre-trained InceptionV3 model, or simply it's structure.
+
+This library creates the model architecture and optionally loads the pre-trained
+weights from Google.
+It can be used with or without the top-layer.
+
+Reference:
+- Rethinking the Inception Architecture for Computer Vision (CVPR 2016), http://arxiv.org/abs/1512.00567
+
+Based on Keras implementation:
+
+- Source: [github.com/keras-team/keras/keras/applications/inception_v3.py](https://github.com/keras-team/keras/blob/v2.12.0/keras/applications/inception_v3.py)
+- Documentation: https://keras.io/api/applications/inceptionv3/
+
+To use it, start with BuildGraph. If using the pre-trained weights, call once DownloadAndUnpackWeights -- it is a no-op
+if weights have already been downloaded and unpacked.
+
+Example:
+
+	var flagDataDir = flag.String("data", "~/work/inceptionv3", "Directory where to save and load model data.")
+
+	func ModelGraph(ctx *context.Context, img *Node) *Node {
+		if img.Rank() == 3 {
+			// Prepend the batch dimension.
+			Img = ExpandDims(img, 0)
+		}
+		img = inceptionv3.PreprocessImage(img, 255.0)
+		embeddings := inceptionv3.BuildGraph(ctx.In("inceptionV3"), img).\
+			PreTrained(*flagDataDir).SetPooling(inceptionv3.MeanPooling).Done()
+		return embeddings
+	}
+
+	func main() {
+		…
+		err := inceptionv3.DownloadAndUnpackWeights(*flagDataDir)
+		AssertNoError(err)
+		…
+		ctx := context.NewContext(manager)
+		modelExec := context.NewExec(manager, ctx, ModelGraph)
+		output := MustNoError(modelExec.Call(imageTensor))[0].Local()
+	}
+*/
 package inceptionv3
 
 import (
@@ -14,6 +57,10 @@ import (
 	"path"
 )
 
+// ClassificationImageSize if using the Inception V3's model for classification.
+// The image should be 299 x 299.
+const ClassificationImageSize = 299
+
 // BuildGraph for InceptionV3 model.
 //
 // For a model with pre-trained weights, call Config.PreTrained.
@@ -21,6 +68,8 @@ import (
 // It returns a Config object that can be further configured.
 // Once the configuration is finished, call `Done` and it will return the embedding
 // (or classification) of the given image.
+//
+// See example in the package inceptionv3 documentation.
 //
 // Parameters:
 //   - ctx: context.Context where variables are created and loaded. Variables
@@ -32,12 +81,12 @@ import (
 //   - Image: image tensor (`*Node`) on which to apply the model. There must be
 //     3 channels, and they must be scaled from -1.0 to 1.0 -- see PreprocessImage
 //     to scale image accordingly if needed. If using ClassificationTop(true),
-//     the images must be of size 299x299.
+//     the images must be of size 299x299 (defined as a constant `ClassificationImageSize`).
 //
-// The original model has weights in `shapes.F32`. If the image has
+// The original model has weights in `shapes.F32`. (TODO: If the image has
 // a different `DType`, it will try to convert the weights and work the model
 // fully on the image's `DType`. This hasn't been extensively tested, so no
-// guarantees of quality.
+// guarantees of quality.)
 //
 // The implementation follows closely the definition in
 // https://github.com/keras-team/keras/blob/v2.12.0/keras/applications/inception_v3.py
