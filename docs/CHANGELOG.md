@@ -1,10 +1,10 @@
 # GoMLX changelog
 
-## Next
+## v0.3.0, 2023-06-01
 
 * Inception V3 model: including downloading pre-trained weights and various configurations.
 * Tensors: added Load, Save for Local tensors.
-* Added HDF5 support.
+* Added HDF5 format support for loading values.
 * Skip evaluation during test of demos.
 * Fixed dogsvscat demo's inconsistent mixed datasets issue, by yielding a correct spec.
 * Added SumPool and MeanPool
