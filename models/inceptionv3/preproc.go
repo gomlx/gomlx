@@ -8,21 +8,28 @@ import (
 
 // PreprocessImage makes the image in a format usable to InceptionV3 model.
 //
-// While the original model uses the values from -1 to 1 (see `maxValue` parameter),
-// fine-tuning, or if not using the pre-trained weights work better (because of batch normalization)
-// if this steps is skipped (set `maxValue=0`).
+// It performs 3 tasks:
 //
-// It performs 2 tasks:
-//
+//   - Scales the values from -1.0 to 1.0: this is how it was originally trained.
+//     It requires `maxValue` to be carefully set to the maxValue of the images --
+//     it is assumed the images are scaled from 0 to `maxValue`. Set `maxValue` to zero
+//     to skip this step.
 //   - It removes the alpha channel, in case it is provided.
 //   - The minimum image size accepted by InceptionV3 is 75x75.
 //     If any size is smaller than that, it will be resized accordingly, while preserving the aspect ratio.
 //
 // Input `image` must have a batch dimension (rank=4), be either 3 or 4 channels, and its
 // values must be scaled from 0 to maxValue (except if it is set to -1).
-func PreprocessImage(image *Node, channelsConfig timage.ChannelsAxisConfig) *Node {
+func PreprocessImage(image *Node, maxValue float64, channelsConfig timage.ChannelsAxisConfig) *Node {
 	if image.Rank() != 4 {
-		return image
+		image.Graph().SetErrorf("inceptionv3.PreprocessImage requires image to be rank-4, got rank-%d instead", image.Rank())
+		return image.Graph().InvalidNode()
+	}
+
+	// Scale image values from -1.0 to 1.0.
+	if maxValue > 0 {
+		image = MulScalar(image, 2.0/maxValue)
+		image = AddScalar(image, -1.0)
 	}
 
 	// Remove alpha-channel, if given.
@@ -64,27 +71,13 @@ func PreprocessImage(image *Node, channelsConfig timage.ChannelsAxisConfig) *Nod
 	return image
 }
 
-// ScaleImageValuesKeras scales the `image` values from -1.0 to 1.0,
+// ScaleImageValues scales the `image` values from -1.0 to 1.0,
 // assuming it is provided with values from 0.0 to `maxValue`.
 //
-// It doesn't work well in transfer learning.
-// In particular, if not using the pre-trained weights, it seems to conflict with batch normalization.
-func ScaleImageValuesKeras(image *Node, maxValue float64) *Node {
-	image = MulScalar(image, 2.0/maxValue)
-	image = AddScalar(image, -1.0)
-	return image
-}
-
-// ScaleImageValuesTorch scales the `image` values to what, according to PyTorch version, was used
-// during training.
-// It assumes `image` has values from 0 to 255.0.
-// It seems to work better in most cases.
+// This is presumably how the model was trained, so one would want this if using the pre-trained weights.
+// But not necessary if training from scratch.
 //
-// See:
-// https://github.com/pytorch/vision/blob/6db1569c89094cf23f3bc41f79275c45e9fcb3f3/torchvision/models/inception.py#LL129C49-L129C86
-func ScaleImageValuesTorch(image *Node) *Node {
-	image = AddScalar(
-		MulScalar(image, (0.229/0.5)),
-		(0.485-0.5)/0.5)
+// Careful with setting maxValue, setting it wrong can cause odd behavior. It's recommended checking.
+func ScaleImageValues(image *Node, maxValue float64) *Node {
 	return image
 }

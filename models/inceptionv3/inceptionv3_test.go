@@ -40,8 +40,7 @@ func TestBuildGraph(t *testing.T) {
 	ctx := context.NewContext(manager)
 	inceptionV3Exec := context.NewExec(manager, ctx, func(ctx *context.Context, img *Node) *Node {
 		img = ExpandDims(img, 0) // Add batch dimension
-		img = PreprocessImage(img, timage.ChannelsLast)
-		img = ScaleImageValuesKeras(img, 255.0) // Our ground-truth is the Keras model, so we use the same scale.
+		img = PreprocessImage(img, 255.0, timage.ChannelsLast)
 		return BuildGraph(ctx, img).PreTrained(*flagDataDir).ClassificationTop(true).Done()
 	})
 	results, err := inceptionV3Exec.Call(imgT)
