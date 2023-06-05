@@ -30,6 +30,7 @@ import (
 	"fmt"
 	mg "github.com/erkkah/margaid"
 	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/janpfeifer/gonb/gonbui"
@@ -108,7 +109,13 @@ func (ps *Plots) Attach(loop *train.Loop, numPoints int) {
 			// Training metrics are pre-generated and given.
 			step := float64(loop.LoopStep)
 			for ii, desc := range loop.Trainer.TrainMetrics() {
-				ps.AddPoint("Train: "+desc.Name(), desc.MetricType(), step, metrics[ii].Value().(float64))
+				if desc.Name() == "Batch Loss" {
+					// Skip the batch loss, that is not very informative -- it fluctuates a lot at each batch,
+					// and the trainer always includes the moving average loss.
+					continue
+				}
+				metric := shapes.ConvertTo[float64](metrics[ii].Value())
+				ps.AddPoint("Train: "+desc.Name(), desc.MetricType(), step, metric)
 			}
 
 			// Eval metrics, if given
@@ -118,7 +125,8 @@ func (ps *Plots) Attach(loop *train.Loop, numPoints int) {
 					return err
 				}
 				for ii, desc := range loop.Trainer.EvalMetrics() {
-					ps.AddPoint(fmt.Sprintf("Eval on %s: %s", ds.Name(), desc.Name()), desc.MetricType(), step, evalMetrics[ii].Value().(float64))
+					metric := shapes.ConvertTo[float64](evalMetrics[ii].Value())
+					ps.AddPoint(fmt.Sprintf("Eval on %s: %s", ds.Name(), desc.Name()), desc.MetricType(), step, metric)
 				}
 			}
 

@@ -1,5 +1,12 @@
 # GoMLX changelog
 
+## v0.3.1
+
+* DogsVsCats: added inception model type; fix of metrics types for plotting.
+* BatchNormalization: differentiable inference code; added Trainable() support.
+* Fixed notebooks broken with v0.3.0 changes.
+* Skip plotting batch loss (we keep the moving average of the batch loss though).
+
 ## v0.3.0, 2023-06-01
 
 * Inception V3 model: including downloading pre-trained weights and various configurations.

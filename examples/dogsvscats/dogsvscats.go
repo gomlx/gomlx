@@ -638,16 +638,17 @@ func (ds *Dataset) Save(writer io.Writer, numEpochs int, verbose bool) error {
 // PreGeneratedDataset implements train.Dataset by reading the images from the pre-generated (scaled and
 // optionally augmented) images data. See Dataset.Save for saving these pre-generated files.
 type PreGeneratedDataset struct {
-	name          string
-	filePath      string
-	dtype         shapes.DType
-	batchSize     int
-	width, height int
-	openedFile    *os.File
-	infinite      bool
-	err           error
-	buffer        []byte
-	labelsAsTypes []DorOrCat
+	name            string
+	filePath        string
+	dtype           shapes.DType
+	batchSize       int
+	width, height   int
+	openedFile      *os.File
+	infinite        bool
+	err             error
+	buffer          []byte
+	labelsAsTypes   []DorOrCat
+	steps, maxSteps int
 }
 
 // Assert PreGeneratedDataset is a train.Dataset.
@@ -675,6 +676,14 @@ func NewPreGeneratedDataset(name, filePath string, batchSize int, infinite bool,
 // Name implements train.Dataset.
 func (pds *PreGeneratedDataset) Name() string { return pds.name }
 
+// WithMaxSteps configures the dataset to exhaust after those many steps, returning `io.EOF`.
+//
+// This is useful for testing.
+func (pds *PreGeneratedDataset) WithMaxSteps(numSteps int) *PreGeneratedDataset {
+	pds.maxSteps = numSteps
+	return pds
+}
+
 func (pds *PreGeneratedDataset) entrySize() int {
 	return 1 + 4*pds.width*pds.height
 }
@@ -682,6 +691,14 @@ func (pds *PreGeneratedDataset) entrySize() int {
 // Yield implements train.Dataset.
 func (pds *PreGeneratedDataset) Yield() (spec any, inputs, labels []tensor.Tensor, err error) {
 	retries := 0
+
+	// Check if maxSteps is reached.
+	pds.steps++
+	if pds.maxSteps > 0 && pds.steps >= pds.maxSteps {
+		err = io.EOF
+		return
+	}
+
 	spec = pds
 	for { // Loop in case pds.infinite is true, and we retry at end of file.
 		if pds.err != nil {
@@ -728,6 +745,7 @@ func (pds *PreGeneratedDataset) Yield() (spec any, inputs, labels []tensor.Tenso
 
 // Reset implements train.Dataset.
 func (pds *PreGeneratedDataset) Reset() {
+	pds.steps = 0
 	if pds.openedFile != nil {
 		_ = pds.openedFile.Close()
 	}

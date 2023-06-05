@@ -1,8 +1,7 @@
 /*
 Package inceptionv3 provides a pre-trained InceptionV3 model, or simply it's structure.
 
-This library creates the model architecture and optionally loads the pre-trained
-weights from Google.
+This library creates the model architecture and optionally loads the pre-trained weights from Google.
 It can be used with or without the top-layer.
 
 Reference:
@@ -16,29 +15,47 @@ Based on Keras implementation:
 To use it, start with BuildGraph. If using the pre-trained weights, call once DownloadAndUnpackWeights -- it is a no-op
 if weights have already been downloaded and unpacked.
 
-Example:
+If using with transfer learning, be mindful it uses batch normalization, which has its own considerations, see
+discussion in
+https://pub.towardsai.net/batchnorm-for-transfer-learning-df17d2897db6 .
 
-	var flagDataDir = flag.String("data", "~/work/inceptionv3", "Directory where to save and load model data.")
+# This model
 
-	func ModelGraph(ctx *context.Context, img *Node) *Node {
-		if img.Rank() == 3 {
-			// Prepend the batch dimension.
-			Img = ExpandDims(img, 0)
+Transfer learning model example:
+
+	var (
+		flagDataDir = flag.String("data", "~/work/my_model", "Directory where to save and load model data.")
+		flagInceptionPreTrained = flag.Bool("pretrained", true, "If using inception model, whether to use the pre-trained weights to transfer learn")
+		flagInceptionFineTuning = flag.Bool("finetuning", true, "If using inception model, whether to fine-tune the inception model")
+	)
+
+	func ModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
+		_ = spec // Not needed.
+		image := inputs[0]
+		channelsConfig := timage.ChannelsLast
+		image = inceptionv3.PreprocessImage(image, channelsConfig)
+		image = inceptionv3.ScaleImageValuesTorch(image)
+
+		var preTrainedPath string
+		if *flagInceptionPreTrained {
+			preTrainedPath = *flagDataDir
 		}
-		img = inceptionv3.PreprocessImage(img, 255.0)
-		embeddings := inceptionv3.BuildGraph(ctx.In("inceptionV3"), img).\
-			PreTrained(*flagDataDir).SetPooling(inceptionv3.MeanPooling).Done()
-		return embeddings
+		logits := inceptionv3.BuildGraph(ctx, image).PreTrained(preTrainedPath).
+			SetPooling(inceptionv3.MaxPooling).Trainable(*flagInceptionFineTuning).Done()
+		if !*flagInceptionFineTuning {
+			logits = StopGradient(logits) // We don't want to train the inception model.
+		}
+		logits = FnnOnTop(ctx, logits)
+		return []*Node{logits}
 	}
 
 	func main() {
 		…
-		err := inceptionv3.DownloadAndUnpackWeights(*flagDataDir)
-		AssertNoError(err)
+		if *flagInceptionPreTrained {
+			err := inceptionv3.DownloadAndUnpackWeights(*flagDataDir)
+			AssertNoError(err)
+		}
 		…
-		ctx := context.NewContext(manager)
-		modelExec := context.NewExec(manager, ctx, ModelGraph)
-		output := MustNoError(modelExec.Call(imageTensor))[0].Local()
 	}
 */
 package inceptionv3
@@ -55,11 +72,24 @@ import (
 	"github.com/pkg/errors"
 	"os"
 	"path"
+	"strings"
 )
 
 // ClassificationImageSize if using the Inception V3's model for classification.
 // The image should be 299 x 299.
 const ClassificationImageSize = 299
+
+// MinimumImageSize for width and height required.
+const MinimumImageSize = 75
+
+// EmbeddingSize output (it not using the top).
+const EmbeddingSize = 2048
+
+// NumberOfClasses when using the top layer.
+const NumberOfClasses = 1000
+
+// BuildScope is used by BuildGraph as a new sub-scope for the InceptionV3 layers.
+const BuildScope = "InceptionV3"
 
 // BuildGraph for InceptionV3 model.
 //
@@ -82,6 +112,7 @@ const ClassificationImageSize = 299
 //     3 channels, and they must be scaled from -1.0 to 1.0 -- see PreprocessImage
 //     to scale image accordingly if needed. If using ClassificationTop(true),
 //     the images must be of size 299x299 (defined as a constant `ClassificationImageSize`).
+//     Otherwise the minimum image size is 75x75.
 //
 // The original model has weights in `shapes.F32`. (TODO: If the image has
 // a different `DType`, it will try to convert the weights and work the model
@@ -92,9 +123,11 @@ const ClassificationImageSize = 299
 // https://github.com/keras-team/keras/blob/v2.12.0/keras/applications/inception_v3.py
 func BuildGraph(ctx *context.Context, image *Node) *Config {
 	cfg := &Config{
-		ctx:                ctx,
-		image:              image,
-		trainableVariables: true,
+		ctx:              ctx.In(BuildScope),
+		image:            image,
+		trainable:        true,
+		batchNormEpsilon: 0.001,
+		batchNormScale:   false,
 	}
 	cfg.ChannelsAxis(timage.ChannelsLast)
 	return cfg
@@ -113,10 +146,12 @@ type Config struct {
 	channelsAxisConfig timage.ChannelsAxisConfig
 	channelsAxis       int
 	spatialAxes        []int
-	trainableVariables bool
+	trainable          bool
 
-	includeTop bool
-	pooling    Pooling
+	includeTop       bool
+	pooling          Pooling
+	batchNormEpsilon float64
+	batchNormScale   bool
 
 	conv2dCount, batchNormCount int
 }
@@ -138,12 +173,13 @@ func (cfg *Config) PreTrained(baseDir string) *Config {
 // If using pre-trained weights as frozen values, set this to false -- and considering using `StopGradient()` on the
 // value returned by Done, to prevent any gradients from even propagating.
 // It's an error to configure this to false if not using pre-trained weights (see PreTrained).
-//
 // The default is true, which allows for fine-tuning of the InceptionV3 model.
+//
+// # Notice that if `Trainable(false)`, it will also mark the batch normalization for inference only
 //
 // It returns the modified Config object, so calls can be cascaded.
 func (cfg *Config) Trainable(trainable bool) *Config {
-	cfg.trainableVariables = trainable
+	cfg.trainable = trainable
 	return cfg
 }
 
@@ -187,6 +223,16 @@ const (
 	MeanPooling
 )
 
+// BatchNormScale sets whether to a scaling variable in BatchNorm.
+// It defaults to false.
+// If set to true, it is initialized with 1.0, so it has no impact if not fine-tuned.
+//
+// The original model doesn't use it, but maybe handy if training from scratch.
+func (cfg *Config) BatchNormScale(value bool) *Config {
+	cfg.batchNormScale = value
+	return cfg
+}
+
 // SetPooling configures whether to use a MaxPool at the very top of the model.
 //
 // If set to NoPooling, the default, it returns a 4D tensor, with 2048 channels
@@ -212,7 +258,7 @@ func (cfg *Config) Done() (output *Node) {
 	if !g.Ok() {
 		return
 	}
-	if cfg.baseDir == "" && !cfg.trainableVariables {
+	if cfg.baseDir == "" && !cfg.trainable {
 		g.SetErrorf("inceptionv3.BuildGraph(): cannot have Trainable(false) if not using pre-trained weights")
 		return
 	}
@@ -414,6 +460,17 @@ func (cfg *Config) Done() (output *Node) {
 		}
 	}
 	output = x
+
+	// Set all variables non-trainable, if model frozen:
+	if !cfg.trainable {
+		currentScope := ctx.Scope()
+		ctx.EnumerateVariables(func(v *context.Variable) {
+			if strings.HasPrefix(v.Scope(), currentScope) {
+				v.SetTrainable(false)
+			}
+		})
+	}
+
 	return
 }
 
@@ -447,7 +504,8 @@ func (cfg *Config) conv2DWithBatchNorm(ctx *context.Context, x *Node, kernelFilt
 
 	// Batch Normalization:
 	ctxWithWeights = cfg.readNextBatchNormalization(ctx, g) // Create a new context scope and read weights from `.h5` file.
-	x = layers.BatchNormalization(ctxWithWeights, x, cfg.channelsAxis).CurrentScope().Scale(false).Done()
+	x = layers.BatchNormalization(ctxWithWeights, x, cfg.channelsAxis).CurrentScope().
+		Scale(cfg.batchNormScale).Epsilon(cfg.batchNormEpsilon).Trainable(cfg.trainable).Done()
 	if !g.Ok() {
 		return
 	}
@@ -486,10 +544,7 @@ func (cfg *Config) loadTensorToVariable(ctx *context.Context, graph *Graph, tens
 	}
 
 	// We don't need the value, since the layer will re-load it.
-	v := ctx.VariableWithValue(variableName, local)
-	if !cfg.trainableVariables {
-		v.Trainable = false
-	}
+	_ = ctx.VariableWithValue(variableName, local)
 }
 
 // readNextConv2D enters a new scope and initializes it with the pre-trained weights for the next Conv2D layer.

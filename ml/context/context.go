@@ -655,7 +655,7 @@ func valueToTensor(value any) tensor.Tensor {
 // If a Loader is configured (see SetLoader), and the value is available to load, it will override
 // the value given here -- e.g.: the value could be actually loaded from the last checkpoint.
 //
-// Notice that variables information is stored in the "data" component of Context objects, and is shared
+// Notice that variables' information is stored in the "data" component of Context objects, and is shared
 // among all connected context references.
 func (ctx *Context) VariableWithValue(name string, value any) *Variable {
 	if !ctx.Ok() {
@@ -674,7 +674,7 @@ func (ctx *Context) VariableWithValue(name string, value any) *Variable {
 	}
 
 	if v != nil {
-		// Pre-existing variable to reuse: check the shape requested and the previous one are the same.
+		// Pre-existing variable to reuse: check that the requested and previous shapes are the same.
 		valueT := valueToTensor(value)
 		if valueT.Error() != nil {
 			ctx.SetErrorf("failed to parse value %v for variable %q in scope %q: %w", value, name, ctx.scope, valueT.Error())
@@ -719,8 +719,15 @@ func (ctx *Context) VariableWithValue(name string, value any) *Variable {
 // EnumerateVariables will call fn for each variable in the context. Notice
 // the order of visitation is deterministic.
 //
-// Notice that variables information is stored in the "data" component of Context objects, and is shared
+// Notice that variables' information is stored in the "data" component of Context objects, and is shared
 // among all connected context references.
+//
+// Example:
+//
+//	fmt.Println("\nVariables:")
+//	ctx.EnumerateVariables(func(v *context.Variable) {
+//		fmt.Printf("\t%s::%s: shape=%s\n", v.Scope(), v.Name(), v.Shape())
+//	})
 func (ctx *Context) EnumerateVariables(fn func(v *Variable)) {
 	for _, v := range ctx.data.variables {
 		fn(v)

@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/models/inceptionv3"
 	"github.com/gomlx/gomlx/types/shapes"
 	"log"
 	"math/rand"
@@ -51,8 +52,8 @@ type Configuration struct {
 	// DType of the images when converted to Tensor.
 	DType shapes.DType
 
-	// BatchSize for batches.
-	BatchSize int
+	// BatchSize for training and evaluation batches.
+	BatchSize, EvalBatchSize int
 
 	// ModelImageSize is use for height and width of the generated images.
 	ModelImageSize int
@@ -88,7 +89,8 @@ var (
 	DefaultConfig = &Configuration{
 		DType:           shapes.Float32,
 		BatchSize:       32,
-		ModelImageSize:  64,
+		EvalBatchSize:   100, // Faster evaluation with larger batches.
+		ModelImageSize:  inceptionv3.MinimumImageSize,
 		NumFolds:        5,
 		TrainFolds:      []int{0, 1, 2, 3},
 		ValidationFolds: []int{4},
@@ -149,12 +151,15 @@ func CreateDatasets(config *Configuration) (trainDS, trainEvalDS, validationEval
 	shuffle := rand.New(rand.NewSource(time.Now().UTC().UnixNano()))
 	trainPath := path.Join(config.DataDir, PreGeneratedTrainFileName)
 	if _, err := os.Stat(trainPath); err == nil && !config.ForceOriginal {
+		// Create a dataset with pre-generated images.
 		trainDS = NewPreGeneratedDataset("train [Pre]", trainPath, config.BatchSize, true,
 			config.ModelImageSize, config.ModelImageSize, config.DType)
 		if config.UseParallelism {
 			trainDS = data.CustomParallel(trainDS).Buffer(config.BufferSize).Start()
 		}
+
 	} else {
+		// Create a dataset that reads individual image files from disk.
 		trainDS = NewDataset("train", config.DataDir, config.BatchSize, true, shuffle,
 			config.NumFolds, config.TrainFolds, config.FoldsSeed,
 			config.ModelImageSize, config.ModelImageSize, config.AngleStdDev, config.FlipRandomly, config.DType)
@@ -163,12 +168,16 @@ func CreateDatasets(config *Configuration) (trainDS, trainEvalDS, validationEval
 		}
 	}
 
+	// Training dataset used for evaluation.
 	trainEvalPath := path.Join(config.DataDir, PreGeneratedTrainEvalFileName)
 	if _, err := os.Stat(trainEvalPath); err == nil && !config.ForceOriginal {
-		trainEvalDS = NewPreGeneratedDataset("train-eval [Pre]", trainEvalPath, config.BatchSize, false,
+		// Create a dataset with pre-generated images.
+		trainEvalDS = NewPreGeneratedDataset("train-eval [Pre]", trainEvalPath, config.EvalBatchSize, false,
 			config.ModelImageSize, config.ModelImageSize, config.DType)
+
 	} else {
-		trainEvalDS = NewDataset("train-eval", config.DataDir, config.BatchSize, false, nil,
+		// Create a dataset that reads individual image files from disk.
+		trainEvalDS = NewDataset("train-eval", config.DataDir, config.EvalBatchSize, false, nil,
 			config.NumFolds, config.TrainFolds, config.FoldsSeed,
 			config.ModelImageSize, config.ModelImageSize, 0, false, config.DType)
 		if config.UseParallelism {
@@ -176,12 +185,16 @@ func CreateDatasets(config *Configuration) (trainDS, trainEvalDS, validationEval
 		}
 	}
 
+	// Validation dataset.
 	validPath := path.Join(config.DataDir, PreGeneratedValidationFileName)
 	if _, err := os.Stat(validPath); err == nil && !config.ForceOriginal {
-		validationEvalDS = NewPreGeneratedDataset("valid-eval [Pre]", validPath, config.BatchSize, false,
+		// Create a dataset with pre-generated images.
+		validationEvalDS = NewPreGeneratedDataset("valid-eval [Pre]", validPath, config.EvalBatchSize, false,
 			config.ModelImageSize, config.ModelImageSize, config.DType)
+
 	} else {
-		validationEvalDS = NewDataset("valid-eval", config.DataDir, config.BatchSize, false, nil,
+		// Create a dataset that reads individual image files from disk.
+		validationEvalDS = NewDataset("valid-eval", config.DataDir, config.EvalBatchSize, false, nil,
 			config.NumFolds, config.TrainFolds, config.FoldsSeed,
 			config.ModelImageSize, config.ModelImageSize, 0, false, config.DType)
 		if config.UseParallelism {

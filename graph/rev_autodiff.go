@@ -339,7 +339,7 @@ var VJPRegistration = map[xla.NodeType]VJP{
 	xla.ConcatenateNode:        concatenateVJP,
 	xla.ConvGeneralDilatedNode: convGeneralDilatedVJP,
 	xla.ReduceWindowNode:       reduceWindowVJP,
-	xla.BatchNormTrainingNode:  batchNormVJP,
+	xla.BatchNormTrainingNode:  batchNormTrainingVJP,
 	xla.TransposeNode:          transposeVJP,
 	xla.BroadcastInDimNode:     broadcastInDimVJP,
 }
@@ -716,12 +716,12 @@ func gatherVJP(node, v *Node, _ shapes.Shape) []*Node {
 	return nil
 }
 
-// batchNormVJP generates the gradient with respect to the operand and the scale and offset
+// batchNormTrainingVJP generates the gradient with respect to the operand and the scale and offset
 // parameters. It uses the XLA implemented gradient.
-func batchNormVJP(node, v *Node, _ shapes.Shape) []*Node {
+func batchNormTrainingVJP(node, v *Node, _ shapes.Shape) []*Node {
 	operand, scale := node.inputs[0], node.inputs[1]
-	mean := GetTupleElement(node, 1)
-	variance := GetTupleElement(node, 2)
+	mean := GetTupleElement(node, 1)     // Output 1 of batchNormTraining, the batchMean.
+	variance := GetTupleElement(node, 2) // Output 2 of batchNormTraining, the batchVariance.
 	epsilon := node.serializedNode.Float
 	featureAxis := node.serializedNode.Int
 	gradOutput := GetTupleElement(v, 0)
