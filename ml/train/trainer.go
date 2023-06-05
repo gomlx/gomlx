@@ -236,12 +236,16 @@ func (r *Trainer) createExecutor(spec any, inputsLen, labelsLen int,
 		r.context = r.context.Checked(false) // Only check for duplicate variables at the first graph creation.
 	}
 	r.inputsAndLabelsLenPerInfo[spec] = [2]int{inputsLen, labelsLen}
+	trainerName := "Trainer"
+	if _, found := spec.(fmt.Stringer); found {
+		trainerName = fmt.Sprintf("Trainer: spec=%s", spec)
+	}
 	exec := context.NewExec(r.manager, r.context,
 		func(ctx *context.Context, inputsAndLabels []*graph.Node) (metrics []*graph.Node) {
 			inputs := inputsAndLabels[:inputsLen]
 			labels := inputsAndLabels[inputsLen:]
 			return graphFn(spec, ctx, inputs, labels)
-		}).WithName(fmt.Sprintf("Trainer: spec=%v", spec))
+		}).WithName(trainerName)
 	if exec == nil {
 		return nil, errors.Errorf("Failed to create a computation graph for spec=%+v", spec)
 	}
