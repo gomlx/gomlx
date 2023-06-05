@@ -60,10 +60,10 @@ type parallelDatasetImpl struct {
 //
 // Example:
 //
-//		var ds train.Dataset
-//		ds = NewMyDataset(...)
-//	 	ds = data.Parallel(ds)
-//	    MyTrainFunc(ds)
+//	var ds train.Dataset
+//	ds = NewMyDataset(...)
+//	ds = data.Parallel(ds)
+//	MyTrainFunc(ds)
 func Parallel(ds train.Dataset) *ParallelDataset {
 	pds := CustomParallel(ds)
 	return pds.Buffer(pds.parallelism).Start()
