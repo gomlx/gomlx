@@ -109,6 +109,11 @@ func (ps *Plots) Attach(loop *train.Loop, numPoints int) {
 			// Training metrics are pre-generated and given.
 			step := float64(loop.LoopStep)
 			for ii, desc := range loop.Trainer.TrainMetrics() {
+				if desc.Name() == "Batch Loss" {
+					// Skip the batch loss, that is not very informative -- it fluctuates a lot at each batch,
+					// and the trainer always includes the moving average loss.
+					continue
+				}
 				metric := shapes.ConvertTo[float64](metrics[ii].Value())
 				ps.AddPoint("Train: "+desc.Name(), desc.MetricType(), step, metric)
 			}
