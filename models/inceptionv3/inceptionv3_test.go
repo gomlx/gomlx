@@ -39,8 +39,9 @@ func TestBuildGraph(t *testing.T) {
 	// InceptionV3 classification.
 	ctx := context.NewContext(manager)
 	inceptionV3Exec := context.NewExec(manager, ctx, func(ctx *context.Context, img *Node) *Node {
-		img = ExpandDims(img, 0)          // Add batch dimension
-		img = PreprocessImage(img, 255.0) // InceptionV3 takes images from -1.0 to 1.0
+		img = ExpandDims(img, 0) // Add batch dimension
+		img = PreprocessImage(img, timage.ChannelsLast)
+		img = ScaleImageValuesKeras(img, 255.0) // Our ground-truth is the Keras model, so we use the same scale.
 		return BuildGraph(ctx, img).PreTrained(*flagDataDir).ClassificationTop(true).Done()
 	})
 	results, err := inceptionV3Exec.Call(imgT)
@@ -48,7 +49,7 @@ func TestBuildGraph(t *testing.T) {
 	predictionT := results[0]
 	prediction := predictionT.Value().([][]float32)[0] // The last [0] takes the first element of teh batch of 1.
 
-	// Compare with expected result:
+	// Compare with the expected result:
 	wantF, err := os.Open("gomlx_gopher_classification_output.bin")
 	require.NoError(t, err)
 	wantT, err := tensor.Load(wantF)
