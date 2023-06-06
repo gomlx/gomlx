@@ -161,7 +161,7 @@ func (g *Graph) Name() string { return g.name }
 // Manager this Graph is attached to.
 func (g *Graph) Manager() *Manager { return g.manager }
 
-// Client return the client where this Graph is located, it's given by its manager and indicates
+// Client returns the client where this Graph is located, it's given by its manager and indicates
 // the device for the computations.
 func (g *Graph) Client() *xla.Client { return g.manager.Client() }
 
@@ -192,7 +192,7 @@ func (g *Graph) GraphId() GraphId {
 // Node creation methods (all the math ops) become no-op if the graph has an error.
 func (g *Graph) Error() error {
 	if g == nil {
-		return fmt.Errorf("the Graph is nil")
+		return errors.Errorf("the Graph is nil")
 	}
 	return g.error
 }
@@ -372,11 +372,11 @@ func (g *Graph) AOTCompile() ([]byte, error) {
 func (g *Graph) RunError(params ParamsMap) (*tensor.Device, error) {
 	numParams := g.NumParameters()
 	if len(params) != numParams {
-		return nil, fmt.Errorf("graph %q takes %d parameters, %d given to RunError()", g.name, numParams, len(params))
+		return nil, errors.Errorf("graph %q takes %d parameters, %d given to RunError()", g.name, numParams, len(params))
 	}
 	deviceParams, err := g.deviceDataForParam(params)
 	if err != nil {
-		return nil, fmt.Errorf("failed to convert parameters: %v", err)
+		return nil, err
 	}
 	result, err := g.comp.Run(deviceParams)
 	if err != nil {
@@ -435,17 +435,17 @@ func (g *Graph) deviceDataForParam(params ParamsMap) ([]*xla.OnDeviceBuffer, err
 	for node, param := range params {
 		handle := node.ParameterHandle()
 		if handle == InvalidParameterHandle {
-			return nil, fmt.Errorf("parameter for node %q is invalid (InvalidParameterHandle)", node)
+			return nil, errors.Errorf("parameter for node %q is invalid (InvalidParameterHandle)", node)
 		}
 		if !buffers[handle].IsNil() {
-			return nil, fmt.Errorf("parameter for node %q defined more than once", node)
+			return nil, errors.Errorf("parameter for node %q defined more than once", node)
 		}
 		if handle == InvalidParameterHandle {
-			return nil, fmt.Errorf("parameter for node %q doesnt have a valid xlaHandle", node)
+			return nil, errors.Errorf("parameter for node %q doesnt have a valid xlaHandle", node)
 		}
 		deviceT := anyToDeviceTensor(g.manager, g.deviceNum, param)
 		if deviceT.Error() != nil {
-			return nil, fmt.Errorf("parameter for node %q fails to transfer to server: %v", node, deviceT.Error())
+			return nil, errors.Wrapf(deviceT.Error(), "parameter for node %q failed to transfer to server", node)
 		}
 		buffers[handle] = deviceT.ShapedBuffer()
 	}
@@ -504,9 +504,9 @@ func (g *Graph) Parameter(name string, shape shapes.Shape) (node *Node) {
 		name = fmt.Sprintf("p#%d", parameterHandle)
 	}
 
-	// Check whether parameter already exists, and return it instead if yes.
+	// Check whether the parameter already exists, and return it instead if yes.
 	if handle, ok := g.parameterNameToHandle[name]; ok {
-		// Parameter already exist, return it instead.
+		// If the parameter already exists, return it instead.
 		node = g.parameters[handle]
 		if !node.shape.Eq(shape) {
 			// Shape requested and the one that already exists don't match,
