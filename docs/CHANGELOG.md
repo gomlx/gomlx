@@ -2,8 +2,10 @@
 
 ## Next
 
-* Force download of correct version of the C++ library in the Jupyter docker -- this
+* Added ArgMax and ArgMin.
+* Force download of the correct version of the C++ library in the Jupyter docker -- this
   prevents Docker cache using an older version.
+* Improved error messages in some cases.
 
 ## v0.3.1
 

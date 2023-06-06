@@ -183,7 +183,10 @@ func scatterXLA(operand, scatterIndices, updates *Node,
 	}, []*Node{operand, scatterIndices, updates})
 }
 
-// AdjustAxis returns the axis adjusted to the operand shape, in case the axis given is negative.
+// AdjustAxis returns the positive axis to the operand shape, adjusting in case the axis given is negative.
+//
+// It sets the graph to an error state (`operand.Graph()`) if the axis given is out of range for the operand
+// shape.
 func AdjustAxis(operand *Node, axis int) int {
 	g := operand.Graph()
 	adjustedAxis := axis

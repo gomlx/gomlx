@@ -36,7 +36,7 @@ type NodeType int32
 //
 // Please bump whenever a new NodeType is created, and keep the C++ (in `node.h`) and Go version numbers
 // in sync.
-const XlaWrapperVersion = 10
+const XlaWrapperVersion = 12
 
 // NodeType values need to be exactly the same as defined in the C++ code, in `c/gomlx/node.h`
 // TODO: keep those in sync using some generator script.
@@ -72,6 +72,7 @@ const (
 	BatchNormInferenceNode
 	BatchNormGradNode
 	DotGeneralNode
+	ArgMinMaxNode
 
 	// One-argument ops:
 

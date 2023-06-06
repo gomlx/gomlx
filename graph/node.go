@@ -1023,6 +1023,76 @@ func reduceHelper(x, init *Node, reduceAxes []int, nodeType xla.NodeType) *Node 
 	}, []*Node{x, init})
 }
 
+// ArgMax returns the index of the largest element across the given axis.
+//
+// The selected axis is reduced, and the output has one fewer axes (rank `x.Rank() - 1`).
+// The output `DType`, if not given, is `shapes.I32`.
+//
+// Ties are resolved by returning the smallest index.
+func ArgMax(x *Node, axis int, outputDType ...shapes.DType) (output *Node) {
+	g := validateGraphFromInputs(x)
+	output = g.InvalidNode()
+	if !g.Ok() {
+		return
+	}
+
+	dtype := shapes.I32
+	if len(outputDType) > 1 {
+		g.SetErrorf("ArgMax takes at most one outputDType, %d values given", len(outputDType))
+		return
+	} else if len(outputDType) == 1 {
+		dtype = outputDType[0]
+	}
+	return argMinMax(x, axis, dtype, false)
+}
+
+// ArgMin returns the index of the smallest element across the given axis.
+//
+// The selected axis is reduced, and the output has one fewer axes (rank `x.Rank() - 1`).
+// The output `DType`, if not given, is `shapes.I32`.
+//
+// Ties are resolved by returning the smallest index.
+func ArgMin(x *Node, axis int, outputDType ...shapes.DType) (output *Node) {
+	g := validateGraphFromInputs(x)
+	output = g.InvalidNode()
+	if !g.Ok() {
+		return
+	}
+
+	dtype := shapes.I32
+	if len(outputDType) > 1 {
+		g.SetErrorf("ArgMin takes at most one outputDType, %d values given", len(outputDType))
+		return
+	} else if len(outputDType) == 1 {
+		dtype = outputDType[0]
+	}
+	return argMinMax(x, axis, dtype, true)
+}
+
+func argMinMax(x *Node, axis int, outputDType shapes.DType, isMin bool) (output *Node) {
+	g := validateGraphFromInputs(x)
+	output = g.InvalidNode()
+	if !g.Ok() {
+		return
+	}
+
+	adjustedAxis := AdjustAxis(x, axis)
+	if !g.Ok() {
+		return
+	}
+
+	output = newNode(g, &xla.SerializedNode{
+		Type: xla.ArgMinMaxNode,
+		Int:  adjustedAxis,
+		Ints: []int{boolToInt(isMin), int(outputDType)},
+	}, []*Node{x})
+
+	// We don't define a gradient for the ArgMax result. It's a discrete quantity, not
+	// something one usually wants to differentiate from anyway.
+	// Presumably, it's either 0 or undefined (if there are another more than one elements with the max value).
+	return StopGradient(output)
+}
+
 // convertNegativeDimensionsAndSort in a copy of dimsWithNegatives.
 func convertNegativeDimensionsAndSort(rank int, dimsWithNegatives []int) []int {
 	copyDims := make([]int, len(dimsWithNegatives))
@@ -1069,13 +1139,13 @@ func ReduceMaskedSum(x, mask *Node, reduceAxes ...int) *Node {
 
 // ReduceAllMaskedSum reduces all dimensions to a scalar by summing.
 //
-// It ignores values for which the corresponding mask is false. mask and x must have the
-// same shape.
+// It ignores values for which the corresponding mask is false.
+// The `mask` and `x` values must have the same shape.
 func ReduceAllMaskedSum(x, mask *Node) *Node {
 	return ReduceMaskedSum(x, mask)
 }
 
-// ReduceMean reduces by taking the mean over the elements of the selected axes of the x.
+// ReduceMean reduces by taking the mean over the elements of the selected axes.
 func ReduceMean(x *Node, reduceAxes ...int) *Node {
 	g := validateGraphFromInputs(x)
 	if !g.Ok() {
@@ -1091,7 +1161,7 @@ func ReduceAllMean(x *Node) *Node {
 	return ReduceMean(x)
 }
 
-// ReduceMultiply reduces by summing over the elements of the selected axes of the x.
+// ReduceMultiply reduces by summing over the elements of the selected axes.
 // If reduceAxes is nil, reduce over all dimensions to a scalar.
 func ReduceMultiply(x *Node, reduceAxes ...int) *Node {
 	g := validateGraphFromInputs(x)
@@ -1107,7 +1177,7 @@ func ReduceAllMultiply(x *Node) *Node {
 	return ReduceMultiply(x)
 }
 
-// ReduceMax reduces by taking the max over the elements of the selected axes of the x.
+// ReduceMax reduces by taking the max over the elements of the selected axes.
 // If reduceAxes is nil, reduce over all dimensions to a scalar.
 func ReduceMax(x *Node, reduceAxes ...int) *Node {
 	g := validateGraphFromInputs(x)
