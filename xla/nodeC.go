@@ -64,12 +64,11 @@ func (comp *Computation) SerializedToC(node *SerializedNode) *C.SerializedNode {
 		float_v:    C.float(node.Float),
 	}
 	if numInputs > 0 {
-		// Create inputs array.
+		// Create the `inputs` array.
 		cNode.inputs = MallocArrayAndSet[C.XlaOpPtr](numInputs, func(ii int) C.XlaOpPtr {
 			return (C.XlaOpPtr)(unsafe.Pointer(comp.ops[node.NodeInputs[ii]]))
 		})
 	}
-
 	if node.Shape.Ok() {
 		cNode.shape = CShapeFromShape(node.Shape)
 	}
