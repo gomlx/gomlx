@@ -170,6 +170,18 @@ XlaStatus* ComputationAddOp(Computation *comp, SerializedNode *node) {
         }
         break;
     }
+    case ArgMinMaxNode: {
+        // Inputs:
+        //   * inputs[0]: Tensor to `num_inputs_to_reduce` pairs of input/initial value.
+        //   * node->integer: Axis on which to calculate the argmax/argmin.
+        //   * node->integer_array[0]: `is_min`, whether to do argmin or argmax.
+        //   * node->integer_array[1]: DType of the output.
+        int axis(node->integer);
+        bool is_min(node->integer_array[0]);
+        xla::PrimitiveType output_type = static_cast<xla::PrimitiveType>(node->integer_array[1]);
+        op = xla::ArgMinMax(*inputs[0], output_type, axis, is_min);
+        break;
+    }
     case SliceNode: {
         int rank = node->integer_array_size / 3;
         absl::Span<const int64_t> starts(node->integer_array, rank);

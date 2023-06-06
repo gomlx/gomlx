@@ -78,6 +78,7 @@ enum NodeType {
     BatchNormInferenceNode,
     BatchNormGradNode,
     DotGeneralNode,
+    ArgMinMaxNode,
 
     // One-argument ops:
     AbsNode,
@@ -139,6 +140,8 @@ typedef struct {
     int32_t node_type;  // [num_nodes]
     int32_t num_inputs;  // [num_nodes]
     XlaOpPtr* inputs;
+
+    // When there is a literal involved.
     struct Literal *literal;
 
     // Extra arguments that depend on the node type:
