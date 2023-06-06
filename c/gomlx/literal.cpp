@@ -38,6 +38,8 @@
 
 #include "gomlx/literal.h"
 
+using namespace std;
+
 // Convert xla::Literal object to our own C-wrapped structure. Ownership is transferred.
 Literal *XlaLiteralToLiteral(xla::Literal *xla_literal) {
     Literal *literal = new Literal();
@@ -90,6 +92,7 @@ void MakeXlaLiteralFromShape(Literal* literal) {
     literal->literal = new xla::Literal(xla_shape);
     literal->data = literal->literal->untyped_data();
     literal->size_bytes = literal->literal->size_bytes();
+    literal->size = literal->literal->element_count();
 }
 
 Literal *MakeLiteralTuple(Literal** elements, int num_elements) {
@@ -100,6 +103,13 @@ Literal *MakeLiteralTuple(Literal** elements, int num_elements) {
     }
 
     return XlaLiteralToLiteral(new xla::Literal(std::move(xla::LiteralUtil::MakeTuple(literals))));
+}
+
+void XlaLiteralRefreshData(Literal* literal) {
+    xla::Shape xla_shape = MakeXlaShape(literal->shape);
+    literal->data = literal->literal->untyped_data();
+    literal->size_bytes = literal->literal->size_bytes();
+    literal->size = literal->literal->element_count();
 }
 
  StatusOr LiteralToOnDeviceBuffer(Literal* literal, Client* client, int device_ordinal) {
