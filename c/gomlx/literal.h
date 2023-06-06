@@ -66,6 +66,9 @@ void DeleteLiteral(Literal* literal);
 // `literal->literal` with the newly created `xla::Literal`.
 void MakeXlaLiteralFromShape(Literal* literal);
 
+// Update data, size and size_bytes elements.
+void XlaLiteralRefreshData(Literal* literal);
+
 // MakeXlaLiteralTuple combine the `elements` into an xla::Literal, and returns it converted to
 // a newly allocated Literal structure.
 Literal *MakeLiteralTuple(Literal** elements, int num_elements);
