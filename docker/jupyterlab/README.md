@@ -26,14 +26,21 @@ should split on 2 dockers)
 
 ### Building the Docker
 
+First update the `GOMLX_VERSION` in file `dockers/jupyterlab/Dockerfile`. Set the environment variable `version`
+to the same string (something like `"v0.X.Y"`).
+
 Due to a couple of issues with NVidia drivers and Docker runtime selection during build, we need a bit of trickery:
 
-1. I have no idea why, but using CUDA/CuDNN with XLA the very first time is very slow. It takes a couple of minutes to run. So we run a trivial model once upfront, so the docker is ready to run faster.
-1. Unfortunately `docker build` more recently cannot run with access to GPUs (it doesn't use Nvidia runtime by default). See issue here:
+1. I have no idea why, but using CUDA/CuDNN with XLA the very first time is very slow.  
+   It takes a couple of minutes to run.
+   So we run a trivial model once upfront, so the docker is ready to run faster.
+1. Unfortunately `docker build` more recently cannot run with access to GPUs (it doesn't use Nvidia runtime by default).
+   See issue here:
   * https://forums.developer.nvidia.com/t/nvidia-driver-is-not-available-on-latest-docker/246265/2
   * https://stackoverflow.com/questions/59691207/docker-build-with-nvidia-runtime/61737404#61737404
 
-So what we do is, after the image is built, immediately run a test train and commit the changed container to the image. We have to then also add a change to set update `CMD`, otherwise it will rewrite the `CMD` with our test script.
+So what we do is, after the image is built, immediately run a test train and commit the changed container to the 
+image. We have to then also add a change to set update `CMD`, otherwise it will rewrite the `CMD` with our test script.
 
 
 ```bash

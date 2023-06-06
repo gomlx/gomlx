@@ -2,7 +2,8 @@ FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
 
 LABEL maintainer="pfeifer@gmail.com"
 
-ARG GO_VERSION=1.20.4
+ARG GOMLX_VERSION="v0.3.1"
+ARG GO_VERSION="1.20.4"
 
 #######################################################################################################
 # User, home directory and basics.
@@ -40,6 +41,17 @@ RUN apt-get install -y --no-install-recommends cuda-nvrtc-dev-11-8
 RUN apt-get install -y --no-install-recommends cuda-nvcc-11-8
 
 
+#######################################################################################################
+# Jupyter Lab
+#######################################################################################################
+USER root
+RUN apt install --yes --no-install-recommends python3 python3-pip
+ENV PATH=${PATH}:${HOME}/.local/bin
+
+USER ${NB_USER}
+WORKDIR ${HOME}
+RUN pip3 install jupyterlab
+
 
 #######################################################################################################
 # Go and GoMLX Libraries and Code
@@ -65,23 +77,12 @@ RUN apt-get update --yes \
     && apt-get install --yes --no-install-recommends gcc libunwind8 liblzma5 libgoogle-perftools-dev
 
 WORKDIR "/usr/local"
-RUN wget --quiet --output-document=- "https://github.com/gomlx/gomlx/releases/latest/download/gomlx_xla-linux-amd64.tar.gz" | tar -xz
+RUN wget --quiet --output-document=- "https://github.com/gomlx/gomlx/releases/download/${GOMLX_VERSION}/gomlx_xla-linux-amd64.tar.gz" | tar -xz
 ENV LD_LIBRARY_PATH /usr/local/lib:${LD_LIBRARY_PATH}
 
-
-
-#######################################################################################################
-# Jupyter Lab
-#######################################################################################################
-USER root
-RUN apt install --yes --no-install-recommends python3 python3-pip
-ENV PATH=${PATH}:${HOME}/.local/bin
-
 USER ${NB_USER}
+ENV PATH ${HOME}/go/bin:${PATH}
 WORKDIR ${HOME}
-RUN pip3 install jupyterlab
-
-
 
 #######################################################################################################
 # Tests: run at the end, so docker build cache is not busted.

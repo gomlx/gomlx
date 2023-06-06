@@ -1,5 +1,10 @@
 # GoMLX changelog
 
+## Next
+
+* Force download of correct version of the C++ library in the Jupyter docker -- this
+  prevents Docker cache using an older version.
+
 ## v0.3.1
 
 * DogsVsCats: added inception model type; fix of metrics types for plotting.
