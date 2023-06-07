@@ -2,6 +2,7 @@
 
 ## Next
 
+* Added Kernel Inception Distance (KID) metric implementation.
 * Added context as the first parameter to metrics.BaseMetricGraph.
 * Added ArgMax and ArgMin.
 * Force download of the correct version of the C++ library in the Jupyter docker -- this

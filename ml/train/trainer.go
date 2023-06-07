@@ -148,7 +148,7 @@ func NewTrainer(manager *graph.Manager, ctx *context.Context,
 	// Create a context executor for TrainStep. Automatically include batch loss and moving average loss metrics.
 	numMetrics := len(trainMetrics) + 2
 	lossAndMetrics := make([]metrics.Interface, numMetrics)
-	batchLossFn := func(labels, predictions []*graph.Node) *graph.Node {
+	batchLossFn := func(_ *context.Context, labels, predictions []*graph.Node) *graph.Node {
 		// Assume lossVar has already been set.
 		g := predictions[0].Graph()
 		loss := GetLosses(ctx, g)

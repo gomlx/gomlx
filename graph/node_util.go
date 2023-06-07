@@ -80,6 +80,16 @@ func DivScalar(x *Node, scalar float64) *Node {
 	return Div(x, Scalar(g, x.DType(), scalar))
 }
 
+// PowScalar converts scalar to a constant with x's DType and returns `Pow(x, scalar)` (or `x ** scalar`)
+// with proper broadcasting.
+func PowScalar(x *Node, scalar float64) *Node {
+	g := x.Graph()
+	if !g.Ok() {
+		return g.InvalidNode()
+	}
+	return Pow(x, Scalar(g, x.DType(), scalar))
+}
+
 // Square returns x^2 point-wise. Same as `Mul(x, x)`.
 func Square(x *Node) *Node {
 	return Mul(x, x)
@@ -224,10 +234,17 @@ func StrictlyPositiveIndicator(x *Node) *Node {
 	return Add(Sign(Sub(Sign(x), one)), one)
 }
 
-// Clip is a short cut to `Min(max, Max(x, min))`, which returns the values of x clipped between
+// Clip is a shortcut to `Min(max, Max(x, min))`, which returns the values of x clipped between
 // min and max.
 func Clip(x, min, max *Node) *Node {
 	return Min(max, Max(x, min))
+}
+
+// ClipScalar is a shortcut to `Min(max, Max(x, min))`, which returns the values of x clipped between
+// min and max. The values min and max are given as scalar values -- the float64 is converted to the
+// `DType` of x.
+func ClipScalar(x *Node, min, max float64) *Node {
+	return MinScalar(MaxScalar(x, min), max)
 }
 
 // OneHot converts an integer numbers representing indices to it's "one-hot" representation, that is an expanded
@@ -434,7 +451,8 @@ func Diagonal(g *Graph, dim int) *Node {
 }
 
 // DiagonalWithValue returns a diagonal matrix of shape `[dim, dim]` with
-// scalar in the diagonal and zero elsewhere.
+// scalar in the diagonal and zero elsewhere. Set scalar to `ScalarOne()`
+// and you get an identity matrix.
 func DiagonalWithValue(scalar *Node, dim int) *Node {
 	g := scalar.Graph()
 	if !g.Ok() {
