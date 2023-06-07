@@ -920,6 +920,31 @@ func ExpandDims(x *Node, axes ...int) *Node {
 	return ReshapeWithShape(x, toShape)
 }
 
+// ExpandLeftToRank prepend axes of dimension 1 to x, until it reaches rank `newRank`.
+func ExpandLeftToRank(x *Node, newRank int) (output *Node) {
+	g := validateGraphFromInputs(x)
+	output = g.InvalidNode()
+	if !g.Ok() {
+		return
+	}
+	if newRank < x.Rank() {
+		g.SetErrorf("ExpandLeftToRank(newRank=%d), but x already has rank %d", newRank, x.Rank())
+		return
+	}
+	if newRank == x.Rank() {
+		// Already the correct rank.
+		output = x
+		return
+	}
+	newDims := make([]int, 0, newRank)
+	for ii := 0; ii < newRank-x.Rank(); ii++ {
+		newDims = append(newDims, 1)
+	}
+	newDims = append(newDims, x.Shape().Dimensions...)
+	output = Reshape(x, newDims...)
+	return
+}
+
 // Squeeze removes `axes` of dimension 1. If `axes` is not set, all axes of dimension 1 are removed.
 // Otherwise, only the provided `axes` are removed. If any of the given `axes` is not of dimension 1,
 // an error is raised in the Graph and an invalid node is returned.
