@@ -22,14 +22,15 @@ import (
 )
 
 // Dataset implements train.Dataset, and yields one image at a time.
-// It pre-transforms the image to the target size.
-//
-// To do batching or shuffling, use
+// It pre-transforms the image to the target `imageSize`.
 type Dataset struct {
-	next     int
-	size     int
-	shuffle  []int
-	toTensor *timage.ToTensorConfig
+	name      string
+	next      int
+	imageSize int
+	shuffle   []int
+	toTensor  *timage.ToTensorConfig
+
+	partitionSelection []bool // Which indices to take.
 
 	mu sync.Mutex
 }
@@ -38,12 +39,15 @@ type Dataset struct {
 // one image at time. It reads them from disk, and the parsing
 // can be parallelized. See `data.NewParallelDataset`.
 //
-// The images are resized and cropped to `size x size` pixel,
+// The images are resized and cropped to `imageSize x imageSize` pixel,
 // cut from the middle.
-func NewDataset(dtype shapes.DType, size int) *Dataset {
+//
+// It doesn't support batch, but you can use GoMLX's `data.Batch` for that.
+func NewDataset(dtype shapes.DType, imageSize int) *Dataset {
 	return &Dataset{
-		size:     size,
-		toTensor: timage.ToTensor(dtype),
+		name:      "Oxford Flowers 102",
+		imageSize: imageSize,
+		toTensor:  timage.ToTensor(dtype),
 	}
 }
 
@@ -54,10 +58,12 @@ var _ train.Dataset = &Dataset{}
 // start of an epoch.
 //
 // Once shuffled, every time the dataset is reset, it is reshuffled.
-func (ds *Dataset) Shuffle() {
+func (ds *Dataset) Shuffle() *Dataset {
 	ds.mu.Lock()
 	ds.shuffleLocked()
 	ds.mu.Unlock()
+	ds.name = ds.name + " [shuffled]"
+	return ds
 }
 
 func (ds *Dataset) shuffleLocked() {
@@ -75,29 +81,71 @@ func (ds *Dataset) shuffleLocked() {
 	}
 }
 
+// Partition allows one to partition the dataset into different parts -- typically "train", "validation" and "test".
+// This should be called before the start of an epoch.
+//
+// It takes a seed number based on which the partitions will be selected, and the range of elements specified as
+// `from` and `to`: these are float values that represent the slice (from 0.0 to 1.0) of the examples that go into
+// this dataset.
+//
+// Example:
+//
+//	seed := int64(42)
+//	dsTrain := oxfordflowers102.NewDataset(shapes.F32, 75).Partition(seed, 0, 0.8)   // 80%
+//	dsValid := oxfordflowers102.NewDataset(shapes.F32, 75).Partition(seed, 0.8, 0.9) // 10%
+//	dsTest := oxfordflowers102.NewDataset(shapes.F32, 75).Partition(seed, 0.9, 1.0)  // 10%
+func (ds *Dataset) Partition(seed int64, from, to float64) *Dataset {
+	ds.mu.Lock()
+	defer ds.mu.Unlock()
+	ds.name = fmt.Sprintf("%s [slice %d%%-%d%%]", ds.name, int(100.0*from), int(100.0*to))
+
+	ds.partitionSelection = make([]bool, NumExamples)
+	rng := rand.New(rand.NewSource(seed))
+	for ii := range ds.partitionSelection {
+		randPos := rng.Float64()
+		if randPos >= from && randPos < to {
+			ds.partitionSelection[ii] = true
+		}
+	}
+	return ds
+}
+
 // nextIndex returns the next index and increments it.
 // Concurrency safe.
 // Returns -1 if reached the end of the dataset.
 func (ds *Dataset) nextIndex() (index int) {
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
-	index = ds.next
-	if ds.next < 0 {
+
+	for {
+		index = ds.next
+		if ds.next < 0 {
+			return
+		}
+
+		ds.next++
+		if ds.next >= NumExamples {
+			ds.next = -1 // Indicates the end of epoch.
+		}
+
+		if ds.shuffle != nil {
+			index = ds.shuffle[index]
+		}
+
+		if len(ds.partitionSelection) > 0 {
+			if !ds.partitionSelection[index] {
+				// This index is not part of this partition, loop and take next index.
+				continue
+			}
+		}
+
 		return
 	}
-	ds.next++
-	if ds.shuffle != nil {
-		index = ds.shuffle[index]
-	}
-	if ds.next >= NumExamples {
-		ds.next = -1 // Indicates the end of epoch.
-	}
-	return
 }
 
 // Name implements train.Dataset interface.
 func (ds *Dataset) Name() string {
-	return "Oxford Flowers 102"
+	return ds.name
 }
 
 // Yield implements train.Dataset interface.
@@ -122,30 +170,30 @@ func (ds *Dataset) Yield() (spec any, inputs []tensor.Tensor, labels []tensor.Te
 		return
 	}
 
-	// 1. Resize the smallest dimension to size, preserving ratio.
+	// 1. Resize the smallest dimension to imageSize, preserving ratio.
 	width := img.Bounds().Dx()
 	height := img.Bounds().Dy()
 	if width < height {
-		ratio := float64(width) / float64(ds.size)
-		width = ds.size
+		ratio := float64(width) / float64(ds.imageSize)
+		width = ds.imageSize
 		height = int(math.Round(float64(height) / ratio))
 	} else if height < width {
-		ratio := float64(height) / float64(ds.size)
-		height = ds.size
+		ratio := float64(height) / float64(ds.imageSize)
+		height = ds.imageSize
 		width = int(math.Round(float64(width) / ratio))
 	} else {
-		width = ds.size
-		height = ds.size
+		width = ds.imageSize
+		height = ds.imageSize
 	}
 	img = imaging.Resize(img, width, height, imaging.Linear)
 
-	// 2. Crop at center the largest dimension to size.
+	// 2. Crop at center the largest dimension to imageSize.
 	if width > height {
-		start := (width - ds.size) / 2
-		img = imaging.Crop(img, image.Rect(start, 0, start+ds.size, ds.size))
+		start := (width - ds.imageSize) / 2
+		img = imaging.Crop(img, image.Rect(start, 0, start+ds.imageSize, ds.imageSize))
 	} else if height > width {
-		start := (height - ds.size) / 2
-		img = imaging.Crop(img, image.Rect(0, start, ds.size, start+ds.size))
+		start := (height - ds.imageSize) / 2
+		img = imaging.Crop(img, image.Rect(0, start, ds.imageSize, start+ds.imageSize))
 	}
 
 	inputs = []tensor.Tensor{ds.toTensor.Single(img), tensor.FromValue(index)}
@@ -161,18 +209,26 @@ func (ds *Dataset) Reset() {
 	ds.mu.Unlock()
 }
 
-// InMemoryDataset creates a `data.InMemoryDataset` with the Oxford Flowers 102, of the given `size` for both, height
-// and width -- image is resized and then cropped at the center.
+// InMemoryDataset creates a `data.InMemoryDataset` with the Oxford Flowers 102, of the given `imageSize` for both,
+// height and width -- image is resized and then cropped at the center.
 //
-// A cache version is automatically saved at the baseDir, if it is not empty. And if a cache file is found, it is
-// used, instead of re-reading and processing all the images.
+// A cache version is automatically saved at the `baseDir` and prefixed with `name`, if it is not empty.
+// And if a cache file is found, it is used, instead of re-reading and processing all the images.
 //
-// One has to first call DownloadAndParse, otherwise it will immediately fail.
-func InMemoryDataset(manager *Manager, baseDir string, size int) (mds *data.InMemoryDataset, err error) {
+// It takes a partition of the data, defined by `partitionFrom` and `partitionTo`.
+// They take values from 0.0 to 1.0 and represent the fraction of the dataset to take.
+// They enable selection of arbitrary train/validation/test sizes.
+// The `partitionSeed` can be used to generate different assignments -- the same seed should be used for the different
+// partitions of the dataset.
+//
+// If the cache is not found, it automatically calls DownloadAndParse to download and untar the original
+// images, if they are not yet downloaded.
+func InMemoryDataset(manager *Manager, baseDir string, imageSize int, name string, partitionSeed int64, partitionFrom, partitionTo float64) (
+	inMemoryDataset *data.InMemoryDataset, err error) {
 	var f *os.File
 	if baseDir != "" {
 		baseDir = data.ReplaceTildeInDir(baseDir) // If dir starts with "~", it is replaced.
-		inMemoryCacheFile := path.Join(baseDir, fmt.Sprintf("cached_images_%dx%d.bin", size, size))
+		inMemoryCacheFile := path.Join(baseDir, fmt.Sprintf("%s_cached_images_%dx%d.bin", name, imageSize, imageSize))
 
 		defer func() {
 			if err != nil {
@@ -184,7 +240,7 @@ func InMemoryDataset(manager *Manager, baseDir string, size int) (mds *data.InMe
 		if err == nil {
 			// Reads from cached file.
 			dec := gob.NewDecoder(f)
-			mds, err = data.GobDeserializeInMemory(manager, dec)
+			inMemoryDataset, err = data.GobDeserializeInMemory(manager, dec)
 			return
 		}
 		if !os.IsNotExist(err) {
@@ -199,14 +255,17 @@ func InMemoryDataset(manager *Manager, baseDir string, size int) (mds *data.InMe
 	}
 
 	if NumExamples == 0 {
-		err = errors.Errorf("Oxford Flowers 102 dataset hasn't been initialized yet, please call oxfordflowers102.DownloadAndParse() first")
+		err = DownloadAndParse(baseDir)
+		if err != nil {
+			return
+		}
 	}
 
 	// Create InMemoryDataset.
 	start := time.Now()
-	fmt.Printf("Creating InMemoryDataset with images cropped and scaled to %dx%d...\n", size, size)
-	ds := NewDataset(shapes.UInt8, size)
-	mds, err = data.InMemory(manager, data.Parallel(ds), false)
+	fmt.Printf("Creating InMemoryDataset for %q with images cropped and scaled to %dx%d...\n", name, imageSize, imageSize)
+	ds := NewDataset(shapes.UInt8, imageSize).Partition(partitionSeed, partitionFrom, partitionTo)
+	inMemoryDataset, err = data.InMemory(manager, data.Parallel(ds), false)
 	elapsed := time.Since(start)
 	fmt.Printf("\t- %s to process dataset.\n", elapsed)
 	if err != nil {
@@ -216,7 +275,7 @@ func InMemoryDataset(manager *Manager, baseDir string, size int) (mds *data.InMe
 	// Save to cache.
 	if f != nil {
 		enc := gob.NewEncoder(f)
-		err = mds.GobSerialize(enc)
+		err = inMemoryDataset.GobSerialize(enc)
 		if err != nil {
 			return
 		}
