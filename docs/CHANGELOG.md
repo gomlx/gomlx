@@ -3,9 +3,10 @@
 ## Next
 
 * Added Kernel Inception Distance (KID) metric implementation.
-* Added context as the first parameter to metrics.BaseMetricGraph.
 * Added ops: ArgMax, ArgMin, ExpandLeftToRank.
 * Added to slices: Flag, op, At, Last.
+* Added context as the first parameter to metrics.BaseMetricGraph.
+* Added context.NumParameters and context.Memory.
 * Force download of the correct version of the C++ library in the Jupyter docker -- this
   prevents Docker cache using an older version.
 * Improved error messages in some cases.
