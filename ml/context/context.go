@@ -739,6 +739,30 @@ func (ctx *Context) NumVariables() int {
 	return len(ctx.data.variables)
 }
 
+// NumParameters returns the summed-up number of all variables.
+// It ignores the `DType`, so a `float64` will count as much as a `uint8`.
+func (ctx *Context) NumParameters() int {
+	total := 0
+	ctx.EnumerateVariables(func(v *Variable) {
+		total += v.Shape().Size()
+	})
+	return total
+}
+
+// Memory returns the total number of bytes summed across all variables.
+// It does not include associated pointers and structures, just the bytes used by the raw data.
+//
+// Example:
+//
+//	fmt.Printf("Model memory usage: %s", data.ByteCountIEC(ctx.Memory()))
+func (ctx *Context) Memory() int64 {
+	total := int64(0)
+	ctx.EnumerateVariables(func(v *Variable) {
+		total += v.Shape().Memory()
+	})
+	return total
+}
+
 // Loader returns the current configured Loader for this context. See SetLoader for details on how the
 // Loader is used.
 //
