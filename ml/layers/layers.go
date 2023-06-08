@@ -23,11 +23,11 @@ package layers
 
 import (
 	"fmt"
-	"golang.org/x/exp/constraints"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/shapes"
+	"golang.org/x/exp/constraints"
 )
 
 const (
@@ -127,18 +127,6 @@ func Dense(ctx *context.Context, input *Node, useBias bool, outputDimensions ...
 	}
 
 	return output
-}
-
-// Relu returns Max(x, 0), and is commonly used as an activation function in neural networks.
-func Relu(x *Node) *Node {
-	if !x.Ok() {
-		return nil
-	}
-	g := x.Graph()
-	if !g.Ok() {
-		return nil
-	}
-	return Max(x, ZerosLike(x))
 }
 
 // Embedding creates an embedding table with vocabSize elements (typically a vocabulary size)
