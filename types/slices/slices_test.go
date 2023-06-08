@@ -59,7 +59,7 @@ func (f StringerFloat) String() string {
 }
 
 func TestSliceFlag(t *testing.T) {
-	f1Ptr := SliceFlag("f1", []int{2, 3}, "f1 flag test", strconv.Atoi)
+	f1Ptr := Flag("f1", []int{2, 3}, "f1 flag test", strconv.Atoi)
 	assert.Equal(t, []int{2, 3}, *f1Ptr)
 	require.NoError(t, flag.Set("f1", "3,4,5"))
 	assert.Equal(t, []int{3, 4, 5}, *f1Ptr)
@@ -67,7 +67,7 @@ func TestSliceFlag(t *testing.T) {
 	require.NotNil(t, f1Flag)
 	assert.Equal(t, "2,3", f1Flag.DefValue)
 
-	f2Ptr := SliceFlag("f2", []StringerFloat{2.0, 3.0}, "f2 flag test",
+	f2Ptr := Flag("f2", []StringerFloat{2.0, 3.0}, "f2 flag test",
 		func(v string) (StringerFloat, error) {
 			f, err := strconv.ParseFloat(v, 64)
 			return StringerFloat(f), err

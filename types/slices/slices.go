@@ -397,8 +397,8 @@ func recursiveDeepSliceCmp(s0, s1 reflect.Value, cmpFn func(e0, e1 any) bool) bo
 	return true
 }
 
-// SliceFlag creates a flag with the given name, description and default value.
-func SliceFlag[T any](name string, defaultValue []T, usage string,
+// Flag creates a flag with the given name, description and default value.
+func Flag[T any](name string, defaultValue []T, usage string,
 	parserFn func(valueStr string) (T, error)) *[]T {
 	f := &genericSliceFlagImpl[T]{
 		parsedSlice: defaultValue,
