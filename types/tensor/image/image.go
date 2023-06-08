@@ -61,6 +61,31 @@ func GetSpatialAxes(image shapes.HasShape, config ChannelsAxisConfig) (spatialAx
 	return
 }
 
+// GetUpSampledSizes returns the dimensions of an image tensor with the spatial
+// dimensions up-sampled by the given factors. If only one factor is given, it is
+// applied to all spatial dimensions.
+//
+// This can be used to up-sample an image, when combined with interpolation.
+//
+// Example: To double the size of an image (or video)
+//
+//	img = Interpolate(img, GetUpSampledSizes(img, ChannelsLast, 2)...).Done()
+func GetUpSampledSizes(image shapes.HasShape, config ChannelsAxisConfig, factors ...int) (dims []int) {
+	dims = image.Shape().Copy().Dimensions
+	if len(factors) == 0 {
+		return dims
+	}
+	spatialAxes := GetSpatialAxes(image, config)
+	for ii, axis := range spatialAxes {
+		factor := factors[0]
+		if ii < len(factors) {
+			factor = factors[ii]
+		}
+		dims[axis] *= factor
+	}
+	return dims
+}
+
 // ToTensorConfig holds the configuration returned by the ToTensor function. Once
 // configured, use Single or Batch to actually convert.
 type ToTensorConfig struct {
