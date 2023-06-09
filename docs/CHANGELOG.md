@@ -7,10 +7,11 @@
 * Added to slices: `Flag()`, `At()`, `Last()`.
 * Added context as the first parameter to `metrics.BaseMetricGraph`.
 * Added `context.NumParameters()` and `context.Memory()`.
-* Datasets: `InMemoryFromData` (for testing).
+* Datasets: `InMemoryFromData` (for testing); `Normalization()` returns mean and standard deviation for dataset.
 * Force download of the correct version of the C++ library in the Jupyter docker -- this
   prevents Docker cache using an older version.
 * Improved error messages in some cases.
+* Changed return type of `tensor.FromAnyValue()` to `tensor.Tensor`.
 
 ## v0.3.1
 

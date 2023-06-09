@@ -1,1 +1,118 @@
+/*
+ *	Copyright 2023 Jan Pfeifer
+ *
+ *	Licensed under the Apache License, Version 2.0 (the "License");
+ *	you may not use this file except in compliance with the License.
+ *	You may obtain a copy of the License at
+ *
+ *	http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *	Unless required by applicable law or agreed to in writing, software
+ *	distributed under the License is distributed on an "AS IS" BASIS,
+ *	WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *	See the License for the specific language governing permissions and
+ *	limitations under the License.
+ */
+
 package data
+
+import (
+	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/ml/context"
+	"github.com/gomlx/gomlx/ml/context/initializers"
+	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/pkg/errors"
+	"io"
+)
+
+// Normalization calculates the normalization parameters `mean` and `stddev` for the `inputsIndex`-th input
+// from the given dataset.
+//
+// These values can later be used for normalization by simply applying `Div(Sub(x, mean), stddev)`. To use
+// as side inputs in an ML model, just set them to variables.
+//
+// The parameter `independentAxes` list axes that should not be normalized together.
+// A typical value is -1, the feature axis (last axis), so that each feature gets its own normalization.
+func Normalization(manager *Manager, ds train.Dataset, inputsIndex int, independentAxes ...int) (mean, stddev tensor.Tensor, err error) {
+	ctx := context.NewContext(manager)
+	updateValuesWithInput := context.NewExec(manager, ctx, func(ctx *context.Context, batch *Node) {
+		g := batch.Graph()
+		ctx = ctx.WithInitializer(initializers.Zero)
+
+		// Find axes to reduce from the input.
+		mapIndependentAxes := make([]bool, batch.Rank())
+		for _, axis := range independentAxes {
+			adjustedAxis := AdjustAxis(batch, axis)
+			mapIndependentAxes[adjustedAxis] = true
+		}
+		reduceAxes := make([]int, 0, batch.Rank()-len(independentAxes))
+		for axis, independent := range mapIndependentAxes {
+			if !independent {
+				reduceAxes = append(reduceAxes, axis)
+			}
+		}
+
+		// Parameters of batch.
+		batchSize := batch.Shape().Dimensions[0]
+		countVar := ctx.VariableWithValue("count", 0)
+		countVar.SetValueGraph(AddScalar(countVar.ValueGraph(g), float64(batchSize)))
+
+		batchSum := ReduceAndKeep(batch, ReduceSum, reduceAxes...)
+		sumVar := ctx.VariableWithShape("sum", batchSum.Shape())
+		sumVar.SetValueGraph(Add(sumVar.ValueGraph(g), batchSum))
+
+		batchSum2 := ReduceAndKeep(Square(batch), ReduceSum, reduceAxes...)
+		sumSquareVar := ctx.VariableWithShape("sum^2", batchSum2.Shape())
+		sumSquareVar.SetValueGraph(Add(sumSquareVar.ValueGraph(g), batchSum2))
+	})
+
+	// Read through dataset updating measurements.
+	batchNum := 0
+	var inputs []tensor.Tensor
+	for {
+		_, inputs, _, err = ds.Yield()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			err = errors.WithMessagef(err, "while reading batch #%d of the dataset", batchNum)
+			return
+		}
+		if inputsIndex >= len(inputs) {
+			err = errors.Errorf("asked for inputsIndex=%d, but inputs has only %d elements",
+				inputsIndex, len(inputs))
+			return
+		}
+		_, err = updateValuesWithInput.Call(inputs[inputsIndex])
+		if err != nil {
+			err = errors.WithMessagef(err, "while processing batch #%d of the dataset", batchNum)
+			return
+		}
+	}
+
+	// Calculate mean and stddev.
+	results, err := context.NewExec(manager, ctx, func(ctx *context.Context, g *Graph) []*Node {
+		countVar := ctx.InspectVariable(ctx.Scope(), "count")
+		count := countVar.ValueGraph(g)
+
+		sumVar := ctx.InspectVariable(ctx.Scope(), "sum")
+		sum := sumVar.ValueGraph(g)
+
+		sumSquareVar := ctx.InspectVariable(ctx.Scope(), "sum^2")
+		sumSquare := sumSquareVar.ValueGraph(g)
+
+		count = ConvertType(count, sum.DType())
+		mean := Div(sum, count)
+		variance := Sub(
+			Div(sumSquare, count),
+			Square(mean))
+		stddev := Sqrt(variance)
+		return []*Node{mean, stddev}
+	}).Call()
+	if err != nil {
+		return
+	}
+	mean, stddev = results[0], results[1]
+	return
+}

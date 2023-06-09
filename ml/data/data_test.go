@@ -23,7 +23,10 @@ import (
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
+	"github.com/stretchr/testify/assert"
 	"io"
+	"math"
+	"math/rand"
 	"sync/atomic"
 	"testing"
 
@@ -294,4 +297,37 @@ func TestInMemoryFromData(t *testing.T) {
 }
 
 func TestNormalization(t *testing.T) {
+	manager := graphtest.BuildTestManager()
+
+	// Create dataset with mean `(pi + featureNum)` and stddev `(e + featureNum)`.
+	rng := rand.New(rand.NewSource(42))
+	baseMean := math.Pi
+	baseStddev := math.E
+	const numExamples = 10000
+	const numFeatures = 5
+	wantMean := make([]float64, numFeatures)
+	wantStddev := make([]float64, numFeatures)
+	for featureIdx := 0; featureIdx < numFeatures; featureIdx++ {
+		wantMean[featureIdx] = baseMean + float64(featureIdx)
+		wantStddev[featureIdx] = baseStddev + float64(featureIdx)
+	}
+	input := tensor.FromShape(shapes.Make(shapes.F64, numExamples, numFeatures))
+	ref := input.AcquireData()
+	data := ref.Flat().([]float64)
+	for ii := range data {
+		featureIdx := ii % numFeatures
+		data[ii] = rng.NormFloat64()*wantStddev[featureIdx] + wantMean[featureIdx]
+	}
+	ref.Release()
+
+	const batchSize = 32
+	mds, err := InMemoryFromData(manager, "test", []any{input}, nil)
+	mds.BatchSize(batchSize, true)
+
+	meanT, stddevT, err := Normalization(manager, mds, 0, -1)
+	require.NoError(t, err)
+	mean, stddev := meanT.Value().([][]float64), stddevT.Value().([][]float64)
+	fmt.Printf("\tmean=%v\n\tstddev=%v\n", mean, stddev)
+	assert.InDeltaSlicef(t, wantMean, mean[0], 0.1, "mean pi+featureNum does not match")
+	assert.InDeltaSlicef(t, wantStddev, stddev[0], 0.1, "stddev e+featureNum does not match")
 }
