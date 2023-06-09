@@ -367,7 +367,7 @@ func Dropout(ctx *context.Context, input *Node, dropoutRate *Node) *Node {
 
 // DropoutNormalize randomly replace the input with zeros if ctx.IsTraining() is true. Otherwise,
 // it's a no op (it returns input). If normalize is set, it scales the output by 1/(1-dropoutRate)
-// to preserve the mean of the values of the input.
+// to preserve the mean of the input values.
 func DropoutNormalize(ctx *context.Context, input *Node, dropoutRate *Node, normalize bool) *Node {
 	g := input.Graph()
 	if !g.Ok() {
@@ -422,4 +422,37 @@ func AddL2Regularization(ctx *context.Context, amount *Node, values ...*Node) {
 	}
 	loss = Mul(loss, amount)
 	train.AddLoss(ctx, loss)
+}
+
+// Normalize shifts and scales the input such that the mean becomes zero and the variance one.
+// It calculates `(x - mean(x)) / (sigma(x))`, where sigma is the standard deviation.
+//
+// The parameter `independentAxes` list axes that should not be normalized together.
+// A typical value is -1, the feature axis (last axis), so that each feature gets its own normalization.
+func Normalize(x *Node, independentAxes ...int) *Node {
+	g := x.Graph()
+	if !g.Ok() {
+		return g.InvalidNode()
+	}
+	if len(independentAxes) >= x.Rank() {
+		return x
+	}
+
+	mapIndependentAxes := make([]bool, x.Rank())
+	for _, axis := range independentAxes {
+		mapIndependentAxes[axis] = true
+	}
+	reduceAxes := make([]int, x.Rank()-len(independentAxes))
+	for axis, independent := range mapIndependentAxes {
+		if !independent {
+			reduceAxes = append(reduceAxes, axis)
+		}
+	}
+
+	mean := ReduceAndKeep(x, ReduceMean, reduceAxes...)
+	normalized := Sub(x, mean)
+	variance := ReduceAndKeep(Square(normalized), ReduceSum, reduceAxes...)
+	stdDev := Sqrt(variance)
+	normalized = Div(normalized, stdDev)
+	return normalized
 }

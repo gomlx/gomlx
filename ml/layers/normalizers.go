@@ -32,7 +32,7 @@ var (
 	// It includes "none", which is a no-op.
 	//
 	// Notice that some normalizers use variables, and they need to be unique
-	// in ther scope (`Context.In(scope)`) -- except if one wants to deliberately share
+	// in their scope (`Context.In(scope)`) -- except if one wants to deliberately share
 	// normalization variables accross more than one application.
 	KnownNormalizers = map[string]func(ctx *context.Context, input *Node) *Node{
 		"batch": func(ctx *context.Context, input *Node) *Node {

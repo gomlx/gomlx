@@ -292,3 +292,6 @@ func TestInMemoryFromData(t *testing.T) {
 	require.True(t, ok, "Could not convert batched input to the expected [][]float32")
 	require.Equal(t, [][]float32{{1, 2}, {3, 4}}, batchInput)
 }
+
+func TestNormalization(t *testing.T) {
+}

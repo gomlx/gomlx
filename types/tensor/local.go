@@ -264,7 +264,7 @@ func (local *Local) Data() any {
 }
 
 // CopyFlat contents of the tensor to dst. The parameter `dst` must be a slice of the corresponding
-// type (that matches the tensor DType, see shapes.TypeForDType.
+// type that matches the tensor DType, see shapes.TypeForDType.
 func (local *Local) CopyFlat(dst any) error {
 	if local.Empty() {
 		return errors.Errorf("cannot copy contents of empty tensor")
@@ -510,7 +510,7 @@ func MakeLocalTuple(tensors ...*Local) *Local {
 func MakeLocalTupleAny(values ...any) *Local {
 	tensors := make([]*Local, 0, len(values))
 	for ii, value := range values {
-		local := FromAnyValue(value)
+		local := FromAnyValue(value).Local()
 		if !local.Ok() {
 			return &Local{
 				error: fmt.Errorf("failed converting %d-th element of tuple: %w", ii, local.error),
@@ -578,21 +578,22 @@ func FromFlatDataAndDimensions[T shapes.Supported](data []T, dimensions ...int) 
 //
 // It returns a tensor.Local with error if shape is not regular.
 func FromValue[S shapes.MultiDimensionSlice](value S) *Local {
-	return FromAnyValue(value)
+	return FromAnyValue(value).Local()
 }
 
-// FromAnyValue is a non-generic version of FromValue. The input is expected to be either a scalar or a slice of
-// slices with homogeneous dimensions. If the input is a tensor.Local, it is simply returned.
+// FromAnyValue is a non-generic version of FromValue that returns a tensor.Tensor (not specified if local or on device).
+// The input is expected to be either a scalar or a slice of slices with homogeneous dimensions.
+// If the input is a tensor already (Local or Device), it is simply returned.
+// If value is anything but a Device tensor, it will return a Local tensor.
 //
-// It returns a tensor.Local with an error (see `Local.Error()`) if `value` type is unsupported or the shape is not
+// It returns a tensor. with an error (see `Tensor.Error()`) if `value` type is unsupported or the shape is not
 // regular.
-func FromAnyValue(value any) (local *Local) {
-	var ok bool
-	if local, ok = value.(*Local); ok {
+func FromAnyValue(value any) Tensor {
+	if t, ok := value.(*Local); ok {
 		// Input is already a Local.
-		return
+		return t
 	}
-	local = &Local{}
+	local := &Local{}
 	shape, err := shapeForValue(value)
 	if err != nil {
 		return MakeLocalWithError(errors.Wrapf(err, "cannot create shape from %T", value))
@@ -605,12 +606,12 @@ func FromAnyValue(value any) (local *Local) {
 		// S is a scalar type.
 		elem := dataV.Index(0)
 		elem.Set(reflect.ValueOf(value))
-		return
+		return local
 	}
 
 	// Copy over multi-dimensional slice recursively.
 	copySlicesRecursively(dataV, reflect.ValueOf(value), local.LayoutStrides())
-	return
+	return local
 }
 
 // copySlicesRecursively copy values on a multi-dimension slice to a flat data slice
