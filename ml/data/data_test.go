@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
+	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
@@ -330,4 +331,14 @@ func TestNormalization(t *testing.T) {
 	fmt.Printf("\tmean=%v\n\tstddev=%v\n", mean, stddev)
 	assert.InDeltaSlicef(t, wantMean, mean[0], 0.1, "mean pi+featureNum does not match")
 	assert.InDeltaSlicef(t, wantStddev, stddev[0], 0.1, "stddev e+featureNum does not match")
+}
+
+func TestReplaceZerosByOnes(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "ReplaceZerosByOnes", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = []*Node{Const(g, []float32{1, 0, 3})}
+		outputs = []*Node{ReplaceZerosByOnes(inputs[0])}
+		return
+	}, []any{
+		[]float32{1, 1, 3},
+	}, 0.1)
 }

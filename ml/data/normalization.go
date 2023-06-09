@@ -34,6 +34,9 @@ import (
 //
 // The parameter `independentAxes` list axes that should not be normalized together.
 // A typical value is -1, the feature axis (last axis), so that each feature gets its own normalization.
+//
+// Notice for any feature that happens to be constant, the `stddev` will be 0. If trying to normalize (divide)
+// by that will result in error. Use ReplaceZerosByOnes below to avoid the numeric issues.
 func Normalization(manager *Manager, ds train.Dataset, inputsIndex int, independentAxes ...int) (mean, stddev tensor.Tensor, err error) {
 	ctx := context.NewContext(manager)
 	updateValuesWithInput := context.NewExec(manager, ctx, func(ctx *context.Context, batch *Node) {
@@ -115,4 +118,15 @@ func Normalization(manager *Manager, ds train.Dataset, inputsIndex int, independ
 	}
 	mean, stddev = results[0], results[1]
 	return
+}
+
+// ReplaceZerosByOnes replaces any zero values in x by one.
+// This is useful if normalizing a value with a standard deviation
+// (`stddev`) that has zeros.
+func ReplaceZerosByOnes(x *Node) *Node {
+	g := x.Graph()
+	return Where(
+		Equal(x, ScalarZero(g, x.DType())),
+		OnesLike(x),
+		x)
 }
