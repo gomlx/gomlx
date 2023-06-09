@@ -258,3 +258,37 @@ func TestInMemoryDataset(t *testing.T) {
 	_, inputs, labels, err = mds.Yield()
 	require.True(t, err == io.EOF) // Not enough examples for a second batch.
 }
+
+func TestInMemoryFromData(t *testing.T) {
+	manager := graphtest.BuildTestManager()
+	mds, err := InMemoryFromData(manager, "test",
+		[]any{[][]float32{{1, 2}, {3, 4}}},
+		[]any{[][]float32{{3}, {7}}})
+	require.NoError(t, err)
+
+	_, inputs, labels, err := mds.Yield()
+	require.NoError(t, err)
+	input, ok := inputs[0].Local().Value().([]float32)
+	require.True(t, ok, "Could not convert input to the expected []float32")
+	label := labels[0].Local().Value().([]float32)
+	require.Equal(t, []float32{1, 2}, input)
+	require.Equal(t, []float32{3}, label)
+
+	_, inputs, labels, err = mds.Yield()
+	require.NoError(t, err)
+	input = inputs[0].Local().Value().([]float32)
+	label = labels[0].Local().Value().([]float32)
+	require.Equal(t, []float32{3, 4}, input)
+	require.Equal(t, []float32{7}, label)
+
+	_, _, _, err = mds.Yield()
+	require.Equal(t, io.EOF, err)
+
+	mds.Reset()
+	mds.BatchSize(2, true)
+	_, inputs, labels, err = mds.Yield()
+	require.NoError(t, err)
+	batchInput, ok := inputs[0].Local().Value().([][]float32)
+	require.True(t, ok, "Could not convert batched input to the expected [][]float32")
+	require.Equal(t, [][]float32{{1, 2}, {3, 4}}, batchInput)
+}

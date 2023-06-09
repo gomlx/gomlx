@@ -102,6 +102,59 @@ func InMemory(manager *Manager, ds train.Dataset, dsIsBatched bool) (mds *InMemo
 	return
 }
 
+// InMemoryFromData creates an InMemoryDataset from the static data given -- it is immediately converted to
+// a tensor, if not a tensor already.
+// The first dimension of each element of inputs and labels must be the batch size, and the same for every
+// element.
+//
+// This is useful to writing unit tests, with small datasets provided inline.
+//
+// Example: A dataset with one input tensor and one label tensor. Each with two examples.
+//
+//	ds := InMemoryFromData(manager, "test", []any{[][]float32{{1, 2}, {3, 4}}, []any{{1}, {2}}})
+func InMemoryFromData(manager *Manager, name string, inputs []any, labels []any) (mds *InMemoryDataset, err error) {
+	mds = &InMemoryDataset{
+		manager:               manager,
+		randomNumberGenerator: rand.New(rand.NewSource(time.Now().UnixNano())),
+		gatherExec:            NewExec(manager, gatherFromDataTensorsGraph),
+		name:                  name,
+		inputsAndLabelsData:   make([]tensor.Tensor, 0, len(inputs)+len(labels)),
+		numInputsTensors:      len(inputs),
+	}
+
+	// Parse inputs + labels in one go.
+	errMsgFn := func(ii int) string {
+		if ii < mds.numInputsTensors {
+			return fmt.Sprintf("parsing inputs[%d]", ii)
+		}
+		return fmt.Sprintf("parsing labels[%d]", ii-mds.numInputsTensors)
+	}
+	for ii, value := range append(inputs, labels...) {
+		valueT := tensor.FromAnyValue(value)
+		if !valueT.Ok() {
+			err = errors.WithMessage(err, errMsgFn(ii))
+			return
+		}
+		if valueT.Shape().IsScalar() {
+			err = errors.Errorf("cannot use scalars when %s", errMsgFn(ii))
+			return
+		}
+		if ii == 0 {
+			mds.numExamples = valueT.Shape().Dimensions[0]
+		} else if mds.numExamples != valueT.Shape().Dimensions[0] {
+			err = errors.Errorf("inputs[0] has %d examples, but got %d examples when %s -- all must have the same number",
+				mds.batchSize, valueT.Shape().Dimensions[0], errMsgFn(ii))
+			return
+		}
+		mds.inputsAndLabelsData = append(mds.inputsAndLabelsData, valueT)
+	}
+
+	if err != nil {
+		return
+	}
+	return
+}
+
 // isEqualButBatchDimension compares shapes s1 and s2 but for the batch dimension, the leading axis. The batch
 // dimension might differ, typically in the last batch of a dataset (if there are not enough examples to fill
 // a batch).
