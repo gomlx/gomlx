@@ -22,6 +22,7 @@ import (
 	"fmt"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
+	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/stretchr/testify/assert"
@@ -304,15 +305,18 @@ func TestNormalization(t *testing.T) {
 	rng := rand.New(rand.NewSource(42))
 	baseMean := math.Pi
 	baseStddev := math.E
-	const numExamples = 10000
-	const numFeatures = 5
+	const (
+		numExamples = 10000
+		midDim      = 3
+		numFeatures = 5
+	)
 	wantMean := make([]float64, numFeatures)
 	wantStddev := make([]float64, numFeatures)
 	for featureIdx := 0; featureIdx < numFeatures; featureIdx++ {
 		wantMean[featureIdx] = baseMean + float64(featureIdx)
 		wantStddev[featureIdx] = baseStddev + float64(featureIdx)
 	}
-	input := tensor.FromShape(shapes.Make(shapes.F64, numExamples, numFeatures))
+	input := tensor.FromShape(shapes.Make(shapes.F64, numExamples, midDim, numFeatures))
 	ref := input.AcquireData()
 	data := ref.Flat().([]float64)
 	for ii := range data {
@@ -327,10 +331,10 @@ func TestNormalization(t *testing.T) {
 
 	meanT, stddevT, err := Normalization(manager, mds, 0, -1)
 	require.NoError(t, err)
-	mean, stddev := meanT.Value().([][]float64), stddevT.Value().([][]float64)
+	mean, stddev := meanT.Value().([][][]float64), stddevT.Value().([][][]float64)
 	fmt.Printf("\tmean=%v\n\tstddev=%v\n", mean, stddev)
-	assert.InDeltaSlicef(t, wantMean, mean[0], 0.1, "mean pi+featureNum does not match")
-	assert.InDeltaSlicef(t, wantStddev, stddev[0], 0.1, "stddev e+featureNum does not match")
+	assert.InDeltaSlicef(t, wantMean, mean[0][0], 0.1, "mean pi+featureNum does not match")
+	assert.InDeltaSlicef(t, wantStddev, stddev[0][0], 0.1, "stddev e+featureNum does not match")
 }
 
 func TestReplaceZerosByOnes(t *testing.T) {
@@ -341,4 +345,27 @@ func TestReplaceZerosByOnes(t *testing.T) {
 	}, []any{
 		[]float32{1, 1, 3},
 	}, 0.1)
+}
+
+func TestMap(t *testing.T) {
+	manager := graphtest.BuildTestManager()
+	ds, err := InMemoryFromData(manager, "test",
+		[]any{[][]float32{{1, 2}, {3, 4}}},
+		[]any{[][]float32{{3}, {7}}})
+	require.NoError(t, err)
+	ds.BatchSize(2, true)
+	mapDS := Map(manager, nil, ds, func(_ *context.Context, inputs, labels []*Node) (mappedInputs, mappedLabels []*Node) {
+		// Add 1 to the inputs[0], drop the labels.
+		return []*Node{AddScalar(inputs[0], 1)}, nil
+	})
+
+	_, inputs, labels, err := mapDS.Yield()
+	require.NoError(t, err)
+	batchInput, ok := inputs[0].Local().Value().([][]float32)
+	require.True(t, ok, "Could not convert batched input to the expected [][]float32")
+	require.Equal(t, [][]float32{{2, 3}, {4, 5}}, batchInput)
+	require.Empty(t, labels, "MapGraphFn provided should have dropped the labels")
+
+	_, _, _, err = mapDS.Yield()
+	require.Equal(t, io.EOF, err)
 }

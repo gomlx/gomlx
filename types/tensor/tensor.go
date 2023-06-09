@@ -362,7 +362,7 @@ func (c *cache) Device(hasClient HasClient, deviceNum int) *Device {
 		// TODO: implement transfer between devices. A simplest first version would be to
 		//       first transfer to local.
 		return MakeDeviceWithError(errors.Errorf(
-			"cannot convert empty tensor.Local to tensor.Device -- " +
+			"no tensor.Local copy to convert to tensor.Device -- " +
 				"maybe tensor exists on device in different clientId (Manager), and " +
 				"transfer between different devices not yet supported, but you can transfer " +
 				"tensor to a tensor.Local first and then to a tensor.Device on the new Manager"))

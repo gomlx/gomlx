@@ -57,11 +57,12 @@ func Normalization(manager *Manager, ds train.Dataset, inputsIndex int, independ
 		}
 
 		// Parameters of batch.
-		batchSize := batch.Shape().Dimensions[0]
-		countVar := ctx.VariableWithValue("count", 0)
-		countVar.SetValueGraph(AddScalar(countVar.ValueGraph(g), float64(batchSize)))
-
 		batchSum := ReduceAndKeep(batch, ReduceSum, reduceAxes...)
+		reducedCount := batch.Shape().Size() / batchSum.Shape().Size()
+
+		countVar := ctx.VariableWithValue("count", 0)
+		countVar.SetValueGraph(AddScalar(countVar.ValueGraph(g), float64(reducedCount)))
+
 		sumVar := ctx.VariableWithShape("sum", batchSum.Shape())
 		sumVar.SetValueGraph(Add(sumVar.ValueGraph(g), batchSum))
 

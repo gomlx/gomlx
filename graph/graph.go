@@ -457,9 +457,10 @@ func (g *Graph) deviceDataForParam(params ParamsMap) ([]*xla.OnDeviceBuffer, err
 func anyToDeviceTensor(manager *Manager, deviceNum int, value any) *tensor.Device {
 	anyT, ok := value.(tensor.Tensor)
 	if !ok {
-		// Convert Go value to a local tensor.
-		localT := tensor.FromAnyValue(value)
-		anyT = localT
+		anyT = tensor.FromAnyValue(value)
+	}
+	if !anyT.Ok() {
+		return tensor.MakeDeviceWithError(anyT.Error())
 	}
 	return anyT.Device(manager, deviceNum)
 }
