@@ -87,7 +87,13 @@ func Normalization(manager *Manager, ds train.Dataset, inputsIndex int, independ
 				inputsIndex, len(inputs))
 			return
 		}
-		_, err = updateValuesWithInput.Call(inputs[inputsIndex])
+		batch := inputs[inputsIndex]
+		if !batch.DType().IsFloat() {
+			err = errors.Errorf("dataset input %d has invalid dtype (shape=%s): Normalization() only accepts float values.",
+				inputsIndex, batch.Shape())
+			return
+		}
+		_, err = updateValuesWithInput.Call(batch)
 		if err != nil {
 			err = errors.WithMessagef(err, "while processing batch #%d of the dataset", batchNum)
 			return
