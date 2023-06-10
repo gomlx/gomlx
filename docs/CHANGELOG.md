@@ -8,7 +8,7 @@
 * Added context as the first parameter to `metrics.BaseMetricGraph`.
 * Added `context.NumParameters()` and `context.Memory()`.
 * Datasets: `InMemoryFromData` (for testing); `Normalization()` returns mean and standard deviation for dataset;
-            `Map()` creates new dataset that maps a function to wrapped dataset.
+  `Map()` creates new dataset that maps a function to wrapped dataset; `Take(n)` to take n elements from a dataset.
 * Force download of the correct version of the C++ library in the Jupyter docker -- this
   prevents Docker cache using an older version.
 * Improved error messages in some cases.
