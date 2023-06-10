@@ -28,27 +28,25 @@
 //
 // ```
 //
-//	 ...
-//		ctx := context.NewContext(manager)
-//		ctx.SetParam(optimizers.LearningRateKey, *flagLearningRate)
+//	…
+//	ctx := context.NewContext(manager)
+//	ctx.SetParam(optimizers.LearningRateKey, *flagLearningRate)
 //
-//		var checkpoint *checkpoints.Handler
-//		if *flagCheckpoint != "" {
-//			var err error
-//			checkpoint, err = checkpoints.Build(ctx).Dir(*flagCheckpoint).Keep(*flagCheckpointKeep).IsNil()
-//			Must(err)  // Panics if err != nil.
-//		}
-//	 ...
-//		// Build training loop.
-//		loop := train.NewLoop(trainer)
-//		commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
-//		if checkpoint != nil {
-//	     const priority = 100  // Large number here, means it runs last.
-//			train.EveryNSteps(loop, 100, "checkpointing", priority, func(_ *train.Loop, _ []tensor.Tensor) error {
-//				return checkpoint.Save()
-//			})
-//		}
-//	 ...
+//	var checkpoint *checkpoints.Handler
+//	if *flagCheckpoint != "" {
+//		var err error
+//		checkpoint, err = checkpoints.Build(ctx).Dir(*flagCheckpoint).Keep(*flagCheckpointKeep).IsNil()
+//		Must(err)  // Panics if err != nil.
+//	}
+//	…
+//	// Build training loop.
+//	loop := train.NewLoop(trainer)
+//	commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
+//	if checkpoint != nil {
+//		const priority = 100  // Large number here, means it runs last.
+//		train.EveryNSteps(loop, 100, "checkpointing", priority, checkpoint.OnStepFn)
+//	}
+//	…
 //
 // ```
 //
@@ -62,6 +60,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/gomlx/gomlx/ml/context"
+	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
@@ -491,6 +490,12 @@ func (h *Handler) Save() error {
 
 	// Remove excess checkpoints.
 	return h.keepNCheckpoints()
+}
+
+// OnStepFn implements `train.OnStepFn`, and make it convenient to attach to a training loop.
+// It simply calls save.
+func (h *Handler) OnStepFn(_ *train.Loop, _ []tensor.Tensor) error {
+	return h.Save()
 }
 
 // keepNCheckpoints checks if there are more than the configured number of checkpoints, and remove
