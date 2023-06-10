@@ -733,7 +733,12 @@ func batchNormTrainingVJP(node, v *Node, _ shapes.Shape) []*Node {
 // simply the transpose of the incoming vector.
 func transposeVJP(node, v *Node, _ shapes.Shape) []*Node {
 	permutations := node.serializedNode.Ints
-	return []*Node{TransposeAllDims(v, permutations...)}
+	reversePermutations := make([]int, len(permutations))
+	for to, from := range permutations {
+		reversePermutations[from] = to
+	}
+	vjp := TransposeAllDims(v, reversePermutations...)
+	return []*Node{vjp}
 }
 
 // broadcastInDimVJP generates the "vector dot jacobian" w.r.t. the input of broadcast.

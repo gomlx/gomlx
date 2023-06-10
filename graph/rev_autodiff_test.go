@@ -532,3 +532,17 @@ func TestGradientBroadcastInDim(t *testing.T) {
 			return output, []*Node{input}
 		}, []any{[]float32{3, 7}})
 }
+
+// TestGradientTranspose makes sure it gets the reverse transpose correct.
+func TestGradientTranspose(t *testing.T) {
+	testGradients[float64](t, "Transpose",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			input := Ones(g, MakeShape(F64, 2, 3, 1))
+			output = TransposeAllDims(input, 1, 2, 0) // Rotate axes left.
+			scale := OnePlus(IotaFull(g, MakeShape(F64, 3, 1, 2)))
+			output = ReduceAllSum(Mul(output, scale))
+			return output, []*Node{input}
+		}, []any{
+			[][][]float64{{{1}, {3}, {5}}, {{2}, {4}, {6}}},
+		})
+}
