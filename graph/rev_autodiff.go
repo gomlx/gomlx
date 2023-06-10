@@ -17,7 +17,6 @@
 package graph
 
 import (
-	"fmt"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/xla"
 )
@@ -685,8 +684,8 @@ func gatherVJP(node, v *Node, _ shapes.Shape) []*Node {
 	}
 
 	// GatherSlices(): sliceSizes are variable, but there are no collapsedSliceDims.
-	fmt.Printf("\tgatherVJP: operand=%s, start=%s, indexVectorDim=%d, offsetDims=%v, collapsedSliceDims=%v, startIndexMap=%v, sliceSizes=%v\n",
-		input.shape, indices.shape, indexVectorDim, offsetDims, collapsedSliceDims, startIndexMap, sliceSizes)
+	//fmt.Printf("\tgatherVJP: operand=%s, start=%s, indexVectorDim=%d, offsetDims=%v, collapsedSliceDims=%v, startIndexMap=%v, sliceSizes=%v\n",
+	//	input.shape, indices.shape, indexVectorDim, offsetDims, collapsedSliceDims, startIndexMap, sliceSizes)
 
 	isGatherSlices := len(collapsedSliceDims) == 0
 	if isGatherSlices {
@@ -695,7 +694,7 @@ func gatherVJP(node, v *Node, _ shapes.Shape) []*Node {
 		startIndices := indices
 		outputPrefixRank := startIndices.Rank() - 1 // Prefix dimensions of the output of the GatherSlice.
 		updates := v
-		fmt.Printf("\tgatherVJP: updates=%s\n", updates.shape)
+		//fmt.Printf("\tgatherVJP: updates=%s\n", updates.shape)
 
 		// updateWindowsDims: one per every dimension of the input, offset by the initial outputPrefixRank.
 		updateWindowsDims := make([]int, 0, inputShape.Rank())
