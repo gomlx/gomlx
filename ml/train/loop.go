@@ -18,10 +18,13 @@ package train
 
 import (
 	"fmt"
+	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/pkg/errors"
+	xslices "golang.org/x/exp/slices"
 	"io"
 	"sort"
+	"time"
 )
 
 // Priority for hooks, the lowest values are run first. Defaults to 0, but negative
@@ -77,6 +80,9 @@ type Loop struct {
 	// finalize inputs and labels after they are used.
 	finalizeInputs bool
 
+	// trainStepDurations collected during training
+	TrainStepDurations []time.Duration
+
 	// Registered hooks.
 	onStart *priorityHooks[*hookWithName[OnStartFn]]
 	onStep  *priorityHooks[*hookWithName[OnStepFn]]
@@ -125,6 +131,11 @@ func (loop *Loop) start(ds Dataset) (err error) {
 // step of loop, called by all looping methods.
 // It calls the appropriate hooks.
 func (loop *Loop) step(spec any, inputs, labels []tensor.Tensor) (metrics []tensor.Tensor, err error) {
+	startTime := time.Now()
+	defer func() {
+		elapsed := time.Since(startTime)
+		loop.TrainStepDurations = append(loop.TrainStepDurations, elapsed)
+	}()
 	checkTensor := func(t tensor.Tensor) {
 		if t.Ok() {
 			return
@@ -210,6 +221,7 @@ func (loop *Loop) RunSteps(ds Dataset, steps int) (metrics []tensor.Tensor, err 
 	if err != nil {
 		return nil, err
 	}
+	loop.TrainStepDurations = make([]time.Duration, 0, steps)
 	for loop.LoopStep = loop.StartStep; loop.LoopStep < loop.EndStep; loop.LoopStep++ {
 		spec, inputs, labels, err := ds.Yield()
 		if err != nil {
@@ -252,6 +264,7 @@ func (loop *Loop) RunEpochs(ds Dataset, epochs int) (metrics []tensor.Tensor, er
 		return nil, err
 	}
 	// Loop over epochs:
+	loop.TrainStepDurations = nil // Reset.
 	for loop.Epoch = 0; loop.Epoch < epochs; loop.Epoch++ {
 		yieldsPerEpoch := 0
 		// Loop over one epoch:
@@ -277,6 +290,21 @@ func (loop *Loop) RunEpochs(ds Dataset, epochs int) (metrics []tensor.Tensor, er
 		return nil, errors.WithMessagef(err, "Loop.RunEpochs(%d): failed end (GlobaStep=%d)", epochs, loop.LoopStep)
 	}
 	return
+}
+
+// MedianTrainStepDuration returns the median duration of each training step. It returns 1 millisecond
+// if no training step was recorded (to avoid potential division by 0).
+//
+// It sorts and mutates loop.TrainStepDurations.
+func (loop *Loop) MedianTrainStepDuration() time.Duration {
+	if len(loop.TrainStepDurations) == 0 {
+		// Return something different than 0 to avoid division by 0.
+		return time.Millisecond
+	}
+
+	times := slices.Copy(loop.TrainStepDurations)
+	xslices.Sort(times)
+	return times[len(times)/2]
 }
 
 // OnStart adds a hook with given priority and name (for error reporting) to the start of a loop.

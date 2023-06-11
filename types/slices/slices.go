@@ -38,9 +38,33 @@ func At[T any](slice []T, index int) T {
 	return slice[index]
 }
 
+// SetAt sets an element at the given `index`, where `index` can be negative, in which case it takes from the end
+// of the slice.
+func SetAt[T any](slice []T, index int, value T) {
+	if index < 0 {
+		index = len(slice) + index
+	}
+	slice[index] = value
+}
+
 // Last returns the last element of a slice.
 func Last[T any](slice []T) T {
 	return At(slice, -1)
+}
+
+// SetLast sets the last element of a slice.
+func SetLast[T any](slice []T, value T) {
+	SetAt(slice, -1, value)
+}
+
+// Copy creates a new (shallow) copy of T. A short cut to a call to `make` and then `copy`.
+func Copy[T any](slice []T) []T {
+	if len(slice) == 0 {
+		return nil
+	}
+	slice2 := make([]T, len(slice))
+	copy(slice2, slice)
+	return slice2
 }
 
 // SlicesInDelta checks whether multidimensional slices s0 and s1 have the same shape and types,
