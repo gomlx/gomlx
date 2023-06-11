@@ -271,6 +271,7 @@ func InMemoryDataset(manager *Manager, baseDir string, imageSize int, name strin
 	if err != nil {
 		return
 	}
+	inMemoryDataset.SetName(name)
 
 	// Save to cache.
 	if f != nil {
