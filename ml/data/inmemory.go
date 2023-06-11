@@ -374,6 +374,12 @@ func (mds *InMemoryDataset) Name() string {
 	return mds.name
 }
 
+// SetName sets the name of the dataset, and returns the updated dataset.
+func (mds *InMemoryDataset) SetName(name string) *InMemoryDataset {
+	mds.name = name
+	return mds
+}
+
 // Reset implements `train.Dataset`
 func (mds *InMemoryDataset) Reset() {
 	mds.muSampling.Lock()
