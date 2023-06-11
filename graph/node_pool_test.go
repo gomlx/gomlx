@@ -123,11 +123,46 @@ func TestSumPool(t *testing.T) {
 // TestGradientSumPool only tests that the correct gradient for the reduction is applied. More fine-grained testing
 // is done in TestGradientMeanPool, which we can verify the result with Tensorflow.
 func TestGradientSumPool(t *testing.T) {
+	testGradients[float32](t, "Gradient 2D SumPool(...).Window(3).PadSame().Strides(1)",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			input := IotaFull(g, MakeShape(shapes.Float32, 1, 3, 1))
+			output = SumPool(input).Window(3).PadSame().Strides(1).Done()
+			return output, []*Node{input}
+		}, []any{
+			[][][]float32{{{2}, {3}, {2}}},
+		})
+
+	testGradients[float64](t, "Gradient 2D Even Spatial Dimensions SumPool(...).Window(2)",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			input := IotaFull(g, MakeShape(shapes.Float64, 1, 5, 1))
+			output = SumPool(input).Window(2).Strides(3).
+				PaddingPerDim([][2]int{{0, 1}}).Done()
+			output = Mul(output, OnePlus(IotaFull(g, output.Shape())))
+			return output, []*Node{input}
+		}, []any{
+			[][][]float64{{{1}, {1}, {0}, {2}, {2}}},
+		})
+
+	testGradients[float64](t, "Gradient 2D Even Spatial Dimensions SumPool(...).Window(2)",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			input := IotaFull(g, MakeShape(shapes.Float64, 1, 4, 4, 1))
+			output = SumPool(input).Window(2).Done()
+			output = Mul(output, OnePlus(IotaFull(g, output.Shape())))
+			return output, []*Node{input}
+		}, []any{
+			[][][][]float64{{
+				{{1}, {1}, {2}, {2}},
+				{{1}, {1}, {2}, {2}},
+				{{3}, {3}, {4}, {4}},
+				{{3}, {3}, {4}, {4}},
+			}},
+		})
+
 	testGradients[float32](t, "Gradient 1D SumPool() -- scaled output",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			input := Add(IotaFull(g, MakeShape(shapes.Float32, 1, 6, 1)), Const(g, float32(1.0)))
 			output = SumPool(input).NoPadding().Window(3).Strides(1).Done()
-			scale := Add(IotaFull(g, output.Shape()), ScalarOne(g, shapes.F32))
+			scale := OnePlus(IotaFull(g, output.Shape()))
 			output = Mul(output, scale)
 			return output, []*Node{input}
 		}, []any{
@@ -169,6 +204,31 @@ func TestMeanPool(t *testing.T) {
 
 // TestGradientMeanPool can leverage `tensorflow.nn.pool` with "AVG" type. Results should be identical.
 func TestGradientMeanPool(t *testing.T) {
+	// The results below should reflect that the last column and row are not used in the output.
+	testGradients[float64](t, "Gradient 2D MeanPool(...).Window(2)",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			input := IotaFull(g, MakeShape(shapes.Float64, 1, 5, 5, 1))
+			output = MeanPool(input).Window(2).Done()
+			return output, []*Node{input}
+		}, []any{
+			[][][][]float64{{
+				{{0.25}, {0.25}, {0.25}, {0.25}, {0}},
+				{{0.25}, {0.25}, {0.25}, {0.25}, {0}},
+				{{0.25}, {0.25}, {0.25}, {0.25}, {0}},
+				{{0.25}, {0.25}, {0.25}, {0.25}, {0}},
+				{{0}, {0}, {0}, {0}, {0}},
+			}},
+		})
+
+	testGradients[float64](t, "Gradient Unbalanced 1D MeanPool(...).Window(2)",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			input := IotaFull(g, MakeShape(shapes.Float64, 1, 3, 1))
+			output = MeanPool(input).Window(2).PaddingPerDim([][2]int{{2, 0}}).Done()
+			return output, []*Node{input}
+		}, []any{
+			[][][]float64{{{0.5}, {0.5}, {0.0}}},
+		})
+
 	testGradients[float32](t, "Gradient 1D MeanPool() -- scaled output",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			input := Add(IotaFull(g, MakeShape(shapes.Float32, 1, 6, 1)), Const(g, float32(1.0)))
@@ -201,19 +261,13 @@ func TestGradientMeanPool(t *testing.T) {
 		})
 	fmt.Println()
 
-	// The results below should reflect that the last column and row are not used in the output.
-	testGradients[float64](t, "Gradient 2D MeanPool(...).Window(2)",
+	testGradients[float64](t, "Gradient 2D even spatial dims MeanPool(...).Window(2)",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
-			input := IotaFull(g, MakeShape(shapes.Float64, 1, 5, 5, 1))
+			input := IotaFull(g, MakeShape(shapes.Float64, 1, 2, 2, 1))
 			output = MeanPool(input).Window(2).Done()
 			return output, []*Node{input}
 		}, []any{
-			[][][][]float64{{
-				{{0.25}, {0.25}, {0.25}, {0.25}, {0}},
-				{{0.25}, {0.25}, {0.25}, {0.25}, {0}},
-				{{0.25}, {0.25}, {0.25}, {0.25}, {0}},
-				{{0.25}, {0.25}, {0.25}, {0.25}, {0}},
-				{{0}, {0}, {0}, {0}, {0}},
-			}},
+			[][][][]float64{{{{0.25}, {0.25}}, {{0.25}, {0.25}}}},
 		})
+
 }

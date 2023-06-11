@@ -198,7 +198,7 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 			if !vjp.shape.Eq(combinedShape) {
 				g.SetErrorf("invalid Gradient calculation for node %q: invalid shape for calculated VJP for input #%d (out of %d): "+
 					"input shape=%s, calculated VJP shape=%s"+
-					" -- this probably indicates a bug in the code, pls open an issue report",
+					" -- this probably indicates a bug in the code, please report the issue.",
 					node, ii, len(node.Inputs()),
 					input.shape, vjp.shape)
 				return nil
