@@ -65,6 +65,7 @@ const PRED = Bool
 
 const (
 	U8  = UInt8
+	U32 = UInt32
 	U64 = UInt64
 	I32 = Int32
 	I64 = Int64
@@ -79,25 +80,25 @@ func (dtype DType) IsFloat() bool {
 
 // IsInt returns whether dtype is a supported integer type -- float types not yet supported will return false.
 func (dtype DType) IsInt() bool {
-	return dtype == Int64 || dtype == Int32 || dtype == UInt8 || dtype == UInt64
+	return dtype == Int64 || dtype == Int32 || dtype == UInt8 || dtype == UInt32 || dtype == UInt64
 }
 
 func (dtype DType) IsSupported() bool {
 	return dtype == Bool || dtype == Float32 || dtype == Float64 ||
-		dtype == Int64 || dtype == Int32 || dtype == UInt8 || dtype == UInt64
+		dtype == Int64 || dtype == Int32 || dtype == UInt8 || dtype == UInt32 || dtype == UInt64
 }
 
 // Supported represents the Go types that are supported by the graph package. Used as a Generics constraint.
 // See also Number.
 type Supported interface {
-	bool | float32 | float64 | int | int32 | uint8 | uint64
+	bool | float32 | float64 | int | int32 | uint8 | uint32 | uint64
 }
 
 // Number represents the Go numeric types that are supported by graph package. Used as a Generics constraint.
 // Notice that "int" becomes int64 in the implementation. Since it needs a 1:1 mapping, it doesn't support the native
 // (Go) int64 type.
 type Number interface {
-	float32 | float64 | int | int32 | uint8 | uint64
+	float32 | float64 | int | int32 | uint8 | uint32 | uint64
 }
 
 // GoFloat represent a continuous Go numeric type, supported by GoMLX.
@@ -109,16 +110,16 @@ type GoFloat interface {
 // generics constraints definitions, so we enumerate up to 7 levels of slices. Feel free to add
 // more if needed, the implementation will work with any arbitrary number.
 type MultiDimensionSlice interface {
-	bool | int | uint8 | uint64 | int32 | float32 | float64 |
-		[]bool | []int | []uint8 | []uint64 | []int32 | []float32 | []float64 |
-		[][]bool | [][]int | [][]uint8 | [][]uint64 | [][]int32 | [][]float32 | [][]float64 |
-		[][][]bool | [][][]int | [][][]uint8 | [][][]uint64 | [][][]int32 | [][][]float32 | [][][]float64 |
-		[][][][]bool | [][][][]int | [][][][]uint8 | [][][][]uint64 | [][][][]int32 | [][][][]float32 | [][][][]float64 |
-		[][][][][]bool | [][][][][]int | [][][][][]uint8 | [][][][][]uint64 | [][][][][]int32 | [][][][][]float32 | [][][][][]float64 |
-		[][][][][][]bool | [][][][][][]int | [][][][][][]uint8 | [][][][][][]uint64 | [][][][][][]int32 | [][][][][][]float32 | [][][][][][]float64 |
-		[][][][][][][]bool | [][][][][][][]int | [][][][][][][]uint8 | [][][][][][][]uint64 | [][][][][][][]int32 | [][][][][][][]float32 | [][][][][][][]float64 |
-		[][][][][][][][]bool | [][][][][][][][]int | [][][][][][][][]uint8 | [][][][][][][][]uint64 | [][][][][][][][]int32 | [][][][][][][][]float32 | [][][][][][][][]float64 |
-		[][][][][][][][][]bool | [][][][][][][][][]int | [][][][][][][][][]uint8 | [][][][][][][][][]uint64 | [][][][][][][][][]int32 | [][][][][][][][][]float32 | [][][][][][][][][]float64
+	bool | int | uint8 | uint32 | uint64 | int32 | float32 | float64 |
+		[]bool | []int | []uint8 | []uint32 | []uint64 | []int32 | []float32 | []float64 |
+		[][]bool | [][]int | [][]uint8 | [][]uint32 | [][]uint64 | [][]int32 | [][]float32 | [][]float64 |
+		[][][]bool | [][][]int | [][][]uint8 | [][][]uint32 | [][][]uint64 | [][][]int32 | [][][]float32 | [][][]float64 |
+		[][][][]bool | [][][][]int | [][][][]uint8 | [][][][]uint32 | [][][][]uint64 | [][][][]int32 | [][][][]float32 | [][][][]float64 |
+		[][][][][]bool | [][][][][]int | [][][][][]uint8 | [][][][][]uint32 | [][][][][]uint64 | [][][][][]int32 | [][][][][]float32 | [][][][][]float64 |
+		[][][][][][]bool | [][][][][][]int | [][][][][][]uint8 | [][][][][][]uint32 | [][][][][][]uint64 | [][][][][][]int32 | [][][][][][]float32 | [][][][][][]float64 |
+		[][][][][][][]bool | [][][][][][][]int | [][][][][][][]uint8 | [][][][][][][]uint32 | [][][][][][][]uint64 | [][][][][][][]int32 | [][][][][][][]float32 | [][][][][][][]float64 |
+		[][][][][][][][]bool | [][][][][][][][]int | [][][][][][][][]uint8 | [][][][][][][][]uint32 | [][][][][][][][]uint64 | [][][][][][][][]int32 | [][][][][][][][]float32 | [][][][][][][][]float64 |
+		[][][][][][][][][]bool | [][][][][][][][][]int | [][][][][][][][][]uint8 | [][][][][][][][][]uint32 | [][][][][][][][][]uint64 | [][][][][][][][][]int32 | [][][][][][][][][]float32 | [][][][][][][][][]float64
 }
 
 func DTypeGeneric[T Supported]() DType {
@@ -136,6 +137,8 @@ func DTypeGeneric[T Supported]() DType {
 		return Bool
 	case uint8:
 		return UInt8
+	case uint32:
+		return UInt32
 	case uint64:
 		return UInt64
 	}
@@ -157,6 +160,8 @@ func ConvertTo[T Number](value any) T {
 		return T(v)
 	case uint8:
 		return T(v)
+	case uint32:
+		return T(v)
 	case uint64:
 		return T(v)
 	}
@@ -177,6 +182,8 @@ func DTypeForType(t reflect.Type) DType {
 		return Bool
 	case reflect.Uint8:
 		return UInt8
+	case reflect.Uint32:
+		return UInt32
 	case reflect.Uint64:
 		return UInt64
 	}
@@ -200,6 +207,8 @@ func UnsafeSliceForDType(dtype DType, unsafePtr unsafe.Pointer, len int) any {
 		return unsafe.Slice((*bool)(unsafePtr), len)
 	case UInt8:
 		return unsafe.Slice((*uint8)(unsafePtr), len)
+	case UInt32:
+		return unsafe.Slice((*uint32)(unsafePtr), len)
 	case UInt64:
 		return unsafe.Slice((*uint64)(unsafePtr), len)
 	}
@@ -221,6 +230,8 @@ func TypeForDType(dtype DType) reflect.Type {
 		return reflect.TypeOf(true)
 	case UInt8:
 		return reflect.TypeOf(uint8(0))
+	case UInt32:
+		return reflect.TypeOf(uint32(0))
 	case UInt64:
 		return reflect.TypeOf(uint64(0))
 	}
@@ -284,6 +295,8 @@ func LowestValueForDType(dtype DType) any {
 	case Bool:
 		return false
 	case UInt8:
+		return 0
+	case UInt32:
 		return 0
 	case UInt64:
 		return 0

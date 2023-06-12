@@ -156,11 +156,12 @@ func testValueOf[T shapes.Number](t *testing.T) {
 
 func TestValueOf(t *testing.T) {
 	// No conversion of different types, just from tensor.Local to a Go slice.
-	testValueOf[uint8](t)
-	testValueOf[int32](t)
-	testValueOf[int](t)
 	testValueOf[float32](t)
 	testValueOf[float64](t)
+	testValueOf[int32](t)
+	testValueOf[int](t)
+	testValueOf[uint8](t)
+	testValueOf[uint32](t)
 	testValueOf[uint64](t)
 }
 

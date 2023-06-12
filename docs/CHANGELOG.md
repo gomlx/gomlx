@@ -14,7 +14,7 @@
 * Force download of the correct version of the C++ library in the Jupyter docker -- this
   prevents Docker cache using an older version.
 * Improved error messages in some cases.
-* Tensors: added new dtype `Uint64`; changed return type of `tensor.FromAnyValue()` to `tensor.Tensor`.
+* Tensors: added new dtypes `UInt32` and `UInt64`; changed return type of `tensor.FromAnyValue()` to `tensor.Tensor`.
 
 ## v0.3.1
 
