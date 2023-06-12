@@ -56,5 +56,3 @@ of places to modify: (Please add more if you find out other places)
 * The `shapes` package: most of the tools that handle types specially were put there, when possible.
 * Tests in package `tensor`: while new types won't break it, they probably should be tested there. Some types (bp16?)
   may need special treatment ?
-
-Next dtypes planned (desired) for support: boolean, bfloat16

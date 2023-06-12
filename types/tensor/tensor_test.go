@@ -161,6 +161,7 @@ func TestValueOf(t *testing.T) {
 	testValueOf[int](t)
 	testValueOf[float32](t)
 	testValueOf[float64](t)
+	testValueOf[uint64](t)
 }
 
 func TestTuples(t *testing.T) {
