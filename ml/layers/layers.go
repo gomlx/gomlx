@@ -388,7 +388,7 @@ func DropoutNormalize(ctx *context.Context, input *Node, dropoutRate *Node, norm
 	// Disable (by multiplying by 0) random entries.
 	dtype := dropoutRate.DType()
 	dims := input.Shape().Dimensions
-	rnd := RngUniform(ScalarZero(g, dtype), ScalarOne(g, dtype), shapes.Make(dtype, dims...))
+	rnd := ctx.RandomUniform(g, shapes.Make(dtype, dims...))
 	broadcastRate := BroadcastToDims(dropoutRate, dims...)
 	result := Where(LessOrEqual(rnd, broadcastRate), ZerosLike(input), input)
 	if normalize {

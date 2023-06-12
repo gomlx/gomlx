@@ -3,9 +3,11 @@
 ## Next
 
 * Added Kernel Inception Distance (KID) metric implementation.
-* Added ops: `ArgMax`, `ArgMin`, `ExpandLeftToRank`.
 * Added context as the first parameter to `metrics.BaseMetricGraph`.
-* Added `context.NumParameters()` and `context.Memory()`.
+* Added `context.NumParameters()`, `context.Memory()`, `context.RandomUniform` and `context.RandomNormal`.
+* Revamped the handling of random numbers: made graph purely functional. And 'context.Context' provides
+  the facilities to carry around random number generator state.
+* Added ops: `ArgMax`, `ArgMin`, `ExpandLeftToRank`, `RandomUniform` and `RandomNormal`.
 * Datasets: `InMemoryFromData` (for testing); `Normalization()` returns mean and standard deviation for dataset;
   `Map()` creates new dataset that maps a function to wrapped dataset; `Take(n)` to take n elements from a dataset.
 * Added `losses.MeanAbsoluteError`.

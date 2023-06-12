@@ -452,7 +452,7 @@ func MaskedWordTaskGraph(ctx *context.Context, tokens, embed, mask *Node,
 	//seqSize.SetLogged("0. seqSize")
 
 	// choice: shape=[batch_size]
-	choice := RngUniform(ScalarZero(g, DType), ScalarOne(g, DType), seqSize.Shape())
+	choice := ctx.RandomUniform(g, seqSize.Shape())
 	choice = Mul(seqSize, choice)
 	choice = ConvertType(choice, shapes.I64)
 	//choice.SetLogged("1. choice")

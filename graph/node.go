@@ -202,6 +202,7 @@ func newNode(graph *Graph, serializedNode *xla.SerializedNode, inputs []*Node) (
 	if err != nil {
 		fmt.Printf("Failed to add op: %+v\n", err)
 		graph.SetError(errors.WithStack(err))
+		node = graph.InvalidNode()
 	} else {
 		node.xlaHandle = NodeXlaHandle(opsNum)
 	}
@@ -1243,36 +1244,6 @@ func ReduceAllMaskedMax(x, mask *Node) *Node {
 	return ReduceMaskedMax(x, mask)
 }
 
-// RngNormal constructs an output of a given shape with random numbers generated following the normal
-// distribution. The parameters mu and sigma, and output shape have to have a floating point
-// elemental type. The parameters furthermore have to be scalar valued.
-func RngNormal(mu, sigma *Node, shape shapes.Shape) *Node {
-	g := validateGraphFromInputs(mu, sigma)
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
-	return newNode(g, &xla.SerializedNode{
-		Type:  xla.RngNormalNode,
-		Shape: shape,
-	}, []*Node{mu, sigma})
-}
-
-// RngUniform constructs an output of a given shape with random numbers generated following the
-// uniform distribution over the interval "$[a,b($". The parameters and output element type have
-// to be a boolean type, an integral type or a floating point types, and the types have to be
-// consistent. Furthermore, the parameters need to be scalar valued. If `b <= a` the result is
-// implementation-defined.
-func RngUniform(a, b *Node, shape shapes.Shape) *Node {
-	g := validateGraphFromInputs(a, b)
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
-	return newNode(g, &xla.SerializedNode{
-		Type:  xla.RngUniformNode,
-		Shape: shape,
-	}, []*Node{a, b})
-}
-
 // AxisRangeDef defines the range of an axis to include in a Slice.
 //
 // Use AxisRange below to create it.
@@ -1823,6 +1794,8 @@ func ScatterAdd(operand, indices, updates *Node) *Node {
 
 // Concatenate results on the given axis. A negative axis will be counted from
 // the end -- so `axis==-1` means the last axis.
+//
+// If operands are scalars, they will be concatenated to a vector (just use `axis=0`).
 func Concatenate(operands []*Node, axis int) *Node {
 	g := validateGraphFromInputs(operands...)
 	if !g.Ok() {
@@ -1838,7 +1811,13 @@ func Concatenate(operands []*Node, axis int) *Node {
 	}
 	baseShape := operands[0].shape
 	rank := baseShape.Rank()
-	if axis >= rank || axis < -rank {
+	targetRank := rank
+	if rank == 0 {
+		// Scalars will be converted to [1] before concatenating.
+		targetRank = 1
+		operands[0] = ExpandDims(operands[0], 0)
+	}
+	if axis >= targetRank || axis < -targetRank {
 		g.SetErrorf("invalid axis %d for ConcatenateDimensions, where first element has rank %d",
 			axis, rank)
 		return g.InvalidNode()
@@ -1867,6 +1846,10 @@ func Concatenate(operands []*Node, axis int) *Node {
 					ii+1, node.shape, baseShape)
 				return g.InvalidNode()
 			}
+		}
+		if node.shape.Rank() == 0 {
+			// Convert scalar to rank-1.
+			operands[ii+1] = ExpandDims(node, 0)
 		}
 	}
 	return newNode(g, &xla.SerializedNode{

@@ -156,10 +156,9 @@ type Loader interface {
 
 // NewContext constructs a new and empty context.
 func NewContext(manager *ml.Manager) *Context {
-	return &Context{
-		scope:        ScopeSeparator,
+	ctx := &Context{
+		scope:        RootScope,
 		deviceNumber: manager.DefaultDeviceNum(),
-		initializer:  initializers.RandomUniformFn(-0.1, 0.1),
 		checked:      true,
 		data: &contextData{
 			manager:      manager,
@@ -168,10 +167,18 @@ func NewContext(manager *ml.Manager) *Context {
 			variablesMap: make(map[string]scopedVariableMap),
 		},
 	}
+	ctx.initializer = initializers.RandomUniformFn(initializers.NoSeed, -0.1, 0.1)
+	return ctx
 }
 
-// ScopeSeparator is used between levels of scope. Scope names cannot use this character.
-const ScopeSeparator = "/"
+const (
+	// ScopeSeparator is used between levels of scope. Scope names cannot use this character.
+	ScopeSeparator = "/"
+
+	// RootScope is the scope at the very root.
+	// Some internal variables (e.g.: default random number generator state) are stored there.
+	RootScope = ScopeSeparator
+)
 
 // copy creates a copy of the Context, but sharing the same "data" component.
 func (ctx *Context) copy() *Context {
@@ -270,7 +277,7 @@ func (ctx *Context) In(scope string) *Context {
 }
 
 // InAbsPath returns a new reference to the Context with the extra given scope. It should start and have each element
-// separated by ScopeSeparator.
+// separated by ScopeSeparator. Use RootScope for the root scope.
 //
 // Notice that Scope is part of the "reference" component of a Context.
 func (ctx *Context) InAbsPath(scopePath string) *Context {
@@ -522,11 +529,13 @@ func (ctx *Context) findVariableInScope(name string) *Variable {
 }
 
 // InspectVariable returns the variable with the given name for inspection. This shouldn't be used during
-// building of models, since this bypass the Reuse checks. It returns nil if a variable with the given
+// building of models, since this bypasses the Reuse checks. It returns nil if a variable with the given
 // name hasn't been created.
 //
-// Notice that variables information is stored in the "data" component of Context objects, and is shared
+// Notice that variables' information is stored in the "data" component of Context objects, and is shared
 // among all connected context references.
+//
+// The root scope is "/" (RootScope).
 func (ctx *Context) InspectVariable(scope, name string) *Variable {
 	if !ctx.Ok() {
 		return nil
@@ -802,7 +811,7 @@ func (ctx *Context) ExecPopulateGraphParamsMap(graph *Graph, params ml.ParamsMap
 }
 
 // execPopulateGraphParamsSlice will fill the graph parameter values for every variable used in the given graph.
-// It keeps a cache of the mapping of the variables for faster access.
+// It keeps a cache of the variables' mapping for faster access.
 //
 // `Exec*` methods are used by those implementing an executor (context.Exec) or related tests, not normally
 // needed by end users.

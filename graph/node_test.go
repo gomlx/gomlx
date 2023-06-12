@@ -704,52 +704,6 @@ func TestTuple(t *testing.T) {
 	}
 }
 
-func rngNormal(manager *Manager) *Graph {
-	g := manager.NewGraph("")
-	RngNormal(Const(g, 1.0), Const(g, 2.0), shapes.Make(shapes.Float64, 5, 2))
-	g.MustCompile()
-	return g
-}
-
-func rngUniform(manager *Manager) *Graph {
-	g := manager.NewGraph("")
-	RngNormal(Const(g, 0.0), Const(g, 1.0), shapes.Make(shapes.Float64, 5, 2))
-	g.MustCompile()
-	return g
-}
-
-func TestRng(t *testing.T) {
-	manager := buildTestManager()
-	testCases := []struct {
-		fn   func(*Manager) *Graph
-		name string
-	}{{rngNormal, "rngNormal"}, {rngUniform, "rngUniform"}}
-
-	for _, testCase := range testCases {
-		// Generate samples.
-		const numSamples = 10
-		g := testCase.fn(manager)
-		if !g.Ok() {
-			t.Fatalf("Failed to create graph for %s: %v", testCase.name, g.Error())
-		}
-		tensors := make([]*tensor.Local, 0, numSamples)
-		for ii := 0; ii < numSamples; ii++ {
-			global, err := g.RunError(nil)
-			if err != nil {
-				t.Fatalf("Failed to run graph for %s: %v", testCase.name, err)
-			}
-			tensors = append(tensors, global.Local())
-		}
-
-		// Check samples are different from each other.
-		for ii := 0; ii < numSamples-1; ii++ {
-			for jj := ii + 1; jj < numSamples; jj++ {
-				slices.DeepSliceCmp(tensors[ii], tensors[jj], slices.Different[float64])
-			}
-		}
-	}
-}
-
 func TestIota(t *testing.T) {
 	manager := buildTestManager()
 	{
