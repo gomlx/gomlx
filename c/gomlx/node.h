@@ -130,6 +130,7 @@ enum NodeType {
 	LessThanTotalOrderNode,
 
     // Nodes with variable sets of arguments.
+    RngBitGeneratorNode,
     RngNormalNode,
     RngUniformNode,
 };
