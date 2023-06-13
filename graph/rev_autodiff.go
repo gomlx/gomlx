@@ -196,11 +196,10 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 			//fmt.Printf("\t\tSetting vjp for %s: %s\n", input, vjp)
 			combinedShape := combineOutputShape(outputShape, input.shape)
 			if !vjp.shape.Eq(combinedShape) {
-				g.SetErrorf("invalid Gradient calculation for node %q: invalid shape for calculated VJP for input #%d (out of %d): "+
-					"input shape=%s, calculated VJP shape=%s"+
+				g.SetErrorf("invalid Gradient calculation for node %q: invalid shape for calculated VJP for "+
+					"input #%d (out of %d): input shape=%s, calculated VJP shape=%s"+
 					" -- this probably indicates a bug in the code, please report the issue.",
-					node, ii, len(node.Inputs()),
-					input.shape, vjp.shape)
+					node, ii, len(node.Inputs()), input.shape, vjp.shape)
 				return nil
 			}
 			rInput := rg.ReverseNodes[input.Id()]
