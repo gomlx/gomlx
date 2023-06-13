@@ -18,11 +18,13 @@ package train
 
 import (
 	"fmt"
+	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/pkg/errors"
 	xslices "golang.org/x/exp/slices"
 	"io"
+	"math"
 	"sort"
 	"time"
 )
@@ -175,6 +177,15 @@ func (loop *Loop) step(spec any, inputs, labels []tensor.Tensor) (metrics []tens
 	})
 	if err != nil {
 		return nil, err
+	}
+	batchLoss := shapes.ConvertTo[float64](metrics[0].Value())
+	if math.IsNaN(batchLoss) {
+		err = errors.Errorf("batch loss is NaN, training interrupted")
+		return
+	}
+	if math.IsInf(batchLoss, 0) {
+		err = errors.Errorf("batch loss is infinity (%f), training interrupted", batchLoss)
+		return
 	}
 
 	// Immediately release used inputs and labels.
