@@ -2,17 +2,20 @@
 
 ## Next
 
-* Added Kernel Inception Distance (KID) metric implementation.
-* Added context as the first parameter to `metrics.BaseMetricGraph`.
-* Added `context.NumParameters()`, `context.Memory()`, `context.RandomUniform` and `context.RandomNormal`.
-* Revamped the handling of random numbers: made graph purely functional. And 'context.Context' provides
+* Models: Diffusion example model; added Kernel Inception Distance (KID) metric implementation.
+* Contexts: added `context.NumParameters()`, `context.Memory()`, `context.RandomUniform`, `context.RandomNormal`, 
+  `context.RngStateWithSeed` and `context.RngStateReset`.
+* Random numbers revamped, making graph purely functional. Also, 'context.Context' provides
   the facilities to carry around random number generator state.
 * Added ops: `ArgMax`, `ArgMin`, `ExpandLeftToRank`, `RandomUniform` and `RandomNormal`.
 * Datasets: `InMemoryFromData` (for testing); `Normalization()` returns mean and standard deviation for dataset;
   `Map()` creates new dataset that maps a function to wrapped dataset; `Take(n)` to take n elements from a dataset.
-* Added `losses.MeanAbsoluteError`.
-* Added `train.Loop.MeanTrainingStepDuration()`.
-* Added to slices: `Flag()`, `At()`, `Last()`, `Copy`.
+* Metrics: added context as the first parameter to `metrics.BaseMetricGraph`.
+* Losses: added `losses.MeanAbsoluteError`.
+* Optimizers: added `optimizers.GetGlobalStepVar`.
+* Training loop (`train.Loop`): added `MeanTrainingStepDuration()`; check for infinity and "nan" losses -- training
+  is immediately interrupted with an error.
+* Added to slices package: `Flag()`, `At()`, `Last()`, `Copy`.
 * Force download of the correct version of the C++ library in the Jupyter docker -- this
   prevents Docker cache using an older version.
 * Improved error messages in some cases.
