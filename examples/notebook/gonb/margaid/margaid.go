@@ -35,6 +35,7 @@ import (
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/janpfeifer/gonb/gonbui"
 	errors "github.com/pkg/errors"
+	"math"
 	"strings"
 )
 
@@ -115,6 +116,9 @@ func (ps *Plots) Attach(loop *train.Loop, numPoints int) {
 					continue
 				}
 				metric := shapes.ConvertTo[float64](metrics[ii].Value())
+				if math.IsNaN(metric) || math.IsInf(metric, 0) {
+					continue
+				}
 				ps.AddPoint("Train: "+desc.Name(), desc.MetricType(), step, metric)
 			}
 
@@ -126,6 +130,9 @@ func (ps *Plots) Attach(loop *train.Loop, numPoints int) {
 				}
 				for ii, desc := range loop.Trainer.EvalMetrics() {
 					metric := shapes.ConvertTo[float64](evalMetrics[ii].Value())
+					if math.IsNaN(metric) || math.IsInf(metric, 0) {
+						continue
+					}
 					ps.AddPoint(fmt.Sprintf("Eval on %s: %s", ds.Name(), desc.Name()), desc.MetricType(), step, metric)
 				}
 			}
