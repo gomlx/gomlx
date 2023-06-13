@@ -370,11 +370,20 @@ func validateGraphFromInputs(inputs ...*Node) (g *Graph) {
 	// Checks that all inputs are of the same graph.
 	var err error
 	for ii, n := range inputs {
+		if n.Graph() == nil {
+			err = errors.WithStack(errors.Errorf("invalid input[%d], it has graph set to nil!?", ii))
+			break
+		}
 		if g == nil {
 			g = n.Graph()
+			if !g.Ok() {
+				// Return immediately.
+				return
+			}
 		} else {
 			if n.Graph() != g {
-				err = errors.WithStack(errors.Errorf("combining nodes from different graphs not allowed"))
+				err = errors.WithStack(errors.Errorf("combining nodes from different graphs not allowed: "+
+					"input[0] graph is %q, input[%d] graph is %q", g.Name(), ii, n.Graph().Name()))
 				break
 			}
 		}
@@ -385,7 +394,10 @@ func validateGraphFromInputs(inputs ...*Node) (g *Graph) {
 	}
 	if err != nil {
 		for _, n := range inputs {
-			if n.Ok() {
+			if n.Graph() != nil && n.Graph().Ok() {
+				if g == nil {
+					g = n.Graph()
+				}
 				n.Graph().SetError(err)
 			}
 		}
