@@ -12,21 +12,35 @@ const (
 func (ctx *Context) getRngStateVar() *Variable {
 	rngStateVar := ctx.InspectVariable(RootScope, RngStateVariableName)
 	if rngStateVar == nil {
+		randomState := graph.RngState()
 		rngStateVar = ctx.InAbsPath(RootScope).Checked(false).
-			VariableWithValue(RngStateVariableName, graph.RngState()).SetTrainable(false)
+			VariableWithValue(RngStateVariableName, randomState).SetTrainable(false)
 	}
 	return rngStateVar
 }
 
+// RngStateReset resets the default context random number generator (RNG) to a random seed based on
+// the nanosecond clock.
+//
+// This is done automatically for new contexts, but if the context was loaded from a checkpoint, and one
+// wants to reset it (as opposed to continue the previous state), one can call this.
+//
+// The random number generator (RNG) state is stored in a variable on the root scope
+// of the context, called "#rngState" (RngStateVariableName).
+func (ctx *Context) RngStateReset() {
+	v := ctx.getRngStateVar()
+	v.SetValue(graph.RngState())
+}
+
 // RngStateFromSeed initializes the default context random number generator (RNG) state with a static seed.
-// It must be set before a graph is created from it, or the RNG state has been initialized otherwise.
+// If the state has already been created, it is reset to a value based on the seed.
 //
 // The random number generator (RNG) state is stored in a variable on the root scope
 // of the context, called "#rngState" (RngStateVariableName).
 func (ctx *Context) RngStateFromSeed(seed int64) {
 	initialState := graph.RngStateFromSeed(seed)
-	ctx.InAbsPath(RootScope).Checked(false).
-		VariableWithValue(RngStateVariableName, initialState).SetTrainable(false)
+	v := ctx.getRngStateVar()
+	v.SetValue(initialState)
 }
 
 // RandomNormal generates random numbers from a normal distribution, with mean 0.0

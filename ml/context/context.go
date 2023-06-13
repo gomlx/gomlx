@@ -682,13 +682,14 @@ func (ctx *Context) VariableWithValue(name string, value any) *Variable {
 		return ctx.badVariable()
 	}
 
+	valueT := valueToTensor(value)
+	if valueT.Error() != nil {
+		ctx.SetErrorf("failed to parse value %v for variable %q in scope %q: %w", value, name, ctx.scope, valueT.Error())
+		return ctx.badVariable()
+	}
+
 	if v != nil {
 		// Pre-existing variable to reuse: check that the requested and previous shapes are the same.
-		valueT := valueToTensor(value)
-		if valueT.Error() != nil {
-			ctx.SetErrorf("failed to parse value %v for variable %q in scope %q: %w", value, name, ctx.scope, valueT.Error())
-			return ctx.badVariable()
-		}
 		if !valueT.Shape().Eq(v.shape) {
 			ctx.SetErrorf("requested to reuse variable %q in scope %q, but with value with different shape from original: previous shape=%s, requested value shape=%s",
 				name, ctx.scope, v.shape, valueT.Shape())
@@ -698,12 +699,6 @@ func (ctx *Context) VariableWithValue(name string, value any) *Variable {
 	}
 
 	// New variable: check, create and register it in Context and return.
-	valueT := valueToTensor(value)
-	if valueT.Error() != nil {
-		ctx.SetErrorf("failed to parse value %v for variable %q in scope %q: %w", value, name, ctx.scope, valueT.Error())
-		return ctx.badVariable()
-	}
-
 	v = &Variable{
 		ctx:          ctx,
 		name:         name,
