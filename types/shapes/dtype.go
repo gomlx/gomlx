@@ -33,7 +33,7 @@ import (
 // See example in package shapes documentation.
 type DType int32
 
-//go:generate stringer -type=DType
+//go:generate enumer -type=DType -yaml -json -text -values
 
 // DType constants must match `tensorflow/compiler/xla/xla_data.proto`.
 const (
@@ -62,6 +62,8 @@ const (
 
 // PRED type is an alias to Bool, used in `tensorflow/compiler/xla/xla_data.proto`.
 const PRED = Bool
+
+// Aliases:
 
 const (
 	U8  = UInt8
