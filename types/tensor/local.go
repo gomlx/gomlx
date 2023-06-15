@@ -8,7 +8,7 @@ import (
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/xla"
 	"github.com/pkg/errors"
-	"io"
+	"os"
 	"reflect"
 	"runtime"
 )
@@ -391,21 +391,45 @@ func GobDeserialize(decoder *gob.Decoder) (local *Local, err error) {
 	return
 }
 
-// Save the Local tensor to the given writer w.
-func (local *Local) Save(w io.Writer) (err error) {
-	enc := gob.NewEncoder(w)
-	return local.GobSerialize(enc)
+// Save the Local tensor to the given file path.
+func (local *Local) Save(filePath string) (err error) {
+	f, err := os.Create(filePath)
+	if err != nil {
+		err = errors.Wrapf(err, "creating %q to save tensor", filePath)
+		return
+	}
+	enc := gob.NewEncoder(f)
+	err = local.GobSerialize(enc)
+	if err != nil {
+		err = errors.WithMessagef(err, "encoding tensor to save to %q", filePath)
+		return
+	}
+	err = f.Close()
+	if err != nil {
+		err = errors.Wrapf(err, "close file %q, where tensor was saved", filePath)
+		return
+	}
+	return
 }
 
-// Load a Local tensor from the given reader r.
-//
-// Notice it uses `encoding/gob` package, which uses buffering when reading, so it will read-ahead on r. In other words,
-// it assumes it's the only thing in this reader: this works well if the tensor is the only thing in a file,
-// but not if it's a file that holds other things. Use GobSerialize/GobDeserialize directly if you need to store several
-// things in a file.
-func Load(r io.Reader) (local *Local, err error) {
-	dec := gob.NewDecoder(r)
-	return GobDeserialize(dec)
+// Load a Local tensor from the file path given.
+func Load(filePath string) (local *Local, err error) {
+	f, err := os.Open(filePath)
+	if os.IsNotExist(err) {
+		return
+	}
+	if err != nil {
+		err = errors.Wrapf(err, "opening %q to load tensor", filePath)
+		return
+	}
+	dec := gob.NewDecoder(f)
+	local, err = GobDeserialize(dec)
+	if err != nil {
+		err = errors.WithMessagef(err, "loading tensor from %q", filePath)
+		return
+	}
+	_ = f.Close()
+	return
 }
 
 // MaxStringSize is the largest Local tensor that is actually returned by String() is requested.

@@ -388,15 +388,9 @@ func (c *UnpackToTensorsConfig) Done() (err error) {
 			err = errors.Wrapf(err, "UnpackToTensors(%q, %q): can't create sub-directory %q for UnpackToTensors", c.targetDir, c.h5Path, dsDir)
 			return
 		}
-		dfFile, newErr := os.Create(dsPath)
-		if newErr != nil {
-			err = errors.Wrapf(newErr, "UnpackToTensors(%q, %q): can't create file %q for UnpackToTensors", c.targetDir, c.h5Path, dsPath)
-			return
-		}
-		err = local.Save(dfFile)
-		_ = dfFile.Close()
+		err = local.Save(dsPath)
 		if err != nil {
-			err = errors.WithMessagef(newErr, "UnpackToTensors(%q, %q): while saving tensor %s", c.targetDir, c.h5Path, dsPath)
+			err = errors.WithMessagef(err, "UnpackToTensors(%q, %q)", c.targetDir, c.h5Path)
 			return
 		}
 
