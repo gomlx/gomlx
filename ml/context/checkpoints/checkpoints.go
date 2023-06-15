@@ -293,9 +293,9 @@ func (h *Handler) String() string {
 func (h *Handler) newCheckpointBaseName(globalStep int) string {
 	now := time.Now().Format("20060102-150405")
 	if globalStep > 0 {
-		return fmt.Sprintf("%s%s-step-%06d", baseNamePrefix, now, globalStep)
+		return fmt.Sprintf("%s%s-step-%08d", baseNamePrefix, now, globalStep)
 	} else {
-		return fmt.Sprintf("%s%s", baseNamePrefix, now)
+		return fmt.Sprintf("%s%s-initial", baseNamePrefix, now)
 	}
 }
 
@@ -406,12 +406,8 @@ func (h *Handler) Save() error {
 	}
 
 	// Read globalStep if one is set.
-	var globalStep int
-	if globalStepVar := h.ctx.InspectVariable("/", optimizers.GlobalStepVariableName); globalStepVar != nil {
-		if v := globalStepVar.Value(); v.Ok() && v.Shape().IsScalar() {
-			globalStep = shapes.CastAsDType(v.Local().Value(), shapes.Int64).(int)
-		}
-	}
+	globalStepVar := optimizers.GetGlobalStepVar(h.ctx)
+	globalStep := globalStepVar.Value().Value().(int)
 
 	// Copy over Params.
 	if h.config.includeParams {
