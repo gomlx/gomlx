@@ -11,6 +11,8 @@
 * Datasets: `InMemoryFromData` (for testing); `Normalization()` returns mean and standard deviation for dataset;
   `Map()` creates new dataset that maps a function to wrapped dataset; `Take(n)` to take n elements from a dataset.
 * Metrics: added context as the first parameter to `metrics.BaseMetricGraph`.
+* Plots (margaid): added support for saving and restoring points (when continue training); optional log-scale plots;
+  allow for arbitrary rate of updates. 
 * Losses: added `losses.MeanAbsoluteError`.
 * Optimizers: added `optimizers.GetGlobalStepVar`.
 * Training loop (`train.Loop`): added `MeanTrainingStepDuration()`; check for infinity and "nan" losses -- training
