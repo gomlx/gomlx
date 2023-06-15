@@ -17,7 +17,8 @@
 package train
 
 import (
-	"fmt"
+	"github.com/gomlx/gomlx/ml/context"
+	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
@@ -45,9 +46,9 @@ type OnEndFn func(loop *Loop, metrics []tensor.Tensor) error
 // Loop will run a training loop, invoking Trainer.TrainStep every step,
 // and calling the appropriate hooks.
 //
-// In itself it doesn't do much, but one can attach to it front-ends,
-// plotting tools, early-stopping strategies, etc. It makes it pretty powerful,
-// and easy to be creative on and share those tools.
+// In itself it doesn't do much, but one can attach functionality to it, like
+// checkpointing, plotting tools, early-stopping strategies, etc.
+// It is simple and flexible to allow arbitrary tools to the training loop.
 //
 // The public attributes are meant for reading only, don't change them -- behavior
 // can be undefined.
@@ -216,7 +217,15 @@ func (loop *Loop) end(metrics []tensor.Tensor) (err error) {
 	return
 }
 
-// RunSteps runs those many steps. StartStep/EndStep are adjusted to the current
+// ReadGlobalStep will read the global step from the context and initialize the LoopStep
+// to that value.
+// The default is to have the LoopStep counter always start from 0 -- independent of the model's GlobalStep.
+func (loop *Loop) ReadGlobalStep(ctx *context.Context) {
+	globalStepVar := optimizers.GetGlobalStepVar(ctx)
+	loop.LoopStep = globalStepVar.Value().Value().(int)
+}
+
+// RunSteps runs those many steps. StartStep and EndStep are adjusted to the current
 // LoopStep, so it can be called multiple times, and it will simply pick up
 // where it left of last time.
 func (loop *Loop) RunSteps(ds Dataset, steps int) (metrics []tensor.Tensor, err error) {
@@ -381,112 +390,5 @@ func (h *priorityHooks[H]) Enumerate(fn func(hook H)) {
 		for _, hook := range h.hooks[key] {
 			fn(hook)
 		}
-	}
-}
-
-// nTimes is used to implement NTimesDuringLoop.
-type nTimes struct {
-	n, nUsed int
-	fn       OnStepFn
-}
-
-func (nT *nTimes) onStep(loop *Loop, metrics []tensor.Tensor) error {
-	stepsDone := (loop.LoopStep - loop.StartStep) + 1 // Current LoopStep just finished.
-	if loop.EndStep < 0 {
-		// End not known, run steps in powers of 2, starting at 128.
-		if stepsDone < (128 << nT.nUsed) {
-			return nil
-		}
-	} else if loop.LoopStep < loop.EndStep-1 { // Last step (LoopStep == EndStep-1) is always included.
-		totalSteps := loop.EndStep - loop.StartStep
-		stepsPerCall := float64(totalSteps) / float64(nT.n)
-		if stepsPerCall > 1 && float64(nT.nUsed) > float64(stepsDone)/stepsPerCall {
-			return nil
-		}
-	}
-
-	// Call hook at this step.
-	nT.nUsed++
-	return nT.fn(loop, metrics)
-}
-
-func (nT *nTimes) onEnd(loop *Loop, metrics []tensor.Tensor) error {
-	return nil
-}
-
-// NTimesDuringLoop registers a OnStep hook on the loop that is called at most N times, split evenly
-// across all steps.
-//
-// For Loop.RunEpochs it does not work perfectly even, at least until it knows what is the
-// exact number of steps -- it may even call OnStepFn more than n times.
-//
-// It always calls `fn` at the very last step.
-func NTimesDuringLoop(loop *Loop, n int, name string, priority Priority, fn OnStepFn) {
-	nT := &nTimes{
-		n:  n,
-		fn: fn,
-	}
-	name = fmt.Sprintf("NTimesDuringLoop(%d): %s", n, name)
-	loop.OnStep(name, priority, nT.onStep)
-	loop.OnEnd(name, priority, nT.onEnd)
-}
-
-type everyNSteps struct {
-	n, count int
-	fn       OnStepFn
-}
-
-func (eN *everyNSteps) onStep(loop *Loop, metrics []tensor.Tensor) error {
-	eN.count++
-	if eN.count%eN.n != 0 {
-		return nil
-	}
-	return eN.fn(loop, metrics)
-}
-
-// EveryNSteps registers a OnStep hook on the loop that is called every N times.
-//
-// Notice that it does not call `fn` at the last step (except by coincidence).
-func EveryNSteps(loop *Loop, n int, name string, priority Priority, fn OnStepFn) {
-	eN := &everyNSteps{n: n, fn: fn}
-	fullName := fmt.Sprintf("EveryNSteps(%d): %s", n, name)
-	loop.OnStep(fullName, priority, eN.onStep)
-}
-
-type periodicCallback struct {
-	last               time.Time
-	period             time.Duration
-	started, callOnEnd bool
-	fn                 OnStepFn
-}
-
-func (p *periodicCallback) onStep(loop *Loop, metrics []tensor.Tensor) error {
-	if !p.started {
-		// Start the clock.
-		p.started = true
-		p.last = time.Now()
-		return nil
-	}
-	elapsed := time.Since(p.last)
-	if elapsed < p.period {
-		return nil
-	}
-
-	p.last = p.last.Add(p.period)
-	return p.fn(loop, metrics)
-}
-
-// PeriodicCallback registers a OnStep hook on the loop that is called every period of time.
-// It callOnEnd is set, it will also call at the very last step.
-func PeriodicCallback(loop *Loop, period time.Duration, callOnEnd bool, name string, priority Priority, fn OnStepFn) {
-	p := &periodicCallback{
-		period:    period,
-		callOnEnd: callOnEnd,
-		fn:        fn,
-	}
-	fullName := fmt.Sprintf("PeriodicCallback(%s): %s", period, name)
-	loop.OnStep(fullName, priority, p.onStep)
-	if callOnEnd {
-		loop.OnEnd(fullName, priority, func(loop *Loop, metrics []tensor.Tensor) error { return p.fn(loop, metrics) })
 	}
 }
