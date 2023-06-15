@@ -445,9 +445,48 @@ func (eN *everyNSteps) onStep(loop *Loop, metrics []tensor.Tensor) error {
 }
 
 // EveryNSteps registers a OnStep hook on the loop that is called every N times.
-// Notice that it not necessarily will call `fn` at the last step.
+//
+// Notice that it does not call `fn` at the last step (except by coincidence).
 func EveryNSteps(loop *Loop, n int, name string, priority Priority, fn OnStepFn) {
 	eN := &everyNSteps{n: n, fn: fn}
 	fullName := fmt.Sprintf("EveryNSteps(%d): %s", n, name)
 	loop.OnStep(fullName, priority, eN.onStep)
+}
+
+type periodicCallback struct {
+	last               time.Time
+	period             time.Duration
+	started, callOnEnd bool
+	fn                 OnStepFn
+}
+
+func (p *periodicCallback) onStep(loop *Loop, metrics []tensor.Tensor) error {
+	if !p.started {
+		// Start the clock.
+		p.started = true
+		p.last = time.Now()
+		return nil
+	}
+	elapsed := time.Since(p.last)
+	if elapsed < p.period {
+		return nil
+	}
+
+	p.last = p.last.Add(p.period)
+	return p.fn(loop, metrics)
+}
+
+// PeriodicCallback registers a OnStep hook on the loop that is called every period of time.
+// It callOnEnd is set, it will also call at the very last step.
+func PeriodicCallback(loop *Loop, period time.Duration, callOnEnd bool, name string, priority Priority, fn OnStepFn) {
+	p := &periodicCallback{
+		period:    period,
+		callOnEnd: callOnEnd,
+		fn:        fn,
+	}
+	fullName := fmt.Sprintf("PeriodicCallback(%s): %s", period, name)
+	loop.OnStep(fullName, priority, p.onStep)
+	if callOnEnd {
+		loop.OnEnd(fullName, priority, func(loop *Loop, metrics []tensor.Tensor) error { return p.fn(loop, metrics) })
+	}
 }

@@ -195,6 +195,7 @@ func (mds *InMemoryDataset) readDataset(ds train.Dataset, dsIsBatched bool) (err
 	var allData [][]tensor.Tensor
 	var inputsAndLabelsShapes []shapes.Shape
 	var numLabelsTensors int
+	mds.numExamples = 0
 
 	// getElementDesc is used to point to the element when formatting error messages
 	getElementDesc := func(ii int) (elementDesc string) {

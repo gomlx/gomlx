@@ -234,11 +234,13 @@ func (g *Graph) SetErrorf(format string, args ...any) {
 	g.SetError(errors.WithStack(fmt.Errorf(format, args...)))
 }
 
-// SetTraced defines whether each node creation is traced. If true, every node
-// will save a stack-trace of where it was created, which is helpful for debugging.
+// SetTraced defines whether each node creation is traced.
+// If true, every node will save a stack-trace of where it was created, which is helpful for debugging.
 // See Node.Track().
-func (g *Graph) SetTraced(tracked bool) {
-	g.traced = tracked
+//
+// This is expensive, but can be handy for debugging.
+func (g *Graph) SetTraced(traced bool) {
+	g.traced = traced
 }
 
 // registerNode in the graph, returning a new unique id within the Graph.
@@ -570,7 +572,7 @@ func (g *Graph) LoggedNodes() (nodes []*Node) {
 // scalarCache provides a cache of a scalar value -- the key always use a float64 -- to
 // its pre-created *Node. It helps avoid creating duplicate nodes for common values.
 //
-// I keeps a cache for each dtype of the scalar.
+// It keeps a cache for each dtype of the scalar.
 type scalarCache map[shapes.DType]map[float64]*Node
 
 // getScalarConst either creates a scalar constant or returns a previously created returned
