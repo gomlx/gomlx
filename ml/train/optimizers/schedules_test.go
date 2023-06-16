@@ -46,8 +46,8 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 		if stepVar == nil {
 			t.Fatalf("Learning rate variable not created in scope %q, name %q", "/optimizers/cosine", GlobalStepVariableName)
 		}
-		step := stepVar.Value().Local().Value().(float32)
-		assert.Equal(t, float32(ii+1), step)
+		step := stepVar.Value().Local().Value().(int)
+		assert.Equal(t, ii+1, step)
 
 		// Checks learning rate is following cosine formulation.
 		lrVar := ctx.InspectVariable("/optimizers", LearningRateKey)
