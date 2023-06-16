@@ -302,6 +302,10 @@ func (ps *Plots) AddTrainAndEvalMetrics(loop *train.Loop, trainMetrics []tensor.
 // AddPoint adds a point for the given metric: `step` is the x-axis, and `value` is the y-axis.
 // Metrics with the same type share the same plot and y-axis.
 func (ps *Plots) AddPoint(metricName, metricType string, step, value float64) {
+	if math.IsNaN(value) || math.IsInf(value, 0) || math.IsNaN(step) || math.IsInf(step, 0) {
+		// Ignore invalid points.
+		return
+	}
 	if ps.fileWriter != nil {
 		// Save point asynchronously.
 		ps.fileWriter <- PlotPoint{metricName, metricType, step, value}
