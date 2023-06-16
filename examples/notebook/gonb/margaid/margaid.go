@@ -123,37 +123,19 @@ type Plot struct {
 
 // WithFile uses the filePath both to load data points and to save any new data points.
 //
-// New datapoints are saved asynchronously -- not to slow down training, with the downside of
+// New data-points are saved asynchronously -- not to slow down training, with the downside of
 // potentially having I/O issues reported asynchronously.
 //
 // If used with DynamicUpdates, call this first, so when DynamicUpdates is called, and dynamic plot
 // is immediately created.
 func (ps *Plots) WithFile(filePath string) (*Plots, error) {
-	f, err := os.Open(filePath)
+	_, err := ps.PreloadFile(filePath, nil)
 	if err != nil && !os.IsNotExist(err) {
-		return nil, errors.Wrapf(err, "failed to read Plots file %q", filePath)
-	}
-	if err == nil {
-		// Read previously stored points.
-		dec := json.NewDecoder(f)
-		var point PlotPoint
-		for {
-			err := dec.Decode(&point)
-			if err == nil {
-				ps.AddPoint(point.MetricName, point.MetricType, point.Step, point.Value)
-				continue
-			}
-			if err == io.EOF {
-				break
-			}
-			return nil, errors.Wrapf(err, "error while decoding Plots file %q", filePath)
-		}
-		_ = f.Close()
-		ps.pointsAdded = ps.minPoints()
+		return nil, err
 	}
 
 	// Create/append file with upcoming metrics.
-	f, err = os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0664)
+	f, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0664)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to open Plots file %q for append", filePath)
 	}
@@ -174,6 +156,42 @@ func (ps *Plots) WithFile(filePath string) (*Plots, error) {
 		}
 		_ = f.Close()
 	}(f, ps.fileWriter)
+	return ps, nil
+}
+
+// PreloadFile uses the filePath both to load data points.
+// Its metric names can be renamed with renameFn -- leave it as nil for no changes.
+//
+// If used with DynamicUpdates, call this first, so when DynamicUpdates is called, and dynamic plot
+// is immediately created.
+func (ps *Plots) PreloadFile(filePath string, renameFn func(metricName string) string) (*Plots, error) {
+	f, err := os.Open(filePath)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to read Plots file %q", filePath)
+	}
+
+	// Read previously stored points.
+	dec := json.NewDecoder(f)
+	var point PlotPoint
+	for {
+		err := dec.Decode(&point)
+		if err == nil {
+			if renameFn != nil {
+				point.MetricName = renameFn(point.MetricName)
+			}
+			ps.AddPoint(point.MetricName, point.MetricType, point.Step, point.Value)
+			continue
+		}
+		if err == io.EOF {
+			break
+		}
+		return nil, errors.Wrapf(err, "error while decoding Plots file %q", filePath)
+	}
+	_ = f.Close()
+	minPoints := ps.minPoints()
+	if minPoints > ps.pointsAdded {
+		ps.pointsAdded = minPoints
+	}
 	return ps, nil
 }
 
