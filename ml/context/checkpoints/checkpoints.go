@@ -17,8 +17,9 @@
 // Package checkpoints implements checkpoint management: saving and loading of checkpoints.
 //
 // The main object is the Handler, that should be created by calling Build, followed by the
-// various options setting and finally calling IsNil. Once create, if a previous saved checkpoint
-// exists, it will automatically load variables and parameters for your model into Context.
+// various options setting and finally calling Config.Done.
+// Once create, if a previous saved checkpoint exists, it will automatically load variables and parameters
+// for your model into Context.
 // And as the model trains, one can call Handler.Save() at any time to save a new checkpoint --
 // typically one will do that inside train.EveryNSteps().
 //
@@ -28,27 +29,25 @@
 //
 // ```
 //
-//	 ...
-//		ctx := context.NewContext(manager)
-//		ctx.SetParam(optimizers.LearningRateKey, *flagLearningRate)
+//	…
+//	ctx := context.NewContext(manager)
+//	ctx.SetParam(optimizers.LearningRateKey, *flagLearningRate)
 //
-//		var checkpoint *checkpoints.Handler
-//		if *flagCheckpoint != "" {
-//			var err error
-//			checkpoint, err = checkpoints.Build(ctx).Dir(*flagCheckpoint).Keep(*flagCheckpointKeep).IsNil()
-//			Must(err)  // Panics if err != nil.
-//		}
-//	 ...
-//		// Build training loop.
-//		loop := train.NewLoop(trainer)
-//		commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
-//		if checkpoint != nil {
-//	     const priority = 100  // Large number here, means it runs last.
-//			train.EveryNSteps(loop, 100, "checkpointing", priority, func(_ *train.Loop, _ []tensor.Tensor) error {
-//				return checkpoint.Save()
-//			})
-//		}
-//	 ...
+//	var checkpoint *checkpoints.Handler
+//	if *flagCheckpoint != "" {
+//		var err error
+//		checkpoint, err = checkpoints.Build(ctx).Dir(*flagCheckpoint).Keep(*flagCheckpointKeep).Done()
+//		Must(err)  // Panics if err != nil.
+//	}
+//	…
+//	// Build training loop.
+//	loop := train.NewLoop(trainer)
+//	commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
+//	if checkpoint != nil {
+//		const priority = 100  // Large number here, means it runs last.
+//		train.EveryNSteps(loop, 100, "checkpointing", priority, checkpoint.OnStepFn)
+//	}
+//	…
 //
 // ```
 //
@@ -62,6 +61,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/gomlx/gomlx/ml/context"
+	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
@@ -96,7 +96,7 @@ type Config struct {
 }
 
 // Build a configuration for building a checkpoints.Handler. After configuring the
-// Config object returned, call IsNil to get the configured checkpoints.Handler.
+// Config object returned, call `Done` to get the configured checkpoints.Handler.
 func Build(ctx *context.Context) *Config {
 	c := &Config{
 		ctx:           ctx,
@@ -293,9 +293,9 @@ func (h *Handler) String() string {
 func (h *Handler) newCheckpointBaseName(globalStep int) string {
 	now := time.Now().Format("20060102-150405")
 	if globalStep > 0 {
-		return fmt.Sprintf("%s%s-step-%06d", baseNamePrefix, now, globalStep)
+		return fmt.Sprintf("%s%s-step-%08d", baseNamePrefix, now, globalStep)
 	} else {
-		return fmt.Sprintf("%s%s", baseNamePrefix, now)
+		return fmt.Sprintf("%s%s-initial", baseNamePrefix, now)
 	}
 }
 
@@ -326,10 +326,16 @@ func (h *Handler) ListCheckpoints() (checkpoints []string, err error) {
 	return checkpoints, nil
 }
 
+// HasCheckpoints returns whether there are any checkpoints saved.
+func (h *Handler) HasCheckpoints() (bool, error) {
+	list, err := h.ListCheckpoints()
+	return len(list) > 0, err
+}
+
 // loadCheckpoint loads a specific checkpoint file. This needs to happen before attachTo,
 // since otherwise it may not have any effect.
 //
-// Usually this does not need to be called: when the Handler is created (when calling `Build()....IsNil()`)
+// Usually this does not need to be called: when the Handler is created (when calling `Build()....Done()`)
 // it will automatically load the latest checkpoint. But it can be used to load some specific
 // checkpoint.
 //
@@ -400,12 +406,8 @@ func (h *Handler) Save() error {
 	}
 
 	// Read globalStep if one is set.
-	var globalStep int
-	if globalStepVar := h.ctx.InspectVariable("/", optimizers.GlobalStepVariableName); globalStepVar != nil {
-		if v := globalStepVar.Value(); v.Ok() && v.Shape().IsScalar() {
-			globalStep = shapes.CastAsDType(v.Local().Value(), shapes.Int64).(int)
-		}
-	}
+	globalStepVar := optimizers.GetGlobalStepVar(h.ctx)
+	globalStep := globalStepVar.Value().Value().(int)
 
 	// Copy over Params.
 	if h.config.includeParams {
@@ -491,6 +493,12 @@ func (h *Handler) Save() error {
 
 	// Remove excess checkpoints.
 	return h.keepNCheckpoints()
+}
+
+// OnStepFn implements `train.OnStepFn`, and make it convenient to attach to a training loop.
+// It simply calls save.
+func (h *Handler) OnStepFn(_ *train.Loop, _ []tensor.Tensor) error {
+	return h.Save()
 }
 
 // keepNCheckpoints checks if there are more than the configured number of checkpoints, and remove

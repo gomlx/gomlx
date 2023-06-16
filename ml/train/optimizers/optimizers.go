@@ -19,11 +19,11 @@
 package optimizers
 
 import (
-	"github.com/pkg/errors"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
+	"github.com/pkg/errors"
 	"log"
 )
 
@@ -89,6 +89,13 @@ func MustOptimizerByName(optName string) Interface {
 	return optBuilder()
 }
 
+// GetGlobalStepVar returns the global step counter.
+// It creates it (initialized with 0) if not already there.
+// This can be used in graph building or directly.
+func GetGlobalStepVar(ctx *context.Context) *context.Variable {
+	return ctx.Checked(false).VariableWithValue(GlobalStepVariableName, 0).SetTrainable(false)
+}
+
 // IncrementGlobalStepGraph creates (if not there yet) a global step counter, and
 // returns it incremented -- its first returned value will be 1.
 //
@@ -102,10 +109,13 @@ func IncrementGlobalStepGraph(ctx *context.Context, g *Graph, dtype shapes.DType
 	if !ctx.Ok() {
 		return g.InvalidNode()
 	}
-	globalStepVar := ctx.Checked(false).VariableWithValue(GlobalStepVariableName, shapes.CastAsDType(0, dtype)).SetTrainable(false)
+	globalStepVar := GetGlobalStepVar(ctx)
 	globalStep := globalStepVar.ValueGraph(g)
 	globalStep = Add(globalStep, OnesLike(globalStep))
 	globalStepVar.SetValueGraph(globalStep)
+	if dtype != shapes.I64 {
+		globalStep = ConvertType(globalStep, dtype)
+	}
 	return globalStep
 }
 

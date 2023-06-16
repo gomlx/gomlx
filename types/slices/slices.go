@@ -18,6 +18,7 @@
 package slices
 
 import (
+	"flag"
 	"fmt"
 	"golang.org/x/exp/constraints"
 	"math"
@@ -28,32 +29,42 @@ import (
 	"sync"
 )
 
-// DeepSliceCmp returns false if the slices given are of different shapes, or if the given cmpFn on each element
-// returns false.
-func DeepSliceCmp(s0, s1 any, cmpFn func(e0, e1 any) bool) bool {
-	return recursiveDeepSliceCmp(reflect.ValueOf(s0), reflect.ValueOf(s1), cmpFn)
+// At takes an element at the given `index`, where `index` can be negative, in which case it takes from the end
+// of the slice.
+func At[T any](slice []T, index int) T {
+	if index < 0 {
+		index = len(slice) + index
+	}
+	return slice[index]
 }
 
-func recursiveDeepSliceCmp(s0, s1 reflect.Value, cmpFn func(e0, e1 any) bool) bool {
-	if !s0.IsValid() || !s1.IsValid() {
-		return false
+// SetAt sets an element at the given `index`, where `index` can be negative, in which case it takes from the end
+// of the slice.
+func SetAt[T any](slice []T, index int, value T) {
+	if index < 0 {
+		index = len(slice) + index
 	}
-	if s0.Type().Kind() != s1.Type().Kind() {
-		fmt.Printf("*** Kinds are different: %s, %s\n", s0.Type().Kind(), s1.Type().Kind())
-		return false
+	slice[index] = value
+}
+
+// Last returns the last element of a slice.
+func Last[T any](slice []T) T {
+	return At(slice, -1)
+}
+
+// SetLast sets the last element of a slice.
+func SetLast[T any](slice []T, value T) {
+	SetAt(slice, -1, value)
+}
+
+// Copy creates a new (shallow) copy of T. A short cut to a call to `make` and then `copy`.
+func Copy[T any](slice []T) []T {
+	if len(slice) == 0 {
+		return nil
 	}
-	if s0.Type().Kind() != reflect.Slice {
-		return cmpFn(s0.Interface(), s1.Interface())
-	}
-	if s0.Len() != s1.Len() {
-		return false
-	}
-	for ii := 0; ii < s0.Len(); ii++ {
-		if !recursiveDeepSliceCmp(s0.Index(ii), s1.Index(ii), cmpFn) {
-			return false
-		}
-	}
-	return true
+	slice2 := make([]T, len(slice))
+	copy(slice2, slice)
+	return slice2
 }
 
 // SlicesInDelta checks whether multidimensional slices s0 and s1 have the same shape and types,
@@ -149,7 +160,7 @@ func ReverseSlice[T any](slice []T) {
 
 // FillSlice with fill the slice with the given value.
 func FillSlice[T any](slice []T, value T) {
-	// Apparently the fastest way is by using copy.
+	// Apparently, the fastest way is by using copy.
 	if len(slice) == 0 {
 		return
 	}
@@ -369,4 +380,94 @@ func Min[T constraints.Ordered](slice []T) (min T) {
 		}
 	}
 	return
+}
+
+// Pop last element of the slice, and returns slice with one less element.
+// If slice is empty it returns the zero value for `T` and returns slice unchanged.
+func Pop[T any](slice []T) (T, []T) {
+	var value T
+	if len(slice) > 0 {
+		value = slice[len(slice)-1]
+		slice = slice[:len(slice)-1]
+	}
+	return value, slice
+}
+
+// DeepSliceCmp returns false if the slices given are of different shapes, or if the given cmpFn on each element
+// returns false.
+func DeepSliceCmp(s0, s1 any, cmpFn func(e0, e1 any) bool) bool {
+	return recursiveDeepSliceCmp(reflect.ValueOf(s0), reflect.ValueOf(s1), cmpFn)
+}
+
+func recursiveDeepSliceCmp(s0, s1 reflect.Value, cmpFn func(e0, e1 any) bool) bool {
+	if !s0.IsValid() || !s1.IsValid() {
+		return false
+	}
+	if s0.Type().Kind() != s1.Type().Kind() {
+		fmt.Printf("*** Kinds are different: %s, %s\n", s0.Type().Kind(), s1.Type().Kind())
+		return false
+	}
+	if s0.Type().Kind() != reflect.Slice {
+		return cmpFn(s0.Interface(), s1.Interface())
+	}
+	if s0.Len() != s1.Len() {
+		return false
+	}
+	for ii := 0; ii < s0.Len(); ii++ {
+		if !recursiveDeepSliceCmp(s0.Index(ii), s1.Index(ii), cmpFn) {
+			return false
+		}
+	}
+	return true
+}
+
+// Flag creates a flag with the given name, description and default value.
+func Flag[T any](name string, defaultValue []T, usage string,
+	parserFn func(valueStr string) (T, error)) *[]T {
+	f := &genericSliceFlagImpl[T]{
+		parsedSlice: defaultValue,
+		parserFn:    parserFn,
+	}
+	flag.Var(f, name, usage)
+	return &f.parsedSlice
+}
+
+// genericSliceFlagImpl implements flag.Value for a generic type.
+type genericSliceFlagImpl[T any] struct {
+	parsedSlice []T
+	parserFn    func(valueStr string) (T, error)
+}
+
+func (f *genericSliceFlagImpl[T]) String() string {
+	if len(f.parsedSlice) == 0 {
+		return ""
+	}
+	parts := make([]string, len(f.parsedSlice))
+	for ii, elem := range f.parsedSlice {
+		v := reflect.ValueOf(elem)
+		stringerType := reflect.TypeOf((*fmt.Stringer)(nil)).Elem()
+		if v.CanConvert(stringerType) {
+			parts[ii] = v.Convert(stringerType).Interface().(fmt.Stringer).String()
+		} else {
+			parts[ii] = fmt.Sprintf("%v", elem)
+		}
+	}
+	return strings.Join(parts, ",")
+}
+
+func (f *genericSliceFlagImpl[T]) Set(listStr string) error {
+	if listStr == "" {
+		f.parsedSlice = make([]T, 0)
+		return nil
+	}
+	parts := strings.Split(listStr, ",")
+	f.parsedSlice = make([]T, len(parts))
+	var err error
+	for ii, part := range parts {
+		f.parsedSlice[ii], err = f.parserFn(part)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

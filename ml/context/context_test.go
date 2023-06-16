@@ -86,9 +86,9 @@ func TestContextVariablesInitialization(t *testing.T) {
 		t.Fatalf("Failed to build Manager: %v", err)
 	}
 	ctx := NewContext(manager)
-	ctx0 := ctx.In("a").WithInitializer(initializers.RandomUniformFn(1.5, 2.5))
+	ctx0 := ctx.In("a").WithInitializer(initializers.RandomUniformFn(42, 1.5, 2.5))
 	v0 := ctx0.VariableWithShape("x", makeShape(shapes.Float32))
-	ctx1 := ctx.In("b").WithInitializer(initializers.RandomNormalFn(1.0))
+	ctx1 := ctx.In("b").WithInitializer(initializers.RandomNormalFn(42, 1.0))
 	v1 := ctx1.VariableWithShape("y", makeShape(shapes.Float64, 2))
 	ctx2 := ctx1.In("c").WithInitializer(initializers.Zero)
 	v2 := ctx2.VariableWithShape("z", makeShape(shapes.Int64, 3, 1))

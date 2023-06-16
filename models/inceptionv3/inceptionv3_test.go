@@ -49,9 +49,7 @@ func TestBuildGraph(t *testing.T) {
 	prediction := predictionT.Value().([][]float32)[0] // The last [0] takes the first element of teh batch of 1.
 
 	// Compare with the expected result:
-	wantF, err := os.Open("gomlx_gopher_classification_output.bin")
-	require.NoError(t, err)
-	wantT, err := tensor.Load(wantF)
+	wantT, err := tensor.Load("gomlx_gopher_classification_output.bin")
 	require.NoError(t, err)
 	want := wantT.Value().([][]float32)[0] // The last [0] takes the first element of teh batch of 1.
 

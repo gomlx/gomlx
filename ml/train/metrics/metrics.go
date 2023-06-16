@@ -64,7 +64,7 @@ const (
 
 // BaseMetricGraph is a graph building function of any metric that can be calculated stateless, without the need for
 // any context. It should return a scalar, the mean for the given batch.
-type BaseMetricGraph func(labels, predictions []*Node) *Node
+type BaseMetricGraph func(ctx *context.Context, labels, predictions []*Node) *Node
 
 // PrettyPrintFn is a function to convert a metric value to a string.
 type PrettyPrintFn func(value tensor.Tensor) string
@@ -95,12 +95,12 @@ func (m *baseMetric) ScopeName() string {
 	return m.scopeName
 }
 
-func (m *baseMetric) UpdateGraph(_ *context.Context, labels, predictions []*Node) (metric *Node) {
+func (m *baseMetric) UpdateGraph(ctx *context.Context, labels, predictions []*Node) (metric *Node) {
 	g := predictions[0].Graph()
 	if !g.Ok() {
 		return g.InvalidNode()
 	}
-	result := m.metricFn(labels, predictions)
+	result := m.metricFn(ctx, labels, predictions)
 	if !result.Shape().IsScalar() {
 		g.SetErrorf("metric %q should return a scalar, instead got shape %s", m.Name(), result.Shape())
 		return g.InvalidNode()
@@ -163,7 +163,7 @@ func (m *meanMetric) UpdateGraph(ctx *context.Context, labels, predictions []*No
 	if !g.Ok() {
 		return g.InvalidNode()
 	}
-	result := m.metricFn(labels, predictions)
+	result := m.metricFn(ctx, labels, predictions)
 	if !result.Shape().IsScalar() {
 		g.SetErrorf("metric %q should return a scalar, instead got shape %s", m.Name(), result.Shape())
 		return g.InvalidNode()
@@ -255,7 +255,7 @@ func (m *movingAverageMetric) UpdateGraph(ctx *context.Context, labels, predicti
 	if !g.Ok() {
 		return g.InvalidNode()
 	}
-	result := m.metricFn(labels, predictions)
+	result := m.metricFn(ctx, labels, predictions)
 	if !g.Ok() {
 		return g.InvalidNode()
 	}
@@ -297,8 +297,9 @@ func (m *movingAverageMetric) UpdateGraph(ctx *context.Context, labels, predicti
 }
 
 // BinaryAccuracyGraph can be used in combination with New*Metric functions to build metrics for binary accuracy.
-// It assumes predictions are probabilities, that labels are {0, 1} and that predictions and labels have the same shape and dtype.
-func BinaryAccuracyGraph(labels, predictions []*Node) *Node {
+// It assumes predictions are probabilities, that labels are `{0, 1}`, and those predictions and labels have
+// the same shape and dtype.
+func BinaryAccuracyGraph(_ *context.Context, labels, predictions []*Node) *Node {
 	prediction := predictions[0]
 	g := prediction.Graph()
 	if !g.Ok() {
@@ -343,7 +344,7 @@ func NewMovingAverageBinaryAccuracy(name, shortName string, newExampleWeight flo
 // It assumes predictions are logits, that labels are {0, 1} and that predictions and labels have the same size and dtype.
 // The shape may be different (e.g.: `[batch_size, 1]` and `[batch_size]`), they will be reshaped to the
 // logits shape before the accuracy is calculated.
-func BinaryLogitsAccuracyGraph(labels, logits []*Node) *Node {
+func BinaryLogitsAccuracyGraph(_ *context.Context, labels, logits []*Node) *Node {
 	logits0 := logits[0]
 	g := logits0.Graph()
 	if !g.Ok() {
@@ -400,7 +401,7 @@ func NewMovingAverageBinaryLogitsAccuracy(name, shortName string, newExampleWeig
 // SparseCategoricalAccuracyGraph returns the accuracy -- fraction of times argmax(logits)
 // is the true label. It works for both probabilities or logits. Ties are considered misses.
 // Labels is expected to be some integer type. And the returned dtype is the same as logits.
-func SparseCategoricalAccuracyGraph(labels, logits []*Node) *Node {
+func SparseCategoricalAccuracyGraph(_ *context.Context, labels, logits []*Node) *Node {
 	logits0 := logits[0]
 	g := logits0.Graph()
 	if !g.Ok() {

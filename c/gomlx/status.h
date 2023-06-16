@@ -67,7 +67,7 @@ typedef struct{
 #include "xla/statusor.h"
 
 // C++ version of the XLA wrapper library. Bump the number whenever something changes.
-constexpr int XlaWrapperVersion = 12;
+constexpr int XlaWrapperVersion = 13;
 
 // Converts std::string to an allocated `char *` that in Go can be passed to StrFree.
 // This doesn't work for binary blobs, like serialized protos.

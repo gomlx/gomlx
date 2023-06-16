@@ -22,7 +22,20 @@ func (s Set[T]) Has(key T) bool {
 	return found
 }
 
-// Insert key into set.
-func (s Set[T]) Insert(key T) {
-	s[key] = struct{}{}
+// Insert keys into set.
+func (s Set[T]) Insert(keys ...T) {
+	for _, key := range keys {
+		s[key] = struct{}{}
+	}
+}
+
+// Sub returns `s - s2`, that is, all elements in `s` that are not in `s2`.
+func (s Set[T]) Sub(s2 Set[T]) Set[T] {
+	sub := MakeSet[T]()
+	for k := range s {
+		if !s2.Has(k) {
+			sub.Insert(k)
+		}
+	}
+	return sub
 }

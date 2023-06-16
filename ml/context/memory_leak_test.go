@@ -19,6 +19,7 @@ package context
 import (
 	"fmt"
 	ml "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/gomlx/gomlx/xla"
@@ -134,6 +135,7 @@ func TestMemoryLeaksCtxExec(t *testing.T) {
 				}
 			}
 		}
+		initializers.Finalize()
 		xla.GarbageCollectXLAObjects(true)
 		fmt.Printf("TestMemoryLeaksCtxExec: L=%d S=%d\n", xla.LiteralsCount(), xla.OnDeviceBufferCount())
 	}

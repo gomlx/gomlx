@@ -147,23 +147,22 @@ func TestLocal_CopyFlat(t *testing.T) {
 //	https://groups.google.com/g/golang-nuts/c/abILUXiD8-k
 func testValueOf[T shapes.Number](t *testing.T) {
 	want := [][]T{{1, 2, 3}, {10, 11, 12}}
-	local := FromAnyValue(want)
-	if local.error != nil {
-		t.Fatalf("Failed to build scalar local tensor: %v", local.error)
-	}
-	got, _ := local.Value().([][]T)
-	if !reflect.DeepEqual(want, got) {
-		t.Fatalf("Local read out got %v, wanted %v", got, want)
-	}
+	valueT := FromAnyValue(want)
+	require.NoError(t, valueT.Error())
+	got, ok := valueT.Value().([][]T)
+	require.Truef(t, ok, "Failed to convert converted tensor to 2-dimensional slice -- value=%v", valueT.Value())
+	assert.Equal(t, want, got)
 }
 
 func TestValueOf(t *testing.T) {
 	// No conversion of different types, just from tensor.Local to a Go slice.
-	testValueOf[uint8](t)
-	testValueOf[int32](t)
-	testValueOf[int](t)
 	testValueOf[float32](t)
 	testValueOf[float64](t)
+	testValueOf[int32](t)
+	testValueOf[int](t)
+	testValueOf[uint8](t)
+	testValueOf[uint32](t)
+	testValueOf[uint64](t)
 }
 
 func TestTuples(t *testing.T) {

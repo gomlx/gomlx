@@ -20,6 +20,7 @@ import (
 	"flag"
 	"fmt"
 	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/types/shapes"
@@ -49,10 +50,7 @@ func IotaP1Initializer(g *Graph, shape Shape) *Node {
 }
 
 func TestDense(t *testing.T) {
-	manager, err := BuildManager().Done()
-	if err != nil {
-		t.Fatalf("Failed to build Manager: %v", err)
-	}
+	manager := graphtest.BuildTestManager()
 	ctx := context.NewContext(manager).WithInitializer(IotaP1Initializer)
 	g := manager.NewGraph("TestDense")
 	input := tensor.FromValue([][]float32{{1, 2}, {10, 20}, {100, 200}})
@@ -116,7 +114,7 @@ func TestDense(t *testing.T) {
 func testSimpleFunc(t *testing.T, name string, input any,
 	fn func(ctx *context.Context, input *Node) *Node,
 	want any) {
-	manager := BuildManager().MustDone()
+	manager := graphtest.BuildTestManager()
 	ctx := context.NewContext(manager).WithInitializer(IotaP1Initializer)
 	exec := context.NewExec(manager, ctx, fn)
 	outputs, err := exec.Call(input)
@@ -173,7 +171,7 @@ func plotComputation(title string, start, end float64, fns ...func(x float64) fl
 }
 
 func TestPieceWiseLinearCalibration(t *testing.T) {
-	manager := BuildManager().MustDone()
+	manager := graphtest.BuildTestManager()
 	{
 		ctx := context.NewContext(manager)
 		g := manager.NewGraph("test")

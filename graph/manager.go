@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"github.com/gomlx/gomlx/xla"
 	"os"
+	"sync"
 )
 
 // GetPlatforms lists the available platforms. Returns `([]string, error)`.
@@ -86,12 +87,17 @@ func (b *ManagerBuilder) Done() (m *Manager, err error) {
 		return nil, err
 	}
 	m = &Manager{
-		client:     client,
-		platform:   platform,
-		graphCount: 0,
+		client:   client,
+		platform: platform,
 	}
 	return
 }
+
+// GraphId has to globally unique.
+var (
+	muGraphCount sync.Mutex
+	graphCount   int
+)
 
 // MustDone constructs the Manager. It panics if there was an error.
 func (b *ManagerBuilder) MustDone() *Manager {
@@ -110,9 +116,6 @@ func (b *ManagerBuilder) MustDone() *Manager {
 type Manager struct {
 	client   *xla.Client
 	platform string
-
-	// graphCount is the number of graphs created.
-	graphCount int
 }
 
 // NewGraph constructs an empty Graph. If name is set to "", a unique name is picked. Uses
@@ -124,11 +127,14 @@ func (m *Manager) NewGraph(name string) *Graph {
 // NewGraphWithDeviceNum constructs an empty Graph, and sets to use the given device number.
 // If name is set to "", a unique name is picked.
 func (m *Manager) NewGraphWithDeviceNum(name string, deviceNum int) *Graph {
+	muGraphCount.Lock()
+	defer muGraphCount.Unlock()
+
 	if name == "" {
-		name = fmt.Sprintf("graph_#%d", m.graphCount)
+		name = fmt.Sprintf("graph_#%d", graphCount)
 	}
-	g := newGraph(m, name, GraphId(m.graphCount), deviceNum)
-	m.graphCount += 1
+	g := newGraph(m, name, GraphId(graphCount), deviceNum)
+	graphCount += 1
 	return g
 }
 

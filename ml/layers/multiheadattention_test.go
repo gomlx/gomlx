@@ -96,7 +96,7 @@ func buildSyntheticAttentionModelFn(debug bool) (modelGraphFn func(ctx *context.
 		batchSize := input.Shape().Dimensions[0]
 		sequenceSize := input.Shape().Dimensions[1]
 		const positionalEmbeddingSize = 16
-		noisyCtx := ctx.WithInitializer(initializers.RandomNormalFn(1.0))
+		noisyCtx := ctx.WithInitializer(initializers.RandomNormalFn(initializers.NoSeed, 1.0))
 		positionalVar := noisyCtx.In("positional").VariableWithShape("embeddings", shapes.Make(dtype, sequenceSize, positionalEmbeddingSize))
 		positionalEmbedding := positionalVar.ValueGraph(g)
 		positionalEmbedding = ExpandDims(positionalEmbedding, 0) // Prefixing with batch dimension.

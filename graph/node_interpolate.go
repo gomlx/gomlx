@@ -57,6 +57,9 @@ func Interpolate(input *Node, outputSizes ...int) *InterpolationConfig {
 // See also Nearest.
 //
 // It returns the InterpolationConfig passed, to allow cascaded method calls.
+//
+// Note: there is a bug in that makes the Bilinear gradient fail if the input dimensions to interpolate <= 3.
+// Use Nearest instead for now.
 func (c *InterpolationConfig) Bilinear() *InterpolationConfig {
 	c.isBilinear = true
 	return c
@@ -150,6 +153,12 @@ func (c *InterpolationConfig) Done() (output *Node) {
 		interpolationDims = append(interpolationDims, s)
 	}
 	numAxesToInterpolate := len(axisToInterpolateList)
+	if numAxesToInterpolate == 0 {
+		// Nothing to do actually, the output shape is exactly the same as the input. Silently return
+		// the input.
+		output = input
+		return
+	}
 
 	// Find slices and weights for each interpolation axis:
 	spanStarts := make([]*Node, 0, len(axisToInterpolateList))

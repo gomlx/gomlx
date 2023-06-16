@@ -1,6 +1,8 @@
-package graph
+package graph_test
 
 import (
+	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/types/shapes"
 	"testing"
 )
 
@@ -38,4 +40,38 @@ func TestInterpolate(t *testing.T) {
 			{{52.5}, {53.25}, {54.75}, {56.25}, {57.75}, {58.5}},
 			{{60}, {60.75}, {62.25}, {63.75}, {65.25}, {66}},
 		}})
+}
+
+func TestGradientInterpolate(t *testing.T) {
+	testGradients[float64](t, "Gradient 2D Interpolate().Nearest()",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			input := Ones(g, MakeShape(shapes.Float64, 1, 2, 2, 1))
+			output = Interpolate(input, 1, 4, 4, 1).Nearest().Done()
+			output = Mul(output, OnePlus(IotaFull(g, output.Shape())))
+			return output, []*Node{input}
+		}, []any{
+			[][][][]float64{{
+				{{14}, {22}},
+				{{46}, {54}},
+			}},
+		})
+
+	// TODO: fix bug where if the input is smaller than 4x4, the gradient fails.
+	/*
+		testGradients[float64](t, "Gradient 2D Interpolate().Bilinear()",
+			func(g *Graph) (output *Node, nodesForGrad []*Node) {
+				input := Ones(g, MakeShape(shapes.Float64, 1, 2, 2, 1))
+				output = Interpolate(input, 1, 4, 4, 1).Bilinear().Done()
+				if !g.Ok() {
+					t.Fatalf("Failed interpolation: %+v", g.Error())
+				}
+				output = Mul(output, OnePlus(IotaFull(g, output.Shape())))
+				return output, []*Node{input}
+			}, []any{
+				[][][][]float64{{
+					{{14}, {22}},
+					{{46}, {54}},
+				}},
+			})
+	*/
 }

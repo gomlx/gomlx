@@ -33,11 +33,6 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 )
 
-var (
-	MakeShape = shapes.Make
-	F64       = shapes.Float64
-)
-
 const (
 	CoefficientMu    = 0.0
 	CoefficientSigma = 5.0
@@ -66,8 +61,13 @@ func MustNoError(err error) {
 // attempt to learn.
 func initCoefficients(manager *Manager, numVariables int) (coefficients, bias tensor.Tensor) {
 	e := NewExec(manager, func(g *Graph) (coefficients, bias *Node) {
-		coefficients = RngNormal(Const(g, CoefficientMu), Const(g, CoefficientSigma), MakeShape(F64, numVariables))
-		bias = RngNormal(Const(g, BiasMu), Const(g, BiasSigma), MakeShape(F64))
+		rngState := Const(g, RngState())
+		rngState, coefficients = RandomNormal(rngState, shapes.Make(shapes.F64, numVariables))
+		coefficients = AddScalar(
+			MulScalar(coefficients, CoefficientSigma),
+			CoefficientMu)
+		rngState, bias = RandomNormal(rngState, shapes.Make(shapes.F64))
+		bias = AddScalar(MulScalar(bias, BiasSigma), BiasMu)
 		return
 	})
 	results, err := e.Call()
@@ -80,18 +80,21 @@ func buildExamples(manager *Manager, coef, bias tensor.Tensor, numExamples int, 
 	e := NewExec(manager, func(coef, bias *Node) (inputs, labels *Node) {
 		g := coef.Graph()
 		numFeatures := coef.Shape().Dimensions[0]
-		zero := ScalarZero(g, shapes.Float64)
 
 		// Random inputs (observations).
-		inputs = RngNormal(zero, ScalarOne(g, shapes.Float64), MakeShape(F64, numExamples, numFeatures))
+		rngState := Const(g, RngState())
+		rngState, inputs = RandomNormal(rngState, shapes.Make(shapes.F64, numExamples, numFeatures))
 		coef = ExpandDims(coef, 0)
 
-		// Perfect labels.
+		// Calculate perfect labels.
 		labels = ReduceAndKeep(Mul(inputs, coef), ReduceSum, -1)
 		labels = Add(labels, bias)
 		if noise > 0 {
 			// Add some noise to the labels.
-			labels = Add(labels, RngNormal(zero, Const(g, noise), labels.Shape()))
+			var noiseVector *Node
+			rngState, noiseVector = RandomNormal(rngState, labels.Shape())
+			noiseVector = MulScalar(noiseVector, noise)
+			labels = Add(labels, noiseVector)
 		}
 		return
 	})

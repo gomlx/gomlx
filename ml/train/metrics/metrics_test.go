@@ -27,15 +27,16 @@ import (
 
 // takeFirstFn wraps the given `metricFn` with a function that takes a single node for labels and predictions as
 // opposed to slices of nodes.
-func takeFirstFn(metricFn func(labels, predictions []*Node) *Node) func(*Node, *Node) *Node {
-	return func(labels, predictions *Node) *Node {
-		return metricFn([]*Node{labels}, []*Node{predictions})
+func takeFirstFn(metricFn func(ctx *context.Context, labels, predictions []*Node) *Node) func(*context.Context, *Node, *Node) *Node {
+	return func(ctx *context.Context, labels, predictions *Node) *Node {
+		return metricFn(ctx, []*Node{labels}, []*Node{predictions})
 	}
 }
 
 func TestBinaryAccuracyGraph(t *testing.T) {
 	manager := BuildManager().MustDone()
-	accuracyExec := NewExec(manager, takeFirstFn(BinaryAccuracyGraph))
+	ctx := context.NewContext(manager)
+	accuracyExec := context.NewExec(manager, ctx, takeFirstFn(BinaryAccuracyGraph))
 	labels, probs := []float32{0, 1, 0, 1, 0, 1}, []float32{0.1, 0.1, 0.5, 0.5, 0.8, 0.8}
 	results, err := accuracyExec.Call(labels, probs)
 	require.NoError(t, err, "failed to execute accuracyExec")
@@ -98,7 +99,8 @@ func TestNewMeanBinaryAccuracy(t *testing.T) {
 
 func TestBinaryLogitsAccuracyGraph(t *testing.T) {
 	manager := BuildManager().MustDone()
-	accuracyExec := NewExec(manager, takeFirstFn(BinaryLogitsAccuracyGraph))
+	ctx := context.NewContext(manager)
+	accuracyExec := context.NewExec(manager, ctx, takeFirstFn(BinaryLogitsAccuracyGraph))
 	labels, logits := []float32{0, 1, 0, 1, 0, 1}, []float32{-0.1, -0.1, 0, 0, 0.2, 10.0}
 	results, err := accuracyExec.Call(labels, logits)
 	require.NoError(t, err, "failed to execute accuracyExec")
@@ -108,7 +110,8 @@ func TestBinaryLogitsAccuracyGraph(t *testing.T) {
 
 func TestSparseCategoricalAccuracyGraph(t *testing.T) {
 	manager := BuildManager().MustDone()
-	accuracyExec := NewExec(manager, takeFirstFn(SparseCategoricalAccuracyGraph))
+	ctx := context.NewContext(manager)
+	accuracyExec := context.NewExec(manager, ctx, takeFirstFn(SparseCategoricalAccuracyGraph))
 	labels, logits := [][]int{{0}, {1}, {2}}, [][]float32{
 		{0, 0, 1},     // Tie, should be a miss.
 		{-2, -1, -3},  // Correct, even if negative.

@@ -36,7 +36,7 @@ type NodeType int32
 //
 // Please bump whenever a new NodeType is created, and keep the C++ (in `node.h`) and Go version numbers
 // in sync.
-const XlaWrapperVersion = 12
+const XlaWrapperVersion = 13
 
 // NodeType values need to be exactly the same as defined in the C++ code, in `c/gomlx/node.h`
 // TODO: keep those in sync using some generator script.
@@ -125,8 +125,34 @@ const (
 	LessOrEqualTotalOrderNode
 	LessThanTotalOrderNode
 
-	// Nodes with variable sets of arguments.
+	// Nodes with variable sets of arguments:
 
+	RngBitGeneratorNode
 	RngNormalNode
 	RngUniformNode
+)
+
+// RandomAlgorithm should be aligned with constants in `xla_data.proto` file is the XLA code base.
+//
+// Each random algorithm entails a different shape of `initialState` that needs to be fed to `RngBitGenerator`.
+//
+// See details and reference of the algorithms: https://www.tensorflow.org/xla/operation_semantics#rngbitgenerator
+//
+// Unfortunately there is no documented way of figuring out what is the initial state for `RngDefault` algorithm.
+type RandomAlgorithm int
+
+//go:generate stringer -type=RandomAlgorithm node.go
+
+const (
+	// RngDefault is the backend specific algorithm with backend specific shape requirements.
+	// There doesn't seem to be any automatic way of figuring out what it takes for `initialState`.
+	RngDefault RandomAlgorithm = iota
+
+	// RngThreeFry counter-based PRNG algorithm. The initial_state shape is U64[2] with arbitrary values.
+	// [Salmon et al. SC 2011. Parallel random numbers: as easy as 1, 2, 3](https://www.thesalmons.org/john/random123/papers/random123sc11.pdf).
+	RngThreeFry
+
+	// RngPhilox algorithm to generate random numbers in parallel. The initial_state shape is `U64[3]` with arbitrary values.
+	// [Salmon et al. SC 2011. Parallel random numbers: as easy as 1, 2, 3](https://www.thesalmons.org/john/random123/papers/random123sc11.pdf).
+	RngPhilox
 )

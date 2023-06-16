@@ -70,7 +70,6 @@ import (
 	"github.com/gomlx/gomlx/types/tensor"
 	timage "github.com/gomlx/gomlx/types/tensor/image"
 	"github.com/pkg/errors"
-	"os"
 	"path"
 	"strings"
 )
@@ -532,17 +531,11 @@ func (cfg *Config) loadTensorToVariable(ctx *context.Context, graph *Graph, tens
 		return
 	}
 	tensorPath := path.Join(cfg.baseDir, UnpackedWeightsName, tensorFileName)
-	f, err := os.Open(tensorPath)
+	local, err := tensor.Load(tensorPath)
 	if err != nil {
-		graph.SetError(errors.Wrapf(err, "inceptionv3.ModelGraph(): failed to read weights from %q", tensorPath))
+		graph.SetError(errors.WithMessagef(err, "inceptionv3.ModelGraph(): failed to read weights from %q", tensorPath))
 		return
 	}
-	local, err := tensor.Load(f)
-	if err != nil {
-		graph.SetError(errors.Wrapf(err, "inceptionv3.ModelGraph(): failed to read weights from %q", tensorPath))
-		return
-	}
-
 	// We don't need the value, since the layer will re-load it.
 	_ = ctx.VariableWithValue(variableName, local)
 }

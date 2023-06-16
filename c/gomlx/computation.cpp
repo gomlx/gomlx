@@ -516,6 +516,11 @@ XlaStatus* ComputationAddOp(Computation *comp, SerializedNode *node) {
     case RngUniformNode:
         op = xla::RngUniform(*inputs[0], *inputs[1], shape);
         break;
+    case RngBitGeneratorNode: {
+        xla::RandomAlgorithm algo = static_cast<xla::RandomAlgorithm>(node->integer);
+        op = xla::RngBitGenerator(algo, *inputs[0], shape);
+        break;
+    }
 
     case EqualNode:
         op = xla::Eq(*inputs[0], *inputs[1]);

@@ -28,6 +28,7 @@ import (
 const Epsilon = 1e-7
 
 // MeanSquaredError returns the mean squared error between labels and predictions.
+// It uses only the first element of each.
 //
 // labels and predictions must have the same shape.
 func MeanSquaredError(labels, predictions []*Node) (loss *Node) {
@@ -45,6 +46,24 @@ func MeanSquaredError(labels, predictions []*Node) (loss *Node) {
 	loss = Mul(loss, loss)
 	loss = ReduceAllMean(loss)
 	return
+}
+
+// MeanAbsoluteError returns the mean absolute error between labels and predictions.
+// It uses only the first element of each.
+//
+// labels and predictions must have the same shape.
+func MeanAbsoluteError(labels, predictions []*Node) (loss *Node) {
+	predictions0 := predictions[0]
+	labels0 := labels[0]
+	g := labels0.Graph()
+	if !g.Ok() {
+		return g.InvalidNode()
+	}
+	if !labels0.Shape().Eq(predictions0.Shape()) {
+		g.SetErrorf("labels0 (%s) and predictions0 (%s) must have same shape", labels0.Shape(), predictions0.Shape())
+		return g.InvalidNode()
+	}
+	return ReduceAllMean(Abs(Sub(labels0, predictions0)))
 }
 
 // BinaryCrossentropy returns the cross-entropy loss between labels and predictions,

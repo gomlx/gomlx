@@ -8,7 +8,7 @@ import (
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/xla"
 	"github.com/pkg/errors"
-	"io"
+	"os"
 	"reflect"
 	"runtime"
 )
@@ -264,7 +264,7 @@ func (local *Local) Data() any {
 }
 
 // CopyFlat contents of the tensor to dst. The parameter `dst` must be a slice of the corresponding
-// type (that matches the tensor DType, see shapes.TypeForDType.
+// type that matches the tensor DType, see shapes.TypeForDType.
 func (local *Local) CopyFlat(dst any) error {
 	if local.Empty() {
 		return errors.Errorf("cannot copy contents of empty tensor")
@@ -391,21 +391,45 @@ func GobDeserialize(decoder *gob.Decoder) (local *Local, err error) {
 	return
 }
 
-// Save the Local tensor to the given writer w.
-func (local *Local) Save(w io.Writer) (err error) {
-	enc := gob.NewEncoder(w)
-	return local.GobSerialize(enc)
+// Save the Local tensor to the given file path.
+func (local *Local) Save(filePath string) (err error) {
+	f, err := os.Create(filePath)
+	if err != nil {
+		err = errors.Wrapf(err, "creating %q to save tensor", filePath)
+		return
+	}
+	enc := gob.NewEncoder(f)
+	err = local.GobSerialize(enc)
+	if err != nil {
+		err = errors.WithMessagef(err, "encoding tensor to save to %q", filePath)
+		return
+	}
+	err = f.Close()
+	if err != nil {
+		err = errors.Wrapf(err, "close file %q, where tensor was saved", filePath)
+		return
+	}
+	return
 }
 
-// Load a Local tensor from the given reader r.
-//
-// Notice it uses `encoding/gob` package, which uses buffering when reading, so it will read-ahead on r. In other words,
-// it assumes it's the only thing in this reader: this works well if the tensor is the only thing in a file,
-// but not if it's a file that holds other things. Use GobSerialize/GobDeserialize directly if you need to store several
-// things in a file.
-func Load(r io.Reader) (local *Local, err error) {
-	dec := gob.NewDecoder(r)
-	return GobDeserialize(dec)
+// Load a Local tensor from the file path given.
+func Load(filePath string) (local *Local, err error) {
+	f, err := os.Open(filePath)
+	if os.IsNotExist(err) {
+		return
+	}
+	if err != nil {
+		err = errors.Wrapf(err, "opening %q to load tensor", filePath)
+		return
+	}
+	dec := gob.NewDecoder(f)
+	local, err = GobDeserialize(dec)
+	if err != nil {
+		err = errors.WithMessagef(err, "loading tensor from %q", filePath)
+		return
+	}
+	_ = f.Close()
+	return
 }
 
 // MaxStringSize is the largest Local tensor that is actually returned by String() is requested.
@@ -510,7 +534,7 @@ func MakeLocalTuple(tensors ...*Local) *Local {
 func MakeLocalTupleAny(values ...any) *Local {
 	tensors := make([]*Local, 0, len(values))
 	for ii, value := range values {
-		local := FromAnyValue(value)
+		local := FromAnyValue(value).Local()
 		if !local.Ok() {
 			return &Local{
 				error: fmt.Errorf("failed converting %d-th element of tuple: %w", ii, local.error),
@@ -578,21 +602,22 @@ func FromFlatDataAndDimensions[T shapes.Supported](data []T, dimensions ...int) 
 //
 // It returns a tensor.Local with error if shape is not regular.
 func FromValue[S shapes.MultiDimensionSlice](value S) *Local {
-	return FromAnyValue(value)
+	return FromAnyValue(value).Local()
 }
 
-// FromAnyValue is a non-generic version of FromValue. The input is expected to be either a scalar or a slice of
-// slices with homogeneous dimensions. If the input is a tensor.Local, it is simply returned.
+// FromAnyValue is a non-generic version of FromValue that returns a tensor.Tensor (not specified if local or on device).
+// The input is expected to be either a scalar or a slice of slices with homogeneous dimensions.
+// If the input is a tensor already (Local or Device), it is simply returned.
+// If value is anything but a Device tensor, it will return a Local tensor.
 //
-// It returns a tensor.Local with an error (see `Local.Error()`) if `value` type is unsupported or the shape is not
+// It returns a tensor. with an error (see `Tensor.Error()`) if `value` type is unsupported or the shape is not
 // regular.
-func FromAnyValue(value any) (local *Local) {
-	var ok bool
-	if local, ok = value.(*Local); ok {
+func FromAnyValue(value any) Tensor {
+	if t, ok := value.(*Local); ok {
 		// Input is already a Local.
-		return
+		return t
 	}
-	local = &Local{}
+	local := &Local{}
 	shape, err := shapeForValue(value)
 	if err != nil {
 		return MakeLocalWithError(errors.Wrapf(err, "cannot create shape from %T", value))
@@ -605,12 +630,12 @@ func FromAnyValue(value any) (local *Local) {
 		// S is a scalar type.
 		elem := dataV.Index(0)
 		elem.Set(reflect.ValueOf(value))
-		return
+		return local
 	}
 
 	// Copy over multi-dimensional slice recursively.
 	copySlicesRecursively(dataV, reflect.ValueOf(value), local.LayoutStrides())
-	return
+	return local
 }
 
 // copySlicesRecursively copy values on a multi-dimension slice to a flat data slice

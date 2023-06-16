@@ -17,11 +17,17 @@
 package train
 
 import (
-	"fmt"
+	"github.com/gomlx/gomlx/ml/context"
+	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/pkg/errors"
+	xslices "golang.org/x/exp/slices"
 	"io"
+	"math"
 	"sort"
+	"time"
 )
 
 // Priority for hooks, the lowest values are run first. Defaults to 0, but negative
@@ -40,9 +46,9 @@ type OnEndFn func(loop *Loop, metrics []tensor.Tensor) error
 // Loop will run a training loop, invoking Trainer.TrainStep every step,
 // and calling the appropriate hooks.
 //
-// In itself it doesn't do much, but one can attach to it front-ends,
-// plotting tools, early-stopping strategies, etc. It makes it pretty powerful,
-// and easy to be creative on and share those tools.
+// In itself it doesn't do much, but one can attach functionality to it, like
+// checkpointing, plotting tools, early-stopping strategies, etc.
+// It is simple and flexible to allow arbitrary tools to the training loop.
 //
 // The public attributes are meant for reading only, don't change them -- behavior
 // can be undefined.
@@ -76,6 +82,9 @@ type Loop struct {
 
 	// finalize inputs and labels after they are used.
 	finalizeInputs bool
+
+	// trainStepDurations collected during training
+	TrainStepDurations []time.Duration
 
 	// Registered hooks.
 	onStart *priorityHooks[*hookWithName[OnStartFn]]
@@ -125,6 +134,11 @@ func (loop *Loop) start(ds Dataset) (err error) {
 // step of loop, called by all looping methods.
 // It calls the appropriate hooks.
 func (loop *Loop) step(spec any, inputs, labels []tensor.Tensor) (metrics []tensor.Tensor, err error) {
+	startTime := time.Now()
+	defer func() {
+		elapsed := time.Since(startTime)
+		loop.TrainStepDurations = append(loop.TrainStepDurations, elapsed)
+	}()
 	checkTensor := func(t tensor.Tensor) {
 		if t.Ok() {
 			return
@@ -165,6 +179,15 @@ func (loop *Loop) step(spec any, inputs, labels []tensor.Tensor) (metrics []tens
 	if err != nil {
 		return nil, err
 	}
+	batchLoss := shapes.ConvertTo[float64](metrics[0].Value())
+	if math.IsNaN(batchLoss) {
+		err = errors.Errorf("batch loss is NaN, training interrupted")
+		return
+	}
+	if math.IsInf(batchLoss, 0) {
+		err = errors.Errorf("batch loss is infinity (%f), training interrupted", batchLoss)
+		return
+	}
 
 	// Immediately release used inputs and labels.
 	if loop.finalizeInputs {
@@ -194,7 +217,15 @@ func (loop *Loop) end(metrics []tensor.Tensor) (err error) {
 	return
 }
 
-// RunSteps runs those many steps. StartStep/EndStep are adjusted to the current
+// ReadGlobalStep will read the global step from the context and initialize the LoopStep
+// to that value.
+// The default is to have the LoopStep counter always start from 0 -- independent of the model's GlobalStep.
+func (loop *Loop) ReadGlobalStep(ctx *context.Context) {
+	globalStepVar := optimizers.GetGlobalStepVar(ctx)
+	loop.LoopStep = globalStepVar.Value().Value().(int)
+}
+
+// RunSteps runs those many steps. StartStep and EndStep are adjusted to the current
 // LoopStep, so it can be called multiple times, and it will simply pick up
 // where it left of last time.
 func (loop *Loop) RunSteps(ds Dataset, steps int) (metrics []tensor.Tensor, err error) {
@@ -210,6 +241,7 @@ func (loop *Loop) RunSteps(ds Dataset, steps int) (metrics []tensor.Tensor, err 
 	if err != nil {
 		return nil, err
 	}
+	loop.TrainStepDurations = make([]time.Duration, 0, steps)
 	for loop.LoopStep = loop.StartStep; loop.LoopStep < loop.EndStep; loop.LoopStep++ {
 		spec, inputs, labels, err := ds.Yield()
 		if err != nil {
@@ -252,6 +284,7 @@ func (loop *Loop) RunEpochs(ds Dataset, epochs int) (metrics []tensor.Tensor, er
 		return nil, err
 	}
 	// Loop over epochs:
+	loop.TrainStepDurations = nil // Reset.
 	for loop.Epoch = 0; loop.Epoch < epochs; loop.Epoch++ {
 		yieldsPerEpoch := 0
 		// Loop over one epoch:
@@ -277,6 +310,21 @@ func (loop *Loop) RunEpochs(ds Dataset, epochs int) (metrics []tensor.Tensor, er
 		return nil, errors.WithMessagef(err, "Loop.RunEpochs(%d): failed end (GlobaStep=%d)", epochs, loop.LoopStep)
 	}
 	return
+}
+
+// MedianTrainStepDuration returns the median duration of each training step. It returns 1 millisecond
+// if no training step was recorded (to avoid potential division by 0).
+//
+// It sorts and mutates loop.TrainStepDurations.
+func (loop *Loop) MedianTrainStepDuration() time.Duration {
+	if len(loop.TrainStepDurations) == 0 {
+		// Return something different than 0 to avoid division by 0.
+		return time.Millisecond
+	}
+
+	times := slices.Copy(loop.TrainStepDurations)
+	xslices.Sort(times)
+	return times[len(times)/2]
 }
 
 // OnStart adds a hook with given priority and name (for error reporting) to the start of a loop.
@@ -343,72 +391,4 @@ func (h *priorityHooks[H]) Enumerate(fn func(hook H)) {
 			fn(hook)
 		}
 	}
-}
-
-// nTimes is used to implement NTimesDuringLoop.
-type nTimes struct {
-	n, nUsed int
-	fn       OnStepFn
-}
-
-func (nT *nTimes) onStep(loop *Loop, metrics []tensor.Tensor) error {
-	stepsDone := (loop.LoopStep - loop.StartStep) + 1 // Current LoopStep just finished.
-	if loop.EndStep < 0 {
-		// End not known, run steps in powers of 2, starting at 128.
-		if stepsDone < (128 << nT.nUsed) {
-			return nil
-		}
-	} else if loop.LoopStep < loop.EndStep-1 { // Last step (LoopStep == EndStep-1) is always included.
-		totalSteps := loop.EndStep - loop.StartStep
-		stepsPerCall := float64(totalSteps) / float64(nT.n)
-		if stepsPerCall > 1 && float64(nT.nUsed) > float64(stepsDone)/stepsPerCall {
-			return nil
-		}
-	}
-
-	// Call hook at this step.
-	nT.nUsed++
-	return nT.fn(loop, metrics)
-}
-
-func (nT *nTimes) onEnd(loop *Loop, metrics []tensor.Tensor) error {
-	return nil
-}
-
-// NTimesDuringLoop registers a OnStep hook on the loop that is called at most N times, split evenly
-// across all steps.
-//
-// For Loop.RunEpochs it does not work perfectly even, at least until it knows what is the
-// exact number of steps -- it may even call OnStepFn more than n times.
-//
-// It always calls `fn` at the very last step.
-func NTimesDuringLoop(loop *Loop, n int, name string, priority Priority, fn OnStepFn) {
-	nT := &nTimes{
-		n:  n,
-		fn: fn,
-	}
-	name = fmt.Sprintf("NTimesDuringLoop(%d): %s", n, name)
-	loop.OnStep(name, priority, nT.onStep)
-	loop.OnEnd(name, priority, nT.onEnd)
-}
-
-type everyNSteps struct {
-	n, count int
-	fn       OnStepFn
-}
-
-func (eN *everyNSteps) onStep(loop *Loop, metrics []tensor.Tensor) error {
-	eN.count++
-	if eN.count%eN.n != 0 {
-		return nil
-	}
-	return eN.fn(loop, metrics)
-}
-
-// EveryNSteps registers a OnStep hook on the loop that is called every N times.
-// Notice that it not necessarily will call `fn` at the last step.
-func EveryNSteps(loop *Loop, n int, name string, priority Priority, fn OnStepFn) {
-	eN := &everyNSteps{n: n, fn: fn}
-	fullName := fmt.Sprintf("EveryNSteps(%d): %s", n, name)
-	loop.OnStep(fullName, priority, eN.onStep)
 }

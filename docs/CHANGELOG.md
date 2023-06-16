@@ -1,11 +1,28 @@
 # GoMLX changelog
 
-## Next
+## v0.4.0
 
-* Added ArgMax and ArgMin.
+* Models: Diffusion example model (working draft); added Kernel Inception Distance (KID) metric implementation.
+* Contexts: added `context.NumParameters()`, `context.Memory()`, `context.RandomUniform`, `context.RandomNormal`, 
+  `context.RngStateWithSeed` and `context.RngStateReset`.
+* Random numbers revamped, making graph purely functional. Also, 'context.Context' provides
+  the facilities to carry around random number generator state.
+* Added ops: `ArgMax`, `ArgMin`, `ExpandLeftToRank`, `RandomUniform` and `RandomNormal`.
+* Datasets: `InMemoryFromData` (for testing); `Normalization()` returns mean and standard deviation for dataset;
+  `Map()` creates new dataset that maps a function to wrapped dataset; `Take(n)` to take n elements from a dataset.
+* Layers: Added `layers.Activation` that takes the activation type as a string (easy to plug to a flag).
+* Metrics: added context as the first parameter to `metrics.BaseMetricGraph`.
+* Plots (margaid): added support for saving and restoring points (when continue training); optional log-scale plots;
+  allow for arbitrary rate of updates; added support for loading data from multiple models. 
+* Losses: added `losses.MeanAbsoluteError`.
+* Optimizers: added `optimizers.GetGlobalStepVar`.
+* Training loop (`train.Loop`): added `MeanTrainingStepDuration()`; check for infinity and "nan" losses -- training
+  is immediately interrupted with an error.
+* Added to slices package: `Flag()`, `At()`, `Last()`, `Copy`.
 * Force download of the correct version of the C++ library in the Jupyter docker -- this
   prevents Docker cache using an older version.
 * Improved error messages in some cases.
+* Tensors: added new dtypes `UInt32` and `UInt64`; changed return type of `tensor.FromAnyValue()` to `tensor.Tensor`.
 
 ## v0.3.1
 

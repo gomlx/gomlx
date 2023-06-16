@@ -571,6 +571,8 @@ func dilateConvolveToMatchSumPooling(x, backProp *Node, windowDimensions, stride
 	}
 	dtype := x.DType()
 	rank := x.Rank()
+	//dims := x.Shape().Dimensions
+
 	if len(windowDimensions) != rank {
 		g.SetErrorf("windowSizes (length %d) must have same length as rank of input x (rank %d)", len(windowDimensions), rank)
 		return g.InvalidNode()
@@ -584,40 +586,60 @@ func dilateConvolveToMatchSumPooling(x, backProp *Node, windowDimensions, stride
 		return g.InvalidNode()
 	}
 
-	// Configure the padding needed to expand the backprop.
+	// Configure the padding needed to expand the backprop back to its original size.
 	padConfig := make([]PadAxis, rank)
 	for axis := range padConfig {
 		conf := &padConfig[axis]
 
-		// pad due to window size.
-		windowSize := windowDimensions[axis] // for this axis.
-		conf.Start = (windowSize - 1) / 2    // For even sized kernels, the padding is asymmetric.
-		conf.End = windowSize / 2
-
-		// pad due to strides.
+		// pad due to strides and window sizes: this reconstructs what was used from
+		// the original dimension -- some may be padding ... but some padding (not used) may
+		// not be included.
 		conf.Interior = strides[axis] - 1
-		conf.Start += strides[axis] / 2
-		conf.End += (strides[axis] - 1) / 2
+		conf.Start = (windowDimensions[axis]) / 2 // Notice that we switch the long/short half from start/end.
+		conf.End = (windowDimensions[axis] - 1) / 2
+	}
+	// expanded should have the same spatial dimensions as the original input,
+	// but with zeros filled in between.
+	zero := ScalarZero(g, dtype)
+	expanded := Pad(backProp, zero, padConfig...)
 
-		// Remove pad that was used originally, since we don't want to re-generate the original padding.
+	// For each position on expanded, just sum the values that reach it.
+	padSame := make([][2]int, rank) // pad to preserve expanded shape.
+	for axis := range padSame {
+		windowSize := windowDimensions[axis]    // for this axis.
+		padSame[axis][0] = (windowSize - 1) / 2 // For even sized kernels, the padding is asymmetric.
+		padSame[axis][1] = windowSize / 2
+	}
+	expanded = reduceWindowXLA(expanded, xla.ReduceSumNode, windowDimensions, nil, nil, nil, padSame)
+
+	// We may need to trim the extra padding that was used originally, since we don't want to re-generate
+	// the original padding. We many also need to pad extra, in case not everything from the input tensor
+	// was used in the output.
+	//
+	// Care has to be taken, because we only want to take out padding that was effectively used,
+	// and not padding that didn't have any effect.
+	// E.g: input=[1, 3, 1], window=3, padding=[0, 500], stride=1000 -> in this case none of the padding was used.
+	var requiresAdjustment bool
+	for axis := range padConfig {
+		conf := &padConfig[axis]
+		*conf = PadAxis{0, 0, 0}
+
+		amountToAdjust := x.Shape().Dimensions[axis] - expanded.Shape().Dimensions[axis] // May be negative.
+		paddingStart := 0
 		if len(paddings) > 0 {
-			// Notice the padding can go negative, which will trim the element from the start/end.
-			conf.Start -= paddings[axis][0]
-			conf.End -= paddings[axis][1]
+			paddingStart = paddings[axis][0]
+		}
+		conf.Start = -paddingStart             // Padding on the start is always used, and needs trimming.
+		conf.End = amountToAdjust - conf.Start // Reminder of adjustment goes to the end of the spatial axis.
+		if conf.Start != 0 || conf.End != 0 {
+			requiresAdjustment = true
 		}
 	}
-	//fmt.Printf("\tpadConfig=%+v\n", padConfig)
-	expanded := Pad(backProp, ScalarZero(g, dtype), padConfig...)
-	//expanded.SetLogged("expanded grad:")
-	//fmt.Printf("\texpanded=%s\n", expanded.shape)
-	paddingsConv := make([][2]int, rank)
-	for axis := range paddingsConv {
-		windowSize := windowDimensions[axis]         // for this axis.
-		paddingsConv[axis][0] = (windowSize - 1) / 2 // For even sized kernels, the padding is asymmetric.
-		paddingsConv[axis][1] = windowSize / 2
+	var grad *Node
+	if requiresAdjustment {
+		grad = Pad(expanded, zero, padConfig...)
+	} else {
+		grad = expanded
 	}
-	//fmt.Printf("\tpaddingsConv=%v\n", paddingsConv)
-	output := reduceWindowXLA(expanded, xla.ReduceSumNode, windowDimensions, nil, nil, nil, paddingsConv)
-	//fmt.Printf("\tgrad=%s\n", output.shape)
-	return output
+	return grad
 }

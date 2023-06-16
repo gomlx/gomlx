@@ -17,7 +17,6 @@
 package graph
 
 import (
-	"fmt"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/xla"
 )
@@ -197,9 +196,10 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 			//fmt.Printf("\t\tSetting vjp for %s: %s\n", input, vjp)
 			combinedShape := combineOutputShape(outputShape, input.shape)
 			if !vjp.shape.Eq(combinedShape) {
-				g.SetErrorf("invalid shape for calculated VJP[%d] of inputs of node %q: VJP[%d] shape is %q, but the node's "+
-					"%dth input has a shape %q -- adjoint VJP shape on node output is %q",
-					ii, node, ii, vjp.Shape(), ii, input.shape, rNode.VJP.Shape())
+				g.SetErrorf("invalid Gradient calculation for node %q: invalid shape for calculated VJP for "+
+					"input #%d (out of %d): input shape=%s, calculated VJP shape=%s"+
+					" -- this probably indicates a bug in the code, please report the issue.",
+					node, ii, len(node.Inputs()), input.shape, vjp.shape)
 				return nil
 			}
 			rInput := rg.ReverseNodes[input.Id()]
@@ -685,8 +685,8 @@ func gatherVJP(node, v *Node, _ shapes.Shape) []*Node {
 	}
 
 	// GatherSlices(): sliceSizes are variable, but there are no collapsedSliceDims.
-	fmt.Printf("\tgatherVJP: operand=%s, start=%s, indexVectorDim=%d, offsetDims=%v, collapsedSliceDims=%v, startIndexMap=%v, sliceSizes=%v\n",
-		input.shape, indices.shape, indexVectorDim, offsetDims, collapsedSliceDims, startIndexMap, sliceSizes)
+	//fmt.Printf("\tgatherVJP: operand=%s, start=%s, indexVectorDim=%d, offsetDims=%v, collapsedSliceDims=%v, startIndexMap=%v, sliceSizes=%v\n",
+	//	input.shape, indices.shape, indexVectorDim, offsetDims, collapsedSliceDims, startIndexMap, sliceSizes)
 
 	isGatherSlices := len(collapsedSliceDims) == 0
 	if isGatherSlices {
@@ -695,7 +695,7 @@ func gatherVJP(node, v *Node, _ shapes.Shape) []*Node {
 		startIndices := indices
 		outputPrefixRank := startIndices.Rank() - 1 // Prefix dimensions of the output of the GatherSlice.
 		updates := v
-		fmt.Printf("\tgatherVJP: updates=%s\n", updates.shape)
+		//fmt.Printf("\tgatherVJP: updates=%s\n", updates.shape)
 
 		// updateWindowsDims: one per every dimension of the input, offset by the initial outputPrefixRank.
 		updateWindowsDims := make([]int, 0, inputShape.Rank())
@@ -733,7 +733,12 @@ func batchNormTrainingVJP(node, v *Node, _ shapes.Shape) []*Node {
 // simply the transpose of the incoming vector.
 func transposeVJP(node, v *Node, _ shapes.Shape) []*Node {
 	permutations := node.serializedNode.Ints
-	return []*Node{TransposeAllDims(v, permutations...)}
+	reversePermutations := make([]int, len(permutations))
+	for to, from := range permutations {
+		reversePermutations[from] = to
+	}
+	vjp := TransposeAllDims(v, reversePermutations...)
+	return []*Node{vjp}
 }
 
 // broadcastInDimVJP generates the "vector dot jacobian" w.r.t. the input of broadcast.

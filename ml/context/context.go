@@ -156,10 +156,9 @@ type Loader interface {
 
 // NewContext constructs a new and empty context.
 func NewContext(manager *ml.Manager) *Context {
-	return &Context{
-		scope:        ScopeSeparator,
+	ctx := &Context{
+		scope:        RootScope,
 		deviceNumber: manager.DefaultDeviceNum(),
-		initializer:  initializers.RandomUniformFn(-0.1, 0.1),
 		checked:      true,
 		data: &contextData{
 			manager:      manager,
@@ -168,10 +167,18 @@ func NewContext(manager *ml.Manager) *Context {
 			variablesMap: make(map[string]scopedVariableMap),
 		},
 	}
+	ctx.initializer = initializers.RandomUniformFn(initializers.NoSeed, -0.1, 0.1)
+	return ctx
 }
 
-// ScopeSeparator is used between levels of scope. Scope names cannot use this character.
-const ScopeSeparator = "/"
+const (
+	// ScopeSeparator is used between levels of scope. Scope names cannot use this character.
+	ScopeSeparator = "/"
+
+	// RootScope is the scope at the very root.
+	// Some internal variables (e.g.: default random number generator state) are stored there.
+	RootScope = ScopeSeparator
+)
 
 // copy creates a copy of the Context, but sharing the same "data" component.
 func (ctx *Context) copy() *Context {
@@ -270,7 +277,7 @@ func (ctx *Context) In(scope string) *Context {
 }
 
 // InAbsPath returns a new reference to the Context with the extra given scope. It should start and have each element
-// separated by ScopeSeparator.
+// separated by ScopeSeparator. Use RootScope for the root scope.
 //
 // Notice that Scope is part of the "reference" component of a Context.
 func (ctx *Context) InAbsPath(scopePath string) *Context {
@@ -522,11 +529,13 @@ func (ctx *Context) findVariableInScope(name string) *Variable {
 }
 
 // InspectVariable returns the variable with the given name for inspection. This shouldn't be used during
-// building of models, since this bypass the Reuse checks. It returns nil if a variable with the given
+// building of models, since this bypasses the Reuse checks. It returns nil if a variable with the given
 // name hasn't been created.
 //
-// Notice that variables information is stored in the "data" component of Context objects, and is shared
+// Notice that variables' information is stored in the "data" component of Context objects, and is shared
 // among all connected context references.
+//
+// The root scope is "/" (RootScope).
 func (ctx *Context) InspectVariable(scope, name string) *Variable {
 	if !ctx.Ok() {
 		return nil
@@ -673,13 +682,14 @@ func (ctx *Context) VariableWithValue(name string, value any) *Variable {
 		return ctx.badVariable()
 	}
 
+	valueT := valueToTensor(value)
+	if valueT.Error() != nil {
+		ctx.SetErrorf("failed to parse value %v for variable %q in scope %q: %w", value, name, ctx.scope, valueT.Error())
+		return ctx.badVariable()
+	}
+
 	if v != nil {
 		// Pre-existing variable to reuse: check that the requested and previous shapes are the same.
-		valueT := valueToTensor(value)
-		if valueT.Error() != nil {
-			ctx.SetErrorf("failed to parse value %v for variable %q in scope %q: %w", value, name, ctx.scope, valueT.Error())
-			return ctx.badVariable()
-		}
 		if !valueT.Shape().Eq(v.shape) {
 			ctx.SetErrorf("requested to reuse variable %q in scope %q, but with value with different shape from original: previous shape=%s, requested value shape=%s",
 				name, ctx.scope, v.shape, valueT.Shape())
@@ -689,12 +699,6 @@ func (ctx *Context) VariableWithValue(name string, value any) *Variable {
 	}
 
 	// New variable: check, create and register it in Context and return.
-	valueT := valueToTensor(value)
-	if valueT.Error() != nil {
-		ctx.SetErrorf("failed to parse value %v for variable %q in scope %q: %w", value, name, ctx.scope, valueT.Error())
-		return ctx.badVariable()
-	}
-
 	v = &Variable{
 		ctx:          ctx,
 		name:         name,
@@ -739,6 +743,30 @@ func (ctx *Context) NumVariables() int {
 	return len(ctx.data.variables)
 }
 
+// NumParameters returns the summed-up number of all variables.
+// It ignores the `DType`, so a `float64` will count as much as a `uint8`.
+func (ctx *Context) NumParameters() int {
+	total := 0
+	ctx.EnumerateVariables(func(v *Variable) {
+		total += v.Shape().Size()
+	})
+	return total
+}
+
+// Memory returns the total number of bytes summed across all variables.
+// It does not include associated pointers and structures, just the bytes used by the raw data.
+//
+// Example:
+//
+//	fmt.Printf("Model memory usage: %s", data.ByteCountIEC(ctx.Memory()))
+func (ctx *Context) Memory() int64 {
+	total := int64(0)
+	ctx.EnumerateVariables(func(v *Variable) {
+		total += v.Shape().Memory()
+	})
+	return total
+}
+
 // Loader returns the current configured Loader for this context. See SetLoader for details on how the
 // Loader is used.
 //
@@ -778,7 +806,7 @@ func (ctx *Context) ExecPopulateGraphParamsMap(graph *Graph, params ml.ParamsMap
 }
 
 // execPopulateGraphParamsSlice will fill the graph parameter values for every variable used in the given graph.
-// It keeps a cache of the mapping of the variables for faster access.
+// It keeps a cache of the variables' mapping for faster access.
 //
 // `Exec*` methods are used by those implementing an executor (context.Exec) or related tests, not normally
 // needed by end users.

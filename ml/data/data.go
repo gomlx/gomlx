@@ -21,6 +21,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/pkg/errors"
 	"github.com/schollz/progressbar/v3"
 	"io"
@@ -304,4 +306,40 @@ func Unzip(zipFile, zipBaseDir string) error {
 		return errors.Wrapf(err, "failed to run %q", cmd)
 	}
 	return nil
+}
+
+// takeDataset implements a `train.Dataset` that only yields `take` batches.
+type takeDataset struct {
+	ds          train.Dataset
+	count, take int
+}
+
+// Take returns a wrapper to `ds`, a `train.Dataset` that only yields `n` batches.
+func Take(ds train.Dataset, n int) train.Dataset {
+	return &takeDataset{
+		ds:   ds,
+		take: n,
+	}
+}
+
+// Name implements train.Dataset. It returns the dataset name.
+func (ds *takeDataset) Name() string {
+	return fmt.Sprintf("%s [Take %d]", ds.ds.Name(), ds.take)
+}
+
+// Reset implements train.Dataset.
+func (ds *takeDataset) Reset() {
+	ds.ds.Reset()
+	ds.count = 0
+}
+
+// Yield implements train.Dataset.
+func (ds *takeDataset) Yield() (spec any, inputs []tensor.Tensor, labels []tensor.Tensor, err error) {
+	if ds.count >= ds.take {
+		err = io.EOF
+		return
+	}
+	ds.count++
+	spec, inputs, labels, err = ds.ds.Yield()
+	return
 }

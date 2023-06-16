@@ -8,8 +8,6 @@ Split by functionality, the most "desirable" TODOs are:
 
 ## Modeling
 
-* Random: make randomization state as a side input -- as it should be, so XLA functions are purely functional.
-  Maybe follow Jax implementation ?
 * CNNs: add SeparableConv2D. The goal would be to have an exact ResNet50 working.
 * GNN Layer: tbd., but is one of the recent hotness, it would be nice to have a GNN layer/scheme available as well.
 * FFT operation for FNets. The op is simple enough, the gradient I'm not sure how yet.
@@ -22,10 +20,16 @@ Split by functionality, the most "desirable" TODOs are:
 * Computation Graph extensions and manipulation tools: there are good reasons for someone to want to 
   change the Graph (splitting the graph for batch processing or distribution) or create arbitrary 
   extensions to it (custom operations in Go or C/C++) and be able to differentiate through those. 
-  This is something that needs some design and thought. 
+  This is something that needs some design and thought.
+* Detecting first occurrence of NaNs (and Inf): have a mode -- likely slower -- where these are automatically checked
+  for and immediately prints a stack trace when they happen.
 
 ## Infrastructure
 
+* Saving/Loading models:
+  * Exporting to TensorFLow's "SavedModel" format -- so models can leverage all the production tools
+    from TensorFlow -- using same mechanism as Jax is using, by converting code to StableHLO intermediary
+    language -- that conversion is done already.
 * Inference-only version: for now to run predictions one has to also import the whole engine and XLA machinery. 
   * Ahead-Of-Time (AOT) compilation of a computation graph to a library that doesn't require linking 
     the whole XLA. This can be the "official" save for inference method. Notice compiled graph will
@@ -43,10 +47,6 @@ Split by functionality, the most "desirable" TODOs are:
     slower (potentially lots slower depending on how much is communicated) but with close to zero
     start-up time, perfect for development.
 * More supported data types (`DType`): missing the 16bit float types.
-* Saving/Loading models:
-  * Exporting to TensorFLow's "SavedModel" format -- so models can leverage all the production tools
-    from TensorFlow -- using same mechanism as Jax is using, by converting code to StableHLO intermediary
-    language -- that conversion is done already.
 
 ## Lower level
 * Add support for multiple devices (e.g: multiple GPUs). In principle, it's already there (DeviceNum is supported)
