@@ -4,6 +4,30 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 )
 
+// Activation allows a configurable activation.
+// Currently supported activations are "relu", "sigmoid", "leaky_relu", "swish", "tanh".
+func Activation(activation string, x *Node) *Node {
+	g := x.Graph()
+	if !g.Ok() {
+		return g.InvalidNode()
+	}
+	switch activation {
+	case "relu":
+		return Relu(x)
+	case "leaky_relu":
+		return LeakyRelu(x)
+	case "sigmoid":
+		return Sigmoid(x)
+	case "tanh":
+		return Tanh(x)
+	case "swish":
+		return Swish(x)
+	default:
+		g.SetErrorf("invalid activation type %q, valid types are: \"relu\", \"sigmoid\", \"leaky_relu\", \"swish\", \"tanh\"", activation)
+		return g.InvalidNode()
+	}
+}
+
 // Relu activation function. It returns Max(x, 0), and is commonly used as an activation function in neural networks.
 func Relu(x *Node) *Node {
 	g := x.Graph()
