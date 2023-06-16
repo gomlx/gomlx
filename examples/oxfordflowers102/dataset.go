@@ -223,7 +223,8 @@ func (ds *Dataset) Reset() {
 //
 // If the cache is not found, it automatically calls DownloadAndParse to download and untar the original
 // images, if they are not yet downloaded.
-func InMemoryDataset(manager *Manager, baseDir string, imageSize int, name string, partitionSeed int64, partitionFrom, partitionTo float64) (
+func InMemoryDataset(manager *Manager, baseDir string, imageSize int, name string,
+	partitionSeed int64, partitionFrom, partitionTo float64) (
 	inMemoryDataset *data.InMemoryDataset, err error) {
 	var f *os.File
 	if baseDir != "" {
@@ -241,6 +242,7 @@ func InMemoryDataset(manager *Manager, baseDir string, imageSize int, name strin
 			// Reads from cached file.
 			dec := gob.NewDecoder(f)
 			inMemoryDataset, err = data.GobDeserializeInMemory(manager, dec)
+			_ = f.Close()
 			return
 		}
 		if !os.IsNotExist(err) {
@@ -254,6 +256,7 @@ func InMemoryDataset(manager *Manager, baseDir string, imageSize int, name strin
 		}
 	}
 
+	// Check whether dataset has been downloaded already.
 	if NumExamples == 0 {
 		err = DownloadAndParse(baseDir)
 		if err != nil {

@@ -1,8 +1,8 @@
 # GoMLX changelog
 
-## Next
+## v0.4.0
 
-* Models: Diffusion example model; added Kernel Inception Distance (KID) metric implementation.
+* Models: Diffusion example model (working draft); added Kernel Inception Distance (KID) metric implementation.
 * Contexts: added `context.NumParameters()`, `context.Memory()`, `context.RandomUniform`, `context.RandomNormal`, 
   `context.RngStateWithSeed` and `context.RngStateReset`.
 * Random numbers revamped, making graph purely functional. Also, 'context.Context' provides
@@ -10,9 +10,10 @@
 * Added ops: `ArgMax`, `ArgMin`, `ExpandLeftToRank`, `RandomUniform` and `RandomNormal`.
 * Datasets: `InMemoryFromData` (for testing); `Normalization()` returns mean and standard deviation for dataset;
   `Map()` creates new dataset that maps a function to wrapped dataset; `Take(n)` to take n elements from a dataset.
+* Layers: Added `layers.Activation` that takes the activation type as a string (easy to plug to a flag).
 * Metrics: added context as the first parameter to `metrics.BaseMetricGraph`.
 * Plots (margaid): added support for saving and restoring points (when continue training); optional log-scale plots;
-  allow for arbitrary rate of updates. 
+  allow for arbitrary rate of updates; added support for loading data from multiple models. 
 * Losses: added `losses.MeanAbsoluteError`.
 * Optimizers: added `optimizers.GetGlobalStepVar`.
 * Training loop (`train.Loop`): added `MeanTrainingStepDuration()`; check for infinity and "nan" losses -- training
