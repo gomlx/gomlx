@@ -96,7 +96,7 @@ COPY --link --chown=${NB_UID}:${NB_GID} . "${HOME}/Projects/gomlx"
 # Run tests -- only on "Host" since GPU in docker build is not working.
 # TODO: Skip running the demo tests, since they require downloading and preparing data, which takes too long.
 WORKDIR "${HOME}/Projects/gomlx"
-RUN go test ./... -test.skip=demo/main
+RUN go test ./xla/... ./types/... ./graph/... ./ml/...
 
 # I have no idea why, but using CUDA/CuDNN with XLA the very first time is very slow. It takes a couple of minutes
 # to run. So we run a trivial model once upfront.
