@@ -425,6 +425,10 @@ func (h *Handler) loadCheckpoint(baseName string, merge bool, mergeWeight float6
 			// Simply load the value:
 			h.variableValues[varInfo.ParameterName] = localT
 		} else {
+			// Make sure we have enough variations of mergeExec for each variable, if they
+			// are of different shape.
+			h.mergeExec.SetMaxCache(len(h.variableValues))
+
 			// Merge value:
 			current, found := h.variableValues[varInfo.ParameterName]
 			if !found || !varInfo.DType.IsFloat() {
