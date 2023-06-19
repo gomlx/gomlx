@@ -102,6 +102,9 @@ func GetGlobalStepVar(ctx *context.Context) *context.Variable {
 // It only builds the computation graph, no actual values are generated.
 //
 // Typically, this is called by the optimizers UpdateGraph method.
+//
+// GlobalStep is always stored as shapes.Int64, but it is converted to the given DType
+// before being returned.
 func IncrementGlobalStepGraph(ctx *context.Context, g *Graph, dtype shapes.DType) *Node {
 	if !g.Ok() {
 		return g.InvalidNode()

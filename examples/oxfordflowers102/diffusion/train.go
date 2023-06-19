@@ -24,9 +24,10 @@ import (
 )
 
 var (
-	flagCheckpoint       = flag.String("checkpoint", "", "Directory save and load checkpoints from. If left empty, no checkpoints are created.")
-	flagCheckpointKeep   = flag.Int("checkpoint_keep", 20, "Number of checkpoints to keep, if --checkpoint is set.")
-	flagCheckpointPeriod = flag.Int("checkpoint_period", 60, "Period of time, in seconds, between checkpoints are saved.")
+	flagCheckpoint         = flag.String("checkpoint", "", "Directory save and load checkpoints from. If left empty, no checkpoints are created.")
+	flagCheckpointKeep     = flag.Int("checkpoint_keep", 20, "Number of checkpoints to keep, if --checkpoint is set.")
+	flagCheckpointPeriod   = flag.Int("checkpoint_period", 60, "Period of time, in seconds, between checkpoints are saved.")
+	flagCheckpointTakeMean = flag.Int("checkpoint_mean", 1, "If != 1, take the mean of the latest checkpoints. This is disabled (set to 1) if training.")
 )
 
 const (
@@ -48,7 +49,9 @@ func LoadCheckpointToContext(ctx *context.Context) (checkpoint *checkpoints.Hand
 		checkpointPath = path.Join(DataDir, checkpointPath)
 	}
 	var err error
-	checkpoint, err = checkpoints.Build(ctx).Dir(checkpointPath).Keep(*flagCheckpointKeep).Done()
+	checkpoint, err = checkpoints.Build(ctx).Dir(checkpointPath).
+		Keep(*flagCheckpointKeep).TakeMean(*flagCheckpointTakeMean).
+		Done()
 	AssertNoError(err)
 
 	// Check if args file exist, if not create it.
@@ -129,6 +132,7 @@ var (
 
 func TrainModel() {
 	Init()
+	*flagCheckpointTakeMean = 1 // Disable mean of checkpoints if training.
 	trainDS, validationDS := CreateInMemoryDatasets()
 	trainEvalDS := trainDS.Copy()
 
