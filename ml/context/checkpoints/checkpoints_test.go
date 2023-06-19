@@ -23,10 +23,12 @@ package checkpoints
 import (
 	"fmt"
 	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"os"
@@ -34,7 +36,7 @@ import (
 )
 
 func TestCheckpoints(t *testing.T) {
-	manager := BuildManager().MustDone()
+	manager := graphtest.BuildTestManager()
 
 	// Graph function to test: it simply creates, increments and returns the global step.
 	testGraphFn := func(ctx *context.Context, g *Graph) *Node {
@@ -100,4 +102,36 @@ func TestCheckpoints(t *testing.T) {
 
 	// Remove test directory.
 	assert.NoErrorf(t, os.RemoveAll(dir), "Removing directory used for testing %q", dir)
+}
+
+func TestMergedCheckpoints(t *testing.T) {
+	manager := graphtest.BuildTestManager()
+	var dir string
+	{
+		ctx := context.NewContext(manager).Checked(false)
+		checkpoint := Build(ctx).TempDir("", "test_checkpoints_").Keep(2).MustDone()
+		dir = checkpoint.Dir()
+		globalStepV := optimizers.GetGlobalStepVar(ctx)
+		globalStepV.SetValue(tensor.FromValue(1))
+		xV := ctx.VariableWithValue("x", []float64{1.0, 1.0, 1.0})
+		yV := ctx.VariableWithValue("y", [][]float32{{4.0}, {4.0}})
+		require.NoError(t, checkpoint.Save())
+
+		globalStepV.SetValue(tensor.FromValue(10))
+		xV.SetValue(tensor.FromValue([]float64{3.0, 3.0, 3.0}))
+		yV.SetValue(tensor.FromValue([][]float32{{6.0}, {6.0}}))
+		require.NoError(t, checkpoint.Save())
+	}
+	{
+		// Check that the values were averaged:
+		ctx := context.NewContext(manager).Checked(false)
+		_ = Build(ctx).Dir(dir).Keep(2).TakeMean(-1).MustDone()
+		globalStepV := optimizers.GetGlobalStepVar(ctx)
+		assert.Equal(t, 10, globalStepV.Value().Value(), "GlobalStep")
+		xV := ctx.VariableWithValue("x", []float64{1.0, 1.0, 1.0})
+		// Assume X will be loaded with the mean of the previous 2 checkpoints:
+		assert.Equal(t, []float64{2.0, 2.0, 2.0}, xV.Value().Value(), "X")
+		yV := ctx.VariableWithValue("y", [][]float32{{4.0}, {4.0}})
+		assert.Equal(t, [][]float32{{5.0}, {5.0}}, yV.Value().Value(), "Y")
+	}
 }
