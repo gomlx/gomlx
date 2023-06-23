@@ -74,6 +74,12 @@ type Tensor interface {
 	// transfer happens.
 	Device(client HasClient, deviceNum int) *Device
 
+	// CurrentDevice returns the current Device tensor backing this tensor, if there is any.
+	// If the tensor is Local, this returns nil.
+	//
+	// If there are more than one Device tensor, this returns the first one.
+	CurrentDevice() *Device
+
 	// Shape of the tensor.
 	Shape() shapes.Shape
 
@@ -386,4 +392,26 @@ func (c *cache) Device(hasClient HasClient, deviceNum int) *Device {
 	}
 	device.shape = device.shapedBuffer.Shape()
 	return device
+}
+
+// CurrentDevice returns the current Device tensor backing this tensor, if there is any.
+// If the tensor is Local, this returns nil.
+//
+// If there are more than one Device tensor, this returns the first one.
+func (c *cache) CurrentDevice() *Device {
+	c.mu.Lock()
+	// TODO: maybe do this more fine-grained: it may make sense to transfer to several devices in parallel (?).
+	defer c.mu.Unlock()
+	if c == nil {
+		return nil
+	}
+	if c.onDevices == nil {
+		return nil
+	}
+	for _, deviceTensors := range c.onDevices {
+		for _, deviceT := range deviceTensors {
+			return deviceT
+		}
+	}
+	return nil
 }
