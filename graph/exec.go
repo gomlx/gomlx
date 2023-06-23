@@ -389,11 +389,15 @@ func (e *Exec) CallWithGraph(args ...any) (results []tensor.Tensor, g *Graph, er
 	}
 	if e.setSideParams != nil {
 		e.setSideParams(g, tensors)
+		if !g.Ok() {
+			err = g.Error()
+			return
+		}
 	}
 	if g.NumParameters() > len(args) {
 		for ii, t := range tensors {
 			if t == nil || !t.Ok() {
-				err = errors.Errorf("parameter %d (%q) is nil or invalid, maybe a variable value not set as a"+
+				err = errors.Errorf("parameter %d (%q) is nil or invalid, maybe a variable value not set as a "+
 					"parameter, cannot execute g", ii, g.ParameterByIndex(ii).ParameterName())
 				return
 			}

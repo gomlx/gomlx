@@ -439,7 +439,9 @@ func (h *Handler) loadCheckpoint(baseName string, merge bool, mergeWeight float6
 			if err != nil {
 				return errors.WithMessagef(err, "when taking the mean of variable %q", varInfo.ParameterName)
 			}
+			current.FinalizeAll()
 			h.variableValues[varInfo.ParameterName] = results[0]
+			localT.FinalizeAll()
 		}
 	}
 	return nil
@@ -481,6 +483,16 @@ func (h *Handler) takeMean(baseNames []string) error {
 	// Free merge executor.
 	h.mergeExec.Finalize()
 	h.mergeExec = nil
+
+	// Move all variables to a local tensor.
+	for key, t := range h.variableValues {
+		deviceT := t.CurrentDevice()
+		if deviceT != nil {
+			// Tensor is on device: convert to local, and free the device version.
+			h.variableValues[key] = deviceT.Local()
+			deviceT.Finalize()
+		}
+	}
 	return nil
 }
 

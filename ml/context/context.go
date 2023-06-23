@@ -817,7 +817,17 @@ func (ctx *Context) execPopulateGraphParamsSlice(graph *Graph, params []*tensor.
 		if !found {
 			return
 		}
-		params[nodes.paramNode.ParameterHandle()] = v.Value().Device(graph.Manager(), graph.DeviceNum())
+		if nodes == nil || nodes.paramNode == nil || nodes.paramNode.ParameterHandle() == 0 {
+			graph.SetErrorf("invalid paramNode for variable %q", v.ParameterName())
+			return
+		}
+		deviceT := v.Value().Device(graph.Manager(), graph.DeviceNum())
+		if !deviceT.Ok() {
+			graph.SetError(errors.WithMessagef(deviceT.Error(), "failed to transfer variable \"%s::%s\" value to device",
+				v.Scope(), v.Name()))
+			return
+		}
+		params[nodes.paramNode.ParameterHandle()] = deviceT
 	})
 }
 

@@ -457,7 +457,8 @@ func (e *Exec) SetContext(context *Context) *Exec {
 // Notice Context shouldn't be passed by Call, it will use automatically the context
 // stored in context.Exec -- you can change it with SetContext.
 //
-// If a graph does not yet exist one is created, compiled and cached for the shapes.
+// If a graph does not yet exist one is created, compiled and cached for the shapes
+// of the inputs.
 // It passes the context to the registered ctxGraphFn. After the very first invocation of Call
 // the context is marked as Context.Reuse().
 //
