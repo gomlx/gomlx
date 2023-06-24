@@ -176,7 +176,11 @@ func TrainModel() {
 		optimizers.Adam().WeightDecay(1e-4).Done(),
 		[]metrics.Interface{movingImagesLoss}, // trainMetrics
 		[]metrics.Interface{meanImagesLoss})   // evalMetrics
-
+	if *flagNanLogger {
+		trainer.OnExecCreation(func(exec *context.Exec, _ train.GraphType) {
+			nanLogger.Attach(exec)
+		})
+	}
 	// Use standard training loop.
 	loop := train.NewLoop(trainer)
 	loop.ReadGlobalStep(ctx)

@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/graph/nanlogger"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/ml/layers"
@@ -25,7 +26,12 @@ var (
 	flagEmbeddingDims         = flag.Int("embedding_dim", 32, "Size of the sinusoidal embeddings, should be an even number")
 	flagEmbeddingMaxFrequency = flag.Float64("embed_max_freq", 1000.0, "Embedding max frequency")
 	flagEmbeddingMinFrequency = flag.Float64("embed_min_freq", 1.0, "Embedding max frequency")
+
+	flagNanLogger = flag.Bool("nan_debug", false, "If set to true, it will add some traces monitoring for NaN values, "+
+		"and it will report the first location where it happens. It slows down a bit the training.")
 )
+
+var nanLogger = nanlogger.New()
 
 // SinusoidalEmbedding provides embeddings of `x` for different frequencies.
 // This is applied to the variance of the noise, and facilitates the NN model to easily map different ranges
@@ -70,6 +76,9 @@ var (
 // NormalizeLayer according to --norm flag.
 // It works with `x` with rank 4 and rank 3.
 func NormalizeLayer(ctx *context.Context, x *Node) *Node {
+	if *flagNanLogger {
+		nanLogger.Trace(x)
+	}
 	switch *flagNormalization {
 	case "none":
 		// No-op.
@@ -78,12 +87,19 @@ func NormalizeLayer(ctx *context.Context, x *Node) *Node {
 	case "layer":
 		x = layers.LayerNormalization(ctx, x, -1).Done()
 	}
+	if *flagNanLogger {
+		nanLogger.Trace(x)
+	}
 	return x
 }
 
 // ActivationLayer can be configured.
 func ActivationLayer(x *Node) *Node {
-	return layers.Activation(*flagActivation, x)
+	x = layers.Activation(*flagActivation, x)
+	if *flagNanLogger {
+		nanLogger.Trace(x)
+	}
+	return x
 }
 
 // ResidualBlock on the input with `outputChannels` (axis 3) in the output.
@@ -107,6 +123,9 @@ func ResidualBlock(ctx *context.Context, x *Node, outputChannels int) *Node {
 	x = ActivationLayer(x)
 	x = layers.Convolution(ctx.In("conv-layer-2"), x).Filters(outputChannels).KernelSize(3).PadSame().Done()
 	x = Add(x, residual)
+	if *flagNanLogger {
+		nanLogger.Trace(x)
+	}
 	return x
 }
 
@@ -158,6 +177,9 @@ func TransformerBlock(ctx *context.Context, x *Node) *Node {
 		embed = layers.MultiHeadAttention(ctx, embed, embed, embed, *flagNumAttHeads, *flagAttKeyQueryEmbedDim).
 			SetOutputDim(embedDim).
 			SetValueHeadDim(embedDim).Done()
+		if *flagNanLogger {
+			nanLogger.Trace(embed)
+		}
 		if *flagDropoutRate > 0 {
 			embed = layers.Dropout(ctx.In("dropout_1"), embed, dropoutRate)
 		}
@@ -174,9 +196,12 @@ func TransformerBlock(ctx *context.Context, x *Node) *Node {
 		embed = Add(embed, attentionOutput)
 		embed = NormalizeLayer(ctx.In("normalization_2"), embed)
 
-		// Residual connection: not part of the usual transfomer layer ...
+		// Residual connection: not part of the usual transformer layer ...
 		if ii > 0 {
 			embed = Add(residual, embed)
+			if *flagNanLogger {
+				nanLogger.Trace(embed)
+			}
 		}
 	}
 	x = Reshape(embed, batchDim, x.Shape().Dimensions[1], x.Shape().Dimensions[2], -1)
@@ -194,6 +219,9 @@ func DownBlock(ctx *context.Context, x *Node, skips []*Node, numBlocks, outputCh
 		skips = append(skips, x)
 	}
 	x = MeanPool(x).Window(2).NoPadding().Done()
+	if *flagNanLogger {
+		nanLogger.Trace(x)
+	}
 	return x, skips
 }
 
@@ -209,6 +237,9 @@ func UpBlock(ctx *context.Context, x *Node, skips []*Node, numBlocks, outputChan
 		skip, skips = slices.Pop(skips)
 		x = Concatenate([]*Node{x, skip}, -1)
 		x = ResidualBlock(ctx.In(name), x, outputChannels)
+	}
+	if *flagNanLogger {
+		nanLogger.Trace(x)
 	}
 	return x, skips
 }
@@ -232,7 +263,15 @@ func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances *Node) *No
 	if !g.Ok() {
 		return g.InvalidNode()
 	}
+	if *flagNanLogger {
+		nanLogger.Trace(noisyImages)
+		nanLogger.Trace(noiseVariances)
+	}
+
 	sinEmbed := SinusoidalEmbedding(noiseVariances)
+	if *flagNanLogger {
+		nanLogger.Trace(sinEmbed)
+	}
 
 	// Broadcast sinEmbed to the spatial dimensions.
 	broadcastDims := sinEmbed.Shape().Copy().Dimensions
@@ -248,25 +287,31 @@ func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances *Node) *No
 	skips := make([]*Node, 0, numBlocks*len(numChannelsList))
 	// Downward: keep pooling image to a smaller size.
 	for ii, numChannels := range numChannelsList {
+		nanLogger.PushScope(fmt.Sprintf("DownBlock-%d", ii))
 		name := fmt.Sprintf("DownBlock-%d", ii+1)
 		x, skips = DownBlock(ctx.In(name), x, skips, numBlocks, numChannels)
+		nanLogger.PopScope()
 	}
 
 	// Intermediary fixed size blocks.
 	x = TransformerBlock(ctx.In("transformer_block"), x)
 	lastNumChannels := slices.Last(numChannelsList)
 	for ii := 0; ii < numBlocks; ii++ {
+		nanLogger.PushScope(fmt.Sprintf("IntermediaryBlock-%d", ii))
 		name := fmt.Sprintf("IntermediaryResidual-%d", ii+1)
 		x = ResidualBlock(ctx.In(name), x, lastNumChannels)
+		nanLogger.PopScope()
 	}
 
 	//fmt.Printf("Intermediary (smallest) shape: %s\n", x.Shape())
 
 	// Upward: up-sample image back to original size, one block at a time.
 	for ii := range numChannelsList {
+		nanLogger.PushScope(fmt.Sprintf("UpBlock-%d", ii))
 		name := fmt.Sprintf("UpBlock-%d", ii+1)
 		numChannels := numChannelsList[len(numChannelsList)-(ii+1)]
 		x, skips = UpBlock(ctx.In(name), x, skips, numBlocks, numChannels)
+		nanLogger.PopScope()
 	}
 	if len(skips) != 0 {
 		g.SetErrorf("Ended with %d skips not accounted for!?", len(skips))
@@ -339,6 +384,10 @@ func TrainingModelGraph(ctx *context.Context, _ any, inputs []*Node) []*Node {
 	batchSize := images.Shape().Dimensions[0]
 	images = PreprocessImages(images, true)
 	noises := ctx.RandomNormal(g, images.Shape())
+	if *flagNanLogger {
+		nanLogger.Trace(images, "images")
+		nanLogger.Trace(noises, "noises")
+	}
 
 	// Sample noise at different schedules.
 	diffusionTimes := ctx.RandomUniform(g, shapes.Make(DType, batchSize, 1, 1, 1))
