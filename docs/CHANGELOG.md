@@ -1,5 +1,11 @@
 # GoMLX changelog
 
+## Next
+
+* NanLogger: added tool to report back (with stack trace and scope) on the occurrences of NaN/Inf in the computation
+  graph.
+* RandomNormal: fixed rare numerical issues in RandomNormal, that would generate -Inf.
+
 ## v0.4.0
 
 * Models: Diffusion example model (working draft); added Kernel Inception Distance (KID) metric implementation.
