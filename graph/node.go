@@ -44,8 +44,11 @@ type Node struct {
 	xlaHandle      NodeXlaHandle
 	serializedNode *xla.SerializedNode
 	inputs         []*Node
-	logMessage     string // if != "" the node is marked for logging.
-	stopGradient   bool   // if true, no gradient is passed through.
+
+	// logMessage is set if node is marked for logging.
+	logMessage string
+
+	stopGradient bool // if true, no gradient is passed through.
 
 	trace error // Stack-trace error of where Node was created. Stored if graph.traced is true.
 }

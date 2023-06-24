@@ -15,7 +15,8 @@
  */
 
 // Package collector implements DataCollector, which attaches itself to a computation graph executor
-// and collects values of any selected computation graph node. This  data can then be used for data analsys.
+// and collects values of any selected computation graph node. This  data can then be used for data
+// analysis.
 package collector
 
 import (
@@ -58,7 +59,7 @@ const (
 )
 
 // DataCollector attaches itself to a computation graph executor -- graph.Exec or context.Exec -- and
-// listens to graph graph.Node that are set to be logged. Those selected for collection are intercepted
+// listens to the graph.Node that are set to be logged. Those selected for collection are intercepted
 // and collected here. These can then be used for plotting.
 //
 // It only works for scalar nodes (it could be extended to collect tensors of different shapes).
@@ -247,7 +248,7 @@ func (c *DataCollector) Collect(node *graph.Node, series string) {
 
 // collectMessagesAndValues implements graph.LoggerFn. It filters the messages/values for this DataCollector,
 // and pass the remaining ones to c.previousLoggerFn.
-func (c *DataCollector) collectMessagesAndValues(messages []string, values []tensor.Tensor) {
+func (c *DataCollector) collectMessagesAndValues(g *graph.Graph, messages []string, values []tensor.Tensor, nodes []graph.NodeId) {
 	passThroughIdx := 0
 	for ii, msg := range messages {
 		if strings.HasPrefix(msg, c.tag) && strings.HasSuffix(msg, dataCollectorTagClose) {
@@ -263,7 +264,7 @@ func (c *DataCollector) collectMessagesAndValues(messages []string, values []ten
 	}
 
 	// Call previous logging function for values not consumed.
-	c.previousLoggerFn(messages[:passThroughIdx], values[:passThroughIdx])
+	c.previousLoggerFn(g, messages[:passThroughIdx], values[:passThroughIdx], nodes)
 }
 
 // storeValue manages the storage of the values collected.

@@ -170,7 +170,7 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 
 		if rNode.VJP == nil {
 			// No gradients arriving to rNode, skip.
-			//fmt.Printf("No gradients for %s\nStack-trace: %+v\n\n%s\n", node, node.Trace(), g)
+			//fmt.Printf("No gradients for %s\nStack-trace: %+v\n\n%s\n", node, node.StackTrace(), g)
 			//panic("failed")
 			continue
 		}

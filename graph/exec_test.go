@@ -222,12 +222,12 @@ func TestExecWithLogger(t *testing.T) {
 	}
 
 	var firstNodeValue tensor.Tensor
-	concat.SetNodeLogger(func(messages []string, values []tensor.Tensor) {
+	concat.SetNodeLogger(func(_ *Graph, messages []string, values []tensor.Tensor, nodes []NodeId) {
 		if len(messages) != 1 {
 			t.Fatalf("Only one node marked for logging, got %d logged nodes", len(messages))
 		}
 		firstNodeValue = values[0]
-		fmt.Printf("\tLogger: %s: %v\n", messages[0], values[0].Local())
+		fmt.Printf("\tLogger: (node #%d) %s: %v\n", nodes[0], messages[0], values[0].Local())
 	})
 
 	a := [][]float64{{1, 2}, {3, 4}}
