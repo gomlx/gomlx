@@ -219,7 +219,7 @@ func TestInMemoryDataset(t *testing.T) {
 	require.NoError(t, err)
 	input := inputs[0].Local().Value().([]int)
 	label := labels[0].Local().Value().([]int)
-	want := slices.IotaSlice(0, 50)
+	want := slices.Iota(0, 50)
 	require.Equal(t, want, input)
 	for ii := range want {
 		want[ii] = -want[ii]
@@ -254,7 +254,7 @@ func TestInMemoryDataset(t *testing.T) {
 	require.NoError(t, err)
 	input = inputs[0].Local().Value().([]int)
 	label = labels[0].Local().Value().([]int)
-	want = slices.IotaSlice(0, 50)
+	want = slices.Iota(0, 50)
 	require.Equal(t, want, input)
 	for ii := range want {
 		want[ii] = -want[ii]

@@ -52,9 +52,9 @@ func GetSpatialAxes(image shapes.HasShape, config ChannelsAxisConfig) (spatialAx
 	}
 	switch config {
 	case ChannelsFirst:
-		spatialAxes = slices.IotaSlice(2, numSpatialDims)
+		spatialAxes = slices.Iota(2, numSpatialDims)
 	case ChannelsLast:
-		spatialAxes = slices.IotaSlice(1, numSpatialDims)
+		spatialAxes = slices.Iota(1, numSpatialDims)
 	default:
 		klog.Errorf("GetSpatialAxes(image, %v): invalid ChannelsAxisConfig!?", config)
 	}

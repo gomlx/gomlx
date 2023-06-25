@@ -346,7 +346,7 @@ func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, att
 	mask := b.buildMask()
 	// Attention coefficients: Softmax over all the inner key axes (the last dimensions of attentionLogits)
 	// Shape: [batch, <query_elements>, num_heads, <key_elements>]
-	softmaxAxes := slices.IotaSlice(attentionLogits.Rank()-numKeyAxes, numKeyAxes)
+	softmaxAxes := slices.Iota(attentionLogits.Rank()-numKeyAxes, numKeyAxes)
 	if mask == nil {
 		attentionCoefficients = Softmax(attentionLogits, softmaxAxes...)
 	} else {

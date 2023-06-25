@@ -303,12 +303,14 @@ func Slice3DWithValue[T any](value T, dim0, dim1, dim2 int) [][][]T {
 	return MultidimensionalSliceWithValue(value, dim0, dim1, dim2).([][][]T)
 }
 
-// IotaSlice returns a slice of incremental int values, starting with start and of length len.
-// Eg: IotaSlice(3, 2) -> []int{3, 4}
-func IotaSlice(start, len int) (slice []int) {
-	slice = make([]int, len)
+// Iota returns a slice of incremental int values, starting with start and of length len.
+// Eg: Iota(3.0, 2) -> []float64{3.0, 4.0}
+func Iota[T interface {
+	constraints.Integer | constraints.Float
+}](start T, len int) (slice []T) {
+	slice = make([]T, len)
 	for ii := range slice {
-		slice[ii] = ii + start
+		slice[ii] = start + T(ii)
 	}
 	return
 }
