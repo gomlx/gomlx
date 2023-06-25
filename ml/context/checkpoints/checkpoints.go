@@ -693,3 +693,11 @@ func (h *Handler) LoadVariable(ctx *context.Context, v *context.Variable) (value
 	delete(h.variableValues, v.ParameterName())
 	return
 }
+
+// LoadedVariables for inspection. These are the values loaded -- but not necessarily immediately available in
+// context, since they are actually used only when a model asks for the variable.
+//
+// The returned map in owned by the Handler, don't change it -- the behaviour is undefined if you do.
+func (h *Handler) LoadedVariables() map[string]tensor.Tensor {
+	return h.variableValues
+}
