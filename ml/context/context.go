@@ -817,7 +817,7 @@ func (ctx *Context) execPopulateGraphParamsSlice(graph *Graph, params []*tensor.
 		if !found {
 			return
 		}
-		if nodes == nil || nodes.paramNode == nil || nodes.paramNode.ParameterHandle() == 0 {
+		if nodes == nil || nodes.paramNode == nil || nodes.paramNode.ParameterHandle() == ml.InvalidParameterHandle {
 			graph.SetErrorf("invalid paramNode for variable %q", v.ParameterName())
 			return
 		}
