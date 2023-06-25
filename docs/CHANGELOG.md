@@ -10,6 +10,7 @@
   * Context: some rare condition on feeding variable values to executor.
   * InMemory dataset: handling cases where dataset returns the same tensor as input and label.
 * Lots of improvements in diffusion example. Added flower type (the original label) as an optional feature.
+* Slices: refactored `IotaSlice()` to `Iota[T number]()`.
 
 ## v0.4.0
 
