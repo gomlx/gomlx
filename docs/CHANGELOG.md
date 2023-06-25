@@ -4,7 +4,12 @@
 
 * NanLogger: added tool to report back (with stack trace and scope) on the occurrences of NaN/Inf in the computation
   graph.
-* RandomNormal: fixed rare numerical issues in RandomNormal, that would generate -Inf.
+* Checkpoints: added `Handler.LoadedVariables()` method for inspection of loaded checkpoint. 
+* Bug fixes: 
+  * RandomNormal: fixed rare numerical issues in RandomNormal, that would generate -Inf.
+  * Context: some rare condition on feeding variable values to executor.
+  * InMemory dataset: handling cases where dataset returns the same tensor as input and label.
+* Lots of improvements in diffusion example. Added flower type (the original label) as an optional feature.
 
 ## v0.4.0
 

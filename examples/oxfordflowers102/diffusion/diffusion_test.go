@@ -19,8 +19,9 @@ func TestUNetModelGraph(t *testing.T) {
 	ctx := context.NewContext(manager)
 	numExamples := 5
 	noisyImages := Zeros(g, shapes.Make(DType, numExamples, 64, 64, 3))
+	flowerIds := Zeros(g, shapes.Make(shapes.I32, numExamples))
 	fmt.Printf("  noisyImages.shape:\t%s\n", noisyImages.Shape())
-	filtered := UNetModelGraph(ctx, noisyImages, Ones(g, shapes.Make(DType, numExamples, 1, 1, 1)))
+	filtered := UNetModelGraph(ctx, noisyImages, Ones(g, shapes.Make(DType, numExamples, 1, 1, 1)), flowerIds)
 	require.NoError(t, g.Error())
 	assert.True(t, noisyImages.Shape().Eq(filtered.Shape()), "Filtered images after UNetModelGraph should have the same shape as its input images")
 	fmt.Printf("     filtered.shape:\t%s\n", filtered.Shape())
@@ -33,9 +34,12 @@ func TestTrainingModelGraph(t *testing.T) {
 	Init()
 	g := manager.NewGraph("test")
 	ctx := context.NewContext(manager)
-	images := Zeros(g, shapes.Make(DType, 5, ImageSize, ImageSize, 3))
+	numExamples := 5
+	images := Zeros(g, shapes.Make(DType, numExamples, ImageSize, ImageSize, 3))
+	imageIds := Zeros(g, shapes.Make(shapes.I32, numExamples))
+	flowerIds := Zeros(g, shapes.Make(shapes.I32, numExamples))
 	fmt.Printf("         images.shape:\t%s\n", images.Shape())
-	predictions := TrainingModelGraph(ctx, nil, []*Node{images})
+	predictions := TrainingModelGraph(ctx, nil, []*Node{images, imageIds, flowerIds})
 	require.NoError(t, g.Error())
 	predictedImages, loss := predictions[0], predictions[1]
 	assert.True(t, predictedImages.Shape().Eq(images.Shape()), "Original images and predicted images shape differ!?")

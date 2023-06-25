@@ -473,7 +473,7 @@ func (ds *Dataset) Yield() (spec any, inputs, labels []tensor.Tensor, err error)
 			examplesIdx[ii] = ds.Shuffle.Intn(len(ds.Examples))
 		}
 	} else {
-		examplesIdx = slices.IotaSlice(ds.Pos, ds.BatchSize)
+		examplesIdx = slices.Iota(ds.Pos, ds.BatchSize)
 		ds.Pos += ds.BatchSize
 	}
 	ds.muIndices.Unlock()

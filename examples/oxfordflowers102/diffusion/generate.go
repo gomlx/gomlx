@@ -3,6 +3,7 @@ package diffusion
 import (
 	"bytes"
 	"fmt"
+	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/data"
@@ -169,13 +170,13 @@ func PlotModelEvolution(imagesPerSample int, animate bool) {
 }
 
 // DenoiseStepGraph executes one step of separating the noise and images from noisy images.
-func DenoiseStepGraph(ctx *context.Context, noisyImages, diffusionTime, nextDiffusionTime *Node) (
+func DenoiseStepGraph(ctx *context.Context, noisyImages, diffusionTime, nextDiffusionTime, flowerIds *Node) (
 	predictedImages, nextNoisyImages *Node) {
 	numImages := noisyImages.Shape().Dimensions[0]
 	diffusionTimes := BroadcastToDims(ConvertType(diffusionTime, DType), numImages, 1, 1, 1)
 	signalRatios, noiseRatios := DiffusionSchedule(diffusionTimes, false)
 	var predictedNoises *Node
-	predictedImages, predictedNoises = Denoise(ctx, noisyImages, signalRatios, noiseRatios)
+	predictedImages, predictedNoises = Denoise(ctx, noisyImages, signalRatios, noiseRatios, flowerIds)
 
 	nextDiffusionTimes := BroadcastToDims(ConvertType(nextDiffusionTime, DType), numImages, 1, 1, 1)
 	nextSignalRatios, nextNoiseRatios := DiffusionSchedule(nextDiffusionTimes, false)
@@ -191,27 +192,58 @@ func DenoiseStepGraph(ctx *context.Context, noisyImages, diffusionTime, nextDiff
 // Plotting results only work if in a Jupyter (with GoNB kernel) notebook.
 func GenerateImages(numImages int, numDiffusionSteps int, displayEveryNSteps int) (predictedImages tensor.Tensor) {
 	ctx := context.NewContext(manager).Checked(false)
-	_, _ = LoadCheckpointToContext(ctx)
+	_, _, _ = LoadCheckpointToContext(ctx)
 	ctx.RngStateReset()
 	noise := GenerateNoise(numImages)
-	generator := NewImagesGenerator(ctx, noise, numDiffusionSteps, displayEveryNSteps)
+	flowerIds := GenerateFlowerIds(numImages)
+	generator := NewImagesGenerator(ctx, noise, flowerIds, numDiffusionSteps, displayEveryNSteps)
+	return generator.Generate()
+}
+
+// GenerateImagesOfFlowerType is similar to GenerateImages, but it limits itself to generating images of only one
+// flower type.
+func GenerateImagesOfFlowerType(numImages int, flowerType int32, numDiffusionSteps int) (predictedImages tensor.Tensor) {
+	ctx := context.NewContext(manager).Checked(false)
+	_, _, _ = LoadCheckpointToContext(ctx)
+	ctx.RngStateReset()
+	noise := GenerateNoise(numImages)
+	flowerIds := tensor.FromValue(slices.SliceWithValue(numImages, flowerType))
+	generator := NewImagesGenerator(ctx, noise, flowerIds, numDiffusionSteps, 0)
+	return generator.Generate()
+}
+
+// GenerateImagesOfAllFlowerTypes takes one random noise, and generate the flower for each of the 102 types.
+func GenerateImagesOfAllFlowerTypes(numDiffusionSteps int) (predictedImages tensor.Tensor) {
+	numImages := flowers.NumLabels
+	ctx := context.NewContext(manager).Checked(false)
+	_, _, _ = LoadCheckpointToContext(ctx)
+	ctx.RngStateReset()
+	noise := MustNoError(NewExec(manager, func(g *Graph) *Node {
+		state := Const(g, RngState())
+		_, noise := RandomNormal(state, shapes.Make(DType, 1, ImageSize, ImageSize, 3))
+		noise = BroadcastToDims(noise, numImages, ImageSize, ImageSize, 3)
+		return noise
+	}).Call())[0]
+	flowerIds := tensor.FromValue(slices.Iota(int32(0), numImages))
+	generator := NewImagesGenerator(ctx, noise, flowerIds, numDiffusionSteps, 0)
 	return generator.Generate()
 }
 
 type ImagesGenerator struct {
 	ctx                                   *context.Context
-	noise                                 tensor.Tensor
+	noise, flowerIds                      tensor.Tensor
 	numImages                             int
 	numDiffusionSteps, displayEveryNSteps int
 	denormalizerExec                      *Exec
 	diffusionStepExec                     *context.Exec
 }
 
-func NewImagesGenerator(ctx *context.Context, noise tensor.Tensor, numDiffusionSteps, displayEveryNSteps int) *ImagesGenerator {
+func NewImagesGenerator(ctx *context.Context, noise, flowerIds tensor.Tensor, numDiffusionSteps, displayEveryNSteps int) *ImagesGenerator {
 	ctx = ctx.Reuse()
 	return &ImagesGenerator{
 		ctx:                ctx,
 		noise:              noise,
+		flowerIds:          flowerIds,
 		numImages:          noise.Shape().Dimensions[0],
 		numDiffusionSteps:  numDiffusionSteps,
 		displayEveryNSteps: displayEveryNSteps,
@@ -241,7 +273,7 @@ func (g *ImagesGenerator) Generate() (predictedImages tensor.Tensor) {
 	for step := 0; step < g.numDiffusionSteps; step++ {
 		diffusionTime := 1.0 - float64(step)*stepSize
 		nextDiffusionTime := math.Max(diffusionTime-stepSize, 0)
-		parts := MustNoError(g.diffusionStepExec.Call(noisyImages, diffusionTime, nextDiffusionTime))
+		parts := MustNoError(g.diffusionStepExec.Call(noisyImages, diffusionTime, nextDiffusionTime, g.flowerIds))
 		if predictedImages != nil {
 			predictedImages.FinalizeAll() // Immediate release of (GPU) memory for intermediary results.
 		}
@@ -272,6 +304,15 @@ func GenerateNoise(numImages int) tensor.Tensor {
 	}).Call())[0]
 }
 
+// GenerateFlowerIds generates random flower ids: this is the type of flowers, one of the 102.
+func GenerateFlowerIds(numImages int) tensor.Tensor {
+	flowerIds := make([]int32, numImages)
+	for ii := range flowerIds {
+		flowerIds[ii] = int32(rand.Intn(flowers.NumLabels))
+	}
+	return tensor.FromValue(flowerIds)
+}
+
 // KidGenerator generates the [Kernel Inception Distance (KID)](https://arxiv.org/abs/1801.01401) metric.
 type KidGenerator struct {
 	ctxGenerator, ctxInceptionV3 *context.Context
@@ -289,6 +330,7 @@ func NewKidGenerator(ctx *context.Context, evalDS train.Dataset, numDiffusionSte
 	Init()
 	ctx = ctx.Checked(false)
 	noise := GenerateNoise(EvalBatchSize)
+	flowerIds := GenerateFlowerIds(EvalBatchSize)
 
 	i3Path := path.Join(DataDir, "inceptionV3")
 	AssertNoError(inceptionv3.DownloadAndUnpackWeights(i3Path))
@@ -296,7 +338,7 @@ func NewKidGenerator(ctx *context.Context, evalDS train.Dataset, numDiffusionSte
 		ctxGenerator:   ctx,
 		ctxInceptionV3: context.NewContext(manager).Checked(false),
 		ds:             evalDS,
-		generator:      NewImagesGenerator(ctx, noise, numDiffusionStep, 0),
+		generator:      NewImagesGenerator(ctx, noise, flowerIds, numDiffusionStep, 0),
 		kid:            inceptionv3.KidMetric(i3Path, inceptionv3.MinimumImageSize, 255.0, timage.ChannelsLast),
 	}
 	kg.evalExec = context.NewExec(manager, kg.ctxInceptionV3, kg.EvalStepGraph)

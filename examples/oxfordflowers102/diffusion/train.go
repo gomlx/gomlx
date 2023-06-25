@@ -17,6 +17,7 @@ import (
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
+	"k8s.io/klog/v2"
 	"os"
 	"path"
 	"strings"
@@ -32,13 +33,14 @@ var (
 
 const (
 	NoiseSamplesFile       = "noise_samples.tensor"
+	FlowerIdsSamplesFile   = "flower_ids_samples.tensor"
 	GeneratedSamplesPrefix = "generated_samples_"
 )
 
 // LoadCheckpointToContext and attaches to it, so that it gets saved.
 //
 // It also loads the noise samples for this model.
-func LoadCheckpointToContext(ctx *context.Context) (checkpoint *checkpoints.Handler, noise tensor.Tensor) {
+func LoadCheckpointToContext(ctx *context.Context) (checkpoint *checkpoints.Handler, noise, flowerIds tensor.Tensor) {
 	Init()
 	if *flagCheckpoint == "" {
 		return
@@ -80,19 +82,24 @@ func LoadCheckpointToContext(ctx *context.Context) (checkpoint *checkpoints.Hand
 		AssertNoError(err)
 	}
 
-	// Load/generate sampled noise.
-	noisePath := path.Join(checkpointPath, NoiseSamplesFile)
+	// Load/generate sampled noise/flowerIds.
+	noisePath, flowerIdsPath := path.Join(checkpointPath, NoiseSamplesFile), path.Join(checkpointPath, FlowerIdsSamplesFile)
 	noise, err = tensor.Load(noisePath)
 	if err == nil {
-		return
+		flowerIds, err = tensor.Load(flowerIdsPath)
+		if err == nil {
+			return
+		}
 	}
 	if !os.IsNotExist(err) {
 		AssertNoError(err)
 	}
 
-	// Create new noise -- and save it for future training.
+	// Create new noise and flower ids -- and save it for future training.
 	noise = GenerateNoise(*flagTrainGeneratedSamples)
+	flowerIds = GenerateFlowerIds(*flagTrainGeneratedSamples)
 	AssertNoError(noise.Local().Save(noisePath))
+	AssertNoError(flowerIds.Local().Save(flowerIdsPath))
 	return
 }
 
@@ -102,7 +109,7 @@ func isArgIrrelevant(arg string) bool {
 	if irrelevantArgs.Has(arg) {
 		return true
 	}
-	for _, prefix := range []string{"-steps", "--steps", "--batch", "--eval_batch"} {
+	for _, prefix := range []string{"-steps", "--steps", "--batch", "--eval_batch", "--checkpoint_mean"} {
 		if strings.HasPrefix(arg, prefix) {
 			return true
 		}
@@ -146,13 +153,16 @@ func TrainModel() {
 	ctx.SetParam(layers.L2RegularizationKey, *flagL2Regularization)
 
 	// Checkpoints saving.
-	checkpoint, noise := LoadCheckpointToContext(ctx)
+	checkpoint, noise, flowerIds := LoadCheckpointToContext(ctx)
 	if *flagRngReset {
 		ctx.RngStateReset()
 	}
-	globalStep := optimizers.GetGlobalStepVar(ctx).Value().Value()
+	globalStep := optimizers.GetGlobalStepVar(ctx).Value().Value().(int)
 	if globalStep != 0 {
 		fmt.Printf("Restarting training from global_step=%d\n", globalStep)
+	}
+	if globalStep >= *flagNumSteps {
+		klog.Exitf("Current global step %d >= target --steps=%d, exiting.", globalStep, *flagNumSteps)
 	}
 
 	// Custom loss: model returns scalar loss as the second element of the predictions.
@@ -189,7 +199,11 @@ func TrainModel() {
 	// Attach a checkpoint.
 	if checkpoint != nil {
 		period := time.Second * time.Duration(*flagCheckpointPeriod)
-		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100, checkpoint.OnStepFn)
+		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
+			func(loop *train.Loop, metrics []tensor.Tensor) error {
+				fmt.Printf("\n[saving checkpoint@%d] [median train step (ms): %d]\n", loop.LoopStep, loop.MedianTrainStepDuration().Milliseconds())
+				return checkpoint.Save()
+			})
 	}
 
 	// Monitoring training: plots, generator of images, kid evaluator.
@@ -203,7 +217,7 @@ func TrainModel() {
 		plots.DynamicUpdates()
 	}
 
-	generator := NewImagesGenerator(ctx, noise, 20, 0)
+	generator := NewImagesGenerator(ctx, noise, flowerIds, 20, 0)
 
 	var kid *KidGenerator
 	if *flagKid {
@@ -218,7 +232,7 @@ func TrainModel() {
 		})
 
 	// Loop for given number of steps.
-	_, err := loop.RunSteps(trainDS, *flagNumSteps)
+	_, err := loop.RunSteps(trainDS, *flagNumSteps-globalStep)
 	if err != nil {
 		fmt.Printf("\nFailed: %v\n\n", err)
 		return
@@ -244,6 +258,7 @@ func TrainModel() {
 func TrainingMonitor(checkpoint *checkpoints.Handler, loop *train.Loop, metrics []tensor.Tensor,
 	plots *margaid.Plots, generator *ImagesGenerator, kid *KidGenerator) error {
 
+	fmt.Printf("\n[... evaluating@%d ...] [median train step (ms): %d]\n", loop.LoopStep, loop.MedianTrainStepDuration().Milliseconds())
 	// Save checkpoint, just in case.
 	if checkpoint == nil {
 		// Only works if there is a model directory.
@@ -273,7 +288,7 @@ func TrainingMonitor(checkpoint *checkpoints.Handler, loop *train.Loop, metrics 
 func DisplayTrainingPlots() {
 	Init()
 	ctx := context.NewContext(manager)
-	checkpoint, _ := LoadCheckpointToContext(ctx)
+	checkpoint, _, _ := LoadCheckpointToContext(ctx)
 	if checkpoint == nil {
 		fmt.Printf("You must set --checkpoint='model_sub_dir'!")
 		return
