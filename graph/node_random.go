@@ -129,7 +129,7 @@ func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Nod
 //	rngState, numbers = RandomNormal(rngState, myShape)
 //	numbers = AddScalar(MulScalar(numbers, stddev), mean)
 //
-// It uses the Box-Muler algorithm (see https://en.wikipedia.org/wiki/Box%E2%80%93Muller_transform), which
+// It uses the Box-Muller algorithm (see https://en.wikipedia.org/wiki/Box%E2%80%93Muller_transform), which
 // has some numeric limitations, but works well for most purposes.
 //
 // It will signal an error if the dtype is not float -- see RandomIntN for random integers.
@@ -145,6 +145,8 @@ func RandomNormal(rngState *Node, shape shapes.Shape) (newRngState, values *Node
 
 	var u1, u2 *Node
 	newRngState, u1 = RandomUniform(newRngState, shape)
+	// u1 must never be zero, so we take the smallest positive non-zero value.
+	u1 = Max(u1, Scalar(g, shape.DType, shapes.ConvertTo[float64](shapes.SmallestNonZeroValueForDType(shape.DType))))
 	newRngState, u2 = RandomUniform(newRngState, shape)
 	if !g.Ok() {
 		return

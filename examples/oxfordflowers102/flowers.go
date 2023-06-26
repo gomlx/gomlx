@@ -27,6 +27,9 @@ var (
 	// successfully called.
 	ImagesDir string
 
+	// NumLabels is 102, hence the name.
+	NumLabels = 102
+
 	// Names of all the 102 flowers in the dataset.
 	Names = []string{
 		"pink primrose",

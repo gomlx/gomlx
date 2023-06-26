@@ -60,10 +60,10 @@ type Trainer struct {
 	optimizer optimizers.Interface
 
 	// maxExecutors to cache. It will fail after that. One executor is created
-	// per info value, so this is the same as the max number of different info
+	// per `spec` value, so this is the same as the max number of different `spec`
 	// values seen.
 	maxExecutors              int
-	inputsAndLabelsLenPerInfo map[any][2]int
+	inputsAndLabelsLenPerSpec map[any][2]int
 
 	// Training data
 	trainStepExecMap map[any]*context.Exec
@@ -72,6 +72,9 @@ type Trainer struct {
 	// Eval data
 	evalStepExecMap map[any]*context.Exec
 	evalMetrics     []metrics.Interface
+
+	// onExecCreationHandlers are hooks called during executor creation.
+	onExecCreationHandlers []OnExecFn
 }
 
 // ModelFn is a computation graph building function that takes as input a `spec` and a slice of `inputs`
@@ -96,9 +99,17 @@ type ModelFn func(ctx *context.Context, spec any, inputs []*graph.Node) (predict
 // the slice and send each label/prediction pair to a predefined loss.
 type LossFn func(labels, predictions []*graph.Node) *graph.Node
 
-// DefaultMaxExecutors used for Trainer objects. Each different `info` value from a Dataset triggers
+// DefaultMaxExecutors used for Trainer objects. Each different `spec` value from a Dataset triggers
 // the creation of a new executor.
 var DefaultMaxExecutors = 20
+
+// GraphType can be TrainGraph or EvalGraph, when there needs to be a distinction.
+type GraphType int
+
+const (
+	TrainType GraphType = iota
+	EvalType
+)
 
 // NewTrainer constructs a trainer that can be used for training steps and evaluation. It also creates a new Context
 // for model, which will hold the variables, hyperparameters and other information. It can be changed by the user.
@@ -140,7 +151,7 @@ func NewTrainer(manager *graph.Manager, ctx *context.Context,
 		optimizer: optimizer,
 
 		maxExecutors:              DefaultMaxExecutors,
-		inputsAndLabelsLenPerInfo: make(map[any][2]int),
+		inputsAndLabelsLenPerSpec: make(map[any][2]int),
 		trainStepExecMap:          make(map[any]*context.Exec),
 		evalStepExecMap:           make(map[any]*context.Exec),
 	}
@@ -220,7 +231,7 @@ func (r *Trainer) TrainMetrics() []metrics.Interface { return r.trainMetrics }
 // that implement them).
 func (r *Trainer) EvalMetrics() []metrics.Interface { return r.evalMetrics }
 
-// createExecutor (train or eval) for the given info. Returns an error if it failed for
+// createExecutor (train or eval) for the given spec. Returns an error if it failed for
 // any reason, including exceeding maxExecutors.
 func (r *Trainer) createExecutor(spec any, inputsLen, labelsLen int,
 	graphFn func(spec any, ctx *context.Context, inputs, labels []*graph.Node) (metrics []*graph.Node)) (*context.Exec, error) {
@@ -235,7 +246,7 @@ func (r *Trainer) createExecutor(spec any, inputsLen, labelsLen int,
 	if numExecs > 0 {
 		r.context = r.context.Checked(false) // Only check for duplicate variables at the first graph creation.
 	}
-	r.inputsAndLabelsLenPerInfo[spec] = [2]int{inputsLen, labelsLen}
+	r.inputsAndLabelsLenPerSpec[spec] = [2]int{inputsLen, labelsLen}
 	trainerName := "Trainer"
 	if _, found := spec.(fmt.Stringer); found {
 		trainerName = fmt.Sprintf("Trainer: spec=%s", spec)
@@ -322,12 +333,12 @@ func (r *Trainer) trainStepGraph(spec any, ctx *context.Context, inputs, labels 
 // do standard checks on inputs and labels.
 func (r *Trainer) callGraphFn(
 	graphFn func(spec any, ctx *context.Context, inputs, labels []*graph.Node) (metrics []*graph.Node),
-	execsMap map[any]*context.Exec,
+	graphType GraphType,
 	spec any, inputs, labels []tensor.Tensor) (metrics []tensor.Tensor, err error) {
 	if len(inputs) == 0 {
 		return nil, errors.Errorf("there are no inputs, at least one is required")
 	}
-	if lengths, found := r.inputsAndLabelsLenPerInfo[spec]; found {
+	if lengths, found := r.inputsAndLabelsLenPerSpec[spec]; found {
 		if len(inputs) != lengths[0] || len(labels) != lengths[1] {
 			err = errors.Errorf("dataset yields inputs (%d) and labels (%d) with lengths different "+
 				"than with previous call (%d and %d) for the given spec %+v", len(inputs), len(labels),
@@ -357,6 +368,13 @@ func (r *Trainer) callGraphFn(
 	}
 
 	// Get executor.
+	var execsMap map[any]*context.Exec
+	switch graphType {
+	case TrainType:
+		execsMap = r.trainStepExecMap
+	case EvalType:
+		execsMap = r.evalStepExecMap
+	}
 	exec, found := execsMap[spec]
 	if !found {
 		exec, err = r.createExecutor(spec, len(inputs), len(labels), graphFn)
@@ -364,6 +382,9 @@ func (r *Trainer) callGraphFn(
 			return
 		}
 		execsMap[spec] = exec
+		for _, handler := range r.onExecCreationHandlers {
+			handler(exec, graphType) // Call handler for training.
+		}
 	}
 
 	// Run trainStepExecMap and check everything went fine.
@@ -411,7 +432,7 @@ func (r *Trainer) metricsUpdatesGraph(ctx *context.Context, labels, predictions 
 // It returns a slice of metrics, that includes (the first two) the batch loss, and the moving exponential average
 // of the batch loss, plus the other `trainMetrics` configured during the creation onf the Trainer.
 func (r *Trainer) TrainStep(spec any, inputs, labels []tensor.Tensor) (metrics []tensor.Tensor, err error) {
-	return r.callGraphFn(r.trainStepGraph, r.trainStepExecMap, spec, inputs, labels)
+	return r.callGraphFn(r.trainStepGraph, TrainType, spec, inputs, labels)
 }
 
 // evalStepGraph builds the graph to eval one step. It is called by the context executor (`r.evalStepExecMap`)
@@ -461,7 +482,7 @@ func (r *Trainer) ResetTrainMetrics() error {
 //
 // It returns the current value for the registered eval metrics.
 func (r *Trainer) EvalStep(spec any, inputs, labels []tensor.Tensor) (metrics []tensor.Tensor, err error) {
-	return r.callGraphFn(r.evalStepGraph, r.evalStepExecMap, spec, inputs, labels)
+	return r.callGraphFn(r.evalStepGraph, EvalType, spec, inputs, labels)
 }
 
 // resetEvalMetrics call Metrics.Reset on all eval metrics.
@@ -513,16 +534,16 @@ func (r *Trainer) Metrics() []metrics.Interface {
 	return r.evalMetrics
 }
 
-// GetTrainExec returns the "train step" executor (context.Exec). This accessor allows tools (like
-// collector.DataCollector) access to the executor to collect information for debugging, plotting, etc.
-func (r *Trainer) GetTrainExec(spec any) *context.Exec {
-	return r.trainStepExecMap[spec]
-}
+// OnExecFn is a handler that can be called when executors are created.
+// See Train.OnExecCreation.
+type OnExecFn func(exec *context.Exec, graphType GraphType)
 
-// GetEvalExec returns the "eval step" executor (context.Exec). This accessor allows tools (like
-// collector.DataCollector) access to the executor to collect information for debugging, plotting, etc.
-func (r *Trainer) GetEvalExec(spec any) *context.Exec {
-	return r.evalStepExecMap[spec]
+// OnExecCreation registers a handler to be called each time an executor (`context.Exec`) is created by the trainer.
+// Different executors are create for training and eval (`train` reflect that), and for different
+// `spec` values received from the Dataset.
+// The `handler` is also given the mode (TrainGraph or EvalGraph) the executor is created for.
+func (r *Trainer) OnExecCreation(handler OnExecFn) {
+	r.onExecCreationHandlers = append(r.onExecCreationHandlers, handler)
 }
 
 // AddLoss adds the given scalar loss (if it is not scalar, it will be reduced with ReduceAllMean)
@@ -568,8 +589,8 @@ type ContextGraphFn func(ctx *context.Context, g *graph.Graph)
 // such functions, use a different context scopes.
 //
 // One thing to observe: this is executed after the optimizer and therefore also after the loss is calculated.
-// Any changes made to the model weights won't be reflected on the loss returned by the training step. Nor most
-// of the metrics: the metrics are updated after this hook, but they typically use the predictions that
+// Any changes made to the model weights won't be reflected on the loss returned by the training step.
+// Nor most of the metrics: the metrics are updated after this hook, but they typically use the predictions that
 // were also generated earlier in the training.
 func AddPerStepUpdateGraphFn(ctx *context.Context, g *graph.Graph, fn ContextGraphFn) {
 	ctx.SetGraphParam(g, TrainerPerStepUpdateGraphFnParamKey, fn)

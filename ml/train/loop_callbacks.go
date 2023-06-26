@@ -94,11 +94,15 @@ func (p *periodicCallback) onStep(loop *Loop, metrics []tensor.Tensor) error {
 		return nil
 	}
 
-	p.last = p.last.Add(p.period)
-	return p.fn(loop, metrics)
+	err := p.fn(loop, metrics)
+	p.last = time.Now()
+	return err
 }
 
 // PeriodicCallback registers an `OnStep` hook on the loop that is called every period of time.
+// The period counts after the execution of `OnStep`: this discounts the time to run `OnStep` (in case it is expensive)
+// and it discounts cases where the execution is paused. By other hand, OnStep is not executed exactly at every `period`
+// time.
 //
 // If callOnEnd is set, it will also call at the end of the loop.
 func PeriodicCallback(loop *Loop, period time.Duration, callOnEnd bool, name string, priority Priority, fn OnStepFn) {

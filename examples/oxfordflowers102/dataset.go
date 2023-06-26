@@ -153,10 +153,12 @@ func (ds *Dataset) Name() string {
 //
 // It yields one example at a time, each consists of:
 //
-//   - `inputs`: two values: the image itself and a scalar `int32` with
-//     the index of the example. The index of the example can be used,
-//     for instance, to split the dataset (into training/validation/test).
-//   - `labels`: a `int32` value from 0 to 101 with the label.
+//   - `inputs`: three values: the image itself and a scalar `int32` with
+//     the index of the example and finally the type of flower (from 0 to `NumLabels-1`=101).
+//     The index of the example can be used, for instance, to split the dataset
+//     (into training/validation/test).
+//   - `labels`: the type of flower (same as `inputs[2]`), an `int32` value from 0 to `NumLabels-1`
+//     with the label.
 func (ds *Dataset) Yield() (spec any, inputs []tensor.Tensor, labels []tensor.Tensor, err error) {
 	spec = ds
 	index := ds.nextIndex()
@@ -196,7 +198,7 @@ func (ds *Dataset) Yield() (spec any, inputs []tensor.Tensor, labels []tensor.Te
 		img = imaging.Crop(img, image.Rect(0, start, ds.imageSize, start+ds.imageSize))
 	}
 
-	inputs = []tensor.Tensor{ds.toTensor.Single(img), tensor.FromValue(index)}
+	inputs = []tensor.Tensor{ds.toTensor.Single(img), tensor.FromValue(index), tensor.FromValue(label)}
 	labels = []tensor.Tensor{tensor.FromValue(label)}
 	return
 }

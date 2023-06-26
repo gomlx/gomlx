@@ -245,6 +245,7 @@ func (mds *InMemoryDataset) readDataset(ds train.Dataset, dsIsBatched bool) (err
 				if !validShapes {
 					err = errors.Errorf("shape of %s incompatible: other examples shape was %s, for example #%d got shape %s",
 						getElementDesc(ii), inputsAndLabelsShapes[ii], count, t.Shape())
+					return
 				}
 			}
 		}
@@ -258,6 +259,7 @@ func (mds *InMemoryDataset) readDataset(ds train.Dataset, dsIsBatched bool) (err
 				if batchSize != elementBatchSize {
 					err = errors.Errorf("batch sizes don't match: inputs[0] batch size is %d, but %s batch size is %d",
 						batchSize, getElementDesc(ii), elementBatchSize)
+					return
 				}
 			}
 		} else {
@@ -267,7 +269,11 @@ func (mds *InMemoryDataset) readDataset(ds train.Dataset, dsIsBatched bool) (err
 
 		// Append data.
 		for ii, t := range inputsAndLabels {
-			t = t.Device(mds.manager, mds.manager.DefaultDeviceNum())
+			//t = t.Device(mds.manager, mds.manager.DefaultDeviceNum())
+			if !t.Ok() {
+				err = errors.WithMessagef(t.Error(), "failed to create device tensor of example(s) %d", mds.numExamples)
+				return
+			}
 			allData[ii] = append(allData[ii], t)
 		}
 		count++
@@ -305,29 +311,37 @@ func (mds *InMemoryDataset) readDataset(ds train.Dataset, dsIsBatched bool) (err
 	const MaxExamplesToConcat = 16
 	mds.inputsAndLabelsData = make([]tensor.Tensor, 0, len(allData))
 	convertToAny := func(t tensor.Tensor) any { return t }
-	for len(allData[0]) > 1 {
+	for concatenationLoopCount := 0; len(allData[0]) > 1; concatenationLoopCount++ {
 		newAllData := make([][]tensor.Tensor, len(allData))
-		for ii, allExamples := range allData {
+		for inputsAndLabelsIdx, allExamples := range allData {
 			numConcatenations := (len(allExamples) + MaxExamplesToConcat - 1) / MaxExamplesToConcat
 			newAllExamples := make([]tensor.Tensor, numConcatenations)
 			for jj := 0; jj < numConcatenations; jj++ {
 				// Take MaxExamplesToConcat examples at a time.
 				start := jj * MaxExamplesToConcat
 				end := minN(start+MaxExamplesToConcat, len(allExamples))
-				examplesAsAny := slices.Map[tensor.Tensor, any](allExamples[start:end], convertToAny)
+				examplesSlice := allExamples[start:end]
+				examplesAsAny := slices.Map[tensor.Tensor, any](examplesSlice, convertToAny)
 				results, newErr := concatenateExec.Call(examplesAsAny...)
 				err = newErr
 				if err != nil {
-					err = errors.WithMessagef(err, "while concatenating %s examples into large tensor", getElementDesc(ii))
+					err = errors.WithMessagef(err, "while concatenating %s examples into large tensor", getElementDesc(inputsAndLabelsIdx))
 					return
 				}
 				newAllExamples[jj] = results[0]
 			}
-			// Immediately free the resources no longer needed.
-			for _, t := range allExamples {
-				t.FinalizeAll()
+			// Free immediately intermediary resources no longer needed.
+			if concatenationLoopCount > 0 {
+				// Notice we don't do this on the first loop, because the same tensor could be used
+				// in different parts of the inputs (let's say the label is also passed as an input),
+				// freeing it here would destroy its value for future iterations on the `inputsAndLabelsIdx`
+				// loop. This means for the original read tensors, in CPU memory, we have to wait for the
+				// garbage collection to collect them.
+				for _, t := range allExamples {
+					t.FinalizeAll()
+				}
 			}
-			newAllData[ii] = newAllExamples
+			newAllData[inputsAndLabelsIdx] = newAllExamples
 		}
 		allData = newAllData
 		alreadyBatched = true // If input was not already batched, now it is.

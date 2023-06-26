@@ -130,7 +130,7 @@ type Plot struct {
 // is immediately created.
 func (ps *Plots) WithFile(filePath string) (*Plots, error) {
 	_, err := ps.PreloadFile(filePath, nil)
-	if err != nil && !os.IsNotExist(err) {
+	if err != nil && !os.IsNotExist(errors.Cause(err)) {
 		return nil, err
 	}
 

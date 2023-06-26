@@ -113,20 +113,20 @@ func (conv *ConvolutionBuilder) ChannelsAxis(channelsAxisConfig timage.ChannelsA
 	switch channelsAxisConfig {
 	case timage.ChannelsFirst:
 		conv.axes.KernelInputChannel = 0
-		conv.axes.KernelSpatial = slices.IotaSlice(1, conv.numSpatialDims)
+		conv.axes.KernelSpatial = slices.Iota(1, conv.numSpatialDims)
 		conv.axes.KernelOutputChannel = conv.numSpatialDims + 1
 
 		conv.axes.OutputBatch = 0
 		conv.axes.OutputChannel = 1
-		conv.axes.OutputSpatial = slices.IotaSlice(2, conv.numSpatialDims)
+		conv.axes.OutputSpatial = slices.Iota(2, conv.numSpatialDims)
 
 	case timage.ChannelsLast:
 		conv.axes.KernelInputChannel = conv.numSpatialDims
 		conv.axes.KernelOutputChannel = conv.numSpatialDims + 1
-		conv.axes.KernelSpatial = slices.IotaSlice(0, conv.numSpatialDims)
+		conv.axes.KernelSpatial = slices.Iota(0, conv.numSpatialDims)
 
 		conv.axes.OutputBatch = 0
-		conv.axes.OutputSpatial = slices.IotaSlice(1, conv.numSpatialDims)
+		conv.axes.OutputSpatial = slices.Iota(1, conv.numSpatialDims)
 		conv.axes.OutputChannel = conv.numSpatialDims + 1
 	}
 	return conv

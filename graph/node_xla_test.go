@@ -121,7 +121,7 @@ func TestDotGeneralXLA(t *testing.T) {
 // allPermutations lists all permutations of a list with n elements. So for n=2, it returns [][]int{{0,1}, {1, 0}},
 // and so on.
 func allPermutations(n int) (permutations [][]int) {
-	return allPermutationsRecursive(n, slices.IotaSlice(0, n))
+	return allPermutationsRecursive(n, slices.Iota(0, n))
 }
 
 // allPermutationsRecursive is used by allPermutations to build all variations.

@@ -76,7 +76,7 @@ type SideParamsFn func(graph *Graph, params []*tensor.Device)
 // LoggerFn is the function used to log nodes marked for logging. It is called
 // after the Call method, with the list of messages and corresponding values
 // of the evaluated nodes.
-type LoggerFn func(messages []string, values []tensor.Tensor)
+type LoggerFn func(graph *Graph, messages []string, values []tensor.Tensor, nodes []NodeId)
 
 // Exec creates and executes computation graphs as needed
 // based on the inputs shapes.
@@ -159,6 +159,7 @@ type execCacheEntry struct {
 	graph          *Graph
 	numOutputs     int      // Number of flattened outputs for this graph, including logged nodes.
 	loggedMessages []string // Messages for logged nodes.
+	loggedNodeIds  []NodeId
 }
 
 const DefaultExecMaxCacheSize = 32
@@ -182,7 +183,7 @@ func NewExecAny(manager *Manager, graphFn any) (*Exec, error) {
 		numInputs:    graphFnT.NumIn(),
 		numOutputs:   graphFnT.NumOut(),
 		maxCacheSize: DefaultExecMaxCacheSize,
-		loggerFn:     defaultNodeLogger,
+		loggerFn:     DefaultNodeLogger,
 	}
 
 	// Verify parameters.
@@ -389,11 +390,15 @@ func (e *Exec) CallWithGraph(args ...any) (results []tensor.Tensor, g *Graph, er
 	}
 	if e.setSideParams != nil {
 		e.setSideParams(g, tensors)
+		if !g.Ok() {
+			err = g.Error()
+			return
+		}
 	}
 	if g.NumParameters() > len(args) {
 		for ii, t := range tensors {
 			if t == nil || !t.Ok() {
-				err = errors.Errorf("parameter %d (%q) is nil or invalid, maybe a variable value not set as a"+
+				err = errors.Errorf("parameter %d (%q) is nil or invalid, maybe a variable value not set as a "+
 					"parameter, cannot execute g", ii, g.ParameterByIndex(ii).ParameterName())
 				return
 			}
@@ -425,7 +430,11 @@ func (e *Exec) CallWithGraph(args ...any) (results []tensor.Tensor, g *Graph, er
 		if len(entry.loggedMessages) > 0 {
 			loggerResults = results[numGraphFnOutputs:]
 		}
-		e.loggerFn(entry.loggedMessages, loggerResults)
+		e.loggerFn(g, entry.loggedMessages, loggerResults, entry.loggedNodeIds)
+		if !g.Ok() {
+			err = errors.WithMessagef(g.Error(), "Error while running loggers for nodes marked for logging")
+			// Continue preparing the results, despite the error.
+		}
 	}
 	if len(results) != numGraphFnOutputs {
 		results = results[:numGraphFnOutputs]
@@ -485,9 +494,13 @@ func (e *Exec) createAndCacheGraph(argsShapes []shapes.Shape) (entry *execCacheE
 	}
 
 	// Append logged nodes as outputs.
-	for _, node := range g.LoggedNodes() {
+	loggedNodes := g.LoggedNodes()
+	entry.loggedMessages = make([]string, 0, len(loggedNodes))
+	entry.loggedNodeIds = make([]NodeId, 0, len(loggedNodes))
+	for _, node := range loggedNodes {
 		outputs = append(outputs, node)
 		entry.loggedMessages = append(entry.loggedMessages, node.LogMessage())
+		entry.loggedNodeIds = append(entry.loggedNodeIds, node.Id())
 	}
 
 	// Compile graph.
@@ -537,14 +550,14 @@ func (e *Exec) Finalize() {
 	e.cache = e.cache[:0]
 }
 
-// defaultNodeLogger for nodes marked to be logged. It prints the message and
-// the node value.
-func defaultNodeLogger(messages []string, values []tensor.Tensor) {
+// DefaultNodeLogger for nodes marked to be logged. It prints the message and
+// the node value for each logged node.
+func DefaultNodeLogger(g *Graph, messages []string, values []tensor.Tensor, nodes []NodeId) {
 	if len(messages) == 0 {
 		return
 	}
-	fmt.Printf("defaultNodeLogger():\n")
+	fmt.Printf("DefaultNodeLogger(Graph %q):\n", g.Name())
 	for ii, msg := range messages {
-		fmt.Printf("\t%s: %s\n", msg, values[ii])
+		fmt.Printf("\t(Node #%d) %s: %s\n", nodes[ii], msg, values[ii])
 	}
 }

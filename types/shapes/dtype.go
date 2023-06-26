@@ -284,12 +284,14 @@ func typeForSliceDType(valueType reflect.Type, dtype DType) reflect.Type {
 	return reflect.SliceOf(subType)
 }
 
+// LowestValueForDType converted to the corresponding Go type.
+// For float values it will return negative infinites.
 func LowestValueForDType(dtype DType) any {
 	switch dtype {
 	case Int64:
-		return math.MinInt64
+		return int(math.MinInt64)
 	case Int32:
-		return math.MinInt32
+		return int32(math.MinInt32)
 	case Float32:
 		return float32(math.Inf(-1))
 	case Float64:
@@ -297,11 +299,36 @@ func LowestValueForDType(dtype DType) any {
 	case Bool:
 		return false
 	case UInt8:
-		return 0
+		return uint8(0)
 	case UInt32:
-		return 0
+		return uint32(0)
 	case UInt64:
-		return 0
+		return uint64(0)
+	}
+	return math.NaN()
+}
+
+// SmallestNonZeroValueForDType is the smallest non-zero value dtypes.
+// Only useful for float types.
+// The return value is converted to the corresponding Go type.
+func SmallestNonZeroValueForDType(dtype DType) any {
+	switch dtype {
+	case Int64:
+		return 1
+	case Int32:
+		return int32(1)
+	case Float32:
+		return float32(math.SmallestNonzeroFloat32)
+	case Float64:
+		return math.SmallestNonzeroFloat64
+	case Bool:
+		return true
+	case UInt8:
+		return uint8(1)
+	case UInt32:
+		return uint32(1)
+	case UInt64:
+		return uint64(1)
 	}
 	return math.NaN()
 }

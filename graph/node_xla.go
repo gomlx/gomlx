@@ -443,7 +443,7 @@ func dotGeneralVJP(node, v *Node, _ shapes.Shape) []*Node {
 			if thisCrossesFirst {
 				pos += len(thisCrossAxes)
 			}
-			thisVJP = ReduceSum(thisVJP, slices.IotaSlice(pos, len(otherCrossAxes))...)
+			thisVJP = ReduceSum(thisVJP, slices.Iota(pos, len(otherCrossAxes))...)
 		}
 
 		// * Transpose thisVJP axes back to its inputs.
