@@ -19,12 +19,33 @@
 //
 // It does that by implementing `graph.LoggerFn` and hooking to the `graph.Exec` that
 // executes the graph. If at the end of a graph.Exec call, if a `NaN` value is found, the
-// first node where it appears is reported back.
-// It includes a stack trace and user set scoped context.
+// first node where it appears (often `NaN` values spread through the graph) is reported back.
+//
+// The report includes a stack trace and an optional user set scoped context.
 //
 // Example:
 //
-//	nanLogger := nanlogger.New()
+//	func train() {
+//		…
+//		nanLogger := nanlogger.New()
+//		trainer := train.NewTrainer(…)
+//		trainer.OnExecCreation(func(exec *context.Exec, _ train.GraphType) {
+//			nanLogger.Attach(exec)
+//		})
+//		…
+//	}
+//
+//	func ModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {) {
+//		…
+//		for ii := 0; ii < numBlocks; ii++ {
+//			name := fmt.Sprintf("Residual-%d", ii+1)
+//			nanLogger.PushScope(name)
+//			x = ResidualBlock(ctx.In(name), x, lastNumChannels)
+//			nanLogger.Trace(x)
+//			nanLogger.PopScope()
+//		}
+//		…
+//	}
 package nanlogger
 
 import (
@@ -87,7 +108,12 @@ func New() *NanLogger {
 // Attach will set the NanLogger as the default logger in exec. NanLogger acts as a pass-through logger, anything
 // that is not marked as nanlogger.UniqueMessageId is passed through to whatever was the previous logger configured
 // in exec.
+//
+// A nil NanLogger is valid, and it will simply be a no-op.
 func (l *NanLogger) Attach(exec ExecWithLogger) {
+	if l == nil {
+		return
+	}
 	l.prevLoggerFn = exec.GetNodeLogger()
 	exec.SetNodeLogger(l.loggerFn)
 }
@@ -98,7 +124,12 @@ func (l *NanLogger) Attach(exec ExecWithLogger) {
 //
 // A user-provided scope can be given. If none is given, then it uses the current NanLogger scope.
 // These are two different methods of providing scope, both optional -- it's also fine not to provide any.
+//
+// A nil NanLogger is valid, and it will simply be a no-op.
 func (l *NanLogger) Trace(node *graph.Node, scope ...string) {
+	if l == nil {
+		return
+	}
 	if !node.Ok() {
 		return
 	}
@@ -134,13 +165,23 @@ func (l *NanLogger) Trace(node *graph.Node, scope ...string) {
 
 // PushScope to current scope stack.
 // These values are added by default to any new Trace.
+//
+// A nil NanLogger is valid, and it will simply be a no-op.
 func (l *NanLogger) PushScope(scope string) {
+	if l == nil {
+		return
+	}
 	l.currentScope = append(l.currentScope, scope)
 }
 
 // PopScope removes the last entry in the current scope stack.
 // These values are added by default to any new Trace.
+//
+// A nil NanLogger is valid, and it will simply be a no-op.
 func (l *NanLogger) PopScope() {
+	if l == nil {
+		return
+	}
 	if len(l.currentScope) == 0 {
 		klog.Warningf("NanLogger.PopScope() called on an already empty scope stack!?")
 		return
@@ -206,6 +247,9 @@ type HandlerFn func(nanType float64, info *Trace)
 // SetHandler sets the function called when a `NaN` is observed. The default is
 // DefaultHandler which prints out all information on the node and exits.
 func (l *NanLogger) SetHandler(handler HandlerFn) {
+	if l == nil {
+		return
+	}
 	l.handler = handler
 }
 

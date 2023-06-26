@@ -43,7 +43,7 @@ var (
 		"and it will report the first location where it happens. It slows down a bit the training.")
 )
 
-var nanLogger = nanlogger.New()
+var nanLogger *nanlogger.NanLogger
 
 // SinusoidalEmbedding provides embeddings of `x` for different frequencies.
 // This is applied to the variance of the noise, and facilitates the NN model to easily map different ranges
@@ -88,9 +88,6 @@ var (
 // NormalizeLayer behaves according to the `--norm` flag.
 // It works with `x` with rank 4 and rank 3.
 func NormalizeLayer(ctx *context.Context, x *Node) *Node {
-	if *flagNanLogger {
-		nanLogger.Trace(x)
-	}
 	switch *flagNormalization {
 	case "none":
 		// No-op.
@@ -99,18 +96,14 @@ func NormalizeLayer(ctx *context.Context, x *Node) *Node {
 	case "layer":
 		x = layers.LayerNormalization(ctx, x, -1).Done()
 	}
-	if *flagNanLogger {
-		nanLogger.Trace(x)
-	}
+	nanLogger.Trace(x)
 	return x
 }
 
 // ActivationLayer can be configured.
 func ActivationLayer(x *Node) *Node {
 	x = layers.Activation(*flagActivation, x)
-	if *flagNanLogger {
-		nanLogger.Trace(x)
-	}
+	nanLogger.Trace(x)
 	return x
 }
 
@@ -135,9 +128,7 @@ func ResidualBlock(ctx *context.Context, x *Node, outputChannels int) *Node {
 	x = ActivationLayer(x)
 	x = layers.Convolution(ctx.In("conv-layer-2"), x).Filters(outputChannels).KernelSize(3).PadSame().Done()
 	x = Add(x, residual)
-	if *flagNanLogger {
-		nanLogger.Trace(x)
-	}
+	nanLogger.Trace(x)
 	return x
 }
 
@@ -189,9 +180,7 @@ func TransformerBlock(ctx *context.Context, x *Node) *Node {
 		embed = layers.MultiHeadAttention(ctx, embed, embed, embed, *flagNumAttHeads, *flagAttKeyQueryEmbedDim).
 			SetOutputDim(embedDim).
 			SetValueHeadDim(embedDim).Done()
-		if *flagNanLogger {
-			nanLogger.Trace(embed)
-		}
+		nanLogger.Trace(embed)
 		if *flagDropoutRate > 0 {
 			embed = layers.Dropout(ctx.In("dropout_1"), embed, dropoutRate)
 		}
@@ -211,9 +200,7 @@ func TransformerBlock(ctx *context.Context, x *Node) *Node {
 		// Residual connection: not part of the usual transformer layer ...
 		if ii > 0 {
 			embed = Add(residual, embed)
-			if *flagNanLogger {
-				nanLogger.Trace(embed)
-			}
+			nanLogger.Trace(embed)
 		}
 	}
 	x = Reshape(embed, batchDim, x.Shape().Dimensions[1], x.Shape().Dimensions[2], -1)
@@ -231,9 +218,7 @@ func DownBlock(ctx *context.Context, x *Node, skips []*Node, numBlocks, outputCh
 		skips = append(skips, x)
 	}
 	x = MeanPool(x).Window(2).NoPadding().Done()
-	if *flagNanLogger {
-		nanLogger.Trace(x)
-	}
+	nanLogger.Trace(x)
 	return x, skips
 }
 
@@ -250,9 +235,7 @@ func UpBlock(ctx *context.Context, x *Node, skips []*Node, numBlocks, outputChan
 		x = Concatenate([]*Node{x, skip}, -1)
 		x = ResidualBlock(ctx.In(name), x, outputChannels)
 	}
-	if *flagNanLogger {
-		nanLogger.Trace(x)
-	}
+	nanLogger.Trace(x)
 	return x, skips
 }
 
@@ -292,10 +275,8 @@ func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds
 	if !g.Ok() {
 		return g.InvalidNode()
 	}
-	if *flagNanLogger {
-		nanLogger.Trace(noisyImages)
-		nanLogger.Trace(noiseVariances)
-	}
+	nanLogger.Trace(noisyImages)
+	nanLogger.Trace(noiseVariances)
 
 	// Adjust imageChannels to initial num channels.
 	imageChannels := slices.Last(noisyImages.Shape().Dimensions)
@@ -304,9 +285,7 @@ func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds
 
 	// Get sinusoidal features, always included, and broadcast them to the spatial dimensions.
 	sinEmbed := SinusoidalEmbedding(noiseVariances)
-	if *flagNanLogger {
-		nanLogger.Trace(sinEmbed)
-	}
+	nanLogger.Trace(sinEmbed)
 	broadcastDims := sinEmbed.Shape().Copy().Dimensions
 	for _, axis := range timage.GetSpatialAxes(noisyImages, timage.ChannelsLast) {
 		broadcastDims[axis] = noisyImages.Shape().Dimensions[axis]
@@ -421,10 +400,8 @@ func TrainingModelGraph(ctx *context.Context, _ any, inputs []*Node) []*Node {
 	batchSize := images.Shape().Dimensions[0]
 	images = PreprocessImages(images, true)
 	noises := ctx.RandomNormal(g, images.Shape())
-	if *flagNanLogger {
-		nanLogger.Trace(images, "images")
-		nanLogger.Trace(noises, "noises")
-	}
+	nanLogger.Trace(images, "images")
+	nanLogger.Trace(noises, "noises")
 
 	// Sample noise at different schedules.
 	diffusionTimes := ctx.RandomUniform(g, shapes.Make(DType, batchSize, 1, 1, 1))

@@ -3,6 +3,7 @@ package diffusion
 import (
 	"flag"
 	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/graph/nanlogger"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/types/shapes"
 	"log"
@@ -52,6 +53,10 @@ func Init() {
 		ImageSize = *flagImageSize
 		BatchSize = *flagBatchSize
 		EvalBatchSize = *flagEvalBatchSize
+		if *flagNanLogger {
+			// If enabled create the object, otherwise leave it as nil.
+			nanLogger = nanlogger.New()
+		}
 	})
 }
 
