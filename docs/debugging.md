@@ -44,6 +44,15 @@ When writing gradient of new operations (or any other debugging) sometimes it's 
 exactly where a `Node` was created. Use `Graph.SetTraced(true)` to enable all new nodes to include
 its stack-trace. And `Node.Trace()` to access it for printing or debugging.
 
+## `NanLogger`
+
+The [`nanlogger.NanLogger`](https://pkg.go.dev/github.com/gomlx/gomlx/graph/nanlogger) allows one 
+to select "traces" on the model, which will panic with a stack trace (and some optional arbitrary
+scope message) whenever a `NaN` or `±Inf` is seen -- or it can be handled by an arbitrary function,
+with relatively low cost to the model.
+
+It has made it relatively easy to track those pesky nans that show up during training -- so far at least.
+
 ## TODO / Future Work
 
 ### Adding "Scope" to `Graph` and its `Nodes`
