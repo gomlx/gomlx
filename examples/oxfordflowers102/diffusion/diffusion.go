@@ -1,3 +1,13 @@
+// Package diffusion contains an example diffusion model, trained on Oxford Flowers 102 dataset.
+//
+// See the accompanying jupyter notebook for some results, and how to call it.
+//
+// The subdirectory `train/` has the command line binary that can be executed for training.
+//
+// Based on the Keras tutorial in https://keras.io/examples/generative/ddim/, and recreated for GoMLX, with
+// many small modifications.
+//
+// Flags are defined on the files that use them, so they are spread over the code.
 package diffusion
 
 import (

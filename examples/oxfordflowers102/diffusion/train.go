@@ -15,7 +15,6 @@ import (
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
 	"k8s.io/klog/v2"
 	"os"
@@ -39,7 +38,16 @@ const (
 
 // LoadCheckpointToContext and attaches to it, so that it gets saved.
 //
-// It also loads the noise samples for this model.
+// It also loads the noise (+flowerIds) samples for this model.
+// The idea is that at each evaluation checkpoint we generate the images for these fixed noise samples,
+// and one can observe the model quality evolving.
+//
+// For new models -- whose directory didn't previously exist, it does 2 things:
+//
+//   - It creates the noise + flowerIds samples used to monitor the model quality evolving.
+//   - It creates the file `args.txt` with a copy of the arguments used to create the model.
+//     Later, if the same model is used, it checks that the arguments match (with some exceptions),
+//     and warns about mismatches.
 func LoadCheckpointToContext(ctx *context.Context) (checkpoint *checkpoints.Handler, noise, flowerIds tensor.Tensor) {
 	Init()
 	if *flagCheckpoint == "" {
@@ -109,7 +117,7 @@ func isArgIrrelevant(arg string) bool {
 	if irrelevantArgs.Has(arg) {
 		return true
 	}
-	for _, prefix := range []string{"-steps", "--steps", "--batch", "--eval_batch", "--checkpoint_mean"} {
+	for _, prefix := range []string{"-steps", "--steps", "--batch", "--eval_batch", "--checkpoint_mean", "--platform"} {
 		if strings.HasPrefix(arg, prefix) {
 			return true
 		}
@@ -118,15 +126,15 @@ func isArgIrrelevant(arg string) bool {
 }
 
 var (
-	flagNumSteps = flag.Int("steps", 2000, "Number of gradient descent steps to perform.")
-	flagPlots    = flag.Bool("plots", true, "Plots during training: perform periodic evaluations, "+
+	flagNumSteps = flag.Int("steps", 2000, "Number of gradient descent steps to perform in total "+
+		"-- this includes the steps already trained, if restarting training a model.")
+	flagPlots = flag.Bool("plots", true, "Plots during training: perform periodic evaluations, "+
 		"save results if --checkpoint is set and draw plots, if in a Jupyter notebook.")
 	flagKid = flag.Bool("kid", true, "If true, calculate Kernel Inception Distance (KID) on evaluation "+
 		"-- it is quite expensive.")
 
 	// Training hyperparameters:
-	flagOptimizer        = flag.String("optimizer", "adamw", fmt.Sprintf("Optimizer, options: %q", slices.SortedKeys(optimizers.KnownOptimizers)))
-	flagLearningRate     = flag.Float64("learning_rate", 0.0001, "Initial learning rate.")
+	flagLearningRate     = flag.Float64("learning_rate", 0.001, "Initial learning rate.")
 	flagL2Regularization = flag.Float64("l2_reg", 0, "L2 regularization on kernels. It doesn't interact well with --batch_norm.")
 	flagReport           = flag.Bool("report", true, "If true generate evaluation report at end of training.")
 	flagRngReset         = flag.Bool("rng_reset", true, "If true will reset the random number generator state with a new random value -- useful when continuing training.")
