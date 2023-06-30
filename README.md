@@ -56,9 +56,10 @@ For now Linux only. It does work well also in WSL (Windows Subsystem for Linux) 
 
 Likely it would work in Macs with some work --> contributions are very welcome, I don't have a Mac. It will likely work in Docker for Mac, but not natively supporting M1/M2.
 
-### Pre-built docker
+### [Pre-built Docker](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab)
 
-The easiest to start playing with it, it's just pulling the docker image that has **GoMLX** + [JupyterLab](https://jupyterlab.readthedocs.io/) + [GoNB](https://github.com/janpfeifer/gonb) (a Go kernel for Jupyter) and 
+The easiest to start playing with it, it's just [pulling the docker image](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab)
+that includes **GoMLX** + [JupyterLab](https://jupyterlab.readthedocs.io/) + [GoNB](https://github.com/janpfeifer/gonb) (a Go kernel for Jupyter) and 
 [Nvidia's CUDA runtime](https://hub.docker.com/layers/nvidia/cuda/11.8.0-cudnn8-runtime-ubuntu22.04/images/sha256-08aed54a213b52e9cb658760b6d985db2f4c5f7e8f11ac45ec66b5c746237823?context=explore)
 (for optional support of GPU) pre-installed -- it is ~5Gb to download.
 
