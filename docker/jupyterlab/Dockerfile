@@ -2,7 +2,7 @@ FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
 
 LABEL maintainer="pfeifer@gmail.com"
 
-ARG GOMLX_VERSION="v0.4.0"
+ARG GOMLX_VERSION="v0.4.1"
 ARG GO_VERSION="1.20.4"
 
 #######################################################################################################
