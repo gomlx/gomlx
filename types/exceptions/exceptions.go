@@ -1,38 +1,28 @@
 // Package exceptions provides helper functions to leverage Go's `panic`, `recover` and `defer`
 // as an "exceptions" system.
 //
-// It is relatively slow (when compared to simply returning an error), but more ergonomic
-// in some cases, and can be used where a little latency in case of errors is not an issue.
+// The `panic`, `recover` and the added runtime type checking is slow when compared to
+// simply returning errors.
+// So it should be used where a little latency in case of errors is not an issue.
+//
+// It defines `Try` and `TryCatch[E any]`.
 package exceptions
 
-// Catch calls `handler` if an exception occurs of the given type.
-//
-// This should be called on a deferred statement. And multiple deferred Catch statements
-// are allowed, for different types of exceptions.
+// Try calls `fn` and return any exception (`panic`) that may occur.
 //
 // Example:
 //
-//	func SomeFunc() {
-//		defer exceptions.Catch(func(e MyError) { fixIt(e) })
-//		defer exceptions.Catch(func(e OtherInfo) { log(e) })
-//		… // code that may throw (panic)...
+//	var x ResultType
+//	e := Try(func() { x = DoSomething() })
+//	if e != nil {
+//		if eInt, ok := e.(int); ok {
+//			errorInt = e
+//		} else if err, ok := e.(err); ok {
+//			klog.Errorf("%v", e)
+//		} else {
+//			panic(e)
+//		}
 //	}
-func Catch[E any](handler func(exception E)) {
-	exception := recover()
-	if exception == nil {
-		// No exception.
-		return
-	}
-	exceptionE, ok := exception.(E)
-	if !ok {
-		// "Re-throw" the exception.
-		panic(exception)
-	}
-	handler(exceptionE) // Assign panic.
-}
-
-// Try calls fn and returns any exception (`panic`) that may have occurred.
-// If not panic happened, it returns nil.
 func Try(fn func()) (exception any) {
 	defer func() {
 		exception = recover()
@@ -41,17 +31,32 @@ func Try(fn func()) (exception any) {
 	return
 }
 
-// TryFor calls `fn` and recover from any exceptions (panic) of type `E`. If no exception
-// happened it returns the zero value for E.
+// TryCatch executes `fn` and in case of `panic`, it recovers if of the type `E`.
+// For a `panic` of any other type, it simply re-throws the `panic`.
 //
-// If a panic happened of a type different then `E`, it is not caught.
-func TryFor[E any](fn func()) (exception E) {
-	defer Catch(func(e E) { exception = e })
+// Example:
+//
+//	var x ResultType
+//	err := TryCatch[error](func() { x = DoSomething() })
+//	if err != nil {
+//		// Handle error ...
+//	}
+func TryCatch[E any](fn func()) (exception E) {
+	defer func() {
+		e := recover()
+		if e == nil {
+			// No exceptions.
+			return
+		}
+		var ok bool
+		exception, ok = e.(E)
+		if !ok {
+			// Re-throw an exception of a different type.
+			panic(e)
+		}
+		// Return the recovered exception.
+		return
+	}()
 	fn()
 	return
-}
-
-// Throw is an alias to `panic`, for those who prefer the usual exceptions' jargon.
-func Throw(exception any) {
-	panic(exception)
 }

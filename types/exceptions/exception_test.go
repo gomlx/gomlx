@@ -2,28 +2,38 @@ package exceptions
 
 import (
 	"fmt"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"testing"
 )
 
-func testCatch(fn func()) (eInt int, eErr error, eFloat float64) {
-	defer Catch(func(x int) { eInt = x })
-	defer Catch(func(x error) { eErr = x })
-	defer Catch(func(x float64) { eFloat = x })
-	fn()
+func testCountExceptions(fn func()) (eInt int, eErr error, eFloat float64) {
+	exception := Try(fn)
+	if exception != nil {
+		if e, ok := exception.(int); ok {
+			eInt = e
+		} else if e, ok := exception.(error); ok {
+			eErr = e
+		} else if e, ok := exception.(float64); ok {
+			eFloat = e
+		} else {
+			panic(e)
+		}
+	}
 	return
 }
 
-func TestCatch(t *testing.T) {
+func TestTry(t *testing.T) {
 	// No throws.
-	eInt, eErr, eFloat := testCatch(func() {})
+	eInt, eErr, eFloat := testCountExceptions(func() {})
 	assert.Equal(t, 0, eInt)
 	assert.Equal(t, nil, eErr)
 	assert.Equal(t, 0.0, eFloat)
 
 	// Throw an int.
-	eInt, eErr, eFloat = testCatch(func() {
-		Throw(7)
+	eInt, eErr, eFloat = testCountExceptions(func() {
+		panic(7)
 	})
 	assert.Equal(t, 7, eInt)
 	assert.Equal(t, nil, eErr)
@@ -31,27 +41,22 @@ func TestCatch(t *testing.T) {
 
 	// Throw an error.
 	e := fmt.Errorf("blah")
-	eInt, eErr, eFloat = testCatch(func() { Throw(e) })
+	eInt, eErr, eFloat = testCountExceptions(func() { panic(e) })
 	assert.Equal(t, 0, eInt)
 	assert.Equal(t, e, eErr)
 	assert.Equal(t, 0.0, eFloat)
+
+	// Throw something different.
+	assert.Panics(t,
+		func() {
+			// Exception of type string is not caught.
+			_, _, _ = testCountExceptions(func() { panic("some string") })
+		})
 }
 
-func TestTry(t *testing.T) {
-	assert.Equal(t, 3, Try(func() { Throw(3) }))
-	assert.Equal(t, 7.0, Try(func() { Throw(7.0) }))
-	assert.Equal(t, nil, Try(func() {}))
-}
-
-func TestTryFor(t *testing.T) {
-	x := TryFor[int](func() {}) // No exceptions, should return 0.
-	assert.Equal(t, 0, x)
-	x = TryFor[int](func() { Throw(11) })
-	assert.Equal(t, 11, x)
-	x = 13
-	assert.Panics(t, func() {
-		// Throwing a float shouldn't be caught by a Try[int].
-		x = TryFor[int](func() { Throw(1.0) })
-	})
-	assert.Equal(t, 13, x, "x shouldn't have changed value")
+func TestTryCatch(t *testing.T) {
+	want := errors.New("test error")
+	var err error
+	require.NotPanics(t, func() { err = TryCatch[error](func() { panic(want) }) })
+	require.EqualError(t, err, want.Error())
 }
