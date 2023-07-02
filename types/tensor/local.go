@@ -266,7 +266,8 @@ func (ref *LocalRef) Bytes() []byte {
 // CopyData contents of the tensor to dst.
 // The parameter `dst` must be a slice of the corresponding type that matches the tensor `DType`,
 // see `shapes.TypeForDType`.
-// Data is copied flat, meaning, it's just one slice of the tensor's size
+// Data is copied flat, as a 1D slice.
+// Even for scalars, it is copied as a slice of size 1.
 //
 // It panics if the tensor is empty or dst doesn't hold enough space or the right type.
 func (local *Local) CopyData(dst any) {
