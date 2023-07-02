@@ -179,7 +179,9 @@ func toTensorGenericsImpl[T shapes.Number](tt *ToTensorConfig, images []image.Im
 	} else {
 		t = tensor.FromShape(shapes.Make(shapes.DTypeForType(reflect.TypeOf(zero)), imgSize.Y, imgSize.X, tt.channels))
 	}
-	tensorData := t.Data().([]T)
+	tRef := t.AcquireData()
+	defer tRef.Release()
+	tensorData := tRef.Flat().([]T)
 	pos := 0
 
 	convertToDType := func(val uint32) T {

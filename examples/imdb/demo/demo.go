@@ -114,7 +114,9 @@ func Sample() {
 	ds := imdb.NewDataset("Test", imdb.Test, *flagMaxLen, 3, DType, true, nil)
 	_, inputs, labels, err := ds.Yield()
 	AssertNoError(err)
-	labelsData := shapes.CastAsDType(labels[0].Local().Data(), shapes.Int64).([]int)
+	labelsRef := labels[0].Local().AcquireData()
+	defer labelsRef.Release()
+	labelsData := shapes.CastAsDType(labelsRef.Flat(), shapes.Int64).([]int)
 	for ii := 0; ii < 3; ii++ {
 		fmt.Printf("\n%v : %s\n", labelsData[ii], imdb.InputToString(inputs[0], ii))
 	}

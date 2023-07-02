@@ -216,7 +216,7 @@ func (l *Literal) Bytes() []byte {
 // The slices themselves shouldn't be modified -- the underlying storage is not
 // owned by Go, and tensor objects are supposed to be immutable. See discussion on data storage
 // and exceptions to mutability on the package description if you really need to mutate its values.
-func DataFromLiteral[T shapes.Number](l *Literal) ([]T, error) {
+func DataFromLiteral[T shapes.Supported](l *Literal) ([]T, error) {
 	if l.IsNil() {
 		return nil, errors.New("empty literal, not underlying literal reference")
 	}

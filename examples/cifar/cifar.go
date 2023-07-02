@@ -102,7 +102,9 @@ func convertBytesToTensor[T shapes.GoFloat](image []byte, imagesT *tensor.Local,
 	if shapes.DTypeForType(reflect.TypeOf(t)) != imagesT.DType() {
 		return errors.Errorf("trying to convert to dtype %s from go type %t", imagesT.DType(), any(t))
 	}
-	tensorData := imagesT.Data().([]T)
+	ref := imagesT.AcquireData()
+	defer ref.Release()
+	tensorData := ref.Flat().([]T)
 	tensorPos := exampleNum * imageSizeBytes
 	for h := 0; h < Height; h++ {
 		for w := 0; w < Width; w++ {
@@ -127,7 +129,9 @@ func LoadCifar10(baseDir string, dtype shapes.DType) (images, labels *tensor.Loc
 	// Allocate the tensor.
 	images = tensor.FromShape(shapes.Make(dtype, NumExamples, Height, Width, Depth))
 	labels = tensor.FromShape(shapes.Make(shapes.I64, NumExamples, 1))
-	labelsData := labels.Data().([]int)
+	labelsRef := labels.AcquireData()
+	defer labelsRef.Release()
+	labelsData := labelsRef.Flat().([]int)
 
 	var labelImageBytes [imageSizeBytes + 1]byte
 	for fileIdx := 0; fileIdx < 6; fileIdx++ {
@@ -219,7 +223,9 @@ func LoadCifar100(baseDir string, dtype shapes.DType) (images, labels *tensor.Lo
 
 func ConvertToGoImage(images *tensor.Local, exampleNum int) *image.NRGBA {
 	img := image.NewNRGBA(image.Rect(0, 0, Width, Height))
-	tensorData := reflect.ValueOf(images.Data())
+	ref := images.AcquireData()
+	defer ref.Release()
+	tensorData := reflect.ValueOf(ref.Flat())
 	tensorPos := exampleNum * imageSizeBytes
 	floatT := reflect.TypeOf(float64(0))
 	for h := 0; h < Height; h++ {

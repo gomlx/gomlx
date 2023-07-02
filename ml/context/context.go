@@ -491,11 +491,7 @@ func (ctx *Context) InitializeVariables() {
 		ctx.SetErrorf("failed to run variable initialization graph: %w", err)
 		return
 	}
-	values, err := tuple.SplitTupleError()
-	if err != nil {
-		ctx.SetErrorf("failed to split tuple during variable initialization graph: %w", err)
-		return
-	}
+	values := tuple.SplitTuple()
 	for ii, variable := range variablesToInitialize {
 		variable.value = values[ii]
 	}

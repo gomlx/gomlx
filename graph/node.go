@@ -1552,7 +1552,7 @@ func GatherSlices(input *Node, slicedAxes []int, start *Node, sizes []int) (gath
 	}
 	outputPrefixRank := startRank - 1
 
-	// Validate slicedAxes and normalizes it (replacing negative axis to their corresponding ones).
+	// AssertValid slicedAxes and normalizes it (replacing negative axis to their corresponding ones).
 	{
 		seen := types.MakeSet[int](numSlicedAxes)
 		normalized := make([]int, 0, numSlicedAxes)
