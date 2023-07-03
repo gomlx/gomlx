@@ -60,3 +60,8 @@ func TestTryCatch(t *testing.T) {
 	require.NotPanics(t, func() { err = TryCatch[error](func() { panic(want) }) })
 	require.EqualError(t, err, want.Error())
 }
+
+func TestThrow(t *testing.T) {
+	err := TryCatch[error](func() { Throw("2+3=%d", 2+3) })
+	require.EqualError(t, err, "2+3=5")
+}

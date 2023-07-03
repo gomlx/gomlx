@@ -8,6 +8,8 @@
 // It defines `Try` and `TryCatch[E any]`.
 package exceptions
 
+import "github.com/pkg/errors"
+
 // Try calls `fn` and return any exception (`panic`) that may occur.
 //
 // Example:
@@ -59,4 +61,10 @@ func TryCatch[E any](fn func()) (exception E) {
 	}()
 	fn()
 	return
+}
+
+// Throw is a shortcut to `panic(errors.Errorf(format, args...))`.
+// It throws an error with a stack-trace and the formatted message.
+func Throw(format string, args ...any) {
+	panic(errors.Errorf(format, args...))
 }
