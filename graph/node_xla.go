@@ -17,6 +17,7 @@
 package graph
 
 import (
+	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/xla"
@@ -40,14 +41,10 @@ import (
 //
 // The length of starts and limits must match the rank of x.
 func SliceXLA(x *Node, starts, limits []int) *Node {
-	g := validateGraphFromInputs(x)
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
+	_ = validateGraphFromInputs(x)
 	rank := x.shape.Rank()
 	if len(starts) != rank || len(limits) != rank {
-		g.SetErrorf("in SliceXLA(x, starts, limits) passed %d start values and %d limits values, but x has rank %d", len(starts), len(limits), rank)
-		return g.InvalidNode()
+		Panicf("in SliceXLA(x, starts, limits) passed %d start values and %d limits values, but x has rank %d", len(starts), len(limits), rank)
 	}
 	strides := make([]int, rank)
 	for ii := range strides {
@@ -61,13 +58,9 @@ func SliceXLA(x *Node, starts, limits []int) *Node {
 // The length of starts, limits and strides must match the rank of x.
 func SliceWithStridesXLA(x *Node, starts, limits, strides []int) *Node {
 	g := validateGraphFromInputs(x)
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	rank := x.shape.Rank()
 	if len(starts) != rank || len(limits) != rank || len(strides) != rank {
-		g.SetErrorf("in SliceWithStridesXLA(x, starts, limits, strides) passed %d start values, %d limits values and %d stride values, but x has rank %d", len(starts), len(limits), len(strides), rank)
-		return g.InvalidNode()
+		Panicf("in SliceWithStridesXLA(x, starts, limits, strides) passed %d start values, %d limits values and %d stride values, but x has rank %d", len(starts), len(limits), len(strides), rank)
 	}
 
 	// Encode starts, limits and strides sequentially, since their size are the same,
@@ -90,10 +83,6 @@ func SliceWithStridesXLA(x *Node, starts, limits, strides []int) *Node {
 // Not exported for now, hopefully Gather and GatherSlices will suffice.
 func gatherXLA(operand, startIndices *Node, indexVectorDim int, offsetDims, collapsedSliceDims, startIndexMap, sliceSizes []int, indicesAreSorted bool) *Node {
 	g := validateGraphFromInputs(operand, startIndices)
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
-
 	//fmt.Printf("\tgatherXLA: operand=%s, start=%s, indexVectorDim=%d, offsetDims=%v, collapsedSliceDims=%v, startIndexMap=%v, sliceSizes=%v\n",
 	//	operand.shape, startIndices.shape, indexVectorDim, offsetDims, collapsedSliceDims, startIndexMap, sliceSizes)
 
@@ -132,16 +121,16 @@ func deserializeGatherXLA(serialized *xla.SerializedNode) (
 		err = errors.Errorf("wrong node type (%s) for unserlizeGatherXLA", serialized.Type)
 		return
 	}
-	ints := serialized.Ints
-	indexVectorDim = ints[0]
-	indicesAreSorted = intToBool(ints[5])
+	intArgs := serialized.Ints
+	indexVectorDim = intArgs[0]
+	indicesAreSorted = intToBool(intArgs[5])
 
 	pos := 6
 	extractSlice := func(lenIdx int) []int {
 		length := serialized.Ints[lenIdx]
 		from := pos
 		pos += length
-		return ints[from:pos]
+		return intArgs[from:pos]
 	}
 	offsetDims = extractSlice(1)
 	collapsedSliceDims = extractSlice(2)
@@ -160,9 +149,6 @@ func scatterXLA(operand, scatterIndices, updates *Node,
 	//fmt.Printf("\tscatterXLA: operand=%s, scatterIndices=%s, updates=%s, indexVectorDim=%d, updateWindowDims=%v, insertedWindowDims=%v, scatterDimsToOperandDims=%v, indicesAreSorted=%v, uniqueIndices=%v\n",
 	//	operand.shape, scatterIndices.shape, updates.shape, indexVectorDim, updateWindowDims, insertedWindowDims, scatterDimsToOperandDims, indicesAreSorted, uniqueIndices)
 	g := validateGraphFromInputs(operand, scatterIndices, updates)
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 
 	// Encoding of the values as follows. IMPORTANT: this code needs to be in sync with corresponding
 	// decoding code in c/gomlx/computation.cpp, in function ComputationAddOp, under GatherNode case.
@@ -188,14 +174,12 @@ func scatterXLA(operand, scatterIndices, updates *Node,
 // It sets the graph to an error state (`operand.Graph()`) if the axis given is out of range for the operand
 // shape.
 func AdjustAxis(operand *Node, axis int) int {
-	g := operand.Graph()
 	adjustedAxis := axis
 	if axis < 0 {
 		adjustedAxis = operand.Rank() + axis
 	}
 	if adjustedAxis < 0 || adjustedAxis >= operand.Rank() {
-		g.SetErrorf("invalid axis %d, operand rank is %d", axis, operand.Rank())
-		return axis
+		Panicf("invalid axis %d, operand rank is %d", axis, operand.Rank())
 	}
 	return adjustedAxis
 }
@@ -210,13 +194,7 @@ func AdjustAxis(operand *Node, axis int) int {
 // Internal Covariate Shift" (Sergey Ioffe, Christian Szegedy), https://arxiv.org/abs/1502.03167.
 func BatchNormInferenceXLA(operand, scale, offset, mean, variance *Node, epsilon float32, axis int) *Node {
 	g := validateGraphFromInputs(operand, scale, offset, mean, variance)
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	axis = AdjustAxis(operand, axis)
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	return newNode(g, &xla.SerializedNode{
 		Type:  xla.BatchNormInferenceNode,
 		Int:   axis,
@@ -236,26 +214,14 @@ func BatchNormInferenceXLA(operand, scale, offset, mean, variance *Node, epsilon
 // Internal Covariate Shift" (Sergey Ioffe, Christian Szegedy), https://arxiv.org/abs/1502.03167.
 func BatchNormTrainingXLA(operand, scale, offset *Node, epsilon float32, axis int) (normalized, batchMean, batchVariance *Node) {
 	g := validateGraphFromInputs(operand, scale, offset)
-	if !g.Ok() {
-		return g.InvalidNode(), g.InvalidNode(), g.InvalidNode()
-	}
 	axis = AdjustAxis(operand, axis)
-	if !g.Ok() {
-		return g.InvalidNode(), g.InvalidNode(), g.InvalidNode()
-	}
 	tuple := newNode(g, &xla.SerializedNode{
 		Type:       xla.BatchNormTrainingNode,
 		NodeInputs: make([]int32, 3),
 		Int:        axis,
 		Float:      epsilon,
 	}, []*Node{operand, scale, offset})
-	if !g.Ok() {
-		return g.InvalidNode(), g.InvalidNode(), g.InvalidNode()
-	}
 	parts := SplitTuple(tuple)
-	if !g.Ok() {
-		return g.InvalidNode(), g.InvalidNode(), g.InvalidNode()
-	}
 	normalized, batchMean, batchVariance = parts[0], parts[1], parts[2]
 	return
 }
@@ -271,26 +237,14 @@ func BatchNormTrainingXLA(operand, scale, offset *Node, epsilon float32, axis in
 func batchNormGradXLA(operand, scale, mean, variance, gradOutput *Node, epsilon float32, axis int) (
 	gradOperand, gradScale, gradOffset *Node) {
 	g := validateGraphFromInputs(operand, scale, mean, variance, gradOutput)
-	if !g.Ok() {
-		return g.InvalidNode(), g.InvalidNode(), g.InvalidNode()
-	}
 	axis = AdjustAxis(operand, axis)
-	if !g.Ok() {
-		return g.InvalidNode(), g.InvalidNode(), g.InvalidNode()
-	}
 	tuple := newNode(g, &xla.SerializedNode{
 		Type:       xla.BatchNormGradNode,
 		NodeInputs: make([]int32, 5),
 		Int:        axis,
 		Float:      epsilon,
 	}, []*Node{operand, scale, mean, variance, gradOutput})
-	if !g.Ok() {
-		return g.InvalidNode(), g.InvalidNode(), g.InvalidNode()
-	}
 	parts := SplitTuple(tuple)
-	if !g.Ok() {
-		return g.InvalidNode(), g.InvalidNode(), g.InvalidNode()
-	}
 	gradOperand, gradScale, gradOffset = parts[0], parts[1], parts[2]
 	return
 }
@@ -312,9 +266,6 @@ func batchNormGradXLA(operand, scale, mean, variance, gradOutput *Node, epsilon 
 func dotGeneralXLA(lhs *Node, lhsContractingAxes, lhsBatchAxes []int,
 	rhs *Node, rhsContractingAxes, rhsBatchAxes []int) *Node {
 	g := validateGraphFromInputs(lhs, rhs)
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 
 	var lists = [][]int{lhsContractingAxes, lhsBatchAxes, rhsContractingAxes, rhsBatchAxes}
 	intsLen := len(lists)
@@ -436,8 +387,8 @@ func dotGeneralVJP(node, v *Node, _ shapes.Shape) []*Node {
 		// * Multiply the contracted dimension by otherProjected: this will expand the contracted dimensions.
 		thisVJP = Mul(thisVJP, otherProjected)
 
-		// * Contract the otherCrossAxes, since those dimensions should exist in the final thisVJP (these
-		//   cross axes came from the "other" input.
+		// * Contract the otherCrossAxes, since those dimensions should exist in the final thisVJP — these
+		//   cross-axes came from the "other" input.
 		if len(otherCrossAxes) > 0 {
 			pos := numBatchAxes
 			if thisCrossesFirst {

@@ -17,6 +17,7 @@
 package graph
 
 import (
+	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 )
 
@@ -24,19 +25,12 @@ import (
 
 // Scalar returns a constant scalar with the given value.
 func Scalar(g *Graph, dtype shapes.DType, value float64) *Node {
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	return g.getScalarConst(dtype, value)
-	// Const(g, shapes.CastAsDType(value, dtype))
 }
 
 // FillScalar creates a Node with a value with the given shape, filled with the given value.
 // It's implemented indirectly using other nodes.
 func FillScalar(g *Graph, shape shapes.Shape, value float64) *Node {
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	return BroadcastPrefix(Scalar(g, shape.DType, value), shape.Dimensions)
 }
 
@@ -54,9 +48,6 @@ func ScalarOne(g *Graph, dtype shapes.DType) *Node {
 // with proper broadcasting.
 func MulScalar(x *Node, scalar float64) *Node {
 	g := x.Graph()
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	return Mul(x, Scalar(g, x.DType(), scalar))
 }
 
@@ -66,12 +57,8 @@ func MulScalar(x *Node, scalar float64) *Node {
 // For float DType's, DivScalar instead uses MulScalar(x, 1/scalar).
 func DivScalar(x *Node, scalar float64) *Node {
 	g := x.Graph()
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	if scalar == 0 {
-		g.SetErrorf("division by zero in DivScalar")
-		return g.InvalidNode()
+		Panicf("division by zero in DivScalar")
 	}
 	if x.DType().IsFloat() {
 		// Multiply by 1/scalar instead:
@@ -84,9 +71,6 @@ func DivScalar(x *Node, scalar float64) *Node {
 // with proper broadcasting.
 func PowScalar(x *Node, scalar float64) *Node {
 	g := x.Graph()
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	return Pow(x, Scalar(g, x.DType(), scalar))
 }
 
@@ -99,27 +83,18 @@ func Square(x *Node) *Node {
 // with proper broadcasting.
 func AddScalar(x *Node, scalar float64) *Node {
 	g := x.Graph()
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	return Add(x, Scalar(g, x.DType(), scalar))
 }
 
 // MaxScalar converts scalar to a constant with x's DType and returns element-wise `Max(x, scalar)`.
 func MaxScalar(x *Node, scalar float64) *Node {
 	g := x.Graph()
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	return Max(x, Scalar(g, x.DType(), scalar))
 }
 
 // MinScalar converts scalar to a constant with x's DType and returns element-wise `Min(x, scalar)`.
 func MinScalar(x *Node, scalar float64) *Node {
 	g := x.Graph()
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	return Min(x, Scalar(g, x.DType(), scalar))
 }
 
@@ -129,18 +104,14 @@ func lowestForDType(g *Graph, dtype shapes.DType) *Node {
 
 // OnesLike returns a tensor with the same shape of x, filled with 1's.
 func OnesLike(x *Node) *Node {
-	if !x.Ok() || !x.Graph().Ok() {
-		return x.Graph().InvalidNode()
-	}
-	return Ones(x.Graph(), x.Shape())
+	g := validateGraphFromInputs(x)
+	return Ones(g, x.Shape())
 }
 
 // Ones creates a computation with the same shape as the input, but with the value 1.
 // It's implemented indirectly using other nodes.
 func Ones(g *Graph, shape shapes.Shape) *Node {
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
+	g.AssertValid()
 	scalar := ScalarOne(g, shape.DType)
 	if scalar == nil {
 		return nil
@@ -150,64 +121,45 @@ func Ones(g *Graph, shape shapes.Shape) *Node {
 
 // ZerosLike returns a tensor with the same shape of x, filled with 0's.
 func ZerosLike(x *Node) *Node {
-	if !x.Ok() || !x.Graph().Ok() {
-		return x.Graph().InvalidNode()
-	}
-	return Zeros(x.Graph(), x.Shape())
+	g := validateGraphFromInputs(x)
+	return Zeros(g, x.Shape())
 }
 
 // Zeros creates a computation with the same shape as the input, but with the value 0.
 // It's implemented indirectly using other nodes.
 func Zeros(g *Graph, shape shapes.Shape) *Node {
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
+	g.AssertValid()
 	return BroadcastPrefix(ScalarZero(g, shape.DType), shape.Dimensions)
 }
 
 // OneMinus returns (1-x).
 func OneMinus(x *Node) *Node {
-	g := x.Graph()
-	if !g.Ok() || !x.Ok() {
-		return g.InvalidNode()
-	}
+	g := validateGraphFromInputs(x)
 	return Sub(ScalarOne(g, x.DType()), x)
 }
 
 // MinusOne returns (x-1).
 func MinusOne(x *Node) *Node {
-	g := x.Graph()
-	if !g.Ok() || !x.Ok() {
-		return g.InvalidNode()
-	}
+	g := validateGraphFromInputs(x)
 	return Sub(x, ScalarOne(g, x.DType()))
 }
 
 // OnePlus returns (1+x).
 func OnePlus(x *Node) *Node {
-	g := x.Graph()
-	if !g.Ok() || !x.Ok() {
-		return g.InvalidNode()
-	}
+	g := validateGraphFromInputs(x)
 	return Add(ScalarOne(g, x.DType()), x)
 }
 
 // Inverse returns (1/x).
 func Inverse(x *Node) *Node {
-	g := x.Graph()
-	if !g.Ok() || !x.Ok() {
-		return g.InvalidNode()
-	}
+	g := validateGraphFromInputs(x)
 	return Div(ScalarOne(g, x.DType()), x)
 }
 
 // SignPlusOrMinus return +1 or -1 whether x >= 0 or x < 0. It's similar to Sign, but
 // where 0s are considered positive.
 func SignPlusOrMinus(x *Node) *Node {
-	g := x.Graph()
-	if !g.Ok() || !x.Ok() {
-		return g.InvalidNode()
-	}
+	g := validateGraphFromInputs(x)
 	half := Scalar(g, x.DType(), 0.5)
 	return Sign(Add(Sign(x), half))
 }
@@ -215,10 +167,7 @@ func SignPlusOrMinus(x *Node) *Node {
 // PositiveIndicator returns 1 where x >= 0, 0 otherwise. See also StrictlyPositiveIndicator.
 // E.g: PositiveIndicator({1.0, 0.0001, 0, -0.2, -3.0}) -> [1, 1, 1, 0, 0], with the same shape/dtype as x.
 func PositiveIndicator(x *Node) *Node {
-	g := x.Graph()
-	if !g.Ok() || !x.Ok() {
-		return g.InvalidNode()
-	}
+	g := validateGraphFromInputs(x)
 	one := ScalarOne(g, x.DType())
 	return Sign(Add(Sign(x), one))
 }
@@ -226,10 +175,7 @@ func PositiveIndicator(x *Node) *Node {
 // StrictlyPositiveIndicator returns 1 where x > 0, 0 otherwise.
 // E.g: StrictlyPositiveIndicator({1.0, 0.0001, 0, -0.2, -3.0}) -> [1, 1, 0, 0, 0], with the same shape/dtype as x.
 func StrictlyPositiveIndicator(x *Node) *Node {
-	g := x.Graph()
-	if !g.Ok() || !x.Ok() {
-		return g.InvalidNode()
-	}
+	g := validateGraphFromInputs(x)
 	one := ScalarOne(g, x.DType())
 	return Add(Sign(Sub(Sign(x), one)), one)
 }
@@ -254,12 +200,8 @@ func ClipScalar(x *Node, min, max float64) *Node {
 // TODO: implement with Select once it's implemented, since it's likely going to be faster (TensorFlow uses that).
 func OneHot(indices *Node, depth int, dtype shapes.DType) *Node {
 	g := indices.Graph()
-	if !g.Ok() || !indices.Ok() {
-		return g.InvalidNode()
-	}
 	if !indices.shape.DType.IsInt() {
-		g.SetErrorf("invalid indices dtype (%s), it must be integer", indices.shape.DType)
-		return g.InvalidNode()
+		Panicf("invalid indices dtype (%s), it must be integer", indices.shape.DType)
 	}
 
 	// Add an expanded dimension at the end, which will contain the one-hot representation.
@@ -293,12 +235,9 @@ func OneHot(indices *Node, depth int, dtype shapes.DType) *Node {
 
 // ReduceAndKeep applies the given reduction function but regenerate the reduced dimensions with size 1.
 func ReduceAndKeep(x *Node, reduceFn func(x *Node, reduceAxes ...int) *Node, reduceAxes ...int) *Node {
-	g := x.Graph()
-	if !g.Ok() || !x.Ok() {
-		return g.InvalidNode()
-	}
+	_ = validateGraphFromInputs(x)
 	rank := x.Rank()
-	reduceAxes = convertNegativeDimensionsAndSort(rank, reduceAxes)
+	reduceAxes = convertNegativeAxesAndSort(rank, reduceAxes)
 	reduced := reduceFn(x, reduceAxes...)
 	shapeWithRecoveredDims := x.Shape().Copy()
 	for ii := 0; ii < rank && len(reduceAxes) > 0; ii++ {
@@ -313,12 +252,9 @@ func ReduceAndKeep(x *Node, reduceFn func(x *Node, reduceAxes ...int) *Node, red
 // ReduceAndKeepMasked applies the given masked reduction function but regenerates the reduced
 // dimensions with size 1.
 func ReduceAndKeepMasked(x, mask *Node, reduceFn func(x, mask *Node, reduceAxes ...int) *Node, reduceAxes ...int) *Node {
-	g := x.Graph()
-	if !g.Ok() || !x.Ok() {
-		return g.InvalidNode()
-	}
+	_ = validateGraphFromInputs(x)
 	rank := x.Rank()
-	reduceAxes = convertNegativeDimensionsAndSort(rank, reduceAxes)
+	reduceAxes = convertNegativeAxesAndSort(rank, reduceAxes)
 	reduced := reduceFn(x, mask, reduceAxes...)
 	shapeWithRecoveredDims := x.Shape().Copy()
 	for ii := 0; ii < rank && len(reduceAxes) > 0; ii++ {
@@ -343,13 +279,9 @@ func ReduceAndKeepMasked(x, mask *Node, reduceFn func(x, mask *Node, reduceAxes 
 // (the axes that will be summed over). If no axes are given, it is assumed to
 // be [-1], meaning, the last axes.
 func Softmax(logits *Node, axes ...int) *Node {
-	g := logits.Graph()
-	if !g.Ok() || !logits.Ok() {
-		return g.InvalidNode()
-	}
+	_ = validateGraphFromInputs(logits)
 	if !logits.shape.DType.IsFloat() {
-		g.SetErrorf("invalid logits dtype (%s), it must be float", logits.shape.DType)
-		return g.InvalidNode()
+		Panicf("invalid logits dtype (%s), it must be float", logits.shape.DType)
 	}
 	if len(axes) == 0 {
 		axes = []int{-1}
@@ -377,13 +309,9 @@ func Softmax(logits *Node, axes ...int) *Node {
 // It ignores values for which the corresponding mask is false, and will return 0 for
 // those fields. mask and logits must have the same shape.
 func MaskedSoftmax(logits, mask *Node, axes ...int) *Node {
-	g := logits.Graph()
-	if !g.Ok() || !logits.Ok() {
-		return g.InvalidNode()
-	}
+	_ = validateGraphFromInputs(logits)
 	if !logits.shape.DType.IsFloat() {
-		g.SetErrorf("invalid logits dtype (%s), it must be float", logits.shape.DType)
-		return g.InvalidNode()
+		Panicf("invalid logits dtype (%s), it must be float", logits.shape.DType)
 	}
 	if len(axes) == 0 {
 		axes = []int{-1}
@@ -415,9 +343,6 @@ func L2Norm(x *Node) *Node {
 //
 // This can be combined with `Where` to select values of any arbitrary other matrix.
 func LowerTriangular(g *Graph, dim int) *Node {
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	shapeInt := shapes.Make(shapes.I64, dim, dim)
 	rows := Iota(g, shapeInt, 0)
 	cols := Iota(g, shapeInt, 1)
@@ -428,9 +353,6 @@ func LowerTriangular(g *Graph, dim int) *Node {
 //
 // This can be combined with `Where` to select values of any arbitrary other matrix.
 func UpperTriangular(g *Graph, dim int) *Node {
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	shapeInt := shapes.Make(shapes.I64, dim, dim)
 	rows := Iota(g, shapeInt, 0)
 	cols := Iota(g, shapeInt, 1)
@@ -441,9 +363,6 @@ func UpperTriangular(g *Graph, dim int) *Node {
 //
 // This can be combined with `Where` to select values of any arbitrary other matrix.
 func Diagonal(g *Graph, dim int) *Node {
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	shapeInt := shapes.Make(shapes.I64, dim, dim)
 	rows := Iota(g, shapeInt, 0)
 	cols := Iota(g, shapeInt, 1)
@@ -455,9 +374,6 @@ func Diagonal(g *Graph, dim int) *Node {
 // and you get an identity matrix.
 func DiagonalWithValue(scalar *Node, dim int) *Node {
 	g := scalar.Graph()
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	matrix := BroadcastPrefix(scalar, []int{dim, dim})
 	return Where(Diagonal(g, dim), matrix, ZerosLike(matrix))
 }

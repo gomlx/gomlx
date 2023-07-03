@@ -25,11 +25,11 @@ import (
 	"testing"
 )
 
-// mustCompileAndRun compiles, runs and returns the value on the tensor. Doesn't work for tuples though.
-func mustCompileAndRun(g *Graph) any {
-	g.MustCompile()
-	global, _ := g.RunError(nil)
-	got := global.Local().Value()
+// compileAndRun compiles, runs and returns the value on the tensor. Doesn't work for tuples though.
+func compileAndRun(g *Graph) any {
+	g.Compile()
+	device := g.Run(nil)
+	got := device.Local().Value()
 	return got
 }
 
@@ -44,7 +44,7 @@ func TestBroadcastInDim(t *testing.T) {
 		g := manager.NewGraph("")
 		input := Const(g, [][][]float32{{{1.1, 1.2}}}) // Shape [1, 1, 2]
 		broadcastInDim(input, shapes.Make(shapes.Float32, 2, 1, 2), []int{0, 1, 2})
-		got := mustCompileAndRun(g)
+		got := compileAndRun(g)
 		want := [][][]float32{{{1.1, 1.2}}, {{1.1, 1.2}}} // Shape [2, 1, 2].
 		if !slices.DeepSliceCmp(got, want, slices.Equal[float32]) {
 			fmt.Printf("%s\n", g)

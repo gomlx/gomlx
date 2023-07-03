@@ -63,8 +63,8 @@ func TryCatch[E any](fn func()) (exception E) {
 	return
 }
 
-// Throw is a shortcut to `panic(errors.Errorf(format, args...))`.
+// Panicf is a shortcut to `panic(errors.Errorf(format, args...))`.
 // It throws an error with a stack-trace and the formatted message.
-func Throw(format string, args ...any) {
+func Panicf(format string, args ...any) {
 	panic(errors.Errorf(format, args...))
 }

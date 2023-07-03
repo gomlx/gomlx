@@ -1,5 +1,11 @@
 # GoMLX changelog
 
+## Next
+
+* Error handling revamp: using `panic` to report errors — it works as exceptions.
+* Remove `tensor.Local.Data()`: now all access is done throw the `tensor.Local.AcquireData()` and release, to
+  prevent a race condition with the garbage collector.
+
 ## v0.4.1
 
 * Diffusion example: Added conditioning on flower type; Improved documentation; several other small improvements.

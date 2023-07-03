@@ -224,7 +224,6 @@ func (c *cache) AddDevice(device *Device) *Device {
 
 // lockedAddDevice implements AddDevice, and assumes cache.mu is already locked.
 func (c *cache) lockedAddDevice(device *Device) *Device {
-	device.AssertValid()
 	device.cache = c
 	if c.onDevices == nil {
 		c.onDevices = make(map[xla.ClientId]map[int]*Device)

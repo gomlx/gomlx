@@ -486,7 +486,7 @@ func (ctx *Context) InitializeVariables() {
 		ctx.SetErrorf("failed to compile variable initialization graph: %w", g.Error())
 		return
 	}
-	tuple, err := g.RunError(nil)
+	tuple, err := g.Run(nil)
 	if err != nil {
 		ctx.SetErrorf("failed to run variable initialization graph: %w", err)
 		return

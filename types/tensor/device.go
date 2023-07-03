@@ -121,6 +121,10 @@ func (device *Device) IsTuple() bool {
 // This can be called more than once: after the first time it doesn't do anything, since the data has already
 // been released.
 func (device *Device) Finalize() {
+	if device.shapedBuffer.IsNil() {
+		// Already finalized.
+		return
+	}
 	device.ClearCache()
 	device.shapedBuffer.Finalize()
 	device.shape = shapes.Shape{}
@@ -134,7 +138,9 @@ func (device *Device) FinalizeAll() {
 
 // ClearCache disconnects the device tensor to any corresponding local data. Internal usage only.
 func (device *Device) ClearCache() {
-	device.cache.ClearDevice(device)
+	if device.cache != nil {
+		device.cache.ClearDevice(device)
+	}
 
 	// Create a new cache with itself only.
 	cache := &cache{}

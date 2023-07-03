@@ -27,21 +27,19 @@ import (
 type graphFnOneInputToTest func(g *Graph) (input, output *Node)
 
 func testFuncOneInput(t *testing.T, testName string, graphFn graphFnOneInputToTest, want any) {
-	fmt.Printf("%s\n", testName)
-	manager := buildTestManager()
-	g := manager.NewGraph(testName)
-	input, output := graphFn(g)
-	g.Compile(input, output)
-	g.MustOk()
-	tuple := g.Run(nil)
-	if !tuple.Ok() {
-		t.Fatalf("Failed to run graph: %+v", tuple.Error())
-	}
-	results := tuple.SplitTuple()
-	fmt.Printf("\t%s(%s) = %s\n", testName, results[0].Local().GoStr(), results[1].Local().GoStr())
-	if !slices.SlicesInDelta(results[1].Local().Value(), want, slices.Epsilon) {
-		t.Errorf("%s(%v): want=%v, got=%v", testName, results[0].Local(), want, results[1].Local().GoStr())
-	}
+	require.NotPanics(t, func() {
+		fmt.Printf("%s\n", testName)
+		manager := buildTestManager()
+		g := manager.NewGraph(testName)
+		input, output := graphFn(g)
+		g.Compile(input, output)
+		tuple := g.Run(nil)
+		results := tuple.SplitTuple()
+		fmt.Printf("\t%s(%s) = %s\n", testName, results[0].Local().GoStr(), results[1].Local().GoStr())
+		if !slices.SlicesInDelta(results[1].Local().Value(), want, slices.Epsilon) {
+			t.Errorf("%s(%v): want=%v, got=%v", testName, results[0].Local(), want, results[1].Local().GoStr())
+		}
+	})
 }
 
 func TestSliceXLA(t *testing.T) {
@@ -50,8 +48,8 @@ func TestSliceXLA(t *testing.T) {
 	numbers := Iota(g, shapes.Make(shapes.F64, 9), 0)
 	numbers = ReshapeWithShape(numbers, shapes.Make(shapes.F64, 3, 3))
 	SliceXLA(numbers, []int{1, 1}, []int{2, 3})
-	g.MustCompile()
-	got := g.MustRun(nil).Local().Value()
+	g.Compile()
+	got := g.Run(nil).Local().Value()
 	want := [][]float64{{4, 5}}
 	if !slices.DeepSliceCmp(got, want, slices.Equal[float64]) {
 		t.Fatalf("Iota: want %v, got %v", want, got)
@@ -69,11 +67,8 @@ func TestGatherXLA(t *testing.T) {
 		/* collapsed_slice_dims */ []int{0},
 		/* start_index_map */ []int{0},
 		/* slice_sizes */ []int{1, 3}, false)
-	g.MustCompile(gather)
-	if g.Error() != nil {
-		t.Fatalf("Failed to create graph: %v", g.Error())
-	}
-	got := g.MustRun(nil).Local()
+	g.Compile(gather)
+	got := g.Run(nil).Local()
 	fmt.Printf("\tgatherXLA=%v\n", got)
 	want := [][]float64{{6, 7, 8}, {0, 1, 2}}
 	if !slices.DeepSliceCmp(got.Value(), want, slices.Equal[float64]) {
@@ -173,8 +168,6 @@ func TestGradDotGeneralXLABatchContracting(t *testing.T) {
 		revLhsPermutation := reversePermutation(lhsPermutation)
 		for _, rhsPermutation := range rhsPermutations {
 			fmt.Println()
-			fmt.Println()
-			fmt.Println()
 			revRhsPermutation := reversePermutation(rhsPermutation)
 			testFn := func(g *Graph) []*Node { // It returns: lhs, rhs, dot, grad_lhs, grad_rhs
 				lhs := IotaFull(g, shapes.Make(shapes.F32, dimensions...))
@@ -192,22 +185,20 @@ func TestGradDotGeneralXLABatchContracting(t *testing.T) {
 				fmt.Printf("\trhs: p:%v, rev:%v, batch: %v, contracting: %v\n", rhsPermutation, revRhsPermutation, rhsBatchAxes, rhsContractingAxes)
 				fmt.Printf("\t\trhs.shape=%s\n", rhs.Shape())
 				dot := dotGeneralXLA(lhs, lhsContractingAxes, lhsBatchAxes, rhs, rhsContractingAxes, rhsBatchAxes)
-				require.Truef(t, g.Ok(), "TestGradDotGeneralXLA failed to generate DotGeneral: %+v", g.Error())
 				fmt.Printf("\t\tdot.shape=%s\n", dot.Shape())
 				// loss is the product of dot and iota (increasing numbers), all reduced sum.
 				incremental := OnePlus(IotaFull(g, dot.Shape()))
 				loss := ReduceAllSum(Mul(incremental, dot))
 				grads := Gradient(loss, lhs, rhs)
-				require.Truef(t, g.Ok(), "TestGradDotGeneralXLA failed to generate gradient: %+v", g.Error())
 				grads[0] = TransposeAllDims(grads[0], revLhsPermutation...)
 				grads[1] = TransposeAllDims(grads[1], revRhsPermutation...)
+				fmt.Printf("\tDone graph\n")
 				return []*Node{lhs, rhs, dot, grads[0], grads[1]}
 			}
 
 			exec := NewExec(manager, testFn)
-			parts, err := exec.Call()
-			require.NoError(t, err, "Executing TestGradDotGeneralXLA failed")
 			fmt.Printf("Executing TestGradDotGeneralXLA:\n")
+			parts := exec.Call()
 			for ii, name := range []string{"lhs", "rhs", "dot", "grad_lhs", "grad_rhs"} {
 				fmt.Printf("\t%s: %s\n", name, parts[ii].Local().GoStr())
 			}
@@ -269,22 +260,19 @@ func TestGradDotGeneralXLABatchContractingCrossing(t *testing.T) {
 				fmt.Printf("\trhs: p:%v, rev:%v, batch: %v, contracting: %v\n", rhsPermutation, revRhsPermutation, rhsBatchAxes, rhsContractingAxes)
 				fmt.Printf("\t\trhs.shape=%s\n", rhs.Shape())
 				dot := dotGeneralXLA(lhs, lhsContractingAxes, lhsBatchAxes, rhs, rhsContractingAxes, rhsBatchAxes)
-				require.Truef(t, g.Ok(), "TestGradDotGeneralXLA failed to generate DotGeneral: %+v", g.Error())
 				fmt.Printf("\t\tdot.shape=%s\n", dot.Shape())
 
 				// loss is the product of dot and iota (increasing numbers), all reduced sum.
 				incremental := OnePlus(IotaFull(g, dot.Shape()))
 				loss := ReduceAllSum(Mul(incremental, dot))
 				grads := Gradient(loss, lhs, rhs)
-				require.Truef(t, g.Ok(), "TestGradDotGeneralXLA failed to generate gradient: %+v", g.Error())
 				grads[0] = TransposeAllDims(grads[0], revLhsPermutation...)
 				grads[1] = TransposeAllDims(grads[1], revRhsPermutation...)
 				return []*Node{lhs, rhs, dot, grads[0], grads[1]}
 			}
 
 			exec := NewExec(manager, testFn)
-			parts, err := exec.Call()
-			require.NoError(t, err, "Executing TestGradDotGeneralXLA failed")
+			parts := exec.Call()
 			fmt.Printf("Executing TestGradDotGeneralXLA:\n")
 			for ii, name := range []string{"lhs", "rhs", "dot", "grad_lhs", "grad_rhs"} {
 				fmt.Printf("\t%s: %s\n", name, parts[ii].Local().GoStr())

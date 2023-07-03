@@ -31,7 +31,7 @@ func TestTry(t *testing.T) {
 	assert.Equal(t, nil, eErr)
 	assert.Equal(t, 0.0, eFloat)
 
-	// Throw an int.
+	// Panicf an int.
 	eInt, eErr, eFloat = testCountExceptions(func() {
 		panic(7)
 	})
@@ -39,14 +39,14 @@ func TestTry(t *testing.T) {
 	assert.Equal(t, nil, eErr)
 	assert.Equal(t, 0.0, eFloat)
 
-	// Throw an error.
+	// Panicf an error.
 	e := fmt.Errorf("blah")
 	eInt, eErr, eFloat = testCountExceptions(func() { panic(e) })
 	assert.Equal(t, 0, eInt)
 	assert.Equal(t, e, eErr)
 	assert.Equal(t, 0.0, eFloat)
 
-	// Throw something different.
+	// Panicf something different.
 	assert.Panics(t,
 		func() {
 			// Exception of type string is not caught.
@@ -62,6 +62,6 @@ func TestTryCatch(t *testing.T) {
 }
 
 func TestThrow(t *testing.T) {
-	err := TryCatch[error](func() { Throw("2+3=%d", 2+3) })
+	err := TryCatch[error](func() { Panicf("2+3=%d", 2+3) })
 	require.EqualError(t, err, "2+3=5")
 }

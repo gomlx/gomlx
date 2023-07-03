@@ -42,8 +42,9 @@ func BuildManager() *ManagerBuilder {
 	return &ManagerBuilder{numReplicas: 1, numThreads: -1}
 }
 
-// Platform can be left empty (it will pick one per GetDefaultPlatform) or can
-// be selected from one returned by GetPlatforms.
+// Platform specifies the platform to use.
+// If left empty, it will pick one per GetDefaultPlatform.
+// The available platforms can be inspected using GetPlatforms.
 func (b *ManagerBuilder) Platform(p string) *ManagerBuilder {
 	b.platform = p
 	return b
@@ -66,8 +67,8 @@ func (b *ManagerBuilder) NumReplicas(n int) *ManagerBuilder {
 	return b
 }
 
-// NumThreads sets number of threads to use when building Manager. Defaults to -1, which indicates to use what
-// is available.
+// NumThreads sets the number of threads to use when building Manager.
+// It defaults to -1, which indicates to use what is available.
 func (b *ManagerBuilder) NumThreads(n int) *ManagerBuilder {
 	b.numThreads = n
 	return b
@@ -118,14 +119,14 @@ type Manager struct {
 	platform string
 }
 
-// NewGraph constructs an empty Graph. If name is set to "", a unique name is picked. Uses
-// DeviceNumber == 0.
+// NewGraph constructs an empty Graph. If `name` is set to "" a unique name is picked.
+// It uses the manager's default device number.
 func (m *Manager) NewGraph(name string) *Graph {
 	return m.NewGraphWithDeviceNum(name, m.DefaultDeviceNum())
 }
 
 // NewGraphWithDeviceNum constructs an empty Graph, and sets to use the given device number.
-// If name is set to "", a unique name is picked.
+// If name is set to "" a unique name is picked.
 func (m *Manager) NewGraphWithDeviceNum(name string, deviceNum int) *Graph {
 	muGraphCount.Lock()
 	defer muGraphCount.Unlock()

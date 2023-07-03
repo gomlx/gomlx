@@ -17,6 +17,7 @@
 package graph
 
 import (
+	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	timage "github.com/gomlx/gomlx/types/tensor/image"
@@ -135,12 +136,9 @@ func makePoolBuilder(x *Node, reductionType xla.NodeType) *PoolBuilder {
 		x:             x,
 		reductionType: reductionType,
 	}
-	if !g.Ok() {
-		return pool
-	}
 	pool.numSpatialDims = x.Rank() - 2
 	if pool.numSpatialDims <= 0 {
-		pool.graph.SetErrorf("Input x must have rank >= 3, shaped by default as [batch, <spatial_dimensions...>, channels] (alternatively channels come first), "+
+		Panicf("Input x must have rank >= 3, shaped by default as [batch, <spatial_dimensions...>, channels] (alternatively channels come first), "+
 			"but x rank is %d", x.Rank())
 	}
 	return pool.ChannelsAxis(timage.ChannelsLast).NoPadding()
@@ -163,9 +161,6 @@ func (pool *PoolBuilder) ChannelsAxis(channelsAxisConfig timage.ChannelsAxisConf
 //
 // There is no default, and this must be set either with Window or WindowPerDim.
 func (pool *PoolBuilder) Window(windowSize int) *PoolBuilder {
-	if !pool.graph.Ok() {
-		return pool
-	}
 	windowSizes := make([]int, pool.numSpatialDims)
 	for ii := range windowSizes {
 		windowSizes[ii] = windowSize
@@ -177,13 +172,9 @@ func (pool *PoolBuilder) Window(windowSize int) *PoolBuilder {
 //
 // There is no default, and this must be set either with Window or WindowPerDim.
 func (pool *PoolBuilder) WindowPerDim(sizes ...int) *PoolBuilder {
-	if !pool.graph.Ok() {
-		return pool
-	}
 	if len(sizes) != pool.numSpatialDims {
-		pool.graph.SetErrorf("received %d window sizes in WindowPerDim, but x has %d spatial dimensions",
+		Panicf("received %d window sizes in WindowPerDim, but x has %d spatial dimensions",
 			len(sizes), pool.numSpatialDims)
-		return pool
 	}
 	pool.windowSizes = sizes
 	return pool
@@ -199,9 +190,6 @@ func (pool *PoolBuilder) WindowPerDim(sizes ...int) *PoolBuilder {
 //
 // One cannot use strides and dilation at the same time.
 func (pool *PoolBuilder) Strides(strides int) *PoolBuilder {
-	if !pool.graph.Ok() {
-		return pool
-	}
 	stridesPerAxis := make([]int, pool.numSpatialDims)
 	for ii := range stridesPerAxis {
 		stridesPerAxis[ii] = strides
@@ -219,13 +207,9 @@ func (pool *PoolBuilder) Strides(strides int) *PoolBuilder {
 //
 // One cannot use strides and dilation at the same time.
 func (pool *PoolBuilder) StridePerDim(strides ...int) *PoolBuilder {
-	if !pool.graph.Ok() {
-		return pool
-	}
 	if len(strides) != pool.numSpatialDims {
-		pool.graph.SetErrorf("received %d strides in StridePerDim, but x has %d spatial dimensions",
+		Panicf("received %d strides in StridePerDim, but x has %d spatial dimensions",
 			len(strides), pool.numSpatialDims)
-		return pool
 	}
 	pool.strides = strides
 	return pool
@@ -235,9 +219,6 @@ func (pool *PoolBuilder) StridePerDim(strides ...int) *PoolBuilder {
 // of the convolution has the same shape as the input (assuming strides=1).
 // The default is NoPadding.
 func (pool *PoolBuilder) PadSame() *PoolBuilder {
-	if !pool.graph.Ok() {
-		return pool
-	}
 	pool.paddings = nil
 	pool.padSame = true
 	return pool
@@ -247,9 +228,6 @@ func (pool *PoolBuilder) PadSame() *PoolBuilder {
 // the output shape will be reduced on the edges.
 // This is the default.
 func (pool *PoolBuilder) NoPadding() *PoolBuilder {
-	if !pool.graph.Ok() {
-		return pool
-	}
 	pool.paddings = nil
 	pool.padSame = false
 	return pool
@@ -259,13 +237,9 @@ func (pool *PoolBuilder) NoPadding() *PoolBuilder {
 // that means one pair ([2]int) per spatial dimension.
 // The default is PadSame.
 func (pool *PoolBuilder) PaddingPerDim(paddings [][2]int) *PoolBuilder {
-	if !pool.graph.Ok() {
-		return pool
-	}
 	if len(paddings) != pool.numSpatialDims {
-		pool.graph.SetErrorf("received %d paddings in PaddingPerDim, but x has %d spatial dimensions",
+		Panicf("received %d paddings in PaddingPerDim, but x has %d spatial dimensions",
 			len(paddings), pool.numSpatialDims)
-		return pool
 	}
 	pool.paddings = paddings
 	pool.padSame = false
@@ -276,10 +250,6 @@ func (pool *PoolBuilder) PaddingPerDim(paddings [][2]int) *PoolBuilder {
 // it updates the computation graph with convolution, and returns the resulting
 // Node.
 func (pool *PoolBuilder) Done() *Node {
-	g := pool.graph
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	rank := pool.x.Rank()
 
 	// Closure to create slice with value for every axis, using a default value
@@ -299,8 +269,7 @@ func (pool *PoolBuilder) Done() *Node {
 
 	// windowSizes is obligatory.
 	if len(pool.windowSizes) == 0 {
-		g.SetErrorf("window sizes required but not configured -- use .Window() or .WindowPerDim()")
-		return g.InvalidNode()
+		Panicf("window sizes required but not configured -- use .Window() or .WindowPerDim()")
 	}
 	windowDimensions := makeSlice(1, pool.windowSizes)
 
@@ -372,22 +341,16 @@ func takeMeanOfContributions(x, pooledSum *Node, channelsAxis int, windowDimensi
 // and `windowDilations` and `paddings` can be left as nil if not used.
 func reduceWindowXLA(x *Node, reductionType xla.NodeType, windowDimensions, strides, baseDilations, windowDilations []int, paddings [][2]int) *Node {
 	g := validateGraphFromInputs(x)
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	dtype := x.DType()
 	rank := x.Rank()
 	if len(windowDimensions) != rank {
-		g.SetErrorf("windowSizes (length %d) must have same length as rank of input x (rank %d)", len(windowDimensions), rank)
-		return g.InvalidNode()
+		Panicf("windowSizes (length %d) must have same length as rank of input x (rank %d)", len(windowDimensions), rank)
 	}
 	if len(strides) != 0 && len(strides) != rank {
-		g.SetErrorf("strides (length %d) must have same length as rank of input x (rank %d)", len(strides), rank)
-		return g.InvalidNode()
+		Panicf("strides (length %d) must have same length as rank of input x (rank %d)", len(strides), rank)
 	}
 	if len(paddings) > 0 && len(paddings) != rank {
-		g.SetErrorf("paddings (length %d) if given must have same length as rank of input x (rank %d)", len(paddings), rank)
-		return g.InvalidNode()
+		Panicf("paddings (length %d) if given must have same length as rank of input x (rank %d)", len(paddings), rank)
 	}
 
 	// Define the initial value for the reduction:
@@ -400,7 +363,7 @@ func reduceWindowXLA(x *Node, reductionType xla.NodeType, windowDimensions, stri
 	case xla.ReduceMultiplyNode:
 		init = ScalarOne(g, dtype)
 	default:
-		g.SetErrorf("unsupported type of ReduceWindow: %s -- only %s, %s and %s are supported",
+		Panicf("unsupported type of ReduceWindow: %s -- only %s, %s and %s are supported",
 			reductionType, xla.ReduceMaxNode, xla.ReduceSumNode, xla.ReduceMultiplyNode)
 	}
 
@@ -445,22 +408,16 @@ func reduceWindowXLA(x *Node, reductionType xla.NodeType, windowDimensions, stri
 // the value from source. It's used to calculate the gradient of a MaxPool.
 func selectAndScatterWithGeneralPaddingXLA(x, source *Node, windowDimensions, strides []int, paddings [][2]int) *Node {
 	g := validateGraphFromInputs(x, source)
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	dtype := x.DType()
 	rank := x.Rank()
 	if len(windowDimensions) != rank {
-		g.SetErrorf("windowSizes (length %d) must have same length as rank of input x (rank %d)", len(windowDimensions), rank)
-		return g.InvalidNode()
+		Panicf("windowSizes (length %d) must have same length as rank of input x (rank %d)", len(windowDimensions), rank)
 	}
 	if len(strides) != rank {
-		g.SetErrorf("strides (length %d) must have same length as rank of input x (rank %d)", len(strides), rank)
-		return g.InvalidNode()
+		Panicf("strides (length %d) must have same length as rank of input x (rank %d)", len(strides), rank)
 	}
 	if len(paddings) > 0 && len(paddings) != rank {
-		g.SetErrorf("paddings (length %d) if given must have same length as rank of input x (rank %d)", len(paddings), rank)
-		return g.InvalidNode()
+		Panicf("paddings (length %d) if given must have same length as rank of input x (rank %d)", len(paddings), rank)
 	}
 
 	init := ScalarZero(g, dtype)
@@ -483,18 +440,12 @@ func selectAndScatterWithGeneralPaddingXLA(x, source *Node, windowDimensions, st
 
 // reduceWindowVJP calculates v*d(reduceWindow(x))/{dx, d_kernel).
 func reduceWindowVJP(node, v *Node, _ shapes.Shape) []*Node {
-	g := node.Graph()
-	if !g.Ok() {
-		return nil
-	}
-
 	// Recover parameters from serialized node.
 	x := node.inputs[0]
 	initValue := node.inputs[1]
 	reductionType := xla.NodeType(node.serializedNode.Int)
 	if reductionType != xla.ReduceMaxNode && reductionType != xla.ReduceSumNode {
-		g.SetErrorf("ReduceWindow gradient only defined for ReduceMax or ReduceSum operation, instead got %s", reductionType)
-		return nil
+		Panicf("ReduceWindow gradient only defined for ReduceMax or ReduceSum operation, instead got %s", reductionType)
 	}
 
 	packedPos := 0
@@ -512,12 +463,12 @@ func reduceWindowVJP(node, v *Node, _ shapes.Shape) []*Node {
 	rank := decode()
 	lenBaseDilations := decode()
 	if lenBaseDilations > 0 {
-		g.SetErrorf("reduceWindow(%s) does not define a gradient if using baseDilations", reductionType)
+		Panicf("reduceWindow(%s) does not define a gradient if using baseDilations", reductionType)
 		return nil
 	}
 	lenWindowDilations := decode()
 	if lenWindowDilations > 0 {
-		g.SetErrorf("reduceWindow(%s) does not define a gradient if using windowDilations", reductionType)
+		Panicf("reduceWindow(%s) does not define a gradient if using windowDilations", reductionType)
 		return nil
 	}
 	lenPaddings := decode()
@@ -536,8 +487,7 @@ func reduceWindowVJP(node, v *Node, _ shapes.Shape) []*Node {
 	_, _ = baseDilations, windowDilations
 
 	if lenBaseDilations > 0 || lenWindowDilations > 0 {
-		g.SetErrorf("gradient of ReduceWindow with base or window dilation not defined")
-		return nil
+		Panicf("gradient of ReduceWindow with base or window dilation not defined")
 	}
 
 	//fmt.Printf("Grad(reduceWindow(%s):\n", reductionType)
@@ -554,10 +504,8 @@ func reduceWindowVJP(node, v *Node, _ shapes.Shape) []*Node {
 	} else if reductionType == xla.ReduceSumNode {
 		vjpX = dilateConvolveToMatchSumPooling(x, v, windowDimensions, strides, paddings)
 	} else {
-		g.SetErrorf("ReduceWindow gradient only defined for ReduceMax or ReduceSum operation, instead got %s", reductionType)
-		return nil
+		Panicf("ReduceWindow gradient only defined for ReduceMax or ReduceSum operation, instead got %s", reductionType)
 	}
-	//fmt.Println()
 	return []*Node{vjpX, ZerosLike(initValue)}
 }
 
@@ -566,24 +514,18 @@ func reduceWindowVJP(node, v *Node, _ shapes.Shape) []*Node {
 // Since the convolution would be with a kernel of 1s we instead use `graph.Pad` and reduceWindowXLA instead.
 func dilateConvolveToMatchSumPooling(x, backProp *Node, windowDimensions, strides []int, paddings [][2]int) *Node {
 	g := validateGraphFromInputs(x, backProp)
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	dtype := x.DType()
 	rank := x.Rank()
 	//dims := x.Shape().Dimensions
 
 	if len(windowDimensions) != rank {
-		g.SetErrorf("windowSizes (length %d) must have same length as rank of input x (rank %d)", len(windowDimensions), rank)
-		return g.InvalidNode()
+		Panicf("windowSizes (length %d) must have same length as rank of input x (rank %d)", len(windowDimensions), rank)
 	}
 	if len(strides) != rank {
-		g.SetErrorf("strides (length %d) must have same length as rank of input x (rank %d)", len(strides), rank)
-		return g.InvalidNode()
+		Panicf("strides (length %d) must have same length as rank of input x (rank %d)", len(strides), rank)
 	}
 	if len(paddings) > 0 && len(paddings) != rank {
-		g.SetErrorf("paddings (length %d) if given must have same length as rank of input x (rank %d)", len(paddings), rank)
-		return g.InvalidNode()
+		Panicf("paddings (length %d) if given must have same length as rank of input x (rank %d)", len(paddings), rank)
 	}
 
 	// Configure the padding needed to expand the backprop back to its original size.

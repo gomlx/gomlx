@@ -183,7 +183,7 @@ func attachPlot(loop *train.Loop, sampler *adult.Dataset) {
 		x := float64(loop.LoopStep)
 		lossData.AddPoint(0, x, metrics[1].Value().(float64))
 		lossData.AddPoint(1, x, metrics[2].Value().(float64))
-		// Run evaluation on test dataset.
+		// Run2 evaluation on test dataset.
 		evalMetrics, err := loop.Trainer.Eval(sampler)
 		if err != nil {
 			return errors.WithMessagef(err, "Evaluating on test for global_step=%d", loop.LoopStep)

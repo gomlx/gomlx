@@ -23,6 +23,7 @@ import (
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/stretchr/testify/require"
 	"math"
 	"reflect"
 	"testing"
@@ -52,11 +53,7 @@ func testFuncOneInput(t *testing.T, testName string, graphFn graphFnOneInputToTe
 	g := manager.NewGraph(testName)
 	input, output := graphFn(g)
 	g.Compile(input, output)
-	g.MustOk()
 	tuple := g.Run(nil)
-	if !tuple.Ok() {
-		t.Fatalf("Failed to run graph: %+v", tuple.Error())
-	}
 	results := tuple.SplitTuple()
 	fmt.Printf("\t%s(%s) = %s\n", testName, results[0].Local().GoStr(), results[1].Local().GoStr())
 	if !slices.SlicesInDelta(results[1].Local().Value(), want, slices.Epsilon) {
@@ -71,9 +68,6 @@ func TestConstant(t *testing.T) {
 	{
 		g := manager.NewGraph("")
 		n := Const(g, 5)
-		if !g.Ok() {
-			t.Fatalf("Failed to create scalar constant: %v", g.Error())
-		}
 		shape := n.Shape()
 		if shape.DType != shapes.Int64 || shape.Rank() != 0 {
 			t.Errorf("ConstLocal has invalid shape: %s", shape)
@@ -82,9 +76,6 @@ func TestConstant(t *testing.T) {
 	{
 		g := manager.NewGraph("")
 		n := Const(g, [][]float32{{1.2, 1.3}, {2.4, 2.5}, {2.6, 2.7}})
-		if !g.Ok() {
-			t.Fatalf("Failed to create multi-dimension constant: %v", g.Error())
-		}
 		shape := n.Shape()
 		if shape.DType != shapes.Float32 || !reflect.DeepEqual(shape.Dimensions, []int{3, 2}) {
 			fmt.Printf("\tTestConstant: node %s\n", n)
@@ -95,18 +86,8 @@ func TestConstant(t *testing.T) {
 
 func compileRunTransfer(t *testing.T, g *Graph, msg string) *tensor.Local {
 	g.Compile()
-	g.MustOk()
-	device, err := g.RunError(nil)
-	if err != nil {
-		t.Fatalf("Failed to run %s: %v", msg, err)
-	}
-	if device.Empty() {
-		t.Fatalf("%s resulted in emtpy tensor.", msg)
-	}
+	device := g.Run(nil)
 	local := device.Local()
-	if local.Error() != nil {
-		t.Fatalf("Failed to transfer %s result: %v", msg, local.Error())
-	}
 	return local
 }
 
@@ -118,13 +99,8 @@ func TestAdd(t *testing.T) {
 		x := Const(g, 5)
 		y := Const(g, 7)
 		n := Add(x, y)
-		if !g.Ok() {
-			t.Fatalf("Failed to create Graph: %v", g.Error())
-		}
 		wantShape := shapes.Shape{DType: shapes.Int64}
-		if !n.Shape().Eq(wantShape) {
-			t.Fatalf("Add invalid shape %s, wanted %s", n.Shape(), wantShape)
-		}
+		require.Truef(t, n.Shape().Eq(wantShape), "Add invalid shape %s, wanted %s", n.Shape(), wantShape)
 		local := compileRunTransfer(t, g, "scalar Graph")
 		got := local.Value().(int)
 		if got != 12 {
@@ -139,9 +115,6 @@ func TestAdd(t *testing.T) {
 		x := Const(g, [][]float32{{1.1, 1.2}, {1.3, 1.4}})
 		y := Const(g, [][]float32{{10, 10}, {20, 20}})
 		n := Add(x, y)
-		if !g.Ok() {
-			t.Fatalf("Failed to create Graph: %v", g.Error())
-		}
 		wantShape := shapes.Make(shapes.Float32, 2, 2)
 		if !n.Shape().Eq(wantShape) {
 			t.Fatalf("Add invalid shape %s, wanted %s", n.Shape(), wantShape)
@@ -161,9 +134,6 @@ func TestAdd(t *testing.T) {
 		x := Const(g, [][]float32{{1.1, 1.2}, {1.3, 1.4}})
 		y := Const(g, [][]float32{{1}, {10}})
 		n := Add(x, y)
-		if !g.Ok() {
-			t.Fatalf("Failed to create Graph: %v", g.Error())
-		}
 		wantShape := shapes.Make(shapes.Float32, 2, 2)
 		if !n.Shape().Eq(wantShape) {
 			t.Fatalf("Add invalid shape %s, wanted %s", n.Shape(), wantShape)
@@ -183,9 +153,6 @@ func TestAdd(t *testing.T) {
 		x := Const(g, [][]float32{{1.1, 1.2}, {1.3, 1.4}})
 		y := Const(g, float32(1))
 		n := Add(x, y)
-		if !g.Ok() {
-			t.Fatalf("Failed to create Graph: %v", g.Error())
-		}
 		wantShape := shapes.Make(shapes.Float32, 2, 2)
 		if !n.Shape().Eq(wantShape) {
 			t.Fatalf("Add invalid shape %s, wanted %s", n.Shape(), wantShape)
@@ -214,24 +181,17 @@ func testTupleParameter(t *testing.T, manager *Manager) {
 	y := GetTupleElement(xy, 1)
 	// x^2 + 2*y
 	Add(Mul(x, x), Mul(Const(g, 2.0), y))
-	if !g.Ok() {
-		t.Fatalf("Failed to create Graph: %v", g.Error())
-	}
 	if xy.ParameterHandle() == InvalidParameterHandle {
 		t.Fatalf("Invalid paramter xlaHandle for tuple")
 	}
 	g.Compile()
-	g.MustOk()
 
 	// Tests for various parameters.
 	for xV := float64(0); xV < 20; xV += 1 {
 		for yV := float64(0); yV < 20; yV += 1 {
 			xyV := tensor.MakeLocalTupleAny(xV, yV)
-			global, err := g.RunError(ParamsMap{xy: xyV})
-			if err != nil {
-				t.Fatalf("Failed to run for xy=%s: %v", xyV, err)
-			}
-			local := global.Local()
+			device := g.Run(ParamsMap{xy: xyV})
+			local := device.Local()
 			got := local.Value().(float64)
 			want := xV*xV + 2*yV
 			if got != want {
@@ -252,23 +212,16 @@ func TestParameter(t *testing.T) {
 		x := g.Parameter("x", shapes.Scalar[float32]())
 		y := g.Parameter("y", shapes.Scalar[float32]())
 		Add(x, y)
-		if !g.Ok() {
-			t.Fatalf("Failed to create Graph: %v", g.Error())
-		}
 		if x.ParameterHandle() == InvalidParameterHandle || y.ParameterHandle() == InvalidParameterHandle || x.ParameterHandle() == y.ParameterHandle() {
 			t.Fatalf("Invalid paramter handles: x=%d, y=%d", x.ParameterHandle(), y.ParameterHandle())
 		}
 		g.Compile()
-		g.MustOk()
 
 		// Tests for various parameters.
 		for xV := float32(0); xV < 3; xV += 1 {
 			for yV := float32(0); yV < 3; yV += 1 {
-				global, err := g.RunError(ParamsMap{x: xV, y: yV})
-				if err != nil {
-					t.Fatalf("Failed to run for x=%f, y=%f: %v", xV, yV, err)
-				}
-				local := global.Local()
+				device := g.Run(ParamsMap{x: xV, y: yV})
+				local := device.Local()
 				got := local.Value().(float32)
 				if got != xV+yV {
 					fmt.Printf("%s\n", g)
@@ -321,9 +274,6 @@ func TestTwoArgsOps(t *testing.T) {
 			x := Const(g, xSlices)
 			y := Const(g, yValue)
 			n := test.fnGraph(x, y)
-			if !g.Ok() {
-				t.Fatalf("Failed to create Graph: %v", g.Error())
-			}
 			wantShape := shapes.Make(shapes.Float32, 2, 2)
 			if !n.Shape().Eq(wantShape) {
 				t.Fatalf("Add invalid shape %s, wanted %s", n.Shape(), wantShape)
@@ -357,9 +307,6 @@ func TestTwoArgsOps(t *testing.T) {
 			x := Const(g, xSlices)
 			y := Const(g, yValue)
 			n := test.fnGraph(x, y)
-			if !g.Ok() {
-				t.Fatalf("Failed to create Graph: %v", g.Error())
-			}
 			wantShape := shapes.Make(shapes.Int64, 2, 2)
 			if !n.Shape().Eq(wantShape) {
 				t.Fatalf("Add invalid shape %s, wanted %s", n.Shape(), wantShape)
@@ -419,9 +366,6 @@ func TestOneArgOps(t *testing.T) {
 		g := manager.NewGraph("")
 		x := Const(g, xSlices)
 		n := test.fnGraph(x)
-		if !g.Ok() {
-			t.Fatalf("Failed to create Graph: %+v", g.Error())
-		}
 		wantShape := shapes.Make(shapes.Float64, 2, 2)
 		if !n.Shape().Eq(wantShape) {
 			t.Fatalf("Add invalid shape %s, wanted %s", n.Shape(), wantShape)
@@ -461,11 +405,11 @@ func TestLogicalOps(t *testing.T) {
 	//	}, []bool{false, true, false, false})
 }
 
-// mustCompileAndRun compiles, runs and returns the value on the tensor. Doesn't work for tuples though.
-func mustCompileAndRun(g *Graph) any {
-	g.MustCompile()
-	global, _ := g.RunError(nil)
-	got := global.Local().Value()
+// compileAndRun compiles, runs and returns the value on the tensor. Doesn't work for tuples though.
+func compileAndRun(g *Graph) any {
+	g.Compile()
+	device := g.Run(nil)
+	got := device.Local().Value()
 	return got
 }
 
@@ -479,7 +423,7 @@ func TestDot(t *testing.T) {
 	w0 := Const(g, [][]float32{{1, 0}, {1, -1}, {-1, 1}})
 	// Dot(inputs, w0) -> shape [batch=4, dims=2]
 	Dot(inputs, w0) // Last node created in the graph is taken as output by default.
-	got := mustCompileAndRun(g)
+	got := compileAndRun(g)
 	want := [][]float32{{0, 1.1}, {0, 11}, {0, 111}, {0, 1111}}
 	if !slices.DeepSliceCmp(got, want, slices.Close[float32]) {
 		fmt.Printf("%s\n", g)
@@ -494,7 +438,7 @@ func TestBroadcast(t *testing.T) {
 		g := manager.NewGraph("")
 		input := Const(g, 7)
 		BroadcastToDims(input, 2, 3) // Last node created in the graph is taken as output by default.
-		got := mustCompileAndRun(g)
+		got := compileAndRun(g)
 		want := [][]int{{7, 7, 7}, {7, 7, 7}}
 		if !slices.DeepSliceCmp(got, want, slices.Equal[int]) {
 			fmt.Printf("%s\n", g)
@@ -507,7 +451,7 @@ func TestBroadcast(t *testing.T) {
 		g := manager.NewGraph("")
 		input := Const(g, []float32{1.1, 1.2})
 		BroadcastPrefix(input, []int{2, 1}) // Last node created in the graph is taken as output by default.
-		got := mustCompileAndRun(g)
+		got := compileAndRun(g)
 		want := [][][]float32{{{1.1, 1.2}}, {{1.1, 1.2}}} // Shape [2, 1, 2].
 		if !slices.DeepSliceCmp(got, want, slices.Equal[float32]) {
 			fmt.Printf("%s\n", g)
@@ -537,7 +481,7 @@ func TestFill(t *testing.T) {
 	{
 		g := manager.NewGraph("FillScalar")
 		FillScalar(g, shapes.Make(shapes.Int64, 3, 1), 4.0)
-		got := mustCompileAndRun(g)
+		got := compileAndRun(g)
 		want := [][]int{{4}, {4}, {4}}
 		if !slices.DeepSliceCmp(got, want, slices.Equal[int]) {
 			t.Errorf("Wanted %v, got %v", want, got)
@@ -546,7 +490,7 @@ func TestFill(t *testing.T) {
 	{
 		g := manager.NewGraph("Ones")
 		Ones(g, shapes.Make(shapes.Float32, 3, 1))
-		got := mustCompileAndRun(g)
+		got := compileAndRun(g)
 		want := [][]float32{{1}, {1}, {1}}
 		if !slices.DeepSliceCmp(got, want, slices.Equal[float32]) {
 			t.Errorf("Wanted %v, got %v", want, got)
@@ -555,7 +499,7 @@ func TestFill(t *testing.T) {
 	{
 		g := manager.NewGraph("Zeros")
 		Zeros(g, shapes.Make(shapes.Float64, 3, 1))
-		got := mustCompileAndRun(g)
+		got := compileAndRun(g)
 		want := [][]float64{{0}, {0}, {0}}
 		if !slices.DeepSliceCmp(got, want, slices.Equal[float64]) {
 			t.Errorf("Wanted %v, got %v", want, got)
@@ -570,9 +514,6 @@ func reduceSumGraph(t *testing.T, m *Manager, reduceDims []int) *Graph {
 	n2 := Add(n1, n0)
 	o0 := ReduceSum(n2, reduceDims...)
 	g.Compile(o0)
-	if !g.Ok() {
-		t.Fatalf("Failed to create/compile graph: %+v", g.Error())
-	}
 	return g
 }
 
@@ -588,10 +529,7 @@ func TestReduceSum(t *testing.T) {
 	}
 	for _, testCase := range cases {
 		g := reduceSumGraph(t, manager, testCase.dims)
-		gotT, err := g.RunError(nil)
-		if err != nil {
-			t.Fatalf("Failed to run Reduce graph for %v: %v", testCase.dims, err)
-		}
+		gotT := g.Run(nil)
 		got := gotT.Local().Value()
 		if !slices.DeepSliceCmp(got, testCase.want, slices.Close[float64]) {
 			t.Errorf("Wanted %v, got %v", testCase.want, got)
@@ -636,7 +574,7 @@ func TestReshape(t *testing.T) {
 		g := manager.NewGraph("")
 		input := Const(g, [][][]float32{{{1.1, 1.2}}}) // Shape [1, 1, 2]
 		ReshapeWithShape(input, shapes.Make(input.DType(), 2, 1))
-		got := mustCompileAndRun(g)
+		got := compileAndRun(g)
 		want := [][]float32{{1.1}, {1.2}}
 		if !slices.DeepSliceCmp(got, want, slices.Equal[float32]) {
 			fmt.Printf("%s\n", g)
@@ -657,7 +595,7 @@ func TestTuple(t *testing.T) {
 			t.Errorf("Expected shape to be tuple, got %s instead", tuple.Shape())
 		}
 		GetTupleElement(tuple, 0)
-		got := mustCompileAndRun(g)
+		got := compileAndRun(g)
 		want := []float32{1.1, 1.2}
 		if !slices.DeepSliceCmp(got, want, slices.Equal[float32]) {
 			fmt.Printf("%s\n", g)
@@ -674,8 +612,8 @@ func TestTuple(t *testing.T) {
 		if !tupleN.Shape().IsTuple() {
 			t.Errorf("Expected shape to be tuple, got %s instead", tupleN.Shape())
 		}
-		g.MustCompile()
-		tupleT, _ := g.RunError(nil)
+		g.Compile()
+		tupleT := g.Run(nil)
 		if !tupleT.IsTuple() {
 			t.Errorf("Expected tensor shape to be tuple, got %s instead", tupleN.Shape())
 		}
@@ -709,8 +647,8 @@ func TestIota(t *testing.T) {
 	{
 		g := manager.NewGraph("iota0")
 		Iota(g, MakeShape(F64, 2, 2), 0)
-		g.MustCompile()
-		got := g.MustRun(nil).Local().Value()
+		g.Compile()
+		got := g.Run(nil).Local().Value()
 		want := [][]float64{{0, 0}, {1, 1}}
 		if !slices.DeepSliceCmp(got, want, slices.Equal[float64]) {
 			t.Fatalf("Iota: want %v, got %v", want, got)
@@ -719,8 +657,8 @@ func TestIota(t *testing.T) {
 	{
 		g := manager.NewGraph("iota0")
 		Iota(g, MakeShape(F64, 2, 2), 1)
-		g.MustCompile()
-		got := g.MustRun(nil).Local().Value()
+		g.Compile()
+		got := g.Run(nil).Local().Value()
 		want := [][]float64{{0, 1}, {0, 1}}
 		if !slices.DeepSliceCmp(got, want, slices.Equal[float64]) {
 			t.Fatalf("Iota: want %v, got %v", want, got)
@@ -792,9 +730,6 @@ func TestGather(t *testing.T) {
 		indices := Const(g, 1)
 		gather := Gather(numbers, indices)
 		g.Compile(gather)
-		if g.Error() != nil {
-			t.Fatalf("Failed to create graph: %v", g.Error())
-		}
 		got := g.Run(nil).Local()
 		fmt.Printf("\t\tGather=%v\n", got)
 		want := []float64{3, 4, 5}
@@ -810,11 +745,8 @@ func TestGather(t *testing.T) {
 		numbers := IotaFull(g, MakeShape(F64, 5, 3))
 		indices := Const(g, [][]int{{2}, {0}})
 		gather := Gather(numbers, indices)
-		g.MustCompile(gather)
-		if g.Error() != nil {
-			t.Fatalf("Failed to create graph: %v", g.Error())
-		}
-		got := g.MustRun(nil).Local()
+		g.Compile(gather)
+		got := g.Run(nil).Local()
 		fmt.Printf("\t\tGather=%v\n", got)
 		want := [][]float64{{6, 7, 8}, {0, 1, 2}}
 		if !slices.DeepSliceCmp(got.Value(), want, slices.Equal[float64]) {
@@ -829,11 +761,8 @@ func TestGather(t *testing.T) {
 		numbers := IotaFull(g, MakeShape(F64, 5, 3))
 		indices := Const(g, [][][]int{{{2}, {0}}, {{2}, {1}}})
 		gather := Gather(numbers, indices)
-		g.MustCompile(gather)
-		if g.Error() != nil {
-			t.Fatalf("Failed to create graph: %v", g.Error())
-		}
-		got := g.MustRun(nil).Local()
+		g.Compile(gather)
+		got := g.Run(nil).Local()
 		fmt.Printf("\t\tGather=%v\n", got)
 		want := [][][]float64{{{6, 7, 8}, {0, 1, 2}}, {{6, 7, 8}, {3, 4, 5}}}
 		if !slices.DeepSliceCmp(got.Value(), want, slices.Equal[float64]) {
@@ -848,11 +777,8 @@ func TestGather(t *testing.T) {
 		numbers := IotaFull(g, MakeShape(F64, 5, 2, 2))
 		indices := Const(g, [][]int{{2}, {0}, {1}, {3}})
 		gather := Gather(numbers, indices)
-		g.MustCompile(gather)
-		if g.Error() != nil {
-			t.Fatalf("Failed to create graph: %v", g.Error())
-		}
-		got := g.MustRun(nil).Local()
+		g.Compile(gather)
+		got := g.Run(nil).Local()
 		fmt.Printf("\t\tGather=%v\n", got)
 		want := [][][]float64{{{8, 9}, {10, 11}}, {{0, 1}, {2, 3}}, {{4, 5}, {6, 7}}, {{12, 13}, {14, 15}}}
 		if !slices.DeepSliceCmp(got.Value(), want, slices.Equal[float64]) {
@@ -897,9 +823,6 @@ func TestIndicesForShape(t *testing.T) {
 	shape := MakeShape(F64, 2, 3, 4)
 	numbers := IndicesForShape(g, shape)
 	g.Compile(numbers)
-	if g.Error() != nil {
-		t.Fatalf("Failed to create graph: %v", g.Error())
-	}
 	got := g.Run(nil).Local()
 	fmt.Printf("\tIndicesForShape(%s)=%v\n", shape, got)
 	want := [][]int{{0, 0, 0}, {0, 0, 1}, {0, 0, 2}, {0, 0, 3}, {0, 1, 0}, {0, 1, 1}, {0, 1, 2}, {0, 1, 3}, {0, 2, 0}, {0, 2, 1}, {0, 2, 2}, {0, 2, 3}, {1, 0, 0}, {1, 0, 1}, {1, 0, 2}, {1, 0, 3}, {1, 1, 0}, {1, 1, 1}, {1, 1, 2}, {1, 1, 3}, {1, 2, 0}, {1, 2, 1}, {1, 2, 2}, {1, 2, 3}}
@@ -918,9 +841,6 @@ func TestScatter(t *testing.T) {
 		indices := Const(g, 1)
 		scatter := Scatter(indices, numbers, MakeShape(F64, 2, 3))
 		g.Compile(scatter)
-		if g.Error() != nil {
-			t.Fatalf("Failed to create graph: %v", g.Error())
-		}
 		got := g.Run(nil).Local()
 		fmt.Printf("\t\tscatter=%v\n", got)
 		want := [][]float64{{0, 0, 0}, {2, 3, 4}}
@@ -937,11 +857,8 @@ func TestScatter(t *testing.T) {
 		indices := Const(g, [][]int{{2}, {0}})
 		operand := Ones(g, MakeShape(F64, 3, 3, 1))
 		scatter := ScatterAdd(operand, indices, numbers)
-		g.MustCompile(scatter)
-		if g.Error() != nil {
-			t.Fatalf("Failed to create graph: %v", g.Error())
-		}
-		got := g.MustRun(nil).Local()
+		g.Compile(scatter)
+		got := g.Run(nil).Local()
 		fmt.Printf("\t\tscatter=%v\n", got)
 		want := [][][]float64{{{4}, {5}, {6}}, {{1}, {1}, {1}}, {{1}, {2}, {3}}}
 		if !slices.DeepSliceCmp(got.Value(), want, slices.Equal[float64]) {
@@ -960,9 +877,6 @@ func TestConcatenate(t *testing.T) {
 		x2 := Add(IotaFull(g, MakeShape(F64, 5)), Const(g, float64(3)))
 		concat := Concatenate([]*Node{x1, x2}, 0)
 		g.Compile(concat)
-		if g.Error() != nil {
-			t.Fatalf("Failed to create graph: %+v", g.Error())
-		}
 		got := g.Run(nil).Local()
 		fmt.Printf("\t\tresult=%s\n", got.GoStr())
 		want := []float64{0, 1, 2, 3, 4, 5, 6, 7}
@@ -978,9 +892,6 @@ func TestConcatenate(t *testing.T) {
 		x2 := Add(IotaFull(g, MakeShape(F64, 2, 1, 2)), Const(g, float64(8)))
 		concat := Concatenate([]*Node{x1, x2}, 1)
 		g.Compile(concat)
-		if g.Error() != nil {
-			t.Fatalf("Failed to create graph: %+v", g.Error())
-		}
 		got := g.Run(nil).Local()
 		fmt.Printf("\t\tresult=%s\n", got.GoStr())
 		want := [][][]float64{{{0, 1}, {2, 3}, {8, 9}}, {{4, 5}, {6, 7}, {10, 11}}}

@@ -387,7 +387,7 @@ func (r *Trainer) callGraphFn(
 		}
 	}
 
-	// Run trainStepExecMap and check everything went fine.
+	// Run2 trainStepExecMap and check everything went fine.
 	metrics, err = exec.Call(inputsAndLabels...)
 	if err != nil {
 		err = errors.WithMessage(err, "failed to execute train/eval step")

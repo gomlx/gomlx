@@ -22,8 +22,6 @@ import (
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"math"
 	"runtime/debug"
 	"testing"
@@ -37,13 +35,7 @@ func TestGradientAdd(t *testing.T) {
 	output := ReduceAllSum(Add(c1, c2))
 	gradients := Gradient(output, c1, c2)
 	g.Compile(output, Tuple(gradients...))
-	if g.Error() != nil {
-		t.Fatalf("Failed to compile graph: %+v", g.Error())
-	}
 	results := g.Run(nil)
-	if results.Error() != nil {
-		t.Fatalf("Failed to run graph: %+v", results.Error())
-	}
 	resultsSplit := results.SplitTuple()
 
 	{
@@ -89,13 +81,7 @@ func TestGradientDot(t *testing.T) {
 		output := Dot(v1, v2)
 		gradients := Gradient(output, v1, v2)
 		g.Compile(output, Tuple(gradients...))
-		if g.Error() != nil {
-			t.Fatalf("Failed to compile graph: %+v", g.Error())
-		}
 		results := g.Run(nil)
-		if results.Error() != nil {
-			t.Fatalf("Failed to run graph: %+v", results.Error())
-		}
 		resultsSplit := results.SplitTuple()
 		{
 			got := resultsSplit[0].Local()
@@ -134,9 +120,6 @@ func TestGradientDot(t *testing.T) {
 		sum := ReduceAllSum(output)
 		gradients := Gradient(sum, v1, v2)
 		g.Compile(sum, output, v1, v2, Tuple(gradients...))
-		if g.Error() != nil {
-			t.Fatalf("Failed to compile graph: %+v", g.Error())
-		}
 		results := g.Run(nil).SplitTuple()
 		fmt.Println()
 		fmt.Printf("\tv1=%v\n", results[2].Local())     // {{2, 2, 2, 2}, {3, 3, 3, 3}}
@@ -179,9 +162,6 @@ func TestGradientDot(t *testing.T) {
 		sum := ReduceAllSum(output)
 		gradients := Gradient(sum, v1, v2)
 		g.Compile(sum, output, v1, v2, Tuple(gradients...))
-		if g.Error() != nil {
-			t.Fatalf("Failed to compile graph: %+v", g.Error())
-		}
 		results := g.Run(nil).SplitTuple()
 		fmt.Println()
 		fmt.Printf("\tv1=%v\n", results[2].Local())     // {{2, 2, 2, 2}, {3, 3, 3, 3}}
@@ -249,13 +229,8 @@ func TestGradientGather(t *testing.T) {
 		// numbers=(Float64)[5 3]: [[0 1 2] [3 4 5] [6 7 8] [9 10 11] [12 13 14]]
 		numbers := IotaFull(g, MakeShape(F64, 5, 3))
 		gather := Gather(numbers, ScalarOne(g, shapes.I64))
-		require.Truef(t, g.Ok(), "Failed on Gather(): %+v", g.Error())
 		gradients := Gradient(ReduceAllSum(gather), numbers)
-		require.Truef(t, g.Ok(), "Failed on Gather(): %+v", g.Error())
 		g.Compile(gather, gradients[0])
-		if g.Error() != nil {
-			t.Fatalf("Failed to create graph: %v", g.Error())
-		}
 		results := g.Run(nil).SplitTuple()
 		{
 			got := results[0].Local()
@@ -286,9 +261,6 @@ func TestGradientGather(t *testing.T) {
 		gather := Gather(numbersMul, indices)
 		gradients := Gradient(ReduceAllSum(gather), numbers)
 		g.Compile(gather, gradients[0])
-		if g.Error() != nil {
-			t.Fatalf("Failed to create graph: %v", g.Error())
-		}
 		results := g.Run(nil).SplitTuple()
 		{
 			got := results[0].Local()
@@ -318,9 +290,6 @@ func TestGradientGather(t *testing.T) {
 		gather := Gather(numbers, indices)
 		gradients := Gradient(ReduceAllSum(gather), numbers)
 		g.Compile(gather, gradients[0])
-		if g.Error() != nil {
-			t.Fatalf("Failed to create graph: %v", g.Error())
-		}
 		results := g.Run(nil).SplitTuple()
 		{
 			got := results[0].Local()
@@ -365,11 +334,7 @@ func testGradients[T interface{ float32 | float64 }](t *testing.T, name string, 
 	}
 	exec := NewExec(manager, fn)
 	var zero T
-	results, err := exec.Call(zero)
-	assert.NoErrorf(t, err, "Failed %s", name) // Failed test, but keep test running.
-	if err != nil {
-		return
-	}
+	results := exec.Call(zero)
 	fmt.Printf("\toutput=%v\n", results[0].Local().GoStr())
 	for ii, want := range wantForGrad {
 		got := results[ii+1].Local()

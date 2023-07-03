@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"time"
 
+	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/gomlx/gomlx/xla"
@@ -55,21 +56,13 @@ func RngState() tensor.Tensor {
 // It returns the new state of the RNG and the generated values (with random bits) with the given shape.
 func RngBitGeneratorXLA(state *Node, shape shapes.Shape) (newState, values *Node) {
 	g := validateGraphFromInputs(state)
-	newState, values = g.InvalidNode(), g.InvalidNode()
-	if !g.Ok() {
-		return
-	}
 	pair := newNode(g, &xla.SerializedNode{
 		Type:  xla.RngBitGeneratorNode,
 		Shape: shape,
 	}, []*Node{state})
-	if !pair.Ok() {
-		return
-	}
 	parts := SplitTuple(pair)
 	if len(parts) != 2 {
-		g.SetErrorf("xla.RngBitGeneratorNode returned %d components, but only 2 expected!?", len(parts))
-		return
+		Panicf("xla.RngBitGeneratorNode returned %d components, but only 2 expected!?", len(parts))
 	}
 	newState, values = parts[0], parts[1]
 	return
@@ -88,12 +81,6 @@ func RngStateSplit(rngState *Node) (newRngState1, newRngState2 *Node) {
 //
 // It uses and updates the random number generator (RNG) state in `rngState`.
 func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Node) {
-	g := rngState.Graph()
-	newRngState = rngState
-	values = g.InvalidNode()
-	if !g.Ok() {
-		return
-	}
 	switch shape.DType {
 	case shapes.Float64:
 		bitsShape := shape.Copy()
@@ -104,7 +91,6 @@ func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Nod
 		values = MulScalar(values, math.Pow(2.0, -64))
 		values = MinScalar(values, math.Nextafter(1.0, 0.0))
 		values = StopGradient(values)
-		return
 	case shapes.Float32:
 		bitsShape := shape.Copy()
 		bitsShape.DType = shapes.UInt32
@@ -114,9 +100,9 @@ func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Nod
 		values = MulScalar(values, 1.0/(float64(1<<32)))
 		values = MinScalar(values, float64(math.Nextafter32(1.0, 0.0)))
 		values = StopGradient(values)
-		return
+	default:
+		Panicf("RandomUniform() only accepts Float32 and Float64 dtypes, shape %s given", shape)
 	}
-	g.SetErrorf("RandomUniform() only accepts Float32 and Float64 dtypes, shape %s given", shape)
 	return
 }
 
@@ -137,20 +123,11 @@ func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Nod
 // It uses and updates the random number generator (RNG) state in `rngState`.
 func RandomNormal(rngState *Node, shape shapes.Shape) (newRngState, values *Node) {
 	g := rngState.Graph()
-	newRngState = rngState
-	values = g.InvalidNode()
-	if !g.Ok() {
-		return
-	}
-
 	var u1, u2 *Node
-	newRngState, u1 = RandomUniform(newRngState, shape)
+	newRngState, u1 = RandomUniform(rngState, shape)
 	// u1 must never be zero, so we take the smallest positive non-zero value.
 	u1 = Max(u1, Scalar(g, shape.DType, shapes.ConvertTo[float64](shapes.SmallestNonZeroValueForDType(shape.DType))))
 	newRngState, u2 = RandomUniform(newRngState, shape)
-	if !g.Ok() {
-		return
-	}
 	values = Mul(
 		Sqrt(MulScalar(Log(u1), -2)),
 		Cos(MulScalar(u2, 2*math.Pi)))

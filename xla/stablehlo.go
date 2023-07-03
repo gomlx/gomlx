@@ -54,7 +54,7 @@ func (shlo *StableHLO) IsNil() bool {
 // ToStableHLO returning a holder of the C++ object representing the StableHLO.
 func (comp *Computation) ToStableHLO() (*StableHLO, error) {
 	if comp.IsNil() || comp.firstError != nil {
-		return nil, errors.Errorf("Computation graph is nil!?")
+		return nil, errors.New("Computation graph is nil!?")
 	}
 	statusOr := C.ConvertComputationToStableHLO(comp.cCompPtr)
 	ptr, err := UnsafePointerOrError(statusOr)

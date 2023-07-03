@@ -1,6 +1,7 @@
 package graph
 
 import (
+	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"golang.org/x/exp/constraints"
 )
@@ -43,6 +44,7 @@ type InterpolationConfig struct {
 //
 // The implementation is based on the Tensorflow `tf2xla` one.
 func Interpolate(input *Node, outputSizes ...int) *InterpolationConfig {
+	input.AssertValid()
 	return &InterpolationConfig{
 		g:                input.Graph(),
 		input:            input,
@@ -110,15 +112,9 @@ const NoInterpolation = int(-1)
 // Any errors are returned in the graph.
 func (c *InterpolationConfig) Done() (output *Node) {
 	g := c.g
-	output = g.InvalidNode()
-	if !g.Ok() {
-		return
-	}
-
 	if c.alignCorner && c.halfPixelCenters {
-		g.SetErrorf("invalid Interpolate configuration, one cannot set alignCorner and halfPixelCenters " +
+		Panicf("invalid Interpolate configuration, one cannot set alignCorner and halfPixelCenters " +
 			"to true at the same time")
-		return
 	}
 
 	// Find axes that are going to be interpolated and the output shape.
@@ -127,9 +123,8 @@ func (c *InterpolationConfig) Done() (output *Node) {
 	dtype := input.DType()
 	outputSizes := c.outputSizes
 	if len(outputSizes) != inputShape.Rank() {
-		g.SetErrorf("Output sizes for interpolation has a different rank (%v) than the input (%s)",
+		Panicf("Output sizes for interpolation has a different rank (%v) than the input (%s)",
 			outputSizes, input.Shape())
-		return
 	}
 
 	// Find axisToInterpolateList, and their target dimensions in interpolationDims:
@@ -139,8 +134,7 @@ func (c *InterpolationConfig) Done() (output *Node) {
 	interpolationDims := make([]int, 0, input.Rank()+1)
 	for axis, s := range outputSizes {
 		if s != NoInterpolation && s <= 0 {
-			g.SetErrorf("Output sizes set to invalid value (%d <= 0): %v", s, outputSizes)
-			return
+			Panicf("Output sizes set to invalid value (%d <= 0): %v", s, outputSizes)
 		}
 		if s == NoInterpolation || s == inputShape.Dimensions[axis] {
 			continue
