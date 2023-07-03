@@ -130,14 +130,7 @@ func (l *NanLogger) Trace(node *graph.Node, scope ...string) {
 	if l == nil {
 		return
 	}
-	if !node.Ok() {
-		return
-	}
-	g := node.Graph()
-	if !g.Ok() {
-		// Graph is in error, nothing to do.
-		return
-	}
+	node.AssertValid()
 
 	// We actually only need to check the sum of all values: any NaN/Inf will trigger the sum to
 	// be NaN/Inf.
@@ -154,7 +147,7 @@ func (l *NanLogger) Trace(node *graph.Node, scope ...string) {
 		trace.Scope = slices.Copy(scope)
 	}
 
-	gId := g.GraphId()
+	gId := node.Graph().GraphId()
 	graphMap, found := l.traces[gId]
 	if !found {
 		graphMap = make(map[graph.NodeId]*Trace)
@@ -234,7 +227,7 @@ func (l *NanLogger) loggerFn(g *graph.Graph, messages []string, values []tensor.
 		}
 	}
 
-	if g.Ok() && l.prevLoggerFn != nil && len(filteredMessages) > 0 {
+	if l.prevLoggerFn != nil && len(filteredMessages) > 0 {
 		// Call previous logger on remaining messages.
 		l.prevLoggerFn(g, filteredMessages, filteredValues, filteredNodes)
 	}
@@ -244,8 +237,8 @@ func (l *NanLogger) loggerFn(g *graph.Graph, messages []string, values []tensor.
 // HandlerFn is the type of function to handle NaN traces.
 type HandlerFn func(nanType float64, info *Trace)
 
-// SetHandler sets the function called when a `NaN` is observed. The default is
-// DefaultHandler which prints out all information on the node and exits.
+// SetHandler sets the function called when a `NaN` is observed.
+// The default is DefaultHandler which prints out all information on the node and exits.
 func (l *NanLogger) SetHandler(handler HandlerFn) {
 	if l == nil {
 		return
