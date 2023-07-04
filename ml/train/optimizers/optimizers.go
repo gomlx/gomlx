@@ -21,9 +21,9 @@ package optimizers
 import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
+	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
-	"github.com/pkg/errors"
 	"log"
 )
 
@@ -31,7 +31,8 @@ import (
 type Interface interface {
 	// UpdateGraph is the function called during computation graph building, it
 	// calculates the updates to the variables (weights) of the model needed for one
-	// training step. It should return these updates.
+	// training step.
+	// It should return these updates.
 	//
 	// Variable values can be updated in graph building time (inside UpdateGraph) using Variable.SetValueGraph,
 	// and the trainer (train.Trainer) will make sure these values are returned from the graph execution
@@ -45,7 +46,7 @@ type Interface interface {
 	// on the same Context object.
 	//
 	// loss must be a scalar value.
-	UpdateGraph(ctx *context.Context, graph *Graph, loss *Node)
+	UpdateGraph(ctx *context.Context, g *Graph, loss *Node)
 }
 
 var (
@@ -106,12 +107,6 @@ func GetGlobalStepVar(ctx *context.Context) *context.Variable {
 // GlobalStep is always stored as shapes.Int64, but it is converted to the given DType
 // before being returned.
 func IncrementGlobalStepGraph(ctx *context.Context, g *Graph, dtype shapes.DType) *Node {
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
-	if !ctx.Ok() {
-		return g.InvalidNode()
-	}
 	globalStepVar := GetGlobalStepVar(ctx)
 	globalStep := globalStepVar.ValueGraph(g)
 	globalStep = Add(globalStep, OnesLike(globalStep))
@@ -158,12 +153,6 @@ func StochasticGradientDescent() Interface {
 // UpdateGraph builds the graph to update the weights for one training step.
 // It implements optimizers.Interface.
 func (sgd *sgd) UpdateGraph(ctx *context.Context, graph *Graph, loss *Node) {
-	if !ctx.Ok() {
-		return
-	}
-	if !graph.Ok() {
-		return
-	}
 	if !loss.Shape().IsScalar() {
 		graph.SetErrorf("optimizer requires a scalar loss to optimize, got loss.shape=%s instead", loss.Shape())
 		return
@@ -177,18 +166,15 @@ func (sgd *sgd) UpdateGraph(ctx *context.Context, graph *Graph, loss *Node) {
 	return
 }
 
-// addGradientsToVariablesGraph takes the output of Context.CalculateGradientsGraph, multiply by (-learningRate) and
-// add to the current value of the variablesMap.
+// addGradientsToVariablesGraph takes the output of Context.BuildTrainableVariablesGradientsGraph,
+// multiply by (-learningRate) and add to the current value of the variablesMap.
 func addGradientsToVariablesGraph(ctx *context.Context, loss, learningRate, globalStep *Node) {
 	g := loss.Graph()
-	if !g.Ok() {
-		return
-	}
 	if !learningRate.Shape().IsScalar() {
 		g.SetErrorf("Context.addGradientsToVariablesGraph require scalar learningRate, instead got %s", learningRate.Shape())
 		return
 	}
-	grads := ctx.CalculateGradientsGraph(loss)
+	grads := ctx.BuildTrainableVariablesGradientsGraph(loss)
 	if len(grads) == 0 {
 		return
 	}
@@ -202,12 +188,9 @@ func addGradientsToVariablesGraph(ctx *context.Context, loss, learningRate, glob
 		}
 	})
 	if ii != numTrainable {
-		err := errors.Errorf("number of trainable variables for CalculateGradientsGraph (%d) and addGradientsToVariablesGraph (%d) "+
+		Panicf("number of trainable variables for BuildTrainableVariablesGradientsGraph (%d) and addGradientsToVariablesGraph (%d) "+
 			"are different -- did new trainable variables were created or variables `.Trainable` property "+
 			"changed in between?", numTrainable, ii)
-		ctx.SetError(err)
-		g.SetError(err)
-		return
 	}
 	return
 }

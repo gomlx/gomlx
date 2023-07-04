@@ -17,19 +17,19 @@
 package context
 
 // Aliases to GoMLX basic types.
+// Usually one would simply import the full `graph` with a period (".") so
+// the ops don't need a package qualifier. But we can't do this in `context`
+// package because we have conflicting symbols (`Exec`, `NewExec`).
 
 import (
 	graph "github.com/gomlx/gomlx/graph"
-	types "github.com/gomlx/gomlx/types/shapes"
 )
 
+// Manager is an alias to graph.Manager.
 type Manager = graph.Manager
-type Graph = graph.Graph
-type Node = graph.Node
-type Shape = types.Shape
 
-var (
-	makeShape = types.Make
-	f32       = types.Float32
-	f64       = types.Float64
-)
+// Graph is an alias to graph.Graph.
+type Graph = graph.Graph
+
+// Node is an alias to graph.Node.
+type Node = graph.Node

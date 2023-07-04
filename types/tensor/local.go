@@ -76,7 +76,7 @@ import (
 // instead use the computation graph engine (package `graph`).
 //
 // Local can be in an empty state (for instance, after calling Finalize), and in an erroneous state -- after some invalid
-// operation. These can be checked and tested with the methods Ok, Empty and Error.
+// operation. These can be checked and tested with the methods AssertValid, Empty and Error.
 type Local struct {
 	*cache
 

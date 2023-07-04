@@ -47,7 +47,7 @@ type OkError interface {
 
 func MustOk(x OkError) {
 	if !x.Ok() {
-		panic(fmt.Sprintf("Not Ok(), error: %+v, contents=%+v", x.Error(), x))
+		panic(fmt.Sprintf("Not AssertValid(), error: %+v, contents=%+v", x.Error(), x))
 	}
 }
 

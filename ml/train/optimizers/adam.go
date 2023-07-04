@@ -159,9 +159,9 @@ func (o *adam) UpdateGraph(ctx *context.Context, graph *Graph, loss *Node) {
 	debiasTermBeta2 := Inverse(OneMinus(Pow(beta2, adamStep)))
 	epsilon := Const(graph, shapes.CastAsDType(o.config.epsilon, dtype))
 
-	grads := ctx.CalculateGradientsGraph(loss)
+	grads := ctx.BuildTrainableVariablesGradientsGraph(loss)
 	if len(grads) == 0 {
-		graph.SetErrorf("Context.CalculateGradientsGraph returned 0 gradients, are there any trainable variables ?")
+		graph.SetErrorf("Context.BuildTrainableVariablesGradientsGraph returned 0 gradients, are there any trainable variables ?")
 		return
 	}
 
@@ -185,7 +185,7 @@ func (o *adam) UpdateGraph(ctx *context.Context, graph *Graph, loss *Node) {
 		return
 	}
 	if varIdx != numTrainable {
-		ctx.SetErrorf("Context.CalculateGradientsGraph returned gradients for %d variables, but "+
+		ctx.Panicf("Context.BuildTrainableVariablesGradientsGraph returned gradients for %d variables, but "+
 			"Adam only sees %d variables -- were new variables created in between ?",
 			numTrainable, varIdx)
 	}

@@ -60,9 +60,7 @@ func Finalize() {
 //
 // If the graph has an error, the state is not updated.
 func useRngState(g *Graph, initialSeed int64, fn func(rngState *Node) (newRngState *Node)) {
-	if !g.Ok() {
-		return
-	}
+	g.AssertValid()
 	muRngStates.Lock()
 	defer muRngStates.Unlock()
 
@@ -76,9 +74,6 @@ func useRngState(g *Graph, initialSeed int64, fn func(rngState *Node) (newRngSta
 		}
 	}
 	newRngState := fn(rngState)
-	if !g.Ok() {
-		return
-	}
 	if !rngState.Shape().Eq(newRngState.Shape()) {
 		g.SetErrorf("updated rngState for the random number generator has invalid shape: %s (should be %s)",
 			newRngState.Shape(), rngState.Shape())
@@ -106,9 +101,6 @@ func RandomNormalFn(initialSeed int64, stddev float64) VariableInitializer {
 			newRngState, values = RandomNormal(rngState, shape)
 			return newRngState
 		})
-		if !g.Ok() {
-			return g.InvalidNode()
-		}
 		return MulScalar(values, stddev)
 	}
 }
@@ -129,9 +121,6 @@ func RandomUniformFn(initialSeed int64, min, max float64) VariableInitializer {
 			newRngState, values = RandomUniform(rngState, shape)
 			return newRngState
 		})
-		if !g.Ok() {
-			return g.InvalidNode()
-		}
 		values = MulScalar(values, max-min)
 		values = AddScalar(values, min)
 		return values

@@ -62,7 +62,7 @@ func TestGradientInterpolate(t *testing.T) {
 			func(g *Graph) (output *Node, nodesForGrad []*Node) {
 				input := Ones(g, MakeShape(shapes.Float64, 1, 2, 2, 1))
 				output = Interpolate(input, 1, 4, 4, 1).Bilinear().Done()
-				if !g.Ok() {
+				if !g.AssertValid() {
 					t.Fatalf("Failed interpolation: %+v", g.Error())
 				}
 				output = Mul(output, OnePlus(IotaFull(g, output.Shape())))

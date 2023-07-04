@@ -640,7 +640,7 @@ func (h *Handler) keepNCheckpoints() error {
 // requested to attach more than once.
 func (h *Handler) attachTo(ctx *context.Context) {
 	if h.ctx != nil {
-		ctx.SetErrorf("%s already attached to a Context, can not attach to another one", h.config.dir)
+		ctx.Panicf("%s already attached to a Context, can not attach to another one", h.config.dir)
 		return
 	}
 	h.ctx = ctx
@@ -683,7 +683,7 @@ func (h *Handler) LoadVariable(ctx *context.Context, v *context.Variable) (value
 		return
 	}
 	if !value.Shape().Eq(v.Shape()) {
-		h.ctx.SetErrorf("shape requested for variable %s is different than value shape %s loaded from %s",
+		h.ctx.Panicf("shape requested for variable %s is different than value shape %s loaded from %s",
 			v.Shape(), value.Shape(), h)
 		found = false
 		value = nil
