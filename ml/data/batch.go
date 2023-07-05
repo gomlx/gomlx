@@ -4,6 +4,7 @@ import (
 	"fmt"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/train"
+	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/pkg/errors"
@@ -241,11 +242,10 @@ func (ds *batchedDataset) lockedBatchTensor(parts []tensor.Tensor) (batched tens
 	for _, part := range parts {
 		partsAny = append(partsAny, part)
 	}
-	res, err := ds.batchExec.Call(partsAny...)
+	err = TryCatch[error](func() { batched = ds.batchExec.Call(partsAny...)[0] })
 	if err != nil {
 		return
 	}
-	batched = res[0]
 	return
 }
 

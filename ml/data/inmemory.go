@@ -21,6 +21,7 @@ import (
 	"fmt"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/train"
+	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
@@ -148,8 +149,9 @@ func InMemoryFromData(manager *Manager, name string, inputs []any, labels []any)
 		return fmt.Sprintf("parsing labels[%d]", ii-mds.numInputsTensors)
 	}
 	for ii, value := range append(inputs, labels...) {
-		valueT := tensor.FromAnyValue(value)
-		if !valueT.Ok() {
+		var valueT tensor.Tensor
+		err = TryCatch[error](func() { valueT = tensor.FromAnyValue(value) })
+		if err != nil {
 			err = errors.WithMessage(err, errMsgFn(ii))
 			return
 		}
@@ -269,11 +271,6 @@ func (mds *InMemoryDataset) readDataset(ds train.Dataset, dsIsBatched bool) (err
 
 		// Append data.
 		for ii, t := range inputsAndLabels {
-			//t = t.Device(mds.manager, mds.manager.DefaultDeviceNum())
-			if !t.Ok() {
-				err = errors.WithMessagef(t.Error(), "failed to create device tensor of example(s) %d", mds.numExamples)
-				return
-			}
 			allData[ii] = append(allData[ii], t)
 		}
 		count++
@@ -301,8 +298,7 @@ func (mds *InMemoryDataset) readDataset(ds train.Dataset, dsIsBatched bool) (err
 		return Concatenate(parts, 0)
 	}
 	concatenateExec := NewExec(mds.manager, concatenateFn)
-	// Set large cache, since there can be quite a few cycles times the number
-	// of elements.
+	// Configure a large cache, since there can be quite a few cycles times the number of elements.
 	concatenateExec.SetMaxCache(512)
 
 	// Concatenate each element of inputsAndLabels across all examples: this is done by consecutively
@@ -322,13 +318,11 @@ func (mds *InMemoryDataset) readDataset(ds train.Dataset, dsIsBatched bool) (err
 				end := minN(start+MaxExamplesToConcat, len(allExamples))
 				examplesSlice := allExamples[start:end]
 				examplesAsAny := slices.Map[tensor.Tensor, any](examplesSlice, convertToAny)
-				results, newErr := concatenateExec.Call(examplesAsAny...)
-				err = newErr
+				err = TryCatch[error](func() { newAllExamples[jj] = concatenateExec.Call(examplesAsAny...)[0] })
 				if err != nil {
 					err = errors.WithMessagef(err, "while concatenating %s examples into large tensor", getElementDesc(inputsAndLabelsIdx))
 					return
 				}
-				newAllExamples[jj] = results[0]
 			}
 			// Free immediately intermediary resources no longer needed.
 			if concatenationLoopCount > 0 {
@@ -461,8 +455,8 @@ func (mds *InMemoryDataset) Yield() (spec any, inputs []tensor.Tensor, labels []
 		return
 	}
 	for _, data := range mds.inputsAndLabelsData {
-		if !data.Ok() {
-			err = errors.Errorf("InMemoryDataset data is invalid, maybe it has been finalized?")
+		if data.IsFinalized() {
+			err = errors.Errorf("InMemoryDataset data has been been finalized?")
 			return
 		}
 	}
@@ -493,15 +487,12 @@ func (mds *InMemoryDataset) Yield() (spec any, inputs []tensor.Tensor, labels []
 	} else {
 		// Indices are shaped [batch_size, 1].
 		indicesT := tensor.FromFlatDataAndDimensions(indices, len(indices), 1)
-		if !indicesT.Ok() {
-			panic("indices not ok!")
-		}
 		indicesAndData = append(indicesAndData, indicesT)
 	}
 	for _, data := range mds.inputsAndLabelsData {
 		indicesAndData = append(indicesAndData, data)
 	}
-	inputsAndLabels, err = mds.gatherExec.Call(indicesAndData...)
+	err = TryCatch[error](func() { inputsAndLabels = mds.gatherExec.Call(indicesAndData...) })
 	if err != nil {
 		err = errors.WithMessagef(err, "failed gathering examples from mds data, indices=%v", indices)
 		return
@@ -699,10 +690,6 @@ func GobDeserializeInMemory(manager *Manager, decoder *gob.Decoder) (mds *InMemo
 	for ii := 0; ii < int(numInputsAndLabels); ii++ {
 		local, err = tensor.GobDeserialize(decoder)
 		if err != nil {
-			return
-		}
-		if local.Error() != nil {
-			err = local.Error()
 			return
 		}
 		onDevice := local.Device(manager, manager.DefaultDeviceNum())

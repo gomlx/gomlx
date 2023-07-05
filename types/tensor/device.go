@@ -42,12 +42,19 @@ func (device *Device) AssertValid() {
 	if device == nil {
 		panic(errors.New("tensor.Device is nil"))
 	}
+	if device.IsFinalized() {
+		panic(errors.New("tensor.Device has been finalized, or C++ 'ShapedBuffer' storage is nil!?"))
+	}
 	if !device.shape.Ok() {
 		panic(errors.New("tensor.Device shape is invalid"))
 	}
-	if device.shapedBuffer == nil || device.shapedBuffer.IsNil() {
-		panic(errors.New("tensor.Device C++ 'ShapedBuffer' storage is nil!?"))
-	}
+}
+
+// IsFinalized returns true if the tensor has already been "finalized", and its
+// data freed.
+// It implements Tensor.IsFinalized.
+func (device *Device) IsFinalized() bool {
+	return device.shapedBuffer == nil || device.shapedBuffer.IsNil()
 }
 
 // InternalNewDevice creates a Device tensor from XLA's OnDeviceBuffer structure.

@@ -4,6 +4,7 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/pkg/errors"
@@ -82,9 +83,11 @@ func (mapDS *mapDataset) Yield() (spec any, inputs []tensor.Tensor, labels []ten
 	}
 
 	inputsAndLabels := append(inputs, labels...)
-	inputsAndLabels, err = mapDS.mapGraphFnExec.Call(
-		// We have to map inputsAndLabels to an `[]any` slice.
-		slices.Map(inputsAndLabels, func(e tensor.Tensor) any { return e })...)
+	err = exceptions.TryCatch[error](func() {
+		inputsAndLabels = mapDS.mapGraphFnExec.Call(
+			// We have to map inputsAndLabels to an `[]any` slice.
+			slices.Map(inputsAndLabels, func(e tensor.Tensor) any { return e })...)
+	})
 	if err != nil {
 		err = errors.WithMessagef(err, "while executing MapGraphFn provided for data.Map()")
 		return

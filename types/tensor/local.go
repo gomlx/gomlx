@@ -107,12 +107,19 @@ func (local *Local) AssertValid() {
 	if local == nil {
 		panic(errors.New("tensor.Local is nil"))
 	}
+	if local.IsFinalized() {
+		panic(errors.New("tensor.Local is finalized or C++ 'Literal' storage is nil!?"))
+	}
 	if !local.shape.Ok() {
 		panic(errors.New("tensor.Local shape is invalid"))
 	}
-	if local.literal == nil || local.literal.IsNil() {
-		panic(errors.New("tensor.Local C++ 'Literal' storage is nil!?"))
-	}
+}
+
+// IsFinalized returns true if the tensor has already been "finalized", and its
+// data freed.
+// It implements Tensor.IsFinalized.
+func (local *Local) IsFinalized() bool {
+	return local.literal == nil || local.literal.IsNil()
 }
 
 // AssertValidAndNoTuple both asserts it's a valid tensor and that it's not a tuple.

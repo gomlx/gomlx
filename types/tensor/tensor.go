@@ -106,6 +106,10 @@ type Tensor interface {
 	// tensor invalid.
 	// This calls Finalize on the cached Local and all Device tensors.
 	FinalizeAll()
+
+	// IsFinalized returns true if the tensor has already been "finalized", and its
+	// data freed.
+	IsFinalized() bool
 }
 
 var (
