@@ -22,7 +22,6 @@ import (
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
-	"github.com/pkg/errors"
 )
 
 // BatchNormBuilder is a helper to build a batch normalization computation. Create it with BatchNormalization, set the
@@ -159,18 +158,8 @@ func (builder *BatchNormBuilder) Done() *Node {
 	}
 	ctx := builder.ctx
 
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
-	if !ctx.Ok() {
-		g.SetError(errors.WithMessagef(ctx.Error(), "Context is in error"))
-		return g.InvalidNode()
-	}
 	featureAxis := AdjustAxis(x, builder.featureAxis)
 	featureDim := x.Shape().Dimensions[featureAxis]
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 
 	// Scale and offset applied to the normalized value.
 	var scale, offset *Node
@@ -178,10 +167,6 @@ func (builder *BatchNormBuilder) Done() *Node {
 	var scaleVar *context.Variable
 	if builder.scale {
 		scaleVar = ctx.WithInitializer(initializers.One).VariableWithShape("scale", varShape).SetTrainable(true)
-		if !ctx.Ok() {
-			g.SetError(errors.WithMessage(ctx.Error(), "error on context"))
-			return g.InvalidNode()
-		}
 		scale = scaleVar.ValueGraph(g)
 	} else {
 		scale = Ones(g, varShape)
@@ -189,10 +174,6 @@ func (builder *BatchNormBuilder) Done() *Node {
 
 	if builder.center {
 		offsetVar := ctx.WithInitializer(initializers.Zero).VariableWithShape("offset", varShape).SetTrainable(true)
-		if !ctx.Ok() {
-			g.SetError(errors.WithMessage(ctx.Error(), "error on context"))
-			return g.InvalidNode()
-		}
 		offset = offsetVar.ValueGraph(g)
 	} else {
 		offset = Zeros(g, varShape)
@@ -202,10 +183,6 @@ func (builder *BatchNormBuilder) Done() *Node {
 	meanAverageVar := ctx.WithInitializer(initializers.Zero).VariableWithShape("mean", varShape).SetTrainable(false)
 	varianceAverageVar := ctx.WithInitializer(initializers.One).VariableWithShape("variance", varShape).SetTrainable(false)
 	weightVar := ctx.WithInitializer(initializers.Zero).VariableWithShape("avg_weight", varShape).SetTrainable(false)
-	if !ctx.Ok() {
-		g.SetError(errors.WithMessage(ctx.Error(), "error on context"))
-		return g.InvalidNode()
-	}
 
 	var normalized *Node
 	if builder.trainable && ctx.IsTraining(g) {

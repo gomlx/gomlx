@@ -19,6 +19,7 @@ package layers
 import (
 	"fmt"
 	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/ctxtest"
 	"github.com/gomlx/gomlx/ml/context/initializers"
@@ -38,7 +39,7 @@ import (
 )
 
 func TestMultiHeadAttentionGraph(t *testing.T) {
-	manager := BuildManager().MustDone()
+	manager := graphtest.BuildTestManager()
 	{
 		ctx := context.NewContext(manager)
 		g := manager.NewGraph("test")
@@ -48,7 +49,6 @@ func TestMultiHeadAttentionGraph(t *testing.T) {
 		value := IotaFull(g, shapes.Make(F32, batchSize, 4, 5, 10))
 		attOutput, attCoef := MultiHeadAttention(ctx, query, key, value, 6, 12).
 			SetOutputDim(11).DoneWithCoefficients()
-		require.Truef(t, g.Ok(), "Failed MultiHeadAttention: %+v", g.Error())
 		assert.EqualValues(t, []int{batchSize, 7, 1, 11}, attOutput.Shape().Dimensions, "AttentionOutput shape mismatch")
 		assert.EqualValues(t, []int{batchSize, 7, 1, 6, 4, 5}, attCoef.Shape().Dimensions, "AttentionCoefficients shape mismatch")
 	}
@@ -179,7 +179,7 @@ func TestMultiHeadAttentionTraining(t *testing.T) {
 	}
 
 	// Manager handles creation of ML computation graphs, accelerator resources, etc.
-	manager := BuildManager().MustDone()
+	manager := graphtest.BuildTestManager()
 
 	// Context and optimizer used for training.
 	ctx := context.NewContext(manager)
@@ -218,8 +218,7 @@ func TestMultiHeadAttentionTraining(t *testing.T) {
 			require.NoErrorf(t, err, "Failed datasets: %+v", err)
 			fmt.Printf("\nInput:\t%v\n", inputs[0].Value())
 			fmt.Printf("Label:\t%v\n", labels[0].Value())
-			results, err = inferenceExec.Call(inputs[0])
-			require.NoErrorf(t, err, "Failed inference: %+v", err)
+			results = inferenceExec.Call(inputs[0])
 			tmp := results[0].Value().([][]float32)[0]
 			var rounded []int
 			for _, v := range tmp {

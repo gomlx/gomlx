@@ -2,15 +2,12 @@ package layers
 
 import (
 	. "github.com/gomlx/gomlx/graph"
+	. "github.com/gomlx/gomlx/types/exceptions"
 )
 
 // Activation allows a configurable activation.
 // Currently supported activations are "relu", "sigmoid", "leaky_relu", "swish", "tanh".
 func Activation(activation string, x *Node) *Node {
-	g := x.Graph()
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	switch activation {
 	case "relu":
 		return Relu(x)
@@ -23,17 +20,13 @@ func Activation(activation string, x *Node) *Node {
 	case "swish":
 		return Swish(x)
 	default:
-		g.SetErrorf("invalid activation type %q, valid types are: \"relu\", \"sigmoid\", \"leaky_relu\", \"swish\", \"tanh\"", activation)
-		return g.InvalidNode()
+		Panicf("invalid activation type %q, valid types are: \"relu\", \"sigmoid\", \"leaky_relu\", \"swish\", \"tanh\"", activation)
 	}
+	return nil
 }
 
 // Relu activation function. It returns Max(x, 0), and is commonly used as an activation function in neural networks.
 func Relu(x *Node) *Node {
-	g := x.Graph()
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	return Max(x, ZerosLike(x))
 }
 
@@ -50,9 +43,6 @@ func LeakyRelu(x *Node) *Node {
 // It returns `x if x >= 0; alpha*x if x < 0`.
 func LeakyReluWithAlpha(x *Node, alpha float64) *Node {
 	g := x.Graph()
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	return Where(
 		GreaterOrEqual(x, ScalarZero(g, x.DType())),
 		x,
@@ -71,9 +61,5 @@ func LeakyReluWithAlpha(x *Node, alpha float64) *Node {
 //
 // Here the beta parameter is fixed at 1.0.
 func Swish(x *Node) *Node {
-	g := x.Graph()
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	return Mul(x, Sigmoid(x))
 }

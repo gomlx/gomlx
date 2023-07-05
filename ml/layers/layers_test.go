@@ -64,11 +64,7 @@ func TestDense(t *testing.T) {
 	gradients := Gradient(sum,
 		inputNode, ctx.InspectVariable("/dense", "weights").ValueGraph(g),
 		ctx.InspectVariable("/dense", "biases").ValueGraph(g))
-
 	g.Compile(sum, output, Tuple(gradients...))
-	if !g.Ok() {
-		t.Fatalf("Failed to compile graph: %+v", g.Error())
-	}
 
 	// Before running the graph initialize the variables.
 	ctx.InitializeVariables()
@@ -112,13 +108,12 @@ func TestDense(t *testing.T) {
 }
 
 func testSimpleFunc(t *testing.T, name string, input any,
-	fn func(ctx *context.Context, input *Node) *Node,
-	want any) {
+	fn func(ctx *context.Context, input *Node) *Node, want any) {
 	manager := graphtest.BuildTestManager()
 	ctx := context.NewContext(manager).WithInitializer(IotaP1Initializer)
 	exec := context.NewExec(manager, ctx, fn)
-	outputs, err := exec.Call(input)
-	require.NoError(t, err, "%s: failed to exec graph", name)
+	var outputs []tensor.Tensor
+	require.NotPanicsf(t, func() { outputs = exec.Call(input) }, "%s: failed to exec graph", name)
 	fmt.Printf("\t%s(%v) = %s\n", name, input, outputs[0].Local().GoStr())
 	require.Truef(t, slices.SlicesInDelta(outputs[0].Local().Value(), want, slices.Epsilon),
 		"%s(%v): want=%v, got=%v", name, input, want, outputs[0].Local().GoStr())
@@ -190,7 +185,6 @@ func TestPieceWiseLinearCalibration(t *testing.T) {
 		keypoints = Mul(keypoints, keypoints)
 		keypoints = Mul(keypoints, Const(g, float32(maxInput)))
 		calibrated := PieceWiseLinearCalibrationCascaded(ctx, input, keypoints, true)
-		g.MustOk()
 		g.Compile(keypoints, calibrated)
 		params := make(ParamsMap)
 		ctx.ExecSetVariablesInParams(params, g)
@@ -200,10 +194,6 @@ func TestPieceWiseLinearCalibration(t *testing.T) {
 			calibration := func(x float64) float64 {
 				params[input] = tensor.FromValue(float32(x))
 				tuple := g.Run(params)
-				if !tuple.Ok() {
-					fmt.Printf("\n\nFailed: %+v", tuple.Error())
-					panic("Failed to run computation graph")
-				}
 				result := tuple.SplitTuple()[1].Local()
 				return float64(result.Value().(float32))
 			}
@@ -214,10 +204,6 @@ func TestPieceWiseLinearCalibration(t *testing.T) {
 
 		// Continue with normal test, with fixed input values.
 		tuple := g.Run(params)
-		g.MustOk()
-		if !tuple.Ok() {
-			t.Fatalf("Failed to run: %s", tuple.Error())
-		}
 		results := tuple.SplitTuple()
 		fmt.Printf("\tinput=%v\n", input)
 		fmt.Printf("\tkeypoints=%s\n", results[0].Local().GoStr())
