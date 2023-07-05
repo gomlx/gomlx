@@ -292,13 +292,19 @@ func (g *Graph) ConvertToStableHLO() *xla.StableHLO {
 //
 // It returns a binary serialized format that can be executed later, without linking the whole GoMLX machinery.
 // See tutorial on instructions and an example of how to do this.
-func (g *Graph) AOTCompile() ([]byte, error) {
+//
+// Errors are reported back in a `panic` call.
+func (g *Graph) AOTCompile() []byte {
 	g.AssertValidAndCompiled()
 	outputShapes := make([]shapes.Shape, 0, g.NumParameters())
 	for _, node := range g.parameters {
 		outputShapes = append(outputShapes, node.shape)
 	}
-	return g.comp.AOTCompile(outputShapes)
+	compiled, err := g.comp.AOTCompile(outputShapes)
+	if err != nil {
+		panic(errors.Wrapf(err, "in Graph(%s).AOTCompile()", g.Name()))
+	}
+	return compiled
 }
 
 // Run runs the compiled graph with the given parameters.

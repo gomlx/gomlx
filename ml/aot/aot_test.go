@@ -19,6 +19,7 @@ package aot
 import (
 	"fmt"
 	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/gomlx/gomlx/xla"
 	"github.com/stretchr/testify/assert"
@@ -34,17 +35,15 @@ func EuclidianDistance(x, y *Node) *Node {
 }
 
 func TestAOTCompileModel(t *testing.T) {
-	manager := BuildManager().Platform("Host").MustDone()
+	manager := graphtest.BuildTestManager()
 	exec := NewExec(manager, EuclidianDistance)
 
 	// Build graph with inputs shaped float32[3]. We don't care about the results,
 	// actually we are only interested on the graph.
-	_, g, err := exec.CallWithGraph([]float32{0.0, 0.0}, []float32{1.0, 1.0})
-	require.NoError(t, err)
+	_, g := exec.CallWithGraph([]float32{0.0, 0.0}, []float32{1.0, 1.0})
 	fmt.Printf("Graph:\n%s\n\n", g)
 	fmt.Printf("StableHLO version: %s\n", xla.StableHLOCurrentVersion())
-	stableHLO, err := g.ConvertToStableHLO()
-	require.NoError(t, err, "Failed to run Graph.ConvertToStableHLO() on EucliadianDistance model: %+v", err)
+	stableHLO := g.ConvertToStableHLO()
 	hloV1 := stableHLO.String()
 	fmt.Printf("StableHLO:\n%s\n", hloV1)
 
@@ -65,13 +64,9 @@ func TestAOTCompileModel(t *testing.T) {
 	fmt.Printf("StableHLO2:\n%s\n", hloV2)
 	assert.Equal(t, hloV1, hloV2)
 
-	aotCompilationResult, err := g.AOTCompile()
-	if err != nil {
-		t.Fatalf("Failed to run Graph.AOTCompile() on EucliadianDistance model: %+v", err)
-	}
-	if !g.Ok() {
-		t.Fatalf("Graph error after run Graph.AOTCompile() on EucliadianDistance model: %+v", g.Error())
-	}
+	var aotCompilationResult []byte
+	require.NotPanicsf(t, func() { aotCompilationResult = g.AOTCompile() },
+		"Failed to run Graph.AOTCompile() on EucliadianDistance model")
 	fmt.Printf("Compilation Result: %d bytes\n", len(aotCompilationResult))
 
 	fAot, err := os.CreateTemp("", "gomlx_aot_test_")
