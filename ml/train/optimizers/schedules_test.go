@@ -38,8 +38,7 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 	})
 
 	for ii := 0; ii < 100; ii++ {
-		_, err := cosineExec.Call()
-		require.NoErrorf(t, err, "cosineExec.Call failed to execute graph for ii=%d", ii)
+		require.NotPanicsf(t, func() { _ = cosineExec.Call() }, "cosineExec.Call failed to execute graph for ii=%d", ii)
 
 		// Checks correct step number.
 		stepVar := ctx.InspectVariable("/optimizers/cosine", GlobalStepVariableName)

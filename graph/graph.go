@@ -200,18 +200,6 @@ func (g *Graph) AssertValidAndCompiled() {
 	}
 }
 
-// SetError for the Graph. After an error is set, most operations become no-ops. Only the first error
-// is kept.
-func (g *Graph) SetError(err error) {
-	panic(err)
-}
-
-// SetErrorf is similar to SetError, but allows formatting in place. It also automatically
-// adds stack trace.
-func (g *Graph) SetErrorf(format string, args ...any) {
-	Panicf(format, args...)
-}
-
 // SetTraced defines whether each node creation is traced.
 // If true, every node will save a stack-trace of where it was created, which is helpful for debugging.
 // See Node.Track().

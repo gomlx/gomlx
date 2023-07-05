@@ -20,6 +20,7 @@ package initializers
 
 import (
 	. "github.com/gomlx/gomlx/graph"
+	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"sync"
 )
@@ -75,9 +76,8 @@ func useRngState(g *Graph, initialSeed int64, fn func(rngState *Node) (newRngSta
 	}
 	newRngState := fn(rngState)
 	if !rngState.Shape().Eq(newRngState.Shape()) {
-		g.SetErrorf("updated rngState for the random number generator has invalid shape: %s (should be %s)",
+		Panicf("updated rngState for the random number generator has invalid shape: %s (should be %s)",
 			newRngState.Shape(), rngState.Shape())
-		return
 	}
 	rngStates[graphId] = newRngState
 }
@@ -93,8 +93,7 @@ const NoSeed = int64(0)
 func RandomNormalFn(initialSeed int64, stddev float64) VariableInitializer {
 	return func(g *Graph, shape shapes.Shape) *Node {
 		if shape.DType != shapes.F32 && shape.DType != shapes.F64 {
-			g.SetErrorf("cannot initialize non-float variable with RandomNormal -- shape requested %s", shape)
-			return nil
+			Panicf("cannot initialize non-float variable with RandomNormal -- shape requested %s", shape)
 		}
 		var values *Node
 		useRngState(g, initialSeed, func(rngState *Node) (newRngState *Node) {
@@ -113,8 +112,7 @@ func RandomNormalFn(initialSeed int64, stddev float64) VariableInitializer {
 func RandomUniformFn(initialSeed int64, min, max float64) VariableInitializer {
 	return func(g *Graph, shape shapes.Shape) *Node {
 		if shape.DType != shapes.F32 && shape.DType != shapes.F64 {
-			g.SetErrorf("cannot initialize non-float variable with RandomUniform -- shape requested %s", shape)
-			return nil
+			Panicf("cannot initialize non-float variable with RandomUniform -- shape requested %s", shape)
 		}
 		var values *Node
 		useRngState(g, initialSeed, func(rngState *Node) (newRngState *Node) {

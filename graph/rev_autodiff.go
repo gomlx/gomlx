@@ -20,6 +20,7 @@ import (
 	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/xla"
+	"github.com/pkg/errors"
 )
 
 // This file implements reverse-mode automatic differentiation, using VJP (Vector Jacobian Product).
@@ -629,8 +630,6 @@ func sliceVJP(node, v *Node, _ shapes.Shape) []*Node {
 // gatherVJP generates the adjoint gradient term for  GatherXL node. It works only for simple gather operations,
 // in particular it works with graph.Gather.
 func gatherVJP(node, v *Node, _ shapes.Shape) []*Node {
-	g := node.Graph()
-
 	// TODO: check that values are compatible with Gather() and return an error if not.
 	input := node.inputs[0]
 	indices := node.inputs[1]
@@ -638,8 +637,7 @@ func gatherVJP(node, v *Node, _ shapes.Shape) []*Node {
 	indexVectorDim, offsetDims, collapsedSliceDims, startIndexMap, sliceSizes, indicesAreSorted, err := deserializeGatherXLA(node.serializedNode)
 	_ = offsetDims // We don't need it here.
 	if err != nil {
-		g.SetError(err)
-		return nil
+		panic(errors.WithMessagef(err, "gatherVJP failed to deserialize its parameters"))
 	}
 
 	// Gather() case: sliceSizes is 1 for the first dimensions, and full in the last. Plus the initial

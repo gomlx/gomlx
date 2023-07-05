@@ -19,6 +19,7 @@ package train
 import (
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
+	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
@@ -46,7 +47,10 @@ type OnEndFn func(loop *Loop, metrics []tensor.Tensor) error
 // Loop will run a training loop, invoking Trainer.TrainStep every step,
 // and calling the appropriate hooks.
 //
-// In itself it doesn't do much, but one can attach functionality to it, like
+// It also converts graph building errors thrown with `panic` and return them
+// instead as normal errors.
+//
+// By itself it doesn't do much, but one can attach functionality to it, like
 // checkpointing, plotting tools, early-stopping strategies, etc.
 // It is simple and flexible to allow arbitrary tools to the training loop.
 //
@@ -139,30 +143,7 @@ func (loop *Loop) step(spec any, inputs, labels []tensor.Tensor) (metrics []tens
 		elapsed := time.Since(startTime)
 		loop.TrainStepDurations = append(loop.TrainStepDurations, elapsed)
 	}()
-	checkTensor := func(t tensor.Tensor) {
-		if t.Ok() {
-			return
-		}
-		var msg string
-		if loop.finalizeInputs {
-			msg = " -- loop is configured to free the dataset input after each step, this may be interfering with contents"
-		}
-		err = errors.Wrapf(t.Error(), "invalid input/label, cannot train%s", msg)
-	}
-	for _, inputT := range inputs {
-		checkTensor(inputT)
-		if err != nil {
-			return
-		}
-	}
-	for _, labelT := range labels {
-		checkTensor(labelT)
-		if err != nil {
-			return
-		}
-	}
-
-	metrics, err = loop.Trainer.TrainStep(spec, inputs, labels)
+	err = TryCatch[error](func() { metrics = loop.Trainer.TrainStep(spec, inputs, labels) })
 	if err != nil {
 		return nil, err
 	}
@@ -251,7 +232,11 @@ func (loop *Loop) RunSteps(ds Dataset, steps int) (metrics []tensor.Tensor, err 
 						"a different (looping) Dataset, or use Loop.RunEpochs() instead of Loop.RunSteps() ?",
 					loop.LoopStep-loop.StartStep, steps)
 			}
-			return nil, errors.WithMessagef(err, "Loop.RunSteps(%d): failed reading from Dataset", steps)
+			var extraErrorMsg string
+			if loop.finalizeInputs {
+				extraErrorMsg = " -- loop is configured to free the dataset input after each step, this may be interfering with contents"
+			}
+			return nil, errors.WithMessagef(err, "Loop.RunSteps(%d): failed reading from Dataset%s", steps, extraErrorMsg)
 		}
 		metrics, err = loop.step(spec, inputs, labels)
 		if err != nil {
@@ -290,10 +275,17 @@ func (loop *Loop) RunEpochs(ds Dataset, epochs int) (metrics []tensor.Tensor, er
 		// Loop over one epoch:
 		for {
 			spec, inputs, labels, err := ds.Yield()
-			if err == io.EOF {
-				// End of epoch: estimate new EndStep and reset.
-				loop.EndStep = loop.LoopStep + yieldsPerEpoch*(epochs-loop.Epoch-1)
-				break
+			if err != nil {
+				if err == io.EOF {
+					// End of epoch: estimate new EndStep and reset.
+					loop.EndStep = loop.LoopStep + yieldsPerEpoch*(epochs-loop.Epoch-1)
+					break
+				}
+				var extraErrorMsg string
+				if loop.finalizeInputs {
+					extraErrorMsg = " -- loop is configured to free the dataset input after each step, this may be interfering with contents"
+				}
+				return nil, errors.WithMessagef(err, "Loop.RunEpochs(epoch %d of %d): failed reading from Dataset%s", loop.Epoch, epochs, extraErrorMsg)
 			}
 			yieldsPerEpoch++
 
@@ -318,7 +310,7 @@ func (loop *Loop) RunEpochs(ds Dataset, epochs int) (metrics []tensor.Tensor, er
 // It sorts and mutates loop.TrainStepDurations.
 func (loop *Loop) MedianTrainStepDuration() time.Duration {
 	if len(loop.TrainStepDurations) == 0 {
-		// Return something different than 0 to avoid division by 0.
+		// Return something different from 0 to avoid division by 0.
 		return time.Millisecond
 	}
 

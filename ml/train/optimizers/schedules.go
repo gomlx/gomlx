@@ -19,6 +19,7 @@ package optimizers
 import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
+	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"math"
 )
@@ -97,19 +98,15 @@ func (opt *CosineAnnealingOptions) LearningRate(learningRate float64) *CosineAnn
 func (opt *CosineAnnealingOptions) Done() {
 	ctx := opt.ctx.Checked(false)
 	graph := opt.graph
-	if !ctx.Ok() || !graph.Ok() {
-		return
-	}
 	if opt.periodNumSteps <= 0 {
-		graph.SetErrorf("period of the CosineAnnealingSchedule in number of steps was not set, or set to <= 0")
-		return
+		Panicf("period of the CosineAnnealingSchedule in number of steps was not set, or set to <= 0")
 	}
 
 	lrValue := opt.learningRate
 	if lrValue == 0 {
 		lrValue = context.GetParam(opt.ctx, LearningRateKey, 0.0)
 		if lrValue == 0 {
-			graph.SetErrorf("learning rate not configured for CosineAnnealingSchedule and also "+
+			Panicf("learning rate not configured for CosineAnnealingSchedule and also "+
 				"not set in the context as parameter %q", LearningRateKey)
 			return
 		}

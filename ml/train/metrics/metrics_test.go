@@ -19,6 +19,7 @@ package metrics
 import (
 	"fmt"
 	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -34,12 +35,11 @@ func takeFirstFn(metricFn func(ctx *context.Context, labels, predictions []*Node
 }
 
 func TestBinaryAccuracyGraph(t *testing.T) {
-	manager := BuildManager().MustDone()
+	manager := graphtest.BuildTestManager()
 	ctx := context.NewContext(manager)
 	accuracyExec := context.NewExec(manager, ctx, takeFirstFn(BinaryAccuracyGraph))
 	labels, probs := []float32{0, 1, 0, 1, 0, 1}, []float32{0.1, 0.1, 0.5, 0.5, 0.8, 0.8}
-	results, err := accuracyExec.Call(labels, probs)
-	require.NoError(t, err, "failed to execute accuracyExec")
+	results := accuracyExec.Call(labels, probs)
 	got := results[0].Value().(float32)
 	if got != float32(2.0/6.0) {
 		t.Errorf("TestBinaryAccuracyGraph: wanted 2/6=0.333..., got %.4f", got)
@@ -47,7 +47,7 @@ func TestBinaryAccuracyGraph(t *testing.T) {
 }
 
 func TestNewMeanBinaryAccuracy(t *testing.T) {
-	manager := BuildManager().MustDone()
+	manager := graphtest.BuildTestManager()
 	ctx := context.NewContext(manager).Checked(false)
 	accMetric := NewMeanBinaryAccuracy("accuracy", "acc")
 	accExec := context.NewExec(manager, ctx, func(ctx *context.Context, labels, predictions *Node) *Node {
@@ -56,10 +56,8 @@ func TestNewMeanBinaryAccuracy(t *testing.T) {
 
 	// First batch:
 	labels, probs := []float32{0, 1, 0, 1, 0, 1}, []float32{0.1, 0.1, 0.5, 0.5, 0.8, 0.8}
-	results, err := accExec.Call(labels, probs)
-	require.NoError(t, err, "Executing MeanBinaryAccuracy")
+	results := accExec.Call(labels, probs)
 	meanAccT := results[0]
-	require.NoError(t, meanAccT.Error(), "Executing MeanBinaryAccuracy")
 	meanAcc := meanAccT.Value().(float32)
 	assert.Equal(t, float32(2.0/6.0), meanAcc, "MeanBinaryAccuracy")
 
@@ -71,7 +69,6 @@ func TestNewMeanBinaryAccuracy(t *testing.T) {
 
 	metricScope := ctx.In(accMetric.ScopeName()).Scope()
 	totalVar := ctx.InspectVariable(metricScope, "total")
-	require.NoErrorf(t, ctx.Error(), "Variable \"total\" was not created in %s / total", metricScope)
 	require.NotNilf(t, totalVar, "Variable \"total\" was not created in %s / total", metricScope)
 	total := totalVar.Value().Local().Value().(float32)
 	assert.Equal(t, float32(2), total, "MeanBinaryAccuracy total value")
@@ -83,14 +80,13 @@ func TestNewMeanBinaryAccuracy(t *testing.T) {
 
 	// Second batch:
 	labels, probs = []float32{0, 0, 0, 1, 1, 1}, []float32{0.1, 0.4, 0.7, 0.8, 0.9, 0.09}
-	results, err = accExec.Call(labels, probs)
-	require.NoError(t, err, "Executing MeanBinaryAccuracy")
+	results = accExec.Call(labels, probs)
 	meanAccT = results[0]
 	meanAcc = meanAccT.Value().(float32)
 	assert.Equal(t, float32(6.0/12.0), meanAcc, "MeanBinaryAccuracy after batch #2")
 
 	// Zeros the state.
-	require.NoError(t, accMetric.Reset(ctx), "Failed to Reset() metric")
+	accMetric.Reset(ctx)
 	total = totalVar.Value().Local().Value().(float32)
 	weight = weightVar.Value().Local().Value().(float32)
 	assert.Zero(t, total, "Expected total variable to be 0 after Reset()")
@@ -98,18 +94,17 @@ func TestNewMeanBinaryAccuracy(t *testing.T) {
 }
 
 func TestBinaryLogitsAccuracyGraph(t *testing.T) {
-	manager := BuildManager().MustDone()
+	manager := graphtest.BuildTestManager()
 	ctx := context.NewContext(manager)
 	accuracyExec := context.NewExec(manager, ctx, takeFirstFn(BinaryLogitsAccuracyGraph))
 	labels, logits := []float32{0, 1, 0, 1, 0, 1}, []float32{-0.1, -0.1, 0, 0, 0.2, 10.0}
-	results, err := accuracyExec.Call(labels, logits)
-	require.NoError(t, err, "failed to execute accuracyExec")
+	results := accuracyExec.Call(labels, logits)
 	got, _ := results[0].Value().(float32)
 	assert.Equal(t, float32(2.0/6.0), got, "TestBinaryAccuracyGraph")
 }
 
 func TestSparseCategoricalAccuracyGraph(t *testing.T) {
-	manager := BuildManager().MustDone()
+	manager := graphtest.BuildTestManager()
 	ctx := context.NewContext(manager)
 	accuracyExec := context.NewExec(manager, ctx, takeFirstFn(SparseCategoricalAccuracyGraph))
 	labels, logits := [][]int{{0}, {1}, {2}}, [][]float32{
@@ -117,8 +112,7 @@ func TestSparseCategoricalAccuracyGraph(t *testing.T) {
 		{-2, -1, -3},  // Correct, even if negative.
 		{100, 90, 80}, // Wrong even if positive.
 	}
-	results, err := accuracyExec.Call(labels, logits)
-	require.NoError(t, err, "failed to execute accuracyExec")
+	results := accuracyExec.Call(labels, logits)
 	got, _ := results[0].Value().(float32)
 	assert.Equal(t, float32(1.0/3.0), got, "TestBinaryAccuracyGraph")
 }

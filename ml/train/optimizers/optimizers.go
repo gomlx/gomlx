@@ -152,15 +152,14 @@ func StochasticGradientDescent() Interface {
 
 // UpdateGraph builds the graph to update the weights for one training step.
 // It implements optimizers.Interface.
-func (sgd *sgd) UpdateGraph(ctx *context.Context, graph *Graph, loss *Node) {
+func (sgd *sgd) UpdateGraph(ctx *context.Context, g *Graph, loss *Node) {
 	if !loss.Shape().IsScalar() {
-		graph.SetErrorf("optimizer requires a scalar loss to optimize, got loss.shape=%s instead", loss.Shape())
-		return
+		Panicf("optimizer requires a scalar loss to optimize, got loss.shape=%s instead", loss.Shape())
 	}
 	dtype := loss.DType()
 	lrVar := LearningRateVar(ctx, dtype, SgdDefaultLearningRate)
-	learningRate := lrVar.ValueGraph(graph)
-	globalStep := IncrementGlobalStepGraph(ctx, graph, dtype)
+	learningRate := lrVar.ValueGraph(g)
+	globalStep := IncrementGlobalStepGraph(ctx, g, dtype)
 	learningRate = Div(learningRate, Sqrt(globalStep)) // Factor global_step into the learning rate.
 	addGradientsToVariablesGraph(ctx, loss, learningRate, globalStep)
 	return
@@ -171,8 +170,7 @@ func (sgd *sgd) UpdateGraph(ctx *context.Context, graph *Graph, loss *Node) {
 func addGradientsToVariablesGraph(ctx *context.Context, loss, learningRate, globalStep *Node) {
 	g := loss.Graph()
 	if !learningRate.Shape().IsScalar() {
-		g.SetErrorf("Context.addGradientsToVariablesGraph require scalar learningRate, instead got %s", learningRate.Shape())
-		return
+		Panicf("Context.addGradientsToVariablesGraph require scalar learningRate, instead got %s", learningRate.Shape())
 	}
 	grads := ctx.BuildTrainableVariablesGradientsGraph(loss)
 	if len(grads) == 0 {

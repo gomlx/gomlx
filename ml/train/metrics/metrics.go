@@ -21,6 +21,7 @@ import (
 	"fmt"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
+	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/google/uuid"
@@ -52,9 +53,9 @@ type Interface interface {
 	// PrettyPrint is used to pretty-print a metric value, usually in a short form.
 	PrettyPrint(value tensor.Tensor) string
 
-	// Reset metrics internal counters, when starting a new evaluation. Notice this may be called
-	// before UpdateGraph, the metric should handle this without errors.
-	Reset(ctx *context.Context) error
+	// Reset metrics internal counters, when starting a new evaluation.
+	// Notice this may be called before UpdateGraph, the metric should handle this without errors.
+	Reset(ctx *context.Context)
 }
 
 const (
@@ -96,14 +97,9 @@ func (m *baseMetric) ScopeName() string {
 }
 
 func (m *baseMetric) UpdateGraph(ctx *context.Context, labels, predictions []*Node) (metric *Node) {
-	g := predictions[0].Graph()
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	result := m.metricFn(ctx, labels, predictions)
 	if !result.Shape().IsScalar() {
-		g.SetErrorf("metric %q should return a scalar, instead got shape %s", m.Name(), result.Shape())
-		return g.InvalidNode()
+		Panicf("metric %q should return a scalar, instead got shape %s", m.Name(), result.Shape())
 	}
 	return result
 }
@@ -115,9 +111,7 @@ func (m *baseMetric) PrettyPrint(value tensor.Tensor) string {
 	return m.pPrintFn(value)
 }
 
-func (m *baseMetric) Reset(_ *context.Context) error {
-	return nil
-}
+func (m *baseMetric) Reset(_ *context.Context) {}
 
 // NewBaseMetric creates a stateless metric from any BaseMetricGraph function, it will return the metric
 // calculated solely on the last batch.
@@ -144,9 +138,6 @@ func NewMeanMetric(name, shortName, metricType string, metricFn BaseMetricGraph,
 // it to the same dtype as data.
 func BatchSize(data *Node) *Node {
 	g := data.Graph()
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	var batchSizeInt int
 	if data.Shape().IsScalar() {
 		// So it works for a single example at a time.
@@ -160,33 +151,27 @@ func BatchSize(data *Node) *Node {
 
 func (m *meanMetric) UpdateGraph(ctx *context.Context, labels, predictions []*Node) (metric *Node) {
 	g := predictions[0].Graph()
-	if !g.Ok() {
-		return g.InvalidNode()
+	var result *Node
+	err := TryCatch[error](func() { result = m.metricFn(ctx, labels, predictions) })
+	if err != nil {
+		panic(errors.WithMessagef(err, "failed building computation graph for mean metric %q", m.Name()))
 	}
-	result := m.metricFn(ctx, labels, predictions)
 	if !result.Shape().IsScalar() {
-		g.SetErrorf("metric %q should return a scalar, instead got shape %s", m.Name(), result.Shape())
-		return g.InvalidNode()
+		Panicf("metric %q should return a scalar, instead got shape %s", m.Name(), result.Shape())
 	}
 
 	// Create scope in context for metrics state, and mark it as unchecked -- model variables
 	// may be set for reuse, but metrics variables are not.
 	ctx = ctx.Checked(false).In(m.ScopeName())
-	if !ctx.Ok() {
-		g.SetError(errors.WithMessagef(ctx.Error(), "failed building computation graph for mean metric %q", m.Name()))
-		return g.InvalidNode()
-	}
 	dtype := result.DType()
 	zero := shapes.CastAsDType(0, dtype)
 	totalVar := ctx.VariableWithValue("total", zero).SetTrainable(false)
 	if totalVar == nil {
-		g.SetError(errors.Errorf("variable nil building computation graph for mean metric %q", m.Name()))
-		return g.InvalidNode()
+		Panicf("variable nil building computation graph for mean metric %q", m.Name())
 	}
 	weightVar := ctx.VariableWithValue("weight", zero).SetTrainable(false)
 	if weightVar == nil {
-		g.SetError(errors.Errorf("variable nil building computation graph for mean metric %q", m.Name()))
-		return g.InvalidNode()
+		Panicf("variable nil building computation graph for mean metric %q", m.Name())
 	}
 
 	total := totalVar.ValueGraph(g)
@@ -203,27 +188,20 @@ func (m *meanMetric) UpdateGraph(ctx *context.Context, labels, predictions []*No
 	return mean
 }
 
-func (m *meanMetric) Reset(ctx *context.Context) error {
-	if !ctx.Ok() {
-		return ctx.Error()
-	}
+func (m *meanMetric) Reset(ctx *context.Context) {
 	ctx = ctx.Reuse().In(m.ScopeName())
-	if !ctx.Ok() {
-		return ctx.Error()
-	}
 	totalVar := ctx.InspectVariable(ctx.Scope(), "total")
 	if totalVar == nil {
 		// Assume this was called before the graph was first built, so there is nothing to reset yet.
-		return nil
+		return
 	}
 	totalVar.SetValue(tensor.FromAnyValue(shapes.CastAsDType(0, totalVar.Value().DType())))
 	weightVar := ctx.InspectVariable(ctx.Scope(), "weight")
 	if weightVar != nil {
 		weightVar.SetValue(tensor.FromAnyValue(shapes.CastAsDType(0, weightVar.Value().DType())))
 	} else {
-		return fmt.Errorf("can't find variable \"weight\" in scope %q", ctx.Scope())
+		Panicf("can't find variable \"weight\" in scope %q", ctx.Scope())
 	}
-	return nil
 }
 
 // movingAverageMetric implements a metric that keeps the mean of a metric.
@@ -252,35 +230,24 @@ func NewExponentialMovingAverageMetric(name, shortName, metricType string, metri
 // UpdateGraph implements metrics.Interface.
 func (m *movingAverageMetric) UpdateGraph(ctx *context.Context, labels, predictions []*Node) (metric *Node) {
 	g := predictions[0].Graph()
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
-	result := m.metricFn(ctx, labels, predictions)
-	if !g.Ok() {
-		return g.InvalidNode()
+	var result *Node
+	err := TryCatch[error](func() { result = m.metricFn(ctx, labels, predictions) })
+	if err != nil {
+		panic(errors.WithMessagef(err, "failed building computation graph for mean metric %q", m.Name()))
 	}
 	if !result.Shape().IsScalar() {
-		g.SetErrorf("metric %q should return a scalar, instead got shape %s", m.Name(), result.Shape())
-		return g.InvalidNode()
+		Panicf("metric %q should return a scalar, instead got shape %s", m.Name(), result.Shape())
 	}
 
 	// Create scope in context for metrics state, and mark it as unchecked -- model variables
 	// may be set for reuse, but metrics variables are not.
 	ctx = ctx.Checked(false).In(m.ScopeName())
-	if !ctx.Ok() {
-		g.SetError(errors.WithMessagef(ctx.Error(), "failed building computation graph for mean metric %q", m.Name()))
-		return g.InvalidNode()
-	}
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	dtype := result.DType()
 	zero := shapes.CastAsDType(0, dtype)
 
 	meanVar := ctx.VariableWithValue("mean", zero).SetTrainable(false)
 	if meanVar == nil {
-		g.SetError(errors.Errorf("variable nil building computation graph for mean metric %q", m.Name()))
-		return g.InvalidNode()
+		Panicf("variable nil building computation graph for mean metric %q", m.Name())
 	}
 	mean := meanVar.ValueGraph(g)
 
@@ -302,18 +269,13 @@ func (m *movingAverageMetric) UpdateGraph(ctx *context.Context, labels, predicti
 func BinaryAccuracyGraph(_ *context.Context, labels, predictions []*Node) *Node {
 	prediction := predictions[0]
 	g := prediction.Graph()
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	if len(labels) != 1 {
-		g.SetErrorf("BinaryAccuracy requires one labels tensor, got (%d) instead", len(labels))
-		return g.InvalidNode()
+		Panicf("BinaryAccuracy requires one labels tensor, got (%d) instead", len(labels))
 	}
 	label := labels[0]
 	if !prediction.Shape().Eq(label.Shape()) {
-		g.SetErrorf("prediction (%s) and label (%s) have different shapes, can't calculate binary accuracy",
+		Panicf("prediction (%s) and label (%s) have different shapes, can't calculate binary accuracy",
 			prediction.Shape(), label.Shape())
-		return g.InvalidNode()
 	}
 	diff := Abs(Sub(label, prediction))
 	// Accuracy is true if diff < 0.5. Notice this will take predictions of 0.5 to be false independent of label
@@ -347,24 +309,18 @@ func NewMovingAverageBinaryAccuracy(name, shortName string, newExampleWeight flo
 func BinaryLogitsAccuracyGraph(_ *context.Context, labels, logits []*Node) *Node {
 	logits0 := logits[0]
 	g := logits0.Graph()
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	if len(labels) != 1 {
-		g.SetErrorf("BinaryLogitsAccuracyGraph requires one labels tensor, got (%d) instead", len(labels))
-		return g.InvalidNode()
+		Panicf("BinaryLogitsAccuracyGraph requires one labels tensor, got (%d) instead", len(labels))
 	}
 	labels0 := labels[0]
 	if logits0.DType() != labels0.DType() {
-		g.SetErrorf("logits0 (%s) and labels0 (%s) have different dtypes, can't calculate binary accuracy",
+		Panicf("logits0 (%s) and labels0 (%s) have different dtypes, can't calculate binary accuracy",
 			logits0.DType(), labels0.DType())
-		return g.InvalidNode()
 
 	}
 	if logits0.Shape().Size() != labels0.Shape().Size() {
-		g.SetErrorf("logits0 (%s) and labels0 (%s) have different shapes (different total sizes), can't calculate binary accuracy",
+		Panicf("logits0 (%s) and labels0 (%s) have different shapes (different total sizes), can't calculate binary accuracy",
 			logits0.Shape(), labels0.Shape())
-		return g.InvalidNode()
 	}
 	if !logits0.Shape().Eq(labels0.Shape()) {
 		// They are the same size, so we assume the labels0 can simply be re-shaped.
@@ -372,18 +328,12 @@ func BinaryLogitsAccuracyGraph(_ *context.Context, labels, logits []*Node) *Node
 		// this is very convenient functionality.
 		labels0 = Reshape(labels0, logits0.Shape().Dimensions...)
 	}
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 
 	dtype := logits0.DType()
 	labels0 = Sub(labels0, Const(g, shapes.CastAsDType(0.5, dtype)))    // Labels: -0.5 for false, +0.5 for true.
 	correctExamples := StrictlyPositiveIndicator(Mul(logits0, labels0)) // 0s are considered a miss.
 	countExamples := Const(g, shapes.CastAsDType(correctExamples.Shape().Size(), correctExamples.DType()))
 	mean := Div(ReduceAllSum(correctExamples), countExamples)
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	return mean
 }
 
@@ -404,12 +354,8 @@ func NewMovingAverageBinaryLogitsAccuracy(name, shortName string, newExampleWeig
 func SparseCategoricalAccuracyGraph(_ *context.Context, labels, logits []*Node) *Node {
 	logits0 := logits[0]
 	g := logits0.Graph()
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	if len(labels) != 1 {
-		g.SetErrorf("SparseCategoricalAccuracyGraph requires one labels tensor, got (%d) instead", len(labels))
-		return g.InvalidNode()
+		Panicf("SparseCategoricalAccuracyGraph requires one labels tensor, got (%d) instead", len(labels))
 	}
 	labels0 := labels[0]
 	labelsShape := labels0.Shape()
@@ -417,16 +363,13 @@ func SparseCategoricalAccuracyGraph(_ *context.Context, labels, logits []*Node) 
 	logitsShape := logits0.Shape()
 	logitsRank := logitsShape.Rank()
 	if !labelsShape.DType.IsInt() {
-		g.SetErrorf("labels0 indices dtype (%s), it must be integer", labelsShape.DType)
-		return g.InvalidNode()
+		Panicf("labels0 indices dtype (%s), it must be integer", labelsShape.DType)
 	}
 	if labelsRank != logitsRank {
-		g.SetErrorf("labels0(%s) and logits0(%s) must have the same rank", labelsShape, logitsShape)
-		return g.InvalidNode()
+		Panicf("labels0(%s) and logits0(%s) must have the same rank", labelsShape, logitsShape)
 	}
 	if labelsShape.Dimensions[labelsRank-1] != 1 {
-		g.SetErrorf("labels0(%s) are expected to have the last dimension == 1, with the true/labeled category", labelsShape)
-		return g.InvalidNode()
+		Panicf("labels0(%s) are expected to have the last dimension == 1, with the true/labeled category", labelsShape)
 	}
 
 	// TODO: implement with argmax

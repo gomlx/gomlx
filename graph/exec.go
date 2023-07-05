@@ -451,9 +451,8 @@ func (e *Exec) createAndCacheGraph(argsShapes []shapes.Shape) (entry *execCacheE
 	var outputs []*Node
 	if e.outputAsSlice {
 		if len(outputsV) != 1 {
-			g.SetErrorf("graphFn for %q returned %d results, as opposed to simply a slice of nodes -- []*Node",
+			Panicf("graphFn for %q returned %d results, as opposed to simply a slice of nodes -- []*Node",
 				e.Name(), len(outputsV))
-			return entry
 		}
 		outputs = outputsV[0].Interface().([]*Node)
 	} else {

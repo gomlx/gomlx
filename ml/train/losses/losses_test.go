@@ -19,6 +19,7 @@ package losses
 import (
 	"fmt"
 	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/types/slices"
 	"testing"
 )
@@ -28,7 +29,7 @@ import (
 type gradTestFunc func(g *Graph) (output *Node, nodesForGrad []*Node)
 
 func testGradients[T interface{ float32 | float64 }](t *testing.T, name string, testFn gradTestFunc, wantForGrad [][]T) {
-	manager := BuildManager().MustDone()
+	manager := graphtest.BuildTestManager()
 	g := manager.NewGraph(name)
 	fmt.Printf("%s:\n", name)
 	output, nodesForGrad := testFn(g)
@@ -36,13 +37,8 @@ func testGradients[T interface{ float32 | float64 }](t *testing.T, name string, 
 	all := make([]*Node, len(grads)+1)
 	all[0] = output
 	copy(all[1:], grads)
-	g.MustOk()
 	g.Compile(all...)
-	g.MustOk()
 	tuple := g.Run(nil)
-	if !tuple.Ok() {
-		t.Fatalf("Failed to run graph: %+v", tuple.Error())
-	}
 	results := tuple.SplitTuple()
 	fmt.Printf("\toutput=%v\n", results[0].Local().GoStr())
 	for ii, want := range wantForGrad {
@@ -79,15 +75,11 @@ type fnToTest func(g *Graph) (input, output *Node)
 
 func testSomeFunc[T interface{ float32 | float64 }](t *testing.T, name string, fn fnToTest, want any, close bool) {
 	fmt.Printf("%s\n", name)
-	manager := BuildManager().MustDone()
+	manager := graphtest.BuildTestManager()
 	g := manager.NewGraph(name)
 	input, output := fn(g)
 	g.Compile(input, output)
-	g.MustOk()
 	tuple := g.Run(nil)
-	if !tuple.Ok() {
-		t.Fatalf("Failed to run graph: %+v", tuple.Error())
-	}
 	results := tuple.SplitTuple()
 	fmt.Printf("\t%s(%s) = %s\n", name, results[0].Local().GoStr(), results[1].Local().GoStr())
 	if close {

@@ -21,6 +21,7 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"
+	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 )
 
@@ -130,15 +131,9 @@ type adam struct {
 
 // UpdateGraph builds the graph to update the weights for one training step.
 // It implements optimizers.Interface.
-func (o *adam) UpdateGraph(ctx *context.Context, graph *Graph, loss *Node) {
-	if !ctx.Ok() {
-		return
-	}
-	if !graph.Ok() {
-		return
-	}
+func (o *adam) UpdateGraph(ctx *context.Context, g *Graph, loss *Node) {
 	if !loss.Shape().IsScalar() {
-		graph.SetErrorf("optimizer requires a scalar loss to optimize, got loss.shape=%s instead", loss.Shape())
+		Panicf("optimizer requires a scalar loss to optimize, got loss.shape=%s instead", loss.Shape())
 		return
 	}
 	dtype := loss.DType()
@@ -149,43 +144,34 @@ func (o *adam) UpdateGraph(ctx *context.Context, graph *Graph, loss *Node) {
 		lrValue = context.GetParam(ctx, LearningRateKey, AdamDefaultLearningRate)
 	}
 	lrVar := LearningRateVar(ctx, dtype, lrValue)
-	learningRate := lrVar.ValueGraph(graph)
+	learningRate := lrVar.ValueGraph(g)
 
-	_ = IncrementGlobalStepGraph(ctx, graph, dtype) // LoopStep, not used by this optimizer, but updated.
-	adamStep := IncrementGlobalStepGraph(ctx.In(o.config.scopeName), graph, dtype)
-	beta1 := Const(graph, shapes.CastAsDType(o.config.beta1, dtype))
+	_ = IncrementGlobalStepGraph(ctx, g, dtype) // LoopStep, not used by this optimizer, but updated.
+	adamStep := IncrementGlobalStepGraph(ctx.In(o.config.scopeName), g, dtype)
+	beta1 := Const(g, shapes.CastAsDType(o.config.beta1, dtype))
 	debiasTermBeta1 := Inverse(OneMinus(Pow(beta1, adamStep)))
-	beta2 := Const(graph, shapes.CastAsDType(o.config.beta2, dtype))
+	beta2 := Const(g, shapes.CastAsDType(o.config.beta2, dtype))
 	debiasTermBeta2 := Inverse(OneMinus(Pow(beta2, adamStep)))
-	epsilon := Const(graph, shapes.CastAsDType(o.config.epsilon, dtype))
+	epsilon := Const(g, shapes.CastAsDType(o.config.epsilon, dtype))
 
 	grads := ctx.BuildTrainableVariablesGradientsGraph(loss)
 	if len(grads) == 0 {
-		graph.SetErrorf("Context.BuildTrainableVariablesGradientsGraph returned 0 gradients, are there any trainable variables ?")
-		return
+		Panicf("Context.BuildTrainableVariablesGradientsGraph returned 0 gradients, are there any trainable variables ?")
 	}
 
 	// Apply gradient one variable at a time.
 	numTrainable := len(grads)
 	varIdx := 0
-	hasError := false
 	ctx.EnumerateVariables(func(v *context.Variable) {
-		if !hasError && v.Trainable && v.InUseByGraph(graph) {
+		if v.Trainable && v.InUseByGraph(g) {
 			if varIdx < numTrainable {
-				o.applyAdamGraph(ctx, graph, v, grads[varIdx], learningRate, beta1, debiasTermBeta1, beta2, debiasTermBeta2, epsilon)
-				if !ctx.Ok() {
-					hasError = true
-				}
+				o.applyAdamGraph(ctx, g, v, grads[varIdx], learningRate, beta1, debiasTermBeta1, beta2, debiasTermBeta2, epsilon)
 			}
 			varIdx++
 		}
 	})
-	if hasError {
-		// Error reported in context or graph.
-		return
-	}
 	if varIdx != numTrainable {
-		ctx.Panicf("Context.BuildTrainableVariablesGradientsGraph returned gradients for %d variables, but "+
+		Panicf("Context.BuildTrainableVariablesGradientsGraph returned gradients for %d variables, but "+
 			"Adam only sees %d variables -- were new variables created in between ?",
 			numTrainable, varIdx)
 	}
@@ -194,7 +180,7 @@ func (o *adam) UpdateGraph(ctx *context.Context, graph *Graph, loss *Node) {
 }
 
 // applyAdamGraph calculates variable and its 1st and 2nd order moments updates.
-// If adamax is set, we use instead moment2 to store the L-infinity (the max) of the gradient.
+// If `Adamax` is set, we use instead moment2 to store the L-infinity (the max) of the gradient.
 func (o *adam) applyAdamGraph(ctx *context.Context, g *Graph, v *context.Variable, grad *Node,
 	learningRate, beta1, debiasTermBeta1, beta2, debiasTermBeta2, epsilon *Node) {
 
