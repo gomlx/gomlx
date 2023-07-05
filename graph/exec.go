@@ -336,7 +336,7 @@ func (e *Exec) Call(args ...any) []tensor.Tensor {
 func (e *Exec) CallWithGraph(args ...any) (results []tensor.Tensor, g *Graph) {
 	if !e.inputAsSlice && len(args) != e.numInputs {
 		Panicf(
-			"# of arguments to call (%d) don't match # arguments to g function (%d) for %q",
+			"# of arguments to call (#args=%d) don't match # arguments to the graph function (#args=%d) for %q",
 			len(args), e.numInputs, e.Name())
 	}
 

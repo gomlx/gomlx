@@ -311,7 +311,7 @@ func (ctx *Context) GetParam(key string) (value any, found bool) {
 // SetParam sets the given param in the current scope. It will be visible (by GetParam)
 // within this scope and descendant scopes (but not by other scopes).
 //
-// See also SetGraphParam for parameters that are graph specific.
+// See also SetGraphParam for parameters that are graph-specific.
 func (ctx *Context) SetParam(key string, value any) {
 	ctx.data.params.Set(ctx.scope, key, value)
 }

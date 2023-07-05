@@ -19,6 +19,7 @@ package graph
 import (
 	"fmt"
 	"github.com/gomlx/gomlx/xla"
+	"github.com/pkg/errors"
 	"os"
 	"sync"
 )
@@ -104,7 +105,7 @@ var (
 func (b *ManagerBuilder) MustDone() *Manager {
 	manager, err := b.Done()
 	if err != nil {
-		panic(fmt.Sprintf("Failed to build gomlx.computation.Manager: %+v", err))
+		panic(errors.Wrapf(err, "Failed to build gomlx.graph.Manager"))
 	}
 	return manager
 }

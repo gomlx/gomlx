@@ -18,7 +18,7 @@ package context
 
 import (
 	"fmt"
-	"github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
@@ -28,10 +28,7 @@ import (
 )
 
 func TestContextVariables(t *testing.T) {
-	manager, err := graph.BuildManager().Done()
-	if err != nil {
-		t.Fatalf("Failed to build Manager: %v", err)
-	}
+	manager := graphtest.BuildTestManager()
 	ctx := NewContext(manager)
 	ctx2 := ctx.In("a")
 
@@ -65,10 +62,7 @@ func TestContextVariables(t *testing.T) {
 }
 
 func TestContextVariablesInitialization(t *testing.T) {
-	manager, err := graph.BuildManager().Done()
-	if err != nil {
-		t.Fatalf("Failed to build Manager: %v", err)
-	}
+	manager := graphtest.BuildTestManager()
 	ctx := NewContext(manager)
 	ctx0 := ctx.In("a").WithInitializer(initializers.RandomUniformFn(42, 1.5, 2.5))
 	v0 := ctx0.VariableWithShape("x", shapes.Make(shapes.Float32))
@@ -114,10 +108,7 @@ func (l *ConstantLoader) LoadVariable(ctx *Context, v *Variable) (value tensor.T
 }
 
 func TestContext_SetLoader(t *testing.T) {
-	manager, err := graph.BuildManager().Done()
-	if err != nil {
-		t.Fatalf("Failed to build Manager: %v", err)
-	}
+	manager := graphtest.BuildTestManager()
 	ctx := NewContext(manager)
 	ctx.SetLoader(&ConstantLoader{
 		Values: map[string]map[string]tensor.Tensor{

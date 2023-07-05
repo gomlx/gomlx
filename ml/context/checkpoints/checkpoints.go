@@ -64,6 +64,7 @@ import (
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
+	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
@@ -103,9 +104,6 @@ func Build(ctx *context.Context) *Config {
 		includeParams: true,
 		keep:          1,
 		takeMean:      1,
-	}
-	if !ctx.Ok() {
-		c.setError(ctx.Error())
 	}
 	return c
 }
@@ -220,7 +218,7 @@ func (c *Config) Done() (*Handler, error) {
 	}
 	if len(checkpoints) > 0 {
 		takeMean := c.takeMean
-		if takeMean < 0 {
+		if takeMean < 0 || takeMean > len(checkpoints) {
 			takeMean = len(checkpoints)
 		}
 		if c.takeMean == 1 {
@@ -241,7 +239,7 @@ func (c *Config) Done() (*Handler, error) {
 func (c *Config) MustDone() *Handler {
 	h, err := c.Done()
 	if err != nil {
-		panic(fmt.Sprintf("Failed to create checkpoints.Handler: %+v", err))
+		panic(errors.Wrap(err, "Failed to create checkpoints.Handler"))
 	}
 	return h
 }
@@ -435,9 +433,12 @@ func (h *Handler) loadCheckpoint(baseName string, merge bool, mergeWeight float6
 				// Variable not found in last checkpoint or not merge-able, just ignore it.
 				continue
 			}
-			results, err := h.mergeExec.Call(current, localT, shapes.CastAsDType(mergeWeight, varInfo.DType))
+			var results []tensor.Tensor
+			err := TryCatch[error](func() {
+				results = h.mergeExec.Call(current, localT, shapes.CastAsDType(mergeWeight, varInfo.DType))
+			})
 			if err != nil {
-				return errors.WithMessagef(err, "when taking the mean of variable %q", varInfo.ParameterName)
+				panic(errors.WithMessagef(err, "when taking the mean of variable %q", varInfo.ParameterName))
 			}
 			current.FinalizeAll()
 			h.variableValues[varInfo.ParameterName] = results[0]
@@ -461,10 +462,7 @@ func (h *Handler) takeMean(baseNames []string) error {
 	}
 
 	// Create merger graph executor.
-	manager, err := graph.BuildManager().Platform("CPU").Done()
-	if err != nil {
-		return errors.WithMessagef(err, "creating manager to average weights loading checkpoints")
-	}
+	manager := graph.BuildManager().Platform("CPU").MustDone()
 	h.mergeExec = graph.NewExec(manager, func(a, b, bWeight *graph.Node) *graph.Node {
 		return graph.Add(
 			graph.Mul(a, graph.OneMinus(bWeight)),
@@ -640,8 +638,7 @@ func (h *Handler) keepNCheckpoints() error {
 // requested to attach more than once.
 func (h *Handler) attachTo(ctx *context.Context) {
 	if h.ctx != nil {
-		ctx.Panicf("%s already attached to a Context, can not attach to another one", h.config.dir)
-		return
+		Panicf("%s already attached to a Context, can not attach to another one", h.config.dir)
 	}
 	h.ctx = ctx
 	h.prevContextLoader = ctx.Loader()
@@ -671,7 +668,7 @@ func (h *Handler) LoadVariable(ctx *context.Context, v *context.Variable) (value
 	// Priority is based on the installation order. That means we attempt first the previously configured loaders.
 	if h.prevContextLoader != nil {
 		value, found = h.prevContextLoader.LoadVariable(ctx, v)
-		if found || !ctx.Ok() {
+		if found {
 			// Previous manager found value (or issued an error), return that.
 			return
 		}
@@ -683,11 +680,8 @@ func (h *Handler) LoadVariable(ctx *context.Context, v *context.Variable) (value
 		return
 	}
 	if !value.Shape().Eq(v.Shape()) {
-		h.ctx.Panicf("shape requested for variable %s is different than value shape %s loaded from %s",
+		Panicf("shape requested for variable %s is different than value shape %s loaded from %s",
 			v.Shape(), value.Shape(), h)
-		found = false
-		value = nil
-		return
 	}
 	// "Consume" value, meaning remove it from Handler.
 	delete(h.variableValues, v.ParameterName())
@@ -697,7 +691,7 @@ func (h *Handler) LoadVariable(ctx *context.Context, v *context.Variable) (value
 // LoadedVariables for inspection. These are the values loaded -- but not necessarily immediately available in
 // context, since they are actually used only when a model asks for the variable.
 //
-// The returned map in owned by the Handler, don't change it -- the behaviour is undefined if you do.
+// The Handler owns the returned map, don't change it -- the behavior is undefined if you do.
 func (h *Handler) LoadedVariables() map[string]tensor.Tensor {
 	return h.variableValues
 }

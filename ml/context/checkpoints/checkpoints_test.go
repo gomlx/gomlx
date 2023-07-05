@@ -54,8 +54,7 @@ func TestCheckpoints(t *testing.T) {
 		fmt.Printf("Checkpoint directory: %s\n", dir)
 		e := context.NewExec(manager, ctx, testGraphFn)
 		for ii := 0; ii < 10; ii++ {
-			results, err := e.Call()
-			require.NoError(t, err, "Executing test graph")
+			results := e.Call()
 			globalStep := results[0].Local().Value().(float64)
 			assert.Equal(t, float64(ii)+1, globalStep, "LoopStep")
 			assert.NoError(t, checkpoint.Save(), "Saving checkpoint")
@@ -88,8 +87,7 @@ func TestCheckpoints(t *testing.T) {
 
 		// Re-execute testGraphFn: it should load global step at 10, increment and return it at 11.
 		e := context.NewExec(manager, ctx, testGraphFn)
-		results, err := e.Call()
-		require.NoError(t, err, "Executing test graph")
+		results := e.Call()
 		globalStep := results[0].Local().Value().(float64)
 		assert.Equal(t, 11.0, globalStep, "Re-loaded global step")
 		assert.NoError(t, checkpoint.Save(), "Saving checkpoint")
