@@ -618,7 +618,7 @@ func FromValue[S shapes.MultiDimensionSlice](value S) *Local {
 //
 // It panics with an error if `value` type is unsupported or the shape is not regular.
 func FromAnyValue(value any) Tensor {
-	if t, ok := value.(*Local); ok {
+	if t, ok := value.(Tensor); ok {
 		// Input is already a Local.
 		return t
 	}
