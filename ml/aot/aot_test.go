@@ -30,13 +30,13 @@ import (
 
 // EuclideanDistance is the "model" function we want to AOT compile, as an example.
 // This is the simplest version, where there are no variables.
-func EuclidianDistance(x, y *Node) *Node {
+func EuclideanDistance(x, y *Node) *Node {
 	return Sqrt(ReduceAllSum(Square(Sub(x, y))))
 }
 
 func TestAOTCompileModel(t *testing.T) {
 	manager := graphtest.BuildTestManager()
-	exec := NewExec(manager, EuclidianDistance)
+	exec := NewExec(manager, EuclideanDistance)
 
 	// Build graph with inputs shaped float32[3]. We don't care about the results,
 	// actually we are only interested on the graph.

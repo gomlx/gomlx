@@ -141,7 +141,7 @@ func (ds *Dataset) Reset() {}
 
 func main() {
 	flag.Parse()
-	manager := BuildManager().NumThreads(*flagNumThreads).NumReplicas(*flagNumReplicas).Platform(*flagPlatform).MustDone()
+	manager := BuildManager().NumThreads(*flagNumThreads).NumReplicas(*flagNumReplicas).Platform(*flagPlatform).Done()
 
 	trueCoefficients, trueBias := initCoefficients(manager, *flagNumFeatures)
 	MustOk(trueCoefficients)

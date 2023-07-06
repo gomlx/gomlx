@@ -122,7 +122,7 @@ func trainModel(config *dogsvscats.Configuration) {
 	trainDS, trainEvalDS, validationEvalDS := dogsvscats.CreateDatasets(config)
 
 	// Manager handles creation of ML computation graphs, accelerator resources, etc.
-	manager := BuildManager().NumThreads(*flagNumThreads).NumReplicas(*flagNumReplicas).Platform(*flagPlatform).MustDone()
+	manager := BuildManager().NumThreads(*flagNumThreads).NumReplicas(*flagNumReplicas).Platform(*flagPlatform).Done()
 
 	// Metrics we are interested.
 	meanAccuracyMetric := metrics.NewMeanBinaryLogitsAccuracy("Mean Accuracy", "#acc")

@@ -27,7 +27,7 @@ import (
 )
 
 func TestCosineAnnealingSchedule(t *testing.T) {
-	manager := BuildManager().Platform("Host").MustDone()
+	manager := BuildManager().Platform("Host").Done()
 	ctx := context.NewContext(manager).Checked(false)
 	cosineExec := context.NewExec(manager, ctx, func(ctx *context.Context, graph *Graph) {
 		CosineAnnealingSchedule(ctx, graph, shapes.Float32).

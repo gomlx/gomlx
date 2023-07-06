@@ -462,7 +462,7 @@ func (h *Handler) takeMean(baseNames []string) error {
 	}
 
 	// Create merger graph executor.
-	manager := graph.BuildManager().Platform("CPU").MustDone()
+	manager := graph.BuildManager().Platform("CPU").Done()
 	h.mergeExec = graph.NewExec(manager, func(a, b, bWeight *graph.Node) *graph.Node {
 		return graph.Add(
 			graph.Mul(a, graph.OneMinus(bWeight)),

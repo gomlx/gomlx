@@ -36,6 +36,12 @@ type ManagerBuilder struct {
 	numReplicas, numThreads int
 }
 
+// NewManager creates a new `Manager` object using the default platform and configuration.
+// For more fine-grained control, see BuildManager.
+func NewManager() *Manager {
+	return BuildManager().Done()
+}
+
 // BuildManager allows the creations a Manager object, used to create computation graphs and execute them.
 // Optional parameters are Platform, NumReplicas and NumThreads (see ManagerBuilder methods).
 // At the end call IsNil().
@@ -76,17 +82,20 @@ func (b *ManagerBuilder) NumThreads(n int) *ManagerBuilder {
 }
 
 // Done constructs the Manager.
-func (b *ManagerBuilder) Done() (m *Manager, err error) {
+//
+// Errors are reported/thrown back with `panic`.
+func (b *ManagerBuilder) Done() (m *Manager) {
 	platform := b.platform
 	if b.platform == "" {
+		var err error
 		platform, err = GetDefaultPlatform()
 		if err != nil {
-			return
+			panic(errors.Wrapf(err, "cant find platform with GetDefaultPlatform"))
 		}
 	}
 	client, err := xla.NewClient(platform, b.numReplicas, b.numThreads)
 	if err != nil {
-		return nil, err
+		panic(errors.Wrapf(err, "failed to create new XLA Client"))
 	}
 	m = &Manager{
 		client:   client,
@@ -100,15 +109,6 @@ var (
 	muGraphCount sync.Mutex
 	graphCount   int
 )
-
-// MustDone constructs the Manager. It panics if there was an error.
-func (b *ManagerBuilder) MustDone() *Manager {
-	manager, err := b.Done()
-	if err != nil {
-		panic(errors.Wrapf(err, "Failed to build gomlx.graph.Manager"))
-	}
-	return manager
-}
 
 // Manager sets up an execution "server" (?? whatever runs stuff in XLA ?), including managing
 // the memory in the accelerator.

@@ -31,7 +31,7 @@ type TestGraphFn func(g *graph.Graph) (inputs, outputs []*graph.Node)
 
 // BuildTestManager using "Host" by default -- can be overwritten by GOMLX_PLATFORM environment variable.
 func BuildTestManager() *graph.Manager {
-	return graph.BuildManager().WithDefaultPlatform("Host").MustDone()
+	return graph.BuildManager().WithDefaultPlatform("Host").Done()
 }
 
 // RunTestGraphFn tests a graph building function graphFn by executing it and comparing

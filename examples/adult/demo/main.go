@@ -101,7 +101,7 @@ func main() {
 	adult.LoadAndPreprocessData(*flagDataDir, *flagNumQuantiles, *flagForceDownload, *flagVerbosity)
 
 	// Crate Manager and upload data to device tensors.
-	manager := BuildManager().NumThreads(*flagNumThreads).NumReplicas(*flagNumReplicas).Platform(*flagPlatform).MustDone()
+	manager := BuildManager().NumThreads(*flagNumThreads).NumReplicas(*flagNumReplicas).Platform(*flagPlatform).Done()
 	adult.Data.Train.CreateTensors(manager)
 	adult.Data.Test.CreateTensors(manager)
 	if *flagVerbosity >= 2 {

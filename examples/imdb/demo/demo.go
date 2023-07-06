@@ -125,7 +125,7 @@ func Sample() {
 
 func trainModel() {
 	// Manager handles creation of ML computation graphs, accelerator resources, etc.
-	manager := BuildManager().NumThreads(*flagNumThreads).NumReplicas(*flagNumReplicas).Platform(*flagPlatform).MustDone()
+	manager := BuildManager().NumThreads(*flagNumThreads).NumReplicas(*flagNumReplicas).Platform(*flagPlatform).Done()
 
 	// Datasets.
 	var trainDS, trainEvalDS, testEvalDS train.Dataset
