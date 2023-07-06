@@ -43,6 +43,7 @@ import (
 	"fmt"
 	mg "github.com/erkkah/margaid"
 	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
@@ -294,8 +295,8 @@ func (ps *Plots) AddTrainAndEvalMetrics(loop *train.Loop, trainMetrics []tensor.
 
 	// Eval metrics, if given
 	for _, ds := range ps.EvalDatasets {
-		evalMetrics, err := loop.Trainer.Eval(ds)
-		if err != nil {
+		var evalMetrics []tensor.Tensor
+		if err := exceptions.TryCatch[error](func() { evalMetrics = loop.Trainer.Eval(ds) }); err != nil {
 			return err
 		}
 		for ii, desc := range loop.Trainer.EvalMetrics() {
