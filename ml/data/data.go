@@ -51,6 +51,9 @@ func FileExists(path string) bool {
 //
 // It may panic with an error if `dir` has an unknown user (e.g: `~unknown/...`)
 func ReplaceTildeInDir(dir string) string {
+	if len(dir) == 0 {
+		return dir
+	}
 	if dir[0] != '~' {
 		return dir
 	}

@@ -22,8 +22,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/gomlx/gomlx/examples/adult"
-	"github.com/gomlx/gomlx/examples/notebook/bashkernel"
-	"github.com/gomlx/gomlx/examples/notebook/bashkernel/chartjs"
+	"github.com/gomlx/gomlx/examples/notebook/gonb/margaid"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
@@ -37,9 +36,10 @@ import (
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
-	"github.com/pkg/errors"
+	"github.com/janpfeifer/gonb/gonbui"
 	"log"
 	"path"
+	"time"
 )
 
 var (
@@ -53,9 +53,6 @@ var (
 	flagCheckpointKeep = flag.Int("checkpoint_keep", 10, "Number of checkpoints to keep, if --checkpoint is set.")
 	flagBatchSize      = flag.Int("batch", 128, "Dataset size for training")
 	flagNumSteps       = flag.Int("steps", 5000, "Number of gradient descent steps to perform")
-	flagNumThreads     = flag.Int("num_threads", -1, "Number of threads for XLA. Leave as -1 to use as many as there are cores.")
-	flagNumReplicas    = flag.Int("num_replicas", 1, "Number of replicas for XLA. Leave as 1 for now.")
-	flagPlatform       = flag.String("platform", "", "Platform to use, if empty uses the default one.")
 	flagForceDownload  = flag.Bool("force_download", false, "Force re-download of Adult dataset files.")
 
 	flagOptimizer       = flag.String("optimizer", "adam", "Type of optimizer to use: 'sgd' or 'adam'")
@@ -70,7 +67,8 @@ var (
 	flagUseCategorical       = flag.Bool("use_categorical", true, "Use categorical features.")
 	flagUseContinuous        = flag.Bool("use_continuous", true, "Use continuous features.")
 	flagTrainableCalibration = flag.Bool("trainable_calibration", true, "Allow piece-wise linear calibration to adjust outputs.")
-	flagNumPlotPoints        = flag.Int("plot_points", 0, "Number points to plot using Chart.JS.")
+	flagPlots                = flag.Bool("plots", true, "Plots during training: perform periodic evaluations, "+
+		"save results if --checkpoint is set and draw plots, if in a Jupyter notebook.")
 )
 
 // AssertNoError logs err and panics, if it is not nil.
@@ -101,17 +99,18 @@ func main() {
 	adult.LoadAndPreprocessData(*flagDataDir, *flagNumQuantiles, *flagForceDownload, *flagVerbosity)
 
 	// Crate Manager and upload data to device tensors.
-	manager := BuildManager().NumThreads(*flagNumThreads).NumReplicas(*flagNumReplicas).Platform(*flagPlatform).Done()
-	adult.Data.Train.CreateTensors(manager)
-	adult.Data.Test.CreateTensors(manager)
+	manager := NewManager()
 	if *flagVerbosity >= 2 {
-		adult.PrintBatchSamples(adult.Data.Train, manager)
+		adult.PrintBatchSamples(manager, adult.Data.Train)
 	}
 
 	// Create datasets for training and evaluation.
-	trainingDS := adult.NewDataset("batched train", adult.Data.Train, manager, *flagBatchSize)
-	trainEvalDS := adult.NewDatasetForEval("train", adult.Data.Train, manager)
-	testEvalDS := adult.NewDatasetForEval("test", adult.Data.Test, manager)
+	trainDS := adult.NewDataset(manager, adult.Data.Train, "batched train")
+	trainEvalDS := trainDS.Copy().BatchSize(*flagBatchSize, false)
+	testEvalDS := adult.NewDataset(manager, adult.Data.Test, "test").
+		BatchSize(*flagBatchSize, false)
+	// For training, we shuffle and loop indefinitely.
+	trainDS.BatchSize(*flagBatchSize, true).Shuffle().Infinite(true)
 
 	// Metrics we are interested.
 	meanAccuracyMetric := metrics.NewMeanBinaryLogitsAccuracy("Mean Accuracy", "#acc")
@@ -135,67 +134,52 @@ func main() {
 		optimizerFn(),
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
 		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
-	AssertNoError(ctx.Error())
 
 	// Use standard training loop.
 	loop := train.NewLoop(trainer)
 	commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
+
+	// Attach a checkpoint.
 	if checkpoint != nil {
-		train.NTimesDuringLoop(loop, *flagNumPlotPoints, "checkpointing", 100, func(_ *train.Loop, _ []tensor.Tensor) error {
-			return checkpoint.Save()
-		})
+		period := time.Minute * 1
+		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
+			func(loop *train.Loop, metrics []tensor.Tensor) error {
+				fmt.Printf("\n[saving checkpoint@%d] [median train step (ms): %d]\n", loop.LoopStep, loop.MedianTrainStepDuration().Milliseconds())
+				return checkpoint.Save()
+			})
 	}
 
-	// Plot metrics, if inside a Bash notebook.
-	if bashkernel.IsBashNotebook() {
-		attachPlot(loop, trainEvalDS)
-	}
-
-	_, err := loop.RunSteps(trainingDS, *flagNumSteps)
-	AssertNoError(err)
-
-	// Finally print an evaluation on train and test datasets.
-	fmt.Println()
-	err = commandline.ReportEval(trainer, trainEvalDS, testEvalDS)
-	AssertNoError(err)
-}
-
-// attachPlot attaches a plot to the end of the loop execution, collecting evaluation points during the loop.
-func attachPlot(loop *train.Loop, sampler *adult.Dataset) {
-	numPlotPoints := *flagNumPlotPoints
-	var lossData *chartjs.LinePlotData
-	lossData = &chartjs.LinePlotData{
-		Lines: []*chartjs.LineData{
-			{Label: "Moving Average Loss (train)", Points: make([]chartjs.XY, 0, numPlotPoints+2)},
-			{Label: "Moving Average Accuracy (train)", IsSecondAxis: true,
-				Points: make([]chartjs.XY, 0, numPlotPoints+2)},
-			{Label: "Mean Loss (test)", Points: make([]chartjs.XY, 0, numPlotPoints+2)},
-			{Label: "Mean Accuracy (test)", IsSecondAxis: true,
-				Points: make([]chartjs.XY, 0, numPlotPoints+2)},
-		},
-		HasTwoAxis: true,
-		XTitle:     "Global Step",
-		YTitle:     "Loss",
-		Y2Title:    "Accuracy",
-	}
-	// Attach itself to `loop`, it will run the function passed numPlotPoints times distributed evenly in the training loop.
-	train.NTimesDuringLoop(loop, numPlotPoints, "Flat for plotting", 0, func(loop *train.Loop, metrics []tensor.Tensor) error {
-		x := float64(loop.LoopStep)
-		lossData.AddPoint(0, x, metrics[1].Value().(float64))
-		lossData.AddPoint(1, x, metrics[2].Value().(float64))
-		// Run2 evaluation on test dataset.
-		evalMetrics, err := loop.Trainer.Eval(sampler)
-		if err != nil {
-			return errors.WithMessagef(err, "Evaluating on test for global_step=%d", loop.LoopStep)
+	// Plot points.
+	var plots *margaid.Plots
+	if *flagPlots {
+		plots = margaid.New(1024, 400, trainEvalDS, testEvalDS).LogScaleX().LogScaleY()
+		if checkpoint != nil {
+			// Save plot points.
+			_, err := plots.WithFile(path.Join(checkpoint.Dir(), "training_plot_points.json"))
+			AssertNoError(err)
 		}
-		lossData.AddPoint(2, x, evalMetrics[0].Value().(float64))
-		lossData.AddPoint(3, x, evalMetrics[1].Value().(float64))
-		return nil
-	})
-	loop.OnEnd("Plotting", 100, func(loop *train.Loop, metrics []tensor.Tensor) error {
-		plot := chartjs.NewLinePlot(lossData)
-		return plot.Plot()
-	})
+		plots.DynamicUpdates()
+
+		// Only plot if (1) it's running in a notebook or if (B) it has a checkpoint directory, where those plot points
+		// will be saved.
+		if checkpoint != nil || gonbui.IsNotebook {
+			// Create plot
+			train.ExponentialCallback(loop, 100, 1.1, true,
+				"Monitor", 0, func(loop *train.Loop, metrics []tensor.Tensor) error {
+					// Update plots with metrics.
+					return plots.AddTrainAndEvalMetrics(loop, metrics)
+				})
+		}
+	}
+
+	// Train for the selected *flagNumSteps
+	_, err := loop.RunSteps(trainDS, *flagNumSteps)
+	AssertNoError(err)
+	fmt.Printf("\t[Step %d] median train step: %d microseconds\n", loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
+
+	// Finally, print an evaluation on train and test datasets.
+	fmt.Println()
+	AssertNoError(commandline.ReportEval(trainer, trainEvalDS, testEvalDS))
 }
 
 // ModelGraph outputs the logits (not the probabilities). The parameter inputs should contain 3 tensors:
@@ -203,12 +187,18 @@ func attachPlot(loop *train.Loop, sampler *adult.Dataset) {
 // - categorical inputs, shaped  `(int64)[batch_size, len(VocabulariesFeatures)]`
 // - continuous inputs, shaped `(float32)[batch_size, len(Quantiles)]`
 // - weights: not currently used, but shaped `(float32)[batch_size, 1]`.
-func ModelGraph(ctx *context.Context, spec any, inputs []*Node) (logits []*Node) {
-	_ = spec // Not used, we know exactly what the inputs are.
+func ModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
+	_ = spec // Not used, since the dataset is always the same.
+	g := inputs[0].Graph()
+
+	// Use Cosine schedule of the learning rate.
+	optimizers.CosineAnnealingSchedule(ctx, g, ModelDType).
+		PeriodInSteps(*flagNumSteps / 3).Done()
+
 	categorical, continuous := inputs[0], inputs[1]
-	// batchSize := categorical.Shape().Dimensions[0]
+	batchSize := categorical.Shape().Dimensions[0]
+
 	var allEmbeddings []*Node
-	graph := categorical.Graph()
 
 	if *flagUseCategorical {
 		// Embedding of categorical values, each with its own vocabulary.
@@ -221,6 +211,7 @@ func ModelGraph(ctx *context.Context, spec any, inputs []*Node) (logits []*Node)
 			vocab := adult.Data.Vocabularies[catIdx]
 			vocabSize := len(vocab)
 			embedding := layers.Embedding(embedCtx, split, ModelDType, vocabSize, *flagEmbeddingDim)
+			embedding.AssertDims(batchSize, *flagEmbeddingDim) // 2-dim tensor, with batch size as the leading dimension.
 			allEmbeddings = append(allEmbeddings, embedding)
 		}
 	}
@@ -234,27 +225,30 @@ func ModelGraph(ctx *context.Context, spec any, inputs []*Node) (logits []*Node)
 			featureName := adult.Data.QuantilesFeatures[contIdx]
 			calibrationCtx := ctx.In(fmt.Sprintf("continuous_%d_%s", contIdx, featureName))
 			quantiles := adult.Data.Quantiles[contIdx]
-			if err := layers.ValidateQuantilesForPWLCalibration(quantiles); err != nil {
-				graph.SetError(errors.Wrapf(err, "quantile for features %q invalid", featureName))
-				return nil
-			}
-			calibrated := layers.PieceWiseLinearCalibration(calibrationCtx, split, Const(graph, quantiles), *flagTrainableCalibration)
+			layers.AssertQuantilesForPWLCalibrationValid(quantiles)
+			calibrated := layers.PieceWiseLinearCalibration(calibrationCtx, split, Const(g, quantiles),
+				*flagTrainableCalibration)
+			calibrated.AssertDims(batchSize, 1) // 2-dim tensor, with batch size as the leading dimension.
 			allEmbeddings = append(allEmbeddings, calibrated)
 		}
 	}
 
 	layer := Concatenate(allEmbeddings, -1)
-	layer = layers.DenseWithBias(ctx.In(fmt.Sprintf("Dense_%d", 0)), layer, *flagNumNodes)
+	layer.AssertDims(batchSize, -1) // 2-dim tensor, with batch size as the leading dimension (-1 means it is not checked).
+
+	layer = layers.DenseWithBias(ctx.In(fmt.Sprintf("DenseLayer_%d", 0)), layer, *flagNumNodes)
 	for ii := 1; ii < *flagNumHiddenLayers; ii++ {
+		ctx := ctx.In(fmt.Sprintf("DenseLayer_%d", ii))
 		// Add layer with residual connection.
 		tmp := Sigmoid(layer)
 		if *flagDropoutRate > 0 {
-			tmp = layers.Dropout(ctx, tmp, Const(graph, shapes.CastAsDType(*flagDropoutRate, ModelDType)))
+			tmp = layers.Dropout(ctx, tmp, Scalar(g, ModelDType, *flagDropoutRate))
 		}
-		tmp = layers.DenseWithBias(ctx.In(fmt.Sprintf("Dense_%d", ii)), tmp, *flagNumNodes)
-		layer = Add(layer, tmp)
+		tmp = layers.DenseWithBias(ctx, tmp, *flagNumNodes)
+		layer = Add(layer, tmp) // Residual connections
 	}
 	layer = Sigmoid(layer)
-	logits0 := layers.DenseWithBias(ctx.In("denseFinal"), layer, 1)
-	return []*Node{logits0}
+	logits := layers.DenseWithBias(ctx.In("DenseFinal"), layer, 1)
+	logits.AssertDims(batchSize, 1) // 2-dim tensor, with batch size as the leading dimension.
+	return []*Node{logits}
 }

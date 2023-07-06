@@ -30,6 +30,9 @@ var GetPlatforms = xla.GetPlatforms
 // GetDefaultPlatform returns the default list of platforms. Returns `(string, error)`.
 var GetDefaultPlatform = xla.GetDefaultPlatform
 
+// DefaultPlatformEnv is the environment variable name that sets the default platform.
+var DefaultPlatformEnv = xla.DefaultPlatformEnv
+
 // ManagerBuilder allow setting of options to build a Manager object.
 type ManagerBuilder struct {
 	platform                string

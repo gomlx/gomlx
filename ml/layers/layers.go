@@ -142,23 +142,24 @@ func Embedding(ctx *context.Context, input *Node, dtype shapes.DType, vocabSize,
 	return Gather(embeddingTable.ValueGraph(input.Graph()), input)
 }
 
-// ValidateQuantilesForPWLCalibration validate that raw values for quantiles are ok to be used for
+// AssertQuantilesForPWLCalibrationValid validates that raw values for quantiles are ok to be used for
 // PieceWiseLinearCalibration. It checks for:
 //   - Enough data points.
 //   - Monotonicity of data points: quantiles should always be increasing.
-func ValidateQuantilesForPWLCalibration[T constraints.Ordered](values []T) error {
+//
+// Errors are reported back with `panic`.
+func AssertQuantilesForPWLCalibrationValid[T constraints.Ordered](values []T) {
 	if len(values) < 2 {
-		return fmt.Errorf("PieceWiseLinearCalibration requires at least 2 quantile values")
+		Panicf("PieceWiseLinearCalibration requires at least 2 quantile values")
 	}
 	current := values[0]
 	for ii, value := range values[1:] {
 		if value <= current {
-			return fmt.Errorf("quantile %d (out of %d), valued %v, for PieceWiseLinearCalibration is out of order or repeated",
+			Panicf("quantile %d (out of %d), valued %v, for PieceWiseLinearCalibration is out of order or repeated",
 				ii, len(values), value)
 		}
 		current = value
 	}
-	return nil
 }
 
 // PieceWiseLinearCalibration creates a piece-wise linear function from the input, splitting
@@ -168,7 +169,7 @@ func ValidateQuantilesForPWLCalibration[T constraints.Ordered](values []T) error
 // The keypoints are typically quantiles of the input feature, starting with the minimum value
 // and ending on the maximum. It must have rank-1 and be of the same DType as input.
 // Its values must be ordered, and cannot be repeated (this may lead to NaNs). Consider using
-// ValidateQuantilesForPWLCalibration on the quantiles.
+// AssertQuantilesForPWLCalibrationValid on the quantiles.
 //
 // If outputTrainable is set to true, the outputs mapped to the keypoints are made trainable, and
 // may change to values outside the range [0, 1].

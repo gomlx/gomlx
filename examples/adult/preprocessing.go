@@ -19,7 +19,6 @@ package adult
 import (
 	"encoding/gob"
 	"fmt"
-	"log"
 	"math/rand"
 	"os"
 	"path"
@@ -50,19 +49,11 @@ const (
 	AdultDatasetTestCecksum = "a2a9044bc167a35b2361efbabec64e89d69ce82d9790d2980119aac5fd7e9c05"
 )
 
-// AssertNoError checks that err is nil, otherwise if `log.Fatal` with the error message.
+// AssertNoError checks that err is nil, otherwise it `panic`s with `err`.
 func AssertNoError(err error) {
-	if err != nil {
-		log.Fatalf("Failed: %+v", err)
-	}
-}
-
-// ValueNoError panics if there is an error, otherwise returns the value.
-func ValueNoError[T any](v T, err error) T {
 	if err != nil {
 		panic(err)
 	}
-	return v
 }
 
 // DownloadDataset downloads the Adult dataset files into `dir`. It `log.Fatal` if
@@ -84,8 +75,7 @@ func DownloadDataset(dir string, force bool, verbosity int) {
 			AssertNoError(err)
 			AssertNoError(data.ValidateChecksum(filePath, urlAndPath.checkSum))
 		} else {
-			err := data.DownloadIfMissing(urlAndPath.url, filePath, urlAndPath.checkSum)
-			AssertNoError(err)
+			AssertNoError(data.DownloadIfMissing(urlAndPath.url, filePath, urlAndPath.checkSum))
 		}
 		if verbosity >= 1 {
 			fmt.Printf("\t%s => %s\n", urlAndPath.url, filePath)
@@ -183,13 +173,13 @@ func LoadAndPreprocessData(dir string, numQuantiles int, forceDownload bool, ver
 		return
 	}
 
-	// Make sure data directory exists.
-	if !ValueNoError(FileExists(dir)) {
+	// Make sure the data directory exists.
+	if !data.FileExists(dir) {
 		AssertNoError(os.MkdirAll(dir, 0777))
 	}
 
 	// Check whether we have a previously binary version of the data already preprocessed.
-	if forceDownload || !ValueNoError(LoadBinaryData(dir, numQuantiles)) {
+	if forceDownload || !LoadBinaryData(dir, numQuantiles) {
 		DownloadDataset(dir, forceDownload, verbosity)
 		df := LoadDataFrame(path.Join(dir, AdultDatasetDataFile))
 		PopulateVocabularies(df)
@@ -299,35 +289,26 @@ func SaveBinaryData(dir string, numQuantiles int) (err error) {
 }
 
 // LoadBinaryData saves the global Data structure in binary format, for faster access.
-// It returns true if data was avaialable and loaded.
+// It returns true if data was available and loaded.
 //
 // Considering using LoadAndPreprocessData instead.
-func LoadBinaryData(dir string, numQuantiles int) (found bool, err error) {
+func LoadBinaryData(dir string, numQuantiles int) (found bool) {
 	filePath := BinaryFilePath(dir, numQuantiles)
-	found, err = FileExists(filePath)
-	if !found || err != nil {
-		return
+	if !data.FileExists(filePath) {
+		return false
 	}
 
-	var f *os.File
-	f, err = os.Open(filePath)
+	f, err := os.Open(filePath)
 	if err != nil {
-		return false, errors.Wrapf(err, "failed to open %q", filePath)
+		panic(errors.Wrapf(err, "failed to open %q", filePath))
 	}
 
-	defer func() {
-		cErr := f.Close()
-		if err == nil && cErr != nil {
-			err = errors.Wrapf(err, "failed to close file %q after reading", filePath)
-			found = false
-		}
-	}()
-
+	defer func() { AssertNoError(f.Close()) }()
 	gobW := gob.NewDecoder(f)
 	if err := gobW.Decode(&Data); err != nil {
-		return false, errors.Wrapf(err, "failed to load data from %q", filePath)
+		panic(errors.Wrapf(err, "failed to load data from %q", filePath))
 	}
-	return true, nil
+	return true
 }
 
 // PopulateVocabularies goes over all string columns in the DataFrame and map their
