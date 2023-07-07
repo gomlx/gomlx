@@ -43,10 +43,8 @@ func TestBuildGraph(t *testing.T) {
 		img = PreprocessImage(img, 255.0, timage.ChannelsLast)
 		return BuildGraph(ctx, img).PreTrained(*flagDataDir).ClassificationTop(true).Done()
 	})
-	results, err := inceptionV3Exec.Call(imgT)
-	require.NoError(t, err)
-	predictionT := results[0]
-	prediction := predictionT.Value().([][]float32)[0] // The last [0] takes the first element of teh batch of 1.
+	predictionT := inceptionV3Exec.Call(imgT)[0]
+	prediction := predictionT.Value().([][]float32)[0] // The last [0] takes the first element of the batch of 1.
 
 	// Compare with the expected result:
 	wantT, err := tensor.Load("gomlx_gopher_classification_output.bin")
@@ -58,13 +56,11 @@ func TestBuildGraph(t *testing.T) {
 		max, mean = ReduceAllMax(diff), ReduceAllMean(diff)
 		return
 	})
-	results, err = diffStats.Call(wantT, predictionT)
-	require.NoError(t, err)
+	results := diffStats.Call(wantT, predictionT)
 	fmt.Printf("\tPredictions difference to previous truth: max=%f, mean=%f\n",
 		results[0].Value(), results[1].Value())
 
 	// Assert difference is within a delta.
 	assert.InDeltaSlice(t, want, prediction, 0.1,
 		"InceptionV3 classification of our gopher image differs -- did the image change ?")
-
 }

@@ -4,6 +4,7 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/train/metrics"
+	. "github.com/gomlx/gomlx/types/exceptions"
 	timage "github.com/gomlx/gomlx/types/tensor/image"
 )
 
@@ -84,25 +85,19 @@ func (builder *KidBuilder) BuildGraph(ctx *context.Context, labels, predictions 
 	// Sanity checking:
 	g := predictions[0].Graph()
 	dtype := predictions[0].DType()
-	output = g.InvalidNode()
-	if !g.Ok() {
-		return
-	}
 	if len(labels) != 1 || len(predictions) != 1 {
-		g.SetErrorf("KidMetric expects only one images tensor in labels and predictions, got %d and %d",
+		Panicf("KidMetric expects only one images tensor in labels and predictions, got %d and %d",
 			len(labels), len(predictions))
-		return
 	}
 	if builder.kidImageSize < 75 || builder.kidImageSize > 299 {
-		g.SetErrorf("KidMetric was configured with an invalid target image size (for KID calculation) of %d -- "+
+		Panicf("KidMetric was configured with an invalid target image size (for KID calculation) of %d -- "+
 			"valid values are between 75 and 299", builder.kidImageSize)
-		return
 	}
 
 	images := [2]*Node{labels[0], predictions[0]}
 	imagesShape := images[0].Shape()
 	if !imagesShape.Eq(images[1].Shape()) {
-		g.SetErrorf("Labels (%s) and predictions (%s) have different shapes",
+		Panicf("Labels (%s) and predictions (%s) have different shapes",
 			images[0].Shape(), images[1].Shape())
 	}
 
@@ -138,9 +133,6 @@ func (builder *KidBuilder) BuildGraph(ctx *context.Context, labels, predictions 
 		features[imgIdx] = BuildGraph(ctx, images[imgIdx]).
 			SetPooling(MeanPooling).ClassificationTop(false).PreTrained(builder.dataDir).
 			ChannelsAxis(builder.channelsConfig).Trainable(false).Done()
-	}
-	if !g.Ok() {
-		return
 	}
 	batchSize := features[0].Shape().Dimensions[0]
 	crossKernels := polynomialKernel(features)
