@@ -103,45 +103,53 @@ var (
 
 // PreGenerate create datasets that reads the original images, but then saves the scaled down and augmented for
 // training images in binary format, for faster consumption later.
-func PreGenerate(config *Configuration, numEpochsForTraining int) {
+//
+// It will only run if files don't already exist.
+func PreGenerate(config *Configuration, numEpochsForTraining int, force bool) {
 	// Notice we need an even sized batch-size, to have equal number of dogs and cats.
 
 	// Validation data for evaluation.
 	validPath := path.Join(config.DataDir, PreGeneratedValidationFileName)
-	f, err := os.Create(validPath)
-	AssertNoError(err)
-	ds := NewDataset("valid", config.DataDir, 2, false, nil, config.NumFolds,
-		config.ValidationFolds, config.FoldsSeed,
-		config.ModelImageSize, config.ModelImageSize, 0, false, config.DType)
-	fmt.Printf("Generating validation data for evaluation in %q...\n", validPath)
-	err = ds.Save(f, 1, true)
-	AssertNoError(err)
-	AssertNoError(f.Close())
+	if !data.FileExists(validPath) || force {
+		f, err := os.Create(validPath)
+		AssertNoError(err)
+		ds := NewDataset("valid", config.DataDir, 2, false, nil, config.NumFolds,
+			config.ValidationFolds, config.FoldsSeed,
+			config.ModelImageSize, config.ModelImageSize, 0, false, config.DType)
+		fmt.Printf("Generating validation data for evaluation in %q...\n", validPath)
+		err = ds.Save(f, 1, true)
+		AssertNoError(err)
+		AssertNoError(f.Close())
+	}
 
 	// Training data for evaluation.
 	trainEvalPath := path.Join(config.DataDir, PreGeneratedTrainEvalFileName)
-	f, err = os.Create(trainEvalPath)
-	AssertNoError(err)
-	ds = NewDataset("train-eval", config.DataDir, 2, false, nil, config.NumFolds,
-		config.TrainFolds, config.FoldsSeed,
-		config.ModelImageSize, config.ModelImageSize, 0, false, config.DType)
-	fmt.Printf("Generating training data for evaluation in %q...\n", trainEvalPath)
-	err = ds.Save(f, 1, true)
-	AssertNoError(err)
-	AssertNoError(f.Close())
+	if !data.FileExists(trainEvalPath) || force {
+		f, err := os.Create(trainEvalPath)
+		AssertNoError(err)
+		ds := NewDataset("train-eval", config.DataDir, 2, false, nil, config.NumFolds,
+			config.TrainFolds, config.FoldsSeed,
+			config.ModelImageSize, config.ModelImageSize, 0, false, config.DType)
+		fmt.Printf("Generating training data for evaluation in %q...\n", trainEvalPath)
+		err = ds.Save(f, 1, true)
+		AssertNoError(err)
+		AssertNoError(f.Close())
+	}
 
 	// Training data.
 	trainPath := path.Join(config.DataDir, PreGeneratedTrainFileName)
-	f, err = os.Create(trainPath)
-	AssertNoError(err)
-	shuffle := rand.New(rand.NewSource(time.Now().UTC().UnixNano()))
-	ds = NewDataset("train", config.DataDir, 2, false, shuffle, config.NumFolds,
-		config.TrainFolds, config.FoldsSeed,
-		config.ModelImageSize, config.ModelImageSize, config.AngleStdDev, config.FlipRandomly, config.DType)
-	fmt.Printf("Generating training data *with augmentation* in %q...\n", trainPath)
-	err = ds.Save(f, numEpochsForTraining, true)
-	AssertNoError(err)
-	AssertNoError(f.Close())
+	if !data.FileExists(trainPath) || force {
+		f, err := os.Create(trainPath)
+		AssertNoError(err)
+		shuffle := rand.New(rand.NewSource(time.Now().UTC().UnixNano()))
+		ds := NewDataset("train", config.DataDir, 2, false, shuffle, config.NumFolds,
+			config.TrainFolds, config.FoldsSeed,
+			config.ModelImageSize, config.ModelImageSize, config.AngleStdDev, config.FlipRandomly, config.DType)
+		fmt.Printf("Generating training data *with augmentation* in %q...\n", trainPath)
+		err = ds.Save(f, numEpochsForTraining, true)
+		AssertNoError(err)
+		AssertNoError(f.Close())
+	}
 }
 
 // CreateDatasets used for training and evaluation. If the pre-generated files with augmented/scaled images

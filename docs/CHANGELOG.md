@@ -5,6 +5,7 @@
 * Error handling revamp: using `panic` to report errors — it works as exceptions. This is a very large change
   affecting most of the code.
 * Added `NewManager`, a simpler interface to create a `Manager` object with defaults.
+* Added `margaid.NewDeafult`, simplifying adding of plots for the default cases.
 * Examples: 
   * UCI-Adult: replaced `adult.Dataset` to the much simpler and powerful `data.InMemoryDataset`.
 * Remove `tensor.Local.Data()`: now all access is done throw the `tensor.Local.AcquireData()` and release, to

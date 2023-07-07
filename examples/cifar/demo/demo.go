@@ -165,8 +165,8 @@ func trainModel() {
 			})
 	}
 
-	// Attach a margaid plots: plot points at exponential steps,
-	// that are saved along the checkpoint directory (if one is given).
+	// Attach a margaid plots: plot points at exponential steps.
+	// The points generated are saved along the checkpoint directory (if one is given).
 	if *flagPlots {
 		_ = margaid.NewDefault(loop, checkpoint.Dir(), 100, 1.1, evalOnTrainDS, evalOnTestDS)
 	}
