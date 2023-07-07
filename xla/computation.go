@@ -23,8 +23,8 @@ import "C"
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/pkg/errors"
 	"log"
 	"unsafe"
 )
@@ -161,13 +161,13 @@ func (comp *Computation) Compile(paramShapes []shapes.Shape, output int) error {
 		return comp.firstError
 	}
 	if output < 0 || output >= len(comp.ops) {
-		return fmt.Errorf("output ops (%d) out of range (only %d were defined)", output, len(comp.ops))
+		return errors.Errorf("output ops (%d) out of range (only %d were defined)", output, len(comp.ops))
 	}
 	if comp.compiled {
-		return fmt.Errorf("the Computation is already compiled")
+		return errors.New("the Computation is already compiled")
 	}
 	if !comp.client.Ok() {
-		return fmt.Errorf("the Client associated to Computation is not ok (finalized?)")
+		return errors.New("the Client associated to Computation is not ok (finalized?)")
 	}
 	comp.compiled = true
 
@@ -176,7 +176,7 @@ func (comp *Computation) Compile(paramShapes []shapes.Shape, output int) error {
 	status := C.ClientCompileComputation(
 		comp.client.cClientPtr, comp.cCompPtr, C.int(numParams), cShapes, unsafe.Pointer(comp.ops[output]))
 	freeShapesCArray(cShapes, cShapesSlice)
-	comp.firstError = ErrorFromStatus((*C.XlaStatus)(status))
+	comp.firstError = errors.Wrap(ErrorFromStatus((*C.XlaStatus)(status)), "compiling an XLA Computation")
 	return comp.firstError
 }
 

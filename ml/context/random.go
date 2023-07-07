@@ -63,9 +63,7 @@ func (ctx *Context) RandomNormal(g *graph.Graph, shape shapes.Shape) (values *No
 	rngStateVar := ctx.getRngStateVar()
 	rngState := rngStateVar.ValueGraph(g)
 	rngState, values = graph.RandomNormal(rngState, shape)
-	if g.Ok() {
-		rngStateVar.SetValueGraph(rngState)
-	}
+	rngStateVar.SetValueGraph(rngState)
 	return
 }
 
@@ -82,8 +80,6 @@ func (ctx *Context) RandomUniform(g *graph.Graph, shape shapes.Shape) (values *N
 	rngStateVar := ctx.getRngStateVar()
 	rngState := rngStateVar.ValueGraph(g)
 	rngState, values = graph.RandomUniform(rngState, shape)
-	if g.Ok() {
-		rngStateVar.SetValueGraph(rngState)
-	}
+	rngStateVar.SetValueGraph(rngState)
 	return
 }

@@ -19,6 +19,7 @@ package context
 import (
 	"fmt"
 	ml "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
@@ -51,10 +52,7 @@ const LeakThreshold int64 = 300000
 // It then destroys the returning tensor.Device objects (xla.OnDeviceBuffer), and checks that memory doesn't get
 // out of control.
 func TestMemoryLeaksCtxExec(t *testing.T) {
-	manager, err := ml.BuildManager().Done()
-	if err != nil {
-		t.Fatalf("Failed to create Manager: %+v", err)
-	}
+	manager := graphtest.BuildTestManager()
 	initialValue := slices.SliceWithValue(100, 0.0)
 
 	graphFn := func(ctx *Context, x *Node) []*Node {
@@ -84,17 +82,11 @@ func TestMemoryLeaksCtxExec(t *testing.T) {
 			for xV := 0.0; xV < 100.0; xV += 1 {
 				for size := 1; size <= 100; size++ {
 					inputT := tensor.FromValue(slices.SliceWithValue(size, xV))
-					results, err := exec.Call(inputT)
-					require.NoErrorf(t, err, "Failed to execute computation: xV=%g, size=%d", xV, size)
+					var results []tensor.Tensor
+					require.NotPanicsf(t, func() { results = exec.Call(inputT) },
+						"Failed to execute computation: xV=%g, size=%d", xV, size)
 					totalT := results[0]
 					varUpdates := results[1:]
-					if totalT.Error() != nil {
-						t.Fatalf("Failed to execute computation: %+v", totalT.Error())
-					}
-					totalL := totalT.Local()
-					if totalL.Error() != nil {
-						t.Fatalf("Failed total: %+v", totalL.Error())
-					}
 					total := totalT.Local().Value().(float64)
 					want := 100.0 * (float64(count) + float64(size)*xV)
 					//want := float64(float32(100.0) * (float32(10) + float32(size)*xV))

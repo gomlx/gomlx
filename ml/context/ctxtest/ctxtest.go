@@ -21,8 +21,10 @@ package ctxtest
 import (
 	"fmt"
 	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/types/slices"
+	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
@@ -36,7 +38,7 @@ type TestContextGraphFn func(ctx *context.Context, g *Graph) (inputs, outputs []
 // delta is the margin of value on the difference of output and want values that are acceptable.
 // Values of delta <= 0 means only exact equality is accepted.
 func RunTestGraphFn(t *testing.T, testName string, graphFn TestContextGraphFn, want []any, delta float64) {
-	manager := BuildManager().MustDone()
+	manager := graphtest.BuildTestManager()
 	ctx := context.NewContext(manager)
 
 	var numInputs, numOutputs int
@@ -47,9 +49,9 @@ func RunTestGraphFn(t *testing.T, testName string, graphFn TestContextGraphFn, w
 		return all
 	}
 	exec := context.NewExec(manager, ctx, wrapperFn)
-	inputsAndOutputs, _, err := exec.CallWithGraph()
-	require.NoErrorf(t, err, "%s: failed to run graph with %+v", testName)
-
+	var inputsAndOutputs []tensor.Tensor
+	require.NotPanicsf(t, func() { inputsAndOutputs = exec.Call() },
+		"%s: failed to run graph with %+v", testName)
 	inputs := inputsAndOutputs[:numInputs]
 	outputs := inputsAndOutputs[numInputs:]
 

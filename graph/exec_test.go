@@ -19,13 +19,13 @@ package graph_test
 import (
 	"fmt"
 	. "github.com/gomlx/gomlx/graph"
+	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/stretchr/testify/require"
 	"math"
 	"reflect"
-	"strings"
 	"testing"
 )
 
@@ -43,15 +43,11 @@ func TestExec(t *testing.T) {
 		for ii := range b {
 			b[ii] = 1
 		}
-		slice, err := dist.Call(a, b)
-		require.NoError(t, err)
+		slice := dist.Call(a, b)
 		if len(slice) == 0 {
 			t.Fatalf("Failed to %q.Call(), returned %d elements, wanted 1 only.", dist.Name(), len(slice))
 		}
 		result := slice[0]
-		if result.Error() != nil {
-			t.Fatalf("Failed to %q.Call(): %+v", dist.Name(), result.Error())
-		}
 		got := result.Value().(float32)
 		want := float32(math.Sqrt(float64(dim)))
 		if !slices.Close[float32](want, got) {
@@ -66,31 +62,38 @@ func TestExec(t *testing.T) {
 	{
 		a := []float64{0, 0}
 		b := []float32{1, 1}
-		results, err := dist.Call(a, b)
-		require.Errorf(t, err, "EuclideanDistance(%v:%v, %v:%v) should have failed, got %+v", reflect.TypeOf(a), a, reflect.TypeOf(b), b, results)
+		var results []tensor.Tensor
+		require.Panicsf(t, func() { results = dist.Call(a, b) },
+			"EuclideanDistance(%v:%v, %v:%v) should have failed, got %+v",
+			reflect.TypeOf(a), a, reflect.TypeOf(b), b, results)
 	}
 
 	// Check different shapes will fail.
 	{
 		a := []float32{0, 0, 0}
 		b := []float32{1, 1}
-		results, err := dist.Call(a, b)
-		require.Errorf(t, err, "EuclideanDistance(%v:%v, %v:%v) should have failed, got %+v", reflect.TypeOf(a), a, reflect.TypeOf(b), b, results)
+		var results []tensor.Tensor
+		require.Panicsf(t, func() { results = dist.Call(a, b) },
+			"EuclideanDistance(%v:%v, %v:%v) should have failed, got %+v",
+			reflect.TypeOf(a), a, reflect.TypeOf(b), b, results)
 	}
 
-	// Check that we have another 3 different shapes before we maxed out the cache.
-	for dim := 6; dim <= 8; dim++ {
+	// Check that we have another 5 different shapes before we maxed out the cache.
+	for dim := 6; dim <= 10; dim++ {
 		testForDim(dim)
 	}
 
-	// Try a different shape (float64) and we should have run out of cache.
+	// Try a different shape (float64) so that we run out of cache.
 	{
 		a := []float64{0, 0}
 		b := []float64{1, 1}
-		results, err := dist.Call(a, b)
-		require.Errorf(t, err, "EuclideanDistance(%v:%v, %v:%v) should have failed, got %+v", reflect.TypeOf(a), a, reflect.TypeOf(b), b, results)
-		require.Truef(t, strings.Contains(err.Error(), "maximum cache"),
-			"EuclideanDistance(%v:%v, %v:%v) failed on something that was not cache: %+v", reflect.TypeOf(a), a, reflect.TypeOf(b), b, err)
+		var results []tensor.Tensor
+		err := TryCatch[error](func() { results = dist.Call(a, b) })
+		require.Errorf(t, err, "EuclideanDistance(%v:%v, %v:%v) should have failed, got %+v",
+			reflect.TypeOf(a), a, reflect.TypeOf(b), b, results)
+		require.ErrorContainsf(t, err, "maximum cache",
+			"EuclideanDistance(%v:%v, %v:%v) failed on something that was not cache: %+v",
+			reflect.TypeOf(a), a, reflect.TypeOf(b), b, err)
 	}
 
 	addAndSubGraph := func(a, b *Node) (sum, add *Node) {
@@ -101,8 +104,9 @@ func TestExec(t *testing.T) {
 	{
 		a := []float32{2, 2}
 		b := []float32{1, 1}
-		outputs, err := addAndSub.Call(a, b)
-		require.NoErrorf(t, err, "%q(%v:%v, %v:%v) failed", addAndSub.Name(), reflect.TypeOf(a), a, reflect.TypeOf(b), b)
+		var outputs []tensor.Tensor
+		require.NotPanicsf(t, func() { outputs = addAndSub.Call(a, b) },
+			"%q(%v:%v, %v:%v) failed", addAndSub.Name(), reflect.TypeOf(a), a, reflect.TypeOf(b), b)
 		add, sub := outputs[0].Value(), outputs[1].Value()
 		wantAdd, wantSub := []float32{3, 3}, b
 		if !slices.DeepSliceCmp(add, wantAdd, slices.Equal[float32]) || !slices.DeepSliceCmp(sub, wantSub, slices.Equal[float32]) {
@@ -128,24 +132,21 @@ func TestExecWithSideParams(t *testing.T) {
 
 	x := []float64{1, 2}
 	want := []float64{4, 5}
-	got, err := addScalar.Call(x)
-	require.NoError(t, err)
+	got := addScalar.Call(x)
 	if !slices.DeepSliceCmp(want, got[0].Value(), slices.Equal[float64]) {
 		t.Fatalf("addScalar(%v, 3): got %v, wanted %v", x, got, want)
 	}
 
 	scalar = tensor.FromValue(10.0).Device(manager, manager.DefaultDeviceNum())
 	want = []float64{11, 12}
-	got, err = addScalar.Call(x)
-	require.NoError(t, err)
+	got = addScalar.Call(x)
 	if !slices.DeepSliceCmp(want, got[0].Value(), slices.Equal[float64]) {
 		t.Fatalf("addScalar(%v, 10): got %v, wanted %v", x, got, want)
 	}
 
 	x = []float64{0, 1, 2}
 	want = []float64{10, 11, 12}
-	got, err = addScalar.Call(x)
-	require.NoError(t, err)
+	got = addScalar.Call(x)
 	if !slices.DeepSliceCmp(want, got[0].Value(), slices.Equal[float64]) {
 		t.Fatalf("addScalar(%v, 10): got %v, wanted %v", x, got, want)
 	}
@@ -164,16 +165,12 @@ func addSubGraph(a, b *Node) []*Node {
 
 func TestExecWithSlices(t *testing.T) {
 	manager := buildTestManager()
-	concat, err := NewExecAny(manager, concatGraph)
-	if err != nil {
-		t.Fatalf("Failed to create concatGraph: %+v", err)
-	}
+	concat := NewExecAny(manager, concatGraph)
 
 	a := [][]float64{{1, 2}, {3, 4}}
 	b := [][]float64{{10}, {20}}
 	{
-		results, err := concat.Call(a, b)
-		require.NoError(t, err)
+		results := concat.Call(a, b)
 		got := results[0]
 		want := [][]float64{{1, 2, 10}, {3, 4, 20}}
 		if !slices.DeepSliceCmp(want, got.Value(), slices.Equal[float64]) {
@@ -183,8 +180,7 @@ func TestExecWithSlices(t *testing.T) {
 
 	c := [][]float64{{100, 101}, {200, 201}}
 	{
-		results, err := concat.Call(a, b, c)
-		require.NoError(t, err)
+		results := concat.Call(a, b, c)
 		got := results[0]
 		want := [][]float64{{1, 2, 10, 100, 101}, {3, 4, 20, 200, 201}}
 		if !slices.DeepSliceCmp(want, got.Value(), slices.Equal[float64]) {
@@ -192,11 +188,9 @@ func TestExecWithSlices(t *testing.T) {
 		}
 	}
 
-	addSub, err := NewExecAny(manager, addSubGraph)
-	require.NoError(t, err, "Failed to create addSubGraph")
+	addSub := NewExecAny(manager, addSubGraph)
 	{
-		gotTuple, err := addSub.Call(c, a)
-		require.NoError(t, err)
+		gotTuple := addSub.Call(c, a)
 		want0 := [][]float64{{101, 103}, {203, 205}}
 		want1 := [][]float64{{99, 99}, {197, 197}}
 		if !slices.DeepSliceCmp(want0, gotTuple[0].Value(), slices.Equal[float64]) {
@@ -216,11 +210,7 @@ func concatWithLoggedFirstNodeGraph(nodes []*Node) *Node {
 func TestExecWithLogger(t *testing.T) {
 	manager := buildTestManager()
 
-	concat, err := NewExecAny(manager, concatWithLoggedFirstNodeGraph)
-	if err != nil {
-		t.Fatalf("Failed to create concatWithLoggedFirstNodeGraph: %+v", err)
-	}
-
+	concat := NewExecAny(manager, concatWithLoggedFirstNodeGraph)
 	var firstNodeValue tensor.Tensor
 	concat.SetNodeLogger(func(_ *Graph, messages []string, values []tensor.Tensor, nodes []NodeId) {
 		if len(messages) != 1 {
@@ -233,8 +223,7 @@ func TestExecWithLogger(t *testing.T) {
 	a := [][]float64{{1, 2}, {3, 4}}
 	b := [][]float64{{10}, {20}}
 	{
-		results, err := concat.Call(a, b)
-		require.NoError(t, err)
+		results := concat.Call(a, b)
 		got := results[0]
 		want := [][]float64{{1, 2, 10}, {3, 4, 20}}
 		if !slices.DeepSliceCmp(want, got.Value(), slices.Equal[float64]) {
@@ -252,8 +241,7 @@ func TestExecWithNoInputs(t *testing.T) {
 	matrixInitFn := NewExec(manager, func(g *Graph) *Node {
 		return IotaFull(g, shapes.Make(shapes.Int64, 3, 3))
 	})
-	results, err := matrixInitFn.Call()
-	require.NoError(t, err)
+	results := matrixInitFn.Call()
 	got := results[0]
 	want := [][]int{{0, 1, 2}, {3, 4, 5}, {6, 7, 8}}
 	if !slices.DeepSliceCmp(want, got.Value(), slices.Equal[int]) {

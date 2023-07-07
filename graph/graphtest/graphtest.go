@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/types/slices"
+	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
@@ -30,7 +31,7 @@ type TestGraphFn func(g *graph.Graph) (inputs, outputs []*graph.Node)
 
 // BuildTestManager using "Host" by default -- can be overwritten by GOMLX_PLATFORM environment variable.
 func BuildTestManager() *graph.Manager {
-	return graph.BuildManager().WithDefaultPlatform("Host").MustDone()
+	return graph.BuildManager().WithDefaultPlatform("Host").Done()
 }
 
 // RunTestGraphFn tests a graph building function graphFn by executing it and comparing
@@ -49,8 +50,9 @@ func RunTestGraphFn(t *testing.T, testName string, graphFn TestGraphFn, want []a
 		return all
 	}
 	exec := graph.NewExec(manager, wrapperFn)
-	inputsAndOutputs, err := exec.Call()
-	require.NoErrorf(t, err, "%s: failed to execute graph", testName)
+	var inputsAndOutputs []tensor.Tensor
+	require.NotPanicsf(t, func() { inputsAndOutputs = exec.Call() },
+		"%s: failed to execute graph", testName)
 	inputs := inputsAndOutputs[:numInputs]
 	outputs := inputsAndOutputs[numInputs:]
 

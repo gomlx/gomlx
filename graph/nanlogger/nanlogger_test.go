@@ -58,22 +58,19 @@ func TestNanLogger(t *testing.T) {
 	l.Attach(e)
 
 	// Checks that without any NaN, nothing happens.
-	_, err := e.Call([]float32{1.0, 3.0})
-	require.NoError(t, err)
+	require.NotPanics(t, func() { e.Call([]float32{1.0, 3.0}) })
 	assert.Equal(t, 0, numHandlerCalls)
 
 	// Check that NaN is observed, with the correct scope.
-	_, err = e.Call([]float64{-1.0, 1.0})
-	require.NoError(t, err)
+	require.NotPanics(t, func() { e.Call([]float32{-1.0, 1.0}) })
 	require.Equal(t, 1, numHandlerCalls)
 	require.Equal(t, 1, numNan)
 	require.Equal(t, 0, numInf)
 	require.Equal(t, []string{"scope1"}, lastHandledScope)
 
-	// Check now that Inf is observed, with correct scope.
-	// Notice we are also using float32, it should just work.
-	_, err = e.Call([]float32{0.0, 1.0})
-	require.NoError(t, err)
+	// Check now that Inf is observed, with the correct scope.
+	// Notice we are also using float32, so it should just work.
+	require.NotPanics(t, func() { e.Call([]float32{0.0, 1.0}) })
 	require.Equal(t, 2, numHandlerCalls)
 	require.Equal(t, 1, numNan)
 	require.Equal(t, 1, numInf)
@@ -81,11 +78,9 @@ func TestNanLogger(t *testing.T) {
 
 	// Check that the NaN happens before the Inf, and should be the one
 	// reported.
-	_, err = e.Call([]float64{0.0, -1.0})
-	require.NoError(t, err)
+	require.NotPanics(t, func() { e.Call([]float32{0.0, -1.0}) })
 	require.Equal(t, 3, numHandlerCalls)
 	require.Equal(t, 2, numNan)
 	require.Equal(t, 1, numInf)
 	require.Equal(t, []string{"scope1"}, lastHandledScope)
-
 }

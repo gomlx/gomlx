@@ -65,19 +65,24 @@ import (
 //
 // More details in the `tensor` package documentation.
 type Tensor interface {
-	// Local version of the tensor. If the underlying tensor is Local already, it's a no-op. Otherwise, the tensor
-	// contents are transferred locally. It uses a cache system, so if tensor was already local no transfer happens.
+	// Local version of the tensor.
+	// If the underlying tensor is `Local` already, it's a no-op.
+	// If there is already a cache of a corresponding `Local` tensor, that is returned.
+	// Otherwise, the contents of one of the on-device tensors (if there is more than one) are
+	// transferred locally.
 	Local() *Local
 
-	// Device version of the tensor. If the underlying tensor is on the given Device already, it's a no-op. Otherwise,
-	// the tensor contents are transferred to the device. It uses a cache system, so if tensor was already local no
-	// transfer happens.
+	// Device version of the tensor.
+	// If the underlying tensor is on the given `Device` already, it's a no-op.
+	// If there is already a cache of a corresponding `Device` tensor on the given device, that is returned.
+	// Otherwise, the contents of the `Local` tensor (if available), or one of the on-device tensors are
+	// transferred to a `Device` tensor on the given `deviceNum`.
 	Device(client HasClient, deviceNum int) *Device
 
 	// CurrentDevice returns the current Device tensor backing this tensor, if there is any.
 	// If the tensor is Local, this returns nil.
 	//
-	// If there are more than one Device tensor, this returns the first one.
+	// If there is more than one Device tensor, this returns the first one.
 	CurrentDevice() *Device
 
 	// Shape of the tensor.
@@ -94,18 +99,17 @@ type Tensor interface {
 	String() string
 
 	// Value returns a multidimensional slice (except if shape is a scalar) containing the values.
-	// If the underlying tensor is on device (e.g: GPU), it's transferred locally with Local().
+	// If the underlying tensor is on device (E.g.: GPU), it's transferred locally with Local().
 	Value() any
 
-	// Error returns the message that caused an error state.
-	Error() error
-
-	// Ok returns whether the tensor is in an invalid state or empty.
-	Ok() bool
-
-	// FinalizeAll immediately frees the data from all versions of the Tensor -- Local or on Device, and make the
-	// tensor invalid. This calls Finalize on the cached Local and all Device tensors.
+	// FinalizeAll immediately frees the data from all versions of the Tensor -- local or on-device, and makes the
+	// tensor invalid.
+	// This calls Finalize on the cached Local and all Device tensors.
 	FinalizeAll()
+
+	// IsFinalized returns true if the tensor has already been "finalized", and its
+	// data freed.
+	IsFinalized() bool
 }
 
 var (
@@ -163,14 +167,14 @@ func shapeForValueRecursive(shape *shapes.Shape, v reflect.Value, t reflect.Type
 	return nil
 }
 
-func depthDTypeAndBaseType(t reflect.Type) (int, shapes.DType, reflect.Type) {
-	if t.Kind() == reflect.Slice {
-		depth, dtype, baseType := depthDTypeAndBaseType(t.Elem())
-		return depth + 1, dtype, baseType
-	}
-	return 0, shapes.DTypeForType(t), t
-
-}
+//func depthDTypeAndBaseType(t reflect.Type) (int, shapes.DType, reflect.Type) {
+//	if t.Kind() == reflect.Slice {
+//		depth, dtype, baseType := depthDTypeAndBaseType(t.Elem())
+//		return depth + 1, dtype, baseType
+//	}
+//	return 0, shapes.DTypeForType(t), t
+//
+//}
 
 // cache stores links to materialization of the tensor (local or on device).
 type cache struct {
@@ -225,9 +229,6 @@ func (c *cache) AddDevice(device *Device) *Device {
 // lockedAddDevice implements AddDevice, and assumes cache.mu is already locked.
 func (c *cache) lockedAddDevice(device *Device) *Device {
 	device.cache = c
-	if !device.Ok() {
-		return device
-	}
 	if c.onDevices == nil {
 		c.onDevices = make(map[xla.ClientId]map[int]*Device)
 	}
@@ -278,7 +279,7 @@ func (c *cache) AddLocal(local *Local) *Local {
 	return local
 }
 
-// lockedAddLocal is the same as AddLocal, but assumes cache is already locked.
+// lockedAddLocal is the same as AddLocal, but it assumes the cache is already locked.
 func (c *cache) lockedAddLocal(local *Local) *Local {
 	c.local = local
 	local.cache = c
@@ -299,52 +300,67 @@ func (c *cache) ClearLocal() {
 	c.local = nil
 }
 
-// Local will transfer data from the Device storage to a Local tensor.
-func (c *cache) Local() *Local {
+// Value returns a multidimensional slice (except if shape is a scalar) containing a
+// copy of the tensor values.
+// It is just a shortcut to calling `device.Local().Value()`.
+// See `Local` and `Local.Value()` for details.
+func (c *cache) Value() any {
+	return c.localFromDevice(nil).Value()
+}
+
+// localFromDevice converts the tensor to `Local`, if there is not one cached yet.
+// And if it needs converting, it uses the `device`, if one is given.
+// If `device == nil`, it converts from any associated `Device` tensor.
+//
+// If `device` is nil, it picks the first Device tensor.
+func (c *cache) localFromDevice(device *Device) *Local {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	return c.localFromDeviceLocked(device)
+}
 
+// localFromDeviceLocked implements localFromDevice, but assumes cache is already locked.
+func (c *cache) localFromDeviceLocked(device *Device) *Local {
 	if c == nil {
 		return nil
 	}
 	if c.local != nil {
 		return c.local
 	}
-	if c.onDevices == nil {
-		return nil
-	}
-	// Pick first onDevice tensor and convert to local.
-	for _, perDeviceOrdinal := range c.onDevices {
-		for _, device := range perDeviceOrdinal {
-			if device == nil {
-				continue
-			}
-			if device.error != nil {
-				c.local = &Local{
-					error: fmt.Errorf("tensor.Local created from bad Device: %w", device.error),
+
+	if device == nil {
+		if c.onDevices == nil {
+			return nil
+		}
+		// Pick the first on-device tensor and convert it to a local tensor.
+	loopAllDevices:
+		for _, perDeviceOrdinal := range c.onDevices {
+			for _, dev := range perDeviceOrdinal {
+				if dev == nil {
+					continue
 				}
-				return c.local
+				device = dev
+				break loopAllDevices
 			}
-			literal, err := xla.FromOnDeviceBuffer(device.shapedBuffer)
-			if err != nil {
-				c.local = &Local{
-					error: fmt.Errorf("tensor.Local failed to transfer from Device: %w", err),
-				}
-				return c.local
-			}
-			return c.lockedAddLocal(&Local{
-				shape:   literal.Shape(),
-				literal: literal,
-			})
 		}
 	}
-	return nil
+
+	literal, err := xla.FromOnDeviceBuffer(device.shapedBuffer)
+	if err != nil {
+		panic(errors.WithMessage(err, "tensor.Local failed to transfer from Device: %v"))
+	}
+	return c.lockedAddLocal(&Local{
+		shape:   literal.Shape(),
+		literal: literal,
+	})
 }
 
-// Device either uses a cached value on device already or it transfers local data to the
-// shapedBuffer store of values (OnDeviceBuffer) and returns a tensor.Device reference -- value
-// is cached for future calls.
-// This is used for instance to transfer parameters when executing a graph.
+// Device implements Tensor.Device.
+// It returns a `Device` version of the tensor.
+// If the underlying tensor is on the given `Device` already, it's a no-op.
+// If there is already a cache of a corresponding `Device` tensor on the given device, that is returned.
+// Otherwise, the contents of the `Local` tensor (if available), or one of the on-device tensors are
+// transferred to a `Device` tensor on the given `deviceNum`.
 func (c *cache) Device(hasClient HasClient, deviceNum int) *Device {
 	c.mu.Lock()
 	// TODO: maybe do this more fine-grained: it may make sense to transfer to several devices in parallel (?).
@@ -363,41 +379,33 @@ func (c *cache) Device(hasClient HasClient, deviceNum int) *Device {
 		}
 	}
 
+	if c.local == nil {
+		// If there is no local, convert from other device tensor to a local tensor,
+		// and then to final device.
+		// This is expensive, since there is another copy around.
+		// TODO: can we transfer directly between different devices !?
+		c.local = c.localFromDeviceLocked(nil)
+	}
 	local := c.local
-	if local == nil || local.Empty() {
-		// TODO: implement transfer between devices. A simplest first version would be to
-		//       first transfer to local.
-		return MakeDeviceWithError(errors.Errorf(
-			"no tensor.Local copy to convert to tensor.Device -- " +
-				"maybe tensor exists on device in different clientId (Manager), and " +
-				"transfer between different devices not yet supported, but you can transfer " +
-				"tensor to a tensor.Local first and then to a tensor.Device on the new Manager"))
-	}
 	cid := client.Id
-	if local.error != nil {
-		return c.lockedAddDevice(&Device{
-			clientId:  cid,
-			deviceNum: deviceNum,
-			error:     fmt.Errorf("tensor.Device transferred from bad Local: %w", local.error),
-		})
-	}
 	device := &Device{
 		clientId:  cid,
 		deviceNum: deviceNum,
 	}
-	device.shapedBuffer, device.error = local.literal.ToOnDeviceBuffer(client, deviceNum)
-	c.lockedAddDevice(device)
-	if device.error != nil {
-		return device
+	var err error
+	device.shapedBuffer, err = local.literal.ToOnDeviceBuffer(client, deviceNum)
+	if err != nil {
+		panic(errors.WithMessage(err, "error converting from local tensor to device"))
 	}
 	device.shape = device.shapedBuffer.Shape()
+	c.lockedAddDevice(device)
 	return device
 }
 
 // CurrentDevice returns the current Device tensor backing this tensor, if there is any.
 // If the tensor is Local, this returns nil.
 //
-// If there are more than one Device tensor, this returns the first one.
+// If there is more than one Device tensor, this returns the first one.
 func (c *cache) CurrentDevice() *Device {
 	c.mu.Lock()
 	// TODO: maybe do this more fine-grained: it may make sense to transfer to several devices in parallel (?).

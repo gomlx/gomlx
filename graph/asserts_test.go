@@ -28,33 +28,20 @@ func TestAsserts(t *testing.T) {
 	node := g.Parameter("node", shapes.Make(shapes.F32, 3, 2))
 	scalar := g.Parameter("scalar", shapes.Make(shapes.I64))
 
-	// Verify correct checks.
-	require.Truef(t, g.Ok(), "Graph.Ok() is false!?: %+v", g.Error())
-	require.Truef(t, node.AssertDims(3, 2), "Assert failed: %+v", g.Error())
-	require.Truef(t, node.AssertDims(-1, 2), "Assert failed: %+v", g.Error())
-	require.Truef(t, node.AssertDims(3, -1), "Assert failed: %+v", g.Error())
-	require.Truef(t, node.AssertDims(-1, -1), "Assert failed: %+v", g.Error())
-	require.Truef(t, node.AssertRank(2), "Assert failed: %+v", g.Error())
-	require.Truef(t, scalar.AssertScalar(), "Assert failed: %+v", g.Error())
-	require.Truef(t, scalar.AssertRank(0), "Assert failed: %+v", g.Error())
+	// Check true asserts.
+	require.NotPanics(t, func() { node.AssertDims(3, 2) })
+	require.NotPanics(t, func() { node.AssertDims(-1, 2) })
+	require.NotPanics(t, func() { node.AssertDims(3, -1) })
+	require.NotPanics(t, func() { node.AssertDims(-1, -1) })
+	require.NotPanics(t, func() { node.AssertRank(2) })
+	require.NotPanics(t, func() { scalar.AssertScalar() })
+	require.NotPanics(t, func() { scalar.AssertRank(0) })
 
-	// Verify for false asserts.
-	require.False(t, node.AssertDims(3)) // Not enough dimensions
-	require.Error(t, g.Error())
-	g.ResetError()
-	require.False(t, node.AssertDims(-1, 1)) // One dimension is wrong
-	require.Error(t, g.Error())
-	g.ResetError()
-	require.False(t, node.AssertDims(4, 2)) // One dimension is wrong
-	require.Error(t, g.Error())
-	g.ResetError()
-	require.False(t, node.AssertRank(3)) // Wrong rank
-	require.Error(t, g.Error())
-	g.ResetError()
-	require.False(t, node.AssertScalar()) // Wrong rank
-	require.Error(t, g.Error())
-	g.ResetError()
-	require.False(t, scalar.AssertRank(1)) // Wrong rank
-	require.Error(t, g.Error())
-	g.ResetError()
+	// Check false asserts.
+	require.Panics(t, func() { node.AssertDims(3) })     // Not enough dimensions
+	require.Panics(t, func() { node.AssertDims(-1, 1) }) // One dimension is wrong
+	require.Panics(t, func() { node.AssertDims(4, 2) })  // One dimension is wrong
+	require.Panics(t, func() { node.AssertRank(3) })     // Wrong rank
+	require.Panics(t, func() { node.AssertScalar() })    // Wrong rank
+	require.Panics(t, func() { scalar.AssertRank(1) })   // Wrong rank
 }

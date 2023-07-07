@@ -20,7 +20,7 @@ func main() {
 	if !g.Ok() {
 		log.Fatalf("Failed to create graph: %+v", g.Error())
 	}
-	g.MustCompile(sum)
+	g.Compile(sum)
 	fmt.Printf("1+1=%s\n", g.Run(nil))
 }
 ```
@@ -47,7 +47,7 @@ One line at a time, this is what is happening:
   first error (and stack trace) that happened during a graph creation, and it can be checked
   only once at the end, like here. In practical terms, this is all there is to it. But for
   a more detailed discussion, see [error_handling.md](docs/error_handling.md).
-* `g.MustCompile(sum)` compiles the g. After it is compiled it can no longer be changed. It
+* `g.Compile(sum)` compiles the g. After it is compiled it can no longer be changed. It
   takes as input a list of `*Node` that are the output of the graph execution.
 * `g.Run(nil)` executes the graph passing `nil` as a map of the graph parameters -- more on that
   on next section. Here it outputs whatever is evaluated for the `sum` node, since that was the node
@@ -85,7 +85,7 @@ func main() {
 		log.Fatalf("Failed to create graph: %+v", g.Error())
 	}
 	output := EuclideanGraph(a, b)
-	g.MustCompile(output)
+	g.Compile(output)
 
 	fmt.Printf("EuclideanDistance((1, 1, 1), (0, 0, 0)) = %s\n",
 		g.Run(ParamsMap{a: []float64{0, 0, 0}, b: []float64{1, 1, 1}}))    

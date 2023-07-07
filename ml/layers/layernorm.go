@@ -17,7 +17,6 @@
 package layers
 
 import (
-	"github.com/pkg/errors"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"
@@ -118,20 +117,9 @@ func (builder *LayerNormBuilder) Done() *Node {
 	x := builder.x
 	g := x.Graph()
 
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
-	if !ctx.Ok() {
-		g.SetError(errors.WithMessagef(ctx.Error(), "Context is in error"))
-		return g.InvalidNode()
-	}
-
 	// Convert negative axes to their actual value.
 	for ii := range builder.normalizingAxes {
 		builder.normalizingAxes[ii] = AdjustAxis(x, builder.normalizingAxes[ii])
-	}
-	if !g.Ok() { // In case some out-of-bound axis value.
-		return g.InvalidNode()
 	}
 
 	// LearnedScale and offset to be applied to the normalized value.
@@ -144,20 +132,12 @@ func (builder *LayerNormBuilder) Done() *Node {
 	var scaleVar *context.Variable
 	if builder.scale {
 		scaleVar = ctx.WithInitializer(initializers.One).VariableWithShape("scale", varShape).SetTrainable(true)
-		if !ctx.Ok() {
-			g.SetError(errors.WithMessage(ctx.Error(), "error on context"))
-			return g.InvalidNode()
-		}
 		scale = scaleVar.ValueGraph(g)
 	} else {
 		scale = Ones(g, varShape)
 	}
 	if builder.center {
 		offsetVar := ctx.WithInitializer(initializers.Zero).VariableWithShape("offset", varShape).SetTrainable(true)
-		if !ctx.Ok() {
-			g.SetError(errors.WithMessage(ctx.Error(), "error on context"))
-			return g.InvalidNode()
-		}
 		offset = offsetVar.ValueGraph(g)
 	} else {
 		offset = Zeros(g, varShape)

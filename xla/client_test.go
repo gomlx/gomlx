@@ -35,7 +35,7 @@ func TestBuildClient(t *testing.T) {
 			continue
 		}
 		/*
-			if !o.RunError() {
+			if !o.Run() {
 				t.Errorf("\tOrchestrator %q failed.", name)
 				continue
 			}

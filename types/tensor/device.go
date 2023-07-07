@@ -12,20 +12,21 @@ import (
 // used as input and output of graph execution. A Device is represented by a `ClientId`, typically provided
 // by the `graph.Manager` object, and a device number -- in case there are multiple GPUs/TPUs.
 //
-// To access it one has to convert it to a `Local` tensor, which some methods (like `Value()`) do
+// To access it, one has to convert it to a `Local` tensor, which some methods (like `Value()`) do
 // automatically. But converting to `Local` usually involves copying across devices, so avoid it
 // when not needed -- for instance, variables (or weights) of models typically don't need to be copied
-// to local, they can simply be left on device until they need to be saved.
+// to local, they can simply be left on-device until they need to be saved for instance.
 //
-// To create it, either create a Local tensor first and then convert it to Device, or use the output of
-// the execution of a computation graph -- they return Device tensors.
+// To create it, either create a Local tensor first and then convert it to Device (see `Tensor.Device() method`),
+// or use the output of a computation graph execution (see `graph` package) -- they return Device tensors.
 //
 // It implements the Tensor interface.
 //
-// When dealing with large tensors, one will want to carefully manage its life cycle. It provides a method
-// called Finalize() to immediately release its data memory (managed in XLA C++) -- it is also called
-// automatically during garbage collection. And to release all associated versions of the tensor,
-// including the copies on other devices and the local tensor (if any), one can use FinalizeAll().
+// When dealing with large tensors, one will want to carefully manage its life cycle.
+// `Device` provides a method called `Finalize()` to immediately release its data memory (managed in XLA C++) --
+// it is also called automatically during garbage collection.
+// And to release all associated versions of the tensor, including the copies on other devices and the Local tensor
+// (if any), one can use `FinalizeAll()`.
 type Device struct {
 	*cache
 
@@ -34,59 +35,52 @@ type Device struct {
 	shapedBuffer *xla.OnDeviceBuffer
 	clientId     xla.ClientId
 	deviceNum    int
-
-	// error reports back any error during the creation or transfer of this Tensor.
-	error error
 }
 
-// InternalNewDevice creates a Device tensor from XLA's OnDeviceBuffer structure. Internal implementation,
-// most users don't need to use this.
-func InternalNewDevice(buffer *xla.OnDeviceBuffer) (deviceT *Device) {
+// AssertValid panics if device is nil, if its shape is invalid or if it has already been finalized (freed).
+func (device *Device) AssertValid() {
+	if device == nil {
+		panic(errors.New("tensor.Device is nil"))
+	}
+	if device.IsFinalized() {
+		panic(errors.New("tensor.Device has been finalized, or C++ 'ShapedBuffer' storage is nil!?"))
+	}
+	if !device.shape.Ok() {
+		panic(errors.New("tensor.Device shape is invalid"))
+	}
+}
+
+// IsFinalized returns true if the tensor has already been "finalized", and its
+// data freed.
+// It implements Tensor.IsFinalized.
+func (device *Device) IsFinalized() bool {
+	return device.shapedBuffer == nil || device.shapedBuffer.IsNil()
+}
+
+// InternalNewDevice creates a Device tensor from XLA's OnDeviceBuffer structure.
+//
+// Internal implementation, most users shouldn't use this.
+// Instead, one creates a `Local` and converts it to a `Device` using the `Tensor.Device()` method.
+func InternalNewDevice(buffer *xla.OnDeviceBuffer) (device *Device) {
 	if buffer == nil {
-		deviceT = &Device{error: fmt.Errorf("invalid (nil) underlying OnDeviceBuffer")}
-	} else {
-		deviceT = &Device{
-			shapedBuffer: buffer,
-			clientId:     buffer.Client().Id,
-			shape:        buffer.Shape(),
-			deviceNum:    buffer.DeviceOrdinal(),
-		}
+		panic(errors.New("cannot create tensor.Device from nil xla.OnDeviceBuffer"))
+	}
+	device = &Device{
+		shapedBuffer: buffer,
+		clientId:     buffer.Client().Id,
+		shape:        buffer.Shape(),
+		deviceNum:    buffer.DeviceOrdinal(),
 	}
 	cache := &cache{}
-	cache.AddDevice(deviceT)
+	cache.AddDevice(device)
 	return
 }
 
-// Empty returns whether Local is holding no data or is in an error state. It's similar
-// to a "nil" state for Local.
-func (device *Device) Empty() bool {
-	return device == nil || device.shapedBuffer.IsNil()
-}
-
-// Ok returns whether the shapedBuffer is not empty and has no error.
-func (device *Device) Ok() bool {
-	return !device.Empty() && device.error == nil
-}
-
-// Error returns the message that caused an error state.
-func (device *Device) Error() error {
-	if device == nil {
-		return errors.Errorf("device tensor is nil")
-	}
-	if device.error != nil {
-		return device.error
-	}
-	if device.Empty() {
-		return errors.Errorf("device tensor is empty")
-	}
-	return device.error
-}
-
 // String converts to string, by converting (transferring) the tensor to local and then using Local.String().
+// If the tensor is larger than MaxStringSize, it doesn't convert the tensor to local, and instead only prints
+// its shape (with no transfer cost).
 func (device *Device) String() string {
-	if device.error != nil {
-		return fmt.Sprintf("tensor.Device.error=%v", device.error)
-	}
+	device.AssertValid()
 	if device.IsTuple() {
 		return fmt.Sprintf("Tuple(%d elements)", device.shape.TupleSize())
 	}
@@ -98,56 +92,49 @@ func (device *Device) String() string {
 
 // Shape returns the shape of the Device.
 func (device *Device) Shape() shapes.Shape {
-	if !device.Ok() {
-		return shapes.Shape{}
-	}
+	device.AssertValid()
 	return device.shape
 }
 
 // DType returns the DType of the tensor's shape.
 func (device *Device) DType() shapes.DType {
+	device.AssertValid()
 	return device.shape.DType
 }
 
-// Rank returns the rank fo the tensor's shape.
+// Rank returns the rank of the tensor's shape.
 func (device *Device) Rank() int {
+	device.AssertValid()
 	return device.shape.Rank()
-}
-
-// Value returns a multidimensional slice (except if shape is a scalar) containing a copy of the tensor values.
-// It is just a shortcut to calling `device.Local().Value()`. See Local and Local.Value for details.
-func (device *Device) Value() any {
-	return device.Local().Value()
-}
-
-// MakeDeviceWithError creates a device tensor with the given error.
-func MakeDeviceWithError(err error) *Device {
-	deviceT := &Device{error: err}
-	cache := &cache{}
-	cache.AddDevice(deviceT)
-	return deviceT
 }
 
 // ShapedBuffer returns the underlying XLA structure. Internal usage only.
 func (device *Device) ShapedBuffer() *xla.OnDeviceBuffer {
-	if device.Empty() {
-		return nil
-	}
+	device.AssertValid()
 	return device.shapedBuffer
 }
 
 // IsTuple returns whether Local is a tuple.
-func (device *Device) IsTuple() bool { return !device.Empty() && device.shape.IsTuple() }
+func (device *Device) IsTuple() bool {
+	device.AssertValid()
+	return device.shape.IsTuple()
+}
 
 // Finalize releases the memory associated with the Device tensor, it becomes empty.
 //
-// This is called automatically when garbage collected. But since sometimes device memory is scarse, this
-// allows for finer control of memory usage.
+// This is called automatically when garbage-collected.
+// But since sometimes device memory is scarce, this allows for finer control of memory usage.
+//
+// This can be called more than once: after the first time it doesn't do anything, since the data has already
+// been released.
 func (device *Device) Finalize() {
+	if device.shapedBuffer.IsNil() {
+		// Already finalized.
+		return
+	}
 	device.ClearCache()
 	device.shapedBuffer.Finalize()
 	device.shape = shapes.Shape{}
-	device.error = nil
 }
 
 // FinalizeAll releases the memory associated with all copies of the tensor, local and on device(s)).
@@ -158,54 +145,37 @@ func (device *Device) FinalizeAll() {
 
 // ClearCache disconnects the device tensor to any corresponding local data. Internal usage only.
 func (device *Device) ClearCache() {
-	device.cache.ClearDevice(device)
+	if device.cache != nil {
+		device.cache.ClearDevice(device)
+	}
 
 	// Create a new cache with itself only.
 	cache := &cache{}
 	cache.AddDevice(device)
 }
 
-// SplitTupleError splits a device tensor into its elements. In case of error, return the error.
+// SplitTuple splits a device tensor into its elements.
 //
-// This makes the current device tensor invalid.
-func (device *Device) SplitTupleError() ([]*Device, error) {
-	if !device.Ok() {
-		return nil, fmt.Errorf("cannot split device tensor that has error: %w", device.error)
-	}
-	if !device.IsTuple() {
-		return nil, fmt.Errorf("cannot split device tensor that is not a tuple")
-	}
-	return device.splitTupleImpl(true)
-}
-
-// SplitTuple splits a device tensor into its elements. In case of error, returns nil.
-//
-// This makes the current device tensor invalid.
+// This makes the current device tensor invalid -- but not any associated Local (or other Device) tensors.
 func (device *Device) SplitTuple() []*Device {
-	if !device.Ok() {
-		return nil
-	}
+	device.AssertValid()
 	if !device.IsTuple() {
-		return nil
+		panic(errors.Errorf("tensor.Device is not a tuple, instead is shaped %s", device.shape))
 	}
-	parts, _ := device.splitTupleImpl(false)
-	return parts
-}
-
-func (device *Device) splitTupleImpl(returnError bool) ([]*Device, error) {
 	deviceTensors := make([]*Device, 0, device.shape.TupleSize())
 	for ii := 0; ii < device.shape.TupleSize(); ii++ {
 		subDeviceT, err := device.shapedBuffer.SubTree([]int{ii})
-		if err == nil {
-			deviceTensors = append(deviceTensors, InternalNewDevice(subDeviceT))
-		} else {
-			if returnError {
-				return nil, fmt.Errorf("failed generating split %d: %w", ii, err)
-			}
-			deviceTensors = append(deviceTensors,
-				MakeDeviceWithError(errors.Wrapf(err, "failed extracting split %d", ii)))
+		if err != nil {
+			panic(errors.WithMessagef(err, "tensor.Device.SplitTuple failed while generating split %d", ii))
 		}
+		deviceTensors = append(deviceTensors, InternalNewDevice(subDeviceT))
 	}
-	device.FinalizeAll()
-	return deviceTensors, nil
+	device.Finalize()
+	return deviceTensors
+}
+
+// Local will transfer data from the Device storage to a Local tensor.
+// If the tensor has already been converted, return the associated cached copy.
+func (device *Device) Local() *Local {
+	return device.cache.localFromDevice(device)
 }

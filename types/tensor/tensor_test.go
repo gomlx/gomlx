@@ -55,7 +55,7 @@ func TestFromValue(t *testing.T) {
 	shape, err = shapeForValue([][]bool{{true, false}, {false, false}, {false, true}})
 	cmpShapes(t, shape, wantShape, err)
 
-	// Test for invalid dtypes.
+	// Test for invalid `DType`.
 	shape, err = shapeForValue([][]uint16{{3}})
 	if shape.DType != shapes.InvalidDType {
 		t.Fatalf("Wanted InvalidDType for uint16, instead got %q", shape.DType)
@@ -74,30 +74,17 @@ func TestFromValue(t *testing.T) {
 	// Test correct setting of scalar value, dtype=int.
 	{
 		want := 5
-		local := FromValue[int](want)
-		if local.error != nil {
-			t.Fatalf("Failed to build scalar local tensor: %v", err)
-		}
-		if local.Empty() {
-			t.Fatalf("Failed to build scalar local tensor: got IsNil Local tensor")
-		}
-		got := local.Value().(int)
-		if got != want {
-			t.Fatalf("Local read out got %d, wanted %d", got, want)
-		}
+		var local *Local
+		require.NotPanics(t, func() { local = FromValue(want) })
+		assert.Equal(t, want, local.Value())
 	}
 
 	// Test correct setting of 1D slice, dtype=float64
 	{
 		want := []float64{2, 5}
-		local := FromValue(want)
-		if local.error != nil {
-			t.Fatalf("Failed to build scalar local: %v", err)
-		}
-		got, _ := local.Flat().([]float64)
-		if !slices.DeepSliceCmp(want, got, slices.Equal[float64]) {
-			t.Fatalf("Local read out got %v, wanted %v", got, want)
-		}
+		var local *Local
+		require.NotPanics(t, func() { local = FromValue(want) })
+		assert.Equal(t, want, local.Value())
 	}
 
 	// Test correct setting of 1D slice, dtype=float64
@@ -127,18 +114,18 @@ func TestFromValue(t *testing.T) {
 	}
 }
 
-func TestLocal_CopyFlat(t *testing.T) {
+func TestLocal_CopyData(t *testing.T) {
 	want := []float32{1, 2, 3, 10, 11, 12}
-	local := FromValue([][]float32{{1, 2, 3}, {10, 11, 12}})
-	require.NoError(t, local.Error())
+	var local *Local
+	require.NotPanics(t, func() { local = FromValue([][]float32{{1, 2, 3}, {10, 11, 12}}) })
 	dst := make([]float32, len(want))
-	require.NoError(t, local.CopyFlat(dst))
+	require.NotPanics(t, func() { local.CopyData(dst) })
 	require.Equal(t, want, dst)
 
 	// Check failures:
-	require.Error(t, local.CopyFlat(dst[:1])) // Wrong size.
+	require.Panics(t, func() { local.CopyData(dst[:1]) }) // Wrong size.
 	dst64 := make([]float64, len(want))
-	require.Error(t, local.CopyFlat(dst64)) // Wrong type.
+	require.Panics(t, func() { local.CopyData(dst64) }) // Wrong type.
 }
 
 // We test using FromAnyValue and AnyValueOf, due to Go generics limitations. See discussion in:
@@ -147,8 +134,8 @@ func TestLocal_CopyFlat(t *testing.T) {
 //	https://groups.google.com/g/golang-nuts/c/abILUXiD8-k
 func testValueOf[T shapes.Number](t *testing.T) {
 	want := [][]T{{1, 2, 3}, {10, 11, 12}}
-	valueT := FromAnyValue(want)
-	require.NoError(t, valueT.Error())
+	var valueT Tensor
+	require.NotPanics(t, func() { valueT = FromAnyValue(want) })
 	got, ok := valueT.Value().([][]T)
 	require.Truef(t, ok, "Failed to convert converted tensor to 2-dimensional slice -- value=%v", valueT.Value())
 	assert.Equal(t, want, got)
@@ -175,19 +162,13 @@ func TestTuples(t *testing.T) {
 	}
 	localT := MakeLocalTuple(FromValue(elem0), FromValue(elem1))
 	fmt.Printf("localT=%s\n", localT)
-	splits, err := localT.SplitTuple()
-	if err != nil {
-		t.Fatalf("Failed to split local tuple: %v", err)
-	}
+	var splits []*Local
+	require.NotPanics(t, func() { splits = localT.SplitTuple() })
 	for ii, split := range splits {
 		fmt.Printf("\tSplit %d: %s\n", ii, split)
 	}
-	if splits[0].Value().(float64) != elem0 {
-		t.Errorf("Tuple[0] transferred back: got %f, wanted %f", splits[0].Value().(float64), elem0)
-	}
-	if !reflect.DeepEqual(splits[1].Value(), elem1) {
-		t.Errorf("Tuple[1] transferred back: got %v, wanted %v", splits[1].Value(), elem1)
-	}
+	assert.Equal(t, elem0, splits[0].Value())
+	assert.Equal(t, elem1, splits[1].Value())
 
 	// Since SplitTupleError destroys local, we re-create it.
 	localT = MakeLocalTuple(FromValue(elem0), FromValue(elem1))
@@ -197,11 +178,9 @@ func TestTuples(t *testing.T) {
 	}
 	fmt.Printf("deviceT.ShapedBuffer().ToString()=%s\n", deviceT.ShapedBuffer().String())
 
-	// Split on device.
-	deviceSplits, err := deviceT.SplitTupleError()
-	if err != nil {
-		t.Fatalf("Failed to split tuple on device: %v", err)
-	}
+	// Split on-device.
+	var deviceSplits []*Device
+	require.NotPanics(t, func() { deviceSplits = deviceT.SplitTuple() })
 	assert.Equalf(t, elem0, deviceSplits[0].Local().Value(), "Tuple[0] on device")
 	assert.Equalf(t, elem1, deviceSplits[1].Local().Value(), "Tuple[1] on device")
 
@@ -210,21 +189,15 @@ func TestTuples(t *testing.T) {
 	localT = MakeLocalTuple(FromValue(elem0), FromValue(elem1))
 	deviceT = localT.Device(client, client.DefaultDeviceOrdinal)
 	deviceT.ClearCache()
-	localT = deviceT.Local()
+	localT = deviceT.Local() // New Local tensor.
 	fmt.Printf("localT=%s\n", localT)
-	splits, err = localT.SplitTuple()
-	if err != nil {
-		t.Fatalf("Failed to split local tuple: %v", err)
-	}
+
+	require.NotPanics(t, func() { splits = localT.SplitTuple() })
 	for ii, split := range splits {
 		fmt.Printf("\tSplit %d: %s\n", ii, split)
 	}
-	if splits[0].Value().(float64) != elem0 {
-		t.Errorf("Tuple[0] transferred back: got %f, wanted %f", splits[0].Value().(float64), elem0)
-	}
-	if !reflect.DeepEqual(splits[1].Value(), elem1) {
-		t.Errorf("Tuple[1] transferred back: got %v, wanted %v", splits[1].Value(), elem1)
-	}
+	assert.Equal(t, elem0, splits[0].Value())
+	assert.Equal(t, elem1, splits[1].Value())
 }
 
 func TestSerialize(t *testing.T) {

@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"image"
 	"os"
+	"sync"
 	"testing"
 )
 
@@ -24,22 +25,28 @@ func loadImage(filePath string) (img image.Image, err error) {
 	return
 }
 
+var (
+	noisyImagesExec     *Exec
+	noisyImagesExecOnce sync.Once
+)
+
 // noisyImages add noise to the batch of images. The noise is simply an increasing
 // value from -127.5 in the top left to 127.5 in the bottom right. It's deterministic.
 func noisyImages(t *testing.T, manager *Manager, batch tensor.Tensor) tensor.Tensor {
-	results, err := NewExec(manager, func(batch *Node) *Node {
-		g := batch.Graph()
-		oneImage := batch.Shape().Copy()
-		oneImage.Dimensions[0] = 1
-		noise := IotaFull(g, oneImage)
-		scale := 255.0 / float64(noise.Shape().Size())
-		noise = AddScalar(MulScalar(noise, scale), -127.5)
-		noisyBatch := Add(batch, noise)
-		noisyBatch = ClipScalar(noisyBatch, 0.0, 255.0)
-		return noisyBatch
-	}).Call(batch)
-	require.NoError(t, err)
-	return results[0]
+	noisyImagesExecOnce.Do(func() {
+		noisyImagesExec = NewExec(manager, func(batch *Node) *Node {
+			g := batch.Graph()
+			oneImage := batch.Shape().Copy()
+			oneImage.Dimensions[0] = 1
+			noise := IotaFull(g, oneImage)
+			scale := 255.0 / float64(noise.Shape().Size())
+			noise = AddScalar(MulScalar(noise, scale), -127.5)
+			noisyBatch := Add(batch, noise)
+			noisyBatch = ClipScalar(noisyBatch, 0.0, 255.0)
+			return noisyBatch
+		})
+	})
+	return noisyImagesExec.Call(batch)[0]
 }
 
 func TestKidMetric(t *testing.T) {
@@ -67,8 +74,6 @@ func TestKidMetric(t *testing.T) {
 	kidExec := context.NewExec(manager, ctx, func(ctx *context.Context, images []*Node) *Node {
 		return kidBuilder.BuildGraph(ctx, []*Node{images[0]}, []*Node{images[1]})
 	})
-	results, err := kidExec.Call(imagesBatch, noisyBatch)
-	require.NoError(t, err)
-	kid := results[0].Local().Value().(float32)
+	kid := kidExec.Call(imagesBatch, noisyBatch)[0].Local().Value().(float32)
 	require.InDelta(t, -1.5861, kid, 0.001, "KID value different than expected for batch.")
 }

@@ -18,9 +18,9 @@ package context
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context/initializers"
+	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
 )
@@ -66,31 +66,31 @@ type variableNodes struct {
 
 // Name of the variable within the scope.
 func (v *Variable) Name() string {
-	if !v.Ok() {
-		return "INVALID (NIL) VARIABLE"
-	}
+	v.AssertValid()
 	return v.name
 }
 
 // String implements stringer.
 func (v *Variable) String() string {
-	if !v.Ok() {
+	if v == nil || !v.Shape().Ok() {
 		return "INVALID (NIL) VARIABLE"
 	}
 	return fmt.Sprintf("%s/%s", v.Scope(), v.Name())
 }
 
-// Ok returns whether the variable is valid. If something went wrong during creation,
-// the variable will not be Ok. The error can be read from Context.Error().
-func (v *Variable) Ok() bool {
-	return v != nil && v.shape.Ok()
+// AssertValid panics if the variable is in an invalid state: if it's nil or it's shape is not yet set.
+func (v *Variable) AssertValid() {
+	if v == nil {
+		Panicf("context.Variable is nil")
+	}
+	if !v.Shape().Ok() {
+		Panicf("context.Variable has no shape")
+	}
 }
 
 // Scope where the variable was created.
 func (v *Variable) Scope() string {
-	if v == nil {
-		return "INVALID (NIL) VARIABLE"
-	}
+	v.AssertValid()
 	return v.scope
 }
 
@@ -102,15 +102,13 @@ func (v *Variable) Shape() shapes.Shape {
 	return v.shape
 }
 
-// ParameterPrefix is used to prefix parameter names for variablesMap.
+// ParameterPrefix is used to prefix Graph parameter names for variablesMap.
 const ParameterPrefix = "var:"
 
 // ParameterName used when creating a parameter node in a Graph to access
 // the variable.
 func (v *Variable) ParameterName() string {
-	if !v.Ok() {
-		return ParameterPrefix + "INVALID (NIL OR EMPTY) VARIABLE"
-	}
+	v.AssertValid()
 	return fmt.Sprintf("%s%s%s%s", ParameterPrefix, v.Scope(), ScopeSeparator, v.Name())
 }
 
@@ -124,9 +122,7 @@ func (v *Variable) ParameterName() string {
 // is not to use this is a concurrent set up -- or to create proper
 // locking mechanisms.
 func (v *Variable) Value() tensor.Tensor {
-	if !v.Ok() {
-		return nil
-	}
+	v.AssertValid()
 	return v.value
 }
 
@@ -146,18 +142,14 @@ func (v *Variable) SetValuePreservingOld(value tensor.Tensor) {
 
 // InUseByGraph returns whether the variable is currently in use by the given graph.
 func (v *Variable) InUseByGraph(g *Graph) bool {
-	if !v.Ok() {
-		return false
-	}
+	v.AssertValid()
 	_, found := v.graphToNodes[g.GraphId()]
 	return found
 }
 
 // ChangedInGraph returns whether the variable is in use and was changed in the computation graph g.
 func (v *Variable) ChangedInGraph(g *Graph) bool {
-	if !v.Ok() {
-		return false
-	}
+	v.AssertValid()
 	nodes, found := v.graphToNodes[g.GraphId()]
 	if !found {
 		return false
@@ -168,22 +160,7 @@ func (v *Variable) ChangedInGraph(g *Graph) bool {
 // ValueGraph returns the Node of the Graph that holds the current value of the variable. It can be changed
 // for the graph (for instance when applying a gradient descent) by SetGraph.
 func (v *Variable) ValueGraph(g *Graph) *Node {
-	if !v.ctx.Ok() {
-		g.SetError(v.ctx.Error())
-		return g.InvalidNode()
-	}
-	if !v.Ok() {
-		g.SetErrorf("trying to use invalid (nil or uninitialized) variable %s", v.ParameterName())
-		return g.InvalidNode()
-	}
-	if v.ctx.Error() != nil {
-		g.SetError(errors.WithMessage(v.ctx.Error(), "trying to use variable with invalid context"))
-		return g.InvalidNode()
-	}
-	if g.Error() != nil {
-		return g.InvalidNode()
-	}
-
+	v.AssertValid()
 	nodes, found := v.graphToNodes[g.GraphId()]
 	if !found {
 		// Use a newly created parameter node as the initial graph value Node.
@@ -202,19 +179,9 @@ func (v *Variable) ValueGraph(g *Graph) *Node {
 // execution and then update the variables (with SetValue) accordingly after each graph execution, for
 // example, after each Trainer.TrainStep call.
 func (v *Variable) SetValueGraph(value *Node) {
+	v.AssertValid()
 	g := value.Graph()
-	if g.Error() != nil {
-		return
-	}
-	if !v.Ok() {
-		g.SetErrorf("trying to use invalid (nil or uninitialized) variable")
-		return
-	}
-	if v.ctx.Error() != nil {
-		g.SetError(errors.WithMessage(v.ctx.Error(), "trying to use variable with invalid context"))
-		return
-	}
-
+	g.AssertValid()
 	nodes, found := v.graphToNodes[g.GraphId()]
 	if !found {
 		// Creates a parameter node, as this includes the variable as in use for the graph.
@@ -234,18 +201,8 @@ func (v *Variable) SetValueGraph(value *Node) {
 // variable after a gradient descent is applied) consider using ValueGraph to read the current associated
 // value of a variable in a graph.
 func (v *Variable) ParamNode(g *Graph) *Node {
-	if !v.Ok() {
-		g.SetErrorf("trying to use invalid (nil or uninitialized) variable")
-		return g.InvalidNode()
-	}
-	if v.ctx.Error() != nil {
-		g.SetError(errors.WithMessage(v.ctx.Error(), "trying to use variable with invalid context"))
-		return g.InvalidNode()
-	}
-	if g.Error() != nil {
-		return g.InvalidNode()
-	}
-
+	v.AssertValid()
+	g.AssertValid()
 	nodes, found := v.graphToNodes[g.GraphId()]
 	if !found {
 		paramName := v.ParameterName()
@@ -258,8 +215,7 @@ func (v *Variable) ParamNode(g *Graph) *Node {
 
 // SetTrainable sets the variable trainable status. Returns itself, so calls can be cascated.
 func (v *Variable) SetTrainable(trainable bool) *Variable {
-	if v.Ok() {
-		v.Trainable = trainable
-	}
+	v.AssertValid()
+	v.Trainable = trainable
 	return v
 }

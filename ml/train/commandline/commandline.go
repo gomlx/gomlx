@@ -20,11 +20,11 @@ package commandline
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
-	"github.com/schollz/progressbar/v3"
 	"github.com/gomlx/gomlx/examples/notebook"
 	"github.com/gomlx/gomlx/ml/train"
+	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/schollz/progressbar/v3"
 	"os"
 	"strings"
 )
@@ -129,21 +129,15 @@ func AttachProgressBar(loop *train.Loop) {
 
 // ReportEval reports on the command line the results of evaluating the datasets using trainer.Eval.
 func ReportEval(trainer *train.Trainer, datasets ...train.Dataset) error {
-	for _, ds := range datasets {
-		fmt.Printf("Results on %s:\n", ds.Name())
-		metricsValues, err := trainer.Eval(ds)
-		if err != nil {
-			return errors.WithMessagef(err, "failed to run Eval on dataset %q", ds.Name())
-		}
-		for metricIdx, metric := range trainer.EvalMetrics() {
-			value := metricsValues[metricIdx]
-			if !value.Ok() {
-				fmt.Printf("\t%s (%s) failed: %s\n", metric.Name(), metric.ShortName(), value.Error())
-			} else {
+	return TryCatch[error](func() {
+		for _, ds := range datasets {
+			fmt.Printf("Results on %s:\n", ds.Name())
+			metricsValues := trainer.Eval(ds)
+			for metricIdx, metric := range trainer.EvalMetrics() {
+				value := metricsValues[metricIdx]
 				fmt.Printf("\t%s (%s): %s\n", metric.Name(), metric.ShortName(), metric.PrettyPrint(value))
 			}
+			ds.Reset()
 		}
-		ds.Reset()
-	}
-	return nil
+	})
 }

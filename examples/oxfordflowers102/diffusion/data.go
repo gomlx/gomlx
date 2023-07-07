@@ -107,11 +107,7 @@ func NormalizationValues() (mean, stddev tensor.Tensor) {
 // it according to `NormalizationValues()` calculated on the training dataset.
 func PreprocessImages(images *Node, normalize bool) *Node {
 	Init()
-
 	g := images.Graph()
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 
 	// ReduceAllMax(images).SetLogged("Max(uint8):")
 	images = ConvertType(images, DType)

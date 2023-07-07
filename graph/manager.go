@@ -19,6 +19,7 @@ package graph
 import (
 	"fmt"
 	"github.com/gomlx/gomlx/xla"
+	"github.com/pkg/errors"
 	"os"
 	"sync"
 )
@@ -29,10 +30,19 @@ var GetPlatforms = xla.GetPlatforms
 // GetDefaultPlatform returns the default list of platforms. Returns `(string, error)`.
 var GetDefaultPlatform = xla.GetDefaultPlatform
 
+// DefaultPlatformEnv is the environment variable name that sets the default platform.
+var DefaultPlatformEnv = xla.DefaultPlatformEnv
+
 // ManagerBuilder allow setting of options to build a Manager object.
 type ManagerBuilder struct {
 	platform                string
 	numReplicas, numThreads int
+}
+
+// NewManager creates a new `Manager` object using the default platform and configuration.
+// For more fine-grained control, see BuildManager.
+func NewManager() *Manager {
+	return BuildManager().Done()
 }
 
 // BuildManager allows the creations a Manager object, used to create computation graphs and execute them.
@@ -42,8 +52,9 @@ func BuildManager() *ManagerBuilder {
 	return &ManagerBuilder{numReplicas: 1, numThreads: -1}
 }
 
-// Platform can be left empty (it will pick one per GetDefaultPlatform) or can
-// be selected from one returned by GetPlatforms.
+// Platform specifies the platform to use.
+// If left empty, it will pick one per GetDefaultPlatform.
+// The available platforms can be inspected using GetPlatforms.
 func (b *ManagerBuilder) Platform(p string) *ManagerBuilder {
 	b.platform = p
 	return b
@@ -66,25 +77,28 @@ func (b *ManagerBuilder) NumReplicas(n int) *ManagerBuilder {
 	return b
 }
 
-// NumThreads sets number of threads to use when building Manager. Defaults to -1, which indicates to use what
-// is available.
+// NumThreads sets the number of threads to use when building Manager.
+// It defaults to -1, which indicates to use what is available.
 func (b *ManagerBuilder) NumThreads(n int) *ManagerBuilder {
 	b.numThreads = n
 	return b
 }
 
 // Done constructs the Manager.
-func (b *ManagerBuilder) Done() (m *Manager, err error) {
+//
+// Errors are reported/thrown back with `panic`.
+func (b *ManagerBuilder) Done() (m *Manager) {
 	platform := b.platform
 	if b.platform == "" {
+		var err error
 		platform, err = GetDefaultPlatform()
 		if err != nil {
-			return
+			panic(errors.Wrapf(err, "cant find platform with GetDefaultPlatform"))
 		}
 	}
 	client, err := xla.NewClient(platform, b.numReplicas, b.numThreads)
 	if err != nil {
-		return nil, err
+		panic(errors.Wrapf(err, "failed to create new XLA Client"))
 	}
 	m = &Manager{
 		client:   client,
@@ -99,15 +113,6 @@ var (
 	graphCount   int
 )
 
-// MustDone constructs the Manager. It panics if there was an error.
-func (b *ManagerBuilder) MustDone() *Manager {
-	manager, err := b.Done()
-	if err != nil {
-		panic(fmt.Sprintf("Failed to build gomlx.computation.Manager: %+v", err))
-	}
-	return manager
-}
-
 // Manager sets up an execution "server" (?? whatever runs stuff in XLA ?), including managing
 // the memory in the accelerator.
 //
@@ -118,14 +123,14 @@ type Manager struct {
 	platform string
 }
 
-// NewGraph constructs an empty Graph. If name is set to "", a unique name is picked. Uses
-// DeviceNumber == 0.
+// NewGraph constructs an empty Graph. If `name` is set to "" a unique name is picked.
+// It uses the manager's default device number.
 func (m *Manager) NewGraph(name string) *Graph {
 	return m.NewGraphWithDeviceNum(name, m.DefaultDeviceNum())
 }
 
 // NewGraphWithDeviceNum constructs an empty Graph, and sets to use the given device number.
-// If name is set to "", a unique name is picked.
+// If name is set to "" a unique name is picked.
 func (m *Manager) NewGraphWithDeviceNum(name string, deviceNum int) *Graph {
 	muGraphCount.Lock()
 	defer muGraphCount.Unlock()

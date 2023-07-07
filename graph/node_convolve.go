@@ -17,6 +17,7 @@
 package graph
 
 import (
+	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	timage "github.com/gomlx/gomlx/types/tensor/image"
@@ -76,11 +77,11 @@ func Convolve(x, kernel *Node) *ConvolutionBuilder {
 	}
 	conv.numSpatialDims = x.Rank() - 2
 	if conv.numSpatialDims < 0 {
-		conv.graph.SetErrorf("Input x must have rank >= 3, shaped by default as [batch, <spatial_dimensions...>, channels], "+
+		Panicf("Input x must have rank >= 3, shaped by default as [batch, <spatial_dimensions...>, channels], "+
 			"but x rank is %d", x.Rank())
 	}
 	if kernel.Rank() != x.Rank() {
-		conv.graph.SetErrorf("Input x (rank %d) must have same rank as the kernel (rank %d) -- x has a batch dimension, "+
+		Panicf("Input x (rank %d) must have same rank as the kernel (rank %d) -- x has a batch dimension, "+
 			"and kernel has an output_channels dimension", x.Rank(), kernel.Rank())
 	}
 	return conv.ChannelsAxis(timage.ChannelsLast).NoPadding()
@@ -151,9 +152,6 @@ func (conv *ConvolutionBuilder) AxesConfig(axes ConvolveAxesConfig) *Convolution
 //
 // One cannot use strides and dilation at the same time.
 func (conv *ConvolutionBuilder) Strides(strides int) *ConvolutionBuilder {
-	if !conv.graph.Ok() {
-		return conv
-	}
 	perDim := slices.SliceWithValue(conv.numSpatialDims, strides)
 	return conv.StridePerDim(perDim...)
 }
@@ -161,19 +159,15 @@ func (conv *ConvolutionBuilder) Strides(strides int) *ConvolutionBuilder {
 // StridePerDim sets the strides for each spatial dimension of the convolution.
 // The default is 1 for every dimension.
 //
-// The stride is how many steps to move after a convolution. A value of 2 will half the input
-// size, since a convolution will be done at every other position, and so on. It can be defined
-// separately per dimension.
+// The stride is how many steps to move after a convolution.
+// A value of 2 will halve the input size, since a convolution will be done at every other position, and so on.
+// It can be defined separately per dimension.
 //
 // One cannot use strides and dilation at the same time.
 func (conv *ConvolutionBuilder) StridePerDim(strides ...int) *ConvolutionBuilder {
-	if !conv.graph.Ok() {
-		return conv
-	}
 	if len(strides) != conv.numSpatialDims {
-		conv.graph.SetErrorf("received %d strides in StridePerDim, but x has %d spatial dimensions",
+		Panicf("received %d strides in StridePerDim, but x has %d spatial dimensions",
 			len(strides), conv.numSpatialDims)
-		return conv
 	}
 	conv.strides = strides
 	return conv
@@ -184,9 +178,6 @@ func (conv *ConvolutionBuilder) StridePerDim(strides ...int) *ConvolutionBuilder
 //
 // The default is no padding. See also NoPadding and PaddingPerDim.
 func (conv *ConvolutionBuilder) PadSame() *ConvolutionBuilder {
-	if !conv.graph.Ok() {
-		return conv
-	}
 	conv.paddings = nil
 	conv.padSame = true
 	return conv
@@ -197,9 +188,6 @@ func (conv *ConvolutionBuilder) PadSame() *ConvolutionBuilder {
 //
 // See also PadSame and PaddingPerDim.
 func (conv *ConvolutionBuilder) NoPadding() *ConvolutionBuilder {
-	if !conv.graph.Ok() {
-		return conv
-	}
 	conv.paddings = nil
 	conv.padSame = false
 	return conv
@@ -210,13 +198,9 @@ func (conv *ConvolutionBuilder) NoPadding() *ConvolutionBuilder {
 //
 // The default is no padding. See also NoPadding and PadSame.
 func (conv *ConvolutionBuilder) PaddingPerDim(paddings [][2]int) *ConvolutionBuilder {
-	if !conv.graph.Ok() {
-		return conv
-	}
 	if len(paddings) != conv.numSpatialDims {
-		conv.graph.SetErrorf("received %d paddings in PaddingPerDim, but x has %d spatial dimensions",
+		Panicf("received %d paddings in PaddingPerDim, but x has %d spatial dimensions",
 			len(paddings), conv.numSpatialDims)
-		return conv
 	}
 	conv.paddings = paddings
 	conv.padSame = false
@@ -234,9 +218,6 @@ func (conv *ConvolutionBuilder) PaddingPerDim(paddings [][2]int) *ConvolutionBui
 //
 // One cannot use strides and dilation at the same time.
 func (conv *ConvolutionBuilder) Dilations(dilation int) *ConvolutionBuilder {
-	if !conv.graph.Ok() {
-		return conv
-	}
 	dilationsPerDim := slices.SliceWithValue(conv.numSpatialDims, dilation)
 	return conv.DilationPerDim(dilationsPerDim...)
 }
@@ -255,13 +236,9 @@ func (conv *ConvolutionBuilder) DilationPerDim(dilations ...int) *ConvolutionBui
 		conv.filterDilation = nil
 		return conv
 	}
-	if !conv.graph.Ok() {
-		return conv
-	}
 	if len(dilations) != conv.numSpatialDims {
-		conv.graph.SetErrorf("received %d dilations in DilationPerDim, but x has %d spatial dimensions",
+		Panicf("received %d dilations in DilationPerDim, but x has %d spatial dimensions",
 			len(dilations), conv.numSpatialDims)
-		return conv
 	}
 	conv.filterDilation = dilations
 	return conv
@@ -275,13 +252,9 @@ func (conv *ConvolutionBuilder) InputDilationPerDim(dilations ...int) *Convoluti
 		conv.inputDilation = nil
 		return conv
 	}
-	if !conv.graph.Ok() {
-		return conv
-	}
 	if len(dilations) != conv.numSpatialDims {
-		conv.graph.SetErrorf("received %d dilations in inputDilationPerDim, but x has %d spatial dimensions",
+		Panicf("received %d dilations in inputDilationPerDim, but x has %d spatial dimensions",
 			len(dilations), conv.numSpatialDims)
-		return conv
 	}
 	conv.inputDilation = dilations
 	return conv
@@ -291,10 +264,6 @@ func (conv *ConvolutionBuilder) InputDilationPerDim(dilations ...int) *Convoluti
 // it updates the computation graph with convolution, and returns the resulting
 // Node.
 func (conv *ConvolutionBuilder) Done() *Node {
-	if !conv.graph.Ok() {
-		return conv.graph.InvalidNode()
-	}
-
 	// Select the kernel spatial dimensions.
 	kernelSpatialDims := gatherSlice(conv.axes.KernelSpatial, conv.kernel.Shape().Dimensions)
 
@@ -332,9 +301,8 @@ func (conv *ConvolutionBuilder) Done() *Node {
 		}
 	}
 	if dilationsSet && stridesSet {
-		conv.graph.SetErrorf("both strides (%v) and dilations (%v) are set, but only one can be used at a time",
+		Panicf("both strides (%v) and dilations (%v) are set, but only one can be used at a time",
 			conv.strides, conv.filterDilation)
-		return conv.graph.InvalidNode()
 	}
 
 	return convGeneralDilatedXLA(conv.x, conv.kernel,
@@ -343,7 +311,7 @@ func (conv *ConvolutionBuilder) Done() *Node {
 		conv.filterGroupCount, conv.batchGroupCount)
 }
 
-// ConvolveAxesConfig defines the interpretation of each axis of the input/kernel/output tensors.
+// ConvolveAxesConfig defines the interpretation of the input/kernel/output tensor axes.
 // There must be the same number of spatial dimensions (axes) for each of the 3 tensors.
 // Input and output has batch and channel axes. Kernel has inputChannel and outputChannel axes.
 type ConvolveAxesConfig struct {
@@ -373,14 +341,10 @@ func convGeneralDilatedXLA(input, filter *Node, axes ConvolveAxesConfig,
 	strides []int, paddings [][2]int, inputDilation, filterDilation []int,
 	filterGroupCount, batchGroupCount int) *Node {
 	g := validateGraphFromInputs(input, filter)
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	numSpatialDims := input.Rank() - 2
 	if len(axes.InputSpatial) != numSpatialDims || len(axes.OutputSpatial) != numSpatialDims || len(axes.KernelSpatial) != numSpatialDims {
-		g.SetErrorf("convGeneralDilatedXLA: input has %d spatial dimensions, but axes configuration has %d, %d, %d spatial axes configured "+
+		Panicf("convGeneralDilatedXLA: input has %d spatial dimensions, but axes configuration has %d, %d, %d spatial axes configured "+
 			"for input/kernel/output", numSpatialDims, len(axes.InputSpatial), len(axes.KernelSpatial), len(axes.OutputSpatial))
-		return g.InvalidNode()
 	}
 
 	// Encoding of the values as follows. IMPORTANT: this code needs to be in sync with corresponding
@@ -419,8 +383,6 @@ func convGeneralDilatedXLA(input, filter *Node, axes ConvolveAxesConfig,
 }
 
 func convGeneralDilatedVJP(node, v *Node, _ shapes.Shape) []*Node {
-	g := node.Graph()
-
 	// Recover parameters from serialized node.
 	x := node.inputs[0]
 	kernel := node.inputs[1]
@@ -465,10 +427,9 @@ func convGeneralDilatedVJP(node, v *Node, _ shapes.Shape) []*Node {
 	_ = inputDilation
 
 	if lenInputDilation > 0 {
-		g.SetErrorf("gradient of Convolve with input dilation not defined, " +
+		Panicf("gradient of Convolve with input dilation not defined, " +
 			"usually it's only used to calculate the gradient of a convolution, so " +
 			"this may occur when trying to do the gradient of a gradient.")
-		return nil
 	}
 
 	//fmt.Printf("\tx.shape=%s\n", x.Shape())
@@ -486,8 +447,6 @@ func convGeneralDilatedVJP(node, v *Node, _ shapes.Shape) []*Node {
 // output with respect to (==wrt) the input (x). See also convVJPWrtKernel.
 func convVJPWrtX(node, x, kernel, v *Node, numSpatialDims int, axes ConvolveAxesConfig,
 	strides []int, paddings [][2]int, filterDilation []int) *Node {
-	g := node.Graph()
-
 	// Get output and input spatial dimensions.
 	inputSpatialDims := gatherSlice(axes.InputSpatial, x.Shape().Dimensions)
 	outputSpatialDims := gatherSlice(axes.OutputSpatial, node.Shape().Dimensions)
@@ -533,10 +492,9 @@ func convVJPWrtX(node, x, kernel, v *Node, numSpatialDims int, axes ConvolveAxes
 		//fmt.Printf("\t\tinput start/end: %d, %d\n", inputDimStart, inputDimEnd)
 
 		if (inputDimEnd-inputDimStart+(dimStride-1))/dimStride != outputDimSize {
-			g.SetErrorf("failed to set up reverse Convolve() for gradient in spatial dimension %d: "+
+			Panicf("failed to set up reverse Convolve() for gradient in spatial dimension %d: "+
 				"outputDimSize=%d, but input convolution window is %d with stride for this dimension %d",
 				axis, outputDimSize, inputDimEnd-inputDimStart, dimStride)
-			return nil
 		}
 
 		// Start/End positions on the output for the reverse convolution.
@@ -545,9 +503,8 @@ func convVJPWrtX(node, x, kernel, v *Node, numSpatialDims int, axes ConvolveAxes
 		// Stride in the input will be become inputDilation in the reverse convolution.
 		outputDimStart := -inputDimStart - ((kernelSize - 1) / 2)
 		if outputDimStart > 0 {
-			g.SetErrorf("failed to set up reverse Convolve() for gradient: spatial dimension %d "+
+			Panicf("failed to set up reverse Convolve() for gradient: spatial dimension %d "+
 				"outputDimStart=%d > 0, which is out-of-bounds", axis, outputDimStart)
-			return nil
 		}
 		outputDimEnd := inputDimSize - inputDimStart + kernelSize/2
 		// So far outputDimEnd and outputDimStart hasn't considered the strides converted to input dilation
@@ -556,9 +513,8 @@ func convVJPWrtX(node, x, kernel, v *Node, numSpatialDims int, axes ConvolveAxes
 		numInjectedZeros := (outputDimSize - 1) * (dimStride - 1)
 		outputDimEnd -= numInjectedZeros
 		if outputDimEnd < outputDimSize {
-			g.SetErrorf("failed to set up reverse Convolve() for gradient: spatial dimension %d "+
+			Panicf("failed to set up reverse Convolve() for gradient: spatial dimension %d "+
 				"outputDimEnd=%d < outputDimSize=%d, which is out-of-bounds", axis, outputDimEnd, outputDimSize)
-			return nil
 		}
 		//fmt.Printf("\t\toutput start/end: %d, %d\n", outputDimStart, outputDimEnd)
 
@@ -566,7 +522,7 @@ func convVJPWrtX(node, x, kernel, v *Node, numSpatialDims int, axes ConvolveAxes
 		reversePaddings[axis][0] = -outputDimStart
 		reversePaddings[axis][1] = outputDimEnd - outputDimSize
 	}
-	// (3) Run the reverse convolution of the VJP.
+	// (3) Run2 the reverse convolution of the VJP.
 	//fmt.Printf("\treversePaddings=%v\n", reversePaddings)
 	//fmt.Printf("\tfilterDilation=%v\n", filterDilation)
 	revConv := Convolve(v, reverseKernel).PaddingPerDim(reversePaddings).DilationPerDim(filterDilation...).AxesConfig(reverseAxes)
@@ -588,10 +544,6 @@ func expectedOutputSize(inputSize, kernelSize, dilation, stride int, padding [2]
 // output with respect to (==wrt) the kernel (aka filters). See also convVJPWrtX.
 func convVJPWrtKernel(node, x, kernel, v *Node, numSpatialDims int, axes ConvolveAxesConfig,
 	strides []int, paddings [][2]int, filterDilation []int) *Node {
-	g := node.Graph()
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	//fmt.Printf("\nconvVJPWrtKernel input:\n")
 	//fmt.Printf("\tnode.shape=%s, x.shape=%s, kernel.shape=%s, v.shape=%s\n", node.Shape(), x.Shape(), kernel.Shape(), v.Shape())
 	//fmt.Printf("\tnumSpatialDims=%d, axes=%+v\n", numSpatialDims, axes)
@@ -657,10 +609,9 @@ func convVJPWrtKernel(node, x, kernel, v *Node, numSpatialDims int, axes Convolv
 		expectedOutputDimSize := expectedOutputSize(inputDimSize, kernelDimSize, dimFilterDilation, dimStride, dimPadding)
 
 		if expectedOutputDimSize != outputDimSize {
-			g.SetErrorf("failed to set up reverse Convolve() for gradient in spatial dimension %d: "+
+			Panicf("failed to set up reverse Convolve() for gradient in spatial dimension %d: "+
 				"outputDimSize=%d, but input size is %d, kernel size is %d, dilation is %d, and stride is %d",
 				axisIdx, outputDimSize, inputDimSize, kernelDimSize, dimFilterDilation, dimStride)
-			return g.InvalidNode()
 		}
 
 		// Reverse kernel size: the output of the original, modified by the filterDilation (set to the
@@ -684,7 +635,7 @@ func convVJPWrtKernel(node, x, kernel, v *Node, numSpatialDims int, axes Convolv
 		reversePaddings[axisIdx][1] += revDimExtraPadding // Adjustment made to the end.
 	}
 
-	// (3) Run the reverse convolution of the VJP.
+	// (3) Run2 the reverse convolution of the VJP.
 	//fmt.Printf("\treversePaddings=%v\n", reversePaddings)
 	//fmt.Printf("\tfilterDilation=%v\n", filterDilation)
 	revConv := Convolve(x, reverseKernel).

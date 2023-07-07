@@ -40,9 +40,6 @@ func TestReverseGraph(t *testing.T) {
 	n4 := Mul(n3, n2)
 	n5 := Div(n3, n2)
 	_ = n5
-	if !g.Ok() {
-		t.Fatalf("Failed to create Graph: %v", g.error)
-	}
 	rg := newReverseGraph(g, n4, []*Node{n0})
 
 	// Enumerate expectations for results of selected/included/useful.

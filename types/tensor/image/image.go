@@ -3,6 +3,7 @@
 package image
 
 import (
+	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
@@ -171,7 +172,7 @@ func toTensorImpl(tt *ToTensorConfig, images []image.Image, batch bool) (t *tens
 func toTensorGenericsImpl[T shapes.Number](tt *ToTensorConfig, images []image.Image, batch bool) (t *tensor.Local) {
 	var zero T
 	if len(images) > 1 && !batch {
-		return tensor.MakeLocalWithError(errors.Errorf("image.ToTensor in none-batch mode, but more than one image (%d) requested for conversion", len(images)))
+		Panicf("image.ToTensor in none-batch mode, but more than one image (%d) requested for conversion", len(images))
 	}
 	imgSize := images[0].Bounds().Size()
 	if batch {
@@ -179,7 +180,9 @@ func toTensorGenericsImpl[T shapes.Number](tt *ToTensorConfig, images []image.Im
 	} else {
 		t = tensor.FromShape(shapes.Make(shapes.DTypeForType(reflect.TypeOf(zero)), imgSize.Y, imgSize.X, tt.channels))
 	}
-	tensorData := t.Data().([]T)
+	tRef := t.AcquireData()
+	defer tRef.Release()
+	tensorData := tRef.Flat().([]T)
 	pos := 0
 
 	convertToDType := func(val uint32) T {
@@ -190,9 +193,9 @@ func toTensorGenericsImpl[T shapes.Number](tt *ToTensorConfig, images []image.Im
 	for imgIdx, img := range images {
 		if !img.Bounds().Size().Eq(imgSize) {
 			t.Finalize()
-			return tensor.MakeLocalWithError(errors.Errorf(
+			Panicf(
 				"image[%d] has size %s, but image[0] has size %s -- they must all be the same",
-				imgIdx, img.Bounds().Size(), imgSize))
+				imgIdx, img.Bounds().Size(), imgSize)
 		}
 		switch tt.channels {
 		case 3: // No alpha channel

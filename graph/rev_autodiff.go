@@ -17,8 +17,10 @@
 package graph
 
 import (
+	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/xla"
+	"github.com/pkg/errors"
 )
 
 // This file implements reverse-mode automatic differentiation, using VJP (Vector Jacobian Product).
@@ -64,11 +66,12 @@ type reverseNode struct {
 	Included bool
 
 	// Useful is true when this node is in the path to one of the nodes we are calculating the gradient with
-	// respect to. For nodes not useful we don't need to generate the VJP values (aka adjoints).
+	// respect to.
+	// For nodes not marked as useful, we don't need to generate the VJP values (aka adjoints).
 	Useful bool
 
 	// VJP is the gradient of the root node with respect to the output of this node. In the end it will be the sum
-	// of the VJPs back-propagated by all its consumers. Once all of them are included, this node is ready push
+	// of the VJPs back-propagated by all its consumers. Once all of them are included, this node is ready to push
 	// its VJP to its inputs.
 	VJP *Node
 
@@ -85,14 +88,14 @@ func combineOutputShape(outputShape, inputShape shapes.Shape) shapes.Shape {
 // The output must be a scalar -- otherwise this would be called Jacobian.
 // TODO: Define a Jacobian.
 func Gradient(output *Node, gradientNodes ...*Node) []*Node {
-	g := output.graph
-	if !output.Ok() || !g.Ok() {
-		return nil
-	}
+	allInputNodes := make([]*Node, 0, len(gradientNodes)+1)
+	allInputNodes = append(allInputNodes, output)
+	allInputNodes = append(allInputNodes, gradientNodes...)
+	g := validateGraphFromInputs(allInputNodes...)
 
 	outputShape := output.Shape()
 	if outputShape.Rank() > 0 {
-		g.SetErrorf("only gradients of a scalar with respect to tensors are accepted, not jacobians, "+
+		Panicf("only gradients of a scalar with respect to tensors are accepted, not jacobians, "+
 			"that is, output must be scalar, got %s", output.Shape())
 	}
 
@@ -177,14 +180,12 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 
 		vjpFn, ok := VJPRegistration[node.NodeType()]
 		if !ok {
-			g.SetErrorf("graph has node %s, for which no gradient is defined yet, cannot generate graph gradient", node)
-			return nil
+			Panicf("graph has node %s, for which no gradient is defined yet, cannot generate graph gradient", node)
 		}
 		inputsVJPs := vjpFn(node, rNode.VJP, outputShape)
 		if len(inputsVJPs) != len(node.Inputs()) {
-			g.SetErrorf("VJP(%s) returned %d VJPs, but it has %d inputs, implementation of auto-differentiation for node failed",
+			Panicf("VJP(%s) returned %d VJPs, but it has %d inputs, implementation of auto-differentiation for node failed",
 				node, len(inputsVJPs), len(node.Inputs()))
-			return nil
 		}
 		//fmt.Printf("\tFrom node %s\n", node)
 		for ii, input := range node.Inputs() {
@@ -196,11 +197,10 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 			//fmt.Printf("\t\tSetting vjp for %s: %s\n", input, vjp)
 			combinedShape := combineOutputShape(outputShape, input.shape)
 			if !vjp.shape.Eq(combinedShape) {
-				g.SetErrorf("invalid Gradient calculation for node %q: invalid shape for calculated VJP for "+
+				Panicf("invalid Gradient calculation for node %q: invalid shape for calculated VJP for "+
 					"input #%d (out of %d): input shape=%s, calculated VJP shape=%s"+
 					" -- this probably indicates a bug in the code, please report the issue.",
 					node, ii, len(node.Inputs()), input.shape, vjp.shape)
-				return nil
 			}
 			rInput := rg.ReverseNodes[input.Id()]
 			if rInput.VJP == nil {
@@ -352,32 +352,27 @@ func nilVJP(_, _ *Node, _ shapes.Shape) []*Node {
 // vjpForDefaultBroadcast returns the VJP of the default broadcasting on operations like Add, Mul, Sub, etc.
 // It is a reduce-sum of the broadcast dimensions.
 func vjpForDefaultBroadcast(node, input, v *Node) *Node {
-	if !v.Ok() {
-		return nil
-	}
-	if !v.shape.Ok() {
-		return nil
-	}
+	_ = validateGraphFromInputs(node, input, v)
 	if input.shape.Eq(node.shape) {
 		// If there was no broadcast involved, VJP is the identity.
 		return v
 	} else if input.shape.IsScalar() {
 		// If there was a broadcast from a scalar, the VJP is the full reduction of the V tensor.
 		return ReduceAllSum(v)
-	} else {
-		// Reduce sum on the dimensions it was broadcast during the sum. Search for all dimensions that
-		// are 1 in the input, and > 1 in the output.
-		var reduceDims []int
-		for ii, dim := range input.shape.Dimensions {
-			if dim == 1 && v.shape.Dimensions[ii] > 1 {
-				reduceDims = append(reduceDims, ii)
-			}
-		}
-		reduced := ReduceSum(v, reduceDims...)
-		// Since ReduceSum collapsed those reduced dimensions of now size 1, we need to reshape it back to the
-		// original input format.
-		return ReshapeWithShape(reduced, input.shape)
 	}
+
+	// Reduce sum on the dimensions it was broadcast during the sum. Search for all dimensions that
+	// are 1 in the input, and > 1 in the output.
+	var reduceDims []int
+	for ii, dim := range input.shape.Dimensions {
+		if dim == 1 && v.shape.Dimensions[ii] > 1 {
+			reduceDims = append(reduceDims, ii)
+		}
+	}
+	reduced := ReduceSum(v, reduceDims...)
+	// Since ReduceSum collapsed those reduced dimensions of now size 1, we need to reshape it back to the
+	// original input format.
+	return ReshapeWithShape(reduced, input.shape)
 }
 
 func negVJP(node, v *Node, _ shapes.Shape) []*Node {
@@ -567,8 +562,6 @@ func logisticVJP(node, v *Node, _ shapes.Shape) []*Node {
 }
 
 func dotVJP(node, v *Node, _ shapes.Shape) []*Node {
-	g := node.Graph()
-
 	// Case 1: dot product of two vectors.
 	if node.inputs[0].shape.Rank() == 1 && node.inputs[1].shape.Rank() == 1 {
 		return []*Node{
@@ -589,8 +582,7 @@ func dotVJP(node, v *Node, _ shapes.Shape) []*Node {
 
 	// Case 3: matrix[i, j] x matrix[j, k] -> matrix[i, k]
 	if node.inputs[0].shape.Rank() != 2 || node.inputs[1].shape.Rank() != 2 {
-		g.SetErrorf("Dot node with combination of ranks not accepted: %s, %s", node.inputs[0].shape, node.inputs[1].shape)
-		return nil
+		Panicf("Dot node with combination of ranks not accepted: %s, %s", node.inputs[0].shape, node.inputs[1].shape)
 	}
 	dimI, dimJ, dimK := node.shape.Dimensions[0], node.inputs[0].shape.Dimensions[1], node.shape.Dimensions[1]
 	v = ExpandDims(v, 1) // Shape [i, 1, k]
@@ -638,8 +630,6 @@ func sliceVJP(node, v *Node, _ shapes.Shape) []*Node {
 // gatherVJP generates the adjoint gradient term for  GatherXL node. It works only for simple gather operations,
 // in particular it works with graph.Gather.
 func gatherVJP(node, v *Node, _ shapes.Shape) []*Node {
-	g := node.Graph()
-
 	// TODO: check that values are compatible with Gather() and return an error if not.
 	input := node.inputs[0]
 	indices := node.inputs[1]
@@ -647,16 +637,14 @@ func gatherVJP(node, v *Node, _ shapes.Shape) []*Node {
 	indexVectorDim, offsetDims, collapsedSliceDims, startIndexMap, sliceSizes, indicesAreSorted, err := deserializeGatherXLA(node.serializedNode)
 	_ = offsetDims // We don't need it here.
 	if err != nil {
-		g.SetError(err)
-		return nil
+		panic(errors.WithMessagef(err, "gatherVJP failed to deserialize its parameters"))
 	}
 
 	// Gather() case: sliceSizes is 1 for the first dimensions, and full in the last. Plus the initial
 	// dimensions are all collapsed.
 	if len(sliceSizes) != inputShape.Rank() {
-		g.SetErrorf("gradient from Gather with len(sliceSizes) != input.Rank() not defined -- sliceSizes=%v, input.Shape()=%s",
+		Panicf("gradient from Gather with len(sliceSizes) != input.Rank() not defined -- sliceSizes=%v, input.Shape()=%s",
 			sliceSizes, inputShape)
-		return nil
 	}
 	isSimpleGather := true // Whether all indexed axes are at the start, and slices are the full dimension.
 	for axis, inputSize := range inputShape.Dimensions {
@@ -689,31 +677,30 @@ func gatherVJP(node, v *Node, _ shapes.Shape) []*Node {
 	//	input.shape, indices.shape, indexVectorDim, offsetDims, collapsedSliceDims, startIndexMap, sliceSizes)
 
 	isGatherSlices := len(collapsedSliceDims) == 0
-	if isGatherSlices {
-		// Find scatterXLA parameters to reverse the GatherSlice:
-		operand := ZerosLike(input)
-		startIndices := indices
-		outputPrefixRank := startIndices.Rank() - 1 // Prefix dimensions of the output of the GatherSlice.
-		updates := v
-		//fmt.Printf("\tgatherVJP: updates=%s\n", updates.shape)
-
-		// updateWindowsDims: one per every dimension of the input, offset by the initial outputPrefixRank.
-		updateWindowsDims := make([]int, 0, inputShape.Rank())
-		for ii := 0; ii < inputShape.Rank(); ii++ {
-			updateWindowsDims = append(updateWindowsDims, ii+outputPrefixRank)
-		}
-		var insertedWindowDims []int              // Empty, since the original GatherSlice don's have any collapsedSliceDims.
-		scatterDimsToOperandDims := startIndexMap // Same map used in GatherSlice.
-		uniqueIndices := false                    // We don't make any assumptions here. Likely the slices will overlap.
-		return []*Node{
-			scatterXLA(operand, startIndices, updates, indexVectorDim, updateWindowsDims, insertedWindowDims, scatterDimsToOperandDims,
-				indicesAreSorted, uniqueIndices),
-			nil, // No gradients for indices.
-		}
+	if !isGatherSlices {
+		Panicf("xlaGather operation for which no gradient was defined. Please use only Gather() or GatherSlices().")
 	}
 
-	g.SetErrorf("xlaGather operation for which no gradient was defined. Please use only Gather() or GatherSlices().")
-	return nil
+	// Find scatterXLA parameters to reverse the GatherSlice:
+	operand := ZerosLike(input)
+	startIndices := indices
+	outputPrefixRank := startIndices.Rank() - 1 // Prefix dimensions of the output of the GatherSlice.
+	updates := v
+	//fmt.Printf("\tgatherVJP: updates=%s\n", updates.shape)
+
+	// updateWindowsDims: one per every dimension of the input, offset by the initial outputPrefixRank.
+	updateWindowsDims := make([]int, 0, inputShape.Rank())
+	for ii := 0; ii < inputShape.Rank(); ii++ {
+		updateWindowsDims = append(updateWindowsDims, ii+outputPrefixRank)
+	}
+	var insertedWindowDims []int              // Empty, since the original GatherSlice don's have any collapsedSliceDims.
+	scatterDimsToOperandDims := startIndexMap // Same map used in GatherSlice.
+	uniqueIndices := false                    // We don't make any assumptions here. Likely the slices will overlap.
+	return []*Node{
+		scatterXLA(operand, startIndices, updates, indexVectorDim, updateWindowsDims, insertedWindowDims, scatterDimsToOperandDims,
+			indicesAreSorted, uniqueIndices),
+		nil, // No gradients for indices.
+	}
 }
 
 // batchNormTrainingVJP generates the gradient with respect to the operand and the scale and offset
@@ -744,16 +731,14 @@ func transposeVJP(node, v *Node, _ shapes.Shape) []*Node {
 // broadcastInDimVJP generates the "vector dot jacobian" w.r.t. the input of broadcast.
 // One just needs to reduce the broadcast dimensions.
 func broadcastInDimVJP(node, v *Node, _ shapes.Shape) []*Node {
-	g := node.Graph()
 	x := node.inputs[0]
 	outputShape := v.Shape()
 	shape := node.serializedNode.Shape
 	broadcastDims := node.serializedNode.Ints
 
 	if x.Rank() != len(broadcastDims) {
-		g.SetErrorf("there must be a broadcastDim for each axis in x, instead got x.shape=%s and broadcastDims=%v",
+		Panicf("there must be a broadcastDim for each axis in x, instead got x.shape=%s and broadcastDims=%v",
 			x.shape, broadcastDims)
-		return nil
 	}
 
 	axesPreserved := make([]bool, outputShape.Rank())
@@ -762,9 +747,8 @@ func broadcastInDimVJP(node, v *Node, _ shapes.Shape) []*Node {
 			axesPreserved[outputAxis] = true
 		} else {
 			if x.Shape().Dimensions[inputAxis] != 1 {
-				g.SetErrorf("unexpected broadcast from shape %s to shape %s at axis %d -- don't know how to calculate gradient",
+				Panicf("unexpected broadcast from shape %s to shape %s at axis %d -- don't know how to calculate gradient",
 					x.Shape(), shape, inputAxis)
-				return nil
 			}
 		}
 	}

@@ -17,94 +17,62 @@
 package graph
 
 import (
-	"github.com/pkg/errors"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/pkg/errors"
 )
 
-// This file implements various asserts (checks) that can be done on the Node. They are derived
-// from the asserts in the shape package. But instead of panic'ing, they just report
-// the error to the Graph.
+// This file implements various asserts (checks) that can be done on the Node.
+// They are derived from the asserts in the shapes package.
 
-// AssertDims checks whether the shape has the given dimensions and rank. A value of -1 in
-// dimensions means it can take any value and is not checked.
+// AssertDims checks whether the shape has the given dimensions and rank.
+// A value of -1 in dimensions means it can take any value and is not checked.
 //
-// If the shape is not what was expected, it sets an error in the associated Graph and returns false.
-// If the Graph is already in error state, it also returns false.
+// If the shape is not what was expected, it panics with an error message.
 //
 // This often serves as documentation for the code when implementing some complex computational
-// graphs. This allows the reader of the code to corroborte what is the expected shape of a node.
+// graphs.
+// This allows the reader of the code to corroborate what is the expected shape of a node.
 //
 // Example:
 //
-// ```
-//
 //	batch_size := inputs[0].Shape().Dimensions[0]
-//	...
+//	…
 //	layer := Concatenate(allEmbeddings, -1)
-//	if !layer.AssertDims(batchSize, -1) {  // 2D tensor, with batch size as the leading dimension.
-//	    return nil
-//	}
-//
-// ```
-func (n *Node) AssertDims(dimensions ...int) bool {
-	if !n.Ok() {
-		return false
-	}
-	g := n.Graph()
-	if !g.Ok() {
-		return false
-	}
-
+//	layer.AssertDims(batchSize, -1) // 2D tensor, with batch size as the leading dimension.
+func (n *Node) AssertDims(dimensions ...int) {
+	n.AssertValid()
 	err := shapes.CheckDims(n, dimensions...)
 	if err != nil {
-		g.SetError(errors.WithMessagef(err, "AssertDims(%v)", dimensions))
-		return false
+		panic(errors.WithMessagef(err, "AssertDims(%v)", dimensions))
 	}
-	return true
 }
 
 // AssertRank checks whether the shape has the given rank.
 //
-// If the shape is not what was expected, it sets an error in the associated Graph and returns false.
-// If the Graph is already in error state, it also returns false.
+// If the rank is not what was expected, it panics with an error message.
+//
+// This often serves as documentation for the code when implementing some complex computational
+// graphs.
+// This allows the reader of the code to corroborate what is the expected shape of a node.
 //
 // It can be used in a similar fashion as AssertDims.
-func (n *Node) AssertRank(rank int) bool {
-	if !n.Ok() {
-		return false
-	}
-	g := n.Graph()
-	if !g.Ok() {
-		return false
-	}
-
+func (n *Node) AssertRank(rank int) {
+	n.AssertValid()
 	err := shapes.CheckRank(n, rank)
 	if err != nil {
-		g.SetError(errors.WithMessagef(err, "AssertRank(%d)", rank))
-		return false
+		panic(errors.WithMessagef(err, "AssertRank(%d)", rank))
 	}
-	return true
 }
 
 // AssertScalar checks whether the shape is a scalar.
 //
-// If the shape is not what was expected, it sets an error in the associated Graph and returns false.
-// If the Graph is already in error state, it also returns false.
+// If the rank is not what was expected, it panics with an error message.
 //
 // It can be used in a similar fashion as AssertDims.
-func (n *Node) AssertScalar() bool {
-	if !n.Ok() {
-		return false
-	}
-	g := n.Graph()
-	if !g.Ok() {
-		return false
-	}
-
+func (n *Node) AssertScalar() {
+	n.AssertValid()
 	err := shapes.CheckScalar(n)
 	if err != nil {
-		g.SetError(errors.WithMessage(err, "AssertScalar()"))
-		return false
+		panic(errors.WithMessage(err, "AssertScalar()"))
 	}
-	return true
 }

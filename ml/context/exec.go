@@ -19,6 +19,7 @@ package context
 import (
 	"fmt"
 	"github.com/gomlx/gomlx/graph"
+	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/pkg/errors"
 	"log"
@@ -27,8 +28,8 @@ import (
 	"sync"
 )
 
-// ContextExecGraphFn is a type parameter for accepted function types for NewExec constructor.
-type ContextExecGraphFn interface {
+// ExecGraphFn is a type parameter for accepted function types for NewExec constructor.
+type ExecGraphFn interface {
 	// With 0 outputs (when only used for the side effects like updating variables):
 	func(*Context, *Node) |
 		func(*Context, *Node, *Node) |
@@ -113,7 +114,7 @@ type ContextExecGraphFn interface {
 // Notice ctxGraphFn, the function that builds the computation graph, is only called the
 // first time Call is used -- so it's slower the first time, since it has to compile the graph.
 // After that the execution is much faster. But that means that changes to Context.SetParams()
-// or Context.SetGraphParams() after the frist execution will not have any effect.
+// or Context.SetGraphParams() after the first execution will not have any effect.
 //
 // Exec also manages updates to variables automatically. Example: we implement a counter,
 // which takes no input values (just the *Graph object), it just creates a variable
@@ -249,11 +250,7 @@ func NewExecAny(manager *Manager, ctx *Context, ctxGraphFn any) (*Exec, error) {
 	}
 
 	e.buildGraphFn()
-	var err error
-	e.exec, err = graph.NewExecAny(manager, e.graphFn)
-	if err != nil {
-		return nil, err
-	}
+	e.exec = graph.NewExecAny(manager, e.graphFn)
 	funcName := runtime.FuncForPC(reflect.ValueOf(ctxGraphFn).Pointer()).Name()
 	e.exec.SetName(fmt.Sprintf("Context.Exec:%s", funcName))
 	e.exec.SetSideParamsHook(e.setSideParams)
@@ -396,7 +393,7 @@ func (e *Exec) GetNodeLogger() graph.LoggerFn {
 //
 // This is a generic wrapper around NewExecAny that check that types are
 // correct (but doesn't support all possible types of ctxGraphFn).
-func NewExec[F ContextExecGraphFn](manager *Manager, ctx *Context, ctxGraphFn F) *Exec {
+func NewExec[F ExecGraphFn](manager *Manager, ctx *Context, ctxGraphFn F) *Exec {
 	e, err := NewExecAny(manager, ctx, ctxGraphFn)
 	if err != nil {
 		log.Fatalf("Failed to create Exec object: %+v", err)
@@ -462,10 +459,12 @@ func (e *Exec) SetContext(context *Context) *Exec {
 // It passes the context to the registered ctxGraphFn. After the very first invocation of Call
 // the context is marked as Context.Reuse().
 //
-// It returns the outputs in a slice, even if there is only one output, or an error.
-func (e *Exec) Call(args ...any) ([]tensor.Tensor, error) {
-	outputs, _, err := e.CallWithGraph(args...)
-	return outputs, err
+// It returns the outputs in a slice, even if there is only one output.
+//
+// It panics with an informative error if something goes wrong.
+func (e *Exec) Call(args ...any) []tensor.Tensor {
+	outputs, _ := e.CallWithGraph(args...)
+	return outputs
 }
 
 // CallWithGraph is similar to Call, but it also returns the computation graph used
@@ -474,24 +473,13 @@ func (e *Exec) Call(args ...any) ([]tensor.Tensor, error) {
 // something else.
 //
 // It returns the outputs in a slice, even if there is only one output, and the graph used
-// to execute the computation or an error.
-func (e *Exec) CallWithGraph(args ...any) (outputs []tensor.Tensor, g *Graph, err error) {
-	if !e.context.Ok() {
-		err = errors.WithMessage(e.context.Error(), "Context already contains error, can't execute")
-		return
-	}
-	outputs, g, err = e.exec.CallWithGraph(args...)
-	if !e.context.Ok() {
-		err = errors.WithMessage(e.context.Error(), "Context contains error, failed to execute probably when building graph")
-		return
-	}
-	if err != nil {
-		// Error during execution, it will be set in all outputs, return as is.
-		return
-	}
+// to execute the computation.
+//
+// It panics with an informative error if something goes wrong.
+func (e *Exec) CallWithGraph(args ...any) (outputs []tensor.Tensor, g *Graph) {
+	outputs, g = e.exec.CallWithGraph(args...)
 	if len(outputs) == 0 {
-		err = errors.Errorf("No outputs from ModelFn function for %q", e.Name())
-		return
+		Panicf("No outputs from ModelFn function for %q", e.Name())
 	}
 
 	// Separate the changed variables new values and set the variables accordingly.

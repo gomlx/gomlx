@@ -26,6 +26,7 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/train"
+	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"golang.org/x/exp/constraints"
 )
@@ -52,23 +53,14 @@ func DenseWithBias(ctx *context.Context, input *Node, outputDimensions ...int) *
 // shape `[<batch dimensions...>, <outputDimensions...>]`.
 func Dense(ctx *context.Context, input *Node, useBias bool, outputDimensions ...int) *Node {
 	g := input.Graph()
-	if !g.Ok() || !input.Ok() {
-		return g.InvalidNode()
-	}
-	if !ctx.Ok() {
-		g.SetErrorf("context passed to layers.Dense has errors: %w", ctx.Error())
-		return g.InvalidNode()
-	}
 	ctx = ctx.In("dense")
 	inputShape := input.Shape()
 	inputRank := inputShape.Rank()
 	if inputRank == 0 {
-		g.SetErrorf("input for layers.Dense needs to have rank >= 1, got %s", input.Shape())
-		return g.InvalidNode()
+		Panicf("input for layers.Dense needs to have rank >= 1, got %s", input.Shape())
 	}
 	if len(outputDimensions) == 0 {
-		g.SetErrorf("at least one outputDimension must be given for layers.Dense, got 0 -- use outputDims=[1] for a scalar output")
-		return g.InvalidNode()
+		Panicf("at least one outputDimension must be given for layers.Dense, got 0 -- use outputDims=[1] for a scalar output")
 	}
 	inputLastDimension := inputShape.Dimensions[inputShape.Rank()-1]
 
@@ -106,9 +98,6 @@ func Dense(ctx *context.Context, input *Node, useBias bool, outputDimensions ...
 	if useBias {
 		biasVar := ctx.VariableWithShape("biases", shapes.Make(inputShape.DType, outputDimensions...))
 		bias := biasVar.ValueGraph(g)
-		if !output.Ok() {
-			return g.InvalidNode()
-		}
 		expandedBiasShape := output.Shape().Copy()
 		for ii := range expandedBiasShape.Dimensions[:output.Rank()-len(outputDimensions)] {
 			expandedBiasShape.Dimensions[ii] = 1
@@ -140,14 +129,9 @@ func Dense(ctx *context.Context, input *Node, useBias bool, outputDimensions ...
 // The output has rank one larger than the input, with the last dimension the same as
 // the embedding dimension.
 func Embedding(ctx *context.Context, input *Node, dtype shapes.DType, vocabSize, dimension int) *Node {
-	g := input.Graph()
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	inputShape := input.Shape()
 	if !inputShape.DType.IsInt() {
-		g.SetErrorf("can only use Embedding on integer inputs, passed %s instead", input.Shape())
-		return g.InvalidNode()
+		Panicf("can only use Embedding on integer inputs, passed %s instead", input.Shape())
 	}
 	if inputShape.IsScalar() || inputShape.Dimensions[inputShape.Rank()-1] != 1 {
 		// Add a last dimension of size 1, since we are pointing to a table that needs
@@ -158,23 +142,24 @@ func Embedding(ctx *context.Context, input *Node, dtype shapes.DType, vocabSize,
 	return Gather(embeddingTable.ValueGraph(input.Graph()), input)
 }
 
-// ValidateQuantilesForPWLCalibration validate that raw values for quantiles are ok to be used for
+// AssertQuantilesForPWLCalibrationValid validates that raw values for quantiles are ok to be used for
 // PieceWiseLinearCalibration. It checks for:
 //   - Enough data points.
 //   - Monotonicity of data points: quantiles should always be increasing.
-func ValidateQuantilesForPWLCalibration[T constraints.Ordered](values []T) error {
+//
+// Errors are reported back with `panic`.
+func AssertQuantilesForPWLCalibrationValid[T constraints.Ordered](values []T) {
 	if len(values) < 2 {
-		return fmt.Errorf("PieceWiseLinearCalibration requires at least 2 quantile values")
+		Panicf("PieceWiseLinearCalibration requires at least 2 quantile values")
 	}
 	current := values[0]
 	for ii, value := range values[1:] {
 		if value <= current {
-			return fmt.Errorf("quantile %d (out of %d), valued %v, for PieceWiseLinearCalibration is out of order or repeated",
+			Panicf("quantile %d (out of %d), valued %v, for PieceWiseLinearCalibration is out of order or repeated",
 				ii, len(values), value)
 		}
 		current = value
 	}
-	return nil
 }
 
 // PieceWiseLinearCalibration creates a piece-wise linear function from the input, splitting
@@ -184,7 +169,7 @@ func ValidateQuantilesForPWLCalibration[T constraints.Ordered](values []T) error
 // The keypoints are typically quantiles of the input feature, starting with the minimum value
 // and ending on the maximum. It must have rank-1 and be of the same DType as input.
 // Its values must be ordered, and cannot be repeated (this may lead to NaNs). Consider using
-// ValidateQuantilesForPWLCalibration on the quantiles.
+// AssertQuantilesForPWLCalibrationValid on the quantiles.
 //
 // If outputTrainable is set to true, the outputs mapped to the keypoints are made trainable, and
 // may change to values outside the range [0, 1].
@@ -196,30 +181,16 @@ func ValidateQuantilesForPWLCalibration[T constraints.Ordered](values []T) error
 // https://www.tensorflow.org/lattice/api_docs/python/tfl/layers/PWLCalibration
 func PieceWiseLinearCalibration(ctx *context.Context, input, keypoints *Node, outputTrainable bool) *Node {
 	g := input.Graph()
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
-	if !ctx.Ok() {
-		g.SetErrorf("context passed to PieceWiseLinearCalibration() has errors: %w", ctx.Error())
-		return g.InvalidNode()
-	}
 	ctx = ctx.In("piece_wise_linear")
-	if !input.Ok() {
-		g.SetErrorf("input Node is not ok: %s", input)
-		return g.InvalidNode()
-	}
 	if !input.DType().IsFloat() {
-		g.SetErrorf("PieceWiseLinearCalibration only accepts float inputs, but got %s", input.Shape())
-		return g.InvalidNode()
+		Panicf("PieceWiseLinearCalibration only accepts float inputs, but got %s", input.Shape())
 	}
 	if keypoints.Rank() != 1 || keypoints.Shape().Dimensions[0] < 2 {
-		g.SetErrorf("PieceWiseLinearCalibration keypoints shape %q invalid, it must be rank-1 and at list size 2", keypoints.Shape())
-		return g.InvalidNode()
+		Panicf("PieceWiseLinearCalibration keypoints shape %q invalid, it must be rank-1 and at list size 2", keypoints.Shape())
 	}
 	if keypoints.DType() != input.DType() {
-		g.SetErrorf("PieceWiseLinearCalibration keypoints DType %s != input's DType %s",
+		Panicf("PieceWiseLinearCalibration keypoints DType %s != input's DType %s",
 			keypoints.DType(), input.DType())
-		return g.InvalidNode()
 	}
 
 	inputShape := input.Shape()
@@ -288,30 +259,16 @@ func PieceWiseLinearCalibration(ctx *context.Context, input, keypoints *Node, ou
 // doing gradient descent.
 func PieceWiseLinearCalibrationCascaded(ctx *context.Context, input, keypoints *Node, outputTrainable bool) *Node {
 	g := input.Graph()
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
-	if !ctx.Ok() {
-		g.SetErrorf("context passed to PieceWiseLinearCalibration() has errors: %w", ctx.Error())
-		return g.InvalidNode()
-	}
 	ctx = ctx.In("piece_wise_linear")
-	if !input.Ok() {
-		g.SetErrorf("input Node is not ok: %s", input)
-		return g.InvalidNode()
-	}
 	if !input.DType().IsFloat() {
-		g.SetErrorf("PieceWiseLinearCalibration only accepts float inputs, but got %s", input.Shape())
-		return g.InvalidNode()
+		Panicf("PieceWiseLinearCalibration only accepts float inputs, but got %s", input.Shape())
 	}
 	if keypoints.Rank() != 1 || keypoints.Shape().Dimensions[0] < 2 {
-		g.SetErrorf("PieceWiseLinearCalibration keypoints shape %q invalid, it must be rank-1 and at list size 2", keypoints.Shape())
-		return g.InvalidNode()
+		Panicf("PieceWiseLinearCalibration keypoints shape %q invalid, it must be rank-1 and at list size 2", keypoints.Shape())
 	}
 	if keypoints.DType() != input.DType() {
-		g.SetErrorf("PieceWiseLinearCalibration keypoints DType %s != input's DType %s",
+		Panicf("PieceWiseLinearCalibration keypoints DType %s != input's DType %s",
 			keypoints.DType(), input.DType())
-		return g.InvalidNode()
 	}
 
 	inputShape := input.Shape()
@@ -370,17 +327,6 @@ func Dropout(ctx *context.Context, input *Node, dropoutRate *Node) *Node {
 // to preserve the mean of the input values.
 func DropoutNormalize(ctx *context.Context, input *Node, dropoutRate *Node, normalize bool) *Node {
 	g := input.Graph()
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
-	if !ctx.Ok() {
-		g.SetErrorf("context has errors: %w", ctx.Error())
-		return g.InvalidNode()
-	}
-	if !input.Ok() {
-		g.SetErrorf("input Node is not ok: %s", input)
-		return g.InvalidNode()
-	}
 	if !ctx.IsTraining(g) {
 		return input
 	}
@@ -403,13 +349,8 @@ func DropoutNormalize(ctx *context.Context, input *Node, dropoutRate *Node, norm
 // by context.Variable.ValueGraph()), scale by the given amount (typically a constant) and then
 // train.AddLoss the resulting value, having the effect of regularizing the weights (variables).
 func AddL2Regularization(ctx *context.Context, amount *Node, values ...*Node) {
-	graph := amount.Graph()
-	if !ctx.Ok() || !graph.Ok() {
-		return
-	}
 	if len(values) == 0 {
-		graph.SetErrorf("no values given to AddL2Regularization")
-		return
+		Panicf("no values given to AddL2Regularization")
 	}
 	var loss *Node
 	for _, v := range values {
@@ -430,10 +371,6 @@ func AddL2Regularization(ctx *context.Context, amount *Node, values ...*Node) {
 // The parameter `independentAxes` list axes that should not be normalized together.
 // A typical value is -1, the feature axis (last axis), so that each feature gets its own normalization.
 func Normalize(x *Node, independentAxes ...int) *Node {
-	g := x.Graph()
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	if len(independentAxes) >= x.Rank() {
 		return x
 	}

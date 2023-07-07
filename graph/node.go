@@ -19,6 +19,7 @@ package graph
 import (
 	"fmt"
 	"github.com/gomlx/gomlx/types"
+	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
@@ -64,8 +65,7 @@ func (n *Node) Graph() *Graph {
 	return n.graph
 }
 
-// Shape of the output of the Node. It can be nil, for nodes that simply have
-// a side effect, like a "Print" Node.
+// Shape of the Node's output. It can be `nil`, for nodes that simply have a side effect, like a "Print" Node.
 func (n *Node) Shape() shapes.Shape {
 	if n == nil {
 		return shapes.Shape{}
@@ -78,7 +78,7 @@ func (n *Node) DType() shapes.DType {
 	return n.shape.DType
 }
 
-// Rank returns the rank fo the node's shape.
+// Rank returns the rank of the node's shape.
 func (n *Node) Rank() int {
 	return n.shape.Rank()
 }
@@ -91,11 +91,10 @@ func (n *Node) Id() NodeId {
 	return n.id
 }
 
-// ParameterHandle returns the parameter id in the graph. Returns InvalidParameterHandle if node is not a parameter.
+// ParameterHandle returns the parameter id in the graph.
+// It returns InvalidParameterHandle if node is not a parameter.
 func (n *Node) ParameterHandle() ParameterHandle {
-	if !n.Ok() {
-		return InvalidParameterHandle
-	}
+	n.AssertValid()
 	if n.NodeType() != xla.ParameterNode {
 		return InvalidParameterHandle
 	}
@@ -104,25 +103,25 @@ func (n *Node) ParameterHandle() ParameterHandle {
 
 const NotAParameterStr = "NOT_A_PARAMETER"
 
-// ParameterName returns the parameter name, if this node is a parameter.
+// ParameterName returns the parameter name if this node is a parameter.
 func (n *Node) ParameterName() string {
-	if !n.Ok() {
-		return NotAParameterStr
-	}
+	n.AssertValid()
 	if n.NodeType() != xla.ParameterNode {
 		return NotAParameterStr
 	}
 	return n.serializedNode.Str
-
 }
 
-// Inputs are the other nodes that are direct inputs to the node. This doesn't include static inputs for some
-// operations, that are not given by other nodes.
+// Inputs are the other nodes that are direct inputs to the node.
+// This doesn't include static inputs for some operations that are not given by other Graph nodes.
 func (n *Node) Inputs() []*Node { return n.inputs }
 
-// Ok indicates whether the Node was created successfully.
-func (n *Node) Ok() bool {
-	return n != nil && n.graph != nil && n.graph.Ok() && n.id >= 0
+// AssertValid panics if `n` is nil, or if its graph is invalid.
+func (n *Node) AssertValid() {
+	if n == nil {
+		panic(errors.New("Node is nil"))
+	}
+	n.graph.AssertValid()
 }
 
 // SetLogged indicates that a node should be logged by executors.
@@ -146,10 +145,14 @@ func (n *Node) Trace() error {
 	return n.trace
 }
 
-// String implements Stringer interface. Logged nodes are marked with (*).
+// String implements the `fmt.Stringer` interface.
+// Logged nodes are marked with (*).
 func (n *Node) String() (str string) {
-	if !n.Ok() {
-		return "InvalidNode"
+	if n == nil {
+		return "Node(nil)"
+	}
+	if n.graph == nil || n.graph.comp.IsNil() {
+		return "Node(graph == nil or invalid)"
 	}
 	if n.serializedNode == nil {
 		return fmt.Sprintf("???(id=%d, xlaHandle=%d)", n.id, n.xlaHandle)
@@ -189,9 +192,7 @@ func (n *Node) String() (str string) {
 //
 // Almost every new node type implementation will rely on the Node.
 func newNode(graph *Graph, serializedNode *xla.SerializedNode, inputs []*Node) (node *Node) {
-	if !graph.Ok() {
-		return graph.InvalidNode()
-	}
+	graph.AssertValid()
 	node = &Node{
 		graph:          graph,
 		serializedNode: serializedNode,
@@ -203,14 +204,11 @@ func newNode(graph *Graph, serializedNode *xla.SerializedNode, inputs []*Node) (
 	var opsNum int
 	opsNum, node.shape, err = graph.comp.AddOp(serializedNode)
 	if err != nil {
-		fmt.Printf("Failed to add op: %+v\n", err)
-		graph.SetError(errors.WithStack(err))
-		node = graph.InvalidNode()
-	} else {
-		node.xlaHandle = NodeXlaHandle(opsNum)
+		panic(errors.Wrapf(err, "failed to AddOp to graph %q", graph.name))
 	}
+	node.xlaHandle = NodeXlaHandle(opsNum)
 	if graph.traced {
-		node.trace = errors.Errorf("Stack-trace")
+		node.trace = errors.New("Stack-trace")
 	}
 	return
 }
@@ -231,9 +229,7 @@ func (n *Node) setInputs(inputs []*Node) {
 // newNoOpNode is similar to newNode, but creates a node with no associated XLA operation,
 // whose output is its input.
 func newNoOpNode(graph *Graph, serializedNode *xla.SerializedNode, input *Node) (node *Node) {
-	if !graph.Ok() {
-		return graph.InvalidNode()
-	}
+	graph.AssertValid()
 	node = &Node{
 		graph:          graph,
 		serializedNode: serializedNode,
@@ -243,24 +239,17 @@ func newNoOpNode(graph *Graph, serializedNode *xla.SerializedNode, input *Node) 
 	node.setInputs([]*Node{input})
 	node.shape = input.shape.Copy()
 	if graph.traced {
-		node.trace = errors.Errorf("Stack-trace")
+		node.trace = errors.New("Stack-trace")
 	}
 	return
 }
 
 // ConstLocal returns a newly created constant node for the tensor x.
 func ConstLocal(g *Graph, x *tensor.Local) *Node {
-	if !g.Ok() {
-		return (*Node)(nil)
-	}
-	literal := x.Literal()
-	if literal.IsNil() {
-		g.SetErrorf("undefined tensor given to ConstLocal")
-		return (*Node)(nil)
-	}
+	x.AssertValid()
 	return newNode(g, &xla.SerializedNode{
 		Type:    xla.ConstantNode,
-		Literal: literal,
+		Literal: x.Literal(),
 	}, nil)
 }
 
@@ -273,35 +262,24 @@ func ConstLocal(g *Graph, x *tensor.Local) *Node {
 // If you are creating very large constants that don't need to be materialized locally, consider
 // instead storing them as variables in the context, or as a side parameter.
 func Const(g *Graph, x any) *Node {
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	if _, ok := x.(*Node); ok {
-		g.SetErrorf("Const(g, x) can only take actual values, not another computation graph `*Node` -- " +
-			"for that you don't need Const(), just use it directly.")
-		return g.InvalidNode()
+		panic(errors.New(
+			"Const(g, x) can only take actual values, not another computation graph `*Node` -- " +
+				"for that you don't need Const(), just use it directly."))
 	}
 	valueT := tensor.FromAnyValue(x)
-	if valueT.Error() != nil {
-		g.SetErrorf("failed converting value to Tensor: %w", valueT.Error())
-		return g.InvalidNode()
-	}
 	return ConstLocal(g, valueT.Local())
 }
 
 // ConstAsDType creates a constant of the given DType. It adds the convenience
 // of converting x (slice or scalar) to the appropriate type.
-// E.g:
+// E.g.:
 //
 //	Pi := ConstScalar(g, myDType, math.Pi)
 //	PiAndE := ConstScalar(g, myDType, []float64{math.Pi, math.E})
 func ConstAsDType(g *Graph, dtype shapes.DType, x interface{}) *Node {
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	if dtype == shapes.InvalidDType {
-		g.SetErrorf("invalid DType given for ConstAsDType")
-		return g.InvalidNode()
+		Panicf("invalid DType given for ConstAsDType")
 	}
 	return Const(g, shapes.CastAsDType(x, dtype))
 }
@@ -312,25 +290,17 @@ func ConstAs(base *Node, x interface{}) *Node {
 	return ConstAsDType(base.Graph(), base.DType(), x)
 }
 
-// NoOp creates a new Node whose output equals the input. No new XLA op is created, so no
-// costs are actually impose.
+// NoOp creates a new Node whose output equals the input.
+// No new XLA op is created, so there are no costs to the computation execution speed.
 func NoOp(x *Node) *Node {
-	g := x.Graph()
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
-	return newNoOpNode(g, &xla.SerializedNode{
+	return newNoOpNode(x.Graph(), &xla.SerializedNode{
 		Type: xla.InvalidNode,
 	}, x)
 }
 
-// StopGradient creates a new NoOp Node, through which gradients don't back-propagate. No new XLA op is created, so no
-// costs are actually impose.
+// StopGradient creates a new NoOp Node, through which gradients don't back-propagate.
+// No new XLA op is created, so there are no costs to the computation execution speed.
 func StopGradient(x *Node) *Node {
-	g := x.Graph()
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	n := NoOp(x)
 	n.stopGradient = true
 	return n
@@ -340,9 +310,6 @@ func StopGradient(x *Node) *Node {
 // on the given dimension. So Iota([2,2], 1) returns [[0 1][0 1]], while Iota([2,2], 0)
 // returns [[0 0][1 1]].
 func Iota(g *Graph, shape shapes.Shape, iotaDimension int) *Node {
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	return newNode(g, &xla.SerializedNode{
 		Type:  xla.IotaNode,
 		Shape: shape,
@@ -353,15 +320,16 @@ func Iota(g *Graph, shape shapes.Shape, iotaDimension int) *Node {
 // IotaFull creates a constant of the given shape with increasing numbers for all values.
 // So `IotaFull([2,2])` returns `[[0 1][2 3]]`.
 func IotaFull(g *Graph, shape shapes.Shape) *Node {
-	if !g.Ok() {
-		return g.InvalidNode()
+	if !shape.Ok() {
+		panic(errors.New("invalid shape"))
 	}
 	return ReshapeWithShape(Iota(g, shapes.Make(shape.DType, shape.Size()), 0), shape)
 }
 
 // validateGraphFromInputs checks that all inputs are of the same Graph and that
-// the Graph has no error. Returns the Graph, or set the error on the graphs
-// and returns nil.
+// the Graph has no error.
+// It panics with a corresponding error message in case of issues.
+// Otherwise, it returns the Graph common to all inputs.
 func validateGraphFromInputs(inputs ...*Node) (g *Graph) {
 	if len(inputs) == 0 {
 		return nil
@@ -371,37 +339,17 @@ func validateGraphFromInputs(inputs ...*Node) (g *Graph) {
 	}
 
 	// Checks that all inputs are of the same graph.
-	var err error
 	for ii, n := range inputs {
-		if n.Graph() == nil {
-			err = errors.WithStack(errors.Errorf("invalid input[%d], it has graph set to nil!?", ii))
-			break
+		if err := TryCatch[error](n.AssertValid); err != nil {
+			panic(errors.WithMessagef(err, "invalid input[%d]", ii))
 		}
 		if g == nil {
 			g = n.Graph()
-			if !g.Ok() {
-				// Return immediately.
-				return
-			}
+			g.AssertValid()
 		} else {
 			if n.Graph() != g {
-				err = errors.WithStack(errors.Errorf("combining nodes from different graphs not allowed: "+
-					"input[0] graph is %q, input[%d] graph is %q", g.Name(), ii, n.Graph().Name()))
-				break
-			}
-		}
-		if !n.Ok() {
-			err = errors.WithStack(errors.Errorf("invalid node for input %d", ii))
-			continue
-		}
-	}
-	if err != nil {
-		for _, n := range inputs {
-			if n.Graph() != nil && n.Graph().Ok() {
-				if g == nil {
-					g = n.Graph()
-				}
-				n.Graph().SetError(err)
+				Panicf("combining nodes from different graphs not allowed: "+
+					"input[0] graph is %q, input[%d] graph is %q", g.Name(), ii, n.Graph().Name())
 			}
 		}
 	}
@@ -411,9 +359,6 @@ func validateGraphFromInputs(inputs ...*Node) (g *Graph) {
 // oneArgNode is a helper function that implements ops that simply take 1 input.
 func oneArgNode(nodeType xla.NodeType, x *Node) *Node {
 	g := validateGraphFromInputs(x)
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	return newNode(g, &xla.SerializedNode{Type: nodeType}, []*Node{x})
 }
 
@@ -477,12 +422,8 @@ func RSqrt(x *Node) *Node { return oneArgNode(xla.RsqrtNode, x) }
 // twoArgsNode is a helper function that implements ops that simply take 2 inputs.
 func twoArgsNode(nodeType xla.NodeType, x, y *Node) *Node {
 	g := validateGraphFromInputs(x, y)
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	if x.shape.DType != y.shape.DType {
-		g.SetErrorf("operands of %s have different dtypes (%s and %s)", nodeType, x.shape.DType, y.shape.DType)
-		return g.InvalidNode()
+		Panicf("operands of %s have different dtypes (%s and %s)", nodeType, x.shape.DType, y.shape.DType)
 	}
 	return newNode(g, &xla.SerializedNode{Type: nodeType}, []*Node{x, y})
 }
@@ -630,15 +571,17 @@ func LessThanTotalOrder(x, y *Node) *Node { return twoArgsNode(xla.LessThanTotal
 //
 // lhs -> left-hand-side; rhs -> right-hand-side
 // The operation performs sum of products over the second dimension of lhs (or the first if it has rank 1) and
-// the first dimension of rhs. These are the "contracted" dimensions. The contracted dimensions
-// of lhs and rhs must be of the same size. In practice, it can be used to perform dot products between vectors,
-// vector/matrix multiplications or matrix/matrix multiplications.
+// the first dimension of rhs.
+// These are the "contracted" dimensions.
+// The contracted dimensions of lhs and rhs must be of the same size.
+// In practice, it can be used to perform dot products between vectors, vector/matrix multiplications or
+// matrix/matrix multiplications.
 func Dot(lhs, rhs *Node) *Node { return twoArgsNode(xla.DotNode, lhs, rhs) }
 
 // BroadcastPrefix adds dimensions to an array by duplicating the data in the array.
 //
-// The new dimensions dims are inserted on the left, i.e. if
-// broadcast_sizes has values {a0, ..., aN} and the operand shape
+// The new dimensions dims are inserted on the left, i.e., if
+// broadcast_sizes has values `{a0, ..., aN}` and the operand shape
 // has dimensions {b0, ..., bM} then the shape of the output has
 // dimensions {a0, ..., aN, b0, ..., bM}.
 //
@@ -647,9 +590,6 @@ func Dot(lhs, rhs *Node) *Node { return twoArgsNode(xla.DotNode, lhs, rhs) }
 //	output[i0, ..., iN, j0, ..., jM] = operand[j0, ..., jM]
 func BroadcastPrefix(x *Node, dims []int) *Node {
 	g := validateGraphFromInputs(x)
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	return newNode(g, &xla.SerializedNode{
 		Type: xla.BroadcastNode,
 		Ints: dims,
@@ -660,7 +600,7 @@ func BroadcastPrefix(x *Node, dims []int) *Node {
 // given in newDimensions. Only new expanded axes or axes with dimension 1 can be broadcast
 // to new dimensions.
 //
-// newDimensions should have a rank larger than the rank of x, and the new axes in newDimensions
+// `newDimensions` should have a rank larger than the rank of x, and the new axes in newDimensions
 // should be listed in expandedAxes. In other words: `x.Rank() + len(expandedAxes) == len(newDimensions)`.
 //
 // For example:
@@ -669,32 +609,25 @@ func BroadcastPrefix(x *Node, dims []int) *Node {
 //	   ExpandAndBroadcast(x, []int{2, 2}, []int{0})  // -> [][]int32{{10, 20}, {10, 20}}
 //	   ExpandAndBroadcast(x, []int{2, 2}, []int{0})  // -> [][]int32{{10, 10}, {20, 20}}
 func ExpandAndBroadcast(x *Node, newDimensions []int, expandedAxes []int) (output *Node) {
-	g := validateGraphFromInputs(x)
-	output = g.InvalidNode()
-	if !g.Ok() {
-		return
-	}
+	_ = validateGraphFromInputs(x)
 	if x.Rank()+len(expandedAxes) != len(newDimensions) {
-		g.SetErrorf("there must be exactly one expandedAxes (%v) for each new axis in newDimensions (%v) -- x.shape=%s",
+		Panicf("there must be exactly one expandedAxes (%v) for each new axis in newDimensions (%v) -- x.shape=%s",
 			expandedAxes, newDimensions, x.shape)
-		return
 	}
 
-	// Verify values of expandedAxis and create a map of the expanded axis.
+	// Verify that the values of expandedAxis and create a map of the expanded axis.
 	expandedMap := make([]bool, len(newDimensions))
 	for ii, axis := range expandedAxes {
 		if axis < 0 {
 			axis = len(newDimensions) + axis
 		}
 		if axis < 0 || axis >= len(newDimensions) {
-			g.SetErrorf("expandedAxes (%v) defines a value out-of-range (%d-th value -> %d), they must be between 0 and len(newDimensions)=%d",
+			Panicf("expandedAxes (%v) defines a value out-of-range (%d-th value -> %d), they must be between 0 and len(newDimensions)=%d",
 				expandedAxes, ii, axis, len(newDimensions))
-			return
 		}
 		if expandedMap[axis] {
-			g.SetErrorf("expandedAxes (%v) repeats an axis (%d-th value -> %d), they must be all unique and between 0 and len(newDimensions)=%d",
+			Panicf("expandedAxes (%v) repeats an axis (%d-th value -> %d), they must be all unique and between 0 and len(newDimensions)=%d",
 				expandedAxes, ii, axis, len(newDimensions))
-			return
 		}
 		expandedMap[axis] = true
 	}
@@ -718,7 +651,7 @@ func ExpandAndBroadcast(x *Node, newDimensions []int, expandedAxes []int) (outpu
 // This also requires that the i-th input dimension is either 1 or is the same as the
 // output dimension it's broadcasting into.
 //
-// This is part the XLA API, prefer using BroadcastAndExpand instead.
+// This is part of the XLA API, prefer using BroadcastAndExpand instead.
 //
 // For example, say operand `x = (s32)[2]{1, 2}`; shape = `(s32)[2,2]`:
 //   - Specifying []int{1} as broadcast_dimension will generate output
@@ -732,13 +665,9 @@ func ExpandAndBroadcast(x *Node, newDimensions []int, expandedAxes []int) (outpu
 // This interface is cumbersome, so instead we expose
 func broadcastInDim(x *Node, shape shapes.Shape, broadcastDims []int) *Node {
 	g := validateGraphFromInputs(x)
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	if x.Rank() != len(broadcastDims) {
-		g.SetErrorf("there must be one broadcastDim for each axis of x in broadcastInDim, but x.shape=%s and broadcastDims=%v",
+		Panicf("there must be one broadcastDim for each axis of x in broadcastInDim, but x.shape=%s and broadcastDims=%v",
 			x.shape, broadcastDims)
-		return g.InvalidNode()
 	}
 	return newNode(g, &xla.SerializedNode{
 		Type:  xla.BroadcastInDimNode,
@@ -753,19 +682,15 @@ func broadcastInDim(x *Node, shape shapes.Shape, broadcastDims []int) *Node {
 //
 // One exception is if x is a scalar, in which case it can be broadcast to any shape.
 func BroadcastToShape(x *Node, shape shapes.Shape) *Node {
-	g := validateGraphFromInputs(x)
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
+	_ = validateGraphFromInputs(x)
 	if shape.DType != x.shape.DType {
-		g.SetErrorf("cannot change dtype (from %s to %s) with BroadcastWithShape", x.shape.DType, shape.DType)
-		return g.InvalidNode()
+		Panicf("cannot change dtype (from %s to %s) with BroadcastWithShape",
+			x.shape.DType, shape.DType)
 	}
 	if x.shape.IsScalar() && shape.IsScalar() {
 		// Assume nothing to do.
 		return x
 	}
-
 	if x.shape.IsScalar() {
 		return broadcastInDim(x, shape, nil)
 	}
@@ -776,9 +701,9 @@ func BroadcastToShape(x *Node, shape shapes.Shape) *Node {
 	return broadcastInDim(x, shape, broadcastDims)
 }
 
-// BroadcastToDims broadcasts x to the given dimensions. They must both have the
-// same rank, and the dimensions in x being broadcast (that is, where it's corresponding requested
-// dimension is different) must be of size 1.
+// BroadcastToDims broadcasts x to the given dimensions.
+// They must both have the same rank and the dimensions in x being broadcast (that is,
+// where its corresponding requested dimension is different) must be of size 1.
 //
 // This is a convenient wrapper for BroadcastToShape.
 func BroadcastToDims(x *Node, dimensions ...int) *Node {
@@ -789,12 +714,8 @@ func BroadcastToDims(x *Node, dimensions ...int) *Node {
 // ConvertType converts x to a different primitive type. See shapes.Supported for the supported types.
 func ConvertType(x *Node, dtype shapes.DType) *Node {
 	g := validateGraphFromInputs(x)
-	if !g.Ok() || !x.Ok() {
-		return g.InvalidNode()
-	}
 	if !dtype.IsSupported() {
-		g.SetErrorf("converting to an unsupported type %s", dtype)
-		return g.InvalidNode()
+		Panicf("converting to an unsupported dtype %s", dtype)
 	}
 	return newNode(g, &xla.SerializedNode{
 		Type: xla.ConvertTypeNode,
@@ -805,25 +726,23 @@ func ConvertType(x *Node, dtype shapes.DType) *Node {
 // Where takes element-wise values from onTrue or onFalse depending on the value of condition (expected to be boolean).
 func Where(condition, onTrue, onFalse *Node) *Node {
 	g := validateGraphFromInputs(condition)
-	if !g.Ok() || !condition.Ok() {
-		return g.InvalidNode()
-	}
 	if condition.DType() != shapes.Bool {
-		g.SetErrorf("Where(condition, onTrue, onFalse) requires condition to be of dtype Bool, got %s instead", condition.Shape())
-		return g.InvalidNode()
+		Panicf("Where(condition, onTrue, onFalse) requires condition to be of dtype Bool, got %s instead",
+			condition.Shape())
 	}
 	if !onTrue.Shape().Eq(onFalse.Shape()) {
-		g.SetErrorf("Where(condition, onTrue, onFalse) requires onTrue (%s) and onFalse (%s) to be the same shape", onTrue.Shape(), onFalse.Shape())
-		return g.InvalidNode()
+		Panicf("Where(condition, onTrue, onFalse) requires onTrue (%s) and onFalse (%s) to be the same shape",
+			onTrue.Shape(), onFalse.Shape())
 	}
 	if condition.Rank() > onTrue.Rank() || !reflect.DeepEqual(condition.Shape().Dimensions, onTrue.Shape().Dimensions[:condition.Rank()]) {
-		g.SetErrorf("Where(condition, onTrue, onFalse) requires condition (%s) dimensions to be the same or a prefix to onTrue (%s) and onFalse (%s) dimensions", condition.Shape(), onTrue.Shape(), onFalse.Shape())
-		return g.InvalidNode()
+		Panicf(
+			"Where(condition, onTrue, onFalse) requires condition (%s) dimensions to be the same "+
+				"or a prefix to onTrue (%s) and onFalse (%s) dimensions",
+			condition.Shape(), onTrue.Shape(), onFalse.Shape())
 	}
 	if condition.Rank() < onTrue.Rank() {
-		// If condition's shape is a prefix to onTrue and onFalse, simply broadcast to
-		// their shape. This allows masks to work for embeddings which has one extra
-		// axis.
+		// If condition's shape is a prefix to onTrue and onFalse, then simply broadcast to their shape.
+		// This allows masks to work for embeddings, which has one extra axis.
 		extraAxes := onTrue.Rank() - condition.Rank()
 		condition = ExpandDims(condition, slices.SliceWithValue(extraAxes, -1)...)
 		condition = BroadcastToDims(condition, onTrue.Shape().Dimensions...)
@@ -836,11 +755,7 @@ func Where(condition, onTrue, onFalse *Node) *Node {
 // Reshape x to the given dimensions. Total size cannot change. One dimension can be left as -1,
 // in which case it will be set to match the size, if possible.
 func Reshape(x *Node, dimensions ...int) *Node {
-	g := validateGraphFromInputs(x)
-	if !g.Ok() || !x.Ok() {
-		return g.InvalidNode()
-	}
-
+	_ = validateGraphFromInputs(x)
 	totalSize := x.Shape().Size()
 	newSize := 1
 	missingIdx := -1
@@ -849,14 +764,14 @@ func Reshape(x *Node, dimensions ...int) *Node {
 			newSize *= dim
 		} else {
 			if missingIdx != -1 {
-				g.SetErrorf("only one dimension can be missing (that is, set to -1) for Reshape, %v given", dimensions)
-				return g.InvalidNode()
+				Panicf("only one dimension can be missing (that is, set to -1) for Reshape, %v given",
+					dimensions)
 			}
 			missingIdx = idx
 		}
 	}
 	if missingIdx != -1 {
-		// Make copy of dimensions, so original is not changed.
+		// Make a copy of dimensions, so the original is not changed.
 		tmpDim := make([]int, len(dimensions))
 		copy(tmpDim, dimensions)
 		dimensions = tmpDim
@@ -864,26 +779,24 @@ func Reshape(x *Node, dimensions ...int) *Node {
 		newSize *= dimensions[missingIdx]
 	}
 	if newSize != totalSize {
-		g.SetErrorf("total requested size %d (dimensions=%v) doesnt match original size %d (dimensions %v)",
+		Panicf("total requested size %d (dimensions=%v) doesnt match original size %d (dimensions %v)",
 			newSize, dimensions, totalSize, x.Shape().Dimensions)
 	}
 	return ReshapeWithShape(x, shapes.Make(x.shape.DType, dimensions...))
 }
 
-// ReshapeWithShape reshapes x to the dimensions given by shape. Total size cannot change, neither
-// the DType is allowed to change. Conceptually, this is a limited form of "shape casting".
+// ReshapeWithShape reshapes x to the dimensions given by shape.
+// Total size cannot change, neither the DType is allowed to change.
+// Conceptually, this is a limited form of "shape casting."
 func ReshapeWithShape(x *Node, shape shapes.Shape) *Node {
 	g := validateGraphFromInputs(x)
-	if !g.Ok() || !x.Ok() || !shape.Ok() {
-		return g.InvalidNode()
-	}
 	if shape.DType != x.shape.DType {
-		g.SetErrorf("cannot change dtype (from %s to %s) with ReshapeWithShape", x.shape.DType, shape.DType)
-		return g.InvalidNode()
+		Panicf("cannot change dtype (from %s to %s) with ReshapeWithShape",
+			x.shape.DType, shape.DType)
 	}
 	if shape.Size() != x.shape.Size() {
-		g.SetErrorf("shapes have different total sizes (from %d to %d), reshape not possible", x.shape.Size(), shape.Size())
-		return g.InvalidNode()
+		Panicf("shapes have different total sizes (from %d to %d), reshape not possible",
+			x.shape.Size(), shape.Size())
 	}
 	return newNode(g, &xla.SerializedNode{
 		Type:  xla.ReshapeNode,
@@ -892,16 +805,13 @@ func ReshapeWithShape(x *Node, shape shapes.Shape) *Node {
 }
 
 // ExpandDims expands x creating new axes just before the axes given. If axes[ii] < 0, then they
-// are counted from the end -- -1 represents a new axis after the end of the original shape. The new axes
-// will be of dimension 1 (so the total size of and contents of the tensor remains the same), and the rank
-// is increased by `len(axes)`.
+// are counted from the end — -1 represents a new axis after the end of the original shape.
+// The new axes will be of dimension 1 (so the total size of and contents of the tensor remains the same),
+// and the rank is increased by `len(axes)`.
 //
 // Maybe it should be called ExpandAxes ... but to follow Tensorflow nomenclature.
 func ExpandDims(x *Node, axes ...int) *Node {
-	g := validateGraphFromInputs(x)
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
+	_ = validateGraphFromInputs(x)
 	if len(axes) == 0 {
 		// Trivial case, noop.
 		return x
@@ -911,7 +821,7 @@ func ExpandDims(x *Node, axes ...int) *Node {
 	fromRank := x.shape.Rank()
 	toRank := fromRank + len(axes)
 
-	// Copy dimensions, so we don't change callers values, and replace negatives.
+	// Copy dimensions, so we don't change the callers' values, and replace negatives.
 	newAxes := make([]int, len(axes))
 	copy(newAxes, axes)
 	axes = newAxes
@@ -939,14 +849,9 @@ func ExpandDims(x *Node, axes ...int) *Node {
 
 // ExpandLeftToRank prepend axes of dimension 1 to x, until it reaches rank `newRank`.
 func ExpandLeftToRank(x *Node, newRank int) (output *Node) {
-	g := validateGraphFromInputs(x)
-	output = g.InvalidNode()
-	if !g.Ok() {
-		return
-	}
+	_ = validateGraphFromInputs(x)
 	if newRank < x.Rank() {
-		g.SetErrorf("ExpandLeftToRank(newRank=%d), but x already has rank %d", newRank, x.Rank())
-		return
+		Panicf("ExpandLeftToRank(newRank=%d), but x already has rank %d", newRank, x.Rank())
 	}
 	if newRank == x.Rank() {
 		// Already the correct rank.
@@ -968,10 +873,7 @@ func ExpandLeftToRank(x *Node, newRank int) (output *Node) {
 //
 // If all dimensions are reduced, it returns a scalar.
 func Squeeze(x *Node, axes ...int) *Node {
-	g := validateGraphFromInputs(x)
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
+	_ = validateGraphFromInputs(x)
 
 	newDims := make([]int, x.Rank())
 	copy(newDims, x.Shape().Dimensions)
@@ -987,16 +889,13 @@ func Squeeze(x *Node, axes ...int) *Node {
 				axis = x.Rank() + axis
 			}
 			if axis < 0 || axis >= x.Rank() {
-				g.SetErrorf("Squeeze() for x.shape=%s, axis %d is out-of-range", x.Shape(), axes[axisIdx])
-				return g.InvalidNode()
+				Panicf("Squeeze() for x.shape=%s, axis %d is out-of-range", x.Shape(), axes[axisIdx])
 			}
 			if newDims[axis] == 0 {
-				g.SetErrorf("Squeeze() for x.shape=%s, axis %d was selected twice!?", x.Shape(), axes[axisIdx])
-				return g.InvalidNode()
+				Panicf("Squeeze() for x.shape=%s, axis %d was selected twice!?", x.Shape(), axes[axisIdx])
 			}
 			if newDims[axis] != 1 {
-				g.SetErrorf("Squeeze() for x.shape=%s, axis %d does not have dimension 1", x.Shape(), axes[axisIdx])
-				return g.InvalidNode()
+				Panicf("Squeeze() for x.shape=%s, axis %d does not have dimension 1", x.Shape(), axes[axisIdx])
 			}
 			newDims[axis] = 0
 		}
@@ -1013,12 +912,10 @@ func Squeeze(x *Node, axes ...int) *Node {
 	return Reshape(x, newDims...)
 }
 
-// Tuple creates a tuple of several values. It's the means to returns several values from one Graph computation.
+// Tuple creates a tuple of several values.
+// It is the mean to return several values from one Graph computation.
 func Tuple(nodes ...*Node) *Node {
 	g := validateGraphFromInputs(nodes...)
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	return newNode(g, &xla.SerializedNode{
 		Type: xla.TupleNode,
 	}, nodes)
@@ -1027,9 +924,6 @@ func Tuple(nodes ...*Node) *Node {
 // GetTupleElement extracts one element from a Tuple.
 func GetTupleElement(tuple *Node, index int) *Node {
 	g := validateGraphFromInputs(tuple)
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	return newNode(g, &xla.SerializedNode{
 		Type: xla.GetTupleElementNode,
 		Int:  index,
@@ -1038,15 +932,11 @@ func GetTupleElement(tuple *Node, index int) *Node {
 
 // SplitTuple is a convenience wrapper around GetTupleElement, it will return an array with all the nodes.
 func SplitTuple(tuple *Node) []*Node {
-	g := validateGraphFromInputs(tuple)
+	_ = validateGraphFromInputs(tuple)
 	numElements := tuple.Shape().TupleSize()
 	nodes := make([]*Node, numElements)
 	for ii := 0; ii < numElements; ii++ {
-		if g.Ok() {
-			nodes[ii] = GetTupleElement(tuple, ii)
-		} else {
-			nodes[ii] = g.InvalidNode()
-		}
+		nodes[ii] = GetTupleElement(tuple, ii)
 	}
 	return nodes
 }
@@ -1054,14 +944,9 @@ func SplitTuple(tuple *Node) []*Node {
 // reduceHelper helps implements all the Reduce<X> functions.
 func reduceHelper(x, init *Node, reduceAxes []int, nodeType xla.NodeType) *Node {
 	g := validateGraphFromInputs(x)
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
-
-	// Convert negative dimensions.
 	return newNode(g, &xla.SerializedNode{
 		Type: nodeType,
-		Ints: convertNegativeDimensionsAndSort(x.shape.Rank(), reduceAxes),
+		Ints: convertNegativeAxesAndSort(x.shape.Rank(), reduceAxes),
 	}, []*Node{x, init})
 }
 
@@ -1072,16 +957,10 @@ func reduceHelper(x, init *Node, reduceAxes []int, nodeType xla.NodeType) *Node 
 //
 // Ties are resolved by returning the smallest index.
 func ArgMax(x *Node, axis int, outputDType ...shapes.DType) (output *Node) {
-	g := validateGraphFromInputs(x)
-	output = g.InvalidNode()
-	if !g.Ok() {
-		return
-	}
-
+	_ = validateGraphFromInputs(x)
 	dtype := shapes.I32
 	if len(outputDType) > 1 {
-		g.SetErrorf("ArgMax takes at most one outputDType, %d values given", len(outputDType))
-		return
+		Panicf("ArgMax takes at most one outputDType, %d values given", len(outputDType))
 	} else if len(outputDType) == 1 {
 		dtype = outputDType[0]
 	}
@@ -1095,16 +974,10 @@ func ArgMax(x *Node, axis int, outputDType ...shapes.DType) (output *Node) {
 //
 // Ties are resolved by returning the smallest index.
 func ArgMin(x *Node, axis int, outputDType ...shapes.DType) (output *Node) {
-	g := validateGraphFromInputs(x)
-	output = g.InvalidNode()
-	if !g.Ok() {
-		return
-	}
-
+	_ = validateGraphFromInputs(x)
 	dtype := shapes.I32
 	if len(outputDType) > 1 {
-		g.SetErrorf("ArgMin takes at most one outputDType, %d values given", len(outputDType))
-		return
+		Panicf("ArgMin takes at most one outputDType, %d values given", len(outputDType))
 	} else if len(outputDType) == 1 {
 		dtype = outputDType[0]
 	}
@@ -1113,16 +986,7 @@ func ArgMin(x *Node, axis int, outputDType ...shapes.DType) (output *Node) {
 
 func argMinMax(x *Node, axis int, outputDType shapes.DType, isMin bool) (output *Node) {
 	g := validateGraphFromInputs(x)
-	output = g.InvalidNode()
-	if !g.Ok() {
-		return
-	}
-
 	adjustedAxis := AdjustAxis(x, axis)
-	if !g.Ok() {
-		return
-	}
-
 	output = newNode(g, &xla.SerializedNode{
 		Type: xla.ArgMinMaxNode,
 		Int:  adjustedAxis,
@@ -1135,10 +999,11 @@ func argMinMax(x *Node, axis int, outputDType shapes.DType, isMin bool) (output 
 	return StopGradient(output)
 }
 
-// convertNegativeDimensionsAndSort in a copy of dimsWithNegatives.
-func convertNegativeDimensionsAndSort(rank int, dimsWithNegatives []int) []int {
-	copyDims := make([]int, len(dimsWithNegatives))
-	copy(copyDims, dimsWithNegatives)
+// convertNegativeAxesAndSort in a copy of `axesWithNegatives`.
+// An axis set to -1 is converted to `rank - 1`.
+func convertNegativeAxesAndSort(rank int, axesWithNegatives []int) []int {
+	copyDims := make([]int, len(axesWithNegatives))
+	copy(copyDims, axesWithNegatives)
 	for ii := range copyDims {
 		if copyDims[ii] < 0 {
 			copyDims[ii] = rank + copyDims[ii]
@@ -1148,13 +1013,10 @@ func convertNegativeDimensionsAndSort(rank int, dimsWithNegatives []int) []int {
 	return copyDims
 }
 
-// ReduceSum reduces by summing over the elements of the selected axes of the x.
+// ReduceSum reduces by summing over X elements over the selected axes.
 // If reduceAxes is nil, reduce over all dimensions to a scalar.
 func ReduceSum(x *Node, reduceAxes ...int) *Node {
 	g := validateGraphFromInputs(x)
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	zero := ScalarZero(g, x.DType())
 	return reduceHelper(x, zero, reduceAxes, xla.ReduceSumNode)
 }
@@ -1164,16 +1026,13 @@ func ReduceAllSum(x *Node) *Node {
 	return ReduceSum(x)
 }
 
-// ReduceMaskedSum reduces by summing over the elements of the selected axes of the x.
-// If reduceAxes is nil, reduce over all dimensions to a scalar.
+// ReduceMaskedSum reduces by summing the `x` elements over the selected axes.
+// If `reduceAxes` is nil, reduce over all dimensions to a scalar.
 //
-// It ignores values for which the corresponding mask is false. mask and x must have the
-// same shape.
+// It ignores values for which the corresponding mask is false.
+// The `mask` and `x` values must have the same shape.
 func ReduceMaskedSum(x, mask *Node, reduceAxes ...int) *Node {
 	g := validateGraphFromInputs(x, mask)
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	maskedX := Where(mask, x, ZerosLike(x))
 	zero := ScalarZero(g, x.DType())
 	return reduceHelper(maskedX, zero, reduceAxes, xla.ReduceSumNode)
@@ -1189,10 +1048,7 @@ func ReduceAllMaskedSum(x, mask *Node) *Node {
 
 // ReduceMean reduces by taking the mean over the elements of the selected axes.
 func ReduceMean(x *Node, reduceAxes ...int) *Node {
-	g := validateGraphFromInputs(x)
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
+	_ = validateGraphFromInputs(x)
 	sum := ReduceSum(x, reduceAxes...)
 	denominator := x.Shape().Size() / sum.Shape().Size()
 	return Div(sum, ConstAs(sum, denominator))
@@ -1207,9 +1063,6 @@ func ReduceAllMean(x *Node) *Node {
 // If reduceAxes is nil, reduce over all dimensions to a scalar.
 func ReduceMultiply(x *Node, reduceAxes ...int) *Node {
 	g := validateGraphFromInputs(x)
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	one := ScalarOne(g, x.DType())
 	return reduceHelper(x, one, reduceAxes, xla.ReduceMultiplyNode)
 }
@@ -1223,9 +1076,6 @@ func ReduceAllMultiply(x *Node) *Node {
 // If reduceAxes is nil, reduce over all dimensions to a scalar.
 func ReduceMax(x *Node, reduceAxes ...int) *Node {
 	g := validateGraphFromInputs(x)
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	lowest := lowestForDType(g, x.DType())
 	return reduceHelper(x, lowest, reduceAxes, xla.ReduceMaxNode)
 }
@@ -1235,16 +1085,13 @@ func ReduceAllMax(x *Node) *Node {
 	return ReduceMax(x)
 }
 
-// ReduceMaskedMax reduces by taking the max over the elements of the selected axes of the x.
+// ReduceMaskedMax reduces by taking the max of `x` elements over the selected axes.
 // If reduceAxes is nil, reduce over all dimensions to a scalar.
 //
-// It ignores values for which the corresponding mask is false. mask and x must have the
-// same shape.
+// It ignores values for which the corresponding mask is false.
+// The shapes of `mask and x must be the same.
 func ReduceMaskedMax(x, mask *Node, reduceAxes ...int) *Node {
 	g := validateGraphFromInputs(x, mask)
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	lowest := lowestForDType(g, x.DType())
 	broadcastLowest := BroadcastToDims(lowest, x.Shape().Dimensions...)
 	maskedX := Where(mask, x, broadcastLowest)
@@ -1253,8 +1100,8 @@ func ReduceMaskedMax(x, mask *Node, reduceAxes ...int) *Node {
 
 // ReduceAllMaskedMax reduces all dimensions to a scalar by taking the max.
 //
-// It ignores values for which the corresponding mask is false. mask and x must have the
-// same shape.
+// It ignores values for which the corresponding mask is false.
+// The shapes of `mask and x must be the same.
 func ReduceAllMaskedMax(x, mask *Node) *Node {
 	return ReduceMaskedMax(x, mask)
 }
@@ -1283,17 +1130,21 @@ func (ar AxisRangeDef) Stride(stride int) AxisRangeDef {
 	return ar2
 }
 
-// AxisRange creates a AxisRangeDef to be used in Slice. The indices can have 0, 1 or 2 elements:
-// - If no elements are given, it's assumed to be full.
-// - If one element is given, it's assumed to be the start, and the range should be taken to the end.
-// - If two elements are given, they should be the start and end.
-// - If more than 2 elements are given, they are ignored.
+// AxisRange creates a `AxisRangeDef` to be used in Slice.
+// The indices can have 0, 1 or 2 elements:
+// - If `len(indices) == 0`, it's assumed to be the full range of the axis.
+// - If `len(indices) == 1`, it's assumed to be the start, and the range should be taken to the end.
+// - If `len(indices) == 2`, they should be the start and end indices for the axis.
+// - If `len(indices) > 2`, an error is raised with panic.
 func AxisRange(indices ...int) AxisRangeDef {
 	if len(indices) == 0 {
 		return AxisRangeDef{Full: true}
 	}
 	if len(indices) == 1 {
 		return AxisRangeDef{Start: indices[0], NoEnd: true}
+	}
+	if len(indices) > 2 {
+		Panicf("AxisRange(%v): more than 2 indices provided, that's not supported", indices)
 	}
 	return AxisRangeDef{Start: indices[0], End: indices[1]}
 }
@@ -1337,14 +1188,11 @@ func adjustToDimension(index, dimension int) int {
 // - For `x = {{1, 2, 3}, {4, 5, 6}}`:
 //   - `Slice(x, AxisRange().Stride(2), AxisRange(-1)) = {{3}}`  // Take every 2nd row (so only the 1st here), the last column.
 func Slice(x *Node, axesRanges ...AxisRangeDef) *Node {
-	g := validateGraphFromInputs(x)
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
+	_ = validateGraphFromInputs(x)
 	rank := x.shape.Rank()
 
 	if len(axesRanges) > rank {
-		g.SetErrorf("Slice was given %d ranges, but x only has (rank) %d axes", len(axesRanges), rank)
+		Panicf("Slice was given %d ranges, but x only has (rank) %d axes", len(axesRanges), rank)
 	}
 	starts := make([]int, rank)
 	limits := make([]int, rank)
@@ -1368,7 +1216,8 @@ func Slice(x *Node, axesRanges ...AxisRangeDef) *Node {
 }
 
 // PadAxis defines the amount of padding preceding one axis (Start), at the end of axis (End)
-// or in between the inputs (Interior). This is used as parameter for the Pad function.
+// or in between the inputs (Interior).
+// This is used as a parameter for the Pad function.
 type PadAxis struct {
 	Start, End, Interior int
 }
@@ -1378,28 +1227,25 @@ type PadAxis struct {
 // that is, no padding for those axes.
 func Pad(operand, fillValue *Node, axesConfig ...PadAxis) *Node {
 	g := validateGraphFromInputs(operand, fillValue)
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	rank := operand.Rank()
 
-	ints := make([]int, 0, 3*rank)
+	intArgs := make([]int, 0, 3*rank)
 	for axis := 0; axis < rank; axis++ {
 		var padding PadAxis
 		if axis < len(axesConfig) {
 			padding = axesConfig[axis]
 		}
-		ints = append(ints, padding.Start, padding.End, padding.Interior)
+		intArgs = append(intArgs, padding.Start, padding.End, padding.Interior)
 	}
 
 	return newNode(g, &xla.SerializedNode{
 		Type: xla.PadNode,
-		Ints: ints,
+		Ints: intArgs,
 	}, []*Node{operand, fillValue})
 }
 
-// Gather values in params from pointer in indices. The output are slices of
-// `params` selected by `indices`, stitched together.
+// Gather values in params from the pointers in indices.
+// The outputs are slices of `params` selected by `indices`, stitched together.
 //
 // Let's assume params has shape `[i_0, ..., i_M, s_0, ..., s_o]`, where:
 //
@@ -1408,8 +1254,8 @@ func Pad(operand, fillValue *Node, axesConfig ...PadAxis) *Node {
 //
 // And let's assume indices has shape `[o_0,...,o_O, N]`, where:
 //
-//   - `o_0, ..., o_O` are enumerations of the slices from `params` to gather. E.g: let's say O=1, and o_0=3,
-//     that means there will be 3 slices to gather.
+//   - `o_0, ..., o_O` are enumerations of the slices from `params` to gather.
+//     E.g.: let's say O=1, and o_0=3, that means there will be 3 slices to gather.
 //   - Last dimension `N`: this is the number of indices in `params` to point to. `N` is the number of
 //     dimensions indexed `i_0, ..., i_N` in `params` above.
 //
@@ -1427,25 +1273,17 @@ func Pad(operand, fillValue *Node, axesConfig ...PadAxis) *Node {
 // In the case above params shape is interpreted as `[i_0=3, s_0=3]`, and indices' shape is
 // `[o_0=2, N=1]`. The output shape is `[o_0=2, s_0=3]`.
 func Gather(params, indices *Node) *Node {
-	g := validateGraphFromInputs(params, indices)
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
+	_ = validateGraphFromInputs(params, indices)
 	if params.shape.IsScalar() || params.shape.IsTuple() {
-		g.SetErrorf("cannot Gather from scalar or tuple, params shape is %s", params.Shape())
-		return g.InvalidNode()
+		Panicf("cannot Gather from scalar or tuple, params shape is %s", params.Shape())
 	}
 	if !indices.shape.DType.IsInt() {
-		g.SetErrorf("Gather requires indices to have an integer type, got shape %q instead", indices.Shape())
-		return g.InvalidNode()
+		Panicf("Gather requires indices to have an integer type, got shape %q instead", indices.Shape())
 	}
 
 	// If indices is a scalar, simply convert it to shape `[1]`.
 	if indices.Shape().IsScalar() {
 		indices = ExpandDims(indices, 0)
-		if !g.Ok() {
-			return g.InvalidNode()
-		}
 	}
 
 	// Check ranks are compatible.
@@ -1454,9 +1292,8 @@ func Gather(params, indices *Node) *Node {
 	indexedSubRank := indices.Shape().Dimensions[indicesRank-1] // N from documentation.
 	slicesSubRank := paramsRank - indexedSubRank                // S from documentation, the slices dimensions.
 	if slicesSubRank < 0 {
-		g.SetErrorf("Gather params are \"over-indexed\": params has only rank %d and "+
+		Panicf("Gather params are \"over-indexed\": params has only rank %d and "+
 			"indexed rank is %d (last dimension of indices)", paramsRank, indexedSubRank)
-		return g.InvalidNode()
 	}
 	outputSubRank := indicesRank - 1
 
@@ -1505,10 +1342,10 @@ func Gather(params, indices *Node) *Node {
 // The output has a rank equal to the prefixing rank of `start` (== `start.Rank()-1`) plus the rank of `input`.
 // And the shape will depend on the sizes of the slices.
 //
-//   - TODO:
-//     Add an option to support batch axes, present in both the input and in the start indices. This
-//     will need to automatically concatenate the batch index in the start Node as a iota of each
-//     batch example, and add the size 1 slice. This can be done manually today.
+//   - TODO: Add an option to support batch axes, present in both the input and in the start indices.
+//     This will need to automatically concatenate the batch index in the start Node as a iota of each
+//     batch example, and add the size 1 slice.
+//     This can be done manually today.
 //
 // Example:
 //
@@ -1519,18 +1356,13 @@ func Gather(params, indices *Node) *Node {
 //	    slices.AssertDims(2, 3, 1, 2)  // 2 slices, Axis=0 taken in full (3), and each slice of dimensions (1, 2).
 //		// Result would be [][][][]int32{{{0, 1, 2, 3, 4}}, {{30, 31, 32, 33, 34}}, {{40, 41, 42, 43, 44}}}
 func GatherSlices(input *Node, slicedAxes []int, start *Node, sizes []int) (gathered *Node) {
-	g := validateGraphFromInputs(input, start)
-	gathered = g.InvalidNode()
-	if !g.Ok() {
-		return
-	}
+	_ = validateGraphFromInputs(input, start)
 	if input.shape.IsScalar() || input.shape.IsTuple() {
-		g.SetErrorf("cannot GatherSlices from scalar or tuple, input shape is %s", input.Shape())
-		return
+		Panicf("cannot GatherSlices from scalar or tuple, input shape is %s", input.Shape())
 	}
 	if !start.shape.DType.IsInt() {
-		g.SetErrorf("GatherSlices requires start indices to have an integer type, got shape %q instead", start.Shape())
-		return
+		Panicf("GatherSlices requires start indices to have an integer type, got shape %q instead",
+			start.Shape())
 	}
 	if start.shape.IsScalar() {
 		start = ExpandDims(start, 0)
@@ -1541,18 +1373,17 @@ func GatherSlices(input *Node, slicedAxes []int, start *Node, sizes []int) (gath
 	startRank := start.Rank()
 	numSlicedAxes := len(slicedAxes)
 	if len(sizes) != numSlicedAxes {
-		g.SetErrorf("GatherSlices requires one value in sizes for each axis marked as slicedAxes -- slicedAxes=%v, sizes=%v", slicedAxes, sizes)
-		return
+		Panicf("GatherSlices requires one value in sizes for each axis marked as slicedAxes -- slicedAxes=%v, sizes=%v",
+			slicedAxes, sizes)
 	}
 	if start.shape.Dimensions[startRank-1] != numSlicedAxes {
-		g.SetErrorf("GatherSlices requires the last axis of `start` to be the same dimension as the slicedAxes, "+
+		Panicf("GatherSlices requires the last axis of `start` to be the same dimension as the slicedAxes, "+
 			"so it takes one index value per axis to be sliced -- slicedAxes=%v, start.Shape()=%s",
 			slicedAxes, start.Shape())
-		return
 	}
 	outputPrefixRank := startRank - 1
 
-	// Validate slicedAxes and normalizes it (replacing negative axis to their corresponding ones).
+	// AssertValid slicedAxes and normalizes it (replacing negative axis to their corresponding ones).
 	{
 		seen := types.MakeSet[int](numSlicedAxes)
 		normalized := make([]int, 0, numSlicedAxes)
@@ -1561,21 +1392,18 @@ func GatherSlices(input *Node, slicedAxes []int, start *Node, sizes []int) (gath
 				axis = inputRank + axis
 			}
 			if axis < 0 || axis >= inputRank {
-				g.SetErrorf("GatherSlices got an invalid axis (%d) selected for slicing, input.Shape()=%s, slicedAxes=%v",
+				Panicf("GatherSlices got an invalid axis (%d) selected for slicing, input.Shape()=%s, slicedAxes=%v",
 					slicedAxes[ii], input.Shape(), slicedAxes)
-				return
 			}
 			if seen.Has(axis) {
-				g.SetErrorf("GatherSlices got an axis (%d) selected twice for slicing, input.Shape()=%s, slicedAxes=%v",
+				Panicf("GatherSlices got an axis (%d) selected twice for slicing, input.Shape()=%s, slicedAxes=%v",
 					slicedAxes[ii], input.Shape(), slicedAxes)
-				return
 			}
 			seen.Insert(axis)
 			if ii > 0 && axis < normalized[ii-1] {
-				g.SetErrorf("GatherSlices got an axis (%d) out-of-order, slicedAxes (%v) must be given in increasing order "+
+				Panicf("GatherSlices got an axis (%d) out-of-order, slicedAxes (%v) must be given in increasing order "+
 					"(and `sizes` and `start` must match that order)",
 					slicedAxes[ii], slicedAxes)
-				return
 			}
 			normalized = append(normalized, axis)
 		}
@@ -1589,7 +1417,7 @@ func GatherSlices(input *Node, slicedAxes []int, start *Node, sizes []int) (gath
 	startIndexMap := slicedAxes
 	// * sliceSizes must be defined for each input axis, and are either given in `sizes` or are assumed to be the full dimension
 	//   of the input.
-	sliceSizes := input.shape.Copy().Dimensions // Start with a copy of the full dimensions of the input.
+	sliceSizes := input.shape.Copy().Dimensions // Start with a copy of the input's dimensions.
 	for ii, size := range sizes {
 		axis := slicedAxes[ii]
 		sliceSizes[axis] = size
@@ -1610,22 +1438,23 @@ func GatherSlices(input *Node, slicedAxes []int, start *Node, sizes []int) (gath
 	return gatherXLA(input, start, indexVectorDim, offsetDims, collapsedSliceDims, startIndexMap, sliceSizes, false)
 }
 
-// GatherWithBatchDims values in params from pointer in indices. It works exactly the same as tensorflow's gather_nd
-// operation, described in https://www.tensorflow.org/api_docs/python/tf/gather_nd.
+// GatherWithBatchDims values in params from pointers in indices.
+// It works exactly the same as tensorflow's gather_nd operation, described in
+// https://www.tensorflow.org/api_docs/python/tf/gather_nd.
 //
 // Let's assume params has shape `[b_0,...,b_{batchDim}, i_0, ..., i_M, s_0, ..., s_o]`, where:
 //
 //   - `b_0, ..., b_{batchDim}` are the batchDims batch dimensions, dimensions that are shared
 //     in params, indices and will also be present in the output.
-//   - `i_0, ..., i_N` are the N "indexed dimensions", that is, the dimensions indexed by indices.
-//   - `s_0, ..., s_S` are the S dimensions of the slices that are going to be "gathered" (copied over).
+//   - `i_0, ..., i_N` are the N "indexed dimensions," that is, the dimensions indexed by indices.
+//   - `s_0, ..., s_S` are the `S` dimensions of the slices that are going to be "gathered" (copied over).
 //
-// And let's assume indices has shape `[b_0, ... b_{batchDim}, o_0,...,o_O, N]`, where:
+// And, let's assume indices has shape `[b_0, ... b_{batchDim}, o_0,...,o_O, N]`, where:
 //
 //   - `b_0, ..., b_{batchDim}` are the batchDims batch dimensions, dimensions that are shared
 //     in params, indices and will also be present in the output.
-//   - `o_0, ..., o_O` are enumerations of the slices from params to gather. E.g: let's say O=1, and o_0=3,
-//     that means there will be 3 slices to gather.
+//   - `o_0, ..., o_O` are enumerations of the slices from params to gather.
+//     E.g.: let's say O=1, and o_0=3, that means there will be 3 slices to gather.
 //   - Last dimension N: this is the number of indices in params to point to. N is the same value as
 //     the dimension `i_0, ..., i_N` in params above.
 //
@@ -1640,23 +1469,16 @@ func GatherSlices(input *Node, slicedAxes []int, start *Node, sizes []int) (gath
 /*
 func GatherWithBatchDims(params, indices *Node, batchDims int) *Node {
 	g := validateGraphFromInputs(params, indices)
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	if params.shape.IsScalar() || params.shape.IsTuple() {
-		g.SetErrorf("cannot Gather from scalar or tuple, params shape is %s", params.Shape())
-		return g.InvalidNode()
+		Panicf("cannot Gather from scalar or tuple, params shape is %s", params.Shape())
 	}
 	if !indices.shape.DType.IsInt() {
-		g.SetErrorf("Gather requires indices to have an integer type, got shape %q instead", indices.Shape())
+		Panicf("Gather requires indices to have an integer type, got shape %q instead", indices.Shape())
 	}
 
 	// If indices is a scalar, simply convert it to shape `[1]`.
 	if indices.Shape().IsScalar() {
 		indices = ReshapeWithShape(indices, shapes.Make(indices.DType(), 1))
-		if !g.Ok() {
-			return g.InvalidNode()
-		}
 	}
 
 	// Check ranks are compatible.
@@ -1666,24 +1488,21 @@ func GatherWithBatchDims(params, indices *Node, batchDims int) *Node {
 	numIndices := indices.shape.Size() / indexedSubRank
 	slicesSubRank := paramsRank - batchDims - indexedSubRank
 	if slicesSubRank < 0 {
-		g.SetErrorf("Gather params are \"over-indexed\": params has only rank %d, batchDims=%d and "+
-			"indexed rank is %d (last dimension of indices)", paramsRank, batchDims, indexedSubRank)
-		return g.InvalidNode()
+		Panicf("Gather params are \"over-indexed\": params has only rank %d, batchDims=%d and "+
+			"indexed rank is %d (last dimension of indices)", paramsRank, batchDims, indexedSubRank))
 	}
 	outputSubRank := indicesRank - 1 - batchDims
 	if outputSubRank < 0 {
-		g.SetErrorf("Gather indices don't have enough batch dimensions: indices rank is %d and "+
-			"one dimension is needed for the indices themselves, but batchDims=%d", indicesRank, batchDims)
-		return g.InvalidNode()
+		Panicf("Gather indices don't have enough batch dimensions: indices rank is %d and "+
+			"one dimension is needed for the indices themselves, but batchDims=%d", indicesRank, batchDims))
 	}
 
 	// Grow indices to include batch dimensions: "example" here mean one element of the batch
 	// dimensions. This is because the underlying gatherXLA doesn't support batch dimensions.
 	if batchDims > 0 {
 		if !types.DeepSliceCmp(params.shape.Dimensions[0:batchDims], indices.shape.Dimensions[0:batchDims], types.Equal[int]) {
-			g.SetErrorf("batch dimensions (first %d dimensions) from params (shape=%s) and indices (shape=%s) don't match",
-				batchDims, params.shape, indices.shape)
-			return g.InvalidNode()
+			Panicf("batch dimensions (first %d dimensions) from params (shape=%s) and indices (shape=%s) don't match",
+				batchDims, params.shape, indices.shape))
 		}
 		batchIndices := IndicesForShape(g, shapes.Make(types.Int64, indices.shape.Dimensions[0:batchDims]))
 		// Now batchIndices need to be broadcast to each id for the gather.
@@ -1699,16 +1518,12 @@ func GatherWithBatchDims(params, indices *Node, batchDims int) *Node {
 // return a node with shape [shape.Size(), shape.Rank()].
 // E.g: if shape=[3, 2], it returns `[[0 0] [0 1] [1 0] [1 1] [2 0] [2 1]]`.
 func IndicesForShape(g *Graph, shape shapes.Shape) *Node {
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	if shape.IsScalar() {
-		g.SetErrorf("can't generate IndicesForShape for scalars (shape=%s)", shape)
-		return g.InvalidNode()
+		Panicf("can't generate IndicesForShape for scalars (shape=%s)", shape)
 	}
-	indices := Iota(g, shapes.Make(shapes.Int64, shape.Size()), 0)                             // [shape.Size()]
-	indices = ExpandDims(indices, -1)                                                          // [shape.Size(), 1]
-	indices = BroadcastToShape(indices, shapes.Make(shapes.Int64, shape.Size(), shape.Rank())) // [shape.Size(), shape.Rank()]
+	indices := Iota(g, shapes.Make(shapes.Int64, shape.Size(), 1), 0)
+	indices = BroadcastToShape(indices, shapes.Make(shapes.Int64, shape.Size(), shape.Rank()))
+	// Example of indices' value here: for shape=`[3, 2]`, indices=`{{0, 0}, {1, 1}, {2, 2}, {3, 3}, {4, 4}, {5, 5}}`
 
 	dividers := make([]int, shape.Rank())
 	dividers[shape.Rank()-1] = 1
@@ -1737,9 +1552,6 @@ func intToBool(i int) bool {
 // It does the opposite of Gather.
 func Scatter(indices, updates *Node, shape shapes.Shape) *Node {
 	g := validateGraphFromInputs(indices, updates)
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	zeros := Zeros(g, shape)
 	return ScatterAdd(zeros, indices, updates)
 }
@@ -1747,29 +1559,22 @@ func Scatter(indices, updates *Node, shape shapes.Shape) *Node {
 // ScatterAdd adds up the slices in updates into the given operand tensor, at the locations pointed by indices.
 // It does the opposite of Gather.
 func ScatterAdd(operand, indices, updates *Node) *Node {
-	g := validateGraphFromInputs(operand, indices, updates)
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
+	_ = validateGraphFromInputs(operand, indices, updates)
 
 	if !indices.shape.DType.IsInt() {
-		g.SetErrorf("scatter operations require integer indices, instead got shape %s", indices.shape)
-		return g.InvalidNode()
+		Panicf("scatter operations require integer indices, instead got shape %s", indices.shape)
 	}
 	if operand.shape.DType != updates.shape.DType {
-		g.SetErrorf("scatter operations require operand and updates to have the same DType, instead got shapes %s (operand) and %s (updates)", operand.shape, updates.shape)
-		return g.InvalidNode()
+		Panicf(
+			"scatter operations require operand and updates to have the same DType, instead got shapes %s (operand) and %s (updates)",
+			operand.shape, updates.shape)
 	}
 	if indices.shape.IsTuple() || operand.shape.IsTuple() || updates.shape.IsTuple() {
-		g.SetErrorf("tuples are not supported in ScatterAdd, operand.shape=%s, indices.shape=%s, updates.shape=%s",
+		Panicf("tuples are not supported in ScatterAdd, operand.shape=%s, indices.shape=%s, updates.shape=%s",
 			operand.shape, indices.shape, updates.shape)
-		return g.InvalidNode()
 	}
 	if indices.shape.IsScalar() {
 		indices = ExpandDims(indices, 0)
-		if !g.Ok() {
-			return g.InvalidNode()
-		}
 	}
 
 	// Check shapes compatibility.
@@ -1777,17 +1582,16 @@ func ScatterAdd(operand, indices, updates *Node) *Node {
 	indexedRank := indices.shape.Dimensions[indicesRank-1]
 	updatesRank := updates.shape.Rank()
 	if updatesRank < indicesRank-1 || !slices.DeepSliceCmp(updates.shape.Dimensions[:indicesRank-1], indices.shape.Dimensions[:indicesRank-1], slices.Equal[int]) {
-		g.SetErrorf("updates rank prefix (shape=%s) must match the first n-1 dimensions of the indices (shape=%s)", updates.shape, indices.shape)
-		return g.InvalidNode()
+		Panicf("updates rank prefix (shape=%s) must match the first n-1 dimensions of the indices (shape=%s)",
+			updates.shape, indices.shape)
 	}
 	slicesRank := updatesRank - (indicesRank - 1)
 	slicesDims := updates.shape.Dimensions[indicesRank-1:]
 	operandRank := operand.shape.Rank()
 	if operandRank != indexedRank+slicesRank || !slices.DeepSliceCmp(operand.shape.Dimensions[indexedRank:], slicesDims, slices.Equal[int]) {
-		g.SetErrorf("operand shape (%s) has to be a combination of the indexed rank (%d, the last dimension of indices shape %s) and "+
+		Panicf("operand shape (%s) has to be a combination of the indexed rank (%d, the last dimension of indices shape %s) and "+
 			"the slices coming from updates (the last %d dimensions %v of the updates, shaped %s)",
 			operand.shape, indexedRank, indices.shape, slicesRank, slicesDims, updates.shape)
-		return g.InvalidNode()
 	}
 
 	// Set scatterXLA parameters:
@@ -1813,12 +1617,8 @@ func ScatterAdd(operand, indices, updates *Node) *Node {
 // If operands are scalars, they will be concatenated to a vector (just use `axis=0`).
 func Concatenate(operands []*Node, axis int) *Node {
 	g := validateGraphFromInputs(operands...)
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	if len(operands) == 0 {
-		g.SetErrorf("cannot ConcatenateDimensions 0 operands")
-		return g.InvalidNode()
+		Panicf("cannot ConcatenateDimensions 0 operands")
 	}
 	if len(operands) == 1 {
 		// Trivial solution.
@@ -1833,23 +1633,20 @@ func Concatenate(operands []*Node, axis int) *Node {
 		operands[0] = ExpandDims(operands[0], 0)
 	}
 	if axis >= targetRank || axis < -targetRank {
-		g.SetErrorf("invalid axis %d for ConcatenateDimensions, where first element has rank %d",
+		Panicf("invalid axis %d for ConcatenateDimensions, where first element has rank %d",
 			axis, rank)
-		return g.InvalidNode()
 	}
 	if axis < 0 {
 		axis = rank + axis
 	}
 	for ii, node := range operands[1:] {
 		if node.shape.DType != baseShape.DType {
-			g.SetErrorf("ConcatenateDimensions operand %d has different dtype (%s) than operand 0's dtype (%s)",
+			Panicf("ConcatenateDimensions operand %d has different dtype (%s) than operand 0's dtype (%s)",
 				ii+1, node.shape.DType, baseShape.DType)
-			return g.InvalidNode()
 		}
 		if node.shape.Rank() != rank {
-			g.SetErrorf("ConcatenateDimensions operand %d has different rank (%s) than operand 0's rank (%s)",
+			Panicf("ConcatenateDimensions operand %d has different rank (%s) than operand 0's rank (%s)",
 				ii+1, node.Shape(), operands[0].Shape())
-			return g.InvalidNode()
 		}
 		for ii, nodeDim := range node.shape.Dimensions {
 			if ii == axis {
@@ -1857,9 +1654,8 @@ func Concatenate(operands []*Node, axis int) *Node {
 				continue
 			}
 			if baseShape.Dimensions[ii] != nodeDim {
-				g.SetErrorf("ConcatenateDimensions operand %d has incompatible shape (%s) with operand 0's shape (%s)",
+				Panicf("ConcatenateDimensions operand %d has incompatible shape (%s) with operand 0's shape (%s)",
 					ii+1, node.shape, baseShape)
-				return g.InvalidNode()
 			}
 		}
 		if node.shape.Rank() == 0 {
@@ -1904,16 +1700,14 @@ func concatenateVJP(node, v *Node, _ shapes.Shape) []*Node {
 // The shape remains the same.
 func Reverse(x *Node, axes ...int) *Node {
 	g := validateGraphFromInputs(x)
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	rank := x.shape.Rank()
 	for ii, dim := range axes {
 		if dim < 0 {
 			axes[ii] = rank + dim
 		}
 		if axes[ii] > rank || axes[ii] < 0 {
-			g.SetErrorf("in Reverse(x, axes...), passed axis %d which is out-of-limits for x rank %d", dim, rank)
+			Panicf("in Reverse(x, axes...), passed axis %d which is out-of-limits for x rank %d",
+				dim, rank)
 		}
 	}
 	return newNode(g, &xla.SerializedNode{
@@ -1924,10 +1718,7 @@ func Reverse(x *Node, axes ...int) *Node {
 
 // Transpose returns x with the axes axisA and axisB transposed.
 func Transpose(x *Node, axisA, axisB int) *Node {
-	g := validateGraphFromInputs(x)
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
+	_ = validateGraphFromInputs(x)
 	rank := x.shape.Rank()
 	dims := []int{axisA, axisB}
 	for ii, dim := range dims {
@@ -1935,7 +1726,8 @@ func Transpose(x *Node, axisA, axisB int) *Node {
 			dims[ii] = rank + dim
 		}
 		if dims[ii] > rank || dims[ii] < 0 {
-			g.SetErrorf("in Transpose(x, %d, %d), passed dimension %d which is out-of-limits for x rank %d", axisA, axisB, dim, rank)
+			Panicf("in Transpose(x, %d, %d), passed dimension %d which is out-of-limits for x rank %d",
+				axisA, axisB, dim, rank)
 		}
 	}
 	permutation := make([]int, x.Rank())
@@ -1950,13 +1742,10 @@ func Transpose(x *Node, axisA, axisB int) *Node {
 // It permutes the operand axes with the given permutation, so ∀ i, 0 ≤ i < rank ⇒ input_dimensions[permutations[i]] = output_dimensions[i].
 func TransposeAllDims(x *Node, permutation ...int) *Node {
 	g := validateGraphFromInputs(x)
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	rank := x.shape.Rank()
 	if len(permutation) != rank {
-		g.SetErrorf("in TransposeAllDims(x, %v), there must be one permutation per dimension in x, but x rank %d", permutation, rank)
-		return g.InvalidNode()
+		Panicf("in TransposeAllDims(x, %v), there must be one permutation per dimension in x, but x rank %d",
+			permutation, rank)
 	}
 	used := make([]bool, rank)
 	for ii, idx := range permutation {
@@ -1965,12 +1754,10 @@ func TransposeAllDims(x *Node, permutation ...int) *Node {
 			permutation[ii] = idx
 		}
 		if idx >= rank || idx < 0 {
-			g.SetErrorf("in TransposeAllDims(x, %v), element %d id is %d which is out-of-limits for x rank %d", permutation, ii, idx, rank)
-			return g.InvalidNode()
+			Panicf("in TransposeAllDims(x, %v), element %d id is %d which is out-of-limits for x rank %d", permutation, ii, idx, rank)
 		}
 		if used[idx] {
-			g.SetErrorf("in TransposeAllDims(x, %v), id %d appears more than once", permutation, idx)
-			return g.InvalidNode()
+			Panicf("in TransposeAllDims(x, %v), id %d appears more than once", permutation, idx)
 		}
 	}
 	return newNode(g, &xla.SerializedNode{
@@ -1980,13 +1767,14 @@ func TransposeAllDims(x *Node, permutation ...int) *Node {
 }
 
 // Einsum evaluates the "Einstein summation" various types of products (inner/outer/batched)
-// between 2 tensors, on arbitrary dimensions. This version uses a textual description on
-// how to manipulate the axes. See EinsumAxes for a version where the axes are given numerically.
+// between 2 tensors, on arbitrary dimensions.
+// This version uses a textual description on how to manipulate the axes.
+// See EinsumAxes for a version where the axes are given numerically.
 //
 // This is inspired on numpy Einsum, a description of which can be seen in
 // https://stackoverflow.com/questions/26089893/understanding-numpys-einsum/33641428#33641428.
 //
-// The equation string describes what it to be made with each dimension, for each operand,
+// The equation string describes what to do with each dimension, for each operand,
 // separated by ",", and the format of the result after the "->" describes what is to be made
 // for each dimension.
 //
@@ -1998,55 +1786,45 @@ func TransposeAllDims(x *Node, permutation ...int) *Node {
 // * `Einsum("i,j->ij", vectorA, vectorB)` performs an outer (cross) product between two vectors.
 //
 // It also works for higher dimension tensors. Dimensions missing on the output (after "->") are
-// reduce summed.
+// reduce-summed.
 //
 // More examples in TensorFlow documentation:
 // https://www.tensorflow.org/api_docs/python/tf/einsum
 //
 // Notice though that this Einsum is only defined for operations between 2 operands:
 //
-// * lhs -> left-hand-side operand.
-// * rhs -> right-hand-side operand.
+// - `lhs`: left-hand-side operand.
+// - `rhs`: right-hand-side operand.
 //
-// Important note: the order of the operands can have dramatic impact on the speed of the multiplications.
+// Important note: the order of the operands can have a dramatic impact on the speed of the multiplications.
 // consider trying both sides.
 func Einsum(equation string, lhs, rhs *Node) *Node {
-	//fmt.Printf("Einsum(%s, %s, %s)\n", equation, lhs.Shape(), rhs.Shape())
-	g := lhs.Graph()
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
-	if !lhs.Ok() {
-		g.SetErrorf("Einsum(%q) left0hand-side operand is no ok", equation)
-		return g.InvalidNode()
-	}
+	_ = validateGraphFromInputs(lhs, rhs)
 
 	// Parse equation.
 	inOutParts := strings.Split(equation, "->")
 	if len(inOutParts) != 2 {
-		g.SetErrorf("Einsum(%q) missing or too many \"->\" separating inputs from outputs, there must be only one", equation)
-		return g.InvalidNode()
+		Panicf("Einsum(%q) missing or too many \"->\" separating inputs from outputs, there must be only one",
+			equation)
 	}
 	outputDesc, err := newEinsumOperandDesc(inOutParts[1])
 	if err != nil {
-		g.SetError(err)
-		return g.InvalidNode()
+		panic(err)
 	}
 	equationInputs := strings.Split(inOutParts[0], ",")
 	if len(equationInputs) != 2 {
-		g.SetErrorf("Einsum(%q) equation describes %d operands (separated by \",\"), but 2 operands (lhs and rhs) required", equation, len(equationInputs))
-		return g.InvalidNode()
+		Panicf("Einsum(%q) equation describes %d operands (separated by \",\"), but 2 operands (lhs and rhs) required",
+			equation, len(equationInputs))
 	}
 	operandsDesc := make([]einsumOperandDesc, 2)
 	for ii, str := range equationInputs {
 		operandsDesc[ii], err = newEinsumOperandDesc(str)
 		if err != nil {
-			g.SetError(errors.WithMessagef(err, "when parsing operand %d", ii))
-			return g.InvalidNode()
+			panic(errors.WithMessagef(err, "when parsing operand %d", ii))
 		}
 	}
 
-	// First independently contract axes that only appear in one operand and not in the output.
+	// First, independently contract axes that only appear in one operand and not in the output.
 	for opIdx, opPtr := range []**Node{&lhs, &rhs} {
 		var newDesc einsumOperandDesc
 		var contracting []int
@@ -2067,15 +1845,15 @@ func Einsum(equation string, lhs, rhs *Node) *Node {
 		}
 	}
 
-	// Calculate parameters for the dotGeneralXLA, and the order of its output -- if
-	// the order of the output of DotGeneral is different from the requested in outputDesc
+	// Calculate parameters for the dotGeneralXLA, and the order of its output — if
+	// the order of `DotGeneral`'s output is different from the requested in `outputDesc`
 	// we need to do a final transposition of the axes.
 	lhsDesc := operandsDesc[0]
 	rhsDesc := operandsDesc[1]
 	var lhsBatchAxes, lhsContractingAxes, rhsBatchAxes, rhsContractingAxes []int
 	var outputBatchAxes, outputCrossAxes einsumOperandDesc // dotGeneralXLA order of outputs.
 
-	// Start from lhs: all axis that feature in both lhs and rhs are already taken care in
+	// Start from lhs: all axes that feature in both `lhs` and `rhs` are already taken care in
 	// this loop.
 	for lhsAxisIdx, axis := range lhsDesc {
 		if rhsDesc.hasAxis(axis) {
@@ -2091,7 +1869,7 @@ func Einsum(equation string, lhs, rhs *Node) *Node {
 				rhsContractingAxes = append(rhsContractingAxes, rhsAxisIdx)
 			}
 		} else {
-			// Axis only exists on lhs and in the output: because axis that only
+			// Axis only exists on lhs and in the output: because axes that only
 			// exist in one operand and nowhere else have already been contracted
 			// earlier.
 			//
@@ -2100,7 +1878,7 @@ func Einsum(equation string, lhs, rhs *Node) *Node {
 		}
 	}
 
-	// Loop in rhs: only missing those axis that only feature in rhs.
+	// Loop in rhs: only missing those axes that only feature in rhs.
 	for _, axis := range rhsDesc {
 		if !lhsDesc.hasAxis(axis) {
 			// This is a cross/outer product axes, the default for dotGeneralXLA.
@@ -2170,12 +1948,12 @@ func (e einsumOperandDesc) axisIndex(axis rune) int {
 // axis, as opposed to a textual description.
 //
 // There are two operands: `lhs` (left-hand-side) and `rhs` (right-hand-side). The default for
-// every axis is to do a cross product, and the resulting tensor will have the concatenated shape (`lhs`
+// every axis is to do a cross-product, and the resulting tensor will have the concatenated shape (`lhs`
 // dimensions first then `rhs` dimensions).
 //
 // One can specify contractionAxes, pairs of axes (each pair with one index in the lhs and rhs operands)
 // to be contracted: these dimensions will multiplied and summed one at a time. That's what happens in
-// the usual "dot product".
+// the usual "dot product."
 //
 // One can also specify batchAxes, pairs of axes (each pair with one index in the lhs and rhs operands)
 // to be considered as independently, as a batch dimension. These dimensions will show up in the same
@@ -2184,28 +1962,16 @@ func (e einsumOperandDesc) axisIndex(axis rune) int {
 // Examples:
 //
 //   - `EinsumAxes(matrixA, matrixB, [][2]int{{1, 0}}, nil)` performs the usual matrix multiplication, where
-//     we contract the axis 1 of `matrixA` with the axis 0 of `matrixB`.
+//     we contract axis 1 of `matrixA` with axis 0 of `matrixB`.
 //   - `EinsumAxes(batchedMatrixA, batchedMatrixB, [][2]int{{2, 1}}, [][2]int{{0, 0}})` is similar, but we
-//     use the axis 0 of both inputs as a batch, and following 2 axes as a matrix multiplication.
+//     use axis 0 of both inputs as a batch, and following 2 axes as a matrix multiplication.
 //   - `EinsumAxes(vectorA, vectorB, nil, nil)` performs an outer (cross) product -- no contractions, no batch.
 //   - `EinsumAxes(vectorA, vectorB, [][2]int{{0, 0}}, nil)` performs a dot product and returns a scalar.
 //
-// Important note: the order of the operands can have dramatic impact on the speed of the multiplications.
-// consider trying both sides.
+// Important note: the order of the operands can have a dramatic impact on the speed of the multiplications.
+// Consider trying both sides.
 func EinsumAxes(lhs, rhs *Node, contractingAxes, batchAxes [][2]int) (output *Node) {
-	g := lhs.Graph()
-	output = g.InvalidNode()
-	if !g.Ok() {
-		return
-	}
-	if !lhs.Ok() {
-		g.SetErrorf("EinsumAxes left-hand-side operand is in an error state")
-		return g.InvalidNode()
-	}
-	if !rhs.Ok() {
-		g.SetErrorf("EinsumAxes right-hand-side operand is in an error state")
-		return g.InvalidNode()
-	}
+	_ = validateGraphFromInputs(lhs, rhs)
 
 	// Create function to process both, contractingAxes and batchAxes.
 	lhsSeen := types.MakeSet[int](rhs.Rank())
@@ -2218,30 +1984,31 @@ func EinsumAxes(lhs, rhs *Node, contractingAxes, batchAxes [][2]int) (output *No
 		rhsAxes = make([]int, 0, len(contractingAxes))
 		for _, pair := range pairs {
 			lhsAxis, rhsAxis := pair[0], pair[1]
-			// Convert negative axis to distance from last (-1 is the last axis).
+			// Convert negative axes to distance from last (-1 is the last axis).
 			if lhsAxis < 0 {
 				lhsAxis = lhs.Rank() + lhsAxis
 			}
 			if rhsAxis < 0 {
 				rhsAxis = rhs.Rank() + rhsAxis
 			}
-			// Check if axis are valid.
+			// Check if axes are valid.
 			if lhsAxis < 0 || lhsAxis >= lhs.Rank() {
-				g.SetErrorf("EinsumAxes %s has out-of-bound axis for left-hand-side operand: %v", name, pairs)
-				return
+				Panicf("EinsumAxes %s has out-of-bound axis for left-hand-side operand: %v",
+					name, pairs)
 			}
 			if lhsSeen.Has(lhsAxis) {
-				g.SetErrorf("EinsumAxes %s axis for left-hand-side operand is duplicate -- each axis can only be contracted or batch once: %v", name, pairs)
-				return
+				Panicf(
+					"EinsumAxes %s axis for left-hand-side operand is duplicate -- each axis can only be contracted or batch once: %v",
+					name, pairs)
 			}
 			lhsSeen.Insert(lhsAxis)
 			if rhsAxis < 0 || rhsAxis >= rhs.Rank() {
-				g.SetErrorf("EinsumAxes %s has out-of-bound axis for right-hand-side operand: %v", name, pairs)
-				return
+				Panicf("EinsumAxes %s has out-of-bound axis for right-hand-side operand: %v", name, pairs)
 			}
 			if rhsSeen.Has(rhsAxis) {
-				g.SetErrorf("EinsumAxes %s axis for right-hand-side operand is duplicate -- each axis can only be contracted or batch once: %v", name, pairs)
-				return
+				Panicf(
+					"EinsumAxes %s axis for right-hand-side operand is duplicate -- each axis can only be contracted or batch once: %v",
+					name, pairs)
 			}
 			rhsSeen.Insert(rhsAxis)
 
@@ -2252,13 +2019,7 @@ func EinsumAxes(lhs, rhs *Node, contractingAxes, batchAxes [][2]int) (output *No
 	}
 
 	lhsContractingAxes, rhsContractingAxes := normalizePairs("contractingAxes", contractingAxes)
-	if !g.Ok() {
-		return
-	}
 	lhsBatchAxes, rhsBatchAxes := normalizePairs("batchAxes", batchAxes)
-	if !g.Ok() {
-		return
-	}
 
 	// Execute dotGeneralXLA
 	output = dotGeneralXLA(lhs, lhsContractingAxes, lhsBatchAxes, rhs, rhsContractingAxes, rhsBatchAxes)

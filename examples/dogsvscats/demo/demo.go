@@ -27,6 +27,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/gomlx/gomlx/examples/dogsvscats"
+	"github.com/gomlx/gomlx/examples/notebook/gonb/margaid"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
@@ -38,12 +39,13 @@ import (
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/models/inceptionv3"
+	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
 	timage "github.com/gomlx/gomlx/types/tensor/image"
 	"log"
 	"os"
-	"path"
+	"time"
 )
 
 var (
@@ -65,6 +67,7 @@ var (
 	flagLearningRate        = flag.Float64("learning_rate", 0.0001, "Initial learning rate.")
 	flagL2Regularization    = flag.Float64("l2_reg", 0, "L2 regularization on kernels. It doesn't interact well with --batch_norm.")
 	flagNormalization       = flag.String("norm", "layer", fmt.Sprintf("Type of layer normalization to use. Valid values: %q.", slices.SortedKeys(layers.KnownNormalizers)))
+	flagNumConvolutions     = flag.Int("num_convolutions", 5, "Number of convolutions -- there will be at least as many to reduce the image to 16x16")
 	flagEval                = flag.Bool("eval", true, "Whether to evaluate trained model on test data in the end.")
 	flagInceptionPreTrained = flag.Bool("pretrained", true, "If using inception model, whether to use the pre-trained weights to transfer learn")
 	flagInceptionFineTuning = flag.Bool("finetuning", true, "If using inception model, whether to fine-tune the inception model")
@@ -81,7 +84,8 @@ var (
 	flagPreGenEpochs = flag.Int("pregen_epochs", 40, "Number of epochs to pre-generate for the training data. Each epoch will take ~310Mb")
 
 	// UI
-	flagUseProgressBar = flag.Bool("bar", true, "If to display a progress bar during training")
+	flagPlots = flag.Bool("plots", true, "Plots during training: perform periodic evaluations, "+
+		"save results if --checkpoint is set and draw plots, if in a Jupyter notebook.")
 )
 
 func AssertNoError(err error) {
@@ -110,7 +114,7 @@ func main() {
 		config.ModelImageSize = inceptionv3.MinimumImageSize
 	}
 	if *flagPreGenerate {
-		dogsvscats.PreGenerate(config, *flagPreGenEpochs)
+		dogsvscats.PreGenerate(config, *flagPreGenEpochs, true)
 		return
 	}
 
@@ -122,7 +126,7 @@ func trainModel(config *dogsvscats.Configuration) {
 	trainDS, trainEvalDS, validationEvalDS := dogsvscats.CreateDatasets(config)
 
 	// Manager handles creation of ML computation graphs, accelerator resources, etc.
-	manager := BuildManager().NumThreads(*flagNumThreads).NumReplicas(*flagNumReplicas).Platform(*flagPlatform).MustDone()
+	manager := BuildManager().NumThreads(*flagNumThreads).NumReplicas(*flagNumReplicas).Platform(*flagPlatform).Done()
 
 	// Metrics we are interested.
 	meanAccuracyMetric := metrics.NewMeanBinaryLogitsAccuracy("Mean Accuracy", "#acc")
@@ -136,12 +140,8 @@ func trainModel(config *dogsvscats.Configuration) {
 	// Checkpoints saving.
 	var checkpoint *checkpoints.Handler
 	if *flagCheckpoint != "" {
-		checkpointPath := data.ReplaceTildeInDir(*flagCheckpoint)
-		if !path.IsAbs(checkpointPath) {
-			checkpointPath = path.Join(config.DataDir, checkpointPath)
-		}
 		var err error
-		checkpoint, err = checkpoints.Build(ctx).Dir(checkpointPath).Keep(*flagCheckpointKeep).Done()
+		checkpoint, err = checkpoints.Build(ctx).DirFromBase(*flagCheckpoint, config.DataDir).Keep(*flagCheckpointKeep).Done()
 		AssertNoError(err)
 	}
 
@@ -167,20 +167,29 @@ func trainModel(config *dogsvscats.Configuration) {
 
 	// Use standard training loop.
 	loop := train.NewLoop(trainer)
-	if *flagUseProgressBar {
-		commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
+	commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
+
+	// Attach a checkpoint: checkpoint every 1 minute of training.
+	if checkpoint != nil {
+		period := time.Minute * 1
+		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
+			func(loop *train.Loop, metrics []tensor.Tensor) error {
+				fmt.Printf("\n[saving checkpoint@%d] [median train step (ms): %d]\n", loop.LoopStep, loop.MedianTrainStepDuration().Milliseconds())
+				return checkpoint.Save()
+			})
 	}
 
-	// Attach a checkpoint.
-	if checkpoint != nil {
-		train.NTimesDuringLoop(loop, *flagCheckpointKeep, "checkpointing", 100, func(_ *train.Loop, _ []tensor.Tensor) error {
-			return checkpoint.Save()
-		})
+	// Attach a margaid plots: plot points at exponential steps.
+	// The points generated are saved along the checkpoint directory (if one is given).
+	if *flagPlots {
+		_ = margaid.NewDefault(loop, checkpoint.Dir(), 100, 1.1, trainEvalDS, validationEvalDS)
 	}
 
 	// Loop for given number of steps.
 	_, err := loop.RunSteps(trainDS, *flagNumSteps)
 	AssertNoError(err)
+	fmt.Printf("\t[Step %d] median train step: %d microseconds\n",
+		loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
 
 	// Finally, print an evaluation on train and test datasets.
 	if *flagEval {
@@ -191,6 +200,7 @@ func trainModel(config *dogsvscats.Configuration) {
 }
 
 func normalizeImage(ctx *context.Context, x *Node) *Node {
+	x.AssertRank(4) // [batch_size, width, height, depth]
 	switch *flagNormalization {
 	case "layer":
 		return layers.LayerNormalization(ctx, x, 1, 2).ScaleNormalization(false).Done()
@@ -199,12 +209,12 @@ func normalizeImage(ctx *context.Context, x *Node) *Node {
 	case "none":
 		return x
 	}
-	g := x.Graph()
-	g.SetErrorf("invalid normalization selected %q -- valid values are batch, layer, none", *flagNormalization)
-	return g.InvalidNode()
+	Panicf("invalid normalization selected %q -- valid values are batch, layer, none", *flagNormalization)
+	return nil
 }
 
 func normalizeFeatures(ctx *context.Context, x *Node) *Node {
+	x.AssertRank(2) // [batch_size, embedding_dim]
 	switch *flagNormalization {
 	case "layer":
 		return layers.LayerNormalization(ctx, x, -1).Done()
@@ -213,21 +223,21 @@ func normalizeFeatures(ctx *context.Context, x *Node) *Node {
 	case "none":
 		return x
 	}
-	g := x.Graph()
-	g.SetErrorf("invalid normalization selected %q -- valid values are batch, layer, none", *flagNormalization)
-	return g.InvalidNode()
+	Panicf("invalid normalization selected %q -- valid values are batch, layer, none", *flagNormalization)
+	return nil
 }
 
-// CnnModelGraph builds the CNN model for our demo. It returns the logits, not the predictions, which works with
-// most losses.
+// CnnModelGraph builds the CNN model for our demo.
+// It returns the logits, not the predictions, which works with most losses.
+// inputs: only one tensor, with shape `[batch_size, width, height, depth]`.
 func CnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	_ = spec // Not needed.
 	x := inputs[0]
-	g := x.Graph()
-	const filterSize = 32
+	filterSize := 16
 	batchSize := x.Shape().Dimensions[0]
 	logits := x
-	for convIdx, imgSize := 0, 128; imgSize > 16; convIdx, imgSize = convIdx+1, imgSize/2 {
+	imgSize := x.Shape().Dimensions[1]
+	for convIdx := 0; convIdx < *flagNumConvolutions && imgSize > 16; convIdx++ {
 		ctx := ctx.In(fmt.Sprintf("conv_%d", convIdx))
 		residual := logits
 		if convIdx > 0 {
@@ -236,15 +246,18 @@ func CnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 		logits = layers.Convolution(ctx, logits).Filters(filterSize).KernelSize(3).PadSame().Done()
 		logits = layers.Relu(logits)
 		logits = normalizeImage(ctx, logits)
-
 		if convIdx > 0 {
 			logits = Add(logits, residual)
 		}
-		logits = MaxPool(logits).Window(2).Done()
-		AssertNoError(g.Error())
+		if imgSize > 16 {
+			// Reduce image size by 2 each time.
+			logits = MaxPool(logits).Window(2).Done()
+			imgSize /= 2
+		}
+		logits.AssertDims(batchSize, imgSize, imgSize, filterSize)
 	}
 
-	// Flatten the resulting image, and treat the convolved logits as flattened.
+	// Flatten resulting image, and treat the convolved logits as tabular.
 	logits = Reshape(logits, batchSize, -1)
 	logits = FnnOnTop(ctx, logits)
 	return []*Node{logits}

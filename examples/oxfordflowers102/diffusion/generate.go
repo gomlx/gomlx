@@ -10,12 +10,12 @@ import (
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/models/inceptionv3"
+	"github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
 	timage "github.com/gomlx/gomlx/types/tensor/image"
 	"github.com/janpfeifer/gonb/gonbui"
-	"github.com/pkg/errors"
 	"image"
 	"io"
 	"math"
@@ -218,12 +218,12 @@ func GenerateImagesOfAllFlowerTypes(numDiffusionSteps int) (predictedImages tens
 	ctx := context.NewContext(manager).Checked(false)
 	_, _, _ = LoadCheckpointToContext(ctx)
 	ctx.RngStateReset()
-	noise := MustNoError(NewExec(manager, func(g *Graph) *Node {
+	noise := NewExec(manager, func(g *Graph) *Node {
 		state := Const(g, RngState())
 		_, noise := RandomNormal(state, shapes.Make(DType, 1, ImageSize, ImageSize, 3))
 		noise = BroadcastToDims(noise, numImages, ImageSize, ImageSize, 3)
 		return noise
-	}).Call())[0]
+	}).Call()[0]
 	flowerIds := tensor.FromValue(slices.Iota(int32(0), numImages))
 	generator := NewImagesGenerator(ctx, noise, flowerIds, numDiffusionSteps, 0)
 	return generator.Generate()
@@ -273,7 +273,7 @@ func (g *ImagesGenerator) Generate() (predictedImages tensor.Tensor) {
 	for step := 0; step < g.numDiffusionSteps; step++ {
 		diffusionTime := 1.0 - float64(step)*stepSize
 		nextDiffusionTime := math.Max(diffusionTime-stepSize, 0)
-		parts := MustNoError(g.diffusionStepExec.Call(noisyImages, diffusionTime, nextDiffusionTime, g.flowerIds))
+		parts := g.diffusionStepExec.Call(noisyImages, diffusionTime, nextDiffusionTime, g.flowerIds)
 		if predictedImages != nil {
 			predictedImages.FinalizeAll() // Immediate release of (GPU) memory for intermediary results.
 		}
@@ -282,12 +282,12 @@ func (g *ImagesGenerator) Generate() (predictedImages tensor.Tensor) {
 		}
 		predictedImages, noisyImages = parts[0], parts[1]
 		if g.displayEveryNSteps > 0 && step%g.displayEveryNSteps == 0 {
-			displayImages := MustNoError(g.denormalizerExec.Call(predictedImages))[0]
+			displayImages := g.denormalizerExec.Call(predictedImages)[0]
 			gonbui.DisplayHTML(fmt.Sprintf("<p><b>Images @ step=%d, diffusion_time=%.3f</b></p>", step, diffusionTime))
 			PlotImagesTensor(displayImages)
 		}
 	}
-	predictedImages = MustNoError(g.denormalizerExec.Call(predictedImages))[0]
+	predictedImages = g.denormalizerExec.Call(predictedImages)[0]
 	if g.displayEveryNSteps > 0 {
 		gonbui.DisplayHTML("<p><b>Final Images</b></p>")
 		PlotImagesTensor(predictedImages)
@@ -297,11 +297,11 @@ func (g *ImagesGenerator) Generate() (predictedImages tensor.Tensor) {
 
 // GenerateNoise generates random noise that can be used to generate images.
 func GenerateNoise(numImages int) tensor.Tensor {
-	return MustNoError(NewExec(manager, func(g *Graph) *Node {
+	return NewExec(manager, func(g *Graph) *Node {
 		state := Const(g, RngState())
 		_, noise := RandomNormal(state, shapes.Make(DType, numImages, ImageSize, ImageSize, 3))
 		return noise
-	}).Call())[0]
+	}).Call()[0]
 }
 
 // GenerateFlowerIds generates random flower ids: this is the type of flowers, one of the 102.
@@ -347,24 +347,18 @@ func NewKidGenerator(ctx *context.Context, evalDS train.Dataset, numDiffusionSte
 
 func (kg *KidGenerator) EvalStepGraph(ctx *context.Context, allImages []*Node) (metric *Node) {
 	g := allImages[0].Graph()
-	if !g.Ok() {
-		return nil
-	}
 	ctx.SetTraining(g, false) // Some layers behave differently in train/eval.
 
 	// Get metrics and updates: the generated images are the inputs, and the
 	generatedImages := allImages[0]
 	datasetImages := PreprocessImages(allImages[1], false)
 	metric = kg.kid.UpdateGraph(ctx, []*Node{datasetImages}, []*Node{generatedImages})
-	if !g.Ok() {
-		return nil
-	}
 	return
 }
 
 func (kg *KidGenerator) Eval() (metric tensor.Tensor) {
 	kg.ds.Reset()
-	AssertNoError(kg.kid.Reset(kg.ctxInceptionV3))
+	kg.kid.Reset(kg.ctxInceptionV3)
 	generatedImages := kg.generator.Generate()
 	count := 0
 	for {
@@ -378,10 +372,10 @@ func (kg *KidGenerator) Eval() (metric tensor.Tensor) {
 		if metric != nil {
 			metric.FinalizeAll()
 		}
-		metric = MustNoError(kg.evalExec.Call(generatedImages, datasetImages))[0]
+		metric = kg.evalExec.Call(generatedImages, datasetImages)[0]
 	}
 	if count == 0 {
-		AssertNoError(errors.Errorf("evaluation dataset %s yielded no batches, no data to evaluate KID", kg.ds))
+		exceptions.Panicf("evaluation dataset %s yielded no batches, no data to evaluate KID", kg.ds)
 	}
 	return
 }

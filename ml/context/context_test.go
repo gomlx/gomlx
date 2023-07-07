@@ -18,21 +18,17 @@ package context
 
 import (
 	"fmt"
-	"github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
 
 func TestContextVariables(t *testing.T) {
-	manager, err := graph.BuildManager().Done()
-	if err != nil {
-		t.Fatalf("Failed to build Manager: %v", err)
-	}
+	manager := graphtest.BuildTestManager()
 	ctx := NewContext(manager)
 	ctx2 := ctx.In("a")
 
@@ -44,58 +40,38 @@ func TestContextVariables(t *testing.T) {
 		t.Fatalf("Expected scope to be %q, got %q instead", want, ctx2.Scope())
 	}
 
+	// Same variable name, but different scopes.
 	ctx3 := ctx.In("b")
-	v0 := ctx2.VariableWithShape("x", makeShape(shapes.Float32))
-	if v0 == nil {
-		t.Fatalf("Failed to create variable %q in %q: %v", v0.Name(), ctx2.Scope(), ctx2.Error())
-	}
-	v1 := ctx3.VariableWithShape("x", makeShape(shapes.Float64))
-	if v1 == nil {
-		t.Fatalf("Failed to create variable in %s: %v", ctx2.Scope(), ctx3.Error())
-	}
+	v0 := ctx2.VariableWithShape("x", shapes.Make(shapes.Float32))
+	_ = ctx3.VariableWithShape("x", shapes.Make(shapes.Float64))
 
 	// Try to reuse, without the context being set for that:
-	v0 = ctx2.VariableWithShape("x", makeShape(shapes.Float32))
-	assert.Falsef(t, v0.Ok(), "Allowed re-creating variable without context set to reuse. v0=%+v", v0)
-	ctx2.ResetError()
+	require.Panicsf(t, func() { v0 = ctx2.VariableWithShape("x", shapes.Make(shapes.Float32)) },
+		"Allowed re-creating variable without context set to reuse. v0=%+v", v0)
 
 	// Create another variable, different name.
-	v0 = ctx2.VariableWithShape("y", makeShape(shapes.Int64))
-	if !v0.Ok() {
-		t.Fatalf("Failed to create variable %q in %q: %v", v0.Name(), ctx2.Scope(), ctx2.Error())
-	}
+	require.NotPanics(t, func() { v0 = ctx2.VariableWithShape("y", shapes.Make(shapes.Int64)) })
 
 	// Try to reuse:
 	ctx2 = ctx2.Reuse()
-	v0 = ctx2.VariableWithShape("x", makeShape(shapes.Float32))
-	if !v0.Ok() {
-		t.Fatalf("Failed to reuse variable %q in %q: %v", v0.Name(), ctx2.Scope(), ctx2.Error())
-	}
+	v0 = ctx2.VariableWithShape("x", shapes.Make(shapes.Float32))
 
 	// Try to reuse with a different shape:
-	v0 = ctx2.VariableWithShape("x", makeShape(shapes.Float32, 1, 1))
-	if v0.Ok() {
-		t.Fatalf("Allowed re-using variable %q in scope %q with a different shape context set to reuse.",
-			v0.Name(), v0.Scope())
-	}
+	require.Panicsf(t, func() { v0 = ctx2.VariableWithShape("x", shapes.Make(shapes.Float32, 1, 1)) },
+		"Allowed re-using variable %q in scope %q with a different shape context set to reuse.", v0.Name(), v0.Scope())
 }
 
 func TestContextVariablesInitialization(t *testing.T) {
-	manager, err := graph.BuildManager().Done()
-	if err != nil {
-		t.Fatalf("Failed to build Manager: %v", err)
-	}
+	manager := graphtest.BuildTestManager()
 	ctx := NewContext(manager)
 	ctx0 := ctx.In("a").WithInitializer(initializers.RandomUniformFn(42, 1.5, 2.5))
-	v0 := ctx0.VariableWithShape("x", makeShape(shapes.Float32))
+	v0 := ctx0.VariableWithShape("x", shapes.Make(shapes.Float32))
 	ctx1 := ctx.In("b").WithInitializer(initializers.RandomNormalFn(42, 1.0))
-	v1 := ctx1.VariableWithShape("y", makeShape(shapes.Float64, 2))
+	v1 := ctx1.VariableWithShape("y", shapes.Make(shapes.Float64, 2))
 	ctx2 := ctx1.In("c").WithInitializer(initializers.Zero)
-	v2 := ctx2.VariableWithShape("z", makeShape(shapes.Int64, 3, 1))
+	v2 := ctx2.VariableWithShape("z", shapes.Make(shapes.Int64, 3, 1))
 	ctx.InitializeVariables()
-	if ctx.Error() != nil {
-		t.Fatalf("Failed to create/initialize variablesMap: %+v", ctx.Error())
-	}
+
 	fmt.Printf("\tv0=%v\n", v0.Value().Local())
 	fmt.Printf("\tv1=%v\n", v1.Value().Local())
 	fmt.Printf("\tv2=%v\n", v2.Value().Local())
@@ -132,10 +108,7 @@ func (l *ConstantLoader) LoadVariable(ctx *Context, v *Variable) (value tensor.T
 }
 
 func TestContext_SetLoader(t *testing.T) {
-	manager, err := graph.BuildManager().Done()
-	if err != nil {
-		t.Fatalf("Failed to build Manager: %v", err)
-	}
+	manager := graphtest.BuildTestManager()
 	ctx := NewContext(manager)
 	ctx.SetLoader(&ConstantLoader{
 		Values: map[string]map[string]tensor.Tensor{
@@ -146,15 +119,12 @@ func TestContext_SetLoader(t *testing.T) {
 		},
 	})
 	e := NewExec(manager, ctx, func(ctx *Context, g *Graph) (*Node, *Node) {
-		v0 := ctx.WithInitializer(initializers.Zero).VariableWithShape("x", makeShape(shapes.Float32))
+		v0 := ctx.WithInitializer(initializers.Zero).VariableWithShape("x", shapes.Make(shapes.Float32))
 		v1 := ctx.VariableWithValue("y", 1)
 		return v0.ValueGraph(g), v1.ValueGraph(g)
 	})
-	if !ctx.Ok() {
-		t.Fatalf("Failed to create context.Exec: %+v", ctx.Error())
-	}
-	results, err := e.Call()
-	require.NoError(t, err, "Failed to run context.Exec")
+	var results []tensor.Tensor
+	require.NotPanics(t, func() { results = e.Call() }, "Failed to run context.Exec")
 	gotV0 := results[0].Value().(float32)
 	gotV1 := results[1].Value().(int)
 	if gotV0 != 2 || gotV1 != 3 {

@@ -43,6 +43,7 @@ import (
 	"fmt"
 	mg "github.com/erkkah/margaid"
 	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
@@ -52,6 +53,7 @@ import (
 	"k8s.io/klog/v2"
 	"math"
 	"os"
+	"path"
 	"strings"
 )
 
@@ -107,6 +109,45 @@ func New(width, height int, evalDatasets ...train.Dataset) *Plots {
 	}
 }
 
+const DefaultFileName = "training_plot_points.json"
+
+// NewDefault creates a new Margaid plots with the usual defaults.
+// The "default" may change over time, and it aims to work with the usual GoNB notebook, or if
+// run from the command line, it simply save the data points for future plotting.
+//
+// It serves also as an example.
+//
+// Arguments:
+//   - 'loop': train.Loop to attach itself to. It uses generates evaluations
+//   - `dir`: directory where to save the plot data-points, with the file name DefaultFileName.
+//   - `startStep` and `stepFactor`: when to add plot points.
+//     The `stepFactor` defines the growth of steps between generating plot points.
+//     Typical values here are `startStep=100` and `stepFactor=1.1`.
+//   - `datasets`: Evaluated whenever plot points are added.
+func NewDefault(loop *train.Loop, dir string, startStep int, stepFactor float64, datasets ...train.Dataset) *Plots {
+	plots := New(1024, 400, datasets...).LogScaleX().LogScaleY()
+	if dir != "" {
+		// Save plot points.
+		_, err := plots.WithFile(path.Join(dir, DefaultFileName))
+		if err != nil {
+			panic(err)
+		}
+	}
+	plots.DynamicUpdates()
+
+	// Only plot if (1) it's running in a notebook or if (B) it has a checkpoint directory, where those plot points
+	// will be saved.
+	if dir != "" || gonbui.IsNotebook {
+		// Register plot points at exponential steps.
+		train.ExponentialCallback(loop, startStep, stepFactor, true,
+			"Monitor", 0, func(loop *train.Loop, metrics []tensor.Tensor) error {
+				// Update plots with metrics.
+				return plots.AddTrainAndEvalMetrics(loop, metrics)
+			})
+	}
+	return plots
+}
+
 // Plot struct holds the series to different metrics that share the same Y axis.
 // They are organized per name of the metric.
 type Plot struct {
@@ -125,6 +166,8 @@ type Plot struct {
 //
 // New data-points are saved asynchronously -- not to slow down training, with the downside of
 // potentially having I/O issues reported asynchronously.
+//
+// Consider using DefaultFileName as the file name, if you don't have one.
 //
 // If used with DynamicUpdates, call this first, so when DynamicUpdates is called, and dynamic plot
 // is immediately created.
@@ -294,8 +337,8 @@ func (ps *Plots) AddTrainAndEvalMetrics(loop *train.Loop, trainMetrics []tensor.
 
 	// Eval metrics, if given
 	for _, ds := range ps.EvalDatasets {
-		evalMetrics, err := loop.Trainer.Eval(ds)
-		if err != nil {
+		var evalMetrics []tensor.Tensor
+		if err := exceptions.TryCatch[error](func() { evalMetrics = loop.Trainer.Eval(ds) }); err != nil {
 			return err
 		}
 		for ii, desc := range loop.Trainer.EvalMetrics() {

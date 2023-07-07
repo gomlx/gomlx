@@ -20,23 +20,24 @@ package main
 import (
 	"flag"
 	"fmt"
-	. "github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/ml/data"
-	"log"
-	"os"
-	"path"
-
 	"github.com/gomlx/gomlx/examples/imdb"
+	"github.com/gomlx/gomlx/examples/notebook/gonb/margaid"
+	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
+	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/commandline"
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
+	"log"
+	"os"
+	"time"
 )
 
 // DType used for the demo.
@@ -91,6 +92,8 @@ var (
 
 	// UI
 	flagUseProgressBar = flag.Bool("bar", true, "If to display a progress bar during training")
+	flagPlots          = flag.Bool("plots", true, "Plots during training: perform periodic evaluations, "+
+		"save results if --checkpoint is set and draw plots, if in a Jupyter notebook.")
 )
 
 func main() {
@@ -114,7 +117,9 @@ func Sample() {
 	ds := imdb.NewDataset("Test", imdb.Test, *flagMaxLen, 3, DType, true, nil)
 	_, inputs, labels, err := ds.Yield()
 	AssertNoError(err)
-	labelsData := shapes.CastAsDType(labels[0].Local().Data(), shapes.Int64).([]int)
+	labelsRef := labels[0].Local().AcquireData()
+	defer labelsRef.Release()
+	labelsData := shapes.CastAsDType(labelsRef.Flat(), shapes.Int64).([]int)
 	for ii := 0; ii < 3; ii++ {
 		fmt.Printf("\n%v : %s\n", labelsData[ii], imdb.InputToString(inputs[0], ii))
 	}
@@ -123,7 +128,7 @@ func Sample() {
 
 func trainModel() {
 	// Manager handles creation of ML computation graphs, accelerator resources, etc.
-	manager := BuildManager().NumThreads(*flagNumThreads).NumReplicas(*flagNumReplicas).Platform(*flagPlatform).MustDone()
+	manager := BuildManager().NumThreads(*flagNumThreads).NumReplicas(*flagNumReplicas).Platform(*flagPlatform).Done()
 
 	// Datasets.
 	var trainDS, trainEvalDS, testEvalDS train.Dataset
@@ -155,12 +160,8 @@ func trainModel() {
 	// Checkpoints saving.
 	var checkpoint *checkpoints.Handler
 	if *flagCheckpoint != "" {
-		checkpointPath := data.ReplaceTildeInDir(*flagCheckpoint)
-		if !path.IsAbs(checkpointPath) {
-			checkpointPath = path.Join(*flagDataDir, checkpointPath)
-		}
 		var err error
-		checkpoint, err = checkpoints.Build(ctx).Dir(checkpointPath).Keep(*flagCheckpointKeep).Done()
+		checkpoint, err = checkpoints.Build(ctx).DirFromBase(*flagCheckpoint, *flagDataDir).Keep(*flagCheckpointKeep).Done()
 		AssertNoError(err)
 	}
 
@@ -184,16 +185,27 @@ func trainModel() {
 			commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
 		}
 
+		// Attach a checkpoint: checkpoint every 1 minute of training.
 		if checkpoint != nil {
-			train.NTimesDuringLoop(loop, 2*(*flagCheckpointKeep), "checkpointing", 100, func(_ *train.Loop, _ []tensor.Tensor) error {
-				return checkpoint.Save()
-			})
+			period := time.Minute * 1
+			train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
+				func(loop *train.Loop, metrics []tensor.Tensor) error {
+					fmt.Printf("\n[saving checkpoint@%d] [median train step (ms): %d]\n", loop.LoopStep, loop.MedianTrainStepDuration().Milliseconds())
+					return checkpoint.Save()
+				})
+		}
+
+		// Attach a margaid plots: plot points at exponential steps.
+		// The points generated are saved along the checkpoint directory (if one is given).
+		if *flagPlots {
+			_ = margaid.NewDefault(loop, checkpoint.Dir(), 100, 1.1, trainEvalDS, testEvalDS)
 		}
 
 		// Loop for given number of steps.
 		_, err := loop.RunSteps(trainDS, *flagNumSteps)
 		AssertNoError(err)
-
+		fmt.Printf("\t[Step %d] median train step: %d microseconds\n",
+			loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
 	}
 
 	if *flagEval {
@@ -240,10 +252,6 @@ func EmbedTokensGraph(ctx *context.Context, tokens *Node) (embed, mask *Node) {
 func modelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	_ = spec // Not used.
 	tokens := inputs[0]
-	g := tokens.Graph()
-	if !g.Ok() {
-		return nil
-	}
 	embed, mask := EmbedTokensGraph(ctx, tokens)
 
 	// Normalization function.
@@ -254,8 +262,7 @@ func modelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	} else if *flagModel == "transformer" {
 		embed = TransformerGraph(ctx, tokens, embed, mask)
 	} else {
-		g.SetErrorf("unknown model type %q, only types \"bow\", \"cnn\" and \"transformer\" are implemented", *flagModel)
-		return nil
+		exceptions.Panicf("unknown model type %q, only types \"bow\", \"cnn\" and \"transformer\" are implemented", *flagModel)
 	}
 
 	// Sum-up per-token embeddings and do a FNN on the output. From now on, the dimensions are `[batch_dim, embed_dim]`
@@ -269,9 +276,6 @@ func modelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 // adds a FNN on top and readout the final logit.
 func ReadoutGraph(ctx *context.Context, embed *Node) *Node {
 	g := embed.Graph()
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	var dropoutRate *Node
 	if *flagDropoutRate > 0 {
 		dropoutRate = ConstAsDType(g, DType, *flagDropoutRate)
@@ -319,14 +323,12 @@ func Conv1DGraph(ctx *context.Context, embed, mask *Node) *Node {
 		embed = Activation(embed)
 		embed = layers.Dropout(ctx, embed, ConstAsDType(g, DType, *flagDropoutRate))
 		embed = layers.Convolution(ctx, embed).KernelSize(7).Filters(*flagTokenEmbeddingSize).Strides(3).Done()
-		AssertNoError(g.Error())
 		embed = Normalize(ctx, embed)
 	}
 	{
 		ctx := ctx.In("conv2")
 		embed = Activation(embed)
 		embed = layers.Convolution(ctx, embed).KernelSize(7).Filters(*flagTokenEmbeddingSize).Strides(3).Done()
-		AssertNoError(g.Error())
 		embed = Normalize(ctx, embed)
 	}
 	return embed
@@ -546,7 +548,6 @@ func Normalize(ctx *context.Context, x *Node) *Node {
 	case "none":
 		return x
 	}
-	g := x.Graph()
-	g.SetErrorf("invalid normalization selected %q -- valid values are batch, layer, none", *flagNormalization)
-	return g.InvalidNode()
+	exceptions.Panicf("invalid normalization selected %q -- valid values are batch, layer, none", *flagNormalization)
+	return nil
 }

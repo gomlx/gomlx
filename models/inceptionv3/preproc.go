@@ -2,6 +2,7 @@ package inceptionv3
 
 import (
 	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/types/exceptions"
 	timage "github.com/gomlx/gomlx/types/tensor/image"
 	"math"
 )
@@ -22,8 +23,7 @@ import (
 // values must be scaled from 0 to maxValue (except if it is set to -1).
 func PreprocessImage(image *Node, maxValue float64, channelsConfig timage.ChannelsAxisConfig) *Node {
 	if image.Rank() != 4 {
-		image.Graph().SetErrorf("inceptionv3.PreprocessImage requires image to be rank-4, got rank-%d instead", image.Rank())
-		return image.Graph().InvalidNode()
+		exceptions.Panicf("inceptionv3.PreprocessImage requires image to be rank-4, got rank-%d instead", image.Rank())
 	}
 
 	// Scale image values from -1.0 to 1.0.

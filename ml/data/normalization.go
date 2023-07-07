@@ -21,6 +21,7 @@ import (
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/pkg/errors"
 	"io"
@@ -94,32 +95,35 @@ func Normalization(manager *Manager, ds train.Dataset, inputsIndex int, independ
 				inputsIndex, batch.Shape())
 			return
 		}
-		_, err = updateValuesWithInput.Call(batch)
+		err = exceptions.TryCatch[error](func() { updateValuesWithInput.Call(batch) })
 		if err != nil {
 			err = errors.WithMessagef(err, "while processing batch #%d of the dataset", batchNum)
 			return
 		}
 	}
 
-	// Calculate mean and stddev.
-	results, err := context.NewExec(manager, ctx, func(ctx *context.Context, g *Graph) []*Node {
-		countVar := ctx.InspectVariable(ctx.Scope(), "count")
-		count := countVar.ValueGraph(g)
+	// Calculate mean and stddev, using a graph.
+	var results []tensor.Tensor
+	err = exceptions.TryCatch[error](func() {
+		results = context.NewExec(manager, ctx, func(ctx *context.Context, g *Graph) []*Node {
+			countVar := ctx.InspectVariable(ctx.Scope(), "count")
+			count := countVar.ValueGraph(g)
 
-		sumVar := ctx.InspectVariable(ctx.Scope(), "sum")
-		sum := sumVar.ValueGraph(g)
+			sumVar := ctx.InspectVariable(ctx.Scope(), "sum")
+			sum := sumVar.ValueGraph(g)
 
-		sumSquareVar := ctx.InspectVariable(ctx.Scope(), "sum^2")
-		sumSquare := sumSquareVar.ValueGraph(g)
+			sumSquareVar := ctx.InspectVariable(ctx.Scope(), "sum^2")
+			sumSquare := sumSquareVar.ValueGraph(g)
 
-		count = ConvertType(count, sum.DType())
-		mean := Div(sum, count)
-		variance := Sub(
-			Div(sumSquare, count),
-			Square(mean))
-		stddev := Sqrt(variance)
-		return []*Node{mean, stddev}
-	}).Call()
+			count = ConvertType(count, sum.DType())
+			mean := Div(sum, count)
+			variance := Sub(
+				Div(sumSquare, count),
+				Square(mean))
+			stddev := Sqrt(variance)
+			return []*Node{mean, stddev}
+		}).Call()
+	})
 	if err != nil {
 		return
 	}

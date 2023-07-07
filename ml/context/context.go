@@ -20,8 +20,9 @@ package context
 
 import (
 	"fmt"
-	ml "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context/initializers"
+	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/pkg/errors"
@@ -99,7 +100,7 @@ type scopedVariableMap map[string]*Variable
 // contextData stores all context information and is shared among various Context, which
 // serve only as scoped references.
 type contextData struct {
-	manager *ml.Manager
+	manager *Manager
 
 	// params holds a model's building (hyper)parameters. Context
 	// is agnostic about the semantics here, hence it's a scoped map of scope+key (both strings)
@@ -119,7 +120,7 @@ type contextData struct {
 	//   indicate whether the graph is being used for training or for inference. This is
 	//   used by layers that behave differently when training and inference (e.g: Dropout,
 	//   BatchNorm, etc.).
-	graphParams map[ml.GraphId]*ScopedParams
+	graphParams map[graph.GraphId]*ScopedParams
 
 	// variablesMap for this context organized per scope.
 	variablesMap map[string]scopedVariableMap
@@ -134,11 +135,6 @@ type contextData struct {
 	// the context. It's set to false whenever one runs Context.InitializeVariables,
 	// and it's set to true whenever a new variable is created without a value.
 	needsInitialization bool
-
-	// Error holds an error when creating this Context reference. If it is set,
-	// all variables are also created in error, and everything fails (gracefully). This allows
-	// one to defer error handling.
-	Error error
 }
 
 // Loader can be implemented by any library providing loading of variables for
@@ -150,12 +146,12 @@ type contextData struct {
 type Loader interface {
 	// LoadVariable tries to load the variable v, usually specified by its scope and name.
 	// If it's not found, returns false, and initialization continues as usual.
-	// Errors can be reported with Context.SetError.
+	// Errors can be reported with Context.Panic.
 	LoadVariable(ctx *Context, v *Variable) (value tensor.Tensor, found bool)
 }
 
 // NewContext constructs a new and empty context.
-func NewContext(manager *ml.Manager) *Context {
+func NewContext(manager *Manager) *Context {
 	ctx := &Context{
 		scope:        RootScope,
 		deviceNumber: manager.DefaultDeviceNum(),
@@ -163,7 +159,7 @@ func NewContext(manager *ml.Manager) *Context {
 		data: &contextData{
 			manager:      manager,
 			params:       NewScopedParams(),
-			graphParams:  make(map[ml.GraphId]*ScopedParams),
+			graphParams:  make(map[graph.GraphId]*ScopedParams),
 			variablesMap: make(map[string]scopedVariableMap),
 		},
 	}
@@ -187,57 +183,6 @@ func (ctx *Context) copy() *Context {
 	return ctx2
 }
 
-// Ok returns whether Context is still valid, the same as saying it has no error.
-//
-// Notice that Error is part of the "data" component, so it's shared among all the
-// connected Context references.
-func (ctx *Context) Ok() bool {
-	return ctx != nil && ctx.data.Error == nil
-}
-
-// Error holds an error when creating this Context reference. If it is set,
-// all variables are also created in error, and everything fails (gracefully). This allows
-// one to defer error handling. Only the first error is stored. After an error is set
-// all operations in Context are no-ops.
-//
-// Notice that Error is part of the "data" component, so it's shared among all the
-// connected Context references.
-func (ctx *Context) Error() error {
-	return ctx.data.Error
-}
-
-// ResetError clears the error in a Context, and allows it to function normally.
-//
-// Notice that Error is part of the "data" component, so it's shared among all the
-// connected Context references.
-func (ctx *Context) ResetError() {
-	ctx.data.Error = nil
-}
-
-// SetError sets the Context into error. After this all operations become no-ops. Only
-// the first error is stored, the following errors are discarded. If stackTrace is set
-// to true, includes a stack trace of the error.
-//
-// Notice that Error is part of the "data" component, so it's shared among all the
-// connected Context references.
-func (ctx *Context) SetError(err error) {
-	if ctx.Ok() {
-		ctx.data.Error = err
-	}
-}
-
-// SetErrorf is similar to SetError, but allows formatting in place. It also automatically
-// adds stack trace.
-//
-// Notice that Error is part of the "data" component, so it's shared among all the
-// connected Context references.
-func (ctx *Context) SetErrorf(format string, args ...any) {
-	if !ctx.Ok() {
-		return
-	}
-	ctx.SetError(errors.WithStack(fmt.Errorf(format, args...)))
-}
-
 // Scope returns the full scope path.
 //
 // Notice that Scope is part of the "reference" component of a Context.
@@ -255,16 +200,11 @@ func EscapeScopeName(scopeName string) string {
 //
 // Notice that Scope is part of the "reference" component of a Context.
 func (ctx *Context) In(scope string) *Context {
-	if !ctx.Ok() {
-		return ctx
-	}
 	if scope == "" {
-		ctx.SetErrorf("cannot use empty scope")
-		return ctx
+		Panicf("cannot use empty scope for Context.In()")
 	}
 	if strings.Contains(scope, ScopeSeparator) {
-		ctx.SetErrorf("cannot use separator %q in scope element %q", ScopeSeparator, scope)
-		return ctx
+		Panicf("cannot use separator %q in scope element %q", ScopeSeparator, scope)
 	}
 
 	var newScope string
@@ -281,12 +221,8 @@ func (ctx *Context) In(scope string) *Context {
 //
 // Notice that Scope is part of the "reference" component of a Context.
 func (ctx *Context) InAbsPath(scopePath string) *Context {
-	if !ctx.Ok() {
-		return ctx
-	}
 	if !strings.HasPrefix(scopePath, ScopeSeparator) {
-		ctx.SetErrorf("absolute scope path must start with separator %q, instead got %q", ScopeSeparator, scopePath)
-		return ctx
+		Panicf("absolute scope path must start with separator %q, instead got %q", ScopeSeparator, scopePath)
 	}
 	_, found := ctx.data.variablesMap[scopePath]
 	if !found {
@@ -304,12 +240,6 @@ func (ctx *Context) InAbsPath(scopePath string) *Context {
 //
 // Notice that re-usability is part of the "reference" component of a Context.
 func (ctx *Context) Reuse() *Context {
-	if !ctx.Ok() {
-		return ctx
-	}
-	if ctx.reuse {
-		return ctx
-	}
 	ctx2 := ctx.copy()
 	ctx2.reuse = true
 	return ctx2
@@ -320,9 +250,6 @@ func (ctx *Context) Reuse() *Context {
 //
 // Notice that re-usability is part of the "reference" component of a Context.
 func (ctx *Context) Unique() *Context {
-	if !ctx.Ok() {
-		return ctx
-	}
 	if !ctx.reuse {
 		return ctx
 	}
@@ -344,9 +271,6 @@ func (ctx *Context) IsReuse() bool { return ctx.reuse }
 //
 // Notice that re-usability is part of the "reference" component of a Context.
 func (ctx *Context) Checked(checked bool) *Context {
-	if !ctx.Ok() {
-		return ctx
-	}
 	if ctx.checked == checked {
 		return ctx
 	}
@@ -365,12 +289,8 @@ func (ctx *Context) IsChecked() bool { return ctx.checked }
 // Notice that default variable initialization is part of the "reference" component of a Context, so this change
 // won't affect other context references.
 func (ctx *Context) WithInitializer(initializer VariableInitializer) *Context {
-	if !ctx.Ok() {
-		return ctx
-	}
 	if initializer == nil {
-		ctx.SetErrorf("Context.WithInitializer passed a nil initializer")
-		return ctx
+		Panicf("Context.WithInitializer passed a nil initializer")
 	}
 	ctx2 := ctx.copy()
 	ctx2.initializer = initializer
@@ -391,7 +311,7 @@ func (ctx *Context) GetParam(key string) (value any, found bool) {
 // SetParam sets the given param in the current scope. It will be visible (by GetParam)
 // within this scope and descendant scopes (but not by other scopes).
 //
-// See also SetGraphParam for parameters that are graph specific.
+// See also SetGraphParam for parameters that are graph-specific.
 func (ctx *Context) SetParam(key string, value any) {
 	ctx.data.params.Set(ctx.scope, key, value)
 }
@@ -412,9 +332,9 @@ func (ctx *Context) EnumerateParams(fn func(scope, key string, value any)) {
 // For example Context.IsTraining and Context.SetTraining uses a Graph parameter to
 // set this state, as the same Context is used for evaluation/inference graphs and
 // training graphs, and they should have different values.
-func (ctx *Context) GetGraphParam(graph *Graph, key string) (value any, found bool) {
+func (ctx *Context) GetGraphParam(g *Graph, key string) (value any, found bool) {
 	var graphParams *ScopedParams
-	graphParams, found = ctx.data.graphParams[graph.GraphId()]
+	graphParams, found = ctx.data.graphParams[g.GraphId()]
 	if !found {
 		return
 	}
@@ -429,18 +349,18 @@ func (ctx *Context) GetGraphParam(graph *Graph, key string) (value any, found bo
 // For example Context.IsTraining and Context.SetTraining uses a Graph parameter to
 // set this state, as the same Context is used for evaluation/inference graphs and
 // training graphs, and they should have different values.
-func (ctx *Context) SetGraphParam(graph *Graph, key string, value any) {
-	graphParams, found := ctx.data.graphParams[graph.GraphId()]
+func (ctx *Context) SetGraphParam(g *Graph, key string, value any) {
+	graphParams, found := ctx.data.graphParams[g.GraphId()]
 	if !found {
 		graphParams = NewScopedParams()
-		ctx.data.graphParams[graph.GraphId()] = graphParams
+		ctx.data.graphParams[g.GraphId()] = graphParams
 	}
 	graphParams.Set(ctx.scope, key, value)
 }
 
 // EnumerateGraphParams enumerates all parameters for the graph, for all scopes calls fn with their values.
-func (ctx *Context) EnumerateGraphParams(graph *Graph, fn func(scope, key string, value any)) {
-	graphParams, found := ctx.data.graphParams[graph.GraphId()]
+func (ctx *Context) EnumerateGraphParams(g *Graph, fn func(scope, key string, value any)) {
+	graphParams, found := ctx.data.graphParams[g.GraphId()]
 	if !found {
 		// Nothing to enumerate.
 		return
@@ -463,9 +383,6 @@ func (ctx *Context) NeedsInitialization() bool {
 // Notice that variables information is stored in the "data" component of Context objects, and is shared
 // among all connected context references.
 func (ctx *Context) InitializeVariables() {
-	if !ctx.Ok() {
-		return
-	}
 	var variablesToInitialize []*Variable
 	ctx.EnumerateVariables(func(v *Variable) {
 		if v.value == nil {
@@ -481,21 +398,15 @@ func (ctx *Context) InitializeVariables() {
 	for _, variable := range variablesToInitialize {
 		valuesNodes = append(valuesNodes, variable.initializer(g, variable.shape))
 	}
-	g.Compile(ml.Tuple(valuesNodes...))
-	if g.Error() != nil {
-		ctx.SetErrorf("failed to compile variable initialization graph: %w", g.Error())
-		return
-	}
-	tuple, err := g.RunError(nil)
+	var tuple *tensor.Device
+	err := TryCatch[error](func() {
+		g.Compile(graph.Tuple(valuesNodes...))
+		tuple = g.Run(nil)
+	})
 	if err != nil {
-		ctx.SetErrorf("failed to run variable initialization graph: %w", err)
-		return
+		panic(errors.WithMessagef(err, "failed to compile/run variable initialization graph"))
 	}
-	values, err := tuple.SplitTupleError()
-	if err != nil {
-		ctx.SetErrorf("failed to split tuple during variable initialization graph: %w", err)
-		return
-	}
+	values := tuple.SplitTuple()
 	for ii, variable := range variablesToInitialize {
 		variable.value = values[ii]
 	}
@@ -506,19 +417,14 @@ func (ctx *Context) InitializeVariables() {
 //
 // `Exec*` methods are used by those implementing an executor (context.Exec) or related tests, not normally
 // needed by end users.
-func (ctx *Context) ExecSetVariablesInParams(params ml.ParamsMap, graph *ml.Graph) {
-	if !graph.Ok() {
-		log.Printf("Graph in invalid state passed to Context.ExecSetVariablesInParams(): %+v", graph.Error())
-		return
-	}
+func (ctx *Context) ExecSetVariablesInParams(params graph.ParamsMap, g *Graph) {
+	g.AssertValid()
 	ctx.EnumerateVariables(func(v *Variable) {
-		if v.InUseByGraph(graph) {
+		if v.InUseByGraph(g) {
 			if v.value == nil {
-				params[v.ParamNode(graph)] = tensor.MakeLocalWithError(
-					fmt.Errorf("variable %q not initialized", v.ParameterName()))
-				return
+				Panicf("variable %q not initialized", v.ParameterName())
 			}
-			params[v.ParamNode(graph)] = v.Value().Device(graph, graph.DeviceNum())
+			params[v.ParamNode(g)] = v.Value().Device(g, g.DeviceNum())
 		}
 	})
 }
@@ -537,9 +443,6 @@ func (ctx *Context) findVariableInScope(name string) *Variable {
 //
 // The root scope is "/" (RootScope).
 func (ctx *Context) InspectVariable(scope, name string) *Variable {
-	if !ctx.Ok() {
-		return nil
-	}
 	scopeVars, ok := ctx.data.variablesMap[scope]
 	if !ok {
 		return nil
@@ -550,9 +453,6 @@ func (ctx *Context) InspectVariable(scope, name string) *Variable {
 
 // setVariableInScope.
 func (ctx *Context) setVariableInScope(name string, v *Variable) {
-	if !ctx.Ok() {
-		return
-	}
 	vSet, found := ctx.data.variablesMap[ctx.scope]
 	if !found {
 		vSet = make(scopedVariableMap)
@@ -560,11 +460,6 @@ func (ctx *Context) setVariableInScope(name string, v *Variable) {
 	}
 	vSet[name] = v
 	ctx.data.variables = append(ctx.data.variables, v)
-}
-
-// badVariable to return when Context has errors.
-func (ctx *Context) badVariable() *Variable {
-	return &Variable{ctx: ctx}
 }
 
 // VariableWithShape creates or returns an existing variable with the given shape in the current scope.
@@ -577,24 +472,18 @@ func (ctx *Context) badVariable() *Variable {
 // Notice that variables information is stored in the "data" component of Context objects, and is shared
 // among all connected context references.
 func (ctx *Context) VariableWithShape(name string, shape shapes.Shape) *Variable {
-	if !ctx.Ok() {
-		return ctx.badVariable()
-	}
 	v := ctx.findVariableInScope(name)
 	if v == nil && ctx.checked && ctx.reuse {
-		ctx.SetErrorf("requested variable %q in scope %q with Context.Reuse set, but variable does not exist", name, ctx.scope)
-		return ctx.badVariable()
+		Panicf("requested variable %q in scope %q with Context.Reuse set, but variable does not exist", name, ctx.scope)
 	}
 	if v != nil && ctx.checked && !ctx.reuse {
-		ctx.SetErrorf("variable %q for scope %q already exists -- if this was deliberate, use Context.Reuse() or Context.Check(false)", name, ctx.scope)
-		return ctx.badVariable()
+		Panicf("variable %q for scope %q already exists -- if this was deliberate, use Context.Reuse() or Context.Check(false)", name, ctx.scope)
 	}
 
 	if v != nil {
 		if !shape.Eq(v.shape) {
-			ctx.SetErrorf("requested to reuse variable %q in scope %q, but with different shape from original: previous shape=%s, requested shape=%s",
+			Panicf("requested to reuse variable %q in scope %q, but with different shape from original: previous shape=%s, requested shape=%s",
 				name, ctx.scope, v.shape, shape)
-			return ctx.badVariable()
 		}
 		return v
 	}
@@ -606,16 +495,13 @@ func (ctx *Context) VariableWithShape(name string, shape shapes.Shape) *Variable
 		scope:        ctx.Scope(),
 		shape:        shape,
 		Trainable:    true,
-		graphToNodes: make(map[ml.GraphId]*variableNodes),
+		graphToNodes: make(map[graph.GraphId]*variableNodes),
 	}
 	ctx.setVariableInScope(name, v)
 
 	// Try to load the variable. Report if something failed.
 	if ctx.tryToLoad(v) {
 		return v
-	}
-	if !ctx.Ok() {
-		return ctx.badVariable()
 	}
 
 	// Set up variable for initialization.
@@ -635,10 +521,9 @@ func (ctx *Context) tryToLoad(v *Variable) bool {
 		if value.Shape().Eq(v.shape) {
 			v.value = value
 		} else {
-			ctx.SetErrorf("loading of variable %q returned shape %s, but variable was created "+
+			Panicf("loading of variable %q returned shape %s, but variable was created "+
 				"with shape %s -- did some hyperparameter change since variable was saved that changed "+
 				"the variable shape?", v.ParameterName(), value.Shape(), v.shape)
-			return false
 		}
 	}
 	return found
@@ -649,9 +534,9 @@ func valueToTensor(value any) tensor.Tensor {
 		return tensorValue
 	}
 	if node, ok := value.(*Node); ok {
-		return tensor.MakeDeviceWithError(errors.Errorf(
+		Panicf(
 			"trying to feed a computation graph node (`*computation.Node`) as a concrete value will not work, "+
-				"you have to provide a Go value or a tensor here -- *Node provided: %s", node))
+				"you have to provide a Go value or a tensor here -- *Node provided: %s", node)
 	}
 	return tensor.FromAnyValue(value)
 }
@@ -667,33 +552,27 @@ func valueToTensor(value any) tensor.Tensor {
 // Notice that variables' information is stored in the "data" component of Context objects, and is shared
 // among all connected context references.
 func (ctx *Context) VariableWithValue(name string, value any) *Variable {
-	if !ctx.Ok() {
-		return nil
-	}
 	v := ctx.findVariableInScope(name)
 
 	// Check against reuse of variables.
 	if ctx.checked && ctx.reuse && v == nil {
-		ctx.SetErrorf("requested variable %q in scope %q with Context.Reuse set, but variable does not exist", name, ctx.scope)
-		return ctx.badVariable()
+		Panicf("requested variable %q in scope %q with Context.Reuse set, but variable does not exist", name, ctx.scope)
 	}
 	if ctx.checked && !ctx.reuse && v != nil {
-		ctx.SetErrorf("variable %q for scope %q already exists", name, ctx.scope)
-		return ctx.badVariable()
+		Panicf("variable %q for scope %q already exists", name, ctx.scope)
 	}
 
-	valueT := valueToTensor(value)
-	if valueT.Error() != nil {
-		ctx.SetErrorf("failed to parse value %v for variable %q in scope %q: %w", value, name, ctx.scope, valueT.Error())
-		return ctx.badVariable()
+	var valueT tensor.Tensor
+	err := TryCatch[error](func() { valueT = valueToTensor(value) })
+	if err != nil {
+		panic(errors.WithMessagef(err, "failed to parse value %v for variable %q in scope %q", value, name, ctx.scope))
 	}
 
 	if v != nil {
 		// Pre-existing variable to reuse: check that the requested and previous shapes are the same.
 		if !valueT.Shape().Eq(v.shape) {
-			ctx.SetErrorf("requested to reuse variable %q in scope %q, but with value with different shape from original: previous shape=%s, requested value shape=%s",
+			Panicf("requested to reuse variable %q in scope %q, but with value with different shape from original: previous shape=%s, requested value shape=%s",
 				name, ctx.scope, v.shape, valueT.Shape())
-			return ctx.badVariable()
 		}
 		return v
 	}
@@ -706,16 +585,13 @@ func (ctx *Context) VariableWithValue(name string, value any) *Variable {
 		shape:        valueT.Shape(),
 		value:        valueT,
 		Trainable:    true, // By default variables are trainable.
-		graphToNodes: make(map[ml.GraphId]*variableNodes),
+		graphToNodes: make(map[graph.GraphId]*variableNodes),
 	}
 	ctx.setVariableInScope(name, v)
 
 	// Try to load the variable. Report if something failed.
 	if ctx.tryToLoad(v) {
 		return v
-	}
-	if !ctx.Ok() {
-		return ctx.badVariable()
 	}
 	return v
 }
@@ -794,8 +670,8 @@ func (ctx *Context) SetLoader(loader Loader) {
 //
 // `Exec*` methods are used by those implementing an executor (context.Exec) or related tests, not normally
 // needed by end users.
-func (ctx *Context) ExecPopulateGraphParamsMap(graph *Graph, params ml.ParamsMap) {
-	graphId := graph.GraphId()
+func (ctx *Context) ExecPopulateGraphParamsMap(g *Graph, params graph.ParamsMap) {
+	graphId := g.GraphId()
 	ctx.EnumerateVariables(func(v *Variable) {
 		nodes, found := v.graphToNodes[graphId]
 		if !found {
@@ -810,28 +686,27 @@ func (ctx *Context) ExecPopulateGraphParamsMap(graph *Graph, params ml.ParamsMap
 //
 // `Exec*` methods are used by those implementing an executor (context.Exec) or related tests, not normally
 // needed by end users.
-func (ctx *Context) execPopulateGraphParamsSlice(graph *Graph, params []*tensor.Device) {
-	graphId := graph.GraphId()
+func (ctx *Context) execPopulateGraphParamsSlice(g *Graph, params []*tensor.Device) {
+	graphId := g.GraphId()
 	ctx.EnumerateVariables(func(v *Variable) {
 		nodes, found := v.graphToNodes[graphId]
 		if !found {
 			return
 		}
-		if nodes == nil || nodes.paramNode == nil || nodes.paramNode.ParameterHandle() == ml.InvalidParameterHandle {
-			graph.SetErrorf("invalid paramNode for variable %q", v.ParameterName())
-			return
+		if nodes == nil || nodes.paramNode == nil || nodes.paramNode.ParameterHandle() == graph.InvalidParameterHandle {
+			Panicf("invalid paramNode for variable %q", v.ParameterName())
 		}
-		deviceT := v.Value().Device(graph.Manager(), graph.DeviceNum())
-		if !deviceT.Ok() {
-			graph.SetError(errors.WithMessagef(deviceT.Error(), "failed to transfer variable \"%s::%s\" value to device",
+		var deviceT *tensor.Device
+		err := TryCatch[error](func() { deviceT = v.Value().Device(g.Manager(), g.DeviceNum()) })
+		if err != nil {
+			panic(errors.WithMessagef(err, "failed to transfer variable \"%s::%s\" value to device",
 				v.Scope(), v.Name()))
-			return
 		}
 		params[nodes.paramNode.ParameterHandle()] = deviceT
 	})
 }
 
-// CalculateGradientsGraph returns the gradient of the loss with respect to each trainable variable
+// BuildTrainableVariablesGradientsGraph returns the gradient of the loss with respect to each trainable variable
 // in the context that was used in the current graph.
 // It returns a tuple Node.
 // Non-trainable variables (Variable.Trainable == false) are not touched.
@@ -840,18 +715,15 @@ func (ctx *Context) execPopulateGraphParamsSlice(graph *Graph, params []*tensor.
 //
 // Note, if during the computation graph the value of the variable is changed with Variable.SetValueGraph,
 // this will calculate the gradient with respect to the new value (*Node) set.
-func (ctx *Context) CalculateGradientsGraph(loss *Node) []*Node {
+func (ctx *Context) BuildTrainableVariablesGradientsGraph(loss *Node) []*Node {
 	g := loss.Graph()
-	if !g.Ok() {
-		return nil
-	}
-	var params []*Node
+	var trainableVars []*Node
 	ctx.EnumerateVariables(func(v *Variable) {
 		if v.Trainable && v.InUseByGraph(g) {
-			params = append(params, v.ValueGraph(g))
+			trainableVars = append(trainableVars, v.ValueGraph(g))
 		}
 	})
-	return ml.Gradient(loss, params...)
+	return graph.Gradient(loss, trainableVars...)
 }
 
 // GetParam from Context object and cast to the give type. If
@@ -886,8 +758,8 @@ func GetParam[T any](ctx *Context, name string, defaultValue T) T {
 // return defaultValue instead.
 //
 // It's a typed wrapper to Context.GetGraphParam()
-func GetGraphParam[T any](ctx *Context, graph *Graph, name string, defaultValue T) T {
-	valueI, found := ctx.GetGraphParam(graph, name)
+func GetGraphParam[T any](ctx *Context, g *Graph, name string, defaultValue T) T {
+	valueI, found := ctx.GetGraphParam(g, name)
 	if !found {
 		return defaultValue
 	}
@@ -915,8 +787,8 @@ const TrainingGraphParamKey = "training"
 //
 // Notice that global parameters is part of the "reference" component of a Context, so this change
 // won't affect other connected context references.
-func (ctx *Context) IsTraining(graph *Graph) bool {
-	isTraining, found := ctx.GetGraphParam(graph, TrainingGraphParamKey)
+func (ctx *Context) IsTraining(g *Graph) bool {
+	isTraining, found := ctx.GetGraphParam(g, TrainingGraphParamKey)
 	return found && isTraining.(bool)
 }
 
@@ -926,6 +798,6 @@ func (ctx *Context) IsTraining(graph *Graph) bool {
 //
 // Notice that global parameters is part of the "reference" component of a Context, so this change
 // won't affect other connected context references.
-func (ctx *Context) SetTraining(graph *Graph, value bool) {
-	ctx.SetGraphParam(graph, TrainingGraphParamKey, value)
+func (ctx *Context) SetTraining(g *Graph, value bool) {
+	ctx.SetGraphParam(g, TrainingGraphParamKey, value)
 }

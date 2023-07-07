@@ -40,23 +40,6 @@ const (
 	BiasSigma        = 10.0
 )
 
-type OkError interface {
-	Ok() bool
-	Error() error
-}
-
-func MustOk(x OkError) {
-	if !x.Ok() {
-		panic(fmt.Sprintf("Not Ok(), error: %+v, contents=%+v", x.Error(), x))
-	}
-}
-
-func MustNoError(err error) {
-	if err != nil {
-		panic(fmt.Sprintf("Error: %+v", err))
-	}
-}
-
 // initCoefficients chooses random coefficients and bias. These are the true values the model will
 // attempt to learn.
 func initCoefficients(manager *Manager, numVariables int) (coefficients, bias tensor.Tensor) {
@@ -70,8 +53,7 @@ func initCoefficients(manager *Manager, numVariables int) (coefficients, bias te
 		bias = AddScalar(MulScalar(bias, BiasSigma), BiasMu)
 		return
 	})
-	results, err := e.Call()
-	MustNoError(err)
+	results := e.Call()
 	coefficients, bias = results[0], results[1]
 	return
 }
@@ -98,10 +80,8 @@ func buildExamples(manager *Manager, coef, bias tensor.Tensor, numExamples int, 
 		}
 		return
 	})
-	examples, err := e.Call(coef, bias)
-	MustNoError(err)
+	examples := e.Call(coef, bias)
 	inputs, labels = examples[0], examples[1]
-	MustOk(inputs)
 	return
 }
 
@@ -141,10 +121,9 @@ func (ds *Dataset) Reset() {}
 
 func main() {
 	flag.Parse()
-	manager := BuildManager().NumThreads(*flagNumThreads).NumReplicas(*flagNumReplicas).Platform(*flagPlatform).MustDone()
+	manager := BuildManager().NumThreads(*flagNumThreads).NumReplicas(*flagNumReplicas).Platform(*flagPlatform).Done()
 
 	trueCoefficients, trueBias := initCoefficients(manager, *flagNumFeatures)
-	MustOk(trueCoefficients)
 	fmt.Printf("Target coefficients: %0.5v\n", trueCoefficients.Value())
 	fmt.Printf("Target bias: %0.5v\n\n", trueBias.Value())
 
@@ -167,7 +146,9 @@ func main() {
 
 	// Loop for given number of steps.
 	_, err := loop.RunSteps(dataset, *flagNumSteps)
-	MustNoError(err)
+	if err != nil {
+		panic(err)
+	}
 
 	// Print learned coefficients and bias -- from the weights in the dense layer.
 	fmt.Println()

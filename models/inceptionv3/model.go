@@ -66,6 +66,7 @@ import (
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"
+	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
 	timage "github.com/gomlx/gomlx/types/tensor/image"
@@ -253,36 +254,26 @@ func (cfg *Config) Done() (output *Node) {
 
 	// Sanity checking:
 	g := x.Graph()
-	output = g.InvalidNode()
-	if !g.Ok() {
-		return
-	}
 	if cfg.baseDir == "" && !cfg.trainable {
-		g.SetErrorf("inceptionv3.BuildGraph(): cannot have Trainable(false) if not using pre-trained weights")
-		return
+		Panicf("inceptionv3.BuildGraph(): cannot have Trainable(false) if not using pre-trained weights")
 	}
 	if x.Rank() != 4 {
-		g.SetErrorf("inceptionv3.BuildGraph(): input image tensor must be of rank 3: e.g.: [batch_size, ..., channels], got shape %s instead", x.Shape())
-		return
+		Panicf("inceptionv3.BuildGraph(): input image tensor must be of rank 3: e.g.: [batch_size, ..., channels], got shape %s instead", x.Shape())
 	}
 	if x.DType() != shapes.F32 {
-		g.SetErrorf("inceptionv3.BuildGraph(): only Float32 supported at this time, got dtype %s instead", x.DType())
-		return
+		Panicf("inceptionv3.BuildGraph(): only Float32 supported at this time, got dtype %s instead", x.DType())
 	}
 	if x.Shape().Dimensions[cfg.channelsAxis] != 3 {
-		g.SetErrorf("inceptionv3.BuildGraph(): image must have 3 channels, scaled from -1.0 to 1.0, got shape %s instead", x.Shape())
-		return
+		Panicf("inceptionv3.BuildGraph(): image must have 3 channels, scaled from -1.0 to 1.0, got shape %s instead", x.Shape())
 	}
 	if cfg.includeTop {
 		if cfg.baseDir == "" {
-			g.SetErrorf("inceptionv3.BuildGraph(): classification top is only available is using pre-trained weights, see PreTrained method")
-			return
+			Panicf("inceptionv3.BuildGraph(): classification top is only available is using pre-trained weights, see PreTrained method")
 		}
 		spatialAxes := timage.GetSpatialAxes(x, cfg.channelsAxisConfig)
 		for _, spatialAxis := range spatialAxes {
 			if x.Shape().Dimensions[spatialAxis] != 299 {
-				g.SetErrorf("inceptionv3.BuildGraph(): image dimensions must be 299x299 if using classification top,  got shape %s instead", x.Shape())
-				return
+				Panicf("inceptionv3.BuildGraph(): image dimensions must be 299x299 if using classification top,  got shape %s instead", x.Shape())
 			}
 		}
 	}
@@ -454,7 +445,7 @@ func (cfg *Config) Done() (output *Node) {
 			// Global pooling across spatial dimensions, shape=[batch_size, 2048].
 			x = ReduceMean(x, cfg.spatialAxes...)
 		default:
-			g.SetErrorf("inceptionv3.BuildGraph(): invalid pooling option %s", cfg.pooling)
+			Panicf("inceptionv3.BuildGraph(): invalid pooling option %s", cfg.pooling)
 			return
 		}
 	}
@@ -479,10 +470,6 @@ func (cfg *Config) Done() (output *Node) {
 func (cfg *Config) conv2DWithBatchNorm(ctx *context.Context, x *Node, kernelFilters, kernelHeight, kernelWidth int,
 	strides []int, padding bool) (output *Node) {
 	g := x.Graph()
-	output = g.InvalidNode()
-	if !g.Ok() {
-		return
-	}
 
 	// 2D Convolution:
 	ctxWithWeights := cfg.readNextConv2D(ctx, g) // Create a new context scope and read weights from `.h5` file.
@@ -497,17 +484,11 @@ func (cfg *Config) conv2DWithBatchNorm(ctx *context.Context, x *Node, kernelFilt
 		convCfg = convCfg.NoPadding()
 	}
 	x = convCfg.Done()
-	if !g.Ok() {
-		return
-	}
 
 	// Batch Normalization:
 	ctxWithWeights = cfg.readNextBatchNormalization(ctx, g) // Create a new context scope and read weights from `.h5` file.
 	x = layers.BatchNormalization(ctxWithWeights, x, cfg.channelsAxis).CurrentScope().
 		Scale(cfg.batchNormScale).Epsilon(cfg.batchNormEpsilon).Trainable(cfg.trainable).Done()
-	if !g.Ok() {
-		return
-	}
 
 	// Activation:
 	x = layers.Relu(x)
@@ -533,8 +514,7 @@ func (cfg *Config) loadTensorToVariable(ctx *context.Context, graph *Graph, tens
 	tensorPath := path.Join(cfg.baseDir, UnpackedWeightsName, tensorFileName)
 	local, err := tensor.Load(tensorPath)
 	if err != nil {
-		graph.SetError(errors.WithMessagef(err, "inceptionv3.ModelGraph(): failed to read weights from %q", tensorPath))
-		return
+		panic(errors.WithMessagef(err, "inceptionv3.ModelGraph(): failed to read weights from %q", tensorPath))
 	}
 	// We don't need the value, since the layer will re-load it.
 	_ = ctx.VariableWithValue(variableName, local)
@@ -544,12 +524,8 @@ func (cfg *Config) loadTensorToVariable(ctx *context.Context, graph *Graph, tens
 //
 // It returns the modified scope to be used in `layers.Convolution`.
 func (cfg *Config) readNextConv2D(ctx *context.Context, graph *Graph) (ctxInScope *context.Context) {
-	ctxInScope = ctx
-	if !graph.Ok() {
-		return
-	}
-
 	// Set scope name to something similar to the original model layer names (cosmetic only).
+	ctxInScope = ctx
 	if cfg.conv2dCount == 0 {
 		ctxInScope = ctx.In("conv2d")
 	} else {
@@ -560,9 +536,6 @@ func (cfg *Config) readNextConv2D(ctx *context.Context, graph *Graph) (ctxInScop
 	// h5 names start with 1 instead of 0 (!!)
 	h5Name := fmt.Sprintf("conv2d_%d/conv2d_%d/kernel:0", cfg.conv2dCount, cfg.conv2dCount)
 	cfg.loadTensorToVariable(ctxInScope, graph, h5Name, "weights")
-	if !graph.Ok() {
-		return
-	}
 
 	// If PreTrained is configured, Context has the variable set already. Disable checking variable existence.
 	ctxInScope = ctxInScope.Checked(false)
@@ -575,19 +548,9 @@ func (cfg *Config) readNextConv2D(ctx *context.Context, graph *Graph) (ctxInScop
 // It returns the modified scope to use for `layers.DenseWithBias`.
 func (cfg *Config) readPredictionsWeights(ctx *context.Context, graph *Graph) (ctxInScope *context.Context) {
 	ctxInScope = ctx.In("predictions")
-	if !graph.Ok() {
-		return
-	}
 	ctxTmp := ctxInScope.In("dense") // layers.Dense will create a sub-scope, which we need to match.
 	cfg.loadTensorToVariable(ctxTmp, graph, "predictions/predictions/kernel:0", "weights")
-	if !graph.Ok() {
-		return
-	}
 	cfg.loadTensorToVariable(ctxTmp, graph, "predictions/predictions/bias:0", "biases")
-	if !graph.Ok() {
-		return
-	}
-
 	ctxInScope = ctxInScope.Checked(false)
 	return
 }
@@ -598,9 +561,6 @@ func (cfg *Config) readPredictionsWeights(ctx *context.Context, graph *Graph) (c
 // It returns the modified scope to use for `layers.BatchNormalization`.
 func (cfg *Config) readNextBatchNormalization(ctx *context.Context, graph *Graph) (ctxInScope *context.Context) {
 	ctxInScope = ctx
-	if !graph.Ok() {
-		return
-	}
 
 	// Set scope name to something similar to the original model layer names (cosmetic only).
 	if cfg.batchNormCount == 0 {
@@ -613,17 +573,8 @@ func (cfg *Config) readNextBatchNormalization(ctx *context.Context, graph *Graph
 	// h5 names start with 1 instead of 0 (!!)
 	h5Group := fmt.Sprintf("batch_normalization_%d/batch_normalization_%d/", cfg.conv2dCount, cfg.conv2dCount)
 	cfg.loadTensorToVariable(ctxInScope, graph, h5Group+"moving_mean:0", "mean")
-	if !graph.Ok() {
-		return
-	}
 	cfg.loadTensorToVariable(ctxInScope, graph, h5Group+"moving_variance:0", "variance")
-	if !graph.Ok() {
-		return
-	}
 	cfg.loadTensorToVariable(ctxInScope, graph, h5Group+"beta:0", "offset")
-	if !graph.Ok() {
-		return
-	}
 
 	// Context will have mixed usage: some variables will be reused, some (like the "avg_weight")
 	// will be dynamically created.

@@ -1,4 +1,4 @@
-# GoMLX -- A full-featured ML Framework (Jax for Go)
+# GoMLX -- A full-featured ML Framework ("Jax for Go")
 
 GoMLX is a fast and easy-to-use set of ML libraries and tools. It can be seen as a TensorFlow/Jax/PyTorch for Go.
 
@@ -115,6 +115,25 @@ the corresponding directories under `/usr/local` (most linux distributions won't
 After that, just import it as with any Go library.
 
 More on building the C library, see [docs/building.md](docs/building.md).
+
+#### GPU Support (NVidia)
+
+Typically one needs the same NVidia libraries as TensorFlow/Jax. On a fresh 23.04 Ubuntu install, all it took was 
+having the commercial NVidia drivers installed (not the Nouveau drivers), and additionally installing:
+
+```bash
+apt install nvidia-cudnn
+```
+
+After that, another needed step — some misconfiguration among NVidia's CuDNN library, Ubuntu package maintainer and XLA 
+code, I'm not sure — is to create the following directory and symbolic link:
+
+```bash
+sudo mkdir /usr/lib/nvidia-cuda-toolkit/nvvm
+sudo ln -s /usr/lib/nvidia-cuda-toolkit/libdevice /usr/lib/nvidia-cuda-toolkit/nvvm/
+```
+
+Without this you'll see errors complaining about not finding `libdevice.10.bc`.
 
 ## Tutorial
 

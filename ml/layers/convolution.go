@@ -19,6 +19,7 @@ package layers
 import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
+	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	timage "github.com/gomlx/gomlx/types/tensor/image"
@@ -66,7 +67,7 @@ func Convolution(ctx *context.Context, x *Node) *ConvBuilder {
 	}
 	conv.numSpatialDims = x.Rank() - 2
 	if conv.numSpatialDims < 0 {
-		conv.graph.SetErrorf("Input x must have rank >= 3, shaped by default as [batch, <spatial_dimensions...>, channels], "+
+		Panicf("Input x must have rank >= 3, shaped by default as [batch, <spatial_dimensions...>, channels], "+
 			"but x rank is %d", x.Rank())
 	}
 	return conv.ChannelsAxis(timage.ChannelsLast).NoPadding().UseBias(true).Strides(1)
@@ -77,7 +78,7 @@ func Convolution(ctx *context.Context, x *Node) *ConvBuilder {
 func (conv *ConvBuilder) Filters(filters int) *ConvBuilder {
 	conv.filters = filters
 	if filters <= 0 {
-		conv.graph.SetErrorf("number of filters must be > 0, it was set to %d", filters)
+		Panicf("number of filters must be > 0, it was set to %d", filters)
 	}
 	return conv
 }
@@ -87,9 +88,6 @@ func (conv *ConvBuilder) Filters(filters int) *ConvBuilder {
 //
 // You can also use KernelSizePerDim to set the kernel size per dimension (axis) individually.
 func (conv *ConvBuilder) KernelSize(size int) *ConvBuilder {
-	if !conv.graph.Ok() {
-		return conv
-	}
 	perDim := slices.SliceWithValue(conv.numSpatialDims, size)
 	return conv.KernelSizePerDim(perDim...)
 }
@@ -100,7 +98,7 @@ func (conv *ConvBuilder) KernelSize(size int) *ConvBuilder {
 // You can also use KernelSize to set the kernel size the same for all dimensions.
 func (conv *ConvBuilder) KernelSizePerDim(sizes ...int) *ConvBuilder {
 	if len(sizes) != conv.numSpatialDims {
-		conv.graph.SetErrorf("received %d kernel sizes, but x has %d spatial dimensions",
+		Panicf("received %d kernel sizes, but x has %d spatial dimensions",
 			len(sizes), conv.numSpatialDims)
 		return conv
 	}
@@ -139,9 +137,6 @@ func (conv *ConvBuilder) PadSame() *ConvBuilder {
 //
 // This is the default.
 func (conv *ConvBuilder) NoPadding() *ConvBuilder {
-	if !conv.graph.Ok() {
-		return conv
-	}
 	conv.padSame = false
 	return conv
 }
@@ -155,9 +150,6 @@ func (conv *ConvBuilder) NoPadding() *ConvBuilder {
 //
 // One cannot use strides and dilation at the same time.
 func (conv *ConvBuilder) Strides(strides int) *ConvBuilder {
-	if !conv.graph.Ok() {
-		return conv
-	}
 	perDim := slices.SliceWithValue(conv.numSpatialDims, strides)
 	return conv.StridePerDim(perDim...)
 }
@@ -171,11 +163,8 @@ func (conv *ConvBuilder) Strides(strides int) *ConvBuilder {
 //
 // One cannot use strides and dilation at the same time.
 func (conv *ConvBuilder) StridePerDim(strides ...int) *ConvBuilder {
-	if !conv.graph.Ok() {
-		return conv
-	}
 	if len(strides) != conv.numSpatialDims {
-		conv.graph.SetErrorf("received %d strides in StridePerDim, but x has %d spatial dimensions",
+		Panicf("received %d strides in StridePerDim, but x has %d spatial dimensions",
 			len(strides), conv.numSpatialDims)
 		return conv
 	}
@@ -193,9 +182,6 @@ func (conv *ConvBuilder) StridePerDim(strides ...int) *ConvBuilder {
 //
 // One cannot use strides and dilation at the same time.
 func (conv *ConvBuilder) Dilations(dilation int) *ConvBuilder {
-	if !conv.graph.Ok() {
-		return conv
-	}
 	dilationsPerDim := slices.SliceWithValue(conv.numSpatialDims, dilation)
 	return conv.DilationPerDim(dilationsPerDim...)
 }
@@ -210,11 +196,8 @@ func (conv *ConvBuilder) Dilations(dilation int) *ConvBuilder {
 //
 // One cannot use strides and dilation at the same time.
 func (conv *ConvBuilder) DilationPerDim(dilations ...int) *ConvBuilder {
-	if !conv.graph.Ok() {
-		return conv
-	}
 	if len(dilations) != conv.numSpatialDims {
-		conv.graph.SetErrorf("received %d dilations in DilationPerDim, but x has %d spatial dimensions",
+		Panicf("received %d dilations in DilationPerDim, but x has %d spatial dimensions",
 			len(dilations), conv.numSpatialDims)
 		return conv
 	}
@@ -235,10 +218,6 @@ func (conv *ConvBuilder) CurrentScope() *ConvBuilder {
 // creates the convolution and it's kernels (variables) and returns the resulting
 // Node.
 func (conv *ConvBuilder) Done() *Node {
-	if !conv.graph.Ok() {
-		return conv.graph.InvalidNode()
-	}
-
 	// Default is to create a sub-scope for the convolution variables.
 	ctxInScope := conv.ctx
 	if conv.newScope {
@@ -246,12 +225,10 @@ func (conv *ConvBuilder) Done() *Node {
 	}
 
 	if len(conv.kernelSize) == 0 || conv.filters <= 0 {
-		conv.graph.SetErrorf("layers.Convolution requires Filters and KernelSize to be set")
-		return conv.graph.InvalidNode()
+		Panicf("layers.Convolution requires Filters and KernelSize to be set")
 	}
 	if conv.numSpatialDims <= 0 {
-		conv.graph.SetErrorf("invalid x shape %s, can't figure spatial dimensions", conv.x.Shape())
-		return conv.graph.InvalidNode()
+		Panicf("invalid x shape %s, can't figure spatial dimensions", conv.x.Shape())
 	}
 
 	// Check only one of strides / dilations are set.
@@ -271,9 +248,8 @@ func (conv *ConvBuilder) Done() *Node {
 		}
 	}
 	if dilationsSet && stridesSet {
-		conv.graph.SetErrorf("both strides (%v) and dilations (%v) are set, but only one can be used at a time",
+		Panicf("both strides (%v) and dilations (%v) are set, but only one can be used at a time",
 			conv.strides, conv.dilations)
-		return conv.graph.InvalidNode()
 	}
 
 	// Create and apply kernel.
@@ -304,9 +280,6 @@ func (conv *ConvBuilder) Done() *Node {
 		convOpts.NoPadding()
 	}
 	output := convOpts.Done()
-	if !conv.graph.Ok() {
-		return output
-	}
 
 	// Create and apply bias.
 	if conv.bias {

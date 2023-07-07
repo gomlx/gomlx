@@ -22,6 +22,7 @@ package losses
 
 import (
 	. "github.com/gomlx/gomlx/graph"
+	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 )
 
@@ -34,13 +35,8 @@ const Epsilon = 1e-7
 func MeanSquaredError(labels, predictions []*Node) (loss *Node) {
 	predictions0 := predictions[0]
 	labels0 := labels[0]
-	g := labels0.Graph()
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	if !labels0.Shape().Eq(predictions0.Shape()) {
-		g.SetErrorf("labels0 (%s) and predictions0 (%s) must have same shape", labels0.Shape(), predictions0.Shape())
-		return g.InvalidNode()
+		Panicf("labels[0] (%s) and predictions[0] (%s) must have same shape", labels0.Shape(), predictions0.Shape())
 	}
 	loss = Sub(labels0, predictions0)
 	loss = Mul(loss, loss)
@@ -55,13 +51,8 @@ func MeanSquaredError(labels, predictions []*Node) (loss *Node) {
 func MeanAbsoluteError(labels, predictions []*Node) (loss *Node) {
 	predictions0 := predictions[0]
 	labels0 := labels[0]
-	g := labels0.Graph()
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	if !labels0.Shape().Eq(predictions0.Shape()) {
-		g.SetErrorf("labels0 (%s) and predictions0 (%s) must have same shape", labels0.Shape(), predictions0.Shape())
-		return g.InvalidNode()
+		Panicf("labels[0] (%s) and predictions[0] (%s) must have same shape", labels0.Shape(), predictions0.Shape())
 	}
 	return ReduceAllMean(Abs(Sub(labels0, predictions0)))
 }
@@ -76,13 +67,8 @@ func MeanAbsoluteError(labels, predictions []*Node) (loss *Node) {
 func BinaryCrossentropy(labels, predictions []*Node) *Node {
 	predictions0 := predictions[0]
 	labels0 := labels[0]
-	g := labels0.Graph()
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	if !labels0.Shape().Eq(predictions0.Shape()) {
-		g.SetErrorf("labels0 (%s) and predictions0 (%s) must have same shape", labels0.Shape(), predictions0.Shape())
-		return g.InvalidNode()
+		Panicf("labels[0] (%s) and predictions[0] (%s) must have same shape", labels0.Shape(), predictions0.Shape())
 	}
 	loss := Neg(Add(
 		Mul(labels0, Log(predictions0)),
@@ -104,12 +90,8 @@ func BinaryCrossentropy(labels, predictions []*Node) *Node {
 func BinaryCrossentropyLogits(labels, logits []*Node) *Node {
 	logits0 := logits[0]
 	labels0 := labels[0]
-	g := logits0.Graph()
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	if logits0.Shape().Size() != labels0.Shape().Size() {
-		g.SetErrorf("labels0 (%s) and logits0 (%s) have incompatible shapes", labels0.Shape(), logits0.Shape())
+		Panicf("labels[0] (%s) and logits[0] (%s) have incompatible shapes", labels0.Shape(), logits0.Shape())
 	}
 	if logits0.Rank() != labels0.Rank() {
 		labels0 = Reshape(labels0, logits0.Shape().Dimensions...)
@@ -130,25 +112,18 @@ func BinaryCrossentropyLogits(labels, logits []*Node) *Node {
 func SparseCategoricalCrossEntropyLogits(labels, logits []*Node) *Node {
 	logits0 := logits[0]
 	labels0 := labels[0]
-	g := logits0.Graph()
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	labelsShape := labels0.Shape()
 	labelsRank := labelsShape.Rank()
 	logitsShape := logits0.Shape()
 	logitsRank := logitsShape.Rank()
 	if !labelsShape.DType.IsInt() {
-		g.SetErrorf("labels0 indices dtype (%s), it must be integer", labelsShape.DType)
-		return g.InvalidNode()
+		Panicf("labels0 indices dtype (%s), it must be integer", labelsShape.DType)
 	}
 	if labelsRank != logitsRank {
-		g.SetErrorf("labels0(%s) and logits0(%s) must have the same rank", labelsShape, logitsShape)
-		return g.InvalidNode()
+		Panicf("labels0(%s) and logits0(%s) must have the same rank", labelsShape, logitsShape)
 	}
 	if labelsShape.Dimensions[labelsRank-1] != 1 {
-		g.SetErrorf("labels0(%s) are expected to have the last dimension == 1, with the true/labeled category", labelsShape)
-		return g.InvalidNode()
+		Panicf("labels0(%s) are expected to have the last dimension == 1, with the true/labeled category", labelsShape)
 	}
 
 	// Remove last dimension, it will be re-added by OneHot
@@ -174,14 +149,9 @@ func CategoricalCrossEntropyLogits(labels, logits []*Node) *Node {
 // categoricalCrossEntropyLogitsImpl implements CategoricalCrossEntropyLogits taking as input the
 // nodes only (as opposed to slices).
 func categoricalCrossEntropyLogitsImpl(labels, logits *Node) *Node {
-	g := logits.Graph()
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	shape := labels.Shape()
 	if !shape.Eq(logits.Shape()) {
-		g.SetErrorf("labels(%s) and logits(%s) must different shapes", shape, logits.Shape())
-		return g.InvalidNode()
+		Panicf("labels(%s) and logits(%s) must different shapes", shape, logits.Shape())
 	}
 	predictions := Softmax(logits)
 	return categoricalCrossEntropyImpl(labels, predictions)
@@ -201,14 +171,10 @@ func CategoricalCrossEntropy(labels, predictions []*Node) *Node {
 // categoricalCrossEntropyImpl implements CategoricalCrossEntropy.
 func categoricalCrossEntropyImpl(labels, predictions *Node) *Node {
 	g := predictions.Graph()
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	shape := labels.Shape()
 	dtype := labels.DType()
 	if !shape.Eq(predictions.Shape()) {
-		g.SetErrorf("labels(%s) and predictions(%s) must different shapes", shape, predictions.Shape())
-		return g.InvalidNode()
+		Panicf("labels(%s) and predictions(%s) must different shapes", shape, predictions.Shape())
 	}
 	epsilon := Const(g, shapes.CastAsDType(Epsilon, dtype))
 	predictions = Clip(predictions, epsilon, Sub(ScalarOne(g, dtype), epsilon))
