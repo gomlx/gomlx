@@ -36,7 +36,6 @@ import (
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
-	"github.com/janpfeifer/gonb/gonbui"
 	"log"
 	"path"
 	"time"
@@ -149,27 +148,10 @@ func main() {
 			})
 	}
 
-	// Plot points.
-	var plots *margaid.Plots
+	// Attach a margaid plots: plot points at exponential steps,
+	// that are saved along the checkpoint directory (if one is given).
 	if *flagPlots {
-		plots = margaid.New(1024, 400, trainEvalDS, testEvalDS).LogScaleX().LogScaleY()
-		if checkpoint != nil {
-			// Save plot points.
-			_, err := plots.WithFile(path.Join(checkpoint.Dir(), "training_plot_points.json"))
-			AssertNoError(err)
-		}
-		plots.DynamicUpdates()
-
-		// Only plot if (1) it's running in a notebook or if (B) it has a checkpoint directory, where those plot points
-		// will be saved.
-		if checkpoint != nil || gonbui.IsNotebook {
-			// Create plot
-			train.ExponentialCallback(loop, 100, 1.1, true,
-				"Monitor", 0, func(loop *train.Loop, metrics []tensor.Tensor) error {
-					// Update plots with metrics.
-					return plots.AddTrainAndEvalMetrics(loop, metrics)
-				})
-		}
+		_ = margaid.NewDefault(loop, checkpoint.Dir(), 100, 1.1, trainEvalDS, testEvalDS)
 	}
 
 	// Train for the selected *flagNumSteps

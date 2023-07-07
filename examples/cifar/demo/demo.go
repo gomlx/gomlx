@@ -21,8 +21,10 @@ import (
 	"flag"
 	"fmt"
 	"github.com/gomlx/gomlx/examples/cifar"
+	"github.com/gomlx/gomlx/examples/notebook/gonb/margaid"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
+	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/train"
@@ -30,15 +32,18 @@ import (
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
+	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
 	"log"
 	"os"
+	"time"
 )
 
 func AssertNoError(err error) {
 	if err != nil {
-		log.Fatalf("Failed: %+v", err)
+		panic(err)
 	}
 }
 
@@ -52,9 +57,9 @@ var (
 
 	// Training hyperparameters:
 	flagModel        = flag.String("model", "fnn", "Model type: fnn or cnn.")
-	flagOptimizer    = flag.String("optimizer", "adam", "Optimizer, options: adam or sgd.")
+	flagOptimizer    = flag.String("optimizer", "adamw", fmt.Sprintf("Optimizer, options: %v", slices.Keys(optimizers.KnownOptimizers)))
 	flagNumSteps     = flag.Int("steps", 2000, "Number of gradient descent steps to perform")
-	flagBatchSize    = flag.Int("batch", 100, "Batch size for training")
+	flagBatchSize    = flag.Int("batch", 50, "Batch size for training")
 	flagLearningRate = flag.Float64("learning_rate", 0.0001, "Initial learning rate.")
 	flagEval         = flag.Bool("eval", true, "Whether to evaluate the model on the validation data in the end.")
 
@@ -63,19 +68,22 @@ var (
 	flagNumNodes         = flag.Int("num_nodes", 128, "Number of nodes in hidden layers.")
 	flagDropoutRate      = flag.Float64("dropout", 0, "Dropout rate")
 	flagL2Regularization = flag.Float64("l2_reg", 0, "L2 regularization on kernels. It doesn't interact well with --batch_norm.")
-	flagNormalization    = flag.String("norm", "batch", "Type of normalization to use. Valid values are \"none\", \"batch\", \"layer\".")
+	flagNormalization    = flag.String("norm", "layer", "Type of normalization to use. Valid values are \"none\", \"batch\", \"layer\".")
 
 	// UI
-	flagUseProgressBar = flag.Bool("bar", true, "If to display a progress bar during training")
+	flagPlots = flag.Bool("plots", true, "Plots during training: perform periodic evaluations, "+
+		"save results if --checkpoint is set and draw plots, if in a Jupyter notebook.")
 
-	// All data, kept in memory since it usually fits, and makes things much faster and easier.
-	images10, labels10, images100, labels100 tensor.Tensor
+	// Checkpointing.
+	flagCheckpoint     = flag.String("checkpoint", "", "Directory save and load checkpoints from. If left empty, no checkpoints are created.")
+	flagCheckpointKeep = flag.Int("checkpoint_keep", 10, "Number of checkpoints to keep, if --checkpoint is set.")
 )
 
-// Flat type used for the demo.
-var dtype = shapes.Float32
+// DType used in the mode.
+var DType = shapes.Float32
 
-const EvalBatchSize = 2000 // Can be larger than training, more efficient.
+// EvalBatchSize can be larger than training, it's more efficient.
+const EvalBatchSize = 2000
 
 func main() {
 	flag.Parse()
@@ -99,12 +107,7 @@ func trainModel() {
 	fmt.Printf("Platform: %s\n", manager.Platform())
 
 	// Create datasets used for training and evaluation.
-	trainDS, err := cifar.NewDataset("Cifar-10 Batched Train", *flagDataDir, cifar.C10, dtype, cifar.Train, *flagBatchSize, false) // loops forever.
-	AssertNoError(err)
-	evalOnTestDS, err := cifar.NewDataset("Cifar-10 Test", *flagDataDir, cifar.C10, dtype, cifar.Test, EvalBatchSize, true) // 1 epoch.
-	AssertNoError(err)
-	evalOnTrainDS, err := cifar.NewDataset("Cifar-10 Train", *flagDataDir, cifar.C10, dtype, cifar.Train, EvalBatchSize, true) // 1 epoch.
-	AssertNoError(err)
+	trainDS, evalOnTrainDS, evalOnTestDS := CreateDatasets(manager, *flagDataDir)
 
 	// Create closure for model graph building function, that uses statically the dataset
 	// used for its Dataset.GatherImage, to convert image indices to the actual images.
@@ -123,6 +126,22 @@ func trainModel() {
 	ctx.SetParam(optimizers.LearningRateKey, *flagLearningRate)
 	ctx.SetParam(layers.L2RegularizationKey, *flagL2Regularization)
 
+	// Checkpoints saving.
+	var checkpoint *checkpoints.Handler
+	if *flagCheckpoint != "" {
+		var err error
+		checkpoint, err = checkpoints.Build(ctx).
+			DirFromBase(*flagCheckpoint, *flagDataDir).Keep(*flagCheckpointKeep).Done()
+		if err != nil {
+			panic(err)
+		}
+		fmt.Printf("Checkpointing model to %q\n", checkpoint.Dir())
+		globalStep := optimizers.GetGlobalStepVar(ctx).Value().Value().(int)
+		if globalStep != 0 {
+			fmt.Printf("Restarting training from global_step=%d\n", globalStep)
+		}
+	}
+
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
 	trainer := train.NewTrainer(manager, ctx, modelFn,
@@ -133,15 +152,32 @@ func trainModel() {
 
 	// Use standard training loop.
 	loop := train.NewLoop(trainer)
-	if *flagUseProgressBar {
-		commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
+	loop.ReadGlobalStep(ctx)            // Make sure it restarts from previous global step, if one is set.
+	commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
+
+	// Attach a checkpoint: checkpoint every 1 minute of training.
+	if checkpoint != nil {
+		period := time.Minute * 1
+		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
+			func(loop *train.Loop, metrics []tensor.Tensor) error {
+				fmt.Printf("\n[saving checkpoint@%d] [median train step (ms): %d]\n", loop.LoopStep, loop.MedianTrainStepDuration().Milliseconds())
+				return checkpoint.Save()
+			})
+	}
+
+	// Attach a margaid plots: plot points at exponential steps,
+	// that are saved along the checkpoint directory (if one is given).
+	if *flagPlots {
+		_ = margaid.NewDefault(loop, checkpoint.Dir(), 100, 1.1, evalOnTrainDS, evalOnTestDS)
 	}
 
 	// Loop for given number of steps.
-	_, err = loop.RunSteps(trainDS, *flagNumSteps)
+	_, err := loop.RunSteps(trainDS, *flagNumSteps)
 	AssertNoError(err)
+	fmt.Printf("\t[Step %d] median train step: %d microseconds\n",
+		loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
 
-	// Finally print an evaluation on train and test datasets.
+	// Finally, print an evaluation on train and test datasets.
 	if *flagEval {
 		fmt.Println()
 		err = commandline.ReportEval(trainer, evalOnTestDS, evalOnTrainDS)
@@ -152,7 +188,17 @@ func trainModel() {
 	cifar.ResetCache()
 }
 
+func CreateDatasets(manager *Manager, dataDir string) (trainDS, trainEvalDS, validationEvalDS train.Dataset) {
+	baseTrain := cifar.NewDataset(manager, "Training", dataDir, cifar.C10, DType, cifar.Train)
+	baseTest := cifar.NewDataset(manager, "Validation", dataDir, cifar.C10, DType, cifar.Test)
+	trainDS = baseTrain.Copy().BatchSize(*flagBatchSize, true).Shuffle().Infinite(true)
+	trainEvalDS = baseTrain.BatchSize(EvalBatchSize, false)
+	validationEvalDS = baseTest.BatchSize(EvalBatchSize, false)
+	return
+}
+
 func normalizeImage(ctx *context.Context, x *Node) *Node {
+	x.AssertRank(4) // [batch_size, width, height, depth]
 	switch *flagNormalization {
 	case "layer":
 		return layers.LayerNormalization(ctx, x, 1, 2).ScaleNormalization(false).Done()
@@ -161,12 +207,12 @@ func normalizeImage(ctx *context.Context, x *Node) *Node {
 	case "none":
 		return x
 	}
-	g := x.Graph()
-	g.SetErrorf("invalid normalization selected %q -- valid values are batch, layer, none", *flagNormalization)
-	return g.InvalidNode()
+	Panicf("invalid normalization selected %q -- valid values are batch, layer, none", *flagNormalization)
+	return nil
 }
 
 func normalizeFeatures(ctx *context.Context, x *Node) *Node {
+	x.AssertRank(2) // [batch_size, embedding_dim]
 	switch *flagNormalization {
 	case "layer":
 		return layers.LayerNormalization(ctx, x, -1).Done()
@@ -175,41 +221,12 @@ func normalizeFeatures(ctx *context.Context, x *Node) *Node {
 	case "none":
 		return x
 	}
-	g := x.Graph()
-	g.SetErrorf("invalid normalization selected %q -- valid values are batch, layer, none", *flagNormalization)
-	return g.InvalidNode()
-}
-
-func getBatchedImages(ctx *context.Context, spec any, inputs []*Node) (batchedImages *Node) {
-	g := inputs[0].Graph()
-	if !g.Ok() {
-		return nil
-	}
-
-	if spec != nil {
-		// spec should hold the dataset that converts the image indices to the actual
-		// images, by gathering from a large variable that holds all the images.
-		dataset, ok := spec.(*cifar.Dataset)
-		if !ok {
-			g.SetErrorf("spec given to FNNModelGraph is not a *cifarDataset, instead got %T", spec)
-			return nil
-		}
-		// We assume that batchedImages passed is actually a list of indices, and we need to gather
-		// the actual images.
-		batchedImages = dataset.GatherImagesGraph(ctx, inputs[0])
-	} else {
-		// If a spec was not given, we assume the raw images are being fed for inference.
-		batchedImages = inputs[0]
-	}
-	if !batchedImages.Ok() {
-		g.SetErrorf("failed to load batch of images")
-		return nil
-	}
-	return
+	Panicf("invalid normalization selected %q -- valid values are batch, layer, none", *flagNormalization)
+	return nil
 }
 
 // FNNModelGraph implements train.ModelFn, and returns the logit Node, given the input image.
-// It's a very simple FNN (Feedforward Neural Network), so no convolutions. It is meant only as an example.
+// It's a basic FNN (Feedforward Neural Network), so no convolutions. It is meant only as an example.
 //
 // If dataset is not nil, assumes batchImage contain instead indices, and that the images need to be
 // gathered from the dataset table (cifar.Dataset.GatherImagesGraph).
@@ -218,13 +235,7 @@ func getBatchedImages(ctx *context.Context, spec any, inputs []*Node) (batchedIm
 // to create a small closure for that, see above for an example.
 func FNNModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	g := inputs[0].Graph()
-	if !g.Ok() {
-		return nil
-	}
-	batchedImages := getBatchedImages(ctx, spec, inputs)
-	if !g.Ok() {
-		return nil
-	}
+	batchedImages := inputs[0]
 	batchSize := batchedImages.Shape().Dimensions[0]
 	logits := Reshape(batchedImages, batchSize, -1)
 	{
@@ -260,13 +271,7 @@ func FNNModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 // to create a small closure for that, see above for an example.
 func CNNModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	g := inputs[0].Graph()
-	if !g.Ok() {
-		return nil
-	}
-	batchedImages := getBatchedImages(ctx, spec, inputs)
-	if !g.Ok() {
-		return nil
-	}
+	batchedImages := inputs[0]
 	batchSize := batchedImages.Shape().Dimensions[0]
 	logits := batchedImages
 	{
