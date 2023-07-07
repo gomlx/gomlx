@@ -21,6 +21,7 @@ import (
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/losses"
+	"github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	timage "github.com/gomlx/gomlx/types/tensor/image"
@@ -50,11 +51,7 @@ var nanLogger *nanlogger.NanLogger
 // of the signal/noise ratio.
 func SinusoidalEmbedding(x *Node) *Node {
 	Init()
-
 	g := x.Graph()
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 
 	// Generate geometrically spaced frequencies: only 1/2 of *flagEmbeddingDims because we use half for Sine, half for Cosine.
 	halfEmbed := *flagEmbeddingDims / 2
@@ -111,13 +108,7 @@ func ActivationLayer(x *Node) *Node {
 //
 // The parameter `x` must be of rank 4, shaped `[batchSize, height, width, channels]`.
 func ResidualBlock(ctx *context.Context, x *Node, outputChannels int) *Node {
-	g := x.Graph()
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
-	if !x.AssertRank(4) {
-		return g.InvalidNode()
-	}
+	x.AssertRank(4)
 	inputChannels := x.Shape().Dimensions[3]
 	residual := x
 	if inputChannels != outputChannels {
@@ -147,9 +138,6 @@ func TransformerBlock(ctx *context.Context, x *Node) *Node {
 		return x
 	}
 	g := x.Graph()
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	batchDim := x.Shape().Dimensions[0]
 	embedDim := x.Shape().Dimensions[3]
 
@@ -271,10 +259,6 @@ func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds
 	numChannelsList := *flagChannelsList
 	numBlocks := *flagNumBlocks
 
-	g := noisyImages.Graph()
-	if !g.Ok() {
-		return g.InvalidNode()
-	}
 	nanLogger.Trace(noisyImages)
 	nanLogger.Trace(noiseVariances)
 
@@ -329,8 +313,7 @@ func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds
 		nanLogger.PopScope()
 	}
 	if len(skips) != 0 {
-		g.SetErrorf("Ended with %d skips not accounted for!?", len(skips))
-		return g.InvalidNode()
+		exceptions.Panicf("Ended with %d skips not accounted for!?", len(skips))
 	}
 
 	// Output initialized to 0, which is the mean of the target.
@@ -421,8 +404,7 @@ func TrainingModelGraph(ctx *context.Context, _ any, inputs []*Node) []*Node {
 	case "mse":
 		lossFn = losses.MeanSquaredError
 	default:
-		g.SetErrorf("Invalid value for --loss=%q. Valid values are \"mae\" or \"mse\"", *flagLoss)
-		return nil
+		exceptions.Panicf("Invalid value for --loss=%q. Valid values are \"mae\" or \"mse\"", *flagLoss)
 	}
 	noisesLoss := lossFn([]*Node{noises}, []*Node{predictedNoises})
 	imagesLoss := lossFn([]*Node{images}, []*Node{predictedImages})

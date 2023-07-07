@@ -8,7 +8,6 @@ import (
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"testing"
 )
 
@@ -22,7 +21,6 @@ func TestUNetModelGraph(t *testing.T) {
 	flowerIds := Zeros(g, shapes.Make(shapes.I32, numExamples))
 	fmt.Printf("  noisyImages.shape:\t%s\n", noisyImages.Shape())
 	filtered := UNetModelGraph(ctx, noisyImages, Ones(g, shapes.Make(DType, numExamples, 1, 1, 1)), flowerIds)
-	require.NoError(t, g.Error())
 	assert.True(t, noisyImages.Shape().Eq(filtered.Shape()), "Filtered images after UNetModelGraph should have the same shape as its input images")
 	fmt.Printf("     filtered.shape:\t%s\n", filtered.Shape())
 	fmt.Printf("U-Net Model #params:\t%d\n", ctx.NumParameters())
@@ -40,7 +38,6 @@ func TestTrainingModelGraph(t *testing.T) {
 	flowerIds := Zeros(g, shapes.Make(shapes.I32, numExamples))
 	fmt.Printf("         images.shape:\t%s\n", images.Shape())
 	predictions := TrainingModelGraph(ctx, nil, []*Node{images, imageIds, flowerIds})
-	require.NoError(t, g.Error())
 	predictedImages, loss := predictions[0], predictions[1]
 	assert.True(t, predictedImages.Shape().Eq(images.Shape()), "Original images and predicted images shape differ!?")
 	assert.True(t, loss.Shape().IsScalar(), "Loss must be scalar.")

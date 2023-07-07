@@ -5,7 +5,11 @@ import (
 	"testing"
 )
 
-func TestMain(t *testing.T) {
+func TestDemo(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping testing in short mode")
+		return
+	}
 	flag.Parse()
 	*flagNumSteps = 10
 	*flagPlatform = "Host"
