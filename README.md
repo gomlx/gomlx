@@ -89,7 +89,7 @@ The library depends on the following libraries to compile and run:
 Typically, this can be installed with:
 
 ```bash
-sudo apt-get install libunwind8 libgoogle-perftools-dev liblzma5
+sudo apt-get install libunwind8 libgoogle-perftools-dev liblzma5 hdf5-tools
 ```
 
 Second you need the pre-compiled GoMLX+XLA C library, included in each release. The library is pretty large,
