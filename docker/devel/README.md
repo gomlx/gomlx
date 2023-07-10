@@ -18,10 +18,12 @@ docker pull janpfeifer/gomlx_devel:latest
 docker run -it -w /mnt -v "${PWD}":/mnt -e HOST_PERMS="$(id -u):$(id -g)" janpfeifer/gomlx_devel:latest
 ```
 
-If you have GPU(s) and want to make them accessible, use instead:
+If you have GPU(s) and want to make them accessible (you need the 
+[NVidia Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
+installed to add GPU support for _docker_) use instead:
 
 ```bash
-docker run -it --gpus all --rm -p 8888:8888 -v "${PWD}":/home/gomlx/work janpfeifer/gomlx_jupyterlab:latest
+docker run -it --gpus all -w /mnt -v "${PWD}":/mnt -e HOST_PERMS="$(id -u):$(id -g)" janpfeifer/gomlx_devel:latest
 ```
 
 ### Building the Docker
