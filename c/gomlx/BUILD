@@ -39,6 +39,7 @@ gomlx_jit_deps = [
 
     # AOT-Compilation: StableHLO conversion,
     "@stablehlo//:stablehlo_serialization",
+    "@stablehlo//:stablehlo_portable_api",
 
     # CPU (Host) stream executor / platform support.
     "@xla//xla/service:cpu_plugin",

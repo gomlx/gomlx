@@ -1,6 +1,6 @@
 # GoMLX changelog
 
-## Next
+## v0.5.0 - 2023/07/10
 
 * Error handling revamp: using `panic` to report errors — it works as exceptions. This is a very large change
   affecting most of the code.
@@ -10,6 +10,7 @@
   * UCI-Adult: replaced `adult.Dataset` to the much simpler and powerful `data.InMemoryDataset`.
 * Remove `tensor.Local.Data()`: now all access is done throw the `tensor.Local.AcquireData()` and release, to
   prevent a race condition with the garbage collector.
+* Update of XLA C++ library.
 
 ## v0.4.1
 

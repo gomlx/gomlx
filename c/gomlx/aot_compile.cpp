@@ -43,6 +43,7 @@
 #include "mlir/Pass/PassManager.h" // from @llvm-project
 
 #include "stablehlo/dialect/Serialization.h"
+#include "stablehlo/api/PortableApi.h"
 
 #include "xla/array.h"
 #include "xla/client/client.h"
