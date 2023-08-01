@@ -82,11 +82,12 @@ func _() {
 	_ = x[RngBitGeneratorNode-71]
 	_ = x[RngNormalNode-72]
 	_ = x[RngUniformNode-73]
+	_ = x[FftNode-74]
 }
 
-const _NodeType_name = "InvalidNodeConstantNodeIotaNodeParameterNodeConvertTypeNodeWhereNodeTupleNodeGetTupleElementNodeReshapeNodeBroadcastNodeBroadcastInDimNodeReduceSumNodeReduceMaxNodeReduceMultiplyNodeSliceNodePadNodeGatherNodeScatterNodeConcatenateNodeConvGeneralDilatedNodeReverseNodeTransposeNodeReduceWindowNodeSelectAndScatterNodeBatchNormTrainingNodeBatchNormInferenceNodeBatchNormGradNodeDotGeneralNodeArgMinMaxNodeAbsNodeNegNodeExpNodeExpm1NodeFloorNodeCeilNodeRoundNodeLogNodeLog1pNodeLogicalNotNodeLogisticNodeSignNodeClzNodeCosNodeSinNodeTanhNodeSqrtNodeRsqrtNodeAddNodeMulNodeSubNodeDivNodeRemNodeAndNodeOrNodeXorNodeDotNodeMinNodeMaxNodePowNodeEqualNodeNotEqualNodeGreaterOrEqualNodeGreaterThanNodeLessOrEqualNodeLessThanNodeEqualTotalOrderNodeNotEqualTotalOrderNodeGreaterOrEqualTotalOrderNodeGreaterThanTotalOrderNodeLessOrEqualTotalOrderNodeLessThanTotalOrderNodeRngBitGeneratorNodeRngNormalNodeRngUniformNode"
+const _NodeType_name = "InvalidNodeConstantNodeIotaNodeParameterNodeConvertTypeNodeWhereNodeTupleNodeGetTupleElementNodeReshapeNodeBroadcastNodeBroadcastInDimNodeReduceSumNodeReduceMaxNodeReduceMultiplyNodeSliceNodePadNodeGatherNodeScatterNodeConcatenateNodeConvGeneralDilatedNodeReverseNodeTransposeNodeReduceWindowNodeSelectAndScatterNodeBatchNormTrainingNodeBatchNormInferenceNodeBatchNormGradNodeDotGeneralNodeArgMinMaxNodeAbsNodeNegNodeExpNodeExpm1NodeFloorNodeCeilNodeRoundNodeLogNodeLog1pNodeLogicalNotNodeLogisticNodeSignNodeClzNodeCosNodeSinNodeTanhNodeSqrtNodeRsqrtNodeAddNodeMulNodeSubNodeDivNodeRemNodeAndNodeOrNodeXorNodeDotNodeMinNodeMaxNodePowNodeEqualNodeNotEqualNodeGreaterOrEqualNodeGreaterThanNodeLessOrEqualNodeLessThanNodeEqualTotalOrderNodeNotEqualTotalOrderNodeGreaterOrEqualTotalOrderNodeGreaterThanTotalOrderNodeLessOrEqualTotalOrderNodeLessThanTotalOrderNodeRngBitGeneratorNodeRngNormalNodeRngUniformNodeFftNode"
 
-var _NodeType_index = [...]uint16{0, 11, 23, 31, 44, 59, 68, 77, 96, 107, 120, 138, 151, 164, 182, 191, 198, 208, 219, 234, 256, 267, 280, 296, 316, 337, 359, 376, 390, 403, 410, 417, 424, 433, 442, 450, 459, 466, 475, 489, 501, 509, 516, 523, 530, 538, 546, 555, 562, 569, 576, 583, 590, 597, 603, 610, 617, 624, 631, 638, 647, 659, 677, 692, 707, 719, 738, 760, 788, 813, 838, 860, 879, 892, 906}
+var _NodeType_index = [...]uint16{0, 11, 23, 31, 44, 59, 68, 77, 96, 107, 120, 138, 151, 164, 182, 191, 198, 208, 219, 234, 256, 267, 280, 296, 316, 337, 359, 376, 390, 403, 410, 417, 424, 433, 442, 450, 459, 466, 475, 489, 501, 509, 516, 523, 530, 538, 546, 555, 562, 569, 576, 583, 590, 597, 603, 610, 617, 624, 631, 638, 647, 659, 677, 692, 707, 719, 738, 760, 788, 813, 838, 860, 879, 892, 906, 913}
 
 func (i NodeType) String() string {
 	if i < 0 || i >= NodeType(len(_NodeType_index)-1) {

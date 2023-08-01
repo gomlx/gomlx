@@ -1,5 +1,10 @@
 # GoMLX changelog
 
+## Next
+
+* FFT, RealFFT, InverseFFT and InverseRealFFT operations.
+* Added Complex128 and Complex64 support. 
+
 ## v0.5.0 - 2023/07/10
 
 * Error handling revamp: using `panic` to report errors — it works as exceptions. This is a very large change
