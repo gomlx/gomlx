@@ -79,6 +79,7 @@ enum NodeType {
     BatchNormGradNode,
     DotGeneralNode,
     ArgMinMaxNode,
+    FftNode,
 
     // One-argument ops:
     AbsNode,
@@ -99,6 +100,8 @@ enum NodeType {
     TanhNode,
     SqrtNode,
     RsqrtNode,
+    ImagNode,
+    RealNode,
 
     // Two-arguments ops:
     AddNode,
