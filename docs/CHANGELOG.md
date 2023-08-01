@@ -3,7 +3,7 @@
 ## Next
 
 * FFT, RealFFT, InverseFFT and InverseRealFFT operations.
-* Added Complex128 and Complex64 support. 
+* Added Complex128 and Complex64 support, and Imag/Real operations.
 
 ## v0.5.0 - 2023/07/10
 

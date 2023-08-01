@@ -94,6 +94,8 @@ const (
 	TanhNode
 	SqrtNode
 	RsqrtNode
+	ImagNode
+	RealNode
 
 	// Two-arguments ops:
 
