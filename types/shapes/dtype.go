@@ -17,6 +17,7 @@
 package shapes
 
 import (
+	"github.com/pkg/errors"
 	"math"
 	"reflect"
 	"unsafe"
@@ -105,11 +106,19 @@ type Supported interface {
 	bool | float32 | float64 | int | int32 | uint8 | uint32 | uint64 | complex64 | complex128
 }
 
-// Number represents the Go numeric types that are supported by graph package. Used as a Generics constraint.
-// Notice that "int" becomes int64 in the implementation. Since it needs a 1:1 mapping, it doesn't support the native
-// (Go) int64 type.
-// It excludes complex numbers.
+// Number represents the Go numeric types that are supported by graph package.
+// Used as a Generics constraint.
+// Notice that "int" becomes int64 in the implementation.
+// Since it needs a 1:1 mapping, it doesn't support the native (Go) int64 type.
+// It includes complex numbers.
 type Number interface {
+	float32 | float64 | int | int32 | uint8 | uint32 | uint64 | complex64 | complex128
+}
+
+// NumberNotComplex represents the Go numeric types that are supported by graph package except the complex numbers.
+// Used as a Generics constraint.
+// See Number for details.
+type NumberNotComplex interface {
 	float32 | float64 | int | int32 | uint8 | uint32 | uint64
 }
 
@@ -164,8 +173,10 @@ func DTypeGeneric[T Supported]() DType {
 // ConvertTo converts any scalar (typically returned by `tensor.Local.Value()`) of the
 // supported dtypes to `T`.
 // Returns 0 if value is not a scalar or not a supported number (e.g: bool).
-// It doesn't work for complex numbers.
-func ConvertTo[T Number](value any) T {
+// It doesn't work for if T (the output type) is a complex number.
+// If value is a complex number, it converts by taking the real part of the number and
+// discarding the imaginary part.
+func ConvertTo[T NumberNotComplex](value any) T {
 	switch v := value.(type) {
 	case float32:
 		return T(v)
@@ -181,6 +192,10 @@ func ConvertTo[T Number](value any) T {
 		return T(v)
 	case uint64:
 		return T(v)
+	case complex64:
+		return T(real(v))
+	case complex128:
+		return T(real(v))
 	}
 	return T(0)
 }
@@ -279,6 +294,12 @@ func (dtype DType) Memory() int64 {
 	return int64(t.Size())
 }
 
+// Pre-generate constant reflect.TypeOf for convenience.
+var (
+	float32Type = reflect.TypeOf(float32(0))
+	float64Type = reflect.TypeOf(float64(0))
+)
+
 // CastAsDType casts a numeric value to the corresponding for the DType.
 // If the value is a slice it will convert to a newly allocated slice of
 // the given DType.
@@ -290,11 +311,19 @@ func CastAsDType(value any, dtype DType) any {
 	newTypeOf := typeForSliceDType(typeOf, dtype)
 	if typeOf.Kind() != reflect.Slice && typeOf.Kind() != reflect.Array {
 		// Scalar value.
-		if newTypeOf.Kind() == reflect.Bool {
+		if dtype == Bool {
 			return !valueOf.IsZero()
 		}
+		if dtype == Complex64 {
+			r := valueOf.Convert(float32Type).Interface().(float32)
+			return complex(r, float32(0))
+		}
+		if dtype == Complex128 {
+			r := valueOf.Convert(float64Type).Interface().(float64)
+			return complex(r, float64(0))
+		}
 		// TODO: if adding support for non-native Go types (e.g: B16), we need
-		// to write our own conversion here.
+		//       to write our own conversion here.
 		return valueOf.Convert(newTypeOf).Interface()
 	}
 
@@ -306,16 +335,21 @@ func CastAsDType(value any, dtype DType) any {
 	return newValueOf.Interface()
 }
 
+// typeForSliceDType recursively converts a type that is a (multi-dimension-) slice
+// of some type, to a `reflect.Type` of a (multi-dimension-) slice of `dtype`.
+// Arrays are converted to slices.
 func typeForSliceDType(valueType reflect.Type, dtype DType) reflect.Type {
 	if valueType.Kind() != reflect.Slice && valueType.Kind() != reflect.Array {
+		// Base case for recursion, simply return the `reflect.Type` for the DType.
 		return TypeForDType(dtype)
 	}
 	subType := typeForSliceDType(valueType.Elem(), dtype)
-	return reflect.SliceOf(subType)
+	return reflect.SliceOf(subType) // Return a slice of the recursively converted type.
 }
 
 // LowestValueForDType converted to the corresponding Go type.
-// For float values it will return negative infinites.
+// For float values it will return negative infinite.
+// There is no lowest value for complex numbers, since they are not ordered.
 func LowestValueForDType(dtype DType) any {
 	switch dtype {
 	case Int64:
@@ -335,12 +369,13 @@ func LowestValueForDType(dtype DType) any {
 	case UInt64:
 		return uint64(0)
 	}
-	return math.NaN()
+	panic(errors.Errorf("LowestValueForDType not defined for dtype %s", dtype))
 }
 
 // SmallestNonZeroValueForDType is the smallest non-zero value dtypes.
 // Only useful for float types.
 // The return value is converted to the corresponding Go type.
+// There is no smallest non-zero value for complex numbers, since they are not ordered.
 func SmallestNonZeroValueForDType(dtype DType) any {
 	switch dtype {
 	case Int64:
@@ -360,5 +395,5 @@ func SmallestNonZeroValueForDType(dtype DType) any {
 	case UInt64:
 		return uint64(1)
 	}
-	return math.NaN()
+	panic(errors.Errorf("SmallestNonZeroValueForDType not defined for dtype %s", dtype))
 }
