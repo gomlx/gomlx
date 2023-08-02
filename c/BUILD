@@ -24,13 +24,19 @@ genrule(
     name = "gomlx_xla_lib",
     srcs = [
         "//gomlx:libgomlx_xla.so",
+        "@gperftools//:libtcmalloc.a",
         # "//gomlx/aot:libgomlx_xla.so",
     ],
     outs = ["lib"],
     cmd = """
     mkdir "$@"
     ln $(location //gomlx:libgomlx_xla.so) "$@"
-  """,
+    GPERFTOOLS_LIB="$$(pwd)/$$(dirname $(location @gperftools//:libtcmalloc.a))"
+    if [ -d "$$GPERFTOOLS_LIB"/lib ]; then
+      GPERFTOOLS_LIB="$$GPERFTOOLS_LIB"/lib
+    fi
+    ln "$$GPERFTOOLS_LIB"/lib* "$@"
+    """,
 )
 
 # Tar packaging: notice we force date/time and ordering to be deterministic, to generate the
@@ -50,7 +56,15 @@ genrule(
         files="$${files} $$(basename $${ii})"
     done
     echo "$${files}"
-    tar --create --dereference --directory="$${tt}" \
+    TAR=tar
+    if [[ "$$OSTYPE" == "darwin"* ]]; then
+        if ! command -v gtar &> /dev/null; then
+            echo -e "\\033[0;31mgtar (gnu-tar) cannot not be found. gnu-tar can be installed using:\nbrew install gnu-tar"
+        exit
+        fi
+        TAR=gtar
+    fi
+    $$TAR --create --dereference --directory="$${tt}" \
         --sort=name --mtime="2023-04-03 00:00Z" --owner=0 --group=0 --numeric-owner --format=gnu \
         --gzip --file "$@" $${files}
     rm -rf "$${tt}"
