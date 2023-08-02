@@ -10,7 +10,7 @@ cases.
 
 ## Quick Start: see our [tutorial](examples/tutorial/tutorial.ipynb), or a [guided example for Kaggle Dogs Vs Cats using GoMLX](examples/dogsvscats/dogsvscats.ipynb).
 
-![GoMLX Gopher](docs/gomlx_gopher.jpg)
+<img src="docs/gomlx_gopher.jpg" alt="GoMLX Gopher" width="50%" height="50%"/>
 
 It was developed primarily as a platform to easily experiment with ML ideas, and to
 allow one to use Go for ML. Hopefully it can grow beyond that -- see Long-Term Goals below.
