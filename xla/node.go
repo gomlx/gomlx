@@ -31,10 +31,10 @@ type NodeType int32
 
 //go:generate stringer -type=NodeType node.go
 
-// XlaWrapperVersion is the version of library. It should match the C++ one, if they are out-of-sync
-// very odd mistakes happen.
+// XlaWrapperVersion is the version of the library.
+// It should match the C++ one, if they are out-of-sync very odd mistakes happen.
 //
-// Please bump whenever a new NodeType is created, and keep the C++ (in `node.h`) and Go version numbers
+// Please bump whenever a new NodeType is created, and keep the C++ (in `c/gomlx/status.h`) and Go version numbers
 // in sync.
 const XlaWrapperVersion = 14
 
@@ -73,6 +73,7 @@ const (
 	BatchNormGradNode
 	DotGeneralNode
 	ArgMinMaxNode
+	FftNode
 
 	// One-argument ops:
 
@@ -132,7 +133,6 @@ const (
 	RngBitGeneratorNode
 	RngNormalNode
 	RngUniformNode
-	FftNode
 )
 
 // RandomAlgorithm should be aligned with constants in `xla_data.proto` file is the XLA code base.
