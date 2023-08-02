@@ -10,8 +10,9 @@ cases.
 
 ## Quick Start: see our [tutorial](examples/tutorial/tutorial.ipynb), or a [guided example for Kaggle Dogs Vs Cats](examples/dogsvscats/dogsvscats.ipynb).
 
+<div>
 <img src="docs/gomlx_gopher.jpg" align="left" alt="GoMLX Gopher" width="160" height="160"/>
-<p>It was developed to be feature full ML platform for Go, and to easily experiment with ML ideas. 
+<p>It was developed to be full-featured ML platform for Go, and to easily experiment with ML ideas. 
 Hopefully it can grow beyond that -- see Long-Term Goals below.</p>
 
 It strives to be **simple to read and reason about**, leading the user to a correct and transparent mental model 
@@ -20,6 +21,7 @@ At the cost of more typing (more verbose) at times.
 
 Documentation is kept up-to-date (if it is not well documented, it is as if the code is not there)
 and error messages are useful and try to make it easy to solve issues.
+</div>
 
 **GoMLX is still under development, and should be considered experimental for now.**
 
