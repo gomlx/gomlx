@@ -1,9 +1,11 @@
 # GoMLX changelog
 
-## Next
+## v0.6.0 - ...
 
 * FFT, RealFFT, InverseFFT and InverseRealFFT operations.
-* Added Complex128 and Complex64 support, and Imag/Real operations.
+* Added Complex/Imag/Real operations to manipulate complex numbers.
+* Added support for complex numbers for ConvertType. Defined gradient for ConvertType.
+* Added Complex128 and Complex64 support
 
 ## v0.5.0 - 2023/07/10
 

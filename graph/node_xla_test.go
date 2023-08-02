@@ -308,22 +308,3 @@ func TestGradDotGeneralXLABatchContractingCrossing(t *testing.T) {
 		}
 	}
 }
-
-func TestImagReal(t *testing.T) {
-	manager := buildTestManager()
-	testFuncOneInput(t, "dotGeneralXLA(lhs=Iota([3,2,4]), rhs=0.1*Ones([3,5,4]))",
-		func(g *Graph) (input, output *Node) {
-			input = IotaFull(g, shapes.Make(shapes.F32, 3, 2, 4))
-			input = OnePlus(input)
-			rhs := MulScalar(Ones(g, shapes.Make(shapes.F32, 3, 5, 4)), 0.1)
-			output = dotGeneralXLA(input, []int{2}, []int{0}, rhs, []int{2}, []int{0})
-			return
-		}, [][][]float32{
-			{
-				{1, 1, 1, 1, 1}, {2.6, 2.6, 2.6, 2.6, 2.6},
-			}, {
-				{4.2, 4.2, 4.2, 4.2, 4.2}, {5.8, 5.8, 5.8, 5.8, 5.8},
-			}, {
-				{7.4, 7.4, 7.4, 7.4, 7.4}, {9, 9, 9, 9, 9},
-			}})
-}

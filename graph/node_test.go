@@ -23,6 +23,7 @@ import (
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"math"
 	"reflect"
@@ -235,6 +236,24 @@ func TestParameter(t *testing.T) {
 	testTupleParameter(t, manager)
 }
 
+func TestConvertType(t *testing.T) {
+	// Test that number can be converted to complex types.
+	wantF32 := []float32{3.0, -5.0}
+	wantF64 := []float64{-7.0, 11.0}
+	graphtest.RunTestGraphFn(t, "ConvertToComplex", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = []*Node{
+			Const(g, wantF32),
+			Const(g, wantF64),
+		}
+		c64 := ConvertType(inputs[0], shapes.Complex64)
+		assert.Equal(t, shapes.Complex64, c64.DType())
+		c128 := ConvertType(inputs[1], shapes.Complex128)
+		assert.Equal(t, shapes.Complex128, c128.DType())
+		outputs = []*Node{Real(c64), Real(c128)}
+		return
+	}, []any{wantF32, wantF64}, -1)
+}
+
 type TwoArgsTestCase[T shapes.Number] struct {
 	fnGraph  func(x, y *Node) *Node
 	fnScalar func(x, y T) T
@@ -384,6 +403,16 @@ func TestOneArgOps(t *testing.T) {
 			t.Errorf("Wanted %v, got %v", want, got)
 		}
 	}
+
+	// Test imag/real for complex numbers.
+	graphtest.RunTestGraphFn(t, "RealAndImag()", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = []*Node{Const(g, []complex64{1.0, 0.0 + 1.0i})}
+		outputs = []*Node{Real(inputs[0]), Imag(inputs[0])}
+		return
+	}, []any{
+		[]float32{1.0, 0.0},
+		[]float32{0.0, 1.0},
+	}, -1)
 }
 
 func TestClzOp(t *testing.T) {
@@ -1070,4 +1099,25 @@ func TestArgMax(t *testing.T) {
 				[]uint8{0, 0, 0},
 			}, -1)
 	}
+}
+
+func TestComplex(t *testing.T) {
+	re := []float32{1.0, -3.0}
+	im := []float32{-5.0, 7.0}
+	re64 := []float64{11, 17}
+	graphtest.RunTestGraphFn(t, "Complex", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = []*Node{
+			Const(g, re),
+			Const(g, im),
+			Const(g, re64),
+		}
+		outputs = []*Node{
+			Complex(inputs[0], inputs[1]),
+			Complex(inputs[2], ScalarOne(g, inputs[2].DType())), // Test broadcast of scalar.
+		}
+		return
+	}, []any{
+		[]complex64{complex(re[0], im[0]), complex(re[1], im[1])},
+		[]complex128{complex(re64[0], 1.0), complex(re64[1], 1.0)},
+	}, -1)
 }

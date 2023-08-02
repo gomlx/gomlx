@@ -419,6 +419,12 @@ func Sqrt(x *Node) *Node { return oneArgNode(xla.SqrtNode, x) }
 // RSqrt adds the 1/sqrt(x) operation to the graph.
 func RSqrt(x *Node) *Node { return oneArgNode(xla.RsqrtNode, x) }
 
+// Imag returns the imaginary part of a complex number.
+func Imag(x *Node) *Node { return oneArgNode(xla.ImagNode, x) }
+
+// Real returns the real part of a complex number.
+func Real(x *Node) *Node { return oneArgNode(xla.RealNode, x) }
+
 // twoArgsNode is a helper function that implements ops that simply take 2 inputs.
 func twoArgsNode(nodeType xla.NodeType, x, y *Node) *Node {
 	g := validateGraphFromInputs(x, y)

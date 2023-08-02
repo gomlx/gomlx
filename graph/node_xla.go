@@ -421,22 +421,6 @@ func dotGeneralVJP(node, v *Node, _ shapes.Shape) []*Node {
 	}
 }
 
-// Imag returns the imaginary part of a complex number.
-func Imag(operand *Node) *Node {
-	g := validateGraphFromInputs(operand)
-	return newNode(g, &xla.SerializedNode{
-		Type: xla.ImagNode,
-	}, []*Node{operand})
-}
-
-// Real returns the real part of a complex number.
-func Real(operand *Node) *Node {
-	g := validateGraphFromInputs(operand)
-	return newNode(g, &xla.SerializedNode{
-		Type: xla.RealNode,
-	}, []*Node{operand})
-}
-
 // fftXLA calls the XLA FFT operation, which implements {Forward, Inverse} x {Complex, Real} versions.
 //
 // See documentation in https://www.tensorflow.org/xla/operation_semantics.

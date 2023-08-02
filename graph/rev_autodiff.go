@@ -81,6 +81,7 @@ type reverseNode struct {
 
 // The jacobian
 func combineOutputShape(outputShape, inputShape shapes.Shape) shapes.Shape {
+	outputShape.DType = inputShape.DType // Make sure they are the same.
 	return shapes.ConcatenateDimensions(outputShape, inputShape)
 }
 
@@ -198,9 +199,9 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 			combinedShape := combineOutputShape(outputShape, input.shape)
 			if !vjp.shape.Eq(combinedShape) {
 				Panicf("invalid Gradient calculation for node %q: invalid shape for calculated VJP for "+
-					"input #%d (out of %d): input shape=%s, calculated VJP shape=%s"+
+					"input #%d (out of %d): input shape=%s, calculated VJP shape=%s (wanted %s)"+
 					" -- this probably indicates a bug in the code, please report the issue.",
-					node, ii, len(node.Inputs()), input.shape, vjp.shape)
+					node, ii, len(node.Inputs()), input.shape, vjp.shape, combinedShape)
 			}
 			rInput := rg.ReverseNodes[input.Id()]
 			if rInput.VJP == nil {
@@ -314,6 +315,7 @@ type VJP func(node, v *Node, outputShape shapes.Shape) []*Node
 var VJPRegistration = map[xla.NodeType]VJP{
 	xla.ConstantNode:           nilVJP,
 	xla.ParameterNode:          nilVJP,
+	xla.ConvertTypeNode:        convertTypeVJP,
 	xla.WhereNode:              whereVJP,
 	xla.NegNode:                negVJP,
 	xla.AbsNode:                absVJP,
@@ -326,6 +328,8 @@ var VJPRegistration = map[xla.NodeType]VJP{
 	xla.MulNode:                mulVJP,
 	xla.DivNode:                divVJP,
 	xla.SqrtNode:               sqrtVJP,
+	xla.RealNode:               realVJP,
+	xla.ImagNode:               imagVJP,
 	xla.MaxNode:                minMaxVJP,
 	xla.MinNode:                minMaxVJP,
 	xla.ReshapeNode:            reshapeVJP,
@@ -342,6 +346,7 @@ var VJPRegistration = map[xla.NodeType]VJP{
 	xla.BatchNormTrainingNode:  batchNormTrainingVJP,
 	xla.TransposeNode:          transposeVJP,
 	xla.BroadcastInDimNode:     broadcastInDimVJP,
+	xla.FftNode:                fftVJP,
 }
 
 // nilVJP returns no gradient, for functions without any inputs.
@@ -373,6 +378,13 @@ func vjpForDefaultBroadcast(node, input, v *Node) *Node {
 	// Since ReduceSum collapsed those reduced dimensions of now size 1, we need to reshape it back to the
 	// original input format.
 	return ReshapeWithShape(reduced, input.shape)
+}
+
+// Gradient of the type conversion, just converts back the adjunt dtype to
+// its input dtype.
+func convertTypeVJP(node, v *Node, _ shapes.Shape) []*Node {
+	_ = node
+	return []*Node{ConvertType(v, node.inputs[0].DType())}
 }
 
 func negVJP(node, v *Node, _ shapes.Shape) []*Node {
@@ -408,6 +420,20 @@ func tanhVJP(node, v *Node, _ shapes.Shape) []*Node {
 func sqrtVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// d(x^0.5)/dx = 0.5 * x^(-0.5) = 0.5/sqrt(x)
 	return []*Node{Mul(v, MulScalar(Inverse(node), 0.5))}
+}
+
+// realVJP projects v back to a complex number -- the gradient on the imaginary
+// is zero.
+func realVJP(node, v *Node, _ shapes.Shape) []*Node {
+	g := node.Graph()
+	return []*Node{Complex(v, ScalarZero(g, v.DType()))}
+}
+
+// imagVJP projects v back to a complex number -- the gradient on the real part
+// is zero.
+func imagVJP(node, v *Node, _ shapes.Shape) []*Node {
+	g := node.Graph()
+	return []*Node{Complex(ScalarZero(g, v.DType()), v)}
 }
 
 func addVJP(node, v *Node, _ shapes.Shape) []*Node {
