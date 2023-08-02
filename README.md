@@ -8,19 +8,18 @@ It's the same engine that powers Google's
 [Jax](https://github.com/google/jax) and [TensorFlow](https://tensorflow.org/), and it has the same speed in many
 cases.
 
-## Quick Start: see our [tutorial](examples/tutorial/tutorial.ipynb), or a [guided example for Kaggle Dogs Vs Cats using GoMLX](examples/dogsvscats/dogsvscats.ipynb).
+## Quick Start: see our [tutorial](examples/tutorial/tutorial.ipynb), or a [guided example for Kaggle Dogs Vs Cats](examples/dogsvscats/dogsvscats.ipynb).
 
 <img src="docs/gomlx_gopher.jpg" align="left" alt="GoMLX Gopher" width="160" height="160"/>
-It was developed primarily as a platform to easily experiment with ML ideas, and to
-allow one to use Go for ML. Hopefully it can grow beyond that -- see Long-Term Goals below.
+<p>It was developed to be feature full ML platform for Go, and to easily experiment with ML ideas. 
+Hopefully it can grow beyond that -- see Long-Term Goals below.</p>
 
-It strives to be **simple to read and reason about**, leading the 
-user to correct and transparent mental model of what is going on (no surprises) -- aligned with Go philosophy.
+It strives to be **simple to read and reason about**, leading the user to a correct and transparent mental model 
+of what is going on (no surprises) -- aligned with Go philosophy.
 At the cost of more typing (more verbose) at times.
 
 Documentation is kept up-to-date (if it is not well documented, it is as if the code is not there)
 and error messages are useful and try to make it easy to solve issues.
-
 
 **GoMLX is still under development, and should be considered experimental for now.**
 
@@ -46,7 +45,7 @@ It includes:
 * SGD and Adam optimizers.
 * Various losses and metrics.
 * Examples: Synthetic linear model; Adult/Census model; Cifar-10 demo; Dogs & Cats classifier demo; IMDB Movie Review 
-  demo. 
+  demo; Diffusion model for Oxford Flowers 102 dataset (generates random flowers).
 * Pre-Trained models to use: InceptionV3 (image model) -- more to come.
 * Docker with integrated JupyterLab and GoNB (a Go kernel)
 
