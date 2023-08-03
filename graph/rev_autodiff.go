@@ -95,9 +95,9 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 	g := validateGraphFromInputs(allInputNodes...)
 
 	outputShape := output.Shape()
-	if outputShape.Rank() > 0 {
-		Panicf("only gradients of a scalar with respect to tensors are accepted, not jacobians, "+
-			"that is, output must be scalar, got %s", output.Shape())
+	if outputShape.Rank() > 0 || outputShape.DType.IsComplex() {
+		Panicf("only gradients of a non-complex scalar with respect to tensors are accepted, not jacobians, "+
+			"that is, output must be float scalar, got %s", output.Shape())
 	}
 
 	rg := newReverseGraph(g, output, gradientNodes)
@@ -393,6 +393,22 @@ func negVJP(node, v *Node, _ shapes.Shape) []*Node {
 }
 
 func absVJP(node, v *Node, _ shapes.Shape) []*Node {
+	x := node.inputs[0]
+	if x.DType().IsComplex() {
+		// For complex numbers, Abs() is defined as the Euclidean distance in the complex
+		// plane from 0.
+		//
+		// Abs(x_c) = Sqrt(x_re^2 + y_re^2)
+		// dAbs(x_c)/dx_re = 1/2 * (x_re^2+y_re^2)^(-1/2) * (2*x_re) = x_re / Abs(x_c)
+		// dAbs(x_c)/dy_re = 1/2 * (x_re^2+y_re^2)^(-1/2) * (2*y_re) = y_re / Abs(x_c)
+		dxReal := Div(Real(x), node)
+		dxImag := Div(Imag(x), node)
+		// Multiply by the current adjoint to get the next adjoint.
+		dxReal = Mul(dxReal, v)
+		dxImag = Mul(dxImag, v)
+		return []*Node{Complex(dxReal, dxImag)}
+	}
+
 	// Notice that d(abs(x))/dx at 0 is actually undefined. This will take 1, so it assumes the positive side.
 	// This usually has little impact on training, but makes some optimizations where the limits of operations
 	// have to behave the same consistent (e.g: layers.BinaryCrossentropyLogitsLoss).

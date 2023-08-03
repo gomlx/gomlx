@@ -398,13 +398,28 @@ func TestGradientConvertType(t *testing.T) {
 }
 
 func TestGradientAbs(t *testing.T) {
-	testGradients(t, "gradient_of_abs",
+	testGradients(t, "TestGradientAbs",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			inputs := Const(g, []float64{1e6, 1e-6, 0, -1e-8, -1e6})
 			output = Mul(Const(g, []float64{2, 1, 3, 4, 5}), Abs(inputs))
 			return output, []*Node{inputs}
 		}, []any{[]float64{2, 1, 3, -4, -5}},
 	)
+
+	testGradients(t, "TestGradientAbs-Complex",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			in0 := Const(g, []complex64{1 + 1i, 3 - 4i, -4 + 3i, -1 - 1i})
+			in1 := Const(g, []complex128{1 + 1i, 3 - 4i, -4 + 3i, -1 - 1i})
+			out0 := ReduceAllSum(Abs(in0))
+			out1 := ReduceAllSum(Abs(in1))
+			output = Add(ConvertType(out0, shapes.Float64), out1)
+			return output, []*Node{in0, in1}
+		}, []any{
+			[]complex64{0.70710677 + 0.70710677i, 0.6 - 0.8i, -0.8 + 0.6i, -0.70710677 - 0.70710677i},
+			[]complex128{0.7071067811865475 + 0.7071067811865475i, 0.6 - 0.8i, -0.8 + 0.6i, -0.7071067811865475 - 0.7071067811865475i},
+		},
+	)
+
 }
 
 func TestGradientMinMax(t *testing.T) {
