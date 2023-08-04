@@ -6,6 +6,7 @@
 * Added Complex/Imag/Real operations to manipulate complex numbers.
 * Added support for complex numbers for ConvertType. Defined gradient for ConvertType.
 * Added Complex128 and Complex64 support
+* Added "spacers" (like "*" for axis ranges) and `AxisElem()` for `Slice()`.
 
 ## v0.5.0 - 2023/07/10
 
