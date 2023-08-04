@@ -268,7 +268,11 @@ func (g *Graph) Compile(outputs ...*Node) {
 	}
 	err := g.comp.Compile(outputShapes, int(root.xlaHandle))
 	if err != nil {
-		panic(errors.WithMessagef(err, "failed to compile Graph with XLA"))
+		panic(errors.WithMessage(err,
+			"Something went wrong when compiling the Graph with XLA, "+
+				"if it is graph building related (invalid values) consider reporting this "+
+				"in `gihtub.com/gomlx/gomlx` -- try printing your graph `fmt.Printf(\"%s\", g)` "+
+				" at the end of your graph building function to help debug"))
 	}
 	return
 }

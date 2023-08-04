@@ -166,7 +166,8 @@ func (n *Node) String() (str string) {
 	for _, inputNode := range n.inputs {
 		inputIds = append(inputIds, inputNode.Id())
 	}
-	str = fmt.Sprintf("%s(id=%d, xlaHandle=%d, inputs=%v", str, n.id, n.xlaHandle, inputIds)
+	str = fmt.Sprintf("%s(id=%d, xlaHandle=%d, inputs=%v, arg#int=%d, arg#ints[]=%v",
+		str, n.id, n.xlaHandle, inputIds, n.serializedNode.Int, n.serializedNode.Ints)
 	if !n.serializedNode.Literal.IsNil() {
 		dataV := reflect.ValueOf(n.serializedNode.Literal.Data())
 		var ellipsis string
@@ -307,13 +308,21 @@ func StopGradient(x *Node) *Node {
 }
 
 // Iota creates a constant of the given shape with increasing numbers (starting from 0)
-// on the given dimension. So Iota([2,2], 1) returns [[0 1][0 1]], while Iota([2,2], 0)
+// on the given axis. So Iota([2,2], 1) returns [[0 1][0 1]], while Iota([2,2], 0)
 // returns [[0 0][1 1]].
-func Iota(g *Graph, shape shapes.Shape, iotaDimension int) *Node {
+func Iota(g *Graph, shape shapes.Shape, iotaAxis int) *Node {
+	if shape.IsScalar() {
+		Panicf("cannot Iota a scalar shape, shape=%s", shape)
+	}
+	adjustedAxis := adjustToDimension(iotaAxis, shape.Rank())
+	if adjustedAxis < 0 || adjustedAxis >= shape.Rank() {
+		Panicf("invalid axis #%d for Iota, when shape is rank %d", shape.Rank())
+	}
+
 	return newNode(g, &xla.SerializedNode{
 		Type:  xla.IotaNode,
 		Shape: shape,
-		Int:   iotaDimension,
+		Int:   adjustedAxis,
 	}, nil)
 }
 
@@ -450,9 +459,15 @@ func Sub(x, y *Node) *Node { return twoArgsNode(xla.SubNode, x, y) }
 // Standard broadcasting rules apply (see documentation).
 func Div(x, y *Node) *Node { return twoArgsNode(xla.DivNode, x, y) }
 
-// Mod adds to the graph the module operation on the two input nodes x and y.
+// Mod adds to the graph the module (remainder) operation on the two input nodes x and y.
 // Standard broadcasting rules apply (see documentation).
-func Mod(x, y *Node) *Node { return twoArgsNode(xla.RemNode, x, y) }
+func Mod(x, y *Node) *Node {
+	if x.DType().IsComplex() || y.DType().IsComplex() {
+		Panicf("cannot take the remainder (Mod) of a complex number: Mod(%s, %s)",
+			x.Shape(), y.Shape())
+	}
+	return twoArgsNode(xla.RemNode, x, y)
+}
 
 // And adds to the graph the corresponding operation on the two input nodes x and y.
 // Only integer types.
