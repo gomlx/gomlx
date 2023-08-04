@@ -706,6 +706,7 @@ func TestSlice(t *testing.T) {
 				Slice(x, AxisRange(2)),
 				Slice(x, AxisRange(1, -1)),
 				Slice(x, AxisRange().Stride(2)),
+				Slice(x, AxisElem(2)),
 			}
 			return
 		}, []any{
@@ -714,15 +715,17 @@ func TestSlice(t *testing.T) {
 			[]int{3, 4},
 			[]int{2, 3},
 			[]int{1, 3},
+			[]int{3},
 		}, slices.Epsilon)
+
 	graphtest.RunTestGraphFn(t, "Slice Tests with Rank 1",
 		func(g *Graph) (inputs, outputs []*Node) {
 			x := Const(g, [][]int{{1, 2, 3}, {4, 5, 6}})
 			inputs = []*Node{x}
 			outputs = []*Node{
-				Slice(x, AxisRange(), AxisRange(0, 1)),
+				Slice(x, AxisRange(), AxisElem(0)),
 				Slice(x, AxisRange(1, 2)),
-				Slice(x, AxisRange().Stride(2), AxisRange(-1)),
+				Slice(x, AxisRange().Stride(2), AxisElem(-1)),
 			}
 			return
 		}, []any{
@@ -730,6 +733,24 @@ func TestSlice(t *testing.T) {
 			[][]int{{4, 5, 6}},
 			[][]int{{3}},
 		}, slices.Epsilon)
+
+	graphtest.RunTestGraphFn(t, "Slice Tests with Rank 1",
+		func(g *Graph) (inputs, outputs []*Node) {
+			x := IotaFull(g, shapes.Make(shapes.I64, 2, 2, 2, 2))
+			inputs = []*Node{x}
+			outputs = []*Node{
+				Slice(x, AxisRange(), AxisElem(0).Spacer(), AxisElem(-1)),
+
+				// Check that a spacer matches 0 elements also.
+				Slice(x, AxisElem(0), AxisElem(0), AxisRange().Spacer(),
+					AxisElem(0), AxisElem(0)),
+			}
+			return
+		}, []any{
+			[][][][]int{{{{1}}}, {{{9}}}},
+			[][][][]int{{{{0}}}},
+		}, slices.Epsilon)
+
 }
 
 func TestPad(t *testing.T) {
