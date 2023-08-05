@@ -3,10 +3,13 @@
 ## v0.6.0 - ...
 
 * FFT, RealFFT, InverseFFT and InverseRealFFT operations.
+  * Added a small notebook demo for FFT. 
 * Added Complex/Imag/Real operations to manipulate complex numbers.
 * Added support for complex numbers for ConvertType. Defined gradient for ConvertType.
 * Added Complex128 and Complex64 support
 * Added "spacers" (like "*" for axis ranges) and `AxisElem()` for `Slice()`.
+* Package `examples/notebook/gonb/margaid`: Added `Plots.AddValues` and `Plots.PlotToHTML`; 
+  Fixed `Plots` returned by `New()` to be linear scale by default.
 
 ## v0.5.0 - 2023/07/10
 
