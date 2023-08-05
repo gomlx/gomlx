@@ -45,6 +45,10 @@ func InverseFFT(operand *Node) *Node {
 //
 // The resulting tensor (Node) has the shape equal to the input, except the last dimension (where the FFT is computed)
 // which has dimension `dim/2 + 1`, where `dim` is the last dimensions of `operand`.
+//
+// Note that because of the last dimension change in `RealFFT`, this cannot be perfectly reversed if
+// `operand.Shape().Dimensions[-1]` is odd.
+// Preferably use with even numbers.
 func RealFFT(operand *Node) *Node {
 	if !operand.DType().IsFloat() {
 		Panicf("FFT requires a real (float) input, got %s for dtype instead", operand.DType())
@@ -60,6 +64,10 @@ func RealFFT(operand *Node) *Node {
 //
 // The resulting tensor (Node) has the shape equal to the input, except the last dimension (where the FFT is computed)
 // which is reversed back to the original, `(dim-1)*2`, where `dim` is the last dimensions of `operand`.
+//
+// Note that because of the last dimension change in `RealFFT`, this cannot be perfectly reversed if
+// `operand.Shape().Dimensions[-1]` is odd.
+// Preferably use with even numbers.
 func InverseRealFFT(operand *Node) *Node {
 	if !operand.DType().IsComplex() {
 		Panicf("InverseRealFFT requires a complex input, got %s for dtype instead", operand.DType())
@@ -72,6 +80,60 @@ func InverseRealFFT(operand *Node) *Node {
 }
 
 // fftVJP implements the auto-grad for all the FFT variations.
-func fftVJP(_, _ *Node, _ shapes.Shape) []*Node {
+func fftVJP(node, v *Node, _ shapes.Shape) []*Node {
+	fftType := xla.FftType(node.serializedNode.Int)
+	switch fftType {
+	case xla.FftForward:
+		size := float64(slices.At(v.Shape().Dimensions, -1))
+		return []*Node{MulScalar(InverseFFT(v), size)}
+	case xla.FftInverse:
+		invSize := 1.0 / float64(slices.At(v.Shape().Dimensions, -1))
+		return []*Node{MulScalar(FFT(v), invSize)}
+	case xla.FftForwardReal:
+		return realFftVJP(node, v)
+		//case xla.FftInverseReal:
+		//	return inverseRealFftVJP(node, v, 1, RealFFT)
+	}
+
+	Panicf("Sorry, gradient for FFT of type %s not implemented, please add an issue in github.com/gomlx/gomlx if you need it!",
+		fftType)
 	return nil
+}
+
+// realFftVJP is called from fftVJP.
+// It is implemented based on the TensorFlow function `_rfft_grad_helper`, in the file `fft_ops.py`.
+//
+// Experimental, not well tested yet.
+func realFftVJP(node, v *Node) []*Node {
+	fftLength := node.serializedNode.Ints
+	isEven := 1.0 - float64(slices.At(fftLength, -1)%2)
+	operand := node.inputs[0]
+	rank := operand.Rank()
+	complexDType := v.DType()
+	operandLastDim := operand.Shape().Dimensions[rank-1]
+
+	// Create yMask with a sequence of alternating signs +1, -1, +1, -1 for the length of
+	// the operand's last dimension. So yMask is shaped `[1, 1, ..., operandLastDim]`.
+	g := v.Graph()
+	yMaskShape := operand.Shape().Copy()
+	yMaskShape.DType = shapes.I32 // For now.
+	for ii := 0; ii < rank-1; ii++ {
+		yMaskShape.Dimensions[ii] = 1
+	}
+	// yMask = -1 * (2*(Iota()%2)-1) -> +1, -1, +1, -1, etc.
+	yMask := Iota(g, yMaskShape, -1)
+	yMask = ModScalar(yMask, 2.0)
+	yMask = Neg(AddScalar(MulScalar(yMask, 2), -1))
+	yMask = ConvertType(yMask, complexDType)
+
+	y0 := Slice(v, AxisRange().Spacer(), AxisElem(0))
+	yLast := Slice(v, AxisRange().Spacer(), AxisElem(-1))
+	extraTerms := Add(y0, MulScalar(Mul(yLast, yMask), isEven))
+
+	// The gradient of RFFT is the IRFFT of the incoming gradient times a scaling
+	// factor, plus some additional terms to make up for the components dropped
+	// due to Hermitian symmetry.
+	irFft := fftXLA(v, xla.FftInverseReal, fftLength)
+	newVJP := MulScalar(Add(MulScalar(irFft, float64(operandLastDim)), Real(extraTerms)), 0.5)
+	return []*Node{newVJP}
 }
