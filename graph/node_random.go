@@ -79,6 +79,8 @@ func RngStateSplit(rngState *Node) (newRngState1, newRngState2 *Node) {
 //
 // It will signal an error if the dtype is not float -- see RandomIntN for random integers.
 //
+// For complex numbers, both the real and the imaginary part are independently sampled from `[0.0, 1.0)`.
+//
 // It uses and updates the random number generator (RNG) state in `rngState`.
 func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Node) {
 	switch shape.DType {
@@ -100,8 +102,22 @@ func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Nod
 		values = MulScalar(values, 1.0/(float64(1<<32)))
 		values = MinScalar(values, float64(math.Nextafter32(1.0, 0.0)))
 		values = StopGradient(values)
+	case shapes.Complex64:
+		componentShape := shape.Copy()
+		componentShape.DType = shapes.Float32
+		var re, im *Node
+		newRngState, re = RandomUniform(rngState, componentShape)
+		newRngState, im = RandomUniform(rngState, componentShape)
+		values = Complex(re, im)
+	case shapes.Complex128:
+		componentShape := shape.Copy()
+		componentShape.DType = shapes.Float64
+		var re, im *Node
+		newRngState, re = RandomUniform(rngState, componentShape)
+		newRngState, im = RandomUniform(rngState, componentShape)
+		values = Complex(re, im)
 	default:
-		Panicf("RandomUniform() only accepts Float32 and Float64 dtypes, shape %s given", shape)
+		Panicf("RandomUniform() only accepts Float32, Float64, Complex64 and Complex128 dtypes, shape %s given", shape)
 	}
 	return
 }
