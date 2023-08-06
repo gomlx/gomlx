@@ -157,7 +157,7 @@ func OnePlus(x *Node) *Node {
 	return Add(ScalarOne(g, x.DType()), x)
 }
 
-// Inverse returns (1/x).
+// Inverse returns (1/x), the multiplicative inverse. Also known as the reciprocal.
 func Inverse(x *Node) *Node {
 	g := validateGraphFromInputs(x)
 	return Div(ScalarOne(g, x.DType()), x)
