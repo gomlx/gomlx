@@ -1,9 +1,20 @@
 package graph_test
 
 import (
+	"fmt"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
+	"github.com/gomlx/gomlx/ml/context"
+	"github.com/gomlx/gomlx/ml/context/initializers"
+	"github.com/gomlx/gomlx/ml/data"
+	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/ml/train/commandline"
+	"github.com/gomlx/gomlx/ml/train/losses"
+	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"math"
 	"testing"
 )
@@ -117,4 +128,58 @@ func TestGradientFFT(t *testing.T) {
 			0.13621834047872816 - 0.9906788398452958i,
 			0.9680364763016536 + 0.2508094506781557i},
 	}, 1e-3)
+}
+
+// realFftExample returns (x, y) where: x is a sinusoidal curve with numPoints points,
+// and with `frequency` full cycles; y is the RealFFT(x).
+func realFftExample(manager *Manager, realDType shapes.DType, numPoints int, frequency float64) (x, y tensor.Tensor) {
+	e := NewExec(manager, func(g *Graph) (x, y *Node) {
+		x = Iota(g, shapes.Make(realDType, 1, numPoints), 1)
+		x = MulScalar(x, 2.0*math.Pi*frequency/float64(numPoints))
+		x = Sin(x)
+		y = RealFFT(x)
+		return
+	})
+	res := e.Call()
+	x, y = res[0], res[1]
+	return
+}
+
+// TestGradientRealFFT tests it by checking that by gradient-descent we can
+// invert RealFFT.
+//
+// See plots of this in `examples/fft/fft.ipynb`.
+func TestGradientRealFFT(t *testing.T) {
+	manager := graphtest.BuildTestManager()
+
+	trueX, trueY := realFftExample(manager, shapes.F32, 100, 2)
+	ctx := context.NewContext(manager)
+	ctx.SetParam(optimizers.LearningRateKey, 0.01)
+	ctx.RngStateFromSeed(42) // Make it deterministic.
+	ctx = ctx.WithInitializer(initializers.Zero)
+	modelFn := func(ctx *context.Context, spec any, inputs []*Node) []*Node {
+		g := inputs[0].Graph()
+		learnedXVar := ctx.VariableWithShape("learnedX", trueX.Shape())
+		y := RealFFT(learnedXVar.ValueGraph(g))
+		return []*Node{y}
+	}
+
+	dataset, err := data.InMemoryFromData(manager, "dataset", []any{trueX}, []any{trueY})
+	require.NoError(t, err)
+	dataset.BatchSize(1, false).Infinite(true)
+	trainer := train.NewTrainer(
+		manager, ctx, modelFn,
+		losses.MeanAbsoluteError,
+		optimizers.Adam().Done(),
+		nil, nil) // trainMetrics, evalMetrics
+	loop := train.NewLoop(trainer)
+	commandline.AttachProgressBar(loop)         // Attaches a progress bar to the loop.
+	metrics, err := loop.RunSteps(dataset, 800) // Typically we get a loss of ~0.01
+	require.NoError(t, err)
+	require.Greater(t, len(metrics), 0)
+	loss := metrics[0].Value().(float32)
+	fmt.Println(loss)
+	assert.Lessf(t, loss, float32(0.1),
+		"Optimizing using gradient descent on RealFFT should have approached an inverse to "+
+			"an mean absolute error < 0.1, got %f instead", loss)
 }

@@ -316,7 +316,7 @@ func Iota(g *Graph, shape shapes.Shape, iotaAxis int) *Node {
 	}
 	adjustedAxis := adjustToDimension(iotaAxis, shape.Rank())
 	if adjustedAxis < 0 || adjustedAxis >= shape.Rank() {
-		Panicf("invalid axis #%d for Iota, when shape is rank %d", shape.Rank())
+		Panicf("invalid axis #%d for Iota, when shape is rank %d", iotaAxis, shape.Rank())
 	}
 
 	return newNode(g, &xla.SerializedNode{
