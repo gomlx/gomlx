@@ -56,7 +56,7 @@ gomlx_jit_deps = [
     "@xla//xla/stream_executor:rocm_platform",
 ])
 
-# Minimal set of dependencies needed to run inference in a AOT compiled model.
+# Minimal set of dependencies needed to run inference in an Ahead-Of-Time (AOT) compiled model.
 gomlx_aot_deps = [
     "@com_google_absl//absl/types:span",
     "@com_google_absl//absl/types:optional",
@@ -89,24 +89,24 @@ cc_library(
     srcs = glob(["*.cpp"]),
     hdrs = glob(["*.h"]),
     linkopts = ["-shared"],
-    deps = [
-	    "@gperftools",
-    ] + gomlx_jit_deps,
+    deps = gomlx_jit_deps + [
+        "@gperftools",
+    ],
     alwayslink = True,
 )
 
 cc_binary(
     name = "libgomlx_xla.so",
-    linkopts = ["-shared"],
+    linkopts = ["-shared", "-ltcmalloc"],
     # Setting linkshared=1 and linkstatic=1 should try to link everything (except system libraries) statically
     # but generate a dynamically linked library -- needed to link it to other languages, Go in this case.
     # At least that's what I understood from reading the docs in
     # https://bazel.build/reference/be/c-cpp#cc_binary.linkshared
     linkshared = 1,
     linkstatic = 1,
-    deps = [
+    deps = gomlx_jit_deps + [
         ":gomlx",
-    ] + gomlx_jit_deps,
+    ]
 )
 
 cc_library(
@@ -128,7 +128,9 @@ cc_library(
         "status.h",
     ],
     linkopts = ["-shared"],
-    deps = [] + gomlx_aot_deps,
+    deps = [
+        "@gperftools",
+    ] + gomlx_aot_deps,
     alwayslink = True,
 )
 
