@@ -10,9 +10,9 @@
 * Added "spacers" (like "*" for axis ranges) and `AxisElem()` for `Slice()`.
 * Package `examples/notebook/gonb/margaid`: Added `Plots.AddValues` and `Plots.PlotToHTML`; 
   Fixed `Plots` returned by `New()` to be linear scale by default.
-* Included build of tcmalloc (gperftools) from the `c/` directory, when building libgomlx_xla.so. 
+* Included build of tcmalloc (`gperftools`) from the `c/` directory, when building libgomlx_xla.so. 
   Still the `libtcmalloc.so` is needed in runtime. 
-  A copy is included in gomlx_xla.tar.gz file and can be copied from there if needed.
+  A copy is included in the `gomlx_xla.tar.gz` package (under `lib/gomlx`) and can be copied from there if needed.
   This enables build for Macs — see #23.
 
 ## v0.5.0 - 2023/07/10
