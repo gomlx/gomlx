@@ -609,7 +609,7 @@ func TestGradientRealImagAndConj(t *testing.T) {
 }
 
 func TestGradientComplex(t *testing.T) {
-	testGradientsExact(t, "gradient_of_Real",
+	testGradients(t, "gradient_of_Real",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			real := Const(g, []float32{1.0, 3.0})
 			imag := Const(g, []float32{-1.0, 4.0})

@@ -4,9 +4,9 @@
 
 * FFT, RealFFT, InverseFFT and InverseRealFFT operations.
   * Added a small notebook demo for FFT. 
-* Added Complex/Imag/Real operations to manipulate complex numbers.
+* Added Complex/Imag/Real/Conj operations to manipulate complex numbers (and their gradients).
 * Added support for complex numbers for ConvertType. Defined gradient for ConvertType.
-* Added Complex128 and Complex64 support
+* Added Complex128 and Complex64 dtypes support.
 * Added "spacers" (like "*" for axis ranges) and `AxisElem()` for `Slice()`.
 * Package `examples/notebook/gonb/margaid`: Added `Plots.AddValues` and `Plots.PlotToHTML`; 
   Fixed `Plots` returned by `New()` to be linear scale by default.

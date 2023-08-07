@@ -22,9 +22,10 @@ import (
 func TestFFT(t *testing.T) {
 	graphtest.RunTestGraphFn(t, "FFT and InverseFFT", func(g *Graph) (inputs, outputs []*Node) {
 		const numPoints = 1000
-		x := Iota(g, shapes.Make(shapes.F32, numPoints), 0)
 		const numPeriods = 10
-		y := Sin(MulScalar(x, 2*math.Pi*numPeriods/numPoints))
+		x := Iota(g, shapes.Make(shapes.F32, numPoints), -1)
+		x = MulScalar(x, 2*math.Pi*numPeriods/numPoints)
+		y := Sin(x)
 		y.AssertDims(numPoints)
 		inputs = []*Node{y}
 		yC := ConvertType(y, shapes.Complex128)
@@ -32,17 +33,16 @@ func TestFFT(t *testing.T) {
 		fft := FFT(yC)
 		yHat := InverseFFT(fft)
 		diff := ReduceAllSum(Abs(Sub(yC, yHat)))
-		outputs = []*Node{Real(diff), Imag(diff)}
+		outputs = []*Node{diff}
 		return
 	}, []any{
-		0.0,
 		0.0,
 	}, 1.0)
 
 	graphtest.RunTestGraphFn(t, "RealFFT and InverseRealFFT", func(g *Graph) (inputs, outputs []*Node) {
 		const batchDim = 2
 		const numPoints = 1000
-		x := Iota(g, shapes.Make(shapes.F32, batchDim, numPoints), 0)
+		x := Iota(g, shapes.Make(shapes.F32, batchDim, numPoints), -1)
 		const numPeriods = 10
 		y := Sin(MulScalar(x, 2*math.Pi*numPeriods/numPoints))
 		y.AssertDims(batchDim, numPoints)
@@ -52,10 +52,9 @@ func TestFFT(t *testing.T) {
 		yHat := InverseRealFFT(fft)
 		yHat.AssertDims(batchDim, numPoints)
 		diff := ReduceAllSum(Abs(Sub(y, yHat)))
-		outputs = []*Node{diff, diff}
+		outputs = []*Node{diff}
 		return
 	}, []any{
-		float32(0.0),
 		float32(0.0),
 	}, 1.0)
 }
@@ -151,7 +150,7 @@ func realFftExample(manager *Manager, realDType shapes.DType, numPoints int, fre
 // See plots of this in `examples/fft/fft.ipynb`.
 func TestGradientRealFFT(t *testing.T) {
 	manager := graphtest.BuildTestManager()
-
+	// trueX is real, and trueY is the fft, a complex tensor.
 	trueX, trueY := realFftExample(manager, shapes.F32, 100, 2)
 	ctx := context.NewContext(manager)
 	ctx.SetParam(optimizers.LearningRateKey, 0.01)
@@ -181,5 +180,44 @@ func TestGradientRealFFT(t *testing.T) {
 	fmt.Println(loss)
 	assert.Lessf(t, loss, float32(0.1),
 		"Optimizing using gradient descent on RealFFT should have approached an inverse to "+
+			"an mean absolute error < 0.1, got %f instead", loss)
+}
+
+// TestGradientInverseRealFFT tests it by checking that by gradient-descent we can
+// invert InverseRealFFT (so effectively we do a RealFFT).
+//
+// This works similar to TestGradientRealFFT, but inverts what we are predicting:
+// we are trying to learn the FFT value that generates the sinusoidal curve.
+func TestGradientInverseRealFFT(t *testing.T) {
+	manager := graphtest.BuildTestManager()
+	// We revert the x/y of realFftExample: trueX is the fft, a complex tensor, and trueY is the real sinusoidal curve.
+	trueY, trueX := realFftExample(manager, shapes.F64, 10, 2)
+	ctx := context.NewContext(manager)
+	ctx.SetParam(optimizers.LearningRateKey, 10.0)
+	ctx.RngStateFromSeed(42) // Make it deterministic.
+	ctx = ctx.WithInitializer(initializers.Zero)
+	modelFn := func(ctx *context.Context, spec any, inputs []*Node) []*Node {
+		g := inputs[0].Graph()
+		learnedXVar := ctx.VariableWithShape("learnedX", trueX.Shape())
+		y := InverseRealFFT(learnedXVar.ValueGraph(g))
+		return []*Node{y}
+	}
+
+	dataset, err := data.InMemoryFromData(manager, "dataset", []any{trueX}, []any{trueY})
+	require.NoError(t, err)
+	dataset.BatchSize(1, false).Infinite(true)
+	trainer := train.NewTrainer(
+		manager, ctx, modelFn,
+		losses.MeanAbsoluteError,
+		optimizers.StochasticGradientDescent(),
+		nil, nil) // trainMetrics, evalMetrics
+	loop := train.NewLoop(trainer)
+	commandline.AttachProgressBar(loop)         // Attaches a progress bar to the loop.
+	metrics, err := loop.RunSteps(dataset, 100) // Typically we get a loss of ~0.01
+	require.NoError(t, err)
+	loss := metrics[0].Value().(float64)
+	fmt.Println("\tLoss:", loss)
+	assert.Lessf(t, loss, 0.1,
+		"Optimizing using gradient descent on InverseRealFFT should have approached the original curve to "+
 			"an mean absolute error < 0.1, got %f instead", loss)
 }

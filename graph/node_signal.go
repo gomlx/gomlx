@@ -91,8 +91,8 @@ func fftVJP(node, v *Node, _ shapes.Shape) []*Node {
 		return []*Node{MulScalar(FFT(v), invSize)}
 	case xla.FftForwardReal:
 		return realFftVJP(node, v)
-		//case xla.FftInverseReal:
-		//	return inverseRealFftVJP(node, v, 1, RealFFT)
+	case xla.FftInverseReal:
+		return inverseRealFftVJP(node, v)
 	}
 
 	Panicf("Sorry, gradient for FFT of type %s not implemented, please add an issue in github.com/gomlx/gomlx if you need it!",
@@ -101,7 +101,8 @@ func fftVJP(node, v *Node, _ shapes.Shape) []*Node {
 }
 
 // realFftVJP is called from fftVJP.
-// It is implemented based on the TensorFlow function `_rfft_grad_helper`, in the file `fft_ops.py`.
+// It is implemented based on the TensorFlow function `_rfft_grad_helper`, in the file
+// `tensorflow/python/ops/signal/fft_ops.pyfft_ops.py`.
 //
 // Experimental, not well tested yet.
 func realFftVJP(node, v *Node) []*Node {
@@ -136,4 +137,36 @@ func realFftVJP(node, v *Node) []*Node {
 	irFft := fftXLA(v, xla.FftInverseReal, fftLength)
 	newVJP := MulScalar(Add(MulScalar(irFft, float64(operandLastDim)), Real(extraTerms)), 0.5)
 	return []*Node{newVJP}
+}
+
+// inverseRealFftVJP is called from fftVJP.
+// It is implemented based on the TensorFlow function `_irfft_grad_helper`, in the file
+// `tensorflow/python/ops/signal/fft_ops.pyfft_ops.py`.
+//
+// Experimental, not well tested yet.
+func inverseRealFftVJP(node, v *Node) []*Node {
+	g := node.Graph()
+	realDType := v.DType()
+	fftValue := node.inputs[0]
+	complexDType := fftValue.DType()
+	fftValueLastDim := slices.Last(fftValue.Shape().Dimensions)
+	fftLength := node.serializedNode.Ints
+	isFftLengthOdd := slices.Last(fftLength) % 2 // 1 if fftLength is odd, 0 if even.
+
+	// Create a simple mask like [1.0, 2.0, 2.0, ..., 2.0, 2.0, 1.0] for even-length FFTs
+	// or [1.0, 2.0, ..., 2.0] for odd-length FFTs -- same length as fftValueLastDim.
+	innerMask := AddScalar(Ones(g, shapes.Make(realDType, fftValueLastDim-2+isFftLengthOdd)), 1.0)
+	edgeMask := Ones(g, shapes.Make(realDType, 1))
+	var mask *Node
+	if isFftLengthOdd == 1 {
+		mask = Concatenate([]*Node{edgeMask, innerMask}, 0)
+	} else {
+		mask = Concatenate([]*Node{edgeMask, innerMask, edgeMask}, 0)
+	}
+	mask.AssertDims(fftValueLastDim) // Our mask will apply to the fftValue (the input to the InverseRealFFT node).
+	mask = ExpandLeftToRank(mask, fftValue.Rank())
+	sizeNormalization := 1.0 / float64(slices.Last(v.Shape().Dimensions))
+	normalizedMask := ConvertType(MulScalar(mask, sizeNormalization), complexDType)
+	vjp := Mul(RealFFT(v), normalizedMask)
+	return []*Node{vjp}
 }
