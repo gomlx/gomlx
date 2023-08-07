@@ -81,6 +81,7 @@ type reverseNode struct {
 
 // The jacobian
 func combineOutputShape(outputShape, inputShape shapes.Shape) shapes.Shape {
+	outputShape.DType = inputShape.DType // Make sure they are the same.
 	return shapes.ConcatenateDimensions(outputShape, inputShape)
 }
 
@@ -94,9 +95,9 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 	g := validateGraphFromInputs(allInputNodes...)
 
 	outputShape := output.Shape()
-	if outputShape.Rank() > 0 {
-		Panicf("only gradients of a scalar with respect to tensors are accepted, not jacobians, "+
-			"that is, output must be scalar, got %s", output.Shape())
+	if outputShape.Rank() > 0 || outputShape.DType.IsComplex() {
+		Panicf("only gradients of a non-complex scalar with respect to tensors are accepted, not jacobians, "+
+			"that is, output must be float scalar, got %s", output.Shape())
 	}
 
 	rg := newReverseGraph(g, output, gradientNodes)
@@ -198,9 +199,9 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 			combinedShape := combineOutputShape(outputShape, input.shape)
 			if !vjp.shape.Eq(combinedShape) {
 				Panicf("invalid Gradient calculation for node %q: invalid shape for calculated VJP for "+
-					"input #%d (out of %d): input shape=%s, calculated VJP shape=%s"+
+					"input #%d (out of %d): input shape=%s, calculated VJP shape=%s (wanted %s)"+
 					" -- this probably indicates a bug in the code, please report the issue.",
-					node, ii, len(node.Inputs()), input.shape, vjp.shape)
+					node, ii, len(node.Inputs()), input.shape, vjp.shape, combinedShape)
 			}
 			rInput := rg.ReverseNodes[input.Id()]
 			if rInput.VJP == nil {
@@ -314,6 +315,7 @@ type VJP func(node, v *Node, outputShape shapes.Shape) []*Node
 var VJPRegistration = map[xla.NodeType]VJP{
 	xla.ConstantNode:           nilVJP,
 	xla.ParameterNode:          nilVJP,
+	xla.ConvertTypeNode:        convertTypeVJP,
 	xla.WhereNode:              whereVJP,
 	xla.NegNode:                negVJP,
 	xla.AbsNode:                absVJP,
@@ -326,6 +328,8 @@ var VJPRegistration = map[xla.NodeType]VJP{
 	xla.MulNode:                mulVJP,
 	xla.DivNode:                divVJP,
 	xla.SqrtNode:               sqrtVJP,
+	xla.RealNode:               realVJP,
+	xla.ImagNode:               imagVJP,
 	xla.MaxNode:                minMaxVJP,
 	xla.MinNode:                minMaxVJP,
 	xla.ReshapeNode:            reshapeVJP,
@@ -342,6 +346,7 @@ var VJPRegistration = map[xla.NodeType]VJP{
 	xla.BatchNormTrainingNode:  batchNormTrainingVJP,
 	xla.TransposeNode:          transposeVJP,
 	xla.BroadcastInDimNode:     broadcastInDimVJP,
+	xla.FftNode:                fftVJP,
 }
 
 // nilVJP returns no gradient, for functions without any inputs.
@@ -375,12 +380,35 @@ func vjpForDefaultBroadcast(node, input, v *Node) *Node {
 	return ReshapeWithShape(reduced, input.shape)
 }
 
+// Gradient of the type conversion, just converts back the adjunt dtype to
+// its input dtype.
+func convertTypeVJP(node, v *Node, _ shapes.Shape) []*Node {
+	_ = node
+	return []*Node{ConvertType(v, node.inputs[0].DType())}
+}
+
 func negVJP(node, v *Node, _ shapes.Shape) []*Node {
 	_ = node
 	return []*Node{Neg(v)}
 }
 
 func absVJP(node, v *Node, _ shapes.Shape) []*Node {
+	x := node.inputs[0]
+	if x.DType().IsComplex() {
+		// For complex numbers, Abs() is defined as the Euclidean distance in the complex
+		// plane from 0.
+		//
+		// Abs(x_c) = Sqrt(x_re^2 + y_re^2)
+		// dAbs(x_c)/dx_re = 1/2 * (x_re^2+y_re^2)^(-1/2) * (2*x_re) = x_re / Abs(x_c)
+		// dAbs(x_c)/dy_re = 1/2 * (x_re^2+y_re^2)^(-1/2) * (2*y_re) = y_re / Abs(x_c)
+		dxReal := Div(Real(x), node)
+		dxImag := Div(Imag(x), node)
+		// Multiply by the current adjoint to get the next adjoint.
+		dxReal = Mul(dxReal, v)
+		dxImag = Mul(dxImag, v)
+		return []*Node{Complex(dxReal, dxImag)}
+	}
+
 	// Notice that d(abs(x))/dx at 0 is actually undefined. This will take 1, so it assumes the positive side.
 	// This usually has little impact on training, but makes some optimizations where the limits of operations
 	// have to behave the same consistent (e.g: layers.BinaryCrossentropyLogitsLoss).
@@ -408,6 +436,20 @@ func tanhVJP(node, v *Node, _ shapes.Shape) []*Node {
 func sqrtVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// d(x^0.5)/dx = 0.5 * x^(-0.5) = 0.5/sqrt(x)
 	return []*Node{Mul(v, MulScalar(Inverse(node), 0.5))}
+}
+
+// realVJP projects v back to a complex number -- the gradient on the imaginary
+// is zero.
+func realVJP(node, v *Node, _ shapes.Shape) []*Node {
+	g := node.Graph()
+	return []*Node{Complex(v, ScalarZero(g, v.DType()))}
+}
+
+// imagVJP projects v back to a complex number -- the gradient on the real part
+// is zero.
+func imagVJP(node, v *Node, _ shapes.Shape) []*Node {
+	g := node.Graph()
+	return []*Node{Complex(ScalarZero(g, v.DType()), v)}
 }
 
 func addVJP(node, v *Node, _ shapes.Shape) []*Node {

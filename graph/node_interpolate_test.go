@@ -43,7 +43,7 @@ func TestInterpolate(t *testing.T) {
 }
 
 func TestGradientInterpolate(t *testing.T) {
-	testGradients[float64](t, "Gradient 2D Interpolate().Nearest()",
+	testGradients(t, "Gradient 2D Interpolate().Nearest()",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			input := Ones(g, MakeShape(shapes.Float64, 1, 2, 2, 1))
 			output = Interpolate(input, 1, 4, 4, 1).Nearest().Done()
@@ -58,7 +58,7 @@ func TestGradientInterpolate(t *testing.T) {
 
 	// TODO: fix bug where if the input is smaller than 4x4, the gradient fails.
 	/*
-		testGradients[float64](t, "Gradient 2D Interpolate().Bilinear()",
+		testGradients(t, "Gradient 2D Interpolate().Bilinear()",
 			func(g *Graph) (output *Node, nodesForGrad []*Node) {
 				input := Ones(g, MakeShape(shapes.Float64, 1, 2, 2, 1))
 				output = Interpolate(input, 1, 4, 4, 1).Bilinear().Done()

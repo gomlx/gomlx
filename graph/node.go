@@ -166,7 +166,8 @@ func (n *Node) String() (str string) {
 	for _, inputNode := range n.inputs {
 		inputIds = append(inputIds, inputNode.Id())
 	}
-	str = fmt.Sprintf("%s(id=%d, xlaHandle=%d, inputs=%v", str, n.id, n.xlaHandle, inputIds)
+	str = fmt.Sprintf("%s(id=%d, xlaHandle=%d, inputs=%v, arg#int=%d, arg#ints[]=%v",
+		str, n.id, n.xlaHandle, inputIds, n.serializedNode.Int, n.serializedNode.Ints)
 	if !n.serializedNode.Literal.IsNil() {
 		dataV := reflect.ValueOf(n.serializedNode.Literal.Data())
 		var ellipsis string
@@ -307,13 +308,21 @@ func StopGradient(x *Node) *Node {
 }
 
 // Iota creates a constant of the given shape with increasing numbers (starting from 0)
-// on the given dimension. So Iota([2,2], 1) returns [[0 1][0 1]], while Iota([2,2], 0)
+// on the given axis. So Iota([2,2], 1) returns [[0 1][0 1]], while Iota([2,2], 0)
 // returns [[0 0][1 1]].
-func Iota(g *Graph, shape shapes.Shape, iotaDimension int) *Node {
+func Iota(g *Graph, shape shapes.Shape, iotaAxis int) *Node {
+	if shape.IsScalar() {
+		Panicf("cannot Iota a scalar shape, shape=%s", shape)
+	}
+	adjustedAxis := adjustToDimension(iotaAxis, shape.Rank())
+	if adjustedAxis < 0 || adjustedAxis >= shape.Rank() {
+		Panicf("invalid axis #%d for Iota, when shape is rank %d", iotaAxis, shape.Rank())
+	}
+
 	return newNode(g, &xla.SerializedNode{
 		Type:  xla.IotaNode,
 		Shape: shape,
-		Int:   iotaDimension,
+		Int:   adjustedAxis,
 	}, nil)
 }
 
@@ -419,6 +428,12 @@ func Sqrt(x *Node) *Node { return oneArgNode(xla.SqrtNode, x) }
 // RSqrt adds the 1/sqrt(x) operation to the graph.
 func RSqrt(x *Node) *Node { return oneArgNode(xla.RsqrtNode, x) }
 
+// Imag returns the imaginary part of a complex number.
+func Imag(x *Node) *Node { return oneArgNode(xla.ImagNode, x) }
+
+// Real returns the real part of a complex number.
+func Real(x *Node) *Node { return oneArgNode(xla.RealNode, x) }
+
 // twoArgsNode is a helper function that implements ops that simply take 2 inputs.
 func twoArgsNode(nodeType xla.NodeType, x, y *Node) *Node {
 	g := validateGraphFromInputs(x, y)
@@ -444,9 +459,15 @@ func Sub(x, y *Node) *Node { return twoArgsNode(xla.SubNode, x, y) }
 // Standard broadcasting rules apply (see documentation).
 func Div(x, y *Node) *Node { return twoArgsNode(xla.DivNode, x, y) }
 
-// Mod adds to the graph the module operation on the two input nodes x and y.
+// Mod adds to the graph the module (remainder) operation on the two input nodes x and y.
 // Standard broadcasting rules apply (see documentation).
-func Mod(x, y *Node) *Node { return twoArgsNode(xla.RemNode, x, y) }
+func Mod(x, y *Node) *Node {
+	if x.DType().IsComplex() || y.DType().IsComplex() {
+		Panicf("cannot take the remainder (Mod) of a complex number: Mod(%s, %s)",
+			x.Shape(), y.Shape())
+	}
+	return twoArgsNode(xla.RemNode, x, y)
+}
 
 // And adds to the graph the corresponding operation on the two input nodes x and y.
 // Only integer types.
@@ -1106,47 +1127,87 @@ func ReduceAllMaskedMax(x, mask *Node) *Node {
 	return ReduceMaskedMax(x, mask)
 }
 
-// AxisRangeDef defines the range of an axis to include in a Slice.
+// SliceAxisSpec specifies the range and stride of an axis to include in a Slice.
 //
-// Use AxisRange below to create it.
+// The recommendation is to use AxisRange or AxisElem (defined below) to create it.
 //
 // Full means to include the whole range (and ignore Start/End), and
 // NoEnd means from Start to the full dimension of the axis.
 //
 // Optional (if Stride != 0) it can set the stride for the axis as well.
 //
-// Consider using AxisRange below to construct AxisRangeDef values.
+// Spacer means this AxisRange should be the generic definition for all
+// undefined axes -- useful when the rank of the node is not known.
+//
+// Consider using function AxisRange below to construct SliceAxisSpec values.
 //
 // TODO: Add strides.
-type AxisRangeDef struct {
+type SliceAxisSpec struct {
 	Start, End, StrideValue int
 	Full, NoEnd             bool
+	IsSpacer                bool
 }
 
-// Stride returns a copy of the AxisRangeDef with Stride set to the given stride.
-func (ar AxisRangeDef) Stride(stride int) AxisRangeDef {
+// Stride returns a copy of the SliceAxisSpec with Stride set to the given stride.
+func (ar SliceAxisSpec) Stride(stride int) SliceAxisSpec {
 	ar2 := ar
 	ar2.StrideValue = stride
 	return ar2
 }
 
-// AxisRange creates a `AxisRangeDef` to be used in Slice.
+// Spacer marks this SliceAxisSpec to be a generic filler range to use on the undefined
+// axes in Slice -- similar to a "*" in a path definition.
+//
+// It works with any SliceAxisSpec, so it can be used with the return of any call to
+// AxisRange or AxisElem.
+//
+// Example: let's say we want to get just the last example of a batch, and just the first
+// element of the embedding. Assume x is shaped `[batch_size, ..., embedding_size]` and
+// we want something like `x[-1, ..., 0:1]`
+//
+// sample := Slice(x, AxisElem(-1), AxisRange().Spacer(), AxisElem(0))
+//
+// Notice that "spacer" ranges also matches zero dimensions. So if x is shaped `[5, 5]`,
+// calling `Slice(x, AxisElem(0), AxisRange().Spacer(), AxisElem(0))` would return
+// a node of shape `[1, 1]` and the spacer would be ignored.
+func (ar SliceAxisSpec) Spacer() SliceAxisSpec {
+	ar2 := ar
+	ar2.IsSpacer = true
+	return ar2
+}
+
+// AxisRange defines a range to take for an axis in Slice.
+// It returns an `SliceAxisSpec` object.
+//
 // The indices can have 0, 1 or 2 elements:
 // - If `len(indices) == 0`, it's assumed to be the full range of the axis.
 // - If `len(indices) == 1`, it's assumed to be the start, and the range should be taken to the end.
 // - If `len(indices) == 2`, they should be the start and end indices for the axis.
 // - If `len(indices) > 2`, an error is raised with panic.
-func AxisRange(indices ...int) AxisRangeDef {
+//
+// See also AxisElem if you want to define only one element of the range.
+func AxisRange(indices ...int) SliceAxisSpec {
 	if len(indices) == 0 {
-		return AxisRangeDef{Full: true}
+		return SliceAxisSpec{Full: true}
 	}
 	if len(indices) == 1 {
-		return AxisRangeDef{Start: indices[0], NoEnd: true}
+		return SliceAxisSpec{Start: indices[0], NoEnd: true}
 	}
 	if len(indices) > 2 {
 		Panicf("AxisRange(%v): more than 2 indices provided, that's not supported", indices)
 	}
-	return AxisRangeDef{Start: indices[0], End: indices[1]}
+	return SliceAxisSpec{Start: indices[0], End: indices[1]}
+}
+
+// AxisElem defines a range of one element to take for an axis in Slice.
+// It returns an `SliceAxisSpec` object.
+func AxisElem(index int) SliceAxisSpec {
+	if index == -1 {
+		// Take the last element: since we don't know the dimensions of the axes yet, just
+		// take it to the end, it will be only one element.
+		return SliceAxisSpec{Start: index, NoEnd: true}
+	}
+	return SliceAxisSpec{Start: index, End: index + 1}
 }
 
 // adjustToDimension converts negative indices to a value starting at dimension.
@@ -1166,19 +1227,27 @@ func adjustToDimension(index, dimension int) int {
 // Examples:
 //
 // - For `x = {1, 2, 3, 4}`:
-//   - `Slice(x) = {1, 2, 3, 4}`  // AxisRangeDef not given is taken in full.
+//   - `Slice(x) = {1, 2, 3, 4}`  // SliceAxisSpec not given is taken in full.
 //   - `Slice(x, AxisRange()) = {1, 2, 3, 4}`  // Default for AxisRange is the full range.
 //   - `Slice(x, AxisRange(2)) = {3, 4}`  // If only start is given, it is taken to the end.
 //   - `Slice(x, AxisRange(1,-1)) = {2, 3}`  // Negative values are taken from the end of the axis dimension.
+//   - `Slice(x, AxisElem(2)) = {3}`  // Take only one element of an axis.
 //
 // - For `x = {{1, 2, 3}, {4, 5, 6}}`:
-//   - `Slice(x, AxisRange(), AxisRange(0,1)) = {{1}, {4}}` // First axis taken in full, second axis only the first element.
-//   - `Slice(x, AxisRange(1,2)) = {{4, 5, 6}}`  // Missing second AxisRangeDef, assumed to be taken in full.
+//   - `Slice(x, AxisRange(), AxisElem(0)) = {{1}, {4}}` // First axis taken in full, second axis only the first element.
+//   - `Slice(x, AxisElem(1)) = {{4, 5, 6}}`  // Missing second SliceAxisSpec, assumed to be taken in full.
 //
-// If Slice is called with `x.shape = [5, 5, 5, 5]` and `axesRanges=AxisRange(1,2), AxisRange(), AxisRange(2), AxisRange(0,2)`
+// If Slice is called with `x.shape = [5, 5, 5, 5]` and `axesRanges=AxisElem(1), AxisRange(), AxisRange(2), AxisRange(0,2)`
 // would return a node shaped `[1, 5, 3, 2]`.
 //
-// It also works with strides, use the AxisRangeDef.Stride() method to conveniently set it.
+// It also supports "spacers" (like "*" in paths), that fill the unknown axes.
+// Example: let's say we want to get just the last example of a batch, and just the first
+// element of the embedding. Assume x is shaped `[batch_size, ..., embedding_size]` and
+// we want something like `x[-1, ..., 0:1]`.
+//
+// sample := Slice(x, AxisElem(-1), AxisRange().Spacer(), AxisElem(0))
+//
+// It also works with strides, use the SliceAxisSpec.Stride() method to conveniently set it.
 //
 // Example:
 //
@@ -1187,12 +1256,42 @@ func adjustToDimension(index, dimension int) int {
 //
 // - For `x = {{1, 2, 3}, {4, 5, 6}}`:
 //   - `Slice(x, AxisRange().Stride(2), AxisRange(-1)) = {{3}}`  // Take every 2nd row (so only the 1st here), the last column.
-func Slice(x *Node, axesRanges ...AxisRangeDef) *Node {
+func Slice(x *Node, axesSpec ...SliceAxisSpec) *Node {
 	_ = validateGraphFromInputs(x)
 	rank := x.shape.Rank()
 
-	if len(axesRanges) > rank {
-		Panicf("Slice was given %d ranges, but x only has (rank) %d axes", len(axesRanges), rank)
+	// Convert spacers
+	var numSpacers int
+	for _, spec := range axesSpec {
+		if spec.IsSpacer {
+			numSpacers++
+		}
+	}
+	if numSpacers > 1 {
+		Panicf("Only one \"spacer\" range is allowed in Slice, but %d were given: axesSpec=%+v", numSpacers, axesSpec)
+	}
+	if numSpacers == 1 {
+		// Replace spacer spec with as many copies as needed to fill the axesSpec to match the rank.
+		newAxesSpec := make([]SliceAxisSpec, 0, rank)
+		copies := rank - len(axesSpec) + numSpacers
+		if copies < 0 {
+			Panicf("Slice was given %d ranges (not counting spacer), but x only has (rank) %d axes", len(axesSpec)-1, rank)
+		}
+		for _, spec := range axesSpec {
+			if !spec.IsSpacer {
+				newAxesSpec = append(newAxesSpec, spec)
+			} else {
+				spec.IsSpacer = false
+				for ii := 0; ii < copies; ii++ {
+					newAxesSpec = append(newAxesSpec, spec)
+				}
+			}
+		}
+		axesSpec = newAxesSpec
+	}
+
+	if len(axesSpec) > rank {
+		Panicf("Slice was given %d ranges, but x only has (rank) %d axes", len(axesSpec), rank)
 	}
 	starts := make([]int, rank)
 	limits := make([]int, rank)
@@ -1202,14 +1301,14 @@ func Slice(x *Node, axesRanges ...AxisRangeDef) *Node {
 		starts[ii] = 0
 		limits[ii] = dim
 		strides[ii] = 1
-		if len(axesRanges) > ii && !axesRanges[ii].Full {
-			starts[ii] = adjustToDimension(axesRanges[ii].Start, dim)
-			if !axesRanges[ii].NoEnd {
-				limits[ii] = adjustToDimension(axesRanges[ii].End, dim)
+		if len(axesSpec) > ii && !axesSpec[ii].Full {
+			starts[ii] = adjustToDimension(axesSpec[ii].Start, dim)
+			if !axesSpec[ii].NoEnd {
+				limits[ii] = adjustToDimension(axesSpec[ii].End, dim)
 			}
 		}
-		if len(axesRanges) > ii && axesRanges[ii].StrideValue > 0 {
-			strides[ii] = axesRanges[ii].StrideValue
+		if len(axesSpec) > ii && axesSpec[ii].StrideValue > 0 {
+			strides[ii] = axesSpec[ii].StrideValue
 		}
 	}
 	return SliceWithStridesXLA(x, starts, limits, strides)

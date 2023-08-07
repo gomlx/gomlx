@@ -86,6 +86,13 @@ func AddScalar(x *Node, scalar float64) *Node {
 	return Add(x, Scalar(g, x.DType(), scalar))
 }
 
+// ModScalar converts scalar to a constant with x's DType and returns `x % scalar`
+// with proper broadcasting.
+func ModScalar(x *Node, scalar float64) *Node {
+	g := x.Graph()
+	return Mod(x, Scalar(g, x.DType(), scalar))
+}
+
 // MaxScalar converts scalar to a constant with x's DType and returns element-wise `Max(x, scalar)`.
 func MaxScalar(x *Node, scalar float64) *Node {
 	g := x.Graph()
@@ -376,4 +383,51 @@ func DiagonalWithValue(scalar *Node, dim int) *Node {
 	g := scalar.Graph()
 	matrix := BroadcastPrefix(scalar, []int{dim, dim})
 	return Where(Diagonal(g, dim), matrix, ZerosLike(matrix))
+}
+
+// Complex generate a complex node from floating point nodes.
+// The inputs `real` and `imaginary` must have the same dtype, and they must be either `shapes.Float32` or
+// `shapes.Float64`.
+// The output will be either `shapes.Complex64` or `shapes.Complex128`, depending on the inputs dtype.
+// The shapes of `real` or `imaginary` must be the same, or one must be a scalar, in which case
+// the value is broadcast to every other value.
+//
+// Example: To get a node c with `{(0+1i), (0-1i)}`:
+//
+//	x := Const(g, []float32{1, -1})
+//	zero := ScalarZero(g, shapes.Float32)
+//	c := Complex(zero , x)
+func Complex(real *Node, imaginary *Node) *Node {
+	g := validateGraphFromInputs(real, imaginary)
+	if real.DType() != imaginary.DType() {
+		Panicf("dtypes for real (%s) and imaginary (%s) must be the same and "+
+			"either shapes.Float32 or shapes.Float64", real.DType(), imaginary.DType())
+	}
+	dtype := real.DType()
+	if dtype != shapes.Float32 && dtype != shapes.Float64 {
+		Panicf("the dtype for the inputs (real and imaginary) must be either Float32 or Float64, got %s instead", dtype)
+	}
+	var cDType shapes.DType
+	var i *Node
+	if dtype == shapes.Float32 {
+		cDType = shapes.Complex64
+		i = Const(g, complex(float32(0), float32(1)))
+	} else {
+		cDType = shapes.Complex128
+		i = Const(g, complex(0.0, 1.0))
+	}
+	if !real.Shape().Eq(imaginary.Shape()) {
+		if real.Shape().IsScalar() {
+			real = BroadcastToShape(real, imaginary.Shape())
+		} else if imaginary.Shape().IsScalar() {
+			imaginary = BroadcastToShape(imaginary, real.Shape())
+		} else {
+			Panicf("shapes for real (%s) and imaginary (%s) must either be the same or "+
+				"one of them must a scalar that is broadcast", real.Shape(), imaginary.Shape())
+		}
+	}
+
+	real = ConvertType(real, cDType)
+	imaginary = Mul(ConvertType(imaginary, cDType), i)
+	return Add(real, imaginary)
 }

@@ -17,15 +17,20 @@
 package shapes
 
 import (
-	"github.com/gomlx/gomlx/types/slices"
+	"github.com/stretchr/testify/require"
 	"testing"
 )
 
 func TestCastAsDType(t *testing.T) {
 	value := [][]int{{1, 2}, {3, 4}, {5, 6}}
-	want := [][]float32{{1, 2}, {3, 4}, {5, 6}}
-	got := CastAsDType(value, Float32)
-	if !slices.DeepSliceCmp(want, got, slices.Equal[float32]) {
-		t.Fatalf("Convert int->float32 slices: got %v, wanted %v", got, want)
+	{
+		want := [][]float32{{1, 2}, {3, 4}, {5, 6}}
+		got := CastAsDType(value, Float32)
+		require.Equal(t, want, got)
+	}
+	{
+		want := [][]complex64{{1, 2}, {3, 4}, {5, 6}}
+		got := CastAsDType(value, Complex64)
+		require.Equal(t, want, got)
 	}
 }

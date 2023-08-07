@@ -105,7 +105,7 @@ func New(width, height int, evalDatasets ...train.Dataset) *Plots {
 		Height:       height,
 		EvalDatasets: evalDatasets,
 		xProjection:  mg.Lin,
-		yProjection:  mg.Log,
+		yProjection:  mg.Lin,
 	}
 }
 
@@ -262,12 +262,14 @@ func (ps *Plots) Done() {
 }
 
 // LogScaleX sets Plots to use a log scale on the X-axis.
+// If not set, it uses linear scale.
 func (ps *Plots) LogScaleX() *Plots {
 	ps.xProjection = mg.Log
 	return ps
 }
 
 // LogScaleY sets Plots to use a log scale on the X-axis.
+// If not set, it uses linear scale.
 func (ps *Plots) LogScaleY() *Plots {
 	ps.yProjection = mg.Log
 	return ps
@@ -387,6 +389,18 @@ func (ps *Plots) AddPoint(metricName, metricType string, step, value float64) {
 	p.AddPoint(metricName, step, value)
 }
 
+// AddValues is a shortcut to add all `values` as y-coordinates, and it uses the indices
+// of the values as x-coordinate.
+// `metricName` and `metricType` defines the label for the y-values, and the type of metric
+// (if there are more than one plot).
+// If there is only one plot, you can leave them empty ("") and there will be no plot title
+// nor labels.
+func (ps *Plots) AddValues(metricName, metricType string, values []float64) {
+	for ii, v := range values {
+		ps.AddPoint(metricName, metricType, float64(ii), v)
+	}
+}
+
 // AddPoint adds a point for the given metric. The `step` is the x-axis, and `value` is the y-axis.
 func (p *Plot) AddPoint(metricName string, step, value float64) {
 	s, found := p.PerName[metricName]
@@ -414,6 +428,16 @@ func (ps *Plots) Plot() {
 	}
 }
 
+// PlotToHTML is similar to Plot but instead returns the HTML that include all plots
+// (one per metric type), which can be displayed in some different way.
+func (ps *Plots) PlotToHTML() string {
+	parts := make([]string, 0, len(ps.PerMetricType))
+	for _, key := range slices.SortedKeys(ps.PerMetricType) {
+		parts = append(parts, ps.PerMetricType[key].PlotToHTML(ps.Width, ps.Height))
+	}
+	return strings.Join(parts, "\n")
+}
+
 // DynamicPlot will plot on a transient area that gets overwritten each time there is a new data point.
 // If final is true, it clears the transient area, and it plots instead in the definitive version.
 func (ps *Plots) DynamicPlot(final bool) {
@@ -433,11 +457,7 @@ func (ps *Plots) DynamicPlot(final bool) {
 	}
 
 	// Plot transient version.
-	parts := make([]string, 0, len(ps.PerMetricType))
-	for _, key := range slices.SortedKeys(ps.PerMetricType) {
-		parts = append(parts, ps.PerMetricType[key].PlotToHTML(ps.Width, ps.Height))
-	}
-	gonbui.UpdateHTML(ps.gonbID, strings.Join(parts, "\n"))
+	gonbui.UpdateHTML(ps.gonbID, ps.PlotToHTML())
 	return
 }
 
@@ -466,8 +486,12 @@ func (p *Plot) PlotToHTML(width, height int) string {
 	diagram.Axis(p.allPoints, mg.XAxis, diagram.ValueTicker('f', 0, 10), false, "Steps")
 	diagram.Axis(p.allPoints, mg.YAxis, diagram.ValueTicker('f', 3, 10), true, p.MetricType)
 	diagram.Frame()
-	diagram.Title(fmt.Sprintf("%s metrics", p.MetricType))
-	diagram.Legend(mg.BottomLeft)
+	if p.MetricType != "" {
+		diagram.Title(fmt.Sprintf("%s metrics", p.MetricType))
+	}
+	if len(p.PerName) > 1 || slices.SortedKeys(p.PerName)[0] != "" {
+		diagram.Legend(mg.BottomLeft)
+	}
 	buf := bytes.NewBuffer(nil)
 	err := diagram.Render(buf)
 	if err != nil {

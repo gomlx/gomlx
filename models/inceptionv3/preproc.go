@@ -36,7 +36,7 @@ func PreprocessImage(image *Node, maxValue float64, channelsConfig timage.Channe
 	shape := image.Shape()
 	channelsAxis := timage.GetChannelsAxis(image, channelsConfig)
 	if shape.Dimensions[channelsAxis] == 4 {
-		axesRanges := make([]AxisRangeDef, image.Rank())
+		axesRanges := make([]SliceAxisSpec, image.Rank())
 		for ii := range axesRanges {
 			if ii == channelsAxis {
 				axesRanges[ii] = AxisRange(0, 3)
