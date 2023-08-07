@@ -313,23 +313,28 @@ type VJP func(node, v *Node, outputShape shapes.Shape) []*Node
 // Notice xla.GetTupleElementNode is specialized inside the main reverse autodiff code, and is not
 // in the table here.
 var VJPRegistration = map[xla.NodeType]VJP{
-	xla.ConstantNode:           nilVJP,
-	xla.ParameterNode:          nilVJP,
-	xla.ConvertTypeNode:        convertTypeVJP,
-	xla.WhereNode:              whereVJP,
-	xla.NegNode:                negVJP,
-	xla.AbsNode:                absVJP,
-	xla.ExpNode:                expVJP,
-	xla.LogNode:                logVJP,
-	xla.Log1pNode:              log1pVJP,
-	xla.TanhNode:               tanhVJP,
-	xla.AddNode:                addVJP,
-	xla.SubNode:                subVJP,
-	xla.MulNode:                mulVJP,
-	xla.DivNode:                divVJP,
-	xla.SqrtNode:               sqrtVJP,
-	xla.RealNode:               realVJP,
-	xla.ImagNode:               imagVJP,
+	xla.ConstantNode:    nilVJP,
+	xla.ParameterNode:   nilVJP,
+	xla.ConvertTypeNode: convertTypeVJP,
+	xla.WhereNode:       whereVJP,
+	xla.NegNode:         negVJP,
+	xla.AbsNode:         absVJP,
+	xla.ExpNode:         expVJP,
+	xla.LogNode:         logVJP,
+	xla.Log1pNode:       log1pVJP,
+	xla.TanhNode:        tanhVJP,
+	xla.AddNode:         addVJP,
+	xla.SubNode:         subVJP,
+	xla.MulNode:         mulVJP,
+	xla.DivNode:         divVJP,
+	xla.SqrtNode:        sqrtVJP,
+
+	// Complex numbers.
+	xla.RealNode:    realVJP,
+	xla.ImagNode:    imagVJP,
+	xla.ConjNode:    conjVJP,
+	xla.ComplexNode: complexVJP,
+
 	xla.MaxNode:                minMaxVJP,
 	xla.MinNode:                minMaxVJP,
 	xla.ReshapeNode:            reshapeVJP,
@@ -366,7 +371,7 @@ func vjpForDefaultBroadcast(node, input, v *Node) *Node {
 		return ReduceAllSum(v)
 	}
 
-	// Reduce sum on the dimensions it was broadcast during the sum. Search for all dimensions that
+	// Reduce-sum on the dimensions it was broadcast during the sum. Search for all dimensions that
 	// are 1 in the input, and > 1 in the output.
 	var reduceDims []int
 	for ii, dim := range input.shape.Dimensions {
@@ -380,11 +385,19 @@ func vjpForDefaultBroadcast(node, input, v *Node) *Node {
 	return ReshapeWithShape(reduced, input.shape)
 }
 
-// Gradient of the type conversion, just converts back the adjunt dtype to
+// Gradient of the type conversion, just converts back the adjoint dtype to
 // its input dtype.
+//
+// Except if the conversion is from float->complex: it's a valid conversion, but for the back-propagation
+// we propagate back only the real part.
 func convertTypeVJP(node, v *Node, _ shapes.Shape) []*Node {
 	_ = node
-	return []*Node{ConvertType(v, node.inputs[0].DType())}
+	inputDType := node.inputs[0].DType()
+	if node.DType().IsComplex() && inputDType.IsFloat() {
+		// Just take the real part of the adjoint, since the input has no effect on the imaginary output.
+		return []*Node{ConvertType(Real(v), inputDType)}
+	}
+	return []*Node{ConvertType(v, inputDType)}
 }
 
 func negVJP(node, v *Node, _ shapes.Shape) []*Node {
@@ -398,14 +411,17 @@ func absVJP(node, v *Node, _ shapes.Shape) []*Node {
 		// For complex numbers, Abs() is defined as the Euclidean distance in the complex
 		// plane from 0.
 		//
-		// Abs(x_c) = Sqrt(x_re^2 + y_re^2)
-		// dAbs(x_c)/dx_re = 1/2 * (x_re^2+y_re^2)^(-1/2) * (2*x_re) = x_re / Abs(x_c)
-		// dAbs(x_c)/dy_re = 1/2 * (x_re^2+y_re^2)^(-1/2) * (2*y_re) = y_re / Abs(x_c)
+		// Abs(x_c) = Sqrt(x_re^2 + x_im^2)
+		// dAbs(x_c)/dx_re = 1/2 * (x_re^2+x_im^2)^(-1/2) * (2*x_re) = x_re / Abs(x_c)
+		// dAbs(x_c)/dx_im = 1/2 * (x_re^2+x_im^2)^(-1/2) * (2*x_im) = x_im / Abs(x_c)
+		//
 		dxReal := Div(Real(x), node)
 		dxImag := Div(Imag(x), node)
-		// Multiply by the current adjoint to get the next adjoint.
+		// Multiply by the output adjoint to get the input adjoint.
 		dxReal = Mul(dxReal, v)
 		dxImag = Mul(dxImag, v)
+		// Now there is a sleight of hand here: we are using
+		//   dAbs(x_c)/d(x_c) = dAbs(x_c)/dx_re + i.dAbs(x_c)/dx_im ... which is not really true.
 		return []*Node{Complex(dxReal, dxImag)}
 	}
 
@@ -450,6 +466,16 @@ func realVJP(node, v *Node, _ shapes.Shape) []*Node {
 func imagVJP(node, v *Node, _ shapes.Shape) []*Node {
 	g := node.Graph()
 	return []*Node{Complex(ScalarZero(g, v.DType()), v)}
+}
+
+// conjVJP takes the conjugate of the output's adjoint.
+func conjVJP(node, v *Node, _ shapes.Shape) []*Node {
+	return []*Node{Conj(v)}
+}
+
+// complexVJP splits the output's adjoint into its components.
+func complexVJP(node, v *Node, _ shapes.Shape) []*Node {
+	return []*Node{Real(v), Imag(v)}
 }
 
 func addVJP(node, v *Node, _ shapes.Shape) []*Node {

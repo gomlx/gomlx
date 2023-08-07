@@ -390,11 +390,14 @@ func TestGradientConvertType(t *testing.T) {
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			inputs := Const(g, []float32{1e6, 1e-6, 0, -1e-8, -1e6})
 			values := ConvertType(inputs, shapes.Complex64)
-			output = Real(Mul(Const(g, []complex64{2 + 1i, 1 - 1i, 3, -4, 5}), values))
-			return output, []*Node{inputs}
-		}, []any{[]float32{2, 1, 3, -4, 5}},
+			scaled := Mul(Const(g, []complex64{2, 1, 3, -4, 5}), values)
+			output = ReduceAllSum(Add(Real(scaled), Imag(scaled)))
+			return output, []*Node{values, inputs}
+		}, []any{
+			[]complex64{2 + 2i, 1 + 1i, 3 + 3i, -4 - 4i, 5 + 5i},
+			[]float32{2, 1, 3, -4, 5},
+		},
 	)
-
 }
 
 func TestGradientAbs(t *testing.T) {
@@ -578,7 +581,7 @@ func TestGradientTranspose(t *testing.T) {
 		})
 }
 
-func TestGradientRealAndImag(t *testing.T) {
+func TestGradientRealImagAndConj(t *testing.T) {
 	testGradientsExact(t, "gradient_of_Real",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			inputs := Const(g, []complex128{1e6, 1e-6, 0, -1e-8, -1e6})
@@ -594,5 +597,28 @@ func TestGradientRealAndImag(t *testing.T) {
 			output = Mul(Const(g, []float64{2, 1, 3, 4, 5}), values)
 			return output, []*Node{inputs}
 		}, []any{[]complex128{2i, 1i, 3i, 4i, 5i}},
+	)
+	testGradientsExact(t, "gradient_of_Conj",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			inputs := Const(g, []complex128{1e6i, 1e-6i, 0, -1e-8i, -1e6i})
+			values := Imag(Conj(inputs))
+			output = Mul(Const(g, []float64{2, 1, 3, 4, 5}), values)
+			return output, []*Node{inputs}
+		}, []any{[]complex128{-2i, -1i, -3i, -4i, -5i}},
+	)
+}
+
+func TestGradientComplex(t *testing.T) {
+	testGradientsExact(t, "gradient_of_Real",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			real := Const(g, []float32{1.0, 3.0})
+			imag := Const(g, []float32{-1.0, 4.0})
+			values := Complex(real, imag)
+			output = Abs(Mul(Const(g, []complex64{complex64(math.Sqrt2), 5}), values))
+			return output, []*Node{real, imag}
+		}, []any{
+			[]float32{1.0, 3},
+			[]float32{-1.0, 4},
+		},
 	)
 }
