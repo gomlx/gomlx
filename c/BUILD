@@ -31,11 +31,13 @@ genrule(
     cmd = """
     mkdir "$@"
     ln $(location //gomlx:libgomlx_xla.so) "$@"
+
+    mkdir "$@/gomlx"
     GPERFTOOLS_LIB="$$(pwd)/$$(dirname $(location @gperftools//:libtcmalloc.a))"
     if [ -d "$$GPERFTOOLS_LIB"/lib ]; then
       GPERFTOOLS_LIB="$$GPERFTOOLS_LIB"/lib
     fi
-    ln "$$GPERFTOOLS_LIB"/lib* "$@"
+    ln "$$GPERFTOOLS_LIB"/lib* "$@/gomlx"
     """,
 )
 
