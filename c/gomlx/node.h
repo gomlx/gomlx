@@ -102,6 +102,7 @@ enum NodeType {
     RsqrtNode,
     ImagNode,
     RealNode,
+    ConjNode,
 
     // Two-arguments ops:
     AddNode,
@@ -117,6 +118,7 @@ enum NodeType {
 	MinNode,
 	MaxNode,
 	PowNode,
+	ComplexNode,
 
 	// Two-arguments comparison ops:
 	EqualNode,

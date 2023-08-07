@@ -472,6 +472,7 @@ XlaStatus* ComputationAddOp(Computation *comp, SerializedNode *node) {
     case RsqrtNode: op = xla::Rsqrt(*inputs[0]); break;
     case ImagNode: op = xla::Imag(*inputs[0]); break;
     case RealNode: op = xla::Real(*inputs[0]); break;
+    case ConjNode: op = xla::Conj(*inputs[0]); break;
 
     // Two-arguments ops
     case AddNode:
@@ -509,6 +510,9 @@ XlaStatus* ComputationAddOp(Computation *comp, SerializedNode *node) {
         break;
     case PowNode:
         op = xla::Pow(*inputs[0], *inputs[1]);
+        break;
+    case ComplexNode:
+        op = xla::Complex(*inputs[0], *inputs[1]);
         break;
 
     // Nodes with variable sets of arguments.
