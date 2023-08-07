@@ -1,6 +1,6 @@
 # GoMLX changelog
 
-## v0.6.0 - ...
+## v0.6.0 - 2023/08/07
 
 * FFT, RealFFT, InverseFFT and InverseRealFFT operations.
   * Added a small notebook demo for FFT. 
