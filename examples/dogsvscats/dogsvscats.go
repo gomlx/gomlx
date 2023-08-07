@@ -757,7 +757,7 @@ func (pds *PreGeneratedDataset) Reset() {
 
 // BytesToTensor converts a batch of saved images as bytes to a tensor.Local with 4 channels: R,G,B and A. It assumes
 // all images have the exact same size. There should be one byte with the label before each image.
-func BytesToTensor[T shapes.Number](buffer []byte, numImages, width, height int) (t *tensor.Local) {
+func BytesToTensor[T shapes.NumberNotComplex](buffer []byte, numImages, width, height int) (t *tensor.Local) {
 	var zero T
 	t = tensor.FromShape(shapes.Make(shapes.DTypeForType(reflect.TypeOf(zero)), numImages, height, width, 4))
 	ref := t.AcquireData()

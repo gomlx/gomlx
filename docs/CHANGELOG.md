@@ -10,6 +10,7 @@
 * Added "spacers" (like "*" for axis ranges) and `AxisElem()` for `Slice()`.
 * Package `examples/notebook/gonb/margaid`: Added `Plots.AddValues` and `Plots.PlotToHTML`; 
   Fixed `Plots` returned by `New()` to be linear scale by default.
+* Included TCMalloc dependency into libgomlx_xla.so statically -- so one less dependency. 
 
 ## v0.5.0 - 2023/07/10
 
