@@ -46,6 +46,20 @@ http_archive(
     ],
 )
 
+
+GPERFTOOLS_VERSION = "2.10"
+
+http_archive(
+    name = "gperftools",
+    strip_prefix = "gperftools-{version}".format(version = GPERFTOOLS_VERSION),
+    build_file = "//third_party:gperftools.BUILD",
+    sha256 = "83e3bfdd28b8bcf53222c3798d4d395d52dadbbae59e8730c4a6d31a9c3732d8",
+    urls = [
+    	  "https://github.com/gperftools/gperftools/releases/download/gperftools-{version}/gperftools-{version}.tar.gz".format(version = GPERFTOOLS_VERSION),
+    ],
+)
+
+
 #http_archive(
 #    name = "org_tensorflow",
 #    add_prefix = "tensorflow",

@@ -89,7 +89,9 @@ cc_library(
     srcs = glob(["*.cpp"]),
     hdrs = glob(["*.h"]),
     linkopts = ["-shared"],
-    deps = [] + gomlx_jit_deps,
+    deps = [
+	    "@gperftools",
+    ] + gomlx_jit_deps,
     alwayslink = True,
 )
 
