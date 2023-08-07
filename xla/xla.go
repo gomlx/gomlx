@@ -23,7 +23,9 @@
 // To compile this library requires (see README.md for details on how to install these):
 //
 //   - gomlx_xla library installed
-//   - tcmalloc installed. See README.md.
+//   - tcmalloc installed -- part of the `gperftools` library. See README.md.
+//     The distribution comes with a pre-compiled libtcmalloc.so, in the `$(INSTALL_DIR)/lib/gomlx/`. You can also copy
+//     it from there to a common libraries directory, of include that directory in your `LD_LIBRAY_PATH`.
 package xla
 
 // #cgo LDFLAGS: -lgomlx_xla -ltcmalloc
