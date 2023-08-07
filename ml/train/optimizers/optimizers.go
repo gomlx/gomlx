@@ -179,11 +179,21 @@ func addGradientsToVariablesGraph(ctx *context.Context, loss, learningRate, glob
 	numTrainable := len(grads)
 	ii := 0
 	ctx.EnumerateVariables(func(v *context.Variable) {
-		if v.Trainable && v.InUseByGraph(g) {
-			updatedValue := Sub(v.ValueGraph(g), Mul(grads[ii], learningRate))
-			v.SetValueGraph(updatedValue)
-			ii++
+		if !v.Trainable || !v.InUseByGraph(g) {
+			// Not interested in this variable.
+			return
 		}
+		lrCast := learningRate
+		if lrCast.DType() != grads[ii].DType() {
+			// Some variables may not be of the same DType as the learning rate (which has the same DType
+			// as the loss), so we need to cast it.
+			// Two common reasons: variables can have different resolution (to save space); variables could be
+			// complex.
+			lrCast = ConvertType(learningRate, grads[ii].DType())
+		}
+		updatedValue := Sub(v.ValueGraph(g), Mul(grads[ii], lrCast))
+		v.SetValueGraph(updatedValue)
+		ii++
 	})
 	if ii != numTrainable {
 		Panicf("number of trainable variables for BuildTrainableVariablesGradientsGraph (%d) and addGradientsToVariablesGraph (%d) "+

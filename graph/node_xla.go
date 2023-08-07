@@ -420,3 +420,16 @@ func dotGeneralVJP(node, v *Node, _ shapes.Shape) []*Node {
 		gradFn(rhs, rhsBatchAxes, rhsContractingAxes, rhsCrossAxes, false, lhs, lhsBatchAxes, lhsContractingAxes, lhsCrossAxes), // grad wrt rhs
 	}
 }
+
+// fftXLA calls the XLA FFT operation, which implements {Forward, Inverse} x {Complex, Real} versions.
+//
+// See documentation in https://www.tensorflow.org/xla/operation_semantics.
+// Underlying, CPU FFT is backed by Eigen's TensorFFT and GPU FFT uses cuFFT.
+func fftXLA(operand *Node, fftType xla.FftType, fftLength []int) *Node {
+	g := validateGraphFromInputs(operand)
+	return newNode(g, &xla.SerializedNode{
+		Type: xla.FftNode,
+		Int:  int(fftType),
+		Ints: slices.Copy(fftLength),
+	}, []*Node{operand})
+}

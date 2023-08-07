@@ -55,6 +55,14 @@ func TestFromValue(t *testing.T) {
 	shape, err = shapeForValue([][]bool{{true, false}, {false, false}, {false, true}})
 	cmpShapes(t, shape, wantShape, err)
 
+	wantShape = shapes.Shape{DType: shapes.Complex64, Dimensions: []int{2}}
+	shape, err = shapeForValue([]complex64{1.0i, 1.0})
+	cmpShapes(t, shape, wantShape, err)
+
+	wantShape = shapes.Shape{DType: shapes.Complex128, Dimensions: []int{2}}
+	shape, err = shapeForValue([]complex128{1.0i, 1.0})
+	cmpShapes(t, shape, wantShape, err)
+
 	// Test for invalid `DType`.
 	shape, err = shapeForValue([][]uint16{{3}})
 	if shape.DType != shapes.InvalidDType {
@@ -132,7 +140,7 @@ func TestLocal_CopyData(t *testing.T) {
 //
 //	https://stackoverflow.com/questions/73591149/generics-type-inference-when-cascaded-calls-of-generic-functions
 //	https://groups.google.com/g/golang-nuts/c/abILUXiD8-k
-func testValueOf[T shapes.Number](t *testing.T) {
+func testValueOf[T shapes.Number | complex64 | complex128](t *testing.T) {
 	want := [][]T{{1, 2, 3}, {10, 11, 12}}
 	var valueT Tensor
 	require.NotPanics(t, func() { valueT = FromAnyValue(want) })
@@ -150,6 +158,8 @@ func TestValueOf(t *testing.T) {
 	testValueOf[uint8](t)
 	testValueOf[uint32](t)
 	testValueOf[uint64](t)
+	testValueOf[complex64](t)
+	testValueOf[complex128](t)
 }
 
 func TestTuples(t *testing.T) {
@@ -201,14 +211,29 @@ func TestTuples(t *testing.T) {
 }
 
 func TestSerialize(t *testing.T) {
-	values := [][]float64{{2}, {3}, {5}, {7}, {11}}
-	localT := FromValue(values)
-	buf := &bytes.Buffer{}
-	enc := gob.NewEncoder(buf)
-	require.NoError(t, localT.GobSerialize(enc))
-	var err error
-	dec := gob.NewDecoder(buf)
-	localT, err = GobDeserialize(dec)
-	require.NoError(t, err)
-	require.Equal(t, values, localT.Value().([][]float64))
+	{
+		values := [][]float64{{2}, {3}, {5}, {7}, {11}}
+		localT := FromValue(values)
+		buf := &bytes.Buffer{}
+		enc := gob.NewEncoder(buf)
+		require.NoError(t, localT.GobSerialize(enc))
+		var err error
+		dec := gob.NewDecoder(buf)
+		localT, err = GobDeserialize(dec)
+		require.NoError(t, err)
+		require.Equal(t, values, localT.Value().([][]float64))
+	}
+
+	{
+		values := [][]complex128{{2}, {3}, {5}, {7}, {11}}
+		localT := FromValue(values)
+		buf := &bytes.Buffer{}
+		enc := gob.NewEncoder(buf)
+		require.NoError(t, localT.GobSerialize(enc))
+		var err error
+		dec := gob.NewDecoder(buf)
+		localT, err = GobDeserialize(dec)
+		require.NoError(t, err)
+		require.Equal(t, values, localT.Value().([][]complex128))
+	}
 }

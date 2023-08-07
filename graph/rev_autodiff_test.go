@@ -22,8 +22,8 @@ import (
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
+	"github.com/stretchr/testify/require"
 	"math"
-	"runtime/debug"
 	"testing"
 )
 
@@ -316,15 +316,14 @@ func TestGradientGather(t *testing.T) {
 type gradTestFunc func(g *Graph) (output *Node, nodesForGrad []*Node)
 
 // testGradients run testFn to build a graph, calculates the gradients of the ReduceAllSum(output) with respect
-// to the nodesForGrad, and check that it gets the corresponding values in wantForGrad.
+// to the nodesForGrad, and check that it gets close to the corresponding values in wantForGrad.
 //
 // It will print out the inputs and outputs to help debugging.
-func testGradients[T interface{ float32 | float64 }](t *testing.T, name string, testFn gradTestFunc, wantForGrad []any) {
+func testGradients(t *testing.T, name string, testFn gradTestFunc, wantForGrad []any) {
 	manager := buildTestManager()
 	fmt.Printf("%s:\n", name)
 	// Create a function that can be used by computation.Exec.
-	fn := func(placeholder *Node) []*Node {
-		g := placeholder.Graph()
+	fn := func(g *Graph) []*Node {
 		output, nodesForGrad := testFn(g)
 		grads := Gradient(ReduceAllSum(output), nodesForGrad...)
 		all := make([]*Node, len(grads)+1)
@@ -333,31 +332,101 @@ func testGradients[T interface{ float32 | float64 }](t *testing.T, name string, 
 		return all
 	}
 	exec := NewExec(manager, fn)
-	var zero T
-	results := exec.Call(zero)
+	results := exec.Call()
 	fmt.Printf("\toutput=%v\n", results[0].Local().GoStr())
-	for ii, want := range wantForGrad {
-		got := results[ii+1].Local()
-		fmt.Printf("\tgrad(f)/grad(x_%d): got=%v\n", ii, got.GoStr())
-		if !slices.DeepSliceCmp(got.Value(), want, slices.Close[T]) {
-			t.Log(string(debug.Stack()))
-			t.Errorf("grad f(x)/x_%d: want (%T) %v, got %v", ii, want, want, got.GoStr())
-		}
+	gradients := results[1:]
+	for ii, output := range gradients {
+		fmt.Printf("\tGradient #%d: %s\n", ii, output.Local().GoStr())
+	}
+	require.Equalf(t, len(wantForGrad), len(gradients), "%s: number of wanted results different than number of gradients", name)
+	const delta = 1e-4
+	for ii, output := range gradients {
+		require.Truef(t, slices.SlicesInDelta(output.Value(), wantForGrad[ii], delta), "%s: gradient #%d doesn't match wanted value %#v",
+			name, ii, wantForGrad[ii])
 	}
 }
 
+// testGradientsExact run testFn to build a graph, calculates the gradients of the
+// ReduceAllSum(output) with respect to the nodesForGrad, and check that it gets the
+// exact corresponding values in wantForGrad.
+//
+// It will print out the inputs and outputs to help debugging.
+func testGradientsExact(t *testing.T, name string, testFn gradTestFunc, wantForGrad []any) {
+	manager := buildTestManager()
+	fmt.Printf("%s:\n", name)
+	// Create a function that can be used by computation.Exec.
+	fn := func(g *Graph) []*Node {
+		output, nodesForGrad := testFn(g)
+		grads := Gradient(ReduceAllSum(output), nodesForGrad...)
+		all := make([]*Node, len(grads)+1)
+		all[0] = output
+		copy(all[1:], grads)
+		return all
+	}
+	exec := NewExec(manager, fn)
+	results := exec.Call()
+	fmt.Printf("\toutput=%v\n", results[0].Local().GoStr())
+	gradients := results[1:]
+	for ii, output := range gradients {
+		fmt.Printf("\tGradient #%d: %s\n", ii, output.Local().GoStr())
+	}
+	require.Equalf(t, len(wantForGrad), len(gradients), "%s: number of wanted results different than number of gradients", name)
+	for ii, output := range gradients {
+		require.Equalf(t, output.Value(), wantForGrad[ii], "%s: gradient #%d doesn't match wanted value %#v",
+			name, ii, wantForGrad[ii])
+	}
+}
+
+func TestGradientConvertType(t *testing.T) {
+	testGradients(t, "gradient_of_ConvertType",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			inputs := Const(g, []float32{1e6, 1e-6, 0, -1e-8, -1e6})
+			values := ConvertType(inputs, shapes.Float64)
+			output = Mul(Const(g, []float64{2, 1, 3, -4, 5}), values)
+			return output, []*Node{inputs}
+		}, []any{[]float32{2, 1, 3, -4, 5}},
+	)
+	testGradients(t, "gradient_of_ConvertType",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			inputs := Const(g, []float32{1e6, 1e-6, 0, -1e-8, -1e6})
+			values := ConvertType(inputs, shapes.Complex64)
+			scaled := Mul(Const(g, []complex64{2, 1, 3, -4, 5}), values)
+			output = ReduceAllSum(Add(Real(scaled), Imag(scaled)))
+			return output, []*Node{values, inputs}
+		}, []any{
+			[]complex64{2 + 2i, 1 + 1i, 3 + 3i, -4 - 4i, 5 + 5i},
+			[]float32{2, 1, 3, -4, 5},
+		},
+	)
+}
+
 func TestGradientAbs(t *testing.T) {
-	testGradients[float64](t, "gradient_of_exp",
+	testGradients(t, "TestGradientAbs",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			inputs := Const(g, []float64{1e6, 1e-6, 0, -1e-8, -1e6})
 			output = Mul(Const(g, []float64{2, 1, 3, 4, 5}), Abs(inputs))
 			return output, []*Node{inputs}
 		}, []any{[]float64{2, 1, 3, -4, -5}},
 	)
+
+	testGradients(t, "TestGradientAbs-Complex",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			in0 := Const(g, []complex64{1 + 1i, 3 - 4i, -4 + 3i, -1 - 1i})
+			in1 := Const(g, []complex128{1 + 1i, 3 - 4i, -4 + 3i, -1 - 1i})
+			out0 := ReduceAllSum(Abs(in0))
+			out1 := ReduceAllSum(Abs(in1))
+			output = Add(ConvertType(out0, shapes.Float64), out1)
+			return output, []*Node{in0, in1}
+		}, []any{
+			[]complex64{0.70710677 + 0.70710677i, 0.6 - 0.8i, -0.8 + 0.6i, -0.70710677 - 0.70710677i},
+			[]complex128{0.7071067811865475 + 0.7071067811865475i, 0.6 - 0.8i, -0.8 + 0.6i, -0.7071067811865475 - 0.7071067811865475i},
+		},
+	)
+
 }
 
 func TestGradientMinMax(t *testing.T) {
-	testGradients[float64](t, "gradient_of_max",
+	testGradients(t, "gradient_of_max",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			inputs := Const(g, []float64{1e6, 1e-6, 0, -1e-8, -1e6})
 			zeros := Zeros(g, inputs.Shape())
@@ -366,7 +435,7 @@ func TestGradientMinMax(t *testing.T) {
 		}, []any{
 			[]float64{2, 1, 3, 0, 0},
 			[]float64{0, 0, 0, 4, 5}})
-	testGradients[float64](t, "gradient_of_min",
+	testGradients(t, "gradient_of_min",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			inputs := Const(g, []float64{1e6, 1e-6, 0, -1e-8, -1e6})
 			zeros := ScalarZero(g, inputs.DType())
@@ -378,7 +447,7 @@ func TestGradientMinMax(t *testing.T) {
 }
 
 func TestGradientExp(t *testing.T) {
-	testGradients[float64](t, "gradient_of_exp",
+	testGradients(t, "gradient_of_exp",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			inputs := Const(g, []float64{6, 1, 0, -2, -3})
 			output = Mul(Const(g, []float64{2, 1, 3, 4, 5}), Exp(inputs))
@@ -388,7 +457,7 @@ func TestGradientExp(t *testing.T) {
 }
 
 func TestGradientLog1p(t *testing.T) {
-	testGradients[float64](t, "gradient_of_log1p",
+	testGradients(t, "gradient_of_log1p",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			inputs := Const(g, []float64{0, 2, 10, 100})
 			output = Mul(Const(g, []float64{2, 1, 3, 4}), Log1p(inputs))
@@ -398,7 +467,7 @@ func TestGradientLog1p(t *testing.T) {
 }
 
 func TestGradientReduceMax(t *testing.T) {
-	testGradients[float64](t, "gradient_of_reduce_max",
+	testGradients(t, "gradient_of_reduce_max",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			inputs := Const(g, [][]float64{{1e6, 1e-6, 0, -1e-8, -1e6}, {0, 0, 0, 0, 0}})
 			// ReduceMax at dimension 0: result should be {1e6, 1e-6, 0, 0, 0}.
@@ -410,7 +479,7 @@ func TestGradientReduceMax(t *testing.T) {
 }
 
 func TestGradientBatchNorm(t *testing.T) {
-	testGradients[float32](t, "BatchNorm",
+	testGradients(t, "BatchNorm",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			input := Iota(g, MakeShape(shapes.Float32, 11, 3), 0) // Values from 0.0 to 6.0 on batch axis.
 			input = Div(input, Const(g, float32(10)))
@@ -441,7 +510,7 @@ func TestGradientBatchNorm(t *testing.T) {
 }
 
 func TestStopGradient(t *testing.T) {
-	testGradients[float64](t, "output=\\sum{3*x_0 + 1+StopGradient(x_1)} == 15, x_0 = x_1 = [0,1,2]",
+	testGradients(t, "output=\\sum{3*x_0 + 1+StopGradient(x_1)} == 15, x_0 = x_1 = [0,1,2]",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			input1 := IotaFull(g, MakeShape(F64, 3))
 			input2 := IotaFull(g, MakeShape(F64, 3))
@@ -455,7 +524,7 @@ func TestStopGradient(t *testing.T) {
 }
 
 func TestGradientGatherSlices(t *testing.T) {
-	testGradients[float32](t, "gradient_gather_slices",
+	testGradients(t, "gradient_gather_slices",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			input := IotaFull(g, shapes.Make(shapes.F32, 3, 2, 4))
 			start := Const(g, [][]int32{{0, 1}, {1, 2}})
@@ -473,7 +542,7 @@ func TestGradientGatherSlices(t *testing.T) {
 // TestGradientBroadcastInDim test the underlying XLA's broadcastInDim operator, since
 // it powers BroadcastToShape, BroadcastToDims and ExpandAndBroadcast operators.
 func TestGradientBroadcastInDim(t *testing.T) {
-	testGradients[float32](t, "broadcastInDim: scalar to shape",
+	testGradients(t, "broadcastInDim: scalar to shape",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			input := Const(g, float32(1))
 			output = BroadcastToDims(input, 2, 2)
@@ -481,7 +550,7 @@ func TestGradientBroadcastInDim(t *testing.T) {
 			return output, []*Node{input}
 		}, []any{float32(10)})
 
-	testGradients[float32](t, "broadcastInDim: with expansion (a)",
+	testGradients(t, "broadcastInDim: with expansion (a)",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			input := Const(g, []float32{10, 20})
 			output = ExpandAndBroadcast(input, []int{2, 2}, []int{0})
@@ -489,7 +558,7 @@ func TestGradientBroadcastInDim(t *testing.T) {
 			return output, []*Node{input}
 		}, []any{[]float32{4, 6}})
 
-	testGradients[float32](t, "broadcastInDim: with expansion (b)",
+	testGradients(t, "broadcastInDim: with expansion (b)",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			input := Const(g, []float32{10, 20})
 			output = ExpandAndBroadcast(input, []int{2, 2}, []int{1})
@@ -500,7 +569,7 @@ func TestGradientBroadcastInDim(t *testing.T) {
 
 // TestGradientTranspose makes sure it gets the reverse transpose correct.
 func TestGradientTranspose(t *testing.T) {
-	testGradients[float64](t, "Transpose",
+	testGradients(t, "Transpose",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			input := Ones(g, MakeShape(F64, 2, 3, 1))
 			output = TransposeAllDims(input, 1, 2, 0) // Rotate axes left.
@@ -510,4 +579,46 @@ func TestGradientTranspose(t *testing.T) {
 		}, []any{
 			[][][]float64{{{1}, {3}, {5}}, {{2}, {4}, {6}}},
 		})
+}
+
+func TestGradientRealImagAndConj(t *testing.T) {
+	testGradientsExact(t, "gradient_of_Real",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			inputs := Const(g, []complex128{1e6, 1e-6, 0, -1e-8, -1e6})
+			values := Real(inputs)
+			output = Mul(Const(g, []float64{2, 1, 3, 4, 5}), values)
+			return output, []*Node{inputs}
+		}, []any{[]complex128{2, 1, 3, 4, 5}},
+	)
+	testGradientsExact(t, "gradient_of_Imag",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			inputs := Const(g, []complex128{1e6i, 1e-6i, 0, -1e-8i, -1e6i})
+			values := Imag(inputs)
+			output = Mul(Const(g, []float64{2, 1, 3, 4, 5}), values)
+			return output, []*Node{inputs}
+		}, []any{[]complex128{2i, 1i, 3i, 4i, 5i}},
+	)
+	testGradientsExact(t, "gradient_of_Conj",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			inputs := Const(g, []complex128{1e6i, 1e-6i, 0, -1e-8i, -1e6i})
+			values := Imag(Conj(inputs))
+			output = Mul(Const(g, []float64{2, 1, 3, 4, 5}), values)
+			return output, []*Node{inputs}
+		}, []any{[]complex128{-2i, -1i, -3i, -4i, -5i}},
+	)
+}
+
+func TestGradientComplex(t *testing.T) {
+	testGradients(t, "gradient_of_Real",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			real := Const(g, []float32{1.0, 3.0})
+			imag := Const(g, []float32{-1.0, 4.0})
+			values := Complex(real, imag)
+			output = Abs(Mul(Const(g, []complex64{complex64(math.Sqrt2), 5}), values))
+			return output, []*Node{real, imag}
+		}, []any{
+			[]float32{1.0, 3},
+			[]float32{-1.0, 4},
+		},
+	)
 }

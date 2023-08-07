@@ -10,7 +10,6 @@ Split by functionality, the most "desirable" TODOs are:
 
 * CNNs: add SeparableConv2D. The goal would be to have an exact ResNet50 working.
 * GNN Layer: tbd., but is one of the recent hotness, it would be nice to have a GNN layer/scheme available as well.
-* FFT operation for FNets. The op is simple enough, the gradient I'm not sure how yet.
 * Importing models from TensorFlow/Jax/Pytorch/Hugging Face
   * Both: (A) As a black-box for inference only; (B) for further fine-tuning.
     * But if only the weights, and the model is translated by hand would already be good.

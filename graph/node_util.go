@@ -86,6 +86,13 @@ func AddScalar(x *Node, scalar float64) *Node {
 	return Add(x, Scalar(g, x.DType(), scalar))
 }
 
+// ModScalar converts scalar to a constant with x's DType and returns `x % scalar`
+// with proper broadcasting.
+func ModScalar(x *Node, scalar float64) *Node {
+	g := x.Graph()
+	return Mod(x, Scalar(g, x.DType(), scalar))
+}
+
 // MaxScalar converts scalar to a constant with x's DType and returns element-wise `Max(x, scalar)`.
 func MaxScalar(x *Node, scalar float64) *Node {
 	g := x.Graph()
@@ -150,7 +157,7 @@ func OnePlus(x *Node) *Node {
 	return Add(ScalarOne(g, x.DType()), x)
 }
 
-// Inverse returns (1/x).
+// Inverse returns (1/x), the multiplicative inverse. Also known as the reciprocal.
 func Inverse(x *Node) *Node {
 	g := validateGraphFromInputs(x)
 	return Div(ScalarOne(g, x.DType()), x)

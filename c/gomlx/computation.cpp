@@ -470,6 +470,9 @@ XlaStatus* ComputationAddOp(Computation *comp, SerializedNode *node) {
     case TanhNode: op = xla::Tanh(*inputs[0]); break;
     case SqrtNode: op = xla::Sqrt(*inputs[0]); break;
     case RsqrtNode: op = xla::Rsqrt(*inputs[0]); break;
+    case ImagNode: op = xla::Imag(*inputs[0]); break;
+    case RealNode: op = xla::Real(*inputs[0]); break;
+    case ConjNode: op = xla::Conj(*inputs[0]); break;
 
     // Two-arguments ops
     case AddNode:
@@ -508,6 +511,9 @@ XlaStatus* ComputationAddOp(Computation *comp, SerializedNode *node) {
     case PowNode:
         op = xla::Pow(*inputs[0], *inputs[1]);
         break;
+    case ComplexNode:
+        op = xla::Complex(*inputs[0], *inputs[1]);
+        break;
 
     // Nodes with variable sets of arguments.
     case RngNormalNode:
@@ -519,6 +525,11 @@ XlaStatus* ComputationAddOp(Computation *comp, SerializedNode *node) {
     case RngBitGeneratorNode: {
         xla::RandomAlgorithm algo = static_cast<xla::RandomAlgorithm>(node->integer);
         op = xla::RngBitGenerator(algo, *inputs[0], shape);
+        break;
+    }
+    case FftNode: {
+        xla::FftType fft_type = static_cast<xla::FftType>(node->integer);
+        op = xla::Fft(*inputs[0], fft_type, list_of_ints);
         break;
     }
 

@@ -111,8 +111,8 @@ func RandomNormalFn(initialSeed int64, stddev float64) VariableInitializer {
 // If it is set to 0 (NoSeed), a random seed is instead generated (from the nanosecond clock).
 func RandomUniformFn(initialSeed int64, min, max float64) VariableInitializer {
 	return func(g *Graph, shape shapes.Shape) *Node {
-		if shape.DType != shapes.F32 && shape.DType != shapes.F64 {
-			Panicf("cannot initialize non-float variable with RandomUniform -- shape requested %s", shape)
+		if !shape.DType.IsFloat() && !shape.DType.IsComplex() {
+			Panicf("cannot initialize non-float/non-complex variable with RandomUniform -- shape requested %s", shape)
 		}
 		var values *Node
 		useRngState(g, initialSeed, func(rngState *Node) (newRngState *Node) {

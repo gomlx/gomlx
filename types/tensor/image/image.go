@@ -169,7 +169,7 @@ func toTensorImpl(tt *ToTensorConfig, images []image.Image, batch bool) (t *tens
 	return
 }
 
-func toTensorGenericsImpl[T shapes.Number](tt *ToTensorConfig, images []image.Image, batch bool) (t *tensor.Local) {
+func toTensorGenericsImpl[T shapes.NumberNotComplex](tt *ToTensorConfig, images []image.Image, batch bool) (t *tensor.Local) {
 	var zero T
 	if len(images) > 1 && !batch {
 		Panicf("image.ToTensor in none-batch mode, but more than one image (%d) requested for conversion", len(images))
@@ -319,7 +319,7 @@ func toImageImpl(ti *ToImageConfig, imagesTensor tensor.Tensor) (images []image.
 	return
 }
 
-func toImageGenericsImpl[T shapes.Number](imagesTensor tensor.Tensor, numImages, height, width, channels int, maxValue float64) (images []image.Image) {
+func toImageGenericsImpl[T shapes.NumberNotComplex](imagesTensor tensor.Tensor, numImages, height, width, channels int, maxValue float64) (images []image.Image) {
 	images = make([]image.Image, 0, numImages)
 	tensorPos := 0
 	imagesRef := imagesTensor.Local().AcquireData()

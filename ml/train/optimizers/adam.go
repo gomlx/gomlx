@@ -183,27 +183,44 @@ func (o *adam) UpdateGraph(ctx *context.Context, g *Graph, loss *Node) {
 // If `Adamax` is set, we use instead moment2 to store the L-infinity (the max) of the gradient.
 func (o *adam) applyAdamGraph(ctx *context.Context, g *Graph, v *context.Variable, grad *Node,
 	learningRate, beta1, debiasTermBeta1, beta2, debiasTermBeta2, epsilon *Node) {
-
 	m1Var, m2Var := o.getMomentVariables(ctx, v)
 	moment1, moment2 := m1Var.ValueGraph(g), m2Var.ValueGraph(g)
 
+	// Notice beta1, beta2 and debias terms are of the dtype of the loss. Since a model can have operations
+	// with different dtypes, we need to convert it to the variable's dtype (same as the moment). We create
+	// this closure to perform this.
+	varDType := moment1.DType()
+	castToVar := func(n *Node) *Node {
+		if n.DType() == varDType {
+			// No-op.
+			return n
+		}
+		return ConvertType(n, varDType)
+	}
+
 	// Do gradient step with momentum.
-	moment1 = Add(Mul(beta1, moment1), Mul(OneMinus(beta1), grad))
+	moment1 = Add(
+		Mul(castToVar(beta1), moment1),
+		Mul(OneMinus(castToVar(beta1)), grad))
 	m1Var.SetValueGraph(moment1)
-	debiasedMoment1 := Mul(moment1, debiasTermBeta1)
+	debiasedMoment1 := Mul(moment1, castToVar(debiasTermBeta1))
 
 	var denominator *Node
 	if o.config.adamax {
 		// Adamax
-		moment2 = Max(Mul(beta2, moment2), Abs(grad)) // L-infinity norm.
+		moment2 = Max(
+			Mul(castToVar(beta2), moment2),
+			castToVar(Abs(grad))) // L-infinity norm. Notice Abs() can change dtypes for complex numbers.
 		m2Var.SetValueGraph(moment2)
-		denominator = Add(moment2, epsilon)
+		denominator = Add(moment2, castToVar(epsilon))
 	} else {
 		// Normal Adam.
-		moment2 = Add(Mul(beta2, moment2), Mul(OneMinus(beta2), Square(grad)))
+		moment2 = Add(
+			Mul(castToVar(beta2), moment2),
+			Mul(OneMinus(castToVar(beta2)), Square(grad)))
 		m2Var.SetValueGraph(moment2)
-		debiasedMoment2 := Mul(moment2, debiasTermBeta2)
-		denominator = Add(Sqrt(debiasedMoment2), epsilon)
+		debiasedMoment2 := Mul(moment2, castToVar(debiasTermBeta2))
+		denominator = Add(Sqrt(debiasedMoment2), castToVar(epsilon))
 	}
 
 	value := v.ValueGraph(g)
@@ -211,7 +228,7 @@ func (o *adam) applyAdamGraph(ctx *context.Context, g *Graph, v *context.Variabl
 	if o.config.weightDecay > 0 {
 		stepDirection = Add(stepDirection, MulScalar(value, o.config.weightDecay))
 	}
-	updated := Sub(value, Mul(learningRate, stepDirection))
+	updated := Sub(value, Mul(castToVar(learningRate), stepDirection))
 
 	// Update variables.
 	v.SetValueGraph(updated)
