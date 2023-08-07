@@ -89,6 +89,24 @@ func (dtype DType) IsComplex() bool {
 	return dtype == Complex64 || dtype == Complex128
 }
 
+// RealDType returns the real component of complex dtypes.
+// For float dtypes, it returns itself.
+//
+// It returns InvalidDType for other non-(complex or float) dtypes.
+func (dtype DType) RealDType() DType {
+	if dtype.IsFloat() {
+		return dtype
+	}
+	switch dtype {
+	case Complex64:
+		return Float32
+	case Complex128:
+		return Float64
+	}
+	// RealDType is not defined for other dtypes.
+	return InvalidDType
+}
+
 // IsInt returns whether dtype is a supported integer type -- float types not yet supported will return false.
 func (dtype DType) IsInt() bool {
 	return dtype == Int64 || dtype == Int32 || dtype == UInt8 || dtype == UInt32 || dtype == UInt64
