@@ -429,10 +429,28 @@ func Sqrt(x *Node) *Node { return oneArgNode(xla.SqrtNode, x) }
 func RSqrt(x *Node) *Node { return oneArgNode(xla.RsqrtNode, x) }
 
 // Imag returns the imaginary part of a complex number.
-func Imag(x *Node) *Node { return oneArgNode(xla.ImagNode, x) }
+func Imag(x *Node) *Node {
+	if !x.DType().IsComplex() {
+		Panicf("Imag(x) is only defined for complex numbers, but x.shape=%s", x.shape)
+	}
+	return oneArgNode(xla.ImagNode, x)
+}
 
 // Real returns the real part of a complex number.
-func Real(x *Node) *Node { return oneArgNode(xla.RealNode, x) }
+func Real(x *Node) *Node {
+	if !x.DType().IsComplex() {
+		Panicf("Real(x) is only defined for complex numbers, but x.shape=%s", x.shape)
+	}
+	return oneArgNode(xla.RealNode, x)
+}
+
+// Conj returns the conjugate of a complex number.
+func Conj(x *Node) *Node {
+	if !x.DType().IsComplex() {
+		Panicf("Conj(x) is only defined for complex numbers, but x.shape=%s", x.shape)
+	}
+	return oneArgNode(xla.ConjNode, x)
+}
 
 // twoArgsNode is a helper function that implements ops that simply take 2 inputs.
 func twoArgsNode(nodeType xla.NodeType, x, y *Node) *Node {
@@ -598,6 +616,31 @@ func LessThanTotalOrder(x, y *Node) *Node { return twoArgsNode(xla.LessThanTotal
 // In practice, it can be used to perform dot products between vectors, vector/matrix multiplications or
 // matrix/matrix multiplications.
 func Dot(lhs, rhs *Node) *Node { return twoArgsNode(xla.DotNode, lhs, rhs) }
+
+// Complex generate a complex node from floating point nodes.
+// The inputs `real` and `imaginary` must have the same dtype, and they must be either `shapes.Float32` or
+// `shapes.Float64`.
+// The output will be either `shapes.Complex64` or `shapes.Complex128`, depending on the inputs dtype.
+// The shapes of `real` or `imaginary` must be the same, or one must be a scalar, in which case
+// the value is broadcast to every other value.
+//
+// Example: To get a node c with `{(1+1i), (1-1i)}`:
+//
+//	im := Const(g, []float32{1, -1})
+//	re := ScalarOne(g, shapes.Float32)
+//	c := Complex(re, x)
+func Complex(real, imaginary *Node) *Node {
+	_ = validateGraphFromInputs(real, imaginary)
+	if real.DType() != imaginary.DType() {
+		Panicf("dtypes for real (%s) and imaginary (%s) must be the same and "+
+			"either shapes.Float32 or shapes.Float64", real.DType(), imaginary.DType())
+	}
+	dtype := real.DType()
+	if dtype != shapes.Float32 && dtype != shapes.Float64 {
+		Panicf("the dtype for the inputs (real and imaginary) must be either Float32 or Float64, got %s instead", dtype)
+	}
+	return twoArgsNode(xla.ComplexNode, real, imaginary)
+}
 
 // BroadcastPrefix adds dimensions to an array by duplicating the data in the array.
 //

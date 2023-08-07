@@ -405,13 +405,14 @@ func TestOneArgOps(t *testing.T) {
 	}
 
 	// Test imag/real for complex numbers.
-	graphtest.RunTestGraphFn(t, "RealAndImag()", func(g *Graph) (inputs, outputs []*Node) {
-		inputs = []*Node{Const(g, []complex64{1.0, 0.0 + 1.0i})}
-		outputs = []*Node{Real(inputs[0]), Imag(inputs[0])}
+	graphtest.RunTestGraphFn(t, "RealImagConj()", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = []*Node{Const(g, []complex64{1.0, 0.0 - 1.0i, -2.0 + 2.0i})}
+		outputs = []*Node{Real(inputs[0]), Imag(inputs[0]), Conj(inputs[0])}
 		return
 	}, []any{
-		[]float32{1.0, 0.0},
-		[]float32{0.0, 1.0},
+		[]float32{1.0, 0.0, -2.0},
+		[]float32{0.0, -1.0, 2.0},
+		[]complex64{1.0, 0.0 + 1.0i, -2.0 - 2.0i},
 	}, -1)
 }
 

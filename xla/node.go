@@ -97,6 +97,7 @@ const (
 	RsqrtNode
 	ImagNode
 	RealNode
+	ConjNode
 
 	// Two-arguments ops:
 
@@ -112,6 +113,7 @@ const (
 	MinNode
 	MaxNode
 	PowNode
+	ComplexNode
 
 	// Two-arguments comparison ops:
 
