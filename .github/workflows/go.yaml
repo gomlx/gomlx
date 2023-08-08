@@ -1,0 +1,75 @@
+# Tests only run with --short, since the full tests involve downloading datasets
+# and would be too costly for a Github actions.
+# Locally in the development box it works because the datasets are cached.
+name: "Tests" # The name of the workflow that will appear on Github
+permissions:
+  # read|write|none
+  actions: read
+  checks: read
+  contents: write
+  deployments: read
+  # id-token: read    --> doesn't work
+  issues: read
+  discussions: read
+  packages: read
+  pages: read
+  pull-requests: write
+  repository-projects: read
+  security-events: read
+  statuses: read
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Install required apt packages
+      run: |
+        sudo apt-get install -y --no-install-recommends "wget" "libunwind8" "liblzma5" "libgoogle-perftools-dev" "hdf5-tools"
+
+    - name: Set up Go
+      uses: actions/setup-go@v3
+      with:
+        go-version: "1.20.x"
+
+    - name: Install GoMLX shared libraries
+      run: |
+        cd /usr/local/lib
+        wget --quiet --output-document=- "https://github.com/gomlx/gomlx/releases/download/${GOMLX_VERSION}/gomlx_xla-linux-amd64.tar.gz" | tar -xz
+
+    - name: Test
+      run: |
+        go test -short -v -cover ./... -coverprofile coverage.out -coverpkg ./...
+        go tool cover -func coverage.out -o coverage.out  # Replaces coverage.out with the analysis of coverage.out
+
+    - name: Go Coverage Badge
+      uses: tj-actions/coverage-badge-go@v2
+      with:
+        green: 80
+        filename: coverage.out
+
+    - uses: stefanzweifel/git-auto-commit-action@v4
+      id: auto-commit-action
+      with:
+        commit_message: Apply Code Coverage Badge
+        skip_fetch: true
+        skip_checkout: true
+        file_pattern: ./README.md
+
+    - name: Push Changes
+      if: steps.auto-commit-action.outputs.changes_detected == 'true'
+      uses: ad-m/github-push-action@master
+      with:
+        github_token: ${{ github.token }}
+        branch: ${{ github.ref }}

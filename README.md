@@ -1,5 +1,12 @@
 # GoMLX -- A full-featured ML Framework ("Jax for Go")
 
+
+[![GoDev](https://img.shields.io/badge/go.dev-reference-007d9c?logo=go&logoColor=white)](https://pkg.go.dev/github.com/gomlx/gomlx?tab=doc)
+[![GitHub](https://img.shields.io/github/license/gomlx/gomlx)](https://github.com/Kwynto/gosession/blob/master/LICENSE)
+[![Go Report Card](https://goreportcard.com/badge/github.com/gomlx/gomlx)](https://goreportcard.com/report/github.com/gomlx/gomlx)
+[![TestStatus](https://github.com/gomlx/gomlx/actions/workflows/go.yaml/badge.svg)](https://github.com/gomlx/gomlx/actions/workflows/go.yaml)
+![Coverage](https://img.shields.io/badge/Coverage-100%100-green)
+
 GoMLX is a fast and easy-to-use set of ML libraries and tools. It can be seen as a TensorFlow/Jax/PyTorch for Go.
 
 It is built on top of [OpenXLA](https://github.com/openxla/xla),

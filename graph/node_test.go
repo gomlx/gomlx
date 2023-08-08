@@ -183,7 +183,7 @@ func testTupleParameter(t *testing.T, manager *Manager) {
 	// x^2 + 2*y
 	Add(Mul(x, x), Mul(Const(g, 2.0), y))
 	if xy.ParameterHandle() == InvalidParameterHandle {
-		t.Fatalf("Invalid paramter xlaHandle for tuple")
+		t.Fatalf("Invalid parameter xlaHandle for tuple")
 	}
 	g.Compile()
 
@@ -214,7 +214,7 @@ func TestParameter(t *testing.T) {
 		y := g.Parameter("y", shapes.Scalar[float32]())
 		Add(x, y)
 		if x.ParameterHandle() == InvalidParameterHandle || y.ParameterHandle() == InvalidParameterHandle || x.ParameterHandle() == y.ParameterHandle() {
-			t.Fatalf("Invalid paramter handles: x=%d, y=%d", x.ParameterHandle(), y.ParameterHandle())
+			t.Fatalf("Invalid parameter handles: x=%d, y=%d", x.ParameterHandle(), y.ParameterHandle())
 		}
 		g.Compile()
 

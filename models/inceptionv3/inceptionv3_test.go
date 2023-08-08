@@ -49,7 +49,7 @@ func TestBuildGraph(t *testing.T) {
 	// Compare with the expected result:
 	wantT, err := tensor.Load("gomlx_gopher_classification_output.bin")
 	require.NoError(t, err)
-	want := wantT.Value().([][]float32)[0] // The last [0] takes the first element of teh batch of 1.
+	want := wantT.Value().([][]float32)[0] // The last [0] takes the first element of the batch of 1.
 
 	diffStats := NewExec(manager, func(a, b *Node) (max, mean *Node) {
 		diff := Abs(Sub(a, b))

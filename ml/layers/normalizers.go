@@ -24,7 +24,7 @@ import (
 )
 
 var (
-	// KnownNormalizers is a map of normalizer string to a function that applys them
+	// KnownNormalizers is a map of normalizer string to a function that applies them
 	// with the default values, with the feature axis set to -1. This will only work
 	// for the most standard problems, since anything with a different shape will need
 	// special feature axes configuration for each normalization technique.
@@ -33,7 +33,7 @@ var (
 	//
 	// Notice that some normalizers use variables, and they need to be unique
 	// in their scope (`Context.In(scope)`) -- except if one wants to deliberately share
-	// normalization variables accross more than one application.
+	// normalization variables across more than one application.
 	KnownNormalizers = map[string]func(ctx *context.Context, input *Node) *Node{
 		"batch": func(ctx *context.Context, input *Node) *Node {
 			return BatchNormalization(ctx, input, -1).Done()
@@ -53,7 +53,7 @@ var (
 // This will only work for the most standard problems, since anything with a different shape will need
 // special feature axes configuration for each normalization technique.
 //
-// It's a simple wrapper around KnonwNormalizers, if one wants to handle errors, just
+// It's a simple wrapper around KnownNormalizers, if one wants to handle errors, just
 // check for its values. For valid values see KnownNormalizers.
 //
 // Typical use:

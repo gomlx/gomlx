@@ -175,7 +175,7 @@ func TestPieceWiseLinearCalibration(t *testing.T) {
 
 		var input *Node
 		if *flagPlot {
-			// For plotting, the input is a parameter of teh computation.
+			// For plotting, the input is a parameter of the computation.
 			input = g.Parameter("x", S(F32))
 		} else {
 			// For normal testing we use fixed input values.
