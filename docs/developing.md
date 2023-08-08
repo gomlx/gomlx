@@ -2,6 +2,18 @@
 
 Below is a list of usual low level implementation tasks:
 
+## Updating `coverage.out` file
+
+This is not done as a github actions because it would take too long to download the datasets, etc.
+Instead, we do it manually with:
+
+```shell
+go test -v -cover ./... -coverprofile docs/coverage.out -coverpkg ./...
+go tool cover -func docs/coverage.out -o docs/coverage.out
+```
+
+Once an updated file is submitted, a GitHub action will update the coverage badge.
+
 ## Adding support to a new node type in gomlx that maps to an op in XLA
 
 Carefully add in `xla/node.go` and `c/gomlx/node.h` the new constant for the op. These two lists

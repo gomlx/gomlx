@@ -20,6 +20,10 @@ import (
 var flagDataDir = flag.String("data", "/tmp/gomlx_inceptionv3", "Directory where to save and load model data.")
 
 func TestBuildGraph(t *testing.T) {
+	if !testing.Short() {
+		fmt.Println("- github.com/gomlx/gomlx/models/inceptionv3: TestBuildGraph disabled for go test --short because it requires downloading a large file with weights.")
+		return
+	}
 	manager := graphtest.BuildTestManager()
 
 	// Load GoMLX gopher mascot image and scale to inception's size
@@ -33,10 +37,8 @@ func TestBuildGraph(t *testing.T) {
 	imgT = timage.ToTensor(shapes.F32).MaxValue(255.0).Single(img)
 	fmt.Printf("\tImage shape=%s\n", imgT.Shape())
 
-	if !testing.Short() {
-		// Download InceptionV3 weights.
-		require.NoError(t, DownloadAndUnpackWeights(*flagDataDir))
-	}
+	// Download InceptionV3 weights.
+	require.NoError(t, DownloadAndUnpackWeights(*flagDataDir))
 
 	// InceptionV3 classification.
 	ctx := context.NewContext(manager)

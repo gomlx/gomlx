@@ -27,20 +27,19 @@ on:
   workflow_dispatch:
 
 jobs:
-
-  build:
+  test:
     runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v3
 
-    - name: Install required apt packages
+    - name: Install apt packages
       shell: bash
       run: |
         sudo apt-get install -y --no-install-recommends \
           "wget" "gcc" "libunwind8" "libunwind-dev" "liblzma5" "libgoogle-perftools-dev" "hdf5-tools"
 
-    - name: Set up Go
+    - name: Install Go
       uses: actions/setup-go@v3
       with:
         go-version: "1.20.x"
@@ -67,14 +66,13 @@ jobs:
 
     - name: Test
       run: |
-        go test -short -v -cover ./... -coverprofile coverage.out -coverpkg ./...
-        go tool cover -func coverage.out -o coverage.out  # Replaces coverage.out with the analysis of coverage.out
+        go test -short ./...
 
     - name: Go Coverage Badge
       uses: tj-actions/coverage-badge-go@v2
       with:
         green: 80
-        filename: coverage.out
+        filename: docs/coverage.out
 
     - uses: stefanzweifel/git-auto-commit-action@v4
       id: auto-commit-action
