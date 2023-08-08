@@ -56,6 +56,10 @@ jobs:
         sudo ln -sf /usr/local/include/gomlx /usr/include
         sudo ln -sf /usr/local/lib/libgomlx_xla.so /usr/lib
 
+    - name: PreTest
+      run: |
+        go test xla -test.v
+
     - name: Test
       run: |
         go test -short -v -cover ./... -coverprofile coverage.out -coverpkg ./...
