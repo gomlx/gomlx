@@ -53,6 +53,10 @@ func TestTrainingModelGraph(t *testing.T) {
 }
 
 func TestGenerateImages(t *testing.T) {
+	if testing.Short() {
+		fmt.Println("TestGenerateImages skipped with go test -short: it requires downloading and preprocessing data.")
+		return
+	}
 	numImages := 5
 	images := GenerateImages(numImages, 3, 0)
 	assert.Equal(t, []int{numImages, ImageSize, ImageSize, 3}, images.Shape().Dimensions)
