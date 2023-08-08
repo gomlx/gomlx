@@ -28,6 +28,10 @@ func TestUNetModelGraph(t *testing.T) {
 }
 
 func TestTrainingModelGraph(t *testing.T) {
+	if testing.Short() {
+		fmt.Println("TestTrainingModelGraph skipped with go test -short: it requires downloading and preprocessing data.")
+		return
+	}
 	manager = graphtest.BuildTestManager()
 	Init()
 	g := manager.NewGraph("test")

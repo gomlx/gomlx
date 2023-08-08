@@ -33,8 +33,10 @@ func TestBuildGraph(t *testing.T) {
 	imgT = timage.ToTensor(shapes.F32).MaxValue(255.0).Single(img)
 	fmt.Printf("\tImage shape=%s\n", imgT.Shape())
 
-	// Download InceptionV3 weights.
-	require.NoError(t, DownloadAndUnpackWeights(*flagDataDir))
+	if !testing.Short() {
+		// Download InceptionV3 weights.
+		require.NoError(t, DownloadAndUnpackWeights(*flagDataDir))
+	}
 
 	// InceptionV3 classification.
 	ctx := context.NewContext(manager)

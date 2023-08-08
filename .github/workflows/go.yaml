@@ -60,7 +60,6 @@ jobs:
         sudo cp release/lib/libgomlx_xla.so /usr/lib/x86_64-linux-gnu
         export LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu
         sudo cp -r release/include/gomlx /usr/include
-        sudo ls -l /usr/include/gomlx
 
     - name: PreTest
       run: |
