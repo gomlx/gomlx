@@ -47,11 +47,12 @@ jobs:
     - name: Install GoMLX shared libraries
       run: |
         cd /usr/local/lib
-        LATEST_RELEASE_URL="$(\
-          curl -s "https://api.github.com/repos/gomlx/gomlx/releases/latest" \
+        curl -s "https://api.github.com/repos/gomlx/gomlx/releases/latest" \
           | grep "gomlx_xla-linux-amd64.tar.gz" | grep "download_url" \
-          | sed 's/.*"\(https.*\)"/\1/')"
-        wget --quiet --output-document=- "${LATEST_RELEASE_URL)" | tar -xvz
+          | sed 's/.*"\(https.*\)"/\1/' \
+          > /tmp/gomlx_latest_release_url.txt
+        cat /tmp/gomlx_latest_release_url.txt
+        wget --quiet --output-document=- $(cat /tmp/gomlx_latest_release_url.txt) | tar -xvz
 
     - name: Test
       run: |
