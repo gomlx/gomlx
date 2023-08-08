@@ -85,6 +85,9 @@ The library depends on the following libraries to compile and run:
 * `libunwind8`: usually available in most Linux systems.
 * `liblzma5`: compression library, also usually available.
 * TC Malloc, usually packaged as `libgoogle-perftools-dev`: fast malloc version, and memory debugging tools.
+  The prebuilt libray shared in the releases `gomlx_xla.tar.gz` also include a build of `libtcmalloc.so`, but
+  leaves it in a separate sub-directory under `/usr/local/lib/gomlx/` to avoid conflict. Feel free to use it
+  if you want (by copying it to `/usr/local/lib` or adding the directory to `$LD_LIBRARY_PATH`).
 * `hdf5-tools`: access to `.h5` file format, used by hold pre-trained weights for some some models. 
 
 Typically, this can be installed with:
@@ -135,6 +138,10 @@ sudo ln -s /usr/lib/nvidia-cuda-toolkit/libdevice /usr/lib/nvidia-cuda-toolkit/n
 ```
 
 Without this you'll see errors complaining about not finding `libdevice.10.bc`.
+
+### MacOS
+
+See #23: presumably it can compile in MacOS, and one just need to move the compiled `libtcmalloc.so` library to a valid `lib` directory. More details to come.
 
 ## Tutorial
 
