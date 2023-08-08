@@ -1,5 +1,10 @@
 # GoMLX changelog
 
+## Next
+
+* Minor typos and reformatting (no execution code change).
+* Added various badges to README.md.
+
 ## v0.6.0 - 2023/08/07
 
 * FFT, RealFFT, InverseFFT and InverseRealFFT operations.
@@ -10,7 +15,7 @@
 * Added "spacers" (like "*" for axis ranges) and `AxisElem()` for `Slice()`.
 * Package `examples/notebook/gonb/margaid`: Added `Plots.AddValues` and `Plots.PlotToHTML`; 
   Fixed `Plots` returned by `New()` to be linear scale by default.
-* Included build of tcmalloc (`gperftools`) from the `c/` directory, when building libgomlx_xla.so. 
+* Included build of tcmalloc (`gperftools`) from the `c/` directory, when building `libgomlx_xla.so`. 
   Still the `libtcmalloc.so` is needed in runtime. 
   A copy is included in the `gomlx_xla.tar.gz` package (under `lib/gomlx`) and can be copied from there if needed.
   This enables build for Macs — see #23.
