@@ -58,6 +58,8 @@ jobs:
 
     - name: PreTest
       run: |
+        ls -l /usr/include/gomlx/
+        ls -lh /usr/include/lib/libgomlx*
         go test ./xla -test.v
 
     - name: Test
