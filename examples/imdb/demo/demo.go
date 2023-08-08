@@ -103,7 +103,7 @@ func main() {
 		log.Fatal("--use_unsupervised is only useful with --mask_word_task=x (x > 0).")
 	}
 
-	// Validade and create --data directory.
+	// Validate and create --data directory.
 	*flagDataDir = data.ReplaceTildeInDir(*flagDataDir)
 	if !data.FileExists(*flagDataDir) {
 		AssertNoError(os.MkdirAll(*flagDataDir, 0777))
@@ -432,7 +432,7 @@ func TransformerLayers(ctx *context.Context, embed, mask *Node) *Node {
 		embed = Add(embed, attentionOutput)
 		embed = Normalize(ctx.In("normalization_2"), embed)
 
-		// Residual connection: not part of the usual transfomer layer ...
+		// Residual connection: not part of the usual transformer layer ...
 		if ii > 0 {
 			embed = Add(residual, embed)
 		}
@@ -478,7 +478,7 @@ func MaskedWordTaskGraph(ctx *context.Context, tokens, embed, mask *Node,
 	maskedWordEmbedding = BroadcastToShape(maskedWordEmbedding, embed.Shape())
 	embedWithMaskedWord := Where(wordMask, embed, maskedWordEmbedding)
 
-	// Use shared transformer layer: embedWithmaskedWord will contain the transfomer
+	// Use shared transformer layer: embedWithMaskedWord will contain the transformer
 	// processed embeddings for all words.
 	embedWithMaskedWord = transformerFn(embedWithMaskedWord, mask)
 

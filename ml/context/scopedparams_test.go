@@ -58,7 +58,11 @@ func TestScopedParams(t *testing.T) {
 	assert.True(t, found, "/:z should be set and found")
 	assert.Equal(t, 40, value.(int), "ScopedParams.Get(\"/d/e/f\", \"z\") -> 40")
 
-	want := []struct{ scope string; key string; value int }{
+	want := []struct {
+		scope string
+		key   string
+		value int
+	}{
 		{"/", "x", 10},
 		{"/", "y", 20},
 		{"/", "z", 40},
@@ -66,7 +70,7 @@ func TestScopedParams(t *testing.T) {
 		{"/a/b", "x", 100},
 	}
 	pos := 0
-	p.Enumerate(func (scope, key string, valueAny any) {
+	p.Enumerate(func(scope, key string, valueAny any) {
 		value := valueAny.(int)
 		require.Lessf(t, pos, len(want), "Enumerate returned more elements (%d at least) than listed in `want` array: "+
 			"scope=%q, key=%q, value=%d", pos, scope, key, value)
@@ -75,7 +79,7 @@ func TestScopedParams(t *testing.T) {
 		require.Equalf(t, want[pos].key, key,
 			"Enumerating element %d: wanted %+v, got: {scope=%q, key=%q, value=%d}", pos, want[pos], scope, key, value)
 		require.Equalf(t, want[pos].value, value,
-		"Enumerating element %d: wanted %+v, got: {scope=%q, key=%q, value=%d}", pos, want[pos], scope, key, value)
+			"Enumerating element %d: wanted %+v, got: {scope=%q, key=%q, value=%d}", pos, want[pos], scope, key, value)
 		pos += 1
 	})
 	require.Equal(t, len(want), pos, "Enumerate returned fewer elements (%d) than listed in `want` array (%d elements)", pos, len(want))
