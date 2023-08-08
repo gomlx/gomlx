@@ -34,6 +34,16 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
+    - name: Install GoMLX shared libraries
+      run: |
+        curl -s "https://api.github.com/repos/gomlx/gomlx/releases/latest" \
+          | grep "gomlx_xla-linux-amd64.tar.gz" | grep "download_url" \
+          | sed 's/.*"\(https.*\)"/\1/' \
+          > /tmp/gomlx_latest_release_url.txt
+        cat /tmp/gomlx_latest_release_url.txt
+        wget --quiet --output-document=- $(cat /tmp/gomlx_latest_release_url.txt) \
+          | (cd /usr/local/lib ; sudo tar -xvz)
+
     - name: Install required apt packages
       run: |
         sudo apt-get install -y --no-install-recommends \
@@ -44,15 +54,6 @@ jobs:
       with:
         go-version: "1.20.x"
 
-    - name: Install GoMLX shared libraries
-      run: |
-        cd /usr/local/lib
-        curl -s "https://api.github.com/repos/gomlx/gomlx/releases/latest" \
-          | grep "gomlx_xla-linux-amd64.tar.gz" | grep "download_url" \
-          | sed 's/.*"\(https.*\)"/\1/' \
-          > /tmp/gomlx_latest_release_url.txt
-        cat /tmp/gomlx_latest_release_url.txt
-        wget --quiet --output-document=- $(cat /tmp/gomlx_latest_release_url.txt) | tar -xvz
 
     - name: Test
       run: |
