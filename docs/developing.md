@@ -8,7 +8,8 @@ This is not done as a github actions because it would take too long to download 
 Instead, we do it manually with:
 
 ```shell
-go test -v -cover ./... -coverprofile docs/coverage.out -coverpkg ./...
+PACKAGE_COVERAGE="./graph/...,./ml/...,./models/...,./types/...,./xla/..."
+go test -v -cover -coverprofile docs/coverage.out -coverpkg "${PACKAGE_COVERAGE}" ./...
 go tool cover -func docs/coverage.out -o docs/coverage.out
 ```
 
