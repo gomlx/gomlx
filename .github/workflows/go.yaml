@@ -58,7 +58,7 @@ jobs:
 
     - name: PreTest
       run: |
-        go test xla -test.v
+        go test ./xla -test.v
 
     - name: Test
       run: |
