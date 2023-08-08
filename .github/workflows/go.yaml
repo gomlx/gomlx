@@ -55,9 +55,7 @@ jobs:
           | (cd /usr/local/lib ; echo "Un-tared to $(pwd)" ; sudo tar -xvz)
         sudo ln -sf /usr/local/include/gomlx /usr/include
         sudo ln -sf /usr/local/lib/libgomlx_xla.so /usr/lib
-        sudo ls -l /usr/local/include/gomlx/
-        sudo ls -l /usr/include/gomlx/
-        sudo ls -lh /usr/include/lib/libgomlx*
+        sudo find -type d /usr/local
 
     - name: PreTest
       run: |
