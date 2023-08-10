@@ -31,7 +31,7 @@ Documentation is kept up-to-date (if it is not well documented, it is as if the 
 and error messages are useful and try to make it easy to solve issues.
 </div>
 
-**GoMLX is still under development, and should be considered experimental for now.**
+**GoMLX is still under development, and should be considered experimental.**
 
 ## Overview
 
