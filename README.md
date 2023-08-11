@@ -1,4 +1,4 @@
-# GoMLX -- A full-featured ML Framework ("Jax for Go")
+# GoMLX, an Accelerated ML and Math Framework (PyTorch/Jax/Tensorflow-like for Go)
 
 
 [![GoDev](https://img.shields.io/badge/go.dev-reference-007d9c?logo=go&logoColor=white)](https://pkg.go.dev/github.com/gomlx/gomlx?tab=doc)
@@ -7,30 +7,31 @@
 [![TestStatus](https://github.com/gomlx/gomlx/actions/workflows/go.yaml/badge.svg)](https://github.com/gomlx/gomlx/actions/workflows/go.yaml)
 ![Coverage](https://img.shields.io/badge/Coverage-75.2%25-yellow)
 
-GoMLX is a fast and easy-to-use set of ML libraries and tools. It can be seen as a TensorFlow/Jax/PyTorch for Go.
+GoMLX is a fast and easy-to-use set of Machine Learning and generic math libraries and tools. 
+It can be seen as a TensorFlow/Jax/PyTorch for Go.
 
-It is built on top of [OpenXLA](https://github.com/openxla/xla),
-a just-in-time compiler of numeric computations to CPU, GPU and TPU. 
-It's the same engine that powers Google's 
-[Jax](https://github.com/google/jax) and [TensorFlow](https://tensorflow.org/), and it has the same speed in many
-cases.
+It uses just-in-time compilation to CPU and GPU (hopefully soon TPUs also) and is built on
+top of [OpenXLA](https://github.com/openxla/xla), wich itself uses LLVM to JIT-compile code.
+It's the same engine that powers Google's [Jax](https://github.com/google/jax) and 
+[TensorFlow](https://tensorflow.org/), and it has the same speed in many cases.
 
 ## Quick Start: see our [tutorial](examples/tutorial/tutorial.ipynb), or a [guided example for Kaggle Dogs Vs Cats](examples/dogsvscats/dogsvscats.ipynb).
 
 <div>
 <img src="docs/gomlx_gopher.jpg" align="left" alt="GoMLX Gopher" width="160" height="160"/>
-<p>It was developed to be full-featured ML platform for Go, and to easily experiment with ML ideas. 
-Hopefully it can grow beyond that -- see Long-Term Goals below.</p>
+<p>It was developed to be full-featured ML platform for Go, and to easily experiment with ML ideas -- see Long-Term Goals below.</p>
 
 It strives to be **simple to read and reason about**, leading the user to a correct and transparent mental model 
 of what is going on (no surprises) -- aligned with Go philosophy.
 At the cost of more typing (more verbose) at times.
 
+It is also incredibly flexible, and easy to extend to try things non-convention: use it to experiment with new optimizer ideas, complex regularizers, funky multi-tasking, etc.
+
 Documentation is kept up-to-date (if it is not well documented, it is as if the code is not there)
 and error messages are useful and try to make it easy to solve issues.
 </div>
 
-**GoMLX is still under development, and should be considered experimental for now.**
+**GoMLX is still under development, and should be considered experimental.**
 
 ## Overview
 
@@ -40,8 +41,11 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
 
 It includes:
 
-* XLA integration for model training and evaluation -- including GPU (and presumably TPU, but never tested so likely 
-  not working).
+* Examples: Synthetic linear model; Adult/Census model; Cifar-10 demo; Dogs & Cats classifier demo; IMDB Movie Review 
+  demo; Diffusion model for Oxford Flowers 102 dataset (generates random flowers).
+* Pre-Trained models to use: InceptionV3 (image model) -- more to come.
+* Docker with integrated JupyterLab and GoNB (a Go kernel)
+* Just-In-Time (JIT) compilation using [OpenXLA](https://github.com/openxla/xla)] for CPUs and GPUs -- hopefully soon TPUs.
 * Autograd: automatic differentiation -- only gradients for now, no jacobian.
 * Context: automatic variable management for ML models.
 * ML layers library with some of the most popular machine learning "layers": dense (simple FFN layer),  
@@ -51,18 +55,13 @@ It includes:
   * Also, various debugging tools: collecting values for particular nodes for plotting, simply logging  the value
     of nodes during training, stack-trace of the code where nodes are created (TODO: automatic printing stack-trace
     when a first NaN appears during training).
-* SGD and Adam optimizers.
+* SGD and Adam (AdamW and Adamax) optimizers.
 * Various losses and metrics.
-* Examples: Synthetic linear model; Adult/Census model; Cifar-10 demo; Dogs & Cats classifier demo; IMDB Movie Review 
-  demo; Diffusion model for Oxford Flowers 102 dataset (generates random flowers).
-* Pre-Trained models to use: InceptionV3 (image model) -- more to come.
-* Docker with integrated JupyterLab and GoNB (a Go kernel)
 
 ## Installation
 
-For now Linux only. It does work well also in WSL (Windows Subsystem for Linux) in Windows or using Docker. 
-
-Likely it would work in Macs with some work --> contributions are very welcome, I don't have a Mac. It will likely work in Docker for Mac, but not natively supporting M1/M2.
+Releases for Linux only, but it's been succesfully compiled in MacOS. 
+It does work well also in WSL (Windows Subsystem for Linux) in Windows or using Docker. 
 
 ### [Pre-built Docker](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab)
 
@@ -148,7 +147,9 @@ Without this you'll see errors complaining about not finding `libdevice.10.bc`.
 
 ### MacOS
 
-See #23: presumably it can compile in MacOS, and one just need to move the compiled `libtcmalloc.so` library to a valid `lib` directory. More details to come.
+See #23: the required C++ library (`libgomlx_xla.so`) is reported to successfully compile in MacOS. 
+It compiles along Google's `libtcmalloc.so`, and one just need to move it to a standard library directory.
+Unfortunately, I don't have a mac to build and include these in the releases.
 
 ## Tutorial
 
@@ -157,9 +158,10 @@ See the [tutorial here](examples/tutorial/tutorial.ipynb). It covers a bit of ev
 After that look at the demos in the [examples/](https://github.com/gomlx/gomlx/tree/main/examples) directory.
 
 The library itself is well documented (pls open issues if something is missing), and the code is
-not too hard to read (except the bindings to C/XLA, which were done very adhoc). Godoc available in [pkg.go.dev](https://pkg.go.dev/github.com/gomlx/gomlx).
+not too hard to read (except the bindings to C/XLA, which are tricky). 
+Godoc available in [pkg.go.dev](https://pkg.go.dev/github.com/gomlx/gomlx).
 
-Finally, feel free to ask questions: time allowing (when not in work) I'm always happy to help -- I created [groups.google.com/g/gomlx-discuss](https://groups.google.com/g/gomlx-discuss).
+Finally, feel free to ask questions: time allowing (when not in work) I'm always happy to help -- I created [groups.google.com/g/gomlx-discuss](https://groups.google.com/g/gomlx-discuss), or use [GitHub discussions page](https://github.com/gomlx/gomlx/discussions).
 
 ## Long-term Goals
 
@@ -192,7 +194,7 @@ in stone, so there is plenty of space for improvements and re-designs for those 
 and with good experience in Go, Machine Learning and APIs in general. See the [TODO file](docs/TODO.md)
 for inspiration.
 
-No governance guidelines have been established yet, this also needs work.
+No governance guidelines have been established yet.
 
 ## Advanced Topics
 
