@@ -24,6 +24,7 @@ import "C"
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"unsafe"
 )
 
@@ -47,6 +48,7 @@ type Client struct {
 
 // Finalize implements Finalizer.
 func (c *Client) Finalize() {
+	defer runtime.KeepAlive(c)
 	if c == nil || c.cClientPtr == nil {
 		return
 	}

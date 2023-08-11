@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"github.com/gomlx/gomlx/types/shapes"
 	"log"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"unsafe"
@@ -43,6 +44,7 @@ func (l *Literal) Finalize() {
 	if l == nil || l.cLiteralPtr == nil {
 		return
 	}
+	defer runtime.KeepAlive(l)
 	C.DeleteLiteral(l.cLiteralPtr)
 	atomic.AddInt64(&LiteralsCountDeallocated, 1)
 	l.cLiteralPtr = nil

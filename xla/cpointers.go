@@ -242,10 +242,12 @@ func (w *AutoCPointer[T]) UnsafePtr() unsafe.Pointer {
 
 // Finalize implements Finalizer.
 func (w *AutoCPointer[T]) Finalize() {
+	defer runtime.KeepAlive(w)
 	if w == nil || w.P == nil {
 		return
 	}
 	C.free(unsafe.Pointer(w.P))
+	w.P = nil
 }
 
 // NewAutoCPointer holds a C pointers, and makes sure it is freed (`C.free`) when
@@ -285,10 +287,12 @@ func (w *UnsafeCPointer) IsNil() bool {
 
 // Finalize implements Finalizer.
 func (w *UnsafeCPointer) Finalize() {
+	defer runtime.KeepAlive(w)
 	if w == nil || w.P == nil {
 		return
 	}
 	C.free(w.P)
+	w.P = nil
 }
 
 // NewUnsafeCPointer holds a forward declared C pointer as `unsafe.Pointer`,
@@ -327,7 +331,9 @@ func (w *WrapperWithDestructor[T]) Finalize() {
 	if w.Empty() {
 		return
 	}
+	defer runtime.KeepAlive(w)
 	w.destructor(w.Data)
+	w.destructor = nil
 }
 
 // wrapperFinalizer is a trivial helper function that calls the WrapperWithDestructor.Finalize.
@@ -336,6 +342,12 @@ func wrapperFinalizer[T any](w *WrapperWithDestructor[T]) {
 }
 
 // NewWrapperWithDestructor creates a WrapperWithDestructor to type T, using the given destructor to finalize the object.
+//
+// The `destructor` will only be called once, even if `Finalize()` is called manually.
+// The wrapper sets the destructor to nil after the first time `Finalize()` is called.
+//
+// There are no synchronization mechanisms, manually calling `Finalize()` concurrently is
+// undefined.
 func NewWrapperWithDestructor[T any](data T, destructor func(data T)) (w *WrapperWithDestructor[T]) {
 	w = &WrapperWithDestructor[T]{
 		Data:       data,

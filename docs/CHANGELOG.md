@@ -2,6 +2,7 @@
 
 ## Next
 
+* Fixed rare race-condition with GC and CGO.
 * Minor typos and reformatting (no execution code change).
 * Added various badges to README.md.
 

@@ -26,6 +26,7 @@ import (
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/pkg/errors"
 	"log"
+	"runtime"
 	"unsafe"
 )
 
@@ -56,6 +57,7 @@ func NewComputation(client *Client, name string) *Computation {
 
 // Finalize implements Finalizer.
 func (comp *Computation) Finalize() {
+	defer runtime.KeepAlive(comp)
 	if comp == nil || comp.cCompPtr == nil {
 		return
 	}
@@ -116,6 +118,7 @@ type xlaOpPtr struct {
 }
 
 func (p *xlaOpPtr) Finalize() {
+	defer runtime.KeepAlive(p)
 	if p == nil && p.cXlaOpPtr == nil {
 		return
 	}
@@ -204,6 +207,7 @@ func (comp *Computation) Run(params []*OnDeviceBuffer) (*OnDeviceBuffer, error) 
 	if !comp.IsCompiled() || comp.IsNil() {
 		return nil, fmt.Errorf("trying to run computation that was not successfully compiled")
 	}
+	defer runtime.KeepAlive(params) // We don't want params to be GC'ed while we are executing the computation.
 	shapedBuffers := newShapedBuffersCArray(params)
 	statusOr := C.ClientExecuteComputation(
 		comp.client.cClientPtr, comp.cCompPtr, C.int(len(params)),

@@ -21,6 +21,7 @@ import "C"
 import (
 	"fmt"
 	"github.com/gomlx/gomlx/types/shapes"
+	"runtime"
 	"sync/atomic"
 	"unsafe"
 )
@@ -71,6 +72,7 @@ func (b *OnDeviceBuffer) Finalize() {
 	if b == nil || b.cOnDeviceBufferPtr == nil {
 		return
 	}
+	defer runtime.KeepAlive(b)
 	C.DeleteOnDeviceBuffer(b.cOnDeviceBufferPtr)
 	atomic.AddInt64(&OnDeviceBufferCountDeallocated, 1)
 	b.cOnDeviceBufferPtr = nil

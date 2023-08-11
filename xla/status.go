@@ -23,6 +23,7 @@ package xla
 import "C"
 import (
 	"fmt"
+	"runtime"
 	"unsafe"
 )
 
@@ -36,6 +37,7 @@ func (s *Status) Finalize() {
 	if s == nil || s.cStatusPtr == nil {
 		return
 	}
+	defer runtime.KeepAlive(s)
 	C.free(unsafe.Pointer(s.cStatusPtr))
 	s.cStatusPtr = nil
 }

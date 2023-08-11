@@ -23,6 +23,7 @@ import "C"
 
 import (
 	"github.com/pkg/errors"
+	"runtime"
 )
 
 // StableHLO is a wrapper for the C++ `StableHLOHolder`.
@@ -39,6 +40,7 @@ func NewStableHLO(cPtr *C.StableHLOHolder) *StableHLO {
 
 // Finalize implements Finalizer.
 func (shlo *StableHLO) Finalize() {
+	defer runtime.KeepAlive(shlo)
 	if shlo.IsNil() {
 		return
 	}

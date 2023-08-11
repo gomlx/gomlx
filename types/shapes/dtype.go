@@ -72,6 +72,7 @@ const (
 	U64  = UInt64
 	I32  = Int32
 	I64  = Int64
+	F16  = Float16
 	F32  = Float32
 	F64  = Float64
 	C64  = Complex64

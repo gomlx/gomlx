@@ -22,6 +22,7 @@ import "C"
 import (
 	"fmt"
 	"github.com/gomlx/gomlx/types/shapes"
+	"runtime"
 	"unsafe"
 )
 
@@ -50,6 +51,7 @@ func (gd *GlobalData) Finalize() {
 	if gd == nil || gd.cGlobalDataPtr == nil {
 		return
 	}
+	defer runtime.KeepAlive(gd)
 	C.DeleteGlobalData(unsafe.Pointer(gd.cGlobalDataPtr))
 	gd.cGlobalDataPtr = nil
 }
