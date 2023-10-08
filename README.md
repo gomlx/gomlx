@@ -51,7 +51,7 @@ It includes:
 * ML layers library with some of the most popular machine learning "layers": dense (simple FFN layer),  
   activation functions, Layer Normalization, Batch Normalization, Convolutions, Pooling, Dropout, Multi-Head-Attention
   (for transformer layers), PiecewiseLinear (for calibration and normalization).
-* Training library, with some pretty-printing. Including plots for Jupyter notebook, using [Bash Kernel](https://github.com/takluyver/bash_kernel).
+* Training library, with some pretty-printing. Including plots for Jupyter notebook, using [GoNB, a Go Kernel](https://github.com/janpfeifer/gonb).
   * Also, various debugging tools: collecting values for particular nodes for plotting, simply logging  the value
     of nodes during training, stack-trace of the code where nodes are created (TODO: automatic printing stack-trace
     when a first NaN appears during training).
