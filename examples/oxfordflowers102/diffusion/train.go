@@ -225,7 +225,7 @@ func TrainModel() {
 		plots.DynamicUpdates()
 	}
 
-	generator := NewImagesGenerator(ctx, noise, flowerIds, 20, 0)
+	generator := NewImagesGenerator(ctx, noise, flowerIds, 20)
 
 	var kid *KidGenerator
 	if *flagKid {
