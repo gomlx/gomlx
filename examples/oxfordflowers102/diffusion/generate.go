@@ -2,6 +2,7 @@ package diffusion
 
 import (
 	"bytes"
+	"encoding/gob"
 	"fmt"
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
 	. "github.com/gomlx/gomlx/graph"
@@ -15,7 +16,11 @@ import (
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
 	timage "github.com/gomlx/gomlx/types/tensor/image"
+	"github.com/janpfeifer/gonb/cache"
+	"github.com/janpfeifer/gonb/common"
 	"github.com/janpfeifer/gonb/gonbui"
+	"github.com/janpfeifer/gonb/gonbui/dom"
+	"github.com/janpfeifer/gonb/gonbui/widgets"
 	"image"
 	"io"
 	"math"
@@ -42,17 +47,21 @@ func PlotImagesTensor(imagesT tensor.Tensor) {
 // This only works in a Jupyter (GoNB kernel) notebook.
 func PlotImages(images []image.Image) {
 	if gonbui.IsNotebook {
-		var parts []string
-		for _, img := range images {
-			imgSrc, err := gonbui.EmbedImageAsPNGSrc(img)
-			AssertNoError(err)
-			parts = append(parts, fmt.Sprintf(`<img src="%s">`, imgSrc))
-		}
-		//gonbui.DisplayHTML(fmt.Sprintf(
-		//	"<table style=\"overflow-x: auto\"><tr><td>%s</td></tr></table>", strings.Join(parts, "\n</td><td>\n")))
-		gonbui.DisplayHTML(fmt.Sprintf(
-			"<div style=\"overflow-x: auto\">\n\t%s</div>\n", strings.Join(parts, "\n\t")))
+		gonbui.DisplayHTML(ImagesToHtml(images))
 	}
+}
+
+// ImagesToHtml converts slice of images to a list of images side-by-side in HTML format,
+// that can be easily displayed.
+func ImagesToHtml(images []image.Image) string {
+	var parts []string
+	for _, img := range images {
+		imgSrc, err := gonbui.EmbedImageAsPNGSrc(img)
+		AssertNoError(err)
+		parts = append(parts, fmt.Sprintf(`<img src="%s">`, imgSrc))
+	}
+	return fmt.Sprintf(
+		"<div style=\"overflow-x: auto\">\n\t%s</div>\n", strings.Join(parts, "\n\t"))
 }
 
 // PlotModelEvolution plots the saved sampled generated images of a model in the current configured checkpoint.
@@ -186,21 +195,99 @@ func DenoiseStepGraph(ctx *context.Context, noisyImages, diffusionTime, nextDiff
 	return
 }
 
-// GenerateImages using reverse diffusion. If displayEveryNSteps is not 0, it will display
+// DisplayImagesAcrossDiffusionSteps using reverse diffusion. If displayEveryNSteps is not 0, it will display
 // intermediary results every n results -- it also displays the initial noise and final image.
 //
 // Plotting results only work if in a Jupyter (with GoNB kernel) notebook.
-func GenerateImages(numImages int, numDiffusionSteps int, displayEveryNSteps int) (predictedImages tensor.Tensor) {
+func DisplayImagesAcrossDiffusionSteps(numImages int, numDiffusionSteps int, displayEveryNSteps int) {
 	ctx := context.NewContext(manager).Checked(false)
 	_, _, _ = LoadCheckpointToContext(ctx)
 	ctx.RngStateReset()
 	noise := GenerateNoise(numImages)
 	flowerIds := GenerateFlowerIds(numImages)
-	generator := NewImagesGenerator(ctx, noise, flowerIds, numDiffusionSteps, displayEveryNSteps)
-	return generator.Generate()
+
+	generator := NewImagesGenerator(ctx, noise, flowerIds, numDiffusionSteps)
+	denoisedImages, diffusionSteps, diffusionTimes := generator.GenerateEveryN(displayEveryNSteps)
+
+	fmt.Printf("DisplayImagesAcrossDiffusionSteps(%d images, %d steps): noise.shape=%s\n", numImages, numDiffusionSteps, noise.Shape())
+	fmt.Printf("\tModel #params:\t%d\n", ctx.NumParameters())
+	fmt.Printf("\t Model memory:\t%s\n", data.ByteCountIEC(ctx.Memory()))
+	gonbui.DisplayHtml("<p><b>Noise</b></p>")
+	PlotImagesTensor(noise)
+
+	for ii, denoisedImage := range denoisedImages {
+		gonbui.DisplayHtml(fmt.Sprintf("<p>%.1f%% Denoised -- Step %d/%d",
+			(1.0-diffusionTimes[ii])*100.0, diffusionSteps[ii]+1, numDiffusionSteps))
+		PlotImagesTensor(denoisedImage)
+	}
 }
 
-// GenerateImagesOfFlowerType is similar to GenerateImages, but it limits itself to generating images of only one
+// SliderDiffusionSteps creates and animates a slider that shows images at different diffusion steps.
+// It handles the slider on a separate goroutine.
+// Trigger the returned latch to stop it.
+//
+// If `cacheKey` empty, cache is by-passed. Otherwise, try to load images from cache first if available,
+// or save generated images in cache for future use.
+func SliderDiffusionSteps(cacheKey string, ctx *context.Context, numImages int, numDiffusionSteps int, htmlId string) *common.Latch {
+	// Generate images.
+	type ImagesAndDiffusions struct {
+		Images    []string
+		Diffusion []float64
+	}
+	generateFn := func() *ImagesAndDiffusions {
+		noise := GenerateNoise(numImages)
+		noisesHtml := ImagesToHtml(MustNoError(timage.ToImage().MaxValue(255.0).Batch(noise)))
+		flowerIds := GenerateFlowerIds(numImages)
+		generator := NewImagesGenerator(ctx, noise, flowerIds, numDiffusionSteps)
+		denoisedImagesT, _, diffusionTimes := generator.GenerateEveryN(1)
+		denoisedImages := make([]string, len(denoisedImagesT))
+		for ii, imgT := range denoisedImagesT {
+			denoisedImages[ii] = ImagesToHtml(
+				MustNoError(
+					timage.ToImage().MaxValue(255.0).Batch(imgT),
+				))
+		}
+		return &ImagesAndDiffusions{
+			Images:    append([]string{noisesHtml}, denoisedImages...),
+			Diffusion: append([]float64{1.0}, diffusionTimes...),
+		}
+	}
+
+	// Use cache if available.
+	var imagesAndDiffusions *ImagesAndDiffusions
+	gob.Register(imagesAndDiffusions)
+	imagesAndDiffusions = cache.Cache[*ImagesAndDiffusions](cacheKey, generateFn)
+
+	// Create HTML content and containers.
+	denoiseHtmlId := "denoise_" + gonbui.UniqueId()
+	dom.Append(
+		htmlId, fmt.Sprintf(`Denoising to flowers: &nbsp;<span id="%s" style="font-family: monospace; font-style: italic; font-size: small; border: 1px solid; border-style: inset; padding-right:5px;"> </span><br/>`, denoiseHtmlId))
+	slider := widgets.Slider(0, numDiffusionSteps, 0).AppendTo(htmlId).Done()
+	plotId := "plot_" + gonbui.UniqueId()
+	dom.Append(htmlId, fmt.Sprintf(`<div id="%s"></div>`, plotId))
+
+	// Create listeners, and inject first value.
+	sliderChan := slider.Listen().LatestOnly()
+	sliderChan.C <- 0
+
+	done := common.NewLatch()
+	go func() {
+		for {
+			select {
+			case value := <-sliderChan.C:
+				dom.SetInnerHtml(denoiseHtmlId, fmt.Sprintf(
+					"%8.1f%%", 100.0*(1.0-imagesAndDiffusions.Diffusion[value])))
+				dom.SetInnerHtml(plotId, imagesAndDiffusions.Images[value])
+			case <-done.WaitChan():
+				sliderChan.Close()
+				return
+			}
+		}
+	}()
+	return done
+}
+
+// GenerateImagesOfFlowerType is similar to DisplayImagesAcrossDiffusionSteps, but it limits itself to generating images of only one
 // flower type.
 func GenerateImagesOfFlowerType(numImages int, flowerType int32, numDiffusionSteps int) (predictedImages tensor.Tensor) {
 	ctx := context.NewContext(manager).Checked(false)
@@ -208,8 +295,61 @@ func GenerateImagesOfFlowerType(numImages int, flowerType int32, numDiffusionSte
 	ctx.RngStateReset()
 	noise := GenerateNoise(numImages)
 	flowerIds := tensor.FromValue(slices.SliceWithValue(numImages, flowerType))
-	generator := NewImagesGenerator(ctx, noise, flowerIds, numDiffusionSteps, 0)
+	generator := NewImagesGenerator(ctx, noise, flowerIds, numDiffusionSteps)
 	return generator.Generate()
+}
+
+// DropdownFlowerTypes creates a drop-down that shows images at different diffusion steps.
+//
+// If `cacheKey` empty, cache is by-passed. Otherwise, try to load images from cache first if available,
+// or save generated images in cache for future use.
+func DropdownFlowerTypes(cacheKey string, ctx *context.Context, numImages, numDiffusionSteps int, htmlId string) *common.Latch {
+	numFlowerTypes := flowers.NumLabels
+	generateFn := func() []string {
+		htmlImages := make([]string, numFlowerTypes)
+		noise := GenerateNoise(numImages)
+		statusId := "flower_types_status_" + gonbui.UniqueId()
+		gonbui.UpdateHtml(statusId, "Generating flowers ...")
+		for flowerType := 0; flowerType < numFlowerTypes; flowerType++ {
+			flowerIds := tensor.FromValue(slices.SliceWithValue(numImages, flowerType))
+			generator := NewImagesGenerator(ctx, noise, flowerIds, numDiffusionSteps)
+			denoisedImages := generator.Generate()
+			htmlImages[flowerType] = ImagesToHtml(
+				MustNoError(
+					timage.ToImage().MaxValue(255.0).Batch(denoisedImages),
+				))
+			gonbui.UpdateHtml(statusId, fmt.Sprintf(
+				"Generating flowers: %q<br/>%s", flowers.Names[flowerType],
+				htmlImages[flowerType]))
+		}
+		gonbui.UpdateHtml(statusId, "")
+		return htmlImages
+	}
+	htmlImages := cache.Cache(cacheKey, generateFn)
+
+	dom.Append(htmlId, "<b>Denoise Conditioned On Flower Type:</b><br/>")
+	dom.Append(htmlId, "Flower Type: ")
+	dropDown := widgets.Select(flowers.Names).AppendTo(htmlId).Done()
+	plotId := "plot_" + gonbui.UniqueId()
+	dom.Append(htmlId, fmt.Sprintf(`<div id="%s"></div>`, plotId))
+
+	// Create listeners, and inject first value.
+	selChan := dropDown.Listen().LatestOnly()
+	selChan.C <- 0
+
+	done := common.NewLatch()
+	go func() {
+		for {
+			select {
+			case value := <-selChan.C:
+				dom.SetInnerHtml(plotId, htmlImages[value])
+			case <-done.WaitChan():
+				selChan.Close()
+				return
+			}
+		}
+	}()
+	return done
 }
 
 // GenerateImagesOfAllFlowerTypes takes one random noise, and generate the flower for each of the 102 types.
@@ -225,74 +365,88 @@ func GenerateImagesOfAllFlowerTypes(numDiffusionSteps int) (predictedImages tens
 		return noise
 	}).Call()[0]
 	flowerIds := tensor.FromValue(slices.Iota(int32(0), numImages))
-	generator := NewImagesGenerator(ctx, noise, flowerIds, numDiffusionSteps, 0)
+	generator := NewImagesGenerator(ctx, noise, flowerIds, numDiffusionSteps)
 	return generator.Generate()
 }
 
+// ImagesGenerator given noise and the flowerIds.
+// Use it with NewImagesGenerator.
 type ImagesGenerator struct {
-	ctx                                   *context.Context
-	noise, flowerIds                      tensor.Tensor
-	numImages                             int
-	numDiffusionSteps, displayEveryNSteps int
-	denormalizerExec                      *Exec
-	diffusionStepExec                     *context.Exec
+	ctx               *context.Context
+	noise, flowerIds  tensor.Tensor
+	numImages         int
+	numDiffusionSteps int
+	denormalizerExec  *Exec
+	diffusionStepExec *context.Exec
 }
 
-func NewImagesGenerator(ctx *context.Context, noise, flowerIds tensor.Tensor, numDiffusionSteps, displayEveryNSteps int) *ImagesGenerator {
+// NewImagesGenerator generates flowers given initial `noise` and `flowerIds`, in `numDiffusionSteps`.
+// Typically, 20 diffusion steps will suffice.
+func NewImagesGenerator(ctx *context.Context, noise, flowerIds tensor.Tensor, numDiffusionSteps int) *ImagesGenerator {
 	ctx = ctx.Reuse()
-	return &ImagesGenerator{
-		ctx:                ctx,
-		noise:              noise,
-		flowerIds:          flowerIds,
-		numImages:          noise.Shape().Dimensions[0],
-		numDiffusionSteps:  numDiffusionSteps,
-		displayEveryNSteps: displayEveryNSteps,
-		denormalizerExec:   NewExec(manager, DenormalizeImages),
-		diffusionStepExec:  context.NewExec(manager, ctx, DenoiseStepGraph),
+	if numDiffusionSteps <= 0 {
+		exceptions.Panicf("Expected numDiffusionSteps > 0, got %d", numDiffusionSteps)
 	}
+	numImages := noise.Shape().Dimensions[0]
+	if flowerIds.Shape().Dimensions[0] != numImages || noise.Rank() != 4 || flowerIds.Rank() != 1 {
+		exceptions.Panicf("Shapes of noise (%s) and flowerIds (%s) are incompatible: "+
+			"they must have the same number of images, noise must be rank 4 and flowerIds must "+
+			"be rank 1", noise.Shape(), flowerIds.Shape())
+	}
+	return &ImagesGenerator{
+		ctx:               ctx,
+		noise:             noise,
+		flowerIds:         flowerIds,
+		numImages:         numImages,
+		numDiffusionSteps: numDiffusionSteps,
+		diffusionStepExec: context.NewExec(manager, ctx, DenoiseStepGraph),
+		denormalizerExec:  NewExec(manager, DenormalizeImages),
+	}
+}
+
+// GenerateEveryN images from the original noise.
+// While iteratively undoing diffusion, it will keep every `n` intermediary images.
+// It will always return the last image generated.
+//
+// It can be called multiple times if the context changed, if the model was further trained.
+// Otherwise, it will always return the same images.
+//
+// It returns a slice of batches of images, one batch per intermediary diffusion step,
+// a slice with the step used for each batch, and another slice with the "diffusionTime"
+// of the intermediary images (it will be 1.0 for the last)
+func (g *ImagesGenerator) GenerateEveryN(n int) (predictedImages []tensor.Tensor,
+	diffusionSteps []int, diffusionTimes []float64) {
+	noisyImages := g.noise
+
+	var imagesBatch tensor.Tensor
+	stepSize := 1.0 / float64(g.numDiffusionSteps)
+	for step := 0; step < g.numDiffusionSteps; step++ {
+		diffusionTime := 1.0 - float64(step)*stepSize
+		nextDiffusionTime := math.Max(diffusionTime-stepSize, 0)
+		parts := g.diffusionStepExec.Call(noisyImages, diffusionTime, nextDiffusionTime, g.flowerIds)
+		if imagesBatch != nil {
+			imagesBatch.FinalizeAll() // Immediate release of (GPU) memory for intermediary results.
+		}
+		if noisyImages != nil && step > 0 {
+			noisyImages.FinalizeAll() // Immediate release of (GPU) memory for intermediary results.
+		}
+		imagesBatch, noisyImages = parts[0], parts[1]
+		if (n > 0 && step%n == 0) || step == g.numDiffusionSteps-1 {
+			diffusionSteps = append(diffusionSteps, step)
+			diffusionTimes = append(diffusionTimes, nextDiffusionTime)
+			predictedImages = append(predictedImages, g.denormalizerExec.Call(imagesBatch)[0])
+		}
+	}
+	return
 }
 
 // Generate images from the original noise.
 //
 // It can be called multiple times if the context changed, if the model was further trained.
 // Otherwise, it will always return the same images.
-func (g *ImagesGenerator) Generate() (predictedImages tensor.Tensor) {
-	if g.displayEveryNSteps > 0 {
-		fmt.Printf("GenerateImages(%d images, %d steps): noise.shape=%s\n", g.numImages, g.numDiffusionSteps, g.noise.Shape())
-		fmt.Printf("\tModel #params:\t%d\n", g.ctx.NumParameters())
-		fmt.Printf("\t Model memory:\t%s\n", data.ByteCountIEC(g.ctx.Memory()))
-	}
-
-	noisyImages := g.noise
-	if g.displayEveryNSteps > 0 {
-		gonbui.DisplayHTML("<p><b>Noise</b></p>")
-		PlotImagesTensor(noisyImages)
-	}
-
-	stepSize := 1.0 / float64(g.numDiffusionSteps)
-	for step := 0; step < g.numDiffusionSteps; step++ {
-		diffusionTime := 1.0 - float64(step)*stepSize
-		nextDiffusionTime := math.Max(diffusionTime-stepSize, 0)
-		parts := g.diffusionStepExec.Call(noisyImages, diffusionTime, nextDiffusionTime, g.flowerIds)
-		if predictedImages != nil {
-			predictedImages.FinalizeAll() // Immediate release of (GPU) memory for intermediary results.
-		}
-		if noisyImages != nil && step > 0 {
-			noisyImages.FinalizeAll() // Immediate release of (GPU) memory for intermediary results.
-		}
-		predictedImages, noisyImages = parts[0], parts[1]
-		if g.displayEveryNSteps > 0 && step%g.displayEveryNSteps == 0 {
-			displayImages := g.denormalizerExec.Call(predictedImages)[0]
-			gonbui.DisplayHTML(fmt.Sprintf("<p><b>Images @ step=%d, diffusion_time=%.3f</b></p>", step, diffusionTime))
-			PlotImagesTensor(displayImages)
-		}
-	}
-	predictedImages = g.denormalizerExec.Call(predictedImages)[0]
-	if g.displayEveryNSteps > 0 {
-		gonbui.DisplayHTML("<p><b>Final Images</b></p>")
-		PlotImagesTensor(predictedImages)
-	}
-	return
+func (g *ImagesGenerator) Generate() (batchedImages tensor.Tensor) {
+	allBatches, _, _ := g.GenerateEveryN(0)
+	return allBatches[0]
 }
 
 // GenerateNoise generates random noise that can be used to generate images.
@@ -338,7 +492,7 @@ func NewKidGenerator(ctx *context.Context, evalDS train.Dataset, numDiffusionSte
 		ctxGenerator:   ctx,
 		ctxInceptionV3: context.NewContext(manager).Checked(false),
 		ds:             evalDS,
-		generator:      NewImagesGenerator(ctx, noise, flowerIds, numDiffusionStep, 0),
+		generator:      NewImagesGenerator(ctx, noise, flowerIds, numDiffusionStep),
 		kid:            inceptionv3.KidMetric(i3Path, inceptionv3.MinimumImageSize, 255.0, timage.ChannelsLast),
 	}
 	kg.evalExec = context.NewExec(manager, kg.ctxInceptionV3, kg.EvalStepGraph)
