@@ -2,8 +2,6 @@ module github.com/gomlx/gomlx
 
 go 1.21
 
-toolchain go1.21.2
-
 require (
 	github.com/daniellowtw/matlab v0.0.0-20190528220746-1ed1d96a6637
 	github.com/disintegration/imaging v1.6.2
