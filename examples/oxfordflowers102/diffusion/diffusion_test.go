@@ -27,6 +27,16 @@ func TestUNetModelGraph(t *testing.T) {
 	fmt.Printf(" U-Net Model memory:\t%s\n", data.ByteCountIEC(ctx.Memory()))
 }
 
+// getZeroPredictions calls the TrainModelGraph on an empty context and graph.
+// This can be used to check the predictions shape and also as a side effect to create
+// the variables in the context `ctx`.
+func getZeroPredictions(ctx *context.Context, g *Graph, numExamples int) []*Node {
+	images := Zeros(g, shapes.Make(DType, numExamples, ImageSize, ImageSize, 3))
+	imageIds := Zeros(g, shapes.Make(shapes.I32, numExamples))
+	flowerIds := Zeros(g, shapes.Make(shapes.I32, numExamples))
+	return TrainingModelGraph(ctx, nil, []*Node{images, imageIds, flowerIds})
+}
+
 func TestTrainingModelGraph(t *testing.T) {
 	if testing.Short() {
 		fmt.Println("TestTrainingModelGraph skipped with go test -short: it requires downloading and preprocessing data.")
@@ -37,13 +47,9 @@ func TestTrainingModelGraph(t *testing.T) {
 	g := manager.NewGraph("test")
 	ctx := context.NewContext(manager)
 	numExamples := 5
-	images := Zeros(g, shapes.Make(DType, numExamples, ImageSize, ImageSize, 3))
-	imageIds := Zeros(g, shapes.Make(shapes.I32, numExamples))
-	flowerIds := Zeros(g, shapes.Make(shapes.I32, numExamples))
-	fmt.Printf("         images.shape:\t%s\n", images.Shape())
-	predictions := TrainingModelGraph(ctx, nil, []*Node{images, imageIds, flowerIds})
+	predictions := getZeroPredictions(ctx, g, numExamples)
 	predictedImages, loss := predictions[0], predictions[1]
-	assert.True(t, predictedImages.Shape().Eq(images.Shape()), "Original images and predicted images shape differ!?")
+	assert.NoError(t, predictedImages.Shape().CheckDims(numExamples, ImageSize, ImageSize, 3))
 	assert.True(t, loss.Shape().IsScalar(), "Loss must be scalar.")
 	assert.Greater(t, ctx.NumParameters(), 0, "No context parameters created!?")
 	fmt.Printf("predictedImages.shape:\t%s\n", predictions[0].Shape())
@@ -52,12 +58,36 @@ func TestTrainingModelGraph(t *testing.T) {
 	fmt.Printf("         Model memory:\t%s\n", data.ByteCountIEC(ctx.Memory()))
 }
 
-func TestGenerateImages(t *testing.T) {
+func TestImagesGenerator(t *testing.T) {
+	Init()
 	if testing.Short() {
 		fmt.Println("TestGenerateImages skipped with go test -short: it requires downloading and preprocessing data.")
 		return
 	}
+
 	numImages := 5
-	images := GenerateImages(numImages, 3, 0)
-	assert.Equal(t, []int{numImages, ImageSize, ImageSize, 3}, images.Shape().Dimensions)
+	numDiffusionSteps := 3
+
+	manager = graphtest.BuildTestManager()
+	ctx := context.NewContext(manager)
+	// ctx.RngStateReset() --> to truly randomize each run uncomment this.
+	g := manager.NewGraph("test")
+	_ = getZeroPredictions(ctx, g, 2) // Batch size won't matter, we only call this to create the model weights.
+	noise := GenerateNoise(numImages)
+	flowerIds := GenerateFlowerIds(numImages)
+	generator := NewImagesGenerator(ctx, noise, flowerIds, numDiffusionSteps)
+
+	// Just the final images:
+	images := generator.Generate()
+	assert.NoError(t, images.Shape().CheckDims(numImages, ImageSize, ImageSize, 3))
+
+	// With intermediary images:
+	allImages, diffusionSteps, diffusionTimes := generator.GenerateEveryN(1)
+	assert.Len(t, allImages, numDiffusionSteps)
+	assert.EqualValues(t, []int{0, 1, 2}, diffusionSteps)
+	assert.InDeltaSlice(t, []float64{0.6666666, .333333333, 0.0}, diffusionTimes, 0.001)
+
+	for _, images = range allImages {
+		assert.NoError(t, images.Shape().CheckDims(numImages, ImageSize, ImageSize, 3))
+	}
 }
