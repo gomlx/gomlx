@@ -2,6 +2,7 @@
 
 ## Next
 
+* Added small demo using GoNB new widgets in Oxford Flowers Diffusion Demo.
 * Fixed rare race-condition with GC and CGO.
 * Minor typos and reformatting (no execution code change).
 * Added various badges to README.md.
