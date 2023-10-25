@@ -75,7 +75,7 @@ From a directory you want to make visible in Jupyter, do:
 
 ```bash
 docker pull janpfeifer/gomlx_jupyterlab:latest
-docker run -it --rm -p 8888:8888 -v "${PWD}":/home/jovyan/work janpfeifer/gomlx_jupyterlab:latest
+docker run -it --rm -p 8888:8888 -v "${PWD}":/home/jupyter/work janpfeifer/gomlx_jupyterlab:latest
 ```
 
 It will display a URL starting with `127.0.0.1:8888` in the terminal (it will include a secret token needed) that you can open in your browser.

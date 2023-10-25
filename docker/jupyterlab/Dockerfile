@@ -9,7 +9,7 @@ ARG GO_VERSION="1.21.3"
 # User, home directory and basics.
 #######################################################################################################
 
-ARG NB_USER="jovyan"
+ARG NB_USER="jupyter"
 ARG NB_UID=1000
 ARG NB_GID=100
 
@@ -26,8 +26,6 @@ RUN apt-get update --yes \
 # Create NB_USER (jovyan) and its home directory.
 RUN useradd --create-home --uid ${NB_UID} --gid ${NB_GID} --shell /bin/bash ${NB_USER}
 ENV HOME /home/${NB_USER}
-
-
 
 #######################################################################################################
 # NVidia/CUDA/CuDNN hacks, that the base package didn't install.
@@ -119,7 +117,7 @@ RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Back to home directory.
 USER ${NB_USER}
-WORKDIR "${HOME}"
+WORKDIR ${HOME}
 EXPOSE 8888/tcp
 CMD ["jupyter-lab", "--no-browser", "--ip=0.0.0.0"]
 ENTRYPOINT []
