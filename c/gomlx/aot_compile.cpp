@@ -106,14 +106,14 @@ xla::StatusOr<mlir::ModuleOp> ConvertXlaComputationToStableHLOImplementation(con
 
     mlir::BaseScopedDiagnosticHandler diagnostic(&context);  // Error collector.
     if (!mlir::verify(module).succeeded()) {
-        return xla::FromAbslStatus(diagnostic.ConsumeStatus());
+        return tsl::FromAbslStatus(diagnostic.ConsumeStatus());
     }
 
     // Convert to StableHLO.
     mlir::PassManager pm(&context);
     pm.addPass(mlir::mhlo::createHloLegalizeToStablehloPass());
     if (!mlir::succeeded(pm.run(module))) {
-        return xla::FromAbslStatus(diagnostic.ConsumeStatus());
+        return tsl::FromAbslStatus(diagnostic.ConsumeStatus());
     }
     return module;
 }
@@ -186,7 +186,7 @@ StatusOr UnserializeStableHLO(VectorData *serialized) {
     delete serialized;
 
     if (!module) {
-        r.status = FromStatus(xla::FromAbslStatus(diagnostic.ConsumeStatus()));
+        r.status = FromStatus(tsl::FromAbslStatus(diagnostic.ConsumeStatus()));
         return r;
     }
     holder->stable_hlo = module.release();

@@ -65,6 +65,7 @@ typedef struct{
 
 #include "xla/status.h"
 #include "xla/statusor.h"
+//#include "xla/xla/shape_util.h"
 
 // C++ version of the XLA wrapper library.
 // Bump the number whenever something changes, and keep in sync with Go file xla/node.go.

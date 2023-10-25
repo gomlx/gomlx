@@ -23,6 +23,7 @@ package xla
 import "C"
 import (
 	"fmt"
+	"gopkg.in/errgo.v2/fmt/errors"
 	"os"
 	"runtime"
 	"unsafe"
@@ -134,6 +135,15 @@ func NewClient(platform string, numReplicas, numThreads int) (*Client, error) {
 		platform, err = GetDefaultPlatform()
 		if err != nil {
 			return nil, err
+		}
+	}
+	if platform == "CUDA" {
+		if !LibDeviceFound {
+			return nil, errors.New(LibDeviceNotFoundErrorMessage)
+		} else if !DirHasLibdevice(LibDeviceDir) {
+			return nil, errors.Newf(
+				"GPU/CUDA directory provided (%q) doesn't have a `nvvm/libdevice/libdevice.10.bc`.\n%s",
+				LibDeviceDir, LibDeviceNotFoundErrorMessage)
 		}
 	}
 	statusOr := C.NewClient(C.CString(platform), C.int(numReplicas), C.int(numThreads))

@@ -1,7 +1,12 @@
 # GoMLX changelog
 
-## Next
+## v0.7.0 -2023/10/25
 
+* Update OpenXLA/XLA dependencies:
+  * Updated `devel/Dockerfile` with fixed dependencies, and better instructions to work around Bazel cache.
+  * Fixed several build breaking issues intersecting XLA and CUDA.
+  * Added automatic finding of CUDA directory (for `libdevice.10.bc` file).
+* Oxford Flowers 102:  Added support for GoNB widgets; Improved image `Generator`.
 * Fixed rare race-condition with GC and CGO.
 * Minor typos and reformatting (no execution code change).
 * Added various badges to README.md.
