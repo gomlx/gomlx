@@ -53,7 +53,7 @@ gomlx_jit_deps = [
     # CUDA or ROCM executor
     "@xla//xla/service:gpu_plugin",
     "@xla//xla/stream_executor:cuda_platform",
-    "@xla//xla/stream_executor:rocm_platform",
+    #    "@xla//xla/stream_executor:rocm_platform",
 ])
 
 # Minimal set of dependencies needed to run inference in an Ahead-Of-Time (AOT) compiled model.
@@ -97,7 +97,10 @@ cc_library(
 
 cc_binary(
     name = "libgomlx_xla.so",
-    linkopts = ["-shared", "-ltcmalloc"],
+    linkopts = [
+        "-shared",
+        "-ltcmalloc",
+    ],
     # Setting linkshared=1 and linkstatic=1 should try to link everything (except system libraries) statically
     # but generate a dynamically linked library -- needed to link it to other languages, Go in this case.
     # At least that's what I understood from reading the docs in
@@ -106,7 +109,7 @@ cc_binary(
     linkstatic = 1,
     deps = gomlx_jit_deps + [
         ":gomlx",
-    ]
+    ],
 )
 
 cc_library(

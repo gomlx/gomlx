@@ -5,7 +5,8 @@
 # * STARTUP_FLAGS and BUILD_FLAGS: passed as `bazel ${STARTUP_FLAGS} build <build_target> ${BUILD_FLAGS}.
 # * --tpu: Also compile for TPUs.
 # * --gpu: Also compile for GPUs.
-# * --output <dir>: Directory to use for build.
+# * --output <dir>: Directory passed to `bazel --output_base`. Unfortunately, not sure why, bazel still outputs things
+#   to $TEST_TMPDIR and /.cache.
 # * <build_target>: Default is ":gomlx_xla". Another common option is ":gomlx_xla_lib".
 
 #BUILD_TARGET=":gomlx_xla_lib"
@@ -49,6 +50,22 @@ set -vex
 BAZEL=${BAZEL:-bazel}  # Bazel version > 5.
 PYTHON=${PYTHON:-python}  # Python, version should be > 3.7.
 
+# Some environment variables used for XLA configure script, but set here anyway:
+if ((USE_GPU)) ; then
+  export TF_NEED_CUDA=1
+  export TF_CUDA_VERSION=12.3
+  export CUDA_VERSION=12.3
+  export TF_NEED_ROCM=0
+  export TF_CUDA_COMPUTE_CAPABILITIES="6.1,9.0"
+else
+  unset TF_NEED_CUDA
+fi
+export USE_DEFAULT_PYTHON_LIB_PATH=1
+export PYTHON_BIN_PATH=/usr/bin/python3
+export TF_CUDA_CLANG=0
+export GCC_HOST_COMPILER_PATH=/usr/bin/gcc
+export CC_OPT_FLAGS=-Wno-sign-compare
+
 # Check the OpenXLA version (commit hash) changed, and if so, download an
 # updated `openxla_xla_bazelrc` file from github.
 # TODO: include a sha256 verification of the file as well.
@@ -72,6 +89,7 @@ fi
 
 STARTUP_FLAGS="${STARTUP_FLAGS} ${OUTPUT_DIR}"
 STARTUP_FLAGS="${STARTUP_FLAGS} --bazelrc=${OPENXLA_BAZELRC}"
+STARTUP_FLAGS="${STARTUP_FLAGS} --bazelrc=tf_configure.bazelrc"
 
 # bazel build flags
 BUILD_FLAGS="${BUILD_FLAGS:---keep_going --verbose_failures --sandbox_debug}"
