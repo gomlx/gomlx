@@ -88,7 +88,7 @@ func PresetXlaFlagsCudaDir() {
 		}
 
 		// Discard multiple occurrences of flag.
-		if found > 0 {
+		if found >= 0 {
 			xlaFlags[found] = ""
 		}
 		found = ii
@@ -110,7 +110,6 @@ func PresetXlaFlagsCudaDir() {
 			LibDeviceDir = ""
 		} else {
 			LibDeviceDir = f[nextPos:]
-			fmt.Printf("%q->%q\n", f, LibDeviceDir)
 		}
 	}
 
