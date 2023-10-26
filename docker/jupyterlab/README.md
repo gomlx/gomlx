@@ -26,8 +26,13 @@ should split on 2 dockers)
 
 ### Building the Docker
 
-First update the `GOMLX_VERSION` in file `dockers/jupyterlab/Dockerfile`. Set the environment variable `version`
-to the same string (something like `"v0.X.Y"`).
+You need a copy of the binary pre-build GoMLX C library.
+You can download it from the latest release (in 
+`https://github.com/gomlx/gomlx/releases/download/${GOMLX_VERSION}/gomlx_xla-linux-amd64.tar.gz`)
+or if you build it yourself (see `docs/building.md`), the built file is usually in ``./c/bazel-bin/gomlx_xla.tar.gz`.
+Copy or download the file and rename to `gomlx_xla.tar.gz`, in the repository root directory -- or 
+set the path to the file by adding `--build-arg GOMLX_XLA_TAR_GZ=<path_to_file>` to the Docker build
+command below.
 
 Due to a couple of issues with NVidia drivers and Docker runtime selection during build, we need a bit of trickery:
 

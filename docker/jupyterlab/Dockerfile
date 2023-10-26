@@ -2,8 +2,14 @@ FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
 
 LABEL maintainer="pfeifer@gmail.com"
 
-ARG GOMLX_VERSION="v0.7.0"
 ARG GO_VERSION="1.21.3"
+
+# Pre-built GoMLX C library: if not building yourself, you can download it from
+# https://github.com/gomlx/gomlx/releases/download/${GOMLX_VERSION}/gomlx_xla-linux-amd64.tar.gz
+# If generated locally, typically it will be located in `./c/bazel-bin/gomlx_xla.tar.gz`,
+# but because docker has issues with symlinks (?? I think, it returns a confusing error??),
+# I suggest making a copy of the file in the current directory when building.
+ARG GOMLX_XLA_TAR_GZ="gomlx_xla.tar.gz"
 
 #######################################################################################################
 # User, home directory and basics.
@@ -72,10 +78,13 @@ RUN go install github.com/janpfeifer/gonb@latest \
 USER root
 
 RUN apt-get update --yes \
-    && apt-get install --yes --no-install-recommends gcc libunwind8 liblzma5 libgoogle-perftools-dev
+    && apt-get install --yes --no-install-recommends gcc libunwind8 liblzma5 libgoogle-perftools-dev micro
 
+# Use locally built gomlx.tar.gz, otherwise download from latest release.
+COPY ${GOMLX_XLA_TAR_GZ} /root/gomlx_xla.tar.gz
 WORKDIR "/usr/local"
-RUN wget --quiet --output-document=- "https://github.com/gomlx/gomlx/releases/download/${GOMLX_VERSION}/gomlx_xla-linux-amd64.tar.gz" | tar -xz
+RUN tar -xzf /root/gomlx_xla.tar.gz
+
 ENV LD_LIBRARY_PATH /usr/local/lib:${LD_LIBRARY_PATH}
 
 USER ${NB_USER}
@@ -104,7 +113,7 @@ RUN go test ./xla/... ./types/... ./graph/... ./ml/...
 # https://stackoverflow.com/questions/59691207/docker-build-with-nvidia-runtime/61737404#61737404
 #
 # So for now, the alternative if to run this after building the image, and then we commit the container.
-
+RUN go run ./examples/linear
 
 
 #######################################################################################################

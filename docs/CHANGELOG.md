@@ -1,6 +1,12 @@
 # GoMLX changelog
 
-## v0.7.0 -2023/10/25
+## v0.7.1 - 2023/10/26
+
+* Fixed search of CUDA paths under /usr/local.
+* Fixed(?) XLA ShapedBuffers issue causing spurious crashes after update. 
+* JupyterLab docker image uses gomlx_xla C library from local disk (as opposed to downloading it).
+
+## v0.7.0 - 2023/10/25
 
 * Update OpenXLA/XLA dependencies:
   * Updated `devel/Dockerfile` with fixed dependencies, and better instructions to work around Bazel cache.
