@@ -95,12 +95,4 @@ StatusOr OnDeviceBufferToLiteral(OnDeviceBuffer *buffer, Client *client);
 }
 #endif
 
-#ifdef __cplusplus
-// Functionality available only for C++ code:
-
-// ShapeFromXlaShape returns a newly allocated Shape C-struct.
-Shape *ShapeFromXlaShape(const xla::Shape &xla_shape);
-#endif
-
-
 #endif

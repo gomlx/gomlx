@@ -60,7 +60,7 @@ Shape* OnDeviceBufferShape(OnDeviceBuffer* b) {
     if (sb == nullptr) {
         return nullptr;
     }
-    xla::Shape shape = sb->on_host_shape();
+    xla::Shape shape = sb->on_device_shape();
     return ShapeFromXlaShape(shape);
 }
 
