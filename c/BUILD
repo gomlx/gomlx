@@ -67,7 +67,7 @@ genrule(
         TAR=gtar
     fi
     $$TAR --create --dereference --directory="$${tt}" \
-        --sort=name --mtime="2023-04-03 00:00Z" --owner=0 --group=0 --numeric-owner --format=gnu \
+        --sort=name --owner=0 --group=0 --numeric-owner --format=gnu \
         --gzip --file "$@" $${files}
     rm -rf "$${tt}"
     """,
