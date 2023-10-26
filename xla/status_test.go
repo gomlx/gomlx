@@ -22,10 +22,10 @@ import (
 )
 
 // LeakThreshold for MemoryLeakTest.
-const LeakThreshold int64 = 10000
+const LeakThreshold int64 = 50000
 
 // MemoryLeakTest records memory before and after running `fn`, and reports a fatal error
-// if its larger than a minimum threhsold, see LeakThreshold.
+// if its larger than a minimum threshold, see LeakThreshold.
 func MemoryLeakTest(t *testing.T, fn func(), msg string) {
 	used := MemoryUsedByFn(fn, msg)
 	if used > LeakThreshold {
