@@ -50,7 +50,7 @@ func TestAOTCompileModel(t *testing.T) {
 	fStableHLO, err := os.CreateTemp("", "gomlx_aot_stable_hlo_")
 	fStableHLOName := fStableHLO.Name()
 	require.NoError(t, err)
-	err = stableHLO.Serialize(fStableHLO.Fd(), xla.StableHLOCurrentVersion())
+	err = stableHLO.SerializeWithVersion(fStableHLO.Fd(), xla.StableHLOCurrentVersion())
 	require.NoError(t, err)
 	_ = fStableHLO.Close()
 	fmt.Printf("StableHLO serialized to %s\n", fStableHLO.Name())
