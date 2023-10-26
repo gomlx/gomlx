@@ -153,15 +153,17 @@ func findLibDevice() string {
 	}
 
 	// Search for `/usr/local/cuda-*` directories.
-	entries, err := os.ReadDir("/usr/local")
+	localPath := "/usr/local"
+	entries, err := os.ReadDir(localPath)
 	if err == nil {
 		var candidate string
 		for _, e := range entries {
 			dir := e.Name()
-			if e.IsDir() && strings.HasPrefix(dir, "cuda-") && DirHasLibdevice(dir) {
+			fullPath := path.Join(localPath, dir)
+			if e.IsDir() && strings.HasPrefix(dir, "cuda-") && DirHasLibdevice(fullPath) {
 				// Take just the last (in alphabetical order) candidate.
 				if candidate == "" || strings.Compare(candidate, dir) == -1 {
-					candidate = dir
+					candidate = fullPath
 				}
 			}
 		}
