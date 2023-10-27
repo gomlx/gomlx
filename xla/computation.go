@@ -19,6 +19,7 @@ package xla
 // #include "gomlx/aot_compile.h"
 // #include "gomlx/client.h"
 // #include "gomlx/computation.h"
+// #include "gomlx/shape.h"
 import "C"
 
 import (

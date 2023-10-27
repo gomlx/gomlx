@@ -52,12 +52,12 @@ extern Shape *ShapeFromXlaShape(const xla::Shape &shape);
 
 // ShapeFromXlaShape returns a newly allocated Shape C-struct.
 Shape *ShapeFromXlaShape(const xla::Shape &xla_shape) {
-    Shape *shape = new Shape();
+    Shape *shape = Malloc<Shape>();
     shape->dtype = int32_t(xla_shape.element_type());
     if (shape->dtype == xla::TUPLE) {
         shape->tuple_size = xla_shape.tuple_shapes_size();
         if (shape->tuple_size > 0) {
-            shape->tuple_shapes = new Shape*[shape->tuple_size];
+            shape->tuple_shapes = Malloc<Shape*>(shape->tuple_size);
             for (int ii = 0; ii < shape->tuple_size; ii++) {
                 shape->tuple_shapes[ii] = ShapeFromXlaShape(xla_shape.tuple_shapes(ii));
             }
@@ -67,7 +67,7 @@ Shape *ShapeFromXlaShape(const xla::Shape &xla_shape) {
     if (xla_shape.IsArray()) {
         shape->rank = xla_shape.rank();
         if (shape->rank > 0) {
-            shape->dimensions = new int64_t[shape->rank];
+            shape->dimensions = Malloc<int64_t>(shape->rank);
             const auto xla_shape_dims = xla_shape.dimensions();
             std::copy(xla_shape_dims.begin(), xla_shape_dims.end(), shape->dimensions);
         }
@@ -80,7 +80,7 @@ void DeleteShape(Shape *shape) {
         return;
     }
     if (shape->dimensions != nullptr) {
-        delete shape->dimensions;
+        free(shape->dimensions);
         shape->dimensions = 0;
     }
     if (shape->tuple_size > 0 && shape->tuple_shapes != nullptr) {
@@ -88,10 +88,10 @@ void DeleteShape(Shape *shape) {
             DeleteShape(shape->tuple_shapes[ii]);
             shape->tuple_shapes[ii] = nullptr;
         }
-        delete shape->tuple_shapes;
+        free(shape->tuple_shapes);
         shape->tuple_shapes = nullptr;
     }
-    delete shape;
+    free(shape);
 }
 
 xla::Shape MakeXlaShape(Shape *shape) {

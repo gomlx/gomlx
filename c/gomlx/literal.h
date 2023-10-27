@@ -41,6 +41,8 @@ extern "C" {
 
 // Literal points to the data in C++ space.
 // TODO: add support for layouts. For now assuming major->minor layout, that is row-major for 2D tensors.
+//
+// Memory managed by C++ new/delete.
 typedef struct Literal {
     // Pointer to xla::Literal that holds the data.
     XlaLiteral *literal;
@@ -59,30 +61,34 @@ typedef struct Literal {
 } Literal;
 
 // Delete the given structure, and the xla::Literal held by it.
-void DeleteLiteral(Literal* literal);
+extern void DeleteLiteral(Literal* literal);
 
-// MakeLiteralFromShape uses the Literal given and creates a new XlaLiteral based on its shape,
-// with uninitialized data. It replaces `literal->shape` with a Copy using C allocation. It sets
-// `literal->literal` with the newly created `xla::Literal`.
-void MakeXlaLiteralFromShape(Literal* literal);
+// MakeFromShape create a new literal with the given shape, with uninitialized data.
+// It takes ownership of the given `Shape*` pointer, and stores it within
+// the returned Literal struct.
+extern Literal *MakeLiteralFromShape(Shape* shape);
 
 // Update data, size and size_bytes elements.
-void XlaLiteralRefreshData(Literal* literal);
+extern void XlaLiteralRefreshData(Literal* literal);
 
 // MakeXlaLiteralTuple combine the `elements` into an xla::Literal, and returns it converted to
 // a newly allocated Literal structure.
-Literal *MakeLiteralTuple(Literal** elements, int num_elements);
+//
+// It takes ownership of the literals pointed by elements, and the `elements` array itself
+// is freed.
+extern Literal *MakeLiteralTuple(Literal** elements, int num_elements);
 
 // TransferToServer takes data from a local Literal to the accelerator server used by client.
 // Returns a pointer to a xla::GlobalData on success or the status on error.
-StatusOr TransferToServer(Literal* literal, Client* client);
+extern StatusOr TransferToServer(Literal* literal, Client* client);
 
-// LiteralDecomposeTuple splits literal into its parts and returns a vector of *Literal. The original *Literal
-// is invalidated.
-Literal** LiteralDecomposeTuple(Literal* literal);
+// LiteralDecomposeTuple splits literal into its parts and returns a vector of *Literal.
+// The original *Literal is invalidated, but not deleted (still owned by caller).
+// The returned array is owned and should be free by the caller.
+extern Literal** LiteralDecomposeTuple(Literal* literal);
 
 // LiteralToOnDeviceBuffer conversion. Either returns a OnDeviceBuffer* or an error.
-StatusOr LiteralToOnDeviceBuffer(Literal* literal, Client* client, int device_ordinal);
+extern StatusOr LiteralToOnDeviceBuffer(Literal* literal, Client* client, int device_ordinal);
 
 struct OnDeviceBuffer;
 typedef struct OnDeviceBuffer OnDeviceBuffer;

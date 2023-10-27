@@ -101,12 +101,9 @@ var muMem sync.Mutex
 
 // NewLiteralFromShape returns a new Literal with the given shape and uninitialized data.
 func NewLiteralFromShape(shape shapes.Shape) *Literal {
-	cLiteral := Malloc[C.Literal]()
-	cLiteral.is_tuple = false
-	cLiteral.shape = CShapeFromShape(shape)
-	cLiteral.size = C.int64_t(shape.Size())
-	C.MakeXlaLiteralFromShape(cLiteral)
-	if int(cLiteral.size) != shape.Size() {
+	cShape := CShapeFromShape(shape)
+	cLiteral := C.MakeLiteralFromShape(cShape)
+	if cLiteral == nil || int(cLiteral.size) != shape.Size() {
 		log.Fatalf("Allocating xla::Literal with shape %s resulted in size %d, wanted size %d", shape, cLiteral.size, shape.Size())
 	}
 	return newLiteral(cLiteral)
@@ -155,7 +152,6 @@ func NewLiteralTuple(literals []*Literal) *Literal {
 		func(idx int) *C.Literal { return literals[idx].cLiteralPtr })
 	//fmt.Printf("\tlen(literals)=%d, literals=%v\n", len(literals), literals)
 	cLiteral := C.MakeLiteralTuple(cLiterals, C.int(len(literals)))
-	C.free(unsafe.Pointer(cLiterals))
 	return newLiteral(cLiteral)
 }
 

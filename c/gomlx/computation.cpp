@@ -667,7 +667,8 @@ StatusOr GlobalDataDeconstructTuple(XlaGlobalData *gd, Client* client) {
         return r;
     }
     std::vector<std::unique_ptr<xla::GlobalData>> gds = std::move(gds_or.value());
-    XlaGlobalData **gdsArray = new XlaGlobalData*[gds.size()];
+    // Since this data is freed by C.free in Go, we use malloc to allocate it.
+    XlaGlobalData **gdsArray = (XlaGlobalData **)malloc(sizeof(XlaGlobalData*) * gds.size());
     for (int ii = 0; ii < gds.size(); ii++) {
         gdsArray[ii] = gds[ii].release();
     }

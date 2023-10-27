@@ -24,6 +24,7 @@
 #ifdef __cplusplus
 // C++ only includes: these are not seen by the Go compiler.
 #include "xla/shape.h"
+#include "status.h"
 
 #else
 // C and CGO only code.
@@ -38,6 +39,8 @@ extern "C" {
 struct Literal;
 
 // Shape C representation.
+//
+// Memory managed by malloc/free.
 struct Shape {
     // Data type.
     int32_t dtype;
@@ -56,8 +59,8 @@ struct Shape {
 };
 typedef struct Shape Shape;
 
-// Delete the given Shape.
-void DeleteShape(Shape* shape);
+// Delete the given Shape -- it actually uses C's free.
+extern void DeleteShape(Shape* shape);
 
 #ifdef __cplusplus
 }
@@ -67,10 +70,13 @@ void DeleteShape(Shape* shape);
 // Functionality available only for C++ code:
 
 // MakeXlaShape converts from our C Shape representation to an xla::Shape.
+// The `shape` given is not freed.
 xla::Shape MakeXlaShape(Shape *shape);
 
 // ShapeFromXlaShape returns a newly allocated Shape C-struct.
+// Ownership is returned to the caller.
 Shape *ShapeFromXlaShape(const xla::Shape &xla_shape);
+
 #endif
 
 #endif  // _GOMLX_XLA_SHAPE_H

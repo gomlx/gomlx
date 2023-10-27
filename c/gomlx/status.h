@@ -34,18 +34,24 @@ extern "C" {
 typedef void XlaStatus;
 
 // StatusOr contains status or the value from the C++ StatusOr.
+//
+// Memory managed by malloc/free.
 typedef struct{
-    XlaStatus *status;
+    XlaStatus *status;  // This is a C++ object, managed by new/delete.
     void *value;
 } StatusOr;
 
 // VectorPointers is a generic container for a dynamically allocated vector. Usually it has to be deleted after use.
+//
+// Memory managed by malloc/free.
 typedef struct{
     int count;
     void **data;  // Will contain <count> elements.
 } VectorPointers;
 
 // VectorData is a generic container for a vector of some arbitrary data type.
+//
+// Memory managed by malloc/free.
 typedef struct{
     int count;
     void *data;  // Will contain <count> elements.
@@ -67,11 +73,26 @@ typedef struct{
 #include "xla/statusor.h"
 //#include "xla/xla/shape_util.h"
 
+// Malloc is a convenience allocation of individual items or arrays (for n>1) using C malloc, needed
+// to interface in Go.
+//
+// n is the number of elements allocated, and defaults to 1.
+template<typename T>
+T *Malloc(int n = 1) {
+    if (n <= 0) {
+        return nullptr;
+    }
+    size_t bytes = sizeof(T) * n;
+    T* data = (T*)malloc(bytes);
+    memset(data, 0, bytes);
+    return data;
+}
+
 // C++ version of the XLA wrapper library.
 // Bump the number whenever something changes, and keep in sync with Go file xla/node.go.
 constexpr int XlaWrapperVersion = 14;
 
-// Converts std::string to an allocated `char *` that in Go can be passed to StrFree.
+// Converts std::string to an allocated `char *` allocated with malloc that in Go can be passed to StrFree.
 // This doesn't work for binary blobs, like serialized protos.
 extern char *c_str(const std::string &s);
 
@@ -97,11 +118,11 @@ StatusOr FromStatusOr(xla::StatusOr<std::unique_ptr<T>> &statusor) {
 }
 
 template <typename T>
-StatusOr FromStatusOr(xla::StatusOr<T*> &statusor) {
+StatusOr FromStatusOr(xla::StatusOr<T*> &status_or) {
     StatusOr r;
-    r.status = static_cast<XlaStatus*>(new xla::Status(std::move(statusor.status())));
-    if (statusor.ok()) {
-        r.value = static_cast<void *>(statusor.Value());
+    r.status = static_cast<XlaStatus*>(new xla::Status(std::move(status_or.status())));
+    if (status_or.ok()) {
+        r.value = static_cast<void *>(status_or.Value());
     }
     return r;
 }
@@ -128,6 +149,7 @@ extern char *number_to_string(int n);
 extern bool XlaStatusOk(XlaStatus *status);
 extern char *XlaStatusErrorMessage(XlaStatus *status);
 extern int XlaStatusCode(XlaStatus *status);
+extern void DeleteXlaStatus(XlaStatus *xla_status);
 
 #ifdef __cplusplus
 }

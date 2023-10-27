@@ -74,43 +74,43 @@ struct Computation {
 
 // NewComputation creates a C++ handle to a computation building structure. It owns
 // the xla::XlaBuilder, and eventually the xla::XlaComputation and xla::ExecutionHandle.
-Computation* NewComputation(char *name);
+extern Computation* NewComputation(char *name);
 
 // ComputationAddOp creates an xla::XlaOp for the given node description. Returns the new op and its shape in the
 // fields `node.new_op` and `node.new_shape`. Ownership of the memory is transferred back.
-XlaStatus* ComputationAddOp(Computation *comp, SerializedNode *node);
+extern XlaStatus* ComputationAddOp(Computation *comp, SerializedNode *node);
 
 // DeleteComputation will destroy associated resources.
-void DeleteComputation(void *comp);
+extern void DeleteComputation(void *comp);
 
 // DeleteXlaOp delete XlaOp reference.
-void DeleteXlaOp(XlaOp *op);
+extern void DeleteXlaOp(XlaOp *op);
 
 // DeleteGlobalData when no longer needed.
-void DeleteGlobalData(XlaGlobalData *gd);
+extern void DeleteGlobalData(XlaGlobalData *gd);
 
 // TransferGlobalData brings data from accelerator server. Returns a Literal* or an error (Status).
-StatusOr TransferFromServer(XlaGlobalData *gd, Client* client);
+extern StatusOr TransferFromServer(XlaGlobalData *gd, Client* client);
 
 // GlobalDataShape retrieves only the shape for the GlobalData. Returns a Shape* or an error (Status).
-StatusOr GlobalDataShape(XlaGlobalData *gd, Client* client);
+extern StatusOr GlobalDataShape(XlaGlobalData *gd, Client* client);
 
 // GlobalDataDecomposeTuple splits tuple into its components. Return array of XlaGlobalData
 // or an error. Size of the array is given by the gd's shape->tuple_size.
-StatusOr GlobalDataDeconstructTuple(XlaGlobalData *gd, Client* client);
+extern StatusOr GlobalDataDeconstructTuple(XlaGlobalData *gd, Client* client);
 
 
 // ClientCompileComputation should be called after all the ops are added to the computation, it will
 // finalize the building and compile the computation graph. No more ops can be added after this.
 // The ownership of the array param_shapes is not transferred.
 // Returns nullptr if there were no errors.
-XlaStatus* ClientCompileComputation(Client *client, Computation *comp, int num_params, Shape **param_shapes,
-                                   XlaOp *output);
+extern XlaStatus* ClientCompileComputation(
+    Client *client, Computation *comp, int num_params, Shape **param_shapes, XlaOp *output);
 
 
 // ComputationExecuteComputation executes a previously compiled computation. It returns a ShapedBuffer pointer or an
 // error. `num_params` and `params` hold the pointers to parameters, its ownership is *not* transferred.
-StatusOr ClientExecuteComputation(Client *client, Computation* comp, int num_params, XlaShapedBuffer** params);
+extern StatusOr ClientExecuteComputation(Client *client, Computation* comp, int num_params, XlaShapedBuffer** params);
 
 #ifdef __cplusplus
 }

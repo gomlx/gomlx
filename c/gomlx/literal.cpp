@@ -64,7 +64,7 @@ Literal** LiteralDecomposeTuple(Literal* literal) {
     if (num_elements == 0) {
         return nullptr;
     }
-    Literal** results = new Literal*[num_elements];
+    Literal** results = Malloc<Literal*>(num_elements);
     auto xla_literals = literal->literal->DecomposeTuple();
     for (int ii = 0; ii < num_elements; ii++) {
         Literal *res = XlaLiteralToLiteral(new xla::Literal(std::move(xla_literals[ii])));
@@ -87,12 +87,19 @@ void DeleteLiteral(Literal* literal) {
 }
 
 
-void MakeXlaLiteralFromShape(Literal* literal) {
-    xla::Shape xla_shape = MakeXlaShape(literal->shape);
+Literal *MakeLiteralFromShape(Shape* shape) {
+    Literal *literal = new Literal();
+    xla::Shape xla_shape = MakeXlaShape(shape);
+    literal->shape = shape;   // Takes ownership of passed shape.
     literal->literal = new xla::Literal(xla_shape);
-    literal->data = literal->literal->untyped_data();
-    literal->size_bytes = literal->literal->size_bytes();
-    literal->size = literal->literal->element_count();
+    if (literal->shape->tuple_size > 0) {
+        literal->is_tuple = true;
+    } else {
+        literal->data = literal->literal->untyped_data();
+        literal->size = literal->literal->element_count();
+        literal->size_bytes = literal->literal->size_bytes();
+    }
+    return literal;
 }
 
 Literal *MakeLiteralTuple(Literal** elements, int num_elements) {
@@ -101,7 +108,7 @@ Literal *MakeLiteralTuple(Literal** elements, int num_elements) {
     for (int ii = 0; ii < num_elements; ii++) {
         literals.push_back(elements[ii]->literal);
     }
-
+    free(elements);
     return XlaLiteralToLiteral(new xla::Literal(std::move(xla::LiteralUtil::MakeTuple(literals))));
 }
 

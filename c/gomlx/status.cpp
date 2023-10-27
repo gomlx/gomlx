@@ -37,6 +37,7 @@ int xla_wrapper_version() {
     return XlaWrapperVersion;
 }
 
+// Cast C pointer type to C++ object pointer.
 xla::Status *XlaStatusCast(XlaStatus *s) {
     return static_cast<xla::Status *>(s);
 }
@@ -46,7 +47,7 @@ char *c_str(const std::string &s) {
 }
 
 VectorData *str_to_bytes(const std::string &s) {
-    VectorData *v = new VectorData;
+    VectorData *v = Malloc<VectorData>();
     v->count = s.size();
     void *data = malloc(v->count);
     memcpy(data, s.data(), v->count);
@@ -55,10 +56,10 @@ VectorData *str_to_bytes(const std::string &s) {
 }
 
 VectorPointers *c_vector_str(const std::vector<std::string> &v) {
-    VectorPointers *vp = new VectorPointers;
+    VectorPointers *vp = Malloc<VectorPointers>();
     vp->count = v.size();
     if (vp->count > 0) {
-        vp->data = new void*[vp->count];
+        vp->data = Malloc<void*>(vp->count);
         for (int ii = 0; ii < vp->count; ii++) {
             vp->data[ii] = static_cast<void *>(c_str(v[ii]));
         }
@@ -68,7 +69,7 @@ VectorPointers *c_vector_str(const std::vector<std::string> &v) {
 
 char *memory_stats() {
     const size_t kBufferSize = 10 * 1024 * 1024;
-    char *buf = new char[kBufferSize];
+    char *buf = (char*)malloc(kBufferSize);
     MallocExtension::instance()->GetStats(buf, kBufferSize);
     return buf;
 }
@@ -102,3 +103,8 @@ int XlaStatusCode(XlaStatus *status) {
 XlaStatus *FromStatus(const xla::Status &status) {
     return static_cast<XlaStatus*>(new xla::Status(status));
 }
+
+void DeleteXlaStatus(XlaStatus *xla_status) {
+    delete XlaStatusCast(xla_status);
+}
+

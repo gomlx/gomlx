@@ -47,6 +47,8 @@ extern "C" {
 // OnDeviceBuffer is a C struct wrapper around a xla::ShapedBuffer or a xla::ScopeShapedBuffer.
 // The two are used in different times in XLA -- it's not documented :( ... Only one of the two
 // are set.
+//
+// Memory managed by C++ new/delete.
 struct OnDeviceBuffer {
     XlaShapedBuffer *sb_buffer;
     XlaScopedShapedBuffer *ssb_buffer;
@@ -54,20 +56,20 @@ struct OnDeviceBuffer {
 typedef struct OnDeviceBuffer OnDeviceBuffer;
 
 // Deletes ShapedBuffer and all associated resources.
-void DeleteOnDeviceBuffer(OnDeviceBuffer *b);
+extern void DeleteOnDeviceBuffer(OnDeviceBuffer *b);
 
 // Returns the shape of the on-device. Ownership of Shape is transferred.
-Shape* OnDeviceBufferShape(OnDeviceBuffer *b);
+extern Shape* OnDeviceBufferShape(OnDeviceBuffer *b);
 
 // OnDeviceBufferSubTree retrieves an element from a nested tuple (tree) OnDeviceBuffer.
 // The subtree in the original buffer is converted to null.
-StatusOr OnDeviceBufferSubTree(OnDeviceBuffer *b, int path_length, int64_t* path);
+extern StatusOr OnDeviceBufferSubTree(OnDeviceBuffer *b, int path_length, int64_t* path);
 
 // Device number of the buffer.
-int OnDeviceBufferDeviceOrdinal(OnDeviceBuffer *b);
+extern int OnDeviceBufferDeviceOrdinal(OnDeviceBuffer *b);
 
 // Convert to a friendly string. Ownership of char* is transferred.
-char* OnDeviceBufferToString(OnDeviceBuffer *b);
+extern char* OnDeviceBufferToString(OnDeviceBuffer *b);
 
 #ifdef __cplusplus
 }
