@@ -27,6 +27,7 @@ installed to add GPU support for _docker_.
 ```bash
 GOMLX_DOCKER=janpfeifer/gomlx_devel:latest
 docker pull ${GOMLX_DOCKER}
+
 export TEST_TMPDIR="/opt/bazel-cache"   # Or set your own
 docker run -it --gpus all -w /mnt \
   -v "${PWD}":/mnt \
