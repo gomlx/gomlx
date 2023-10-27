@@ -49,10 +49,10 @@ RUN wget --quiet --output-document=- "https://go.dev/dl/go${GO_VERSION}.linux-am
     && go version \
     && go install github.com/bazelbuild/bazelisk@latest
 
-# Fetch XLA source.
-RUN <<EOT
-  git clone https://github.com/openxla/xla.git
-EOT
+# Fetch XLA source: probably better done manually when updating XLA.
+#RUN <<EOT
+#  git clone https://github.com/openxla/xla.git
+#EOT
 
 # It is a downgrade, but as of 10/2023, this is the cudnn version that seems to compile.
 RUN apt-get install --yes --allow-downgrades \
@@ -64,5 +64,14 @@ RUN apt-get install --yes micro
 # Needed because they include NVidia TensorRT, even though they are for CUDA 12 ...
 RUN apt-get install --yes libnvinfer8 libnvinfer-dev
 
+#######################################################################################################
+# Finishing touches.
+#######################################################################################################
+
+# Clean up space used by apt.
+USER root
+RUN apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Default is to start a shell as root.
 WORKDIR "/root"
 CMD ["bash"]
