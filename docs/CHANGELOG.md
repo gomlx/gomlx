@@ -1,6 +1,6 @@
 # GoMLX changelog
 
-## Next
+## v0.7.2 - 2023/10/27
 
 * Fixed C/C++ mismatching malloc/new/new[] and free/delete/delete[].
   * Formatted C/C++ code using clang-format.
