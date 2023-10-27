@@ -99,6 +99,9 @@ func main() {
 
 	// Crate Manager and upload data to device tensors.
 	manager := NewManager()
+	if *flagVerbosity >= 1 {
+		fmt.Printf("Platform: %s\n", manager.Platform())
+	}
 	if *flagVerbosity >= 2 {
 		adult.PrintBatchSamples(manager, adult.Data.Train)
 	}
@@ -132,7 +135,7 @@ func main() {
 	trainer := train.NewTrainer(manager, ctx, ModelGraph, losses.BinaryCrossentropyLogits,
 		optimizerFn(),
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
-		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
+		[]metrics.Interface{meanAccuracyMetric}) // evalMetrics
 
 	// Use standard training loop.
 	loop := train.NewLoop(trainer)
@@ -179,7 +182,7 @@ func ModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 
 	categorical, continuous := inputs[0], inputs[1]
 	batchSize := categorical.Shape().Dimensions[0]
-
+	
 	var allEmbeddings []*Node
 
 	if *flagUseCategorical {

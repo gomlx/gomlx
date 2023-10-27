@@ -25,6 +25,8 @@ But since we want to share it with the Docker container, we recommend creating o
 ```bash
 GOMLX_DOCKER=janpfeifer/gomlx_devel:latest
 docker pull ${GOMLX_DOCKER}
+
+export TEST_TMPDIR="/opt/bazel-cache"   # Or set your own
 docker run -it --gpus all -w /mnt \
   -v "${PWD}":/mnt \
   -v "${TEST_TMPDIR}:${TEST_TMPDIR}" \
@@ -33,6 +35,7 @@ docker run -it --gpus all -w /mnt \
   -e "TEST_TMPDIR=${TEST_TMPDIR}" \
   -e "USER=${USER}" \
   -u "$(id -u):$(id -g)" \
+  ${GOMLX_DOCKER}
 ```
 
 If you have GPU(s) and want to make them accessible you need the

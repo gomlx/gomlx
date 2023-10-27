@@ -472,7 +472,7 @@ func (local *Local) GoStr() string {
 	}
 	value := local.Value()
 	if local.shape.IsScalar() {
-		return fmt.Sprintf("%s: %v", local.shape, value)
+		return fmt.Sprintf("%s(%v)", local.shape.DType.GoStr(), value)
 	}
 	return fmt.Sprintf("%s: %s", local.shape, slices.SliceToGoStr(value))
 }

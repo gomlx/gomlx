@@ -18,8 +18,9 @@
 shaped_buffer.h provide a C API around xla::ShapedBuffer, defined in
 `tensorflow/compiler/xla/service/shaped_buffer.h`.
 
-Notice the Go API will only see the "C" view of this file (where `__cplusplus` is not defined).
-The "C" view should have no includes from tensorflow, so that the library won't depend on their
+Notice the Go API will only see the "C" view of this file (where `__cplusplus`
+is not defined). The "C" view should have no includes from tensorflow, so that
+the library won't depend on their
 */
 #ifndef _GOMLX_ON_DEVICE_BUFFER_H
 #define _GOMLX_ON_DEVICE_BUFFER_H
@@ -44,30 +45,33 @@ typedef void XlaScopedShapedBuffer;
 extern "C" {
 #endif
 
-// OnDeviceBuffer is a C struct wrapper around a xla::ShapedBuffer or a xla::ScopeShapedBuffer.
-// The two are used in different times in XLA -- it's not documented :( ... Only one of the two
-// are set.
+// OnDeviceBuffer is a C struct wrapper around a xla::ShapedBuffer or a
+// xla::ScopeShapedBuffer. The two are used in different times in XLA -- it's
+// not documented :( ... Only one of the two are set.
+//
+// Memory managed by C++ new/delete.
 struct OnDeviceBuffer {
-    XlaShapedBuffer *sb_buffer;
-    XlaScopedShapedBuffer *ssb_buffer;
+  XlaShapedBuffer *sb_buffer;
+  XlaScopedShapedBuffer *ssb_buffer;
 };
 typedef struct OnDeviceBuffer OnDeviceBuffer;
 
 // Deletes ShapedBuffer and all associated resources.
-void DeleteOnDeviceBuffer(OnDeviceBuffer *b);
+extern void DeleteOnDeviceBuffer(OnDeviceBuffer *b);
 
 // Returns the shape of the on-device. Ownership of Shape is transferred.
-Shape* OnDeviceBufferShape(OnDeviceBuffer *b);
+extern Shape *OnDeviceBufferShape(OnDeviceBuffer *b);
 
-// OnDeviceBufferSubTree retrieves an element from a nested tuple (tree) OnDeviceBuffer.
-// The subtree in the original buffer is converted to null.
-StatusOr OnDeviceBufferSubTree(OnDeviceBuffer *b, int path_length, int64_t* path);
+// OnDeviceBufferSubTree retrieves an element from a nested tuple (tree)
+// OnDeviceBuffer. The subtree in the original buffer is converted to null.
+extern StatusOr OnDeviceBufferSubTree(OnDeviceBuffer *b, int path_length,
+                                      int64_t *path);
 
 // Device number of the buffer.
-int OnDeviceBufferDeviceOrdinal(OnDeviceBuffer *b);
+extern int OnDeviceBufferDeviceOrdinal(OnDeviceBuffer *b);
 
 // Convert to a friendly string. Ownership of char* is transferred.
-char* OnDeviceBufferToString(OnDeviceBuffer *b);
+extern char *OnDeviceBufferToString(OnDeviceBuffer *b);
 
 #ifdef __cplusplus
 }

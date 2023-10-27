@@ -1,5 +1,13 @@
 # GoMLX changelog
 
+## Next
+
+* Fixed C/C++ mismatching malloc/new/new[] and free/delete/delete[].
+  * Formatted C/C++ code using clang-format.
+* Increased static size threshold for string memory leak test.
+* Small StableHLO support improvements.
+* Fixed and updated devel docker ('janpfeifer/gomlx_devel:latest').
+
 ## v0.7.1 - 2023/10/26
 
 * Fixed search of CUDA paths under /usr/local.

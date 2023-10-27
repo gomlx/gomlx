@@ -23,6 +23,7 @@ import "C"
 
 import (
 	"github.com/pkg/errors"
+	"os"
 	"runtime"
 )
 
@@ -79,14 +80,30 @@ func StableHLOCurrentVersion() string {
 	return StrFree(C.StableHLOCurrentVersion())
 }
 
-// Serialize will serialize the StableHLO to the given fileDescriptor, assuming the given
-// version -- for now simply use StableHLOCurrentVersion.
-func (shlo *StableHLO) Serialize(fileDescriptor uintptr, version string) error {
+// SerializeWithVersion to bytecode that can presumably be used by PjRT and IREE, as well as
+// embedded in one of the TensorFlow SavedModel formats.(??)
+//
+// It serializes to the given file descriptor, presumable a file opened for writing.
+//
+// For version, the usual is to use the value returned by StableHLOCurrentVersion.
+func (shlo *StableHLO) SerializeWithVersion(fileDescriptor uintptr, version string) error {
 	if C.SerializeStableHLO(shlo.cPtr, C.CString(version), C.int(fileDescriptor)) {
 		return nil
 	}
 	return errors.Errorf("Failed to serialize StableHLO at version %s (current StableHLO version is %s)",
 		version, StableHLOCurrentVersion())
+}
+
+// Serialize to bytecode that can presumably be used by PjRT and IREE, as well as
+// embedded in one of the TensorFlow SavedModel formats.(??)
+//
+// It serializes to the given file path.
+func (shlo *StableHLO) Serialize(filePath string) error {
+	f, err := os.Create(filePath)
+	if err != nil {
+		return errors.Wrapf(err, "Cannot create file %q to save StableHLO", filePath)
+	}
+	return shlo.SerializeWithVersion(f.Fd(), StableHLOCurrentVersion())
 }
 
 func NewStableHLOFromSerialized(serialized []byte) (*StableHLO, error) {

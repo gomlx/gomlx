@@ -21,16 +21,15 @@
 
 #include <stdlib.h>
 
-#include "gomlx/status.h"
 #include "gomlx/on_device_buffer.h"
-
+#include "gomlx/status.h"
 
 #ifndef __cplusplus
 typedef _Bool bool;
 #endif
 
 #ifdef __cplusplus
-//#include "xla/client/client.h"
+// #include "xla/client/client.h"
 #include "xla/client/local_client.h"
 #include "xla/executable_run_options.h"
 #include "xla/service/backend.h"
@@ -39,12 +38,12 @@ typedef _Bool bool;
 // are shared across multiple computation graphs. Still lots of guess work here
 // (XLA is poorly documented).
 struct Client {
-    // xla::LocalClient is owned by XLA, only a reference is kept here.
-    xla::LocalClient *client;
+  // xla::LocalClient is owned by XLA, only a reference is kept here.
+  xla::LocalClient *client;
 
-    // Cliend data.
-    xla::ExecutableRunOptions exec_options;
-    int device_count, default_device_ordinal;
+  // Cliend data.
+  xla::ExecutableRunOptions exec_options;
+  int device_count, default_device_ordinal;
 };
 
 // Forward declaration, defined in computation.cpp.
@@ -63,19 +62,21 @@ struct Shape;
 typedef struct Shape Shape;
 #endif
 
-// GetPlatforms enumerates list of platform names available. Return StatusOr of a VectorPointers of strings.
+// GetPlatforms enumerates list of platform names available. Return StatusOr of
+// a VectorPointers of strings.
 StatusOr GetPlatforms();
 
-// NewClient returns a wrapper object that holds XLA::Client and allow execution of computations.
-// The ownership of `platform_name` is transferred.
+// NewClient returns a wrapper object that holds XLA::Client and allow execution
+// of computations. The ownership of `platform_name` is transferred.
 StatusOr NewClient(char *platform_name, int num_replicas, int num_threads);
 
-// DeleteClient deletes the client and associated data. Notice that all computations
-// compiled with this client will become invalid.
-void DeleteClient(Client* client);
+// DeleteClient deletes the client and associated data. Notice that all
+// computations compiled with this client will become invalid.
+void DeleteClient(Client *client);
 
 // ClientDevices sets device_count and default_device_ordinal.
-void ClientDevices(Client* client, int64_t* device_count, int64_t* default_device_ordinal);
+void ClientDevices(Client *client, int64_t *device_count,
+                   int64_t *default_device_ordinal);
 
 #ifdef __cplusplus
 }

@@ -23,6 +23,7 @@
 
 #ifdef __cplusplus
 // C++ only includes: these are not seen by the Go compiler.
+#include "status.h"
 #include "xla/shape.h"
 
 #else
@@ -38,26 +39,28 @@ extern "C" {
 struct Literal;
 
 // Shape C representation.
+//
+// Memory managed by malloc/free.
 struct Shape {
-    // Data type.
-    int32_t dtype;
+  // Data type.
+  int32_t dtype;
 
-    // Tuple-Size, if tuple
-    int32_t tuple_size;
+  // Tuple-Size, if tuple
+  int32_t tuple_size;
 
-    // Number of dimensions.
-    int64_t rank;
+  // Number of dimensions.
+  int64_t rank;
 
-    // List of dimensions.
-    int64_t* dimensions;
+  // List of dimensions.
+  int64_t *dimensions;
 
-    // List of the tuple elements shapes. An array of tuple_size pointers.
-    struct Shape** tuple_shapes;
+  // List of the tuple elements shapes. An array of tuple_size pointers.
+  struct Shape **tuple_shapes;
 };
 typedef struct Shape Shape;
 
-// Delete the given Shape.
-void DeleteShape(Shape* shape);
+// Delete the given Shape -- it actually uses C's free.
+extern void DeleteShape(Shape *shape);
 
 #ifdef __cplusplus
 }
@@ -67,10 +70,13 @@ void DeleteShape(Shape* shape);
 // Functionality available only for C++ code:
 
 // MakeXlaShape converts from our C Shape representation to an xla::Shape.
+// The `shape` given is not freed.
 xla::Shape MakeXlaShape(Shape *shape);
 
 // ShapeFromXlaShape returns a newly allocated Shape C-struct.
+// Ownership is returned to the caller.
 Shape *ShapeFromXlaShape(const xla::Shape &xla_shape);
+
 #endif
 
-#endif  // _GOMLX_XLA_SHAPE_H
+#endif // _GOMLX_XLA_SHAPE_H

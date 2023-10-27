@@ -38,7 +38,7 @@ func (s *Status) Finalize() {
 		return
 	}
 	defer runtime.KeepAlive(s)
-	C.free(unsafe.Pointer(s.cStatusPtr))
+	C.DeleteXlaStatus(unsafe.Pointer(s.cStatusPtr))
 	s.cStatusPtr = nil
 }
 

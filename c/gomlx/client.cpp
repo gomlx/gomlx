@@ -14,13 +14,13 @@
  *	limitations under the License.
  */
 
+#include <iostream>
 #include <string>
 #include <vector>
-#include <iostream>
 
 #include "gomlx/status.h"
 
-//#include "xla/client/client.h"
+// #include "xla/client/client.h"
 #include "xla/client/client_library.h"
 #include "xla/client/local_client.h"
 #include "xla/client/xla_builder.h"
@@ -48,7 +48,7 @@ StatusOr GetPlatforms() {
   std::vector<std::string> names;
   for (const auto &platform : platforms) {
     if (platform->VisibleDeviceCount() > 0) {
-        names.push_back(platform->Name());
+      names.push_back(platform->Name());
     }
   }
   r.value = c_vector_str(names);
@@ -56,48 +56,51 @@ StatusOr GetPlatforms() {
 }
 
 StatusOr NewClient(char *platform_name, int num_replicas, int num_threads) {
-    StatusOr r{0, 0};
+  StatusOr r{0, 0};
 
-    // Get selected platform by name.
-    auto platform_or = xla::PlatformUtil::GetPlatform(platform_name);
-    free(platform_name);
-    if (!platform_or.ok()) {
-        r.status = FromStatus(platform_or.status());
-        return r;
-    }
-    auto platform = platform_or.value();
-
-    // Create client with given options.
-    xla::LocalClientOptions opt(platform, num_replicas, num_threads);
-    Client *client = new Client();
-    auto client_or = xla::ClientLibrary::GetOrCreateLocalClient(opt);
-    if (!client_or.ok()) {
-        r.status = FromStatus(client_or.status());
-        return r;
-    }
-    client->client = client_or.value();
-    const xla::Backend &backend = client->client->backend();
-    client->device_count = backend.device_count();
-    client->default_device_ordinal = backend.default_device_ordinal();
-
-    // Create ExecutableRunOptions.
-    client->exec_options.set_allocator(backend.memory_allocator());
-    client->exec_options.set_device_ordinal(client->default_device_ordinal);
-    client->exec_options.set_intra_op_thread_pool(backend.eigen_intra_op_thread_pool_device());
-
-    r.value = client;
+  // Get selected platform by name.
+  auto platform_or = xla::PlatformUtil::GetPlatform(platform_name);
+  free(platform_name);
+  if (!platform_or.ok()) {
+    r.status = FromStatus(platform_or.status());
     return r;
+  }
+  auto platform = platform_or.value();
+
+  // Create client with given options.
+  xla::LocalClientOptions opt(platform, num_replicas, num_threads);
+  Client *client = new Client();
+  auto client_or = xla::ClientLibrary::GetOrCreateLocalClient(opt);
+  if (!client_or.ok()) {
+    r.status = FromStatus(client_or.status());
+    return r;
+  }
+  client->client = client_or.value();
+  const xla::Backend &backend = client->client->backend();
+  client->device_count = backend.device_count();
+  client->default_device_ordinal = backend.default_device_ordinal();
+
+  // Create ExecutableRunOptions.
+  client->exec_options.set_allocator(backend.memory_allocator());
+  client->exec_options.set_device_ordinal(client->default_device_ordinal);
+  client->exec_options.set_intra_op_thread_pool(
+      backend.eigen_intra_op_thread_pool_device());
+
+  r.value = client;
+  return r;
 }
 
-void ClientDevices(Client* client, int64_t* device_count, int64_t* default_device_ordinal) {
-    *default_device_ordinal = static_cast<int64_t>(client->default_device_ordinal);
-    *device_count = static_cast<int64_t>(client->device_count);
+void ClientDevices(Client *client, int64_t *device_count,
+                   int64_t *default_device_ordinal) {
+  *default_device_ordinal =
+      static_cast<int64_t>(client->default_device_ordinal);
+  *device_count = static_cast<int64_t>(client->device_count);
 }
 
-void DeleteClient(Client* client) {
-    if (client->client != nullptr) {
-        delete client->client;
-        client->client = nullptr;
-    }
-    delete client;
+void DeleteClient(Client *client) {
+  if (client->client != nullptr) {
+    delete client->client;
+    client->client = nullptr;
+  }
+  delete client;
 }
