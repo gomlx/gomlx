@@ -22,8 +22,8 @@
 #include <stdlib.h>
 
 #include "gomlx/client.h"
-#include "gomlx/status.h"
 #include "gomlx/on_device_buffer.h"
+#include "gomlx/status.h"
 
 #ifdef __cplusplus
 #include "xla/client/client.h"
@@ -32,7 +32,7 @@
 
 // AOTExecutable wraps XLA LocalExecutable, to execute AOT graphs.
 struct AOTExecutable {
-    std::unique_ptr<xla::LocalExecutable> local_executable;
+  std::unique_ptr<xla::LocalExecutable> local_executable;
 };
 
 extern "C" {
@@ -47,7 +47,7 @@ typedef struct AOTExecutable AOTExecutable;
 struct Shape;
 typedef struct Shape Shape;
 
-#endif  // #ifdef __cplusplus
+#endif // #ifdef __cplusplus
 
 // NewAOTExecutable (or an error) given the `Client` and a serialized
 // xla::AotResult (these are created by `ClientAOTCompileComputation`).
@@ -58,10 +58,11 @@ StatusOr NewAOTExecutable(Client *client, VectorData *serialized_aot_result);
 // ExecuteAOT and returns a ShapedBuffer pointer or an error.
 // `num_params` and `params` hold the pointers to parameters, its ownership
 // is *not* transferred.
-StatusOr ExecuteAOT(Client *client, AOTExecutable *exec, int num_params, XlaShapedBuffer** params);
+StatusOr ExecuteAOT(Client *client, AOTExecutable *exec, int num_params,
+                    XlaShapedBuffer **params);
 
 #ifdef __cplusplus
-}  // extern "C" {
+} // extern "C" {
 #endif
 
-#endif  // #ifndef _GOMLX_XLA_AOT_EXEC_H
+#endif // #ifndef _GOMLX_XLA_AOT_EXEC_H

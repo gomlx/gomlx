@@ -21,9 +21,9 @@
 
 #include <stdlib.h>
 
-#include "gomlx/status.h"
 #include "gomlx/client.h"
 #include "gomlx/computation.h"
+#include "gomlx/status.h"
 
 #ifndef __cplusplus
 typedef _Bool bool;
@@ -31,17 +31,18 @@ typedef _Bool bool;
 
 #ifdef __cplusplus
 #include "mlir/IR/BuiltinOps.h"
-//#include "xla/client/client.h"
+// #include "xla/client/client.h"
 #include "xla/client/local_client.h"
 #include "xla/executable_run_options.h"
 #include "xla/service/backend.h"
 
 // StableHLOHolder holds a StableHLO object and its Context.
 struct StableHLOHolder {
-    mlir::ModuleOp stable_hlo;
+  mlir::ModuleOp stable_hlo;
 
-    // context where the MLIR's StableHLO is defined. If delete, the stable_hlo becomes invalid.
-    std::unique_ptr<mlir::MLIRContext> context;
+  // context where the MLIR's StableHLO is defined. If delete, the stable_hlo
+  // becomes invalid.
+  std::unique_ptr<mlir::MLIRContext> context;
 };
 
 extern "C" {
@@ -50,14 +51,18 @@ extern "C" {
 // Forward ceclarations for C.
 struct StableHLOHolder;
 typedef struct StableHLOHolder StableHLOHolder;
-#endif  // __cpluplus
+#endif // __cpluplus
 
-// ClientAOTCompileComputation to a compiled binary format, that is serialized as a string.
-extern StatusOr ClientAOTCompileComputation(Client *client, Computation *comp, int num_params, Shape **param_shapes);
+// ClientAOTCompileComputation to a compiled binary format, that is serialized
+// as a string.
+extern StatusOr ClientAOTCompileComputation(Client *client, Computation *comp,
+                                            int num_params,
+                                            Shape **param_shapes);
 
-// ConvertComputationToStableHLO converts a **compiled** computation graph to the StableHLO representation.
-// It returns either an error or a `StableHLOHolder*` that holds the StableHLO C++ object.
-// Returned StableHLOHolder object is owned and needs to be deleted by the caller.
+// ConvertComputationToStableHLO converts a **compiled** computation graph to
+// the StableHLO representation. It returns either an error or a
+// `StableHLOHolder*` that holds the StableHLO C++ object. Returned
+// StableHLOHolder object is owned and needs to be deleted by the caller.
 extern StatusOr ConvertComputationToStableHLO(Computation *comp);
 
 // DeleteStableHLOHolder and its contained data.
@@ -71,19 +76,23 @@ extern char *StableHLOToString(StableHLOHolder *holder);
 // Returned string is owned and needs to be freed by the caller.
 extern char *StableHLOCurrentVersion();
 
-// SerializeStableHLO to bytecode that can presumably be used by PjRT and IREE, as well as
-// embedded in one of the TensorFlow SavedModel formats.(??)
+// SerializeStableHLO to bytecode that can presumably be used by PjRT and IREE,
+// as well as embedded in one of the TensorFlow SavedModel formats.(??)
 //
 // Return true if it succeeds, false if failed.
 //
-// Probably you want to use StableHLOCurrentVersion() for `version`. The string will be freed.
+// Probably you want to use StableHLOCurrentVersion() for `version`. The string
+// will be freed.
 //
-// The file_descriptor is not closed at the end for the call (but written content is flushed).
-extern bool SerializeStableHLO(StableHLOHolder *holder, char *version, int file_descriptor);
+// The file_descriptor is not closed at the end for the call (but written
+// content is flushed).
+extern bool SerializeStableHLO(StableHLOHolder *holder, char *version,
+                               int file_descriptor);
 
-// UnserializeStableHLO takes a byte array in VectorData and constructs a StableHLO. It
-// creates a new MLIRContext to hold it -- meaning that for now it does not support unserializing
-// more than one StableHLO program to the same context.
+// UnserializeStableHLO takes a byte array in VectorData and constructs a
+// StableHLO. It creates a new MLIRContext to hold it -- meaning that for now it
+// does not support unserializing more than one StableHLO program to the same
+// context.
 //
 // VectorData and its associated data is freed before returning.
 //
@@ -94,4 +103,4 @@ extern StatusOr UnserializeStableHLO(VectorData *serialized);
 }
 #endif
 
-#endif  // _GOMLX_XLA_AOT_COMPILE_H
+#endif // _GOMLX_XLA_AOT_COMPILE_H
