@@ -53,7 +53,6 @@
 #include "xla/execution_options_util.h"
 #include "xla/hlo/ir/hlo_module.h"
 #include "xla/literal.h"
-#include "xla/mlir/utils/error_util.h"
 #include "xla/mlir_hlo/mhlo/transforms/passes.h"
 #include "xla/service/compiler.h"
 #include "xla/service/cpu/cpu_compiler.h"
@@ -70,6 +69,10 @@
 #include "xla/translate/hlo_to_mhlo/hlo_to_mlir_hlo.h"
 #include "xla/types.h"
 #include "xla/xla_data.pb.h"
+
+// Temporarily replacing:
+// #include "xla/mlir/utils/error_util.h"
+#include "third_party/xla_mlir/error_util.h"
 
 using namespace std;
 
@@ -104,7 +107,7 @@ xla::StatusOr<mlir::ModuleOp> ConvertXlaComputationToStableHLOImplementation(
     return status;
   }
 
-  mlir::BaseScopedDiagnosticHandler diagnostic(&context); // Error collector.
+  mlir::TmpBaseScopedDiagnosticHandler diagnostic(&context); // Error collector.
   if (!mlir::verify(module).succeeded()) {
     return tsl::FromAbslStatus(diagnostic.ConsumeStatus());
   }
@@ -182,7 +185,7 @@ StatusOr UnserializeStableHLO(VectorData *serialized) {
   StatusOr r{0, 0};
   std::unique_ptr<StableHLOHolder> holder(new StableHLOHolder());
   holder->context.reset(new mlir::MLIRContext());
-  mlir::BaseScopedDiagnosticHandler diagnostic(
+  mlir::TmpBaseScopedDiagnosticHandler diagnostic(
       holder->context.get()); // Error collector.
   mlir::OwningOpRef<mlir::ModuleOp> module =
       mlir::stablehlo::deserializePortableArtifact(

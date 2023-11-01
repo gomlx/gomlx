@@ -1,5 +1,10 @@
 # GoMLX changelog
 
+## Next
+
+* Workaround small C++ copy elision limitation from clang.
+* Temporarily copied `xla/mlir/utils` library to `third-party/xla_mlir`, since it is not available in all XLA distributions.
+
 ## v0.7.2 - 2023/10/27
 
 * Fixed C/C++ mismatching malloc/new/new[] and free/delete/delete[].
