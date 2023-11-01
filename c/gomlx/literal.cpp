@@ -109,8 +109,7 @@ Literal *MakeLiteralTuple(Literal **elements, int num_elements) {
     literals.push_back(elements[ii]->literal);
   }
   free(elements);
-  auto tuple = xla::LiteralUtil::MakeTuple(literals);
-  return XlaLiteralToLiteral(new xla::Literal(std::move(tuple)));
+  return XlaLiteralToLiteral(new xla::Literal(xla::LiteralUtil::MakeTuple(literals)));
 }
 
 void XlaLiteralRefreshData(Literal *literal) {
