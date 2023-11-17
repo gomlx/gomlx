@@ -23,6 +23,7 @@ import (
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
@@ -87,6 +88,31 @@ func TestContextVariablesInitialization(t *testing.T) {
 	if !slices.DeepSliceCmp([][]int{{0}, {0}, {0}}, t2, slices.Equal[int]) {
 		t.Errorf("Expected Zeros initialization to yield zeros, got %v instead", t2)
 	}
+}
+
+func TestParams(t *testing.T) {
+	manager := graphtest.BuildTestManager()
+	ctx := NewContext(manager)
+	ctx.SetParam("x", 7.0)
+	got, found := ctx.GetParam("x")
+	assert.True(t, found)
+	assert.Equal(t, 7.0, got)
+	assert.Equal(t, 7.0, GetParamOr(ctx, "x", 0.0))
+	assert.Equal(t, 0.0, GetParamOr(ctx, "foo", 0.0))
+	// Wrong type should panic.
+	assert.Panics(t, func() { _ = GetParamOr(ctx, "x", "string value") })
+
+	// Check correct search to root node.
+	ctx.SetParam("y", 11.0)
+	ctx0 := ctx.In("0")
+	ctx0.SetParam("y", 13.0)
+	got, found = ctx0.GetParam("x") // Takes value from root scope.
+	assert.True(t, found)
+	assert.Equal(t, 7.0, got)
+	got, found = ctx0.GetParam("y") // Takes value from "/0" scope.
+	assert.True(t, found)
+	assert.Equal(t, 13.0, got)
+	assert.Equal(t, 7.0, GetParamOr(ctx, "x", 0.0))
 }
 
 type ConstantLoader struct {
