@@ -62,13 +62,11 @@ type Loop struct {
 	// TODO: make Trainer an interface, so Loop can work on custom trainers..
 	Trainer *Trainer
 
-	// LoopStep currently being executed. Defaults to 0. Notice this may not be in sync with model's
-	// typical `GlobalStep` variable.
+	// LoopStep currently being executed.
+	// Defaults to the current context's `GlobalStep`, which will be 0 for a new context.
 	LoopStep int
 
-	// StartStep is the value of LoopStep at the start of a run (RunSteps or RunEpochs). At the first
-	// run it wil be 0 (the default value for LoopStep) and if Loop.RunSteps (or Loop.RunEpochs) is called
-	// multiple times, StartStep is reset to the last LoopStep value of the previous run.
+	// StartStep is the value of LoopStep at the start of a run (RunSteps or RunEpochs).
 	StartStep int
 
 	// EndStep is one-past the last step to be executed. If -1 the end step is not known (if
@@ -105,6 +103,7 @@ func NewLoop(trainer *Trainer) *Loop {
 		onStep:         newPriorityHooks[*hookWithName[OnStepFn]](),
 		onEnd:          newPriorityHooks[*hookWithName[OnEndFn]](),
 		finalizeInputs: false,
+		LoopStep:       optimizers.GetGlobalStep(trainer.Context()),
 	}
 }
 
@@ -210,6 +209,9 @@ func (loop *Loop) ReadGlobalStep(ctx *context.Context) {
 // LoopStep, so it can be called multiple times, and it will simply pick up
 // where it left of last time.
 func (loop *Loop) RunSteps(ds Dataset, steps int) (metrics []tensor.Tensor, err error) {
+	if loop.LoopStep < 0 {
+		loop.LoopStep = optimizers.GetGlobalStep(loop.Trainer.Context())
+	}
 	if steps == 0 {
 		return nil, nil
 	}

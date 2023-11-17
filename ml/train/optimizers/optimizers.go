@@ -97,6 +97,12 @@ func GetGlobalStepVar(ctx *context.Context) *context.Variable {
 	return ctx.Checked(false).VariableWithValue(GlobalStepVariableName, 0).SetTrainable(false)
 }
 
+// GetGlobalStep returns the current global step value.
+// It creates the global step variable if it does not yet exist.
+func GetGlobalStep(ctx *context.Context) int {
+	return GetGlobalStepVar(ctx).Value().Value().(int)
+}
+
 // IncrementGlobalStepGraph creates (if not there yet) a global step counter, and
 // returns it incremented -- its first returned value will be 1.
 //
