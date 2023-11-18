@@ -387,14 +387,14 @@ func (ctx *Context) GetGraphParam(g *Graph, key string) (value any, found bool) 
 // set this state, as the same Context is used for evaluation/inference graphs and
 // training graphs, and they will have different values.
 func GetGraphParamOr[T any](ctx *Context, g *Graph, key string, defaultValue T) T {
-	valueAny, found := ctx.GetParam(key)
+	valueAny, found := ctx.GetGraphParam(g, key)
 	if !found {
 		return defaultValue
 	}
 	v, ok := valueAny.(T)
 	if !ok {
-		Panicf("GetGraphParamOr[%T](ctx, %q, %v): ctx(scope=%q)[%q]=(%T) %#v, and cannot be converted to int",
-			v, key, defaultValue, ctx.Scope(), key, valueAny, valueAny)
+		Panicf("GetGraphParamOr[%T](ctx, g, %q, %v): ctx(scope=%q)[%q]=(%T) %#v, and cannot be converted to %T",
+			v, key, defaultValue, ctx.Scope(), key, valueAny, valueAny, defaultValue)
 	}
 	return valueAny.(T)
 }
