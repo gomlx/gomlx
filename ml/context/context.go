@@ -322,14 +322,27 @@ func GetParamOr[T any](ctx *Context, key string, defaultValue T) T {
 	}
 	v, ok := valueAny.(T)
 	if !ok {
-		Panicf("GetParamOr[%T](ctx, %q, %v): ctx(scope=%q)[%q]=(%T) %#v, and cannot be converted to int",
-			v, key, defaultValue, ctx.Scope(), key, valueAny, valueAny)
+		Panicf("GetParamOr[%T](ctx, %q, %v): ctx(scope=%q)[%q]=(%T) %#v, and cannot be converted to %T -- "+
+			"Notice that when reloading a context from a checkpoint involves decoding them from Json, and "+
+			"the original type of the param may have been decoded incorrectly causing this error. "+
+			"Many types are automatically corrected, if one is missing please report, or fix it in package "+
+			"`checkpoints`, in function `serializedParam.jsonDecodeTypeConvert`. "+
+			"Unfortunately, custom parameter types won't work with `checkpoints` (saving/loading), but generic "+
+			"`map[string]any` are handled correctly by Json and "+
+			"are usually enough for these hyperparameters.",
+			v, key, defaultValue, ctx.Scope(), key, valueAny, valueAny, v)
 	}
 	return v
 }
 
 // SetParam sets the given param in the current scope. It will be visible (by GetParam)
 // within this scope and descendant scopes (but not by other scopes).
+//
+// Note: the scoped parameters of the context are saved in `checkpoints` package using
+// Json encoding. This works well for `string`, `float64` and `int` and slices of those values,
+// but other types may not be recovered correctly later.
+// See `checkpoints` package to add support for some other specific type, if you get a different
+// type when loading the json.
 //
 // See also SetGraphParam for parameters that are graph-specific.
 func (ctx *Context) SetParam(key string, value any) {
