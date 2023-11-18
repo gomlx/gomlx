@@ -64,7 +64,7 @@ func LoadCheckpointToContext(ctx *context.Context) (checkpoint *checkpoints.Hand
 		Done()
 	AssertNoError(err)
 
-	// Check if args file exist, if not create it.
+	// Check if args file exists, if not create it.
 	argsPath := path.Join(checkpoint.Dir(), "args.txt")
 	argsBytes, err := os.ReadFile(argsPath)
 	if err != nil && os.IsNotExist(err) {
@@ -165,7 +165,7 @@ func TrainModel() {
 	if *flagRngReset {
 		ctx.RngStateReset()
 	}
-	globalStep := optimizers.GetGlobalStepVar(ctx).Value().Value().(int)
+	globalStep := optimizers.GetGlobalStep(ctx)
 	if globalStep != 0 {
 		fmt.Printf("Restarting training from global_step=%d\n", globalStep)
 	}
@@ -201,7 +201,6 @@ func TrainModel() {
 	}
 	// Use standard training loop.
 	loop := train.NewLoop(trainer)
-	loop.ReadGlobalStep(ctx)
 	commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
 
 	// Attach a checkpoint.

@@ -17,7 +17,6 @@
 package train
 
 import (
-	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
@@ -197,21 +196,10 @@ func (loop *Loop) end(metrics []tensor.Tensor) (err error) {
 	return
 }
 
-// ReadGlobalStep will read the global step from the context and initialize the LoopStep
-// to that value.
-// The default is to have the LoopStep counter always start from 0 -- independent of the model's GlobalStep.
-func (loop *Loop) ReadGlobalStep(ctx *context.Context) {
-	globalStepVar := optimizers.GetGlobalStepVar(ctx)
-	loop.LoopStep = globalStepVar.Value().Value().(int)
-}
-
 // RunSteps runs those many steps. StartStep and EndStep are adjusted to the current
 // LoopStep, so it can be called multiple times, and it will simply pick up
 // where it left of last time.
 func (loop *Loop) RunSteps(ds Dataset, steps int) (metrics []tensor.Tensor, err error) {
-	if loop.LoopStep < 0 {
-		loop.LoopStep = optimizers.GetGlobalStep(loop.Trainer.Context())
-	}
 	if steps == 0 {
 		return nil, nil
 	}

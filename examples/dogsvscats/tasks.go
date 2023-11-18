@@ -107,13 +107,14 @@ var (
 // It will only run if files don't already exist.
 func PreGenerate(config *Configuration, numEpochsForTraining int, force bool) {
 	// Notice we need an even sized batch-size, to have equal number of dogs and cats.
+	batchSize := 2
 
 	// Validation data for evaluation.
 	validPath := path.Join(config.DataDir, PreGeneratedValidationFileName)
 	if !data.FileExists(validPath) || force {
 		f, err := os.Create(validPath)
 		AssertNoError(err)
-		ds := NewDataset("valid", config.DataDir, 2, false, nil, config.NumFolds,
+		ds := NewDataset("valid", config.DataDir, batchSize, false, nil, config.NumFolds,
 			config.ValidationFolds, config.FoldsSeed,
 			config.ModelImageSize, config.ModelImageSize, 0, false, config.DType)
 		fmt.Printf("Generating validation data for evaluation in %q...\n", validPath)
@@ -127,7 +128,7 @@ func PreGenerate(config *Configuration, numEpochsForTraining int, force bool) {
 	if !data.FileExists(trainEvalPath) || force {
 		f, err := os.Create(trainEvalPath)
 		AssertNoError(err)
-		ds := NewDataset("train-eval", config.DataDir, 2, false, nil, config.NumFolds,
+		ds := NewDataset("train-eval", config.DataDir, batchSize, false, nil, config.NumFolds,
 			config.TrainFolds, config.FoldsSeed,
 			config.ModelImageSize, config.ModelImageSize, 0, false, config.DType)
 		fmt.Printf("Generating training data for evaluation in %q...\n", trainEvalPath)
@@ -142,7 +143,7 @@ func PreGenerate(config *Configuration, numEpochsForTraining int, force bool) {
 		f, err := os.Create(trainPath)
 		AssertNoError(err)
 		shuffle := rand.New(rand.NewSource(time.Now().UTC().UnixNano()))
-		ds := NewDataset("train", config.DataDir, 2, false, shuffle, config.NumFolds,
+		ds := NewDataset("train", config.DataDir, batchSize, false, shuffle, config.NumFolds,
 			config.TrainFolds, config.FoldsSeed,
 			config.ModelImageSize, config.ModelImageSize, config.AngleStdDev, config.FlipRandomly, config.DType)
 		fmt.Printf("Generating training data *with augmentation* in %q...\n", trainPath)
@@ -157,57 +158,49 @@ func PreGenerate(config *Configuration, numEpochsForTraining int, force bool) {
 // makes the training much, much slower.
 func CreateDatasets(config *Configuration) (trainDS, trainEvalDS, validationEvalDS train.Dataset) {
 	shuffle := rand.New(rand.NewSource(time.Now().UTC().UnixNano()))
+	usePretrained := !config.ForceOriginal
 	trainPath := path.Join(config.DataDir, PreGeneratedTrainFileName)
-	if _, err := os.Stat(trainPath); err == nil && !config.ForceOriginal {
-		// Create a dataset with pre-generated images.
+	trainEvalPath := path.Join(config.DataDir, PreGeneratedTrainEvalFileName)
+	validPath := path.Join(config.DataDir, PreGeneratedValidationFileName)
+
+	if usePretrained {
+		// Check the pre-trained files exist:
+		for _, filePath := range []string{trainPath, trainEvalPath, validPath} {
+			if _, err := os.Stat(filePath); err != nil {
+				usePretrained = false
+				break
+			}
+		}
+	}
+
+	if usePretrained {
+		// Build pre-trained datasets:
 		trainDS = NewPreGeneratedDataset("train [Pre]", trainPath, config.BatchSize, true,
 			config.ModelImageSize, config.ModelImageSize, config.DType)
-		if config.UseParallelism {
-			trainDS = data.CustomParallel(trainDS).Buffer(config.BufferSize).Start()
-		}
-
-	} else {
-		// Create a dataset that reads individual image files from disk.
-		trainDS = NewDataset("train", config.DataDir, config.BatchSize, true, shuffle,
-			config.NumFolds, config.TrainFolds, config.FoldsSeed,
-			config.ModelImageSize, config.ModelImageSize, config.AngleStdDev, config.FlipRandomly, config.DType)
-		if config.UseParallelism {
-			trainDS = data.CustomParallel(trainDS).Buffer(config.BufferSize).Start()
-		}
-	}
-
-	// Training dataset used for evaluation.
-	trainEvalPath := path.Join(config.DataDir, PreGeneratedTrainEvalFileName)
-	if _, err := os.Stat(trainEvalPath); err == nil && !config.ForceOriginal {
-		// Create a dataset with pre-generated images.
 		trainEvalDS = NewPreGeneratedDataset("train-eval [Pre]", trainEvalPath, config.EvalBatchSize, false,
 			config.ModelImageSize, config.ModelImageSize, config.DType)
-
-	} else {
-		// Create a dataset that reads individual image files from disk.
-		trainEvalDS = NewDataset("train-eval", config.DataDir, config.EvalBatchSize, false, nil,
-			config.NumFolds, config.TrainFolds, config.FoldsSeed,
-			config.ModelImageSize, config.ModelImageSize, 0, false, config.DType)
-		if config.UseParallelism {
-			trainEvalDS = data.CustomParallel(trainEvalDS).Buffer(config.BufferSize).Start()
-		}
-	}
-
-	// Validation dataset.
-	validPath := path.Join(config.DataDir, PreGeneratedValidationFileName)
-	if _, err := os.Stat(validPath); err == nil && !config.ForceOriginal {
-		// Create a dataset with pre-generated images.
 		validationEvalDS = NewPreGeneratedDataset("valid-eval [Pre]", validPath, config.EvalBatchSize, false,
 			config.ModelImageSize, config.ModelImageSize, config.DType)
 
 	} else {
-		// Create a dataset that reads individual image files from disk.
+		// Datasets created from original images:
+		trainDS = NewDataset("train", config.DataDir, config.BatchSize, true, shuffle,
+			config.NumFolds, config.TrainFolds, config.FoldsSeed,
+			config.ModelImageSize, config.ModelImageSize, config.AngleStdDev, config.FlipRandomly, config.DType)
+		trainEvalDS = NewDataset("train-eval", config.DataDir, config.EvalBatchSize, false, nil,
+			config.NumFolds, config.TrainFolds, config.FoldsSeed,
+			config.ModelImageSize, config.ModelImageSize, 0, false, config.DType)
 		validationEvalDS = NewDataset("valid-eval", config.DataDir, config.EvalBatchSize, false, nil,
 			config.NumFolds, config.TrainFolds, config.FoldsSeed,
 			config.ModelImageSize, config.ModelImageSize, 0, false, config.DType)
+
+		// Read tensors in parallel:
 		if config.UseParallelism {
+			trainDS = data.CustomParallel(trainDS).Buffer(config.BufferSize).Start()
+			trainEvalDS = data.CustomParallel(trainEvalDS).Buffer(config.BufferSize).Start()
 			validationEvalDS = data.CustomParallel(validationEvalDS).Buffer(config.BufferSize).Start()
 		}
 	}
+
 	return
 }

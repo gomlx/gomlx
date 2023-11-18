@@ -100,7 +100,12 @@ func GetGlobalStepVar(ctx *context.Context) *context.Variable {
 // GetGlobalStep returns the current global step value.
 // It creates the global step variable if it does not yet exist.
 func GetGlobalStep(ctx *context.Context) int {
-	return GetGlobalStepVar(ctx).Value().Value().(int)
+	vAny := GetGlobalStepVar(ctx).Value().Value()
+	v, ok := vAny.(int)
+	if !ok {
+		Panicf("Context(scope=%q)[%q]=%#v, and cannot be converted to int", ctx.Scope(), GlobalStepVariableName, vAny)
+	}
+	return v
 }
 
 // IncrementGlobalStepGraph creates (if not there yet) a global step counter, and

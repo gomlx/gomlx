@@ -152,7 +152,6 @@ func trainModel() {
 
 	// Use standard training loop.
 	loop := train.NewLoop(trainer)
-	loop.ReadGlobalStep(ctx)            // Make sure it restarts from previous global step, if one is set.
 	commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
 
 	// Attach a checkpoint: checkpoint every 1 minute of training.

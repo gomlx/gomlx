@@ -320,7 +320,12 @@ func GetParamOr[T any](ctx *Context, key string, defaultValue T) T {
 	if !found {
 		return defaultValue
 	}
-	return valueAny.(T)
+	v, ok := valueAny.(T)
+	if !ok {
+		Panicf("GetParamOr[%T](ctx, %q, %v): ctx(scope=%q)[%q]=(%T) %#v, and cannot be converted to int",
+			v, key, defaultValue, ctx.Scope(), key, valueAny, valueAny)
+	}
+	return v
 }
 
 // SetParam sets the given param in the current scope. It will be visible (by GetParam)
@@ -372,6 +377,11 @@ func GetGraphParamOr[T any](ctx *Context, g *Graph, key string, defaultValue T) 
 	valueAny, found := ctx.GetParam(key)
 	if !found {
 		return defaultValue
+	}
+	v, ok := valueAny.(T)
+	if !ok {
+		Panicf("GetGraphParamOr[%T](ctx, %q, %v): ctx(scope=%q)[%q]=(%T) %#v, and cannot be converted to int",
+			v, key, defaultValue, ctx.Scope(), key, valueAny, valueAny)
 	}
 	return valueAny.(T)
 }

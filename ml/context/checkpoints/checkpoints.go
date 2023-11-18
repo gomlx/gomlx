@@ -322,6 +322,7 @@ type serializedVar struct {
 type serializedParam struct {
 	Scope, Key string
 	Value      any
+	ValueType  string
 }
 
 // String implements Stringer.
@@ -436,7 +437,7 @@ func (h *Handler) loadCheckpoint(baseName string, merge bool, mergeWeight float6
 		}
 
 		if !merge {
-			// Simply load the value:
+			// Load the value.
 			h.variableValues[varInfo.ParameterName] = localT
 		} else {
 			// Make sure we have enough variations of mergeExec for each variable, if they
@@ -529,7 +530,9 @@ func (h *Handler) Save() error {
 	if h.config.includeParams {
 		h.serialized.Params = nil
 		h.ctx.EnumerateParams(func(scope, key string, value any) {
-			h.serialized.Params = append(h.serialized.Params, serializedParam{scope, key, value})
+			h.serialized.Params = append(h.serialized.Params,
+				serializedParam{
+					Scope: scope, Key: key, Value: value, ValueType: fmt.Sprintf("%T", value)})
 		})
 	}
 
@@ -680,7 +683,8 @@ func (h *Handler) Dir() string {
 	return h.config.dir
 }
 
-// LoadVariable implements context.Loader. This will be called automatically by context.Context.
+// LoadVariable implements context.Loader.
+// This will is called by context.Context when the variable is used for the first time.
 // The user may want to use this function to inspect loaded values for testing.
 func (h *Handler) LoadVariable(ctx *context.Context, v *context.Variable) (value tensor.Tensor, found bool) {
 	// Priority is based on the installation order. That means we attempt first the previously configured loaders.
@@ -712,4 +716,27 @@ func (h *Handler) LoadVariable(ctx *context.Context, v *context.Variable) (value
 // The Handler owns the returned map, don't change it -- the behavior is undefined if you do.
 func (h *Handler) LoadedVariables() map[string]tensor.Tensor {
 	return h.variableValues
+}
+
+// convertNumber converts a float64 to the given type.
+// This is needed because json decoder will convert all numbers to float64.
+func convertNumber(value float64, typeName string) any {
+	switch typeName {
+	case "int":
+		return int(value)
+	case "int8":
+		return int8(value)
+	case "int32":
+		return int32(value)
+	case "int64":
+		return int64(value)
+	case "uint32":
+		return uint32(value)
+	case "float32":
+		return float32(value)
+	case "float64":
+		return value
+	default:
+		panic("Unsupported numeric type: " + typeName)
+	}
 }
