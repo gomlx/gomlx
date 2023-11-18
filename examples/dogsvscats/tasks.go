@@ -121,6 +121,8 @@ func PreGenerate(config *Configuration, numEpochsForTraining int, force bool) {
 		err = ds.Save(f, 1, true)
 		AssertNoError(err)
 		AssertNoError(f.Close())
+	} else {
+		fmt.Printf("Validation data for evaluation already generated in %q\n", validPath)
 	}
 
 	// Training data for evaluation.
@@ -135,6 +137,8 @@ func PreGenerate(config *Configuration, numEpochsForTraining int, force bool) {
 		err = ds.Save(f, 1, true)
 		AssertNoError(err)
 		AssertNoError(f.Close())
+	} else {
+		fmt.Printf("Training data for evaluation already generated in %q\n", trainEvalPath)
 	}
 
 	// Training data.
@@ -150,6 +154,8 @@ func PreGenerate(config *Configuration, numEpochsForTraining int, force bool) {
 		err = ds.Save(f, numEpochsForTraining, true)
 		AssertNoError(err)
 		AssertNoError(f.Close())
+	} else {
+		fmt.Printf("Training data for training already generated in %q\n", trainPath)
 	}
 }
 
