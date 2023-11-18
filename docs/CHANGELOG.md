@@ -5,6 +5,7 @@
 * Enable copy elision -- which makes `std::move` not necessary.
 * Temporarily copied `xla/mlir/utils` library to `third-party/xla_mlir`, since it is not available in all XLA distributions.
 * Added `context.GetParamOr`, using generics to cast to the desired type, and allowing a default value.
+* Added recovery of some basic types (numeric and slices) when loading params from Json with `checkpoints`.
 * `train.Loop` automatically sets LoopStep to context's "global_step" parameter.
 
 ## v0.7.2 - 2023/10/27
