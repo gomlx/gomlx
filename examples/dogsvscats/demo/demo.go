@@ -122,27 +122,45 @@ func main() {
 	fmt.Printf("Finished!\n")
 }
 
+// NewContext returns a new context with the parameters set from the flags values.
+func NewContext(manager *Manager) *context.Context {
+	ctx := context.NewContext(manager)
+	ctx.SetParam("optimizer", *flagOptimizer) // Just so it is saved along with the context.
+	ctx.SetParam(optimizers.LearningRateKey, *flagLearningRate)
+	ctx.SetParam(layers.L2RegularizationKey, *flagL2Regularization)
+	ctx.SetParam("normalization", *flagNormalization)
+	ctx.SetParam("num_convolutions", *flagNumConvolutions)
+	ctx.SetParam("hidden_layers", *flagNumHiddenLayers)
+	ctx.SetParam("num_nodes", *flagNumNodes)
+	return ctx
+}
+
+// trainModel based on configuration and flags.
 func trainModel(config *dogsvscats.Configuration) {
 	trainDS, trainEvalDS, validationEvalDS := dogsvscats.CreateDatasets(config)
 
 	// Manager handles creation of ML computation graphs, accelerator resources, etc.
 	manager := BuildManager().NumThreads(*flagNumThreads).NumReplicas(*flagNumReplicas).Platform(*flagPlatform).Done()
 
+	// Context holds the variables and hyperparameters for the model.
+	ctx := NewContext(manager)
+
 	// Metrics we are interested.
 	meanAccuracyMetric := metrics.NewMeanBinaryLogitsAccuracy("Mean Accuracy", "#acc")
 	movingAccuracyMetric := metrics.NewMovingAverageBinaryLogitsAccuracy("Moving Average Accuracy", "~acc", 0.01)
 
-	// Context holds the variables and hyperparameters for the model.
-	ctx := context.NewContext(manager)
-	ctx.SetParam(optimizers.LearningRateKey, *flagLearningRate)
-	ctx.SetParam(layers.L2RegularizationKey, *flagL2Regularization)
-
-	// Checkpoints saving.
+	// Checkpoint: it loads if already exists, and it will save as we train.
 	var checkpoint *checkpoints.Handler
 	if *flagCheckpoint != "" {
 		var err error
-		checkpoint, err = checkpoints.Build(ctx).DirFromBase(*flagCheckpoint, config.DataDir).Keep(*flagCheckpointKeep).Done()
+		checkpoint, err = checkpoints.Build(ctx).
+			DirFromBase(*flagCheckpoint, config.DataDir).
+			Keep(*flagCheckpointKeep).Done()
 		AssertNoError(err)
+		globalStep := optimizers.GetGlobalStep(ctx)
+		if globalStep != 0 {
+			fmt.Printf("> restarting training from global_step=%d\n", globalStep)
+		}
 	}
 
 	// Select the model type we are using:
@@ -174,15 +192,15 @@ func trainModel(config *dogsvscats.Configuration) {
 		period := time.Minute * 1
 		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
 			func(loop *train.Loop, metrics []tensor.Tensor) error {
-				fmt.Printf("\n[saving checkpoint@%d] [median train step (ms): %d]\n", loop.LoopStep, loop.MedianTrainStepDuration().Milliseconds())
 				return checkpoint.Save()
 			})
 	}
 
 	// Attach a margaid plots: plot points at exponential steps.
 	// The points generated are saved along the checkpoint directory (if one is given).
+	var plots *margaid.Plots
 	if *flagPlots {
-		_ = margaid.NewDefault(loop, checkpoint.Dir(), 100, 1.1, trainEvalDS, validationEvalDS)
+		plots = margaid.NewDefault(loop, checkpoint.Dir(), 100, 1.1, trainEvalDS, validationEvalDS)
 	}
 
 	// Loop for given number of steps.
@@ -192,16 +210,20 @@ func trainModel(config *dogsvscats.Configuration) {
 		loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
 
 	// Finally, print an evaluation on train and test datasets.
-	if *flagEval {
-		fmt.Println()
-		err = commandline.ReportEval(trainer, trainEvalDS, validationEvalDS)
-		AssertNoError(err)
+	fmt.Println()
+	err = commandline.ReportEval(trainer, trainEvalDS, validationEvalDS)
+	if plots != nil {
+		// Save plot points.
+		plots.Done()
 	}
+	AssertNoError(err)
+	fmt.Println()
 }
 
 func normalizeImage(ctx *context.Context, x *Node) *Node {
 	x.AssertRank(4) // [batch_size, width, height, depth]
-	switch *flagNormalization {
+	norm := context.GetParamOr(ctx, "normalization", "none")
+	switch norm {
 	case "layer":
 		return layers.LayerNormalization(ctx, x, 1, 2).ScaleNormalization(false).Done()
 	case "batch":
@@ -209,13 +231,14 @@ func normalizeImage(ctx *context.Context, x *Node) *Node {
 	case "none":
 		return x
 	}
-	Panicf("invalid normalization selected %q -- valid values are batch, layer, none", *flagNormalization)
+	Panicf("invalid normalization selected %q -- valid values are batch, layer, none", norm)
 	return nil
 }
 
 func normalizeFeatures(ctx *context.Context, x *Node) *Node {
 	x.AssertRank(2) // [batch_size, embedding_dim]
-	switch *flagNormalization {
+	norm := context.GetParamOr(ctx, "normalization", "none")
+	switch norm {
 	case "layer":
 		return layers.LayerNormalization(ctx, x, -1).Done()
 	case "batch":
@@ -223,21 +246,28 @@ func normalizeFeatures(ctx *context.Context, x *Node) *Node {
 	case "none":
 		return x
 	}
-	Panicf("invalid normalization selected %q -- valid values are batch, layer, none", *flagNormalization)
+	Panicf("invalid normalization selected %q -- valid values are batch, layer, none", norm)
 	return nil
 }
 
 // CnnModelGraph builds the CNN model for our demo.
-// It returns the logits, not the predictions, which works with most losses.
+// It returns the logit, not the predictions, which works with most losses.
 // inputs: only one tensor, with shape `[batch_size, width, height, depth]`.
 func CnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
+	outputs := CnnModelEmbedding(ctx, spec, inputs)
+	return outputs[:1] // Return only the logits.
+}
+
+// CnnModelEmbedding builds a CNN model and return the final logit of the binary classification and the last layer embeddings.
+func CnnModelEmbedding(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	_ = spec // Not needed.
 	x := inputs[0]
 	filterSize := 16
 	batchSize := x.Shape().Dimensions[0]
 	logits := x
 	imgSize := x.Shape().Dimensions[1]
-	for convIdx := 0; convIdx < *flagNumConvolutions && imgSize > 16; convIdx++ {
+	numConvolutions := context.GetParamOr(ctx, "num_convolutions", 5)
+	for convIdx := 0; convIdx < numConvolutions && imgSize > 16; convIdx++ {
 		ctx := ctx.In(fmt.Sprintf("conv_%d", convIdx))
 		residual := logits
 		if convIdx > 0 {
@@ -257,27 +287,29 @@ func CnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 		logits.AssertDims(batchSize, imgSize, imgSize, filterSize)
 	}
 
-	// Flatten resulting image, and treat the convolved logits as tabular.
+	// Flatten the resulting image, and treat the convolved values as tabular.
 	logits = Reshape(logits, batchSize, -1)
 	logits = FnnOnTop(ctx, logits)
-	return []*Node{logits}
+	embedding := logits
+	logits = layers.DenseWithBias(ctx.In("readout"), logits, 1)
+	return []*Node{logits, embedding}
 }
 
-// FnnOnTop adds a feedforward neural network on top of the CNN layer.
+// FnnOnTop adds a feedforward neural network on top of the CNN layer and returns the "embedding" of the last layer.
 func FnnOnTop(ctx *context.Context, logits *Node) *Node {
-	for ii := 0; ii < *flagNumHiddenLayers; ii++ {
+	numHiddenLayers := context.GetParamOr(ctx, "hidden_layers", 3)
+	numNodes := context.GetParamOr(ctx, "num_nodes", 3)
+	for ii := 0; ii < numHiddenLayers; ii++ {
 		ctx := ctx.In(fmt.Sprintf("dense_%d", ii))
 		residual := logits
 		// Add layer with residual connection.
 		logits = layers.Relu(logits)
-		logits = layers.DenseWithBias(ctx, logits, *flagNumNodes)
+		logits = layers.DenseWithBias(ctx, logits, numNodes)
 		logits = normalizeFeatures(ctx, logits)
 		if ii >= 1 {
 			logits = Add(logits, residual)
 		}
 	}
-	logits = layers.Relu(logits)
-	logits = layers.DenseWithBias(ctx.In("readout"), logits, 1)
 	return logits
 }
 
@@ -294,17 +326,24 @@ func InceptionV3ModelGraph(ctx *context.Context, spec any, inputs []*Node) []*No
 	_ = spec           // Not needed.
 	image := inputs[0] // Images scaled from 0.0 to 1.0
 	channelsConfig := timage.ChannelsLast
-	image = inceptionv3.PreprocessImage(image, 1.0, channelsConfig)
+	image = inceptionv3.PreprocessImage(image, 1.0, channelsConfig) // Adjust image to format used by Inception.
 
 	var preTrainedPath string
 	if *flagInceptionPreTrained {
+		// Use pre-trained
 		preTrainedPath = *flagDataDir
+		err := inceptionv3.DownloadAndUnpackWeights(*flagDataDir) // Only downloads/unpacks the first time.
+		AssertNoError(err)
 	}
-	logits := inceptionv3.BuildGraph(ctx, image).PreTrained(preTrainedPath).
-		SetPooling(inceptionv3.MaxPooling).Trainable(*flagInceptionFineTuning).Done()
+	logits := inceptionv3.BuildGraph(ctx, image).
+		PreTrained(preTrainedPath).
+		SetPooling(inceptionv3.MaxPooling).
+		Trainable(*flagInceptionFineTuning).Done()
 	if !*flagInceptionFineTuning {
 		logits = StopGradient(logits) // We don't want to train the inception model.
 	}
+
 	logits = FnnOnTop(ctx, logits)
+	logits = layers.DenseWithBias(ctx.In("readout"), logits, 1)
 	return []*Node{logits}
 }
