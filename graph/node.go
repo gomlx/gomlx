@@ -1079,6 +1079,9 @@ func convertNegativeAxesAndSort(rank int, axesWithNegatives []int) []int {
 
 // ReduceSum reduces by summing over X elements over the selected axes.
 // If reduceAxes is nil, reduce over all dimensions to a scalar.
+//
+// The reduced axes of `x` are removed in the output -- so the rank is reduced.
+// See ReduceAndKeep for a version to preserve the reduced axes.
 func ReduceSum(x *Node, reduceAxes ...int) *Node {
 	g := validateGraphFromInputs(x)
 	zero := ScalarZero(g, x.DType())
@@ -1092,6 +1095,9 @@ func ReduceAllSum(x *Node) *Node {
 
 // ReduceMaskedSum reduces by summing the `x` elements over the selected axes.
 // If `reduceAxes` is nil, reduce over all dimensions to a scalar.
+//
+// The reduced axes of `x` are removed in the output -- so the rank is reduced.
+// See ReduceAndKeep for a version to preserve the reduced axes.
 //
 // It ignores values for which the corresponding mask is false.
 // The `mask` and `x` values must have the same shape.
@@ -1111,6 +1117,9 @@ func ReduceAllMaskedSum(x, mask *Node) *Node {
 }
 
 // ReduceMean reduces by taking the mean over the elements of the selected axes.
+//
+// The reduced axes of `x` are removed in the output -- so the rank is reduced.
+// See ReduceAndKeep for a version to preserve the reduced axes.
 func ReduceMean(x *Node, reduceAxes ...int) *Node {
 	_ = validateGraphFromInputs(x)
 	sum := ReduceSum(x, reduceAxes...)
@@ -1125,6 +1134,9 @@ func ReduceAllMean(x *Node) *Node {
 
 // ReduceMultiply reduces by summing over the elements of the selected axes.
 // If reduceAxes is nil, reduce over all dimensions to a scalar.
+//
+// The reduced axes of `x` are removed in the output -- so the rank is reduced.
+// See ReduceAndKeep for a version to preserve the reduced axes.
 func ReduceMultiply(x *Node, reduceAxes ...int) *Node {
 	g := validateGraphFromInputs(x)
 	one := ScalarOne(g, x.DType())
@@ -1138,6 +1150,9 @@ func ReduceAllMultiply(x *Node) *Node {
 
 // ReduceMax reduces by taking the max over the elements of the selected axes.
 // If reduceAxes is nil, reduce over all dimensions to a scalar.
+//
+// The reduced axes of `x` are removed in the output -- so the rank is reduced.
+// See ReduceAndKeep for a version to preserve the reduced axes.
 func ReduceMax(x *Node, reduceAxes ...int) *Node {
 	g := validateGraphFromInputs(x)
 	lowest := lowestForDType(g, x.DType())

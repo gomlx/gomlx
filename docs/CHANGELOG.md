@@ -2,11 +2,19 @@
 
 ## Next
 
-* Enable copy elision -- which makes `std::move` not necessary.
-* Temporarily copied `xla/mlir/utils` library to `third-party/xla_mlir`, since it is not available in all XLA distributions.
-* Added `context.GetParamOr`, using generics to cast to the desired type, and allowing a default value.
+* C++ code integrating with XLA:
+  * Enable copy elision -- which makes `std::move` not necessary.
+  * Temporarily copied `xla/mlir/utils` library to `third-party/xla_mlir`, since it is not available in all XLA distributions.
+* Package `context`:
+  * Added `context.GetParamOr` and `context.GetGraphParamOr`: it uses generics to cast to the desired type, and allowing a default value to be returned.
 * Added recovery of some basic types (numeric and slices) when loading params from Json with `checkpoints`.
-* `train.Loop` automatically sets LoopStep to context's "global_step" parameter.
+* Package `train`:
+  * `Loop` automatically sets LoopStep to context's "global_step" parameter.
+* Package `context`:
+  * Added `Context.EnumerateVariablesInScope()` method.
+* Package `graph`:
+  * Added optional `reduceAxes` parameter to `L2Norm` and `L1Norm`.
+  * Added `L2Normalize` and `L2NormalizeWithEpsilon`. 
 
 ## v0.7.2 - 2023/10/27
 
