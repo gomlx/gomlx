@@ -163,9 +163,16 @@ func TestClip(t *testing.T) {
 }
 
 func TestNorms(t *testing.T) {
+	testFuncOneInput(t, "L2NormSquare",
+		func(g *Graph) (input, output *Node) {
+			input = Const(g, [][]float32{{1, 2}, {-3, 4}})
+			output = L2NormSquare(input)
+			return
+		}, float32(5+25))
+
 	testFuncOneInput(t, "L2Norm",
 		func(g *Graph) (input, output *Node) {
-			input = Const(g, [][]float32{{4, 3}, {5, 12}})
+			input = Const(g, [][]float32{{4, -3}, {-5, 12}})
 			output = L2Norm(input, -1)
 			return
 		}, [][]float32{{5}, {13}})

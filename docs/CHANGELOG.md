@@ -14,7 +14,7 @@
   * Added `Context.EnumerateVariablesInScope()` method.
 * Package `graph`:
   * Added optional `reduceAxes` parameter to `L2Norm` and `L1Norm`.
-  * Added `L2Normalize` and `L2NormalizeWithEpsilon`. 
+  * Added `L2NormSquare`, `L2Normalize` and `L2NormalizeWithEpsilon`. 
 
 ## v0.7.2 - 2023/10/27
 
