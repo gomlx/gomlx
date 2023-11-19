@@ -29,9 +29,7 @@
 //		…
 //		nanLogger := nanlogger.New()
 //		trainer := train.NewTrainer(…)
-//		trainer.OnExecCreation(func(exec *context.Exec, _ train.GraphType) {
-//			nanLogger.Attach(exec)
-//		})
+//		nanLogger.AttachToTrainer(trainer)
 //		…
 //	}
 //
@@ -51,6 +49,8 @@ package nanlogger
 import (
 	"fmt"
 	"github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/ml/context"
+	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
@@ -105,17 +105,26 @@ func New() *NanLogger {
 	}
 }
 
-// Attach will set the NanLogger as the default logger in exec. NanLogger acts as a pass-through logger, anything
-// that is not marked as nanlogger.UniqueMessageId is passed through to whatever was the previous logger configured
-// in exec.
+// AttachToExec will set the NanLogger as the default logger in exec.
+// NanLogger acts as a pass-through logger, anything that is not marked as nanlogger.UniqueMessageId is passed
+// through to whatever was the previous logger configured in exec.
 //
 // A nil NanLogger is valid, and it will simply be a no-op.
-func (l *NanLogger) Attach(exec ExecWithLogger) {
+func (l *NanLogger) AttachToExec(exec ExecWithLogger) {
 	if l == nil {
 		return
 	}
 	l.prevLoggerFn = exec.GetNodeLogger()
 	exec.SetNodeLogger(l.loggerFn)
+}
+
+// AttachToTrainer makes sure that the logger is attached to every graph created by the trainer.
+//
+// A nil NanLogger is valid, and it will simply be a no-op.
+func (l *NanLogger) AttachToTrainer(trainer *train.Trainer) {
+	trainer.OnExecCreation(func(exec *context.Exec, _ train.GraphType) {
+		l.AttachToExec(exec)
+	})
 }
 
 // Trace the given node.
@@ -144,7 +153,9 @@ func (l *NanLogger) Trace(node *graph.Node, scope ...string) {
 	if len(scope) == 0 {
 		trace.Scope = slices.Copy(l.currentScope)
 	} else {
-		trace.Scope = slices.Copy(scope)
+		trace.Scope = make([]string, 0, len(l.currentScope)+len(scope))
+		trace.Scope = append(trace.Scope, l.currentScope...)
+		trace.Scope = append(trace.Scope, scope...)
 	}
 
 	gId := node.Graph().GraphId()
@@ -238,7 +249,7 @@ func (l *NanLogger) loggerFn(g *graph.Graph, messages []string, values []tensor.
 type HandlerFn func(nanType float64, info *Trace)
 
 // SetHandler sets the function called when a `NaN` is observed.
-// The default is DefaultHandler which prints out all information on the node and exits.
+// The default is DefaultHandler that prints out all information on the node and exits.
 func (l *NanLogger) SetHandler(handler HandlerFn) {
 	if l == nil {
 		return

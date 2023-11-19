@@ -55,7 +55,7 @@ func TestNanLogger(t *testing.T) {
 		l.PopScope()
 		return Add(v1, v2)
 	})
-	l.Attach(e)
+	l.AttachToExec(e)
 
 	// Checks that without any NaN, nothing happens.
 	require.NotPanics(t, func() { e.Call([]float32{1.0, 3.0}) })

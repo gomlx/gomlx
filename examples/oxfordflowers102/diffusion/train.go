@@ -196,7 +196,7 @@ func TrainModel() {
 		[]metrics.Interface{meanImagesLoss})   // evalMetrics
 	if *flagNanLogger {
 		trainer.OnExecCreation(func(exec *context.Exec, _ train.GraphType) {
-			nanLogger.Attach(exec)
+			nanLogger.AttachToExec(exec)
 		})
 	}
 	// Use standard training loop.
