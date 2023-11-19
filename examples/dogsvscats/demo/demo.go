@@ -29,6 +29,7 @@ import (
 	"github.com/gomlx/gomlx/examples/dogsvscats"
 	"github.com/gomlx/gomlx/examples/notebook/gonb/margaid"
 	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/graph/nanlogger"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/ml/data"
@@ -42,15 +43,15 @@ import (
 	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
-	timage "github.com/gomlx/gomlx/types/tensor/image"
 	"log"
 	"os"
 	"time"
 )
 
 var (
-	flagDataDir     = flag.String("data", "~/tmp/dogs_vs_cats", "Directory to cache downloaded dataset and save checkpoints.")
-	flagPreGenerate = flag.Bool("pre", false, "Pre-generate preprocessed image data to speed up training.")
+	flagDataDir       = flag.String("data", "~/tmp/dogs_vs_cats", "Directory to cache downloaded dataset and save checkpoints.")
+	flagPreGenerate   = flag.Bool("pre", false, "Pre-generate preprocessed image data to speed up training.")
+	flagForceOriginal = flag.Bool("force_original", false, "Set to true to use original images and dynamically read and augment images.")
 
 	// ML Manager creation:
 	flagNumThreads     = flag.Int("num_threads", -1, "Number of threads. Leave as -1 to use as many as there are cores.")
@@ -58,23 +59,31 @@ var (
 	flagPlatform       = flag.String("platform", "", "Platform to use, if empty uses the default one.")
 	flagCheckpoint     = flag.String("checkpoint", "", "Directory save and load checkpoints from. If left empty, no checkpoints are created.")
 	flagCheckpointKeep = flag.Int("checkpoint_keep", 10, "Number of checkpoints to keep, if --checkpoint is set.")
+	flagNanLogger      = flag.Bool("nanlogger", false, "Set to enable logging of NaN values, as soon as they happen.")
 
 	// Training hyperparameters:
-	flagModelType           = flag.String("model", "cnn", "Model types: \"cnn\" or \"inception\"")
-	flagOptimizer           = flag.String("optimizer", "adamw", fmt.Sprintf("Optimizer, options: %q", slices.SortedKeys(optimizers.KnownOptimizers)))
-	flagNumSteps            = flag.Int("steps", 2000, "Number of gradient descent steps to perform")
-	flagBatchSize           = flag.Int("batch", dogsvscats.DefaultConfig.BatchSize, "Batch size for training")
-	flagLearningRate        = flag.Float64("learning_rate", 0.0001, "Initial learning rate.")
-	flagL2Regularization    = flag.Float64("l2_reg", 0, "L2 regularization on kernels. It doesn't interact well with --batch_norm.")
-	flagNormalization       = flag.String("norm", "layer", fmt.Sprintf("Type of layer normalization to use. Valid values: %q.", slices.SortedKeys(layers.KnownNormalizers)))
-	flagNumConvolutions     = flag.Int("num_convolutions", 5, "Number of convolutions -- there will be at least as many to reduce the image to 16x16")
-	flagEval                = flag.Bool("eval", true, "Whether to evaluate trained model on test data in the end.")
-	flagInceptionPreTrained = flag.Bool("pretrained", true, "If using inception model, whether to use the pre-trained weights to transfer learn")
-	flagInceptionFineTuning = flag.Bool("finetuning", true, "If using inception model, whether to fine-tune the inception model")
+	flagModelType        = flag.String("model", "cnn", "Model types: \"cnn\" or \"inception\"")
+	flagOptimizer        = flag.String("optimizer", "adamw", fmt.Sprintf("Optimizer, options: %q", slices.SortedKeys(optimizers.KnownOptimizers)))
+	flagNumSteps         = flag.Int("steps", 2000, "Number of gradient descent steps to perform")
+	flagBatchSize        = flag.Int("batch", dogsvscats.DefaultConfig.BatchSize, "Batch size for training")
+	flagLearningRate     = flag.Float64("learning_rate", 0.0001, "Initial learning rate.")
+	flagL2Regularization = flag.Float64("l2_reg", 0, "L2 regularization on kernels. It doesn't interact well with --batch_norm.")
+	flagNormalization    = flag.String("norm", "layer", fmt.Sprintf("Type of layer normalization to use. Valid values: %q.", slices.SortedKeys(layers.KnownNormalizers)))
+	flagNumConvolutions  = flag.Int("num_convolutions", 5, "Number of convolutions -- there will be at least as many to reduce the image to 16x16")
+	flagEval             = flag.Bool("eval", true, "Whether to evaluate trained model on test data in the end.")
 
 	// Flat part of model, after convolutions and models being flattened:
 	flagNumHiddenLayers = flag.Int("hidden_layers", 3, "Number of hidden layers, stacked with residual connection.")
 	flagNumNodes        = flag.Int("num_nodes", 128, "Number of nodes in hidden layers.")
+
+	// InceptionV3 model parameters:
+	flagInceptionPreTrained = flag.Bool("pretrained", true, "If using inception model, whether to use the pre-trained weights to transfer learn")
+	flagInceptionFineTuning = flag.Bool("finetuning", true, "If using inception model, whether to fine-tune the inception model")
+
+	// BYOL model parameters:
+	flagByolProjectionNumLayers = flag.Int("byol_hidden_layers", 2, "When using \"byol\" model, this is the number of layers in the projection to the target regularizing model.")
+	flagByolProjectionNumNodes  = flag.Int("byol_num_nodes", 128, "When using \"byol\" model, this is the number of nodes (dimension) in the projection to the target regularizing model.")
+	flagByolTargetUpdateRatio   = flag.Float64("byol_target_update_ratio", 0.999, "Moving average update weight to the \"target\" sub-model for BYOL model.")
 
 	// Flat augmentation hyperparameters:
 	flagAngleStdDev  = flag.Float64("angle", 5.0, "Standard deviation of noise used to rotate the image. Disabled if --augment=false.")
@@ -117,9 +126,12 @@ func main() {
 		dogsvscats.PreGenerate(config, *flagPreGenEpochs, true)
 		return
 	}
+	config.ForceOriginal = *flagForceOriginal
+	config.UseParallelism = true
+	config.BufferSize = 100
+	config.YieldImagePairs = *flagModelType == "byol"
 
 	trainModel(config)
-	fmt.Printf("Finished!\n")
 }
 
 // NewContext returns a new context with the parameters set from the flags values.
@@ -132,6 +144,17 @@ func NewContext(manager *Manager) *context.Context {
 	ctx.SetParam("num_convolutions", *flagNumConvolutions)
 	ctx.SetParam("hidden_layers", *flagNumHiddenLayers)
 	ctx.SetParam("num_nodes", *flagNumNodes)
+
+	// BYOL model parameters.
+	if *flagModelType == "byol" {
+		ctx.SetParam("byol_hidden_layers", *flagByolProjectionNumLayers)
+		ctx.SetParam("byol_num_nodes", *flagByolProjectionNumNodes)
+		ctx.SetParam("byol_target_update_ratio", *flagByolTargetUpdateRatio)
+	}
+
+	if *flagNanLogger {
+		nanLogger = nanlogger.New()
+	}
 	return ctx
 }
 
@@ -173,6 +196,8 @@ func trainModel(config *dogsvscats.Configuration) {
 		if *flagInceptionPreTrained {
 			AssertNoError(inceptionv3.DownloadAndUnpackWeights(*flagDataDir))
 		}
+	case "byol":
+		modelFn = ByolCnnModelGraph
 	}
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
@@ -182,6 +207,7 @@ func trainModel(config *dogsvscats.Configuration) {
 		optimizers.MustOptimizerByName(*flagOptimizer),
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
 		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
+	nanLogger.AttachToTrainer(trainer) // It's a no-op if nanLogger is nil.
 
 	// Use standard training loop.
 	loop := train.NewLoop(trainer)
@@ -248,102 +274,4 @@ func normalizeFeatures(ctx *context.Context, x *Node) *Node {
 	}
 	Panicf("invalid normalization selected %q -- valid values are batch, layer, none", norm)
 	return nil
-}
-
-// CnnModelGraph builds the CNN model for our demo.
-// It returns the logit, not the predictions, which works with most losses.
-// inputs: only one tensor, with shape `[batch_size, width, height, depth]`.
-func CnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
-	outputs := CnnModelEmbedding(ctx, spec, inputs)
-	return outputs[:1] // Return only the logits.
-}
-
-// CnnModelEmbedding builds a CNN model and return the final logit of the binary classification and the last layer embeddings.
-func CnnModelEmbedding(ctx *context.Context, spec any, inputs []*Node) []*Node {
-	_ = spec // Not needed.
-	x := inputs[0]
-	filterSize := 16
-	batchSize := x.Shape().Dimensions[0]
-	logits := x
-	imgSize := x.Shape().Dimensions[1]
-	numConvolutions := context.GetParamOr(ctx, "num_convolutions", 5)
-	for convIdx := 0; convIdx < numConvolutions && imgSize > 16; convIdx++ {
-		ctx := ctx.In(fmt.Sprintf("conv_%d", convIdx))
-		residual := logits
-		if convIdx > 0 {
-			logits = layers.Relu(logits)
-		}
-		logits = layers.Convolution(ctx, logits).Filters(filterSize).KernelSize(3).PadSame().Done()
-		logits = layers.Relu(logits)
-		logits = normalizeImage(ctx, logits)
-		if convIdx > 0 {
-			logits = Add(logits, residual)
-		}
-		if imgSize > 16 {
-			// Reduce image size by 2 each time.
-			logits = MaxPool(logits).Window(2).Done()
-			imgSize /= 2
-		}
-		logits.AssertDims(batchSize, imgSize, imgSize, filterSize)
-	}
-
-	// Flatten the resulting image, and treat the convolved values as tabular.
-	logits = Reshape(logits, batchSize, -1)
-	logits = FnnOnTop(ctx, logits)
-	embedding := logits
-	logits = layers.DenseWithBias(ctx.In("readout"), logits, 1)
-	return []*Node{logits, embedding}
-}
-
-// FnnOnTop adds a feedforward neural network on top of the CNN layer and returns the "embedding" of the last layer.
-func FnnOnTop(ctx *context.Context, logits *Node) *Node {
-	numHiddenLayers := context.GetParamOr(ctx, "hidden_layers", 3)
-	numNodes := context.GetParamOr(ctx, "num_nodes", 3)
-	for ii := 0; ii < numHiddenLayers; ii++ {
-		ctx := ctx.In(fmt.Sprintf("dense_%d", ii))
-		residual := logits
-		// Add layer with residual connection.
-		logits = layers.Relu(logits)
-		logits = layers.DenseWithBias(ctx, logits, numNodes)
-		logits = normalizeFeatures(ctx, logits)
-		if ii >= 1 {
-			logits = Add(logits, residual)
-		}
-	}
-	return logits
-}
-
-// InceptionV3ModelGraph uses an optionally pre-trained inception model.
-//
-// Results on validation after training 1000 steps, inception pre-trained weights used:
-// - no scaling (from 0.0 to 1.0): 90.4% accuracy
-// - with Keras scale (from -1.0 to 1.0): 90.6% accuracy
-//
-// Results if we don't use the pre-trained weights (it can probably get much better with more training):
-// - no scaling (from 0.0 to 1.0): 62.5% accuracy
-// - with Keras scale (from -1.0 to 1.0): 61.8% accuracy
-func InceptionV3ModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
-	_ = spec           // Not needed.
-	image := inputs[0] // Images scaled from 0.0 to 1.0
-	channelsConfig := timage.ChannelsLast
-	image = inceptionv3.PreprocessImage(image, 1.0, channelsConfig) // Adjust image to format used by Inception.
-
-	var preTrainedPath string
-	if *flagInceptionPreTrained {
-		// Use pre-trained
-		preTrainedPath = *flagDataDir
-		err := inceptionv3.DownloadAndUnpackWeights(*flagDataDir) // Only downloads/unpacks the first time.
-		AssertNoError(err)
-	}
-	logits := inceptionv3.BuildGraph(ctx, image).
-		PreTrained(preTrainedPath).
-		SetPooling(inceptionv3.MaxPooling).
-		Trainable(*flagInceptionFineTuning).Done()
-	if !*flagInceptionFineTuning {
-		logits = StopGradient(logits) // We don't want to train the inception model.
-	}
-
-	logits = FnnOnTop(ctx, logits)
-	logits = layers.DenseWithBias(ctx.In("readout"), logits, 1)
-	return []*Node{logits}
 }

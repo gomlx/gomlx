@@ -40,6 +40,7 @@ func AssertNoError(err error) {
 
 const (
 	PreGeneratedTrainFileName      = "train_data.bin"
+	PreGeneratedTrainPairFileName  = "train_pair_data.bin"
 	PreGeneratedTrainEvalFileName  = "train_eval_data.bin"
 	PreGeneratedValidationFileName = "validation_eval_data.bin"
 )
@@ -57,6 +58,10 @@ type Configuration struct {
 
 	// ModelImageSize is use for height and width of the generated images.
 	ModelImageSize int
+
+	// YieldImagePairs if to yield an extra input with the paired image: same image, different random augmentation.
+	// Only applies for Train dataset.
+	YieldImagePairs bool
 
 	// NumFolds for cross-validation.
 	NumFolds int
@@ -118,7 +123,7 @@ func PreGenerate(config *Configuration, numEpochsForTraining int, force bool) {
 			config.ValidationFolds, config.FoldsSeed,
 			config.ModelImageSize, config.ModelImageSize, 0, false, config.DType)
 		fmt.Printf("Generating validation data for evaluation in %q...\n", validPath)
-		err = ds.Save(f, 1, true)
+		err = ds.Save(1, true, f)
 		AssertNoError(err)
 		AssertNoError(f.Close())
 	} else {
@@ -134,7 +139,7 @@ func PreGenerate(config *Configuration, numEpochsForTraining int, force bool) {
 			config.TrainFolds, config.FoldsSeed,
 			config.ModelImageSize, config.ModelImageSize, 0, false, config.DType)
 		fmt.Printf("Generating training data for evaluation in %q...\n", trainEvalPath)
-		err = ds.Save(f, 1, true)
+		err = ds.Save(1, true, f)
 		AssertNoError(err)
 		AssertNoError(f.Close())
 	} else {
@@ -143,17 +148,23 @@ func PreGenerate(config *Configuration, numEpochsForTraining int, force bool) {
 
 	// Training data.
 	trainPath := path.Join(config.DataDir, PreGeneratedTrainFileName)
+	trainPairPath := path.Join(config.DataDir, PreGeneratedTrainPairFileName)
 	if !data.FileExists(trainPath) || force {
 		f, err := os.Create(trainPath)
 		AssertNoError(err)
+		f2, err := os.Create(trainPairPath)
+		AssertNoError(err)
+
 		shuffle := rand.New(rand.NewSource(time.Now().UTC().UnixNano()))
 		ds := NewDataset("train", config.DataDir, batchSize, false, shuffle, config.NumFolds,
 			config.TrainFolds, config.FoldsSeed,
-			config.ModelImageSize, config.ModelImageSize, config.AngleStdDev, config.FlipRandomly, config.DType)
-		fmt.Printf("Generating training data *with augmentation* in %q...\n", trainPath)
-		err = ds.Save(f, numEpochsForTraining, true)
+			config.ModelImageSize, config.ModelImageSize, config.AngleStdDev, config.FlipRandomly, config.DType).
+			WithImagePairs(true) // We want 2 augmented images per original image for training with BYOL model.
+		fmt.Printf("Generating training data *with augmentation* in %q and %q...\n", trainPath, trainPairPath)
+		err = ds.Save(numEpochsForTraining, true, f, f2)
 		AssertNoError(err)
 		AssertNoError(f.Close())
+		AssertNoError(f2.Close())
 	} else {
 		fmt.Printf("Training data for training already generated in %q\n", trainPath)
 	}

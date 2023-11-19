@@ -42,6 +42,7 @@ func buildConfig() *Configuration {
 	config.AngleStdDev = *flagAngleStdDev
 	config.FlipRandomly = *flagFlipRandomly
 	config.BatchSize = *flagBatchSize
+
 	return config
 }
 
