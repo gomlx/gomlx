@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context/initializers"
+	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
@@ -113,6 +114,37 @@ func TestParams(t *testing.T) {
 	assert.True(t, found)
 	assert.Equal(t, 13.0, got)
 	assert.Equal(t, 7.0, GetParamOr(ctx, "x", 0.0))
+}
+
+func TestEnumerateVariables(t *testing.T) {
+	manager := graphtest.BuildTestManager()
+	ctx := NewContext(manager)
+	ctx0 := ctx.In("a")
+	_ = ctx0.VariableWithShape("x", shapes.Make(shapes.Float32))
+	ctx1 := ctx.In("b")
+	_ = ctx1.VariableWithShape("y", shapes.Make(shapes.Float64, 2))
+	ctx2 := ctx1.In("c")
+	_ = ctx2.VariableWithShape("z", shapes.Make(shapes.Float32, 3, 1))
+	ctx.InitializeVariables()
+
+	// Checks EnumerateVariables lists all variables:
+	got := types.MakeSet[string]()
+	setGotFn := func(v *Variable) { got.Insert(v.Name()) }
+	ctx.EnumerateVariables(setGotFn)
+	assert.Equal(t, 3, len(got))
+	assert.True(t, got.Has("x") && got.Has("y") && got.Has("z"))
+
+	// Checks EnumerateVariables lists all variables, even if starting from a different scope:
+	got = types.MakeSet[string]()
+	ctx0.EnumerateVariables(setGotFn)
+	assert.Equal(t, 3, len(got))
+	assert.True(t, got.Has("x") && got.Has("y") && got.Has("z"))
+
+	// Checks EnumerateVariablesInScope:
+	got = types.MakeSet[string]()
+	ctx1.EnumerateVariablesInScope(setGotFn)
+	assert.Equal(t, 2, len(got))
+	assert.True(t, got.Has("y") && got.Has("z"))
 }
 
 type ConstantLoader struct {

@@ -675,6 +675,18 @@ func (ctx *Context) EnumerateVariables(fn func(v *Variable)) {
 	}
 }
 
+// EnumerateVariablesInScope is similar to EnumerateVariables, but enumerate only those under the current
+// context scope.
+func (ctx *Context) EnumerateVariablesInScope(fn func(v *Variable)) {
+	baseScope := ctx.Scope()
+	baseScopeWithSeparator := baseScope + ScopeSeparator
+	for _, v := range ctx.data.variables {
+		if v.Scope() == baseScope || strings.HasPrefix(v.Scope(), baseScopeWithSeparator) {
+			fn(v)
+		}
+	}
+}
+
 // NumVariables return the number of variables in this Context.
 func (ctx *Context) NumVariables() int {
 	return len(ctx.data.variables)
