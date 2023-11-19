@@ -16,6 +16,9 @@
   * Added `L2NormSquare`, `L2Normalize` and `L2NormalizeWithEpsilon`. 
 * Package `nanlogger`: added `AttachToTrainer`; improved docs.
 * Package `margaid`: automatic ending plot when loop finishes.
+* Example "Dogs vs Cats":
+  * Added ByolCnn model (Bootstrap Your Own Latent).
+  * Added support for generating pair of images for BYOL model.
 
 ## v0.7.2 - 2023/10/27
 
