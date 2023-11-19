@@ -112,7 +112,7 @@ func New(width, height int, evalDatasets ...train.Dataset) *Plots {
 const DefaultFileName = "training_plot_points.json"
 
 // NewDefault creates a new Margaid plots with the usual defaults.
-// The "default" may change over time, and it aims to work with the usual GoNB notebook, or if
+// This "default" configuration may change over time, and it aims to work with the usual GoNB notebook, or if
 // run from the command line, it simply save the data points for future plotting.
 //
 // It serves also as an example.
@@ -124,8 +124,11 @@ const DefaultFileName = "training_plot_points.json"
 //     The `stepFactor` defines the growth of steps between generating plot points.
 //     Typical values here are `startStep=100` and `stepFactor=1.1`.
 //   - `datasets`: Evaluated whenever plot points are added.
+//
+// This will automatically `Attach` to the given loop, so no need to call `Attach()` if using this
+// constructor.
 func NewDefault(loop *train.Loop, dir string, startStep int, stepFactor float64, datasets ...train.Dataset) *Plots {
-	plots := New(1024, 400, datasets...).LogScaleX().LogScaleY()
+	plots := New(1024, 400, datasets...).LogScaleX() // .LogScaleY()
 	if dir != "" {
 		// Save plot points.
 		_, err := plots.WithFile(path.Join(dir, DefaultFileName))
@@ -144,6 +147,7 @@ func NewDefault(loop *train.Loop, dir string, startStep int, stepFactor float64,
 				// Update plots with metrics.
 				return plots.AddTrainAndEvalMetrics(loop, metrics)
 			})
+		plots.attachOnEnd(loop)
 	}
 	return plots
 }
@@ -285,22 +289,19 @@ func (ps *Plots) DynamicUpdates() *Plots {
 	if !gonbui.IsNotebook {
 		return ps
 	}
-	ps.gonbID = gonbui.UniqueID()
+	ps.gonbID = gonbui.UniqueId()
 	if ps.pointsAdded < 3 {
 		// If we are having a dynamically updating plot, we reserve the transient HTML block
 		// upfront -- otherwise it will interfere with the progressbar the first time it is displayed.
-		gonbui.UpdateHTML(ps.gonbID, "(...collecting metrics, minimum 3 required to start plotting...)")
+		gonbui.UpdateHtml(ps.gonbID, "(...collecting metrics, minimum 3 required to start plotting...)")
 	} else {
 		ps.DynamicPlot(false)
 	}
 	return ps
 }
 
-// Attach plots to the given loop, collecting metric values for plot. For each EvalDatasets given
-// to `Plots.New()`, their metrics are evaluated and also plotted.
-// It automatically calls Plots.Plot at the end of the loop (`loop.OnEnd()`).
-func (ps *Plots) Attach(loop *train.Loop, numPoints int) {
-	train.NTimesDuringLoop(loop, numPoints, "margaid plots", 0, ps.AddTrainAndEvalMetrics)
+// attachOnEnd of the loop to draw the final plot -- and clear the trasient area if using dynamic plots.
+func (ps *Plots) attachOnEnd(loop *train.Loop) {
 	loop.OnEnd("margaid plots", 120, func(_ *train.Loop, _ []tensor.Tensor) error {
 		// Final plot.
 		if ps.gonbID != "" {
@@ -311,6 +312,14 @@ func (ps *Plots) Attach(loop *train.Loop, numPoints int) {
 		}
 		return nil
 	})
+}
+
+// Attach plots to the given loop, collecting metric values for plot. For each EvalDatasets given
+// to `Plots.New()`, their metrics are evaluated and also plotted.
+// It automatically calls Plots.Plot at the end of the loop (`loop.OnEnd()`).
+func (ps *Plots) Attach(loop *train.Loop, numPoints int) {
+	train.NTimesDuringLoop(loop, numPoints, "margaid plots", 0, ps.AddTrainAndEvalMetrics)
+	ps.attachOnEnd(loop)
 }
 
 // AddTrainAndEvalMetrics will add the given train metrics, and run `loop.Trainer.Eval()` on each of the
