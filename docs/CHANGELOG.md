@@ -15,6 +15,7 @@
   * Added optional `reduceAxes` parameter to `L2Norm` and `L1Norm`.
   * Added `L2NormSquare`, `L2Normalize` and `L2NormalizeWithEpsilon`. 
 * Package `nanlogger`: added `AttachToTrainer`; improved docs.
+* Package `margaid`: automatic ending plot when loop finishes.
 
 ## v0.7.2 - 2023/10/27
 
