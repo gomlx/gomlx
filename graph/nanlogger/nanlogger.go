@@ -18,12 +18,16 @@
 // `NaN` ("not-a-number") or `Inf` (infinity) values.
 //
 // It does that by implementing `graph.LoggerFn` and hooking to the `graph.Exec` that
-// executes the graph. If at the end of a graph.Exec call, if a `NaN` value is found, the
-// first node where it appears (often `NaN` values spread through the graph) is reported back.
+// executes the graph -- it can also `AttachToTrainer`, so it automatically attaches to every
+// graph the trainer creates.
+//
+// If at the end of a graph.Exec call, if a `NaN` value is found on the traced computation nodes,
+// the first node where it appears (often `NaN` values spread through the graph) is reported back.
 //
 // The report includes a stack trace and an optional user set scoped context.
 //
-// Example:
+// Example: create a `NanLogger` and attaches it to the trainer, to it gets attached to every
+// graph created (if more than one is created by the trainer).
 //
 //	func train() {
 //		…
@@ -36,11 +40,8 @@
 //	func ModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {) {
 //		…
 //		for ii := 0; ii < numBlocks; ii++ {
-//			name := fmt.Sprintf("Residual-%d", ii+1)
-//			nanLogger.PushScope(name)
 //			x = ResidualBlock(ctx.In(name), x, lastNumChannels)
-//			nanLogger.Trace(x)
-//			nanLogger.PopScope()
+//			nanLogger.Trace(x, fmt.Sprintf("Residual-%d", ii+1))
 //		}
 //		…
 //	}
@@ -131,8 +132,7 @@ func (l *NanLogger) AttachToTrainer(trainer *train.Trainer) {
 // This means the node is monitored and whenever a NaN is observed, the trace is printed and the program exit.
 // Alternatively, a handler is called, see SetHandler.
 //
-// A user-provided scope can be given. If none is given, then it uses the current NanLogger scope.
-// These are two different methods of providing scope, both optional -- it's also fine not to provide any.
+// A user-provided extra scope can be given: it's appended to the current NanLogger scope.
 //
 // A nil NanLogger is valid, and it will simply be a no-op.
 func (l *NanLogger) Trace(node *graph.Node, scope ...string) {

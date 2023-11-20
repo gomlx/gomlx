@@ -49,7 +49,7 @@ func TestNanLogger(t *testing.T) {
 		v1 := Sqrt(values)
 		l.Trace(v1)
 		l.PopScope()
-		l.PushScope("not_used")
+		l.PushScope("base")
 		v2 := Inverse(values)
 		l.Trace(v2, "scope2")
 		l.PopScope()
@@ -74,7 +74,7 @@ func TestNanLogger(t *testing.T) {
 	require.Equal(t, 2, numHandlerCalls)
 	require.Equal(t, 1, numNan)
 	require.Equal(t, 1, numInf)
-	require.Equal(t, []string{"scope2"}, lastHandledScope)
+	require.Equal(t, []string{"base", "scope2"}, lastHandledScope)
 
 	// Check that the NaN happens before the Inf, and should be the one
 	// reported.
