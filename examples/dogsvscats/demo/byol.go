@@ -35,12 +35,9 @@ func ByolCnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 		return []*Node{onlineLogit} // Return only the logits.
 	}
 	onlineProjection := byolProjection(onlineCtx, onlineEmbedding)
-	onlineProjection = Div(onlineProjection, L2NormalizeWithEpsilon(onlineProjection, 1e-12, -1))
 	onlineTargetPrediction := layers.Dense(onlineCtx.In("target_prediction"), onlineProjection, true,
 		context.GetParamOr(onlineCtx, "byol_num_nodes", 0))
-	if nanLogger != nil {
-		nanLogger.Trace(onlineTargetPrediction, "onlineTargetPrediction")
-	}
+	onlineTargetPrediction = L2NormalizeWithEpsilon(onlineTargetPrediction, 1e-12, -1)
 
 	// "Target" model is the one used to regularize, and is updated by a moving
 	// average towards the "Online" model.
@@ -48,9 +45,7 @@ func ByolCnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	targetOutputs := CnnModelWithEmbedding(targetCtx, spec, inputs)
 	targetEmbedding := targetOutputs[1]
 	targetProjection := byolProjection(targetCtx, targetEmbedding)
-	nanLogger.Trace(targetProjection, "targetProjection")
-	targetProjection = Div(targetProjection, L2NormalizeWithEpsilon(targetProjection, 1e-12, -1))
-	nanLogger.Trace(targetProjection, "normalized targetProjection")
+	targetProjection = L2NormalizeWithEpsilon(targetProjection, 1e-12, -1)
 
 	// Gradient descent does not update the "target" model, so we `StopGradient` and mark their
 	// variables as not training.
@@ -61,9 +56,6 @@ func ByolCnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 
 	// Add a loss term regularizing the "online" model projection towards the "target" one.
 	targetRegularization := L2NormSquare(Sub(onlineTargetPrediction, targetProjection), -1)
-	if nanLogger != nil {
-		nanLogger.Trace(targetRegularization, "targetProjection")
-	}
 	train.AddLoss(ctx, targetRegularization)
 	//train.AddLoss(ctx, MulScalar(targetRegularization, 1.0))
 
