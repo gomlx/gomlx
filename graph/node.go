@@ -729,6 +729,11 @@ func ExpandAndBroadcast(x *Node, newDimensions []int, expandedAxes []int) (outpu
 // This interface is cumbersome, so instead we expose
 func broadcastInDim(x *Node, shape shapes.Shape, broadcastDims []int) *Node {
 	g := validateGraphFromInputs(x)
+	for _, dim := range shape.Dimensions {
+		if dim <= 0 {
+			Panicf("broadcastInDim(x.shape=%s, shape=%s): cannot create a shape with an axis with dimension <= 0", x.Shape(), shape)
+		}
+	}
 	if x.Rank() != len(broadcastDims) {
 		Panicf("there must be one broadcastDim for each axis of x in broadcastInDim, but x.shape=%s and broadcastDims=%v",
 			x.shape, broadcastDims)
