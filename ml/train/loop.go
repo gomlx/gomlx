@@ -102,7 +102,7 @@ func NewLoop(trainer *Trainer) *Loop {
 		onStep:         newPriorityHooks[*hookWithName[OnStepFn]](),
 		onEnd:          newPriorityHooks[*hookWithName[OnEndFn]](),
 		finalizeInputs: false,
-		LoopStep:       optimizers.GetGlobalStep(trainer.Context()),
+		LoopStep:       int(optimizers.GetGlobalStep(trainer.Context())),
 	}
 }
 
