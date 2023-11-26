@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"reflect"
+	"strconv"
 	"testing"
 )
 
@@ -46,6 +47,22 @@ func TestFromValue(t *testing.T) {
 	wantShape = shapes.Shape{DType: shapes.Float64, Dimensions: []int{1, 1, 1}}
 	shape, err = shapeForValue([][][]float64{{{1}}})
 	cmpShapes(t, shape, wantShape, err)
+
+	if strconv.IntSize == 64 {
+		wantShape = shapes.Shape{DType: shapes.Int64, Dimensions: nil}
+		shape, err = shapeForValue(5)
+		cmpShapes(t, shape, wantShape, err)
+	} else if strconv.IntSize == 32 {
+		wantShape = shapes.Shape{DType: shapes.Int32, Dimensions: nil}
+		shape, err = shapeForValue(5)
+		cmpShapes(t, shape, wantShape, err)
+	} else {
+		// For any other int size, it should panic.
+		wantShape = shapes.Shape{DType: shapes.Int32, Dimensions: nil}
+		require.Panics(t, func() {
+			shape, err = shapeForValue(5)
+		})
+	}
 
 	wantShape = shapes.Shape{DType: shapes.Int64, Dimensions: nil}
 	shape, err = shapeForValue(5)
@@ -73,18 +90,36 @@ func TestFromValue(t *testing.T) {
 	}
 
 	// Test for irregularly shaped slices.
-	shape, err = shapeForValue([][][]int{{{1}}, {{1, 2}}})
+	shape, err = shapeForValue([][][]int32{{{1}}, {{1, 2}}})
 	if err == nil {
 		t.Fatalf("Should have returned error for irregularly shaped slices")
 	}
 	fmt.Printf("\tExpected error: %v\n", err)
 
-	// Test correct setting of scalar value, dtype=int.
+	// Test correct setting of scalar value, dtype=Int64.
 	{
-		want := 5
+		want := int64(5)
 		var local *Local
 		require.NotPanics(t, func() { local = FromValue(want) })
 		assert.Equal(t, want, local.Value())
+	}
+
+	// Test correct setting of scalar value for Go type `int` (maybe dtype=Int64 or Int32).
+	if strconv.IntSize == 64 {
+		want := int64(5)
+		var local *Local
+		require.NotPanics(t, func() { local = FromValue(5) })
+		assert.Equal(t, want, local.Value())
+	} else if strconv.IntSize == 32 {
+		want := int32(5)
+		var local *Local
+		require.NotPanics(t, func() { local = FromValue(5) })
+		assert.Equal(t, want, local.Value())
+	} else {
+		// For any other int size, it should panic.
+		require.Panics(t, func() {
+			_ = FromValue(5)
+		})
 	}
 
 	// Test correct setting of 1D slice, dtype=float64
@@ -102,7 +137,7 @@ func TestFromValue(t *testing.T) {
 		if local.error != nil {
 			t.Fatalf("Failed to build scalar local: %v", err)
 		}
-		got, _ := local.Flat().([]float32)
+		got, _ := local.FlatCopy().([]float32)
 		if !slices.DeepSliceCmp(want, got, slices.Equal[float32]) {
 			t.Fatalf("Local read out got %v, wanted %v", got, want)
 		}
@@ -115,10 +150,24 @@ func TestFromValue(t *testing.T) {
 		if local.error != nil {
 			t.Fatalf("Failed to build scalar local: %v", err)
 		}
-		got, _ := local.Flat().([]bool)
+		got, _ := local.FlatCopy().([]bool)
 		if !reflect.DeepEqual(want, got) {
 			t.Fatalf("Local read out got %v, wanted %v", got, want)
 		}
+	}
+
+	// Test correct 2D slice, Go type=int, dtype=Int32 or Int64
+	{
+		local := FromValue([][]int{{1, 3}, {5, 7}})
+		if strconv.IntSize == 64 {
+			want := []int64{1, 3, 5, 7}
+			got, _ := local.FlatCopy().([]int64)
+			assert.Equal(t, want, got)
+		} else if strconv.IntSize == 32 {
+			want := []int32{1, 3, 5, 7}
+			got, _ := local.FlatCopy().([]int32)
+			assert.Equal(t, want, got)
+		} // Other int sizes will panic on `FromValue`.
 	}
 }
 
@@ -154,7 +203,7 @@ func TestValueOf(t *testing.T) {
 	testValueOf[float32](t)
 	testValueOf[float64](t)
 	testValueOf[int32](t)
-	testValueOf[int](t)
+	testValueOf[int64](t)
 	testValueOf[uint8](t)
 	testValueOf[uint32](t)
 	testValueOf[uint64](t)
@@ -164,7 +213,7 @@ func TestValueOf(t *testing.T) {
 
 func TestTuples(t *testing.T) {
 	elem0 := 5.0
-	elem1 := []int{1, 3}
+	elem1 := []int64{1, 3}
 
 	client, err := xla.NewClient("Host", 1, -1)
 	if err != nil {

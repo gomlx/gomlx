@@ -253,7 +253,7 @@ func DTypeForType(t reflect.Type) DType {
 		case 64:
 			return Int64
 		default:
-			exceptions.Panicf("Cannot use int of %d bits with GoMLX -- try using int32 or int64", strconv.IntSize)
+			exceptions.Panicf("cannot use int of %d bits with GoMLX -- try using int32 or int64", strconv.IntSize)
 		}
 	case reflect.Int64:
 		return Int64
