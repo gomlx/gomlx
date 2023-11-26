@@ -86,6 +86,8 @@ type Plots struct {
 	// filePath where to load data points from and save to. Only used if not empty.
 	filePath   string
 	fileWriter chan PlotPoint
+
+	evalLossMetricType string
 }
 
 // PlotPoint is used to save/load plot points. They reflect the parameters to Plots.AddPoint.
@@ -300,7 +302,18 @@ func (ps *Plots) DynamicUpdates() *Plots {
 	return ps
 }
 
-// attachOnEnd of the loop to draw the final plot -- and clear the trasient area if using dynamic plots.
+// WithEvalLossType defines the name to be used by the loss on eval datasets.
+// This is useful if one wants a separate plot for the loss in evaluation than the one used
+// for training (called "loss") -- this is needed if training includes loss terms that don't
+// show up in evaluation.
+//
+// A common choice of name here would be "eval_loss".
+func (ps *Plots) WithEvalLossType(evalLossMetricType string) *Plots {
+	ps.evalLossMetricType = evalLossMetricType
+	return ps
+}
+
+// attachOnEnd of the loop to draw the final plot -- and clear the transient area if using dynamic plots.
 func (ps *Plots) attachOnEnd(loop *train.Loop) {
 	loop.OnEnd("margaid plots", 120, func(_ *train.Loop, _ []tensor.Tensor) error {
 		// Final plot.
@@ -358,7 +371,11 @@ func (ps *Plots) AddTrainAndEvalMetrics(loop *train.Loop, trainMetrics []tensor.
 				incomplete = true
 				continue
 			}
-			ps.AddPoint(fmt.Sprintf("Eval on %s: %s", ds.Name(), desc.Name()), desc.MetricType(), step, metric)
+			metricType := desc.MetricType()
+			if ii == 0 && ps.evalLossMetricType != "" {
+				metricType = ps.evalLossMetricType
+			}
+			ps.AddPoint(fmt.Sprintf("Eval on %s: %s", ds.Name(), desc.Name()), metricType, step, metric)
 		}
 	}
 
