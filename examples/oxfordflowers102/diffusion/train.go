@@ -165,7 +165,7 @@ func TrainModel() {
 	if *flagRngReset {
 		ctx.RngStateReset()
 	}
-	globalStep := optimizers.GetGlobalStep(ctx)
+	globalStep := int(optimizers.GetGlobalStep(ctx))
 	if globalStep != 0 {
 		fmt.Printf("Restarting training from global_step=%d\n", globalStep)
 	}

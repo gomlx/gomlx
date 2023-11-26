@@ -386,7 +386,7 @@ func (h *Handler) String() string {
 }
 
 // newCheckpointBaseName returns the base name for the checkpoint files.
-func (h *Handler) newCheckpointBaseName(globalStep int) string {
+func (h *Handler) newCheckpointBaseName(globalStep int64) string {
 	now := time.Now().Format("20060102-150405")
 	if globalStep > 0 {
 		return fmt.Sprintf("%s%s-step-%08d", baseNamePrefix, now, globalStep)
@@ -583,8 +583,7 @@ func (h *Handler) Save() error {
 	}
 
 	// Read globalStep if one is set.
-	globalStepVar := optimizers.GetGlobalStepVar(h.ctx)
-	globalStep := globalStepVar.Value().Value().(int)
+	globalStep := optimizers.GetGlobalStep(h.ctx)
 
 	// Copy over Params.
 	if h.config.includeParams {

@@ -128,8 +128,8 @@ func TestMergedCheckpoints(t *testing.T) {
 		// Check that the values were averaged:
 		ctx := context.NewContext(manager).Checked(false)
 		_ = Build(ctx).Dir(dir).Keep(2).TakeMean(-1).MustDone()
-		globalStepV := optimizers.GetGlobalStepVar(ctx)
-		assert.Equal(t, 10, globalStepV.Value().Value(), "GlobalStep")
+		globalStep := optimizers.GetGlobalStep(ctx)
+		assert.Equal(t, int64(10), globalStep, "GlobalStep")
 		xV := ctx.VariableWithValue("x", []float64{1.0, 1.0, 1.0})
 		// Assume X will be loaded with the mean of the previous 2 checkpoints:
 		assert.Equal(t, []float64{2.0, 2.0, 2.0}, xV.Value().Value(), "X")

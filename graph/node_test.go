@@ -52,13 +52,12 @@ func testFuncOneInput(t *testing.T, testName string, graphFn graphFnOneInputToTe
 	fmt.Printf("%s\n", testName)
 	manager := buildTestManager()
 	g := manager.NewGraph(testName)
-	input, output := graphFn(g)
-	g.Compile(input, output)
-	tuple := g.Run(nil)
-	results := tuple.SplitTuple()
-	fmt.Printf("\t%s(%s) = %s\n", testName, results[0].Local().GoStr(), results[1].Local().GoStr())
-	if !slices.SlicesInDelta(results[1].Local().Value(), want, slices.Epsilon) {
-		t.Errorf("%s(%v): want=%v, got=%v", testName, results[0].Local(), want, results[1].Local().GoStr())
+	inputNode, outputNode := graphFn(g)
+	g.Compile(inputNode, outputNode)
+	results := g.Run(nil).SplitTuple()
+	input, got := results[0].Value(), results[1].Value()
+	if !slices.SlicesInDelta(want, got, slices.Epsilon) {
+		t.Errorf("%s(%#v): want=%v, got=%v", testName, input, want, got)
 	}
 }
 
@@ -103,7 +102,7 @@ func TestAdd(t *testing.T) {
 		wantShape := shapes.Shape{DType: shapes.Int64}
 		require.Truef(t, n.Shape().Eq(wantShape), "Add invalid shape %s, wanted %s", n.Shape(), wantShape)
 		local := compileRunTransfer(t, g, "scalar Graph")
-		got := local.Value().(int)
+		got := local.Value().(int64)
 		if got != 12 {
 			fmt.Printf("%s\n", g)
 			fmt.Printf("\tResult: %d %s\n", got, local.Shape())
@@ -314,13 +313,13 @@ func TestTwoArgsOps(t *testing.T) {
 	}
 
 	{
-		casesInt := []TwoArgsTestCase[int]{
-			{And, func(x, y int) int { return x & y }},
-			{Or, func(x, y int) int { return x | y }},
-			{Xor, func(x, y int) int { return x ^ y }},
+		casesInt := []TwoArgsTestCase[int64]{
+			{And, func(x, y int64) int64 { return x & y }},
+			{Or, func(x, y int64) int64 { return x | y }},
+			{Xor, func(x, y int64) int64 { return x ^ y }},
 		}
-		xSlices := [][]int{{11, 12}, {13, 14}}
-		yValue := 3
+		xSlices := [][]int64{{11, 12}, {13, 14}}
+		yValue := int64(3)
 		for _, test := range casesInt {
 			g := manager.NewGraph("")
 			x := Const(g, xSlices)
@@ -331,8 +330,8 @@ func TestTwoArgsOps(t *testing.T) {
 				t.Fatalf("Add invalid shape %s, wanted %s", n.Shape(), wantShape)
 			}
 			local := compileRunTransfer(t, g, "[2, 2] Graph")
-			got := local.Value().([][]int)
-			want := [][]int{{11, 12}, {13, 14}}
+			got := local.Value().([][]int64)
+			want := [][]int64{{11, 12}, {13, 14}}
 			for _, s1 := range want {
 				for ii := range s1 {
 					s1[ii] = test.fnScalar(s1[ii], yValue)
@@ -419,10 +418,10 @@ func TestOneArgOps(t *testing.T) {
 func TestClzOp(t *testing.T) {
 	testFuncOneInput(t, "Clz()",
 		func(g *Graph) (input, output *Node) {
-			input = Const(g, []int{16, 14})
+			input = Const(g, []int64{16, 14})
 			output = Clz(input)
 			return
-		}, []int{64 - 5, 64 - 4})
+		}, []int64{64 - 5, 64 - 4})
 }
 
 func TestLogicalOps(t *testing.T) {
@@ -469,25 +468,17 @@ func TestBroadcast(t *testing.T) {
 		input := Const(g, 7)
 		BroadcastToDims(input, 2, 3) // Last node created in the graph is taken as output by default.
 		got := compileAndRun(g)
-		want := [][]int{{7, 7, 7}, {7, 7, 7}}
-		if !slices.DeepSliceCmp(got, want, slices.Equal[int]) {
-			fmt.Printf("%s\n", g)
-			fmt.Printf("\tResult=%v\n", got)
-			t.Errorf("Wanted %v, got %v", want, got)
-		}
+		want := [][]int64{{7, 7, 7}, {7, 7, 7}}
+		assert.Equal(t, want, got)
 	}
 
 	{
 		g := manager.NewGraph("")
 		input := Const(g, []float32{1.1, 1.2})
-		BroadcastPrefix(input, []int{2, 1}) // Last node created in the graph is taken as output by default.
+		BroadcastPrefix(input, []int{2, 1}) // The last node created in the graph is taken as output by default.
 		got := compileAndRun(g)
 		want := [][][]float32{{{1.1, 1.2}}, {{1.1, 1.2}}} // Shape [2, 1, 2].
-		if !slices.DeepSliceCmp(got, want, slices.Equal[float32]) {
-			fmt.Printf("%s\n", g)
-			fmt.Printf("\tResult=%v\n", got)
-			t.Errorf("Wanted %v, got %v", want, got)
-		}
+		assert.Equal(t, want, got)
 	}
 
 	// Using now the new testFuncOneInput testing tool:
@@ -512,9 +503,9 @@ func TestFill(t *testing.T) {
 		g := manager.NewGraph("FillScalar")
 		FillScalar(g, shapes.Make(shapes.Int64, 3, 1), 4.0)
 		got := compileAndRun(g)
-		want := [][]int{{4}, {4}, {4}}
-		if !slices.DeepSliceCmp(got, want, slices.Equal[int]) {
-			t.Errorf("Wanted %v, got %v", want, got)
+		want := [][]int64{{4}, {4}, {4}}
+		if !slices.DeepSliceCmp(got, want, slices.Equal[int64]) {
+			t.Errorf("Wanted %#v, got %#v", want, got)
 		}
 	}
 	{
@@ -523,7 +514,7 @@ func TestFill(t *testing.T) {
 		got := compileAndRun(g)
 		want := [][]float32{{1}, {1}, {1}}
 		if !slices.DeepSliceCmp(got, want, slices.Equal[float32]) {
-			t.Errorf("Wanted %v, got %v", want, got)
+			t.Errorf("Wanted %#v, got %#v", want, got)
 		}
 	}
 	{
@@ -532,7 +523,7 @@ func TestFill(t *testing.T) {
 		got := compileAndRun(g)
 		want := [][]float64{{0}, {0}, {0}}
 		if !slices.DeepSliceCmp(got, want, slices.Equal[float64]) {
-			t.Errorf("Wanted %v, got %v", want, got)
+			t.Errorf("Wanted %#v, got %#v", want, got)
 		}
 	}
 }
@@ -699,7 +690,7 @@ func TestIota(t *testing.T) {
 func TestSlice(t *testing.T) {
 	graphtest.RunTestGraphFn(t, "Slice Tests with Rank 1",
 		func(g *Graph) (inputs, outputs []*Node) {
-			x := Const(g, []int{1, 2, 3, 4})
+			x := Const(g, []int64{1, 2, 3, 4})
 			inputs = []*Node{x}
 			outputs = []*Node{
 				Slice(x),
@@ -711,17 +702,17 @@ func TestSlice(t *testing.T) {
 			}
 			return
 		}, []any{
-			[]int{1, 2, 3, 4},
-			[]int{1, 2, 3, 4},
-			[]int{3, 4},
-			[]int{2, 3},
-			[]int{1, 3},
-			[]int{3},
+			[]int64{1, 2, 3, 4},
+			[]int64{1, 2, 3, 4},
+			[]int64{3, 4},
+			[]int64{2, 3},
+			[]int64{1, 3},
+			[]int64{3},
 		}, slices.Epsilon)
 
 	graphtest.RunTestGraphFn(t, "Slice Tests with Rank 1",
 		func(g *Graph) (inputs, outputs []*Node) {
-			x := Const(g, [][]int{{1, 2, 3}, {4, 5, 6}})
+			x := Const(g, [][]int32{{1, 2, 3}, {4, 5, 6}})
 			inputs = []*Node{x}
 			outputs = []*Node{
 				Slice(x, AxisRange(), AxisElem(0)),
@@ -730,9 +721,9 @@ func TestSlice(t *testing.T) {
 			}
 			return
 		}, []any{
-			[][]int{{1}, {4}},
-			[][]int{{4, 5, 6}},
-			[][]int{{3}},
+			[][]int32{{1}, {4}},
+			[][]int32{{4, 5, 6}},
+			[][]int32{{3}},
 		}, slices.Epsilon)
 
 	graphtest.RunTestGraphFn(t, "Slice Tests with Rank 1",
@@ -748,8 +739,8 @@ func TestSlice(t *testing.T) {
 			}
 			return
 		}, []any{
-			[][][][]int{{{{1}}}, {{{9}}}},
-			[][][][]int{{{{0}}}},
+			[][][][]int64{{{{1}}}, {{{9}}}},
+			[][][][]int64{{{{0}}}},
 		}, slices.Epsilon)
 
 }
@@ -757,7 +748,7 @@ func TestSlice(t *testing.T) {
 func TestPad(t *testing.T) {
 	graphtest.RunTestGraphFn(t, "Slice Tests with Rank 1",
 		func(g *Graph) (inputs, outputs []*Node) {
-			x := Const(g, [][]int{{1, 2}, {3, 4}})
+			x := Const(g, [][]int64{{1, 2}, {3, 4}})
 			zero := ScalarZero(g, x.DType())
 			inputs = []*Node{x, zero}
 			outputs = []*Node{
@@ -766,8 +757,8 @@ func TestPad(t *testing.T) {
 			}
 			return
 		}, []any{
-			[][]int{{1, 2}, {3, 4}},
-			[][]int{{0, 1, 0, 2}, {0, 3, 0, 4}},
+			[][]int64{{1, 2}, {3, 4}},
+			[][]int64{{0, 1, 0, 2}, {0, 3, 0, 4}},
 		}, slices.Epsilon)
 }
 
@@ -876,8 +867,8 @@ func TestIndicesForShape(t *testing.T) {
 	g.Compile(numbers)
 	got := g.Run(nil).Local()
 	fmt.Printf("\tIndicesForShape(%s)=%v\n", shape, got)
-	want := [][]int{{0, 0, 0}, {0, 0, 1}, {0, 0, 2}, {0, 0, 3}, {0, 1, 0}, {0, 1, 1}, {0, 1, 2}, {0, 1, 3}, {0, 2, 0}, {0, 2, 1}, {0, 2, 2}, {0, 2, 3}, {1, 0, 0}, {1, 0, 1}, {1, 0, 2}, {1, 0, 3}, {1, 1, 0}, {1, 1, 1}, {1, 1, 2}, {1, 1, 3}, {1, 2, 0}, {1, 2, 1}, {1, 2, 2}, {1, 2, 3}}
-	if !slices.DeepSliceCmp(got.Value(), want, slices.Equal[int]) {
+	want := [][]int64{{0, 0, 0}, {0, 0, 1}, {0, 0, 2}, {0, 0, 3}, {0, 1, 0}, {0, 1, 1}, {0, 1, 2}, {0, 1, 3}, {0, 2, 0}, {0, 2, 1}, {0, 2, 2}, {0, 2, 3}, {1, 0, 0}, {1, 0, 1}, {1, 0, 2}, {1, 0, 3}, {1, 1, 0}, {1, 1, 1}, {1, 1, 2}, {1, 1, 3}, {1, 2, 0}, {1, 2, 1}, {1, 2, 2}, {1, 2, 3}}
+	if !slices.DeepSliceCmp(got.Value(), want, slices.Equal[int64]) {
 		t.Errorf("IndicesForShape(%s): want %v, got %v", shape, want, got)
 	}
 }
@@ -1089,16 +1080,16 @@ func TestSqueeze(t *testing.T) {
 			}
 			return
 		}, []any{
-			[][]int{
+			[][]int64{
 				{0, 0},
 				{0, 0},
 			},
-			[][]int{
+			[][]int64{
 				{0, 0},
 				{0, 0},
 			},
-			1,
-			1,
+			int64(1),
+			int64(1),
 		}, -1)
 }
 
