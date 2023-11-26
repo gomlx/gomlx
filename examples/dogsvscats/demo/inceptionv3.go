@@ -20,10 +20,10 @@ import (
 // - no scaling (from 0.0 to 1.0): 62.5% accuracy
 // - with Keras scale (from -1.0 to 1.0): 61.8% accuracy
 func InceptionV3ModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
-	_ = spec           // Not needed.
-	image := inputs[0] // Images scaled from 0.0 to 1.0
+	_ = spec            // Not needed.
+	images := inputs[0] // Images scaled from 0.0 to 1.0
 	channelsConfig := timage.ChannelsLast
-	image = inceptionv3.PreprocessImage(image, 1.0, channelsConfig) // Adjust image to format used by Inception.
+	images = inceptionv3.PreprocessImage(images, 1.0, channelsConfig) // Adjust image to format used by Inception.
 
 	var preTrainedPath string
 	if *flagInceptionPreTrained {
@@ -32,10 +32,15 @@ func InceptionV3ModelGraph(ctx *context.Context, spec any, inputs []*Node) []*No
 		err := inceptionv3.DownloadAndUnpackWeights(*flagDataDir) // Only downloads/unpacks the first time.
 		AssertNoError(err)
 	}
-	logits := inceptionv3.BuildGraph(ctx, image).
+	inceptionV3Builder := inceptionv3.BuildGraph(ctx, images).
 		PreTrained(preTrainedPath).
 		SetPooling(inceptionv3.MaxPooling).
-		Trainable(*flagInceptionFineTuning).Done()
+		Trainable(*flagInceptionFineTuning)
+	if *flagInceptionPreTrained {
+		inceptionV3Builder = inceptionV3Builder.PreTrained(preTrainedPath)
+	}
+	logits := inceptionV3Builder.Done()
+
 	if !*flagInceptionFineTuning {
 		logits = StopGradient(logits) // We don't want to train the inception model.
 	}

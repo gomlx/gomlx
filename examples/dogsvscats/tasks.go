@@ -177,12 +177,13 @@ func CreateDatasets(config *Configuration) (trainDS, trainEvalDS, validationEval
 	shuffle := rand.New(rand.NewSource(time.Now().UTC().UnixNano()))
 	usePretrained := !config.ForceOriginal
 	trainPath := path.Join(config.DataDir, PreGeneratedTrainFileName)
+	trainPairPath := path.Join(config.DataDir, PreGeneratedTrainPairFileName)
 	trainEvalPath := path.Join(config.DataDir, PreGeneratedTrainEvalFileName)
 	validPath := path.Join(config.DataDir, PreGeneratedValidationFileName)
 
 	if usePretrained {
 		// Check the pre-trained files exist:
-		for _, filePath := range []string{trainPath, trainEvalPath, validPath} {
+		for _, filePath := range []string{trainPath, trainPairPath, trainEvalPath, validPath} {
 			if _, err := os.Stat(filePath); err != nil {
 				usePretrained = false
 				break
@@ -192,8 +193,12 @@ func CreateDatasets(config *Configuration) (trainDS, trainEvalDS, validationEval
 
 	if usePretrained {
 		// Build pre-trained datasets:
-		trainDS = NewPreGeneratedDataset("train [Pre]", trainPath, config.BatchSize, true,
+		trainPre := NewPreGeneratedDataset("train [Pre]", trainPath, config.BatchSize, true,
 			config.ModelImageSize, config.ModelImageSize, config.DType)
+		if config.YieldImagePairs {
+			trainPre = trainPre.WithImagePairs(trainPairPath)
+		}
+		trainDS = trainPre
 		trainEvalDS = NewPreGeneratedDataset("train-eval [Pre]", trainEvalPath, config.EvalBatchSize, false,
 			config.ModelImageSize, config.ModelImageSize, config.DType)
 		validationEvalDS = NewPreGeneratedDataset("valid-eval [Pre]", validPath, config.EvalBatchSize, false,

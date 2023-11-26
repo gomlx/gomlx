@@ -385,6 +385,7 @@ func (ds *Dataset) yieldIndices() (dogsAndCats [2][]int, err error) {
 func (ds *Dataset) YieldImages() (images []image.Image, labels []DorOrCat, indices []int, err error) {
 	// It uses Dataset.yieldIndices to select which images to return. This function then
 	// reads / scales / augment the images.
+	//fmt.Printf("YieldImages: yieldPairs=%v\n", ds.yieldPairs)
 	dogsAndCats, err := ds.yieldIndices()
 	if err != nil {
 		return
@@ -562,12 +563,6 @@ func (ds *Dataset) Save(numEpochs int, verbose bool, writers ...io.Writer) error
 	if ds.batchSize%2 != 0 {
 		return errors.Errorf("batch size %d is not even, and will lead to more dogs than cats, please choose something divided by 2", ds.batchSize)
 	}
-	if len(writers) == 0 {
-		return errors.Errorf("no writers to save dataset %q to", ds.Name())
-	}
-	if len(writers) > 2 {
-		return errors.Errorf("%d writers given to save dataset %q: only one or two possible", len(writers), ds.Name())
-	}
 	if ds.yieldPairs && len(writers) != 2 {
 		return errors.Errorf("dataset %q configured to yield pairs, 2 writers required but %d writers given", ds.Name(), len(writers))
 	}
@@ -616,15 +611,19 @@ func (ds *Dataset) Save(numEpochs int, verbose bool, writers ...io.Writer) error
 				var err error
 				var images []image.Image
 				var labels []DorOrCat
+			loopImageWrite:
 				for {
 					images, labels, _, err = ds.YieldImages()
 					if err != nil {
 						break
 					}
 
-					for writerIdx, writer := range writers {
+					var buffers [2][][]byte
+					for writerIdx := range writers {
+						buffers[writerIdx] = make([][]byte, ds.batchSize)
 						for imgIdx := 0; imgIdx < ds.batchSize; imgIdx++ {
 							buffer := make([]byte, ds.width*ds.height*4+1)
+							buffers[writerIdx][imgIdx] = buffer
 							pos := 0
 							buffer[pos] = (byte)(labels[imgIdx])
 							pos += 1
@@ -638,16 +637,18 @@ func (ds *Dataset) Save(numEpochs int, verbose bool, writers ...io.Writer) error
 									}
 								}
 							}
-							muWrite.Lock()
-							_, err = writer.Write(buffer)
-							muWrite.Unlock()
+						}
+					}
+					muWrite.Lock()
+					for writerIdx, writer := range writers {
+						for imgIdx := 0; imgIdx < ds.batchSize; imgIdx++ {
+							_, err = writer.Write(buffers[writerIdx][imgIdx])
 							if err != nil {
-								break
+								break loopImageWrite
 							}
 						}
 					}
 					if verbose {
-						muWrite.Lock()
 						addToPBar += ds.batchSize
 						now := time.Now()
 						if now.After(nextPBarUpdate) {
@@ -656,11 +657,8 @@ func (ds *Dataset) Save(numEpochs int, verbose bool, writers ...io.Writer) error
 							addToPBar = 0
 							nextPBarUpdate = now.Add(maxFrequencyPBar)
 						}
-						muWrite.Unlock()
 					}
-					if err != nil {
-						break
-					}
+					muWrite.Unlock()
 				}
 				if err != nil && err != io.EOF {
 					errChan <- err
@@ -692,17 +690,18 @@ func (ds *Dataset) Save(numEpochs int, verbose bool, writers ...io.Writer) error
 // PreGeneratedDataset implements train.Dataset by reading the images from the pre-generated (scaled and
 // optionally augmented) images data. See Dataset.Save for saving these pre-generated files.
 type PreGeneratedDataset struct {
-	name            string
-	filePath        string
-	dtype           shapes.DType
-	batchSize       int
-	width, height   int
-	openedFile      *os.File
-	infinite        bool
-	err             error
-	buffer          []byte
-	labelsAsTypes   []DorOrCat
-	steps, maxSteps int
+	name                       string
+	filePath, pairFilePath     string
+	dtype                      shapes.DType
+	batchSize                  int
+	width, height              int
+	openedFile, openedPairFile *os.File
+	infinite                   bool
+	yieldPairs                 bool
+	err                        error
+	buffer, pairBuffer         []byte
+	labelsAsTypes              []DorOrCat
+	steps, maxSteps            int
 }
 
 // Assert PreGeneratedDataset is a train.Dataset.
@@ -735,6 +734,23 @@ func (pds *PreGeneratedDataset) Name() string { return pds.name }
 // This is useful for testing.
 func (pds *PreGeneratedDataset) WithMaxSteps(numSteps int) *PreGeneratedDataset {
 	pds.maxSteps = numSteps
+	return pds
+}
+
+// WithImagePairs configures the dataset to yield image pairs (with the different augmentation).
+//
+// It takes a second file path `pairFilePath` that points to the pair images.
+// If `pairFilePath` is empty, it disables yielding image pairs.
+func (pds *PreGeneratedDataset) WithImagePairs(pairFilePath string) *PreGeneratedDataset {
+	pds.yieldPairs = pairFilePath != ""
+	pds.pairFilePath = pairFilePath
+	pds.Reset()
+	if pds.yieldPairs {
+		batchBytes := pds.batchSize * pds.entrySize()
+		pds.pairBuffer = make([]byte, batchBytes)
+	} else {
+		pds.pairBuffer = nil
+	}
 	return pds
 }
 
@@ -778,23 +794,40 @@ func (pds *PreGeneratedDataset) Yield() (spec any, inputs, labels []tensor.Tenso
 			pds.err = errors.Wrapf(err, "failed reading PreGeneratedDataset from file %q ", pds.filePath)
 			return nil, nil, nil, pds.err
 		}
+		if pds.yieldPairs {
+			_, err = pds.openedPairFile.Read(pds.pairBuffer)
+			if err != nil {
+				pds.err = errors.Wrapf(err, "failed reading PreGeneratedDataset from file %q ", pds.pairFilePath)
+				return nil, nil, nil, pds.err
+			}
+		}
 
 		entrySize := pds.entrySize()
 		for ii := 0; ii < pds.batchSize; ii++ {
 			pds.labelsAsTypes[ii] = DorOrCat(pds.buffer[ii*entrySize])
 		}
 		labels = []tensor.Tensor{tensor.FromAnyValue(shapes.CastAsDType(pds.labelsAsTypes, pds.dtype))}
-		var t *tensor.Local
+		var t, pairT *tensor.Local
 		switch pds.dtype {
 		case shapes.Float32:
 			t = BytesToTensor[float32](pds.buffer, pds.batchSize, pds.width, pds.height)
+			if pds.yieldPairs {
+				pairT = BytesToTensor[float32](pds.pairBuffer, pds.batchSize, pds.width, pds.height)
+			}
 		case shapes.Float64:
 			t = BytesToTensor[float64](pds.buffer, pds.batchSize, pds.width, pds.height)
+			if pds.yieldPairs {
+				pairT = BytesToTensor[float64](pds.pairBuffer, pds.batchSize, pds.width, pds.height)
+			}
 		default:
 			pds.err = errors.Wrapf(err, "PreGeneratedDataset with dtype=%q not supported", pds.dtype)
 			return nil, nil, nil, pds.err
 		}
-		inputs = []tensor.Tensor{t}
+		if pds.yieldPairs {
+			inputs = []tensor.Tensor{t, pairT}
+		} else {
+			inputs = []tensor.Tensor{t}
+		}
 		break
 	}
 	return
@@ -809,6 +842,17 @@ func (pds *PreGeneratedDataset) Reset() {
 	pds.openedFile, pds.err = os.Open(pds.filePath)
 	if pds.err != nil {
 		pds.err = errors.Wrapf(pds.err, "failed to open file %q", pds.filePath)
+	}
+
+	// Open image pairs file if requested:
+	if pds.openedPairFile != nil {
+		_ = pds.openedPairFile.Close()
+	}
+	if pds.yieldPairs {
+		pds.openedPairFile, pds.err = os.Open(pds.pairFilePath)
+		if pds.err != nil {
+			pds.err = errors.Wrapf(pds.err, "failed to open file %q", pds.pairFilePath)
+		}
 	}
 }
 

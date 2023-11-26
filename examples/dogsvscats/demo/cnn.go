@@ -13,30 +13,39 @@ import (
 // It returns the logit, not the predictions, which works with most losses.
 // inputs: only one tensor, with shape `[batch_size, width, height, depth]`.
 func CnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
-	outputs := CnnModelWithEmbedding(ctx, spec, inputs)
-	return outputs[:1] // Return only the logits.
+	logit, _ := CnnModelWithEmbedding(ctx, inputs[0])
+	return []*Node{logit} // Return only the logits.
 }
 
 // CnnModelWithEmbedding builds a CNN model and return the final logit of the binary classification and the last layer embeddings.
-func CnnModelWithEmbedding(ctx *context.Context, spec any, inputs []*Node) []*Node {
-	_ = spec // Not needed.
-	x := inputs[0]
-	filterSize := 16
-	batchSize := x.Shape().Dimensions[0]
-	logits := x
-	imgSize := x.Shape().Dimensions[1]
+func CnnModelWithEmbedding(ctx *context.Context, images *Node) (logit, embedding *Node) {
 	numConvolutions := context.GetParamOr(ctx, "num_convolutions", 5)
+	dropoutRate := context.GetParamOr(ctx, "conv_dropout", 0.0)
+	var dropoutNode *Node
+	if dropoutRate > 0.0 {
+		dropoutNode = Scalar(images.Graph(), images.DType(), dropoutRate)
+	}
+
+	filterSize := 16
+	batchSize := images.Shape().Dimensions[0]
+	logits := images
+	imgSize := images.Shape().Dimensions[1]
 	for convIdx := 0; convIdx < numConvolutions && imgSize > 16; convIdx++ {
 		ctx := ctx.In(fmt.Sprintf("conv_%d", convIdx))
-		residual := logits
 		if convIdx > 0 {
-			logits = layers.Relu(logits)
+			logits = normalizeImage(ctx, logits)
 		}
-		logits = layers.Convolution(ctx, logits).Filters(filterSize).KernelSize(3).PadSame().Done()
-		logits = layers.Relu(logits)
-		logits = normalizeImage(ctx, logits)
-		if convIdx > 0 {
-			logits = Add(logits, residual)
+		for repeat := 0; repeat < 2; repeat++ {
+			ctx := ctx.In(fmt.Sprintf("repeat_%d", repeat))
+			residual := logits
+			logits = layers.Convolution(ctx, logits).Filters(filterSize).KernelSize(3).PadSame().Done()
+			logits = layers.Relu(logits)
+			if dropoutNode != nil {
+				logits = layers.Dropout(ctx, logits, dropoutNode)
+			}
+			if residual.Shape().Eq(logits.Shape()) {
+				logits = Add(logits, residual)
+			}
 		}
 		if imgSize > 16 {
 			// Reduce image size by 2 each time.
@@ -49,9 +58,9 @@ func CnnModelWithEmbedding(ctx *context.Context, spec any, inputs []*Node) []*No
 	// Flatten the resulting image, and treat the convolved values as tabular.
 	logits = Reshape(logits, batchSize, -1)
 	logits = FnnOnTop(ctx, logits)
-	embedding := logits
-	logits = layers.DenseWithBias(ctx.In("readout"), logits, 1)
-	return []*Node{logits, embedding}
+	embedding = logits
+	logit = layers.DenseWithBias(ctx.In("readout"), logits, 1)
+	return
 }
 
 // FnnOnTop adds a feedforward neural network on top of the CNN layer and returns the "embedding" of the last layer.

@@ -58,7 +58,7 @@ var (
 	flagNumReplicas    = flag.Int("num_replicas", 1, "Number of replicas.")
 	flagPlatform       = flag.String("platform", "", "Platform to use, if empty uses the default one.")
 	flagCheckpoint     = flag.String("checkpoint", "", "Directory save and load checkpoints from. If left empty, no checkpoints are created.")
-	flagCheckpointKeep = flag.Int("checkpoint_keep", 10, "Number of checkpoints to keep, if --checkpoint is set.")
+	flagCheckpointKeep = flag.Int("checkpoint_keep", 2, "Number of checkpoints to keep, if --checkpoint is set.")
 	flagNanLogger      = flag.Bool("nanlogger", false, "Set to enable logging of NaN values, as soon as they happen.")
 
 	// Training hyperparameters:
@@ -69,8 +69,11 @@ var (
 	flagLearningRate     = flag.Float64("learning_rate", 0.0001, "Initial learning rate.")
 	flagL2Regularization = flag.Float64("l2_reg", 0, "L2 regularization on kernels. It doesn't interact well with --batch_norm.")
 	flagNormalization    = flag.String("norm", "layer", fmt.Sprintf("Type of layer normalization to use. Valid values: %q.", slices.SortedKeys(layers.KnownNormalizers)))
-	flagNumConvolutions  = flag.Int("num_convolutions", 5, "Number of convolutions -- there will be at least as many to reduce the image to 16x16")
 	flagEval             = flag.Bool("eval", true, "Whether to evaluate trained model on test data in the end.")
+
+	// Convolution
+	flagNumConvolutions = flag.Int("num_convolutions", 5, "Number of convolutions -- there will be at least as many to reduce the image to 16x16")
+	flagConvDropout     = flag.Float64("conv_dropout", 0, "Amount of dropout in the convolution layers. 0 means no dropout.")
 
 	// Flat part of model, after convolutions and models being flattened:
 	flagNumHiddenLayers = flag.Int("hidden_layers", 3, "Number of hidden layers, stacked with residual connection.")
@@ -80,13 +83,8 @@ var (
 	flagInceptionPreTrained = flag.Bool("pretrained", true, "If using inception model, whether to use the pre-trained weights to transfer learn")
 	flagInceptionFineTuning = flag.Bool("finetuning", true, "If using inception model, whether to fine-tune the inception model")
 
-	// BYOL model parameters:
-	flagByolProjectionNumLayers = flag.Int("byol_hidden_layers", 2, "When using \"byol\" model, this is the number of layers in the projection to the target regularizing model.")
-	flagByolProjectionNumNodes  = flag.Int("byol_num_nodes", 128, "When using \"byol\" model, this is the number of nodes (dimension) in the projection to the target regularizing model.")
-	flagByolTargetUpdateRatio   = flag.Float64("byol_target_update_ratio", 0.999, "Moving average update weight to the \"target\" sub-model for BYOL model.")
-
 	// Flat augmentation hyperparameters:
-	flagAngleStdDev  = flag.Float64("angle", 5.0, "Standard deviation of noise used to rotate the image. Disabled if --augment=false.")
+	flagAngleStdDev  = flag.Float64("angle", 20.0, "Standard deviation of noise used to rotate the image. Disabled if --augment=false.")
 	flagFlipRandomly = flag.Bool("flip", true, "Randomly flip the image horizontally. Disabled if --augment=false.")
 
 	// Pre-Generation parameters:
@@ -102,6 +100,10 @@ func AssertNoError(err error) {
 		log.Fatalf("Failed: %+v", err)
 	}
 }
+
+// nanLogger is used for debugging, enabled with --nanlogger in the command line.
+// See `nanlogger` package for details.
+var nanLogger *nanlogger.NanLogger
 
 func main() {
 	flag.Parse()
@@ -129,7 +131,7 @@ func main() {
 	config.ForceOriginal = *flagForceOriginal
 	config.UseParallelism = true
 	config.BufferSize = 100
-	config.YieldImagePairs = *flagModelType == "byol"
+	config.YieldImagePairs = *flagModelType == "byol" && *flagByolUsePairs
 
 	trainModel(config)
 }
@@ -142,6 +144,7 @@ func NewContext(manager *Manager) *context.Context {
 	ctx.SetParam(layers.L2RegularizationKey, *flagL2Regularization)
 	ctx.SetParam("normalization", *flagNormalization)
 	ctx.SetParam("num_convolutions", *flagNumConvolutions)
+	ctx.SetParam("conv_dropout", *flagConvDropout)
 	ctx.SetParam("hidden_layers", *flagNumHiddenLayers)
 	ctx.SetParam("num_nodes", *flagNumNodes)
 
@@ -150,6 +153,9 @@ func NewContext(manager *Manager) *context.Context {
 		ctx.SetParam("byol_hidden_layers", *flagByolProjectionNumLayers)
 		ctx.SetParam("byol_num_nodes", *flagByolProjectionNumNodes)
 		ctx.SetParam("byol_target_update_ratio", *flagByolTargetUpdateRatio)
+		ctx.SetParam("byol_use_pairs", *flagByolUsePairs)
+		ctx.SetParam("byol_regularization_rate", *flagByolRegularizationRate)
+		ctx.SetParam("byol_inception", *flagByolInception)
 	}
 
 	if *flagNanLogger {
@@ -198,6 +204,8 @@ func trainModel(config *dogsvscats.Configuration) {
 		}
 	case "byol":
 		modelFn = ByolCnnModelGraph
+	default:
+		Panicf("Unknown model %q: valid values are \"cnn\", \"inception\" or \"byol\"")
 	}
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
@@ -226,7 +234,8 @@ func trainModel(config *dogsvscats.Configuration) {
 	// The points generated are saved along the checkpoint directory (if one is given).
 	var plots *margaid.Plots
 	if *flagPlots {
-		plots = margaid.NewDefault(loop, checkpoint.Dir(), 100, 1.1, trainEvalDS, validationEvalDS)
+		plots = margaid.NewDefault(loop, checkpoint.Dir(), 100, 1.1, trainEvalDS, validationEvalDS).
+			WithEvalLossType("eval-loss")
 	}
 
 	// Loop for given number of steps.
