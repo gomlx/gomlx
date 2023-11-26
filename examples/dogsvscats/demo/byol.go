@@ -21,9 +21,9 @@ import (
 var (
 	flagByolProjectionNumLayers = flag.Int("byol_hidden_layers", 2, "When using \"byol\" model, this is the number of layers in the projection to the target regularizing model.")
 	flagByolProjectionNumNodes  = flag.Int("byol_num_nodes", 128, "When using \"byol\" model, this is the number of nodes (dimension) in the projection to the target regularizing model.")
-	flagByolTargetUpdateRatio   = flag.Float64("byol_target_update_ratio", 0.99, "Moving average update weight to the \"target\" sub-model for BYOL model.")
+	flagByolTargetUpdateRatio   = flag.Float64("byol_target_update_ratio", 0.999, "Moving average update weight to the \"target\" sub-model for BYOL model.")
 	flagByolUsePairs            = flag.Bool("byol_use_pairs", true, "BYOL trained on pairs of images.")
-	flagByolRegularizationRate  = flag.Float64("byol_regularization_rate", 1.0, "BYOL regularization loss rate, a simple multiplier.")
+	flagByolRegularizationRate  = flag.Float64("byol_regularization_rate", 3.1, "BYOL regularization loss rate, a simple multiplier.")
 	flagByolInception           = flag.Bool("byol_inception", false, "Instaed of using a CNN model with BYOL, uses InceptionV3.")
 	flagByolOnlyPrediction      = flag.Bool("byol_only_prediction", false, "Train only the prediction, and not the regularization.")
 )

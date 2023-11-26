@@ -73,9 +73,10 @@ var (
 
 	// Convolution
 	flagNumConvolutions = flag.Int("num_convolutions", 5, "Number of convolutions -- there will be at least as many to reduce the image to 16x16")
-	flagConvDropout     = flag.Float64("conv_dropout", 0, "Amount of dropout in the convolution layers. 0 means no dropout.")
+	flagConvDropout     = flag.Float64("conv_dropout", 0.1, "Amount of dropout in the convolution layers. 0 means no dropout.")
 
 	// Flat part of model, after convolutions and models being flattened:
+	flagDropout         = flag.Float64("dropout", 0.1, "Amount of dropout in the convolution layers. 0 means no dropout.")
 	flagNumHiddenLayers = flag.Int("hidden_layers", 3, "Number of hidden layers, stacked with residual connection.")
 	flagNumNodes        = flag.Int("num_nodes", 128, "Number of nodes in hidden layers.")
 
@@ -145,6 +146,7 @@ func NewContext(manager *Manager) *context.Context {
 	ctx.SetParam("normalization", *flagNormalization)
 	ctx.SetParam("num_convolutions", *flagNumConvolutions)
 	ctx.SetParam("conv_dropout", *flagConvDropout)
+	ctx.SetParam("dropout", *flagDropout)
 	ctx.SetParam("hidden_layers", *flagNumHiddenLayers)
 	ctx.SetParam("num_nodes", *flagNumNodes)
 
@@ -205,7 +207,7 @@ func trainModel(config *dogsvscats.Configuration) {
 	case "byol":
 		modelFn = ByolCnnModelGraph
 	default:
-		Panicf("Unknown model %q: valid values are \"cnn\", \"inception\" or \"byol\"", *flagModelType)
+		Panicf("Unknown model %q: valid values are \"cnn\", \"inception\" or \"byol\"")
 	}
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding

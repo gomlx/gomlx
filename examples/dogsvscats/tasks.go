@@ -93,7 +93,7 @@ type Configuration struct {
 var (
 	DefaultConfig = &Configuration{
 		DType:           shapes.Float32,
-		BatchSize:       32,
+		BatchSize:       16,
 		EvalBatchSize:   100, // Faster evaluation with larger batches.
 		ModelImageSize:  inceptionv3.MinimumImageSize,
 		NumFolds:        5,

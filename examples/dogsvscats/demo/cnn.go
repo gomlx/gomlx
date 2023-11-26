@@ -65,12 +65,21 @@ func CnnModelWithEmbedding(ctx *context.Context, images *Node) (logit, embedding
 
 // FnnOnTop adds a feedforward neural network on top of the CNN layer and returns the "embedding" of the last layer.
 func FnnOnTop(ctx *context.Context, logits *Node) *Node {
+	dropoutRate := context.GetParamOr(ctx, "dropout", 0.0)
+	var dropoutNode *Node
+	if dropoutRate > 0.0 {
+		dropoutNode = Scalar(logits.Graph(), logits.DType(), dropoutRate)
+	}
+
 	numHiddenLayers := context.GetParamOr(ctx, "hidden_layers", 3)
 	numNodes := context.GetParamOr(ctx, "num_nodes", 3)
 	for ii := 0; ii < numHiddenLayers; ii++ {
 		ctx := ctx.In(fmt.Sprintf("dense_%d", ii))
 		residual := logits
 		// Add layer with residual connection.
+		if dropoutNode != nil {
+			logits = layers.Dropout(ctx, logits, dropoutNode)
+		}
 		logits = layers.Relu(logits)
 		logits = layers.DenseWithBias(ctx, logits, numNodes)
 		logits = normalizeFeatures(ctx, logits)
