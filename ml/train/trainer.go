@@ -125,9 +125,9 @@ const (
 //
 //   - lossFn takes the predictions (the output of modelFn) and the labels and outputs the loss. If the
 //     returned loss is not a scalar, it will be ReduceAllMean to a scalar.
-//     There are several standard losses available in gomlx/ml/train/losses package. They can simply be used
-//     as is, or called by arbitrary custom losses. It can also be set to nil, if it's doing
-//     unsupervised training, or for any other reason if the model uses
+//     There are several standard losses available in gomlx/ml/train/losses package.
+//     They can simply be used as is, or called by arbitrary custom losses.
+//     It can also be set to nil, if one is providing loss terms with `AddLoss` -- e.g.: for unsupervised training.
 //
 //   - optimizer (e.g: optimizers.StochasticGradientDescent) is the methodology to improve the model variables (aka.
 //     parameters or weights) to minimize the loss (the output of lossFn), typically using gradient descent.
@@ -499,7 +499,11 @@ func (r *Trainer) OnExecCreation(handler OnExecFn) {
 // AddLoss adds the given scalar loss (if it is not scalar, it will be reduced with ReduceAllMean)
 // to the context's Params. This is the loss used by the trainer to optimize the model.
 //
-// The loss is added to previous values of loss added (if any), they should all have the same dtype.
+// This function can be called multiple times and the loss is accumulated.
+//
+// If `loss` is not scalar (often one doesn't reduce the batch axis), it is automatically reduced with `graph.ReduceAllMean`.
+//
+// If you are only providing loss terms with AddLoss, you can pass nil as the `lossFn` parameter to the Trainer.
 func AddLoss(ctx *context.Context, loss *graph.Node) {
 	g := loss.Graph()
 	ctxTrainer := ctx.InAbsPath(TrainerAbsoluteScope)
