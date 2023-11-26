@@ -184,7 +184,7 @@ func LoadCifar100(manager *Manager, baseDir string, dtype shapes.DType) (partiti
 	labels := tensor.FromShape(shapes.Make(shapes.I64, NumExamples, 1))
 	labelsRef := labels.AcquireData()
 	defer labelsRef.Release()
-	labelsData := labelsRef.Flat().([]int)
+	labelsData := labelsRef.Flat().([]int64)
 
 	var labelImageBytes [imageSizeBytes + 2]byte
 	dataFiles := []string{"train.bin", "test.bin"}
@@ -218,7 +218,7 @@ func LoadCifar100(manager *Manager, baseDir string, dtype shapes.DType) (partiti
 			if err != nil {
 				panic(errors.Wrapf(err, "failed converting bytes to tensor of %s", dtype))
 			}
-			labelsData[exampleIdx] = int(labelImageBytes[1]) // Take the fine-label (and discard the coarse-label).
+			labelsData[exampleIdx] = int64(labelImageBytes[1]) // Take the fine-label (and discard the coarse-label).
 			exampleIdx++
 		}
 	}
