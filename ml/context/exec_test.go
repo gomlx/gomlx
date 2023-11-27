@@ -107,13 +107,13 @@ func TestExecWithVariableUpdates(t *testing.T) {
 	})
 	results := counter.Call()
 	gotTensor := results[0]
-	got := gotTensor.Value().(int)
+	got := gotTensor.Value().(int64)
 	if got != 1 {
 		t.Fatalf("Wanted first counter value to be 1, got %d instead", got)
 	}
 	results = counter.Call()
 	gotTensor = results[0]
-	got = gotTensor.Value().(int)
+	got = gotTensor.Value().(int64)
 	if got != 2 {
 		t.Fatalf("Wanted second counter value to be 2, got %d instead", got)
 	}

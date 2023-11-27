@@ -336,14 +336,56 @@ func MaskedSoftmax(logits, mask *Node, axes ...int) *Node {
 	return result
 }
 
-// L1Norm returns the L1 norm.
-func L1Norm(x *Node) *Node {
-	return ReduceAllSum(Abs(x))
+// L1Norm returns the L1 norm (same as Manhattan length) of the last axis of x.
+// The returned value has the same rank, but the last axes will have dimension 1.
+//
+// If no axes are given, it returns a scalar.
+// Otherwise, the returned value has the same rank as `x`, but the reduce axes will have dimension 1.
+func L1Norm(x *Node, reduceAxes ...int) *Node {
+	if len(reduceAxes) == 0 {
+		return ReduceAllSum(Abs(x))
+	}
+	return ReduceAndKeep(Abs(x), ReduceSum, -1)
 }
 
-// L2Norm returns the L2 Norm (same as euclidean length) of x, given by Sqrt(\Sum{x_i^2}).
-func L2Norm(x *Node) *Node {
-	return Sqrt(ReduceAllSum(Mul(x, x)))
+// L2NormSquare returns the L2 norm square (same as square of the Euclidean length) over the given axes
+// of x (defaults to all).
+// Same as `\Sum_{reduceAxes}{x_i^2}`.
+//
+// If no axes are given, it returns a scalar.
+// Otherwise, the returned value has the same rank as `x`, but the reduce axes will have dimension 1.
+func L2NormSquare(x *Node, reduceAxes ...int) *Node {
+	if len(reduceAxes) == 0 {
+		return ReduceAllSum(Square(x))
+	}
+	return ReduceAndKeep(Square(x), ReduceSum, reduceAxes...)
+}
+
+// L2Norm returns the L2 norm (same as Euclidean length) over the given axes of x (defaults to all), given by Sqrt(\Sum{x_i^2}).
+//
+// If no axes are given, it returns a scalar.
+// Otherwise, the returned value has the same rank as `x`, but the reduce axes will have dimension 1.
+func L2Norm(x *Node, reduceAxes ...int) *Node {
+	return Sqrt(L2NormSquare(x, reduceAxes...))
+}
+
+// L2Normalize returns `x/L2Norm(x)` on the given reduce axes, making the last axis a unit-length vector.
+//
+// It will return `inf` for values of x that are zero-length.
+// See L2NormalizeWithEpsilon for a version that adds an epsilon to the denominator to avoid that.
+func L2Normalize(x *Node, reduceAxis int, moreReduceAxes ...int) *Node {
+	reduceAxes := make([]int, 1, 1+len(moreReduceAxes))
+	reduceAxes[0] = reduceAxis
+	reduceAxes = append(reduceAxes, moreReduceAxes...)
+	return Div(x, L2Norm(x, reduceAxes...))
+}
+
+// L2NormalizeWithEpsilon returns `x/(L2Norm(x)+epsilon)` on the last axis, making the last axis a unit-length vector.
+func L2NormalizeWithEpsilon(x *Node, epsilon float64, reduceAxis int, moreReduceAxes ...int) *Node {
+	reduceAxes := make([]int, 1, 1+len(moreReduceAxes))
+	reduceAxes[0] = reduceAxis
+	reduceAxes = append(reduceAxes, moreReduceAxes...)
+	return Div(x, AddScalar(L2Norm(x, reduceAxes...), epsilon))
 }
 
 // LowerTriangular returns a lower-triangular boolean square matrix of shape `[dim, dim]`.

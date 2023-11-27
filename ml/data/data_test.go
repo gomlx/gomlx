@@ -188,8 +188,8 @@ func TestInMemoryDataset(t *testing.T) {
 			require.NoError(t, err)
 			require.Less(t, count, ds.numExamples*valuesPerExample)
 
-			input := inputs[0].Value().(int)
-			label := labels[0].Value().(int)
+			input := int(inputs[0].Value().(int64))
+			label := int(labels[0].Value().(int64))
 			if repeat < 2 {
 				// In-order:
 				require.Equal(t, count, input)
@@ -217,9 +217,9 @@ func TestInMemoryDataset(t *testing.T) {
 	mds = mds.Copy().BatchSize(50, true) // This should also reset shuffling/random sampling.
 	_, inputs, labels, err := mds.Yield()
 	require.NoError(t, err)
-	input := inputs[0].Local().Value().([]int)
-	label := labels[0].Local().Value().([]int)
-	want := slices.Iota(0, 50)
+	input := inputs[0].Value().([]int64)
+	label := labels[0].Value().([]int64)
+	want := slices.Iota(int64(0), 50)
 	require.Equal(t, want, input)
 	for ii := range want {
 		want[ii] = -want[ii]
@@ -235,10 +235,10 @@ func TestInMemoryDataset(t *testing.T) {
 	require.NoError(t, err)
 	_, inputs, labels, err = mds.Yield() // Second batch will have size 1.
 	require.NoError(t, err)
-	input = inputs[0].Local().Value().([]int)
-	label = labels[0].Local().Value().([]int)
-	require.Equal(t, []int{50}, input)
-	require.Equal(t, []int{-50}, label)
+	input = inputs[0].Value().([]int64)
+	label = labels[0].Value().([]int64)
+	require.Equal(t, []int64{50}, input)
+	require.Equal(t, []int64{-50}, label)
 
 	// Serialize and deserialize, check that we recover it.
 	buf := &bytes.Buffer{}
@@ -252,9 +252,9 @@ func TestInMemoryDataset(t *testing.T) {
 	mds = mds.BatchSize(50, true)
 	_, inputs, labels, err = mds.Yield()
 	require.NoError(t, err)
-	input = inputs[0].Local().Value().([]int)
-	label = labels[0].Local().Value().([]int)
-	want = slices.Iota(0, 50)
+	input = inputs[0].Value().([]int64)
+	label = labels[0].Value().([]int64)
+	want = slices.Iota(int64(0), 50)
 	require.Equal(t, want, input)
 	for ii := range want {
 		want[ii] = -want[ii]
@@ -273,16 +273,16 @@ func TestInMemoryFromData(t *testing.T) {
 
 	_, inputs, labels, err := mds.Yield()
 	require.NoError(t, err)
-	input, ok := inputs[0].Local().Value().([]float32)
+	input, ok := inputs[0].Value().([]float32)
 	require.True(t, ok, "Could not convert input to the expected []float32")
-	label := labels[0].Local().Value().([]float32)
+	label := labels[0].Value().([]float32)
 	require.Equal(t, []float32{1, 2}, input)
 	require.Equal(t, []float32{3}, label)
 
 	_, inputs, labels, err = mds.Yield()
 	require.NoError(t, err)
-	input = inputs[0].Local().Value().([]float32)
-	label = labels[0].Local().Value().([]float32)
+	input = inputs[0].Value().([]float32)
+	label = labels[0].Value().([]float32)
 	require.Equal(t, []float32{3, 4}, input)
 	require.Equal(t, []float32{7}, label)
 
@@ -293,7 +293,7 @@ func TestInMemoryFromData(t *testing.T) {
 	mds.BatchSize(2, true)
 	_, inputs, labels, err = mds.Yield()
 	require.NoError(t, err)
-	batchInput, ok := inputs[0].Local().Value().([][]float32)
+	batchInput, ok := inputs[0].Value().([][]float32)
 	require.True(t, ok, "Could not convert batched input to the expected [][]float32")
 	require.Equal(t, [][]float32{{1, 2}, {3, 4}}, batchInput)
 }
@@ -361,7 +361,7 @@ func TestMap(t *testing.T) {
 
 	_, inputs, labels, err := mapDS.Yield()
 	require.NoError(t, err)
-	batchInput, ok := inputs[0].Local().Value().([][]float32)
+	batchInput, ok := inputs[0].Value().([][]float32)
 	require.True(t, ok, "Could not convert batched input to the expected [][]float32")
 	require.Equal(t, [][]float32{{2, 3}, {4, 5}}, batchInput)
 	require.Empty(t, labels, "MapGraphFn provided should have dropped the labels")

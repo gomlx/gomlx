@@ -48,7 +48,7 @@ func AssertNoError(err error) {
 }
 
 var (
-	flagDataDir = flag.String("data", "~/tmp/cifar", "Directory to cache downloaded and generated dataset files.")
+	flagDataDir = flag.String("data", "~/work/cifar", "Directory to cache downloaded and generated dataset files.")
 
 	// ML Manager creation:
 	flagNumThreads  = flag.Int("num_threads", -1, "Number of threads. Leave as -1 to use as many as there are cores.")
@@ -152,7 +152,6 @@ func trainModel() {
 
 	// Use standard training loop.
 	loop := train.NewLoop(trainer)
-	loop.ReadGlobalStep(ctx)            // Make sure it restarts from previous global step, if one is set.
 	commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
 
 	// Attach a checkpoint: checkpoint every 1 minute of training.

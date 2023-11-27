@@ -1,7 +1,7 @@
 FROM tensorflow/tensorflow:devel-gpu
 
 LABEL maintainer="pfeifer@gmail.com"
-ARG GO_VERSION=1.21.3
+ARG GO_VERSION=1.21.4
 ARG CUDA_VERSION=11.8
 # Fix: https://github.com/hadolint/hadolint/wiki/DL4006
 # Fix: https://github.com/koalaman/shellcheck/wiki/SC3014

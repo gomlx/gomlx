@@ -17,7 +17,6 @@
 package train
 
 import (
-	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
@@ -62,13 +61,11 @@ type Loop struct {
 	// TODO: make Trainer an interface, so Loop can work on custom trainers..
 	Trainer *Trainer
 
-	// LoopStep currently being executed. Defaults to 0. Notice this may not be in sync with model's
-	// typical `GlobalStep` variable.
+	// LoopStep currently being executed.
+	// Defaults to the current context's `GlobalStep`, which will be 0 for a new context.
 	LoopStep int
 
-	// StartStep is the value of LoopStep at the start of a run (RunSteps or RunEpochs). At the first
-	// run it wil be 0 (the default value for LoopStep) and if Loop.RunSteps (or Loop.RunEpochs) is called
-	// multiple times, StartStep is reset to the last LoopStep value of the previous run.
+	// StartStep is the value of LoopStep at the start of a run (RunSteps or RunEpochs).
 	StartStep int
 
 	// EndStep is one-past the last step to be executed. If -1 the end step is not known (if
@@ -105,6 +102,7 @@ func NewLoop(trainer *Trainer) *Loop {
 		onStep:         newPriorityHooks[*hookWithName[OnStepFn]](),
 		onEnd:          newPriorityHooks[*hookWithName[OnEndFn]](),
 		finalizeInputs: false,
+		LoopStep:       int(optimizers.GetGlobalStep(trainer.Context())),
 	}
 }
 
@@ -196,14 +194,6 @@ func (loop *Loop) end(metrics []tensor.Tensor) (err error) {
 		}
 	})
 	return
-}
-
-// ReadGlobalStep will read the global step from the context and initialize the LoopStep
-// to that value.
-// The default is to have the LoopStep counter always start from 0 -- independent of the model's GlobalStep.
-func (loop *Loop) ReadGlobalStep(ctx *context.Context) {
-	globalStepVar := optimizers.GetGlobalStepVar(ctx)
-	loop.LoopStep = globalStepVar.Value().Value().(int)
 }
 
 // RunSteps runs those many steps. StartStep and EndStep are adjusted to the current

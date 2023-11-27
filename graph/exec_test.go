@@ -23,6 +23,7 @@ import (
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"math"
 	"reflect"
@@ -242,9 +243,7 @@ func TestExecWithNoInputs(t *testing.T) {
 		return IotaFull(g, shapes.Make(shapes.Int64, 3, 3))
 	})
 	results := matrixInitFn.Call()
-	got := results[0]
-	want := [][]int{{0, 1, 2}, {3, 4, 5}, {6, 7, 8}}
-	if !slices.DeepSliceCmp(want, got.Value(), slices.Equal[int]) {
-		t.Fatalf("matrixInitFn(): got %v, wanted %v", got, want)
-	}
+	got := results[0].Value()
+	want := [][]int64{{0, 1, 2}, {3, 4, 5}, {6, 7, 8}}
+	assert.Equal(t, want, got)
 }

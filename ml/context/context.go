@@ -64,8 +64,8 @@ import (
 //		func ModelGraph(ctx *context.Context, inputs []*Node) (logits *Node) {
 //			...
 //			{
-//				ctx := ctx.In("output_layer)  // Enter "output_layer" scope in temporary new context (same data, different scope)
-//	        	ctx.SetParam("dropout_rate", 0.6  // Let's say we want the "output_layer" only to have dropout=0.6
+//				ctx := ctx.In("output_layer")  // Enter "output_layer" scope in temporary new context (same data, different scope)
+//	        	ctx.SetParam("dropout_rate", 0.6)  // Let's say we want the "output_layer" only to have dropout=0.6
 //	         	logits = Dense(ctx, logits, output_dim)
 //			}  // Exiting "output_later" scope, ctx is back to it's original scope.
 //		}
@@ -308,8 +308,41 @@ func (ctx *Context) GetParam(key string) (value any, found bool) {
 	return ctx.data.params.Get(ctx.scope, key)
 }
 
+// GetParamOr either returns the value for the given param key in the context `ctx`,
+// searching successively from the current scope back to the root scope ("/"), or if the
+// key is not found, returns the given default value.
+//
+// It casts the value to the given type, and it will panic is that fails.
+//
+// It's a convenience method around `ctx.GetParam`.
+func GetParamOr[T any](ctx *Context, key string, defaultValue T) T {
+	valueAny, found := ctx.GetParam(key)
+	if !found {
+		return defaultValue
+	}
+	v, ok := valueAny.(T)
+	if !ok {
+		Panicf("GetParamOr[%T](ctx, %q, %v): ctx(scope=%q)[%q]=(%T) %#v, and cannot be converted to %T -- "+
+			"Notice that when reloading a context from a checkpoint involves decoding them from Json, and "+
+			"the original type of the param may have been decoded incorrectly causing this error. "+
+			"Many types are automatically corrected, if one is missing please report, or fix it in package "+
+			"`checkpoints`, in function `serializedParam.jsonDecodeTypeConvert`. "+
+			"Unfortunately, custom parameter types won't work with `checkpoints` (saving/loading), but generic "+
+			"`map[string]any` are handled correctly by Json and "+
+			"are usually enough for these hyperparameters.",
+			v, key, defaultValue, ctx.Scope(), key, valueAny, valueAny, v)
+	}
+	return v
+}
+
 // SetParam sets the given param in the current scope. It will be visible (by GetParam)
 // within this scope and descendant scopes (but not by other scopes).
+//
+// Note: the scoped parameters of the context are saved in `checkpoints` package using
+// Json encoding. This works well for `string`, `float64` and `int` and slices of those values,
+// but other types may not be recovered correctly later.
+// See `checkpoints` package to add support for some other specific type, if you get a different
+// type when loading the json.
 //
 // See also SetGraphParam for parameters that are graph-specific.
 func (ctx *Context) SetParam(key string, value any) {
@@ -321,7 +354,7 @@ func (ctx *Context) EnumerateParams(fn func(scope, key string, value any)) {
 	ctx.data.params.Enumerate(fn)
 }
 
-// GetGraphParam returns, for the givne graph, the value for the given param key,
+// GetGraphParam returns the value for the given param key for the given graph,
 // searching successively from the current scope back to the root scope ("/"), in
 // case the key is not found.
 //
@@ -331,7 +364,7 @@ func (ctx *Context) EnumerateParams(fn func(scope, key string, value any)) {
 // This is very similar to GetParam, but used for parameters that are graph specific.
 // For example Context.IsTraining and Context.SetTraining uses a Graph parameter to
 // set this state, as the same Context is used for evaluation/inference graphs and
-// training graphs, and they should have different values.
+// training graphs, and they will have different values.
 func (ctx *Context) GetGraphParam(g *Graph, key string) (value any, found bool) {
 	var graphParams *ScopedParams
 	graphParams, found = ctx.data.graphParams[g.GraphId()]
@@ -341,9 +374,37 @@ func (ctx *Context) GetGraphParam(g *Graph, key string) (value any, found bool) 
 	return graphParams.Get(ctx.scope, key)
 }
 
+// GetGraphParamOr either returns the value for the given param key for the given graph,
+// searching successively from the current scope back to the root scope ("/"), or if the
+// key is not found, returns the given default value.
+//
+// It casts the value to the given type, and it will panic is that fails.
+//
+// It's a convenience method around `ctx.GetGraphParam`.
+//
+// This is very similar to GetParamOr, but used for parameters that are graph specific.
+// For example Context.IsTraining and Context.SetTraining uses a Graph parameter to
+// set this state, as the same Context is used for evaluation/inference graphs and
+// training graphs, and they will have different values.
+func GetGraphParamOr[T any](ctx *Context, g *Graph, key string, defaultValue T) T {
+	valueAny, found := ctx.GetGraphParam(g, key)
+	if !found {
+		return defaultValue
+	}
+	v, ok := valueAny.(T)
+	if !ok {
+		Panicf("GetGraphParamOr[%T](ctx, g, %q, %v): ctx(scope=%q)[%q]=(%T) %#v, and cannot be converted to %T",
+			v, key, defaultValue, ctx.Scope(), key, valueAny, valueAny, defaultValue)
+	}
+	return valueAny.(T)
+}
+
 // SetGraphParam sets the given Graph param in the current scope. It will be visible (by
 // GetGraphParam) for this Graph within this scope and descendant scopes (but not by other
 // scopes).
+//
+// Notice each time a new graph is created, the associated "graph parameters" in the context
+// will be empty.
 //
 // This is very similar to SetParam, but used for parameters that are graph specific.
 // For example Context.IsTraining and Context.SetTraining uses a Graph parameter to
@@ -611,6 +672,18 @@ func (ctx *Context) VariableWithValue(name string, value any) *Variable {
 func (ctx *Context) EnumerateVariables(fn func(v *Variable)) {
 	for _, v := range ctx.data.variables {
 		fn(v)
+	}
+}
+
+// EnumerateVariablesInScope is similar to EnumerateVariables, but enumerate only those under the current
+// context scope.
+func (ctx *Context) EnumerateVariablesInScope(fn func(v *Variable)) {
+	baseScope := ctx.Scope()
+	baseScopeWithSeparator := baseScope + ScopeSeparator
+	for _, v := range ctx.data.variables {
+		if v.Scope() == baseScope || strings.HasPrefix(v.Scope(), baseScopeWithSeparator) {
+			fn(v)
+		}
 	}
 }
 

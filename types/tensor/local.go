@@ -12,6 +12,8 @@ import (
 	"os"
 	"reflect"
 	"runtime"
+	"strconv"
+	"unsafe"
 )
 
 // Local tensor represents a multidimensional array of one of the supported types (see shapes.Number)
@@ -51,10 +53,10 @@ import (
 //
 //   - `Local.Value() any`: it creates a copy of the tensor contents to a Go type. A scalar if the underlying shape
 //     is a scalar or a (multidimensional) slice. If returning a multidimensional slice, it first creates a flat
-//     slice (see Local.Flat below) with the flat data, and then creates the sub-slices point to the middle of it.
-//   - `Local.Flat() any`: similar to Value() it creates a copy of the flattened (only one dimension) contents to
+//     slice (see Local.FlatCopy below) with the flat data, and then creates the sub-slices point to the middle of it.
+//   - `Local.FlatCopy() any`: similar to Value() it creates a copy of the flattened (only one dimension) contents to
 //     a Go slice -- even if it is a scalar, it will return a slice with one value.
-//   - `Local.CopyData(dst any) error`: similar to Local.Flat, but instead of creating a new slice, it copies to an already
+//   - `Local.CopyData(dst any) error`: similar to Local.FlatCopy, but instead of creating a new slice, it copies to an already
 //     provided slice. Useful when looping over results. It returns an error if the `dst` type is not compatible
 //     or not if there is not the correct space in `dst`, that is, if `len(dst) != Local.Shape().Size()`.
 //
@@ -230,6 +232,7 @@ func (ref *LocalRef) AssertValid() {
 }
 
 // Flat returns the flattened data as a slice of the corresponding DType type.
+// This is not a copy, but a pointer to the underlying data, that can be changed.
 //
 // See Local.LayoutStrides to calculate the offset of individual positions.
 //
@@ -243,6 +246,7 @@ func (ref *LocalRef) Flat() any {
 
 // FlatFromRef returns the flattened data acquired by `ref` as a slice of the corresponding DType type.
 // It is the "generics" version of LocalRef.Flat()
+// This is not a copy, but a pointer to the underlying data, that can be changed.
 //
 // See Local.LayoutStrides to calculate the offset of individual positions.
 //
@@ -294,7 +298,7 @@ func (local *Local) CopyData(dst any) {
 	runtime.KeepAlive(local) // Make sure that local doesn't get garbage collected in the middle of the copy.
 }
 
-// Flat returns a copy of `Local` tensor's flattened contents as a slice of the
+// FlatCopy returns a copy of `Local` tensor's flattened contents as a slice of the
 // type matching the tensor's DType (see shapes.TypeForDType).
 //
 // See Local.LayoutStrides to calculate the offset of individual positions.
@@ -302,7 +306,7 @@ func (local *Local) CopyData(dst any) {
 // If the tensor is a scalar, it still returns a slice with one element.
 //
 // If tensor is invalid (already finalized?), of if is a tuple, it panics with an error.
-func (local *Local) Flat() any {
+func (local *Local) FlatCopy() any {
 	local.AssertValidAndNoTuple()
 	srcV := reflect.ValueOf(local.literal.Data())
 	size := local.Shape().Size()
@@ -344,7 +348,7 @@ func (local *Local) Value() any {
 	}
 
 	// Create a flat slice with all data.
-	flatCopy := local.Flat()
+	flatCopy := local.FlatCopy()
 	if local.shape.Rank() == 1 {
 		return flatCopy
 	}
@@ -630,7 +634,24 @@ func FromAnyValue(value any) Tensor {
 	local = FromShape(shape)
 	dataRef := local.AcquireData()
 	defer dataRef.Release()
-	dataV := reflect.ValueOf(dataRef.Flat())
+
+	flatRefAny := dataRef.Flat()
+	if baseType(reflect.TypeOf(value)) == reflect.TypeOf(int(0)) {
+		// Go `int` type can be either an int32 or int64 depending on the architecture (anything else would panic
+		// already). For the copy operation to work, we have to cast flatRefAny (either a []int64 or []int32) as an []int.
+		// This is not pretty (using unsafe), but it avoids individually converting values, which is important for large tensors.
+		if strconv.IntSize == 64 {
+			flatRef := flatRefAny.([]int64)
+			flatRefAny = unsafe.Slice((*int)(unsafe.Pointer(unsafe.SliceData(flatRef))), len(flatRef))
+		} else if strconv.IntSize == 32 {
+			flatRef := flatRefAny.([]int32)
+			flatRefAny = unsafe.Slice((*int)(unsafe.Pointer(unsafe.SliceData(flatRef))), len(flatRef))
+		} else {
+			Panicf("cannot use `int` of %d bits with GoMLX -- try using int32 or int64", strconv.IntSize)
+		}
+	}
+	dataV := reflect.ValueOf(flatRefAny)
+
 	if local.shape.Rank() == 0 {
 		// S is a scalar type.
 		elem := dataV.Index(0)

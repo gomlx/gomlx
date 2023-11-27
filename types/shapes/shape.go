@@ -71,6 +71,7 @@ package shapes
 import (
 	"encoding/gob"
 	"fmt"
+	"github.com/gomlx/gomlx/types/exceptions"
 	"github.com/pkg/errors"
 	"reflect"
 	"strings"
@@ -88,7 +89,13 @@ type Shape struct {
 
 // Make returns a Shape structure filled with the values given.
 func Make(dtype DType, dimensions ...int) Shape {
-	return Shape{Dimensions: dimensions, DType: dtype}
+	s := Shape{Dimensions: dimensions, DType: dtype}
+	for _, dim := range dimensions {
+		if dim <= 0 {
+			exceptions.Panicf("shapes.Make(%s): cannot create a shape with an axis with dimension <= 0", s)
+		}
+	}
+	return s
 }
 
 // Scalar returns a scalar Shape for the given type.

@@ -167,6 +167,15 @@ func shapeForValueRecursive(shape *shapes.Shape, v reflect.Value, t reflect.Type
 	return nil
 }
 
+// baseValue will return the underlying of a multi-dimension array/slice. So `baseValue([][]int{})` would return the
+// type `int`.
+func baseType(valueType reflect.Type) reflect.Type {
+	for valueType.Kind() == reflect.Slice || valueType.Kind() == reflect.Array {
+		valueType = valueType.Elem()
+	}
+	return valueType
+}
+
 //func depthDTypeAndBaseType(t reflect.Type) (int, shapes.DType, reflect.Type) {
 //	if t.Kind() == reflect.Slice {
 //		depth, dtype, baseType := depthDTypeAndBaseType(t.Elem())

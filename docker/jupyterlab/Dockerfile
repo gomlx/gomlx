@@ -2,13 +2,15 @@ FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
 
 LABEL maintainer="pfeifer@gmail.com"
 
-ARG GO_VERSION="1.21.3"
+ARG GO_VERSION="1.21.4"
 
 # Pre-built GoMLX C library: if not building yourself, you can download it from
 # https://github.com/gomlx/gomlx/releases/download/${GOMLX_VERSION}/gomlx_xla-linux-amd64.tar.gz
 # If generated locally, typically it will be located in `./c/bazel-bin/gomlx_xla.tar.gz`,
-# but because docker has issues with symlinks (?? I think, it returns a confusing error??),
-# I suggest making a copy of the file in the current directory when building.
+# but because docker has issues with symlinks to are outside the "build context"
+# (it returns a confusing error) I suggest making a copy of the file in the current directory
+# when building.
+# See: https://docs.docker.com/build/building/context/
 ARG GOMLX_XLA_TAR_GZ="gomlx_xla.tar.gz"
 
 #######################################################################################################
@@ -27,7 +29,8 @@ USER root
 
 # Update apt and install basic utils
 RUN apt-get update --yes \
-    && apt-get install -y --no-install-recommends wget vim unzip hdf5-tools
+    && apt-get upgrade --yes \
+    && apt-get install --yes --no-install-recommends wget vim unzip hdf5-tools
 
 # Create NB_USER (jovyan) and its home directory.
 RUN useradd --create-home --uid ${NB_UID} --gid ${NB_GID} --shell /bin/bash ${NB_USER}
@@ -81,7 +84,8 @@ RUN apt-get update --yes \
     && apt-get install --yes --no-install-recommends gcc libunwind8 liblzma5 libgoogle-perftools-dev micro
 
 # Use locally built gomlx.tar.gz, otherwise download from latest release.
-COPY ${GOMLX_XLA_TAR_GZ} /root/gomlx_xla.tar.gz
+COPY --chown=0:0 ${GOMLX_XLA_TAR_GZ} /root/gomlx_xla.tar.gz
+
 WORKDIR "/usr/local"
 RUN tar -xzf /root/gomlx_xla.tar.gz
 
@@ -100,8 +104,7 @@ WORKDIR ${HOME}
 USER ${NB_UID}
 COPY --link --chown=${NB_UID}:${NB_GID} . "${HOME}/Projects/gomlx"
 
-# Run tests -- only on "Host" since GPU in docker build is not working.
-# TODO: Skip running the demo tests, since they require downloading and preparing data, which takes too long.
+# Run basic tests -- only on "Host" since GPU in docker build is not working.
 WORKDIR "${HOME}/Projects/gomlx"
 RUN go test ./xla/... ./types/... ./graph/... ./ml/...
 

@@ -200,7 +200,7 @@ func TestGradientDot(t *testing.T) {
 func TestGradientSlice(t *testing.T) {
 	graphtest.RunTestGraphFn(t, "Slice Gradient Tests",
 		func(g *Graph) (inputs, outputs []*Node) {
-			x := Const(g, [][]int{{1, 2, 3}, {4, 5, 6}})
+			x := Const(g, [][]int64{{1, 2, 3}, {4, 5, 6}})
 			o1 := Slice(x)
 			o2 := Slice(x, AxisRange(), AxisRange(1))
 			o3 := Slice(x, AxisRange(0, -1))
@@ -214,10 +214,10 @@ func TestGradientSlice(t *testing.T) {
 			}
 			return
 		}, []any{
-			[][]int{{1, 1, 1}, {1, 1, 1}},
-			[][]int{{0, 1, 1}, {0, 1, 1}},
-			[][]int{{1, 1, 1}, {0, 0, 0}},
-			[][]int{{0, 0, 0}, {1, 0, 1}},
+			[][]int64{{1, 1, 1}, {1, 1, 1}},
+			[][]int64{{0, 1, 1}, {0, 1, 1}},
+			[][]int64{{1, 1, 1}, {0, 0, 0}},
+			[][]int64{{0, 0, 0}, {1, 0, 1}},
 		}, slices.Epsilon)
 }
 

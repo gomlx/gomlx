@@ -1,9 +1,30 @@
 # GoMLX changelog
 
-## Next
+## 0.8.0 - 2023/11/27
 
-* Enable copy elision -- which makes `std::move` not necessary.
-* Temporarily copied `xla/mlir/utils` library to `third-party/xla_mlir`, since it is not available in all XLA distributions.
+* DType and Tensors:
+  * Added support to Go's `int64` -- breaks compatibility because DType Int64 when converted back to Go becomes `int64`
+    and not `int`.
+  * Renamed Local.Flat -> Local.FlatCopy : not to be mixed with LocalRef.Flat (which is not a copy).
+* C++ code integrating with XLA:
+  * Enable copy elision -- which makes `std::move` not necessary.
+  * Temporarily copied `xla/mlir/utils` library to `third-party/xla_mlir`, since it is not available in all XLA distributions.
+* Package `context`:
+  * Added `context.GetParamOr` and `context.GetGraphParamOr`: it uses generics to cast to the desired type, and allowing a default value to be returned.
+* Added recovery of some basic types (numeric and slices) when loading params from Json with `checkpoints`.
+* Package `train`: `Loop` automatically sets LoopStep to context's "global_step" parameter.
+* Package `optimizer`: Added `GetGlobalStep`.
+* Package `context`: Added `Context.EnumerateVariablesInScope()` method.
+* Package `graph`:
+  * Added optional `reduceAxes` parameter to `L2Norm` and `L1Norm`.
+  * Added `L2NormSquare`, `L2Normalize` and `L2NormalizeWithEpsilon`. 
+* Package `nanlogger`: added `AttachToTrainer`; improved docs.
+* Package `margaid`: 
+  * automatic ending plot when loop finishes.
+  * option to plot evaluation losses separately from training losses -- for when they include different terms.
+* Example "Dogs vs Cats":
+  * Added Byol (Bootstrap Your Own Latent) regularized models.
+  * Added support for generating pairs of images for BYOL model.
 
 ## v0.7.2 - 2023/10/27
 

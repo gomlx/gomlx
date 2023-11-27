@@ -5,6 +5,7 @@ import (
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
+	"math"
 	"testing"
 )
 
@@ -159,4 +160,42 @@ func TestClip(t *testing.T) {
 			output = Clip(input, Const(g, float32(2)), Const(g, float32(4)))
 			return
 		}, [][][]float32{{{2}, {3}, {4}}})
+}
+
+func TestNorms(t *testing.T) {
+	testFuncOneInput(t, "L2NormSquare",
+		func(g *Graph) (input, output *Node) {
+			input = Const(g, [][]float32{{1, 2}, {-3, 4}})
+			output = L2NormSquare(input)
+			return
+		}, float32(5+25))
+
+	testFuncOneInput(t, "L2Norm",
+		func(g *Graph) (input, output *Node) {
+			input = Const(g, [][]float32{{4, -3}, {-5, 12}})
+			output = L2Norm(input, -1)
+			return
+		}, [][]float32{{5}, {13}})
+
+	testFuncOneInput(t, "L1Norm",
+		func(g *Graph) (input, output *Node) {
+			input = Const(g, [][]float32{{-4, 3}, {5, -12}})
+			output = L1Norm(input, -1)
+			return
+		}, [][]float32{{7}, {17}})
+
+	invSqrt2 := float32(1.0 / math.Sqrt(2.0))
+	testFuncOneInput(t, "L2Normalize",
+		func(g *Graph) (input, output *Node) {
+			input = Const(g, [][]float32{{5, 5}, {711, 711}})
+			output = L2Normalize(input, -1)
+			return
+		}, [][]float32{{invSqrt2, invSqrt2}, {invSqrt2, invSqrt2}})
+
+	testFuncOneInput(t, "L2NormalizeWithEpsilon",
+		func(g *Graph) (input, output *Node) {
+			input = Const(g, [][]float32{{0, 0}, {11, 11}})
+			output = L2NormalizeWithEpsilon(input, 1e-9, -1)
+			return
+		}, [][]float32{{0, 0}, {invSqrt2, invSqrt2}}) // Epsilon shouldn't create a large enough difference to fail the test.
 }

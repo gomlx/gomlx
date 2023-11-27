@@ -319,9 +319,65 @@ type serializedVar struct {
 	Pos, Length int
 }
 
+// serializedParam represents a serialized context parameter.
+// It includes the original ValueType, because Json decoder may
+// not be capable of recovering the original type in anonymous (any) Value.
 type serializedParam struct {
 	Scope, Key string
 	Value      any
+	ValueType  string
+}
+
+// jsonDecodedTypeConvert attempts to convert the Value decoded by Json into
+// the original ValueType.
+//
+// E.g.: Json decoder will decode all numbers to float64. So we cast it to the
+// given ValueType.
+func (p *serializedParam) jsonDecodeTypeConvert() {
+	// Switch on current Json type:
+	switch value := p.Value.(type) {
+	case float64:
+		// All numbers when converted to `any` by the json decoders become float64,
+		// here we convert them back.
+		switch p.ValueType {
+		case "int":
+			p.Value = int(value)
+		case "int8":
+			p.Value = int8(value)
+		case "int32":
+			p.Value = int32(value)
+		case "int64":
+			p.Value = int64(value)
+		case "uint8":
+			p.Value = uint8(value)
+		case "uint32":
+			p.Value = uint32(value)
+		case "float32":
+			p.Value = float32(value)
+		}
+
+	case []any:
+		switch p.ValueType {
+		case "[]int":
+			p.Value = slices.Map(value, func(fAny any) int {
+				f, _ := fAny.(float64) // Json decoder converts any numbers to float64.
+				return int(f)
+			})
+		case "[]float64":
+			p.Value = slices.Map(value, func(fAny any) float64 {
+				f, _ := fAny.(float64) // Json decoder converts any numbers to float64.
+				return f
+			})
+		case "[]string":
+			p.Value = slices.Map(value, func(sAny any) string {
+				s, _ := sAny.(string) // Json decoder converts any numbers to float64.
+				return s
+			})
+		}
+	default:
+		// No other types converted for now.
+		return
+	}
 }
 
 // String implements Stringer.
@@ -330,7 +386,7 @@ func (h *Handler) String() string {
 }
 
 // newCheckpointBaseName returns the base name for the checkpoint files.
-func (h *Handler) newCheckpointBaseName(globalStep int) string {
+func (h *Handler) newCheckpointBaseName(globalStep int64) string {
 	now := time.Now().Format("20060102-150405")
 	if globalStep > 0 {
 		return fmt.Sprintf("%s%s-step-%08d", baseNamePrefix, now, globalStep)
@@ -408,7 +464,12 @@ func (h *Handler) loadCheckpoint(baseName string, merge bool, mergeWeight float6
 	if err = jsonFile.Close(); err != nil {
 		return errors.Wrapf(err, "%s: failed to close checkpoint metadata file %s", h, jsonFileName)
 	}
-	if !h.config.includeParams {
+	if h.config.includeParams {
+		for ii := range serialized.Params {
+			// Recover original type where possible.
+			serialized.Params[ii].jsonDecodeTypeConvert()
+		}
+	} else {
 		// Discard loaded Params, if they were not included.
 		serialized.Params = nil
 	}
@@ -436,7 +497,7 @@ func (h *Handler) loadCheckpoint(baseName string, merge bool, mergeWeight float6
 		}
 
 		if !merge {
-			// Simply load the value:
+			// Load the value.
 			h.variableValues[varInfo.ParameterName] = localT
 		} else {
 			// Make sure we have enough variations of mergeExec for each variable, if they
@@ -522,14 +583,15 @@ func (h *Handler) Save() error {
 	}
 
 	// Read globalStep if one is set.
-	globalStepVar := optimizers.GetGlobalStepVar(h.ctx)
-	globalStep := globalStepVar.Value().Value().(int)
+	globalStep := optimizers.GetGlobalStep(h.ctx)
 
 	// Copy over Params.
 	if h.config.includeParams {
 		h.serialized.Params = nil
 		h.ctx.EnumerateParams(func(scope, key string, value any) {
-			h.serialized.Params = append(h.serialized.Params, serializedParam{scope, key, value})
+			h.serialized.Params = append(h.serialized.Params,
+				serializedParam{
+					Scope: scope, Key: key, Value: value, ValueType: fmt.Sprintf("%T", value)})
 		})
 	}
 
@@ -680,7 +742,8 @@ func (h *Handler) Dir() string {
 	return h.config.dir
 }
 
-// LoadVariable implements context.Loader. This will be called automatically by context.Context.
+// LoadVariable implements context.Loader.
+// This will is called by context.Context when the variable is used for the first time.
 // The user may want to use this function to inspect loaded values for testing.
 func (h *Handler) LoadVariable(ctx *context.Context, v *context.Variable) (value tensor.Tensor, found bool) {
 	// Priority is based on the installation order. That means we attempt first the previously configured loaders.

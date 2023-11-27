@@ -41,6 +41,11 @@ import (
 // Notice that "/" (== ScopeSeparator constant) separates parts of the scope path, and the root
 // scope is referred to as "/". There is no "empty" scope, and every scope name must start with
 // a ScopeSeparator.
+//
+// The Context object uses ScopedParams to store the normal hyperparameters (see `Context.GetParam` and `Context.SetParam`)
+// and to store the graph hyperparameters (see `Context.GetGraphParam` and `Context.SetGraphParam`).
+//
+// Usually there will be no need for the end user to use this.
 type ScopedParams struct {
 	scopeToMap map[string]map[string]any
 }

@@ -382,7 +382,15 @@ func vjpForDefaultBroadcast(node, input, v *Node) *Node {
 	reduced := ReduceSum(v, reduceDims...)
 	// Since ReduceSum collapsed those reduced dimensions of now size 1, we need to reshape it back to the
 	// original input format.
-	return ReshapeWithShape(reduced, input.shape)
+	var vjp *Node
+	err := TryCatch[error](func() {
+		vjp = ReshapeWithShape(reduced, input.shape)
+	})
+	if err != nil {
+		err = errors.WithMessagef(err, "AutoGrad: calculating the VJP of a broadcast: v.shape=%s, input.shape=%s", v.Shape(), input.Shape())
+		panic(err)
+	}
+	return vjp
 }
 
 // Gradient of the type conversion, just converts back the adjoint dtype to

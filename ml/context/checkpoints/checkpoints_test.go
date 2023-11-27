@@ -99,7 +99,11 @@ func TestCheckpoints(t *testing.T) {
 	}
 
 	// Remove test directory.
-	assert.NoErrorf(t, os.RemoveAll(dir), "Removing directory used for testing %q", dir)
+	if t.Failed() {
+		fmt.Printf("Temporary directory with saved context: %s\n", dir)
+	} else {
+		assert.NoErrorf(t, os.RemoveAll(dir), "Removing directory used for testing %q", dir)
+	}
 }
 
 func TestMergedCheckpoints(t *testing.T) {
@@ -124,12 +128,83 @@ func TestMergedCheckpoints(t *testing.T) {
 		// Check that the values were averaged:
 		ctx := context.NewContext(manager).Checked(false)
 		_ = Build(ctx).Dir(dir).Keep(2).TakeMean(-1).MustDone()
-		globalStepV := optimizers.GetGlobalStepVar(ctx)
-		assert.Equal(t, 10, globalStepV.Value().Value(), "GlobalStep")
+		globalStep := optimizers.GetGlobalStep(ctx)
+		assert.Equal(t, int64(10), globalStep, "GlobalStep")
 		xV := ctx.VariableWithValue("x", []float64{1.0, 1.0, 1.0})
 		// Assume X will be loaded with the mean of the previous 2 checkpoints:
 		assert.Equal(t, []float64{2.0, 2.0, 2.0}, xV.Value().Value(), "X")
 		yV := ctx.VariableWithValue("y", [][]float32{{4.0}, {4.0}})
 		assert.Equal(t, [][]float32{{5.0}, {5.0}}, yV.Value().Value(), "Y")
+	}
+
+	if t.Failed() {
+		fmt.Printf("Temporary directory with saved context: %s\n", dir)
+	} else {
+		assert.NoErrorf(t, os.RemoveAll(dir), "Removing directory used for testing %q", dir)
+	}
+}
+
+func TestParams(t *testing.T) {
+	manager := graphtest.BuildTestManager()
+
+	var (
+		dir                            string
+		xFloat64, xFloat32, xInt, xStr = 0.01, float32(7.1), 11, "bar"
+		xInts                          = []int{13, 17, 19}
+		xStrs                          = []string{"a", "b", "c"}
+	)
+
+	{
+		// Build model, checkpoint a few times.
+		ctx := context.NewContext(manager)
+		ctx.SetParam("xFloat64", xFloat64)
+		ctx.SetParam("xFloat32", xFloat32)
+		ctx.SetParam("xInt", xInt)
+		ctx.SetParam("xInts", xInts)
+		ctx = ctx.In("foo") // Some different scope.
+		ctx.SetParam("xStr", xStr)
+		ctx.SetParam("xStrs", xStrs)
+
+		checkpoint := Build(ctx).TempDir("", "test_checkpoints_").Keep(3).MustDone()
+		dir = checkpoint.Dir()
+		require.NoError(t, checkpoint.Save())
+	}
+
+	// Test loading of values
+	{
+		// Build model, checkpoint a few times.
+		ctx := context.NewContext(manager)
+		_ = Build(ctx).Dir(dir).Keep(3).MustDone()
+
+		got, found := ctx.GetParam("xFloat64")
+		require.True(t, found)
+		assert.Equal(t, xFloat64, got)
+
+		got, found = ctx.GetParam("xFloat32")
+		assert.True(t, found)
+		assert.Equal(t, xFloat32, got)
+
+		got, found = ctx.GetParam("xInt")
+		assert.True(t, found)
+		assert.Equal(t, xInt, got)
+
+		got, found = ctx.GetParam("xInts")
+		assert.True(t, found)
+		assert.Equal(t, xInts, got)
+
+		ctx = ctx.In("foo")
+		got, found = ctx.GetParam("xStr")
+		assert.True(t, found)
+		assert.Equal(t, xStr, got)
+
+		got, found = ctx.GetParam("xStrs")
+		assert.True(t, found)
+		assert.Equal(t, xStrs, got)
+	}
+
+	if t.Failed() {
+		fmt.Printf("Temporary directory with saved context: %s\n", dir)
+	} else {
+		assert.NoErrorf(t, os.RemoveAll(dir), "Removing directory used for testing %q", dir)
 	}
 }
