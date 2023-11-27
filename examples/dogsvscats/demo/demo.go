@@ -207,7 +207,7 @@ func trainModel(config *dogsvscats.Configuration) {
 	case "byol":
 		modelFn = ByolCnnModelGraph
 	default:
-		Panicf("Unknown model %q: valid values are \"cnn\", \"inception\" or \"byol\"")
+		Panicf("Unknown model %q: valid values are \"cnn\", \"inception\" or \"byol\"", *flagModelType)
 	}
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
