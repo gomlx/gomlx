@@ -1,6 +1,6 @@
 # GoMLX changelog
 
-## Next
+## 0.8.0 - 2023/11/27
 
 * DType and Tensors:
   * Added support to Go's `int64` -- breaks compatibility because DType Int64 when converted back to Go becomes `int64`
