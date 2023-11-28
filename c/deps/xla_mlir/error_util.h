@@ -19,8 +19,8 @@ limitations under the License.
 //     for some obscure C++ reason -- useless GCC output.
 //#ifndef XLA_MLIR_UTILS_ERROR_UTIL_H_
 //#define XLA_MLIR_UTILS_ERROR_UTIL_H_
-#ifndef THIRD_PARTY_XLA_MLIR_ERROR_UTIL_H_
-#define THIRD_PARTY_XLA_MLIR_ERROR_UTIL_H_
+#ifndef DEPS_XLA_MLIR_ERROR_UTIL_H_
+#define DEPS_XLA_MLIR_ERROR_UTIL_H_
 
 #include <string>
 
@@ -76,4 +76,4 @@ class TmpBaseScopedDiagnosticHandler : public SourceMgrDiagnosticHandler {
 };
 }  // namespace mlir
 
-#endif  // XLA_MLIR_UTILS_ERROR_UTIL_H_
+#endif  // DEPS_XLA_MLIR_ERROR_UTIL_H_

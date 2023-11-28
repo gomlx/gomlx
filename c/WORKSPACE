@@ -53,7 +53,7 @@ GPERFTOOLS_VERSION = "2.10"
 
 http_archive(
     name = "gperftools",
-    build_file = "//third_party:gperftools.BUILD",
+    build_file = "//deps:gperftools.BUILD",
     sha256 = "83e3bfdd28b8bcf53222c3798d4d395d52dadbbae59e8730c4a6d31a9c3732d8",
     strip_prefix = "gperftools-{version}".format(version = GPERFTOOLS_VERSION),
     urls = [
