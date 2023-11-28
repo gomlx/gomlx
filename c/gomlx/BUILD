@@ -6,7 +6,7 @@ load("@tsl//tsl:tsl.bzl", "if_cuda_or_rocm")
 # Dependencies needed for Just-In-Time (JIT) compilation: what we use for training.
 gomlx_jit_deps = [
     # "@xla//xla/mlir/utils:error_util", Temporarily replaced by:
-    "//third_party/xla_mlir:error_util",
+    "//deps/xla_mlir:error_util",
     "@com_google_absl//absl/types:span",
     "@com_google_absl//absl/types:optional",
     "@com_google_absl//absl/base:log_severity",

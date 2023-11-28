@@ -14,7 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 // #include "xla/mlir/utils/error_util.h"
-#include "third_party/xla_mlir/error_util.h"
+#include "deps/xla_mlir/error_util.h"
 
 #include <string>
 #include <string_view>

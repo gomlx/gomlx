@@ -70,9 +70,9 @@
 #include "xla/types.h"
 #include "xla/xla_data.pb.h"
 
-// Temporarily replacing:
+// Third-party dependency directly imported into repository:
 // #include "xla/mlir/utils/error_util.h"
-#include "third_party/xla_mlir/error_util.h"
+#include "deps/xla_mlir/error_util.h"
 
 using namespace std;
 

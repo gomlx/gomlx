@@ -1,6 +1,6 @@
 # GoMLX changelog
 
-## 0.8.0 - 2023/11/27
+## 0.8.0 - 2023/11/28
 
 * DType and Tensors:
   * Added support to Go's `int64` -- breaks compatibility because DType Int64 when converted back to Go becomes `int64`
@@ -8,7 +8,7 @@
   * Renamed Local.Flat -> Local.FlatCopy : not to be mixed with LocalRef.Flat (which is not a copy).
 * C++ code integrating with XLA:
   * Enable copy elision -- which makes `std::move` not necessary.
-  * Temporarily copied `xla/mlir/utils` library to `third-party/xla_mlir`, since it is not available in all XLA distributions.
+  * Temporarily copied `xla/mlir/utils` library to `deps/xla_mlir`, since it is not available in all XLA distributions.
 * Package `context`:
   * Added `context.GetParamOr` and `context.GetGraphParamOr`: it uses generics to cast to the desired type, and allowing a default value to be returned.
 * Added recovery of some basic types (numeric and slices) when loading params from Json with `checkpoints`.
