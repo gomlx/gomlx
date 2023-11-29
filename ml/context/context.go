@@ -26,6 +26,7 @@ import (
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/pkg/errors"
+	"golang.org/x/exp/slices"
 	"log"
 	"reflect"
 	"strings"
@@ -523,6 +524,61 @@ func (ctx *Context) setVariableInScope(name string, v *Variable) {
 	ctx.data.variables = append(ctx.data.variables, v)
 }
 
+// DeleteVariable if it exists.
+// Returns whether the variable existed before being deleted.
+//
+// This should not be called from a graph building function or from within EnumerateVariables: the results are undefined if you do.
+func (ctx *Context) DeleteVariable(scope, name string) bool {
+	scopeVars, ok := ctx.data.variablesMap[scope]
+	if !ok {
+		return false
+	}
+	v := scopeVars[name]
+	if v == nil {
+		return false
+	}
+	v.value = nil
+	v.graphToNodes = nil
+	delete(scopeVars, name)
+	if len(scopeVars) == 0 {
+		delete(ctx.data.variablesMap, scope)
+	}
+	ctx.data.variables = slices.DeleteFunc(ctx.data.variables, func(vCandidate *Variable) bool {
+		return vCandidate == v
+	})
+	return true
+}
+
+// DeleteVariablesInScope deletes all variables under the current scope (ctx.Scope()).
+//
+// This should not be called from a graph building function or from within EnumerateVariables: the results are undefined if you do.
+func (ctx *Context) DeleteVariablesInScope() {
+	variables := make([]*Variable, 0, len(ctx.data.variables))
+	baseScope := ctx.Scope()
+	baseScopeWithSeparator := baseScope + ScopeSeparator
+	if baseScope == RootScope {
+		baseScopeWithSeparator = baseScope
+	}
+	for _, v := range ctx.data.variables {
+		if v.Scope() == baseScope || strings.HasPrefix(v.Scope(), baseScopeWithSeparator) {
+			// Remove reference to variable.
+			scopeVars, ok := ctx.data.variablesMap[v.Scope()]
+			if !ok {
+				continue
+			}
+			delete(scopeVars, v.name)
+			if len(scopeVars) == 0 {
+				delete(ctx.data.variablesMap, v.Scope())
+			}
+			continue
+		} else {
+			// Preserve variable.
+			variables = append(variables, v)
+		}
+	}
+	ctx.data.variables = variables
+}
+
 // VariableWithShape creates or returns an existing variable with the given shape in the current scope.
 // It is initialized with the current variable initializer set for the context.
 // By default, variables are marked as trainable.
@@ -680,6 +736,9 @@ func (ctx *Context) EnumerateVariables(fn func(v *Variable)) {
 func (ctx *Context) EnumerateVariablesInScope(fn func(v *Variable)) {
 	baseScope := ctx.Scope()
 	baseScopeWithSeparator := baseScope + ScopeSeparator
+	if baseScope == RootScope {
+		baseScopeWithSeparator = baseScope
+	}
 	for _, v := range ctx.data.variables {
 		if v.Scope() == baseScope || strings.HasPrefix(v.Scope(), baseScopeWithSeparator) {
 			fn(v)

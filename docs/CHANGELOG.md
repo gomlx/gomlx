@@ -11,6 +11,7 @@
   * Temporarily copied `xla/mlir/utils` library to `deps/xla_mlir`, since it is not available in all XLA distributions.
 * Package `context`:
   * Added `context.GetParamOr` and `context.GetGraphParamOr`: it uses generics to cast to the desired type, and allowing a default value to be returned.
+  * Added `Context.DeleteVariable` and `Context.DeleteVariablesInScope`.
 * Package `checkpoints`: Added recovery of some basic types (numeric and slices) when loading params from Json.
 * Package `exceptions`: special case runtime panics to preserve its stack-trace.
 * Package `train`: `Loop` automatically sets LoopStep to context's "global_step" parameter.

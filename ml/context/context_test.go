@@ -147,6 +147,53 @@ func TestEnumerateVariables(t *testing.T) {
 	assert.True(t, got.Has("y") && got.Has("z"))
 }
 
+func TestDeleteVariable(t *testing.T) {
+	manager := graphtest.BuildTestManager()
+	ctx := NewContext(manager)
+	ctx0 := ctx.In("a")
+	_ = ctx0.VariableWithShape("x", shapes.Make(shapes.Float32))
+	ctx1 := ctx.In("b")
+	_ = ctx1.VariableWithShape("y", shapes.Make(shapes.Float64, 2))
+	ctx2 := ctx1.In("c")
+	_ = ctx2.VariableWithShape("z", shapes.Make(shapes.Float32, 3, 1))
+	ctx.InitializeVariables()
+
+	assert.False(t, ctx.DeleteVariable("/foo", "x"))
+	assert.True(t, ctx.DeleteVariable("/b", "y"))
+	assert.Equal(t, 2, ctx.NumVariables())
+	assert.NotNil(t, ctx.InspectVariable("/b/c", "z")) // Check "z" hasn't been deleted.
+	assert.True(t, ctx.DeleteVariable("/b/c", "z"))
+	assert.Equal(t, 1, ctx.NumVariables())
+	assert.True(t, ctx.DeleteVariable("/a", "x"))
+	assert.Equal(t, 0, ctx.NumVariables())
+}
+
+func TestDeleteVariablesInScope(t *testing.T) {
+	manager := graphtest.BuildTestManager()
+	ctx := NewContext(manager)
+	ctx0 := ctx.In("a")
+	_ = ctx0.VariableWithShape("x", shapes.Make(shapes.Float32))
+	ctx1 := ctx.In("b")
+	_ = ctx1.VariableWithShape("y", shapes.Make(shapes.Float64, 2))
+	ctx2 := ctx1.In("c")
+	_ = ctx2.VariableWithShape("z", shapes.Make(shapes.Float32, 3, 1))
+	ctx.InitializeVariables()
+
+	// Remove all under scope "/b"
+	ctx1.DeleteVariablesInScope()
+	assert.Equal(t, 1, ctx.NumVariables())
+	assert.NotNil(t, ctx.InspectVariable("/a", "x")) // Check "x" hasn't been deleted.
+
+	// Check that deleting an empty scope is a no-op.
+	ctx.In("foo").DeleteVariablesInScope()
+	assert.Equal(t, 1, ctx.NumVariables())
+	assert.NotNil(t, ctx.InspectVariable("/a", "x")) // Check "x" hasn't been deleted.
+
+	// Delete everything.
+	ctx.DeleteVariablesInScope()
+	assert.Equal(t, 0, ctx.NumVariables())
+}
+
 type ConstantLoader struct {
 	Values map[string]map[string]tensor.Tensor
 }
