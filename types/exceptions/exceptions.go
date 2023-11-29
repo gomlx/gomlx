@@ -8,9 +8,27 @@
 // It defines `Try` and `TryCatch[E any]`.
 package exceptions
 
-import "github.com/pkg/errors"
+import (
+	"github.com/pkg/errors"
+	"runtime"
+)
+
+// convertRuntimePanic converts a runtime panic error to something with a printable stack.
+func convertRuntimePanic(e any) any {
+	if e == nil {
+		return e
+	}
+	runtimeErr, ok := e.(runtime.Error)
+	if !ok {
+		// Not a runtime error.
+		return e
+	}
+	return errors.Wrap(runtimeErr, "runtime panic: ")
+}
 
 // Try calls `fn` and return any exception (`panic`) that may occur.
+//
+// Runtime panics are converted to an error with a stack-trace, to facilitate debugging.
 //
 // Example:
 //
@@ -28,6 +46,7 @@ import "github.com/pkg/errors"
 func Try(fn func()) (exception any) {
 	defer func() {
 		exception = recover()
+		exception = convertRuntimePanic(exception)
 	}()
 	fn()
 	return
@@ -35,6 +54,8 @@ func Try(fn func()) (exception any) {
 
 // TryCatch executes `fn` and in case of `panic`, it recovers if of the type `E`.
 // For a `panic` of any other type, it simply re-throws the `panic`.
+//
+// Runtime panics are converted to errors.Error, with a stack trace.
 //
 // Example:
 //
@@ -50,6 +71,8 @@ func TryCatch[E any](fn func()) (exception E) {
 			// No exceptions.
 			return
 		}
+		e = convertRuntimePanic(e)
+
 		var ok bool
 		exception, ok = e.(E)
 		if !ok {
