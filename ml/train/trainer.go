@@ -165,6 +165,7 @@ func NewTrainer(manager *graph.Manager, ctx *context.Context,
 		g := predictions[0].Graph()
 		loss := GetLosses(ctx, g)
 		if loss == nil {
+
 			return graph.ScalarZero(g, predictions[0].DType())
 		}
 		return loss
@@ -296,6 +297,11 @@ func (r *Trainer) trainStepGraph(spec any, ctx *context.Context, inputs, labels 
 			fn(ctx, g)
 		}
 	})
+
+	if len(predictions) == 0 {
+		// We create an zero prediction (same dtype as loss), because the metrics require something.
+		predictions = []*graph.Node{graph.ScalarZero(g, loss.DType())}
+	}
 
 	// Generate all metrics, which includes: batch loss, exponential moving average of the batch loss.
 	metrics = r.metricsUpdatesGraph(ctx, labels, predictions, r.trainMetrics)
