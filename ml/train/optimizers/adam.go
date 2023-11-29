@@ -250,3 +250,10 @@ func (o *adam) getMomentVariables(ctx *context.Context, trainable *context.Varia
 	m2 = ctx.InAbsPath(scopePath).WithInitializer(initializers.Zero).VariableWithShape(m2Name, shape).SetTrainable(false)
 	return
 }
+
+// Clear all optimizer variables.
+// It implements optimizers.Interface.
+func (o *adam) Clear(ctx *context.Context) {
+	ctxAdam := ctx.In(o.config.scopeName)
+	ctxAdam.DeleteVariablesInScope()
+}
