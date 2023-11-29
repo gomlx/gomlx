@@ -21,35 +21,36 @@ import (
 var (
 	flagByolProjectionNumLayers = flag.Int("byol_hidden_layers", 2, "When using \"byol\" model, this is the number of layers in the projection to the target regularizing model.")
 	flagByolProjectionNumNodes  = flag.Int("byol_num_nodes", 128, "When using \"byol\" model, this is the number of nodes (dimension) in the projection to the target regularizing model.")
-	flagByolTargetUpdateRatio   = flag.Float64("byol_target_update_ratio", 0.999, "Moving average update weight to the \"target\" sub-model for BYOL model.")
-	flagByolUsePairs            = flag.Bool("byol_use_pairs", true, "BYOL trained on pairs of images.")
-	flagByolRegularizationRate  = flag.Float64("byol_regularization_rate", 3.1, "BYOL regularization loss rate, a simple multiplier.")
-	flagByolInception           = flag.Bool("byol_inception", false, "Instaed of using a CNN model with BYOL, uses InceptionV3.")
-	flagByolOnlyPrediction      = flag.Bool("byol_only_prediction", false, "Train only the prediction, and not the regularization.")
+	flagByolTargetUpdateRatio   = flag.Float64("byol_target_update_ratio", 0.9999, "Moving average update weight to the \"target\" sub-model for BYOL model.")
+	flagByolRegularizationRate  = flag.Float64("byol_regularization_rate", 0.31, "BYOL regularization loss rate, a simple multiplier.")
+	flagByolInception           = flag.Bool("byol_inception", false, "Instead of using a CNN model with BYOL, uses InceptionV3.")
+
+	flagByolPretraining = flag.Bool("byol_pretrain", false, "Pre-train BYOL model, unsupervised.")
+	flagByolFinetuning  = flag.Bool("byol_finetuning", false, "Finetune BYOL model. If set to false, only the linear model on top is trained.")
 )
 
 // byolModel is the core of the BYOL model.
 // It's built twice, once for the "online" model once for the "target" model -- using contexts on different scopes.
-func byolModel(ctx *context.Context, images *Node) (logit, embeddings *Node) {
+//
+// baseTrainable defines whether the base model should be trainable (set to false for the "target"
+// model, or if fine-tuning is disabled)
+func byolModel(ctx *context.Context, images *Node, baseTrainable bool) (logit, embeddings *Node) {
 	isInceptionV3 := context.GetParamOr(ctx, "byol_inception", false)
 	if isInceptionV3 {
 		channelsConfig := timage.ChannelsLast
 		images = inceptionv3.PreprocessImage(images, 1.0, channelsConfig) // Adjust image to format used by Inception.
-		logits := inceptionv3.BuildGraph(ctx, images).
+		embeddings = inceptionv3.BuildGraph(ctx, images).
 			SetPooling(inceptionv3.MaxPooling).
-			Trainable(true).Done()
-		embeddings = FnnOnTop(ctx, logits)
+			Trainable(baseTrainable).Done()
 	} else {
-		// Simple CNN model -- we need an extra FNN on top, so we discard the original predicition.
-		_, embeddings = CnnModelWithEmbedding(ctx, images)
+		// Simple CNN model -- we need an extra FNN on top, so we discard the original prediction.
+		embeddings = CnnEmbeddings(ctx, images)
 	}
-	if *flagByolOnlyPrediction {
+	if !baseTrainable {
 		embeddings = StopGradient(embeddings)
 	}
 
-	ctxPrediction := ctx.In("prediction_layers")
-	predictionLayers := FnnOnTop(ctxPrediction, embeddings)
-	logit = layers.DenseWithBias(ctxPrediction.In("readout"), predictionLayers, 1)
+	logit = layers.DenseWithBias(ctx.In("readout"), embeddings, 1)
 	return
 }
 
@@ -58,43 +59,36 @@ func byolModel(ctx *context.Context, images *Node) (logit, embeddings *Node) {
 // It returns the logit, not the predictions, which works with most losses.
 // inputs: only one tensor, with shape `[batch_size, width, height, depth]`.
 func ByolCnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
+	_ = spec // Not used.
+
 	// Create two models: same structure, different initializations, and if `--byol_use_pairs` is set,
 	// different augmentations of the same image.
 	onlineCtx := ctx.In("online")
 	targetCtx := ctx.In("target")
-	usePairs := context.GetParamOr(ctx, "byol_use_pairs", false)
 	regularizationRate := context.GetParamOr(targetCtx, "byol_regularization_rate", 0.1)
 
-	// Evaluation/Inference we only use the "online" model, and return its prediction.
-	// There are no image pairs for inference, even if it's enabled.
+	// Evaluation/Inference and if pre-training is over, we only use the "online" model, and return
+	// its prediction.
 	g := inputs[0].Graph() // Graph.
-	if !ctx.IsTraining(g) {
-		onlineCtx := ctx.In("online")
-		onlineLogit, _ := byolModel(onlineCtx, inputs[0])
+	if !ctx.IsTraining(g) || !*flagByolPretraining {
+		baseTraining := ctx.IsTraining(g) && *flagByolFinetuning
+		onlineLogit, _ := byolModel(onlineCtx, inputs[0], baseTraining)
 		return []*Node{onlineLogit} // Return only the logits.
 	}
 
-	// If using image pairs, let's say images A and B, we want the model applied twice, and the
-	// prediction to be the mean prediction `(online(A)+online(B))/2`.
-	numFlips := 1
-	if usePairs {
-		numFlips = 2
-	}
-	var prediction *Node
+	// No dropout on target model.
+	targetCtx.SetParam("conv_dropout", 0.0) // Disable dropout on the target side.
+	targetCtx.SetParam("dropout", 0.0)      // Disable dropout on the target side.
 
-	for flip := 0; flip < numFlips; flip++ {
+	// We use image pairs A, B -- the same image, but with different augmentations.
+	// There are no predictions, we `trainer.AddLoss` our BYOL unsupervised loss.
+	// But we flip the images twice: first Online(A) vs Target(B) then Online(B) vs Target(A).
+	for flip := 0; flip < 2; flip++ {
 		// "Online" model is the one that we'll take the predictions from.
 		if flip > 0 {
 			onlineCtx = onlineCtx.Reuse()
 		}
-		onlineLogit, onlineEmbedding := byolModel(onlineCtx, inputs[0])
-		if prediction == nil {
-			// 1st prediction.
-			prediction = onlineLogit
-		} else {
-			// 2nd prediction: take the mean.
-			prediction = MulScalar(Add(prediction, onlineLogit), 0.5)
-		}
+		_, onlineEmbedding := byolModel(onlineCtx, inputs[0], true)
 
 		onlineProjection := byolProjection(onlineCtx, onlineEmbedding)
 		onlineTargetPrediction := layers.Dense(onlineCtx.In("online_target_prediction"), onlineProjection, true,
@@ -103,18 +97,12 @@ func ByolCnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 
 		// "Target" model is the one used to regularize, and is updated by a moving
 		// average towards the "Online" model.
-		if usePairs {
-			// Flip inputs for target:
-			inputs[0], inputs[1] = inputs[1], inputs[0]
-		}
-		if *flagByolOnlyPrediction || regularizationRate <= 0.0 {
-			continue
-		}
+		// Flip inputs for target:
+		inputs[0], inputs[1] = inputs[1], inputs[0]
 		if flip > 0 {
 			targetCtx = targetCtx.Reuse()
 		}
-		targetCtx.SetParam("conv_dropout", 0.0) // Disable dropout on the target side.
-		_, targetEmbedding := byolModel(targetCtx, inputs[0])
+		_, targetEmbedding := byolModel(targetCtx, inputs[0], false)
 		targetProjection := byolProjection(targetCtx, targetEmbedding)
 		targetProjection = L2NormalizeWithEpsilon(targetProjection, 1e-12, -1)
 
@@ -129,16 +117,15 @@ func ByolCnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 
 		// Add a loss term regularizing the "online" model projection towards the "target" one.
 		targetRegularization := L2NormSquare(Sub(onlineTargetPrediction, targetProjection), -1)
-		if usePairs {
-			targetRegularization = MulScalar(targetRegularization, 0.5)
-		}
+		targetRegularization = MulScalar(targetRegularization, 0.5) // 1/2 for each flip.
+
 		//train.AddLoss(ctx, targetRegularization)
 		train.AddLoss(ctx, MulScalar(targetRegularization, regularizationRate))
 	}
 
 	// Update "target" model with moving average to the "online" model.
 	movingAverageRatio := context.GetParamOr(targetCtx, "byol_target_update_ratio", 0.999)
-	if movingAverageRatio < 1.0 && !*flagByolOnlyPrediction && regularizationRate > 0.0 {
+	if movingAverageRatio < 1.0 {
 		onlineScope := onlineCtx.Scope()
 		targetScope := targetCtx.Scope()
 		targetCtx.EnumerateVariablesInScope(func(targetVar *context.Variable) {
@@ -163,7 +150,7 @@ func ByolCnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 			targetVar.SetValueGraph(targetValue)
 		})
 	}
-	return []*Node{prediction} // Return only the logits.
+	return []*Node{} // No prediction to return.
 }
 
 func byolProjection(ctx *context.Context, embeddings *Node) *Node {
