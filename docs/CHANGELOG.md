@@ -22,7 +22,7 @@
 * Package `optimizer`: 
   * Added `GetGlobalStep`.
   * Interface now include `Clear(ctx)` to clear all variables used by an optimizer --> this also breaks
-    compatibility unfortunately. 
+    compatibility for any custom optimizer, unfortunately. 
     But if it broke you, it should be a very easy fix, since most optimizers use a fixed scope for its variables, and
     `Context.DeleteVariablesInScope` will do the job.
   * Added `DeleteGlobalStep`.
