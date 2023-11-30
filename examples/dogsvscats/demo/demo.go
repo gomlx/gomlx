@@ -64,11 +64,9 @@ var (
 	flagNanLogger = flag.Bool("nanlogger", false, "Set to enable logging of NaN values, as soon as they happen.")
 
 	// Training hyperparameters:
-	flagModelType  = flag.String("model", "cnn", "Model types: \"cnn\" or \"inception\"")
-	flagOptimizer  = flag.String("optimizer", "adamw", fmt.Sprintf("Optimizer, options: %q", slices.SortedKeys(optimizers.KnownOptimizers)))
-	flagNumSteps   = flag.Int("steps", 2000, "Number of gradient descent steps to perform")
-	flagNumSamples = flag.Int("samples", -1,
-		"If set, only allow the model to see a subsample of that size, that are repeated over and over")
+	flagModelType        = flag.String("model", "cnn", "Model types: \"cnn\" or \"inception\"")
+	flagOptimizer        = flag.String("optimizer", "adamw", fmt.Sprintf("Optimizer, options: %q", slices.SortedKeys(optimizers.KnownOptimizers)))
+	flagNumSteps         = flag.Int("steps", 2000, "Number of gradient descent steps to perform")
 	flagBatchSize        = flag.Int("batch", dogsvscats.DefaultConfig.BatchSize, "Batch size for training")
 	flagLearningRate     = flag.Float64("learning_rate", 0.0001, "Initial learning rate.")
 	flagL2Regularization = flag.Float64("l2_reg", 0, "L2 regularization on kernels. It doesn't interact well with --batch_norm.")
