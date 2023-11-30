@@ -73,7 +73,9 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -229,6 +231,7 @@ func (c *Config) Done() (*Handler, error) {
 		Variables: nil,
 	}}
 	checkpoints, err := handler.ListCheckpoints()
+	handler.checkpointsCount = maxCheckPointCountFromCheckpoints(checkpoints) + 1
 	if err != nil {
 		return nil, err
 	}
@@ -294,6 +297,8 @@ type Handler struct {
 	serialized     *serializedData
 	variableValues map[string]tensor.Tensor
 	mergeExec      *graph.Exec
+
+	checkpointsCount int
 }
 
 // serializedData is how the information is read and written from storage.
@@ -388,10 +393,11 @@ func (h *Handler) String() string {
 // newCheckpointBaseName returns the base name for the checkpoint files.
 func (h *Handler) newCheckpointBaseName(globalStep int64) string {
 	now := time.Now().Format("20060102-150405")
+	baseName := fmt.Sprintf("%sn%07d-%s", baseNamePrefix, h.checkpointsCount, now)
 	if globalStep > 0 {
-		return fmt.Sprintf("%s%s-step-%08d", baseNamePrefix, now, globalStep)
+		return fmt.Sprintf("%s-step-%08d", baseName, globalStep)
 	} else {
-		return fmt.Sprintf("%s%s-initial", baseNamePrefix, now)
+		return fmt.Sprintf("%s-initial", baseName)
 	}
 }
 
@@ -428,6 +434,30 @@ func (h *Handler) HasCheckpoints() (bool, error) {
 	return len(list) > 0, err
 }
 
+var checkpointCountRexex = regexp.MustCompile(`^checkpoint-n(\d+)-`)
+
+// maxCheckPointCountFromCheckpoints returns the largest `checkpointCount` in the saved
+// checkpoints -- so the next checkpoint saved uses this count+1.
+//
+// The input should be the output of Handler.ListCheckpoints.
+func maxCheckPointCountFromCheckpoints(checkpoints []string) int {
+	maxId := -1
+	for _, name := range checkpoints {
+		matches := checkpointCountRexex.FindAllStringSubmatch(name, 1)
+		if len(matches) != 1 || len(matches[0]) != 2 {
+			continue
+		}
+		id, err := strconv.Atoi(matches[0][1])
+		if err != nil {
+			continue
+		}
+		if id > maxId {
+			maxId = id
+		}
+	}
+	return maxId
+}
+
 // loadCheckpoint loads a specific checkpoint file. This needs to happen before attachTo,
 // since otherwise it may not have any effect.
 //
@@ -439,6 +469,7 @@ func (h *Handler) HasCheckpoints() (bool, error) {
 // If `merge` is set to true, only trainable weights are merged into the current values, using
 // `mergeWeight` for the current weight. For merging one must set up `h.mergeExec` as well.
 func (h *Handler) loadCheckpoint(baseName string, merge bool, mergeWeight float64) error {
+	fmt.Printf("loading: %q\n", baseName)
 	if h.ctx != nil {
 		return errors.Errorf("%s tried to loadCheckpoint(%q) after being attached to a Context, this is not allowed", h, baseName)
 	}
@@ -597,6 +628,7 @@ func (h *Handler) Save() error {
 
 	// Create files.
 	baseName := h.newCheckpointBaseName(globalStep)
+	h.checkpointsCount += 1 // Bump unique number.
 	varFileName := filepath.Join(h.config.dir, baseName+varDataSuffix)
 	varFile, err := os.Create(varFileName)
 	if err != nil {
