@@ -58,13 +58,17 @@ var (
 	flagNumReplicas    = flag.Int("num_replicas", 1, "Number of replicas.")
 	flagPlatform       = flag.String("platform", "", "Platform to use, if empty uses the default one.")
 	flagCheckpoint     = flag.String("checkpoint", "", "Directory save and load checkpoints from. If left empty, no checkpoints are created.")
-	flagCheckpointKeep = flag.Int("checkpoint_keep", 2, "Number of checkpoints to keep, if --checkpoint is set.")
-	flagNanLogger      = flag.Bool("nanlogger", false, "Set to enable logging of NaN values, as soon as they happen.")
+	flagCheckpointKeep = flag.Int("checkpoint_keep", 2, "Number of checkpoints to keep, if --checkpoint is set. "+
+		"If set to 0 no checkpoints are set, and the checkpoint directory is used only for reading. "+
+		"If set to 1, a new checkpoint is generated at the end of training only. ")
+	flagNanLogger = flag.Bool("nanlogger", false, "Set to enable logging of NaN values, as soon as they happen.")
 
 	// Training hyperparameters:
-	flagModelType        = flag.String("model", "cnn", "Model types: \"cnn\" or \"inception\"")
-	flagOptimizer        = flag.String("optimizer", "adamw", fmt.Sprintf("Optimizer, options: %q", slices.SortedKeys(optimizers.KnownOptimizers)))
-	flagNumSteps         = flag.Int("steps", 2000, "Number of gradient descent steps to perform")
+	flagModelType  = flag.String("model", "cnn", "Model types: \"cnn\" or \"inception\"")
+	flagOptimizer  = flag.String("optimizer", "adamw", fmt.Sprintf("Optimizer, options: %q", slices.SortedKeys(optimizers.KnownOptimizers)))
+	flagNumSteps   = flag.Int("steps", 2000, "Number of gradient descent steps to perform")
+	flagNumSamples = flag.Int("samples", -1,
+		"If set, only allow the model to see a subsample of that size, that are repeated over and over")
 	flagBatchSize        = flag.Int("batch", dogsvscats.DefaultConfig.BatchSize, "Batch size for training")
 	flagLearningRate     = flag.Float64("learning_rate", 0.0001, "Initial learning rate.")
 	flagL2Regularization = flag.Float64("l2_reg", 0, "L2 regularization on kernels. It doesn't interact well with --batch_norm.")
@@ -139,6 +143,7 @@ func main() {
 // NewContext returns a new context with the parameters set from the flags values.
 func NewContext(manager *Manager) *context.Context {
 	ctx := context.NewContext(manager)
+	ctx.RngStateReset()
 	ctx.SetParam("optimizer", *flagOptimizer) // Just so it is saved along with the context.
 	ctx.SetParam(optimizers.LearningRateKey, *flagLearningRate)
 	ctx.SetParam(layers.L2RegularizationKey, *flagL2Regularization)
@@ -156,6 +161,7 @@ func NewContext(manager *Manager) *context.Context {
 		ctx.SetParam("byol_target_update_ratio", *flagByolTargetUpdateRatio)
 		ctx.SetParam("byol_regularization_rate", *flagByolRegularizationRate)
 		ctx.SetParam("byol_inception", *flagByolInception)
+		ctx.SetParam("byol_reg_len1", *flagByolRegLenOne)
 	}
 
 	if *flagNanLogger {
@@ -182,9 +188,14 @@ func trainModel(config *dogsvscats.Configuration) {
 	var checkpoint *checkpoints.Handler
 	if *flagCheckpoint != "" {
 		var err error
+		numCheckpoints := *flagCheckpointKeep
+		if *flagCheckpointKeep <= 1 {
+			// Only limit the amount of checkpoints kept if >= 2.
+			numCheckpoints = -1
+		}
 		checkpoint, err = checkpoints.Build(ctx).
 			DirFromBase(*flagCheckpoint, config.DataDir).
-			Keep(*flagCheckpointKeep).Done()
+			Keep(numCheckpoints).Done()
 		AssertNoError(err)
 		globalStep := optimizers.GetGlobalStep(ctx)
 		if globalStep != 0 {
@@ -212,7 +223,7 @@ func trainModel(config *dogsvscats.Configuration) {
 		Panicf("Unknown model %q: valid values are \"cnn\", \"inception\" or \"byol\"", *flagModelType)
 	}
 	if preTraining && checkpoint == nil {
-		fmt.Println("*** WARNING: pre-training model but not saving the pretrained weights is only useful for debugging")
+		fmt.Println("*** WARNING: pre-training model but not saving (--checkpoint) the pretrained weights is only useful for debugging")
 	}
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
@@ -240,7 +251,7 @@ func trainModel(config *dogsvscats.Configuration) {
 	commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
 
 	// Attach a checkpoint: checkpoint every 1 minute of training.
-	if checkpoint != nil {
+	if checkpoint != nil && *flagCheckpointKeep > 1 {
 		period := time.Minute * 1
 		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
 			func(loop *train.Loop, metrics []tensor.Tensor) error {
@@ -267,7 +278,7 @@ func trainModel(config *dogsvscats.Configuration) {
 	fmt.Printf("\t[Step %d] median train step: %d microseconds\n",
 		loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
 
-	// If pre-training, skip evaluation, and clear out optimizer variables.
+	// If pre-training (unsupervised), skip evaluation, and clear optimizer variables.
 	if preTraining {
 		fmt.Println("Pre-training only, no evaluation.")
 		optimizer.Clear(ctx)
@@ -277,6 +288,10 @@ func trainModel(config *dogsvscats.Configuration) {
 			checkpoint.Save()
 		}
 		return
+	}
+	if checkpoint != nil && *flagCheckpointKeep == 1 {
+		// Save checkpoint at end of training.
+		checkpoint.Save()
 	}
 
 	// Finally, print an evaluation on train and test datasets.

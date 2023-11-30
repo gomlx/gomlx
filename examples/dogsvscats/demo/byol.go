@@ -7,6 +7,7 @@ import (
 	"flag"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
+	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/models/inceptionv3"
@@ -21,8 +22,9 @@ import (
 var (
 	flagByolProjectionNumLayers = flag.Int("byol_hidden_layers", 2, "When using \"byol\" model, this is the number of layers in the projection to the target regularizing model.")
 	flagByolProjectionNumNodes  = flag.Int("byol_num_nodes", 128, "When using \"byol\" model, this is the number of nodes (dimension) in the projection to the target regularizing model.")
-	flagByolTargetUpdateRatio   = flag.Float64("byol_target_update_ratio", 0.9999, "Moving average update weight to the \"target\" sub-model for BYOL model.")
-	flagByolRegularizationRate  = flag.Float64("byol_regularization_rate", 0.31, "BYOL regularization loss rate, a simple multiplier.")
+	flagByolTargetUpdateRatio   = flag.Float64("byol_target_update_ratio", 0.99, "Moving average update weight to the \"target\" sub-model for BYOL model.")
+	flagByolRegularizationRate  = flag.Float64("byol_regularization_rate", 1.0, "BYOL regularization loss rate, a simple multiplier.")
+	flagByolRegLenOne           = flag.Float64("byol_reg_len1", 0.01, "BYOL regularize projections to length 1.")
 	flagByolInception           = flag.Bool("byol_inception", false, "Instead of using a CNN model with BYOL, uses InceptionV3.")
 
 	flagByolPretraining = flag.Bool("byol_pretrain", false, "Pre-train BYOL model, unsupervised.")
@@ -64,8 +66,11 @@ func ByolCnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	// Create two models: same structure, different initializations, and if `--byol_use_pairs` is set,
 	// different augmentations of the same image.
 	onlineCtx := ctx.In("online")
-	targetCtx := ctx.In("target")
-	regularizationRate := context.GetParamOr(targetCtx, "byol_regularization_rate", 0.1)
+	targetCtx := ctx.In("target").WithInitializer(initializers.RandomNormalFn(0, 1.0))
+
+	// No dropout for the "target" model, and a more random initialization.
+	targetCtx.SetParam("conv_dropout", 0.0) // Disable dropout on the target side.
+	targetCtx.SetParam("dropout", 0.0)      // Disable dropout on the target side.
 
 	// Evaluation/Inference and if pre-training is over, we only use the "online" model, and return
 	// its prediction.
@@ -76,52 +81,26 @@ func ByolCnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 		return []*Node{onlineLogit} // Return only the logits.
 	}
 
-	// No dropout on target model.
-	targetCtx.SetParam("conv_dropout", 0.0) // Disable dropout on the target side.
-	targetCtx.SetParam("dropout", 0.0)      // Disable dropout on the target side.
+	stackedImages12 := Concatenate([]*Node{inputs[0], inputs[1]}, 0) // For "online" model.
+	stackedImages21 := Concatenate([]*Node{inputs[1], inputs[0]}, 0) // For "target" model.
 
-	// We use image pairs A, B -- the same image, but with different augmentations.
-	// There are no predictions, we `trainer.AddLoss` our BYOL unsupervised loss.
-	// But we flip the images twice: first Online(A) vs Target(B) then Online(B) vs Target(A).
-	for flip := 0; flip < 2; flip++ {
-		// "Online" model is the one that we'll take the predictions from.
-		if flip > 0 {
-			onlineCtx = onlineCtx.Reuse()
-		}
-		_, onlineEmbedding := byolModel(onlineCtx, inputs[0], true)
+	regularizationRate := context.GetParamOr(targetCtx, "byol_regularization_rate", 1.0)
 
-		onlineProjection := byolProjection(onlineCtx, onlineEmbedding)
-		onlineTargetPrediction := layers.Dense(onlineCtx.In("online_target_prediction"), onlineProjection, true,
-			context.GetParamOr(onlineCtx, "byol_num_nodes", 0))
-		onlineTargetPrediction = L2NormalizeWithEpsilon(onlineTargetPrediction, 1e-12, -1)
+	_, onlineEmbedding := byolModel(onlineCtx, stackedImages12, true)
+	onlineProjection := byolProjection(onlineCtx, onlineEmbedding)
+	onlinePrediction := byolOnlinePrediction(onlineCtx, onlineProjection)
+	//byolRegularizeToLengthOne(onlineCtx, onlineTargetPrediction)
 
-		// "Target" model is the one used to regularize, and is updated by a moving
-		// average towards the "Online" model.
-		// Flip inputs for target:
-		inputs[0], inputs[1] = inputs[1], inputs[0]
-		if flip > 0 {
-			targetCtx = targetCtx.Reuse()
-		}
-		_, targetEmbedding := byolModel(targetCtx, inputs[0], false)
-		targetProjection := byolProjection(targetCtx, targetEmbedding)
-		targetProjection = L2NormalizeWithEpsilon(targetProjection, 1e-12, -1)
+	_, targetEmbedding := byolModel(targetCtx, stackedImages21, false)
+	targetProjection := byolProjection(targetCtx, targetEmbedding)
+	targetCtx.EnumerateVariablesInScope(func(v *context.Variable) {
+		v.Trainable = false
+	})
+	targetProjection = StopGradient(targetProjection)
 
-		// Gradient descent does not update the "target" model, so we `StopGradient` and mark their
-		// variables as not training.
-		targetProjection = StopGradient(targetProjection)
-		if flip == 0 {
-			targetCtx.EnumerateVariablesInScope(func(v *context.Variable) {
-				v.Trainable = false
-			})
-		}
-
-		// Add a loss term regularizing the "online" model projection towards the "target" one.
-		targetRegularization := L2NormSquare(Sub(onlineTargetPrediction, targetProjection), -1)
-		targetRegularization = MulScalar(targetRegularization, 0.5) // 1/2 for each flip.
-
-		//train.AddLoss(ctx, targetRegularization)
-		train.AddLoss(ctx, MulScalar(targetRegularization, regularizationRate))
-	}
+	byolReg := byolLoss(onlinePrediction, targetProjection)
+	ReduceAllMean(Sqrt(byolReg)).SetLogged("byolReg")
+	train.AddLoss(ctx, MulScalar(byolReg, regularizationRate))
 
 	// Update "target" model with moving average to the "online" model.
 	movingAverageRatio := context.GetParamOr(targetCtx, "byol_target_update_ratio", 0.999)
@@ -156,12 +135,51 @@ func ByolCnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 func byolProjection(ctx *context.Context, embeddings *Node) *Node {
 	// Re-use FnnOnTop: redefine its params based on BYOL ones, in the local scope.
 	ctx = ctx.In("byol_projection")
-	numLayers := context.GetParamOr(ctx, "byol_hidden_layers", 2)
-	if numLayers == 0 {
-		return embeddings
+	hiddenCtx := ctx.In("hidden")
+	embeddings = layers.Dense(hiddenCtx, embeddings, true, 4096)
+	embeddings = normalizeFeatures(hiddenCtx, embeddings)
+	embeddings = layers.Relu(embeddings)
+	embeddings = layers.Dense(ctx.In("projection"), embeddings, true, 256)
+	return embeddings
+}
+
+func byolOnlinePrediction(ctx *context.Context, projection *Node) *Node {
+	ctx = ctx.In("byol_online_prediction")
+	hiddenCtx := ctx.In("hidden")
+	projection = layers.Dense(hiddenCtx, projection, true, 4096)
+	projection = normalizeFeatures(hiddenCtx, projection)
+	projection = layers.Relu(projection)
+	projection = layers.Dense(ctx.In("projection"), projection, true, 256)
+	return projection
+}
+
+// byolLoss is based on the projections from the "online" model and "target" models -- the order
+// doesn't matter.
+func byolLoss(p0, p1 *Node) *Node {
+	ReduceAllMean(L2Norm(p0, -1)).SetLogged("||online_prediction||_2=")
+	ReduceAllMean(L2Norm(p1, -1)).SetLogged("||target_projection||_2=")
+
+	p0 = L2NormalizeWithEpsilon(p0, 1e-12, -1)
+	p1 = L2NormalizeWithEpsilon(p1, 1e-12, -1)
+	return AddScalar(
+		MulScalar(
+			ReduceSum(Mul(p0, p1), -1),
+			-2.0),
+		2.0)
+}
+
+// Add a regularization term proportional to $(1 - L2(projection))^2$.
+func byolRegularizeToLengthOne(ctx *context.Context, projection *Node) {
+	regLenOne := context.GetParamOr(ctx, "byol_reg_len1", 0.0)
+	if regLenOne <= 0.0 {
+		return
 	}
-	ctx.SetParam("hidden_layers", numLayers)
-	numNodes := context.GetParamOr(ctx, "byol_num_nodes", 0)
-	ctx.SetParam("num_nodes", numNodes)
-	return FnnOnTop(ctx, embeddings)
+
+	g := projection.Graph()
+	dtype := projection.DType()
+	lengths := L2Norm(projection, -1)
+	ReduceAllMean(lengths).SetLogged("MeanLengthProjection")
+	regLength := Square(Sub(ScalarOne(g, dtype), lengths))
+	regLength = MulScalar(regLength, regLenOne)
+	train.AddLoss(ctx, regLength)
 }
