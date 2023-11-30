@@ -58,8 +58,10 @@ var (
 	flagNumReplicas    = flag.Int("num_replicas", 1, "Number of replicas.")
 	flagPlatform       = flag.String("platform", "", "Platform to use, if empty uses the default one.")
 	flagCheckpoint     = flag.String("checkpoint", "", "Directory save and load checkpoints from. If left empty, no checkpoints are created.")
-	flagCheckpointKeep = flag.Int("checkpoint_keep", 2, "Number of checkpoints to keep, if --checkpoint is set.")
-	flagNanLogger      = flag.Bool("nanlogger", false, "Set to enable logging of NaN values, as soon as they happen.")
+	flagCheckpointKeep = flag.Int("checkpoint_keep", 2, "Number of checkpoints to keep, if --checkpoint is set. "+
+		"If set to 0 no checkpoints are set, and the checkpoint directory is used only for reading. "+
+		"If set to 1, a new checkpoint is generated at the end of training only. ")
+	flagNanLogger = flag.Bool("nanlogger", false, "Set to enable logging of NaN values, as soon as they happen.")
 
 	// Training hyperparameters:
 	flagModelType        = flag.String("model", "cnn", "Model types: \"cnn\" or \"inception\"")
@@ -132,14 +134,14 @@ func main() {
 	config.ForceOriginal = *flagForceOriginal
 	config.UseParallelism = true
 	config.BufferSize = 100
-	config.YieldImagePairs = *flagModelType == "byol" && *flagByolUsePairs
-
+	config.YieldImagePairs = *flagModelType == "byol"
 	trainModel(config)
 }
 
 // NewContext returns a new context with the parameters set from the flags values.
 func NewContext(manager *Manager) *context.Context {
 	ctx := context.NewContext(manager)
+	ctx.RngStateReset()
 	ctx.SetParam("optimizer", *flagOptimizer) // Just so it is saved along with the context.
 	ctx.SetParam(optimizers.LearningRateKey, *flagLearningRate)
 	ctx.SetParam(layers.L2RegularizationKey, *flagL2Regularization)
@@ -152,12 +154,12 @@ func NewContext(manager *Manager) *context.Context {
 
 	// BYOL model parameters.
 	if *flagModelType == "byol" {
-		ctx.SetParam("byol_hidden_layers", *flagByolProjectionNumLayers)
-		ctx.SetParam("byol_num_nodes", *flagByolProjectionNumNodes)
+		ctx.SetParam("byol_hidden_nodes", *flagByolProjectionHiddenNodes)
+		ctx.SetParam("byol_projection_nodes", *flagByolProjectionNodes)
 		ctx.SetParam("byol_target_update_ratio", *flagByolTargetUpdateRatio)
-		ctx.SetParam("byol_use_pairs", *flagByolUsePairs)
 		ctx.SetParam("byol_regularization_rate", *flagByolRegularizationRate)
 		ctx.SetParam("byol_inception", *flagByolInception)
+		ctx.SetParam("byol_reg_len1", *flagByolRegLenOne)
 	}
 
 	if *flagNanLogger {
@@ -184,9 +186,14 @@ func trainModel(config *dogsvscats.Configuration) {
 	var checkpoint *checkpoints.Handler
 	if *flagCheckpoint != "" {
 		var err error
+		numCheckpoints := *flagCheckpointKeep
+		if *flagCheckpointKeep <= 1 {
+			// Only limit the amount of checkpoints kept if >= 2.
+			numCheckpoints = -1
+		}
 		checkpoint, err = checkpoints.Build(ctx).
 			DirFromBase(*flagCheckpoint, config.DataDir).
-			Keep(*flagCheckpointKeep).Done()
+			Keep(numCheckpoints).Done()
 		AssertNoError(err)
 		globalStep := optimizers.GetGlobalStep(ctx)
 		if globalStep != 0 {
@@ -195,7 +202,10 @@ func trainModel(config *dogsvscats.Configuration) {
 	}
 
 	// Select the model type we are using:
-	var modelFn func(ctx *context.Context, spec any, inputs []*Node) []*Node
+	var (
+		modelFn     train.ModelFn
+		preTraining = false
+	)
 	switch *flagModelType {
 	case "cnn":
 		modelFn = CnnModelGraph
@@ -206,17 +216,32 @@ func trainModel(config *dogsvscats.Configuration) {
 		}
 	case "byol":
 		modelFn = ByolCnnModelGraph
+		preTraining = *flagByolPretraining
 	default:
 		Panicf("Unknown model %q: valid values are \"cnn\", \"inception\" or \"byol\"", *flagModelType)
+	}
+	if preTraining && checkpoint == nil {
+		fmt.Println("*** WARNING: pre-training model but not saving (--checkpoint) the pretrained weights is only useful for debugging")
 	}
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
-	trainer := train.NewTrainer(manager, ctx, modelFn,
-		losses.BinaryCrossentropyLogits,
-		optimizers.MustOptimizerByName(*flagOptimizer),
-		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
-		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
+	var trainer *train.Trainer
+	optimizer := optimizers.MustOptimizerByName(*flagOptimizer)
+	if !preTraining {
+		trainer = train.NewTrainer(manager, ctx, modelFn,
+			losses.BinaryCrossentropyLogits,
+			optimizer,
+			[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
+			[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
+	} else {
+		// Pre-training: no loss, no metrics.
+		trainer = train.NewTrainer(manager, ctx, modelFn,
+			nil,
+			optimizers.MustOptimizerByName(*flagOptimizer),
+			nil, // trainMetrics
+			nil) // evalMetrics
+	}
 	nanLogger.AttachToTrainer(trainer) // It's a no-op if nanLogger is nil.
 
 	// Use standard training loop.
@@ -224,7 +249,7 @@ func trainModel(config *dogsvscats.Configuration) {
 	commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
 
 	// Attach a checkpoint: checkpoint every 1 minute of training.
-	if checkpoint != nil {
+	if checkpoint != nil && *flagCheckpointKeep > 1 {
 		period := time.Minute * 1
 		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
 			func(loop *train.Loop, metrics []tensor.Tensor) error {
@@ -236,8 +261,13 @@ func trainModel(config *dogsvscats.Configuration) {
 	// The points generated are saved along the checkpoint directory (if one is given).
 	var plots *margaid.Plots
 	if *flagPlots {
-		plots = margaid.NewDefault(loop, checkpoint.Dir(), 100, 1.1, trainEvalDS, validationEvalDS).
-			WithEvalLossType("eval-loss")
+		if !preTraining {
+			plots = margaid.NewDefault(loop, checkpoint.Dir(), 100, 1.1, trainEvalDS, validationEvalDS).
+				WithEvalLossType("eval-loss")
+		} else {
+			// Pre-training: no evaluation.
+			plots = margaid.NewDefault(loop, checkpoint.Dir(), 100, 1.1)
+		}
 	}
 
 	// Loop for given number of steps.
@@ -245,6 +275,22 @@ func trainModel(config *dogsvscats.Configuration) {
 	AssertNoError(err)
 	fmt.Printf("\t[Step %d] median train step: %d microseconds\n",
 		loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
+
+	// If pre-training (unsupervised), skip evaluation, and clear optimizer variables.
+	if preTraining {
+		fmt.Println("Pre-training only, no evaluation.")
+		optimizer.Clear(ctx)
+		optimizers.DeleteGlobalStep(ctx)
+		if checkpoint != nil {
+			fmt.Println("- Saving cleared checkpoint.")
+			checkpoint.Save()
+		}
+		return
+	}
+	if checkpoint != nil && *flagCheckpointKeep == 1 {
+		// Save checkpoint at end of training.
+		checkpoint.Save()
+	}
 
 	// Finally, print an evaluation on train and test datasets.
 	fmt.Println()

@@ -88,6 +88,10 @@ type Configuration struct {
 	// BufferSize used for data.ParallelDataset, to cache intermediary batches. This value is used
 	// for each dataset.
 	BufferSize int
+
+	// NumSamples is the maximum number of samples the model is allowed to see. If set to -1
+	// model can see all samples.
+	NumSamples int
 }
 
 var (
@@ -102,6 +106,7 @@ var (
 		FoldsSeed:       0,
 		UseParallelism:  true,
 		BufferSize:      32,
+		NumSamples:      -1,
 	} // DType used for model.
 
 )
@@ -175,7 +180,7 @@ func PreGenerate(config *Configuration, numEpochsForTraining int, force bool) {
 // makes the training much, much slower.
 func CreateDatasets(config *Configuration) (trainDS, trainEvalDS, validationEvalDS train.Dataset) {
 	shuffle := rand.New(rand.NewSource(time.Now().UTC().UnixNano()))
-	usePretrained := !config.ForceOriginal
+	usePretrained := !config.ForceOriginal && config.NumSamples == -1
 	trainPath := path.Join(config.DataDir, PreGeneratedTrainFileName)
 	trainPairPath := path.Join(config.DataDir, PreGeneratedTrainPairFileName)
 	trainEvalPath := path.Join(config.DataDir, PreGeneratedTrainEvalFileName)

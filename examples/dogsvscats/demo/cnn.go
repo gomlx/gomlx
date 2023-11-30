@@ -13,12 +13,13 @@ import (
 // It returns the logit, not the predictions, which works with most losses.
 // inputs: only one tensor, with shape `[batch_size, width, height, depth]`.
 func CnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
-	logit, _ := CnnModelWithEmbedding(ctx, inputs[0])
+	embeddings := CnnEmbeddings(ctx, inputs[0])
+	logit := layers.DenseWithBias(ctx.In("readout"), embeddings, 1)
 	return []*Node{logit} // Return only the logits.
 }
 
-// CnnModelWithEmbedding builds a CNN model and return the final logit of the binary classification and the last layer embeddings.
-func CnnModelWithEmbedding(ctx *context.Context, images *Node) (logit, embedding *Node) {
+// CnnEmbeddings builds a CNN model and returns the flattened embeddings for each image.
+func CnnEmbeddings(ctx *context.Context, images *Node) (embeddings *Node) {
 	numConvolutions := context.GetParamOr(ctx, "num_convolutions", 5)
 	dropoutRate := context.GetParamOr(ctx, "conv_dropout", 0.0)
 	var dropoutNode *Node
@@ -57,9 +58,7 @@ func CnnModelWithEmbedding(ctx *context.Context, images *Node) (logit, embedding
 
 	// Flatten the resulting image, and treat the convolved values as tabular.
 	logits = Reshape(logits, batchSize, -1)
-	logits = FnnOnTop(ctx, logits)
-	embedding = logits
-	logit = layers.DenseWithBias(ctx.In("readout"), logits, 1)
+	embeddings = FnnOnTop(ctx, logits)
 	return
 }
 

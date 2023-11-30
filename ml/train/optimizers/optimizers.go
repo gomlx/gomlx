@@ -47,6 +47,11 @@ type Interface interface {
 	//
 	// loss must be a scalar value.
 	UpdateGraph(ctx *context.Context, g *Graph, loss *Node)
+
+	// Clear deletes all temporary variables used by the optimizer.
+	// This may be used for a model to be used by inference to save space, or if the training should be reset
+	// for some other reason.
+	Clear(ctx *context.Context)
 }
 
 var (
@@ -106,6 +111,11 @@ func GetGlobalStep(ctx *context.Context) int64 {
 		Panicf("Context(scope=%q)[%q]=%#v, and cannot be converted to int64", ctx.Scope(), GlobalStepVariableName, vAny)
 	}
 	return v
+}
+
+// DeleteGlobalStep in case one wants to reset the model state, or hide how many steps were taken.
+func DeleteGlobalStep(ctx *context.Context) {
+	ctx.DeleteVariable(ctx.Scope(), GlobalStepVariableName)
 }
 
 // IncrementGlobalStepGraph creates (if not there yet) a global step counter, and
@@ -175,6 +185,11 @@ func (sgd *sgd) UpdateGraph(ctx *context.Context, g *Graph, loss *Node) {
 	addGradientsToVariablesGraph(ctx, loss, learningRate, globalStep)
 	return
 }
+
+// Clear all optimizer variables.
+// There are none for SGD, so this is a non-op.
+// It implements optimizers.Interface.
+func (sgd *sgd) Clear(ctx *context.Context) {}
 
 // addGradientsToVariablesGraph takes the output of Context.BuildTrainableVariablesGradientsGraph,
 // multiply by (-learningRate) and add to the current value of the variablesMap.

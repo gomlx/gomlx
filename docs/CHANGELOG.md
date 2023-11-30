@@ -11,9 +11,21 @@
   * Temporarily copied `xla/mlir/utils` library to `deps/xla_mlir`, since it is not available in all XLA distributions.
 * Package `context`:
   * Added `context.GetParamOr` and `context.GetGraphParamOr`: it uses generics to cast to the desired type, and allowing a default value to be returned.
-* Added recovery of some basic types (numeric and slices) when loading params from Json with `checkpoints`.
-* Package `train`: `Loop` automatically sets LoopStep to context's "global_step" parameter.
-* Package `optimizer`: Added `GetGlobalStep`.
+  * Added `Context.DeleteVariable` and `Context.DeleteVariablesInScope`.
+* Package `checkpoints`: 
+  * Added recovery of some basic types (numeric and slices) when loading params from Json.
+  * Added unique incrementing id to checkpoint file names.
+* Package `exceptions`: special case runtime panics to preserve its stack-trace.
+* Package `train`: 
+  * `Loop` automatically sets LoopStep to context's "global_step" parameter.
+  * Models (e.g.: unsupervised) can return `nil` for predictions.
+* Package `optimizer`: 
+  * Added `GetGlobalStep`.
+  * Interface now include `Clear(ctx)` to clear all variables used by an optimizer --> this also breaks
+    compatibility for any custom optimizer, unfortunately. 
+    But if it broke you, it should be a very easy fix, since most optimizers use a fixed scope for its variables, and
+    `Context.DeleteVariablesInScope` will do the job.
+  * Added `DeleteGlobalStep`.
 * Package `context`: Added `Context.EnumerateVariablesInScope()` method.
 * Package `graph`:
   * Added optional `reduceAxes` parameter to `L2Norm` and `L1Norm`.

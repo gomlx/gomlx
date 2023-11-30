@@ -50,6 +50,7 @@ func TestCheckpoints(t *testing.T) {
 		ctx.SetParam(layers.L2RegularizationKey, 0.001)
 		ctx.In("layer_1").SetParam(layers.L2RegularizationKey, 0.004)
 		checkpoint := Build(ctx).TempDir("", "test_checkpoints_").Keep(3).MustDone()
+		assert.Equal(t, 0, checkpoint.checkpointsCount)
 		dir = checkpoint.Dir()
 		fmt.Printf("Checkpoint directory: %s\n", dir)
 		e := context.NewExec(manager, ctx, testGraphFn)
@@ -64,6 +65,8 @@ func TestCheckpoints(t *testing.T) {
 		list, err := checkpoint.ListCheckpoints()
 		assert.NoError(t, err)
 		assert.Len(t, list, 3, "Number of remaining checkpoints")
+		assert.Equal(t, 10, checkpoint.checkpointsCount)
+		assert.Equal(t, 9, maxCheckPointCountFromCheckpoints(list))
 	}
 
 	// Test loading of values
