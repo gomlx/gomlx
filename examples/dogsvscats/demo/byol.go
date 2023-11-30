@@ -20,12 +20,12 @@ import (
 // https://arxiv.org/abs/2006.07733
 
 var (
-	flagByolProjectionNumLayers = flag.Int("byol_hidden_layers", 2, "When using \"byol\" model, this is the number of layers in the projection to the target regularizing model.")
-	flagByolProjectionNumNodes  = flag.Int("byol_num_nodes", 128, "When using \"byol\" model, this is the number of nodes (dimension) in the projection to the target regularizing model.")
-	flagByolTargetUpdateRatio   = flag.Float64("byol_target_update_ratio", 0.99, "Moving average update weight to the \"target\" sub-model for BYOL model.")
-	flagByolRegularizationRate  = flag.Float64("byol_regularization_rate", 1.0, "BYOL regularization loss rate, a simple multiplier.")
-	flagByolRegLenOne           = flag.Float64("byol_reg_len1", 0.01, "BYOL regularize projections to length 1.")
-	flagByolInception           = flag.Bool("byol_inception", false, "Instead of using a CNN model with BYOL, uses InceptionV3.")
+	flagByolProjectionHiddenNodes = flag.Int("byol_hidden_nodes", 4096, "When using \"byol\" model, the number of nodes in the hidden layer.")
+	flagByolProjectionNodes       = flag.Int("byol_projection_nodes", 256, "When using \"byol\" model, this is the number of nodes (dimension) in the projection to the target regularizing model.")
+	flagByolTargetUpdateRatio     = flag.Float64("byol_target_update_ratio", 0.99, "Moving average update weight to the \"target\" sub-model for BYOL model.")
+	flagByolRegularizationRate    = flag.Float64("byol_regularization_rate", 1.0, "BYOL regularization loss rate, a simple multiplier.")
+	flagByolRegLenOne             = flag.Float64("byol_reg_len1", 0.01, "BYOL regularize projections to length 1.")
+	flagByolInception             = flag.Bool("byol_inception", false, "Instead of using a CNN model with BYOL, uses InceptionV3.")
 
 	flagByolPretraining = flag.Bool("byol_pretrain", false, "Pre-train BYOL model, unsupervised.")
 	flagByolFinetuning  = flag.Bool("byol_finetuning", false, "Finetune BYOL model. If set to false, only the linear model on top is trained.")
@@ -133,23 +133,29 @@ func ByolCnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 }
 
 func byolProjection(ctx *context.Context, embeddings *Node) *Node {
+	projectionNodes := context.GetParamOr(ctx, "byol_projection_nodes", 256)
+	projectionHiddenNodes := context.GetParamOr(ctx, "byol_hidden_nodes", 4096)
+
 	// Re-use FnnOnTop: redefine its params based on BYOL ones, in the local scope.
 	ctx = ctx.In("byol_projection")
 	hiddenCtx := ctx.In("hidden")
-	embeddings = layers.Dense(hiddenCtx, embeddings, true, 4096)
+	embeddings = layers.Dense(hiddenCtx, embeddings, true, projectionHiddenNodes)
 	embeddings = normalizeFeatures(hiddenCtx, embeddings)
 	embeddings = layers.Relu(embeddings)
-	embeddings = layers.Dense(ctx.In("projection"), embeddings, true, 256)
+	embeddings = layers.Dense(ctx.In("projection"), embeddings, true, projectionNodes)
 	return embeddings
 }
 
 func byolOnlinePrediction(ctx *context.Context, projection *Node) *Node {
+	projectionNodes := context.GetParamOr(ctx, "byol_projection_nodes", 256)
+	projectionHiddenNodes := context.GetParamOr(ctx, "byol_hidden_nodes", 4096)
+
 	ctx = ctx.In("byol_online_prediction")
 	hiddenCtx := ctx.In("hidden")
-	projection = layers.Dense(hiddenCtx, projection, true, 4096)
+	projection = layers.Dense(hiddenCtx, projection, true, projectionHiddenNodes)
 	projection = normalizeFeatures(hiddenCtx, projection)
 	projection = layers.Relu(projection)
-	projection = layers.Dense(ctx.In("projection"), projection, true, 256)
+	projection = layers.Dense(ctx.In("projection"), projection, true, projectionNodes)
 	return projection
 }
 

@@ -156,8 +156,8 @@ func NewContext(manager *Manager) *context.Context {
 
 	// BYOL model parameters.
 	if *flagModelType == "byol" {
-		ctx.SetParam("byol_hidden_layers", *flagByolProjectionNumLayers)
-		ctx.SetParam("byol_num_nodes", *flagByolProjectionNumNodes)
+		ctx.SetParam("byol_hidden_nodes", *flagByolProjectionHiddenNodes)
+		ctx.SetParam("byol_projection_nodes", *flagByolProjectionNodes)
 		ctx.SetParam("byol_target_update_ratio", *flagByolTargetUpdateRatio)
 		ctx.SetParam("byol_regularization_rate", *flagByolRegularizationRate)
 		ctx.SetParam("byol_inception", *flagByolInception)
