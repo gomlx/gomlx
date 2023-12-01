@@ -103,6 +103,8 @@ WORKDIR ${HOME}
 # look at. Also make a copy of the tutorial at the root directory for quick access.
 USER ${NB_UID}
 COPY --link --chown=${NB_UID}:${NB_GID} . "${HOME}/Projects/gomlx"
+COPY --link --chown=${NB_UID}:${NB_GID} "./examples/tutorial/tutorial.ipynb" "${HOME}/"
+COPY --link --chown=${NB_UID}:${NB_GID} "./examples/tutorial/*.jpg" "${HOME}/"
 
 # Run basic tests -- only on "Host" since GPU in docker build is not working.
 WORKDIR "${HOME}/Projects/gomlx"

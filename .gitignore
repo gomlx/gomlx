@@ -19,6 +19,7 @@ bazel-c
 bazel-out
 bazel-mnt
 bazel-testlogs
+gomlx_xla.tar.gz
 
 # VSCode files
 .Trash*
