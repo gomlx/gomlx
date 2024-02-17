@@ -18,7 +18,9 @@
 package data
 
 import (
+	"compress/gzip"
 	"crypto/sha256"
+	"encoding/csv"
 	"encoding/hex"
 	"fmt"
 	"github.com/gomlx/gomlx/ml/train"
@@ -296,8 +298,10 @@ func DownloadAndUntarIfMissing(url, baseDir, tarFile, targetUntarDir, checkHash 
 	return nil
 }
 
-// DownloadAndUnzipIfMissing downloads zipFile from given url, if file not there yet, and then unzip it
-// under directory `unzipBaseDir`. If the target `targetUnzipDir` directory is missing.
+// DownloadAndUnzipIfMissing downloads `zipFile` from given url, if file not there yet.
+// And then unzip it under directory `unzipBaseDir`, if the target `targetUnzipDir` directory is missing.
+//
+// It's recommended that all paths be absolute.
 //
 // If checkHash is provided, it checks that the file has the hash or fail.
 func DownloadAndUnzipIfMissing(url, zipFile, unzipBaseDir, targetUnzipDir, checkHash string) error {
@@ -327,6 +331,36 @@ func Unzip(zipFile, zipBaseDir string) error {
 	if err != nil {
 		//fmt.Printf("%v", cmd.Error())
 		return errors.Wrapf(err, "failed to run %q", cmd)
+	}
+	return nil
+}
+
+// ParseGzipCSVFile opens a `CSV.gz` file and iterates over each of its rows, calling `perRowFn`, with a slice
+// of strings for each cell value in the row.
+func ParseGzipCSVFile(filePath string, perRowFn func(row []string) error) error {
+	f, err := os.Open(filePath)
+	if err != nil {
+		return errors.Wrapf(err, "failed to open file %q", filePath)
+	}
+	defer func() { _ = f.Close() }()
+	gz, err := gzip.NewReader(f)
+	if err != nil {
+		return errors.Wrapf(err, "failed to un-gzip file %q", filePath)
+	}
+	r := csv.NewReader(gz)
+	var record []string
+	for {
+		record, err = r.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return errors.Wrapf(err, "while reading gzip+csv %q", filePath)
+		}
+		err = perRowFn(record)
+		if err != nil {
+			return errors.WithMessagef(err, "while processing file %q", filePath)
+		}
 	}
 	return nil
 }
