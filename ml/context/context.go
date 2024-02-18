@@ -184,6 +184,11 @@ func (ctx *Context) copy() *Context {
 	return ctx2
 }
 
+// Manager returns the manager associated with this context.
+func (ctx *Context) Manager() *Manager {
+	return ctx.data.manager
+}
+
 // Scope returns the full scope path.
 //
 // Notice that Scope is part of the "reference" component of a Context.
@@ -304,7 +309,10 @@ func (ctx *Context) WithInitializer(initializer VariableInitializer) *Context {
 // E.g: if current scope is "/a/b", it will search for the key in "/a/b" scope, then
 // in "/a" and finally in "/", and return the first result found.
 //
-// See also GetGraphParam for parameters that are graph specific.
+// See also:
+//
+// * GetParamOr to get a parameter with a default, if one doesn't exist.
+// * GetGraphParam for parameters that are graph specific.
 func (ctx *Context) GetParam(key string) (value any, found bool) {
 	return ctx.data.params.Get(ctx.scope, key)
 }
