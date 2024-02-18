@@ -1,3 +1,9 @@
+// Package ogbnmag provides `Download` method for the corresponding dataset, and some dataset tools
+//
+// See https://ogb.stanford.edu/ for all Open Graph Benchmark (OGB) datasets.
+// See https://ogb.stanford.edu/docs/nodeprop/#ogbn-mag for the `ogbn-mag` dataset description.
+//
+// The task is to predict the venue of publication of a paper, given it's relations.
 package ogbnmag
 
 import (
@@ -23,7 +29,9 @@ var (
 	NumAuthors      = 1134649
 	NumInstitutions = 8740
 	NumFieldOfStudy = 59965
-	NumLabels       = 349
+
+	// NumLabels is the number of labels for the papers. These correspond to publication venues.
+	NumLabels = 349
 
 	// PaperEmbeddingsSize is the size of the node features given.
 	PaperEmbeddingsSize = 128
