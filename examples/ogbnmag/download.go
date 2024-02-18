@@ -19,14 +19,28 @@ var (
 )
 
 var (
-	NumPapers           = 736389 // Number of papers read, 736389
+	NumPapers       = 736389
+	NumAuthors      = 1134649
+	NumInstitutions = 8740
+	NumFieldOfStudy = 59965
+	NumLabels       = 349
+
+	// PaperEmbeddingsSize is the size of the node features given.
 	PaperEmbeddingsSize = 128
 
 	// PapersEmbeddings contains the embeddings, shaped `(Float32)[NumPapers, PaperEmbeddingsSize]`
 	PapersEmbeddings tensor.Tensor
 
-	// PapersYears for each paper, where year starts in 2000 (so 10 corresponds to 2010). Shaped `(int16)[NumPapers, 1]`.
+	// PapersYears for each paper, where year starts in 2000 (so 10 corresponds to 2010). Shaped `(Int16)[NumPapers, 1]`.
 	PapersYears tensor.Tensor
+
+	// PapersLabels for each paper, values from 0 to 348 (so 349 in total). Shaped `(Int16)[NumPapers, 1]`.
+	PapersLabels tensor.Tensor
+
+	// TrainSplit, TestSplit, ValidationSplit splits of the data.
+	// These are indices to papers, values from `[0, NumPapers-1]`. Shaped `(Int32)[n, 1]
+	// They have 629571, 41939 and 64879 elements each.
+	TrainSplit, TestSplit, ValidationSplit tensor.Tensor
 )
 
 // Download and prepares the tensors with the data into the `baseDir`.
@@ -40,11 +54,15 @@ func Download(baseDir string) error {
 		return nil
 	}
 	baseDir = mldata.ReplaceTildeInDir(baseDir) // If baseDir starts with "~", it is replaced.
-	if err := downloadZip(baseDir); err != nil {
+	downloadDir := path.Join(baseDir, DownloadSubdir)
+	if err := downloadZip(downloadDir); err != nil {
 		return err
 	}
 
-	if err := parsePapersFromCSV(baseDir); err != nil {
+	if err := parsePapersFromCSV(downloadDir); err != nil {
+		return err
+	}
+	if err := parseSplitsFromCSV(downloadDir); err != nil {
 		return err
 	}
 
@@ -53,14 +71,13 @@ func Download(baseDir string) error {
 
 // downloadZip downloads, uncompress and then removes the Zip file.
 // Run this only if tensor files are not available.
-func downloadZip(baseDir string) error {
-	downloadPath := path.Join(baseDir, DownloadSubdir)
-	if err := os.MkdirAll(downloadPath, 0777); err != nil && !os.IsExist(err) {
-		return errors.Wrapf(err, "Failed to create path for downloading %q", downloadPath)
+func downloadZip(downloadDir string) error {
+	if err := os.MkdirAll(downloadDir, 0777); err != nil && !os.IsExist(err) {
+		return errors.Wrapf(err, "Failed to create path for downloading %q", downloadDir)
 	}
 
-	zipPath := path.Join(downloadPath, ZipFile)
-	err := mldata.DownloadAndUnzipIfMissing(ZipURL, zipPath, downloadPath, path.Join(downloadPath, "mag"), ZipChecksum)
+	zipPath := path.Join(downloadDir, ZipFile)
+	err := mldata.DownloadAndUnzipIfMissing(ZipURL, zipPath, downloadDir, path.Join(downloadDir, "mag"), ZipChecksum)
 	if err != nil {
 		return err
 	}
@@ -78,24 +95,55 @@ const (
 	papersEmbeddingsFile    = "papers_embeddings.tensor"
 	papersYearsCSVFile      = "mag/raw/node-feat/paper/node_year.csv.gz"
 	papersYearsFile         = "papers_years.tensor"
+	papersLabelsCSVFile     = "mag/raw/node-label/paper/node-label.csv.gz"
+	papersLabelsFile        = "papers_labels.tensor"
 )
 
-func parsePapersFromCSV(baseDir string) error {
-	papersFeaturesCSVPath := path.Join(baseDir, DownloadSubdir, papersEmbeddingsCSVFile)
-	papersFeaturesPath := path.Join(baseDir, papersEmbeddingsFile)
+func parsePapersFromCSV(downloadDir string) error {
+	papersFeaturesCSVPath := path.Join(downloadDir, papersEmbeddingsCSVFile)
+	papersFeaturesPath := path.Join(downloadDir, papersEmbeddingsFile)
 	t, err := parseNumbersFromCSV(papersFeaturesCSVPath, papersFeaturesPath, NumPapers, PaperEmbeddingsSize, parseFloat32)
 	if err != nil {
 		return err
 	}
 	PapersEmbeddings = t
 
-	papersYearsCSVPath := path.Join(baseDir, DownloadSubdir, papersYearsCSVFile)
-	papersYearsPath := path.Join(baseDir, papersYearsFile)
+	papersYearsCSVPath := path.Join(downloadDir, papersYearsCSVFile)
+	papersYearsPath := path.Join(downloadDir, papersYearsFile)
 	t, err = parseNumbersFromCSV(papersYearsCSVPath, papersYearsPath, NumPapers, 1, parseYear)
 	if err != nil {
 		return err
 	}
 	PapersYears = t
+
+	papersLabelsCSVPath := path.Join(downloadDir, papersLabelsCSVFile)
+	papersLabelsPath := path.Join(downloadDir, papersLabelsFile)
+	t, err = parseNumbersFromCSV(papersLabelsCSVPath, papersLabelsPath, NumPapers, 1, parseYear)
+	if err != nil {
+		return err
+	}
+	PapersLabels = t
+
+	return nil
+}
+
+var (
+	splitsCSVFiles = []string{"train.csv.gz", "test.csv.gz", "valid.csv.gz"}
+	splitsNumRows  = []int{629571, 41939, 64879} // Total = NumPapers
+	splitsFiles    = []string{"train", "test", "validation"}
+	splitsStore    = []*tensor.Tensor{&TrainSplit, &TestSplit, &ValidationSplit}
+)
+
+func parseSplitsFromCSV(downloadDir string) error {
+	for ii, fileName := range splitsCSVFiles {
+		splitCSVFilePath := path.Join(downloadDir, "mag/split/time/paper/", fileName)
+		splitFile := path.Join(downloadDir, splitsFiles[ii]+"_split.tensor")
+		t, err := parseNumbersFromCSV(splitCSVFilePath, splitFile, splitsNumRows[ii], 1, parseInt32)
+		if err != nil {
+			return errors.WithMessagef(err, "while parsing split file for %s", splitsFiles[ii])
+		}
+		*(splitsStore[ii]) = t
+	}
 	return nil
 }
 
@@ -116,6 +164,15 @@ func parseYear(str string) (value uint8, err error) {
 	return uint8(v - 2000), nil
 }
 
+func parseInt32(str string) (int32, error) {
+	v, err := strconv.ParseFloat(str, 32)
+	if err != nil {
+		return 0, err
+	}
+	return int32(v), nil
+}
+
+// parseNumbersFromCSV returns the numbers in a CSV file as a tensor.
 func parseNumbersFromCSV[E shapes.NumberNotComplex](inputFilePath, outputFilePath string, numRows, numCols int, parseNumberFn func(string) (E, error)) (*tensor.Local, error) {
 	var tensorOut *tensor.Local
 	var err error
@@ -156,7 +213,7 @@ func parseNumbersFromCSV[E shapes.NumberNotComplex](inputFilePath, outputFilePat
 	if err != nil {
 		return nil, err
 	}
-	if rowNum != NumPapers {
+	if rowNum != numRows {
 		return nil, errors.Errorf("found %d rows in %1q, was expecting %d -- did file change ?", rowNum, inputFilePath, numRows)
 	}
 	if outputFilePath != "" {
