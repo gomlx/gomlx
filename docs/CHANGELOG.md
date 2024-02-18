@@ -2,8 +2,10 @@
 
 ## Next
 
-* Open Graph Benchmark OGBN-MAG dataset support and example models.
-* Context: added `Manager()` accessor method.
+* Open Graph Benchmark OGBN-MAG dataset support and example models (FNN).
+* Context:
+  * added `Manager()` accessor method.
+  * added `SetParams` to set various parameters at once.
 
 ## 0.8.0 - 2023/11/28
 
