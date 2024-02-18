@@ -358,6 +358,16 @@ func (ctx *Context) SetParam(key string, value any) {
 	ctx.data.params.Set(ctx.scope, key, value)
 }
 
+// SetParams sets a collection of parameters in the current scope. It will be visible (by GetParam)
+// within this scope and descendant scopes (but not by other scopes).
+//
+// This is a shortcut to multiple calls to `Context.SetParam` and the same observations apply.
+func (ctx *Context) SetParams(keyValues map[string]any) {
+	for key, value := range keyValues {
+		ctx.data.params.Set(ctx.scope, key, value)
+	}
+}
+
 // EnumerateParams enumerates all parameters for all scopes calls fn with their values.
 func (ctx *Context) EnumerateParams(fn func(scope, key string, value any)) {
 	ctx.data.params.Enumerate(fn)
