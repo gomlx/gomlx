@@ -522,7 +522,7 @@ func (mds *InMemoryDataset) RandomWithReplacement() *InMemoryDataset {
 	return mds
 }
 
-// Shuffle configures the InMemoryDataset to shuffle the order of the data. It returns random elements with
+// Shuffle configures the InMemoryDataset to shuffle the order of the data. It returns random elements
 // without replacement. If this is configured, RandomWithReplacement is canceled.
 //
 // At each call to Reset() it is reshuffled. It happens automatically if dataset is configured to Loop.
