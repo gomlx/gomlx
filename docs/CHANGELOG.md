@@ -1,5 +1,10 @@
 # GoMLX changelog
 
+## Next
+
+* Open Graph Benchmark OGBN-MAG dataset support and example models.
+* Context: added `Manager()` accessor method.
+
 ## 0.8.0 - 2023/11/28
 
 * DType and Tensors:

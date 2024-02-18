@@ -1,6 +1,6 @@
 module github.com/gomlx/gomlx
 
-go 1.21
+go 1.22
 
 require (
 	github.com/daniellowtw/matlab v0.0.0-20190528220746-1ed1d96a6637

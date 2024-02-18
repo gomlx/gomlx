@@ -1,2 +1,161 @@
 // Package fnn implements a feed-forward neural network for the OGBN-MAG problem.
 package fnn
+
+import (
+	"fmt"
+	"github.com/gomlx/gomlx/examples/notebook/gonb/margaid"
+	mag "github.com/gomlx/gomlx/examples/ogbnmag"
+	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/ml/context"
+	"github.com/gomlx/gomlx/ml/context/checkpoints"
+	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/ml/train/commandline"
+	"github.com/gomlx/gomlx/ml/train/losses"
+	"github.com/gomlx/gomlx/ml/train/metrics"
+	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/types/exceptions"
+	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/pkg/errors"
+	"time"
+)
+
+// FnnModelGraph builds the FnnModel
+func FnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
+	seeds := inputs[0]
+
+	// Convert seeds (indices of papers) to its embeddings.
+	g := seeds.Graph()
+	paperEmbeddingsVar := ctx.InspectVariable(mag.OgbnMagVariablesScope, "PapersEmbeddings")
+	if paperEmbeddingsVar == nil {
+		exceptions.Panicf("Missing OGBN-MAG dataset variables, pls call UploadOgbnMagVariables() on context first.")
+	}
+	paperEmbeddings := paperEmbeddingsVar.ValueGraph(g)
+	logits := Gather(paperEmbeddings, seeds)
+
+	// Build FNN.
+	numLayers := context.GetParamOr(ctx, "hidden_layers", 2)
+	numNodes := context.GetParamOr(ctx, "num_nodes", 128)
+	for layerNum := range numLayers {
+		layerName := fmt.Sprintf("layer-%d", layerNum)
+		logits = layers.DenseWithBias(ctx.In(layerName), logits, numNodes)
+		logits = layers.LeakyRelu(logits)
+		dropoutRate := context.GetParamOr(ctx, "dropout_rate", 0.0)
+		if dropoutRate > 0 {
+			dropoutRateNode := Scalar(g, shapes.Float32, dropoutRate)
+			logits = layers.Dropout(ctx, logits, dropoutRateNode)
+		}
+	}
+	logits = layers.DenseWithBias(ctx.In("readout"), logits, mag.NumLabels)
+
+	return []*Node{logits} // Return only the logits.
+}
+
+var ModelFn = FnnModelGraph
+
+// Train FNN model based on configuration in `ctx`.
+func Train(ctx *context.Context) error {
+	manager := ctx.Manager()
+	trainDS, validDS, testDS, err := mag.PapersSeedDatasets(manager)
+	mag.UploadOgbnMagVariables(ctx)
+	ctx.EnumerateVariables(func(v *context.Variable) {
+		fmt.Printf("%s :: %s:\t%s\n", v.Scope(), v.Name(), v.Value().Shape())
+	})
+
+	if err != nil {
+		return err
+	}
+
+	batchSize := context.GetParamOr(ctx, "batch_size", 128)
+	trainDS = trainDS.Shuffle().BatchSize(batchSize, true).Infinite(true)
+
+	evalBatchSize := context.GetParamOr(ctx, "eval_batch_size", 1024)
+	validDS = validDS.BatchSize(evalBatchSize, false).Infinite(false)
+	testDS = testDS.BatchSize(evalBatchSize, false).Infinite(false)
+
+	// Checkpoint: it loads if already exists, and it will save as we train.
+	checkpointPath := context.GetParamOr(ctx, "checkpoint", "")
+	numCheckpointsToKeep := context.GetParamOr(ctx, "num_checkpoints", 10)
+	var checkpoint *checkpoints.Handler
+	if checkpointPath != "" {
+		var err error
+		if numCheckpointsToKeep <= 1 {
+			// Only limit the amount of checkpoints kept if >= 2.
+			numCheckpointsToKeep = -1
+		}
+		checkpoint, err = checkpoints.Build(ctx).Dir(checkpointPath).Keep(numCheckpointsToKeep).Done()
+		if err != nil {
+			return errors.WithMessagef(err, "while setting up checkpoint to %q (keep=%d)",
+				checkpointPath, numCheckpointsToKeep)
+		}
+		globalStep := optimizers.GetGlobalStep(ctx)
+		if globalStep != 0 {
+			fmt.Printf("> restarting training from global_step=%d\n", globalStep)
+		}
+	}
+
+	// Loss: multi-class classification problem.
+	lossFn := losses.SparseCategoricalCrossEntropyLogits
+
+	// Metrics we are interested.
+	meanAccuracyMetric := metrics.NewSparseCategoricalAccuracy("Mean Accuracy", "#acc")
+	movingAccuracyMetric := metrics.NewMovingAverageSparseCategoricalAccuracy("Moving Average Accuracy", "~acc", 0.01)
+
+	// Create a train.Trainer: this object will orchestrate running the model, feeding
+	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
+	optimizer := optimizers.MustOptimizerByName(context.GetParamOr(ctx, "optimizer", "adamw"))
+	trainer := train.NewTrainer(manager, ctx, ModelFn,
+		lossFn,
+		optimizer,
+		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
+		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
+
+	// Use standard training loop.
+	loop := train.NewLoop(trainer)
+	commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
+
+	// Attach a checkpoint: checkpoint every 1 minute of training.
+	if checkpoint != nil && numCheckpointsToKeep > 1 {
+		period := time.Minute * 1
+		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
+			func(loop *train.Loop, metrics []tensor.Tensor) error {
+				return checkpoint.Save()
+			})
+	}
+
+	// Attach a margaid plots: plot points at exponential steps.
+	// The points generated are saved along the checkpoint directory (if one is given).
+	var plots *margaid.Plots
+	usePlots := context.GetParamOr(ctx, "plots", false)
+	if usePlots {
+		plots = margaid.NewDefault(loop, checkpoint.Dir(), 100, 1.1, validDS, testDS).
+			WithEvalLossType("eval-loss")
+	}
+
+	// Loop for given number of steps
+	trainSteps := context.GetParamOr(ctx, "train_steps", 100)
+	_, err = loop.RunSteps(trainDS, trainSteps)
+	if err != nil {
+		return errors.WithMessage(err, "while running steps")
+	}
+	fmt.Printf("\t[Step %d] median train step: %d microseconds\n",
+		loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
+	if checkpoint != nil && numCheckpointsToKeep <= 1 {
+		// Save checkpoint at end of training.
+		checkpoint.Save()
+	}
+
+	// Finally, print an evaluation on train and test datasets.
+	fmt.Println()
+	err = commandline.ReportEval(trainer, validDS, testDS)
+	if err != nil {
+		return errors.WithMessage(err, "while reporting eval")
+	}
+	if plots != nil {
+		// Save plot points.
+		plots.Done()
+	}
+	fmt.Println()
+	return nil
+}

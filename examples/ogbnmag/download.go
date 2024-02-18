@@ -3,7 +3,7 @@
 // See https://ogb.stanford.edu/ for all Open Graph Benchmark (OGB) datasets.
 // See https://ogb.stanford.edu/docs/nodeprop/#ogbn-mag for the `ogbn-mag` dataset description.
 //
-// The task is to predict the venue of publication of a paper, given it's relations.
+// The task is to predict the venue of publication of a paper, given its relations.
 package ogbnmag
 
 import (
@@ -45,10 +45,10 @@ var (
 	// PapersLabels for each paper, values from 0 to 348 (so 349 in total). Shaped `(Int16)[NumPapers, 1]`.
 	PapersLabels tensor.Tensor
 
-	// TrainSplit, TestSplit, ValidationSplit splits of the data.
+	// TrainSplit, TestSplit, ValidSplit splits of the data.
 	// These are indices to papers, values from `[0, NumPapers-1]`. Shaped `(Int32)[n, 1]
 	// They have 629571, 41939 and 64879 elements each.
-	TrainSplit, TestSplit, ValidationSplit tensor.Tensor
+	TrainSplit, TestSplit, ValidSplit tensor.Tensor
 )
 
 // Download and prepares the tensors with the data into the `baseDir`.
@@ -126,7 +126,7 @@ func parsePapersFromCSV(downloadDir string) error {
 
 	papersLabelsCSVPath := path.Join(downloadDir, papersLabelsCSVFile)
 	papersLabelsPath := path.Join(downloadDir, papersLabelsFile)
-	t, err = parseNumbersFromCSV(papersLabelsCSVPath, papersLabelsPath, NumPapers, 1, parseYear)
+	t, err = parseNumbersFromCSV(papersLabelsCSVPath, papersLabelsPath, NumPapers, 1, parseInt32)
 	if err != nil {
 		return err
 	}
@@ -139,7 +139,7 @@ var (
 	splitsCSVFiles = []string{"train.csv.gz", "test.csv.gz", "valid.csv.gz"}
 	splitsNumRows  = []int{629571, 41939, 64879} // Total = NumPapers
 	splitsFiles    = []string{"train", "test", "validation"}
-	splitsStore    = []*tensor.Tensor{&TrainSplit, &TestSplit, &ValidationSplit}
+	splitsStore    = []*tensor.Tensor{&TrainSplit, &TestSplit, &ValidSplit}
 )
 
 func parseSplitsFromCSV(downloadDir string) error {
