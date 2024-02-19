@@ -90,6 +90,13 @@ var (
 	// ~50%+ topics have < 10 papers associated. Some ~30% have < 1000 papers associated. A handful have 10s of
 	// thousands papers associated, and there is one topic that is associated to everyone.
 	EdgesHasTopic tensor.Tensor
+
+	// Counts to the various edge types.
+	// These are call shaped `(Int32)[NumElements]` for each of their entities.
+	CountAuthorsAffiliations, CountInstitutionsAffiliations tensor.Tensor
+	CountPapersCites, CountPapersIsCited                    tensor.Tensor
+	CountPapersFieldsOfStudy, CountFieldsOfStudyPapers      tensor.Tensor
+	CountAuthorsPapers, CountPapersAuthors                  tensor.Tensor
 )
 
 // Download and prepares the tensors with the data into the `baseDir`.
@@ -117,6 +124,10 @@ func Download(baseDir string) error {
 	if err := parseEdgesFromCSV(downloadDir); err != nil {
 		return err
 	}
+	if err := allEdgesCount(downloadDir); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -296,4 +307,81 @@ func parseNumbersFromCSV[E shapes.NumberNotComplex](inputFilePath, outputFilePat
 		}
 	}
 	return tensorOut, nil
+}
+
+var (
+	countsFileNames = []string{
+		"count_authors_affiliations", "count_institutions_affiliations",
+		"count_papers_cites", "count_papers_is_cited",
+		"count_papers_fields_of_study", "count_fields_of_study_papers",
+		"count_authors_papers", "count_papers_authors",
+	}
+)
+
+func allEdgesCount(downloadDir string) error {
+	var store = []*tensor.Tensor{
+		&CountAuthorsAffiliations, &CountInstitutionsAffiliations,
+		&CountPapersCites, &CountPapersIsCited,
+		&CountPapersFieldsOfStudy, &CountFieldsOfStudyPapers,
+		&CountAuthorsPapers, &CountPapersAuthors,
+	}
+	var numElements = []int{
+		NumAuthors, NumInstitutions,
+		NumPapers, NumPapers,
+		NumPapers, NumFieldOfStudy,
+		NumAuthors, NumPapers,
+	}
+	idxTensor := 0
+	for idxInput, input := range []tensor.Tensor{EdgesAffiliatedWith, EdgesCites, EdgesHasTopic, EdgesWrites} {
+		for column := 0; column < 2; column++ {
+			outputFilePath := path.Join(downloadDir, countsFileNames[idxTensor]+".tensor")
+			var counts *tensor.Local
+			var err error
+			if mldata.FileExists(outputFilePath) {
+				counts, err = tensor.Load(outputFilePath)
+			} else {
+				fmt.Printf("> Counting elements for edges %s[column %d]: %d entries\n", edgesFiles[idxInput], column, input.Shape().Dimensions[0])
+				counts, err = edgesCount(input.Local(), column, numElements[idxTensor])
+				if err == nil {
+					err = counts.Save(outputFilePath)
+				}
+			}
+			if err != nil {
+				return errors.WithMessagef(err, "while counting elements for edges %s[column %d]", edgesFiles[idxInput], column)
+			}
+			*(store[idxTensor]) = counts
+			idxTensor++
+		}
+	}
+	return nil
+}
+
+func edgesCount(input *tensor.Local, column, numElements int) (output *tensor.Local, err error) {
+	if input.DType() != shapes.Int32 || input.Rank() != 2 || input.Shape().Dimensions[1] != 2 {
+		return nil, errors.Errorf("input shape is invalid, expected (Int32)[?, 2], got %s", input.Shape())
+	}
+	if column < 0 || column > 1 {
+		return nil, errors.Errorf("column=%d given is invalid, only columsn 0 or 1 are valid", column)
+	}
+	if numElements <= 0 {
+		return nil, errors.Errorf("invalid number of elements %d", numElements)
+	}
+
+	inputRef := input.AcquireData()
+	defer inputRef.Release()
+	inputData := inputRef.Flat().([]int32)
+
+	output = tensor.FromScalarAndDimensions(int32(0), numElements)
+	outputRef := output.AcquireData()
+	outputData := outputRef.Flat().([]int32)
+
+	numRows := input.Shape().Dimensions[0]
+	for row := 0; row < numRows; row++ {
+		idx := inputData[2*row+column]
+		if idx < 0 || int(idx) > numElements {
+			return nil, errors.Errorf("In row=%d, col=%d, got index %d > numElements %d", row, column, idx, numElements)
+		}
+		outputData[idx]++
+	}
+	return
 }
