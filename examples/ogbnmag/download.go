@@ -45,10 +45,51 @@ var (
 	// PapersLabels for each paper, values from 0 to 348 (so 349 in total). Shaped `(Int16)[NumPapers, 1]`.
 	PapersLabels tensor.Tensor
 
-	// TrainSplit, TestSplit, ValidSplit splits of the data.
+	// TrainSplit, ValidSplit, TestSplit  splits of the data.
 	// These are indices to papers, values from `[0, NumPapers-1]`. Shaped `(Int32)[n, 1]
 	// They have 629571, 41939 and 64879 elements each.
-	TrainSplit, TestSplit, ValidSplit tensor.Tensor
+	TrainSplit, ValidSplit, TestSplit tensor.Tensor
+
+	// Various relations: their shape is always `(Int32)[num_edges, 2]`:
+
+	// EdgesAffiliatedWith `(Int32)[1043998, 2]`, pairs with (author_id, institution_id).
+	//
+	// Thousands of institutions with only one affiliated author, and a exponential decreasing amount
+	// of affiliated authors, all the way to one institution that has 27K authors.
+	//
+	// Most authors are affiliated to 1 institution only, and an exponentially decreasing number affiliations up
+	// to one author with 47 affiliations. ~300K authors with no affiliation.
+	EdgesAffiliatedWith tensor.Tensor
+
+	// EdgesWrites `(Int32)[7145660, 2]`, pairs with (author_id, paper_id).
+	//
+	// Every author writes at least one paper, and every paper has at least one author.
+	//
+	// Most authors (~600K) wrote one paper, with a substantial tail with thousands of authors having written hundreds of
+	// papers, and in the extreme one author wrote 1046 papers.
+	//
+	// Papers are written on average by 3 authors (140k papers), with a bell-curve distribution with a long
+	// tail, with a dozen of papers written by thousands of authors (5050 authors in one case).
+	EdgesWrites tensor.Tensor
+
+	// EdgesCites `(Int32)[5416271, 2]`, pairs with (paper_id, paper_id).
+	//
+	// ~120K papers don't cite anyone, 95K papers cite only one paper, and a long exponential decreasing tail,
+	// in the extreme a paper cites 609 other papers.
+	//
+	// ~100K papers are never cited, 155K are cited once, and again a long exponential decreasing tail, in the extreme
+	// one paper is cited by 4744 other papers.
+	EdgesCites tensor.Tensor
+
+	// EdgesHasTopic `(Int32)[7505078, 2]`, pairs with (paper_id, topic_id).
+	//
+	// All papers have at least one "field of study" topic. Most (550K) papers have 12 or 13 topics. At most a paper has
+	// 14 topics.
+	//
+	// All "fields of study" are associated to at least one topic. ~17K (out of ~60K) have only one paper associated.
+	// ~50%+ topics have < 10 papers associated. Some ~30% have < 1000 papers associated. A handful have 10s of
+	// thousands papers associated, and there is one topic that is associated to everyone.
+	EdgesHasTopic tensor.Tensor
 )
 
 // Download and prepares the tensors with the data into the `baseDir`.
@@ -63,17 +104,19 @@ func Download(baseDir string) error {
 	}
 	baseDir = mldata.ReplaceTildeInDir(baseDir) // If baseDir starts with "~", it is replaced.
 	downloadDir := path.Join(baseDir, DownloadSubdir)
+
 	if err := downloadZip(downloadDir); err != nil {
 		return err
 	}
-
 	if err := parsePapersFromCSV(downloadDir); err != nil {
 		return err
 	}
 	if err := parseSplitsFromCSV(downloadDir); err != nil {
 		return err
 	}
-
+	if err := parseEdgesFromCSV(downloadDir); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -151,6 +194,27 @@ func parseSplitsFromCSV(downloadDir string) error {
 			return errors.WithMessagef(err, "while parsing split file for %s", splitsFiles[ii])
 		}
 		*(splitsStore[ii]) = t
+	}
+	return nil
+}
+
+var (
+	edgesCSVDirs = []string{"author___affiliated_with___institution",
+		"author___writes___paper", "paper___cites___paper", "paper___has_topic___field_of_study"}
+	edgesNumRows = []int{1043998, 7145660, 5416271, 7505078}
+	edgesFiles   = []string{"affiliated_with", "writes", "cites", "has_topic"}
+	edgesStore   = []*tensor.Tensor{&EdgesAffiliatedWith, &EdgesWrites, &EdgesCites, &EdgesHasTopic}
+)
+
+func parseEdgesFromCSV(downloadDir string) error {
+	for ii, dirName := range edgesCSVDirs {
+		edgesCSVFilePath := path.Join(downloadDir, "mag/raw/relations/", dirName, "edge.csv.gz")
+		edgesFile := path.Join(downloadDir, "edges_"+edgesFiles[ii]+".tensor")
+		t, err := parseNumbersFromCSV(edgesCSVFilePath, edgesFile, edgesNumRows[ii], 2, parseInt32)
+		if err != nil {
+			return errors.WithMessagef(err, "while parsing edges file for %s", edgesFiles[ii])
+		}
+		*(edgesStore[ii]) = t
 	}
 	return nil
 }
