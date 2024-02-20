@@ -24,15 +24,29 @@ import (
 // FnnModelGraph builds the FnnModel
 func FnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	seeds := inputs[0]
-
-	// Convert seeds (indices of papers) to its embeddings.
 	g := seeds.Graph()
-	paperEmbeddingsVar := ctx.InspectVariable(mag.OgbnMagVariablesScope, "PapersEmbeddings")
-	if paperEmbeddingsVar == nil {
-		exceptions.Panicf("Missing OGBN-MAG dataset variables, pls call UploadOgbnMagVariables() on context first.")
+	getMagVar := func(name string) *Node {
+		magVar := ctx.InspectVariable(mag.OgbnMagVariablesScope, name)
+		if magVar == nil {
+			exceptions.Panicf("Missing OGBN-MAG dataset variables (%q), pls call UploadOgbnMagVariables() on context first.", name)
+		}
+		return magVar.ValueGraph(g)
 	}
-	paperEmbeddings := paperEmbeddingsVar.ValueGraph(g)
-	logits := Gather(paperEmbeddings, seeds)
+	log1pMagVar := func(name string) *Node {
+		return Log1p(ConvertType(getMagVar(name), shapes.Float32))
+	}
+
+	// Gather and concatenate all features from the seeds (indices of papers).
+	logits := Concatenate([]*Node{
+		Gather(getMagVar("PapersEmbeddings"), seeds),
+		Gather(log1pMagVar("CountPapersCites"), seeds),
+		Gather(log1pMagVar("CountPapersIsCited"), seeds),
+		Gather(log1pMagVar("CountPapersFieldsOfStudy"), seeds),
+		Gather(log1pMagVar("CountPapersAuthors"), seeds),
+	}, 1)
+	if ctx.IsTraining(g) {
+		fmt.Printf("> papers features input shape: %s\n", logits.Shape())
+	}
 
 	// Build FNN.
 	numLayers := context.GetParamOr(ctx, "hidden_layers", 2)
@@ -59,18 +73,21 @@ func Train(ctx *context.Context) error {
 	manager := ctx.Manager()
 	trainDS, validDS, testDS, err := mag.PapersSeedDatasets(manager)
 	mag.UploadOgbnMagVariables(ctx)
-	ctx.EnumerateVariables(func(v *context.Variable) {
-		fmt.Printf("%s :: %s:\t%s\n", v.Scope(), v.Name(), v.Value().Shape())
-	})
+	//ctx.EnumerateVariables(func(v *context.Variable) {
+	//	fmt.Printf("%s :: %s:\t%s\n", v.Scope(), v.Name(), v.Value().Shape())
+	//})
 
 	if err != nil {
 		return err
 	}
 
 	batchSize := context.GetParamOr(ctx, "batch_size", 128)
+	trainEvalDS := trainDS.Copy()
 	trainDS = trainDS.Shuffle().BatchSize(batchSize, true).Infinite(true)
 
+	// Evaluation datasets.
 	evalBatchSize := context.GetParamOr(ctx, "eval_batch_size", 1024)
+	trainEvalDS = trainEvalDS.BatchSize(evalBatchSize, false).Infinite(false)
 	validDS = validDS.BatchSize(evalBatchSize, false).Infinite(false)
 	testDS = testDS.BatchSize(evalBatchSize, false).Infinite(false)
 
@@ -129,7 +146,7 @@ func Train(ctx *context.Context) error {
 	var plots *margaid.Plots
 	usePlots := context.GetParamOr(ctx, "plots", false)
 	if usePlots {
-		plots = margaid.NewDefault(loop, checkpoint.Dir(), 100, 1.1, validDS, testDS).
+		plots = margaid.NewDefault(loop, checkpoint.Dir(), 100, 1.1, validDS, testDS, trainEvalDS).
 			WithEvalLossType("eval-loss")
 	}
 
@@ -148,7 +165,7 @@ func Train(ctx *context.Context) error {
 
 	// Finally, print an evaluation on train and test datasets.
 	fmt.Println()
-	err = commandline.ReportEval(trainer, validDS, testDS)
+	err = commandline.ReportEval(trainer, trainEvalDS, validDS, testDS)
 	if err != nil {
 		return errors.WithMessage(err, "while reporting eval")
 	}

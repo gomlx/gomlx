@@ -92,7 +92,7 @@ var (
 	EdgesHasTopic tensor.Tensor
 
 	// Counts to the various edge types.
-	// These are call shaped `(Int32)[NumElements]` for each of their entities.
+	// These are call shaped `(Int32)[NumElements, 1]` for each of their entities.
 	CountAuthorsAffiliations, CountInstitutionsAffiliations tensor.Tensor
 	CountPapersCites, CountPapersIsCited                    tensor.Tensor
 	CountPapersFieldsOfStudy, CountFieldsOfStudyPapers      tensor.Tensor
@@ -371,7 +371,7 @@ func edgesCount(input *tensor.Local, column, numElements int) (output *tensor.Lo
 	defer inputRef.Release()
 	inputData := inputRef.Flat().([]int32)
 
-	output = tensor.FromScalarAndDimensions(int32(0), numElements)
+	output = tensor.FromScalarAndDimensions(int32(0), numElements, 1)
 	outputRef := output.AcquireData()
 	outputData := outputRef.Flat().([]int32)
 

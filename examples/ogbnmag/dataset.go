@@ -57,8 +57,20 @@ var (
 	//
 	// They will be stored under the "/ogbnmag" scope.
 	OgbnMagVariables = map[string]*tensor.Tensor{
-		"PapersEmbeddings": &PapersEmbeddings,
-		"PapersLabels":     &PapersLabels,
+		"PapersEmbeddings":              &PapersEmbeddings,
+		"PapersLabels":                  &PapersLabels,
+		"EdgesAffiliatedWith":           &EdgesAffiliatedWith,
+		"EdgesWrites":                   &EdgesWrites,
+		"EdgesCites":                    &EdgesCites,
+		"EdgesHasTopic":                 &EdgesHasTopic,
+		"CountAuthorsAffiliations":      &CountAuthorsAffiliations,
+		"CountInstitutionsAffiliations": &CountInstitutionsAffiliations,
+		"CountPapersCites":              &CountPapersCites,
+		"CountPapersIsCited":            &CountPapersIsCited,
+		"CountPapersFieldsOfStudy":      &CountPapersFieldsOfStudy,
+		"CountFieldsOfStudyPapers":      &CountFieldsOfStudyPapers,
+		"CountAuthorsPapers":            &CountAuthorsPapers,
+		"CountPapersAuthors":            &CountPapersAuthors,
 	}
 
 	// OgbnMagVariablesScope is the absolute scope where the dataset variables are stored.
