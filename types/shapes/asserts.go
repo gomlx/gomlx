@@ -35,7 +35,7 @@ type HasShape interface {
 // CheckDims checks that the shape has the given dimensions and rank. A value of -1 in
 // dimensions means it can take any value and is not checked.
 //
-// It returns an error if the rank is different or any of the dimensions.
+// It returns an error if the rank is different or if any of the dimensions don't match.
 func (s Shape) CheckDims(dimensions ...int) error {
 	if s.Rank() != len(dimensions) {
 		return errors.Errorf("shape (%s) has incompatible rank %d (wanted %d)", s, s.Rank(), len(dimensions))
@@ -48,6 +48,17 @@ func (s Shape) CheckDims(dimensions ...int) error {
 	return nil
 }
 
+// Check that the shape has the given dtype, dimensions and rank. A value of -1 in
+// dimensions means it can take any value and is not checked.
+//
+// It returns an error if the dtype or rank is different or if any of the dimensions don't match.
+func (s Shape) Check(dtype DType, dimensions ...int) error {
+	if dtype != s.DType {
+		return errors.Errorf("shape (%s) has incompatible dtype %s (wanted %s)", s, s.DType, dtype)
+	}
+	return s.CheckDims(dimensions...)
+}
+
 // AssertDims checks that the shape has the given dimensions and rank. A value of -1 in
 // dimensions means it can take any value and is not checked.
 //
@@ -57,7 +68,18 @@ func (s Shape) CheckDims(dimensions ...int) error {
 func (s Shape) AssertDims(dimensions ...int) {
 	err := s.CheckDims(dimensions...)
 	if err != nil {
-		panic(fmt.Sprintf("assertDims(%v): %+v", dimensions, err))
+		panic(fmt.Sprintf("shapes.AssertDims(%v): %+v", dimensions, err))
+	}
+}
+
+// Assert checks that the shape has the given dtype, dimensions and rank. A value of -1 in
+// dimensions means it can take any value and is not checked.
+//
+// It panics if it doesn't match.
+func (s Shape) Assert(dtype DType, dimensions ...int) {
+	err := s.Check(dtype, dimensions...)
+	if err != nil {
+		panic(fmt.Sprintf("shapes.Assert(%s, %v): %+v", dtype, dimensions, err))
 	}
 }
 
@@ -77,6 +99,10 @@ func CheckDims(shaped HasShape, dimensions ...int) error {
 // See usage example in package shapes documentation.
 func AssertDims(shaped HasShape, dimensions ...int) {
 	shaped.Shape().AssertDims(dimensions...)
+}
+
+func AssertShape(dtype DType, dimensions ...int) {
+
 }
 
 // CheckRank checks that the shape has the given rank.
