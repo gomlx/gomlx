@@ -7,6 +7,7 @@ require (
 	github.com/disintegration/imaging v1.6.2
 	github.com/erkkah/margaid v0.3.0
 	github.com/go-gota/gota v0.12.0
+	github.com/gomlx/exceptions v0.0.1
 	github.com/google/uuid v1.6.0
 	github.com/janpfeifer/gonb v0.9.3
 	github.com/pkg/errors v0.9.1

@@ -6,6 +6,9 @@
 * Context:
   * added `Manager()` accessor method.
   * added `SetParams` to set various parameters at once.
+* shapes:
+  * Added `Check()` and `Assert()` to check for both, dtype and dimensions.
+* `exceptions`: refactoring to use separate package `github.com/gomlx/exceptions`.
 
 ## 0.8.0 - 2023/11/28
 
