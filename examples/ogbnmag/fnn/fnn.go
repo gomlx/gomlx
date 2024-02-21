@@ -8,6 +8,7 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
+	mldata "github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/commandline"
@@ -96,6 +97,7 @@ func Train(ctx *context.Context) error {
 	numCheckpointsToKeep := context.GetParamOr(ctx, "num_checkpoints", 10)
 	var checkpoint *checkpoints.Handler
 	if checkpointPath != "" {
+		checkpointPath = mldata.ReplaceTildeInDir(checkpointPath) // If the path starts with "~", it is replaced.
 		var err error
 		if numCheckpointsToKeep <= 1 {
 			// Only limit the amount of checkpoints kept if >= 2.
