@@ -3,6 +3,7 @@
 ## Next
 
 * Open Graph Benchmark OGBN-MAG dataset support and example models (FNN).
+  * Added sampler library.
 * Context:
   * added `Manager()` accessor method.
   * added `SetParams` to set various parameters at once.

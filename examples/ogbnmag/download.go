@@ -25,10 +25,10 @@ var (
 )
 
 var (
-	NumPapers       = 736389
-	NumAuthors      = 1134649
-	NumInstitutions = 8740
-	NumFieldOfStudy = 59965
+	NumPapers        = 736389
+	NumAuthors       = 1134649
+	NumInstitutions  = 8740
+	NumFieldsOfStudy = 59965
 
 	// NumLabels is the number of labels for the papers. These correspond to publication venues.
 	NumLabels = 349
@@ -328,7 +328,7 @@ func allEdgesCount(downloadDir string) error {
 	var numElements = []int{
 		NumAuthors, NumInstitutions,
 		NumPapers, NumPapers,
-		NumPapers, NumFieldOfStudy,
+		NumPapers, NumFieldsOfStudy,
 		NumAuthors, NumPapers,
 	}
 	idxTensor := 0

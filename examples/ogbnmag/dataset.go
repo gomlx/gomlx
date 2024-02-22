@@ -1,12 +1,16 @@
 package ogbnmag
 
 import (
+	"fmt"
+	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	mldata "github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/pkg/errors"
+	"os"
+	"path"
 )
 
 func getLabelsGraph(indices, allLabels *Node) *Node {
@@ -91,4 +95,37 @@ func UploadOgbnMagVariables(ctx *context.Context) *context.Context {
 		v.Trainable = false
 	}
 	return ctx
+}
+
+// NewSampler will create a [sampler.Sampler] and configure it with the OGBN-MAG graph definition.
+func NewSampler(baseDir string) (*sampler.Sampler, error) {
+	baseDir = mldata.ReplaceTildeInDir(baseDir) // If baseDir starts with "~", it is replaced.
+	samplerPath := path.Join(baseDir, DownloadSubdir, "sampler.bin")
+	s, err := sampler.Load(samplerPath)
+	if err == nil {
+		return s, nil
+	}
+	if !os.IsNotExist(err) {
+		return nil, err
+	}
+
+	fmt.Println("> Creating a new Sampler for OGBN-MAG")
+	s = sampler.New()
+	s.AddNodeType("papers", NumPapers)
+	s.AddNodeType("authors", NumAuthors)
+	s.AddNodeType("institutions", NumInstitutions)
+	s.AddNodeType("fields_of_study", NumFieldsOfStudy)
+
+	s.AddEdgeType("writes", "authors", "papers", EdgesWrites /* reverse= */, false)
+	s.AddEdgeType("writtenBy", "authors", "papers", EdgesWrites /* reverse= */, true)
+	s.AddEdgeType("cites", "papers", "papers", EdgesCites /*reverse=*/, false)
+	s.AddEdgeType("citedBy", "papers", "papers", EdgesCites /*reverse=*/, true)
+	s.AddEdgeType("affiliatedWith", "authors", "institutions", EdgesAffiliatedWith /*reverse=*/, false)
+	s.AddEdgeType("affiliations", "authors", "institutions", EdgesAffiliatedWith /*reverse=*/, true)
+	s.AddEdgeType("hasTopic", "papers", "fields_of_study", EdgesHasTopic /*reverse=*/, false)
+	s.AddEdgeType("topicHasPapers", "papers", "fields_of_study", EdgesHasTopic /*reverse=*/, true)
+	if err := s.Save(samplerPath); err != nil {
+		return nil, err
+	}
+	return s, nil
 }
