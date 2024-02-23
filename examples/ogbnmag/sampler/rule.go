@@ -4,7 +4,6 @@ import (
 	"fmt"
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
 )
 
 // Rule defines one rule of the sampling strategy. It's created by the various methods
@@ -34,9 +33,9 @@ type Rule struct {
 	// shape of the sample for this rule.
 	shape shapes.Shape
 
-	// sourceSet is a set (a tensor) of indices that a "Node" rule is allowed to sample from.
-	// E.g.: have separate sourceSet for train, test and validation datasets.
-	sourceSet *tensor.Local
+	// nodeSet is a set of indices that a "Node" rule is allowed to sample from.
+	// E.g.: have separate nodeSet for train, test and validation datasets.
+	nodeSet []int32
 }
 
 // IsNode returns whether this is a "Node" rule, it can also be seen as a root rule.
@@ -48,8 +47,8 @@ func (r *Rule) IsNode() bool {
 func (r *Rule) String() string {
 	if r.IsNode() {
 		var sourceSetDesc string
-		if r.sourceSet != nil {
-			sourceSetDesc = fmt.Sprintf(", sourceSet.size=%s", r.sourceSet.Shape().Size())
+		if r.nodeSet != nil {
+			sourceSetDesc = fmt.Sprintf(", nodeSet.size=%d", len(r.nodeSet))
 		}
 		return fmt.Sprintf("Rule %q: type=Node, nodeType=%q, shape=%s%s", r.name, r.nodeTypeName, r.shape, sourceSetDesc)
 	}
@@ -57,24 +56,36 @@ func (r *Rule) String() string {
 		r.name, r.nodeTypeName, r.shape, r.sourceRule.name, r.edgeTypeName)
 }
 
-// RandomNodes creates a rule (named `name`) to sample nodes randomly without replacement
-// from the node type given by `nodeTypeName`.
-//
-// Nodes will be indices from 0 to the number of elements of the given node type.
-//
-// Node sampling (as opposed to Edges sampling) are typically the "root nodes" or "seed nodes" of a tree being
-// sampled, that represent the sampled sub-graph.
-//
-// If this is used to sample the seed nodes, `count` in this case will be typically the batch size.
-func (st *Strategy) RandomNodes(name, nodeTypeName string, count int) *Rule {
-	if _, found := st.sampler.d.NodeTypesToCount[nodeTypeName]; !found {
-		Panicf("unknown node type %q to for rule %q", nodeTypeName, name)
+// FromEdges returns a [Rule] that samples nodes from the edges connecting the results of the current Rule `r`.
+func (r *Rule) FromEdges(name, edgeTypeName string, count int) *Rule {
+	strategy := r.strategy
+	if strategy.frozen {
+		Panicf("Strategy is frozen, that is, a dataset was already created and used with NewDataset() and hence can no longer be modified.")
 	}
-	return &Rule{
-		sampler:      st.sampler,
-		strategy:     st,
+	if prevRule, found := strategy.rules[name]; found {
+		Panicf("rule named %q already exists: %s", name, prevRule)
+	}
+	edgeDef, found := r.sampler.d.EdgeTypes[edgeTypeName]
+	if !found {
+		Panicf("edge type %q not found to sample from in rule %q", edgeTypeName, name)
+	}
+	if edgeDef.SourceNodeType != r.nodeTypeName {
+		Panicf("edge type %q connects %q to %q: but you are using it on sampling rule %q, which is of node type %q",
+			edgeTypeName, edgeDef.SourceNodeType, edgeDef.TargetNodeType, r.name, r.nodeTypeName)
+	}
+	newShape := r.shape.Copy()
+	newShape.Dimensions = append(newShape.Dimensions, count)
+	newRule := &Rule{
+		sampler:      r.sampler,
+		strategy:     strategy,
 		name:         name,
-		nodeTypeName: nodeTypeName,
+		nodeTypeName: edgeDef.TargetNodeType,
+		sourceRule:   r,
+		edgeTypeName: "edgeType",
 		count:        count,
+		shape:        newShape,
 	}
+	r.dependents = append(r.dependents, newRule)
+	strategy.rules[name] = newRule
+	return newRule
 }

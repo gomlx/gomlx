@@ -43,8 +43,8 @@ const PaddingIndex = 0
 // It uses padding if sampling something that doesn't have enough examples to sample. Example:
 //
 //	trainStrategy := sampler.NewStrategy()
-//	seeds := trainStrategy.NodesFromSubset("seeds", "papers", batchSize, /* subset= */TrainSplits)
-//	citedBy := seeds.FromEdgesRandomWithoutReplacement(/* name= */ "citedBy", /* edgeSet= */ "citedBy", 5)
+//	seeds := trainStrategy.NodesFromSet("seeds", "papers", batchSize, /* subset= */TrainSplits)
+//	citedBy := seeds.FromEdges(/* name= */ "citedBy", /* edgeType= */ "citedBy", 5)
 //	authors := seeds.SampleFromEdgesRandomWithoutReplacement(/* name= */ "authors", /* edgeSet= */ "writtenBy", 5)
 //	coauthoredPapers := authors.SampleFromEdgesRandomWithoutReplacement(/* name= */ "coauthoredPapers", /* edgeSet= */ "writes", 5)
 //	citingAuthors := citedBy.SampleFromEdgesRandomWithoutReplacement(/* name= */ "citingAuthors", /* edgeSet= */ "writtenBy", 5)
@@ -141,7 +141,7 @@ func (s *Sampler) AddNodeType(name string, count int) {
 // But the edges information themselves are not lost.
 func (s *Sampler) AddEdgeType(name, sourceNodeType, targetNodeType string, edges tensor.Tensor, reverse bool) {
 	if s.d.Frozen {
-		Panicf("Sampler is Frozen, that is, a strategy was already created with NewStrategy() and hence can no longer be modified.")
+		Panicf("Sampler is frozen, that is, a strategy was already created with NewStrategy() and hence can no longer be modified.")
 	}
 	if edges.Rank() != 2 || edges.DType() != shapes.Int32 ||
 		edges.Shape().Dimensions[1] != 2 || edges.Shape().Dimensions[0] == 0 {
@@ -240,6 +240,7 @@ func (s *Sampler) NewStrategy() *Strategy {
 	s.d.Frozen = true
 	return &Strategy{
 		sampler: s,
+		rules:   make(map[string]*Rule),
 	}
 }
 
