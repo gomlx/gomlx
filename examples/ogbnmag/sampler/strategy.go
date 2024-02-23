@@ -20,6 +20,7 @@ type Strategy struct {
 	frozen  bool // If set to true, it can no longer be modified.
 
 	rules map[string]*Rule
+	seeds []*Rule
 }
 
 // String returns a multi-line informative description of the strategy.
@@ -110,13 +111,6 @@ func (strategy *Strategy) NodesFromSet(name, nodeTypeName string, count int, nod
 		nodeSet:      nodeSet,
 	}
 	strategy.rules[name] = r
+	strategy.seeds = append(strategy.seeds, r)
 	return r
-}
-
-// NewDataset creates a new [Dataset] from the configured [Strategy].
-// One can create multiple datasets from the same [Strategy], but once a [Dataset] is created,
-// the [Strategy] is considered frozen and can no longer be modified.
-func (strategy *Strategy) NewDataset() any {
-	strategy.frozen = true
-	return nil
 }

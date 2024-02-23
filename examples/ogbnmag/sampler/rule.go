@@ -50,10 +50,10 @@ func (r *Rule) String() string {
 		if r.nodeSet != nil {
 			sourceSetDesc = fmt.Sprintf(", nodeSet.size=%d", len(r.nodeSet))
 		}
-		return fmt.Sprintf("Rule %q: type=Node, nodeType=%q, shape=%s%s", r.name, r.nodeTypeName, r.shape, sourceSetDesc)
+		return fmt.Sprintf("Rule %q: type=Node, nodeType=%q, shape=%s (size=%d)%s", r.name, r.nodeTypeName, r.shape, r.shape.Size(), sourceSetDesc)
 	}
-	return fmt.Sprintf("Rule %q: type=Edge, nodeType=%q, shape=%s, sourceRule=%q, edgeType=%q",
-		r.name, r.nodeTypeName, r.shape, r.sourceRule.name, r.edgeTypeName)
+	return fmt.Sprintf("Rule %q: type=Edge, nodeType=%q, shape=%s (size=%d), sourceRule=%q, edgeType=%q",
+		r.name, r.nodeTypeName, r.shape, r.shape.Size(), r.sourceRule.name, r.edgeTypeName)
 }
 
 // FromEdges returns a [Rule] that samples nodes from the edges connecting the results of the current Rule `r`.
@@ -81,7 +81,7 @@ func (r *Rule) FromEdges(name, edgeTypeName string, count int) *Rule {
 		name:         name,
 		nodeTypeName: edgeDef.TargetNodeType,
 		sourceRule:   r,
-		edgeTypeName: "edgeType",
+		edgeTypeName: edgeTypeName,
 		count:        count,
 		shape:        newShape,
 	}
