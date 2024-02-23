@@ -19,10 +19,11 @@ import (
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/pkg/errors"
+	"k8s.io/klog/v2"
 	"time"
 )
 
-// FnnModelGraph builds the FnnModel
+// FnnModelGraph builds a FnnModel for the OGBN-MAP dataset.
 func FnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	seeds := inputs[0]
 	g := seeds.Graph()
@@ -162,7 +163,10 @@ func Train(ctx *context.Context) error {
 		loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
 	if checkpoint != nil && numCheckpointsToKeep <= 1 {
 		// Save checkpoint at end of training.
-		checkpoint.Save()
+		err = checkpoint.Save()
+		if err != nil {
+			klog.Errorf("Failed to save final checkpoint in %q: %+v", checkpointPath, err)
+		}
 	}
 
 	// Finally, print an evaluation on train and test datasets.
