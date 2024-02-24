@@ -286,7 +286,10 @@ func sampleEdges(rule *Rule, srcNodes, srcMask *tensor.Local) (nodes, mask *tens
 func randKOfN(values []int32, n int) {
 	k := len(values)
 	if k*k < n {
-		// Random sampling, checking for previous choices.
+		// Random sampling, checking for previous choices: this is O(k^2), but since usually we are working
+		// with small values of K, it's faster than creating a map.
+		//
+		// FutureWork: for larger values of K, create a map/set.
 		for ii := range values {
 			// Take a unique number.
 			var x int32
@@ -314,7 +317,7 @@ func randKOfN(values []int32, n int) {
 				continue
 			}
 			pos := rand.IntN(int(ii))
-			if pos <= k {
+			if pos < k {
 				values[pos] = int32(ii)
 			}
 		}

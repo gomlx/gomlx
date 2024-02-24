@@ -2,6 +2,7 @@ package sampler
 
 import (
 	"fmt"
+	mldata "github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/stretchr/testify/assert"
@@ -121,12 +122,8 @@ func TestDataset(t *testing.T) {
 	s := createTestSampler(t)
 	strategy := createTestStrategy(t, s)
 
-	ds := strategy.NewDataset("one_epoch_in_order")
-	ds.Epochs(1)
-
-	for ii := range 2 {
-		fmt.Printf("\nSample %d:\n", ii)
-		spec, inputs, labels, err := ds.Yield()
+	// checkInputsFn make automatic checks of expected dimensions and errors.
+	checkInputsFn := func(t *testing.T, spec any, inputs, labels []tensor.Tensor, err error) map[string]ValueMask {
 		require.NoError(t, err)
 		require.Empty(t, labels)
 		require.Equal(t, strategy, spec.(*Strategy))
@@ -137,9 +134,25 @@ func TestDataset(t *testing.T) {
 			require.True(t, value.Shape().Eq(rule.shape), "Mismatch of shapes for value of rule %q", name)
 			require.NoErrorf(t, mask.Shape().Check(shapes.Bool, rule.shape.Dimensions...),
 				"Mismatch of shapes for mask of rule %q", name)
-			fmt.Printf("> %s: value=%s, mask=%s\n", name, value, mask)
 		}
+		return graphSample
+	}
+
+	ds := strategy.NewDataset("one_epoch_in_order").Epochs(1)
+	ds.Epochs(1)
+	{
+		spec, inputs, labels, err := ds.Yield()
+		_ = checkInputsFn(t, spec, inputs, labels, err)
+		spec, inputs, labels, err = ds.Yield()
+		_ = checkInputsFn(t, spec, inputs, labels, err)
 	}
 	_, _, _, err := ds.Yield()
 	require.Error(t, err, "Dataset should have been exhausted.")
+
+	ds = strategy.NewDataset("one_epoch_in_order").Infinite().Shuffle()
+	parallelDS := mldata.Parallel(ds)
+	for _ = range 100 { // Sample 100 using parallel datasets, and checks that it works ok.
+		spec, inputs, labels, err := parallelDS.Yield()
+		_ = checkInputsFn(t, spec, inputs, labels, err)
+	}
 }

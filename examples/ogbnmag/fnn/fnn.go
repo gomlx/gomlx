@@ -104,7 +104,11 @@ func Train(ctx *context.Context) error {
 			// Only limit the amount of checkpoints kept if >= 2.
 			numCheckpointsToKeep = -1
 		}
-		checkpoint, err = checkpoints.Build(ctx).Dir(checkpointPath).Keep(numCheckpointsToKeep).Done()
+		if numCheckpointsToKeep > 0 {
+			checkpoint, err = checkpoints.Build(ctx).Dir(checkpointPath).Keep(numCheckpointsToKeep).TakeMean(3).Done()
+		} else {
+			checkpoint, err = checkpoints.Build(ctx).Dir(checkpointPath).Done()
+		}
 		if err != nil {
 			return errors.WithMessagef(err, "while setting up checkpoint to %q (keep=%d)",
 				checkpointPath, numCheckpointsToKeep)
