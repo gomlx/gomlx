@@ -17,6 +17,9 @@ type Rule struct {
 	// nodeTypeName of the nodes sampled by this rule.
 	nodeTypeName string
 
+	// numNodes for nodeTypeName. Only used if nodeSet is not provided.
+	numNodes int32
+
 	// sourceRule is the name of the [Rule] this rule uses as source, or empty if
 	// this is a "Node" sampling rule (a root/seed sampling)
 	sourceRule *Rule
@@ -26,6 +29,9 @@ type Rule struct {
 
 	// edgeTypeName used to sample from, if this is an "Edge" sampling rule, or empty.
 	edgeTypeName string
+
+	// edgeType
+	edgeType *edgeType
 
 	// count is the number of samples to create. It will define the last dimension of the tensor sampled.
 	count int
@@ -82,6 +88,7 @@ func (r *Rule) FromEdges(name, edgeTypeName string, count int) *Rule {
 		nodeTypeName: edgeDef.TargetNodeType,
 		sourceRule:   r,
 		edgeTypeName: edgeTypeName,
+		edgeType:     edgeDef,
 		count:        count,
 		shape:        newShape,
 	}

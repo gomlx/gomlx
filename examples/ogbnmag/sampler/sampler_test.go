@@ -69,6 +69,10 @@ func createTestStrategy(t *testing.T, s *Sampler) *Strategy {
 		seeds := strategy.NodesFromSet("seeds", "papers", 2, []int32{2, 3, 4})
 		authors := seeds.FromEdges("authors", "written_by", 5)
 		_ = authors.FromEdges("otherPapers", "writes", 3)
+
+		seeds2 := strategy.Nodes("seeds2", "papers", 3)
+		_ = seeds2.FromEdges("authors2", "written_by", 1)
+
 	})
 	return strategy
 }
@@ -78,12 +82,18 @@ func TestStrategy(t *testing.T) {
 	strategy := createTestStrategy(t, s)
 	fmt.Printf("\n%s\n\n", strategy)
 
-	require.Equal(t, 3, len(strategy.rules))
+	require.Equal(t, 5, len(strategy.rules))
+	require.Len(t, strategy.seeds, 2)
 
 	seeds, found := strategy.rules["seeds"]
 	require.True(t, found)
 	require.NoError(t, seeds.shape.Check(shapes.Int32, 2))
 	assert.Equal(t, 1, len(seeds.dependents))
+
+	seeds2, found := strategy.rules["seeds2"]
+	require.True(t, found)
+	require.NoError(t, seeds2.shape.Check(shapes.Int32, 3))
+	assert.Equal(t, 0, len(seeds2.dependents))
 
 	authors, found := strategy.rules["authors"]
 	require.True(t, found)
@@ -98,11 +108,38 @@ func TestStrategy(t *testing.T) {
 	assert.Equal(t, 0, len(otherPapers.dependents))
 
 	// Checks that frozen strategies can no longer be modified.
-	_ = strategy.NewDataset()
+	_ = strategy.NewDataset("test")
 	require.Panics(t, func() { strategy.Nodes("other_seeds", "authors", 1) },
 		"After creating a dataset, strategy is frozen and can't be modified")
 	require.Panics(t, func() { strategy.NodesFromSet("other_seeds", "authors", 1, []int32{1}) },
 		"After creating a dataset, strategy is frozen and can't be modified")
 	require.Panics(t, func() { seeds.FromEdges("other_authors", "written_by", 1) },
 		"After creating a dataset, strategy is frozen and can't be modified")
+}
+
+func TestDataset(t *testing.T) {
+	s := createTestSampler(t)
+	strategy := createTestStrategy(t, s)
+
+	ds := strategy.NewDataset("one_epoch_in_order")
+	ds.Epochs(1)
+
+	for ii := range 2 {
+		fmt.Printf("\nSample %d:\n", ii)
+		spec, inputs, labels, err := ds.Yield()
+		require.NoError(t, err)
+		require.Empty(t, labels)
+		require.Equal(t, strategy, spec.(*Strategy))
+		graphSample := strategy.MapInputs(inputs)
+		for name, rule := range strategy.rules {
+			require.Containsf(t, graphSample, name, "Missing input for rule %q", name)
+			value, mask := graphSample[name].Value, graphSample[name].Mask
+			require.True(t, value.Shape().Eq(rule.shape), "Mismatch of shapes for value of rule %q", name)
+			require.NoErrorf(t, mask.Shape().Check(shapes.Bool, rule.shape.Dimensions...),
+				"Mismatch of shapes for mask of rule %q", name)
+			fmt.Printf("> %s: value=%s, mask=%s\n", name, value, mask)
+		}
+	}
+	_, _, _, err := ds.Yield()
+	require.Error(t, err, "Dataset should have been exhausted.")
 }

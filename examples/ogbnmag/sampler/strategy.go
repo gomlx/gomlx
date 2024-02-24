@@ -4,6 +4,7 @@ import (
 	"fmt"
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/tensor"
 	"strings"
 )
 
@@ -64,7 +65,8 @@ func (strategy *Strategy) Nodes(name, nodeTypeName string, count int) *Rule {
 	if strategy.frozen {
 		Panicf("Strategy is frozen, that is, a dataset was already created and used with NewDataset() and hence can no longer be modified.")
 	}
-	if _, found := strategy.sampler.d.NodeTypesToCount[nodeTypeName]; !found {
+	numNodes, found := strategy.sampler.d.NodeTypesToCount[nodeTypeName]
+	if !found {
 		Panicf("unknown node type %q to for rule %q", nodeTypeName, name)
 	}
 	if prevRule, found := strategy.rules[name]; found {
@@ -75,10 +77,12 @@ func (strategy *Strategy) Nodes(name, nodeTypeName string, count int) *Rule {
 		strategy:     strategy,
 		name:         name,
 		nodeTypeName: nodeTypeName,
+		numNodes:     numNodes,
 		count:        count,
 		shape:        shapes.Make(shapes.Int32, count),
 	}
 	strategy.rules[name] = r
+	strategy.seeds = append(strategy.seeds, r)
 	return r
 }
 
@@ -95,7 +99,8 @@ func (strategy *Strategy) NodesFromSet(name, nodeTypeName string, count int, nod
 	if strategy.frozen {
 		Panicf("Strategy is frozen, that is, a dataset was already created and used with NewDataset() and hence can no longer be modified.")
 	}
-	if _, found := strategy.sampler.d.NodeTypesToCount[nodeTypeName]; !found {
+	numNodes, found := strategy.sampler.d.NodeTypesToCount[nodeTypeName]
+	if !found {
 		Panicf("unknown node type %q to for rule %q", nodeTypeName, name)
 	}
 	if prevRule, found := strategy.rules[name]; found {
@@ -106,6 +111,7 @@ func (strategy *Strategy) NodesFromSet(name, nodeTypeName string, count int, nod
 		strategy:     strategy,
 		name:         name,
 		nodeTypeName: nodeTypeName,
+		numNodes:     numNodes,
 		count:        count,
 		shape:        shapes.Make(shapes.Int32, count),
 		nodeSet:      nodeSet,
@@ -113,4 +119,41 @@ func (strategy *Strategy) NodesFromSet(name, nodeTypeName string, count int, nod
 	strategy.rules[name] = r
 	strategy.seeds = append(strategy.seeds, r)
 	return r
+}
+
+type ValueMask struct {
+	Value, Mask tensor.Tensor
+}
+
+// MapInputs convert inputs yielded by a [sampler.Dataset] to map of the rules name to the
+// Value/Mask tensors with the samples for this example.
+//
+// Typical usage is (`ds` is the [sampler.Dataset] created by this Strategy):
+//
+//	spec, inputs, _, err := ds.Yield()
+//	strategy := spec.(*sampler.Strategy)
+//	graphSample := strategy.MapInputs(inputs)
+//	seeds, mask := graphSample["seeds"].Value, graphSample["seeds"].Mask
+//	...
+func (strategy *Strategy) MapInputs(inputs []tensor.Tensor) map[string]ValueMask {
+	mapNodes := make(map[string]ValueMask, len(strategy.rules))
+	for _, seedRule := range strategy.seeds {
+		mapNodes[seedRule.name] = ValueMask{inputs[0], inputs[1]}
+		inputs = inputs[2:]
+		inputs = recursivelyMapInputsToSubRules(inputs, seedRule, mapNodes)
+	}
+	return mapNodes
+}
+
+// recursivelyMapInputsToSubRules returns the remaining inputs and updates `mapNodes` with the sub-rules
+// dependent on `rule`.
+func recursivelyMapInputsToSubRules(inputs []tensor.Tensor, rule *Rule, mapNodes map[string]ValueMask) []tensor.Tensor {
+	for _, subRule := range rule.dependents {
+		mapNodes[subRule.name] = ValueMask{inputs[0], inputs[1]}
+		inputs = inputs[2:]
+		if len(subRule.dependents) > 0 {
+			inputs = recursivelyMapInputsToSubRules(inputs, subRule, mapNodes)
+		}
+	}
+	return inputs
 }
