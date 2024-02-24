@@ -49,9 +49,9 @@ type Dataset interface {
 	// and types of a generic CSV file reader.
 	//
 	// **Important**:
-	// 1. For train.Trainer the `spec` is a key of a `map[string]` for different computation graphs, so each time the
-	//    `spec` changes, the model graph is regenerated and re-compiled. Just like with `inputs` or `labels` of
-	//    different shapes.
+	// 1. For train.Trainer the `spec` is converted to string as a key of a `map[string]` for different computation
+	//    graphs, so each time the `spec` changes, the model graph is regenerated and re-compiled. Just like with
+	//   `inputs` or `labels` of different shapes.
 	// 2. The number of `inputs` and `labels` should not change for the same `spec` -- the train.Trainer will return
 	//    an error if they do. Their shape can vary (at the cost of creating a new JIT-compiled graph for each
 	//    different combination of shapes). If the number of `inputs` or `labels` needs changing, a new `spec`
@@ -61,7 +61,7 @@ type Dataset interface {
 	// not to use Loop.RunEpochs on a dataset configured to loop indefinitely.
 	//
 	// Optionally it can return an error. If the error is `io.EOF` the training/evaluation terminates
-	// normally, as it indicates end of data for finite datasets -- the end of the epoch.
+	// normally, as it indicates end of data for finite datasets -- maybe the end of the epoch.
 	//
 	// Any other errors should interrupt the training/evaluation and be returned to the user.
 	Yield() (spec any, inputs []tensor.Tensor, labels []tensor.Tensor, err error)
