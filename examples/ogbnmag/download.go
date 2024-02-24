@@ -54,8 +54,8 @@ var (
 
 	// EdgesAffiliatedWith `(Int32)[1043998, 2]`, pairs with (author_id, institution_id).
 	//
-	// Thousands of institutions with only one affiliated author, and a exponential decreasing amount
-	// of affiliated authors, all the way to one institution that has 27K authors.
+	// Thousands of institutions with only one affiliated author, and an exponential decreasing amount
+	// of institutions with more affiliated authors, all the way to one institution that has 27K authors.
 	//
 	// Most authors are affiliated to 1 institution only, and an exponentially decreasing number affiliations up
 	// to one author with 47 affiliations. ~300K authors with no affiliation.

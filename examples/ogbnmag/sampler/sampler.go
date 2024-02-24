@@ -24,7 +24,7 @@ const PaddingIndex = 0
 // It implements the train.Dataset interface.
 //
 // It always samples nodes with the same size, padding whenever there is not enough elements
-// to sample from. This way the resulting tensors will always be the same shape -- required
+// to sample from. This way the resulting tensors will always be the same Shape -- required
 // by XLA.
 //
 // There are 3 phases when using the Sampler:
@@ -43,11 +43,11 @@ const PaddingIndex = 0
 // It uses padding if sampling something that doesn't have enough examples to sample. Example:
 //
 //	trainStrategy := sampler.NewStrategy()
-//	seeds := trainStrategy.NodesFromSet("seeds", "papers", batchSize, /* subset= */TrainSplits)
-//	citedBy := seeds.FromEdges(/* name= */ "citedBy", /* edgeType= */ "citedBy", 5)
-//	authors := seeds.SampleFromEdgesRandomWithoutReplacement(/* name= */ "authors", /* edgeSet= */ "writtenBy", 5)
-//	coauthoredPapers := authors.SampleFromEdgesRandomWithoutReplacement(/* name= */ "coauthoredPapers", /* edgeSet= */ "writes", 5)
-//	citingAuthors := citedBy.SampleFromEdgesRandomWithoutReplacement(/* name= */ "citingAuthors", /* edgeSet= */ "writtenBy", 5)
+//	Seeds := trainStrategy.NodesFromSet("Seeds", "papers", batchSize, /* subset= */TrainSplits)
+//	citedBy := Seeds.FromEdges(/* Name= */ "citedBy", /* EdgeType= */ "citedBy", 5)
+//	authors := Seeds.SampleFromEdgesRandomWithoutReplacement(/* Name= */ "authors", /* edgeSet= */ "writtenBy", 5)
+//	coauthoredPapers := authors.SampleFromEdgesRandomWithoutReplacement(/* Name= */ "coauthoredPapers", /* edgeSet= */ "writes", 5)
+//	citingAuthors := citedBy.SampleFromEdgesRandomWithoutReplacement(/* Name= */ "citingAuthors", /* edgeSet= */ "writtenBy", 5)
 //
 // (3) Create a dataset and use it. The `spec` returned by `Yield` is a pointer to the [Strategy] object,
 // and can be used to create a [GraphSample] by providing it the inputs and labels lists. Example:
@@ -108,8 +108,8 @@ func New() *Sampler {
 	}
 }
 
-// AddNodeType adds the node with the given name and count to the collection of known nodes.
-// This assumes this is a dense representation of the node type -- all indices are valid from `0` to `count-1`
+// AddNodeType adds the node with the given Name and Count to the collection of known nodes.
+// This assumes this is a dense representation of the node type -- all indices are valid from `0` to `Count-1`
 //
 // A sparse node type (e.g.: indices are random numbers from 0 to MAXINT-1 or strings) is not supported.
 func (s *Sampler) AddNodeType(name string, count int) {
@@ -117,13 +117,13 @@ func (s *Sampler) AddNodeType(name string, count int) {
 		Panicf("Sampler is Frozen, that is, a strategy was already created with NewStrategy() and hence can no longer be modified.")
 	}
 	if count > math.MaxInt32 {
-		Panicf("Sampler uses int32, but node type %q count of %d given is bigger than the max possible.", name, count)
+		Panicf("Sampler uses int32, but node type %q Count of %d given is bigger than the max possible.", name, count)
 	} else if count <= 0 {
-		Panicf("count of %d for node type %q invalid, it must be > 0", count, name)
+		Panicf("Count of %d for node type %q invalid, it must be > 0", count, name)
 	}
 	s.d.NodeTypesToCount[name] = int32(count)
 	if count <= 0 {
-		Panicf("Sampler.AddNodeType(name=%q, count=%d): count must be > 0", name, count)
+		Panicf("Sampler.AddNodeType(Name=%q, Count=%d): Count must be > 0", name, count)
 	}
 }
 
@@ -136,7 +136,7 @@ func (s *Sampler) AddNodeType(name string, count int) {
 // edges. So if `reverse` is true, the source is interpreted as the target and vice-versa.
 // Same as the values of `edges`.
 //
-// The `edges` tensor must have shape `(Int32)[N, 2]`. It's contents are changed in place
+// The `edges` tensor must have Shape `(Int32)[N, 2]`. It's contents are changed in place
 // -- they are sorted by the source node type (or target if reversed).
 // But the edges information themselves are not lost.
 func (s *Sampler) AddEdgeType(name, sourceNodeType, targetNodeType string, edges tensor.Tensor, reverse bool) {
@@ -145,7 +145,7 @@ func (s *Sampler) AddEdgeType(name, sourceNodeType, targetNodeType string, edges
 	}
 	if edges.Rank() != 2 || edges.DType() != shapes.Int32 ||
 		edges.Shape().Dimensions[1] != 2 || edges.Shape().Dimensions[0] == 0 {
-		Panicf("invalid edge shape %s for AddEdgeType(): it must be shaped like (Int32)[N, 2]",
+		Panicf("invalid edge Shape %s for AddEdgeType(): it must be shaped like (Int32)[N, 2]",
 			edges.Shape())
 	}
 	countSource := s.d.NodeTypesToCount[sourceNodeType]
@@ -198,7 +198,7 @@ func (s *Sampler) AddEdgeType(name, sourceNodeType, targetNodeType string, edges
 	s.d.EdgeTypes[name] = samplerEdges
 }
 
-// NumEdges of the edgeType.
+// NumEdges of the EdgeType.
 func (e *edgeType) NumEdges() int {
 	return len(e.EdgeTargets)
 }
@@ -240,7 +240,7 @@ func (s *Sampler) NewStrategy() *Strategy {
 	s.d.Frozen = true
 	return &Strategy{
 		sampler: s,
-		rules:   make(map[string]*Rule),
+		Rules:   make(map[string]*Rule),
 	}
 }
 

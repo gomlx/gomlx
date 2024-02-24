@@ -6,60 +6,62 @@ import (
 	"github.com/gomlx/gomlx/types/shapes"
 )
 
-// Rule defines one rule of the sampling strategy. It's created by the various methods
+// Rule defines one rule of the sampling strategy.
+// It's created by [Strategy.Nodes], [Strategy.NodesFromSet] and [Rule.FromEdges].
+// Don't modity it directly.
 type Rule struct {
 	sampler  *Sampler
 	strategy *Strategy
 
-	// name of the [Rule].
-	name string
+	// Name of the [Rule].
+	Name string
 
-	// nodeTypeName of the nodes sampled by this rule.
-	nodeTypeName string
+	// NodeTypeName of the nodes sampled by this rule.
+	NodeTypeName string
 
-	// numNodes for nodeTypeName. Only used if nodeSet is not provided.
-	numNodes int32
+	// NumNodes for NodeTypeName. Only used if NodeSet is not provided.
+	NumNodes int32
 
-	// sourceRule is the name of the [Rule] this rule uses as source, or empty if
+	// SourceRule is the Name of the [Rule] this rule uses as source, or empty if
 	// this is a "Node" sampling rule (a root/seed sampling)
-	sourceRule *Rule
+	SourceRule *Rule
 
-	// dependents is the list of rules that depend on this one.
-	dependents []*Rule
+	// Dependents is the list of Rules that depend on this one.
+	Dependents []*Rule
 
-	// edgeTypeName used to sample from, if this is an "Edge" sampling rule, or empty.
-	edgeTypeName string
+	// EdgeTypeName used to sample from, if this is an "Edge" sampling rule, or empty.
+	EdgeTypeName string
 
-	// edgeType
-	edgeType *edgeType
+	// EdgeType
+	EdgeType *edgeType
 
-	// count is the number of samples to create. It will define the last dimension of the tensor sampled.
-	count int
+	// Count is the number of samples to create. It will define the last dimension of the tensor sampled.
+	Count int
 
-	// shape of the sample for this rule.
-	shape shapes.Shape
+	// Shape of the sample for this rule.
+	Shape shapes.Shape
 
-	// nodeSet is a set of indices that a "Node" rule is allowed to sample from.
-	// E.g.: have separate nodeSet for train, test and validation datasets.
-	nodeSet []int32
+	// NodeSet is a set of indices that a "Node" rule is allowed to sample from.
+	// E.g.: have separate NodeSet for train, test and validation datasets.
+	NodeSet []int32
 }
 
 // IsNode returns whether this is a "Node" rule, it can also be seen as a root rule.
 func (r *Rule) IsNode() bool {
-	return r.sourceRule == nil
+	return r.SourceRule == nil
 }
 
 // String returns an informative description of the rule.
 func (r *Rule) String() string {
 	if r.IsNode() {
 		var sourceSetDesc string
-		if r.nodeSet != nil {
-			sourceSetDesc = fmt.Sprintf(", nodeSet.size=%d", len(r.nodeSet))
+		if r.NodeSet != nil {
+			sourceSetDesc = fmt.Sprintf(", NodeSet.size=%d", len(r.NodeSet))
 		}
-		return fmt.Sprintf("Rule %q: type=Node, nodeType=%q, shape=%s (size=%d)%s", r.name, r.nodeTypeName, r.shape, r.shape.Size(), sourceSetDesc)
+		return fmt.Sprintf("Rule %q: type=Node, nodeType=%q, Shape=%s (size=%d)%s", r.Name, r.NodeTypeName, r.Shape, r.Shape.Size(), sourceSetDesc)
 	}
-	return fmt.Sprintf("Rule %q: type=Edge, nodeType=%q, shape=%s (size=%d), sourceRule=%q, edgeType=%q",
-		r.name, r.nodeTypeName, r.shape, r.shape.Size(), r.sourceRule.name, r.edgeTypeName)
+	return fmt.Sprintf("Rule %q: type=Edge, nodeType=%q, Shape=%s (size=%d), SourceRule=%q, EdgeType=%q",
+		r.Name, r.NodeTypeName, r.Shape, r.Shape.Size(), r.SourceRule.Name, r.EdgeTypeName)
 }
 
 // FromEdges returns a [Rule] that samples nodes from the edges connecting the results of the current Rule `r`.
@@ -68,31 +70,31 @@ func (r *Rule) FromEdges(name, edgeTypeName string, count int) *Rule {
 	if strategy.frozen {
 		Panicf("Strategy is frozen, that is, a dataset was already created and used with NewDataset() and hence can no longer be modified.")
 	}
-	if prevRule, found := strategy.rules[name]; found {
+	if prevRule, found := strategy.Rules[name]; found {
 		Panicf("rule named %q already exists: %s", name, prevRule)
 	}
 	edgeDef, found := r.sampler.d.EdgeTypes[edgeTypeName]
 	if !found {
 		Panicf("edge type %q not found to sample from in rule %q", edgeTypeName, name)
 	}
-	if edgeDef.SourceNodeType != r.nodeTypeName {
+	if edgeDef.SourceNodeType != r.NodeTypeName {
 		Panicf("edge type %q connects %q to %q: but you are using it on sampling rule %q, which is of node type %q",
-			edgeTypeName, edgeDef.SourceNodeType, edgeDef.TargetNodeType, r.name, r.nodeTypeName)
+			edgeTypeName, edgeDef.SourceNodeType, edgeDef.TargetNodeType, r.Name, r.NodeTypeName)
 	}
-	newShape := r.shape.Copy()
+	newShape := r.Shape.Copy()
 	newShape.Dimensions = append(newShape.Dimensions, count)
 	newRule := &Rule{
 		sampler:      r.sampler,
 		strategy:     strategy,
-		name:         name,
-		nodeTypeName: edgeDef.TargetNodeType,
-		sourceRule:   r,
-		edgeTypeName: edgeTypeName,
-		edgeType:     edgeDef,
-		count:        count,
-		shape:        newShape,
+		Name:         name,
+		NodeTypeName: edgeDef.TargetNodeType,
+		SourceRule:   r,
+		EdgeTypeName: edgeTypeName,
+		EdgeType:     edgeDef,
+		Count:        count,
+		Shape:        newShape,
 	}
-	r.dependents = append(r.dependents, newRule)
-	strategy.rules[name] = newRule
+	r.Dependents = append(r.Dependents, newRule)
+	strategy.Rules[name] = newRule
 	return newRule
 }

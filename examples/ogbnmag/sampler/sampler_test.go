@@ -67,7 +67,7 @@ func createTestStrategy(t *testing.T, s *Sampler) *Strategy {
 	var strategy *Strategy
 	require.NotPanics(t, func() {
 		strategy = s.NewStrategy()
-		seeds := strategy.NodesFromSet("seeds", "papers", 2, []int32{2, 3, 4})
+		seeds := strategy.NodesFromSet("Seeds", "papers", 2, []int32{2, 3, 4})
 		authors := seeds.FromEdges("authors", "written_by", 5)
 		_ = authors.FromEdges("otherPapers", "writes", 3)
 
@@ -83,30 +83,30 @@ func TestStrategy(t *testing.T) {
 	strategy := createTestStrategy(t, s)
 	fmt.Printf("\n%s\n\n", strategy)
 
-	require.Equal(t, 5, len(strategy.rules))
-	require.Len(t, strategy.seeds, 2)
+	require.Equal(t, 5, len(strategy.Rules))
+	require.Len(t, strategy.Seeds, 2)
 
-	seeds, found := strategy.rules["seeds"]
+	seeds, found := strategy.Rules["Seeds"]
 	require.True(t, found)
-	require.NoError(t, seeds.shape.Check(shapes.Int32, 2))
-	assert.Equal(t, 1, len(seeds.dependents))
+	require.NoError(t, seeds.Shape.Check(shapes.Int32, 2))
+	assert.Equal(t, 1, len(seeds.Dependents))
 
-	seeds2, found := strategy.rules["seeds2"]
+	seeds2, found := strategy.Rules["seeds2"]
 	require.True(t, found)
-	require.NoError(t, seeds2.shape.Check(shapes.Int32, 3))
-	assert.Equal(t, 0, len(seeds2.dependents))
+	require.NoError(t, seeds2.Shape.Check(shapes.Int32, 3))
+	assert.Equal(t, 1, len(seeds2.Dependents))
 
-	authors, found := strategy.rules["authors"]
+	authors, found := strategy.Rules["authors"]
 	require.True(t, found)
-	require.NoError(t, authors.shape.Check(shapes.Int32, 2, 5))
-	assert.Equal(t, seeds, authors.sourceRule)
-	assert.Equal(t, 1, len(authors.dependents))
+	require.NoError(t, authors.Shape.Check(shapes.Int32, 2, 5))
+	assert.Equal(t, seeds, authors.SourceRule)
+	assert.Equal(t, 1, len(authors.Dependents))
 
-	otherPapers, found := strategy.rules["otherPapers"]
+	otherPapers, found := strategy.Rules["otherPapers"]
 	require.True(t, found)
-	require.NoError(t, otherPapers.shape.Check(shapes.Int32, 2, 5, 3))
-	assert.Equal(t, authors, otherPapers.sourceRule)
-	assert.Equal(t, 0, len(otherPapers.dependents))
+	require.NoError(t, otherPapers.Shape.Check(shapes.Int32, 2, 5, 3))
+	assert.Equal(t, authors, otherPapers.SourceRule)
+	assert.Equal(t, 0, len(otherPapers.Dependents))
 
 	// Checks that frozen strategies can no longer be modified.
 	_ = strategy.NewDataset("test")
@@ -123,16 +123,16 @@ func TestDataset(t *testing.T) {
 	strategy := createTestStrategy(t, s)
 
 	// checkInputsFn make automatic checks of expected dimensions and errors.
-	checkInputsFn := func(t *testing.T, spec any, inputs, labels []tensor.Tensor, err error) map[string]ValueMask {
+	checkInputsFn := func(t *testing.T, spec any, inputs, labels []tensor.Tensor, err error) map[string]*ValueMask[tensor.Tensor] {
 		require.NoError(t, err)
 		require.Empty(t, labels)
 		require.Equal(t, strategy, spec.(*Strategy))
-		graphSample := strategy.MapInputs(inputs)
-		for name, rule := range strategy.rules {
+		graphSample := MapInputs[tensor.Tensor](strategy, inputs)
+		for name, rule := range strategy.Rules {
 			require.Containsf(t, graphSample, name, "Missing input for rule %q", name)
 			value, mask := graphSample[name].Value, graphSample[name].Mask
-			require.True(t, value.Shape().Eq(rule.shape), "Mismatch of shapes for value of rule %q", name)
-			require.NoErrorf(t, mask.Shape().Check(shapes.Bool, rule.shape.Dimensions...),
+			require.True(t, value.Shape().Eq(rule.Shape), "Mismatch of shapes for value of rule %q", name)
+			require.NoErrorf(t, mask.Shape().Check(shapes.Bool, rule.Shape.Dimensions...),
 				"Mismatch of shapes for mask of rule %q", name)
 		}
 		return graphSample
