@@ -64,11 +64,22 @@ var (
 		"adamax": func() Interface { return Adam().Adamax().Done() },
 		"adamw":  func() Interface { return Adam().WeightDecay(0.004).Done() },
 	}
+
+	// ParamOptimizer is the context parameter with the name of the optimizer.
+	// The default value is "adamw", and the valid values are "sgd", "adam", "adamw" and "adamax".
+	ParamOptimizer = "optimizer"
 )
 
 // GlobalStepVariableName as stored in context.Context, usually in the root scope -- but depends on the
 // caller.
 const GlobalStepVariableName = "global_step"
+
+// FromContext creates an optimizer from context hyperparameters.
+// See [ParamOptimizer]. The default is "adamw".
+func FromContext(ctx *context.Context) Interface {
+	optName := context.GetParamOr(ctx, ParamOptimizer, "adamw")
+	return MustOptimizerByName(optName)
+}
 
 // MustOptimizerByName returns an optimizer given the name, or log.Fatal if one does not exist. It uses
 // KnownOptimizers -- in case one wants to better handle invalid values.

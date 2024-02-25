@@ -9,6 +9,7 @@ import (
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/shapes"
 )
 
@@ -35,6 +36,8 @@ func getMagVar(ctx *context.Context, g *Graph, name string) *Node {
 // * Predictions for all seeds shaped `Float32[BatchSize, mag.NumLabels]`.
 // * Mask of the seeds, provided by the sampler, shaped `Bool[BatchSize]`.
 func MagModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
+	g := inputs[0].Graph()
+	optimizers.CosineAnnealingSchedule(ctx, g, shapes.F32)
 	strategy := spec.(*sampler.Strategy)
 	graphStates := FeaturePreprocessing(ctx, strategy, inputs)
 	numMessages := context.GetParamOr(ctx, ParamMagGnnNumMessages, 4)

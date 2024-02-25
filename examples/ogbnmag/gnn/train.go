@@ -7,7 +7,6 @@ import (
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	mldata "github.com/gomlx/gomlx/ml/data"
-	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/commandline"
 	"github.com/gomlx/gomlx/ml/train/losses"
@@ -31,7 +30,6 @@ var (
 // Train FNN model based on configuration in `ctx`.
 func Train(ctx *context.Context, baseDir string) error {
 	baseDir = mldata.ReplaceTildeInDir(baseDir)
-	layers.ParamDropoutRate
 	trainDS, trainEvalDS, validEvalDS, testEvalDS, err := MakeDatasets(baseDir)
 	if err != nil {
 		return err
@@ -88,9 +86,9 @@ func Train(ctx *context.Context, baseDir string) error {
 	// Attach a margaid plots: plot points at exponential steps.
 	// The points generated are saved along the checkpoint directory (if one is given).
 	var plots *margaid.Plots
-	usePlots := context.GetParamOr(ctx, "plots", false)
+	usePlots := context.GetParamOr(ctx, margaid.ParamPlots, false)
 	if usePlots {
-		plots = margaid.NewDefault(loop, checkpoint.Dir(), 100, 1.1, validEvalDS, testEvalDS, trainEvalDS).
+		plots = margaid.NewDefault(loop, checkpoint.Dir(), 100, 1.1, validEvalDS, testEvalDS).
 			WithEvalLossType("eval-loss")
 	}
 
@@ -134,11 +132,9 @@ func newTrainer(ctx *context.Context) *train.Trainer {
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
-	optimizer := optimizers.MustOptimizerByName(context.GetParamOr(ctx, "optimizer", "adamw"))
-	optimizers.CosineAnnealingSchedule()
 	trainer := train.NewTrainer(ctx.Manager(), ctx, MagModelGraph,
 		lossFn,
-		optimizer,
+		optimizers.FromContext(ctx), // Based on `ctx.GetParam("optimizer")`.
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
 		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
 	return trainer

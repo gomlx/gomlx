@@ -61,6 +61,11 @@ var (
 	_ = gonbui.IsNotebook
 	_ = mg.NewSeries
 	_ = New
+
+	// ParamPlots is the conventioned context parameter to trigger generating of plot points and
+	// displaying them.
+	// A boolean value that defaults to false.
+	ParamPlots = "plots"
 )
 
 // Plots holds many plots for different metrics. They are organized per "metric type", where

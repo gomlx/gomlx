@@ -19,6 +19,8 @@
   * Added `...FromContext` family of functions, that apply layers according to parameters set in the context: 
     `ActivationFromContext`, `DropoutFromContext`, `NormalizeFromContext` and `MaskedNormalizeFromContext`.
   * `LayerNormalization`: added `Mask` support; added defaults from context parameters.
+* Package `optimizers`:
+  * Added `CosineAnnealingSchedule.FromContext`.
 
 ## 0.8.0 - 2023/11/28
 
