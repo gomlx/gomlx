@@ -32,10 +32,18 @@ import (
 )
 
 const (
-	// L2RegularizationKey is the key to a context.Context.Params that defines the default L2 regularization
-	// of kernels. Each layer may decide independently to implement it or not. DenseWithBias and Convolution kernels
-	// look at this hyperparameter. The value should be a float64.
-	L2RegularizationKey = "l2_regularization"
+	// ParamL2Regularization context hyperparameter defines the L2 regularization of kernels.
+	// Each layer may decide independently to implement it or not.
+	// Dense, DenseWithBias and Convolution kernels look at this hyperparameter.
+	// The value should be a float64.
+	// The default is `0.0`.
+	ParamL2Regularization = "l2_regularization"
+
+	// L2RegularizationKey is an alias for ParamL2Regularization.
+	//
+	// Deprecated: all context parameters constants are prefixed now with "Param", to make it easy
+	// to find them.
+	L2RegularizationKey = ParamL2Regularization
 )
 
 // DenseWithBias adds a dense linear layer, a learnable linear transformation plus a bias term.
@@ -107,7 +115,7 @@ func Dense(ctx *context.Context, input *Node, useBias bool, outputDimensions ...
 	}
 
 	// Add regularization -- notice not for the bias term.
-	if l2any, found := ctx.GetParam(L2RegularizationKey); found {
+	if l2any, found := ctx.GetParam(ParamL2Regularization); found {
 		l2 := l2any.(float64)
 		if l2 > 0 {
 			l2Node := Const(g, shapes.CastAsDType(l2, inputShape.DType))

@@ -293,7 +293,7 @@ func (conv *ConvBuilder) Done() *Node {
 	}
 
 	// Add regularization.
-	if l2any, found := ctxInScope.GetParam(L2RegularizationKey); found {
+	if l2any, found := ctxInScope.GetParam(ParamL2Regularization); found {
 		l2 := l2any.(float64)
 		if l2 > 0 {
 			l2Node := Const(conv.graph, shapes.CastAsDType(l2, dtype))

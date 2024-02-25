@@ -145,7 +145,7 @@ func (builder *LayerNormBuilder) Done() *Node {
 
 	// Add regularization to scale.
 	if scaleVar != nil {
-		if l2any, found := ctx.GetParam(L2RegularizationKey); found {
+		if l2any, found := ctx.GetParam(ParamL2Regularization); found {
 			l2 := l2any.(float64)
 			if l2 > 0 {
 				l2Node := ConstAs(x, l2)
