@@ -69,7 +69,13 @@ type CosineScheduleOptions struct {
 //		optimizers.CosineAnnealingSchedule(ctx, g, shapes.Float32).PeriodInSteps(*flagNumSteps).Done()
 //	}
 //
-// ```
+// Or more simply, just pass the hyperparameters in the context (see [ParamCosineScheduleSteps]):
+//
+//	func modelGraph(cxt *context.Context, inputs []*Node) *Node {
+//		...
+//		g := inputs[0].Graph()
+//		optimizers.CosineAnnealingSchedule(ctx, g, shapes.Float32).FromContext().Done()
+//	}
 func CosineAnnealingSchedule(ctx *context.Context, graph *Graph, dtype shapes.DType) *CosineScheduleOptions {
 	return &CosineScheduleOptions{
 		ctx:   ctx,
