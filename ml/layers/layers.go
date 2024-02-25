@@ -44,6 +44,15 @@ const (
 	// Deprecated: all context parameters constants are prefixed now with "Param", to make it easy
 	// to find them.
 	L2RegularizationKey = ParamL2Regularization
+
+	// ParamDropoutRate context hyperparameter defines the amount of dropout applied when DropoutFromContext is used.
+	// Should be a value from `0.0` to `1.0`, where 0 means no dropout, and 1 would dropout everything.
+	//
+	// It is only applied if `Context.IsTraining() == true`, that is, during evaluation/inference it is
+	// ignored.
+	//
+	// The default is `0.0`, which means no dropout.
+	ParamDropoutRate = "dropout_rate"
 )
 
 // DenseWithBias adds a dense linear layer, a learnable linear transformation plus a bias term.
@@ -351,6 +360,21 @@ func DropoutNormalize(ctx *context.Context, input *Node, dropoutRate *Node, norm
 		result = Div(result, keepRate)
 	}
 	return result
+}
+
+// DropoutFromContext applies a dropout configured in the context parameters keyed by [ParamDropoutRate].
+//
+// If it is 0.0 this is a no-op.
+// If `Context.IsTraining() == false` this is a also a no-op, so it doesn't impact evaluation or inference.
+func DropoutFromContext(ctx *context.Context, x *Node) *Node {
+	dropoutRate := context.GetParamOr(ctx, ParamDropoutRate, 0.0)
+	if dropoutRate > 0 {
+		// We apply edge dropout to the mask.
+		g := x.Graph()
+		normalize := x.DType().IsFloat()
+		x = DropoutNormalize(ctx, x, Scalar(g, shapes.F32, dropoutRate), normalize)
+	}
+	return x
 }
 
 // AddL2Regularization calculates the L2 of the given values (typically variable nodes returned

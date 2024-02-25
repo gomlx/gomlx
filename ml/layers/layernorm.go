@@ -27,12 +27,32 @@ import (
 // See LayerNormalization for details.
 type LayerNormBuilder struct {
 	ctx                *context.Context
-	x                  *Node
+	x, mask            *Node
 	normalizingAxes    []int
 	epsilon            float64
 	center, scale      bool
 	scaleNormalization bool
 }
+
+var (
+	// ParamLayerNormEpsilon is the context parameter that defines the default layer normalizaiton epsilon value.
+	// The default is 1e-3.
+	ParamLayerNormEpsilon = "layer_norm_epsilon"
+
+	// ParamLayerNormCenter is the context parameter that defines whether to center the norm by default.
+	// The default is true.
+	ParamLayerNormCenter = "layer_norm_center"
+
+	// ParamLayerNormLearnedScale is the context parameter that defines whether to learn a scale for the
+	// layer norm, that multiplies its output.
+	// The default is true.
+	ParamLayerNormLearnedScale = "layer_norm_learned_scale"
+
+	// ParamLayerNormRescale is the context parameter that defines whether to rescale the layer
+	// by dividing it by the square root of the variance.
+	// The default is true.
+	ParamLayerNormRescale = "layer_norm_rescale"
+)
 
 // LayerNormalization performs a layer normalization on the input. It includes a scaling and offset factor,
 // and normalization over the feature entries.
@@ -68,14 +88,15 @@ func LayerNormalization(ctx *context.Context, x *Node, normalizingAxes ...int) *
 		ctx:                ctx.In("layer_normalization"),
 		x:                  x,
 		normalizingAxes:    normalizingAxes,
-		epsilon:            1e-3,
-		center:             true,
-		scale:              true,
-		scaleNormalization: true,
+		epsilon:            context.GetParamOr(ctx, ParamLayerNormEpsilon, 1e-3),
+		center:             context.GetParamOr(ctx, ParamLayerNormCenter, true),
+		scale:              context.GetParamOr(ctx, ParamLayerNormLearnedScale, true),
+		scaleNormalization: context.GetParamOr(ctx, ParamLayerNormRescale, true),
 	}
 }
 
-// Epsilon is a small float added to variance to avoid dividing by zero. It defaults to 1e-3.
+// Epsilon is a small float added to variance to avoid dividing by zero.
+// It defaults to the value given by [ParamLayerNormEpsilon].
 //
 // It is not used if ScaleNormalization is set to false.
 func (builder *LayerNormBuilder) Epsilon(value float64) *LayerNormBuilder {
@@ -111,10 +132,18 @@ func (builder *LayerNormBuilder) ScaleNormalization(value bool) *LayerNormBuilde
 	return builder
 }
 
+// Mask sets the mask for the input values. False values in the mask should be ignored for
+// the normalization.
+func (builder *LayerNormBuilder) Mask(mask *Node) *LayerNormBuilder {
+	builder.mask = mask
+	return builder
+}
+
 // Done finishes configuring the LayerNormalization and generates the graph computation to normalize the input.
 func (builder *LayerNormBuilder) Done() *Node {
 	ctx := builder.ctx
 	x := builder.x
+	mask := builder.mask
 	g := x.Graph()
 
 	// Convert negative axes to their actual value.
@@ -155,10 +184,23 @@ func (builder *LayerNormBuilder) Done() *Node {
 	}
 
 	// Calculate mean and variance over normalizingAxes and normalize.
-	mean := ReduceAndKeep(builder.x, ReduceMean, builder.normalizingAxes...)
-	normalized := Sub(builder.x, mean)
+	var mean *Node
+	if mask == nil {
+		mean = ReduceAndKeep(x, ReduceMean, builder.normalizingAxes...)
+	} else {
+		mean = MaskedReduceAndKeep(x, mask, MaskedReduceMean, builder.normalizingAxes...)
+	}
+	normalized := Sub(x, mean)
+	if mask != nil {
+		normalized = Where(mask, normalized, ZerosLike(normalized))
+	}
 	if builder.scaleNormalization {
-		variance := ReduceAndKeep(Square(normalized), ReduceMean, builder.normalizingAxes...)
+		var variance *Node
+		if mask == nil {
+			variance = ReduceAndKeep(Square(normalized), ReduceMean, builder.normalizingAxes...)
+		} else {
+			variance = MaskedReduceAndKeep(Square(normalized), mask, MaskedReduceMean, builder.normalizingAxes...)
+		}
 		epsilon := ConstAs(x, builder.epsilon)
 		normalized = Div(normalized, Sqrt(Add(variance, epsilon)))
 	}
