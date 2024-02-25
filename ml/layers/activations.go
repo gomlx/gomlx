@@ -2,13 +2,30 @@ package layers
 
 import (
 	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/ml/context"
 	. "github.com/gomlx/gomlx/types/exceptions"
 )
+
+const (
+	// ParamActivation context hyperparameter defines the activation to use, for models using ActivationFromContext.
+	// Available values are: `none`, `relu`, `leaky_relu`, `sigmoid`, `tanh` or `swish` (same as `silu`).
+	// The default is `relu`.
+	ParamActivation = "activation"
+)
+
+// ActivationFromContext picks an activation function from the context using [ParamActivation] paramter,
+// and applies it to `x`.
+func ActivationFromContext(ctx *context.Context, x *Node) *Node {
+	activation := context.GetParamOr(ctx, ParamActivation, "relu")
+	return Activation(activation, x)
+}
 
 // Activation allows a configurable activation.
 // Currently supported activations are "relu", "sigmoid", "leaky_relu", "swish", "tanh".
 func Activation(activation string, x *Node) *Node {
 	switch activation {
+	case "none":
+		return x
 	case "relu":
 		return Relu(x)
 	case "leaky_relu":
@@ -19,8 +36,10 @@ func Activation(activation string, x *Node) *Node {
 		return Tanh(x)
 	case "swish":
 		return Swish(x)
+	case "silu":
+		return Swish(x)
 	default:
-		Panicf("invalid activation type %q, valid types are: \"relu\", \"sigmoid\", \"leaky_relu\", \"swish\", \"tanh\"", activation)
+		Panicf("invalid activation type %q, valid types are: \"relu\", \"sigmoid\", \"leaky_relu\", \"swish\", \"silu\", \"tanh\"", activation)
 	}
 	return nil
 }
