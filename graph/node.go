@@ -1098,28 +1098,35 @@ func ReduceAllSum(x *Node) *Node {
 	return ReduceSum(x)
 }
 
-// ReduceMaskedSum reduces by summing the `x` elements over the selected axes.
+// MaskedReduceSum reduces by summing the `x` elements over the selected axes.
 // If `reduceAxes` is nil, reduce over all dimensions to a scalar.
 //
 // The reduced axes of `x` are removed in the output -- so the rank is reduced.
-// See ReduceAndKeep for a version to preserve the reduced axes.
 //
 // It ignores values for which the corresponding mask is false.
 // The `mask` and `x` values must have the same shape.
-func ReduceMaskedSum(x, mask *Node, reduceAxes ...int) *Node {
-	g := validateGraphFromInputs(x, mask)
+func MaskedReduceSum(x, mask *Node, reduceAxes ...int) *Node {
 	maskedX := Where(mask, x, ZerosLike(x))
-	zero := ScalarZero(g, x.DType())
-	return reduceHelper(maskedX, zero, reduceAxes, xla.ReduceSumNode)
+	return ReduceSum(maskedX, reduceAxes...)
 }
 
-// ReduceAllMaskedSum reduces all dimensions to a scalar by summing.
+// ReduceMaskedSum is an alias for MaskedReduceSum.
+//
+// Deprecated: all functions that take mask are prefixed with `Masked...`
+var ReduceMaskedSum = MaskedReduceSum
+
+// MaskedReduceAllSum reduces all dimensions to a scalar by summing.
 //
 // It ignores values for which the corresponding mask is false.
 // The `mask` and `x` values must have the same shape.
-func ReduceAllMaskedSum(x, mask *Node) *Node {
-	return ReduceMaskedSum(x, mask)
+func MaskedReduceAllSum(x, mask *Node) *Node {
+	return MaskedReduceSum(x, mask)
 }
+
+// ReduceAllMaskedSum is an alias for MaskedReduceAllSum.
+//
+// Deprecated: all functions that take mask are prefixed with `Masked...`
+var ReduceAllMaskedSum = MaskedReduceAllSum
 
 // ReduceMean reduces by taking the mean over the elements of the selected axes.
 //
@@ -1135,6 +1142,29 @@ func ReduceMean(x *Node, reduceAxes ...int) *Node {
 // ReduceAllMean reduces all dimensions to a scalar by taking the mean.
 func ReduceAllMean(x *Node) *Node {
 	return ReduceMean(x)
+}
+
+// MaskedReduceMean reduces by taking the mean over the elements of the selected axes.
+//
+// The reduced axes of `x` are removed in the output -- so the rank is reduced.
+//
+// It first applies a mask to x, converting masked values to the neutral value of the operation (0).
+// For reduction dimensions that are completely masked, it returns 0.
+func MaskedReduceMean(x, mask *Node, reduceAxes ...int) *Node {
+	zeros := ZerosLike(x)
+	ones := OnesLike(x)
+	maskedX := Where(mask, x, zeros)
+	sum := ReduceSum(maskedX, reduceAxes...)
+	denominator := Where(mask, ones, zeros)
+	denominator = ReduceSum(denominator, reduceAxes...)
+	denominator = Max(denominator, OnesLike(denominator))
+	return Div(sum, denominator)
+}
+
+// MaskedReduceAllMean reduces all dimensions to a scalar by taking the mean.
+// It ignores entries where mask is false.
+func MaskedReduceAllMean(x, mask *Node) *Node {
+	return MaskedReduceMean(x, mask)
 }
 
 // ReduceMultiply reduces by summing over the elements of the selected axes.
@@ -1169,26 +1199,36 @@ func ReduceAllMax(x *Node) *Node {
 	return ReduceMax(x)
 }
 
-// ReduceMaskedMax reduces by taking the max of `x` elements over the selected axes.
+// MaskedReduceMax reduces by taking the max of `x` elements over the selected axes.
 // If reduceAxes is nil, reduce over all dimensions to a scalar.
 //
 // It ignores values for which the corresponding mask is false.
 // The shapes of `mask and x must be the same.
-func ReduceMaskedMax(x, mask *Node, reduceAxes ...int) *Node {
-	g := validateGraphFromInputs(x, mask)
+func MaskedReduceMax(x, mask *Node, reduceAxes ...int) *Node {
+	g := x.Graph()
 	lowest := lowestForDType(g, x.DType())
 	broadcastLowest := BroadcastToDims(lowest, x.Shape().Dimensions...)
 	maskedX := Where(mask, x, broadcastLowest)
-	return reduceHelper(maskedX, lowest, reduceAxes, xla.ReduceMaxNode)
+	return ReduceMax(maskedX, reduceAxes...)
 }
 
-// ReduceAllMaskedMax reduces all dimensions to a scalar by taking the max.
+// ReduceMaskedMax is an alias for MaskedReduceMax.
+//
+// Deprecated: all functions that take mask are prefixed with `Masked...`
+var ReduceMaskedMax = MaskedReduceMax
+
+// MaskedReduceAllMax reduces all dimensions to a scalar by taking the max.
 //
 // It ignores values for which the corresponding mask is false.
 // The shapes of `mask and x must be the same.
-func ReduceAllMaskedMax(x, mask *Node) *Node {
-	return ReduceMaskedMax(x, mask)
+func MaskedReduceAllMax(x, mask *Node) *Node {
+	return MaskedReduceMax(x, mask)
 }
+
+// ReduceAllMaskedMax is an alias for MaskedReduceAllMax.
+//
+// Deprecated: all functions that take mask are prefixed with `Masked...`
+var ReduceAllMaskedMax = MaskedReduceAllMax
 
 // SliceAxisSpec specifies the range and stride of an axis to include in a Slice.
 //

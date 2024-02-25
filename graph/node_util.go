@@ -323,7 +323,7 @@ func MaskedSoftmax(logits, mask *Node, axes ...int) *Node {
 	if len(axes) == 0 {
 		axes = []int{-1}
 	}
-	max := StopGradient(ReduceAndKeepMasked(logits, mask, ReduceMaskedMax, axes...))
+	max := StopGradient(ReduceAndKeepMasked(logits, mask, MaskedReduceMax, axes...))
 	zeros := ZerosLike(logits)
 	normalizedLogits := Sub(logits, max)
 	normalizedLogits = Where(mask, normalizedLogits, zeros)
