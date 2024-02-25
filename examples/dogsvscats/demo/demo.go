@@ -143,7 +143,7 @@ func NewContext(manager *Manager) *context.Context {
 	ctx := context.NewContext(manager)
 	ctx.RngStateReset()
 	ctx.SetParam("optimizer", *flagOptimizer) // Just so it is saved along with the context.
-	ctx.SetParam(optimizers.LearningRateKey, *flagLearningRate)
+	ctx.SetParam(optimizers.ParamLearningRate, *flagLearningRate)
 	ctx.SetParam(layers.ParamL2Regularization, *flagL2Regularization)
 	ctx.SetParam("normalization", *flagNormalization)
 	ctx.SetParam("num_convolutions", *flagNumConvolutions)

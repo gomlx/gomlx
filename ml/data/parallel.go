@@ -1,7 +1,6 @@
 package data
 
 import (
-	"fmt"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/pkg/errors"
@@ -15,6 +14,9 @@ import (
 // See details in CustomParallel.
 type ParallelDataset struct {
 	Dataset train.Dataset
+
+	// name is set by default to the underlying dataset name.
+	name string
 
 	// parallelism is the number of goroutines started generating examples.
 	parallelism int
@@ -85,6 +87,7 @@ func Parallel(ds train.Dataset) *ParallelDataset {
 //	 	MyTrainFunc(ds)
 func CustomParallel(ds train.Dataset) *ParallelDataset {
 	pd := &ParallelDataset{
+		name:    ds.Name(),
 		Dataset: ds,
 	}
 	pd.Parallelism(0)
@@ -109,6 +112,15 @@ func (pd *ParallelDataset) Parallelism(n int) *ParallelDataset {
 		n = runtime.NumCPU() + 1
 	}
 	pd.parallelism = n
+	return pd
+}
+
+// WithName sets the name of the parallel dataset.
+// It defaults to the original dataset name.
+//
+// It returns the updated ParallelDataset, so calls can be cascaded.
+func (pd *ParallelDataset) WithName(name string) *ParallelDataset {
+	pd.name = name
 	return pd
 }
 
@@ -223,7 +235,7 @@ func (impl *parallelDatasetImpl) startGoRoutines() {
 
 // Name implements train.Dataset.
 func (pd *ParallelDataset) Name() string {
-	return fmt.Sprintf("%s [Parallelized]", pd.Dataset.Name())
+	return pd.name
 }
 
 // Reset implements train.Dataset.

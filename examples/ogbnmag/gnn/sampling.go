@@ -3,7 +3,9 @@ package gnn
 import (
 	mag "github.com/gomlx/gomlx/examples/ogbnmag"
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
+	mldata "github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
 )
 
@@ -45,6 +47,27 @@ func MagStrategy(magSampler *sampler.Sampler, batchSize int, seedIdsCandidates t
 // BatchSize used for the sampler.
 var BatchSize = 32
 
+// magCreateLabels create the labels from the input seed indices.
+func magCreateLabels(inputs, labels []tensor.Tensor) ([]tensor.Tensor, []tensor.Tensor) {
+	seedsRef := inputs[0].Local().AcquireData()
+	defer seedsRef.Release()
+	seedsData := seedsRef.Flat().([]int32)
+
+	seedsLabels := tensor.FromShape(shapes.Make(inputs[0].DType(), inputs[0].Shape().Size(), 1))
+	labelsRef := seedsLabels.AcquireData()
+	defer labelsRef.Release()
+	labelsData := labelsRef.Flat().([]int32)
+
+	papersLabelsRef := mag.PapersLabels.Local().AcquireData()
+	defer papersLabelsRef.Release()
+	papersLabelData := papersLabelsRef.Flat().([]int32)
+
+	for ii, paperIdx := range seedsData {
+		labelsData[ii] = papersLabelData[paperIdx]
+	}
+	return inputs, []tensor.Tensor{seedsLabels}
+}
+
 // MakeDatasets takes a directory where to store the downloaded data and return 4 datasets:
 // "train", "trainEval", "validEval", "testEval".
 //
@@ -60,9 +83,15 @@ func MakeDatasets(dataDir string) (trainDS, trainEvalDS, validEvalDS, testEvalDS
 	trainStrategy := MagStrategy(magSampler, BatchSize, mag.TrainSplit)
 	validStrategy := MagStrategy(magSampler, BatchSize, mag.ValidSplit)
 	testStrategy := MagStrategy(magSampler, BatchSize, mag.TestSplit)
+
 	trainDS = trainStrategy.NewDataset("train").Infinite().Shuffle()
 	trainEvalDS = trainStrategy.NewDataset("train").Epochs(1)
-	validEvalDS = validStrategy.NewDataset("train").Epochs(1)
-	testEvalDS = testStrategy.NewDataset("train").Epochs(1)
+	validEvalDS = validStrategy.NewDataset("valid").Epochs(1)
+	testEvalDS = testStrategy.NewDataset("test").Epochs(1)
+
+	trainDS = mldata.Parallel(mldata.MapInHost(trainDS, magCreateLabels, ""))
+	trainEvalDS = mldata.Parallel(mldata.MapInHost(trainEvalDS, magCreateLabels, ""))
+	validEvalDS = mldata.Parallel(mldata.MapInHost(validEvalDS, magCreateLabels, ""))
+	testEvalDS = mldata.Parallel(mldata.MapInHost(testEvalDS, magCreateLabels, ""))
 	return
 }

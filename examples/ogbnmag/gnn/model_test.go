@@ -33,7 +33,7 @@ func TestModel(t *testing.T) {
 	// Create graph function that will take a sampled sub-graph.
 	var spec any
 	testGraphFn := func(ctx *context.Context, inputs []*Node) []*Node {
-		return MagModelGraph(ctx, spec, inputs, nil)
+		return MagModelGraph(ctx, spec, inputs)
 	}
 	testGraphExec := context.NewExec(manager, ctx, testGraphFn)
 
@@ -46,5 +46,29 @@ func TestModel(t *testing.T) {
 	}
 	assert.NoError(t, outputs[0].Shape().Check(shapes.F32, BatchSize, mag.NumLabels))
 	assert.NoError(t, outputs[1].Shape().Check(shapes.Bool, BatchSize))
-	assert.NoError(t, outputs[2].Shape().Check(shapes.I32, BatchSize))
+}
+
+// BenchmarkParallelSampling measures the average time create one sampled subgraph (with `BatchSize` seeds).
+//
+// With BatchSize=32, I'm getting:
+//
+//	goos: linux
+//	goarch: amd64
+//	pkg: github.com/gomlx/gomlx/examples/ogbnmag/gnn
+//	cpu: 12th Gen Intel(R) Core(TM) i9-12900K
+//	BenchmarkParallelSampling-24              125136             92917 ns/op
+func BenchmarkParallelSampling(b *testing.B) {
+	err := mag.Download(*flagDataDir)
+	require.NoError(b, err)
+	ds, _, _, _, err := MakeDatasets(*flagDataDir)
+	require.NoError(b, err)
+
+	b.ResetTimer()
+	for _ = range b.N {
+		_, inputs, _, err := ds.Yield()
+		if err != nil {
+			b.Fatalf("Failed to sample: %+v", err)
+		}
+		_ = inputs
+	}
 }

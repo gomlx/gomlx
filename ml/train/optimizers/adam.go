@@ -75,7 +75,7 @@ func (c *AdamConfig) Scope(name string) *AdamConfig {
 
 // LearningRate sets the base learning rate as a floating point value -- eventually converted to the same dtype as the loss.
 //
-// Default is either the value of LearningRateKey ("learning_rate") global parameter in Context if defined, or 0.001 if not.
+// Default is either the value of ParamLearningRate ("learning_rate") global parameter in Context if defined, or 0.001 if not.
 func (c *AdamConfig) LearningRate(value float64) *AdamConfig {
 	c.learningRate = value
 	return c
@@ -141,7 +141,7 @@ func (o *adam) UpdateGraph(ctx *context.Context, g *Graph, loss *Node) {
 	// Set up learning-rate.
 	lrValue := o.config.learningRate
 	if lrValue < 0 {
-		lrValue = context.GetParam(ctx, LearningRateKey, AdamDefaultLearningRate)
+		lrValue = context.GetParam(ctx, ParamLearningRate, AdamDefaultLearningRate)
 	}
 	lrVar := LearningRateVar(ctx, dtype, lrValue)
 	learningRate := lrVar.ValueGraph(g)

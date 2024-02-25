@@ -157,7 +157,7 @@ func TrainModel() {
 
 	// Context holds the variables and hyperparameters for the model.
 	ctx := context.NewContext(manager)
-	ctx.SetParam(optimizers.LearningRateKey, *flagLearningRate)
+	ctx.SetParam(optimizers.ParamLearningRate, *flagLearningRate)
 	ctx.SetParam(layers.ParamL2Regularization, *flagL2Regularization)
 
 	// Checkpoints saving.

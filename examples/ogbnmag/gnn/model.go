@@ -34,10 +34,7 @@ func getMagVar(ctx *context.Context, g *Graph, name string) *Node {
 // It returns 3 tensors:
 // * Predictions for all seeds shaped `Float32[BatchSize, mag.NumLabels]`.
 // * Mask of the seeds, provided by the sampler, shaped `Bool[BatchSize]`.
-// * Indices of the seeds that can be used to fetch the label, shaped `Int32[BatchSize]`.
-func MagModelGraph(ctx *context.Context, spec any, inputs, labels []*Node) []*Node {
-	_ = labels // Not used, labels are joined else-where.
-	seedsIndices := inputs[0]
+func MagModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	strategy := spec.(*sampler.Strategy)
 	graphStates := FeaturePreprocessing(ctx, strategy, inputs)
 	numMessages := context.GetParamOr(ctx, ParamMagGnnNumMessages, 4)
@@ -48,7 +45,7 @@ func MagModelGraph(ctx *context.Context, spec any, inputs, labels []*Node) []*No
 	// Add one more hidden layer on the readout, by updating using itself as input.
 	readoutState.Value = updateState(ctx.In("readout_hidden"), readoutState.Value, readoutState.Value, readoutState.Mask)
 	readoutState.Value = layers.DenseWithBias(ctx.In("readout"), readoutState.Value, mag.NumLabels)
-	return []*Node{readoutState.Value, readoutState.Mask, seedsIndices}
+	return []*Node{readoutState.Value, readoutState.Mask}
 }
 
 // FeaturePreprocessing converts the `spec` and `inputs` given by the dataset into a map of node type name to

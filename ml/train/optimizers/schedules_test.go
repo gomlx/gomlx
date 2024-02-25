@@ -29,12 +29,14 @@ import (
 func TestCosineAnnealingSchedule(t *testing.T) {
 	manager := BuildManager().Platform("Host").Done()
 	ctx := context.NewContext(manager).Checked(false)
-	cosineExec := context.NewExec(manager, ctx, func(ctx *context.Context, graph *Graph) {
+	cosineExec := context.NewExec(manager, ctx, func(ctx *context.Context, graph *Graph) *Node {
+		ctx.SetTraining(graph, true)
 		CosineAnnealingSchedule(ctx, graph, shapes.Float32).
 			PeriodInSteps(50).
 			LearningRate(1.0).
 			MinLearningRate(0.001).
 			Done()
+		return LearningRateVar(ctx, shapes.F32, 0.001).ValueGraph(graph)
 	})
 
 	for ii := int64(0); ii < 100; ii++ {
@@ -49,15 +51,25 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 		assert.Equal(t, ii+1, step)
 
 		// Check learning rate is following cosine formulation.
-		lrVar := ctx.InspectVariable("/optimizers", LearningRateKey)
+		lrVar := ctx.InspectVariable("/optimizers", ParamLearningRate)
 		if lrVar == nil {
-			t.Fatalf("Learning rate variable not created in scope %q, name %q", "/optimiziers", LearningRateKey)
+			t.Fatalf("Learning rate variable not created in scope %q, name %q", "/optimiziers", ParamLearningRate)
 		}
 		lr := lrVar.Value().Value().(float32)
 		cycle := float64(ii) / 50.0
 		wantLR := (math.Cos((cycle-math.Floor(cycle))*math.Pi) + 1.0) / 2.0
 		wantLR = wantLR*(1.0-0.001) + 0.001
 		assert.InDelta(t, float32(wantLR), lr, 0.001)
-
 	}
+
+	cosineExec = context.NewExec(manager, ctx, func(ctx *context.Context, graph *Graph) *Node {
+		ctx.SetTraining(graph, false)
+		CosineAnnealingSchedule(ctx, graph, shapes.Float32).
+			PeriodInSteps(50).
+			LearningRate(1.0).
+			MinLearningRate(0.001).
+			Done()
+		return LearningRateVar(ctx, shapes.F32, 0.001).ValueGraph(graph)
+	})
+	require.NotPanics(t, func() { _ = cosineExec.Call() }, "cosineExec.Call failed to execute graph when ctx.IsTraining() == false")
 }

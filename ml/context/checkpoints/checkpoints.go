@@ -31,7 +31,7 @@
 //
 //	…
 //	ctx := context.NewContext(manager)
-//	ctx.SetParam(optimizers.LearningRateKey, *flagLearningRate)
+//	ctx.SetParam(optimizers.ParamLearningRate, *flagLearningRate)
 //
 //	var checkpoint *checkpoints.Handler
 //	if *flagCheckpoint != "" {

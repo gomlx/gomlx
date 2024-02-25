@@ -153,7 +153,7 @@ func TestGradientRealFFT(t *testing.T) {
 	// trueX is real, and trueY is the fft, a complex tensor.
 	trueX, trueY := realFftExample(manager, shapes.F32, 100, 2)
 	ctx := context.NewContext(manager)
-	ctx.SetParam(optimizers.LearningRateKey, 0.01)
+	ctx.SetParam(optimizers.ParamLearningRate, 0.01)
 	ctx.RngStateFromSeed(42) // Make it deterministic.
 	ctx = ctx.WithInitializer(initializers.Zero)
 	modelFn := func(ctx *context.Context, spec any, inputs []*Node) []*Node {
@@ -193,7 +193,7 @@ func TestGradientInverseRealFFT(t *testing.T) {
 	// We revert the x/y of realFftExample: trueX is the fft, a complex tensor, and trueY is the real sinusoidal curve.
 	trueY, trueX := realFftExample(manager, shapes.F64, 10, 2)
 	ctx := context.NewContext(manager)
-	ctx.SetParam(optimizers.LearningRateKey, 10.0)
+	ctx.SetParam(optimizers.ParamLearningRate, 10.0)
 	ctx.RngStateFromSeed(42) // Make it deterministic.
 	ctx = ctx.WithInitializer(initializers.Zero)
 	modelFn := func(ctx *context.Context, spec any, inputs []*Node) []*Node {
