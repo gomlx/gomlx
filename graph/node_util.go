@@ -256,9 +256,9 @@ func ReduceAndKeep(x *Node, reduceFn func(x *Node, reduceAxes ...int) *Node, red
 	return Reshape(reduced, shapeWithRecoveredDims.Dimensions...)
 }
 
-// ReduceAndKeepMasked applies the given masked reduction function but regenerates the reduced
+// MaskedReduceAndKeep applies the given masked reduction function but regenerates the reduced
 // dimensions with size 1.
-func ReduceAndKeepMasked(x, mask *Node, reduceFn func(x, mask *Node, reduceAxes ...int) *Node, reduceAxes ...int) *Node {
+func MaskedReduceAndKeep(x, mask *Node, reduceFn func(x, mask *Node, reduceAxes ...int) *Node, reduceAxes ...int) *Node {
 	_ = validateGraphFromInputs(x)
 	rank := x.Rank()
 	reduceAxes = convertNegativeAxesAndSort(rank, reduceAxes)
@@ -272,6 +272,11 @@ func ReduceAndKeepMasked(x, mask *Node, reduceFn func(x, mask *Node, reduceAxes 
 	}
 	return Reshape(reduced, shapeWithRecoveredDims.Dimensions...)
 }
+
+// ReduceAndKeepMasked is an alias for MaskedReduceAndKeep.
+//
+// Deprecated: all functions that take mask are prefixed with `Masked...`
+var ReduceAndKeepMasked = MaskedReduceAndKeep
 
 // Softmax computes softmax activations. It's the equivalent to
 // ```
@@ -323,7 +328,7 @@ func MaskedSoftmax(logits, mask *Node, axes ...int) *Node {
 	if len(axes) == 0 {
 		axes = []int{-1}
 	}
-	max := StopGradient(ReduceAndKeepMasked(logits, mask, MaskedReduceMax, axes...))
+	max := StopGradient(MaskedReduceAndKeep(logits, mask, MaskedReduceMax, axes...))
 	zeros := ZerosLike(logits)
 	normalizedLogits := Sub(logits, max)
 	normalizedLogits = Where(mask, normalizedLogits, zeros)
