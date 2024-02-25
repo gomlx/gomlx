@@ -932,21 +932,22 @@ func GetGraphParam[T any](ctx *Context, g *Graph, name string, defaultValue T) T
 
 const TrainingGraphParamKey = "training"
 
-// IsTraining returns whether context is being used for training. This is only a convention and is defined
-// by having Globals["training"] == true. See SetTraining to change this value.
+// IsTraining returns whether context is being used for training.
+// This is only a convention adopted by the library components, and it is read
+// with [Context.GetGraphParam] and [TrainingGraphParamKey] for the current scope.
+// See [SetTraining] to change this value.
 //
-// Notice that global parameters is part of the "reference" component of a Context, so this change
+// Notice that graph parameters is part of the "reference" component of a Context, so this change
 // won't affect other connected context references.
 func (ctx *Context) IsTraining(g *Graph) bool {
-	isTraining, found := ctx.GetGraphParam(g, TrainingGraphParamKey)
-	return found && isTraining.(bool)
+	return GetGraphParamOr(ctx, g, TrainingGraphParamKey, false)
 }
 
-// SetTraining marks the context for the given graph as training. This is a convention
-// adopted by the library components, and it simply sets
-// Context.Globals["training"] to the given value. See IsTraining to check for this value.
+// SetTraining marks the context for the given graph as training.
+// This is a convention adopted by the library components, and it simply sets it with
+// [Context.SetGraphParam] and [TrainingGraphParamKey] to the given value. See IsTraining to check for this value.
 //
-// Notice that global parameters is part of the "reference" component of a Context, so this change
+// Notice that the graph parameters is part of the "reference" component of a Context, so this change
 // won't affect other connected context references.
 func (ctx *Context) SetTraining(g *Graph, value bool) {
 	ctx.SetGraphParam(g, TrainingGraphParamKey, value)

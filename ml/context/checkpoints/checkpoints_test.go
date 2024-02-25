@@ -47,8 +47,8 @@ func TestCheckpoints(t *testing.T) {
 		// Build model, checkpoint a few times.
 		ctx := context.NewContext(manager)
 		ctx.SetParam("learning_rate", 0.01)
-		ctx.SetParam(layers.L2RegularizationKey, 0.001)
-		ctx.In("layer_1").SetParam(layers.L2RegularizationKey, 0.004)
+		ctx.SetParam(layers.ParamL2Regularization, 0.001)
+		ctx.In("layer_1").SetParam(layers.ParamL2Regularization, 0.004)
 		checkpoint := Build(ctx).TempDir("", "test_checkpoints_").Keep(3).MustDone()
 		assert.Equal(t, 0, checkpoint.checkpointsCount)
 		dir = checkpoint.Dir()
@@ -81,12 +81,12 @@ func TestCheckpoints(t *testing.T) {
 		assert.Equal(t, 0.01, lr.(float64), "Params[learning_rate]")
 
 		var l2 any
-		l2, found = ctx.GetParam(layers.L2RegularizationKey)
-		assert.Truef(t, found, "%s should have been set", layers.L2RegularizationKey)
-		assert.Equal(t, 0.001, l2.(float64), "(Scope=%s) Params[%s]", ctx.Scope(), layers.L2RegularizationKey)
-		l2, found = ctx.In("layer_1").GetParam(layers.L2RegularizationKey)
-		assert.Truef(t, found, "%s should have been set", layers.L2RegularizationKey)
-		assert.Equal(t, 0.004, l2.(float64), "Params[%s]", layers.L2RegularizationKey)
+		l2, found = ctx.GetParam(layers.ParamL2Regularization)
+		assert.Truef(t, found, "%s should have been set", layers.ParamL2Regularization)
+		assert.Equal(t, 0.001, l2.(float64), "(Scope=%s) Params[%s]", ctx.Scope(), layers.ParamL2Regularization)
+		l2, found = ctx.In("layer_1").GetParam(layers.ParamL2Regularization)
+		assert.Truef(t, found, "%s should have been set", layers.ParamL2Regularization)
+		assert.Equal(t, 0.004, l2.(float64), "Params[%s]", layers.ParamL2Regularization)
 
 		// Re-execute testGraphFn: it should load global step at 10, increment and return it at 11.
 		e := context.NewExec(manager, ctx, testGraphFn)
