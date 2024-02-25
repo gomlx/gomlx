@@ -1,6 +1,7 @@
 package gnn
 
 import (
+	"fmt"
 	. "github.com/gomlx/exceptions"
 	mag "github.com/gomlx/gomlx/examples/ogbnmag"
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
@@ -9,6 +10,13 @@ import (
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/types/shapes"
+)
+
+var (
+	// ParamMagGnnNumMessages is the context parameter that defines the number of messages to
+	// send in the GNN tree of nodes.
+	// The default is 4.
+	ParamMagGnnNumMessages = "mag_gnn_num_messages"
 )
 
 // getMagVar retrieves the static (not-learnable) OGBN-MAG variables -- e.g: the frozen papers embedding table.
@@ -20,6 +28,29 @@ func getMagVar(ctx *context.Context, g *Graph, name string) *Node {
 	return magVar.ValueGraph(g)
 }
 
+// MagModelGraph builds a OGBN-MAG GNN model that sends [ParamMagGnnNumMessages] along its sampling
+// strategy, and then adding a final layer on top of the seeds.
+//
+// It returns 3 tensors:
+// * Predictions for all seeds shaped `Float32[BatchSize, mag.NumLabels]`.
+// * Mask of the seeds, provided by the sampler, shaped `Bool[BatchSize]`.
+// * Indices of the seeds that can be used to fetch the label, shaped `Int32[BatchSize]`.
+func MagModelGraph(ctx *context.Context, spec any, inputs, labels []*Node) []*Node {
+	_ = labels // Not used, labels are joined else-where.
+	seedsIndices := inputs[0]
+	strategy := spec.(*sampler.Strategy)
+	graphStates := FeaturePreprocessing(ctx, strategy, inputs)
+	numMessages := context.GetParamOr(ctx, ParamMagGnnNumMessages, 4)
+	for ii := range numMessages {
+		GraphStateUpdate(ctx.In(fmt.Sprintf("round_%d", ii)), strategy, graphStates)
+	}
+	readoutState := graphStates[strategy.Seeds[0].Name]
+	// Add one more hidden layer on the readout, by updating using itself as input.
+	readoutState.Value = updateState(ctx.In("readout_hidden"), readoutState.Value, readoutState.Value, readoutState.Mask)
+	readoutState.Value = layers.DenseWithBias(ctx.In("readout"), readoutState.Value, mag.NumLabels)
+	return []*Node{readoutState.Value, readoutState.Mask, seedsIndices}
+}
+
 // FeaturePreprocessing converts the `spec` and `inputs` given by the dataset into a map of node type name to
 // its initial embeddings.
 //
@@ -27,9 +58,8 @@ func getMagVar(ctx *context.Context, g *Graph, name string) *Node {
 //
 //	author/paper, so it is reasonable to expect that during validation/testing it will see many embeddings
 //	zero initialized.
-func FeaturePreprocessing(ctx *context.Context, spec any, inputs []*Node) (graphInputs map[string]*sampler.ValueMask[*Node]) {
+func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inputs []*Node) (graphInputs map[string]*sampler.ValueMask[*Node]) {
 	g := inputs[0].Graph()
-	strategy := spec.(*sampler.Strategy)
 	graphInputs = sampler.MapInputs[*Node](strategy, inputs)
 
 	// Learnable embeddings context: zero initialized, and we should have dropout to have the model handle well
@@ -41,7 +71,7 @@ func FeaturePreprocessing(ctx *context.Context, spec any, inputs []*Node) (graph
 	for name, rule := range strategy.Rules {
 		if rule.NodeTypeName == "papers" {
 			// Gather values from frozen paperEmbeddings. Mask remains unchanged.
-			graphInputs[name].Value = Gather(papersEmbeddings, graphInputs[name].Value)
+			graphInputs[name].Value = Gather(papersEmbeddings, ExpandDims(graphInputs[name].Value, -1))
 		}
 	}
 
@@ -52,7 +82,7 @@ func FeaturePreprocessing(ctx *context.Context, spec any, inputs []*Node) (graph
 			// Gather values from frozen paperEmbeddings. Mask remains unchanged.
 			embedded := layers.Embedding(ctxEmbed.In("institutions"),
 				graphInputs[name].Value, shapes.F32, mag.NumInstitutions, institutionsEmbedSize)
-			embedded = Where(ExpandDims(graphInputs[name].Mask, -1), embedded, ZerosLike(embedded)) // Apply mask.
+			embedded = Where(graphInputs[name].Mask, embedded, ZerosLike(embedded)) // Apply mask.
 			graphInputs[name].Value = embedded
 		}
 	}
@@ -64,7 +94,7 @@ func FeaturePreprocessing(ctx *context.Context, spec any, inputs []*Node) (graph
 			// Gather values from frozen paperEmbeddings. Mask remains unchanged.
 			embedded := layers.Embedding(ctxEmbed.In("fields_of_study"),
 				graphInputs[name].Value, shapes.F32, mag.NumFieldsOfStudy, fieldsOfStudyEmbedSize)
-			embedded = Where(ExpandDims(graphInputs[name].Mask, -1), embedded, ZerosLike(embedded)) // Apply mask.
+			embedded = Where(graphInputs[name].Mask, embedded, ZerosLike(embedded)) // Apply mask.
 			graphInputs[name].Value = embedded
 		}
 	}

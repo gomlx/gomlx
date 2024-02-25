@@ -1,4 +1,3 @@
-// Package gnn implements a GNN model for the OGBN-MAG dataset.
 package gnn
 
 import (

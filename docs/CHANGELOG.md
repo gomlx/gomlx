@@ -2,14 +2,23 @@
 
 ## Next
 
-* Open Graph Benchmark OGBN-MAG dataset support and example models (FNN).
+* Open Graph Benchmark OGBN-MAG dataset support and example models (FNN and GNN).
   * Added sampler library.
-* Context:
+* Package `Context`:
   * added `Manager()` accessor method.
   * added `SetParams` to set various parameters at once.
-* shapes:
+  * renaming name of parameters to be prefixed with "Param".
+* Package `shapes`:
   * Added `Check()` and `Assert()` to check for both, dtype and dimensions.
 * `exceptions`: refactoring to use separate package `github.com/gomlx/exceptions`.
+* Package `graph`:
+  * Functions that take masked inputs are being renamed to use a "Masked" prefix (e.g.: `MaskedReduceSum`,
+    `MaskedReduceMean`, `MaskedReduceMax`, `MaskedReduceAndKeep`).
+  * Added `MaskedReduceMean`.
+* Package `layers`:
+  * Added `...FromContext` family of functions, that apply layers according to parameters set in the context: 
+    `ActivationFromContext`, `DropoutFromContext`, `NormalizeFromContext` and `MaskedNormalizeFromContext`.
+  * `LayerNormalization`: added `Mask` support; added defaults from context parameters.
 
 ## 0.8.0 - 2023/11/28
 

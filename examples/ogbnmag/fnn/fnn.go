@@ -41,14 +41,11 @@ func FnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	// Gather and concatenate all features from the seeds (indices of papers).
 	logits := Concatenate([]*Node{
 		Gather(getMagVar("PapersEmbeddings"), seeds),
-		Gather(log1pMagVar("CountPapersCites"), seeds),
-		Gather(log1pMagVar("CountPapersIsCited"), seeds),
-		Gather(log1pMagVar("CountPapersFieldsOfStudy"), seeds),
+		//Gather(log1pMagVar("CountPapersCites"), seeds),
+		//Gather(log1pMagVar("CountPapersIsCited"), seeds),
+		//Gather(log1pMagVar("CountPapersFieldsOfStudy"), seeds),
 		Gather(log1pMagVar("CountPapersAuthors"), seeds),
 	}, 1)
-	if ctx.IsTraining(g) {
-		fmt.Printf("> papers features input shape: %s\n", logits.Shape())
-	}
 
 	// Build FNN.
 	numLayers := context.GetParamOr(ctx, "hidden_layers", 2)
