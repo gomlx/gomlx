@@ -333,10 +333,20 @@ func PieceWiseLinearCalibrationCascaded(ctx *context.Context, input, keypoints *
 }
 
 // Dropout randomly replace the input with zeros if ctx.IsTraining() is true. Otherwise,
-// it's a no op (it returns input). It scales the output by 1/(1-dropoutRate)
-// to preserve the mean of the values of the input.
+// it's a no op (it returns input).
+// If the input is float, it scales the output by 1/(1-dropoutRate) to preserve the mean of the values of the input.
 func Dropout(ctx *context.Context, input *Node, dropoutRate *Node) *Node {
-	return DropoutNormalize(ctx, input, dropoutRate, true)
+	return DropoutNormalize(ctx, input, dropoutRate, input.DType().IsFloat())
+}
+
+// DropoutWithFloat is the same as Dropout, but it takes the `dropoutRate` as a static float64.
+// If `dropoutRate <= 0` or it's not training, this is a no-op.
+func DropoutWithFloat(ctx *context.Context, input *Node, dropoutRate float64) *Node {
+	if dropoutRate <= 0 {
+		return input
+	}
+	g := input.Graph()
+	return Dropout(ctx, input, Scalar(g, shapes.F32, dropoutRate))
 }
 
 // DropoutNormalize randomly replace the input with zeros if ctx.IsTraining() is true. Otherwise,
