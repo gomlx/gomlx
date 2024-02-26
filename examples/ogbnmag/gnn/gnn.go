@@ -16,7 +16,7 @@ import (
 	"strings"
 )
 
-const (
+var (
 	// ParamMessageDim context hyperparameter defines the dimension of the messages calculated per node.
 	// The default is 128.
 	ParamMessageDim = "message_dim"
@@ -47,12 +47,18 @@ const (
 	ParamPoolingType = "gnn_pooling_type"
 
 	// ParamNormalizationType context hyperparameter can take values `none` ( or `""`), `batch` or `layer`.
+	// It's an alias to [layers.ParamNormalizationType].
 	// The default is `layer`.
-	ParamNormalizationType = "normalization_type"
+	ParamNormalizationType = layers.ParamNormalizationType
 
 	// ParamUpdateStateType context hyperparameter can take values `residual` or `none`.
 	// The default is `residual`.
-	ParamUpdateStateType = "update_state_type"
+	ParamUpdateStateType = "gnn_update_state_type"
+
+	// ParamUsePathToRootStates context hyperparameter that if set allows each update state to see the states
+	// of all nodes in its path to root.
+	// Default is false.
+	ParamUsePathToRootStates = "gnn_use_path_to_root"
 )
 
 // GraphStateUpdate takes a `graphStates`, a map of name of node sets to their hidden states,
@@ -70,11 +76,12 @@ const (
 func GraphStateUpdate(ctx *context.Context, strategy *sampler.Strategy, graphStates map[string]*sampler.ValueMask[*Node]) {
 	// Starting from the seed node sets, do updates recursively.
 	for _, rule := range strategy.Seeds {
-		recursivelyApplyGraphConvolution(ctx, strategy, rule, graphStates)
+		recursivelyApplyGraphConvolution(ctx, strategy, rule, nil, graphStates)
 	}
 }
 
 func recursivelyApplyGraphConvolution(ctx *context.Context, strategy *sampler.Strategy, rule *sampler.Rule,
+	pathToRootStates []*Node,
 	graphStates map[string]*sampler.ValueMask[*Node]) {
 	// Makes sure there is a state for the current dependent.
 	state, found := graphStates[rule.Name]
@@ -87,13 +94,39 @@ func recursivelyApplyGraphConvolution(ctx *context.Context, strategy *sampler.St
 		return
 	}
 
+	var subPathToRootStates []*Node
+	if context.GetParamOr(ctx, ParamUsePathToRootStates, false) {
+		// subPathToRootStates: passed to the children rules. They need to be expanded at each level to get the correct
+		// broadcasting (the broadcasting to the right shapes will happen automatically).
+		subPathToRootStates = make([]*Node, 0, len(pathToRootStates)+1)
+		for _, contextState := range pathToRootStates {
+			// We need to expand so it will be properly broadcast.
+			// Noted the new axis is in between the "BatchSize" and following axes, and the last embedding
+			// dimensions, which remains unchanged.
+			subPathToRootStates = append(subPathToRootStates, ExpandDims(contextState, -2))
+		}
+		if state.Value != nil {
+			// If the state of the current rule is not latent, include it as well.
+			subPathToRootStates = append(subPathToRootStates, ExpandDims(state.Value, -2))
+		}
+	}
+
 	// Update dependents and calculate their messages.
-	updateInputs := make([]*Node, 0, len(rule.Dependents)+1)
+	updateInputs := make([]*Node, 0, len(rule.Dependents)+1+len(pathToRootStates))
 	if state.Value != nil { // state == nil for latent node types, at their initial state.
 		updateInputs = append(updateInputs, state.Value)
 	}
+	for _, contextState := range pathToRootStates {
+		// Broadcast dimensions where needed.
+		dims := make([]int, 0, rule.Shape.Rank()+1)
+		dims = append(dims, rule.Shape.Dimensions...)
+		dims = append(dims, contextState.Shape().Dimensions[contextState.Rank()-1])
+		contextState = BroadcastToDims(contextState, dims...)
+		updateInputs = append(updateInputs, contextState)
+	}
+
 	for _, dependent := range rule.Dependents {
-		recursivelyApplyGraphConvolution(ctx, strategy, dependent, graphStates)
+		recursivelyApplyGraphConvolution(ctx, strategy, dependent, subPathToRootStates, graphStates)
 		dependentState := graphStates[dependent.Name]
 		updateInputs = append(updateInputs,
 			convolveNodeSet(ctx.In("gnn:"+dependent.Name).In("conv"), dependentState.Value, dependentState.Mask))
