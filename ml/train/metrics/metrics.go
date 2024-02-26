@@ -21,6 +21,7 @@ import (
 	"fmt"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
+	"github.com/gomlx/gomlx/ml/train/losses"
 	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
@@ -48,6 +49,9 @@ type Interface interface {
 
 	// UpdateGraph builds a graph that takes as input the predictions (or logits) and labels and
 	// outputs the resulting metric (a scalar).
+	//
+	// Weights and masks are by convention given as extra `*Node` values in the labels slice,
+	// when supported by the metrics.
 	UpdateGraph(ctx *context.Context, labels, predictions []*Node) (metric *Node)
 
 	// PrettyPrint is used to pretty-print a metric value, usually in a short form.
@@ -129,9 +133,9 @@ type meanMetric struct {
 
 // NewMeanMetric creates a metric from any BaseMetricGraph function. It assumes the batch size (to weight the
 // mean with each new result) is given by the first dimension of the labels' node.
-// pPrintFn can be left as nil, and a default will be used.
-func NewMeanMetric(name, shortName, metricType string, metricFn BaseMetricGraph, pPrintFn PrettyPrintFn) Interface {
-	return &meanMetric{baseMetric: baseMetric{name: name, shortName: shortName, metricType: metricType, metricFn: metricFn, pPrintFn: pPrintFn}}
+// `prettyPrintFn` can be left as nil, and a default will be used.
+func NewMeanMetric(name, shortName, metricType string, metricFn BaseMetricGraph, prettyPrintFn PrettyPrintFn) Interface {
+	return &meanMetric{baseMetric: baseMetric{name: name, shortName: shortName, metricType: metricType, metricFn: metricFn, pPrintFn: prettyPrintFn}}
 }
 
 // BatchSize returns the batch size (assumed first dimension) of the data node, casting
@@ -351,12 +355,12 @@ func NewMovingAverageBinaryLogitsAccuracy(name, shortName string, newExampleWeig
 // SparseCategoricalAccuracyGraph returns the accuracy -- fraction of times argmax(logits)
 // is the true label. It works for both probabilities or logits. Ties are considered misses.
 // Labels is expected to be some integer type. And the returned dtype is the same as logits.
+//
+// Weights and mask can be given in the `labels` slice, following the labels themselves and they
+// will be accounted for.
 func SparseCategoricalAccuracyGraph(_ *context.Context, labels, logits []*Node) *Node {
 	logits0 := logits[0]
 	g := logits0.Graph()
-	if len(labels) != 1 {
-		Panicf("SparseCategoricalAccuracyGraph requires one labels tensor, got (%d) instead", len(labels))
-	}
 	labels0 := labels[0]
 	labelsShape := labels0.Shape()
 	labelsRank := labelsShape.Rank()
@@ -372,6 +376,9 @@ func SparseCategoricalAccuracyGraph(_ *context.Context, labels, logits []*Node) 
 		Panicf("labels0(%s) are expected to have the last dimension == 1, with the true/labeled category", labelsShape)
 	}
 
+	// Weights and masks: checks whether either are defined.
+	weightsShape := shapes.Make(logits0.DType(), logits0.Shape().Dimensions[:logits0.Rank()-1]...)
+	weights, mask := losses.CheckLabelsForWeightsAndMask(weightsShape, labels)
 	// TODO: implement with argmax
 
 	// Convert logits0 such that only those with the maximum value become 1, the rest 0.
@@ -389,9 +396,32 @@ func SparseCategoricalAccuracyGraph(_ *context.Context, labels, logits []*Node) 
 	labelsValues := OneHot(reducedLabels, logitsShape.Dimensions[logitsRank-1], logitsShape.DType)
 
 	// correctExamples will be those where labelsValues and logitsMaxIndicator are 1.
-	correctExamples := Mul(logitsMaxIndicator, labelsValues)
-	countExamples := Const(g, shapes.CastAsDType(labels0.Shape().Size(), correctExamples.DType()))
-	return Div(ReduceAllSum(correctExamples), countExamples)
+	// We reduce the last axis, because only one column can be correct (==1), and any column correct means the
+	// whole example is correct.
+	correctExamples := ReduceSum(Mul(logitsMaxIndicator, labelsValues), -1)
+	if mask != nil {
+		correctExamples = Where(mask, correctExamples, ZerosLike(correctExamples))
+	}
+	if weights != nil {
+		correctExamples = Mul(weights, correctExamples)
+	}
+
+	var totalWeight *Node
+	if weights == nil && mask == nil {
+		// Simple count of examples.
+		totalWeight = Scalar(g, correctExamples.DType(), float64(correctExamples.Shape().Size()))
+	} else {
+		if weights != nil {
+			totalWeight = weights
+		} else {
+			totalWeight = OnesLike(correctExamples)
+		}
+		if mask != nil {
+			totalWeight = Where(mask, totalWeight, ZerosLike(totalWeight))
+		}
+		totalWeight = ReduceAllSum(totalWeight)
+	}
+	return Div(ReduceAllSum(correctExamples), totalWeight)
 }
 
 // NewSparseCategoricalAccuracy returns a new sparse categorical accuracy metric with the given names.
