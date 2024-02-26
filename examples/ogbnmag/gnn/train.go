@@ -31,6 +31,7 @@ var (
 func Train(ctx *context.Context, baseDir string) error {
 	baseDir = mldata.ReplaceTildeInDir(baseDir)
 	trainDS, trainEvalDS, validEvalDS, testEvalDS, err := MakeDatasets(baseDir)
+	_ = testEvalDS
 	if err != nil {
 		return err
 	}
@@ -42,7 +43,7 @@ func Train(ctx *context.Context, baseDir string) error {
 
 	// Checkpoint: it loads if already exists, and it will save as we train.
 	checkpointPath := context.GetParamOr(ctx, ParamCheckpointPath, "")
-	numCheckpointsToKeep := context.GetParamOr(ctx, ParamNumCheckpoints, 10)
+	numCheckpointsToKeep := context.GetParamOr(ctx, ParamNumCheckpoints, 5)
 	var checkpoint *checkpoints.Handler
 	if checkpointPath != "" {
 		checkpointPath = mldata.ReplaceTildeInDir(checkpointPath) // If the path starts with "~", it is replaced.
@@ -55,7 +56,7 @@ func Train(ctx *context.Context, baseDir string) error {
 			numCheckpointsToKeep = -1
 		}
 		if numCheckpointsToKeep > 0 {
-			checkpoint, err = checkpoints.Build(ctx).Dir(checkpointPath).Keep(numCheckpointsToKeep).TakeMean(3).Done()
+			checkpoint, err = checkpoints.Build(ctx).Dir(checkpointPath).Keep(numCheckpointsToKeep).Done()
 		} else {
 			checkpoint, err = checkpoints.Build(ctx).Dir(checkpointPath).Done()
 		}
@@ -76,7 +77,7 @@ func Train(ctx *context.Context, baseDir string) error {
 
 	// Attach a checkpoint: checkpoint every 1 minute of training.
 	if checkpoint != nil && numCheckpointsToKeep > 1 {
-		period := time.Minute * 1
+		period := time.Minute * 3
 		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
 			func(loop *train.Loop, metrics []tensor.Tensor) error {
 				return checkpoint.Save()
@@ -88,7 +89,7 @@ func Train(ctx *context.Context, baseDir string) error {
 	var plots *margaid.Plots
 	usePlots := context.GetParamOr(ctx, margaid.ParamPlots, false)
 	if usePlots {
-		plots = margaid.NewDefault(loop, checkpoint.Dir(), 100, 1.1, validEvalDS, testEvalDS).
+		plots = margaid.NewDefault(loop, checkpoint.Dir(), 1000, 1.2, validEvalDS).
 			WithEvalLossType("eval-loss")
 	}
 
@@ -110,7 +111,7 @@ func Train(ctx *context.Context, baseDir string) error {
 
 	// Finally, print an evaluation on train and test datasets.
 	fmt.Println()
-	err = commandline.ReportEval(trainer, trainEvalDS, validEvalDS, testEvalDS)
+	err = commandline.ReportEval(trainer, validEvalDS, trainEvalDS)
 	if err != nil {
 		return errors.WithMessage(err, "while reporting eval")
 	}
@@ -161,7 +162,7 @@ func Eval(ctx *context.Context, baseDir string, datasets ...train.Dataset) error
 	}
 	var err error
 	if numCheckpointsToKeep > 0 {
-		_, err = checkpoints.Build(ctx).Dir(checkpointPath).Keep(numCheckpointsToKeep).TakeMean(3).Done()
+		_, err = checkpoints.Build(ctx).Dir(checkpointPath).Keep(numCheckpointsToKeep).Done()
 	} else {
 		_, err = checkpoints.Build(ctx).Dir(checkpointPath).Done()
 	}
@@ -180,7 +181,7 @@ func Eval(ctx *context.Context, baseDir string, datasets ...train.Dataset) error
 		start := time.Now()
 		err := commandline.ReportEval(trainer, ds)
 		if err != nil {
-			return errors.WithMessagef(err, "while reporting eval on %q", ds.Name())
+			return errors.WithMessagef(err, "while reporting eval on %q: %+v", ds.Name(), err)
 		}
 		elapsed := time.Since(start)
 		fmt.Printf("\telapsed %s (%s)\n", elapsed, ds.Name())
