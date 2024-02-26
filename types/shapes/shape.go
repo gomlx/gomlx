@@ -72,6 +72,7 @@ import (
 	"encoding/gob"
 	"fmt"
 	"github.com/gomlx/gomlx/types/exceptions"
+	"github.com/gomlx/gomlx/types/slices"
 	"github.com/pkg/errors"
 	"reflect"
 	"strings"
@@ -89,7 +90,7 @@ type Shape struct {
 
 // Make returns a Shape structure filled with the values given.
 func Make(dtype DType, dimensions ...int) Shape {
-	s := Shape{Dimensions: dimensions, DType: dtype}
+	s := Shape{Dimensions: slices.Copy(dimensions), DType: dtype}
 	for _, dim := range dimensions {
 		if dim <= 0 {
 			exceptions.Panicf("shapes.Make(%s): cannot create a shape with an axis with dimension <= 0", s)
@@ -169,6 +170,32 @@ func (s Shape) Eq(s2 Shape) bool {
 		}
 		for ii, element := range s.TupleShapes {
 			if !element.Eq(s2.TupleShapes[ii]) {
+				return false
+			}
+		}
+		return true
+	}
+	if s.Rank() != s2.Rank() {
+		return false
+	}
+	if s.IsScalar() {
+		return true
+	}
+	// For normal shapes just compare dimensions.
+	return reflect.DeepEqual(s.Dimensions, s2.Dimensions)
+}
+
+// EqDimensions compares two shapes for equality of dimensions. Dtypes can be different.
+func (s Shape) EqDimensions(s2 Shape) bool {
+	if s.DType == Tuple {
+		if s2.DType != Tuple {
+			return false
+		}
+		if s.TupleSize() != s2.TupleSize() {
+			return false
+		}
+		for ii, element := range s.TupleShapes {
+			if !element.EqDimensions(s2.TupleShapes[ii]) {
 				return false
 			}
 		}
