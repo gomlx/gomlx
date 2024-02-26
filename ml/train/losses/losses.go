@@ -42,7 +42,7 @@ func MeanSquaredError(labels, predictions []*Node) (loss *Node) {
 	if !labels0.Shape().Eq(predictions0.Shape()) {
 		Panicf("labels[0] (%s) and predictions[0] (%s) must have same shape", labels0.Shape(), predictions0.Shape())
 	}
-	weights, mask := checkForWeightsAndMask(labels0.Shape(), labels)
+	weights, mask := CheckLabelsForWeightsAndMask(labels0.Shape(), labels)
 	loss = Sub(labels0, predictions0)
 	loss = Mul(loss, loss)
 
@@ -56,7 +56,7 @@ func MeanSquaredError(labels, predictions []*Node) (loss *Node) {
 	return loss
 }
 
-// checkForWeightsAndMask in the labels slice of tensors -- it is assumed that labels[0] are the actual labels, so
+// CheckLabelsForWeightsAndMask in the labels slice of tensors -- it is assumed that labels[0] are the actual labels, so
 // they are not considered.
 //
 // `weightsShape` is the expected shape for weights (if present) and the dimensions for a mask (if present), although
@@ -64,7 +64,7 @@ func MeanSquaredError(labels, predictions []*Node) (loss *Node) {
 //
 // If there is an extra `labels` `*Node` with the shape of `weightsShape`, it is assumed to be weights.
 // If there is an extra `labels` `*Node` with booleans with the same dimension as `weightsShape`, it is assumed to be a mask.
-func checkForWeightsAndMask(weightsShape shapes.Shape, labels []*Node) (weights, mask *Node) {
+func CheckLabelsForWeightsAndMask(weightsShape shapes.Shape, labels []*Node) (weights, mask *Node) {
 	maskShape := shapes.Make(shapes.Bool, weightsShape.Dimensions...)
 	// We skip labels[0] because that contains the actual labels.
 	for ii, extra := range labels[1:] {
@@ -98,7 +98,7 @@ func MeanAbsoluteError(labels, predictions []*Node) (loss *Node) {
 
 	loss = Abs(Sub(labels0, predictions0))
 
-	weights, mask := checkForWeightsAndMask(labels0.Shape(), labels)
+	weights, mask := CheckLabelsForWeightsAndMask(labels0.Shape(), labels)
 	if weights != nil {
 		loss = Mul(loss, weights)
 	}
@@ -131,7 +131,7 @@ func BinaryCrossentropy(labels, predictions []*Node) *Node {
 		Mul(labels0, Log(predictions0)),
 		Mul(OneMinus(labels0), Log(OneMinus(predictions0)))))
 
-	weights, mask := checkForWeightsAndMask(labels0.Shape(), labels)
+	weights, mask := CheckLabelsForWeightsAndMask(labels0.Shape(), labels)
 	if weights != nil {
 		losses = Mul(losses, weights)
 	}
@@ -171,7 +171,7 @@ func BinaryCrossentropyLogits(labels, logits []*Node) *Node {
 	maxPart := Max(logits0, ZerosLike(logits0))
 	losses := Add(Sub(maxPart, prodPart), logPart)
 
-	weights, mask := checkForWeightsAndMask(labels0.Shape(), labels)
+	weights, mask := CheckLabelsForWeightsAndMask(labels0.Shape(), labels)
 	if weights != nil {
 		losses = Mul(losses, weights)
 	}
@@ -207,7 +207,7 @@ func SparseCategoricalCrossEntropyLogits(labels, logits []*Node) *Node {
 		Panicf("labels0(%s) are expected to have the last dimension == 1, with the true/labeled category", labelsShape)
 	}
 	weightsShape := shapes.Make(logits0.DType(), labelsShape.Dimensions[:labelsRank-1]...)
-	weights, mask := checkForWeightsAndMask(weightsShape, labels)
+	weights, mask := CheckLabelsForWeightsAndMask(weightsShape, labels)
 
 	// Remove last dimension, it will be re-added by OneHot
 	reducedLabels := Reshape(labels0, labels0.Shape().Dimensions[:labelsRank-1]...)
@@ -232,7 +232,7 @@ func CategoricalCrossEntropyLogits(labels, logits []*Node) *Node {
 	logits0 := logits[0]
 	labels0 := labels[0]
 	weightsShape := shapes.Make(logits0.DType(), labels0.Shape().Dimensions[:labels0.Rank()-1]...)
-	weights, mask := checkForWeightsAndMask(weightsShape, labels)
+	weights, mask := CheckLabelsForWeightsAndMask(weightsShape, labels)
 	return categoricalCrossEntropyLogitsImpl(labels0, logits0, weights, mask)
 }
 
@@ -261,7 +261,7 @@ func categoricalCrossEntropyLogitsImpl(labels, logits, weights, mask *Node) *Nod
 // (usually simply `batch_size`), it assumed to be a mask.
 func CategoricalCrossEntropy(labels, predictions []*Node) *Node {
 	weightsShape := shapes.Make(predictions[0].DType(), labels[0].Shape().Dimensions[:labels[0].Rank()-1]...)
-	weights, mask := checkForWeightsAndMask(weightsShape, labels)
+	weights, mask := CheckLabelsForWeightsAndMask(weightsShape, labels)
 	return categoricalCrossEntropyImpl(labels[0], predictions[0], weights, mask)
 }
 
