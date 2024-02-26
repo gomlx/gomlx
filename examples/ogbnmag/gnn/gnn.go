@@ -44,7 +44,7 @@ const (
 	// or aggregated).
 	// It can take values `mean`, `sum` or `max` or a combination of them separated by `|`.
 	// The default is `mean|sum`.
-	ParamPoolingType = "convolution_reduce_type"
+	ParamPoolingType = "gnn_pooling_type"
 
 	// ParamNormalizationType context hyperparameter can take values `none` ( or `""`), `batch` or `layer`.
 	// The default is `layer`.
@@ -125,7 +125,7 @@ func convolveNodeSet(ctx *context.Context, value, mask *Node) *Node {
 // So the returned shape will be `[d_0, d_1, ..., d_{n-1}, k*e]`, where `k` is the number of pooling types configured.
 // E.g.: If the pooling types (see [ParamPoolingType]) are configured to `mean|sum`, then `k=2`.
 func poolMessages(ctx *context.Context, value, mask *Node) *Node {
-	poolTypes := context.GetParamOr(ctx, ParamPoolingType, "mean")
+	poolTypes := context.GetParamOr(ctx, ParamPoolingType, "mean|sum")
 	poolTypesList := strings.Split(poolTypes, "|")
 	parts := make([]*Node, 0, len(poolTypesList))
 	var pooled *Node

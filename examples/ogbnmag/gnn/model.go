@@ -18,6 +18,14 @@ var (
 	// send in the GNN tree of nodes.
 	// The default is 4.
 	ParamMagGnnNumMessages = "mag_gnn_num_messages"
+
+	// ParamReadoutHiddenLayers context parameter that defines the number or hidden layers connected to the readout.
+	ParamReadoutHiddenLayers = "mag_readout_hidden_layers"
+
+	// ParamEmbedDropoutRate adds an extra dropout to learning embeddings.
+	// This may be important because many embeddings are seen only once, so likely in testing many will have never
+	//  been seen, and we want the model learn how to handle lack of embeddings (zero initialized) well.
+	ParamEmbedDropoutRate = "mag_embed_dropout_rate"
 )
 
 // getMagVar retrieves the static (not-learnable) OGBN-MAG variables -- e.g: the frozen papers embedding table.
@@ -45,8 +53,15 @@ func MagModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 		GraphStateUpdate(ctx.In(fmt.Sprintf("round_%d", ii)), strategy, graphStates)
 	}
 	readoutState := graphStates[strategy.Seeds[0].Name]
-	// Add one more hidden layer on the readout, by updating using itself as input.
-	readoutState.Value = updateState(ctx.In("readout_hidden"), readoutState.Value, readoutState.Value, readoutState.Mask)
+
+	// Add hidden layers on the readout, by updating using itself as input.
+	numHiddenLayers := context.GetParamOr(ctx, ParamReadoutHiddenLayers, 1)
+	for ii := range numHiddenLayers {
+		readoutState.Value = updateState(
+			ctx.In(fmt.Sprintf("readout_hidden_%d", ii)),
+			readoutState.Value, readoutState.Value, readoutState.Mask)
+	}
+	// Last layer outputs the logits for the `NumLabels` classes.
 	readoutState.Value = layers.DenseWithBias(ctx.In("readout"), readoutState.Value, mag.NumLabels)
 	return []*Node{readoutState.Value, readoutState.Mask}
 }
@@ -65,6 +80,7 @@ func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inpu
 	// Learnable embeddings context: zero initialized, and we should have dropout to have the model handle well
 	// the cases of unknown (zero) embeddings.
 	ctxEmbed := ctx.In("embeddings").Checked(false).WithInitializer(initializers.Zero)
+	embedDropoutRate := context.GetParamOr(ctx, ParamEmbedDropoutRate, 0.0)
 
 	// Preprocess papers to its features --> these are in a frozen embedding table in the context as a frozen variable.
 	papersEmbeddings := getMagVar(ctx, g, "PapersEmbeddings")
@@ -82,7 +98,8 @@ func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inpu
 			// Gather values from frozen paperEmbeddings. Mask remains unchanged.
 			embedded := layers.Embedding(ctxEmbed.In("institutions"),
 				graphInputs[name].Value, shapes.F32, mag.NumInstitutions, institutionsEmbedSize)
-			embedded = Where(graphInputs[name].Mask, embedded, ZerosLike(embedded)) // Apply mask.
+			embedMask := layers.DropoutWithFloat(ctx, graphInputs[name].Mask, embedDropoutRate)
+			embedded = Where(embedMask, embedded, ZerosLike(embedded)) // Apply mask.
 			graphInputs[name].Value = embedded
 		}
 	}
@@ -94,7 +111,8 @@ func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inpu
 			// Gather values from frozen paperEmbeddings. Mask remains unchanged.
 			embedded := layers.Embedding(ctxEmbed.In("fields_of_study"),
 				graphInputs[name].Value, shapes.F32, mag.NumFieldsOfStudy, fieldsOfStudyEmbedSize)
-			embedded = Where(graphInputs[name].Mask, embedded, ZerosLike(embedded)) // Apply mask.
+			embedMask := layers.DropoutWithFloat(ctx, graphInputs[name].Mask, embedDropoutRate)
+			embedded = Where(embedMask, embedded, ZerosLike(embedded)) // Apply mask.
 			graphInputs[name].Value = embedded
 		}
 	}
