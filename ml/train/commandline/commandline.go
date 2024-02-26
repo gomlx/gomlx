@@ -27,6 +27,7 @@ import (
 	"github.com/schollz/progressbar/v3"
 	"os"
 	"strings"
+	"time"
 )
 
 // progressBar holds a progressbar being displayed.
@@ -81,30 +82,37 @@ func (pBar *progressBar) onStart(loop *train.Loop, _ train.Dataset) error {
 }
 
 func (pBar *progressBar) onStep(loop *train.Loop, metrics []tensor.Tensor) error {
-	if !pBar.bar.IsFinished() {
-		// Set suffix -- it will be displayed along with the progressbar.
-		trainMetrics := loop.Trainer.TrainMetrics()
-		parts := make([]string, 0, len(trainMetrics)+1)
-		for metricIdx, metricObj := range trainMetrics {
-			parts = append(parts, fmt.Sprintf(" [%s=%s]", metricObj.ShortName(), metricObj.PrettyPrint(metrics[metricIdx])))
-		}
-		if pBar.inNotebook {
-			// Erase to end-of-line escape sequence not supported:
-			parts = append(parts, "        ")
-		} else {
-			// Erase to end-of-line:
-			parts = append(parts, "\033[J")
-		}
-		pBar.suffix = strings.Join(parts, "")
-
-		// Update progressbar.
-		amount := loop.LoopStep + 1 - pBar.lastStepReported // +1 because the current LoopStep is finished.
-		if amount > 0 {
-			pBar.bar.Add(amount)
-			pBar.totalAmount += amount
-			pBar.lastStepReported = loop.LoopStep + 1
-		}
+	// Check whether it is finished.
+	if pBar.bar.IsFinished() {
+		return nil
 	}
+
+	// Check whether there is something to update.
+	amount := loop.LoopStep + 1 - pBar.lastStepReported // +1 because the current LoopStep is finished.
+	if amount <= 0 {
+		return nil
+	}
+
+	// Set suffix -- it will be displayed along with the progressbar.
+	trainMetrics := loop.Trainer.TrainMetrics()
+	parts := make([]string, 0, len(trainMetrics)+1)
+	parts = append(parts, fmt.Sprintf(" [step=%d]", loop.LoopStep))
+	for metricIdx, metricObj := range trainMetrics {
+		parts = append(parts, fmt.Sprintf(" [%s=%s]", metricObj.ShortName(), metricObj.PrettyPrint(metrics[metricIdx])))
+	}
+	if pBar.inNotebook {
+		// Erase to end-of-line escape sequence not supported:
+		parts = append(parts, "        ")
+	} else {
+		// Erase to end-of-line:
+		parts = append(parts, "\033[J")
+	}
+	pBar.suffix = strings.Join(parts, "")
+
+	// Add amount run since last time.
+	pBar.bar.Add(amount)
+	pBar.totalAmount += amount
+	pBar.lastStepReported = loop.LoopStep + 1
 	return nil
 }
 
@@ -123,7 +131,9 @@ func AttachProgressBar(loop *train.Loop) {
 	pBar := &progressBar{}
 	pBar.inNotebook = notebook.IsPresent()
 	loop.OnStart(ProgressBarName, 0, pBar.onStart)
+	// Run at least 1000 during loop or at least every 3 seconds.
 	train.NTimesDuringLoop(loop, 1000, ProgressBarName, 0, pBar.onStep)
+	train.PeriodicCallback(loop, 3*time.Second, false, ProgressBarName, 0, pBar.onStep)
 	loop.OnEnd(ProgressBarName, 0, pBar.onEnd)
 }
 
