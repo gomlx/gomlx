@@ -7,7 +7,6 @@ import (
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/shapes"
@@ -77,9 +76,9 @@ func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inpu
 	g := inputs[0].Graph()
 	graphInputs = sampler.MapInputs[*Node](strategy, inputs)
 
-	// Learnable embeddings context: zero initialized, and we should have dropout to have the model handle well
+	// Learnable embeddings context: it may benefit from dropout to have the model handle well
 	// the cases of unknown (zero) embeddings.
-	ctxEmbed := ctx.In("embeddings").Checked(false).WithInitializer(initializers.Zero)
+	ctxEmbed := ctx.In("embeddings").Checked(false) // ?.WithInitializer(initializers.Zero)?
 	embedDropoutRate := context.GetParamOr(ctx, ParamEmbedDropoutRate, 0.0)
 
 	// Preprocess papers to its features --> these are in a frozen embedding table in the context as a frozen variable.
