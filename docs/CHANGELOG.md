@@ -10,6 +10,8 @@
   * renaming name of parameters to be prefixed with "Param".
 * Package `shapes`:
   * Added `Check()` and `Assert()` to check for both, dtype and dimensions.
+  * Added `EqDimensions()` to compare dimensions.
+  * `Make(dtype, dimensions...)` now makes a copy of the `dimensions` slice given.
 * `exceptions`: refactoring to use separate package `github.com/gomlx/exceptions`.
 * Package `graph`:
   * Functions that take masked inputs are being renamed to use a "Masked" prefix (e.g.: `MaskedReduceSum`,
@@ -19,8 +21,11 @@
   * Added `...FromContext` family of functions, that apply layers according to parameters set in the context: 
     `ActivationFromContext`, `DropoutFromContext`, `NormalizeFromContext` and `MaskedNormalizeFromContext`.
   * `LayerNormalization`: added `Mask` support; added defaults from context parameters.
+  * `DropoutWithFloat`: Dropout api where one can pass the dropout rate as a Go float.
 * Package `optimizers`:
   * Added `CosineAnnealingSchedule.FromContext`.
+* Package `losses`:
+  * Added support for `weights` and `mask`.
 
 ## 0.8.0 - 2023/11/28
 
