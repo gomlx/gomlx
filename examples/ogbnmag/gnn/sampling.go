@@ -48,10 +48,12 @@ func MagStrategy(magSampler *sampler.Sampler, batchSize int, seedIdsCandidates t
 var BatchSize = 32
 
 // magCreateLabels create the labels from the input seed indices.
+// It returns the same inputs and the extracted labels (with mask).
 func magCreateLabels(inputs, labels []tensor.Tensor) ([]tensor.Tensor, []tensor.Tensor) {
 	seedsRef := inputs[0].Local().AcquireData()
 	defer seedsRef.Release()
 	seedsData := seedsRef.Flat().([]int32)
+	seedsMask := inputs[1]
 
 	seedsLabels := tensor.FromShape(shapes.Make(inputs[0].DType(), inputs[0].Shape().Size(), 1))
 	labelsRef := seedsLabels.AcquireData()
@@ -65,7 +67,7 @@ func magCreateLabels(inputs, labels []tensor.Tensor) ([]tensor.Tensor, []tensor.
 	for ii, paperIdx := range seedsData {
 		labelsData[ii] = papersLabelData[paperIdx]
 	}
-	return inputs, []tensor.Tensor{seedsLabels}
+	return inputs, []tensor.Tensor{seedsLabels, seedsMask}
 }
 
 // MakeDatasets takes a directory where to store the downloaded data and return 4 datasets:
