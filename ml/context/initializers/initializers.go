@@ -22,6 +22,7 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
+	"math"
 	"sync"
 )
 
@@ -90,10 +91,12 @@ const NoSeed = int64(0)
 // The parameter `initialSeed` is used to initialize the random number generator -- only the first time it is
 // used for a graph.
 // If it is set to 0 (NoSeed), a random seed is instead generated (from the nanosecond clock).
+//
+// Non-float and non-complex variables are initialized with zero instead.
 func RandomNormalFn(initialSeed int64, stddev float64) VariableInitializer {
 	return func(g *Graph, shape shapes.Shape) *Node {
 		if shape.DType != shapes.F32 && shape.DType != shapes.F64 {
-			Panicf("cannot initialize non-float variable with RandomNormal -- shape requested %s", shape)
+			return Zeros(g, shape)
 		}
 		var values *Node
 		useRngState(g, initialSeed, func(rngState *Node) (newRngState *Node) {
@@ -109,10 +112,12 @@ func RandomNormalFn(initialSeed int64, stddev float64) VariableInitializer {
 // The parameter `initialSeed` is used to initialize the random number generator -- only the first time it is
 // used for a graph.
 // If it is set to 0 (NoSeed), a random seed is instead generated (from the nanosecond clock).
+//
+// Non-float and non-complex variables are initialized with zero instead.
 func RandomUniformFn(initialSeed int64, min, max float64) VariableInitializer {
 	return func(g *Graph, shape shapes.Shape) *Node {
 		if !shape.DType.IsFloat() && !shape.DType.IsComplex() {
-			Panicf("cannot initialize non-float/non-complex variable with RandomUniform -- shape requested %s", shape)
+			return Zeros(g, shape)
 		}
 		var values *Node
 		useRngState(g, initialSeed, func(rngState *Node) (newRngState *Node) {
@@ -123,4 +128,67 @@ func RandomUniformFn(initialSeed int64, min, max float64) VariableInitializer {
 		values = AddScalar(values, min)
 		return values
 	}
+}
+
+// GlorotUniformFn return a Glorot uniform initializer, also called Xavier uniform initializer.
+//
+// It can be set to a context with `ctx.WithInitializer(GlorotUniformFn(initialSeed))`,
+// where `initialSeed` can be 0 for a random seed to be generated.
+//
+// For float and complex values, it draws samples from a uniform distribution within
+// `[-limit, limit]`, where `limit = sqrt(3 / ((fan_in + fan_out)/2))` (`fan_in` is the number of input units in
+// the weight tensor and fan_out is the number of output units).
+//
+// Since it doesn't have semantic information about the variables being created, it makes
+// some assumptions about the shapes of the variables: it assumes either these are weights
+// for biases, matrix multiplications or 2D or 3D convolutions.
+// Using it for different types of shapes may not get the expected result.
+//
+// The parameter `initialSeed` is used to initialize the random number generator -- only the first time it is
+// used for a graph.
+// If it is set to 0 (NoSeed), a random seed is instead generated (from the nanosecond clock).
+//
+// Non-float and non-complex variables are initialized with zero instead.
+func GlorotUniformFn(initialSeed int64) VariableInitializer {
+	return func(g *Graph, shape shapes.Shape) *Node {
+		if !shape.DType.IsFloat() && !shape.DType.IsComplex() {
+			return Zeros(g, shape)
+		}
+		fanIn, fanOut := computeFanInFanOut(shape)
+		scale := max(1.0, float64(fanIn+fanOut)/2.0)
+		limit := math.Sqrt(3.0 / scale)
+		var values *Node
+		useRngState(g, initialSeed, func(rngState *Node) (newRngState *Node) {
+			newRngState, values = RandomUniform(rngState, shape)
+			return newRngState
+		})
+		values = MulScalar(values, 2*limit)
+		values = AddScalar(values, -limit)
+		return values
+	}
+}
+
+// computeFanInFanOut of a variable that is expected to be the parameters of
+// either a [layers.Dense] or [layers.Convolution].
+func computeFanInFanOut(shape shapes.Shape) (fanIn, fanOut int) {
+	rank := shape.Rank()
+	switch rank {
+	case 0: // Scalar.
+		fanIn = 1
+		fanOut = fanIn
+	case 1: // 1D shape, like a bias term in a dense layer.
+		fanIn = shape.Dimensions[0]
+		fanOut = fanIn
+	case 2: // 2D shape, weights of a a dense layer.
+		fanIn = shape.Dimensions[0]
+		fanOut = shape.Dimensions[1]
+	default: // Assuming convolution kernels (2D, 3D, or more):
+		receptiveFieldSize := 1
+		for dim := range shape.Dimensions[:rank-2] {
+			receptiveFieldSize *= dim
+		}
+		fanIn = shape.Dimensions[rank-2] * receptiveFieldSize
+		fanOut = shape.Dimensions[rank-1] * receptiveFieldSize
+	}
+	return
 }
