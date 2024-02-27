@@ -20,6 +20,8 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"
+	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/slices"
 )
 
 // LayerNormBuilder is a helper to build a layer normalization computation. Create it with LayerNormalization,
@@ -30,7 +32,7 @@ type LayerNormBuilder struct {
 	x, mask            *Node
 	normalizingAxes    []int
 	epsilon            float64
-	center, scale      bool
+	center, gain       bool
 	scaleNormalization bool
 }
 
@@ -43,10 +45,14 @@ var (
 	// The default is true.
 	ParamLayerNormCenter = "layer_norm_center"
 
-	// ParamLayerNormLearnedScale is the context parameter that defines whether to learn a scale for the
+	// ParamLayerNormLearnedGain is the context parameter that defines whether to learn a gain for the
 	// layer norm, that multiplies its output.
 	// The default is true.
-	ParamLayerNormLearnedScale = "layer_norm_learned_scale"
+	ParamLayerNormLearnedGain = "layer_norm_learned_gain"
+
+	// ParamLayerNormLearnedScale is an alias to ParamLayerNormLearnedGain.
+	// Deprecated: renamed to follow original papers nomenclature.
+	ParamLayerNormLearnedScale = ParamLayerNormLearnedGain
 
 	// ParamLayerNormRescale is the context parameter that defines whether to rescale the layer
 	// by dividing it by the square root of the variance.
@@ -70,7 +76,7 @@ var (
 // Notice the difference between BatchNormalization, that normalizes over the batch dimension, as opposed
 // to the feature dimensions.
 //
-// The layer norm may have a learned scale and offset, controlled by LayerNormBuilder.LearnedScale
+// The layer norm may have a learned gain and offset, controlled by LayerNormBuilder.LearnedGain
 // and LayerNormBuilder.LearnedOffset settings, enabled by default.
 //
 // To ease setting its parameters it returns a LayerNormBuilder object for configuration. Once it is
@@ -90,7 +96,7 @@ func LayerNormalization(ctx *context.Context, x *Node, normalizingAxes ...int) *
 		normalizingAxes:    normalizingAxes,
 		epsilon:            context.GetParamOr(ctx, ParamLayerNormEpsilon, 1e-3),
 		center:             context.GetParamOr(ctx, ParamLayerNormCenter, true),
-		scale:              context.GetParamOr(ctx, ParamLayerNormLearnedScale, true),
+		gain:               context.GetParamOr(ctx, ParamLayerNormLearnedGain, true),
 		scaleNormalization: context.GetParamOr(ctx, ParamLayerNormRescale, true),
 	}
 }
@@ -114,14 +120,21 @@ func (builder *LayerNormBuilder) LearnedOffset(value bool) *LayerNormBuilder {
 	return builder
 }
 
-// LearnedScale defines whether the layer normalization tries to scale the input by adding a learned scale.
-// It defaults to true.
+// LearnedGain defines whether the layer normalization tries apply a multiplying gain the input, a tensor
+// with the shape of the combined normalizing axes -- so it changes the direction of the inputs, it's not
+// simply a gain.
 //
-// The scale will be learned separately for each axis that is not the batch (assumed to be axis 0 only)
-// and not any of the normalizingAxes.
-func (builder *LayerNormBuilder) LearnedScale(value bool) *LayerNormBuilder {
-	builder.scale = value
+// Default is true.
+func (builder *LayerNormBuilder) LearnedGain(value bool) *LayerNormBuilder {
+	builder.gain = value
 	return builder
+}
+
+// LearnedScale is an alias for LearnedGain.
+//
+// Deprecated: the original paper calls this term a gain.
+func (builder *LayerNormBuilder) LearnedScale(value bool) *LayerNormBuilder {
+	return builder.LearnedGain(value)
 }
 
 // ScaleNormalization defines whether the input's scale is normalized by the square root of the
@@ -151,35 +164,36 @@ func (builder *LayerNormBuilder) Done() *Node {
 		builder.normalizingAxes[ii] = AdjustAxis(x, builder.normalizingAxes[ii])
 	}
 
-	// LearnedScale and offset to be applied to the normalized value.
-	var scale, offset *Node
-	varShape := x.Shape().Copy()
-	varShape.Dimensions[0] = 1 // Same value for all elements of the batch.
-	for _, axis := range builder.normalizingAxes {
-		varShape.Dimensions[axis] = 1 // Same value for the feature axes we are normalizing over.
+	// LearnedGain and offset to be applied to the normalized value.
+	var gain, offset *Node
+	normShape := shapes.Make(x.DType(), slices.Map(builder.normalizingAxes, func(axis int) int {
+		return x.Shape().Dimensions[axis]
+	})...)
+	broadcastNormShape := x.Shape().Copy() // the shape `normShape` will need to be reshaped to be combined with `x`.
+	for ii := range broadcastNormShape.Dimensions {
+		broadcastNormShape.Dimensions[ii] = 1
 	}
-	var scaleVar *context.Variable
-	if builder.scale {
-		scaleVar = ctx.WithInitializer(initializers.One).VariableWithShape("scale", varShape).SetTrainable(true)
-		scale = scaleVar.ValueGraph(g)
+	for _, axis := range builder.normalizingAxes {
+		broadcastNormShape.Dimensions[axis] = x.Shape().Dimensions[axis] // Same value for the feature axes we are normalizing over.
+	}
+	var gainVar *context.Variable
+	if builder.gain {
+		gainVar = ctx.WithInitializer(initializers.One).VariableWithShape("gain", normShape).SetTrainable(true)
+		gain = Reshape(gainVar.ValueGraph(g), broadcastNormShape.Dimensions...)
 	} else {
-		scale = Ones(g, varShape)
+		gain = Ones(g, broadcastNormShape)
 	}
 	if builder.center {
-		offsetVar := ctx.WithInitializer(initializers.Zero).VariableWithShape("offset", varShape).SetTrainable(true)
-		offset = offsetVar.ValueGraph(g)
+		offsetVar := ctx.WithInitializer(initializers.Zero).VariableWithShape("offset", normShape).SetTrainable(true)
+		offset = Reshape(offsetVar.ValueGraph(g), broadcastNormShape.Dimensions...)
 	} else {
-		offset = Zeros(g, varShape)
+		offset = Zeros(g, broadcastNormShape)
 	}
 
-	// Add regularization to scale.
-	if scaleVar != nil {
-		if l2any, found := ctx.GetParam(ParamL2Regularization); found {
-			l2 := l2any.(float64)
-			if l2 > 0 {
-				l2Node := ConstAs(x, l2)
-				AddL2Regularization(ctx, l2Node, scaleVar.ValueGraph(g))
-			}
+	// Add regularization to gain.
+	if gainVar != nil {
+		if l2 := context.GetParamOr(ctx, ParamL2Regularization, 0.0); l2 > 0 {
+			AddL2RegularizationStatic(ctx, l2, gainVar.ValueGraph(g))
 		}
 	}
 
@@ -204,9 +218,9 @@ func (builder *LayerNormBuilder) Done() *Node {
 		epsilon := ConstAs(x, builder.epsilon)
 		normalized = Div(normalized, Sqrt(Add(variance, epsilon)))
 	}
-	// Adjust if using learned offset/scale factors.
-	if builder.scale {
-		normalized = Mul(normalized, scale)
+	// Adjust if using learned offset/gain factors.
+	if builder.gain {
+		normalized = Mul(normalized, gain)
 	}
 	if builder.center {
 		normalized = Add(normalized, offset)

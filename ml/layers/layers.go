@@ -339,9 +339,9 @@ func Dropout(ctx *context.Context, input *Node, dropoutRate *Node) *Node {
 	return DropoutNormalize(ctx, input, dropoutRate, input.DType().IsFloat())
 }
 
-// DropoutWithFloat is the same as Dropout, but it takes the `dropoutRate` as a static float64.
+// DropoutStatic is the same as Dropout, but it takes the `dropoutRate` as a static value, given as a float64.
 // If `dropoutRate <= 0` or it's not training, this is a no-op.
-func DropoutWithFloat(ctx *context.Context, input *Node, dropoutRate float64) *Node {
+func DropoutStatic(ctx *context.Context, input *Node, dropoutRate float64) *Node {
 	if dropoutRate <= 0 {
 		return input
 	}
@@ -382,9 +382,19 @@ func DropoutFromContext(ctx *context.Context, x *Node) *Node {
 		// We apply edge dropout to the mask.
 		g := x.Graph()
 		normalize := x.DType().IsFloat()
-		x = DropoutNormalize(ctx, x, Scalar(g, shapes.F32, dropoutRate), normalize)
+		x = DropoutNormalize(ctx, x, Scalar(g, x.DType(), dropoutRate), normalize)
 	}
 	return x
+}
+
+// AddL2RegularizationStatic is like AddL2Regularization, but takes the `amount` as a static Go float64 value.
+func AddL2RegularizationStatic(ctx *context.Context, amount float64, values ...*Node) {
+	if len(values) == 0 {
+		Panicf("no values given to AddL2RegularizationAsFloat")
+	}
+	g := values[0].Graph()
+	amountNode := Scalar(g, values[0].DType(), amount)
+	AddL2Regularization(ctx, amountNode, values...)
 }
 
 // AddL2Regularization calculates the L2 of the given values (typically variable nodes returned

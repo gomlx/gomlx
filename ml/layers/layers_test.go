@@ -238,14 +238,14 @@ func TestLayerNormalization(t *testing.T) {
 	testSimpleFunc(t, "LayerNormalization()",
 		[][]float32{{0, 10}, {20, 30}, {40, 50}},
 		func(ctx *context.Context, input *Node) *Node {
-			return LayerNormalization(ctx, input, -1).LearnedOffset(false).LearnedScale(false).Epsilon(0).Done()
+			return LayerNormalization(ctx, input, -1).LearnedOffset(false).LearnedGain(false).Epsilon(0).Done()
 		},
 		[][]float32{{-1, 1}, {-1, 1}, {-1, 1}},
 	)
 	testSimpleFunc(t, "LayerNormalization()",
 		[][]float32{{0, 10}, {20, 30}, {40, 50}},
 		func(ctx *context.Context, input *Node) *Node {
-			return LayerNormalization(ctx, input, -1).LearnedOffset(false).LearnedScale(false).Epsilon(0).ScaleNormalization(false).Done()
+			return LayerNormalization(ctx, input, -1).LearnedOffset(false).LearnedGain(false).Epsilon(0).ScaleNormalization(false).Done()
 		},
 		[][]float32{{-5, 5}, {-5, 5}, {-5, 5}},
 	)
@@ -256,7 +256,7 @@ func TestLayerNormalization(t *testing.T) {
 		},
 		func(ctx *context.Context, inputs []*Node) *Node {
 			return LayerNormalization(ctx, inputs[0], -1).Mask(inputs[1]).
-				LearnedOffset(false).LearnedScale(false).Epsilon(0).
+				LearnedOffset(false).LearnedGain(false).Epsilon(0).
 				ScaleNormalization(false).Done()
 		},
 		[][]float32{{-5, 5, 0}, {-5, 5, 0}, {-25, 0, 25}, {0, 0, 0}},
