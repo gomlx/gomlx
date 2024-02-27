@@ -105,8 +105,8 @@ func (v *Variable) Shape() shapes.Shape {
 // ParameterPrefix is used to prefix Graph parameter names for variablesMap.
 const ParameterPrefix = "var:"
 
-// ParameterName used when creating a parameter node in a Graph to access
-// the variable.
+// ParameterName used when creating a parameter node in a Graph to access the variable, or as a key when saving.
+// It is a unique name for the variable that includes the scope and the variable name, and is reversible.
 func (v *Variable) ParameterName() string {
 	v.AssertValid()
 	return fmt.Sprintf("%s%s%s%s", ParameterPrefix, v.Scope(), ScopeSeparator, v.Name())

@@ -164,7 +164,7 @@ func NewContext(manager *Manager) *Context {
 			variablesMap: make(map[string]scopedVariableMap),
 		},
 	}
-	ctx.initializer = initializers.RandomUniformFn(initializers.NoSeed, -0.1, 0.1)
+	ctx.initializer = initializers.RandomUniformFn(initializers.NoSeed, -0.05, 0.05)
 	return ctx
 }
 
