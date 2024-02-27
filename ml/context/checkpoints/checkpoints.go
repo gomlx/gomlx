@@ -65,6 +65,7 @@ import (
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/types"
 	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
@@ -94,20 +95,22 @@ type Config struct {
 
 	err error
 
-	dir           string
-	includeParams bool
-	keep          int
-	takeMean      int
+	dir             string
+	includeParams   bool
+	keep            int
+	takeMean        int
+	excludeFromSave types.Set[*context.Variable]
 }
 
 // Build a configuration for building a checkpoints.Handler. After configuring the
 // Config object returned, call `Done` to get the configured checkpoints.Handler.
 func Build(ctx *context.Context) *Config {
 	c := &Config{
-		ctx:           ctx,
-		includeParams: true,
-		keep:          1,
-		takeMean:      1,
+		ctx:             ctx,
+		includeParams:   true,
+		keep:            1,
+		takeMean:        1,
+		excludeFromSave: types.MakeSet[*context.Variable](),
 	}
 	return c
 }
@@ -192,6 +195,15 @@ func (c *Config) TempDir(dir, pattern string) *Config {
 // (when Done() is called), overriding values already present in the Context.
 func (c *Config) ExcludeParams() *Config {
 	c.includeParams = false
+	return c
+}
+
+// ExcludeVarsFromSaving enumerate variables to be excluded from saving.
+// The function can be called multiple times, adding variables to be excluded from saving.
+func (c *Config) ExcludeVarsFromSaving(vars ...*context.Variable) *Config {
+	for _, v := range vars {
+		c.excludeFromSave.Insert(v)
+	}
 	return c
 }
 
@@ -670,6 +682,9 @@ func (h *Handler) Save() error {
 	// * Loop over variables in context.
 	h.ctx.EnumerateVariables(func(v *context.Variable) {
 		if err != nil {
+			return
+		}
+		if h.config.excludeFromSave.Has(v) {
 			return
 		}
 		err = saveVar(v.ParameterName(), v.Value().Local())
