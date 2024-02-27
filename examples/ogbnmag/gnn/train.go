@@ -24,7 +24,7 @@ var (
 
 	// ParamNumCheckpoints is the number of past checkpoints to keep.
 	// The default is 10.
-	ParamNumCheckpoints = "num_checkpointss"
+	ParamNumCheckpoints = "num_checkpoints"
 )
 
 // Train FNN model based on configuration in `ctx`.
@@ -51,14 +51,24 @@ func Train(ctx *context.Context, baseDir string) error {
 			checkpointPath = path.Join(baseDir, checkpointPath)
 		}
 		var err error
+
+		// Exclude from saving all the variables created by the `mag` package -- specially the frozen papers embeddings,
+		// which take most space.
+		var varsToExclude []*context.Variable
+		ctx.InAbsPath(mag.OgbnMagVariablesScope).EnumerateVariablesInScope(func(v *context.Variable) {
+			varsToExclude = append(varsToExclude, v)
+		})
+
 		if numCheckpointsToKeep <= 1 {
 			// Only limit the amount of checkpoints kept if >= 2.
 			numCheckpointsToKeep = -1
 		}
 		if numCheckpointsToKeep > 0 {
-			checkpoint, err = checkpoints.Build(ctx).Dir(checkpointPath).Keep(numCheckpointsToKeep).Done()
+			checkpoint, err = checkpoints.Build(ctx).Dir(checkpointPath).Keep(numCheckpointsToKeep).
+				ExcludeVarsFromSaving(varsToExclude...).Done()
 		} else {
-			checkpoint, err = checkpoints.Build(ctx).Dir(checkpointPath).Done()
+			checkpoint, err = checkpoints.Build(ctx).Dir(checkpointPath).
+				ExcludeVarsFromSaving(varsToExclude...).Done()
 		}
 		if err != nil {
 			return errors.WithMessagef(err, "while setting up checkpoint to %q (keep=%d)",
@@ -68,6 +78,7 @@ func Train(ctx *context.Context, baseDir string) error {
 		if globalStep != 0 {
 			fmt.Printf("> restarting training from global_step=%d\n", globalStep)
 		}
+
 	}
 
 	// Create trainer and loop.
@@ -150,7 +161,8 @@ func Eval(ctx *context.Context, baseDir string, datasets ...train.Dataset) error
 	checkpointPath := context.GetParamOr(ctx, ParamCheckpointPath, "")
 	numCheckpointsToKeep := context.GetParamOr(ctx, ParamNumCheckpoints, 10)
 	if checkpointPath == "" {
-		return errors.Errorf("No checkpoint defined in Context.GetParam(%q), please configure it to the checkpoint name")
+		return errors.Errorf("no checkpoint defined in Context.GetParam(%q), please configure it to the checkpoint directory",
+			ParamCheckpointPath)
 	}
 	checkpointPath = mldata.ReplaceTildeInDir(checkpointPath) // If the path starts with "~", it is replaced.
 	if !path.IsAbs(checkpointPath) {

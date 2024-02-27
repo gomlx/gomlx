@@ -9,6 +9,17 @@ import (
 	"github.com/gomlx/gomlx/types/tensor"
 )
 
+var (
+	// BatchSize used for the sampler.
+	BatchSize = 32
+
+	// ReuseShareableKernels will share the kernels across similar messages in the strategy tree.
+	// So the authors to papers messages will be the same if it comes from authors of the seed papers,
+	// or of the coauthored-papers.
+	// Default is true.
+	ReuseShareableKernels = true
+)
+
 // MagStrategy takes a sampler created by [ogbnmag.NewSampler], a desired batch size, and the set of
 // seed ids to sample from ([ogbnmag.TrainSplit], [ogbnmag.ValidSplit] or [ogbnmag.TestSplit]) and
 // returns a sampling strategy, that can be used to create datasets.
@@ -26,26 +37,36 @@ func MagStrategy(magSampler *sampler.Sampler, batchSize int, seedIdsCandidates t
 	// Authors
 	seedsAuthors := seeds.FromEdges("seedsAuthors", "writtenBy", 8)
 	citationsAuthors := citations.FromEdges("citationsAuthors", "writtenBy", 8)
+	if ReuseShareableKernels {
+		citationsAuthors.KernelScopeName = seedsAuthors.KernelScopeName
+	}
 
 	// Co-authored papers
 	coauthoredPapers := seedsAuthors.FromEdges("coauthoredPapers", "writes", 8)
 	coauthoredFromCitations := citationsAuthors.FromEdges("coauthoredFromCitations", "writes", 8)
+	if ReuseShareableKernels {
+		coauthoredFromCitations.KernelScopeName = coauthoredPapers.KernelScopeName
+	}
 
 	// Affiliations
-	_ = seedsAuthors.FromEdges("authorsInstitutions", "affiliatedWith", 8)
-	_ = citationsAuthors.FromEdges("citationAuthorsInstitutions", "affiliatedWith", 8)
+	authorsInstitutions := seedsAuthors.FromEdges("authorsInstitutions", "affiliatedWith", 8)
+	citationAuthorsInstitutions := citationsAuthors.FromEdges("citationAuthorsInstitutions", "affiliatedWith", 8)
+	if ReuseShareableKernels {
+		citationAuthorsInstitutions.KernelScopeName = authorsInstitutions.KernelScopeName
+	}
 
 	// Topics
-	_ = seeds.FromEdges("seedsTopics", "hasTopic", 8)
-	_ = coauthoredPapers.FromEdges("coauthoredTopics", "hasTopic", 8)
-	_ = citations.FromEdges("citationsTopics", "hasTopic", 8)
-	_ = coauthoredFromCitations.FromEdges("coauthoredFromCitationsTopics", "hasTopic", 8)
-
+	seedsTopics := seeds.FromEdges("seedsTopics", "hasTopic", 8)
+	coauthoredTopics := coauthoredPapers.FromEdges("coauthoredTopics", "hasTopic", 8)
+	citationsTopics := citations.FromEdges("citationsTopics", "hasTopic", 8)
+	coauthoredFromCitationsTopics := coauthoredFromCitations.FromEdges("coauthoredFromCitationsTopics", "hasTopic", 8)
+	if ReuseShareableKernels {
+		coauthoredTopics.KernelScopeName = seedsTopics.KernelScopeName
+		citationsTopics.KernelScopeName = seedsTopics.KernelScopeName
+		coauthoredFromCitationsTopics.KernelScopeName = seedsTopics.KernelScopeName
+	}
 	return strategy
 }
-
-// BatchSize used for the sampler.
-var BatchSize = 32
 
 // magCreateLabels create the labels from the input seed indices.
 // It returns the same inputs and the extracted labels (with mask).

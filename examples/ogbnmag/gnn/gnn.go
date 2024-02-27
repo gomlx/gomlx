@@ -6,6 +6,7 @@
 package gnn
 
 import (
+	"fmt"
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
 	. "github.com/gomlx/gomlx/graph"
@@ -17,13 +18,22 @@ import (
 )
 
 var (
+	// ParamNumMessages is the context parameter that defines the number of messages to
+	// send in the GNN tree of nodes.
+	// The default is 2.
+	ParamNumMessages = "gnn_num_messages"
+
+	// ParamReadoutHiddenLayers context parameter that defines the number or hidden layers
+	// connected to the readout of a GNN model.
+	ParamReadoutHiddenLayers = "gnn_readout_hidden_layers"
+
 	// ParamMessageDim context hyperparameter defines the dimension of the messages calculated per node.
 	// The default is 128.
-	ParamMessageDim = "message_dim"
+	ParamMessageDim = "gnn_message_dim"
 
-	// ParamNodeStateDim context hyperparameter defines the dimension of the updated hidden states per node.
+	// ParamStateDim context hyperparameter defines the dimension of the updated hidden states per node.
 	// The default is 128.
-	ParamNodeStateDim = "node_state_dim"
+	ParamStateDim = "gnn_node_state_dim"
 
 	// ParamActivation context hyperparameter defines the activation to use, see [layers.ParamActivation]
 	ParamActivation = layers.ParamActivation
@@ -34,7 +44,7 @@ var (
 
 	// ParamEdgeDropoutRate is applied to full edges, disabling the whole edge.
 	// Default is 0.0, meaning no edge dropout.
-	ParamEdgeDropoutRate = "edge_dropout_rate"
+	ParamEdgeDropoutRate = "gnn_edge_dropout_rate"
 
 	// ParamL2Regularization is an alias for layers.ParamL2Regularization, and adds regularizations to the NN kernels.
 	// The default is `0.0`.
@@ -61,6 +71,49 @@ var (
 	ParamUsePathToRootStates = "gnn_use_path_to_root"
 )
 
+// GnnNodePrediction performs graph convolutions from leaf nodes to the seeds (the roots of the trees), this
+// is called a "graph update".
+//
+// This process is repeated [ParamNumMessages] times (parameter set in `ctx` with key [ParamNumMessages]).
+// After that the state of the seed nodes go through [ParamReadoutHiddenLayers] hidden layers,
+// and these seed states (updated in `graphStates`) can be read out and converted to whatever is the output to match the
+// task.
+//
+// The `strategy` describes which convolutions and their order.
+//
+// There are several hyperparameters that control the GNN model. They can be set as parameters
+// in the context. If scoped in specific [Rule.KernelScopeName] (rules of the `strategy`), they
+// can be different for different node sets (so different node sets can have different state
+// dimensions, for instance). See variables `Param...`
+//
+// Example of a `ModelGraph` function, that describes a model:
+//
+//	func MyGnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
+//		g := inputs[0].Graph()
+//		optimizers.CosineAnnealingSchedule(ctx, g, shapes.F32)
+//		ctx = ctx.WithInitializer(initializers.GlorotUniformFn(initializers.NoSeed))
+//		strategy := spec.(*sampler.Strategy)
+//		graphStates := MyFeaturePreprocessing(ctx, strategy, inputs)
+//		GnnNodePrediction(ctx, strategy, graphStates)
+//		readoutState = graphStates["my_seed_nodes"]
+//		logits := layers.DenseWithBias(ctx.In("readout"), readoutState.Value, numClasses)
+//		return []*Node{logits}
+//	}
+func GnnNodePrediction(ctx *context.Context, strategy *sampler.Strategy, graphStates map[string]*sampler.ValueMask[*Node]) {
+	numMessages := context.GetParamOr(ctx, ParamNumMessages, 2)
+	for ii := range numMessages {
+		GraphStateUpdate(ctx.In(fmt.Sprintf("graph_update_%d", ii)), strategy, graphStates)
+	}
+	numHiddenLayers := context.GetParamOr(ctx, ParamReadoutHiddenLayers, 1)
+	for _, rule := range strategy.Seeds {
+		seedState := graphStates[rule.Name]
+		for ii := range numHiddenLayers {
+			ctxReadout := ctx.In(rule.KernelScopeName).In(fmt.Sprintf("readout_hidden_%d", ii))
+			seedState.Value = updateState(ctxReadout, seedState.Value, seedState.Value, seedState.Mask)
+		}
+	}
+}
+
 // GraphStateUpdate takes a `graphStates`, a map of name of node sets to their hidden states,
 // and updates them by running graph convolutions on the reverse direction of the sampling
 // rules in `strategy`, that is, from leaves back to the root of the tree.
@@ -83,6 +136,11 @@ func GraphStateUpdate(ctx *context.Context, strategy *sampler.Strategy, graphSta
 func recursivelyApplyGraphConvolution(ctx *context.Context, strategy *sampler.Strategy, rule *sampler.Rule,
 	pathToRootStates []*Node,
 	graphStates map[string]*sampler.ValueMask[*Node]) {
+	if rule.Name == "" || rule.KernelScopeName == "" {
+		Panicf("strategy's rule name=%q or kernel scope name=%q are empty, they both must be defined",
+			rule.Name, rule.KernelScopeName)
+	}
+
 	// Makes sure there is a state for the current dependent.
 	state, found := graphStates[rule.Name]
 	if !found {
@@ -124,16 +182,15 @@ func recursivelyApplyGraphConvolution(ctx *context.Context, strategy *sampler.St
 		contextState = BroadcastToDims(contextState, dims...)
 		updateInputs = append(updateInputs, contextState)
 	}
-
+	// Depth-First-Search on dependents.
 	for _, dependent := range rule.Dependents {
 		recursivelyApplyGraphConvolution(ctx, strategy, dependent, subPathToRootStates, graphStates)
 		dependentState := graphStates[dependent.Name]
-		updateInputs = append(updateInputs,
-			convolveNodeSet(ctx.In("gnn:"+dependent.Name).In("conv"), dependentState.Value, dependentState.Mask))
+		convolveCtx := ctx.In(dependent.KernelScopeName).In("conv")
+		updateInputs = append(updateInputs, convolveNodeSet(convolveCtx, dependentState.Value, dependentState.Mask))
 	}
-	state.Value = updateState(
-		ctx.In("gnn:"+rule.Name).In("update"),
-		state.Value, Concatenate(updateInputs, -1), state.Mask)
+	updateCtx := ctx.In(rule.KernelScopeName).In("update")
+	state.Value = updateState(updateCtx, state.Value, Concatenate(updateInputs, -1), state.Mask)
 }
 
 // convolveNodeSet creates messages from a node set and aggregate them to the same prefix dimension of their source
@@ -195,13 +252,14 @@ func updateState(ctx *context.Context, prevState, input, mask *Node) *Node {
 			updateType, ParamUpdateStateType)
 	}
 
-	stateDim := context.GetParamOr(ctx, ParamNodeStateDim, 128)
+	stateDim := context.GetParamOr(ctx, ParamStateDim, 128)
 	state := layers.DenseWithBias(ctx.In("message"), input, stateDim)
 	state = layers.ActivationFromContext(ctx, state)
 	state = layers.DropoutFromContext(ctx, state)
 	if updateType == "residual" && prevState.Shape().Eq(state.Shape()) {
 		state = Add(state, prevState)
 	}
+	//state = layers.MaskedNormalizeFromContext(ctxRuleSpecific, state, mask)
 	state = layers.MaskedNormalizeFromContext(ctx, state, mask)
 	return state
 }
