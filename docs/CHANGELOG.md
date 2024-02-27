@@ -4,10 +4,16 @@
 
 * Open Graph Benchmark OGBN-MAG dataset support and example models (FNN and GNN).
   * Added sampler library.
-* Package `Context`:
+* Package `context`:
   * added `Manager()` accessor method.
   * added `SetParams` to set various parameters at once.
   * renaming name of parameters to be prefixed with "Param".
+* Package `context/initializers`:
+  * added `GlorotUniformFn`
+  * random initializers use zeros for non-float variables by default (as opposed to crash)
+  * default initializer now matches Keras (random uniform from `[-0.05, 0.05]`).
+* Package `context/checkpoints`:
+  * added `ExcludeVarsFromSaving` to allow preventing saving large static variables. 
 * Package `shapes`:
   * Added `Check()` and `Assert()` to check for both, dtype and dimensions.
   * Added `EqDimensions()` to compare dimensions.
@@ -20,8 +26,12 @@
 * Package `layers`:
   * Added `...FromContext` family of functions, that apply layers according to parameters set in the context: 
     `ActivationFromContext`, `DropoutFromContext`, `NormalizeFromContext` and `MaskedNormalizeFromContext`.
+  * `LayerNormalization`: fixed shaping bug, and renamed `scale` to `gain`, more aligned with [original paper](https://arxiv.org/pdf/1607.06450v1.pdf)
+    * **This will break previous models using LayerNormalization!**: this is not taken lightly, but as it is, it
+      is wrong and depending on the shape it may be adversely affecting some models.
   * `LayerNormalization`: added `Mask` support; added defaults from context parameters.
-  * `DropoutWithFloat`: Dropout api where one can pass the dropout rate as a Go float.
+  * `DropoutStatic`: Dropout api where one can pass a static dropout rate as a Go float.
+  * `AddL2RegularizationStatic`: Add L2 regularization on values, where the amout of regularization is static. 
 * Package `optimizers`:
   * Added `CosineAnnealingSchedule.FromContext`.
 * Package `losses`:
