@@ -8,13 +8,18 @@ import (
 
 // Rule defines one rule of the sampling strategy.
 // It's created by [Strategy.Nodes], [Strategy.NodesFromSet] and [Rule.FromEdges].
-// Don't modity it directly.
+// Don't modify it directly.
 type Rule struct {
 	sampler  *Sampler
 	strategy *Strategy
 
 	// Name of the [Rule].
 	Name string
+
+	// KernelScopeName doesn't affect sampling, but can be used to uniquely identify
+	// the scope used for the kernels in a GNN to do convolutions on this rule.
+	// If two rules have the same KernelScopeName, they will share weights.
+	KernelScopeName string
 
 	// NodeTypeName of the nodes sampled by this rule.
 	NodeTypeName string
@@ -84,15 +89,16 @@ func (r *Rule) FromEdges(name, edgeTypeName string, count int) *Rule {
 	newShape := r.Shape.Copy()
 	newShape.Dimensions = append(newShape.Dimensions, count)
 	newRule := &Rule{
-		sampler:      r.sampler,
-		strategy:     strategy,
-		Name:         name,
-		NodeTypeName: edgeDef.TargetNodeType,
-		SourceRule:   r,
-		EdgeTypeName: edgeTypeName,
-		EdgeType:     edgeDef,
-		Count:        count,
-		Shape:        newShape,
+		sampler:         r.sampler,
+		strategy:        strategy,
+		Name:            name,
+		KernelScopeName: "gnn:" + name,
+		NodeTypeName:    edgeDef.TargetNodeType,
+		SourceRule:      r,
+		EdgeTypeName:    edgeTypeName,
+		EdgeType:        edgeDef,
+		Count:           count,
+		Shape:           newShape,
 	}
 	r.Dependents = append(r.Dependents, newRule)
 	strategy.Rules[name] = newRule
