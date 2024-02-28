@@ -76,9 +76,14 @@ func Train(ctx *context.Context, baseDir string) error {
 		}
 		globalStep := optimizers.GetGlobalStep(ctx)
 		if globalStep != 0 {
-			fmt.Printf("> restarting training from global_step=%d\n", globalStep)
+			fmt.Printf("> restarting training from global_step=%d (training until %d)\n", globalStep, trainSteps)
 		}
-
+		if trainSteps <= int(globalStep) {
+			fmt.Printf("> training already reached target train_steps=%d. To train further, set a number additional "+
+				"to current global step. Use Eval to get reading on current performance.\n", trainSteps)
+			return nil
+		}
+		trainSteps -= int(globalStep)
 	}
 
 	// Create trainer and loop.
