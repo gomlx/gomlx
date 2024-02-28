@@ -35,16 +35,18 @@ func getMagVar(ctx *context.Context, g *Graph, name string) *Node {
 // * Predictions for all seeds shaped `Float32[BatchSize, mag.NumLabels]`.
 // * Mask of the seeds, provided by the sampler, shaped `Bool[BatchSize]`.
 func MagModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
-	g := inputs[0].Graph()
-	optimizers.CosineAnnealingSchedule(ctx, g, shapes.F32)
 	ctx = ctx.WithInitializer(initializers.GlorotUniformFn(initializers.NoSeed))
+
+	g := inputs[0].Graph()
+	optimizers.CosineAnnealingSchedule(ctx, g, shapes.F32).FromContext().Done()
+
 	// We disable checking for re-use of scopes because we deliberately reuse
 	// kernels in our GNN.
 	ctx = ctx.Checked(false)
 
 	strategy := spec.(*sampler.Strategy)
 	graphStates := FeaturePreprocessing(ctx, strategy, inputs)
-	GnnNodePrediction(ctx, strategy, graphStates)
+	NodePrediction(ctx, strategy, graphStates)
 	readoutState := graphStates[strategy.Seeds[0].Name]
 	// Last layer outputs the logits for the `NumLabels` classes.
 	readoutState.Value = layers.DenseWithBias(ctx.In("logits"), readoutState.Value, mag.NumLabels)
