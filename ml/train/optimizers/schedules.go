@@ -57,6 +57,8 @@ type CosineScheduleOptions struct {
 // CosineAnnealingSchedule allows one to set up a cosine annealing schedule for the learning
 // rate. See details https://paperswithcode.com/method/cosine-annealing.
 //
+// This is slightly different in the sense that $T_i$ is fixed to what here is called [PeriodInSteps].
+//
 // It returns a CosineScheduleOptions that can be configured. When finished configuring call
 // `Done` and it will generate the computation graph that updates the learning rate at every
 // training step.
@@ -121,6 +123,8 @@ func (opt *CosineScheduleOptions) LearningRate(learningRate float64) *CosineSche
 	return opt
 }
 
+const CosineScheduleScope = "cosine_schedule"
+
 // Done finalizes the configuration of CosineAnnealingSchedule and generates the computation
 // graph code to implement it.
 //
@@ -146,20 +150,20 @@ func (opt *CosineScheduleOptions) Done() {
 	}
 	lrMinValue := opt.minLearningRate
 	if lrMinValue == 0 {
-		lrMinValue = lrValue / 1000.0
+		lrMinValue = lrValue * 1e-3
 	}
 
-	lrVar := LearningRateVarWithValue(ctx, opt.dtype, lrValue)
-	lrMax := Const(graph, shapes.CastAsDType(lrValue, opt.dtype))
-	lrMin := Const(graph, shapes.CastAsDType(lrMinValue, opt.dtype))
-	cosineStep := IncrementGlobalStepGraph(ctx.In("optimizers").In("cosine"), graph, opt.dtype)
-	cosineStep = MinusOne(cosineStep) // Since LoopStep starts at 1.
+	// Current training step: cosine schedule keeps its own "global step" counter.
+	cosineStep := IncrementGlobalStepGraph(ctx.In(Scope).In(CosineScheduleScope), graph, opt.dtype)
+	cosineStep = MinusOne(cosineStep) // Since the count starts at 1.
 
+	// Calculate
 	cycle := Div(cosineStep, Const(graph, shapes.CastAsDType(opt.periodNumSteps, opt.dtype)))
-	cycle = Sub(cycle, Floor(cycle)) // Take only the fractional part.
-	pi := Const(graph, shapes.CastAsDType(math.Pi, opt.dtype))
-	cosine := Cos(Mul(cycle, pi))
-	lr := Div(OnePlus(cosine), Scalar(graph, opt.dtype, 2)) // From 0 to 1
-	lr = Add(Mul(lr, Sub(lrMax, lrMin)), lrMin)             // Now from lrMin to lrMax
+	cycle = Sub(cycle, Floor(cycle)) // Take only the fractional part: so always in range `[0.0, 1.0)`.
+	cosine := Cos(MulScalar(cycle, math.Pi))
+	lr := MulScalar(OnePlus(cosine), 0.5)                           // (Cos()+1.0)/2.0
+	lr = AddScalar(MulScalar(lr, (lrValue-lrMinValue)), lrMinValue) // Now from lrMin to lrMax
+
+	lrVar := LearningRateVarWithValue(ctx, opt.dtype, lrValue)
 	lrVar.SetValueGraph(lr)
 }

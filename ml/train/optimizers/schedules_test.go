@@ -17,6 +17,7 @@
 package optimizers
 
 import (
+	"fmt"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/types/shapes"
@@ -43,7 +44,7 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 		require.NotPanicsf(t, func() { _ = cosineExec.Call() }, "cosineExec.Call failed to execute graph for ii=%d", ii)
 
 		// Checks correct step number.
-		stepVar := ctx.InspectVariable("/optimizers/cosine", GlobalStepVariableName)
+		stepVar := ctx.InspectVariable(fmt.Sprintf("/%s/%s", Scope, CosineScheduleScope), GlobalStepVariableName)
 		if stepVar == nil {
 			t.Fatalf("Learning rate variable not created in scope %q, name %q", "/optimizers/cosine", GlobalStepVariableName)
 		}

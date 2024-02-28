@@ -70,9 +70,14 @@ var (
 	ParamOptimizer = "optimizer"
 )
 
-// GlobalStepVariableName as stored in context.Context, usually in the root scope -- but depends on the
-// caller.
-const GlobalStepVariableName = "global_step"
+const (
+	// GlobalStepVariableName as stored in context.Context, usually in the root scope -- but depends on the
+	// caller.
+	GlobalStepVariableName = "global_step"
+
+	// Scope reserved for optimizers.
+	Scope = "optimizers"
+)
 
 // FromContext creates an optimizer from context hyperparameters.
 // See [ParamOptimizer]. The default is "adamw".
