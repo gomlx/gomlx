@@ -71,7 +71,7 @@ var (
 	ParamUsePathToRootStates = "gnn_use_path_to_root"
 )
 
-// GnnNodePrediction performs graph convolutions from leaf nodes to the seeds (the roots of the trees), this
+// NodePrediction performs graph convolutions from leaf nodes to the seeds (the roots of the trees), this
 // is called a "graph update".
 //
 // This process is repeated [ParamNumMessages] times (parameter set in `ctx` with key [ParamNumMessages]).
@@ -94,12 +94,12 @@ var (
 //		ctx = ctx.WithInitializer(initializers.GlorotUniformFn(initializers.NoSeed))
 //		strategy := spec.(*sampler.Strategy)
 //		graphStates := MyFeaturePreprocessing(ctx, strategy, inputs)
-//		GnnNodePrediction(ctx, strategy, graphStates)
+//		NodePrediction(ctx, strategy, graphStates)
 //		readoutState = graphStates["my_seed_nodes"]
 //		logits := layers.DenseWithBias(ctx.In("readout"), readoutState.Value, numClasses)
 //		return []*Node{logits}
 //	}
-func GnnNodePrediction(ctx *context.Context, strategy *sampler.Strategy, graphStates map[string]*sampler.ValueMask[*Node]) {
+func NodePrediction(ctx *context.Context, strategy *sampler.Strategy, graphStates map[string]*sampler.ValueMask[*Node]) {
 	numMessages := context.GetParamOr(ctx, ParamNumMessages, 2)
 	for ii := range numMessages {
 		GraphStateUpdate(ctx.In(fmt.Sprintf("graph_update_%d", ii)), strategy, graphStates)
@@ -129,11 +129,11 @@ func GnnNodePrediction(ctx *context.Context, strategy *sampler.Strategy, graphSt
 func GraphStateUpdate(ctx *context.Context, strategy *sampler.Strategy, graphStates map[string]*sampler.ValueMask[*Node]) {
 	// Starting from the seed node sets, do updates recursively.
 	for _, rule := range strategy.Seeds {
-		recursivelyApplyGraphConvolution(ctx, strategy, rule, nil, graphStates)
+		recursivelyApplyGraphConvolution(ctx, rule, nil, graphStates)
 	}
 }
 
-func recursivelyApplyGraphConvolution(ctx *context.Context, strategy *sampler.Strategy, rule *sampler.Rule,
+func recursivelyApplyGraphConvolution(ctx *context.Context, rule *sampler.Rule,
 	pathToRootStates []*Node,
 	graphStates map[string]*sampler.ValueMask[*Node]) {
 	if rule.Name == "" || rule.KernelScopeName == "" {
@@ -147,7 +147,7 @@ func recursivelyApplyGraphConvolution(ctx *context.Context, strategy *sampler.St
 		Panicf("state for node %q not given in `graphStates`, states given: %v", rule.Name, slices.Keys(graphStates))
 	}
 
-	// Leaf nodes are simply skip.
+	// Leaf nodes are not updated.
 	if len(rule.Dependents) == 0 {
 		return
 	}
@@ -158,7 +158,7 @@ func recursivelyApplyGraphConvolution(ctx *context.Context, strategy *sampler.St
 		// broadcasting (the broadcasting to the right shapes will happen automatically).
 		subPathToRootStates = make([]*Node, 0, len(pathToRootStates)+1)
 		for _, contextState := range pathToRootStates {
-			// We need to expand so it will be properly broadcast.
+			// We need to expand, so it will be properly broadcast.
 			// Noted the new axis is in between the "BatchSize" and following axes, and the last embedding
 			// dimensions, which remains unchanged.
 			subPathToRootStates = append(subPathToRootStates, ExpandDims(contextState, -2))
@@ -169,7 +169,7 @@ func recursivelyApplyGraphConvolution(ctx *context.Context, strategy *sampler.St
 		}
 	}
 
-	// Update dependents and calculate their messages.
+	// Collections of inputs to be updated to update current hidden state.
 	updateInputs := make([]*Node, 0, len(rule.Dependents)+1+len(pathToRootStates))
 	if state.Value != nil { // state == nil for latent node types, at their initial state.
 		updateInputs = append(updateInputs, state.Value)
@@ -182,9 +182,10 @@ func recursivelyApplyGraphConvolution(ctx *context.Context, strategy *sampler.St
 		contextState = BroadcastToDims(contextState, dims...)
 		updateInputs = append(updateInputs, contextState)
 	}
-	// Depth-First-Search on dependents.
+
+	// Update dependents and calculate their convolved messages: it's a depth-first-search on dependents.
 	for _, dependent := range rule.Dependents {
-		recursivelyApplyGraphConvolution(ctx, strategy, dependent, subPathToRootStates, graphStates)
+		recursivelyApplyGraphConvolution(ctx, dependent, subPathToRootStates, graphStates)
 		dependentState := graphStates[dependent.Name]
 		convolveCtx := ctx.In(dependent.KernelScopeName).In("conv")
 		updateInputs = append(updateInputs, convolveNodeSet(convolveCtx, dependentState.Value, dependentState.Mask))
