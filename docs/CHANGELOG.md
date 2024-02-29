@@ -36,6 +36,10 @@
   * Added `CosineAnnealingSchedule.FromContext`.
 * Package `losses`:
   * Added support for `weights` and `mask`.
+* Package `ml/data`:
+  * Added `MapInHost`: a map function to a dataset that runs in host (as opposed to in accelerator/XLA).
+  * Added `Freeing`: a dataset wrapper that frees inputs and labels in between each call to `Yield`: to control GPU
+    memory usage. It replaces `loop.FreeInput()`
 
 ## 0.8.0 - 2023/11/28
 
