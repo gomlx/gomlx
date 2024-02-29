@@ -81,9 +81,6 @@ type Loop struct {
 	// and semantics/type of their values are not specified by loop.
 	SharedData map[string]any
 
-	// finalize inputs and labels after they are used.
-	finalizeInputs bool
-
 	// trainStepDurations collected during training
 	TrainStepDurations []time.Duration
 
@@ -96,24 +93,13 @@ type Loop struct {
 // NewLoop creates a new training loop trainer.
 func NewLoop(trainer *Trainer) *Loop {
 	return &Loop{
-		Trainer:        trainer,
-		SharedData:     make(map[string]any),
-		onStart:        newPriorityHooks[*hookWithName[OnStartFn]](),
-		onStep:         newPriorityHooks[*hookWithName[OnStepFn]](),
-		onEnd:          newPriorityHooks[*hookWithName[OnEndFn]](),
-		finalizeInputs: false,
-		LoopStep:       int(optimizers.GetGlobalStep(trainer.Context())),
+		Trainer:    trainer,
+		SharedData: make(map[string]any),
+		onStart:    newPriorityHooks[*hookWithName[OnStartFn]](),
+		onStep:     newPriorityHooks[*hookWithName[OnStepFn]](),
+		onEnd:      newPriorityHooks[*hookWithName[OnEndFn]](),
+		LoopStep:   int(optimizers.GetGlobalStep(trainer.Context())),
 	}
-}
-
-// FreeInputs configure the loop to free the inputs yielded by the dataset immediately -- as opposed to
-// wait for garbage collection. This can increase efficiency and be required for large inputs,
-// but if the inputs are being reused, this will break.
-//
-// It returns loop itself after it has been configured, so calls can be cascaded.
-func (loop *Loop) FreeInputs() *Loop {
-	loop.finalizeInputs = true
-	return loop
 }
 
 // start of loop, called by all looping methods.
@@ -141,10 +127,13 @@ func (loop *Loop) step(spec any, inputs, labels []tensor.Tensor) (metrics []tens
 		elapsed := time.Since(startTime)
 		loop.TrainStepDurations = append(loop.TrainStepDurations, elapsed)
 	}()
+
 	err = TryCatch[error](func() { metrics = loop.Trainer.TrainStep(spec, inputs, labels) })
 	if err != nil {
 		return nil, err
 	}
+
+	// Call "OnStep" hooks.
 	loop.onStep.Enumerate(func(hook *hookWithName[OnStepFn]) {
 		if err != nil {
 			// After the first error stop.
@@ -158,6 +147,7 @@ func (loop *Loop) step(spec any, inputs, labels []tensor.Tensor) (metrics []tens
 	if err != nil {
 		return nil, err
 	}
+
 	batchLoss := shapes.ConvertTo[float64](metrics[0].Value())
 	if math.IsNaN(batchLoss) {
 		err = errors.Errorf("batch loss is NaN, training interrupted")
@@ -166,16 +156,6 @@ func (loop *Loop) step(spec any, inputs, labels []tensor.Tensor) (metrics []tens
 	if math.IsInf(batchLoss, 0) {
 		err = errors.Errorf("batch loss is infinity (%f), training interrupted", batchLoss)
 		return
-	}
-
-	// Immediately release used inputs and labels.
-	if loop.finalizeInputs {
-		for _, t := range inputs {
-			t.FinalizeAll()
-		}
-		for _, t := range labels {
-			t.FinalizeAll()
-		}
 	}
 	return
 }
@@ -222,11 +202,7 @@ func (loop *Loop) RunSteps(ds Dataset, steps int) (metrics []tensor.Tensor, err 
 						"a different (looping) Dataset, or use Loop.RunEpochs() instead of Loop.RunSteps() ?",
 					loop.LoopStep-loop.StartStep, steps)
 			}
-			var extraErrorMsg string
-			if loop.finalizeInputs {
-				extraErrorMsg = " -- loop is configured to free the dataset input after each step, this may be interfering with contents"
-			}
-			return nil, errors.WithMessagef(err, "Loop.RunSteps(%d): failed reading from Dataset%s", steps, extraErrorMsg)
+			return nil, errors.WithMessagef(err, "Loop.RunSteps(%d): failed reading from Dataset", steps)
 		}
 		metrics, err = loop.step(spec, inputs, labels)
 		if err != nil {
@@ -271,11 +247,7 @@ func (loop *Loop) RunEpochs(ds Dataset, epochs int) (metrics []tensor.Tensor, er
 					loop.EndStep = loop.LoopStep + yieldsPerEpoch*(epochs-loop.Epoch-1)
 					break
 				}
-				var extraErrorMsg string
-				if loop.finalizeInputs {
-					extraErrorMsg = " -- loop is configured to free the dataset input after each step, this may be interfering with contents"
-				}
-				return nil, errors.WithMessagef(err, "Loop.RunEpochs(epoch %d of %d): failed reading from Dataset%s", loop.Epoch, epochs, extraErrorMsg)
+				return nil, errors.WithMessagef(err, "Loop.RunEpochs(epoch %d of %d): failed reading from Dataset", loop.Epoch, epochs)
 			}
 			yieldsPerEpoch++
 
