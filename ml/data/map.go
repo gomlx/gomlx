@@ -13,8 +13,9 @@ import (
 // MapGraphFn if a graph building function that transforms inputs and labels.
 type MapGraphFn func(ctx *context.Context, inputs, labels []*Node) (mappedInputs, mappedLabels []*Node)
 
-// mapDataset implements a `train.Dataset` that maps a function to a wrapped dataset.
-type mapDataset struct {
+// mapGraphFnDataset implements a `train.Dataset` that maps a graph building function to a wrapped dataset.
+// See [MapWithGraphFn] on how to use it.
+type mapGraphFnDataset struct {
 	manager                          *Manager
 	ctx                              *context.Context
 	ds                               train.Dataset
@@ -24,19 +25,19 @@ type mapDataset struct {
 	numMappedInputs, numMappedLabels int
 }
 
-// Map returns a `train.Dataset` with the result of applying (mapping) the batches yielded by the provided `dataset`
-// by the graph function `fn`.
+// MapWithGraphFn returns a `train.Dataset` with the result of applying (mapping) the batches yielded by the provided
+// `dataset` by the graph function `graphFn`.
 // The function is executed by the `manager` given.
 // If `ctx` is nil, a new one is created.
 //
-// The graph building function `fn` can return a different number of `inputs` or `labels` than what it was given,
+// The graph building function `graphFn` can return a different number of `inputs` or `labels` than what it was given,
 // but these numbers should never change -- always return the same number of inputs and labels.
-func Map(manager *Manager, ctx *context.Context, dataset train.Dataset, fn MapGraphFn) train.Dataset {
-	mapDS := &mapDataset{
+func MapWithGraphFn(manager *Manager, ctx *context.Context, dataset train.Dataset, graphFn MapGraphFn) train.Dataset {
+	mapDS := &mapGraphFnDataset{
 		manager:    manager,
 		ctx:        ctx,
 		ds:         dataset,
-		mapGraphFn: fn,
+		mapGraphFn: graphFn,
 	}
 	if mapDS.ctx == nil {
 		mapDS.ctx = context.NewContext(manager)
@@ -45,18 +46,18 @@ func Map(manager *Manager, ctx *context.Context, dataset train.Dataset, fn MapGr
 }
 
 // Reset implements train.Dataset.
-func (mapDS *mapDataset) Reset() {
+func (mapDS *mapGraphFnDataset) Reset() {
 	mapDS.ds.Reset()
 	mapDS.ds.Name()
 }
 
 // Name implements train.Dataset.
-func (mapDS *mapDataset) Name() string {
-	return mapDS.ds.Name() + " [Map]"
+func (mapDS *mapGraphFnDataset) Name() string {
+	return mapDS.ds.Name()
 }
 
 // Yield implements train.Dataset.
-func (mapDS *mapDataset) Yield() (spec any, inputs []tensor.Tensor, labels []tensor.Tensor, err error) {
+func (mapDS *mapGraphFnDataset) Yield() (spec any, inputs []tensor.Tensor, labels []tensor.Tensor, err error) {
 	spec, inputs, labels, err = mapDS.ds.Yield()
 	if err != nil {
 		return
@@ -89,7 +90,7 @@ func (mapDS *mapDataset) Yield() (spec any, inputs []tensor.Tensor, labels []ten
 			slices.Map(inputsAndLabels, func(e tensor.Tensor) any { return e })...)
 	})
 	if err != nil {
-		err = errors.WithMessagef(err, "while executing MapGraphFn provided for data.Map()")
+		err = errors.WithMessagef(err, "while executing MapGraphFn provided for data.MapWithGraphFn()")
 		return
 	}
 	inputs, labels = nil, nil
@@ -105,37 +106,30 @@ func (mapDS *mapDataset) Yield() (spec any, inputs []tensor.Tensor, labels []ten
 // MapExampleFn if normal Go function that applies a transformation to the inputs/labels of a dataset.
 type MapExampleFn func(inputs, labels []tensor.Tensor) (mappedInputs, mappedLabels []tensor.Tensor)
 
-// mapDatasetInHost implements a `train.Dataset` that maps a function executed on the host to a wrapped dataset.
-type mapDatasetInHost struct {
-	name  string
+// mapDataset implements a `train.Dataset` that maps a function executed on the host to a wrapped dataset.
+type mapDataset struct {
 	ds    train.Dataset
 	mapFn MapExampleFn
 }
 
-// Check that mapDataset implements train.Dataset.
-var _ train.Dataset = (*mapDatasetInHost)(nil)
+// Check that mapGraphFnDataset implements train.Dataset.
+var _ train.Dataset = (*mapDataset)(nil)
 
-// MapInHost maps a dataset through a transformation with a (normal Go) function that runs in the host cpu.
+// Map maps a dataset through a transformation with a (normal Go) function that runs in the host cpu.
 //
-// If name is left empty, it takes the name from the original dataset `ds`.
-//
-// See [Map] for a function that runs on the accelerator, with a graph building function.
-func MapInHost(ds train.Dataset, mapFn MapExampleFn, name string) train.Dataset {
-	if name == "" {
-		name = ds.Name()
-	}
-	return &mapDatasetInHost{
-		name:  name,
+// See [MapWithGraphFn] for a function that runs on the accelerator, with a graph building function.
+func Map(ds train.Dataset, mapFn MapExampleFn) train.Dataset {
+	return &mapDataset{
 		ds:    ds,
 		mapFn: mapFn,
 	}
 }
 
 // Name implements train.Dataset.
-func (ds *mapDatasetInHost) Name() string { return ds.name }
+func (ds *mapDataset) Name() string { return ds.ds.Name() }
 
 // Yield implements train.Dataset.
-func (ds *mapDatasetInHost) Yield() (spec any, inputs []tensor.Tensor, labels []tensor.Tensor, err error) {
+func (ds *mapDataset) Yield() (spec any, inputs []tensor.Tensor, labels []tensor.Tensor, err error) {
 	spec, inputs, labels, err = ds.ds.Yield()
 	if err != nil {
 		return
@@ -145,6 +139,6 @@ func (ds *mapDatasetInHost) Yield() (spec any, inputs []tensor.Tensor, labels []
 }
 
 // Reset implements train.Dataset.
-func (ds *mapDatasetInHost) Reset() {
+func (ds *mapDataset) Reset() {
 	ds.ds.Reset()
 }

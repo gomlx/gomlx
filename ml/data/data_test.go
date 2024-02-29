@@ -354,7 +354,7 @@ func TestMap(t *testing.T) {
 		[]any{[][]float32{{3}, {7}}})
 	require.NoError(t, err)
 	ds.BatchSize(2, true)
-	mapDS := Map(manager, nil, ds, func(_ *context.Context, inputs, labels []*Node) (mappedInputs, mappedLabels []*Node) {
+	mapDS := MapWithGraphFn(manager, nil, ds, func(_ *context.Context, inputs, labels []*Node) (mappedInputs, mappedLabels []*Node) {
 		// Add 1 to the inputs[0], drop the labels.
 		return []*Node{AddScalar(inputs[0], 1)}, nil
 	})

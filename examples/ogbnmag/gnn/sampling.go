@@ -119,7 +119,7 @@ func MakeDatasets(dataDir string) (trainDS, trainEvalDS, validEvalDS, testEvalDS
 	// - Parallelize its generation: greatly speeds it up.
 	// - Free GPU memory in between each use, since each batch may use lots of GPU memory.
 	perDatasetFn := func(ds train.Dataset) train.Dataset {
-		ds = mldata.MapInHost(ds, magCreateLabels, "")
+		ds = mldata.Map(ds, magCreateLabels)
 		ds = mldata.Parallel(ds)
 		ds = mldata.Freeing(ds)
 		return ds
