@@ -31,13 +31,14 @@
       is wrong and depending on the shape it may be adversely affecting some models.
   * `LayerNormalization`: added `Mask` support; added defaults from context parameters.
   * `DropoutStatic`: Dropout api where one can pass a static dropout rate as a Go float.
-  * `AddL2RegularizationStatic`: Add L2 regularization on values, where the amout of regularization is static. 
+  * `AddL2RegularizationStatic`: Add L2 regularization on values, where the amount of regularization is static. 
 * Package `optimizers`:
   * Added `CosineAnnealingSchedule.FromContext`.
 * Package `losses`:
   * Added support for `weights` and `mask`.
 * Package `ml/data`:
-  * Added `MapInHost`: a map function to a dataset that runs in host (as opposed to in accelerator/XLA).
+  * Renamed `Map` -> `MapWithGraphFn`: to make it explicit that the transformation happens in accelerator.
+  * Added `Map`: a map function to a dataset that runs in host (as opposed to in accelerator/XLA).
   * Added `Freeing`: a dataset wrapper that frees inputs and labels in between each call to `Yield`: to control GPU
     memory usage. It replaces `loop.FreeInput()`
 
