@@ -12,7 +12,6 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/layers"
-	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"strings"
 )
@@ -203,9 +202,8 @@ func convolveNodeSet(ctx *context.Context, value, mask *Node) *Node {
 	messages = layers.DropoutFromContext(ctx, messages)
 	edgeDropOutRate := context.GetParamOr(ctx, ParamEdgeDropoutRate, 0.0)
 	if edgeDropOutRate > 0 {
-		// We apply edge dropout to the mask.
-		g := messages.Graph()
-		mask = layers.DropoutNormalize(ctx, mask, Scalar(g, shapes.F32, edgeDropOutRate), false)
+		// We apply edge dropout to the mask: values disabled here will mask the whole edge.
+		mask = layers.DropoutStatic(ctx, mask, edgeDropOutRate)
 	}
 	return poolMessages(ctx, messages, mask)
 }

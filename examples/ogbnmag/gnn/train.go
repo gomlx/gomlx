@@ -105,7 +105,7 @@ func Train(ctx *context.Context, baseDir string) error {
 	var plots *margaid.Plots
 	usePlots := context.GetParamOr(ctx, margaid.ParamPlots, false)
 	if usePlots {
-		plots = margaid.NewDefault(loop, checkpoint.Dir(), 1000, 1.2, validEvalDS).
+		plots = margaid.NewDefault(loop, checkpoint.Dir(), 200, 1.2, validEvalDS).
 			WithEvalLossType("eval-loss")
 	}
 

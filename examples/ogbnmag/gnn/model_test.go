@@ -5,6 +5,7 @@ package gnn
 import (
 	"flag"
 	"fmt"
+	"github.com/dustin/go-humanize"
 	mag "github.com/gomlx/gomlx/examples/ogbnmag"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
@@ -39,6 +40,11 @@ func TestModel(t *testing.T) {
 
 	var inputs []tensor.Tensor
 	spec, inputs, _, err = trainDS.Yield()
+	totalSizeBytes := uint64(0)
+	for _, input := range inputs {
+		totalSizeBytes += uint64(input.Shape().Memory())
+	}
+	fmt.Printf("One sample (batch) size is %s bytes\n", humanize.Bytes(totalSizeBytes))
 	require.NoError(t, err)
 	outputs := testGraphExec.Call(inputs)
 	for ii, output := range outputs {

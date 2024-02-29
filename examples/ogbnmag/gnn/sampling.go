@@ -10,8 +10,10 @@ import (
 )
 
 var (
-	// BatchSize used for the sampler.
-	BatchSize = 32
+	// BatchSize used for the sampler: the value was taken from the TF-GNN OGBN-MAG demo colab, and it was the
+	// best found with some hyperparameter tuning. It does lead to using almost 7Gb of the GPU ram ...
+	// but it works fine in an Nvidia RTX 2080 Ti (with 11Gb memory).
+	BatchSize = 128
 
 	// ReuseShareableKernels will share the kernels across similar messages in the strategy tree.
 	// So the authors to papers messages will be the same if it comes from authors of the seed papers,
@@ -112,9 +114,20 @@ func MakeDatasets(dataDir string) (trainDS, trainEvalDS, validEvalDS, testEvalDS
 	validEvalDS = validStrategy.NewDataset("valid").Epochs(1)
 	testEvalDS = testStrategy.NewDataset("test").Epochs(1)
 
-	trainDS = mldata.Parallel(mldata.MapInHost(trainDS, magCreateLabels, ""))
-	trainEvalDS = mldata.Parallel(mldata.MapInHost(trainEvalDS, magCreateLabels, ""))
-	validEvalDS = mldata.Parallel(mldata.MapInHost(validEvalDS, magCreateLabels, ""))
-	testEvalDS = mldata.Parallel(mldata.MapInHost(testEvalDS, magCreateLabels, ""))
+	// We want to transform the dataset in 3 ways:
+	// - Gather the labels
+	// - Parallelize its generation: greatly speeds it up.
+	// - Free GPU memory in between each use, since each batch may use lots of GPU memory.
+	perDatasetFn := func(ds train.Dataset) train.Dataset {
+		ds = mldata.MapInHost(ds, magCreateLabels, "")
+		ds = mldata.Parallel(ds)
+		ds = mldata.Freeing(ds)
+		return ds
+	}
+
+	trainDS = perDatasetFn(trainDS)
+	trainEvalDS = perDatasetFn(trainEvalDS)
+	validEvalDS = perDatasetFn(validEvalDS)
+	testEvalDS = perDatasetFn(testEvalDS)
 	return
 }
