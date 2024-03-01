@@ -11,6 +11,7 @@ require (
 	github.com/gomlx/exceptions v0.0.1
 	github.com/google/uuid v1.6.0
 	github.com/janpfeifer/gonb v0.9.3
+	github.com/janpfeifer/must v0.0.2
 	github.com/pkg/errors v0.9.1
 	github.com/schollz/progressbar/v3 v3.14.1
 	github.com/stretchr/testify v1.8.4
