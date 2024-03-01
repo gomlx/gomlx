@@ -141,7 +141,7 @@ func (opt *CosineScheduleOptions) Done() {
 
 	lrValue := opt.learningRate
 	if lrValue == 0 {
-		lrValue = context.GetParam(opt.ctx, ParamLearningRate, 0.0)
+		lrValue = context.GetParamOr(opt.ctx, ParamLearningRate, 0.0)
 		if lrValue == 0 {
 			Panicf("learning rate not configured for CosineAnnealingSchedule and also "+
 				"not set in the context as parameter %q", ParamLearningRate)

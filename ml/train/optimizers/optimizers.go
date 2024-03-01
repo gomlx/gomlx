@@ -170,7 +170,7 @@ var (
 // If variable doesn't exist yet, it will be created using the parameter ParamLearningRate, if it
 // is set, or the provided defaultValue (must be a scalar convertible to dtype) if not.
 func LearningRateVar(ctx *context.Context, dtype shapes.DType, defaultValue float64) *context.Variable {
-	lrValue := context.GetParam(ctx, ParamLearningRate, defaultValue)
+	lrValue := context.GetParamOr(ctx, ParamLearningRate, defaultValue)
 	return LearningRateVarWithValue(ctx, dtype, lrValue)
 }
 

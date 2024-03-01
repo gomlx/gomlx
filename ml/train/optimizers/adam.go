@@ -141,7 +141,7 @@ func (o *adam) UpdateGraph(ctx *context.Context, g *Graph, loss *Node) {
 	// Set up learning-rate.
 	lrValue := o.config.learningRate
 	if lrValue < 0 {
-		lrValue = context.GetParam(ctx, ParamLearningRate, AdamDefaultLearningRate)
+		lrValue = context.GetParamOr(ctx, ParamLearningRate, AdamDefaultLearningRate)
 	}
 	lrVar := LearningRateVar(ctx, dtype, lrValue)
 	learningRate := lrVar.ValueGraph(g)
