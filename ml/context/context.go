@@ -27,7 +27,6 @@ import (
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/pkg/errors"
 	"golang.org/x/exp/slices"
-	"log"
 	"reflect"
 	"strings"
 )
@@ -321,7 +320,9 @@ func (ctx *Context) GetParam(key string) (value any, found bool) {
 // searching successively from the current scope back to the root scope ("/"), or if the
 // key is not found, returns the given default value.
 //
-// It casts the value to the given type, and it will panic is that fails.
+// It tries to cast the value to the given type. If it fails, it tries to convert the
+// value to the given type (so an `int` will be converted to a `float64` transparently).
+// If that also fails, an explaining exception is thrown.
 //
 // It's a convenience method around `ctx.GetParam`.
 func GetParamOr[T any](ctx *Context, key string, defaultValue T) T {
@@ -329,8 +330,15 @@ func GetParamOr[T any](ctx *Context, key string, defaultValue T) T {
 	if !found {
 		return defaultValue
 	}
-	v, ok := valueAny.(T)
-	if !ok {
+	value, ok := valueAny.(T)
+	if ok {
+		return value
+	}
+
+	// Try converting, for instance, a float32 could be converted to float64.
+	v := reflect.ValueOf(valueAny)
+	typeOfT := reflect.TypeOf(defaultValue)
+	if !v.CanConvert(typeOfT) {
 		Panicf("GetParamOr[%T](ctx, %q, %v): ctx(scope=%q)[%q]=(%T) %#v, and cannot be converted to %T -- "+
 			"Notice that when reloading a context from a checkpoint involves decoding them from Json, and "+
 			"the original type of the param may have been decoded incorrectly causing this error. "+
@@ -341,7 +349,7 @@ func GetParamOr[T any](ctx *Context, key string, defaultValue T) T {
 			"are usually enough for these hyperparameters.",
 			v, key, defaultValue, ctx.Scope(), key, valueAny, valueAny, v)
 	}
-	return v
+	return v.Convert(typeOfT).Interface().(T)
 }
 
 // SetParam sets the given param in the current scope. It will be visible (by GetParam)
@@ -397,7 +405,9 @@ func (ctx *Context) GetGraphParam(g *Graph, key string) (value any, found bool) 
 // searching successively from the current scope back to the root scope ("/"), or if the
 // key is not found, returns the given default value.
 //
-// It casts the value to the given type, and it will panic is that fails.
+// It tries to cast the value to the given type. If it fails, it tries to convert the
+// value to the given type (so an `int` will be converted to a `float64` transparently).
+// If that also fails, an explaining exception is thrown.
 //
 // It's a convenience method around `ctx.GetGraphParam`.
 //
@@ -406,16 +416,35 @@ func (ctx *Context) GetGraphParam(g *Graph, key string) (value any, found bool) 
 // set this state, as the same Context is used for evaluation/inference graphs and
 // training graphs, and they will have different values.
 func GetGraphParamOr[T any](ctx *Context, g *Graph, key string, defaultValue T) T {
+	// GetGraphParam from Context object and cast to the give type. If
+	// parameter key is not defined, or if it cannot be cast to the given type,
+	// return defaultValue instead.
+	//
+	// It's a typed wrapper to Context.GetGraphParam()
 	valueAny, found := ctx.GetGraphParam(g, key)
 	if !found {
 		return defaultValue
 	}
-	v, ok := valueAny.(T)
-	if !ok {
-		Panicf("GetGraphParamOr[%T](ctx, g, %q, %v): ctx(scope=%q)[%q]=(%T) %#v, and cannot be converted to %T",
-			v, key, defaultValue, ctx.Scope(), key, valueAny, valueAny, defaultValue)
+	value, ok := valueAny.(T)
+	if ok {
+		return value
 	}
-	return valueAny.(T)
+
+	// Try converting, for instance, a float32 could be converted to float64.
+	v := reflect.ValueOf(valueAny)
+	typeOfT := reflect.TypeOf(defaultValue)
+	if !v.CanConvert(typeOfT) {
+		Panicf("GetParamOr[%T](ctx, %q, %v): ctx(scope=%q)[%q]=(%T) %#v, and cannot be converted to %T -- "+
+			"Notice that when reloading a context from a checkpoint involves decoding them from Json, and "+
+			"the original type of the param may have been decoded incorrectly causing this error. "+
+			"Many types are automatically corrected, if one is missing please report, or fix it in package "+
+			"`checkpoints`, in function `serializedParam.jsonDecodeTypeConvert`. "+
+			"Unfortunately, custom parameter types won't work with `checkpoints` (saving/loading), but generic "+
+			"`map[string]any` are handled correctly by Json and "+
+			"are usually enough for these hyperparameters.",
+			v, key, defaultValue, ctx.Scope(), key, valueAny, valueAny, v)
+	}
+	return v.Convert(typeOfT).Interface().(T)
 }
 
 // SetGraphParam sets the given Graph param in the current scope. It will be visible (by
@@ -876,79 +905,25 @@ func (ctx *Context) BuildTrainableVariablesGradientsGraph(loss *Node) []*Node {
 	return graph.Gradient(loss, trainableVars...)
 }
 
-// GetParam from Context object and cast to the give type. If
-// parameter name is not defined, or if it cannot be cast to the given type,
-// return defaultValue instead.
-//
-// It's a typed wrapper to Context.GetParam()
-func GetParam[T any](ctx *Context, name string, defaultValue T) T {
-	valueI, found := ctx.GetParam(name)
-	if !found {
-		return defaultValue
-	}
-	value, ok := valueI.(T)
-	if ok {
-		return value
-	}
-
-	// Try converting, for instance, a float32 could be converted to float64.
-	v := reflect.ValueOf(valueI)
-	var t T
-	typeOfT := reflect.TypeOf(t)
-	if !v.CanConvert(typeOfT) {
-		log.Printf("Tried to read hyperparameter %q as %t, but failed because it was type %s.",
-			name, any(t), v.Type())
-		return defaultValue
-	}
-	return v.Convert(typeOfT).Interface().(T)
-}
-
-// GetGraphParam from Context object and cast to the give type. If
-// parameter name is not defined, or if it cannot be cast to the given type,
-// return defaultValue instead.
-//
-// It's a typed wrapper to Context.GetGraphParam()
-func GetGraphParam[T any](ctx *Context, g *Graph, name string, defaultValue T) T {
-	valueI, found := ctx.GetGraphParam(g, name)
-	if !found {
-		return defaultValue
-	}
-	value, ok := valueI.(T)
-	if ok {
-		return value
-	}
-
-	// Try converting, for instance, a float32 could be converted to float64.
-	v := reflect.ValueOf(valueI)
-	var t T
-	typeOfT := reflect.TypeOf(t)
-	if !v.CanConvert(typeOfT) {
-		log.Printf("Tried to read hyperparameter %q as %t, but failed because it was type %s.",
-			name, any(t), v.Type())
-		return defaultValue
-	}
-	return v.Convert(typeOfT).Interface().(T)
-}
-
-const TrainingGraphParamKey = "training"
+const GraphParamIsTraining = "training"
 
 // IsTraining returns whether context is being used for training.
 // This is only a convention adopted by the library components, and it is read
-// with [Context.GetGraphParam] and [TrainingGraphParamKey] for the current scope.
+// with [Context.GetGraphParam] and [GraphParamIsTraining] for the current scope.
 // See [SetTraining] to change this value.
 //
 // Notice that graph parameters is part of the "reference" component of a Context, so this change
 // won't affect other connected context references.
 func (ctx *Context) IsTraining(g *Graph) bool {
-	return GetGraphParamOr(ctx, g, TrainingGraphParamKey, false)
+	return GetGraphParamOr(ctx, g, GraphParamIsTraining, false)
 }
 
 // SetTraining marks the context for the given graph as training.
 // This is a convention adopted by the library components, and it simply sets it with
-// [Context.SetGraphParam] and [TrainingGraphParamKey] to the given value. See IsTraining to check for this value.
+// [Context.SetGraphParam] and [GraphParamIsTraining] to the given value. See IsTraining to check for this value.
 //
 // Notice that the graph parameters is part of the "reference" component of a Context, so this change
 // won't affect other connected context references.
 func (ctx *Context) SetTraining(g *Graph, value bool) {
-	ctx.SetGraphParam(g, TrainingGraphParamKey, value)
+	ctx.SetGraphParam(g, GraphParamIsTraining, value)
 }
