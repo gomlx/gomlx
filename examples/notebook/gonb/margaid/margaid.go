@@ -145,17 +145,19 @@ func NewDefault(loop *train.Loop, dir string, startStep int, stepFactor float64,
 	}
 	plots.DynamicUpdates()
 
-	// Only plot if (1) it's running in a notebook or if (B) it has a checkpoint directory, where those plot points
-	// will be saved.
-	if dir != "" || gonbui.IsNotebook {
-		// Register plot points at exponential steps.
-		train.ExponentialCallback(loop, startStep, stepFactor, true,
-			"Monitor", 0, func(loop *train.Loop, metrics []tensor.Tensor) error {
-				// Update plots with metrics.
-				return plots.AddTrainAndEvalMetrics(loop, metrics)
-			})
-		plots.attachOnEnd(loop)
+	// It requires a checkpoint directory (`dir`) to be configured.
+	if dir == "" {
+		return plots
 	}
+
+	// Notice that plot points will be generated even if not running in a notebook -- just no plot will be displayed.
+	// Register plot points at exponential steps.
+	train.ExponentialCallback(loop, startStep, stepFactor, true,
+		"Monitor", 0, func(loop *train.Loop, metrics []tensor.Tensor) error {
+			// Update plots with metrics.
+			return plots.AddTrainAndEvalMetrics(loop, metrics)
+		})
+	plots.attachOnEnd(loop)
 	return plots
 }
 
