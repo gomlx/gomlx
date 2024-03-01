@@ -68,6 +68,15 @@ var (
 	// of all nodes in its path to root.
 	// Default is false.
 	ParamUsePathToRootStates = "gnn_use_path_to_root"
+
+	// ParamGraphUpdateType context hyperparameter can take values `tree` or `simultaneous`.
+	// Graph updates in `tree` fashion will update from leaf all the way to the seeds (the roots of the trees),
+	// for each message configured with [ParamNumMessages].
+	// Graph updates in `simultaneous` fashion will update all states from it's dependents "simultaneously". In that
+	// sense it will require [ParamNumMessages] to be at least equal to the depth of the sampling tree for the
+	// influence of the leaf nodes to reach to the root nodes.
+	// The default is `tree`.
+	ParamGraphUpdateType = "gnn_graph_update_type"
 )
 
 // NodePrediction performs graph convolutions from leaf nodes to the seeds (the roots of the trees), this
@@ -100,8 +109,16 @@ var (
 //	}
 func NodePrediction(ctx *context.Context, strategy *sampler.Strategy, graphStates map[string]*sampler.ValueMask[*Node]) {
 	numMessages := context.GetParamOr(ctx, ParamNumMessages, 2)
+	graphUpdateType := context.GetParamOr(ctx, ParamGraphUpdateType, "tree")
 	for ii := range numMessages {
-		GraphStateUpdate(ctx.In(fmt.Sprintf("graph_update_%d", ii)), strategy, graphStates)
+		switch graphUpdateType {
+		case "tree":
+			TreeGraphStateUpdate(ctx.In(fmt.Sprintf("graph_update_%d", ii)), strategy, graphStates)
+		case "simultaneous":
+			SimultaneousGraphStateUpdate(ctx.In(fmt.Sprintf("graph_update_%d", ii)), strategy, graphStates)
+		default:
+			Panicf("invalid value for %q: valid values are \"tree\" or \"simultaneous\"", ParamGraphUpdateType)
+		}
 	}
 	numHiddenLayers := context.GetParamOr(ctx, ParamReadoutHiddenLayers, 1)
 	for _, rule := range strategy.Seeds {
@@ -113,9 +130,9 @@ func NodePrediction(ctx *context.Context, strategy *sampler.Strategy, graphState
 	}
 }
 
-// GraphStateUpdate takes a `graphStates`, a map of name of node sets to their hidden states,
+// TreeGraphStateUpdate takes a `graphStates`, a map of name of node sets to their hidden states,
 // and updates them by running graph convolutions on the reverse direction of the sampling
-// rules in `strategy`, that is, from leaves back to the root of the tree.
+// rules in `strategy`, that is, from leaves back to the root of the trees -- trees rooted on the seed rules.
 //
 // All hyperparameters are read from the context `ctx`, and can be set to individual node sets,
 // by setting them in the scope `"gnn:"+rule.Name`, where `rule.Name` is the name of the corresponding
@@ -125,16 +142,27 @@ func NodePrediction(ctx *context.Context, strategy *sampler.Strategy, graphState
 // run from the leaf nodes towards the root nodes (seeds).
 //
 // It updates all states in `graphStates` except the leaves. The masks are left unchanged.
-func GraphStateUpdate(ctx *context.Context, strategy *sampler.Strategy, graphStates map[string]*sampler.ValueMask[*Node]) {
+func TreeGraphStateUpdate(ctx *context.Context, strategy *sampler.Strategy, graphStates map[string]*sampler.ValueMask[*Node]) {
 	// Starting from the seed node sets, do updates recursively.
 	for _, rule := range strategy.Seeds {
-		recursivelyApplyGraphConvolution(ctx, rule, nil, graphStates)
+		recursivelyApplyGraphConvolution(ctx, rule, nil, graphStates, true)
+	}
+}
+
+// SimultaneousGraphStateUpdate executes one step of state update on all node sets of the graph "simultaneously".
+// If the graph has a tree like structure, one needs to call this function at least `N` times, where `N` is the depth
+// of the tree, until the signal arrives from the leaf node to the root.
+func SimultaneousGraphStateUpdate(ctx *context.Context, strategy *sampler.Strategy, graphStates map[string]*sampler.ValueMask[*Node]) {
+	// Starting from the seed node sets, do updates recursively.
+	for _, rule := range strategy.Seeds {
+		recursivelyApplyGraphConvolution(ctx, rule, nil, graphStates, false)
 	}
 }
 
 func recursivelyApplyGraphConvolution(ctx *context.Context, rule *sampler.Rule,
 	pathToRootStates []*Node,
-	graphStates map[string]*sampler.ValueMask[*Node]) {
+	graphStates map[string]*sampler.ValueMask[*Node],
+	dependentsUpdateFirst bool) {
 	if rule.Name == "" || rule.KernelScopeName == "" {
 		Panicf("strategy's rule name=%q or kernel scope name=%q are empty, they both must be defined",
 			rule.Name, rule.KernelScopeName)
@@ -169,6 +197,7 @@ func recursivelyApplyGraphConvolution(ctx *context.Context, rule *sampler.Rule,
 	}
 
 	// Collections of inputs to be updated to update current hidden state.
+	var hasNewUpdateInputs bool
 	updateInputs := make([]*Node, 0, len(rule.Dependents)+1+len(pathToRootStates))
 	if state.Value != nil { // state == nil for latent node types, at their initial state.
 		updateInputs = append(updateInputs, state.Value)
@@ -180,17 +209,30 @@ func recursivelyApplyGraphConvolution(ctx *context.Context, rule *sampler.Rule,
 		dims = append(dims, contextState.Shape().Dimensions[contextState.Rank()-1])
 		contextState = BroadcastToDims(contextState, dims...)
 		updateInputs = append(updateInputs, contextState)
+		hasNewUpdateInputs = true
 	}
 
 	// Update dependents and calculate their convolved messages: it's a depth-first-search on dependents.
 	for _, dependent := range rule.Dependents {
-		recursivelyApplyGraphConvolution(ctx, dependent, subPathToRootStates, graphStates)
+		if dependentsUpdateFirst {
+			recursivelyApplyGraphConvolution(ctx, dependent, subPathToRootStates, graphStates, dependentsUpdateFirst)
+		}
 		dependentState := graphStates[dependent.Name]
 		convolveCtx := ctx.In(dependent.KernelScopeName).In("conv")
-		updateInputs = append(updateInputs, convolveNodeSet(convolveCtx, dependentState.Value, dependentState.Mask))
+		if dependentState.Value != nil {
+			updateInputs = append(updateInputs, convolveNodeSet(convolveCtx, dependentState.Value, dependentState.Mask))
+			hasNewUpdateInputs = true
+		}
+		if !dependentsUpdateFirst {
+			recursivelyApplyGraphConvolution(ctx, dependent, subPathToRootStates, graphStates, dependentsUpdateFirst)
+		}
 	}
-	updateCtx := ctx.In(rule.KernelScopeName).In("update")
-	state.Value = updateState(updateCtx, state.Value, Concatenate(updateInputs, -1), state.Mask)
+
+	// Update state of current rule: only update state if there was any new incoming input.
+	if hasNewUpdateInputs {
+		updateCtx := ctx.In(rule.KernelScopeName).In("update")
+		state.Value = updateState(updateCtx, state.Value, Concatenate(updateInputs, -1), state.Mask)
+	}
 }
 
 // convolveNodeSet creates messages from a node set and aggregate them to the same prefix dimension of their source
