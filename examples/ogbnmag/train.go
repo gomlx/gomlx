@@ -1,9 +1,8 @@
-package gnn
+package ogbnmag
 
 import (
 	"fmt"
 	"github.com/gomlx/gomlx/examples/notebook/gonb/margaid"
-	mag "github.com/gomlx/gomlx/examples/ogbnmag"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	mldata "github.com/gomlx/gomlx/ml/data"
@@ -27,7 +26,7 @@ var (
 	ParamNumCheckpoints = "num_checkpoints"
 )
 
-// Train FNN model based on configuration in `ctx`.
+// Train GNN model based on configuration in `ctx`.
 func Train(ctx *context.Context, baseDir string) error {
 	baseDir = mldata.ReplaceTildeInDir(baseDir)
 	trainDS, trainEvalDS, validEvalDS, testEvalDS, err := MakeDatasets(baseDir)
@@ -35,7 +34,7 @@ func Train(ctx *context.Context, baseDir string) error {
 	if err != nil {
 		return err
 	}
-	mag.UploadOgbnMagVariables(ctx)
+	UploadOgbnMagVariables(ctx)
 
 	// Context values (both parameters and variables) are reloaded from checkpoint,
 	// any values that we don't want overwritten need to be read before the checkpointing.
@@ -55,7 +54,7 @@ func Train(ctx *context.Context, baseDir string) error {
 		// Exclude from saving all the variables created by the `mag` package -- specially the frozen papers embeddings,
 		// which take most space.
 		var varsToExclude []*context.Variable
-		ctx.InAbsPath(mag.OgbnMagVariablesScope).EnumerateVariablesInScope(func(v *context.Variable) {
+		ctx.InAbsPath(OgbnMagVariablesScope).EnumerateVariablesInScope(func(v *context.Variable) {
 			varsToExclude = append(varsToExclude, v)
 		})
 
@@ -157,10 +156,10 @@ func newTrainer(ctx *context.Context) *train.Trainer {
 	return trainer
 }
 
-// Eval FNN model based on configuration in `ctx`.
+// Eval GNN model based on configuration in `ctx`.
 func Eval(ctx *context.Context, baseDir string, datasets ...train.Dataset) error {
 	baseDir = mldata.ReplaceTildeInDir(baseDir)
-	mag.UploadOgbnMagVariables(ctx)
+	UploadOgbnMagVariables(ctx)
 
 	// Load checkpoint.
 	checkpointPath := context.GetParamOr(ctx, ParamCheckpointPath, "")

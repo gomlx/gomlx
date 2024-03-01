@@ -1,12 +1,14 @@
-package gnn
+package ogbnmag
 
 import (
-	mag "github.com/gomlx/gomlx/examples/ogbnmag"
+	"fmt"
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
 	mldata "github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
+	"os"
+	"path"
 )
 
 var (
@@ -21,6 +23,39 @@ var (
 	// Default is true.
 	ReuseShareableKernels = true
 )
+
+// NewSampler will create a [sampler.Sampler] and configure it with the OGBN-MAG graph definition.
+func NewSampler(baseDir string) (*sampler.Sampler, error) {
+	baseDir = mldata.ReplaceTildeInDir(baseDir) // If baseDir starts with "~", it is replaced.
+	samplerPath := path.Join(baseDir, DownloadSubdir, "sampler.bin")
+	s, err := sampler.Load(samplerPath)
+	if err == nil {
+		return s, nil
+	}
+	if !os.IsNotExist(err) {
+		return nil, err
+	}
+
+	fmt.Println("> Creating a new Sampler for OGBN-MAG")
+	s = sampler.New()
+	s.AddNodeType("papers", NumPapers)
+	s.AddNodeType("authors", NumAuthors)
+	s.AddNodeType("institutions", NumInstitutions)
+	s.AddNodeType("fields_of_study", NumFieldsOfStudy)
+
+	s.AddEdgeType("writes", "authors", "papers", EdgesWrites /* reverse= */, false)
+	s.AddEdgeType("writtenBy", "authors", "papers", EdgesWrites /* reverse= */, true)
+	s.AddEdgeType("cites", "papers", "papers", EdgesCites /*reverse=*/, false)
+	s.AddEdgeType("citedBy", "papers", "papers", EdgesCites /*reverse=*/, true)
+	s.AddEdgeType("affiliatedWith", "authors", "institutions", EdgesAffiliatedWith /*reverse=*/, false)
+	s.AddEdgeType("affiliations", "authors", "institutions", EdgesAffiliatedWith /*reverse=*/, true)
+	s.AddEdgeType("hasTopic", "papers", "fields_of_study", EdgesHasTopic /*reverse=*/, false)
+	s.AddEdgeType("topicHasPapers", "papers", "fields_of_study", EdgesHasTopic /*reverse=*/, true)
+	if err := s.Save(samplerPath); err != nil {
+		return nil, err
+	}
+	return s, nil
+}
 
 // MagStrategy takes a sampler created by [ogbnmag.NewSampler], a desired batch size, and the set of
 // seed ids to sample from ([ogbnmag.TrainSplit], [ogbnmag.ValidSplit] or [ogbnmag.TestSplit]) and
@@ -83,7 +118,7 @@ func magCreateLabels(inputs, labels []tensor.Tensor) ([]tensor.Tensor, []tensor.
 	defer labelsRef.Release()
 	labelsData := labelsRef.Flat().([]int32)
 
-	papersLabelsRef := mag.PapersLabels.Local().AcquireData()
+	papersLabelsRef := PapersLabels.Local().AcquireData()
 	defer papersLabelsRef.Release()
 	papersLabelData := papersLabelsRef.Flat().([]int32)
 
@@ -98,16 +133,16 @@ func magCreateLabels(inputs, labels []tensor.Tensor) ([]tensor.Tensor, []tensor.
 //
 // It uses the package `ogbnmag` to download the data.
 func MakeDatasets(dataDir string) (trainDS, trainEvalDS, validEvalDS, testEvalDS train.Dataset, err error) {
-	if err = mag.Download(dataDir); err != nil {
+	if err = Download(dataDir); err != nil {
 		return
 	}
-	magSampler, err := mag.NewSampler(dataDir)
+	magSampler, err := NewSampler(dataDir)
 	if err != nil {
 		return
 	}
-	trainStrategy := MagStrategy(magSampler, BatchSize, mag.TrainSplit)
-	validStrategy := MagStrategy(magSampler, BatchSize, mag.ValidSplit)
-	testStrategy := MagStrategy(magSampler, BatchSize, mag.TestSplit)
+	trainStrategy := MagStrategy(magSampler, BatchSize, TrainSplit)
+	validStrategy := MagStrategy(magSampler, BatchSize, ValidSplit)
+	testStrategy := MagStrategy(magSampler, BatchSize, TestSplit)
 
 	trainDS = trainStrategy.NewDataset("train").Infinite().Shuffle()
 	trainEvalDS = trainStrategy.NewDataset("train").Epochs(1)

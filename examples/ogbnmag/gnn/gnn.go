@@ -1,7 +1,5 @@
 // Package gnn implements a generic GNN modeling based on [TF-GNN MtAlbis].
 //
-// And it also includes and example for the OGBN-MAG dataset.
-//
 // [TF-GNN MtAlbis]: https://github.com/tensorflow/gnn/tree/main/tensorflow_gnn/models/mt_albis
 package gnn
 

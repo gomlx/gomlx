@@ -1,4 +1,4 @@
-package gnn
+package ogbnmag
 
 // Test will download OGBN-MAG dataset if not yet downloaded, into the directory `~/work/ogbnmag`.
 
@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"github.com/dustin/go-humanize"
-	mag "github.com/gomlx/gomlx/examples/ogbnmag"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
@@ -24,9 +23,9 @@ var (
 func TestModel(t *testing.T) {
 	manager := graphtest.BuildTestManager()
 	ctx := context.NewContext(manager)
-	err := mag.Download(*flagDataDir)
+	err := Download(*flagDataDir)
 	require.NoError(t, err, "failed to download OGBN-MAG dataset")
-	mag.UploadOgbnMagVariables(ctx) // Uploads the Papers frozen embedding table.
+	UploadOgbnMagVariables(ctx) // Uploads the Papers frozen embedding table.
 
 	trainDS, _, _, _, err := MakeDatasets(*flagDataDir)
 	require.NoError(t, err, "failed to make datasets")
@@ -50,7 +49,7 @@ func TestModel(t *testing.T) {
 	for ii, output := range outputs {
 		fmt.Printf("output #%d=%s\n", ii, output.Shape())
 	}
-	assert.NoError(t, outputs[0].Shape().Check(shapes.F32, BatchSize, mag.NumLabels))
+	assert.NoError(t, outputs[0].Shape().Check(shapes.F32, BatchSize, NumLabels))
 	assert.NoError(t, outputs[1].Shape().Check(shapes.Bool, BatchSize))
 }
 
@@ -64,7 +63,7 @@ func TestModel(t *testing.T) {
 //	cpu: 12th Gen Intel(R) Core(TM) i9-12900K
 //	BenchmarkParallelSampling-24              125136             92917 ns/op
 func BenchmarkParallelSampling(b *testing.B) {
-	err := mag.Download(*flagDataDir)
+	err := Download(*flagDataDir)
 	require.NoError(b, err)
 	ds, _, _, _, err := MakeDatasets(*flagDataDir)
 	require.NoError(b, err)

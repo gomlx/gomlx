@@ -11,11 +11,13 @@ import (
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/janpfeifer/must"
+	"k8s.io/klog/v2"
 	"path"
 	"time"
 )
 
 var (
+	flagEval             = flag.Bool("eval", false, "Set to true to run evaluation instead of training.")
 	flagDataDir          = flag.String("data", "~/work/ogbnmag", "Directory to cache downloaded and generated dataset files.")
 	flagCheckpointSubdir = flag.String("checkpoint", "", "Checkpoint subdirectory under --data directory. If empty does not use checkpoints.")
 	manager              = NewManager()
@@ -25,7 +27,7 @@ func configGnn(baseDir string) *context.Context {
 	ctx := context.NewContext(manager)
 	ctx.RngStateReset()
 
-	stepsPerEpoch := mag.TrainSplit.Shape().Size()/gnn.BatchSize + 1
+	stepsPerEpoch := mag.TrainSplit.Shape().Size()/mag.BatchSize + 1
 	numEpochs := 10 // Taken from TF-GNN OGBN-MAG notebook.
 	numTrainSteps := numEpochs * stepsPerEpoch
 	checkpointPath := mldata.ReplaceTildeInDir(*flagCheckpointSubdir)
@@ -48,7 +50,7 @@ func configGnn(baseDir string) *context.Context {
 		gnn.ParamEdgeDropoutRate:            0.0,
 		gnn.ParamNumMessages:                4,
 		gnn.ParamReadoutHiddenLayers:        2,
-		gnn.ParamMagEmbedDropoutRate:        0.0,
+		mag.ParamEmbedDropoutRate:           0.0,
 		gnn.ParamPoolingType:                "mean|sum",
 		gnn.ParamUsePathToRootStates:        false,
 		gnn.ParamGraphUpdateType:            "simultaneous",
@@ -69,9 +71,20 @@ func main() {
 	checkpointPath := context.GetParamOr(ctx, "checkpoint", "")
 	if checkpointPath != "" {
 		fmt.Printf("Model checkpoints in %s\n", checkpointPath)
+	} else if *flagEval {
+		klog.Fatal("To run eval (--eval) you need to specify a checkpoint (--checkpoint).")
 	}
 
-	err := gnn.Train(ctx, *flagDataDir)
+	var err error
+	if *flagEval {
+		// Evaluate on various datasets.
+		_, trainEvalDS, validEvalDS, testEvalDS := must.M4(mag.MakeDatasets(*flagDataDir))
+		_, _, _ = trainEvalDS, validEvalDS, testEvalDS
+		err = mag.Eval(ctx, *flagDataDir, trainEvalDS, validEvalDS, testEvalDS)
+	} else {
+		// Train.
+		err = mag.Train(ctx, *flagDataDir)
+	}
 	if err != nil {
 		fmt.Printf("%+v\n", err)
 	}

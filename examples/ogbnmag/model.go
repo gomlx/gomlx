@@ -1,8 +1,8 @@
-package gnn
+package ogbnmag
 
 import (
 	. "github.com/gomlx/exceptions"
-	mag "github.com/gomlx/gomlx/examples/ogbnmag"
+	"github.com/gomlx/gomlx/examples/ogbnmag/gnn"
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
@@ -13,15 +13,15 @@ import (
 )
 
 var (
-	// ParamMagEmbedDropoutRate adds an extra dropout to learning embeddings.
+	// ParamEmbedDropoutRate adds an extra dropout to learning embeddings.
 	// This may be important because many embeddings are seen only once, so likely in testing many will have never
 	//  been seen, and we want the model learn how to handle lack of embeddings (zero initialized) well.
-	ParamMagEmbedDropoutRate = "mag_embed_dropout_rate"
+	ParamEmbedDropoutRate = "mag_embed_dropout_rate"
 )
 
 // getMagVar retrieves the static (not-learnable) OGBN-MAG variables -- e.g: the frozen papers embedding table.
 func getMagVar(ctx *context.Context, g *Graph, name string) *Node {
-	magVar := ctx.InspectVariable(mag.OgbnMagVariablesScope, name)
+	magVar := ctx.InspectVariable(OgbnMagVariablesScope, name)
 	if magVar == nil {
 		Panicf("Missing OGBN-MAG dataset variables (%q), pls call UploadOgbnMagVariables() on context first.", name)
 	}
@@ -46,10 +46,10 @@ func MagModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 
 	strategy := spec.(*sampler.Strategy)
 	graphStates := FeaturePreprocessing(ctx, strategy, inputs)
-	NodePrediction(ctx, strategy, graphStates)
+	gnn.NodePrediction(ctx, strategy, graphStates)
 	readoutState := graphStates[strategy.Seeds[0].Name]
 	// Last layer outputs the logits for the `NumLabels` classes.
-	readoutState.Value = layers.DenseWithBias(ctx.In("logits"), readoutState.Value, mag.NumLabels)
+	readoutState.Value = layers.DenseWithBias(ctx.In("logits"), readoutState.Value, NumLabels)
 	return []*Node{readoutState.Value, readoutState.Mask}
 }
 
@@ -69,7 +69,7 @@ func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inpu
 	// They shouldn't be initialized with GlorotUniform, but instead with small random uniform values.
 	ctxEmbed := ctx.In("embeddings").Checked(false).
 		WithInitializer(initializers.RandomUniformFn(initializers.NoSeed, -0.05, 0.05))
-	embedDropoutRate := context.GetParamOr(ctx, ParamMagEmbedDropoutRate, 0.0)
+	embedDropoutRate := context.GetParamOr(ctx, ParamEmbedDropoutRate, 0.0)
 
 	// Preprocess papers to its features --> these are in a frozen embedding table in the context as a frozen variable.
 	papersEmbeddings := getMagVar(ctx, g, "PapersEmbeddings")
@@ -86,7 +86,7 @@ func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inpu
 		if rule.NodeTypeName == "institutions" {
 			// Gather values from frozen paperEmbeddings. Mask remains unchanged.
 			embedded := layers.Embedding(ctxEmbed.In("institutions"),
-				graphInputs[name].Value, shapes.F32, mag.NumInstitutions, institutionsEmbedSize)
+				graphInputs[name].Value, shapes.F32, NumInstitutions, institutionsEmbedSize)
 			embedMask := layers.DropoutStatic(ctx, graphInputs[name].Mask, embedDropoutRate)
 			embedded = Where(embedMask, embedded, ZerosLike(embedded)) // Apply mask.
 			graphInputs[name].Value = embedded
@@ -99,7 +99,7 @@ func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inpu
 		if rule.NodeTypeName == "fields_of_study" {
 			// Gather values from frozen paperEmbeddings. Mask remains unchanged.
 			embedded := layers.Embedding(ctxEmbed.In("fields_of_study"),
-				graphInputs[name].Value, shapes.F32, mag.NumFieldsOfStudy, fieldsOfStudyEmbedSize)
+				graphInputs[name].Value, shapes.F32, NumFieldsOfStudy, fieldsOfStudyEmbedSize)
 			embedMask := layers.DropoutStatic(ctx, graphInputs[name].Mask, embedDropoutRate)
 			embedded = Where(embedMask, embedded, ZerosLike(embedded)) // Apply mask.
 			graphInputs[name].Value = embedded
