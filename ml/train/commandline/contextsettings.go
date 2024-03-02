@@ -74,6 +74,8 @@ func ParseContextSettings(ctx *context.Context, settings string) error {
 		case bool:
 			err = json.Unmarshal([]byte(valueStr), &v)
 			value = v
+		case string:
+			value = valueStr
 		default:
 			err = fmt.Errorf("don't know how to parse type %T for setting parameter %q",
 				value, setting)

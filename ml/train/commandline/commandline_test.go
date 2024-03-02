@@ -14,6 +14,7 @@ func createTestContext() *context.Context {
 	ctx.SetParam("x", 11.0)
 	ctx.SetParam("y", 7)
 	ctx.SetParam("z", false)
+	ctx.SetParam("s", "foo")
 	return ctx
 }
 
@@ -21,7 +22,7 @@ func TestParseContextSettings(t *testing.T) {
 	ctx := createTestContext()
 
 	require.NoError(t, ParseContextSettings(ctx,
-		"x=13;a/z=true;/a/b/y=3"))
+		"x=13;a/z=true;/a/b/y=3;s=bar"))
 	x, found := ctx.GetParam("x")
 	assert.True(t, found)
 	assert.Equal(t, 13.0, x.(float64))
@@ -39,6 +40,10 @@ func TestParseContextSettings(t *testing.T) {
 	assert.False(t, z.(bool))
 	z, _ = ctx.In("a").GetParam("z")
 	assert.True(t, z.(bool))
+
+	s, found := ctx.GetParam("s")
+	assert.True(t, found)
+	assert.Equal(t, "bar", s.(string))
 
 	// Parameter "q" is unknown.
 	require.Error(t, ParseContextSettings(ctx, "q=3"))
