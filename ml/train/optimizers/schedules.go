@@ -157,13 +157,14 @@ func (opt *CosineScheduleOptions) Done() {
 	cosineStep := IncrementGlobalStepGraph(ctx.In(Scope).In(CosineScheduleScope), graph, opt.dtype)
 	cosineStep = MinusOne(cosineStep) // Since the count starts at 1.
 
-	// Calculate
-	cycle := Div(cosineStep, Const(graph, shapes.CastAsDType(opt.periodNumSteps, opt.dtype)))
+	// Calculate cosine schedule.
+	cycle := DivScalar(cosineStep, float64(opt.periodNumSteps))
 	cycle = Sub(cycle, Floor(cycle)) // Take only the fractional part: so always in range `[0.0, 1.0)`.
 	cosine := Cos(MulScalar(cycle, math.Pi))
-	lr := MulScalar(OnePlus(cosine), 0.5)                           // (Cos()+1.0)/2.0
-	lr = AddScalar(MulScalar(lr, (lrValue-lrMinValue)), lrMinValue) // Now from lrMin to lrMax
+	lr := MulScalar(OnePlus(cosine), 0.5)                         // (Cos()+1.0)/2.0
+	lr = AddScalar(MulScalar(lr, lrValue-lrMinValue), lrMinValue) // Now from lrMin to lrMax
 
+	// Update learning rate.
 	lrVar := LearningRateVarWithValue(ctx, opt.dtype, lrValue)
 	lrVar.SetValueGraph(lr)
 }
