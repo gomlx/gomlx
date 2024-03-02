@@ -44,6 +44,7 @@
 * Package `commandline`:
   * `AttachProgressBar` now displays a continuously updated table with metrics generated during training.
     This only works in the commandline (not in notebooks).
+  * Added `CreateContextSettingsFlag` and `ParseContextSettings`.
 
 ## 0.8.0 - 2023/11/28
 

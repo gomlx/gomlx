@@ -9,6 +9,7 @@ import (
 	"github.com/gomlx/gomlx/ml/context"
 	mldata "github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/train/commandline"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
@@ -24,58 +25,85 @@ var (
 	manager              = NewManager()
 )
 
-func configGnn(baseDir string) *context.Context {
+func createDefaultContext(manager *Manager) *context.Context {
 	ctx := context.NewContext(manager)
 	ctx.RngStateReset()
-
-	stepsPerEpoch := mag.TrainSplit.Shape().Size()/mag.BatchSize + 1
-	numEpochs := 10 // Taken from TF-GNN OGBN-MAG notebook.
-	numTrainSteps := numEpochs * stepsPerEpoch
-	checkpointPath := mldata.ReplaceTildeInDir(*flagCheckpointSubdir)
-	if checkpointPath != "" && !path.IsAbs(checkpointPath) {
-		checkpointPath = path.Join(baseDir, checkpointPath)
-	}
-
-	fmt.Printf("checkpoint=%s\n", checkpointPath)
-
 	ctx.SetParams(map[string]any{
-		"checkpoint":      checkpointPath,
+		"checkpoint":      "",
 		"num_checkpoints": 3,
+		"train_steps":     0,
+		"plots":           true,
 
-		"train_steps":                       numTrainSteps,
 		optimizers.ParamOptimizer:           "adam",
 		optimizers.ParamLearningRate:        0.001,
-		optimizers.ParamCosineScheduleSteps: numTrainSteps,
-		layers.ParamL2Regularization:        1e-5,
-		layers.ParamDropoutRate:             0.2,
-		gnn.ParamEdgeDropoutRate:            0.0,
-		gnn.ParamNumGraphUpdates:            4,
-		gnn.ParamReadoutHiddenLayers:        2,
-		mag.ParamEmbedDropoutRate:           0.0,
-		gnn.ParamPoolingType:                "mean|sum",
-		gnn.ParamUsePathToRootStates:        false,
-		gnn.ParamGraphUpdateType:            "simultaneous",
-		"plots":                             true,
+		optimizers.ParamCosineScheduleSteps: 0,
+
+		layers.ParamL2Regularization: 1e-5,
+		layers.ParamDropoutRate:      0.2,
+
+		gnn.ParamEdgeDropoutRate:     0.0,
+		gnn.ParamNumGraphUpdates:     4,
+		gnn.ParamReadoutHiddenLayers: 2,
+		gnn.ParamPoolingType:         "mean|sum",
+		gnn.ParamUsePathToRootStates: false,
+		gnn.ParamGraphUpdateType:     "simultaneous",
+
+		mag.ParamEmbedDropoutRate:     0.0,
+		mag.ParamSplitEmbedTablesSize: 1,
 	})
 	return ctx
 }
+
+func SetTrainSteps(ctx *context.Context) {
+	numTrainSteps := context.GetParamOr(ctx, "train_steps", 0)
+	if numTrainSteps <= 0 {
+		stepsPerEpoch := mag.TrainSplit.Shape().Size()/mag.BatchSize + 1
+		numEpochs := 10 // Taken from TF-GNN OGBN-MAG notebook.
+		numTrainSteps = numEpochs * stepsPerEpoch
+		ctx.SetParam("train_steps", numTrainSteps)
+	}
+	cosineScheduleSteps := context.GetParamOr(ctx, optimizers.ParamCosineScheduleSteps, 0)
+	if cosineScheduleSteps == 0 {
+		ctx.SetParam(optimizers.ParamCosineScheduleSteps, numTrainSteps)
+	}
+}
+
 func main() {
+	// Init GoMLX manager and default context.
+	manager := NewManager()
+	ctx := createDefaultContext(manager)
+
+	// Flags with context settings.
+	settings := commandline.CreateContextSettingsFlag(ctx, "")
 	flag.Parse()
+	must.M(commandline.ParseContextSettings(ctx, *settings))
+
+	// Set checkpoint accordingly.
 	*flagDataDir = mldata.ReplaceTildeInDir(*flagDataDir)
-
-	fmt.Printf("Loading data ... ")
-	start := time.Now()
-	must.M(mag.Download(*flagDataDir))
-	fmt.Printf("elapsed: %s\n", time.Since(start))
-
-	ctx := configGnn(*flagDataDir)
-	checkpointPath := context.GetParamOr(ctx, "checkpoint", "")
+	checkpointPath := mldata.ReplaceTildeInDir(*flagCheckpointSubdir)
+	if checkpointPath != "" && !path.IsAbs(checkpointPath) {
+		checkpointPath = path.Join(*flagDataDir, checkpointPath)
+	}
+	if checkpointPath != "" {
+		ctx.SetParam("checkpoint", checkpointPath)
+	} else {
+		checkpointPath = context.GetParamOr(ctx, "checkpoint", "")
+	}
 	if checkpointPath != "" {
 		fmt.Printf("Model checkpoints in %s\n", checkpointPath)
 	} else if *flagEval {
 		klog.Fatal("To run eval (--eval) you need to specify a checkpoint (--checkpoint).")
 	}
 
+	// Load data from OGBN-MAG.
+	fmt.Printf("Loading data ... ")
+	start := time.Now()
+	must.M(mag.Download(*flagDataDir))
+	fmt.Printf("elapsed: %s\n", time.Since(start))
+
+	SetTrainSteps(ctx) // Can only be set after mag data is loaded.
+
+	// Run train / eval.
 	var err error
 	if *flagEval {
 		// Evaluate on various datasets.
