@@ -808,7 +808,7 @@ func (h *Handler) LoadVariable(ctx *context.Context, v *context.Variable) (value
 		return
 	}
 	if !value.Shape().Eq(v.Shape()) {
-		Panicf("shape requested for variable %s is different than value shape %s loaded from %s",
+		Panicf("shape requested for variable %s is different from value shape %s loaded from %s",
 			v.Shape(), value.Shape(), h)
 	}
 	// "Consume" value, meaning remove it from Handler.

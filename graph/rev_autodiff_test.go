@@ -338,7 +338,7 @@ func testGradients(t *testing.T, name string, testFn gradTestFunc, wantForGrad [
 	for ii, output := range gradients {
 		fmt.Printf("\tGradient #%d: %s\n", ii, output.Local().GoStr())
 	}
-	require.Equalf(t, len(wantForGrad), len(gradients), "%s: number of wanted results different than number of gradients", name)
+	require.Equalf(t, len(wantForGrad), len(gradients), "%s: number of wanted results different from number of gradients", name)
 	const delta = 1e-4
 	for ii, output := range gradients {
 		require.Truef(t, slices.SlicesInDelta(output.Value(), wantForGrad[ii], delta), "%s: gradient #%d doesn't match wanted value %#v",
@@ -370,7 +370,7 @@ func testGradientsExact(t *testing.T, name string, testFn gradTestFunc, wantForG
 	for ii, output := range gradients {
 		fmt.Printf("\tGradient #%d: %s\n", ii, output.Local().GoStr())
 	}
-	require.Equalf(t, len(wantForGrad), len(gradients), "%s: number of wanted results different than number of gradients", name)
+	require.Equalf(t, len(wantForGrad), len(gradients), "%s: number of wanted results different from number of gradients", name)
 	for ii, output := range gradients {
 		require.Equalf(t, output.Value(), wantForGrad[ii], "%s: gradient #%d doesn't match wanted value %#v",
 			name, ii, wantForGrad[ii])

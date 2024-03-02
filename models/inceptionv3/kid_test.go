@@ -75,5 +75,5 @@ func TestKidMetric(t *testing.T) {
 		return kidBuilder.BuildGraph(ctx, []*Node{images[0]}, []*Node{images[1]})
 	})
 	kid := kidExec.Call(imagesBatch, noisyBatch)[0].Local().Value().(float32)
-	require.InDelta(t, -1.5861, kid, 0.001, "KID value different than expected for batch.")
+	require.InDelta(t, -1.5861, kid, 0.001, "KID value different from expected for batch.")
 }
