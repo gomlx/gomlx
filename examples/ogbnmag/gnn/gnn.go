@@ -15,10 +15,10 @@ import (
 )
 
 var (
-	// ParamNumMessages is the context parameter that defines the number of messages to
+	// ParamNumGraphUpdates is the context parameter that defines the number of messages to
 	// send in the GNN tree of nodes.
 	// The default is 2.
-	ParamNumMessages = "gnn_num_messages"
+	ParamNumGraphUpdates = "gnn_num_messages"
 
 	// ParamReadoutHiddenLayers context parameter that defines the number or hidden layers
 	// connected to the readout of a GNN model.
@@ -69,9 +69,9 @@ var (
 
 	// ParamGraphUpdateType context hyperparameter can take values `tree` or `simultaneous`.
 	// Graph updates in `tree` fashion will update from leaf all the way to the seeds (the roots of the trees),
-	// for each message configured with [ParamNumMessages].
+	// for each message configured with [ParamNumGraphUpdates].
 	// Graph updates in `simultaneous` fashion will update all states from it's dependents "simultaneously". In that
-	// sense it will require [ParamNumMessages] to be at least equal to the depth of the sampling tree for the
+	// sense it will require [ParamNumGraphUpdates] to be at least equal to the depth of the sampling tree for the
 	// influence of the leaf nodes to reach to the root nodes.
 	// The default is `tree`.
 	ParamGraphUpdateType = "gnn_graph_update_type"
@@ -80,7 +80,7 @@ var (
 // NodePrediction performs graph convolutions from leaf nodes to the seeds (the roots of the trees), this
 // is called a "graph update".
 //
-// This process is repeated [ParamNumMessages] times (parameter set in `ctx` with key [ParamNumMessages]).
+// This process is repeated [ParamNumGraphUpdates] times (parameter set in `ctx` with key [ParamNumGraphUpdates]).
 // After that the state of the seed nodes go through [ParamReadoutHiddenLayers] hidden layers,
 // and these seed states (updated in `graphStates`) can be read out and converted to whatever is the output to match the
 // task.
@@ -106,7 +106,7 @@ var (
 //		return []*Node{logits}
 //	}
 func NodePrediction(ctx *context.Context, strategy *sampler.Strategy, graphStates map[string]*sampler.ValueMask[*Node]) {
-	numMessages := context.GetParamOr(ctx, ParamNumMessages, 2)
+	numMessages := context.GetParamOr(ctx, ParamNumGraphUpdates, 2)
 	graphUpdateType := context.GetParamOr(ctx, ParamGraphUpdateType, "tree")
 	for ii := range numMessages {
 		switch graphUpdateType {

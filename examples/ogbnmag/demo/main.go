@@ -48,7 +48,7 @@ func configGnn(baseDir string) *context.Context {
 		layers.ParamL2Regularization:        1e-5,
 		layers.ParamDropoutRate:             0.2,
 		gnn.ParamEdgeDropoutRate:            0.0,
-		gnn.ParamNumMessages:                4,
+		gnn.ParamNumGraphUpdates:            4,
 		gnn.ParamReadoutHiddenLayers:        2,
 		mag.ParamEmbedDropoutRate:           0.0,
 		gnn.ParamPoolingType:                "mean|sum",
