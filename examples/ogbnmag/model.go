@@ -17,6 +17,10 @@ var (
 	// This may be important because many embeddings are seen only once, so likely in testing many will have never
 	//  been seen, and we want the model learn how to handle lack of embeddings (zero initialized) well.
 	ParamEmbedDropoutRate = "mag_embed_dropout_rate"
+
+	// ParamSplitEmbedTablesSize will make embed tables share entries across these many entries.
+	// Default is 1, which means no splitting.
+	ParamSplitEmbedTablesSize = "mag_split_embed_tables"
 )
 
 // getMagVar retrieves the static (not-learnable) OGBN-MAG variables -- e.g: the frozen papers embedding table.
@@ -28,7 +32,7 @@ func getMagVar(ctx *context.Context, g *Graph, name string) *Node {
 	return magVar.ValueGraph(g)
 }
 
-// MagModelGraph builds a OGBN-MAG GNN model that sends [ParamNumMessages] along its sampling
+// MagModelGraph builds a OGBN-MAG GNN model that sends [ParamNumGraphUpdates] along its sampling
 // strategy, and then adding a final layer on top of the seeds.
 //
 // It returns 3 tensors:
@@ -82,11 +86,13 @@ func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inpu
 
 	// Preprocess institutions to its embeddings.
 	institutionsEmbedSize := context.GetParamOr(ctx, "InstitutionsEmbedSize", 16)
+	splitEmbedTables := context.GetParamOr(ctx, ParamSplitEmbedTablesSize, 1)
 	for name, rule := range strategy.Rules {
 		if rule.NodeTypeName == "institutions" {
 			// Gather values from frozen paperEmbeddings. Mask remains unchanged.
-			embedded := layers.Embedding(ctxEmbed.In("institutions"),
-				graphInputs[name].Value, shapes.F32, NumInstitutions, institutionsEmbedSize)
+			indices := DivScalar(graphInputs[name].Value, float64(splitEmbedTables))
+			embedded := layers.Embedding(ctxEmbed.In("institutions"), indices,
+				shapes.F32, (NumInstitutions+splitEmbedTables-1)/splitEmbedTables, institutionsEmbedSize)
 			embedMask := layers.DropoutStatic(ctx, graphInputs[name].Mask, embedDropoutRate)
 			embedded = Where(embedMask, embedded, ZerosLike(embedded)) // Apply mask.
 			graphInputs[name].Value = embedded
@@ -98,8 +104,9 @@ func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inpu
 	for name, rule := range strategy.Rules {
 		if rule.NodeTypeName == "fields_of_study" {
 			// Gather values from frozen paperEmbeddings. Mask remains unchanged.
+			indices := DivScalar(graphInputs[name].Value, float64(splitEmbedTables))
 			embedded := layers.Embedding(ctxEmbed.In("fields_of_study"),
-				graphInputs[name].Value, shapes.F32, NumFieldsOfStudy, fieldsOfStudyEmbedSize)
+				indices, shapes.F32, (NumFieldsOfStudy+splitEmbedTables-1)/splitEmbedTables, fieldsOfStudyEmbedSize)
 			embedMask := layers.DropoutStatic(ctx, graphInputs[name].Mask, embedDropoutRate)
 			embedded = Where(embedMask, embedded, ZerosLike(embedded)) // Apply mask.
 			graphInputs[name].Value = embedded

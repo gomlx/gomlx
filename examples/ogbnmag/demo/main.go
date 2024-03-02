@@ -18,6 +18,7 @@ import (
 
 var (
 	flagEval             = flag.Bool("eval", false, "Set to true to run evaluation instead of training.")
+	flagSkipTrainEval    = flag.Bool("skip_train_eval", false, "Set to true to skip evaluation on training data, which takes longer.")
 	flagDataDir          = flag.String("data", "~/work/ogbnmag", "Directory to cache downloaded and generated dataset files.")
 	flagCheckpointSubdir = flag.String("checkpoint", "", "Checkpoint subdirectory under --data directory. If empty does not use checkpoints.")
 	manager              = NewManager()
@@ -79,8 +80,11 @@ func main() {
 	if *flagEval {
 		// Evaluate on various datasets.
 		_, trainEvalDS, validEvalDS, testEvalDS := must.M4(mag.MakeDatasets(*flagDataDir))
-		_, _, _ = trainEvalDS, validEvalDS, testEvalDS
-		err = mag.Eval(ctx, *flagDataDir, trainEvalDS, validEvalDS, testEvalDS)
+		if *flagSkipTrainEval {
+			err = mag.Eval(ctx, *flagDataDir, validEvalDS, testEvalDS)
+		} else {
+			err = mag.Eval(ctx, *flagDataDir, trainEvalDS, validEvalDS, testEvalDS)
+		}
 	} else {
 		// Train.
 		err = mag.Train(ctx, *flagDataDir)
