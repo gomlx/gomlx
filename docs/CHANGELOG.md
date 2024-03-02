@@ -41,6 +41,9 @@
   * Added `Map`: a map function to a dataset that runs in host (as opposed to in accelerator/XLA).
   * Added `Freeing`: a dataset wrapper that frees inputs and labels in between each call to `Yield`: to control GPU
     memory usage. It replaces `loop.FreeInput()`
+* Package `commandline`:
+  * `AttachProgressBar` now displays a continuously updated table with metrics generated during training.
+    This only works in the commandline (not in notebooks).
 
 ## 0.8.0 - 2023/11/28
 

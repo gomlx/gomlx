@@ -20,10 +20,13 @@ package commandline
 
 import (
 	"fmt"
+	"github.com/charmbracelet/lipgloss"
+	lgtable "github.com/charmbracelet/lipgloss/table"
 	"github.com/gomlx/gomlx/examples/notebook"
 	"github.com/gomlx/gomlx/ml/train"
 	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/muesli/termenv"
 	"github.com/schollz/progressbar/v3"
 	"os"
 	"strings"
@@ -37,8 +40,13 @@ type progressBar struct {
 	bar              *progressbar.ProgressBar
 	suffix           string
 	inNotebook       bool
+	totalAmount      int
 
-	totalAmount int
+	// lipgloss based rich display for the command-line.
+	termenv       *termenv.Output
+	statsStyle    lipgloss.Style
+	statsTable    *lgtable.Table
+	isFirstOutput bool
 }
 
 // Write implements io.Writer, and appends the current suffix with metrics to each
@@ -93,26 +101,42 @@ func (pBar *progressBar) onStep(loop *train.Loop, metrics []tensor.Tensor) error
 		return nil
 	}
 
-	// Set suffix -- it will be displayed along with the progressbar.
 	trainMetrics := loop.Trainer.TrainMetrics()
-	parts := make([]string, 0, len(trainMetrics)+1)
-	parts = append(parts, fmt.Sprintf(" [step=%d]", loop.LoopStep))
-	for metricIdx, metricObj := range trainMetrics {
-		parts = append(parts, fmt.Sprintf(" [%s=%s]", metricObj.ShortName(), metricObj.PrettyPrint(metrics[metricIdx])))
-	}
 	if pBar.inNotebook {
-		// Erase to end-of-line escape sequence not supported:
+		// For notebooks set a suffix that will be written along with the progressbar in [progressBar.Write].
+		parts := make([]string, 0, len(trainMetrics)+1)
+		parts = append(parts, fmt.Sprintf(" [step=%d]", loop.LoopStep))
+		for metricIdx, metricObj := range trainMetrics {
+			parts = append(parts, fmt.Sprintf(" [%s=%s]", metricObj.ShortName(), metricObj.PrettyPrint(metrics[metricIdx])))
+		}
+		// Erase to end-of-line escape sequence ("\033[J") not supported in notebook:
 		parts = append(parts, "        ")
+		pBar.suffix = strings.Join(parts, "")
+
 	} else {
-		// Erase to end-of-line:
-		parts = append(parts, "\033[J")
+		// For command-line, we clear the previous lines that will be overwritten.
+		if !pBar.isFirstOutput {
+			pBar.termenv.ClearLines(len(trainMetrics) + 1 + 2 + 1)
+		}
+		pBar.isFirstOutput = false
 	}
-	pBar.suffix = strings.Join(parts, "")
 
 	// Add amount run since last time.
-	pBar.bar.Add(amount)
+	_ = pBar.bar.Add(amount) // Triggers print, see [pBar.Write] method.
 	pBar.totalAmount += amount
 	pBar.lastStepReported = loop.LoopStep + 1
+
+	// For non-notebook, report the metrics on the following lines -- already reserved with the `ClearLines` call above.
+	if !pBar.inNotebook {
+		fmt.Printf("\n") // End current progressbar line.
+
+		pBar.statsTable.Data(lgtable.NewStringData())
+		pBar.statsTable.Row("Global Step", fmt.Sprintf("%d of %d", loop.LoopStep, loop.EndStep))
+		for metricIdx, metricObj := range trainMetrics {
+			pBar.statsTable.Row(metricObj.Name(), metricObj.PrettyPrint(metrics[metricIdx]))
+		}
+		fmt.Println(pBar.statsStyle.Render(pBar.statsTable.String()))
+	}
 	return nil
 }
 
@@ -123,13 +147,32 @@ func (pBar *progressBar) onEnd(loop *train.Loop, metrics []tensor.Tensor) error 
 
 const ProgressBarName = "gomlx.ml.train.commandline.progressBar"
 
+var (
+	normalStyle       = lipgloss.NewStyle().Padding(0, 1)
+	rightAlignedStyle = lipgloss.NewStyle().Align(lipgloss.Right).Padding(0, 1)
+)
+
 // AttachProgressBar creates a commandline progress bar and attaches it to the Loop, so that
 // everytime Loop is run it will display a progress bar with progression and metrics.
 //
 // The associated data will be attached to the train.Loop, so nothing is returned.
 func AttachProgressBar(loop *train.Loop) {
-	pBar := &progressBar{}
-	pBar.inNotebook = notebook.IsPresent()
+	pBar := &progressBar{
+		inNotebook: notebook.IsPresent(),
+	}
+	if !pBar.inNotebook {
+		pBar.isFirstOutput = true
+		pBar.termenv = termenv.NewOutput(os.Stdout)
+		pBar.statsStyle = lipgloss.NewStyle().PaddingLeft(8)
+		pBar.statsTable = lgtable.New().
+			Border(lipgloss.RoundedBorder()).
+			StyleFunc(func(row, col int) lipgloss.Style {
+				if col == 0 {
+					return rightAlignedStyle
+				}
+				return normalStyle
+			})
+	}
 	loop.OnStart(ProgressBarName, 0, pBar.onStart)
 	// Run at least 1000 during loop or at least every 3 seconds.
 	train.NTimesDuringLoop(loop, 1000, ProgressBarName, 0, pBar.onStep)
