@@ -78,11 +78,11 @@ func MagStrategy(magSampler *sampler.Sampler, batchSize int, seedIdsCandidates t
 		citationsAuthors.KernelScopeName = seedsAuthors.KernelScopeName
 	}
 
-	// Co-authored papers
-	coauthoredPapers := seedsAuthors.FromEdges("coauthoredPapers", "writes", 8)
-	coauthoredFromCitations := citationsAuthors.FromEdges("coauthoredFromCitations", "writes", 8)
+	// Other papers by authors.
+	papersByAuthors := seedsAuthors.FromEdges("papersByAuthors", "writes", 8)
+	papersByCitationAuthors := citationsAuthors.FromEdges("papersByCitationAuthors", "writes", 8)
 	if ReuseShareableKernels {
-		coauthoredFromCitations.KernelScopeName = coauthoredPapers.KernelScopeName
+		papersByCitationAuthors.KernelScopeName = papersByAuthors.KernelScopeName
 	}
 
 	// Affiliations
@@ -94,13 +94,13 @@ func MagStrategy(magSampler *sampler.Sampler, batchSize int, seedIdsCandidates t
 
 	// Topics
 	seedsTopics := seeds.FromEdges("seedsTopics", "hasTopic", 8)
-	coauthoredTopics := coauthoredPapers.FromEdges("coauthoredTopics", "hasTopic", 8)
+	papersByAuthorsTopics := papersByAuthors.FromEdges("papersByAuthorsTopics", "hasTopic", 8)
 	citationsTopics := citations.FromEdges("citationsTopics", "hasTopic", 8)
-	coauthoredFromCitationsTopics := coauthoredFromCitations.FromEdges("coauthoredFromCitationsTopics", "hasTopic", 8)
+	papersByCitationAuthorsTopics := papersByCitationAuthors.FromEdges("papersByCitationAuthorsTopics", "hasTopic", 8)
 	if ReuseShareableKernels {
-		coauthoredTopics.KernelScopeName = seedsTopics.KernelScopeName
+		papersByAuthorsTopics.KernelScopeName = seedsTopics.KernelScopeName
 		citationsTopics.KernelScopeName = seedsTopics.KernelScopeName
-		coauthoredFromCitationsTopics.KernelScopeName = seedsTopics.KernelScopeName
+		papersByCitationAuthorsTopics.KernelScopeName = seedsTopics.KernelScopeName
 	}
 	return strategy
 }
