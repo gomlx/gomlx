@@ -7,6 +7,7 @@ import (
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/constraints"
 	"path"
 	"testing"
 )
@@ -154,5 +155,109 @@ func TestDataset(t *testing.T) {
 	for _ = range 100 { // Sample 100 using parallel datasets, and checks that it works ok.
 		spec, inputs, labels, err := parallelDS.Yield()
 		_ = checkInputsFn(t, spec, inputs, labels, err)
+	}
+}
+
+// TestSamplingRandomness checks that the distribution of seeds and edge sampling is homogeneous.
+func TestSamplingRandomness(t *testing.T) {
+	// We create a new sampler+strategy for this.
+	s := New()
+	numPapers := 3
+	numAuthors := numPapers*2 + 1 // One extra author that never wrote any paper.
+	s.AddNodeType("papers", numPapers)
+	s.AddNodeType("authors", numAuthors)
+	var authorWritesPapers [][]int32
+	for paper := range int32(numPapers) {
+		for author := paper; author < (paper+1)*2; author++ {
+			authorWritesPapers = append(authorWritesPapers, []int32{author, paper})
+		}
+	}
+	authorWritesPapersT := tensor.FromValue(authorWritesPapers)
+	require.NoError(t, authorWritesPapersT.Shape().Check(shapes.Int32, 2+3+4, 2))
+	s.AddEdgeType("written_by", "authors", "papers", authorWritesPapersT, true)
+
+	strategy := s.NewStrategy()
+	{
+		seeds := strategy.NodesFromSet("seeds", "papers", 1, []int32{1, 2})
+		_ = seeds.FromEdges("authors", "written_by", 2)
+		_ = seeds.FromEdges("authors2", "written_by", 2)
+	}
+
+	// Keep counts.
+	papersCounts := make([]int, numPapers)
+	authorsPerPapersCounts := make([][]int, numPapers)
+	for ii := range authorsPerPapersCounts {
+		authorsPerPapersCounts[ii] = make([]int, numAuthors)
+	}
+
+	// Sample
+	numSamples := 1000
+	ds := strategy.NewDataset("infinite").Infinite().Shuffle()
+	parallelDS := mldata.Parallel(ds)
+	for _ = range numSamples {
+		_, inputs, _, err := parallelDS.Yield()
+		require.NoError(t, err)
+		graphSample := MapInputs[tensor.Tensor](strategy, inputs)
+
+		require.NoError(t, graphSample["seeds"].Value.Shape().CheckDims(1))
+		sampledPaper := graphSample["seeds"].Value.Local().FlatCopy().([]int32)[0]
+		papersCounts[sampledPaper]++
+
+		require.NoError(t, graphSample["authors"].Value.Shape().CheckDims(1, 2))
+		require.NoError(t, graphSample["authors"].Mask.Shape().CheckDims(1, 2))
+		authors := graphSample["authors"].Value.Local().FlatCopy().([]int32)
+		authorsMask := graphSample["authors"].Mask.Local().FlatCopy().([]bool)
+		for ii, author := range authors {
+			require.True(t, authorsMask[ii])
+			authorsPerPapersCounts[sampledPaper][author]++
+		}
+	}
+
+	fmt.Printf("papersCounts=%v\n", papersCounts)
+	assert.Equal(t, numSamples, papersCounts[1]+papersCounts[2])
+	assert.Less(t, diff(papersCounts[1], papersCounts[2]), 1)
+	fmt.Printf("authorsPerPapersCounts=%v\n", authorsPerPapersCounts)
+	for _, paper := range []int{1, 2} {
+		authorsCounts := authorsPerPapersCounts[paper]
+		for author := paper + 1; author < (paper+1)*2; author++ {
+			// author loop starts one after the first author for the paper, so we can compare
+			// the count of the author with the previous one. They should be similar.
+			assert.Less(t, diff(authorsCounts[author], authorsCounts[author-1]), 50)
+		}
+	}
+}
+
+func diff[T interface {
+	constraints.Integer | constraints.Float
+}](a, b T) T {
+	r := a - b
+	if r < 0 {
+		r = -r
+	}
+	return r
+}
+
+func TestRandKOfN(t *testing.T) {
+	names := []string{"randKOfNLinear", "randKOfNReservoir"}
+	const numSamples = 5
+	const n = 20
+	const numRepeats = 5000
+	sample := make([]int32, numSamples)
+	for ii, fn := range []func([]int32, int){randKOfNLinear, randKOfNReservoir} {
+		name := names[ii]
+		counts := make([]int, n)
+		for _ = range numRepeats {
+			fn(sample, n)
+			for ii, x := range sample {
+				for jj := 0; jj < ii; jj++ {
+					require.NotEqualf(t, sample[jj], x, "Repeated value %d for %s", x, name)
+				}
+				counts[x]++
+			}
+		}
+		fmt.Printf("%s: counts=%v\n", name, counts)
+		for _, count := range counts {
+			require.Lessf(t, diff(count, numRepeats*numSamples/n), 200, "Unbalanced sampling for %s: %v", name, counts)
+		}
 	}
 }

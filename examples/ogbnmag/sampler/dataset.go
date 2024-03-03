@@ -286,40 +286,45 @@ func sampleEdges(rule *Rule, srcNodes, srcMask *tensor.Local) (nodes, mask *tens
 func randKOfN(values []int32, n int) {
 	k := len(values)
 	if k*k < n {
-		// Random sampling, checking for previous choices: this is O(k^2), but since usually we are working
-		// with small values of K, it's faster than creating a map.
-		//
-		// FutureWork: for larger values of K, create a map/set.
-		for ii := range values {
-			// Take a unique number.
-			var x int32
-		takeANumber:
-			for {
-				x = int32(rand.IntN(n))
-				for jj := range ii {
-					if values[jj] == x {
-						continue takeANumber
-					}
-				}
-				break
-			}
-			values[ii] = x
-		}
-
+		randKOfNLinear(values, n)
 	} else {
-		// Reservoir sampling: go over all n values and check whether it replaces a previous value.
-		for ii := range k {
-			values[ii] = int32(ii)
+		randKOfNReservoir(values, n)
+	}
+}
+
+// randKOfNLinear is the linear implementation of rankKOfN that works well when k is small.
+func randKOfNLinear(values []int32, n int) {
+	// Random sampling, checking for previous choices: this is O(k^2), but since usually we are working
+	// with small values of K, it's faster than creating a hash.
+	//
+	// FutureWork: for larger values of K, create some form of hash.
+	for ii := range values {
+		// Take a unique number.
+		var x int32
+	takeANumber:
+		for {
+			x = int32(rand.IntN(n))
+			for jj := range ii {
+				if values[jj] == x {
+					continue takeANumber
+				}
+			}
+			break
 		}
-		for ii := k; ii < n; ii++ {
-			if ii < k {
-				// Start by populating
-				continue
-			}
-			pos := rand.IntN(int(ii))
-			if pos < k {
-				values[pos] = int32(ii)
-			}
+		values[ii] = x
+	}
+}
+
+func randKOfNReservoir(values []int32, n int) {
+	k := len(values)
+	// Reservoir sampling: go over all n values and check whether it replaces a previous value.
+	for ii := range k {
+		values[ii] = int32(ii)
+	}
+	for ii := k; ii < n; ii++ {
+		pos := rand.IntN(ii + 1)
+		if pos < k {
+			values[pos] = int32(ii)
 		}
 	}
 }
