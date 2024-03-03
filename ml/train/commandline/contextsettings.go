@@ -27,6 +27,9 @@ import (
 func ParseContextSettings(ctx *context.Context, settings string) error {
 	settingsList := strings.Split(settings, ";")
 	for _, setting := range settingsList {
+		if setting == "" {
+			continue
+		}
 		parts := strings.Split(setting, "=")
 		if len(parts) != 2 {
 			return errors.Errorf("can't parse settings %q: each setting requires the format \"<param>=<value>\", got %q",
