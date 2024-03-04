@@ -117,6 +117,14 @@ func (ds *Dataset) Reset() {
 // The returned spec is a pointer to the Strategy, and can be used to build a map of the names to the sampled
 // tensors.
 func (ds *Dataset) Yield() (spec any, inputs, labels []tensor.Tensor, err error) {
+	ds.muSample.Lock()
+	var unlocked bool
+	defer func() {
+		if !unlocked {
+			ds.muSample.Unlock()
+		}
+	}()
+
 	spec = ds.strategy
 	if ds.exhausted {
 		err = io.EOF
@@ -124,7 +132,6 @@ func (ds *Dataset) Yield() (spec any, inputs, labels []tensor.Tensor, err error)
 	}
 
 	inputs = make([]tensor.Tensor, 0, 2*len(ds.strategy.Rules))
-	ds.muSample.Lock()
 	ds.frozen = true
 	if ds.startOfEpoch {
 		ds.startEpoch()
@@ -137,9 +144,10 @@ func (ds *Dataset) Yield() (spec any, inputs, labels []tensor.Tensor, err error)
 		seeds, mask := ds.sampleSeeds(ii, seedsRule)
 		seedsTensors = append(seedsTensors, seeds, mask)
 	}
-	ds.muSample.Unlock()
 
 	// Sampling edges: doesn't require lock.
+	ds.muSample.Unlock()
+	unlocked = true
 	for seedIdx, seedsRule := range ds.strategy.Seeds {
 		seeds, mask := seedsTensors[2*seedIdx], seedsTensors[2*seedIdx+1]
 		inputs = recursivelySampleEdges(seedsRule, seeds, mask, inputs)
