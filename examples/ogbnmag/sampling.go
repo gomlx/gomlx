@@ -72,18 +72,18 @@ func MagStrategy(magSampler *sampler.Sampler, batchSize int, seedIdsCandidates t
 	citations := seeds.FromEdges("citations", "cites", 8)
 
 	// Authors
-	const authorsCount = 16
+	const authorsCount = 8
 	seedsAuthors := seeds.FromEdges("seedsAuthors", "writtenBy", authorsCount)
 	citationsAuthors := citations.FromEdges("citationsAuthors", "writtenBy", authorsCount)
 	if ReuseShareableKernels {
 		citationsAuthors.KernelScopeName = seedsAuthors.KernelScopeName
 	}
 
-	// Co-authored papers
-	coauthoredPapers := seedsAuthors.FromEdges("coauthoredPapers", "writes", 8)
-	coauthoredFromCitations := citationsAuthors.FromEdges("coauthoredFromCitations", "writes", 8)
+	// Other papers by authors.
+	papersByAuthors := seedsAuthors.FromEdges("papersByAuthors", "writes", 8)
+	papersByCitationAuthors := citationsAuthors.FromEdges("papersByCitationAuthors", "writes", 8)
 	if ReuseShareableKernels {
-		coauthoredFromCitations.KernelScopeName = coauthoredPapers.KernelScopeName
+		papersByCitationAuthors.KernelScopeName = papersByAuthors.KernelScopeName
 	}
 
 	// Affiliations
@@ -96,13 +96,13 @@ func MagStrategy(magSampler *sampler.Sampler, batchSize int, seedIdsCandidates t
 	// Topics
 	const topicsCount = 8
 	seedsTopics := seeds.FromEdges("seedsTopics", "hasTopic", topicsCount)
-	coauthoredTopics := coauthoredPapers.FromEdges("coauthoredTopics", "hasTopic", topicsCount)
+	papersByAuthorsTopics := papersByAuthors.FromEdges("papersByAuthorsTopics", "hasTopic", topicsCount)
 	citationsTopics := citations.FromEdges("citationsTopics", "hasTopic", topicsCount)
-	coauthoredFromCitationsTopics := coauthoredFromCitations.FromEdges("coauthoredFromCitationsTopics", "hasTopic", topicsCount)
+	papersByCitationAuthorsTopics := papersByCitationAuthors.FromEdges("papersByCitationAuthorsTopics", "hasTopic", topicsCount)
 	if ReuseShareableKernels {
-		coauthoredTopics.KernelScopeName = seedsTopics.KernelScopeName
+		papersByAuthorsTopics.KernelScopeName = seedsTopics.KernelScopeName
 		citationsTopics.KernelScopeName = seedsTopics.KernelScopeName
-		coauthoredFromCitationsTopics.KernelScopeName = seedsTopics.KernelScopeName
+		papersByCitationAuthorsTopics.KernelScopeName = seedsTopics.KernelScopeName
 	}
 	return strategy
 }
