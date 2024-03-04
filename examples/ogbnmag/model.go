@@ -60,8 +60,6 @@ func MagModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 // FeaturePreprocessing converts the `spec` and `inputs` given by the dataset into a map of node type name to
 // its initial embeddings.
 //
-// TODO: Add dropout of embeddings. Both Institutions and FieldsOfStudy sometimes are associated to only one
-//
 //	author/paper, so it is reasonable to expect that during validation/testing it will see many embeddings
 //	zero initialized.
 func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inputs []*Node) (graphInputs map[string]*sampler.ValueMask[*Node]) {

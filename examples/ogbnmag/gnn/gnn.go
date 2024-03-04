@@ -239,7 +239,6 @@ func convolveNodeSet(ctx *context.Context, value, mask *Node) *Node {
 	messageDim := context.GetParamOr(ctx, ParamMessageDim, 128)
 	messages := layers.DenseWithBias(ctx.In("message"), value, messageDim)
 	messages = layers.ActivationFromContext(ctx, messages)
-	messages = layers.DropoutFromContext(ctx, messages)
 	edgeDropOutRate := context.GetParamOr(ctx, ParamEdgeDropoutRate, 0.0)
 	if edgeDropOutRate > 0 {
 		// We apply edge dropout to the mask: values disabled here will mask the whole edge.
@@ -291,10 +290,13 @@ func updateState(ctx *context.Context, prevState, input, mask *Node) *Node {
 			updateType, ParamUpdateStateType)
 	}
 
+	// Inputs: both previous state and pooled messages passes through a dropout first.
+	input = layers.DropoutFromContext(ctx, input)
 	stateDim := context.GetParamOr(ctx, ParamStateDim, 128)
 	state := layers.DenseWithBias(ctx.In("message"), input, stateDim)
 	state = layers.ActivationFromContext(ctx, state)
 	state = layers.DropoutFromContext(ctx, state)
+
 	if updateType == "residual" && prevState.Shape().Eq(state.Shape()) {
 		state = Add(state, prevState)
 	}
