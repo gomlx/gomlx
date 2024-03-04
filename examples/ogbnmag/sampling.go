@@ -72,8 +72,9 @@ func MagStrategy(magSampler *sampler.Sampler, batchSize int, seedIdsCandidates t
 	citations := seeds.FromEdges("citations", "cites", 8)
 
 	// Authors
-	seedsAuthors := seeds.FromEdges("seedsAuthors", "writtenBy", 8)
-	citationsAuthors := citations.FromEdges("citationsAuthors", "writtenBy", 8)
+	const authorsCount = 16
+	seedsAuthors := seeds.FromEdges("seedsAuthors", "writtenBy", authorsCount)
+	citationsAuthors := citations.FromEdges("citationsAuthors", "writtenBy", authorsCount)
 	if ReuseShareableKernels {
 		citationsAuthors.KernelScopeName = seedsAuthors.KernelScopeName
 	}
@@ -93,10 +94,11 @@ func MagStrategy(magSampler *sampler.Sampler, batchSize int, seedIdsCandidates t
 	}
 
 	// Topics
-	seedsTopics := seeds.FromEdges("seedsTopics", "hasTopic", 8)
-	coauthoredTopics := coauthoredPapers.FromEdges("coauthoredTopics", "hasTopic", 8)
-	citationsTopics := citations.FromEdges("citationsTopics", "hasTopic", 8)
-	coauthoredFromCitationsTopics := coauthoredFromCitations.FromEdges("coauthoredFromCitationsTopics", "hasTopic", 8)
+	const topicsCount = 8
+	seedsTopics := seeds.FromEdges("seedsTopics", "hasTopic", topicsCount)
+	coauthoredTopics := coauthoredPapers.FromEdges("coauthoredTopics", "hasTopic", topicsCount)
+	citationsTopics := citations.FromEdges("citationsTopics", "hasTopic", topicsCount)
+	coauthoredFromCitationsTopics := coauthoredFromCitations.FromEdges("coauthoredFromCitationsTopics", "hasTopic", topicsCount)
 	if ReuseShareableKernels {
 		coauthoredTopics.KernelScopeName = seedsTopics.KernelScopeName
 		citationsTopics.KernelScopeName = seedsTopics.KernelScopeName
