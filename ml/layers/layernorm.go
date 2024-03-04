@@ -37,7 +37,7 @@ type LayerNormBuilder struct {
 }
 
 var (
-	// ParamLayerNormEpsilon is the context parameter that defines the default layer normalizaiton epsilon value.
+	// ParamLayerNormEpsilon is the context parameter that defines the default layer normalization epsilon value.
 	// The default is 1e-3.
 	ParamLayerNormEpsilon = "layer_norm_epsilon"
 
@@ -58,6 +58,11 @@ var (
 	// by dividing it by the square root of the variance.
 	// The default is true.
 	ParamLayerNormRescale = "layer_norm_rescale"
+
+	// ParamLayerNormL2Regularization is the context parameter that defines the amount of L2 regularization
+	// to apply to the learned gain, if one is defined.
+	// The default is 0.0.
+	ParamLayerNormL2Regularization = "layer_norm_l2_regularization"
 )
 
 // LayerNormalization performs a layer normalization on the input. It includes a scaling and offset factor,
@@ -192,7 +197,7 @@ func (builder *LayerNormBuilder) Done() *Node {
 
 	// Add regularization to gain.
 	if gainVar != nil {
-		if l2 := context.GetParamOr(ctx, ParamL2Regularization, 0.0); l2 > 0 {
+		if l2 := context.GetParamOr(ctx, ParamLayerNormL2Regularization, 0.0); l2 > 0 {
 			AddL2RegularizationStatic(ctx, l2, gainVar.ValueGraph(g))
 		}
 	}
