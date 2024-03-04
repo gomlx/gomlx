@@ -5,6 +5,7 @@ import (
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/pkg/errors"
 	"io"
+	"k8s.io/klog/v2"
 	"log"
 	"runtime"
 	"sync"
@@ -90,7 +91,7 @@ func CustomParallel(ds train.Dataset) *ParallelDataset {
 		name:    ds.Name(),
 		Dataset: ds,
 	}
-	pd.Parallelism(0)
+	pd.Parallelism(0) // 0 here means it will take the number of cores available.
 	return pd
 }
 
@@ -125,7 +126,8 @@ func (pd *ParallelDataset) WithName(name string) *ParallelDataset {
 }
 
 // Buffer reserved in the channel that collects the parallel yields.
-// Notice there is already a intrinsic buffering that happens
+// Notice there is already an intrinsic buffering that happens in the goroutines sampling
+// in parallel.
 //
 // This must be called before a call to Start.
 //
@@ -194,7 +196,7 @@ func (impl *parallelDatasetImpl) startGoRoutines() {
 					return
 				}
 				if err != nil {
-					log.Printf("Error: %+v", err)
+					klog.Errorf("Error: %+v", err)
 					// Fatal error, stop everything.
 					impl.muErr.Lock()
 					if impl.err != nil {
