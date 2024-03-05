@@ -40,7 +40,7 @@ var (
 
 	// ParamCosineScheduleMinLearningRate is the minimum value of the learning rate, during
 	// cosine annealing schedule.
-	// Defaults to 10^-3 * initial learning rate.
+	// Defaults to 0.0.
 	ParamCosineScheduleMinLearningRate = "cosine_annealing_min_learning_rate"
 )
 
@@ -109,7 +109,7 @@ func (opt *CosineScheduleOptions) PeriodInSteps(periodSteps int) *CosineSchedule
 	return opt
 }
 
-// MinLearningRate at the end of the cosine cycle. Defaults to 10^-3 * initial learning rate.
+// MinLearningRate at the end of the cosine cycle. Defaults to 0.0.
 func (opt *CosineScheduleOptions) MinLearningRate(minLearningRate float64) *CosineScheduleOptions {
 	opt.minLearningRate = minLearningRate
 	return opt
@@ -149,9 +149,6 @@ func (opt *CosineScheduleOptions) Done() {
 		}
 	}
 	lrMinValue := opt.minLearningRate
-	if lrMinValue == 0 {
-		lrMinValue = lrValue * 1e-3
-	}
 
 	// Current training step: cosine schedule keeps its own "global step" counter.
 	cosineStep := IncrementGlobalStepGraph(ctx.In(Scope).In(CosineScheduleScope), graph, opt.dtype)
