@@ -84,7 +84,7 @@ func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inpu
 
 	// Preprocess institutions to its embeddings.
 	institutionsEmbedSize := context.GetParamOr(ctx, "InstitutionsEmbedSize", 16)
-	splitEmbedTables := context.GetParamOr(ctx, ParamSplitEmbedTablesSize, 1)
+	splitEmbedTables := context.GetParamOr(ctx, ParamSplitEmbedTablesSize, 2)
 	for name, rule := range strategy.Rules {
 		if rule.NodeTypeName == "institutions" {
 			// Gather values from frozen paperEmbeddings. Mask remains unchanged.
