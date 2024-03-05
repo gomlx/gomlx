@@ -42,6 +42,7 @@ import (
 	"encoding/json"
 	"fmt"
 	mg "github.com/erkkah/margaid"
+	stdplots "github.com/gomlx/gomlx/examples/notebook/gonb/plots"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
@@ -90,15 +91,9 @@ type Plots struct {
 
 	// filePath where to load data points from and save to. Only used if not empty.
 	filePath   string
-	fileWriter chan PlotPoint
+	fileWriter chan stdplots.Point
 
 	evalLossMetricType string
-}
-
-// PlotPoint is used to save/load plot points. They reflect the parameters to Plots.AddPoint.
-type PlotPoint struct {
-	MetricName, MetricType string
-	Step, Value            float64
 }
 
 // New creates new Margaid plots structure.
@@ -116,8 +111,6 @@ func New(width, height int, evalDatasets ...train.Dataset) *Plots {
 	}
 }
 
-const DefaultFileName = "training_plot_points.json"
-
 // NewDefault creates a new Margaid plots with the usual defaults.
 // This "default" configuration may change over time, and it aims to work with the usual GoNB notebook, or if
 // run from the command line, it simply save the data points for future plotting.
@@ -126,7 +119,7 @@ const DefaultFileName = "training_plot_points.json"
 //
 // Arguments:
 //   - 'loop': train.Loop to attach itself to. It uses generates evaluations
-//   - `dir`: directory where to save the plot data-points, with the file name DefaultFileName.
+//   - `dir`: directory where to save the plot data-points, with the file name TrainingPlotFileName.
 //   - `startStep` and `stepFactor`: when to add plot points.
 //     The `stepFactor` defines the growth of steps between generating plot points.
 //     Typical values here are `startStep=100` and `stepFactor=1.1`.
@@ -138,7 +131,7 @@ func NewDefault(loop *train.Loop, dir string, startStep int, stepFactor float64,
 	plots := New(1024, 400, datasets...).LogScaleX() // .LogScaleY()
 	if dir != "" {
 		// Save plot points.
-		_, err := plots.WithFile(path.Join(dir, DefaultFileName))
+		_, err := plots.WithFile(path.Join(dir, stdplots.TrainingPlotFileName))
 		if err != nil {
 			panic(err)
 		}
@@ -190,7 +183,7 @@ func (ps *Plots) PlotEveryNSteps(loop *train.Loop, n int) {
 // New data-points are saved asynchronously -- not to slow down training, with the downside of
 // potentially having I/O issues reported asynchronously.
 //
-// Consider using DefaultFileName as the file name, if you don't have one.
+// Consider using TrainingPlotFileName as the file name, if you don't have one.
 //
 // If used with DynamicUpdates, call this first, so when DynamicUpdates is called, and dynamic plot
 // is immediately created.
@@ -205,8 +198,8 @@ func (ps *Plots) WithFile(filePath string) (*Plots, error) {
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to open Plots file %q for append", filePath)
 	}
-	ps.fileWriter = make(chan PlotPoint, 100)
-	go func(f *os.File, fileWriter <-chan PlotPoint) {
+	ps.fileWriter = make(chan stdplots.Point, 100)
+	go func(f *os.File, fileWriter <-chan stdplots.Point) {
 		enc := json.NewEncoder(f)
 		errLogCount := 0
 		errLogStep := 1
@@ -238,7 +231,7 @@ func (ps *Plots) PreloadFile(filePath string, renameFn func(metricName string) s
 
 	// Read previously stored points.
 	dec := json.NewDecoder(f)
-	var point PlotPoint
+	var point stdplots.Point
 	for {
 		err := dec.Decode(&point)
 		if err == nil {
@@ -414,7 +407,7 @@ func (ps *Plots) AddPoint(metricName, metricType string, step, value float64) {
 	}
 	if ps.fileWriter != nil {
 		// Save point asynchronously.
-		ps.fileWriter <- PlotPoint{metricName, metricType, step, value}
+		ps.fileWriter <- stdplots.Point{metricName, metricType, step, value}
 	}
 	if ps.PerMetricType == nil {
 		ps.PerMetricType = make(map[string]*Plot)
