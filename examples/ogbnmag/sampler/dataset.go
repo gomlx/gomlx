@@ -18,13 +18,14 @@ import (
 //
 // The Dataset is created to be re-entrant, so it can be used with [data.Parallel].
 type Dataset struct {
-	name                    string
-	sampler                 *Sampler
-	strategy                *Strategy
-	numEpochs, currentEpoch int
-	shuffle                 bool
+	name                     string
+	sampler                  *Sampler
+	strategy                 *Strategy
+	numEpochs                int
+	shuffle, withReplacement bool
 
 	muSample                sync.Mutex
+	currentEpoch            int
 	frozen                  bool
 	startOfEpoch, exhausted bool
 
@@ -46,12 +47,14 @@ func (strategy *Strategy) NewDataset(name string) *Dataset {
 	}
 	strategy.frozen = true
 	return &Dataset{
-		name:          name,
-		sampler:       strategy.sampler,
-		strategy:      strategy,
-		frozen:        false,
-		numEpochs:     1,
-		shuffle:       false,
+		name:            name,
+		sampler:         strategy.sampler,
+		strategy:        strategy,
+		frozen:          false,
+		numEpochs:       1,
+		shuffle:         false,
+		withReplacement: false,
+
 		startOfEpoch:  true,
 		exhausted:     false,
 		seedsPosition: make([]int32, len(strategy.Seeds)),
@@ -61,12 +64,15 @@ func (strategy *Strategy) NewDataset(name string) *Dataset {
 // Epochs configures the dataset to yield those many epochs. Default is 1.
 //
 // Notice if there are more than one seed node type, an epoch is considered finished
-// whenever the first of the seed types is exhaused.
+// whenever the first of the seed types is exhausted.
 //
 // It returns itself to allow cascading configuration calls.
 func (ds *Dataset) Epochs(n int) *Dataset {
 	if ds.frozen {
 		Panicf("cannot change a Dataset that has already started yielding results")
+	}
+	if ds.withReplacement {
+		Panicf("cannot configure Epochs for a dataset configured WithReplacement()")
 	}
 	if n <= 0 {
 		Panicf("for Dataset.Epochs(n), n > 0, but got n=%d instead", n)
@@ -82,6 +88,14 @@ func (ds *Dataset) Infinite() *Dataset {
 		Panicf("cannot change a Dataset that has already started yielding results")
 	}
 	ds.numEpochs = -1
+	return ds
+}
+
+// WithReplacement configures the dataset to yield with replacement.
+// This automatically implies `Shuffle` and `Infinite`.
+func (ds *Dataset) WithReplacement() *Dataset {
+	ds = ds.Infinite().Shuffle()
+	ds.withReplacement = true
 	return ds
 }
 
@@ -168,7 +182,20 @@ func (ds *Dataset) sampleSeeds(seedIdx int, rule *Rule) (seeds, mask *tensor.Loc
 	defer maskRef.Release()
 	maskData := maskRef.Flat().([]bool)
 
-	if ds.shuffle {
+	if ds.withReplacement {
+		for ii := range rule.Count {
+			maskData[ii] = true
+		}
+		if len(rule.NodeSet) > 0 {
+			for ii := range rule.Count {
+				seedsData[ii] = rule.NodeSet[rand.IntN(len(rule.NodeSet))]
+			}
+		} else {
+			for ii := range rule.Count {
+				seedsData[ii] = int32(rand.IntN(int(rule.NumNodes)))
+			}
+		}
+	} else if ds.shuffle {
 		// Sample from shuffles of the candidate seed nodes.
 		shuffle := ds.seedsShuffle[seedIdx]
 		pos := ds.seedsPosition[seedIdx]
@@ -340,6 +367,9 @@ func randKOfNReservoir(values []int32, n int) {
 // startEpoch resets position counter and creates shuffle where required.
 func (ds *Dataset) startEpoch() {
 	ds.startOfEpoch = false
+	if ds.withReplacement {
+		return
+	}
 
 	// Restart the positions.
 	for ii := range ds.seedsPosition {

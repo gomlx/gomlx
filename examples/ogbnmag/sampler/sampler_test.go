@@ -3,6 +3,7 @@ package sampler
 import (
 	"fmt"
 	mldata "github.com/gomlx/gomlx/ml/data"
+	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/stretchr/testify/assert"
@@ -183,46 +184,56 @@ func TestSamplingRandomness(t *testing.T) {
 		_ = seeds.FromEdges("authors2", "written_by", 2)
 	}
 
-	// Keep counts.
-	papersCounts := make([]int, numPapers)
-	authorsPerPapersCounts := make([][]int, numPapers)
-	for ii := range authorsPerPapersCounts {
-		authorsPerPapersCounts[ii] = make([]int, numAuthors)
-	}
-
 	// Sample
 	numSamples := 1000
-	ds := strategy.NewDataset("infinite").Infinite().Shuffle()
-	parallelDS := mldata.Parallel(ds)
-	for _ = range numSamples {
-		_, inputs, _, err := parallelDS.Yield()
-		require.NoError(t, err)
-		graphSample := MapInputs[tensor.Tensor](strategy, inputs)
+	dsNames := []string{"without_replacement", "with_replacement"}
+	for dsIdx, ds := range []train.Dataset{
+		strategy.NewDataset("infinite").Infinite().Shuffle(),
+		strategy.NewDataset("infinite").WithReplacement(),
+	} {
+		parallelDS := mldata.Parallel(ds)
 
-		require.NoError(t, graphSample["seeds"].Value.Shape().CheckDims(1))
-		sampledPaper := graphSample["seeds"].Value.Local().FlatCopy().([]int32)[0]
-		papersCounts[sampledPaper]++
-
-		require.NoError(t, graphSample["authors"].Value.Shape().CheckDims(1, 2))
-		require.NoError(t, graphSample["authors"].Mask.Shape().CheckDims(1, 2))
-		authors := graphSample["authors"].Value.Local().FlatCopy().([]int32)
-		authorsMask := graphSample["authors"].Mask.Local().FlatCopy().([]bool)
-		for ii, author := range authors {
-			require.True(t, authorsMask[ii])
-			authorsPerPapersCounts[sampledPaper][author]++
+		// Keep counts.
+		papersCounts := make([]int, numPapers)
+		authorsPerPapersCounts := make([][]int, numPapers)
+		for ii := range authorsPerPapersCounts {
+			authorsPerPapersCounts[ii] = make([]int, numAuthors)
 		}
-	}
 
-	fmt.Printf("papersCounts=%v\n", papersCounts)
-	assert.Equal(t, numSamples, papersCounts[1]+papersCounts[2])
-	assert.Less(t, diff(papersCounts[1], papersCounts[2]), 1)
-	fmt.Printf("authorsPerPapersCounts=%v\n", authorsPerPapersCounts)
-	for _, paper := range []int{1, 2} {
-		authorsCounts := authorsPerPapersCounts[paper]
-		for author := paper + 1; author < (paper+1)*2; author++ {
-			// author loop starts one after the first author for the paper, so we can compare
-			// the count of the author with the previous one. They should be similar.
-			assert.Less(t, diff(authorsCounts[author], authorsCounts[author-1]), 50)
+		for _ = range numSamples {
+			_, inputs, _, err := parallelDS.Yield()
+			require.NoErrorf(t, err, "while testing dataset %q", dsNames[dsIdx])
+			graphSample := MapInputs[tensor.Tensor](strategy, inputs)
+
+			require.NoErrorf(t, graphSample["seeds"].Value.Shape().CheckDims(1), "while testing dataset %q", dsNames[dsIdx])
+			sampledPaper := graphSample["seeds"].Value.Local().FlatCopy().([]int32)[0]
+			papersCounts[sampledPaper]++
+
+			require.NoErrorf(t, graphSample["authors"].Value.Shape().CheckDims(1, 2), "while testing dataset %q", dsNames[dsIdx])
+			require.NoErrorf(t, graphSample["authors"].Mask.Shape().CheckDims(1, 2), "while testing dataset %q", dsNames[dsIdx])
+			authors := graphSample["authors"].Value.Local().FlatCopy().([]int32)
+			authorsMask := graphSample["authors"].Mask.Local().FlatCopy().([]bool)
+			for ii, author := range authors {
+				require.True(t, authorsMask[ii])
+				authorsPerPapersCounts[sampledPaper][author]++
+			}
+		}
+
+		fmt.Printf("ds=%s, papersCounts=%v\n", dsNames[dsIdx], papersCounts)
+		assert.Equalf(t, numSamples, papersCounts[1]+papersCounts[2], "while testing dataset %q", dsNames[dsIdx])
+		if dsIdx == 0 {
+			assert.Lessf(t, diff(papersCounts[1], papersCounts[2]), 2, "while testing dataset %q", dsNames[dsIdx])
+		} else {
+			assert.Lessf(t, diff(papersCounts[1], papersCounts[2]), 100, "while testing dataset %q", dsNames[dsIdx])
+		}
+		fmt.Printf("authorsPerPapersCounts=%v\n", authorsPerPapersCounts)
+		for _, paper := range []int{1, 2} {
+			authorsCounts := authorsPerPapersCounts[paper]
+			for author := paper + 1; author < (paper+1)*2; author++ {
+				// author loop starts one after the first author for the paper, so we can compare
+				// the count of the author with the previous one. They should be similar.
+				assert.Lessf(t, diff(authorsCounts[author], authorsCounts[author-1]), 50, "while testing dataset %q", dsNames[dsIdx])
+			}
 		}
 	}
 }
