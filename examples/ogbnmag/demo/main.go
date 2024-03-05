@@ -43,7 +43,7 @@ func createDefaultContext(manager *Manager) *context.Context {
 
 		gnn.ParamEdgeDropoutRate:     0.0,
 		gnn.ParamNumGraphUpdates:     4,
-		gnn.ParamReadoutHiddenLayers: 2,
+		gnn.ParamReadoutHiddenLayers: 0,
 		gnn.ParamPoolingType:         "mean|sum",
 		gnn.ParamUsePathToRootStates: false,
 		gnn.ParamGraphUpdateType:     "simultaneous",
