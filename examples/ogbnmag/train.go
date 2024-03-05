@@ -104,8 +104,10 @@ func Train(ctx *context.Context, baseDir string) error {
 	var plots *margaid.Plots
 	usePlots := context.GetParamOr(ctx, margaid.ParamPlots, false)
 	if usePlots {
-		plots = margaid.NewDefault(loop, checkpoint.Dir(), 200, 1.2, validEvalDS).
+		plots = margaid.NewDefault(loop, checkpoint.Dir(), 200, 1.2, trainEvalDS, validEvalDS).
 			WithEvalLossType("eval-loss")
+		stepsPerEpoch := TrainSplit.Shape().Size()/BatchSize + 1
+		plots.PlotEveryNSteps(loop, stepsPerEpoch)
 	}
 
 	// Loop for given number of steps
