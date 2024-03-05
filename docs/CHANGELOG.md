@@ -33,7 +33,7 @@
   * `DropoutStatic`: Dropout api where one can pass a static dropout rate as a Go float.
   * `AddL2RegularizationStatic`: Add L2 regularization on values, where the amount of regularization is static. 
 * Package `optimizers`:
-  * Added `CosineAnnealingSchedule.FromContext`.
+  * Added `CosineAnnealingSchedule.FromContext`. New `MinLearningRate` is 0.0 (same used in Keras).
 * Package `losses`:
   * Added support for `weights` and `mask`.
 * Package `ml/data`:
@@ -47,6 +47,8 @@
   * Asynchronous display of updates: it works better with very fast training loops or if running
     over a slow terminal connection (network).
   * Added `CreateContextSettingsFlag` and `ParseContextSettings`.
+* Package `margaid`:
+  * Added `Plots.PlotEveryNSteps`.
 
 ## 0.8.0 - 2023/11/28
 
