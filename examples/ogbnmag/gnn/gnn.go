@@ -22,6 +22,7 @@ var (
 
 	// ParamReadoutHiddenLayers context parameter that defines the number or hidden layers
 	// connected to the readout of a GNN model.
+	// Default to 0.
 	ParamReadoutHiddenLayers = "gnn_readout_hidden_layers"
 
 	// ParamMessageDim context hyperparameter defines the dimension of the messages calculated per node.
@@ -118,7 +119,7 @@ func NodePrediction(ctx *context.Context, strategy *sampler.Strategy, graphState
 			Panicf("invalid value for %q: valid values are \"tree\" or \"simultaneous\"", ParamGraphUpdateType)
 		}
 	}
-	numHiddenLayers := context.GetParamOr(ctx, ParamReadoutHiddenLayers, 1)
+	numHiddenLayers := context.GetParamOr(ctx, ParamReadoutHiddenLayers, 0)
 	for _, rule := range strategy.Seeds {
 		seedState := graphStates[rule.Name]
 		for ii := range numHiddenLayers {
@@ -301,6 +302,6 @@ func updateState(ctx *context.Context, prevState, input, mask *Node) *Node {
 		state = Add(state, prevState)
 	}
 	//state = layers.MaskedNormalizeFromContext(ctxRuleSpecific, state, mask)
-	state = layers.MaskedNormalizeFromContext(ctx, state, mask)
+	state = layers.MaskedNormalizeFromContext(ctx.In("normalization"), state, mask)
 	return state
 }
