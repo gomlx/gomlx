@@ -153,7 +153,7 @@ func NewDefault(loop *train.Loop, dir string, startStep int, stepFactor float64,
 	// Notice that plot points will be generated even if not running in a notebook -- just no plot will be displayed.
 	// Register plot points at exponential steps.
 	train.ExponentialCallback(loop, startStep, stepFactor, true,
-		"Monitor", 0, func(loop *train.Loop, metrics []tensor.Tensor) error {
+		"margaid.Plot", 0, func(loop *train.Loop, metrics []tensor.Tensor) error {
 			// Update plots with metrics.
 			return plots.AddTrainAndEvalMetrics(loop, metrics)
 		})
@@ -173,6 +173,16 @@ type Plot struct {
 	allPoints *mg.Series
 
 	xProjection, yProjection mg.Projection
+}
+
+// PlotEveryNSteps calls an evaluation and plot every `n` steps. Useful if one wants
+// an evaluation at given points.
+func (ps *Plots) PlotEveryNSteps(loop *train.Loop, n int) {
+	train.EveryNSteps(loop, n, "margaid.Plot", 0,
+		func(loop *train.Loop, metrics []tensor.Tensor) error {
+			// Update plots with metrics.
+			return ps.AddTrainAndEvalMetrics(loop, metrics)
+		})
 }
 
 // WithFile uses the filePath both to load data points and to save any new data points.
