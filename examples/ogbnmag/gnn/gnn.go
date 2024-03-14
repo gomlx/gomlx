@@ -107,14 +107,14 @@ var (
 //		return []*Node{logits}
 //	}
 func NodePrediction(ctx *context.Context, strategy *sampler.Strategy, graphStates map[string]*sampler.ValueMask[*Node]) {
-	numMessages := context.GetParamOr(ctx, ParamNumGraphUpdates, 2)
+	numGraphUpdates := context.GetParamOr(ctx, ParamNumGraphUpdates, 2)
 	graphUpdateType := context.GetParamOr(ctx, ParamGraphUpdateType, "tree")
-	for ii := range numMessages {
+	for round := range numGraphUpdates {
 		switch graphUpdateType {
 		case "tree":
-			TreeGraphStateUpdate(ctx.In(fmt.Sprintf("graph_update_%d", ii)), strategy, graphStates)
+			TreeGraphStateUpdate(ctxForGraphUpdateRound(ctx, round), strategy, graphStates)
 		case "simultaneous":
-			SimultaneousGraphStateUpdate(ctx.In(fmt.Sprintf("graph_update_%d", ii)), strategy, graphStates)
+			SimultaneousGraphStateUpdate(ctxForGraphUpdateRound(ctx, round), strategy, graphStates)
 		default:
 			Panicf("invalid value for %q: valid values are \"tree\" or \"simultaneous\"", ParamGraphUpdateType)
 		}
@@ -127,6 +127,16 @@ func NodePrediction(ctx *context.Context, strategy *sampler.Strategy, graphState
 			seedState.Value = updateState(ctxReadout, seedState.Value, seedState.Value, seedState.Mask)
 		}
 	}
+}
+
+// ctxForGraphUpdateRound returns the context with scope for the given round of graph update.
+func ctxForGraphUpdateRound(ctx *context.Context, n int) *context.Context {
+	return ctx.In(fmt.Sprintf("graph_update_%d", n))
+}
+
+// nameForNodeDegree returns the name of the input field that contains the degree of the given rule node.
+func nameForNodeDegree(ruleName, dependentName string) string {
+	return fmt.Sprintf("[%s<->%s].degree", ruleName, dependentName)
 }
 
 // TreeGraphStateUpdate takes a `graphStates`, a map of name of node sets to their hidden states,
@@ -217,9 +227,14 @@ func recursivelyApplyGraphConvolution(ctx *context.Context, rule *sampler.Rule,
 			recursivelyApplyGraphConvolution(ctx, dependent, subPathToRootStates, graphStates, dependentsUpdateFirst)
 		}
 		dependentState := graphStates[dependent.Name]
+		dependentDegreePair := graphStates[nameForNodeDegree(rule.Name, dependent.Name)]
+		var dependentDegree *Node
+		if dependentDegreePair != nil {
+			dependentDegree = dependentDegreePair.Value
+		}
 		convolveCtx := ctx.In(dependent.KernelScopeName).In("conv")
 		if dependentState.Value != nil {
-			updateInputs = append(updateInputs, convolveNodeSet(convolveCtx, dependentState.Value, dependentState.Mask))
+			updateInputs = append(updateInputs, sampledConvolveEdgeSet(convolveCtx, dependentState.Value, dependentState.Mask, dependentDegree))
 			hasNewUpdateInputs = true
 		}
 		if !dependentsUpdateFirst {
@@ -234,18 +249,33 @@ func recursivelyApplyGraphConvolution(ctx *context.Context, rule *sampler.Rule,
 	}
 }
 
-// convolveNodeSet creates messages from a node set and aggregate them to the same prefix dimension of their source
-// node sets. The context `ctx` must already have been properly scoped.
-func convolveNodeSet(ctx *context.Context, value, mask *Node) *Node {
+// sampledConvolveEdgeSet creates messages from a node set and aggregates them to the same prefix dimension of their target
+// node sets. This runs a convolution over one of the edge sets that connects a Rule to its `SourceRule`.
+//
+// The context `ctx` must already have been properly scoped.
+//
+// This function should do the same as `layeredConvolveEdgeSet`, this function does it for sampled graphs.
+// They must be aligned.
+func sampledConvolveEdgeSet(ctx *context.Context, value, mask, degree *Node) *Node {
+	messages, mask := edgeMessageGraph(ctx, value, mask)
+	return poolMessages(ctx, messages, mask, degree)
+}
+
+// edgeMessageGraph calculates the graph for messages being sent across edges.
+// It takes as input the source node state already gathered for the edge: their shape should
+// look like: `[batch_size, ..., num_edges, source_node_state_dim]`.
+func edgeMessageGraph(ctx *context.Context, gatheredStates, gatheredMask *Node) (messages, mask *Node) {
 	messageDim := context.GetParamOr(ctx, ParamMessageDim, 128)
-	messages := layers.DenseWithBias(ctx.In("message"), value, messageDim)
+	messages = layers.DenseWithBias(ctx.In("message"), gatheredStates, messageDim)
 	messages = layers.ActivationFromContext(ctx, messages)
+
+	mask = gatheredMask
 	edgeDropOutRate := context.GetParamOr(ctx, ParamEdgeDropoutRate, 0.0)
 	if edgeDropOutRate > 0 {
 		// We apply edge dropout to the mask: values disabled here will mask the whole edge.
-		mask = layers.DropoutStatic(ctx, mask, edgeDropOutRate)
+		mask = layers.DropoutStatic(ctx, gatheredMask, edgeDropOutRate)
 	}
-	return poolMessages(ctx, messages, mask)
+	return
 }
 
 // poolMessages will pool according to [ParamPoolingType].
@@ -253,7 +283,10 @@ func convolveNodeSet(ctx *context.Context, value, mask *Node) *Node {
 // tensor, and we want to reduce the axis `n`.
 // So the returned shape will be `[d_0, d_1, ..., d_{n-1}, k*e]`, where `k` is the number of pooling types configured.
 // E.g.: If the pooling types (see [ParamPoolingType]) are configured to `mean|sum`, then `k=2`.
-func poolMessages(ctx *context.Context, value, mask *Node) *Node {
+//
+// The parameter `degree` is optional, but if given, the `sum` pooling will scale the sum to the given degree.
+// It's expected to be of shape `[d_0, d_1, ..., d_{n-1}, 1]`.
+func poolMessages(ctx *context.Context, value, mask, degree *Node) *Node {
 	poolTypes := context.GetParamOr(ctx, ParamPoolingType, "mean|sum")
 	poolTypesList := strings.Split(poolTypes, "|")
 	parts := make([]*Node, 0, len(poolTypesList))
@@ -262,7 +295,13 @@ func poolMessages(ctx *context.Context, value, mask *Node) *Node {
 		reduceAxis := value.Rank() - 2
 		switch poolType {
 		case "sum":
-			pooled = MaskedReduceSum(value, mask, reduceAxis)
+			if degree == nil {
+				pooled = MaskedReduceSum(value, mask, reduceAxis)
+			} else {
+				// Sum pondered by degree, that is, `mean(value)*degree`.
+				pooled = MaskedReduceMean(value, mask, reduceAxis)
+				pooled = Mul(pooled, degree)
+			}
 		case "mean":
 			pooled = MaskedReduceMean(value, mask, reduceAxis)
 		case "max":

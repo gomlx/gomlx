@@ -20,13 +20,19 @@ func TestPoolMessages(t *testing.T) {
 				{true, false, true},
 				{false, false, false}})
 			x := IotaFull(g, shapes.Make(shapes.F32, append(mask.Shape().Dimensions, 5)...))
-			output := poolMessages(ctx, x, mask)
+			degree := Const(g, [][]float32{{10}, {7}})
+			outputNoDegree := poolMessages(ctx, x, mask, nil)
+			outputWithDegree := poolMessages(ctx, x, mask, degree)
 			inputs = []*Node{x, mask}
-			outputs = []*Node{output}
+			outputs = []*Node{outputNoDegree, outputWithDegree}
 			return
 		}, []any{
 			[][]float32{
 				{ /* sum */ 10, 12, 14, 16, 18 /* max */, 10, 11, 12, 13, 14},
+				{ /* sum */ 0, 0, 0, 0, 0 /* max */, 0, 0, 0, 0, 0},
+			},
+			[][]float32{
+				{ /* sum */ 50, 60, 70, 80, 90 /* max */, 10, 11, 12, 13, 14},
 				{ /* sum */ 0, 0, 0, 0, 0 /* max */, 0, 0, 0, 0, 0},
 			},
 		}, slices.Epsilon)
