@@ -10,8 +10,8 @@ import (
 // It's created by [Strategy.Nodes], [Strategy.NodesFromSet] and [Rule.FromEdges].
 // Don't modify it directly.
 type Rule struct {
-	sampler  *Sampler
-	strategy *Strategy
+	Sampler  *Sampler
+	Strategy *Strategy
 
 	// Name of the [Rule].
 	Name string
@@ -32,13 +32,13 @@ type Rule struct {
 	SourceRule *Rule
 
 	// Dependents is the list of Rules that depend on this one.
+	// That is other rules that have this Rule as [SourceRule].
+	// This is to keep track of the graph, and are not involved on the sampling of this rule.
 	Dependents []*Rule
 
-	// EdgeTypeName used to sample from, if this is an "Edge" sampling rule, or empty.
-	EdgeTypeName string
-
-	// EdgeType
-	EdgeType *edgeType
+	// EdgeType that connects the [SourceRule] node type, to the node type ([NodeTypeName]) of this Rule.
+	// This is only set if this is an edge sampling rule. A node sampling rule (for seeds) have this set to nil.
+	EdgeType *EdgeType
 
 	// Count is the number of samples to create. It will define the last dimension of the tensor sampled.
 	Count int
@@ -66,19 +66,19 @@ func (r *Rule) String() string {
 		return fmt.Sprintf("Rule %q: type=Node, nodeType=%q, Shape=%s (size=%d)%s", r.Name, r.NodeTypeName, r.Shape, r.Shape.Size(), sourceSetDesc)
 	}
 	return fmt.Sprintf("Rule %q: type=Edge, nodeType=%q, Shape=%s (size=%d), SourceRule=%q, EdgeType=%q",
-		r.Name, r.NodeTypeName, r.Shape, r.Shape.Size(), r.SourceRule.Name, r.EdgeTypeName)
+		r.Name, r.NodeTypeName, r.Shape, r.Shape.Size(), r.SourceRule.Name, r.EdgeType.Name)
 }
 
 // FromEdges returns a [Rule] that samples nodes from the edges connecting the results of the current Rule `r`.
 func (r *Rule) FromEdges(name, edgeTypeName string, count int) *Rule {
-	strategy := r.strategy
+	strategy := r.Strategy
 	if strategy.frozen {
 		Panicf("Strategy is frozen, that is, a dataset was already created and used with NewDataset() and hence can no longer be modified.")
 	}
 	if prevRule, found := strategy.Rules[name]; found {
 		Panicf("rule named %q already exists: %s", name, prevRule)
 	}
-	edgeDef, found := r.sampler.d.EdgeTypes[edgeTypeName]
+	edgeDef, found := r.Sampler.EdgeTypes[edgeTypeName]
 	if !found {
 		Panicf("edge type %q not found to sample from in rule %q", edgeTypeName, name)
 	}
@@ -89,13 +89,12 @@ func (r *Rule) FromEdges(name, edgeTypeName string, count int) *Rule {
 	newShape := r.Shape.Copy()
 	newShape.Dimensions = append(newShape.Dimensions, count)
 	newRule := &Rule{
-		sampler:         r.sampler,
-		strategy:        strategy,
+		Sampler:         r.Sampler,
+		Strategy:        strategy,
 		Name:            name,
 		KernelScopeName: "gnn:" + name,
 		NodeTypeName:    edgeDef.TargetNodeType,
 		SourceRule:      r,
-		EdgeTypeName:    edgeTypeName,
 		EdgeType:        edgeDef,
 		Count:           count,
 		Shape:           newShape,

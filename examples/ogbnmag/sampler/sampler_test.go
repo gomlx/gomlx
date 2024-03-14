@@ -49,20 +49,20 @@ func TestSampler(t *testing.T) {
 		assert.EqualValues(t, []int32{}, s.d.EdgeTypes["written_by"].EdgeTargetsForSourceIdx(0))
 	}
 
-	// Checks sampler s is correct.
+	// Checks Sampler s is correct.
 	checkSamplerFn()
 
 	// Save it, load it and check that we get the same results.
 	filePath := path.Join(t.TempDir(), "test_sampler.bin")
-	require.NoErrorf(t, s.Save(filePath), "Saving test sampler to %q", filePath)
+	require.NoErrorf(t, s.Save(filePath), "Saving test Sampler to %q", filePath)
 	var err error
 	s, err = Load(filePath)
-	require.NoErrorf(t, err, "Loading test sampler from %q", filePath)
+	require.NoErrorf(t, err, "Loading test Sampler from %q", filePath)
 	checkSamplerFn()
 
 	// Makes sure Sampler can't be modified after a Strategy is created.
 	_ = s.NewStrategy()
-	require.Panics(t, func() { s.AddNodeType("rogue", 10) }, "No changes to sampler allowed after frozen.")
+	require.Panics(t, func() { s.AddNodeType("rogue", 10) }, "No changes to Sampler allowed after frozen.")
 }
 
 func createTestStrategy(t *testing.T, s *Sampler) *Strategy {
@@ -161,7 +161,7 @@ func TestDataset(t *testing.T) {
 
 // TestSamplingRandomness checks that the distribution of seeds and edge sampling is homogeneous.
 func TestSamplingRandomness(t *testing.T) {
-	// We create a new sampler+strategy for this.
+	// We create a new Sampler+strategy for this.
 	s := New()
 	numPapers := 3
 	numAuthors := numPapers*2 + 1 // One extra author that never wrote any paper.

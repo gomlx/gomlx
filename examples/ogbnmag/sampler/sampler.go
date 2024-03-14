@@ -31,18 +31,18 @@ const PaddingIndex = 0
 //
 // (1) Specify the full graph data: define node type and edge types, for example for the [OGBN-MAG dataset]:
 //
-//	sampler := sampler.New()
-//	sampler.AddNodeType("papers", mag.NumPapers)
-//	sampler.AddNodeType("authors", mag.NumAuthors)
-//	sampler.AddEdgeType("writes", "authors", "papers", mag.EdgesWrites, /* reverse= */ false)
-//	sampler.AddEdgeType("writtenBy", "authors", "papers", mag.EdgesWrites, /* reverse= */ true)
-//	sampler.AddEdgeType("cites", "papers", "papers", mag.EdgesCites, /*reverse=*/ false)
-//	sampler.AddEdgeType("citedBy", "papers", "papers", mag.EdgesCites, /*reverse=*/ true)
+//	Sampler := Sampler.New()
+//	Sampler.AddNodeType("papers", mag.NumPapers)
+//	Sampler.AddNodeType("authors", mag.NumAuthors)
+//	Sampler.AddEdgeType("writes", "authors", "papers", mag.EdgesWrites, /* reverse= */ false)
+//	Sampler.AddEdgeType("writtenBy", "authors", "papers", mag.EdgesWrites, /* reverse= */ true)
+//	Sampler.AddEdgeType("cites", "papers", "papers", mag.EdgesCites, /*reverse=*/ false)
+//	Sampler.AddEdgeType("citedBy", "papers", "papers", mag.EdgesCites, /*reverse=*/ true)
 //
 // (2) Create and specify sampling strategy: sampling generates always a tree of elements, with fixed shaped tensors.
 // It uses padding if sampling something that doesn't have enough examples to sample. Example:
 //
-//	trainStrategy := sampler.NewStrategy()
+//	trainStrategy := Sampler.NewStrategy()
 //	Seeds := trainStrategy.NodesFromSet("Seeds", "papers", batchSize, /* subset= */TrainSplits)
 //	citedBy := Seeds.FromEdges(/* Name= */ "citedBy", /* EdgeType= */ "citedBy", 5)
 //	authors := Seeds.SampleFromEdgesRandomWithoutReplacement(/* Name= */ "authors", /* edgeSet= */ "writtenBy", 5)
@@ -62,23 +62,23 @@ const PaddingIndex = 0
 // Each registration of an edge type creates a corresponding structure to store the edges, that
 // will be used for sampling.
 //
-// # After registration, one can
+// All the information kept by Sampler is available for reading, but avoid changing it
+// directly, and instead use the provided methods.
+//
+// Example usage:
 //
 // [OGBN-MAG dataset]: https://github.com/gomlx/gomlx/tree/main/examples/ogbnmag
 type Sampler struct {
-	d samplerData
-}
-
-type samplerData struct {
-	EdgeTypes        map[string]*edgeType
+	EdgeTypes        map[string]*EdgeType
 	NodeTypesToCount map[string]int32
 	Frozen           bool // When true, it can no longer be changed.
 }
 
-// edgeType information used by the sampler.
-type edgeType struct {
+// EdgeType information used by the Sampler.
+type EdgeType struct {
 	// SourceNodeType, TargetNodeType of the edges.
 	Name, SourceNodeType, TargetNodeType string
+	numTargetNodes                       int
 
 	// Starts has one entry for each source node (shifted by 1): it points to the start of the list of
 	// target nodes (edges) that this source node is connected.
@@ -95,16 +95,23 @@ type edgeType struct {
 	EdgeTargets []int32
 }
 
-// New creates a new empty sampler.
+// NumSourceNodes for the source node type -- total number of nodes, even if they are not used by the edges.
+func (et *EdgeType) NumSourceNodes() int { return len(et.Starts) }
+
+// NumTargetNodes for the source node type -- total number of nodes, even if they are not used by the edges.
+func (et *EdgeType) NumTargetNodes() int { return et.numTargetNodes }
+
+// NumEdges for this type.
+func (et *EdgeType) NumEdges() int { return len(et.EdgeTargets) }
+
+// New creates a new empty Sampler.
 //
 // After creating it, use AddNodeType and AddEdgeType to define where to
 // sample from.
 func New() *Sampler {
 	return &Sampler{
-		d: samplerData{
-			EdgeTypes:        make(map[string]*edgeType),
-			NodeTypesToCount: make(map[string]int32),
-		},
+		EdgeTypes:        make(map[string]*EdgeType),
+		NodeTypesToCount: make(map[string]int32),
 	}
 }
 
@@ -113,7 +120,7 @@ func New() *Sampler {
 //
 // A sparse node type (e.g.: indices are random numbers from 0 to MAXINT-1 or strings) is not supported.
 func (s *Sampler) AddNodeType(name string, count int) {
-	if s.d.Frozen {
+	if s.Frozen {
 		Panicf("Sampler is Frozen, that is, a strategy was already created with NewStrategy() and hence can no longer be modified.")
 	}
 	if count > math.MaxInt32 {
@@ -121,7 +128,7 @@ func (s *Sampler) AddNodeType(name string, count int) {
 	} else if count <= 0 {
 		Panicf("Count of %d for node type %q invalid, it must be > 0", count, name)
 	}
-	s.d.NodeTypesToCount[name] = int32(count)
+	s.NodeTypesToCount[name] = int32(count)
 	if count <= 0 {
 		Panicf("Sampler.AddNodeType(Name=%q, Count=%d): Count must be > 0", name, count)
 	}
@@ -140,7 +147,7 @@ func (s *Sampler) AddNodeType(name string, count int) {
 // -- they are sorted by the source node type (or target if reversed).
 // But the edges information themselves are not lost.
 func (s *Sampler) AddEdgeType(name, sourceNodeType, targetNodeType string, edges tensor.Tensor, reverse bool) {
-	if s.d.Frozen {
+	if s.Frozen {
 		Panicf("Sampler is frozen, that is, a strategy was already created with NewStrategy() and hence can no longer be modified.")
 	}
 	if edges.Rank() != 2 || edges.DType() != shapes.Int32 ||
@@ -148,8 +155,8 @@ func (s *Sampler) AddEdgeType(name, sourceNodeType, targetNodeType string, edges
 		Panicf("invalid edge Shape %s for AddEdgeType(): it must be shaped like (Int32)[N, 2]",
 			edges.Shape())
 	}
-	countSource := s.d.NodeTypesToCount[sourceNodeType]
-	countTarget := s.d.NodeTypesToCount[targetNodeType]
+	countSource := s.NodeTypesToCount[sourceNodeType]
+	countTarget := s.NodeTypesToCount[targetNodeType]
 	columnSrc, columnTgt := 0, 1
 	if reverse {
 		columnSrc, columnTgt = 1, 0
@@ -168,10 +175,11 @@ func (s *Sampler) AddEdgeType(name, sourceNodeType, targetNodeType string, edges
 
 	// Store edge-lists per source in new SamplerEdgeInfo.
 	numEdges := int32(edges.Shape().Dimensions[0])
-	samplerEdges := &edgeType{
+	samplerEdges := &EdgeType{
 		Name:           name,
 		SourceNodeType: sourceNodeType,
 		TargetNodeType: targetNodeType,
+		numTargetNodes: int(countTarget),
 		Starts:         make([]int32, countSource),
 		EdgeTargets:    make([]int32, numEdges),
 	}
@@ -195,26 +203,21 @@ func (s *Sampler) AddEdgeType(name, sourceNodeType, targetNodeType string, edges
 	for ; currentSourceIdx < countSource; currentSourceIdx++ {
 		samplerEdges.Starts[currentSourceIdx] = int32(numEdges)
 	}
-	s.d.EdgeTypes[name] = samplerEdges
-}
-
-// NumEdges of the EdgeType.
-func (e *edgeType) NumEdges() int {
-	return len(e.EdgeTargets)
+	s.EdgeTypes[name] = samplerEdges
 }
 
 // EdgeTargetsForSourceIdx returns a slice with the target nodes for the given source nodes.
 // Don't modify the returned slice, it's in use by the Sampler -- make a copy if you need to modify.
-func (e *edgeType) EdgeTargetsForSourceIdx(srcIdx int32) []int32 {
-	if srcIdx < 0 || int(srcIdx) >= len(e.Starts) {
-		Panicf("invalid source node (%q) index %d for edge type %q (only %d source nodes)", e.SourceNodeType, srcIdx, e.Name, len(e.Starts))
+func (et *EdgeType) EdgeTargetsForSourceIdx(srcIdx int32) []int32 {
+	if srcIdx < 0 || int(srcIdx) >= len(et.Starts) {
+		Panicf("invalid source node (%q) index %d for edge type %q (only %d source nodes)", et.SourceNodeType, srcIdx, et.Name, len(et.Starts))
 	}
 	var start int32
 	if srcIdx > 0 {
-		start = e.Starts[srcIdx-1]
+		start = et.Starts[srcIdx-1]
 	}
-	end := e.Starts[srcIdx]
-	return e.EdgeTargets[start:end]
+	end := et.Starts[srcIdx]
+	return et.EdgeTargets[start:end]
 }
 
 type pairsToSort struct {
@@ -235,29 +238,29 @@ func (p *pairsToSort) Swap(i, j int) {
 // NewStrategy yields a new Strategy object, based on the graph data definitions of the Sampler object.
 //
 // Once a strategy is created, the Sampler can no longer be changed -- but multiple strategies can be created
-// based on the same sampler.
+// based on the same Sampler.
 func (s *Sampler) NewStrategy() *Strategy {
-	s.d.Frozen = true
+	s.Frozen = true
 	return &Strategy{
-		sampler: s,
+		Sampler: s,
 		Rules:   make(map[string]*Rule),
 	}
 }
 
-// String returns a multi-line informative description of the sampler data specification.
+// String returns a multi-line informative description of the Sampler data specification.
 func (s *Sampler) String() string {
-	parts := make([]string, 0, 1+len(s.d.NodeTypesToCount)+len(s.d.EdgeTypes))
+	parts := make([]string, 0, 1+len(s.NodeTypesToCount)+len(s.EdgeTypes))
 	var frozenDesc string
-	if s.d.Frozen {
+	if s.Frozen {
 		frozenDesc = ", Frozen"
 	}
 	parts = append(parts, fmt.Sprintf("Sampler: %d node types, %d edge types%s",
-		len(s.d.NodeTypesToCount), len(s.d.EdgeTypes), frozenDesc))
-	for name, count := range s.d.NodeTypesToCount {
+		len(s.NodeTypesToCount), len(s.EdgeTypes), frozenDesc))
+	for name, count := range s.NodeTypesToCount {
 		parts = append(parts, fmt.Sprintf(
 			"\tNodeType %q: %s items", name, humanize.Comma(int64(count))))
 	}
-	for name, edge := range s.d.EdgeTypes {
+	for name, edge := range s.EdgeTypes {
 		parts = append(parts, fmt.Sprintf(
 			"\tEdgeType %q: [%q]->[%q], %s edges",
 			name, edge.SourceNodeType, edge.TargetNodeType, humanize.Comma(int64(edge.NumEdges()))))
@@ -266,11 +269,11 @@ func (s *Sampler) String() string {
 }
 
 func initGob() {
-	gob.Register(&edgeType{})
-	gob.Register(&samplerData{})
+	gob.Register(&EdgeType{})
+	gob.Register(&Sampler{})
 }
 
-// Save sampler: it will include the edges indices, so it can be reloaded and ready to go.
+// Save Sampler: it will include the edges indices, so it can be reloaded and ready to go.
 func (s *Sampler) Save(filePath string) (err error) {
 	initGob()
 	f, err := os.Create(filePath)
@@ -279,7 +282,7 @@ func (s *Sampler) Save(filePath string) (err error) {
 		return
 	}
 	enc := gob.NewEncoder(f)
-	err = enc.Encode(&s.d)
+	err = enc.Encode(s)
 	if err != nil {
 		err = errors.WithMessagef(err, "encoding Sampler to save to %q", filePath)
 		return
@@ -292,7 +295,7 @@ func (s *Sampler) Save(filePath string) (err error) {
 	return
 }
 
-// Load previously saved sampler.
+// Load previously saved Sampler.
 // If filePath doesn't exist, it returns an error that can be checked with [os.IsNotExist]
 func Load(filePath string) (s *Sampler, err error) {
 	initGob()
@@ -306,7 +309,7 @@ func Load(filePath string) (s *Sampler, err error) {
 	}
 	dec := gob.NewDecoder(f)
 	s = &Sampler{}
-	err = dec.Decode(&s.d)
+	err = dec.Decode(s)
 	if err != nil {
 		s = nil
 		err = errors.Wrapf(err, "trying to decode Sampler from %q", filePath)

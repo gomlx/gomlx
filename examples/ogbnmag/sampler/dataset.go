@@ -48,7 +48,7 @@ func (strategy *Strategy) NewDataset(name string) *Dataset {
 	strategy.frozen = true
 	return &Dataset{
 		name:            name,
-		sampler:         strategy.sampler,
+		sampler:         strategy.Sampler,
 		strategy:        strategy,
 		frozen:          false,
 		numEpochs:       1,

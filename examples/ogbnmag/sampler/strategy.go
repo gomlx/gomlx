@@ -16,7 +16,7 @@ import (
 // Once the strategy is defined, it can be used to create one or more datasets -- and after datasets are created,
 // the strategy can no longer be changed.
 type Strategy struct {
-	sampler *Sampler
+	Sampler *Sampler
 	frozen  bool // If set to true, it can no longer be modified.
 
 	// Rules lists all the rules of a strategy.
@@ -69,7 +69,7 @@ func (strategy *Strategy) Nodes(name, nodeTypeName string, count int) *Rule {
 	if strategy.frozen {
 		Panicf("Strategy is frozen, that is, a dataset was already created and used with NewDataset() and hence can no longer be modified.")
 	}
-	numNodes, found := strategy.sampler.d.NodeTypesToCount[nodeTypeName]
+	numNodes, found := strategy.Sampler.NodeTypesToCount[nodeTypeName]
 	if !found {
 		Panicf("unknown node type %q to for rule %q", nodeTypeName, name)
 	}
@@ -77,8 +77,8 @@ func (strategy *Strategy) Nodes(name, nodeTypeName string, count int) *Rule {
 		Panicf("rule named %q already exists: %s", name, prevRule)
 	}
 	r := &Rule{
-		sampler:         strategy.sampler,
-		strategy:        strategy,
+		Sampler:         strategy.Sampler,
+		Strategy:        strategy,
 		Name:            name,
 		KernelScopeName: "gnn:" + name,
 		NodeTypeName:    nodeTypeName,
@@ -104,7 +104,7 @@ func (strategy *Strategy) NodesFromSet(name, nodeTypeName string, count int, nod
 	if strategy.frozen {
 		Panicf("Strategy is frozen, that is, a dataset was already created and used with NewDataset() and hence can no longer be modified.")
 	}
-	numNodes, found := strategy.sampler.d.NodeTypesToCount[nodeTypeName]
+	numNodes, found := strategy.Sampler.NodeTypesToCount[nodeTypeName]
 	if !found {
 		Panicf("unknown node type %q to for rule %q", nodeTypeName, name)
 	}
@@ -112,8 +112,8 @@ func (strategy *Strategy) NodesFromSet(name, nodeTypeName string, count int, nod
 		Panicf("rule named %q already exists: %s", name, prevRule)
 	}
 	r := &Rule{
-		sampler:         strategy.sampler,
-		strategy:        strategy,
+		Sampler:         strategy.Sampler,
+		Strategy:        strategy,
 		Name:            name,
 		KernelScopeName: "gnn:" + name,
 		NodeTypeName:    nodeTypeName,
@@ -138,7 +138,7 @@ type ValueMask[T any] struct {
 // Example 1: if using directly the outputs of a a [sampler.Dataset] created by this Strategy:
 //
 //	spec, inputs, _, err := ds.Yield()
-//	strategy := spec.(*sampler.Strategy)
+//	strategy := spec.(*Sampler.Strategy)
 //	graphSample := strategy.MapInputs(inputs)
 //	Seeds, mask := graphSample["Seeds"].Value, graphSample["Seeds"].Mask
 //	...
@@ -146,7 +146,7 @@ type ValueMask[T any] struct {
 // Example 2: usage in a model that is fed the output of a [sampler.Dataset]:
 //
 //	func MyModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
-//		strategy := spec.(*sampler.Strategy)
+//		strategy := spec.(*Sampler.Strategy)
 //		graphSample := strategy.MapInputs(inputs)
 //		Seeds, mask := graphSample["Seeds"].Value, graphSample["Seeds"].Mask
 //		...
