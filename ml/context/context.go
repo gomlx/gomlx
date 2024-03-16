@@ -144,10 +144,13 @@ type contextData struct {
 // An example of a loader in gomlx/context/checkpoints. An example for testing can be found
 // in context_test.go:ConstantLoader.
 type Loader interface {
-	// LoadVariable tries to load the variable v, usually specified by its scope and name.
+	// LoadVariable tries to load the variable v pointed by its scope and name.
 	// If it's not found, returns false, and initialization continues as usual.
 	// Errors can be reported with Context.Panic.
-	LoadVariable(ctx *Context, v *Variable) (value tensor.Tensor, found bool)
+	//
+	// It is called at most once for each variable: if a values is loaded owner is transferred and the Loader
+	// can "forget" about that variable, it's assumed to be transferred to the context.
+	LoadVariable(ctx *Context, scope, name string) (value tensor.Tensor, found bool)
 }
 
 // NewContext constructs a new and empty context.
@@ -556,8 +559,36 @@ func (ctx *Context) InspectVariable(scope, name string) *Variable {
 	if !ok {
 		return nil
 	}
-	v := scopeVars[name]
+	v, found := scopeVars[name]
+	if found {
+		return v
+	}
+
+	// Try to load it, if a loader (checkpoint handler) is configured.
+	loader := ctx.data.loader
+	if loader == nil {
+		return nil
+	}
+	value, found := loader.LoadVariable(ctx, scope, name)
+	if !found {
+		return nil
+	}
+	v = &Variable{
+		ctx:          ctx,
+		name:         name,
+		scope:        scope,
+		shape:        value.Shape(),
+		value:        value,
+		Trainable:    true,
+		graphToNodes: make(map[graph.GraphId]*variableNodes),
+	}
+	ctx.InAbsPath(scope).setVariableInScope(name, v)
 	return v
+}
+
+// InspectVariableInScope works like InspectVariable, but looks for the variable in the current scope.
+func (ctx *Context) InspectVariableInScope(name string) *Variable {
+	return ctx.InspectVariable(ctx.Scope(), name)
 }
 
 // setVariableInScope.
@@ -680,7 +711,7 @@ func (ctx *Context) tryToLoad(v *Variable) bool {
 	if loader == nil {
 		return false
 	}
-	value, found := loader.LoadVariable(ctx, v)
+	value, found := loader.LoadVariable(ctx, v.Scope(), v.Name())
 	if found {
 		if value.Shape().Eq(v.shape) {
 			v.value = value

@@ -23,6 +23,7 @@ import (
 	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
+	"strings"
 )
 
 // Variable is a value shared among computation graphs, or across multiple executions of the same graph.
@@ -102,14 +103,39 @@ func (v *Variable) Shape() shapes.Shape {
 	return v.shape
 }
 
-// ParameterPrefix is used to prefix Graph parameter names for variablesMap.
-const ParameterPrefix = "var:"
+// VariableParameterPrefix is used to prefix Graph parameter names for variablesMap.
+const VariableParameterPrefix = "var:"
 
 // ParameterName used when creating a parameter node in a Graph to access the variable, or as a key when saving.
 // It is a unique name for the variable that includes the scope and the variable name, and is reversible.
 func (v *Variable) ParameterName() string {
 	v.AssertValid()
-	return fmt.Sprintf("%s%s%s%s", ParameterPrefix, v.Scope(), ScopeSeparator, v.Name())
+	return VariableParameterNameFromScopeAndName(v.Scope(), v.Name())
+}
+
+// VariableScopeAndNameFromParameterName extracts the scope and name from a variable's [ParameterName].
+// It will return empty strings for an invalid parameter name.
+func VariableScopeAndNameFromParameterName(parameterName string) (scope, name string) {
+	if !strings.HasPrefix(parameterName, VariableParameterPrefix) {
+		return
+	}
+	parts := strings.Split(parameterName[len(VariableParameterPrefix):], ScopeSeparator)
+	if len(parts) == 1 {
+		// Scope was not properly set.
+		return
+	}
+	name = parts[len(parts)-1]
+	if len(parts) > 2 {
+		scope = strings.Join(parts[:len(parts)-1], ScopeSeparator)
+	} else {
+		scope = RootScope
+	}
+	return
+}
+
+// VariableParameterNameFromScopeAndName creates the [Variable.ParameterName] from its scope and name.
+func VariableParameterNameFromScopeAndName(scope, name string) string {
+	return fmt.Sprintf("%s%s%s%s", VariableParameterPrefix, scope, ScopeSeparator, name)
 }
 
 // Value returns the tensor holding the variable value. Use this to
@@ -130,7 +156,9 @@ func (v *Variable) Value() tensor.Tensor {
 // NOTE: Because often variables are large in size, the previous value is immediately freed (as opposed to
 // wait for garbage collection). If the previous value is used somewhere else, use SetValuePreservingOld.
 func (v *Variable) SetValue(value tensor.Tensor) {
-	v.value.FinalizeAll()
+	if v.value != nil {
+		v.value.FinalizeAll()
+	}
 	v.value = value
 }
 
