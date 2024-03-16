@@ -134,11 +134,6 @@ func ctxForGraphUpdateRound(ctx *context.Context, n int) *context.Context {
 	return ctx.In(fmt.Sprintf("graph_update_%d", n))
 }
 
-// nameForNodeDegree returns the name of the input field that contains the degree of the given rule node.
-func nameForNodeDegree(ruleName, dependentName string) string {
-	return fmt.Sprintf("[%s<->%s].degree", ruleName, dependentName)
-}
-
 // TreeGraphStateUpdate takes a `graphStates`, a map of name of node sets to their hidden states,
 // and updates them by running graph convolutions on the reverse direction of the sampling
 // rules in `strategy`, that is, from leaves back to the root of the trees -- trees rooted on the seed rules.
@@ -227,7 +222,7 @@ func recursivelyApplyGraphConvolution(ctx *context.Context, rule *sampler.Rule,
 			recursivelyApplyGraphConvolution(ctx, dependent, subPathToRootStates, graphStates, dependentsUpdateFirst)
 		}
 		dependentState := graphStates[dependent.Name]
-		dependentDegreePair := graphStates[nameForNodeDegree(rule.Name, dependent.Name)]
+		dependentDegreePair := graphStates[sampler.NameForNodeDependentDegree(rule.Name, dependent.Name)]
 		var dependentDegree *Node
 		if dependentDegreePair != nil {
 			dependentDegree = dependentDegreePair.Value
@@ -300,7 +295,7 @@ func poolMessages(ctx *context.Context, value, mask, degree *Node) *Node {
 			} else {
 				// Sum pondered by degree, that is, `mean(value)*degree`.
 				pooled = MaskedReduceMean(value, mask, reduceAxis)
-				pooled = Mul(pooled, degree)
+				pooled = Mul(pooled, ConvertType(degree, pooled.DType()))
 			}
 		case "mean":
 			pooled = MaskedReduceMean(value, mask, reduceAxis)
