@@ -97,6 +97,7 @@ type Config struct {
 
 	dir             string
 	includeParams   bool
+	immediate       bool
 	keep            int
 	takeMean        int
 	excludeFromSave types.Set[*context.Variable]
@@ -159,6 +160,13 @@ func (c *Config) DirFromBase(dir, baseDir string) *Config {
 		dir = path.Join(baseDir, dir)
 	}
 	return c.Dir(dir)
+}
+
+// Immediate forces immediate load of all variables, as opposed to dynamically load
+// variables from checkpoint as they are being used when building the model.
+func (c *Config) Immediate() *Config {
+	c.immediate = true
+	return c
 }
 
 // TempDir creates a temporary directory under dir, with the pattern name, and uses this
@@ -263,6 +271,13 @@ func (c *Config) Done() (*Handler, error) {
 		}
 	}
 	handler.attachTo(c.ctx)
+	if c.immediate {
+		ctxToSet := c.ctx.Checked(false)
+		for paramName, t := range handler.LoadedVariables() {
+			scope, name := context.VariableScopeAndNameFromParameterName(paramName)
+			ctxToSet.InAbsPath(scope).VariableWithValue(name, t)
+		}
+	}
 	return handler, nil
 }
 
@@ -792,10 +807,10 @@ func (h *Handler) Dir() string {
 // LoadVariable implements context.Loader.
 // This will is called by context.Context when the variable is used for the first time.
 // The user may want to use this function to inspect loaded values for testing.
-func (h *Handler) LoadVariable(ctx *context.Context, v *context.Variable) (value tensor.Tensor, found bool) {
+func (h *Handler) LoadVariable(ctx *context.Context, scope, name string) (value tensor.Tensor, found bool) {
 	// Priority is based on the installation order. That means we attempt first the previously configured loaders.
 	if h.prevContextLoader != nil {
-		value, found = h.prevContextLoader.LoadVariable(ctx, v)
+		value, found = h.prevContextLoader.LoadVariable(ctx, scope, name)
 		if found {
 			// Previous manager found value (or issued an error), return that.
 			return
@@ -803,16 +818,14 @@ func (h *Handler) LoadVariable(ctx *context.Context, v *context.Variable) (value
 	}
 
 	// Try to find variable in our currently loaded checkpoint.
-	value, found = h.variableValues[v.ParameterName()]
+	varParamName := context.VariableParameterNameFromScopeAndName(scope, name)
+	value, found = h.variableValues[varParamName]
 	if !found {
 		return
 	}
-	if !value.Shape().Eq(v.Shape()) {
-		Panicf("shape requested for variable %s is different from value shape %s loaded from %s",
-			v.Shape(), value.Shape(), h)
-	}
+
 	// "Consume" value, meaning remove it from Handler.
-	delete(h.variableValues, v.ParameterName())
+	delete(h.variableValues, varParamName)
 	return
 }
 
