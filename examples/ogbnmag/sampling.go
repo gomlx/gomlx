@@ -22,6 +22,10 @@ var (
 	// or of the coauthored-papers.
 	// Default is true.
 	ReuseShareableKernels = true
+
+	// KeepDegrees will also make sampler keep the degrees of the edges as separate tensors.
+	// These can be used by the GNN pooling functions to multiply the sum to the actual degree.
+	KeepDegrees = true
 )
 
 // NewSampler will create a [sampler.Sampler] and configure it with the OGBN-MAG graph definition.
@@ -62,6 +66,7 @@ func NewSampler(baseDir string) (*sampler.Sampler, error) {
 // returns a sampling strategy, that can be used to create datasets.
 func MagStrategy(magSampler *sampler.Sampler, batchSize int, seedIdsCandidates tensor.Tensor) *sampler.Strategy {
 	strategy := magSampler.NewStrategy()
+	strategy.KeepDegrees = KeepDegrees
 	var seeds *sampler.Rule
 	if seedIdsCandidates == nil {
 		seeds = strategy.Nodes("seeds", "papers", batchSize)
@@ -130,6 +135,9 @@ func magCreateLabels(inputs, labels []tensor.Tensor) ([]tensor.Tensor, []tensor.
 	return inputs, []tensor.Tensor{seedsLabels, seedsMask}
 }
 
+// WithReplacement indicates whether the training dataset is created with replacement.
+var WithReplacement = false
+
 // MakeDatasets takes a directory where to store the downloaded data and return 4 datasets:
 // "train", "trainEval", "validEval", "testEval".
 //
@@ -147,6 +155,11 @@ func MakeDatasets(dataDir string) (trainDS, trainEvalDS, validEvalDS, testEvalDS
 	testStrategy := MagStrategy(magSampler, BatchSize, TestSplit)
 
 	trainDS = trainStrategy.NewDataset("train").Infinite().Shuffle()
+	if WithReplacement {
+		trainDS = trainStrategy.NewDataset("train").Infinite().Shuffle().WithReplacement()
+	} else {
+		trainDS = trainStrategy.NewDataset("train").Infinite().Shuffle()
+	}
 	trainEvalDS = trainStrategy.NewDataset("train").Epochs(1)
 	validEvalDS = validStrategy.NewDataset("valid").Epochs(1)
 	testEvalDS = testStrategy.NewDataset("test").Epochs(1)
