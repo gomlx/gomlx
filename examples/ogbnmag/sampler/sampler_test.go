@@ -38,15 +38,15 @@ func TestSampler(t *testing.T) {
 
 	// We create a checking function because we'll use it 2 times.
 	checkSamplerFn := func() {
-		assert.EqualValues(t, []int32{3, 3, 3, 4, 6, 6, 6, 7, 7, 7}, s.d.EdgeTypes["writes"].Starts)
-		assert.EqualValues(t, []int32{2, 3, 4, 2, 2, 4, 4}, s.d.EdgeTypes["writes"].EdgeTargets)
-		assert.EqualValues(t, []int32{2, 4}, s.d.EdgeTypes["writes"].EdgeTargetsForSourceIdx(4))
-		assert.EqualValues(t, []int32{}, s.d.EdgeTypes["writes"].EdgeTargetsForSourceIdx(9))
+		assert.EqualValues(t, []int32{3, 3, 3, 4, 6, 6, 6, 7, 7, 7}, s.EdgeTypes["writes"].Starts)
+		assert.EqualValues(t, []int32{2, 3, 4, 2, 2, 4, 4}, s.EdgeTypes["writes"].EdgeTargets)
+		assert.EqualValues(t, []int32{2, 4}, s.EdgeTypes["writes"].EdgeTargetsForSourceIdx(4))
+		assert.EqualValues(t, []int32{}, s.EdgeTypes["writes"].EdgeTargetsForSourceIdx(9))
 
-		assert.EqualValues(t, []int32{0, 0, 3, 4, 7}, s.d.EdgeTypes["written_by"].Starts)
-		assert.EqualValues(t, []int32{0, 3, 4, 0, 0, 4, 7}, s.d.EdgeTypes["written_by"].EdgeTargets)
-		assert.EqualValues(t, []int32{0, 4, 7}, s.d.EdgeTypes["written_by"].EdgeTargetsForSourceIdx(4))
-		assert.EqualValues(t, []int32{}, s.d.EdgeTypes["written_by"].EdgeTargetsForSourceIdx(0))
+		assert.EqualValues(t, []int32{0, 0, 3, 4, 7}, s.EdgeTypes["written_by"].Starts)
+		assert.EqualValues(t, []int32{0, 3, 4, 0, 0, 4, 7}, s.EdgeTypes["written_by"].EdgeTargets)
+		assert.EqualValues(t, []int32{0, 4, 7}, s.EdgeTypes["written_by"].EdgeTargetsForSourceIdx(4))
+		assert.EqualValues(t, []int32{}, s.EdgeTypes["written_by"].EdgeTargetsForSourceIdx(0))
 	}
 
 	// Checks Sampler s is correct.
@@ -130,32 +130,64 @@ func TestDataset(t *testing.T) {
 		require.Empty(t, labels)
 		require.Equal(t, strategy, spec.(*Strategy))
 		graphSample := MapInputs[tensor.Tensor](strategy, inputs)
+		if strategy.KeepDegrees == true {
+			seeds := graphSample["Seeds"].Value.Local().FlatCopy().([]int32)
+			degrees := graphSample[NameForNodeDependentDegree("Seeds", "authors")].Value.Local().FlatCopy().([]int32)
+			for ii, paper := range seeds {
+				var want int32
+				switch paper {
+				case 2:
+					want = 3
+				case 3:
+					want = 1
+				case 4:
+					want = 3
+				case 0:
+					// Padding.
+					want = 0
+				default:
+					require.Failf(t, "Invalid value for paper", "paper=%d!?", paper)
+				}
+				require.Equalf(t, want, degrees[ii], "Got degree %d for paper %d, wanted %d", degrees[ii], paper, want)
+			}
+		}
 		for name, rule := range strategy.Rules {
 			require.Containsf(t, graphSample, name, "Missing input for rule %q", name)
 			value, mask := graphSample[name].Value, graphSample[name].Mask
-			require.True(t, value.Shape().Eq(rule.Shape), "Mismatch of shapes for value of rule %q", name)
+			require.True(t, value.Shape().Eq(rule.Shape), "Mismatch of shapes for value of rule %q: value.Shape=%s, rule.Shape=%s", name,
+				value.Shape(), rule.Shape)
 			require.NoErrorf(t, mask.Shape().Check(shapes.Bool, rule.Shape.Dimensions...),
 				"Mismatch of shapes for mask of rule %q", name)
+			if rule.SourceRule != nil && strategy.KeepDegrees {
+				degreeName := NameForNodeDependentDegree(rule.SourceRule.Name, rule.Name)
+				degrees := graphSample[degreeName].Value
+				wantShape := value.Shape().Copy()
+				wantShape.Dimensions[wantShape.Rank()-1] = 1
+				require.Truef(t, degrees.Shape().Eq(wantShape), "Mismatch degree shapes for %q: degree shape is %s, wanted %s",
+					degreeName, degrees.Shape(), wantShape)
+			}
 		}
 		return graphSample
 	}
 
-	ds := strategy.NewDataset("one_epoch_in_order").Epochs(1)
-	ds.Epochs(1)
-	{
-		spec, inputs, labels, err := ds.Yield()
-		_ = checkInputsFn(t, spec, inputs, labels, err)
-		spec, inputs, labels, err = ds.Yield()
-		_ = checkInputsFn(t, spec, inputs, labels, err)
-	}
-	_, _, _, err := ds.Yield()
-	require.Error(t, err, "Dataset should have been exhausted.")
+	for _, strategy.KeepDegrees = range []bool{false, true} {
+		fmt.Printf("> strategy.KeepDegrees=%v\n", strategy.KeepDegrees)
+		ds := strategy.NewDataset("one_epoch_in_order").Epochs(1)
+		{
+			spec, inputs, labels, err := ds.Yield()
+			_ = checkInputsFn(t, spec, inputs, labels, err)
+			spec, inputs, labels, err = ds.Yield()
+			_ = checkInputsFn(t, spec, inputs, labels, err)
+		}
+		_, _, _, err := ds.Yield()
+		require.Error(t, err, "Dataset should have been exhausted.")
 
-	ds = strategy.NewDataset("one_epoch_in_order").Infinite().Shuffle()
-	parallelDS := mldata.Parallel(ds)
-	for _ = range 100 { // Sample 100 using parallel datasets, and checks that it works ok.
-		spec, inputs, labels, err := parallelDS.Yield()
-		_ = checkInputsFn(t, spec, inputs, labels, err)
+		ds = strategy.NewDataset("one_epoch_in_order").Infinite().Shuffle()
+		parallelDS := mldata.Parallel(ds)
+		for _ = range 100 { // Sample 100 using parallel datasets, and checks that it works ok.
+			spec, inputs, labels, err := parallelDS.Yield()
+			_ = checkInputsFn(t, spec, inputs, labels, err)
+		}
 	}
 }
 

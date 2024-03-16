@@ -19,6 +19,9 @@ type Strategy struct {
 	Sampler *Sampler
 	frozen  bool // If set to true, it can no longer be modified.
 
+	// KeepDegrees means the sampler should add a tensor for all edges with the degrees of source sampling nodes.
+	KeepDegrees bool
+
 	// Rules lists all the rules of a strategy.
 	// It can be used for reading, but don't change it.
 	Rules map[string]*Rule
@@ -167,6 +170,11 @@ func recursivelyMapInputsToSubRules[T any](inputs []T, rule *Rule, mapNodes map[
 	for _, subRule := range rule.Dependents {
 		mapNodes[subRule.Name] = &ValueMask[T]{inputs[0], inputs[1]}
 		inputs = inputs[2:]
+		if rule.Strategy.KeepDegrees {
+			// Extract degree tensor.
+			mapNodes[NameForNodeDependentDegree(rule.Name, subRule.Name)] = &ValueMask[T]{Value: inputs[0], Mask: mapNodes[rule.Name].Mask}
+			inputs = inputs[1:]
+		}
 		if len(subRule.Dependents) > 0 {
 			inputs = recursivelyMapInputsToSubRules(inputs, subRule, mapNodes)
 		}

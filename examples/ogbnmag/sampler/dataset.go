@@ -23,6 +23,7 @@ type Dataset struct {
 	strategy                 *Strategy
 	numEpochs                int
 	shuffle, withReplacement bool
+	degree                   bool
 
 	muSample                sync.Mutex
 	currentEpoch            int
@@ -94,9 +95,11 @@ func (ds *Dataset) Infinite() *Dataset {
 // WithReplacement configures the dataset to yield with replacement.
 // This automatically implies `Shuffle` and `Infinite`.
 func (ds *Dataset) WithReplacement() *Dataset {
-	ds = ds.Infinite().Shuffle()
+	if ds.frozen {
+		Panicf("cannot change a Dataset that has already started yielding results")
+	}
 	ds.withReplacement = true
-	return ds
+	return ds.Infinite().Shuffle()
 }
 
 // Shuffle configures the dataset to shuffle the seed nodes before sampling it.
@@ -145,7 +148,14 @@ func (ds *Dataset) Yield() (spec any, inputs, labels []tensor.Tensor, err error)
 		return
 	}
 
-	inputs = make([]tensor.Tensor, 0, 2*len(ds.strategy.Rules))
+	if ds.strategy.KeepDegrees {
+		// 2 tensors per node (value and mask), plus one tensor per edge (degree).
+		numEdges := len(ds.strategy.Rules) - len(ds.strategy.Seeds)
+		inputs = make([]tensor.Tensor, 0, 2*len(ds.strategy.Rules)+numEdges)
+	} else {
+		// 2 tensors per node: value and mask.
+		inputs = make([]tensor.Tensor, 0, 2*len(ds.strategy.Rules))
+	}
 	ds.frozen = true
 	if ds.startOfEpoch {
 		ds.startEpoch()
@@ -164,6 +174,7 @@ func (ds *Dataset) Yield() (spec any, inputs, labels []tensor.Tensor, err error)
 	unlocked = true
 	for seedIdx, seedsRule := range ds.strategy.Seeds {
 		seeds, mask := seedsTensors[2*seedIdx], seedsTensors[2*seedIdx+1]
+		inputs = append(inputs, seeds, mask)
 		inputs = recursivelySampleEdges(seedsRule, seeds, mask, inputs)
 	}
 	return
@@ -244,16 +255,19 @@ func (ds *Dataset) sampleSeeds(seedIdx int, rule *Rule) (seeds, mask *tensor.Loc
 // recursivelySampleEdges in the dependency tree of Rules, storing the results that will become the yielded values
 // by the Dataset.
 func recursivelySampleEdges(rule *Rule, nodes, mask *tensor.Local, store []tensor.Tensor) []tensor.Tensor {
-	store = append(store, nodes, mask)
 	for _, subRule := range rule.Dependents {
-		subNodes, subMask := sampleEdges(subRule, nodes, mask)
+		subNodes, subMask, degrees := sampleEdges(subRule, nodes, mask)
+		store = append(store, subNodes, subMask)
+		if degrees != nil {
+			store = append(store, degrees)
+		}
 		store = recursivelySampleEdges(subRule, subNodes, subMask, store)
 	}
 	return store
 }
 
 // sampleEdges based on a edge sampling rule `rule`, and the source nodes from which to sample.
-func sampleEdges(rule *Rule, srcNodes, srcMask *tensor.Local) (nodes, mask *tensor.Local) {
+func sampleEdges(rule *Rule, srcNodes, srcMask *tensor.Local) (nodes, mask, degrees *tensor.Local) {
 	nodes = tensor.FromScalarAndDimensions(int32(0), rule.Shape.Dimensions...)
 	mask = tensor.FromScalarAndDimensions(false, rule.Shape.Dimensions...)
 
@@ -261,11 +275,27 @@ func sampleEdges(rule *Rule, srcNodes, srcMask *tensor.Local) (nodes, mask *tens
 	maskRef := mask.AcquireData()
 	srcNodesRef := srcNodes.AcquireData()
 	srcMaskRef := srcMask.AcquireData()
+
+	var (
+		degreesRef  *tensor.LocalRef
+		degreesData []int32
+	)
+	if rule.Strategy.KeepDegrees {
+		degreesShape := srcNodes.Shape().Copy()
+		degreesShape.Dimensions = append(degreesShape.Dimensions, 1)
+		degrees = tensor.FromScalarAndDimensions(int32(0), degreesShape.Dimensions...)
+		degreesRef = degrees.AcquireData()
+		degreesData = degreesRef.Flat().([]int32)
+	}
+
 	defer func() {
 		nodesRef.Release()
 		maskRef.Release()
 		srcNodesRef.Release()
 		srcMaskRef.Release()
+		if degreesRef != nil {
+			degreesRef.Release()
+		}
 	}()
 
 	tgtNodesData := nodesRef.Flat().([]int32)
@@ -293,6 +323,9 @@ func sampleEdges(rule *Rule, srcNodes, srcMask *tensor.Local) (nodes, mask *tens
 		edges := edgeDef.EdgeTargets[start:end]
 		if len(edges) == 0 {
 			continue // No edges to sample from.
+		}
+		if degreesData != nil {
+			degreesData[fromIdx] = int32(len(edges))
 		}
 
 		// If we don't have enough edges to sample from, take what we got.

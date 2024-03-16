@@ -318,3 +318,9 @@ func Load(filePath string) (s *Sampler, err error) {
 	_ = f.Close()
 	return
 }
+
+// NameForNodeDependentDegree returns the name of the input field that contains the degree of the given rule node,
+// with respect to the dependent rule node.
+func NameForNodeDependentDegree(ruleName, dependentName string) string {
+	return fmt.Sprintf("[%s->%s].degree", ruleName, dependentName)
+}
