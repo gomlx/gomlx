@@ -22,17 +22,19 @@ var (
 	flagSkipTrainEval    = flag.Bool("skip_train_eval", false, "Set to true to skip evaluation on training data, which takes longer.")
 	flagDataDir          = flag.String("data", "~/work/ogbnmag", "Directory to cache downloaded and generated dataset files.")
 	flagCheckpointSubdir = flag.String("checkpoint", "", "Checkpoint subdirectory under --data directory. If empty does not use checkpoints.")
-	manager              = NewManager()
 )
+
+const paramWithReplacement = "mag_with_replacement"
 
 func createDefaultContext(manager *Manager) *context.Context {
 	ctx := context.NewContext(manager)
 	ctx.RngStateReset()
 	ctx.SetParams(map[string]any{
-		"checkpoint":      "",
-		"num_checkpoints": 3,
-		"train_steps":     0,
-		"plots":           true,
+		"checkpoint":         "",
+		"num_checkpoints":    3,
+		"train_steps":        0,
+		"plots":              true,
+		paramWithReplacement: false,
 
 		optimizers.ParamOptimizer:           "adam",
 		optimizers.ParamLearningRate:        0.001,
@@ -42,11 +44,11 @@ func createDefaultContext(manager *Manager) *context.Context {
 		layers.ParamDropoutRate:      0.2,
 
 		gnn.ParamEdgeDropoutRate:     0.0,
-		gnn.ParamNumGraphUpdates:     4,
-		gnn.ParamReadoutHiddenLayers: 0,
+		gnn.ParamNumGraphUpdates:     2,
+		gnn.ParamReadoutHiddenLayers: 2,
 		gnn.ParamPoolingType:         "mean|sum",
 		gnn.ParamUsePathToRootStates: false,
-		gnn.ParamGraphUpdateType:     "simultaneous",
+		gnn.ParamGraphUpdateType:     "tree",
 
 		mag.ParamEmbedDropoutRate:     0.0,
 		mag.ParamSplitEmbedTablesSize: 1,
@@ -100,10 +102,10 @@ func main() {
 	start := time.Now()
 	must.M(mag.Download(*flagDataDir))
 	fmt.Printf("elapsed: %s\n", time.Since(start))
-
 	SetTrainSteps(ctx) // Can only be set after mag data is loaded.
 
 	// Run train / eval.
+	mag.WithReplacement = context.GetParamOr(ctx, paramWithReplacement, false)
 	var err error
 	if *flagEval {
 		// Evaluate on various datasets.
@@ -114,6 +116,10 @@ func main() {
 			err = mag.Eval(ctx, *flagDataDir, trainEvalDS, validEvalDS, testEvalDS)
 		}
 	} else {
+		if mag.WithReplacement {
+			fmt.Println("Training dataset with replacement")
+		}
+
 		// Train.
 		err = mag.Train(ctx, *flagDataDir)
 	}
