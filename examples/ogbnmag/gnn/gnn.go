@@ -289,13 +289,16 @@ func poolMessages(ctx *context.Context, value, mask, degree *Node) *Node {
 	for _, poolType := range poolTypesList {
 		reduceAxis := value.Rank() - 2
 		switch poolType {
-		case "sum":
+		case "sum", "logsum":
 			if degree == nil {
 				pooled = MaskedReduceSum(value, mask, reduceAxis)
 			} else {
 				// Sum pondered by degree, that is, `mean(value)*degree`.
 				pooled = MaskedReduceMean(value, mask, reduceAxis)
 				pooled = Mul(pooled, ConvertType(degree, pooled.DType()))
+			}
+			if poolType == "logsum" {
+				pooled = MirroredLog1p(pooled)
 			}
 		case "mean":
 			pooled = MaskedReduceMean(value, mask, reduceAxis)

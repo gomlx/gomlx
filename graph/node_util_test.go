@@ -199,3 +199,12 @@ func TestNorms(t *testing.T) {
 			return
 		}, [][]float32{{0, 0}, {invSqrt2, invSqrt2}}) // Epsilon shouldn't create a large enough difference to fail the test.
 }
+
+func TestMirroredLog1p(t *testing.T) {
+	testFuncOneInput(t, "MirroredLog1p",
+		func(g *Graph) (input, output *Node) {
+			input = Const(g, []float64{0.0, 1.0, math.E - 1.0, -1.0, -(math.E - 1.0)})
+			output = MirroredLog1p(input)
+			return
+		}, []float64{0.0, math.Log1p(1.0), 1.0, -math.Log1p(1.0), -1}) // Epsilon shouldn't create a large enough difference to fail the test.
+}

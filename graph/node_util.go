@@ -179,6 +179,12 @@ func PositiveIndicator(x *Node) *Node {
 	return Sign(Add(Sign(x), one))
 }
 
+// MirroredLog1p is similar to Log1p, but it is mirrored to negative numbers.
+// It return Log(Abs(x)+1)*Sign(x).
+func MirroredLog1p(x *Node) *Node {
+	return Mul(Log1p(Abs(x)), StopGradient(Sign(x)))
+}
+
 // StrictlyPositiveIndicator returns 1 where x > 0, 0 otherwise.
 // E.g: StrictlyPositiveIndicator({1.0, 0.0001, 0, -0.2, -3.0}) -> [1, 1, 0, 0, 0], with the same shape/dtype as x.
 func StrictlyPositiveIndicator(x *Node) *Node {
