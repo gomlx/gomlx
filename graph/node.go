@@ -408,7 +408,12 @@ func Logistic(x *Node) *Node { return oneArgNode(xla.LogisticNode, x) }
 func Sigmoid(x *Node) *Node { return Logistic(x) }
 
 // Sign adds to the graph the corresponding operation on the input node x.
-func Sign(x *Node) *Node { return oneArgNode(xla.SignNode, x) }
+// The gradient of Sign is assumed to be zero everywhere.
+func Sign(x *Node) *Node {
+	y := oneArgNode(xla.SignNode, x)
+	y.stopGradient = true
+	return y
+}
 
 // Clz adds to the graph the "count leading zeroes" operation on the input node x.
 func Clz(x *Node) *Node { return oneArgNode(xla.ClzNode, x) }

@@ -206,5 +206,12 @@ func TestMirroredLog1p(t *testing.T) {
 			input = Const(g, []float64{0.0, 1.0, math.E - 1.0, -1.0, -(math.E - 1.0)})
 			output = MirroredLog1p(input)
 			return
-		}, []float64{0.0, math.Log1p(1.0), 1.0, -math.Log1p(1.0), -1}) // Epsilon shouldn't create a large enough difference to fail the test.
+		}, []float64{0.0, math.Log1p(1.0), 1.0, -math.Log1p(1.0), -1})
+
+	testGradients(t, "MirroredLog1p gradient",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			input := Const(g, []float32{0.0, 2, -3})
+			output = MirroredLog1p(input)
+			return output, []*Node{input}
+		}, []any{[]float32{0.0, 1.0 / (2 + 1), 1.0 / (3 + 1)}})
 }
