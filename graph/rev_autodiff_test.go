@@ -622,3 +622,20 @@ func TestGradientComplex(t *testing.T) {
 		},
 	)
 }
+
+func TestIdentityWithCustomGradient(t *testing.T) {
+	testGradients(t, "IdentityWithCustomGradient",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			input := IotaFull(g, shapes.Make(shapes.F32, 5))
+			output = IdentityWithCustomGradient(input, func(x, v *Node) *Node {
+				factor := AddScalar(Neg(x), 5)
+				fmt.Printf("> custom gradient: x.shape=%s, v.shape=%s\n", x.Shape(), v.Shape())
+				return Mul(v, factor)
+			})
+			output = MulScalar(output, 2)
+			return output, []*Node{input}
+		}, []any{
+			[]float32{10, 8, 6, 4, 2},
+		},
+	)
+}

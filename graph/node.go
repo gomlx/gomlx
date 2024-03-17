@@ -49,7 +49,12 @@ type Node struct {
 	// logMessage is set if node is marked for logging.
 	logMessage string
 
-	stopGradient bool // if true, no gradient is passed through.
+	// stopGradient is set if no gradient is supposed to pass through.
+	stopGradient bool
+
+	// customVJP can be set for a custom reverse gradient definition for the function.
+	// Usually, defined for a NoOp operation.
+	customVJP VJP
 
 	trace error // Stack-trace error of where Node was created. Stored if graph.traced is true.
 }
@@ -304,6 +309,20 @@ func NoOp(x *Node) *Node {
 func StopGradient(x *Node) *Node {
 	n := NoOp(x)
 	n.stopGradient = true
+	return n
+}
+
+// IdentityWithCustomGradient returns x unchanged, but sets a custom gradient function to be applied when
+// doing the reverse autograd (gradient) calculation.
+//
+// The `gradientFn` will be called during auto-grad and will be passed `x` and `v`, the "adjoint", which represents
+// the gradient of the loss (typically, but of whatever we are calculating the gradient of) with respect to `x`,
+// and we should return the updated `v`, that is, the customized gradient with respect to `x`.
+func IdentityWithCustomGradient(x *Node, gradientFn func(x, v *Node) *Node) *Node {
+	n := NoOp(x)
+	n.customVJP = func(node, v *Node, _ shapes.Shape) []*Node {
+		return []*Node{gradientFn(node, v)}
+	}
 	return n
 }
 
