@@ -363,7 +363,7 @@ func TestOneArgOps(t *testing.T) {
 		{Ceil, func(x float64) float64 { return math.Ceil(x) }},
 		{Round, func(x float64) float64 { return math.Round(x) }},
 		{Log, func(x float64) float64 { return math.Log(x) }},
-		{Log1p, func(x float64) float64 { return math.Log1p(x) }},
+		{Log1P, func(x float64) float64 { return math.Log1p(x) }},
 		{Sign, func(x float64) float64 {
 			if math.Signbit(x) {
 				return -1

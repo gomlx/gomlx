@@ -166,7 +166,7 @@ func BinaryCrossentropyLogits(labels, logits []*Node) *Node {
 	if logits0.Rank() != labels0.Rank() {
 		labels0 = Reshape(labels0, logits0.Shape().Dimensions...)
 	}
-	logPart := Log1p(Exp(Neg(Abs(logits0))))
+	logPart := Log1P(Exp(Neg(Abs(logits0))))
 	prodPart := Mul(logits0, labels0)
 	maxPart := Max(logits0, ZerosLike(logits0))
 	losses := Add(Sub(maxPart, prodPart), logPart)

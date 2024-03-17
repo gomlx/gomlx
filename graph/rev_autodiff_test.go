@@ -460,7 +460,7 @@ func TestGradientLog1p(t *testing.T) {
 	testGradients(t, "gradient_of_log1p",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			inputs := Const(g, []float64{0, 2, 10, 100})
-			output = Mul(Const(g, []float64{2, 1, 3, 4}), Log1p(inputs))
+			output = Mul(Const(g, []float64{2, 1, 3, 4}), Log1P(inputs))
 			return output, []*Node{inputs}
 		}, []any{[]float64{2, 1.0 / (2.0 + 1.0), 3.0 / (10.0 + 1.0), 4.0 / (100.0 + 1.0)}},
 	)
