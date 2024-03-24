@@ -9,6 +9,7 @@
   * Functions that take masked inputs are being renamed to use a "Masked" prefix (e.g.: `MaskedReduceSum`,
     `MaskedReduceMean`, `MaskedReduceMax`, `MaskedReduceAndKeep`).
   * Added `MaskedReduceMean`.
+  * Added `IdentityWithCustomGradient`, to allow for manual tweaks to the gradient.
 * Package `context`:
   * added `Manager()` accessor method.
   * added `SetParams` to set various parameters at once.
