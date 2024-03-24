@@ -49,7 +49,12 @@ type Node struct {
 	// logMessage is set if node is marked for logging.
 	logMessage string
 
-	stopGradient bool // if true, no gradient is passed through.
+	// stopGradient is set if no gradient is supposed to pass through.
+	stopGradient bool
+
+	// customVJP can be set for a custom reverse gradient definition for the function.
+	// Usually, defined for a NoOp operation.
+	customVJP VJP
 
 	trace error // Stack-trace error of where Node was created. Stored if graph.traced is true.
 }
@@ -307,6 +312,20 @@ func StopGradient(x *Node) *Node {
 	return n
 }
 
+// IdentityWithCustomGradient returns x unchanged, but sets a custom gradient function to be applied when
+// doing the reverse autograd (gradient) calculation.
+//
+// The `gradientFn` will be called during auto-grad and will be passed `x` and `v`, the "adjoint", which represents
+// the gradient of the loss (typically, but of whatever we are calculating the gradient of) with respect to `x`,
+// and we should return the updated `v`, that is, the customized gradient with respect to `x`.
+func IdentityWithCustomGradient(x *Node, gradientFn func(x, v *Node) *Node) *Node {
+	n := NoOp(x)
+	n.customVJP = func(node, v *Node, _ shapes.Shape) []*Node {
+		return []*Node{gradientFn(node, v)}
+	}
+	return n
+}
+
 // Iota creates a constant of the given shape with increasing numbers (starting from 0)
 // on the given axis. So Iota([2,2], 1) returns [[0 1][0 1]], while Iota([2,2], 0)
 // returns [[0 0][1 1]].
@@ -412,7 +431,12 @@ func Logistic(x *Node) *Node { return oneArgNode(xla.LogisticNode, x) }
 func Sigmoid(x *Node) *Node { return Logistic(x) }
 
 // Sign adds to the graph the corresponding operation on the input node x.
-func Sign(x *Node) *Node { return oneArgNode(xla.SignNode, x) }
+// The gradient of Sign is assumed to be zero everywhere.
+func Sign(x *Node) *Node {
+	y := oneArgNode(xla.SignNode, x)
+	y.stopGradient = true
+	return y
+}
 
 // Clz adds to the graph the "count leading zeroes" operation on the input node x.
 func Clz(x *Node) *Node { return oneArgNode(xla.ClzNode, x) }

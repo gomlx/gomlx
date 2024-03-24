@@ -23,7 +23,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-// This file implements reverse-mode automatic differentiation, using VJP (Vector Jacobian Product).
+// This file implements reverse-mode automatic differentiation, using AccumulatedVJP (Vector Jacobian Product).
 // There are many sources discussing this topic, some below:
 //
 // Jax Autodiff Cookbook: https://jax.readthedocs.io/en/latest/notebooks/autodiff_cookbook.html
@@ -70,10 +70,10 @@ type reverseNode struct {
 	// For nodes not marked as useful, we don't need to generate the VJP values (aka adjoints).
 	Useful bool
 
-	// VJP is the gradient of the root node with respect to the output of this node. In the end it will be the sum
+	// AccumulatedVJP is the gradient of the root node with respect to the output of this node. In the end it will be the sum
 	// of the VJPs back-propagated by all its consumers. Once all of them are included, this node is ready to push
 	// its VJP to its inputs.
-	VJP *Node
+	AccumulatedVJP *Node
 
 	// VJPsForTuple holds the individual VJPs for a tuple: they are only collapsed to a VJP at the end.
 	VJPsForTuple []*Node
@@ -104,7 +104,7 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 	rOutput := rg.ReverseNodes[output.Id()]
 	// Initialize gradient of the output with respect to itself to 1. When outputShape.Rank() != 0
 	// we will need to find something akin to a matrix identity for possibly higher dimensional tensors.
-	rOutput.VJP = Ones(output.graph, shapes.Make(outputShape.DType))
+	rOutput.AccumulatedVJP = Ones(output.graph, shapes.Make(outputShape.DType))
 
 	// Whether we need the gradient for the node.
 	needGradientForNode := func(node *Node) bool {
@@ -145,7 +145,7 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 					rNode.VJPsForTuple[ii] = Zeros(node.Graph(), shape)
 				}
 			}
-			rNode.VJP = Tuple(rNode.VJPsForTuple...)
+			rNode.AccumulatedVJP = Tuple(rNode.VJPsForTuple...)
 		}
 		if node.NodeType() == xla.GetTupleElementNode {
 			// GetTupleElement just pushes v to the specific element of the tuple.
@@ -153,39 +153,30 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 			input := node.inputs[0]
 			rInput := rg.ReverseNodes[input.Id()]
 			if rInput.VJPsForTuple[elementIdx] == nil {
-				rInput.VJPsForTuple[elementIdx] = rNode.VJP
+				rInput.VJPsForTuple[elementIdx] = rNode.AccumulatedVJP
 			} else {
-				rInput.VJPsForTuple[elementIdx] = Add(rInput.VJPsForTuple[elementIdx], rNode.VJP)
-			}
-			continue
-		} else if node.NodeType() == xla.InvalidNode {
-			// This is a No-Op node, just pass gradient through the one input.
-			if rNode.VJP != nil {
-				input := node.inputs[0]
-				rInput := rg.ReverseNodes[input.Id()]
-				if rInput.VJP == nil {
-					rInput.VJP = rNode.VJP
-				} else {
-					rInput.VJP = Add(rInput.VJP, rNode.VJP)
-				}
+				rInput.VJPsForTuple[elementIdx] = Add(rInput.VJPsForTuple[elementIdx], rNode.AccumulatedVJP)
 			}
 			continue
 		}
 
-		if rNode.VJP == nil {
-			// No gradients arriving to rNode, skip.
-			//fmt.Printf("No gradients for %s\nStack-trace: %+v\n\n%s\n", node, node.StackTrace(), g)
-			//panic("failed")
+		if rNode.AccumulatedVJP == nil {
+			// No gradients arriving to rNode -- e.g.: there was a `stopGradient`. So we can't propagate the gradient
+			// either.
 			continue
 		}
 
-		vjpFn, ok := VJPRegistration[node.NodeType()]
-		if !ok {
-			Panicf("graph has node %s, for which no gradient is defined yet, cannot generate graph gradient", node)
+		vjpFn := node.customVJP
+		if vjpFn == nil {
+			var ok bool
+			vjpFn, ok = VJPRegistration[node.NodeType()]
+			if !ok {
+				Panicf("graph has node %s, for which no gradient is defined yet, cannot generate graph gradient", node)
+			}
 		}
-		inputsVJPs := vjpFn(node, rNode.VJP, outputShape)
+		inputsVJPs := vjpFn(node, rNode.AccumulatedVJP, outputShape)
 		if len(inputsVJPs) != len(node.Inputs()) {
-			Panicf("VJP(%s) returned %d VJPs, but it has %d inputs, implementation of auto-differentiation for node failed",
+			Panicf("AccumulatedVJP(%s) returned %d VJPs, but it has %d inputs, implementation of auto-differentiation for node failed",
 				node, len(inputsVJPs), len(node.Inputs()))
 		}
 		//fmt.Printf("\tFrom node %s\n", node)
@@ -198,16 +189,16 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 			//fmt.Printf("\t\tSetting vjp for %s: %s\n", input, vjp)
 			combinedShape := combineOutputShape(outputShape, input.shape)
 			if !vjp.shape.Eq(combinedShape) {
-				Panicf("invalid Gradient calculation for node %q: invalid shape for calculated VJP for "+
-					"input #%d (out of %d): input shape=%s, calculated VJP shape=%s (wanted %s)"+
+				Panicf("invalid Gradient calculation for node %q: invalid shape for calculated AccumulatedVJP for "+
+					"input #%d (out of %d): input shape=%s, calculated AccumulatedVJP shape=%s (wanted %s)"+
 					" -- this probably indicates a bug in the code, please report the issue.",
 					node, ii, len(node.Inputs()), input.shape, vjp.shape, combinedShape)
 			}
 			rInput := rg.ReverseNodes[input.Id()]
-			if rInput.VJP == nil {
-				rInput.VJP = vjp
+			if rInput.AccumulatedVJP == nil {
+				rInput.AccumulatedVJP = vjp
 			} else {
-				rInput.VJP = Add(rInput.VJP, vjp)
+				rInput.AccumulatedVJP = Add(rInput.AccumulatedVJP, vjp)
 			}
 		}
 	}
@@ -215,14 +206,14 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 	gradients := make([]*Node, len(gradientNodes))
 	for ii, node := range gradientNodes {
 		rNode := rg.ReverseNodes[node.Id()]
-		if rNode.VJP == nil {
+		if rNode.AccumulatedVJP == nil {
 			// If there is no path from the output to the gradient node (possibly because of
 			// a StopGradient) return zero.
 			// TODO: fix the shape if the output wrt which we are calculating the gradient is not a scalar.
 			gradients[ii] = ZerosLike(node)
 
 		} else {
-			gradients[ii] = rNode.VJP
+			gradients[ii] = rNode.AccumulatedVJP
 		}
 	}
 	return gradients
@@ -298,13 +289,28 @@ func recursiveMarkAsUseful(rg *reverseGraph, rNode *reverseNode) {
 	}
 }
 
-// VJP returns the $v \dot Jacobian$ of the given node, with respect to each of its inputs (given
-// in node.Inputs()).
+// VJP returns the $v \dot Jacobian$ of the given `node`, with respect to each of its inputs (given
+// by `node.Inputs()`).
+//
 // outputShape is the shape of the value for which we are calculating the gradient for.
 // For now this is only used for Gradient, so one can expect outputShape to be scalar, and `v.Shape()`
 // to be the same as `output.Shape()`. But this won't be true once Jacobian functionality (like a
 // Gradient where output is a non-scalar tensor),
 // is defined.
+//
+// Args:
+//
+//	`node`: node for which we are calculating the backward gradient. An important part of `node` are its inputs
+//	   given by `node.Inputs()`. The VJP function must one gradient per input.
+//	`v`: gradient (or jacobian) of what we care about with the respect to the output of `node`, also known as the
+//	   adjoint. VJP needs to calculate the next adjoint (`v`) but with respect to the inputs of `node` instead.
+//	`outputShape`: for now fixed as scalar, and can be ignored. When we add support for Jacobian this will hold
+//	   the shape of the thing we are calculating the Jacobian for.
+//
+// Returns:
+//
+//	The adjoint (the updated `v`) to each of `node` inputs. That is, the gradient of the loss (typically, but of
+//	whatever we are calculating the gradient of) with respect to each of the `node` inputs.
 type VJP func(node, v *Node, outputShape shapes.Shape) []*Node
 
 // VJPRegistration maps each node type to its implementation of VJP. If implementing a new op, or
@@ -313,6 +319,7 @@ type VJP func(node, v *Node, outputShape shapes.Shape) []*Node
 // Notice xla.GetTupleElementNode is specialized inside the main reverse autodiff code, and is not
 // in the table here.
 var VJPRegistration = map[xla.NodeType]VJP{
+	xla.InvalidNode:     noOpVJP, // NoOp
 	xla.ConstantNode:    nilVJP,
 	xla.ParameterNode:   nilVJP,
 	xla.ConvertTypeNode: convertTypeVJP,
@@ -359,6 +366,11 @@ func nilVJP(_, _ *Node, _ shapes.Shape) []*Node {
 	return nil
 }
 
+// noOpVJP works for anything that has not impact on the gradient, like a No-Op.
+func noOpVJP(node, v *Node, _ shapes.Shape) []*Node {
+	return []*Node{v}
+}
+
 // vjpForDefaultBroadcast returns the VJP of the default broadcasting on operations like Add, Mul, Sub, etc.
 // It is a reduce-sum of the broadcast dimensions.
 func vjpForDefaultBroadcast(node, input, v *Node) *Node {
@@ -387,7 +399,7 @@ func vjpForDefaultBroadcast(node, input, v *Node) *Node {
 		vjp = ReshapeWithShape(reduced, input.shape)
 	})
 	if err != nil {
-		err = errors.WithMessagef(err, "AutoGrad: calculating the VJP of a broadcast: v.shape=%s, input.shape=%s", v.Shape(), input.Shape())
+		err = errors.WithMessagef(err, "AutoGrad: calculating the AccumulatedVJP of a broadcast: v.shape=%s, input.shape=%s", v.Shape(), input.Shape())
 		panic(err)
 	}
 	return vjp

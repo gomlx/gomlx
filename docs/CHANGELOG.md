@@ -4,6 +4,12 @@
 
 * Open Graph Benchmark OGBN-MAG dataset support and example models (FNN and GNN).
   * Added sampler library.
+* Package `graph`:
+  * added `MirroredLog1P`.
+  * Functions that take masked inputs are being renamed to use a "Masked" prefix (e.g.: `MaskedReduceSum`,
+    `MaskedReduceMean`, `MaskedReduceMax`, `MaskedReduceAndKeep`).
+  * Added `MaskedReduceMean`.
+  * Added `IdentityWithCustomGradient`, to allow for manual tweaks to the gradient.
 * Package `context`:
   * added `Manager()` accessor method.
   * added `SetParams` to set various parameters at once.
@@ -19,10 +25,6 @@
   * Added `EqDimensions()` to compare dimensions.
   * `Make(dtype, dimensions...)` now makes a copy of the `dimensions` slice given.
 * `exceptions`: refactoring to use separate package `github.com/gomlx/exceptions`.
-* Package `graph`:
-  * Functions that take masked inputs are being renamed to use a "Masked" prefix (e.g.: `MaskedReduceSum`,
-    `MaskedReduceMean`, `MaskedReduceMax`, `MaskedReduceAndKeep`).
-  * Added `MaskedReduceMean`.
 * Package `layers`:
   * Added `...FromContext` family of functions, that apply layers according to parameters set in the context: 
     `ActivationFromContext`, `DropoutFromContext`, `NormalizeFromContext` and `MaskedNormalizeFromContext`.
