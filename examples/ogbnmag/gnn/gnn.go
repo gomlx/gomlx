@@ -252,7 +252,7 @@ func recursivelyApplyGraphConvolution(ctx *context.Context, rule *sampler.Rule,
 // This function should do the same as `layeredConvolveEdgeSet`, this function does it for sampled graphs.
 // They must be aligned.
 func sampledConvolveEdgeSet(ctx *context.Context, value, mask, degree *Node) *Node {
-	messages, mask := edgeMessageGraph(ctx, value, mask)
+	messages, mask := edgeMessageGraph(ctx.In("message"), value, mask)
 	return poolMessages(ctx, messages, mask, degree)
 }
 
@@ -261,7 +261,7 @@ func sampledConvolveEdgeSet(ctx *context.Context, value, mask, degree *Node) *No
 // look like: `[batch_size, ..., num_edges, source_node_state_dim]`.
 func edgeMessageGraph(ctx *context.Context, gatheredStates, gatheredMask *Node) (messages, mask *Node) {
 	messageDim := context.GetParamOr(ctx, ParamMessageDim, 128)
-	messages = layers.DenseWithBias(ctx.In("message"), gatheredStates, messageDim)
+	messages = layers.DenseWithBias(ctx, gatheredStates, messageDim)
 	messages = layers.ActivationFromContext(ctx, messages)
 
 	mask = gatheredMask
@@ -331,7 +331,7 @@ func updateState(ctx *context.Context, prevState, input, mask *Node) *Node {
 	// Inputs: both previous state and pooled messages passes through a dropout first.
 	input = layers.DropoutFromContext(ctx, input)
 	stateDim := context.GetParamOr(ctx, ParamStateDim, 128)
-	state := layers.DenseWithBias(ctx.In("message"), input, stateDim)
+	state := layers.DenseWithBias(ctx, input, stateDim)
 	state = layers.ActivationFromContext(ctx, state)
 	state = layers.DropoutFromContext(ctx, state)
 

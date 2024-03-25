@@ -76,6 +76,7 @@ func Train(ctx *context.Context, baseDir string) error {
 		globalStep := optimizers.GetGlobalStep(ctx)
 		if globalStep != 0 {
 			fmt.Printf("> restarting training from global_step=%d (training until %d)\n", globalStep, trainSteps)
+			ctx = ctx.Reuse()
 		}
 		if trainSteps <= int(globalStep) {
 			fmt.Printf("> training already reached target train_steps=%d. To train further, set a number additional "+
@@ -152,9 +153,9 @@ func newTrainer(ctx *context.Context) *train.Trainer {
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
 	trainer := train.NewTrainer(ctx.Manager(), ctx, MagModelGraph,
 		lossFn,
-		optimizers.FromContext(ctx), // Based on `ctx.GetParam("optimizer")`.
+		optimizers.FromContext(ctx),               // Based on `ctx.GetParam("optimizer")`.
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
-		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
+		[]metrics.Interface{meanAccuracyMetric}) // evalMetrics
 	return trainer
 }
 
