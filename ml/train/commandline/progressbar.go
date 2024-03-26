@@ -118,7 +118,9 @@ func (pBar *progressBar) onStep(loop *train.Loop, metrics []tensor.Tensor) error
 }
 
 func (pBar *progressBar) onEnd(loop *train.Loop, metrics []tensor.Tensor) error {
-	close(pBar.updates)
+	if pBar.updates != nil {
+		close(pBar.updates)
+	}
 	pBar.asyncUpdatesDone.Wait()
 	fmt.Println()
 	return nil

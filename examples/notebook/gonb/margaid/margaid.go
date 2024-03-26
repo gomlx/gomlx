@@ -30,7 +30,7 @@
 //
 //	plots = margaid.New(1024, 400, trainEvalDS, validationDS)
 //	if checkpoint != nil {
-//		_, err := plots.WithFile(path.Join(checkpoint.Dir(), "training_plot_points.json"))
+//		_, err := plots.WithFile(path.Join(checkpoint.Dir(), TrainingPlotFileName))
 //		AssertNoError(err)
 //	}
 //	plots.DynamicUpdates()
@@ -44,8 +44,6 @@ import (
 	mg "github.com/erkkah/margaid"
 	stdplots "github.com/gomlx/gomlx/examples/notebook/gonb/plots"
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/types/exceptions"
-	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/janpfeifer/gonb/gonbui"
@@ -63,7 +61,7 @@ var (
 	_ = mg.NewSeries
 	_ = New
 
-	// ParamPlots is the conventioned context parameter to trigger generating of plot points and
+	// ParamPlots is the context parameter to trigger generating of plot points and
 	// displaying them.
 	// A boolean value that defaults to false.
 	ParamPlots = "plots"
@@ -148,7 +146,7 @@ func NewDefault(loop *train.Loop, dir string, startStep int, stepFactor float64,
 	train.ExponentialCallback(loop, startStep, stepFactor, true,
 		"margaid.Plot", 0, func(loop *train.Loop, metrics []tensor.Tensor) error {
 			// Update plots with metrics.
-			return plots.AddTrainAndEvalMetrics(loop, metrics)
+			return stdplots.AddTrainAndEvalMetrics(plots, loop, metrics, plots.EvalDatasets)
 		})
 	plots.attachOnEnd(loop)
 	return plots
@@ -174,7 +172,7 @@ func (ps *Plots) PlotEveryNSteps(loop *train.Loop, n int) {
 	train.EveryNSteps(loop, n, "margaid.Plot", 0,
 		func(loop *train.Loop, metrics []tensor.Tensor) error {
 			// Update plots with metrics.
-			return ps.AddTrainAndEvalMetrics(loop, metrics)
+			return stdplots.AddTrainAndEvalMetrics(ps, loop, metrics, ps.EvalDatasets)
 		})
 }
 
@@ -238,7 +236,7 @@ func (ps *Plots) PreloadFile(filePath string, renameFn func(metricName string) s
 			if renameFn != nil {
 				point.MetricName = renameFn(point.MetricName)
 			}
-			ps.AddPoint(point.MetricName, point.MetricType, point.Step, point.Value)
+			ps.AddPoint(point)
 			continue
 		}
 		if err == io.EOF {
@@ -341,88 +339,54 @@ func (ps *Plots) attachOnEnd(loop *train.Loop) {
 // to `Plots.New()`, their metrics are evaluated and also plotted.
 // It automatically calls Plots.Plot at the end of the loop (`loop.OnEnd()`).
 func (ps *Plots) Attach(loop *train.Loop, numPoints int) {
-	train.NTimesDuringLoop(loop, numPoints, "margaid plots", 0, ps.AddTrainAndEvalMetrics)
+	train.NTimesDuringLoop(loop, numPoints, "margaid plots", 0,
+		func(loop *train.Loop, metrics []tensor.Tensor) error {
+			return stdplots.AddTrainAndEvalMetrics(ps, loop, metrics, ps.EvalDatasets)
+		})
 	ps.attachOnEnd(loop)
 }
 
-// AddTrainAndEvalMetrics will add the given train metrics, and run `loop.Trainer.Eval()` on each of the
-// datasets registered and include those metrics.
-// Finally, if set for DynamicUpdates, it will update the plots.
+// DynamicSampleDone is called after all the data points recorded for this sample (evaluation at a time step).
+// The value `incomplete` is set to true if any of the evaluations are NaN or infinite.
 //
-// This function can be set as a callback to the `train.Loop`, at some desired frequency.
-// It is used by Plots.Attach, for instance.
-func (ps *Plots) AddTrainAndEvalMetrics(loop *train.Loop, trainMetrics []tensor.Tensor) error {
-	// Training metrics are pre-generated and given.
-	step := float64(loop.LoopStep)
-	var incomplete bool
-	for ii, desc := range loop.Trainer.TrainMetrics() {
-		if desc.Name() == "Batch Loss" {
-			// Skip the batch loss, that is not very informative -- it fluctuates a lot at each batch,
-			// and the trainer always includes the moving average loss.
-			continue
-		}
-		metric := shapes.ConvertTo[float64](trainMetrics[ii].Value())
-		if math.IsNaN(metric) || math.IsInf(metric, 0) {
-			incomplete = true
-			continue
-		}
-		ps.AddPoint("Train: "+desc.Name(), desc.MetricType(), step, metric)
-	}
-
-	// Eval metrics, if given
-	for _, ds := range ps.EvalDatasets {
-		var evalMetrics []tensor.Tensor
-		if err := exceptions.TryCatch[error](func() { evalMetrics = loop.Trainer.Eval(ds) }); err != nil {
-			return err
-		}
-		for ii, desc := range loop.Trainer.EvalMetrics() {
-			metric := shapes.ConvertTo[float64](evalMetrics[ii].Value())
-			if math.IsNaN(metric) || math.IsInf(metric, 0) {
-				incomplete = true
-				continue
-			}
-			metricType := desc.MetricType()
-			if ii == 0 && ps.evalLossMetricType != "" {
-				metricType = ps.evalLossMetricType
-			}
-			ps.AddPoint(fmt.Sprintf("Eval on %s: %s", ds.Name(), desc.Name()), metricType, step, metric)
-		}
-	}
-
+// If in a notebook, this would trigger a redraw of the plot.
+//
+// It implements [plot.Plotter]
+func (ps *Plots) DynamicSampleDone(incomplete bool) {
 	if !incomplete {
 		ps.pointsAdded++
 	}
 	if gonbui.IsNotebook && ps.gonbID != "" {
 		ps.DynamicPlot(false)
 	}
-	return nil
 }
 
 // AddPoint adds a point for the given metric: `step` is the x-axis, and `value` is the y-axis.
 // Metrics with the same type share the same plot and y-axis.
-func (ps *Plots) AddPoint(metricName, metricType string, step, value float64) {
-	if math.IsNaN(value) || math.IsInf(value, 0) || math.IsNaN(step) || math.IsInf(step, 0) {
+// It implements [plots.Plotter].
+func (ps *Plots) AddPoint(pt stdplots.Point) {
+	if math.IsNaN(pt.Value) || math.IsInf(pt.Value, 0) || math.IsNaN(pt.Step) || math.IsInf(pt.Step, 0) {
 		// Ignore invalid points.
 		return
 	}
 	if ps.fileWriter != nil {
 		// Save point asynchronously.
-		ps.fileWriter <- stdplots.Point{metricName, metricType, step, value}
+		ps.fileWriter <- pt
 	}
 	if ps.PerMetricType == nil {
 		ps.PerMetricType = make(map[string]*Plot)
 	}
-	p, found := ps.PerMetricType[metricType]
+	p, found := ps.PerMetricType[pt.MetricType]
 	if !found {
 		p = &Plot{
-			MetricType:  metricType,
+			MetricType:  pt.MetricType,
 			PerName:     make(map[string]*mg.Series),
 			xProjection: ps.xProjection,
 			yProjection: ps.yProjection,
 		}
-		ps.PerMetricType[metricType] = p
+		ps.PerMetricType[pt.MetricType] = p
 	}
-	p.AddPoint(metricName, step, value)
+	p.AddPoint(pt.MetricName, pt.Step, pt.Value)
 }
 
 // AddValues is a shortcut to add all `values` as y-coordinates, and it uses the indices
@@ -433,7 +397,7 @@ func (ps *Plots) AddPoint(metricName, metricType string, step, value float64) {
 // nor labels.
 func (ps *Plots) AddValues(metricName, metricType string, values []float64) {
 	for ii, v := range values {
-		ps.AddPoint(metricName, metricType, float64(ii), v)
+		ps.AddPoint(stdplots.Point{MetricName: metricName, MetricType: metricType, Step: float64(ii), Value: v})
 	}
 }
 

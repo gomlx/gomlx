@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/gomlx/gomlx/examples/notebook/gonb/margaid"
+	stdplots "github.com/gomlx/gomlx/examples/notebook/gonb/plots"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
@@ -274,7 +275,7 @@ func TrainingMonitor(checkpoint *checkpoints.Handler, loop *train.Loop, metrics 
 	AssertNoError(checkpoint.Save())
 
 	// Update plots with metrics.
-	AssertNoError(plots.AddTrainAndEvalMetrics(loop, metrics))
+	AssertNoError(stdplots.AddTrainAndEvalMetrics(plots, loop, metrics, plots.EvalDatasets))
 
 	// Kid generator
 	if kid != nil {

@@ -6,12 +6,17 @@ import (
 	"fmt"
 	"github.com/charmbracelet/lipgloss"
 	lgtable "github.com/charmbracelet/lipgloss/table"
+	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/ml/data"
+	"github.com/gomlx/gomlx/ml/train"
 	types "github.com/gomlx/gomlx/types"
+	"github.com/gomlx/gomlx/types/shapes"
 	xslices "github.com/gomlx/gomlx/types/slices"
+	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/pkg/errors"
 	"golang.org/x/exp/maps"
 	"io"
+	"math"
 	"os"
 	"path"
 	"slices"
@@ -37,6 +42,62 @@ type Point struct {
 
 	// Value is the metric captured.
 	Value float64
+}
+
+// Plotter is a generic plotter API, implemented by [margaid.Plots] and [plotly.PlotConfig].
+type Plotter interface {
+	// AddPoint to be drawn. One metric at a time.
+	AddPoint(point Point)
+
+	// DynamicSampleDone is called after all the data points recorded for this sample (evaluation at a time step).
+	// The value `incomplete` is set to true if any of the evaluations are NaN or infinite.
+	//
+	// If in a notebook, this would trigger a redraw of the plot.
+	DynamicSampleDone(incomplete bool)
+}
+
+// AddTrainAndEvalMetrics is used by plotters (see [margaid.PLots] and [plotly.PlotConfig]) to include the metrics
+// generated given training, plus to run evaluation on the given datasets.
+//
+// Notice it evaluate on the datasets sequentially -- presumably the training could go in parallel if there is
+// enough accelerator processing / memory. But this doesn't assume that.
+func AddTrainAndEvalMetrics(plotter Plotter, loop *train.Loop, trainMetrics []tensor.Tensor, evalDatasets []train.Dataset) error {
+	// Training metrics are pre-generated and given.
+	step := float64(loop.LoopStep)
+	var incomplete bool
+	for ii, desc := range loop.Trainer.TrainMetrics() {
+		if desc.Name() == "Batch Loss" {
+			// Skip the batch loss, that is not very informative -- it fluctuates a lot at each batch,
+			// and the trainer always includes the moving average loss.
+			continue
+		}
+		metric := shapes.ConvertTo[float64](trainMetrics[ii].Value())
+		if math.IsNaN(metric) || math.IsInf(metric, 0) {
+			incomplete = true
+			continue
+		}
+		plotter.AddPoint(Point{MetricName: "Train: " + desc.Name(), MetricType: desc.MetricType(), Step: step, Value: metric})
+	}
+
+	// Eval metrics, if given
+	for _, ds := range evalDatasets {
+		var evalMetrics []tensor.Tensor
+		if err := exceptions.TryCatch[error](func() { evalMetrics = loop.Trainer.Eval(ds) }); err != nil {
+			return err
+		}
+		for ii, desc := range loop.Trainer.EvalMetrics() {
+			metric := shapes.ConvertTo[float64](evalMetrics[ii].Value())
+			if math.IsNaN(metric) || math.IsInf(metric, 0) {
+				incomplete = true
+				continue
+			}
+			metricType := desc.MetricType()
+			plotter.AddPoint(Point{MetricName: fmt.Sprintf("Eval on %s: %s", ds.Name(), desc.Name()), MetricType: metricType, Step: step, Value: metric})
+		}
+	}
+
+	plotter.DynamicSampleDone(incomplete)
+	return nil
 }
 
 // LoadPointsFromCheckpoint loads all plot points saved during training in file [TrainingPlotFileName]
