@@ -248,9 +248,6 @@ func TrainModel() {
 	// AssertNoError(err)
 	fmt.Printf("\tMedian train step duration: %d ms\n\t(not counting evaluations)\n",
 		loop.MedianTrainStepDuration().Milliseconds())
-	if plots != nil {
-		plots.Done()
-	}
 
 	// Finally, print an evaluation on train and test datasets.
 	if *flagReport {

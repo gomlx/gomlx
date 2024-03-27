@@ -16,6 +16,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/exp/maps"
 	"io"
+	"k8s.io/klog/v2"
 	"math"
 	"os"
 	"path"
@@ -131,6 +132,44 @@ func LoadPoints(filePath string) ([]Point, error) {
 	}
 	_ = f.Close()
 	return points, nil
+}
+
+// CreatePointsWriter creates a channel to write Point to the given file.
+// It creates an errReport channel to report an error (or nil) back at the very end.
+// If any error occurs, it stops writing, and will report the error back once pointWriter is closed.
+func CreatePointsWriter(filePath string) (pointWriter chan<- Point, errReport <-chan error) {
+	pointChan := make(chan Point, 100)
+	pointWriter = pointChan
+	errChan := make(chan error, 1)
+	errReport = errChan
+	go func() {
+		// Create/append file with upcoming metrics.
+		f, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0664)
+		if err != nil {
+			err = errors.Wrapf(err, "failed to open Plots file %q for append", filePath)
+			klog.Errorf("Error: %v", err)
+		}
+		enc := json.NewEncoder(f)
+		for point := range pointChan {
+			if err == nil {
+				err = enc.Encode(point)
+				if err != nil {
+					err = errors.Wrapf(err, "failed to encode point %v", point)
+					klog.Errorf("Error: %v", err)
+				} else {
+				}
+			}
+		}
+		if f != nil {
+			if err == nil {
+				err = f.Close()
+			} else {
+				_ = f.Close()
+			}
+		}
+		errChan <- err
+	}()
+	return
 }
 
 // Points is a collection of Point objects organized by their Step value.

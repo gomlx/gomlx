@@ -24,7 +24,9 @@ import (
 	gonbplotly "github.com/janpfeifer/gonb/gonbui/plotly"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
+	"math"
 	"os"
+	"path"
 )
 
 // PlotConfig hold the configuration object that will generate the plot. Create it with [New].
@@ -50,6 +52,12 @@ type PlotConfig struct {
 
 	// finalPlot indicates whether the final plot has already been drawn.
 	finalPlot bool
+
+	// filePath where to save data points to. Only used if not empty.
+	enablePointsWriting bool
+	filePath            string
+	fileWriter          chan<- plots.Point
+	errFileWriter       <-chan error
 }
 
 // New creates a new PlotConfig, that can be used to generate plots.
@@ -63,8 +71,8 @@ func New() *PlotConfig {
 //
 // `datasets` is a list of datasets to be evaluated when collecting metrics for plotting.
 //
-// It should be followed by a call to [ScheduleExponential] or [SechedulePeriodic] (or both) to plot points
-// are captured.
+// It should be followed by a call to [ScheduleExponential] or [SechedulePeriodic] (or both) to schedule capturing
+// points to plot, and [WithCheckpoint] to save the captured points.
 //
 // It returns itself to allow cascading configuration method calls.
 func (pc *PlotConfig) Dynamic(datasets ...train.Dataset) *PlotConfig {
@@ -120,17 +128,39 @@ func (pc *PlotConfig) attachOnEnd(loop *train.Loop) {
 			pc.DynamicPlot(true)
 			pc.finalPlot = true
 		}
+		pc.stopWriting()
 		return nil
 	})
 }
 
-// Load loads points from checkpoint directory given. It ignores errors, and simply assume file is not there.
-// See [LoadCheckpointData] for more powerful version that returns an error.
+// WithCheckpoint uses the `checkpointDir` both to load data points and to save any new data points.
+// Usually, used with [PlotConfig.Dynamic].
+//
+// New data-points are saved asynchronously -- not to slow down training, with the downside of
+// potentially having I/O issues reported asynchronously.
 //
 // It returns itself to allow cascading configuration method calls.
-func (pc *PlotConfig) Load(dataDirOrFile string) *PlotConfig {
-	_ = pc.LoadCheckpointData(dataDirOrFile)
+func (pc *PlotConfig) WithCheckpoint(checkpointDir string) *PlotConfig {
+	// Ignore errors while loading: maybe nothing was written yet.
+	_ = pc.LoadCheckpointData(checkpointDir)
+	checkpointDir = data.ReplaceTildeInDir(checkpointDir)
+	filePath := path.Join(checkpointDir, plots.TrainingPlotFileName)
+	pc.fileWriter, pc.errFileWriter = plots.CreatePointsWriter(filePath)
+	pc.enablePointsWriting = true
 	return pc
+}
+
+// stopWriting indicates that no more points are coming. This closes the asynchronous job writing new points.
+func (pc *PlotConfig) stopWriting() {
+	if pc.fileWriter != nil {
+		close(pc.fileWriter)
+		pc.fileWriter = nil
+		err := <-pc.errFileWriter
+		if err != nil {
+			klog.Errorf("Failed to write plots data: %+v", err)
+		}
+		pc.enablePointsWriting = false
+	}
 }
 
 // PointFilter can change any [plots.Point] arbitrarily. If it returns false means the point should be dropped.
@@ -164,6 +194,9 @@ func (pc *PlotConfig) LoadCheckpointData(dataDirOrFile string, filters ...PointF
 	}
 
 	steps := types.MakeSet[float64]()
+	enableWriting := pc.enablePointsWriting
+	pc.enablePointsWriting = false
+	defer func() { pc.enablePointsWriting = enableWriting }()
 
 nextPoint:
 	for _, point := range points {
@@ -186,6 +219,14 @@ nextPoint:
 // Usually not called directly, instead use [LoadCheckpointData] or [Dynamic], which will attach to a
 // training loop and call this automatically.
 func (pc *PlotConfig) AddPoint(pt plots.Point) {
+	if math.IsNaN(pt.Value) || math.IsInf(pt.Value, 0) || math.IsNaN(pt.Step) || math.IsInf(pt.Step, 0) {
+		// Ignore invalid points.
+		return
+	}
+	if pc.fileWriter != nil {
+		// Save point asynchronously.
+		pc.fileWriter <- pt
+	}
 	figIdx, found := pc.metricsTypesToFig[pt.MetricType]
 	if !found {
 		pc.figs = append(pc.figs, &grob.Fig{

@@ -88,8 +88,9 @@ type Plots struct {
 	xProjection, yProjection mg.Projection
 
 	// filePath where to load data points from and save to. Only used if not empty.
-	filePath   string
-	fileWriter chan stdplots.Point
+	filePath      string
+	fileWriter    chan<- stdplots.Point
+	errFileWriter <-chan error
 
 	evalLossMetricType string
 }
@@ -190,29 +191,7 @@ func (ps *Plots) WithFile(filePath string) (*Plots, error) {
 	if err != nil && !os.IsNotExist(errors.Cause(err)) {
 		return nil, err
 	}
-
-	// Create/append file with upcoming metrics.
-	f, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0664)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to open Plots file %q for append", filePath)
-	}
-	ps.fileWriter = make(chan stdplots.Point, 100)
-	go func(f *os.File, fileWriter <-chan stdplots.Point) {
-		enc := json.NewEncoder(f)
-		errLogCount := 0
-		errLogStep := 1
-		for point := range fileWriter {
-			err = enc.Encode(point)
-			if err != nil {
-				errLogCount++
-				if errLogCount%errLogStep == 0 {
-					klog.Errorf("failed (%d times) to write to Plots log file in %q: %+v", errLogCount, filePath, err)
-					errLogStep *= 10
-				}
-			}
-		}
-		_ = f.Close()
-	}(f, ps.fileWriter)
+	ps.fileWriter, ps.errFileWriter = stdplots.CreatePointsWriter(filePath)
 	return ps, nil
 }
 
@@ -267,11 +246,15 @@ func (ps *Plots) minPoints() int {
 	return minPoints
 }
 
-// Done indicates that no more points are coming. This closes the asynchronous job writing new points.
-func (ps *Plots) Done() {
+// stopWriting indicates no more points to be written. This closes the asynchronous job writing new points.
+func (ps *Plots) stopWriting() {
 	if ps.fileWriter != nil {
 		close(ps.fileWriter)
 		ps.fileWriter = nil
+		err := <-ps.errFileWriter
+		if err != nil {
+			klog.Errorf("Failed to write plots data: %+v", err)
+		}
 	}
 }
 
@@ -331,6 +314,7 @@ func (ps *Plots) attachOnEnd(loop *train.Loop) {
 		} else {
 			ps.Plot()
 		}
+		ps.stopWriting()
 		return nil
 	})
 }

@@ -133,11 +133,6 @@ func Train(ctx *context.Context, baseDir string) error {
 	if err != nil {
 		return errors.WithMessage(err, "while reporting eval")
 	}
-	if plots != nil {
-		// Save plot points.
-		plots.Done()
-	}
-	fmt.Println()
 	return nil
 }
 
@@ -153,9 +148,9 @@ func newTrainer(ctx *context.Context) *train.Trainer {
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
 	trainer := train.NewTrainer(ctx.Manager(), ctx, MagModelGraph,
 		lossFn,
-		optimizers.FromContext(ctx),               // Based on `ctx.GetParam("optimizer")`.
+		optimizers.FromContext(ctx), // Based on `ctx.GetParam("optimizer")`.
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
-		[]metrics.Interface{meanAccuracyMetric}) // evalMetrics
+		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
 	return trainer
 }
 
