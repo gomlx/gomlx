@@ -74,7 +74,11 @@ func MagStrategy(magSampler *sampler.Sampler, batchSize int, seedIdsCandidates t
 		seedIdsData := seedIdsCandidates.Local().FlatCopy().([]int32)
 		seeds = strategy.NodesFromSet("seeds", "papers", batchSize, seedIdsData)
 	}
+	seedsBase := seeds.IdentitySubRule("seedsBase")
 	citations := seeds.FromEdges("citations", "cites", 8)
+	if ReuseShareableKernels {
+		citations.KernelScopeName = seedsBase.KernelScopeName
+	}
 
 	// Authors
 	const authorsCount = 8
