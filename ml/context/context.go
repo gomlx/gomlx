@@ -541,14 +541,12 @@ func (ctx *Context) ExecSetVariablesInParams(params graph.ParamsMap, g *Graph) {
 	})
 }
 
-// findVariableInScope or nil if not found.
-func (ctx *Context) findVariableInScope(name string) *Variable {
-	return ctx.InspectVariable(ctx.scope, name)
-}
-
-// InspectVariable returns the variable with the given name for inspection. This shouldn't be used during
-// building of models, since this bypasses the Reuse checks. It returns nil if a variable with the given
+// InspectVariable returns the variable with the given name for inspection. It returns nil if a variable with the given
 // name hasn't been created.
+//
+// It is not affected by [Context.Reuse] checks.
+//
+// This will trigger the loading of the variable if a loader (like `checkpoint.Checkpoint`) is attached.
 //
 // Notice that variables' information is stored in the "data" component of Context objects, and is shared
 // among all connected context references.
@@ -589,6 +587,17 @@ func (ctx *Context) InspectVariable(scope, name string) *Variable {
 // InspectVariableInScope works like InspectVariable, but looks for the variable in the current scope.
 func (ctx *Context) InspectVariableInScope(name string) *Variable {
 	return ctx.InspectVariable(ctx.Scope(), name)
+}
+
+// InspectVariableIfLoaded returns the variable if it exists already, but it won't attempt to load it.
+//
+// It is similar to [InspectVariable] but won't attempt to load the variable.
+func (ctx *Context) InspectVariableIfLoaded(scope, name string) *Variable {
+	scopeVars, ok := ctx.data.variablesMap[scope]
+	if !ok {
+		return nil
+	}
+	return scopeVars[name]
 }
 
 // setVariableInScope.
@@ -667,7 +676,7 @@ func (ctx *Context) DeleteVariablesInScope() {
 // Notice that variables information is stored in the "data" component of Context objects, and is shared
 // among all connected context references.
 func (ctx *Context) VariableWithShape(name string, shape shapes.Shape) *Variable {
-	v := ctx.findVariableInScope(name)
+	v := ctx.InspectVariableIfLoaded(ctx.scope, name)
 	if v == nil && ctx.checked && ctx.reuse {
 		Panicf("requested variable %q in scope %q with Context.Reuse set, but variable does not exist", name, ctx.scope)
 	}
@@ -747,7 +756,7 @@ func valueToTensor(value any) tensor.Tensor {
 // Notice that variables' information is stored in the "data" component of Context objects, and is shared
 // among all connected context references.
 func (ctx *Context) VariableWithValue(name string, value any) *Variable {
-	v := ctx.findVariableInScope(name)
+	v := ctx.InspectVariableIfLoaded(ctx.scope, name)
 
 	// Check against reuse of variables.
 	if ctx.checked && ctx.reuse && v == nil {

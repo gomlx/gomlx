@@ -199,16 +199,15 @@ type ConstantLoader struct {
 }
 
 // LoadVariable implements Loader.
-func (l *ConstantLoader) LoadVariable(ctx *Context, v *Variable) (value tensor.Tensor, found bool) {
+func (l *ConstantLoader) LoadVariable(ctx *Context, scope, name string) (value tensor.Tensor, found bool) {
 	if l.Values == nil {
 		return
 	}
-	var nameToValue map[string]tensor.Tensor
-	nameToValue, found = l.Values[v.Scope()]
+	nameToValue, found := l.Values[scope]
 	if !found {
 		return
 	}
-	value, found = nameToValue[v.Name()]
+	value, found = nameToValue[name]
 	return
 }
 

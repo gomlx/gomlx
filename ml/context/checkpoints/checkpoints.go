@@ -805,7 +805,7 @@ func (h *Handler) Dir() string {
 }
 
 // LoadVariable implements context.Loader.
-// This will is called by context.Context when the variable is used for the first time.
+// This is called by context.Context when the variable is used for the first time.
 // The user may want to use this function to inspect loaded values for testing.
 func (h *Handler) LoadVariable(ctx *context.Context, scope, name string) (value tensor.Tensor, found bool) {
 	// Priority is based on the installation order. That means we attempt first the previously configured loaders.
