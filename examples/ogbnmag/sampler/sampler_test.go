@@ -70,6 +70,7 @@ func createTestStrategy(t *testing.T, s *Sampler) *Strategy {
 	require.NotPanics(t, func() {
 		strategy = s.NewStrategy()
 		seeds := strategy.NodesFromSet("Seeds", "papers", 2, []int32{2, 3, 4})
+		_ = seeds.IdentitySubRule("SubSeeds")
 		authors := seeds.FromEdges("authors", "written_by", 5)
 		_ = authors.FromEdges("otherPapers", "writes", 3)
 
@@ -85,13 +86,19 @@ func TestStrategy(t *testing.T) {
 	strategy := createTestStrategy(t, s)
 	fmt.Printf("\n%s\n\n", strategy)
 
-	require.Equal(t, 5, len(strategy.Rules))
+	require.Equal(t, 6, len(strategy.Rules))
 	require.Len(t, strategy.Seeds, 2)
 
 	seeds, found := strategy.Rules["Seeds"]
 	require.True(t, found)
 	require.NoError(t, seeds.Shape.Check(shapes.Int32, 2))
-	assert.Equal(t, 1, len(seeds.Dependents))
+	assert.Equal(t, 2, len(seeds.Dependents))
+
+	subSeeds, found := strategy.Rules["SubSeeds"]
+	require.True(t, found)
+	require.NoError(t, subSeeds.Shape.Check(shapes.Int32, 2, 1))
+	assert.Equal(t, 0, len(subSeeds.Dependents))
+	assert.Equal(t, seeds, subSeeds.SourceRule)
 
 	seeds2, found := strategy.Rules["seeds2"]
 	require.True(t, found)
@@ -149,6 +156,16 @@ func TestDataset(t *testing.T) {
 					require.Failf(t, "Invalid value for paper", "paper=%d!?", paper)
 				}
 				require.Equalf(t, want, degrees[ii], "Got degree %d for paper %d, wanted %d", degrees[ii], paper, want)
+			}
+
+			// Test degrees of identity.
+			degrees = graphSample[NameForNodeDependentDegree("Seeds", "SubSeeds")].Value.Local().FlatCopy().([]int32)
+			seedsMask := graphSample["Seeds"].Mask.Local().FlatCopy().([]bool)
+			for ii, paperMask := range seedsMask {
+				if !paperMask {
+					continue
+				}
+				require.Equal(t, int32(1), degrees[ii], "Got degree %d for paper %d, wanted %d", degrees[ii], seeds[ii], 1)
 			}
 		}
 		for name, rule := range strategy.Rules {

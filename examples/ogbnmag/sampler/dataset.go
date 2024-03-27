@@ -302,6 +302,17 @@ func sampleEdges(rule *Rule, srcNodes, srcMask *tensor.Local) (nodes, mask, degr
 	tgtMaskData := maskRef.Flat().([]bool)
 	srcNodesData := srcNodesRef.Flat().([]int32)
 	srcMaskData := srcMaskRef.Flat().([]bool)
+
+	if rule.IsIdentitySubRule() {
+		// Identity Sub-Rule has the exact same data, just different shapes (the sub-rule has an extra axis of dimension 1).
+		copy(tgtNodesData, srcNodesData)
+		copy(tgtMaskData, srcMaskData)
+		if len(degreesData) != 0 {
+			slices.FillSlice(degreesData, int32(1))
+		}
+		return
+	}
+
 	edgeDef := rule.EdgeType
 	sampledEdges := make([]int32, rule.Count) // reserve space for sampling edges (reused over all iterations).
 

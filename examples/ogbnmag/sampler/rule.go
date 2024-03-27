@@ -56,6 +56,11 @@ func (r *Rule) IsNode() bool {
 	return r.SourceRule == nil
 }
 
+// IsIdentitySubRule returns whether this is an identity sub-rule with a 1-to-1 mapping.
+func (r *Rule) IsIdentitySubRule() bool {
+	return r.SourceRule != nil && r.EdgeType == nil
+}
+
 // String returns an informative description of the rule.
 func (r *Rule) String() string {
 	if r.IsNode() {
@@ -64,6 +69,10 @@ func (r *Rule) String() string {
 			sourceSetDesc = fmt.Sprintf(", NodeSet.size=%d", len(r.NodeSet))
 		}
 		return fmt.Sprintf("Rule %q: type=Node, nodeType=%q, Shape=%s (size=%d)%s", r.Name, r.NodeTypeName, r.Shape, r.Shape.Size(), sourceSetDesc)
+	}
+	if r.IsIdentitySubRule() {
+		return fmt.Sprintf("Rule %q: type=Edge, nodeType=%q, Shape=%s (size=%d), SourceRule=%q, EdgeType=Identity",
+			r.Name, r.NodeTypeName, r.Shape, r.Shape.Size(), r.SourceRule.Name)
 	}
 	return fmt.Sprintf("Rule %q: type=Edge, nodeType=%q, Shape=%s (size=%d), SourceRule=%q, EdgeType=%q",
 		r.Name, r.NodeTypeName, r.Shape, r.Shape.Size(), r.SourceRule.Name, r.EdgeType.Name)
@@ -102,4 +111,34 @@ func (r *Rule) FromEdges(name, edgeTypeName string, count int) *Rule {
 	r.Dependents = append(r.Dependents, newRule)
 	strategy.Rules[name] = newRule
 	return newRule
+}
+
+// IdentitySubRule creates a sub-rule that copies over the current rule, adding one rank (but same size).
+// This is useful when trying to split updates into different parts, with the "IdentitySubRule" taking a
+// subset of the dependents.
+func (r *Rule) IdentitySubRule(name string) *Rule {
+	strategy := r.Strategy
+	if strategy.frozen {
+		Panicf("Strategy is frozen, that is, a dataset was already created and used with NewDataset() and hence can no longer be modified.")
+	}
+	if prevRule, found := strategy.Rules[name]; found {
+		Panicf("rule named %q already exists: %s", name, prevRule)
+	}
+	newShape := r.Shape.Copy()
+	newShape.Dimensions = append(newShape.Dimensions, 1)
+	newRule := &Rule{
+		Sampler:         r.Sampler,
+		Strategy:        strategy,
+		Name:            name,
+		KernelScopeName: "gnn:" + name,
+		NodeTypeName:    r.NodeTypeName,
+		SourceRule:      r,
+		EdgeType:        nil, // This identifies this as an identity sub-rule.
+		Count:           1,   // 1-to-1 mapping.
+		Shape:           newShape,
+	}
+	r.Dependents = append(r.Dependents, newRule)
+	strategy.Rules[name] = newRule
+	return newRule
+
 }
