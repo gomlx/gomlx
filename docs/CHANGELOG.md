@@ -49,8 +49,11 @@
   * Asynchronous display of updates: it works better with very fast training loops or if running
     over a slow terminal connection (network).
   * Added `CreateContextSettingsFlag` and `ParseContextSettings`.
-* Package `margaid`:
-  * Added `Plots.PlotEveryNSteps`.
+* Package `plots`, `margaid` and `plotly`:
+  * Added `margaid.Plots.PlotEveryNSteps`.
+  * Remove `margaid.Plots.Done`, no longer needed, as closing of writing file is done automatically at the end of the
+    training loop.
+  * Added Plotly plots.
 
 ## 0.8.0 - 2023/11/28
 
