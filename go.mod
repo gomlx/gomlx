@@ -3,6 +3,7 @@ module github.com/gomlx/gomlx
 go 1.22
 
 require (
+	github.com/MetalBlueberry/go-plotly v0.4.0
 	github.com/charmbracelet/lipgloss v0.9.1
 	github.com/daniellowtw/matlab v0.0.0-20190528220746-1ed1d96a6637
 	github.com/disintegration/imaging v1.6.2
@@ -11,7 +12,7 @@ require (
 	github.com/go-gota/gota v0.12.0
 	github.com/gomlx/exceptions v0.0.1
 	github.com/google/uuid v1.6.0
-	github.com/janpfeifer/gonb v0.9.3
+	github.com/janpfeifer/gonb v0.9.6
 	github.com/janpfeifer/must v0.0.2
 	github.com/muesli/termenv v0.15.2
 	github.com/pkg/errors v0.9.1
@@ -45,7 +46,7 @@ require (
 	golang.org/x/net v0.17.0 // indirect
 	golang.org/x/sys v0.17.0 // indirect
 	golang.org/x/term v0.17.0 // indirect
-	golang.org/x/text v0.13.0 // indirect
+	golang.org/x/text v0.14.0 // indirect
 	gonum.org/v1/gonum v0.14.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
