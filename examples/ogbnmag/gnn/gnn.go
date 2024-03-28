@@ -89,7 +89,7 @@ var (
 // The `strategy` describes which convolutions and their order.
 //
 // There are several hyperparameters that control the GNN model. They can be set as parameters
-// in the context. If scoped in specific [Rule.KernelScopeName] (rules of the `strategy`), they
+// in the context. If scoped in specific [Rule.ConvKernelScopeName] (rules of the `strategy`), they
 // can be different for different node sets (so different node sets can have different state
 // dimensions, for instance). See variables `Param...`
 //
@@ -123,7 +123,7 @@ func NodePrediction(ctx *context.Context, strategy *sampler.Strategy, graphState
 	for _, rule := range strategy.Seeds {
 		seedState := graphStates[rule.Name]
 		for ii := range numHiddenLayers {
-			ctxReadout := ctx.In(rule.KernelScopeName).In(fmt.Sprintf("readout_hidden_%d", ii))
+			ctxReadout := ctx.In(rule.ConvKernelScopeName).In(fmt.Sprintf("readout_hidden_%d", ii))
 			seedState.Value = updateState(ctxReadout, seedState.Value, seedState.Value, seedState.Mask)
 		}
 	}
@@ -167,9 +167,9 @@ func recursivelyApplyGraphConvolution(ctx *context.Context, rule *sampler.Rule,
 	pathToRootStates []*Node,
 	graphStates map[string]*sampler.ValueMask[*Node],
 	dependentsUpdateFirst bool) {
-	if rule.Name == "" || rule.KernelScopeName == "" {
+	if rule.Name == "" || rule.ConvKernelScopeName == "" {
 		Panicf("strategy's rule name=%q or kernel scope name=%q are empty, they both must be defined",
-			rule.Name, rule.KernelScopeName)
+			rule.Name, rule.ConvKernelScopeName)
 	}
 
 	// Makes sure there is a state for the current dependent.
@@ -227,7 +227,7 @@ func recursivelyApplyGraphConvolution(ctx *context.Context, rule *sampler.Rule,
 		if dependentDegreePair != nil {
 			dependentDegree = dependentDegreePair.Value
 		}
-		convolveCtx := ctx.In(dependent.KernelScopeName).In("conv")
+		convolveCtx := ctx.In(dependent.ConvKernelScopeName).In("conv")
 		if dependentState.Value != nil {
 			updateInputs = append(updateInputs, sampledConvolveEdgeSet(convolveCtx, dependentState.Value, dependentState.Mask, dependentDegree))
 			hasNewUpdateInputs = true
@@ -239,7 +239,7 @@ func recursivelyApplyGraphConvolution(ctx *context.Context, rule *sampler.Rule,
 
 	// Update state of current rule: only update state if there was any new incoming input.
 	if hasNewUpdateInputs {
-		updateCtx := ctx.In(rule.KernelScopeName).In("update")
+		updateCtx := ctx.In(rule.UpdateKernelScopeName).In("update")
 		state.Value = updateState(updateCtx, state.Value, Concatenate(updateInputs, -1), state.Mask)
 	}
 }

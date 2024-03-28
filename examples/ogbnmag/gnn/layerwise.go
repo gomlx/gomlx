@@ -153,7 +153,7 @@ func layeredConvolveEdgeSet(ctx *context.Context, dependantRule *sampler.Rule, s
 	if dependantRule.EdgeType == nil {
 		Panicf("can only run edge convolution on edge type rules, got instead %s", dependantRule)
 	}
-	convolveCtx := ctx.In(dependantRule.KernelScopeName).In("conv")
+	convolveCtx := ctx.In(dependantRule.ConvKernelScopeName).In("conv")
 	edgeState := gatherToEdgesGraph(convolveCtx, sourceState, dependantRule.EdgeType)
 	targetState := poolEdgesGraph(convolveCtx, edgeState, dependantRule.EdgeType)
 	return targetState

@@ -77,41 +77,41 @@ func MagStrategy(magSampler *sampler.Sampler, batchSize int, seedIdsCandidates t
 	seedsBase := seeds.IdentitySubRule("seedsBase")
 	citations := seeds.FromEdges("citations", "cites", 8)
 	if ReuseShareableKernels {
-		citations.KernelScopeName = seedsBase.KernelScopeName
+		citations.UpdateKernelScopeName = seedsBase.UpdateKernelScopeName
 	}
 
 	// Authors
 	const authorsCount = 8
-	seedsAuthors := seeds.FromEdges("seedsAuthors", "writtenBy", authorsCount)
+	seedsAuthors := seedsBase.FromEdges("seedsAuthors", "writtenBy", authorsCount)
 	citationsAuthors := citations.FromEdges("citationsAuthors", "writtenBy", authorsCount)
 	if ReuseShareableKernels {
-		citationsAuthors.KernelScopeName = seedsAuthors.KernelScopeName
+		citationsAuthors.WithKernelScopeName(seedsAuthors.ConvKernelScopeName)
 	}
 
 	// Other papers by authors.
 	papersByAuthors := seedsAuthors.FromEdges("papersByAuthors", "writes", 8)
 	papersByCitationAuthors := citationsAuthors.FromEdges("papersByCitationAuthors", "writes", 8)
 	if ReuseShareableKernels {
-		papersByCitationAuthors.KernelScopeName = papersByAuthors.KernelScopeName
+		papersByCitationAuthors.WithKernelScopeName(papersByAuthors.ConvKernelScopeName)
 	}
 
 	// Affiliations
 	authorsInstitutions := seedsAuthors.FromEdges("authorsInstitutions", "affiliatedWith", 8)
 	citationAuthorsInstitutions := citationsAuthors.FromEdges("citationAuthorsInstitutions", "affiliatedWith", 8)
 	if ReuseShareableKernels {
-		citationAuthorsInstitutions.KernelScopeName = authorsInstitutions.KernelScopeName
+		citationAuthorsInstitutions.WithKernelScopeName(authorsInstitutions.ConvKernelScopeName)
 	}
 
 	// Topics
 	const topicsCount = 8
-	seedsTopics := seeds.FromEdges("seedsTopics", "hasTopic", topicsCount)
+	seedsTopics := seedsBase.FromEdges("seedsTopics", "hasTopic", topicsCount)
 	papersByAuthorsTopics := papersByAuthors.FromEdges("papersByAuthorsTopics", "hasTopic", topicsCount)
 	citationsTopics := citations.FromEdges("citationsTopics", "hasTopic", topicsCount)
 	papersByCitationAuthorsTopics := papersByCitationAuthors.FromEdges("papersByCitationAuthorsTopics", "hasTopic", topicsCount)
 	if ReuseShareableKernels {
-		papersByAuthorsTopics.KernelScopeName = seedsTopics.KernelScopeName
-		citationsTopics.KernelScopeName = seedsTopics.KernelScopeName
-		papersByCitationAuthorsTopics.KernelScopeName = seedsTopics.KernelScopeName
+		papersByAuthorsTopics.WithKernelScopeName(seedsTopics.ConvKernelScopeName)
+		citationsTopics.WithKernelScopeName(seedsTopics.ConvKernelScopeName)
+		papersByCitationAuthorsTopics.WithKernelScopeName(seedsTopics.ConvKernelScopeName)
 	}
 	return strategy
 }

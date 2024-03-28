@@ -16,10 +16,15 @@ type Rule struct {
 	// Name of the [Rule].
 	Name string
 
-	// KernelScopeName doesn't affect sampling, but can be used to uniquely identify
+	// ConvKernelScopeName doesn't affect sampling, but can be used to uniquely identify
 	// the scope used for the kernels in a GNN to do convolutions on this rule.
-	// If two rules have the same KernelScopeName, they will share weights.
-	KernelScopeName string
+	// If two rules have the same ConvKernelScopeName, they will share weights.
+	ConvKernelScopeName string
+
+	// UpdateKernelScopeName doesn't affect sampling, but can be used to uniquely identify
+	// the scope used for the kernels in a GNN to do convolutions on this rule.
+	// If two rules have the same UpdateKernelScopeName, they will share weights.
+	UpdateKernelScopeName string
 
 	// NodeTypeName of the nodes sampled by this rule.
 	NodeTypeName string
@@ -61,6 +66,13 @@ func (r *Rule) IsIdentitySubRule() bool {
 	return r.SourceRule != nil && r.EdgeType == nil
 }
 
+// WithKernelScopeName will set both ConvKernelScopeName and UpdateKernelScopeName to `name`.
+func (r *Rule) WithKernelScopeName(name string) *Rule {
+	r.ConvKernelScopeName = name
+	r.UpdateKernelScopeName = name
+	return r
+}
+
 // String returns an informative description of the rule.
 func (r *Rule) String() string {
 	if r.IsNode() {
@@ -98,16 +110,16 @@ func (r *Rule) FromEdges(name, edgeTypeName string, count int) *Rule {
 	newShape := r.Shape.Copy()
 	newShape.Dimensions = append(newShape.Dimensions, count)
 	newRule := &Rule{
-		Sampler:         r.Sampler,
-		Strategy:        strategy,
-		Name:            name,
-		KernelScopeName: "gnn:" + name,
-		NodeTypeName:    edgeDef.TargetNodeType,
-		SourceRule:      r,
-		EdgeType:        edgeDef,
-		Count:           count,
-		Shape:           newShape,
+		Sampler:      r.Sampler,
+		Strategy:     strategy,
+		Name:         name,
+		NodeTypeName: edgeDef.TargetNodeType,
+		SourceRule:   r,
+		EdgeType:     edgeDef,
+		Count:        count,
+		Shape:        newShape,
 	}
+	newRule = newRule.WithKernelScopeName("gnn:" + name)
 	r.Dependents = append(r.Dependents, newRule)
 	strategy.Rules[name] = newRule
 	return newRule
@@ -127,16 +139,16 @@ func (r *Rule) IdentitySubRule(name string) *Rule {
 	newShape := r.Shape.Copy()
 	newShape.Dimensions = append(newShape.Dimensions, 1)
 	newRule := &Rule{
-		Sampler:         r.Sampler,
-		Strategy:        strategy,
-		Name:            name,
-		KernelScopeName: "gnn:" + name,
-		NodeTypeName:    r.NodeTypeName,
-		SourceRule:      r,
-		EdgeType:        nil, // This identifies this as an identity sub-rule.
-		Count:           1,   // 1-to-1 mapping.
-		Shape:           newShape,
+		Sampler:      r.Sampler,
+		Strategy:     strategy,
+		Name:         name,
+		NodeTypeName: r.NodeTypeName,
+		SourceRule:   r,
+		EdgeType:     nil, // This identifies this as an identity sub-rule.
+		Count:        1,   // 1-to-1 mapping.
+		Shape:        newShape,
 	}
+	newRule = newRule.WithKernelScopeName("gnn:" + name)
 	r.Dependents = append(r.Dependents, newRule)
 	strategy.Rules[name] = newRule
 	return newRule

@@ -80,15 +80,15 @@ func (strategy *Strategy) Nodes(name, nodeTypeName string, count int) *Rule {
 		Panicf("rule named %q already exists: %s", name, prevRule)
 	}
 	r := &Rule{
-		Sampler:         strategy.Sampler,
-		Strategy:        strategy,
-		Name:            name,
-		KernelScopeName: "gnn:" + name,
-		NodeTypeName:    nodeTypeName,
-		NumNodes:        numNodes,
-		Count:           count,
-		Shape:           shapes.Make(shapes.Int32, count),
+		Sampler:      strategy.Sampler,
+		Strategy:     strategy,
+		Name:         name,
+		NodeTypeName: nodeTypeName,
+		NumNodes:     numNodes,
+		Count:        count,
+		Shape:        shapes.Make(shapes.Int32, count),
 	}
+	r = r.WithKernelScopeName("gnn:" + name)
 	strategy.Rules[name] = r
 	strategy.Seeds = append(strategy.Seeds, r)
 	return r
@@ -115,16 +115,16 @@ func (strategy *Strategy) NodesFromSet(name, nodeTypeName string, count int, nod
 		Panicf("rule named %q already exists: %s", name, prevRule)
 	}
 	r := &Rule{
-		Sampler:         strategy.Sampler,
-		Strategy:        strategy,
-		Name:            name,
-		KernelScopeName: "gnn:" + name,
-		NodeTypeName:    nodeTypeName,
-		NumNodes:        numNodes,
-		Count:           count,
-		Shape:           shapes.Make(shapes.Int32, count),
-		NodeSet:         nodeSet,
+		Sampler:      strategy.Sampler,
+		Strategy:     strategy,
+		Name:         name,
+		NodeTypeName: nodeTypeName,
+		NumNodes:     numNodes,
+		Count:        count,
+		Shape:        shapes.Make(shapes.Int32, count),
+		NodeSet:      nodeSet,
 	}
+	r = r.WithKernelScopeName("gnn:" + name)
 	strategy.Rules[name] = r
 	strategy.Seeds = append(strategy.Seeds, r)
 	return r
