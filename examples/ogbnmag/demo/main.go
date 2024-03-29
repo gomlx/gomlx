@@ -5,14 +5,12 @@ import (
 	"fmt"
 	mag "github.com/gomlx/gomlx/examples/ogbnmag"
 	"github.com/gomlx/gomlx/examples/ogbnmag/gnn"
-	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	mldata "github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/train/commandline"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/janpfeifer/must"
-	"k8s.io/klog/v2"
 	"path"
 	"time"
 )
@@ -52,6 +50,7 @@ func createDefaultContext(manager *Manager) *context.Context {
 
 		mag.ParamEmbedDropoutRate:     0.0,
 		mag.ParamSplitEmbedTablesSize: 1,
+		mag.ParamReuseKernels:         true,
 	})
 	return ctx
 }
