@@ -338,7 +338,6 @@ func updateState(ctx *context.Context, prevState, input, mask *Node) *Node {
 	if updateType == "residual" && prevState.Shape().Eq(state.Shape()) {
 		state = Add(state, prevState)
 	}
-	//state = layers.MaskedNormalizeFromContext(ctxRuleSpecific, state, mask)
 	state = layers.MaskedNormalizeFromContext(ctx.In("normalization"), state, mask)
 	return state
 }
