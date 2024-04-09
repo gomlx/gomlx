@@ -846,7 +846,10 @@ func broadcastInDimVJP(node, v *Node, _ shapes.Shape) []*Node {
 			dimsToReduce = append(dimsToReduce, axis)
 		}
 	}
-	gradWrtX := ReduceSum(v, dimsToReduce...)
+	gradWrtX := v
+	if len(dimsToReduce) > 0 {
+		gradWrtX = ReduceSum(v, dimsToReduce...)
+	}
 	if gradWrtX.Rank() != x.Rank() {
 		// X had some axes of dimension 1 that were reduced, we simply reshape it here.
 		gradWrtX = Reshape(gradWrtX, x.Shape().Dimensions...)
