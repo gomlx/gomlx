@@ -27,12 +27,16 @@ var (
 
 	// ParamReuseKernels context parameter configs whether the kernels for similar sampling rules will be reused.
 	ParamReuseKernels = "mag_reuse_kernels"
+
+	// ParamIdentitySubSeeds controls whether to use an IdentitySubSeed, to allow more sharing of the kernel.
+	ParamIdentitySubSeeds = "mag_identity_sub_seeds"
 )
 
 // Train GNN model based on configuration in `ctx`.
 func Train(ctx *context.Context, baseDir string) error {
 	baseDir = mldata.ReplaceTildeInDir(baseDir)
 	ReuseShareableKernels = context.GetParamOr(ctx, ParamReuseKernels, true)
+	IdentitySubSeeds = context.GetParamOr(ctx, ParamIdentitySubSeeds, true)
 
 	trainDS, trainEvalDS, validEvalDS, testEvalDS, err := MakeDatasets(baseDir)
 	_ = testEvalDS
