@@ -26,6 +26,9 @@ var (
 	// KeepDegrees will also make sampler keep the degrees of the edges as separate tensors.
 	// These can be used by the GNN pooling functions to multiply the sum to the actual degree.
 	KeepDegrees = true
+
+	// IdentitySubSeeds controls whether to use an IdentitySubSeed, to allow more sharing of the kernel.
+	IdentitySubSeeds = true
 )
 
 // NewSampler will create a [sampler.Sampler] and configure it with the OGBN-MAG graph definition.
@@ -74,10 +77,16 @@ func MagStrategy(magSampler *sampler.Sampler, batchSize int, seedIdsCandidates t
 		seedIdsData := seedIdsCandidates.Local().FlatCopy().([]int32)
 		seeds = strategy.NodesFromSet("seeds", "papers", batchSize, seedIdsData)
 	}
-	seedsBase := seeds.IdentitySubRule("seedsBase")
 	citations := seeds.FromEdges("citations", "cites", 8)
-	if ReuseShareableKernels {
-		citations.UpdateKernelScopeName = seedsBase.UpdateKernelScopeName
+
+	var seedsBase *sampler.Rule
+	if IdentitySubSeeds {
+		seedsBase = seeds.IdentitySubRule("seedsBase")
+		if ReuseShareableKernels {
+			citations.UpdateKernelScopeName = seedsBase.UpdateKernelScopeName
+		}
+	} else {
+		seedsBase = seeds
 	}
 
 	// Authors
