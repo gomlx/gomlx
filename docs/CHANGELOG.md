@@ -10,6 +10,7 @@
     `MaskedReduceMean`, `MaskedReduceMax`, `MaskedReduceAndKeep`).
   * Added `MaskedReduceMean`.
   * Added `IdentityWithCustomGradient`, to allow for manual tweaks to the gradient.
+  * Fixed for special case of gradient on `broadcastInDimVJP`.
 * Package `context`:
   * added `Manager()` accessor method.
   * added `SetParams` to set various parameters at once.
