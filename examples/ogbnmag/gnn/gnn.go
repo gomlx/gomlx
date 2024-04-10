@@ -63,10 +63,16 @@ var (
 	// The default is `residual`.
 	ParamUpdateStateType = "gnn_update_state_type"
 
+	// ParamUpdateNumHiddenLayers context hyperparameter that defines the number of hidden layers for the update kernel.
+	ParamUpdateNumHiddenLayers = "gnn_update_num_hidden_layers"
+
 	// ParamUsePathToRootStates context hyperparameter that if set allows each update state to see the states
 	// of all nodes in its path to root.
 	// Default is false.
 	ParamUsePathToRootStates = "gnn_use_path_to_root"
+
+	// ParamUseRootAsContext context hyperparameter that if set uses the root state as a context state.
+	ParamUseRootAsContext = "gnn_use_root_as_context"
 
 	// ParamGraphUpdateType context hyperparameter can take values `tree` or `simultaneous`.
 	// Graph updates in `tree` fashion will update from leaf all the way to the seeds (the roots of the trees),
@@ -184,7 +190,8 @@ func recursivelyApplyGraphConvolution(ctx *context.Context, rule *sampler.Rule,
 	}
 
 	var subPathToRootStates []*Node
-	if context.GetParamOr(ctx, ParamUsePathToRootStates, false) {
+	useRootAsContext := context.GetParamOr(ctx, ParamUseRootAsContext, false)
+	if context.GetParamOr(ctx, ParamUsePathToRootStates, false) || useRootAsContext {
 		// subPathToRootStates: passed to the children rules. They need to be expanded at each level to get the correct
 		// broadcasting (the broadcasting to the right shapes will happen automatically).
 		subPathToRootStates = make([]*Node, 0, len(pathToRootStates)+1)
@@ -195,8 +202,12 @@ func recursivelyApplyGraphConvolution(ctx *context.Context, rule *sampler.Rule,
 			subPathToRootStates = append(subPathToRootStates, ExpandDims(contextState, -2))
 		}
 		if state.Value != nil {
-			// If the state of the current rule is not latent, include it as well.
-			subPathToRootStates = append(subPathToRootStates, ExpandDims(state.Value, -2))
+			// If useRootAsContext, only takes the root state as context.
+			if len(subPathToRootStates) == 0 || !useRootAsContext {
+				// If the state of the current rule is not latent, include it as well.
+				newContextState := ExpandDims(state.Value, -2)
+				subPathToRootStates = append(subPathToRootStates, newContextState)
+			}
 		}
 	}
 
@@ -331,6 +342,13 @@ func updateState(ctx *context.Context, prevState, input, mask *Node) *Node {
 	// Inputs: both previous state and pooled messages passes through a dropout first.
 	input = layers.DropoutFromContext(ctx, input)
 	stateDim := context.GetParamOr(ctx, ParamStateDim, 128)
+	numHiddenLayers := context.GetParamOr(ctx, ParamUpdateNumHiddenLayers, 0)
+	for ii := range numHiddenLayers {
+		ctxHiddenLayer := ctx.In(fmt.Sprintf("hidden_%d", ii))
+		state := layers.DenseWithBias(ctxHiddenLayer, input, stateDim)
+		state = layers.ActivationFromContext(ctx.In(fmt.Sprintf("hidden_%d", ii)), state)
+		state = layers.DropoutFromContext(ctx.In(fmt.Sprintf("hidden_%d", ii)), state)
+	}
 	state := layers.DenseWithBias(ctx, input, stateDim)
 	state = layers.ActivationFromContext(ctx, state)
 	state = layers.DropoutFromContext(ctx, state)
