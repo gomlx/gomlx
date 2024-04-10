@@ -43,16 +43,21 @@ func createDefaultContext(manager *Manager) *context.Context {
 		layers.ParamL2Regularization: 1e-5,
 		layers.ParamDropoutRate:      0.2,
 
-		gnn.ParamEdgeDropoutRate:     0.0,
-		gnn.ParamNumGraphUpdates:     2,
-		gnn.ParamReadoutHiddenLayers: 2,
-		gnn.ParamPoolingType:         "mean|sum",
-		gnn.ParamUsePathToRootStates: false,
-		gnn.ParamGraphUpdateType:     "tree",
+		gnn.ParamEdgeDropoutRate:       0.0,
+		gnn.ParamNumGraphUpdates:       2,
+		gnn.ParamReadoutHiddenLayers:   2,
+		gnn.ParamPoolingType:           "mean|logsum",
+		gnn.ParamUsePathToRootStates:   false,
+		gnn.ParamGraphUpdateType:       "tree",
+		gnn.ParamUpdateNumHiddenLayers: 0,
+		gnn.ParamMessageDim:            32, // 128 or 256 will work better, but takes way more time
+		gnn.ParamStateDim:              32, // 128 or 256 will work better, but takes way more time
+		gnn.ParamUseRootAsContext:      false,
 
 		mag.ParamEmbedDropoutRate:     0.0,
 		mag.ParamSplitEmbedTablesSize: 1,
 		mag.ParamReuseKernels:         true,
+		mag.ParamIdentitySubSeeds:     true,
 	})
 	return ctx
 }
