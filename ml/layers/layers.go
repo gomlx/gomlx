@@ -32,10 +32,27 @@ import (
 )
 
 const (
-	// L2RegularizationKey is the key to a context.Context.Params that defines the default L2 regularization
-	// of kernels. Each layer may decide independently to implement it or not. DenseWithBias and Convolution kernels
-	// look at this hyperparameter. The value should be a float64.
-	L2RegularizationKey = "l2_regularization"
+	// ParamL2Regularization context hyperparameter defines the L2 regularization of kernels.
+	// Each layer may decide independently to implement it or not.
+	// Dense, DenseWithBias and Convolution kernels look at this hyperparameter.
+	// The value should be a float64.
+	// The default is `0.0`.
+	ParamL2Regularization = "l2_regularization"
+
+	// L2RegularizationKey is an alias for ParamL2Regularization.
+	//
+	// Deprecated: all context parameters constants are prefixed now with "Param", to make it easy
+	// to find them.
+	L2RegularizationKey = ParamL2Regularization
+
+	// ParamDropoutRate context hyperparameter defines the amount of dropout applied when DropoutFromContext is used.
+	// Should be a value from `0.0` to `1.0`, where 0 means no dropout, and 1 would dropout everything.
+	//
+	// It is only applied if `Context.IsTraining() == true`, that is, during evaluation/inference it is
+	// ignored.
+	//
+	// The default is `0.0`, which means no dropout.
+	ParamDropoutRate = "dropout_rate"
 )
 
 // DenseWithBias adds a dense linear layer, a learnable linear transformation plus a bias term.
@@ -107,7 +124,7 @@ func Dense(ctx *context.Context, input *Node, useBias bool, outputDimensions ...
 	}
 
 	// Add regularization -- notice not for the bias term.
-	if l2any, found := ctx.GetParam(L2RegularizationKey); found {
+	if l2any, found := ctx.GetParam(ParamL2Regularization); found {
 		l2 := l2any.(float64)
 		if l2 > 0 {
 			l2Node := Const(g, shapes.CastAsDType(l2, inputShape.DType))
@@ -316,10 +333,20 @@ func PieceWiseLinearCalibrationCascaded(ctx *context.Context, input, keypoints *
 }
 
 // Dropout randomly replace the input with zeros if ctx.IsTraining() is true. Otherwise,
-// it's a no op (it returns input). It scales the output by 1/(1-dropoutRate)
-// to preserve the mean of the values of the input.
+// it's a no op (it returns input).
+// If the input is float, it scales the output by 1/(1-dropoutRate) to preserve the mean of the values of the input.
 func Dropout(ctx *context.Context, input *Node, dropoutRate *Node) *Node {
-	return DropoutNormalize(ctx, input, dropoutRate, true)
+	return DropoutNormalize(ctx, input, dropoutRate, input.DType().IsFloat())
+}
+
+// DropoutStatic is the same as Dropout, but it takes the `dropoutRate` as a static value, given as a float64.
+// If `dropoutRate <= 0` or it's not training, this is a no-op.
+func DropoutStatic(ctx *context.Context, input *Node, dropoutRate float64) *Node {
+	if dropoutRate <= 0 {
+		return input
+	}
+	g := input.Graph()
+	return Dropout(ctx, input, Scalar(g, shapes.F32, dropoutRate))
 }
 
 // DropoutNormalize randomly replace the input with zeros if ctx.IsTraining() is true. Otherwise,
@@ -343,6 +370,31 @@ func DropoutNormalize(ctx *context.Context, input *Node, dropoutRate *Node, norm
 		result = Div(result, keepRate)
 	}
 	return result
+}
+
+// DropoutFromContext applies a dropout configured in the context parameters keyed by [ParamDropoutRate].
+//
+// If it is 0.0 this is a no-op.
+// If `Context.IsTraining() == false` this is a also a no-op, so it doesn't impact evaluation or inference.
+func DropoutFromContext(ctx *context.Context, x *Node) *Node {
+	dropoutRate := context.GetParamOr(ctx, ParamDropoutRate, 0.0)
+	if dropoutRate > 0 {
+		// We apply edge dropout to the mask.
+		g := x.Graph()
+		normalize := x.DType().IsFloat()
+		x = DropoutNormalize(ctx, x, Scalar(g, x.DType(), dropoutRate), normalize)
+	}
+	return x
+}
+
+// AddL2RegularizationStatic is like AddL2Regularization, but takes the `amount` as a static Go float64 value.
+func AddL2RegularizationStatic(ctx *context.Context, amount float64, values ...*Node) {
+	if len(values) == 0 {
+		Panicf("no values given to AddL2RegularizationAsFloat")
+	}
+	g := values[0].Graph()
+	amountNode := Scalar(g, values[0].DType(), amount)
+	AddL2Regularization(ctx, amountNode, values...)
 }
 
 // AddL2Regularization calculates the L2 of the given values (typically variable nodes returned

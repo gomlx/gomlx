@@ -20,6 +20,7 @@ import (
 	"fmt"
 	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/pkg/errors"
 	"reflect"
@@ -320,6 +321,23 @@ func (e *Exec) Call(args ...any) []tensor.Tensor {
 	return results
 }
 
+// unwrapListOfTensors will convert something like []any{[]tensor.Tensor{t1, t2, ...}} to []any{t1, t2,...}
+func convertToListOfTensors(args []any) []any {
+	if len(args) != 1 {
+		return args
+	}
+	switch v := args[0].(type) {
+	case []tensor.Tensor:
+		return slices.Map(v, func(x tensor.Tensor) any { return x })
+	case []*tensor.Local:
+		return slices.Map(v, func(x *tensor.Local) any { return x })
+	case []*tensor.Device:
+		return slices.Map(v, func(x *tensor.Device) any { return x })
+	}
+	// Otherwise, process as usual.
+	return args
+}
+
 // CallWithGraph is similar to Call, but it also returns the computation graph used
 // in the call. Since Exec creates different computation graphs for different set of
 // parameters, this can help disambiguate in case the user needs to use the Graph for
@@ -330,6 +348,7 @@ func (e *Exec) Call(args ...any) []tensor.Tensor {
 //
 // Errors (with full stack-traces) are raised with `panic`.
 func (e *Exec) CallWithGraph(args ...any) (results []tensor.Tensor, g *Graph) {
+	args = convertToListOfTensors(args)
 	if !e.inputAsSlice && len(args) != e.numInputs {
 		Panicf(
 			"# of arguments to call (#args=%d) don't match # arguments to the graph function (#args=%d) for %q",
@@ -343,8 +362,9 @@ func (e *Exec) CallWithGraph(args ...any) (results []tensor.Tensor, g *Graph) {
 		var deviceT *tensor.Device
 		err := TryCatch[error](func() { deviceT = anyToDeviceTensor(e.manager, e.deviceNum, args[ii]) })
 		if err != nil {
-			panic(errors.WithMessagef(err, "failed to convert argument #%d to device(%d): %v",
-				ii, e.deviceNum, args[ii]))
+			fmt.Printf("Original error: %+v\n", err)
+			panic(errors.WithMessagef(err, "Failed to convert argument #%d of %d to device(%d) -- type %T: %v",
+				ii, len(args), e.deviceNum, args[ii], args[ii]))
 		}
 		tensors = append(tensors, deviceT)
 		argsShapes = append(argsShapes, deviceT.Shape())

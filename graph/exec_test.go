@@ -200,6 +200,15 @@ func TestExecWithSlices(t *testing.T) {
 		if !slices.DeepSliceCmp(want1, gotTuple[1].Value(), slices.Equal[float64]) {
 			t.Errorf("addSub(%v, %v)[1]: got %v, wanted %v", c, a, gotTuple[1].Local(), want1)
 		}
+
+		// Test that call with list of tensors also work.
+		gotTuple = addSub.Call([]tensor.Tensor{tensor.FromValue(c), tensor.FromValue(a)})
+		if !slices.DeepSliceCmp(want0, gotTuple[0].Value(), slices.Equal[float64]) {
+			t.Errorf("addSub(%v, %v)[0]: got %v, wanted %v", c, a, gotTuple[0].Local(), want0)
+		}
+		if !slices.DeepSliceCmp(want1, gotTuple[1].Value(), slices.Equal[float64]) {
+			t.Errorf("addSub(%v, %v)[1]: got %v, wanted %v", c, a, gotTuple[1].Local(), want1)
+		}
 	}
 }
 

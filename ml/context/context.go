@@ -27,7 +27,6 @@ import (
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/pkg/errors"
 	"golang.org/x/exp/slices"
-	"log"
 	"reflect"
 	"strings"
 )
@@ -145,10 +144,13 @@ type contextData struct {
 // An example of a loader in gomlx/context/checkpoints. An example for testing can be found
 // in context_test.go:ConstantLoader.
 type Loader interface {
-	// LoadVariable tries to load the variable v, usually specified by its scope and name.
+	// LoadVariable tries to load the variable v pointed by its scope and name.
 	// If it's not found, returns false, and initialization continues as usual.
 	// Errors can be reported with Context.Panic.
-	LoadVariable(ctx *Context, v *Variable) (value tensor.Tensor, found bool)
+	//
+	// It is called at most once for each variable: if a values is loaded owner is transferred and the Loader
+	// can "forget" about that variable, it's assumed to be transferred to the context.
+	LoadVariable(ctx *Context, scope, name string) (value tensor.Tensor, found bool)
 }
 
 // NewContext constructs a new and empty context.
@@ -164,7 +166,7 @@ func NewContext(manager *Manager) *Context {
 			variablesMap: make(map[string]scopedVariableMap),
 		},
 	}
-	ctx.initializer = initializers.RandomUniformFn(initializers.NoSeed, -0.1, 0.1)
+	ctx.initializer = initializers.RandomUniformFn(initializers.NoSeed, -0.05, 0.05)
 	return ctx
 }
 
@@ -182,6 +184,11 @@ func (ctx *Context) copy() *Context {
 	ctx2 := &Context{}
 	*ctx2 = *ctx
 	return ctx2
+}
+
+// Manager returns the manager associated with this context.
+func (ctx *Context) Manager() *Manager {
+	return ctx.data.manager
 }
 
 // Scope returns the full scope path.
@@ -304,7 +311,10 @@ func (ctx *Context) WithInitializer(initializer VariableInitializer) *Context {
 // E.g: if current scope is "/a/b", it will search for the key in "/a/b" scope, then
 // in "/a" and finally in "/", and return the first result found.
 //
-// See also GetGraphParam for parameters that are graph specific.
+// See also:
+//
+// * GetParamOr to get a parameter with a default, if one doesn't exist.
+// * GetGraphParam for parameters that are graph specific.
 func (ctx *Context) GetParam(key string) (value any, found bool) {
 	return ctx.data.params.Get(ctx.scope, key)
 }
@@ -313,7 +323,9 @@ func (ctx *Context) GetParam(key string) (value any, found bool) {
 // searching successively from the current scope back to the root scope ("/"), or if the
 // key is not found, returns the given default value.
 //
-// It casts the value to the given type, and it will panic is that fails.
+// It tries to cast the value to the given type. If it fails, it tries to convert the
+// value to the given type (so an `int` will be converted to a `float64` transparently).
+// If that also fails, an explaining exception is thrown.
 //
 // It's a convenience method around `ctx.GetParam`.
 func GetParamOr[T any](ctx *Context, key string, defaultValue T) T {
@@ -321,8 +333,15 @@ func GetParamOr[T any](ctx *Context, key string, defaultValue T) T {
 	if !found {
 		return defaultValue
 	}
-	v, ok := valueAny.(T)
-	if !ok {
+	value, ok := valueAny.(T)
+	if ok {
+		return value
+	}
+
+	// Try converting, for instance, a float32 could be converted to float64.
+	v := reflect.ValueOf(valueAny)
+	typeOfT := reflect.TypeOf(defaultValue)
+	if !v.CanConvert(typeOfT) {
 		Panicf("GetParamOr[%T](ctx, %q, %v): ctx(scope=%q)[%q]=(%T) %#v, and cannot be converted to %T -- "+
 			"Notice that when reloading a context from a checkpoint involves decoding them from Json, and "+
 			"the original type of the param may have been decoded incorrectly causing this error. "+
@@ -333,7 +352,7 @@ func GetParamOr[T any](ctx *Context, key string, defaultValue T) T {
 			"are usually enough for these hyperparameters.",
 			v, key, defaultValue, ctx.Scope(), key, valueAny, valueAny, v)
 	}
-	return v
+	return v.Convert(typeOfT).Interface().(T)
 }
 
 // SetParam sets the given param in the current scope. It will be visible (by GetParam)
@@ -348,6 +367,16 @@ func GetParamOr[T any](ctx *Context, key string, defaultValue T) T {
 // See also SetGraphParam for parameters that are graph-specific.
 func (ctx *Context) SetParam(key string, value any) {
 	ctx.data.params.Set(ctx.scope, key, value)
+}
+
+// SetParams sets a collection of parameters in the current scope. It will be visible (by GetParam)
+// within this scope and descendant scopes (but not by other scopes).
+//
+// This is a shortcut to multiple calls to `Context.SetParam` and the same observations apply.
+func (ctx *Context) SetParams(keyValues map[string]any) {
+	for key, value := range keyValues {
+		ctx.data.params.Set(ctx.scope, key, value)
+	}
 }
 
 // EnumerateParams enumerates all parameters for all scopes calls fn with their values.
@@ -379,7 +408,9 @@ func (ctx *Context) GetGraphParam(g *Graph, key string) (value any, found bool) 
 // searching successively from the current scope back to the root scope ("/"), or if the
 // key is not found, returns the given default value.
 //
-// It casts the value to the given type, and it will panic is that fails.
+// It tries to cast the value to the given type. If it fails, it tries to convert the
+// value to the given type (so an `int` will be converted to a `float64` transparently).
+// If that also fails, an explaining exception is thrown.
 //
 // It's a convenience method around `ctx.GetGraphParam`.
 //
@@ -388,16 +419,35 @@ func (ctx *Context) GetGraphParam(g *Graph, key string) (value any, found bool) 
 // set this state, as the same Context is used for evaluation/inference graphs and
 // training graphs, and they will have different values.
 func GetGraphParamOr[T any](ctx *Context, g *Graph, key string, defaultValue T) T {
+	// GetGraphParam from Context object and cast to the give type. If
+	// parameter key is not defined, or if it cannot be cast to the given type,
+	// return defaultValue instead.
+	//
+	// It's a typed wrapper to Context.GetGraphParam()
 	valueAny, found := ctx.GetGraphParam(g, key)
 	if !found {
 		return defaultValue
 	}
-	v, ok := valueAny.(T)
-	if !ok {
-		Panicf("GetGraphParamOr[%T](ctx, g, %q, %v): ctx(scope=%q)[%q]=(%T) %#v, and cannot be converted to %T",
-			v, key, defaultValue, ctx.Scope(), key, valueAny, valueAny, defaultValue)
+	value, ok := valueAny.(T)
+	if ok {
+		return value
 	}
-	return valueAny.(T)
+
+	// Try converting, for instance, a float32 could be converted to float64.
+	v := reflect.ValueOf(valueAny)
+	typeOfT := reflect.TypeOf(defaultValue)
+	if !v.CanConvert(typeOfT) {
+		Panicf("GetParamOr[%T](ctx, %q, %v): ctx(scope=%q)[%q]=(%T) %#v, and cannot be converted to %T -- "+
+			"Notice that when reloading a context from a checkpoint involves decoding them from Json, and "+
+			"the original type of the param may have been decoded incorrectly causing this error. "+
+			"Many types are automatically corrected, if one is missing please report, or fix it in package "+
+			"`checkpoints`, in function `serializedParam.jsonDecodeTypeConvert`. "+
+			"Unfortunately, custom parameter types won't work with `checkpoints` (saving/loading), but generic "+
+			"`map[string]any` are handled correctly by Json and "+
+			"are usually enough for these hyperparameters.",
+			v, key, defaultValue, ctx.Scope(), key, valueAny, valueAny, v)
+	}
+	return v.Convert(typeOfT).Interface().(T)
 }
 
 // SetGraphParam sets the given Graph param in the current scope. It will be visible (by
@@ -491,14 +541,12 @@ func (ctx *Context) ExecSetVariablesInParams(params graph.ParamsMap, g *Graph) {
 	})
 }
 
-// findVariableInScope or nil if not found.
-func (ctx *Context) findVariableInScope(name string) *Variable {
-	return ctx.InspectVariable(ctx.scope, name)
-}
-
-// InspectVariable returns the variable with the given name for inspection. This shouldn't be used during
-// building of models, since this bypasses the Reuse checks. It returns nil if a variable with the given
+// InspectVariable returns the variable with the given name for inspection. It returns nil if a variable with the given
 // name hasn't been created.
+//
+// It is not affected by [Context.Reuse] checks.
+//
+// This will trigger the loading of the variable if a loader (like `checkpoint.Checkpoint`) is attached.
 //
 // Notice that variables' information is stored in the "data" component of Context objects, and is shared
 // among all connected context references.
@@ -509,8 +557,47 @@ func (ctx *Context) InspectVariable(scope, name string) *Variable {
 	if !ok {
 		return nil
 	}
-	v := scopeVars[name]
+	v, found := scopeVars[name]
+	if found {
+		return v
+	}
+
+	// Try to load it, if a loader (checkpoint handler) is configured.
+	loader := ctx.data.loader
+	if loader == nil {
+		return nil
+	}
+	value, found := loader.LoadVariable(ctx, scope, name)
+	if !found {
+		return nil
+	}
+	v = &Variable{
+		ctx:          ctx,
+		name:         name,
+		scope:        scope,
+		shape:        value.Shape(),
+		value:        value,
+		Trainable:    true,
+		graphToNodes: make(map[graph.GraphId]*variableNodes),
+	}
+	ctx.InAbsPath(scope).setVariableInScope(name, v)
 	return v
+}
+
+// InspectVariableInScope works like InspectVariable, but looks for the variable in the current scope.
+func (ctx *Context) InspectVariableInScope(name string) *Variable {
+	return ctx.InspectVariable(ctx.Scope(), name)
+}
+
+// InspectVariableIfLoaded returns the variable if it exists already, but it won't attempt to load it.
+//
+// It is similar to [InspectVariable] but won't attempt to load the variable.
+func (ctx *Context) InspectVariableIfLoaded(scope, name string) *Variable {
+	scopeVars, ok := ctx.data.variablesMap[scope]
+	if !ok {
+		return nil
+	}
+	return scopeVars[name]
 }
 
 // setVariableInScope.
@@ -589,7 +676,7 @@ func (ctx *Context) DeleteVariablesInScope() {
 // Notice that variables information is stored in the "data" component of Context objects, and is shared
 // among all connected context references.
 func (ctx *Context) VariableWithShape(name string, shape shapes.Shape) *Variable {
-	v := ctx.findVariableInScope(name)
+	v := ctx.InspectVariableIfLoaded(ctx.scope, name)
 	if v == nil && ctx.checked && ctx.reuse {
 		Panicf("requested variable %q in scope %q with Context.Reuse set, but variable does not exist", name, ctx.scope)
 	}
@@ -633,7 +720,7 @@ func (ctx *Context) tryToLoad(v *Variable) bool {
 	if loader == nil {
 		return false
 	}
-	value, found := loader.LoadVariable(ctx, v)
+	value, found := loader.LoadVariable(ctx, v.Scope(), v.Name())
 	if found {
 		if value.Shape().Eq(v.shape) {
 			v.value = value
@@ -669,7 +756,7 @@ func valueToTensor(value any) tensor.Tensor {
 // Notice that variables' information is stored in the "data" component of Context objects, and is shared
 // among all connected context references.
 func (ctx *Context) VariableWithValue(name string, value any) *Variable {
-	v := ctx.findVariableInScope(name)
+	v := ctx.InspectVariableIfLoaded(ctx.scope, name)
 
 	// Check against reuse of variables.
 	if ctx.checked && ctx.reuse && v == nil {
@@ -858,78 +945,25 @@ func (ctx *Context) BuildTrainableVariablesGradientsGraph(loss *Node) []*Node {
 	return graph.Gradient(loss, trainableVars...)
 }
 
-// GetParam from Context object and cast to the give type. If
-// parameter name is not defined, or if it cannot be cast to the given type,
-// return defaultValue instead.
+const GraphParamIsTraining = "training"
+
+// IsTraining returns whether context is being used for training.
+// This is only a convention adopted by the library components, and it is read
+// with [Context.GetGraphParam] and [GraphParamIsTraining] for the current scope.
+// See [SetTraining] to change this value.
 //
-// It's a typed wrapper to Context.GetParam()
-func GetParam[T any](ctx *Context, name string, defaultValue T) T {
-	valueI, found := ctx.GetParam(name)
-	if !found {
-		return defaultValue
-	}
-	value, ok := valueI.(T)
-	if ok {
-		return value
-	}
-
-	// Try converting, for instance, a float32 could be converted to float64.
-	v := reflect.ValueOf(valueI)
-	var t T
-	typeOfT := reflect.TypeOf(t)
-	if !v.CanConvert(typeOfT) {
-		log.Printf("Tried to read hyperparameter %q as %t, but failed because it was type %s.",
-			name, any(t), v.Type())
-		return defaultValue
-	}
-	return v.Convert(typeOfT).Interface().(T)
-}
-
-// GetGraphParam from Context object and cast to the give type. If
-// parameter name is not defined, or if it cannot be cast to the given type,
-// return defaultValue instead.
-//
-// It's a typed wrapper to Context.GetGraphParam()
-func GetGraphParam[T any](ctx *Context, g *Graph, name string, defaultValue T) T {
-	valueI, found := ctx.GetGraphParam(g, name)
-	if !found {
-		return defaultValue
-	}
-	value, ok := valueI.(T)
-	if ok {
-		return value
-	}
-
-	// Try converting, for instance, a float32 could be converted to float64.
-	v := reflect.ValueOf(valueI)
-	var t T
-	typeOfT := reflect.TypeOf(t)
-	if !v.CanConvert(typeOfT) {
-		log.Printf("Tried to read hyperparameter %q as %t, but failed because it was type %s.",
-			name, any(t), v.Type())
-		return defaultValue
-	}
-	return v.Convert(typeOfT).Interface().(T)
-}
-
-const TrainingGraphParamKey = "training"
-
-// IsTraining returns whether context is being used for training. This is only a convention and is defined
-// by having Globals["training"] == true. See SetTraining to change this value.
-//
-// Notice that global parameters is part of the "reference" component of a Context, so this change
+// Notice that graph parameters is part of the "reference" component of a Context, so this change
 // won't affect other connected context references.
 func (ctx *Context) IsTraining(g *Graph) bool {
-	isTraining, found := ctx.GetGraphParam(g, TrainingGraphParamKey)
-	return found && isTraining.(bool)
+	return GetGraphParamOr(ctx, g, GraphParamIsTraining, false)
 }
 
-// SetTraining marks the context for the given graph as training. This is a convention
-// adopted by the library components, and it simply sets
-// Context.Globals["training"] to the given value. See IsTraining to check for this value.
+// SetTraining marks the context for the given graph as training.
+// This is a convention adopted by the library components, and it simply sets it with
+// [Context.SetGraphParam] and [GraphParamIsTraining] to the given value. See IsTraining to check for this value.
 //
-// Notice that global parameters is part of the "reference" component of a Context, so this change
+// Notice that the graph parameters is part of the "reference" component of a Context, so this change
 // won't affect other connected context references.
 func (ctx *Context) SetTraining(g *Graph, value bool) {
-	ctx.SetGraphParam(g, TrainingGraphParamKey, value)
+	ctx.SetGraphParam(g, GraphParamIsTraining, value)
 }

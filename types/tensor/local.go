@@ -168,8 +168,13 @@ func (local *Local) Local() *Local {
 // It mutates the tensor, but it's handy in case one is dealing with large data.
 // See discussion on storage and mutability in the package documentation.
 func (local *Local) Finalize() {
-	local.AssertValid()
+	if local == nil {
+		panic(errors.New("tensor.Local is nil"))
+	}
 	local.ClearCache()
+	if local.IsFinalized() {
+		return
+	}
 	local.literal.Finalize()
 	local.shape = shapes.Shape{}
 	local.error = nil
@@ -178,7 +183,9 @@ func (local *Local) Finalize() {
 // FinalizeAll releases the memory associated with all copies of the tensor (local and on device),
 // and mark them as empty.
 func (local *Local) FinalizeAll() {
-	local.AssertValid()
+	if local == nil {
+		panic(errors.New("tensor.Local is nil"))
+	}
 	local.cache.FinalizeAll()
 }
 

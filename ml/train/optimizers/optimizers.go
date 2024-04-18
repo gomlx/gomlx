@@ -64,11 +64,27 @@ var (
 		"adamax": func() Interface { return Adam().Adamax().Done() },
 		"adamw":  func() Interface { return Adam().WeightDecay(0.004).Done() },
 	}
+
+	// ParamOptimizer is the context parameter with the name of the optimizer.
+	// The default value is "adamw", and the valid values are "sgd", "adam", "adamw" and "adamax".
+	ParamOptimizer = "optimizer"
 )
 
-// GlobalStepVariableName as stored in context.Context, usually in the root scope -- but depends on the
-// caller.
-const GlobalStepVariableName = "global_step"
+const (
+	// GlobalStepVariableName as stored in context.Context, usually in the root scope -- but depends on the
+	// caller.
+	GlobalStepVariableName = "global_step"
+
+	// Scope reserved for optimizers.
+	Scope = "optimizers"
+)
+
+// FromContext creates an optimizer from context hyperparameters.
+// See [ParamOptimizer]. The default is "adamw".
+func FromContext(ctx *context.Context) Interface {
+	optName := context.GetParamOr(ctx, ParamOptimizer, "adamw")
+	return MustOptimizerByName(optName)
+}
 
 // MustOptimizerByName returns an optimizer given the name, or log.Fatal if one does not exist. It uses
 // KnownOptimizers -- in case one wants to better handle invalid values.
@@ -138,22 +154,30 @@ func IncrementGlobalStepGraph(ctx *context.Context, g *Graph, dtype shapes.DType
 	return globalStep
 }
 
-// LearningRateKey is the string key for learning rate in Context.Params.
-const LearningRateKey = "learning_rate"
+var (
+	// ParamLearningRate is the context parameter name for the default value of learning rate.
+	// It is used by most (all?) optimizers.
+	ParamLearningRate = "learning_rate"
+
+	// LearningRateKey is an alias to ParamLearningRate
+	//
+	// Deprecated: use ParamLearningRate instead.
+	LearningRateKey = ParamLearningRate
+)
 
 // LearningRateVar returns the learning rate variable -- a scalar value of the given dtype.
 //
-// If variable doesn't exist yet, it will be created using the parameter LearningRateKey, if it
+// If variable doesn't exist yet, it will be created using the parameter ParamLearningRate, if it
 // is set, or the provided defaultValue (must be a scalar convertible to dtype) if not.
 func LearningRateVar(ctx *context.Context, dtype shapes.DType, defaultValue float64) *context.Variable {
-	lrValue := context.GetParam(ctx, LearningRateKey, defaultValue)
+	lrValue := context.GetParamOr(ctx, ParamLearningRate, defaultValue)
 	return LearningRateVarWithValue(ctx, dtype, lrValue)
 }
 
 // LearningRateVarWithValue creates (or reuses) variable for learning rate with the given value.
 func LearningRateVarWithValue(ctx *context.Context, dtype shapes.DType, value float64) *context.Variable {
 	ctx = ctx.Checked(false).In("optimizers")
-	return ctx.VariableWithValue(LearningRateKey, shapes.CastAsDType(value, dtype))
+	return ctx.VariableWithValue(ParamLearningRate, shapes.CastAsDType(value, dtype))
 }
 
 // sgd is an empty struct that implements Interface for SGD.

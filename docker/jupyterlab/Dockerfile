@@ -1,8 +1,8 @@
-FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
+FROM nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04
 
 LABEL maintainer="pfeifer@gmail.com"
 
-ARG GO_VERSION="1.21.4"
+ARG GO_VERSION="1.22.2"
 
 # Pre-built GoMLX C library: if not building yourself, you can download it from
 # https://github.com/gomlx/gomlx/releases/download/${GOMLX_VERSION}/gomlx_xla-linux-amd64.tar.gz
@@ -27,10 +27,11 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 USER root
 
-# Update apt and install basic utils
+# Update apt and install basic utils.
+# C compiler is included because some of the Go dependencies require C.
 RUN apt-get update --yes \
     && apt-get upgrade --yes \
-    && apt-get install --yes --no-install-recommends wget vim unzip hdf5-tools
+    && apt-get install --yes --no-install-recommends wget vim unzip hdf5-tools libc6-dev
 
 # Create NB_USER (jovyan) and its home directory.
 RUN useradd --create-home --uid ${NB_UID} --gid ${NB_GID} --shell /bin/bash ${NB_USER}
@@ -47,6 +48,8 @@ RUN apt-get install -y --no-install-recommends cuda-nvrtc-dev-11-8
 # NVCC: required by XLA to just-in-time compile I suppose.
 RUN apt-get install -y --no-install-recommends cuda-nvcc-11-8
 
+# Unfortunately our base docker comes with cudnn9, so we install libcudnn8.
+RUN apt-get install -y --no-install-recommends libcudnn8
 
 #######################################################################################################
 # Jupyter Lab
@@ -66,7 +69,8 @@ RUN pip3 install jupyterlab
 
 # Download Go in users home directory.
 USER ${NB_USER}
-ENV PATH ${HOME}/go/bin:${PATH}
+ENV GOPATH /home/${NB_USER}/go-data
+ENV PATH ${HOME}/go/bin:${GOPATH}/bin:${PATH}
 WORKDIR ${HOME}
 RUN wget --quiet --output-document=- "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" | tar -xz \
     && go version
@@ -79,15 +83,19 @@ RUN go install github.com/janpfeifer/gonb@latest \
 
 # Download and install GoMLX C++ library and its dependencies (tcmalloc, libunwind8 and liblzma5).
 USER root
-
 RUN apt-get update --yes \
     && apt-get install --yes --no-install-recommends gcc libunwind8 liblzma5 libgoogle-perftools-dev micro
 
-# Use locally built gomlx.tar.gz, otherwise download from latest release.
-COPY --chown=0:0 ${GOMLX_XLA_TAR_GZ} /root/gomlx_xla.tar.gz
+# Copy the GoMLX source code, which includes the examples, that can be interesting to
+# look at. Also make a copy of the tutorial at the root directory for quick access.
+USER ${NB_UID}
+COPY --link --chown=${NB_UID}:${NB_GID} . "${HOME}/Projects/gomlx"
+COPY --link --chown=${NB_UID}:${NB_GID} "./examples/tutorial/tutorial.ipynb" "${HOME}/"
+COPY --link --chown=${NB_UID}:${NB_GID} "./examples/tutorial/*.jpg" "${HOME}/"
 
+USER root
 WORKDIR "/usr/local"
-RUN tar -xzf /root/gomlx_xla.tar.gz
+RUN tar -xzf "${HOME}/Projects/gomlx/gomlx_xla.tar.gz" && rm -f "${HOME}/Projects/gomlx/gomlx_xla.tar.gz"
 
 ENV LD_LIBRARY_PATH /usr/local/lib:${LD_LIBRARY_PATH}
 
@@ -98,13 +106,6 @@ WORKDIR ${HOME}
 #######################################################################################################
 # Tests: run at the end, so docker build cache is not busted.
 #######################################################################################################
-
-# Copy the GoMLX source code, which includes the examples, that can be interesting to
-# look at. Also make a copy of the tutorial at the root directory for quick access.
-USER ${NB_UID}
-COPY --link --chown=${NB_UID}:${NB_GID} . "${HOME}/Projects/gomlx"
-COPY --link --chown=${NB_UID}:${NB_GID} "./examples/tutorial/tutorial.ipynb" "${HOME}/"
-COPY --link --chown=${NB_UID}:${NB_GID} "./examples/tutorial/*.jpg" "${HOME}/"
 
 # Run basic tests -- only on "Host" since GPU in docker build is not working.
 WORKDIR "${HOME}/Projects/gomlx"
@@ -119,7 +120,6 @@ RUN go test ./xla/... ./types/... ./graph/... ./ml/...
 #
 # So for now, the alternative if to run this after building the image, and then we commit the container.
 RUN go run ./examples/linear
-
 
 #######################################################################################################
 # Finishing touches.

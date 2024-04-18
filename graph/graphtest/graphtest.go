@@ -66,7 +66,7 @@ func RunTestGraphFn(t *testing.T, testName string, graphFn TestGraphFn, want []a
 	for ii, output := range outputs {
 		fmt.Printf("\tOutput %d: %s\n", ii, output.Local().GoStr())
 	}
-	require.Equalf(t, len(want), numOutputs, "%s: number of wanted results different than number of outputs", testName)
+	require.Equalf(t, len(want), numOutputs, "%s: number of wanted results different from number of outputs", testName)
 
 	for ii, output := range outputs {
 		require.Truef(t, slices.SlicesInDelta(output.Value(), want[ii], delta), "%s: output #%d doesn't match wanted value %v",

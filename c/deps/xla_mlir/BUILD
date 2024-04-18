@@ -1,5 +1,4 @@
-load("@tsl//tsl:tsl.default.bzl", "get_compatible_with_portable")
-load("@tsl//tsl/platform:rules_cc.bzl", "cc_library")
+load("@xla//xla/tsl:tsl.bzl", "if_with_tpu_support", "if_cuda_or_rocm")
 
 cc_library(
     name = "error_util",

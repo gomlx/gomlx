@@ -29,6 +29,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gonum.org/v1/plot/plotter"
 	"gonum.org/v1/plot/vg"
+	"strings"
 	"testing"
 
 	"gonum.org/v1/plot"
@@ -117,6 +118,23 @@ func testSimpleFunc(t *testing.T, name string, input any,
 	fmt.Printf("\t%s(%v) = %s\n", name, input, outputs[0].Local().GoStr())
 	require.Truef(t, slices.SlicesInDelta(outputs[0].Local().Value(), want, slices.Epsilon),
 		"%s(%v): want=%v, got=%v", name, input, want, outputs[0].Local().GoStr())
+}
+
+func testSimpleFuncMany(t *testing.T, name string, inputs []any,
+	fn func(ctx *context.Context, inputs []*Node) *Node, want any) {
+	manager := graphtest.BuildTestManager()
+	ctx := context.NewContext(manager).WithInitializer(IotaP1Initializer)
+	exec := context.NewExec(manager, ctx, fn)
+	var outputs []tensor.Tensor
+	require.NotPanicsf(t, func() { outputs = exec.Call(inputs...) }, "%s: failed to exec graph", name)
+	parts := make([]string, len(inputs))
+	for ii, input := range inputs {
+		parts[ii] = fmt.Sprintf("%v", input)
+	}
+	inputsStr := strings.Join(parts, ", ")
+	fmt.Printf("\t%s(%s) = %s\n", name, inputsStr, outputs[0].Local().GoStr())
+	require.Truef(t, slices.SlicesInDelta(outputs[0].Local().Value(), want, slices.Epsilon),
+		"%s(%s): want=%v, got=%v", name, inputsStr, want, outputs[0].Local().GoStr())
 }
 
 func TestDense2(t *testing.T) {
@@ -220,15 +238,27 @@ func TestLayerNormalization(t *testing.T) {
 	testSimpleFunc(t, "LayerNormalization()",
 		[][]float32{{0, 10}, {20, 30}, {40, 50}},
 		func(ctx *context.Context, input *Node) *Node {
-			return LayerNormalization(ctx, input, -1).LearnedOffset(false).LearnedScale(false).Epsilon(0).Done()
+			return LayerNormalization(ctx, input, -1).LearnedOffset(false).LearnedGain(false).Epsilon(0).Done()
 		},
 		[][]float32{{-1, 1}, {-1, 1}, {-1, 1}},
 	)
 	testSimpleFunc(t, "LayerNormalization()",
 		[][]float32{{0, 10}, {20, 30}, {40, 50}},
 		func(ctx *context.Context, input *Node) *Node {
-			return LayerNormalization(ctx, input, -1).LearnedOffset(false).LearnedScale(false).Epsilon(0).ScaleNormalization(false).Done()
+			return LayerNormalization(ctx, input, -1).LearnedOffset(false).LearnedGain(false).Epsilon(0).ScaleNormalization(false).Done()
 		},
 		[][]float32{{-5, 5}, {-5, 5}, {-5, 5}},
+	)
+	testSimpleFuncMany(t, "LayerNormalization()",
+		[]any{
+			[][]float32{{0, 10, 5}, {20, 30, 0}, {0, 30, 50}, {0, 0, 0}},
+			[][]bool{{true, true, true}, {true, true, false}, {true, false, true}, {false, false, false}},
+		},
+		func(ctx *context.Context, inputs []*Node) *Node {
+			return LayerNormalization(ctx, inputs[0], -1).Mask(inputs[1]).
+				LearnedOffset(false).LearnedGain(false).Epsilon(0).
+				ScaleNormalization(false).Done()
+		},
+		[][]float32{{-5, 5, 0}, {-5, 5, 0}, {-25, 0, 25}, {0, 0, 0}},
 	)
 }

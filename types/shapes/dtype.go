@@ -121,7 +121,7 @@ func (dtype DType) IsSupported() bool {
 }
 
 // GoStr converts dtype to the corresponding Go type and convert that to string.
-// Notice the names are different than the Dtype (so `Int64` dtype is simply `int` in Go).
+// Notice the names are different from the Dtype (so `Int64` dtype is simply `int` in Go).
 func (dtype DType) GoStr() string {
 	t := TypeForDType(dtype)
 	return t.Name()

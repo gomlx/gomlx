@@ -49,7 +49,12 @@ type Node struct {
 	// logMessage is set if node is marked for logging.
 	logMessage string
 
-	stopGradient bool // if true, no gradient is passed through.
+	// stopGradient is set if no gradient is supposed to pass through.
+	stopGradient bool
+
+	// customVJP can be set for a custom reverse gradient definition for the function.
+	// Usually, defined for a NoOp operation.
+	customVJP VJP
 
 	trace error // Stack-trace error of where Node was created. Stored if graph.traced is true.
 }
@@ -307,6 +312,20 @@ func StopGradient(x *Node) *Node {
 	return n
 }
 
+// IdentityWithCustomGradient returns x unchanged, but sets a custom gradient function to be applied when
+// doing the reverse autograd (gradient) calculation.
+//
+// The `gradientFn` will be called during auto-grad and will be passed `x` and `v`, the "adjoint", which represents
+// the gradient of the loss (typically, but of whatever we are calculating the gradient of) with respect to `x`,
+// and we should return the updated `v`, that is, the customized gradient with respect to `x`.
+func IdentityWithCustomGradient(x *Node, gradientFn func(x, v *Node) *Node) *Node {
+	n := NoOp(x)
+	n.customVJP = func(node, v *Node, _ shapes.Shape) []*Node {
+		return []*Node{gradientFn(node, v)}
+	}
+	return n
+}
+
 // Iota creates a constant of the given shape with increasing numbers (starting from 0)
 // on the given axis. So Iota([2,2], 1) returns [[0 1][0 1]], while Iota([2,2], 0)
 // returns [[0 0][1 1]].
@@ -395,8 +414,12 @@ func Round(x *Node) *Node { return oneArgNode(xla.RoundNode, x) }
 // Log adds to the graph the corresponding operation on the input node x.
 func Log(x *Node) *Node { return oneArgNode(xla.LogNode, x) }
 
-// Log1p adds to the graph the corresponding operation on the input node x.
-func Log1p(x *Node) *Node { return oneArgNode(xla.Log1pNode, x) }
+// Log1P adds to the graph the corresponding operation on the input node x.
+func Log1P(x *Node) *Node { return oneArgNode(xla.Log1pNode, x) }
+
+// Log1p is an alias for Log1P for compatibility.
+// Deprecated: renamed to Log1P to conform to Go style.
+func Log1p(x *Node) *Node { return Log1P(x) }
 
 // Not adds to the graph the corresponding operation on the input node x.
 func Not(x *Node) *Node { return oneArgNode(xla.LogicalNotNode, x) }
@@ -408,7 +431,12 @@ func Logistic(x *Node) *Node { return oneArgNode(xla.LogisticNode, x) }
 func Sigmoid(x *Node) *Node { return Logistic(x) }
 
 // Sign adds to the graph the corresponding operation on the input node x.
-func Sign(x *Node) *Node { return oneArgNode(xla.SignNode, x) }
+// The gradient of Sign is assumed to be zero everywhere.
+func Sign(x *Node) *Node {
+	y := oneArgNode(xla.SignNode, x)
+	y.stopGradient = true
+	return y
+}
 
 // Clz adds to the graph the "count leading zeroes" operation on the input node x.
 func Clz(x *Node) *Node { return oneArgNode(xla.ClzNode, x) }
@@ -1098,28 +1126,35 @@ func ReduceAllSum(x *Node) *Node {
 	return ReduceSum(x)
 }
 
-// ReduceMaskedSum reduces by summing the `x` elements over the selected axes.
+// MaskedReduceSum reduces by summing the `x` elements over the selected axes.
 // If `reduceAxes` is nil, reduce over all dimensions to a scalar.
 //
 // The reduced axes of `x` are removed in the output -- so the rank is reduced.
-// See ReduceAndKeep for a version to preserve the reduced axes.
 //
 // It ignores values for which the corresponding mask is false.
 // The `mask` and `x` values must have the same shape.
-func ReduceMaskedSum(x, mask *Node, reduceAxes ...int) *Node {
-	g := validateGraphFromInputs(x, mask)
+func MaskedReduceSum(x, mask *Node, reduceAxes ...int) *Node {
 	maskedX := Where(mask, x, ZerosLike(x))
-	zero := ScalarZero(g, x.DType())
-	return reduceHelper(maskedX, zero, reduceAxes, xla.ReduceSumNode)
+	return ReduceSum(maskedX, reduceAxes...)
 }
 
-// ReduceAllMaskedSum reduces all dimensions to a scalar by summing.
+// ReduceMaskedSum is an alias for MaskedReduceSum.
+//
+// Deprecated: all functions that take mask are prefixed with `Masked...`
+var ReduceMaskedSum = MaskedReduceSum
+
+// MaskedReduceAllSum reduces all dimensions to a scalar by summing.
 //
 // It ignores values for which the corresponding mask is false.
 // The `mask` and `x` values must have the same shape.
-func ReduceAllMaskedSum(x, mask *Node) *Node {
-	return ReduceMaskedSum(x, mask)
+func MaskedReduceAllSum(x, mask *Node) *Node {
+	return MaskedReduceSum(x, mask)
 }
+
+// ReduceAllMaskedSum is an alias for MaskedReduceAllSum.
+//
+// Deprecated: all functions that take mask are prefixed with `Masked...`
+var ReduceAllMaskedSum = MaskedReduceAllSum
 
 // ReduceMean reduces by taking the mean over the elements of the selected axes.
 //
@@ -1135,6 +1170,29 @@ func ReduceMean(x *Node, reduceAxes ...int) *Node {
 // ReduceAllMean reduces all dimensions to a scalar by taking the mean.
 func ReduceAllMean(x *Node) *Node {
 	return ReduceMean(x)
+}
+
+// MaskedReduceMean reduces by taking the mean over the elements of the selected axes.
+//
+// The reduced axes of `x` are removed in the output -- so the rank is reduced.
+//
+// It first applies a mask to x, converting masked values to the neutral value of the operation (0).
+// For reduction dimensions that are completely masked, it returns 0.
+func MaskedReduceMean(x, mask *Node, reduceAxes ...int) *Node {
+	zeros := ZerosLike(x)
+	ones := OnesLike(x)
+	maskedX := Where(mask, x, zeros)
+	sum := ReduceSum(maskedX, reduceAxes...)
+	denominator := Where(mask, ones, zeros)
+	denominator = ReduceSum(denominator, reduceAxes...)
+	denominator = Max(denominator, OnesLike(denominator))
+	return Div(sum, denominator)
+}
+
+// MaskedReduceAllMean reduces all dimensions to a scalar by taking the mean.
+// It ignores entries where mask is false.
+func MaskedReduceAllMean(x, mask *Node) *Node {
+	return MaskedReduceMean(x, mask)
 }
 
 // ReduceMultiply reduces by summing over the elements of the selected axes.
@@ -1169,26 +1227,36 @@ func ReduceAllMax(x *Node) *Node {
 	return ReduceMax(x)
 }
 
-// ReduceMaskedMax reduces by taking the max of `x` elements over the selected axes.
+// MaskedReduceMax reduces by taking the max of `x` elements over the selected axes.
 // If reduceAxes is nil, reduce over all dimensions to a scalar.
 //
 // It ignores values for which the corresponding mask is false.
 // The shapes of `mask and x must be the same.
-func ReduceMaskedMax(x, mask *Node, reduceAxes ...int) *Node {
-	g := validateGraphFromInputs(x, mask)
+func MaskedReduceMax(x, mask *Node, reduceAxes ...int) *Node {
+	g := x.Graph()
 	lowest := lowestForDType(g, x.DType())
 	broadcastLowest := BroadcastToDims(lowest, x.Shape().Dimensions...)
 	maskedX := Where(mask, x, broadcastLowest)
-	return reduceHelper(maskedX, lowest, reduceAxes, xla.ReduceMaxNode)
+	return ReduceMax(maskedX, reduceAxes...)
 }
 
-// ReduceAllMaskedMax reduces all dimensions to a scalar by taking the max.
+// ReduceMaskedMax is an alias for MaskedReduceMax.
+//
+// Deprecated: all functions that take mask are prefixed with `Masked...`
+var ReduceMaskedMax = MaskedReduceMax
+
+// MaskedReduceAllMax reduces all dimensions to a scalar by taking the max.
 //
 // It ignores values for which the corresponding mask is false.
 // The shapes of `mask and x must be the same.
-func ReduceAllMaskedMax(x, mask *Node) *Node {
-	return ReduceMaskedMax(x, mask)
+func MaskedReduceAllMax(x, mask *Node) *Node {
+	return MaskedReduceMax(x, mask)
 }
+
+// ReduceAllMaskedMax is an alias for MaskedReduceAllMax.
+//
+// Deprecated: all functions that take mask are prefixed with `Masked...`
+var ReduceAllMaskedMax = MaskedReduceAllMax
 
 // SliceAxisSpec specifies the range and stride of an axis to include in a Slice.
 //

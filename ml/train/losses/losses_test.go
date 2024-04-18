@@ -24,6 +24,30 @@ import (
 	"testing"
 )
 
+func TestMeanSquaredError(t *testing.T) {
+	testSomeFunc[float32](t, "MeanSquaredErrorWithWeightsAndMask",
+		func(g *Graph) (input, output *Node) {
+			labels := Const(g, []float32{1.0, 2.0, 7.0})
+			mask := Const(g, []bool{true, true, false})
+			weights := Const(g, []float32{5.0, 1.0, 3.2})
+			predictions := Const(g, []float32{2.0, 4.0, 0})
+			output = MeanSquaredError([]*Node{labels, mask, weights}, []*Node{predictions})
+			return predictions, output
+		}, float32(5.0*1.0+1.0*4.0)/3, true)
+}
+
+func TestMeanAbsoluteError(t *testing.T) {
+	testSomeFunc[float32](t, "MeanAbsoluteErrorWithWeightsAndMask",
+		func(g *Graph) (input, output *Node) {
+			labels := Const(g, []float32{1.0, 2.0, 7.0})
+			mask := Const(g, []bool{true, true, false})
+			weights := Const(g, []float32{5.0, 1.0, 3.2})
+			predictions := Const(g, []float32{0.0, 4.0, 0})
+			output = MeanAbsoluteError([]*Node{labels, mask, weights}, []*Node{predictions})
+			return predictions, output
+		}, float32(5.0*1.0+1.0*2.0)/3, true)
+}
+
 // gradTestFunc takes a graph and returns the output being tested, along the nodes that
 // we want the gradients for.
 type gradTestFunc func(g *Graph) (output *Node, nodesForGrad []*Node)
@@ -103,4 +127,32 @@ func TestCategoricalCrossEntropy(t *testing.T) {
 			output = CategoricalCrossEntropy([]*Node{labels}, []*Node{predictions})
 			return predictions, output
 		}, []float32{0.05129, 2.3026}, true)
+
+	testSomeFunc[float32](t, "CategoricalCrossEntropyWithMask",
+		func(g *Graph) (input, output *Node) {
+			labels := Const(g, [][]float32{{0, 1, 0}, {0, 0, 1}, {0, 0, 0}})
+			mask := Const(g, []bool{true, true, false})
+			predictions := Const(g, [][]float32{{0.05, 0.95, 0}, {0.1, 0.8, 0.1}, {0, 0, 0}})
+			output = CategoricalCrossEntropy([]*Node{labels, mask}, []*Node{predictions})
+			return predictions, output
+		}, []float32{0.05129, 2.3026, 0}, true)
+
+	testSomeFunc[float32](t, "CategoricalCrossEntropyWithMaskAndWeights",
+		func(g *Graph) (input, output *Node) {
+			labels := Const(g, [][]float32{{0, 1, 0}, {0, 0, 1}, {0, 0, 0}})
+			mask := Const(g, []bool{true, true, false})
+			weights := Const(g, []float32{1.0, 2.0, 0.0})
+			predictions := Const(g, [][]float32{{0.05, 0.95, 0}, {0.1, 0.8, 0.1}, {0, 0, 0}})
+			output = CategoricalCrossEntropy([]*Node{labels, weights, mask}, []*Node{predictions})
+			return predictions, output
+		}, []float32{0.05129, 4.6052, 0}, true)
+
+	testSomeFunc[float32](t, "SparseCategoricalCrossEntropyLogits",
+		func(g *Graph) (input, output *Node) {
+			labels := Const(g, [][]int32{{1}, {2}, {0}})
+			mask := Const(g, []bool{true, true, false})
+			predictions := Const(g, [][]float32{{0, 10.0, 0}, {10.0, 0, 0}, {0, 0, 0}})
+			output = SparseCategoricalCrossEntropyLogits([]*Node{labels, mask}, []*Node{predictions})
+			return predictions, output
+		}, []float32{0, 10.0, 0}, true)
 }

@@ -34,6 +34,13 @@ func takeFirstFn(metricFn func(ctx *context.Context, labels, predictions []*Node
 	}
 }
 
+// takeLabelsMaskWeightPredictionsFn wraps the given `metricFn` with a function that takes labels, mask, weights and predictions.
+func takeLabelsMaskWeightPredictionsFn(metricFn func(ctx *context.Context, labels, predictions []*Node) *Node) func(ctx *context.Context, labels, mask, weights, predictions *Node) *Node {
+	return func(ctx *context.Context, labels, mask, weights, predictions *Node) *Node {
+		return metricFn(ctx, []*Node{labels, mask, weights}, []*Node{predictions})
+	}
+}
+
 func TestBinaryAccuracyGraph(t *testing.T) {
 	manager := graphtest.BuildTestManager()
 	ctx := context.NewContext(manager)
@@ -106,13 +113,30 @@ func TestBinaryLogitsAccuracyGraph(t *testing.T) {
 func TestSparseCategoricalAccuracyGraph(t *testing.T) {
 	manager := graphtest.BuildTestManager()
 	ctx := context.NewContext(manager)
-	accuracyExec := context.NewExec(manager, ctx, takeFirstFn(SparseCategoricalAccuracyGraph))
-	labels, logits := [][]int{{0}, {1}, {2}}, [][]float32{
-		{0, 0, 1},     // Tie, should be a miss.
-		{-2, -1, -3},  // Correct, even if negative.
-		{100, 90, 80}, // Wrong even if positive.
+	{
+		accuracyExec := context.NewExec(manager, ctx, takeFirstFn(SparseCategoricalAccuracyGraph))
+		labels, logits := [][]int{{0}, {1}, {2}}, [][]float32{
+			{0, 0, 1},     // Tie, should be a miss.
+			{-2, -1, -3},  // Correct, even if negative.
+			{100, 90, 80}, // Wrong even if positive.
+		}
+		results := accuracyExec.Call(labels, logits)
+		got, _ := results[0].Value().(float32)
+		assert.Equal(t, float32(1.0/3.0), got, "TestSparseCategoricalAccuracyGraph")
 	}
-	results := accuracyExec.Call(labels, logits)
-	got, _ := results[0].Value().(float32)
-	assert.Equal(t, float32(1.0/3.0), got, "TestBinaryAccuracyGraph")
+	{
+		accuracyExec := context.NewExec(manager, ctx, takeLabelsMaskWeightPredictionsFn(SparseCategoricalAccuracyGraph))
+		labels := [][]int{{0}, {1}, {0}, {2}}
+		mask := []bool{true, true, false, true}
+		weights := []float32{1.0, 2.0, 100.0, 0.5}
+		logits := [][]float32{
+			{0, 0, 1},      // Tie, should be a miss.
+			{-2, -1, -3},   // Correct, even if negative.
+			{-100, 20, 80}, // Disabled by mask.
+			{100, 90, 80},  // Wrong even if positive.
+		}
+		results := accuracyExec.Call(labels, mask, weights, logits)
+		got, _ := results[0].Value().(float32)
+		assert.Equal(t, float32((2.0*1.0)/(1.0+2.0+0.5)), got, "TestSparseCategoricalAccuracyGraph[with mask/weights]")
+	}
 }

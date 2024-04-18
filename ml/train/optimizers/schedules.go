@@ -26,9 +26,27 @@ import (
 
 // This file implements learning rate schedules.
 
-// CosineAnnealingOptions is returned by CosineAnnealingSchedule to configure the cosine annealing schedule
-// strategy. When finished to configure, call `IsNil`.
-type CosineAnnealingOptions struct {
+var (
+	// ParamCosineScheduleSteps will enable cosine annealing (aka. "cosine schedule")
+	// of the learning rate, if set to a value > 0. It defines the number of steps of the
+	// period of the cosine annealing schedule.
+	// It is very commonly to use the same value as the number of steps being trained.
+	//
+	// It requires that the model call `CosineAnnealingSchedule().FromContext().Done()`
+	// in the start of the model.
+	//
+	// It only impacts training, and it is a no-op during inference and evaluation.
+	ParamCosineScheduleSteps = "cosine_schedule_steps"
+
+	// ParamCosineScheduleMinLearningRate is the minimum value of the learning rate, during
+	// cosine annealing schedule.
+	// Defaults to 0.0.
+	ParamCosineScheduleMinLearningRate = "cosine_annealing_min_learning_rate"
+)
+
+// CosineScheduleOptions is returned by CosineAnnealingSchedule to configure the cosine annealing schedule
+// strategy. When finished to configure, call `Done`.
+type CosineScheduleOptions struct {
 	graph                         *Graph
 	ctx                           *context.Context
 	dtype                         shapes.DType
@@ -39,28 +57,42 @@ type CosineAnnealingOptions struct {
 // CosineAnnealingSchedule allows one to set up a cosine annealing schedule for the learning
 // rate. See details https://paperswithcode.com/method/cosine-annealing.
 //
-// It returns a CosineAnnealingOptions that can be configured. When finished configuring call
-// `IsNil` and it will generate the computation graph that updates the learning rate at every
+// This is slightly different in the sense that $T_i$ is fixed to what here is called [PeriodInSteps].
+//
+// It returns a CosineScheduleOptions that can be configured. When finished configuring call
+// `Done` and it will generate the computation graph that updates the learning rate at every
 // training step.
 //
 // Example with only one cycle (assuming `*flagNumSteps` is the number of training steps):
 //
-// ```
+//	func modelGraph(cxt *context.Context, inputs []*Node) *Node {
+//		...
+//		g := inputs[0].Graph()
+//		optimizers.CosineAnnealingSchedule(ctx, g, shapes.Float32).PeriodInSteps(*flagNumSteps).Done()
+//	}
 //
-//		func modelGraph(cxt *context.Context, inputs []*Node) *Node {
-//	     graph := inputs[0].Graph()
-//			if *flagUseCosineSchedule {
-//				optimizers.CosineAnnealingSchedule(ctx, graph, types.Float32).PeriodInSteps(*flagNumSteps).IsNil()
-//			}
-//		}
+// Or more simply, just pass the hyperparameters in the context (see [ParamCosineScheduleSteps]):
 //
-// ```
-func CosineAnnealingSchedule(ctx *context.Context, graph *Graph, dtype shapes.DType) *CosineAnnealingOptions {
-	return &CosineAnnealingOptions{
+//	func modelGraph(cxt *context.Context, inputs []*Node) *Node {
+//		...
+//		g := inputs[0].Graph()
+//		optimizers.CosineAnnealingSchedule(ctx, g, shapes.Float32).FromContext().Done()
+//	}
+func CosineAnnealingSchedule(ctx *context.Context, graph *Graph, dtype shapes.DType) *CosineScheduleOptions {
+	return &CosineScheduleOptions{
 		ctx:   ctx,
 		graph: graph,
 		dtype: dtype,
 	}
+}
+
+// FromContext configures the cosine annealing from the context, using the keys
+// [ParamCosineScheduleSteps] and [ParamCosineScheduleMinLearningRate].
+func (opt *CosineScheduleOptions) FromContext() *CosineScheduleOptions {
+	opt.periodNumSteps = context.GetParamOr(opt.ctx, ParamCosineScheduleSteps, 0)
+	opt.learningRate = context.GetParamOr(opt.ctx, ParamLearningRate, 0.0)
+	opt.minLearningRate = context.GetParamOr(opt.ctx, ParamCosineScheduleMinLearningRate, 0.0)
+	return opt
 }
 
 // PeriodInSteps sets the number of steps for one period of the cosine schedule. The effective
@@ -70,63 +102,66 @@ func CosineAnnealingSchedule(ctx *context.Context, graph *Graph, dtype shapes.DT
 // It's common to use only one period (so no annealing, just a cosine schedule), in which case
 // just set to the number of steps that will be used for training.
 //
-// There is no default yet, this value must be given, or an error will be issued in the graph
-// and context.
-func (opt *CosineAnnealingOptions) PeriodInSteps(periodSteps int) *CosineAnnealingOptions {
+// The default is -1, which will trigger an exception when building the graph, so it must be
+// defined. If set to 0, the cosine annealing schedule is silently disabled.
+func (opt *CosineScheduleOptions) PeriodInSteps(periodSteps int) *CosineScheduleOptions {
 	opt.periodNumSteps = periodSteps
 	return opt
 }
 
-// MinLearningRate at the end of the cosine cycle. Defaults to 10^-3 * initial learning rate.
-func (opt *CosineAnnealingOptions) MinLearningRate(minLearningRate float64) *CosineAnnealingOptions {
+// MinLearningRate at the end of the cosine cycle. Defaults to 0.0.
+func (opt *CosineScheduleOptions) MinLearningRate(minLearningRate float64) *CosineScheduleOptions {
 	opt.minLearningRate = minLearningRate
 	return opt
 }
 
 // LearningRate at the start of the cosine cycle. If not given, it will try to read from the context
-// params (keyed by LearningRateKey). If neither are set, it will fail and return an error in the
+// params (keyed by ParamLearningRate). If neither are set, it will fail and return an error in the
 // context and graph.
-func (opt *CosineAnnealingOptions) LearningRate(learningRate float64) *CosineAnnealingOptions {
+func (opt *CosineScheduleOptions) LearningRate(learningRate float64) *CosineScheduleOptions {
 	opt.learningRate = learningRate
 	return opt
 }
 
+const CosineScheduleScope = "cosine_schedule"
+
 // Done finalizes the configuration of CosineAnnealingSchedule and generates the computation
-// graph code to implment it.
+// graph code to implement it.
 //
 // If invalid options are given, an error is raised in the Graph.
-func (opt *CosineAnnealingOptions) Done() {
+func (opt *CosineScheduleOptions) Done() {
 	ctx := opt.ctx.Checked(false)
 	graph := opt.graph
-	if opt.periodNumSteps <= 0 {
-		Panicf("period of the CosineAnnealingSchedule in number of steps was not set, or set to <= 0")
+	if !ctx.IsTraining(opt.graph) || opt.periodNumSteps == 0 {
+		return
+	}
+	if opt.periodNumSteps < 0 {
+		Panicf("period of the CosineAnnealingSchedule in number of steps was not set, or set to < 0")
 	}
 
 	lrValue := opt.learningRate
 	if lrValue == 0 {
-		lrValue = context.GetParam(opt.ctx, LearningRateKey, 0.0)
+		lrValue = context.GetParamOr(opt.ctx, ParamLearningRate, 0.0)
 		if lrValue == 0 {
 			Panicf("learning rate not configured for CosineAnnealingSchedule and also "+
-				"not set in the context as parameter %q", LearningRateKey)
+				"not set in the context as parameter %q", ParamLearningRate)
 			return
 		}
 	}
 	lrMinValue := opt.minLearningRate
-	if lrMinValue == 0 {
-		lrMinValue = lrValue / 1000.0
-	}
 
+	// Current training step: cosine schedule keeps its own "global step" counter.
+	cosineStep := IncrementGlobalStepGraph(ctx.In(Scope).In(CosineScheduleScope), graph, opt.dtype)
+	cosineStep = MinusOne(cosineStep) // Since the count starts at 1.
+
+	// Calculate cosine schedule.
+	cycle := DivScalar(cosineStep, float64(opt.periodNumSteps))
+	cycle = Sub(cycle, Floor(cycle)) // Take only the fractional part: so always in range `[0.0, 1.0)`.
+	cosine := Cos(MulScalar(cycle, math.Pi))
+	lr := MulScalar(OnePlus(cosine), 0.5)                         // (Cos()+1.0)/2.0
+	lr = AddScalar(MulScalar(lr, lrValue-lrMinValue), lrMinValue) // Now from lrMin to lrMax
+
+	// Update learning rate.
 	lrVar := LearningRateVarWithValue(ctx, opt.dtype, lrValue)
-	lrMax := Const(graph, shapes.CastAsDType(lrValue, opt.dtype))
-	lrMin := Const(graph, shapes.CastAsDType(lrMinValue, opt.dtype))
-	cosineStep := IncrementGlobalStepGraph(ctx.In("optimizers").In("cosine"), graph, opt.dtype)
-	cosineStep = MinusOne(cosineStep) // Since LoopStep starts at 1.
-
-	cycle := Div(cosineStep, Const(graph, shapes.CastAsDType(opt.periodNumSteps, opt.dtype)))
-	cycle = Sub(cycle, Floor(cycle)) // Take only the fractional part.
-	pi := Const(graph, shapes.CastAsDType(math.Pi, opt.dtype))
-	cosine := Cos(Mul(cycle, pi))
-	lr := Div(OnePlus(cosine), Scalar(graph, opt.dtype, 2)) // From 0 to 1
-	lr = Add(Mul(lr, Sub(lrMax, lrMin)), lrMin)             // Now from lrMin to lrMax
 	lrVar.SetValueGraph(lr)
 }

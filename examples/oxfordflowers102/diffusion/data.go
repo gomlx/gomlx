@@ -84,7 +84,7 @@ func NormalizationValues() (mean, stddev tensor.Tensor) {
 
 	trainDS, _ := CreateInMemoryDatasets()
 	trainDS.BatchSize(128, false)
-	ds := data.Map(manager, nil, trainDS, func(ctx *context.Context, inputs, labels []*Node) (mappedInputs, mappedLabels []*Node) {
+	ds := data.MapWithGraphFn(manager, nil, trainDS, func(ctx *context.Context, inputs, labels []*Node) (mappedInputs, mappedLabels []*Node) {
 		images := PreprocessImages(inputs[0], false)
 		return []*Node{images}, labels
 	})

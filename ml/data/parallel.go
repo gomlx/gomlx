@@ -1,11 +1,11 @@
 package data
 
 import (
-	"fmt"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/pkg/errors"
 	"io"
+	"k8s.io/klog/v2"
 	"log"
 	"runtime"
 	"sync"
@@ -15,6 +15,9 @@ import (
 // See details in CustomParallel.
 type ParallelDataset struct {
 	Dataset train.Dataset
+
+	// name is set by default to the underlying dataset name.
+	name string
 
 	// parallelism is the number of goroutines started generating examples.
 	parallelism int
@@ -85,9 +88,10 @@ func Parallel(ds train.Dataset) *ParallelDataset {
 //	 	MyTrainFunc(ds)
 func CustomParallel(ds train.Dataset) *ParallelDataset {
 	pd := &ParallelDataset{
+		name:    ds.Name(),
 		Dataset: ds,
 	}
-	pd.Parallelism(0)
+	pd.Parallelism(0) // 0 here means it will take the number of cores available.
 	return pd
 }
 
@@ -112,8 +116,18 @@ func (pd *ParallelDataset) Parallelism(n int) *ParallelDataset {
 	return pd
 }
 
+// WithName sets the name of the parallel dataset.
+// It defaults to the original dataset name.
+//
+// It returns the updated ParallelDataset, so calls can be cascaded.
+func (pd *ParallelDataset) WithName(name string) *ParallelDataset {
+	pd.name = name
+	return pd
+}
+
 // Buffer reserved in the channel that collects the parallel yields.
-// Notice there is already a intrinsic buffering that happens
+// Notice there is already an intrinsic buffering that happens in the goroutines sampling
+// in parallel.
 //
 // This must be called before a call to Start.
 //
@@ -182,7 +196,7 @@ func (impl *parallelDatasetImpl) startGoRoutines() {
 					return
 				}
 				if err != nil {
-					log.Printf("Error: %+v", err)
+					klog.Errorf("Error: %+v", err)
 					// Fatal error, stop everything.
 					impl.muErr.Lock()
 					if impl.err != nil {
@@ -223,7 +237,7 @@ func (impl *parallelDatasetImpl) startGoRoutines() {
 
 // Name implements train.Dataset.
 func (pd *ParallelDataset) Name() string {
-	return fmt.Sprintf("%s [Parallelized]", pd.Dataset.Name())
+	return pd.name
 }
 
 // Reset implements train.Dataset.

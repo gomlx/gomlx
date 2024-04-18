@@ -338,7 +338,7 @@ func testGradients(t *testing.T, name string, testFn gradTestFunc, wantForGrad [
 	for ii, output := range gradients {
 		fmt.Printf("\tGradient #%d: %s\n", ii, output.Local().GoStr())
 	}
-	require.Equalf(t, len(wantForGrad), len(gradients), "%s: number of wanted results different than number of gradients", name)
+	require.Equalf(t, len(wantForGrad), len(gradients), "%s: number of wanted results different from number of gradients", name)
 	const delta = 1e-4
 	for ii, output := range gradients {
 		require.Truef(t, slices.SlicesInDelta(output.Value(), wantForGrad[ii], delta), "%s: gradient #%d doesn't match wanted value %#v",
@@ -370,7 +370,7 @@ func testGradientsExact(t *testing.T, name string, testFn gradTestFunc, wantForG
 	for ii, output := range gradients {
 		fmt.Printf("\tGradient #%d: %s\n", ii, output.Local().GoStr())
 	}
-	require.Equalf(t, len(wantForGrad), len(gradients), "%s: number of wanted results different than number of gradients", name)
+	require.Equalf(t, len(wantForGrad), len(gradients), "%s: number of wanted results different from number of gradients", name)
 	for ii, output := range gradients {
 		require.Equalf(t, output.Value(), wantForGrad[ii], "%s: gradient #%d doesn't match wanted value %#v",
 			name, ii, wantForGrad[ii])
@@ -460,7 +460,7 @@ func TestGradientLog1p(t *testing.T) {
 	testGradients(t, "gradient_of_log1p",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			inputs := Const(g, []float64{0, 2, 10, 100})
-			output = Mul(Const(g, []float64{2, 1, 3, 4}), Log1p(inputs))
+			output = Mul(Const(g, []float64{2, 1, 3, 4}), Log1P(inputs))
 			return output, []*Node{inputs}
 		}, []any{[]float64{2, 1.0 / (2.0 + 1.0), 3.0 / (10.0 + 1.0), 4.0 / (100.0 + 1.0)}},
 	)
@@ -619,6 +619,23 @@ func TestGradientComplex(t *testing.T) {
 		}, []any{
 			[]float32{1.0, 3},
 			[]float32{-1.0, 4},
+		},
+	)
+}
+
+func TestIdentityWithCustomGradient(t *testing.T) {
+	testGradients(t, "IdentityWithCustomGradient",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			input := IotaFull(g, shapes.Make(shapes.F32, 5))
+			output = IdentityWithCustomGradient(input, func(x, v *Node) *Node {
+				factor := AddScalar(Neg(x), 5)
+				fmt.Printf("> custom gradient: x.shape=%s, v.shape=%s\n", x.Shape(), v.Shape())
+				return Mul(v, factor)
+			})
+			output = MulScalar(output, 2)
+			return output, []*Node{input}
+		}, []any{
+			[]float32{10, 8, 6, 4, 2},
 		},
 	)
 }

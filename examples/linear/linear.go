@@ -133,7 +133,7 @@ func main() {
 
 	// Creates Context with learned weights and bias.
 	ctx := context.NewContext(manager)
-	ctx.SetParam(optimizers.LearningRateKey, *flagLearningRate)
+	ctx.SetParam(optimizers.ParamLearningRate, *flagLearningRate)
 
 	// train.Trainer executes a training step.
 	trainer := train.NewTrainer(manager, ctx, modelGraph,

@@ -363,7 +363,7 @@ func TestOneArgOps(t *testing.T) {
 		{Ceil, func(x float64) float64 { return math.Ceil(x) }},
 		{Round, func(x float64) float64 { return math.Round(x) }},
 		{Log, func(x float64) float64 { return math.Log(x) }},
-		{Log1p, func(x float64) float64 { return math.Log1p(x) }},
+		{Log1P, func(x float64) float64 { return math.Log1p(x) }},
 		{Sign, func(x float64) float64 {
 			if math.Signbit(x) {
 				return -1
@@ -571,10 +571,26 @@ func TestReduceMean(t *testing.T) {
 			output = ReduceAllMean(input)
 			return
 		}, float32(11.5))
+	graphtest.RunTestGraphFn(t, "ReduceMean",
+		func(g *Graph) (inputs, outputs []*Node) {
+			inputs = []*Node{
+				IotaFull(g, shapes.Make(shapes.F32, 3, 5)),
+				Const(g, [][]bool{
+					{true, true, true, true, true},
+					{true, true, false, false, false},
+					{false, false, false, false, false}}),
+			}
+			outputs = []*Node{
+				MaskedReduceMean(inputs[0], inputs[1], -1),
+			}
+			return
+		}, []any{
+			[]float32{2.0, 5.5, 0.0},
+		}, -1)
 }
 
 func TestReduceMaskedMax(t *testing.T) {
-	graphtest.RunTestGraphFn(t, "ReduceMaskedMax()",
+	graphtest.RunTestGraphFn(t, "MaskedReduceMax()",
 		func(g *Graph) (inputs, outputs []*Node) {
 			x := IotaFull(g, MakeShape(shapes.Float32, 4, 3))
 			mask := Const(g, [][]bool{
@@ -582,7 +598,7 @@ func TestReduceMaskedMax(t *testing.T) {
 				{true, true, false},
 				{true, false, true},
 				{true, true, true}})
-			output := ReduceMaskedMax(x, mask, 1)
+			output := MaskedReduceMax(x, mask, 1)
 			inputs = []*Node{x, mask}
 			outputs = []*Node{output}
 			return

@@ -1,5 +1,68 @@
 # GoMLX changelog
 
+## 0.9.0 - 2024/04/18
+
+* Binary GOMLX+XLA distribution:
+  * Now requires package `libnccl > 2.21` to be installed.
+  * Updated to CUDA version `12.3` and Cudnn `8.9`.
+  * Newer version GPU performance measured on a GNN model improved significantly (In one model the median train step went from 160ms to 110ms). 
+    On CPUs measured on the "CSI Adult" dataset remained the same. 
+* Open Graph Benchmark OGBN-MAG dataset support and example models (FNN and GNN).
+  * Added sampler library.
+* Package `graph`:
+  * added `MirroredLog1P`.
+  * Functions that take masked inputs are being renamed to use a "Masked" prefix (e.g.: `MaskedReduceSum`,
+    `MaskedReduceMean`, `MaskedReduceMax`, `MaskedReduceAndKeep`).
+  * Added `MaskedReduceMean`.
+  * Added `IdentityWithCustomGradient`, to allow for manual tweaks to the gradient.
+  * Fixed for special case of gradient on `broadcastInDimVJP`.
+* Package `context`:
+  * added `Manager()` accessor method.
+  * added `SetParams` to set various parameters at once.
+  * renaming name of parameters to be prefixed with "Param".
+* Package `context/initializers`:
+  * added `GlorotUniformFn`
+  * random initializers use zeros for non-float variables by default (as opposed to crash)
+  * default initializer now matches Keras (random uniform from `[-0.05, 0.05]`).
+* Package `context/checkpoints`:
+  * added `ExcludeVarsFromSaving` to allow preventing saving large static variables. 
+* Package `shapes`:
+  * Added `Check()` and `Assert()` to check for both, dtype and dimensions.
+  * Added `EqDimensions()` to compare dimensions.
+  * `Make(dtype, dimensions...)` now makes a copy of the `dimensions` slice given.
+* `exceptions`: refactoring to use separate package `github.com/gomlx/exceptions`.
+* Package `layers`:
+  * Added `...FromContext` family of functions, that apply layers according to parameters set in the context: 
+    `ActivationFromContext`, `DropoutFromContext`, `NormalizeFromContext` and `MaskedNormalizeFromContext`.
+  * `LayerNormalization`: fixed shaping bug, and renamed `scale` to `gain`, more aligned with [original paper](https://arxiv.org/pdf/1607.06450v1.pdf)
+    * **This will break previous models using LayerNormalization!**: this is not taken lightly, but as it is, it
+      is wrong and depending on the shape it may be adversely affecting some models.
+  * `LayerNormalization`: added `Mask` support; added defaults from context parameters.
+  * `DropoutStatic`: Dropout api where one can pass a static dropout rate as a Go float.
+  * `AddL2RegularizationStatic`: Add L2 regularization on values, where the amount of regularization is static. 
+* Package `optimizers`:
+  * Added `CosineAnnealingSchedule.FromContext`. New `MinLearningRate` is 0.0 (same used in Keras).
+* Package `losses`:
+  * Added support for `weights` and `mask`.
+* Package `ml/data`:
+  * Renamed `Map` -> `MapWithGraphFn`: to make it explicit that the transformation happens in accelerator.
+  * Added `Map`: a map function to a dataset that runs in host (as opposed to in accelerator/XLA).
+  * Added `Freeing`: a dataset wrapper that frees inputs and labels in between each call to `Yield`: to control GPU
+    memory usage. It replaces `loop.FreeInput()`
+* Package `commandline`:
+  * `AttachProgressBar` now displays a continuously updated table with metrics generated during training.
+    This only works in the commandline (not in notebooks). 
+  * Asynchronous display of updates: it works better with very fast training loops or if running
+    over a slow terminal connection (network).
+  * Added `CreateContextSettingsFlag` and `ParseContextSettings`.
+* Package `plots`, `margaid` and `plotly`:
+  * Added `margaid.Plots.PlotEveryNSteps`.
+  * Remove `margaid.Plots.Done`, no longer needed, as closing of writing file is done automatically at the end of the
+    training loop.
+  * Added Plotly plots.
+* Ahead-Of-Time compilation:
+  * Not yet working, and actually broken. This still requires some XLA hacking to get right (if at all possible).
+
 ## 0.8.0 - 2023/11/28
 
 * DType and Tensors:
