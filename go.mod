@@ -12,13 +12,13 @@ require (
 	github.com/go-gota/gota v0.12.0
 	github.com/gomlx/exceptions v0.0.1
 	github.com/google/uuid v1.6.0
-	github.com/janpfeifer/gonb v0.9.6
+	github.com/janpfeifer/gonb v0.10.1
 	github.com/janpfeifer/must v0.0.2
 	github.com/muesli/termenv v0.15.2
 	github.com/pkg/errors v0.9.1
 	github.com/schollz/progressbar/v3 v3.14.1
 	github.com/stretchr/testify v1.8.4
-	golang.org/x/exp v0.0.0-20240213143201-ec583247a57a
+	golang.org/x/exp v0.0.0-20240416160154-fe59bbe5cc7f
 	gonum.org/v1/plot v0.10.1
 	k8s.io/klog/v2 v2.120.1
 )
