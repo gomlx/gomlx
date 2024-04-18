@@ -69,6 +69,7 @@ func TestGradientFFT(t *testing.T) {
 		x = Sin(x)
 		x = ConvertType(x, shapes.Complex128)
 		fft := FFT(x)
+		fft.SetLogged("FFT")
 		output := ReduceAllSum(Abs(fft))
 		argmax := ArgMax(Abs(fft), -1)
 		inv := InverseFFT(fft)
@@ -76,22 +77,25 @@ func TestGradientFFT(t *testing.T) {
 		grad := Gradient(output, x)[0]
 		return []*Node{x}, []*Node{output, argmax, diff, grad}
 	}, []any{
-		11.0, int32(10), 0.0,
+		11.0,
+		int32(1), // Max frequency is of 1, since it's exactly 1 period of a sin curve.
+		0.0,
 		// Notice that GPUs FFT implementation yields significantly different results, so this only works on
 		// the CPU (Eigen presumably) implementation. The results matches results yielded by similar code in
 		// TensorFlow (notice that if using complex64 the numbers differ).
 		[]complex128{
-			-0.7126987103881084 + 2.050415210607949i,
-			-0.34708456852657743 + 2.1129871487498937i,
-			6.221747438979876 - 0.7815639565770847i,
-			1.2212951935321779 - 0.5731899738198121i,
-			2.737096425081983 + 0.5834007264215436i,
-			2.8156998840012886 - 2.042120467795749i,
-			0.7909217660400658 + 2.4657154202830442i,
-			-4.848589784434233 + 2.175014774879141i,
-			2.2094212306941765 - 0.2007046968306172i,
-			-1.3018177490725729 - 2.3496106014958604i,
-			1.815039114738962 - 0.5046736716278869i},
+			2.241402232696969 + 0i,
+			0.8408081271818637 + 0i,
+			4.848838858213708 + 0i,
+			2.7934819834338587 + 0i,
+			-0.5628044369683731 + 0i,
+			0.6846870446443976 + 0i,
+			4.140658304799644 + 0i,
+			-0.16628391231716422 + 0i,
+			0.3723748150049282 + 0i,
+			-7.438217966151578 + 0i,
+			3.245054949461747 + 0i,
+		},
 	}, 1e-3)
 
 	// Similar to previous test, same input, but now we check the gradient of the diff of the reversed sequence
@@ -106,26 +110,15 @@ func TestGradientFFT(t *testing.T) {
 		sumFft := ReduceAllSum(Abs(fft))
 		argmax := ArgMax(Abs(fft), -1)
 		inv := InverseFFT(fft)
-		diff := ReduceAllSum(Abs(Sub(inv, x)))
-		grad := Gradient(diff, inv)[0]
+		diff := Abs(ReduceAllSum(Sub(inv, x)))
+		grad := Gradient(diff, fft)[0]
 		return []*Node{x}, []*Node{sumFft, argmax, diff, grad}
 	}, []any{
-		11.0, int32(10), 0.0,
+		11.0, int32(1), 0.0,
 		// Notice that GPUs FFT implementation yields significantly different results, so this only works on
 		// the CPU (Eigen presumably) implementation. The results matches results yielded by similar code in
 		// TensorFlow (notice that if using complex64 the numbers differ).
-		[]complex128{
-			0.21951219512195125 + 0.9756097560975611i,
-			-0.043097175436008814 + 0.9990708851074771i,
-			0.8087360843031886 + 0.5881716976750463i,
-			0.11383845836148958 + 0.9934992729729999i,
-			0.15968884391337387 + 0.9871673987372204i,
-			0.656144370283719 - 0.7546353856962857i,
-			-0.9991847547814338 + 0.04037110120329026i,
-			-0.9549934880178522 - 0.29662676521766623i,
-			-0.6288692494311636 - 0.7775110720239841i,
-			0.13621834047872816 - 0.9906788398452958i,
-			0.9680364763016536 + 0.2508094506781557i},
+		[]complex128{(-1 + 0i), (0 + 0i), (0 + 0i), (0 + 0i), (0 + 0i), (0 + 0i), (0 + 0i), (0 + 0i), (0 + 0i), (0 + 0i), (0 + 0i)},
 	}, 1e-3)
 }
 

@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"golang.org/x/exp/constraints"
 	"math"
+	"math/cmplx"
 	"reflect"
 	"runtime"
 	"sort"
@@ -85,8 +86,21 @@ func SlicesInDelta(s0, s1 any, delta float64) bool {
 		if delta <= 0 {
 			return false
 		}
+
 		e0v := reflect.ValueOf(e0)
 		e1v := reflect.ValueOf(e1)
+
+		if reflect.TypeOf(e0).Kind() == reflect.Complex64 || reflect.TypeOf(e0).Kind() == reflect.Complex128 {
+			// Complex numbers
+			e0c, e1c := e0v.Complex(), e1v.Complex()
+			ok := cmplx.Abs(e0c-e1c) <= delta
+			if !ok {
+				fmt.Printf("e0c=%v, e1c=%v, abs diff=%f\n", e0c, e1c, cmplx.Abs(e0c-e1c))
+			}
+			return ok
+		}
+
+		// Other numbers:
 		deltaType := reflect.TypeOf(delta)
 		if !e0v.CanConvert(deltaType) {
 			// Not numeric, cannot check for delta.
