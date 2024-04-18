@@ -17,7 +17,7 @@ func (ctx *Context) getRngStateVar() *Variable {
 		rngStateVar = ctx.InAbsPath(RootScope).Checked(false).
 			VariableWithValue(RngStateVariableName, randomState).SetTrainable(false)
 	} else if rngStateVar.Trainable {
-		klog.Warningf("Variable %q was trainable, marking it as non-trainable.", rngStateVar.Name)
+		klog.Warningf("Variable %q was trainable, marking it as non-trainable.", rngStateVar.ParameterName())
 		rngStateVar.SetTrainable(false)
 	}
 	return rngStateVar
