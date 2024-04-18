@@ -159,7 +159,7 @@ func NewTrainer(manager *graph.Manager, ctx *context.Context,
 
 	// Create a context executor for TrainStep. Automatically include batch loss and moving average loss metrics.
 	numMetrics := len(trainMetrics) + 3
-	lossAndMetrics := make([]metrics.Interface, numMetrics)
+	lossAndMetrics := make([]metrics.Interface, 0, numMetrics)
 	batchLossFn := func(_ *context.Context, labels, predictions []*graph.Node) *graph.Node {
 		// Assume lossVar has already been set.
 		g := predictions[0].Graph()
@@ -170,19 +170,23 @@ func NewTrainer(manager *graph.Manager, ctx *context.Context,
 		}
 		return loss
 	}
-	lossAndMetrics[0] = metrics.NewBaseMetric("Batch Loss+Regularization", "loss+", metrics.LossMetricType, batchLossFn, nil)
-	lossAndMetrics[1] = metrics.NewExponentialMovingAverageMetric("Moving Average Loss+Regularization", "~loss+", metrics.LossMetricType, batchLossFn, nil, 0.01)
-	lossAndMetrics[2] = metrics.NewExponentialMovingAverageMetric("Moving Average Loss", "~loss", metrics.LossMetricType, r.lossFnScalarLoss, nil, 0.01)
+	lossAndMetrics = append(lossAndMetrics, metrics.NewBaseMetric("Batch Loss+Regularization", "loss+", metrics.LossMetricType, batchLossFn, nil))
+	lossAndMetrics = append(lossAndMetrics, metrics.NewExponentialMovingAverageMetric("Moving Average Loss+Regularization", "~loss+", metrics.LossMetricType, batchLossFn, nil, 0.01))
+	if r.lossFn != nil {
+		lossAndMetrics = append(lossAndMetrics, metrics.NewExponentialMovingAverageMetric("Moving Average Loss", "~loss", metrics.LossMetricType, r.lossFnScalarLoss, nil, 0.01))
+	}
 
-	copy(lossAndMetrics[3:], trainMetrics)
+	lossAndMetrics = append(lossAndMetrics, trainMetrics...)
 	r.trainMetrics = lossAndMetrics
 
 	// Create a context executor for EvalStep. Automatically include mean loss metric as the first eval metric.
 	numMetrics = len(evalMetrics) + 2
-	lossAndMetrics = make([]metrics.Interface, numMetrics)
-	lossAndMetrics[0] = metrics.NewMeanMetric("Mean Loss+Regularization", "#loss+", metrics.LossMetricType, batchLossFn, nil)
-	lossAndMetrics[1] = metrics.NewMeanMetric("Mean Loss", "#loss", metrics.LossMetricType, r.lossFnScalarLoss, nil)
-	copy(lossAndMetrics[2:], evalMetrics)
+	lossAndMetrics = make([]metrics.Interface, 0, numMetrics)
+	lossAndMetrics = append(lossAndMetrics, metrics.NewMeanMetric("Mean Loss+Regularization", "#loss+", metrics.LossMetricType, batchLossFn, nil))
+	if r.lossFn != nil {
+		lossAndMetrics = append(lossAndMetrics, metrics.NewMeanMetric("Mean Loss", "#loss", metrics.LossMetricType, r.lossFnScalarLoss, nil))
+	}
+	lossAndMetrics = append(lossAndMetrics, evalMetrics...)
 	r.evalMetrics = lossAndMetrics
 	return r
 }
@@ -265,6 +269,10 @@ func (r *Trainer) createExecutor(spec any, inputsLen, labelsLen int,
 }
 
 func (r *Trainer) lossFnScalarLoss(ctx *context.Context, labels, predictions []*graph.Node) *graph.Node {
+	if r.lossFn == nil {
+
+	}
+
 	loss := r.lossFn(labels, predictions)
 	if !loss.Shape().IsScalar() {
 		loss = graph.ReduceAllMean(loss)

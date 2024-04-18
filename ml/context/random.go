@@ -3,6 +3,7 @@ package context
 import (
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/types/shapes"
+	"k8s.io/klog/v2"
 )
 
 const (
@@ -15,6 +16,9 @@ func (ctx *Context) getRngStateVar() *Variable {
 		randomState := graph.RngState()
 		rngStateVar = ctx.InAbsPath(RootScope).Checked(false).
 			VariableWithValue(RngStateVariableName, randomState).SetTrainable(false)
+	} else if rngStateVar.Trainable {
+		klog.Warningf("Variable %q was trainable, marking it as non-trainable.", rngStateVar.Name)
+		rngStateVar.SetTrainable(false)
 	}
 	return rngStateVar
 }
