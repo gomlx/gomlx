@@ -1,7 +1,6 @@
 package(default_visibility = ["//visibility:public"])
 
-load("@tsl//tsl:tsl.bzl", "if_with_tpu_support")
-load("@tsl//tsl:tsl.bzl", "if_cuda_or_rocm")
+load("@xla//xla/tsl:tsl.bzl", "if_with_tpu_support", "if_cuda_or_rocm")
 
 # Dependencies needed for Just-In-Time (JIT) compilation: what we use for training.
 gomlx_jit_deps = [
@@ -32,11 +31,12 @@ gomlx_jit_deps = [
     "@xla//xla/client/lib:self_adjoint_eig",
     "@xla//xla/translate/hlo_to_mhlo:hlo_to_mlir_hlo",
 
+    "@xla//xla/stream_executor:stream_executor",
+
     # Do we need these explicitly ?
-    "@xla//xla/stream_executor:device_id_utils",
-    "@xla//xla/stream_executor:dnn",
-    "@xla//xla/stream_executor:event",
-    "@xla//xla/stream_executor:scratch_allocator",
+    # "@xla//xla/stream_executor:dnn",
+    # @xla//xla/stream_executor:event",
+    # "@xla//xla/stream_executor:scratch_allocator",
 
     # AOT-Compilation: StableHLO conversion,
     "@stablehlo//:stablehlo_serialization",

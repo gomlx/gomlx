@@ -2,6 +2,11 @@
 
 ## Next
 
+* Binary GOMLX+XLA distribution:
+  * Now requires package `libnccl > 2.21` to be installed.
+  * Updated to CUDA version `12.3` and Cudnn `8.9`.
+  * Newer version GPU performance measured on a GNN model improved significantly (In one model the median train step went from 160ms to 110ms). 
+    On CPUs measured on the "CSI Adult" dataset remained the same. 
 * Open Graph Benchmark OGBN-MAG dataset support and example models (FNN and GNN).
   * Added sampler library.
 * Package `graph`:

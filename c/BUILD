@@ -20,12 +20,12 @@ genrule(
 )
 
 # This genrule remaps libxla_extension.so to lib/libxla_extension.so
+# Optional: "//gomlx/aot:libgomlx_xla.so",
 genrule(
     name = "gomlx_xla_lib",
     srcs = [
         "//gomlx:libgomlx_xla.so",
         "@gperftools//:libtcmalloc.a",
-        # "//gomlx/aot:libgomlx_xla.so",
     ],
     outs = ["lib"],
     cmd = """

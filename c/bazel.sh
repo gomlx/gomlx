@@ -89,7 +89,7 @@ fi
 
 STARTUP_FLAGS="${STARTUP_FLAGS} ${OUTPUT_DIR}"
 STARTUP_FLAGS="${STARTUP_FLAGS} --bazelrc=${OPENXLA_BAZELRC}"
-STARTUP_FLAGS="${STARTUP_FLAGS} --bazelrc=tf_configure.bazelrc"
+STARTUP_FLAGS="${STARTUP_FLAGS} --bazelrc=xla_configure.bazelrc"
 
 # bazel build flags
 BUILD_FLAGS="${BUILD_FLAGS:---keep_going --verbose_failures --sandbox_debug}"
