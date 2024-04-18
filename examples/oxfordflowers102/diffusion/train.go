@@ -163,6 +163,9 @@ func TrainModel() {
 
 	// Checkpoints saving.
 	checkpoint, noise, flowerIds := LoadCheckpointToContext(ctx)
+	if noise == nil {
+		klog.Exitf("A checkpoint directory name with --checkpoint is required, none given")
+	}
 	if *flagRngReset {
 		ctx.RngStateReset()
 	}
@@ -214,15 +217,17 @@ func TrainModel() {
 			})
 	}
 
-	// Monitoring training: plots, generator of images, kid evaluator.
-	var plots *margaid.Plots
+	// Monitoring training: plotter, generator of images, kid evaluator.
+	var plotter *margaid.Plots
 	if *flagPlots {
-		plots = margaid.New(1024, 400, trainEvalDS, validationDS).LogScaleX().LogScaleY()
+		// No need to store the returned `plot.Plots` object, it attaches itself to the loop, and will
+		// generate plot points and update the plot until the `loop` ends.
+		plotter = margaid.New(1024, 400, trainEvalDS, validationDS).LogScaleX().LogScaleY()
 		if checkpoint != nil {
-			_, err := plots.WithFile(path.Join(checkpoint.Dir(), "training_plot_points.json"))
+			_, err := plotter.WithFile(path.Join(checkpoint.Dir(), "training_plot_points.json"))
 			AssertNoError(err)
 		}
-		plots.DynamicUpdates()
+		plotter.DynamicUpdates()
 	}
 
 	generator := NewImagesGenerator(ctx, noise, flowerIds, 20)
@@ -236,7 +241,7 @@ func TrainModel() {
 
 	train.ExponentialCallback(loop, *flagTrainMonitorStartFrequency, *flagTrainMonitorFrequencyFactor, true,
 		"Monitor", 0, func(loop *train.Loop, metrics []tensor.Tensor) error {
-			return TrainingMonitor(checkpoint, loop, metrics, plots, generator, kid)
+			return TrainingMonitor(checkpoint, loop, metrics, plotter, plotter.EvalDatasets, generator, kid)
 		})
 
 	// Loop for given number of steps.
@@ -261,7 +266,7 @@ func TrainModel() {
 // TrainingMonitor is periodically called during training, and is used to report metrics and generate sample images at
 // the current training step.
 func TrainingMonitor(checkpoint *checkpoints.Handler, loop *train.Loop, metrics []tensor.Tensor,
-	plots *margaid.Plots, generator *ImagesGenerator, kid *KidGenerator) error {
+	plotter stdplots.Plotter, evalDatasets []train.Dataset, generator *ImagesGenerator, kid *KidGenerator) error {
 
 	fmt.Printf("\n[... evaluating@%d ...] [median train step (ms): %d]\n", loop.LoopStep, loop.MedianTrainStepDuration().Milliseconds())
 	// Save checkpoint, just in case.
@@ -271,15 +276,16 @@ func TrainingMonitor(checkpoint *checkpoints.Handler, loop *train.Loop, metrics 
 	}
 	AssertNoError(checkpoint.Save())
 
-	// Update plots with metrics.
-	AssertNoError(stdplots.AddTrainAndEvalMetrics(plots, loop, metrics, plots.EvalDatasets))
+	// Update plotter with metrics.
+	AssertNoError(stdplots.AddTrainAndEvalMetrics(plotter, loop, metrics, evalDatasets))
 
 	// Kid generator
 	if kid != nil {
 		kidValue := kid.Eval()
 		//fmt.Printf("\nKID=%f\n", kidValue.Value())
-		plots.AddPoint("KID", "KID", float64(loop.LoopStep), shapes.ConvertTo[float64](kidValue.Value()))
+		plotter.AddPoint(stdplots.Point{MetricName: "KID", MetricType: "KID", Step: float64(loop.LoopStep), Value: shapes.ConvertTo[float64](kidValue.Value())})
 	}
+	plotter.DynamicSampleDone(false)
 
 	// Generate intermediary images.
 	images := generator.Generate()
@@ -299,10 +305,10 @@ func DisplayTrainingPlots() {
 		return
 	}
 
-	plots := margaid.New(1024, 400).LogScaleX().LogScaleY()
-	_, err := plots.WithFile(path.Join(checkpoint.Dir(), "training_plot_points.json"))
+	plotter := margaid.New(1024, 400).LogScaleX().LogScaleY()
+	_, err := plotter.WithFile(path.Join(checkpoint.Dir(), "training_plot_points.json"))
 	AssertNoError(err)
-	plots.Plot()
+	plotter.Plot()
 }
 
 // CompareModelPlots display several model metrics on the same plots.

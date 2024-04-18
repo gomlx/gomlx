@@ -1,6 +1,6 @@
 # GoMLX changelog
 
-## Next
+## 0.9.0 - 2024/04/18
 
 * Binary GOMLX+XLA distribution:
   * Now requires package `libnccl > 2.21` to be installed.

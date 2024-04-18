@@ -259,14 +259,15 @@ func trainModel(config *dogsvscats.Configuration) {
 
 	// Attach a margaid plots: plot points at exponential steps.
 	// The points generated are saved along the checkpoint directory (if one is given).
-	var plots *margaid.Plots
 	if *flagPlots {
+		// No need to store the returned `plot.Plots` object, it attaches itself to the loop, and will
+		// generate plot points and update the plot until the `loop` ends.
 		if !preTraining {
-			plots = margaid.NewDefault(loop, checkpoint.Dir(), 100, 1.1, trainEvalDS, validationEvalDS).
+			_ = margaid.NewDefault(loop, checkpoint.Dir(), 100, 1.1, trainEvalDS, validationEvalDS).
 				WithEvalLossType("eval-loss")
 		} else {
 			// Pre-training: no evaluation.
-			plots = margaid.NewDefault(loop, checkpoint.Dir(), 100, 1.1)
+			_ = margaid.NewDefault(loop, checkpoint.Dir(), 100, 1.1)
 		}
 	}
 
@@ -295,10 +296,6 @@ func trainModel(config *dogsvscats.Configuration) {
 	// Finally, print an evaluation on train and test datasets.
 	fmt.Println()
 	err = commandline.ReportEval(trainer, trainEvalDS, validationEvalDS)
-	if plots != nil {
-		// Save plot points.
-		plots.Done()
-	}
 	AssertNoError(err)
 	fmt.Println()
 }

@@ -147,10 +147,9 @@ func Train(ctx *context.Context) error {
 
 	// Attach a margaid plots: plot points at exponential steps.
 	// The points generated are saved along the checkpoint directory (if one is given).
-	var plots *margaid.Plots
 	usePlots := context.GetParamOr(ctx, "plots", false)
 	if usePlots {
-		plots = margaid.NewDefault(loop, checkpoint.Dir(), 100, 1.1, validDS, testDS, trainEvalDS).
+		_ = margaid.NewDefault(loop, checkpoint.Dir(), 100, 1.1, validDS, testDS, trainEvalDS).
 			WithEvalLossType("eval-loss")
 	}
 
@@ -175,10 +174,6 @@ func Train(ctx *context.Context) error {
 	err = commandline.ReportEval(trainer, trainEvalDS, validDS, testDS)
 	if err != nil {
 		return errors.WithMessage(err, "while reporting eval")
-	}
-	if plots != nil {
-		// Save plot points.
-		plots.Done()
 	}
 	fmt.Println()
 	return nil

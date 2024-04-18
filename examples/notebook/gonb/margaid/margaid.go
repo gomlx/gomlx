@@ -175,6 +175,7 @@ func (ps *Plots) PlotEveryNSteps(loop *train.Loop, n int) {
 			// Update plots with metrics.
 			return stdplots.AddTrainAndEvalMetrics(ps, loop, metrics, ps.EvalDatasets)
 		})
+	ps.attachOnEnd(loop)
 }
 
 // WithFile uses the filePath both to load data points and to save any new data points.
@@ -435,13 +436,14 @@ func (ps *Plots) DynamicPlot(final bool) {
 		return
 	}
 	if final == true {
-		gonbui.UpdateHTML(ps.gonbID, "")
+		gonbui.UpdateHtml(ps.gonbID, "")
 		ps.Plot()
+		ps.gonbID = "" // Only do the final plot once.
 		return
 	}
 
 	// Plot transient version.
-	gonbui.UpdateHTML(ps.gonbID, ps.PlotToHTML())
+	gonbui.UpdateHtml(ps.gonbID, ps.PlotToHTML())
 	return
 }
 
