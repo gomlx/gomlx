@@ -60,6 +60,8 @@
   * Remove `margaid.Plots.Done`, no longer needed, as closing of writing file is done automatically at the end of the
     training loop.
   * Added Plotly plots.
+* Ahead-Of-Time compilation:
+  * Not yet working, and actually broken. This still requires some XLA hacking to get right (if at all possible).
 
 ## 0.8.0 - 2023/11/28
 

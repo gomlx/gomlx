@@ -298,6 +298,8 @@ func (g *Graph) ConvertToStableHLO() *xla.StableHLO {
 // See tutorial on instructions and an example of how to do this.
 //
 // Errors are reported back in a `panic` call.
+//
+// EXPERIMENTAL: it's currently broken -- it still requires some XLA hacking.
 func (g *Graph) AOTCompile() []byte {
 	g.AssertValidAndCompiled()
 	outputShapes := make([]shapes.Shape, 0, g.NumParameters())

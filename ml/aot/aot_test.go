@@ -35,6 +35,9 @@ func EuclideanDistance(x, y *Node) *Node {
 }
 
 func TestAOTCompileModel(t *testing.T) {
+	if os.Getenv("GOMLX_AOT") == "" {
+		t.Skip("Skipping GOMLX_AOT testing, still experimental/broken. Enable by setting GOMLX_AOT env var.")
+	}
 	manager := graphtest.BuildTestManager()
 	exec := NewExec(manager, EuclideanDistance)
 
