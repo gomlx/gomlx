@@ -14,6 +14,7 @@
  *	limitations under the License.
  */
 
+#include "absl/log/initialize.h"
 #include "xla/status.h"
 #include "gperftools/heap-checker.h"
 #include "gperftools/malloc_extension.h"
@@ -25,9 +26,13 @@
 
 const char *TF_LOG_LEVEL_ENV = "TF_CPP_MIN_LOG_LEVEL";
 
-// Set TF_CPP_MIN_LOG_LEVEL to two by default. Notice that if it is set, it is
-// not overwritten.
-int initSetTfLogs() { return setenv(TF_LOG_LEVEL_ENV, "2", /* overwrite */ 0); }
+// Initialize logs and tet TF_CPP_MIN_LOG_LEVEL to two by default.
+// Notice that if it is set, it is not overwritten.
+int initSetTfLogs() {
+    int res = setenv(TF_LOG_LEVEL_ENV, "2", /* overwrite */ 0);
+    absl::InitializeLog();
+    return res;
+}
 
 extern int initCall;
 int initCall = initSetTfLogs();
