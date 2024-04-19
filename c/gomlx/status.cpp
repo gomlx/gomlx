@@ -30,7 +30,14 @@ const char *TF_LOG_LEVEL_ENV = "TF_CPP_MIN_LOG_LEVEL";
 // Notice that if it is set, it is not overwritten.
 int initSetTfLogs() {
     int res = setenv(TF_LOG_LEVEL_ENV, "2", /* overwrite */ 0);
+
+// Without absl::InitializeLog(), XLA outputs spurious logs at initialization.
+// But it can only be called once, and if whoever is using GoMLX already does it,
+// it will lead to a duplicate call and crash.
+// Add a define SKIP_ABSL_INITIALIZE_LOG to the BUILD file to skip it.
+#ifndef SKIP_ABSL_INITIALIZE_LOG
     absl::InitializeLog();
+#endif
     return res;
 }
 
