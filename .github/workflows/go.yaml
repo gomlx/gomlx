@@ -31,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Install apt packages
       shell: bash
@@ -40,9 +40,9 @@ jobs:
           "wget" "gcc" "libunwind8" "libunwind-dev" "liblzma5" "libgoogle-perftools-dev" "hdf5-tools"
 
     - name: Install Go
-      uses: actions/setup-go@v3
+      uses: actions/setup-go@v5
       with:
-        go-version: "1.20.x"
+        go-version: "1.22.x"
 
     - name: Install GoMLX shared libraries
       shell: bash
@@ -74,13 +74,13 @@ jobs:
         green: 80
         filename: docs/coverage.out
 
-    - uses: stefanzweifel/git-auto-commit-action@v4
-      id: auto-commit-action
-      with:
-        commit_message: Apply Code Coverage Badge
-        skip_fetch: true
-        skip_checkout: true
-        file_pattern: ./README.md
+    - name: Commit changes
+      if: steps.verify-changed-files.outputs.files_changed == 'true'
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add README.md
+        git commit -m "chore: Updated coverage badge."
 
     - name: Push Changes
       if: steps.auto-commit-action.outputs.changes_detected == 'true'
