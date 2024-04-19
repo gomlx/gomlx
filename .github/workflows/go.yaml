@@ -74,16 +74,18 @@ jobs:
         green: 80
         filename: docs/coverage.out
 
-    - name: Commit changes
-      if: steps.verify-changed-files.outputs.files_changed == 'true'
+    - name: Commit README.md changes
       run: |
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-        git add README.md
-        git commit -m "chore: Updated coverage badge."
+        if git diff --quiet -- 'README.md' ; then
+          echo "README.md not modified."
+        else
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add README.md
+          git commit -m "chore: Updated coverage badge."
+        fi
 
     - name: Push Changes
-      if: steps.auto-commit-action.outputs.changes_detected == 'true'
       uses: ad-m/github-push-action@master
       with:
         github_token: ${{ github.token }}
