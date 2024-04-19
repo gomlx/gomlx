@@ -21,6 +21,9 @@ var (
 )
 
 func TestModel(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping long-running test.")
+	}
 	manager := graphtest.BuildTestManager()
 	ctx := context.NewContext(manager)
 	err := Download(*flagDataDir)
