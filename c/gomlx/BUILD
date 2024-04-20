@@ -89,16 +89,15 @@ cc_library(
     name = "gomlx",
     srcs = glob(["*.cpp"]),
     hdrs = glob(["*.h"]),
+    # SKIP_ABSL_INITIALIZE_LOG: this will trigger skipping of the of the call to `absl::InitializeLog()`
+    # to prevent double-calling, in case whoever is linking GoMLX also calls it. Setting it may
+    # lead to spurious logging by XLA library at startup up.
+    # defines = ["SKIP_ABSL_INITIALIZE_LOG"],
     linkopts = ["-shared"],
     deps = gomlx_jit_deps + [
         "@gperftools",
     ],
     alwayslink = True,
-
-    # SKIP_ABSL_INITIALIZE_LOG: this will trigger skipping of the of the call to `absl::InitializeLog()`
-    # to prevent double-calling, in case whoever is linking GoMLX also calls it. Setting it may
-    # lead to spurious logging by XLA library at startup up.
-    # defines = ["SKIP_ABSL_INITIALIZE_LOG"],
 )
 
 cc_binary(

@@ -7,7 +7,7 @@
 [![TestStatus](https://github.com/gomlx/gomlx/actions/workflows/go.yaml/badge.svg)](https://github.com/gomlx/gomlx/actions/workflows/go.yaml)
 ![Coverage](https://img.shields.io/badge/Coverage-76.6%25-yellow)
 
-<img align="right" src="docs/gomlx_gopher.jpg" align="left" alt="GoMLX Gopher" width="220"/>
+<img align="right" src="docs/gomlx_gopher.jpg" alt="GoMLX Gopher" width="220px"/>
 
 GoMLX is a fast and easy-to-use set of Machine Learning and generic math libraries and tools. 
 It can be seen as a TensorFlow/Jax/PyTorch for Go.

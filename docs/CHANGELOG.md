@@ -1,6 +1,6 @@
 # GoMLX changelog
 
-## Next
+## 0.9.1 - 2024/04/19
 
 * XLA integration:
   * Added "SKIP_ABSL_INITIALIZE_LOG", for conflict cases, while https://github.com/abseil/abseil-cpp/issues/1656 is
