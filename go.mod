@@ -18,6 +18,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/schollz/progressbar/v3 v3.14.2
 	github.com/stretchr/testify v1.9.0
+	github.com/x448/float16 v0.8.4
 	golang.org/x/exp v0.0.0-20240416160154-fe59bbe5cc7f
 	gonum.org/v1/plot v0.14.0
 	k8s.io/klog/v2 v2.120.1

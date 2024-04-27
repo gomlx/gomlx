@@ -44,11 +44,11 @@ func createDefaultContext(manager *Manager) *context.Context {
 		layers.ParamDropoutRate:      0.2,
 
 		gnn.ParamEdgeDropoutRate:       0.0,
-		gnn.ParamNumGraphUpdates:       2,
+		gnn.ParamNumGraphUpdates:       6, // gnn_num_messages
 		gnn.ParamReadoutHiddenLayers:   2,
 		gnn.ParamPoolingType:           "mean|logsum",
 		gnn.ParamUsePathToRootStates:   false,
-		gnn.ParamGraphUpdateType:       "tree",
+		gnn.ParamGraphUpdateType:       "simultaneous",
 		gnn.ParamUpdateNumHiddenLayers: 0,
 		gnn.ParamMessageDim:            32, // 128 or 256 will work better, but takes way more time
 		gnn.ParamStateDim:              32, // 128 or 256 will work better, but takes way more time
@@ -58,6 +58,7 @@ func createDefaultContext(manager *Manager) *context.Context {
 		mag.ParamSplitEmbedTablesSize: 1,
 		mag.ParamReuseKernels:         true,
 		mag.ParamIdentitySubSeeds:     true,
+		mag.ParamDType:                "float32",
 	})
 	return ctx
 }

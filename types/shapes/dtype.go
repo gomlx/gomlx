@@ -17,12 +17,14 @@
 package shapes
 
 import (
-	"github.com/gomlx/gomlx/types/exceptions"
-	"github.com/pkg/errors"
 	"math"
 	"reflect"
 	"strconv"
 	"unsafe"
+
+	"github.com/gomlx/gomlx/types/exceptions"
+	"github.com/pkg/errors"
+	"github.com/x448/float16"
 )
 
 // DType indicates the type of the unit element of a Tensor (or its representation in
@@ -49,11 +51,11 @@ const (
 	UInt16             // U16
 	UInt32             // U32
 	UInt64             // U64
-	Float16            // F16
+	Float16            // F16, IEEE 754-2008 half-precision, in Go we use the [github.com/x448/float16.Float16] representation.
 	Float32            // F32
 	Float64            // F64
 
-	BFloat16   DType = 16 // BF16
+	BFloat16   DType = 16 // BF16, Brain float16: defined for Google TPUs, but supported by newer NVidia GPUs as well.
 	Complex64  DType = 15 // C64
 	Complex128 DType = 18 // C128
 
@@ -83,7 +85,7 @@ const (
 // IsFloat returns whether dtype is a supported float -- float types not yet supported will return false.
 // It returns false for complex numbers.
 func (dtype DType) IsFloat() bool {
-	return dtype == Float32 || dtype == Float64
+	return dtype == Float32 || dtype == Float64 || dtype == Float16 || dtype == BFloat16
 }
 
 // IsComplex returns whether dtype is a supported complex number type.
@@ -104,9 +106,10 @@ func (dtype DType) RealDType() DType {
 		return Float32
 	case Complex128:
 		return Float64
+	default:
+		// RealDType is not defined for other dtypes.
+		return InvalidDType
 	}
-	// RealDType is not defined for other dtypes.
-	return InvalidDType
 }
 
 // IsInt returns whether dtype is a supported integer type -- float types not yet supported will return false.
@@ -115,7 +118,7 @@ func (dtype DType) IsInt() bool {
 }
 
 func (dtype DType) IsSupported() bool {
-	return dtype == Bool || dtype == Float32 || dtype == Float64 ||
+	return dtype == Bool || dtype == Float16 || dtype == Float32 || dtype == Float64 ||
 		dtype == Int64 || dtype == Int32 || dtype == UInt8 || dtype == UInt32 || dtype == UInt64 ||
 		dtype == Complex64 || dtype == Complex128
 }
@@ -176,13 +179,16 @@ type MultiDimensionSlice interface {
 		[][][][][][]bool | [][][][][][]float32 | [][][][][][]float64 | [][][][][][]int | [][][][][][]int32 | [][][][][][]int64 | [][][][][][]uint8 | [][][][][][]uint32 | [][][][][][]uint64 | [][][][][][]complex64 | [][][][][][]complex128
 }
 
+// DTypeGeneric returns the DType enum for the given type.
 func DTypeGeneric[T Supported]() DType {
 	var t T
 	switch (any(t)).(type) {
-	case float32:
-		return Float32
 	case float64:
 		return Float64
+	case float32:
+		return Float32
+	case float16.Float16:
+		return Float16
 	case int:
 		switch strconv.IntSize {
 		case 32:
@@ -219,6 +225,15 @@ func DTypeGeneric[T Supported]() DType {
 // If value is a complex number, it converts by taking the real part of the number and
 // discarding the imaginary part.
 func ConvertTo[T NumberNotComplex](value any) T {
+	t, ok := value.(T)
+	if ok {
+		return t
+	}
+	if reflect.TypeOf(t) == float16Type {
+		v32 := ConvertTo[float32](value)
+		return T(float16.Fromfloat32(v32))
+	}
+
 	switch v := value.(type) {
 	case float32:
 		return T(v)
@@ -240,11 +255,16 @@ func ConvertTo[T NumberNotComplex](value any) T {
 		return T(real(v))
 	case complex128:
 		return T(real(v))
+	case float16.Float16:
+		return T(v.Float32())
 	}
 	return T(0)
 }
 
 func DTypeForType(t reflect.Type) DType {
+	if t == float16Type {
+		return Float16
+	}
 	switch t.Kind() {
 	case reflect.Int:
 		switch strconv.IntSize {
@@ -275,6 +295,8 @@ func DTypeForType(t reflect.Type) DType {
 		return Complex64
 	case reflect.Complex128:
 		return Complex128
+	default:
+		return InvalidDType
 	}
 	return InvalidDType
 }
@@ -289,6 +311,8 @@ func UnsafeSliceForDType(dtype DType, unsafePtr unsafe.Pointer, len int) any {
 		return unsafe.Slice((*int64)(unsafePtr), len)
 	case Int32:
 		return unsafe.Slice((*int32)(unsafePtr), len)
+	case Float16:
+		return unsafe.Slice((*float16.Float16)(unsafePtr), len)
 	case Float32:
 		return unsafe.Slice((*float32)(unsafePtr), len)
 	case Float64:
@@ -305,8 +329,9 @@ func UnsafeSliceForDType(dtype DType, unsafePtr unsafe.Pointer, len int) any {
 		return unsafe.Slice((*complex64)(unsafePtr), len)
 	case Complex128:
 		return unsafe.Slice((*complex128)(unsafePtr), len)
+	default:
+		return nil
 	}
-	return nil
 }
 
 // TypeForDType returns the Go `reflect.Type` corresponding to the tensor DType.
@@ -316,6 +341,8 @@ func TypeForDType(dtype DType) reflect.Type {
 		return reflect.TypeOf(int64(0))
 	case Int32:
 		return reflect.TypeOf(int32(0))
+	case Float16:
+		return float16Type
 	case Float32:
 		return float32Type
 	case Float64:
@@ -332,8 +359,9 @@ func TypeForDType(dtype DType) reflect.Type {
 		return reflect.TypeOf(complex64(0))
 	case Complex128:
 		return reflect.TypeOf(complex128(0))
+	default:
+		return reflect.TypeOf(nil)
 	}
-	return reflect.TypeOf(nil)
 }
 
 // Type returns the Go `reflect.Type` corresponding to the tensor DType.
@@ -351,6 +379,7 @@ func (dtype DType) Memory() int64 {
 var (
 	float32Type = reflect.TypeOf(float32(0))
 	float64Type = reflect.TypeOf(float64(0))
+	float16Type = reflect.TypeOf(float16.Float16(0))
 )
 
 // CastAsDType casts a numeric value to the corresponding for the DType.
@@ -374,6 +403,10 @@ func CastAsDType(value any, dtype DType) any {
 		if dtype == Complex128 {
 			r := valueOf.Convert(float64Type).Interface().(float64)
 			return complex(r, float64(0))
+		}
+		if dtype == Float16 {
+			v32 := valueOf.Convert(float32Type).Interface().(float32)
+			return float16.Fromfloat32(v32)
 		}
 		// TODO: if adding support for non-native Go types (e.g: B16), we need
 		//       to write our own conversion here.
@@ -413,6 +446,8 @@ func LowestValueForDType(dtype DType) any {
 		return float32(math.Inf(-1))
 	case Float64:
 		return math.Inf(-1)
+	case Float16:
+		return float16.Inf(-1)
 	case Bool:
 		return false
 	case UInt8:
@@ -441,6 +476,8 @@ func SmallestNonZeroValueForDType(dtype DType) any {
 		return float32(math.SmallestNonzeroFloat32)
 	case Float64:
 		return math.SmallestNonzeroFloat64
+	case Float16:
+		return float16.Float16(0b000010000000001)
 	case Bool:
 		return true
 	case UInt8:

@@ -60,7 +60,8 @@ type Variable struct {
 // shape. It is defined in the Context.
 type VariableInitializer = initializers.VariableInitializer
 
-// variableNodes is used to store the variable parameter and current value Node for a given graph.
+// variableNodes is used to store the variable parameter node (fed to the graph) and current value Node for a given graph.
+// They can be different if the variable value is changed during the graph building with [Variable.SetValueGraph].
 type variableNodes struct {
 	paramNode, valueNode *Node
 }
@@ -160,6 +161,7 @@ func (v *Variable) SetValue(value tensor.Tensor) {
 		v.value.FinalizeAll()
 	}
 	v.value = value
+	v.shape = value.Shape()
 }
 
 // SetValuePreservingOld updates the tensor holding the variable value, and dont' free old value. If previous
@@ -186,7 +188,7 @@ func (v *Variable) ChangedInGraph(g *Graph) bool {
 }
 
 // ValueGraph returns the Node of the Graph that holds the current value of the variable. It can be changed
-// for the graph (for instance when applying a gradient descent) by SetGraph.
+// for the graph (for instance when applying a gradient descent) by [SetValueGraph].
 func (v *Variable) ValueGraph(g *Graph) *Node {
 	v.AssertValid()
 	nodes, found := v.graphToNodes[g.GraphId()]
@@ -197,15 +199,16 @@ func (v *Variable) ValueGraph(g *Graph) *Node {
 	return nodes.valueNode
 }
 
-// SetValueGraph sets the Node associated with the current value of the variable for the computation
-// graph where value is defined.
+// SetValueGraph sets the value (a graph [*Node]) of the variable for the current graph.
 //
 // This is used to "communicate" among different parts of the graph building that this value Node should
-// be used as the variable value.
+// be used as the new variable value.
 //
-// train.Trainer will use the last value set here during graph building and use it as output of the graph
-// execution and then update the variables (with SetValue) accordingly after each graph execution, for
-// example, after each Trainer.TrainStep call.
+// [context.Exec] will also use the last value set with [SetValueGraph] and include it as the output of the graph
+// execution and then update the variables (with [SetValue]) accordingly after each graph execution.
+//
+// So a graph building function can update variable values, for instance to update weights during gradient
+// descent.
 func (v *Variable) SetValueGraph(value *Node) {
 	v.AssertValid()
 	g := value.Graph()

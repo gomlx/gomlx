@@ -2,7 +2,9 @@ package ogbnmag
 
 import (
 	"fmt"
+	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/examples/notebook/gonb/margaid"
+	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	mldata "github.com/gomlx/gomlx/ml/data"
@@ -11,6 +13,7 @@ import (
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
@@ -30,6 +33,9 @@ var (
 
 	// ParamIdentitySubSeeds controls whether to use an IdentitySubSeed, to allow more sharing of the kernel.
 	ParamIdentitySubSeeds = "mag_identity_sub_seeds"
+
+	// ParamDType controls the dtype to be used: either "float32" or "float16".
+	ParamDType = "mag_dtype"
 )
 
 // Train GNN model based on configuration in `ctx`.
@@ -209,4 +215,51 @@ func Eval(ctx *context.Context, baseDir string, datasets ...train.Dataset) error
 		fmt.Printf("\telapsed %s (%s)\n", elapsed, ds.Name())
 	}
 	return nil
+}
+
+// getDType returns the dtype selected in the context hyperparameters.
+func getDType(ctx *context.Context) shapes.DType {
+	dtypeStr := context.GetParamOr(ctx, ParamDType, "float32")
+	switch dtypeStr {
+	case "float32":
+		return shapes.F32
+	case "float16":
+		return shapes.F16
+	default:
+		Panicf("Invalid DType %q given to parameters %q", dtypeStr, ParamDType)
+	}
+	return shapes.InvalidDType
+}
+
+// convertPaperEmbeddings converts the "PapersEmbeddings" variable to the selected dtype, if needed.
+//
+// One should be careful not to save the converted values -- ideally, the values are saved in the original Float32.
+func convertPapersEmbeddings(ctx *context.Context) {
+	dtype := getDType(ctx)
+	papersVar := ctx.InspectVariable(OgbnMagVariablesScope, "PapersEmbeddings")
+	if papersVar == nil {
+		Panicf("Cannot convert papers embeddings if variable \"PapersEmbeddings\" is not set yet")
+	}
+	if papersVar.Value().DType() == dtype {
+		// Nothing to convert.
+		return
+	}
+
+	klog.Infof("Converting papers embeddings to %s", dtype)
+	e := context.NewExec(ctx.Manager(), ctx, func(ctx *context.Context, g *Graph) {
+		embeddings := papersVar.ValueGraph(g)
+		fmt.Println(g.GraphId())
+		embeddings = ConvertType(embeddings, dtype)
+		papersVar.SetValueGraph(embeddings)
+	})
+	_ = e.Call()
+	klog.Infof("Papers embeddings converted to %s", papersVar.Value().Shape())
+
+	e = context.NewExec(ctx.Manager(), ctx, func(ctx *context.Context, g *Graph) {
+		//embeddings := getMagVar(ctx, g, "PapersEmbeddings")
+		embeddings := papersVar.ValueGraph(g)
+		fmt.Println(g.GraphId())
+		klog.Infof("Papers embeddings in graph %s", embeddings.Shape())
+	})
+	_ = e.Call()
 }

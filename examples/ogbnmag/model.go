@@ -1,6 +1,7 @@
 package ogbnmag
 
 import (
+	"fmt"
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/examples/ogbnmag/gnn"
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
@@ -9,7 +10,6 @@ import (
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
-	"github.com/gomlx/gomlx/types/shapes"
 )
 
 var (
@@ -36,13 +36,14 @@ func getMagVar(ctx *context.Context, g *Graph, name string) *Node {
 // strategy, and then adding a final layer on top of the seeds.
 //
 // It returns 3 tensors:
-// * Predictions for all seeds shaped `Float32[BatchSize, mag.NumLabels]`.
+// * Predictions for all seeds shaped `Float32[BatchSize, mag.NumLabels]`. (or Float16)
 // * Mask of the seeds, provided by the sampler, shaped `Bool[BatchSize]`.
 func MagModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	ctx = ctx.WithInitializer(initializers.GlorotUniformFn(initializers.NoSeed))
+	dtype := getDType(ctx) // Default is Float32
 
 	g := inputs[0].Graph()
-	optimizers.CosineAnnealingSchedule(ctx, g, shapes.F32).FromContext().Done()
+	optimizers.CosineAnnealingSchedule(ctx, g, dtype).FromContext().Done()
 
 	// We disable checking for re-use of scopes because we deliberately reuse
 	// kernels in our GNN.
@@ -50,6 +51,14 @@ func MagModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 
 	strategy := spec.(*sampler.Strategy)
 	graphStates := FeaturePreprocessing(ctx, strategy, inputs)
+	for name, state := range graphStates {
+		fmt.Printf("state[%q]: ", name)
+		if state.Value == nil {
+			fmt.Println("nil")
+		} else {
+			fmt.Printf("dtype=%s, mask.dtype=%s\n", state.Value.DType(), state.Mask.DType())
+		}
+	}
 	gnn.NodePrediction(ctx, strategy, graphStates)
 	readoutState := graphStates[strategy.Seeds[0].Name]
 	// Last layer outputs the logits for the `NumLabels` classes.
@@ -65,6 +74,7 @@ func MagModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inputs []*Node) (graphInputs map[string]*sampler.ValueMask[*Node]) {
 	g := inputs[0].Graph()
 	graphInputs = sampler.MapInputs[*Node](strategy, inputs)
+	dtype := getDType(ctx)
 
 	// Learnable embeddings context: it may benefit from dropout to have the model handle well
 	// the cases of unknown (zero) embeddings.
@@ -75,6 +85,7 @@ func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inpu
 
 	// Preprocess papers to its features --> these are in a frozen embedding table in the context as a frozen variable.
 	papersEmbeddings := getMagVar(ctx, g, "PapersEmbeddings")
+	fmt.Printf("papersEmbeddings=%q\n", papersEmbeddings.DType())
 	for name, rule := range strategy.Rules {
 		if rule.NodeTypeName == "papers" {
 			// Gather values from frozen paperEmbeddings. Mask remains unchanged.
@@ -90,7 +101,7 @@ func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inpu
 			// Gather values from frozen paperEmbeddings. Mask remains unchanged.
 			indices := DivScalar(graphInputs[name].Value, float64(splitEmbedTables))
 			embedded := layers.Embedding(ctxEmbed.In("institutions"), indices,
-				shapes.F32, (NumInstitutions+splitEmbedTables-1)/splitEmbedTables, institutionsEmbedSize)
+				dtype, (NumInstitutions+splitEmbedTables-1)/splitEmbedTables, institutionsEmbedSize)
 			embedMask := layers.DropoutStatic(ctx, graphInputs[name].Mask, embedDropoutRate)
 			embedded = Where(embedMask, embedded, ZerosLike(embedded)) // Apply mask.
 			graphInputs[name].Value = embedded
@@ -104,7 +115,7 @@ func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inpu
 			// Gather values from frozen paperEmbeddings. Mask remains unchanged.
 			indices := DivScalar(graphInputs[name].Value, float64(splitEmbedTables))
 			embedded := layers.Embedding(ctxEmbed.In("fields_of_study"),
-				indices, shapes.F32, (NumFieldsOfStudy+splitEmbedTables-1)/splitEmbedTables, fieldsOfStudyEmbedSize)
+				indices, dtype, (NumFieldsOfStudy+splitEmbedTables-1)/splitEmbedTables, fieldsOfStudyEmbedSize)
 			embedMask := layers.DropoutStatic(ctx, graphInputs[name].Mask, embedDropoutRate)
 			embedded = Where(embedMask, embedded, ZerosLike(embedded)) // Apply mask.
 			graphInputs[name].Value = embedded

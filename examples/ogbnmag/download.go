@@ -430,6 +430,7 @@ func UploadOgbnMagVariables(ctx *context.Context) *context.Context {
 		v := ctxMag.VariableWithValue(name, *tPtr)
 		v.Trainable = false
 	}
+	convertPapersEmbeddings(ctx) // Convert to the selected dtype.
 	return ctx
 }
 
