@@ -34,6 +34,12 @@ const (
 
 	// ParamAdamEpsilon can be used to configure the default value of epsilon. It must be a float64.
 	ParamAdamEpsilon = "adam_epsilon"
+
+	// ParamAdamDType can be used to specify the dtype to be used by Adam's temporary variables and computations.
+	// The default or if set to empty is to use the same dtype as the value of the loss provided.
+	// This was created for the case of training with `float16`, which is not enough resolution for Adam calculations.
+	// Valid values: "" (empty), "float32", "float64".
+	ParamAdamDType = "adam_dtype"
 )
 
 // Adam optimization is a stochastic gradient descent method that is based on adaptive estimation of first-order and
@@ -55,6 +61,7 @@ func Adam() *AdamConfig {
 		beta2:        0.999,
 		epsilon:      1e-7,
 		amsGrad:      false,
+		dtype:        shapes.InvalidDType,
 	}
 }
 
@@ -62,6 +69,7 @@ func Adam() *AdamConfig {
 // call Done to create an Adam based optimizer.Interface.
 type AdamConfig struct {
 	scopeName    string
+	dtype        shapes.DType // If invalid, use the loss type instead.
 	learningRate float64
 	beta1, beta2 float64
 	epsilon      float64
@@ -74,6 +82,14 @@ type AdamConfig struct {
 // E.g.: "adam_epsilon" (see [ParamAdamEpsilon]) is used to set [AdamConfig.Epsilon].
 func (c *AdamConfig) FromContext(ctx *context.Context) *AdamConfig {
 	c.Epsilon(context.GetParamOr(ctx, ParamAdamEpsilon, c.epsilon))
+	dtypeStr := context.GetParamOr(ctx, ParamAdamDType, "")
+	if dtypeStr != "" {
+		dtype, err := shapes.DTypeString(dtypeStr)
+		if err != nil || !dtype.IsFloat() {
+			Panicf("Invalid hyperparameter value %s=%q", ParamAdamDType, dtypeStr)
+		}
+		c.DType(dtype)
+	}
 	return c
 }
 
@@ -84,6 +100,17 @@ func (c *AdamConfig) FromContext(ctx *context.Context) *AdamConfig {
 // It defaults to AdamDefaultScope.
 func (c *AdamConfig) Scope(name string) *AdamConfig {
 	c.scopeName = name
+	return c
+}
+
+// DType sets the dtype to use for Adam calculation and temporary variables.
+// This can be useful if training using `float16`, which is not enough resolution for Adam calculations in some cases.
+//
+// If set to `shapes.InvalidDType` it will use the dtype of the `loss` used to optimize.
+//
+// This can also be set from context using [ParamAdamDType]("adam_dtype") hyperparameter.
+func (c *AdamConfig) DType(dtype shapes.DType) *AdamConfig {
+	c.dtype = dtype
 	return c
 }
 
@@ -151,7 +178,10 @@ func (o *adam) UpdateGraph(ctx *context.Context, g *Graph, loss *Node) {
 		Panicf("optimizer requires a scalar loss to optimize, got loss.shape=%s instead", loss.Shape())
 		return
 	}
-	dtype := loss.DType()
+	dtype := o.config.dtype
+	if dtype == shapes.InvalidDType {
+		dtype = loss.DType()
+	}
 
 	// Set up learning-rate.
 	lrValue := o.config.learningRate
@@ -180,7 +210,7 @@ func (o *adam) UpdateGraph(ctx *context.Context, g *Graph, loss *Node) {
 	ctx.EnumerateVariables(func(v *context.Variable) {
 		if v.Trainable && v.InUseByGraph(g) {
 			if varIdx < numTrainable {
-				o.applyAdamGraph(ctx, g, v, grads[varIdx], learningRate, beta1, debiasTermBeta1, beta2, debiasTermBeta2, epsilon)
+				o.applyAdamGraph(ctx, g, v, dtype, grads[varIdx], learningRate, beta1, debiasTermBeta1, beta2, debiasTermBeta2, epsilon)
 			}
 			varIdx++
 		}
@@ -196,56 +226,53 @@ func (o *adam) UpdateGraph(ctx *context.Context, g *Graph, loss *Node) {
 
 // applyAdamGraph calculates variable and its 1st and 2nd order moments updates.
 // If `Adamax` is set, we use instead moment2 to store the L-infinity (the max) of the gradient.
-func (o *adam) applyAdamGraph(ctx *context.Context, g *Graph, v *context.Variable, grad *Node,
+func (o *adam) applyAdamGraph(ctx *context.Context, g *Graph, v *context.Variable, dtype shapes.DType, grad *Node,
 	learningRate, beta1, debiasTermBeta1, beta2, debiasTermBeta2, epsilon *Node) {
-	m1Var, m2Var := o.getMomentVariables(ctx, v)
+	m1Var, m2Var := o.getMomentVariables(ctx, v, dtype)
 	moment1, moment2 := m1Var.ValueGraph(g), m2Var.ValueGraph(g)
 
-	// Notice beta1, beta2 and debias terms are of the dtype of the loss. Since a model can have operations
-	// with different dtypes, we need to convert it to the variable's dtype (same as the moment). We create
-	// this closure to perform this.
-	varDType := moment1.DType()
-	convertToVar := func(n *Node) *Node {
-		if n.DType() == varDType {
-			// No-op.
-			return n
-		}
-		return ConvertType(n, varDType)
+	// Adam runs on a fixed dtype -- defaults to the dtype of the loss, but it can be configured.
+	// We convert the grad to the dtype used by Adam for its computation.
+	if grad.DType() != dtype {
+		grad = ConvertType(grad, dtype)
 	}
 
 	// Do gradient step with momentum.
 	moment1 = Add(
-		Mul(convertToVar(beta1), moment1),
-		Mul(OneMinus(convertToVar(beta1)), grad))
+		Mul(beta1, moment1),
+		Mul(OneMinus(beta1), grad))
 	m1Var.SetValueGraph(moment1)
-	debiasedMoment1 := Mul(moment1, convertToVar(debiasTermBeta1))
+	debiasedMoment1 := Mul(moment1, debiasTermBeta1)
 
 	var denominator *Node
 	if o.config.adamax {
 		// Adamax
 		moment2 = Max(
-			Mul(convertToVar(beta2), moment2),
-			convertToVar(Abs(grad))) // L-infinity norm. Notice Abs() can change dtypes for complex numbers.
+			Mul(beta2, moment2),
+			Abs(grad)) // L-infinity norm. Notice Abs() can change dtypes for complex numbers.
 		m2Var.SetValueGraph(moment2)
-		denominator = Add(moment2, convertToVar(epsilon))
+		denominator = Add(moment2, epsilon)
+
 	} else {
 		// Normal Adam.
 		moment2 = Add(
-			Mul(convertToVar(beta2), moment2),
-			Mul(OneMinus(convertToVar(beta2)), Square(grad)))
+			Mul(beta2, moment2),
+			Mul(OneMinus(beta2), Square(grad)))
 		m2Var.SetValueGraph(moment2)
-		debiasedMoment2 := Mul(moment2, convertToVar(debiasTermBeta2))
-		denominator = Add(Sqrt(debiasedMoment2), convertToVar(epsilon))
+		debiasedMoment2 := Mul(moment2, debiasTermBeta2)
+		denominator = Add(Sqrt(debiasedMoment2), epsilon)
 	}
 
 	value := v.ValueGraph(g)
-	lr := convertToVar(learningRate)
-	stepDirection := Mul(lr, debiasedMoment1)
+	if value.DType() != dtype {
+		value = ConvertType(value, dtype)
+	}
+	stepDirection := Mul(learningRate, debiasedMoment1)
 	stepDirection = Div(stepDirection, denominator)
 
 	// Weight decay: also scaled by the learning rate.
 	if o.config.weightDecay > 0 {
-		stepDirection = Add(stepDirection, Mul(lr, MulScalar(value, o.config.weightDecay)))
+		stepDirection = Add(stepDirection, Mul(learningRate, MulScalar(value, o.config.weightDecay)))
 	}
 
 	// Clip step value, if requested.
@@ -254,21 +281,12 @@ func (o *adam) applyAdamGraph(ctx *context.Context, g *Graph, v *context.Variabl
 		stepDirection = ClipScalar(stepDirection, -clipByValue, clipByValue)
 	}
 
-	//L2Norm(stepDirection).SetLogged(fmt.Sprintf("Adam(%q).stepDirection: ", v.ParameterName()))
-	//stepDirection.SetLogged(fmt.Sprintf("Adam(%q).stepDirection: ", v.ParameterName()))
+	// Update variable.
 	updated := Sub(value, stepDirection)
-	//L2Norm(stepDirection).SetLogged(fmt.Sprintf("Adam(%q).Updated(shape=%s): ", v.ParameterName(), updated.Shape()))
-
-	/*
-		stepDirection := Div(debiasedMoment1, denominator)
-		if o.config.weightDecay > 0 {
-			stepDirection = Add(stepDirection, MulScalar(value, o.config.weightDecay))
-		}
-		L2Norm(stepDirection, logReduceAxes...).SetLogged(fmt.Sprintf("Adam(%q).stepDirection: ", v.ParameterName()))
-		updated := Sub(value, Mul(convertToVar(learningRate), stepDirection))
-	*/
-
-	// Update variables.
+	if v.Shape().DType != dtype {
+		// Convert back to the variable type.
+		updated = ConvertType(updated, v.Shape().DType)
+	}
 	v.SetValueGraph(updated)
 	return
 }
@@ -277,13 +295,14 @@ func (o *adam) applyAdamGraph(ctx *context.Context, g *Graph, v *context.Variabl
 //
 // If g is not nil, it creates the moments variables if they don't exist. Otherwise, it just tries to
 // fetch the presumably existing variables.
-func (o *adam) getMomentVariables(ctx *context.Context, trainable *context.Variable) (m1, m2 *context.Variable) {
+func (o *adam) getMomentVariables(ctx *context.Context, trainable *context.Variable, dtype shapes.DType) (m1, m2 *context.Variable) {
 	originalScope := trainable.Scope()
 	originalName := trainable.Name()
 	scopePath := fmt.Sprintf("%s%s%s", context.ScopeSeparator, o.config.scopeName, originalScope)
 	m1Name := fmt.Sprintf("%s_1st_moment", originalName)
 	m2Name := fmt.Sprintf("%s_2nd_moment", originalName)
-	shape := trainable.Shape()
+	shape := trainable.Shape().Copy()
+	shape.DType = dtype
 	m1 = ctx.InAbsPath(scopePath).WithInitializer(initializers.Zero).VariableWithShape(m1Name, shape).SetTrainable(false)
 	m2 = ctx.InAbsPath(scopePath).WithInitializer(initializers.Zero).VariableWithShape(m2Name, shape).SetTrainable(false)
 	return

@@ -185,7 +185,7 @@ func LearningRateVar(ctx *context.Context, dtype shapes.DType, defaultValue floa
 // LearningRateVarWithValue creates (or reuses) variable for learning rate with the given value.
 func LearningRateVarWithValue(ctx *context.Context, dtype shapes.DType, value float64) *context.Variable {
 	ctx = ctx.Checked(false).In("optimizers")
-	return ctx.VariableWithValue(ParamLearningRate, shapes.CastAsDType(value, dtype))
+	return ctx.VariableWithValue(ParamLearningRate, shapes.CastAsDType(value, dtype)).SetTrainable(false)
 }
 
 // ClipStepByValue applies the [ParamClipStepByValue] hyperparameter if it is not 0.0 (the default).
