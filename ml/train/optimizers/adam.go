@@ -31,6 +31,9 @@ const (
 
 	// AdamDefaultScope is the default scope name for moments and step used by Adam.
 	AdamDefaultScope = "AdamOptimizer"
+
+	// ParamAdamEpsilon can be used to configure the default value of epsilon. It must be a float64.
+	ParamAdamEpsilon = "adam_epsilon"
 )
 
 // Adam optimization is a stochastic gradient descent method that is based on adaptive estimation of first-order and
@@ -40,6 +43,10 @@ const (
 //
 // It returns a configuration object that can be used to set its parameters. Once configured call IsNil, and it
 // will return an optimizer.Interface.
+//
+// See [AdamConfig.FromContext] to configure it from the context hyperparameters.
+//
+// Clipping of the gradient updates available by setting the context hyperparameter [ParamClipStepByValue]("clip_step_by_value").
 func Adam() *AdamConfig {
 	return &AdamConfig{
 		scopeName:    AdamDefaultScope,
@@ -61,6 +68,13 @@ type AdamConfig struct {
 	amsGrad      bool
 	adamax       bool    // Works as Adamax.
 	weightDecay  float64 // Works as AdamW.
+}
+
+// FromContext will configure Adam with hyperparameters set in the given context.
+// E.g.: "adam_epsilon" (see [ParamAdamEpsilon]) is used to set [AdamConfig.Epsilon].
+func (c *AdamConfig) FromContext(ctx *context.Context) *AdamConfig {
+	c.Epsilon(context.GetParamOr(ctx, ParamAdamEpsilon, c.epsilon))
+	return c
 }
 
 // Scope defines the top-level scope to use to store the 1st and 2nd order moments of the gradients and the step number
@@ -88,6 +102,7 @@ func (c *AdamConfig) Betas(beta1, beta2 float64) *AdamConfig {
 }
 
 // Epsilon used on the denominator as a small constant for stability.
+// For low precision numbers like float16, try a larger value here, like 1e-3.
 func (c *AdamConfig) Epsilon(epsilon float64) *AdamConfig {
 	c.epsilon = epsilon
 	return c
@@ -190,7 +205,7 @@ func (o *adam) applyAdamGraph(ctx *context.Context, g *Graph, v *context.Variabl
 	// with different dtypes, we need to convert it to the variable's dtype (same as the moment). We create
 	// this closure to perform this.
 	varDType := moment1.DType()
-	castToVar := func(n *Node) *Node {
+	convertToVar := func(n *Node) *Node {
 		if n.DType() == varDType {
 			// No-op.
 			return n
@@ -200,35 +215,58 @@ func (o *adam) applyAdamGraph(ctx *context.Context, g *Graph, v *context.Variabl
 
 	// Do gradient step with momentum.
 	moment1 = Add(
-		Mul(castToVar(beta1), moment1),
-		Mul(OneMinus(castToVar(beta1)), grad))
+		Mul(convertToVar(beta1), moment1),
+		Mul(OneMinus(convertToVar(beta1)), grad))
 	m1Var.SetValueGraph(moment1)
-	debiasedMoment1 := Mul(moment1, castToVar(debiasTermBeta1))
+	debiasedMoment1 := Mul(moment1, convertToVar(debiasTermBeta1))
 
 	var denominator *Node
 	if o.config.adamax {
 		// Adamax
 		moment2 = Max(
-			Mul(castToVar(beta2), moment2),
-			castToVar(Abs(grad))) // L-infinity norm. Notice Abs() can change dtypes for complex numbers.
+			Mul(convertToVar(beta2), moment2),
+			convertToVar(Abs(grad))) // L-infinity norm. Notice Abs() can change dtypes for complex numbers.
 		m2Var.SetValueGraph(moment2)
-		denominator = Add(moment2, castToVar(epsilon))
+		denominator = Add(moment2, convertToVar(epsilon))
 	} else {
 		// Normal Adam.
 		moment2 = Add(
-			Mul(castToVar(beta2), moment2),
-			Mul(OneMinus(castToVar(beta2)), Square(grad)))
+			Mul(convertToVar(beta2), moment2),
+			Mul(OneMinus(convertToVar(beta2)), Square(grad)))
 		m2Var.SetValueGraph(moment2)
-		debiasedMoment2 := Mul(moment2, castToVar(debiasTermBeta2))
-		denominator = Add(Sqrt(debiasedMoment2), castToVar(epsilon))
+		debiasedMoment2 := Mul(moment2, convertToVar(debiasTermBeta2))
+		denominator = Add(Sqrt(debiasedMoment2), convertToVar(epsilon))
 	}
 
 	value := v.ValueGraph(g)
-	stepDirection := Div(debiasedMoment1, denominator)
+	lr := convertToVar(learningRate)
+	stepDirection := Mul(lr, debiasedMoment1)
+	stepDirection = Div(stepDirection, denominator)
+
+	// Weight decay: also scaled by the learning rate.
 	if o.config.weightDecay > 0 {
-		stepDirection = Add(stepDirection, MulScalar(value, o.config.weightDecay))
+		stepDirection = Add(stepDirection, Mul(lr, MulScalar(value, o.config.weightDecay)))
 	}
-	updated := Sub(value, Mul(castToVar(learningRate), stepDirection))
+
+	// Clip step value, if requested.
+	clipByValue := context.GetParamOr(ctx, ParamClipStepByValue, 0.0)
+	if clipByValue > 0 {
+		stepDirection = ClipScalar(stepDirection, -clipByValue, clipByValue)
+	}
+
+	//L2Norm(stepDirection).SetLogged(fmt.Sprintf("Adam(%q).stepDirection: ", v.ParameterName()))
+	//stepDirection.SetLogged(fmt.Sprintf("Adam(%q).stepDirection: ", v.ParameterName()))
+	updated := Sub(value, stepDirection)
+	//L2Norm(stepDirection).SetLogged(fmt.Sprintf("Adam(%q).Updated(shape=%s): ", v.ParameterName(), updated.Shape()))
+
+	/*
+		stepDirection := Div(debiasedMoment1, denominator)
+		if o.config.weightDecay > 0 {
+			stepDirection = Add(stepDirection, MulScalar(value, o.config.weightDecay))
+		}
+		L2Norm(stepDirection, logReduceAxes...).SetLogged(fmt.Sprintf("Adam(%q).stepDirection: ", v.ParameterName()))
+		updated := Sub(value, Mul(convertToVar(learningRate), stepDirection))
+	*/
 
 	// Update variables.
 	v.SetValueGraph(updated)
