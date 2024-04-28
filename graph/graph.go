@@ -89,7 +89,9 @@ import (
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/gomlx/gomlx/xla"
 	"github.com/pkg/errors"
+	"k8s.io/klog/v2"
 	"strings"
+	"time"
 )
 
 // Graph with the operations and dependencies needed to run a computation.
@@ -261,6 +263,15 @@ func (g *Graph) Compile(outputs ...*Node) {
 	if g.comp.IsCompiled() {
 		return
 	}
+
+	if klog.V(1).Enabled() {
+		start := time.Now()
+		defer func() {
+			elapsed := time.Since(start)
+			klog.Infof("Graph.Compile time for graph %q: %s", g.Name(), elapsed)
+		}()
+	}
+
 	root := g.selectOutputNode(outputs...)
 	outputShapes := make([]shapes.Shape, 0, g.NumParameters())
 	for _, node := range g.parameters {
