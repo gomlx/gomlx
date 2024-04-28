@@ -19,6 +19,7 @@ import (
 
 var (
 	flagEval             = flag.Bool("eval", false, "Set to true to run evaluation instead of training.")
+	flagSkipReport       = flag.Bool("skip_report", false, "Set to true to skip report of quality after training.")
 	flagSkipTrainEval    = flag.Bool("skip_train_eval", false, "Set to true to skip evaluation on training data, which takes longer.")
 	flagDataDir          = flag.String("data", "~/work/ogbnmag", "Directory to cache downloaded and generated dataset files.")
 	flagCheckpointSubdir = flag.String("checkpoint", "", "Checkpoint subdirectory under --data directory. If empty does not use checkpoints.")
@@ -41,6 +42,7 @@ func createDefaultContext(manager *Manager) *context.Context {
 		optimizers.ParamCosineScheduleSteps: 0,
 		optimizers.ParamClipStepByValue:     0.0,
 		optimizers.ParamAdamEpsilon:         1e-7,
+		optimizers.ParamAdamDType:           "",
 
 		layers.ParamL2Regularization: 1e-5,
 		layers.ParamDropoutRate:      0.2,
@@ -131,7 +133,7 @@ func main() {
 		}
 
 		// Train.
-		err = mag.Train(ctx, *flagDataDir)
+		err = mag.Train(ctx, *flagDataDir, !*flagSkipReport)
 	}
 	if err != nil {
 		fmt.Printf("%+v\n", err)

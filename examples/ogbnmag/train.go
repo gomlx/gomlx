@@ -39,7 +39,7 @@ var (
 )
 
 // Train GNN model based on configuration in `ctx`.
-func Train(ctx *context.Context, baseDir string) error {
+func Train(ctx *context.Context, baseDir string, report bool) error {
 	baseDir = mldata.ReplaceTildeInDir(baseDir)
 	ReuseShareableKernels = context.GetParamOr(ctx, ParamReuseKernels, true)
 	IdentitySubSeeds = context.GetParamOr(ctx, ParamIdentitySubSeeds, true)
@@ -141,14 +141,13 @@ func Train(ctx *context.Context, baseDir string) error {
 	}
 	fmt.Printf("Median training step duration: %s\n", loop.MedianTrainStepDuration())
 
-	if true {
-		return nil
-	}
 	// Finally, print an evaluation on train and test datasets.
-	fmt.Println()
-	err = commandline.ReportEval(trainer, validEvalDS, trainEvalDS)
-	if err != nil {
-		return errors.WithMessage(err, "while reporting eval")
+	if report {
+		fmt.Println()
+		err = commandline.ReportEval(trainer, validEvalDS, trainEvalDS)
+		if err != nil {
+			return errors.WithMessage(err, "while reporting eval")
+		}
 	}
 	return nil
 }

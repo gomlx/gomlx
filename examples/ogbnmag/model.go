@@ -9,6 +9,7 @@ import (
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/types/shapes"
 )
 
 var (
@@ -42,7 +43,16 @@ func MagModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	dtype := getDType(ctx) // Default is Float32
 
 	g := inputs[0].Graph()
-	optimizers.CosineAnnealingSchedule(ctx, g, dtype).FromContext().Done()
+
+	lrDType := dtype
+	if adamDType := context.GetParamOr(ctx, optimizers.ParamAdamDType, ""); adamDType != "" {
+		var err error
+		lrDType, err = shapes.DTypeString(adamDType)
+		if err != nil || !lrDType.IsFloat() {
+			Panicf("Cannot parse hyperparameter %s=%q: %v", optimizers.ParamAdamDType, adamDType, err)
+		}
+	}
+	optimizers.CosineAnnealingSchedule(ctx, g, lrDType).FromContext().Done()
 
 	// We disable checking for re-use of scopes because we deliberately reuse
 	// kernels in our GNN.
