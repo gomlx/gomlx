@@ -141,6 +141,9 @@ func Train(ctx *context.Context, baseDir string) error {
 	}
 	fmt.Printf("Median training step duration: %s\n", loop.MedianTrainStepDuration())
 
+	if true {
+		return nil
+	}
 	// Finally, print an evaluation on train and test datasets.
 	fmt.Println()
 	err = commandline.ReportEval(trainer, validEvalDS, trainEvalDS)
@@ -225,6 +228,8 @@ func getDType(ctx *context.Context) shapes.DType {
 		return shapes.F32
 	case "float16":
 		return shapes.F16
+	case "float64":
+		return shapes.F64
 	default:
 		Panicf("Invalid DType %q given to parameters %q", dtypeStr, ParamDType)
 	}
@@ -245,21 +250,11 @@ func convertPapersEmbeddings(ctx *context.Context) {
 		return
 	}
 
-	klog.Infof("Converting papers embeddings to %s", dtype)
 	e := context.NewExec(ctx.Manager(), ctx, func(ctx *context.Context, g *Graph) {
 		embeddings := papersVar.ValueGraph(g)
-		fmt.Println(g.GraphId())
 		embeddings = ConvertType(embeddings, dtype)
 		papersVar.SetValueGraph(embeddings)
 	})
 	_ = e.Call()
-	klog.Infof("Papers embeddings converted to %s", papersVar.Value().Shape())
-
-	e = context.NewExec(ctx.Manager(), ctx, func(ctx *context.Context, g *Graph) {
-		//embeddings := getMagVar(ctx, g, "PapersEmbeddings")
-		embeddings := papersVar.ValueGraph(g)
-		fmt.Println(g.GraphId())
-		klog.Infof("Papers embeddings in graph %s", embeddings.Shape())
-	})
-	_ = e.Call()
+	klog.Infof("Converted papers embeddings to %s", dtype)
 }

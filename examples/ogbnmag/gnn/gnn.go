@@ -183,11 +183,6 @@ func recursivelyApplyGraphConvolution(ctx *context.Context, rule *sampler.Rule,
 	if !found {
 		Panicf("state for node %q not given in `graphStates`, states given: %v", rule.Name, slices.Keys(graphStates))
 	}
-	if state.Value != nil {
-		fmt.Printf("state[%q].dtype=%s, %s\n", rule.Name, state.Value.DType(), state.Mask.DType())
-	} else {
-		fmt.Printf("state[%q] is nil\n", rule.Name)
-	}
 
 	// Leaf nodes are not updated.
 	if len(rule.Dependents) == 0 {

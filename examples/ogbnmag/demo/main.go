@@ -39,6 +39,8 @@ func createDefaultContext(manager *Manager) *context.Context {
 		optimizers.ParamOptimizer:           "adam",
 		optimizers.ParamLearningRate:        0.001,
 		optimizers.ParamCosineScheduleSteps: 0,
+		optimizers.ParamClipStepByValue:     0.0,
+		optimizers.ParamAdamEpsilon:         1e-7,
 
 		layers.ParamL2Regularization: 1e-5,
 		layers.ParamDropoutRate:      0.2,
@@ -84,6 +86,7 @@ func main() {
 
 	// Flags with context settings.
 	settings := commandline.CreateContextSettingsFlag(ctx, "")
+	klog.InitFlags(nil)
 	flag.Parse()
 	must.M(commandline.ParseContextSettings(ctx, *settings))
 

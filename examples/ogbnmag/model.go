@@ -1,7 +1,6 @@
 package ogbnmag
 
 import (
-	"fmt"
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/examples/ogbnmag/gnn"
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
@@ -51,14 +50,6 @@ func MagModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 
 	strategy := spec.(*sampler.Strategy)
 	graphStates := FeaturePreprocessing(ctx, strategy, inputs)
-	for name, state := range graphStates {
-		fmt.Printf("state[%q]: ", name)
-		if state.Value == nil {
-			fmt.Println("nil")
-		} else {
-			fmt.Printf("dtype=%s, mask.dtype=%s\n", state.Value.DType(), state.Mask.DType())
-		}
-	}
 	gnn.NodePrediction(ctx, strategy, graphStates)
 	readoutState := graphStates[strategy.Seeds[0].Name]
 	// Last layer outputs the logits for the `NumLabels` classes.
@@ -85,7 +76,6 @@ func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inpu
 
 	// Preprocess papers to its features --> these are in a frozen embedding table in the context as a frozen variable.
 	papersEmbeddings := getMagVar(ctx, g, "PapersEmbeddings")
-	fmt.Printf("papersEmbeddings=%q\n", papersEmbeddings.DType())
 	for name, rule := range strategy.Rules {
 		if rule.NodeTypeName == "papers" {
 			// Gather values from frozen paperEmbeddings. Mask remains unchanged.

@@ -1,5 +1,15 @@
 # GoMLX changelog
 
+## Next
+
+* Added logging of time to build and compile graph. Last version improved a lot the execution time, but slowed the compilation.
+* Fixed `Variable.SetValueGraph` when the shape change. Improved some documentation.
+* Added support for `Float16` -- tested with GNNs.
+* Package `optimizers`:
+  * Fixed optimizer constructor `FromContext` to allow further configuration of the optimizer by setting other hyperparameters into context.   
+  * Added hyperparameter `clip_step_by_value`, a clip by value applied to gradient updates.
+  * `Adam` optimizer: `"clip_step_by_value", "adam_epsilon"` hyperparameters support; Improved `float16` support. 
+
 ## 0.9.1 - 2024/04/19
 
 * XLA integration:
