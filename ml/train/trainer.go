@@ -268,11 +268,9 @@ func (r *Trainer) createExecutor(spec any, inputsLen, labelsLen int,
 		}).WithName(trainerName)
 }
 
+// lossFnScalarLoss calls `r.lossFn` and [ReduceAllMean] to a scalar.
+// It assumes `r.lossFn != nil`.
 func (r *Trainer) lossFnScalarLoss(ctx *context.Context, labels, predictions []*graph.Node) *graph.Node {
-	if r.lossFn == nil {
-
-	}
-
 	loss := r.lossFn(labels, predictions)
 	if !loss.Shape().IsScalar() {
 		loss = graph.ReduceAllMean(loss)

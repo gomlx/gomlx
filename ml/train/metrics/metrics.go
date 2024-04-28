@@ -27,6 +27,7 @@ import (
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
+	"github.com/x448/float16"
 )
 
 // Interface for a Metric.
@@ -110,7 +111,16 @@ func (m *baseMetric) UpdateGraph(ctx *context.Context, labels, predictions []*No
 
 func (m *baseMetric) PrettyPrint(value tensor.Tensor) string {
 	if m.pPrintFn == nil {
-		return fmt.Sprintf("%.3f", value.Value())
+		dtype := value.DType()
+		isScalar := value.Shape().IsScalar()
+		v := value.Value()
+		if dtype.IsFloat() && isScalar {
+			if dtype == shapes.F16 {
+				v = v.(float16.Float16).Float32()
+			}
+			return fmt.Sprintf("%.3f", v)
+		}
+		return fmt.Sprintf("%s", v)
 	}
 	return m.pPrintFn(value)
 }
