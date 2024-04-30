@@ -148,7 +148,7 @@ func RandomNormal(rngState *Node, shape shapes.Shape) (newRngState, values *Node
 	var u1, u2 *Node
 	newRngState, u1 = RandomUniform(rngState, shape)
 	// u1 must never be zero, so we take the smallest positive non-zero value.
-	u1 = Max(u1, Scalar(g, shape.DType, shapes.ConvertTo[float64](shapes.SmallestNonZeroValueForDType(shape.DType))))
+	u1 = Max(u1, Const(g, shapes.SmallestNonZeroValueForDType(shape.DType)))
 	newRngState, u2 = RandomUniform(newRngState, shape)
 	values = Mul(
 		Sqrt(MulScalar(Log(u1), -2)),
