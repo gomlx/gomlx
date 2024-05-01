@@ -227,7 +227,7 @@ func trainModel(config *dogsvscats.Configuration) {
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
 	var trainer *train.Trainer
-	optimizer := optimizers.MustOptimizerByName(*flagOptimizer)
+	optimizer := optimizers.MustOptimizerByName(ctx, *flagOptimizer)
 	if !preTraining {
 		trainer = train.NewTrainer(manager, ctx, modelFn,
 			losses.BinaryCrossentropyLogits,
@@ -238,7 +238,7 @@ func trainModel(config *dogsvscats.Configuration) {
 		// Pre-training: no loss, no metrics.
 		trainer = train.NewTrainer(manager, ctx, modelFn,
 			nil,
-			optimizers.MustOptimizerByName(*flagOptimizer),
+			optimizers.MustOptimizerByName(ctx, *flagOptimizer),
 			nil, // trainMetrics
 			nil) // evalMetrics
 	}

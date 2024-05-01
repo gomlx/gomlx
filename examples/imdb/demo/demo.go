@@ -173,7 +173,7 @@ func trainModel() {
 	}
 	trainer := train.NewTrainer(
 		manager, ctx, modelGraph, loss,
-		optimizers.MustOptimizerByName(*flagOptimizer),
+		optimizers.MustOptimizerByName(ctx, *flagOptimizer),
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
 		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
 

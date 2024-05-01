@@ -7,7 +7,7 @@
   * Allow arbitrary dtype for `Adam` optimizer -- it requires at least `float32`, even if the model runs on `float16`.
   * DType dependent `epsilon` values for `Softmax` and `Adam` -- current values would lead to `NaN` with `float16`.
 * Added logging of time to build and compile graph. Last version improved a lot the execution time, but slowed the compilation.
-* Fixed `Variable.SetValueGraph` when the shape change. Improved some documentation.
+* Fixed `Variable.SetValueGraph` when the shape changes. Improved some documentation.
 * Package `optimizers`:
   * Fixed optimizer constructor `FromContext` to allow further configuration of the optimizer by setting other hyperparameters into context.   
   * Added hyperparameter `clip_step_by_value`, a clip by value applied to gradient updates.
