@@ -11,7 +11,8 @@
 * Package `optimizers`:
   * Fixed optimizer constructor `FromContext` to allow further configuration of the optimizer by setting other hyperparameters into context.   
   * Added hyperparameter `clip_step_by_value`, a clip by value applied to gradient updates.
-  * `Adam` optimizer: `"clip_step_by_value", "adam_epsilon", "adam_dtype"` hyperparameters support. 
+  * `Adam` optimizer: `"clip_step_by_value", "adam_epsilon", "adam_dtype"` hyperparameters support.
+  * **`MustOptimizerByName` now takes also the context for the optimzier hyperparameters.** -- this breaks the API.
 
 ## 0.9.1 - 2024/04/19
 
