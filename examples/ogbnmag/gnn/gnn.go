@@ -10,6 +10,7 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"strings"
 )
@@ -264,7 +265,7 @@ func recursivelyApplyGraphConvolution(ctx *context.Context, rule *sampler.Rule,
 // They must be aligned.
 func sampledConvolveEdgeSet(ctx *context.Context, value, mask, degree *Node) *Node {
 	messages, mask := edgeMessageGraph(ctx.In("message"), value, mask)
-	return poolMessages(ctx, messages, mask, degree)
+	return poolMessagesWithFixedShape(ctx, messages, mask, degree)
 }
 
 // edgeMessageGraph calculates the graph for messages being sent across edges.
@@ -276,23 +277,28 @@ func edgeMessageGraph(ctx *context.Context, gatheredStates, gatheredMask *Node) 
 	messages = layers.ActivationFromContext(ctx, messages)
 
 	mask = gatheredMask
-	edgeDropOutRate := context.GetParamOr(ctx, ParamEdgeDropoutRate, 0.0)
-	if edgeDropOutRate > 0 {
-		// We apply edge dropout to the mask: values disabled here will mask the whole edge.
-		mask = layers.DropoutStatic(ctx, gatheredMask, edgeDropOutRate)
+	if mask != nil {
+		edgeDropOutRate := context.GetParamOr(ctx, ParamEdgeDropoutRate, 0.0)
+		if edgeDropOutRate > 0 {
+			// We apply edge dropout to the mask: values disabled here will mask the whole edge.
+			mask = layers.DropoutStatic(ctx, gatheredMask, edgeDropOutRate)
+		}
 	}
 	return
 }
 
-// poolMessages will pool according to [ParamPoolingType].
+// poolMessagesWithFixedShape will pool according to [ParamPoolingType].
+//
 // Let's say `value` is shaped `[d_0, d_1, ..., d_{n-1}, d_{n}, e]`: we assume `e` is the embedding dimension of the
 // tensor, and we want to reduce the axis `n`.
 // So the returned shape will be `[d_0, d_1, ..., d_{n-1}, k*e]`, where `k` is the number of pooling types configured.
 // E.g.: If the pooling types (see [ParamPoolingType]) are configured to `mean|sum`, then `k=2`.
 //
-// The parameter `degree` is optional, but if given, the `sum` pooling will scale the sum to the given degree.
+// The parameter `degree` is optional, but if given, the `sum` and `logsum` pooling will scale the sum to the given degree.
 // It's expected to be of shape `[d_0, d_1, ..., d_{n-1}, 1]`.
-func poolMessages(ctx *context.Context, value, mask, degree *Node) *Node {
+//
+// There are no training variables in this. The `ctx` is only used for the hyperparameter configuration.
+func poolMessagesWithFixedShape(ctx *context.Context, value, mask, degree *Node) *Node {
 	poolTypes := context.GetParamOr(ctx, ParamPoolingType, "mean|sum")
 	poolTypesList := strings.Split(poolTypes, "|")
 	parts := make([]*Node, 0, len(poolTypesList))
@@ -319,6 +325,80 @@ func poolMessages(ctx *context.Context, value, mask, degree *Node) *Node {
 			pooledMask := ReduceMax(mask, -1)
 			pooled = Where(pooledMask, pooled, ZerosLike(pooled))
 		default:
+			Panicf("unknown graph convolution pooling type (%q) given in context: value given %q (of %q) -- valid values are sum, mean and max, or a combination of them separated by '|'",
+				ParamPoolingType, poolType, poolTypes)
+		}
+		parts = append(parts, pooled)
+	}
+	if len(parts) == 1 {
+		return parts[0]
+	}
+	return Concatenate(parts, -1)
+}
+
+// poolMessagesWithAdjacency will pool according to [ParamPoolingType] using the adjacency information.
+//
+// Args:
+//   - [ctx] is the context, used to read the [ParamPoolingType] hyperparameter, which defines the type(s) of
+//     pooling to be used.
+//   - [source] should be shaped `[num_source_nodes, embedding_size]` and have the `dtype` of the model.
+//   - [adjacency] should be shaped `[num_edges, 2]` and should have some integer dtype. The first value is the
+//     source node index, and the second value is the target node index.
+//   - [targetDim] is the dimension of the first axis of the resulting target tensor.
+//   - [degree] is optional. If given, the `sum` and `logsum` pooling will scale the sum to the given degree.
+//     It's expected to be of shape `[targetDim, 1]`.
+//
+// It returns a tensor ([graph.Node]) shaped `[targetSize, pooled_embedded_size]`.
+//
+// There are no training variables in this. The `ctx` is only used for the hyperparameter configuration.
+func poolMessagesWithAdjacency(ctx *context.Context, source, adjacency *Node, targetSize int, degree *Node) *Node {
+	poolTypes := context.GetParamOr(ctx, ParamPoolingType, "mean|sum")
+	if source.Rank() != 2 {
+		Panicf("poolMessagesWithAdjacency(): source is expected to be shaped `[num_nodes, emb_size]`, instead got %s", source.Shape())
+	}
+	if adjacency.Rank() != 2 || adjacency.Shape().Dimensions[1] != 2 {
+		Panicf("poolMessagesWithAdjacency(): adjacency is expected to be shaped `[num_edges, 2]`, instead got %s", source.Shape())
+	}
+	if degree != nil && (degree.Rank() != 2 || degree.Shape().Dimensions[0] != targetSize || degree.Shape().Dimensions[1] != 1) {
+		Panicf("poolMessagesWithAdjacency(): if degree is given (not nil) it is expected to be shaped `[targetSize=%d, 1]`, instead got %s", targetSize, degree.Shape())
+	}
+	g := source.Graph()
+	dtype := source.DType()
+	embSize := source.Shape().Dimensions[1]
+	numEdges := adjacency.Shape().Dimensions[0]
+
+	poolTypesList := strings.Split(poolTypes, "|")
+	parts := make([]*Node, 0, len(poolTypesList))
+	var pooled *Node
+	for _, poolType := range poolTypesList {
+		switch poolType {
+		case "sum", "logsum", "mean":
+			srcIndices := Slice(adjacency, AxisRange(), AxisElem(0))
+			tgtIndices := Slice(adjacency, AxisRange(), AxisElem(1))
+
+			// Get values from the source to be pooled. Since a source may contribute to more than one target
+			// node, a source value may appear more than once. Shaped '[num_edges, emb_size]`.
+			values := Gather(source, srcIndices)
+			pooled = Scatter(tgtIndices, values, shapes.Make(dtype, targetSize, embSize))
+
+			var pooledCount *Node
+			if poolType == "mean" || degree != nil {
+				// Get count of items pooled and take the mean.
+				ones := Ones(g, shapes.Make(dtype, numEdges, 1))
+				pooledCount = Scatter(tgtIndices, ones, shapes.Make(dtype, targetSize, 1))
+				pooledCount = MaxScalar(pooledCount, 1) // To avoid division by 0.
+				pooled = Div(pooled, pooledCount)
+			}
+			if poolType != "mean" && degree != nil {
+				// Weight mean pooled value by `degree`.
+				pooled = Mul(pooled, ConvertType(degree, pooled.DType()))
+			}
+			if poolType == "logsum" {
+				pooled = MirroredLog1p(pooled)
+			}
+			pooled.SetLogged(fmt.Sprintf("pooled(%s): ", poolType))
+		default:
+			// Notice "max" is not implemented yet.
 			Panicf("unknown graph convolution pooling type (%q) given in context: value given %q (of %q) -- valid values are sum, mean and max, or a combination of them separated by '|'",
 				ParamPoolingType, poolType, poolTypes)
 		}

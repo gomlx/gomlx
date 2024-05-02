@@ -9,20 +9,20 @@ import (
 	"testing"
 )
 
-func TestPoolMessages(t *testing.T) {
+func TestPoolMessagesWithFixedShape(t *testing.T) {
 	manager := graphtest.BuildTestManager()
 	ctx := context.NewContext(manager)
 	ctx.SetParam(ParamPoolingType, "sum|max")
 	graphtest.RunTestGraphFn(
-		t, "poolMessages()",
+		t, "poolMessagesWithFixedShape()",
 		func(g *Graph) (inputs, outputs []*Node) {
 			mask := Const(g, [][]bool{
 				{true, false, true},
 				{false, false, false}})
 			x := IotaFull(g, shapes.Make(shapes.F32, append(mask.Shape().Dimensions, 5)...))
 			degree := Const(g, [][]float32{{10}, {7}})
-			outputNoDegree := poolMessages(ctx, x, mask, nil)
-			outputWithDegree := poolMessages(ctx, x, mask, degree)
+			outputNoDegree := poolMessagesWithFixedShape(ctx, x, mask, nil)
+			outputWithDegree := poolMessagesWithFixedShape(ctx, x, mask, degree)
 			inputs = []*Node{x, mask}
 			outputs = []*Node{outputNoDegree, outputWithDegree}
 			return
@@ -34,6 +34,45 @@ func TestPoolMessages(t *testing.T) {
 			[][]float32{
 				{ /* sum */ 50, 60, 70, 80, 90 /* max */, 10, 11, 12, 13, 14},
 				{ /* sum */ 0, 0, 0, 0, 0 /* max */, 0, 0, 0, 0, 0},
+			},
+		}, slices.Epsilon)
+}
+
+func TestPoolMessagesWithAdjacency(t *testing.T) {
+	manager := graphtest.BuildTestManager()
+	ctx := context.NewContext(manager)
+	ctx.SetParam(ParamPoolingType, "sum|mean")
+	graphtest.RunTestGraphFn(
+		t, "poolMessagesWithAdjacency()",
+		func(g *Graph) (inputs, outputs []*Node) {
+			// 4 source nodes.
+			source := IotaFull(g, shapes.Make(shapes.F32, 4, 2))
+			// (source_idx, target_idx) pairs:
+			adjacency := Const(g, [][]int{
+				{0, 0}, {1, 2}, {1, 3}, {2, 3},
+			})
+			// 4 target nodes.
+			targetSize := 4
+			//
+			degree := Const(g, [][]float32{{1}, {1000}, {10}, {100}})
+			outputNoDegree := poolMessagesWithAdjacency(ctx, source, adjacency, targetSize, nil)
+			outputWithDegree := poolMessagesWithAdjacency(ctx, source, adjacency, targetSize, degree)
+			inputs = []*Node{source, adjacency, degree}
+			outputs = []*Node{outputNoDegree, outputWithDegree}
+			return
+		}, []any{
+			[][]float32{
+				/* Sum | Mean */
+				{0, 1, 0, 1},
+				{0, 0, 0, 0},
+				{2, 3, 2, 3},
+				{6, 8, 3, 4},
+			},
+			[][]float32{
+				{0, 1, 0, 1},
+				{0, 0, 0, 0},
+				{20, 30, 2, 3},
+				{300, 400, 3, 4},
 			},
 		}, slices.Epsilon)
 }
