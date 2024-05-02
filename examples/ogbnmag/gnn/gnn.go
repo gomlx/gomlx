@@ -342,8 +342,8 @@ func poolMessagesWithFixedShape(ctx *context.Context, value, mask, degree *Node)
 //   - [ctx] is the context, used to read the [ParamPoolingType] hyperparameter, which defines the type(s) of
 //     pooling to be used.
 //   - [source] should be shaped `[num_source_nodes, embedding_size]` and have the `dtype` of the model.
-//   - [adjacency] should be shaped `[num_edges, 2]` and should have some integer dtype. The first value is the
-//     source node index, and the second value is the target node index.
+//   - [edgesSource] and [edgesTarget] represent the adjacency: source and target indices of the connected nodes.
+//     They must have the same shape: both shaped either `[num_edges]` or `[num_edges,1]` and should have some integer dtype.
 //   - [targetDim] is the dimension of the first axis of the resulting target tensor.
 //   - [degree] is optional. If given, the `sum` and `logsum` pooling will scale the sum to the given degree.
 //     It's expected to be of shape `[targetDim, 1]`.
@@ -351,13 +351,15 @@ func poolMessagesWithFixedShape(ctx *context.Context, value, mask, degree *Node)
 // It returns a tensor ([graph.Node]) shaped `[targetSize, pooled_embedded_size]`.
 //
 // There are no training variables in this. The `ctx` is only used for the hyperparameter configuration.
-func poolMessagesWithAdjacency(ctx *context.Context, source, adjacency *Node, targetSize int, degree *Node) *Node {
+func poolMessagesWithAdjacency(ctx *context.Context, source, edgesSource, edgesTarget *Node, targetSize int, degree *Node) *Node {
 	poolTypes := context.GetParamOr(ctx, ParamPoolingType, "mean|sum")
 	if source.Rank() != 2 {
 		Panicf("poolMessagesWithAdjacency(): source is expected to be shaped `[num_nodes, emb_size]`, instead got %s", source.Shape())
 	}
-	if adjacency.Rank() != 2 || adjacency.Shape().Dimensions[1] != 2 {
-		Panicf("poolMessagesWithAdjacency(): adjacency is expected to be shaped `[num_edges, 2]`, instead got %s", source.Shape())
+	if (edgesSource.Rank() != 1 && edgesSource.Rank() != 2) || !edgesSource.Shape().Eq(edgesTarget.Shape()) ||
+		(edgesSource.Rank() == 2 && edgesSource.Shape().Dimensions[1] != 1) {
+		Panicf("poolMessagesWithAdjacency(): edgesSource and edgesTarget must have the same shape: either [num_edges] or [num_edges, 1] and be of "+
+			"some integer dtype, instead got edgesSource.shape=%s edgesTarget.shape=%s", edgesSource.Shape(), edgesTarget.Shape())
 	}
 	if degree != nil && (degree.Rank() != 2 || degree.Shape().Dimensions[0] != targetSize || degree.Shape().Dimensions[1] != 1) {
 		Panicf("poolMessagesWithAdjacency(): if degree is given (not nil) it is expected to be shaped `[targetSize=%d, 1]`, instead got %s", targetSize, degree.Shape())
@@ -365,7 +367,11 @@ func poolMessagesWithAdjacency(ctx *context.Context, source, adjacency *Node, ta
 	g := source.Graph()
 	dtype := source.DType()
 	embSize := source.Shape().Dimensions[1]
-	numEdges := adjacency.Shape().Dimensions[0]
+	numEdges := edgesSource.Shape().Dimensions[0]
+	if edgesSource.Rank() == 1 {
+		edgesSource = ExpandDims(edgesSource, -1)
+		edgesTarget = ExpandDims(edgesTarget, -1)
+	}
 
 	poolTypesList := strings.Split(poolTypes, "|")
 	parts := make([]*Node, 0, len(poolTypesList))
@@ -373,19 +379,16 @@ func poolMessagesWithAdjacency(ctx *context.Context, source, adjacency *Node, ta
 	for _, poolType := range poolTypesList {
 		switch poolType {
 		case "sum", "logsum", "mean":
-			srcIndices := Slice(adjacency, AxisRange(), AxisElem(0))
-			tgtIndices := Slice(adjacency, AxisRange(), AxisElem(1))
-
 			// Get values from the source to be pooled. Since a source may contribute to more than one target
 			// node, a source value may appear more than once. Shaped '[num_edges, emb_size]`.
-			values := Gather(source, srcIndices)
-			pooled = Scatter(tgtIndices, values, shapes.Make(dtype, targetSize, embSize))
+			values := Gather(source, edgesSource)
+			pooled = Scatter(edgesTarget, values, shapes.Make(dtype, targetSize, embSize))
 
 			var pooledCount *Node
 			if poolType == "mean" || degree != nil {
 				// Get count of items pooled and take the mean.
 				ones := Ones(g, shapes.Make(dtype, numEdges, 1))
-				pooledCount = Scatter(tgtIndices, ones, shapes.Make(dtype, targetSize, 1))
+				pooledCount = Scatter(edgesTarget, ones, shapes.Make(dtype, targetSize, 1))
 				pooledCount = MaxScalar(pooledCount, 1) // To avoid division by 0.
 				pooled = Div(pooled, pooledCount)
 			}

@@ -47,17 +47,17 @@ func TestPoolMessagesWithAdjacency(t *testing.T) {
 		func(g *Graph) (inputs, outputs []*Node) {
 			// 4 source nodes.
 			source := IotaFull(g, shapes.Make(shapes.F32, 4, 2))
-			// (source_idx, target_idx) pairs:
-			adjacency := Const(g, [][]int{
-				{0, 0}, {1, 2}, {1, 3}, {2, 3},
-			})
+			// Edges: source/target pairs.
+			edgesSource := Const(g, []int{0, 1, 1, 2})
+			edgesTarget := Const(g, []int{0, 2, 3, 3})
+
 			// 4 target nodes.
 			targetSize := 4
-			//
+
 			degree := Const(g, [][]float32{{1}, {1000}, {10}, {100}})
-			outputNoDegree := poolMessagesWithAdjacency(ctx, source, adjacency, targetSize, nil)
-			outputWithDegree := poolMessagesWithAdjacency(ctx, source, adjacency, targetSize, degree)
-			inputs = []*Node{source, adjacency, degree}
+			outputNoDegree := poolMessagesWithAdjacency(ctx, source, edgesSource, edgesTarget, targetSize, nil)
+			outputWithDegree := poolMessagesWithAdjacency(ctx, source, edgesSource, edgesTarget, targetSize, degree)
+			inputs = []*Node{source, edgesSource, edgesTarget, degree}
 			outputs = []*Node{outputNoDegree, outputWithDegree}
 			return
 		}, []any{
