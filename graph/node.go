@@ -1780,6 +1780,9 @@ func intToBool(i int) bool {
 
 // Scatter sums up the slices in updates into a new tensor of the given shape, at the locations pointed by indices.
 // It does the opposite of Gather.
+//
+// In the simplest form, [indices] is shaped `[num_updates, 1]`, [updates] is shaped `[num_updates, update_size]` and
+// [shape] is of the form `[output_size, update_size]`. The indices values should be in between 0 and `output_size-1`.
 func Scatter(indices, updates *Node, shape shapes.Shape) *Node {
 	g := validateGraphFromInputs(indices, updates)
 	zeros := Zeros(g, shape)
