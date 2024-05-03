@@ -62,7 +62,8 @@ func TestDatasets(t *testing.T) {
 			}
 			require.NoError(t, err)
 			strategy := spec.(*sampler.Strategy)
-			graphSample := sampler.MapInputs[tensor.Tensor](strategy, inputs)
+			graphSample, remaining := sampler.MapInputsToStates[tensor.Tensor](strategy, inputs)
+			require.Empty(t, remaining)
 			seeds := graphSample["seeds"].Value.Local().FlatCopy().([]int32)
 			mask := graphSample["seeds"].Mask.Local().FlatCopy().([]bool)
 			for ii, idx := range seeds {

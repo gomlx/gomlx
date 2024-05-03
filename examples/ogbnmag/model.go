@@ -28,6 +28,7 @@ func getMagVar(ctx *context.Context, g *Graph, name string) *Node {
 	magVar := ctx.InspectVariable(OgbnMagVariablesScope, name)
 	if magVar == nil {
 		Panicf("Missing OGBN-MAG dataset variables (%q), pls call UploadOgbnMagVariables() on context first.", name)
+		panic(nil) // Quiet linter.
 	}
 	return magVar.ValueGraph(g)
 }
@@ -35,8 +36,8 @@ func getMagVar(ctx *context.Context, g *Graph, name string) *Node {
 // MagModelGraph builds a OGBN-MAG GNN model that sends [ParamNumGraphUpdates] along its sampling
 // strategy, and then adding a final layer on top of the seeds.
 //
-// It returns 3 tensors:
-// * Predictions for all seeds shaped `Float32[BatchSize, mag.NumLabels]`. (or Float16)
+// It returns 2 tensors:
+// * Predictions for all seeds shaped `Float32[BatchSize, mag.NumLabels]` (or `Float16` or `Float64`).
 // * Mask of the seeds, provided by the sampler, shaped `Bool[BatchSize]`.
 func MagModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	ctx = ctx.WithInitializer(initializers.GlorotUniformFn(initializers.NoSeed))
@@ -59,10 +60,11 @@ func MagModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	ctx = ctx.Checked(false)
 
 	strategy := spec.(*sampler.Strategy)
-	graphStates := FeaturePreprocessing(ctx, strategy, inputs)
+	graphStates, _ := FeaturePreprocessing(ctx, strategy, inputs)
 	gnn.NodePrediction(ctx, strategy, graphStates)
-	readoutState := graphStates[strategy.Seeds[0].Name]
+
 	// Last layer outputs the logits for the `NumLabels` classes.
+	readoutState := graphStates[strategy.Seeds[0].Name]
 	readoutState.Value = layers.DenseWithBias(ctx.In("logits"), readoutState.Value, NumLabels)
 	return []*Node{readoutState.Value, readoutState.Mask}
 }
@@ -72,9 +74,10 @@ func MagModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 //
 //	author/paper, so it is reasonable to expect that during validation/testing it will see many embeddings
 //	zero initialized.
-func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inputs []*Node) (graphInputs map[string]*sampler.ValueMask[*Node]) {
+func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inputs []*Node) (
+	graphInputs map[string]*sampler.ValueMask[*Node], remainingInputs []*Node) {
 	g := inputs[0].Graph()
-	graphInputs = sampler.MapInputs[*Node](strategy, inputs)
+	graphInputs, remainingInputs = sampler.MapInputsToStates[*Node](strategy, inputs)
 	dtype := getDType(ctx)
 
 	// Learnable embeddings context: it may benefit from dropout to have the model handle well
@@ -102,8 +105,10 @@ func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inpu
 			indices := DivScalar(graphInputs[name].Value, float64(splitEmbedTables))
 			embedded := layers.Embedding(ctxEmbed.In("institutions"), indices,
 				dtype, (NumInstitutions+splitEmbedTables-1)/splitEmbedTables, institutionsEmbedSize)
-			embedMask := layers.DropoutStatic(ctx, graphInputs[name].Mask, embedDropoutRate)
-			embedded = Where(embedMask, embedded, ZerosLike(embedded)) // Apply mask.
+			if graphInputs[name].Mask != nil {
+				embedMask := layers.DropoutStatic(ctx, graphInputs[name].Mask, embedDropoutRate)
+				embedded = Where(embedMask, embedded, ZerosLike(embedded)) // Apply mask.
+			}
 			graphInputs[name].Value = embedded
 		}
 	}
@@ -116,8 +121,11 @@ func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inpu
 			indices := DivScalar(graphInputs[name].Value, float64(splitEmbedTables))
 			embedded := layers.Embedding(ctxEmbed.In("fields_of_study"),
 				indices, dtype, (NumFieldsOfStudy+splitEmbedTables-1)/splitEmbedTables, fieldsOfStudyEmbedSize)
-			embedMask := layers.DropoutStatic(ctx, graphInputs[name].Mask, embedDropoutRate)
-			embedded = Where(embedMask, embedded, ZerosLike(embedded)) // Apply mask.
+
+			if graphInputs[name].Mask != nil {
+				embedMask := layers.DropoutStatic(ctx, graphInputs[name].Mask, embedDropoutRate)
+				embedded = Where(embedMask, embedded, ZerosLike(embedded)) // Apply mask.
+			}
 			graphInputs[name].Value = embedded
 		}
 	}

@@ -135,14 +135,16 @@ type ValueMask[T any] struct {
 	Value, Mask T
 }
 
-// MapInputs convert inputs yielded by a [sampler.Dataset] to map of the Rules Name to the
+// MapInputsToStates convert inputs yielded by a [sampler.Dataset] to map of the Rules Name to the
 // Value/Mask tensors with the samples for this example.
 //
-// Example 1: if using directly the outputs of a a [sampler.Dataset] created by this Strategy:
+// It returns also the remaining not used inputs (or empty if all were consumed).
+//
+// Example 1: if using directly the outputs of a [sampler.Dataset] created by this Strategy:
 //
 //	spec, inputs, _, err := ds.Yield()
 //	strategy := spec.(*Sampler.Strategy)
-//	graphSample := strategy.MapInputs(inputs)
+//	graphSample, _ := strategy.MapInputsToStates(inputs)
 //	Seeds, mask := graphSample["Seeds"].Value, graphSample["Seeds"].Mask
 //	...
 //
@@ -150,23 +152,23 @@ type ValueMask[T any] struct {
 //
 //	func MyModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 //		strategy := spec.(*Sampler.Strategy)
-//		graphSample := strategy.MapInputs(inputs)
+//		graphSample, _ := strategy.MapInputsToStates(inputs)
 //		Seeds, mask := graphSample["Seeds"].Value, graphSample["Seeds"].Mask
 //		...
 //	}
-func MapInputs[T any](strategy *Strategy, inputs []T) map[string]*ValueMask[T] {
+func MapInputsToStates[T any](strategy *Strategy, inputs []T) (ruleToInput map[string]*ValueMask[T], remainingInputs []T) {
 	mapNodes := make(map[string]*ValueMask[T], len(strategy.Rules))
 	for _, seedRule := range strategy.Seeds {
 		mapNodes[seedRule.Name] = &ValueMask[T]{inputs[0], inputs[1]}
 		inputs = inputs[2:]
-		inputs = recursivelyMapInputsToSubRules(inputs, seedRule, mapNodes)
+		inputs = recursivelyMapStateInputsToSubRules(inputs, seedRule, mapNodes)
 	}
-	return mapNodes
+	return mapNodes, inputs
 }
 
-// recursivelyMapInputsToSubRules returns the remaining inputs and updates `mapNodes` with the sub-Rules
+// recursivelyMapStateInputsToSubRules returns the remaining inputs and updates `mapNodes` with the sub-Rules
 // dependent on `rule`.
-func recursivelyMapInputsToSubRules[T any](inputs []T, rule *Rule, mapNodes map[string]*ValueMask[T]) []T {
+func recursivelyMapStateInputsToSubRules[T any](inputs []T, rule *Rule, mapNodes map[string]*ValueMask[T]) []T {
 	for _, subRule := range rule.Dependents {
 		mapNodes[subRule.Name] = &ValueMask[T]{inputs[0], inputs[1]}
 		inputs = inputs[2:]
@@ -176,7 +178,33 @@ func recursivelyMapInputsToSubRules[T any](inputs []T, rule *Rule, mapNodes map[
 			inputs = inputs[1:]
 		}
 		if len(subRule.Dependents) > 0 {
-			inputs = recursivelyMapInputsToSubRules(inputs, subRule, mapNodes)
+			inputs = recursivelyMapStateInputsToSubRules(inputs, subRule, mapNodes)
+		}
+	}
+	return inputs
+}
+
+// EdgePair contains the source and target indices for the edges.
+type EdgePair[T any] struct {
+	SourceIndices, TargetIndices T
+}
+
+// MapInputsToEdges is similar to MapInputsToStates, but for the edges, when using LayerWiseInference.
+func MapInputsToEdges[T any](strategy *Strategy, inputs []T) (ruleToEdgePair map[string]EdgePair[T], remainingInputs []T) {
+	edges := make(map[string]EdgePair[T], len(strategy.Rules))
+	for _, seedRule := range strategy.Seeds {
+		// Seed nodes don't have "upwards" edges.
+		inputs = recursivelyMapEdgeInputsToSubRules(inputs, seedRule, edges)
+	}
+	return edges, inputs
+}
+
+func recursivelyMapEdgeInputsToSubRules[T any](inputs []T, rule *Rule, edges map[string]EdgePair[T]) []T {
+	for _, subRule := range rule.Dependents {
+		edges[subRule.Name] = EdgePair[T]{SourceIndices: inputs[0], TargetIndices: inputs[1]}
+		inputs = inputs[2:]
+		if len(subRule.Dependents) > 0 {
+			inputs = recursivelyMapEdgeInputsToSubRules(inputs, subRule, edges)
 		}
 	}
 	return inputs
