@@ -119,9 +119,9 @@ func (lw *LayerWiseConfig) recursivelyApplyGraphConvolution(
 
 	// Update dependents and calculate their convolved messages: it's a depth-first-search on dependents.
 	for _, dependent := range rule.Dependents {
-		dependentEdges, found := edges[rule.Name]
+		dependentEdges, found := edges[dependent.Name]
 		if !found {
-			Panicf("edges for rule %q not given in `edges`, edges given for rules: %q", rule.Name, slices.Keys(edges))
+			Panicf("edges for rule %q not given in `edges`, edges given for rules: %q", dependent.Name, slices.Keys(edges))
 		}
 
 		if lw.dependentsUpdateFirst {
