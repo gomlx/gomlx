@@ -75,7 +75,6 @@ func createInputsWithAllStates(g *Graph, strategy *sampler.Strategy, inputs []*N
 
 func recursivelyCreateInputsWithAllStates(g *Graph, rule *sampler.Rule, inputs []*Node) []*Node {
 	for _, subRule := range rule.Dependents {
-		fmt.Printf("Rule %q: NumNodes=%d\n", subRule.Name, subRule.NumNodes)
 		if subRule.NumNodes == 0 {
 			Panicf("Rule %q has 0 nodes configured.", subRule.Name)
 		}
@@ -102,7 +101,7 @@ func createEdgesInputs(ctx *context.Context, g *Graph, strategy *sampler.Strateg
 func createEdgesIndices(ctx *context.Context, g *Graph) map[string]sampler.EdgePair[*Node] {
 	edges := make(map[string]sampler.EdgePair[*Node])
 	for _, edgeName := range []string{"Writes", "AffiliatedWith", "Cites", "HasTopic"} {
-		edgeVar := getMagVar(ctx, g, "Edge"+edgeName)
+		edgeVar := getMagVar(ctx, g, "Edges"+edgeName)
 		edges[edgeName] = sampler.EdgePair[*Node]{
 			SourceIndices: Slice(edgeVar, AxisRange(), AxisElem(0)),
 			TargetIndices: Slice(edgeVar, AxisRange(), AxisElem(1)),
@@ -117,30 +116,37 @@ func recursivelyCreateEdgesInputs(g *Graph, rule *sampler.Rule, edges map[string
 			edgeName string
 			reversed bool
 		)
-		switch rule.EdgeType.Name {
-		case "writes":
-			edgeName, reversed = "Writes", false
-		case "writtenBy":
-			edgeName, reversed = "Writes", true
-		case "cites":
-			edgeName, reversed = "Cites", false
-		case "citedBy":
-			edgeName, reversed = "Cites", true
-		case "affiliatedWith":
-			edgeName, reversed = "AffiliatedWith", false
-		case "affiliations":
-			edgeName, reversed = "AffiliatedWith", true
-		case "hasTopic":
-			edgeName, reversed = "HasTopic", false
-		case "topicHasPapers":
-			edgeName, reversed = "HasTopic", true
-		default:
-			Panicf("Unknown edge name %q, can't generate its inputs", rule.EdgeType.Name)
-		}
-		if !reversed {
-			inputs = append(inputs, edges[edgeName].SourceIndices, edges[edgeName].TargetIndices)
+		if subRule.EdgeType == nil {
+			// Identity rule: edges are 1-to-1 mapping.
+			indices := IotaFull(g, shapes.Make(shapes.I32, int(subRule.NumNodes)))
+			inputs = append(inputs, indices, indices)
 		} else {
-			inputs = append(inputs, edges[edgeName].TargetIndices, edges[edgeName].SourceIndices)
+			// Normal edge.
+			switch subRule.EdgeType.Name {
+			case "writes":
+				edgeName, reversed = "Writes", false
+			case "writtenBy":
+				edgeName, reversed = "Writes", true
+			case "cites":
+				edgeName, reversed = "Cites", false
+			case "citedBy":
+				edgeName, reversed = "Cites", true
+			case "affiliatedWith":
+				edgeName, reversed = "AffiliatedWith", false
+			case "affiliations":
+				edgeName, reversed = "AffiliatedWith", true
+			case "hasTopic":
+				edgeName, reversed = "HasTopic", false
+			case "topicHasPapers":
+				edgeName, reversed = "HasTopic", true
+			default:
+				Panicf("Unknown edge name %q, can't generate its inputs", rule.EdgeType.Name)
+			}
+			if !reversed {
+				inputs = append(inputs, edges[edgeName].SourceIndices, edges[edgeName].TargetIndices)
+			} else {
+				inputs = append(inputs, edges[edgeName].TargetIndices, edges[edgeName].SourceIndices)
+			}
 		}
 		inputs = recursivelyCreateEdgesInputs(g, subRule, edges, inputs)
 	}
