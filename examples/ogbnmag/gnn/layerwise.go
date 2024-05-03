@@ -7,6 +7,7 @@ import (
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/pkg/errors"
 	"strings"
@@ -20,20 +21,36 @@ type LayerWiseConfig struct {
 	sampler                *sampler.Sampler
 	keepIntermediaryStates bool
 	freeAcceleratorMemory  bool
+
+	numGraphUpdates       int
+	graphUpdateType       string
+	dependentsUpdateFirst bool
 }
 
 // LayerWiseGNN can perform a GNN on a full layer (== node set convolution) at a time.
+// It works only for [NodePrediction] GNNs.
 //
 // It returns a configuration option that can be furthered configured.
 // It runs the layer-wise GNN once [Compute] is called.
-func LayerWiseGNN(ctx *context.Context, strategy *sampler.Strategy) *LayerWiseConfig {
-	return &LayerWiseConfig{
+func LayerWiseGNN(ctx *context.Context, strategy *sampler.Strategy) (*LayerWiseConfig, error) {
+	lw := &LayerWiseConfig{
 		ctx:                    ctx,
 		strategy:               strategy,
 		sampler:                strategy.Sampler,
 		keepIntermediaryStates: true,
 		freeAcceleratorMemory:  true,
+		numGraphUpdates:        context.GetParamOr(ctx, ParamNumGraphUpdates, 2),
+		graphUpdateType:        context.GetParamOr(ctx, ParamGraphUpdateType, "tree"),
 	}
+	lw.dependentsUpdateFirst = "tree" == lw.graphUpdateType
+	if lw.graphUpdateType != "tree" && lw.graphUpdateType != "simultaneous" {
+		return nil, errors.Errorf("unsupported graph update type: %s", lw.graphUpdateType)
+	}
+	if context.GetParamOr(ctx, ParamUsePathToRootStates, false) {
+		return nil, errors.Errorf("layerwise inference doesn't work if using `%q=true`",
+			ParamUsePathToRootStates)
+	}
+	return lw, nil
 }
 
 // KeepIntermediaryStates configures whether the GNN will return the final state of the seed nodes only, or if it also
@@ -64,19 +81,72 @@ func (lw *LayerWiseConfig) FreeAcceleratorMemory(free bool) *LayerWiseConfig {
 //
 // It can be called more than once with different `initialStates`.
 // Subsequent calls will by-step the JIT-compilation of the models.
-func (lw *LayerWiseConfig) Compute(initialStates map[string]tensor.Tensor) (finalStates map[string]tensor.Tensor, err error) {
-	ctx := lw.ctx
-	if context.GetParamOr(ctx, ParamUsePathToRootStates, false) {
-		return nil, errors.Errorf("layerwise inference doesn't work if using `%q=true`",
-			ParamUsePathToRootStates)
+func (lw *LayerWiseConfig) Compute(ctx *context.Context, graphStates map[string]*Node, edges map[string]sampler.EdgePair[*Node]) {
+	for round := range lw.numGraphUpdates {
+		for _, rule := range lw.strategy.Seeds {
+			lw.recursivelyApplyGraphConvolution(ctxForGraphUpdateRound(ctx, round), rule, graphStates, edges)
+		}
 	}
-	graphUpdateType := context.GetParamOr(ctx, ParamGraphUpdateType, "tree")
-	if graphUpdateType != "tree" {
-		return nil, errors.Errorf("layerwise inference doesn't work if using `%q=true`",
-			ParamUsePathToRootStates)
+}
+
+func (lw *LayerWiseConfig) recursivelyApplyGraphConvolution(
+	ctx *context.Context, rule *sampler.Rule, graphStates map[string]*Node, edges map[string]sampler.EdgePair[*Node]) {
+	if rule.Name == "" || rule.ConvKernelScopeName == "" {
+		Panicf("strategy's rule name=%q or kernel scope name=%q are empty, they both must be defined",
+			rule.Name, rule.ConvKernelScopeName)
 	}
 
-	return nil, nil
+	// Makes sure there is a state for the current dependent.
+	state, found := graphStates[rule.Name]
+	if !found {
+		Panicf("state for rule %q not given in `graphStates`, states given for rules: %q", rule.Name, slices.Keys(graphStates))
+	}
+	if state == nil {
+		Panicf("state for rule %q is set to nil in `graphStates` -- for LayerWise inference on needs to set the first dimension to the number of nodes in the node set for the rule, even if the last axis has dimension 0", rule.Name)
+		panic(nil) // Remove lint error on state==nil not having been checked.
+	}
+	numNodes := state.Shape().Dimensions[0]
+
+	// Leaf nodes are not updated.
+	if len(rule.Dependents) == 0 {
+		return
+	}
+
+	updateInputs := make([]*Node, 0, len(rule.Dependents)+1)
+	if state.Shape().Size() > 0 { // state size is 0 for latent node types, at their initial state.
+		updateInputs = append(updateInputs, state)
+	}
+
+	// Update dependents and calculate their convolved messages: it's a depth-first-search on dependents.
+	for _, dependent := range rule.Dependents {
+		dependentEdges, found := edges[rule.Name]
+		if !found {
+			Panicf("edges for rule %q not given in `edges`, edges given for rules: %q", rule.Name, slices.Keys(edges))
+		}
+
+		if lw.dependentsUpdateFirst {
+			lw.recursivelyApplyGraphConvolution(ctx, dependent, graphStates, edges)
+		}
+		dependentState := graphStates[dependent.Name]
+		convolveCtx := ctx.In(dependent.ConvKernelScopeName).In("conv")
+		_ = convolveCtx
+		if dependentState != nil {
+			updateInputs = append(updateInputs,
+				lw.sampledConvolveEdgeSet(convolveCtx, dependentState, dependentEdges.SourceIndices, dependentEdges.TargetIndices, numNodes))
+		}
+		if !lw.dependentsUpdateFirst {
+			lw.recursivelyApplyGraphConvolution(ctx, dependent, graphStates, edges)
+		}
+	}
+}
+
+func (lw *LayerWiseConfig) sampledConvolveEdgeSet(ctx *context.Context, sourceState, edgesSource, edgesTarget *Node, numTargetNodes int) *Node {
+	messages, _ := edgeMessageGraph(ctx.In("message"), sourceState, nil)
+	return poolMessagesWithAdjacency(ctx, messages, edgesSource, edgesTarget, numTargetNodes, nil)
+}
+
+func (lw *LayerWiseConfig) LayerComputer(current map[string]tensor.Tensor, rule *sampler.Rule) {
+
 }
 
 type stateInfo struct {
@@ -125,8 +195,7 @@ func recursivelyMapLayerWiseStateInfo(ctx *context.Context, round int, rule *sam
 // computeLayerUpdate calculates the updated `targetState`, given the current state and
 // states of the rule dependent nodes.
 //
-// The context `ctx` must be scoped into the message number (see [NodePrediction]), typically
-// named `"graph_update_%d"`.
+// The context `ctx` must be scoped into the message number (see [NodePrediction]), typically named `"graph_update_%d"`.
 //
 // The source states must be given in the same order as `rule.Dependents".
 func recursivelyApplyLayeredGraphConvolution(ctx *context.Context, rule *sampler.Rule, currentStates map[string]*Node) (*tensor.Local, error) {
