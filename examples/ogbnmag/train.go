@@ -66,24 +66,17 @@ func Train(ctx *context.Context, baseDir string, report bool) error {
 		}
 		var err error
 
-		// Exclude from saving all the variables created by the `mag` package -- specially the frozen papers embeddings,
-		// which take most space.
-		var varsToExclude []*context.Variable
-		ctx.InAbsPath(OgbnMagVariablesScope).EnumerateVariablesInScope(func(v *context.Variable) {
-			varsToExclude = append(varsToExclude, v)
-		})
-
 		if numCheckpointsToKeep <= 1 {
 			// Only limit the amount of checkpoints kept if >= 2.
 			numCheckpointsToKeep = -1
 		}
 		if numCheckpointsToKeep > 0 {
-			checkpoint, err = checkpoints.Build(ctx).Dir(checkpointPath).Keep(numCheckpointsToKeep).
-				ExcludeVarsFromSaving(varsToExclude...).Done()
+			checkpoint, err = checkpoints.Build(ctx).Dir(checkpointPath).Keep(numCheckpointsToKeep).Done()
 		} else {
-			checkpoint, err = checkpoints.Build(ctx).Dir(checkpointPath).
-				ExcludeVarsFromSaving(varsToExclude...).Done()
+			checkpoint, err = checkpoints.Build(ctx).Dir(checkpointPath).Done()
 		}
+		ExcludeOgbnMagVariablesFromSave(ctx, checkpoint)
+
 		if err != nil {
 			return errors.WithMessagef(err, "while setting up checkpoint to %q (keep=%d)",
 				checkpointPath, numCheckpointsToKeep)
@@ -164,9 +157,9 @@ func newTrainer(ctx *context.Context) *train.Trainer {
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
 	trainer := train.NewTrainer(ctx.Manager(), ctx, MagModelGraph,
 		lossFn,
-		optimizers.FromContext(ctx), // Based on `ctx.GetParam("optimizer")`.
+		optimizers.FromContext(ctx),               // Based on `ctx.GetParam("optimizer")`.
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
-		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
+		[]metrics.Interface{meanAccuracyMetric}) // evalMetrics
 	return trainer
 }
 

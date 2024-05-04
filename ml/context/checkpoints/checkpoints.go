@@ -208,6 +208,8 @@ func (c *Config) ExcludeParams() *Config {
 
 // ExcludeVarsFromSaving enumerate variables to be excluded from saving.
 // The function can be called multiple times, adding variables to be excluded from saving.
+//
+// It can also be called after the [Handler] object is built as new variables are created.
 func (c *Config) ExcludeVarsFromSaving(vars ...*context.Variable) *Config {
 	for _, v := range vars {
 		c.excludeFromSave.Insert(v)
@@ -835,4 +837,12 @@ func (h *Handler) LoadVariable(ctx *context.Context, scope, name string) (value 
 // The Handler owns the returned map, don't change it -- the behavior is undefined if you do.
 func (h *Handler) LoadedVariables() map[string]tensor.Tensor {
 	return h.variableValues
+}
+
+// ExcludeVarsFromSaving enumerate variables to be excluded from saving.
+// The function can be called multiple times, adding variables to be excluded from saving.
+func (h *Handler) ExcludeVarsFromSaving(vars ...*context.Variable) {
+	for _, v := range vars {
+		h.config.excludeFromSave.Insert(v)
+	}
 }
