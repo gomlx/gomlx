@@ -13,6 +13,8 @@
   * Added hyperparameter `clip_step_by_value`, a clip by value applied to gradient updates.
   * `Adam` optimizer: `"clip_step_by_value", "adam_epsilon", "adam_dtype"` hyperparameters support.
   * **`MustOptimizerByName` now takes also the context for the optimzier hyperparameters.** -- this breaks the API.
+* Package `checkpoints`:
+  * Allow adding variables to exclude from saving after checkpoint is created -- for newly created variables.
 
 ## 0.9.1 - 2024/04/19
 
