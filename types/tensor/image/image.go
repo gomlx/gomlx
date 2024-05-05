@@ -160,7 +160,7 @@ func toTensorImpl(tt *ToTensorConfig, images []image.Image, batch bool) (t *tens
 		t = toTensorGenericsImpl[int32](tt, images, batch)
 	case shapes.Int64:
 		t = toTensorGenericsImpl[int](tt, images, batch)
-	case shapes.UInt8:
+	case shapes.Uint8:
 		t = toTensorGenericsImpl[uint8](tt, images, batch)
 	default:
 		log.Printf("image.ToTensor does not support dtype %s", tt.dtype)
@@ -310,7 +310,7 @@ func toImageImpl(ti *ToImageConfig, imagesTensor tensor.Tensor) (images []image.
 		images = toImageGenericsImpl[int32](imagesTensor, numImages, height, width, channels, maxValue)
 	case shapes.Int64:
 		images = toImageGenericsImpl[int](imagesTensor, numImages, height, width, channels, maxValue)
-	case shapes.UInt8:
+	case shapes.Uint8:
 		images = toImageGenericsImpl[uint8](imagesTensor, numImages, height, width, channels, maxValue)
 	default:
 		err = errors.Errorf("cannot convert unsupported dtype %s to images.image", dtype)

@@ -47,10 +47,10 @@ const (
 	Int16              // S16
 	Int32              // S32
 	Int64              // S64
-	UInt8              // U8
-	UInt16             // U16
-	UInt32             // U32
-	UInt64             // U64
+	Uint8              // U8
+	Uint16             // U16
+	Uint32             // U32
+	Uint64             // U64
 	Float16            // F16, IEEE 754-2008 half-precision, in Go we use the [github.com/x448/float16.Float16] representation.
 	Float32            // F32
 	Float64            // F64
@@ -70,9 +70,9 @@ const PRED = Bool
 // Aliases:
 
 const (
-	U8   = UInt8
-	U32  = UInt32
-	U64  = UInt64
+	U8   = Uint8
+	U32  = Uint32
+	U64  = Uint64
 	I32  = Int32
 	I64  = Int64
 	F16  = Float16
@@ -80,6 +80,11 @@ const (
 	F64  = Float64
 	C64  = Complex64
 	C128 = Complex128
+
+	UInt8  = Uint8
+	UInt16 = Uint16
+	UInt32 = Uint32
+	UInt64 = Uint64
 )
 
 // IsFloat returns whether dtype is a supported float -- float types not yet supported will return false.
@@ -114,13 +119,12 @@ func (dtype DType) RealDType() DType {
 
 // IsInt returns whether dtype is a supported integer type -- float types not yet supported will return false.
 func (dtype DType) IsInt() bool {
-	return dtype == Int64 || dtype == Int32 || dtype == UInt8 || dtype == UInt32 || dtype == UInt64
+	return dtype == Int64 || dtype == Int32 || dtype == Int16 || dtype == Int8 ||
+		dtype == Uint8 || dtype == Uint16 || dtype == Uint32 || dtype == Uint64
 }
 
 func (dtype DType) IsSupported() bool {
-	return dtype == Bool || dtype == Float16 || dtype == Float32 || dtype == Float64 ||
-		dtype == Int64 || dtype == Int32 || dtype == UInt8 || dtype == UInt32 || dtype == UInt64 ||
-		dtype == Complex64 || dtype == Complex128
+	return dtype == Bool || dtype == Float16 || dtype == Float32 || dtype == Float64 || dtype == Int64 || dtype == Int32 || dtype == Int16 || dtype == Int8 || dtype == Uint32 || dtype == Uint16 || dtype == Uint8 || dtype == Complex64 || dtype == Complex128
 }
 
 // GoStr converts dtype to the corresponding Go type and convert that to string.
@@ -202,14 +206,20 @@ func DTypeGeneric[T Supported]() DType {
 		return Int64
 	case int32:
 		return Int32
+	case int16:
+		return Int16
+	case int8:
+		return Int8
 	case bool:
 		return Bool
 	case uint8:
-		return UInt8
+		return Uint8
+	case uint16:
+		return Uint16
 	case uint32:
-		return UInt32
+		return Uint32
 	case uint64:
-		return UInt64
+		return Uint64
 	case complex64:
 		return Complex64
 	case complex128:
@@ -235,32 +245,40 @@ func ConvertTo[T NumberNotComplex](value any) T {
 	}
 
 	switch v := value.(type) {
-	case float32:
-		return T(v)
 	case float64:
 		return T(v)
+	case float32:
+		return T(v)
+	case float16.Float16:
+		return T(v.Float32())
 	case int:
 		return T(v)
 	case int64:
 		return T(v)
 	case int32:
 		return T(v)
-	case uint8:
+	case int16:
+		return T(v)
+	case int8:
+		return T(v)
+	case uint64:
 		return T(v)
 	case uint32:
 		return T(v)
-	case uint64:
+	case uint16:
+		return T(v)
+	case uint8:
 		return T(v)
 	case complex64:
 		return T(real(v))
 	case complex128:
 		return T(real(v))
-	case float16.Float16:
-		return T(v.Float32())
 	}
 	return T(0)
 }
 
+// DTypeForType returns the DType for the given [reflect.Type].
+// It panics for unknown DType values.
 func DTypeForType(t reflect.Type) DType {
 	if t == float16Type {
 		return Float16
@@ -279,18 +297,28 @@ func DTypeForType(t reflect.Type) DType {
 		return Int64
 	case reflect.Int32:
 		return Int32
+	case reflect.Int16:
+		return Int16
+	case reflect.Int8:
+		return Int8
+
+	case reflect.Uint64:
+		return Uint64
+	case reflect.Uint32:
+		return Uint32
+	case reflect.Uint16:
+		return Uint16
+	case reflect.Uint8:
+		return Uint8
+
+	case reflect.Bool:
+		return Bool
+
 	case reflect.Float32:
 		return Float32
 	case reflect.Float64:
 		return Float64
-	case reflect.Bool:
-		return Bool
-	case reflect.Uint8:
-		return UInt8
-	case reflect.Uint32:
-		return UInt32
-	case reflect.Uint64:
-		return UInt64
+
 	case reflect.Complex64:
 		return Complex64
 	case reflect.Complex128:
@@ -311,26 +339,37 @@ func UnsafeSliceForDType(dtype DType, unsafePtr unsafe.Pointer, len int) any {
 		return unsafe.Slice((*int64)(unsafePtr), len)
 	case Int32:
 		return unsafe.Slice((*int32)(unsafePtr), len)
+	case Int16:
+		return unsafe.Slice((*int16)(unsafePtr), len)
+	case Int8:
+		return unsafe.Slice((*int8)(unsafePtr), len)
+
+	case Uint64:
+		return unsafe.Slice((*uint64)(unsafePtr), len)
+	case Uint32:
+		return unsafe.Slice((*uint32)(unsafePtr), len)
+	case Uint16:
+		return unsafe.Slice((*uint16)(unsafePtr), len)
+	case Uint8:
+		return unsafe.Slice((*uint8)(unsafePtr), len)
+
+	case Bool:
+		return unsafe.Slice((*bool)(unsafePtr), len)
+
 	case Float16:
 		return unsafe.Slice((*float16.Float16)(unsafePtr), len)
 	case Float32:
 		return unsafe.Slice((*float32)(unsafePtr), len)
 	case Float64:
 		return unsafe.Slice((*float64)(unsafePtr), len)
-	case Bool:
-		return unsafe.Slice((*bool)(unsafePtr), len)
-	case UInt8:
-		return unsafe.Slice((*uint8)(unsafePtr), len)
-	case UInt32:
-		return unsafe.Slice((*uint32)(unsafePtr), len)
-	case UInt64:
-		return unsafe.Slice((*uint64)(unsafePtr), len)
+
 	case Complex64:
 		return unsafe.Slice((*complex64)(unsafePtr), len)
 	case Complex128:
 		return unsafe.Slice((*complex128)(unsafePtr), len)
 	default:
-		return nil
+		exceptions.Panicf("unknown dtype %q (%d) in UnsafeSliceForDType", dtype, dtype)
+		panic(nil) // Quiet lint warning.
 	}
 }
 
@@ -341,26 +380,38 @@ func TypeForDType(dtype DType) reflect.Type {
 		return reflect.TypeOf(int64(0))
 	case Int32:
 		return reflect.TypeOf(int32(0))
+	case Int16:
+		return reflect.TypeOf(int16(0))
+	case Int8:
+		return reflect.TypeOf(int8(0))
+
+	case Uint64:
+		return reflect.TypeOf(uint64(0))
+	case Uint32:
+		return reflect.TypeOf(uint32(0))
+	case Uint16:
+		return reflect.TypeOf(uint16(0))
+	case Uint8:
+		return reflect.TypeOf(uint8(0))
+
+	case Bool:
+		return reflect.TypeOf(true)
+
 	case Float16:
 		return float16Type
 	case Float32:
 		return float32Type
 	case Float64:
 		return float64Type
-	case Bool:
-		return reflect.TypeOf(true)
-	case UInt8:
-		return reflect.TypeOf(uint8(0))
-	case UInt32:
-		return reflect.TypeOf(uint32(0))
-	case UInt64:
-		return reflect.TypeOf(uint64(0))
+
 	case Complex64:
 		return reflect.TypeOf(complex64(0))
 	case Complex128:
 		return reflect.TypeOf(complex128(0))
+
 	default:
-		return reflect.TypeOf(nil)
+		exceptions.Panicf("unknown dtype %q (%d) in TypeForDType", dtype, dtype)
+		panic(nil) // Quiet lint warning.
 	}
 }
 
@@ -442,20 +493,30 @@ func LowestValueForDType(dtype DType) any {
 		return int64(math.MinInt64)
 	case Int32:
 		return int32(math.MinInt32)
+	case Int16:
+		return int16(math.MinInt16)
+	case Int8:
+		return int16(math.MinInt8)
+
+	case Uint64:
+		return uint64(0)
+	case Uint32:
+		return uint32(0)
+	case Uint16:
+		return uint16(0)
+	case Uint8:
+		return uint8(0)
+
+	case Bool:
+		return false
+
 	case Float32:
 		return float32(math.Inf(-1))
 	case Float64:
 		return math.Inf(-1)
 	case Float16:
 		return float16.Inf(-1)
-	case Bool:
-		return false
-	case UInt8:
-		return uint8(0)
-	case UInt32:
-		return uint32(0)
-	case UInt64:
-		return uint64(0)
+
 	default:
 		exceptions.Panicf("LowestValueForDType not defined for dtype %s", dtype)
 	}
@@ -472,20 +533,30 @@ func SmallestNonZeroValueForDType(dtype DType) any {
 		return int64(1)
 	case Int32:
 		return int32(1)
+	case Int16:
+		return int16(1)
+	case Int8:
+		return int8(1)
+
+	case Uint64:
+		return uint64(1)
+	case Uint32:
+		return uint32(1)
+	case Uint16:
+		return uint16(1)
+	case Uint8:
+		return uint8(1)
+
+	case Bool:
+		return true
+
 	case Float32:
 		return float32(math.SmallestNonzeroFloat32)
 	case Float64:
 		return math.SmallestNonzeroFloat64
 	case Float16:
 		return float16.Float16(0x0001) // 1p-24, see discussion in https://github.com/x448/float16/pull/46
-	case Bool:
-		return true
-	case UInt8:
-		return uint8(1)
-	case UInt32:
-		return uint32(1)
-	case UInt64:
-		return uint64(1)
+
 	default:
 		panic(errors.Errorf("SmallestNonZeroValueForDType not defined for dtype %s", dtype))
 	}

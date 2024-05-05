@@ -1119,7 +1119,7 @@ func TestArgMax(t *testing.T) {
 				outputs = []*Node{
 					ArgMax(inputs[0], -1),
 					ArgMax(inputs[0], 0),
-					ArgMin(inputs[0], 1, shapes.UInt8),
+					ArgMin(inputs[0], 1, shapes.Uint8),
 				}
 				return
 			}, []any{

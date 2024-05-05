@@ -20,7 +20,7 @@ var (
 	// RngStateShape is the shape of the random number generator state, used
 	// in all Random* functions.
 	// This is dependent on the algorithm, that for now is fixed.
-	RngStateShape = shapes.Make(shapes.UInt64, 3)
+	RngStateShape = shapes.Make(shapes.Uint64, 3)
 )
 
 // RngStateFromSeed creates a random number generator (RNG) state based on the static seed.
@@ -86,7 +86,7 @@ func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Nod
 	switch shape.DType {
 	case shapes.Float64:
 		bitsShape := shape.Copy()
-		bitsShape.DType = shapes.UInt64
+		bitsShape.DType = shapes.Uint64
 		var randomBits *Node
 		newRngState, randomBits = RngBitGeneratorXLA(rngState, bitsShape)
 		values = ConvertType(randomBits, shapes.Float64)
@@ -95,7 +95,7 @@ func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Nod
 		values = StopGradient(values)
 	case shapes.Float32:
 		bitsShape := shape.Copy()
-		bitsShape.DType = shapes.UInt32
+		bitsShape.DType = shapes.Uint32
 		var randomBits *Node
 		newRngState, randomBits = RngBitGeneratorXLA(rngState, bitsShape)
 		values = ConvertType(randomBits, shapes.Float32)

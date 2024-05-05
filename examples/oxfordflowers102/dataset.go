@@ -269,7 +269,7 @@ func InMemoryDataset(manager *Manager, baseDir string, imageSize int, name strin
 	// Create InMemoryDataset.
 	start := time.Now()
 	fmt.Printf("Creating InMemoryDataset for %q with images cropped and scaled to %dx%d...\n", name, imageSize, imageSize)
-	ds := NewDataset(shapes.UInt8, imageSize).Partition(partitionSeed, partitionFrom, partitionTo)
+	ds := NewDataset(shapes.Uint8, imageSize).Partition(partitionSeed, partitionFrom, partitionTo)
 	inMemoryDataset, err = data.InMemory(manager, data.Parallel(ds), false)
 	elapsed := time.Since(start)
 	fmt.Printf("\t- %s to process dataset.\n", elapsed)
