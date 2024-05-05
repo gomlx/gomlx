@@ -51,6 +51,7 @@ func createDefaultContext(manager *Manager) *context.Context {
 		gnn.ParamNumGraphUpdates:       6, // gnn_num_messages
 		gnn.ParamReadoutHiddenLayers:   2,
 		gnn.ParamPoolingType:           "mean|logsum",
+		gnn.ParamUpdateStateType:       "residual",
 		gnn.ParamUsePathToRootStates:   false,
 		gnn.ParamGraphUpdateType:       "simultaneous",
 		gnn.ParamUpdateNumHiddenLayers: 0,

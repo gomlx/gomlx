@@ -414,7 +414,6 @@ func updateState(ctx *context.Context, prevState, input, mask *Node) *Node {
 		ctxHiddenLayer := ctx.In(fmt.Sprintf("hidden_%d", ii))
 		state = layers.DenseWithBias(ctxHiddenLayer, state, stateDim)
 		state = layers.ActivationFromContext(ctx.In(fmt.Sprintf("hidden_%d", ii)), state)
-		state = layers.DropoutFromContext(ctx.In(fmt.Sprintf("hidden_%d", ii)), state)
 	}
 	state = layers.DenseWithBias(ctx, state, stateDim)
 	state = layers.ActivationFromContext(ctx, state)

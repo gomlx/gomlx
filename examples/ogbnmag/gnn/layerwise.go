@@ -96,24 +96,19 @@ func (lw *LayerWiseConfig) recursivelyApplyGraphConvolution(
 			rule.Name, rule.ConvKernelScopeName)
 	}
 
-	// Makes sure there is a state for the current dependent.
-	state, found := graphStates[rule.Name]
-	if !found {
-		Panicf("state for rule %q not given in `graphStates`, states given for rules: %q", rule.Name, slices.Keys(graphStates))
-	}
-	if state == nil {
-		Panicf("state for rule %q is set to nil in `graphStates` -- for LayerWise inference on needs to set the first dimension to the number of nodes in the node set for the rule, even if the last axis has dimension 0", rule.Name)
-		panic(nil) // Remove lint error on state==nil not having been checked.
-	}
-	numNodes := state.Shape().Dimensions[0]
-
 	// Leaf nodes are not updated.
 	if len(rule.Dependents) == 0 {
 		return
 	}
 
+	// Makes sure there is a state for the current dependent.
+	state, found := graphStates[rule.Name]
+	if !found {
+		Panicf("state for rule %q not given in `graphStates`, states given for rules: %q", rule.Name, slices.Keys(graphStates))
+	}
+
 	updateInputs := make([]*Node, 0, len(rule.Dependents)+1)
-	if state.Shape().Size() > 0 { // state size is 0 for latent node types, at their initial state.
+	if state != nil { // state size is 0 for latent node types, at their initial state.
 		updateInputs = append(updateInputs, state)
 	}
 
@@ -132,15 +127,20 @@ func (lw *LayerWiseConfig) recursivelyApplyGraphConvolution(
 		_ = convolveCtx
 		if dependentState != nil {
 			updateInputs = append(updateInputs,
-				lw.sampledConvolveEdgeSet(convolveCtx, dependentState, dependentEdges.SourceIndices, dependentEdges.TargetIndices, numNodes))
+				lw.convolveEdgeSet(convolveCtx, dependentState, dependentEdges.SourceIndices, dependentEdges.TargetIndices, int(rule.NumNodes)))
 		}
 		if !lw.dependentsUpdateFirst {
 			lw.recursivelyApplyGraphConvolution(ctx, dependent, graphStates, edges)
 		}
 	}
+
+	// Update state of current rule: only update state if there was any new incoming input.
+	updateCtx := ctx.In(rule.UpdateKernelScopeName).In("update")
+	state = updateState(updateCtx, state, Concatenate(updateInputs, -1), nil)
+	graphStates[rule.Name] = state
 }
 
-func (lw *LayerWiseConfig) sampledConvolveEdgeSet(ctx *context.Context, sourceState, edgesSource, edgesTarget *Node, numTargetNodes int) *Node {
+func (lw *LayerWiseConfig) convolveEdgeSet(ctx *context.Context, sourceState, edgesSource, edgesTarget *Node, numTargetNodes int) *Node {
 	messages, _ := edgeMessageGraph(ctx.In("message"), sourceState, nil)
 	return poolMessagesWithAdjacency(ctx, messages, edgesSource, edgesTarget, numTargetNodes, nil)
 }
@@ -217,7 +217,7 @@ func recursivelyApplyLayeredGraphConvolution(ctx *context.Context, rule *sampler
 // This runs the convolution for one edge set: the target node set my have several incoming edge sets defined in its
 // [sampler.Rule] -- it's defined in its dependants.
 //
-// This function should do the same as `sampledConvolveEdgeSet`, but layer-wise instead. They must be aligned.
+// This function should do the same as `convolveEdgeSet`, but layer-wise instead. They must be aligned.
 func layeredConvolveEdgeSet(ctx *context.Context, dependantRule *sampler.Rule, sourceState *Node) *Node {
 	if dependantRule.EdgeType == nil {
 		Panicf("can only run edge convolution on edge type rules, got instead %s", dependantRule)

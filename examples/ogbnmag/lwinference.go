@@ -15,16 +15,30 @@ import (
 )
 
 func LayerWiseInference(ctx *context.Context, strategy *sampler.Strategy) tensor.Tensor {
-	var predictions tensor.Tensor
-	exec := context.NewExec(ctx.Manager(), ctx, BuildLayerWiseInferenceModel(strategy))
+	var predictionsT tensor.Tensor
+	exec := context.NewExec(ctx.Manager(), ctx.Reuse(), BuildLayerWiseInferenceModel(strategy))
 	for _ = range 2 {
 		start := time.Now()
-		predictions = exec.Call()[0]
-		fmt.Printf("predicitons.shape=%s\n", predictions.Shape())
+		predictionsT = exec.Call()[0]
+		fmt.Printf("predicitons.shape=%s\n", predictionsT.Shape())
 		elapsed := time.Since(start)
 		fmt.Printf("\tElapsed time: %s\n", elapsed)
 	}
-	return predictions
+
+	predictions := predictionsT.Local().Value().([]int16)
+	labels := PapersLabels.Local().FlatCopy().([]int32)
+	splitNames := []string{"Train", "Validation", "Test"}
+	for splitIdx, splitT := range []tensor.Tensor{TrainSplit, ValidSplit, TestSplit} {
+		split := splitT.Local().FlatCopy().([]int32)
+		numCorrect := 0
+		for _, paperIdx := range split {
+			if int(predictions[paperIdx]) == int(labels[paperIdx]) {
+				numCorrect++
+			}
+		}
+		fmt.Printf("%s Accuracy: %.2f%%\n", splitNames[splitIdx], 100.0*float64(numCorrect)/float64(len(split)))
+	}
+	return predictionsT
 }
 
 // BuildLayerWiseInferenceModel returns a function that builds the OGBN-MAG GNN inference model,
@@ -59,7 +73,9 @@ func BuildLayerWiseInferenceModel(strategy *sampler.Strategy) func(ctx *context.
 		lw.Compute(ctx, graphStates, edges) // Last layer outputs the logits for the `NumLabels` classes.
 		readoutState := graphStates[strategy.Seeds[0].Name]
 		readoutState = layers.DenseWithBias(ctx.In("logits"), readoutState, NumLabels)
-		return readoutState
+
+		predictions := ArgMax(readoutState, -1, shapes.Int16)
+		return predictions
 	}
 }
 
