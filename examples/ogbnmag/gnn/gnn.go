@@ -34,31 +34,15 @@ var (
 	// The default is 128.
 	ParamStateDim = "gnn_node_state_dim"
 
-	// ParamActivation context hyperparameter defines the activation to use, see [layers.ParamActivation]
-	ParamActivation = layers.ParamActivation
-
-	// ParamDropoutRate is applied to FNN kernels, as usual, randomly turning off individual values.
-	// Default is 0.0, meaning no dropout.
-	ParamDropoutRate = layers.ParamDropoutRate
-
 	// ParamEdgeDropoutRate is applied to full edges, disabling the whole edge.
 	// Default is 0.0, meaning no edge dropout.
 	ParamEdgeDropoutRate = "gnn_edge_dropout_rate"
-
-	// ParamL2Regularization is an alias for layers.ParamL2Regularization, and adds regularizations to the NN kernels.
-	// The default is `0.0`.
-	ParamL2Regularization = layers.ParamL2Regularization
 
 	// ParamPoolingType context hyperparameter defines how incoming messages in the graph convolutions are pooled (that is, reduced
 	// or aggregated).
 	// It can take values `mean`, `sum` or `max` or a combination of them separated by `|`.
 	// The default is `mean|sum`.
 	ParamPoolingType = "gnn_pooling_type"
-
-	// ParamNormalizationType context hyperparameter can take values `none` ( or `""`), `batch` or `layer`.
-	// It's an alias to [layers.ParamNormalizationType].
-	// The default is `layer`.
-	ParamNormalizationType = layers.ParamNormalizationType
 
 	// ParamUpdateStateType context hyperparameter can take values `residual` or `none`.
 	// The default is `residual`.
@@ -78,7 +62,7 @@ var (
 	// ParamGraphUpdateType context hyperparameter can take values `tree` or `simultaneous`.
 	// Graph updates in `tree` fashion will update from leaf all the way to the seeds (the roots of the trees),
 	// for each message configured with [ParamNumGraphUpdates].
-	// Graph updates in `simultaneous` fashion will update all states from it's dependents "simultaneously". In that
+	// Graph updates in `simultaneous` fashion will update all states from its dependents "simultaneously". In that
 	// sense it will require [ParamNumGraphUpdates] to be at least equal to the depth of the sampling tree for the
 	// influence of the leaf nodes to reach to the root nodes.
 	// The default is `tree`.
@@ -380,7 +364,7 @@ func poolMessagesWithAdjacency(ctx *context.Context, source, edgesSource, edgesT
 		switch poolType {
 		case "sum", "logsum", "mean":
 			// Get values from the source to be pooled. Since a source may contribute to more than one target
-			// node, a source value may appear more than once. Shaped '[num_edges, emb_size]`.
+			// node, a source value may appear more than once. Shaped `[num_edges, emb_size]`.
 			values := Gather(source, edgesSource)
 			pooled = Scatter(edgesTarget, values, shapes.Make(dtype, targetSize, embSize))
 
@@ -399,7 +383,6 @@ func poolMessagesWithAdjacency(ctx *context.Context, source, edgesSource, edgesT
 			if poolType == "logsum" {
 				pooled = MirroredLog1p(pooled)
 			}
-			pooled.SetLogged(fmt.Sprintf("pooled(%s): ", poolType))
 		default:
 			// Notice "max" is not implemented yet.
 			Panicf("unknown graph convolution pooling type (%q) given in context: value given %q (of %q) -- valid values are sum, mean and max, or a combination of them separated by '|'",
@@ -426,13 +409,14 @@ func updateState(ctx *context.Context, prevState, input, mask *Node) *Node {
 	input = layers.DropoutFromContext(ctx, input)
 	stateDim := context.GetParamOr(ctx, ParamStateDim, 128)
 	numHiddenLayers := context.GetParamOr(ctx, ParamUpdateNumHiddenLayers, 0)
+	state := input
 	for ii := range numHiddenLayers {
 		ctxHiddenLayer := ctx.In(fmt.Sprintf("hidden_%d", ii))
-		state := layers.DenseWithBias(ctxHiddenLayer, input, stateDim)
+		state = layers.DenseWithBias(ctxHiddenLayer, state, stateDim)
 		state = layers.ActivationFromContext(ctx.In(fmt.Sprintf("hidden_%d", ii)), state)
 		state = layers.DropoutFromContext(ctx.In(fmt.Sprintf("hidden_%d", ii)), state)
 	}
-	state := layers.DenseWithBias(ctx, input, stateDim)
+	state = layers.DenseWithBias(ctx, state, stateDim)
 	state = layers.ActivationFromContext(ctx, state)
 	state = layers.DropoutFromContext(ctx, state)
 
