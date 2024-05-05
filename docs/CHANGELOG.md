@@ -2,10 +2,13 @@
 
 ## Next
 
-* **Added support for `Float16` training -- tested with GNNs.**
-  * Up-precision metrics dtypes if they are `Float16`.
-  * Allow arbitrary dtype for `Adam` optimizer -- it requires at least `float32`, even if the model runs on `float16`.
-  * DType dependent `epsilon` values for `Softmax` and `Adam` -- current values would lead to `NaN` with `float16`.
+* `types.shapes` package:
+  * **Added support for `Float16` training -- tested with GNNs.**
+    * Up-precision metrics dtypes if they are `Float16`.
+    * Allow arbitrary dtype for `Adam` optimizer -- it requires at least `float32`, even if the model runs on `float16`.
+    * DType dependent `epsilon` values for `Softmax` and `Adam` -- current values would lead to `NaN` with `float16`.
+  * Added support for `Int8`, `Int16`, `Uint8` and `Uint16`.
+  * Renamed `UInt{X}` to `Uint{X}` and added a deprecated alias to the old form (so it still compiles).
 * Added logging of time to build and compile graph. Last version improved a lot the execution time, but slowed the compilation.
 * Fixed `Variable.SetValueGraph` when the shape changes. Improved some documentation.
 * Package `optimizers`:
