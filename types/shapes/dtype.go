@@ -81,9 +81,20 @@ const (
 	C64  = Complex64
 	C128 = Complex128
 
-	UInt8  = Uint8
+	// UInt8
+	// Deprecated: use Uint8 instead.
+	UInt8 = Uint8
+
+	// UInt16
+	// Deprecated: use Uint16 instead.
 	UInt16 = Uint16
+
+	// UInt32
+	// Deprecated: use Uint32 instead.
 	UInt32 = Uint32
+
+	// UInt64
+	// Deprecated: use Uint64 instead.
 	UInt64 = Uint64
 )
 
