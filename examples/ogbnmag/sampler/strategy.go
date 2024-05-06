@@ -4,6 +4,7 @@ import (
 	"fmt"
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/tensor"
 	"strings"
 )
 
@@ -208,4 +209,23 @@ func recursivelyMapEdgeInputsToSubRules[T any](inputs []T, rule *Rule, edges map
 		}
 	}
 	return inputs
+}
+
+// ExtractSamplingEdgeIndices for non-seed rules, into a map of edge name to a local tensor.
+//
+// This can be used for LayerWise inference -- but the tensors have to be converted to a constant graph node (or
+// variable).
+//
+// Notice the direction of sampling is reverse to the direction of message passing in the GNN, so usually these
+// need to be reversed first.
+func (strategy *Strategy) ExtractSamplingEdgeIndices() (edges map[string]EdgePair[*tensor.Local]) {
+	edges = make(map[string]EdgePair[*tensor.Local])
+	for _, rule := range strategy.Rules {
+		et := rule.EdgeType
+		if et == nil {
+			continue
+		}
+		edges[rule.Name] = et.EdgePairTensor()
+	}
+	return
 }

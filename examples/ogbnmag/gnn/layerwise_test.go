@@ -6,122 +6,173 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
+	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
 
-func createTestSampler() *samplerPkg.Sampler {
-	sampler := samplerPkg.New()
-	sampler.AddNodeType("papers", 5)
-	sampler.AddNodeType("authors", 10)
+// Test sampler constants.
+const (
+	lwFactor     = 5
+	lwNumPapers  = 10
+	lwNumAuthors = lwNumPapers * lwFactor
+)
 
-	authorWritesPapers := tensor.FromValue([][]int32{
-		{0, 2}, // Author 0 writes paper 2.
-		{3, 2},
-		{4, 2},
-		{0, 3},
-		{0, 4},
-		{4, 4},
-		{7, 4},
-	})
+// createDenseTestSampler creates a sampler where every paper has exactly 5 author, so the sampled and layer-wise
+// inference should be exactly the same.
+//
+// Optionally, it includes paper citations. Each paper cites the next 5 (in a circular form).
+func createDenseTestSampler(withCitation bool) *samplerPkg.Sampler {
+	sampler := samplerPkg.New()
+	sampler.AddNodeType("papers", lwNumPapers)
+	sampler.AddNodeType("authors", lwNumAuthors)
+
+	authorWritesPapers := tensor.FromShape(shapes.Make(shapes.Int32, lwNumAuthors, 2))
+	{
+		// Each paper is written by 5 authors.
+		ref := authorWritesPapers.AcquireData()
+		authorData := ref.Flat().([]int32)
+		for authorIdx := range int32(lwNumAuthors) {
+			paperIdx := authorIdx / 5
+			authorData[authorIdx*2] = authorIdx
+			authorData[authorIdx*2+1] = paperIdx
+		}
+		ref.Release()
+	}
 	sampler.AddEdgeType("writes", "authors", "papers", authorWritesPapers, false)
 	sampler.AddEdgeType("writtenBy", "authors", "papers", authorWritesPapers, true)
 
-	paperCitesPaper := tensor.FromValue([][]int32{
-		{2, 0}, // Paper 2 cites paper 0
-		{2, 1},
-		{3, 0},
-		{3, 2},
-		{4, 1},
-		{4, 3},
-	})
-	sampler.AddEdgeType("cites", "papers", "papers", paperCitesPaper, false)
-	sampler.AddEdgeType("citedBy", "papers", "papers", paperCitesPaper, true)
+	if withCitation {
+		paperCitesPaper := tensor.FromShape(shapes.Make(shapes.Int32, lwNumPapers*lwFactor, 2))
+		{
+			// Each paper is written by 5 authors.
+			ref := paperCitesPaper.AcquireData()
+			citesData := ref.Flat().([]int32)
+			for citing := range int32(lwNumPapers) {
+				for ii := range int32(lwFactor) {
+					cited := (citing + ii) % lwNumPapers
+					citesData[citing*lwFactor+ii*2] = citing
+					citesData[citing*lwFactor+ii*2+1] = cited
+				}
+			}
+			ref.Release()
+		}
+		sampler.AddEdgeType("cites", "papers", "papers", paperCitesPaper, false)
+		sampler.AddEdgeType("citedBy", "papers", "papers", paperCitesPaper, true)
+	}
 	return sampler
 }
 
-func createTestStrategy() (*samplerPkg.Sampler, *samplerPkg.Strategy) {
-	s := createTestSampler()
+func createDenseTestStrategy(withCitation bool) (*samplerPkg.Sampler, *samplerPkg.Strategy) {
+	s := createDenseTestSampler(withCitation)
 	strategy := s.NewStrategy()
 	strategy = s.NewStrategy()
-	seeds := strategy.NodesFromSet("Seeds", "papers", 2, []int32{2, 3, 4})
-	authors := seeds.FromEdges("authors", "writtenBy", 5)
-	_ = authors.FromEdges("otherPapers", "writes", 3)
-	citations := seeds.FromEdges("citations", "cites", 2)
-	citationsAuthors := citations.FromEdges("citationsAuthors", "writtenBy", 1)
-	_ = citationsAuthors
+	seeds := strategy.NodesFromSet("seeds", "papers", lwNumPapers, nil)
+	_ = seeds.FromEdges("authors", "writtenBy", lwFactor)
+	if withCitation {
+		_ = seeds.FromEdges("citations", "cites", lwFactor)
+	}
 	return s, strategy
 }
 
-func TestLayerWiseOperations(t *testing.T) {
-	sampler := createTestSampler()
-	manager := graphtest.BuildTestManager()
-	ctx := context.NewContext(manager)
-
-	numPapers := int(sampler.NodeTypesToCount["papers"])
-	papersEmbedSize := 10
-	edgeType := sampler.EdgeTypes["cites"]
-	e := context.NewExec(manager, ctx, func(ctx *context.Context, g *Graph) []*Node {
-		sourceState := IotaFull(g, shapes.Make(shapes.F32, numPapers, papersEmbedSize))
-		edgesState := gatherToEdgesGraph(ctx, sourceState, edgeType)
-		pooled := poolEdgesGraph(ctx, edgesState, edgeType)
-		return []*Node{edgesState, pooled}
-	})
-
-	var gatheredToEdges, pooledToNodes tensor.Tensor
-	require.NotPanics(t, func() {
-		res := e.Call()
-		gatheredToEdges, pooledToNodes = res[0], res[1]
-	})
-
-	{ // Gathered state into edges:
-		fmt.Printf("gatheredToEdges=%s\n", gatheredToEdges.Local().GoStr())
-		// Based on the edges list, the gathered results should represent the values gathered from the
-		// right column below:
-		//	paper2 <- paper0
-		//	paper2 <- paper1
-		//	paper3 <- paper0
-		//	paper3 <- paper2
-		//	paper4 <- paper1
-		//	paper4 <- paper3
-		want := [][]float32{
-			{0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
-			{10, 11, 12, 13, 14, 15, 16, 17, 18, 19},
-			{0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
-			{20, 21, 22, 23, 24, 25, 26, 27, 28, 29},
-			{10, 11, 12, 13, 14, 15, 16, 17, 18, 19},
-			{30, 31, 32, 33, 34, 35, 36, 37, 38, 39}}
-		require.Equal(t, want, gatheredToEdges.Local().Value())
+func createDenseTestStateGraphWithMask(g *Graph, dtype shapes.DType, withCitation bool) map[string]*samplerPkg.ValueMask[*Node] {
+	graphStates := make(map[string]*samplerPkg.ValueMask[*Node])
+	graphStates["seeds"] = &samplerPkg.ValueMask[*Node]{
+		Value: IotaFull(g, shapes.Make(shapes.F32, lwNumPapers, 1)),
+		Mask:  Ones(g, shapes.Make(shapes.Bool, lwNumPapers)),
 	}
-
-	{ // Edges state (above) sum-pooled to target nodes.
-		fmt.Printf("pooledToNodes=%s\n", pooledToNodes.Local().GoStr())
-		want := [][]float32{
-			{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-			{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-			{5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28},      // Mean(Paper0, Paper1), (Paper 0 + Paper 1)
-			{10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38}, // Mean(Paper0, Paper2), (Paper 0 + Paper 2)
-			{20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 40, 42, 44, 46, 48, 50, 52, 54, 56, 58}, // Mean(Paper1, Paper3), (Paper 1 + Paper 3),
-		}
-		require.Equal(t, want, pooledToNodes.Local().Value())
+	graphStates["authors"] = &samplerPkg.ValueMask[*Node]{
+		Value: DivScalar(IotaFull(g, shapes.Make(shapes.F32, lwNumPapers, lwFactor, 1)), 1000.0),
+		Mask:  Ones(g, shapes.Make(shapes.Bool, lwNumPapers, lwFactor)),
 	}
+	return graphStates
 }
 
-func TestTargetIndicesForEdgeType(t *testing.T) {
-	sampler := createTestSampler()
-	edgeType := sampler.EdgeTypes["cites"]
-	indices := targetIndicesForEdgeType(edgeType)
-	fmt.Printf("targetIndicesForEdgeType(%q)=%#v\n", edgeType.Name, indices)
-	// Based on the edges list, the gathered results should represent the values gathered from the
-	// left column below:
-	//	paper2 <- paper0
-	//	paper2 <- paper1
-	//	paper3 <- paper0
-	//	paper3 <- paper2
-	//	paper4 <- paper1
-	//	paper4 <- paper3
-	want := []int32{2, 2, 3, 3, 4, 4}
-	require.Equal(t, want, indices)
+func createDenseTestStateGraphLayerWise(g *Graph, dtype shapes.DType, withCitation bool) map[string]*Node {
+	graphStates := make(map[string]*Node)
+	graphStates["seeds"] = IotaFull(g, shapes.Make(shapes.F32, lwNumPapers, 1))
+	graphStates["authors"] = DivScalar(IotaFull(g, shapes.Make(shapes.F32, lwNumPapers*lwFactor, 1)), 1000.0)
+	return graphStates
+}
+
+func setDefaultTestParams(ctx *context.Context) {
+	ctx.SetParams(map[string]any{
+		layers.ParamDropoutRate:       0.0,
+		layers.ParamActivation:        "none", // No activation, to make math simpler.
+		layers.ParamNormalizationType: "none",
+
+		ParamEdgeDropoutRate:       0.0,
+		ParamNumGraphUpdates:       1, // gnn_num_messages
+		ParamReadoutHiddenLayers:   0,
+		ParamPoolingType:           "sum",
+		ParamUpdateStateType:       "residual",
+		ParamUsePathToRootStates:   false,
+		ParamGraphUpdateType:       "simultaneous",
+		ParamUpdateNumHiddenLayers: 0,
+		ParamMessageDim:            1, // 128 or 256 will work better, but takes way more time
+		ParamStateDim:              1, // 128 or 256 will work better, but takes way more time
+		ParamUseRootAsContext:      false,
+	})
+}
+
+func TestLayerWiseInference(t *testing.T) {
+	for _, withCitation := range []bool{false /*, true */} {
+		fmt.Printf("\nwithCitation=%v:\n", withCitation)
+		manager := graphtest.BuildTestManager()
+		_, strategy := createDenseTestStrategy(withCitation)
+		ctx := context.NewContext(manager)
+		setDefaultTestParams(ctx)
+		// Set weights to fixed values, that makes it easier to interpret:
+		{
+			ctx := ctx.InAbsPath("/graph_update_0/gnn:authors/conv/message/dense")
+			_ = ctx.VariableWithValue("weights", tensor.FromValue([][]float32{{1.0}}))
+			_ = ctx.VariableWithValue("biases", tensor.FromValue([]float32{0.0}))
+		}
+		{
+			ctx := ctx.InAbsPath("/graph_update_0/gnn:seeds/update/dense")
+			_ = ctx.VariableWithValue("weights", tensor.FromValue([][]float32{{1000.0}, {1.0}}))
+			_ = ctx.VariableWithValue("biases", tensor.FromValue([]float32{0.0}))
+		}
+
+		// Normal GNN executor.
+		execGnn := context.NewExec(manager, ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
+			graphStates := createDenseTestStateGraphWithMask(g, shapes.F32, withCitation)
+			NodePrediction(ctx, strategy, graphStates)
+			return graphStates["seeds"].Value
+		})
+
+		// For each paper: paperIdx (residual connection) + 1000*paperIdx + 0.025*paperIdx + (0+1+2+3+4)/1000
+		logits := execGnn.Call()[0]
+		fmt.Printf("\tGNN seeds states: %s\n", logits.Local().GoStr())
+		want := [][]float32{{0.010}, {1001.035}, {2002.060}, {3003.085}, {4004.110}, {5005.135}, {6006.160}, {7007.185}, {8008.210}, {9009.235}}
+		require.Equal(t, want, logits.Local().Value().([][]float32))
+
+		// Uncomment to list variables used in model.
+		/*
+			ctx.EnumerateVariables(func(v *context.Variable) {
+				fmt.Printf("\t%s=%s\n", v.ParameterName(), v.Value())
+			})
+		*/
+
+		// Layer-Wise Inference: should return the same values.
+		lw, err := LayerWiseGNN(ctx, strategy)
+		require.NoError(t, err)
+		execLayerWise := context.NewExec(manager, ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
+			graphStates := createDenseTestStateGraphLayerWise(g, shapes.F32, withCitation)
+			edges := make(map[string]samplerPkg.EdgePair[*Node])
+			for name, value := range strategy.ExtractSamplingEdgeIndices() {
+				edges[name] = samplerPkg.EdgePair[*Node]{
+					SourceIndices: Const(g, value.SourceIndices),
+					TargetIndices: Const(g, value.TargetIndices),
+				}
+			}
+			lw.Compute(ctx, graphStates, edges)
+			return graphStates["seeds"]
+		})
+		logits = execLayerWise.Call()[0]
+		fmt.Printf("\tLayerWiseGNN seeds states: %s\n", logits.Local().GoStr())
+		require.Equal(t, want, logits.Local().Value().([][]float32))
+	}
 }

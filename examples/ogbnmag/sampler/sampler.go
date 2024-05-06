@@ -104,6 +104,37 @@ func (et *EdgeType) NumTargetNodes() int { return et.numTargetNodes }
 // NumEdges for this type.
 func (et *EdgeType) NumEdges() int { return len(et.EdgeTargets) }
 
+// EdgeTargetsForSourceIdx returns a slice with the target nodes for the given source nodes.
+// Don't modify the returned slice, it's in use by the Sampler -- make a copy if you need to modify.
+func (et *EdgeType) EdgeTargetsForSourceIdx(srcIdx int32) []int32 {
+	if srcIdx < 0 || int(srcIdx) >= len(et.Starts) {
+		Panicf("invalid source node (%q) index %d for edge type %q (only %d source nodes)", et.SourceNodeType, srcIdx, et.Name, len(et.Starts))
+	}
+	var start int32
+	if srcIdx > 0 {
+		start = et.Starts[srcIdx-1]
+	}
+	end := et.Starts[srcIdx]
+	return et.EdgeTargets[start:end]
+}
+
+// EdgePairTensor creates new tensors for the source and target indices.
+// It can be used by LayerWise inference.
+func (et *EdgeType) EdgePairTensor() EdgePair[*tensor.Local] {
+	sources := make([]int32, et.NumEdges())
+	current := int32(0)
+	for srcIdx, last := range et.Starts {
+		for ii := current; ii < last; ii++ {
+			sources[ii] = int32(srcIdx)
+		}
+		current = last
+	}
+	return EdgePair[*tensor.Local]{
+		SourceIndices: tensor.FromValue(sources),
+		TargetIndices: tensor.FromValue(et.EdgeTargets),
+	}
+}
+
 // New creates a new empty Sampler.
 //
 // After creating it, use AddNodeType and AddEdgeType to define where to
@@ -204,20 +235,6 @@ func (s *Sampler) AddEdgeType(name, sourceNodeType, targetNodeType string, edges
 		samplerEdges.Starts[currentSourceIdx] = int32(numEdges)
 	}
 	s.EdgeTypes[name] = samplerEdges
-}
-
-// EdgeTargetsForSourceIdx returns a slice with the target nodes for the given source nodes.
-// Don't modify the returned slice, it's in use by the Sampler -- make a copy if you need to modify.
-func (et *EdgeType) EdgeTargetsForSourceIdx(srcIdx int32) []int32 {
-	if srcIdx < 0 || int(srcIdx) >= len(et.Starts) {
-		Panicf("invalid source node (%q) index %d for edge type %q (only %d source nodes)", et.SourceNodeType, srcIdx, et.Name, len(et.Starts))
-	}
-	var start int32
-	if srcIdx > 0 {
-		start = et.Starts[srcIdx-1]
-	}
-	end := et.Starts[srcIdx]
-	return et.EdgeTargets[start:end]
 }
 
 type pairsToSort struct {
