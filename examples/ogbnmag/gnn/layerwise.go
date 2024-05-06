@@ -28,7 +28,7 @@ type LayerWiseConfig struct {
 // It works only for [NodePrediction] GNNs.
 //
 // It returns a configuration option that can be furthered configured.
-// It runs the layer-wise GNN once [Compute] is called.
+// It runs the layer-wise GNN once [NodePrediction] is called.
 func LayerWiseGNN(ctx *context.Context, strategy *sampler.Strategy) (*LayerWiseConfig, error) {
 	lw := &LayerWiseConfig{
 		ctx:                    ctx,
@@ -71,18 +71,27 @@ func (lw *LayerWiseConfig) FreeAcceleratorMemory(free bool) *LayerWiseConfig {
 	return lw
 }
 
-// Compute computes the layer-wise GNN.
+// NodePrediction computes the layer-wise GNN.
 //
 // `initialStates` should map node set names to its initial values, and be shaped `[num_nodes, initial_state_dim]`.
 // Any preprocessing transformation (like normalizations) need to be calculated and materialized to tensors.
 //
 // It can be called more than once with different `initialStates`.
 // Subsequent calls will by-step the JIT-compilation of the models.
-func (lw *LayerWiseConfig) Compute(ctx *context.Context, graphStates map[string]*Node, edges map[string]sampler.EdgePair[*Node]) {
+func (lw *LayerWiseConfig) NodePrediction(ctx *context.Context, graphStates map[string]*Node, edges map[string]sampler.EdgePair[*Node]) {
 	for round := range lw.numGraphUpdates {
 		for _, rule := range lw.strategy.Seeds {
 			lw.recursivelyApplyGraphConvolution(ctxForGraphUpdateRound(ctx, round), rule, graphStates, edges)
 		}
+	}
+	numHiddenLayers := context.GetParamOr(ctx, ParamReadoutHiddenLayers, 0)
+	for _, rule := range lw.strategy.Seeds {
+		seedState := graphStates[rule.Name]
+		for ii := range numHiddenLayers {
+			ctxReadout := ctx.In(rule.ConvKernelScopeName).In(fmt.Sprintf("readout_hidden_%d", ii))
+			seedState = updateState(ctxReadout, seedState, seedState, nil)
+		}
+		graphStates[rule.Name] = seedState
 	}
 }
 
@@ -103,7 +112,6 @@ func (lw *LayerWiseConfig) recursivelyApplyGraphConvolution(
 	if !found {
 		Panicf("state for rule %q not given in `graphStates`, states given for rules: %q", rule.Name, slices.Keys(graphStates))
 	}
-	state.SetLogged(fmt.Sprintf("state(%s):", rule.Name))
 
 	updateInputs := make([]*Node, 0, len(rule.Dependents)+1)
 	if state != nil { // state size is 0 for latent node types, at their initial state.
@@ -128,7 +136,7 @@ func (lw *LayerWiseConfig) recursivelyApplyGraphConvolution(
 				// Notice that we are sending messages on the reverse order of the sampling.
 				// E.g.: If paper->"HasTopic"->topic, the sampling direction is "paper is source, topic is target".
 				// When evaluating the GNN we want the message to go from topic (source) to paper (target).
-				lw.convolveEdgeSet(convolveCtx, dependentState, dependentEdges.TargetIndices, dependentEdges.SourceIndices, int(rule.NumNodes)))
+				lw.convolveEdgeSet(convolveCtx, dependent.Name, dependentState, dependentEdges.TargetIndices, dependentEdges.SourceIndices, int(rule.NumNodes)))
 		}
 		if !lw.dependentsUpdateFirst {
 			lw.recursivelyApplyGraphConvolution(ctx, dependent, graphStates, edges)
@@ -141,8 +149,14 @@ func (lw *LayerWiseConfig) recursivelyApplyGraphConvolution(
 	graphStates[rule.Name] = state
 }
 
-func (lw *LayerWiseConfig) convolveEdgeSet(ctx *context.Context, sourceState, edgesSource, edgesTarget *Node, numTargetNodes int) *Node {
+func (lw *LayerWiseConfig) convolveEdgeSet(ctx *context.Context, ruleName string, sourceState, edgesSource, edgesTarget *Node, numTargetNodes int) *Node {
+	//fmt.Printf("> Convolving %q\n", ruleName)
+	//fmt.Printf("\tstate: state.shape=%s", sourceState.Shape())
+	//fmt.Printf("\tedges: {source|target}.shape=%s\n", edgesSource.Shape())
+	//ReduceAllMax(edgesSource).SetLogged(fmt.Sprintf("edges[%s].Source.Max", ruleName))
+	//ReduceAllMax(edgesTarget).SetLogged(fmt.Sprintf("edges[%s].Target.Max", ruleName))
 	messages, _ := edgeMessageGraph(ctx.In("message"), sourceState, nil)
 	pooled := poolMessagesWithAdjacency(ctx, messages, edgesSource, edgesTarget, numTargetNodes, nil)
+	//fmt.Printf("\tpooled: shape=%s\n", pooled.Shape())
 	return pooled
 }

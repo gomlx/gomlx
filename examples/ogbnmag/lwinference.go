@@ -17,7 +17,7 @@ import (
 func LayerWiseInference(ctx *context.Context, strategy *sampler.Strategy) tensor.Tensor {
 	var predictionsT tensor.Tensor
 	exec := context.NewExec(ctx.Manager(), ctx.Reuse(), BuildLayerWiseInferenceModel(strategy))
-	for _ = range 2 {
+	for _ = range 1 {
 		start := time.Now()
 		predictionsT = exec.Call()[0]
 		fmt.Printf("predicitons.shape=%s\n", predictionsT.Shape())
@@ -70,7 +70,7 @@ func BuildLayerWiseInferenceModel(strategy *sampler.Strategy) func(ctx *context.
 		if err != nil {
 			panic(err)
 		}
-		lw.Compute(ctx, graphStates, edges) // Last layer outputs the logits for the `NumLabels` classes.
+		lw.NodePrediction(ctx, graphStates, edges) // Last layer outputs the logits for the `NumLabels` classes.
 		readoutState := graphStates[strategy.Seeds[0].Name]
 		readoutState = layers.DenseWithBias(ctx.In("logits"), readoutState, NumLabels)
 

@@ -8,6 +8,7 @@ import (
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -97,7 +98,7 @@ func createDenseTestStateGraphLayerWise(g *Graph, dtype shapes.DType, withCitati
 	return graphStates
 }
 
-func setDefaultTestParams(ctx *context.Context) {
+func setMinimalTestParams(ctx *context.Context) {
 	ctx.SetParams(map[string]any{
 		layers.ParamDropoutRate:       0.0,
 		layers.ParamActivation:        "none", // No activation, to make math simpler.
@@ -117,37 +118,105 @@ func setDefaultTestParams(ctx *context.Context) {
 	})
 }
 
-func TestLayerWiseInference(t *testing.T) {
+func setCommonTestParams(ctx *context.Context) {
+	ctx.SetParams(map[string]any{
+		layers.ParamDropoutRate:       0.0,
+		layers.ParamActivation:        "swish",
+		layers.ParamNormalizationType: "layer",
+
+		ParamEdgeDropoutRate:       0.0,
+		ParamNumGraphUpdates:       3, // gnn_num_messages
+		ParamReadoutHiddenLayers:   1,
+		ParamPoolingType:           "mean|logsum",
+		ParamUpdateStateType:       "residual",
+		ParamUsePathToRootStates:   false,
+		ParamGraphUpdateType:       "simultaneous",
+		ParamUpdateNumHiddenLayers: 2,
+		ParamMessageDim:            8,
+		ParamStateDim:              8,
+		ParamUseRootAsContext:      false,
+	})
+}
+
+// TestLayerWiseInferenceMinimal makes sure sampled and layer-wise inference with manually edited
+// weights and minimal configuration get expected results.
+func TestLayerWiseInferenceMinimal(t *testing.T) {
+	withCitation := false
+	manager := graphtest.BuildTestManager()
+	_, strategy := createDenseTestStrategy(withCitation)
+	ctx := context.NewContext(manager)
+	setMinimalTestParams(ctx)
+	// Set weights to fixed values, that makes it easier to interpret:
+	{
+		ctx := ctx.InAbsPath("/graph_update_0/gnn:authors/conv/message/dense")
+		_ = ctx.VariableWithValue("weights", tensor.FromValue([][]float32{{1.0}}))
+		_ = ctx.VariableWithValue("biases", tensor.FromValue([]float32{0.0}))
+	}
+	{
+		ctx := ctx.InAbsPath("/graph_update_0/gnn:seeds/update/dense")
+		_ = ctx.VariableWithValue("weights", tensor.FromValue([][]float32{{1000.0}, {1.0}}))
+		_ = ctx.VariableWithValue("biases", tensor.FromValue([]float32{0.0}))
+	}
+
+	// Normal GNN executor.
+	execGnn := context.NewExec(manager, ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
+		graphStates := createDenseTestStateGraphWithMask(g, shapes.F32, withCitation)
+		NodePrediction(ctx, strategy, graphStates)
+		return graphStates["seeds"].Value
+	})
+
+	// For each paper: paperIdx (residual connection) + 1000*paperIdx + 0.025*paperIdx + (0+1+2+3+4)/1000
+	logits := execGnn.Call()[0]
+	fmt.Printf("\tGNN seeds states: %s\n", logits.Local().GoStr())
+	want := [][]float32{{0.010}, {1001.035}, {2002.060}, {3003.085}, {4004.110}, {5005.135}, {6006.160}, {7007.185}, {8008.210}, {9009.235}}
+	require.Equal(t, want, logits.Local().Value().([][]float32))
+
+	// Uncomment to list variables used in model.
+	/*
+		ctx.EnumerateVariables(func(v *context.Variable) {
+			fmt.Printf("\t%s=%s\n", v.ParameterName(), v.Value())
+		})
+	*/
+
+	// Layer-Wise Inference: should return the same values.
+	lw, err := LayerWiseGNN(ctx, strategy)
+	require.NoError(t, err)
+	execLayerWise := context.NewExec(manager, ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
+		graphStates := createDenseTestStateGraphLayerWise(g, shapes.F32, withCitation)
+		edges := make(map[string]samplerPkg.EdgePair[*Node])
+		for name, value := range strategy.ExtractSamplingEdgeIndices() {
+			edges[name] = samplerPkg.EdgePair[*Node]{
+				SourceIndices: Const(g, value.SourceIndices),
+				TargetIndices: Const(g, value.TargetIndices),
+			}
+		}
+		lw.NodePrediction(ctx, graphStates, edges)
+		return graphStates["seeds"]
+	})
+	logits = execLayerWise.Call()[0]
+	fmt.Printf("\tLayerWiseGNN seeds states: %s\n", logits.Local().GoStr())
+	require.Equal(t, want, logits.Local().Value().([][]float32))
+}
+
+// TestLayerWiseInferenceCommon makes sure sampled and layer-wise inference get the same results under
+// common configuration parameters
+func TestLayerWiseInferenceCommon(t *testing.T) {
 	for _, withCitation := range []bool{false /*, true */} {
 		fmt.Printf("\nwithCitation=%v:\n", withCitation)
 		manager := graphtest.BuildTestManager()
 		_, strategy := createDenseTestStrategy(withCitation)
 		ctx := context.NewContext(manager)
-		setDefaultTestParams(ctx)
-		// Set weights to fixed values, that makes it easier to interpret:
-		{
-			ctx := ctx.InAbsPath("/graph_update_0/gnn:authors/conv/message/dense")
-			_ = ctx.VariableWithValue("weights", tensor.FromValue([][]float32{{1.0}}))
-			_ = ctx.VariableWithValue("biases", tensor.FromValue([]float32{0.0}))
-		}
-		{
-			ctx := ctx.InAbsPath("/graph_update_0/gnn:seeds/update/dense")
-			_ = ctx.VariableWithValue("weights", tensor.FromValue([][]float32{{1000.0}, {1.0}}))
-			_ = ctx.VariableWithValue("biases", tensor.FromValue([]float32{0.0}))
-		}
+		setCommonTestParams(ctx)
 
 		// Normal GNN executor.
-		execGnn := context.NewExec(manager, ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
+		execGnn := context.NewExec(manager, ctx, func(ctx *context.Context, g *Graph) *Node {
 			graphStates := createDenseTestStateGraphWithMask(g, shapes.F32, withCitation)
 			NodePrediction(ctx, strategy, graphStates)
 			return graphStates["seeds"].Value
 		})
 
-		// For each paper: paperIdx (residual connection) + 1000*paperIdx + 0.025*paperIdx + (0+1+2+3+4)/1000
-		logits := execGnn.Call()[0]
-		fmt.Printf("\tGNN seeds states: %s\n", logits.Local().GoStr())
-		want := [][]float32{{0.010}, {1001.035}, {2002.060}, {3003.085}, {4004.110}, {5005.135}, {6006.160}, {7007.185}, {8008.210}, {9009.235}}
-		require.Equal(t, want, logits.Local().Value().([][]float32))
+		sampledLogits := execGnn.Call()[0]
+		fmt.Printf("\tGNN seeds states: %s\n", sampledLogits.Local().GoStr())
 
 		// Uncomment to list variables used in model.
 		/*
@@ -168,11 +237,15 @@ func TestLayerWiseInference(t *testing.T) {
 					TargetIndices: Const(g, value.TargetIndices),
 				}
 			}
-			lw.Compute(ctx, graphStates, edges)
+			lw.NodePrediction(ctx, graphStates, edges)
 			return graphStates["seeds"]
 		})
-		logits = execLayerWise.Call()[0]
-		fmt.Printf("\tLayerWiseGNN seeds states: %s\n", logits.Local().GoStr())
-		require.Equal(t, want, logits.Local().Value().([][]float32))
+		lwLogits := execLayerWise.Call()[0]
+		fmt.Printf("\tLayerWiseGNN seeds states: %s\n", lwLogits.Local().GoStr())
+		require.True(t,
+			slices.DeepSliceCmp(
+				sampledLogits.Local().Value().([][]float32),
+				lwLogits.Local().Value().([][]float32),
+				slices.Close[float32]))
 	}
 }
