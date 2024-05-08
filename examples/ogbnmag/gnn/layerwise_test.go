@@ -53,9 +53,9 @@ func createDenseTestSampler(withCitation bool) *samplerPkg.Sampler {
 			citesData := ref.Flat().([]int32)
 			for citing := range int32(lwNumPapers) {
 				for ii := range int32(lwFactor) {
-					cited := (citing + ii) % lwNumPapers
-					citesData[citing*lwFactor+ii*2] = citing
-					citesData[citing*lwFactor+ii*2+1] = cited
+					cited := (citing + ii + 1) % lwNumPapers
+					citesData[(citing*lwFactor+ii)*2] = citing
+					citesData[(citing*lwFactor+ii)*2+1] = cited
 				}
 			}
 			ref.Release()
@@ -78,24 +78,49 @@ func createDenseTestStrategy(withCitation bool) (*samplerPkg.Sampler, *samplerPk
 	return s, strategy
 }
 
-func createDenseTestStateGraphWithMask(g *Graph, dtype shapes.DType, withCitation bool) map[string]*samplerPkg.ValueMask[*Node] {
+func createDenseTestStateGraphWithMask(strategy *samplerPkg.Strategy, g *Graph, dtype shapes.DType, withCitation bool) map[string]*samplerPkg.ValueMask[*Node] {
 	graphStates := make(map[string]*samplerPkg.ValueMask[*Node])
 	graphStates["seeds"] = &samplerPkg.ValueMask[*Node]{
-		Value: IotaFull(g, shapes.Make(shapes.F32, lwNumPapers, 1)),
+		Value: IotaFull(g, shapes.Make(dtype, lwNumPapers, 1)),
 		Mask:  Ones(g, shapes.Make(shapes.Bool, lwNumPapers)),
 	}
 	graphStates["authors"] = &samplerPkg.ValueMask[*Node]{
-		Value: DivScalar(IotaFull(g, shapes.Make(shapes.F32, lwNumPapers, lwFactor, 1)), 1000.0),
+		Value: DivScalar(IotaFull(g, shapes.Make(dtype, lwNumPapers, lwFactor, 1)), 1000.0),
 		Mask:  Ones(g, shapes.Make(shapes.Bool, lwNumPapers, lwFactor)),
+	}
+	if withCitation {
+		edges := strategy.ExtractSamplingEdgeIndices()
+		indices := Const(g, edges["citations"].TargetIndices)
+		indices = ExpandDims(indices, -1)
+		fmt.Printf("srcIndices=%s\n", edges["citations"].TargetIndices)
+		citations := Gather(graphStates["seeds"].Value, indices)
+		citations = Reshape(citations, lwNumPapers, lwFactor, 1)
+		graphStates["citations"] = &samplerPkg.ValueMask[*Node]{
+			Value: citations,
+			Mask:  Ones(g, shapes.Make(shapes.Bool, lwNumPapers, lwFactor)),
+		}
 	}
 	return graphStates
 }
 
-func createDenseTestStateGraphLayerWise(g *Graph, dtype shapes.DType, withCitation bool) map[string]*Node {
-	graphStates := make(map[string]*Node)
-	graphStates["seeds"] = IotaFull(g, shapes.Make(shapes.F32, lwNumPapers, 1))
-	graphStates["authors"] = DivScalar(IotaFull(g, shapes.Make(shapes.F32, lwNumPapers*lwFactor, 1)), 1000.0)
-	return graphStates
+func createDenseTestStateGraphLayerWise(strategy *samplerPkg.Strategy, g *Graph, dtype shapes.DType, withCitation bool) (
+	graphStates map[string]*Node, edges map[string]samplerPkg.EdgePair[*Node]) {
+	graphStates = make(map[string]*Node)
+	graphStates["seeds"] = IotaFull(g, shapes.Make(dtype, lwNumPapers, 1))
+	graphStates["authors"] = DivScalar(IotaFull(g, shapes.Make(dtype, lwNumPapers*lwFactor, 1)), 1000.0)
+	if withCitation {
+		graphStates["citations"] = graphStates["seeds"]
+	}
+
+	edges = make(map[string]samplerPkg.EdgePair[*Node])
+	for name, value := range strategy.ExtractSamplingEdgeIndices() {
+		edges[name] = samplerPkg.EdgePair[*Node]{
+			SourceIndices: Const(g, value.SourceIndices),
+			TargetIndices: Const(g, value.TargetIndices),
+		}
+	}
+
+	return graphStates, edges
 }
 
 func setMinimalTestParams(ctx *context.Context) {
@@ -160,7 +185,7 @@ func TestLayerWiseInferenceMinimal(t *testing.T) {
 
 	// Normal GNN executor.
 	execGnn := context.NewExec(manager, ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
-		graphStates := createDenseTestStateGraphWithMask(g, shapes.F32, withCitation)
+		graphStates := createDenseTestStateGraphWithMask(strategy, g, shapes.F32, withCitation)
 		NodePrediction(ctx, strategy, graphStates)
 		return graphStates["seeds"].Value
 	})
@@ -182,14 +207,7 @@ func TestLayerWiseInferenceMinimal(t *testing.T) {
 	lw, err := LayerWiseGNN(ctx, strategy)
 	require.NoError(t, err)
 	execLayerWise := context.NewExec(manager, ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
-		graphStates := createDenseTestStateGraphLayerWise(g, shapes.F32, withCitation)
-		edges := make(map[string]samplerPkg.EdgePair[*Node])
-		for name, value := range strategy.ExtractSamplingEdgeIndices() {
-			edges[name] = samplerPkg.EdgePair[*Node]{
-				SourceIndices: Const(g, value.SourceIndices),
-				TargetIndices: Const(g, value.TargetIndices),
-			}
-		}
+		graphStates, edges := createDenseTestStateGraphLayerWise(strategy, g, shapes.F32, withCitation)
 		lw.NodePrediction(ctx, graphStates, edges)
 		return graphStates["seeds"]
 	})
@@ -201,7 +219,7 @@ func TestLayerWiseInferenceMinimal(t *testing.T) {
 // TestLayerWiseInferenceCommon makes sure sampled and layer-wise inference get the same results under
 // common configuration parameters
 func TestLayerWiseInferenceCommon(t *testing.T) {
-	for _, withCitation := range []bool{false /*, true */} {
+	for _, withCitation := range []bool{false, true} {
 		fmt.Printf("\nwithCitation=%v:\n", withCitation)
 		manager := graphtest.BuildTestManager()
 		_, strategy := createDenseTestStrategy(withCitation)
@@ -210,7 +228,10 @@ func TestLayerWiseInferenceCommon(t *testing.T) {
 
 		// Normal GNN executor.
 		execGnn := context.NewExec(manager, ctx, func(ctx *context.Context, g *Graph) *Node {
-			graphStates := createDenseTestStateGraphWithMask(g, shapes.F32, withCitation)
+			graphStates := createDenseTestStateGraphWithMask(strategy, g, shapes.F32, withCitation)
+			if withCitation {
+				graphStates["citations"].Value.SetLogged("citations")
+			}
 			NodePrediction(ctx, strategy, graphStates)
 			return graphStates["seeds"].Value
 		})
@@ -229,14 +250,7 @@ func TestLayerWiseInferenceCommon(t *testing.T) {
 		lw, err := LayerWiseGNN(ctx, strategy)
 		require.NoError(t, err)
 		execLayerWise := context.NewExec(manager, ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
-			graphStates := createDenseTestStateGraphLayerWise(g, shapes.F32, withCitation)
-			edges := make(map[string]samplerPkg.EdgePair[*Node])
-			for name, value := range strategy.ExtractSamplingEdgeIndices() {
-				edges[name] = samplerPkg.EdgePair[*Node]{
-					SourceIndices: Const(g, value.SourceIndices),
-					TargetIndices: Const(g, value.TargetIndices),
-				}
-			}
+			graphStates, edges := createDenseTestStateGraphLayerWise(strategy, g, shapes.F32, withCitation)
 			lw.NodePrediction(ctx, graphStates, edges)
 			return graphStates["seeds"]
 		})
