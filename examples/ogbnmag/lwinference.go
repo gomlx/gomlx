@@ -134,7 +134,7 @@ func recursivelyCreateEdgesInputs(g *Graph, rule *sampler.Rule, edges map[string
 		)
 		if subRule.EdgeType == nil {
 			// Identity rule: edges are 1-to-1 mapping.
-			indices := IotaFull(g, shapes.Make(shapes.I32, int(subRule.NumNodes)))
+			indices := IotaFull(g, shapes.Make(shapes.I32, int(subRule.NumNodes), 1))
 			inputs = append(inputs, indices, indices)
 		} else {
 			// Normal edge.

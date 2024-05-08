@@ -119,6 +119,7 @@ func (lw *LayerWiseConfig) recursivelyApplyGraphConvolution(
 	}
 
 	// Update dependents and calculate their convolved messages: it's a depth-first-search on dependents.
+
 	for _, dependent := range rule.Dependents {
 		dependentEdges, found := edges[dependent.Name]
 		if !found {
@@ -130,7 +131,6 @@ func (lw *LayerWiseConfig) recursivelyApplyGraphConvolution(
 		}
 		dependentState := graphStates[dependent.Name]
 		convolveCtx := ctx.In(dependent.ConvKernelScopeName).In("conv")
-		_ = convolveCtx
 		if dependentState != nil {
 			updateInputs = append(updateInputs,
 				// Notice that we are sending messages on the reverse order of the sampling.
@@ -150,13 +150,13 @@ func (lw *LayerWiseConfig) recursivelyApplyGraphConvolution(
 }
 
 func (lw *LayerWiseConfig) convolveEdgeSet(ctx *context.Context, ruleName string, sourceState, edgesSource, edgesTarget *Node, numTargetNodes int) *Node {
-	//fmt.Printf("> Convolving %q\n", ruleName)
-	//fmt.Printf("\tstate: state.shape=%s", sourceState.Shape())
+	//fmt.Printf("\t> Convolving %q\n", ruleName)
+	//fmt.Printf("\t\tstate: state.shape=%s\n", sourceState.Shape())
 	//fmt.Printf("\tedges: {source|target}.shape=%s\n", edgesSource.Shape())
 	//ReduceAllMax(edgesSource).SetLogged(fmt.Sprintf("edges[%s].Source.Max", ruleName))
 	//ReduceAllMax(edgesTarget).SetLogged(fmt.Sprintf("edges[%s].Target.Max", ruleName))
 	messages, _ := edgeMessageGraph(ctx.In("message"), sourceState, nil)
 	pooled := poolMessagesWithAdjacency(ctx, messages, edgesSource, edgesTarget, numTargetNodes, nil)
-	//fmt.Printf("\tpooled: shape=%s\n", pooled.Shape())
+	//fmt.Printf("\t\tpooled: shape=%s\n", pooled.Shape())
 	return pooled
 }

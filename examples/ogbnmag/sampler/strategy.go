@@ -4,6 +4,7 @@ import (
 	"fmt"
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
 	"strings"
 )
@@ -222,7 +223,18 @@ func (strategy *Strategy) ExtractSamplingEdgeIndices() (edges map[string]EdgePai
 	edges = make(map[string]EdgePair[*tensor.Local])
 	for _, rule := range strategy.Rules {
 		et := rule.EdgeType
+		if rule.SourceRule == nil {
+			// Seed rule.
+			continue
+		}
 		if et == nil {
+			// Identity type of edge: straight forward 1:1 mapping.
+			indices := slices.Iota[int32](0, int(rule.NumNodes))
+			pair := EdgePair[*tensor.Local]{
+				SourceIndices: tensor.FromValue(indices),
+			}
+			pair.TargetIndices = pair.SourceIndices
+			edges[rule.Name] = pair
 			continue
 		}
 		edges[rule.Name] = et.EdgePairTensor()

@@ -166,7 +166,7 @@ func recursivelyApplyGraphConvolution(ctx *context.Context, rule *sampler.Rule,
 	// Makes sure there is a state for the current dependent.
 	state, found := graphStates[rule.Name]
 	if !found {
-		Panicf("state for node %q not given in `graphStates`, states given: %v", rule.Name, slices.Keys(graphStates))
+		Panicf("state for sampling rule %q not given in `graphStates`, states given: %v", rule.Name, slices.Keys(graphStates))
 	}
 
 	// Leaf nodes are not updated.
@@ -217,7 +217,10 @@ func recursivelyApplyGraphConvolution(ctx *context.Context, rule *sampler.Rule,
 		if dependentsUpdateFirst {
 			recursivelyApplyGraphConvolution(ctx, dependent, subPathToRootStates, graphStates, dependentsUpdateFirst)
 		}
-		dependentState := graphStates[dependent.Name]
+		dependentState, found := graphStates[dependent.Name]
+		if !found {
+			Panicf("state for sampling rule %q not given in `graphStates`, states given: %v", dependent.Name, slices.Keys(graphStates))
+		}
 		dependentDegreePair := graphStates[sampler.NameForNodeDependentDegree(rule.Name, dependent.Name)]
 		var dependentDegree *Node
 		if dependentDegreePair != nil {

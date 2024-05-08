@@ -24,7 +24,8 @@ const (
 // createDenseTestSampler creates a sampler where every paper has exactly 5 author, so the sampled and layer-wise
 // inference should be exactly the same.
 //
-// Optionally, it includes paper citations. Each paper cites the next 5 (in a circular form).
+// Optionally, it includes paper citations along an identity node-set for the seeds.
+// Each paper cites the next 5 (in a circular form).
 func createDenseTestSampler(withCitation bool) *samplerPkg.Sampler {
 	sampler := samplerPkg.New()
 	sampler.AddNodeType("papers", lwNumPapers)
@@ -73,7 +74,9 @@ func createDenseTestStrategy(withCitation bool) (*samplerPkg.Sampler, *samplerPk
 	seeds := strategy.NodesFromSet("seeds", "papers", lwNumPapers, nil)
 	_ = seeds.FromEdges("authors", "writtenBy", lwFactor)
 	if withCitation {
-		_ = seeds.FromEdges("citations", "cites", lwFactor)
+		seedsBase := seeds.IdentitySubRule("seedsBase")
+		citations := seeds.FromEdges("citations", "cites", lwFactor)
+		citations.UpdateKernelScopeName = seedsBase.UpdateKernelScopeName
 	}
 	return s, strategy
 }
@@ -92,12 +95,15 @@ func createDenseTestStateGraphWithMask(strategy *samplerPkg.Strategy, g *Graph, 
 		edges := strategy.ExtractSamplingEdgeIndices()
 		indices := Const(g, edges["citations"].TargetIndices)
 		indices = ExpandDims(indices, -1)
-		fmt.Printf("srcIndices=%s\n", edges["citations"].TargetIndices)
 		citations := Gather(graphStates["seeds"].Value, indices)
 		citations = Reshape(citations, lwNumPapers, lwFactor, 1)
 		graphStates["citations"] = &samplerPkg.ValueMask[*Node]{
 			Value: citations,
 			Mask:  Ones(g, shapes.Make(shapes.Bool, lwNumPapers, lwFactor)),
+		}
+		graphStates["seedsBase"] = &samplerPkg.ValueMask[*Node]{
+			Value: ExpandDims(graphStates["seeds"].Value, -2), // [lwNumPapers, 1, embedding_dim]
+			Mask:  ExpandDims(graphStates["seeds"].Mask, -1),  // [lwNumPapers, 1]
 		}
 	}
 	return graphStates
@@ -110,6 +116,7 @@ func createDenseTestStateGraphLayerWise(strategy *samplerPkg.Strategy, g *Graph,
 	graphStates["authors"] = DivScalar(IotaFull(g, shapes.Make(dtype, lwNumPapers*lwFactor, 1)), 1000.0)
 	if withCitation {
 		graphStates["citations"] = graphStates["seeds"]
+		graphStates["seedsBase"] = graphStates["seeds"]
 	}
 
 	edges = make(map[string]samplerPkg.EdgePair[*Node])
@@ -229,9 +236,6 @@ func TestLayerWiseInferenceCommon(t *testing.T) {
 		// Normal GNN executor.
 		execGnn := context.NewExec(manager, ctx, func(ctx *context.Context, g *Graph) *Node {
 			graphStates := createDenseTestStateGraphWithMask(strategy, g, shapes.F32, withCitation)
-			if withCitation {
-				graphStates["citations"].Value.SetLogged("citations")
-			}
 			NodePrediction(ctx, strategy, graphStates)
 			return graphStates["seeds"].Value
 		})
