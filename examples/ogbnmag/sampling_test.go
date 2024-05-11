@@ -29,7 +29,7 @@ func TestDatasets(t *testing.T) {
 
 	// Checks that shuffling also doesn't loses elements.
 	magSampler, err := NewSampler(*flagDataDir)
-	trainStrategy := MagStrategy(magSampler, BatchSize, TrainSplit)
+	trainStrategy := NewSamplerStrategy(magSampler, BatchSize, TrainSplit)
 	shuffledTrainDS := mldata.Parallel(
 		trainStrategy.NewDataset("train").Epochs(1).Shuffle())
 
