@@ -72,7 +72,7 @@ func createDenseTestStrategy(withCitation bool) (*samplerPkg.Sampler, *samplerPk
 	strategy := s.NewStrategy()
 	strategy = s.NewStrategy()
 	seeds := strategy.NodesFromSet("seeds", "papers", lwNumPapers, nil)
-	_ = seeds.FromEdges("authors", "writtenBy", lwFactor)
+	_ = seeds.FromEdges("authors", "writtenBy", lwFactor+1) // There are only lwFactor edges, but we sample +1 which means a mask entry set to false.
 	if withCitation {
 		seedsBase := seeds.IdentitySubRule("seedsBase")
 		citations := seeds.FromEdges("citations", "cites", lwFactor)
@@ -87,9 +87,27 @@ func createDenseTestStateGraphWithMask(strategy *samplerPkg.Strategy, g *Graph, 
 		Value: IotaFull(g, shapes.Make(dtype, lwNumPapers, 1)),
 		Mask:  Ones(g, shapes.Make(shapes.Bool, lwNumPapers)),
 	}
+
+	authorsStates := make([][][]float64, lwNumPapers)
+	authorsMask := make([][]bool, lwNumPapers)
+	count := 0.0
+	for p := range lwNumPapers {
+		authorsStates[p] = make([][]float64, lwFactor+1)
+		authorsMask[p] = make([]bool, lwFactor+1)
+		for a := range lwFactor + 1 {
+			if a < lwFactor {
+				authorsStates[p][a] = []float64{count}
+				authorsMask[p][a] = true
+				count++
+			} else {
+				authorsStates[p][a] = []float64{0}
+				authorsMask[p][a] = false
+			}
+		}
+	}
 	graphStates["authors"] = &samplerPkg.ValueMask[*Node]{
-		Value: DivScalar(IotaFull(g, shapes.Make(dtype, lwNumPapers, lwFactor, 1)), 1000.0),
-		Mask:  Ones(g, shapes.Make(shapes.Bool, lwNumPapers, lwFactor)),
+		Value: ConvertType(DivScalar(Const(g, authorsStates), 1000.0), dtype),
+		Mask:  Const(g, authorsMask),
 	}
 	if withCitation {
 		edges := strategy.ExtractSamplingEdgeIndices()
