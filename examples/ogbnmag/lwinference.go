@@ -16,7 +16,7 @@ import (
 
 func LayerWiseInference(ctx *context.Context, strategy *sampler.Strategy) tensor.Tensor {
 	var predictionsT tensor.Tensor
-	exec := context.NewExec(ctx.Manager(), ctx.Reuse(), BuildLayerWiseInferenceModel(strategy))
+	exec := context.NewExec(ctx.Manager(), ctx.Reuse(), BuildLayerWiseInferenceModel(strategy, true))
 	for _ = range 1 {
 		start := time.Now()
 		predictionsT = exec.Call()[0]
@@ -47,8 +47,9 @@ func LayerWiseInference(ctx *context.Context, strategy *sampler.Strategy) tensor
 // It takes as input the [sampler.Strategy], and returns a function that can be used with `context.NewExec`
 // and executed with the values of the MAG graph.
 //
-// It returns the predictions for all seeds shaped `Float32[NumSeedNodes, mag.NumLabels]` (or Float16).
-func BuildLayerWiseInferenceModel(strategy *sampler.Strategy) func(ctx *context.Context, g *Graph) *Node {
+// The returned function returns the predictions for all seeds shaped `Int16[NumSeedNodes]` if `predictions == true`,
+// or the readout layer shaped `Float32[NumSeedNodes, mag.NumLabels]` (or Float16) if `predictions == false`.
+func BuildLayerWiseInferenceModel(strategy *sampler.Strategy, predictions bool) func(ctx *context.Context, g *Graph) *Node {
 	return func(ctx *context.Context, g *Graph) *Node {
 		ctx = ctx.WithInitializer(initializers.GlorotUniformFn(initializers.NoSeed))
 
@@ -73,9 +74,10 @@ func BuildLayerWiseInferenceModel(strategy *sampler.Strategy) func(ctx *context.
 		lw.NodePrediction(ctx, graphStates, edges) // Last layer outputs the logits for the `NumLabels` classes.
 		readoutState := graphStates[strategy.Seeds[0].Name]
 		readoutState = layers.DenseWithBias(ctx.In("logits"), readoutState, NumLabels)
-
-		predictions := ArgMax(readoutState, -1, shapes.Int16)
-		return predictions
+		if predictions {
+			return ArgMax(readoutState, -1, shapes.Int16)
+		}
+		return readoutState
 	}
 }
 
