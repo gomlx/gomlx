@@ -141,9 +141,9 @@ func NewSamplerStrategy(magSampler *sampler.Sampler, batchSize int, seedIdsCandi
 	return strategy
 }
 
-// magCreateLabels create the labels from the input seed indices.
+// ExtractLabelsFromInput create the labels from the input seed indices.
 // It returns the same inputs and the extracted labels (with mask).
-func magCreateLabels(inputs, labels []tensor.Tensor) ([]tensor.Tensor, []tensor.Tensor) {
+func ExtractLabelsFromInput(inputs, labels []tensor.Tensor) ([]tensor.Tensor, []tensor.Tensor) {
 	seedsRef := inputs[0].Local().AcquireData()
 	defer seedsRef.Release()
 	seedsData := seedsRef.Flat().([]int32)
@@ -198,7 +198,7 @@ func MakeDatasets(dataDir string) (trainDS, trainEvalDS, validEvalDS, testEvalDS
 	// - Parallelize its generation: greatly speeds it up.
 	// - Free GPU memory in between each use, since each batch may use lots of GPU memory.
 	perDatasetFn := func(ds train.Dataset) train.Dataset {
-		ds = mldata.Map(ds, magCreateLabels)
+		ds = mldata.Map(ds, ExtractLabelsFromInput)
 		ds = mldata.Parallel(ds)
 		ds = mldata.Freeing(ds)
 		return ds

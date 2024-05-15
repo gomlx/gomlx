@@ -36,8 +36,17 @@ func LayerWiseInference(ctx *context.Context, strategy *sampler.Strategy) tensor
 				numCorrect++
 			}
 		}
-		fmt.Printf("%s Accuracy: %.2f%%\n", splitNames[splitIdx], 100.0*float64(numCorrect)/float64(len(split)))
+		fmt.Printf("%s accuracy: %.2f%%\n", splitNames[splitIdx], 100.0*float64(numCorrect)/float64(len(split)))
 	}
+
+	numCorrect := 0
+	for ii, pred := range predictions {
+		if labels[ii] == int32(pred) {
+			numCorrect++
+		}
+	}
+	fmt.Printf("Overall accuracy: %.2f%%\n", 100.0*float64(numCorrect)/float64(len(predictions)))
+
 	return predictionsT
 }
 

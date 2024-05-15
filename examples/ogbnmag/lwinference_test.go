@@ -8,12 +8,16 @@ import (
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
+	mldata "github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/schollz/progressbar/v3"
 	"github.com/stretchr/testify/require"
+	"io"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -105,9 +109,11 @@ func configureLayerWiseTestContext(ctx *context.Context) {
 	ctx.SetParam(optimizers.ParamAdamDType, "float32")
 }
 
-// TestLayerWiseInference uses [flagDataDir] to store downloaded data, which defaults to `~/work/ogbnmag` by
-// default.
-func TestLayerWiseInference(t *testing.T) {
+// TestLayerWiseInferenceLogits checks that the logits from layer-wise and by sampling are the same, for one paper
+// with a small subgraph that fits fully in memory.
+//
+// It uses [flagDataDir] to store downloaded data, which defaults to `~/work/ogbnmag` by default.
+func TestLayerWiseInferenceLogits(t *testing.T) {
 	if testing.Short() {
 		t.Skipf("Skipping TestLayerWiseInference: it requires downloading OGBN-MAG data.")
 		return
@@ -122,13 +128,14 @@ func TestLayerWiseInference(t *testing.T) {
 	// Create inputs for `seedId`.
 	require.NoError(t, Download(*flagDataDir), "Download")
 	magSampler, err := NewSampler(*flagDataDir)
+	require.NoError(t, err, "NewSampler")
 	strategy := NewSamplerStrategy(magSampler, batchSize, seedsIds)
 	ds := strategy.NewDataset("lwinference_test")
 	_, inputs, _, err := ds.Yield()
 	require.NoError(t, err, "Dataset.Yield")
 
 	manager := graphtest.BuildTestManager()
-	for ctxSourceIdx := 1; ctxSourceIdx < 2; ctxSourceIdx++ {
+	for ctxSourceIdx := 0; ctxSourceIdx < 2; ctxSourceIdx++ {
 		// Create context.
 		ctx := context.NewContext(manager)
 		UploadOgbnMagVariables(ctx)
@@ -175,4 +182,123 @@ func TestLayerWiseInference(t *testing.T) {
 				predictionsLW.Local().Value().([][]float32),
 				slices.Close[float32]))
 	}
+}
+
+// TestLayerWiseInferencePredictions checks that the layer-wise predictions of random initialized model and a trained model
+// mostly matches the sampled GNN.
+//
+// It uses [flagDataDir] to store downloaded data, which defaults to `~/work/ogbnmag` by default.
+func TestLayerWiseInferencePredictions(t *testing.T) {
+	if testing.Short() {
+		t.Skipf("Skipping TestLayerWiseInferencePredictions: it requires downloading OGBN-MAG data.")
+		return
+	}
+	fmt.Printf("Creating dataset.\n")
+	const batchSize = 32
+
+	// Create dataset with all papers.
+	require.NoError(t, Download(*flagDataDir), "Download")
+	magSampler, err := NewSampler(*flagDataDir)
+	require.NoError(t, err, "NewSampler")
+	strategy := NewSamplerStrategy(magSampler, batchSize, nil /* all papers */)
+	var ds train.Dataset
+	ds = strategy.NewDataset("lwinference_test")
+	ds = mldata.Map(ds, ExtractLabelsFromInput)
+
+	// Create context.
+	manager := graphtest.BuildTestManager()
+	ctx := context.NewContext(manager)
+	UploadOgbnMagVariables(ctx)
+	if false {
+		// Random context
+		configureLayerWiseTestContext(ctx)
+	} else {
+		// Pre-trained context
+		_, fileName, _, ok := runtime.Caller(0)
+		require.True(t, ok, "Failed to get caller information to find out test source directory.")
+		baseDir := filepath.Dir(fileName)
+		checkpoint, err := checkpoints.Build(ctx).DirFromBase("test_checkpoint", baseDir).
+			Immediate().Done()
+		fmt.Printf("\nLoaded trained context: %s\n", checkpoint.Dir())
+		require.NoError(t, err, "Checkpoint loading.")
+		ctx = ctx.Reuse()
+	}
+
+	// Execute normal inference model for the inputs.
+	executor := context.NewExec(manager, ctx, func(ctx *context.Context, inputs []*Node) []*Node {
+		labels := inputs[len(inputs)-1]
+		inputs = inputs[:len(inputs)-1]
+		predictionsAndMask := MagModelGraph(ctx, strategy, inputs)
+		predictions := ArgMax(predictionsAndMask[0], -1, shapes.Int32)
+		mask := predictionsAndMask[1]
+		correct := ConvertType(Equal(predictions, Squeeze(labels, -1)), shapes.Int32)
+		correct = Where(mask, correct, ZerosLike(correct))
+		correct = ReduceAllSum(correct)
+		count := ReduceAllSum(ConvertType(mask, shapes.Int32))
+		return []*Node{correct, count, predictions}
+	})
+	var correct, total int
+	numSteps := int64((NumPapers - batchSize + 1)) / batchSize // Each step has batchSize samples.
+	numSteps = 64
+	predictionsGNN := make([]int32, 0, numSteps*batchSize)
+	pbar := progressbar.Default(numSteps, "steps")
+	ds.Reset()
+	count := 0
+	for {
+		_, inputs, labels, err := ds.Yield()
+		if err == io.EOF || count == int(numSteps) {
+			require.NoError(t, pbar.Finish())
+			require.NoError(t, pbar.Close())
+			break
+		}
+		require.NoError(t, err, "Dataset.Yield")
+		inputs = append(inputs, labels[0])
+		var results []tensor.Tensor
+		require.NotPanics(t, func() { results = executor.Call(inputs) })
+		correct += int(results[0].Value().(int32))
+		total += int(results[1].Value().(int32))
+		predictionsGNN = append(predictionsGNN, results[2].Value().([]int32)...)
+		pbar.Add(1)
+		count++
+	}
+	fmt.Printf("predictionsGNN: %d correct out of %d, %.2f%% accuracy\n%v ...\n",
+		correct, total, 100.0*float64(correct)/float64(total), predictionsGNN[:100])
+	executor.Finalize()
+
+	// Layer-Wise inference
+	modelFn := BuildLayerWiseInferenceModel(strategy, false) // Function that builds the LW inference model.
+	numToCompare := len(predictionsGNN)
+	executor = context.NewExec(ctx.Manager(), ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
+		logits := modelFn(ctx, g)
+		predictions := ArgMax(logits, -1, shapes.Int32)
+		predictions = Slice(predictions, AxisRange(0, numToCompare))
+		return predictions
+	})
+	var results []tensor.Tensor
+	require.NotPanics(t, func() { results = executor.Call() })
+	predictionsLW := results[0].Value().([]int32)
+	correct = 0
+	labels := PapersLabels.Local().FlatCopy().([]int32)
+	for ii, value := range predictionsLW {
+		if value == labels[ii] {
+			correct++
+		}
+	}
+	fmt.Printf("\npredictionsLW: %d correct out of %d, %.2f%% accuracy\n%v...\n",
+		correct, len(predictionsLW),
+		100.0*float64(correct)/float64(len(predictionsLW)),
+		predictionsLW[:100])
+
+	// Compare how many are the same.
+	matches := 0
+	for ii, gnnValue := range predictionsGNN {
+		if gnnValue == predictionsLW[ii] {
+			matches++
+		}
+	}
+	fmt.Printf("\n%d matches out of %d (%.2f%%)\n",
+		matches, len(predictionsGNN),
+		100.0*float64(matches)/float64(len(predictionsGNN)))
+
+	_ = LayerWiseInference(ctx, strategy)
 }
