@@ -144,6 +144,7 @@ func TestLayerWiseInferenceLogits(t *testing.T) {
 			UploadOgbnMagVariables(ctx)
 
 		} else {
+			// Load from pre-trained checkpoint.
 			_, fileName, _, ok := runtime.Caller(0)
 			require.True(t, ok, "Failed to get caller information to find out test source directory.")
 			baseDir := filepath.Dir(fileName)
@@ -206,24 +207,17 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 	ds = strategy.NewDataset("lwinference_test")
 	ds = mldata.Map(ds, ExtractLabelsFromInput)
 
-	// Create context.
+	// Create context and load from pre-trained checkpoint.
 	manager := graphtest.BuildTestManager()
 	ctx := context.NewContext(manager)
-	if false {
-		// Random context
-		configureLayerWiseTestContext(ctx)
-	} else {
-		// Pre-trained context
-		_, fileName, _, ok := runtime.Caller(0)
-		require.True(t, ok, "Failed to get caller information to find out test source directory.")
-		baseDir := filepath.Dir(fileName)
-		checkpoint, err := checkpoints.Build(ctx).DirFromBase("test_checkpoint", baseDir).
-			Immediate().Done()
-		fmt.Printf("\nLoaded trained context: %s\n", checkpoint.Dir())
-		require.NoError(t, err, "Checkpoint loading.")
-		//ctx.SetParam(ParamDType, "float16") /// Shouldn't be needed
-		fmt.Printf("\t%s=%q\n", ParamDType, context.GetParamOr(ctx, ParamDType, ""))
-	}
+	_, fileName, _, ok := runtime.Caller(0)
+	require.True(t, ok, "Failed to get caller information to find out test source directory.")
+	baseDir := filepath.Dir(fileName)
+	checkpoint, err := checkpoints.Build(ctx).DirFromBase("test_checkpoint", baseDir).
+		Immediate().Done()
+	fmt.Printf("\nLoaded trained context: %s\n", checkpoint.Dir())
+	require.NoError(t, err, "Checkpoint loading.")
+	fmt.Printf("\t%s=%q\n", ParamDType, context.GetParamOr(ctx, ParamDType, ""))
 	UploadOgbnMagVariables(ctx)
 	ctx = ctx.Reuse()
 
@@ -299,9 +293,11 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 			matches++
 		}
 	}
+	matchRatio := float64(matches) / float64(len(predictionsGNN))
 	fmt.Printf("\n%d matches out of %d (%.2f%%)\n",
 		matches, len(predictionsGNN),
-		100.0*float64(matches)/float64(len(predictionsGNN)))
+		100.0*matchRatio)
+	require.Greaterf(t, matchRatio, 0.60, "Expect LayerWise inference to match at least 60% of times with sampled graph GNN inference")
 
 	_ = LayerWiseInference(ctx, strategy)
 }

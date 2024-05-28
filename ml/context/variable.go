@@ -154,20 +154,20 @@ func (v *Variable) Value() tensor.Tensor {
 }
 
 // SetValue updates the tensor holding the variable value.
-// NOTE: Because often variables are large in size, the previous value is immediately freed (as opposed to
+// NOTE: Because often variables are large, the previous value is immediately freed (as opposed to
 // wait for garbage collection). If the previous value is used somewhere else, use SetValuePreservingOld.
 func (v *Variable) SetValue(value tensor.Tensor) {
 	if v.value != nil {
 		v.value.FinalizeAll()
 	}
-	v.value = value
-	v.shape = value.Shape()
+	v.SetValuePreservingOld(value)
 }
 
 // SetValuePreservingOld updates the tensor holding the variable value, and dont' free old value. If previous
 // value is not used, use SetValue instead that will free it immediately.
 func (v *Variable) SetValuePreservingOld(value tensor.Tensor) {
 	v.value = value
+	v.shape = value.Shape()
 }
 
 // InUseByGraph returns whether the variable is currently in use by the given graph.

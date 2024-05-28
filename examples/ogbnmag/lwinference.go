@@ -1,5 +1,7 @@
 package ogbnmag
 
+// Implements OGBN-MAG model layer-wise inference.
+
 import (
 	"fmt"
 	. "github.com/gomlx/exceptions"
