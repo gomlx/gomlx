@@ -135,6 +135,30 @@ func Close[T interface{ float32 | float64 }](e0, e1 any) bool {
 	return diff < Epsilon && diff > -Epsilon
 }
 
+// CloseToEpsilon returns a comparison function that can be fed to DeepSliceCmp.
+func CloseToEpsilon[T interface{ float32 | float64 }](epsilon T) func(e0, e1 any) bool {
+	return func(e0, e1 any) bool {
+		e0v, ok := e0.(T)
+		if !ok {
+			fmt.Printf("*** Close[T] given (e0) incompatible type value %v for expected type %T\n", e0, e0v)
+			return false
+		}
+		e1v, ok := e1.(T)
+		if !ok {
+			fmt.Printf("*** Close[T] given (e1) incompatible type value %v for expected type %T\n", e1, e1v)
+			return false
+		}
+		if math.IsNaN(float64(e0v)) && math.IsNaN(float64(e1v)) {
+			return true
+		}
+		diff := e0v - e1v
+		if !(diff < epsilon && diff > -epsilon) {
+			fmt.Printf("\t***Unmatching: %v, %v, diff=%v, epsilon=%v\n", e0, e1, diff, epsilon)
+		}
+		return diff < epsilon && diff > -epsilon
+	}
+}
+
 // Equal is a comparison function that tests for exact equality, and can be fed to DeepSliceCmp.
 func Equal[T comparable](e0, e1 any) bool {
 	e0v, ok := e0.(T)
