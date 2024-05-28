@@ -150,13 +150,7 @@ func (lw *LayerWiseConfig) recursivelyApplyGraphConvolution(
 }
 
 func (lw *LayerWiseConfig) convolveEdgeSet(ctx *context.Context, ruleName string, sourceState, edgesSource, edgesTarget *Node, numTargetNodes int) *Node {
-	//fmt.Printf("\t> Convolving %q\n", ruleName)
-	//fmt.Printf("\t\tstate: state.shape=%s\n", sourceState.Shape())
-	//fmt.Printf("\tedges: {source|target}.shape=%s\n", edgesSource.Shape())
-	//ReduceAllMax(edgesSource).SetLogged(fmt.Sprintf("edges[%s].Source.Max", ruleName))
-	//ReduceAllMax(edgesTarget).SetLogged(fmt.Sprintf("edges[%s].Target.Max", ruleName))
 	messages, _ := edgeMessageGraph(ctx.In("message"), sourceState, nil)
 	pooled := poolMessagesWithAdjacency(ctx, messages, edgesSource, edgesTarget, numTargetNodes, nil)
-	//fmt.Printf("\t\tpooled: shape=%s\n", pooled.Shape())
 	return pooled
 }
