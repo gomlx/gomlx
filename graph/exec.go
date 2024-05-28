@@ -350,6 +350,18 @@ func convertToListOfTensors(args []any) []any {
 //
 // Errors (with full stack-traces) are raised with `panic`.
 func (e *Exec) CallWithGraph(args ...any) (results []tensor.Tensor, g *Graph) {
+	return e.compileAndExecute(true, args...)
+}
+
+// PreCompile will build the computation graph and compile it, but not yet execute.
+// Useful when one wants to measure the time separately, from graph compilation and its execution.
+func (e *Exec) PreCompile(args ...any) {
+	_, _ = e.compileAndExecute(false, args...)
+	return
+}
+
+// compileAndExecute compiles graph for arguments and optionally executes it.
+func (e *Exec) compileAndExecute(execute bool, args ...any) (results []tensor.Tensor, g *Graph) {
 	args = convertToListOfTensors(args)
 	if !e.inputAsSlice && len(args) != e.numInputs {
 		Panicf(
@@ -402,6 +414,9 @@ func (e *Exec) CallWithGraph(args ...any) (results []tensor.Tensor, g *Graph) {
 	}
 
 	// Execute graph.
+	if !execute {
+		return
+	}
 	var outputT *tensor.Device
 	outputT = g.RunWithTensors(tensors)
 	if entry.numOutputs == 1 {
