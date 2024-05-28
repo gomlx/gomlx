@@ -3,7 +3,9 @@ package ogbnmag
 // Implements OGBN-MAG model layer-wise inference.
 
 import (
+	"fmt"
 	. "github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/examples/notebook/gonb/plots"
 	"github.com/gomlx/gomlx/examples/ogbnmag/gnn"
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
 	. "github.com/gomlx/gomlx/graph"
@@ -39,6 +41,10 @@ func LayerWiseEvaluation(ctx *context.Context, strategy *sampler.Strategy) (trai
 
 	predictions := predictionsT.Local().Value().([]int16)
 	labels := PapersLabels.Local().FlatCopy().([]int32)
+	return layerWiseCalculateAccuracies(predictions, labels)
+}
+
+func layerWiseCalculateAccuracies(predictions []int16, labels []int32) (train, validation, test float64) {
 	splitVars := []*float64{&train, &validation, &test}
 	for splitIdx, splitT := range []tensor.Tensor{TrainSplit, ValidSplit, TestSplit} {
 		split := splitT.Local().FlatCopy().([]int32)
@@ -51,6 +57,27 @@ func LayerWiseEvaluation(ctx *context.Context, strategy *sampler.Strategy) (trai
 		*splitVars[splitIdx] = float64(numCorrect) / float64(len(split))
 	}
 	return
+}
+
+func BuildLayerWiseCustomMetricFn(ctx *context.Context, strategy *sampler.Strategy) plots.CustomMetricFn {
+	exec := context.NewExec(ctx.Manager(), ctx.Reuse(), BuildLayerWiseInferenceModel(strategy, true))
+	ctx = ctx.Reuse()
+	labels := PapersLabels.Local().FlatCopy().([]int32)
+	return func(plotter plots.Plotter, step float64) error {
+		predictions := exec.Call()[0].Local().Value().([]int16)
+		train, validation, test := layerWiseCalculateAccuracies(predictions, labels)
+		accuracies := []float64{train, validation, test}
+		names := []string{"Train", "Validation", "Test"}
+		for ii, acc := range accuracies {
+			plotter.AddPoint(plots.Point{
+				MetricName: fmt.Sprintf("%s: layer-wise eval", names[ii]),
+				MetricType: "accuracy",
+				Step:       step,
+				Value:      acc,
+			})
+		}
+		return nil
+	}
 }
 
 // BuildLayerWiseInferenceModel returns a function that builds the OGBN-MAG GNN inference model,

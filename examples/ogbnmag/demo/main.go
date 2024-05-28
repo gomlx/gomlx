@@ -47,7 +47,7 @@ func createDefaultContext(manager *Manager) *context.Context {
 
 		layers.ParamL2Regularization: 1e-5,
 		layers.ParamDropoutRate:      0.2,
-		layers.ParamActivation:       "relu",
+		layers.ParamActivation:       "swish",
 
 		gnn.ParamEdgeDropoutRate:       0.0,
 		gnn.ParamNumGraphUpdates:       6, // gnn_num_messages
@@ -130,7 +130,7 @@ func main() {
 		}
 
 		// Train.
-		err = mag.Train(ctx, *flagDataDir, !*flagSkipReport)
+		err = mag.Train(ctx, *flagDataDir, *flagLayerWise, !*flagSkipReport)
 	}
 	if err != nil {
 		fmt.Printf("%+v\n", err)

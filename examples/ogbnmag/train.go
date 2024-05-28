@@ -6,6 +6,7 @@ import (
 	"fmt"
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/examples/notebook/gonb/margaid"
+	"github.com/gomlx/gomlx/examples/notebook/gonb/plotly"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
@@ -42,7 +43,7 @@ var (
 )
 
 // Train GNN model based on configuration in `ctx`.
-func Train(ctx *context.Context, baseDir string, report bool) error {
+func Train(ctx *context.Context, baseDir string, layerWiseEval, report bool) error {
 	baseDir = mldata.ReplaceTildeInDir(baseDir)
 	ReuseShareableKernels = context.GetParamOr(ctx, ParamReuseKernels, true)
 	IdentitySubSeeds = context.GetParamOr(ctx, ParamIdentitySubSeeds, true)
@@ -110,15 +111,25 @@ func Train(ctx *context.Context, baseDir string, report bool) error {
 			})
 	}
 
-	// Attach a margaid plots: plot points at exponential steps.
+	// Attach Plotly plots: plot points at exponential steps.
 	// The points generated are saved along the checkpoint directory (if one is given).
-	var plots *margaid.Plots
+	var plots *plotly.PlotConfig
 	usePlots := context.GetParamOr(ctx, margaid.ParamPlots, false)
 	if usePlots {
-		plots = margaid.NewDefault(loop, checkpoint.Dir(), 200, 1.2, trainEvalDS, validEvalDS).
-			WithEvalLossType("eval-loss")
 		stepsPerEpoch := TrainSplit.Shape().Size()/BatchSize + 1
-		plots.PlotEveryNSteps(loop, stepsPerEpoch)
+		plots = plotly.New().Dynamic().
+			ScheduleExponential(loop, 200, 1.2).
+			ScheduleEveryNSteps(loop, stepsPerEpoch)
+		if layerWiseEval {
+			magSampler := must.M1(NewSampler(baseDir))
+			layerWiseStrategy := NewSamplerStrategy(magSampler, 1, nil)
+			plots = plots.WithCustomMetricFn(BuildLayerWiseCustomMetricFn(ctx, layerWiseStrategy))
+		} else {
+			plots = plots.WithDatasets(trainEvalDS, validEvalDS)
+		}
+		if checkpoint != nil {
+			plots = plots.WithCheckpoint(checkpoint.Dir())
+		}
 	}
 
 	// Loop for given number of steps
