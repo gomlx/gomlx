@@ -17,13 +17,11 @@ import (
 func LayerWiseInference(ctx *context.Context, strategy *sampler.Strategy) tensor.Tensor {
 	var predictionsT tensor.Tensor
 	exec := context.NewExec(ctx.Manager(), ctx.Reuse(), BuildLayerWiseInferenceModel(strategy, true))
-	for _ = range 1 {
-		start := time.Now()
-		predictionsT = exec.Call()[0]
-		fmt.Printf("predicitons.shape=%s\n", predictionsT.Shape())
-		elapsed := time.Since(start)
-		fmt.Printf("\tElapsed time: %s\n", elapsed)
-	}
+	start := time.Now()
+	predictionsT = exec.Call()[0]
+	fmt.Printf("predicitons.shape=%s\n", predictionsT.Shape())
+	elapsed := time.Since(start)
+	fmt.Printf("\tElapsed time: %s\n", elapsed)
 
 	predictions := predictionsT.Local().Value().([]int16)
 	labels := PapersLabels.Local().FlatCopy().([]int32)
@@ -46,7 +44,6 @@ func LayerWiseInference(ctx *context.Context, strategy *sampler.Strategy) tensor
 		}
 	}
 	fmt.Printf("Overall accuracy: %.2f%%\n", 100.0*float64(numCorrect)/float64(len(predictions)))
-
 	return predictionsT
 }
 

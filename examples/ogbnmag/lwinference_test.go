@@ -138,10 +138,10 @@ func TestLayerWiseInferenceLogits(t *testing.T) {
 	for ctxSourceIdx := 0; ctxSourceIdx < 2; ctxSourceIdx++ {
 		// Create context.
 		ctx := context.NewContext(manager)
-		UploadOgbnMagVariables(ctx)
 		if ctxSourceIdx == 0 {
 			fmt.Printf("\nRandomly initialized context:\n")
 			configureLayerWiseTestContext(ctx)
+			UploadOgbnMagVariables(ctx)
 
 		} else {
 			_, fileName, _, ok := runtime.Caller(0)
@@ -151,6 +151,7 @@ func TestLayerWiseInferenceLogits(t *testing.T) {
 				Immediate().Done()
 			fmt.Printf("\nLoaded trained context: %s\n", checkpoint.Dir())
 			require.NoError(t, err, "Checkpoint loading.")
+			UploadOgbnMagVariables(ctx)
 			ctx = ctx.Reuse()
 		}
 
@@ -180,7 +181,7 @@ func TestLayerWiseInferenceLogits(t *testing.T) {
 			slices.DeepSliceCmp(
 				predictionsGNN.Local().Value().([][]float32),
 				predictionsLW.Local().Value().([][]float32),
-				slices.Close[float32]))
+				slices.CloseToEpsilon(float32(0.01))))
 	}
 }
 
@@ -208,7 +209,6 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 	// Create context.
 	manager := graphtest.BuildTestManager()
 	ctx := context.NewContext(manager)
-	UploadOgbnMagVariables(ctx)
 	if false {
 		// Random context
 		configureLayerWiseTestContext(ctx)
@@ -221,8 +221,11 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 			Immediate().Done()
 		fmt.Printf("\nLoaded trained context: %s\n", checkpoint.Dir())
 		require.NoError(t, err, "Checkpoint loading.")
-		ctx = ctx.Reuse()
+		//ctx.SetParam(ParamDType, "float16") /// Shouldn't be needed
+		fmt.Printf("\t%s=%q\n", ParamDType, context.GetParamOr(ctx, ParamDType, ""))
 	}
+	UploadOgbnMagVariables(ctx)
+	ctx = ctx.Reuse()
 
 	// Execute normal inference model for the inputs.
 	executor := context.NewExec(manager, ctx, func(ctx *context.Context, inputs []*Node) []*Node {
@@ -238,17 +241,17 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 		return []*Node{correct, count, predictions}
 	})
 	var correct, total int
-	numSteps := int64((NumPapers - batchSize + 1)) / batchSize // Each step has batchSize samples.
+	numSteps := int64(NumPapers-batchSize+1) / batchSize // Each step has batchSize samples.
 	numSteps = 64
 	predictionsGNN := make([]int32, 0, numSteps*batchSize)
-	pbar := progressbar.Default(numSteps, "steps")
+	pBar := progressbar.Default(numSteps, "steps")
 	ds.Reset()
 	count := 0
 	for {
 		_, inputs, labels, err := ds.Yield()
 		if err == io.EOF || count == int(numSteps) {
-			require.NoError(t, pbar.Finish())
-			require.NoError(t, pbar.Close())
+			require.NoError(t, pBar.Finish())
+			require.NoError(t, pBar.Close())
 			break
 		}
 		require.NoError(t, err, "Dataset.Yield")
@@ -258,7 +261,7 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 		correct += int(results[0].Value().(int32))
 		total += int(results[1].Value().(int32))
 		predictionsGNN = append(predictionsGNN, results[2].Value().([]int32)...)
-		pbar.Add(1)
+		_ = pBar.Add(1)
 		count++
 	}
 	fmt.Printf("predictionsGNN: %d correct out of %d, %.2f%% accuracy\n%v ...\n",

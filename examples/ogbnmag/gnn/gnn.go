@@ -353,6 +353,11 @@ func poolMessagesWithAdjacency(ctx *context.Context, source, edgesSource, edgesT
 	}
 	g := source.Graph()
 	dtype := source.DType()
+	dtypePool := dtype
+	if dtype.IsFloat16() {
+		// Up-precision to 32 bits for pooling.
+		dtypePool = shapes.Float32
+	}
 	embSize := source.Shape().Dimensions[1]
 	numEdges := edgesSource.Shape().Dimensions[0]
 	if edgesSource.Rank() == 1 {
@@ -369,19 +374,22 @@ func poolMessagesWithAdjacency(ctx *context.Context, source, edgesSource, edgesT
 			// Get values from the source to be pooled. Since a source may contribute to more than one target
 			// node, a source value may appear more than once. Shaped `[num_edges, emb_size]`.
 			values := Gather(source, edgesSource)
-			pooled = Scatter(edgesTarget, values, shapes.Make(dtype, targetSize, embSize))
+			if dtypePool != dtype {
+				values = ConvertType(values, dtypePool)
+			}
+			pooled = Scatter(edgesTarget, values, shapes.Make(dtypePool, targetSize, embSize))
 
 			var pooledCount *Node
 			if poolType == "mean" || degree != nil {
 				// Get count of items pooled and take the mean.
-				ones := Ones(g, shapes.Make(dtype, numEdges, 1))
-				pooledCount = Scatter(edgesTarget, ones, shapes.Make(dtype, targetSize, 1))
+				ones := Ones(g, shapes.Make(dtypePool, numEdges, 1))
+				pooledCount = Scatter(edgesTarget, ones, shapes.Make(dtypePool, targetSize, 1))
 				pooledCount = MaxScalar(pooledCount, 1) // To avoid division by 0.
 				pooled = Div(pooled, pooledCount)
 			}
 			if poolType != "mean" && degree != nil {
 				// Weight mean pooled value by `degree`.
-				pooled = Mul(pooled, ConvertType(degree, pooled.DType()))
+				pooled = Mul(pooled, ConvertType(degree, dtypePool))
 			}
 			if poolType == "logsum" {
 				pooled = MirroredLog1p(pooled)
@@ -396,7 +404,11 @@ func poolMessagesWithAdjacency(ctx *context.Context, source, edgesSource, edgesT
 	if len(parts) == 1 {
 		return parts[0]
 	}
-	return Concatenate(parts, -1)
+	all := Concatenate(parts, -1)
+	if dtype != dtypePool {
+		all = ConvertType(all, dtype)
+	}
+	return all
 }
 
 // updateState of a node set, given the `input` (should be a concatenation of previous
