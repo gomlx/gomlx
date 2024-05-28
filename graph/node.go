@@ -1841,7 +1841,7 @@ func ScatterAdd(operand, indices, updates *Node) *Node {
 		scatterDimsToOperandDims = append(scatterDimsToOperandDims, ii)
 	}
 	return scatterXLA(operand, indices, updates, indicesRank-1, updateWindowsDims, insertedWindowDims, scatterDimsToOperandDims,
-		true, true)
+		false, false)
 }
 
 // Concatenate results on the given axis. A negative axis will be counted from

@@ -783,10 +783,11 @@ func gatherVJP(node, v *Node, _ shapes.Shape) []*Node {
 	}
 	var insertedWindowDims []int              // Empty, since the original GatherSlice don's have any collapsedSliceDims.
 	scatterDimsToOperandDims := startIndexMap // Same map used in GatherSlice.
-	uniqueIndices := false                    // We don't make any assumptions here. Likely the slices will overlap.
+	// We don't make any assumptions on uniqueness or sortedness of the indices. Likely the slices will overlap.
+	_ = indicesAreSorted
 	return []*Node{
 		scatterXLA(operand, startIndices, updates, indexVectorDim, updateWindowsDims, insertedWindowDims, scatterDimsToOperandDims,
-			indicesAreSorted, uniqueIndices),
+			/* indicesAreSorted */ false /* uniqueIndices */, false),
 		nil, // No gradients for indices.
 	}
 }

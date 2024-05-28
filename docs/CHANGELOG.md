@@ -21,6 +21,7 @@
   * Allow adding variables to exclude from saving after checkpoint is created -- for newly created variables.
 * Added `slices.CloseToEpsilon` to easily customize tests.
 * Fixed `Variable.SetValuePreservingOld` when shapes change.
+* `Scatter` doesn't assume indices are sorted or unique.
 
 ## 0.9.1 - 2024/04/19
 
