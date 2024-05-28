@@ -104,6 +104,11 @@ func (dtype DType) IsFloat() bool {
 	return dtype == Float32 || dtype == Float64 || dtype == Float16 || dtype == BFloat16
 }
 
+// IsFloat16 returns whether dtype is a supported float with 16 bits: [Float16] or [BFloat16].
+func (dtype DType) IsFloat16() bool {
+	return dtype == Float16 || dtype == BFloat16
+}
+
 // IsComplex returns whether dtype is a supported complex number type.
 func (dtype DType) IsComplex() bool {
 	return dtype == Complex64 || dtype == Complex128
