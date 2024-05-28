@@ -3,7 +3,6 @@ package ogbnmag
 // Implements OGBN-MAG model layer-wise inference.
 
 import (
-	"fmt"
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/examples/ogbnmag/gnn"
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
@@ -13,21 +12,34 @@ import (
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
+	"k8s.io/klog/v2"
 	"time"
 )
 
-func LayerWiseInference(ctx *context.Context, strategy *sampler.Strategy) tensor.Tensor {
+// LayerWiseEvaluation returns the train, validation and test accuracy of the model, using layer-wise inference.
+func LayerWiseEvaluation(ctx *context.Context, strategy *sampler.Strategy) (train, validation, test float64) {
 	var predictionsT tensor.Tensor
 	exec := context.NewExec(ctx.Manager(), ctx.Reuse(), BuildLayerWiseInferenceModel(strategy, true))
-	start := time.Now()
-	predictionsT = exec.Call()[0]
-	fmt.Printf("predicitons.shape=%s\n", predictionsT.Shape())
-	elapsed := time.Since(start)
-	fmt.Printf("\tElapsed time: %s\n", elapsed)
+
+	if klog.V(1).Enabled() {
+		// Report timings.
+		start := time.Now()
+		exec.PreCompile()
+		elapsed := time.Since(start)
+		klog.Infof("Layer-wise inference elapsed time (computation graph compilation): %s\n", elapsed)
+
+		start = time.Now()
+		predictionsT = exec.Call()[0]
+		elapsed = time.Since(start)
+		klog.Infof("Layer-wise inference elapsed time (execution): %s\n", elapsed)
+	} else {
+		// Just call inference.
+		predictionsT = exec.Call()[0]
+	}
 
 	predictions := predictionsT.Local().Value().([]int16)
 	labels := PapersLabels.Local().FlatCopy().([]int32)
-	splitNames := []string{"Train", "Validation", "Test"}
+	splitVars := []*float64{&train, &validation, &test}
 	for splitIdx, splitT := range []tensor.Tensor{TrainSplit, ValidSplit, TestSplit} {
 		split := splitT.Local().FlatCopy().([]int32)
 		numCorrect := 0
@@ -36,24 +48,16 @@ func LayerWiseInference(ctx *context.Context, strategy *sampler.Strategy) tensor
 				numCorrect++
 			}
 		}
-		fmt.Printf("%s accuracy: %.2f%%\n", splitNames[splitIdx], 100.0*float64(numCorrect)/float64(len(split)))
+		*splitVars[splitIdx] = float64(numCorrect) / float64(len(split))
 	}
-
-	numCorrect := 0
-	for ii, pred := range predictions {
-		if labels[ii] == int32(pred) {
-			numCorrect++
-		}
-	}
-	fmt.Printf("Overall accuracy: %.2f%%\n", 100.0*float64(numCorrect)/float64(len(predictions)))
-	return predictionsT
+	return
 }
 
 // BuildLayerWiseInferenceModel returns a function that builds the OGBN-MAG GNN inference model,
 // that expects to run inference on the whole dataset in one go.
 //
 // It takes as input the [sampler.Strategy], and returns a function that can be used with `context.NewExec`
-// and executed with the values of the MAG graph.
+// and executed with the values of the MAG graph. Batch size is irrelevant.
 //
 // The returned function returns the predictions for all seeds shaped `Int16[NumSeedNodes]` if `predictions == true`,
 // or the readout layer shaped `Float32[NumSeedNodes, mag.NumLabels]` (or Float16) if `predictions == false`.

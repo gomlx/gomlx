@@ -215,8 +215,8 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 	baseDir := filepath.Dir(fileName)
 	checkpoint, err := checkpoints.Build(ctx).DirFromBase("test_checkpoint", baseDir).
 		Immediate().Done()
-	fmt.Printf("\nLoaded trained context: %s\n", checkpoint.Dir())
 	require.NoError(t, err, "Checkpoint loading.")
+	fmt.Printf("\nLoaded trained context: %s\n", checkpoint.Dir())
 	fmt.Printf("\t%s=%q\n", ParamDType, context.GetParamOr(ctx, ParamDType, ""))
 	UploadOgbnMagVariables(ctx)
 	ctx = ctx.Reuse()
@@ -297,7 +297,5 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 	fmt.Printf("\n%d matches out of %d (%.2f%%)\n",
 		matches, len(predictionsGNN),
 		100.0*matchRatio)
-	require.Greaterf(t, matchRatio, 0.60, "Expect LayerWise inference to match at least 60% of times with sampled graph GNN inference")
-
-	_ = LayerWiseInference(ctx, strategy)
+	require.Greater(t, matchRatio, 0.60, "Expect LayerWise inference to match at least 60% of times with sampled graph GNN inference")
 }

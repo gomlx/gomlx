@@ -23,6 +23,7 @@ var (
 	flagSkipTrainEval    = flag.Bool("skip_train_eval", false, "Set to true to skip evaluation on training data, which takes longer.")
 	flagDataDir          = flag.String("data", "~/work/ogbnmag", "Directory to cache downloaded and generated dataset files.")
 	flagCheckpointSubdir = flag.String("checkpoint", "", "Checkpoint subdirectory under --data directory. If empty does not use checkpoints.")
+	flagLayerWise        = flag.Bool("layerwise", true, "Whether to use Layer-Wise inference for evaluation -- default is true.")
 )
 
 const paramWithReplacement = "mag_with_replacement"
@@ -122,13 +123,7 @@ func main() {
 	mag.WithReplacement = context.GetParamOr(ctx, paramWithReplacement, false)
 	var err error
 	if *flagEval {
-		// Evaluate on various datasets.
-		_, trainEvalDS, validEvalDS, testEvalDS := must.M4(mag.MakeDatasets(*flagDataDir))
-		if *flagSkipTrainEval {
-			err = mag.Eval(ctx, *flagDataDir, validEvalDS, testEvalDS)
-		} else {
-			err = mag.Eval(ctx, *flagDataDir, trainEvalDS, validEvalDS, testEvalDS)
-		}
+		err = mag.Eval(ctx, *flagDataDir, *flagLayerWise, *flagSkipTrainEval)
 	} else {
 		if mag.WithReplacement {
 			fmt.Println("Training dataset with replacement")
