@@ -23,6 +23,8 @@
 * Fixed `Variable.SetValuePreservingOld` when shapes change.
 * `Scatter` doesn't assume indices are sorted or unique.
 * Plotly training plots: added `WithCustomMetricFn` for custom metrics and `ScheduleEveryNSteps`.
+* Added OGBN_MAG GNN example:
+  * Including Layer-Wise Inference.
 
 ## 0.9.1 - 2024/04/19
 
