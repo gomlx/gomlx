@@ -57,6 +57,10 @@ type Plotter interface {
 	DynamicSampleDone(incomplete bool)
 }
 
+// CustomMetricFn can be used by plotters to allow the user to subscribe a function to create arbitrary metrics to
+// plot. Use
+type CustomMetricFn func(plotter Plotter, step float64) error
+
 // AddTrainAndEvalMetrics is used by plotters (see [margaid.PLots] and [plotly.PlotConfig]) to include the metrics
 // generated given training, plus to run evaluation on the given datasets.
 //
