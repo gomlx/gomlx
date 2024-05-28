@@ -17,7 +17,6 @@
 package graph
 
 import (
-	"fmt"
 	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
@@ -147,8 +146,8 @@ func deserializeGatherXLA(serialized *xla.SerializedNode) (
 func scatterXLA(operand, scatterIndices, updates *Node,
 	indexVectorDim int, updateWindowDims, insertedWindowDims, scatterDimsToOperandDims []int,
 	indicesAreSorted, uniqueIndices bool) *Node {
-	fmt.Printf("\tscatterXLA: operand=%s, scatterIndices=%s, updates=%s, indexVectorDim=%d, updateWindowDims=%v, insertedWindowDims=%v, scatterDimsToOperandDims=%v, indicesAreSorted=%v, uniqueIndices=%v\n",
-		operand.shape, scatterIndices.shape, updates.shape, indexVectorDim, updateWindowDims, insertedWindowDims, scatterDimsToOperandDims, indicesAreSorted, uniqueIndices)
+	//fmt.Printf("\tscatterXLA: operand=%s, scatterIndices=%s, updates=%s, indexVectorDim=%d, updateWindowDims=%v, insertedWindowDims=%v, scatterDimsToOperandDims=%v, indicesAreSorted=%v, uniqueIndices=%v\n",
+	//	operand.shape, scatterIndices.shape, updates.shape, indexVectorDim, updateWindowDims, insertedWindowDims, scatterDimsToOperandDims, indicesAreSorted, uniqueIndices)
 	g := validateGraphFromInputs(operand, scatterIndices, updates)
 
 	// Encoding of the values as follows. IMPORTANT: this code needs to be in sync with corresponding
