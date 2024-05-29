@@ -1786,12 +1786,16 @@ func intToBool(i int) bool {
 func Scatter(indices, updates *Node, shape shapes.Shape) *Node {
 	g := validateGraphFromInputs(indices, updates)
 	zeros := Zeros(g, shape)
-	return ScatterAdd(zeros, indices, updates)
+	return ScatterAdd(zeros, indices, updates, false, false)
 }
 
 // ScatterAdd adds up the slices in updates into the given operand tensor, at the locations pointed by indices.
 // It does the opposite of Gather.
-func ScatterAdd(operand, indices, updates *Node) *Node {
+//
+// Args:
+// - [sorted]: the indices must be in order. In some cases it is faster, but if indices are not in order results may be unstable.
+// - [unique]: the indices must be unique. In some cases it is faster, but if indices are not unique results may be unstable.
+func ScatterAdd(operand, indices, updates *Node, sorted, unique bool) *Node {
 	_ = validateGraphFromInputs(operand, indices, updates)
 
 	if !indices.shape.DType.IsInt() {
@@ -1841,7 +1845,7 @@ func ScatterAdd(operand, indices, updates *Node) *Node {
 		scatterDimsToOperandDims = append(scatterDimsToOperandDims, ii)
 	}
 	return scatterXLA(operand, indices, updates, indicesRank-1, updateWindowsDims, insertedWindowDims, scatterDimsToOperandDims,
-		false, false)
+		sorted, unique)
 }
 
 // Concatenate results on the given axis. A negative axis will be counted from

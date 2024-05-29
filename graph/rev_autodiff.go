@@ -755,7 +755,7 @@ func gatherVJP(node, v *Node, _ shapes.Shape) []*Node {
 	}
 	if isSimpleGather {
 		return []*Node{
-			Scatter(indices, v, inputShape),
+			ScatterAdd(Zeros(node.graph, inputShape), indices, v, indicesAreSorted, false),
 			nil, // No gradients for indices.
 		}
 	}
@@ -784,10 +784,9 @@ func gatherVJP(node, v *Node, _ shapes.Shape) []*Node {
 	var insertedWindowDims []int              // Empty, since the original GatherSlice don's have any collapsedSliceDims.
 	scatterDimsToOperandDims := startIndexMap // Same map used in GatherSlice.
 	// We don't make any assumptions on uniqueness or sortedness of the indices. Likely the slices will overlap.
-	_ = indicesAreSorted
 	return []*Node{
 		scatterXLA(operand, startIndices, updates, indexVectorDim, updateWindowsDims, insertedWindowDims, scatterDimsToOperandDims,
-			/* indicesAreSorted */ false /* uniqueIndices */, false),
+			/* indicesAreSorted */ indicesAreSorted /* uniqueIndices */, false),
 		nil, // No gradients for indices.
 	}
 }

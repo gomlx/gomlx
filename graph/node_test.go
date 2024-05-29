@@ -914,7 +914,7 @@ func TestScatter(t *testing.T) {
 		numbers := IotaFull(g, MakeShape(F64, 2, 3, 1))
 		indices := Const(g, [][]int{{2}, {0}})
 		operand := Ones(g, MakeShape(F64, 3, 3, 1))
-		scatter := ScatterAdd(operand, indices, numbers)
+		scatter := ScatterAdd(operand, indices, numbers, false, true)
 		g.Compile(scatter)
 		got := g.Run(nil).Local()
 		fmt.Printf("\t\tscatter=%v\n", got)
