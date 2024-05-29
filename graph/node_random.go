@@ -143,6 +143,8 @@ func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Nod
 // It will signal an error if the dtype is not float -- see RandomIntN for random integers.
 //
 // It uses and updates the random number generator (RNG) state in `rngState`.
+//
+// See [RngStateFromSeed] or [RngState] to generate a random state tensor (that can be fed to the computation graph).
 func RandomNormal(rngState *Node, shape shapes.Shape) (newRngState, values *Node) {
 	g := rngState.Graph()
 	var u1, u2 *Node
