@@ -786,7 +786,7 @@ func gatherVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// We don't make any assumptions on uniqueness or sortedness of the indices. Likely the slices will overlap.
 	return []*Node{
 		scatterXLA(operand, startIndices, updates, indexVectorDim, updateWindowsDims, insertedWindowDims, scatterDimsToOperandDims,
-			/* indicesAreSorted */ indicesAreSorted /* uniqueIndices */, false),
+			indicesAreSorted, false),
 		nil, // No gradients for indices.
 	}
 }
