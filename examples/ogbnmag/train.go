@@ -151,7 +151,7 @@ func Train(ctx *context.Context, baseDir string, layerWiseEval, report bool) err
 	// Finally, print an evaluation on train and test datasets.
 	if report {
 		fmt.Println()
-		err = commandline.ReportEval(trainer, validEvalDS, trainEvalDS)
+		err = evalWithContext(ctx, baseDir, layerWiseEval, false)
 		if err != nil {
 			return errors.WithMessage(err, "while reporting eval")
 		}
@@ -181,7 +181,10 @@ func Eval(ctx *context.Context, baseDir string, layerWise, skipTrain bool) error
 	if err := loadCheckpointToContext(ctx, baseDir); err != nil {
 		return err
 	}
+	return evalWithContext(ctx, baseDir, layerWise, skipTrain)
+}
 
+func evalWithContext(ctx *context.Context, baseDir string, layerWise, skipTrain bool) error {
 	if layerWise {
 		return evalLayerWise(ctx, baseDir)
 	}
@@ -223,6 +226,7 @@ func evalLayerWise(ctx *context.Context, baseDir string, datasets ...train.Datas
 	fmt.Printf("Train Accuracy:     \t%.2f%%\n", 100*trainAcc)
 	fmt.Printf("Validation Accuracy:\t%.2f%%\n", 100*validationAcc)
 	fmt.Printf("Test Accuracy:      \t%.2f%%\n", 100*testAcc)
+	fmt.Printf("Copy&paste version: \t%.2f%%,%.2f%%,%.2f%%", 100*trainAcc, 100*validationAcc, 100*testAcc)
 
 	// Evaluation on the various eval datasets.
 	return nil
