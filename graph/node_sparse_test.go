@@ -182,7 +182,7 @@ func BenchmarkScatter(b *testing.B) {
 		NumEntries          = 1_000_000
 		EmbeddingSize       = 32
 		BatchSize           = 100 // Number of indices to scatter
-		ConsecutiveScatters = 1
+		ConsecutiveScatters = 100
 	)
 	indices := make([]int32, BatchSize)
 	for ii := range indices {
@@ -199,14 +199,14 @@ func BenchmarkScatter(b *testing.B) {
 				dtype := values.DType()
 				zeros := Zeros(g, shapes.Make(dtype, NumEntries, EmbeddingSize))
 				indices = ExpandDims(indices, -1)
-				x := ScatterAdd(zeros, indices, values, sorted, unique)
-				for _ = range ConsecutiveScatters {
-					indices = AddScalar(indices, 1)
-					x = ScatterAdd(x, indices, values, sorted, unique)
+				parts := make([]*Node, ConsecutiveScatters)
+				for ii := range parts {
+					parts[ii] = ExpandDims(ScatterAdd(zeros, AddScalar(indices, float64(ii)), values, sorted, unique), -1)
 				}
+				x := ReduceSum(Concatenate(parts, -1), -1)
 				return Add(state, x)
 			})
-			for _, dtype := range []shapes.DType{shapes.Float16} { // shapes.Float64, shapes.Float32,
+			for _, dtype := range []shapes.DType{shapes.Float64, shapes.Float32, shapes.Float16} { //
 				// Create random values tensor shaped [BatchSize, EmbeddingSize] of the given dtype.
 				results := NewExec(manager, func(rngState *Node) (state, value *Node) {
 					_, state = RandomNormal(rngState, shapes.Make(dtype, NumEntries, EmbeddingSize))
