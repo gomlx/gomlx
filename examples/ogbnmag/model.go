@@ -79,6 +79,14 @@ func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inpu
 	g := inputs[0].Graph()
 	graphInputs, remainingInputs = sampler.MapInputsToStates[*Node](strategy, inputs)
 	dtype := getDType(ctx)
+	dtypeEmbed := dtype
+	if dtype == shapes.Float16 {
+		// If we don't do this for Float16, on a 2080ti GPU, the training becomes 3 times slower. Gemini mentioned
+		// that the RTX 30 series is better at "scattering" (used on the auto-differentiation of the "gathers" here),
+		// and may be worth a try then. But for now, leave it as Float32. Notice this is only an issue on non-sorted
+		// gathers/scatters, which is the case here (indices may come randomly).
+		dtypeEmbed = shapes.Float32
+	}
 
 	// Learnable embeddings context: it may benefit from dropout to have the model handle well
 	// the cases of unknown (zero) embeddings.
@@ -93,6 +101,9 @@ func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inpu
 		if rule.NodeTypeName == "papers" {
 			// Gather values from frozen paperEmbeddings. Mask remains unchanged.
 			graphInputs[name].Value = Gather(papersEmbeddings, ExpandDims(graphInputs[name].Value, -1))
+			if dtype != dtypeEmbed {
+				graphInputs[name].Value = ConvertType(graphInputs[name].Value, dtype)
+			}
 		}
 	}
 
@@ -104,12 +115,15 @@ func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inpu
 			// Gather values from frozen paperEmbeddings. Mask remains unchanged.
 			indices := DivScalar(graphInputs[name].Value, float64(splitEmbedTables))
 			embedded := layers.Embedding(ctxEmbed.In("institutions"), indices,
-				dtype, (NumInstitutions+splitEmbedTables-1)/splitEmbedTables, institutionsEmbedSize)
+				dtypeEmbed, (NumInstitutions+splitEmbedTables-1)/splitEmbedTables, institutionsEmbedSize)
 			if graphInputs[name].Mask != nil {
 				embedMask := layers.DropoutStatic(ctx, graphInputs[name].Mask, embedDropoutRate)
 				embedded = Where(embedMask, embedded, ZerosLike(embedded)) // Apply mask.
 			}
 			graphInputs[name].Value = embedded
+			if dtype != dtypeEmbed {
+				graphInputs[name].Value = ConvertType(graphInputs[name].Value, dtype)
+			}
 		}
 	}
 
@@ -120,13 +134,16 @@ func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inpu
 			// Gather values from frozen paperEmbeddings. Mask remains unchanged.
 			indices := DivScalar(graphInputs[name].Value, float64(splitEmbedTables))
 			embedded := layers.Embedding(ctxEmbed.In("fields_of_study"),
-				indices, dtype, (NumFieldsOfStudy+splitEmbedTables-1)/splitEmbedTables, fieldsOfStudyEmbedSize)
+				indices, dtypeEmbed, (NumFieldsOfStudy+splitEmbedTables-1)/splitEmbedTables, fieldsOfStudyEmbedSize)
 
 			if graphInputs[name].Mask != nil {
 				embedMask := layers.DropoutStatic(ctx, graphInputs[name].Mask, embedDropoutRate)
 				embedded = Where(embedMask, embedded, ZerosLike(embedded)) // Apply mask.
 			}
 			graphInputs[name].Value = embedded
+			if dtype != dtypeEmbed {
+				graphInputs[name].Value = ConvertType(graphInputs[name].Value, dtype)
+			}
 		}
 	}
 

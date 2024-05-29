@@ -278,11 +278,17 @@ func getDType(ctx *context.Context) shapes.DType {
 // One should be careful not to save the converted values -- ideally, the values are saved in the original Float32.
 func convertPapersEmbeddings(ctx *context.Context) {
 	dtype := getDType(ctx)
+	dtypeEmbed := dtype
+	if dtype == shapes.Float16 {
+		// See comment on model.go, in function FeaturePreprocessing.
+		dtypeEmbed = shapes.Float32
+	}
+
 	papersVar := ctx.InspectVariable(OgbnMagVariablesScope, "PapersEmbeddings")
-	if papersVar == nil {
+	if papersVar == nil || papersVar.Value() == nil {
 		Panicf("Cannot convert papers embeddings if variable \"PapersEmbeddings\" is not set yet")
 	}
-	if papersVar.Value().DType() == dtype {
+	if papersVar.Value().DType() == dtypeEmbed {
 		// Nothing to convert.
 		return
 	}
@@ -293,5 +299,4 @@ func convertPapersEmbeddings(ctx *context.Context) {
 	converted := e.Call()[0]
 	papersVar.SetValuePreservingOld(converted) // We don't want to destroy the unconverted values, in case we need it again (it happens in tests).
 	klog.V(1).Infof("Converted papers embeddings to %s: new shape is %s", dtype, papersVar.Shape())
-
 }
