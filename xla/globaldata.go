@@ -16,14 +16,15 @@
 
 package xla
 
-// #include <gomlx/client.h>
-// #include <gomlx/computation.h>
+// #include "gomlx/client.h"
+// #include "gomlx/computation.h"
 import "C"
 import (
 	"fmt"
-	"github.com/gomlx/gomlx/types/shapes"
 	"runtime"
 	"unsafe"
+
+	"github.com/gomlx/gomlx/types/shapes"
 )
 
 // GlobalData represents a value stored in the remote accelerator (or wherever the computation

@@ -17,11 +17,12 @@
 package graph_test
 
 import (
+	"testing"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
 	timage "github.com/gomlx/gomlx/types/tensor/image"
-	"testing"
+	"github.com/gomlx/gomlx/types/tensor"
 )
 
 func TestConvolve(t *testing.T) {

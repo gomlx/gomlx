@@ -13,20 +13,21 @@ package diffusion
 import (
 	"flag"
 	"fmt"
+	"math"
+	"strconv"
+
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/nanlogger"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/ml/layers"
-	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/losses"
+	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	timage "github.com/gomlx/gomlx/types/tensor/image"
-	"math"
-	"strconv"
 )
 
 var (

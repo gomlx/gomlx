@@ -15,10 +15,10 @@
  */
 
 // status.h holds C/Go conversion utilities, in particular handling of
-// xla::Status and xla::StatusOr.
+// absl::Status and absl::StatusOr.
 #ifndef _GOMLX_XLA_STATUS_H
 #define _GOMLX_XLA_STATUS_H
-// status.h holds the simplified C interface to xla::Status and xla::StatusOr
+// status.h holds the simplified C interface to absl::Status and absl::StatusOr
 // objects.
 #include <stdlib.h>
 
@@ -31,7 +31,7 @@ typedef _Bool bool;
 extern "C" {
 #endif
 
-// XlaStatus behind the scenes is a xla::Status type.
+// XlaStatus behind the scenes is a absl::Status type.
 typedef void XlaStatus;
 
 // StatusOr contains status or the value from the C++ StatusOr.
@@ -71,8 +71,8 @@ typedef struct {
 #include <string>
 #include <vector>
 
-#include "xla/status.h"
-#include "xla/statusor.h"
+#include "third_party/tensorflow/compiler/xla/status.h"
+#include "third_party/tensorflow/compiler/xla/statusor.h"
 // #include "xla/xla/shape_util.h"
 
 // Malloc is a convenience allocation of individual items or arrays (for n>1)
@@ -109,13 +109,13 @@ extern VectorPointers *c_vector_str(const std::vector<std::string> &v);
 
 // FromStatus creates a dynamically allocated status (aliased to *XlaStatus)
 // from the given one -- contents are transferred.
-XlaStatus *FromStatus(const xla::Status &status);
+XlaStatus *FromStatus(const absl::Status &status);
 
 template <typename T>
-StatusOr FromStatusOr(xla::StatusOr<std::unique_ptr<T>> &statusor) {
+StatusOr FromStatusOr(absl::StatusOr<std::unique_ptr<T>> &statusor) {
   StatusOr r;
   r.status =
-      static_cast<XlaStatus *>(new xla::Status(std::move(statusor.status())));
+      static_cast<XlaStatus *>(new absl::Status(std::move(statusor.status())));
   if (statusor.ok()) {
     r.value = static_cast<void *>(statusor->get());
     statusor->release(); // Ownership should go to StatusOr.
@@ -123,10 +123,11 @@ StatusOr FromStatusOr(xla::StatusOr<std::unique_ptr<T>> &statusor) {
   return r;
 }
 
-template <typename T> StatusOr FromStatusOr(xla::StatusOr<T *> &status_or) {
+template <typename T>
+StatusOr FromStatusOr(absl::StatusOr<T *> &status_or) {
   StatusOr r;
   r.status =
-      static_cast<XlaStatus *>(new xla::Status(std::move(status_or.status())));
+      static_cast<XlaStatus *>(new absl::Status(std::move(status_or.status())));
   if (status_or.ok()) {
     r.value = static_cast<void *>(status_or.Value());
   }

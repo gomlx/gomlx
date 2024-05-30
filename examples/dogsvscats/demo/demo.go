@@ -26,26 +26,27 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
+	"os"
+	"time"
+
 	"github.com/gomlx/gomlx/examples/dogsvscats"
 	"github.com/gomlx/gomlx/examples/notebook/gonb/margaid"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/nanlogger"
-	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
+	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"
-	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/commandline"
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/models/inceptionv3"
 	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
-	"log"
-	"os"
-	"time"
 )
 
 var (

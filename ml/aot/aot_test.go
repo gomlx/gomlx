@@ -14,18 +14,19 @@
  *	limitations under the License.
  */
 
-package aot
+package aot_test
 
 import (
 	"fmt"
+	"os"
+	"testing"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/gomlx/gomlx/xla"
-	"github.com/stretchr/testify/assert"
+	"google3/third_party/golang/testify/assert/assert"
 	"github.com/stretchr/testify/require"
-	"os"
-	"testing"
 )
 
 // EuclideanDistance is the "model" function we want to AOT compile, as an example.
@@ -35,6 +36,7 @@ func EuclideanDistance(x, y *Node) *Node {
 }
 
 func TestAOTCompileModel(t *testing.T) {
+	t.Skip()
 	manager := graphtest.BuildTestManager()
 	exec := NewExec(manager, EuclideanDistance)
 

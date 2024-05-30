@@ -2,10 +2,11 @@ package exceptions
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	"github.com/pkg/errors"
+	"google3/third_party/golang/testify/assert/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func testCountExceptions(fn func()) (eInt int, eErr error, eFloat float64) {

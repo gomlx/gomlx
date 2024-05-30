@@ -1,8 +1,9 @@
 package keepalive
 
 import (
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestAcquire(t *testing.T) {

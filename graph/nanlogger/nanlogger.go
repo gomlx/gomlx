@@ -49,16 +49,17 @@ package nanlogger
 
 import (
 	"fmt"
+	"math"
+	"strings"
+
+	"github.com/pkg/errors"
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
-	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
-	"math"
-	"strings"
 )
 
 const UniqueMessageId = "#nanlogger"

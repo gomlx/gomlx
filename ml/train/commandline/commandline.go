@@ -20,13 +20,15 @@ package commandline
 
 import (
 	"fmt"
+	"os"
+	"strings"
+
+	"github.com/schollz/progressbar/v3"
+
 	"github.com/gomlx/gomlx/examples/notebook"
 	"github.com/gomlx/gomlx/ml/train"
 	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/tensor"
-	"github.com/schollz/progressbar/v3"
-	"os"
-	"strings"
 )
 
 // progressBar holds a progressbar being displayed.

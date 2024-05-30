@@ -24,12 +24,12 @@ limitations under the License.
 
 #include <string>
 
-#include "absl/status/status.h"
-#include "llvm/Support/SourceMgr.h"
-#include "llvm/Support/raw_ostream.h"
-#include "mlir/IR/Diagnostics.h"  // from @llvm-project
-#include "mlir/IR/Location.h"  // from @llvm-project
-#include "mlir/IR/MLIRContext.h"  // from @llvm-project
+#include "third_party/absl/status/status.h"
+#include "third_party/llvm/llvm-project/llvm/include/llvm/Support/SourceMgr.h"
+#include "third_party/llvm/llvm-project/llvm/include/llvm/Support/raw_ostream.h"
+#include "third_party/llvm/llvm-project/mlir/include/mlir/IR/Diagnostics.h"  // from @llvm-project
+#include "third_party/llvm/llvm-project/mlir/include/mlir/IR/Location.h"  // from @llvm-project
+#include "third_party/llvm/llvm-project/mlir/include/mlir/IR/MLIRContext.h"  // from @llvm-project
 
 // Error utilities for MLIR when interacting with code using Status returns.
 // Temporarily renamed namespace to gomlx_mlir.

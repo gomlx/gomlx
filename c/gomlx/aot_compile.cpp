@@ -27,52 +27,52 @@
 #include <string>
 #include <vector>
 
-#include "gomlx/aot_compile.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/aot_compile.h"
 
-#include "gomlx/client.h"
-#include "gomlx/literal.h"
-#include "gomlx/on_device_buffer.h"
-#include "gomlx/status.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/client.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/literal.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/on_device_buffer.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/status.h"
 
-#include "absl/strings/str_format.h"
-#include "absl/types/span.h"
+#include "third_party/absl/strings/str_format.h"
+#include "third_party/absl/types/span.h"
 
-#include "mlir/IR/BuiltinOps.h"
-#include "mlir/IR/Verifier.h"      // from @llvm-project
-#include "mlir/Pass/PassManager.h" // from @llvm-project
+#include "third_party/llvm/llvm-project/mlir/include/mlir/IR/BuiltinOps.h"
+#include "third_party/llvm/llvm-project/mlir/include/mlir/IR/Verifier.h" // from @llvm-project
+#include "third_party/llvm/llvm-project/mlir/include/mlir/Pass/PassManager.h" // from @llvm-project
 
-#include "stablehlo/api/PortableApi.h"
-#include "stablehlo/dialect/Serialization.h"
+#include "third_party/stablehlo/stablehlo/api/PortableApi.h"
+#include "third_party/stablehlo/stablehlo/dialect/Serialization.h"
 
-#include "xla/array.h"
-#include "xla/client/client.h"
-#include "xla/client/client_library.h"
-#include "xla/client/lib/arithmetic.h"
-#include "xla/client/xla_builder.h"
-#include "xla/debug_options_flags.h"
-#include "xla/execution_options_util.h"
-#include "xla/hlo/ir/hlo_module.h"
-#include "xla/literal.h"
-#include "xla/mlir_hlo/mhlo/transforms/passes.h"
-#include "xla/service/compiler.h"
-#include "xla/service/cpu/cpu_compiler.h"
-#include "xla/service/cpu/cpu_executable.h"
-#include "xla/service/cpu/executable.pb.h"
-#include "xla/service/hlo.pb.h"
-#include "xla/service/hlo_module_config.h"
-#include "xla/service/platform_util.h"
-#include "xla/service/shaped_buffer.h"
-#include "xla/status.h"
-#include "xla/statusor.h"
-#include "xla/stream_executor/host/host_platform_id.h"
-#include "xla/stream_executor/platform.h"
-#include "xla/translate/hlo_to_mhlo/hlo_to_mlir_hlo.h"
-#include "xla/types.h"
-#include "xla/xla_data.pb.h"
+#include "third_party/tensorflow/compiler/xla/array.h"
+#include "third_party/tensorflow/compiler/xla/client/client.h"
+#include "third_party/tensorflow/compiler/xla/client/client_library.h"
+#include "third_party/tensorflow/compiler/xla/client/lib/arithmetic.h"
+#include "third_party/tensorflow/compiler/xla/client/xla_builder.h"
+#include "third_party/tensorflow/compiler/xla/debug_options_flags.h"
+#include "third_party/tensorflow/compiler/xla/execution_options_util.h"
+#include "third_party/tensorflow/compiler/xla/hlo/ir/hlo_module.h"
+#include "third_party/tensorflow/compiler/xla/literal.h"
+#include "third_party/tensorflow/compiler/xla/mlir/utils/error_util.h"
+#include "third_party/tensorflow/compiler/xla/mlir_hlo/mhlo/transforms/passes.h"
+#include "third_party/tensorflow/compiler/xla/service/compiler.h"
+#include "third_party/tensorflow/compiler/xla/service/cpu/cpu_compiler.h"
+#include "third_party/tensorflow/compiler/xla/service/cpu/cpu_executable.h"
+#include "third_party/tensorflow/compiler/xla/service/cpu/executable.pb.h"
+#include "third_party/tensorflow/compiler/xla/service/hlo.pb.h"
+#include "third_party/tensorflow/compiler/xla/service/hlo_module_config.h"
+#include "third_party/tensorflow/compiler/xla/service/platform_util.h"
+#include "third_party/tensorflow/compiler/xla/service/shaped_buffer.h"
+#include "third_party/tensorflow/compiler/xla/status.h"
+#include "third_party/tensorflow/compiler/xla/statusor.h"
+#include "third_party/tensorflow/compiler/xla/stream_executor/host/host_platform_id.h"
+#include "third_party/tensorflow/compiler/xla/stream_executor/platform.h"
+#include "third_party/tensorflow/compiler/xla/translate/hlo_to_mhlo/hlo_to_mlir_hlo.h"
+#include "third_party/tensorflow/compiler/xla/types.h"
+#include "third_party/tensorflow/compiler/xla/xla_data.pb.h"
 
 // Third-party dependency directly imported into repository:
-// #include "xla/mlir/utils/error_util.h"
-#include "deps/xla_mlir/error_util.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/deps/xla_mlir/error_util.h"
 
 using namespace std;
 
@@ -89,7 +89,7 @@ std::string StableHLOToStringImplementation(mlir::ModuleOp module) {
 // ConvertXlaComputationToStableHLOImplementation returns teh StableHLO
 // referenced by an mlir::ModuleOp within the given `mlir::MLIRContext`. If the
 // context is destroyed the returned StableHLO becomes invalid.
-xla::StatusOr<mlir::ModuleOp> ConvertXlaComputationToStableHLOImplementation(
+absl::StatusOr<mlir::ModuleOp> ConvertXlaComputationToStableHLOImplementation(
     const xla::XlaComputation &xla_comp, mlir::MLIRContext &context) {
   xla::HloModuleProto hlo_module_proto = xla_comp.proto();
   TF_ASSIGN_OR_RETURN(xla::ProgramShape program_shape,
@@ -109,14 +109,14 @@ xla::StatusOr<mlir::ModuleOp> ConvertXlaComputationToStableHLOImplementation(
 
   mlir::TmpBaseScopedDiagnosticHandler diagnostic(&context); // Error collector.
   if (!mlir::verify(module).succeeded()) {
-    return tsl::FromAbslStatus(diagnostic.ConsumeStatus());
+    return diagnostic.ConsumeStatus();
   }
 
   // Convert to StableHLO.
   mlir::PassManager pm(&context);
   pm.addPass(mlir::mhlo::createHloLegalizeToStablehloPass());
   if (!mlir::succeeded(pm.run(module))) {
-    return tsl::FromAbslStatus(diagnostic.ConsumeStatus());
+    return diagnostic.ConsumeStatus();
   }
   return module;
 }
@@ -124,8 +124,8 @@ xla::StatusOr<mlir::ModuleOp> ConvertXlaComputationToStableHLOImplementation(
 StatusOr ConvertComputationToStableHLO(Computation *comp) {
   StatusOr r{0, 0};
   if (comp->xla_comp == nullptr) {
-    r.status = new xla::Status(absl::StatusCode::kInvalidArgument,
-                               "Computation hasn't been compiled yet");
+    r.status = new absl::Status(absl::StatusCode::kInvalidArgument,
+                                "Computation hasn't been compiled yet");
     return r;
   }
 
@@ -199,7 +199,7 @@ StatusOr UnserializeStableHLO(VectorData *serialized) {
   delete serialized;
 
   if (!module) {
-    r.status = FromStatus(tsl::FromAbslStatus(diagnostic.ConsumeStatus()));
+    r.status = FromStatus(diagnostic.ConsumeStatus());
     return r;
   }
   holder->stable_hlo = module.release();
@@ -209,8 +209,8 @@ StatusOr UnserializeStableHLO(VectorData *serialized) {
 
 // aotCompileCpuExecutable compiles for CPU, based on
 // `openxla/xla/xla/service/xla_compile_main.cc`.
-xla::StatusOr<std::string>
-aotCompileCpuExecutable(std::unique_ptr<xla::HloModule> hlo_module) {
+absl::StatusOr<std::string> aotCompileCpuExecutable(
+    std::unique_ptr<xla::HloModule> hlo_module) {
   xla::cpu::CpuCompiler cpu_compiler;
   TF_ASSIGN_OR_RETURN(
       std::unique_ptr<xla::cpu::CpuExecutable> cpu_executable,
@@ -228,9 +228,9 @@ aotCompileCpuExecutable(std::unique_ptr<xla::HloModule> hlo_module) {
   return result;
 }
 
-xla::StatusOr<std::string>
-aotCompileToSerialized2(stream_executor::Platform *platform,
-                        std::unique_ptr<xla::HloModule> hlo_module) {
+absl::StatusOr<std::string> aotCompileToSerialized2(
+    stream_executor::Platform *platform,
+    std::unique_ptr<xla::HloModule> hlo_module) {
   cerr << "Finding compiler..." << endl;
   TF_ASSIGN_OR_RETURN(xla::Compiler * compiler,
                       xla::Compiler::GetForPlatform(platform));
@@ -251,10 +251,10 @@ aotCompileToSerialized2(stream_executor::Platform *platform,
   return result;
 }
 
-xla::StatusOr<std::string> aotCompileToSerialized3(Client *client,
-                                                   Computation *comp,
-                                                   int num_params,
-                                                   Shape **param_shapes) {
+absl::StatusOr<std::string> aotCompileToSerialized3(Client *client,
+                                                    Computation *comp,
+                                                    int num_params,
+                                                    Shape **param_shapes) {
   xla::ExecutableBuildOptions executable_build_options;
   std::vector<xla::Shape> shapes(num_params);
   for (int ii = 0; ii < num_params; ii++) {
@@ -279,8 +279,8 @@ StatusOr ClientAOTCompileComputation(Client *client, Computation *comp,
                                      int num_params, Shape **param_shapes) {
   StatusOr r{0, 0};
   if (comp->xla_comp == nullptr) {
-    r.status = new xla::Status(absl::StatusCode::kInvalidArgument,
-                               "Computation hasn't been compiled yet");
+    r.status = new absl::Status(absl::StatusCode::kInvalidArgument,
+                                "Computation hasn't been compiled yet");
     return r;
   }
 
@@ -326,9 +326,9 @@ StatusOr ClientAOTCompileComputation(Client *client, Computation *comp,
       r.value = static_cast<void *>(str_to_bytes(string_or.value()));
     }
   } else {
-    r.status = new xla::Status(absl::StatusCode::kInvalidArgument,
-                               "Unsupported platform " + platform->Name() +
-                                   ", not able to AOT compile");
+    r.status = new absl::Status(absl::StatusCode::kInvalidArgument,
+                                "Unsupported platform " + platform->Name() +
+                                    ", not able to AOT compile");
   }
   return r;
 }

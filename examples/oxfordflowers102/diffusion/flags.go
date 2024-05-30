@@ -2,12 +2,13 @@ package diffusion
 
 import (
 	"flag"
+	"log"
+	"sync"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/nanlogger"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/types/shapes"
-	"log"
-	"sync"
 )
 
 var (

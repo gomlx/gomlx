@@ -18,10 +18,13 @@ package graph
 
 import (
 	"fmt"
+	"testing"
+
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/stretchr/testify/require"
-	"testing"
+
+	_ "github.com/gomlx/gomlx/xla/cpu"
 )
 
 type graphFnOneInputToTest func(g *Graph) (input, output *Node)

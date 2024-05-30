@@ -18,10 +18,11 @@ package losses
 
 import (
 	"fmt"
+	"testing"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/types/slices"
-	"testing"
 )
 
 // gradTestFunc takes a graph and returns the output being tested, along the nodes that

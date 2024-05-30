@@ -45,11 +45,12 @@ package tensor
 
 import (
 	"fmt"
-	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/xla"
-	"github.com/pkg/errors"
 	"reflect"
 	"sync"
+
+	"github.com/pkg/errors"
+	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/xla"
 )
 
 // Tensor represents a multidimensional arrays (from scalar with 0 dimensions, to arbitrarily large dimensions), defined

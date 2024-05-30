@@ -18,12 +18,11 @@ package xla
 
 // This file includes wrappers around xla::Service and xla::ClientLibrary.
 
-// #include <gomlx/client.h>
-// #include <gomlx/aot_exec.h>
+// #include "gomlx/client.h"
 import "C"
+
 import (
 	"fmt"
-	"github.com/pkg/errors"
 	"os"
 	"runtime"
 	"unsafe"
@@ -135,15 +134,6 @@ func NewClient(platform string, numReplicas, numThreads int) (*Client, error) {
 		platform, err = GetDefaultPlatform()
 		if err != nil {
 			return nil, err
-		}
-	}
-	if platform == "CUDA" {
-		if !LibDeviceFound {
-			return nil, errors.New(LibDeviceNotFoundErrorMessage)
-		} else if !DirHasLibdevice(LibDeviceDir) {
-			return nil, errors.Errorf(
-				"GPU/CUDA directory provided (%q) doesn't have a `nvvm/libdevice/libdevice.10.bc`.\n%s",
-				LibDeviceDir, LibDeviceNotFoundErrorMessage)
 		}
 	}
 	statusOr := C.NewClient(C.CString(platform), C.int(numReplicas), C.int(numThreads))

@@ -24,12 +24,6 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
-	"github.com/gomlx/gomlx/ml/data"
-	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
-	"github.com/gomlx/gomlx/types/tensor"
-	"github.com/pkg/errors"
 	"io"
 	"math/rand"
 	"os"
@@ -40,6 +34,13 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/pkg/errors"
+	"github.com/gomlx/gomlx/ml/data"
+	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/slices"
+	"github.com/gomlx/gomlx/types/tensor"
 )
 
 const (

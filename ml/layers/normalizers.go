@@ -17,10 +17,11 @@
 package layers
 
 import (
+	"log"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/types/slices"
-	"log"
 )
 
 var (

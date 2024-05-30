@@ -20,28 +20,28 @@
 #include <string>
 #include <vector>
 
-#include "gomlx/client.h"
-#include "gomlx/literal.h"
-#include "gomlx/on_device_buffer.h"
-#include "gomlx/status.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/client.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/literal.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/on_device_buffer.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/status.h"
 
-#include "absl/strings/str_format.h"
-#include "absl/types/span.h"
-#include "xla/array.h"
-#include "xla/client/client.h"
-#include "xla/client/client_library.h"
-#include "xla/client/lib/arithmetic.h"
-#include "xla/client/xla_builder.h"
-#include "xla/execution_options_util.h"
-#include "xla/literal.h"
-#include "xla/service/platform_util.h"
-#include "xla/service/shaped_buffer.h"
-#include "xla/status.h"
-#include "xla/statusor.h"
-#include "xla/types.h"
-#include "xla/xla_data.pb.h"
+#include "third_party/absl/strings/str_format.h"
+#include "third_party/absl/types/span.h"
+#include "third_party/tensorflow/compiler/xla/array.h"
+#include "third_party/tensorflow/compiler/xla/client/client.h"
+#include "third_party/tensorflow/compiler/xla/client/client_library.h"
+#include "third_party/tensorflow/compiler/xla/client/lib/arithmetic.h"
+#include "third_party/tensorflow/compiler/xla/client/xla_builder.h"
+#include "third_party/tensorflow/compiler/xla/execution_options_util.h"
+#include "third_party/tensorflow/compiler/xla/literal.h"
+#include "third_party/tensorflow/compiler/xla/service/platform_util.h"
+#include "third_party/tensorflow/compiler/xla/service/shaped_buffer.h"
+#include "third_party/tensorflow/compiler/xla/status.h"
+#include "third_party/tensorflow/compiler/xla/statusor.h"
+#include "third_party/tensorflow/compiler/xla/types.h"
+#include "third_party/tensorflow/compiler/xla/xla_data.pb.h"
 
-#include "computation.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/computation.h"
 
 using namespace std;
 
@@ -67,9 +67,8 @@ Computation *NewComputation(char *name) {
 
 void DeleteXlaOp(XlaOp *op) { delete (static_cast<xla::XlaOp *>(op)); }
 
-xla::StatusOr<xla::XlaComputation> xlaCompForReduction(xla::XlaBuilder *builder,
-                                                       xla::XlaOp &init_op,
-                                                       int32_t node_type) {
+absl::StatusOr<xla::XlaComputation> xlaCompForReduction(
+    xla::XlaBuilder *builder, xla::XlaOp &init_op, int32_t node_type) {
   auto shape_or = builder->GetShape(init_op);
   if (!shape_or.ok()) {
     return shape_or.status();
@@ -85,7 +84,7 @@ xla::StatusOr<xla::XlaComputation> xlaCompForReduction(xla::XlaBuilder *builder,
   case ReduceMultiplyNode:
     return CreateScalarMultiplyComputation(primitive_type, builder);
   }
-  return xla::Status(
+  return absl::Status(
       absl::StatusCode::kInvalidArgument,
       absl::StrFormat("invalid node_type=%d for xlaCompForReduction",
                       node_type));
@@ -170,7 +169,7 @@ XlaStatus *ComputationAddOp(Computation *comp, SerializedNode *node) {
     auto reduce_comp_or =
         xlaCompForReduction(builder, *inputs[1], node->node_type);
     if (!reduce_comp_or.ok()) {
-      return new xla::Status(reduce_comp_or.status());
+      return new absl::Status(reduce_comp_or.status());
     }
     auto reduce_comp = std::move(reduce_comp_or.value());
     if (node->integer_array_size > 0) {
@@ -269,7 +268,7 @@ XlaStatus *ComputationAddOp(Computation *comp, SerializedNode *node) {
     // Create the update computation: only Add supported for now.
     auto shape_or = builder->GetShape(*inputs[0]);
     if (!shape_or.ok()) {
-      return new xla::Status(std::move(shape_or.status()));
+      return new absl::Status(std::move(shape_or.status()));
     }
     xla::PrimitiveType primitive_type = shape_or.value().element_type();
     auto update_computation =
@@ -357,7 +356,7 @@ XlaStatus *ComputationAddOp(Computation *comp, SerializedNode *node) {
     auto reduce_comp_or =
         xlaCompForReduction(builder, *inputs[1], reduction_type);
     if (!reduce_comp_or.ok()) {
-      return new xla::Status(reduce_comp_or.status());
+      return new absl::Status(reduce_comp_or.status());
     }
     auto reduce_comp = std::move(reduce_comp_or.value());
 
@@ -391,7 +390,7 @@ XlaStatus *ComputationAddOp(Computation *comp, SerializedNode *node) {
     // Create select and scatter comps.
     auto shape_or = builder->GetShape(init_value);
     if (!shape_or.ok()) {
-      return new xla::Status(shape_or.status());
+      return new absl::Status(shape_or.status());
     }
     xla::PrimitiveType primitive_type =
         shape_or.value().element_type(); // They are both ints.
@@ -453,7 +452,7 @@ XlaStatus *ComputationAddOp(Computation *comp, SerializedNode *node) {
     auto &lhs = *inputs[0]; // left-hand-side.
     auto &rhs = *inputs[1];
     xla::DotDimensionNumbers dims;
-    std::vector<google::protobuf::RepeatedField<google::protobuf::int64> *>
+    std::vector<proto2::RepeatedField<int64> *>
         lists = {dims.mutable_lhs_contracting_dimensions(),
                  dims.mutable_lhs_batch_dimensions(),
                  dims.mutable_rhs_contracting_dimensions(),
@@ -640,7 +639,7 @@ XlaStatus *ComputationAddOp(Computation *comp, SerializedNode *node) {
     break;
 
   default:
-    return new xla::Status(
+    return new absl::Status(
         absl::StatusCode::kInvalidArgument,
         absl::StrFormat("invalid node_type=%d for ComputationAddOp",
                         node->node_type));
@@ -648,9 +647,9 @@ XlaStatus *ComputationAddOp(Computation *comp, SerializedNode *node) {
   if (!op.valid()) {
     auto status = comp->builder->first_error();
     if (!status.ok()) {
-      return new xla::Status(status);
+      return new absl::Status(status);
     }
-    return new xla::Status(
+    return new absl::Status(
         absl::StatusCode::kInvalidArgument,
         absl::StrFormat("failed to convert node to XLA: node_type=%d",
                         node->node_type));
@@ -695,7 +694,7 @@ XlaStatus *ClientCompileComputation(Client *client, Computation *comp,
   }
   auto local_execs = std::move(status_or.value());
   if (local_execs.size() > 1) {
-    return new xla::Status(
+    return new absl::Status(
         absl::StatusCode::kInvalidArgument,
         absl::StrFormat("compilation for multiple partitions not allowed, got "
                         "%d partitions, wanted only one",

@@ -18,10 +18,11 @@ package graph
 
 import (
 	"fmt"
-	"github.com/gomlx/gomlx/xla"
-	"github.com/pkg/errors"
 	"os"
 	"sync"
+
+	"github.com/pkg/errors"
+	"github.com/gomlx/gomlx/xla"
 )
 
 // GetPlatforms lists the available platforms. Returns `([]string, error)`.

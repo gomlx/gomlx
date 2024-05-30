@@ -19,12 +19,13 @@
 package optimizers
 
 import (
+	"log"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
-	"log"
 )
 
 // Interface implemented by optimizer implementations.

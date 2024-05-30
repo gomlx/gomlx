@@ -17,12 +17,15 @@
 package nanlogger
 
 import (
-	. "github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/graph/graphtest"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"math"
 	"testing"
+
+	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/graph/graphtest"
+	"google3/third_party/golang/testify/assert/assert"
+	"github.com/stretchr/testify/require"
+
+	_ "github.com/gomlx/gomlx/xla/cpu"
 )
 
 func TestNanLogger(t *testing.T) {

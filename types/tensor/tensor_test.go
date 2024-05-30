@@ -20,14 +20,17 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
-	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
-	"github.com/gomlx/gomlx/xla"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"reflect"
 	"strconv"
 	"testing"
+
+	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/slices"
+	"github.com/gomlx/gomlx/xla"
+	"google3/third_party/golang/testify/assert/assert"
+	"github.com/stretchr/testify/require"
+
+	_ "github.com/gomlx/gomlx/xla/cpu"
 )
 
 func cmpShapes(t *testing.T, shape, wantShape shapes.Shape, err error) {

@@ -17,11 +17,12 @@
 package optimizers
 
 import (
+	"math"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
-	"math"
 )
 
 // This file implements learning rate schedules.

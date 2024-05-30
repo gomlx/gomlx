@@ -16,7 +16,6 @@
 
 package xla
 
-// #include "gomlx/aot_compile.h"
 // #include "gomlx/client.h"
 // #include "gomlx/computation.h"
 // #include "gomlx/shape.h"
@@ -24,11 +23,12 @@ import "C"
 
 import (
 	"fmt"
-	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/pkg/errors"
 	"log"
 	"runtime"
 	"unsafe"
+
+	"github.com/pkg/errors"
+	"github.com/gomlx/gomlx/types/shapes"
 )
 
 // Computation is a wrapper for the C++ `XlaComputation`.
@@ -232,22 +232,25 @@ func (comp *Computation) Run(params []*OnDeviceBuffer) (*OnDeviceBuffer, error) 
 // It returns a binary serialized format that can be executed later, without linking the whole GoMLX machinery.
 // See tutorial on instructions and an example of how to do this.
 func (comp *Computation) AOTCompile(paramShapes []shapes.Shape) ([]byte, error) {
-	if comp.IsNil() || comp.firstError != nil {
-		return nil, errors.Errorf("Computation graph is nil!?")
-	}
-	if comp.firstError != nil {
-		return nil, comp.firstError
-	}
-	if !comp.client.Ok() {
-		return nil, errors.Errorf("the Client associated to Computation is not ok (finalized?)")
-	}
-	numParams := len(paramShapes)
-	cShapes, cShapesSlice := newShapesCArray(paramShapes)
-	statusOr := C.ClientAOTCompileComputation(comp.client.cClientPtr, comp.cCompPtr, C.int(numParams), cShapes)
-	freeShapesCArray(cShapes, cShapesSlice)
-	vec, err := PointerOrError[C.VectorData](statusOr)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed conversion in Computation.ReadableStableHLO")
-	}
-	return VectorDataToSlice[byte](vec), nil
+	return nil, errors.Errorf("AOTCompile disabled on google3")
+	/*
+		if comp.IsNil() || comp.firstError != nil {
+			return nil, errors.Errorf("Computation graph is nil!?")
+		}
+		if comp.firstError != nil {
+			return nil, comp.firstError
+		}
+		if !comp.client.Ok() {
+			return nil, errors.Errorf("the Client associated to Computation is not ok (finalized?)")
+		}
+		numParams := len(paramShapes)
+		cShapes, cShapesSlice := newShapesCArray(paramShapes)
+		statusOr := C.ClientAOTCompileComputation(comp.client.cClientPtr, comp.cCompPtr, C.int(numParams), cShapes)
+		freeShapesCArray(cShapes, cShapesSlice)
+		vec, err := PointerOrError[C.VectorData](statusOr)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed conversion in Computation.ReadableStableHLO")
+		}
+		return VectorDataToSlice[byte](vec), nil
+	*/
 }

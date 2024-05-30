@@ -18,10 +18,11 @@ package graph_test
 
 import (
 	"fmt"
+	"testing"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/types/shapes"
 	timage "github.com/gomlx/gomlx/types/tensor/image"
-	"testing"
 )
 
 func TestMaxPool(t *testing.T) {

@@ -3,18 +3,19 @@ package inceptionv3
 import (
 	"flag"
 	"fmt"
-	. "github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/graph/graphtest"
-	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
-	timage "github.com/gomlx/gomlx/types/tensor/image"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"image"
 	_ "image/png"
 	"os"
 	"testing"
+
+	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/graph/graphtest"
+	"github.com/gomlx/gomlx/ml/context"
+	"github.com/gomlx/gomlx/types/shapes"
+	timage "github.com/gomlx/gomlx/types/tensor/image"
+	"github.com/gomlx/gomlx/types/tensor"
+	"google3/third_party/golang/testify/assert/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var flagDataDir = flag.String("data", "/tmp/gomlx_inceptionv3", "Directory where to save and load model data.")

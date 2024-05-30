@@ -84,12 +84,13 @@ package graph
 
 import (
 	"fmt"
+	"strings"
+
+	"github.com/pkg/errors"
 	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/gomlx/gomlx/xla"
-	"github.com/pkg/errors"
-	"strings"
 )
 
 // Graph with the operations and dependencies needed to run a computation.

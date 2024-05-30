@@ -3,17 +3,18 @@ package tensor
 import (
 	"encoding/gob"
 	"fmt"
-	. "github.com/gomlx/gomlx/types/exceptions"
-	"github.com/gomlx/gomlx/types/keepalive"
-	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
-	"github.com/gomlx/gomlx/xla"
-	"github.com/pkg/errors"
 	"os"
 	"reflect"
 	"runtime"
 	"strconv"
 	"unsafe"
+
+	"github.com/pkg/errors"
+	. "github.com/gomlx/gomlx/types/exceptions"
+	"github.com/gomlx/gomlx/types/keepalive"
+	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/slices"
+	"github.com/gomlx/gomlx/xla"
 )
 
 // Local tensor represents a multidimensional array of one of the supported types (see shapes.Number)

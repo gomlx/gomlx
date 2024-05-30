@@ -3,16 +3,17 @@
 package image
 
 import (
+	"image"
+	"log"
+	"math"
+	"reflect"
+
+	"github.com/pkg/errors"
 	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
-	"github.com/pkg/errors"
-	"image"
 	"k8s.io/klog/v2"
-	"log"
-	"math"
-	"reflect"
 )
 
 // ChannelsAxisConfig indicates if a tensor with an image has the channels axis

@@ -20,15 +20,16 @@ package context
 
 import (
 	"fmt"
+	"log"
+	"reflect"
+	"strings"
+
+	"github.com/pkg/errors"
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
-	"github.com/pkg/errors"
-	"log"
-	"reflect"
-	"strings"
 )
 
 // Context organizes information shared in a model (or anything else). A model can

@@ -18,16 +18,17 @@ package graph_test
 
 import (
 	"fmt"
+	"math"
+	"reflect"
+	"testing"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
-	"github.com/stretchr/testify/assert"
+	"google3/third_party/golang/testify/assert/assert"
 	"github.com/stretchr/testify/require"
-	"math"
-	"reflect"
-	"testing"
 )
 
 var (

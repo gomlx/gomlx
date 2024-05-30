@@ -32,6 +32,7 @@ import (
 
 	"github.com/go-gota/gota/dataframe"
 	"github.com/go-gota/gota/series"
+
 	"github.com/pkg/errors"
 )
 

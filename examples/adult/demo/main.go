@@ -21,24 +21,25 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
+	"path"
+	"time"
+
 	"github.com/gomlx/gomlx/examples/adult"
 	"github.com/gomlx/gomlx/examples/notebook/gonb/margaid"
 	. "github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
+	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"
-	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/commandline"
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
-	"log"
-	"path"
-	"time"
 )
 
 var (
@@ -135,7 +136,7 @@ func main() {
 	trainer := train.NewTrainer(manager, ctx, ModelGraph, losses.BinaryCrossentropyLogits,
 		optimizerFn(),
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
-		[]metrics.Interface{meanAccuracyMetric}) // evalMetrics
+		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
 
 	// Use standard training loop.
 	loop := train.NewLoop(trainer)
@@ -182,7 +183,7 @@ func ModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 
 	categorical, continuous := inputs[0], inputs[1]
 	batchSize := categorical.Shape().Dimensions[0]
-	
+
 	var allEmbeddings []*Node
 
 	if *flagUseCategorical {

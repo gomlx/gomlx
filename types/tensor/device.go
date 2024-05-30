@@ -2,9 +2,10 @@ package tensor
 
 import (
 	"fmt"
+
+	"github.com/pkg/errors"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/xla"
-	"github.com/pkg/errors"
 )
 
 // Device represents a tensor (or tuple) stored on a "device": typically an accelerator (GPU, TPU), but it can

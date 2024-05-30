@@ -21,10 +21,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/types/tensor"
-	"github.com/pkg/errors"
-	"github.com/schollz/progressbar/v3"
 	"io"
 	"log"
 	"net/http"
@@ -33,6 +29,12 @@ import (
 	"os/user"
 	"path"
 	"strings"
+
+	"github.com/schollz/progressbar/v3"
+
+	"github.com/pkg/errors"
+	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/types/tensor"
 )
 
 // FileExists returns true if file or directory exists.

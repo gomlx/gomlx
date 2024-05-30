@@ -19,12 +19,13 @@ package chartjs
 import (
 	"encoding/hex"
 	"fmt"
-	"github.com/gomlx/gomlx/examples/notebook/bashkernel"
-	"github.com/pkg/errors"
 	"math/rand"
 	"strings"
 	"text/template"
 	"unsafe"
+
+	"github.com/pkg/errors"
+	"github.com/gomlx/gomlx/examples/notebook/bashkernel"
 )
 
 // SrcUrl is the default URL for the ChartJSUrl.js library. It can be changed to

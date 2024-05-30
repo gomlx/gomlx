@@ -14,14 +14,14 @@
  *	limitations under the License.
  */
 
-#include "xla/status.h"
-#include "gperftools/heap-checker.h"
-#include "gperftools/malloc_extension.h"
-#include "xla/statusor.h"
 #include <string.h>
 
-#include "gomlx/shape.h"
-#include "gomlx/status.h"
+#include "third_party/tensorflow/compiler/xla/status.h"
+#include "third_party/tcmalloc/malloc_extension.h"
+#include "third_party/tensorflow/compiler/xla/statusor.h"
+
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/shape.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/status.h"
 
 const char *TF_LOG_LEVEL_ENV = "TF_CPP_MIN_LOG_LEVEL";
 
@@ -35,8 +35,8 @@ int initCall = initSetTfLogs();
 int xla_wrapper_version() { return XlaWrapperVersion; }
 
 // Cast C pointer type to C++ object pointer.
-xla::Status *XlaStatusCast(XlaStatus *s) {
-  return static_cast<xla::Status *>(s);
+absl::Status *XlaStatusCast(XlaStatus *s) {
+  return static_cast<absl::Status *>(s);
 }
 
 char *c_str(const std::string &s) { return strdup(s.c_str()); }
@@ -63,23 +63,43 @@ VectorPointers *c_vector_str(const std::vector<std::string> &v) {
 }
 
 char *memory_stats() {
+#if defined(TCMALLOC)
+    std::string src = tcmalloc::MallocExtension::GetStats();
+    char *dest = new char[src.length() + 1];
+    strcpy(dest, src.c_str());
+    return dest;
+#else
   const size_t kBufferSize = 10 * 1024 * 1024;
   char *buf = (char *)malloc(kBufferSize);
   MallocExtension::instance()->GetStats(buf, kBufferSize);
   return buf;
+#endif
 }
 
 size_t memory_usage() {
   const char *kCurrentAllocatedBytes = "generic.current_allocated_bytes";
+#if defined(TCMALLOC)
+    absl::optional<size_t> current_allocated = tcmalloc::MallocExtension::GetNumericProperty(kCurrentAllocatedBytes);
+    if (current_allocated.has_value()) {
+      return *current_allocated;
+    }
+#else
   size_t res;
   if (MallocExtension::instance()->GetNumericProperty(kCurrentAllocatedBytes,
                                                       &res)) {
     return res;
   }
+#endif
   return 0;
 }
 
-bool heap_checker_no_global_leaks() { return HeapLeakChecker::NoGlobalLeaks(); }
+bool heap_checker_no_global_leaks() {
+#if defined(TCMALLOC)
+    return false;
+#else
+    return HeapLeakChecker::NoGlobalLeaks();
+#endif
+}
 
 char *number_to_string(int n) { return c_str(std::to_string(n)); }
 
@@ -92,8 +112,8 @@ int XlaStatusCode(XlaStatus *status) {
   return int(XlaStatusCast(status)->code());
 }
 
-XlaStatus *FromStatus(const xla::Status &status) {
-  return static_cast<XlaStatus *>(new xla::Status(status));
+XlaStatus *FromStatus(const absl::Status &status) {
+  return static_cast<XlaStatus *>(new absl::Status(status));
 }
 
 void DeleteXlaStatus(XlaStatus *xla_status) {

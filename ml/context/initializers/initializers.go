@@ -19,10 +19,11 @@
 package initializers
 
 import (
+	"sync"
+
 	. "github.com/gomlx/gomlx/graph"
 	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
-	"sync"
 )
 
 // VariableInitializer builds a node that returns a value to initialize a variable of the given

@@ -20,16 +20,16 @@
 #define _GOMLX_XLA_COMPUTATION_H
 
 // #include "gomlx/aot/aot.h"
-#include "gomlx/client.h"
-#include "gomlx/literal.h"
-#include "gomlx/node.h"
-#include "gomlx/on_device_buffer.h"
-#include "gomlx/status.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/client.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/literal.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/node.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/on_device_buffer.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/status.h"
 
 #ifdef __cplusplus
 // C++ dependencies.
-#include "xla/client/xla_builder.h"
-#include "xla/execution_options_util.h"
+#include "third_party/tensorflow/compiler/xla/client/xla_builder.h"
+#include "third_party/tensorflow/compiler/xla/execution_options_util.h"
 
 // Alias to xla::Literal.
 typedef xla::GlobalData XlaGlobalData;

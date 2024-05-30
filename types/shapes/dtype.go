@@ -17,12 +17,13 @@
 package shapes
 
 import (
-	"github.com/gomlx/gomlx/types/exceptions"
-	"github.com/pkg/errors"
 	"math"
 	"reflect"
 	"strconv"
 	"unsafe"
+
+	"github.com/pkg/errors"
+	"github.com/gomlx/gomlx/types/exceptions"
 )
 
 // DType indicates the type of the unit element of a Tensor (or its representation in

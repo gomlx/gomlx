@@ -19,13 +19,14 @@ package metrics
 
 import (
 	"fmt"
+
+	"github.com/pkg/errors"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/google/uuid"
-	"github.com/pkg/errors"
 )
 
 // Interface for a Metric.

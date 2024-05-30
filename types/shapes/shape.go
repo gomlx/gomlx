@@ -71,10 +71,11 @@ package shapes
 import (
 	"encoding/gob"
 	"fmt"
-	"github.com/gomlx/gomlx/types/exceptions"
-	"github.com/pkg/errors"
 	"reflect"
 	"strings"
+
+	"github.com/pkg/errors"
+	"github.com/gomlx/gomlx/types/exceptions"
 )
 
 // Shape represents the shape of either a Tensor or the expected shape

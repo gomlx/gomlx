@@ -18,6 +18,8 @@ package context_test
 
 import (
 	"fmt"
+	"testing"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
@@ -25,9 +27,8 @@ import (
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
-	"github.com/stretchr/testify/assert"
+	"google3/third_party/golang/testify/assert/assert"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func oneLayerGraph(ctx *context.Context, x *Node) *Node {

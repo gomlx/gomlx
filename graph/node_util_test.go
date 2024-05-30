@@ -1,12 +1,13 @@
 package graph_test
 
 import (
+	"math"
+	"testing"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
-	"math"
-	"testing"
 )
 
 func TestEinsum(t *testing.T) {

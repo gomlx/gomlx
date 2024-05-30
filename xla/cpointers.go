@@ -19,7 +19,7 @@ package xla
 // This file includes many `cgo` related tools, in particular C pointer manipulation.
 
 // #include <string.h>
-// #include <gomlx/status.h>
+// #include "gomlx/status.h"
 import "C"
 import (
 	"fmt"

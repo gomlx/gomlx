@@ -19,11 +19,14 @@ package graphtest
 
 import (
 	"fmt"
+	"testing"
+
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/stretchr/testify/require"
-	"testing"
+
+	_ "github.com/gomlx/gomlx/xla/cpu"
 )
 
 // TestGraphFn should build its own inputs, and return both inputs and outputs

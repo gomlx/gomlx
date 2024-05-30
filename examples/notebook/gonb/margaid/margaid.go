@@ -41,20 +41,22 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
+	"math"
+	"os"
+	"path"
+	"strings"
+
 	mg "github.com/erkkah/margaid"
+	"github.com/janpfeifer/gonb/gonbui"
+
+	"github.com/pkg/errors"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
-	"github.com/janpfeifer/gonb/gonbui"
-	"github.com/pkg/errors"
-	"io"
 	"k8s.io/klog/v2"
-	"math"
-	"os"
-	"path"
-	"strings"
 )
 
 var (

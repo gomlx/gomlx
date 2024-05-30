@@ -17,14 +17,15 @@
 package data
 
 import (
+	"io"
+
+	"github.com/pkg/errors"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/tensor"
-	"github.com/pkg/errors"
-	"io"
 )
 
 // Normalization calculates the normalization parameters `mean` and `stddev` for the `inputsIndex`-th input

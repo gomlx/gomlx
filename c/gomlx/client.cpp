@@ -18,21 +18,21 @@
 #include <string>
 #include <vector>
 
-#include "gomlx/status.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/status.h"
 
 // #include "xla/client/client.h"
-#include "xla/client/client_library.h"
-#include "xla/client/local_client.h"
-#include "xla/client/xla_builder.h"
-#include "xla/execution_options_util.h"
-#include "xla/literal.h"
-#include "xla/service/backend.h"
-#include "xla/service/platform_util.h"
-#include "xla/statusor.h"
-#include "xla/types.h"
-#include "xla/xla_data.pb.h"
+#include "third_party/tensorflow/compiler/xla/client/client_library.h"
+#include "third_party/tensorflow/compiler/xla/client/local_client.h"
+#include "third_party/tensorflow/compiler/xla/client/xla_builder.h"
+#include "third_party/tensorflow/compiler/xla/execution_options_util.h"
+#include "third_party/tensorflow/compiler/xla/literal.h"
+#include "third_party/tensorflow/compiler/xla/service/backend.h"
+#include "third_party/tensorflow/compiler/xla/service/platform_util.h"
+#include "third_party/tensorflow/compiler/xla/statusor.h"
+#include "third_party/tensorflow/compiler/xla/types.h"
+#include "third_party/tensorflow/compiler/xla/xla_data.pb.h"
 
-#include "client.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/client.h"
 
 using namespace std;
 

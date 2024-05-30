@@ -19,14 +19,15 @@ package xla
 // This file includes the all code that is dependent on cgo ("C" import). This needs to be a separate file
 // for stringer to work.
 
-// #include <gomlx/client.h>
-// #include <gomlx/computation.h>
-// #include <gomlx/status.h>
+// #include "gomlx/client.h"
+// #include "gomlx/computation.h"
+// #include "gomlx/status.h"
 import "C"
 import (
-	"github.com/gomlx/gomlx/types/shapes"
 	"log"
 	"unsafe"
+
+	"github.com/gomlx/gomlx/types/shapes"
 )
 
 func init() {

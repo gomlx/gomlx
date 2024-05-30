@@ -62,17 +62,18 @@ package inceptionv3
 
 import (
 	"fmt"
+	"path"
+	"strings"
+
+	"github.com/pkg/errors"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"
 	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
 	timage "github.com/gomlx/gomlx/types/tensor/image"
-	"github.com/pkg/errors"
-	"path"
-	"strings"
+	"github.com/gomlx/gomlx/types/tensor"
 )
 
 // ClassificationImageSize if using the Inception V3's model for classification.

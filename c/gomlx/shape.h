@@ -24,7 +24,7 @@
 #ifdef __cplusplus
 // C++ only includes: these are not seen by the Go compiler.
 #include "status.h"
-#include "xla/shape.h"
+#include "third_party/tensorflow/compiler/xla/shape.h"
 
 #else
 // C and CGO only code.

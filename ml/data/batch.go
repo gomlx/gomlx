@@ -2,14 +2,15 @@ package data
 
 import (
 	"fmt"
+	"io"
+	"sync"
+
+	"github.com/pkg/errors"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/train"
 	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
-	"github.com/pkg/errors"
-	"io"
-	"sync"
 )
 
 type batchElement struct {

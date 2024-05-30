@@ -10,19 +10,21 @@ package hdf5
 import (
 	"bytes"
 	"fmt"
-	"github.com/gomlx/gomlx/ml/data"
-	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
-	"github.com/pkg/errors"
-	"github.com/schollz/progressbar/v3"
-	_ "github.com/schollz/progressbar/v3"
-	"k8s.io/klog/v2"
 	"os"
 	"os/exec"
 	"path"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/schollz/progressbar/v3"
+	_ "github.com/schollz/progressbar/v3"
+
+	"github.com/pkg/errors"
+	"github.com/gomlx/gomlx/ml/data"
+	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/tensor"
+	"k8s.io/klog/v2"
 )
 
 // Hdf5Contents is a map of all the datasets present in the HDF5 file. The key is the path

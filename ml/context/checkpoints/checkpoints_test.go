@@ -22,6 +22,9 @@ package checkpoints
 
 import (
 	"fmt"
+	"os"
+	"testing"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
@@ -29,10 +32,8 @@ import (
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
-	"github.com/stretchr/testify/assert"
+	"google3/third_party/golang/testify/assert/assert"
 	"github.com/stretchr/testify/require"
-	"os"
-	"testing"
 )
 
 func TestCheckpoints(t *testing.T) {

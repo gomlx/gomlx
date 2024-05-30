@@ -2,13 +2,14 @@ package diffusion
 
 import (
 	"fmt"
+	"testing"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/stretchr/testify/assert"
-	"testing"
+	"google3/third_party/golang/testify/assert/assert"
 )
 
 func TestUNetModelGraph(t *testing.T) {

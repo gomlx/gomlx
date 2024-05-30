@@ -19,9 +19,10 @@ package nest
 
 import (
 	"fmt"
+	"log"
+
 	"github.com/pkg/errors"
 	"github.com/gomlx/gomlx/types/slices"
-	"log"
 )
 
 // Nest is a generic container used in GoMLX in several of its libraries. It is a "sum type" (a union) of

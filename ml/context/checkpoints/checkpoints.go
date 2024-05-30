@@ -60,22 +60,23 @@ package checkpoints
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/ml/data"
-	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/ml/train/optimizers"
-	. "github.com/gomlx/gomlx/types/exceptions"
-	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
-	"github.com/gomlx/gomlx/types/tensor"
-	"github.com/pkg/errors"
 	"os"
 	"path"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/pkg/errors"
+	"github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/ml/context"
+	"github.com/gomlx/gomlx/ml/data"
+	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/ml/train"
+	. "github.com/gomlx/gomlx/types/exceptions"
+	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/slices"
+	"github.com/gomlx/gomlx/types/tensor"
 )
 
 var (

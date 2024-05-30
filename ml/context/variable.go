@@ -18,6 +18,7 @@ package context
 
 import (
 	"fmt"
+
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	. "github.com/gomlx/gomlx/types/exceptions"

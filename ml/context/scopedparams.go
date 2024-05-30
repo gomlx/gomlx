@@ -17,8 +17,9 @@
 package context
 
 import (
-	"github.com/gomlx/gomlx/types/slices"
 	"strings"
+
+	"github.com/gomlx/gomlx/types/slices"
 )
 
 // ScopedParams provides a mapping from string to any data type that is "scoped":

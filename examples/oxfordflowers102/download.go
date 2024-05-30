@@ -1,9 +1,6 @@
 package oxfordflowers102
 
 import (
-	"github.com/daniellowtw/matlab"
-	"github.com/gomlx/gomlx/ml/data"
-	"github.com/pkg/errors"
 	"image"
 	"image/jpeg"
 	"log"
@@ -11,6 +8,11 @@ import (
 	"path"
 	"sort"
 	"strings"
+
+	"github.com/daniellowtw/matlab"
+
+	"github.com/pkg/errors"
+	"github.com/gomlx/gomlx/ml/data"
 )
 
 var (

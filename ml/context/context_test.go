@@ -18,15 +18,18 @@ package context
 
 import (
 	"fmt"
+	"testing"
+
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context/initializers"
-	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
-	"github.com/stretchr/testify/assert"
+	"github.com/gomlx/gomlx/types"
+	"google3/third_party/golang/testify/assert/assert"
 	"github.com/stretchr/testify/require"
-	"testing"
+
+	_ "github.com/gomlx/gomlx/xla/cpu"
 )
 
 func TestContextVariables(t *testing.T) {

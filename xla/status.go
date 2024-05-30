@@ -19,7 +19,7 @@ package xla
 // This file implements a wrapper over C++'s Status and StatusOr objects.
 
 // #include <string.h>
-// #include <gomlx/status.h>
+// #include "gomlx/status.h"
 import "C"
 import (
 	"fmt"

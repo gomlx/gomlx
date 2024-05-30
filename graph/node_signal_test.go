@@ -2,21 +2,22 @@ package graph_test
 
 import (
 	"fmt"
+	"math"
+	"testing"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/ml/data"
-	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/commandline"
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
-	"github.com/stretchr/testify/assert"
+	"google3/third_party/golang/testify/assert/assert"
 	"github.com/stretchr/testify/require"
-	"math"
-	"testing"
 )
 
 func TestFFT(t *testing.T) {

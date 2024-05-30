@@ -18,13 +18,14 @@ package graph_test
 
 import (
 	"fmt"
+	"math"
+	"testing"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/stretchr/testify/require"
-	"math"
-	"testing"
 )
 
 func TestGradientAdd(t *testing.T) {

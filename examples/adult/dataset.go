@@ -33,10 +33,11 @@ package adult
 
 import (
 	"fmt"
+	"log"
+
+	"github.com/pkg/errors"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/data"
-	"github.com/pkg/errors"
-	"log"
 )
 
 // NewDataset creates a new `data.InMemoryDataset` (can be used for training and evaluation) for the

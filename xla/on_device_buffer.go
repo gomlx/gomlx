@@ -16,14 +16,15 @@
 
 package xla
 
-// #include <gomlx/on_device_buffer.h>
+// #include "gomlx/on_device_buffer.h"
 import "C"
 import (
 	"fmt"
-	"github.com/gomlx/gomlx/types/shapes"
 	"runtime"
 	"sync/atomic"
 	"unsafe"
+
+	"github.com/gomlx/gomlx/types/shapes"
 )
 
 // OnDeviceBuffer represents a value stored in an execution device (CPU or accelerator).

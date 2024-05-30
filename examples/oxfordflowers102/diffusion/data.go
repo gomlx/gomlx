@@ -2,11 +2,12 @@ package diffusion
 
 import (
 	"encoding/gob"
-	. "github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/types/tensor"
-	"github.com/pkg/errors"
 	"os"
 	"path"
+
+	"github.com/pkg/errors"
+	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/types/tensor"
 
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/data"

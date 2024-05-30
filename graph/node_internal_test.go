@@ -20,9 +20,10 @@ package graph
 
 import (
 	"fmt"
+	"testing"
+
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
-	"testing"
 )
 
 // compileAndRun compiles, runs and returns the value on the tensor. Doesn't work for tuples though.

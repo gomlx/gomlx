@@ -1,9 +1,10 @@
 package image
 
 import (
-	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/gomlx/gomlx/types/shapes"
+	"google3/third_party/golang/testify/assert/assert"
 )
 
 func TestGetUpSampledSizes(t *testing.T) {

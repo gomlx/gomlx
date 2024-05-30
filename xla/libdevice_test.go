@@ -2,10 +2,11 @@ package xla
 
 import (
 	"fmt"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"os"
 	"testing"
+
+	"google3/third_party/golang/testify/assert/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLibDevice(t *testing.T) {

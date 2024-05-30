@@ -19,6 +19,8 @@ package layers
 import (
 	"flag"
 	"fmt"
+	"testing"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
@@ -26,12 +28,11 @@ import (
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
+	"google3/third_party/golang/plot/plotter/plotter"
+	"google3/third_party/golang/plot/vg/vg"
 	"github.com/stretchr/testify/require"
-	"gonum.org/v1/plot/plotter"
-	"gonum.org/v1/plot/vg"
-	"testing"
 
-	"gonum.org/v1/plot"
+	"google3/third_party/golang/plot/plot"
 )
 
 var (

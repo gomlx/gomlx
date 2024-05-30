@@ -18,11 +18,11 @@
 #include <string>
 #include <vector>
 
-#include "gomlx/on_device_buffer.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/on_device_buffer.h"
 
-#include "absl/status/status.h"
-#include "gomlx/literal.h"
-#include "gomlx/status.h"
+#include "third_party/absl/status/status.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/literal.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/status.h"
 
 using namespace std;
 
@@ -90,8 +90,8 @@ StatusOr OnDeviceBufferSubTree(OnDeviceBuffer *b, int path_length,
 
   if (b == nullptr) {
     r.status =
-        new xla::Status(absl::StatusCode::kInvalidArgument,
-                        "cant take sub-tree of OnDeviceBuffer == nullptr");
+        new absl::Status(absl::StatusCode::kInvalidArgument,
+                         "cant take sub-tree of OnDeviceBuffer == nullptr");
 
   } else if (b->sb_buffer != nullptr) {
     auto status_or = b->sb_buffer->SubShapedBuffer(indices);
@@ -106,14 +106,14 @@ StatusOr OnDeviceBufferSubTree(OnDeviceBuffer *b, int path_length,
 
   } else if (b->ssb_buffer != nullptr) {
     xla::ScopedShapedBuffer *ssb = new xla::ScopedShapedBuffer(
-        std::move(b->ssb_buffer->TakeSubTree(indices)));
+        b->ssb_buffer->TakeSubTree(indices));
     OnDeviceBuffer *wrapper = new OnDeviceBuffer();
     wrapper->ssb_buffer = ssb;
     r.value = static_cast<void *>(wrapper);
 
   } else {
-    r.status = new xla::Status(absl::StatusCode::kInvalidArgument,
-                               "cant take sub-tree of empty OnDeviceBuffer");
+    r.status = new absl::Status(absl::StatusCode::kInvalidArgument,
+                                "cant take sub-tree of empty OnDeviceBuffer");
   }
   return r;
 }
@@ -124,8 +124,8 @@ StatusOr OnDeviceBufferToLiteral(OnDeviceBuffer *buffer, Client *client) {
 
   if (sb == nullptr) {
     r.status =
-        new xla::Status(absl::StatusCode::kInvalidArgument,
-                        "cant convert nullptr OnDeviceBuffer to Literal");
+        new absl::Status(absl::StatusCode::kInvalidArgument,
+                         "cant convert nullptr OnDeviceBuffer to Literal");
 
   } else {
     auto status_or = client->client->ShapedBufferToLiteral(*sb);

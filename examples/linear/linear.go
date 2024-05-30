@@ -21,12 +21,13 @@ package main
 import (
 	"flag"
 	"fmt"
+
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/layers"
-	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/commandline"
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
 

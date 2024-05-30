@@ -20,13 +20,14 @@ package ctxtest
 
 import (
 	"fmt"
+	"testing"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 // TestContextGraphFn should build its own inputs, and return both inputs and outputs

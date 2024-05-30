@@ -19,19 +19,20 @@ package data
 import (
 	"encoding/gob"
 	"fmt"
+	"io"
+	"log"
+	"math/rand"
+	"sync"
+	"time"
+
+	"github.com/pkg/errors"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/train"
 	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
-	"github.com/pkg/errors"
 	"golang.org/x/exp/constraints"
-	"io"
-	"log"
-	"math/rand"
-	"sync"
-	"time"
 )
 
 // InMemoryDataset represents a Dataset that has been completely read into the memory of the device

@@ -20,22 +20,22 @@
 #include <string>
 #include <vector>
 
-#include "gomlx/client.h"
-#include "gomlx/on_device_buffer.h"
-#include "gomlx/shape.h"
-#include "gomlx/status.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/client.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/on_device_buffer.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/shape.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/status.h"
 
-#include "absl/strings/str_format.h"
-#include "absl/types/span.h"
-#include "xla/array.h"
-#include "xla/client/client.h"
-#include "xla/client/client_library.h"
-#include "xla/literal.h"
-#include "xla/shape.h"
-#include "xla/status.h"
-#include "xla/types.h"
+#include "third_party/absl/strings/str_format.h"
+#include "third_party/absl/types/span.h"
+#include "third_party/tensorflow/compiler/xla/array.h"
+#include "third_party/tensorflow/compiler/xla/client/client.h"
+#include "third_party/tensorflow/compiler/xla/client/client_library.h"
+#include "third_party/tensorflow/compiler/xla/literal.h"
+#include "third_party/tensorflow/compiler/xla/shape.h"
+#include "third_party/tensorflow/compiler/xla/status.h"
+#include "third_party/tensorflow/compiler/xla/types.h"
 
-#include "gomlx/literal.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/literal.h"
 
 using namespace std;
 

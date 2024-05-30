@@ -2,9 +2,9 @@ package xla
 
 import (
 	"fmt"
-	"golang.org/x/exp/slices"
 	"os"
 	"path"
+	"slices"
 	"strings"
 )
 

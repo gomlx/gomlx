@@ -1,10 +1,11 @@
 package layers
 
 import (
+	"testing"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/types/slices"
-	"testing"
 )
 
 func TestRelu(t *testing.T) {

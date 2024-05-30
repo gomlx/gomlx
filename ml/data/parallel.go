@@ -2,13 +2,14 @@ package data
 
 import (
 	"fmt"
-	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/types/tensor"
-	"github.com/pkg/errors"
 	"io"
 	"log"
 	"runtime"
 	"sync"
+
+	"github.com/pkg/errors"
+	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/types/tensor"
 )
 
 // ParallelDataset is a wrapper around a `train.Dataset` that parallelize calls to Yield.

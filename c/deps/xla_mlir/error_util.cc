@@ -14,14 +14,14 @@ limitations under the License.
 ==============================================================================*/
 
 // #include "xla/mlir/utils/error_util.h"
-#include "deps/xla_mlir/error_util.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/deps/xla_mlir/error_util.h"
 
 #include <string>
 #include <string_view>
 
-#include "tsl/platform/errors.h"
-#include "mlir/IR/BuiltinAttributes.h"  // from @llvm-project
-#include "mlir/IR/Diagnostics.h"  // from @llvm-project
+#include "third_party/tensorflow/tsl/platform/errors.h"
+#include "third_party/llvm/llvm-project/mlir/include/mlir/IR/BuiltinAttributes.h"  // from @llvm-project
+#include "third_party/llvm/llvm-project/mlir/include/mlir/IR/Diagnostics.h"  // from @llvm-project
 
 namespace mlir {
 TmpBaseScopedDiagnosticHandler::TmpBaseScopedDiagnosticHandler(MLIRContext* context,

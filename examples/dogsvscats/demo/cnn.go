@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/layers"

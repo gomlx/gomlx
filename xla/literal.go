@@ -17,19 +17,20 @@
 package xla
 
 // #include <string.h>
-// #include <gomlx/client.h>
-// #include <gomlx/computation.h>
+// #include "gomlx/client.h"
+// #include "gomlx/computation.h"
 import "C"
 
 import (
 	"errors"
 	"fmt"
-	"github.com/gomlx/gomlx/types/shapes"
 	"log"
 	"runtime"
 	"sync"
 	"sync/atomic"
 	"unsafe"
+
+	"github.com/gomlx/gomlx/types/shapes"
 )
 
 // Literal represents a value stored in the local CPU, in C++ heap, to interact

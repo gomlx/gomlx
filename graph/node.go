@@ -18,16 +18,17 @@ package graph
 
 import (
 	"fmt"
-	"github.com/gomlx/gomlx/types"
+	"reflect"
+	"sort"
+	"strings"
+
+	"github.com/pkg/errors"
 	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/xla"
-	"github.com/pkg/errors"
-	"reflect"
-	"sort"
-	"strings"
 )
 
 const (

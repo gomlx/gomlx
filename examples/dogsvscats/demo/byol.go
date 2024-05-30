@@ -5,6 +5,8 @@ package main
 
 import (
 	"flag"
+	"strings"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/layers"
@@ -12,7 +14,6 @@ import (
 	"github.com/gomlx/gomlx/models/inceptionv3"
 	"github.com/gomlx/gomlx/types/exceptions"
 	timage "github.com/gomlx/gomlx/types/tensor/image"
-	"strings"
 )
 
 // This file defines the BYOL-CNN (Bootstrap Your Own Latent) model, based on

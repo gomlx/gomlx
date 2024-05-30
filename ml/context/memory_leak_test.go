@@ -18,6 +18,8 @@ package context
 
 import (
 	"fmt"
+	"testing"
+
 	ml "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context/initializers"
@@ -25,7 +27,6 @@ import (
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/gomlx/gomlx/xla"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 // How to get a memory profile using the "gperftools":

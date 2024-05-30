@@ -17,10 +17,10 @@
 package graph
 
 import (
+	"github.com/pkg/errors"
 	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/xla"
-	"github.com/pkg/errors"
 )
 
 // This file implements reverse-mode automatic differentiation, using VJP (Vector Jacobian Product).

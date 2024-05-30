@@ -20,13 +20,14 @@ package slices
 import (
 	"flag"
 	"fmt"
-	"golang.org/x/exp/constraints"
 	"math"
 	"reflect"
 	"runtime"
 	"sort"
 	"strings"
 	"sync"
+
+	"golang.org/x/exp/constraints"
 )
 
 // At takes an element at the given `index`, where `index` can be negative, in which case it takes from the end

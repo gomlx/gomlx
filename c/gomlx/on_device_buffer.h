@@ -25,12 +25,12 @@ the library won't depend on their
 #ifndef _GOMLX_ON_DEVICE_BUFFER_H
 #define _GOMLX_ON_DEVICE_BUFFER_H
 
-#include "gomlx/shape.h"
-#include "gomlx/status.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/shape.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/status.h"
 
 #ifdef __cplusplus
 // C++ only includes: these are not seen by the Go compiler.
-#include "xla/service/shaped_buffer.h"
+#include "third_party/tensorflow/compiler/xla/service/shaped_buffer.h"
 
 typedef xla::ShapedBuffer XlaShapedBuffer;
 typedef xla::ScopedShapedBuffer XlaScopedShapedBuffer;

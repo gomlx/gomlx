@@ -17,17 +17,18 @@
 package train
 
 import (
+	"io"
+	"math"
+	"sort"
+	"time"
+
+	"github.com/pkg/errors"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
-	"github.com/pkg/errors"
 	xslices "golang.org/x/exp/slices"
-	"io"
-	"math"
-	"sort"
-	"time"
 )
 
 // Priority for hooks, the lowest values are run first. Defaults to 0, but negative

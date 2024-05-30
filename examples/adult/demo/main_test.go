@@ -2,10 +2,11 @@ package main
 
 import (
 	"flag"
-	"github.com/gomlx/gomlx/graph"
-	"github.com/stretchr/testify/require"
 	"os"
 	"testing"
+
+	"github.com/gomlx/gomlx/graph"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMainFunc(t *testing.T) {

@@ -2,14 +2,15 @@ package diffusion
 
 import (
 	"fmt"
+	"io"
+	"testing"
+	"time"
+
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/stretchr/testify/require"
-	"io"
-	"testing"
-	"time"
 )
 
 func benchmarkDataset(ds train.Dataset) {

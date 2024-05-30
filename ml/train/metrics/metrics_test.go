@@ -18,12 +18,15 @@ package metrics
 
 import (
 	"fmt"
+	"testing"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
-	"github.com/stretchr/testify/assert"
+	"google3/third_party/golang/testify/assert/assert"
 	"github.com/stretchr/testify/require"
-	"testing"
+
+	_ "github.com/gomlx/gomlx/xla/cpu"
 )
 
 // takeFirstFn wraps the given `metricFn` with a function that takes a single node for labels and predictions as

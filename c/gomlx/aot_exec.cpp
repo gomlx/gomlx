@@ -19,16 +19,16 @@
 #include <string>
 #include <vector>
 
-#include "gomlx/client.h"
-#include "gomlx/status.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/client.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/status.h"
 
 // #include "xla/client/client_library.h"
-#include "xla/client/executable_build_options.h"
-#include "xla/client/local_client.h"
-#include "xla/execution_options_util.h"
-#include "xla/service/platform_util.h"
-#include "xla/statusor.h"
-#include "xla/types.h"
+#include "third_party/tensorflow/compiler/xla/client/executable_build_options.h"
+#include "third_party/tensorflow/compiler/xla/client/local_client.h"
+#include "third_party/tensorflow/compiler/xla/execution_options_util.h"
+#include "third_party/tensorflow/compiler/xla/service/platform_util.h"
+#include "third_party/tensorflow/compiler/xla/statusor.h"
+#include "third_party/tensorflow/compiler/xla/types.h"
 // #include "xla/xla_data.pb.h"
 
 #include "aot_exec.h"

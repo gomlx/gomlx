@@ -1,9 +1,10 @@
 package graph_test
 
 import (
+	"testing"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/types/shapes"
-	"testing"
 )
 
 func TestInterpolate(t *testing.T) {

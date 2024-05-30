@@ -19,12 +19,13 @@ package dogsvscats
 import (
 	"flag"
 	"fmt"
-	"github.com/gomlx/gomlx/ml/data"
-	"github.com/gomlx/gomlx/ml/train"
 	"io"
 	"path"
 	"runtime"
 	"testing"
+
+	"github.com/gomlx/gomlx/ml/data"
+	"github.com/gomlx/gomlx/ml/train"
 )
 
 var (

@@ -24,10 +24,11 @@ import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
-	"github.com/pkg/errors"
 	"image"
 	"image/png"
 	"os"
+
+	"github.com/pkg/errors"
 )
 
 const BashNotebookEnv = "NOTEBOOK_BASH_KERNEL_CAPABILITIES"

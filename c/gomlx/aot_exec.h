@@ -21,14 +21,14 @@
 
 #include <stdlib.h>
 
-#include "gomlx/client.h"
-#include "gomlx/on_device_buffer.h"
-#include "gomlx/status.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/client.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/on_device_buffer.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/status.h"
 
 #ifdef __cplusplus
-#include "xla/client/client.h"
-#include "xla/client/local_client.h"
-#include "xla/executable_run_options.h"
+#include "third_party/tensorflow/compiler/xla/client/client.h"
+#include "third_party/tensorflow/compiler/xla/client/local_client.h"
+#include "third_party/tensorflow/compiler/xla/executable_run_options.h"
 
 // AOTExecutable wraps XLA LocalExecutable, to execute AOT graphs.
 struct AOTExecutable {

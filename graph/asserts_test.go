@@ -17,9 +17,10 @@
 package graph_test
 
 import (
+	"testing"
+
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestAsserts(t *testing.T) {

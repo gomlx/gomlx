@@ -17,13 +17,16 @@
 package optimizers
 
 import (
+	"math"
+	"testing"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/stretchr/testify/assert"
+	"google3/third_party/golang/testify/assert/assert"
 	"github.com/stretchr/testify/require"
-	"math"
-	"testing"
+
+	_ "github.com/gomlx/gomlx/xla/cpu"
 )
 
 func TestCosineAnnealingSchedule(t *testing.T) {

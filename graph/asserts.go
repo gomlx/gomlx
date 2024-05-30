@@ -17,8 +17,8 @@
 package graph
 
 import (
-	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/pkg/errors"
+	"github.com/gomlx/gomlx/types/shapes"
 )
 
 // This file implements various asserts (checks) that can be done on the Node.

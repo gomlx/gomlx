@@ -18,12 +18,13 @@ package graph_test
 
 import (
 	"fmt"
+	"testing"
+	"time"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/gomlx/gomlx/xla"
-	"testing"
-	"time"
 )
 
 // How to get a memory profile using the "gperftools":

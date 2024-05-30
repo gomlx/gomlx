@@ -18,30 +18,31 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string>
+
 #include <vector>
 
-#include "gomlx/client.h"
-#include "gomlx/literal.h"
-#include "gomlx/on_device_buffer.h"
-#include "gomlx/status.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/client.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/literal.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/on_device_buffer.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/status.h"
 
-#include "absl/strings/str_format.h"
-#include "absl/types/span.h"
+#include "third_party/absl/strings/str_format.h"
+#include "third_party/absl/types/span.h"
 // #include "xla/client/client.h"
 // #include "xla/client/client_library.h"
 // #include "xla/client/lib/arithmetic.h"
 // #include "xla/client/xla_builder.h"
 // #include "xla/execution_options_util.h"
-#include "xla/array.h"
-#include "xla/literal.h"
+#include "third_party/tensorflow/compiler/xla/array.h"
+#include "third_party/tensorflow/compiler/xla/literal.h"
 // #include "xla/service/platform_util.h"
 // #include "xla/service/shaped_buffer.h"
-#include "xla/statusor.h"
-#include "xla/types.h"
+#include "third_party/tensorflow/compiler/xla/statusor.h"
+#include "third_party/tensorflow/compiler/xla/types.h"
 // #include "xla/xla_data.pb.h"
-#include "xla/status.h"
+#include "third_party/tensorflow/compiler/xla/status.h"
 
-#include "gomlx/shape.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/shape.h"
 
 using namespace std;
 

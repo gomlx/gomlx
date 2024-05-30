@@ -1,17 +1,18 @@
 package inceptionv3
 
 import (
-	. "github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/graph/graphtest"
-	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
-	timage "github.com/gomlx/gomlx/types/tensor/image"
-	"github.com/stretchr/testify/require"
 	"image"
 	"os"
 	"sync"
 	"testing"
+
+	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/graph/graphtest"
+	"github.com/gomlx/gomlx/ml/context"
+	"github.com/gomlx/gomlx/types/shapes"
+	timage "github.com/gomlx/gomlx/types/tensor/image"
+	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/stretchr/testify/require"
 )
 
 func loadImage(filePath string) (img image.Image, err error) {

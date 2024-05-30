@@ -21,18 +21,19 @@
 
 #include <stdlib.h>
 
-#include "gomlx/on_device_buffer.h"
-#include "gomlx/status.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/on_device_buffer.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/status.h"
 
 #ifndef __cplusplus
 typedef _Bool bool;
 #endif
 
 #ifdef __cplusplus
+
 // #include "xla/client/client.h"
-#include "xla/client/local_client.h"
-#include "xla/executable_run_options.h"
-#include "xla/service/backend.h"
+#include "third_party/tensorflow/compiler/xla/client/local_client.h"
+#include "third_party/tensorflow/compiler/xla/executable_run_options.h"
+#include "third_party/tensorflow/compiler/xla/service/backend.h"
 
 // Client wraps XLA stuff needed to compile and execute computations. Stuff that
 // are shared across multiple computation graphs. Still lots of guess work here

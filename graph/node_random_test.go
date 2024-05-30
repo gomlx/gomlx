@@ -2,10 +2,11 @@ package graph_test
 
 import (
 	"fmt"
+	"testing"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/types/shapes"
-	"testing"
 )
 
 func testRandomUniform[T interface {

@@ -17,9 +17,10 @@
 package nest
 
 import (
-	"github.com/stretchr/testify/assert"
 	"math"
 	"testing"
+
+	"google3/third_party/golang/testify/assert/assert"
 )
 
 func assertEnumeration[T any](t *testing.T, n *Nest[T], expectedPaths []string, expectedValues []T) {

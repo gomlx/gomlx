@@ -18,13 +18,14 @@ package layers
 
 import (
 	"fmt"
+	"math"
+	"reflect"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
-	"math"
-	"reflect"
 )
 
 // This file contains all parts of the layers.MultiHeadAttention implementation.

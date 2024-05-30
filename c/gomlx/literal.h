@@ -19,13 +19,13 @@
 #ifndef _GOMLX_XLA_LITERAL_H
 #define _GOMLX_XLA_LITERAL_H
 
-#include "gomlx/client.h"
-#include "gomlx/status.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/client.h"
+#include "third_party/golang/github_com/gomlx/gomlx/v/v0/c/gomlx/status.h"
 
 #ifdef __cplusplus
 // C++ only includes: these are not seen by the Go compiler.
-#include "xla/client/xla_builder.h"
-#include "xla/shape.h"
+#include "third_party/tensorflow/compiler/xla/client/xla_builder.h"
+#include "third_party/tensorflow/compiler/xla/shape.h"
 
 typedef xla::Literal XlaLiteral;
 extern Literal *XlaLiteralToLiteral(xla::Literal *xla_literal);
