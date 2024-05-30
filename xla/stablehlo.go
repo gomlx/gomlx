@@ -1,3 +1,5 @@
+//go:build exclude
+
 /*
  *	Copyright 2023 Jan Pfeifer
  *
@@ -22,9 +24,10 @@ package xla
 import "C"
 
 import (
-	"github.com/pkg/errors"
 	"os"
 	"runtime"
+
+	"github.com/pkg/errors"
 )
 
 // StableHLO is a wrapper for the C++ `StableHLOHolder`.

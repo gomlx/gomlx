@@ -1,3 +1,5 @@
+//go:build exclude
+
 /*
  *	Copyright 2023 Jan Pfeifer
  *
@@ -20,8 +22,9 @@ package xla
 import "C"
 import (
 	"fmt"
-	"github.com/pkg/errors"
 	"unsafe"
+
+	"github.com/pkg/errors"
 )
 
 // AOTExecutable executes Ahead-Of-Time (AOT) compiled graphs.
