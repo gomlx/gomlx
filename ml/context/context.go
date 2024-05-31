@@ -676,7 +676,7 @@ func (ctx *Context) DeleteVariablesInScope() {
 // Notice that variables information is stored in the "data" component of Context objects, and is shared
 // among all connected context references.
 func (ctx *Context) VariableWithShape(name string, shape shapes.Shape) *Variable {
-	v := ctx.InspectVariableIfLoaded(ctx.scope, name)
+	v := ctx.InspectVariable(ctx.scope, name)
 	if v == nil && ctx.checked && ctx.reuse {
 		Panicf("requested variable %q in scope %q with Context.Reuse set, but variable does not exist", name, ctx.scope)
 	}
@@ -756,7 +756,7 @@ func valueToTensor(value any) tensor.Tensor {
 // Notice that variables' information is stored in the "data" component of Context objects, and is shared
 // among all connected context references.
 func (ctx *Context) VariableWithValue(name string, value any) *Variable {
-	v := ctx.InspectVariableIfLoaded(ctx.scope, name)
+	v := ctx.InspectVariable(ctx.scope, name)
 
 	// Check against reuse of variables.
 	if ctx.checked && ctx.reuse && v == nil {
