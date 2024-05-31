@@ -243,7 +243,7 @@ func loadCheckpointToContext(ctx *context.Context, baseDir string) error {
 	if !path.IsAbs(checkpointPath) {
 		checkpointPath = path.Join(baseDir, checkpointPath)
 	}
-	_, err := checkpoints.Build(ctx).Dir(checkpointPath).Immediate().Done()
+	_, err := checkpoints.Build(ctx).Dir(checkpointPath).Done()
 	if err != nil {
 		return errors.WithMessagef(err, "while loading checkpoint from %q", checkpointPath)
 	}
