@@ -763,7 +763,6 @@ func gatherVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// GatherSlices(): sliceSizes are variable, but there are no collapsedSliceDims.
 	//fmt.Printf("\tgatherVJP: operand=%s, start=%s, indexVectorDim=%d, offsetDims=%v, collapsedSliceDims=%v, startIndexMap=%v, sliceSizes=%v\n",
 	//	input.shape, indices.shape, indexVectorDim, offsetDims, collapsedSliceDims, startIndexMap, sliceSizes)
-
 	isGatherSlices := len(collapsedSliceDims) == 0
 	if !isGatherSlices {
 		Panicf("xlaGather operation for which no gradient was defined. Please use only Gather() or GatherSlices().")
