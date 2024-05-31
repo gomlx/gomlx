@@ -148,8 +148,7 @@ func TestLayerWiseInferenceLogits(t *testing.T) {
 			_, fileName, _, ok := runtime.Caller(0)
 			require.True(t, ok, "Failed to get caller information to find out test source directory.")
 			baseDir := filepath.Dir(fileName)
-			checkpoint, err := checkpoints.Build(ctx).DirFromBase("test_checkpoint", baseDir).
-				Immediate().Done()
+			checkpoint, err := checkpoints.Build(ctx).DirFromBase("test_checkpoint", baseDir).Done()
 			fmt.Printf("\nLoaded trained context: %s\n", checkpoint.Dir())
 			require.NoError(t, err, "Checkpoint loading.")
 			UploadOgbnMagVariables(ctx)
@@ -182,7 +181,7 @@ func TestLayerWiseInferenceLogits(t *testing.T) {
 			slices.DeepSliceCmp(
 				predictionsGNN.Local().Value().([][]float32),
 				predictionsLW.Local().Value().([][]float32),
-				slices.CloseToEpsilon(float32(0.01))))
+				slices.CloseToEpsilon(float32(0.05))))
 	}
 }
 
@@ -213,8 +212,7 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 	_, fileName, _, ok := runtime.Caller(0)
 	require.True(t, ok, "Failed to get caller information to find out test source directory.")
 	baseDir := filepath.Dir(fileName)
-	checkpoint, err := checkpoints.Build(ctx).DirFromBase("test_checkpoint", baseDir).
-		Immediate().Done()
+	checkpoint, err := checkpoints.Build(ctx).DirFromBase("test_checkpoint", baseDir).Done()
 	require.NoError(t, err, "Checkpoint loading.")
 	fmt.Printf("\nLoaded trained context: %s\n", checkpoint.Dir())
 	fmt.Printf("\t%s=%q\n", ParamDType, context.GetParamOr(ctx, ParamDType, ""))

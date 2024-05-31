@@ -164,6 +164,11 @@ func (c *Config) DirFromBase(dir, baseDir string) *Config {
 
 // Immediate forces immediate load of all variables, as opposed to dynamically load
 // variables from checkpoint as they are being used when building the model.
+//
+// Not normally needed, but may be handy for testing. See also [context.Context.InspectVariableIfLoaded].
+//
+// It may trigger use more memory if not all variables are not used by the model -- not all training data (e.g.: optimizer
+// variables) is used for inference.
 func (c *Config) Immediate() *Config {
 	c.immediate = true
 	return c

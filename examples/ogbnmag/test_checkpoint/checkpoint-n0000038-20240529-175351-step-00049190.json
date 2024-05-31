@@ -1,0 +1,5263 @@
+{
+	"Params": [
+		{
+			"Scope": "/",
+			"Key": "activation",
+			"Value": "swish",
+			"ValueType": "string"
+		},
+		{
+			"Scope": "/",
+			"Key": "adam_dtype",
+			"Value": "float32",
+			"ValueType": "string"
+		},
+		{
+			"Scope": "/",
+			"Key": "adam_epsilon",
+			"Value": 1e-7,
+			"ValueType": "float64"
+		},
+		{
+			"Scope": "/",
+			"Key": "checkpoint",
+			"Value": "/home/janpf/work/ogbnmag/small_80",
+			"ValueType": "string"
+		},
+		{
+			"Scope": "/",
+			"Key": "clip_step_by_value",
+			"Value": 0,
+			"ValueType": "float64"
+		},
+		{
+			"Scope": "/",
+			"Key": "cosine_schedule_steps",
+			"Value": 49190,
+			"ValueType": "int"
+		},
+		{
+			"Scope": "/",
+			"Key": "dropout_rate",
+			"Value": 0.2,
+			"ValueType": "float64"
+		},
+		{
+			"Scope": "/",
+			"Key": "gnn_edge_dropout_rate",
+			"Value": 0,
+			"ValueType": "float64"
+		},
+		{
+			"Scope": "/",
+			"Key": "gnn_graph_update_type",
+			"Value": "simultaneous",
+			"ValueType": "string"
+		},
+		{
+			"Scope": "/",
+			"Key": "gnn_message_dim",
+			"Value": 32,
+			"ValueType": "int"
+		},
+		{
+			"Scope": "/",
+			"Key": "gnn_node_state_dim",
+			"Value": 32,
+			"ValueType": "int"
+		},
+		{
+			"Scope": "/",
+			"Key": "gnn_num_messages",
+			"Value": 6,
+			"ValueType": "int"
+		},
+		{
+			"Scope": "/",
+			"Key": "gnn_pooling_type",
+			"Value": "mean|logsum",
+			"ValueType": "string"
+		},
+		{
+			"Scope": "/",
+			"Key": "gnn_readout_hidden_layers",
+			"Value": 2,
+			"ValueType": "int"
+		},
+		{
+			"Scope": "/",
+			"Key": "gnn_update_num_hidden_layers",
+			"Value": 0,
+			"ValueType": "int"
+		},
+		{
+			"Scope": "/",
+			"Key": "gnn_update_state_type",
+			"Value": "residual",
+			"ValueType": "string"
+		},
+		{
+			"Scope": "/",
+			"Key": "gnn_use_path_to_root",
+			"Value": false,
+			"ValueType": "bool"
+		},
+		{
+			"Scope": "/",
+			"Key": "gnn_use_root_as_context",
+			"Value": false,
+			"ValueType": "bool"
+		},
+		{
+			"Scope": "/",
+			"Key": "l2_regularization",
+			"Value": 0.00001,
+			"ValueType": "float64"
+		},
+		{
+			"Scope": "/",
+			"Key": "learning_rate",
+			"Value": 0.001,
+			"ValueType": "float64"
+		},
+		{
+			"Scope": "/",
+			"Key": "mag_dtype",
+			"Value": "float16",
+			"ValueType": "string"
+		},
+		{
+			"Scope": "/",
+			"Key": "mag_embed_dropout_rate",
+			"Value": 0,
+			"ValueType": "float64"
+		},
+		{
+			"Scope": "/",
+			"Key": "mag_identity_sub_seeds",
+			"Value": true,
+			"ValueType": "bool"
+		},
+		{
+			"Scope": "/",
+			"Key": "mag_reuse_kernels",
+			"Value": true,
+			"ValueType": "bool"
+		},
+		{
+			"Scope": "/",
+			"Key": "mag_split_embed_tables",
+			"Value": 1,
+			"ValueType": "int"
+		},
+		{
+			"Scope": "/",
+			"Key": "mag_with_replacement",
+			"Value": false,
+			"ValueType": "bool"
+		},
+		{
+			"Scope": "/",
+			"Key": "num_checkpoints",
+			"Value": 3,
+			"ValueType": "int"
+		},
+		{
+			"Scope": "/",
+			"Key": "optimizer",
+			"Value": "adam",
+			"ValueType": "string"
+		},
+		{
+			"Scope": "/",
+			"Key": "plots",
+			"Value": true,
+			"ValueType": "bool"
+		},
+		{
+			"Scope": "/",
+			"Key": "train_steps",
+			"Value": 49190,
+			"ValueType": "int"
+		}
+	],
+	"Variables": [
+		{
+			"ParameterName": "var://#rngState",
+			"Dimensions": [
+				3
+			],
+			"DType": "Uint64",
+			"Pos": 0,
+			"Length": 24
+		},
+		{
+			"ParameterName": "var://global_step",
+			"Dimensions": null,
+			"DType": "Int64",
+			"Pos": 24,
+			"Length": 8
+		},
+		{
+			"ParameterName": "var:/optimizers/cosine_schedule/global_step",
+			"Dimensions": null,
+			"DType": "Int64",
+			"Pos": 32,
+			"Length": 8
+		},
+		{
+			"ParameterName": "var:/optimizers/learning_rate",
+			"Dimensions": null,
+			"DType": "Float32",
+			"Pos": 40,
+			"Length": 4
+		},
+		{
+			"ParameterName": "var:/embeddings/institutions/embeddings",
+			"Dimensions": [
+				8740,
+				16
+			],
+			"DType": "Float32",
+			"Pos": 44,
+			"Length": 559360
+		},
+		{
+			"ParameterName": "var:/embeddings/fields_of_study/embeddings",
+			"Dimensions": [
+				59965,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 559404,
+			"Length": 7675520
+		},
+		{
+			"ParameterName": "var:/graph_update_0/gnn:citations/conv/message/dense/weights",
+			"Dimensions": [
+				128,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8234924,
+			"Length": 8192
+		},
+		{
+			"ParameterName": "var:/graph_update_0/gnn:citations/conv/message/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8243116,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_0/gnn:papersByAuthors/conv/message/dense/weights",
+			"Dimensions": [
+				128,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8243180,
+			"Length": 8192
+		},
+		{
+			"ParameterName": "var:/graph_update_0/gnn:papersByAuthors/conv/message/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8251372,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_0/gnn:seedsTopics/conv/message/dense/weights",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8251436,
+			"Length": 2048
+		},
+		{
+			"ParameterName": "var:/graph_update_0/gnn:seedsTopics/conv/message/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8253484,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_0/gnn:papersByAuthors/update/dense/weights",
+			"Dimensions": [
+				192,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8253548,
+			"Length": 12288
+		},
+		{
+			"ParameterName": "var:/graph_update_0/gnn:papersByAuthors/update/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8265836,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_0/gnn:papersByAuthors/update/normalization/layer_normalization/gain",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8265900,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_0/gnn:papersByAuthors/update/normalization/layer_normalization/offset",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8265964,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_0/gnn:authorsInstitutions/conv/message/dense/weights",
+			"Dimensions": [
+				16,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8266028,
+			"Length": 1024
+		},
+		{
+			"ParameterName": "var:/graph_update_0/gnn:authorsInstitutions/conv/message/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8267052,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_0/gnn:seedsAuthors/update/dense/weights",
+			"Dimensions": [
+				128,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8267116,
+			"Length": 8192
+		},
+		{
+			"ParameterName": "var:/graph_update_0/gnn:seedsAuthors/update/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8275308,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_0/gnn:seedsAuthors/update/normalization/layer_normalization/gain",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8275372,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_0/gnn:seedsAuthors/update/normalization/layer_normalization/offset",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8275436,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_0/gnn:seedsBase/update/dense/weights",
+			"Dimensions": [
+				192,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8275500,
+			"Length": 12288
+		},
+		{
+			"ParameterName": "var:/graph_update_0/gnn:seedsBase/update/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8287788,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_0/gnn:seedsBase/update/normalization/layer_normalization/gain",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8287852,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_0/gnn:seedsBase/update/normalization/layer_normalization/offset",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8287916,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_0/gnn:seedsBase/conv/message/dense/weights",
+			"Dimensions": [
+				128,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8287980,
+			"Length": 8192
+		},
+		{
+			"ParameterName": "var:/graph_update_0/gnn:seedsBase/conv/message/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8296172,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_0/gnn:seeds/update/dense/weights",
+			"Dimensions": [
+				256,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8296236,
+			"Length": 16384
+		},
+		{
+			"ParameterName": "var:/graph_update_0/gnn:seeds/update/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8312620,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_0/gnn:seeds/update/normalization/layer_normalization/gain",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8312684,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_0/gnn:seeds/update/normalization/layer_normalization/offset",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8312748,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_1/gnn:citations/conv/message/dense/weights",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8312812,
+			"Length": 2048
+		},
+		{
+			"ParameterName": "var:/graph_update_1/gnn:citations/conv/message/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8314860,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_1/gnn:seedsAuthors/conv/message/dense/weights",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8314924,
+			"Length": 2048
+		},
+		{
+			"ParameterName": "var:/graph_update_1/gnn:seedsAuthors/conv/message/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8316972,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_1/gnn:papersByAuthors/conv/message/dense/weights",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8317036,
+			"Length": 2048
+		},
+		{
+			"ParameterName": "var:/graph_update_1/gnn:papersByAuthors/conv/message/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8319084,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_1/gnn:seedsTopics/conv/message/dense/weights",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8319148,
+			"Length": 2048
+		},
+		{
+			"ParameterName": "var:/graph_update_1/gnn:seedsTopics/conv/message/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8321196,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_1/gnn:papersByAuthors/update/dense/weights",
+			"Dimensions": [
+				96,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8321260,
+			"Length": 6144
+		},
+		{
+			"ParameterName": "var:/graph_update_1/gnn:papersByAuthors/update/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8327404,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_1/gnn:papersByAuthors/update/normalization/layer_normalization/gain",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8327468,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_1/gnn:papersByAuthors/update/normalization/layer_normalization/offset",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8327532,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_1/gnn:authorsInstitutions/conv/message/dense/weights",
+			"Dimensions": [
+				16,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8327596,
+			"Length": 1024
+		},
+		{
+			"ParameterName": "var:/graph_update_1/gnn:authorsInstitutions/conv/message/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8328620,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_1/gnn:seedsAuthors/update/dense/weights",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8328684,
+			"Length": 10240
+		},
+		{
+			"ParameterName": "var:/graph_update_1/gnn:seedsAuthors/update/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8338924,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_1/gnn:seedsAuthors/update/normalization/layer_normalization/gain",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8338988,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_1/gnn:seedsAuthors/update/normalization/layer_normalization/offset",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8339052,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_1/gnn:seedsBase/update/dense/weights",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8339116,
+			"Length": 10240
+		},
+		{
+			"ParameterName": "var:/graph_update_1/gnn:seedsBase/update/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8349356,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_1/gnn:seedsBase/update/normalization/layer_normalization/gain",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8349420,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_1/gnn:seedsBase/update/normalization/layer_normalization/offset",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8349484,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_1/gnn:seedsBase/conv/message/dense/weights",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8349548,
+			"Length": 2048
+		},
+		{
+			"ParameterName": "var:/graph_update_1/gnn:seedsBase/conv/message/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8351596,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_1/gnn:seeds/update/dense/weights",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8351660,
+			"Length": 10240
+		},
+		{
+			"ParameterName": "var:/graph_update_1/gnn:seeds/update/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8361900,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_1/gnn:seeds/update/normalization/layer_normalization/gain",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8361964,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_1/gnn:seeds/update/normalization/layer_normalization/offset",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8362028,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_2/gnn:citations/conv/message/dense/weights",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8362092,
+			"Length": 2048
+		},
+		{
+			"ParameterName": "var:/graph_update_2/gnn:citations/conv/message/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8364140,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_2/gnn:seedsAuthors/conv/message/dense/weights",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8364204,
+			"Length": 2048
+		},
+		{
+			"ParameterName": "var:/graph_update_2/gnn:seedsAuthors/conv/message/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8366252,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_2/gnn:papersByAuthors/conv/message/dense/weights",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8366316,
+			"Length": 2048
+		},
+		{
+			"ParameterName": "var:/graph_update_2/gnn:papersByAuthors/conv/message/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8368364,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_2/gnn:seedsTopics/conv/message/dense/weights",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8368428,
+			"Length": 2048
+		},
+		{
+			"ParameterName": "var:/graph_update_2/gnn:seedsTopics/conv/message/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8370476,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_2/gnn:papersByAuthors/update/dense/weights",
+			"Dimensions": [
+				96,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8370540,
+			"Length": 6144
+		},
+		{
+			"ParameterName": "var:/graph_update_2/gnn:papersByAuthors/update/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8376684,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_2/gnn:papersByAuthors/update/normalization/layer_normalization/gain",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8376748,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_2/gnn:papersByAuthors/update/normalization/layer_normalization/offset",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8376812,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_2/gnn:authorsInstitutions/conv/message/dense/weights",
+			"Dimensions": [
+				16,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8376876,
+			"Length": 1024
+		},
+		{
+			"ParameterName": "var:/graph_update_2/gnn:authorsInstitutions/conv/message/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8377900,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_2/gnn:seedsAuthors/update/dense/weights",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8377964,
+			"Length": 10240
+		},
+		{
+			"ParameterName": "var:/graph_update_2/gnn:seedsAuthors/update/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8388204,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_2/gnn:seedsAuthors/update/normalization/layer_normalization/gain",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8388268,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_2/gnn:seedsAuthors/update/normalization/layer_normalization/offset",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8388332,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_2/gnn:seedsBase/update/dense/weights",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8388396,
+			"Length": 10240
+		},
+		{
+			"ParameterName": "var:/graph_update_2/gnn:seedsBase/update/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8398636,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_2/gnn:seedsBase/update/normalization/layer_normalization/gain",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8398700,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_2/gnn:seedsBase/update/normalization/layer_normalization/offset",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8398764,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_2/gnn:seedsBase/conv/message/dense/weights",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8398828,
+			"Length": 2048
+		},
+		{
+			"ParameterName": "var:/graph_update_2/gnn:seedsBase/conv/message/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8400876,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_2/gnn:seeds/update/dense/weights",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8400940,
+			"Length": 10240
+		},
+		{
+			"ParameterName": "var:/graph_update_2/gnn:seeds/update/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8411180,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_2/gnn:seeds/update/normalization/layer_normalization/gain",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8411244,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_2/gnn:seeds/update/normalization/layer_normalization/offset",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8411308,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_3/gnn:citations/conv/message/dense/weights",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8411372,
+			"Length": 2048
+		},
+		{
+			"ParameterName": "var:/graph_update_3/gnn:citations/conv/message/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8413420,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_3/gnn:seedsAuthors/conv/message/dense/weights",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8413484,
+			"Length": 2048
+		},
+		{
+			"ParameterName": "var:/graph_update_3/gnn:seedsAuthors/conv/message/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8415532,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_3/gnn:papersByAuthors/conv/message/dense/weights",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8415596,
+			"Length": 2048
+		},
+		{
+			"ParameterName": "var:/graph_update_3/gnn:papersByAuthors/conv/message/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8417644,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_3/gnn:seedsTopics/conv/message/dense/weights",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8417708,
+			"Length": 2048
+		},
+		{
+			"ParameterName": "var:/graph_update_3/gnn:seedsTopics/conv/message/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8419756,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_3/gnn:papersByAuthors/update/dense/weights",
+			"Dimensions": [
+				96,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8419820,
+			"Length": 6144
+		},
+		{
+			"ParameterName": "var:/graph_update_3/gnn:papersByAuthors/update/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8425964,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_3/gnn:papersByAuthors/update/normalization/layer_normalization/gain",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8426028,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_3/gnn:papersByAuthors/update/normalization/layer_normalization/offset",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8426092,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_3/gnn:authorsInstitutions/conv/message/dense/weights",
+			"Dimensions": [
+				16,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8426156,
+			"Length": 1024
+		},
+		{
+			"ParameterName": "var:/graph_update_3/gnn:authorsInstitutions/conv/message/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8427180,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_3/gnn:seedsAuthors/update/dense/weights",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8427244,
+			"Length": 10240
+		},
+		{
+			"ParameterName": "var:/graph_update_3/gnn:seedsAuthors/update/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8437484,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_3/gnn:seedsAuthors/update/normalization/layer_normalization/gain",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8437548,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_3/gnn:seedsAuthors/update/normalization/layer_normalization/offset",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8437612,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_3/gnn:seedsBase/update/dense/weights",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8437676,
+			"Length": 10240
+		},
+		{
+			"ParameterName": "var:/graph_update_3/gnn:seedsBase/update/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8447916,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_3/gnn:seedsBase/update/normalization/layer_normalization/gain",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8447980,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_3/gnn:seedsBase/update/normalization/layer_normalization/offset",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8448044,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_3/gnn:seedsBase/conv/message/dense/weights",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8448108,
+			"Length": 2048
+		},
+		{
+			"ParameterName": "var:/graph_update_3/gnn:seedsBase/conv/message/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8450156,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_3/gnn:seeds/update/dense/weights",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8450220,
+			"Length": 10240
+		},
+		{
+			"ParameterName": "var:/graph_update_3/gnn:seeds/update/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8460460,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_3/gnn:seeds/update/normalization/layer_normalization/gain",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8460524,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_3/gnn:seeds/update/normalization/layer_normalization/offset",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8460588,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_4/gnn:citations/conv/message/dense/weights",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8460652,
+			"Length": 2048
+		},
+		{
+			"ParameterName": "var:/graph_update_4/gnn:citations/conv/message/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8462700,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_4/gnn:seedsAuthors/conv/message/dense/weights",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8462764,
+			"Length": 2048
+		},
+		{
+			"ParameterName": "var:/graph_update_4/gnn:seedsAuthors/conv/message/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8464812,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_4/gnn:papersByAuthors/conv/message/dense/weights",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8464876,
+			"Length": 2048
+		},
+		{
+			"ParameterName": "var:/graph_update_4/gnn:papersByAuthors/conv/message/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8466924,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_4/gnn:seedsTopics/conv/message/dense/weights",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8466988,
+			"Length": 2048
+		},
+		{
+			"ParameterName": "var:/graph_update_4/gnn:seedsTopics/conv/message/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8469036,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_4/gnn:papersByAuthors/update/dense/weights",
+			"Dimensions": [
+				96,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8469100,
+			"Length": 6144
+		},
+		{
+			"ParameterName": "var:/graph_update_4/gnn:papersByAuthors/update/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8475244,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_4/gnn:papersByAuthors/update/normalization/layer_normalization/gain",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8475308,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_4/gnn:papersByAuthors/update/normalization/layer_normalization/offset",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8475372,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_4/gnn:authorsInstitutions/conv/message/dense/weights",
+			"Dimensions": [
+				16,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8475436,
+			"Length": 1024
+		},
+		{
+			"ParameterName": "var:/graph_update_4/gnn:authorsInstitutions/conv/message/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8476460,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_4/gnn:seedsAuthors/update/dense/weights",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8476524,
+			"Length": 10240
+		},
+		{
+			"ParameterName": "var:/graph_update_4/gnn:seedsAuthors/update/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8486764,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_4/gnn:seedsAuthors/update/normalization/layer_normalization/gain",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8486828,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_4/gnn:seedsAuthors/update/normalization/layer_normalization/offset",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8486892,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_4/gnn:seedsBase/update/dense/weights",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8486956,
+			"Length": 10240
+		},
+		{
+			"ParameterName": "var:/graph_update_4/gnn:seedsBase/update/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8497196,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_4/gnn:seedsBase/update/normalization/layer_normalization/gain",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8497260,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_4/gnn:seedsBase/update/normalization/layer_normalization/offset",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8497324,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_4/gnn:seedsBase/conv/message/dense/weights",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8497388,
+			"Length": 2048
+		},
+		{
+			"ParameterName": "var:/graph_update_4/gnn:seedsBase/conv/message/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8499436,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_4/gnn:seeds/update/dense/weights",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8499500,
+			"Length": 10240
+		},
+		{
+			"ParameterName": "var:/graph_update_4/gnn:seeds/update/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8509740,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_4/gnn:seeds/update/normalization/layer_normalization/gain",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8509804,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_4/gnn:seeds/update/normalization/layer_normalization/offset",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8509868,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_5/gnn:citations/conv/message/dense/weights",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8509932,
+			"Length": 2048
+		},
+		{
+			"ParameterName": "var:/graph_update_5/gnn:citations/conv/message/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8511980,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_5/gnn:seedsAuthors/conv/message/dense/weights",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8512044,
+			"Length": 2048
+		},
+		{
+			"ParameterName": "var:/graph_update_5/gnn:seedsAuthors/conv/message/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8514092,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_5/gnn:papersByAuthors/conv/message/dense/weights",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8514156,
+			"Length": 2048
+		},
+		{
+			"ParameterName": "var:/graph_update_5/gnn:papersByAuthors/conv/message/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8516204,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_5/gnn:seedsTopics/conv/message/dense/weights",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8516268,
+			"Length": 2048
+		},
+		{
+			"ParameterName": "var:/graph_update_5/gnn:seedsTopics/conv/message/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8518316,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_5/gnn:papersByAuthors/update/dense/weights",
+			"Dimensions": [
+				96,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8518380,
+			"Length": 6144
+		},
+		{
+			"ParameterName": "var:/graph_update_5/gnn:papersByAuthors/update/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8524524,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_5/gnn:papersByAuthors/update/normalization/layer_normalization/gain",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8524588,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_5/gnn:papersByAuthors/update/normalization/layer_normalization/offset",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8524652,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_5/gnn:authorsInstitutions/conv/message/dense/weights",
+			"Dimensions": [
+				16,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8524716,
+			"Length": 1024
+		},
+		{
+			"ParameterName": "var:/graph_update_5/gnn:authorsInstitutions/conv/message/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8525740,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_5/gnn:seedsAuthors/update/dense/weights",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8525804,
+			"Length": 10240
+		},
+		{
+			"ParameterName": "var:/graph_update_5/gnn:seedsAuthors/update/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8536044,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_5/gnn:seedsAuthors/update/normalization/layer_normalization/gain",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8536108,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_5/gnn:seedsAuthors/update/normalization/layer_normalization/offset",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8536172,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_5/gnn:seedsBase/update/dense/weights",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8536236,
+			"Length": 10240
+		},
+		{
+			"ParameterName": "var:/graph_update_5/gnn:seedsBase/update/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8546476,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_5/gnn:seedsBase/update/normalization/layer_normalization/gain",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8546540,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_5/gnn:seedsBase/update/normalization/layer_normalization/offset",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8546604,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_5/gnn:seedsBase/conv/message/dense/weights",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8546668,
+			"Length": 2048
+		},
+		{
+			"ParameterName": "var:/graph_update_5/gnn:seedsBase/conv/message/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8548716,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_5/gnn:seeds/update/dense/weights",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8548780,
+			"Length": 10240
+		},
+		{
+			"ParameterName": "var:/graph_update_5/gnn:seeds/update/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8559020,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_5/gnn:seeds/update/normalization/layer_normalization/gain",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8559084,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/graph_update_5/gnn:seeds/update/normalization/layer_normalization/offset",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8559148,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/gnn:seeds/readout_hidden_0/dense/weights",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8559212,
+			"Length": 2048
+		},
+		{
+			"ParameterName": "var:/gnn:seeds/readout_hidden_0/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8561260,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/gnn:seeds/readout_hidden_0/normalization/layer_normalization/gain",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8561324,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/gnn:seeds/readout_hidden_0/normalization/layer_normalization/offset",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8561388,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/gnn:seeds/readout_hidden_1/dense/weights",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8561452,
+			"Length": 2048
+		},
+		{
+			"ParameterName": "var:/gnn:seeds/readout_hidden_1/dense/biases",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8563500,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/gnn:seeds/readout_hidden_1/normalization/layer_normalization/gain",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8563564,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/gnn:seeds/readout_hidden_1/normalization/layer_normalization/offset",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float16",
+			"Pos": 8563628,
+			"Length": 64
+		},
+		{
+			"ParameterName": "var:/logits/dense/weights",
+			"Dimensions": [
+				32,
+				349
+			],
+			"DType": "Float16",
+			"Pos": 8563692,
+			"Length": 22336
+		},
+		{
+			"ParameterName": "var:/logits/dense/biases",
+			"Dimensions": [
+				349
+			],
+			"DType": "Float16",
+			"Pos": 8586028,
+			"Length": 698
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/global_step",
+			"Dimensions": null,
+			"DType": "Int64",
+			"Pos": 8586726,
+			"Length": 8
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/embeddings/institutions/embeddings_1st_moment",
+			"Dimensions": [
+				8740,
+				16
+			],
+			"DType": "Float32",
+			"Pos": 8586734,
+			"Length": 559360
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/embeddings/institutions/embeddings_2nd_moment",
+			"Dimensions": [
+				8740,
+				16
+			],
+			"DType": "Float32",
+			"Pos": 9146094,
+			"Length": 559360
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/embeddings/fields_of_study/embeddings_1st_moment",
+			"Dimensions": [
+				59965,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 9705454,
+			"Length": 7675520
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/embeddings/fields_of_study/embeddings_2nd_moment",
+			"Dimensions": [
+				59965,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 17380974,
+			"Length": 7675520
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:citations/conv/message/dense/weights_1st_moment",
+			"Dimensions": [
+				128,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25056494,
+			"Length": 16384
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:citations/conv/message/dense/weights_2nd_moment",
+			"Dimensions": [
+				128,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25072878,
+			"Length": 16384
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:citations/conv/message/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25089262,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:citations/conv/message/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25089390,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:papersByAuthors/conv/message/dense/weights_1st_moment",
+			"Dimensions": [
+				128,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25089518,
+			"Length": 16384
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:papersByAuthors/conv/message/dense/weights_2nd_moment",
+			"Dimensions": [
+				128,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25105902,
+			"Length": 16384
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:papersByAuthors/conv/message/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25122286,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:papersByAuthors/conv/message/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25122414,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:seedsTopics/conv/message/dense/weights_1st_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25122542,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:seedsTopics/conv/message/dense/weights_2nd_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25126638,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:seedsTopics/conv/message/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25130734,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:seedsTopics/conv/message/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25130862,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:papersByAuthors/update/dense/weights_1st_moment",
+			"Dimensions": [
+				192,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25130990,
+			"Length": 24576
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:papersByAuthors/update/dense/weights_2nd_moment",
+			"Dimensions": [
+				192,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25155566,
+			"Length": 24576
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:papersByAuthors/update/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25180142,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:papersByAuthors/update/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25180270,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:papersByAuthors/update/normalization/layer_normalization/gain_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25180398,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:papersByAuthors/update/normalization/layer_normalization/gain_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25180526,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:papersByAuthors/update/normalization/layer_normalization/offset_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25180654,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:papersByAuthors/update/normalization/layer_normalization/offset_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25180782,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:authorsInstitutions/conv/message/dense/weights_1st_moment",
+			"Dimensions": [
+				16,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25180910,
+			"Length": 2048
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:authorsInstitutions/conv/message/dense/weights_2nd_moment",
+			"Dimensions": [
+				16,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25182958,
+			"Length": 2048
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:authorsInstitutions/conv/message/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25185006,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:authorsInstitutions/conv/message/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25185134,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:seedsAuthors/update/dense/weights_1st_moment",
+			"Dimensions": [
+				128,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25185262,
+			"Length": 16384
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:seedsAuthors/update/dense/weights_2nd_moment",
+			"Dimensions": [
+				128,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25201646,
+			"Length": 16384
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:seedsAuthors/update/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25218030,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:seedsAuthors/update/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25218158,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:seedsAuthors/update/normalization/layer_normalization/gain_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25218286,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:seedsAuthors/update/normalization/layer_normalization/gain_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25218414,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:seedsAuthors/update/normalization/layer_normalization/offset_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25218542,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:seedsAuthors/update/normalization/layer_normalization/offset_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25218670,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:seedsBase/update/dense/weights_1st_moment",
+			"Dimensions": [
+				192,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25218798,
+			"Length": 24576
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:seedsBase/update/dense/weights_2nd_moment",
+			"Dimensions": [
+				192,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25243374,
+			"Length": 24576
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:seedsBase/update/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25267950,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:seedsBase/update/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25268078,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:seedsBase/update/normalization/layer_normalization/gain_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25268206,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:seedsBase/update/normalization/layer_normalization/gain_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25268334,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:seedsBase/update/normalization/layer_normalization/offset_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25268462,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:seedsBase/update/normalization/layer_normalization/offset_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25268590,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:seedsBase/conv/message/dense/weights_1st_moment",
+			"Dimensions": [
+				128,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25268718,
+			"Length": 16384
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:seedsBase/conv/message/dense/weights_2nd_moment",
+			"Dimensions": [
+				128,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25285102,
+			"Length": 16384
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:seedsBase/conv/message/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25301486,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:seedsBase/conv/message/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25301614,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:seeds/update/dense/weights_1st_moment",
+			"Dimensions": [
+				256,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25301742,
+			"Length": 32768
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:seeds/update/dense/weights_2nd_moment",
+			"Dimensions": [
+				256,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25334510,
+			"Length": 32768
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:seeds/update/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25367278,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:seeds/update/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25367406,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:seeds/update/normalization/layer_normalization/gain_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25367534,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:seeds/update/normalization/layer_normalization/gain_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25367662,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:seeds/update/normalization/layer_normalization/offset_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25367790,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_0/gnn:seeds/update/normalization/layer_normalization/offset_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25367918,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:citations/conv/message/dense/weights_1st_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25368046,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:citations/conv/message/dense/weights_2nd_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25372142,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:citations/conv/message/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25376238,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:citations/conv/message/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25376366,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:seedsAuthors/conv/message/dense/weights_1st_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25376494,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:seedsAuthors/conv/message/dense/weights_2nd_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25380590,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:seedsAuthors/conv/message/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25384686,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:seedsAuthors/conv/message/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25384814,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:papersByAuthors/conv/message/dense/weights_1st_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25384942,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:papersByAuthors/conv/message/dense/weights_2nd_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25389038,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:papersByAuthors/conv/message/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25393134,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:papersByAuthors/conv/message/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25393262,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:seedsTopics/conv/message/dense/weights_1st_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25393390,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:seedsTopics/conv/message/dense/weights_2nd_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25397486,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:seedsTopics/conv/message/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25401582,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:seedsTopics/conv/message/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25401710,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:papersByAuthors/update/dense/weights_1st_moment",
+			"Dimensions": [
+				96,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25401838,
+			"Length": 12288
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:papersByAuthors/update/dense/weights_2nd_moment",
+			"Dimensions": [
+				96,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25414126,
+			"Length": 12288
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:papersByAuthors/update/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25426414,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:papersByAuthors/update/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25426542,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:papersByAuthors/update/normalization/layer_normalization/gain_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25426670,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:papersByAuthors/update/normalization/layer_normalization/gain_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25426798,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:papersByAuthors/update/normalization/layer_normalization/offset_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25426926,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:papersByAuthors/update/normalization/layer_normalization/offset_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25427054,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:authorsInstitutions/conv/message/dense/weights_1st_moment",
+			"Dimensions": [
+				16,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25427182,
+			"Length": 2048
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:authorsInstitutions/conv/message/dense/weights_2nd_moment",
+			"Dimensions": [
+				16,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25429230,
+			"Length": 2048
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:authorsInstitutions/conv/message/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25431278,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:authorsInstitutions/conv/message/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25431406,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:seedsAuthors/update/dense/weights_1st_moment",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25431534,
+			"Length": 20480
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:seedsAuthors/update/dense/weights_2nd_moment",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25452014,
+			"Length": 20480
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:seedsAuthors/update/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25472494,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:seedsAuthors/update/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25472622,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:seedsAuthors/update/normalization/layer_normalization/gain_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25472750,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:seedsAuthors/update/normalization/layer_normalization/gain_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25472878,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:seedsAuthors/update/normalization/layer_normalization/offset_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25473006,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:seedsAuthors/update/normalization/layer_normalization/offset_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25473134,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:seedsBase/update/dense/weights_1st_moment",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25473262,
+			"Length": 20480
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:seedsBase/update/dense/weights_2nd_moment",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25493742,
+			"Length": 20480
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:seedsBase/update/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25514222,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:seedsBase/update/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25514350,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:seedsBase/update/normalization/layer_normalization/gain_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25514478,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:seedsBase/update/normalization/layer_normalization/gain_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25514606,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:seedsBase/update/normalization/layer_normalization/offset_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25514734,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:seedsBase/update/normalization/layer_normalization/offset_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25514862,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:seedsBase/conv/message/dense/weights_1st_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25514990,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:seedsBase/conv/message/dense/weights_2nd_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25519086,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:seedsBase/conv/message/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25523182,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:seedsBase/conv/message/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25523310,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:seeds/update/dense/weights_1st_moment",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25523438,
+			"Length": 20480
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:seeds/update/dense/weights_2nd_moment",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25543918,
+			"Length": 20480
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:seeds/update/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25564398,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:seeds/update/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25564526,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:seeds/update/normalization/layer_normalization/gain_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25564654,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:seeds/update/normalization/layer_normalization/gain_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25564782,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:seeds/update/normalization/layer_normalization/offset_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25564910,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_1/gnn:seeds/update/normalization/layer_normalization/offset_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25565038,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:citations/conv/message/dense/weights_1st_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25565166,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:citations/conv/message/dense/weights_2nd_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25569262,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:citations/conv/message/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25573358,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:citations/conv/message/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25573486,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:seedsAuthors/conv/message/dense/weights_1st_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25573614,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:seedsAuthors/conv/message/dense/weights_2nd_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25577710,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:seedsAuthors/conv/message/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25581806,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:seedsAuthors/conv/message/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25581934,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:papersByAuthors/conv/message/dense/weights_1st_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25582062,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:papersByAuthors/conv/message/dense/weights_2nd_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25586158,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:papersByAuthors/conv/message/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25590254,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:papersByAuthors/conv/message/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25590382,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:seedsTopics/conv/message/dense/weights_1st_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25590510,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:seedsTopics/conv/message/dense/weights_2nd_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25594606,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:seedsTopics/conv/message/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25598702,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:seedsTopics/conv/message/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25598830,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:papersByAuthors/update/dense/weights_1st_moment",
+			"Dimensions": [
+				96,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25598958,
+			"Length": 12288
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:papersByAuthors/update/dense/weights_2nd_moment",
+			"Dimensions": [
+				96,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25611246,
+			"Length": 12288
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:papersByAuthors/update/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25623534,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:papersByAuthors/update/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25623662,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:papersByAuthors/update/normalization/layer_normalization/gain_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25623790,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:papersByAuthors/update/normalization/layer_normalization/gain_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25623918,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:papersByAuthors/update/normalization/layer_normalization/offset_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25624046,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:papersByAuthors/update/normalization/layer_normalization/offset_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25624174,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:authorsInstitutions/conv/message/dense/weights_1st_moment",
+			"Dimensions": [
+				16,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25624302,
+			"Length": 2048
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:authorsInstitutions/conv/message/dense/weights_2nd_moment",
+			"Dimensions": [
+				16,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25626350,
+			"Length": 2048
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:authorsInstitutions/conv/message/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25628398,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:authorsInstitutions/conv/message/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25628526,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:seedsAuthors/update/dense/weights_1st_moment",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25628654,
+			"Length": 20480
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:seedsAuthors/update/dense/weights_2nd_moment",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25649134,
+			"Length": 20480
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:seedsAuthors/update/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25669614,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:seedsAuthors/update/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25669742,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:seedsAuthors/update/normalization/layer_normalization/gain_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25669870,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:seedsAuthors/update/normalization/layer_normalization/gain_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25669998,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:seedsAuthors/update/normalization/layer_normalization/offset_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25670126,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:seedsAuthors/update/normalization/layer_normalization/offset_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25670254,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:seedsBase/update/dense/weights_1st_moment",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25670382,
+			"Length": 20480
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:seedsBase/update/dense/weights_2nd_moment",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25690862,
+			"Length": 20480
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:seedsBase/update/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25711342,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:seedsBase/update/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25711470,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:seedsBase/update/normalization/layer_normalization/gain_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25711598,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:seedsBase/update/normalization/layer_normalization/gain_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25711726,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:seedsBase/update/normalization/layer_normalization/offset_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25711854,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:seedsBase/update/normalization/layer_normalization/offset_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25711982,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:seedsBase/conv/message/dense/weights_1st_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25712110,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:seedsBase/conv/message/dense/weights_2nd_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25716206,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:seedsBase/conv/message/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25720302,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:seedsBase/conv/message/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25720430,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:seeds/update/dense/weights_1st_moment",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25720558,
+			"Length": 20480
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:seeds/update/dense/weights_2nd_moment",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25741038,
+			"Length": 20480
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:seeds/update/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25761518,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:seeds/update/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25761646,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:seeds/update/normalization/layer_normalization/gain_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25761774,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:seeds/update/normalization/layer_normalization/gain_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25761902,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:seeds/update/normalization/layer_normalization/offset_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25762030,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_2/gnn:seeds/update/normalization/layer_normalization/offset_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25762158,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:citations/conv/message/dense/weights_1st_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25762286,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:citations/conv/message/dense/weights_2nd_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25766382,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:citations/conv/message/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25770478,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:citations/conv/message/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25770606,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:seedsAuthors/conv/message/dense/weights_1st_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25770734,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:seedsAuthors/conv/message/dense/weights_2nd_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25774830,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:seedsAuthors/conv/message/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25778926,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:seedsAuthors/conv/message/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25779054,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:papersByAuthors/conv/message/dense/weights_1st_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25779182,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:papersByAuthors/conv/message/dense/weights_2nd_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25783278,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:papersByAuthors/conv/message/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25787374,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:papersByAuthors/conv/message/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25787502,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:seedsTopics/conv/message/dense/weights_1st_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25787630,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:seedsTopics/conv/message/dense/weights_2nd_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25791726,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:seedsTopics/conv/message/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25795822,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:seedsTopics/conv/message/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25795950,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:papersByAuthors/update/dense/weights_1st_moment",
+			"Dimensions": [
+				96,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25796078,
+			"Length": 12288
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:papersByAuthors/update/dense/weights_2nd_moment",
+			"Dimensions": [
+				96,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25808366,
+			"Length": 12288
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:papersByAuthors/update/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25820654,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:papersByAuthors/update/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25820782,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:papersByAuthors/update/normalization/layer_normalization/gain_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25820910,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:papersByAuthors/update/normalization/layer_normalization/gain_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25821038,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:papersByAuthors/update/normalization/layer_normalization/offset_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25821166,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:papersByAuthors/update/normalization/layer_normalization/offset_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25821294,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:authorsInstitutions/conv/message/dense/weights_1st_moment",
+			"Dimensions": [
+				16,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25821422,
+			"Length": 2048
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:authorsInstitutions/conv/message/dense/weights_2nd_moment",
+			"Dimensions": [
+				16,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25823470,
+			"Length": 2048
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:authorsInstitutions/conv/message/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25825518,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:authorsInstitutions/conv/message/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25825646,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:seedsAuthors/update/dense/weights_1st_moment",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25825774,
+			"Length": 20480
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:seedsAuthors/update/dense/weights_2nd_moment",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25846254,
+			"Length": 20480
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:seedsAuthors/update/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25866734,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:seedsAuthors/update/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25866862,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:seedsAuthors/update/normalization/layer_normalization/gain_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25866990,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:seedsAuthors/update/normalization/layer_normalization/gain_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25867118,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:seedsAuthors/update/normalization/layer_normalization/offset_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25867246,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:seedsAuthors/update/normalization/layer_normalization/offset_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25867374,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:seedsBase/update/dense/weights_1st_moment",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25867502,
+			"Length": 20480
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:seedsBase/update/dense/weights_2nd_moment",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25887982,
+			"Length": 20480
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:seedsBase/update/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25908462,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:seedsBase/update/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25908590,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:seedsBase/update/normalization/layer_normalization/gain_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25908718,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:seedsBase/update/normalization/layer_normalization/gain_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25908846,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:seedsBase/update/normalization/layer_normalization/offset_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25908974,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:seedsBase/update/normalization/layer_normalization/offset_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25909102,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:seedsBase/conv/message/dense/weights_1st_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25909230,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:seedsBase/conv/message/dense/weights_2nd_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25913326,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:seedsBase/conv/message/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25917422,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:seedsBase/conv/message/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25917550,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:seeds/update/dense/weights_1st_moment",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25917678,
+			"Length": 20480
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:seeds/update/dense/weights_2nd_moment",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25938158,
+			"Length": 20480
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:seeds/update/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25958638,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:seeds/update/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25958766,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:seeds/update/normalization/layer_normalization/gain_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25958894,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:seeds/update/normalization/layer_normalization/gain_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25959022,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:seeds/update/normalization/layer_normalization/offset_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25959150,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_3/gnn:seeds/update/normalization/layer_normalization/offset_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25959278,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:citations/conv/message/dense/weights_1st_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25959406,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:citations/conv/message/dense/weights_2nd_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25963502,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:citations/conv/message/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25967598,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:citations/conv/message/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25967726,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:seedsAuthors/conv/message/dense/weights_1st_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25967854,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:seedsAuthors/conv/message/dense/weights_2nd_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25971950,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:seedsAuthors/conv/message/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25976046,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:seedsAuthors/conv/message/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25976174,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:papersByAuthors/conv/message/dense/weights_1st_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25976302,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:papersByAuthors/conv/message/dense/weights_2nd_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25980398,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:papersByAuthors/conv/message/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25984494,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:papersByAuthors/conv/message/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25984622,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:seedsTopics/conv/message/dense/weights_1st_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25984750,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:seedsTopics/conv/message/dense/weights_2nd_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25988846,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:seedsTopics/conv/message/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25992942,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:seedsTopics/conv/message/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25993070,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:papersByAuthors/update/dense/weights_1st_moment",
+			"Dimensions": [
+				96,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 25993198,
+			"Length": 12288
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:papersByAuthors/update/dense/weights_2nd_moment",
+			"Dimensions": [
+				96,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26005486,
+			"Length": 12288
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:papersByAuthors/update/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26017774,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:papersByAuthors/update/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26017902,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:papersByAuthors/update/normalization/layer_normalization/gain_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26018030,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:papersByAuthors/update/normalization/layer_normalization/gain_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26018158,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:papersByAuthors/update/normalization/layer_normalization/offset_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26018286,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:papersByAuthors/update/normalization/layer_normalization/offset_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26018414,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:authorsInstitutions/conv/message/dense/weights_1st_moment",
+			"Dimensions": [
+				16,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26018542,
+			"Length": 2048
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:authorsInstitutions/conv/message/dense/weights_2nd_moment",
+			"Dimensions": [
+				16,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26020590,
+			"Length": 2048
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:authorsInstitutions/conv/message/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26022638,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:authorsInstitutions/conv/message/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26022766,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:seedsAuthors/update/dense/weights_1st_moment",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26022894,
+			"Length": 20480
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:seedsAuthors/update/dense/weights_2nd_moment",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26043374,
+			"Length": 20480
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:seedsAuthors/update/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26063854,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:seedsAuthors/update/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26063982,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:seedsAuthors/update/normalization/layer_normalization/gain_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26064110,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:seedsAuthors/update/normalization/layer_normalization/gain_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26064238,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:seedsAuthors/update/normalization/layer_normalization/offset_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26064366,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:seedsAuthors/update/normalization/layer_normalization/offset_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26064494,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:seedsBase/update/dense/weights_1st_moment",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26064622,
+			"Length": 20480
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:seedsBase/update/dense/weights_2nd_moment",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26085102,
+			"Length": 20480
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:seedsBase/update/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26105582,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:seedsBase/update/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26105710,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:seedsBase/update/normalization/layer_normalization/gain_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26105838,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:seedsBase/update/normalization/layer_normalization/gain_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26105966,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:seedsBase/update/normalization/layer_normalization/offset_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26106094,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:seedsBase/update/normalization/layer_normalization/offset_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26106222,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:seedsBase/conv/message/dense/weights_1st_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26106350,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:seedsBase/conv/message/dense/weights_2nd_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26110446,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:seedsBase/conv/message/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26114542,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:seedsBase/conv/message/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26114670,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:seeds/update/dense/weights_1st_moment",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26114798,
+			"Length": 20480
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:seeds/update/dense/weights_2nd_moment",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26135278,
+			"Length": 20480
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:seeds/update/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26155758,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:seeds/update/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26155886,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:seeds/update/normalization/layer_normalization/gain_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26156014,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:seeds/update/normalization/layer_normalization/gain_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26156142,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:seeds/update/normalization/layer_normalization/offset_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26156270,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_4/gnn:seeds/update/normalization/layer_normalization/offset_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26156398,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:citations/conv/message/dense/weights_1st_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26156526,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:citations/conv/message/dense/weights_2nd_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26160622,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:citations/conv/message/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26164718,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:citations/conv/message/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26164846,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:seedsAuthors/conv/message/dense/weights_1st_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26164974,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:seedsAuthors/conv/message/dense/weights_2nd_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26169070,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:seedsAuthors/conv/message/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26173166,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:seedsAuthors/conv/message/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26173294,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:papersByAuthors/conv/message/dense/weights_1st_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26173422,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:papersByAuthors/conv/message/dense/weights_2nd_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26177518,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:papersByAuthors/conv/message/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26181614,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:papersByAuthors/conv/message/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26181742,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:seedsTopics/conv/message/dense/weights_1st_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26181870,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:seedsTopics/conv/message/dense/weights_2nd_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26185966,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:seedsTopics/conv/message/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26190062,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:seedsTopics/conv/message/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26190190,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:papersByAuthors/update/dense/weights_1st_moment",
+			"Dimensions": [
+				96,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26190318,
+			"Length": 12288
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:papersByAuthors/update/dense/weights_2nd_moment",
+			"Dimensions": [
+				96,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26202606,
+			"Length": 12288
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:papersByAuthors/update/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26214894,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:papersByAuthors/update/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26215022,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:papersByAuthors/update/normalization/layer_normalization/gain_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26215150,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:papersByAuthors/update/normalization/layer_normalization/gain_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26215278,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:papersByAuthors/update/normalization/layer_normalization/offset_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26215406,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:papersByAuthors/update/normalization/layer_normalization/offset_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26215534,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:authorsInstitutions/conv/message/dense/weights_1st_moment",
+			"Dimensions": [
+				16,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26215662,
+			"Length": 2048
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:authorsInstitutions/conv/message/dense/weights_2nd_moment",
+			"Dimensions": [
+				16,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26217710,
+			"Length": 2048
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:authorsInstitutions/conv/message/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26219758,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:authorsInstitutions/conv/message/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26219886,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:seedsAuthors/update/dense/weights_1st_moment",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26220014,
+			"Length": 20480
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:seedsAuthors/update/dense/weights_2nd_moment",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26240494,
+			"Length": 20480
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:seedsAuthors/update/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26260974,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:seedsAuthors/update/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26261102,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:seedsAuthors/update/normalization/layer_normalization/gain_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26261230,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:seedsAuthors/update/normalization/layer_normalization/gain_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26261358,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:seedsAuthors/update/normalization/layer_normalization/offset_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26261486,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:seedsAuthors/update/normalization/layer_normalization/offset_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26261614,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:seedsBase/update/dense/weights_1st_moment",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26261742,
+			"Length": 20480
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:seedsBase/update/dense/weights_2nd_moment",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26282222,
+			"Length": 20480
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:seedsBase/update/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26302702,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:seedsBase/update/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26302830,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:seedsBase/update/normalization/layer_normalization/gain_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26302958,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:seedsBase/update/normalization/layer_normalization/gain_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26303086,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:seedsBase/update/normalization/layer_normalization/offset_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26303214,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:seedsBase/update/normalization/layer_normalization/offset_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26303342,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:seedsBase/conv/message/dense/weights_1st_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26303470,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:seedsBase/conv/message/dense/weights_2nd_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26307566,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:seedsBase/conv/message/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26311662,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:seedsBase/conv/message/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26311790,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:seeds/update/dense/weights_1st_moment",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26311918,
+			"Length": 20480
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:seeds/update/dense/weights_2nd_moment",
+			"Dimensions": [
+				160,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26332398,
+			"Length": 20480
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:seeds/update/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26352878,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:seeds/update/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26353006,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:seeds/update/normalization/layer_normalization/gain_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26353134,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:seeds/update/normalization/layer_normalization/gain_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26353262,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:seeds/update/normalization/layer_normalization/offset_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26353390,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/graph_update_5/gnn:seeds/update/normalization/layer_normalization/offset_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26353518,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/gnn:seeds/readout_hidden_0/dense/weights_1st_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26353646,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/gnn:seeds/readout_hidden_0/dense/weights_2nd_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26357742,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/gnn:seeds/readout_hidden_0/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26361838,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/gnn:seeds/readout_hidden_0/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26361966,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/gnn:seeds/readout_hidden_0/normalization/layer_normalization/gain_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26362094,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/gnn:seeds/readout_hidden_0/normalization/layer_normalization/gain_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26362222,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/gnn:seeds/readout_hidden_0/normalization/layer_normalization/offset_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26362350,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/gnn:seeds/readout_hidden_0/normalization/layer_normalization/offset_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26362478,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/gnn:seeds/readout_hidden_1/dense/weights_1st_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26362606,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/gnn:seeds/readout_hidden_1/dense/weights_2nd_moment",
+			"Dimensions": [
+				32,
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26366702,
+			"Length": 4096
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/gnn:seeds/readout_hidden_1/dense/biases_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26370798,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/gnn:seeds/readout_hidden_1/dense/biases_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26370926,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/gnn:seeds/readout_hidden_1/normalization/layer_normalization/gain_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26371054,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/gnn:seeds/readout_hidden_1/normalization/layer_normalization/gain_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26371182,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/gnn:seeds/readout_hidden_1/normalization/layer_normalization/offset_1st_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26371310,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/gnn:seeds/readout_hidden_1/normalization/layer_normalization/offset_2nd_moment",
+			"Dimensions": [
+				32
+			],
+			"DType": "Float32",
+			"Pos": 26371438,
+			"Length": 128
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/logits/dense/weights_1st_moment",
+			"Dimensions": [
+				32,
+				349
+			],
+			"DType": "Float32",
+			"Pos": 26371566,
+			"Length": 44672
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/logits/dense/weights_2nd_moment",
+			"Dimensions": [
+				32,
+				349
+			],
+			"DType": "Float32",
+			"Pos": 26416238,
+			"Length": 44672
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/logits/dense/biases_1st_moment",
+			"Dimensions": [
+				349
+			],
+			"DType": "Float32",
+			"Pos": 26460910,
+			"Length": 1396
+		},
+		{
+			"ParameterName": "var:/AdamOptimizer/logits/dense/biases_2nd_moment",
+			"Dimensions": [
+				349
+			],
+			"DType": "Float32",
+			"Pos": 26462306,
+			"Length": 1396
+		},
+		{
+			"ParameterName": "var:/Moving Average Loss+Regularization_uuid_06d9646a-e0ee-46d4-a683-4c794a427542/mean",
+			"Dimensions": null,
+			"DType": "Float32",
+			"Pos": 26463702,
+			"Length": 4
+		},
+		{
+			"ParameterName": "var:/Moving Average Loss+Regularization_uuid_06d9646a-e0ee-46d4-a683-4c794a427542/count",
+			"Dimensions": null,
+			"DType": "Float32",
+			"Pos": 26463706,
+			"Length": 4
+		},
+		{
+			"ParameterName": "var:/Moving Average Loss_uuid_eef1b5a3-1921-4b65-9c3c-55477495ee81/mean",
+			"Dimensions": null,
+			"DType": "Float32",
+			"Pos": 26463710,
+			"Length": 4
+		},
+		{
+			"ParameterName": "var:/Moving Average Loss_uuid_eef1b5a3-1921-4b65-9c3c-55477495ee81/count",
+			"Dimensions": null,
+			"DType": "Float32",
+			"Pos": 26463714,
+			"Length": 4
+		},
+		{
+			"ParameterName": "var:/Moving Average Accuracy_uuid_acf7e28d-2dcb-4940-8681-b61a70b9ed59/mean",
+			"Dimensions": null,
+			"DType": "Float32",
+			"Pos": 26463718,
+			"Length": 4
+		},
+		{
+			"ParameterName": "var:/Moving Average Accuracy_uuid_acf7e28d-2dcb-4940-8681-b61a70b9ed59/count",
+			"Dimensions": null,
+			"DType": "Float32",
+			"Pos": 26463722,
+			"Length": 4
+		}
+	]
+}

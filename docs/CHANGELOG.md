@@ -57,7 +57,8 @@
   * random initializers use zeros for non-float variables by default (as opposed to crash)
   * default initializer now matches Keras (random uniform from `[-0.05, 0.05]`).
 * Package `context/checkpoints`:
-  * added `ExcludeVarsFromSaving` to allow preventing saving large static variables. 
+  * added `ExcludeVarsFromSaving` to allow preventing saving large static variables.
+  * fixed issue with lazy-loading of variables.
 * Package `shapes`:
   * Added `Check()` and `Assert()` to check for both, dtype and dimensions.
   * Added `EqDimensions()` to compare dimensions.
