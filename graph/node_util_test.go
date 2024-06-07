@@ -215,3 +215,42 @@ func TestMirroredLog1p(t *testing.T) {
 			return output, []*Node{input}
 		}, []any{[]float32{0.0, 1.0 / (2 + 1), 1.0 / (3 + 1)}})
 }
+
+func TestGenericShift(t *testing.T) {
+	testFuncOneInput(t, "GenericShift(input, axis=1, left, n=1, fill=0.0)",
+		func(g *Graph) (input, output *Node) {
+			input = IotaFull(g, shapes.Make(shapes.F32, 3, 2, 2))
+			output = GenericShift(input, 1, true, 1, 0.0)
+			return
+		}, [][][]float32{
+			{{2, 3}, {0, 0}},
+			{{6, 7}, {0, 0}},
+			{{10, 11}, {0, 0}},
+		})
+	testFuncOneInput(t, "GenericShift(input, axis=-1, left, n=1, fill=100)",
+		func(g *Graph) (input, output *Node) {
+			input = IotaFull(g, shapes.Make(shapes.I32, 3, 2, 2))
+			output = GenericShift(input, -1, true, 1, 100)
+			return
+		}, [][][]int32{
+			{{1, 100}, {3, 100}},
+			{{5, 100}, {7, 100}},
+			{{9, 100}, {11, 100}},
+		})
+	testFuncOneInput(t, "GenericShift(input, axis=0, right, n=2, fill=1.0)",
+		func(g *Graph) (input, output *Node) {
+			input = Zeros(g, shapes.Make(shapes.Bool, 3, 2, 2))
+			output = GenericShift(input, 0, false, 2, 1)
+			return
+		}, [][][]bool{ // Inserted `true` to the left (shift-right) of the tensor:
+			{{true, true}, {true, true}},
+			{{true, true}, {true, true}},
+			{{false, false}, {false, false}},
+		})
+	testFuncOneInput(t, "GenericShift(input, axis=0, right, n=3, fill=1)",
+		func(g *Graph) (input, output *Node) {
+			input = IotaFull(g, shapes.Make(shapes.F64, 10.0))
+			output = GenericShift(input, -1, false, 3, 1)
+			return
+		}, []float64{1, 1, 1, 0, 1, 2, 3, 4, 5, 6})
+}

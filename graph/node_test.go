@@ -57,7 +57,7 @@ func testFuncOneInput(t *testing.T, testName string, graphFn graphFnOneInputToTe
 	results := g.Run(nil).SplitTuple()
 	input, got := results[0].Value(), results[1].Value()
 	if !slices.SlicesInDelta(want, got, slices.Epsilon) {
-		t.Errorf("%s(%#v): want=%v, got=%v", testName, input, want, got)
+		t.Errorf("%s(%#v): want=%v, got=%s", testName, input, want, results[1].Local().GoStr())
 	}
 }
 

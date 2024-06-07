@@ -25,6 +25,8 @@
 * Plotly training plots: added `WithCustomMetricFn` for custom metrics and `ScheduleEveryNSteps`.
 * Added OGBN_MAG GNN example:
   * Including Layer-Wise Inference.
+* Package graph:
+  * Added `ShiftLeft`, `ShiftRight` and `GenericShift`.
 
 ## 0.9.1 - 2024/04/19
 

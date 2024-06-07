@@ -17,6 +17,7 @@
 package graph
 
 import (
+	"github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 )
@@ -436,4 +437,71 @@ func DiagonalWithValue(scalar *Node, dim int) *Node {
 	g := scalar.Graph()
 	matrix := BroadcastPrefix(scalar, []int{dim, dim})
 	return Where(Diagonal(g, dim), matrix, ZerosLike(matrix))
+}
+
+// ShiftLeft the last axis of [x] by [n] positions ([n] is a static value) and fill the new value
+// with [fill]. The value of [fill] is converted to [x]'s [shapes.DType]. For boolean dtype, use 1.0 or 0.0.
+func ShiftLeft(x *Node, n int, fill float64) *Node {
+	return GenericShift(x, -1, true, n, fill)
+}
+
+// ShiftRight the last axis of [x] by [n] positions ([n] is a static value) and fill the new value
+// with [fill]. The value of [fill] is converted to [x]'s [shapes.DType]. For boolean dtype, use 1.0 or 0.0.
+func ShiftRight(x *Node, n int, fill float64) *Node {
+	return GenericShift(x, -1, false, n, fill)
+}
+
+// GenericShift a given [axis] of [x] by [n] positions ([n] is a static value) and fill the new value
+// with [fill].
+// If [dirLeft] is true it shifts to the left (towards lower values), otherwise to the right (towards higher values).
+// The value of [fill] is converted to [x]'s [shapes.DType]. For boolean dtype, use 1.0 or 0.0.
+func GenericShift(x *Node, axis int, dirLeft bool, n int, fill float64) *Node {
+	g := x.Graph()
+	dtype := x.DType()
+	rank := x.Rank()
+	dims := x.Shape().Dimensions
+	shiftAxis := AdjustAxis(x, axis)
+	if n > dims[shiftAxis] {
+		exceptions.Panicf("cannot shift %d positions for axis %d, x.shape=%s", n, axis, x.Shape())
+	}
+	if n == 0 {
+		// Trivial solution.
+		return x
+	}
+
+	// Slice part of the tensor that stays.
+	axisRanges := make([]SliceAxisSpec, rank)
+	fillDims := make([]int, rank)
+	for ii := range rank {
+		if ii != shiftAxis {
+			// Take axes that are not shifted and fill the full dimension.
+			axisRanges[ii] = AxisRange()
+			fillDims[ii] = dims[ii]
+			continue
+		}
+		if dirLeft {
+			axisRanges[ii] = AxisRange(n)
+		} else {
+			axisRanges[ii] = AxisRange(0, dims[ii]-n)
+		}
+		fillDims[ii] = n
+	}
+
+	xSlice := Slice(x, axisRanges...)
+	var xFill *Node
+	if fill == 0.0 {
+		xFill = Zeros(g, shapes.Make(dtype, fillDims...))
+	} else {
+		xFill = Ones(g, shapes.Make(dtype, fillDims...))
+		if fill != 1.0 {
+			xFill = MulScalar(xFill, fill)
+		}
+	}
+
+	if dirLeft {
+		x = Concatenate([]*Node{xSlice, xFill}, shiftAxis)
+	} else {
+		x = Concatenate([]*Node{xFill, xSlice}, shiftAxis)
+	}
+	return x
 }
