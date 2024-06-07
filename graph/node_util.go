@@ -442,22 +442,22 @@ func DiagonalWithValue(scalar *Node, dim int) *Node {
 // ShiftLeft the last axis of [x] by [n] positions ([n] is a static value) and fill the new value
 // with [fill]. The value of [fill] is converted to [x]'s [shapes.DType]. For boolean dtype, use 1.0 or 0.0.
 //
-// See [GenericShiftWithScalar] and [GenericShiftWithValue] for a more generic shift function.
+// See [ShiftWithScalar] and [ShiftWithValue] for a more generic shift function.
 func ShiftLeft(x *Node, n int, fill float64) *Node {
-	return GenericShiftWithScalar(x, -1, ShiftLeftDir, n, fill)
+	return ShiftWithScalar(x, -1, ShiftLeftDir, n, fill)
 }
 
 // ShiftRight the last axis of [x] by [n] positions ([n] is a static value) and fill the new value
 // with [fill]. The value of [fill] is converted to [x]'s [shapes.DType]. For boolean dtype, use 1.0 or 0.0.
 //
-// See [GenericShiftWithScalar] and [GenericShiftWithValue] for a more generic shift function.
+// See [ShiftWithScalar] and [ShiftWithValue] for a more generic shift function.
 func ShiftRight(x *Node, n int, fill float64) *Node {
-	return GenericShiftWithScalar(x, -1, ShiftRightDir, n, fill)
+	return ShiftWithScalar(x, -1, ShiftRightDir, n, fill)
 }
 
 //go:generate stringer -type=ShiftDirection
 
-// ShiftDirection used by [GenericShiftWithScalar] and [GenericShiftWithValue]. See [ShiftLeftDir] and [ShiftRightDir].
+// ShiftDirection used by [ShiftWithScalar] and [ShiftWithValue]. See [ShiftLeftDir] and [ShiftRightDir].
 type ShiftDirection bool
 
 const (
@@ -465,31 +465,31 @@ const (
 	ShiftRightDir                = true
 )
 
-// GenericShiftWithScalar a given [axis] of [x] by [n] positions ([n] is a static value) and fill the new value
+// ShiftWithScalar a given [axis] of [x] by [n] positions ([n] is a static value) and fill the new value
 // with [fill], a **static** scalar value.
 // The [shiftDir] defines the direction: left towards lower values or right towards higher values.
 // The value of [fill] is converted to [x]'s [shapes.DType]. For boolean dtype, use 1.0 or 0.0.
-func GenericShiftWithScalar(x *Node, axis int, shiftDir ShiftDirection, n int, fill float64) *Node {
+func ShiftWithScalar(x *Node, axis int, shiftDir ShiftDirection, n int, fill float64) *Node {
 	return genericShiftImpl(x, axis, shiftDir, n, fill, nil)
 }
 
-// GenericShiftWithValue a given [axis] of [x] by [n] positions ([n] is a static value) and fill the new value
+// ShiftWithValue a given [axis] of [x] by [n] positions ([n] is a static value) and fill the new value
 // with a dynamic (graph) [value].
 // The [shiftDir] defines the direction: left towards lower values or right towards higher values.
 // The filling [value] must be "broadcastable" (see [BroadcastToDim]) to the space it's going to fill with the shift --
 // a scalar can always be broadcast.
-func GenericShiftWithValue(x *Node, axis int, shiftDir ShiftDirection, n int, value *Node) *Node {
+func ShiftWithValue(x *Node, axis int, shiftDir ShiftDirection, n int, value *Node) *Node {
 	return genericShiftImpl(x, axis, shiftDir, n, 0, value)
 }
 
-// GenericShift a given [axis] of [x] by [n] positions ([n] is a static value).
+// Shift a given [axis] of [x] by [n] positions ([n] is a static value).
 // The [shiftDir] defines the direction: left towards lower values or right towards higher values.
 // The spaces left open keep the edge value. Example:
 //
-//	GenericShift([0, 1, 2, 3], axis=-1, ShiftLeftDir, n=2)
+//	Shift([0, 1, 2, 3], axis=-1, ShiftLeftDir, n=2)
 //
 // Will return `[2, 3, 3, 3]`.
-func GenericShift(x *Node, axis int, shiftDir ShiftDirection, n int) *Node {
+func Shift(x *Node, axis int, shiftDir ShiftDirection, n int) *Node {
 	rank := x.Rank()
 	dims := x.Shape().Dimensions
 	shiftAxis := AdjustAxis(x, axis)
@@ -509,10 +509,10 @@ func GenericShift(x *Node, axis int, shiftDir ShiftDirection, n int) *Node {
 		}
 	}
 	fillValues := Slice(x, axisRanges...)
-	return GenericShiftWithValue(x, axis, shiftDir, n, fillValues)
+	return ShiftWithValue(x, axis, shiftDir, n, fillValues)
 }
 
-// genericShiftImpl implements GenericShiftWithScalar and GenericShitWithValue.
+// genericShiftImpl implements ShiftWithScalar and GenericShitWithValue.
 func genericShiftImpl(x *Node, axis int, shiftDir ShiftDirection, n int, fill float64, value *Node) *Node {
 	g := x.Graph()
 	dtype := x.DType()

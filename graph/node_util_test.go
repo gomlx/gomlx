@@ -216,56 +216,56 @@ func TestMirroredLog1p(t *testing.T) {
 		}, []any{[]float32{0.0, 1.0 / (2 + 1), 1.0 / (3 + 1)}})
 }
 
-func TestGenericShiftWithScalar(t *testing.T) {
-	testFuncOneInput(t, "GenericShiftWithScalar(input, axis=1, left, n=1, fill=0.0)",
+func TestShiftWithScalar(t *testing.T) {
+	testFuncOneInput(t, "ShiftWithScalar(input, axis=1, left, n=1, fill=0.0)",
 		func(g *Graph) (input, output *Node) {
 			input = IotaFull(g, shapes.Make(shapes.F32, 3, 2, 2))
-			output = GenericShiftWithScalar(input, 1, ShiftLeftDir, 1, 0.0)
+			output = ShiftWithScalar(input, 1, ShiftLeftDir, 1, 0.0)
 			return
 		}, [][][]float32{
 			{{2, 3}, {0, 0}},
 			{{6, 7}, {0, 0}},
 			{{10, 11}, {0, 0}},
 		})
-	testFuncOneInput(t, "GenericShiftWithScalar(input, axis=-1, left, n=1, fill=100)",
+	testFuncOneInput(t, "ShiftWithScalar(input, axis=-1, left, n=1, fill=100)",
 		func(g *Graph) (input, output *Node) {
 			input = IotaFull(g, shapes.Make(shapes.I32, 3, 2, 2))
-			output = GenericShiftWithScalar(input, -1, ShiftLeftDir, 1, 100)
+			output = ShiftWithScalar(input, -1, ShiftLeftDir, 1, 100)
 			return
 		}, [][][]int32{
 			{{1, 100}, {3, 100}},
 			{{5, 100}, {7, 100}},
 			{{9, 100}, {11, 100}},
 		})
-	testFuncOneInput(t, "GenericShiftWithScalar(input, axis=0, right, n=2, fill=1.0)",
+	testFuncOneInput(t, "ShiftWithScalar(input, axis=0, right, n=2, fill=1.0)",
 		func(g *Graph) (input, output *Node) {
 			input = Zeros(g, shapes.Make(shapes.Bool, 3, 2, 2))
-			output = GenericShiftWithScalar(input, 0, ShiftRightDir, 2, 1)
+			output = ShiftWithScalar(input, 0, ShiftRightDir, 2, 1)
 			return
 		}, [][][]bool{ // Inserted `true` to the left (shift-right) of the tensor:
 			{{true, true}, {true, true}},
 			{{true, true}, {true, true}},
 			{{false, false}, {false, false}},
 		})
-	testFuncOneInput(t, "GenericShiftWithScalar(input, axis=0, right, n=3, fill=1)",
+	testFuncOneInput(t, "ShiftWithScalar(input, axis=0, right, n=3, fill=1)",
 		func(g *Graph) (input, output *Node) {
 			input = IotaFull(g, shapes.Make(shapes.F64, 10.0))
-			output = GenericShiftWithScalar(input, -1, ShiftRightDir, 3, 1)
+			output = ShiftWithScalar(input, -1, ShiftRightDir, 3, 1)
 			return
 		}, []float64{1, 1, 1, 0, 1, 2, 3, 4, 5, 6})
 }
 
-func TestGenericShiftWithValue(t *testing.T) {
-	testFuncOneInput(t, "GenericShiftWithScalar(input, axis=0, left, n=3, value=1000)",
+func TestShiftWithValue(t *testing.T) {
+	testFuncOneInput(t, "ShiftWithScalar(input, axis=0, left, n=3, value=1000)",
 		func(g *Graph) (input, output *Node) {
 			input = IotaFull(g, shapes.Make(shapes.F32, 10))
-			output = GenericShiftWithValue(input, 0, ShiftLeftDir, 3, Scalar(g, F32, 1000))
+			output = ShiftWithValue(input, 0, ShiftLeftDir, 3, Scalar(g, F32, 1000))
 			return
 		}, []float32{3, 4, 5, 6, 7, 8, 9, 1000, 1000, 1000})
-	testFuncOneInput(t, "GenericShiftWithScalar(input, axis=-1, right, n=3, value=[[100], [1000]])",
+	testFuncOneInput(t, "ShiftWithScalar(input, axis=-1, right, n=3, value=[[100], [1000]])",
 		func(g *Graph) (input, output *Node) {
 			input = IotaFull(g, shapes.Make(shapes.I32, 2, 10))
-			output = GenericShiftWithValue(input, -1, ShiftRightDir, 3, Const(g, [][]int32{{100}, {1000}}))
+			output = ShiftWithValue(input, -1, ShiftRightDir, 3, Const(g, [][]int32{{100}, {1000}}))
 			return
 		}, [][]int32{
 			{100, 100, 100, 0, 1, 2, 3, 4, 5, 6},
@@ -273,17 +273,17 @@ func TestGenericShiftWithValue(t *testing.T) {
 		})
 }
 
-func TestGenericShift(t *testing.T) {
-	testFuncOneInput(t, "GenericShift(input, axis=0, left, n=3)",
+func TestShift(t *testing.T) {
+	testFuncOneInput(t, "Shift(input, axis=0, left, n=3)",
 		func(g *Graph) (input, output *Node) {
 			input = IotaFull(g, shapes.Make(shapes.F32, 10))
-			output = GenericShift(input, 0, ShiftLeftDir, 3)
+			output = Shift(input, 0, ShiftLeftDir, 3)
 			return
 		}, []float32{3, 4, 5, 6, 7, 8, 9, 9, 9, 9})
-	testFuncOneInput(t, "GenericShift(input, axis=-1, right, n=3)",
+	testFuncOneInput(t, "Shift(input, axis=-1, right, n=3)",
 		func(g *Graph) (input, output *Node) {
 			input = IotaFull(g, shapes.Make(shapes.I32, 2, 10))
-			output = GenericShift(input, -1, ShiftRightDir, 3)
+			output = Shift(input, -1, ShiftRightDir, 3)
 			return
 		}, [][]int32{
 			{0, 0, 0, 0, 1, 2, 3, 4, 5, 6},
