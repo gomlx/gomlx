@@ -799,8 +799,8 @@ func BroadcastToShape(x *Node, shape shapes.Shape) *Node {
 }
 
 // BroadcastToDims broadcasts x to the given dimensions.
-// They must both have the same rank and the dimensions in x being broadcast (that is,
-// where its corresponding requested dimension is different) must be of size 1.
+// If [x] is not scalar, it must have the same rank of the target dimensions, and where the corresponding requested
+// dimension is different than [x]'s, [x]'s dimension must be of size 1.
 //
 // This is a convenient wrapper for BroadcastToShape.
 func BroadcastToDims(x *Node, dimensions ...int) *Node {

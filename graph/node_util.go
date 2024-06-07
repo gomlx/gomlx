@@ -441,21 +441,79 @@ func DiagonalWithValue(scalar *Node, dim int) *Node {
 
 // ShiftLeft the last axis of [x] by [n] positions ([n] is a static value) and fill the new value
 // with [fill]. The value of [fill] is converted to [x]'s [shapes.DType]. For boolean dtype, use 1.0 or 0.0.
+//
+// See [GenericShiftWithScalar] and [GenericShiftWithValue] for a more generic shift function.
 func ShiftLeft(x *Node, n int, fill float64) *Node {
-	return GenericShift(x, -1, true, n, fill)
+	return GenericShiftWithScalar(x, -1, ShiftLeftDir, n, fill)
 }
 
 // ShiftRight the last axis of [x] by [n] positions ([n] is a static value) and fill the new value
 // with [fill]. The value of [fill] is converted to [x]'s [shapes.DType]. For boolean dtype, use 1.0 or 0.0.
+//
+// See [GenericShiftWithScalar] and [GenericShiftWithValue] for a more generic shift function.
 func ShiftRight(x *Node, n int, fill float64) *Node {
-	return GenericShift(x, -1, false, n, fill)
+	return GenericShiftWithScalar(x, -1, ShiftRightDir, n, fill)
 }
 
-// GenericShift a given [axis] of [x] by [n] positions ([n] is a static value) and fill the new value
-// with [fill].
-// If [dirLeft] is true it shifts to the left (towards lower values), otherwise to the right (towards higher values).
+//go:generate stringer -type=ShiftDirection
+
+// ShiftDirection used by [GenericShiftWithScalar] and [GenericShiftWithValue]. See [ShiftLeftDir] and [ShiftRightDir].
+type ShiftDirection bool
+
+const (
+	ShiftLeftDir  ShiftDirection = false
+	ShiftRightDir                = true
+)
+
+// GenericShiftWithScalar a given [axis] of [x] by [n] positions ([n] is a static value) and fill the new value
+// with [fill], a **static** scalar value.
+// The [shiftDir] defines the direction: left towards lower values or right towards higher values.
 // The value of [fill] is converted to [x]'s [shapes.DType]. For boolean dtype, use 1.0 or 0.0.
-func GenericShift(x *Node, axis int, dirLeft bool, n int, fill float64) *Node {
+func GenericShiftWithScalar(x *Node, axis int, shiftDir ShiftDirection, n int, fill float64) *Node {
+	return genericShiftImpl(x, axis, shiftDir, n, fill, nil)
+}
+
+// GenericShiftWithValue a given [axis] of [x] by [n] positions ([n] is a static value) and fill the new value
+// with a dynamic (graph) [value].
+// The [shiftDir] defines the direction: left towards lower values or right towards higher values.
+// The filling [value] must be "broadcastable" (see [BroadcastToDim]) to the space it's going to fill with the shift --
+// a scalar can always be broadcast.
+func GenericShiftWithValue(x *Node, axis int, shiftDir ShiftDirection, n int, value *Node) *Node {
+	return genericShiftImpl(x, axis, shiftDir, n, 0, value)
+}
+
+// GenericShift a given [axis] of [x] by [n] positions ([n] is a static value).
+// The [shiftDir] defines the direction: left towards lower values or right towards higher values.
+// The spaces left open keep the edge value. Example:
+//
+//	GenericShift([0, 1, 2, 3], axis=-1, ShiftLeftDir, n=2)
+//
+// Will return `[2, 3, 3, 3]`.
+func GenericShift(x *Node, axis int, shiftDir ShiftDirection, n int) *Node {
+	rank := x.Rank()
+	dims := x.Shape().Dimensions
+	shiftAxis := AdjustAxis(x, axis)
+
+	// Find slice of left-most / right-most values to use for filling.
+	axisRanges := make([]SliceAxisSpec, rank)
+	for ii := range rank {
+		if ii != shiftAxis {
+			// Take full axes that are not shifted.
+			axisRanges[ii] = AxisRange()
+			continue
+		}
+		if shiftDir == ShiftLeftDir {
+			axisRanges[ii] = AxisRange(dims[ii] - 1) // Take last value.
+		} else {
+			axisRanges[ii] = AxisRange(0, 1) // Take first value.
+		}
+	}
+	fillValues := Slice(x, axisRanges...)
+	return GenericShiftWithValue(x, axis, shiftDir, n, fillValues)
+}
+
+// genericShiftImpl implements GenericShiftWithScalar and GenericShitWithValue.
+func genericShiftImpl(x *Node, axis int, shiftDir ShiftDirection, n int, fill float64, value *Node) *Node {
 	g := x.Graph()
 	dtype := x.DType()
 	rank := x.Rank()
@@ -463,6 +521,9 @@ func GenericShift(x *Node, axis int, dirLeft bool, n int, fill float64) *Node {
 	shiftAxis := AdjustAxis(x, axis)
 	if n > dims[shiftAxis] {
 		exceptions.Panicf("cannot shift %d positions for axis %d, x.shape=%s", n, axis, x.Shape())
+	}
+	if value != nil && value.DType() != dtype {
+		exceptions.Panicf("cannot shift x.shape=%s using value.shape=%s with a different dtype", x.Shape(), value.Shape())
 	}
 	if n == 0 {
 		// Trivial solution.
@@ -479,7 +540,7 @@ func GenericShift(x *Node, axis int, dirLeft bool, n int, fill float64) *Node {
 			fillDims[ii] = dims[ii]
 			continue
 		}
-		if dirLeft {
+		if shiftDir == ShiftLeftDir {
 			axisRanges[ii] = AxisRange(n)
 		} else {
 			axisRanges[ii] = AxisRange(0, dims[ii]-n)
@@ -489,16 +550,22 @@ func GenericShift(x *Node, axis int, dirLeft bool, n int, fill float64) *Node {
 
 	xSlice := Slice(x, axisRanges...)
 	var xFill *Node
-	if fill == 0.0 {
-		xFill = Zeros(g, shapes.Make(dtype, fillDims...))
-	} else {
-		xFill = Ones(g, shapes.Make(dtype, fillDims...))
-		if fill != 1.0 {
-			xFill = MulScalar(xFill, fill)
+	if value == nil {
+		// Fill with given value.
+		if fill == 0.0 {
+			xFill = Zeros(g, shapes.Make(dtype, fillDims...))
+		} else {
+			xFill = Ones(g, shapes.Make(dtype, fillDims...))
+			if fill != 1.0 {
+				xFill = MulScalar(xFill, fill)
+			}
 		}
+	} else {
+		// Fill with value broadcast on the required dimensions.
+		xFill = BroadcastToDims(value, fillDims...)
 	}
 
-	if dirLeft {
+	if shiftDir == ShiftLeftDir {
 		x = Concatenate([]*Node{xSlice, xFill}, shiftAxis)
 	} else {
 		x = Concatenate([]*Node{xFill, xSlice}, shiftAxis)
