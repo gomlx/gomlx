@@ -476,7 +476,7 @@ func ShiftWithScalar(x *Node, axis int, shiftDir ShiftDirection, n int, fill flo
 // ShiftWithValue a given [axis] of [x] by [n] positions ([n] is a static value) and fill the new value
 // with a dynamic (graph) [value].
 // The [shiftDir] defines the direction: left towards lower values or right towards higher values.
-// The filling [value] must be "broadcastable" (see [BroadcastToDim]) to the space it's going to fill with the shift --
+// The filling [value] must be "broadcast-able" (see [BroadcastToDim]) to the space it's going to fill with the shift --
 // a scalar can always be broadcast.
 func ShiftWithValue(x *Node, axis int, shiftDir ShiftDirection, n int, value *Node) *Node {
 	return genericShiftImpl(x, axis, shiftDir, n, 0, value)
