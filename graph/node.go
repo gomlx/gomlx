@@ -418,7 +418,6 @@ func Log(x *Node) *Node { return oneArgNode(xla.LogNode, x) }
 func Log1P(x *Node) *Node { return oneArgNode(xla.Log1pNode, x) }
 
 // Log1p is an alias for Log1P for compatibility.
-// Deprecated: renamed to Log1P to conform to Go style.
 func Log1p(x *Node) *Node { return Log1P(x) }
 
 // Not adds to the graph the corresponding operation on the input node x.

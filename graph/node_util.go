@@ -239,12 +239,6 @@ func OneHot(indices *Node, depth int, dtype shapes.DType) *Node {
 	scatterIndices = Reshape(scatterIndices, indices.shape.Size(), indices.shape.Rank())
 	ones := Ones(g, shapes.Make(dtype, indices.shape.Size()))
 	return Scatter(scatterIndices, ones, targetShape)
-
-	//// ones will have the same shape as the sindices, but with the dtype set to the desired type.
-	//onesShape := indices.shape.Copy()
-	//onesShape.DType = dtype
-	//ones := Ones(g, onesShape)
-	//return Scatter(indices, ones, targetShape)
 }
 
 // ReduceAndKeep applies the given reduction function but regenerate the reduced dimensions with size 1.
@@ -305,8 +299,8 @@ func Softmax(logits *Node, axes ...int) *Node {
 	if len(axes) == 0 {
 		axes = []int{-1}
 	}
-	max := StopGradient(ReduceAndKeep(logits, ReduceMax, axes...))
-	normalizedLogits := Sub(logits, max)
+	normalizingMax := StopGradient(ReduceAndKeep(logits, ReduceMax, axes...))
+	normalizedLogits := Sub(logits, normalizingMax)
 	numerator := Exp(normalizedLogits)
 	denominator := ReduceAndKeep(numerator, ReduceSum, axes...)
 	return Div(numerator, denominator)
@@ -335,9 +329,9 @@ func MaskedSoftmax(logits, mask *Node, axes ...int) *Node {
 	if len(axes) == 0 {
 		axes = []int{-1}
 	}
-	max := StopGradient(MaskedReduceAndKeep(logits, mask, MaskedReduceMax, axes...))
+	normalizingMax := StopGradient(MaskedReduceAndKeep(logits, mask, MaskedReduceMax, axes...))
 	zeros := ZerosLike(logits)
-	normalizedLogits := Sub(logits, max)
+	normalizedLogits := Sub(logits, normalizingMax)
 	normalizedLogits = Where(mask, normalizedLogits, zeros)
 	numerator := Exp(normalizedLogits)
 	numerator = Where(mask, numerator, zeros)
@@ -410,7 +404,7 @@ func LowerTriangular(g *Graph, dim int) *Node {
 	return LessOrEqual(cols, rows)
 }
 
-// UpperTriangular returns a upper-triangular boolean square matrix of shape `[dim, dim]`.
+// UpperTriangular returns an upper-triangular boolean square matrix of shape `[dim, dim]`.
 //
 // This can be combined with `Where` to select values of any arbitrary other matrix.
 func UpperTriangular(g *Graph, dim int) *Node {
@@ -444,7 +438,7 @@ func DiagonalWithValue(scalar *Node, dim int) *Node {
 //
 // See [ShiftWithScalar] and [ShiftWithValue] for a more generic shift function.
 func ShiftLeft(x *Node, n int, fill float64) *Node {
-	return ShiftWithScalar(x, -1, ShiftLeftDir, n, fill)
+	return ShiftWithScalar(x, -1, ShiftDirLeft, n, fill)
 }
 
 // ShiftRight the last axis of [x] by [n] positions ([n] is a static value) and fill the new value
@@ -452,18 +446,24 @@ func ShiftLeft(x *Node, n int, fill float64) *Node {
 //
 // See [ShiftWithScalar] and [ShiftWithValue] for a more generic shift function.
 func ShiftRight(x *Node, n int, fill float64) *Node {
-	return ShiftWithScalar(x, -1, ShiftRightDir, n, fill)
+	return ShiftWithScalar(x, -1, ShiftDirRight, n, fill)
 }
 
-//go:generate stringer -type=ShiftDirection
-
-// ShiftDirection used by [ShiftWithScalar] and [ShiftWithValue]. See [ShiftLeftDir] and [ShiftRightDir].
+// ShiftDirection used by [ShiftWithScalar] and [ShiftWithValue]. See [ShiftDirLeft] and [ShiftDirRight].
 type ShiftDirection bool
 
 const (
-	ShiftLeftDir  ShiftDirection = false
-	ShiftRightDir                = true
+	ShiftDirLeft  ShiftDirection = false
+	ShiftDirRight                = true
 )
+
+// String implements the stringer interface.
+func (s ShiftDirection) String() string {
+	if s == ShiftDirRight {
+		return "ShiftDirRight"
+	}
+	return "ShiftDirLeft"
+}
 
 // ShiftWithScalar a given [axis] of [x] by [n] positions ([n] is a static value) and fill the new value
 // with [fill], a **static** scalar value.
@@ -486,7 +486,7 @@ func ShiftWithValue(x *Node, axis int, shiftDir ShiftDirection, n int, value *No
 // The [shiftDir] defines the direction: left towards lower values or right towards higher values.
 // The spaces left open keep the edge value. Example:
 //
-//	Shift([0, 1, 2, 3], axis=-1, ShiftLeftDir, n=2)
+//	Shift([0, 1, 2, 3], axis=-1, ShiftDirLeft, n=2)
 //
 // Will return `[2, 3, 3, 3]`.
 func Shift(x *Node, axis int, shiftDir ShiftDirection, n int) *Node {
@@ -502,7 +502,7 @@ func Shift(x *Node, axis int, shiftDir ShiftDirection, n int) *Node {
 			axisRanges[ii] = AxisRange()
 			continue
 		}
-		if shiftDir == ShiftLeftDir {
+		if shiftDir == ShiftDirLeft {
 			axisRanges[ii] = AxisRange(dims[ii] - 1) // Take last value.
 		} else {
 			axisRanges[ii] = AxisRange(0, 1) // Take first value.
@@ -540,7 +540,7 @@ func genericShiftImpl(x *Node, axis int, shiftDir ShiftDirection, n int, fill fl
 			fillDims[ii] = dims[ii]
 			continue
 		}
-		if shiftDir == ShiftLeftDir {
+		if shiftDir == ShiftDirLeft {
 			axisRanges[ii] = AxisRange(n)
 		} else {
 			axisRanges[ii] = AxisRange(0, dims[ii]-n)
@@ -565,7 +565,7 @@ func genericShiftImpl(x *Node, axis int, shiftDir ShiftDirection, n int, fill fl
 		xFill = BroadcastToDims(value, fillDims...)
 	}
 
-	if shiftDir == ShiftLeftDir {
+	if shiftDir == ShiftDirLeft {
 		x = Concatenate([]*Node{xSlice, xFill}, shiftAxis)
 	} else {
 		x = Concatenate([]*Node{xFill, xSlice}, shiftAxis)

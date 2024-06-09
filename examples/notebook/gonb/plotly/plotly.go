@@ -80,7 +80,7 @@ func (pc *PlotConfig) WithDatasets(datasets ...train.Dataset) *PlotConfig {
 
 // Dynamic sets plot to be dynamically updated and new data comes in. It's a no-op if not running in a GoNB notebook.
 //
-// It should be followed by a call to [ScheduleExponential] or [SechedulePeriodic] (or both) to schedule capturing
+// It should be followed by a call to [ScheduleExponential] or [SchedulePeriodic] (or both) to schedule capturing
 // points to plot, and [WithCheckpoint] to save the captured points.
 //
 // It returns itself to allow cascading configuration method calls.
@@ -287,8 +287,8 @@ func (pc *PlotConfig) AddPoint(pt plots.Point) {
 				Legend: &grob.LayoutLegend{
 					//Y:       -0.2,
 					//X:       1.0,
-					//Xanchor: grob.LayoutLegendXanchorRight,
-					//Yanchor: grob.LayoutLegendYanchorTop,
+					//X anchor: grob.LayoutLegendX anchorRight,
+					//Y anchor: grob.LayoutLegendY anchorTop,
 				},
 			},
 		})
@@ -309,7 +309,7 @@ func (pc *PlotConfig) AddPoint(pt plots.Point) {
 			Line: &grob.ScatterLine{
 				Shape: grob.ScatterLineShapeLinear,
 			},
-			Mode: grob.ScatterMode("lines+markers"),
+			Mode: "lines+markers",
 			X:    []float64{},
 			Y:    []float64{},
 		})

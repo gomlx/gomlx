@@ -192,14 +192,14 @@ func evalWithContext(ctx *context.Context, baseDir string, layerWise, skipTrain 
 	// Evaluate on various datasets.
 	_, trainEvalDS, validEvalDS, testEvalDS := must.M4(MakeDatasets(baseDir))
 	if skipTrain {
-		return evalSampled(ctx, baseDir, validEvalDS, testEvalDS)
+		return evalSampled(ctx, validEvalDS, testEvalDS)
 	} else {
-		return evalSampled(ctx, baseDir, trainEvalDS, validEvalDS, testEvalDS)
+		return evalSampled(ctx, trainEvalDS, validEvalDS, testEvalDS)
 	}
 }
 
 // evalSampled evaluates GNN model based on configuration in `ctx` using sampled sub-graphs.
-func evalSampled(ctx *context.Context, baseDir string, datasets ...train.Dataset) error {
+func evalSampled(ctx *context.Context, datasets ...train.Dataset) error {
 	// Evaluation on the various eval datasets.
 	trainer := newTrainer(ctx)
 	for _, ds := range datasets {
@@ -215,7 +215,7 @@ func evalSampled(ctx *context.Context, baseDir string, datasets ...train.Dataset
 }
 
 // evalLayerWise evaluates GNN model based on configuration in `ctx` using layer-wise inference.
-func evalLayerWise(ctx *context.Context, baseDir string, datasets ...train.Dataset) error {
+func evalLayerWise(ctx *context.Context, baseDir string) error {
 	// Create the OGBN-MAG strategy, used by the layer-wise inference: batch-size is irrelevant.
 	magSampler, err := NewSampler(baseDir)
 	if err != nil {
@@ -287,6 +287,7 @@ func convertPapersEmbeddings(ctx *context.Context) {
 	papersVar := ctx.InspectVariable(OgbnMagVariablesScope, "PapersEmbeddings")
 	if papersVar == nil || papersVar.Value() == nil {
 		Panicf("Cannot convert papers embeddings if variable \"PapersEmbeddings\" is not set yet")
+		panic(nil) // Clear lint warning.
 	}
 	if papersVar.Value().DType() == dtypeEmbed {
 		// Nothing to convert.
