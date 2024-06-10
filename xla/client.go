@@ -23,10 +23,12 @@ package xla
 import "C"
 import (
 	"fmt"
-	"github.com/pkg/errors"
 	"os"
 	"runtime"
 	"unsafe"
+
+	"github.com/pkg/errors"
+	"golang.org/x/exp/maps"
 )
 
 // ClientId is a unique identifier to clients. Starts with 0 and increases.
@@ -146,8 +148,11 @@ func NewClient(platform string, numReplicas, numThreads int) (*Client, error) {
 				LibDeviceDir, LibDeviceNotFoundErrorMessage)
 		}
 	}
-	statusOr := C.NewClient(C.CString(platform), C.int(numReplicas), C.int(numThreads))
-	cPtr, err := UnsafePointerOrError(statusOr)
+	clientFactory, ok := platforms[platform]
+	if !ok {
+		return nil, errors.Errorf("platform %q not found. Registered platforms are: %v", platform, maps.Keys(platforms))
+	}
+	cPtr, err := clientFactory.Client(numReplicas, numThreads)
 	if err != nil {
 		return nil, err
 	}
