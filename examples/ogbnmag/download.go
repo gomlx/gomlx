@@ -11,6 +11,7 @@ import (
 	. "github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
+	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	mldata "github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
@@ -430,7 +431,21 @@ func UploadOgbnMagVariables(ctx *context.Context) *context.Context {
 		v := ctxMag.VariableWithValue(name, *tPtr)
 		v.Trainable = false
 	}
+	convertPapersEmbeddings(ctx) // Convert to the selected dtype.
 	return ctx
+}
+
+// ExcludeOgbnMagVariablesFromSave marks the OGBN-MAG variables as not to be saved by the given `checkpoint`.
+// Since they are read separately and are constant, no need to repeat them at every checkpoint.
+func ExcludeOgbnMagVariablesFromSave(ctx *context.Context, checkpoint *checkpoints.Handler) {
+	ctxMag := ctx.InAbsPath(OgbnMagVariablesScope)
+	for name := range OgbnMagVariables {
+		v := ctxMag.InspectVariableInScope(name)
+		if v == nil {
+			Panicf("OGBN-MAG variable %q not found in context!?", name)
+		}
+		checkpoint.ExcludeVarsFromSaving(v)
+	}
 }
 
 func getLabelsGraph(indices, allLabels *Node) *Node {

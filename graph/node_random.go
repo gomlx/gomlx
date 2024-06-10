@@ -20,7 +20,7 @@ var (
 	// RngStateShape is the shape of the random number generator state, used
 	// in all Random* functions.
 	// This is dependent on the algorithm, that for now is fixed.
-	RngStateShape = shapes.Make(shapes.UInt64, 3)
+	RngStateShape = shapes.Make(shapes.Uint64, 3)
 )
 
 // RngStateFromSeed creates a random number generator (RNG) state based on the static seed.
@@ -86,7 +86,7 @@ func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Nod
 	switch shape.DType {
 	case shapes.Float64:
 		bitsShape := shape.Copy()
-		bitsShape.DType = shapes.UInt64
+		bitsShape.DType = shapes.Uint64
 		var randomBits *Node
 		newRngState, randomBits = RngBitGeneratorXLA(rngState, bitsShape)
 		values = ConvertType(randomBits, shapes.Float64)
@@ -95,12 +95,18 @@ func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Nod
 		values = StopGradient(values)
 	case shapes.Float32:
 		bitsShape := shape.Copy()
-		bitsShape.DType = shapes.UInt32
+		bitsShape.DType = shapes.Uint32
 		var randomBits *Node
 		newRngState, randomBits = RngBitGeneratorXLA(rngState, bitsShape)
 		values = ConvertType(randomBits, shapes.Float32)
 		values = MulScalar(values, 1.0/(float64(1<<32)))
 		values = MinScalar(values, float64(math.Nextafter32(1.0, 0.0)))
+		values = StopGradient(values)
+	case shapes.Float16:
+		shapeF32 := shape.Copy()
+		shapeF32.DType = shapes.F32
+		newRngState, values = RandomUniform(rngState, shapeF32)
+		values = ConvertType(values, shape.DType)
 		values = StopGradient(values)
 	case shapes.Complex64:
 		componentShape := shape.Copy()
@@ -117,7 +123,7 @@ func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Nod
 		newRngState, im = RandomUniform(rngState, componentShape)
 		values = Complex(re, im)
 	default:
-		Panicf("RandomUniform() only accepts Float32, Float64, Complex64 and Complex128 dtypes, shape %s given", shape)
+		Panicf("RandomUniform() only accepts Float16, Float32, Float64, Complex64 and Complex128 dtypes, shape %s given", shape)
 	}
 	return
 }
@@ -137,12 +143,14 @@ func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Nod
 // It will signal an error if the dtype is not float -- see RandomIntN for random integers.
 //
 // It uses and updates the random number generator (RNG) state in `rngState`.
+//
+// See [RngStateFromSeed] or [RngState] to generate a random state tensor (that can be fed to the computation graph).
 func RandomNormal(rngState *Node, shape shapes.Shape) (newRngState, values *Node) {
 	g := rngState.Graph()
 	var u1, u2 *Node
 	newRngState, u1 = RandomUniform(rngState, shape)
 	// u1 must never be zero, so we take the smallest positive non-zero value.
-	u1 = Max(u1, Scalar(g, shape.DType, shapes.ConvertTo[float64](shapes.SmallestNonZeroValueForDType(shape.DType))))
+	u1 = Max(u1, Const(g, shapes.SmallestNonZeroValueForDType(shape.DType)))
 	newRngState, u2 = RandomUniform(newRngState, shape)
 	values = Mul(
 		Sqrt(MulScalar(Log(u1), -2)),

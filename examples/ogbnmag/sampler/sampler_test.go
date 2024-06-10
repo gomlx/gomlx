@@ -136,7 +136,8 @@ func TestDataset(t *testing.T) {
 		require.NoError(t, err)
 		require.Empty(t, labels)
 		require.Equal(t, strategy, spec.(*Strategy))
-		graphSample := MapInputs[tensor.Tensor](strategy, inputs)
+		graphSample, remaining := MapInputsToStates[tensor.Tensor](strategy, inputs)
+		require.Empty(t, remaining)
 		if strategy.KeepDegrees == true {
 			seeds := graphSample["Seeds"].Value.Local().FlatCopy().([]int32)
 			degrees := graphSample[NameForNodeDependentDegree("Seeds", "authors")].Value.Local().FlatCopy().([]int32)
@@ -252,7 +253,8 @@ func TestSamplingRandomness(t *testing.T) {
 		for _ = range numSamples {
 			_, inputs, _, err := parallelDS.Yield()
 			require.NoErrorf(t, err, "while testing dataset %q", dsNames[dsIdx])
-			graphSample := MapInputs[tensor.Tensor](strategy, inputs)
+			graphSample, remaining := MapInputsToStates[tensor.Tensor](strategy, inputs)
+			require.Empty(t, remaining)
 
 			require.NoErrorf(t, graphSample["seeds"].Value.Shape().CheckDims(1), "while testing dataset %q", dsNames[dsIdx])
 			sampledPaper := graphSample["seeds"].Value.Local().FlatCopy().([]int32)[0]

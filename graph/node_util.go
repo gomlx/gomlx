@@ -17,6 +17,7 @@
 package graph
 
 import (
+	"github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 )
@@ -238,12 +239,6 @@ func OneHot(indices *Node, depth int, dtype shapes.DType) *Node {
 	scatterIndices = Reshape(scatterIndices, indices.shape.Size(), indices.shape.Rank())
 	ones := Ones(g, shapes.Make(dtype, indices.shape.Size()))
 	return Scatter(scatterIndices, ones, targetShape)
-
-	//// ones will have the same shape as the sindices, but with the dtype set to the desired type.
-	//onesShape := indices.shape.Copy()
-	//onesShape.DType = dtype
-	//ones := Ones(g, onesShape)
-	//return Scatter(indices, ones, targetShape)
 }
 
 // ReduceAndKeep applies the given reduction function but regenerate the reduced dimensions with size 1.
@@ -304,8 +299,8 @@ func Softmax(logits *Node, axes ...int) *Node {
 	if len(axes) == 0 {
 		axes = []int{-1}
 	}
-	max := StopGradient(ReduceAndKeep(logits, ReduceMax, axes...))
-	normalizedLogits := Sub(logits, max)
+	normalizingMax := StopGradient(ReduceAndKeep(logits, ReduceMax, axes...))
+	normalizedLogits := Sub(logits, normalizingMax)
 	numerator := Exp(normalizedLogits)
 	denominator := ReduceAndKeep(numerator, ReduceSum, axes...)
 	return Div(numerator, denominator)
@@ -334,9 +329,9 @@ func MaskedSoftmax(logits, mask *Node, axes ...int) *Node {
 	if len(axes) == 0 {
 		axes = []int{-1}
 	}
-	max := StopGradient(MaskedReduceAndKeep(logits, mask, MaskedReduceMax, axes...))
+	normalizingMax := StopGradient(MaskedReduceAndKeep(logits, mask, MaskedReduceMax, axes...))
 	zeros := ZerosLike(logits)
-	normalizedLogits := Sub(logits, max)
+	normalizedLogits := Sub(logits, normalizingMax)
 	normalizedLogits = Where(mask, normalizedLogits, zeros)
 	numerator := Exp(normalizedLogits)
 	numerator = Where(mask, numerator, zeros)
@@ -409,7 +404,7 @@ func LowerTriangular(g *Graph, dim int) *Node {
 	return LessOrEqual(cols, rows)
 }
 
-// UpperTriangular returns a upper-triangular boolean square matrix of shape `[dim, dim]`.
+// UpperTriangular returns an upper-triangular boolean square matrix of shape `[dim, dim]`.
 //
 // This can be combined with `Where` to select values of any arbitrary other matrix.
 func UpperTriangular(g *Graph, dim int) *Node {
@@ -436,4 +431,144 @@ func DiagonalWithValue(scalar *Node, dim int) *Node {
 	g := scalar.Graph()
 	matrix := BroadcastPrefix(scalar, []int{dim, dim})
 	return Where(Diagonal(g, dim), matrix, ZerosLike(matrix))
+}
+
+// ShiftLeft the last axis of [x] by [n] positions ([n] is a static value) and fill the new value
+// with [fill]. The value of [fill] is converted to [x]'s [shapes.DType]. For boolean dtype, use 1.0 or 0.0.
+//
+// See [ShiftWithScalar] and [ShiftWithValue] for a more generic shift function.
+func ShiftLeft(x *Node, n int, fill float64) *Node {
+	return ShiftWithScalar(x, -1, ShiftDirLeft, n, fill)
+}
+
+// ShiftRight the last axis of [x] by [n] positions ([n] is a static value) and fill the new value
+// with [fill]. The value of [fill] is converted to [x]'s [shapes.DType]. For boolean dtype, use 1.0 or 0.0.
+//
+// See [ShiftWithScalar] and [ShiftWithValue] for a more generic shift function.
+func ShiftRight(x *Node, n int, fill float64) *Node {
+	return ShiftWithScalar(x, -1, ShiftDirRight, n, fill)
+}
+
+// ShiftDirection used by [ShiftWithScalar] and [ShiftWithValue]. See [ShiftDirLeft] and [ShiftDirRight].
+type ShiftDirection bool
+
+const (
+	ShiftDirLeft  ShiftDirection = false
+	ShiftDirRight                = true
+)
+
+// String implements the stringer interface.
+func (s ShiftDirection) String() string {
+	if s == ShiftDirRight {
+		return "ShiftDirRight"
+	}
+	return "ShiftDirLeft"
+}
+
+// ShiftWithScalar a given [axis] of [x] by [n] positions ([n] is a static value) and fill the new value
+// with [fill], a **static** scalar value.
+// The [shiftDir] defines the direction: left towards lower values or right towards higher values.
+// The value of [fill] is converted to [x]'s [shapes.DType]. For boolean dtype, use 1.0 or 0.0.
+func ShiftWithScalar(x *Node, axis int, shiftDir ShiftDirection, n int, fill float64) *Node {
+	return genericShiftImpl(x, axis, shiftDir, n, fill, nil)
+}
+
+// ShiftWithValue a given [axis] of [x] by [n] positions ([n] is a static value) and fill the new value
+// with a dynamic (graph) [value].
+// The [shiftDir] defines the direction: left towards lower values or right towards higher values.
+// The filling [value] must be "broadcast-able" (see [BroadcastToDim]) to the space it's going to fill with the shift --
+// a scalar can always be broadcast.
+func ShiftWithValue(x *Node, axis int, shiftDir ShiftDirection, n int, value *Node) *Node {
+	return genericShiftImpl(x, axis, shiftDir, n, 0, value)
+}
+
+// Shift a given [axis] of [x] by [n] positions ([n] is a static value).
+// The [shiftDir] defines the direction: left towards lower values or right towards higher values.
+// The spaces left open keep the edge value. Example:
+//
+//	Shift([0, 1, 2, 3], axis=-1, ShiftDirLeft, n=2)
+//
+// Will return `[2, 3, 3, 3]`.
+func Shift(x *Node, axis int, shiftDir ShiftDirection, n int) *Node {
+	rank := x.Rank()
+	dims := x.Shape().Dimensions
+	shiftAxis := AdjustAxis(x, axis)
+
+	// Find slice of left-most / right-most values to use for filling.
+	axisRanges := make([]SliceAxisSpec, rank)
+	for ii := range rank {
+		if ii != shiftAxis {
+			// Take full axes that are not shifted.
+			axisRanges[ii] = AxisRange()
+			continue
+		}
+		if shiftDir == ShiftDirLeft {
+			axisRanges[ii] = AxisRange(dims[ii] - 1) // Take last value.
+		} else {
+			axisRanges[ii] = AxisRange(0, 1) // Take first value.
+		}
+	}
+	fillValues := Slice(x, axisRanges...)
+	return ShiftWithValue(x, axis, shiftDir, n, fillValues)
+}
+
+// genericShiftImpl implements ShiftWithScalar and GenericShitWithValue.
+func genericShiftImpl(x *Node, axis int, shiftDir ShiftDirection, n int, fill float64, value *Node) *Node {
+	g := x.Graph()
+	dtype := x.DType()
+	rank := x.Rank()
+	dims := x.Shape().Dimensions
+	shiftAxis := AdjustAxis(x, axis)
+	if n > dims[shiftAxis] {
+		exceptions.Panicf("cannot shift %d positions for axis %d, x.shape=%s", n, axis, x.Shape())
+	}
+	if value != nil && value.DType() != dtype {
+		exceptions.Panicf("cannot shift x.shape=%s using value.shape=%s with a different dtype", x.Shape(), value.Shape())
+	}
+	if n == 0 {
+		// Trivial solution.
+		return x
+	}
+
+	// Slice part of the tensor that stays.
+	axisRanges := make([]SliceAxisSpec, rank)
+	fillDims := make([]int, rank)
+	for ii := range rank {
+		if ii != shiftAxis {
+			// Take axes that are not shifted and fill the full dimension.
+			axisRanges[ii] = AxisRange()
+			fillDims[ii] = dims[ii]
+			continue
+		}
+		if shiftDir == ShiftDirLeft {
+			axisRanges[ii] = AxisRange(n)
+		} else {
+			axisRanges[ii] = AxisRange(0, dims[ii]-n)
+		}
+		fillDims[ii] = n
+	}
+
+	xSlice := Slice(x, axisRanges...)
+	var xFill *Node
+	if value == nil {
+		// Fill with given value.
+		if fill == 0.0 {
+			xFill = Zeros(g, shapes.Make(dtype, fillDims...))
+		} else {
+			xFill = Ones(g, shapes.Make(dtype, fillDims...))
+			if fill != 1.0 {
+				xFill = MulScalar(xFill, fill)
+			}
+		}
+	} else {
+		// Fill with value broadcast on the required dimensions.
+		xFill = BroadcastToDims(value, fillDims...)
+	}
+
+	if shiftDir == ShiftDirLeft {
+		x = Concatenate([]*Node{xSlice, xFill}, shiftAxis)
+	} else {
+		x = Concatenate([]*Node{xFill, xSlice}, shiftAxis)
+	}
+	return x
 }

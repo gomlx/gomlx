@@ -17,6 +17,8 @@ import (
 // Strategy Rules configuration (see [Strategy.Nodes] to define the Seeds).
 //
 // The Dataset is created to be re-entrant, so it can be used with [data.Parallel].
+//
+// No labels are generated, and [Dataset.Yield] will return nil labels.
 type Dataset struct {
 	name                     string
 	sampler                  *Sampler

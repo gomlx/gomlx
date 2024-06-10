@@ -486,3 +486,9 @@ func (e *Exec) CallWithGraph(args ...any) (outputs []tensor.Tensor, g *Graph) {
 	outputs = outputs[len(changedVars):]
 	return
 }
+
+// PreCompile will build the computation graph and compile it, but not yet execute.
+// Useful when one wants to measure the time separately, from graph compilation and its execution.
+func (e *Exec) PreCompile(args ...any) {
+	e.exec.PreCompile(args...)
+}

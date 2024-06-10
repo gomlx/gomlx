@@ -27,6 +27,7 @@ import (
 	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
+	"github.com/x448/float16"
 )
 
 // Interface for a Metric.
@@ -110,7 +111,16 @@ func (m *baseMetric) UpdateGraph(ctx *context.Context, labels, predictions []*No
 
 func (m *baseMetric) PrettyPrint(value tensor.Tensor) string {
 	if m.pPrintFn == nil {
-		return fmt.Sprintf("%.3f", value.Value())
+		dtype := value.DType()
+		isScalar := value.Shape().IsScalar()
+		v := value.Value()
+		if dtype.IsFloat() && isScalar {
+			if dtype == shapes.F16 {
+				v = v.(float16.Float16).Float32()
+			}
+			return fmt.Sprintf("%.3f", v)
+		}
+		return fmt.Sprintf("%s", v)
 	}
 	return m.pPrintFn(value)
 }
@@ -153,6 +163,14 @@ func BatchSize(data *Node) *Node {
 	return Const(g, shapes.CastAsDType(batchSizeInt, data.DType()))
 }
 
+// upPrecision promotes the precision of `x` if it is float16, to float32.
+func upPrecision(x *Node) *Node {
+	if x.DType() == shapes.Float16 {
+		x = ConvertType(x, shapes.Float32)
+	}
+	return x
+}
+
 func (m *meanMetric) UpdateGraph(ctx *context.Context, labels, predictions []*Node) (metric *Node) {
 	g := predictions[0].Graph()
 	var result *Node
@@ -163,6 +181,9 @@ func (m *meanMetric) UpdateGraph(ctx *context.Context, labels, predictions []*No
 	if !result.Shape().IsScalar() {
 		Panicf("metric %q should return a scalar, instead got shape %s", m.Name(), result.Shape())
 	}
+
+	// Up the precision for float16, often not enough.
+	result = upPrecision(result)
 
 	// Create scope in context for metrics state, and mark it as unchecked -- model variables
 	// may be set for reuse, but metrics variables are not.
@@ -180,7 +201,8 @@ func (m *meanMetric) UpdateGraph(ctx *context.Context, labels, predictions []*No
 
 	total := totalVar.ValueGraph(g)
 	previousWeight := weightVar.ValueGraph(g)
-	resultWeight := BatchSize(predictions[0])
+	resultWeight := upPrecision(BatchSize(predictions[0]))
+
 	total = Add(total, Mul(result, resultWeight))
 	weight := Add(previousWeight, resultWeight)
 	mean := Div(total, weight)
@@ -188,7 +210,6 @@ func (m *meanMetric) UpdateGraph(ctx *context.Context, labels, predictions []*No
 	// Update variable values.
 	weightVar.SetValueGraph(weight)
 	totalVar.SetValueGraph(total)
-
 	return mean
 }
 
@@ -242,6 +263,7 @@ func (m *movingAverageMetric) UpdateGraph(ctx *context.Context, labels, predicti
 	if !result.Shape().IsScalar() {
 		Panicf("metric %q should return a scalar, instead got shape %s", m.Name(), result.Shape())
 	}
+	result = upPrecision(result)
 
 	// Create scope in context for metrics state, and mark it as unchecked -- model variables
 	// may be set for reuse, but metrics variables are not.

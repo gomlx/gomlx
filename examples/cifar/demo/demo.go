@@ -146,7 +146,7 @@ func trainModel() {
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
 	trainer := train.NewTrainer(manager, ctx, modelFn,
 		losses.SparseCategoricalCrossEntropyLogits,
-		optimizers.MustOptimizerByName(*flagOptimizer),
+		optimizers.MustOptimizerByName(ctx, *flagOptimizer),
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
 		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
 

@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-const _DTypeName = "InvalidDTypeBoolInt8Int16Int32Int64UInt8UInt16UInt32UInt64Float16Float32Float64TupleOpaqueTypeComplex64BFloat16TokenComplex128"
+const _DTypeName = "InvalidDTypeBoolInt8Int16Int32Int64Uint8Uint16Uint32Uint64Float16Float32Float64TupleOpaqueTypeComplex64BFloat16TokenComplex128"
 
 var _DTypeIndex = [...]uint8{0, 12, 16, 20, 25, 30, 35, 40, 46, 52, 58, 65, 72, 79, 84, 94, 103, 111, 116, 126}
 
@@ -35,10 +35,10 @@ func _DTypeNoOp() {
 	_ = x[Int16-(3)]
 	_ = x[Int32-(4)]
 	_ = x[Int64-(5)]
-	_ = x[UInt8-(6)]
-	_ = x[UInt16-(7)]
-	_ = x[UInt32-(8)]
-	_ = x[UInt64-(9)]
+	_ = x[Uint8-(6)]
+	_ = x[Uint16-(7)]
+	_ = x[Uint32-(8)]
+	_ = x[Uint64-(9)]
 	_ = x[Float16-(10)]
 	_ = x[Float32-(11)]
 	_ = x[Float64-(12)]
@@ -50,7 +50,7 @@ func _DTypeNoOp() {
 	_ = x[Complex128-(18)]
 }
 
-var _DTypeValues = []DType{InvalidDType, Bool, Int8, Int16, Int32, Int64, UInt8, UInt16, UInt32, UInt64, Float16, Float32, Float64, Tuple, OpaqueType, Complex64, BFloat16, Token, Complex128}
+var _DTypeValues = []DType{InvalidDType, Bool, Int8, Int16, Int32, Int64, Uint8, Uint16, Uint32, Uint64, Float16, Float32, Float64, Tuple, OpaqueType, Complex64, BFloat16, Token, Complex128}
 
 var _DTypeNameToValueMap = map[string]DType{
 	_DTypeName[0:12]:         InvalidDType,
@@ -65,14 +65,14 @@ var _DTypeNameToValueMap = map[string]DType{
 	_DTypeLowerName[25:30]:   Int32,
 	_DTypeName[30:35]:        Int64,
 	_DTypeLowerName[30:35]:   Int64,
-	_DTypeName[35:40]:        UInt8,
-	_DTypeLowerName[35:40]:   UInt8,
-	_DTypeName[40:46]:        UInt16,
-	_DTypeLowerName[40:46]:   UInt16,
-	_DTypeName[46:52]:        UInt32,
-	_DTypeLowerName[46:52]:   UInt32,
-	_DTypeName[52:58]:        UInt64,
-	_DTypeLowerName[52:58]:   UInt64,
+	_DTypeName[35:40]:        Uint8,
+	_DTypeLowerName[35:40]:   Uint8,
+	_DTypeName[40:46]:        Uint16,
+	_DTypeLowerName[40:46]:   Uint16,
+	_DTypeName[46:52]:        Uint32,
+	_DTypeLowerName[46:52]:   Uint32,
+	_DTypeName[52:58]:        Uint64,
+	_DTypeLowerName[52:58]:   Uint64,
 	_DTypeName[58:65]:        Float16,
 	_DTypeLowerName[58:65]:   Float16,
 	_DTypeName[65:72]:        Float32,

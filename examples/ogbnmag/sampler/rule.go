@@ -109,6 +109,10 @@ func (r *Rule) FromEdges(name, edgeTypeName string, count int) *Rule {
 	}
 	newShape := r.Shape.Copy()
 	newShape.Dimensions = append(newShape.Dimensions, count)
+	numNodes, found := strategy.Sampler.NodeTypesToCount[edgeDef.TargetNodeType]
+	if !found {
+		Panicf("unknown target node type %q to for rule %q", edgeDef.TargetNodeType, name)
+	}
 	newRule := &Rule{
 		Sampler:      r.Sampler,
 		Strategy:     strategy,
@@ -117,6 +121,7 @@ func (r *Rule) FromEdges(name, edgeTypeName string, count int) *Rule {
 		SourceRule:   r,
 		EdgeType:     edgeDef,
 		Count:        count,
+		NumNodes:     numNodes,
 		Shape:        newShape,
 	}
 	newRule = newRule.WithKernelScopeName("gnn:" + name)
@@ -143,6 +148,7 @@ func (r *Rule) IdentitySubRule(name string) *Rule {
 		Strategy:     strategy,
 		Name:         name,
 		NodeTypeName: r.NodeTypeName,
+		NumNodes:     r.NumNodes,
 		SourceRule:   r,
 		EdgeType:     nil, // This identifies this as an identity sub-rule.
 		Count:        1,   // 1-to-1 mapping.

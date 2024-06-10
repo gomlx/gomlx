@@ -23,6 +23,8 @@
 // Shape and DType are used both by the concrete tensor values (see tensor package) and when
 // working on the computation graph (see graph package).
 //
+// Go float16 support (commonly used by NVidia GPUs) uses github.com/x448/float16 implementation.
+//
 // ## Glossary
 //
 //   - Rank: number of axes (dimensions) of a Tensor.

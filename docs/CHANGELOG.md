@@ -1,5 +1,33 @@
 # GoMLX changelog
 
+## Next
+
+* `types.shapes` package:
+  * **Added support for `Float16` training -- tested with GNNs.**
+    * Up-precision metrics dtypes if they are `Float16`.
+    * Allow arbitrary dtype for `Adam` optimizer -- it requires at least `float32`, even if the model runs on `float16`.
+    * DType dependent `epsilon` values for `Softmax` and `Adam` -- current values would lead to `NaN` with `float16`.
+    * Added `DType.IsFloat16` to check for `Float16` or `BFloat16` (not yet well-supported).
+  * Added support for `Int8`, `Int16`, `Uint8` and `Uint16`.
+  * Renamed `UInt{X}` to `Uint{X}` and added a deprecated alias to the old form (so it still compiles).
+* Added logging of time to build and compile graph. Last version improved a lot the execution time, but slowed the compilation.
+* Fixed `Variable.SetValueGraph` when the shape changes. Improved some documentation.
+* Package `optimizers`:
+  * Fixed optimizer constructor `FromContext` to allow further configuration of the optimizer by setting other hyperparameters into context.   
+  * Added hyperparameter `clip_step_by_value`, a clip by value applied to gradient updates.
+  * `Adam` optimizer: `"clip_step_by_value", "adam_epsilon", "adam_dtype"` hyperparameters support.
+  * **`MustOptimizerByName` now takes also the context for the optimizer hyperparameters.** -- this breaks the API.
+* Package `checkpoints`:
+  * Allow adding variables to exclude from saving after checkpoint is created -- for newly created variables.
+* Added `slices.CloseToEpsilon` to easily customize tests.
+* Fixed `Variable.SetValuePreservingOld` when shapes change.
+* `Scatter` doesn't assume indices are sorted or unique.
+* Plotly training plots: added `WithCustomMetricFn` for custom metrics and `ScheduleEveryNSteps`.
+* Added OGBN_MAG GNN example:
+  * Including Layer-Wise Inference.
+* Package graph:
+  * Added `Shift`, `ShiftLeft`, `ShiftRight`, `ShiftWithScalar`, `ShiftWithValue`.
+
 ## 0.9.1 - 2024/04/19
 
 * XLA integration:
@@ -31,7 +59,8 @@
   * random initializers use zeros for non-float variables by default (as opposed to crash)
   * default initializer now matches Keras (random uniform from `[-0.05, 0.05]`).
 * Package `context/checkpoints`:
-  * added `ExcludeVarsFromSaving` to allow preventing saving large static variables. 
+  * added `ExcludeVarsFromSaving` to allow preventing saving large static variables.
+  * fixed issue with lazy-loading of variables.
 * Package `shapes`:
   * Added `Check()` and `Assert()` to check for both, dtype and dimensions.
   * Added `EqDimensions()` to compare dimensions.

@@ -1,8 +1,13 @@
 package ogbnmag
 
+// Train and Eval functions.
+
 import (
 	"fmt"
+	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/examples/notebook/gonb/margaid"
+	"github.com/gomlx/gomlx/examples/notebook/gonb/plotly"
+	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	mldata "github.com/gomlx/gomlx/ml/data"
@@ -11,7 +16,9 @@ import (
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/janpfeifer/must"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 	"path"
@@ -30,10 +37,13 @@ var (
 
 	// ParamIdentitySubSeeds controls whether to use an IdentitySubSeed, to allow more sharing of the kernel.
 	ParamIdentitySubSeeds = "mag_identity_sub_seeds"
+
+	// ParamDType controls the dtype to be used: either "float32" or "float16".
+	ParamDType = "mag_dtype"
 )
 
 // Train GNN model based on configuration in `ctx`.
-func Train(ctx *context.Context, baseDir string) error {
+func Train(ctx *context.Context, baseDir string, layerWiseEval, report bool) error {
 	baseDir = mldata.ReplaceTildeInDir(baseDir)
 	ReuseShareableKernels = context.GetParamOr(ctx, ParamReuseKernels, true)
 	IdentitySubSeeds = context.GetParamOr(ctx, ParamIdentitySubSeeds, true)
@@ -60,24 +70,17 @@ func Train(ctx *context.Context, baseDir string) error {
 		}
 		var err error
 
-		// Exclude from saving all the variables created by the `mag` package -- specially the frozen papers embeddings,
-		// which take most space.
-		var varsToExclude []*context.Variable
-		ctx.InAbsPath(OgbnMagVariablesScope).EnumerateVariablesInScope(func(v *context.Variable) {
-			varsToExclude = append(varsToExclude, v)
-		})
-
 		if numCheckpointsToKeep <= 1 {
 			// Only limit the amount of checkpoints kept if >= 2.
 			numCheckpointsToKeep = -1
 		}
 		if numCheckpointsToKeep > 0 {
-			checkpoint, err = checkpoints.Build(ctx).Dir(checkpointPath).Keep(numCheckpointsToKeep).
-				ExcludeVarsFromSaving(varsToExclude...).Done()
+			checkpoint, err = checkpoints.Build(ctx).Dir(checkpointPath).Keep(numCheckpointsToKeep).Done()
 		} else {
-			checkpoint, err = checkpoints.Build(ctx).Dir(checkpointPath).
-				ExcludeVarsFromSaving(varsToExclude...).Done()
+			checkpoint, err = checkpoints.Build(ctx).Dir(checkpointPath).Done()
 		}
+		ExcludeOgbnMagVariablesFromSave(ctx, checkpoint)
+
 		if err != nil {
 			return errors.WithMessagef(err, "while setting up checkpoint to %q (keep=%d)",
 				checkpointPath, numCheckpointsToKeep)
@@ -108,15 +111,25 @@ func Train(ctx *context.Context, baseDir string) error {
 			})
 	}
 
-	// Attach a margaid plots: plot points at exponential steps.
+	// Attach Plotly plots: plot points at exponential steps.
 	// The points generated are saved along the checkpoint directory (if one is given).
-	var plots *margaid.Plots
+	var plots *plotly.PlotConfig
 	usePlots := context.GetParamOr(ctx, margaid.ParamPlots, false)
 	if usePlots {
-		plots = margaid.NewDefault(loop, checkpoint.Dir(), 200, 1.2, trainEvalDS, validEvalDS).
-			WithEvalLossType("eval-loss")
 		stepsPerEpoch := TrainSplit.Shape().Size()/BatchSize + 1
-		plots.PlotEveryNSteps(loop, stepsPerEpoch)
+		plots = plotly.New().Dynamic().
+			ScheduleExponential(loop, 200, 1.2).
+			ScheduleEveryNSteps(loop, stepsPerEpoch)
+		if layerWiseEval {
+			magSampler := must.M1(NewSampler(baseDir))
+			layerWiseStrategy := NewSamplerStrategy(magSampler, 1, nil)
+			plots = plots.WithCustomMetricFn(BuildLayerWiseCustomMetricFn(ctx, layerWiseStrategy))
+		} else {
+			plots = plots.WithDatasets(trainEvalDS, validEvalDS)
+		}
+		if checkpoint != nil {
+			plots = plots.WithCheckpoint(checkpoint.Dir())
+		}
 	}
 
 	// Loop for given number of steps
@@ -136,10 +149,12 @@ func Train(ctx *context.Context, baseDir string) error {
 	fmt.Printf("Median training step duration: %s\n", loop.MedianTrainStepDuration())
 
 	// Finally, print an evaluation on train and test datasets.
-	fmt.Println()
-	err = commandline.ReportEval(trainer, validEvalDS, trainEvalDS)
-	if err != nil {
-		return errors.WithMessage(err, "while reporting eval")
+	if report {
+		fmt.Println()
+		err = evalWithContext(ctx, baseDir, layerWiseEval, false)
+		if err != nil {
+			return errors.WithMessage(err, "while reporting eval")
+		}
 	}
 	return nil
 }
@@ -162,41 +177,29 @@ func newTrainer(ctx *context.Context) *train.Trainer {
 	return trainer
 }
 
-// Eval GNN model based on configuration in `ctx`.
-func Eval(ctx *context.Context, baseDir string, datasets ...train.Dataset) error {
-	baseDir = mldata.ReplaceTildeInDir(baseDir)
-	UploadOgbnMagVariables(ctx)
+func Eval(ctx *context.Context, baseDir string, layerWise, skipTrain bool) error {
+	if err := loadCheckpointToContext(ctx, baseDir); err != nil {
+		return err
+	}
+	return evalWithContext(ctx, baseDir, layerWise, skipTrain)
+}
 
-	// Load checkpoint.
-	checkpointPath := context.GetParamOr(ctx, ParamCheckpointPath, "")
-	numCheckpointsToKeep := context.GetParamOr(ctx, ParamNumCheckpoints, 10)
-	if checkpointPath == "" {
-		return errors.Errorf("no checkpoint defined in Context.GetParam(%q), please configure it to the checkpoint directory",
-			ParamCheckpointPath)
+func evalWithContext(ctx *context.Context, baseDir string, layerWise, skipTrain bool) error {
+	if layerWise {
+		return evalLayerWise(ctx, baseDir)
 	}
-	checkpointPath = mldata.ReplaceTildeInDir(checkpointPath) // If the path starts with "~", it is replaced.
-	if !path.IsAbs(checkpointPath) {
-		checkpointPath = path.Join(baseDir, checkpointPath)
-	}
-	if numCheckpointsToKeep <= 1 {
-		// Only limit the amount of checkpoints kept if >= 2.
-		numCheckpointsToKeep = -1
-	}
-	var err error
-	if numCheckpointsToKeep > 0 {
-		_, err = checkpoints.Build(ctx).Dir(checkpointPath).Keep(numCheckpointsToKeep).Done()
+
+	// Evaluate on various datasets.
+	_, trainEvalDS, validEvalDS, testEvalDS := must.M4(MakeDatasets(baseDir))
+	if skipTrain {
+		return evalSampled(ctx, validEvalDS, testEvalDS)
 	} else {
-		_, err = checkpoints.Build(ctx).Dir(checkpointPath).Done()
+		return evalSampled(ctx, trainEvalDS, validEvalDS, testEvalDS)
 	}
-	if err != nil {
-		return errors.WithMessagef(err, "while loading checkpoint from %q (%s=%d)",
-			checkpointPath, ParamNumCheckpoints, numCheckpointsToKeep)
-	}
+}
 
-	// Model stats:
-	globalStep := optimizers.GetGlobalStep(ctx)
-	fmt.Printf("Model in %q trained for %d steps.\n", checkpointPath, globalStep)
-
+// evalSampled evaluates GNN model based on configuration in `ctx` using sampled sub-graphs.
+func evalSampled(ctx *context.Context, datasets ...train.Dataset) error {
 	// Evaluation on the various eval datasets.
 	trainer := newTrainer(ctx)
 	for _, ds := range datasets {
@@ -209,4 +212,92 @@ func Eval(ctx *context.Context, baseDir string, datasets ...train.Dataset) error
 		fmt.Printf("\telapsed %s (%s)\n", elapsed, ds.Name())
 	}
 	return nil
+}
+
+// evalLayerWise evaluates GNN model based on configuration in `ctx` using layer-wise inference.
+func evalLayerWise(ctx *context.Context, baseDir string) error {
+	// Create the OGBN-MAG strategy, used by the layer-wise inference: batch-size is irrelevant.
+	magSampler, err := NewSampler(baseDir)
+	if err != nil {
+		return err
+	}
+	magStrategy := NewSamplerStrategy(magSampler, 1, nil)
+	trainAcc, validationAcc, testAcc := LayerWiseEvaluation(ctx, magStrategy)
+	fmt.Printf("Train Accuracy:     \t%.2f%%\n", 100*trainAcc)
+	fmt.Printf("Validation Accuracy:\t%.2f%%\n", 100*validationAcc)
+	fmt.Printf("Test Accuracy:      \t%.2f%%\n", 100*testAcc)
+	fmt.Printf("Copy&paste version: \t%.2f%%,%.2f%%,%.2f%%", 100*trainAcc, 100*validationAcc, 100*testAcc)
+
+	// Evaluation on the various eval datasets.
+	return nil
+}
+
+func loadCheckpointToContext(ctx *context.Context, baseDir string) error {
+	baseDir = mldata.ReplaceTildeInDir(baseDir)
+	checkpointPath := context.GetParamOr(ctx, ParamCheckpointPath, "")
+	if checkpointPath == "" {
+		return errors.Errorf("no checkpoint defined in Context.GetParam(%q), please configure it to the checkpoint directory",
+			ParamCheckpointPath)
+	}
+	checkpointPath = mldata.ReplaceTildeInDir(checkpointPath) // If the path starts with "~", it is replaced.
+	if !path.IsAbs(checkpointPath) {
+		checkpointPath = path.Join(baseDir, checkpointPath)
+	}
+	_, err := checkpoints.Build(ctx).Dir(checkpointPath).Done()
+	if err != nil {
+		return errors.WithMessagef(err, "while loading checkpoint from %q", checkpointPath)
+	}
+
+	// Model stats:
+	globalStep := optimizers.GetGlobalStep(ctx)
+	fmt.Printf("Model in %q trained for %d steps.\n", checkpointPath, globalStep)
+
+	// Upload OGBN-MAG variables -- and possibly convert them.
+	_ = UploadOgbnMagVariables(ctx)
+	return nil
+}
+
+// getDType returns the dtype selected in the context hyperparameters.
+func getDType(ctx *context.Context) shapes.DType {
+	dtypeStr := context.GetParamOr(ctx, ParamDType, "float32")
+	switch dtypeStr {
+	case "float32":
+		return shapes.F32
+	case "float16":
+		return shapes.F16
+	case "float64":
+		return shapes.F64
+	default:
+		Panicf("Invalid DType %q given to parameters %q", dtypeStr, ParamDType)
+	}
+	return shapes.InvalidDType
+}
+
+// convertPaperEmbeddings converts the "PapersEmbeddings" variable to the selected dtype, if needed.
+//
+// One should be careful not to save the converted values -- ideally, the values are saved in the original Float32.
+func convertPapersEmbeddings(ctx *context.Context) {
+	dtype := getDType(ctx)
+	dtypeEmbed := dtype
+	if dtype == shapes.Float16 {
+		// See comment on model.go, in function FeaturePreprocessing.
+		dtypeEmbed = shapes.Float32
+	}
+
+	papersVar := ctx.InspectVariable(OgbnMagVariablesScope, "PapersEmbeddings")
+	if papersVar == nil || papersVar.Value() == nil {
+		Panicf("Cannot convert papers embeddings if variable \"PapersEmbeddings\" is not set yet")
+		panic(nil) // Clear lint warning.
+	}
+	if papersVar.Value().DType() == dtypeEmbed {
+		// Nothing to convert.
+		return
+	}
+
+	e := context.NewExec(ctx.Manager(), ctx, func(ctx *context.Context, g *Graph) *Node {
+		return ConvertType(papersVar.ValueGraph(g), dtype)
+	})
+	converted := e.Call()[0]
+	papersVar.SetValuePreservingOld(converted) // We don't want to destroy the unconverted values, in case we need it again (it happens in tests).
+	klog.V(1).Infof("Converted papers embeddings to %s: new shape is %s", dtype, papersVar.Shape())
 }

@@ -755,7 +755,7 @@ func gatherVJP(node, v *Node, _ shapes.Shape) []*Node {
 	}
 	if isSimpleGather {
 		return []*Node{
-			Scatter(indices, v, inputShape),
+			ScatterAdd(Zeros(node.graph, inputShape), indices, v, indicesAreSorted, false),
 			nil, // No gradients for indices.
 		}
 	}
@@ -763,7 +763,6 @@ func gatherVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// GatherSlices(): sliceSizes are variable, but there are no collapsedSliceDims.
 	//fmt.Printf("\tgatherVJP: operand=%s, start=%s, indexVectorDim=%d, offsetDims=%v, collapsedSliceDims=%v, startIndexMap=%v, sliceSizes=%v\n",
 	//	input.shape, indices.shape, indexVectorDim, offsetDims, collapsedSliceDims, startIndexMap, sliceSizes)
-
 	isGatherSlices := len(collapsedSliceDims) == 0
 	if !isGatherSlices {
 		Panicf("xlaGather operation for which no gradient was defined. Please use only Gather() or GatherSlices().")
@@ -783,10 +782,10 @@ func gatherVJP(node, v *Node, _ shapes.Shape) []*Node {
 	}
 	var insertedWindowDims []int              // Empty, since the original GatherSlice don's have any collapsedSliceDims.
 	scatterDimsToOperandDims := startIndexMap // Same map used in GatherSlice.
-	uniqueIndices := false                    // We don't make any assumptions here. Likely the slices will overlap.
+	// We don't make any assumptions on uniqueness or sortedness of the indices. Likely the slices will overlap.
 	return []*Node{
 		scatterXLA(operand, startIndices, updates, indexVectorDim, updateWindowsDims, insertedWindowDims, scatterDimsToOperandDims,
-			indicesAreSorted, uniqueIndices),
+			indicesAreSorted, false),
 		nil, // No gradients for indices.
 	}
 }

@@ -50,8 +50,13 @@ type PlotConfig struct {
 	// gonbId of the `<div>` tag where to generate dynamic plots.
 	gonbId string
 
+	// lastStepCollected that metrics was collected.
+	lastStepCollected int
+
+	customMetricFn plots.CustomMetricFn
+
 	// finalPlot indicates whether the final plot has already been drawn.
-	finalPlot bool
+	scheduledFinalPlot, finalPlot bool
 
 	// filePath where to save data points to. Only used if not empty.
 	enablePointsWriting bool
@@ -67,20 +72,23 @@ func New() *PlotConfig {
 	}
 }
 
+// WithDatasets configures the datasets to evaluate at each collecting step (see `Schedule*` methods).
+func (pc *PlotConfig) WithDatasets(datasets ...train.Dataset) *PlotConfig {
+	pc.EvalDatasets = datasets
+	return pc
+}
+
 // Dynamic sets plot to be dynamically updated and new data comes in. It's a no-op if not running in a GoNB notebook.
 //
-// `datasets` is a list of datasets to be evaluated when collecting metrics for plotting.
-//
-// It should be followed by a call to [ScheduleExponential] or [SechedulePeriodic] (or both) to schedule capturing
+// It should be followed by a call to [ScheduleExponential] or [SchedulePeriodic] (or both) to schedule capturing
 // points to plot, and [WithCheckpoint] to save the captured points.
 //
 // It returns itself to allow cascading configuration method calls.
-func (pc *PlotConfig) Dynamic(datasets ...train.Dataset) *PlotConfig {
+func (pc *PlotConfig) Dynamic() *PlotConfig {
 	if !gonbui.IsNotebook {
 		return pc
 	}
 	pc.gonbId = gonbui.UniqueId()
-	pc.EvalDatasets = datasets
 	if pc.pointsAdded < 3 {
 		// If we are having a dynamically updating plot, we reserve the transient HTML block
 		// upfront -- otherwise it will interfere with the progressbar the first time it is displayed.
@@ -97,11 +105,7 @@ func (pc *PlotConfig) Dynamic(datasets ...train.Dataset) *PlotConfig {
 //
 // It returns itself to allow cascading configuration method calls.
 func (pc *PlotConfig) ScheduleExponential(loop *train.Loop, startStep int, stepFactor float64) *PlotConfig {
-	train.ExponentialCallback(loop, startStep, stepFactor, true,
-		"plotly.DynamicPlot", 0, func(loop *train.Loop, metrics []tensor.Tensor) error {
-			// Update plots with metrics.
-			return plots.AddTrainAndEvalMetrics(pc, loop, metrics, pc.EvalDatasets)
-		})
+	train.ExponentialCallback(loop, startStep, stepFactor, true, "plotly.DynamicPlot", 0, pc.addMetrics)
 	pc.attachOnEnd(loop)
 	return pc
 }
@@ -110,18 +114,56 @@ func (pc *PlotConfig) ScheduleExponential(loop *train.Loop, startStep int, stepF
 //
 // It returns itself to allow cascading configuration method calls.
 func (pc *PlotConfig) ScheduleNTimes(loop *train.Loop, numPoints int) *PlotConfig {
-	train.NTimesDuringLoop(loop, numPoints, "plotly.DynamicPlot", 0,
-		func(loop *train.Loop, metrics []tensor.Tensor) error {
-			return plots.AddTrainAndEvalMetrics(pc, loop, metrics, pc.EvalDatasets)
-		})
+	train.NTimesDuringLoop(loop, numPoints, "plotly.DynamicPlot", 0, pc.addMetrics)
 	pc.attachOnEnd(loop)
 	return pc
+}
+
+// ScheduleEveryNSteps to collect metrics.
+//
+// It returns itself to allow cascading configuration method calls.
+func (pc *PlotConfig) ScheduleEveryNSteps(loop *train.Loop, n int) *PlotConfig {
+	train.EveryNSteps(loop, n, "plotly.DynamicPlot", 0, pc.addMetrics)
+	pc.attachOnEnd(loop)
+	return pc
+}
+
+// WithCustomMetricFn registers the given function to run at every step it collects metrics.
+// Only one function can be registered. Set to nil to reset.
+//
+// It returns itself to allow cascading configuration method calls.
+func (pc *PlotConfig) WithCustomMetricFn(fn plots.CustomMetricFn) *PlotConfig {
+	pc.customMetricFn = fn
+	return pc
+}
+
+func (pc *PlotConfig) addMetrics(loop *train.Loop, metrics []tensor.Tensor) error {
+	// Only add metrics once per step: multiple calls here can happen if plotting was scheduled more than
+	// one way with functions `Schedule*`.
+	if pc.lastStepCollected >= loop.LoopStep {
+		return nil
+	}
+	pc.lastStepCollected = loop.LoopStep
+
+	// Custom metric:
+	if pc.customMetricFn != nil {
+		err := pc.customMetricFn(pc, float64(loop.LoopStep))
+		if err != nil {
+			return errors.WithMessagef(err, "plotly.PlotConfig CustomMetricFn returned an error at step %d", loop.LoopStep)
+		}
+	}
+
+	return plots.AddTrainAndEvalMetrics(pc, loop, metrics, pc.EvalDatasets)
 }
 
 // attachOnEnd registers a final call to DynamicPlot when training finishes. After that no more dynamic plots
 // are allowed.
 func (pc *PlotConfig) attachOnEnd(loop *train.Loop) {
-	loop.OnEnd("margaid plots", 120, func(_ *train.Loop, _ []tensor.Tensor) error {
+	if pc.scheduledFinalPlot {
+		return
+	}
+	pc.scheduledFinalPlot = true
+	loop.OnEnd("plotly.DynamicPlot", 120, func(_ *train.Loop, _ []tensor.Tensor) error {
 		// Final plot: only called once to the transient plots
 		if pc.gonbId != "" && !pc.finalPlot {
 			// Erase intermediary transient plots.
@@ -245,8 +287,8 @@ func (pc *PlotConfig) AddPoint(pt plots.Point) {
 				Legend: &grob.LayoutLegend{
 					//Y:       -0.2,
 					//X:       1.0,
-					//Xanchor: grob.LayoutLegendXanchorRight,
-					//Yanchor: grob.LayoutLegendYanchorTop,
+					//X anchor: grob.LayoutLegendX anchorRight,
+					//Y anchor: grob.LayoutLegendY anchorTop,
 				},
 			},
 		})
@@ -267,7 +309,7 @@ func (pc *PlotConfig) AddPoint(pt plots.Point) {
 			Line: &grob.ScatterLine{
 				Shape: grob.ScatterLineShapeLinear,
 			},
-			Mode: grob.ScatterMode("lines+markers"),
+			Mode: "lines+markers",
 			X:    []float64{},
 			Y:    []float64{},
 		})

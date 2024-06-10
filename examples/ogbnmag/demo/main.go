@@ -19,9 +19,11 @@ import (
 
 var (
 	flagEval             = flag.Bool("eval", false, "Set to true to run evaluation instead of training.")
+	flagSkipReport       = flag.Bool("skip_report", false, "Set to true to skip report of quality after training.")
 	flagSkipTrainEval    = flag.Bool("skip_train_eval", false, "Set to true to skip evaluation on training data, which takes longer.")
 	flagDataDir          = flag.String("data", "~/work/ogbnmag", "Directory to cache downloaded and generated dataset files.")
 	flagCheckpointSubdir = flag.String("checkpoint", "", "Checkpoint subdirectory under --data directory. If empty does not use checkpoints.")
+	flagLayerWise        = flag.Bool("layerwise", true, "Whether to use Layer-Wise inference for evaluation -- default is true.")
 )
 
 const paramWithReplacement = "mag_with_replacement"
@@ -39,16 +41,21 @@ func createDefaultContext(manager *Manager) *context.Context {
 		optimizers.ParamOptimizer:           "adam",
 		optimizers.ParamLearningRate:        0.001,
 		optimizers.ParamCosineScheduleSteps: 0,
+		optimizers.ParamClipStepByValue:     0.0,
+		optimizers.ParamAdamEpsilon:         1e-7,
+		optimizers.ParamAdamDType:           "",
 
 		layers.ParamL2Regularization: 1e-5,
 		layers.ParamDropoutRate:      0.2,
+		layers.ParamActivation:       "swish",
 
 		gnn.ParamEdgeDropoutRate:       0.0,
-		gnn.ParamNumGraphUpdates:       2,
+		gnn.ParamNumGraphUpdates:       6, // gnn_num_messages
 		gnn.ParamReadoutHiddenLayers:   2,
 		gnn.ParamPoolingType:           "mean|logsum",
+		gnn.ParamUpdateStateType:       "residual",
 		gnn.ParamUsePathToRootStates:   false,
-		gnn.ParamGraphUpdateType:       "tree",
+		gnn.ParamGraphUpdateType:       "simultaneous",
 		gnn.ParamUpdateNumHiddenLayers: 0,
 		gnn.ParamMessageDim:            32, // 128 or 256 will work better, but takes way more time
 		gnn.ParamStateDim:              32, // 128 or 256 will work better, but takes way more time
@@ -58,6 +65,7 @@ func createDefaultContext(manager *Manager) *context.Context {
 		mag.ParamSplitEmbedTablesSize: 1,
 		mag.ParamReuseKernels:         true,
 		mag.ParamIdentitySubSeeds:     true,
+		mag.ParamDType:                "float32",
 	})
 	return ctx
 }
@@ -83,6 +91,7 @@ func main() {
 
 	// Flags with context settings.
 	settings := commandline.CreateContextSettingsFlag(ctx, "")
+	klog.InitFlags(nil)
 	flag.Parse()
 	must.M(commandline.ParseContextSettings(ctx, *settings))
 
@@ -114,20 +123,14 @@ func main() {
 	mag.WithReplacement = context.GetParamOr(ctx, paramWithReplacement, false)
 	var err error
 	if *flagEval {
-		// Evaluate on various datasets.
-		_, trainEvalDS, validEvalDS, testEvalDS := must.M4(mag.MakeDatasets(*flagDataDir))
-		if *flagSkipTrainEval {
-			err = mag.Eval(ctx, *flagDataDir, validEvalDS, testEvalDS)
-		} else {
-			err = mag.Eval(ctx, *flagDataDir, trainEvalDS, validEvalDS, testEvalDS)
-		}
+		err = mag.Eval(ctx, *flagDataDir, *flagLayerWise, *flagSkipTrainEval)
 	} else {
 		if mag.WithReplacement {
 			fmt.Println("Training dataset with replacement")
 		}
 
 		// Train.
-		err = mag.Train(ctx, *flagDataDir)
+		err = mag.Train(ctx, *flagDataDir, *flagLayerWise, !*flagSkipReport)
 	}
 	if err != nil {
 		fmt.Printf("%+v\n", err)

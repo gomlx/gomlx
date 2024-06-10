@@ -164,6 +164,11 @@ func (c *Config) DirFromBase(dir, baseDir string) *Config {
 
 // Immediate forces immediate load of all variables, as opposed to dynamically load
 // variables from checkpoint as they are being used when building the model.
+//
+// Not normally needed, but may be handy for testing. See also [context.Context.InspectVariableIfLoaded].
+//
+// It may trigger use more memory if not all variables are not used by the model -- not all training data (e.g.: optimizer
+// variables) is used for inference.
 func (c *Config) Immediate() *Config {
 	c.immediate = true
 	return c
@@ -208,6 +213,8 @@ func (c *Config) ExcludeParams() *Config {
 
 // ExcludeVarsFromSaving enumerate variables to be excluded from saving.
 // The function can be called multiple times, adding variables to be excluded from saving.
+//
+// It can also be called after the [Handler] object is built as new variables are created.
 func (c *Config) ExcludeVarsFromSaving(vars ...*context.Variable) *Config {
 	for _, v := range vars {
 		c.excludeFromSave.Insert(v)
@@ -835,4 +842,12 @@ func (h *Handler) LoadVariable(ctx *context.Context, scope, name string) (value 
 // The Handler owns the returned map, don't change it -- the behavior is undefined if you do.
 func (h *Handler) LoadedVariables() map[string]tensor.Tensor {
 	return h.variableValues
+}
+
+// ExcludeVarsFromSaving enumerate variables to be excluded from saving.
+// The function can be called multiple times, adding variables to be excluded from saving.
+func (h *Handler) ExcludeVarsFromSaving(vars ...*context.Variable) {
+	for _, v := range vars {
+		h.config.excludeFromSave.Insert(v)
+	}
 }

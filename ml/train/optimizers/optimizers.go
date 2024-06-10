@@ -58,11 +58,11 @@ var (
 	// KnownOptimizers is a map of known optimizers by name to their default constructors.
 	// This provides an easy quick start point. One can hyperparameter-tune the optimizers
 	// for usually slightly better results.
-	KnownOptimizers = map[string]func() Interface{
-		"sgd":    StochasticGradientDescent,
-		"adam":   func() Interface { return Adam().Done() },
-		"adamax": func() Interface { return Adam().Adamax().Done() },
-		"adamw":  func() Interface { return Adam().WeightDecay(0.004).Done() },
+	KnownOptimizers = map[string]func(ctx *context.Context) Interface{
+		"sgd":    func(ctx *context.Context) Interface { return StochasticGradientDescent() },
+		"adam":   func(ctx *context.Context) Interface { return Adam().FromContext(ctx).Done() },
+		"adamax": func(ctx *context.Context) Interface { return Adam().Adamax().FromContext(ctx).Done() },
+		"adamw":  func(ctx *context.Context) Interface { return Adam().WeightDecay(0.004).FromContext(ctx).Done() },
 	}
 
 	// ParamOptimizer is the context parameter with the name of the optimizer.
@@ -83,11 +83,13 @@ const (
 // See [ParamOptimizer]. The default is "adamw".
 func FromContext(ctx *context.Context) Interface {
 	optName := context.GetParamOr(ctx, ParamOptimizer, "adamw")
-	return MustOptimizerByName(optName)
+	return MustOptimizerByName(ctx, optName)
 }
 
 // MustOptimizerByName returns an optimizer given the name, or log.Fatal if one does not exist. It uses
 // KnownOptimizers -- in case one wants to better handle invalid values.
+//
+// Some optimizers (e.g.: Adam) uses optional hyperparameters set in the context for configuration.
 //
 // Example usage:
 //
@@ -98,17 +100,17 @@ func FromContext(ctx *context.Context) Interface {
 //
 //	trainer := train.NewTrainer(manager, ctx, ModelGraph,
 //	   losses.SomeLoss,
-//	   optimizers.MustOptimizerByName(*flagOptimizer),
+//	   optimizers.MustOptimizerByName(ctx, *flagOptimizer),
 //	   []metrics.Interface{someMetric},    // trainMetrics
 //	   []metrics.Interface{otherMetric})   // evalMetrics
 //
 // ```
-func MustOptimizerByName(optName string) Interface {
+func MustOptimizerByName(ctx *context.Context, optName string) Interface {
 	optBuilder, found := KnownOptimizers[optName]
 	if !found {
 		log.Fatalf("Unknown optimizer %q, valid values are %v.", optName, slices.Keys(KnownOptimizers))
 	}
-	return optBuilder()
+	return optBuilder(ctx)
 }
 
 // GetGlobalStepVar returns the global step counter.
@@ -163,6 +165,12 @@ var (
 	//
 	// Deprecated: use ParamLearningRate instead.
 	LearningRateKey = ParamLearningRate
+
+	// ParamClipStepByValue is a clip scalar value for each individual value of the gradient step, after
+	// being scaled by the learning rate and optimizer.
+	// The step applied will be `ClipScalar(step, -clip_step_by_value, +clip_step_by_value)`.
+	// Defaults to no clipping, and values are expected to be float64.
+	ParamClipStepByValue = "clip_step_by_value"
 )
 
 // LearningRateVar returns the learning rate variable -- a scalar value of the given dtype.
@@ -177,7 +185,16 @@ func LearningRateVar(ctx *context.Context, dtype shapes.DType, defaultValue floa
 // LearningRateVarWithValue creates (or reuses) variable for learning rate with the given value.
 func LearningRateVarWithValue(ctx *context.Context, dtype shapes.DType, value float64) *context.Variable {
 	ctx = ctx.Checked(false).In("optimizers")
-	return ctx.VariableWithValue(ParamLearningRate, shapes.CastAsDType(value, dtype))
+	return ctx.VariableWithValue(ParamLearningRate, shapes.CastAsDType(value, dtype)).SetTrainable(false)
+}
+
+// ClipStepByValue applies the [ParamClipStepByValue] hyperparameter if it is not 0.0 (the default).
+func ClipStepByValue(ctx *context.Context, step *Node) *Node {
+	clipByValue := context.GetParamOr(ctx, ParamClipStepByValue, 0.0)
+	if clipByValue == 0 {
+		return step
+	}
+	return ClipScalar(step, -clipByValue, clipByValue)
 }
 
 // sgd is an empty struct that implements Interface for SGD.
@@ -241,7 +258,9 @@ func addGradientsToVariablesGraph(ctx *context.Context, loss, learningRate, glob
 			// complex.
 			lrCast = ConvertType(learningRate, grads[ii].DType())
 		}
-		updatedValue := Sub(v.ValueGraph(g), Mul(grads[ii], lrCast))
+		scaledGradient := Mul(grads[ii], lrCast)
+		scaledGradient = ClipStepByValue(ctx, scaledGradient)
+		updatedValue := Sub(v.ValueGraph(g), scaledGradient)
 		v.SetValueGraph(updatedValue)
 		ii++
 	})

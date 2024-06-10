@@ -32,19 +32,27 @@ var (
 )
 
 // NewSampler will create a [sampler.Sampler] and configure it with the OGBN-MAG graph definition.
+//
+// Usually, one will want to use the [NewSamplerStrategy] instead, which will calls this. Call this instead if
+// crafting a custom sampling strategy.
+//
+// `baseDir` is used to store a cached sampler called `sampler.bin` for faster startup.
+// If empty, it will force re-creating the sampler.
 func NewSampler(baseDir string) (*sampler.Sampler, error) {
-	baseDir = mldata.ReplaceTildeInDir(baseDir) // If baseDir starts with "~", it is replaced.
-	samplerPath := path.Join(baseDir, DownloadSubdir, "sampler.bin")
-	s, err := sampler.Load(samplerPath)
-	if err == nil {
-		return s, nil
+	var samplerPath string
+	if baseDir != "" {
+		baseDir = mldata.ReplaceTildeInDir(baseDir) // If baseDir starts with "~", it is replaced.
+		samplerPath = path.Join(baseDir, DownloadSubdir, "sampler.bin")
+		s, err := sampler.Load(samplerPath)
+		if err == nil {
+			return s, nil
+		}
+		if !os.IsNotExist(err) {
+			return nil, err
+		}
 	}
-	if !os.IsNotExist(err) {
-		return nil, err
-	}
-
 	fmt.Println("> Creating a new Sampler for OGBN-MAG")
-	s = sampler.New()
+	s := sampler.New()
 	s.AddNodeType("papers", NumPapers)
 	s.AddNodeType("authors", NumAuthors)
 	s.AddNodeType("institutions", NumInstitutions)
@@ -58,17 +66,25 @@ func NewSampler(baseDir string) (*sampler.Sampler, error) {
 	s.AddEdgeType("affiliations", "authors", "institutions", EdgesAffiliatedWith /*reverse=*/, true)
 	s.AddEdgeType("hasTopic", "papers", "fields_of_study", EdgesHasTopic /*reverse=*/, false)
 	s.AddEdgeType("topicHasPapers", "papers", "fields_of_study", EdgesHasTopic /*reverse=*/, true)
-	if err := s.Save(samplerPath); err != nil {
-		return nil, err
+	if samplerPath != "" {
+		err := s.Save(samplerPath)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return s, nil
 }
 
-// MagStrategy takes a sampler created by [ogbnmag.NewSampler], a desired batch size, and the set of
-// seed ids to sample from ([ogbnmag.TrainSplit], [ogbnmag.ValidSplit] or [ogbnmag.TestSplit]) and
-// returns a sampling strategy, that can be used to create datasets.
-func MagStrategy(magSampler *sampler.Sampler, batchSize int, seedIdsCandidates tensor.Tensor) *sampler.Strategy {
-	strategy := magSampler.NewStrategy()
+// NewSamplerStrategy creates a sampling strategy given the sampler, batch size and seeds candidates to sample from.
+//
+// Args:
+// . [magSampler] should have been created with [ogbnmag.NewSampler]
+// . [batchSize] is the number of seed nodes ("Papers") to sample.
+// . [seedIdsCandidates] is the seed of seed nodes to sample from, typically [ogbnmag.TrainSplit], [ogbnmag.ValidSplit] or [ogbnmag.TestSplit]. If empty it will sample from all possible papers.
+//
+// It returns a [sampler.Strategy] for OGBN-MAG.
+func NewSamplerStrategy(magSampler *sampler.Sampler, batchSize int, seedIdsCandidates tensor.Tensor) (strategy *sampler.Strategy) {
+	strategy = magSampler.NewStrategy()
 	strategy.KeepDegrees = KeepDegrees
 	var seeds *sampler.Rule
 	if seedIdsCandidates == nil {
@@ -125,9 +141,9 @@ func MagStrategy(magSampler *sampler.Sampler, batchSize int, seedIdsCandidates t
 	return strategy
 }
 
-// magCreateLabels create the labels from the input seed indices.
+// ExtractLabelsFromInput create the labels from the input seed indices.
 // It returns the same inputs and the extracted labels (with mask).
-func magCreateLabels(inputs, labels []tensor.Tensor) ([]tensor.Tensor, []tensor.Tensor) {
+func ExtractLabelsFromInput(inputs, labels []tensor.Tensor) ([]tensor.Tensor, []tensor.Tensor) {
 	seedsRef := inputs[0].Local().AcquireData()
 	defer seedsRef.Release()
 	seedsData := seedsRef.Flat().([]int32)
@@ -163,9 +179,9 @@ func MakeDatasets(dataDir string) (trainDS, trainEvalDS, validEvalDS, testEvalDS
 	if err != nil {
 		return
 	}
-	trainStrategy := MagStrategy(magSampler, BatchSize, TrainSplit)
-	validStrategy := MagStrategy(magSampler, BatchSize, ValidSplit)
-	testStrategy := MagStrategy(magSampler, BatchSize, TestSplit)
+	trainStrategy := NewSamplerStrategy(magSampler, BatchSize, TrainSplit)
+	validStrategy := NewSamplerStrategy(magSampler, BatchSize, ValidSplit)
+	testStrategy := NewSamplerStrategy(magSampler, BatchSize, TestSplit)
 
 	trainDS = trainStrategy.NewDataset("train").Infinite().Shuffle()
 	if WithReplacement {
@@ -182,7 +198,7 @@ func MakeDatasets(dataDir string) (trainDS, trainEvalDS, validEvalDS, testEvalDS
 	// - Parallelize its generation: greatly speeds it up.
 	// - Free GPU memory in between each use, since each batch may use lots of GPU memory.
 	perDatasetFn := func(ds train.Dataset) train.Dataset {
-		ds = mldata.Map(ds, magCreateLabels)
+		ds = mldata.Map(ds, ExtractLabelsFromInput)
 		ds = mldata.Parallel(ds)
 		ds = mldata.Freeing(ds)
 		return ds

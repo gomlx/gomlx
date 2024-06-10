@@ -28,6 +28,7 @@ func getMagVar(ctx *context.Context, g *Graph, name string) *Node {
 	magVar := ctx.InspectVariable(OgbnMagVariablesScope, name)
 	if magVar == nil {
 		Panicf("Missing OGBN-MAG dataset variables (%q), pls call UploadOgbnMagVariables() on context first.", name)
+		panic(nil) // Quiet linter.
 	}
 	return magVar.ValueGraph(g)
 }
@@ -35,24 +36,35 @@ func getMagVar(ctx *context.Context, g *Graph, name string) *Node {
 // MagModelGraph builds a OGBN-MAG GNN model that sends [ParamNumGraphUpdates] along its sampling
 // strategy, and then adding a final layer on top of the seeds.
 //
-// It returns 3 tensors:
-// * Predictions for all seeds shaped `Float32[BatchSize, mag.NumLabels]`.
+// It returns 2 tensors:
+// * Predictions for all seeds shaped `Float32[BatchSize, mag.NumLabels]` (or `Float16` or `Float64`).
 // * Mask of the seeds, provided by the sampler, shaped `Bool[BatchSize]`.
 func MagModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	ctx = ctx.WithInitializer(initializers.GlorotUniformFn(initializers.NoSeed))
+	dtype := getDType(ctx) // Default is Float32
 
 	g := inputs[0].Graph()
-	optimizers.CosineAnnealingSchedule(ctx, g, shapes.F32).FromContext().Done()
+
+	lrDType := dtype
+	if adamDType := context.GetParamOr(ctx, optimizers.ParamAdamDType, ""); adamDType != "" {
+		var err error
+		lrDType, err = shapes.DTypeString(adamDType)
+		if err != nil || !lrDType.IsFloat() {
+			Panicf("Cannot parse hyperparameter %s=%q: %v", optimizers.ParamAdamDType, adamDType, err)
+		}
+	}
+	optimizers.CosineAnnealingSchedule(ctx, g, lrDType).FromContext().Done()
 
 	// We disable checking for re-use of scopes because we deliberately reuse
 	// kernels in our GNN.
 	ctx = ctx.Checked(false)
 
 	strategy := spec.(*sampler.Strategy)
-	graphStates := FeaturePreprocessing(ctx, strategy, inputs)
+	graphStates, _ := FeaturePreprocessing(ctx, strategy, inputs)
 	gnn.NodePrediction(ctx, strategy, graphStates)
-	readoutState := graphStates[strategy.Seeds[0].Name]
+
 	// Last layer outputs the logits for the `NumLabels` classes.
+	readoutState := graphStates[strategy.Seeds[0].Name]
 	readoutState.Value = layers.DenseWithBias(ctx.In("logits"), readoutState.Value, NumLabels)
 	return []*Node{readoutState.Value, readoutState.Mask}
 }
@@ -62,9 +74,19 @@ func MagModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 //
 //	author/paper, so it is reasonable to expect that during validation/testing it will see many embeddings
 //	zero initialized.
-func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inputs []*Node) (graphInputs map[string]*sampler.ValueMask[*Node]) {
+func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inputs []*Node) (
+	graphInputs map[string]*sampler.ValueMask[*Node], remainingInputs []*Node) {
 	g := inputs[0].Graph()
-	graphInputs = sampler.MapInputs[*Node](strategy, inputs)
+	graphInputs, remainingInputs = sampler.MapInputsToStates[*Node](strategy, inputs)
+	dtype := getDType(ctx)
+	dtypeEmbed := dtype
+	if dtype == shapes.Float16 {
+		// If we don't do this for Float16, on a 2080ti GPU, the training becomes 3 times slower. Gemini mentioned
+		// that the RTX 30 series is better at "scattering" (used on the auto-differentiation of the "gathers" here),
+		// and may be worth a try then. But for now, leave it as Float32. Notice this is only an issue on non-sorted
+		// gathers/scatters, which is the case here (indices may come randomly).
+		dtypeEmbed = shapes.Float32
+	}
 
 	// Learnable embeddings context: it may benefit from dropout to have the model handle well
 	// the cases of unknown (zero) embeddings.
@@ -79,6 +101,9 @@ func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inpu
 		if rule.NodeTypeName == "papers" {
 			// Gather values from frozen paperEmbeddings. Mask remains unchanged.
 			graphInputs[name].Value = Gather(papersEmbeddings, ExpandDims(graphInputs[name].Value, -1))
+			if dtype != dtypeEmbed {
+				graphInputs[name].Value = ConvertType(graphInputs[name].Value, dtype)
+			}
 		}
 	}
 
@@ -90,10 +115,15 @@ func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inpu
 			// Gather values from frozen paperEmbeddings. Mask remains unchanged.
 			indices := DivScalar(graphInputs[name].Value, float64(splitEmbedTables))
 			embedded := layers.Embedding(ctxEmbed.In("institutions"), indices,
-				shapes.F32, (NumInstitutions+splitEmbedTables-1)/splitEmbedTables, institutionsEmbedSize)
-			embedMask := layers.DropoutStatic(ctx, graphInputs[name].Mask, embedDropoutRate)
-			embedded = Where(embedMask, embedded, ZerosLike(embedded)) // Apply mask.
+				dtypeEmbed, (NumInstitutions+splitEmbedTables-1)/splitEmbedTables, institutionsEmbedSize)
+			if graphInputs[name].Mask != nil {
+				embedMask := layers.DropoutStatic(ctx, graphInputs[name].Mask, embedDropoutRate)
+				embedded = Where(embedMask, embedded, ZerosLike(embedded)) // Apply mask.
+			}
 			graphInputs[name].Value = embedded
+			if dtype != dtypeEmbed {
+				graphInputs[name].Value = ConvertType(graphInputs[name].Value, dtype)
+			}
 		}
 	}
 
@@ -104,10 +134,16 @@ func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inpu
 			// Gather values from frozen paperEmbeddings. Mask remains unchanged.
 			indices := DivScalar(graphInputs[name].Value, float64(splitEmbedTables))
 			embedded := layers.Embedding(ctxEmbed.In("fields_of_study"),
-				indices, shapes.F32, (NumFieldsOfStudy+splitEmbedTables-1)/splitEmbedTables, fieldsOfStudyEmbedSize)
-			embedMask := layers.DropoutStatic(ctx, graphInputs[name].Mask, embedDropoutRate)
-			embedded = Where(embedMask, embedded, ZerosLike(embedded)) // Apply mask.
+				indices, dtypeEmbed, (NumFieldsOfStudy+splitEmbedTables-1)/splitEmbedTables, fieldsOfStudyEmbedSize)
+
+			if graphInputs[name].Mask != nil {
+				embedMask := layers.DropoutStatic(ctx, graphInputs[name].Mask, embedDropoutRate)
+				embedded = Where(embedMask, embedded, ZerosLike(embedded)) // Apply mask.
+			}
 			graphInputs[name].Value = embedded
+			if dtype != dtypeEmbed {
+				graphInputs[name].Value = ConvertType(graphInputs[name].Value, dtype)
+			}
 		}
 	}
 

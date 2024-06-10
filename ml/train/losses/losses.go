@@ -26,7 +26,26 @@ import (
 	"github.com/gomlx/gomlx/types/shapes"
 )
 
-const Epsilon = 1e-7
+const (
+	Epsilon16 = 1e-4
+	Epsilon32 = 1e-7
+	Epsilon64 = 1e-8
+)
+
+func epsilonForDType(g *Graph, dtype shapes.DType) *Node {
+	var epsilon float64
+	switch dtype {
+	case shapes.Float64:
+		epsilon = Epsilon64
+	case shapes.Float32:
+		epsilon = Epsilon32
+	case shapes.Float16:
+		epsilon = Epsilon16
+	default:
+		Panicf("Unknown epsilon value for dtype %s", dtype)
+	}
+	return Const(g, shapes.CastAsDType(epsilon, dtype))
+}
 
 // MeanSquaredError returns the mean squared error between labels and predictions.
 //
@@ -273,7 +292,7 @@ func categoricalCrossEntropyImpl(labels, predictions, weights, mask *Node) *Node
 	if !shape.Eq(predictions.Shape()) {
 		Panicf("labels(%s) and predictions(%s) must different shapes", shape, predictions.Shape())
 	}
-	epsilon := Const(g, shapes.CastAsDType(Epsilon, dtype))
+	epsilon := epsilonForDType(g, dtype)
 	predictions = Clip(predictions, epsilon, Sub(ScalarOne(g, dtype), epsilon))
 	losses := ReduceSum(Neg(Mul(labels, Log(predictions))), -1)
 	// Losses will usually be shaped `[batch_size]` now, ready to apply weights multiplication and/or a mask.

@@ -38,8 +38,10 @@ func Activation(activation string, x *Node) *Node {
 		return Swish(x)
 	case "silu":
 		return Swish(x)
+	case "selu":
+		return Selu(x)
 	default:
-		Panicf("invalid activation type %q, valid types are: \"relu\", \"sigmoid\", \"leaky_relu\", \"swish\", \"silu\", \"tanh\"", activation)
+		Panicf("invalid activation type %q, valid types are: \"relu\", \"sigmoid\", \"leaky_relu\", \"selu\", \"silu\", \"swish\", \"tanh\"", activation)
 	}
 	return nil
 }
@@ -81,4 +83,23 @@ func LeakyReluWithAlpha(x *Node, alpha float64) *Node {
 // Here the beta parameter is fixed at 1.0.
 func Swish(x *Node) *Node {
 	return Mul(x, Sigmoid(x))
+}
+
+const (
+	SeluAlpha = 1.67326324
+	SeluScale = 1.05070098
+)
+
+// Selu stands for Scaled Exponential Linear Unit (SELU) activation function is defined as:
+// . $SeluScale * x$ if $x > 0$
+// . $SeluScale * SeluAlpha * (e^x - 1)$ if $x < 0$
+//
+// Ideally, it should be matched with a "LecunNormal initializer" and the dropout variant called "AlphaDropout"
+// -- TODO, neither are implemented yet.
+func Selu(x *Node) *Node {
+	x = Where(GreaterThan(x, ScalarZero(x.Graph(), x.DType())),
+		x,
+		MulScalar(MinusOne(Exp(x)), SeluAlpha),
+	)
+	return MulScalar(x, SeluScale)
 }

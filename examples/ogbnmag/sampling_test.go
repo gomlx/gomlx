@@ -29,7 +29,7 @@ func TestDatasets(t *testing.T) {
 
 	// Checks that shuffling also doesn't loses elements.
 	magSampler, err := NewSampler(*flagDataDir)
-	trainStrategy := MagStrategy(magSampler, BatchSize, TrainSplit)
+	trainStrategy := NewSamplerStrategy(magSampler, BatchSize, TrainSplit)
 	shuffledTrainDS := mldata.Parallel(
 		trainStrategy.NewDataset("train").Epochs(1).Shuffle())
 
@@ -62,7 +62,8 @@ func TestDatasets(t *testing.T) {
 			}
 			require.NoError(t, err)
 			strategy := spec.(*sampler.Strategy)
-			graphSample := sampler.MapInputs[tensor.Tensor](strategy, inputs)
+			graphSample, remaining := sampler.MapInputsToStates[tensor.Tensor](strategy, inputs)
+			require.Empty(t, remaining)
 			seeds := graphSample["seeds"].Value.Local().FlatCopy().([]int32)
 			mask := graphSample["seeds"].Mask.Local().FlatCopy().([]bool)
 			for ii, idx := range seeds {

@@ -10,6 +10,7 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
 	"strings"
 )
@@ -33,31 +34,15 @@ var (
 	// The default is 128.
 	ParamStateDim = "gnn_node_state_dim"
 
-	// ParamActivation context hyperparameter defines the activation to use, see [layers.ParamActivation]
-	ParamActivation = layers.ParamActivation
-
-	// ParamDropoutRate is applied to FNN kernels, as usual, randomly turning off individual values.
-	// Default is 0.0, meaning no dropout.
-	ParamDropoutRate = layers.ParamDropoutRate
-
 	// ParamEdgeDropoutRate is applied to full edges, disabling the whole edge.
 	// Default is 0.0, meaning no edge dropout.
 	ParamEdgeDropoutRate = "gnn_edge_dropout_rate"
-
-	// ParamL2Regularization is an alias for layers.ParamL2Regularization, and adds regularizations to the NN kernels.
-	// The default is `0.0`.
-	ParamL2Regularization = layers.ParamL2Regularization
 
 	// ParamPoolingType context hyperparameter defines how incoming messages in the graph convolutions are pooled (that is, reduced
 	// or aggregated).
 	// It can take values `mean`, `sum` or `max` or a combination of them separated by `|`.
 	// The default is `mean|sum`.
 	ParamPoolingType = "gnn_pooling_type"
-
-	// ParamNormalizationType context hyperparameter can take values `none` ( or `""`), `batch` or `layer`.
-	// It's an alias to [layers.ParamNormalizationType].
-	// The default is `layer`.
-	ParamNormalizationType = layers.ParamNormalizationType
 
 	// ParamUpdateStateType context hyperparameter can take values `residual` or `none`.
 	// The default is `residual`.
@@ -77,7 +62,7 @@ var (
 	// ParamGraphUpdateType context hyperparameter can take values `tree` or `simultaneous`.
 	// Graph updates in `tree` fashion will update from leaf all the way to the seeds (the roots of the trees),
 	// for each message configured with [ParamNumGraphUpdates].
-	// Graph updates in `simultaneous` fashion will update all states from it's dependents "simultaneously". In that
+	// Graph updates in `simultaneous` fashion will update all states from its dependents "simultaneously". In that
 	// sense it will require [ParamNumGraphUpdates] to be at least equal to the depth of the sampling tree for the
 	// influence of the leaf nodes to reach to the root nodes.
 	// The default is `tree`.
@@ -181,7 +166,7 @@ func recursivelyApplyGraphConvolution(ctx *context.Context, rule *sampler.Rule,
 	// Makes sure there is a state for the current dependent.
 	state, found := graphStates[rule.Name]
 	if !found {
-		Panicf("state for node %q not given in `graphStates`, states given: %v", rule.Name, slices.Keys(graphStates))
+		Panicf("state for sampling rule %q not given in `graphStates`, states given: %v", rule.Name, slices.Keys(graphStates))
 	}
 
 	// Leaf nodes are not updated.
@@ -232,7 +217,10 @@ func recursivelyApplyGraphConvolution(ctx *context.Context, rule *sampler.Rule,
 		if dependentsUpdateFirst {
 			recursivelyApplyGraphConvolution(ctx, dependent, subPathToRootStates, graphStates, dependentsUpdateFirst)
 		}
-		dependentState := graphStates[dependent.Name]
+		dependentState, found := graphStates[dependent.Name]
+		if !found {
+			Panicf("state for sampling rule %q not given in `graphStates`, states given: %v", dependent.Name, slices.Keys(graphStates))
+		}
 		dependentDegreePair := graphStates[sampler.NameForNodeDependentDegree(rule.Name, dependent.Name)]
 		var dependentDegree *Node
 		if dependentDegreePair != nil {
@@ -264,7 +252,7 @@ func recursivelyApplyGraphConvolution(ctx *context.Context, rule *sampler.Rule,
 // They must be aligned.
 func sampledConvolveEdgeSet(ctx *context.Context, value, mask, degree *Node) *Node {
 	messages, mask := edgeMessageGraph(ctx.In("message"), value, mask)
-	return poolMessages(ctx, messages, mask, degree)
+	return poolMessagesWithFixedShape(ctx, messages, mask, degree)
 }
 
 // edgeMessageGraph calculates the graph for messages being sent across edges.
@@ -276,23 +264,28 @@ func edgeMessageGraph(ctx *context.Context, gatheredStates, gatheredMask *Node) 
 	messages = layers.ActivationFromContext(ctx, messages)
 
 	mask = gatheredMask
-	edgeDropOutRate := context.GetParamOr(ctx, ParamEdgeDropoutRate, 0.0)
-	if edgeDropOutRate > 0 {
-		// We apply edge dropout to the mask: values disabled here will mask the whole edge.
-		mask = layers.DropoutStatic(ctx, gatheredMask, edgeDropOutRate)
+	if mask != nil {
+		edgeDropOutRate := context.GetParamOr(ctx, ParamEdgeDropoutRate, 0.0)
+		if edgeDropOutRate > 0 {
+			// We apply edge dropout to the mask: values disabled here will mask the whole edge.
+			mask = layers.DropoutStatic(ctx, gatheredMask, edgeDropOutRate)
+		}
 	}
 	return
 }
 
-// poolMessages will pool according to [ParamPoolingType].
+// poolMessagesWithFixedShape will pool according to [ParamPoolingType].
+//
 // Let's say `value` is shaped `[d_0, d_1, ..., d_{n-1}, d_{n}, e]`: we assume `e` is the embedding dimension of the
 // tensor, and we want to reduce the axis `n`.
 // So the returned shape will be `[d_0, d_1, ..., d_{n-1}, k*e]`, where `k` is the number of pooling types configured.
 // E.g.: If the pooling types (see [ParamPoolingType]) are configured to `mean|sum`, then `k=2`.
 //
-// The parameter `degree` is optional, but if given, the `sum` pooling will scale the sum to the given degree.
+// The parameter `degree` is optional, but if given, the `sum` and `logsum` pooling will scale the sum to the given degree.
 // It's expected to be of shape `[d_0, d_1, ..., d_{n-1}, 1]`.
-func poolMessages(ctx *context.Context, value, mask, degree *Node) *Node {
+//
+// There are no training variables in this. The `ctx` is only used for the hyperparameter configuration.
+func poolMessagesWithFixedShape(ctx *context.Context, value, mask, degree *Node) *Node {
 	poolTypes := context.GetParamOr(ctx, ParamPoolingType, "mean|sum")
 	poolTypesList := strings.Split(poolTypes, "|")
 	parts := make([]*Node, 0, len(poolTypesList))
@@ -330,6 +323,94 @@ func poolMessages(ctx *context.Context, value, mask, degree *Node) *Node {
 	return Concatenate(parts, -1)
 }
 
+// poolMessagesWithAdjacency will pool according to [ParamPoolingType] using the adjacency information.
+//
+// Args:
+//   - [ctx] is the context, used to read the [ParamPoolingType] hyperparameter, which defines the type(s) of
+//     pooling to be used.
+//   - [source] should be shaped `[num_source_nodes, embedding_size]` and have the `dtype` of the model.
+//   - [edgesSource] and [edgesTarget] represent the adjacency: source and target indices of the connected nodes.
+//     They must have the same shape: both shaped either `[num_edges]` or `[num_edges,1]` and should have some integer dtype.
+//   - [targetDim] is the dimension of the first axis of the resulting target tensor.
+//   - [degree] is optional. If given, the `sum` and `logsum` pooling will scale the sum to the given degree.
+//     It's expected to be of shape `[targetDim, 1]`.
+//
+// It returns a tensor ([graph.Node]) shaped `[targetSize, pooled_embedded_size]`.
+//
+// There are no training variables in this. The `ctx` is only used for the hyperparameter configuration.
+func poolMessagesWithAdjacency(ctx *context.Context, source, edgesSource, edgesTarget *Node, targetSize int, degree *Node) *Node {
+	poolTypes := context.GetParamOr(ctx, ParamPoolingType, "mean|sum")
+	if source.Rank() != 2 {
+		Panicf("poolMessagesWithAdjacency(): source is expected to be shaped `[num_nodes, emb_size]`, instead got %s", source.Shape())
+	}
+	if (edgesSource.Rank() != 1 && edgesSource.Rank() != 2) || !edgesSource.Shape().Eq(edgesTarget.Shape()) ||
+		(edgesSource.Rank() == 2 && edgesSource.Shape().Dimensions[1] != 1) {
+		Panicf("poolMessagesWithAdjacency(): edgesSource and edgesTarget must have the same shape: either [num_edges] or [num_edges, 1] and be of "+
+			"some integer dtype, instead got edgesSource.shape=%s edgesTarget.shape=%s", edgesSource.Shape(), edgesTarget.Shape())
+	}
+	if degree != nil && (degree.Rank() != 2 || degree.Shape().Dimensions[0] != targetSize || degree.Shape().Dimensions[1] != 1) {
+		Panicf("poolMessagesWithAdjacency(): if degree is given (not nil) it is expected to be shaped `[targetSize=%d, 1]`, instead got %s", targetSize, degree.Shape())
+	}
+	g := source.Graph()
+	dtype := source.DType()
+	dtypePool := dtype
+	if dtype.IsFloat16() {
+		// Up-precision to 32 bits for pooling.
+		dtypePool = shapes.Float32
+	}
+	embSize := source.Shape().Dimensions[1]
+	numEdges := edgesSource.Shape().Dimensions[0]
+	if edgesSource.Rank() == 1 {
+		edgesSource = ExpandDims(edgesSource, -1)
+		edgesTarget = ExpandDims(edgesTarget, -1)
+	}
+
+	poolTypesList := strings.Split(poolTypes, "|")
+	parts := make([]*Node, 0, len(poolTypesList))
+	var pooled *Node
+	for _, poolType := range poolTypesList {
+		switch poolType {
+		case "sum", "logsum", "mean":
+			// Get values from the source to be pooled. Since a source may contribute to more than one target
+			// node, a source value may appear more than once. Shaped `[num_edges, emb_size]`.
+			values := Gather(source, edgesSource)
+			if dtypePool != dtype {
+				values = ConvertType(values, dtypePool)
+			}
+			pooled = Scatter(edgesTarget, values, shapes.Make(dtypePool, targetSize, embSize))
+
+			var pooledCount *Node
+			if poolType == "mean" || degree != nil {
+				// Get count of items pooled and take the mean.
+				ones := Ones(g, shapes.Make(dtypePool, numEdges, 1))
+				pooledCount = Scatter(edgesTarget, ones, shapes.Make(dtypePool, targetSize, 1))
+				pooledCount = MaxScalar(pooledCount, 1) // To avoid division by 0.
+				pooled = Div(pooled, pooledCount)
+			}
+			if poolType != "mean" && degree != nil {
+				// Weight mean pooled value by `degree`.
+				pooled = Mul(pooled, ConvertType(degree, dtypePool))
+			}
+			if poolType == "logsum" {
+				pooled = MirroredLog1p(pooled)
+			}
+		default:
+			// Notice "max" is not implemented yet.
+			Panicf("unknown graph convolution pooling type (%q) given in context: value given %q (of %q) -- valid values are sum, mean and max, or a combination of them separated by '|'",
+				ParamPoolingType, poolType, poolTypes)
+		}
+		parts = append(parts, pooled)
+	}
+	if len(parts) == 1 {
+		return parts[0]
+	}
+	all := Concatenate(parts, -1)
+	if dtype != dtypePool {
+		all = ConvertType(all, dtype)
+	}
+	return all
+}
+
 // updateState of a node set, given the `input` (should be a concatenation of previous
 // state and all pooled messages) and its `mask`.
 func updateState(ctx *context.Context, prevState, input, mask *Node) *Node {
@@ -343,13 +424,13 @@ func updateState(ctx *context.Context, prevState, input, mask *Node) *Node {
 	input = layers.DropoutFromContext(ctx, input)
 	stateDim := context.GetParamOr(ctx, ParamStateDim, 128)
 	numHiddenLayers := context.GetParamOr(ctx, ParamUpdateNumHiddenLayers, 0)
+	state := input
 	for ii := range numHiddenLayers {
 		ctxHiddenLayer := ctx.In(fmt.Sprintf("hidden_%d", ii))
-		state := layers.DenseWithBias(ctxHiddenLayer, input, stateDim)
+		state = layers.DenseWithBias(ctxHiddenLayer, state, stateDim)
 		state = layers.ActivationFromContext(ctx.In(fmt.Sprintf("hidden_%d", ii)), state)
-		state = layers.DropoutFromContext(ctx.In(fmt.Sprintf("hidden_%d", ii)), state)
 	}
-	state := layers.DenseWithBias(ctx, input, stateDim)
+	state = layers.DenseWithBias(ctx, state, stateDim)
 	state = layers.ActivationFromContext(ctx, state)
 	state = layers.DropoutFromContext(ctx, state)
 
