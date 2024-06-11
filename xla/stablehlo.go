@@ -1,3 +1,5 @@
+//go:build !google3
+
 /*
  *	Copyright 2023 Jan Pfeifer
  *

@@ -1,6 +1,6 @@
 # GoMLX changelog
 
-## Next
+## 0.10.1 - ...
 
 * `types.shapes` package:
   * **Added support for `Float16` training -- tested with GNNs.**
@@ -27,6 +27,8 @@
   * Including Layer-Wise Inference.
 * Package graph:
   * Added `Shift`, `ShiftLeft`, `ShiftRight`, `ShiftWithScalar`, `ShiftWithValue`.
+* Dummy package for xla.AOT and xla.StableHLO APIs enabled when using "google3" build tag: this allows the dependency
+  to the corresponding C++ code to be dropped. (Thanks @tdegris).
 
 ## 0.9.1 - 2024/04/19
 
