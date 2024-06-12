@@ -1,6 +1,6 @@
 # GoMLX changelog
 
-## 0.10.1 - 2024/06/12
+## 0.10.0 - 2024/06/12
 
 * `types.shapes` package:
   * **Added support for `Float16` training -- tested with GNNs.**
