@@ -1,6 +1,6 @@
 # GoMLX changelog
 
-## 0.10.1 - ...
+## 0.10.1 - 2024/06/12
 
 * `types.shapes` package:
   * **Added support for `Float16` training -- tested with GNNs.**
@@ -11,16 +11,18 @@
   * Added support for `Int8`, `Int16`, `Uint8` and `Uint16`.
   * Renamed `UInt{X}` to `Uint{X}` and added a deprecated alias to the old form (so it still compiles).
 * Added logging of time to build and compile graph. Last version improved a lot the execution time, but slowed the compilation.
-* Fixed `Variable.SetValueGraph` when the shape changes. Improved some documentation.
+* Context.Variable:
+  * Fixed `Variable.SetValueGraph` when the shape changes. Improved some documentation.
+  * Fixed `Variable.SetValuePreservingOld` when shapes change.
+  * Fixed checking of loaded variables -- that they are not newly created.
 * Package `optimizers`:
   * Fixed optimizer constructor `FromContext` to allow further configuration of the optimizer by setting other hyperparameters into context.   
   * Added hyperparameter `clip_step_by_value`, a clip by value applied to gradient updates.
   * `Adam` optimizer: `"clip_step_by_value", "adam_epsilon", "adam_dtype"` hyperparameters support.
   * **`MustOptimizerByName` now takes also the context for the optimizer hyperparameters.** -- this breaks the API.
 * Package `checkpoints`:
-  * Allow adding variables to exclude from saving after checkpoint is created -- for newly created variables.
+  * Allow adding variables to exclude from saving after checkpoint is created -- for newly created variables
 * Added `slices.CloseToEpsilon` to easily customize tests.
-* Fixed `Variable.SetValuePreservingOld` when shapes change.
 * `Scatter` doesn't assume indices are sorted or unique.
 * Plotly training plots: added `WithCustomMetricFn` for custom metrics and `ScheduleEveryNSteps`.
 * Added OGBN_MAG GNN example:

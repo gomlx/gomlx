@@ -222,6 +222,7 @@ func TestContext_SetLoader(t *testing.T) {
 			},
 		},
 	})
+	ctx = ctx.Reuse()
 	e := NewExec(manager, ctx, func(ctx *Context, g *Graph) (*Node, *Node) {
 		v0 := ctx.WithInitializer(initializers.Zero).VariableWithShape("x", shapes.Make(shapes.Float32))
 		v1 := ctx.VariableWithValue("y", 1)
