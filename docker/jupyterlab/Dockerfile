@@ -2,7 +2,7 @@ FROM nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04
 
 LABEL maintainer="pfeifer@gmail.com"
 
-ARG GO_VERSION="1.22.2"
+ARG GO_VERSION="1.22.4"
 
 # Pre-built GoMLX C library: if not building yourself, you can download it from
 # https://github.com/gomlx/gomlx/releases/download/${GOMLX_VERSION}/gomlx_xla-linux-amd64.tar.gz

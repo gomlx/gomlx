@@ -72,6 +72,17 @@ import (
 //
 // Finally, Context also allows one to checkpoint the variable values (save and load). See checkpoint package.
 //
+// Variable duplicate creation checking:
+// the context is by default configure to with Context.Checked(true), which checks at every variable creation whether
+// the variable already exists. This is useful to prevent unintended reuse of variables. When checked, variable creation
+// (with Context.VariableWithShape and Context.VariableWithValue) will panic if:
+//
+// - Context.Unique() (the default) and variable already exists (or was loaded);
+// - Context.Reuse() and variable didn't exist (or was not loaded);
+//
+// Remember to set Context.Reuse if you expect to load the variables, or disable Context.Checked(false) if only some
+// variables are going to be loaded.
+//
 // TODO: Handling of devices with multiple instances (e.g.: multiple GPUs/TPUs).
 type Context struct {
 	// scope for currently created variables and registration.
@@ -554,12 +565,11 @@ func (ctx *Context) ExecSetVariablesInParams(params graph.ParamsMap, g *Graph) {
 // The root scope is "/" (RootScope).
 func (ctx *Context) InspectVariable(scope, name string) *Variable {
 	scopeVars, ok := ctx.data.variablesMap[scope]
-	if !ok {
-		return nil
-	}
-	v, found := scopeVars[name]
-	if found {
-		return v
+	if ok {
+		v, found := scopeVars[name]
+		if found {
+			return v
+		}
 	}
 
 	// Try to load it, if a loader (checkpoint handler) is configured.
@@ -571,7 +581,7 @@ func (ctx *Context) InspectVariable(scope, name string) *Variable {
 	if !found {
 		return nil
 	}
-	v = &Variable{
+	v := &Variable{
 		ctx:          ctx,
 		name:         name,
 		scope:        scope,
@@ -677,6 +687,11 @@ func (ctx *Context) DeleteVariablesInScope() {
 //
 // Notice that variables information is stored in the "data" component of Context objects, and is shared
 // among all connected context references.
+//
+// If Context is set with Context.Checked(true), this may panic if:
+//
+// - Context.Unique() and variable already exists (or was loaded);
+// - Context.Reuse() and variable didn't exist (or was not loaded);
 func (ctx *Context) VariableWithShape(name string, shape shapes.Shape) *Variable {
 	v := ctx.InspectVariable(ctx.scope, name)
 	if v == nil && ctx.checked && ctx.reuse {
@@ -705,34 +720,10 @@ func (ctx *Context) VariableWithShape(name string, shape shapes.Shape) *Variable
 	}
 	ctx.setVariableInScope(name, v)
 
-	// Try to load the variable. Report if something failed.
-	if ctx.tryToLoad(v) {
-		return v
-	}
-
 	// Set up variable for initialization.
 	v.initializer = ctx.initializer
 	ctx.data.needsInitialization = true
 	return v
-}
-
-// tryToLoad tries to load the variable from the loader. It returns true if it succeeded.
-func (ctx *Context) tryToLoad(v *Variable) bool {
-	loader := ctx.data.loader
-	if loader == nil {
-		return false
-	}
-	value, found := loader.LoadVariable(ctx, v.Scope(), v.Name())
-	if found {
-		if value.Shape().Eq(v.shape) {
-			v.value = value
-		} else {
-			Panicf("loading of variable %q returned shape %s, but variable was created "+
-				"with shape %s -- did some hyperparameter change since variable was saved that changed "+
-				"the variable shape?", v.ParameterName(), value.Shape(), v.shape)
-		}
-	}
-	return found
 }
 
 func valueToTensor(value any) tensor.Tensor {
@@ -757,6 +748,11 @@ func valueToTensor(value any) tensor.Tensor {
 //
 // Notice that variables' information is stored in the "data" component of Context objects, and is shared
 // among all connected context references.
+//
+// If Context is set with Context.Checked(true), this may panic if:
+//
+// - Context.Unique() and variable already exists (or was loaded);
+// - Context.Reuse() and variable didn't exist (or was not loaded);
 func (ctx *Context) VariableWithValue(name string, value any) *Variable {
 	v := ctx.InspectVariable(ctx.scope, name)
 
@@ -794,11 +790,6 @@ func (ctx *Context) VariableWithValue(name string, value any) *Variable {
 		graphToNodes: make(map[graph.GraphId]*variableNodes),
 	}
 	ctx.setVariableInScope(name, v)
-
-	// Try to load the variable. Report if something failed.
-	if ctx.tryToLoad(v) {
-		return v
-	}
 	return v
 }
 
