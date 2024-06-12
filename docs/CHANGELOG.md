@@ -29,6 +29,7 @@
   * Added `Shift`, `ShiftLeft`, `ShiftRight`, `ShiftWithScalar`, `ShiftWithValue`.
 * Dummy package for xla.AOT and xla.StableHLO APIs enabled when using "google3" build tag: this allows the dependency
   to the corresponding C++ code to be dropped. (Thanks @tdegris).
+* Removed xla.AOTExecute: see issue #52
 
 ## 0.9.1 - 2024/04/19
 
