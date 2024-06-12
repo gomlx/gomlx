@@ -1,5 +1,10 @@
 # GoMLX changelog
 
+## Next
+
+* C/C++ code:
+  * Removed reference to AOT compilation, see #52.
+
 ## 0.10.0 - 2024/06/12
 
 * `types.shapes` package:

@@ -53,12 +53,6 @@ struct StableHLOHolder;
 typedef struct StableHLOHolder StableHLOHolder;
 #endif // __cpluplus
 
-// ClientAOTCompileComputation to a compiled binary format, that is serialized
-// as a string.
-extern StatusOr ClientAOTCompileComputation(Client *client, Computation *comp,
-                                            int num_params,
-                                            Shape **param_shapes);
-
 // ConvertComputationToStableHLO converts a **compiled** computation graph to
 // the StableHLO representation. It returns either an error or a
 // `StableHLOHolder*` that holds the StableHLO C++ object. Returned
