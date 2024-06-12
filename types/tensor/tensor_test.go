@@ -80,10 +80,14 @@ func TestFromValue(t *testing.T) {
 	shape, err = shapeForValue([]complex128{1.0i, 1.0})
 	cmpShapes(t, shape, wantShape, err)
 
-	// Test for invalid `DType`.
+	wantShape = shapes.Shape{DType: shapes.Uint16, Dimensions: []int{1, 1}}
 	shape, err = shapeForValue([][]uint16{{3}})
+	cmpShapes(t, shape, wantShape, err)
+
+	// Test for invalid `DType`.
+	shape, err = shapeForValue([][]string{{"blah"}})
 	if shape.DType != shapes.InvalidDType {
-		t.Fatalf("Wanted InvalidDType for uint16, instead got %q", shape.DType)
+		t.Fatalf("Wanted InvalidDType for string, instead got %q", shape.DType)
 	}
 	if err == nil {
 		t.Fatalf("Should have returned error for unsupported DType")
