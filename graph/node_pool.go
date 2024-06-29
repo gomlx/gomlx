@@ -337,7 +337,7 @@ func takeMeanOfContributions(x, pooledSum *Node, channelsAxis int, windowDimensi
 // reduceWindowXLA runs a reduction function, here limited to the value given by reductionType,
 // it can be either ReduceMaxNode, ReduceSumNode or ReduceMultiplyNode.
 //
-// The parameter windowDimensions must be setand have a value for each axis. The parameters `strides`, `baseDilations`
+// The parameter windowDimensions must be set and have a value for each axis. The parameters `strides`, `baseDilations`
 // and `windowDilations` and `paddings` can be left as nil if not used.
 func reduceWindowXLA(x *Node, reductionType xla.NodeType, windowDimensions, strides, baseDilations, windowDilations []int, paddings [][2]int) *Node {
 	g := validateGraphFromInputs(x)
