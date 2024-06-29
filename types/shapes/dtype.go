@@ -500,10 +500,10 @@ func typeForSliceDType(valueType reflect.Type, dtype DType) reflect.Type {
 	return reflect.SliceOf(subType) // Return a slice of the recursively converted type.
 }
 
-// LowestValueForDType converted to the corresponding Go type.
+// LowestValue of ordered dtypes, converted to the corresponding Go type.
 // For float values it will return negative infinite.
 // There is no lowest value for complex numbers, since they are not ordered.
-func LowestValueForDType(dtype DType) any {
+func (dtype DType) LowestValue() any {
 	switch dtype {
 	case Int64:
 		return int64(math.MinInt64)
@@ -535,6 +535,50 @@ func LowestValueForDType(dtype DType) any {
 
 	default:
 		exceptions.Panicf("LowestValueForDType not defined for dtype %s", dtype)
+	}
+	return 0 // Never reaches here.
+}
+
+// LowestValueForDType is an alias for dtype.LowestValue.
+func LowestValueForDType(dtype DType) any {
+	return dtype.LowestValue()
+}
+
+// HighestValue for dtype converted to the corresponding Go type.
+// For float values it will return infinite.
+// There is no lowest value for complex numbers, since they are not ordered.
+func (dtype DType) HighestValue() any {
+	switch dtype {
+	case Int64:
+		return int64(math.MaxInt64)
+	case Int32:
+		return int32(math.MaxInt32)
+	case Int16:
+		return int16(math.MaxInt16)
+	case Int8:
+		return int8(math.MaxInt8)
+
+	case Uint64:
+		return uint64(math.MaxUint64)
+	case Uint32:
+		return uint32(math.MaxUint32)
+	case Uint16:
+		return uint16(math.MaxUint16)
+	case Uint8:
+		return uint8(math.MaxUint8)
+
+	case Bool:
+		return true
+
+	case Float32:
+		return float32(math.Inf(1))
+	case Float64:
+		return math.Inf(1)
+	case Float16:
+		return float16.Inf(1)
+
+	default:
+		exceptions.Panicf("LowestValue for dtype %s not defined", dtype)
 	}
 	return 0 // Never reaches here.
 }
