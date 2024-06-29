@@ -107,7 +107,7 @@ func Scalar[T Number]() Shape {
 }
 
 // Ok returns whether this is a valid Shape. A "zero" shape, that is just instantiating it with Shape{} will be invalid.
-func (s Shape) Ok() bool { return s.DType != InvalidDType }
+func (s Shape) Ok() bool { return s.DType != InvalidDType || len(s.TupleShapes) > 0 }
 
 // Rank of the shape, that is, the number of dimensions.
 func (s Shape) Rank() int { return len(s.Dimensions) }
