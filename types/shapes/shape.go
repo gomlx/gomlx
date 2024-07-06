@@ -107,6 +107,13 @@ func Scalar[T Number]() Shape {
 	return Shape{DType: FromGenericsType[T]()}
 }
 
+// Invalid returns an invalid shape.
+//
+// Invalid().IsOk() == false.
+func Invalid() Shape {
+	return Shape{DType: InvalidDType}
+}
+
 // Ok returns whether this is a valid Shape. A "zero" shape, that is just instantiating it with Shape{} will be invalid.
 func (s Shape) Ok() bool { return s.DType != InvalidDType || len(s.TupleShapes) > 0 }
 

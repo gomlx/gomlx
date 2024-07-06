@@ -17,13 +17,11 @@
 package shapes
 
 import (
-	"math"
 	"reflect"
 	"unsafe"
 
 	"github.com/gomlx/gomlx/types/exceptions"
 	. "github.com/gomlx/gopjrt/dtypes"
-	"github.com/pkg/errors"
 	"github.com/x448/float16"
 )
 
@@ -172,47 +170,8 @@ func CastAsDType(value any, dtype DType) any {
 func typeForSliceDType(valueType reflect.Type, dtype DType) reflect.Type {
 	if valueType.Kind() != reflect.Slice && valueType.Kind() != reflect.Array {
 		// Base case for recursion, simply return the `reflect.Type` for the DType.
-		return GoType(dtype)
+		return dtype.GoType()
 	}
 	subType := typeForSliceDType(valueType.Elem(), dtype)
 	return reflect.SliceOf(subType) // Return a slice of the recursively converted type.
-}
-
-// SmallestNonZeroValueForDType is the smallest non-zero value dtypes.
-// Only useful for float types.
-// The return value is converted to the corresponding Go type.
-// There is no smallest non-zero value for complex numbers, since they are not ordered.
-func SmallestNonZeroValueForDType(dtype DType) any {
-	switch dtype {
-	case Int64:
-		return int64(1)
-	case Int32:
-		return int32(1)
-	case Int16:
-		return int16(1)
-	case Int8:
-		return int8(1)
-
-	case Uint64:
-		return uint64(1)
-	case Uint32:
-		return uint32(1)
-	case Uint16:
-		return uint16(1)
-	case Uint8:
-		return uint8(1)
-
-	case Bool:
-		return true
-
-	case Float32:
-		return float32(math.SmallestNonzeroFloat32)
-	case Float64:
-		return math.SmallestNonzeroFloat64
-	case Float16:
-		return float16.Float16(0x0001) // 1p-24, see discussion in https://github.com/x448/float16/pull/46
-
-	default:
-		panic(errors.Errorf("SmallestNonZeroValueForDType not defined for dtype %s", dtype))
-	}
 }
