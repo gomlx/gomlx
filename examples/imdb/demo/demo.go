@@ -401,7 +401,7 @@ func TransformerLayers(ctx *context.Context, embed, mask *Node) *Node {
 	// Create positional embedding variable: it is 1 in every axis, but for the
 	// sequence dimension -- there will be one embedding per position.
 	// Shape: [1, maxLen, embedDim]
-	posEmbedShape := shape.Copy()
+	posEmbedShape := shape.Clone()
 	posEmbedShape.Dimensions[0] = 1
 	posEmbedVar := ctx.VariableWithShape("positional", posEmbedShape)
 	posEmbed := posEmbedVar.ValueGraph(g)

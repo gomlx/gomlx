@@ -57,7 +57,7 @@ func PreprocessImage(image *Node, maxValue float64, channelsConfig timage.Channe
 		}
 	}
 	if upScale > 1.0 {
-		newShape := image.Shape().Copy()
+		newShape := image.Shape().Clone()
 		for _, axis := range spatialDims {
 			newSize := int(math.Round(float64(shape.Dimensions[axis]) * upScale))
 			if newSize < MinimumImageSize {

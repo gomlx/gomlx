@@ -378,7 +378,7 @@ func LoadIndividualFiles(baseDir string) (vocab *Vocab, examples []*Example, err
 type Dataset struct {
 	name             string
 	SetType          SetType
-	LabelDType       shapes.DType
+	LabelDType       dtypes.DType
 	MaxLen, MaxVocab int
 	BatchSize        int
 	Examples         []*Example
@@ -395,7 +395,7 @@ type Dataset struct {
 var _ train.Dataset = &Dataset{}
 
 // NewDataset creates a labeled Dataset.
-func NewDataset(name string, set SetType, maxLen, batchSize int, labelDType shapes.DType, infinite bool, shuffle *rand.Rand) *Dataset {
+func NewDataset(name string, set SetType, maxLen, batchSize int, labelDType dtypes.DType, infinite bool, shuffle *rand.Rand) *Dataset {
 	if shuffle == nil {
 		shuffle = rand.New(rand.NewSource(time.Now().UTC().UnixNano()))
 	}
@@ -419,7 +419,7 @@ func NewDataset(name string, set SetType, maxLen, batchSize int, labelDType shap
 }
 
 // NewUnsupervisedDataset with the SetType assumed to be Train.
-func NewUnsupervisedDataset(name string, maxLen, batchSize int, labelDType shapes.DType, infinite bool, shuffle *rand.Rand) *Dataset {
+func NewUnsupervisedDataset(name string, maxLen, batchSize int, labelDType dtypes.DType, infinite bool, shuffle *rand.Rand) *Dataset {
 	if shuffle == nil {
 		shuffle = rand.New(rand.NewSource(time.Now().UTC().UnixNano()))
 	}

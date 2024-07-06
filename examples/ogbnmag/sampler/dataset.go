@@ -283,7 +283,7 @@ func sampleEdges(rule *Rule, srcNodes, srcMask *tensor.Local) (nodes, mask, degr
 		degreesData []int32
 	)
 	if rule.Strategy.KeepDegrees {
-		degreesShape := srcNodes.Shape().Copy()
+		degreesShape := srcNodes.Shape().Clone()
 		degreesShape.Dimensions = append(degreesShape.Dimensions, 1)
 		degrees = tensor.FromScalarAndDimensions(int32(0), degreesShape.Dimensions...)
 		degreesRef = degrees.AcquireData()

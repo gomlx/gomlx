@@ -17,6 +17,7 @@
 package shapes
 
 import (
+	. "github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
 	"testing"
 )

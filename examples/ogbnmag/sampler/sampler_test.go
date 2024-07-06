@@ -179,7 +179,7 @@ func TestDataset(t *testing.T) {
 			if rule.SourceRule != nil && strategy.KeepDegrees {
 				degreeName := NameForNodeDependentDegree(rule.SourceRule.Name, rule.Name)
 				degrees := graphSample[degreeName].Value
-				wantShape := value.Shape().Copy()
+				wantShape := value.Shape().Clone()
 				wantShape.Dimensions[wantShape.Rank()-1] = 1
 				require.Truef(t, degrees.Shape().Eq(wantShape), "Mismatch degree shapes for %q: degree shape is %s, wanted %s",
 					degreeName, degrees.Shape(), wantShape)

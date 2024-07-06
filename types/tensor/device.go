@@ -97,7 +97,7 @@ func (device *Device) Shape() shapes.Shape {
 }
 
 // DType returns the DType of the tensor's shape.
-func (device *Device) DType() shapes.DType {
+func (device *Device) DType() dtypes.DType {
 	device.AssertValid()
 	return device.shape.DType
 }

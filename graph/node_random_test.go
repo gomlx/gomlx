@@ -12,7 +12,7 @@ import (
 func testRandomUniform[T interface {
 	float32 | float64 | float16.Float16 | complex64 | complex128
 }](t *testing.T, manager *Manager) {
-	dtype := shapes.DTypeGeneric[T]()
+	dtype := shapes.FromGoType[T]()
 	graphtest.RunTestGraphFn(t, fmt.Sprintf("TestRandomUniform(%s)", dtype),
 		func(g *Graph) (inputs []*Node, outputs []*Node) {
 			state := Const(g, RngStateFromSeed(42))
@@ -55,7 +55,7 @@ func TestRandomUniform(t *testing.T) {
 func testRandomNormal[T interface {
 	float32 | float64 | float16.Float16
 }](t *testing.T, manager *Manager) {
-	dtype := shapes.DTypeGeneric[T]()
+	dtype := shapes.FromGoType[T]()
 	graphtest.RunTestGraphFn(t, fmt.Sprintf("TestRandomNormal(%s)", dtype),
 		func(g *Graph) (inputs []*Node, outputs []*Node) {
 			state := Const(g, RngStateFromSeed(42))

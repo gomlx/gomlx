@@ -31,7 +31,7 @@ import (
 
 var (
 	manager *Manager
-	DType   shapes.DType
+	DType   dtypes.DType
 )
 
 var (
@@ -235,7 +235,7 @@ func FlowerTypeEmbedding(ctx *context.Context, flowerIds, x *Node) *Node {
 	}
 	flowerIds = ExpandDims(flowerIds, -1, -1, -1) // Expand axis to the match noisyImages rank.
 	flowerTypeEmbed := layers.Embedding(ctx, flowerIds, DType, flowers.NumLabels, *flagFlowerTypeEmbeddingSize)
-	broadcastDims := flowerTypeEmbed.Shape().Copy().Dimensions
+	broadcastDims := flowerTypeEmbed.Shape().Clone().Dimensions
 	for _, axis := range timage.GetSpatialAxes(x, timage.ChannelsLast) {
 		broadcastDims[axis] = x.Shape().Dimensions[axis]
 	}
@@ -270,7 +270,7 @@ func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds
 	// Get sinusoidal features, always included, and broadcast them to the spatial dimensions.
 	sinEmbed := SinusoidalEmbedding(noiseVariances)
 	nanLogger.Trace(sinEmbed)
-	broadcastDims := sinEmbed.Shape().Copy().Dimensions
+	broadcastDims := sinEmbed.Shape().Clone().Dimensions
 	for _, axis := range timage.GetSpatialAxes(noisyImages, timage.ChannelsLast) {
 		broadcastDims[axis] = noisyImages.Shape().Dimensions[axis]
 	}

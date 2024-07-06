@@ -196,7 +196,7 @@ func GatherSlices(input *Node, slicedAxes []int, start *Node, sizes []int) (gath
 	startIndexMap := slicedAxes
 	// * sliceSizes must be defined for each input axis, and are either given in `sizes` or are assumed to be the full dimension
 	//   of the input.
-	sliceSizes := input.shape.Copy().Dimensions // Start with a copy of the input's dimensions.
+	sliceSizes := input.shape.Clone().Dimensions // Start with a copy of the input's dimensions.
 	for ii, size := range sizes {
 		axis := slicedAxes[ii]
 		sliceSizes[axis] = size

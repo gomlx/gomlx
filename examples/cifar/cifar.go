@@ -98,7 +98,7 @@ const imageSizeBytes = Height * Width * Depth
 
 func convertBytesToTensor[T shapes.GoFloat](image []byte, imagesT *tensor.Local, exampleNum int) error {
 	var t T
-	if shapes.DTypeForType(reflect.TypeOf(t)) != imagesT.DType() {
+	if shapes.FromType(reflect.TypeOf(t)) != imagesT.DType() {
 		return errors.Errorf("trying to convert to dtype %s from go type %t", imagesT.DType(), any(t))
 	}
 	ref := imagesT.AcquireData()
@@ -122,7 +122,7 @@ func convertBytesToTensor[T shapes.GoFloat](image []byte, imagesT *tensor.Local,
 // [NumExamples=60000, 1] of Int64.
 // The first 50k examples are for training, and the last 10k for testing.
 // Only Float32 and Float64 dtypes are supported for now.
-func LoadCifar10(manager *Manager, baseDir string, dtype shapes.DType) (partitioned PartitionedImagesAndLabels) {
+func LoadCifar10(manager *Manager, baseDir string, dtype dtypes.DType) (partitioned PartitionedImagesAndLabels) {
 	baseDir = data.ReplaceTildeInDir(baseDir)
 
 	// Allocate the tensor.
@@ -176,7 +176,7 @@ func LoadCifar10(manager *Manager, baseDir string, dtype shapes.DType) (partitio
 // [NumExamples=60000, 1] of Int64.
 // The first 50k examples are for training, and the last 10k for testing.
 // Only Float32 and Float64 dtypes are supported for now.
-func LoadCifar100(manager *Manager, baseDir string, dtype shapes.DType) (partitioned PartitionedImagesAndLabels) {
+func LoadCifar100(manager *Manager, baseDir string, dtype dtypes.DType) (partitioned PartitionedImagesAndLabels) {
 	baseDir = data.ReplaceTildeInDir(baseDir)
 
 	// Allocate the tensor.
@@ -288,13 +288,13 @@ type PartitionedImagesAndLabels [2]ImagesAndLabels
 
 var (
 	// Cache of loaded data: one per DataSource, per DType, per Partition(Train/Test).
-	imagesAndLabelsCache [2]map[shapes.DType]PartitionedImagesAndLabels
+	imagesAndLabelsCache [2]map[dtypes.DType]PartitionedImagesAndLabels
 )
 
 func ResetCache() {
-	imagesAndLabelsCache = [2]map[shapes.DType]PartitionedImagesAndLabels{
-		make(map[shapes.DType]PartitionedImagesAndLabels), // Cifar10
-		make(map[shapes.DType]PartitionedImagesAndLabels), // Cifar100
+	imagesAndLabelsCache = [2]map[dtypes.DType]PartitionedImagesAndLabels{
+		make(map[dtypes.DType]PartitionedImagesAndLabels), // Cifar10
+		make(map[dtypes.DType]PartitionedImagesAndLabels), // Cifar100
 	}
 }
 
@@ -308,7 +308,7 @@ func init() {
 // It automatically downloads the data from the web, and then loads the data into memory if it hasn't been
 // loaded yet.
 // It caches the result, so multiple Datasets can be created without any extra costs in time/memory.
-func NewDataset(manager *Manager, name, baseDir string, source DataSource, dtype shapes.DType, partition Partition) *data.InMemoryDataset {
+func NewDataset(manager *Manager, name, baseDir string, source DataSource, dtype dtypes.DType, partition Partition) *data.InMemoryDataset {
 	if source > C100 {
 		Panicf("Invalid source value %d, only C10 or C100 accepted", source)
 	}
@@ -317,7 +317,7 @@ func NewDataset(manager *Manager, name, baseDir string, source DataSource, dtype
 		// How do download & load data: one per DataSource.
 		downloadFunctions := [2]func(baseDir string) error{
 			DownloadCifar10, DownloadCifar100}
-		loadFunctions := [2]func(manager *Manager, baseDir string, dType shapes.DType) PartitionedImagesAndLabels{
+		loadFunctions := [2]func(manager *Manager, baseDir string, dType dtypes.DType) PartitionedImagesAndLabels{
 			LoadCifar10, LoadCifar100}
 
 		err := downloadFunctions[source](baseDir)

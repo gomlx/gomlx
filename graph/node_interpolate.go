@@ -130,7 +130,7 @@ func (c *InterpolationConfig) Done() (output *Node) {
 	// Find axisToInterpolateList, and their target dimensions in interpolationDims:
 	axisToInterpolateList := make([]int, 0, input.Rank())
 	axisToInterpolateMap := make([]bool, input.Rank()) // Set to true if the axis is marked for interpolation.
-	outputShape := inputShape.Copy()
+	outputShape := inputShape.Clone()
 	interpolationDims := make([]int, 0, input.Rank()+1)
 	for axis, s := range outputSizes {
 		if s != NoInterpolation && s <= 0 {

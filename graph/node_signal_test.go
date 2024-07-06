@@ -124,7 +124,7 @@ func TestGradientFFT(t *testing.T) {
 
 // realFftExample returns (x, y) where: x is a sinusoidal curve with numPoints points,
 // and with `frequency` full cycles; y is the RealFFT(x).
-func realFftExample(manager *Manager, realDType shapes.DType, numPoints int, frequency float64) (x, y tensor.Tensor) {
+func realFftExample(manager *Manager, realDType dtypes.DType, numPoints int, frequency float64) (x, y tensor.Tensor) {
 	e := NewExec(manager, func(g *Graph) (x, y *Node) {
 		x = Iota(g, shapes.Make(realDType, 1, numPoints), 1)
 		x = MulScalar(x, 2.0*math.Pi*frequency/float64(numPoints))

@@ -36,7 +36,7 @@ func noisyImages(t *testing.T, manager *Manager, batch tensor.Tensor) tensor.Ten
 	noisyImagesExecOnce.Do(func() {
 		noisyImagesExec = NewExec(manager, func(batch *Node) *Node {
 			g := batch.Graph()
-			oneImage := batch.Shape().Copy()
+			oneImage := batch.Shape().Clone()
 			oneImage.Dimensions[0] = 1
 			noise := IotaFull(g, oneImage)
 			scale := 255.0 / float64(noise.Shape().Size())

@@ -258,7 +258,7 @@ func loadCheckpointToContext(ctx *context.Context, baseDir string) error {
 }
 
 // getDType returns the dtype selected in the context hyperparameters.
-func getDType(ctx *context.Context) shapes.DType {
+func getDType(ctx *context.Context) dtypes.DType {
 	dtypeStr := context.GetParamOr(ctx, ParamDType, "float32")
 	switch dtypeStr {
 	case "float32":

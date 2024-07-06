@@ -847,8 +847,8 @@ func (ctx *Context) NumParameters() int {
 // Example:
 //
 //	fmt.Printf("Model memory usage: %s", data.ByteCountIEC(ctx.Memory()))
-func (ctx *Context) Memory() int64 {
-	total := int64(0)
+func (ctx *Context) Memory() uintptr {
+	total := uintptr(0)
 	ctx.EnumerateVariables(func(v *Variable) {
 		total += v.Shape().Memory()
 	})

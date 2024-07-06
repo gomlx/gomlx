@@ -89,7 +89,7 @@ type Tensor interface {
 	Shape() shapes.Shape
 
 	// DType of the tensor's shape.
-	DType() shapes.DType
+	DType() dtypes.DType
 
 	// Rank of the tensor's shape.
 	Rank() int
@@ -136,7 +136,7 @@ func shapeForValueRecursive(shape *shapes.Shape, v reflect.Value, t reflect.Type
 		// Recurse into inner slices.
 		t = t.Elem()
 		shape.Dimensions = append(shape.Dimensions, v.Len())
-		shapePrefix := shape.Copy()
+		shapePrefix := shape.Clone()
 
 		// The first element is the reference
 		v0 := v.Index(0)
@@ -147,7 +147,7 @@ func shapeForValueRecursive(shape *shapes.Shape, v reflect.Value, t reflect.Type
 
 		// Test that other elements have the same shape as the first one.
 		for ii := 1; ii < v.Len(); ii++ {
-			shapeTest := shapePrefix.Copy()
+			shapeTest := shapePrefix.Clone()
 			err = shapeForValueRecursive(&shapeTest, v.Index(ii), t)
 			if err != nil {
 				return err
@@ -159,7 +159,7 @@ func shapeForValueRecursive(shape *shapes.Shape, v reflect.Value, t reflect.Type
 	} else if t.Kind() == reflect.Pointer {
 		return fmt.Errorf("cannot convert Pointer (%s) to a concrete value for tensors", t)
 	} else {
-		shape.DType = shapes.DTypeForType(t)
+		shape.DType = shapes.FromType(t)
 		if shape.DType == shapes.InvalidDType {
 			return fmt.Errorf("cannot convert type %s to a value concrete tensor type (maybe type not supported yet?)", t)
 		}
@@ -176,12 +176,12 @@ func baseType(valueType reflect.Type) reflect.Type {
 	return valueType
 }
 
-//func depthDTypeAndBaseType(t reflect.Type) (int, shapes.DType, reflect.Type) {
+//func depthDTypeAndBaseType(t reflect.Type) (int, dtypes.DType, reflect.Type) {
 //	if t.Kind() == reflect.Slice {
 //		depth, dtype, baseType := depthDTypeAndBaseType(t.Elem())
 //		return depth + 1, dtype, baseType
 //	}
-//	return 0, shapes.DTypeForType(t), t
+//	return 0, shapes.FromType(t), t
 //
 //}
 

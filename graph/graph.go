@@ -485,11 +485,11 @@ func (g *Graph) LoggedNodes() (nodes []*Node) {
 // its pre-created *Node. It helps avoid creating duplicate nodes for common values.
 //
 // It keeps a cache for each dtype of the scalar.
-type scalarCache map[shapes.DType]map[float64]*Node
+type scalarCache map[dtypes.DType]map[float64]*Node
 
 // getScalarConst either creates a scalar constant or returns a previously created returned
 // from the cache. It shouldn't be called directly by users, rather Scalar and Const use it.
-func (g *Graph) getScalarConst(dtype shapes.DType, value float64) (output *Node) {
+func (g *Graph) getScalarConst(dtype dtypes.DType, value float64) (output *Node) {
 	dtypeMap, found := g.scalars[dtype]
 	if !found {
 		dtypeMap = make(map[float64]*Node)

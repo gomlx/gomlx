@@ -23,16 +23,16 @@
 // Shape and DType are used both by the concrete tensor values (see tensor package) and when
 // working on the computation graph (see graph package).
 //
-// Go float16 support (commonly used by NVidia GPUs) uses github.com/x448/float16 implementation.
+// Go float16 support (commonly used by Nvidia GPUs) uses github.com/x448/float16 implementation.
 //
 // ## Glossary
 //
 //   - Rank: number of axes (dimensions) of a Tensor.
-//   - Axis: is the index of a dimension on a multi-dimensional Tensor. Sometimes used
+//   - Axis: is the index of a dimension on a multidimensional Tensor. Sometimes used
 //     interchangeably with Dimension, but here we try to refer to a dimension index as "axis"
 //     (plural axes), and its size as its dimension.
 //   - Dimension: the size of a multi-dimensions Tensor in one of its axes. See example below:
-//   - DType: the data type of the unit element in a tensor.
+//   - DType: the data type of the unit element in a tensor. Enumeration defined in github.com/gomlx/gopjrt/dtypes
 //   - Scalar: is a shape where there are no axes (or dimensions), only a single value
 //     of the associated DType.
 //
@@ -46,7 +46,7 @@
 // When coding ML models, one delicate part is keeping tabs on the shape of
 // the nodes of the graphs -- unfortunately there is no compile-time checking of values,
 // so validation only happens in runtime. To facilitate, and also to serve as code documentation,
-// this package provides two variations of _assert_ funtionality. Examples:
+// this package provides two variations of _assert_ functionality. Examples:
 //
 // `AssertRank` and `AssertDims` checks that the rank and dimensions of the given
 //
@@ -67,16 +67,16 @@
 // ```
 //
 // If you don't want to panic, but instead return an error through the `graph.Graph`, you can
-// use the `Node.AssertDims()` method. So it would loook like `logits.AssertDims(batchSize, -1)`.
+// use the `Node.AssertDims()` method. So it would look like `logits.AssertDims(batchSize, -1)`.
 package shapes
 
 import (
 	"encoding/gob"
 	"fmt"
 	"github.com/gomlx/gomlx/types/exceptions"
-	"github.com/gomlx/gomlx/types/slices"
+	. "github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
-	"reflect"
+	"slices"
 	"strings"
 )
 
@@ -91,8 +91,9 @@ type Shape struct {
 }
 
 // Make returns a Shape structure filled with the values given.
+// See MakeTuple for tuple shapes.
 func Make(dtype DType, dimensions ...int) Shape {
-	s := Shape{Dimensions: slices.Copy(dimensions), DType: dtype}
+	s := Shape{Dimensions: slices.Clone(dimensions), DType: dtype}
 	for _, dim := range dimensions {
 		if dim <= 0 {
 			exceptions.Panicf("shapes.Make(%s): cannot create a shape with an axis with dimension <= 0", s)
@@ -103,7 +104,7 @@ func Make(dtype DType, dimensions ...int) Shape {
 
 // Scalar returns a scalar Shape for the given type.
 func Scalar[T Number]() Shape {
-	return Shape{DType: DTypeGeneric[T]()}
+	return Shape{DType: FromGenericsType[T]()}
 }
 
 // Ok returns whether this is a valid Shape. A "zero" shape, that is just instantiating it with Shape{} will be invalid.
@@ -144,17 +145,19 @@ func (s Shape) Size() (size int) {
 
 // Memory returns the number of bytes for that would be used in Go to store the given data -- the actual
 // memory may depend on the device implementation in some cases (e.g. bool).
-func (s Shape) Memory() int64 {
-	return s.DType.Memory() * int64(s.Size())
+func (s Shape) Memory() uintptr {
+	return s.DType.Memory() * uintptr(s.Size())
 }
 
 // MakeTuple returns a shape representing a tuple of elements with the given shapes.
 func MakeTuple(elements []Shape) Shape {
-	return Shape{DType: Tuple, TupleShapes: elements}
+	return Shape{DType: InvalidDType, Dimensions: nil, TupleShapes: elements}
 }
 
 // IsTuple returns whether the shape represents a tuple.
-func (s Shape) IsTuple() bool { return s.DType == Tuple }
+func (s Shape) IsTuple() bool {
+	return s.DType == InvalidDType
+}
 
 // TupleSize returns the number of elements in the tuple, if it is a tuple.
 func (s Shape) TupleSize() int {
@@ -166,7 +169,7 @@ func (s Shape) Eq(s2 Shape) bool {
 	if s.DType != s2.DType {
 		return false
 	}
-	if s.DType == Tuple {
+	if s.IsTuple() {
 		if s.TupleSize() != s2.TupleSize() {
 			return false
 		}
@@ -184,13 +187,13 @@ func (s Shape) Eq(s2 Shape) bool {
 		return true
 	}
 	// For normal shapes just compare dimensions.
-	return reflect.DeepEqual(s.Dimensions, s2.Dimensions)
+	return slices.Equal(s.Dimensions, s2.Dimensions)
 }
 
 // EqDimensions compares two shapes for equality of dimensions. Dtypes can be different.
 func (s Shape) EqDimensions(s2 Shape) bool {
-	if s.DType == Tuple {
-		if s2.DType != Tuple {
+	if s.IsTuple() {
+		if !s2.IsTuple() {
 			return false
 		}
 		if s.TupleSize() != s2.TupleSize() {
@@ -210,18 +213,17 @@ func (s Shape) EqDimensions(s2 Shape) bool {
 		return true
 	}
 	// For normal shapes just compare dimensions.
-	return reflect.DeepEqual(s.Dimensions, s2.Dimensions)
+	return slices.Equal(s.Dimensions, s2.Dimensions)
 }
 
-// Copy makes a deep copy of the shapes.
-func (s Shape) Copy() (s2 Shape) {
+// Clone returns a new deep copy of the shape.
+func (s Shape) Clone() (s2 Shape) {
 	s2.DType = s.DType
-	s2.Dimensions = make([]int, len(s.Dimensions))
-	copy(s2.Dimensions, s.Dimensions)
+	s2.Dimensions = slices.Clone(s.Dimensions)
 	if s.TupleSize() > 0 {
 		s2.TupleShapes = make([]Shape, 0, len(s.TupleShapes))
 		for _, subShape := range s.TupleShapes {
-			s2.TupleShapes = append(s2.TupleShapes, subShape)
+			s2.TupleShapes = append(s2.TupleShapes, subShape.Clone())
 		}
 	}
 	return
@@ -295,9 +297,9 @@ func ConcatenateDimensions(s1, s2 Shape) (shape Shape) {
 		return
 	}
 	if s1.IsScalar() {
-		return s2.Copy()
+		return s2.Clone()
 	} else if s2.IsScalar() {
-		return s1.Copy()
+		return s1.Clone()
 	}
 	shape.DType = s1.DType
 	shape.Dimensions = make([]int, s1.Rank()+s2.Rank())

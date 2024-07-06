@@ -115,7 +115,7 @@ func Dense(ctx *context.Context, input *Node, useBias bool, outputDimensions ...
 	if useBias {
 		biasVar := ctx.VariableWithShape("biases", shapes.Make(inputShape.DType, outputDimensions...))
 		bias := biasVar.ValueGraph(g)
-		expandedBiasShape := output.Shape().Copy()
+		expandedBiasShape := output.Shape().Clone()
 		for ii := range expandedBiasShape.Dimensions[:output.Rank()-len(outputDimensions)] {
 			expandedBiasShape.Dimensions[ii] = 1
 		}
@@ -145,7 +145,7 @@ func Dense(ctx *context.Context, input *Node, useBias bool, outputDimensions ...
 //
 // The output has rank one larger than the input, with the last dimension the same as
 // the embedding dimension.
-func Embedding(ctx *context.Context, input *Node, dtype shapes.DType, vocabSize, dimension int) *Node {
+func Embedding(ctx *context.Context, input *Node, dtype dtypes.DType, vocabSize, dimension int) *Node {
 	inputShape := input.Shape()
 	if !inputShape.DType.IsInt() {
 		Panicf("can only use Embedding on integer inputs, passed %s instead", input.Shape())

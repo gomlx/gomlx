@@ -219,7 +219,7 @@ func (b *MultiHeadAttentionBuilder) SetQueryKeyMatrixMask(queryKeyMatrixMask *No
 	}
 
 	// shapeWithoutHeads = '[batch, <query_elements>, <key_elements>]` (without numHeads).
-	shapeWithoutHeads := b.attentionShape.Copy()
+	shapeWithoutHeads := b.attentionShape.Clone()
 	for ii := 1 + b.innerQueryAxes; ii < b.attentionShape.Rank()-1; ii++ {
 		shapeWithoutHeads.Dimensions[ii] = shapeWithoutHeads.Dimensions[ii+1]
 	}

@@ -48,7 +48,7 @@ func MagModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	lrDType := dtype
 	if adamDType := context.GetParamOr(ctx, optimizers.ParamAdamDType, ""); adamDType != "" {
 		var err error
-		lrDType, err = shapes.DTypeString(adamDType)
+		lrDType, err = dtypes.DTypeString(adamDType)
 		if err != nil || !lrDType.IsFloat() {
 			Panicf("Cannot parse hyperparameter %s=%q: %v", optimizers.ParamAdamDType, adamDType, err)
 		}

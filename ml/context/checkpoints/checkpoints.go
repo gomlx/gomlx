@@ -352,7 +352,7 @@ type serializedVar struct {
 	Dimensions []int
 
 	// DType of the shape.
-	DType shapes.DType
+	DType dtypes.DType
 
 	// Pos, Length in bytes in the file.
 	Pos, Length int

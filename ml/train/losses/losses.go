@@ -32,7 +32,7 @@ const (
 	Epsilon64 = 1e-8
 )
 
-func epsilonForDType(g *Graph, dtype shapes.DType) *Node {
+func epsilonForDType(g *Graph, dtype dtypes.DType) *Node {
 	var epsilon float64
 	switch dtype {
 	case shapes.Float64:

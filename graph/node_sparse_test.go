@@ -206,7 +206,7 @@ func BenchmarkScatter(b *testing.B) {
 				x := ReduceSum(Concatenate(parts, -1), -1)
 				return Add(state, x)
 			})
-			for _, dtype := range []shapes.DType{shapes.Float64, shapes.Float32, shapes.Float16} { //
+			for _, dtype := range []dtypes.DType{shapes.Float64, shapes.Float32, shapes.Float16} { //
 				// Create random values tensor shaped [BatchSize, EmbeddingSize] of the given dtype.
 				results := NewExec(manager, func(rngState *Node) (state, value *Node) {
 					_, state = RandomNormal(rngState, shapes.Make(dtype, NumEntries, EmbeddingSize))

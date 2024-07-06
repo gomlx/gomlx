@@ -43,7 +43,7 @@ type Dataset struct {
 // cut from the middle.
 //
 // It doesn't support batch, but you can use GoMLX's `data.Batch` for that.
-func NewDataset(dtype shapes.DType, imageSize int) *Dataset {
+func NewDataset(dtype dtypes.DType, imageSize int) *Dataset {
 	return &Dataset{
 		name:      "Oxford Flowers 102",
 		imageSize: imageSize,

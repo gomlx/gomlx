@@ -273,7 +273,7 @@ func parseNumbersFromCSV[E shapes.NumberNotComplex](inputFilePath, outputFilePat
 		return nil, errors.WithMessagef(err, "failed to load output file %q, you many need to remove so it can be regenerated", outputFilePath)
 	}
 	fmt.Printf("Parsing %d rows from %q\n", numRows, inputFilePath)
-	tensorOut = tensor.FromShape(shapes.Make(shapes.DTypeGeneric[E](), numRows, numCols))
+	tensorOut = tensor.FromShape(shapes.Make(shapes.FromGoType[E](), numRows, numCols))
 	dataRef := tensorOut.Local().AcquireData()
 	defer dataRef.Release()
 	rawData := dataRef.Flat().([]E)

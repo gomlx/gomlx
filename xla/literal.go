@@ -78,7 +78,7 @@ func ShapeFromCShape(cShape *C.Shape) (shape shapes.Shape) {
 	if cShape == nil {
 		return
 	}
-	shape.DType = shapes.DType(cShape.dtype)
+	shape.DType = dtypes.DType(cShape.dtype)
 	rank := int(cShape.rank)
 	if rank > 0 {
 		shape.Dimensions = make([]int, cShape.rank)
@@ -203,7 +203,7 @@ func (l *Literal) Bytes() []byte {
 	}
 	rawBytes := (*byte)(unsafe.Pointer(l.cLiteralPtr.data))
 	dtype := l.shape.DType
-	t := shapes.TypeForDType(dtype)
+	t := shapes.GoType(dtype)
 	size := int(l.cLiteralPtr.size) * int(t.Size())
 	return unsafe.Slice(rawBytes, size)
 }
@@ -218,7 +218,7 @@ func DataFromLiteral[T shapes.Supported](l *Literal) ([]T, error) {
 	if l.IsNil() {
 		return nil, errors.New("empty literal, not underlying literal reference")
 	}
-	wantDType := shapes.DTypeGeneric[T]()
+	wantDType := shapes.FromGoType[T]()
 	if wantDType != l.shape.DType {
 		return nil, fmt.Errorf("failed to retrieve literal: want dtype %s, but literal is of type  %s", wantDType, l.shape.DType)
 	}

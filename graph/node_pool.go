@@ -324,7 +324,7 @@ func takeMeanOfContributions(x, pooledSum *Node, channelsAxis int, windowDimensi
 	// We need to normalize the sum by the number of elements that were actually used, ignoring the padding.
 	// We use a similar reduceWindowXLA configuration, but as input a tensor with 1s and dropping the
 	// batch and channels axes, since they will are the same.
-	shapeNoBatchOrChannels := x.shape.Copy()
+	shapeNoBatchOrChannels := x.shape.Clone()
 	shapeNoBatchOrChannels.Dimensions[0] = 1
 	shapeNoBatchOrChannels.Dimensions[channelsAxis] = 1
 	ones := Ones(x.graph, shapeNoBatchOrChannels)

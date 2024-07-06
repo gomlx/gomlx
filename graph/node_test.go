@@ -963,7 +963,7 @@ func TestSqueeze(t *testing.T) {
 }
 
 func TestArgMax(t *testing.T) {
-	for _, dtype := range []shapes.DType{shapes.F64, shapes.F32, shapes.I64, shapes.I32} {
+	for _, dtype := range []dtypes.DType{shapes.F64, shapes.F32, shapes.I64, shapes.I32} {
 		graphtest.RunTestGraphFn(t, fmt.Sprintf("ArgMax()/ArgMin() for dtype %q", dtype),
 			func(g *Graph) (inputs, outputs []*Node) {
 				inputs = []*Node{

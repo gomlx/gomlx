@@ -100,7 +100,7 @@ func buildSyntheticAttentionModelFn(debug bool) (modelGraphFn func(ctx *context.
 		positionalVar := noisyCtx.In("positional").VariableWithShape("embeddings", shapes.Make(dtype, sequenceSize, positionalEmbeddingSize))
 		positionalEmbedding := positionalVar.ValueGraph(g)
 		positionalEmbedding = ExpandDims(positionalEmbedding, 0) // Prefixing with batch dimension.
-		dims := positionalEmbedding.Shape().Copy().Dimensions
+		dims := positionalEmbedding.Shape().Clone().Dimensions
 		dims[0] = batchSize
 		positionalEmbedding = BroadcastToDims(positionalEmbedding, dims...)
 		logits := Concatenate([]*Node{input, positionalEmbedding}, -1) // Shape=[batch, sequence, 1+positionalEmbeddingSize]

@@ -79,7 +79,7 @@ func (n *Node) Shape() shapes.Shape {
 }
 
 // DType returns the DType of the node's shape.
-func (n *Node) DType() shapes.DType {
+func (n *Node) DType() dtypes.DType {
 	return n.shape.DType
 }
 
@@ -243,7 +243,7 @@ func newNoOpNode(graph *Graph, serializedNode *xla.SerializedNode, input *Node) 
 	node.id = graph.registerNode(node)
 	node.xlaHandle = input.XlaHandle()
 	node.setInputs([]*Node{input})
-	node.shape = input.shape.Copy()
+	node.shape = input.shape.Clone()
 	if graph.traced {
 		node.trace = errors.New("Stack-trace")
 	}
@@ -283,7 +283,7 @@ func Const(g *Graph, x any) *Node {
 //
 //	Pi := ConstScalar(g, myDType, math.Pi)
 //	PiAndE := ConstScalar(g, myDType, []float64{math.Pi, math.E})
-func ConstAsDType(g *Graph, dtype shapes.DType, x interface{}) *Node {
+func ConstAsDType(g *Graph, dtype dtypes.DType, x interface{}) *Node {
 	if dtype == shapes.InvalidDType {
 		Panicf("invalid DType given for ConstAsDType")
 	}
@@ -808,7 +808,7 @@ func BroadcastToDims(x *Node, dimensions ...int) *Node {
 }
 
 // ConvertType converts x to a different primitive type. See shapes.Supported for the supported types.
-func ConvertType(x *Node, dtype shapes.DType) *Node {
+func ConvertType(x *Node, dtype dtypes.DType) *Node {
 	g := validateGraphFromInputs(x)
 	if !dtype.IsSupported() {
 		Panicf("converting to an unsupported dtype %s", dtype)
@@ -1052,7 +1052,7 @@ func reduceHelper(x, init *Node, reduceAxes []int, nodeType xla.NodeType) *Node 
 // The output `DType`, if not given, is `shapes.I32`.
 //
 // Ties are resolved by returning the smallest index.
-func ArgMax(x *Node, axis int, outputDType ...shapes.DType) (output *Node) {
+func ArgMax(x *Node, axis int, outputDType ...dtypes.DType) (output *Node) {
 	_ = validateGraphFromInputs(x)
 	dtype := shapes.I32
 	if len(outputDType) > 1 {
@@ -1069,7 +1069,7 @@ func ArgMax(x *Node, axis int, outputDType ...shapes.DType) (output *Node) {
 // The output `DType`, if not given, is `shapes.I32`.
 //
 // Ties are resolved by returning the smallest index.
-func ArgMin(x *Node, axis int, outputDType ...shapes.DType) (output *Node) {
+func ArgMin(x *Node, axis int, outputDType ...dtypes.DType) (output *Node) {
 	_ = validateGraphFromInputs(x)
 	dtype := shapes.I32
 	if len(outputDType) > 1 {
@@ -1080,7 +1080,7 @@ func ArgMin(x *Node, axis int, outputDType ...shapes.DType) (output *Node) {
 	return argMinMax(x, axis, dtype, true)
 }
 
-func argMinMax(x *Node, axis int, outputDType shapes.DType, isMin bool) (output *Node) {
+func argMinMax(x *Node, axis int, outputDType dtypes.DType, isMin bool) (output *Node) {
 	g := validateGraphFromInputs(x)
 	adjustedAxis := AdjustAxis(x, axis)
 	output = newNode(g, &xla.SerializedNode{

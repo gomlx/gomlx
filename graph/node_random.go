@@ -85,7 +85,7 @@ func RngStateSplit(rngState *Node) (newRngState1, newRngState2 *Node) {
 func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Node) {
 	switch shape.DType {
 	case shapes.Float64:
-		bitsShape := shape.Copy()
+		bitsShape := shape.Clone()
 		bitsShape.DType = shapes.Uint64
 		var randomBits *Node
 		newRngState, randomBits = RngBitGeneratorXLA(rngState, bitsShape)
@@ -94,7 +94,7 @@ func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Nod
 		values = MinScalar(values, math.Nextafter(1.0, 0.0))
 		values = StopGradient(values)
 	case shapes.Float32:
-		bitsShape := shape.Copy()
+		bitsShape := shape.Clone()
 		bitsShape.DType = shapes.Uint32
 		var randomBits *Node
 		newRngState, randomBits = RngBitGeneratorXLA(rngState, bitsShape)
@@ -103,20 +103,20 @@ func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Nod
 		values = MinScalar(values, float64(math.Nextafter32(1.0, 0.0)))
 		values = StopGradient(values)
 	case shapes.Float16:
-		shapeF32 := shape.Copy()
+		shapeF32 := shape.Clone()
 		shapeF32.DType = shapes.F32
 		newRngState, values = RandomUniform(rngState, shapeF32)
 		values = ConvertType(values, shape.DType)
 		values = StopGradient(values)
 	case shapes.Complex64:
-		componentShape := shape.Copy()
+		componentShape := shape.Clone()
 		componentShape.DType = shapes.Float32
 		var re, im *Node
 		newRngState, re = RandomUniform(rngState, componentShape)
 		newRngState, im = RandomUniform(rngState, componentShape)
 		values = Complex(re, im)
 	case shapes.Complex128:
-		componentShape := shape.Copy()
+		componentShape := shape.Clone()
 		componentShape.DType = shapes.Float64
 		var re, im *Node
 		newRngState, re = RandomUniform(rngState, componentShape)
@@ -150,7 +150,7 @@ func RandomNormal(rngState *Node, shape shapes.Shape) (newRngState, values *Node
 	var u1, u2 *Node
 	newRngState, u1 = RandomUniform(rngState, shape)
 	// u1 must never be zero, so we take the smallest positive non-zero value.
-	u1 = Max(u1, Const(g, shapes.SmallestNonZeroValueForDType(shape.DType)))
+	u1 = Max(u1, Const(g, shape.DType.SmallestNonZeroValue()))
 	newRngState, u2 = RandomUniform(newRngState, shape)
 	values = Mul(
 		Sqrt(MulScalar(Log(u1), -2)),

@@ -20,12 +20,13 @@ import (
 	"github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gopjrt/dtypes"
 )
 
 // This file contains derived practical calculations that often used.
 
 // Scalar returns a constant scalar with the given value.
-func Scalar(g *Graph, dtype shapes.DType, value float64) *Node {
+func Scalar(g *Graph, dtype dtypes.DType, value float64) *Node {
 	return g.getScalarConst(dtype, value)
 }
 
@@ -36,12 +37,12 @@ func FillScalar(g *Graph, shape shapes.Shape, value float64) *Node {
 }
 
 // ScalarZero returns a scalar constant 0 for the given DType.
-func ScalarZero(g *Graph, dtype shapes.DType) *Node {
+func ScalarZero(g *Graph, dtype dtypes.DType) *Node {
 	return Scalar(g, dtype, 0)
 }
 
 // ScalarOne returns a scalar constant 1 for the given DType.
-func ScalarOne(g *Graph, dtype shapes.DType) *Node {
+func ScalarOne(g *Graph, dtype dtypes.DType) *Node {
 	return Scalar(g, dtype, 1)
 }
 
@@ -106,8 +107,8 @@ func MinScalar(x *Node, scalar float64) *Node {
 	return Min(x, Scalar(g, x.DType(), scalar))
 }
 
-func lowestForDType(g *Graph, dtype shapes.DType) *Node {
-	return Const(g, shapes.LowestValueForDType(dtype))
+func lowestForDType(g *Graph, dtype dtypes.DType) *Node {
+	return Const(g, dtype.LowestValue())
 }
 
 // OnesLike returns a tensor with the same shape of x, filled with 1's.
@@ -212,7 +213,7 @@ func ClipScalar(x *Node, min, max float64) *Node {
 // dimension at the end.
 // For example `OneHot([][]INT64{1, 0, 3}, 4, types.Float32)` returns  `[][]F32{{0, 1, 0, 0}, {1, 0, 0, 0}, {0, 0, 0, 1}}`
 // TODO: implement with Select once it's implemented, since it's likely going to be faster (TensorFlow uses that).
-func OneHot(indices *Node, depth int, dtype shapes.DType) *Node {
+func OneHot(indices *Node, depth int, dtype dtypes.DType) *Node {
 	g := indices.Graph()
 	if !indices.shape.DType.IsInt() {
 		Panicf("invalid indices dtype (%s), it must be integer", indices.shape.DType)
@@ -222,7 +223,7 @@ func OneHot(indices *Node, depth int, dtype shapes.DType) *Node {
 	indices = ExpandDims(indices, -1)
 
 	// The target shape will expand the indices dimension (last/innermost one) to depth.
-	targetShape := indices.shape.Copy()
+	targetShape := indices.shape.Clone()
 	targetShape.Dimensions[targetShape.Rank()-1] = depth
 	targetShape.DType = dtype
 
@@ -247,7 +248,7 @@ func ReduceAndKeep(x *Node, reduceFn func(x *Node, reduceAxes ...int) *Node, red
 	rank := x.Rank()
 	reduceAxes = convertNegativeAxesAndSort(rank, reduceAxes)
 	reduced := reduceFn(x, reduceAxes...)
-	shapeWithRecoveredDims := x.Shape().Copy()
+	shapeWithRecoveredDims := x.Shape().Clone()
 	for ii := 0; ii < rank && len(reduceAxes) > 0; ii++ {
 		if ii == reduceAxes[0] {
 			shapeWithRecoveredDims.Dimensions[ii] = 1
@@ -264,7 +265,7 @@ func MaskedReduceAndKeep(x, mask *Node, reduceFn func(x, mask *Node, reduceAxes 
 	rank := x.Rank()
 	reduceAxes = convertNegativeAxesAndSort(rank, reduceAxes)
 	reduced := reduceFn(x, mask, reduceAxes...)
-	shapeWithRecoveredDims := x.Shape().Copy()
+	shapeWithRecoveredDims := x.Shape().Clone()
 	for ii := 0; ii < rank && len(reduceAxes) > 0; ii++ {
 		if ii == reduceAxes[0] {
 			shapeWithRecoveredDims.Dimensions[ii] = 1
@@ -434,7 +435,7 @@ func DiagonalWithValue(scalar *Node, dim int) *Node {
 }
 
 // ShiftLeft the last axis of [x] by [n] positions ([n] is a static value) and fill the new value
-// with [fill]. The value of [fill] is converted to [x]'s [shapes.DType]. For boolean dtype, use 1.0 or 0.0.
+// with [fill]. The value of [fill] is converted to [x]'s [dtypes.DType]. For boolean dtype, use 1.0 or 0.0.
 //
 // See [ShiftWithScalar] and [ShiftWithValue] for a more generic shift function.
 func ShiftLeft(x *Node, n int, fill float64) *Node {
@@ -442,7 +443,7 @@ func ShiftLeft(x *Node, n int, fill float64) *Node {
 }
 
 // ShiftRight the last axis of [x] by [n] positions ([n] is a static value) and fill the new value
-// with [fill]. The value of [fill] is converted to [x]'s [shapes.DType]. For boolean dtype, use 1.0 or 0.0.
+// with [fill]. The value of [fill] is converted to [x]'s [dtypes.DType]. For boolean dtype, use 1.0 or 0.0.
 //
 // See [ShiftWithScalar] and [ShiftWithValue] for a more generic shift function.
 func ShiftRight(x *Node, n int, fill float64) *Node {
@@ -468,7 +469,7 @@ func (s ShiftDirection) String() string {
 // ShiftWithScalar a given [axis] of [x] by [n] positions ([n] is a static value) and fill the new value
 // with [fill], a **static** scalar value.
 // The [shiftDir] defines the direction: left towards lower values or right towards higher values.
-// The value of [fill] is converted to [x]'s [shapes.DType]. For boolean dtype, use 1.0 or 0.0.
+// The value of [fill] is converted to [x]'s [dtypes.DType]. For boolean dtype, use 1.0 or 0.0.
 func ShiftWithScalar(x *Node, axis int, shiftDir ShiftDirection, n int, fill float64) *Node {
 	return genericShiftImpl(x, axis, shiftDir, n, fill, nil)
 }

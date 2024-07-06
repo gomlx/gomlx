@@ -72,7 +72,7 @@ func GetSpatialAxes(image shapes.HasShape, config ChannelsAxisConfig) (spatialAx
 //
 //	img = Interpolate(img, GetUpSampledSizes(img, ChannelsLast, 2)...).Done()
 func GetUpSampledSizes(image shapes.HasShape, config ChannelsAxisConfig, factors ...int) (dims []int) {
-	dims = image.Shape().Copy().Dimensions
+	dims = image.Shape().Clone().Dimensions
 	if len(factors) == 0 {
 		return dims
 	}
@@ -92,14 +92,14 @@ func GetUpSampledSizes(image shapes.HasShape, config ChannelsAxisConfig, factors
 type ToTensorConfig struct {
 	channels int
 	maxValue float64
-	dtype    shapes.DType
+	dtype    dtypes.DType
 }
 
 // ToTensor converts an image (or batch) a tensor.Local.
 //
 // It returns a configuration object that can be further configured. Once set, use Single or Batch
 // methods to convert an image or a batch of images.
-func ToTensor(dtype shapes.DType) *ToTensorConfig {
+func ToTensor(dtype dtypes.DType) *ToTensorConfig {
 	tt := &ToTensorConfig{
 		channels: 3,
 		maxValue: 1.0,
@@ -176,9 +176,9 @@ func toTensorGenericsImpl[T shapes.NumberNotComplex](tt *ToTensorConfig, images 
 	}
 	imgSize := images[0].Bounds().Size()
 	if batch {
-		t = tensor.FromShape(shapes.Make(shapes.DTypeForType(reflect.TypeOf(zero)), len(images), imgSize.Y, imgSize.X, tt.channels))
+		t = tensor.FromShape(shapes.Make(shapes.FromType(reflect.TypeOf(zero)), len(images), imgSize.Y, imgSize.X, tt.channels))
 	} else {
-		t = tensor.FromShape(shapes.Make(shapes.DTypeForType(reflect.TypeOf(zero)), imgSize.Y, imgSize.X, tt.channels))
+		t = tensor.FromShape(shapes.Make(shapes.FromType(reflect.TypeOf(zero)), imgSize.Y, imgSize.X, tt.channels))
 	}
 	tRef := t.AcquireData()
 	defer tRef.Release()

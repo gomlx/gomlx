@@ -200,7 +200,7 @@ type Dataset struct {
 	angleStdDev   float64
 	flipRandomly  bool
 	rng           *rand.Rand
-	dtype         shapes.DType
+	dtype         dtypes.DType
 	toTensor      *timage.ToTensorConfig
 
 	// Dataset sampling strategy.
@@ -245,7 +245,7 @@ var (
 //     to false not to include any augmentation.
 func NewDataset(name, baseDir string, batchSize int, infinite bool, shuffle *rand.Rand,
 	numFolds int, folds []int, foldsSeed int32,
-	width, height int, angleStdDev float64, flipRandomly bool, dtype shapes.DType) *Dataset {
+	width, height int, angleStdDev float64, flipRandomly bool, dtype dtypes.DType) *Dataset {
 	ds := &Dataset{
 		name:         name,
 		BaseDir:      baseDir,
@@ -692,7 +692,7 @@ func (ds *Dataset) Save(numEpochs int, verbose bool, writers ...io.Writer) error
 type PreGeneratedDataset struct {
 	name                       string
 	filePath, pairFilePath     string
-	dtype                      shapes.DType
+	dtype                      dtypes.DType
 	batchSize                  int
 	width, height              int
 	openedFile, openedPairFile *os.File
@@ -708,7 +708,7 @@ type PreGeneratedDataset struct {
 var _ train.Dataset = &PreGeneratedDataset{}
 
 // NewPreGeneratedDataset creates a PreGeneratedDataset that yields dogsvscats images and labels.
-func NewPreGeneratedDataset(name, filePath string, batchSize int, infinite bool, width, height int, dtype shapes.DType) *PreGeneratedDataset {
+func NewPreGeneratedDataset(name, filePath string, batchSize int, infinite bool, width, height int, dtype dtypes.DType) *PreGeneratedDataset {
 	pds := &PreGeneratedDataset{
 		name:      name,
 		filePath:  filePath,
@@ -860,7 +860,7 @@ func (pds *PreGeneratedDataset) Reset() {
 // all images have the exact same size. There should be one byte with the label before each image.
 func BytesToTensor[T shapes.NumberNotComplex](buffer []byte, numImages, width, height int) (t *tensor.Local) {
 	var zero T
-	t = tensor.FromShape(shapes.Make(shapes.DTypeForType(reflect.TypeOf(zero)), numImages, height, width, 4))
+	t = tensor.FromShape(shapes.Make(shapes.FromType(reflect.TypeOf(zero)), numImages, height, width, 4))
 	ref := t.AcquireData()
 	defer ref.Release()
 	tensorData := tensor.FlatFromRef[T](ref)

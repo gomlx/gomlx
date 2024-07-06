@@ -112,7 +112,7 @@ func (builder *KidBuilder) BuildGraph(ctx *context.Context, labels, predictions 
 	}
 	if needsResizing {
 		// Resize to kidImageSize x kidImageSize:
-		newSizes := images[0].Shape().Copy().Dimensions
+		newSizes := images[0].Shape().Clone().Dimensions
 		for _, axis := range spatialAxis {
 			newSizes[axis] = builder.kidImageSize
 		}

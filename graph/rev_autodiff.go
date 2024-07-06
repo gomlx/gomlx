@@ -590,7 +590,7 @@ func reduceSumVJP(node, v *Node, _ shapes.Shape) []*Node {
 
 	// Expand rank of v to match the input, by re-creating
 	// the reduced dimensions with size 1.
-	newShape := node.inputs[0].shape.Copy()
+	newShape := node.inputs[0].shape.Clone()
 	for _, dim := range reducedDims {
 		newShape.Dimensions[dim] = 1
 	}
@@ -615,7 +615,7 @@ func reduceMaxVJP(node, v *Node, _ shapes.Shape) []*Node {
 			reducedDims[ii] = ii
 		}
 	}
-	newShape := node.inputs[0].shape.Copy()
+	newShape := node.inputs[0].shape.Clone()
 	for _, dim := range reducedDims {
 		newShape.Dimensions[dim] = 1
 	}

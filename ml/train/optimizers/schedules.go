@@ -49,7 +49,7 @@ var (
 type CosineScheduleOptions struct {
 	graph                         *Graph
 	ctx                           *context.Context
-	dtype                         shapes.DType
+	dtype                         dtypes.DType
 	learningRate, minLearningRate float64
 	periodNumSteps                int
 }
@@ -78,7 +78,7 @@ type CosineScheduleOptions struct {
 //		g := inputs[0].Graph()
 //		optimizers.CosineAnnealingSchedule(ctx, g, shapes.Float32).FromContext().Done()
 //	}
-func CosineAnnealingSchedule(ctx *context.Context, graph *Graph, dtype shapes.DType) *CosineScheduleOptions {
+func CosineAnnealingSchedule(ctx *context.Context, graph *Graph, dtype dtypes.DType) *CosineScheduleOptions {
 	return &CosineScheduleOptions{
 		ctx:   ctx,
 		graph: graph,

@@ -145,7 +145,7 @@ func DeleteGlobalStep(ctx *context.Context) {
 //
 // GlobalStep is always stored as shapes.Int64, but it is converted to the given DType
 // before being returned.
-func IncrementGlobalStepGraph(ctx *context.Context, g *Graph, dtype shapes.DType) *Node {
+func IncrementGlobalStepGraph(ctx *context.Context, g *Graph, dtype dtypes.DType) *Node {
 	globalStepVar := GetGlobalStepVar(ctx)
 	globalStep := globalStepVar.ValueGraph(g)
 	globalStep = Add(globalStep, OnesLike(globalStep))
@@ -177,13 +177,13 @@ var (
 //
 // If variable doesn't exist yet, it will be created using the parameter ParamLearningRate, if it
 // is set, or the provided defaultValue (must be a scalar convertible to dtype) if not.
-func LearningRateVar(ctx *context.Context, dtype shapes.DType, defaultValue float64) *context.Variable {
+func LearningRateVar(ctx *context.Context, dtype dtypes.DType, defaultValue float64) *context.Variable {
 	lrValue := context.GetParamOr(ctx, ParamLearningRate, defaultValue)
 	return LearningRateVarWithValue(ctx, dtype, lrValue)
 }
 
 // LearningRateVarWithValue creates (or reuses) variable for learning rate with the given value.
-func LearningRateVarWithValue(ctx *context.Context, dtype shapes.DType, value float64) *context.Variable {
+func LearningRateVarWithValue(ctx *context.Context, dtype dtypes.DType, value float64) *context.Variable {
 	ctx = ctx.Checked(false).In("optimizers")
 	return ctx.VariableWithValue(ParamLearningRate, shapes.CastAsDType(value, dtype)).SetTrainable(false)
 }

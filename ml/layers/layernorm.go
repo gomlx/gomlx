@@ -174,7 +174,7 @@ func (builder *LayerNormBuilder) Done() *Node {
 	normShape := shapes.Make(x.DType(), slices.Map(builder.normalizingAxes, func(axis int) int {
 		return x.Shape().Dimensions[axis]
 	})...)
-	broadcastNormShape := x.Shape().Copy() // the shape `normShape` will need to be reshaped to be combined with `x`.
+	broadcastNormShape := x.Shape().Clone() // the shape `normShape` will need to be reshaped to be combined with `x`.
 	for ii := range broadcastNormShape.Dimensions {
 		broadcastNormShape.Dimensions[ii] = 1
 	}

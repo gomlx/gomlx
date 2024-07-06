@@ -81,7 +81,7 @@ func createDenseTestStrategy(withCitation bool) (*samplerPkg.Sampler, *samplerPk
 	return s, strategy
 }
 
-func createDenseTestStateGraphWithMask(strategy *samplerPkg.Strategy, g *Graph, dtype shapes.DType, withCitation bool) map[string]*samplerPkg.ValueMask[*Node] {
+func createDenseTestStateGraphWithMask(strategy *samplerPkg.Strategy, g *Graph, dtype dtypes.DType, withCitation bool) map[string]*samplerPkg.ValueMask[*Node] {
 	graphStates := make(map[string]*samplerPkg.ValueMask[*Node])
 	graphStates["seeds"] = &samplerPkg.ValueMask[*Node]{
 		Value: IotaFull(g, shapes.Make(dtype, lwNumPapers, 1)),
@@ -127,7 +127,7 @@ func createDenseTestStateGraphWithMask(strategy *samplerPkg.Strategy, g *Graph, 
 	return graphStates
 }
 
-func createDenseTestStateGraphLayerWise(strategy *samplerPkg.Strategy, g *Graph, dtype shapes.DType, withCitation bool) (
+func createDenseTestStateGraphLayerWise(strategy *samplerPkg.Strategy, g *Graph, dtype dtypes.DType, withCitation bool) (
 	graphStates map[string]*Node, edges map[string]samplerPkg.EdgePair[*Node]) {
 	graphStates = make(map[string]*Node)
 	graphStates["seeds"] = IotaFull(g, shapes.Make(dtype, lwNumPapers, 1))

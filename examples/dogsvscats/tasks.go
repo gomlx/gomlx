@@ -51,7 +51,7 @@ type Configuration struct {
 	DataDir string
 
 	// DType of the images when converted to Tensor.
-	DType shapes.DType
+	DType dtypes.DType
 
 	// BatchSize for training and evaluation batches.
 	BatchSize, EvalBatchSize int

@@ -116,7 +116,7 @@ func realFftVJP(node, v *Node) []*Node {
 	// Create yMask with a sequence of alternating signs +1, -1, +1, -1 for the length of
 	// the operand's last dimension. So yMask is shaped `[1, 1, ..., operandLastDim]`.
 	g := v.Graph()
-	yMaskShape := operand.Shape().Copy()
+	yMaskShape := operand.Shape().Clone()
 	yMaskShape.DType = shapes.I32 // For now.
 	for ii := 0; ii < rank-1; ii++ {
 		yMaskShape.Dimensions[ii] = 1

@@ -48,7 +48,7 @@ func Init() {
 		if manager == nil {
 			manager = BuildManager().Platform(*flagPlatform).Done()
 		}
-		DType = MustNoError(shapes.DTypeString(*flagDType))
+		DType = MustNoError(dtypes.DTypeString(*flagDType))
 		DataDir = data.ReplaceTildeInDir(*flagDataDir)
 		ImageSize = *flagImageSize
 		BatchSize = *flagBatchSize
