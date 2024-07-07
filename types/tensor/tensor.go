@@ -22,28 +22,40 @@
 //
 // The main use of tensors are to be used as input and output of GoMLX computation graph.
 //
-// It is a container that keeps in sync different materializations of value:
+// There are various ways to construct a Tensor from local data:
 //
-//   - `Local`: a copy of the values stored in CPU, as a Go flat array of the underlying dtype.
-//   - `Device`: a copy of the values stored in the accelerator (GPU?), a wrapper for a "XLA's PJRT buffer" managed by
-//     the lower levels (see github.com/gomlx/gopjrt). There can be multiple `Device` backing of a tensor,
-//     if there are multiple devices (like a multi-GPU set up).
+//   - `FromShape(shape shapes.Shape)`: creates a tensor with the given shape, and uninitialized values.
+//   - `FromScalarAndDimensions[T shapes.Supported](value T, dimensions ...int)`: creates a Tensor with the
+//     given dimensions, filled with the scalar value given. `T` must be one of the supported types.
+//   - `FromFlatDataAndDimensions[T shapes.Supported](data []T, dimensions ...int)`: creates a Tensor with the
+//     given dimensions, and set the flattened values with the given data. `T` must be one of the supported types.
+//   - `FromValue[S MultiDimensionSlice](value S)`: Generic conversion, works with the scalar supported `DType`s
+//     as well as with any arbitrary multidimensional slice of them. Slices of rank > 1 must be regular, that is
+//     all the sub-slices must have the same shape. E.g.: `FromValue([][]float{{1,2}, {3, 5}, {7, 11}})`
+//   - `FromAnyValue(value any)`: same as `FromValue` but non-generic, it takes an anonymous type `any`. The exception
+//     is if `value` is already a tensor, then it is a no-op and it returns the tensor itself.
 //
-// The Tensor container is lazy in nature: it won't transfer data from `Device` to `Local` (or vice-versa) until needed.
+// Behind the scenes Tensor is a container that keeps in sync different materialization's of value:
+//
+//   - `local`: a copy of the values stored in CPU, as a Go flat array of the underlying dtype.
+//   - `onDevices`: a copy of the values stored in the accelerator device(s) (CPU, GPU, TPU, etc.),
+//     a wrapper for a "XLA's PJRT buffer" managed by the lower levels (see github.com/gomlx/gopjrt).
+//     There can be multiple `Device` backing of a tensor, if there are multiple devices (like a multi-GPU set up).
+//
+// The Tensor container is lazy in nature: it won't transfer data from local storage to "on device" until needed.
 // And if one is updated, the others are immediately invalidated.
 //
 // Transferring tensors to/from local/device areas has a cost, and should be avoided. For example,
 // while training weights of an ML model, one generally does not need to transfer those weights to local -- just at
 // the end of training to save the model weights. But the Tensor will keep the (local/device) copies cached,
 // so they can be used multiple times, and transfer only occurs once.
-//
-// See details on the documentation of Tensor, Device and Local structures.
 package tensor
 
 import (
-	"github.com/gomlx/gomlx/types/exceptions"
+	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/xla"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/pjrt"
 	"github.com/pkg/errors"
 	"sync"
@@ -66,14 +78,59 @@ type Tensor struct {
 	// shape of the tensor.
 	shape shapes.Shape
 
-	// error that may have occurred during construction/conversion/operation.
-	error error
-
+	// mu protects the local and OnDevices data, but not the shape, which is considered immutable (only changed
+	// when Tensor is finalized).
 	mu    sync.Mutex
-	local *Local
+	local *local
 
-	// Maps ClientId->Map of deviceNum->Device tensor.
-	onDevices map[xla.ClientId]map[int]*Device
+	// onDevices maps deviceNum -> on device buffer.
+	onDevices map[int]*Device
+}
+
+// newTensor returns a Tensor object initialized only with the shape, but no actual storage (local or on any device)
+// The returned tensor is invalid, and some data (local or on device) must be associated to it still.
+func newTensor(shape shapes.Shape) *Tensor {
+	return &Tensor{
+		shape:     shape,
+		onDevices: make(map[int]*Device),
+	}
+}
+
+// Shape of Local, includes DType.
+func (t *Tensor) Shape() shapes.Shape { return t.shape }
+
+// DType returns the DType of the tensor's shape.
+// It is a shortcut to `Tensor.Shape().DType`.
+func (t *Tensor) DType() dtypes.DType {
+	return t.shape.DType
+}
+
+// Rank returns the rank of the tensor's shape.
+// It is a shortcut to `Tensor.Shape().Rank()`.
+func (t *Tensor) Rank() int { return t.shape.Rank() }
+
+// IsScalar returns whether the tensor represents a scalar value.
+// It is a shortcut to `Tensor.Shape().IsScalar()`.
+func (t *Tensor) IsScalar() bool { return t.shape.IsScalar() }
+
+// Size returns the number of elements in the tensor.
+// It is a shortcut to `Tensor.Shape().IsScalar()`.
+func (t *Tensor) Size() int { return t.shape.Size() }
+
+// Memory returns the number of bytes used to store the tensor. An alias to Tensor.Shape().Memory().
+func (t *Tensor) Memory() uintptr { return t.shape.Memory() }
+
+// AssertValid panics if local is nil, or if its shape is invalid.
+func (t *Tensor) AssertValid() {
+	if t == nil {
+		panic(errors.New("Tensor is nil"))
+	}
+	if !t.shape.Ok() {
+		panic(errors.New("Tensor shape is invalid"))
+	}
+	if t.local.IsFinalized() && t.CurrentDevice() == nil {
+		panic(errors.New("Tensor has no local or on device representation"))
+	}
 }
 
 // HasClient accepts anything that can return a xla.Client. That includes xla.Client itself and
@@ -91,9 +148,6 @@ func (t *Tensor) FinalizeAll() {
 		return
 	}
 	local := t.local
-	if local != nil && local.cache == t {
-		local.cache = nil
-	}
 	t.local = nil
 	var devices []*Device
 	for _, tensorsPerDevice := range t.onDevices {
@@ -116,6 +170,8 @@ func (t *Tensor) FinalizeAll() {
 		d.Finalize()
 	}
 }
+
+/// ---------------------------------------------------------------------------------------------------------------
 
 // AddDevice to the internal cache.
 func (t *Tensor) AddDevice(device *Device) {
@@ -176,17 +232,10 @@ func (t *Tensor) clearLocal() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if t.local.cache == t {
-		t.local.cache = nil
+	if t.local.t == t {
+		t.local.t = nil
 	}
 	t.local = nil
-}
-
-// Value returns a multidimensional slice (except if shape is a scalar) containing a
-// copy of the tensor values.
-// See `Local` and `Local.Value()` for details.
-func (t *Tensor) Value() any {
-	return t.localFromDevice(nil).Value()
 }
 
 // localFromDevice converts the tensor to `Local`, if there is not one cached yet.

@@ -77,14 +77,14 @@ func InternalNewDevice(buffer *xla.OnDeviceBuffer) (device *Device) {
 }
 
 // String converts to string, by converting (transferring) the tensor to local and then using Local.String().
-// If the tensor is larger than MaxStringSize, it doesn't convert the tensor to local, and instead only prints
+// If the tensor is larger than MaxSizeForString, it doesn't convert the tensor to local, and instead only prints
 // its shape (with no transfer cost).
 func (device *Device) String() string {
 	device.AssertValid()
 	if device.IsTuple() {
 		return fmt.Sprintf("Tuple(%d elements)", device.shape.TupleSize())
 	}
-	if device.shape.Size() < MaxStringSize {
+	if device.shape.Size() < MaxSizeForString {
 		return device.Local().String()
 	}
 	return fmt.Sprintf("%s: (... too large, %d values ...)", device.shape, device.shape.Size())
