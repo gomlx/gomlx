@@ -34,7 +34,7 @@ func compileAndRun(g *Graph) any {
 
 // buildTestManager using "Host" by default -- can be overwritten by GOMLX_PLATFORM environment variable.
 func buildTestManager() *Manager {
-	return BuildManager().WithDefaultPlatform("Host").Done()
+	return BuildManager().WithDefaultPlugin("Host").Done()
 }
 
 func TestBroadcastInDim(t *testing.T) {

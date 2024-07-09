@@ -11,6 +11,7 @@ require (
 	github.com/erkkah/margaid v0.3.0
 	github.com/go-gota/gota v0.12.0
 	github.com/gomlx/exceptions v0.0.3
+	github.com/gomlx/gopjrt v0.1.2
 	github.com/google/uuid v1.6.0
 	github.com/janpfeifer/gonb v0.10.1
 	github.com/janpfeifer/must v0.0.2
@@ -50,6 +51,7 @@ require (
 	golang.org/x/term v0.19.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	gonum.org/v1/gonum v0.15.0 // indirect
+	google.golang.org/protobuf v1.34.2 // indirect
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

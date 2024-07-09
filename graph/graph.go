@@ -15,14 +15,18 @@
  */
 
 // Package graph is the core package for GoMLX. It is used to create and run computation graphs
-// on XLA -- a just-in-time compiler that allows for very efficient numerical computations. It
-// also includes an autograd system and many useful higher level machine learning tools.
+// on XLA/PJRT (using github.com/gomlx/gopjrt) -- a just-in-time compiler that allows for very
+// efficient numerical computations.
+// It requires PJRT plugins corresponding to accelerators ("cpu, "cuda", "tpu", etc.) to be available
+// (see github.com/gomlx/gopjrt) to compile and execute programs. Gopjrt is distributed with a "cpu"
+// plugin, and it describes how to install a "cuda" plugin, for Nvidia graphics cards.
+//
+// It also includes an autograd system and many useful higher level machine learning tools.
 //
 // The main elements in the package are:
 //
-//   - Manager: holds information on the device where numerical computations will be run. Everything
-//     runs within the scope of a Manager. Currently, it supports "Host" (using the CPU for numerical
-//     computation, using the Eigen library) and "CUDA" for GPUs. TPU support is also planned.
+//   - Manager: manages an XLA/PJRT (through gopjrt) connection: a PJRT plugin and a client.
+//     The whole computation building, compilation and execution runs within the scope of a Manager.
 //
 //   - Graph: created by the Manager, this is used to construct a computation graph that can then
 //     be "just-in-time" compiled and executed efficiently.
@@ -40,7 +44,7 @@
 //
 // Graph (and its Nodes) and Context methods "throw" errors with `panic`. This prevents having to manage
 // error returning for every function call.
-// It always throws meaningful error messages, with the full stack, that hopefully can lead to quick fixes of issues.
+// It always throws meaningful error messages, with the full stack, to ease tracking bugs and solve issues.
 //
 // Notice that unfortunately, there is no way to statically, in compile time, check for many
 // of the errors that for a human would be relatively easy to spot without running the program.
@@ -85,9 +89,10 @@ package graph
 import (
 	"fmt"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/xla"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
-	"k8s.io/klog/v2"
 	"strings"
 	"time"
 )
@@ -300,7 +305,7 @@ func (g *Graph) ConvertToStableHLO() *xla.StableHLO {
 // AOTCompile returns the Ahead-Of-Time compiled version of the graph, that can be used for
 // execution later.
 //
-// The graph needs to be compiled. And it is AOT-compiled to the same platform it was already
+// The graph needs to be compiled. And it is AOT-compiled to the same pluginName it was already
 // compiled -- TODO: cross-compile.
 //
 // It returns a binary serialized format that can be executed later, without linking the whole GoMLX machinery.

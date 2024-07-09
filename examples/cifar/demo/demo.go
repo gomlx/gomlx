@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"github.com/gomlx/gomlx/examples/cifar"
 	"github.com/gomlx/gomlx/examples/notebook/gonb/margaid"
-	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/ml/data"
@@ -50,7 +49,7 @@ var (
 	// ML Manager creation:
 	flagNumThreads  = flag.Int("num_threads", -1, "Number of threads. Leave as -1 to use as many as there are cores.")
 	flagNumReplicas = flag.Int("num_replicas", 1, "Number of replicas.")
-	flagPlatform    = flag.String("platform", "", "Platform to use, if empty uses the default one.")
+	flagPlatform    = flag.String("platform", "", "PluginDescription to use, if empty uses the default one.")
 
 	// Training hyperparameters:
 	flagModel        = flag.String("model", "fnn", "Model type: fnn or cnn.")
@@ -101,7 +100,7 @@ func main() {
 func trainModel() {
 	// Manager handles creation of ML computation graphs, accelerator resources, etc.
 	manager := BuildManager().NumThreads(*flagNumThreads).NumReplicas(*flagNumReplicas).Platform(*flagPlatform).Done()
-	fmt.Printf("Platform: %s\n", manager.Platform())
+	fmt.Printf("PluginDescription: %s\n", manager.Platform())
 
 	// Create datasets used for training and evaluation.
 	trainDS, evalOnTrainDS, evalOnTestDS := CreateDatasets(manager, *flagDataDir)

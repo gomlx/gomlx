@@ -28,7 +28,6 @@ import (
 	"fmt"
 	"github.com/gomlx/gomlx/examples/dogsvscats"
 	"github.com/gomlx/gomlx/examples/notebook/gonb/margaid"
-	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/nanlogger"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
@@ -53,7 +52,7 @@ var (
 	// ML Manager creation:
 	flagNumThreads     = flag.Int("num_threads", -1, "Number of threads. Leave as -1 to use as many as there are cores.")
 	flagNumReplicas    = flag.Int("num_replicas", 1, "Number of replicas.")
-	flagPlatform       = flag.String("platform", "", "Platform to use, if empty uses the default one.")
+	flagPlatform       = flag.String("platform", "", "PluginDescription to use, if empty uses the default one.")
 	flagCheckpoint     = flag.String("checkpoint", "", "Directory save and load checkpoints from. If left empty, no checkpoints are created.")
 	flagCheckpointKeep = flag.Int("checkpoint_keep", 2, "Number of checkpoints to keep, if --checkpoint is set. "+
 		"If set to 0 no checkpoints are set, and the checkpoint directory is used only for reading. "+

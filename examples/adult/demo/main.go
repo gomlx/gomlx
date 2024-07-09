@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"github.com/gomlx/gomlx/examples/adult"
 	"github.com/gomlx/gomlx/examples/notebook/gonb/margaid"
-	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/ml/data"
@@ -98,7 +97,7 @@ func main() {
 	// Crate Manager and upload data to device tensors.
 	manager := NewManager()
 	if *flagVerbosity >= 1 {
-		fmt.Printf("Platform: %s\n", manager.Platform())
+		fmt.Printf("PluginDescription: %s\n", manager.Platform())
 	}
 	if *flagVerbosity >= 2 {
 		adult.PrintBatchSamples(manager, adult.Data.Train)

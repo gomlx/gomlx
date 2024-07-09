@@ -16,6 +16,15 @@ func MakeSet[T comparable](size ...int) Set[T] {
 	return make(Set[T], size[0])
 }
 
+// SetWith creates a Set[T] with the given elements inserted.
+func SetWith[T comparable](elements ...T) Set[T] {
+	s := MakeSet[T](len(elements))
+	for _, element := range elements {
+		s.Insert(element)
+	}
+	return s
+}
+
 // Has returns true if Set s has the given key.
 func (s Set[T]) Has(key T) bool {
 	_, found := s[key]

@@ -2,16 +2,14 @@ package diffusion
 
 import (
 	"flag"
-	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/nanlogger"
 	"github.com/gomlx/gomlx/ml/data"
-	"github.com/gomlx/gomlx/types/shapes"
 	"log"
 	"sync"
 )
 
 var (
-	flagPlatform = flag.String("platform", "", "Platform to use, if empty uses the default one.")
+	flagPlatform = flag.String("platform", "", "PluginDescription to use, if empty uses the default one.")
 	flagDataDir  = flag.String("data", "~/work/oxfordflowers102", "Directory to cache downloaded dataset and save checkpoints.")
 
 	flagDType = flag.String("dtype", "float32", "DType to use for model.")

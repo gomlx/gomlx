@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"github.com/gomlx/gomlx/examples/imdb"
 	"github.com/gomlx/gomlx/examples/notebook/gonb/margaid"
-	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/ml/data"
@@ -64,7 +63,7 @@ var (
 	// ML Manager creation:
 	flagNumThreads  = flag.Int("num_threads", -1, "Number of threads. Leave as -1 to use as many as there are cores.")
 	flagNumReplicas = flag.Int("num_replicas", 1, "Number of replicas.")
-	flagPlatform    = flag.String("platform", "", "Platform to use, if empty uses the default one.")
+	flagPlatform    = flag.String("platform", "", "PluginDescription to use, if empty uses the default one.")
 
 	// Training hyperparameters:
 	flagModel            = flag.String("model", "transformer", "Model type: bow or transformer.")

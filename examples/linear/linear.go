@@ -21,7 +21,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/train"
@@ -97,7 +96,7 @@ var (
 	flagNumSteps     = flag.Int("steps", 1000, "Number of gradient descent steps to perform")
 	flagNumThreads   = flag.Int("num_threads", -1, "Number of threads. Leave as -1 to use as many as there are cores.")
 	flagNumReplicas  = flag.Int("num_replicas", 1, "Number of replicas.")
-	flagPlatform     = flag.String("platform", "", "Platform to use, if empty uses the default one.")
+	flagPlatform     = flag.String("platform", "", "PluginDescription to use, if empty uses the default one.")
 	flagLearningRate = flag.Float64("learning_rate", 0.1, "Initial learning rate.")
 )
 
