@@ -20,7 +20,7 @@ import (
 	"reflect"
 	"unsafe"
 
-	"github.com/gomlx/gomlx/types/exceptions"
+	"github.com/gomlx/exceptions"
 	. "github.com/gomlx/gopjrt/dtypes"
 	"github.com/x448/float16"
 )

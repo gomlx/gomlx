@@ -73,7 +73,7 @@ package shapes
 import (
 	"encoding/gob"
 	"fmt"
-	"github.com/gomlx/gomlx/types/exceptions"
+	"github.com/gomlx/exceptions"
 	. "github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 	"slices"
