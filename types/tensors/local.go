@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
-	xslices "github.com/gomlx/gomlx/types/slices"
+	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 	"os"

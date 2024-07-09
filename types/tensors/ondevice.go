@@ -44,6 +44,27 @@ func FromPJRT(buffer *pjrt.Buffer) (t *Tensor) {
 	return
 }
 
+// Buffer returns the pjrt.Buffer for the tensor.
+// It triggers the transfer from local to the device, if the tensor is not already store on device.
+//
+// If you use the returned buffer in a "donatable" fashion (the accelerator may rewrite the buffer), remember to
+// finalize and invalidate the tensor -- it doesn't happen automatically.
+//
+// The deviceNum is optional. But only one can be given. The default value is 0.
+func (t *Tensor) Buffer(client *pjrt.Client, deviceNum ...int) *pjrt.Buffer {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.AssertValid()
+	if len(deviceNum) > 1 {
+		exceptions.Panicf("Tensor.Buffer takes at most one deviceNum, %v given", deviceNum)
+	}
+	if len(deviceNum) == 0 {
+		deviceNum = defaultDeviceNums
+	}
+	t.lockedMaterializeOnDevices(client, deviceNum...)
+	return t.onDevices[deviceNum[0]].buffer
+}
+
 // IsFinalized returns true if the tensor has already been "finalized", and its
 // data freed.
 // It implements Tensor.IsFinalized.
