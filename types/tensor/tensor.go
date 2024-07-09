@@ -52,9 +52,7 @@
 package tensor
 
 import (
-	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/xla"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/pjrt"
 	"github.com/pkg/errors"
@@ -65,13 +63,12 @@ import (
 // by their shape, a data type (dtypes.DType) and its axes' dimensions, and their actual content stored as a flat (1D)
 // array of values.
 //
-// It is a container for Local and Device backing. Local is stored as flat slice of the underlying DType.
-// As a special case, a Tensor can also be a tuple of multiple tensors -- only works for the Local representation.
+// It is a container for "local" (host CPU) and "on-device" backing of the tensor. A local backed tensor is stored
+// as flat slice of the underlying DType.
 //
 // Tensor manages caching of Local and Device copies. There is a transferring cost that one needs to be aware when
 // using it for large data -- LLM models can have 100s of GB in size... There is a cache
-// system to prevent duplicate transfers, but it requires the user to be careful about informing about changes
-// to invalidate the cache (see FlatData and ConstFlatData).
+// system to prevent duplicate transfers, but it requires some care from the user (see ConstFlatData and MutableFlatData).
 //
 // More details in the `tensor` package documentation.
 type Tensor struct {
@@ -84,7 +81,10 @@ type Tensor struct {
 	local *local
 
 	// onDevices maps deviceNum -> on device buffer.
-	onDevices map[int]*Device
+	onDevices map[int]*onDevice
+
+	// client is the PJRT client, holding all "on device" buffers. A Tensor cannot be in more than one client.
+	client *pjrt.Client
 }
 
 // newTensor returns a Tensor object initialized only with the shape, but no actual storage (local or on any device)
@@ -92,7 +92,7 @@ type Tensor struct {
 func newTensor(shape shapes.Shape) *Tensor {
 	return &Tensor{
 		shape:     shape,
-		onDevices: make(map[int]*Device),
+		onDevices: make(map[int]*onDevice),
 	}
 }
 
@@ -128,8 +128,8 @@ func (t *Tensor) AssertValid() {
 	if !t.shape.Ok() {
 		panic(errors.New("Tensor shape is invalid"))
 	}
-	if t.local.IsFinalized() && t.CurrentDevice() == nil {
-		panic(errors.New("Tensor has no local or on device representation"))
+	if t.local.IsFinalized() && len(t.onDevices) == 0 {
+		panic(errors.New("Tensor has no local or on-device representation"))
 	}
 }
 
@@ -139,217 +139,23 @@ type HasClient interface {
 	Client() *pjrt.Client
 }
 
-// FinalizeAll will finalize (free) all associated data.
+// FinalizeAll will finalize (free) all associated data and leave Tensor in an invalid state. Shape is cleared also.
 func (t *Tensor) FinalizeAll() {
 	// Get the list of local and device tensors to finalize.
 	t.mu.Lock()
+	defer t.mu.Unlock()
+
 	if t == nil {
 		t.mu.Unlock()
 		return
 	}
-	local := t.local
-	t.local = nil
-	var devices []*Device
-	for _, tensorsPerDevice := range t.onDevices {
-		for _, d := range tensorsPerDevice {
-			if d.cache == t {
-				d.cache = nil
-			}
-			devices = append(devices, d)
-		}
+	if t.local != nil {
+		t.local.Finalize()
+		t.local = nil
+	}
+	for _, device := range t.onDevices {
+		device.Finalize()
 	}
 	t.onDevices = nil
 	t.shape = shapes.Invalid()
-	t.mu.Unlock()
-
-	// Cache was cleared and unlocked, now we call Finalize on each tensor separately.
-	if local != nil {
-		local.Finalize()
-	}
-	for _, d := range devices {
-		d.Finalize()
-	}
-}
-
-/// ---------------------------------------------------------------------------------------------------------------
-
-// AddDevice to the internal cache.
-func (t *Tensor) AddDevice(device *Device) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.lockedAddDevice(device)
-}
-
-// lockedAddDevice implements AddDevice, and assumes cache.mu is already locked.
-func (t *Tensor) lockedAddDevice(device *Device) {
-	device.cache = t
-	if t.onDevices == nil {
-		t.onDevices = make(map[xla.ClientId]map[int]*Device)
-	}
-	clientMap, ok := t.onDevices[device.clientId]
-	if !ok {
-		clientMap = make(map[int]*Device)
-		t.onDevices[device.clientId] = clientMap
-	}
-	clientMap[device.deviceNum] = device
-}
-
-// clearDevice from tensor cache -- but doesn't finalize it.
-func (t *Tensor) clearDevice(device *Device) {
-	if t == nil {
-		return
-	}
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	if device == nil {
-		return
-	}
-	if device.cache == t {
-		device.cache = nil
-	} else if device.cache != nil {
-		exceptions.Panicf("Tensor.clearDevice given a device that is not managed by the Tensor")
-	}
-	if t.onDevices == nil {
-		return
-	}
-	clientMap, ok := t.onDevices[device.clientId]
-	if !ok {
-		return
-	}
-	if clientMap == nil {
-		return
-	}
-	delete(clientMap, device.deviceNum)
-	device.cache = nil
-}
-
-// clearLocal cache, and leaves the local cached tensor without a cache.
-func (t *Tensor) clearLocal() {
-	if t == nil {
-		return
-	}
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	if t.local.t == t {
-		t.local.t = nil
-	}
-	t.local = nil
-}
-
-// localFromDevice converts the tensor to `Local`, if there is not one cached yet.
-// And if it needs converting, it uses the `device`, if one is given.
-// If `device == nil`, it converts from any associated `Device` tensor.
-//
-// If `device` is nil, it picks the first Device tensor.
-func (t *Tensor) localFromDevice(device *Device) *Local {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	return t.localFromDeviceLocked(device)
-}
-
-// localFromDeviceLocked implements localFromDevice, but assumes cache is already locked.
-func (t *Tensor) localFromDeviceLocked(device *Device) *Local {
-	if t == nil {
-		return nil
-	}
-	if t.local != nil {
-		return t.local
-	}
-
-	if device == nil {
-		if t.onDevices == nil {
-			return nil
-		}
-		// Pick the first on-device tensor and convert it to a local tensor.
-	loopAllDevices:
-		for _, perDeviceOrdinal := range t.onDevices {
-			for _, dev := range perDeviceOrdinal {
-				if dev == nil {
-					continue
-				}
-				device = dev
-				break loopAllDevices
-			}
-		}
-	}
-
-	literal, err := xla.FromOnDeviceBuffer(device.shapedBuffer)
-	if err != nil {
-		panic(errors.WithMessage(err, "tensor.Local failed to transfer from Device: %v"))
-	}
-	return t.lockedAddLocal(&Local{
-		shape:   literal.Shape(),
-		literal: literal,
-	})
-}
-
-// Device implements Tensor.Device.
-// It returns a `Device` version of the tensor.
-// If the underlying tensor is on the given `Device` already, it's a no-op.
-// If there is already a cache of a corresponding `Device` tensor on the given device, that is returned.
-// Otherwise, the contents of the `Local` tensor (if available), or one of the on-device tensors are
-// transferred to a `Device` tensor on the given `deviceNum`.
-func (t *Tensor) Device(hasClient HasClient, deviceNum int) *Device {
-	t.mu.Lock()
-	// TODO: maybe do this more fine-grained: it may make sense to transfer to several devices in parallel (?).
-	defer t.mu.Unlock()
-	if t == nil {
-		return nil
-	}
-
-	// Search in cache.
-	client := hasClient.Client()
-	if t.onDevices != nil {
-		if deviceNumMap, found := t.onDevices[client.Id]; found {
-			if device, found := deviceNumMap[deviceNum]; found {
-				return device
-			}
-		}
-	}
-
-	if t.local == nil {
-		// If there is no local, convert from other device tensor to a local tensor,
-		// and then to final device.
-		// This is expensive, since there is another copy around.
-		// TODO: can we transfer directly between different devices !?
-		t.local = t.localFromDeviceLocked(nil)
-	}
-	local := t.local
-	cid := client.Id
-	device := &Device{
-		clientId:  cid,
-		deviceNum: deviceNum,
-	}
-	var err error
-	device.shapedBuffer, err = local.literal.ToOnDeviceBuffer(client, deviceNum)
-	if err != nil {
-		panic(errors.WithMessage(err, "error converting from local tensor to device"))
-	}
-	device.shape = device.shapedBuffer.Shape()
-	t.lockedAddDevice(device)
-	return device
-}
-
-// CurrentDevice returns the current Device tensor backing this tensor, if there is any.
-// If the tensor is Local, this returns nil.
-//
-// If there is more than one Device tensor, this returns the first one.
-func (t *Tensor) CurrentDevice() *Device {
-	t.mu.Lock()
-	// TODO: maybe do this more fine-grained: it may make sense to transfer to several devices in parallel (?).
-	defer t.mu.Unlock()
-	if t == nil {
-		return nil
-	}
-	if t.onDevices == nil {
-		return nil
-	}
-	for _, deviceTensors := range t.onDevices {
-		for _, deviceT := range deviceTensors {
-			return deviceT
-		}
-	}
-	return nil
 }

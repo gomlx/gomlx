@@ -55,6 +55,12 @@ func (l *local) Finalize() {
 	return
 }
 
+// HasLocal returns whether there is an up-to-date copy of the Tensor on local storage.
+// If false, any access to the data (e.g.: Tensor.ConstFlatData) will require a transfer (Tensor.MaterializeToLocal).
+func (t *Tensor) HasLocal() bool {
+	return !t.local.IsFinalized()
+}
+
 // ConstFlatData calls accessFn with the flattened data as a slice of the Go type corresponding to the DType type.
 // Even scalar values have a flattened data representation of one element.
 // It locks the Tensor until accessFn returns.
@@ -74,8 +80,13 @@ func (l *local) Finalize() {
 func (t *Tensor) ConstFlatData(accessFn func(flat any)) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	t.lockedConstFlatData(accessFn)
+}
+
+// lockedConstFlatData implements Tensor.ConstFlatData.
+func (t *Tensor) lockedConstFlatData(accessFn func(flat any)) {
 	t.AssertValid()
-	// t.lockedMaterializeLocal()
+	t.lockedMaterializeLocal()
 	accessFn(t.local.flat)
 }
 
@@ -130,8 +141,8 @@ func (t *Tensor) MutableFlatData(accessFn func(flat any)) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.AssertValid()
-	// t.lockedMaterializeLocal()
-	// t.lockedInvalidateOnDevice()
+	t.lockedMaterializeLocal()
+	t.lockedInvalidateOnDevice()
 	accessFn(t.local.flat)
 }
 
@@ -264,12 +275,6 @@ func (t *Tensor) Value() any {
 	return mdSlice
 }
 
-func sliceToBytes(slice any) []byte {
-	sliceV := reflect.ValueOf(slice)
-	size := uintptr(sliceV.Len()) * sliceV.Index(0).Type().Size()
-	return unsafe.Slice((*byte)(sliceV.Index(0).UnsafePointer()), size)
-}
-
 // GobSerialize Tensor in binary format.
 //
 // It triggers a synchronous transfer from device to local, if the tensor is only on device.
@@ -285,7 +290,7 @@ func (t *Tensor) GobSerialize(encoder *gob.Encoder) (err error) {
 	if err != nil {
 		return
 	}
-	t.ConstFlatData(func(flat any) {
+	t.lockedConstFlatData(func(flat any) {
 		err = encoder.Encode(flat)
 		if err != nil {
 			err = errors.Wrapf(err, "failed to write tensor.Local data")
@@ -301,8 +306,8 @@ func GobDeserialize(decoder *gob.Decoder) (t *Tensor, err error) {
 		err = errors.Wrapf(err, "failed to deserialize Tensor shape data")
 		return
 	}
-	flatV := reflect.MakeSlice(shape.DType.GoType(), 0, shape.Size())
-	err = decoder.Decode(flatV.Addr().Interface())
+	flatPtrV := reflect.New(reflect.SliceOf(shape.DType.GoType()))
+	err = decoder.Decode(flatPtrV.Interface())
 	if err != nil {
 		err = errors.Wrapf(err, "failed to deserialize Tensor data")
 		return
@@ -311,7 +316,7 @@ func GobDeserialize(decoder *gob.Decoder) (t *Tensor, err error) {
 	t = newTensor(shape)
 	t.local = &local{
 		t:    t,
-		flat: flatV.Interface(),
+		flat: flatPtrV.Elem().Interface(),
 	}
 	return
 }
@@ -591,12 +596,3 @@ func baseType(valueType reflect.Type) reflect.Type {
 	}
 	return valueType
 }
-
-//func depthDTypeAndBaseType(t reflect.Type) (int, dtypes.DType, reflect.Type) {
-//	if t.Kind() == reflect.Slice {
-//		depth, dtype, baseType := depthDTypeAndBaseType(t.Elem())
-//		return depth + 1, dtype, baseType
-//	}
-//	return 0, shapes.FromType(t), t
-//
-//}
