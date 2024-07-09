@@ -13,7 +13,6 @@
 * Package `slices` renamed to `xslices`, not to mix up with the new standard pacakge `slices`.
 * Package `tensors/image` renamed `tensors/images`.
 
-
 * C/C++ code:
   * Removed reference to AOT compilation, see #52.
 

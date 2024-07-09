@@ -1,15 +1,17 @@
-// Package image provides several functions to transform images back and
+// Package images provides several functions to transform images back and
 // forth from tensors.
 package images
 
 import (
+	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/pkg/errors"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/types/xslices"
+	"github.com/gomlx/gopjrt/dtypes"
 	"image"
 	"k8s.io/klog/v2"
 	"log"
 	"math"
-	"reflect"
 )
 
 // ChannelsAxisConfig indicates if a tensor with an image has the channels axis
@@ -132,33 +134,47 @@ func (tt *ToTensorConfig) MaxValue(v float64) *ToTensorConfig {
 // Single converts the given img to a tensor, using the ToTensorConfig.
 //
 // It returns a 3D tensor, shaped as `[height, width, channels]`.
-func (tt *ToTensorConfig) Single(img image.Image) (t *tensors.Local) {
+//
+// It panics in case of error.
+func (tt *ToTensorConfig) Single(img image.Image) (t *tensors.Tensor) {
 	return toTensorImpl(tt, []image.Image{img}, false)
 }
 
 // Batch converts the given images to a tensor, using the ToTensorConfig.
 //
 // It returns a 4D tensor, shaped as `[batch_size, height, width, channels]`.
-func (tt *ToTensorConfig) Batch(images []image.Image) (t *tensors.Local) {
+//
+// It panics in case of error.
+func (tt *ToTensorConfig) Batch(images []image.Image) (t *tensors.Tensor) {
 	return toTensorImpl(tt, images, true)
 }
 
-func toTensorImpl(tt *ToTensorConfig, images []image.Image, batch bool) (t *tensors.Local) {
+func toTensorImpl(tt *ToTensorConfig, images []image.Image, batch bool) (t *tensors.Tensor) {
 	if !batch && len(images) != 1 {
 		log.Printf("ToTensor asked for a single image, but given %d images", len(images))
 		return nil
 	}
 	switch tt.dtype {
-	case shapes.Float32:
+	case dtypes.Float32:
 		t = toTensorGenericsImpl[float32](tt, images, batch)
-	case shapes.Float64:
+	case dtypes.Float64:
 		t = toTensorGenericsImpl[float64](tt, images, batch)
-	case shapes.Int32:
+	case dtypes.Int8:
+		t = toTensorGenericsImpl[int8](tt, images, batch)
+	case dtypes.Int16:
+		t = toTensorGenericsImpl[int16](tt, images, batch)
+	case dtypes.Int32:
 		t = toTensorGenericsImpl[int32](tt, images, batch)
-	case shapes.Int64:
-		t = toTensorGenericsImpl[int](tt, images, batch)
-	case shapes.Uint8:
+	case dtypes.Int64:
+		t = toTensorGenericsImpl[int64](tt, images, batch)
+	case dtypes.Uint8:
 		t = toTensorGenericsImpl[uint8](tt, images, batch)
+	case dtypes.Uint16:
+		t = toTensorGenericsImpl[uint16](tt, images, batch)
+	case dtypes.Uint32:
+		t = toTensorGenericsImpl[uint32](tt, images, batch)
+	case dtypes.Uint64:
+		t = toTensorGenericsImpl[uint64](tt, images, batch)
 	default:
 		log.Printf("image.ToTensor does not support dtype %s", tt.dtype)
 		t = nil
@@ -166,60 +182,61 @@ func toTensorImpl(tt *ToTensorConfig, images []image.Image, batch bool) (t *tens
 	return
 }
 
-func toTensorGenericsImpl[T shapes.NumberNotComplex](tt *ToTensorConfig, images []image.Image, batch bool) (t *tensors.Local) {
-	var zero T
+func toTensorGenericsImpl[T dtypes.NumberNotComplex](tt *ToTensorConfig, images []image.Image, batch bool) (t *tensors.Tensor) {
 	if len(images) > 1 && !batch {
 		Panicf("image.ToTensor in none-batch mode, but more than one image (%d) requested for conversion", len(images))
 	}
 	imgSize := images[0].Bounds().Size()
+	dtype := dtypes.FromGenericsType[T]()
 	if batch {
-		t = tensors.FromShape(shapes.Make(shapes.FromType(reflect.TypeOf(zero)), len(images), imgSize.Y, imgSize.X, tt.channels))
+		t = tensors.FromShape(shapes.Make(dtype, len(images), imgSize.Y, imgSize.X, tt.channels))
 	} else {
-		t = tensors.FromShape(shapes.Make(shapes.FromType(reflect.TypeOf(zero)), imgSize.Y, imgSize.X, tt.channels))
+		t = tensors.FromShape(shapes.Make(dtype, imgSize.Y, imgSize.X, tt.channels))
 	}
-	tRef := t.AcquireData()
-	defer tRef.Release()
-	tensorData := tRef.Flat().([]T)
-	pos := 0
 
+	// convertToDType converts RGBA channel value to the given DType.
 	convertToDType := func(val uint32) T {
 		// color.RGBA() returns 16 bits values packaged in uint32.
 		return T(float64(val) * tt.maxValue / float64(0xFFFF))
 	}
 
-	for imgIdx, img := range images {
-		if !img.Bounds().Size().Eq(imgSize) {
-			t.Finalize()
-			Panicf(
-				"image[%d] has size %s, but image[0] has size %s -- they must all be the same",
-				imgIdx, img.Bounds().Size(), imgSize)
-		}
-		switch tt.channels {
-		case 3: // No alpha channel
-			for y := 0; y < imgSize.Y; y++ {
-				for x := 0; x < imgSize.X; x++ {
-					r, g, b, _ := img.At(x, y).RGBA()
-					for _, channel := range [3]uint32{r, g, b} {
-						tensorData[pos] = convertToDType(channel)
-						pos++
+	t.MutableFlatData(func(flatAny any) {
+		flat := flatAny.([]T)
+		pos := 0 // Position in the flat slice.
+		for imgIdx, img := range images {
+			if !img.Bounds().Size().Eq(imgSize) {
+				t.FinalizeAll()
+				Panicf(
+					"image[%d] has size %s, but image[0] has size %s -- they must all be the same",
+					imgIdx, img.Bounds().Size(), imgSize)
+			}
+			switch tt.channels {
+			case 3: // No alpha channel
+				for y := 0; y < imgSize.Y; y++ {
+					for x := 0; x < imgSize.X; x++ {
+						r, g, b, _ := img.At(x, y).RGBA()
+						for _, channel := range [3]uint32{r, g, b} {
+							flat[pos] = convertToDType(channel)
+							pos++
+						}
+					}
+				}
+			case 4: // Include alpha channel
+				for y := 0; y < imgSize.Y; y++ {
+					for x := 0; x < imgSize.X; x++ {
+						r, g, b, a := img.At(x, y).RGBA()
+						for _, channel := range [4]uint32{r, g, b, a} {
+							flat[pos] = convertToDType(channel)
+							pos++
+						}
 					}
 				}
 			}
-		case 4: // Include alpha channel
-			for y := 0; y < imgSize.Y; y++ {
-				for x := 0; x < imgSize.X; x++ {
-					r, g, b, a := img.At(x, y).RGBA()
-					for _, channel := range [4]uint32{r, g, b, a} {
-						tensorData[pos] = convertToDType(channel)
-						pos++
-					}
-				}
-			}
 		}
-	}
-	if pos != t.Shape().Size() {
-		log.Fatalf("Incorrect number of values set.")
-	}
+		if pos != t.Shape().Size() {
+			Panicf("images.ToTensor failed to set the values for all pixels (%d written out of %d)", pos, t.Shape().Size())
+		}
+	})
 	return
 }
 
@@ -250,12 +267,11 @@ func (ti *ToImageConfig) MaxValue(v float64) *ToImageConfig {
 
 // Single converts the given 3D tensor shaped as `[height, width, channels]`
 // with an image to a tensor, using the ToImageConfig.
-func (ti *ToImageConfig) Single(t tensors.Tensor) (img image.Image, err error) {
+//
+// It panics in case of error.
+func (ti *ToImageConfig) Single(t *tensors.Tensor) (img image.Image) {
 	var images []image.Image
-	images, err = toImageImpl(ti, t)
-	if err != nil {
-		return
-	}
+	images = toImageImpl(ti, t)
 	if len(images) > 0 {
 		img = images[0]
 	}
@@ -264,11 +280,13 @@ func (ti *ToImageConfig) Single(t tensors.Tensor) (img image.Image, err error) {
 
 // Batch converts the given 4D tensor shaped as `[batch_size, height, width, channels]`
 // to a collection of images to a tensor, using the ToImageConfig.
-func (ti *ToImageConfig) Batch(t tensors.Tensor) (images []image.Image, err error) {
+//
+// It panics in case of error.
+func (ti *ToImageConfig) Batch(t *tensors.Tensor) (images []image.Image) {
 	return toImageImpl(ti, t)
 }
 
-func toImageImpl(ti *ToImageConfig, imagesTensor tensors.Tensor) (images []image.Image, err error) {
+func toImageImpl(ti *ToImageConfig, imagesTensor *tensors.Tensor) (images []image.Image) {
 	var numImages, width, height, channels int
 	switch imagesTensor.Rank() {
 	case 3:
@@ -282,11 +300,10 @@ func toImageImpl(ti *ToImageConfig, imagesTensor tensors.Tensor) (images []image
 		width = imagesTensor.Shape().Dimensions[2]
 		channels = imagesTensor.Shape().Dimensions[3]
 	default:
-		err = errors.Errorf("invalid tensor shape %s for ToImage conversion, must be either rank-3 or rank-4", imagesTensor.Shape())
-		return
+		Panicf("invalid tensor shape %s for images.ToImage conversion, must be either rank-3 or rank-4", imagesTensor.Shape())
 	}
 	if channels != 3 && channels != 4 {
-		err = errors.Errorf("invalid tensor shape %s, with %d channels: only images with 3 or 4 channels are supported", imagesTensor.Shape(), channels)
+		Panicf("images.ToImage invalid tensor shape %s, with %d channels: only images with 3 or 4 channels are supported", imagesTensor.Shape(), channels)
 		return
 	}
 	maxValue := ti.maxValue
@@ -299,45 +316,55 @@ func toImageImpl(ti *ToImageConfig, imagesTensor tensors.Tensor) (images []image
 	}
 	dtype := imagesTensor.DType()
 	switch dtype {
-	case shapes.Float32:
+	case dtypes.Float32:
 		images = toImageGenericsImpl[float32](imagesTensor, numImages, height, width, channels, maxValue)
-	case shapes.Float64:
+	case dtypes.Float64:
 		images = toImageGenericsImpl[float64](imagesTensor, numImages, height, width, channels, maxValue)
-	case shapes.Int32:
+	case dtypes.Int8:
+		images = toImageGenericsImpl[int8](imagesTensor, numImages, height, width, channels, maxValue)
+	case dtypes.Int16:
+		images = toImageGenericsImpl[int16](imagesTensor, numImages, height, width, channels, maxValue)
+	case dtypes.Int32:
 		images = toImageGenericsImpl[int32](imagesTensor, numImages, height, width, channels, maxValue)
-	case shapes.Int64:
-		images = toImageGenericsImpl[int](imagesTensor, numImages, height, width, channels, maxValue)
-	case shapes.Uint8:
+	case dtypes.Int64:
+		images = toImageGenericsImpl[int64](imagesTensor, numImages, height, width, channels, maxValue)
+	case dtypes.Uint8:
 		images = toImageGenericsImpl[uint8](imagesTensor, numImages, height, width, channels, maxValue)
+	case dtypes.Uint16:
+		images = toImageGenericsImpl[uint16](imagesTensor, numImages, height, width, channels, maxValue)
+	case dtypes.Uint32:
+		images = toImageGenericsImpl[uint32](imagesTensor, numImages, height, width, channels, maxValue)
+	case dtypes.Uint64:
+		images = toImageGenericsImpl[uint64](imagesTensor, numImages, height, width, channels, maxValue)
 	default:
-		err = errors.Errorf("cannot convert unsupported dtype %s to images.image", dtype)
+		Panicf("images.ToImage cannot convert tensor of unsupported dtype %s to Image", dtype)
 		return
 	}
 	return
 }
 
-func toImageGenericsImpl[T shapes.NumberNotComplex](imagesTensor tensors.Tensor, numImages, height, width, channels int, maxValue float64) (images []image.Image) {
+func toImageGenericsImpl[T dtypes.NumberNotComplex](imagesTensor *tensors.Tensor, numImages, height, width, channels int, maxValue float64) (images []image.Image) {
 	images = make([]image.Image, 0, numImages)
 	tensorPos := 0
-	imagesRef := imagesTensor.Local().AcquireData()
-	defer imagesRef.Release()
-	tensorData := tensors.FlatFromRef[T](imagesRef)
-	for imageIdx := 0; imageIdx < numImages; imageIdx++ {
-		img := image.NewNRGBA(image.Rect(0, 0, width, height))
-		for h := 0; h < height; h++ {
-			for w := 0; w < width; w++ {
-				for d := 0; d < channels; d++ {
-					v := float64(tensorData[tensorPos])
-					tensorPos++
-					v = math.Round(255 * (v / maxValue))
-					img.Pix[h*img.Stride+w*4+d] = uint8(v)
-				}
-				if channels < 4 {
-					img.Pix[h*img.Stride+w*4+3] = uint8(255) // Alpha channel.
+	imagesTensor.ConstFlatData(func(flatAny any) {
+		tensorData := flatAny.([]T)
+		for imageIdx := 0; imageIdx < numImages; imageIdx++ {
+			img := image.NewNRGBA(image.Rect(0, 0, width, height))
+			for h := 0; h < height; h++ {
+				for w := 0; w < width; w++ {
+					for d := 0; d < channels; d++ {
+						v := float64(tensorData[tensorPos])
+						tensorPos++
+						v = math.Round(255 * (v / maxValue))
+						img.Pix[h*img.Stride+w*4+d] = uint8(v)
+					}
+					if channels < 4 {
+						img.Pix[h*img.Stride+w*4+3] = uint8(255) // Alpha channel.
+					}
 				}
 			}
+			images = append(images, img)
 		}
-		images = append(images, img)
-	}
+	})
 	return
 }
