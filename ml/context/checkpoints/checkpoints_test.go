@@ -28,7 +28,6 @@ import (
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"os"
@@ -117,14 +116,14 @@ func TestMergedCheckpoints(t *testing.T) {
 		checkpoint := Build(ctx).TempDir("", "test_checkpoints_").Keep(2).MustDone()
 		dir = checkpoint.Dir()
 		globalStepV := optimizers.GetGlobalStepVar(ctx)
-		globalStepV.SetValue(tensor.FromValue(1))
+		globalStepV.SetValue(tensors.FromValue(1))
 		xV := ctx.VariableWithValue("x", []float64{1.0, 1.0, 1.0})
 		yV := ctx.VariableWithValue("y", [][]float32{{4.0}, {4.0}})
 		require.NoError(t, checkpoint.Save())
 
-		globalStepV.SetValue(tensor.FromValue(10))
-		xV.SetValue(tensor.FromValue([]float64{3.0, 3.0, 3.0}))
-		yV.SetValue(tensor.FromValue([][]float32{{6.0}, {6.0}}))
+		globalStepV.SetValue(tensors.FromValue(10))
+		xV.SetValue(tensors.FromValue([]float64{3.0, 3.0, 3.0}))
+		yV.SetValue(tensors.FromValue([][]float32{{6.0}, {6.0}}))
 		require.NoError(t, checkpoint.Save())
 	}
 	{

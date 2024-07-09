@@ -6,7 +6,6 @@ import (
 	humanize "github.com/dustin/go-humanize"
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/pkg/errors"
 	"math"
 	"os"
@@ -120,7 +119,7 @@ func (et *EdgeType) EdgeTargetsForSourceIdx(srcIdx int32) []int32 {
 
 // EdgePairTensor creates new tensors for the source and target indices.
 // It can be used by LayerWise inference.
-func (et *EdgeType) EdgePairTensor() EdgePair[*tensor.Local] {
+func (et *EdgeType) EdgePairTensor() EdgePair[*tensors.Local] {
 	sources := make([]int32, et.NumEdges())
 	current := int32(0)
 	for srcIdx, last := range et.Starts {
@@ -129,9 +128,9 @@ func (et *EdgeType) EdgePairTensor() EdgePair[*tensor.Local] {
 		}
 		current = last
 	}
-	return EdgePair[*tensor.Local]{
-		SourceIndices: tensor.FromValue(sources),
-		TargetIndices: tensor.FromValue(et.EdgeTargets),
+	return EdgePair[*tensors.Local]{
+		SourceIndices: tensors.FromValue(sources),
+		TargetIndices: tensors.FromValue(et.EdgeTargets),
 	}
 }
 
@@ -177,7 +176,7 @@ func (s *Sampler) AddNodeType(name string, count int) {
 // The `edges` tensor must have Shape `(Int32)[N, 2]`. It's contents are changed in place
 // -- they are sorted by the source node type (or target if reversed).
 // But the edges information themselves are not lost.
-func (s *Sampler) AddEdgeType(name, sourceNodeType, targetNodeType string, edges tensor.Tensor, reverse bool) {
+func (s *Sampler) AddEdgeType(name, sourceNodeType, targetNodeType string, edges tensors.Tensor, reverse bool) {
 	if s.Frozen {
 		Panicf("Sampler is frozen, that is, a strategy was already created with NewStrategy() and hence can no longer be modified.")
 	}

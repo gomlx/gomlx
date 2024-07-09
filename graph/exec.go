@@ -18,10 +18,8 @@ package graph
 
 import (
 	"fmt"
-	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
-	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 	"reflect"
@@ -70,12 +68,12 @@ type ExecGraphFn interface {
 
 // SideParamsFn is the functions that sets side parameters during execution
 // for Graphs that defines those. Typically, this is used to set the variables.
-type SideParamsFn func(graph *Graph, params []*tensor.Device)
+type SideParamsFn func(graph *Graph, params []*tensors.Device)
 
 // LoggerFn is the function used to log nodes marked for logging. It is called
 // after the Call method, with the list of messages and corresponding values
 // of the evaluated nodes.
-type LoggerFn func(graph *Graph, messages []string, values []tensor.Tensor, nodes []NodeId)
+type LoggerFn func(graph *Graph, messages []string, values []tensors.Tensor, nodes []NodeId)
 
 // Exec creates and executes computation graphs as needed
 // based on the inputs shapes.
@@ -318,7 +316,7 @@ func (e *Exec) GetNodeLogger() LoggerFn {
 // It returns the outputs in a slice, even if there is only one output.
 //
 // Errors (with full stack-traces) are raised with `panic`.
-func (e *Exec) Call(args ...any) []tensor.Tensor {
+func (e *Exec) Call(args ...any) []tensors.Tensor {
 	results, _ := e.CallWithGraph(args...)
 	return results
 }
@@ -329,12 +327,12 @@ func convertToListOfTensors(args []any) []any {
 		return args
 	}
 	switch v := args[0].(type) {
-	case []tensor.Tensor:
-		return slices.Map(v, func(x tensor.Tensor) any { return x })
-	case []*tensor.Local:
-		return slices.Map(v, func(x *tensor.Local) any { return x })
-	case []*tensor.Device:
-		return slices.Map(v, func(x *tensor.Device) any { return x })
+	case []tensors.Tensor:
+		return slices.Map(v, func(x tensors.Tensor) any { return x })
+	case []*tensors.Local:
+		return slices.Map(v, func(x *tensors.Local) any { return x })
+	case []*tensors.Device:
+		return slices.Map(v, func(x *tensors.Device) any { return x })
 	}
 	// Otherwise, process as usual.
 	return args
@@ -349,7 +347,7 @@ func convertToListOfTensors(args []any) []any {
 // to execute the computation.
 //
 // Errors (with full stack-traces) are raised with `panic`.
-func (e *Exec) CallWithGraph(args ...any) (results []tensor.Tensor, g *Graph) {
+func (e *Exec) CallWithGraph(args ...any) (results []tensors.Tensor, g *Graph) {
 	return e.compileAndExecute(true, args...)
 }
 
@@ -361,7 +359,7 @@ func (e *Exec) PreCompile(args ...any) {
 }
 
 // compileAndExecute compiles graph for arguments and optionally executes it.
-func (e *Exec) compileAndExecute(execute bool, args ...any) (results []tensor.Tensor, g *Graph) {
+func (e *Exec) compileAndExecute(execute bool, args ...any) (results []tensors.Tensor, g *Graph) {
 	args = convertToListOfTensors(args)
 	if !e.inputAsSlice && len(args) != e.numInputs {
 		Panicf(
@@ -371,9 +369,9 @@ func (e *Exec) compileAndExecute(execute bool, args ...any) (results []tensor.Te
 
 	// Convert args to tensors.
 	argsShapes := make([]shapes.Shape, 0, len(args))
-	tensors := make([]*tensor.Device, 0, len(args)) // There may be more parameters, set with Exec.setSideParams later.
+	tensors := make([]*tensors.Device, 0, len(args)) // There may be more parameters, set with Exec.setSideParams later.
 	for ii := range args {
-		var deviceT *tensor.Device
+		var deviceT *tensors.Device
 		err := TryCatch[error](func() { deviceT = anyToDeviceTensor(e.manager, e.deviceNum, args[ii]) })
 		if err != nil {
 			fmt.Printf("Original error: %+v\n", err)
@@ -397,7 +395,7 @@ func (e *Exec) compileAndExecute(execute bool, args ...any) (results []tensor.Te
 
 	// Set extra input parameters created by the graph.
 	if g.NumParameters() > len(args) {
-		tmp := make([]*tensor.Device, g.NumParameters())
+		tmp := make([]*tensors.Device, g.NumParameters())
 		copy(tmp, tensors)
 		tensors = tmp
 	}
@@ -417,13 +415,13 @@ func (e *Exec) compileAndExecute(execute bool, args ...any) (results []tensor.Te
 	if !execute {
 		return
 	}
-	var outputT *tensor.Device
+	var outputT *tensors.Device
 	outputT = g.RunWithTensors(tensors)
 	if entry.numOutputs == 1 {
-		results = []tensor.Tensor{outputT}
+		results = []tensors.Tensor{outputT}
 	} else if entry.numOutputs > 1 {
 		outputsDevice := outputT.SplitTuple()
-		results = make([]tensor.Tensor, len(outputsDevice))
+		results = make([]tensors.Tensor, len(outputsDevice))
 		for ii := range outputsDevice {
 			results[ii] = outputsDevice[ii]
 		}
@@ -433,7 +431,7 @@ func (e *Exec) compileAndExecute(execute bool, args ...any) (results []tensor.Te
 	// Call logger on logged nodes, even if no node is marked for logging (it serves as a hook).
 	numGraphFnOutputs := entry.numOutputs - len(entry.loggedMessages)
 	if e.loggerFn != nil {
-		var loggerResults []tensor.Tensor
+		var loggerResults []tensors.Tensor
 		if len(entry.loggedMessages) > 0 {
 			loggerResults = results[numGraphFnOutputs:]
 		}
@@ -558,7 +556,7 @@ func (e *Exec) Finalize() {
 
 // DefaultNodeLogger for nodes marked to be logged. It prints the message and
 // the node value for each logged node.
-func DefaultNodeLogger(g *Graph, messages []string, values []tensor.Tensor, nodes []NodeId) {
+func DefaultNodeLogger(g *Graph, messages []string, values []tensors.Tensor, nodes []NodeId) {
 	if len(messages) == 0 {
 		return
 	}

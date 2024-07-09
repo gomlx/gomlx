@@ -5,7 +5,6 @@ import (
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
-	"github.com/gomlx/gomlx/types/tensor"
 	"strings"
 )
 
@@ -219,8 +218,8 @@ func recursivelyMapEdgeInputsToSubRules[T any](inputs []T, rule *Rule, edges map
 //
 // Notice the direction of sampling is reverse to the direction of message passing in the GNN, so usually these
 // need to be reversed first.
-func (strategy *Strategy) ExtractSamplingEdgeIndices() (edges map[string]EdgePair[*tensor.Local]) {
-	edges = make(map[string]EdgePair[*tensor.Local])
+func (strategy *Strategy) ExtractSamplingEdgeIndices() (edges map[string]EdgePair[*tensors.Local]) {
+	edges = make(map[string]EdgePair[*tensors.Local])
 	for _, rule := range strategy.Rules {
 		et := rule.EdgeType
 		if rule.SourceRule == nil {
@@ -230,8 +229,8 @@ func (strategy *Strategy) ExtractSamplingEdgeIndices() (edges map[string]EdgePai
 		if et == nil {
 			// Identity type of edge: straight forward 1:1 mapping.
 			indices := slices.Iota[int32](0, int(rule.NumNodes))
-			pair := EdgePair[*tensor.Local]{
-				SourceIndices: tensor.FromValue(indices),
+			pair := EdgePair[*tensors.Local]{
+				SourceIndices: tensors.FromValue(indices),
 			}
 			pair.TargetIndices = pair.SourceIndices
 			edges[rule.Name] = pair

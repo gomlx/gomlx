@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 	"github.com/schollz/progressbar/v3"
@@ -225,7 +224,7 @@ func (ds *Hdf5Dataset) Load() (rawContent []byte, err error) {
 }
 
 // ToTensor reads the HDF5 dataset into GoMLX's `tensor.Local`.
-func (ds *Hdf5Dataset) ToTensor() (local *tensor.Local, err error) {
+func (ds *Hdf5Dataset) ToTensor() (local *tensors.Local, err error) {
 	if !ds.Shape.Ok() {
 		err = errors.Errorf("no shape information from HDF5 dataset, can't convert to tenosr")
 		return
@@ -234,7 +233,7 @@ func (ds *Hdf5Dataset) ToTensor() (local *tensor.Local, err error) {
 	if err != nil {
 		return
 	}
-	local = tensor.FromShape(ds.Shape)
+	local = tensors.FromShape(ds.Shape)
 	localRef := local.AcquireData()
 	defer localRef.Release()
 	localData := localRef.Bytes()

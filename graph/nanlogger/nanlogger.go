@@ -54,7 +54,6 @@ import (
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
-	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 	"math"
@@ -195,10 +194,10 @@ func (l *NanLogger) PopScope() {
 
 // loggerFn implements graph.LoggerFn, it's the hook that listens to nodes for which we want to
 // monitor for NaNs.
-func (l *NanLogger) loggerFn(g *graph.Graph, messages []string, values []tensor.Tensor, nodes []graph.NodeId) {
+func (l *NanLogger) loggerFn(g *graph.Graph, messages []string, values []tensors.Tensor, nodes []graph.NodeId) {
 	// Filtered logged values/messages: the ones not handled by NanLogger:
 	filteredMessages := make([]string, 0, len(messages))
-	filteredValues := make([]tensor.Tensor, 0, len(values))
+	filteredValues := make([]tensors.Tensor, 0, len(values))
 	filteredNodes := make([]graph.NodeId, 0, len(nodes))
 
 	firstNan := graph.InvalidNodeId

@@ -66,9 +66,7 @@ import (
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"
-	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
 	timage "github.com/gomlx/gomlx/types/tensor/image"
 	"github.com/pkg/errors"
 	"path"
@@ -512,7 +510,7 @@ func (cfg *Config) loadTensorToVariable(ctx *context.Context, graph *Graph, tens
 		return
 	}
 	tensorPath := path.Join(cfg.baseDir, UnpackedWeightsName, tensorFileName)
-	local, err := tensor.Load(tensorPath)
+	local, err := tensors.Load(tensorPath)
 	if err != nil {
 		panic(errors.WithMessagef(err, "inceptionv3.ModelGraph(): failed to read weights from %q", tensorPath))
 	}

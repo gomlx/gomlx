@@ -23,7 +23,6 @@ import (
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
 	timage "github.com/gomlx/gomlx/types/tensor/image"
 	"github.com/pkg/errors"
 	"github.com/schollz/progressbar/v3"
@@ -444,7 +443,7 @@ var muT sync.Mutex
 //   - spec: not used, left as nil.
 //   - inputs: two tensors, the first is the images batch (shaped `[batch_size, height, width, depth==4]`) and
 //     the second holds the indices of the images as int (I64), shaped `[batch_size]`.
-func (ds *Dataset) Yield() (spec any, inputs, labels []tensor.Tensor, err error) {
+func (ds *Dataset) Yield() (spec any, inputs, labels []tensors.Tensor, err error) {
 	muT.Lock()
 	defer muT.Unlock()
 
@@ -459,16 +458,16 @@ func (ds *Dataset) Yield() (spec any, inputs, labels []tensor.Tensor, err error)
 	if ds.yieldPairs {
 		numExamples := len(indices)
 		firstHalf, secondHalf := ds.toTensor.Batch(images[:numExamples]), ds.toTensor.Batch(images[numExamples:])
-		inputs = []tensor.Tensor{
+		inputs = []tensors.Tensor{
 			firstHalf,
-			tensor.FromValue(indices),
+			tensors.FromValue(indices),
 			secondHalf,
 		}
 	} else {
 		// No paired image.
-		inputs = []tensor.Tensor{ds.toTensor.Batch(images), tensor.FromValue(indices)}
+		inputs = []tensors.Tensor{ds.toTensor.Batch(images), tensors.FromValue(indices)}
 	}
-	labels = []tensor.Tensor{tensor.FromAnyValue(shapes.CastAsDType(labelsAsTypes, ds.dtype))}
+	labels = []tensors.Tensor{tensors.FromAnyValue(shapes.CastAsDType(labelsAsTypes, ds.dtype))}
 	return
 }
 
@@ -759,7 +758,7 @@ func (pds *PreGeneratedDataset) entrySize() int {
 }
 
 // Yield implements train.Dataset.
-func (pds *PreGeneratedDataset) Yield() (spec any, inputs, labels []tensor.Tensor, err error) {
+func (pds *PreGeneratedDataset) Yield() (spec any, inputs, labels []tensors.Tensor, err error) {
 	retries := 0
 
 	// Check if maxSteps is reached.
@@ -806,8 +805,8 @@ func (pds *PreGeneratedDataset) Yield() (spec any, inputs, labels []tensor.Tenso
 		for ii := 0; ii < pds.batchSize; ii++ {
 			pds.labelsAsTypes[ii] = DorOrCat(pds.buffer[ii*entrySize])
 		}
-		labels = []tensor.Tensor{tensor.FromAnyValue(shapes.CastAsDType(pds.labelsAsTypes, pds.dtype))}
-		var t, pairT *tensor.Local
+		labels = []tensors.Tensor{tensors.FromAnyValue(shapes.CastAsDType(pds.labelsAsTypes, pds.dtype))}
+		var t, pairT *tensors.Local
 		switch pds.dtype {
 		case shapes.Float32:
 			t = BytesToTensor[float32](pds.buffer, pds.batchSize, pds.width, pds.height)
@@ -824,9 +823,9 @@ func (pds *PreGeneratedDataset) Yield() (spec any, inputs, labels []tensor.Tenso
 			return nil, nil, nil, pds.err
 		}
 		if pds.yieldPairs {
-			inputs = []tensor.Tensor{t, pairT}
+			inputs = []tensors.Tensor{t, pairT}
 		} else {
-			inputs = []tensor.Tensor{t}
+			inputs = []tensors.Tensor{t}
 		}
 		break
 	}
@@ -858,12 +857,12 @@ func (pds *PreGeneratedDataset) Reset() {
 
 // BytesToTensor converts a batch of saved images as bytes to a tensor.Local with 4 channels: R,G,B and A. It assumes
 // all images have the exact same size. There should be one byte with the label before each image.
-func BytesToTensor[T shapes.NumberNotComplex](buffer []byte, numImages, width, height int) (t *tensor.Local) {
+func BytesToTensor[T shapes.NumberNotComplex](buffer []byte, numImages, width, height int) (t *tensors.Local) {
 	var zero T
-	t = tensor.FromShape(shapes.Make(shapes.FromType(reflect.TypeOf(zero)), numImages, height, width, 4))
+	t = tensors.FromShape(shapes.Make(shapes.FromType(reflect.TypeOf(zero)), numImages, height, width, 4))
 	ref := t.AcquireData()
 	defer ref.Release()
-	tensorData := tensor.FlatFromRef[T](ref)
+	tensorData := tensors.FlatFromRef[T](ref)
 	dataPos := 0
 	bufferPos := 0
 

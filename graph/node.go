@@ -19,10 +19,8 @@ package graph
 import (
 	"fmt"
 	"github.com/gomlx/gomlx/types"
-	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
-	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/gomlx/gomlx/xla"
 	"github.com/pkg/errors"
 	"reflect"
@@ -251,7 +249,7 @@ func newNoOpNode(graph *Graph, serializedNode *xla.SerializedNode, input *Node) 
 }
 
 // ConstLocal returns a newly created constant node for the tensor x.
-func ConstLocal(g *Graph, x *tensor.Local) *Node {
+func ConstLocal(g *Graph, x *tensors.Local) *Node {
 	x.AssertValid()
 	return newNode(g, &xla.SerializedNode{
 		Type:    xla.ConstantNode,
@@ -273,7 +271,7 @@ func Const(g *Graph, x any) *Node {
 			"Const(g, x) can only take actual values, not another computation graph `*Node` -- " +
 				"for that you don't need Const(), just use it directly."))
 	}
-	valueT := tensor.FromAnyValue(x)
+	valueT := tensors.FromAnyValue(x)
 	return ConstLocal(g, valueT.Local())
 }
 

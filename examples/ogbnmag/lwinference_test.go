@@ -14,7 +14,6 @@ import (
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
-	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/schollz/progressbar/v3"
 	"github.com/stretchr/testify/require"
 	"io"
@@ -35,7 +34,7 @@ func findSmallestDegreeSubgraph(t *testing.T) int32 {
 	const batchSize = 1
 	minSeedId, minMaxDegree := int32(-1), int32(1000)
 	for seedId := range int32(10000) {
-		seedsIds := tensor.FromValue([]int32{seedId}) // We take only one seed for testing.
+		seedsIds := tensors.FromValue([]int32{seedId}) // We take only one seed for testing.
 		strategy := NewSamplerStrategy(magSampler, batchSize, seedsIds)
 		ds := strategy.NewDataset("lwinference_test")
 
@@ -123,7 +122,7 @@ func TestLayerWiseInferenceLogits(t *testing.T) {
 	// Paper id with the least amount of degrees in its subgraph.
 	// seedId := findSmallestDegreeSubgraph(t)
 	const seedId = 3162
-	seedsIds := tensor.FromValue([]int32{seedId}) // We take only one seed for testing.
+	seedsIds := tensors.FromValue([]int32{seedId}) // We take only one seed for testing.
 
 	// Create inputs for `seedId`.
 	require.NoError(t, Download(*flagDataDir), "Download")
@@ -160,7 +159,7 @@ func TestLayerWiseInferenceLogits(t *testing.T) {
 			predictionsAndMask := MagModelGraph(ctx, strategy, inputs)
 			return ConvertType(predictionsAndMask[0], shapes.Float32)
 		})
-		var results []tensor.Tensor
+		var results []tensors.Tensor
 		require.NotPanics(t, func() { results = executor.Call(inputs) })
 		predictionsGNN := results[0]
 		fmt.Printf("predictionsGNN:\n%s\n", predictionsGNN)
@@ -248,7 +247,7 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 		}
 		require.NoError(t, err, "Dataset.Yield")
 		inputs = append(inputs, labels[0])
-		var results []tensor.Tensor
+		var results []tensors.Tensor
 		require.NotPanics(t, func() { results = executor.Call(inputs) })
 		correct += int(results[0].Value().(int32))
 		total += int(results[1].Value().(int32))
@@ -269,7 +268,7 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 		predictions = Slice(predictions, AxisRange(0, numToCompare))
 		return predictions
 	})
-	var results []tensor.Tensor
+	var results []tensors.Tensor
 	require.NotPanics(t, func() { results = executor.Call() })
 	predictionsLW := results[0].Value().([]int32)
 	correct = 0

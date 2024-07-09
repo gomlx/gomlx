@@ -5,9 +5,7 @@ import (
 	"math/rand"
 	"time"
 
-	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/gomlx/gomlx/xla"
 )
 
@@ -27,10 +25,10 @@ var (
 //
 // Notice it returns a concrete tensor value that can be used to set a variable or
 // constant to be used in a graph.
-func RngStateFromSeed(seed int64) tensor.Tensor {
+func RngStateFromSeed(seed int64) tensors.Tensor {
 	rngSrc := rand.NewSource(seed)
 	rng := rand.New(rngSrc)
-	state := tensor.FromShape(RngStateShape)
+	state := tensors.FromShape(RngStateShape)
 	ref := state.AcquireData()
 	defer ref.Release()
 	data := ref.Flat().([]uint64)
@@ -45,7 +43,7 @@ func RngStateFromSeed(seed int64) tensor.Tensor {
 //
 // Notice it returns a concrete tensor value that can be used to set a variable or
 // constant to be used in a graph.
-func RngState() tensor.Tensor {
+func RngState() tensors.Tensor {
 	return RngStateFromSeed(time.Now().UTC().UnixNano())
 }
 

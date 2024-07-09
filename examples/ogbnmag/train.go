@@ -17,7 +17,6 @@ import (
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/janpfeifer/must"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
@@ -106,7 +105,7 @@ func Train(ctx *context.Context, baseDir string, layerWiseEval, report bool) err
 	if checkpoint != nil && numCheckpointsToKeep > 1 {
 		period := time.Minute * 3
 		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
-			func(loop *train.Loop, metrics []tensor.Tensor) error {
+			func(loop *train.Loop, metrics []tensors.Tensor) error {
 				return checkpoint.Save()
 			})
 	}

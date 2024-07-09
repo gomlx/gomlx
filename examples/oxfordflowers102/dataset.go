@@ -8,7 +8,6 @@ import (
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
 	timage "github.com/gomlx/gomlx/types/tensor/image"
 	"github.com/pkg/errors"
 	"image"
@@ -159,7 +158,7 @@ func (ds *Dataset) Name() string {
 //     (into training/validation/test).
 //   - `labels`: the type of flower (same as `inputs[2]`), an `int32` value from 0 to `NumLabels-1`
 //     with the label.
-func (ds *Dataset) Yield() (spec any, inputs []tensor.Tensor, labels []tensor.Tensor, err error) {
+func (ds *Dataset) Yield() (spec any, inputs []tensors.Tensor, labels []tensors.Tensor, err error) {
 	spec = ds
 	index := ds.nextIndex()
 	if index == -1 {
@@ -198,8 +197,8 @@ func (ds *Dataset) Yield() (spec any, inputs []tensor.Tensor, labels []tensor.Te
 		img = imaging.Crop(img, image.Rect(0, start, ds.imageSize, start+ds.imageSize))
 	}
 
-	inputs = []tensor.Tensor{ds.toTensor.Single(img), tensor.FromValue(index), tensor.FromValue(label)}
-	labels = []tensor.Tensor{tensor.FromValue(label)}
+	inputs = []tensors.Tensor{ds.toTensor.Single(img), tensors.FromValue(index), tensors.FromValue(label)}
+	labels = []tensors.Tensor{tensors.FromValue(label)}
 	return
 }
 

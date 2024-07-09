@@ -1,4 +1,4 @@
-package tensor
+package tensors
 
 import (
 	"encoding/gob"

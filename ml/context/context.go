@@ -22,9 +22,7 @@ import (
 	"fmt"
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context/initializers"
-	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/pkg/errors"
 	"golang.org/x/exp/slices"
 	"reflect"
@@ -161,7 +159,7 @@ type Loader interface {
 	//
 	// It is called at most once for each variable: if a values is loaded owner is transferred and the Loader
 	// can "forget" about that variable, it's assumed to be transferred to the context.
-	LoadVariable(ctx *Context, scope, name string) (value tensor.Tensor, found bool)
+	LoadVariable(ctx *Context, scope, name string) (value tensors.Tensor, found bool)
 }
 
 // NewContext constructs a new and empty context.
@@ -521,7 +519,7 @@ func (ctx *Context) InitializeVariables() {
 	for _, variable := range variablesToInitialize {
 		valuesNodes = append(valuesNodes, variable.initializer(g, variable.shape))
 	}
-	var tuple *tensor.Device
+	var tuple *tensors.Device
 	err := TryCatch[error](func() {
 		g.Compile(graph.Tuple(valuesNodes...))
 		tuple = g.Run(nil)
@@ -726,8 +724,8 @@ func (ctx *Context) VariableWithShape(name string, shape shapes.Shape) *Variable
 	return v
 }
 
-func valueToTensor(value any) tensor.Tensor {
-	if tensorValue, ok := value.(tensor.Tensor); ok {
+func valueToTensor(value any) tensors.Tensor {
+	if tensorValue, ok := value.(tensors.Tensor); ok {
 		return tensorValue
 	}
 	if node, ok := value.(*Node); ok {
@@ -735,7 +733,7 @@ func valueToTensor(value any) tensor.Tensor {
 			"trying to feed a computation graph node (`*computation.Node`) as a concrete value will not work, "+
 				"you have to provide a Go value or a tensor here -- *Node provided: %s", node)
 	}
-	return tensor.FromAnyValue(value)
+	return tensors.FromAnyValue(value)
 }
 
 // VariableWithValue creates a variable that is initialized with the given value in the current scope.
@@ -764,7 +762,7 @@ func (ctx *Context) VariableWithValue(name string, value any) *Variable {
 		Panicf("variable %q for scope %q already exists", name, ctx.scope)
 	}
 
-	var valueT tensor.Tensor
+	var valueT tensors.Tensor
 	err := TryCatch[error](func() { valueT = valueToTensor(value) })
 	if err != nil {
 		panic(errors.WithMessagef(err, "failed to parse value %v for variable %q in scope %q", value, name, ctx.scope))
@@ -898,7 +896,7 @@ func (ctx *Context) ExecPopulateGraphParamsMap(g *Graph, params graph.ParamsMap)
 //
 // `Exec*` methods are used by those implementing an executor (context.Exec) or related tests, not normally
 // needed by end users.
-func (ctx *Context) execPopulateGraphParamsSlice(g *Graph, params []*tensor.Device) {
+func (ctx *Context) execPopulateGraphParamsSlice(g *Graph, params []*tensors.Device) {
 	graphId := g.GraphId()
 	ctx.EnumerateVariables(func(v *Variable) {
 		nodes, found := v.graphToNodes[graphId]
@@ -908,7 +906,7 @@ func (ctx *Context) execPopulateGraphParamsSlice(g *Graph, params []*tensor.Devi
 		if nodes == nil || nodes.paramNode == nil || nodes.paramNode.ParameterHandle() == graph.InvalidParameterHandle {
 			Panicf("invalid paramNode for variable %q", v.ParameterName())
 		}
-		var deviceT *tensor.Device
+		var deviceT *tensors.Device
 		err := TryCatch[error](func() { deviceT = v.Value().Device(g.Manager(), g.DeviceNum()) })
 		if err != nil {
 			panic(errors.WithMessagef(err, "failed to transfer variable \"%s::%s\" value to device",

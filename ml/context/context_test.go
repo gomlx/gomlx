@@ -23,7 +23,6 @@ import (
 	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
-	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -195,11 +194,11 @@ func TestDeleteVariablesInScope(t *testing.T) {
 }
 
 type ConstantLoader struct {
-	Values map[string]map[string]tensor.Tensor
+	Values map[string]map[string]tensors.Tensor
 }
 
 // LoadVariable implements Loader.
-func (l *ConstantLoader) LoadVariable(ctx *Context, scope, name string) (value tensor.Tensor, found bool) {
+func (l *ConstantLoader) LoadVariable(ctx *Context, scope, name string) (value tensors.Tensor, found bool) {
 	if l.Values == nil {
 		return
 	}
@@ -215,10 +214,10 @@ func TestContext_SetLoader(t *testing.T) {
 	manager := graphtest.BuildTestManager()
 	ctx := NewContext(manager)
 	ctx.SetLoader(&ConstantLoader{
-		Values: map[string]map[string]tensor.Tensor{
+		Values: map[string]map[string]tensors.Tensor{
 			"/": {
-				"x": tensor.FromValue(float32(2)),
-				"y": tensor.FromValue(int(3)),
+				"x": tensors.FromValue(float32(2)),
+				"y": tensors.FromValue(int(3)),
 			},
 		},
 	})
@@ -228,7 +227,7 @@ func TestContext_SetLoader(t *testing.T) {
 		v1 := ctx.VariableWithValue("y", 1)
 		return v0.ValueGraph(g), v1.ValueGraph(g)
 	})
-	var results []tensor.Tensor
+	var results []tensors.Tensor
 	require.NotPanics(t, func() { results = e.Call() }, "Failed to run context.Exec")
 	gotV0 := results[0].Value().(float32)
 	gotV1 := results[1].Value().(int64)

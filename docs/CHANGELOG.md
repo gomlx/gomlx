@@ -1,6 +1,16 @@
 # GoMLX changelog
 
-## Next
+## 0.11.0 
+
+* MAJOR REFACTORING. Very breaking compatibility changes -- it would be a major release number change, if it were > v1 already.
+* Package `tensors':
+  * `tensor` -> `tensors`, more inline with other package names, and allow one to use `tensor` as a variable name.
+  * Now there is only one `Tensor` type (not an interface), that manages local and on-device storage.
+  * Local storage using Go
+  * On-device storage now using [`github.com/gomlx/gopjrt`](github.com/gomlx/gopjrt) project.
+  * Improved testing, greatly simplified.
+* Package `exceptions` removed: using the (same) now external [`github.com/gomlx/exceptions`](github.com/gomlx/exceptions) instead.
+
 
 * C/C++ code:
   * Removed reference to AOT compilation, see #52.

@@ -26,12 +26,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/ml/data"
-	"github.com/gomlx/gomlx/types/tensor"
-
 	"github.com/go-gota/gota/dataframe"
 	"github.com/go-gota/gota/series"
+	"github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/ml/data"
 	"github.com/pkg/errors"
 )
 
@@ -493,16 +491,16 @@ func (r *RawData) SampleWithReplacement(numExamples int) *RawData {
 
 // TensorData contains a RawData converted to tensors.
 type TensorData struct {
-	CategoricalTensor, ContinuousTensor, WeightsTensor, LabelsTensor tensor.Tensor
+	CategoricalTensor, ContinuousTensor, WeightsTensor, LabelsTensor tensors.Tensor
 }
 
 // CreateTensors of dataset, for faster ML interaction.
 func (r *RawData) CreateTensors(manager *graph.Manager) *TensorData {
 	return &TensorData{
-		CategoricalTensor: tensor.FromFlatDataAndDimensions(r.Categorical, r.NumRows, r.NumCategorical),
-		ContinuousTensor:  tensor.FromFlatDataAndDimensions(r.Continuous, r.NumRows, r.NumContinuous),
-		WeightsTensor:     tensor.FromFlatDataAndDimensions(r.Weights, r.NumRows, 1),
-		LabelsTensor:      tensor.FromFlatDataAndDimensions(r.Labels, r.NumRows, 1),
+		CategoricalTensor: tensors.FromFlatDataAndDimensions(r.Categorical, r.NumRows, r.NumCategorical),
+		ContinuousTensor:  tensors.FromFlatDataAndDimensions(r.Continuous, r.NumRows, r.NumContinuous),
+		WeightsTensor:     tensors.FromFlatDataAndDimensions(r.Weights, r.NumRows, 1),
+		LabelsTensor:      tensors.FromFlatDataAndDimensions(r.Labels, r.NumRows, 1),
 	}
 }
 

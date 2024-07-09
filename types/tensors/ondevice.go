@@ -1,4 +1,4 @@
-package tensor
+package tensors
 
 import (
 	"github.com/gomlx/exceptions"

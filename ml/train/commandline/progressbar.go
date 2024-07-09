@@ -6,7 +6,6 @@ import (
 	lgtable "github.com/charmbracelet/lipgloss/table"
 	"github.com/gomlx/gomlx/examples/notebook"
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/muesli/termenv"
 	"github.com/schollz/progressbar/v3"
 	"os"
@@ -73,7 +72,7 @@ func (pBar *progressBar) onStart(loop *train.Loop, _ train.Dataset) error {
 	return nil
 }
 
-func (pBar *progressBar) onStep(loop *train.Loop, metrics []tensor.Tensor) error {
+func (pBar *progressBar) onStep(loop *train.Loop, metrics []tensors.Tensor) error {
 	// Check whether it is finished.
 	if pBar.bar.IsFinished() {
 		return nil
@@ -117,7 +116,7 @@ func (pBar *progressBar) onStep(loop *train.Loop, metrics []tensor.Tensor) error
 	return nil
 }
 
-func (pBar *progressBar) onEnd(loop *train.Loop, metrics []tensor.Tensor) error {
+func (pBar *progressBar) onEnd(loop *train.Loop, metrics []tensors.Tensor) error {
 	if pBar.updates != nil {
 		close(pBar.updates)
 	}

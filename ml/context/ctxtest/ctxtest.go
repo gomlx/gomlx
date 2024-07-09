@@ -24,7 +24,6 @@ import (
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/types/slices"
-	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
@@ -49,7 +48,7 @@ func RunTestGraphFn(t *testing.T, testName string, graphFn TestContextGraphFn, w
 		return all
 	}
 	exec := context.NewExec(manager, ctx, wrapperFn)
-	var inputsAndOutputs []tensor.Tensor
+	var inputsAndOutputs []tensors.Tensor
 	require.NotPanicsf(t, func() { inputsAndOutputs = exec.Call() },
 		"%s: failed to run graph with %+v", testName)
 	inputs := inputsAndOutputs[:numInputs]

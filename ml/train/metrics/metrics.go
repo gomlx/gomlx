@@ -22,9 +22,7 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/train/losses"
-	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/x448/float16"
@@ -56,7 +54,7 @@ type Interface interface {
 	UpdateGraph(ctx *context.Context, labels, predictions []*Node) (metric *Node)
 
 	// PrettyPrint is used to pretty-print a metric value, usually in a short form.
-	PrettyPrint(value tensor.Tensor) string
+	PrettyPrint(value tensors.Tensor) string
 
 	// Reset metrics internal counters, when starting a new evaluation.
 	// Notice this may be called before UpdateGraph, the metric should handle this without errors.
@@ -73,7 +71,7 @@ const (
 type BaseMetricGraph func(ctx *context.Context, labels, predictions []*Node) *Node
 
 // PrettyPrintFn is a function to convert a metric value to a string.
-type PrettyPrintFn func(value tensor.Tensor) string
+type PrettyPrintFn func(value tensors.Tensor) string
 
 // baseMetric implements a stateless metric.Interface.
 type baseMetric struct {
@@ -109,7 +107,7 @@ func (m *baseMetric) UpdateGraph(ctx *context.Context, labels, predictions []*No
 	return result
 }
 
-func (m *baseMetric) PrettyPrint(value tensor.Tensor) string {
+func (m *baseMetric) PrettyPrint(value tensors.Tensor) string {
 	if m.pPrintFn == nil {
 		dtype := value.DType()
 		isScalar := value.Shape().IsScalar()
@@ -220,10 +218,10 @@ func (m *meanMetric) Reset(ctx *context.Context) {
 		// Assume this was called before the graph was first built, so there is nothing to reset yet.
 		return
 	}
-	totalVar.SetValue(tensor.FromAnyValue(shapes.CastAsDType(0, totalVar.Value().DType())))
+	totalVar.SetValue(tensors.FromAnyValue(shapes.CastAsDType(0, totalVar.Value().DType())))
 	weightVar := ctx.InspectVariable(ctx.Scope(), "weight")
 	if weightVar != nil {
-		weightVar.SetValue(tensor.FromAnyValue(shapes.CastAsDType(0, weightVar.Value().DType())))
+		weightVar.SetValue(tensors.FromAnyValue(shapes.CastAsDType(0, weightVar.Value().DType())))
 	} else {
 		Panicf("can't find variable \"weight\" in scope %q", ctx.Scope())
 	}
@@ -312,7 +310,7 @@ func BinaryAccuracyGraph(_ *context.Context, labels, predictions []*Node) *Node 
 	return Div(ReduceAllSum(correctExamples), countExamples)
 }
 
-func accuracyPPrint(value tensor.Tensor) string {
+func accuracyPPrint(value tensors.Tensor) string {
 	return fmt.Sprintf("%.2f%%", shapes.ConvertTo[float64](value.Value())*100.0)
 }
 

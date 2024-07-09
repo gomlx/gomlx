@@ -12,7 +12,6 @@ import (
 	types "github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/shapes"
 	xslices "github.com/gomlx/gomlx/types/slices"
-	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/pkg/errors"
 	"golang.org/x/exp/maps"
 	"io"
@@ -66,7 +65,7 @@ type CustomMetricFn func(plotter Plotter, step float64) error
 //
 // Notice it evaluate on the datasets sequentially -- presumably the training could go in parallel if there is
 // enough accelerator processing / memory. But this doesn't assume that.
-func AddTrainAndEvalMetrics(plotter Plotter, loop *train.Loop, trainMetrics []tensor.Tensor, evalDatasets []train.Dataset) error {
+func AddTrainAndEvalMetrics(plotter Plotter, loop *train.Loop, trainMetrics []tensors.Tensor, evalDatasets []train.Dataset) error {
 	// Training metrics are pre-generated and given.
 	step := float64(loop.LoopStep)
 	var incomplete bool
@@ -86,7 +85,7 @@ func AddTrainAndEvalMetrics(plotter Plotter, loop *train.Loop, trainMetrics []te
 
 	// Eval metrics, if given
 	for _, ds := range evalDatasets {
-		var evalMetrics []tensor.Tensor
+		var evalMetrics []tensors.Tensor
 		if err := exceptions.TryCatch[error](func() { evalMetrics = loop.Trainer.Eval(ds) }); err != nil {
 			return err
 		}

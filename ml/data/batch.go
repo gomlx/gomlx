@@ -4,16 +4,14 @@ import (
 	"fmt"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/train"
-	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/pkg/errors"
 	"io"
 	"sync"
 )
 
 type batchElement struct {
-	inputs, labels []tensor.Tensor
+	inputs, labels []tensors.Tensor
 	spec           any
 }
 
@@ -102,11 +100,11 @@ func (ds *batchedDataset) lockedFreeBuffer() {
 }
 
 // Yield implements train.Dataset.
-func (ds *batchedDataset) Yield() (spec any, inputs []tensor.Tensor, labels []tensor.Tensor, err error) {
+func (ds *batchedDataset) Yield() (spec any, inputs []tensors.Tensor, labels []tensors.Tensor, err error) {
 	defer ds.mu.Unlock()
 	for {
 		var eSpec any
-		var eInputs, eLabels []tensor.Tensor
+		var eInputs, eLabels []tensors.Tensor
 		eSpec, eInputs, eLabels, err = ds.ds.Yield()
 		ds.mu.Lock()
 		if err == io.EOF {
@@ -200,8 +198,8 @@ func (ds *batchedDataset) lockedBatchBuffer() (batched batchElement, err error) 
 		}
 	}
 
-	allInputs := make([][]tensor.Tensor, 0, len(ds.buffer))
-	allLabels := make([][]tensor.Tensor, 0, len(ds.buffer))
+	allInputs := make([][]tensors.Tensor, 0, len(ds.buffer))
+	allLabels := make([][]tensors.Tensor, 0, len(ds.buffer))
 	for _, e := range ds.buffer {
 		allInputs = append(allInputs, e.inputs)
 		allLabels = append(allLabels, e.labels)
@@ -217,16 +215,16 @@ func (ds *batchedDataset) lockedBatchBuffer() (batched batchElement, err error) 
 // lockedBatchTensorsList receives a list of inputs or labels collections, and concatenate them
 // into a batch. Returns the list of the concatenated tensors.
 // The batching happens on the tensors on the first axis of the `inputs` slice.
-func (ds *batchedDataset) lockedBatchTensorsList(inputs [][]tensor.Tensor) (batchedTensors []tensor.Tensor, err error) {
+func (ds *batchedDataset) lockedBatchTensorsList(inputs [][]tensors.Tensor) (batchedTensors []tensors.Tensor, err error) {
 	numBatchedTensors := len(inputs[0])
 	numParts := len(inputs)
-	batchedTensors = make([]tensor.Tensor, 0, numBatchedTensors)
-	parts := make([]tensor.Tensor, numParts)
+	batchedTensors = make([]tensors.Tensor, 0, numBatchedTensors)
+	parts := make([]tensors.Tensor, numParts)
 	for batchedTensorIdx := 0; batchedTensorIdx < numBatchedTensors; batchedTensorIdx++ {
 		for ii, tensors := range inputs {
 			parts[ii] = tensors[batchedTensorIdx]
 		}
-		var batchedTensor tensor.Tensor
+		var batchedTensor tensors.Tensor
 		batchedTensor, err = ds.lockedBatchTensor(parts)
 		if err != nil {
 			return
@@ -237,7 +235,7 @@ func (ds *batchedDataset) lockedBatchTensorsList(inputs [][]tensor.Tensor) (batc
 }
 
 // lockedBatchTensor batches the given tensor list, all should already have the same shape.
-func (ds *batchedDataset) lockedBatchTensor(parts []tensor.Tensor) (batched tensor.Tensor, err error) {
+func (ds *batchedDataset) lockedBatchTensor(parts []tensors.Tensor) (batched tensors.Tensor, err error) {
 	partsAny := make([]any, 0, len(parts))
 	for _, part := range parts {
 		partsAny = append(partsAny, part)

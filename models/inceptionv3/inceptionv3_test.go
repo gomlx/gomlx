@@ -7,7 +7,6 @@ import (
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
 	timage "github.com/gomlx/gomlx/types/tensor/image"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -33,7 +32,7 @@ func TestBuildGraph(t *testing.T) {
 	img, _, err := image.Decode(f)
 	require.NoError(t, err)
 	require.NoError(t, f.Close())
-	var imgT tensor.Tensor
+	var imgT tensors.Tensor
 	imgT = timage.ToTensor(shapes.F32).MaxValue(255.0).Single(img)
 	fmt.Printf("\tImage shape=%s\n", imgT.Shape())
 
@@ -51,7 +50,7 @@ func TestBuildGraph(t *testing.T) {
 	prediction := predictionT.Value().([][]float32)[0] // The last [0] takes the first element of the batch of 1.
 
 	// Compare with the expected result:
-	wantT, err := tensor.Load("gomlx_gopher_classification_output.bin")
+	wantT, err := tensors.Load("gomlx_gopher_classification_output.bin")
 	require.NoError(t, err)
 	want := wantT.Value().([][]float32)[0] // The last [0] takes the first element of the batch of 1.
 

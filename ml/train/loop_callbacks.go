@@ -2,7 +2,6 @@ package train // nTimes is used to implement NTimesDuringLoop.
 
 import (
 	"fmt"
-	"github.com/gomlx/gomlx/types/tensor"
 	"math"
 	"time"
 )
@@ -12,7 +11,7 @@ type nTimes struct {
 	fn       OnStepFn
 }
 
-func (nT *nTimes) onStep(loop *Loop, metrics []tensor.Tensor) error {
+func (nT *nTimes) onStep(loop *Loop, metrics []tensors.Tensor) error {
 	stepsDone := (loop.LoopStep - loop.StartStep) + 1 // Current LoopStep just finished.
 	if loop.EndStep < 0 {
 		// End not known, run steps in powers of 2, starting at 128.
@@ -32,7 +31,7 @@ func (nT *nTimes) onStep(loop *Loop, metrics []tensor.Tensor) error {
 	return nT.fn(loop, metrics)
 }
 
-func (nT *nTimes) onEnd(loop *Loop, metrics []tensor.Tensor) error {
+func (nT *nTimes) onEnd(loop *Loop, metrics []tensors.Tensor) error {
 	return nil
 }
 
@@ -58,7 +57,7 @@ type everyNSteps struct {
 	fn       OnStepFn
 }
 
-func (eN *everyNSteps) onStep(loop *Loop, metrics []tensor.Tensor) error {
+func (eN *everyNSteps) onStep(loop *Loop, metrics []tensors.Tensor) error {
 	eN.count++
 	if eN.count%eN.n != 0 {
 		return nil
@@ -82,7 +81,7 @@ type periodicCallback struct {
 	fn                 OnStepFn
 }
 
-func (p *periodicCallback) onStep(loop *Loop, metrics []tensor.Tensor) error {
+func (p *periodicCallback) onStep(loop *Loop, metrics []tensors.Tensor) error {
 	if !p.started {
 		// Start the clock.
 		p.started = true
@@ -114,7 +113,7 @@ func PeriodicCallback(loop *Loop, period time.Duration, callOnEnd bool, name str
 	fullName := fmt.Sprintf("PeriodicCallback(%s): %s", period, name)
 	loop.OnStep(fullName, priority, p.onStep)
 	if callOnEnd {
-		loop.OnEnd(fullName, priority, func(loop *Loop, metrics []tensor.Tensor) error { return p.fn(loop, metrics) })
+		loop.OnEnd(fullName, priority, func(loop *Loop, metrics []tensors.Tensor) error { return p.fn(loop, metrics) })
 	}
 }
 
@@ -136,7 +135,7 @@ func ExponentialCallback(loop *Loop, startStep int, exponentialFactor float64, c
 	fullName := fmt.Sprintf("ExponentialCallback(%d, %f): %s", startStep, exponentialFactor, name)
 	loop.OnStep(fullName, priority, e.onStep)
 	if callOnEnd {
-		loop.OnEnd(fullName, priority, func(loop *Loop, metrics []tensor.Tensor) error { return e.fn(loop, metrics) })
+		loop.OnEnd(fullName, priority, func(loop *Loop, metrics []tensors.Tensor) error { return e.fn(loop, metrics) })
 	}
 
 }
@@ -159,7 +158,7 @@ func (e *exponentialCallback) findNextStepToCall(currentStep int) {
 	}
 }
 
-func (e *exponentialCallback) onStep(loop *Loop, metrics []tensor.Tensor) error {
+func (e *exponentialCallback) onStep(loop *Loop, metrics []tensors.Tensor) error {
 	if e.nextStepToCall == 0 {
 		e.findNextStepToCall(loop.StartStep)
 	}

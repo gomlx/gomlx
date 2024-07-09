@@ -6,7 +6,6 @@ import (
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/slices"
-	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/pkg/errors"
 )
 
@@ -57,7 +56,7 @@ func (mapDS *mapGraphFnDataset) Name() string {
 }
 
 // Yield implements train.Dataset.
-func (mapDS *mapGraphFnDataset) Yield() (spec any, inputs []tensor.Tensor, labels []tensor.Tensor, err error) {
+func (mapDS *mapGraphFnDataset) Yield() (spec any, inputs []tensors.Tensor, labels []tensors.Tensor, err error) {
 	spec, inputs, labels, err = mapDS.ds.Yield()
 	if err != nil {
 		return
@@ -87,7 +86,7 @@ func (mapDS *mapGraphFnDataset) Yield() (spec any, inputs []tensor.Tensor, label
 	err = exceptions.TryCatch[error](func() {
 		inputsAndLabels = mapDS.mapGraphFnExec.Call(
 			// We have to map inputsAndLabels to an `[]any` slice.
-			slices.Map(inputsAndLabels, func(e tensor.Tensor) any { return e })...)
+			slices.Map(inputsAndLabels, func(e tensors.Tensor) any { return e })...)
 	})
 	if err != nil {
 		err = errors.WithMessagef(err, "while executing MapGraphFn provided for data.MapWithGraphFn()")
@@ -104,7 +103,7 @@ func (mapDS *mapGraphFnDataset) Yield() (spec any, inputs []tensor.Tensor, label
 }
 
 // MapExampleFn if normal Go function that applies a transformation to the inputs/labels of a dataset.
-type MapExampleFn func(inputs, labels []tensor.Tensor) (mappedInputs, mappedLabels []tensor.Tensor)
+type MapExampleFn func(inputs, labels []tensors.Tensor) (mappedInputs, mappedLabels []tensors.Tensor)
 
 // mapDataset implements a `train.Dataset` that maps a function executed on the host to a wrapped dataset.
 type mapDataset struct {
@@ -129,7 +128,7 @@ func Map(ds train.Dataset, mapFn MapExampleFn) train.Dataset {
 func (ds *mapDataset) Name() string { return ds.ds.Name() }
 
 // Yield implements train.Dataset.
-func (ds *mapDataset) Yield() (spec any, inputs []tensor.Tensor, labels []tensor.Tensor, err error) {
+func (ds *mapDataset) Yield() (spec any, inputs []tensors.Tensor, labels []tensors.Tensor, err error) {
 	spec, inputs, labels, err = ds.ds.Yield()
 	if err != nil {
 		return

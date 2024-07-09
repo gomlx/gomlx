@@ -25,7 +25,6 @@ import (
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
-	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/stretchr/testify/require"
 	"gonum.org/v1/plot/plotter"
 	"gonum.org/v1/plot/vg"
@@ -54,7 +53,7 @@ func TestDense(t *testing.T) {
 	manager := graphtest.BuildTestManager()
 	ctx := context.NewContext(manager).WithInitializer(IotaP1Initializer)
 	g := manager.NewGraph("TestDense")
-	input := tensor.FromValue([][]float32{{1, 2}, {10, 20}, {100, 200}})
+	input := tensors.FromValue([][]float32{{1, 2}, {10, 20}, {100, 200}})
 	fmt.Printf("\tinput=%v\n", input)
 
 	inputNode := g.Parameter("input", input.Shape())
@@ -113,7 +112,7 @@ func testSimpleFunc(t *testing.T, name string, input any,
 	manager := graphtest.BuildTestManager()
 	ctx := context.NewContext(manager).WithInitializer(IotaP1Initializer)
 	exec := context.NewExec(manager, ctx, fn)
-	var outputs []tensor.Tensor
+	var outputs []tensors.Tensor
 	require.NotPanicsf(t, func() { outputs = exec.Call(input) }, "%s: failed to exec graph", name)
 	fmt.Printf("\t%s(%v) = %s\n", name, input, outputs[0].Local().GoStr())
 	require.Truef(t, slices.SlicesInDelta(outputs[0].Local().Value(), want, slices.Epsilon),
@@ -125,7 +124,7 @@ func testSimpleFuncMany(t *testing.T, name string, inputs []any,
 	manager := graphtest.BuildTestManager()
 	ctx := context.NewContext(manager).WithInitializer(IotaP1Initializer)
 	exec := context.NewExec(manager, ctx, fn)
-	var outputs []tensor.Tensor
+	var outputs []tensors.Tensor
 	require.NotPanicsf(t, func() { outputs = exec.Call(inputs...) }, "%s: failed to exec graph", name)
 	parts := make([]string, len(inputs))
 	for ii, input := range inputs {
@@ -210,7 +209,7 @@ func TestPieceWiseLinearCalibration(t *testing.T) {
 		if *flagPlot {
 			// Plot calibration of a point x.
 			calibration := func(x float64) float64 {
-				params[input] = tensor.FromValue(float32(x))
+				params[input] = tensors.FromValue(float32(x))
 				tuple := g.Run(params)
 				result := tuple.SplitTuple()[1].Local()
 				return float64(result.Value().(float32))

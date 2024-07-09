@@ -19,8 +19,6 @@ package context
 import (
 	"fmt"
 	"github.com/gomlx/gomlx/graph"
-	. "github.com/gomlx/gomlx/types/exceptions"
-	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/pkg/errors"
 	"log"
 	"reflect"
@@ -352,7 +350,7 @@ func (e *Exec) Finalize() {
 
 // setSideParams is used by computation.Exec.SetSideParamsHook to set up
 // the variable values as parameters just before graph execution.
-func (e *Exec) setSideParams(graph *Graph, tensors []*tensor.Device) {
+func (e *Exec) setSideParams(graph *Graph, tensors []*tensors.Device) {
 	// Initialize variables if needed.
 	if e.context.NeedsInitialization() {
 		e.context.InitializeVariables()
@@ -454,7 +452,7 @@ func (e *Exec) SetContext(context *Context) *Exec {
 // It returns the outputs in a slice, even if there is only one output.
 //
 // It panics with an informative error if something goes wrong.
-func (e *Exec) Call(args ...any) []tensor.Tensor {
+func (e *Exec) Call(args ...any) []tensors.Tensor {
 	outputs, _ := e.CallWithGraph(args...)
 	return outputs
 }
@@ -468,7 +466,7 @@ func (e *Exec) Call(args ...any) []tensor.Tensor {
 // to execute the computation.
 //
 // It panics with an informative error if something goes wrong.
-func (e *Exec) CallWithGraph(args ...any) (outputs []tensor.Tensor, g *Graph) {
+func (e *Exec) CallWithGraph(args ...any) (outputs []tensors.Tensor, g *Graph) {
 	outputs, g = e.exec.CallWithGraph(args...)
 	if len(outputs) == 0 {
 		Panicf("No outputs from ModelFn function for %q", e.Name())

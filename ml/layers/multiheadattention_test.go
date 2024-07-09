@@ -29,7 +29,6 @@ import (
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
-	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"io"
@@ -139,7 +138,7 @@ func (ds *attentionTestDataset) Reset() {
 	ds.count = 0
 }
 
-func (ds *attentionTestDataset) Yield() (spec any, inputs []tensor.Tensor, labels []tensor.Tensor, err error) {
+func (ds *attentionTestDataset) Yield() (spec any, inputs []tensors.Tensor, labels []tensors.Tensor, err error) {
 	if !ds.infinite && ds.count+ds.batchSize > ds.maxCount {
 		return nil, nil, nil, io.EOF
 	}
@@ -158,8 +157,8 @@ func (ds *attentionTestDataset) Yield() (spec any, inputs []tensor.Tensor, label
 			}
 		}
 	}
-	inputs = []tensor.Tensor{tensor.FromValue(batch)}
-	labels = []tensor.Tensor{tensor.FromValue(batchLabel)}
+	inputs = []tensors.Tensor{tensors.FromValue(batch)}
+	labels = []tensors.Tensor{tensors.FromValue(batchLabel)}
 	//fmt.Printf("inputs: %v\n", batch)
 	//fmt.Printf("labels: %v\n", labels)
 	return
@@ -206,7 +205,7 @@ func TestMultiHeadAttentionTraining(t *testing.T) {
 		evalDS := &attentionTestDataset{}
 		*evalDS = *trainDS
 		evalDS.batchSize = 1
-		var results []tensor.Tensor
+		var results []tensors.Tensor
 
 		modelFn := buildSyntheticAttentionModelFn(false)
 		inferenceFn := func(ctx *context.Context, inputs []*Node) *Node {

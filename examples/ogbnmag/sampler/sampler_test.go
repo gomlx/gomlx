@@ -5,7 +5,6 @@ import (
 	mldata "github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/constraints"
@@ -17,7 +16,7 @@ func createTestSampler(t *testing.T) *Sampler {
 	s := New()
 	s.AddNodeType("papers", 5)
 	s.AddNodeType("authors", 10)
-	authorWritesPapers := tensor.FromValue([][]int32{
+	authorWritesPapers := tensors.FromValue([][]int32{
 		{0, 2}, // Author 0 writes paper 2.
 		{3, 2},
 		{4, 2},
@@ -132,11 +131,11 @@ func TestDataset(t *testing.T) {
 	strategy := createTestStrategy(t, s)
 
 	// checkInputsFn make automatic checks of expected dimensions and errors.
-	checkInputsFn := func(t *testing.T, spec any, inputs, labels []tensor.Tensor, err error) map[string]*ValueMask[tensor.Tensor] {
+	checkInputsFn := func(t *testing.T, spec any, inputs, labels []tensors.Tensor, err error) map[string]*ValueMask[tensors.Tensor] {
 		require.NoError(t, err)
 		require.Empty(t, labels)
 		require.Equal(t, strategy, spec.(*Strategy))
-		graphSample, remaining := MapInputsToStates[tensor.Tensor](strategy, inputs)
+		graphSample, remaining := MapInputsToStates[tensors.Tensor](strategy, inputs)
 		require.Empty(t, remaining)
 		if strategy.KeepDegrees == true {
 			seeds := graphSample["Seeds"].Value.Local().FlatCopy().([]int32)
@@ -223,7 +222,7 @@ func TestSamplingRandomness(t *testing.T) {
 			authorWritesPapers = append(authorWritesPapers, []int32{author, paper})
 		}
 	}
-	authorWritesPapersT := tensor.FromValue(authorWritesPapers)
+	authorWritesPapersT := tensors.FromValue(authorWritesPapers)
 	require.NoError(t, authorWritesPapersT.Shape().Check(shapes.Int32, 2+3+4, 2))
 	s.AddEdgeType("written_by", "authors", "papers", authorWritesPapersT, true)
 
@@ -253,7 +252,7 @@ func TestSamplingRandomness(t *testing.T) {
 		for _ = range numSamples {
 			_, inputs, _, err := parallelDS.Yield()
 			require.NoErrorf(t, err, "while testing dataset %q", dsNames[dsIdx])
-			graphSample, remaining := MapInputsToStates[tensor.Tensor](strategy, inputs)
+			graphSample, remaining := MapInputsToStates[tensors.Tensor](strategy, inputs)
 			require.Empty(t, remaining)
 
 			require.NoErrorf(t, graphSample["seeds"].Value.Shape().CheckDims(1), "while testing dataset %q", dsNames[dsIdx])

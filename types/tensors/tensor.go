@@ -14,7 +14,7 @@
  *	limitations under the License.
  */
 
-// Package tensor implements a `Tensor`, a representation of a multi-dimensional array.
+// Package tensors implements a `Tensor`, a representation of a multi-dimensional array.
 //
 // Tensors are multidimensional arrays (from scalar with 0 dimensions, to arbitrarily large dimensions), defined
 // by their shape (a data type and its axes dimensions) and their actual content. As a special case, a Tensor can
@@ -49,7 +49,7 @@
 // while training weights of an ML model, one generally does not need to transfer those weights to local -- just at
 // the end of training to save the model weights. But the Tensor will keep the (local/device) copies cached,
 // so they can be used multiple times, and transfer only occurs once.
-package tensor
+package tensors
 
 import (
 	"github.com/gomlx/gomlx/types/shapes"

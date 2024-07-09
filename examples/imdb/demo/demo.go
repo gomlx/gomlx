@@ -34,7 +34,6 @@ import (
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
 	"log"
 	"os"
 	"time"
@@ -189,7 +188,7 @@ func trainModel() {
 		if checkpoint != nil {
 			period := time.Minute * 1
 			train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
-				func(loop *train.Loop, metrics []tensor.Tensor) error {
+				func(loop *train.Loop, metrics []tensors.Tensor) error {
 					fmt.Printf("\n[saving checkpoint@%d] [median train step (ms): %d]\n", loop.LoopStep, loop.MedianTrainStepDuration().Milliseconds())
 					return checkpoint.Save()
 				})

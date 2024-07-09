@@ -8,7 +8,6 @@ import (
 	mldata "github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types"
-	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/stretchr/testify/require"
 	"io"
 	"testing"
@@ -36,7 +35,7 @@ func TestDatasets(t *testing.T) {
 	for _, testCase := range []struct {
 		Name  string
 		DS    train.Dataset
-		Seeds tensor.Tensor
+		Seeds tensors.Tensor
 	}{
 		{"valid", validDS, ValidSplit},
 		{"test", testDS, TestSplit},
@@ -62,7 +61,7 @@ func TestDatasets(t *testing.T) {
 			}
 			require.NoError(t, err)
 			strategy := spec.(*sampler.Strategy)
-			graphSample, remaining := sampler.MapInputsToStates[tensor.Tensor](strategy, inputs)
+			graphSample, remaining := sampler.MapInputsToStates[tensors.Tensor](strategy, inputs)
 			require.Empty(t, remaining)
 			seeds := graphSample["seeds"].Value.Local().FlatCopy().([]int32)
 			mask := graphSample["seeds"].Mask.Local().FlatCopy().([]bool)

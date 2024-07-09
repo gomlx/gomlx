@@ -32,7 +32,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/stretchr/testify/require"
 )
 
@@ -46,14 +45,14 @@ var (
 
 func (ds *testDS) Name() string { return "testDS" }
 func (ds *testDS) Reset()       { ds.count.Store(0) }
-func (ds *testDS) Yield() (spec any, inputs []tensor.Tensor, labels []tensor.Tensor, err error) {
+func (ds *testDS) Yield() (spec any, inputs []tensors.Tensor, labels []tensors.Tensor, err error) {
 	value := ds.count.Add(1)
 	if value > testDSMaxValue {
 		err = io.EOF
 		return
 	}
-	inputs = []tensor.Tensor{tensor.FromAnyValue(int(value))} // One nil element.
-	return                                                    // As if a batch was returned.
+	inputs = []tensors.Tensor{tensors.FromAnyValue(int(value))} // One nil element.
+	return                                                      // As if a batch was returned.
 }
 
 // TestNewParallelDataset with and without buffer.
@@ -125,7 +124,7 @@ type testSlicesDS struct {
 
 func (ds *testSlicesDS) Name() string { return "testSlicesDS" }
 func (ds *testSlicesDS) Reset()       { ds.next = 0 }
-func (ds *testSlicesDS) Yield() (spec any, inputs []tensor.Tensor, labels []tensor.Tensor, err error) {
+func (ds *testSlicesDS) Yield() (spec any, inputs []tensors.Tensor, labels []tensors.Tensor, err error) {
 	if ds.next >= ds.numExamples {
 		err = io.EOF
 		return
@@ -137,8 +136,8 @@ func (ds *testSlicesDS) Yield() (spec any, inputs []tensor.Tensor, labels []tens
 		input[ii] = ds.next*len(input) + ii
 		label[ii] = -input[ii]
 	}
-	inputs = []tensor.Tensor{tensor.FromValue(input)}
-	labels = []tensor.Tensor{tensor.FromValue(label)}
+	inputs = []tensors.Tensor{tensors.FromValue(input)}
+	labels = []tensors.Tensor{tensors.FromValue(label)}
 	ds.next += 1
 	return
 }
@@ -316,7 +315,7 @@ func TestNormalization(t *testing.T) {
 		wantMean[featureIdx] = baseMean + float64(featureIdx)
 		wantStddev[featureIdx] = baseStddev + float64(featureIdx)
 	}
-	input := tensor.FromShape(shapes.Make(shapes.F64, numExamples, midDim, numFeatures))
+	input := tensors.FromShape(shapes.Make(shapes.F64, numExamples, midDim, numFeatures))
 	ref := input.AcquireData()
 	data := ref.Flat().([]float64)
 	for ii := range data {

@@ -22,7 +22,6 @@ import (
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
-	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"math"
@@ -84,7 +83,7 @@ func TestConstant(t *testing.T) {
 	}
 }
 
-func compileRunTransfer(t *testing.T, g *Graph, msg string) *tensor.Local {
+func compileRunTransfer(t *testing.T, g *Graph, msg string) *tensors.Local {
 	g.Compile()
 	device := g.Run(nil)
 	local := device.Local()
@@ -189,7 +188,7 @@ func testTupleParameter(t *testing.T, manager *Manager) {
 	// Tests for various parameters.
 	for xV := float64(0); xV < 20; xV += 1 {
 		for yV := float64(0); yV < 20; yV += 1 {
-			xyV := tensor.MakeLocalTupleAny(xV, yV)
+			xyV := tensors.MakeLocalTupleAny(xV, yV)
 			device := g.Run(ParamsMap{xy: xyV})
 			local := device.Local()
 			got := local.Value().(float64)

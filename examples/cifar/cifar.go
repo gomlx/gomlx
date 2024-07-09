@@ -22,9 +22,7 @@ import (
 	"fmt"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/data"
-	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/pkg/errors"
 	"image"
 	"io"
@@ -96,7 +94,7 @@ var (
 const C10ExamplesPerFile = 10000
 const imageSizeBytes = Height * Width * Depth
 
-func convertBytesToTensor[T shapes.GoFloat](image []byte, imagesT *tensor.Local, exampleNum int) error {
+func convertBytesToTensor[T shapes.GoFloat](image []byte, imagesT *tensors.Local, exampleNum int) error {
 	var t T
 	if shapes.FromType(reflect.TypeOf(t)) != imagesT.DType() {
 		return errors.Errorf("trying to convert to dtype %s from go type %t", imagesT.DType(), any(t))
@@ -126,8 +124,8 @@ func LoadCifar10(manager *Manager, baseDir string, dtype dtypes.DType) (partitio
 	baseDir = data.ReplaceTildeInDir(baseDir)
 
 	// Allocate the tensor.
-	images := tensor.FromShape(shapes.Make(dtype, NumExamples, Height, Width, Depth))
-	labels := tensor.FromShape(shapes.Make(shapes.I64, NumExamples, 1))
+	images := tensors.FromShape(shapes.Make(dtype, NumExamples, Height, Width, Depth))
+	labels := tensors.FromShape(shapes.Make(shapes.I64, NumExamples, 1))
 	labelsRef := labels.AcquireData()
 	defer labelsRef.Release()
 	labelsData := labelsRef.Flat().([]int64)
@@ -180,8 +178,8 @@ func LoadCifar100(manager *Manager, baseDir string, dtype dtypes.DType) (partiti
 	baseDir = data.ReplaceTildeInDir(baseDir)
 
 	// Allocate the tensor.
-	images := tensor.FromShape(shapes.Make(dtype, NumExamples, Height, Width, Depth))
-	labels := tensor.FromShape(shapes.Make(shapes.I64, NumExamples, 1))
+	images := tensors.FromShape(shapes.Make(dtype, NumExamples, Height, Width, Depth))
+	labels := tensors.FromShape(shapes.Make(shapes.I64, NumExamples, 1))
 	labelsRef := labels.AcquireData()
 	defer labelsRef.Release()
 	labelsData := labelsRef.Flat().([]int64)
@@ -225,7 +223,7 @@ func LoadCifar100(manager *Manager, baseDir string, dtype dtypes.DType) (partiti
 	return partitionImagesAndLabels(manager, images, labels)
 }
 
-func ConvertToGoImage(images *tensor.Local, exampleNum int) *image.NRGBA {
+func ConvertToGoImage(images *tensors.Local, exampleNum int) *image.NRGBA {
 	img := image.NewNRGBA(image.Rect(0, 0, Width, Height))
 	ref := images.AcquireData()
 	defer ref.Release()
@@ -247,7 +245,7 @@ func ConvertToGoImage(images *tensor.Local, exampleNum int) *image.NRGBA {
 }
 
 // partitionImagesAndLabels into train and test partitions.
-func partitionImagesAndLabels(manager *Manager, images, labels tensor.Tensor) (partitioned PartitionedImagesAndLabels) {
+func partitionImagesAndLabels(manager *Manager, images, labels tensors.Tensor) (partitioned PartitionedImagesAndLabels) {
 	exec := NewExec(manager, func(images, labels *Node) []*Node {
 		imagesTrain := Slice(images, AxisRange(0, NumTrainExamples))
 		labelsTrain := Slice(labels, AxisRange(0, NumTrainExamples))
@@ -280,7 +278,7 @@ const (
 )
 
 type ImagesAndLabels struct {
-	images, labels tensor.Tensor
+	images, labels tensors.Tensor
 }
 
 // PartitionedImagesAndLabels holds for each partition (Train, Test), one set of Images and Labels.

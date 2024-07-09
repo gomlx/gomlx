@@ -15,7 +15,6 @@ import (
 	mldata "github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/pkg/errors"
 	"os"
 	"path"
@@ -42,18 +41,18 @@ var (
 	PaperEmbeddingsSize = 128
 
 	// PapersEmbeddings contains the embeddings, shaped `(Float32)[NumPapers, PaperEmbeddingsSize]`
-	PapersEmbeddings tensor.Tensor
+	PapersEmbeddings tensors.Tensor
 
 	// PapersYears for each paper, where year starts in 2000 (so 10 corresponds to 2010). Shaped `(Int16)[NumPapers, 1]`.
-	PapersYears tensor.Tensor
+	PapersYears tensors.Tensor
 
 	// PapersLabels for each paper, values from 0 to 348 (so 349 in total). Shaped `(Int16)[NumPapers, 1]`.
-	PapersLabels tensor.Tensor
+	PapersLabels tensors.Tensor
 
 	// TrainSplit, ValidSplit, TestSplit  splits of the data.
 	// These are indices to papers, values from `[0, NumPapers-1]`. Shaped `(Int32)[n, 1]
 	// They have 629571, 41939 and 64879 elements each.
-	TrainSplit, ValidSplit, TestSplit tensor.Tensor
+	TrainSplit, ValidSplit, TestSplit tensors.Tensor
 
 	// Various relations: their shape is always `(Int32)[num_edges, 2]`:
 
@@ -64,7 +63,7 @@ var (
 	//
 	// Most authors are affiliated to 1 institution only, and an exponentially decreasing number affiliations up
 	// to one author with 47 affiliations. ~300K authors with no affiliation.
-	EdgesAffiliatedWith tensor.Tensor
+	EdgesAffiliatedWith tensors.Tensor
 
 	// EdgesWrites `(Int32)[7145660, 2]`, pairs with (author_id, paper_id).
 	//
@@ -75,7 +74,7 @@ var (
 	//
 	// Papers are written on average by 3 authors (140k papers), with a bell-curve distribution with a long
 	// tail, with a dozen of papers written by thousands of authors (5050 authors in one case).
-	EdgesWrites tensor.Tensor
+	EdgesWrites tensors.Tensor
 
 	// EdgesCites `(Int32)[5416271, 2]`, pairs with (paper_id, paper_id).
 	//
@@ -84,7 +83,7 @@ var (
 	//
 	// ~100K papers are never cited, 155K are cited once, and again a long exponential decreasing tail, in the extreme
 	// one paper is cited by 4744 other papers.
-	EdgesCites tensor.Tensor
+	EdgesCites tensors.Tensor
 
 	// EdgesHasTopic `(Int32)[7505078, 2]`, pairs with (paper_id, topic_id).
 	//
@@ -94,14 +93,14 @@ var (
 	// All "fields of study" are associated to at least one topic. ~17K (out of ~60K) have only one paper associated.
 	// ~50%+ topics have < 10 papers associated. Some ~30% have < 1000 papers associated. A handful have 10s of
 	// thousands papers associated, and there is one topic that is associated to everyone.
-	EdgesHasTopic tensor.Tensor
+	EdgesHasTopic tensors.Tensor
 
 	// Counts to the various edge types.
 	// These are call shaped `(Int32)[NumElements, 1]` for each of their entities.
-	CountAuthorsAffiliations, CountInstitutionsAffiliations tensor.Tensor
-	CountPapersCites, CountPapersIsCited                    tensor.Tensor
-	CountPapersFieldsOfStudy, CountFieldsOfStudyPapers      tensor.Tensor
-	CountAuthorsPapers, CountPapersAuthors                  tensor.Tensor
+	CountAuthorsAffiliations, CountInstitutionsAffiliations tensors.Tensor
+	CountPapersCites, CountPapersIsCited                    tensors.Tensor
+	CountPapersFieldsOfStudy, CountFieldsOfStudyPapers      tensors.Tensor
+	CountAuthorsPapers, CountPapersAuthors                  tensors.Tensor
 )
 
 // Download and prepares the tensors with the data into the `baseDir`.
@@ -198,7 +197,7 @@ var (
 	splitsCSVFiles = []string{"train.csv.gz", "test.csv.gz", "valid.csv.gz"}
 	splitsNumRows  = []int{629571, 41939, 64879} // Total = NumPapers
 	splitsFiles    = []string{"train", "test", "validation"}
-	splitsStore    = []*tensor.Tensor{&TrainSplit, &TestSplit, &ValidSplit}
+	splitsStore    = []*tensors.Tensor{&TrainSplit, &TestSplit, &ValidSplit}
 )
 
 func parseSplitsFromCSV(downloadDir string) error {
@@ -219,7 +218,7 @@ var (
 		"author___writes___paper", "paper___cites___paper", "paper___has_topic___field_of_study"}
 	edgesNumRows = []int{1043998, 7145660, 5416271, 7505078}
 	edgesFiles   = []string{"affiliated_with", "writes", "cites", "has_topic"}
-	edgesStore   = []*tensor.Tensor{&EdgesAffiliatedWith, &EdgesWrites, &EdgesCites, &EdgesHasTopic}
+	edgesStore   = []*tensors.Tensor{&EdgesAffiliatedWith, &EdgesWrites, &EdgesCites, &EdgesHasTopic}
 )
 
 func parseEdgesFromCSV(downloadDir string) error {
@@ -261,11 +260,11 @@ func parseInt32(str string) (int32, error) {
 }
 
 // parseNumbersFromCSV returns the numbers in a CSV file as a tensor.
-func parseNumbersFromCSV[E shapes.NumberNotComplex](inputFilePath, outputFilePath string, numRows, numCols int, parseNumberFn func(string) (E, error)) (*tensor.Local, error) {
-	var tensorOut *tensor.Local
+func parseNumbersFromCSV[E shapes.NumberNotComplex](inputFilePath, outputFilePath string, numRows, numCols int, parseNumberFn func(string) (E, error)) (*tensors.Local, error) {
+	var tensorOut *tensors.Local
 	var err error
 	if outputFilePath != "" && mldata.FileExists(outputFilePath) {
-		tensorOut, err = tensor.Load(outputFilePath)
+		tensorOut, err = tensors.Load(outputFilePath)
 		if err == nil {
 			// Read from pre-saved tensor.
 			return tensorOut, nil
@@ -273,7 +272,7 @@ func parseNumbersFromCSV[E shapes.NumberNotComplex](inputFilePath, outputFilePat
 		return nil, errors.WithMessagef(err, "failed to load output file %q, you many need to remove so it can be regenerated", outputFilePath)
 	}
 	fmt.Printf("Parsing %d rows from %q\n", numRows, inputFilePath)
-	tensorOut = tensor.FromShape(shapes.Make(shapes.FromGoType[E](), numRows, numCols))
+	tensorOut = tensors.FromShape(shapes.Make(shapes.FromGoType[E](), numRows, numCols))
 	dataRef := tensorOut.Local().AcquireData()
 	defer dataRef.Release()
 	rawData := dataRef.Flat().([]E)
@@ -324,7 +323,7 @@ var (
 )
 
 func allEdgesCount(downloadDir string) error {
-	var store = []*tensor.Tensor{
+	var store = []*tensors.Tensor{
 		&CountAuthorsAffiliations, &CountInstitutionsAffiliations,
 		&CountPapersCites, &CountPapersIsCited,
 		&CountPapersFieldsOfStudy, &CountFieldsOfStudyPapers,
@@ -337,13 +336,13 @@ func allEdgesCount(downloadDir string) error {
 		NumAuthors, NumPapers,
 	}
 	idxTensor := 0
-	for idxInput, input := range []tensor.Tensor{EdgesAffiliatedWith, EdgesCites, EdgesHasTopic, EdgesWrites} {
+	for idxInput, input := range []tensors.Tensor{EdgesAffiliatedWith, EdgesCites, EdgesHasTopic, EdgesWrites} {
 		for column := 0; column < 2; column++ {
 			outputFilePath := path.Join(downloadDir, countsFileNames[idxTensor]+".tensor")
-			var counts *tensor.Local
+			var counts *tensors.Local
 			var err error
 			if mldata.FileExists(outputFilePath) {
-				counts, err = tensor.Load(outputFilePath)
+				counts, err = tensors.Load(outputFilePath)
 			} else {
 				fmt.Printf("> Counting elements for edges %s[column %d]: %d entries\n", edgesFiles[idxInput], column, input.Shape().Dimensions[0])
 				counts, err = edgesCount(input.Local(), column, numElements[idxTensor])
@@ -361,7 +360,7 @@ func allEdgesCount(downloadDir string) error {
 	return nil
 }
 
-func edgesCount(input *tensor.Local, column, numElements int) (output *tensor.Local, err error) {
+func edgesCount(input *tensors.Local, column, numElements int) (output *tensors.Local, err error) {
 	if input.DType() != shapes.Int32 || input.Rank() != 2 || input.Shape().Dimensions[1] != 2 {
 		return nil, errors.Errorf("input shape is invalid, expected (Int32)[?, 2], got %s", input.Shape())
 	}
@@ -376,7 +375,7 @@ func edgesCount(input *tensor.Local, column, numElements int) (output *tensor.Lo
 	defer inputRef.Release()
 	inputData := inputRef.Flat().([]int32)
 
-	output = tensor.FromScalarAndDimensions(int32(0), numElements, 1)
+	output = tensors.FromScalarAndDimensions(int32(0), numElements, 1)
 	outputRef := output.AcquireData()
 	outputData := outputRef.Flat().([]int32)
 
@@ -397,7 +396,7 @@ var (
 	// We keep a reference to the values because the actual values change during the call to `Download()`
 	//
 	// They will be stored under the "/ogbnmag" scope.
-	OgbnMagVariables = map[string]*tensor.Tensor{
+	OgbnMagVariables = map[string]*tensors.Tensor{
 		"PapersEmbeddings":              &PapersEmbeddings,
 		"PapersLabels":                  &PapersLabels,
 		"EdgesAffiliatedWith":           &EdgesAffiliatedWith,
@@ -464,7 +463,7 @@ func PapersSeedDatasets(manager *Manager) (trainDS, validDS, testDS *mldata.InMe
 		// Data is not loaded yet.
 		err = errors.New("data is not loaded yet, please call ogbnmag.Download() first")
 	}
-	var trainLabels, validLabels, testLabels tensor.Tensor
+	var trainLabels, validLabels, testLabels tensors.Tensor
 	err = exceptions.TryCatch[error](func() {
 		getLabels := NewExec(manager, getLabelsGraph)
 		trainLabels = getLabels.Call(TrainSplit, PapersLabels)[0]

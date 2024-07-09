@@ -14,7 +14,7 @@
  *	limitations under the License.
  */
 
-package tensor
+package tensors
 
 import (
 	"bytes"

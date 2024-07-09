@@ -84,9 +84,7 @@ package graph
 
 import (
 	"fmt"
-	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/gomlx/gomlx/xla"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
@@ -328,7 +326,7 @@ func (g *Graph) AOTCompile() []byte {
 //
 // The params can use Go values, Local tensors or Device tensors. Go values and Local tensors will be transferred to
 // Device tensors (located in the Manager's accelerator memory) before the graph is executed.
-func (g *Graph) Run(params ParamsMap) *tensor.Device {
+func (g *Graph) Run(params ParamsMap) *tensors.Device {
 	g.AssertValidAndCompiled()
 	numParams := g.NumParameters()
 	if len(params) != numParams {
@@ -342,12 +340,12 @@ func (g *Graph) Run(params ParamsMap) *tensor.Device {
 	if err != nil {
 		panic(errors.WithMessagef(err, "Graph(%q).Run() failed to run JIT compiled", g.name))
 	}
-	return tensor.InternalNewDevice(result)
+	return tensors.InternalNewDevice(result)
 }
 
 // RunWithTensors is a slightly faster execution path for the graph, but inputs
 // must be provided already in Device tensors and in order.
-func (g *Graph) RunWithTensors(params []*tensor.Device) *tensor.Device {
+func (g *Graph) RunWithTensors(params []*tensors.Device) *tensors.Device {
 	g.AssertValidAndCompiled()
 	deviceParams := make([]*xla.OnDeviceBuffer, 0, len(params))
 	for _, param := range params {
@@ -357,7 +355,7 @@ func (g *Graph) RunWithTensors(params []*tensor.Device) *tensor.Device {
 	if err != nil {
 		panic(errors.WithMessagef(err, "Graph(%q).RunWithTensors() failed to run JIT compiled", g.name))
 	}
-	return tensor.InternalNewDevice(result)
+	return tensors.InternalNewDevice(result)
 }
 
 // deviceDataForParam converts each parameter to a Device tensor, and then returns their OnDeviceBuffer reference.
@@ -381,10 +379,10 @@ func (g *Graph) deviceDataForParam(params ParamsMap) ([]*xla.OnDeviceBuffer, err
 }
 
 // anyToDeviceTensor converts generic values to a tensor.Device on the requested device number.
-func anyToDeviceTensor(manager *Manager, deviceNum int, value any) *tensor.Device {
-	t, ok := value.(tensor.Tensor)
+func anyToDeviceTensor(manager *Manager, deviceNum int, value any) *tensors.Device {
+	t, ok := value.(tensors.Tensor)
 	if !ok {
-		t = tensor.FromAnyValue(value)
+		t = tensors.FromAnyValue(value)
 	}
 	return t.Device(manager, deviceNum)
 }

@@ -21,7 +21,6 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/types/shapes"
 	xslices "github.com/gomlx/gomlx/types/slices"
-	"github.com/gomlx/gomlx/types/tensor"
 	"golang.org/x/exp/rand"
 	"slices"
 	"testing"
@@ -189,7 +188,7 @@ func BenchmarkScatter(b *testing.B) {
 		indices[ii] = int32(rand.Int31n(NumEntries - ConsecutiveScatters))
 	}
 	slices.Sort(indices)
-	indicesT := tensor.FromValue(indices)
+	indicesT := tensors.FromValue(indices)
 	rngStateT := RngStateFromSeed(42)
 
 	for _, sorted := range []bool{true, false} {

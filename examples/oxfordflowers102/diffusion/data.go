@@ -3,7 +3,6 @@ package diffusion
 import (
 	"encoding/gob"
 	. "github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/pkg/errors"
 	"os"
 	"path"
@@ -49,14 +48,14 @@ func CreateInMemoryDatasets() (trainDS, validationDS *data.InMemoryDataset) {
 
 var (
 	// Cached results for NormalizationValues.
-	normalizationMean, normalizationStdDev tensor.Tensor
+	normalizationMean, normalizationStdDev tensors.Tensor
 
 	// NormalizationInfoFile where NormalizationValues results are saved (and loaded from).
 	NormalizationInfoFile = "normalization_data.bin"
 )
 
 // NormalizationValues for the flowers dataset -- only look at the training data.
-func NormalizationValues() (mean, stddev tensor.Tensor) {
+func NormalizationValues() (mean, stddev tensors.Tensor) {
 	Init()
 
 	// Check if values have already been retrieved.
@@ -71,8 +70,8 @@ func NormalizationValues() (mean, stddev tensor.Tensor) {
 	if err == nil {
 		// Load previously generated values.
 		dec := gob.NewDecoder(f)
-		mean = MustNoError(tensor.GobDeserialize(dec))
-		stddev = MustNoError(tensor.GobDeserialize(dec))
+		mean = MustNoError(tensors.GobDeserialize(dec))
+		stddev = MustNoError(tensors.GobDeserialize(dec))
 		_ = f.Close()
 		normalizationMean, normalizationStdDev = mean, stddev
 		return
@@ -143,7 +142,7 @@ func DenormalizeImages(images *Node) *Node {
 
 }
 
-func finalize(tensors []tensor.Tensor) {
+func finalize(tensors []tensors.Tensor) {
 	for _, t := range tensors {
 		t.FinalizeAll()
 	}

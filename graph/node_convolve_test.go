@@ -19,7 +19,6 @@ package graph_test
 import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
 	timage "github.com/gomlx/gomlx/types/tensor/image"
 	"testing"
 )
@@ -225,8 +224,8 @@ func TestGradientConvolve(t *testing.T) {
 			output = Convolve(input, kernel).NoPadding().Strides(2).Done()
 			return output, []*Node{input, kernel}
 		}, []any{
-			tensor.FromScalarAndDimensions(0.0, 2, 8, 7, 3).Value(),
-			tensor.FromScalarAndDimensions(0.0, 1, 1, 3, 6).Value(),
+			tensors.FromScalarAndDimensions(0.0, 2, 8, 7, 3).Value(),
+			tensors.FromScalarAndDimensions(0.0, 1, 1, 3, 6).Value(),
 		})
 
 	testGradients(t, "Gradient 2D Convolve().NoPadding().Dilations(2): shape check",
@@ -236,7 +235,7 @@ func TestGradientConvolve(t *testing.T) {
 			output = Convolve(input, kernel).NoPadding().Dilations(2).Done()
 			return output, []*Node{input, kernel}
 		}, []any{
-			tensor.FromScalarAndDimensions(0.0, 2, 5, 5, 3).Value(),
-			tensor.FromScalarAndDimensions(0.0, 2, 2, 3, 6).Value(),
+			tensors.FromScalarAndDimensions(0.0, 2, 5, 5, 3).Value(),
+			tensors.FromScalarAndDimensions(0.0, 2, 2, 3, 6).Value(),
 		})
 }

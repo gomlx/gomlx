@@ -19,10 +19,8 @@ package graph_test
 import (
 	"fmt"
 	. "github.com/gomlx/gomlx/graph"
-	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
-	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"math"
@@ -63,7 +61,7 @@ func TestExec(t *testing.T) {
 	{
 		a := []float64{0, 0}
 		b := []float32{1, 1}
-		var results []tensor.Tensor
+		var results []tensors.Tensor
 		require.Panicsf(t, func() { results = dist.Call(a, b) },
 			"EuclideanDistance(%v:%v, %v:%v) should have failed, got %+v",
 			reflect.TypeOf(a), a, reflect.TypeOf(b), b, results)
@@ -73,7 +71,7 @@ func TestExec(t *testing.T) {
 	{
 		a := []float32{0, 0, 0}
 		b := []float32{1, 1}
-		var results []tensor.Tensor
+		var results []tensors.Tensor
 		require.Panicsf(t, func() { results = dist.Call(a, b) },
 			"EuclideanDistance(%v:%v, %v:%v) should have failed, got %+v",
 			reflect.TypeOf(a), a, reflect.TypeOf(b), b, results)
@@ -88,7 +86,7 @@ func TestExec(t *testing.T) {
 	{
 		a := []float64{0, 0}
 		b := []float64{1, 1}
-		var results []tensor.Tensor
+		var results []tensors.Tensor
 		err := TryCatch[error](func() { results = dist.Call(a, b) })
 		require.Errorf(t, err, "EuclideanDistance(%v:%v, %v:%v) should have failed, got %+v",
 			reflect.TypeOf(a), a, reflect.TypeOf(b), b, results)
@@ -105,7 +103,7 @@ func TestExec(t *testing.T) {
 	{
 		a := []float32{2, 2}
 		b := []float32{1, 1}
-		var outputs []tensor.Tensor
+		var outputs []tensors.Tensor
 		require.NotPanicsf(t, func() { outputs = addAndSub.Call(a, b) },
 			"%q(%v:%v, %v:%v) failed", addAndSub.Name(), reflect.TypeOf(a), a, reflect.TypeOf(b), b)
 		add, sub := outputs[0].Value(), outputs[1].Value()
@@ -124,8 +122,8 @@ func addScalarTest(x *Node) *Node {
 
 func TestExecWithSideParams(t *testing.T) {
 	manager := buildTestManager()
-	scalar := tensor.FromValue(3.0).Device(manager, manager.DefaultDeviceNum())
-	setSideParams := func(g *Graph, tensors []*tensor.Device) {
+	scalar := tensors.FromValue(3.0).Device(manager, manager.DefaultDeviceNum())
+	setSideParams := func(g *Graph, tensors []*tensors.Device) {
 		node := g.ParameterByName(scalarParamName)
 		tensors[node.ParameterHandle()] = scalar
 	}
@@ -138,7 +136,7 @@ func TestExecWithSideParams(t *testing.T) {
 		t.Fatalf("addScalar(%v, 3): got %v, wanted %v", x, got, want)
 	}
 
-	scalar = tensor.FromValue(10.0).Device(manager, manager.DefaultDeviceNum())
+	scalar = tensors.FromValue(10.0).Device(manager, manager.DefaultDeviceNum())
 	want = []float64{11, 12}
 	got = addScalar.Call(x)
 	if !slices.DeepSliceCmp(want, got[0].Value(), slices.Equal[float64]) {
@@ -202,7 +200,7 @@ func TestExecWithSlices(t *testing.T) {
 		}
 
 		// Test that call with list of tensors also work.
-		gotTuple = addSub.Call([]tensor.Tensor{tensor.FromValue(c), tensor.FromValue(a)})
+		gotTuple = addSub.Call([]tensors.Tensor{tensors.FromValue(c), tensors.FromValue(a)})
 		if !slices.DeepSliceCmp(want0, gotTuple[0].Value(), slices.Equal[float64]) {
 			t.Errorf("addSub(%v, %v)[0]: got %v, wanted %v", c, a, gotTuple[0].Local(), want0)
 		}
@@ -221,8 +219,8 @@ func TestExecWithLogger(t *testing.T) {
 	manager := buildTestManager()
 
 	concat := NewExecAny(manager, concatWithLoggedFirstNodeGraph)
-	var firstNodeValue tensor.Tensor
-	concat.SetNodeLogger(func(_ *Graph, messages []string, values []tensor.Tensor, nodes []NodeId) {
+	var firstNodeValue tensors.Tensor
+	concat.SetNodeLogger(func(_ *Graph, messages []string, values []tensors.Tensor, nodes []NodeId) {
 		if len(messages) != 1 {
 			t.Fatalf("Only one node marked for logging, got %d logged nodes", len(messages))
 		}

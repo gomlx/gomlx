@@ -13,14 +13,13 @@ import (
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
 	"k8s.io/klog/v2"
 	"time"
 )
 
 // LayerWiseEvaluation returns the train, validation and test accuracy of the model, using layer-wise inference.
 func LayerWiseEvaluation(ctx *context.Context, strategy *sampler.Strategy) (train, validation, test float64) {
-	var predictionsT tensor.Tensor
+	var predictionsT tensors.Tensor
 	exec := context.NewExec(ctx.Manager(), ctx.Reuse(), BuildLayerWiseInferenceModel(strategy, true))
 
 	if klog.V(1).Enabled() {
@@ -46,7 +45,7 @@ func LayerWiseEvaluation(ctx *context.Context, strategy *sampler.Strategy) (trai
 
 func layerWiseCalculateAccuracies(predictions []int16, labels []int32) (train, validation, test float64) {
 	splitVars := []*float64{&train, &validation, &test}
-	for splitIdx, splitT := range []tensor.Tensor{TrainSplit, ValidSplit, TestSplit} {
+	for splitIdx, splitT := range []tensors.Tensor{TrainSplit, ValidSplit, TestSplit} {
 		split := splitT.Local().FlatCopy().([]int32)
 		numCorrect := 0
 		for _, paperIdx := range split {

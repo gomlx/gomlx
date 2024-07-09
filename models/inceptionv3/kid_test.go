@@ -5,7 +5,6 @@ import (
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
 	timage "github.com/gomlx/gomlx/types/tensor/image"
 	"github.com/stretchr/testify/require"
 	"image"
@@ -32,7 +31,7 @@ var (
 
 // noisyImages add noise to the batch of images. The noise is simply an increasing
 // value from -127.5 in the top left to 127.5 in the bottom right. It's deterministic.
-func noisyImages(t *testing.T, manager *Manager, batch tensor.Tensor) tensor.Tensor {
+func noisyImages(t *testing.T, manager *Manager, batch tensors.Tensor) tensors.Tensor {
 	noisyImagesExecOnce.Do(func() {
 		noisyImagesExec = NewExec(manager, func(batch *Node) *Node {
 			g := batch.Graph()

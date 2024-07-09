@@ -66,10 +66,8 @@ import (
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types"
-	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
-	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/pkg/errors"
 	"os"
 	"path"
@@ -329,7 +327,7 @@ type Handler struct {
 	prevContextLoader context.Loader
 
 	serialized     *serializedData
-	variableValues map[string]tensor.Tensor
+	variableValues map[string]tensors.Tensor
 	mergeExec      *graph.Exec
 
 	checkpointsCount int
@@ -541,12 +539,12 @@ func (h *Handler) loadCheckpoint(baseName string, merge bool, mergeWeight float6
 	if !merge {
 		// We are loading all the variables, as opposed to merging them.
 		h.serialized = serialized
-		h.variableValues = make(map[string]tensor.Tensor, len(h.serialized.Variables))
+		h.variableValues = make(map[string]tensors.Tensor, len(h.serialized.Variables))
 	}
 
 	// Load variable values.
 	for _, varInfo := range serialized.Variables {
-		localT := tensor.FromShape(shapes.Make(varInfo.DType, varInfo.Dimensions...))
+		localT := tensors.FromShape(shapes.Make(varInfo.DType, varInfo.Dimensions...))
 		dataRef := localT.AcquireData()
 		rawBytes := dataRef.Bytes()
 		var n int
@@ -575,7 +573,7 @@ func (h *Handler) loadCheckpoint(baseName string, merge bool, mergeWeight float6
 				// Variable not found in last checkpoint or not merge-able, just ignore it.
 				continue
 			}
-			var results []tensor.Tensor
+			var results []tensors.Tensor
 			err := TryCatch[error](func() {
 				results = h.mergeExec.Call(current, localT, shapes.CastAsDType(mergeWeight, varInfo.DType))
 			})
@@ -679,7 +677,7 @@ func (h *Handler) Save() error {
 	h.serialized.Variables = make([]serializedVar, 0, h.ctx.NumVariables()+len(h.variableValues))
 	pos := 0
 	// * Closure to save the contents of a variable.
-	saveVar := func(name string, value *tensor.Local) error {
+	saveVar := func(name string, value *tensors.Local) error {
 		shape := value.Shape()
 		dataRef := value.AcquireData()
 		defer dataRef.Release()
@@ -744,7 +742,7 @@ func (h *Handler) Save() error {
 
 // OnStepFn implements `train.OnStepFn`, and make it convenient to attach to a training loop.
 // It simply calls save.
-func (h *Handler) OnStepFn(_ *train.Loop, _ []tensor.Tensor) error {
+func (h *Handler) OnStepFn(_ *train.Loop, _ []tensors.Tensor) error {
 	return h.Save()
 }
 
@@ -814,7 +812,7 @@ func (h *Handler) Dir() string {
 // LoadVariable implements context.Loader.
 // This is called by context.Context when the variable is used for the first time.
 // The user may want to use this function to inspect loaded values for testing.
-func (h *Handler) LoadVariable(ctx *context.Context, scope, name string) (value tensor.Tensor, found bool) {
+func (h *Handler) LoadVariable(ctx *context.Context, scope, name string) (value tensors.Tensor, found bool) {
 	// Priority is based on the installation order. That means we attempt first the previously configured loaders.
 	if h.prevContextLoader != nil {
 		value, found = h.prevContextLoader.LoadVariable(ctx, scope, name)
@@ -840,7 +838,7 @@ func (h *Handler) LoadVariable(ctx *context.Context, scope, name string) (value 
 // context, since they are actually used only when a model asks for the variable.
 //
 // The Handler owns the returned map, don't change it -- the behavior is undefined if you do.
-func (h *Handler) LoadedVariables() map[string]tensor.Tensor {
+func (h *Handler) LoadedVariables() map[string]tensors.Tensor {
 	return h.variableValues
 }
 

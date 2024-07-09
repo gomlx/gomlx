@@ -4,7 +4,6 @@ import (
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/slices"
-	"github.com/gomlx/gomlx/types/tensor"
 	"io"
 	"math/rand/v2"
 	"sync"
@@ -135,7 +134,7 @@ func (ds *Dataset) Reset() {
 // Yield implements train.Dataset.
 // The returned spec is a pointer to the Strategy, and can be used to build a map of the names to the sampled
 // tensors.
-func (ds *Dataset) Yield() (spec any, inputs, labels []tensor.Tensor, err error) {
+func (ds *Dataset) Yield() (spec any, inputs, labels []tensors.Tensor, err error) {
 	ds.muSample.Lock()
 	var unlocked bool
 	defer func() {
@@ -153,10 +152,10 @@ func (ds *Dataset) Yield() (spec any, inputs, labels []tensor.Tensor, err error)
 	if ds.strategy.KeepDegrees {
 		// 2 tensors per node (value and mask), plus one tensor per edge (degree).
 		numEdges := len(ds.strategy.Rules) - len(ds.strategy.Seeds)
-		inputs = make([]tensor.Tensor, 0, 2*len(ds.strategy.Rules)+numEdges)
+		inputs = make([]tensors.Tensor, 0, 2*len(ds.strategy.Rules)+numEdges)
 	} else {
 		// 2 tensors per node: value and mask.
-		inputs = make([]tensor.Tensor, 0, 2*len(ds.strategy.Rules))
+		inputs = make([]tensors.Tensor, 0, 2*len(ds.strategy.Rules))
 	}
 	ds.frozen = true
 	if ds.startOfEpoch {
@@ -165,7 +164,7 @@ func (ds *Dataset) Yield() (spec any, inputs, labels []tensor.Tensor, err error)
 
 	// Sample Seeds: requires a lock for the sampling.
 	numSeeds := len(ds.strategy.Seeds)
-	seedsTensors := make([]*tensor.Local, 0, 2*numSeeds)
+	seedsTensors := make([]*tensors.Local, 0, 2*numSeeds)
 	for ii, seedsRule := range ds.strategy.Seeds {
 		seeds, mask := ds.sampleSeeds(ii, seedsRule)
 		seedsTensors = append(seedsTensors, seeds, mask)
@@ -184,13 +183,13 @@ func (ds *Dataset) Yield() (spec any, inputs, labels []tensor.Tensor, err error)
 
 // sampleSeeds returns the sampled Seeds and their masks.
 // For sampling Seeds, ds.muSample must be locked.
-func (ds *Dataset) sampleSeeds(seedIdx int, rule *Rule) (seeds, mask *tensor.Local) {
-	seeds = tensor.FromScalarAndDimensions(int32(0), rule.Count)
+func (ds *Dataset) sampleSeeds(seedIdx int, rule *Rule) (seeds, mask *tensors.Local) {
+	seeds = tensors.FromScalarAndDimensions(int32(0), rule.Count)
 	seedsRef := seeds.AcquireData()
 	defer seedsRef.Release()
 	seedsData := seedsRef.Flat().([]int32)
 
-	mask = tensor.FromScalarAndDimensions(false, rule.Count)
+	mask = tensors.FromScalarAndDimensions(false, rule.Count)
 	maskRef := mask.AcquireData()
 	defer maskRef.Release()
 	maskData := maskRef.Flat().([]bool)
@@ -256,7 +255,7 @@ func (ds *Dataset) sampleSeeds(seedIdx int, rule *Rule) (seeds, mask *tensor.Loc
 
 // recursivelySampleEdges in the dependency tree of Rules, storing the results that will become the yielded values
 // by the Dataset.
-func recursivelySampleEdges(rule *Rule, nodes, mask *tensor.Local, store []tensor.Tensor) []tensor.Tensor {
+func recursivelySampleEdges(rule *Rule, nodes, mask *tensors.Local, store []tensors.Tensor) []tensors.Tensor {
 	for _, subRule := range rule.Dependents {
 		subNodes, subMask, degrees := sampleEdges(subRule, nodes, mask)
 		store = append(store, subNodes, subMask)
@@ -269,9 +268,9 @@ func recursivelySampleEdges(rule *Rule, nodes, mask *tensor.Local, store []tenso
 }
 
 // sampleEdges based on a edge sampling rule `rule`, and the source nodes from which to sample.
-func sampleEdges(rule *Rule, srcNodes, srcMask *tensor.Local) (nodes, mask, degrees *tensor.Local) {
-	nodes = tensor.FromScalarAndDimensions(int32(0), rule.Shape.Dimensions...)
-	mask = tensor.FromScalarAndDimensions(false, rule.Shape.Dimensions...)
+func sampleEdges(rule *Rule, srcNodes, srcMask *tensors.Local) (nodes, mask, degrees *tensors.Local) {
+	nodes = tensors.FromScalarAndDimensions(int32(0), rule.Shape.Dimensions...)
+	mask = tensors.FromScalarAndDimensions(false, rule.Shape.Dimensions...)
 
 	nodesRef := nodes.AcquireData()
 	maskRef := mask.AcquireData()
@@ -279,13 +278,13 @@ func sampleEdges(rule *Rule, srcNodes, srcMask *tensor.Local) (nodes, mask, degr
 	srcMaskRef := srcMask.AcquireData()
 
 	var (
-		degreesRef  *tensor.LocalRef
+		degreesRef  *tensors.LocalRef
 		degreesData []int32
 	)
 	if rule.Strategy.KeepDegrees {
 		degreesShape := srcNodes.Shape().Clone()
 		degreesShape.Dimensions = append(degreesShape.Dimensions, 1)
-		degrees = tensor.FromScalarAndDimensions(int32(0), degreesShape.Dimensions...)
+		degrees = tensors.FromScalarAndDimensions(int32(0), degreesShape.Dimensions...)
 		degreesRef = degrees.AcquireData()
 		degreesData = degreesRef.Flat().([]int32)
 	}

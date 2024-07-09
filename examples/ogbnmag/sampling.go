@@ -6,7 +6,6 @@ import (
 	mldata "github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
 	"os"
 	"path"
 )
@@ -83,7 +82,7 @@ func NewSampler(baseDir string) (*sampler.Sampler, error) {
 // . [seedIdsCandidates] is the seed of seed nodes to sample from, typically [ogbnmag.TrainSplit], [ogbnmag.ValidSplit] or [ogbnmag.TestSplit]. If empty it will sample from all possible papers.
 //
 // It returns a [sampler.Strategy] for OGBN-MAG.
-func NewSamplerStrategy(magSampler *sampler.Sampler, batchSize int, seedIdsCandidates tensor.Tensor) (strategy *sampler.Strategy) {
+func NewSamplerStrategy(magSampler *sampler.Sampler, batchSize int, seedIdsCandidates tensors.Tensor) (strategy *sampler.Strategy) {
 	strategy = magSampler.NewStrategy()
 	strategy.KeepDegrees = KeepDegrees
 	var seeds *sampler.Rule
@@ -143,13 +142,13 @@ func NewSamplerStrategy(magSampler *sampler.Sampler, batchSize int, seedIdsCandi
 
 // ExtractLabelsFromInput create the labels from the input seed indices.
 // It returns the same inputs and the extracted labels (with mask).
-func ExtractLabelsFromInput(inputs, labels []tensor.Tensor) ([]tensor.Tensor, []tensor.Tensor) {
+func ExtractLabelsFromInput(inputs, labels []tensors.Tensor) ([]tensors.Tensor, []tensors.Tensor) {
 	seedsRef := inputs[0].Local().AcquireData()
 	defer seedsRef.Release()
 	seedsData := seedsRef.Flat().([]int32)
 	seedsMask := inputs[1]
 
-	seedsLabels := tensor.FromShape(shapes.Make(inputs[0].DType(), inputs[0].Shape().Size(), 1))
+	seedsLabels := tensors.FromShape(shapes.Make(inputs[0].DType(), inputs[0].Shape().Size(), 1))
 	labelsRef := seedsLabels.AcquireData()
 	defer labelsRef.Release()
 	labelsData := labelsRef.Flat().([]int32)
@@ -161,7 +160,7 @@ func ExtractLabelsFromInput(inputs, labels []tensor.Tensor) ([]tensor.Tensor, []
 	for ii, paperIdx := range seedsData {
 		labelsData[ii] = papersLabelData[paperIdx]
 	}
-	return inputs, []tensor.Tensor{seedsLabels, seedsMask}
+	return inputs, []tensors.Tensor{seedsLabels, seedsMask}
 }
 
 // WithReplacement indicates whether the training dataset is created with replacement.

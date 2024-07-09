@@ -10,7 +10,6 @@ import (
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -40,7 +39,7 @@ func TestModel(t *testing.T) {
 	}
 	testGraphExec := context.NewExec(manager, ctx, testGraphFn)
 
-	var inputs []tensor.Tensor
+	var inputs []tensors.Tensor
 	spec, inputs, _, err = trainDS.Yield()
 	totalSizeBytes := uint64(0)
 	for _, input := range inputs {

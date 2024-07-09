@@ -20,7 +20,6 @@ import (
 	"fmt"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/types/slices"
-	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/gomlx/gomlx/xla"
 	"testing"
 	"time"
@@ -54,7 +53,7 @@ func TestMemoryLeaksLiteral(t *testing.T) {
 		// Tests for various parameters.
 		for xV := float64(0); xV < 100; xV += 1 {
 			for yV := float64(0); yV < 100; yV += 1 {
-				l := tensor.MakeLocalTupleAny(slices.SliceWithValue(100, xV), slices.SliceWithValue(10, yV))
+				l := tensors.MakeLocalTupleAny(slices.SliceWithValue(100, xV), slices.SliceWithValue(10, yV))
 				l.Finalize()
 			}
 		}
@@ -89,13 +88,13 @@ func TestMemoryLeaksShapedBuffer(t *testing.T) {
 		// Tests for various parameters.
 		for xV := float64(0); xV < 100; xV += 1 {
 			for yV := float64(0); yV < 100; yV += 1 {
-				l := tensor.MakeLocalTupleAny(slices.SliceWithValue(100, xV), slices.SliceWithValue(10, yV))
+				l := tensors.MakeLocalTupleAny(slices.SliceWithValue(100, xV), slices.SliceWithValue(10, yV))
 				sb, err := l.Literal().ToOnDeviceBuffer(manager.Client(), manager.DefaultDeviceNum())
 				if err != nil {
 					t.Fatalf("Failed to convert xla.Literal to xla.OnDeviceBuffer: %+v", err)
 				}
 				l.Finalize()
-				d := tensor.InternalNewDevice(sb)
+				d := tensors.InternalNewDevice(sb)
 				d.Finalize()
 			}
 		}

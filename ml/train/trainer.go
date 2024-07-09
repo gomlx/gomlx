@@ -28,8 +28,6 @@ import (
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
-	. "github.com/gomlx/gomlx/types/exceptions"
-	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/pkg/errors"
 	"io"
 )
@@ -326,7 +324,7 @@ func (r *Trainer) trainStepGraph(spec any, ctx *context.Context, inputs, labels 
 func (r *Trainer) callGraphFn(
 	graphFn func(spec any, ctx *context.Context, inputs, labels []*graph.Node) (metrics []*graph.Node),
 	graphType GraphType,
-	spec any, inputs, labels []tensor.Tensor) (metrics []tensor.Tensor) {
+	spec any, inputs, labels []tensors.Tensor) (metrics []tensors.Tensor) {
 	if len(inputs) == 0 {
 		Panicf("there are no inputs, at least one is required")
 	}
@@ -410,7 +408,7 @@ func (r *Trainer) metricsUpdatesGraph(ctx *context.Context, labels, predictions 
 // of the batch loss, plus the other `trainMetrics` configured during the creation of the Trainer.
 //
 // Errors are thrown using `panic` -- they are usually informative and include a stack-trace.
-func (r *Trainer) TrainStep(spec any, inputs, labels []tensor.Tensor) (metrics []tensor.Tensor) {
+func (r *Trainer) TrainStep(spec any, inputs, labels []tensors.Tensor) (metrics []tensors.Tensor) {
 	return r.callGraphFn(r.trainStepGraph, TrainType, spec, inputs, labels)
 }
 
@@ -453,7 +451,7 @@ func (r *Trainer) ResetTrainMetrics() error {
 // It returns the current value for the registered eval metrics.
 //
 // Errors are thrown using `panic` -- they are usually informative and include a stack-trace.
-func (r *Trainer) EvalStep(spec any, inputs, labels []tensor.Tensor) (metrics []tensor.Tensor) {
+func (r *Trainer) EvalStep(spec any, inputs, labels []tensors.Tensor) (metrics []tensors.Tensor) {
 	return r.callGraphFn(r.evalStepGraph, EvalType, spec, inputs, labels)
 }
 
@@ -470,7 +468,7 @@ func (r *Trainer) resetEvalMetrics() {
 // Eval returns the computation of loss and metrics over the given dataset. The dataset
 // has to be finite (yield io.EOF at the end). The function will reset the dataset
 // at the start.
-func (r *Trainer) Eval(ds Dataset) (lossAndMetrics []tensor.Tensor) {
+func (r *Trainer) Eval(ds Dataset) (lossAndMetrics []tensors.Tensor) {
 	ds.Reset()
 	r.resetEvalMetrics()
 	count := 0

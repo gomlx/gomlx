@@ -9,7 +9,6 @@ import (
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
-	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
@@ -31,7 +30,7 @@ func createDenseTestSampler(withCitation bool) *samplerPkg.Sampler {
 	sampler.AddNodeType("papers", lwNumPapers)
 	sampler.AddNodeType("authors", lwNumAuthors)
 
-	authorWritesPapers := tensor.FromShape(shapes.Make(shapes.Int32, lwNumAuthors, 2))
+	authorWritesPapers := tensors.FromShape(shapes.Make(shapes.Int32, lwNumAuthors, 2))
 	{
 		// Each paper is written by 5 authors.
 		ref := authorWritesPapers.AcquireData()
@@ -47,7 +46,7 @@ func createDenseTestSampler(withCitation bool) *samplerPkg.Sampler {
 	sampler.AddEdgeType("writtenBy", "authors", "papers", authorWritesPapers, true)
 
 	if withCitation {
-		paperCitesPaper := tensor.FromShape(shapes.Make(shapes.Int32, lwNumPapers*lwFactor, 2))
+		paperCitesPaper := tensors.FromShape(shapes.Make(shapes.Int32, lwNumPapers*lwFactor, 2))
 		{
 			// Each paper is written by 5 authors.
 			ref := paperCitesPaper.AcquireData()
@@ -199,13 +198,13 @@ func TestLayerWiseInferenceMinimal(t *testing.T) {
 	// Set weights to fixed values, that makes it easier to interpret:
 	{
 		ctx := ctx.InAbsPath("/graph_update_0/gnn:authors/conv/message/dense")
-		_ = ctx.VariableWithValue("weights", tensor.FromValue([][]float32{{1.0}}))
-		_ = ctx.VariableWithValue("biases", tensor.FromValue([]float32{0.0}))
+		_ = ctx.VariableWithValue("weights", tensors.FromValue([][]float32{{1.0}}))
+		_ = ctx.VariableWithValue("biases", tensors.FromValue([]float32{0.0}))
 	}
 	{
 		ctx := ctx.InAbsPath("/graph_update_0/gnn:seeds/update/dense")
-		_ = ctx.VariableWithValue("weights", tensor.FromValue([][]float32{{1000.0}, {1.0}}))
-		_ = ctx.VariableWithValue("biases", tensor.FromValue([]float32{0.0}))
+		_ = ctx.VariableWithValue("weights", tensors.FromValue([][]float32{{1000.0}, {1.0}}))
+		_ = ctx.VariableWithValue("biases", tensors.FromValue([]float32{0.0}))
 	}
 
 	// Normal GNN executor.

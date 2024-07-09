@@ -21,10 +21,8 @@ import (
 	"fmt"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/train"
-	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/slices"
-	"github.com/gomlx/gomlx/types/tensor"
 	"github.com/pkg/errors"
 	"golang.org/x/exp/constraints"
 	"io"
@@ -52,7 +50,7 @@ type InMemoryDataset struct {
 	spec any
 
 	// inputsAndLabelsData contains the full dataset for each of the inputs and labels.
-	inputsAndLabelsData []tensor.Tensor
+	inputsAndLabelsData []tensors.Tensor
 
 	// numInputsTensors indicate how many in inputsAndLabelsData are inputs, the remainder are labels.
 	numInputsTensors int
@@ -137,7 +135,7 @@ func InMemoryFromData(manager *Manager, name string, inputs []any, labels []any)
 		randomNumberGenerator: rand.New(rand.NewSource(time.Now().UnixNano())),
 		gatherExec:            NewExec(manager, gatherFromDataTensorsGraph),
 		name:                  name,
-		inputsAndLabelsData:   make([]tensor.Tensor, 0, len(inputs)+len(labels)),
+		inputsAndLabelsData:   make([]tensors.Tensor, 0, len(inputs)+len(labels)),
 		numInputsTensors:      len(inputs),
 	}
 
@@ -149,8 +147,8 @@ func InMemoryFromData(manager *Manager, name string, inputs []any, labels []any)
 		return fmt.Sprintf("parsing labels[%d]", ii-mds.numInputsTensors)
 	}
 	for ii, value := range append(inputs, labels...) {
-		var valueT tensor.Tensor
-		err = TryCatch[error](func() { valueT = tensor.FromAnyValue(value) })
+		var valueT tensors.Tensor
+		err = TryCatch[error](func() { valueT = tensors.FromAnyValue(value) })
 		if err != nil {
 			err = errors.WithMessage(err, errMsgFn(ii))
 			return
@@ -194,7 +192,7 @@ func isEqualButBatchDimension(s1, s2 shapes.Shape) bool {
 // readDataset and generate concatenated tensors with all the data.
 func (mds *InMemoryDataset) readDataset(ds train.Dataset, dsIsBatched bool) (err error) {
 	// allData: for each element in `(inputs, labels)`, a slice with all the tensors returned by ds.Yield.
-	var allData [][]tensor.Tensor
+	var allData [][]tensors.Tensor
 	var inputsAndLabelsShapes []shapes.Shape
 	var numLabelsTensors int
 	mds.numExamples = 0
@@ -227,7 +225,7 @@ func (mds *InMemoryDataset) readDataset(ds train.Dataset, dsIsBatched bool) (err
 				inputsAndLabelsShapes = append(inputsAndLabelsShapes, t.Shape())
 			}
 			// Initialize allData.
-			allData = make([][]tensor.Tensor, len(inputsAndLabels))
+			allData = make([][]tensors.Tensor, len(inputsAndLabels))
 
 		} else {
 			// Check that the inputs/labels are consistent with previous.
@@ -305,19 +303,19 @@ func (mds *InMemoryDataset) readDataset(ds train.Dataset, dsIsBatched bool) (err
 	// concatenating at most `MaxElementsToConcat` elements at a time (XLA doesn't handle well very large
 	// computation graphs.
 	const MaxExamplesToConcat = 16
-	mds.inputsAndLabelsData = make([]tensor.Tensor, 0, len(allData))
-	convertToAny := func(t tensor.Tensor) any { return t }
+	mds.inputsAndLabelsData = make([]tensors.Tensor, 0, len(allData))
+	convertToAny := func(t tensors.Tensor) any { return t }
 	for concatenationLoopCount := 0; len(allData[0]) > 1; concatenationLoopCount++ {
-		newAllData := make([][]tensor.Tensor, len(allData))
+		newAllData := make([][]tensors.Tensor, len(allData))
 		for inputsAndLabelsIdx, allExamples := range allData {
 			numConcatenations := (len(allExamples) + MaxExamplesToConcat - 1) / MaxExamplesToConcat
-			newAllExamples := make([]tensor.Tensor, numConcatenations)
+			newAllExamples := make([]tensors.Tensor, numConcatenations)
 			for jj := 0; jj < numConcatenations; jj++ {
 				// Take MaxExamplesToConcat examples at a time.
 				start := jj * MaxExamplesToConcat
 				end := minN(start+MaxExamplesToConcat, len(allExamples))
 				examplesSlice := allExamples[start:end]
-				examplesAsAny := slices.Map[tensor.Tensor, any](examplesSlice, convertToAny)
+				examplesAsAny := slices.Map[tensors.Tensor, any](examplesSlice, convertToAny)
 				err = TryCatch[error](func() { newAllExamples[jj] = concatenateExec.Call(examplesAsAny...)[0] })
 				if err != nil {
 					err = errors.WithMessagef(err, "while concatenating %s examples into large tensor", getElementDesc(inputsAndLabelsIdx))
@@ -449,7 +447,7 @@ func gatherFromDataTensorsGraph(indicesAndData []*Node) (gathered []*Node) {
 // Yield implements `train.Dataset`.
 //
 // Returns next batch's inputs and labels or single example if BatchSize is set to 0.
-func (mds *InMemoryDataset) Yield() (spec any, inputs []tensor.Tensor, labels []tensor.Tensor, err error) {
+func (mds *InMemoryDataset) Yield() (spec any, inputs []tensors.Tensor, labels []tensors.Tensor, err error) {
 	if len(mds.inputsAndLabelsData) == 0 {
 		err = errors.Errorf("InMemoryDataset is empty, maybe it has been finalized?")
 		return
@@ -479,14 +477,14 @@ func (mds *InMemoryDataset) Yield() (spec any, inputs []tensor.Tensor, labels []
 	}
 
 	// Gather the elements (inputs and labels) all in one call, given the indices.
-	inputsAndLabels := make([]tensor.Tensor, len(mds.inputsAndLabelsData))
+	inputsAndLabels := make([]tensors.Tensor, len(mds.inputsAndLabelsData))
 	indicesAndData := make([]any, 0, len(mds.inputsAndLabelsData)+1)
 	if mds.batchSize == 0 {
 		// Index should be a scalar.
 		indicesAndData = append(indicesAndData, indices[0])
 	} else {
 		// Indices are shaped [batch_size, 1].
-		indicesT := tensor.FromFlatDataAndDimensions(indices, len(indices), 1)
+		indicesT := tensors.FromFlatDataAndDimensions(indices, len(indices), 1)
 		indicesAndData = append(indicesAndData, indicesT)
 	}
 	for _, data := range mds.inputsAndLabelsData {
@@ -684,11 +682,11 @@ func GobDeserializeInMemory(manager *Manager, decoder *gob.Decoder) (mds *InMemo
 	if err != nil {
 		return
 	}
-	mds.inputsAndLabelsData = make([]tensor.Tensor, 0, numInputsAndLabels)
+	mds.inputsAndLabelsData = make([]tensors.Tensor, 0, numInputsAndLabels)
 
-	var local *tensor.Local
+	var local *tensors.Local
 	for ii := 0; ii < int(numInputsAndLabels); ii++ {
-		local, err = tensor.GobDeserialize(decoder)
+		local, err = tensors.GobDeserialize(decoder)
 		if err != nil {
 			return
 		}
