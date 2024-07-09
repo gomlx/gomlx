@@ -1,6 +1,6 @@
 // Package image provides several functions to transform images back and
 // forth from tensors.
-package image
+package images
 
 import (
 	"github.com/gomlx/gomlx/types/shapes"
