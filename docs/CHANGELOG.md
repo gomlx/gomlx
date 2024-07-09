@@ -12,6 +12,7 @@
 * Package `exceptions` removed: using the (same) now external [`github.com/gomlx/exceptions`](github.com/gomlx/exceptions) instead.
 * Package `slices` renamed to `xslices`, not to mix up with the new standard pacakge `slices`.
 * Package `tensors/image` renamed `tensors/images`.
+  * Added all numeric dtypes support; Added conversion tests to all types.
 
 * C/C++ code:
   * Removed reference to AOT compilation, see #52.
