@@ -19,7 +19,6 @@ package train
 import (
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
 	"github.com/pkg/errors"
 	xslices "golang.org/x/exp/slices"
 	"io"
@@ -274,7 +273,7 @@ func (loop *Loop) MedianTrainStepDuration() time.Duration {
 		return time.Millisecond
 	}
 
-	times := slices.Copy(loop.TrainStepDurations)
+	times := xslices.Copy(loop.TrainStepDurations)
 	xslices.Sort(times)
 	return times[len(times)/2]
 }

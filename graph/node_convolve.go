@@ -17,9 +17,7 @@
 package graph
 
 import (
-	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
 	timage "github.com/gomlx/gomlx/types/tensor/image"
 	"github.com/gomlx/gomlx/xla"
 )
@@ -114,20 +112,20 @@ func (conv *ConvolutionBuilder) ChannelsAxis(channelsAxisConfig timage.ChannelsA
 	switch channelsAxisConfig {
 	case timage.ChannelsFirst:
 		conv.axes.KernelInputChannel = 0
-		conv.axes.KernelSpatial = slices.Iota(1, conv.numSpatialDims)
+		conv.axes.KernelSpatial = xslices.Iota(1, conv.numSpatialDims)
 		conv.axes.KernelOutputChannel = conv.numSpatialDims + 1
 
 		conv.axes.OutputBatch = 0
 		conv.axes.OutputChannel = 1
-		conv.axes.OutputSpatial = slices.Iota(2, conv.numSpatialDims)
+		conv.axes.OutputSpatial = xslices.Iota(2, conv.numSpatialDims)
 
 	case timage.ChannelsLast:
 		conv.axes.KernelInputChannel = conv.numSpatialDims
 		conv.axes.KernelOutputChannel = conv.numSpatialDims + 1
-		conv.axes.KernelSpatial = slices.Iota(0, conv.numSpatialDims)
+		conv.axes.KernelSpatial = xslices.Iota(0, conv.numSpatialDims)
 
 		conv.axes.OutputBatch = 0
-		conv.axes.OutputSpatial = slices.Iota(1, conv.numSpatialDims)
+		conv.axes.OutputSpatial = xslices.Iota(1, conv.numSpatialDims)
 		conv.axes.OutputChannel = conv.numSpatialDims + 1
 	}
 	return conv
@@ -152,7 +150,7 @@ func (conv *ConvolutionBuilder) AxesConfig(axes ConvolveAxesConfig) *Convolution
 //
 // One cannot use strides and dilation at the same time.
 func (conv *ConvolutionBuilder) Strides(strides int) *ConvolutionBuilder {
-	perDim := slices.SliceWithValue(conv.numSpatialDims, strides)
+	perDim := xslices.SliceWithValue(conv.numSpatialDims, strides)
 	return conv.StridePerDim(perDim...)
 }
 
@@ -218,7 +216,7 @@ func (conv *ConvolutionBuilder) PaddingPerDim(paddings [][2]int) *ConvolutionBui
 //
 // One cannot use strides and dilation at the same time.
 func (conv *ConvolutionBuilder) Dilations(dilation int) *ConvolutionBuilder {
-	dilationsPerDim := slices.SliceWithValue(conv.numSpatialDims, dilation)
+	dilationsPerDim := xslices.SliceWithValue(conv.numSpatialDims, dilation)
 	return conv.DilationPerDim(dilationsPerDim...)
 }
 

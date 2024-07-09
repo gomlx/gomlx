@@ -19,7 +19,6 @@ package layers
 import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/types/slices"
 	"log"
 )
 
@@ -76,7 +75,7 @@ var (
 func MustNormalizeByName(ctx *context.Context, normalization string, input *Node) *Node {
 	normFn, found := KnownNormalizers[normalization]
 	if !found {
-		log.Fatalf("Unsupported normalization %q given, valid values are %v", normalization, slices.SortedKeys(KnownNormalizers))
+		log.Fatalf("Unsupported normalization %q given, valid values are %v", normalization, xslices.SortedKeys(KnownNormalizers))
 	}
 	return normFn(ctx, input)
 }

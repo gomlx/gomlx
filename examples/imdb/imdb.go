@@ -27,7 +27,6 @@ import (
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
 	"github.com/pkg/errors"
 	"io"
 	"math/rand"
@@ -472,7 +471,7 @@ func (ds *Dataset) Yield() (spec any, inputs, labels []tensors.Tensor, err error
 			examplesIdx[ii] = ds.Shuffle.Intn(len(ds.Examples))
 		}
 	} else {
-		examplesIdx = slices.Iota(ds.Pos, ds.BatchSize)
+		examplesIdx = xslices.Iota(ds.Pos, ds.BatchSize)
 		ds.Pos += ds.BatchSize
 	}
 	ds.muIndices.Unlock()

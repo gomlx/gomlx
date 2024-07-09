@@ -13,7 +13,6 @@ import (
 	"github.com/gomlx/gomlx/models/inceptionv3"
 	"github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
 	timage "github.com/gomlx/gomlx/types/tensor/image"
 	"github.com/janpfeifer/gonb/cache"
 	"github.com/janpfeifer/gonb/common"
@@ -123,7 +122,7 @@ func PlotModelEvolution(imagesPerSample int, animate bool) {
 		imagesT := MustNoError(tensors.Load(path.Join(modelDir, generatedFile)))
 		images := MustNoError(timage.ToImage().MaxValue(255.0).Batch(imagesT))
 		images = images[:imagesPerSample]
-		params.Images[ii] = slices.Map(images[:imagesPerSample], func(img image.Image) string {
+		params.Images[ii] = xslices.Map(images[:imagesPerSample], func(img image.Image) string {
 			//return fmt.Sprintf("timestep_%d", ii)
 			return MustNoError(gonbui.EmbedImageAsPNGSrc(img))
 		})
@@ -293,7 +292,7 @@ func GenerateImagesOfFlowerType(numImages int, flowerType int32, numDiffusionSte
 	_, _, _ = LoadCheckpointToContext(ctx)
 	ctx.RngStateReset()
 	noise := GenerateNoise(numImages)
-	flowerIds := tensors.FromValue(slices.SliceWithValue(numImages, flowerType))
+	flowerIds := tensors.FromValue(xslices.SliceWithValue(numImages, flowerType))
 	generator := NewImagesGenerator(ctx, noise, flowerIds, numDiffusionSteps)
 	return generator.Generate()
 }
@@ -310,7 +309,7 @@ func DropdownFlowerTypes(cacheKey string, ctx *context.Context, numImages, numDi
 		statusId := "flower_types_status_" + gonbui.UniqueId()
 		gonbui.UpdateHtml(statusId, "Generating flowers ...")
 		for flowerType := 0; flowerType < numFlowerTypes; flowerType++ {
-			flowerIds := tensors.FromValue(slices.SliceWithValue(numImages, flowerType))
+			flowerIds := tensors.FromValue(xslices.SliceWithValue(numImages, flowerType))
 			generator := NewImagesGenerator(ctx, noise, flowerIds, numDiffusionSteps)
 			denoisedImages := generator.Generate()
 			htmlImages[flowerType] = ImagesToHtml(
@@ -363,7 +362,7 @@ func GenerateImagesOfAllFlowerTypes(numDiffusionSteps int) (predictedImages tens
 		noise = BroadcastToDims(noise, numImages, ImageSize, ImageSize, 3)
 		return noise
 	}).Call()[0]
-	flowerIds := tensors.FromValue(slices.Iota(int32(0), numImages))
+	flowerIds := tensors.FromValue(xslices.Iota(int32(0), numImages))
 	generator := NewImagesGenerator(ctx, noise, flowerIds, numDiffusionSteps)
 	return generator.Generate()
 }

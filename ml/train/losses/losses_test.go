@@ -20,7 +20,6 @@ import (
 	"fmt"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
-	"github.com/gomlx/gomlx/types/slices"
 	"testing"
 )
 
@@ -68,7 +67,7 @@ func testGradients[T interface{ float32 | float64 }](t *testing.T, name string, 
 	for ii, want := range wantForGrad {
 		got := results[ii+1].Local()
 		fmt.Printf("\tgrad(f)/grad(x_%d): got=%v\n", ii, got.GoStr())
-		if !slices.DeepSliceCmp(got.Value(), want, slices.Close[T]) {
+		if !xslices.DeepSliceCmp(got.Value(), want, xslices.Close[T]) {
 			t.Errorf("grad f(x)/x_%d: want %v, got %v", ii, want, got.GoStr())
 		}
 	}
@@ -108,12 +107,12 @@ func testSomeFunc[T interface{ float32 | float64 }](t *testing.T, name string, f
 	fmt.Printf("\t%s(%s) = %s\n", name, results[0].Local().GoStr(), results[1].Local().GoStr())
 	if close {
 		// Check close.
-		if !slices.DeepSliceCmp(results[1].Local().Value(), want, slices.Close[T]) {
+		if !xslices.DeepSliceCmp(results[1].Local().Value(), want, xslices.Close[T]) {
 			t.Errorf("%s(%v): want=%v, got=%v", name, results[0].Local(), want, results[1].Local().GoStr())
 		}
 	} else {
 		// Check equality.
-		if !slices.DeepSliceCmp(results[1].Local().Value(), want, slices.Equal[T]) {
+		if !xslices.DeepSliceCmp(results[1].Local().Value(), want, xslices.Equal[T]) {
 			t.Errorf("%s(%v): want=%v, got=%v", name, results[0].Local(), want, results[1].Local().GoStr())
 		}
 	}

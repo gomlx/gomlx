@@ -20,9 +20,7 @@ import (
 	"fmt"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
-	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
 	"math"
 	"reflect"
 )
@@ -330,7 +328,7 @@ func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, att
 	mask := b.buildMask()
 	// Attention coefficients: Softmax over all the inner key axes (the last dimensions of attentionLogits)
 	// Shape: [batch, <query_elements>, num_heads, <key_elements>]
-	softmaxAxes := slices.Iota(attentionLogits.Rank()-numKeyAxes, numKeyAxes)
+	softmaxAxes := xslices.Iota(attentionLogits.Rank()-numKeyAxes, numKeyAxes)
 	if mask == nil {
 		attentionCoefficients = Softmax(attentionLogits, softmaxAxes...)
 	} else {
@@ -421,23 +419,23 @@ func (b *MultiHeadAttentionBuilder) buildMaskFromSplitMasks() (mask *Node) {
 	var keyMask *Node
 	if b.keyMask == nil {
 		// keyMask nil, create a skeleton (to be broadcasted) keyMask filled with `true`.
-		keyMask = Reshape(trueNode, slices.SliceWithValue(b.attentionShape.Rank(), 1)...)
+		keyMask = Reshape(trueNode, xslices.SliceWithValue(b.attentionShape.Rank(), 1)...)
 		keyMask = BroadcastToDims(keyMask, b.attentionShape.Dimensions...)
 	} else {
 		// Expand dims after the batch axis.
 		// attentionShape=`[batch, <query_elements>, num_heads, <key_elements>]`
 		// b.keyMask.shape=`[batch, <key_elements>]`
-		keyMask = ExpandDims(b.keyMask, slices.SliceWithValue(b.attentionShape.Rank()-b.keyMask.Rank(), 1)...)
+		keyMask = ExpandDims(b.keyMask, xslices.SliceWithValue(b.attentionShape.Rank()-b.keyMask.Rank(), 1)...)
 		keyMask = BroadcastToDims(keyMask, b.attentionShape.Dimensions...)
 	}
 	var queryMask *Node
 	if b.queryMask == nil {
 		// queryMask nil, create a skeleton (to be broadcasted) queryMask filled with `true`.
-		queryMask = Reshape(trueNode, slices.SliceWithValue(b.attentionShape.Rank(), 1)...)
+		queryMask = Reshape(trueNode, xslices.SliceWithValue(b.attentionShape.Rank(), 1)...)
 		queryMask = BroadcastToDims(queryMask, b.attentionShape.Dimensions...)
 	} else {
 		// Expand dims at the end.
-		queryMask = ExpandDims(b.queryMask, slices.SliceWithValue(b.attentionShape.Rank()-b.queryMask.Rank(), -1)...)
+		queryMask = ExpandDims(b.queryMask, xslices.SliceWithValue(b.attentionShape.Rank()-b.queryMask.Rank(), -1)...)
 		queryMask = BroadcastToDims(queryMask, b.attentionShape.Dimensions...)
 	}
 	return And(queryMask, keyMask)

@@ -13,7 +13,6 @@ import (
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
 	"github.com/schollz/progressbar/v3"
 	"github.com/stretchr/testify/require"
 	"io"
@@ -177,10 +176,10 @@ func TestLayerWiseInferenceLogits(t *testing.T) {
 		fmt.Printf("\npredictionsLW:\n%s\n", predictionsLW)
 
 		require.True(t,
-			slices.DeepSliceCmp(
+			xslices.DeepSliceCmp(
 				predictionsGNN.Local().Value().([][]float32),
 				predictionsLW.Local().Value().([][]float32),
-				slices.CloseToEpsilon(float32(0.05))))
+				xslices.CloseToEpsilon(float32(0.05))))
 	}
 }
 

@@ -22,7 +22,6 @@ import (
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -85,7 +84,7 @@ func TestContextVariablesInitialization(t *testing.T) {
 		t.Errorf("Expected RandomNormalFn initialization to be random, got %v intead", t1)
 	}
 	t2 := v2.Value().Value().([][]int64)
-	if !slices.DeepSliceCmp([][]int64{{0}, {0}, {0}}, t2, slices.Equal[int64]) {
+	if !xslices.DeepSliceCmp([][]int64{{0}, {0}, {0}}, t2, xslices.Equal[int64]) {
 		t.Errorf("Expected Zeros initialization to yield zeros, got %v instead", t2)
 	}
 }

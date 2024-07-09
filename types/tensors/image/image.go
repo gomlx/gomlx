@@ -4,7 +4,6 @@ package image
 
 import (
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
 	"github.com/pkg/errors"
 	"image"
 	"k8s.io/klog/v2"
@@ -51,9 +50,9 @@ func GetSpatialAxes(image shapes.HasShape, config ChannelsAxisConfig) (spatialAx
 	}
 	switch config {
 	case ChannelsFirst:
-		spatialAxes = slices.Iota(2, numSpatialDims)
+		spatialAxes = xslices.Iota(2, numSpatialDims)
 	case ChannelsLast:
-		spatialAxes = slices.Iota(1, numSpatialDims)
+		spatialAxes = xslices.Iota(1, numSpatialDims)
 	default:
 		klog.Errorf("GetSpatialAxes(image, %v): invalid ChannelsAxisConfig!?", config)
 	}

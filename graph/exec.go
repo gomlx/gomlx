@@ -19,7 +19,6 @@ package graph
 import (
 	"fmt"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 	"reflect"
@@ -328,11 +327,11 @@ func convertToListOfTensors(args []any) []any {
 	}
 	switch v := args[0].(type) {
 	case []tensors.Tensor:
-		return slices.Map(v, func(x tensors.Tensor) any { return x })
+		return xslices.Map(v, func(x tensors.Tensor) any { return x })
 	case []*tensors.Local:
-		return slices.Map(v, func(x *tensors.Local) any { return x })
+		return xslices.Map(v, func(x *tensors.Local) any { return x })
 	case []*tensors.Device:
-		return slices.Map(v, func(x *tensors.Device) any { return x })
+		return xslices.Map(v, func(x *tensors.Device) any { return x })
 	}
 	// Otherwise, process as usual.
 	return args

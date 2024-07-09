@@ -21,7 +21,6 @@ import (
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
 )
 
 // BatchNormBuilder is a helper to build a batch normalization computation. Create it with BatchNormalization, set the
@@ -223,7 +222,7 @@ func (builder *BatchNormBuilder) directBatchNormGraph(x, scale, offset, mean, va
 	featureAxis := AdjustAxis(x, builder.featureAxis)
 	featureDim := x.Shape().Dimensions[featureAxis]
 
-	dims := slices.SliceWithValue(x.Rank(), 1)
+	dims := xslices.SliceWithValue(x.Rank(), 1)
 	dims[featureAxis] = featureDim
 	expandedMean := Reshape(mean, dims...)
 	expandedVariance := Reshape(variance, dims...)

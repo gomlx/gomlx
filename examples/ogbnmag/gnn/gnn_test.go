@@ -5,7 +5,6 @@ import (
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
 	"testing"
 )
 
@@ -35,7 +34,7 @@ func TestPoolMessagesWithFixedShape(t *testing.T) {
 				{ /* sum */ 50, 60, 70, 80, 90 /* max */, 10, 11, 12, 13, 14},
 				{ /* sum */ 0, 0, 0, 0, 0 /* max */, 0, 0, 0, 0, 0},
 			},
-		}, slices.Epsilon)
+		}, xslices.Epsilon)
 }
 
 func TestPoolMessagesWithAdjacency(t *testing.T) {
@@ -74,5 +73,5 @@ func TestPoolMessagesWithAdjacency(t *testing.T) {
 				{20, 30, 2, 3},
 				{300, 400, 3, 4},
 			},
-		}, slices.Epsilon)
+		}, xslices.Epsilon)
 }

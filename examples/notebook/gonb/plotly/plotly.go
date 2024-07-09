@@ -17,7 +17,6 @@ import (
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types"
-	"github.com/gomlx/gomlx/types/slices"
 	"github.com/janpfeifer/gonb/gonbui"
 	"github.com/janpfeifer/gonb/gonbui/dom"
 	gonbplotly "github.com/janpfeifer/gonb/gonbui/plotly"
@@ -339,7 +338,7 @@ func (pc *PlotConfig) Plot() error {
 	if !gonbui.IsNotebook {
 		return nil
 	}
-	for _, metricType := range slices.SortedKeys(pc.metricsTypesToFig) {
+	for _, metricType := range xslices.SortedKeys(pc.metricsTypesToFig) {
 		figIdx := pc.metricsTypesToFig[metricType]
 		gonbui.DisplayHtmlf("<p><b>Metric: %s</b></p>\n", metricType)
 		err := gonbplotly.DisplayFig(pc.figs[figIdx])
@@ -379,7 +378,7 @@ func (pc *PlotConfig) DynamicPlot(final bool) {
 	elementId := gonbui.UniqueId()
 	gonbui.UpdateHtml(pc.gonbId, fmt.Sprintf("<div id=%q></div>", elementId))
 
-	for _, metricType := range slices.SortedKeys(pc.metricsTypesToFig) {
+	for _, metricType := range xslices.SortedKeys(pc.metricsTypesToFig) {
 		figIdx := pc.metricsTypesToFig[metricType]
 		dom.Append(elementId, fmt.Sprintf("<p><b>Metric: %s</b></p>\n", metricType))
 		err := gonbplotly.AppendFig(elementId, pc.figs[figIdx])

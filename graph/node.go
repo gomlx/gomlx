@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/xla"
 	"github.com/pkg/errors"
 	"reflect"
@@ -838,7 +837,7 @@ func Where(condition, onTrue, onFalse *Node) *Node {
 		// If condition's shape is a prefix to onTrue and onFalse, then simply broadcast to their shape.
 		// This allows masks to work for embeddings, which has one extra axis.
 		extraAxes := onTrue.Rank() - condition.Rank()
-		condition = ExpandDims(condition, slices.SliceWithValue(extraAxes, -1)...)
+		condition = ExpandDims(condition, xslices.SliceWithValue(extraAxes, -1)...)
 		condition = BroadcastToDims(condition, onTrue.Shape().Dimensions...)
 	}
 	return newNode(g, &xla.SerializedNode{

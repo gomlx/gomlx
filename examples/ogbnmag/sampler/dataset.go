@@ -3,7 +3,6 @@ package sampler
 import (
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/types/slices"
 	"io"
 	"math/rand/v2"
 	"sync"
@@ -309,7 +308,7 @@ func sampleEdges(rule *Rule, srcNodes, srcMask *tensors.Local) (nodes, mask, deg
 		copy(tgtNodesData, srcNodesData)
 		copy(tgtMaskData, srcMaskData)
 		if len(degreesData) != 0 {
-			slices.FillSlice(degreesData, int32(1))
+			xslices.FillSlice(degreesData, int32(1))
 		}
 		return
 	}
@@ -430,9 +429,9 @@ func (ds *Dataset) startEpoch() {
 		ds.seedsShuffle = make([][]int32, len(ds.seedsPosition))
 		for ii, rule := range strategy.Seeds {
 			if rule.NodeSet != nil {
-				ds.seedsShuffle[ii] = slices.Copy(rule.NodeSet)
+				ds.seedsShuffle[ii] = xslices.Copy(rule.NodeSet)
 			} else {
-				ds.seedsShuffle[ii] = slices.Iota[int32](int32(0), int(rule.NumNodes))
+				ds.seedsShuffle[ii] = xslices.Iota[int32](int32(0), int(rule.NumNodes))
 			}
 		}
 	}

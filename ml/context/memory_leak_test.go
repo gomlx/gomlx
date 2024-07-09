@@ -21,7 +21,6 @@ import (
 	ml "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context/initializers"
-	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/xla"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -52,7 +51,7 @@ const LeakThreshold int64 = 300000
 // out of control.
 func TestMemoryLeaksCtxExec(t *testing.T) {
 	manager := graphtest.BuildTestManager()
-	initialValue := slices.SliceWithValue(100, 0.0)
+	initialValue := xslices.SliceWithValue(100, 0.0)
 
 	graphFn := func(ctx *Context, x *Node) []*Node {
 		g := x.Graph()
@@ -80,7 +79,7 @@ func TestMemoryLeaksCtxExec(t *testing.T) {
 			count := 0
 			for xV := 0.0; xV < 100.0; xV += 1 {
 				for size := 1; size <= 100; size++ {
-					inputT := tensors.FromValue(slices.SliceWithValue(size, xV))
+					inputT := tensors.FromValue(xslices.SliceWithValue(size, xV))
 					var results []tensors.Tensor
 					require.NotPanicsf(t, func() { results = exec.Call(inputT) },
 						"Failed to execute computation: xV=%g, size=%d", xV, size)

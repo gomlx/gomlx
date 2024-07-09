@@ -23,7 +23,6 @@ import (
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
 	timage "github.com/gomlx/gomlx/types/tensor/image"
 	"math"
 	"strconv"
@@ -74,7 +73,7 @@ func SinusoidalEmbedding(x *Node) *Node {
 }
 
 var (
-	flagChannelsList = slices.Flag("channels_list", []int{32, 64, 96, 128},
+	flagChannelsList = xslices.Flag("channels_list", []int{32, 64, 96, 128},
 		"Number of channels (features) for each image size (progressively smaller) in U-Net model",
 		strconv.Atoi)
 	flagNumBlocks     = flag.Int("blocks", 2, "Number of blocks per image size in U-Net model")
@@ -219,7 +218,7 @@ func UpBlock(ctx *context.Context, x *Node, skips []*Node, numBlocks, outputChan
 	for ii := 0; ii < numBlocks; ii++ {
 		name := fmt.Sprintf("up-residual-%d", ii+1)
 		var skip *Node
-		skip, skips = slices.Pop(skips)
+		skip, skips = xslices.Pop(skips)
 		x = Concatenate([]*Node{x, skip}, -1)
 		x = ResidualBlock(ctx.In(name), x, outputChannels)
 	}
@@ -263,7 +262,7 @@ func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds
 	nanLogger.Trace(noiseVariances)
 
 	// Adjust imageChannels to initial num channels.
-	imageChannels := slices.Last(noisyImages.Shape().Dimensions)
+	imageChannels := xslices.Last(noisyImages.Shape().Dimensions)
 	x := layers.DenseWithBias(ctx.In("starting_channels"), noisyImages, numChannelsList[0])
 	concatFeatures := []*Node{x}
 
@@ -294,7 +293,7 @@ func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds
 
 	// Intermediary fixed size blocks.
 	x = TransformerBlock(ctx.In("transformer_block"), x)
-	lastNumChannels := slices.Last(numChannelsList)
+	lastNumChannels := xslices.Last(numChannelsList)
 	for ii := 0; ii < numBlocks; ii++ {
 		nanLogger.PushScope(fmt.Sprintf("IntermediaryBlock-%d", ii))
 		name := fmt.Sprintf("IntermediaryResidual-%d", ii+1)

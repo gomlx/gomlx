@@ -1,4 +1,4 @@
-package slices
+package xslices
 
 import (
 	"flag"

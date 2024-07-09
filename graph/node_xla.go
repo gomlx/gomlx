@@ -17,9 +17,7 @@
 package graph
 
 import (
-	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/xla"
 	"github.com/pkg/errors"
 )
@@ -347,7 +345,7 @@ func dotGeneralVJP(node, v *Node, _ shapes.Shape) []*Node {
 		//   thisVJP shape will be [batch_dims..., lhs_cross_dims..., rhs_cross_dims..., 1 x (numContractionAxes)].
 		thisVJP := v
 		if numContractionAxes > 0 {
-			thisVJP = ExpandDims(thisVJP, slices.SliceWithValue(numContractionAxes, -1)...)
+			thisVJP = ExpandDims(thisVJP, xslices.SliceWithValue(numContractionAxes, -1)...)
 		}
 
 		// * Project other operand with contracted dimensions.
@@ -380,7 +378,7 @@ func dotGeneralVJP(node, v *Node, _ shapes.Shape) []*Node {
 				if !thisCrossesFirst {
 					pos += len(otherCrossAxes)
 				}
-				otherProjected = ExpandDims(otherProjected, slices.SliceWithValue(len(thisCrossAxes), pos)...)
+				otherProjected = ExpandDims(otherProjected, xslices.SliceWithValue(len(thisCrossAxes), pos)...)
 			}
 		}
 
@@ -394,7 +392,7 @@ func dotGeneralVJP(node, v *Node, _ shapes.Shape) []*Node {
 			if thisCrossesFirst {
 				pos += len(thisCrossAxes)
 			}
-			thisVJP = ReduceSum(thisVJP, slices.Iota(pos, len(otherCrossAxes))...)
+			thisVJP = ReduceSum(thisVJP, xslices.Iota(pos, len(otherCrossAxes))...)
 		}
 
 		// * Transpose thisVJP axes back to its inputs.
@@ -430,6 +428,6 @@ func fftXLA(operand *Node, fftType xla.FftType, fftLength []int) *Node {
 	return newNode(g, &xla.SerializedNode{
 		Type: xla.FftNode,
 		Int:  int(fftType),
-		Ints: slices.Copy(fftLength),
+		Ints: xslices.Copy(fftLength),
 	}, []*Node{operand})
 }

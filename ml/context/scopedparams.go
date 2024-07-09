@@ -17,7 +17,6 @@
 package context
 
 import (
-	"github.com/gomlx/gomlx/types/slices"
 	"strings"
 )
 
@@ -97,10 +96,10 @@ func (p *ScopedParams) Get(scope, key string) (value any, found bool) {
 // Enumerate enumerates all parameters stored in the ScopedParams structure and calls the given closure with
 // them.
 func (p *ScopedParams) Enumerate(fn func(scope, key string, value any)) {
-	scopes := slices.SortedKeys(p.scopeToMap)
+	scopes := xslices.SortedKeys(p.scopeToMap)
 	for _, scope := range scopes {
 		keyValues := p.scopeToMap[scope]
-		keys := slices.SortedKeys(keyValues)
+		keys := xslices.SortedKeys(keyValues)
 		for _, key := range keys {
 			value := keyValues[key]
 			fn(scope, key, value)

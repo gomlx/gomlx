@@ -24,7 +24,6 @@ import (
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
 	"github.com/stretchr/testify/require"
 	"gonum.org/v1/plot/plotter"
 	"gonum.org/v1/plot/vg"
@@ -80,7 +79,7 @@ func TestDense(t *testing.T) {
 	fmt.Printf("\toutput=%v\n", results[1].Local())
 	got := results[1].Local().Value()
 	want := [][]float32{{6, 7, 8}, {51, 52, 53}, {501, 502, 503}}
-	if !slices.DeepSliceCmp(want, got, slices.Equal[float32]) {
+	if !xslices.DeepSliceCmp(want, got, xslices.Equal[float32]) {
 		t.Errorf("Got %v, Want %v", got, want)
 	}
 
@@ -89,19 +88,19 @@ func TestDense(t *testing.T) {
 
 		got := gradients[0].Local()
 		fmt.Printf("\t\tgrad sum/input=%v\n", got)
-		if want := [][]float32{{3, 6}, {3, 6}, {3, 6}}; !slices.DeepSliceCmp(want, got.Value(), slices.Equal[float32]) {
+		if want := [][]float32{{3, 6}, {3, 6}, {3, 6}}; !xslices.DeepSliceCmp(want, got.Value(), xslices.Equal[float32]) {
 			t.Errorf("grad sum/input: got=%v, want=%v", got, want)
 		}
 
 		got = gradients[1].Local()
 		fmt.Printf("\t\tgrad sum/weights=%v\n", got)
-		if want := [][]float32{{111, 111, 111}, {222, 222, 222}}; !slices.DeepSliceCmp(want, got.Value(), slices.Equal[float32]) {
+		if want := [][]float32{{111, 111, 111}, {222, 222, 222}}; !xslices.DeepSliceCmp(want, got.Value(), xslices.Equal[float32]) {
 			t.Errorf("grad sum/weights: got=%v, want=%v", got, want)
 		}
 
 		got = gradients[2].Local()
 		fmt.Printf("\t\tgrad sum/biases=%v\n", got)
-		if want := []float32{3, 3, 3}; !slices.DeepSliceCmp(want, got.Value(), slices.Equal[float32]) {
+		if want := []float32{3, 3, 3}; !xslices.DeepSliceCmp(want, got.Value(), xslices.Equal[float32]) {
 			t.Errorf("grad sum/weights: got=%v, want=%v", got, want)
 		}
 	}
@@ -115,7 +114,7 @@ func testSimpleFunc(t *testing.T, name string, input any,
 	var outputs []tensors.Tensor
 	require.NotPanicsf(t, func() { outputs = exec.Call(input) }, "%s: failed to exec graph", name)
 	fmt.Printf("\t%s(%v) = %s\n", name, input, outputs[0].Local().GoStr())
-	require.Truef(t, slices.SlicesInDelta(outputs[0].Local().Value(), want, slices.Epsilon),
+	require.Truef(t, xslices.SlicesInDelta(outputs[0].Local().Value(), want, xslices.Epsilon),
 		"%s(%v): want=%v, got=%v", name, input, want, outputs[0].Local().GoStr())
 }
 
@@ -132,7 +131,7 @@ func testSimpleFuncMany(t *testing.T, name string, inputs []any,
 	}
 	inputsStr := strings.Join(parts, ", ")
 	fmt.Printf("\t%s(%s) = %s\n", name, inputsStr, outputs[0].Local().GoStr())
-	require.Truef(t, slices.SlicesInDelta(outputs[0].Local().Value(), want, slices.Epsilon),
+	require.Truef(t, xslices.SlicesInDelta(outputs[0].Local().Value(), want, xslices.Epsilon),
 		"%s(%s): want=%v, got=%v", name, inputsStr, want, outputs[0].Local().GoStr())
 }
 
@@ -227,7 +226,7 @@ func TestPieceWiseLinearCalibration(t *testing.T) {
 		got := results[1].Local()
 		fmt.Printf("\tpwl=%s\n", got.GoStr())
 		want := []float32{0, 0.2, 0.5, 0.7, 1}
-		if !slices.DeepSliceCmp(want, got.Value(), slices.Close[float32]) {
+		if !xslices.DeepSliceCmp(want, got.Value(), xslices.Close[float32]) {
 			t.Errorf("Expected a log-like output, trimmed at the edges: got=%s, want=%v", got.GoStr(), want)
 		}
 	}

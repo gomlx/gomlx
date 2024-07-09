@@ -21,7 +21,6 @@ import (
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
 )
 
 // LayerNormBuilder is a helper to build a layer normalization computation. Create it with LayerNormalization,
@@ -171,7 +170,7 @@ func (builder *LayerNormBuilder) Done() *Node {
 
 	// LearnedGain and offset to be applied to the normalized value.
 	var gain, offset *Node
-	normShape := shapes.Make(x.DType(), slices.Map(builder.normalizingAxes, func(axis int) int {
+	normShape := shapes.Make(x.DType(), xslices.Map(builder.normalizingAxes, func(axis int) int {
 		return x.Shape().Dimensions[axis]
 	})...)
 	broadcastNormShape := x.Shape().Clone() // the shape `normShape` will need to be reshaped to be combined with `x`.

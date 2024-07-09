@@ -10,6 +10,7 @@
   * On-device storage now using [`github.com/gomlx/gopjrt`](github.com/gomlx/gopjrt) project.
   * Improved testing, greatly simplified.
 * Package `exceptions` removed: using the (same) now external [`github.com/gomlx/exceptions`](github.com/gomlx/exceptions) instead.
+* Package `slices` renamed to `xslices`, not to mix up with the new standard pacakge `slices`.
 
 
 * C/C++ code:

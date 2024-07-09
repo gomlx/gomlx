@@ -19,7 +19,6 @@ package graph_test
 import (
 	"fmt"
 	. "github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/xla"
 	"testing"
 	"time"
@@ -53,7 +52,7 @@ func TestMemoryLeaksLiteral(t *testing.T) {
 		// Tests for various parameters.
 		for xV := float64(0); xV < 100; xV += 1 {
 			for yV := float64(0); yV < 100; yV += 1 {
-				l := tensors.MakeLocalTupleAny(slices.SliceWithValue(100, xV), slices.SliceWithValue(10, yV))
+				l := tensors.MakeLocalTupleAny(xslices.SliceWithValue(100, xV), xslices.SliceWithValue(10, yV))
 				l.Finalize()
 			}
 		}
@@ -88,7 +87,7 @@ func TestMemoryLeaksShapedBuffer(t *testing.T) {
 		// Tests for various parameters.
 		for xV := float64(0); xV < 100; xV += 1 {
 			for yV := float64(0); yV < 100; yV += 1 {
-				l := tensors.MakeLocalTupleAny(slices.SliceWithValue(100, xV), slices.SliceWithValue(10, yV))
+				l := tensors.MakeLocalTupleAny(xslices.SliceWithValue(100, xV), xslices.SliceWithValue(10, yV))
 				sb, err := l.Literal().ToOnDeviceBuffer(manager.Client(), manager.DefaultDeviceNum())
 				if err != nil {
 					t.Fatalf("Failed to convert xla.Literal to xla.OnDeviceBuffer: %+v", err)
@@ -139,7 +138,7 @@ func TestMemoryLeaksExec(t *testing.T) {
 			// Tests for various parameters.
 			for xV := float64(0); xV < 100; xV += 1 {
 				for size := 1; size <= 100; size++ {
-					results := exec.Call(slices.SliceWithValue(size, xV), float64(size))
+					results := exec.Call(xslices.SliceWithValue(size, xV), float64(size))
 					addedT, reducedT := results[0], results[1]
 					if addedT.Rank() != 1 && addedT.Shape().Dimensions[0] != size {
 						t.Errorf("Unexpected shape %s for size %d, value %f", addedT.Shape(), size, xV)

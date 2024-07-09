@@ -19,7 +19,6 @@ package graph
 import (
 	"fmt"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
@@ -36,7 +35,7 @@ func testFuncOneInput(t *testing.T, testName string, graphFn graphFnOneInputToTe
 		tuple := g.Run(nil)
 		results := tuple.SplitTuple()
 		fmt.Printf("\t%s(%s) = %s\n", testName, results[0].Local().GoStr(), results[1].Local().GoStr())
-		if !slices.SlicesInDelta(results[1].Local().Value(), want, slices.Epsilon) {
+		if !xslices.SlicesInDelta(results[1].Local().Value(), want, xslices.Epsilon) {
 			t.Errorf("%s(%v): want=%v, got=%v", testName, results[0].Local(), want, results[1].Local().GoStr())
 		}
 	})
@@ -51,7 +50,7 @@ func TestSliceXLA(t *testing.T) {
 	g.Compile()
 	got := g.Run(nil).Local().Value()
 	want := [][]float64{{4, 5}}
-	if !slices.DeepSliceCmp(got, want, slices.Equal[float64]) {
+	if !xslices.DeepSliceCmp(got, want, xslices.Equal[float64]) {
 		t.Fatalf("Iota: want %v, got %v", want, got)
 	}
 }
@@ -71,7 +70,7 @@ func TestGatherXLA(t *testing.T) {
 	got := g.Run(nil).Local()
 	fmt.Printf("\tgatherXLA=%v\n", got)
 	want := [][]float64{{6, 7, 8}, {0, 1, 2}}
-	if !slices.DeepSliceCmp(got.Value(), want, slices.Equal[float64]) {
+	if !xslices.DeepSliceCmp(got.Value(), want, xslices.Equal[float64]) {
 		t.Fatalf("gatherXLA: want %v, got %v", want, got)
 	}
 }
@@ -116,7 +115,7 @@ func TestDotGeneralXLA(t *testing.T) {
 // allPermutations lists all permutations of a list with n elements. So for n=2, it returns [][]int{{0,1}, {1, 0}},
 // and so on.
 func allPermutations(n int) (permutations [][]int) {
-	return allPermutationsRecursive(n, slices.Iota(0, n))
+	return allPermutationsRecursive(n, xslices.Iota(0, n))
 }
 
 // allPermutationsRecursive is used by allPermutations to build all variations.
@@ -206,20 +205,20 @@ func TestGradDotGeneralXLABatchContracting(t *testing.T) {
 			// require.InDeltaSlice is not working for some reason.
 			dot := parts[2].Value()
 			wantDot := []float32{7.8, 22.2}
-			require.Truef(t, slices.DeepSliceCmp(dot, wantDot, slices.Close[float32]), "DotGeneral results don't match, want %v", wantDot)
+			require.Truef(t, xslices.DeepSliceCmp(dot, wantDot, xslices.Close[float32]), "DotGeneral results don't match, want %v", wantDot)
 			gradLhs := parts[3].Value()
 			wantGradLhs := [][][]float32{
 				{{0.1, 0.1, 0.1, 0.1}, {0.1, 0.1, 0.1, 0.1}, {0.1, 0.1, 0.1, 0.1}},
 				{{0.2, 0.2, 0.2, 0.2}, {0.2, 0.2, 0.2, 0.2}, {0.2, 0.2, 0.2, 0.2}},
 			}
-			require.Truef(t, slices.DeepSliceCmp(gradLhs, wantGradLhs, slices.Close[float32]),
+			require.Truef(t, xslices.DeepSliceCmp(gradLhs, wantGradLhs, xslices.Close[float32]),
 				"Grad lhs (%v) doesn't match (%v)", gradLhs, wantGradLhs)
 			gradRhs := parts[4].Value()
 			wantGradRhs := [][][]float32{
 				{{1, 2, 3, 4}, {5, 6, 7, 8}, {9, 10, 11, 12}},
 				{{26, 28, 30, 32}, {34, 36, 38, 40}, {42, 44, 46, 48}},
 			}
-			require.Truef(t, slices.DeepSliceCmp(gradRhs, wantGradRhs, slices.Close[float32]),
+			require.Truef(t, xslices.DeepSliceCmp(gradRhs, wantGradRhs, xslices.Close[float32]),
 				"Grad rhs (%v) doesn't match (%v)", gradRhs, wantGradRhs)
 		}
 	}
@@ -286,7 +285,7 @@ func TestGradDotGeneralXLABatchContractingCrossing(t *testing.T) {
 				{{11.5, 11.5, 11.5}, {14, 14, 14}},
 				{{16.5, 16.5, 16.5}, {19, 19, 19}},
 			}
-			require.Truef(t, slices.DeepSliceCmp(dot, wantDot, slices.Close[float32]), "DotGeneral results don't match, want %v", wantDot)
+			require.Truef(t, xslices.DeepSliceCmp(dot, wantDot, xslices.Close[float32]), "DotGeneral results don't match, want %v", wantDot)
 			gradLhs := parts[3].Value()
 			wantGradLhs := [][][]float32{
 				{{0.6, 0.6, 0.6, 0.6, 0.6}, {1.5, 1.5, 1.5, 1.5, 1.5}},
@@ -294,7 +293,7 @@ func TestGradDotGeneralXLABatchContractingCrossing(t *testing.T) {
 				{{4.2, 4.2, 4.2, 4.2, 4.2}, {5.1, 5.1, 5.1, 5.1, 5.1}},
 				{{6, 6, 6, 6, 6}, {6.9, 6.9, 6.9, 6.9, 6.9}},
 			}
-			require.Truef(t, slices.DeepSliceCmp(gradLhs, wantGradLhs, slices.Close[float32]),
+			require.Truef(t, xslices.DeepSliceCmp(gradLhs, wantGradLhs, xslices.Close[float32]),
 				"Grad lhs (%v) doesn't match (%v)", gradLhs, wantGradLhs)
 			gradRhs := parts[4].Value()
 			wantGradRhs := [][][]float32{
@@ -303,7 +302,7 @@ func TestGradDotGeneralXLABatchContractingCrossing(t *testing.T) {
 				{{689, 718, 747, 776, 805}, {736, 767, 798, 829, 860}, {783, 816, 849, 882, 915}},
 				{{1381, 1422, 1463, 1504, 1545}, {1448, 1491, 1534, 1577, 1620}, {1515, 1560, 1605, 1650, 1695}},
 			}
-			require.Truef(t, slices.DeepSliceCmp(gradRhs, wantGradRhs, slices.Close[float32]),
+			require.Truef(t, xslices.DeepSliceCmp(gradRhs, wantGradRhs, xslices.Close[float32]),
 				"Grad rhs (%v) doesn't match (%v)", gradRhs, wantGradRhs)
 		}
 	}

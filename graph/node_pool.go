@@ -17,9 +17,7 @@
 package graph
 
 import (
-	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
 	timage "github.com/gomlx/gomlx/types/tensor/image"
 	"github.com/gomlx/gomlx/xla"
 )
@@ -369,7 +367,7 @@ func reduceWindowXLA(x *Node, reductionType xla.NodeType, windowDimensions, stri
 
 	// `strides` must always have rank elements. It defaults to 1.
 	if strides == nil {
-		strides = slices.SliceWithValue[int](rank, 1)
+		strides = xslices.SliceWithValue[int](rank, 1)
 	}
 
 	// Encode parameters in ints.

@@ -21,9 +21,7 @@ package optimizers
 import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
-	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
 	"log"
 )
 
@@ -108,7 +106,7 @@ func FromContext(ctx *context.Context) Interface {
 func MustOptimizerByName(ctx *context.Context, optName string) Interface {
 	optBuilder, found := KnownOptimizers[optName]
 	if !found {
-		log.Fatalf("Unknown optimizer %q, valid values are %v.", optName, slices.Keys(KnownOptimizers))
+		log.Fatalf("Unknown optimizer %q, valid values are %v.", optName, xslices.Keys(KnownOptimizers))
 	}
 	return optBuilder(ctx)
 }

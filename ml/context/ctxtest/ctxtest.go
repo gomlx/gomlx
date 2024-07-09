@@ -23,7 +23,6 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/types/slices"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
@@ -76,7 +75,7 @@ func RunTestGraphFn(t *testing.T, testName string, graphFn TestContextGraphFn, w
 	require.Equalf(t, len(want), numOutputs, "%s: number of wanted results different from number of outputs", testName)
 
 	for ii, output := range outputs {
-		require.Truef(t, slices.SlicesInDelta(output.Value(), want[ii], delta), "%s: output #%d doesn't match wanted value %v",
+		require.Truef(t, xslices.SlicesInDelta(output.Value(), want[ii], delta), "%s: output #%d doesn't match wanted value %v",
 			testName, ii, want[ii])
 	}
 }

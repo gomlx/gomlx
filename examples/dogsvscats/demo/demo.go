@@ -40,7 +40,6 @@ import (
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/models/inceptionv3"
-	"github.com/gomlx/gomlx/types/slices"
 	"log"
 	"os"
 	"time"
@@ -63,12 +62,12 @@ var (
 
 	// Training hyperparameters:
 	flagModelType        = flag.String("model", "cnn", "Model types: \"cnn\" or \"inception\"")
-	flagOptimizer        = flag.String("optimizer", "adamw", fmt.Sprintf("Optimizer, options: %q", slices.SortedKeys(optimizers.KnownOptimizers)))
+	flagOptimizer        = flag.String("optimizer", "adamw", fmt.Sprintf("Optimizer, options: %q", xslices.SortedKeys(optimizers.KnownOptimizers)))
 	flagNumSteps         = flag.Int("steps", 2000, "Number of gradient descent steps to perform")
 	flagBatchSize        = flag.Int("batch", dogsvscats.DefaultConfig.BatchSize, "Batch size for training")
 	flagLearningRate     = flag.Float64("learning_rate", 0.0001, "Initial learning rate.")
 	flagL2Regularization = flag.Float64("l2_reg", 0, "L2 regularization on kernels. It doesn't interact well with --batch_norm.")
-	flagNormalization    = flag.String("norm", "layer", fmt.Sprintf("Type of layer normalization to use. Valid values: %q.", slices.SortedKeys(layers.KnownNormalizers)))
+	flagNormalization    = flag.String("norm", "layer", fmt.Sprintf("Type of layer normalization to use. Valid values: %q.", xslices.SortedKeys(layers.KnownNormalizers)))
 	flagEval             = flag.Bool("eval", true, "Whether to evaluate trained model on test data in the end.")
 
 	// Convolution

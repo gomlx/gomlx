@@ -33,7 +33,6 @@ import (
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
 	"log"
 	"os"
 	"time"
@@ -55,7 +54,7 @@ var (
 
 	// Training hyperparameters:
 	flagModel        = flag.String("model", "fnn", "Model type: fnn or cnn.")
-	flagOptimizer    = flag.String("optimizer", "adamw", fmt.Sprintf("Optimizer, options: %v", slices.Keys(optimizers.KnownOptimizers)))
+	flagOptimizer    = flag.String("optimizer", "adamw", fmt.Sprintf("Optimizer, options: %v", xslices.Keys(optimizers.KnownOptimizers)))
 	flagNumSteps     = flag.Int("steps", 2000, "Number of gradient descent steps to perform")
 	flagBatchSize    = flag.Int("batch", 50, "Batch size for training")
 	flagLearningRate = flag.Float64("learning_rate", 0.0001, "Initial learning rate.")

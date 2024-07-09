@@ -21,7 +21,6 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"math"
@@ -55,7 +54,7 @@ func testFuncOneInput(t *testing.T, testName string, graphFn graphFnOneInputToTe
 	g.Compile(inputNode, outputNode)
 	results := g.Run(nil).SplitTuple()
 	input, got := results[0].Value(), results[1].Value()
-	if !slices.SlicesInDelta(want, got, slices.Epsilon) {
+	if !xslices.SlicesInDelta(want, got, xslices.Epsilon) {
 		t.Errorf("%s(%#v): want=%v, got=%s", testName, input, want, results[1].Local().GoStr())
 	}
 }
@@ -395,7 +394,7 @@ func TestOneArgOps(t *testing.T) {
 				want[i0][i1] = test.goFnScalar(value)
 			}
 		}
-		if !slices.DeepSliceCmp(got, want, slices.Close[float64]) {
+		if !xslices.DeepSliceCmp(got, want, xslices.Close[float64]) {
 			fmt.Printf("%s\n", g)
 			fmt.Printf("\tResult: %v %s\n", got, local.Shape())
 			t.Errorf("Wanted %v, got %v", want, got)
@@ -453,7 +452,7 @@ func TestDot(t *testing.T) {
 	Dot(inputs, w0) // Last node created in the graph is taken as output by default.
 	got := compileAndRun(g)
 	want := [][]float32{{0, 1.1}, {0, 11}, {0, 111}, {0, 1111}}
-	if !slices.DeepSliceCmp(got, want, slices.Close[float32]) {
+	if !xslices.DeepSliceCmp(got, want, xslices.Close[float32]) {
 		fmt.Printf("%s\n", g)
 		fmt.Printf("\tResult=%v\n", got)
 		t.Errorf("Wanted %v, got %v", want, got)
@@ -503,7 +502,7 @@ func TestFill(t *testing.T) {
 		FillScalar(g, shapes.Make(shapes.Int64, 3, 1), 4.0)
 		got := compileAndRun(g)
 		want := [][]int64{{4}, {4}, {4}}
-		if !slices.DeepSliceCmp(got, want, slices.Equal[int64]) {
+		if !xslices.DeepSliceCmp(got, want, xslices.Equal[int64]) {
 			t.Errorf("Wanted %#v, got %#v", want, got)
 		}
 	}
@@ -512,7 +511,7 @@ func TestFill(t *testing.T) {
 		Ones(g, shapes.Make(shapes.Float32, 3, 1))
 		got := compileAndRun(g)
 		want := [][]float32{{1}, {1}, {1}}
-		if !slices.DeepSliceCmp(got, want, slices.Equal[float32]) {
+		if !xslices.DeepSliceCmp(got, want, xslices.Equal[float32]) {
 			t.Errorf("Wanted %#v, got %#v", want, got)
 		}
 	}
@@ -521,7 +520,7 @@ func TestFill(t *testing.T) {
 		Zeros(g, shapes.Make(shapes.Float64, 3, 1))
 		got := compileAndRun(g)
 		want := [][]float64{{0}, {0}, {0}}
-		if !slices.DeepSliceCmp(got, want, slices.Equal[float64]) {
+		if !xslices.DeepSliceCmp(got, want, xslices.Equal[float64]) {
 			t.Errorf("Wanted %#v, got %#v", want, got)
 		}
 	}
@@ -551,7 +550,7 @@ func TestReduceSum(t *testing.T) {
 		g := reduceSumGraph(t, manager, testCase.dims)
 		gotT := g.Run(nil)
 		got := gotT.Local().Value()
-		if !slices.DeepSliceCmp(got, testCase.want, slices.Close[float64]) {
+		if !xslices.DeepSliceCmp(got, testCase.want, xslices.Close[float64]) {
 			t.Errorf("Wanted %v, got %v", testCase.want, got)
 		}
 	}
@@ -601,7 +600,7 @@ func TestReduceMaskedMax(t *testing.T) {
 			inputs = []*Node{x, mask}
 			outputs = []*Node{output}
 			return
-		}, []any{[]float32{0, 4, 8, 11}}, slices.Epsilon)
+		}, []any{[]float32{0, 4, 8, 11}}, xslices.Epsilon)
 }
 
 func TestReshape(t *testing.T) {
@@ -612,7 +611,7 @@ func TestReshape(t *testing.T) {
 		ReshapeWithShape(input, shapes.Make(input.DType(), 2, 1))
 		got := compileAndRun(g)
 		want := [][]float32{{1.1}, {1.2}}
-		if !slices.DeepSliceCmp(got, want, slices.Equal[float32]) {
+		if !xslices.DeepSliceCmp(got, want, xslices.Equal[float32]) {
 			fmt.Printf("%s\n", g)
 			fmt.Printf("\tResult=%v\n", got)
 			t.Errorf("Wanted %v, got %v", want, got)
@@ -633,7 +632,7 @@ func TestTuple(t *testing.T) {
 		GetTupleElement(tuple, 0)
 		got := compileAndRun(g)
 		want := []float32{1.1, 1.2}
-		if !slices.DeepSliceCmp(got, want, slices.Equal[float32]) {
+		if !xslices.DeepSliceCmp(got, want, xslices.Equal[float32]) {
 			fmt.Printf("%s\n", g)
 			fmt.Printf("\tResult=%v\n", got)
 			t.Errorf("Wanted %v, got %v", want, got)
@@ -686,7 +685,7 @@ func TestIota(t *testing.T) {
 		g.Compile()
 		got := g.Run(nil).Local().Value()
 		want := [][]float64{{0, 0}, {1, 1}}
-		if !slices.DeepSliceCmp(got, want, slices.Equal[float64]) {
+		if !xslices.DeepSliceCmp(got, want, xslices.Equal[float64]) {
 			t.Fatalf("Iota: want %v, got %v", want, got)
 		}
 	}
@@ -696,7 +695,7 @@ func TestIota(t *testing.T) {
 		g.Compile()
 		got := g.Run(nil).Local().Value()
 		want := [][]float64{{0, 1}, {0, 1}}
-		if !slices.DeepSliceCmp(got, want, slices.Equal[float64]) {
+		if !xslices.DeepSliceCmp(got, want, xslices.Equal[float64]) {
 			t.Fatalf("Iota: want %v, got %v", want, got)
 		}
 	}
@@ -723,7 +722,7 @@ func TestSlice(t *testing.T) {
 			[]int64{2, 3},
 			[]int64{1, 3},
 			[]int64{3},
-		}, slices.Epsilon)
+		}, xslices.Epsilon)
 
 	graphtest.RunTestGraphFn(t, "Slice Tests with Rank 1",
 		func(g *Graph) (inputs, outputs []*Node) {
@@ -739,7 +738,7 @@ func TestSlice(t *testing.T) {
 			[][]int32{{1}, {4}},
 			[][]int32{{4, 5, 6}},
 			[][]int32{{3}},
-		}, slices.Epsilon)
+		}, xslices.Epsilon)
 
 	graphtest.RunTestGraphFn(t, "Slice Tests with Rank 1",
 		func(g *Graph) (inputs, outputs []*Node) {
@@ -756,7 +755,7 @@ func TestSlice(t *testing.T) {
 		}, []any{
 			[][][][]int64{{{{1}}}, {{{9}}}},
 			[][][][]int64{{{{0}}}},
-		}, slices.Epsilon)
+		}, xslices.Epsilon)
 
 }
 
@@ -774,7 +773,7 @@ func TestPad(t *testing.T) {
 		}, []any{
 			[][]int64{{1, 2}, {3, 4}},
 			[][]int64{{0, 1, 0, 2}, {0, 3, 0, 4}},
-		}, slices.Epsilon)
+		}, xslices.Epsilon)
 }
 
 func TestConcatenate(t *testing.T) {
@@ -790,7 +789,7 @@ func TestConcatenate(t *testing.T) {
 		got := g.Run(nil).Local()
 		fmt.Printf("\t\tresult=%s\n", got.GoStr())
 		want := []float64{0, 1, 2, 3, 4, 5, 6, 7}
-		if !slices.DeepSliceCmp(got.Value(), want, slices.Equal[float64]) {
+		if !xslices.DeepSliceCmp(got.Value(), want, xslices.Equal[float64]) {
 			t.Errorf("scatter: want %v, got %v", want, got)
 		}
 	}
@@ -805,7 +804,7 @@ func TestConcatenate(t *testing.T) {
 		got := g.Run(nil).Local()
 		fmt.Printf("\t\tresult=%s\n", got.GoStr())
 		want := [][][]float64{{{0, 1}, {2, 3}, {8, 9}}, {{4, 5}, {6, 7}, {10, 11}}}
-		if !slices.DeepSliceCmp(got.Value(), want, slices.Equal[float64]) {
+		if !xslices.DeepSliceCmp(got.Value(), want, xslices.Equal[float64]) {
 			t.Errorf("scatter: want %v, got %v", want, got)
 		}
 	}
@@ -876,7 +875,7 @@ func TestSoftmax(t *testing.T) {
 			[][]float64{
 				{0.09003057317038046, 0.24472847105479764, 0.6652409557748218},
 				{0.15536240349696362, 0.4223187982515182, 0.4223187982515182}},
-		}, slices.Epsilon)
+		}, xslices.Epsilon)
 }
 
 func TestMaskedSoftmax(t *testing.T) {
@@ -890,7 +889,7 @@ func TestMaskedSoftmax(t *testing.T) {
 			return
 		}, []any{
 			[][]float64{{0.09003057317038046, 0.24472847105479764, 0.6652409557748218}, {1, 0, 0}},
-		}, slices.Epsilon)
+		}, xslices.Epsilon)
 }
 
 func TestReverse(t *testing.T) {

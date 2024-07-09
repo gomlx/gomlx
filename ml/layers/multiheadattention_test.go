@@ -28,7 +28,6 @@ import (
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"io"
@@ -76,7 +75,7 @@ func TestMultiHeadAttentionGraph(t *testing.T) {
 				{{{1, 0, 0}}, {{0, 1, 0}}, {{0, 0, 1}}},
 				{{{1, 0, 0}}, {{0, 1, 0}}, {{0, 0, 1}}},
 			},
-		}, slices.Epsilon)
+		}, xslices.Epsilon)
 }
 
 // buildSyntheticAttentionModelFn builds a model graph building function that does a regression on the elements

@@ -21,7 +21,6 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
 	"github.com/stretchr/testify/require"
 	"math"
 	"testing"
@@ -42,7 +41,7 @@ func TestGradientAdd(t *testing.T) {
 		got := resultsSplit[0].Local().Value()
 		fmt.Printf("output=%v\n", got)
 		want := float32(23)
-		if !slices.DeepSliceCmp(got, want, slices.Equal[float32]) {
+		if !xslices.DeepSliceCmp(got, want, xslices.Equal[float32]) {
 			t.Fatalf("Want %v, Got %v", want, got)
 		}
 	}
@@ -53,7 +52,7 @@ func TestGradientAdd(t *testing.T) {
 		got := gradientsSplit[0].Local().Value()
 		fmt.Printf("\tgrad output/A=%v\n", got)
 		want := []float32{1, 1}
-		if !slices.DeepSliceCmp(got, want, slices.Equal[float32]) {
+		if !xslices.DeepSliceCmp(got, want, xslices.Equal[float32]) {
 			t.Fatalf("Want %v, Got %v", want, got)
 		}
 	}
@@ -62,7 +61,7 @@ func TestGradientAdd(t *testing.T) {
 		got := gradientsSplit[1].Local().Value()
 		fmt.Printf("\tgrad output/B=%v\n", got)
 		want := []float32{2}
-		if !slices.DeepSliceCmp(got, want, slices.Equal[float32]) {
+		if !xslices.DeepSliceCmp(got, want, xslices.Equal[float32]) {
 			t.Fatalf("Want %v, Got %v", want, got)
 		}
 	}
@@ -87,7 +86,7 @@ func TestGradientDot(t *testing.T) {
 			got := resultsSplit[0].Local()
 			fmt.Printf("\toutput=%s\n", got)
 			want := float32(24)
-			if !slices.DeepSliceCmp(got.Value(), want, slices.Equal[float32]) {
+			if !xslices.DeepSliceCmp(got.Value(), want, xslices.Equal[float32]) {
 				t.Fatalf("Want %v, Got %v", want, got.Value())
 			}
 		}
@@ -96,7 +95,7 @@ func TestGradientDot(t *testing.T) {
 			got := gradientsSplit[0].Local()
 			fmt.Printf("\tgrad output/v1=%v\n", got)
 			want := []float32{3, 3, 3, 3}
-			if !slices.DeepSliceCmp(got.Value(), want, slices.Equal[float32]) {
+			if !xslices.DeepSliceCmp(got.Value(), want, xslices.Equal[float32]) {
 				t.Fatalf("Want %v, Got %v", want, got)
 			}
 		}
@@ -105,7 +104,7 @@ func TestGradientDot(t *testing.T) {
 			got := gradientsSplit[1].Local()
 			fmt.Printf("\tgrad output/v2=%v\n", got)
 			want := []float32{2, 2, 2, 2}
-			if !slices.DeepSliceCmp(got.Value(), want, slices.Equal[float32]) {
+			if !xslices.DeepSliceCmp(got.Value(), want, xslices.Equal[float32]) {
 				t.Fatalf("Want %v, Got %v", want, got)
 			}
 		}
@@ -129,7 +128,7 @@ func TestGradientDot(t *testing.T) {
 		{
 			got := results[0].Local()
 			want := float32(60)
-			if !slices.DeepSliceCmp(got.Value(), want, slices.Equal[float32]) {
+			if !xslices.DeepSliceCmp(got.Value(), want, xslices.Equal[float32]) {
 				t.Errorf("Want %v, Got %v", want, got.Value())
 			}
 		}
@@ -138,7 +137,7 @@ func TestGradientDot(t *testing.T) {
 			got := gradientsSplit[0].Local()
 			fmt.Printf("\tgrad output/v1=%v\n", got)
 			want := [][]float32{{3, 3, 3, 3}, {3, 3, 3, 3}}
-			if !slices.DeepSliceCmp(got.Value(), want, slices.Equal[float32]) {
+			if !xslices.DeepSliceCmp(got.Value(), want, xslices.Equal[float32]) {
 				t.Errorf("Want %v, Got %v", want, got)
 			}
 		}
@@ -147,7 +146,7 @@ func TestGradientDot(t *testing.T) {
 			got := gradientsSplit[1].Local()
 			fmt.Printf("\tgrad output/v2=%v\n", got)
 			want := []float32{5, 5, 5, 5}
-			if !slices.DeepSliceCmp(got.Value(), want, slices.Equal[float32]) {
+			if !xslices.DeepSliceCmp(got.Value(), want, xslices.Equal[float32]) {
 				t.Errorf("Want %v, Got %v", want, got)
 			}
 		}
@@ -171,7 +170,7 @@ func TestGradientDot(t *testing.T) {
 		{
 			got := results[0].Local()
 			want := float32(50)
-			if !slices.DeepSliceCmp(got.Value(), want, slices.Equal[float32]) {
+			if !xslices.DeepSliceCmp(got.Value(), want, xslices.Equal[float32]) {
 				t.Errorf("Want %v, Got %v", want, got.Value())
 			}
 		}
@@ -180,7 +179,7 @@ func TestGradientDot(t *testing.T) {
 			got := gradientsSplit[0].Local()
 			fmt.Printf("\tgrad output/v1=%v\n", got)
 			want := [][]float32{{1, 2, 3, 4}, {1, 2, 3, 4}}
-			if !slices.DeepSliceCmp(got.Value(), want, slices.Equal[float32]) {
+			if !xslices.DeepSliceCmp(got.Value(), want, xslices.Equal[float32]) {
 				t.Errorf("Want %v, Got %v", want, got)
 			}
 		}
@@ -189,7 +188,7 @@ func TestGradientDot(t *testing.T) {
 			got := gradientsSplit[1].Local()
 			fmt.Printf("\tgrad output/v2=%v\n", got)
 			want := [][]float32{{5}, {5}, {5}, {5}}
-			if !slices.DeepSliceCmp(got.Value(), want, slices.Equal[float32]) {
+			if !xslices.DeepSliceCmp(got.Value(), want, xslices.Equal[float32]) {
 				t.Errorf("Want %v, Got %v", want, got)
 			}
 		}
@@ -218,7 +217,7 @@ func TestGradientSlice(t *testing.T) {
 			[][]int64{{0, 1, 1}, {0, 1, 1}},
 			[][]int64{{1, 1, 1}, {0, 0, 0}},
 			[][]int64{{0, 0, 0}, {1, 0, 1}},
-		}, slices.Epsilon)
+		}, xslices.Epsilon)
 }
 
 func TestGradientGather(t *testing.T) {
@@ -236,7 +235,7 @@ func TestGradientGather(t *testing.T) {
 			got := results[0].Local()
 			fmt.Printf("\t\tGather=%s\n", got.GoStr())
 			want := []float64{3, 4, 5}
-			if !slices.DeepSliceCmp(got.Value(), want, slices.Equal[float64]) {
+			if !xslices.DeepSliceCmp(got.Value(), want, xslices.Equal[float64]) {
 				t.Errorf("Gather: want %v, got %v", want, got)
 			}
 		}
@@ -244,7 +243,7 @@ func TestGradientGather(t *testing.T) {
 			got := results[1].Local()
 			fmt.Printf("\t\tGradient=%v\n", got.GoStr())
 			want := [][]float64{{0, 0, 0}, {1, 1, 1}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}}
-			if !slices.DeepSliceCmp(got.Value(), want, slices.Equal[float64]) {
+			if !xslices.DeepSliceCmp(got.Value(), want, xslices.Equal[float64]) {
 				t.Errorf("Gather: want %v, got %v", want, got)
 			}
 		}
@@ -266,7 +265,7 @@ func TestGradientGather(t *testing.T) {
 			got := results[0].Local()
 			fmt.Printf("\t\tGather=%v\n", got.GoStr())
 			want := [][]float64{{6 * 3, 7 * 3, 8 * 3}, {0, 1, 2}}
-			if !slices.DeepSliceCmp(got.Value(), want, slices.Equal[float64]) {
+			if !xslices.DeepSliceCmp(got.Value(), want, xslices.Equal[float64]) {
 				t.Errorf("Gather: want %v, got %v", want, got)
 			}
 		}
@@ -275,7 +274,7 @@ func TestGradientGather(t *testing.T) {
 			fmt.Printf("\t\tGradient=%v\n", got.GoStr())
 			// Indices are {{2}, {0}}, where the {2} is multiplied by 3, and {0} is multiplied by 1:
 			want := [][]float64{{1, 1, 1}, {0, 0, 0}, {3, 3, 3}, {0, 0, 0}, {0, 0, 0}}
-			if !slices.DeepSliceCmp(got.Value(), want, slices.Equal[float64]) {
+			if !xslices.DeepSliceCmp(got.Value(), want, xslices.Equal[float64]) {
 				t.Errorf("Gather: want %v, got %v", want, got)
 			}
 		}
@@ -295,7 +294,7 @@ func TestGradientGather(t *testing.T) {
 			got := results[0].Local()
 			fmt.Printf("\t\tGather=%v\n", got.GoStr())
 			want := [][][]float64{{{6, 7, 8}, {0, 1, 2}}, {{6, 7, 8}, {3, 4, 5}}}
-			if !slices.DeepSliceCmp(got.Value(), want, slices.Equal[float64]) {
+			if !xslices.DeepSliceCmp(got.Value(), want, xslices.Equal[float64]) {
 				t.Errorf("Gather: want %v, got %v", want, got)
 			}
 		}
@@ -304,7 +303,7 @@ func TestGradientGather(t *testing.T) {
 			fmt.Printf("\t\tGradient=%v\n", got.GoStr())
 			// Indices gathered from {0}, {1} and 2x{2}:
 			want := [][]float64{{1, 1, 1}, {1, 1, 1}, {2, 2, 2}, {0, 0, 0}, {0, 0, 0}}
-			if !slices.DeepSliceCmp(got.Value(), want, slices.Equal[float64]) {
+			if !xslices.DeepSliceCmp(got.Value(), want, xslices.Equal[float64]) {
 				t.Errorf("Gather: want %v, got %v", want, got)
 			}
 		}
@@ -341,7 +340,7 @@ func testGradients(t *testing.T, name string, testFn gradTestFunc, wantForGrad [
 	require.Equalf(t, len(wantForGrad), len(gradients), "%s: number of wanted results different from number of gradients", name)
 	const delta = 1e-4
 	for ii, output := range gradients {
-		require.Truef(t, slices.SlicesInDelta(output.Value(), wantForGrad[ii], delta), "%s: gradient #%d doesn't match wanted value %#v",
+		require.Truef(t, xslices.SlicesInDelta(output.Value(), wantForGrad[ii], delta), "%s: gradient #%d doesn't match wanted value %#v",
 			name, ii, wantForGrad[ii])
 	}
 }

@@ -8,7 +8,6 @@ import (
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
@@ -278,9 +277,9 @@ func TestLayerWiseInferenceCommon(t *testing.T) {
 		lwLogits := execLayerWise.Call()[0]
 		fmt.Printf("\tLayerWiseGNN seeds states: %s\n", lwLogits.Local().GoStr())
 		require.True(t,
-			slices.DeepSliceCmp(
+			xslices.DeepSliceCmp(
 				sampledLogits.Local().Value().([][]float32),
 				lwLogits.Local().Value().([][]float32),
-				slices.Close[float32]))
+				xslices.Close[float32]))
 	}
 }

@@ -3,7 +3,6 @@ package layers
 import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
-	"github.com/gomlx/gomlx/types/slices"
 	"testing"
 )
 
@@ -16,7 +15,7 @@ func TestRelu(t *testing.T) {
 			return
 		}, []any{
 			[]float32{0, 0, 2, 0, 4, 0, 6},
-		}, slices.Epsilon)
+		}, xslices.Epsilon)
 }
 
 func TestLeakyReluWithAlpha(t *testing.T) {
@@ -28,7 +27,7 @@ func TestLeakyReluWithAlpha(t *testing.T) {
 			return
 		}, []any{
 			[]float32{0, -0.1, 2, -0.3, 4, -0.5, 6},
-		}, slices.Epsilon)
+		}, xslices.Epsilon)
 }
 
 func TestSwish(t *testing.T) {
@@ -40,7 +39,7 @@ func TestSwish(t *testing.T) {
 			return
 		}, []any{
 			[]float32{0, -0.26894143, 1.7615942, -0.14227763, 3.928055, -0.03346425, 5.9851646},
-		}, slices.Epsilon)
+		}, xslices.Epsilon)
 }
 
 func TestSelu(t *testing.T) {
@@ -52,5 +51,5 @@ func TestSelu(t *testing.T) {
 			return
 		}, []any{
 			[]float32{0., -1.1113307, 2.101402, -1.6705687, 4.202804, -1.7462534, 6.304206},
-		}, slices.Epsilon)
+		}, xslices.Epsilon)
 }

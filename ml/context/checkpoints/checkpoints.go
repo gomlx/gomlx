@@ -67,7 +67,6 @@ import (
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
 	"github.com/pkg/errors"
 	"os"
 	"path"
@@ -396,17 +395,17 @@ func (p *serializedParam) jsonDecodeTypeConvert() {
 	case []any:
 		switch p.ValueType {
 		case "[]int":
-			p.Value = slices.Map(value, func(fAny any) int {
+			p.Value = xslices.Map(value, func(fAny any) int {
 				f, _ := fAny.(float64) // Json decoder converts any numbers to float64.
 				return int(f)
 			})
 		case "[]float64":
-			p.Value = slices.Map(value, func(fAny any) float64 {
+			p.Value = xslices.Map(value, func(fAny any) float64 {
 				f, _ := fAny.(float64) // Json decoder converts any numbers to float64.
 				return f
 			})
 		case "[]string":
-			p.Value = slices.Map(value, func(sAny any) string {
+			p.Value = xslices.Map(value, func(sAny any) string {
 				s, _ := sAny.(string) // Json decoder converts any numbers to float64.
 				return s
 			})
@@ -596,7 +595,7 @@ func (h *Handler) loadCheckpoint(baseName string, merge bool, mergeWeight float6
 // of the model weights in memory, plus the tensor being merged.
 func (h *Handler) takeMean(baseNames []string) error {
 	// First load the last checkpoint.
-	err := h.loadCheckpoint(slices.Last(baseNames), false, 0)
+	err := h.loadCheckpoint(xslices.Last(baseNames), false, 0)
 	if err != nil {
 		return err
 	}

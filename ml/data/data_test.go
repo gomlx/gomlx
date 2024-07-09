@@ -24,7 +24,6 @@ import (
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
 	"github.com/stretchr/testify/assert"
 	"io"
 	"math"
@@ -218,7 +217,7 @@ func TestInMemoryDataset(t *testing.T) {
 	require.NoError(t, err)
 	input := inputs[0].Value().([]int64)
 	label := labels[0].Value().([]int64)
-	want := slices.Iota(int64(0), 50)
+	want := xslices.Iota(int64(0), 50)
 	require.Equal(t, want, input)
 	for ii := range want {
 		want[ii] = -want[ii]
@@ -253,7 +252,7 @@ func TestInMemoryDataset(t *testing.T) {
 	require.NoError(t, err)
 	input = inputs[0].Value().([]int64)
 	label = labels[0].Value().([]int64)
-	want = slices.Iota(int64(0), 50)
+	want = xslices.Iota(int64(0), 50)
 	require.Equal(t, want, input)
 	for ii := range want {
 		want[ii] = -want[ii]

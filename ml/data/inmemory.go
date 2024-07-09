@@ -22,7 +22,6 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
 	"github.com/pkg/errors"
 	"golang.org/x/exp/constraints"
 	"io"
@@ -315,7 +314,7 @@ func (mds *InMemoryDataset) readDataset(ds train.Dataset, dsIsBatched bool) (err
 				start := jj * MaxExamplesToConcat
 				end := minN(start+MaxExamplesToConcat, len(allExamples))
 				examplesSlice := allExamples[start:end]
-				examplesAsAny := slices.Map[tensors.Tensor, any](examplesSlice, convertToAny)
+				examplesAsAny := xslices.Map[tensors.Tensor, any](examplesSlice, convertToAny)
 				err = TryCatch[error](func() { newAllExamples[jj] = concatenateExec.Call(examplesAsAny...)[0] })
 				if err != nil {
 					err = errors.WithMessagef(err, "while concatenating %s examples into large tensor", getElementDesc(inputsAndLabelsIdx))

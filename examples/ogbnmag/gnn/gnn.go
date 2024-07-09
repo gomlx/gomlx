@@ -11,7 +11,6 @@ import (
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
 	"strings"
 )
 
@@ -166,7 +165,7 @@ func recursivelyApplyGraphConvolution(ctx *context.Context, rule *sampler.Rule,
 	// Makes sure there is a state for the current dependent.
 	state, found := graphStates[rule.Name]
 	if !found {
-		Panicf("state for sampling rule %q not given in `graphStates`, states given: %v", rule.Name, slices.Keys(graphStates))
+		Panicf("state for sampling rule %q not given in `graphStates`, states given: %v", rule.Name, xslices.Keys(graphStates))
 	}
 
 	// Leaf nodes are not updated.
@@ -219,7 +218,7 @@ func recursivelyApplyGraphConvolution(ctx *context.Context, rule *sampler.Rule,
 		}
 		dependentState, found := graphStates[dependent.Name]
 		if !found {
-			Panicf("state for sampling rule %q not given in `graphStates`, states given: %v", dependent.Name, slices.Keys(graphStates))
+			Panicf("state for sampling rule %q not given in `graphStates`, states given: %v", dependent.Name, xslices.Keys(graphStates))
 		}
 		dependentDegreePair := graphStates[sampler.NameForNodeDependentDegree(rule.Name, dependent.Name)]
 		var dependentDegree *Node

@@ -24,7 +24,6 @@ import (
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -88,7 +87,7 @@ func TestExecWithSlices(t *testing.T) {
 	oneElementOfX := [][]float64{{1}}
 	got2 := oneLayer.Call(oneElementOfX, oneElementOfX, oneElementOfX)[0].Value().([][]float64)
 	fmt.Printf("\toneLayer(%v, %v, %v)=%v\n", oneElementOfX, oneElementOfX, oneElementOfX, got)
-	if !slices.DeepSliceCmp(got, got2, slices.Equal[float64]) {
+	if !xslices.DeepSliceCmp(got, got2, xslices.Equal[float64]) {
 		t.Fatalf("oneLayer(%v) should have been the same as oneLayer(%v, %v, %v), but got %v and %v",
 			x, oneElementOfX, oneElementOfX, oneElementOfX, got, got2)
 	}

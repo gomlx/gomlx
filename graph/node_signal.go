@@ -1,9 +1,7 @@
 package graph
 
 import (
-	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
 	"github.com/gomlx/gomlx/xla"
 )
 
@@ -21,7 +19,7 @@ func FFT(operand *Node) *Node {
 	if operand.Shape().IsScalar() {
 		Panicf("FFT requires a complex input with rank > 1, got scalar %s instead", operand.DType())
 	}
-	return fftXLA(operand, xla.FftForward, []int{slices.At(operand.Shape().Dimensions, -1)})
+	return fftXLA(operand, xla.FftForward, []int{xslices.At(operand.Shape().Dimensions, -1)})
 }
 
 // InverseFFT computes an inverse fast-fourier transformation of the operand, which is expected to be complex.
@@ -37,7 +35,7 @@ func InverseFFT(operand *Node) *Node {
 	if operand.Shape().IsScalar() {
 		Panicf("InverseFFT requires a complex input with rank > 1, got scalar %s instead", operand.DType())
 	}
-	return fftXLA(operand, xla.FftInverse, []int{slices.At(operand.Shape().Dimensions, -1)})
+	return fftXLA(operand, xla.FftInverse, []int{xslices.At(operand.Shape().Dimensions, -1)})
 }
 
 // RealFFT computes a forward 1D fast-fourier transformation on a real (float) input.
@@ -56,7 +54,7 @@ func RealFFT(operand *Node) *Node {
 	if operand.Shape().IsScalar() {
 		Panicf("RealFFT requires a real (float) input with rank > 1, got scalar %s instead", operand.DType())
 	}
-	return fftXLA(operand, xla.FftForwardReal, []int{slices.At(operand.Shape().Dimensions, -1)})
+	return fftXLA(operand, xla.FftForwardReal, []int{xslices.At(operand.Shape().Dimensions, -1)})
 }
 
 // InverseRealFFT computes the inverse of a forward 1D fast-fourier transformation.
@@ -75,7 +73,7 @@ func InverseRealFFT(operand *Node) *Node {
 	if operand.Shape().IsScalar() {
 		Panicf("RealFFT requires a real (float) input with rank > 1, got scalar %s instead", operand.DType())
 	}
-	lastDim := (slices.At(operand.Shape().Dimensions, -1) - 1) * 2
+	lastDim := (xslices.At(operand.Shape().Dimensions, -1) - 1) * 2
 	return fftXLA(operand, xla.FftInverseReal, []int{lastDim})
 }
 
@@ -84,10 +82,10 @@ func fftVJP(node, v *Node, _ shapes.Shape) []*Node {
 	fftType := xla.FftType(node.serializedNode.Int)
 	switch fftType {
 	case xla.FftForward:
-		size := float64(slices.At(v.Shape().Dimensions, -1))
+		size := float64(xslices.At(v.Shape().Dimensions, -1))
 		return []*Node{MulScalar(InverseFFT(v), size)}
 	case xla.FftInverse:
-		invSize := 1.0 / float64(slices.At(v.Shape().Dimensions, -1))
+		invSize := 1.0 / float64(xslices.At(v.Shape().Dimensions, -1))
 		return []*Node{MulScalar(FFT(v), invSize)}
 	case xla.FftForwardReal:
 		return realFftVJP(node, v)
@@ -107,7 +105,7 @@ func fftVJP(node, v *Node, _ shapes.Shape) []*Node {
 // Experimental, not well tested yet.
 func realFftVJP(node, v *Node) []*Node {
 	fftLength := node.serializedNode.Ints
-	isEven := 1.0 - float64(slices.At(fftLength, -1)%2)
+	isEven := 1.0 - float64(xslices.At(fftLength, -1)%2)
 	operand := node.inputs[0]
 	rank := operand.Rank()
 	complexDType := v.DType()
@@ -149,9 +147,9 @@ func inverseRealFftVJP(node, v *Node) []*Node {
 	realDType := v.DType()
 	fftValue := node.inputs[0]
 	complexDType := fftValue.DType()
-	fftValueLastDim := slices.Last(fftValue.Shape().Dimensions)
+	fftValueLastDim := xslices.Last(fftValue.Shape().Dimensions)
 	fftLength := node.serializedNode.Ints
-	isFftLengthOdd := slices.Last(fftLength) % 2 // 1 if fftLength is odd, 0 if even.
+	isFftLengthOdd := xslices.Last(fftLength) % 2 // 1 if fftLength is odd, 0 if even.
 
 	// Create a simple mask like [1.0, 2.0, 2.0, ..., 2.0, 2.0, 1.0] for even-length FFTs
 	// or [1.0, 2.0, ..., 2.0] for odd-length FFTs -- same length as fftValueLastDim.
@@ -165,7 +163,7 @@ func inverseRealFftVJP(node, v *Node) []*Node {
 	}
 	mask.AssertDims(fftValueLastDim) // Our mask will apply to the fftValue (the input to the InverseRealFFT node).
 	mask = ExpandLeftToRank(mask, fftValue.Rank())
-	sizeNormalization := 1.0 / float64(slices.Last(v.Shape().Dimensions))
+	sizeNormalization := 1.0 / float64(xslices.Last(v.Shape().Dimensions))
 	normalizedMask := ConvertType(MulScalar(mask, sizeNormalization), complexDType)
 	vjp := Mul(RealFFT(v), normalizedMask)
 	return []*Node{vjp}

@@ -44,7 +44,6 @@ import (
 	mg "github.com/erkkah/margaid"
 	stdplots "github.com/gomlx/gomlx/examples/notebook/gonb/plots"
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/types/slices"
 	"github.com/janpfeifer/gonb/gonbui"
 	"github.com/pkg/errors"
 	"io"
@@ -407,7 +406,7 @@ func (ps *Plots) Plot() {
 	if !gonbui.IsNotebook {
 		return
 	}
-	for _, key := range slices.SortedKeys(ps.PerMetricType) {
+	for _, key := range xslices.SortedKeys(ps.PerMetricType) {
 		gonbui.DisplayHTML(ps.PerMetricType[key].PlotToHTML(ps.Width, ps.Height))
 	}
 }
@@ -416,7 +415,7 @@ func (ps *Plots) Plot() {
 // (one per metric type), which can be displayed in some different way.
 func (ps *Plots) PlotToHTML() string {
 	parts := make([]string, 0, len(ps.PerMetricType))
-	for _, key := range slices.SortedKeys(ps.PerMetricType) {
+	for _, key := range xslices.SortedKeys(ps.PerMetricType) {
 		parts = append(parts, ps.PerMetricType[key].PlotToHTML(ps.Width, ps.Height))
 	}
 	return strings.Join(parts, "\n")
@@ -452,7 +451,7 @@ func (p *Plot) PlotToHTML(width, height int) string {
 		return ""
 	}
 	allSeries := make([]*mg.Series, 0, len(p.PerName))
-	for _, key := range slices.SortedKeys(p.PerName) {
+	for _, key := range xslices.SortedKeys(p.PerName) {
 		allSeries = append(allSeries, p.PerName[key])
 	}
 	diagram := mg.New(width, height,
@@ -474,7 +473,7 @@ func (p *Plot) PlotToHTML(width, height int) string {
 	if p.MetricType != "" {
 		diagram.Title(fmt.Sprintf("%s metrics", p.MetricType))
 	}
-	if len(p.PerName) > 1 || slices.SortedKeys(p.PerName)[0] != "" {
+	if len(p.PerName) > 1 || xslices.SortedKeys(p.PerName)[0] != "" {
 		diagram.Legend(mg.BottomLeft)
 	}
 	buf := bytes.NewBuffer(nil)

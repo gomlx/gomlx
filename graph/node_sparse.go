@@ -18,9 +18,7 @@ package graph
 
 import (
 	"github.com/gomlx/gomlx/types"
-	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
 )
 
 // Gather values in params from the pointers in indices.
@@ -355,14 +353,14 @@ func ScatterAdd(operand, indices, updates *Node, sorted, unique bool) *Node {
 	indicesRank := indices.shape.Rank()
 	indexedRank := indices.shape.Dimensions[indicesRank-1]
 	updatesRank := updates.shape.Rank()
-	if updatesRank < indicesRank-1 || !slices.DeepSliceCmp(updates.shape.Dimensions[:indicesRank-1], indices.shape.Dimensions[:indicesRank-1], slices.Equal[int]) {
+	if updatesRank < indicesRank-1 || !xslices.DeepSliceCmp(updates.shape.Dimensions[:indicesRank-1], indices.shape.Dimensions[:indicesRank-1], xslices.Equal[int]) {
 		Panicf("updates rank prefix (shape=%s) must match the first n-1 dimensions of the indices (shape=%s)",
 			updates.shape, indices.shape)
 	}
 	slicesRank := updatesRank - (indicesRank - 1)
 	slicesDims := updates.shape.Dimensions[indicesRank-1:]
 	operandRank := operand.shape.Rank()
-	if operandRank != indexedRank+slicesRank || !slices.DeepSliceCmp(operand.shape.Dimensions[indexedRank:], slicesDims, slices.Equal[int]) {
+	if operandRank != indexedRank+slicesRank || !xslices.DeepSliceCmp(operand.shape.Dimensions[indexedRank:], slicesDims, xslices.Equal[int]) {
 		Panicf("operand shape (%s) has to be a combination of the indexed rank (%d, the last dimension of indices shape %s) and "+
 			"the slices coming from updates (the last %d dimensions %v of the updates, shaped %s)",
 			operand.shape, indexedRank, indices.shape, slicesRank, slicesDims, updates.shape)

@@ -34,7 +34,6 @@ import (
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
 	"log"
 	"path"
 	"time"
@@ -90,7 +89,7 @@ func main() {
 	optimizerFn, found := optimizers.KnownOptimizers[*flagOptimizer]
 	if !found {
 		log.Fatalf("Unknown optimizer %q, please use one of %v",
-			*flagOptimizer, slices.Keys(optimizers.KnownOptimizers))
+			*flagOptimizer, xslices.Keys(optimizers.KnownOptimizers))
 	}
 
 	// Load training data and initialize statistics (vocabularies and quantiles).

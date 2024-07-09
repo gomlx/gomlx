@@ -19,9 +19,7 @@ package layers
 import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
-	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
 	timage "github.com/gomlx/gomlx/types/tensor/image"
 )
 
@@ -88,7 +86,7 @@ func (conv *ConvBuilder) Filters(filters int) *ConvBuilder {
 //
 // You can also use KernelSizePerDim to set the kernel size per dimension (axis) individually.
 func (conv *ConvBuilder) KernelSize(size int) *ConvBuilder {
-	perDim := slices.SliceWithValue(conv.numSpatialDims, size)
+	perDim := xslices.SliceWithValue(conv.numSpatialDims, size)
 	return conv.KernelSizePerDim(perDim...)
 }
 
@@ -150,7 +148,7 @@ func (conv *ConvBuilder) NoPadding() *ConvBuilder {
 //
 // One cannot use strides and dilation at the same time.
 func (conv *ConvBuilder) Strides(strides int) *ConvBuilder {
-	perDim := slices.SliceWithValue(conv.numSpatialDims, strides)
+	perDim := xslices.SliceWithValue(conv.numSpatialDims, strides)
 	return conv.StridePerDim(perDim...)
 }
 
@@ -182,7 +180,7 @@ func (conv *ConvBuilder) StridePerDim(strides ...int) *ConvBuilder {
 //
 // One cannot use strides and dilation at the same time.
 func (conv *ConvBuilder) Dilations(dilation int) *ConvBuilder {
-	dilationsPerDim := slices.SliceWithValue(conv.numSpatialDims, dilation)
+	dilationsPerDim := xslices.SliceWithValue(conv.numSpatialDims, dilation)
 	return conv.DilationPerDim(dilationsPerDim...)
 }
 
@@ -285,7 +283,7 @@ func (conv *ConvBuilder) Done() *Node {
 	if conv.bias {
 		biasVar := ctxInScope.VariableWithShape("biases", shapes.Make(dtype, conv.filters))
 		bias := biasVar.ValueGraph(conv.graph)
-		expandedDims := slices.SliceWithValue(output.Rank(), 1)
+		expandedDims := xslices.SliceWithValue(output.Rank(), 1)
 		outputChannelsAxis := timage.GetChannelsAxis(output, conv.channelsAxisConfig)
 		expandedDims[outputChannelsAxis] = conv.filters
 		bias = Reshape(bias, expandedDims...)

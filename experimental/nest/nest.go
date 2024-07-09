@@ -20,7 +20,6 @@ package nest
 import (
 	"fmt"
 	"github.com/pkg/errors"
-	"github.com/gomlx/gomlx/types/slices"
 	"log"
 )
 
@@ -137,7 +136,7 @@ func (n *Nest[T]) Enumerate(fn func(value T) error) error {
 			return nil
 		}
 		// Range on sorted keys, to make it deterministic.
-		for _, key := range slices.SortedKeys(n.stringMap) {
+		for _, key := range xslices.SortedKeys(n.stringMap) {
 			err := fn(n.stringMap[key])
 			if err != nil {
 				return err
@@ -169,7 +168,7 @@ func (n *Nest[T]) EnumerateWithPath(fn func(path string, value T) error) error {
 			return nil
 		}
 		// Range on sorted keys, to make it deterministic.
-		for _, key := range slices.SortedKeys(n.stringMap) {
+		for _, key := range xslices.SortedKeys(n.stringMap) {
 			err := fn(fmt.Sprintf(">%s:", key), n.stringMap[key])
 			if err != nil {
 				return err
@@ -216,7 +215,7 @@ func (n *Nest[T]) Flatten() []T {
 		}
 		// Range on sorted keys, to make it deterministic.
 		s := make([]T, 0, len(n.stringMap))
-		for _, key := range slices.SortedKeys(n.stringMap) {
+		for _, key := range xslices.SortedKeys(n.stringMap) {
 			s = append(s, n.stringMap[key])
 		}
 		return s
@@ -238,7 +237,7 @@ func Unflatten[T1, T2 any](nestShape *Nest[T1], flatValues []T2) *Nest[T2] {
 		stringMap := make(map[string]T2, len(nestShape.stringMap))
 		if len(nestShape.stringMap) >= 0 {
 			idx := 0
-			for _, key := range slices.SortedKeys(nestShape.stringMap) {
+			for _, key := range xslices.SortedKeys(nestShape.stringMap) {
 				stringMap[key] = flatValues[idx]
 				idx++
 			}

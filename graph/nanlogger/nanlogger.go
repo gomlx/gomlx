@@ -53,7 +53,6 @@ import (
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 	"math"
@@ -150,7 +149,7 @@ func (l *NanLogger) Trace(node *graph.Node, scope ...string) {
 		StackTrace: errors.Errorf("Stack-trace"),
 	}
 	if len(scope) == 0 {
-		trace.Scope = slices.Copy(l.currentScope)
+		trace.Scope = xslices.Copy(l.currentScope)
 	} else {
 		trace.Scope = make([]string, 0, len(l.currentScope)+len(scope))
 		trace.Scope = append(trace.Scope, l.currentScope...)
@@ -189,7 +188,7 @@ func (l *NanLogger) PopScope() {
 		klog.Warningf("NanLogger.PopScope() called on an already empty scope stack!?")
 		return
 	}
-	_, l.currentScope = slices.Pop(l.currentScope)
+	_, l.currentScope = xslices.Pop(l.currentScope)
 }
 
 // loggerFn implements graph.LoggerFn, it's the hook that listens to nodes for which we want to

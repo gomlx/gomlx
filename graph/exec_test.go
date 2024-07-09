@@ -20,7 +20,6 @@ import (
 	"fmt"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"math"
@@ -49,7 +48,7 @@ func TestExec(t *testing.T) {
 		result := slice[0]
 		got := result.Value().(float32)
 		want := float32(math.Sqrt(float64(dim)))
-		if !slices.Close[float32](want, got) {
+		if !xslices.Close[float32](want, got) {
 			t.Fatalf("EuclideanDistance(%v to %v): want %.5f, got %.5f", a, b, want, got)
 		}
 	}
@@ -108,7 +107,7 @@ func TestExec(t *testing.T) {
 			"%q(%v:%v, %v:%v) failed", addAndSub.Name(), reflect.TypeOf(a), a, reflect.TypeOf(b), b)
 		add, sub := outputs[0].Value(), outputs[1].Value()
 		wantAdd, wantSub := []float32{3, 3}, b
-		if !slices.DeepSliceCmp(add, wantAdd, slices.Equal[float32]) || !slices.DeepSliceCmp(sub, wantSub, slices.Equal[float32]) {
+		if !xslices.DeepSliceCmp(add, wantAdd, xslices.Equal[float32]) || !xslices.DeepSliceCmp(sub, wantSub, xslices.Equal[float32]) {
 			t.Fatalf("%q(%v:%v, %v:%v) got (%v, %v), but wanted (%v, %v)", addAndSub.Name(), reflect.TypeOf(a), a, reflect.TypeOf(b), b, add, sub, wantAdd, wantSub)
 		}
 	}
@@ -132,21 +131,21 @@ func TestExecWithSideParams(t *testing.T) {
 	x := []float64{1, 2}
 	want := []float64{4, 5}
 	got := addScalar.Call(x)
-	if !slices.DeepSliceCmp(want, got[0].Value(), slices.Equal[float64]) {
+	if !xslices.DeepSliceCmp(want, got[0].Value(), xslices.Equal[float64]) {
 		t.Fatalf("addScalar(%v, 3): got %v, wanted %v", x, got, want)
 	}
 
 	scalar = tensors.FromValue(10.0).Device(manager, manager.DefaultDeviceNum())
 	want = []float64{11, 12}
 	got = addScalar.Call(x)
-	if !slices.DeepSliceCmp(want, got[0].Value(), slices.Equal[float64]) {
+	if !xslices.DeepSliceCmp(want, got[0].Value(), xslices.Equal[float64]) {
 		t.Fatalf("addScalar(%v, 10): got %v, wanted %v", x, got, want)
 	}
 
 	x = []float64{0, 1, 2}
 	want = []float64{10, 11, 12}
 	got = addScalar.Call(x)
-	if !slices.DeepSliceCmp(want, got[0].Value(), slices.Equal[float64]) {
+	if !xslices.DeepSliceCmp(want, got[0].Value(), xslices.Equal[float64]) {
 		t.Fatalf("addScalar(%v, 10): got %v, wanted %v", x, got, want)
 	}
 }
@@ -172,7 +171,7 @@ func TestExecWithSlices(t *testing.T) {
 		results := concat.Call(a, b)
 		got := results[0]
 		want := [][]float64{{1, 2, 10}, {3, 4, 20}}
-		if !slices.DeepSliceCmp(want, got.Value(), slices.Equal[float64]) {
+		if !xslices.DeepSliceCmp(want, got.Value(), xslices.Equal[float64]) {
 			t.Fatalf("concat(%v, %v): got %v, wanted %v", a, b, got, want)
 		}
 	}
@@ -182,7 +181,7 @@ func TestExecWithSlices(t *testing.T) {
 		results := concat.Call(a, b, c)
 		got := results[0]
 		want := [][]float64{{1, 2, 10, 100, 101}, {3, 4, 20, 200, 201}}
-		if !slices.DeepSliceCmp(want, got.Value(), slices.Equal[float64]) {
+		if !xslices.DeepSliceCmp(want, got.Value(), xslices.Equal[float64]) {
 			t.Fatalf("concat(%v, %v, %v): got %v, wanted %v", a, b, c, got, want)
 		}
 	}
@@ -192,19 +191,19 @@ func TestExecWithSlices(t *testing.T) {
 		gotTuple := addSub.Call(c, a)
 		want0 := [][]float64{{101, 103}, {203, 205}}
 		want1 := [][]float64{{99, 99}, {197, 197}}
-		if !slices.DeepSliceCmp(want0, gotTuple[0].Value(), slices.Equal[float64]) {
+		if !xslices.DeepSliceCmp(want0, gotTuple[0].Value(), xslices.Equal[float64]) {
 			t.Errorf("addSub(%v, %v)[0]: got %v, wanted %v", c, a, gotTuple[0].Local(), want0)
 		}
-		if !slices.DeepSliceCmp(want1, gotTuple[1].Value(), slices.Equal[float64]) {
+		if !xslices.DeepSliceCmp(want1, gotTuple[1].Value(), xslices.Equal[float64]) {
 			t.Errorf("addSub(%v, %v)[1]: got %v, wanted %v", c, a, gotTuple[1].Local(), want1)
 		}
 
 		// Test that call with list of tensors also work.
 		gotTuple = addSub.Call([]tensors.Tensor{tensors.FromValue(c), tensors.FromValue(a)})
-		if !slices.DeepSliceCmp(want0, gotTuple[0].Value(), slices.Equal[float64]) {
+		if !xslices.DeepSliceCmp(want0, gotTuple[0].Value(), xslices.Equal[float64]) {
 			t.Errorf("addSub(%v, %v)[0]: got %v, wanted %v", c, a, gotTuple[0].Local(), want0)
 		}
-		if !slices.DeepSliceCmp(want1, gotTuple[1].Value(), slices.Equal[float64]) {
+		if !xslices.DeepSliceCmp(want1, gotTuple[1].Value(), xslices.Equal[float64]) {
 			t.Errorf("addSub(%v, %v)[1]: got %v, wanted %v", c, a, gotTuple[1].Local(), want1)
 		}
 	}
@@ -234,11 +233,11 @@ func TestExecWithLogger(t *testing.T) {
 		results := concat.Call(a, b)
 		got := results[0]
 		want := [][]float64{{1, 2, 10}, {3, 4, 20}}
-		if !slices.DeepSliceCmp(want, got.Value(), slices.Equal[float64]) {
+		if !xslices.DeepSliceCmp(want, got.Value(), xslices.Equal[float64]) {
 			t.Fatalf("concat(%v, %v): got %v, wanted %v", a, b, got, want)
 		}
 		// firstNodeValue must have been set by our custom logger, concat.Call().
-		if !slices.DeepSliceCmp(a, firstNodeValue.Value(), slices.Equal[float64]) {
+		if !xslices.DeepSliceCmp(a, firstNodeValue.Value(), xslices.Equal[float64]) {
 			t.Fatalf("concat(%v, %v): got first node %v, wanted %v", a, b, firstNodeValue, a)
 		}
 	}

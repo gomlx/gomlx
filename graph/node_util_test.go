@@ -4,7 +4,6 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
 	"math"
 	"testing"
 )
@@ -18,7 +17,7 @@ func TestEinsum(t *testing.T) {
 			inputs = []*Node{lhs, rhs}
 			outputs = []*Node{Einsum("ij,jk->ik", lhs, rhs)}
 			return
-		}, []any{[][]float32{{1, 1, 1}, {2.6, 2.6, 2.6}}}, slices.Epsilon)
+		}, []any{[][]float32{{1, 1, 1}, {2.6, 2.6, 2.6}}}, xslices.Epsilon)
 	graphtest.RunTestGraphFn(t, "EinsumDotProduct",
 		func(g *Graph) (inputs, outputs []*Node) {
 			lhs := IotaFull(g, shapes.Make(shapes.F32, 4))
@@ -27,7 +26,7 @@ func TestEinsum(t *testing.T) {
 			inputs = []*Node{lhs, rhs}
 			outputs = []*Node{Einsum("i,i->", lhs, rhs)}
 			return
-		}, []any{float32(1)}, slices.Epsilon)
+		}, []any{float32(1)}, xslices.Epsilon)
 	graphtest.RunTestGraphFn(t, "EinsumOuterProduct",
 		func(g *Graph) (inputs, outputs []*Node) {
 			lhs := OnePlus(IotaFull(g, shapes.Make(shapes.F32, 4)))
@@ -35,7 +34,7 @@ func TestEinsum(t *testing.T) {
 			inputs = []*Node{lhs, rhs}
 			outputs = []*Node{Einsum("i,j->ij", lhs, rhs)}
 			return
-		}, []any{[][]float32{{1, 2, 3}, {2, 4, 6}, {3, 6, 9}, {4, 8, 12}}}, slices.Epsilon)
+		}, []any{[][]float32{{1, 2, 3}, {2, 4, 6}, {3, 6, 9}, {4, 8, 12}}}, xslices.Epsilon)
 	graphtest.RunTestGraphFn(t, "EinsumBatchMatrixMul",
 		func(g *Graph) (inputs, outputs []*Node) {
 			lhs := IotaFull(g, shapes.Make(shapes.F32, 5, 2, 4))
@@ -50,7 +49,7 @@ func TestEinsum(t *testing.T) {
 			{{7.4, 7.4, 7.4}, {9, 9, 9}},
 			{{10.6, 10.6, 10.6}, {12.2, 12.2, 12.2}},
 			{{13.8, 13.8, 13.8}, {15.4, 15.4, 15.4}}},
-		}, slices.Epsilon)
+		}, xslices.Epsilon)
 	graphtest.RunTestGraphFn(t, "EinsumBatchMatrixMulTransposed",
 		func(g *Graph) (inputs, outputs []*Node) {
 			lhs := IotaFull(g, shapes.Make(shapes.F32, 5, 2, 4))
@@ -66,7 +65,7 @@ func TestEinsum(t *testing.T) {
 			{{2.6, 5.8, 9, 12.2, 15.4},
 				{2.6, 5.8, 9, 12.2, 15.4},
 				{2.6, 5.8, 9, 12.2, 15.4}},
-		}}, slices.Epsilon)
+		}}, xslices.Epsilon)
 }
 
 func TestEinsumAxes(t *testing.T) {
@@ -78,7 +77,7 @@ func TestEinsumAxes(t *testing.T) {
 			inputs = []*Node{lhs, rhs}
 			outputs = []*Node{EinsumAxes(lhs, rhs, [][2]int{{1, 0}}, nil)}
 			return
-		}, []any{[][]float32{{1, 1, 1}, {2.6, 2.6, 2.6}}}, slices.Epsilon)
+		}, []any{[][]float32{{1, 1, 1}, {2.6, 2.6, 2.6}}}, xslices.Epsilon)
 	graphtest.RunTestGraphFn(t, "EinsumAxesDotProduct",
 		func(g *Graph) (inputs, outputs []*Node) {
 			lhs := IotaFull(g, shapes.Make(shapes.F32, 4))
@@ -87,7 +86,7 @@ func TestEinsumAxes(t *testing.T) {
 			inputs = []*Node{lhs, rhs}
 			outputs = []*Node{EinsumAxes(lhs, rhs, [][2]int{{0, 0}}, nil)}
 			return
-		}, []any{float32(1)}, slices.Epsilon)
+		}, []any{float32(1)}, xslices.Epsilon)
 	graphtest.RunTestGraphFn(t, "EinsumAxesOuterProduct",
 		func(g *Graph) (inputs, outputs []*Node) {
 			lhs := OnePlus(IotaFull(g, shapes.Make(shapes.F32, 4)))
@@ -95,7 +94,7 @@ func TestEinsumAxes(t *testing.T) {
 			inputs = []*Node{lhs, rhs}
 			outputs = []*Node{EinsumAxes(lhs, rhs, nil, nil)}
 			return
-		}, []any{[][]float32{{1, 2, 3}, {2, 4, 6}, {3, 6, 9}, {4, 8, 12}}}, slices.Epsilon)
+		}, []any{[][]float32{{1, 2, 3}, {2, 4, 6}, {3, 6, 9}, {4, 8, 12}}}, xslices.Epsilon)
 	graphtest.RunTestGraphFn(t, "EinsumAxesBatchMatrixMul",
 		func(g *Graph) (inputs, outputs []*Node) {
 			lhs := IotaFull(g, shapes.Make(shapes.F32, 5, 2, 4))
@@ -110,7 +109,7 @@ func TestEinsumAxes(t *testing.T) {
 			{{7.4, 7.4, 7.4}, {9, 9, 9}},
 			{{10.6, 10.6, 10.6}, {12.2, 12.2, 12.2}},
 			{{13.8, 13.8, 13.8}, {15.4, 15.4, 15.4}}},
-		}, slices.Epsilon)
+		}, xslices.Epsilon)
 }
 
 func TestLowerTriangular(t *testing.T) {
