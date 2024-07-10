@@ -41,7 +41,7 @@ type Shape = shapes.Shape
 
 var (
 	S   = shapes.Make
-	F32 = shapes.Float32
+	F32 = dtypes.Float32
 )
 
 func IotaP1Initializer(g *Graph, shape Shape) *Node {
@@ -148,7 +148,7 @@ func TestDense2(t *testing.T) {
 		float32(0),
 		func(ctx *context.Context, input *Node) *Node {
 			g := input.Graph()
-			input = Ones(g, shapes.Make(shapes.Float32, 100, 3072))
+			input = Ones(g, shapes.Make(dtypes.Float32, 100, 3072))
 			output := DenseWithBias(ctx.WithInitializer(initializers.Zero), input, 4)
 			fmt.Printf("\toutput.shape=%s\n", output.Shape())
 			return ReduceAllSum(output)

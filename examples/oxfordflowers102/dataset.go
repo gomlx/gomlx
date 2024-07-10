@@ -7,7 +7,6 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/types/shapes"
 	timage "github.com/gomlx/gomlx/types/tensor/image"
 	"github.com/pkg/errors"
 	"image"
@@ -90,9 +89,9 @@ func (ds *Dataset) shuffleLocked() {
 // Example:
 //
 //	seed := int64(42)
-//	dsTrain := oxfordflowers102.NewDataset(shapes.F32, 75).Partition(seed, 0, 0.8)   // 80%
-//	dsValid := oxfordflowers102.NewDataset(shapes.F32, 75).Partition(seed, 0.8, 0.9) // 10%
-//	dsTest := oxfordflowers102.NewDataset(shapes.F32, 75).Partition(seed, 0.9, 1.0)  // 10%
+//	dsTrain := oxfordflowers102.NewDataset(dtypes.Float32, 75).Partition(seed, 0, 0.8)   // 80%
+//	dsValid := oxfordflowers102.NewDataset(dtypes.Float32, 75).Partition(seed, 0.8, 0.9) // 10%
+//	dsTest := oxfordflowers102.NewDataset(dtypes.Float32, 75).Partition(seed, 0.9, 1.0)  // 10%
 func (ds *Dataset) Partition(seed int64, from, to float64) *Dataset {
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
@@ -268,7 +267,7 @@ func InMemoryDataset(manager *Manager, baseDir string, imageSize int, name strin
 	// Create InMemoryDataset.
 	start := time.Now()
 	fmt.Printf("Creating InMemoryDataset for %q with images cropped and scaled to %dx%d...\n", name, imageSize, imageSize)
-	ds := NewDataset(shapes.Uint8, imageSize).Partition(partitionSeed, partitionFrom, partitionTo)
+	ds := NewDataset(dtypes.Uint8, imageSize).Partition(partitionSeed, partitionFrom, partitionTo)
 	inMemoryDataset, err = data.InMemory(manager, data.Parallel(ds), false)
 	elapsed := time.Since(start)
 	fmt.Printf("\t- %s to process dataset.\n", elapsed)

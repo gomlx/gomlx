@@ -40,7 +40,7 @@ import (
 
 var (
 	// ModelDType used for the model. AssertNoError match RawData Go types.
-	ModelDType = shapes.Float32
+	ModelDType = dtypes.Float32
 )
 
 var (

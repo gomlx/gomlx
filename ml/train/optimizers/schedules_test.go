@@ -33,12 +33,12 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 	ctx := context.NewContext(manager).Checked(false)
 	cosineExec := context.NewExec(manager, ctx, func(ctx *context.Context, graph *Graph) *Node {
 		ctx.SetTraining(graph, true)
-		CosineAnnealingSchedule(ctx, graph, shapes.Float32).
+		CosineAnnealingSchedule(ctx, graph, dtypes.Float32).
 			PeriodInSteps(periodInSteps).
 			LearningRate(1.0).
 			MinLearningRate(0.001).
 			Done()
-		return LearningRateVar(ctx, shapes.F32, 0.001).ValueGraph(graph)
+		return LearningRateVar(ctx, dtypes.Float32, 0.001).ValueGraph(graph)
 	})
 
 	for ii := 0; ii < 2*periodInSteps; ii++ {
@@ -67,12 +67,12 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 
 	cosineExec = context.NewExec(manager, ctx, func(ctx *context.Context, graph *Graph) *Node {
 		ctx.SetTraining(graph, false)
-		CosineAnnealingSchedule(ctx, graph, shapes.Float32).
+		CosineAnnealingSchedule(ctx, graph, dtypes.Float32).
 			PeriodInSteps(50).
 			LearningRate(1.0).
 			MinLearningRate(0.001).
 			Done()
-		return LearningRateVar(ctx, shapes.F32, 0.001).ValueGraph(graph)
+		return LearningRateVar(ctx, dtypes.Float32, 0.001).ValueGraph(graph)
 	})
 	require.NotPanics(t, func() { _ = cosineExec.Call() }, "cosineExec.Call failed to execute graph when ctx.IsTraining() == false")
 }

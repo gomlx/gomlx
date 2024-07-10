@@ -20,7 +20,6 @@ package initializers
 
 import (
 	. "github.com/gomlx/gomlx/graph"
-	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"math"
 	"sync"
@@ -95,7 +94,7 @@ const NoSeed = int64(0)
 // Non-float and non-complex variables are initialized with zero instead.
 func RandomNormalFn(initialSeed int64, stddev float64) VariableInitializer {
 	return func(g *Graph, shape shapes.Shape) *Node {
-		if shape.DType != shapes.F32 && shape.DType != shapes.F64 {
+		if shape.DType != dtypes.Float32 && shape.DType != dtypes.Float64 {
 			return Zeros(g, shape)
 		}
 		var values *Node

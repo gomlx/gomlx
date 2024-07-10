@@ -45,7 +45,7 @@ func TestInterpolate(t *testing.T) {
 func TestGradientInterpolate(t *testing.T) {
 	testGradients(t, "Gradient 2D Interpolate().Nearest()",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
-			input := Ones(g, MakeShape(shapes.Float64, 1, 2, 2, 1))
+			input := Ones(g, MakeShape(dtypes.Float64, 1, 2, 2, 1))
 			output = Interpolate(input, 1, 4, 4, 1).Nearest().Done()
 			output = Mul(output, OnePlus(IotaFull(g, output.Shape())))
 			return output, []*Node{input}
@@ -60,7 +60,7 @@ func TestGradientInterpolate(t *testing.T) {
 	/*
 		testGradients(t, "Gradient 2D Interpolate().Bilinear()",
 			func(g *Graph) (output *Node, nodesForGrad []*Node) {
-				input := Ones(g, MakeShape(shapes.Float64, 1, 2, 2, 1))
+				input := Ones(g, MakeShape(dtypes.Float64, 1, 2, 2, 1))
 				output = Interpolate(input, 1, 4, 4, 1).Bilinear().Done()
 				if !g.AssertValid() {
 					t.Fatalf("Failed interpolation: %+v", g.Error())

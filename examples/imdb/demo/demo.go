@@ -39,7 +39,7 @@ import (
 )
 
 // DType used for the demo.
-const DType = shapes.Float32
+const DType = dtypes.Float32
 
 func AssertNoError(err error) {
 	if err != nil {
@@ -117,7 +117,7 @@ func Sample() {
 	AssertNoError(err)
 	labelsRef := labels[0].Local().AcquireData()
 	defer labelsRef.Release()
-	labelsData := shapes.CastAsDType(labelsRef.Flat(), shapes.Int64).([]int)
+	labelsData := shapes.CastAsDType(labelsRef.Flat(), dtypes.Int64).([]int)
 	for ii := 0; ii < 3; ii++ {
 		fmt.Printf("\n%v : %s\n", labelsData[ii], imdb.InputToString(inputs[0], ii))
 	}
@@ -454,18 +454,18 @@ func MaskedWordTaskGraph(ctx *context.Context, tokens, embed, mask *Node,
 	// choice: shape=[batch_size]
 	choice := ctx.RandomUniform(g, seqSize.Shape())
 	choice = Mul(seqSize, choice)
-	choice = ConvertType(choice, shapes.I64)
+	choice = ConvertType(choice, dtypes.Int64)
 	//choice.SetLogged("1. choice")
 
 	// Find indices to gather the word token and later the word embedding.
 	expandedChoice := ExpandDims(choice, -1)
-	batchIndices := Iota(g, shapes.Make(shapes.I64, batchSize, 1), 0)
+	batchIndices := Iota(g, shapes.Make(dtypes.Int64, batchSize, 1), 0)
 	indices := Concatenate([]*Node{batchIndices, expandedChoice}, -1) // shape=[batchSize, 2]
 	wordToken := ExpandDims(Gather(tokens, indices), -1)              // [batchSize, 1]
 
 	// wordMask: shape=[batch_size, seq_size]
 	broadcastChoice := BroadcastToDims(expandedChoice, mask.Shape().Dimensions...)
-	wordMask := Iota(g, shapes.Make(shapes.I64, mask.Shape().Dimensions...), 1)
+	wordMask := Iota(g, shapes.Make(dtypes.Int64, mask.Shape().Dimensions...), 1)
 	wordMask = Equal(wordMask, broadcastChoice)
 
 	// wordMaskedEmbed: shape=[batch_size, seq_size, embedding_dim]

@@ -113,7 +113,7 @@ func BuildLayerWiseInferenceModel(strategy *sampler.Strategy, predictions bool) 
 		readoutState := graphStates[strategy.Seeds[0].Name]
 		readoutState = layers.DenseWithBias(ctx.In("logits"), readoutState, NumLabels)
 		if predictions {
-			return ArgMax(readoutState, -1, shapes.Int16)
+			return ArgMax(readoutState, -1, dtypes.Int16)
 		}
 		return readoutState
 	}
@@ -122,7 +122,7 @@ func BuildLayerWiseInferenceModel(strategy *sampler.Strategy, predictions bool) 
 // createInputsWithAllStates with masks and degrees are set to nil and append to the [inputs] slice.
 func createInputsWithAllStates(g *Graph, strategy *sampler.Strategy, inputs []*Node) []*Node {
 	for _, seedsRule := range strategy.Seeds {
-		inputs = append(inputs, IotaFull(g, shapes.Make(shapes.I32, int(seedsRule.NumNodes))))
+		inputs = append(inputs, IotaFull(g, shapes.Make(dtypes.Int32, int(seedsRule.NumNodes))))
 		inputs = append(inputs, nil) // mask is nil
 		inputs = recursivelyCreateInputsWithAllStates(g, seedsRule, inputs)
 	}
@@ -134,7 +134,7 @@ func recursivelyCreateInputsWithAllStates(g *Graph, rule *sampler.Rule, inputs [
 		if subRule.NumNodes == 0 {
 			Panicf("Rule %q has 0 nodes configured.", subRule.Name)
 		}
-		inputs = append(inputs, IotaFull(g, shapes.Make(shapes.I32, int(subRule.NumNodes))))
+		inputs = append(inputs, IotaFull(g, shapes.Make(dtypes.Int32, int(subRule.NumNodes))))
 		inputs = append(inputs, nil) // mask is nil
 		if subRule.Strategy.KeepDegrees {
 			inputs = append(inputs, nil) // degree is nil
@@ -174,7 +174,7 @@ func recursivelyCreateEdgesInputs(g *Graph, rule *sampler.Rule, edges map[string
 		)
 		if subRule.EdgeType == nil {
 			// Identity rule: edges are 1-to-1 mapping.
-			indices := IotaFull(g, shapes.Make(shapes.I32, int(subRule.NumNodes), 1))
+			indices := IotaFull(g, shapes.Make(dtypes.Int32, int(subRule.NumNodes), 1))
 			inputs = append(inputs, indices, indices)
 		} else {
 			// Normal edge.

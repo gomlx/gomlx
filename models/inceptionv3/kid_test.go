@@ -65,7 +65,7 @@ func TestKidMetric(t *testing.T) {
 		Images[ii], err = loadImage(p)
 		require.NoError(t, err)
 	}
-	imagesBatch := timage.ToTensor(shapes.F32).MaxValue(255.0).Batch(Images)
+	imagesBatch := timage.ToTensor(dtypes.Float32).MaxValue(255.0).Batch(Images)
 	noisyBatch := noisyImages(t, manager, imagesBatch)
 
 	kidBuilder := NewKidBuilder(*flagDataDir, 75, 255.0, timage.ChannelsLast)

@@ -34,7 +34,7 @@ func FnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 		return magVar.ValueGraph(g)
 	}
 	log1pMagVar := func(name string) *Node {
-		return Log1p(ConvertType(getMagVar(name), shapes.Float32))
+		return Log1p(ConvertType(getMagVar(name), dtypes.Float32))
 	}
 
 	// Gather and concatenate all features from the seeds (indices of papers).
@@ -55,7 +55,7 @@ func FnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 		logits = layers.LeakyRelu(logits)
 		dropoutRate := context.GetParamOr(ctx, "dropout_rate", 0.0)
 		if dropoutRate > 0 {
-			dropoutRateNode := Scalar(g, shapes.Float32, dropoutRate)
+			dropoutRateNode := Scalar(g, dtypes.Float32, dropoutRate)
 			logits = layers.Dropout(ctx, logits, dropoutRateNode)
 		}
 	}

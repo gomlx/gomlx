@@ -5,7 +5,6 @@ import (
 	"fmt"
 	humanize "github.com/dustin/go-humanize"
 	. "github.com/gomlx/exceptions"
-	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/pkg/errors"
 	"math"
 	"os"
@@ -180,7 +179,7 @@ func (s *Sampler) AddEdgeType(name, sourceNodeType, targetNodeType string, edges
 	if s.Frozen {
 		Panicf("Sampler is frozen, that is, a strategy was already created with NewStrategy() and hence can no longer be modified.")
 	}
-	if edges.Rank() != 2 || edges.DType() != shapes.Int32 ||
+	if edges.Rank() != 2 || edges.DType() != dtypes.Int32 ||
 		edges.Shape().Dimensions[1] != 2 || edges.Shape().Dimensions[0] == 0 {
 		Panicf("invalid edge Shape %s for AddEdgeType(): it must be shaped like (Int32)[N, 2]",
 			edges.Shape())

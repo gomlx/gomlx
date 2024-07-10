@@ -22,7 +22,7 @@ func TestFFT(t *testing.T) {
 	graphtest.RunTestGraphFn(t, "FFT and InverseFFT", func(g *Graph) (inputs, outputs []*Node) {
 		const numPoints = 1000
 		const numPeriods = 10
-		x := Iota(g, shapes.Make(shapes.F32, numPoints), -1)
+		x := Iota(g, shapes.Make(dtypes.Float32, numPoints), -1)
 		x = MulScalar(x, 2*math.Pi*numPeriods/numPoints)
 		y := Sin(x)
 		y.AssertDims(numPoints)
@@ -41,7 +41,7 @@ func TestFFT(t *testing.T) {
 	graphtest.RunTestGraphFn(t, "RealFFT and InverseRealFFT", func(g *Graph) (inputs, outputs []*Node) {
 		const batchDim = 2
 		const numPoints = 1000
-		x := Iota(g, shapes.Make(shapes.F32, batchDim, numPoints), -1)
+		x := Iota(g, shapes.Make(dtypes.Float32, batchDim, numPoints), -1)
 		const numPeriods = 10
 		y := Sin(MulScalar(x, 2*math.Pi*numPeriods/numPoints))
 		y.AssertDims(batchDim, numPoints)
@@ -63,7 +63,7 @@ func TestGradientFFT(t *testing.T) {
 	// calculate the FFT, takes the gradient of that w.r.t input.
 	// Also checks that the InverseFFT takes it back to the input.
 	graphtest.RunTestGraphFn(t, "GradientFFT", func(g *Graph) (inputs, outputs []*Node) {
-		x := Iota(g, shapes.Make(shapes.F64, 11), 0)
+		x := Iota(g, shapes.Make(dtypes.Float64, 11), 0)
 		x = MulScalar(x, 2.0*math.Pi/11)
 		x = Sin(x)
 		x = ConvertType(x, shapes.Complex128)
@@ -101,7 +101,7 @@ func TestGradientFFT(t *testing.T) {
 	// w.r.t the FFT values.
 	// It should be close to 0, since the diff should be close to 0 -- it would be if the FFT were perfect.
 	graphtest.RunTestGraphFn(t, "GradientFFT", func(g *Graph) (inputs, outputs []*Node) {
-		x := Iota(g, shapes.Make(shapes.F64, 11), 0)
+		x := Iota(g, shapes.Make(dtypes.Float64, 11), 0)
 		x = MulScalar(x, 2.0*math.Pi/11)
 		x = Sin(x)
 		x = ConvertType(x, shapes.Complex128)
@@ -143,7 +143,7 @@ func realFftExample(manager *Manager, realDType dtypes.DType, numPoints int, fre
 func TestGradientRealFFT(t *testing.T) {
 	manager := graphtest.BuildTestManager()
 	// trueX is real, and trueY is the fft, a complex tensor.
-	trueX, trueY := realFftExample(manager, shapes.F32, 100, 2)
+	trueX, trueY := realFftExample(manager, dtypes.Float32, 100, 2)
 	ctx := context.NewContext(manager)
 	ctx.SetParam(optimizers.ParamLearningRate, 0.01)
 	ctx.RngStateFromSeed(42) // Make it deterministic.
@@ -183,7 +183,7 @@ func TestGradientRealFFT(t *testing.T) {
 func TestGradientInverseRealFFT(t *testing.T) {
 	manager := graphtest.BuildTestManager()
 	// We revert the x/y of realFftExample: trueX is the fft, a complex tensor, and trueY is the real sinusoidal curve.
-	trueY, trueX := realFftExample(manager, shapes.F64, 10, 2)
+	trueY, trueX := realFftExample(manager, dtypes.Float64, 10, 2)
 	ctx := context.NewContext(manager)
 	ctx.SetParam(optimizers.ParamLearningRate, 10.0)
 	ctx.RngStateFromSeed(42) // Make it deterministic.

@@ -56,7 +56,7 @@ func loopDataset(b *testing.B, ds train.Dataset, n int) {
 
 func BenchmarkDatasets(b *testing.B) {
 	Init()
-	ds := flowers.NewDataset(shapes.F32, ImageSize)
+	ds := flowers.NewDataset(dtypes.Float32, ImageSize)
 	dsBatched := data.Batch(manager, ds, BatchSize, true, true)
 	require.NoError(b, flowers.DownloadAndParse(DataDir))
 

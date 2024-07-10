@@ -227,7 +227,7 @@ func TestGradientGather(t *testing.T) {
 		g := manager.NewGraph("")
 		// numbers=(Float64)[5 3]: [[0 1 2] [3 4 5] [6 7 8] [9 10 11] [12 13 14]]
 		numbers := IotaFull(g, MakeShape(F64, 5, 3))
-		gather := Gather(numbers, ScalarOne(g, shapes.I64))
+		gather := Gather(numbers, ScalarOne(g, dtypes.Int64))
 		gradients := Gradient(ReduceAllSum(gather), numbers)
 		g.Compile(gather, gradients[0])
 		results := g.Run(nil).SplitTuple()
@@ -380,7 +380,7 @@ func TestGradientConvertType(t *testing.T) {
 	testGradients(t, "gradient_of_ConvertType",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			inputs := Const(g, []float32{1e6, 1e-6, 0, -1e-8, -1e6})
-			values := ConvertType(inputs, shapes.Float64)
+			values := ConvertType(inputs, dtypes.Float64)
 			output = Mul(Const(g, []float64{2, 1, 3, -4, 5}), values)
 			return output, []*Node{inputs}
 		}, []any{[]float32{2, 1, 3, -4, 5}},
@@ -414,7 +414,7 @@ func TestGradientAbs(t *testing.T) {
 			in1 := Const(g, []complex128{1 + 1i, 3 - 4i, -4 + 3i, -1 - 1i})
 			out0 := ReduceAllSum(Abs(in0))
 			out1 := ReduceAllSum(Abs(in1))
-			output = Add(ConvertType(out0, shapes.Float64), out1)
+			output = Add(ConvertType(out0, dtypes.Float64), out1)
 			return output, []*Node{in0, in1}
 		}, []any{
 			[]complex64{0.70710677 + 0.70710677i, 0.6 - 0.8i, -0.8 + 0.6i, -0.70710677 - 0.70710677i},
@@ -480,7 +480,7 @@ func TestGradientReduceMax(t *testing.T) {
 func TestGradientBatchNorm(t *testing.T) {
 	testGradients(t, "BatchNorm",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
-			input := Iota(g, MakeShape(shapes.Float32, 11, 3), 0) // Values from 0.0 to 6.0 on batch axis.
+			input := Iota(g, MakeShape(dtypes.Float32, 11, 3), 0) // Values from 0.0 to 6.0 on batch axis.
 			input = Div(input, Const(g, float32(10)))
 			scale := Const(g, []float32{1.0, 2.0, 3.0})
 			offset := Const(g, []float32{1.0, 10.0, 100.0})
@@ -525,7 +525,7 @@ func TestStopGradient(t *testing.T) {
 func TestGradientGatherSlices(t *testing.T) {
 	testGradients(t, "gradient_gather_slices",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
-			input := IotaFull(g, shapes.Make(shapes.F32, 3, 2, 4))
+			input := IotaFull(g, shapes.Make(dtypes.Float32, 3, 2, 4))
 			start := Const(g, [][]int32{{0, 1}, {1, 2}})
 			sizes := []int{1, 2} // Take a sub-matrix
 			output = GatherSlices(input, []int{1, 2}, start, sizes)
@@ -625,7 +625,7 @@ func TestGradientComplex(t *testing.T) {
 func TestIdentityWithCustomGradient(t *testing.T) {
 	testGradients(t, "IdentityWithCustomGradient",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
-			input := IotaFull(g, shapes.Make(shapes.F32, 5))
+			input := IotaFull(g, shapes.Make(dtypes.Float32, 5))
 			output = IdentityWithCustomGradient(input, func(x, v *Node) *Node {
 				factor := AddScalar(Neg(x), 5)
 				fmt.Printf("> custom gradient: x.shape=%s, v.shape=%s\n", x.Shape(), v.Shape())

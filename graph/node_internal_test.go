@@ -21,6 +21,8 @@ package graph
 import (
 	"fmt"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/xslices"
+	"github.com/gomlx/gopjrt/dtypes"
 	"testing"
 )
 
@@ -34,7 +36,7 @@ func compileAndRun(g *Graph) any {
 
 // buildTestManager using "Host" by default -- can be overwritten by GOMLX_PLATFORM environment variable.
 func buildTestManager() *Manager {
-	return BuildManager().WithDefaultPlugin("Host").Done()
+	return BuildManager().WithDefaultPlugin("cpu").Done()
 }
 
 func TestBroadcastInDim(t *testing.T) {
@@ -42,7 +44,7 @@ func TestBroadcastInDim(t *testing.T) {
 	{
 		g := manager.NewGraph("")
 		input := Const(g, [][][]float32{{{1.1, 1.2}}}) // Shape [1, 1, 2]
-		broadcastInDim(input, shapes.Make(shapes.Float32, 2, 1, 2), []int{0, 1, 2})
+		broadcastInDim(input, shapes.Make(dtypes.Float32, 2, 1, 2), []int{0, 1, 2})
 		got := compileAndRun(g)
 		want := [][][]float32{{{1.1, 1.2}}, {{1.1, 1.2}}} // Shape [2, 1, 2].
 		if !xslices.DeepSliceCmp(got, want, xslices.Equal[float32]) {

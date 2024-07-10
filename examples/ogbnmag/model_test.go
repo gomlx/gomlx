@@ -51,8 +51,8 @@ func TestModel(t *testing.T) {
 	for ii, output := range outputs {
 		fmt.Printf("output #%d=%s\n", ii, output.Shape())
 	}
-	assert.NoError(t, outputs[0].Shape().Check(shapes.F32, BatchSize, NumLabels))
-	assert.NoError(t, outputs[1].Shape().Check(shapes.Bool, BatchSize))
+	assert.NoError(t, outputs[0].Shape().Check(dtypes.Float32, BatchSize, NumLabels))
+	assert.NoError(t, outputs[1].Shape().Check(dtypes.Bool, BatchSize))
 }
 
 // BenchmarkParallelSampling measures the average time create one sampled subgraph (with `BatchSize` seeds).

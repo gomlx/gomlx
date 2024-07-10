@@ -15,8 +15,8 @@ func TestMainFunc(t *testing.T) {
 	}
 	flag.Parse()
 	*flagNumSteps = 10
-	if _, found := os.LookupEnv(graph.DefaultPlatformEnv); !found { // "GOMLX_PLATFORM"
-		err := os.Setenv("GOMLX_PLATFORM", "Host") // Force default to CPU.
+	if _, found := os.LookupEnv(graph.DefaultPluginEnv); !found { // "GOMLX_PJRT_PLUGIN"
+		err := os.Setenv(graph.DefaultPluginEnv, "cpu") // Force default to CPU.
 		require.NoError(t, err)
 	}
 	main()

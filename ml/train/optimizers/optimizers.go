@@ -141,14 +141,14 @@ func DeleteGlobalStep(ctx *context.Context) {
 //
 // Typically, this is called by the optimizers UpdateGraph method.
 //
-// GlobalStep is always stored as shapes.Int64, but it is converted to the given DType
+// GlobalStep is always stored as dtypes.Int64, but it is converted to the given DType
 // before being returned.
 func IncrementGlobalStepGraph(ctx *context.Context, g *Graph, dtype dtypes.DType) *Node {
 	globalStepVar := GetGlobalStepVar(ctx)
 	globalStep := globalStepVar.ValueGraph(g)
 	globalStep = Add(globalStep, OnesLike(globalStep))
 	globalStepVar.SetValueGraph(globalStep)
-	if dtype != shapes.I64 {
+	if dtype != dtypes.Int64 {
 		globalStep = ConvertType(globalStep, dtype)
 	}
 	return globalStep

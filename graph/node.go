@@ -642,8 +642,8 @@ func LessThanTotalOrder(x, y *Node) *Node { return twoArgsNode(xla.LessThanTotal
 func Dot(lhs, rhs *Node) *Node { return twoArgsNode(xla.DotNode, lhs, rhs) }
 
 // Complex generate a complex node from floating point nodes.
-// The inputs `real` and `imaginary` must have the same dtype, and they must be either `shapes.Float32` or
-// `shapes.Float64`.
+// The inputs `real` and `imaginary` must have the same dtype, and they must be either `dtypes.Float32` or
+// `dtypes.Float64`.
 // The output will be either `shapes.Complex64` or `shapes.Complex128`, depending on the inputs dtype.
 // The shapes of `real` or `imaginary` must be the same, or one must be a scalar, in which case
 // the value is broadcast to every other value.
@@ -651,16 +651,16 @@ func Dot(lhs, rhs *Node) *Node { return twoArgsNode(xla.DotNode, lhs, rhs) }
 // Example: To get a node c with `{(1+1i), (1-1i)}`:
 //
 //	im := Const(g, []float32{1, -1})
-//	re := ScalarOne(g, shapes.Float32)
+//	re := ScalarOne(g, dtypes.Float32)
 //	c := Complex(re, x)
 func Complex(real, imaginary *Node) *Node {
 	_ = validateGraphFromInputs(real, imaginary)
 	if real.DType() != imaginary.DType() {
 		Panicf("dtypes for real (%s) and imaginary (%s) must be the same and "+
-			"either shapes.Float32 or shapes.Float64", real.DType(), imaginary.DType())
+			"either dtypes.Float32 or dtypes.Float64", real.DType(), imaginary.DType())
 	}
 	dtype := real.DType()
-	if dtype != shapes.Float32 && dtype != shapes.Float64 {
+	if dtype != dtypes.Float32 && dtype != dtypes.Float64 {
 		Panicf("the dtype for the inputs (real and imaginary) must be either Float32 or Float64, got %s instead", dtype)
 	}
 	return twoArgsNode(xla.ComplexNode, real, imaginary)
@@ -819,7 +819,7 @@ func ConvertType(x *Node, dtype dtypes.DType) *Node {
 // Where takes element-wise values from onTrue or onFalse depending on the value of condition (expected to be boolean).
 func Where(condition, onTrue, onFalse *Node) *Node {
 	g := validateGraphFromInputs(condition)
-	if condition.DType() != shapes.Bool {
+	if condition.DType() != dtypes.Bool {
 		Panicf("Where(condition, onTrue, onFalse) requires condition to be of dtype Bool, got %s instead",
 			condition.Shape())
 	}
@@ -1046,12 +1046,12 @@ func reduceHelper(x, init *Node, reduceAxes []int, nodeType xla.NodeType) *Node 
 // ArgMax returns the index of the largest element across the given axis.
 //
 // The selected axis is reduced, and the output has one fewer axes (rank `x.Rank() - 1`).
-// The output `DType`, if not given, is `shapes.I32`.
+// The output `DType`, if not given, is `dtypes.Int32`.
 //
 // Ties are resolved by returning the smallest index.
 func ArgMax(x *Node, axis int, outputDType ...dtypes.DType) (output *Node) {
 	_ = validateGraphFromInputs(x)
-	dtype := shapes.I32
+	dtype := dtypes.Int32
 	if len(outputDType) > 1 {
 		Panicf("ArgMax takes at most one outputDType, %d values given", len(outputDType))
 	} else if len(outputDType) == 1 {
@@ -1063,12 +1063,12 @@ func ArgMax(x *Node, axis int, outputDType ...dtypes.DType) (output *Node) {
 // ArgMin returns the index of the smallest element across the given axis.
 //
 // The selected axis is reduced, and the output has one fewer axes (rank `x.Rank() - 1`).
-// The output `DType`, if not given, is `shapes.I32`.
+// The output `DType`, if not given, is `dtypes.Int32`.
 //
 // Ties are resolved by returning the smallest index.
 func ArgMin(x *Node, axis int, outputDType ...dtypes.DType) (output *Node) {
 	_ = validateGraphFromInputs(x)
-	dtype := shapes.I32
+	dtype := dtypes.Int32
 	if len(outputDType) > 1 {
 		Panicf("ArgMin takes at most one outputDType, %d values given", len(outputDType))
 	} else if len(outputDType) == 1 {

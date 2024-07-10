@@ -26,7 +26,7 @@ func TestOnDeviceBuffer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
-	want := shapes.Make(shapes.Float64, 2, 3)
+	want := shapes.Make(dtypes.Float64, 2, 3)
 	literal := NewLiteralFromShape(want)
 	buffer, err := literal.ToOnDeviceBuffer(client, 0)
 	if err != nil {

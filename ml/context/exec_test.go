@@ -97,7 +97,7 @@ func TestExecWithVariableUpdates(t *testing.T) {
 	manager := graphtest.BuildTestManager()
 	ctx := context.NewContext(manager)
 	counter := context.NewExec(manager, ctx, func(ctx *context.Context, g *Graph) *Node {
-		dtype := shapes.Int64
+		dtype := dtypes.Int64
 		counterVar := ctx.WithInitializer(initializers.Zero).VariableWithShape("counter", shapes.Make(dtype))
 		counterNode := counterVar.ValueGraph(g)
 		counterNode = Add(counterNode, OnesLike(counterNode))

@@ -76,7 +76,7 @@ var (
 )
 
 // DType used in the mode.
-var DType = shapes.Float32
+var DType = dtypes.Float32
 
 // EvalBatchSize can be larger than training, it's more efficient.
 const EvalBatchSize = 2000

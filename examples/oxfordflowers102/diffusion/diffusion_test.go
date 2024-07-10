@@ -18,7 +18,7 @@ func TestUNetModelGraph(t *testing.T) {
 	ctx := context.NewContext(manager)
 	numExamples := 5
 	noisyImages := Zeros(g, shapes.Make(DType, numExamples, 64, 64, 3))
-	flowerIds := Zeros(g, shapes.Make(shapes.I32, numExamples))
+	flowerIds := Zeros(g, shapes.Make(dtypes.Int32, numExamples))
 	fmt.Printf("  noisyImages.shape:\t%s\n", noisyImages.Shape())
 	filtered := UNetModelGraph(ctx, noisyImages, Ones(g, shapes.Make(DType, numExamples, 1, 1, 1)), flowerIds)
 	assert.True(t, noisyImages.Shape().Eq(filtered.Shape()), "Filtered images after UNetModelGraph should have the same shape as its input images")
@@ -32,8 +32,8 @@ func TestUNetModelGraph(t *testing.T) {
 // the variables in the context `ctx`.
 func getZeroPredictions(ctx *context.Context, g *Graph, numExamples int) []*Node {
 	images := Zeros(g, shapes.Make(DType, numExamples, ImageSize, ImageSize, 3))
-	imageIds := Zeros(g, shapes.Make(shapes.I32, numExamples))
-	flowerIds := Zeros(g, shapes.Make(shapes.I32, numExamples))
+	imageIds := Zeros(g, shapes.Make(dtypes.Int32, numExamples))
+	flowerIds := Zeros(g, shapes.Make(dtypes.Int32, numExamples))
 	return TrainingModelGraph(ctx, nil, []*Node{images, imageIds, flowerIds})
 }
 

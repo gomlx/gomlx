@@ -163,8 +163,8 @@ func BatchSize(data *Node) *Node {
 
 // upPrecision promotes the precision of `x` if it is float16, to float32.
 func upPrecision(x *Node) *Node {
-	if x.DType() == shapes.Float16 {
-		x = ConvertType(x, shapes.Float32)
+	if x.DType() == dtypes.Float16 {
+		x = ConvertType(x, dtypes.Float32)
 	}
 	return x
 }

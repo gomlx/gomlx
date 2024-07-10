@@ -86,7 +86,7 @@ func (strategy *Strategy) Nodes(name, nodeTypeName string, count int) *Rule {
 		NodeTypeName: nodeTypeName,
 		NumNodes:     numNodes,
 		Count:        count,
-		Shape:        shapes.Make(shapes.Int32, count),
+		Shape:        shapes.Make(dtypes.Int32, count),
 	}
 	r = r.WithKernelScopeName("gnn:" + name)
 	strategy.Rules[name] = r
@@ -121,7 +121,7 @@ func (strategy *Strategy) NodesFromSet(name, nodeTypeName string, count int, nod
 		NodeTypeName: nodeTypeName,
 		NumNodes:     numNodes,
 		Count:        count,
-		Shape:        shapes.Make(shapes.Int32, count),
+		Shape:        shapes.Make(dtypes.Int32, count),
 		NodeSet:      nodeSet,
 	}
 	r = r.WithKernelScopeName("gnn:" + name)

@@ -112,7 +112,7 @@ const BuildScope = "InceptionV3"
 //     the images must be of size 299x299 (defined as a constant `ClassificationImageSize`).
 //     Otherwise the minimum image size is 75x75.
 //
-// The original model has weights in `shapes.F32`. (TODO: If the image has
+// The original model has weights in `dtypes.Float32`. (TODO: If the image has
 // a different `DType`, it will try to convert the weights and work the model
 // fully on the image's `DType`. This hasn't been extensively tested, so no
 // guarantees of quality.)
@@ -258,7 +258,7 @@ func (cfg *Config) Done() (output *Node) {
 	if x.Rank() != 4 {
 		Panicf("inceptionv3.BuildGraph(): input image tensor must be of rank 3: e.g.: [batch_size, ..., channels], got shape %s instead", x.Shape())
 	}
-	if x.DType() != shapes.F32 {
+	if x.DType() != dtypes.Float32 {
 		Panicf("inceptionv3.BuildGraph(): only Float32 supported at this time, got dtype %s instead", x.DType())
 	}
 	if x.Shape().Dimensions[cfg.channelsAxis] != 3 {

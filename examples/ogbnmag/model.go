@@ -80,12 +80,12 @@ func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inpu
 	graphInputs, remainingInputs = sampler.MapInputsToStates[*Node](strategy, inputs)
 	dtype := getDType(ctx)
 	dtypeEmbed := dtype
-	if dtype == shapes.Float16 {
+	if dtype == dtypes.Float16 {
 		// If we don't do this for Float16, on a 2080ti GPU, the training becomes 3 times slower. Gemini mentioned
 		// that the RTX 30 series is better at "scattering" (used on the auto-differentiation of the "gathers" here),
 		// and may be worth a try then. But for now, leave it as Float32. Notice this is only an issue on non-sorted
 		// gathers/scatters, which is the case here (indices may come randomly).
-		dtypeEmbed = shapes.Float32
+		dtypeEmbed = dtypes.Float32
 	}
 
 	// Learnable embeddings context: it may benefit from dropout to have the model handle well

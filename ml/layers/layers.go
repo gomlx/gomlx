@@ -346,7 +346,7 @@ func DropoutStatic(ctx *context.Context, input *Node, dropoutRate float64) *Node
 		return input
 	}
 	g := input.Graph()
-	return Dropout(ctx, input, Scalar(g, shapes.F32, dropoutRate))
+	return Dropout(ctx, input, Scalar(g, dtypes.Float32, dropoutRate))
 }
 
 // DropoutNormalize randomly replace the input with zeros if ctx.IsTraining() is true. Otherwise,

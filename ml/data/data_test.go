@@ -144,7 +144,7 @@ func (ds *testSlicesDS) Yield() (spec any, inputs []tensors.Tensor, labels []ten
 func TestInMemoryDataset(t *testing.T) {
 	manager := graphtest.BuildTestManager()
 	ds := &testSlicesDS{numExamples: 17}
-	const bytesPerValue = 8 // int uses shapes.Int64, 8 bytes per value.
+	const bytesPerValue = 8 // int uses dtypes.Int64, 8 bytes per value.
 	const valuesPerExample = 3
 
 	// Test as if each element is int[3]
@@ -154,8 +154,8 @@ func TestInMemoryDataset(t *testing.T) {
 	require.Equal(t, 1, mds.numInputsTensors)
 	require.Equal(t, ds.numExamples, mds.numExamples)
 	require.Equal(t, int64(2*ds.numExamples*valuesPerExample*bytesPerValue), mds.Memory())
-	require.True(t, shapes.Make(shapes.I64, ds.numExamples, valuesPerExample).Eq(mds.inputsAndLabelsData[0].Shape()))
-	require.True(t, shapes.Make(shapes.I64, ds.numExamples, valuesPerExample).Eq(mds.inputsAndLabelsData[0].Shape()))
+	require.True(t, shapes.Make(dtypes.Int64, ds.numExamples, valuesPerExample).Eq(mds.inputsAndLabelsData[0].Shape()))
+	require.True(t, shapes.Make(dtypes.Int64, ds.numExamples, valuesPerExample).Eq(mds.inputsAndLabelsData[0].Shape()))
 
 	// Test as if ds provided a batch of 3 elements each time.
 	ds.Reset()
@@ -165,8 +165,8 @@ func TestInMemoryDataset(t *testing.T) {
 	require.Equal(t, 1, mds.numInputsTensors)
 	require.Equal(t, ds.numExamples*valuesPerExample, mds.numExamples)
 	require.Equal(t, int64(2*ds.numExamples*valuesPerExample*bytesPerValue), mds.Memory())
-	require.True(t, shapes.Make(shapes.I64, ds.numExamples*valuesPerExample).Eq(mds.inputsAndLabelsData[0].Shape()))
-	require.True(t, shapes.Make(shapes.I64, ds.numExamples*valuesPerExample).Eq(mds.inputsAndLabelsData[0].Shape()))
+	require.True(t, shapes.Make(dtypes.Int64, ds.numExamples*valuesPerExample).Eq(mds.inputsAndLabelsData[0].Shape()))
+	require.True(t, shapes.Make(dtypes.Int64, ds.numExamples*valuesPerExample).Eq(mds.inputsAndLabelsData[0].Shape()))
 
 	// Read one element at a time: repeat 4 times, the last two are randomized.
 	for repeat := 0; repeat < 4; repeat++ {
@@ -314,7 +314,7 @@ func TestNormalization(t *testing.T) {
 		wantMean[featureIdx] = baseMean + float64(featureIdx)
 		wantStddev[featureIdx] = baseStddev + float64(featureIdx)
 	}
-	input := tensors.FromShape(shapes.Make(shapes.F64, numExamples, midDim, numFeatures))
+	input := tensors.FromShape(shapes.Make(dtypes.Float64, numExamples, midDim, numFeatures))
 	ref := input.AcquireData()
 	data := ref.Flat().([]float64)
 	for ii := range data {

@@ -1,7 +1,6 @@
 package graph
 
 import (
-	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"golang.org/x/exp/constraints"
 )
@@ -205,7 +204,7 @@ func (c *InterpolationConfig) Done() (output *Node) {
 
 		// Broadcast spanStart to common shape so it can be combined with other interpolation axes.
 		// The final shape will be [interpolationDims..., 1].
-		broadcastSpanStart := ConvertType(spanStart, shapes.I32)
+		broadcastSpanStart := ConvertType(spanStart, dtypes.Int32)
 		{
 			spanExpandAxes := make([]int, 0, numAxesToInterpolate)
 			for axis := 0; axis < axisIdx; axis++ {

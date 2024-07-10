@@ -125,7 +125,7 @@ func LoadCifar10(manager *Manager, baseDir string, dtype dtypes.DType) (partitio
 
 	// Allocate the tensor.
 	images := tensors.FromShape(shapes.Make(dtype, NumExamples, Height, Width, Depth))
-	labels := tensors.FromShape(shapes.Make(shapes.I64, NumExamples, 1))
+	labels := tensors.FromShape(shapes.Make(dtypes.Int64, NumExamples, 1))
 	labelsRef := labels.AcquireData()
 	defer labelsRef.Release()
 	labelsData := labelsRef.Flat().([]int64)
@@ -153,9 +153,9 @@ func LoadCifar10(manager *Manager, baseDir string, dtype dtypes.DType) (partitio
 					bytesRead, inFileIdx, C10ExamplesPerFile, dataFile, len(labelImageBytes)))
 			}
 			switch dtype {
-			case shapes.Float64:
+			case dtypes.Float64:
 				err = convertBytesToTensor[float64](labelImageBytes[1:], images, exampleIdx)
-			case shapes.Float32:
+			case dtypes.Float32:
 				err = convertBytesToTensor[float32](labelImageBytes[1:], images, exampleIdx)
 			default:
 				panic(errors.Errorf("DType %s not supported", dtype))
@@ -179,7 +179,7 @@ func LoadCifar100(manager *Manager, baseDir string, dtype dtypes.DType) (partiti
 
 	// Allocate the tensor.
 	images := tensors.FromShape(shapes.Make(dtype, NumExamples, Height, Width, Depth))
-	labels := tensors.FromShape(shapes.Make(shapes.I64, NumExamples, 1))
+	labels := tensors.FromShape(shapes.Make(dtypes.Int64, NumExamples, 1))
 	labelsRef := labels.AcquireData()
 	defer labelsRef.Release()
 	labelsData := labelsRef.Flat().([]int64)
@@ -206,9 +206,9 @@ func LoadCifar100(manager *Manager, baseDir string, dtype dtypes.DType) (partiti
 					bytesRead, inFileIdx, dataFile, len(labelImageBytes)))
 			}
 			switch dtype {
-			case shapes.Float64:
+			case dtypes.Float64:
 				err = convertBytesToTensor[float64](labelImageBytes[2:], images, exampleIdx)
-			case shapes.Float32:
+			case dtypes.Float32:
 				err = convertBytesToTensor[float32](labelImageBytes[2:], images, exampleIdx)
 			default:
 				Panicf("DType %s not supported", dtype)

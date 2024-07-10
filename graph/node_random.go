@@ -18,7 +18,7 @@ var (
 	// RngStateShape is the shape of the random number generator state, used
 	// in all Random* functions.
 	// This is dependent on the algorithm, that for now is fixed.
-	RngStateShape = shapes.Make(shapes.Uint64, 3)
+	RngStateShape = shapes.Make(dtypes.Uint64, 3)
 )
 
 // RngStateFromSeed creates a random number generator (RNG) state based on the static seed.
@@ -82,40 +82,40 @@ func RngStateSplit(rngState *Node) (newRngState1, newRngState2 *Node) {
 // It uses and updates the random number generator (RNG) state in `rngState`.
 func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Node) {
 	switch shape.DType {
-	case shapes.Float64:
+	case dtypes.Float64:
 		bitsShape := shape.Clone()
-		bitsShape.DType = shapes.Uint64
+		bitsShape.DType = dtypes.Uint64
 		var randomBits *Node
 		newRngState, randomBits = RngBitGeneratorXLA(rngState, bitsShape)
-		values = ConvertType(randomBits, shapes.Float64)
+		values = ConvertType(randomBits, dtypes.Float64)
 		values = MulScalar(values, math.Pow(2.0, -64))
 		values = MinScalar(values, math.Nextafter(1.0, 0.0))
 		values = StopGradient(values)
-	case shapes.Float32:
+	case dtypes.Float32:
 		bitsShape := shape.Clone()
-		bitsShape.DType = shapes.Uint32
+		bitsShape.DType = dtypes.Uint32
 		var randomBits *Node
 		newRngState, randomBits = RngBitGeneratorXLA(rngState, bitsShape)
-		values = ConvertType(randomBits, shapes.Float32)
+		values = ConvertType(randomBits, dtypes.Float32)
 		values = MulScalar(values, 1.0/(float64(1<<32)))
 		values = MinScalar(values, float64(math.Nextafter32(1.0, 0.0)))
 		values = StopGradient(values)
-	case shapes.Float16:
+	case dtypes.Float16:
 		shapeF32 := shape.Clone()
-		shapeF32.DType = shapes.F32
+		shapeF32.DType = dtypes.Float32
 		newRngState, values = RandomUniform(rngState, shapeF32)
 		values = ConvertType(values, shape.DType)
 		values = StopGradient(values)
 	case shapes.Complex64:
 		componentShape := shape.Clone()
-		componentShape.DType = shapes.Float32
+		componentShape.DType = dtypes.Float32
 		var re, im *Node
 		newRngState, re = RandomUniform(rngState, componentShape)
 		newRngState, im = RandomUniform(rngState, componentShape)
 		values = Complex(re, im)
 	case shapes.Complex128:
 		componentShape := shape.Clone()
-		componentShape.DType = shapes.Float64
+		componentShape.DType = dtypes.Float64
 		var re, im *Node
 		newRngState, re = RandomUniform(rngState, componentShape)
 		newRngState, im = RandomUniform(rngState, componentShape)

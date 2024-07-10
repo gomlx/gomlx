@@ -261,11 +261,11 @@ func getDType(ctx *context.Context) dtypes.DType {
 	dtypeStr := context.GetParamOr(ctx, ParamDType, "float32")
 	switch dtypeStr {
 	case "float32":
-		return shapes.F32
+		return dtypes.Float32
 	case "float16":
 		return shapes.F16
 	case "float64":
-		return shapes.F64
+		return dtypes.Float64
 	default:
 		Panicf("Invalid DType %q given to parameters %q", dtypeStr, ParamDType)
 	}
@@ -278,9 +278,9 @@ func getDType(ctx *context.Context) dtypes.DType {
 func convertPapersEmbeddings(ctx *context.Context) {
 	dtype := getDType(ctx)
 	dtypeEmbed := dtype
-	if dtype == shapes.Float16 {
+	if dtype == dtypes.Float16 {
 		// See comment on model.go, in function FeaturePreprocessing.
-		dtypeEmbed = shapes.Float32
+		dtypeEmbed = dtypes.Float32
 	}
 
 	papersVar := ctx.InspectVariable(OgbnMagVariablesScope, "PapersEmbeddings")

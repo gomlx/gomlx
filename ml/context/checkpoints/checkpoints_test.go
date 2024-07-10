@@ -39,7 +39,7 @@ func TestCheckpoints(t *testing.T) {
 
 	// Graph function to test: it simply creates, increments and returns the global step.
 	testGraphFn := func(ctx *context.Context, g *Graph) *Node {
-		return optimizers.IncrementGlobalStepGraph(ctx, g, shapes.Float64)
+		return optimizers.IncrementGlobalStepGraph(ctx, g, dtypes.Float64)
 	}
 	var dir string
 	{

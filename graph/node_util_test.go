@@ -11,35 +11,35 @@ import (
 func TestEinsum(t *testing.T) {
 	graphtest.RunTestGraphFn(t, "EinsumMatrixMul",
 		func(g *Graph) (inputs, outputs []*Node) {
-			lhs := IotaFull(g, shapes.Make(shapes.F32, 2, 4))
+			lhs := IotaFull(g, shapes.Make(dtypes.Float32, 2, 4))
 			lhs = OnePlus(lhs)
-			rhs := MulScalar(Ones(g, shapes.Make(shapes.F32, 4, 3)), 0.1)
+			rhs := MulScalar(Ones(g, shapes.Make(dtypes.Float32, 4, 3)), 0.1)
 			inputs = []*Node{lhs, rhs}
 			outputs = []*Node{Einsum("ij,jk->ik", lhs, rhs)}
 			return
 		}, []any{[][]float32{{1, 1, 1}, {2.6, 2.6, 2.6}}}, xslices.Epsilon)
 	graphtest.RunTestGraphFn(t, "EinsumDotProduct",
 		func(g *Graph) (inputs, outputs []*Node) {
-			lhs := IotaFull(g, shapes.Make(shapes.F32, 4))
+			lhs := IotaFull(g, shapes.Make(dtypes.Float32, 4))
 			lhs = OnePlus(lhs)
-			rhs := MulScalar(Ones(g, shapes.Make(shapes.F32, 4)), 0.1)
+			rhs := MulScalar(Ones(g, shapes.Make(dtypes.Float32, 4)), 0.1)
 			inputs = []*Node{lhs, rhs}
 			outputs = []*Node{Einsum("i,i->", lhs, rhs)}
 			return
 		}, []any{float32(1)}, xslices.Epsilon)
 	graphtest.RunTestGraphFn(t, "EinsumOuterProduct",
 		func(g *Graph) (inputs, outputs []*Node) {
-			lhs := OnePlus(IotaFull(g, shapes.Make(shapes.F32, 4)))
-			rhs := OnePlus(IotaFull(g, shapes.Make(shapes.F32, 3)))
+			lhs := OnePlus(IotaFull(g, shapes.Make(dtypes.Float32, 4)))
+			rhs := OnePlus(IotaFull(g, shapes.Make(dtypes.Float32, 3)))
 			inputs = []*Node{lhs, rhs}
 			outputs = []*Node{Einsum("i,j->ij", lhs, rhs)}
 			return
 		}, []any{[][]float32{{1, 2, 3}, {2, 4, 6}, {3, 6, 9}, {4, 8, 12}}}, xslices.Epsilon)
 	graphtest.RunTestGraphFn(t, "EinsumBatchMatrixMul",
 		func(g *Graph) (inputs, outputs []*Node) {
-			lhs := IotaFull(g, shapes.Make(shapes.F32, 5, 2, 4))
+			lhs := IotaFull(g, shapes.Make(dtypes.Float32, 5, 2, 4))
 			lhs = OnePlus(lhs)
-			rhs := MulScalar(Ones(g, shapes.Make(shapes.F32, 5, 4, 3)), 0.1)
+			rhs := MulScalar(Ones(g, shapes.Make(dtypes.Float32, 5, 4, 3)), 0.1)
 			inputs = []*Node{lhs, rhs}
 			outputs = []*Node{Einsum("bij,bjk->bik", lhs, rhs)}
 			return
@@ -52,9 +52,9 @@ func TestEinsum(t *testing.T) {
 		}, xslices.Epsilon)
 	graphtest.RunTestGraphFn(t, "EinsumBatchMatrixMulTransposed",
 		func(g *Graph) (inputs, outputs []*Node) {
-			lhs := IotaFull(g, shapes.Make(shapes.F32, 5, 2, 4))
+			lhs := IotaFull(g, shapes.Make(dtypes.Float32, 5, 2, 4))
 			lhs = OnePlus(lhs)
-			rhs := MulScalar(Ones(g, shapes.Make(shapes.F32, 5, 4, 3)), 0.1)
+			rhs := MulScalar(Ones(g, shapes.Make(dtypes.Float32, 5, 4, 3)), 0.1)
 			inputs = []*Node{lhs, rhs}
 			outputs = []*Node{Einsum("bij,bjk->ikb", lhs, rhs)}
 			return
@@ -71,35 +71,35 @@ func TestEinsum(t *testing.T) {
 func TestEinsumAxes(t *testing.T) {
 	graphtest.RunTestGraphFn(t, "EinsumAxesMatrixMul",
 		func(g *Graph) (inputs, outputs []*Node) {
-			lhs := IotaFull(g, shapes.Make(shapes.F32, 2, 4))
+			lhs := IotaFull(g, shapes.Make(dtypes.Float32, 2, 4))
 			lhs = OnePlus(lhs)
-			rhs := MulScalar(Ones(g, shapes.Make(shapes.F32, 4, 3)), 0.1)
+			rhs := MulScalar(Ones(g, shapes.Make(dtypes.Float32, 4, 3)), 0.1)
 			inputs = []*Node{lhs, rhs}
 			outputs = []*Node{EinsumAxes(lhs, rhs, [][2]int{{1, 0}}, nil)}
 			return
 		}, []any{[][]float32{{1, 1, 1}, {2.6, 2.6, 2.6}}}, xslices.Epsilon)
 	graphtest.RunTestGraphFn(t, "EinsumAxesDotProduct",
 		func(g *Graph) (inputs, outputs []*Node) {
-			lhs := IotaFull(g, shapes.Make(shapes.F32, 4))
+			lhs := IotaFull(g, shapes.Make(dtypes.Float32, 4))
 			lhs = OnePlus(lhs)
-			rhs := MulScalar(Ones(g, shapes.Make(shapes.F32, 4)), 0.1)
+			rhs := MulScalar(Ones(g, shapes.Make(dtypes.Float32, 4)), 0.1)
 			inputs = []*Node{lhs, rhs}
 			outputs = []*Node{EinsumAxes(lhs, rhs, [][2]int{{0, 0}}, nil)}
 			return
 		}, []any{float32(1)}, xslices.Epsilon)
 	graphtest.RunTestGraphFn(t, "EinsumAxesOuterProduct",
 		func(g *Graph) (inputs, outputs []*Node) {
-			lhs := OnePlus(IotaFull(g, shapes.Make(shapes.F32, 4)))
-			rhs := OnePlus(IotaFull(g, shapes.Make(shapes.F32, 3)))
+			lhs := OnePlus(IotaFull(g, shapes.Make(dtypes.Float32, 4)))
+			rhs := OnePlus(IotaFull(g, shapes.Make(dtypes.Float32, 3)))
 			inputs = []*Node{lhs, rhs}
 			outputs = []*Node{EinsumAxes(lhs, rhs, nil, nil)}
 			return
 		}, []any{[][]float32{{1, 2, 3}, {2, 4, 6}, {3, 6, 9}, {4, 8, 12}}}, xslices.Epsilon)
 	graphtest.RunTestGraphFn(t, "EinsumAxesBatchMatrixMul",
 		func(g *Graph) (inputs, outputs []*Node) {
-			lhs := IotaFull(g, shapes.Make(shapes.F32, 5, 2, 4))
+			lhs := IotaFull(g, shapes.Make(dtypes.Float32, 5, 2, 4))
 			lhs = OnePlus(lhs)
-			rhs := MulScalar(Ones(g, shapes.Make(shapes.F32, 5, 4, 3)), 0.1)
+			rhs := MulScalar(Ones(g, shapes.Make(dtypes.Float32, 5, 4, 3)), 0.1)
 			inputs = []*Node{lhs, rhs}
 			outputs = []*Node{EinsumAxes(lhs, rhs, [][2]int{{2, 1}}, [][2]int{{0, 0}})}
 			return
@@ -218,7 +218,7 @@ func TestMirroredLog1p(t *testing.T) {
 func TestShiftWithScalar(t *testing.T) {
 	testFuncOneInput(t, "ShiftWithScalar(input, axis=1, left, n=1, fill=0.0)",
 		func(g *Graph) (input, output *Node) {
-			input = IotaFull(g, shapes.Make(shapes.F32, 3, 2, 2))
+			input = IotaFull(g, shapes.Make(dtypes.Float32, 3, 2, 2))
 			output = ShiftWithScalar(input, 1, ShiftDirLeft, 1, 0.0)
 			return
 		}, [][][]float32{
@@ -228,7 +228,7 @@ func TestShiftWithScalar(t *testing.T) {
 		})
 	testFuncOneInput(t, "ShiftWithScalar(input, axis=-1, left, n=1, fill=100)",
 		func(g *Graph) (input, output *Node) {
-			input = IotaFull(g, shapes.Make(shapes.I32, 3, 2, 2))
+			input = IotaFull(g, shapes.Make(dtypes.Int32, 3, 2, 2))
 			output = ShiftWithScalar(input, -1, ShiftDirLeft, 1, 100)
 			return
 		}, [][][]int32{
@@ -238,7 +238,7 @@ func TestShiftWithScalar(t *testing.T) {
 		})
 	testFuncOneInput(t, "ShiftWithScalar(input, axis=0, right, n=2, fill=1.0)",
 		func(g *Graph) (input, output *Node) {
-			input = Zeros(g, shapes.Make(shapes.Bool, 3, 2, 2))
+			input = Zeros(g, shapes.Make(dtypes.Bool, 3, 2, 2))
 			output = ShiftWithScalar(input, 0, ShiftDirRight, 2, 1)
 			return
 		}, [][][]bool{ // Inserted `true` to the left (shift-right) of the tensor:
@@ -248,7 +248,7 @@ func TestShiftWithScalar(t *testing.T) {
 		})
 	testFuncOneInput(t, "ShiftWithScalar(input, axis=0, right, n=3, fill=1)",
 		func(g *Graph) (input, output *Node) {
-			input = IotaFull(g, shapes.Make(shapes.F64, 10.0))
+			input = IotaFull(g, shapes.Make(dtypes.Float64, 10.0))
 			output = ShiftWithScalar(input, -1, ShiftDirRight, 3, 1)
 			return
 		}, []float64{1, 1, 1, 0, 1, 2, 3, 4, 5, 6})
@@ -257,13 +257,13 @@ func TestShiftWithScalar(t *testing.T) {
 func TestShiftWithValue(t *testing.T) {
 	testFuncOneInput(t, "ShiftWithScalar(input, axis=0, left, n=3, value=1000)",
 		func(g *Graph) (input, output *Node) {
-			input = IotaFull(g, shapes.Make(shapes.F32, 10))
+			input = IotaFull(g, shapes.Make(dtypes.Float32, 10))
 			output = ShiftWithValue(input, 0, ShiftDirLeft, 3, Scalar(g, F32, 1000))
 			return
 		}, []float32{3, 4, 5, 6, 7, 8, 9, 1000, 1000, 1000})
 	testFuncOneInput(t, "ShiftWithScalar(input, axis=-1, right, n=3, value=[[100], [1000]])",
 		func(g *Graph) (input, output *Node) {
-			input = IotaFull(g, shapes.Make(shapes.I32, 2, 10))
+			input = IotaFull(g, shapes.Make(dtypes.Int32, 2, 10))
 			output = ShiftWithValue(input, -1, ShiftDirRight, 3, Const(g, [][]int32{{100}, {1000}}))
 			return
 		}, [][]int32{
@@ -275,13 +275,13 @@ func TestShiftWithValue(t *testing.T) {
 func TestShift(t *testing.T) {
 	testFuncOneInput(t, "Shift(input, axis=0, left, n=3)",
 		func(g *Graph) (input, output *Node) {
-			input = IotaFull(g, shapes.Make(shapes.F32, 10))
+			input = IotaFull(g, shapes.Make(dtypes.Float32, 10))
 			output = Shift(input, 0, ShiftDirLeft, 3)
 			return
 		}, []float32{3, 4, 5, 6, 7, 8, 9, 9, 9, 9})
 	testFuncOneInput(t, "Shift(input, axis=-1, right, n=3)",
 		func(g *Graph) (input, output *Node) {
-			input = IotaFull(g, shapes.Make(shapes.I32, 2, 10))
+			input = IotaFull(g, shapes.Make(dtypes.Int32, 2, 10))
 			output = Shift(input, -1, ShiftDirRight, 3)
 			return
 		}, [][]int32{

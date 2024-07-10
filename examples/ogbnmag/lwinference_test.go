@@ -12,7 +12,6 @@ import (
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
-	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/schollz/progressbar/v3"
 	"github.com/stretchr/testify/require"
 	"io"
@@ -156,7 +155,7 @@ func TestLayerWiseInferenceLogits(t *testing.T) {
 		// Execute normal inference model for the inputs.
 		executor := context.NewExec(manager, ctx, func(ctx *context.Context, inputs []*Node) *Node {
 			predictionsAndMask := MagModelGraph(ctx, strategy, inputs)
-			return ConvertType(predictionsAndMask[0], shapes.Float32)
+			return ConvertType(predictionsAndMask[0], dtypes.Float32)
 		})
 		var results []tensors.Tensor
 		require.NotPanics(t, func() { results = executor.Call(inputs) })
@@ -169,7 +168,7 @@ func TestLayerWiseInferenceLogits(t *testing.T) {
 			allPredictions := modelFn(ctx, g)
 			return ConvertType(
 				Slice(allPredictions, AxisElem(seedId), AxisRange()),
-				shapes.Float32)
+				dtypes.Float32)
 		})
 		require.NotPanics(t, func() { results = executor.Call() })
 		predictionsLW := results[0]
@@ -222,12 +221,12 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 		labels := inputs[len(inputs)-1]
 		inputs = inputs[:len(inputs)-1]
 		predictionsAndMask := MagModelGraph(ctx, strategy, inputs)
-		predictions := ArgMax(predictionsAndMask[0], -1, shapes.Int32)
+		predictions := ArgMax(predictionsAndMask[0], -1, dtypes.Int32)
 		mask := predictionsAndMask[1]
-		correct := ConvertType(Equal(predictions, Squeeze(labels, -1)), shapes.Int32)
+		correct := ConvertType(Equal(predictions, Squeeze(labels, -1)), dtypes.Int32)
 		correct = Where(mask, correct, ZerosLike(correct))
 		correct = ReduceAllSum(correct)
-		count := ReduceAllSum(ConvertType(mask, shapes.Int32))
+		count := ReduceAllSum(ConvertType(mask, dtypes.Int32))
 		return []*Node{correct, count, predictions}
 	})
 	var correct, total int
@@ -263,7 +262,7 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 	numToCompare := len(predictionsGNN)
 	executor = context.NewExec(ctx.Manager(), ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
 		logits := modelFn(ctx, g)
-		predictions := ArgMax(logits, -1, shapes.Int32)
+		predictions := ArgMax(logits, -1, dtypes.Int32)
 		predictions = Slice(predictions, AxisRange(0, numToCompare))
 		return predictions
 	})

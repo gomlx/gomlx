@@ -22,7 +22,6 @@ package losses
 
 import (
 	. "github.com/gomlx/gomlx/graph"
-	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 )
 
@@ -35,11 +34,11 @@ const (
 func epsilonForDType(g *Graph, dtype dtypes.DType) *Node {
 	var epsilon float64
 	switch dtype {
-	case shapes.Float64:
+	case dtypes.Float64:
 		epsilon = Epsilon64
-	case shapes.Float32:
+	case dtypes.Float32:
 		epsilon = Epsilon32
-	case shapes.Float16:
+	case dtypes.Float16:
 		epsilon = Epsilon16
 	default:
 		Panicf("Unknown epsilon value for dtype %s", dtype)
@@ -84,7 +83,7 @@ func MeanSquaredError(labels, predictions []*Node) (loss *Node) {
 // If there is an extra `labels` `*Node` with the shape of `weightsShape`, it is assumed to be weights.
 // If there is an extra `labels` `*Node` with booleans with the same dimension as `weightsShape`, it is assumed to be a mask.
 func CheckLabelsForWeightsAndMask(weightsShape shapes.Shape, labels []*Node) (weights, mask *Node) {
-	maskShape := shapes.Make(shapes.Bool, weightsShape.Dimensions...)
+	maskShape := shapes.Make(dtypes.Bool, weightsShape.Dimensions...)
 	// We skip labels[0] because that contains the actual labels.
 	for ii, extra := range labels[1:] {
 		if weights == nil && extra.Shape().Eq(weightsShape) {

@@ -18,7 +18,6 @@ package graph
 
 import (
 	"github.com/gomlx/exceptions"
-	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 )
@@ -399,7 +398,7 @@ func L2NormalizeWithEpsilon(x *Node, epsilon float64, reduceAxis int, moreReduce
 //
 // This can be combined with `Where` to select values of any arbitrary other matrix.
 func LowerTriangular(g *Graph, dim int) *Node {
-	shapeInt := shapes.Make(shapes.I64, dim, dim)
+	shapeInt := shapes.Make(dtypes.Int64, dim, dim)
 	rows := Iota(g, shapeInt, 0)
 	cols := Iota(g, shapeInt, 1)
 	return LessOrEqual(cols, rows)
@@ -409,7 +408,7 @@ func LowerTriangular(g *Graph, dim int) *Node {
 //
 // This can be combined with `Where` to select values of any arbitrary other matrix.
 func UpperTriangular(g *Graph, dim int) *Node {
-	shapeInt := shapes.Make(shapes.I64, dim, dim)
+	shapeInt := shapes.Make(dtypes.Int64, dim, dim)
 	rows := Iota(g, shapeInt, 0)
 	cols := Iota(g, shapeInt, 1)
 	return GreaterOrEqual(cols, rows)
@@ -419,7 +418,7 @@ func UpperTriangular(g *Graph, dim int) *Node {
 //
 // This can be combined with `Where` to select values of any arbitrary other matrix.
 func Diagonal(g *Graph, dim int) *Node {
-	shapeInt := shapes.Make(shapes.I64, dim, dim)
+	shapeInt := shapes.Make(dtypes.Int64, dim, dim)
 	rows := Iota(g, shapeInt, 0)
 	cols := Iota(g, shapeInt, 1)
 	return Equal(cols, rows)

@@ -808,12 +808,12 @@ func (pds *PreGeneratedDataset) Yield() (spec any, inputs, labels []tensors.Tens
 		labels = []tensors.Tensor{tensors.FromAnyValue(shapes.CastAsDType(pds.labelsAsTypes, pds.dtype))}
 		var t, pairT *tensors.Local
 		switch pds.dtype {
-		case shapes.Float32:
+		case dtypes.Float32:
 			t = BytesToTensor[float32](pds.buffer, pds.batchSize, pds.width, pds.height)
 			if pds.yieldPairs {
 				pairT = BytesToTensor[float32](pds.pairBuffer, pds.batchSize, pds.width, pds.height)
 			}
-		case shapes.Float64:
+		case dtypes.Float64:
 			t = BytesToTensor[float64](pds.buffer, pds.batchSize, pds.width, pds.height)
 			if pds.yieldPairs {
 				pairT = BytesToTensor[float64](pds.pairBuffer, pds.batchSize, pds.width, pds.height)

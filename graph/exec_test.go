@@ -246,7 +246,7 @@ func TestExecWithLogger(t *testing.T) {
 func TestExecWithNoInputs(t *testing.T) {
 	manager := buildTestManager()
 	matrixInitFn := NewExec(manager, func(g *Graph) *Node {
-		return IotaFull(g, shapes.Make(shapes.Int64, 3, 3))
+		return IotaFull(g, shapes.Make(dtypes.Int64, 3, 3))
 	})
 	results := matrixInitFn.Call()
 	got := results[0].Value()

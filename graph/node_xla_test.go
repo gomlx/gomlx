@@ -44,8 +44,8 @@ func testFuncOneInput(t *testing.T, testName string, graphFn graphFnOneInputToTe
 func TestSliceXLA(t *testing.T) {
 	manager := buildTestManager()
 	g := manager.NewGraph("iota0")
-	numbers := Iota(g, shapes.Make(shapes.F64, 9), 0)
-	numbers = ReshapeWithShape(numbers, shapes.Make(shapes.F64, 3, 3))
+	numbers := Iota(g, shapes.Make(dtypes.Float64, 9), 0)
+	numbers = ReshapeWithShape(numbers, shapes.Make(dtypes.Float64, 3, 3))
 	SliceXLA(numbers, []int{1, 1}, []int{2, 3})
 	g.Compile()
 	got := g.Run(nil).Local().Value()
@@ -59,7 +59,7 @@ func TestGatherXLA(t *testing.T) {
 	manager := buildTestManager()
 	g := manager.NewGraph("iota0")
 	// numbers=(Float64)[5 3]: [[0 1 2] [3 4 5] [6 7 8] [9 10 11] [12 13 14]]
-	numbers := ReshapeWithShape(Iota(g, shapes.Make(shapes.F64, 5*3), 0), shapes.Make(shapes.F64, 5, 3))
+	numbers := ReshapeWithShape(Iota(g, shapes.Make(dtypes.Float64, 5*3), 0), shapes.Make(dtypes.Float64, 5, 3))
 	indices := Const(g, [][]int{{2}, {0}})
 	gather := gatherXLA(numbers, indices, 1,
 		/* offsetDims */ []int{1},
@@ -78,8 +78,8 @@ func TestGatherXLA(t *testing.T) {
 func TestSelectAndScatterWithGeneralPaddingXLA(t *testing.T) {
 	testFuncOneInput(t, "selectAndScatterWithGeneralPaddingXLA()",
 		func(g *Graph) (input, output *Node) {
-			input = IotaFull(g, shapes.Make(shapes.Float64, 1, 6, 1))
-			source := Add(IotaFull(g, shapes.Make(shapes.Float64, 1, 2, 1)), Const(g, 1.0))
+			input = IotaFull(g, shapes.Make(dtypes.Float64, 1, 6, 1))
+			source := Add(IotaFull(g, shapes.Make(dtypes.Float64, 1, 2, 1)), Const(g, 1.0))
 			output = selectAndScatterWithGeneralPaddingXLA(input, source, []int{1, 3, 1}, []int{1, 3, 1}, nil)
 			return
 		}, [][][]float64{{{0}, {0}, {1}, {0}, {0}, {2}}})
@@ -88,18 +88,18 @@ func TestSelectAndScatterWithGeneralPaddingXLA(t *testing.T) {
 func TestDotGeneralXLA(t *testing.T) {
 	testFuncOneInput(t, "dotGeneralXLA(lhs=Iota([3,4]), rhs=0.1*Ones([3,4]))",
 		func(g *Graph) (input, output *Node) {
-			input = IotaFull(g, shapes.Make(shapes.F32, 3, 4))
+			input = IotaFull(g, shapes.Make(dtypes.Float32, 3, 4))
 			input = OnePlus(input)
-			rhs := MulScalar(Ones(g, shapes.Make(shapes.F32, 3, 4)), 0.1)
+			rhs := MulScalar(Ones(g, shapes.Make(dtypes.Float32, 3, 4)), 0.1)
 			output = dotGeneralXLA(input, []int{1}, []int{0}, rhs, []int{1}, []int{0})
 			return
 		}, []float32{1, 2.6, 4.2})
 
 	testFuncOneInput(t, "dotGeneralXLA(lhs=Iota([3,2,4]), rhs=0.1*Ones([3,5,4]))",
 		func(g *Graph) (input, output *Node) {
-			input = IotaFull(g, shapes.Make(shapes.F32, 3, 2, 4))
+			input = IotaFull(g, shapes.Make(dtypes.Float32, 3, 2, 4))
 			input = OnePlus(input)
-			rhs := MulScalar(Ones(g, shapes.Make(shapes.F32, 3, 5, 4)), 0.1)
+			rhs := MulScalar(Ones(g, shapes.Make(dtypes.Float32, 3, 5, 4)), 0.1)
 			output = dotGeneralXLA(input, []int{2}, []int{0}, rhs, []int{2}, []int{0})
 			return
 		}, [][][]float32{
@@ -169,10 +169,10 @@ func TestGradDotGeneralXLABatchContracting(t *testing.T) {
 			fmt.Println()
 			revRhsPermutation := reversePermutation(rhsPermutation)
 			testFn := func(g *Graph) []*Node { // It returns: lhs, rhs, dot, grad_lhs, grad_rhs
-				lhs := IotaFull(g, shapes.Make(shapes.F32, dimensions...))
+				lhs := IotaFull(g, shapes.Make(dtypes.Float32, dimensions...))
 				lhs = OnePlus(lhs)
 				lhs = TransposeAllDims(lhs, lhsPermutation...)
-				rhs := MulScalar(Ones(g, shapes.Make(shapes.F32, dimensions...)), 0.1)
+				rhs := MulScalar(Ones(g, shapes.Make(dtypes.Float32, dimensions...)), 0.1)
 				rhs = TransposeAllDims(rhs, rhsPermutation...)
 
 				lhsBatchAxes := gatherSlice([]int{0}, revLhsPermutation)
@@ -244,10 +244,10 @@ func TestGradDotGeneralXLABatchContractingCrossing(t *testing.T) {
 			fmt.Println()
 			revRhsPermutation := reversePermutation(rhsPermutation)
 			testFn := func(g *Graph) []*Node { // It returns: lhs, rhs, dot, grad_lhs, grad_rhs
-				lhs := IotaFull(g, shapes.Make(shapes.F32, lhsDimensions...))
+				lhs := IotaFull(g, shapes.Make(dtypes.Float32, lhsDimensions...))
 				lhs = OnePlus(lhs)
 				lhs = TransposeAllDims(lhs, lhsPermutation...)
-				rhs := MulScalar(Ones(g, shapes.Make(shapes.F32, rhsDimensions...)), 0.1)
+				rhs := MulScalar(Ones(g, shapes.Make(dtypes.Float32, rhsDimensions...)), 0.1)
 				rhs = TransposeAllDims(rhs, rhsPermutation...)
 
 				lhsBatchAxes := gatherSlice([]int{0}, revLhsPermutation)

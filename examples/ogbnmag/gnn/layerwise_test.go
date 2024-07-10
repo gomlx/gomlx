@@ -29,7 +29,7 @@ func createDenseTestSampler(withCitation bool) *samplerPkg.Sampler {
 	sampler.AddNodeType("papers", lwNumPapers)
 	sampler.AddNodeType("authors", lwNumAuthors)
 
-	authorWritesPapers := tensors.FromShape(shapes.Make(shapes.Int32, lwNumAuthors, 2))
+	authorWritesPapers := tensors.FromShape(shapes.Make(dtypes.Int32, lwNumAuthors, 2))
 	{
 		// Each paper is written by 5 authors.
 		ref := authorWritesPapers.AcquireData()
@@ -45,7 +45,7 @@ func createDenseTestSampler(withCitation bool) *samplerPkg.Sampler {
 	sampler.AddEdgeType("writtenBy", "authors", "papers", authorWritesPapers, true)
 
 	if withCitation {
-		paperCitesPaper := tensors.FromShape(shapes.Make(shapes.Int32, lwNumPapers*lwFactor, 2))
+		paperCitesPaper := tensors.FromShape(shapes.Make(dtypes.Int32, lwNumPapers*lwFactor, 2))
 		{
 			// Each paper is written by 5 authors.
 			ref := paperCitesPaper.AcquireData()
@@ -83,7 +83,7 @@ func createDenseTestStateGraphWithMask(strategy *samplerPkg.Strategy, g *Graph, 
 	graphStates := make(map[string]*samplerPkg.ValueMask[*Node])
 	graphStates["seeds"] = &samplerPkg.ValueMask[*Node]{
 		Value: IotaFull(g, shapes.Make(dtype, lwNumPapers, 1)),
-		Mask:  Ones(g, shapes.Make(shapes.Bool, lwNumPapers)),
+		Mask:  Ones(g, shapes.Make(dtypes.Bool, lwNumPapers)),
 	}
 
 	authorsStates := make([][][]float64, lwNumPapers)
@@ -115,7 +115,7 @@ func createDenseTestStateGraphWithMask(strategy *samplerPkg.Strategy, g *Graph, 
 		citations = Reshape(citations, lwNumPapers, lwFactor, 1)
 		graphStates["citations"] = &samplerPkg.ValueMask[*Node]{
 			Value: citations,
-			Mask:  Ones(g, shapes.Make(shapes.Bool, lwNumPapers, lwFactor)),
+			Mask:  Ones(g, shapes.Make(dtypes.Bool, lwNumPapers, lwFactor)),
 		}
 		graphStates["seedsBase"] = &samplerPkg.ValueMask[*Node]{
 			Value: ExpandDims(graphStates["seeds"].Value, -2), // [lwNumPapers, 1, embedding_dim]
@@ -208,7 +208,7 @@ func TestLayerWiseInferenceMinimal(t *testing.T) {
 
 	// Normal GNN executor.
 	execGnn := context.NewExec(manager, ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
-		graphStates := createDenseTestStateGraphWithMask(strategy, g, shapes.F32, withCitation)
+		graphStates := createDenseTestStateGraphWithMask(strategy, g, dtypes.Float32, withCitation)
 		NodePrediction(ctx, strategy, graphStates)
 		return graphStates["seeds"].Value
 	})
@@ -230,7 +230,7 @@ func TestLayerWiseInferenceMinimal(t *testing.T) {
 	lw, err := LayerWiseGNN(ctx, strategy)
 	require.NoError(t, err)
 	execLayerWise := context.NewExec(manager, ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
-		graphStates, edges := createDenseTestStateGraphLayerWise(strategy, g, shapes.F32, withCitation)
+		graphStates, edges := createDenseTestStateGraphLayerWise(strategy, g, dtypes.Float32, withCitation)
 		lw.NodePrediction(ctx, graphStates, edges)
 		return graphStates["seeds"]
 	})
@@ -251,7 +251,7 @@ func TestLayerWiseInferenceCommon(t *testing.T) {
 
 		// Normal GNN executor.
 		execGnn := context.NewExec(manager, ctx, func(ctx *context.Context, g *Graph) *Node {
-			graphStates := createDenseTestStateGraphWithMask(strategy, g, shapes.F32, withCitation)
+			graphStates := createDenseTestStateGraphWithMask(strategy, g, dtypes.Float32, withCitation)
 			NodePrediction(ctx, strategy, graphStates)
 			return graphStates["seeds"].Value
 		})
@@ -270,7 +270,7 @@ func TestLayerWiseInferenceCommon(t *testing.T) {
 		lw, err := LayerWiseGNN(ctx, strategy)
 		require.NoError(t, err)
 		execLayerWise := context.NewExec(manager, ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
-			graphStates, edges := createDenseTestStateGraphLayerWise(strategy, g, shapes.F32, withCitation)
+			graphStates, edges := createDenseTestStateGraphLayerWise(strategy, g, dtypes.Float32, withCitation)
 			lw.NodePrediction(ctx, graphStates, edges)
 			return graphStates["seeds"]
 		})

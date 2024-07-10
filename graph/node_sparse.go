@@ -126,7 +126,7 @@ func Gather(params, indices *Node) *Node {
 //
 // Example:
 //
-//		x := IotaFull(g, shapes.Make(shapes.F64, 3, 10, 10))  // 300 in total.
+//		x := IotaFull(g, shapes.Make(dtypes.Float64, 3, 10, 10))  // 300 in total.
 //		start := Const(g, [][]int32{{0, 3}, {1, 2}})  // 2 slices
 //		sizes := []int{1, 3}
 //		slices := GatherSlices(x, []int{1,2}, start, sizes)  // Axis=0 is taken in full.
@@ -298,8 +298,8 @@ func IndicesForShape(g *Graph, shape shapes.Shape) *Node {
 	if shape.IsScalar() {
 		Panicf("can't generate IndicesForShape for scalars (shape=%s)", shape)
 	}
-	indices := Iota(g, shapes.Make(shapes.Int64, shape.Size(), 1), 0)
-	indices = BroadcastToShape(indices, shapes.Make(shapes.Int64, shape.Size(), shape.Rank()))
+	indices := Iota(g, shapes.Make(dtypes.Int64, shape.Size(), 1), 0)
+	indices = BroadcastToShape(indices, shapes.Make(dtypes.Int64, shape.Size(), shape.Rank()))
 	// Example of indices' value here: for shape=`[3, 2]`, indices=`{{0, 0}, {1, 1}, {2, 2}, {3, 3}, {4, 4}, {5, 5}}`
 
 	dividers := make([]int, shape.Rank())

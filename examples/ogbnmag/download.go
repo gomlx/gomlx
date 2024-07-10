@@ -361,7 +361,7 @@ func allEdgesCount(downloadDir string) error {
 }
 
 func edgesCount(input *tensors.Local, column, numElements int) (output *tensors.Local, err error) {
-	if input.DType() != shapes.Int32 || input.Rank() != 2 || input.Shape().Dimensions[1] != 2 {
+	if input.DType() != dtypes.Int32 || input.Rank() != 2 || input.Shape().Dimensions[1] != 2 {
 		return nil, errors.Errorf("input shape is invalid, expected (Int32)[?, 2], got %s", input.Shape())
 	}
 	if column < 0 || column > 1 {

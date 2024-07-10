@@ -19,7 +19,6 @@ package graph_test
 import (
 	"fmt"
 	. "github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/types/shapes"
 	timage "github.com/gomlx/gomlx/types/tensor/image"
 	"testing"
 )
@@ -27,7 +26,7 @@ import (
 func TestMaxPool(t *testing.T) {
 	testFuncOneInput(t, "MaxPool(...).ChannelsFirst().NoPadding()",
 		func(g *Graph) (input, output *Node) {
-			channelA := Iota(g, MakeShape(shapes.Float32, 1, 1, 3, 3), 2)
+			channelA := Iota(g, MakeShape(dtypes.Float32, 1, 1, 3, 3), 2)
 			channelB := Mul(channelA, Const(g, float32(0.1)))
 			input = Concatenate([]*Node{channelA, channelB}, 1)
 			output = MaxPool(input).ChannelsAxis(timage.ChannelsFirst).Window(3).NoPadding().Done()
@@ -36,7 +35,7 @@ func TestMaxPool(t *testing.T) {
 
 	testFuncOneInput(t, "MaxPool(...).ChannelsAfter().NoPadding()",
 		func(g *Graph) (input, output *Node) {
-			channelA := Iota(g, MakeShape(shapes.Float64, 1, 3, 3, 1), 2)
+			channelA := Iota(g, MakeShape(dtypes.Float64, 1, 3, 3, 1), 2)
 			channelB := Mul(channelA, Const(g, 0.1))
 			input = Concatenate([]*Node{channelA, channelB}, -1)
 			output = MaxPool(input).Window(3).ChannelsAxis(timage.ChannelsLast).NoPadding().Done()
@@ -45,7 +44,7 @@ func TestMaxPool(t *testing.T) {
 
 	testFuncOneInput(t, "MaxPool(...).Window(3).ChannelsFirst().PadSame().Strides(1)",
 		func(g *Graph) (input, output *Node) {
-			channelA := Iota(g, MakeShape(shapes.Float32, 1, 1, 3, 3), 2)
+			channelA := Iota(g, MakeShape(dtypes.Float32, 1, 1, 3, 3), 2)
 			channelB := Mul(channelA, Const(g, float32(0.1)))
 			input = Concatenate([]*Node{channelA, channelB}, 1)
 			output = MaxPool(input).Window(3).ChannelsAxis(timage.ChannelsFirst).PadSame().Strides(1).Done()
@@ -54,7 +53,7 @@ func TestMaxPool(t *testing.T) {
 
 	testFuncOneInput(t, "MaxPool(...).Window(2).Strides(1)",
 		func(g *Graph) (input, output *Node) {
-			channelA := IotaFull(g, MakeShape(shapes.Float64, 1, 5, 1))
+			channelA := IotaFull(g, MakeShape(dtypes.Float64, 1, 5, 1))
 			channelB := Mul(channelA, Const(g, 0.1))
 			input = Concatenate([]*Node{channelA, channelB}, -1)
 			output = MaxPool(input).Window(2).Strides(1).Done()
@@ -62,7 +61,7 @@ func TestMaxPool(t *testing.T) {
 		}, [][][]float64{{{1, 0.1}, {2, 0.2}, {3, 0.3}, {4, 0.4}}})
 	testFuncOneInput(t, "MaxPool(...).Window(2)",
 		func(g *Graph) (input, output *Node) {
-			input = IotaFull(g, MakeShape(shapes.Float64, 1, 5, 5, 1))
+			input = IotaFull(g, MakeShape(dtypes.Float64, 1, 5, 5, 1))
 			output = MaxPool(input).Window(2).Done()
 			return
 		}, [][][][]float64{{{{6}, {8}}, {{16}, {18}}}})
@@ -71,7 +70,7 @@ func TestMaxPool(t *testing.T) {
 func TestGradientMaxPool(t *testing.T) {
 	testGradients(t, "Gradient 1D MaxPool().NoPadding() -- scaled output",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
-			input := Add(IotaFull(g, MakeShape(shapes.Float32, 1, 6, 1)), Const(g, float32(1.0)))
+			input := Add(IotaFull(g, MakeShape(dtypes.Float32, 1, 6, 1)), Const(g, float32(1.0)))
 			output = MaxPool(input).NoPadding().Window(3).Strides(1).Done()
 			scale := Add(IotaFull(g, output.Shape()), Const(g, float32(1.0)))
 			output = Mul(output, scale)
@@ -82,7 +81,7 @@ func TestGradientMaxPool(t *testing.T) {
 
 	testGradients(t, "Gradient 1D MaxPool(...).Window(2).Strides(1)",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
-			channelA := IotaFull(g, MakeShape(shapes.Float64, 1, 5, 1))
+			channelA := IotaFull(g, MakeShape(dtypes.Float64, 1, 5, 1))
 			channelB := Mul(channelA, Const(g, 0.1))
 			input := Concatenate([]*Node{channelA, channelB}, -1)
 			output = MaxPool(input).Window(2).Strides(1).Done()
@@ -93,7 +92,7 @@ func TestGradientMaxPool(t *testing.T) {
 
 	testGradients(t, "Gradient 2D MaxPool(...).Window(2)",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
-			input := IotaFull(g, MakeShape(shapes.Float64, 1, 5, 5, 1))
+			input := IotaFull(g, MakeShape(dtypes.Float64, 1, 5, 5, 1))
 			output = MaxPool(input).Window(2).Done()
 			return output, []*Node{input}
 		}, []any{
@@ -112,7 +111,7 @@ func TestGradientMaxPool(t *testing.T) {
 func TestSumPool(t *testing.T) {
 	testFuncOneInput(t, "SumPool(...)",
 		func(g *Graph) (input, output *Node) {
-			channelA := IotaFull(g, MakeShape(shapes.Float64, 1, 3, 3, 1))
+			channelA := IotaFull(g, MakeShape(dtypes.Float64, 1, 3, 3, 1))
 			channelB := Mul(channelA, Const(g, 0.1))
 			input = Concatenate([]*Node{channelA, channelB}, -1)
 			output = SumPool(input).Window(3).ChannelsAxis(timage.ChannelsLast).NoPadding().Done()
@@ -125,7 +124,7 @@ func TestSumPool(t *testing.T) {
 func TestGradientSumPool(t *testing.T) {
 	testGradients(t, "Gradient 2D SumPool(...).Window(3).PadSame().Strides(1)",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
-			input := IotaFull(g, MakeShape(shapes.Float32, 1, 3, 1))
+			input := IotaFull(g, MakeShape(dtypes.Float32, 1, 3, 1))
 			output = SumPool(input).Window(3).PadSame().Strides(1).Done()
 			return output, []*Node{input}
 		}, []any{
@@ -134,7 +133,7 @@ func TestGradientSumPool(t *testing.T) {
 
 	testGradients(t, "Gradient 2D Even Spatial Dimensions SumPool(...).Window(2)",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
-			input := IotaFull(g, MakeShape(shapes.Float64, 1, 5, 1))
+			input := IotaFull(g, MakeShape(dtypes.Float64, 1, 5, 1))
 			output = SumPool(input).Window(2).Strides(3).
 				PaddingPerDim([][2]int{{0, 1}}).Done()
 			output = Mul(output, OnePlus(IotaFull(g, output.Shape())))
@@ -145,7 +144,7 @@ func TestGradientSumPool(t *testing.T) {
 
 	testGradients(t, "Gradient 2D Even Spatial Dimensions SumPool(...).Window(2)",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
-			input := IotaFull(g, MakeShape(shapes.Float64, 1, 4, 4, 1))
+			input := IotaFull(g, MakeShape(dtypes.Float64, 1, 4, 4, 1))
 			output = SumPool(input).Window(2).Done()
 			output = Mul(output, OnePlus(IotaFull(g, output.Shape())))
 			return output, []*Node{input}
@@ -160,7 +159,7 @@ func TestGradientSumPool(t *testing.T) {
 
 	testGradients(t, "Gradient 1D SumPool() -- scaled output",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
-			input := Add(IotaFull(g, MakeShape(shapes.Float32, 1, 6, 1)), Const(g, float32(1.0)))
+			input := Add(IotaFull(g, MakeShape(dtypes.Float32, 1, 6, 1)), Const(g, float32(1.0)))
 			output = SumPool(input).NoPadding().Window(3).Strides(1).Done()
 			scale := OnePlus(IotaFull(g, output.Shape()))
 			output = Mul(output, scale)
@@ -175,7 +174,7 @@ func TestGradientSumPool(t *testing.T) {
 func TestMeanPool(t *testing.T) {
 	testFuncOneInput(t, "MeanPool(...).ChannelsAfter().NoPadding()",
 		func(g *Graph) (input, output *Node) {
-			channelA := IotaFull(g, MakeShape(shapes.Float64, 1, 3, 3, 1))
+			channelA := IotaFull(g, MakeShape(dtypes.Float64, 1, 3, 3, 1))
 			channelB := Mul(channelA, Const(g, 0.1))
 			input = Concatenate([]*Node{channelA, channelB}, -1)
 			output = MeanPool(input).Window(3).ChannelsAxis(timage.ChannelsLast).NoPadding().Done()
@@ -185,7 +184,7 @@ func TestMeanPool(t *testing.T) {
 	fmt.Println()
 	testFuncOneInput(t, "MeanPool(...).ChannelsAfter().PadSame().",
 		func(g *Graph) (input, output *Node) {
-			channelA := IotaFull(g, MakeShape(shapes.Float64, 1, 3, 3, 1))
+			channelA := IotaFull(g, MakeShape(dtypes.Float64, 1, 3, 3, 1))
 			channelB := Mul(channelA, Const(g, 0.1))
 			input = Concatenate([]*Node{channelA, channelB}, -1)
 			input = Concatenate([]*Node{input, input}, 0) // Batch of 2.
@@ -207,7 +206,7 @@ func TestGradientMeanPool(t *testing.T) {
 	// The results below should reflect that the last column and row are not used in the output.
 	testGradients(t, "Gradient 2D MeanPool(...).Window(2)",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
-			input := IotaFull(g, MakeShape(shapes.Float64, 1, 5, 5, 1))
+			input := IotaFull(g, MakeShape(dtypes.Float64, 1, 5, 5, 1))
 			output = MeanPool(input).Window(2).Done()
 			return output, []*Node{input}
 		}, []any{
@@ -222,7 +221,7 @@ func TestGradientMeanPool(t *testing.T) {
 
 	testGradients(t, "Gradient Unbalanced 1D MeanPool(...).Window(2)",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
-			input := IotaFull(g, MakeShape(shapes.Float64, 1, 3, 1))
+			input := IotaFull(g, MakeShape(dtypes.Float64, 1, 3, 1))
 			output = MeanPool(input).Window(2).PaddingPerDim([][2]int{{2, 0}}).Done()
 			return output, []*Node{input}
 		}, []any{
@@ -231,9 +230,9 @@ func TestGradientMeanPool(t *testing.T) {
 
 	testGradients(t, "Gradient 1D MeanPool() -- scaled output",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
-			input := Add(IotaFull(g, MakeShape(shapes.Float32, 1, 6, 1)), Const(g, float32(1.0)))
+			input := Add(IotaFull(g, MakeShape(dtypes.Float32, 1, 6, 1)), Const(g, float32(1.0)))
 			output = MeanPool(input).NoPadding().Window(3).Strides(1).Done()
-			scale := Add(IotaFull(g, output.Shape()), ScalarOne(g, shapes.F32))
+			scale := Add(IotaFull(g, output.Shape()), ScalarOne(g, dtypes.Float32))
 			output = Mul(output, scale)
 			return output, []*Node{input}
 		}, []any{
@@ -243,7 +242,7 @@ func TestGradientMeanPool(t *testing.T) {
 
 	testGradients(t, "Gradient 2D MeanPool(...).Window(3).ChannelsFirst().PadSame().Strides(1)",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
-			channelA := IotaFull(g, MakeShape(shapes.Float32, 1, 1, 3, 3))
+			channelA := IotaFull(g, MakeShape(dtypes.Float32, 1, 1, 3, 3))
 			channelB := Mul(channelA, Const(g, float32(0.1)))
 			input := Concatenate([]*Node{channelA, channelB}, 1)
 			output = MeanPool(input).ChannelsAxis(timage.ChannelsFirst).Window(3).PadSame().Strides(1).Done()
@@ -263,7 +262,7 @@ func TestGradientMeanPool(t *testing.T) {
 
 	testGradients(t, "Gradient 2D even spatial dims MeanPool(...).Window(2)",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
-			input := IotaFull(g, MakeShape(shapes.Float64, 1, 2, 2, 1))
+			input := IotaFull(g, MakeShape(dtypes.Float64, 1, 2, 2, 1))
 			output = MeanPool(input).Window(2).Done()
 			return output, []*Node{input}
 		}, []any{

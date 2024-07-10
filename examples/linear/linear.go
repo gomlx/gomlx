@@ -42,11 +42,11 @@ const (
 func initCoefficients(manager *Manager, numVariables int) (coefficients, bias tensors.Tensor) {
 	e := NewExec(manager, func(g *Graph) (coefficients, bias *Node) {
 		rngState := Const(g, RngState())
-		rngState, coefficients = RandomNormal(rngState, shapes.Make(shapes.F64, numVariables))
+		rngState, coefficients = RandomNormal(rngState, shapes.Make(dtypes.Float64, numVariables))
 		coefficients = AddScalar(
 			MulScalar(coefficients, CoefficientSigma),
 			CoefficientMu)
-		rngState, bias = RandomNormal(rngState, shapes.Make(shapes.F64))
+		rngState, bias = RandomNormal(rngState, shapes.Make(dtypes.Float64))
 		bias = AddScalar(MulScalar(bias, BiasSigma), BiasMu)
 		return
 	})
@@ -62,7 +62,7 @@ func buildExamples(manager *Manager, coef, bias tensors.Tensor, numExamples int,
 
 		// Random inputs (observations).
 		rngState := Const(g, RngState())
-		rngState, inputs = RandomNormal(rngState, shapes.Make(shapes.F64, numExamples, numFeatures))
+		rngState, inputs = RandomNormal(rngState, shapes.Make(dtypes.Float64, numExamples, numFeatures))
 		coef = ExpandDims(coef, 0)
 
 		// Calculate perfect labels.

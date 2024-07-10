@@ -87,7 +87,7 @@ var (
 //
 //	func MyGnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 //		g := inputs[0].Graph()
-//		optimizers.CosineAnnealingSchedule(ctx, g, shapes.F32)
+//		optimizers.CosineAnnealingSchedule(ctx, g, dtypes.Float32)
 //		ctx = ctx.WithInitializer(initializers.GlorotUniformFn(initializers.NoSeed))
 //		strategy := spec.(*sampler.Strategy)
 //		graphStates := MyFeaturePreprocessing(ctx, strategy, inputs)
@@ -355,7 +355,7 @@ func poolMessagesWithAdjacency(ctx *context.Context, source, edgesSource, edgesT
 	dtypePool := dtype
 	if dtype.IsFloat16() {
 		// Up-precision to 32 bits for pooling.
-		dtypePool = shapes.Float32
+		dtypePool = dtypes.Float32
 	}
 	embSize := source.Shape().Dimensions[1]
 	numEdges := edgesSource.Shape().Dimensions[0]

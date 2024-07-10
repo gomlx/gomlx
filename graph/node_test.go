@@ -32,8 +32,8 @@ var (
 	// Aliases:
 
 	MakeShape = shapes.Make
-	F32       = shapes.Float32
-	F64       = shapes.Float64
+	F32       = dtypes.Float32
+	F64       = dtypes.Float64
 )
 
 // buildTestManager using "Host" by default -- can be overwritten by GOMLX_PLATFORM environment variable.
@@ -67,7 +67,7 @@ func TestConstant(t *testing.T) {
 		g := manager.NewGraph("")
 		n := Const(g, 5)
 		shape := n.Shape()
-		if shape.DType != shapes.Int64 || shape.Rank() != 0 {
+		if shape.DType != dtypes.Int64 || shape.Rank() != 0 {
 			t.Errorf("ConstLocal has invalid shape: %s", shape)
 		}
 	}
@@ -75,7 +75,7 @@ func TestConstant(t *testing.T) {
 		g := manager.NewGraph("")
 		n := Const(g, [][]float32{{1.2, 1.3}, {2.4, 2.5}, {2.6, 2.7}})
 		shape := n.Shape()
-		if shape.DType != shapes.Float32 || !reflect.DeepEqual(shape.Dimensions, []int{3, 2}) {
+		if shape.DType != dtypes.Float32 || !reflect.DeepEqual(shape.Dimensions, []int{3, 2}) {
 			fmt.Printf("\tTestConstant: node %s\n", n)
 			t.Errorf("ConstLocal has invalid shape: %s", shape)
 		}
@@ -97,7 +97,7 @@ func TestAdd(t *testing.T) {
 		x := Const(g, 5)
 		y := Const(g, 7)
 		n := Add(x, y)
-		wantShape := shapes.Shape{DType: shapes.Int64}
+		wantShape := shapes.Shape{DType: dtypes.Int64}
 		require.Truef(t, n.Shape().Eq(wantShape), "Add invalid shape %s, wanted %s", n.Shape(), wantShape)
 		local := compileRunTransfer(t, g, "scalar Graph")
 		got := local.Value().(int64)
@@ -113,7 +113,7 @@ func TestAdd(t *testing.T) {
 		x := Const(g, [][]float32{{1.1, 1.2}, {1.3, 1.4}})
 		y := Const(g, [][]float32{{10, 10}, {20, 20}})
 		n := Add(x, y)
-		wantShape := shapes.Make(shapes.Float32, 2, 2)
+		wantShape := shapes.Make(dtypes.Float32, 2, 2)
 		if !n.Shape().Eq(wantShape) {
 			t.Fatalf("Add invalid shape %s, wanted %s", n.Shape(), wantShape)
 		}
@@ -132,7 +132,7 @@ func TestAdd(t *testing.T) {
 		x := Const(g, [][]float32{{1.1, 1.2}, {1.3, 1.4}})
 		y := Const(g, [][]float32{{1}, {10}})
 		n := Add(x, y)
-		wantShape := shapes.Make(shapes.Float32, 2, 2)
+		wantShape := shapes.Make(dtypes.Float32, 2, 2)
 		if !n.Shape().Eq(wantShape) {
 			t.Fatalf("Add invalid shape %s, wanted %s", n.Shape(), wantShape)
 		}
@@ -151,7 +151,7 @@ func TestAdd(t *testing.T) {
 		x := Const(g, [][]float32{{1.1, 1.2}, {1.3, 1.4}})
 		y := Const(g, float32(1))
 		n := Add(x, y)
-		wantShape := shapes.Make(shapes.Float32, 2, 2)
+		wantShape := shapes.Make(dtypes.Float32, 2, 2)
 		if !n.Shape().Eq(wantShape) {
 			t.Fatalf("Add invalid shape %s, wanted %s", n.Shape(), wantShape)
 		}
@@ -290,7 +290,7 @@ func TestTwoArgsOps(t *testing.T) {
 			x := Const(g, xSlices)
 			y := Const(g, yValue)
 			n := test.fnGraph(x, y)
-			wantShape := shapes.Make(shapes.Float32, 2, 2)
+			wantShape := shapes.Make(dtypes.Float32, 2, 2)
 			if !n.Shape().Eq(wantShape) {
 				t.Fatalf("Add invalid shape %s, wanted %s", n.Shape(), wantShape)
 			}
@@ -323,7 +323,7 @@ func TestTwoArgsOps(t *testing.T) {
 			x := Const(g, xSlices)
 			y := Const(g, yValue)
 			n := test.fnGraph(x, y)
-			wantShape := shapes.Make(shapes.Int64, 2, 2)
+			wantShape := shapes.Make(dtypes.Int64, 2, 2)
 			if !n.Shape().Eq(wantShape) {
 				t.Fatalf("Add invalid shape %s, wanted %s", n.Shape(), wantShape)
 			}
@@ -382,7 +382,7 @@ func TestOneArgOps(t *testing.T) {
 		g := manager.NewGraph("")
 		x := Const(g, xSlices)
 		n := test.fnGraph(x)
-		wantShape := shapes.Make(shapes.Float64, 2, 2)
+		wantShape := shapes.Make(dtypes.Float64, 2, 2)
 		if !n.Shape().Eq(wantShape) {
 			t.Fatalf("Add invalid shape %s, wanted %s", n.Shape(), wantShape)
 		}
@@ -499,7 +499,7 @@ func TestFill(t *testing.T) {
 	manager := buildTestManager()
 	{
 		g := manager.NewGraph("FillScalar")
-		FillScalar(g, shapes.Make(shapes.Int64, 3, 1), 4.0)
+		FillScalar(g, shapes.Make(dtypes.Int64, 3, 1), 4.0)
 		got := compileAndRun(g)
 		want := [][]int64{{4}, {4}, {4}}
 		if !xslices.DeepSliceCmp(got, want, xslices.Equal[int64]) {
@@ -508,7 +508,7 @@ func TestFill(t *testing.T) {
 	}
 	{
 		g := manager.NewGraph("Ones")
-		Ones(g, shapes.Make(shapes.Float32, 3, 1))
+		Ones(g, shapes.Make(dtypes.Float32, 3, 1))
 		got := compileAndRun(g)
 		want := [][]float32{{1}, {1}, {1}}
 		if !xslices.DeepSliceCmp(got, want, xslices.Equal[float32]) {
@@ -517,7 +517,7 @@ func TestFill(t *testing.T) {
 	}
 	{
 		g := manager.NewGraph("Zeros")
-		Zeros(g, shapes.Make(shapes.Float64, 3, 1))
+		Zeros(g, shapes.Make(dtypes.Float64, 3, 1))
 		got := compileAndRun(g)
 		want := [][]float64{{0}, {0}, {0}}
 		if !xslices.DeepSliceCmp(got, want, xslices.Equal[float64]) {
@@ -529,7 +529,7 @@ func TestFill(t *testing.T) {
 func reduceSumGraph(t *testing.T, m *Manager, reduceDims []int) *Graph {
 	g := m.NewGraph("main")
 	n0 := Const(g, [][]float64{{5.0, 1.0}})
-	n1 := Ones(g, shapes.Make(shapes.Float64, 2, 1))
+	n1 := Ones(g, shapes.Make(dtypes.Float64, 2, 1))
 	n2 := Add(n1, n0)
 	o0 := ReduceSum(n2, reduceDims...)
 	g.Compile(o0)
@@ -559,20 +559,20 @@ func TestReduceSum(t *testing.T) {
 func TestReduceMean(t *testing.T) {
 	testFuncOneInput(t, "ReduceMean(dims=1, 2)",
 		func(g *Graph) (input, output *Node) {
-			input = IotaFull(g, MakeShape(shapes.Float32, 3, 2, 4))
+			input = IotaFull(g, MakeShape(dtypes.Float32, 3, 2, 4))
 			output = ReduceMean(input, 1, 2)
 			return
 		}, []float32{3.5, 11.5, 19.5})
 	testFuncOneInput(t, "ReduceAllMean()",
 		func(g *Graph) (input, output *Node) {
-			input = IotaFull(g, MakeShape(shapes.Float32, 3, 2, 4))
+			input = IotaFull(g, MakeShape(dtypes.Float32, 3, 2, 4))
 			output = ReduceAllMean(input)
 			return
 		}, float32(11.5))
 	graphtest.RunTestGraphFn(t, "ReduceMean",
 		func(g *Graph) (inputs, outputs []*Node) {
 			inputs = []*Node{
-				IotaFull(g, shapes.Make(shapes.F32, 3, 5)),
+				IotaFull(g, shapes.Make(dtypes.Float32, 3, 5)),
 				Const(g, [][]bool{
 					{true, true, true, true, true},
 					{true, true, false, false, false},
@@ -590,7 +590,7 @@ func TestReduceMean(t *testing.T) {
 func TestReduceMaskedMax(t *testing.T) {
 	graphtest.RunTestGraphFn(t, "MaskedReduceMax()",
 		func(g *Graph) (inputs, outputs []*Node) {
-			x := IotaFull(g, MakeShape(shapes.Float32, 4, 3))
+			x := IotaFull(g, MakeShape(dtypes.Float32, 4, 3))
 			mask := Const(g, [][]bool{
 				{true, false, false},
 				{true, true, false},
@@ -742,7 +742,7 @@ func TestSlice(t *testing.T) {
 
 	graphtest.RunTestGraphFn(t, "Slice Tests with Rank 1",
 		func(g *Graph) (inputs, outputs []*Node) {
-			x := IotaFull(g, shapes.Make(shapes.I64, 2, 2, 2, 2))
+			x := IotaFull(g, shapes.Make(dtypes.Int64, 2, 2, 2, 2))
 			inputs = []*Node{x}
 			outputs = []*Node{
 				Slice(x, AxisRange(), AxisElem(0).Spacer(), AxisElem(-1)),
@@ -832,13 +832,13 @@ func TestOneHot(t *testing.T) {
 	testFuncOneInput(t, "OneHot 1 leading dimension",
 		func(g *Graph) (input, output *Node) {
 			input = Const(g, []int{1, 0, 3})
-			output = OneHot(input, 4, shapes.Float32)
+			output = OneHot(input, 4, dtypes.Float32)
 			return
 		}, [][]float32{{0, 1, 0, 0}, {1, 0, 0, 0}, {0, 0, 0, 1}})
 	testFuncOneInput(t, "OneHot 2 leading dimensions",
 		func(g *Graph) (input, output *Node) {
 			input = Const(g, [][]int{{1, 0}, {0, 2}, {3, 1}})
-			output = OneHot(input, 4, shapes.Float32)
+			output = OneHot(input, 4, dtypes.Float32)
 			return
 		}, [][][]float32{{{0, 1, 0, 0}, {1, 0, 0, 0}}, {{1, 0, 0, 0}, {0, 0, 1, 0}}, {{0, 0, 0, 1}, {0, 1, 0, 0}}})
 }
@@ -895,7 +895,7 @@ func TestMaskedSoftmax(t *testing.T) {
 func TestReverse(t *testing.T) {
 	testFuncOneInput(t, "Reverse(dimensions={1, 2})",
 		func(g *Graph) (input, output *Node) {
-			input = Iota(g, MakeShape(shapes.Float32, 9), 0)
+			input = Iota(g, MakeShape(dtypes.Float32, 9), 0)
 			input = Reshape(input, 1, 3, 3, 1)
 			output = Reverse(input, 1, 2)
 			return
@@ -905,7 +905,7 @@ func TestReverse(t *testing.T) {
 func TestTranspose(t *testing.T) {
 	testFuncOneInput(t, "Transpose(dims=1, 2)",
 		func(g *Graph) (input, output *Node) {
-			input = IotaFull(g, MakeShape(shapes.Float32, 3, 2, 4))
+			input = IotaFull(g, MakeShape(dtypes.Float32, 3, 2, 4))
 			output = Transpose(input, 1, 2)
 			return
 		}, [][][]float32{{{0, 4}, {1, 5}, {2, 6}, {3, 7}}, {{8, 12}, {9, 13}, {10, 14}, {11, 15}}, {{16, 20}, {17, 21}, {18, 22}, {19, 23}}})
@@ -914,7 +914,7 @@ func TestTranspose(t *testing.T) {
 func TestBatchNormInferenceXLA(t *testing.T) {
 	testFuncOneInput(t, "BatchNormInference()",
 		func(g *Graph) (input, output *Node) {
-			input = Iota(g, MakeShape(shapes.Float32, 7, 3), 0) // Values from 0.0 to 6.0 on batch axis.
+			input = Iota(g, MakeShape(dtypes.Float32, 7, 3), 0) // Values from 0.0 to 6.0 on batch axis.
 			scale := Const(g, []float32{1.0, 2.0, 3.0})
 			offset := Const(g, []float32{10.0, 100.0, 1000.0})
 			mean := Const(g, []float32{0.5, 0.5, 1.0})
@@ -936,8 +936,8 @@ func TestSqueeze(t *testing.T) {
 	graphtest.RunTestGraphFn(t, "Squeeze()",
 		func(g *Graph) (inputs, outputs []*Node) {
 			inputs = []*Node{
-				Zeros(g, shapes.Make(shapes.Int64, 1, 2, 1, 2)),
-				Ones(g, shapes.Make(shapes.Int64, 1, 1, 1)),
+				Zeros(g, shapes.Make(dtypes.Int64, 1, 2, 1, 2)),
+				Ones(g, shapes.Make(dtypes.Int64, 1, 1, 1)),
 			}
 			outputs = []*Node{
 				Squeeze(inputs[0], 0, -2),
@@ -961,7 +961,7 @@ func TestSqueeze(t *testing.T) {
 }
 
 func TestArgMax(t *testing.T) {
-	for _, dtype := range []dtypes.DType{shapes.F64, shapes.F32, shapes.I64, shapes.I32} {
+	for _, dtype := range []dtypes.DType{dtypes.Float64, dtypes.Float32, dtypes.Int64, dtypes.Int32} {
 		graphtest.RunTestGraphFn(t, fmt.Sprintf("ArgMax()/ArgMin() for dtype %q", dtype),
 			func(g *Graph) (inputs, outputs []*Node) {
 				inputs = []*Node{
@@ -970,7 +970,7 @@ func TestArgMax(t *testing.T) {
 				outputs = []*Node{
 					ArgMax(inputs[0], -1),
 					ArgMax(inputs[0], 0),
-					ArgMin(inputs[0], 1, shapes.Uint8),
+					ArgMin(inputs[0], 1, dtypes.Uint8),
 				}
 				return
 			}, []any{

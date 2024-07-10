@@ -42,22 +42,22 @@ func TestContextVariables(t *testing.T) {
 
 	// Same variable name, but different scopes.
 	ctx3 := ctx.In("b")
-	v0 := ctx2.VariableWithShape("x", shapes.Make(shapes.Float32))
-	_ = ctx3.VariableWithShape("x", shapes.Make(shapes.Float64))
+	v0 := ctx2.VariableWithShape("x", shapes.Make(dtypes.Float32))
+	_ = ctx3.VariableWithShape("x", shapes.Make(dtypes.Float64))
 
 	// Try to reuse, without the context being set for that:
-	require.Panicsf(t, func() { v0 = ctx2.VariableWithShape("x", shapes.Make(shapes.Float32)) },
+	require.Panicsf(t, func() { v0 = ctx2.VariableWithShape("x", shapes.Make(dtypes.Float32)) },
 		"Allowed re-creating variable without context set to reuse. v0=%+v", v0)
 
 	// Create another variable, different name.
-	require.NotPanics(t, func() { v0 = ctx2.VariableWithShape("y", shapes.Make(shapes.Int64)) })
+	require.NotPanics(t, func() { v0 = ctx2.VariableWithShape("y", shapes.Make(dtypes.Int64)) })
 
 	// Try to reuse:
 	ctx2 = ctx2.Reuse()
-	v0 = ctx2.VariableWithShape("x", shapes.Make(shapes.Float32))
+	v0 = ctx2.VariableWithShape("x", shapes.Make(dtypes.Float32))
 
 	// Try to reuse with a different shape:
-	require.Panicsf(t, func() { v0 = ctx2.VariableWithShape("x", shapes.Make(shapes.Float32, 1, 1)) },
+	require.Panicsf(t, func() { v0 = ctx2.VariableWithShape("x", shapes.Make(dtypes.Float32, 1, 1)) },
 		"Allowed re-using variable %q in scope %q with a different shape context set to reuse.", v0.Name(), v0.Scope())
 }
 
@@ -65,11 +65,11 @@ func TestContextVariablesInitialization(t *testing.T) {
 	manager := graphtest.BuildTestManager()
 	ctx := NewContext(manager)
 	ctx0 := ctx.In("a").WithInitializer(initializers.RandomUniformFn(42, 1.5, 2.5))
-	v0 := ctx0.VariableWithShape("x", shapes.Make(shapes.Float32))
+	v0 := ctx0.VariableWithShape("x", shapes.Make(dtypes.Float32))
 	ctx1 := ctx.In("b").WithInitializer(initializers.RandomNormalFn(42, 1.0))
-	v1 := ctx1.VariableWithShape("y", shapes.Make(shapes.Float64, 2))
+	v1 := ctx1.VariableWithShape("y", shapes.Make(dtypes.Float64, 2))
 	ctx2 := ctx1.In("c").WithInitializer(initializers.Zero)
-	v2 := ctx2.VariableWithShape("z", shapes.Make(shapes.Int64, 3, 1))
+	v2 := ctx2.VariableWithShape("z", shapes.Make(dtypes.Int64, 3, 1))
 	ctx.InitializeVariables()
 
 	fmt.Printf("\tv0=%v\n", v0.Value().Local())
@@ -118,11 +118,11 @@ func TestEnumerateVariables(t *testing.T) {
 	manager := graphtest.BuildTestManager()
 	ctx := NewContext(manager)
 	ctx0 := ctx.In("a")
-	_ = ctx0.VariableWithShape("x", shapes.Make(shapes.Float32))
+	_ = ctx0.VariableWithShape("x", shapes.Make(dtypes.Float32))
 	ctx1 := ctx.In("b")
-	_ = ctx1.VariableWithShape("y", shapes.Make(shapes.Float64, 2))
+	_ = ctx1.VariableWithShape("y", shapes.Make(dtypes.Float64, 2))
 	ctx2 := ctx1.In("c")
-	_ = ctx2.VariableWithShape("z", shapes.Make(shapes.Float32, 3, 1))
+	_ = ctx2.VariableWithShape("z", shapes.Make(dtypes.Float32, 3, 1))
 	ctx.InitializeVariables()
 
 	// Checks EnumerateVariables lists all variables:
@@ -149,11 +149,11 @@ func TestDeleteVariable(t *testing.T) {
 	manager := graphtest.BuildTestManager()
 	ctx := NewContext(manager)
 	ctx0 := ctx.In("a")
-	_ = ctx0.VariableWithShape("x", shapes.Make(shapes.Float32))
+	_ = ctx0.VariableWithShape("x", shapes.Make(dtypes.Float32))
 	ctx1 := ctx.In("b")
-	_ = ctx1.VariableWithShape("y", shapes.Make(shapes.Float64, 2))
+	_ = ctx1.VariableWithShape("y", shapes.Make(dtypes.Float64, 2))
 	ctx2 := ctx1.In("c")
-	_ = ctx2.VariableWithShape("z", shapes.Make(shapes.Float32, 3, 1))
+	_ = ctx2.VariableWithShape("z", shapes.Make(dtypes.Float32, 3, 1))
 	ctx.InitializeVariables()
 
 	assert.False(t, ctx.DeleteVariable("/foo", "x"))
@@ -170,11 +170,11 @@ func TestDeleteVariablesInScope(t *testing.T) {
 	manager := graphtest.BuildTestManager()
 	ctx := NewContext(manager)
 	ctx0 := ctx.In("a")
-	_ = ctx0.VariableWithShape("x", shapes.Make(shapes.Float32))
+	_ = ctx0.VariableWithShape("x", shapes.Make(dtypes.Float32))
 	ctx1 := ctx.In("b")
-	_ = ctx1.VariableWithShape("y", shapes.Make(shapes.Float64, 2))
+	_ = ctx1.VariableWithShape("y", shapes.Make(dtypes.Float64, 2))
 	ctx2 := ctx1.In("c")
-	_ = ctx2.VariableWithShape("z", shapes.Make(shapes.Float32, 3, 1))
+	_ = ctx2.VariableWithShape("z", shapes.Make(dtypes.Float32, 3, 1))
 	ctx.InitializeVariables()
 
 	// Remove all under scope "/b"
@@ -222,7 +222,7 @@ func TestContext_SetLoader(t *testing.T) {
 	})
 	ctx = ctx.Reuse()
 	e := NewExec(manager, ctx, func(ctx *Context, g *Graph) (*Node, *Node) {
-		v0 := ctx.WithInitializer(initializers.Zero).VariableWithShape("x", shapes.Make(shapes.Float32))
+		v0 := ctx.WithInitializer(initializers.Zero).VariableWithShape("x", shapes.Make(dtypes.Float32))
 		v1 := ctx.VariableWithValue("y", 1)
 		return v0.ValueGraph(g), v1.ValueGraph(g)
 	})

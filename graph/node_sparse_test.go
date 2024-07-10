@@ -111,7 +111,7 @@ func TestGather(t *testing.T) {
 func TestGatherSlices(t *testing.T) {
 	testFuncOneInput(t, "GatherSlices(input, slicedAxes={1}, start={{0}, {1}, {0}}, sizes={1})",
 		func(g *Graph) (input, output *Node) {
-			input = IotaFull(g, shapes.Make(shapes.F32, 4, 5))
+			input = IotaFull(g, shapes.Make(dtypes.Float32, 4, 5))
 			start := Const(g, [][]int32{{0}, {1}, {0}}) // Slice from rows 0, 2 and 0 of each example in the batch.
 			sizes := []int{1}                           // Take only one row per start.
 			output = GatherSlices(input, []int{0}, start, sizes)
@@ -120,7 +120,7 @@ func TestGatherSlices(t *testing.T) {
 
 	testFuncOneInput(t, "GatherSlices(input, slicedAxes={0}, start={{0}, {1}}, sizes={2})",
 		func(g *Graph) (input, output *Node) {
-			input = IotaFull(g, shapes.Make(shapes.F32, 4, 3))
+			input = IotaFull(g, shapes.Make(dtypes.Float32, 4, 3))
 			start := Const(g, [][]int32{{0}, {1}}) // Slice from rows 0 and 1.
 			sizes := []int{2}                      // Take two rows per start.
 			output = GatherSlices(input, []int{0}, start, sizes)
@@ -129,7 +129,7 @@ func TestGatherSlices(t *testing.T) {
 
 	testFuncOneInput(t, "GatherSlices(input, slicedAxes={0,1}, start={1, 1}, sizes={2, 3})",
 		func(g *Graph) (input, output *Node) {
-			input = IotaFull(g, shapes.Make(shapes.F32, 4, 10))
+			input = IotaFull(g, shapes.Make(dtypes.Float32, 4, 10))
 			start := Const(g, []int32{1, 1}) // Slice in middle of matrix.
 			sizes := []int{2, 3}             // Take a sub-matrix
 			output = GatherSlices(input, []int{0, 1}, start, sizes)
@@ -205,7 +205,7 @@ func BenchmarkScatter(b *testing.B) {
 				x := ReduceSum(Concatenate(parts, -1), -1)
 				return Add(state, x)
 			})
-			for _, dtype := range []dtypes.DType{shapes.Float64, shapes.Float32, shapes.Float16} { //
+			for _, dtype := range []dtypes.DType{dtypes.Float64, dtypes.Float32, dtypes.Float16} { //
 				// Create random values tensor shaped [BatchSize, EmbeddingSize] of the given dtype.
 				results := NewExec(manager, func(rngState *Node) (state, value *Node) {
 					_, state = RandomNormal(rngState, shapes.Make(dtype, NumEntries, EmbeddingSize))

@@ -18,7 +18,7 @@ func TestPoolMessagesWithFixedShape(t *testing.T) {
 			mask := Const(g, [][]bool{
 				{true, false, true},
 				{false, false, false}})
-			x := IotaFull(g, shapes.Make(shapes.F32, append(mask.Shape().Dimensions, 5)...))
+			x := IotaFull(g, shapes.Make(dtypes.Float32, append(mask.Shape().Dimensions, 5)...))
 			degree := Const(g, [][]float32{{10}, {7}})
 			outputNoDegree := poolMessagesWithFixedShape(ctx, x, mask, nil)
 			outputWithDegree := poolMessagesWithFixedShape(ctx, x, mask, degree)
@@ -45,7 +45,7 @@ func TestPoolMessagesWithAdjacency(t *testing.T) {
 		t, "poolMessagesWithAdjacency()",
 		func(g *Graph) (inputs, outputs []*Node) {
 			// 4 source nodes.
-			source := IotaFull(g, shapes.Make(shapes.F32, 4, 2))
+			source := IotaFull(g, shapes.Make(dtypes.Float32, 4, 2))
 			// Edges: source/target pairs.
 			edgesSource := Const(g, []int{0, 1, 1, 2})
 			edgesTarget := Const(g, []int{0, 2, 3, 3})
