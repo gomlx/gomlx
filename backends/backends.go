@@ -30,8 +30,8 @@ type Backend interface {
 	// NumDevices return the number of devices available for this Backend.
 	NumDevices() DeviceNum
 
-	// Builder creates a new builder used to define a new computation.
-	Builder() Builder
+	// Builder creates a new builder used to define a new named computation.
+	Builder(name string) Builder
 
 	// DataInterface is the sub-interface that defines the API to transfer Buffer to/from accelerators for the backend.
 	DataInterface

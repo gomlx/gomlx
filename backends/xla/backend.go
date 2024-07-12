@@ -22,51 +22,45 @@ type Backend struct {
 }
 
 // AssertValid will panic if the backend is not valid: if it's nil or has already been finalized.
-func (b *Backend) AssertValid() {
-	if b == nil {
+func (backend *Backend) AssertValid() {
+	if backend == nil {
 		exceptions.Panicf("%q backend is nil", BackendName)
 	}
-	if b.plugin == nil {
+	if backend.plugin == nil {
 		exceptions.Panicf("%q backend's plugin is nil, has it already been finalized?", BackendName)
 	}
 }
 
 // Name returns the short name of the backend. E.g.: "xla" for the Xla/PJRT plugin.
-func (b *Backend) Name() string {
+func (backend *Backend) Name() string {
 	return BackendName
 }
 
 // Description is a longer description of the Backend that can be used to pretty-print.
-func (b *Backend) Description() string {
-	b.AssertValid()
-	return fmt.Sprintf("%s:%s - %s", BackendName, b.pluginName, b.plugin)
+func (backend *Backend) Description() string {
+	backend.AssertValid()
+	return fmt.Sprintf("%s:%s - %s", BackendName, backend.pluginName, backend.plugin)
 }
 
 // NumDevices return the number of devices available for this Backend.
-func (b *Backend) NumDevices() backends.DeviceNum {
-	b.AssertValid()
-	return backends.DeviceNum(len(b.client.AddressableDevices()))
-}
-
-// Builder creates a new builder used to define a new computation.
-func (b *Backend) Builder() backends.Builder {
-	b.AssertValid()
-	return nil
+func (backend *Backend) NumDevices() backends.DeviceNum {
+	backend.AssertValid()
+	return backends.DeviceNum(len(backend.client.AddressableDevices()))
 }
 
 // Finalize releases all the associated resources immediately, and makes the backend invalid.
-func (b *Backend) Finalize() {
-	if b.plugin == nil {
+func (backend *Backend) Finalize() {
+	if backend.plugin == nil {
 		return
 	}
-	if b.client != nil {
-		err := b.client.Destroy()
+	if backend.client != nil {
+		err := backend.client.Destroy()
 		if err != nil {
 			klog.Warningf("Failure while destroying PJRT client: %+v", err)
 		}
-		b.client = nil
+		backend.client = nil
 	}
-	b.plugin = nil
+	backend.plugin = nil
 	return
 }
 
@@ -81,8 +75,8 @@ func castToPJRT(buffer backends.Buffer) *pjrt.Buffer {
 
 // BufferFinalize allows client to inform backend that buffer is no longer needed and associated resources can be
 // freed immediately.
-func (b *Backend) BufferFinalize(buffer backends.Buffer) {
-	b.AssertValid()
+func (backend *Backend) BufferFinalize(buffer backends.Buffer) {
+	backend.AssertValid()
 	buf := castToPJRT(buffer)
 	err := buf.Destroy()
 	if err != nil {
@@ -91,8 +85,8 @@ func (b *Backend) BufferFinalize(buffer backends.Buffer) {
 }
 
 // BufferShape returns the shape for the buffer.
-func (b *Backend) BufferShape(buffer backends.Buffer) shapes.Shape {
-	b.AssertValid()
+func (backend *Backend) BufferShape(buffer backends.Buffer) shapes.Shape {
+	backend.AssertValid()
 	pBuffer := castToPJRT(buffer)
 	dtype, err := pBuffer.DType()
 	if err != nil {
@@ -106,8 +100,8 @@ func (b *Backend) BufferShape(buffer backends.Buffer) shapes.Shape {
 }
 
 // BufferDeviceNum returns the deviceNum for the buffer.
-func (b *Backend) BufferDeviceNum(buffer backends.Buffer) backends.DeviceNum {
-	b.AssertValid()
+func (backend *Backend) BufferDeviceNum(buffer backends.Buffer) backends.DeviceNum {
+	backend.AssertValid()
 	pBuffer := castToPJRT(buffer)
 	device, err := pBuffer.Device()
 	if err != nil {
@@ -122,9 +116,9 @@ func (b *Backend) BufferDeviceNum(buffer backends.Buffer) backends.DeviceNum {
 
 // BufferToFlatData transfers the flat values of buffer to the Go flat array. The slice flat must have
 // the exact number of elements required to store the Buffer shape. See BufferShape, and shapes.Shape.Size.
-func (b *Backend) BufferToFlatData(buffer backends.Buffer, flat any) {
-	b.AssertValid()
-	shape := b.BufferShape(buffer)
+func (backend *Backend) BufferToFlatData(buffer backends.Buffer, flat any) {
+	backend.AssertValid()
+	shape := backend.BufferShape(buffer)
 
 	flatV := reflect.ValueOf(flat)
 	if flatV.Kind() != reflect.Slice {
@@ -153,7 +147,7 @@ func (b *Backend) BufferToFlatData(buffer backends.Buffer, flat any) {
 
 // BufferFromFlatData transfers data from Go given as a flat slice (of the type corresponding to the shape DType)
 // to the deviceNum, and returns the corresponding Buffer.
-func (b *Backend) BufferFromFlatData(deviceNum backends.DeviceNum, flat any, shape shapes.Shape) backends.Buffer {
+func (backend *Backend) BufferFromFlatData(deviceNum backends.DeviceNum, flat any, shape shapes.Shape) backends.Buffer {
 	flatV := reflect.ValueOf(flat)
 	if flatV.Kind() != reflect.Slice {
 		exceptions.Panicf("backend %q: BuffferFromFlatData, but flat is not a slice, instead it is %T", BackendName, flat)
@@ -163,7 +157,7 @@ func (b *Backend) BufferFromFlatData(deviceNum backends.DeviceNum, flat any, sha
 		exceptions.Panicf("backend %q: BuffferFromFlatData with shape %s, but flat with incompatible dtype, it is %T", BackendName, shape, flat)
 	}
 
-	buffer, err := b.client.BufferFromHost().
+	buffer, err := backend.client.BufferFromHost().
 		FromFlatDataWithDimensions(flat, shape.Dimensions).
 		ToDeviceNum(int(deviceNum)).
 		Done()
