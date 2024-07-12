@@ -3,12 +3,14 @@
 ## 0.11.0 
 
 * MAJOR REFACTORING. Very breaking compatibility changes -- it would be a major release number change, if it were > v1 already.
+* New package `backends`: no GoMLX can support different backends -- but for now only xla is implemented.
+  * Sub-package `xla` implements the XLA/PJRT version, based on [`github.com/gomlx/gopjrt`](github.com/gomlx/gopjrt) project.
 * Package `tensors':
   * `tensor` -> `tensors`, more inline with other package names, and allow one to use `tensor` as a variable name.
   * Now there is only one `Tensor` type (not an interface), that manages local and on-device storage.
   * Local storage using Go
-  * On-device storage now using [`github.com/gomlx/gopjrt`](github.com/gomlx/gopjrt) project.
-  * Improved testing, greatly simplified.
+  * On-device storage now using generic `backends.Backend` api.
+  * Improved testing using xla, greatly simplified.
 * Package `exceptions` removed: using the (same) now external [`github.com/gomlx/exceptions`](github.com/gomlx/exceptions) instead.
 * Package `slices` renamed to `xslices`, not to mix up with the new standard pacakge `slices`.
 * Package `tensors/image` renamed `tensors/images`.
