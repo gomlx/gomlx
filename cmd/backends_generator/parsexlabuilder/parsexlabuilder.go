@@ -9,6 +9,7 @@ import (
 	"bufio"
 	"fmt"
 	"github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/types"
 	"github.com/janpfeifer/must"
 	"go/ast"
 	"go/parser"
@@ -178,6 +179,8 @@ func (e *NodeTextExtractor) Get(node ast.Node) string {
 	return string(fileContent[pos.Offset:endOffset])
 }
 
+var FunctionsBlackList = types.SetWith("Parameter")
+
 // EnumerateStandardOpsFunctions calls callback for every "standard" op declaring function of the xlaBuilder package AST,
 // that can be automatically converted to a backends.Backend API, and implemented in the xla.Backend.
 func EnumerateStandardOpsFunctions(extractor *NodeTextExtractor, xlaBuilderPkg *ast.Package, callback func(funcDecl *ast.FuncDecl)) {
@@ -202,14 +205,15 @@ func EnumerateStandardOpsFunctions(extractor *NodeTextExtractor, xlaBuilderPkg *
 
 		// Skip functions that take a sub-computation as a paramter.
 		for _, param := range funcDecl.Type.Params.List {
-			if extractor.Get(param.Type) == "*XlaComputation" {
+			typeName := extractor.Get(param.Type)
+			if typeName == "*XlaComputation" || typeName == "*Literal" {
 				//fmt.Printf("*** dropping %q because it takes a computation as input\n", funcDecl.Name.Name)
 				return
 			}
 		}
 
 		// Skip tuple-functions.
-		if strings.Index(funcDecl.Name.Name, "Tuple") {
+		if strings.Index(funcDecl.Name.Name, "Tuple") != -1 || FunctionsBlackList.Has(funcDecl.Name.Name) {
 			return
 		}
 
