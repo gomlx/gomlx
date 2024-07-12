@@ -28,6 +28,11 @@ func (backend *Backend) Builder(name string) backends.Builder {
 	}
 }
 
+// Name of the computation being built.
+func (b *Builder) Name() string {
+	return b.name
+}
+
 // castToXlaOp casts the op to xlabuilder.Op and panics if not possible.
 func castToXlaOp(op backends.Op) *xlabuilder.Op {
 	xop, ok := op.(*xlabuilder.Op)
@@ -68,4 +73,28 @@ func (b *Builder) Parameter(name string, shape shapes.Shape) backends.Op {
 	b.parameterNames = append(b.parameterNames, name)
 	b.parameterShapes = append(b.parameterShapes, shape)
 	return xop
+}
+
+func convertConvolveAxesConfig(c backends.ConvolveAxesConfig) (xlaConfig xlabuilder.ConvolveAxesConfig) {
+	xlaConfig = xlabuilder.ConvolveAxesConfig{
+		InputBatch:          c.InputBatch,
+		InputChannel:        c.InputChannel,
+		InputSpatial:        c.InputSpatial,
+		KernelInputChannel:  c.KernelInputChannel,
+		KernelOutputChannel: c.KernelOutputChannel,
+		KernelSpatial:       c.KernelSpatial,
+		OutputBatch:         c.OutputBatch,
+		OutputChannel:       c.OutputChannel,
+		OutputSpatial:       c.OutputSpatial,
+	}
+	return
+}
+
+func convertPadAxis(pad backends.PadAxis) (xlaPad xlabuilder.PadAxis) {
+	xlaPad = xlabuilder.PadAxis{
+		Start:    pad.Start,
+		End:      pad.End,
+		Interior: pad.Interior,
+	}
+	return
 }

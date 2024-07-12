@@ -15,6 +15,8 @@ import (
 	"strings"
 )
 
+//go:generate go run ../cmd/backends_generator
+
 // DeviceNum represents which device holds a buffer, or should execute a computation.
 // It's up to the backend to interpret it, but it should be between 0 and Backend.NumDevices.
 type DeviceNum int

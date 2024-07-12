@@ -9,21 +9,20 @@ package main
 import (
 	"fmt"
 	"github.com/gomlx/gomlx/cmd/backend_generator/parsexlabuilder"
+	"github.com/gomlx/gomlx/types/xslices"
 	"go/ast"
+	"strings"
 )
 
 func main() {
 	opsInfo := parsexlabuilder.ReadOpsInfo()
 	_ = opsInfo
-	fileSet, xlaBuilderAst := parsexlabuilder.Parse()
-	_, _ = fileSet, xlaBuilderAst
-	for fileName, fileAst := range xlaBuilderAst.Files {
-		for _, decl := range fileAst.Decls {
-			funcDecl, ok := decl.(*ast.FuncDecl)
-			if !ok {
-				continue
-			}
-			fmt.Printf("Function %q declared in %s\n", funcDecl.Name.Name, fileName)
-		}
-	}
+	fmt.Println(parsexlabuilder.GopjrtSourcePath)
+	extractor, xlaBuilderAst := parsexlabuilder.Parse()
+	parsexlabuilder.EnumerateStandardOpsFunctions(extractor, xlaBuilderAst, func(funcDecl *ast.FuncDecl) {
+		parts := xslices.Map(funcDecl.Type.Results.List, func(field *ast.Field) string {
+			return extractor.Get(field.Type)
+		})
+		fmt.Printf("\t%s -> %s\n", funcDecl.Name.Name, strings.Join(parts, ", "))
+	})
 }

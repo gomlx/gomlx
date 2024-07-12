@@ -17,6 +17,7 @@ import (
 	"os/exec"
 	"path"
 	"strings"
+	"sync"
 )
 
 const GopjrtEnv = "GOPJRT_SRC"
@@ -39,7 +40,8 @@ func GetGopjrt() string {
 		return GopjrtSourcePath
 	}
 
-	GopjrtSourcePath, found := os.LookupEnv(GopjrtEnv)
+	var found bool
+	GopjrtSourcePath, found = os.LookupEnv(GopjrtEnv)
 	if found {
 		return GopjrtSourcePath
 	}
@@ -114,11 +116,12 @@ func ReadOpsInfo() []OpInfo {
 // Parse returns the parse tree of the gopjrt/xlabuilder pacakge.
 //
 // Notice ast.Package is deprecated, but the go/types package it suggests as a replacement doesn't seem to do the same thing.
-func Parse() (*token.FileSet, *ast.Package) {
+func Parse() (*NodeTextExtractor, *ast.Package) {
 	xlaBuilderPath := path.Join(GetGopjrt(), "xlabuilder")
 	fset := token.NewFileSet()
 	pkgs := must.M1(parser.ParseDir(fset, xlaBuilderPath, nil, parser.ParseComments|parser.AllErrors))
-	return fset, pkgs["xlabuilder"]
+	extractor := NewNodeTextExtractor(fset)
+	return extractor, pkgs["xlabuilder"]
 }
 
 // EnumerateFunctions calls callback for every function declaration in the package.
@@ -135,9 +138,81 @@ func EnumerateFunctions(pkg *ast.Package, callback func(funcDecl *ast.FuncDecl))
 	}
 }
 
-// EnumerateOpsFunctions calls callback for every op declaring function of the xlaBuilder package AST.
-func EnumerateOpsFunctions(xlaBuilderPkg *ast.Package, callback func(funcDecl *ast.FuncDecl)) {
-	EnumerateFunctions(xlaBuilderPkg, func(funcDecl *ast.FuncDecl) {
+type NodeTextExtractor struct {
+	fSet    *token.FileSet
+	cache   map[string][]byte
+	cacheMu sync.Mutex
+}
 
+func NewNodeTextExtractor(fset *token.FileSet) *NodeTextExtractor {
+	return &NodeTextExtractor{
+		fSet:  fset,
+		cache: make(map[string][]byte),
+	}
+}
+
+func (e *NodeTextExtractor) Get(node ast.Node) string {
+	pos := e.fSet.Position(node.Pos())
+	fileName := pos.Filename
+
+	// Check cache
+	e.cacheMu.Lock()
+	fileContent, ok := e.cache[fileName]
+	e.cacheMu.Unlock()
+
+	if !ok {
+		// File not in cache, read it
+		fileContent = must.M1(os.ReadFile(fileName))
+
+		// Store in cache
+		e.cacheMu.Lock()
+		e.cache[fileName] = fileContent
+		e.cacheMu.Unlock()
+	}
+
+	// Extract text from the cached file content
+	endOffset := e.fSet.Position(node.End()).Offset
+	if endOffset > len(fileContent) {
+		exceptions.Panicf("end offset out of bounds for file %s", fileName)
+	}
+	return string(fileContent[pos.Offset:endOffset])
+}
+
+// EnumerateStandardOpsFunctions calls callback for every "standard" op declaring function of the xlaBuilder package AST,
+// that can be automatically converted to a backends.Backend API, and implemented in the xla.Backend.
+func EnumerateStandardOpsFunctions(extractor *NodeTextExtractor, xlaBuilderPkg *ast.Package, callback func(funcDecl *ast.FuncDecl)) {
+	EnumerateFunctions(xlaBuilderPkg, func(funcDecl *ast.FuncDecl) {
+		if funcDecl.Recv != nil {
+			// Skip methods.
+			return
+		}
+
+		// We are looking for methods that have 2 outputs: (*Op, error)
+		if funcDecl.Type.Results.NumFields() != 2 {
+			return
+		}
+
+		if extractor.Get(funcDecl.Type.Results.List[0].Type) != "*Op" ||
+			extractor.Get(funcDecl.Type.Results.List[1].Type) != "error" {
+			return
+		}
+		if !funcDecl.Name.IsExported() {
+			return
+		}
+
+		// Skip functions that take a sub-computation as a paramter.
+		for _, param := range funcDecl.Type.Params.List {
+			if extractor.Get(param.Type) == "*XlaComputation" {
+				//fmt.Printf("*** dropping %q because it takes a computation as input\n", funcDecl.Name.Name)
+				return
+			}
+		}
+
+		// Skip tuple-functions.
+		if strings.Index(funcDecl.Name.Name, "Tuple") {
+			return
+		}
+
+		callback(funcDecl)
 	})
 }

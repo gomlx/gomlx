@@ -4,6 +4,8 @@
 // It will register itself as an available backend during initialization.
 package xla
 
+//go:generate go run ../../cmd/xla_generator
+
 import (
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"

@@ -24,10 +24,39 @@ type Builder interface {
 	// It is given the list of outputs.
 	Compile(outputs ...Op) Executable
 
+	// Name of the computation being built.
+	Name() string
+
 	// OpShape returns the shape of a computation Op.
 	OpShape(op Op) shapes.Shape
 
 	// Parameter creates an input parameter for the computation.
 	// During execution of the computation this value will need to be fed, in the same order it is created.
 	Parameter(name string, shape shapes.Shape) Op
+
+	// StandardOps include automatically generated list of operations for the Builder.
+	StandardOps
+}
+
+// ConvolveAxesConfig defines the interpretation of the input/kernel/output tensor axes.
+// There must be the same number of spatial dimensions (axes) for each of the 3 tensors.
+// Input and output has batch and channel axes. Kernel has inputChannel and outputChannel axes.
+//
+// See Builder.ConvGeneralDilated
+type ConvolveAxesConfig struct {
+	InputBatch, InputChannel int
+	InputSpatial             []int
+
+	KernelInputChannel, KernelOutputChannel int
+	KernelSpatial                           []int
+
+	OutputBatch, OutputChannel int
+	OutputSpatial              []int
+}
+
+// PadAxis defines the amount of padding preceding one axis (Start), at the end of axis (End)
+// or in between the inputs (Interior).
+// This is used as a parameter for the Pad operation.
+type PadAxis struct {
+	Start, End, Interior int
 }

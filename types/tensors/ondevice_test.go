@@ -49,7 +49,8 @@ func testOnDeviceInputOutputImpl[T dtypes.Number](t *testing.T, backend backends
 	dims := []int{3, 2}
 	builder := backend.Builder(fmt.Sprintf("%s_%s", t.Name(), dtype))
 	x := builder.Parameter("x", shapes.Make(dtype, dims...))
-	exec := builder.Compile(x)
+	x2 := builder.Mul(x, x)
+	exec := builder.Compile(x2)
 
 	// Create local Tensor input.
 	values := []T{0, 1, 2, 3, 4, 11}
@@ -69,8 +70,7 @@ func testOnDeviceInputOutputImpl[T dtypes.Number](t *testing.T, backend backends
 	outputTensor := FromBuffer(backend, outputs[0])
 	fmt.Printf("\tf(x) = x^2, f(%s) = %s\n", tensor.GoStr(), outputTensor.GoStr())
 	require.NoErrorf(t, outputTensor.Shape().Check(dtype, 3, 2), "Output tensor for dtype %s got shape %s", dtype, outputTensor.Shape())
-	want := []T{0, 1, 2, 3, 4, 11}
-	//want := []T{0, 1, 4, 9, 16, 121}
+	want := []T{0, 1, 4, 9, 16, 121}
 	outputTensor.ConstFlatData(func(flatAny any) {
 		flat := flatAny.([]T)
 		require.Equal(t, want, flat) //  "Output tensor value was %s", outputTensor.GoStr())
