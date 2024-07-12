@@ -150,8 +150,8 @@ func (s Shape) Size() (size int) {
 	return
 }
 
-// Memory returns the number of bytes for that would be used in Go to store the given data -- the actual
-// memory may depend on the device implementation in some cases (e.g. bool).
+// Memory returns the memory used to store an array of the given shape, the same as the size in bytes.
+// Careful, so far all types in Go and on device seem to use the same sizes, but future type this is not guaranteed.
 func (s Shape) Memory() uintptr {
 	return s.DType.Memory() * uintptr(s.Size())
 }

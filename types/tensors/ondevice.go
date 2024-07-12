@@ -2,40 +2,24 @@ package tensors
 
 import (
 	"github.com/gomlx/exceptions"
-	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gopjrt/pjrt"
-	"github.com/pkg/errors"
+	"github.com/gomlx/gomlx/backends"
 	"maps"
+	"reflect"
 )
 
 // device holds internal information about on-device storage of a Tensor.
 type onDevice struct {
 	t         *Tensor
-	buffer    *pjrt.Buffer
-	deviceNum int
+	buffer    backends.Buffer
+	deviceNum backends.DeviceNum
 }
 
-// FromPJRT creates a Tensor from a PJRT buffer. It requires the deviceNum information as well.
-func FromPJRT(buffer *pjrt.Buffer) (t *Tensor) {
-	dtype, err := buffer.DType()
-	if err != nil {
-		panic(errors.WithMessage(err, "failed to read DType from PJRT buffer"))
-	}
-	dims, err := buffer.Dimensions()
-	if err != nil {
-		panic(errors.WithMessage(err, "failed to read dimensions from PJRT buffer"))
-	}
-	device, err := buffer.Device()
-	if err != nil {
-		panic(errors.WithMessage(err, "failed to read device from PJRT buffer"))
-	}
-	deviceNum := buffer.Client().NumForDevice(device)
-	if deviceNum == -1 {
-		exceptions.Panicf("cannot find deviceNum for device used by PJRT buffer!?")
-	}
-
+// FromBuffer creates a Tensor from a backend's buffer. It requires the deviceNum information as well.
+func FromBuffer(backend backends.Backend, buffer backends.Buffer) (t *Tensor) {
 	// Create tensor.
-	t = newTensor(shapes.Make(dtype, dims...))
+	t = newTensor(backend.BufferShape(buffer))
+	t.backend = backend
+	deviceNum := backend.BufferDeviceNum(buffer)
 	t.onDevices[deviceNum] = &onDevice{
 		t:         t,
 		buffer:    buffer,
@@ -44,14 +28,14 @@ func FromPJRT(buffer *pjrt.Buffer) (t *Tensor) {
 	return
 }
 
-// Buffer returns the pjrt.Buffer for the tensor.
+// Buffer returns the backend buffer for the tensor.
 // It triggers the transfer from local to the device, if the tensor is not already store on device.
 //
 // If you use the returned buffer in a "donatable" fashion (the accelerator may rewrite the buffer), remember to
 // finalize and invalidate the tensor -- it doesn't happen automatically.
 //
 // The deviceNum is optional. But only one can be given. The default value is 0.
-func (t *Tensor) Buffer(client *pjrt.Client, deviceNum ...int) *pjrt.Buffer {
+func (t *Tensor) Buffer(backend backends.Backend, deviceNum ...backends.DeviceNum) backends.Buffer {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.AssertValid()
@@ -61,7 +45,7 @@ func (t *Tensor) Buffer(client *pjrt.Client, deviceNum ...int) *pjrt.Buffer {
 	if len(deviceNum) == 0 {
 		deviceNum = defaultDeviceNums
 	}
-	t.lockedMaterializeOnDevices(client, deviceNum...)
+	t.lockedMaterializeOnDevices(backend, deviceNum...)
 	return t.onDevices[deviceNum[0]].buffer
 }
 
@@ -78,10 +62,7 @@ func (d *onDevice) Finalize() {
 	if d.IsFinalized() {
 		return
 	}
-	err := d.buffer.Destroy()
-	if err != nil {
-		panic(errors.WithMessagef(err, "while finalizing Tensor (shape=%s) on-device buffer", d.t.shape))
-	}
+	d.t.backend.BufferFinalize(d.buffer)
 	d.buffer = nil
 	d.t = nil
 }
@@ -95,22 +76,24 @@ func (d *onDevice) Finalize() {
 // - If no deviceNum is given, 0 is assumed, the default device for the client.
 //
 // TODO: For now this only transfers from local storage to on-device. Implement cross-device copy in gopjrt.
-func (t *Tensor) MaterializeOnDevices(client *pjrt.Client, deviceNums ...int) {
+func (t *Tensor) MaterializeOnDevices(backend backends.Backend, deviceNums ...backends.DeviceNum) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.AssertValid()
-	t.lockedMaterializeOnDevices(client, deviceNums...)
+	t.lockedMaterializeOnDevices(backend, deviceNums...)
 }
 
 // defaultDeviceNums is used whenever `deviceNums` is not provided.
-var defaultDeviceNums = []int{0}
+var defaultDeviceNums = []backends.DeviceNum{0}
 
 // lockedMaterializeOnDevices implements Tensor.MaterializeOnDevices
-func (t *Tensor) lockedMaterializeOnDevices(client *pjrt.Client, deviceNums ...int) {
-	if t.client == nil {
-		t.client = client
-	} else if t.client != client {
-		exceptions.Panicf("Tensor(shape=%s).MaterilizeOnDevices: cannot have a Tensor be stored by different PJRT clients, use separate Tensors for this", t.shape)
+func (t *Tensor) lockedMaterializeOnDevices(backend backends.Backend, deviceNums ...backends.DeviceNum) {
+	if t.backend == nil {
+		t.backend = backend
+	} else if t.backend != backend {
+		exceptions.Panicf("Tensor(shape=%s).MaterilizeOnDevices: cannot have a Tensor be stored by different "+
+			"backend instances (current=%q, provided=%q), use separate Tensors for this",
+			t.shape, t.backend.Name(), backend.Description())
 	}
 
 	if t.local == nil {
@@ -129,13 +112,7 @@ func (t *Tensor) lockedMaterializeOnDevices(client *pjrt.Client, deviceNums ...i
 			// Nothing to do.
 			continue
 		}
-		buffer, err := client.BufferFromHost().
-			FromFlatDataWithDimensions(t.local.flat, t.shape.Dimensions).
-			ToDeviceNum(deviceNum).
-			Done()
-		if err != nil {
-			panic(errors.WithMessagef(err, "Tensor(shape=%s).MaterializeOnDevices for deviceNum=%d failed", t.shape, deviceNum))
-		}
+		buffer := t.backend.BufferFromFlatData(deviceNum, t.local.flat, t.shape)
 		d = &onDevice{
 			t:         t,
 			buffer:    buffer,
@@ -154,7 +131,7 @@ func (t *Tensor) lockedInvalidateOnDevice() {
 	for _, d := range t.onDevices {
 		d.Finalize()
 	}
-	maps.DeleteFunc(t.onDevices, func(_ int, _ *onDevice) bool {
+	maps.DeleteFunc(t.onDevices, func(_ backends.DeviceNum, _ *onDevice) bool {
 		return true
 	})
 }
@@ -166,9 +143,12 @@ func (t *Tensor) lockedMaterializeLocal() {
 	if t.local != nil && !t.local.IsFinalized() {
 		return
 	}
+	if t.backend == nil {
+		exceptions.Panicf("Tensor(shape=%s) is not associated to any backend, likely with no on-device storage either", t.shape)
+	}
 
 	// Get on-device version: try default (deviceNum==0) first.
-	deviceNum := 0
+	deviceNum := backends.DeviceNum(0)
 	d, found := t.onDevices[deviceNum]
 	if !found {
 		for deviceNum, d = range t.onDevices {
@@ -179,14 +159,12 @@ func (t *Tensor) lockedMaterializeLocal() {
 		exceptions.Panicf("Tensor(shape=%s).MaterializeLocal() failed because on-device tensor (deviceNum=%d) is invalid",
 			t.shape, deviceNum)
 	}
-	flat, dims, err := d.buffer.ToFlatDataAndDimensions()
-	if err != nil {
-		panic(errors.WithMessagef(err, "Tensor(shape=%s).MaterializeLocal() failed to transfer on-device tensor (deviceNum=%d) to host",
-			t.shape, deviceNum))
-	}
-	t.shape.AssertDims(dims...)
+
+	// Create flat slice.
+	flatV := reflect.MakeSlice(reflect.SliceOf(t.shape.DType.GoType()), t.Size(), t.Size())
 	t.local = &local{
 		t:    t,
-		flat: flat,
+		flat: flatV.Interface(),
 	}
+	t.backend.BufferToFlatData(d.buffer, t.local.flat)
 }

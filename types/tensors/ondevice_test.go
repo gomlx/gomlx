@@ -3,6 +3,8 @@ package tensors
 import (
 	"flag"
 	"fmt"
+	"github.com/gomlx/gomlx/backends"
+	_ "github.com/gomlx/gomlx/backends/xla" // Use xla backend.
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/pjrt"
 	xla "github.com/gomlx/gopjrt/xlabuilder"
@@ -15,6 +17,9 @@ var flagPluginName = flag.String("plugin", "cpu", "plugin name")
 
 func init() {
 	klog.InitFlags(nil)
+
+	// Default test uses XLA/PJRT with "cpu" plugin.
+	backends.DefaultConfig = "xla:cpu"
 }
 
 type errTester[T any] struct {
@@ -76,7 +81,7 @@ func testOnDeviceInputOutputImpl[T dtypes.Number](t *testing.T, client *pjrt.Cli
 	outputs := capture(exec.Execute(buffer).Done()).Test(t)
 
 	// Convert buffer to tensor.
-	outputTensor := FromPJRT(outputs[0])
+	outputTensor := FromBuffer(outputs[0])
 	fmt.Printf("\tf(x) = x^2, f(%s) = %s\n", tensor.GoStr(), outputTensor.GoStr())
 	require.NoErrorf(t, outputTensor.Shape().Check(dtype, 3, 2), "Output tensor for dtype %s got shape %s", dtype, outputTensor.Shape())
 	want := []T{0, 1, 4, 9, 16, 121}

@@ -52,6 +52,7 @@
 package tensors
 
 import (
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/pjrt"
@@ -81,10 +82,10 @@ type Tensor struct {
 	local *local
 
 	// onDevices maps deviceNum -> on device buffer.
-	onDevices map[int]*onDevice
+	onDevices map[backends.DeviceNum]*onDevice
 
-	// client is the PJRT client, holding all "on device" buffers. A Tensor cannot be in more than one client.
-	client *pjrt.Client
+	// backend to use for on-device tensors.
+	backend backends.Backend
 }
 
 // newTensor returns a Tensor object initialized only with the shape, but no actual storage (local or on any device)
@@ -92,7 +93,7 @@ type Tensor struct {
 func newTensor(shape shapes.Shape) *Tensor {
 	return &Tensor{
 		shape:     shape,
-		onDevices: make(map[int]*onDevice),
+		onDevices: make(map[backends.DeviceNum]*onDevice),
 	}
 }
 
