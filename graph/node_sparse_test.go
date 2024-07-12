@@ -28,7 +28,7 @@ import (
 
 func TestIndicesForShape(t *testing.T) {
 	manager := buildTestManager()
-	g := manager.NewGraph("")
+	g := manager.NewGraph()
 	shape := MakeShape(F64, 2, 3, 4)
 	numbers := IndicesForShape(g, shape)
 	g.Compile(numbers)
@@ -44,7 +44,7 @@ func TestGather(t *testing.T) {
 	manager := buildTestManager()
 	{ // Trivial scalar gather.
 		fmt.Println("\tGather(): trivial scalar gather.")
-		g := manager.NewGraph("")
+		g := manager.NewGraph()
 		// numbers=(Float64)[5 3]: [[0 1 2] [3 4 5] [6 7 8] [9 10 11] [12 13 14]]
 		numbers := IotaFull(g, MakeShape(F64, 5, 3))
 		indices := Const(g, 1)
@@ -60,7 +60,7 @@ func TestGather(t *testing.T) {
 
 	{ // Simple leading indices dimension.
 		fmt.Println("\tGather(): simple leading indices dimension.")
-		g := manager.NewGraph("")
+		g := manager.NewGraph()
 		// numbers=(Float64)[5 3]: [[0 1 2] [3 4 5] [6 7 8] [9 10 11] [12 13 14]]
 		numbers := IotaFull(g, MakeShape(F64, 5, 3))
 		indices := Const(g, [][]int{{2}, {0}})
@@ -76,7 +76,7 @@ func TestGather(t *testing.T) {
 
 	{ // With 2D leading indices dimension.
 		fmt.Println("\tGather(): with 2D leading indices dimension.")
-		g := manager.NewGraph("")
+		g := manager.NewGraph()
 		// numbers=(Float64)[5 3]: [[0 1 2] [3 4 5] [6 7 8] [9 10 11] [12 13 14]]
 		numbers := IotaFull(g, MakeShape(F64, 5, 3))
 		indices := Const(g, [][][]int{{{2}, {0}}, {{2}, {1}}})
@@ -92,7 +92,7 @@ func TestGather(t *testing.T) {
 
 	{ // With leading indices dimension, and 3D params tailing dimensions.
 		fmt.Println("\tGather(): With leading indices dimension, and 2D params tailing dimensions.")
-		g := manager.NewGraph("")
+		g := manager.NewGraph()
 		// numbers=(Float64)[5 3]: [[0 1 2] [3 4 5] [6 7 8] [9 10 11] [12 13 14]]
 		numbers := IotaFull(g, MakeShape(F64, 5, 2, 2))
 		indices := Const(g, [][]int{{2}, {0}, {1}, {3}})
@@ -141,7 +141,7 @@ func TestScatter(t *testing.T) {
 	manager := buildTestManager()
 	{ // Trivial scalar scatter.
 		fmt.Println("\tScatter(): trivial scalar scatter.")
-		g := manager.NewGraph("")
+		g := manager.NewGraph()
 		// numbers=(Float64)[3]: [2 3 4]
 		numbers := Add(IotaFull(g, MakeShape(F64, 3)), Const(g, float64(2)))
 		indices := Const(g, 1)
@@ -157,7 +157,7 @@ func TestScatter(t *testing.T) {
 
 	{ // Simple leading indices dimension.
 		fmt.Println("\tScatterAdd(): leading indices dimension, and deeper slice dimension.")
-		g := manager.NewGraph("")
+		g := manager.NewGraph()
 		// numbers=(Float64)[5 3, 1]: [[[0] [1] [2]] [[3] [4] [5]]]
 		numbers := IotaFull(g, MakeShape(F64, 2, 3, 1))
 		indices := Const(g, [][]int{{2}, {0}})

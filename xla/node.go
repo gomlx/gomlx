@@ -21,7 +21,7 @@ package xla
 //
 // Internal implementation only.
 //
-// It defines NodeType for its internal representation.
+// It defines Type for its internal representation.
 //
 // But mostly this is only needed for those implementing new ops, in which case they need to define
 // the new type here.

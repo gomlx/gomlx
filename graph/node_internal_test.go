@@ -42,7 +42,7 @@ func buildTestManager() *Manager {
 func TestBroadcastInDim(t *testing.T) {
 	manager := buildTestManager()
 	{
-		g := manager.NewGraph("")
+		g := manager.NewGraph()
 		input := Const(g, [][][]float32{{{1.1, 1.2}}}) // Shape [1, 1, 2]
 		broadcastInDim(input, shapes.Make(dtypes.Float32, 2, 1, 2), []int{0, 1, 2})
 		got := compileAndRun(g)

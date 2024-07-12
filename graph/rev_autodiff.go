@@ -17,7 +17,6 @@
 package graph
 
 import (
-	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/xla"
 	"github.com/pkg/errors"
@@ -147,7 +146,7 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 			}
 			rNode.AccumulatedVJP = Tuple(rNode.VJPsForTuple...)
 		}
-		if node.NodeType() == xla.GetTupleElementNode {
+		if node.Type() == xla.GetTupleElementNode {
 			// GetTupleElement just pushes v to the specific element of the tuple.
 			elementIdx := node.serializedNode.Int
 			input := node.inputs[0]
@@ -169,7 +168,7 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 		vjpFn := node.customVJP
 		if vjpFn == nil {
 			var ok bool
-			vjpFn, ok = VJPRegistration[node.NodeType()]
+			vjpFn, ok = VJPRegistration[node.Type()]
 			if !ok {
 				Panicf("graph has node %s, for which no gradient is defined yet, cannot generate graph gradient", node)
 			}
@@ -566,7 +565,7 @@ func minMaxVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// (as opposed to 0).
 	side0Indicator := PositiveIndicator(Sub(node.inputs[0], node.inputs[1]))
 	side1Indicator := OneMinus(side0Indicator)
-	if node.NodeType() == xla.MinNode {
+	if node.Type() == xla.MinNode {
 		// If min, swap directions.
 		side0Indicator, side1Indicator = side1Indicator, side0Indicator
 	}

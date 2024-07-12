@@ -32,7 +32,7 @@ func testState(t *testing.T, rg *reverseGraph, node *Node, selected, included, u
 func TestReverseGraph(t *testing.T) {
 	manager := buildTestManager()
 
-	g := manager.NewGraph("")
+	g := manager.NewGraph()
 	n0 := g.Parameter("n0", shapes.Scalar[float32]())
 	n1 := g.Parameter("n1", shapes.Scalar[float32]())
 	n2 := g.Parameter("n2", shapes.Scalar[float32]())

@@ -19,8 +19,6 @@ package graph
 import (
 	"fmt"
 	"github.com/gomlx/exceptions"
-	"github.com/gomlx/gomlx/types"
-	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/pjrt"
 	"github.com/pkg/errors"
 	"os"
@@ -48,48 +46,6 @@ type Manager struct {
 	pluginName string
 }
 
-// GetAvailablePlugins lists the available platforms -- it caches and reuses the result in future calls.
-//
-// Plugins are searched in the PJRT_PLUGIN_LIBRARY_PATH directory -- or directories, if it is a ":" separated list.
-// If it is not set it will search in "/usr/local/lib/gomlx/pjrt" and the standard libraries directories of the
-// system (in linux in LD_LIBRARY_PATH and /etc/ld.so.conf file) in that order.
-//
-// If there are plugins with the same name but different versions in different directories, it respects the order of the directories given by
-// PJRT_PLUGIN_LIBRARY_PATH or by the system.
-//
-// See details in pjrt.AvailablePlugins.
-func GetAvailablePlugins() []string {
-	if len(availablePluginsList) > 0 {
-		// Use cache results.
-		return availablePluginsList
-	}
-
-	availablePluginsMap := pjrt.AvailablePlugins()
-	pluginNames := types.SetWith(xslices.Keys(availablePluginsMap))
-	availablePluginsList = make([]string, 0, len(pluginNames))
-
-	// Add GOMLX_PJRT_PLUGIN first.
-	selectedPlugin := os.Getenv(DefaultPluginEnv)
-	if selectedPlugin != "" && pluginNames.Has(selectedPlugin) {
-		availablePluginsList = append(availablePluginsList, selectedPlugin)
-		delete(pluginNames, selectedPlugin)
-	}
-
-	// Add DefaultPlugins first.
-	for _, pluginName := range DefaultPlugins {
-		if pluginNames.Has(pluginName) {
-			availablePluginsList = append(availablePluginsList, pluginName)
-			delete(pluginNames, pluginName)
-		}
-	}
-
-	// Add the other plugins in some random order.
-	for pluginName := range pluginNames {
-		availablePluginsList = append(availablePluginsList, pluginName)
-	}
-	return availablePluginsList
-}
-
 // DefaultPluginEnv is the environment variable name for the default plugin name.
 // It can be a name (e.g.: "cpu", "cuda") or a full-path to the plugin.
 // See pjrt.GetPlugin.
@@ -97,7 +53,8 @@ var DefaultPluginEnv = "GOMLX_PJRT_PLUGIN"
 
 // ManagerBuilder allow setting of options to build a Manager object.
 type ManagerBuilder struct {
-	pluginName string
+	pluginName        string
+	pjrtClientOptions pjrt.NamedValuesMap
 }
 
 // NewManager creates a new `Manager` object using the default plugin and configuration.
@@ -125,7 +82,7 @@ func (b *ManagerBuilder) Plugin(p string) *ManagerBuilder {
 	return b
 }
 
-// WithDefaultPlugin takes the given pluginName if one is not overwritten with GOMLX_PLATFORM.
+// WithDefaultPlugin takes the given pluginName if one is not overwritten with GOMLX_PJRT_PLUGIN.
 // This is useful for testing, where one wants to force something except if explicitly overwritten.
 func (b *ManagerBuilder) WithDefaultPlugin(p string) *ManagerBuilder {
 	b.pluginName = p
@@ -133,6 +90,15 @@ func (b *ManagerBuilder) WithDefaultPlugin(p string) *ManagerBuilder {
 	if found {
 		b.pluginName = plugin
 	}
+	return b
+}
+
+// WithClientOptions sets client options, in the form of a  pjrt.NamedValuesMap (a map[string]any to small list
+// of supported value types).
+// .
+// The options are plugin dependent,
+func (b *ManagerBuilder) WithClientOptions(options pjrt.NamedValuesMap) *ManagerBuilder {
+	b.pjrtClientOptions = options
 	return b
 }
 
@@ -159,7 +125,7 @@ func (b *ManagerBuilder) Done() (m *Manager) {
 	if err != nil {
 		panic(errors.WithMessagef(err, "failed to load PJRT plugin %q", pluginName))
 	}
-	client, err := plugin.NewClient()
+	client, err := plugin.NewClient(b.pjrtClientOptions)
 	m = &Manager{
 		client: client,
 		plugin: plugin,
@@ -167,28 +133,19 @@ func (b *ManagerBuilder) Done() (m *Manager) {
 	return
 }
 
-// GraphId has to globally unique.
+// GraphId is globally unique.
 var (
 	muGraphCount sync.Mutex
-	graphCount   int
+	graphCount   GraphId
 )
 
 // NewGraph constructs an empty Graph. If `name` is set to "" a unique name is picked.
 // It uses the manager's default device number.
-func (m *Manager) NewGraph(name string) *Graph {
-	return m.NewGraphWithDeviceNum(name, m.DefaultDeviceNum())
-}
-
-// NewGraphWithDeviceNum constructs an empty Graph, and sets to use the given device number.
-// If name is set to "" a unique name is picked.
-func (m *Manager) NewGraphWithDeviceNum(name string, deviceNum int) *Graph {
+func (m *Manager) NewGraph() *Graph {
 	muGraphCount.Lock()
 	defer muGraphCount.Unlock()
 
-	if name == "" {
-		name = fmt.Sprintf("graph_#%d", graphCount)
-	}
-	g := newGraph(m, name, GraphId(graphCount), deviceNum)
+	g := newConfiguringGraph(m, fmt.Sprintf("graph_#%d", graphCount), graphCount, 0)
 	graphCount += 1
 	return g
 }

@@ -24,7 +24,7 @@ import (
 
 func TestAsserts(t *testing.T) {
 	manager := buildTestManager()
-	g := manager.NewGraph("TestAssertGraph")
+	g := manager.NewGraph().WithName("TestAssertGraph")
 	node := g.Parameter("node", shapes.Make(dtypes.Float32, 3, 2))
 	scalar := g.Parameter("scalar", shapes.Make(dtypes.Int64))
 

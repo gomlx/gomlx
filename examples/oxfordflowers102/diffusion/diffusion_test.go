@@ -14,7 +14,7 @@ import (
 func TestUNetModelGraph(t *testing.T) {
 	manager = graphtest.BuildTestManager()
 	Init()
-	g := manager.NewGraph("test")
+	g := manager.NewGraph().WithName("test")
 	ctx := context.NewContext(manager)
 	numExamples := 5
 	noisyImages := Zeros(g, shapes.Make(DType, numExamples, 64, 64, 3))
@@ -44,7 +44,7 @@ func TestTrainingModelGraph(t *testing.T) {
 	}
 	manager = graphtest.BuildTestManager()
 	Init()
-	g := manager.NewGraph("test")
+	g := manager.NewGraph().WithName("test")
 	ctx := context.NewContext(manager)
 	numExamples := 5
 	predictions := getZeroPredictions(ctx, g, numExamples)
@@ -71,7 +71,7 @@ func TestImagesGenerator(t *testing.T) {
 	manager = graphtest.BuildTestManager()
 	ctx := context.NewContext(manager)
 	// ctx.RngStateReset() --> to truly randomize each run uncomment this.
-	g := manager.NewGraph("test")
+	g := manager.NewGraph().WithName("test")
 	_ = getZeroPredictions(ctx, g, 2) // Batch size won't matter, we only call this to create the model weights.
 	noise := GenerateNoise(numImages)
 	flowerIds := GenerateFlowerIds(numImages)

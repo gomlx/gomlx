@@ -18,7 +18,10 @@ package graph
 
 import (
 	"fmt"
+	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 	"reflect"
@@ -184,7 +187,7 @@ func NewExecAny(manager *Manager, graphFn any) *Exec {
 
 	// Verify parameters.
 	if graphFnT.Kind() != reflect.Func {
-		Panicf("graphFn must be a function")
+		exceptions.Panicf("graphFn must be a function")
 	}
 
 	var node *Node
@@ -194,39 +197,39 @@ func NewExecAny(manager *Manager, graphFn any) *Exec {
 
 	if graphFnT.NumIn() < 1 || graphFnT.NumOut() < 1 {
 		// It requires at least one input and one output.
-		Panicf("not enough input (%d)/output (%d) parameters, both need to be > 0",
+		exceptions.Panicf("not enough input (%d)/output (%d) parameters, both need to be > 0",
 			graphFnT.NumIn(), graphFnT.NumOut())
 	}
 	for ii := 0; ii < graphFnT.NumIn(); ii++ {
 		if graphFnT.In(ii).Kind() == reflect.Slice && graphFnT.In(ii).Elem() == nodeType {
 			if graphFnT.NumIn() != 1 {
-				Panicf("[]*Node parameters are only accepted as input if they are the only input, got function type %s instead", graphFnT)
+				exceptions.Panicf("[]*Node parameters are only accepted as input if they are the only input, got function type %s instead", graphFnT)
 			}
 			exec.inputAsSlice = true
 			break
 		}
 		if graphFnT.In(ii) == graphType {
 			if graphFnT.NumIn() != 1 {
-				Panicf("*Graph parameter only accepted as input if they are the only input, got function type %s instead", graphFnT)
+				exceptions.Panicf("*Graph parameter only accepted as input if they are the only input, got function type %s instead", graphFnT)
 			}
 			exec.inputIsGraph = true
 			exec.numInputs = 0
 			break
 		}
 		if graphFnT.In(ii) != nodeType {
-			Panicf("input parameter %d is not of type *Node or []*Node", ii)
+			exceptions.Panicf("input parameter %d is not of type *Node or []*Node", ii)
 		}
 	}
 	for ii := 0; ii < graphFnT.NumOut(); ii++ {
 		if graphFnT.Out(ii).Kind() == reflect.Slice && graphFnT.Out(ii).Elem() == nodeType {
 			if graphFnT.NumOut() != 1 {
-				Panicf("[]*Node parameters are only accepted as output if they are the only output, got function type %s instead", graphFnT)
+				exceptions.Panicf("[]*Node parameters are only accepted as output if they are the only output, got function type %s instead", graphFnT)
 			}
 			exec.outputAsSlice = true
 			break
 		}
 		if graphFnT.Out(ii) != nodeType {
-			Panicf("output parameter %d is not of type *Node", ii)
+			exceptions.Panicf("output parameter %d is not of type *Node", ii)
 		}
 	}
 	return exec
@@ -361,7 +364,7 @@ func (e *Exec) PreCompile(args ...any) {
 func (e *Exec) compileAndExecute(execute bool, args ...any) (results []tensors.Tensor, g *Graph) {
 	args = convertToListOfTensors(args)
 	if !e.inputAsSlice && len(args) != e.numInputs {
-		Panicf(
+		exceptions.Panicf(
 			"# of arguments to call (#args=%d) don't match # arguments to the graph function (#args=%d) for %q",
 			len(args), e.numInputs, e.Name())
 	}
@@ -384,7 +387,7 @@ func (e *Exec) compileAndExecute(execute bool, args ...any) (results []tensors.T
 	// Get or build the graph.
 	entry := e.findCacheEntry(argsShapes)
 	if entry == nil {
-		Panicf(
+		exceptions.Panicf(
 			"maximum cache size of %d reached for %q, cannot create another g -- "+
 				"a new computation g needs to be created+compiled for each different shape of "+
 				"the input, consider using padding, or if this is not a concern change "+
@@ -404,7 +407,7 @@ func (e *Exec) compileAndExecute(execute bool, args ...any) (results []tensors.T
 	if g.NumParameters() > len(args) {
 		for ii, t := range tensors {
 			if t == nil {
-				Panicf("parameter %d (%q) is nil or invalid, maybe a variable value not set as a "+
+				exceptions.Panicf("parameter %d (%q) is nil or invalid, maybe a variable value not set as a "+
 					"parameter, cannot execute g", ii, g.ParameterByIndex(ii).ParameterName())
 			}
 		}
@@ -487,7 +490,7 @@ func (e *Exec) createAndCacheGraph(argsShapes []shapes.Shape) (entry *execCacheE
 	var outputs []*Node
 	if e.outputAsSlice {
 		if len(outputsV) != 1 {
-			Panicf("graphFn for %q returned %d results, as opposed to simply a slice of nodes -- []*Node",
+			exceptions.Panicf("graphFn for %q returned %d results, as opposed to simply a slice of nodes -- []*Node",
 				e.Name(), len(outputsV))
 		}
 		outputs = outputsV[0].Interface().([]*Node)

@@ -28,7 +28,7 @@ import (
 
 func TestGradientAdd(t *testing.T) {
 	manager := buildTestManager()
-	g := manager.NewGraph("TestDense")
+	g := manager.NewGraph().WithName("TestDense")
 	c1 := Const(g, []float32{1, 2})
 	c2 := Const(g, []float32{10})
 	output := ReduceAllSum(Add(c1, c2))
@@ -72,7 +72,7 @@ func TestGradientDot(t *testing.T) {
 
 	// vector x vector case: simple dot product.
 	{
-		g := manager.NewGraph("TestDense")
+		g := manager.NewGraph().WithName("TestDense")
 		v1 := Mul(Ones(g, MakeShape(F32, 4)), Const(g, float32(2)))
 		v2 := Mul(Ones(g, MakeShape(F32, 4)), Const(g, float32(3)))
 		fmt.Printf("\tv1=2s, %s\n", v1)
@@ -112,7 +112,7 @@ func TestGradientDot(t *testing.T) {
 
 	// matrix x vector case: simple dot product.
 	{
-		g := manager.NewGraph("TestDense")
+		g := manager.NewGraph().WithName("TestDense")
 		v1 := Add(Iota(g, MakeShape(F32, 2, 4), 0), Const(g, float32(2)))
 		v2 := Mul(Ones(g, MakeShape(F32, 4)), Const(g, float32(3)))
 		output := Dot(v1, v2)
@@ -154,7 +154,7 @@ func TestGradientDot(t *testing.T) {
 
 	// matrix x matrix case: simple dot product.
 	{
-		g := manager.NewGraph("TestDense")
+		g := manager.NewGraph().WithName("TestDense")
 		v1 := Add(Iota(g, MakeShape(F32, 2, 4), 0), Const(g, float32(2)))
 		v2 := Add(Iota(g, MakeShape(F32, 4, 1), 0), Const(g, float32(1)))
 		output := Dot(v1, v2)
@@ -224,7 +224,7 @@ func TestGradientGather(t *testing.T) {
 	manager := buildTestManager()
 	{ // Trivial scalar gather.
 		fmt.Println("\tGather(): trivial scalar gather.")
-		g := manager.NewGraph("")
+		g := manager.NewGraph()
 		// numbers=(Float64)[5 3]: [[0 1 2] [3 4 5] [6 7 8] [9 10 11] [12 13 14]]
 		numbers := IotaFull(g, MakeShape(F64, 5, 3))
 		gather := Gather(numbers, ScalarOne(g, dtypes.Int64))
@@ -251,7 +251,7 @@ func TestGradientGather(t *testing.T) {
 
 	{ // Simple leading indices dimension.
 		fmt.Println("\tGather(): simple leading indices dimension.")
-		g := manager.NewGraph("")
+		g := manager.NewGraph()
 		// numbers=(Float64)[5 3]: [[0 1 2] [3 4 5] [6 7 8] [9 10 11] [12 13 14]]
 		numbers := IotaFull(g, MakeShape(F64, 5, 3))
 		// Multiply numbers, so we can see that adjoint gradients are properly passed.
@@ -282,7 +282,7 @@ func TestGradientGather(t *testing.T) {
 
 	{ // With 2D leading indices dimension.
 		fmt.Println("\tGather(): with 2D leading indices dimension.")
-		g := manager.NewGraph("")
+		g := manager.NewGraph()
 		// numbers=(Float64)[5 3]: [[0 1 2] [3 4 5] [6 7 8] [9 10 11] [12 13 14]]
 		numbers := IotaFull(g, MakeShape(F64, 5, 3))
 		indices := Const(g, [][][]int{{{2}, {0}}, {{2}, {1}}})

@@ -514,7 +514,7 @@ func (ctx *Context) InitializeVariables() {
 		// Nothing to do.
 		return
 	}
-	g := ctx.data.manager.NewGraph("InitializeVariables")
+	g := ctx.data.manager.NewGraph().WithName("InitializeVariables")
 	valuesNodes := make([]*Node, 0, len(variablesToInitialize))
 	for _, variable := range variablesToInitialize {
 		valuesNodes = append(valuesNodes, variable.initializer(g, variable.shape))

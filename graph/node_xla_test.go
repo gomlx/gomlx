@@ -43,7 +43,7 @@ func testFuncOneInput(t *testing.T, testName string, graphFn graphFnOneInputToTe
 
 func TestSliceXLA(t *testing.T) {
 	manager := buildTestManager()
-	g := manager.NewGraph("iota0")
+	g := manager.NewGraph().WithName("iota0")
 	numbers := Iota(g, shapes.Make(dtypes.Float64, 9), 0)
 	numbers = ReshapeWithShape(numbers, shapes.Make(dtypes.Float64, 3, 3))
 	SliceXLA(numbers, []int{1, 1}, []int{2, 3})
@@ -57,7 +57,7 @@ func TestSliceXLA(t *testing.T) {
 
 func TestGatherXLA(t *testing.T) {
 	manager := buildTestManager()
-	g := manager.NewGraph("iota0")
+	g := manager.NewGraph().WithName("iota0")
 	// numbers=(Float64)[5 3]: [[0 1 2] [3 4 5] [6 7 8] [9 10 11] [12 13 14]]
 	numbers := ReshapeWithShape(Iota(g, shapes.Make(dtypes.Float64, 5*3), 0), shapes.Make(dtypes.Float64, 5, 3))
 	indices := Const(g, [][]int{{2}, {0}})
