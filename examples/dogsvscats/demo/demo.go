@@ -49,7 +49,7 @@ var (
 	flagPreGenerate   = flag.Bool("pre", false, "Pre-generate preprocessed image data to speed up training.")
 	flagForceOriginal = flag.Bool("force_original", false, "Set to true to use original images and dynamically read and augment images.")
 
-	// ML Manager creation:
+	// ML Backend creation:
 	flagNumThreads     = flag.Int("num_threads", -1, "Number of threads. Leave as -1 to use as many as there are cores.")
 	flagNumReplicas    = flag.Int("num_replicas", 1, "Number of replicas.")
 	flagPlatform       = flag.String("platform", "", "PluginDescription to use, if empty uses the default one.")
@@ -168,7 +168,7 @@ func NewContext(manager *Manager) *context.Context {
 func trainModel(config *dogsvscats.Configuration) {
 	trainDS, trainEvalDS, validationEvalDS := dogsvscats.CreateDatasets(config)
 
-	// Manager handles creation of ML computation graphs, accelerator resources, etc.
+	// Backend handles creation of ML computation graphs, accelerator resources, etc.
 	manager := BuildManager().NumThreads(*flagNumThreads).NumReplicas(*flagNumReplicas).Platform(*flagPlatform).Done()
 
 	// Context holds the variables and hyperparameters for the model.

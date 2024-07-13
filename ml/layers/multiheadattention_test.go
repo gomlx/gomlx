@@ -176,7 +176,7 @@ func TestMultiHeadAttentionTraining(t *testing.T) {
 		infinite:     true,
 	}
 
-	// Manager handles creation of ML computation graphs, accelerator resources, etc.
+	// Backend handles creation of ML computation graphs, accelerator resources, etc.
 	manager := graphtest.BuildTestManager()
 
 	// Context and optimizer used for training.

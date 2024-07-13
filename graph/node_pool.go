@@ -439,8 +439,8 @@ func selectAndScatterWithGeneralPaddingXLA(x, source *Node, windowDimensions, st
 // reduceWindowVJP calculates v*d(reduceWindow(x))/{dx, d_kernel).
 func reduceWindowVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// Recover parameters from serialized node.
-	x := node.inputs[0]
-	initValue := node.inputs[1]
+	x := node.nodeInputs[0]
+	initValue := node.nodeInputs[1]
 	reductionType := xla.NodeType(node.serializedNode.Int)
 	if reductionType != xla.ReduceMaxNode && reductionType != xla.ReduceSumNode {
 		Panicf("ReduceWindow gradient only defined for ReduceMax or ReduceSum operation, instead got %s", reductionType)

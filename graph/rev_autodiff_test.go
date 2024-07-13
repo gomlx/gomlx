@@ -317,7 +317,7 @@ type gradTestFunc func(g *Graph) (output *Node, nodesForGrad []*Node)
 // testGradients run testFn to build a graph, calculates the gradients of the ReduceAllSum(output) with respect
 // to the nodesForGrad, and check that it gets close to the corresponding values in wantForGrad.
 //
-// It will print out the inputs and outputs to help debugging.
+// It will print out the nodeInputs and outputs to help debugging.
 func testGradients(t *testing.T, name string, testFn gradTestFunc, wantForGrad []any) {
 	manager := buildTestManager()
 	fmt.Printf("%s:\n", name)
@@ -349,7 +349,7 @@ func testGradients(t *testing.T, name string, testFn gradTestFunc, wantForGrad [
 // ReduceAllSum(output) with respect to the nodesForGrad, and check that it gets the
 // exact corresponding values in wantForGrad.
 //
-// It will print out the inputs and outputs to help debugging.
+// It will print out the nodeInputs and outputs to help debugging.
 func testGradientsExact(t *testing.T, name string, testFn gradTestFunc, wantForGrad []any) {
 	manager := buildTestManager()
 	fmt.Printf("%s:\n", name)

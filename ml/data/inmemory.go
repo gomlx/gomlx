@@ -91,7 +91,7 @@ type InMemoryDataset struct {
 // InMemory creates dataset that reads the whole contents of `ds` into memory.
 //
 // It uses GoMLX to batch the tensors themselves, so it takes a graph.Manager as its first
-// parameter. Flat will be cached in the platform (device) the Manager was configured with.
+// parameter. Flat will be cached in the platform (device) the Backend was configured with.
 //
 // Args:
 //   - `manager`: will be used to create the graph that does the caching and the ca actually does the batching.

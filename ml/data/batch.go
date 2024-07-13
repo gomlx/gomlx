@@ -46,7 +46,7 @@ type batchedDataset struct {
 //
 // It uses GoMLX to batch the tensors themselves, so it takes a graph.Manager as its first
 // parameter. Also, it means that it yields examples already stored "on device" -- whichever
-// the platform Manager was configured with.
+// the platform Backend was configured with.
 //
 // Typically, Batch can benefit from ReadAhead, so while training or evaluation of batch
 // is happening, the next batch is being built. Consider using ReadAhead on the Batch dataset,

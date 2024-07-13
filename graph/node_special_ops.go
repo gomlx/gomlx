@@ -22,7 +22,7 @@ var MinConstValueSizeToKeep = int(32)
 // ConstTensor returns a newly created constant node for the tensor x.
 //
 // The value of x is copied into the graph. It's recommended that for very large tensors,
-// even if constants, that they are passed as side inputs (or variables, see context package) instead.
+// even if constants, that they are passed as side nodeInputs (or variables, see context package) instead.
 func ConstTensor(g *Graph, x *tensors.Tensor) *Node {
 	g.AssertBuilding()
 	x.AssertValid()
@@ -141,10 +141,10 @@ func IotaFull(g *Graph, shape shapes.Shape) *Node {
 	return ReshapeWithShape(Iota(g, shapes.Make(shape.DType, shape.Size()), 0), shape)
 }
 
-// validateGraphFromInputs checks that all inputs are of the same Graph and that
+// validateGraphFromInputs checks that all nodeInputs are of the same Graph and that
 // the Graph has no error.
 // It panics with a corresponding error message in case of issues.
-// Otherwise, it returns the Graph common to all inputs.
+// Otherwise, it returns the Graph common to all nodeInputs.
 func validateGraphFromInputs(inputs ...*Node) (g *Graph) {
 	if len(inputs) == 0 {
 		return nil
@@ -153,7 +153,7 @@ func validateGraphFromInputs(inputs ...*Node) (g *Graph) {
 		return nil
 	}
 
-	// Checks that all inputs are of the same graph.
+	// Checks that all nodeInputs are of the same graph.
 	for ii, n := range inputs {
 		if err := TryCatch[error](n.AssertValid); err != nil {
 			panic(errors.WithMessagef(err, "invalid input[%d]", ii))
@@ -266,7 +266,7 @@ func Conj(x *Node) *Node {
 	return oneArgNode(xla.ConjNode, x)
 }
 
-// twoArgsNode is a helper function that implements ops that simply take 2 inputs.
+// twoArgsNode is a helper function that implements ops that simply take 2 nodeInputs.
 func twoArgsNode(nodeType xla.NodeType, x, y *Node) *Node {
 	g := validateGraphFromInputs(x, y)
 	if x.shape.DType != y.shape.DType {
@@ -432,9 +432,9 @@ func LessThanTotalOrder(x, y *Node) *Node { return twoArgsNode(xla.LessThanTotal
 func Dot(lhs, rhs *Node) *Node { return twoArgsNode(xla.DotNode, lhs, rhs) }
 
 // Complex generate a complex node from floating point nodes.
-// The inputs `real` and `imaginary` must have the same dtype, and they must be either `dtypes.Float32` or
+// The nodeInputs `real` and `imaginary` must have the same dtype, and they must be either `dtypes.Float32` or
 // `dtypes.Float64`.
-// The output will be either `shapes.Complex64` or `shapes.Complex128`, depending on the inputs dtype.
+// The output will be either `shapes.Complex64` or `shapes.Complex128`, depending on the nodeInputs dtype.
 // The shapes of `real` or `imaginary` must be the same, or one must be a scalar, in which case
 // the value is broadcast to every other value.
 //
@@ -451,7 +451,7 @@ func Complex(real, imaginary *Node) *Node {
 	}
 	dtype := real.DType()
 	if dtype != dtypes.Float32 && dtype != dtypes.Float64 {
-		exceptions.Panicf("the dtype for the inputs (real and imaginary) must be either Float32 or Float64, got %s instead", dtype)
+		exceptions.Panicf("the dtype for the nodeInputs (real and imaginary) must be either Float32 or Float64, got %s instead", dtype)
 	}
 	return twoArgsNode(xla.ComplexNode, real, imaginary)
 }
@@ -1232,7 +1232,7 @@ func Slice(x *Node, axesSpec ...SliceAxisSpec) *Node {
 }
 
 // PadAxis defines the amount of padding preceding one axis (Start), at the end of axis (End)
-// or in between the inputs (Interior).
+// or in between the nodeInputs (Interior).
 // This is used as a parameter for the Pad function.
 type PadAxis struct {
 	Start, End, Interior int
@@ -1332,12 +1332,12 @@ func Concatenate(operands []*Node, axis int) *Node {
 
 // concatenateVJP implements a VJP function for the ConcatenateNode operation.
 func concatenateVJP(node, v *Node, _ shapes.Shape) []*Node {
-	vjps := make([]*Node, 0, len(node.inputs))
+	vjps := make([]*Node, 0, len(node.nodeInputs))
 	concatDimension := node.serializedNode.Int
 	concatDimStart := 0
 	shape := node.shape
 
-	// Set starts and limits for slices that are shared among all concatenated inputs.
+	// Set starts and limits for slices that are shared among all concatenated nodeInputs.
 	starts, limits := make([]int, shape.Rank()), make([]int, shape.Rank())
 	for dim := 0; dim < shape.Rank(); dim++ {
 		if dim == concatDimension {
@@ -1347,7 +1347,7 @@ func concatenateVJP(node, v *Node, _ shapes.Shape) []*Node {
 	}
 
 	// Take slice for each concatenated input.
-	for _, input := range node.inputs {
+	for _, input := range node.nodeInputs {
 		starts[concatDimension] = concatDimStart
 		concatDimStart += input.shape.Dimensions[concatDimension]
 		limits[concatDimension] = concatDimStart
@@ -1465,7 +1465,7 @@ func Einsum(equation string, lhs, rhs *Node) *Node {
 	// Parse equation.
 	inOutParts := strings.Split(equation, "->")
 	if len(inOutParts) != 2 {
-		exceptions.Panicf("Einsum(%q) missing or too many \"->\" separating inputs from outputs, there must be only one",
+		exceptions.Panicf("Einsum(%q) missing or too many \"->\" separating nodeInputs from outputs, there must be only one",
 			equation)
 	}
 	outputDesc, err := newEinsumOperandDesc(inOutParts[1])
@@ -1625,7 +1625,7 @@ func (e einsumOperandDesc) axisIndex(axis rune) int {
 //   - `EinsumAxes(matrixA, matrixB, [][2]int{{1, 0}}, nil)` performs the usual matrix multiplication, where
 //     we contract axis 1 of `matrixA` with axis 0 of `matrixB`.
 //   - `EinsumAxes(batchedMatrixA, batchedMatrixB, [][2]int{{2, 1}}, [][2]int{{0, 0}})` is similar, but we
-//     use axis 0 of both inputs as a batch, and following 2 axes as a matrix multiplication.
+//     use axis 0 of both nodeInputs as a batch, and following 2 axes as a matrix multiplication.
 //   - `EinsumAxes(vectorA, vectorB, nil, nil)` performs an outer (cross) product -- no contractions, no batch.
 //   - `EinsumAxes(vectorA, vectorB, [][2]int{{0, 0}}, nil)` performs a dot product and returns a scalar.
 //

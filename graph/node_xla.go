@@ -250,7 +250,7 @@ func batchNormGradXLA(operand, scale, mean, variance, gradOutput *Node, epsilon 
 // dotGeneralXLA takes as input lhs (left-hand-side) and rhs (right-hand-side) specifications
 // for a general vector product. Each axis can be:
 //
-//   - Just aligned (batch axes), so the output has the same axes as the inputs. The dimensions
+//   - Just aligned (batch axes), so the output has the same axes as the nodeInputs. The dimensions
 //     must match in lhs and rhs.
 //   - Crossed (default), in which case the output is the combination (concatenation) of the
 //     dimensions.
@@ -306,7 +306,7 @@ func dotCrossAxes(input *Node, contractingAxes, batchAxes []int) (crossAxes []in
 
 // dotGeneralVJP generates the gradient with respect to the lhs (left-hand-side) and rhs (right-hand-side) operands.
 func dotGeneralVJP(node, v *Node, _ shapes.Shape) []*Node {
-	lhs, rhs := node.inputs[0], node.inputs[1]
+	lhs, rhs := node.nodeInputs[0], node.nodeInputs[1]
 
 	// Rebuild axes lists.
 	ints := node.serializedNode.Ints
@@ -395,7 +395,7 @@ func dotGeneralVJP(node, v *Node, _ shapes.Shape) []*Node {
 			thisVJP = ReduceSum(thisVJP, xslices.Iota(pos, len(otherCrossAxes))...)
 		}
 
-		// * Transpose thisVJP axes back to its inputs.
+		// * Transpose thisVJP axes back to its nodeInputs.
 		thisRank := thisVJP.shape.Rank()
 		{
 			permutation := make([]int, thisRank)

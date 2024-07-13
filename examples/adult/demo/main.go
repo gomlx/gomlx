@@ -32,7 +32,6 @@ import (
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
-	"github.com/gomlx/gomlx/types/shapes"
 	"log"
 	"path"
 	"time"
@@ -94,7 +93,7 @@ func main() {
 	// Load training data and initialize statistics (vocabularies and quantiles).
 	adult.LoadAndPreprocessData(*flagDataDir, *flagNumQuantiles, *flagForceDownload, *flagVerbosity)
 
-	// Crate Manager and upload data to device tensors.
+	// Crate Backend and upload data to device tensors.
 	manager := NewManager()
 	if *flagVerbosity >= 1 {
 		fmt.Printf("PluginDescription: %s\n", manager.Platform())

@@ -298,14 +298,6 @@ type StandardOps interface {
 	// Rsqrt returns the Op that represents the output of the corresponding operation.
 	Rsqrt(x Op) Op
 
-	// ScalarOne returns a one (1) constant for the given dtype.
-	// It caches the constant, so it doesn't get defined multiple times.
-	ScalarOne(dtype dtypes.DType) Op
-
-	// ScalarZero returns a zero constant for the given dtype.
-	// It caches the constant, so it doesn't get defined multiple times.
-	ScalarZero(dtype dtypes.DType) Op
-
 	// ScatterAdd values from updates pointed by scatterIndices to operand.
 	ScatterAdd(operand, scatterIndices, updates Op, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) Op
 

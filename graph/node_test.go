@@ -446,9 +446,9 @@ func TestDot(t *testing.T) {
 
 	// Shape: [batch=4, dims=3]
 	inputs := Const(g, [][]float32{{1.1, 2.2, 3.3}, {11, 22, 33}, {111, 222, 333}, {1111, 2222, 3333}})
-	// Layer 0: shape [3, 2], that is the inputs have dim=3, and should output dims=2
+	// Layer 0: shape [3, 2], that is the nodeInputs have dim=3, and should output dims=2
 	w0 := Const(g, [][]float32{{1, 0}, {1, -1}, {-1, 1}})
-	// Dot(inputs, w0) -> shape [batch=4, dims=2]
+	// Dot(nodeInputs, w0) -> shape [batch=4, dims=2]
 	Dot(inputs, w0) // Last node created in the graph is taken as output by default.
 	got := compileAndRun(g)
 	want := [][]float32{{0, 1.1}, {0, 11}, {0, 111}, {0, 1111}}

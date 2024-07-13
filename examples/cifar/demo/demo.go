@@ -46,7 +46,7 @@ func AssertNoError(err error) {
 var (
 	flagDataDir = flag.String("data", "~/work/cifar", "Directory to cache downloaded and generated dataset files.")
 
-	// ML Manager creation:
+	// ML Backend creation:
 	flagNumThreads  = flag.Int("num_threads", -1, "Number of threads. Leave as -1 to use as many as there are cores.")
 	flagNumReplicas = flag.Int("num_replicas", 1, "Number of replicas.")
 	flagPlatform    = flag.String("platform", "", "PluginDescription to use, if empty uses the default one.")
@@ -98,7 +98,7 @@ func main() {
 }
 
 func trainModel() {
-	// Manager handles creation of ML computation graphs, accelerator resources, etc.
+	// Backend handles creation of ML computation graphs, accelerator resources, etc.
 	manager := BuildManager().NumThreads(*flagNumThreads).NumReplicas(*flagNumReplicas).Platform(*flagPlatform).Done()
 	fmt.Printf("PluginDescription: %s\n", manager.Platform())
 

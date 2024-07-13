@@ -106,7 +106,7 @@ func Gather(params, indices *Node) *Node {
 		false)
 }
 
-// GatherSlices from inputs. Each axis listed in slicedAxes have corresponding start position and size for each
+// GatherSlices from nodeInputs. Each axis listed in slicedAxes have corresponding start position and size for each
 // slice indexed by `start` (a graph Node, can be dynamically generated in the graph) and `sizes`, which will
 // define the output final shape, and must be statically given.
 //

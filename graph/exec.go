@@ -78,7 +78,7 @@ type SideParamsFn func(graph *Graph, params []*tensors.Device)
 type LoggerFn func(graph *Graph, messages []string, values []tensors.Tensor, nodes []NodeId)
 
 // Exec creates and executes computation graphs as needed
-// based on the inputs shapes.
+// based on the nodeInputs shapes.
 //
 // It simplifies the process of executing a graph building
 // function with real values. For example, assume you wrote:
@@ -108,7 +108,7 @@ type LoggerFn func(graph *Graph, messages []string, values []tensors.Tensor, nod
 // Also Call outputs a slice with all the outputs, even when there is only
 // one output.
 //
-// If there are no inputs (for instance for some initialization function), then
+// If there are no nodeInputs (for instance for some initialization function), then
 // one needs to take a *Graph as the first parameter of graphFn. Example:
 //
 //	```
@@ -119,7 +119,7 @@ type LoggerFn func(graph *Graph, messages []string, values []tensors.Tensor, nod
 //	```
 //
 // The need to build different graphs for different shapes can be expensive
-// when sizes of the inputs varies a lot. The usual solution is to use shapes
+// when sizes of the nodeInputs varies a lot. The usual solution is to use shapes
 // with size in a power scale (for instance powers of 2) and masking of tensors
 // for unused slices. For safety concerns there are a maximum number of different
 // instantiations of the graph. It can be set or disabled with SetMaxCache.
@@ -166,10 +166,10 @@ const DefaultExecMaxCacheSize = 32
 // NewExecAny constructs an Exec object that uses the given graphFn to build
 // computation graphs.
 // `graphFn` can take only *Node parameters as input and returns one or more *Node.
-// Except if there are no inputs, in which case graphFn needs to take a *Graph as the first parameter.
+// Except if there are no nodeInputs, in which case graphFn needs to take a *Graph as the first parameter.
 //
-// If any input or output parameter of graphFn is not a *Node (or *Graph is there are no inputs),
-// or if there are no inputs or outputs, it panics with a corresponding error message.
+// If any input or output parameter of graphFn is not a *Node (or *Graph is there are no nodeInputs),
+// or if there are no nodeInputs or outputs, it panics with a corresponding error message.
 func NewExecAny(manager *Manager, graphFn any) *Exec {
 	graphFnT := reflect.TypeOf(graphFn)
 	funcName := runtime.FuncForPC(reflect.ValueOf(graphFn).Pointer()).Name()
@@ -374,7 +374,7 @@ func (e *Exec) compileAndExecute(execute bool, args ...any) (results []tensors.T
 	tensors := make([]*tensors.Device, 0, len(args)) // There may be more parameters, set with Exec.setSideParams later.
 	for ii := range args {
 		var deviceT *tensors.Device
-		err := TryCatch[error](func() { deviceT = anyToDeviceTensor(e.manager, e.deviceNum, args[ii]) })
+		err := TryCatch[error](func() { deviceT = anyToBuffer(e.manager, e.deviceNum, args[ii]) })
 		if err != nil {
 			fmt.Printf("Original error: %+v\n", err)
 			panic(errors.WithMessagef(err, "Failed to convert argument #%d of %d to device(%d) -- type %T: %v",
@@ -391,7 +391,7 @@ func (e *Exec) compileAndExecute(execute bool, args ...any) (results []tensors.T
 			"maximum cache size of %d reached for %q, cannot create another g -- "+
 				"a new computation g needs to be created+compiled for each different shape of "+
 				"the input, consider using padding, or if this is not a concern change "+
-				"the cache size with exec.SetMaxCache()", e.maxCacheSize, e.Name())
+				"the cache size with executable.SetMaxCache()", e.maxCacheSize, e.Name())
 	}
 	g = entry.graph
 

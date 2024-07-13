@@ -17,12 +17,10 @@
 package graph
 
 import (
-	"fmt"
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gopjrt/pjrt"
 	"github.com/pkg/errors"
 	"os"
-	"sync"
 )
 
 var (
@@ -57,7 +55,7 @@ type ManagerBuilder struct {
 	pjrtClientOptions pjrt.NamedValuesMap
 }
 
-// NewManager creates a new `Manager` object using the default plugin and configuration.
+// NewManager creates a new `Backend` object using the default plugin and configuration.
 // For more fine-grained control, see BuildManager.
 func NewManager() *Manager {
 	return BuildManager().Done()
@@ -131,23 +129,6 @@ func (b *ManagerBuilder) Done() (m *Manager) {
 		plugin: plugin,
 	}
 	return
-}
-
-// GraphId is globally unique.
-var (
-	muGraphCount sync.Mutex
-	graphCount   GraphId
-)
-
-// NewGraph constructs an empty Graph. If `name` is set to "" a unique name is picked.
-// It uses the manager's default device number.
-func (m *Manager) NewGraph() *Graph {
-	muGraphCount.Lock()
-	defer muGraphCount.Unlock()
-
-	g := newConfiguringGraph(m, fmt.Sprintf("graph_#%d", graphCount), graphCount, 0)
-	graphCount += 1
-	return g
 }
 
 // PluginDescription returns a printable description of the PJRT plugin used by manager.

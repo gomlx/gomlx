@@ -87,35 +87,34 @@
 //     in the middle of computation — handy to debug the math.
 package graph
 
+//go:generate go run ../cmd/graphs_generator
+
 import (
 	"fmt"
 	"github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/gopjrt/pjrt"
 	xla "github.com/gomlx/gopjrt/xlabuilder"
-	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 	"strings"
+	"sync"
 	"time"
 )
 
 // Graph with the operations and dependencies needed to run a computation.
 type Graph struct {
-	manager   *Manager
-	id        GraphId
-	name      string
-	deviceNum int
+	backend    backends.Backend
+	builder    backends.Builder
+	executable backends.Executable
 
-	xlaBuilder *xla.XlaBuilder
-	exec       *pjrt.LoadedExecutable
+	id   GraphId
+	name string
 
 	// nodes includes all nodes known to Graph.
-	// We also keep a map of xlabuilder.Op to the Graph nodes, but notice that some xlabuilder.Op may be created
-	// that the graph doesn't know about, and will not be found in the opToNode mapping.
-	nodes    []*Node
-	opToNode map[*xla.Op]*Node
+	nodes []*Node
 
 	// parameters keeps track of parameter nodes, its names and a mapping of name to index.
 	parameters            []*Node
@@ -128,15 +127,43 @@ type Graph struct {
 	scalars scalarCache
 }
 
+// GraphId is globally unique.
+var (
+	muGraphCount sync.Mutex
+	graphCount   GraphId
+)
+
+// NewGraph constructs an empty Graph.
+//
+// Empty Graph's can still be further configured (e.g. Graph.WithName) until one starts building a computation with them.
+//
+// After building a computation they can be compiled (see Graph.Compile) at which point they can only be executed.
+//
+// If they are finalized (see Graph.Finalize) resources are released immediately (instead of waiting for the GC) and
+// the Graph can no longer be used.
+func NewGraph(backend backends.Backend, name string) *Graph {
+	muGraphCount.Lock()
+	defer muGraphCount.Unlock()
+
+	if name == "" {
+		name = fmt.Sprintf("graph_#%d", graphCount)
+	}
+	g := &Graph{
+		backend:               backend,
+		id:                    graphCount,
+		name:                  name,
+		parameterNameToHandle: make(map[string]ParameterHandle),
+		scalars:               make(scalarCache),
+	}
+	graphCount += 1
+	return g
+}
+
 // NodeXlaHandle is used by the underlying XLA implementation.
 type NodeXlaHandle int
 
 // GraphId is a unique Graph id within a manager.
 type GraphId int
-
-// InvalidNodeXlaHandle is returned when trying to add an invalid node, or a node that
-// has no XLA counterpart (usually some form of No-op).
-const InvalidNodeXlaHandle = NodeXlaHandle(-1)
 
 // NodeId is a unique NodeId within a Graph
 type NodeId int
@@ -155,78 +182,40 @@ const InvalidParameterHandle = ParameterHandle(-1)
 // execution. The values are anything that is accepted by tensor.FromAnyValue().
 type ParamsMap map[*Node]any
 
-// newConfiguringGraph creates a Graph without the xlaBuilder set yet, which allows it to be further configured.
-func newConfiguringGraph(m *Manager, name string, graphId GraphId, deviceNum int) *Graph {
-	return &Graph{
-		manager:               m,
-		id:                    graphId,
-		name:                  name,
-		deviceNum:             deviceNum,
-		parameterNameToHandle: make(map[string]ParameterHandle),
-		scalars:               make(scalarCache),
-	}
-}
-
 // WithName sets the name of the Graph.
 //
 // It can only be called just after creation of the graph with NewGraph.
-// Once any operation is created with the graph, the graph parameters (WithName, WithDeviceNum, etc.) become immutable,
+// Once any operation is created with the graph, the graph configuration (e.g.: Graph.WithName) become immutable,
 // and changing them will panic.
 //
 // It returns the graph passed, so configuring methods can be cascaded.
 func (g *Graph) WithName(name string) *Graph {
-	if g.manager == nil {
-		exceptions.Panicf("Graph has been finalized already")
-	}
-	if g.xlaBuilder != nil {
-		exceptions.Panicf("Graph can only be configured before the Graph is actually used, just after it's creation")
-	}
+	g.AssertConfiguring()
 	g.name = name
-	return g
-}
-
-// WithDeviceNum sets the deviceNum to use for this Graph.
-//
-// It can only be called just after creation of the graph with NewGraph.
-// Once any operation is created with the graph, the graph parameters (WithName, WithDeviceNum, etc.) become immutable,
-// and changing them will panic.
-//
-// It returns the graph passed, so configuring methods can be cascaded.
-func (g *Graph) WithDeviceNum(deviceNum int) *Graph {
-	if g.manager == nil {
-		exceptions.Panicf("Graph has been finalized already")
-	}
-	if g.xlaBuilder != nil {
-		exceptions.Panicf("Graph can only be configured before the Graph is actually used, just after it's creation")
-	}
-	g.deviceNum = deviceNum
 	return g
 }
 
 // build creates the XlaBuilder if not yet created -- which makes the Graph parameters immutable -- and checks
 // the Graph hasn't yet been compiled -- in which case it can't be further changed.
-func (g *Graph) build() *xla.XlaBuilder {
-	if g.manager == nil {
+func (g *Graph) build() backends.Builder {
+	if g.backend == nil {
 		exceptions.Panicf("Graph has been finalized already")
 	}
-	if g.exec != nil {
+	if g.executable != nil {
 		exceptions.Panicf("Graph already compiled and can't be used for building")
 	}
-	if g.xlaBuilder == nil {
+	if g.builder == nil {
 		// Lazy construction of builder: this allows one to further configure the Graph object before using it.
-		g.xlaBuilder = xla.New(g.name)
+		g.builder = g.backend.Builder(g.name)
 	}
-	return g.xlaBuilder
+	return g.builder
 }
 
-// Manager this Graph is attached to.
-func (g *Graph) Manager() *Manager { return g.manager }
+// Backend this Graph is using.
+func (g *Graph) Backend() backends.Backend { return g.backend }
 
 // Name of the computation this Graph defines, set during its construction.
 func (g *Graph) Name() string { return g.name }
-
-// DeviceNum returns the device number where this Graph is executed/built.
-func (g *Graph) DeviceNum() int { return g.deviceNum }
 
 // Finalize frees the associated data with the compiled graph (if it is compiled) and
 // all the nodes.
@@ -234,25 +223,24 @@ func (g *Graph) DeviceNum() int { return g.deviceNum }
 // It is safe to call it more than once — subsequent calls are no-ops.
 func (g *Graph) Finalize() {
 	if g == nil {
-		panic(errors.New("the Graph is nil"))
+		return
 	}
-	if g.xlaBuilder != nil {
-		g.xlaBuilder.Destroy()
-		g.xlaBuilder = nil
+	if g.builder != nil {
+		g.builder = nil
 	}
-	if g.exec != nil {
-		err := g.exec.Destroy()
+	if g.executable != nil {
+		err := g.executable.Finalize
 		if err != nil {
 			klog.Errorf("Failure while destroying Graph executable: %+v", err)
 		}
-		g.exec = nil
+		g.executable = nil
 	}
 	g.nodes = nil
 	g.parameters = nil
 	g.parametersNames = nil
 	g.parameterNameToHandle = nil
 	g.name = ""
-	g.manager = nil
+	g.backend = nil
 }
 
 // GraphId is a globally unique id (even across Manager's) of the graph. It's a counter that starts with 0.
@@ -262,7 +250,7 @@ func (g *Graph) GraphId() GraphId {
 
 // IsValid returns whether the Graph is in a valid state: it is valid if it is in a configuring, building or compiled state.
 func (g *Graph) IsValid() bool {
-	return !(g == nil || g.manager == nil)
+	return !(g == nil || g.backend == nil)
 }
 
 // AssertValid panics if graph is nil, or if it has already been finalized.
@@ -270,8 +258,21 @@ func (g *Graph) AssertValid() {
 	if g == nil {
 		exceptions.Panicf("the Graph is nil")
 	}
-	if g.manager == nil {
-		exceptions.Panicf("Graph has been finalized already")
+	if g.backend == nil {
+		exceptions.Panicf("Graph %q has been finalized already", g.name)
+	}
+}
+
+// AssertConfiguring panics if graph is not in "configuring" phase: that is, if one already started
+// building a computation with it, or if it has already been compiled.
+// It also panics if it is not valid (e.g.: if it has been finalized).
+func (g *Graph) AssertConfiguring() {
+	g.AssertValid()
+	if g.builder != nil {
+		exceptions.Panicf("Graph %q building already started, it can not be further configured", g.name)
+	}
+	if g.executable != nil {
+		exceptions.Panicf("Graph %q is already compiled, it can not be further configured", g.name)
 	}
 }
 
@@ -279,14 +280,17 @@ func (g *Graph) AssertValid() {
 // If Graph was in a configuring state (just after creation) this triggers it to enter into a "building" state.
 func (g *Graph) AssertBuilding() {
 	g.AssertValid()
+	if g.executable != nil {
+		exceptions.Panicf("Graph %q has already been compiled, one cannot further build computions with it", g.name)
+	}
 	_ = g.build()
 }
 
 // AssertCompiled panics if graph is nil, if it has already been finalized or if it is not yet compiled.
 func (g *Graph) AssertCompiled() {
 	g.AssertValid()
-	if g.exec == nil {
-		exceptions.Panicf("Graph not compiled yet, it can't be used for execution")
+	if g.executable == nil {
+		exceptions.Panicf("Graph %q not compiled yet, it can't be used for execution", g.name)
 	}
 }
 
@@ -305,7 +309,6 @@ func (g *Graph) registerNode(node *Node) (id NodeId) {
 	g.AssertBuilding()
 	id = NodeId(len(g.nodes))
 	g.nodes = append(g.nodes, node)
-	g.opToNode[node.op] = node
 	node.id = id
 	return
 }
@@ -319,41 +322,25 @@ func (g *Graph) NodeById(id NodeId) *Node {
 	return g.nodes[id]
 }
 
-// selectOutputNode either takes the last node (if no output was given), or takes the one given (if only one),
-// or creates a tuple with all the outputs.
-func (g *Graph) selectOutputNode(outputs ...*Node) *Node {
-	g.AssertValid()
-	for ii, n := range outputs {
-		if n == nil {
-			exceptions.Panicf("output node %d is nil when compiling graph %q", ii, g.name)
-		}
-		if n.Graph() != g {
-			exceptions.Panicf("output node %d is part of a different graph (name=%q) than the one being compiled (name=%q)",
-				ii, n.graph.name, g.name)
-		}
-	}
-
-	// Find output (root) node.
-	var root *Node
-	if len(outputs) == 0 {
-		root = g.nodes[len(g.nodes)-1]
-	} else if len(outputs) == 1 {
-		root = outputs[0]
-	} else {
-		root = Tuple(outputs...)
-	}
-	return root
-}
-
 // Compile just-in-time (JIT) compiles the Graph into a Computation that can be executed.
-// If the output node is not given, it assumes it's the last node created in the graph.
 //
-// If more than one output is provided, it creates a tuple of those elements and use that as output --
-// the tuple is split when executed.
+// At least one output must be given.
 func (g *Graph) Compile(outputs ...*Node) {
 	g.AssertValid()
-	if g.exec.IsCompiled() {
-		return
+	g.AssertBuilding() // But by then end of this call it will be in "compiled" state.
+	if len(outputs) == 0 {
+		exceptions.Panicf("no outputs selected when Graph.Compile graph %q", g.name)
+	}
+	// Check all nodes are from this graph.
+	for ii, node := range outputs {
+		if node == nil {
+			exceptions.Panicf("output node %d is nil when compiling graph %q", ii, g.name)
+			panic(nil) // Never executed, just to quiet warning below.
+		}
+		if node.Graph() != g {
+			exceptions.Panicf("output node %d is part of a different graph (name=%q) than the one being compiled (name=%q)",
+				ii, node.graph.name, g.name)
+		}
 	}
 
 	if klog.V(1).Enabled() {
@@ -364,19 +351,8 @@ func (g *Graph) Compile(outputs ...*Node) {
 		}()
 	}
 
-	root := g.selectOutputNode(outputs...)
-	outputShapes := make([]shapes.Shape, 0, g.NumParameters())
-	for _, node := range g.parameters {
-		outputShapes = append(outputShapes, node.shape)
-	}
-	err := g.exec.Compile(outputShapes, int(root.xlaHandle))
-	if err != nil {
-		panic(errors.WithMessage(err,
-			"Something went wrong when compiling the Graph with XLA, "+
-				"if it is graph building related (invalid values) consider reporting this "+
-				"in `gihtub.com/gomlx/gomlx` -- try printing your graph `fmt.Printf(\"%s\", g)` "+
-				" at the end of your graph building function to help debug"))
-	}
+	outputsOps := xslices.Map(outputs, func(node *Node) backends.Op { return node.op })
+	g.executable = g.builder.Compile(outputsOps...)
 	return
 }
 
@@ -384,65 +360,57 @@ func (g *Graph) Compile(outputs ...*Node) {
 //
 // The params can use Go values, Local tensors or Device tensors. Go values and Local tensors will be transferred to
 // Device tensors (located in the Manager's accelerator memory) before the graph is executed.
-func (g *Graph) Run(params ParamsMap) *tensors.Device {
+func (g *Graph) Run(inputs ParamsMap) (outputs []*tensors.Tensor) {
 	g.AssertCompiled()
 	numParams := g.NumParameters()
-	if len(params) != numParams {
-		exceptions.Panicf("graph %q takes %d parameters, but %d were given to Run()", g.name, numParams, len(params))
+	if len(inputs) != numParams {
+		exceptions.Panicf("graph %q takes %d parameters, but %d were given to Run()", g.name, numParams, len(inputs))
 	}
-	deviceParams, err := g.deviceDataForParam(params)
-	if err != nil {
-		panic(errors.WithMessagef(err, "Graph(%q).Run() failed to convert parameters to Device tensor", g.name))
+	for node := range inputs {
+		if node.ParameterHandle() == InvalidParameterHandle {
+			exceptions.Panicf("graph %q Run() received a non-parameter node as key to an input", g.name)
+		}
 	}
-	result, err := g.exec.Run(deviceParams)
-	if err != nil {
-		panic(errors.WithMessagef(err, "Graph(%q).Run() failed to run JIT compiled", g.name))
-	}
-	return tensors.InternalNewDevice(result)
+	inputBuffers := g.inputsMapToBuffers(inputs, 0)
+	results := g.executable.Execute(inputBuffers)
+	outputs = xslices.Map(results, func(buf backends.Buffer) *tensors.Tensor { return tensors.FromBuffer(g.backend, buf) })
+	return
 }
 
-// RunWithTensors is a slightly faster execution path for the graph, but inputs
+// RunWithTensors is a slightly faster execution path for the graph, but nodeInputs
 // must be provided already in Device tensors and in order.
-func (g *Graph) RunWithTensors(params []*tensors.Device) *tensors.Device {
+func (g *Graph) RunWithTensors(inputs []*tensors.Tensor) (outputs []*tensors.Tensor) {
 	g.AssertCompiled()
-	deviceParams := make([]*xla.OnDeviceBuffer, 0, len(params))
-	for _, param := range params {
-		deviceParams = append(deviceParams, param.ShapedBuffer())
-	}
-	result, err := g.exec.Run(deviceParams)
-	if err != nil {
-		panic(errors.WithMessagef(err, "Graph(%q).RunWithTensors() failed to run JIT compiled", g.name))
-	}
-	return tensors.InternalNewDevice(result)
+	deviceNum := backends.DeviceNum(0)
+	inputBuffers := xslices.Map(inputs, func(tensor *tensors.Tensor) backends.Buffer { return tensor.Buffer(g.backend, deviceNum) })
+	results := g.executable.Execute(inputBuffers)
+	outputs = xslices.Map(results, func(buf backends.Buffer) *tensors.Tensor { return tensors.FromBuffer(g.backend, buf) })
+	return
 }
 
-// deviceDataForParam converts each parameter to a Device tensor, and then returns their OnDeviceBuffer reference.
-func (g *Graph) deviceDataForParam(params ParamsMap) ([]*xla.OnDeviceBuffer, error) {
-	buffers := make([]*xla.OnDeviceBuffer, len(params))
-	for node, param := range params {
+// inputsMapToBuffers converts each input to a tensors.Tensor and then to a backends.Buffer.
+func (g *Graph) inputsMapToBuffers(inputs ParamsMap, deviceNum backends.DeviceNum) (buffers []backends.Buffer) {
+	buffers = make([]backends.Buffer, g.NumParameters())
+	for node, value := range inputs {
 		handle := node.ParameterHandle()
 		if handle == InvalidParameterHandle {
-			return nil, errors.Errorf("parameter for node %q is invalid (InvalidParameterHandle)", node)
+			exceptions.Panicf("Graph %q input for node %q is invalid (InvalidParameterHandle)", g.name, node)
 		}
-		if !buffers[handle].IsNil() {
-			return nil, errors.Errorf("parameter for node %q defined more than once", node)
+		if buffers[handle] != nil {
+			exceptions.Panicf("Graph %q input for node %q defined more than once", g.name, node)
 		}
-		if handle == InvalidParameterHandle {
-			return nil, errors.Errorf("parameter for node %q doesnt have a valid xlaHandle", node)
-		}
-		device := anyToDeviceTensor(g.manager, g.deviceNum, param)
-		buffers[handle] = device.ShapedBuffer()
+		buffers[handle] = anyToBuffer(g.backend, deviceNum, value)
 	}
-	return buffers, nil
+	return
 }
 
-// anyToDeviceTensor converts generic values to a tensor.Device on the requested device number.
-func anyToDeviceTensor(manager *Manager, deviceNum int, value any) *tensors.Device {
-	t, ok := value.(tensors.Tensor)
+// anyToBuffer converts generic values to a tensor.Device on the requested device number.
+func anyToBuffer(backend backends.Backend, deviceNum backends.DeviceNum, value any) backends.Buffer {
+	t, ok := value.(*tensors.Tensor)
 	if !ok {
 		t = tensors.FromAnyValue(value)
 	}
-	return t.Device(manager, deviceNum)
+	return t.Buffer(backend, deviceNum)
 }
 
 // NumParameters returns the number of parameters created for this graph.
@@ -473,8 +441,8 @@ func (g *Graph) ParameterByName(name string) (node *Node) {
 
 // Parameter registers an input parameter for a computation Graph (e.g: a feature used as input).
 // It can be used in two different ways: as a Node when building the Graph, so when defining a
-// function that uses the parameter, or as the key in the map of the inputs when executing
-// the computation Graph (see Manager.Run).
+// function that uses the parameter, or as the key in the map of the nodeInputs when executing
+// the computation Graph (see Backend.Run).
 func (g *Graph) Parameter(name string, shape shapes.Shape) (node *Node) {
 	g.AssertValid()
 	parameterHandle := ParameterHandle(len(g.parameters))
@@ -516,7 +484,7 @@ func (g *Graph) String() string {
 	if g == nil {
 		return "Graph(nil)!?"
 	}
-	if g.exec.IsNil() {
+	if g.executable.IsNil() {
 		return "Invalid Graph (already finalized)"
 	}
 	parts := []string{fmt.Sprintf("Graph: %d nodes, %d parameters", len(g.nodes), g.NumParameters())}

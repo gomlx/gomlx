@@ -907,7 +907,7 @@ func (ctx *Context) execPopulateGraphParamsSlice(g *Graph, params []*tensors.Dev
 			Panicf("invalid paramNode for variable %q", v.ParameterName())
 		}
 		var deviceT *tensors.Device
-		err := TryCatch[error](func() { deviceT = v.Value().Device(g.Manager(), g.DeviceNum()) })
+		err := TryCatch[error](func() { deviceT = v.Value().Device(g.Backend(), g.DeviceNum()) })
 		if err != nil {
 			panic(errors.WithMessagef(err, "failed to transfer variable \"%s::%s\" value to device",
 				v.Scope(), v.Name()))

@@ -214,7 +214,7 @@ func BenchmarkScatter(b *testing.B) {
 				}).Call(rngStateT)
 				stateT, valuesT := results[0], results[1]
 
-				// Precompile graph for given inputs. It also makes sure the inputs are transferred to the accelerator.
+				// Precompile graph for given nodeInputs. It also makes sure the nodeInputs are transferred to the accelerator.
 				scatterExec.Call(stateT, indicesT, valuesT)[0].FinalizeAll()
 				b.Run(fmt.Sprintf("sorted-%v_unique-%v_dtype-%s", sorted, unique, dtype), func(b *testing.B) {
 					for _ = range b.N {

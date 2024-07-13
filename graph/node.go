@@ -19,6 +19,7 @@ package graph
 import (
 	"fmt"
 	"github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	xla "github.com/gomlx/gopjrt/xlabuilder"
@@ -35,11 +36,17 @@ const (
 //
 // Almost every new node type implementation will rely on the Node.
 type Node struct {
-	graph  *Graph
-	shape  shapes.Shape
-	id     NodeId // id within graph.
-	op     *xla.Op
-	inputs []*Node
+	graph *Graph
+	shape shapes.Shape
+	id    NodeId // id within graph.
+	op    backends.Op
+
+	// nodeInputs are the edges of the computation graph.
+	// Notice that other static inputs to the node are registered in staticInputs
+	nodeInputs []*Node
+
+	// staticInputs need to be
+	staticInputs NodeInputs
 
 	// logMessage is set if node is marked for logging.
 	logMessage string
@@ -51,15 +58,21 @@ type Node struct {
 	// Usually, defined for a NoOp operation.
 	customVJP VJP
 
-	// constValue is a multi-dimensional Go slice, kept for small values (like scalars), and only used for printing/debugging only.
+	// constValue is a multidimensional Go slice, kept for small values (like scalars), and only used for printing/debugging only.
 	// See MinConstValueSizeToKeep to configure.
 	constValue any
 
 	trace error // Stack-trace error of where Node was created. Stored if graph.traced is true.
 }
 
+// NodeInputs represents the inputs to node. The common interface is to return the type of the node.
+// For the input parameters themselves, the pointer needs to be cast to the corresponding type.
+type NodeInputs interface {
+	Type() NodeType
+}
+
 // Type identify the operation performed by the node.
-func (n *Node) Type() xla.OpType { return n.op.Type }
+func (n *Node) Type() NodeType { return n.staticInputs.Type() }
 
 // Graph that holds this Node.
 func (n *Node) Graph() *Graph {
@@ -120,9 +133,9 @@ func (n *Node) ParameterName() string {
 	return name
 }
 
-// Inputs are the other nodes that are direct inputs to the node.
-// This doesn't include static inputs for some operations that are not given by other Graph nodes.
-func (n *Node) Inputs() []*Node { return n.inputs }
+// Inputs are the other nodes that are direct nodeInputs to the node.
+// This doesn't include static nodeInputs for some operations that are not given by other Graph nodes.
+func (n *Node) Inputs() []*Node { return n.nodeInputs }
 
 // AssertValid panics if `n` is nil, or if its graph is invalid.
 func (n *Node) AssertValid() {
@@ -167,8 +180,8 @@ func (n *Node) String() (str string) {
 	} else {
 		str = n.Type().String()
 	}
-	inputIds := make([]NodeId, 0, len(n.inputs))
-	for _, inputNode := range n.inputs {
+	inputIds := make([]NodeId, 0, len(n.nodeInputs))
+	for _, inputNode := range n.nodeInputs {
 		inputIds = append(inputIds, inputNode.Id())
 	}
 
@@ -187,7 +200,7 @@ func (n *Node) String() (str string) {
 		partsStr = ", " + strings.Join(parts, ", ")
 	}
 
-	str = fmt.Sprintf("%s(id=%d, inputs=%v%s) -> %s", str, n.id, inputIds, partsStr, n.shape)
+	str = fmt.Sprintf("%s(id=%d, nodeInputs=%v%s) -> %s", str, n.id, inputIds, partsStr, n.shape)
 	return
 }
 
@@ -207,19 +220,19 @@ func newNode(graph *Graph, op *xla.Op) (node *Node) {
 	return
 }
 
-// setInputs caches the known inputs of the xlabuilder.Op associated with the Node.
+// setInputs caches the known nodeInputs of the xlabuilder.Op associated with the Node.
 // Only the xlabuilder.Op's known the Graph are cached.
 func (n *Node) setInputs() {
 	if len(n.op.OpInputs) == 0 {
-		n.inputs = nil
+		n.nodeInputs = nil
 		return
 	}
-	n.inputs = make([]*Node, 0, len(n.op.OpInputs))
+	n.nodeInputs = make([]*Node, 0, len(n.op.OpInputs))
 	g := n.graph
 	for _, inputOp := range n.op.OpInputs {
 		inputNode, found := g.opToNode[inputOp]
 		if found {
-			n.inputs = append(n.inputs, inputNode)
+			n.nodeInputs = append(n.nodeInputs, inputNode)
 		}
 	}
 }

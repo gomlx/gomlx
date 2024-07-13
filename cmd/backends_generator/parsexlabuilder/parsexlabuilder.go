@@ -179,7 +179,7 @@ func (e *NodeTextExtractor) Get(node ast.Node) string {
 	return string(fileContent[pos.Offset:endOffset])
 }
 
-var FunctionsBlackList = types.SetWith("Parameter")
+var FunctionsBlackList = types.SetWith("Parameter", "ScalarZero", "ScalarOne")
 
 // EnumerateStandardOpsFunctions calls callback for every "standard" op declaring function of the xlaBuilder package AST,
 // that can be automatically converted to a backends.Backend API, and implemented in the xla.Backend.

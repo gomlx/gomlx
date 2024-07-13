@@ -106,7 +106,7 @@ func fftVJP(node, v *Node, _ shapes.Shape) []*Node {
 func realFftVJP(node, v *Node) []*Node {
 	fftLength := node.serializedNode.Ints
 	isEven := 1.0 - float64(xslices.At(fftLength, -1)%2)
-	operand := node.inputs[0]
+	operand := node.nodeInputs[0]
 	rank := operand.Rank()
 	complexDType := v.DType()
 	operandLastDim := operand.Shape().Dimensions[rank-1]
@@ -145,7 +145,7 @@ func realFftVJP(node, v *Node) []*Node {
 func inverseRealFftVJP(node, v *Node) []*Node {
 	g := node.Graph()
 	realDType := v.DType()
-	fftValue := node.inputs[0]
+	fftValue := node.nodeInputs[0]
 	complexDType := fftValue.DType()
 	fftValueLastDim := xslices.Last(fftValue.Shape().Dimensions)
 	fftLength := node.serializedNode.Ints

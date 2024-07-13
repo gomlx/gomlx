@@ -60,7 +60,7 @@ var (
 	flagCheckpoint     = flag.String("checkpoint", "", "Directory save and load checkpoints from. If left empty, no checkpoints are created.")
 	flagCheckpointKeep = flag.Int("checkpoint_keep", 10, "Number of checkpoints to keep, if --checkpoint is set.")
 
-	// ML Manager creation:
+	// ML Backend creation:
 	flagNumThreads  = flag.Int("num_threads", -1, "Number of threads. Leave as -1 to use as many as there are cores.")
 	flagNumReplicas = flag.Int("num_replicas", 1, "Number of replicas.")
 	flagPlatform    = flag.String("platform", "", "PluginDescription to use, if empty uses the default one.")
@@ -125,7 +125,7 @@ func Sample() {
 }
 
 func trainModel() {
-	// Manager handles creation of ML computation graphs, accelerator resources, etc.
+	// Backend handles creation of ML computation graphs, accelerator resources, etc.
 	manager := BuildManager().NumThreads(*flagNumThreads).NumReplicas(*flagNumReplicas).Platform(*flagPlatform).Done()
 
 	// Datasets.

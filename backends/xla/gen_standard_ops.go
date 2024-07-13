@@ -1716,26 +1716,6 @@ func (b *Builder) Rsqrt(x backends.Op) backends.Op {
 	return xla_result
 }
 
-// ScalarOne returns a one (1) constant for the given dtype.
-// It caches the constant, so it doesn't get defined multiple times.
-func (b *Builder) ScalarOne(dtype dtypes.DType) backends.Op {
-	xla_result, err := xlabuilder.ScalarOne(b.builder, dtype)
-	if err != nil {
-		panic(errors.WithMessagef(err, "Backend %q: failed ScalarOne", BackendName))
-	}
-	return xla_result
-}
-
-// ScalarZero returns a zero constant for the given dtype.
-// It caches the constant, so it doesn't get defined multiple times.
-func (b *Builder) ScalarZero(dtype dtypes.DType) backends.Op {
-	xla_result, err := xlabuilder.ScalarZero(b.builder, dtype)
-	if err != nil {
-		panic(errors.WithMessagef(err, "Backend %q: failed ScalarZero", BackendName))
-	}
-	return xla_result
-}
-
 // ScatterAdd values from updates pointed by scatterIndices to operand.
 func (b *Builder) ScatterAdd(operand, scatterIndices, updates backends.Op, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) backends.Op {
 	var xla_operand *xlabuilder.Op
