@@ -13,6 +13,42 @@ import (
 	"strings"
 )
 
+// nodeInputsParameter holds the inputs used for the call to backends.Parameter.
+type nodeInputsParameter struct {
+	name   string
+	shape  shapes.Shape
+	handle ParameterHandle
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsParameter) Type() NodeType {
+	return NodeTypeParameter
+}
+
+// Parameter registers an input parameter for a computation Graph (e.g: a feature used as input).
+//
+// When created they get a handle (a plain index) but they can also be accessed
+// It can be used in two different ways: as a Node when building the Graph, so when defining a
+// function that uses the parameter, or as the key in the map of the nodeInputs when executing
+// the computation Graph (see Backend.Run).
+func Parameter(g *Graph, name string, shape shapes.Shape) (node *Node) {
+	g.AssertBuilding()
+
+	nodeInputs := &nodeInputsParameter{
+		name:  name,
+		shape: shape,
+	}
+	result := g.builder.Parameter(nodeInputs.name, nodeInputs.shape)
+	node = &Node{
+		graph:        g,
+		op:           result,
+		shape:        g.builder.OpShape(result),
+		staticInputs: nodeInputs,
+	}
+	g.registerNode(node)
+	return
+}
+
 // MinConstValueSizeToKeep defines a size below which constant values (see Const, ConstTensor) are kept in the Node/Graph
 // for printing/debugging purposes
 //

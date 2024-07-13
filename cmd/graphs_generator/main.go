@@ -21,8 +21,13 @@ func main() {
 	GenerateBackendOps(methods)
 }
 
-var methodsNotExported = types.SetWith(
-	"Broadcast", "Concatenate", "Gather", "Iota", "Parameter", "Sign")
+var (
+	methodsNotExported = types.SetWith(
+		"Broadcast", "Concatenate", "Gather", "Iota", "Sign")
+
+	// methodsToExclude from writing, but the corresponding will be written and maintained manually.
+	methodsToExclude = types.SetWith("Parameter")
+)
 
 func buildMethodInfo() (methods []*MethodInfo) {
 	extractor, funcs := parsebackends.ParseBuilder()
@@ -31,6 +36,7 @@ func buildMethodInfo() (methods []*MethodInfo) {
 			BackendName: name,
 			GraphName:   name,
 			Exported:    !methodsNotExported.Has(name),
+			Excluded:    methodsToExclude.Has(name),
 			Comments:    funcInfo.Comments,
 		}
 		methods = append(methods, mi)
@@ -102,7 +108,7 @@ type MethodInfo struct {
 	OpInputs               []string
 	OpInputsList           string
 	Inputs                 []*ParameterInfo
-	Exported               bool
+	Exported, Excluded     bool
 	Comments               []string
 }
 
@@ -138,7 +144,7 @@ const (
 {{range .}}	NodeType{{.BackendName}}
 {{end}})
 
-{{range .}}// nodeInputs{{.BackendName}} holds the inputs used for the call to backends.{{.BackendName}}.
+{{range .}}{{if not .Excluded}}// nodeInputs{{.BackendName}} holds the inputs used for the call to backends.{{.BackendName}}.
 type nodeInputs{{.BackendName}} struct {
 {{range .Inputs}}	{{.Name}} {{.NodeInputType}}
 {{end}}}
@@ -169,7 +175,7 @@ nodeInputs := &nodeInputs{{.BackendName}}{
 	return
 }
 
-{{end}}
+{{end}}{{end}}
 `))
 )
 
