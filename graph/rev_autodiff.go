@@ -91,7 +91,7 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 	allInputNodes := make([]*Node, 0, len(gradientNodes)+1)
 	allInputNodes = append(allInputNodes, output)
 	allInputNodes = append(allInputNodes, gradientNodes...)
-	g := validateGraphFromInputs(allInputNodes...)
+	g := validateBuildingGraphFromInputs(allInputNodes...)
 
 	outputShape := output.Shape()
 	if outputShape.Rank() > 0 || outputShape.DType.IsComplex() {
@@ -373,7 +373,7 @@ func noOpVJP(node, v *Node, _ shapes.Shape) []*Node {
 // vjpForDefaultBroadcast returns the VJP of the default broadcasting on operations like Add, Mul, Sub, etc.
 // It is a reduce-sum of the broadcast dimensions.
 func vjpForDefaultBroadcast(node, input, v *Node) *Node {
-	_ = validateGraphFromInputs(node, input, v)
+	_ = validateBuildingGraphFromInputs(node, input, v)
 	if input.shape.Eq(node.shape) {
 		// If there was no broadcast involved, VJP is the identity.
 		return v

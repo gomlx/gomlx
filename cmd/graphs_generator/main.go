@@ -21,32 +21,28 @@ func main() {
 	GenerateBackendOps(methods)
 }
 
-var methodsNotExported = types.SetWith("Parameter", "Iota", "Concatenate")
+var methodsNotExported = types.SetWith(
+	"Broadcast", "Concatenate", "Gather", "Iota", "Parameter", "Sign")
 
 func buildMethodInfo() (methods []*MethodInfo) {
 	extractor, funcs := parsebackends.ParseBuilder()
-	for name, funcType := range funcs {
+	for name, funcInfo := range funcs {
 		mi := &MethodInfo{
 			BackendName: name,
 			GraphName:   name,
-			Exported:    !(methodsNotExported.Has(name) || true),
+			Exported:    !methodsNotExported.Has(name),
+			Comments:    funcInfo.Comments,
 		}
 		methods = append(methods, mi)
 		if !mi.Exported {
 			mi.GraphName = "backend" + name
 		}
-		if name == "Concatenate" {
-			fmt.Printf("%s\n", name)
-		}
-		for _, param := range funcType.Params.List {
+		for _, param := range funcInfo.Type.Params.List {
 			paramNames := xslices.Map(param.Names, func(ident *ast.Ident) string { return ident.Name })
 			for _, paramName := range paramNames {
 				pi := &ParameterInfo{
 					Name:        paramName,
 					BackendType: extractor.Get(param.Type),
-				}
-				if name == "Concatenate" {
-					fmt.Printf("\t%s: %s\n", paramName, pi.BackendType)
 				}
 				mi.Inputs = append(mi.Inputs, pi)
 				switch pi.BackendType {
@@ -95,9 +91,6 @@ func buildMethodInfo() (methods []*MethodInfo) {
 				}
 			}
 			mi.HasGraph = mi.OpInputsList == "" && len(mi.OpInputs) == 0
-			if name == "Concatenate" {
-				fmt.Printf("\tmi.OpInputsList=%s, HasGraph=%v\n", mi.OpInputsList, mi.HasGraph)
-			}
 		}
 	}
 	return methods
@@ -110,6 +103,7 @@ type MethodInfo struct {
 	OpInputsList           string
 	Inputs                 []*ParameterInfo
 	Exported               bool
+	Comments               []string
 }
 
 // ParameterInfo represents one parameter only.
@@ -155,10 +149,13 @@ func (ni *nodeInputs{{.BackendName}}) Type() NodeType {
 }
 
 {{if not .Exported}}// {{.GraphName}} is a Graph wrapper for the backend.Builder.{{.BackendName}} method.
-{{end}}func {{.GraphName}}({{if .HasGraph}}g *Graph, {{end}}{{range .Inputs}}{{.Name}} {{.GraphType}}, {{end}}) (node *Node) {
-{{if not .HasGraph}}{{if ne .OpInputsList ""}}	g := {{.OpInputsList}}[0].Graph()
-{{else}}	g := {{index .OpInputs 0}}.Graph()
-{{end}}{{end}}	nodeInputs := &nodeInputs{{.BackendName}}{
+{{else}}{{range .Comments}}{{.}}
+{{end}}{{end}}func {{.GraphName}}({{if .HasGraph}}g *Graph, {{end}}{{range .Inputs}}{{.Name}} {{.GraphType}}, {{end}}) (node *Node) {
+{{if .HasGraph}}	g.AssertBuilding()
+{{else}}{{if ne .OpInputsList ""}}	g := validateBuildingGraphFromInputs({{.OpInputsList}}...)
+{{else}}	g := validateBuildingGraphFromInputs({{range .OpInputs}}{{.}}, {{end}})
+{{end}}{{end}}
+nodeInputs := &nodeInputs{{.BackendName}}{
 {{range .Inputs}}		{{.Name}}: {{.CopyStatement}},		
 {{end}}	}
 	result := g.builder.{{.BackendName}}({{range .Inputs}}{{.ConvertStatement}}, {{end}})
@@ -168,6 +165,7 @@ func (ni *nodeInputs{{.BackendName}}) Type() NodeType {
 		shape: g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -188,4 +186,9 @@ func GenerateBackendOps(methods []*MethodInfo) {
 	fmt.Printf("\t%s\n", cmd)
 	must.M(cmd.Run())
 	fmt.Printf("Generated %q based on backends.Builder interface\n", fileName)
+
+	cmd = exec.Command("stringer", "-type", "NodeType", "-trimprefix", "NodeType", fileName)
+	fmt.Printf("\t%s\n", cmd)
+	must.M(cmd.Run())
+
 }

@@ -141,26 +141,23 @@ func IotaFull(g *Graph, shape shapes.Shape) *Node {
 	return ReshapeWithShape(Iota(g, shapes.Make(shape.DType, shape.Size()), 0), shape)
 }
 
-// validateGraphFromInputs checks that all nodeInputs are of the same Graph and that
-// the Graph has no error.
+// validateBuildingGraphFromInputs checks that all nodeInputs are of the same Graph and that
+// the Graph is valid for building.
 // It panics with a corresponding error message in case of issues.
 // Otherwise, it returns the Graph common to all nodeInputs.
-func validateGraphFromInputs(inputs ...*Node) (g *Graph) {
+func validateBuildingGraphFromInputs(inputs ...*Node) (g *Graph) {
 	if len(inputs) == 0 {
-		return nil
-	}
-	if inputs[0] == nil {
-		return nil
+		exceptions.Panicf("no input nodes provided, at least one is required")
 	}
 
 	// Checks that all nodeInputs are of the same graph.
 	for ii, n := range inputs {
-		if err := TryCatch[error](n.AssertValid); err != nil {
+		if err := exceptions.TryCatch[error](n.AssertValid); err != nil {
 			panic(errors.WithMessagef(err, "invalid input[%d]", ii))
 		}
 		if g == nil {
 			g = n.Graph()
-			g.AssertValid()
+			g.AssertBuilding()
 		} else {
 			if n.Graph() != g {
 				exceptions.Panicf("combining nodes from different graphs not allowed: "+
@@ -171,289 +168,28 @@ func validateGraphFromInputs(inputs ...*Node) (g *Graph) {
 	return
 }
 
-// oneArgNode is a helper function that implements ops that simply take 1 input.
-func oneArgNode(nodeType xla.NodeType, x *Node) *Node {
-	g := validateGraphFromInputs(x)
-	return newNode(g, &xla.SerializedNode{Type: nodeType}, []*Node{x})
-}
+// Log1P is an alias to Log1p. It returns log(1+x).
+func Log1P(x *Node) *Node { return Log1p(x) }
 
-// Abs adds to the graph the corresponding operation on the input node x.
-func Abs(x *Node) *Node { return oneArgNode(xla.AbsNode, x) }
-
-// Neg adds to the graph negative of the given node x.
-func Neg(x *Node) *Node { return oneArgNode(xla.NegNode, x) }
-
-// Exp adds to the graph the corresponding operation on the input node x.
-func Exp(x *Node) *Node { return oneArgNode(xla.ExpNode, x) }
-
-// Expm1 adds to the graph the corresponding operation on the input node x.
-func Expm1(x *Node) *Node { return oneArgNode(xla.Expm1Node, x) }
-
-// Floor adds to the graph the corresponding operation on the input node x.
-func Floor(x *Node) *Node { return oneArgNode(xla.FloorNode, x) }
-
-// Ceil adds to the graph the corresponding operation on the input node x.
-func Ceil(x *Node) *Node { return oneArgNode(xla.CeilNode, x) }
-
-// Round adds to the graph the corresponding operation on the input node x.
-func Round(x *Node) *Node { return oneArgNode(xla.RoundNode, x) }
-
-// Log adds to the graph the corresponding operation on the input node x.
-func Log(x *Node) *Node { return oneArgNode(xla.LogNode, x) }
-
-// Log1P adds to the graph the corresponding operation on the input node x.
-func Log1P(x *Node) *Node { return oneArgNode(xla.Log1pNode, x) }
-
-// Log1p is an alias for Log1P for compatibility.
-func Log1p(x *Node) *Node { return Log1P(x) }
-
-// Not adds to the graph the corresponding operation on the input node x.
-func Not(x *Node) *Node { return oneArgNode(xla.LogicalNotNode, x) }
-
-// Logistic returns a node with $1/(1+exp(-x))$. Alias to the Sigmoid function.
-func Logistic(x *Node) *Node { return oneArgNode(xla.LogisticNode, x) }
-
-// Sigmoid returns a node with $1/(1+exp(-x))$. Alias to the Logistic function.
+// Sigmoid returns the expression $1/(1+exp(-x)). It is an alias to the Logistic function.
 func Sigmoid(x *Node) *Node { return Logistic(x) }
 
-// Sign adds to the graph the corresponding operation on the input node x.
+// Sign returns element-wise +1, +/-0 or -1 depending on the sign of x. It returns NaN if the input is NaN.
 // The gradient of Sign is assumed to be zero everywhere.
 func Sign(x *Node) *Node {
-	y := oneArgNode(xla.SignNode, x)
+	y := backendSign(x)
 	y.stopGradient = true
 	return y
 }
 
-// Clz adds to the graph the "count leading zeroes" operation on the input node x.
-func Clz(x *Node) *Node { return oneArgNode(xla.ClzNode, x) }
-
-// Cos adds to the graph the corresponding operation on the input node x.
-func Cos(x *Node) *Node { return oneArgNode(xla.CosNode, x) }
-
-// Sin adds to the graph the corresponding operation on the input node x.
-func Sin(x *Node) *Node { return oneArgNode(xla.SinNode, x) }
-
-// Tanh adds to the graph the corresponding operation on the input node x.
-func Tanh(x *Node) *Node { return oneArgNode(xla.TanhNode, x) }
-
-// Sqrt adds to the graph the corresponding operation on the input node x.
-func Sqrt(x *Node) *Node { return oneArgNode(xla.SqrtNode, x) }
-
-// RSqrt adds the 1/sqrt(x) operation to the graph.
-func RSqrt(x *Node) *Node { return oneArgNode(xla.RsqrtNode, x) }
-
-// Imag returns the imaginary part of a complex number.
-func Imag(x *Node) *Node {
-	if !x.DType().IsComplex() {
-		exceptions.Panicf("Imag(x) is only defined for complex numbers, but x.shape=%s", x.shape)
-	}
-	return oneArgNode(xla.ImagNode, x)
-}
-
-// Real returns the real part of a complex number.
-func Real(x *Node) *Node {
-	if !x.DType().IsComplex() {
-		exceptions.Panicf("Real(x) is only defined for complex numbers, but x.shape=%s", x.shape)
-	}
-	return oneArgNode(xla.RealNode, x)
-}
-
-// Conj returns the conjugate of a complex number.
-func Conj(x *Node) *Node {
-	if !x.DType().IsComplex() {
-		exceptions.Panicf("Conj(x) is only defined for complex numbers, but x.shape=%s", x.shape)
-	}
-	return oneArgNode(xla.ConjNode, x)
-}
-
-// twoArgsNode is a helper function that implements ops that simply take 2 nodeInputs.
-func twoArgsNode(nodeType xla.NodeType, x, y *Node) *Node {
-	g := validateGraphFromInputs(x, y)
-	if x.shape.DType != y.shape.DType {
-		exceptions.Panicf("operands of %s have different dtypes (%s and %s)", nodeType, x.shape.DType, y.shape.DType)
-	}
-	return newNode(g, &xla.SerializedNode{Type: nodeType}, []*Node{x, y})
-}
-
-// Add adds a node that sums the two nodes.
-// Standard broadcasting rules apply (see documentation).
-func Add(x, y *Node) *Node { return twoArgsNode(xla.AddNode, x, y) }
-
-// Mul adds a node that multiplies the two nodes.
-// Standard broadcasting rules apply (see documentation).
-func Mul(x, y *Node) *Node { return twoArgsNode(xla.MulNode, x, y) }
-
-// Sub adds to the graph the corresponding operation on the two input nodes x and y.
-// Standard broadcasting rules apply (see documentation).
-func Sub(x, y *Node) *Node { return twoArgsNode(xla.SubNode, x, y) }
-
-// Div adds to the graph the corresponding operation on the two input nodes x and y.
-// Standard broadcasting rules apply (see documentation).
-func Div(x, y *Node) *Node { return twoArgsNode(xla.DivNode, x, y) }
-
-// Mod adds to the graph the module (remainder) operation on the two input nodes x and y.
+// Mod adds to the graph the module (remainder) operation on the two input nodes x and y. It's an alias to Rem.
 // Standard broadcasting rules apply (see documentation).
 func Mod(x, y *Node) *Node {
 	if x.DType().IsComplex() || y.DType().IsComplex() {
 		exceptions.Panicf("cannot take the remainder (Mod) of a complex number: Mod(%s, %s)",
 			x.Shape(), y.Shape())
 	}
-	return twoArgsNode(xla.RemNode, x, y)
-}
-
-// And adds to the graph the corresponding operation on the two input nodes x and y.
-// Only integer types.
-// Standard broadcasting rules apply (see documentation).
-func And(x, y *Node) *Node { return twoArgsNode(xla.AndNode, x, y) }
-
-// Or adds to the graph the corresponding operation on the two input nodes x and y.
-// Only integer types.
-// Standard broadcasting rules apply (see documentation).
-func Or(x, y *Node) *Node { return twoArgsNode(xla.OrNode, x, y) }
-
-// Xor adds to the graph the corresponding operation on the two input nodes x and y.
-// Only integer types.
-// Standard broadcasting rules apply (see documentation).
-func Xor(x, y *Node) *Node { return twoArgsNode(xla.XorNode, x, y) }
-
-// Max returns element-wise the max from lhs and rhs.
-// Standard broadcasting rules apply (see documentation).
-func Max(lhs, rhs *Node) *Node { return twoArgsNode(xla.MaxNode, lhs, rhs) }
-
-// Min returns the min from lhs and rhs for each element.
-// Standard broadcasting rules apply (see documentation).
-func Min(lhs, rhs *Node) *Node { return twoArgsNode(xla.MinNode, lhs, rhs) }
-
-// Pow adds lhs^(rhs) to the graph.
-// Standard broadcasting rules apply (see documentation).
-func Pow(lhs, rhs *Node) *Node { return twoArgsNode(xla.PowNode, lhs, rhs) }
-
-// Equal returns the element-wise operation to the graph.
-//
-//	// Standard broadcasting rules apply (see documentation).                                                                                                                //
-//
-// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-func Equal(x, y *Node) *Node { return twoArgsNode(xla.EqualNode, x, y) }
-
-// NotEqual returns the element-wise operation to the graph.
-//
-// Standard broadcasting rules apply (see documentation).
-//
-// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-func NotEqual(x, y *Node) *Node { return twoArgsNode(xla.NotEqualNode, x, y) }
-
-// GreaterOrEqual returns the element-wise operation to the graph.
-//
-// Standard broadcasting rules apply (see documentation).
-//
-// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-func GreaterOrEqual(x, y *Node) *Node { return twoArgsNode(xla.GreaterOrEqualNode, x, y) }
-
-// GreaterThan returns the element-wise operation to the graph.
-//
-// Standard broadcasting rules apply (see documentation).
-//
-// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-func GreaterThan(x, y *Node) *Node { return twoArgsNode(xla.GreaterThanNode, x, y) }
-
-// LessOrEqual returns the element-wise operation to the graph.
-//
-// Standard broadcasting rules apply (see documentation).
-//
-// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-func LessOrEqual(x, y *Node) *Node { return twoArgsNode(xla.LessOrEqualNode, x, y) }
-
-// LessThan returns the element-wise operation to the graph.
-//
-// Standard broadcasting rules apply (see documentation).
-//
-// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-func LessThan(x, y *Node) *Node { return twoArgsNode(xla.LessThanNode, x, y) }
-
-// EqualTotalOrder returns the element-wise operation to the graph.
-//
-// Standard broadcasting rules apply (see documentation).
-//
-// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-func EqualTotalOrder(x, y *Node) *Node { return twoArgsNode(xla.EqualTotalOrderNode, x, y) }
-
-// NotEqualTotalOrder returns the element-wise operation to the graph.
-//
-// Standard broadcasting rules apply (see documentation).
-//
-// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-func NotEqualTotalOrder(x, y *Node) *Node { return twoArgsNode(xla.NotEqualTotalOrderNode, x, y) }
-
-// GreaterOrEqualTotalOrder returns the element-wise operation to the graph.
-//
-// Standard broadcasting rules apply (see documentation).
-//
-// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-func GreaterOrEqualTotalOrder(x, y *Node) *Node {
-	return twoArgsNode(xla.GreaterOrEqualTotalOrderNode, x, y)
-}
-
-// GreaterThanTotalOrder returns the element-wise operation to the graph.
-//
-// Standard broadcasting rules apply (see documentation).
-//
-// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-func GreaterThanTotalOrder(x, y *Node) *Node { return twoArgsNode(xla.GreaterThanTotalOrderNode, x, y) }
-
-// LessOrEqualTotalOrder returns the element-wise operation to the graph.
-//
-// Standard broadcasting rules apply (see documentation).
-//
-// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-func LessOrEqualTotalOrder(x, y *Node) *Node { return twoArgsNode(xla.LessOrEqualTotalOrderNode, x, y) }
-
-// LessThanTotalOrder returns the element-wise operation to the graph.
-//
-// Standard broadcasting rules apply (see documentation).
-//
-// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-func LessThanTotalOrder(x, y *Node) *Node { return twoArgsNode(xla.LessThanTotalOrderNode, x, y) }
-
-// Dot adds to the graph the corresponding operation on the two input nodes x and y.
-// The exact semantics of this operation depend on the ranks of the operands:
-//
-// | Input | Output | Semantics |
-// | vector [n] dot vector [n] | scalar | vector dot product |
-// | matrix [m x k] dot vector [k] | vector [m]	matrix-vector multiplication |
-// | matrix [m x k] dot matrix [k x n] | matrix [m x n] | matrix-matrix multiplication |
-//
-// lhs -> left-hand-side; rhs -> right-hand-side
-// The operation performs sum of products over the second dimension of lhs (or the first if it has rank 1) and
-// the first dimension of rhs.
-// These are the "contracted" dimensions.
-// The contracted dimensions of lhs and rhs must be of the same size.
-// In practice, it can be used to perform dot products between vectors, vector/matrix multiplications or
-// matrix/matrix multiplications.
-func Dot(lhs, rhs *Node) *Node { return twoArgsNode(xla.DotNode, lhs, rhs) }
-
-// Complex generate a complex node from floating point nodes.
-// The nodeInputs `real` and `imaginary` must have the same dtype, and they must be either `dtypes.Float32` or
-// `dtypes.Float64`.
-// The output will be either `shapes.Complex64` or `shapes.Complex128`, depending on the nodeInputs dtype.
-// The shapes of `real` or `imaginary` must be the same, or one must be a scalar, in which case
-// the value is broadcast to every other value.
-//
-// Example: To get a node c with `{(1+1i), (1-1i)}`:
-//
-//	im := Const(g, []float32{1, -1})
-//	re := ScalarOne(g, dtypes.Float32)
-//	c := Complex(re, x)
-func Complex(real, imaginary *Node) *Node {
-	_ = validateGraphFromInputs(real, imaginary)
-	if real.DType() != imaginary.DType() {
-		exceptions.Panicf("dtypes for real (%s) and imaginary (%s) must be the same and "+
-			"either dtypes.Float32 or dtypes.Float64", real.DType(), imaginary.DType())
-	}
-	dtype := real.DType()
-	if dtype != dtypes.Float32 && dtype != dtypes.Float64 {
-		exceptions.Panicf("the dtype for the nodeInputs (real and imaginary) must be either Float32 or Float64, got %s instead", dtype)
-	}
-	return twoArgsNode(xla.ComplexNode, real, imaginary)
+	return Rem(x, y)
 }
 
 // BroadcastPrefix adds dimensions to an array by duplicating the data in the array.
@@ -466,12 +202,8 @@ func Complex(real, imaginary *Node) *Node {
 // The new dimensions id into copies of the operand, i.e.
 //
 //	output[i0, ..., iN, j0, ..., jM] = operand[j0, ..., jM]
-func BroadcastPrefix(x *Node, dims []int) *Node {
-	g := validateGraphFromInputs(x)
-	return newNode(g, &xla.SerializedNode{
-		Type: xla.BroadcastNode,
-		Ints: dims,
-	}, []*Node{x})
+func BroadcastPrefix(x *Node, dims ...int) *Node {
+	return backendBroadcast(x, dims...)
 }
 
 // ExpandAndBroadcast combines ExpandDims and Broadcast of `x`, broadcasting it to the shape
@@ -487,7 +219,7 @@ func BroadcastPrefix(x *Node, dims []int) *Node {
 //	   ExpandAndBroadcast(x, []int{2, 2}, []int{0})  // -> [][]int32{{10, 20}, {10, 20}}
 //	   ExpandAndBroadcast(x, []int{2, 2}, []int{0})  // -> [][]int32{{10, 10}, {20, 20}}
 func ExpandAndBroadcast(x *Node, newDimensions []int, expandedAxes []int) (output *Node) {
-	_ = validateGraphFromInputs(x)
+	_ = validateBuildingGraphFromInputs(x)
 	if x.Rank()+len(expandedAxes) != len(newDimensions) {
 		exceptions.Panicf("there must be exactly one expandedAxes (%v) for each new axis in newDimensions (%v) -- x.shape=%s",
 			expandedAxes, newDimensions, x.shape)
@@ -542,7 +274,7 @@ func ExpandAndBroadcast(x *Node, newDimensions []int, expandedAxes []int) (outpu
 //
 // This interface is cumbersome, so instead we expose
 func broadcastInDim(x *Node, shape shapes.Shape, broadcastDims []int) *Node {
-	g := validateGraphFromInputs(x)
+	g := validateBuildingGraphFromInputs(x)
 	for _, dim := range shape.Dimensions {
 		if dim <= 0 {
 			exceptions.Panicf("broadcastInDim(x.shape=%s, shape=%s): cannot create a shape with an axis with dimension <= 0", x.Shape(), shape)
@@ -565,7 +297,7 @@ func broadcastInDim(x *Node, shape shapes.Shape, broadcastDims []int) *Node {
 //
 // One exception is if x is a scalar, in which case it can be broadcast to any shape.
 func BroadcastToShape(x *Node, shape shapes.Shape) *Node {
-	_ = validateGraphFromInputs(x)
+	_ = validateBuildingGraphFromInputs(x)
 	if shape.DType != x.shape.DType {
 		exceptions.Panicf("cannot change dtype (from %s to %s) with BroadcastWithShape",
 			x.shape.DType, shape.DType)
@@ -596,7 +328,7 @@ func BroadcastToDims(x *Node, dimensions ...int) *Node {
 
 // ConvertType converts x to a different primitive type. See shapes.Supported for the supported types.
 func ConvertType(x *Node, dtype dtypes.DType) *Node {
-	g := validateGraphFromInputs(x)
+	g := validateBuildingGraphFromInputs(x)
 	if !dtype.IsSupported() {
 		exceptions.Panicf("converting to an unsupported dtype %s", dtype)
 	}
@@ -608,7 +340,7 @@ func ConvertType(x *Node, dtype dtypes.DType) *Node {
 
 // Where takes element-wise values from onTrue or onFalse depending on the value of condition (expected to be boolean).
 func Where(condition, onTrue, onFalse *Node) *Node {
-	g := validateGraphFromInputs(condition)
+	g := validateBuildingGraphFromInputs(condition)
 	if condition.DType() != dtypes.Bool {
 		exceptions.Panicf("Where(condition, onTrue, onFalse) requires condition to be of dtype Bool, got %s instead",
 			condition.Shape())
@@ -638,7 +370,7 @@ func Where(condition, onTrue, onFalse *Node) *Node {
 // Reshape x to the given dimensions. Total size cannot change. One dimension can be left as -1,
 // in which case it will be set to match the size, if possible.
 func Reshape(x *Node, dimensions ...int) *Node {
-	_ = validateGraphFromInputs(x)
+	_ = validateBuildingGraphFromInputs(x)
 	totalSize := x.Shape().Size()
 	newSize := 1
 	missingIdx := -1
@@ -672,7 +404,7 @@ func Reshape(x *Node, dimensions ...int) *Node {
 // Total size cannot change, neither the DType is allowed to change.
 // Conceptually, this is a limited form of "shape casting."
 func ReshapeWithShape(x *Node, shape shapes.Shape) *Node {
-	g := validateGraphFromInputs(x)
+	g := validateBuildingGraphFromInputs(x)
 	if shape.DType != x.shape.DType {
 		exceptions.Panicf("cannot change dtype (from %s to %s) with ReshapeWithShape",
 			x.shape.DType, shape.DType)
@@ -694,7 +426,7 @@ func ReshapeWithShape(x *Node, shape shapes.Shape) *Node {
 //
 // Maybe it should be called ExpandAxes ... but to follow Tensorflow nomenclature.
 func ExpandDims(x *Node, axes ...int) *Node {
-	_ = validateGraphFromInputs(x)
+	_ = validateBuildingGraphFromInputs(x)
 	if len(axes) == 0 {
 		// Trivial case, noop.
 		return x
@@ -732,7 +464,7 @@ func ExpandDims(x *Node, axes ...int) *Node {
 
 // ExpandLeftToRank prepend axes of dimension 1 to x, until it reaches rank `newRank`.
 func ExpandLeftToRank(x *Node, newRank int) (output *Node) {
-	_ = validateGraphFromInputs(x)
+	_ = validateBuildingGraphFromInputs(x)
 	if newRank < x.Rank() {
 		exceptions.Panicf("ExpandLeftToRank(newRank=%d), but x already has rank %d", newRank, x.Rank())
 	}
@@ -756,7 +488,7 @@ func ExpandLeftToRank(x *Node, newRank int) (output *Node) {
 //
 // If all dimensions are reduced, it returns a scalar.
 func Squeeze(x *Node, axes ...int) *Node {
-	_ = validateGraphFromInputs(x)
+	_ = validateBuildingGraphFromInputs(x)
 
 	newDims := make([]int, x.Rank())
 	copy(newDims, x.Shape().Dimensions)
@@ -798,7 +530,7 @@ func Squeeze(x *Node, axes ...int) *Node {
 // Tuple creates a tuple of several values.
 // It is the mean to return several values from one Graph computation.
 func Tuple(nodes ...*Node) *Node {
-	g := validateGraphFromInputs(nodes...)
+	g := validateBuildingGraphFromInputs(nodes...)
 	return newNode(g, &xla.SerializedNode{
 		Type: xla.TupleNode,
 	}, nodes)
@@ -806,7 +538,7 @@ func Tuple(nodes ...*Node) *Node {
 
 // GetTupleElement extracts one element from a Tuple.
 func GetTupleElement(tuple *Node, index int) *Node {
-	g := validateGraphFromInputs(tuple)
+	g := validateBuildingGraphFromInputs(tuple)
 	return newNode(g, &xla.SerializedNode{
 		Type: xla.GetTupleElementNode,
 		Int:  index,
@@ -815,7 +547,7 @@ func GetTupleElement(tuple *Node, index int) *Node {
 
 // SplitTuple is a convenience wrapper around GetTupleElement, it will return an array with all the nodes.
 func SplitTuple(tuple *Node) []*Node {
-	_ = validateGraphFromInputs(tuple)
+	_ = validateBuildingGraphFromInputs(tuple)
 	numElements := tuple.Shape().TupleSize()
 	nodes := make([]*Node, numElements)
 	for ii := 0; ii < numElements; ii++ {
@@ -826,7 +558,7 @@ func SplitTuple(tuple *Node) []*Node {
 
 // reduceHelper helps implements all the Reduce<X> functions.
 func reduceHelper(x, init *Node, reduceAxes []int, nodeType xla.NodeType) *Node {
-	g := validateGraphFromInputs(x)
+	g := validateBuildingGraphFromInputs(x)
 	return newNode(g, &xla.SerializedNode{
 		Type: nodeType,
 		Ints: convertNegativeAxesAndSort(x.shape.Rank(), reduceAxes),
@@ -840,7 +572,7 @@ func reduceHelper(x, init *Node, reduceAxes []int, nodeType xla.NodeType) *Node 
 //
 // Ties are resolved by returning the smallest index.
 func ArgMax(x *Node, axis int, outputDType ...dtypes.DType) (output *Node) {
-	_ = validateGraphFromInputs(x)
+	_ = validateBuildingGraphFromInputs(x)
 	dtype := dtypes.Int32
 	if len(outputDType) > 1 {
 		exceptions.Panicf("ArgMax takes at most one outputDType, %d values given", len(outputDType))
@@ -857,7 +589,7 @@ func ArgMax(x *Node, axis int, outputDType ...dtypes.DType) (output *Node) {
 //
 // Ties are resolved by returning the smallest index.
 func ArgMin(x *Node, axis int, outputDType ...dtypes.DType) (output *Node) {
-	_ = validateGraphFromInputs(x)
+	_ = validateBuildingGraphFromInputs(x)
 	dtype := dtypes.Int32
 	if len(outputDType) > 1 {
 		exceptions.Panicf("ArgMin takes at most one outputDType, %d values given", len(outputDType))
@@ -868,7 +600,7 @@ func ArgMin(x *Node, axis int, outputDType ...dtypes.DType) (output *Node) {
 }
 
 func argMinMax(x *Node, axis int, outputDType dtypes.DType, isMin bool) (output *Node) {
-	g := validateGraphFromInputs(x)
+	g := validateBuildingGraphFromInputs(x)
 	adjustedAxis := AdjustAxis(x, axis)
 	output = newNode(g, &xla.SerializedNode{
 		Type: xla.ArgMinMaxNode,
@@ -902,7 +634,7 @@ func convertNegativeAxesAndSort(rank int, axesWithNegatives []int) []int {
 // The reduced axes of `x` are removed in the output -- so the rank is reduced.
 // See ReduceAndKeep for a version to preserve the reduced axes.
 func ReduceSum(x *Node, reduceAxes ...int) *Node {
-	g := validateGraphFromInputs(x)
+	g := validateBuildingGraphFromInputs(x)
 	zero := ScalarZero(g, x.DType())
 	return reduceHelper(x, zero, reduceAxes, xla.ReduceSumNode)
 }
@@ -947,7 +679,7 @@ var ReduceAllMaskedSum = MaskedReduceAllSum
 // The reduced axes of `x` are removed in the output -- so the rank is reduced.
 // See ReduceAndKeep for a version to preserve the reduced axes.
 func ReduceMean(x *Node, reduceAxes ...int) *Node {
-	_ = validateGraphFromInputs(x)
+	_ = validateBuildingGraphFromInputs(x)
 	sum := ReduceSum(x, reduceAxes...)
 	denominator := x.Shape().Size() / sum.Shape().Size()
 	return Div(sum, ConstAs(sum, denominator))
@@ -987,7 +719,7 @@ func MaskedReduceAllMean(x, mask *Node) *Node {
 // The reduced axes of `x` are removed in the output -- so the rank is reduced.
 // See ReduceAndKeep for a version to preserve the reduced axes.
 func ReduceMultiply(x *Node, reduceAxes ...int) *Node {
-	g := validateGraphFromInputs(x)
+	g := validateBuildingGraphFromInputs(x)
 	one := ScalarOne(g, x.DType())
 	return reduceHelper(x, one, reduceAxes, xla.ReduceMultiplyNode)
 }
@@ -1003,7 +735,7 @@ func ReduceAllMultiply(x *Node) *Node {
 // The reduced axes of `x` are removed in the output -- so the rank is reduced.
 // See ReduceAndKeep for a version to preserve the reduced axes.
 func ReduceMax(x *Node, reduceAxes ...int) *Node {
-	g := validateGraphFromInputs(x)
+	g := validateBuildingGraphFromInputs(x)
 	lowest := lowestForDType(g, x.DType())
 	return reduceHelper(x, lowest, reduceAxes, xla.ReduceMaxNode)
 }
@@ -1174,7 +906,7 @@ func adjustToDimension(index, dimension int) int {
 // - For `x = {{1, 2, 3}, {4, 5, 6}}`:
 //   - `Slice(x, AxisRange().Stride(2), AxisRange(-1)) = {{3}}`  // Take every 2nd row (so only the 1st here), the last column.
 func Slice(x *Node, axesSpec ...SliceAxisSpec) *Node {
-	_ = validateGraphFromInputs(x)
+	_ = validateBuildingGraphFromInputs(x)
 	rank := x.shape.Rank()
 
 	// Convert spacers
@@ -1242,7 +974,7 @@ type PadAxis struct {
 // There must be at most `operand.Rank()` axesConfig values. Missing PadAxis are assumed to be zeros,
 // that is, no padding for those axes.
 func Pad(operand, fillValue *Node, axesConfig ...PadAxis) *Node {
-	g := validateGraphFromInputs(operand, fillValue)
+	g := validateBuildingGraphFromInputs(operand, fillValue)
 	rank := operand.Rank()
 
 	intArgs := make([]int, 0, 3*rank)
@@ -1277,7 +1009,7 @@ func intToBool(i int) bool {
 //
 // If operands are scalars, they will be concatenated to a vector (just use `axis=0`).
 func Concatenate(operands []*Node, axis int) *Node {
-	g := validateGraphFromInputs(operands...)
+	g := validateBuildingGraphFromInputs(operands...)
 	if len(operands) == 0 {
 		exceptions.Panicf("cannot ConcatenateDimensions 0 operands")
 	}
@@ -1360,7 +1092,7 @@ func concatenateVJP(node, v *Node, _ shapes.Shape) []*Node {
 // the value indexed at `i` will be swapped with the value at indexed `(dimension_size - 1 - i)`.
 // The shape remains the same.
 func Reverse(x *Node, axes ...int) *Node {
-	g := validateGraphFromInputs(x)
+	g := validateBuildingGraphFromInputs(x)
 	rank := x.shape.Rank()
 	for ii, dim := range axes {
 		if dim < 0 {
@@ -1379,7 +1111,7 @@ func Reverse(x *Node, axes ...int) *Node {
 
 // Transpose returns x with the axes axisA and axisB transposed.
 func Transpose(x *Node, axisA, axisB int) *Node {
-	_ = validateGraphFromInputs(x)
+	_ = validateBuildingGraphFromInputs(x)
 	rank := x.shape.Rank()
 	dims := []int{axisA, axisB}
 	for ii, dim := range dims {
@@ -1402,7 +1134,7 @@ func Transpose(x *Node, axisA, axisB int) *Node {
 // TransposeAllDims allows one to transpose any or all dimensions.
 // It permutes the operand axes with the given permutation, so ∀ i, 0 ≤ i < rank ⇒ input_dimensions[permutations[i]] = output_dimensions[i].
 func TransposeAllDims(x *Node, permutation ...int) *Node {
-	g := validateGraphFromInputs(x)
+	g := validateBuildingGraphFromInputs(x)
 	rank := x.shape.Rank()
 	if len(permutation) != rank {
 		exceptions.Panicf("in TransposeAllDims(x, %v), there must be one permutation per dimension in x, but x rank %d",
@@ -1460,7 +1192,7 @@ func TransposeAllDims(x *Node, permutation ...int) *Node {
 // Important note: the order of the operands can have a dramatic impact on the speed of the multiplications.
 // consider trying both sides.
 func Einsum(equation string, lhs, rhs *Node) *Node {
-	_ = validateGraphFromInputs(lhs, rhs)
+	_ = validateBuildingGraphFromInputs(lhs, rhs)
 
 	// Parse equation.
 	inOutParts := strings.Split(equation, "->")
@@ -1632,7 +1364,7 @@ func (e einsumOperandDesc) axisIndex(axis rune) int {
 // Important note: the order of the operands can have a dramatic impact on the speed of the multiplications.
 // Consider trying both sides.
 func EinsumAxes(lhs, rhs *Node, contractingAxes, batchAxes [][2]int) (output *Node) {
-	_ = validateGraphFromInputs(lhs, rhs)
+	_ = validateBuildingGraphFromInputs(lhs, rhs)
 
 	// Create function to process both, contractingAxes and batchAxes.
 	lhsSeen := types.MakeSet[int](rhs.Rank())

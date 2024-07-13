@@ -12,11 +12,12 @@ type StandardOps interface {
 	// Abs returns the Op that represents the output of the corresponding operation.
 	Abs(x Op) Op
 
-	// Add returns the Op that represents the output of the corresponding operation.
+	// Add returns the element-wise sum of the two values.
+	// Standard broadcasting rules apply (see documentation).
 	// The op is created on the same XlaBuilder as used for x0 and x1.
 	Add(x0, x1 Op) Op
 
-	// And returns the Op that represents the output of the corresponding operation.
+	// And returns the element-wise logic "and" operator.
 	// The op is created on the same XlaBuilder as used for x0 and x1.
 	And(x0, x1 Op) Op
 
@@ -65,10 +66,15 @@ type StandardOps interface {
 	// Ceil returns the Op that represents the output of the corresponding operation.
 	Ceil(x Op) Op
 
-	// Clz returns the Op that represents the output of the corresponding operation.
+	// Clz returns element-wise the "count leading zeros" bits of input node x -- for integer values.
 	Clz(x Op) Op
 
-	// Complex returns the Op that represents the output of the corresponding operation.
+	// Complex returns the complex number taking x0 as the real part and x1 as the imaginary part.
+	// The real (x0) and imaginary (x1) must have the same dtype, and they must be either `dtypes.Float32` or
+	// `dtypes.Float64`.
+	// The output will be either `shapes.Complex64` or `shapes.Complex128`, depending on x0 and x1 dtypes.
+	// The shapes of `real` or `imaginary` must be the same, or one must be a scalar, in which case
+	// the value is broadcast to every other value.
 	// The op is created on the same XlaBuilder as used for x0 and x1.
 	Complex(x0, x1 Op) Op
 
@@ -78,7 +84,7 @@ type StandardOps interface {
 	// If there is only one operand, it is returned and this is a no-op.
 	Concatenate(axis int, operands ...Op) Op
 
-	// Conj returns the Op that represents the output of the corresponding operation.
+	// Conj returns the conjugate of a complex number. E.g: Conj(1+3i) = 1-3i
 	Conj(x Op) Op
 
 	// ConvGeneralDilated is a generic Convolution operation offered by XLA.
@@ -98,11 +104,23 @@ type StandardOps interface {
 	// Cos returns the Op that represents the output of the corresponding operation.
 	Cos(x Op) Op
 
-	// Div returns the Op that represents the output of the corresponding operation.
+	// Div returns the element-wise subtraction of the two values.
+	// Standard broadcasting rules apply (see documentation).
 	// The op is created on the same XlaBuilder as used for x0 and x1.
 	Div(x0, x1 Op) Op
 
-	// Dot returns the Op that represents the output of the corresponding operation.
+	// Dot returns the "dot product" operation.
+	// The exact semantics of this operation depend on the ranks of the operands:
+	// | Input | Output | Semantics |
+	// | vector [n] dot vector [n] | scalar | vector dot product |
+	// | matrix [m x k] dot vector [k] | vector [m]	matrix-vector multiplication |
+	// | matrix [m x k] dot matrix [k x n] | matrix [m x n] | matrix-matrix multiplication |
+	// The operation performs sum of products over the second dimension of x0 (or the first if it has rank 1) and
+	// the first dimension of x1.
+	// These are the "contracted" dimensions.
+	// The contracted dimensions of x0 and x1 must be of the same size.
+	// In practice, it can be used to perform dot products between vectors, vector/matrix multiplications or
+	// matrix/matrix multiplications.
 	// The op is created on the same XlaBuilder as used for x0 and x1.
 	Dot(x0, x1 Op) Op
 
@@ -119,11 +137,13 @@ type StandardOps interface {
 	// It provides the basic means of implementing Einsum.
 	DotGeneral(lhs Op, lhsContractingAxes, lhsBatchAxes []int, rhs Op, rhsContractingAxes, rhsBatchAxes []int) Op
 
-	// Equal returns the Op that represents the output of the corresponding operation.
+	// Two-arguments comparison ops:
 	// The op is created on the same XlaBuilder as used for x0 and x1.
 	Equal(x0, x1 Op) Op
 
-	// EqualTotalOrder returns the Op that represents the output of the corresponding operation.
+	// EqualTotalOrder returns the element-wise operation.
+	// Standard broadcasting rules apply (see documentation).
+	// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 	// The op is created on the same XlaBuilder as used for x0 and x1.
 	EqualTotalOrder(x0, x1 Op) Op
 
@@ -175,7 +195,9 @@ type StandardOps interface {
 	// The op is created on the same XlaBuilder as used for x0 and x1.
 	GreaterOrEqual(x0, x1 Op) Op
 
-	// GreaterOrEqualTotalOrder returns the Op that represents the output of the corresponding operation.
+	// GreaterOrEqualTotalOrder returns the element-wise operation.
+	// Standard broadcasting rules apply (see documentation).
+	// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 	// The op is created on the same XlaBuilder as used for x0 and x1.
 	GreaterOrEqualTotalOrder(x0, x1 Op) Op
 
@@ -183,11 +205,13 @@ type StandardOps interface {
 	// The op is created on the same XlaBuilder as used for x0 and x1.
 	GreaterThan(x0, x1 Op) Op
 
-	// GreaterThanTotalOrder returns the Op that represents the output of the corresponding operation.
+	// GreaterThanTotalOrder returns the element-wise operation.
+	// Standard broadcasting rules apply (see documentation).
+	// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 	// The op is created on the same XlaBuilder as used for x0 and x1.
 	GreaterThanTotalOrder(x0, x1 Op) Op
 
-	// Imag returns the Op that represents the output of the corresponding operation.
+	// Imag returns the imaginary part of a complex number. It returns 0 if the x is a float number.
 	Imag(x Op) Op
 
 	// Iota creates a constant of the given shape with increasing numbers (starting from 0)
@@ -199,7 +223,9 @@ type StandardOps interface {
 	// The op is created on the same XlaBuilder as used for x0 and x1.
 	LessOrEqual(x0, x1 Op) Op
 
-	// LessOrEqualTotalOrder returns the Op that represents the output of the corresponding operation.
+	// LessOrEqualTotalOrder returns the element-wise operation.
+	// Standard broadcasting rules apply (see documentation).
+	// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 	// The op is created on the same XlaBuilder as used for x0 and x1.
 	LessOrEqualTotalOrder(x0, x1 Op) Op
 
@@ -207,31 +233,34 @@ type StandardOps interface {
 	// The op is created on the same XlaBuilder as used for x0 and x1.
 	LessThan(x0, x1 Op) Op
 
-	// LessThanTotalOrder returns the Op that represents the output of the corresponding operation.
+	// LessThanTotalOrder returns the element-wise operation.
+	// Standard broadcasting rules apply (see documentation).
+	// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 	// The op is created on the same XlaBuilder as used for x0 and x1.
 	LessThanTotalOrder(x0, x1 Op) Op
 
 	// Log returns the Op that represents the output of the corresponding operation.
 	Log(x Op) Op
 
-	// Log1p returns the Op that represents the output of the corresponding operation.
+	// Log1p returns the expression log(x+1).
 	Log1p(x Op) Op
 
 	// LogicalNot returns the Op that represents the output of the corresponding operation.
 	LogicalNot(x Op) Op
 
-	// Logistic returns the Op that represents the output of the corresponding operation.
+	// Logistic returns the element-wise expression 1/(1+exp(-x)). Also known as the Sigmoid function.
 	Logistic(x Op) Op
 
-	// Max returns the Op that represents the output of the corresponding operation.
+	// Max returns the element-wise highest value among the two.
 	// The op is created on the same XlaBuilder as used for x0 and x1.
 	Max(x0, x1 Op) Op
 
-	// Min returns the Op that represents the output of the corresponding operation.
+	// Min returns the element-wise smallest value among the two.
 	// The op is created on the same XlaBuilder as used for x0 and x1.
 	Min(x0, x1 Op) Op
 
-	// Mul returns the Op that represents the output of the corresponding operation.
+	// Mul returns the element-wise multiplication of the two values.
+	// Standard broadcasting rules apply (see documentation).
 	// The op is created on the same XlaBuilder as used for x0 and x1.
 	Mul(x0, x1 Op) Op
 
@@ -242,11 +271,13 @@ type StandardOps interface {
 	// The op is created on the same XlaBuilder as used for x0 and x1.
 	NotEqual(x0, x1 Op) Op
 
-	// NotEqualTotalOrder returns the Op that represents the output of the corresponding operation.
+	// NotEqualTotalOrder returns the element-wise operation.
+	// Standard broadcasting rules apply (see documentation).
+	// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 	// The op is created on the same XlaBuilder as used for x0 and x1.
 	NotEqualTotalOrder(x0, x1 Op) Op
 
-	// Or returns the Op that represents the output of the corresponding operation.
+	// Or returns the element-wise logic "and" operator.
 	// The op is created on the same XlaBuilder as used for x0 and x1.
 	Or(x0, x1 Op) Op
 
@@ -259,7 +290,7 @@ type StandardOps interface {
 	// The op is created on the same XlaBuilder as used for x0 and x1.
 	Pow(x0, x1 Op) Op
 
-	// Real returns the Op that represents the output of the corresponding operation.
+	// Real return the real part of a complex number. It returns x if the x is a float number.
 	Real(x Op) Op
 
 	// ReduceMax is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the max value.
@@ -278,7 +309,8 @@ type StandardOps interface {
 	// If no axes are given, it reduces the full array.
 	ReduceSum(x Op, axes ...int) Op
 
-	// Rem returns the Op that represents the output of the corresponding operation.
+	// Rem returns the remainder operation, also known as modulo (or Mod for short).
+	// Notice despite the name XLA implements Mod not IEEE754 Remainder operation.
 	// The op is created on the same XlaBuilder as used for x0 and x1.
 	Rem(x0, x1 Op) Op
 
@@ -295,7 +327,7 @@ type StandardOps interface {
 	// Round returns the Op that represents the output of the corresponding operation.
 	Round(x Op) Op
 
-	// Rsqrt returns the Op that represents the output of the corresponding operation.
+	// Rsqrt returns the element-wise reciprocal of square root operation 1/sqrt(x).
 	Rsqrt(x Op) Op
 
 	// ScatterAdd values from updates pointed by scatterIndices to operand.
@@ -322,7 +354,7 @@ type StandardOps interface {
 	// See details in https://openxla.org/xla/operation_semantics#selectandscatter
 	SelectAndScatterSum(operand, source Op, windowDimensions, windowStrides []int, paddings [][2]int) Op
 
-	// Sign returns the Op that represents the output of the corresponding operation.
+	// Sign returns element-wise +1, +/-0 or -1 depending on the sign of x. It returns NaN if the input is NaN.
 	Sign(x Op) Op
 
 	// Sin returns the Op that represents the output of the corresponding operation.
@@ -341,7 +373,8 @@ type StandardOps interface {
 	// Sqrt returns the Op that represents the output of the corresponding operation.
 	Sqrt(x Op) Op
 
-	// Sub returns the Op that represents the output of the corresponding operation.
+	// Sub returns the element-wise subtraction of the two values.
+	// Standard broadcasting rules apply (see documentation).
 	// The op is created on the same XlaBuilder as used for x0 and x1.
 	Sub(x0, x1 Op) Op
 
@@ -356,7 +389,7 @@ type StandardOps interface {
 	// Where takes element-wise values from onTrue or onFalse depending on the value of condition (expected to be boolean).
 	Where(condition, onTrue, onFalse Op) Op
 
-	// Xor returns the Op that represents the output of the corresponding operation.
+	// Xor returns the element-wise logic "and" operator.
 	// The op is created on the same XlaBuilder as used for x0 and x1.
 	Xor(x0, x1 Op) Op
 }

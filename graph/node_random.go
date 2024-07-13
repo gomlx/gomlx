@@ -53,7 +53,7 @@ func RngState() tensors.Tensor {
 //
 // It returns the new state of the RNG and the generated values (with random bits) with the given shape.
 func RngBitGeneratorXLA(state *Node, shape shapes.Shape) (newState, values *Node) {
-	g := validateGraphFromInputs(state)
+	g := validateBuildingGraphFromInputs(state)
 	pair := newNode(g, &xla.SerializedNode{
 		Type:  xla.RngBitGeneratorNode,
 		Shape: shape,

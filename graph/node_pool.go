@@ -128,7 +128,7 @@ func MeanPool(x *Node) *PoolBuilder {
 }
 
 func makePoolBuilder(x *Node, reductionType xla.NodeType) *PoolBuilder {
-	g := validateGraphFromInputs(x)
+	g := validateBuildingGraphFromInputs(x)
 	pool := &PoolBuilder{
 		graph:         g,
 		x:             x,
@@ -338,7 +338,7 @@ func takeMeanOfContributions(x, pooledSum *Node, channelsAxis int, windowDimensi
 // The parameter windowDimensions must be set and have a value for each axis. The parameters `strides`, `baseDilations`
 // and `windowDilations` and `paddings` can be left as nil if not used.
 func reduceWindowXLA(x *Node, reductionType xla.NodeType, windowDimensions, strides, baseDilations, windowDilations []int, paddings [][2]int) *Node {
-	g := validateGraphFromInputs(x)
+	g := validateBuildingGraphFromInputs(x)
 	dtype := x.DType()
 	rank := x.Rank()
 	if len(windowDimensions) != rank {
@@ -405,7 +405,7 @@ func reduceWindowXLA(x *Node, reductionType xla.NodeType, windowDimensions, stri
 // selectAndScatterWithGeneralPaddingXLA selects (largest) element from a window and scatter to those positions
 // the value from source. It's used to calculate the gradient of a MaxPool.
 func selectAndScatterWithGeneralPaddingXLA(x, source *Node, windowDimensions, strides []int, paddings [][2]int) *Node {
-	g := validateGraphFromInputs(x, source)
+	g := validateBuildingGraphFromInputs(x, source)
 	dtype := x.DType()
 	rank := x.Rank()
 	if len(windowDimensions) != rank {
@@ -511,7 +511,7 @@ func reduceWindowVJP(node, v *Node, _ shapes.Shape) []*Node {
 //
 // Since the convolution would be with a kernel of 1s we instead use `graph.Pad` and reduceWindowXLA instead.
 func dilateConvolveToMatchSumPooling(x, backProp *Node, windowDimensions, strides []int, paddings [][2]int) *Node {
-	g := validateGraphFromInputs(x, backProp)
+	g := validateBuildingGraphFromInputs(x, backProp)
 	dtype := x.DType()
 	rank := x.Rank()
 	//dims := x.Shape().Dimensions

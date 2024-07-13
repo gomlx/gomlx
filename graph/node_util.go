@@ -32,7 +32,7 @@ func Scalar(g *Graph, dtype dtypes.DType, value float64) *Node {
 // FillScalar creates a Node with a value with the given shape, filled with the given value.
 // It's implemented indirectly using other nodes.
 func FillScalar(g *Graph, shape shapes.Shape, value float64) *Node {
-	return BroadcastPrefix(Scalar(g, shape.DType, value), shape.Dimensions)
+	return BroadcastPrefix(Scalar(g, shape.DType, value), shape.Dimensions...)
 }
 
 // ScalarZero returns a scalar constant 0 for the given DType.
@@ -112,7 +112,7 @@ func lowestForDType(g *Graph, dtype dtypes.DType) *Node {
 
 // OnesLike returns a tensor with the same shape of x, filled with 1's.
 func OnesLike(x *Node) *Node {
-	g := validateGraphFromInputs(x)
+	g := validateBuildingGraphFromInputs(x)
 	return Ones(g, x.Shape())
 }
 
@@ -124,12 +124,12 @@ func Ones(g *Graph, shape shapes.Shape) *Node {
 	if scalar == nil {
 		return nil
 	}
-	return BroadcastPrefix(scalar, shape.Dimensions)
+	return BroadcastPrefix(scalar, shape.Dimensions...)
 }
 
 // ZerosLike returns a tensor with the same shape of x, filled with 0's.
 func ZerosLike(x *Node) *Node {
-	g := validateGraphFromInputs(x)
+	g := validateBuildingGraphFromInputs(x)
 	return Zeros(g, x.Shape())
 }
 
@@ -137,37 +137,37 @@ func ZerosLike(x *Node) *Node {
 // It's implemented indirectly using other nodes.
 func Zeros(g *Graph, shape shapes.Shape) *Node {
 	g.AssertValid()
-	return BroadcastPrefix(ScalarZero(g, shape.DType), shape.Dimensions)
+	return BroadcastPrefix(ScalarZero(g, shape.DType), shape.Dimensions...)
 }
 
 // OneMinus returns (1-x).
 func OneMinus(x *Node) *Node {
-	g := validateGraphFromInputs(x)
+	g := validateBuildingGraphFromInputs(x)
 	return Sub(ScalarOne(g, x.DType()), x)
 }
 
 // MinusOne returns (x-1).
 func MinusOne(x *Node) *Node {
-	g := validateGraphFromInputs(x)
+	g := validateBuildingGraphFromInputs(x)
 	return Sub(x, ScalarOne(g, x.DType()))
 }
 
 // OnePlus returns (1+x).
 func OnePlus(x *Node) *Node {
-	g := validateGraphFromInputs(x)
+	g := validateBuildingGraphFromInputs(x)
 	return Add(ScalarOne(g, x.DType()), x)
 }
 
 // Inverse returns (1/x), the multiplicative inverse. Also known as the reciprocal.
 func Inverse(x *Node) *Node {
-	g := validateGraphFromInputs(x)
+	g := validateBuildingGraphFromInputs(x)
 	return Div(ScalarOne(g, x.DType()), x)
 }
 
 // SignPlusOrMinus return +1 or -1 whether x >= 0 or x < 0. It's similar to Sign, but
 // where 0s are considered positive.
 func SignPlusOrMinus(x *Node) *Node {
-	g := validateGraphFromInputs(x)
+	g := validateBuildingGraphFromInputs(x)
 	half := Scalar(g, x.DType(), 0.5)
 	return Sign(Add(Sign(x), half))
 }
@@ -175,7 +175,7 @@ func SignPlusOrMinus(x *Node) *Node {
 // PositiveIndicator returns 1 where x >= 0, 0 otherwise. See also StrictlyPositiveIndicator.
 // E.g: PositiveIndicator({1.0, 0.0001, 0, -0.2, -3.0}) -> [1, 1, 1, 0, 0], with the same shape/dtype as x.
 func PositiveIndicator(x *Node) *Node {
-	g := validateGraphFromInputs(x)
+	g := validateBuildingGraphFromInputs(x)
 	one := ScalarOne(g, x.DType())
 	return Sign(Add(Sign(x), one))
 }
@@ -189,7 +189,7 @@ func MirroredLog1p(x *Node) *Node {
 // StrictlyPositiveIndicator returns 1 where x > 0, 0 otherwise.
 // E.g: StrictlyPositiveIndicator({1.0, 0.0001, 0, -0.2, -3.0}) -> [1, 1, 0, 0, 0], with the same shape/dtype as x.
 func StrictlyPositiveIndicator(x *Node) *Node {
-	g := validateGraphFromInputs(x)
+	g := validateBuildingGraphFromInputs(x)
 	one := ScalarOne(g, x.DType())
 	return Add(Sign(Sub(Sign(x), one)), one)
 }
@@ -243,7 +243,7 @@ func OneHot(indices *Node, depth int, dtype dtypes.DType) *Node {
 
 // ReduceAndKeep applies the given reduction function but regenerate the reduced dimensions with size 1.
 func ReduceAndKeep(x *Node, reduceFn func(x *Node, reduceAxes ...int) *Node, reduceAxes ...int) *Node {
-	_ = validateGraphFromInputs(x)
+	_ = validateBuildingGraphFromInputs(x)
 	rank := x.Rank()
 	reduceAxes = convertNegativeAxesAndSort(rank, reduceAxes)
 	reduced := reduceFn(x, reduceAxes...)
@@ -260,7 +260,7 @@ func ReduceAndKeep(x *Node, reduceFn func(x *Node, reduceAxes ...int) *Node, red
 // MaskedReduceAndKeep applies the given masked reduction function but regenerates the reduced
 // dimensions with size 1.
 func MaskedReduceAndKeep(x, mask *Node, reduceFn func(x, mask *Node, reduceAxes ...int) *Node, reduceAxes ...int) *Node {
-	_ = validateGraphFromInputs(x)
+	_ = validateBuildingGraphFromInputs(x)
 	rank := x.Rank()
 	reduceAxes = convertNegativeAxesAndSort(rank, reduceAxes)
 	reduced := reduceFn(x, mask, reduceAxes...)
@@ -292,7 +292,7 @@ var ReduceAndKeepMasked = MaskedReduceAndKeep
 // (the axes that will be summed over). If no axes are given, it is assumed to
 // be [-1], meaning, the last axes.
 func Softmax(logits *Node, axes ...int) *Node {
-	_ = validateGraphFromInputs(logits)
+	_ = validateBuildingGraphFromInputs(logits)
 	if !logits.shape.DType.IsFloat() {
 		Panicf("invalid logits dtype (%s), it must be float", logits.shape.DType)
 	}
@@ -322,7 +322,7 @@ func Softmax(logits *Node, axes ...int) *Node {
 // It ignores values for which the corresponding mask is false, and will return 0 for
 // those fields. mask and logits must have the same shape.
 func MaskedSoftmax(logits, mask *Node, axes ...int) *Node {
-	_ = validateGraphFromInputs(logits)
+	_ = validateBuildingGraphFromInputs(logits)
 	if !logits.shape.DType.IsFloat() {
 		Panicf("invalid logits dtype (%s), it must be float", logits.shape.DType)
 	}
@@ -429,7 +429,7 @@ func Diagonal(g *Graph, dim int) *Node {
 // and you get an identity matrix.
 func DiagonalWithValue(scalar *Node, dim int) *Node {
 	g := scalar.Graph()
-	matrix := BroadcastPrefix(scalar, []int{dim, dim})
+	matrix := BroadcastPrefix(scalar, dim, dim)
 	return Where(Diagonal(g, dim), matrix, ZerosLike(matrix))
 }
 

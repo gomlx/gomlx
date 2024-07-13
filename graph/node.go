@@ -205,7 +205,7 @@ func (n *Node) String() (str string) {
 }
 
 // newNode creates a Node based on the given XlaBuilder op, registers it in the Graph.
-func newNode(graph *Graph, op *xla.Op) (node *Node) {
+func newNodeId(graph *Graph, op *xla.Op) (node *Node) {
 	graph.AssertBuilding()
 	node = &Node{
 		graph: graph,

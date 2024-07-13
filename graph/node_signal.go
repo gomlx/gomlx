@@ -12,7 +12,7 @@ import (
 // The resulting tensor (Node) has the same shape as the input, and has the values on the frequency
 // domain. Use InverseFFT to reverse the result.
 func FFT(operand *Node) *Node {
-	_ = validateGraphFromInputs(operand)
+	_ = validateBuildingGraphFromInputs(operand)
 	if !operand.DType().IsComplex() {
 		Panicf("FFT requires a complex input, got %s for dtype instead", operand.DType())
 	}
@@ -28,7 +28,7 @@ func FFT(operand *Node) *Node {
 // The resulting tensor (Node) has the same shape as the input, and has the values on the frequency
 // domain.
 func InverseFFT(operand *Node) *Node {
-	_ = validateGraphFromInputs(operand)
+	_ = validateBuildingGraphFromInputs(operand)
 	if !operand.DType().IsComplex() {
 		Panicf("InverseFFT requires a complex input, got %s for dtype instead", operand.DType())
 	}

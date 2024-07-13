@@ -5,7 +5,6 @@ package graph
 import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/protos"
 	"slices"
@@ -96,14 +95,15 @@ type nodeInputsAbs struct {
 	x *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsAbs) Type() NodeType {
 	return NodeTypeAbs
 }
 
-// backendAbs is a Graph wrapper for the backend.Builder.Abs method.
-func backendAbs(x *Node) (node *Node) {
-	g := x.Graph()
+// Abs returns the Op that represents the output of the corresponding operation.
+func Abs(x *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x)
+
 	nodeInputs := &nodeInputsAbs{
 		x: x,
 	}
@@ -114,6 +114,7 @@ func backendAbs(x *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -123,14 +124,17 @@ type nodeInputsAdd struct {
 	x1 *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsAdd) Type() NodeType {
 	return NodeTypeAdd
 }
 
-// backendAdd is a Graph wrapper for the backend.Builder.Add method.
-func backendAdd(x0 *Node, x1 *Node) (node *Node) {
-	g := x0.Graph()
+// Add returns the element-wise sum of the two values.
+// Standard broadcasting rules apply (see documentation).
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func Add(x0 *Node, x1 *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x0, x1)
+
 	nodeInputs := &nodeInputsAdd{
 		x0: x0,
 		x1: x1,
@@ -142,6 +146,7 @@ func backendAdd(x0 *Node, x1 *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -151,14 +156,16 @@ type nodeInputsAnd struct {
 	x1 *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsAnd) Type() NodeType {
 	return NodeTypeAnd
 }
 
-// backendAnd is a Graph wrapper for the backend.Builder.And method.
-func backendAnd(x0 *Node, x1 *Node) (node *Node) {
-	g := x0.Graph()
+// And returns the element-wise logic "and" operator.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func And(x0 *Node, x1 *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x0, x1)
+
 	nodeInputs := &nodeInputsAnd{
 		x0: x0,
 		x1: x1,
@@ -170,6 +177,7 @@ func backendAnd(x0 *Node, x1 *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -181,14 +189,22 @@ type nodeInputsArgMinMax struct {
 	isMin       bool
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsArgMinMax) Type() NodeType {
 	return NodeTypeArgMinMax
 }
 
-// backendArgMinMax is a Graph wrapper for the backend.Builder.ArgMinMax method.
-func backendArgMinMax(x *Node, axis int, outputDType dtypes.DType, isMin bool) (node *Node) {
-	g := x.Graph()
+// ArgMinMax calculates the "argmin" or "argmax" across an axis of the given input array x.
+// outputDType defines the output of the argmin/argmax, it doesn't need to be the same as the input.
+// It's a form of reduction on the given axis, and that axis goes away. So the rank of the result is one less than
+// the rank of x.
+// Examples:
+//
+//	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=1, isMin=true) -> {1, 0}  // (it chooses the 0 and the -3)
+//	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=0, isMin=false) -> {0, 1, 0} // (it choose the 2, 4 and 7)
+func ArgMinMax(x *Node, axis int, outputDType dtypes.DType, isMin bool) (node *Node) {
+	g := validateBuildingGraphFromInputs(x)
+
 	nodeInputs := &nodeInputsArgMinMax{
 		x:           x,
 		axis:        axis,
@@ -202,6 +218,7 @@ func backendArgMinMax(x *Node, axis int, outputDType dtypes.DType, isMin bool) (
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -216,14 +233,18 @@ type nodeInputsBatchNormInference struct {
 	axis     int
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsBatchNormInference) Type() NodeType {
 	return NodeTypeBatchNormInference
 }
 
-// backendBatchNormInference is a Graph wrapper for the backend.Builder.BatchNormInference method.
-func backendBatchNormInference(operand *Node, scale *Node, offset *Node, mean *Node, variance *Node, epsilon float32, axis int) (node *Node) {
-	g := operand.Graph()
+// BatchNormInference implements Batch Norm for inference. See details in
+// https://www.tensorflow.org/xla/operation_semantics#batchnorminference.
+// Based on paper "Batch Normalization: Accelerating Deep Network Training by Reducing
+// Internal Covariate Shift" (Sergey Ioffe, Christian Szegedy), https://arxiv.org/abs/1502.03167.
+func BatchNormInference(operand *Node, scale *Node, offset *Node, mean *Node, variance *Node, epsilon float32, axis int) (node *Node) {
+	g := validateBuildingGraphFromInputs(operand, scale, offset, mean, variance)
+
 	nodeInputs := &nodeInputsBatchNormInference{
 		operand:  operand,
 		scale:    scale,
@@ -240,6 +261,7 @@ func backendBatchNormInference(operand *Node, scale *Node, offset *Node, mean *N
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -249,14 +271,15 @@ type nodeInputsBroadcast struct {
 	prefixDims []int
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsBroadcast) Type() NodeType {
 	return NodeTypeBroadcast
 }
 
 // backendBroadcast is a Graph wrapper for the backend.Builder.Broadcast method.
 func backendBroadcast(x *Node, prefixDims ...int) (node *Node) {
-	g := x.Graph()
+	g := validateBuildingGraphFromInputs(x)
+
 	nodeInputs := &nodeInputsBroadcast{
 		x:          x,
 		prefixDims: slices.Clone(prefixDims),
@@ -268,6 +291,7 @@ func backendBroadcast(x *Node, prefixDims ...int) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -278,14 +302,29 @@ type nodeInputsBroadcastInDim struct {
 	broadcastAxes []int
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsBroadcastInDim) Type() NodeType {
 	return NodeTypeBroadcastInDim
 }
 
-// backendBroadcastInDim is a Graph wrapper for the backend.Builder.BroadcastInDim method.
-func backendBroadcastInDim(x *Node, outputShape shapes.Shape, broadcastAxes []int) (node *Node) {
-	g := x.Graph()
+// BroadcastInDim broadcasts x to an output with the given shape.
+// broadcastAxes has an output axes value for each x axes (len(broadcastAxes) == x.Shape.Rank()).
+// The i-th axis of x is mapped to the broadcastDim[i]-th dimension of the output.
+// broadcastAxes must be also increasing: this operation cannot be used to transpose axes, it will only
+// broadcast and introduce new axes in-between.
+// This also requires that the i-th input dimension is either 1 or is the same as the
+// output dimension it's broadcasting into.
+// For example, say operand `x = (s32)[2]{1, 2}`; outputShape = `(s32)[2,2]`:
+//   - Specifying []int{1} as broadcast_dimension will generate output
+//     {{1, 2},
+//     {1, 2}}
+//   - On the other hand, specifying []int{0} as broadcast_dimension
+//     will generate output
+//     {{1 , 1},
+//     {2 , 2}}
+func BroadcastInDim(x *Node, outputShape shapes.Shape, broadcastAxes []int) (node *Node) {
+	g := validateBuildingGraphFromInputs(x)
+
 	nodeInputs := &nodeInputsBroadcastInDim{
 		x:             x,
 		outputShape:   outputShape,
@@ -298,6 +337,7 @@ func backendBroadcastInDim(x *Node, outputShape shapes.Shape, broadcastAxes []in
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -306,14 +346,15 @@ type nodeInputsCeil struct {
 	x *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsCeil) Type() NodeType {
 	return NodeTypeCeil
 }
 
-// backendCeil is a Graph wrapper for the backend.Builder.Ceil method.
-func backendCeil(x *Node) (node *Node) {
-	g := x.Graph()
+// Ceil returns the Op that represents the output of the corresponding operation.
+func Ceil(x *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x)
+
 	nodeInputs := &nodeInputsCeil{
 		x: x,
 	}
@@ -324,6 +365,7 @@ func backendCeil(x *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -332,14 +374,15 @@ type nodeInputsClz struct {
 	x *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsClz) Type() NodeType {
 	return NodeTypeClz
 }
 
-// backendClz is a Graph wrapper for the backend.Builder.Clz method.
-func backendClz(x *Node) (node *Node) {
-	g := x.Graph()
+// Clz returns element-wise the "count leading zeros" bits of input node x -- for integer values.
+func Clz(x *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x)
+
 	nodeInputs := &nodeInputsClz{
 		x: x,
 	}
@@ -350,6 +393,7 @@ func backendClz(x *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -359,14 +403,21 @@ type nodeInputsComplex struct {
 	x1 *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsComplex) Type() NodeType {
 	return NodeTypeComplex
 }
 
-// backendComplex is a Graph wrapper for the backend.Builder.Complex method.
-func backendComplex(x0 *Node, x1 *Node) (node *Node) {
-	g := x0.Graph()
+// Complex returns the complex number taking x0 as the real part and x1 as the imaginary part.
+// The real (x0) and imaginary (x1) must have the same dtype, and they must be either `dtypes.Float32` or
+// `dtypes.Float64`.
+// The output will be either `shapes.Complex64` or `shapes.Complex128`, depending on x0 and x1 dtypes.
+// The shapes of `real` or `imaginary` must be the same, or one must be a scalar, in which case
+// the value is broadcast to every other value.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func Complex(x0 *Node, x1 *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x0, x1)
+
 	nodeInputs := &nodeInputsComplex{
 		x0: x0,
 		x1: x1,
@@ -378,6 +429,7 @@ func backendComplex(x0 *Node, x1 *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -387,14 +439,15 @@ type nodeInputsConcatenate struct {
 	operands []*Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsConcatenate) Type() NodeType {
 	return NodeTypeConcatenate
 }
 
 // backendConcatenate is a Graph wrapper for the backend.Builder.Concatenate method.
 func backendConcatenate(axis int, operands ...*Node) (node *Node) {
-	g := operands[0].Graph()
+	g := validateBuildingGraphFromInputs(operands...)
+
 	nodeInputs := &nodeInputsConcatenate{
 		axis:     axis,
 		operands: slices.Clone(operands),
@@ -406,6 +459,7 @@ func backendConcatenate(axis int, operands ...*Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -414,14 +468,15 @@ type nodeInputsConj struct {
 	x *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsConj) Type() NodeType {
 	return NodeTypeConj
 }
 
-// backendConj is a Graph wrapper for the backend.Builder.Conj method.
-func backendConj(x *Node) (node *Node) {
-	g := x.Graph()
+// Conj returns the conjugate of a complex number. E.g: Conj(1+3i) = 1-3i
+func Conj(x *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x)
+
 	nodeInputs := &nodeInputsConj{
 		x: x,
 	}
@@ -432,6 +487,7 @@ func backendConj(x *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -448,14 +504,24 @@ type nodeInputsConvGeneralDilated struct {
 	batchGroupCount  int
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsConvGeneralDilated) Type() NodeType {
 	return NodeTypeConvGeneralDilated
 }
 
-// backendConvGeneralDilated is a Graph wrapper for the backend.Builder.ConvGeneralDilated method.
-func backendConvGeneralDilated(operand *Node, filter *Node, axes backends.ConvolveAxesConfig, strides []int, paddings [][2]int, inputDilation []int, filterDilation []int, filterGroupCount int, batchGroupCount int) (node *Node) {
-	g := operand.Graph()
+// ConvGeneralDilated is a generic Convolution operation offered by XLA.
+// featureAxisAfter defines whether the features (aka. channels or depth) axis comes after the
+// spatial dimension. Example: a 2D input can be one of the two:
+//   - featureAxisAfter=false: input=[batch_size, features, height, width], filter=[output_features, input_features, height, width]
+//   - featureAxisAfter=true:  input=[batch_size, height, width, features], filter=[output_features, height, width, input_features]
+//
+// Some details in https://www.tensorflow.org/xla/operation_semantics#convwithgeneralpadding_convolution.
+// There operand and filter are called lhs and rhs.
+// (XLA documentation is unfortunately poor, much is guess-work).
+// Also useful, https://arxiv.org/pdf/1603.07285v1.pdf.
+func ConvGeneralDilated(operand *Node, filter *Node, axes backends.ConvolveAxesConfig, strides []int, paddings [][2]int, inputDilation []int, filterDilation []int, filterGroupCount int, batchGroupCount int) (node *Node) {
+	g := validateBuildingGraphFromInputs(operand, filter)
+
 	nodeInputs := &nodeInputsConvGeneralDilated{
 		operand:          operand,
 		filter:           filter,
@@ -474,6 +540,7 @@ func backendConvGeneralDilated(operand *Node, filter *Node, axes backends.Convol
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -483,14 +550,15 @@ type nodeInputsConvertDType struct {
 	dtype dtypes.DType
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsConvertDType) Type() NodeType {
 	return NodeTypeConvertDType
 }
 
-// backendConvertDType is a Graph wrapper for the backend.Builder.ConvertDType method.
-func backendConvertDType(x *Node, dtype dtypes.DType) (node *Node) {
-	g := x.Graph()
+// ConvertDType of x to dtype.
+func ConvertDType(x *Node, dtype dtypes.DType) (node *Node) {
+	g := validateBuildingGraphFromInputs(x)
+
 	nodeInputs := &nodeInputsConvertDType{
 		x:     x,
 		dtype: dtype,
@@ -502,6 +570,7 @@ func backendConvertDType(x *Node, dtype dtypes.DType) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -510,14 +579,15 @@ type nodeInputsCos struct {
 	x *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsCos) Type() NodeType {
 	return NodeTypeCos
 }
 
-// backendCos is a Graph wrapper for the backend.Builder.Cos method.
-func backendCos(x *Node) (node *Node) {
-	g := x.Graph()
+// Cos returns the Op that represents the output of the corresponding operation.
+func Cos(x *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x)
+
 	nodeInputs := &nodeInputsCos{
 		x: x,
 	}
@@ -528,6 +598,7 @@ func backendCos(x *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -537,14 +608,17 @@ type nodeInputsDiv struct {
 	x1 *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsDiv) Type() NodeType {
 	return NodeTypeDiv
 }
 
-// backendDiv is a Graph wrapper for the backend.Builder.Div method.
-func backendDiv(x0 *Node, x1 *Node) (node *Node) {
-	g := x0.Graph()
+// Div returns the element-wise subtraction of the two values.
+// Standard broadcasting rules apply (see documentation).
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func Div(x0 *Node, x1 *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x0, x1)
+
 	nodeInputs := &nodeInputsDiv{
 		x0: x0,
 		x1: x1,
@@ -556,6 +630,7 @@ func backendDiv(x0 *Node, x1 *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -565,14 +640,27 @@ type nodeInputsDot struct {
 	x1 *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsDot) Type() NodeType {
 	return NodeTypeDot
 }
 
-// backendDot is a Graph wrapper for the backend.Builder.Dot method.
-func backendDot(x0 *Node, x1 *Node) (node *Node) {
-	g := x0.Graph()
+// Dot returns the "dot product" operation.
+// The exact semantics of this operation depend on the ranks of the operands:
+// | Input | Output | Semantics |
+// | vector [n] dot vector [n] | scalar | vector dot product |
+// | matrix [m x k] dot vector [k] | vector [m]	matrix-vector multiplication |
+// | matrix [m x k] dot matrix [k x n] | matrix [m x n] | matrix-matrix multiplication |
+// The operation performs sum of products over the second dimension of x0 (or the first if it has rank 1) and
+// the first dimension of x1.
+// These are the "contracted" dimensions.
+// The contracted dimensions of x0 and x1 must be of the same size.
+// In practice, it can be used to perform dot products between vectors, vector/matrix multiplications or
+// matrix/matrix multiplications.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func Dot(x0 *Node, x1 *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x0, x1)
+
 	nodeInputs := &nodeInputsDot{
 		x0: x0,
 		x1: x1,
@@ -584,6 +672,7 @@ func backendDot(x0 *Node, x1 *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -597,14 +686,26 @@ type nodeInputsDotGeneral struct {
 	rhsBatchAxes       []int
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsDotGeneral) Type() NodeType {
 	return NodeTypeDotGeneral
 }
 
-// backendDotGeneral is a Graph wrapper for the backend.Builder.DotGeneral method.
-func backendDotGeneral(lhs *Node, lhsContractingAxes []int, lhsBatchAxes []int, rhs *Node, rhsContractingAxes []int, rhsBatchAxes []int) (node *Node) {
-	g := lhs.Graph()
+// DotGeneral takes as input lhs (left-hand-side) and rhs (right-hand-side) specifications
+// for a general vector product -- a generalized "Einsum". Each axis can be:
+//   - Just aligned (batch axes), so the output has the same axes as the inputs. The dimensions
+//     must match in lhs and rhs.
+//   - Crossed (default), in which case the output is the combination (concatenation) of the
+//     dimensions.
+//   - Contracted (contracting axes), where the output does multiply the values and reduce sum
+//     those dimensions.
+//
+// It follows that the resulting dimension number starts with the batch dimension, then the 'lhs'
+// non-contracting/non-batch dimension, and finally the 'rhs' non-contracting/non-batch dimension.
+// It provides the basic means of implementing Einsum.
+func DotGeneral(lhs *Node, lhsContractingAxes []int, lhsBatchAxes []int, rhs *Node, rhsContractingAxes []int, rhsBatchAxes []int) (node *Node) {
+	g := validateBuildingGraphFromInputs(lhs, rhs)
+
 	nodeInputs := &nodeInputsDotGeneral{
 		lhs:                lhs,
 		lhsContractingAxes: lhsContractingAxes,
@@ -620,6 +721,7 @@ func backendDotGeneral(lhs *Node, lhsContractingAxes []int, lhsBatchAxes []int, 
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -629,14 +731,16 @@ type nodeInputsEqual struct {
 	x1 *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsEqual) Type() NodeType {
 	return NodeTypeEqual
 }
 
-// backendEqual is a Graph wrapper for the backend.Builder.Equal method.
-func backendEqual(x0 *Node, x1 *Node) (node *Node) {
-	g := x0.Graph()
+// Two-arguments comparison ops:
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func Equal(x0 *Node, x1 *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x0, x1)
+
 	nodeInputs := &nodeInputsEqual{
 		x0: x0,
 		x1: x1,
@@ -648,6 +752,7 @@ func backendEqual(x0 *Node, x1 *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -657,14 +762,18 @@ type nodeInputsEqualTotalOrder struct {
 	x1 *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsEqualTotalOrder) Type() NodeType {
 	return NodeTypeEqualTotalOrder
 }
 
-// backendEqualTotalOrder is a Graph wrapper for the backend.Builder.EqualTotalOrder method.
-func backendEqualTotalOrder(x0 *Node, x1 *Node) (node *Node) {
-	g := x0.Graph()
+// EqualTotalOrder returns the element-wise operation.
+// Standard broadcasting rules apply (see documentation).
+// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func EqualTotalOrder(x0 *Node, x1 *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x0, x1)
+
 	nodeInputs := &nodeInputsEqualTotalOrder{
 		x0: x0,
 		x1: x1,
@@ -676,6 +785,7 @@ func backendEqualTotalOrder(x0 *Node, x1 *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -684,14 +794,15 @@ type nodeInputsExp struct {
 	x *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsExp) Type() NodeType {
 	return NodeTypeExp
 }
 
-// backendExp is a Graph wrapper for the backend.Builder.Exp method.
-func backendExp(x *Node) (node *Node) {
-	g := x.Graph()
+// Exp returns the Op that represents the output of the corresponding operation.
+func Exp(x *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x)
+
 	nodeInputs := &nodeInputsExp{
 		x: x,
 	}
@@ -702,6 +813,7 @@ func backendExp(x *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -710,14 +822,15 @@ type nodeInputsExpm1 struct {
 	x *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsExpm1) Type() NodeType {
 	return NodeTypeExpm1
 }
 
-// backendExpm1 is a Graph wrapper for the backend.Builder.Expm1 method.
-func backendExpm1(x *Node) (node *Node) {
-	g := x.Graph()
+// Expm1 returns the Op that represents the output of the corresponding operation.
+func Expm1(x *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x)
+
 	nodeInputs := &nodeInputsExpm1{
 		x: x,
 	}
@@ -728,6 +841,7 @@ func backendExpm1(x *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -738,14 +852,17 @@ type nodeInputsFFT struct {
 	fftLength []int
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsFFT) Type() NodeType {
 	return NodeTypeFFT
 }
 
-// backendFFT is a Graph wrapper for the backend.Builder.FFT method.
-func backendFFT(operand *Node, fftType protos.FftType, fftLength []int) (node *Node) {
-	g := operand.Graph()
+// FFT calls the XLA FFT operation, which implements {Forward, Inverse} x {Complex, Real} versions.
+// See documentation in https://www.tensorflow.org/xla/operation_semantics.
+// Underlying, CPU FFT is backed by Eigen's TensorFFT and GPU FFT uses cuFFT.
+func FFT(operand *Node, fftType protos.FftType, fftLength []int) (node *Node) {
+	g := validateBuildingGraphFromInputs(operand)
+
 	nodeInputs := &nodeInputsFFT{
 		operand:   operand,
 		fftType:   fftType,
@@ -758,6 +875,7 @@ func backendFFT(operand *Node, fftType protos.FftType, fftLength []int) (node *N
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -766,14 +884,15 @@ type nodeInputsFloor struct {
 	x *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsFloor) Type() NodeType {
 	return NodeTypeFloor
 }
 
-// backendFloor is a Graph wrapper for the backend.Builder.Floor method.
-func backendFloor(x *Node) (node *Node) {
-	g := x.Graph()
+// Floor returns the Op that represents the output of the corresponding operation.
+func Floor(x *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x)
+
 	nodeInputs := &nodeInputsFloor{
 		x: x,
 	}
@@ -784,6 +903,7 @@ func backendFloor(x *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -799,14 +919,15 @@ type nodeInputsGather struct {
 	indicesAreSorted   bool
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsGather) Type() NodeType {
 	return NodeTypeGather
 }
 
 // backendGather is a Graph wrapper for the backend.Builder.Gather method.
 func backendGather(operand *Node, startIndices *Node, indexVectorAxis int, offsetAxes []int, collapsedSliceAxes []int, startIndexMap []int, sliceSizes []int, indicesAreSorted bool) (node *Node) {
-	g := operand.Graph()
+	g := validateBuildingGraphFromInputs(operand, startIndices)
+
 	nodeInputs := &nodeInputsGather{
 		operand:            operand,
 		startIndices:       startIndices,
@@ -824,6 +945,7 @@ func backendGather(operand *Node, startIndices *Node, indexVectorAxis int, offse
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -833,14 +955,16 @@ type nodeInputsGreaterOrEqual struct {
 	x1 *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsGreaterOrEqual) Type() NodeType {
 	return NodeTypeGreaterOrEqual
 }
 
-// backendGreaterOrEqual is a Graph wrapper for the backend.Builder.GreaterOrEqual method.
-func backendGreaterOrEqual(x0 *Node, x1 *Node) (node *Node) {
-	g := x0.Graph()
+// GreaterOrEqual returns the Op that represents the output of the corresponding operation.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func GreaterOrEqual(x0 *Node, x1 *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x0, x1)
+
 	nodeInputs := &nodeInputsGreaterOrEqual{
 		x0: x0,
 		x1: x1,
@@ -852,6 +976,7 @@ func backendGreaterOrEqual(x0 *Node, x1 *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -861,14 +986,18 @@ type nodeInputsGreaterOrEqualTotalOrder struct {
 	x1 *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsGreaterOrEqualTotalOrder) Type() NodeType {
 	return NodeTypeGreaterOrEqualTotalOrder
 }
 
-// backendGreaterOrEqualTotalOrder is a Graph wrapper for the backend.Builder.GreaterOrEqualTotalOrder method.
-func backendGreaterOrEqualTotalOrder(x0 *Node, x1 *Node) (node *Node) {
-	g := x0.Graph()
+// GreaterOrEqualTotalOrder returns the element-wise operation.
+// Standard broadcasting rules apply (see documentation).
+// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func GreaterOrEqualTotalOrder(x0 *Node, x1 *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x0, x1)
+
 	nodeInputs := &nodeInputsGreaterOrEqualTotalOrder{
 		x0: x0,
 		x1: x1,
@@ -880,6 +1009,7 @@ func backendGreaterOrEqualTotalOrder(x0 *Node, x1 *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -889,14 +1019,16 @@ type nodeInputsGreaterThan struct {
 	x1 *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsGreaterThan) Type() NodeType {
 	return NodeTypeGreaterThan
 }
 
-// backendGreaterThan is a Graph wrapper for the backend.Builder.GreaterThan method.
-func backendGreaterThan(x0 *Node, x1 *Node) (node *Node) {
-	g := x0.Graph()
+// GreaterThan returns the Op that represents the output of the corresponding operation.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func GreaterThan(x0 *Node, x1 *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x0, x1)
+
 	nodeInputs := &nodeInputsGreaterThan{
 		x0: x0,
 		x1: x1,
@@ -908,6 +1040,7 @@ func backendGreaterThan(x0 *Node, x1 *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -917,14 +1050,18 @@ type nodeInputsGreaterThanTotalOrder struct {
 	x1 *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsGreaterThanTotalOrder) Type() NodeType {
 	return NodeTypeGreaterThanTotalOrder
 }
 
-// backendGreaterThanTotalOrder is a Graph wrapper for the backend.Builder.GreaterThanTotalOrder method.
-func backendGreaterThanTotalOrder(x0 *Node, x1 *Node) (node *Node) {
-	g := x0.Graph()
+// GreaterThanTotalOrder returns the element-wise operation.
+// Standard broadcasting rules apply (see documentation).
+// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func GreaterThanTotalOrder(x0 *Node, x1 *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x0, x1)
+
 	nodeInputs := &nodeInputsGreaterThanTotalOrder{
 		x0: x0,
 		x1: x1,
@@ -936,6 +1073,7 @@ func backendGreaterThanTotalOrder(x0 *Node, x1 *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -944,14 +1082,15 @@ type nodeInputsImag struct {
 	x *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsImag) Type() NodeType {
 	return NodeTypeImag
 }
 
-// backendImag is a Graph wrapper for the backend.Builder.Imag method.
-func backendImag(x *Node) (node *Node) {
-	g := x.Graph()
+// Imag returns the imaginary part of a complex number. It returns 0 if the x is a float number.
+func Imag(x *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x)
+
 	nodeInputs := &nodeInputsImag{
 		x: x,
 	}
@@ -962,6 +1101,7 @@ func backendImag(x *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -971,13 +1111,15 @@ type nodeInputsIota struct {
 	iotaAxis int
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsIota) Type() NodeType {
 	return NodeTypeIota
 }
 
 // backendIota is a Graph wrapper for the backend.Builder.Iota method.
 func backendIota(g *Graph, shape shapes.Shape, iotaAxis int) (node *Node) {
+	g.AssertBuilding()
+
 	nodeInputs := &nodeInputsIota{
 		shape:    shape,
 		iotaAxis: iotaAxis,
@@ -989,6 +1131,7 @@ func backendIota(g *Graph, shape shapes.Shape, iotaAxis int) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -998,14 +1141,16 @@ type nodeInputsLessOrEqual struct {
 	x1 *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsLessOrEqual) Type() NodeType {
 	return NodeTypeLessOrEqual
 }
 
-// backendLessOrEqual is a Graph wrapper for the backend.Builder.LessOrEqual method.
-func backendLessOrEqual(x0 *Node, x1 *Node) (node *Node) {
-	g := x0.Graph()
+// LessOrEqual returns the Op that represents the output of the corresponding operation.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func LessOrEqual(x0 *Node, x1 *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x0, x1)
+
 	nodeInputs := &nodeInputsLessOrEqual{
 		x0: x0,
 		x1: x1,
@@ -1017,6 +1162,7 @@ func backendLessOrEqual(x0 *Node, x1 *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -1026,14 +1172,18 @@ type nodeInputsLessOrEqualTotalOrder struct {
 	x1 *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsLessOrEqualTotalOrder) Type() NodeType {
 	return NodeTypeLessOrEqualTotalOrder
 }
 
-// backendLessOrEqualTotalOrder is a Graph wrapper for the backend.Builder.LessOrEqualTotalOrder method.
-func backendLessOrEqualTotalOrder(x0 *Node, x1 *Node) (node *Node) {
-	g := x0.Graph()
+// LessOrEqualTotalOrder returns the element-wise operation.
+// Standard broadcasting rules apply (see documentation).
+// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func LessOrEqualTotalOrder(x0 *Node, x1 *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x0, x1)
+
 	nodeInputs := &nodeInputsLessOrEqualTotalOrder{
 		x0: x0,
 		x1: x1,
@@ -1045,6 +1195,7 @@ func backendLessOrEqualTotalOrder(x0 *Node, x1 *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -1054,14 +1205,16 @@ type nodeInputsLessThan struct {
 	x1 *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsLessThan) Type() NodeType {
 	return NodeTypeLessThan
 }
 
-// backendLessThan is a Graph wrapper for the backend.Builder.LessThan method.
-func backendLessThan(x0 *Node, x1 *Node) (node *Node) {
-	g := x0.Graph()
+// LessThan returns the Op that represents the output of the corresponding operation.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func LessThan(x0 *Node, x1 *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x0, x1)
+
 	nodeInputs := &nodeInputsLessThan{
 		x0: x0,
 		x1: x1,
@@ -1073,6 +1226,7 @@ func backendLessThan(x0 *Node, x1 *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -1082,14 +1236,18 @@ type nodeInputsLessThanTotalOrder struct {
 	x1 *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsLessThanTotalOrder) Type() NodeType {
 	return NodeTypeLessThanTotalOrder
 }
 
-// backendLessThanTotalOrder is a Graph wrapper for the backend.Builder.LessThanTotalOrder method.
-func backendLessThanTotalOrder(x0 *Node, x1 *Node) (node *Node) {
-	g := x0.Graph()
+// LessThanTotalOrder returns the element-wise operation.
+// Standard broadcasting rules apply (see documentation).
+// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func LessThanTotalOrder(x0 *Node, x1 *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x0, x1)
+
 	nodeInputs := &nodeInputsLessThanTotalOrder{
 		x0: x0,
 		x1: x1,
@@ -1101,6 +1259,7 @@ func backendLessThanTotalOrder(x0 *Node, x1 *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -1109,14 +1268,15 @@ type nodeInputsLog struct {
 	x *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsLog) Type() NodeType {
 	return NodeTypeLog
 }
 
-// backendLog is a Graph wrapper for the backend.Builder.Log method.
-func backendLog(x *Node) (node *Node) {
-	g := x.Graph()
+// Log returns the Op that represents the output of the corresponding operation.
+func Log(x *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x)
+
 	nodeInputs := &nodeInputsLog{
 		x: x,
 	}
@@ -1127,6 +1287,7 @@ func backendLog(x *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -1135,14 +1296,15 @@ type nodeInputsLog1p struct {
 	x *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsLog1p) Type() NodeType {
 	return NodeTypeLog1p
 }
 
-// backendLog1p is a Graph wrapper for the backend.Builder.Log1p method.
-func backendLog1p(x *Node) (node *Node) {
-	g := x.Graph()
+// Log1p returns the expression log(x+1).
+func Log1p(x *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x)
+
 	nodeInputs := &nodeInputsLog1p{
 		x: x,
 	}
@@ -1153,6 +1315,7 @@ func backendLog1p(x *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -1161,14 +1324,15 @@ type nodeInputsLogicalNot struct {
 	x *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsLogicalNot) Type() NodeType {
 	return NodeTypeLogicalNot
 }
 
-// backendLogicalNot is a Graph wrapper for the backend.Builder.LogicalNot method.
-func backendLogicalNot(x *Node) (node *Node) {
-	g := x.Graph()
+// LogicalNot returns the Op that represents the output of the corresponding operation.
+func LogicalNot(x *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x)
+
 	nodeInputs := &nodeInputsLogicalNot{
 		x: x,
 	}
@@ -1179,6 +1343,7 @@ func backendLogicalNot(x *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -1187,14 +1352,15 @@ type nodeInputsLogistic struct {
 	x *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsLogistic) Type() NodeType {
 	return NodeTypeLogistic
 }
 
-// backendLogistic is a Graph wrapper for the backend.Builder.Logistic method.
-func backendLogistic(x *Node) (node *Node) {
-	g := x.Graph()
+// Logistic returns the element-wise expression 1/(1+exp(-x)). Also known as the Sigmoid function.
+func Logistic(x *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x)
+
 	nodeInputs := &nodeInputsLogistic{
 		x: x,
 	}
@@ -1205,6 +1371,7 @@ func backendLogistic(x *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -1214,14 +1381,16 @@ type nodeInputsMax struct {
 	x1 *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsMax) Type() NodeType {
 	return NodeTypeMax
 }
 
-// backendMax is a Graph wrapper for the backend.Builder.Max method.
-func backendMax(x0 *Node, x1 *Node) (node *Node) {
-	g := x0.Graph()
+// Max returns the element-wise highest value among the two.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func Max(x0 *Node, x1 *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x0, x1)
+
 	nodeInputs := &nodeInputsMax{
 		x0: x0,
 		x1: x1,
@@ -1233,6 +1402,7 @@ func backendMax(x0 *Node, x1 *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -1242,14 +1412,16 @@ type nodeInputsMin struct {
 	x1 *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsMin) Type() NodeType {
 	return NodeTypeMin
 }
 
-// backendMin is a Graph wrapper for the backend.Builder.Min method.
-func backendMin(x0 *Node, x1 *Node) (node *Node) {
-	g := x0.Graph()
+// Min returns the element-wise smallest value among the two.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func Min(x0 *Node, x1 *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x0, x1)
+
 	nodeInputs := &nodeInputsMin{
 		x0: x0,
 		x1: x1,
@@ -1261,6 +1433,7 @@ func backendMin(x0 *Node, x1 *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -1270,14 +1443,17 @@ type nodeInputsMul struct {
 	x1 *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsMul) Type() NodeType {
 	return NodeTypeMul
 }
 
-// backendMul is a Graph wrapper for the backend.Builder.Mul method.
-func backendMul(x0 *Node, x1 *Node) (node *Node) {
-	g := x0.Graph()
+// Mul returns the element-wise multiplication of the two values.
+// Standard broadcasting rules apply (see documentation).
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func Mul(x0 *Node, x1 *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x0, x1)
+
 	nodeInputs := &nodeInputsMul{
 		x0: x0,
 		x1: x1,
@@ -1289,6 +1465,7 @@ func backendMul(x0 *Node, x1 *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -1297,14 +1474,15 @@ type nodeInputsNeg struct {
 	x *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsNeg) Type() NodeType {
 	return NodeTypeNeg
 }
 
-// backendNeg is a Graph wrapper for the backend.Builder.Neg method.
-func backendNeg(x *Node) (node *Node) {
-	g := x.Graph()
+// Neg returns the Op that represents the output of the corresponding operation.
+func Neg(x *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x)
+
 	nodeInputs := &nodeInputsNeg{
 		x: x,
 	}
@@ -1315,6 +1493,7 @@ func backendNeg(x *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -1324,14 +1503,16 @@ type nodeInputsNotEqual struct {
 	x1 *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsNotEqual) Type() NodeType {
 	return NodeTypeNotEqual
 }
 
-// backendNotEqual is a Graph wrapper for the backend.Builder.NotEqual method.
-func backendNotEqual(x0 *Node, x1 *Node) (node *Node) {
-	g := x0.Graph()
+// NotEqual returns the Op that represents the output of the corresponding operation.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func NotEqual(x0 *Node, x1 *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x0, x1)
+
 	nodeInputs := &nodeInputsNotEqual{
 		x0: x0,
 		x1: x1,
@@ -1343,6 +1524,7 @@ func backendNotEqual(x0 *Node, x1 *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -1352,14 +1534,18 @@ type nodeInputsNotEqualTotalOrder struct {
 	x1 *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsNotEqualTotalOrder) Type() NodeType {
 	return NodeTypeNotEqualTotalOrder
 }
 
-// backendNotEqualTotalOrder is a Graph wrapper for the backend.Builder.NotEqualTotalOrder method.
-func backendNotEqualTotalOrder(x0 *Node, x1 *Node) (node *Node) {
-	g := x0.Graph()
+// NotEqualTotalOrder returns the element-wise operation.
+// Standard broadcasting rules apply (see documentation).
+// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func NotEqualTotalOrder(x0 *Node, x1 *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x0, x1)
+
 	nodeInputs := &nodeInputsNotEqualTotalOrder{
 		x0: x0,
 		x1: x1,
@@ -1371,6 +1557,7 @@ func backendNotEqualTotalOrder(x0 *Node, x1 *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -1380,14 +1567,16 @@ type nodeInputsOr struct {
 	x1 *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsOr) Type() NodeType {
 	return NodeTypeOr
 }
 
-// backendOr is a Graph wrapper for the backend.Builder.Or method.
-func backendOr(x0 *Node, x1 *Node) (node *Node) {
-	g := x0.Graph()
+// Or returns the element-wise logic "and" operator.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func Or(x0 *Node, x1 *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x0, x1)
+
 	nodeInputs := &nodeInputsOr{
 		x0: x0,
 		x1: x1,
@@ -1399,6 +1588,7 @@ func backendOr(x0 *Node, x1 *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -1409,14 +1599,17 @@ type nodeInputsPad struct {
 	axesConfig []backends.PadAxis
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsPad) Type() NodeType {
 	return NodeTypePad
 }
 
-// backendPad is a Graph wrapper for the backend.Builder.Pad method.
-func backendPad(x *Node, fillValue *Node, axesConfig ...backends.PadAxis) (node *Node) {
-	g := x.Graph()
+// Pad injects padding on the start, end or interior (in between each element) of the given operand.
+// There must be at most `operand.Rank()` axesConfig values. Missing PadAxis are assumed to be zeros,
+// that is, no padding for those axes.
+func Pad(x *Node, fillValue *Node, axesConfig ...backends.PadAxis) (node *Node) {
+	g := validateBuildingGraphFromInputs(x, fillValue)
+
 	nodeInputs := &nodeInputsPad{
 		x:          x,
 		fillValue:  fillValue,
@@ -1429,6 +1622,7 @@ func backendPad(x *Node, fillValue *Node, axesConfig ...backends.PadAxis) (node 
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -1438,13 +1632,15 @@ type nodeInputsParameter struct {
 	shape shapes.Shape
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsParameter) Type() NodeType {
 	return NodeTypeParameter
 }
 
 // backendParameter is a Graph wrapper for the backend.Builder.Parameter method.
 func backendParameter(g *Graph, name string, shape shapes.Shape) (node *Node) {
+	g.AssertBuilding()
+
 	nodeInputs := &nodeInputsParameter{
 		name:  name,
 		shape: shape,
@@ -1456,6 +1652,7 @@ func backendParameter(g *Graph, name string, shape shapes.Shape) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -1465,14 +1662,16 @@ type nodeInputsPow struct {
 	x1 *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsPow) Type() NodeType {
 	return NodeTypePow
 }
 
-// backendPow is a Graph wrapper for the backend.Builder.Pow method.
-func backendPow(x0 *Node, x1 *Node) (node *Node) {
-	g := x0.Graph()
+// Pow returns the Op that represents the output of the corresponding operation.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func Pow(x0 *Node, x1 *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x0, x1)
+
 	nodeInputs := &nodeInputsPow{
 		x0: x0,
 		x1: x1,
@@ -1484,6 +1683,7 @@ func backendPow(x0 *Node, x1 *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -1492,14 +1692,15 @@ type nodeInputsReal struct {
 	x *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsReal) Type() NodeType {
 	return NodeTypeReal
 }
 
-// backendReal is a Graph wrapper for the backend.Builder.Real method.
-func backendReal(x *Node) (node *Node) {
-	g := x.Graph()
+// Real return the real part of a complex number. It returns x if the x is a float number.
+func Real(x *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x)
+
 	nodeInputs := &nodeInputsReal{
 		x: x,
 	}
@@ -1510,6 +1711,7 @@ func backendReal(x *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -1519,14 +1721,16 @@ type nodeInputsReduceMax struct {
 	axes []int
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsReduceMax) Type() NodeType {
 	return NodeTypeReduceMax
 }
 
-// backendReduceMax is a Graph wrapper for the backend.Builder.ReduceMax method.
-func backendReduceMax(x *Node, axes ...int) (node *Node) {
-	g := x.Graph()
+// ReduceMax is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the max value.
+// If no axes are given, it reduces the full array.
+func ReduceMax(x *Node, axes ...int) (node *Node) {
+	g := validateBuildingGraphFromInputs(x)
+
 	nodeInputs := &nodeInputsReduceMax{
 		x:    x,
 		axes: slices.Clone(axes),
@@ -1538,6 +1742,7 @@ func backendReduceMax(x *Node, axes ...int) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -1547,14 +1752,16 @@ type nodeInputsReduceMin struct {
 	axes []int
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsReduceMin) Type() NodeType {
 	return NodeTypeReduceMin
 }
 
-// backendReduceMin is a Graph wrapper for the backend.Builder.ReduceMin method.
-func backendReduceMin(x *Node, axes ...int) (node *Node) {
-	g := x.Graph()
+// ReduceMin is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the min value.
+// If no axes are given, it reduces the full array.
+func ReduceMin(x *Node, axes ...int) (node *Node) {
+	g := validateBuildingGraphFromInputs(x)
+
 	nodeInputs := &nodeInputsReduceMin{
 		x:    x,
 		axes: slices.Clone(axes),
@@ -1566,6 +1773,7 @@ func backendReduceMin(x *Node, axes ...int) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -1575,14 +1783,16 @@ type nodeInputsReduceProduct struct {
 	axes []int
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsReduceProduct) Type() NodeType {
 	return NodeTypeReduceProduct
 }
 
-// backendReduceProduct is a Graph wrapper for the backend.Builder.ReduceProduct method.
-func backendReduceProduct(x *Node, axes ...int) (node *Node) {
-	g := x.Graph()
+// ReduceProduct is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the product of the reduced axes.
+// If no axes are given, it reduces the full array.
+func ReduceProduct(x *Node, axes ...int) (node *Node) {
+	g := validateBuildingGraphFromInputs(x)
+
 	nodeInputs := &nodeInputsReduceProduct{
 		x:    x,
 		axes: slices.Clone(axes),
@@ -1594,6 +1804,7 @@ func backendReduceProduct(x *Node, axes ...int) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -1603,14 +1814,16 @@ type nodeInputsReduceSum struct {
 	axes []int
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsReduceSum) Type() NodeType {
 	return NodeTypeReduceSum
 }
 
-// backendReduceSum is a Graph wrapper for the backend.Builder.ReduceSum method.
-func backendReduceSum(x *Node, axes ...int) (node *Node) {
-	g := x.Graph()
+// ReduceSum is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the sum of the reduced axes.
+// If no axes are given, it reduces the full array.
+func ReduceSum(x *Node, axes ...int) (node *Node) {
+	g := validateBuildingGraphFromInputs(x)
+
 	nodeInputs := &nodeInputsReduceSum{
 		x:    x,
 		axes: slices.Clone(axes),
@@ -1622,6 +1835,7 @@ func backendReduceSum(x *Node, axes ...int) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -1631,14 +1845,17 @@ type nodeInputsRem struct {
 	x1 *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsRem) Type() NodeType {
 	return NodeTypeRem
 }
 
-// backendRem is a Graph wrapper for the backend.Builder.Rem method.
-func backendRem(x0 *Node, x1 *Node) (node *Node) {
-	g := x0.Graph()
+// Rem returns the remainder operation, also known as modulo (or Mod for short).
+// Notice despite the name XLA implements Mod not IEEE754 Remainder operation.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func Rem(x0 *Node, x1 *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x0, x1)
+
 	nodeInputs := &nodeInputsRem{
 		x0: x0,
 		x1: x1,
@@ -1650,6 +1867,7 @@ func backendRem(x0 *Node, x1 *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -1659,14 +1877,17 @@ type nodeInputsReshape struct {
 	dimensions []int
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsReshape) Type() NodeType {
 	return NodeTypeReshape
 }
 
-// backendReshape is a Graph wrapper for the backend.Builder.Reshape method.
-func backendReshape(x *Node, dimensions ...int) (node *Node) {
-	g := x.Graph()
+// Reshape reshapes x to the new dimensions.
+// Total size cannot change, it's just a "reinterpretation" of the same flat data.
+// The dtype remains the same, see ConvertDType to actually convert the values.
+func Reshape(x *Node, dimensions ...int) (node *Node) {
+	g := validateBuildingGraphFromInputs(x)
+
 	nodeInputs := &nodeInputsReshape{
 		x:          x,
 		dimensions: slices.Clone(dimensions),
@@ -1678,6 +1899,7 @@ func backendReshape(x *Node, dimensions ...int) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -1687,14 +1909,17 @@ type nodeInputsReverse struct {
 	axes []int
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsReverse) Type() NodeType {
 	return NodeTypeReverse
 }
 
-// backendReverse is a Graph wrapper for the backend.Builder.Reverse method.
-func backendReverse(x *Node, axes ...int) (node *Node) {
-	g := x.Graph()
+// Reverse returns x with the values for the given dimensions reversed, that is,
+// the value indexed at `i` will be swapped with the value at indexed `(dimension_size - 1 - i)`.
+// The shape remains the same.
+func Reverse(x *Node, axes ...int) (node *Node) {
+	g := validateBuildingGraphFromInputs(x)
+
 	nodeInputs := &nodeInputsReverse{
 		x:    x,
 		axes: slices.Clone(axes),
@@ -1706,6 +1931,7 @@ func backendReverse(x *Node, axes ...int) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -1714,14 +1940,15 @@ type nodeInputsRound struct {
 	x *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsRound) Type() NodeType {
 	return NodeTypeRound
 }
 
-// backendRound is a Graph wrapper for the backend.Builder.Round method.
-func backendRound(x *Node) (node *Node) {
-	g := x.Graph()
+// Round returns the Op that represents the output of the corresponding operation.
+func Round(x *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x)
+
 	nodeInputs := &nodeInputsRound{
 		x: x,
 	}
@@ -1732,6 +1959,7 @@ func backendRound(x *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -1740,14 +1968,15 @@ type nodeInputsRsqrt struct {
 	x *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsRsqrt) Type() NodeType {
 	return NodeTypeRsqrt
 }
 
-// backendRsqrt is a Graph wrapper for the backend.Builder.Rsqrt method.
-func backendRsqrt(x *Node) (node *Node) {
-	g := x.Graph()
+// Rsqrt returns the element-wise reciprocal of square root operation 1/sqrt(x).
+func Rsqrt(x *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x)
+
 	nodeInputs := &nodeInputsRsqrt{
 		x: x,
 	}
@@ -1758,6 +1987,7 @@ func backendRsqrt(x *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -1774,14 +2004,15 @@ type nodeInputsScatterAdd struct {
 	uniqueIndices            bool
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsScatterAdd) Type() NodeType {
 	return NodeTypeScatterAdd
 }
 
-// backendScatterAdd is a Graph wrapper for the backend.Builder.ScatterAdd method.
-func backendScatterAdd(operand *Node, scatterIndices *Node, updates *Node, indexVectorAxis int, updateWindowAxes []int, insertedWindowAxes []int, scatterAxesToOperandAxes []int, indicesAreSorted bool, uniqueIndices bool) (node *Node) {
-	g := operand.Graph()
+// ScatterAdd values from updates pointed by scatterIndices to operand.
+func ScatterAdd(operand *Node, scatterIndices *Node, updates *Node, indexVectorAxis int, updateWindowAxes []int, insertedWindowAxes []int, scatterAxesToOperandAxes []int, indicesAreSorted bool, uniqueIndices bool) (node *Node) {
+	g := validateBuildingGraphFromInputs(operand, scatterIndices, updates)
+
 	nodeInputs := &nodeInputsScatterAdd{
 		operand:                  operand,
 		scatterIndices:           scatterIndices,
@@ -1800,6 +2031,7 @@ func backendScatterAdd(operand *Node, scatterIndices *Node, updates *Node, index
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -1816,14 +2048,15 @@ type nodeInputsScatterMax struct {
 	uniqueIndices            bool
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsScatterMax) Type() NodeType {
 	return NodeTypeScatterMax
 }
 
-// backendScatterMax is a Graph wrapper for the backend.Builder.ScatterMax method.
-func backendScatterMax(operand *Node, scatterIndices *Node, updates *Node, indexVectorAxis int, updateWindowAxes []int, insertedWindowAxes []int, scatterAxesToOperandAxes []int, indicesAreSorted bool, uniqueIndices bool) (node *Node) {
-	g := operand.Graph()
+// ScatterMax scatter values from updates pointed by scatterIndices to operand, by taking the Max.
+func ScatterMax(operand *Node, scatterIndices *Node, updates *Node, indexVectorAxis int, updateWindowAxes []int, insertedWindowAxes []int, scatterAxesToOperandAxes []int, indicesAreSorted bool, uniqueIndices bool) (node *Node) {
+	g := validateBuildingGraphFromInputs(operand, scatterIndices, updates)
+
 	nodeInputs := &nodeInputsScatterMax{
 		operand:                  operand,
 		scatterIndices:           scatterIndices,
@@ -1842,6 +2075,7 @@ func backendScatterMax(operand *Node, scatterIndices *Node, updates *Node, index
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -1858,14 +2092,15 @@ type nodeInputsScatterMin struct {
 	uniqueIndices            bool
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsScatterMin) Type() NodeType {
 	return NodeTypeScatterMin
 }
 
-// backendScatterMin is a Graph wrapper for the backend.Builder.ScatterMin method.
-func backendScatterMin(operand *Node, scatterIndices *Node, updates *Node, indexVectorAxis int, updateWindowAxes []int, insertedWindowAxes []int, scatterAxesToOperandAxes []int, indicesAreSorted bool, uniqueIndices bool) (node *Node) {
-	g := operand.Graph()
+// ScatterMin scatter values from updates pointed by scatterIndices to operand, by taking the Min.
+func ScatterMin(operand *Node, scatterIndices *Node, updates *Node, indexVectorAxis int, updateWindowAxes []int, insertedWindowAxes []int, scatterAxesToOperandAxes []int, indicesAreSorted bool, uniqueIndices bool) (node *Node) {
+	g := validateBuildingGraphFromInputs(operand, scatterIndices, updates)
+
 	nodeInputs := &nodeInputsScatterMin{
 		operand:                  operand,
 		scatterIndices:           scatterIndices,
@@ -1884,6 +2119,7 @@ func backendScatterMin(operand *Node, scatterIndices *Node, updates *Node, index
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -1896,14 +2132,17 @@ type nodeInputsSelectAndScatterMax struct {
 	paddings         [][2]int
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsSelectAndScatterMax) Type() NodeType {
 	return NodeTypeSelectAndScatterMax
 }
 
-// backendSelectAndScatterMax is a Graph wrapper for the backend.Builder.SelectAndScatterMax method.
-func backendSelectAndScatterMax(operand *Node, source *Node, windowDimensions []int, windowStrides []int, paddings [][2]int) (node *Node) {
-	g := operand.Graph()
+// SelectAndScatterMax runs windows (similar to ReduceWindow) over the operand, selects values to updates the output (like ScatterAdd)
+// It selects the values in the window such that it works as reverse for ScatterMax.
+// See details in https://openxla.org/xla/operation_semantics#selectandscatter
+func SelectAndScatterMax(operand *Node, source *Node, windowDimensions []int, windowStrides []int, paddings [][2]int) (node *Node) {
+	g := validateBuildingGraphFromInputs(operand, source)
+
 	nodeInputs := &nodeInputsSelectAndScatterMax{
 		operand:          operand,
 		source:           source,
@@ -1918,6 +2157,7 @@ func backendSelectAndScatterMax(operand *Node, source *Node, windowDimensions []
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -1930,14 +2170,17 @@ type nodeInputsSelectAndScatterMin struct {
 	paddings         [][2]int
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsSelectAndScatterMin) Type() NodeType {
 	return NodeTypeSelectAndScatterMin
 }
 
-// backendSelectAndScatterMin is a Graph wrapper for the backend.Builder.SelectAndScatterMin method.
-func backendSelectAndScatterMin(operand *Node, source *Node, windowDimensions []int, windowStrides []int, paddings [][2]int) (node *Node) {
-	g := operand.Graph()
+// SelectAndScatterMin runs windows (similar to ReduceWindow) over the operand, selects values to updates the output (like ScatterAdd)
+// It selects the values in the window such that it works as reverse for ScatterMin.
+// See details in https://openxla.org/xla/operation_semantics#selectandscatter
+func SelectAndScatterMin(operand *Node, source *Node, windowDimensions []int, windowStrides []int, paddings [][2]int) (node *Node) {
+	g := validateBuildingGraphFromInputs(operand, source)
+
 	nodeInputs := &nodeInputsSelectAndScatterMin{
 		operand:          operand,
 		source:           source,
@@ -1952,6 +2195,7 @@ func backendSelectAndScatterMin(operand *Node, source *Node, windowDimensions []
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -1964,14 +2208,17 @@ type nodeInputsSelectAndScatterSum struct {
 	paddings         [][2]int
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsSelectAndScatterSum) Type() NodeType {
 	return NodeTypeSelectAndScatterSum
 }
 
-// backendSelectAndScatterSum is a Graph wrapper for the backend.Builder.SelectAndScatterSum method.
-func backendSelectAndScatterSum(operand *Node, source *Node, windowDimensions []int, windowStrides []int, paddings [][2]int) (node *Node) {
-	g := operand.Graph()
+// SelectAndScatterSum runs windows (similar to ReduceWindow) over the operand, selects values to updates the output (like ScatterAdd)
+// It selects the values in the window such that it works as reverse for ScatterSum.
+// See details in https://openxla.org/xla/operation_semantics#selectandscatter
+func SelectAndScatterSum(operand *Node, source *Node, windowDimensions []int, windowStrides []int, paddings [][2]int) (node *Node) {
+	g := validateBuildingGraphFromInputs(operand, source)
+
 	nodeInputs := &nodeInputsSelectAndScatterSum{
 		operand:          operand,
 		source:           source,
@@ -1986,6 +2233,7 @@ func backendSelectAndScatterSum(operand *Node, source *Node, windowDimensions []
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -1994,14 +2242,15 @@ type nodeInputsSign struct {
 	x *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsSign) Type() NodeType {
 	return NodeTypeSign
 }
 
 // backendSign is a Graph wrapper for the backend.Builder.Sign method.
 func backendSign(x *Node) (node *Node) {
-	g := x.Graph()
+	g := validateBuildingGraphFromInputs(x)
+
 	nodeInputs := &nodeInputsSign{
 		x: x,
 	}
@@ -2012,6 +2261,7 @@ func backendSign(x *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -2020,14 +2270,15 @@ type nodeInputsSin struct {
 	x *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsSin) Type() NodeType {
 	return NodeTypeSin
 }
 
-// backendSin is a Graph wrapper for the backend.Builder.Sin method.
-func backendSin(x *Node) (node *Node) {
-	g := x.Graph()
+// Sin returns the Op that represents the output of the corresponding operation.
+func Sin(x *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x)
+
 	nodeInputs := &nodeInputsSin{
 		x: x,
 	}
@@ -2038,6 +2289,7 @@ func backendSin(x *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -2049,14 +2301,23 @@ type nodeInputsSlice struct {
 	strides []int
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsSlice) Type() NodeType {
 	return NodeTypeSlice
 }
 
-// backendSlice is a Graph wrapper for the backend.Builder.Slice method.
-func backendSlice(x *Node, starts []int, limits []int, strides []int) (node *Node) {
-	g := x.Graph()
+// Slice extracts a sub-array from the input array.
+// The sub-array is of the same rank as the input and contains the values inside a bounding box within the input array
+// where the dimensions and indices of the bounding box are given as arguments to the slice operation.
+// The strides set the input stride of the slice in each axis and must be >= 1.
+// It is optional, and if missing it is assumed to be 1 for every dimension.
+// Examples:
+//
+//	Slice(x={0, 1, 2, 3, 4}, starts={2}, limits={4}, strides=nil) -> {2, 3}
+//	Slice(x={0, 1, 2, 3, 4}, starts={2}, limits={5}, strides={2}) -> {2, 4}
+func Slice(x *Node, starts []int, limits []int, strides []int) (node *Node) {
+	g := validateBuildingGraphFromInputs(x)
+
 	nodeInputs := &nodeInputsSlice{
 		x:       x,
 		starts:  starts,
@@ -2070,6 +2331,7 @@ func backendSlice(x *Node, starts []int, limits []int, strides []int) (node *Nod
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -2078,14 +2340,15 @@ type nodeInputsSqrt struct {
 	x *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsSqrt) Type() NodeType {
 	return NodeTypeSqrt
 }
 
-// backendSqrt is a Graph wrapper for the backend.Builder.Sqrt method.
-func backendSqrt(x *Node) (node *Node) {
-	g := x.Graph()
+// Sqrt returns the Op that represents the output of the corresponding operation.
+func Sqrt(x *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x)
+
 	nodeInputs := &nodeInputsSqrt{
 		x: x,
 	}
@@ -2096,6 +2359,7 @@ func backendSqrt(x *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -2105,14 +2369,17 @@ type nodeInputsSub struct {
 	x1 *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsSub) Type() NodeType {
 	return NodeTypeSub
 }
 
-// backendSub is a Graph wrapper for the backend.Builder.Sub method.
-func backendSub(x0 *Node, x1 *Node) (node *Node) {
-	g := x0.Graph()
+// Sub returns the element-wise subtraction of the two values.
+// Standard broadcasting rules apply (see documentation).
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func Sub(x0 *Node, x1 *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x0, x1)
+
 	nodeInputs := &nodeInputsSub{
 		x0: x0,
 		x1: x1,
@@ -2124,6 +2391,7 @@ func backendSub(x0 *Node, x1 *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -2132,14 +2400,15 @@ type nodeInputsTanh struct {
 	x *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsTanh) Type() NodeType {
 	return NodeTypeTanh
 }
 
-// backendTanh is a Graph wrapper for the backend.Builder.Tanh method.
-func backendTanh(x *Node) (node *Node) {
-	g := x.Graph()
+// Tanh returns the Op that represents the output of the corresponding operation.
+func Tanh(x *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x)
+
 	nodeInputs := &nodeInputsTanh{
 		x: x,
 	}
@@ -2150,6 +2419,7 @@ func backendTanh(x *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -2159,14 +2429,17 @@ type nodeInputsTranspose struct {
 	permutations []int
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsTranspose) Type() NodeType {
 	return NodeTypeTranspose
 }
 
-// backendTranspose is a Graph wrapper for the backend.Builder.Transpose method.
-func backendTranspose(x *Node, permutations ...int) (node *Node) {
-	g := x.Graph()
+// Transpose axes of x.
+// There should be one value in permutations for each axis in x.
+// The output will have: output.Shape.Dimension[permutation[i]] = x.Shape.Dimension[i].
+func Transpose(x *Node, permutations ...int) (node *Node) {
+	g := validateBuildingGraphFromInputs(x)
+
 	nodeInputs := &nodeInputsTranspose{
 		x:            x,
 		permutations: slices.Clone(permutations),
@@ -2178,6 +2451,7 @@ func backendTranspose(x *Node, permutations ...int) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -2188,14 +2462,15 @@ type nodeInputsWhere struct {
 	onFalse   *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsWhere) Type() NodeType {
 	return NodeTypeWhere
 }
 
-// backendWhere is a Graph wrapper for the backend.Builder.Where method.
-func backendWhere(condition *Node, onTrue *Node, onFalse *Node) (node *Node) {
-	g := condition.Graph()
+// Where takes element-wise values from onTrue or onFalse depending on the value of condition (expected to be boolean).
+func Where(condition *Node, onTrue *Node, onFalse *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(condition, onTrue, onFalse)
+
 	nodeInputs := &nodeInputsWhere{
 		condition: condition,
 		onTrue:    onTrue,
@@ -2208,6 +2483,7 @@ func backendWhere(condition *Node, onTrue *Node, onFalse *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }
 
@@ -2217,14 +2493,16 @@ type nodeInputsXor struct {
 	x1 *Node
 }
 
-// Type implements interface NodeInputs.
+// Type implements the interface NodeInputs.
 func (ni *nodeInputsXor) Type() NodeType {
 	return NodeTypeXor
 }
 
-// backendXor is a Graph wrapper for the backend.Builder.Xor method.
-func backendXor(x0 *Node, x1 *Node) (node *Node) {
-	g := x0.Graph()
+// Xor returns the element-wise logic "and" operator.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func Xor(x0 *Node, x1 *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x0, x1)
+
 	nodeInputs := &nodeInputsXor{
 		x0: x0,
 		x1: x1,
@@ -2236,5 +2514,6 @@ func backendXor(x0 *Node, x1 *Node) (node *Node) {
 		shape:        g.builder.OpShape(result),
 		staticInputs: nodeInputs,
 	}
+	g.registerNode(node)
 	return
 }

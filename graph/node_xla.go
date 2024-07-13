@@ -39,7 +39,7 @@ import (
 //
 // The length of starts and limits must match the rank of x.
 func SliceXLA(x *Node, starts, limits []int) *Node {
-	_ = validateGraphFromInputs(x)
+	_ = validateBuildingGraphFromInputs(x)
 	rank := x.shape.Rank()
 	if len(starts) != rank || len(limits) != rank {
 		Panicf("in SliceXLA(x, starts, limits) passed %d start values and %d limits values, but x has rank %d", len(starts), len(limits), rank)
@@ -55,7 +55,7 @@ func SliceXLA(x *Node, starts, limits []int) *Node {
 // each dimension.
 // The length of starts, limits and strides must match the rank of x.
 func SliceWithStridesXLA(x *Node, starts, limits, strides []int) *Node {
-	g := validateGraphFromInputs(x)
+	g := validateBuildingGraphFromInputs(x)
 	rank := x.shape.Rank()
 	if len(starts) != rank || len(limits) != rank || len(strides) != rank {
 		Panicf("in SliceWithStridesXLA(x, starts, limits, strides) passed %d start values, %d limits values and %d stride values, but x has rank %d", len(starts), len(limits), len(strides), rank)
@@ -80,7 +80,7 @@ func SliceWithStridesXLA(x *Node, starts, limits, strides []int) *Node {
 //
 // Not exported for now, hopefully Gather and GatherSlices will suffice.
 func gatherXLA(operand, startIndices *Node, indexVectorDim int, offsetDims, collapsedSliceDims, startIndexMap, sliceSizes []int, indicesAreSorted bool) *Node {
-	g := validateGraphFromInputs(operand, startIndices)
+	g := validateBuildingGraphFromInputs(operand, startIndices)
 	//fmt.Printf("\tgatherXLA: operand=%s, start=%s, indexVectorDim=%d, offsetDims=%v, collapsedSliceDims=%v, startIndexMap=%v, sliceSizes=%v\n",
 	//	operand.shape, startIndices.shape, indexVectorDim, offsetDims, collapsedSliceDims, startIndexMap, sliceSizes)
 
@@ -146,7 +146,7 @@ func scatterXLA(operand, scatterIndices, updates *Node,
 	indicesAreSorted, uniqueIndices bool) *Node {
 	//fmt.Printf("\tscatterXLA: operand=%s, scatterIndices=%s, updates=%s, indexVectorDim=%d, updateWindowDims=%v, insertedWindowDims=%v, scatterDimsToOperandDims=%v, indicesAreSorted=%v, uniqueIndices=%v\n",
 	//	operand.shape, scatterIndices.shape, updates.shape, indexVectorDim, updateWindowDims, insertedWindowDims, scatterDimsToOperandDims, indicesAreSorted, uniqueIndices)
-	g := validateGraphFromInputs(operand, scatterIndices, updates)
+	g := validateBuildingGraphFromInputs(operand, scatterIndices, updates)
 
 	// Encoding of the values as follows. IMPORTANT: this code needs to be in sync with corresponding
 	// decoding code in c/gomlx/computation.cpp, in function ComputationAddOp, under GatherNode case.
@@ -191,7 +191,7 @@ func AdjustAxis(operand *Node, axis int) int {
 // Based on paper "Batch Normalization: Accelerating Deep Network Training by Reducing
 // Internal Covariate Shift" (Sergey Ioffe, Christian Szegedy), https://arxiv.org/abs/1502.03167.
 func BatchNormInferenceXLA(operand, scale, offset, mean, variance *Node, epsilon float32, axis int) *Node {
-	g := validateGraphFromInputs(operand, scale, offset, mean, variance)
+	g := validateBuildingGraphFromInputs(operand, scale, offset, mean, variance)
 	axis = AdjustAxis(operand, axis)
 	return newNode(g, &xla.SerializedNode{
 		Type:  xla.BatchNormInferenceNode,
@@ -211,7 +211,7 @@ func BatchNormInferenceXLA(operand, scale, offset, mean, variance *Node, epsilon
 // Based on paper "Batch Normalization: Accelerating Deep Network Training by Reducing
 // Internal Covariate Shift" (Sergey Ioffe, Christian Szegedy), https://arxiv.org/abs/1502.03167.
 func BatchNormTrainingXLA(operand, scale, offset *Node, epsilon float32, axis int) (normalized, batchMean, batchVariance *Node) {
-	g := validateGraphFromInputs(operand, scale, offset)
+	g := validateBuildingGraphFromInputs(operand, scale, offset)
 	axis = AdjustAxis(operand, axis)
 	tuple := newNode(g, &xla.SerializedNode{
 		Type:       xla.BatchNormTrainingNode,
@@ -234,7 +234,7 @@ func BatchNormTrainingXLA(operand, scale, offset *Node, epsilon float32, axis in
 // Internal Covariate Shift" (Sergey Ioffe, Christian Szegedy), https://arxiv.org/abs/1502.03167.
 func batchNormGradXLA(operand, scale, mean, variance, gradOutput *Node, epsilon float32, axis int) (
 	gradOperand, gradScale, gradOffset *Node) {
-	g := validateGraphFromInputs(operand, scale, mean, variance, gradOutput)
+	g := validateBuildingGraphFromInputs(operand, scale, mean, variance, gradOutput)
 	axis = AdjustAxis(operand, axis)
 	tuple := newNode(g, &xla.SerializedNode{
 		Type:       xla.BatchNormGradNode,
@@ -263,7 +263,7 @@ func batchNormGradXLA(operand, scale, mean, variance, gradOutput *Node, epsilon 
 // It provides the basic means of implementing Einsum.
 func dotGeneralXLA(lhs *Node, lhsContractingAxes, lhsBatchAxes []int,
 	rhs *Node, rhsContractingAxes, rhsBatchAxes []int) *Node {
-	g := validateGraphFromInputs(lhs, rhs)
+	g := validateBuildingGraphFromInputs(lhs, rhs)
 
 	var lists = [][]int{lhsContractingAxes, lhsBatchAxes, rhsContractingAxes, rhsBatchAxes}
 	intsLen := len(lists)
@@ -424,7 +424,7 @@ func dotGeneralVJP(node, v *Node, _ shapes.Shape) []*Node {
 // See documentation in https://www.tensorflow.org/xla/operation_semantics.
 // Underlying, CPU FFT is backed by Eigen's TensorFFT and GPU FFT uses cuFFT.
 func fftXLA(operand *Node, fftType xla.FftType, fftLength []int) *Node {
-	g := validateGraphFromInputs(operand)
+	g := validateBuildingGraphFromInputs(operand)
 	return newNode(g, &xla.SerializedNode{
 		Type: xla.FftNode,
 		Int:  int(fftType),

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types"
+	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/janpfeifer/must"
 	"go/ast"
 	"go/parser"
@@ -48,7 +49,12 @@ func Parse() (*NodeTextExtractor, *ast.Package) {
 
 var MethodsBlackList = types.SetWith("Compile", "OpShape", "Name")
 
-func ParseBuilder() (extractor *NodeTextExtractor, funcs map[string]*ast.FuncType) {
+type FuncInfo struct {
+	Type     *ast.FuncType
+	Comments []string
+}
+
+func ParseBuilder() (extractor *NodeTextExtractor, funcs map[string]FuncInfo) {
 	var pkg *ast.Package
 	extractor, pkg = Parse()
 	funcs = extractInterfaceMethods(pkg, "Builder")
@@ -58,8 +64,8 @@ func ParseBuilder() (extractor *NodeTextExtractor, funcs map[string]*ast.FuncTyp
 	return
 }
 
-func extractInterfaceMethods(pkg *ast.Package, interfaceName string) map[string]*ast.FuncType {
-	methods := make(map[string]*ast.FuncType)
+func extractInterfaceMethods(pkg *ast.Package, interfaceName string) map[string]FuncInfo {
+	methods := make(map[string]FuncInfo)
 	for _, file := range pkg.Files {
 		for _, decl := range file.Decls {
 			// Check if the declaration is a GenDecl (e.g., type, const, var)
@@ -86,10 +92,11 @@ func extractInterfaceMethods(pkg *ast.Package, interfaceName string) map[string]
 
 				// Extract method names from the interface
 				for _, field := range interfaceType.Methods.List {
+					comments := xslices.Map(field.Doc.List, func(c *ast.Comment) string { return c.Text })
 					switch fieldType := field.Type.(type) {
 					case *ast.FuncType:
 						for _, name := range field.Names {
-							methods[name.Name] = fieldType
+							methods[name.Name] = FuncInfo{Type: fieldType, Comments: comments}
 						}
 					case *ast.Ident:
 						if len(field.Names) == 0 {

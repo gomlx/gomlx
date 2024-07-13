@@ -50,7 +50,7 @@ import (
 // In the case above params shape is interpreted as `[i_0=3, s_0=3]`, and indices' shape is
 // `[o_0=2, N=1]`. The output shape is `[o_0=2, s_0=3]`.
 func Gather(params, indices *Node) *Node {
-	_ = validateGraphFromInputs(params, indices)
+	_ = validateBuildingGraphFromInputs(params, indices)
 	if params.shape.IsScalar() || params.shape.IsTuple() {
 		Panicf("cannot Gather from scalar or tuple, params shape is %s", params.Shape())
 	}
@@ -133,7 +133,7 @@ func Gather(params, indices *Node) *Node {
 //	    slices.AssertDims(2, 3, 1, 2)  // 2 slices, Axis=0 taken in full (3), and each slice of dimensions (1, 2).
 //		// Result would be [][][][]int32{{{0, 1, 2, 3, 4}}, {{30, 31, 32, 33, 34}}, {{40, 41, 42, 43, 44}}}
 func GatherSlices(input *Node, slicedAxes []int, start *Node, sizes []int) (gathered *Node) {
-	_ = validateGraphFromInputs(input, start)
+	_ = validateBuildingGraphFromInputs(input, start)
 	if input.shape.IsScalar() || input.shape.IsTuple() {
 		Panicf("cannot GatherSlices from scalar or tuple, input shape is %s", input.Shape())
 	}
@@ -245,7 +245,7 @@ func GatherSlices(input *Node, slicedAxes []int, start *Node, sizes []int) (gath
 // See some examples in `node_test.go` function `TestGather`.
 /*
 func GatherWithBatchDims(params, indices *Node, batchDims int) *Node {
-	g := validateGraphFromInputs(params, indices)
+	g := validateBuildingGraphFromInputs(params, indices)
 	if params.shape.IsScalar() || params.shape.IsTuple() {
 		Panicf("cannot Gather from scalar or tuple, params shape is %s", params.Shape())
 	}
@@ -319,7 +319,7 @@ func IndicesForShape(g *Graph, shape shapes.Shape) *Node {
 // In the simplest form, [indices] is shaped `[num_updates, 1]`, [updates] is shaped `[num_updates, update_size]` and
 // [shape] is of the form `[output_size, update_size]`. The indices values should be in between 0 and `output_size-1`.
 func Scatter(indices, updates *Node, shape shapes.Shape) *Node {
-	g := validateGraphFromInputs(indices, updates)
+	g := validateBuildingGraphFromInputs(indices, updates)
 	zeros := Zeros(g, shape)
 	return ScatterAdd(zeros, indices, updates, false, false)
 }
@@ -331,7 +331,7 @@ func Scatter(indices, updates *Node, shape shapes.Shape) *Node {
 // - [sorted]: the indices must be in order. In some cases it is faster, but if indices are not in order results may be unstable.
 // - [unique]: the indices must be unique. In some cases it is faster, but if indices are not unique results may be unstable.
 func ScatterAdd(operand, indices, updates *Node, sorted, unique bool) *Node {
-	_ = validateGraphFromInputs(operand, indices, updates)
+	_ = validateBuildingGraphFromInputs(operand, indices, updates)
 
 	if !indices.shape.DType.IsInt() {
 		Panicf("scatter operations require integer indices, instead got shape %s", indices.shape)

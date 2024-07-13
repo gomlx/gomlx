@@ -21,6 +21,8 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/xslices"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"math"
@@ -473,7 +475,7 @@ func TestBroadcast(t *testing.T) {
 	{
 		g := manager.NewGraph()
 		input := Const(g, []float32{1.1, 1.2})
-		BroadcastPrefix(input, []int{2, 1}) // The last node created in the graph is taken as output by default.
+		BroadcastPrefix(input, 2, 1) // The last node created in the graph is taken as output by default.
 		got := compileAndRun(g)
 		want := [][][]float32{{{1.1, 1.2}}, {{1.1, 1.2}}} // Shape [2, 1, 2].
 		assert.Equal(t, want, got)

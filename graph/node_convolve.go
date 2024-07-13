@@ -67,7 +67,7 @@ type ConvolutionBuilder struct {
 // "channels". Likewise, we use "kernel" instead of "filters" -- but they mean the same.
 func Convolve(x, kernel *Node) *ConvolutionBuilder {
 	conv := &ConvolutionBuilder{
-		graph:            validateGraphFromInputs(x, kernel),
+		graph:            validateBuildingGraphFromInputs(x, kernel),
 		x:                x,
 		kernel:           kernel,
 		filterGroupCount: 1,
@@ -338,7 +338,7 @@ type ConvolveAxesConfig struct {
 func convGeneralDilatedXLA(input, filter *Node, axes ConvolveAxesConfig,
 	strides []int, paddings [][2]int, inputDilation, filterDilation []int,
 	filterGroupCount, batchGroupCount int) *Node {
-	g := validateGraphFromInputs(input, filter)
+	g := validateBuildingGraphFromInputs(input, filter)
 	numSpatialDims := input.Rank() - 2
 	if len(axes.InputSpatial) != numSpatialDims || len(axes.OutputSpatial) != numSpatialDims || len(axes.KernelSpatial) != numSpatialDims {
 		Panicf("convGeneralDilatedXLA: input has %d spatial dimensions, but axes configuration has %d, %d, %d spatial axes configured "+

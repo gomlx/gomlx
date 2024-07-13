@@ -33,7 +33,8 @@ func (b *Builder) Abs(x backends.Op) backends.Op {
 	return xla_result
 }
 
-// Add returns the Op that represents the output of the corresponding operation.
+// Add returns the element-wise sum of the two values.
+// Standard broadcasting rules apply (see documentation).
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) Add(x0, x1 backends.Op) backends.Op {
 	var xla_x0 *xlabuilder.Op
@@ -67,7 +68,7 @@ func (b *Builder) Add(x0, x1 backends.Op) backends.Op {
 	return xla_result
 }
 
-// And returns the Op that represents the output of the corresponding operation.
+// And returns the element-wise logic "and" operator.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) And(x0, x1 backends.Op) backends.Op {
 	var xla_x0 *xlabuilder.Op
@@ -287,7 +288,7 @@ func (b *Builder) Ceil(x backends.Op) backends.Op {
 	return xla_result
 }
 
-// Clz returns the Op that represents the output of the corresponding operation.
+// Clz returns element-wise the "count leading zeros" bits of input node x -- for integer values.
 func (b *Builder) Clz(x backends.Op) backends.Op {
 	var xla_x *xlabuilder.Op
 	{
@@ -308,7 +309,12 @@ func (b *Builder) Clz(x backends.Op) backends.Op {
 	return xla_result
 }
 
-// Complex returns the Op that represents the output of the corresponding operation.
+// Complex returns the complex number taking x0 as the real part and x1 as the imaginary part.
+// The real (x0) and imaginary (x1) must have the same dtype, and they must be either `dtypes.Float32` or
+// `dtypes.Float64`.
+// The output will be either `shapes.Complex64` or `shapes.Complex128`, depending on x0 and x1 dtypes.
+// The shapes of `real` or `imaginary` must be the same, or one must be a scalar, in which case
+// the value is broadcast to every other value.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) Complex(x0, x1 backends.Op) backends.Op {
 	var xla_x0 *xlabuilder.Op
@@ -366,7 +372,7 @@ func (b *Builder) Concatenate(axis int, operands ...backends.Op) backends.Op {
 	return xla_result
 }
 
-// Conj returns the Op that represents the output of the corresponding operation.
+// Conj returns the conjugate of a complex number. E.g: Conj(1+3i) = 1-3i
 func (b *Builder) Conj(x backends.Op) backends.Op {
 	var xla_x *xlabuilder.Op
 	{
@@ -472,7 +478,8 @@ func (b *Builder) Cos(x backends.Op) backends.Op {
 	return xla_result
 }
 
-// Div returns the Op that represents the output of the corresponding operation.
+// Div returns the element-wise subtraction of the two values.
+// Standard broadcasting rules apply (see documentation).
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) Div(x0, x1 backends.Op) backends.Op {
 	var xla_x0 *xlabuilder.Op
@@ -506,7 +513,18 @@ func (b *Builder) Div(x0, x1 backends.Op) backends.Op {
 	return xla_result
 }
 
-// Dot returns the Op that represents the output of the corresponding operation.
+// Dot returns the "dot product" operation.
+// The exact semantics of this operation depend on the ranks of the operands:
+// | Input | Output | Semantics |
+// | vector [n] dot vector [n] | scalar | vector dot product |
+// | matrix [m x k] dot vector [k] | vector [m]	matrix-vector multiplication |
+// | matrix [m x k] dot matrix [k x n] | matrix [m x n] | matrix-matrix multiplication |
+// The operation performs sum of products over the second dimension of x0 (or the first if it has rank 1) and
+// the first dimension of x1.
+// These are the "contracted" dimensions.
+// The contracted dimensions of x0 and x1 must be of the same size.
+// In practice, it can be used to perform dot products between vectors, vector/matrix multiplications or
+// matrix/matrix multiplications.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) Dot(x0, x1 backends.Op) backends.Op {
 	var xla_x0 *xlabuilder.Op
@@ -584,7 +602,7 @@ func (b *Builder) DotGeneral(lhs backends.Op, lhsContractingAxes, lhsBatchAxes [
 	return xla_result
 }
 
-// Equal returns the Op that represents the output of the corresponding operation.
+// Two-arguments comparison ops:
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) Equal(x0, x1 backends.Op) backends.Op {
 	var xla_x0 *xlabuilder.Op
@@ -618,7 +636,9 @@ func (b *Builder) Equal(x0, x1 backends.Op) backends.Op {
 	return xla_result
 }
 
-// EqualTotalOrder returns the Op that represents the output of the corresponding operation.
+// EqualTotalOrder returns the element-wise operation.
+// Standard broadcasting rules apply (see documentation).
+// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) EqualTotalOrder(x0, x1 backends.Op) backends.Op {
 	var xla_x0 *xlabuilder.Op
@@ -832,7 +852,9 @@ func (b *Builder) GreaterOrEqual(x0, x1 backends.Op) backends.Op {
 	return xla_result
 }
 
-// GreaterOrEqualTotalOrder returns the Op that represents the output of the corresponding operation.
+// GreaterOrEqualTotalOrder returns the element-wise operation.
+// Standard broadcasting rules apply (see documentation).
+// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) GreaterOrEqualTotalOrder(x0, x1 backends.Op) backends.Op {
 	var xla_x0 *xlabuilder.Op
@@ -900,7 +922,9 @@ func (b *Builder) GreaterThan(x0, x1 backends.Op) backends.Op {
 	return xla_result
 }
 
-// GreaterThanTotalOrder returns the Op that represents the output of the corresponding operation.
+// GreaterThanTotalOrder returns the element-wise operation.
+// Standard broadcasting rules apply (see documentation).
+// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) GreaterThanTotalOrder(x0, x1 backends.Op) backends.Op {
 	var xla_x0 *xlabuilder.Op
@@ -934,7 +958,7 @@ func (b *Builder) GreaterThanTotalOrder(x0, x1 backends.Op) backends.Op {
 	return xla_result
 }
 
-// Imag returns the Op that represents the output of the corresponding operation.
+// Imag returns the imaginary part of a complex number. It returns 0 if the x is a float number.
 func (b *Builder) Imag(x backends.Op) backends.Op {
 	var xla_x *xlabuilder.Op
 	{
@@ -1001,7 +1025,9 @@ func (b *Builder) LessOrEqual(x0, x1 backends.Op) backends.Op {
 	return xla_result
 }
 
-// LessOrEqualTotalOrder returns the Op that represents the output of the corresponding operation.
+// LessOrEqualTotalOrder returns the element-wise operation.
+// Standard broadcasting rules apply (see documentation).
+// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) LessOrEqualTotalOrder(x0, x1 backends.Op) backends.Op {
 	var xla_x0 *xlabuilder.Op
@@ -1069,7 +1095,9 @@ func (b *Builder) LessThan(x0, x1 backends.Op) backends.Op {
 	return xla_result
 }
 
-// LessThanTotalOrder returns the Op that represents the output of the corresponding operation.
+// LessThanTotalOrder returns the element-wise operation.
+// Standard broadcasting rules apply (see documentation).
+// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) LessThanTotalOrder(x0, x1 backends.Op) backends.Op {
 	var xla_x0 *xlabuilder.Op
@@ -1124,7 +1152,7 @@ func (b *Builder) Log(x backends.Op) backends.Op {
 	return xla_result
 }
 
-// Log1p returns the Op that represents the output of the corresponding operation.
+// Log1p returns the expression log(x+1).
 func (b *Builder) Log1p(x backends.Op) backends.Op {
 	var xla_x *xlabuilder.Op
 	{
@@ -1166,7 +1194,7 @@ func (b *Builder) LogicalNot(x backends.Op) backends.Op {
 	return xla_result
 }
 
-// Logistic returns the Op that represents the output of the corresponding operation.
+// Logistic returns the element-wise expression 1/(1+exp(-x)). Also known as the Sigmoid function.
 func (b *Builder) Logistic(x backends.Op) backends.Op {
 	var xla_x *xlabuilder.Op
 	{
@@ -1187,7 +1215,7 @@ func (b *Builder) Logistic(x backends.Op) backends.Op {
 	return xla_result
 }
 
-// Max returns the Op that represents the output of the corresponding operation.
+// Max returns the element-wise highest value among the two.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) Max(x0, x1 backends.Op) backends.Op {
 	var xla_x0 *xlabuilder.Op
@@ -1221,7 +1249,7 @@ func (b *Builder) Max(x0, x1 backends.Op) backends.Op {
 	return xla_result
 }
 
-// Min returns the Op that represents the output of the corresponding operation.
+// Min returns the element-wise smallest value among the two.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) Min(x0, x1 backends.Op) backends.Op {
 	var xla_x0 *xlabuilder.Op
@@ -1255,7 +1283,8 @@ func (b *Builder) Min(x0, x1 backends.Op) backends.Op {
 	return xla_result
 }
 
-// Mul returns the Op that represents the output of the corresponding operation.
+// Mul returns the element-wise multiplication of the two values.
+// Standard broadcasting rules apply (see documentation).
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) Mul(x0, x1 backends.Op) backends.Op {
 	var xla_x0 *xlabuilder.Op
@@ -1344,7 +1373,9 @@ func (b *Builder) NotEqual(x0, x1 backends.Op) backends.Op {
 	return xla_result
 }
 
-// NotEqualTotalOrder returns the Op that represents the output of the corresponding operation.
+// NotEqualTotalOrder returns the element-wise operation.
+// Standard broadcasting rules apply (see documentation).
+// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) NotEqualTotalOrder(x0, x1 backends.Op) backends.Op {
 	var xla_x0 *xlabuilder.Op
@@ -1378,7 +1409,7 @@ func (b *Builder) NotEqualTotalOrder(x0, x1 backends.Op) backends.Op {
 	return xla_result
 }
 
-// Or returns the Op that represents the output of the corresponding operation.
+// Or returns the element-wise logic "and" operator.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) Or(x0, x1 backends.Op) backends.Op {
 	var xla_x0 *xlabuilder.Op
@@ -1485,7 +1516,7 @@ func (b *Builder) Pow(x0, x1 backends.Op) backends.Op {
 	return xla_result
 }
 
-// Real returns the Op that represents the output of the corresponding operation.
+// Real return the real part of a complex number. It returns x if the x is a float number.
 func (b *Builder) Real(x backends.Op) backends.Op {
 	var xla_x *xlabuilder.Op
 	{
@@ -1594,7 +1625,8 @@ func (b *Builder) ReduceSum(x backends.Op, axes ...int) backends.Op {
 	return xla_result
 }
 
-// Rem returns the Op that represents the output of the corresponding operation.
+// Rem returns the remainder operation, also known as modulo (or Mod for short).
+// Notice despite the name XLA implements Mod not IEEE754 Remainder operation.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) Rem(x0, x1 backends.Op) backends.Op {
 	var xla_x0 *xlabuilder.Op
@@ -1695,7 +1727,7 @@ func (b *Builder) Round(x backends.Op) backends.Op {
 	return xla_result
 }
 
-// Rsqrt returns the Op that represents the output of the corresponding operation.
+// Rsqrt returns the element-wise reciprocal of square root operation 1/sqrt(x).
 func (b *Builder) Rsqrt(x backends.Op) backends.Op {
 	var xla_x *xlabuilder.Op
 	{
@@ -1956,7 +1988,7 @@ func (b *Builder) SelectAndScatterSum(operand, source backends.Op, windowDimensi
 	return xla_result
 }
 
-// Sign returns the Op that represents the output of the corresponding operation.
+// Sign returns element-wise +1, +/-0 or -1 depending on the sign of x. It returns NaN if the input is NaN.
 func (b *Builder) Sign(x backends.Op) backends.Op {
 	var xla_x *xlabuilder.Op
 	{
@@ -2048,7 +2080,8 @@ func (b *Builder) Sqrt(x backends.Op) backends.Op {
 	return xla_result
 }
 
-// Sub returns the Op that represents the output of the corresponding operation.
+// Sub returns the element-wise subtraction of the two values.
+// Standard broadcasting rules apply (see documentation).
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) Sub(x0, x1 backends.Op) backends.Op {
 	var xla_x0 *xlabuilder.Op
@@ -2171,7 +2204,7 @@ func (b *Builder) Where(condition, onTrue, onFalse backends.Op) backends.Op {
 	return xla_result
 }
 
-// Xor returns the Op that represents the output of the corresponding operation.
+// Xor returns the element-wise logic "and" operator.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) Xor(x0, x1 backends.Op) backends.Op {
 	var xla_x0 *xlabuilder.Op
