@@ -23,7 +23,9 @@ func main() {
 
 var (
 	methodsNotExported = types.SetWith(
-		"Broadcast", "Concatenate", "Gather", "Iota", "ReduceMax", "ReduceMin", "ReduceSum", "Sign", "Where")
+		"Broadcast", "Concatenate", "Gather", "Iota", "Pad",
+		"ReduceMax", "ReduceMin", "ReduceSum",
+		"Reshape", "Reverse", "Sign", "Where")
 
 	// methodsToExclude from writing, but the corresponding will be written and maintained manually.
 	methodsToExclude = types.SetWith("Constant", "Parameter")
@@ -57,6 +59,8 @@ func buildMethodInfo() (methods []*MethodInfo) {
 					pi.GraphType = "*Node"
 					pi.ConvertStatement = fmt.Sprintf("%s.op", paramName)
 					mi.OpInputs = append(mi.OpInputs, paramName)
+					pi.Format = "[#%d]"
+					pi.FormatValue = fmt.Sprintf("ni.%s.Id()", paramName)
 				case "...Op":
 					pi.BackendType = "...backends.Op"
 					pi.GraphType = "...*Node"
@@ -64,16 +68,23 @@ func buildMethodInfo() (methods []*MethodInfo) {
 					pi.NodeInputType = "[]*Node"
 					pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", paramName)
 					pi.ConvertStatement = fmt.Sprintf("xslices.Map(%s, func(node *Node) backends.Op { return node.op })", paramName)
+					pi.Format = "[#%s]"
+					pi.FormatValue = fmt.Sprintf(
+						`strings.Join(xslices.Map(ni.%s, func (node *Node) string { return fmt.Sprintf("#%%d", node.Id()) }), ", ")`,
+						paramName)
 				case "ConvolveAxesConfig":
 					pi.BackendType = "backends." + pi.BackendType
 					pi.CopyStatement = fmt.Sprintf("%s.Clone()", paramName)
+					pi.Format = "%+v"
 				case "PadAxis":
 					pi.BackendType = "backends." + pi.BackendType
+					pi.Format = "%+v"
 				case "...PadAxis":
 					pi.BackendType = "...backends." + pi.BackendType[3:]
 					pi.NodeInputType = "[]" + pi.BackendType[3:]
 					pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", paramName)
 					pi.ConvertStatement = fmt.Sprintf("inputs.%s...", paramName)
+					pi.Format = "%+v"
 				default:
 					if strings.HasPrefix(pi.BackendType, "...") {
 						pi.NodeInputType = "[]" + pi.BackendType[3:]
@@ -94,6 +105,12 @@ func buildMethodInfo() (methods []*MethodInfo) {
 				}
 				if pi.ConvertStatement == "" {
 					pi.ConvertStatement = "inputs." + pi.Name
+				}
+				if pi.Format == "" {
+					pi.Format = "%v"
+				}
+				if pi.FormatValue == "" {
+					pi.FormatValue = "ni." + pi.Name
 				}
 			}
 			mi.HasGraph = mi.OpInputsList == "" && len(mi.OpInputs) == 0
@@ -117,6 +134,7 @@ type ParameterInfo struct {
 	Name                                  string
 	BackendType, GraphType, NodeInputType string
 	CopyStatement, ConvertStatement       string
+	Format, FormatValue                   string
 }
 
 const (
@@ -152,6 +170,14 @@ type nodeInputs{{.BackendName}} struct {
 // Type implements the interface NodeInputs.
 func (ni *nodeInputs{{.BackendName}}) Type() NodeType {
 	return NodeType{{.BackendName}}
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputs{{.BackendName}}) String() string {
+	return fmt.Sprintf("%s({{range .Inputs}}{{.Name}}={{.Format}}, {{end}})", 
+		ni.Type(),
+{{range .Inputs}}		{{.FormatValue}},
+{{end}}	)
 }
 
 {{if not .Exported}}// {{.GraphName}} is a Graph wrapper for the backend.Builder.{{.BackendName}} method.

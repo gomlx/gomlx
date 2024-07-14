@@ -12,6 +12,7 @@ import (
 	xla "github.com/gomlx/gopjrt/xlabuilder"
 	"github.com/pkg/errors"
 	"reflect"
+	"slices"
 	"strings"
 )
 
@@ -25,6 +26,11 @@ type nodeInputsParameter struct {
 // Type implements the interface NodeInputs.
 func (ni *nodeInputsParameter) Type() NodeType {
 	return NodeTypeParameter
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsParameter) String() string {
+	return fmt.Sprintf("%s(name=%q, shape=%s)", ni.Type(), ni.name, ni.shape)
 }
 
 // Parameter registers an input parameter for a computation Graph (e.g: a feature used as input).
@@ -191,7 +197,7 @@ func Iota(g *Graph, shape shapes.Shape, iotaAxis int) *Node {
 	if shape.IsScalar() {
 		exceptions.Panicf("cannot Iota a scalar shape, shape=%s", shape)
 	}
-	adjustedAxis := adjustToDimension(iotaAxis, shape.Rank())
+	adjustedAxis := adjustAxisToRank(iotaAxis, shape.Rank())
 	if adjustedAxis < 0 || adjustedAxis >= shape.Rank() {
 		exceptions.Panicf("invalid axis #%d for Iota, when shape is rank %d", iotaAxis, shape.Rank())
 	}
@@ -455,18 +461,21 @@ func Reshape(x *Node, dimensions ...int) *Node {
 		}
 	}
 	if missingIdx != -1 {
-		// Make a copy of dimensions, so the original is not changed.
-		tmpDim := make([]int, len(dimensions))
-		copy(tmpDim, dimensions)
-		dimensions = tmpDim
-		dimensions[missingIdx] = totalSize / newSize
+		tmpDim := slices.Clone(dimensions)
+		tmpDim[missingIdx] = totalSize / newSize
 		newSize *= dimensions[missingIdx]
+		if newSize != totalSize {
+			exceptions.Panicf("cannot find new dimension for axis %d that will make new dimensions %v match original the input size %d (dimensions %v)",
+				missingIdx, dimensions, totalSize, x.Shape().Dimensions)
+		}
+		dimensions = tmpDim
+	} else {
+		if newSize != totalSize {
+			exceptions.Panicf("total requested size %d (dimensions=%v) doesnt match original size %d (dimensions %v)",
+				newSize, dimensions, totalSize, x.Shape().Dimensions)
+		}
 	}
-	if newSize != totalSize {
-		exceptions.Panicf("total requested size %d (dimensions=%v) doesnt match original size %d (dimensions %v)",
-			newSize, dimensions, totalSize, x.Shape().Dimensions)
-	}
-	return ReshapeWithShape(x, shapes.Make(x.shape.DType, dimensions...))
+	return backendReshape(x, dimensions...)
 }
 
 // ReshapeWithShape reshapes x to the dimensions given by shape.
@@ -479,13 +488,10 @@ func ReshapeWithShape(x *Node, shape shapes.Shape) *Node {
 			x.shape.DType, shape.DType)
 	}
 	if shape.Size() != x.shape.Size() {
-		exceptions.Panicf("shapes have different total sizes (from %d to %d), reshape not possible",
-			x.shape.Size(), shape.Size())
+		exceptions.Panicf("shapes (x.shape=%s, shape=%s) have different total sizes (from %d to %d), reshape not possible",
+			x.shape, shape, x.shape.Size(), shape.Size())
 	}
-	return newNode(g, &xla.SerializedNode{
-		Type:  xla.ReshapeNode,
-		Shape: shape,
-	}, []*Node{x})
+	return backendReshape(x, shape.Dimensions...)
 }
 
 // ExpandDims expands x creating new axes just before the axes given. If axes[ii] < 0, then they
@@ -928,12 +934,12 @@ func AxisElem(index int) SliceAxisSpec {
 	return SliceAxisSpec{Start: index, End: index + 1}
 }
 
-// adjustToDimension converts negative indices to a value starting at dimension.
-func adjustToDimension(index, dimension int) int {
-	if index >= 0 {
-		return index
+// adjustAxisToRank converts negative axes to a value starting from the end.
+func adjustAxisToRank(axis, rank int) int {
+	if axis >= 0 {
+		return axis
 	}
-	return dimension + index
+	return rank + axis
 }
 
 // Slice take slices of the operand.
@@ -1020,9 +1026,9 @@ func Slice(x *Node, axesSpec ...SliceAxisSpec) *Node {
 		limits[ii] = dim
 		strides[ii] = 1
 		if len(axesSpec) > ii && !axesSpec[ii].Full {
-			starts[ii] = adjustToDimension(axesSpec[ii].Start, dim)
+			starts[ii] = adjustAxisToRank(axesSpec[ii].Start, dim)
 			if !axesSpec[ii].NoEnd {
-				limits[ii] = adjustToDimension(axesSpec[ii].End, dim)
+				limits[ii] = adjustAxisToRank(axesSpec[ii].End, dim)
 			}
 		}
 		if len(axesSpec) > ii && axesSpec[ii].StrideValue > 0 {
@@ -1163,19 +1169,15 @@ func concatenateVJP(node, v *Node, _ shapes.Shape) []*Node {
 func Reverse(x *Node, axes ...int) *Node {
 	g := validateBuildingGraphFromInputs(x)
 	rank := x.shape.Rank()
-	for ii, dim := range axes {
-		if dim < 0 {
-			axes[ii] = rank + dim
-		}
-		if axes[ii] > rank || axes[ii] < 0 {
-			exceptions.Panicf("in Reverse(x, axes...), passed axis %d which is out-of-limits for x rank %d",
-				dim, rank)
+	adjustedAxes := slices.Clone(axes)
+	for ii, axis := range adjustedAxes {
+		adjustedAxes[ii] = adjustAxisToRank(axis, rank)
+		if adjustedAxes[ii] > rank || adjustedAxes[ii] < 0 {
+			exceptions.Panicf("in Reverse(x, axes=%v), passed axis %d which is out-of-limits for x rank %d",
+				axes, axis, rank)
 		}
 	}
-	return newNode(g, &xla.SerializedNode{
-		Type: xla.ReverseNode,
-		Ints: axes,
-	}, []*Node{x})
+	return backendReverse(x, adjustedAxes...)
 }
 
 // Transpose returns x with the axes axisA and axisB transposed.

@@ -21,10 +21,7 @@ import (
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
-	xslices "github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
-	xla "github.com/gomlx/gopjrt/xlabuilder"
-	"github.com/pkg/errors"
 	"strings"
 )
 
@@ -71,10 +68,18 @@ type Node struct {
 // inputNodes<backend_operation_name>, see generated gen_backend_ops.go
 type NodeInputs interface {
 	Type() NodeType
+
+	// String prints a descriptive representation of the node, using its parameters.
+	String() string
 }
 
 // Type identify the operation performed by the node.
-func (n *Node) Type() NodeType { return n.inputs.Type() }
+func (n *Node) Type() NodeType {
+	if n == nil || n.inputs == nil {
+		return NodeTypeInvalid
+	}
+	return n.inputs.Type()
+}
 
 // Graph that holds this Node.
 func (n *Node) Graph() *Graph {
@@ -119,12 +124,7 @@ func (n *Node) GetParameterHandle() ParameterHandle {
 	if n.Type() != NodeTypeParameter {
 		exceptions.Panicf("node %s is not a Parameter node", n.Type())
 	}
-	inputs, ok := n.inputs.(*nodeInputsParameter)
-	if !ok {
-		exceptions.Panicf("Parameter node %s, but doesn't have a configured nodesInputsParamter, instead got a %T",
-			n, n.inputs)
-	}
-	return inputs.handle
+	return n.inputs.(*nodeInputsParameter).handle
 }
 
 // GetParameterName returns the parameter name.
@@ -134,8 +134,7 @@ func (n *Node) GetParameterName() string {
 	if n.Type() != NodeTypeParameter {
 		exceptions.Panicf("trying to get GetParameterName of a non-parameter node %q", n.Type())
 	}
-	name, _, _ := xla.DecodeParameter(n.op)
-	return name
+	return n.inputs.(*nodeInputsParameter).name
 }
 
 // Inputs are the other nodes that are direct inputNodes to the node.
@@ -145,7 +144,10 @@ func (n *Node) Inputs() []*Node { return n.inputNodes }
 // AssertValid panics if `n` is nil, or if its graph is invalid.
 func (n *Node) AssertValid() {
 	if n == nil {
-		panic(errors.New("Node is nil"))
+		exceptions.Panicf("Node is nil")
+	}
+	if n.inputs == nil {
+		exceptions.Panicf("Node in an invalid state")
 	}
 	n.graph.AssertValid()
 }
@@ -178,31 +180,26 @@ func (n *Node) String() (str string) {
 		return "Node(nil)"
 	}
 	if n.graph == nil || n.graph.IsValid() {
-		return "Node(graph == nil or invalid)"
+		return "Node(invalid)"
 	}
 	if n.Type() == NodeTypeInvalid {
 		str = "Invalid(?)"
 	} else {
-		str = n.Type().String()
+		str = n.inputs.String()
 	}
-	inputIds := xslices.Map(n.inputNodes, func(node *Node) NodeId { return node.Id() })
 
-	var parts []string
-	if n.constValue != nil {
-		parts = append(parts, fmt.Sprintf("value=%v", n.constValue))
-	}
+	parts := []string{str}
 	if n.logMessage != "" {
 		parts = append(parts, "[Logged]")
 	}
 	if n.stopGradient {
 		parts = append(parts, "[StopGradient]")
 	}
-	var partsStr string
-	if len(parts) > 0 {
-		partsStr = ", " + strings.Join(parts, ", ")
+	if n.customVJP != nil {
+		parts = append(parts, "[CustomVJP]")
 	}
 
-	str = fmt.Sprintf("%s(id=%d, inputNodes=%v%s) -> %s", str, n.id, inputIds, partsStr, n.shape)
+	str = fmt.Sprintf("%s -> %s", strings.Join(parts, " "), n.shape)
 	return
 }
 
