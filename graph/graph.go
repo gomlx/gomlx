@@ -98,7 +98,7 @@ import (
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
-	xla "github.com/gomlx/gopjrt/xlabuilder"
+	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 	"strings"
 	"sync"
@@ -306,11 +306,15 @@ func (g *Graph) SetTraced(traced bool) {
 }
 
 // registerNode in the graph mapping its underlying op and returns a new unique id within the Graph.
+// If Graph.traced is set, it also sets Node.trace to an error with a stack-trace.
 func (g *Graph) registerNode(node *Node) (id NodeId) {
 	g.AssertBuilding()
 	id = NodeId(len(g.nodes))
 	g.nodes = append(g.nodes, node)
 	node.id = id
+	if g.traced {
+		node.trace = errors.New("Stack-trace")
+	}
 	return
 }
 
@@ -368,7 +372,7 @@ func (g *Graph) Run(inputs ParamsMap) (outputs []*tensors.Tensor) {
 		exceptions.Panicf("graph %q takes %d parameters, but %d were given to Run()", g.name, numParams, len(inputs))
 	}
 	for node := range inputs {
-		if node.ParameterHandle() == InvalidParameterHandle {
+		if node.Type() != NodeTypeParameter {
 			exceptions.Panicf("graph %q Run() received a non-parameter node as key to an input", g.name)
 		}
 	}
@@ -378,7 +382,7 @@ func (g *Graph) Run(inputs ParamsMap) (outputs []*tensors.Tensor) {
 	return
 }
 
-// RunWithTensors is a slightly faster execution path for the graph, but nodeInputs
+// RunWithTensors is a slightly faster execution path for the graph, but inputNodes
 // must be provided already in Device tensors and in order.
 func (g *Graph) RunWithTensors(inputs []*tensors.Tensor) (outputs []*tensors.Tensor) {
 	g.AssertCompiled()
@@ -393,10 +397,7 @@ func (g *Graph) RunWithTensors(inputs []*tensors.Tensor) (outputs []*tensors.Ten
 func (g *Graph) inputsMapToBuffers(inputs ParamsMap, deviceNum backends.DeviceNum) (buffers []backends.Buffer) {
 	buffers = make([]backends.Buffer, g.NumParameters())
 	for node, value := range inputs {
-		handle := node.ParameterHandle()
-		if handle == InvalidParameterHandle {
-			exceptions.Panicf("Graph %q input for node %q is invalid (InvalidParameterHandle)", g.name, node)
-		}
+		handle := node.GetParameterHandle()
 		if buffers[handle] != nil {
 			exceptions.Panicf("Graph %q input for node %q defined more than once", g.name, node)
 		}
@@ -440,59 +441,21 @@ func (g *Graph) GetParameterByName(name string) (node *Node) {
 	return g.parameters[handle]
 }
 
-// Parameter registers an input parameter for a computation Graph (e.g: a feature used as input).
-//
-// When created they get a handle (a plain index) but they can also be accessed
-// It can be used in two different ways: as a Node when building the Graph, so when defining a
-// function that uses the parameter, or as the key in the map of the nodeInputs when executing
-// the computation Graph (see Backend.Run).
-func (g *Graph) Parameter(name string, shape shapes.Shape) (node *Node) {
-	node = backendParameter(g, name, shape)
-	parameterHandle := ParameterHandle(len(g.parameters))
-	if name == "" {
-		name = fmt.Sprintf("p#%d", parameterHandle)
-	}
-
-	// Check whether the parameter already exists, and return it instead if yes.
-	if handle, ok := g.parameterNameToHandle[name]; ok {
-		// If the parameter already exists, return it instead.
-		node = g.parameters[handle]
-		if !node.shape.Eq(shape) {
-			// Shape requested and the one that already exists don't match,
-			// report the error.
-			exceptions.Panicf("requested parameter with name %q already exists with a different shape:"+
-				" requested shape %s, previous shape %s", name, shape, node.shape)
-		}
-		return
-	}
-
-	// Create new node.
-	serialized := &xla.SerializedNode{
-		Type:  xla.ParameterNode,
-		Str:   name,
-		Shape: shape,
-		Int:   int(parameterHandle),
-	}
-	node = newNode(g, serialized, nil)
-	if node == nil {
-		return
-	}
-	g.parameters = append(g.parameters, node)
-	g.parameterNameToHandle[name] = parameterHandle
-	return
-}
-
-// String converts the Graph to a multi-Graph string.
+// String converts the Graph to a multiline string with a description of the full graph.
 func (g *Graph) String() string {
 	if g == nil {
 		return "Graph(nil)!?"
 	}
-	if g.executable.IsNil() {
+	if g.backend == nil {
 		return "Invalid Graph (already finalized)"
 	}
-	parts := []string{fmt.Sprintf("Graph: %d nodes, %d parameters", len(g.nodes), g.NumParameters())}
+	var compiled string
+	if g.executable != nil {
+		compiled = " (*)"
+	}
+	parts := []string{fmt.Sprintf("Graph %q%s: %d nodes, %d parameters", g.name, compiled, len(g.nodes), g.NumParameters())}
 	for ii, node := range g.nodes {
-		parts = append(parts, fmt.Sprintf("#%d\t%s", ii, node))
+		parts = append(parts, fmt.Sprintf("\t#%d\t%s", ii, node))
 	}
 	return strings.Join(parts, "\n")
 }

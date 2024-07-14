@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"fmt"
 	exceptions "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/shapes"
@@ -29,23 +30,32 @@ func (ni *nodeInputsParameter) Type() NodeType {
 //
 // When created they get a handle (a plain index) but they can also be accessed
 // It can be used in two different ways: as a Node when building the Graph, so when defining a
-// function that uses the parameter, or as the key in the map of the nodeInputs when executing
+// function that uses the parameter, or as the key in the map of the inputNodes when executing
 // the computation Graph (see Backend.Run).
 func Parameter(g *Graph, name string, shape shapes.Shape) (node *Node) {
 	g.AssertBuilding()
-
+	handle := ParameterHandle(len(g.parameters))
+	if name == "" {
+		name = fmt.Sprintf("parameter_#%d", handle)
+	}
+	if _, ok := g.parameterNameToHandle[name]; ok {
+		exceptions.Panicf("requested parameter with name %q for graph %q already exists", name, g.name)
+	}
 	nodeInputs := &nodeInputsParameter{
-		name:  name,
-		shape: shape,
+		name:   name,
+		shape:  shape,
+		handle: handle,
 	}
 	result := g.builder.Parameter(nodeInputs.name, nodeInputs.shape)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:  g,
+		op:     result,
+		shape:  g.builder.OpShape(result),
+		inputs: nodeInputs,
 	}
 	g.registerNode(node)
+	g.parameters = append(g.parameters, node)
+	g.parameterNameToHandle[name] = handle
 	return
 }
 
@@ -58,7 +68,7 @@ var MinConstValueSizeToKeep = int(32)
 // ConstTensor returns a newly created constant node for the tensor x.
 //
 // The value of x is copied into the graph. It's recommended that for very large tensors,
-// even if constants, that they are passed as side nodeInputs (or variables, see context package) instead.
+// even if constants, that they are passed as side inputNodes (or variables, see context package) instead.
 func ConstTensor(g *Graph, x *tensors.Tensor) *Node {
 	g.AssertBuilding()
 	x.AssertValid()
@@ -177,16 +187,16 @@ func IotaFull(g *Graph, shape shapes.Shape) *Node {
 	return ReshapeWithShape(Iota(g, shapes.Make(shape.DType, shape.Size()), 0), shape)
 }
 
-// validateBuildingGraphFromInputs checks that all nodeInputs are of the same Graph and that
+// validateBuildingGraphFromInputs checks that all inputNodes are of the same Graph and that
 // the Graph is valid for building.
 // It panics with a corresponding error message in case of issues.
-// Otherwise, it returns the Graph common to all nodeInputs.
+// Otherwise, it returns the Graph common to all inputNodes.
 func validateBuildingGraphFromInputs(inputs ...*Node) (g *Graph) {
 	if len(inputs) == 0 {
 		exceptions.Panicf("no input nodes provided, at least one is required")
 	}
 
-	// Checks that all nodeInputs are of the same graph.
+	// Checks that all inputNodes are of the same graph.
 	for ii, n := range inputs {
 		if err := exceptions.TryCatch[error](n.AssertValid); err != nil {
 			panic(errors.WithMessagef(err, "invalid input[%d]", ii))
@@ -398,9 +408,7 @@ func Where(condition, onTrue, onFalse *Node) *Node {
 		condition = ExpandDims(condition, xslices.SliceWithValue(extraAxes, -1)...)
 		condition = BroadcastToDims(condition, onTrue.Shape().Dimensions...)
 	}
-	return newNode(g, &xla.SerializedNode{
-		Type: xla.WhereNode,
-	}, []*Node{condition, onTrue, onFalse})
+	return backendWhere(condition, onTrue, onFalse)
 }
 
 // Reshape x to the given dimensions. Total size cannot change. One dimension can be left as -1,
@@ -1000,7 +1008,7 @@ func Slice(x *Node, axesSpec ...SliceAxisSpec) *Node {
 }
 
 // PadAxis defines the amount of padding preceding one axis (Start), at the end of axis (End)
-// or in between the nodeInputs (Interior).
+// or in between the inputNodes (Interior).
 // This is used as a parameter for the Pad function.
 type PadAxis struct {
 	Start, End, Interior int
@@ -1100,12 +1108,12 @@ func Concatenate(operands []*Node, axis int) *Node {
 
 // concatenateVJP implements a VJP function for the ConcatenateNode operation.
 func concatenateVJP(node, v *Node, _ shapes.Shape) []*Node {
-	vjps := make([]*Node, 0, len(node.nodeInputs))
+	vjps := make([]*Node, 0, len(node.inputNodes))
 	concatDimension := node.serializedNode.Int
 	concatDimStart := 0
 	shape := node.shape
 
-	// Set starts and limits for slices that are shared among all concatenated nodeInputs.
+	// Set starts and limits for slices that are shared among all concatenated inputNodes.
 	starts, limits := make([]int, shape.Rank()), make([]int, shape.Rank())
 	for dim := 0; dim < shape.Rank(); dim++ {
 		if dim == concatDimension {
@@ -1115,7 +1123,7 @@ func concatenateVJP(node, v *Node, _ shapes.Shape) []*Node {
 	}
 
 	// Take slice for each concatenated input.
-	for _, input := range node.nodeInputs {
+	for _, input := range node.inputNodes {
 		starts[concatDimension] = concatDimStart
 		concatDimStart += input.shape.Dimensions[concatDimension]
 		limits[concatDimension] = concatDimStart
@@ -1233,7 +1241,7 @@ func Einsum(equation string, lhs, rhs *Node) *Node {
 	// Parse equation.
 	inOutParts := strings.Split(equation, "->")
 	if len(inOutParts) != 2 {
-		exceptions.Panicf("Einsum(%q) missing or too many \"->\" separating nodeInputs from outputs, there must be only one",
+		exceptions.Panicf("Einsum(%q) missing or too many \"->\" separating inputNodes from outputs, there must be only one",
 			equation)
 	}
 	outputDesc, err := newEinsumOperandDesc(inOutParts[1])
@@ -1393,7 +1401,7 @@ func (e einsumOperandDesc) axisIndex(axis rune) int {
 //   - `EinsumAxes(matrixA, matrixB, [][2]int{{1, 0}}, nil)` performs the usual matrix multiplication, where
 //     we contract axis 1 of `matrixA` with axis 0 of `matrixB`.
 //   - `EinsumAxes(batchedMatrixA, batchedMatrixB, [][2]int{{2, 1}}, [][2]int{{0, 0}})` is similar, but we
-//     use axis 0 of both nodeInputs as a batch, and following 2 axes as a matrix multiplication.
+//     use axis 0 of both inputNodes as a batch, and following 2 axes as a matrix multiplication.
 //   - `EinsumAxes(vectorA, vectorB, nil, nil)` performs an outer (cross) product -- no contractions, no batch.
 //   - `EinsumAxes(vectorA, vectorB, [][2]int{{0, 0}}, nil)` performs a dot product and returns a scalar.
 //

@@ -21,6 +21,7 @@ import (
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
+	xslices "github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	xla "github.com/gomlx/gopjrt/xlabuilder"
 	"github.com/pkg/errors"
@@ -41,12 +42,12 @@ type Node struct {
 	id    NodeId // id within graph.
 	op    backends.Op
 
-	// nodeInputs are the edges of the computation graph.
-	// Notice that other static inputs to the node are registered in staticInputs
-	nodeInputs []*Node
+	// inputNodes are the edges of the computation graph.
+	// Notice that other static inputs to the node are registered in inputs
+	inputNodes []*Node
 
-	// staticInputs need to be
-	staticInputs NodeInputs
+	// inputs need to be
+	inputs NodeInputs
 
 	// logMessage is set if node is marked for logging.
 	logMessage string
@@ -66,13 +67,14 @@ type Node struct {
 }
 
 // NodeInputs represents the inputs to node. The common interface is to return the type of the node.
-// For the input parameters themselves, the pointer needs to be cast to the corresponding type.
+// For the input parameters themselves, the pointer needs to be cast to the corresponding type, usually named
+// inputNodes<backend_operation_name>, see generated gen_backend_ops.go
 type NodeInputs interface {
 	Type() NodeType
 }
 
 // Type identify the operation performed by the node.
-func (n *Node) Type() NodeType { return n.staticInputs.Type() }
+func (n *Node) Type() NodeType { return n.inputs.Type() }
 
 // Graph that holds this Node.
 func (n *Node) Graph() *Graph {
@@ -110,17 +112,17 @@ func (n *Node) Id() NodeId {
 	return n.id
 }
 
-// ParameterHandle returns the parameter id in the graph.
-// It returns InvalidParameterHandle if node is not a parameter.
-func (n *Node) ParameterHandle() ParameterHandle {
+// GetParameterHandle returns the parameter id in the graph.
+// It panics if node is not a parameter.
+func (n *Node) GetParameterHandle() ParameterHandle {
 	n.AssertValid()
 	if n.Type() != NodeTypeParameter {
-		return InvalidParameterHandle
+		exceptions.Panicf("node %s is not a Parameter node", n.Type())
 	}
-	inputs, ok := n.staticInputs.(*nodeInputsParameter)
+	inputs, ok := n.inputs.(*nodeInputsParameter)
 	if !ok {
 		exceptions.Panicf("Parameter node %s, but doesn't have a configured nodesInputsParamter, instead got a %T",
-			n, n.staticInputs)
+			n, n.inputs)
 	}
 	return inputs.handle
 }
@@ -130,16 +132,16 @@ const NotAParameterStr = "NOT_A_PARAMETER"
 // ParameterName returns the parameter name if this node is a parameter. Otherwise, it returns NotAParameterStr
 func (n *Node) ParameterName() string {
 	n.AssertValid()
-	if n.Type() != xla.ParameterOp {
+	if n.Type() != NodeTypeParameter {
 		exceptions.Panicf("trying to get ParameterName of a non-parameter node %q", n.Type())
 	}
 	name, _, _ := xla.DecodeParameter(n.op)
 	return name
 }
 
-// Inputs are the other nodes that are direct nodeInputs to the node.
-// This doesn't include static nodeInputs for some operations that are not given by other Graph nodes.
-func (n *Node) Inputs() []*Node { return n.nodeInputs }
+// Inputs are the other nodes that are direct inputNodes to the node.
+// This doesn't include static inputNodes for some operations that are not given by other Graph nodes.
+func (n *Node) Inputs() []*Node { return n.inputNodes }
 
 // AssertValid panics if `n` is nil, or if its graph is invalid.
 func (n *Node) AssertValid() {
@@ -179,15 +181,12 @@ func (n *Node) String() (str string) {
 	if n.graph == nil || n.graph.IsValid() {
 		return "Node(graph == nil or invalid)"
 	}
-	if n.Type() == xla.InvalidOp {
-		str = "NoOp"
+	if n.Type() == NodeTypeInvalid {
+		str = "Invalid(?)"
 	} else {
 		str = n.Type().String()
 	}
-	inputIds := make([]NodeId, 0, len(n.nodeInputs))
-	for _, inputNode := range n.nodeInputs {
-		inputIds = append(inputIds, inputNode.Id())
-	}
+	inputIds := xslices.Map(n.inputNodes, func(node *Node) NodeId { return node.Id() })
 
 	var parts []string
 	if n.constValue != nil {
@@ -204,41 +203,8 @@ func (n *Node) String() (str string) {
 		partsStr = ", " + strings.Join(parts, ", ")
 	}
 
-	str = fmt.Sprintf("%s(id=%d, nodeInputs=%v%s) -> %s", str, n.id, inputIds, partsStr, n.shape)
+	str = fmt.Sprintf("%s(id=%d, inputNodes=%v%s) -> %s", str, n.id, inputIds, partsStr, n.shape)
 	return
-}
-
-// newNode creates a Node based on the given XlaBuilder op, registers it in the Graph.
-func newNodeId(graph *Graph, op *xla.Op) (node *Node) {
-	graph.AssertBuilding()
-	node = &Node{
-		graph: graph,
-		op:    op,
-	}
-	graph.registerNode(node)
-	node.setInputs()
-	if graph.traced {
-		node.trace = errors.New("Stack-trace")
-	}
-	op.UserPayload = node
-	return
-}
-
-// setInputs caches the known nodeInputs of the xlabuilder.Op associated with the Node.
-// Only the xlabuilder.Op's known the Graph are cached.
-func (n *Node) setInputs() {
-	if len(n.op.OpInputs) == 0 {
-		n.nodeInputs = nil
-		return
-	}
-	n.nodeInputs = make([]*Node, 0, len(n.op.OpInputs))
-	g := n.graph
-	for _, inputOp := range n.op.OpInputs {
-		inputNode, found := g.opToNode[inputOp]
-		if found {
-			n.nodeInputs = append(n.nodeInputs, inputNode)
-		}
-	}
 }
 
 // StopGradient returns weather node is a StopGradient.

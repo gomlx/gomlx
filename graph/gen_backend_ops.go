@@ -5,6 +5,7 @@ package graph
 import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/protos"
 	"slices"
@@ -104,15 +105,16 @@ func (ni *nodeInputsAbs) Type() NodeType {
 func Abs(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
 
-	nodeInputs := &nodeInputsAbs{
+	inputs := &nodeInputsAbs{
 		x: x,
 	}
 	result := g.builder.Abs(x.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x},
 	}
 	g.registerNode(node)
 	return
@@ -135,16 +137,17 @@ func (ni *nodeInputsAdd) Type() NodeType {
 func Add(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
 
-	nodeInputs := &nodeInputsAdd{
+	inputs := &nodeInputsAdd{
 		x0: x0,
 		x1: x1,
 	}
 	result := g.builder.Add(x0.op, x1.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x0, x1},
 	}
 	g.registerNode(node)
 	return
@@ -166,16 +169,17 @@ func (ni *nodeInputsAnd) Type() NodeType {
 func And(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
 
-	nodeInputs := &nodeInputsAnd{
+	inputs := &nodeInputsAnd{
 		x0: x0,
 		x1: x1,
 	}
 	result := g.builder.And(x0.op, x1.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x0, x1},
 	}
 	g.registerNode(node)
 	return
@@ -205,18 +209,19 @@ func (ni *nodeInputsArgMinMax) Type() NodeType {
 func ArgMinMax(x *Node, axis int, outputDType dtypes.DType, isMin bool) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
 
-	nodeInputs := &nodeInputsArgMinMax{
+	inputs := &nodeInputsArgMinMax{
 		x:           x,
 		axis:        axis,
 		outputDType: outputDType,
 		isMin:       isMin,
 	}
-	result := g.builder.ArgMinMax(x.op, nodeInputs.axis, nodeInputs.outputDType, nodeInputs.isMin)
+	result := g.builder.ArgMinMax(x.op, inputs.axis, inputs.outputDType, inputs.isMin)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x},
 	}
 	g.registerNode(node)
 	return
@@ -245,7 +250,7 @@ func (ni *nodeInputsBatchNormInference) Type() NodeType {
 func BatchNormInference(operand *Node, scale *Node, offset *Node, mean *Node, variance *Node, epsilon float32, axis int) (node *Node) {
 	g := validateBuildingGraphFromInputs(operand, scale, offset, mean, variance)
 
-	nodeInputs := &nodeInputsBatchNormInference{
+	inputs := &nodeInputsBatchNormInference{
 		operand:  operand,
 		scale:    scale,
 		offset:   offset,
@@ -254,12 +259,13 @@ func BatchNormInference(operand *Node, scale *Node, offset *Node, mean *Node, va
 		epsilon:  epsilon,
 		axis:     axis,
 	}
-	result := g.builder.BatchNormInference(operand.op, scale.op, offset.op, mean.op, variance.op, nodeInputs.epsilon, nodeInputs.axis)
+	result := g.builder.BatchNormInference(operand.op, scale.op, offset.op, mean.op, variance.op, inputs.epsilon, inputs.axis)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{operand, scale, offset, mean, variance},
 	}
 	g.registerNode(node)
 	return
@@ -280,16 +286,17 @@ func (ni *nodeInputsBroadcast) Type() NodeType {
 func backendBroadcast(x *Node, prefixDims ...int) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
 
-	nodeInputs := &nodeInputsBroadcast{
+	inputs := &nodeInputsBroadcast{
 		x:          x,
 		prefixDims: slices.Clone(prefixDims),
 	}
-	result := g.builder.Broadcast(x.op, nodeInputs.prefixDims...)
+	result := g.builder.Broadcast(x.op, inputs.prefixDims...)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x},
 	}
 	g.registerNode(node)
 	return
@@ -325,17 +332,18 @@ func (ni *nodeInputsBroadcastInDim) Type() NodeType {
 func BroadcastInDim(x *Node, outputShape shapes.Shape, broadcastAxes []int) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
 
-	nodeInputs := &nodeInputsBroadcastInDim{
+	inputs := &nodeInputsBroadcastInDim{
 		x:             x,
 		outputShape:   outputShape,
 		broadcastAxes: broadcastAxes,
 	}
-	result := g.builder.BroadcastInDim(x.op, nodeInputs.outputShape, nodeInputs.broadcastAxes)
+	result := g.builder.BroadcastInDim(x.op, inputs.outputShape, inputs.broadcastAxes)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x},
 	}
 	g.registerNode(node)
 	return
@@ -355,15 +363,16 @@ func (ni *nodeInputsCeil) Type() NodeType {
 func Ceil(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
 
-	nodeInputs := &nodeInputsCeil{
+	inputs := &nodeInputsCeil{
 		x: x,
 	}
 	result := g.builder.Ceil(x.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x},
 	}
 	g.registerNode(node)
 	return
@@ -383,15 +392,16 @@ func (ni *nodeInputsClz) Type() NodeType {
 func Clz(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
 
-	nodeInputs := &nodeInputsClz{
+	inputs := &nodeInputsClz{
 		x: x,
 	}
 	result := g.builder.Clz(x.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x},
 	}
 	g.registerNode(node)
 	return
@@ -418,16 +428,17 @@ func (ni *nodeInputsComplex) Type() NodeType {
 func Complex(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
 
-	nodeInputs := &nodeInputsComplex{
+	inputs := &nodeInputsComplex{
 		x0: x0,
 		x1: x1,
 	}
 	result := g.builder.Complex(x0.op, x1.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x0, x1},
 	}
 	g.registerNode(node)
 	return
@@ -448,16 +459,17 @@ func (ni *nodeInputsConcatenate) Type() NodeType {
 func backendConcatenate(axis int, operands ...*Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(operands...)
 
-	nodeInputs := &nodeInputsConcatenate{
+	inputs := &nodeInputsConcatenate{
 		axis:     axis,
 		operands: slices.Clone(operands),
 	}
-	result := g.builder.Concatenate(nodeInputs.axis, xslices.Map(operands, func(node *Node) backends.Op { return node.op }))
+	result := g.builder.Concatenate(inputs.axis, xslices.Map(operands, func(node *Node) backends.Op { return node.op }))
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: operands,
 	}
 	g.registerNode(node)
 	return
@@ -477,15 +489,16 @@ func (ni *nodeInputsConj) Type() NodeType {
 func Conj(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
 
-	nodeInputs := &nodeInputsConj{
+	inputs := &nodeInputsConj{
 		x: x,
 	}
 	result := g.builder.Conj(x.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x},
 	}
 	g.registerNode(node)
 	return
@@ -522,7 +535,7 @@ func (ni *nodeInputsConvGeneralDilated) Type() NodeType {
 func ConvGeneralDilated(operand *Node, filter *Node, axes backends.ConvolveAxesConfig, strides []int, paddings [][2]int, inputDilation []int, filterDilation []int, filterGroupCount int, batchGroupCount int) (node *Node) {
 	g := validateBuildingGraphFromInputs(operand, filter)
 
-	nodeInputs := &nodeInputsConvGeneralDilated{
+	inputs := &nodeInputsConvGeneralDilated{
 		operand:          operand,
 		filter:           filter,
 		axes:             axes.Clone(),
@@ -533,12 +546,13 @@ func ConvGeneralDilated(operand *Node, filter *Node, axes backends.ConvolveAxesC
 		filterGroupCount: filterGroupCount,
 		batchGroupCount:  batchGroupCount,
 	}
-	result := g.builder.ConvGeneralDilated(operand.op, filter.op, nodeInputs.axes, nodeInputs.strides, nodeInputs.paddings, nodeInputs.inputDilation, nodeInputs.filterDilation, nodeInputs.filterGroupCount, nodeInputs.batchGroupCount)
+	result := g.builder.ConvGeneralDilated(operand.op, filter.op, inputs.axes, inputs.strides, inputs.paddings, inputs.inputDilation, inputs.filterDilation, inputs.filterGroupCount, inputs.batchGroupCount)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{operand, filter},
 	}
 	g.registerNode(node)
 	return
@@ -559,16 +573,17 @@ func (ni *nodeInputsConvertDType) Type() NodeType {
 func ConvertDType(x *Node, dtype dtypes.DType) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
 
-	nodeInputs := &nodeInputsConvertDType{
+	inputs := &nodeInputsConvertDType{
 		x:     x,
 		dtype: dtype,
 	}
-	result := g.builder.ConvertDType(x.op, nodeInputs.dtype)
+	result := g.builder.ConvertDType(x.op, inputs.dtype)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x},
 	}
 	g.registerNode(node)
 	return
@@ -588,15 +603,16 @@ func (ni *nodeInputsCos) Type() NodeType {
 func Cos(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
 
-	nodeInputs := &nodeInputsCos{
+	inputs := &nodeInputsCos{
 		x: x,
 	}
 	result := g.builder.Cos(x.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x},
 	}
 	g.registerNode(node)
 	return
@@ -619,16 +635,17 @@ func (ni *nodeInputsDiv) Type() NodeType {
 func Div(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
 
-	nodeInputs := &nodeInputsDiv{
+	inputs := &nodeInputsDiv{
 		x0: x0,
 		x1: x1,
 	}
 	result := g.builder.Div(x0.op, x1.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x0, x1},
 	}
 	g.registerNode(node)
 	return
@@ -661,16 +678,17 @@ func (ni *nodeInputsDot) Type() NodeType {
 func Dot(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
 
-	nodeInputs := &nodeInputsDot{
+	inputs := &nodeInputsDot{
 		x0: x0,
 		x1: x1,
 	}
 	result := g.builder.Dot(x0.op, x1.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x0, x1},
 	}
 	g.registerNode(node)
 	return
@@ -706,7 +724,7 @@ func (ni *nodeInputsDotGeneral) Type() NodeType {
 func DotGeneral(lhs *Node, lhsContractingAxes []int, lhsBatchAxes []int, rhs *Node, rhsContractingAxes []int, rhsBatchAxes []int) (node *Node) {
 	g := validateBuildingGraphFromInputs(lhs, rhs)
 
-	nodeInputs := &nodeInputsDotGeneral{
+	inputs := &nodeInputsDotGeneral{
 		lhs:                lhs,
 		lhsContractingAxes: lhsContractingAxes,
 		lhsBatchAxes:       lhsBatchAxes,
@@ -714,12 +732,13 @@ func DotGeneral(lhs *Node, lhsContractingAxes []int, lhsBatchAxes []int, rhs *No
 		rhsContractingAxes: rhsContractingAxes,
 		rhsBatchAxes:       rhsBatchAxes,
 	}
-	result := g.builder.DotGeneral(lhs.op, nodeInputs.lhsContractingAxes, nodeInputs.lhsBatchAxes, rhs.op, nodeInputs.rhsContractingAxes, nodeInputs.rhsBatchAxes)
+	result := g.builder.DotGeneral(lhs.op, inputs.lhsContractingAxes, inputs.lhsBatchAxes, rhs.op, inputs.rhsContractingAxes, inputs.rhsBatchAxes)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{lhs, rhs},
 	}
 	g.registerNode(node)
 	return
@@ -741,16 +760,17 @@ func (ni *nodeInputsEqual) Type() NodeType {
 func Equal(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
 
-	nodeInputs := &nodeInputsEqual{
+	inputs := &nodeInputsEqual{
 		x0: x0,
 		x1: x1,
 	}
 	result := g.builder.Equal(x0.op, x1.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x0, x1},
 	}
 	g.registerNode(node)
 	return
@@ -774,16 +794,17 @@ func (ni *nodeInputsEqualTotalOrder) Type() NodeType {
 func EqualTotalOrder(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
 
-	nodeInputs := &nodeInputsEqualTotalOrder{
+	inputs := &nodeInputsEqualTotalOrder{
 		x0: x0,
 		x1: x1,
 	}
 	result := g.builder.EqualTotalOrder(x0.op, x1.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x0, x1},
 	}
 	g.registerNode(node)
 	return
@@ -803,15 +824,16 @@ func (ni *nodeInputsExp) Type() NodeType {
 func Exp(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
 
-	nodeInputs := &nodeInputsExp{
+	inputs := &nodeInputsExp{
 		x: x,
 	}
 	result := g.builder.Exp(x.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x},
 	}
 	g.registerNode(node)
 	return
@@ -831,15 +853,16 @@ func (ni *nodeInputsExpm1) Type() NodeType {
 func Expm1(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
 
-	nodeInputs := &nodeInputsExpm1{
+	inputs := &nodeInputsExpm1{
 		x: x,
 	}
 	result := g.builder.Expm1(x.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x},
 	}
 	g.registerNode(node)
 	return
@@ -863,17 +886,18 @@ func (ni *nodeInputsFFT) Type() NodeType {
 func FFT(operand *Node, fftType protos.FftType, fftLength []int) (node *Node) {
 	g := validateBuildingGraphFromInputs(operand)
 
-	nodeInputs := &nodeInputsFFT{
+	inputs := &nodeInputsFFT{
 		operand:   operand,
 		fftType:   fftType,
 		fftLength: fftLength,
 	}
-	result := g.builder.FFT(operand.op, nodeInputs.fftType, nodeInputs.fftLength)
+	result := g.builder.FFT(operand.op, inputs.fftType, inputs.fftLength)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{operand},
 	}
 	g.registerNode(node)
 	return
@@ -893,15 +917,16 @@ func (ni *nodeInputsFloor) Type() NodeType {
 func Floor(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
 
-	nodeInputs := &nodeInputsFloor{
+	inputs := &nodeInputsFloor{
 		x: x,
 	}
 	result := g.builder.Floor(x.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x},
 	}
 	g.registerNode(node)
 	return
@@ -928,7 +953,7 @@ func (ni *nodeInputsGather) Type() NodeType {
 func backendGather(operand *Node, startIndices *Node, indexVectorAxis int, offsetAxes []int, collapsedSliceAxes []int, startIndexMap []int, sliceSizes []int, indicesAreSorted bool) (node *Node) {
 	g := validateBuildingGraphFromInputs(operand, startIndices)
 
-	nodeInputs := &nodeInputsGather{
+	inputs := &nodeInputsGather{
 		operand:            operand,
 		startIndices:       startIndices,
 		indexVectorAxis:    indexVectorAxis,
@@ -938,12 +963,13 @@ func backendGather(operand *Node, startIndices *Node, indexVectorAxis int, offse
 		sliceSizes:         sliceSizes,
 		indicesAreSorted:   indicesAreSorted,
 	}
-	result := g.builder.Gather(operand.op, startIndices.op, nodeInputs.indexVectorAxis, nodeInputs.offsetAxes, nodeInputs.collapsedSliceAxes, nodeInputs.startIndexMap, nodeInputs.sliceSizes, nodeInputs.indicesAreSorted)
+	result := g.builder.Gather(operand.op, startIndices.op, inputs.indexVectorAxis, inputs.offsetAxes, inputs.collapsedSliceAxes, inputs.startIndexMap, inputs.sliceSizes, inputs.indicesAreSorted)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{operand, startIndices},
 	}
 	g.registerNode(node)
 	return
@@ -965,16 +991,17 @@ func (ni *nodeInputsGreaterOrEqual) Type() NodeType {
 func GreaterOrEqual(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
 
-	nodeInputs := &nodeInputsGreaterOrEqual{
+	inputs := &nodeInputsGreaterOrEqual{
 		x0: x0,
 		x1: x1,
 	}
 	result := g.builder.GreaterOrEqual(x0.op, x1.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x0, x1},
 	}
 	g.registerNode(node)
 	return
@@ -998,16 +1025,17 @@ func (ni *nodeInputsGreaterOrEqualTotalOrder) Type() NodeType {
 func GreaterOrEqualTotalOrder(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
 
-	nodeInputs := &nodeInputsGreaterOrEqualTotalOrder{
+	inputs := &nodeInputsGreaterOrEqualTotalOrder{
 		x0: x0,
 		x1: x1,
 	}
 	result := g.builder.GreaterOrEqualTotalOrder(x0.op, x1.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x0, x1},
 	}
 	g.registerNode(node)
 	return
@@ -1029,16 +1057,17 @@ func (ni *nodeInputsGreaterThan) Type() NodeType {
 func GreaterThan(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
 
-	nodeInputs := &nodeInputsGreaterThan{
+	inputs := &nodeInputsGreaterThan{
 		x0: x0,
 		x1: x1,
 	}
 	result := g.builder.GreaterThan(x0.op, x1.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x0, x1},
 	}
 	g.registerNode(node)
 	return
@@ -1062,16 +1091,17 @@ func (ni *nodeInputsGreaterThanTotalOrder) Type() NodeType {
 func GreaterThanTotalOrder(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
 
-	nodeInputs := &nodeInputsGreaterThanTotalOrder{
+	inputs := &nodeInputsGreaterThanTotalOrder{
 		x0: x0,
 		x1: x1,
 	}
 	result := g.builder.GreaterThanTotalOrder(x0.op, x1.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x0, x1},
 	}
 	g.registerNode(node)
 	return
@@ -1091,15 +1121,16 @@ func (ni *nodeInputsImag) Type() NodeType {
 func Imag(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
 
-	nodeInputs := &nodeInputsImag{
+	inputs := &nodeInputsImag{
 		x: x,
 	}
 	result := g.builder.Imag(x.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x},
 	}
 	g.registerNode(node)
 	return
@@ -1120,16 +1151,16 @@ func (ni *nodeInputsIota) Type() NodeType {
 func backendIota(g *Graph, shape shapes.Shape, iotaAxis int) (node *Node) {
 	g.AssertBuilding()
 
-	nodeInputs := &nodeInputsIota{
+	inputs := &nodeInputsIota{
 		shape:    shape,
 		iotaAxis: iotaAxis,
 	}
-	result := g.builder.Iota(nodeInputs.shape, nodeInputs.iotaAxis)
+	result := g.builder.Iota(inputs.shape, inputs.iotaAxis)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:  g,
+		op:     result,
+		shape:  g.builder.OpShape(result),
+		inputs: inputs,
 	}
 	g.registerNode(node)
 	return
@@ -1151,16 +1182,17 @@ func (ni *nodeInputsLessOrEqual) Type() NodeType {
 func LessOrEqual(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
 
-	nodeInputs := &nodeInputsLessOrEqual{
+	inputs := &nodeInputsLessOrEqual{
 		x0: x0,
 		x1: x1,
 	}
 	result := g.builder.LessOrEqual(x0.op, x1.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x0, x1},
 	}
 	g.registerNode(node)
 	return
@@ -1184,16 +1216,17 @@ func (ni *nodeInputsLessOrEqualTotalOrder) Type() NodeType {
 func LessOrEqualTotalOrder(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
 
-	nodeInputs := &nodeInputsLessOrEqualTotalOrder{
+	inputs := &nodeInputsLessOrEqualTotalOrder{
 		x0: x0,
 		x1: x1,
 	}
 	result := g.builder.LessOrEqualTotalOrder(x0.op, x1.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x0, x1},
 	}
 	g.registerNode(node)
 	return
@@ -1215,16 +1248,17 @@ func (ni *nodeInputsLessThan) Type() NodeType {
 func LessThan(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
 
-	nodeInputs := &nodeInputsLessThan{
+	inputs := &nodeInputsLessThan{
 		x0: x0,
 		x1: x1,
 	}
 	result := g.builder.LessThan(x0.op, x1.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x0, x1},
 	}
 	g.registerNode(node)
 	return
@@ -1248,16 +1282,17 @@ func (ni *nodeInputsLessThanTotalOrder) Type() NodeType {
 func LessThanTotalOrder(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
 
-	nodeInputs := &nodeInputsLessThanTotalOrder{
+	inputs := &nodeInputsLessThanTotalOrder{
 		x0: x0,
 		x1: x1,
 	}
 	result := g.builder.LessThanTotalOrder(x0.op, x1.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x0, x1},
 	}
 	g.registerNode(node)
 	return
@@ -1277,15 +1312,16 @@ func (ni *nodeInputsLog) Type() NodeType {
 func Log(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
 
-	nodeInputs := &nodeInputsLog{
+	inputs := &nodeInputsLog{
 		x: x,
 	}
 	result := g.builder.Log(x.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x},
 	}
 	g.registerNode(node)
 	return
@@ -1305,15 +1341,16 @@ func (ni *nodeInputsLog1p) Type() NodeType {
 func Log1p(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
 
-	nodeInputs := &nodeInputsLog1p{
+	inputs := &nodeInputsLog1p{
 		x: x,
 	}
 	result := g.builder.Log1p(x.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x},
 	}
 	g.registerNode(node)
 	return
@@ -1333,15 +1370,16 @@ func (ni *nodeInputsLogicalNot) Type() NodeType {
 func LogicalNot(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
 
-	nodeInputs := &nodeInputsLogicalNot{
+	inputs := &nodeInputsLogicalNot{
 		x: x,
 	}
 	result := g.builder.LogicalNot(x.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x},
 	}
 	g.registerNode(node)
 	return
@@ -1361,15 +1399,16 @@ func (ni *nodeInputsLogistic) Type() NodeType {
 func Logistic(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
 
-	nodeInputs := &nodeInputsLogistic{
+	inputs := &nodeInputsLogistic{
 		x: x,
 	}
 	result := g.builder.Logistic(x.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x},
 	}
 	g.registerNode(node)
 	return
@@ -1391,16 +1430,17 @@ func (ni *nodeInputsMax) Type() NodeType {
 func Max(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
 
-	nodeInputs := &nodeInputsMax{
+	inputs := &nodeInputsMax{
 		x0: x0,
 		x1: x1,
 	}
 	result := g.builder.Max(x0.op, x1.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x0, x1},
 	}
 	g.registerNode(node)
 	return
@@ -1422,16 +1462,17 @@ func (ni *nodeInputsMin) Type() NodeType {
 func Min(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
 
-	nodeInputs := &nodeInputsMin{
+	inputs := &nodeInputsMin{
 		x0: x0,
 		x1: x1,
 	}
 	result := g.builder.Min(x0.op, x1.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x0, x1},
 	}
 	g.registerNode(node)
 	return
@@ -1454,16 +1495,17 @@ func (ni *nodeInputsMul) Type() NodeType {
 func Mul(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
 
-	nodeInputs := &nodeInputsMul{
+	inputs := &nodeInputsMul{
 		x0: x0,
 		x1: x1,
 	}
 	result := g.builder.Mul(x0.op, x1.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x0, x1},
 	}
 	g.registerNode(node)
 	return
@@ -1483,15 +1525,16 @@ func (ni *nodeInputsNeg) Type() NodeType {
 func Neg(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
 
-	nodeInputs := &nodeInputsNeg{
+	inputs := &nodeInputsNeg{
 		x: x,
 	}
 	result := g.builder.Neg(x.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x},
 	}
 	g.registerNode(node)
 	return
@@ -1513,16 +1556,17 @@ func (ni *nodeInputsNotEqual) Type() NodeType {
 func NotEqual(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
 
-	nodeInputs := &nodeInputsNotEqual{
+	inputs := &nodeInputsNotEqual{
 		x0: x0,
 		x1: x1,
 	}
 	result := g.builder.NotEqual(x0.op, x1.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x0, x1},
 	}
 	g.registerNode(node)
 	return
@@ -1546,16 +1590,17 @@ func (ni *nodeInputsNotEqualTotalOrder) Type() NodeType {
 func NotEqualTotalOrder(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
 
-	nodeInputs := &nodeInputsNotEqualTotalOrder{
+	inputs := &nodeInputsNotEqualTotalOrder{
 		x0: x0,
 		x1: x1,
 	}
 	result := g.builder.NotEqualTotalOrder(x0.op, x1.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x0, x1},
 	}
 	g.registerNode(node)
 	return
@@ -1577,16 +1622,17 @@ func (ni *nodeInputsOr) Type() NodeType {
 func Or(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
 
-	nodeInputs := &nodeInputsOr{
+	inputs := &nodeInputsOr{
 		x0: x0,
 		x1: x1,
 	}
 	result := g.builder.Or(x0.op, x1.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x0, x1},
 	}
 	g.registerNode(node)
 	return
@@ -1610,17 +1656,18 @@ func (ni *nodeInputsPad) Type() NodeType {
 func Pad(x *Node, fillValue *Node, axesConfig ...backends.PadAxis) (node *Node) {
 	g := validateBuildingGraphFromInputs(x, fillValue)
 
-	nodeInputs := &nodeInputsPad{
+	inputs := &nodeInputsPad{
 		x:          x,
 		fillValue:  fillValue,
 		axesConfig: slices.Clone(axesConfig),
 	}
-	result := g.builder.Pad(x.op, fillValue.op, nodeInputs.axesConfig...)
+	result := g.builder.Pad(x.op, fillValue.op, inputs.axesConfig...)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x, fillValue},
 	}
 	g.registerNode(node)
 	return
@@ -1642,16 +1689,17 @@ func (ni *nodeInputsPow) Type() NodeType {
 func Pow(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
 
-	nodeInputs := &nodeInputsPow{
+	inputs := &nodeInputsPow{
 		x0: x0,
 		x1: x1,
 	}
 	result := g.builder.Pow(x0.op, x1.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x0, x1},
 	}
 	g.registerNode(node)
 	return
@@ -1671,15 +1719,16 @@ func (ni *nodeInputsReal) Type() NodeType {
 func Real(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
 
-	nodeInputs := &nodeInputsReal{
+	inputs := &nodeInputsReal{
 		x: x,
 	}
 	result := g.builder.Real(x.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x},
 	}
 	g.registerNode(node)
 	return
@@ -1696,21 +1745,21 @@ func (ni *nodeInputsReduceMax) Type() NodeType {
 	return NodeTypeReduceMax
 }
 
-// ReduceMax is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the max value.
-// If no axes are given, it reduces the full array.
-func ReduceMax(x *Node, axes ...int) (node *Node) {
+// backendReduceMax is a Graph wrapper for the backend.Builder.ReduceMax method.
+func backendReduceMax(x *Node, axes ...int) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
 
-	nodeInputs := &nodeInputsReduceMax{
+	inputs := &nodeInputsReduceMax{
 		x:    x,
 		axes: slices.Clone(axes),
 	}
-	result := g.builder.ReduceMax(x.op, nodeInputs.axes...)
+	result := g.builder.ReduceMax(x.op, inputs.axes...)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x},
 	}
 	g.registerNode(node)
 	return
@@ -1727,21 +1776,21 @@ func (ni *nodeInputsReduceMin) Type() NodeType {
 	return NodeTypeReduceMin
 }
 
-// ReduceMin is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the min value.
-// If no axes are given, it reduces the full array.
-func ReduceMin(x *Node, axes ...int) (node *Node) {
+// backendReduceMin is a Graph wrapper for the backend.Builder.ReduceMin method.
+func backendReduceMin(x *Node, axes ...int) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
 
-	nodeInputs := &nodeInputsReduceMin{
+	inputs := &nodeInputsReduceMin{
 		x:    x,
 		axes: slices.Clone(axes),
 	}
-	result := g.builder.ReduceMin(x.op, nodeInputs.axes...)
+	result := g.builder.ReduceMin(x.op, inputs.axes...)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x},
 	}
 	g.registerNode(node)
 	return
@@ -1763,16 +1812,17 @@ func (ni *nodeInputsReduceProduct) Type() NodeType {
 func ReduceProduct(x *Node, axes ...int) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
 
-	nodeInputs := &nodeInputsReduceProduct{
+	inputs := &nodeInputsReduceProduct{
 		x:    x,
 		axes: slices.Clone(axes),
 	}
-	result := g.builder.ReduceProduct(x.op, nodeInputs.axes...)
+	result := g.builder.ReduceProduct(x.op, inputs.axes...)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x},
 	}
 	g.registerNode(node)
 	return
@@ -1789,21 +1839,21 @@ func (ni *nodeInputsReduceSum) Type() NodeType {
 	return NodeTypeReduceSum
 }
 
-// ReduceSum is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the sum of the reduced axes.
-// If no axes are given, it reduces the full array.
-func ReduceSum(x *Node, axes ...int) (node *Node) {
+// backendReduceSum is a Graph wrapper for the backend.Builder.ReduceSum method.
+func backendReduceSum(x *Node, axes ...int) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
 
-	nodeInputs := &nodeInputsReduceSum{
+	inputs := &nodeInputsReduceSum{
 		x:    x,
 		axes: slices.Clone(axes),
 	}
-	result := g.builder.ReduceSum(x.op, nodeInputs.axes...)
+	result := g.builder.ReduceSum(x.op, inputs.axes...)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x},
 	}
 	g.registerNode(node)
 	return
@@ -1826,16 +1876,17 @@ func (ni *nodeInputsRem) Type() NodeType {
 func Rem(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
 
-	nodeInputs := &nodeInputsRem{
+	inputs := &nodeInputsRem{
 		x0: x0,
 		x1: x1,
 	}
 	result := g.builder.Rem(x0.op, x1.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x0, x1},
 	}
 	g.registerNode(node)
 	return
@@ -1858,16 +1909,17 @@ func (ni *nodeInputsReshape) Type() NodeType {
 func Reshape(x *Node, dimensions ...int) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
 
-	nodeInputs := &nodeInputsReshape{
+	inputs := &nodeInputsReshape{
 		x:          x,
 		dimensions: slices.Clone(dimensions),
 	}
-	result := g.builder.Reshape(x.op, nodeInputs.dimensions...)
+	result := g.builder.Reshape(x.op, inputs.dimensions...)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x},
 	}
 	g.registerNode(node)
 	return
@@ -1890,16 +1942,17 @@ func (ni *nodeInputsReverse) Type() NodeType {
 func Reverse(x *Node, axes ...int) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
 
-	nodeInputs := &nodeInputsReverse{
+	inputs := &nodeInputsReverse{
 		x:    x,
 		axes: slices.Clone(axes),
 	}
-	result := g.builder.Reverse(x.op, nodeInputs.axes...)
+	result := g.builder.Reverse(x.op, inputs.axes...)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x},
 	}
 	g.registerNode(node)
 	return
@@ -1919,15 +1972,16 @@ func (ni *nodeInputsRound) Type() NodeType {
 func Round(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
 
-	nodeInputs := &nodeInputsRound{
+	inputs := &nodeInputsRound{
 		x: x,
 	}
 	result := g.builder.Round(x.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x},
 	}
 	g.registerNode(node)
 	return
@@ -1947,15 +2001,16 @@ func (ni *nodeInputsRsqrt) Type() NodeType {
 func Rsqrt(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
 
-	nodeInputs := &nodeInputsRsqrt{
+	inputs := &nodeInputsRsqrt{
 		x: x,
 	}
 	result := g.builder.Rsqrt(x.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x},
 	}
 	g.registerNode(node)
 	return
@@ -1983,7 +2038,7 @@ func (ni *nodeInputsScatterAdd) Type() NodeType {
 func ScatterAdd(operand *Node, scatterIndices *Node, updates *Node, indexVectorAxis int, updateWindowAxes []int, insertedWindowAxes []int, scatterAxesToOperandAxes []int, indicesAreSorted bool, uniqueIndices bool) (node *Node) {
 	g := validateBuildingGraphFromInputs(operand, scatterIndices, updates)
 
-	nodeInputs := &nodeInputsScatterAdd{
+	inputs := &nodeInputsScatterAdd{
 		operand:                  operand,
 		scatterIndices:           scatterIndices,
 		updates:                  updates,
@@ -1994,12 +2049,13 @@ func ScatterAdd(operand *Node, scatterIndices *Node, updates *Node, indexVectorA
 		indicesAreSorted:         indicesAreSorted,
 		uniqueIndices:            uniqueIndices,
 	}
-	result := g.builder.ScatterAdd(operand.op, scatterIndices.op, updates.op, nodeInputs.indexVectorAxis, nodeInputs.updateWindowAxes, nodeInputs.insertedWindowAxes, nodeInputs.scatterAxesToOperandAxes, nodeInputs.indicesAreSorted, nodeInputs.uniqueIndices)
+	result := g.builder.ScatterAdd(operand.op, scatterIndices.op, updates.op, inputs.indexVectorAxis, inputs.updateWindowAxes, inputs.insertedWindowAxes, inputs.scatterAxesToOperandAxes, inputs.indicesAreSorted, inputs.uniqueIndices)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{operand, scatterIndices, updates},
 	}
 	g.registerNode(node)
 	return
@@ -2027,7 +2083,7 @@ func (ni *nodeInputsScatterMax) Type() NodeType {
 func ScatterMax(operand *Node, scatterIndices *Node, updates *Node, indexVectorAxis int, updateWindowAxes []int, insertedWindowAxes []int, scatterAxesToOperandAxes []int, indicesAreSorted bool, uniqueIndices bool) (node *Node) {
 	g := validateBuildingGraphFromInputs(operand, scatterIndices, updates)
 
-	nodeInputs := &nodeInputsScatterMax{
+	inputs := &nodeInputsScatterMax{
 		operand:                  operand,
 		scatterIndices:           scatterIndices,
 		updates:                  updates,
@@ -2038,12 +2094,13 @@ func ScatterMax(operand *Node, scatterIndices *Node, updates *Node, indexVectorA
 		indicesAreSorted:         indicesAreSorted,
 		uniqueIndices:            uniqueIndices,
 	}
-	result := g.builder.ScatterMax(operand.op, scatterIndices.op, updates.op, nodeInputs.indexVectorAxis, nodeInputs.updateWindowAxes, nodeInputs.insertedWindowAxes, nodeInputs.scatterAxesToOperandAxes, nodeInputs.indicesAreSorted, nodeInputs.uniqueIndices)
+	result := g.builder.ScatterMax(operand.op, scatterIndices.op, updates.op, inputs.indexVectorAxis, inputs.updateWindowAxes, inputs.insertedWindowAxes, inputs.scatterAxesToOperandAxes, inputs.indicesAreSorted, inputs.uniqueIndices)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{operand, scatterIndices, updates},
 	}
 	g.registerNode(node)
 	return
@@ -2071,7 +2128,7 @@ func (ni *nodeInputsScatterMin) Type() NodeType {
 func ScatterMin(operand *Node, scatterIndices *Node, updates *Node, indexVectorAxis int, updateWindowAxes []int, insertedWindowAxes []int, scatterAxesToOperandAxes []int, indicesAreSorted bool, uniqueIndices bool) (node *Node) {
 	g := validateBuildingGraphFromInputs(operand, scatterIndices, updates)
 
-	nodeInputs := &nodeInputsScatterMin{
+	inputs := &nodeInputsScatterMin{
 		operand:                  operand,
 		scatterIndices:           scatterIndices,
 		updates:                  updates,
@@ -2082,12 +2139,13 @@ func ScatterMin(operand *Node, scatterIndices *Node, updates *Node, indexVectorA
 		indicesAreSorted:         indicesAreSorted,
 		uniqueIndices:            uniqueIndices,
 	}
-	result := g.builder.ScatterMin(operand.op, scatterIndices.op, updates.op, nodeInputs.indexVectorAxis, nodeInputs.updateWindowAxes, nodeInputs.insertedWindowAxes, nodeInputs.scatterAxesToOperandAxes, nodeInputs.indicesAreSorted, nodeInputs.uniqueIndices)
+	result := g.builder.ScatterMin(operand.op, scatterIndices.op, updates.op, inputs.indexVectorAxis, inputs.updateWindowAxes, inputs.insertedWindowAxes, inputs.scatterAxesToOperandAxes, inputs.indicesAreSorted, inputs.uniqueIndices)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{operand, scatterIndices, updates},
 	}
 	g.registerNode(node)
 	return
@@ -2113,19 +2171,20 @@ func (ni *nodeInputsSelectAndScatterMax) Type() NodeType {
 func SelectAndScatterMax(operand *Node, source *Node, windowDimensions []int, windowStrides []int, paddings [][2]int) (node *Node) {
 	g := validateBuildingGraphFromInputs(operand, source)
 
-	nodeInputs := &nodeInputsSelectAndScatterMax{
+	inputs := &nodeInputsSelectAndScatterMax{
 		operand:          operand,
 		source:           source,
 		windowDimensions: windowDimensions,
 		windowStrides:    windowStrides,
 		paddings:         paddings,
 	}
-	result := g.builder.SelectAndScatterMax(operand.op, source.op, nodeInputs.windowDimensions, nodeInputs.windowStrides, nodeInputs.paddings)
+	result := g.builder.SelectAndScatterMax(operand.op, source.op, inputs.windowDimensions, inputs.windowStrides, inputs.paddings)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{operand, source},
 	}
 	g.registerNode(node)
 	return
@@ -2151,19 +2210,20 @@ func (ni *nodeInputsSelectAndScatterMin) Type() NodeType {
 func SelectAndScatterMin(operand *Node, source *Node, windowDimensions []int, windowStrides []int, paddings [][2]int) (node *Node) {
 	g := validateBuildingGraphFromInputs(operand, source)
 
-	nodeInputs := &nodeInputsSelectAndScatterMin{
+	inputs := &nodeInputsSelectAndScatterMin{
 		operand:          operand,
 		source:           source,
 		windowDimensions: windowDimensions,
 		windowStrides:    windowStrides,
 		paddings:         paddings,
 	}
-	result := g.builder.SelectAndScatterMin(operand.op, source.op, nodeInputs.windowDimensions, nodeInputs.windowStrides, nodeInputs.paddings)
+	result := g.builder.SelectAndScatterMin(operand.op, source.op, inputs.windowDimensions, inputs.windowStrides, inputs.paddings)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{operand, source},
 	}
 	g.registerNode(node)
 	return
@@ -2189,19 +2249,20 @@ func (ni *nodeInputsSelectAndScatterSum) Type() NodeType {
 func SelectAndScatterSum(operand *Node, source *Node, windowDimensions []int, windowStrides []int, paddings [][2]int) (node *Node) {
 	g := validateBuildingGraphFromInputs(operand, source)
 
-	nodeInputs := &nodeInputsSelectAndScatterSum{
+	inputs := &nodeInputsSelectAndScatterSum{
 		operand:          operand,
 		source:           source,
 		windowDimensions: windowDimensions,
 		windowStrides:    windowStrides,
 		paddings:         paddings,
 	}
-	result := g.builder.SelectAndScatterSum(operand.op, source.op, nodeInputs.windowDimensions, nodeInputs.windowStrides, nodeInputs.paddings)
+	result := g.builder.SelectAndScatterSum(operand.op, source.op, inputs.windowDimensions, inputs.windowStrides, inputs.paddings)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{operand, source},
 	}
 	g.registerNode(node)
 	return
@@ -2221,15 +2282,16 @@ func (ni *nodeInputsSign) Type() NodeType {
 func backendSign(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
 
-	nodeInputs := &nodeInputsSign{
+	inputs := &nodeInputsSign{
 		x: x,
 	}
 	result := g.builder.Sign(x.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x},
 	}
 	g.registerNode(node)
 	return
@@ -2249,15 +2311,16 @@ func (ni *nodeInputsSin) Type() NodeType {
 func Sin(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
 
-	nodeInputs := &nodeInputsSin{
+	inputs := &nodeInputsSin{
 		x: x,
 	}
 	result := g.builder.Sin(x.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x},
 	}
 	g.registerNode(node)
 	return
@@ -2288,18 +2351,19 @@ func (ni *nodeInputsSlice) Type() NodeType {
 func Slice(x *Node, starts []int, limits []int, strides []int) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
 
-	nodeInputs := &nodeInputsSlice{
+	inputs := &nodeInputsSlice{
 		x:       x,
 		starts:  starts,
 		limits:  limits,
 		strides: strides,
 	}
-	result := g.builder.Slice(x.op, nodeInputs.starts, nodeInputs.limits, nodeInputs.strides)
+	result := g.builder.Slice(x.op, inputs.starts, inputs.limits, inputs.strides)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x},
 	}
 	g.registerNode(node)
 	return
@@ -2319,15 +2383,16 @@ func (ni *nodeInputsSqrt) Type() NodeType {
 func Sqrt(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
 
-	nodeInputs := &nodeInputsSqrt{
+	inputs := &nodeInputsSqrt{
 		x: x,
 	}
 	result := g.builder.Sqrt(x.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x},
 	}
 	g.registerNode(node)
 	return
@@ -2350,16 +2415,17 @@ func (ni *nodeInputsSub) Type() NodeType {
 func Sub(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
 
-	nodeInputs := &nodeInputsSub{
+	inputs := &nodeInputsSub{
 		x0: x0,
 		x1: x1,
 	}
 	result := g.builder.Sub(x0.op, x1.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x0, x1},
 	}
 	g.registerNode(node)
 	return
@@ -2379,15 +2445,16 @@ func (ni *nodeInputsTanh) Type() NodeType {
 func Tanh(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
 
-	nodeInputs := &nodeInputsTanh{
+	inputs := &nodeInputsTanh{
 		x: x,
 	}
 	result := g.builder.Tanh(x.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x},
 	}
 	g.registerNode(node)
 	return
@@ -2410,16 +2477,17 @@ func (ni *nodeInputsTranspose) Type() NodeType {
 func Transpose(x *Node, permutations ...int) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
 
-	nodeInputs := &nodeInputsTranspose{
+	inputs := &nodeInputsTranspose{
 		x:            x,
 		permutations: slices.Clone(permutations),
 	}
-	result := g.builder.Transpose(x.op, nodeInputs.permutations...)
+	result := g.builder.Transpose(x.op, inputs.permutations...)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x},
 	}
 	g.registerNode(node)
 	return
@@ -2437,21 +2505,22 @@ func (ni *nodeInputsWhere) Type() NodeType {
 	return NodeTypeWhere
 }
 
-// Where takes element-wise values from onTrue or onFalse depending on the value of condition (expected to be boolean).
-func Where(condition *Node, onTrue *Node, onFalse *Node) (node *Node) {
+// backendWhere is a Graph wrapper for the backend.Builder.Where method.
+func backendWhere(condition *Node, onTrue *Node, onFalse *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(condition, onTrue, onFalse)
 
-	nodeInputs := &nodeInputsWhere{
+	inputs := &nodeInputsWhere{
 		condition: condition,
 		onTrue:    onTrue,
 		onFalse:   onFalse,
 	}
 	result := g.builder.Where(condition.op, onTrue.op, onFalse.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{condition, onTrue, onFalse},
 	}
 	g.registerNode(node)
 	return
@@ -2473,16 +2542,17 @@ func (ni *nodeInputsXor) Type() NodeType {
 func Xor(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
 
-	nodeInputs := &nodeInputsXor{
+	inputs := &nodeInputsXor{
 		x0: x0,
 		x1: x1,
 	}
 	result := g.builder.Xor(x0.op, x1.op)
 	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x0, x1},
 	}
 	g.registerNode(node)
 	return

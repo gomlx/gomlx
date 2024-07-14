@@ -20,9 +20,12 @@ package context
 
 import (
 	"fmt"
+	. "github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/pkg/errors"
 	"golang.org/x/exp/slices"
 	"reflect"
@@ -896,23 +899,23 @@ func (ctx *Context) ExecPopulateGraphParamsMap(g *Graph, params graph.ParamsMap)
 //
 // `Exec*` methods are used by those implementing an executor (context.Exec) or related tests, not normally
 // needed by end users.
-func (ctx *Context) execPopulateGraphParamsSlice(g *Graph, params []*tensors.Device) {
+func (ctx *Context) execPopulateGraphParamsSlice(g *Graph, params []*tensors.Tensor, deviceNum backends.DeviceNum) {
 	graphId := g.GraphId()
 	ctx.EnumerateVariables(func(v *Variable) {
 		nodes, found := v.graphToNodes[graphId]
 		if !found {
 			return
 		}
-		if nodes == nil || nodes.paramNode == nil || nodes.paramNode.ParameterHandle() == graph.InvalidParameterHandle {
+		if nodes == nil || nodes.paramNode == nil || nodes.paramNode.Type() != graph.NodeTypeParameter {
 			Panicf("invalid paramNode for variable %q", v.ParameterName())
 		}
-		var deviceT *tensors.Device
-		err := TryCatch[error](func() { deviceT = v.Value().Device(g.Backend(), g.DeviceNum()) })
+		var tensor *tensors.Tensor
+		err := TryCatch[error](func() { tensor = v.Value().Device(g.Backend(), deviceNum) })
 		if err != nil {
-			panic(errors.WithMessagef(err, "failed to transfer variable \"%s::%s\" value to device",
-				v.Scope(), v.Name()))
+			panic(errors.WithMessagef(err, "failed to transfer variable \"%s::%s\" value to accelerator device %d",
+				v.Scope(), v.Name(), deviceNum))
 		}
-		params[nodes.paramNode.ParameterHandle()] = deviceT
+		params[nodes.paramNode.GetParameterHandle()] = tensor
 	})
 }
 

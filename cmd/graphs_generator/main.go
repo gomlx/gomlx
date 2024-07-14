@@ -23,7 +23,7 @@ func main() {
 
 var (
 	methodsNotExported = types.SetWith(
-		"Broadcast", "Concatenate", "Gather", "Iota", "Sign")
+		"Broadcast", "Concatenate", "Gather", "Iota", "ReduceMax", "ReduceMin", "ReduceSum", "Sign", "Where")
 
 	// methodsToExclude from writing, but the corresponding will be written and maintained manually.
 	methodsToExclude = types.SetWith("Parameter")
@@ -73,12 +73,12 @@ func buildMethodInfo() (methods []*MethodInfo) {
 					pi.BackendType = "...backends." + pi.BackendType[3:]
 					pi.NodeInputType = "[]" + pi.BackendType[3:]
 					pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", paramName)
-					pi.ConvertStatement = fmt.Sprintf("nodeInputs.%s...", paramName)
+					pi.ConvertStatement = fmt.Sprintf("inputs.%s...", paramName)
 				default:
 					if strings.HasPrefix(pi.BackendType, "...") {
 						pi.NodeInputType = "[]" + pi.BackendType[3:]
 						pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", paramName)
-						pi.ConvertStatement = fmt.Sprintf("nodeInputs.%s...", paramName)
+						pi.ConvertStatement = fmt.Sprintf("inputs.%s...", paramName)
 					} else if strings.HasPrefix(pi.GraphType, "[]") {
 						pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", paramName)
 					}
@@ -93,7 +93,7 @@ func buildMethodInfo() (methods []*MethodInfo) {
 					pi.CopyStatement = pi.Name
 				}
 				if pi.ConvertStatement == "" {
-					pi.ConvertStatement = "nodeInputs." + pi.Name
+					pi.ConvertStatement = "inputs." + pi.Name
 				}
 			}
 			mi.HasGraph = mi.OpInputsList == "" && len(mi.OpInputs) == 0
@@ -161,7 +161,7 @@ func (ni *nodeInputs{{.BackendName}}) Type() NodeType {
 {{else}}{{if ne .OpInputsList ""}}	g := validateBuildingGraphFromInputs({{.OpInputsList}}...)
 {{else}}	g := validateBuildingGraphFromInputs({{range .OpInputs}}{{.}}, {{end}})
 {{end}}{{end}}
-nodeInputs := &nodeInputs{{.BackendName}}{
+	inputs := &nodeInputs{{.BackendName}}{
 {{range .Inputs}}		{{.Name}}: {{.CopyStatement}},		
 {{end}}	}
 	result := g.builder.{{.BackendName}}({{range .Inputs}}{{.ConvertStatement}}, {{end}})
@@ -169,8 +169,10 @@ nodeInputs := &nodeInputs{{.BackendName}}{
 		graph: g,
 		op: result,
 		shape: g.builder.OpShape(result),
-		staticInputs: nodeInputs,
-	}
+		inputs: inputs,
+{{if not .HasGraph}}{{if eq .OpInputsList ""}}	inputNodes: []*Node{ {{range .OpInputs}}{{.}}, {{end}} }, 
+{{else}}	inputNodes: {{.OpInputsList}},
+{{end}}{{end}}	}
 	g.registerNode(node)
 	return
 }

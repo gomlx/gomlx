@@ -35,7 +35,7 @@ import (
 //
 // Example:
 //
-//	batch_size := nodeInputs[0].Shape().Dimensions[0]
+//	batch_size := inputNodes[0].Shape().Dimensions[0]
 //	…
 //	layer := Concatenate(allEmbeddings, -1)
 //	layer.AssertDims(batchSize, -1) // 2D tensor, with batch size as the leading dimension.

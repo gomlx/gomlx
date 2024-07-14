@@ -382,8 +382,8 @@ func convGeneralDilatedXLA(input, filter *Node, axes ConvolveAxesConfig,
 
 func convGeneralDilatedVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// Recover parameters from serialized node.
-	x := node.nodeInputs[0]
-	kernel := node.nodeInputs[1]
+	x := node.inputNodes[0]
+	kernel := node.inputNodes[1]
 	packedPos := 0
 	decode := func() int {
 		i := node.serializedNode.Ints[packedPos]
@@ -549,7 +549,7 @@ func convVJPWrtKernel(node, x, kernel, v *Node, numSpatialDims int, axes Convolv
 
 	// (1) For the Gradient of the output with respect to kernel we need a reverse convolution of
 	// the original input using v (the term from VJP, shaped as the original output) as the
-	// "reverseKernel". Since we need to multiply it by most of the nodeInputs to get the VJP wrt
+	// "reverseKernel". Since we need to multiply it by most of the inputNodes to get the VJP wrt
 	// to the kernel. The output of this reverse convolution will be shaped like original
 	// convolution kernel, if we adjust correctly the axes, see below.
 	reverseKernel := v

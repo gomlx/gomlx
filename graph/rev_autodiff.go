@@ -31,14 +31,14 @@ import (
 // Overall in this file we assume the following conventions:
 //
 // * root node: the final output of the graph. The objective it to generate the gradient of this value with
-//      respect to a list of selected gradient nodes (or selected graph nodeInputs).
+//      respect to a list of selected gradient nodes (or selected graph inputNodes).
 // * selected gradient nodes: the nodes with respect to which we want to calculate the gradient of the output.
 //      Typically, in a machine learning set up these  will be the variables (aka. weights).
 // * VJP / Adjoint: VJP stands for "Vector Jacobian Product", and it's the  accumulated reverse gradient of the root
 //      node with respect to the current node being processed. The final gradients will the adjoints/VJP on the selected
 //      gradient nodes. Notice the "V" is not necessarily a vector, it could be of any dimension. And the "V" of one
 //      node is the "VJP" of its output node. They are generated in reverse order, from the Graph outputs back to
-//      its nodeInputs.
+//      its inputNodes.
 // * "new nodes": new nodes that being created on the fly to calculate the adjoints. They are not included in the
 //      reverse graph.
 
@@ -54,7 +54,7 @@ type reverseGraph struct {
 type reverseNode struct {
 	Node *Node
 
-	// Consumers is the list of nodes that utilize the output of this node. That is, the nodes whose nodeInputs
+	// Consumers is the list of nodes that utilize the output of this node. That is, the nodes whose inputNodes
 	// include this node.
 	Consumers []*reverseNode
 
@@ -71,7 +71,7 @@ type reverseNode struct {
 
 	// AccumulatedVJP is the gradient of the root node with respect to the output of this node. In the end it will be the sum
 	// of the VJPs back-propagated by all its consumers. Once all of them are included, this node is ready to push
-	// its VJP to its nodeInputs.
+	// its VJP to its inputNodes.
 	AccumulatedVJP *Node
 
 	// VJPsForTuple holds the individual VJPs for a tuple: they are only collapsed to a VJP at the end.
@@ -122,7 +122,7 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 		rNode := rg.ReverseNodes[nodeIdx]
 
 		// No need to propagate VJP if either node is not of interest, if there is a stop gradient, or
-		// if its nodeInputs are not of interest.
+		// if its inputNodes are not of interest.
 		if !needGradientForNode(node) {
 			continue
 		}
@@ -149,7 +149,7 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 		if node.Type() == xla.GetTupleElementNode {
 			// GetTupleElement just pushes v to the specific element of the tuple.
 			elementIdx := node.serializedNode.Int
-			input := node.nodeInputs[0]
+			input := node.inputNodes[0]
 			rInput := rg.ReverseNodes[input.Id()]
 			if rInput.VJPsForTuple[elementIdx] == nil {
 				rInput.VJPsForTuple[elementIdx] = rNode.AccumulatedVJP
@@ -175,7 +175,7 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 		}
 		inputsVJPs := vjpFn(node, rNode.AccumulatedVJP, outputShape)
 		if len(inputsVJPs) != len(node.Inputs()) {
-			Panicf("AccumulatedVJP(%s) returned %d VJPs, but it has %d nodeInputs, implementation of auto-differentiation for node failed",
+			Panicf("AccumulatedVJP(%s) returned %d VJPs, but it has %d inputNodes, implementation of auto-differentiation for node failed",
 				node, len(inputsVJPs), len(node.Inputs()))
 		}
 		//fmt.Printf("\tFrom node %s\n", node)
@@ -237,14 +237,14 @@ func newReverseGraph(g *Graph, root *Node, gradientNodes []*Node) *reverseGraph 
 		if node.shape.IsTuple() {
 			rNode.VJPsForTuple = make([]*Node, node.shape.TupleSize())
 		}
-		for _, input := range node.nodeInputs {
+		for _, input := range node.inputNodes {
 			rg.NumConsumers[input.Id()] += 1
 		}
 	}
 	for ii, node := range g.nodes {
 		rNode := rg.ReverseNodes[ii]
 		rNode.Consumers = make([]*reverseNode, 0, rg.NumConsumers[ii])
-		for _, input := range node.nodeInputs {
+		for _, input := range node.inputNodes {
 			rInput := rg.ReverseNodes[input.Id()]
 			rInput.Consumers = append(rInput.Consumers, rNode)
 		}
@@ -264,7 +264,7 @@ func newReverseGraph(g *Graph, root *Node, gradientNodes []*Node) *reverseGraph 
 	return rg
 }
 
-// recursivePathFromRoot mark nodes and its nodeInputs recursively as Included.
+// recursivePathFromRoot mark nodes and its inputNodes recursively as Included.
 func recursivePathFromRoot(rg *reverseGraph, node *Node) {
 	rNode := rg.ReverseNodes[node.Id()]
 	if rNode.Included {
@@ -272,7 +272,7 @@ func recursivePathFromRoot(rg *reverseGraph, node *Node) {
 		return
 	}
 	rNode.Included = true
-	for _, input := range node.nodeInputs {
+	for _, input := range node.inputNodes {
 		recursivePathFromRoot(rg, input)
 	}
 }
@@ -288,7 +288,7 @@ func recursiveMarkAsUseful(rg *reverseGraph, rNode *reverseNode) {
 	}
 }
 
-// VJP returns the $v \dot Jacobian$ of the given `node`, with respect to each of its nodeInputs (given
+// VJP returns the $v \dot Jacobian$ of the given `node`, with respect to each of its inputNodes (given
 // by `node.Inputs()`).
 //
 // outputShape is the shape of the value for which we are calculating the gradient for.
@@ -299,17 +299,17 @@ func recursiveMarkAsUseful(rg *reverseGraph, rNode *reverseNode) {
 //
 // Args:
 //
-//	`node`: node for which we are calculating the backward gradient. An important part of `node` are its nodeInputs
+//	`node`: node for which we are calculating the backward gradient. An important part of `node` are its inputNodes
 //	   given by `node.Inputs()`. The VJP function must one gradient per input.
 //	`v`: gradient (or jacobian) of what we care about with the respect to the output of `node`, also known as the
-//	   adjoint. VJP needs to calculate the next adjoint (`v`) but with respect to the nodeInputs of `node` instead.
+//	   adjoint. VJP needs to calculate the next adjoint (`v`) but with respect to the inputNodes of `node` instead.
 //	`outputShape`: for now fixed as scalar, and can be ignored. When we add support for Jacobian this will hold
 //	   the shape of the thing we are calculating the Jacobian for.
 //
 // Returns:
 //
-//	The adjoint (the updated `v`) to each of `node` nodeInputs. That is, the gradient of the loss (typically, but of
-//	whatever we are calculating the gradient of) with respect to each of the `node` nodeInputs.
+//	The adjoint (the updated `v`) to each of `node` inputNodes. That is, the gradient of the loss (typically, but of
+//	whatever we are calculating the gradient of) with respect to each of the `node` inputNodes.
 type VJP func(node, v *Node, outputShape shapes.Shape) []*Node
 
 // VJPRegistration maps each node type to its implementation of VJP. If implementing a new op, or
@@ -360,7 +360,7 @@ var VJPRegistration = map[xla.NodeType]VJP{
 	xla.FftNode:                fftVJP,
 }
 
-// nilVJP returns no gradient, for functions without any nodeInputs.
+// nilVJP returns no gradient, for functions without any inputNodes.
 func nilVJP(_, _ *Node, _ shapes.Shape) []*Node {
 	return nil
 }
@@ -411,7 +411,7 @@ func vjpForDefaultBroadcast(node, input, v *Node) *Node {
 // we propagate back only the real part.
 func convertTypeVJP(node, v *Node, _ shapes.Shape) []*Node {
 	_ = node
-	inputDType := node.nodeInputs[0].DType()
+	inputDType := node.inputNodes[0].DType()
 	if node.DType().IsComplex() && inputDType.IsFloat() {
 		// Just take the real part of the adjoint, since the input has no effect on the imaginary output.
 		return []*Node{ConvertType(Real(v), inputDType)}
@@ -425,7 +425,7 @@ func negVJP(node, v *Node, _ shapes.Shape) []*Node {
 }
 
 func absVJP(node, v *Node, _ shapes.Shape) []*Node {
-	x := node.nodeInputs[0]
+	x := node.inputNodes[0]
 	if x.DType().IsComplex() {
 		// For complex numbers, Abs() is defined as the Euclidean distance in the complex
 		// plane from 0.
@@ -447,7 +447,7 @@ func absVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// Notice that d(abs(x))/dx at 0 is actually undefined. This will take 1, so it assumes the positive side.
 	// This usually has little impact on training, but makes some optimizations where the limits of operations
 	// have to behave the same consistent (e.g: layers.BinaryCrossentropyLogitsLoss).
-	return []*Node{Mul(v, SignPlusOrMinus(node.nodeInputs[0]))}
+	return []*Node{Mul(v, SignPlusOrMinus(node.inputNodes[0]))}
 }
 
 func expVJP(node, v *Node, _ shapes.Shape) []*Node {
@@ -455,12 +455,12 @@ func expVJP(node, v *Node, _ shapes.Shape) []*Node {
 }
 
 func logVJP(node, v *Node, _ shapes.Shape) []*Node {
-	return []*Node{Mul(v, Inverse(node.nodeInputs[0]))}
+	return []*Node{Mul(v, Inverse(node.inputNodes[0]))}
 }
 
 func log1pVJP(node, v *Node, _ shapes.Shape) []*Node {
-	one := ScalarOne(node.Graph(), node.nodeInputs[0].DType())
-	return []*Node{Mul(v, Inverse(Add(one, node.nodeInputs[0])))}
+	one := ScalarOne(node.Graph(), node.inputNodes[0].DType())
+	return []*Node{Mul(v, Inverse(Add(one, node.inputNodes[0])))}
 }
 
 func tanhVJP(node, v *Node, _ shapes.Shape) []*Node {
@@ -498,8 +498,8 @@ func complexVJP(node, v *Node, _ shapes.Shape) []*Node {
 }
 
 func addVJP(node, v *Node, _ shapes.Shape) []*Node {
-	inputsVJPs := make([]*Node, len(node.nodeInputs))
-	for ii, input := range node.nodeInputs {
+	inputsVJPs := make([]*Node, len(node.inputNodes))
+	for ii, input := range node.inputNodes {
 		inputsVJPs[ii] = vjpForDefaultBroadcast(node, input, v)
 	}
 	return inputsVJPs
@@ -507,13 +507,13 @@ func addVJP(node, v *Node, _ shapes.Shape) []*Node {
 
 func subVJP(node, v *Node, _ shapes.Shape) []*Node {
 	return []*Node{
-		vjpForDefaultBroadcast(node, node.nodeInputs[0], v),
-		Neg(vjpForDefaultBroadcast(node, node.nodeInputs[1], v)),
+		vjpForDefaultBroadcast(node, node.inputNodes[0], v),
+		Neg(vjpForDefaultBroadcast(node, node.inputNodes[1], v)),
 	}
 }
 
 func whereVJP(node, v *Node, _ shapes.Shape) []*Node {
-	condition := node.nodeInputs[0]
+	condition := node.inputNodes[0]
 	zeros := ZerosLike(v)
 	return []*Node{
 		nil, // No gradient wrt condition.
@@ -528,14 +528,14 @@ func mulVJP(node, v *Node, _ shapes.Shape) []*Node {
 	inputsVJPs := make([]*Node, 2)
 	broadcastInputs := make([]*Node, 2)
 	for ii := 0; ii < 2; ii++ {
-		broadcastInputs[ii] = node.nodeInputs[ii]
+		broadcastInputs[ii] = node.inputNodes[ii]
 		if !broadcastInputs[ii].shape.Eq(node.shape) {
 			broadcastInputs[ii] = BroadcastToShape(broadcastInputs[ii], node.shape)
 		}
 	}
 	for ii := 0; ii < 2; ii++ {
 		vMul := Mul(v, broadcastInputs[1-ii])
-		inputsVJPs[ii] = vjpForDefaultBroadcast(node, node.nodeInputs[ii], vMul)
+		inputsVJPs[ii] = vjpForDefaultBroadcast(node, node.inputNodes[ii], vMul)
 	}
 	return inputsVJPs
 }
@@ -546,15 +546,15 @@ func divVJP(node, v *Node, _ shapes.Shape) []*Node {
 	inputsVJPs := make([]*Node, 2)
 	broadcastInputs := make([]*Node, 2)
 	for ii := 0; ii < 2; ii++ {
-		broadcastInputs[ii] = node.nodeInputs[ii]
+		broadcastInputs[ii] = node.inputNodes[ii]
 		if !broadcastInputs[ii].shape.Eq(node.shape) {
 			broadcastInputs[ii] = BroadcastToShape(broadcastInputs[ii], node.shape)
 		}
 	}
 	a := broadcastInputs[0]
 	b := broadcastInputs[1]
-	inputsVJPs[0] = vjpForDefaultBroadcast(node, node.nodeInputs[0], Div(v, b))
-	inputsVJPs[1] = vjpForDefaultBroadcast(node, node.nodeInputs[1],
+	inputsVJPs[0] = vjpForDefaultBroadcast(node, node.inputNodes[0], Div(v, b))
+	inputsVJPs[1] = vjpForDefaultBroadcast(node, node.inputNodes[1],
 		Neg(Mul(v, Div(a, Mul(b, b))))) // -v*a/b^2
 	return inputsVJPs
 }
@@ -563,21 +563,21 @@ func minMaxVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// We push the adjoint gradient to one side or the other, depending on which is the max.
 	// Notice because PositiveIndicator(0) == 1, the gradient of Max(x, y) w.r.t. x, where x == y will be 1.0
 	// (as opposed to 0).
-	side0Indicator := PositiveIndicator(Sub(node.nodeInputs[0], node.nodeInputs[1]))
+	side0Indicator := PositiveIndicator(Sub(node.inputNodes[0], node.inputNodes[1]))
 	side1Indicator := OneMinus(side0Indicator)
 	if node.Type() == xla.MinNode {
 		// If min, swap directions.
 		side0Indicator, side1Indicator = side1Indicator, side0Indicator
 	}
 	return []*Node{
-		vjpForDefaultBroadcast(node, node.nodeInputs[0], Mul(v, side0Indicator)),
-		vjpForDefaultBroadcast(node, node.nodeInputs[1], Mul(v, side1Indicator)),
+		vjpForDefaultBroadcast(node, node.inputNodes[0], Mul(v, side0Indicator)),
+		vjpForDefaultBroadcast(node, node.inputNodes[1], Mul(v, side1Indicator)),
 	}
 }
 
 func reduceSumVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// Reconstruct exactly the reduced dimensions.
-	rankInput := node.nodeInputs[0].shape.Rank()
+	rankInput := node.inputNodes[0].shape.Rank()
 	reducedDims := node.serializedNode.Ints
 	if len(reducedDims) == 0 {
 		// Reduced all dims, reconstruct those.
@@ -589,7 +589,7 @@ func reduceSumVJP(node, v *Node, _ shapes.Shape) []*Node {
 
 	// Expand rank of v to match the input, by re-creating
 	// the reduced dimensions with size 1.
-	newShape := node.nodeInputs[0].shape.Clone()
+	newShape := node.inputNodes[0].shape.Clone()
 	for _, dim := range reducedDims {
 		newShape.Dimensions[dim] = 1
 	}
@@ -598,14 +598,14 @@ func reduceSumVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// Now all we need it to broadcast the v on the reduced dimensions.
 	// Notice the second input to a reduction is its initial value, a constant. There
 	// is no need to push a gradient to that.
-	vjp := BroadcastToShape(expandedV, node.nodeInputs[0].shape)
+	vjp := BroadcastToShape(expandedV, node.inputNodes[0].shape)
 	return []*Node{vjp, nil}
 }
 
 func reduceMaxVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// Reconstruct exactly the reduced dimensions, and build a newShape
 	// (same shape as if we had done ReduceAndKeep(input[0]))
-	rankInput := node.nodeInputs[0].shape.Rank()
+	rankInput := node.inputNodes[0].shape.Rank()
 	reducedDims := node.serializedNode.Ints
 	if len(reducedDims) == 0 {
 		// Reduced all dims, reconstruct those.
@@ -614,7 +614,7 @@ func reduceMaxVJP(node, v *Node, _ shapes.Shape) []*Node {
 			reducedDims[ii] = ii
 		}
 	}
-	newShape := node.nodeInputs[0].shape.Clone()
+	newShape := node.inputNodes[0].shape.Clone()
 	for _, dim := range reducedDims {
 		newShape.Dimensions[dim] = 1
 	}
@@ -622,12 +622,12 @@ func reduceMaxVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// Expand the node output (with max) to match the input. And then creates
 	// an indicator to which positions are at the max values.
 	maxAtOriginalRank := ReshapeWithShape(node, newShape)
-	maxIndicatorAtInput := PositiveIndicator(Sub(node.nodeInputs[0], maxAtOriginalRank))
+	maxIndicatorAtInput := PositiveIndicator(Sub(node.inputNodes[0], maxAtOriginalRank))
 
 	// Expand rank of v to match the input, by re-creating
 	// the reduced dimensions with size 1 and then broadcasting.
 	expandedV := ReshapeWithShape(v, newShape)
-	expandedV = BroadcastToShape(expandedV, node.nodeInputs[0].shape)
+	expandedV = BroadcastToShape(expandedV, node.inputNodes[0].shape)
 
 	// vjp is only propagated to the elements at the max value.
 	vjp := Mul(expandedV, maxIndicatorAtInput)
@@ -635,8 +635,8 @@ func reduceMaxVJP(node, v *Node, _ shapes.Shape) []*Node {
 }
 
 func reshapeVJP(node, v *Node, _ shapes.Shape) []*Node {
-	// ReshapeWithShape back to its nodeInputs shape.
-	return []*Node{ReshapeWithShape(v, node.nodeInputs[0].shape)}
+	// ReshapeWithShape back to its inputNodes shape.
+	return []*Node{ReshapeWithShape(v, node.inputNodes[0].shape)}
 }
 
 func logisticVJP(node, v *Node, _ shapes.Shape) []*Node {
@@ -650,33 +650,33 @@ func logisticVJP(node, v *Node, _ shapes.Shape) []*Node {
 
 func dotVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// Case 1: dot product of two vectors.
-	if node.nodeInputs[0].shape.Rank() == 1 && node.nodeInputs[1].shape.Rank() == 1 {
+	if node.inputNodes[0].shape.Rank() == 1 && node.inputNodes[1].shape.Rank() == 1 {
 		return []*Node{
-			Mul(v, node.nodeInputs[1]),
-			Mul(v, node.nodeInputs[0]),
+			Mul(v, node.inputNodes[1]),
+			Mul(v, node.inputNodes[0]),
 		}
 	}
 
 	// Case 2: matrix[i, j] x vector[j] -> vector[i]
-	if node.nodeInputs[0].shape.Rank() == 2 && node.nodeInputs[1].shape.Rank() == 1 {
+	if node.inputNodes[0].shape.Rank() == 2 && node.inputNodes[1].shape.Rank() == 1 {
 		v = ExpandDims(v, -1)
-		v = BroadcastToShape(v, node.nodeInputs[0].shape)
+		v = BroadcastToShape(v, node.inputNodes[0].shape)
 		return []*Node{
-			Mul(v, ExpandDims(node.nodeInputs[1], 0)),
-			ReduceSum(Mul(v, node.nodeInputs[0]), 0),
+			Mul(v, ExpandDims(node.inputNodes[1], 0)),
+			ReduceSum(Mul(v, node.inputNodes[0]), 0),
 		}
 	}
 
 	// Case 3: matrix[i, j] x matrix[j, k] -> matrix[i, k]
-	if node.nodeInputs[0].shape.Rank() != 2 || node.nodeInputs[1].shape.Rank() != 2 {
-		Panicf("Dot node with combination of ranks not accepted: %s, %s", node.nodeInputs[0].shape, node.nodeInputs[1].shape)
+	if node.inputNodes[0].shape.Rank() != 2 || node.inputNodes[1].shape.Rank() != 2 {
+		Panicf("Dot node with combination of ranks not accepted: %s, %s", node.inputNodes[0].shape, node.inputNodes[1].shape)
 	}
-	dimI, dimJ, dimK := node.shape.Dimensions[0], node.nodeInputs[0].shape.Dimensions[1], node.shape.Dimensions[1]
+	dimI, dimJ, dimK := node.shape.Dimensions[0], node.inputNodes[0].shape.Dimensions[1], node.shape.Dimensions[1]
 	v = ExpandDims(v, 1) // Shape [i, 1, k]
 	v = BroadcastToShape(v, shapes.Make(node.shape.DType, dimI, dimJ, dimK))
 	return []*Node{
-		ReduceSum(Mul(v, ExpandDims(node.nodeInputs[1], 0)), 2),
-		ReduceSum(Mul(v, ExpandDims(node.nodeInputs[0], -1)), 0),
+		ReduceSum(Mul(v, ExpandDims(node.inputNodes[1], 0)), 2),
+		ReduceSum(Mul(v, ExpandDims(node.inputNodes[0], -1)), 0),
 	}
 }
 
@@ -718,8 +718,8 @@ func sliceVJP(node, v *Node, _ shapes.Shape) []*Node {
 // in particular it works with graph.Gather.
 func gatherVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// TODO: check that values are compatible with Gather() and return an error if not.
-	input := node.nodeInputs[0]
-	indices := node.nodeInputs[1]
+	input := node.inputNodes[0]
+	indices := node.inputNodes[1]
 	inputShape := input.Shape()
 	indexVectorDim, offsetDims, collapsedSliceDims, startIndexMap, sliceSizes, indicesAreSorted, err := deserializeGatherXLA(node.serializedNode)
 	_ = offsetDims // We don't need it here.
@@ -792,7 +792,7 @@ func gatherVJP(node, v *Node, _ shapes.Shape) []*Node {
 // batchNormTrainingVJP generates the gradient with respect to the operand and the scale and offset
 // parameters. It uses the XLA implemented gradient.
 func batchNormTrainingVJP(node, v *Node, _ shapes.Shape) []*Node {
-	operand, scale := node.nodeInputs[0], node.nodeInputs[1]
+	operand, scale := node.inputNodes[0], node.inputNodes[1]
 	mean := GetTupleElement(node, 1)     // Output 1 of batchNormTraining, the batchMean.
 	variance := GetTupleElement(node, 2) // Output 2 of batchNormTraining, the batchVariance.
 	epsilon := node.serializedNode.Float
@@ -817,7 +817,7 @@ func transposeVJP(node, v *Node, _ shapes.Shape) []*Node {
 // broadcastInDimVJP generates the "vector dot jacobian" w.r.t. the input of broadcast.
 // One just needs to reduce the broadcast dimensions.
 func broadcastInDimVJP(node, v *Node, _ shapes.Shape) []*Node {
-	x := node.nodeInputs[0]
+	x := node.inputNodes[0]
 	outputShape := v.Shape()
 	shape := node.serializedNode.Shape
 	broadcastDims := node.serializedNode.Ints
