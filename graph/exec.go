@@ -408,7 +408,7 @@ func (e *Exec) compileAndExecute(execute bool, args ...any) (results []tensors.T
 		for ii, t := range tensors {
 			if t == nil {
 				exceptions.Panicf("parameter %d (%q) is nil or invalid, maybe a variable value not set as a "+
-					"parameter, cannot execute g", ii, g.ParameterByIndex(ii).ParameterName())
+					"parameter, cannot execute g", ii, g.GetParameterByHandle(ii).ParameterName())
 			}
 		}
 	}

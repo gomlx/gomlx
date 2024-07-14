@@ -114,11 +114,15 @@ func (n *Node) Id() NodeId {
 // It returns InvalidParameterHandle if node is not a parameter.
 func (n *Node) ParameterHandle() ParameterHandle {
 	n.AssertValid()
-	if n.Type() != xla.ParameterOp {
+	if n.Type() != NodeTypeParameter {
 		return InvalidParameterHandle
 	}
-	_, idx, _ := xla.DecodeParameter(n.op)
-	return ParameterHandle(idx)
+	inputs, ok := n.staticInputs.(*nodeInputsParameter)
+	if !ok {
+		exceptions.Panicf("Parameter node %s, but doesn't have a configured nodesInputsParamter, instead got a %T",
+			n, n.staticInputs)
+	}
+	return inputs.handle
 }
 
 const NotAParameterStr = "NOT_A_PARAMETER"

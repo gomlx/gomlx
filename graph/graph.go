@@ -420,15 +420,15 @@ func (g *Graph) NumParameters() int {
 	return len(g.parameters)
 }
 
-// ParameterByIndex returns the ii-th parameter, in order of creation, registered for this graph.
-func (g *Graph) ParameterByIndex(ii int) *Node {
+// GetParameterByHandle returns the ii-th parameter, in order of creation, registered for this graph.
+func (g *Graph) GetParameterByHandle(handle ParameterHandle) *Node {
 	g.AssertValid()
-	return g.parameters[ii]
+	return g.parameters[handle]
 }
 
-// ParameterByName returns the parameter registered with the given name. Returns nil if the parameter
+// GetParameterByName returns the parameter registered with the given name. Returns nil if the parameter
 // with the given name hasn't been registered (see Parameter method).
-func (g *Graph) ParameterByName(name string) (node *Node) {
+func (g *Graph) GetParameterByName(name string) (node *Node) {
 	g.AssertValid()
 	if name == "" {
 		return
@@ -441,11 +441,13 @@ func (g *Graph) ParameterByName(name string) (node *Node) {
 }
 
 // Parameter registers an input parameter for a computation Graph (e.g: a feature used as input).
+//
+// When created they get a handle (a plain index) but they can also be accessed
 // It can be used in two different ways: as a Node when building the Graph, so when defining a
 // function that uses the parameter, or as the key in the map of the nodeInputs when executing
 // the computation Graph (see Backend.Run).
 func (g *Graph) Parameter(name string, shape shapes.Shape) (node *Node) {
-	g.AssertValid()
+	node = backendParameter(g, name, shape)
 	parameterHandle := ParameterHandle(len(g.parameters))
 	if name == "" {
 		name = fmt.Sprintf("p#%d", parameterHandle)
@@ -458,7 +460,7 @@ func (g *Graph) Parameter(name string, shape shapes.Shape) (node *Node) {
 		if !node.shape.Eq(shape) {
 			// Shape requested and the one that already exists don't match,
 			// report the error.
-			exceptions.Panicf("requested parameter %q already exists with a different shape:"+
+			exceptions.Panicf("requested parameter with name %q already exists with a different shape:"+
 				" requested shape %s, previous shape %s", name, shape, node.shape)
 		}
 		return

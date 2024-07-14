@@ -1626,36 +1626,6 @@ func Pad(x *Node, fillValue *Node, axesConfig ...backends.PadAxis) (node *Node) 
 	return
 }
 
-// nodeInputsParameter holds the inputs used for the call to backends.Parameter.
-type nodeInputsParameter struct {
-	name  string
-	shape shapes.Shape
-}
-
-// Type implements the interface NodeInputs.
-func (ni *nodeInputsParameter) Type() NodeType {
-	return NodeTypeParameter
-}
-
-// backendParameter is a Graph wrapper for the backend.Builder.Parameter method.
-func backendParameter(g *Graph, name string, shape shapes.Shape) (node *Node) {
-	g.AssertBuilding()
-
-	nodeInputs := &nodeInputsParameter{
-		name:  name,
-		shape: shape,
-	}
-	result := g.builder.Parameter(nodeInputs.name, nodeInputs.shape)
-	node = &Node{
-		graph:        g,
-		op:           result,
-		shape:        g.builder.OpShape(result),
-		staticInputs: nodeInputs,
-	}
-	g.registerNode(node)
-	return
-}
-
 // nodeInputsPow holds the inputs used for the call to backends.Pow.
 type nodeInputsPow struct {
 	x0 *Node

@@ -123,7 +123,7 @@ func TestExecWithSideParams(t *testing.T) {
 	manager := buildTestManager()
 	scalar := tensors.FromValue(3.0).Device(manager, manager.DefaultDeviceNum())
 	setSideParams := func(g *Graph, tensors []*tensors.Device) {
-		node := g.ParameterByName(scalarParamName)
+		node := g.GetParameterByName(scalarParamName)
 		tensors[node.ParameterHandle()] = scalar
 	}
 	addScalar := NewExec(manager, addScalarTest).SetSideParamsHook(setSideParams)

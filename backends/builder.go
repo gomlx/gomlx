@@ -35,6 +35,8 @@ type Builder interface {
 	// During execution of the computation this value will need to be fed, in the same order it is created.
 	Parameter(name string, shape shapes.Shape) Op
 
+	// Constant creates a constant
+
 	// StandardOps include automatically generated list of operations for the Builder.
 	StandardOps
 }
