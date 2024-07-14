@@ -26,7 +26,7 @@ var (
 		"Broadcast", "Concatenate", "Gather", "Iota", "ReduceMax", "ReduceMin", "ReduceSum", "Sign", "Where")
 
 	// methodsToExclude from writing, but the corresponding will be written and maintained manually.
-	methodsToExclude = types.SetWith("Parameter")
+	methodsToExclude = types.SetWith("Constant", "Parameter")
 )
 
 func buildMethodInfo() (methods []*MethodInfo) {

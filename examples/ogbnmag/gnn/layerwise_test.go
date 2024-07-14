@@ -222,7 +222,7 @@ func TestLayerWiseInferenceMinimal(t *testing.T) {
 	// Uncomment to list variables used in model.
 	/*
 		ctx.EnumerateVariables(func(v *context.Variable) {
-			fmt.Printf("\t%s=%s\n", v.ParameterName(), v.Value())
+			fmt.Printf("\t%s=%s\n", v.GetParameterName(), v.Value())
 		})
 	*/
 
@@ -262,7 +262,7 @@ func TestLayerWiseInferenceCommon(t *testing.T) {
 		// Uncomment to list variables used in model.
 		/*
 			ctx.EnumerateVariables(func(v *context.Variable) {
-				fmt.Printf("\t%s=%s\n", v.ParameterName(), v.Value())
+				fmt.Printf("\t%s=%s\n", v.GetParameterName(), v.Value())
 			})
 		*/
 

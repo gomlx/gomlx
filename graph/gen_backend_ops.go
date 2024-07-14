@@ -5,7 +5,6 @@ package graph
 import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/protos"
 	"slices"
@@ -27,6 +26,7 @@ const (
 	NodeTypeComplex
 	NodeTypeConcatenate
 	NodeTypeConj
+	NodeTypeConstant
 	NodeTypeConvGeneralDilated
 	NodeTypeConvertDType
 	NodeTypeCos

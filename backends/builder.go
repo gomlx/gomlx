@@ -35,7 +35,13 @@ type Builder interface {
 	// During execution of the computation this value will need to be fed, in the same order it is created.
 	Parameter(name string, shape shapes.Shape) Op
 
-	// Constant creates a constant
+	// Constant creates a constant in the graph with the given flat values, and the shape defined by dims.
+	//
+	// flat must be a slice of a basic type supported -- that can be converted to a DType.
+	//
+	// The value is copied into the graph. It's recommended that for very large tensors,
+	// even if constants, that they are passed as side inputNodes (or variables, see context package) instead.
+	Constant(flat any, dims ...int) Op
 
 	// StandardOps include automatically generated list of operations for the Builder.
 	StandardOps

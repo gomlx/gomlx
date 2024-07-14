@@ -127,13 +127,12 @@ func (n *Node) GetParameterHandle() ParameterHandle {
 	return inputs.handle
 }
 
-const NotAParameterStr = "NOT_A_PARAMETER"
-
-// ParameterName returns the parameter name if this node is a parameter. Otherwise, it returns NotAParameterStr
-func (n *Node) ParameterName() string {
+// GetParameterName returns the parameter name.
+// If node is not a parameter, it panics.
+func (n *Node) GetParameterName() string {
 	n.AssertValid()
 	if n.Type() != NodeTypeParameter {
-		exceptions.Panicf("trying to get ParameterName of a non-parameter node %q", n.Type())
+		exceptions.Panicf("trying to get GetParameterName of a non-parameter node %q", n.Type())
 	}
 	name, _, _ := xla.DecodeParameter(n.op)
 	return name

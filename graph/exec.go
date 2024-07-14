@@ -397,7 +397,7 @@ func (e *Exec) compileAndExecute(execute bool, args ...any) (results []tensors.T
 
 	// Set extra input parameters created by the graph.
 	if g.NumParameters() > len(args) {
-		tmp := make([]*tensors.Device, g.NumParameters())
+		tmp := make([]*tensors.Tensor, g.NumParameters())
 		copy(tmp, tensors)
 		tensors = tmp
 	}
@@ -408,7 +408,7 @@ func (e *Exec) compileAndExecute(execute bool, args ...any) (results []tensors.T
 		for ii, t := range tensors {
 			if t == nil {
 				exceptions.Panicf("parameter %d (%q) is nil or invalid, maybe a variable value not set as a "+
-					"parameter, cannot execute g", ii, g.GetParameterByHandle(ii).ParameterName())
+					"parameter, cannot execute g", ii, g.GetParameterByHandle(ParameterHandle(ii)).GetParameterName())
 			}
 		}
 	}

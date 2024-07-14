@@ -3,6 +3,7 @@ package graph
 import (
 	"fmt"
 	exceptions "github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
@@ -65,26 +66,50 @@ func Parameter(g *Graph, name string, shape shapes.Shape) (node *Node) {
 // If set to 0, no value is kept.
 var MinConstValueSizeToKeep = int(32)
 
+// nodeInputsConstant holds the inputs used for the call to backends.Parameter.
+type nodeInputsConstant struct {
+	shape  shapes.Shape
+	tensor *tensors.Tensor // Only saved for values < MinConstValueSizeToKeep
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsConstant) Type() NodeType {
+	return NodeTypeConstant
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsConstant) String() string {
+	if ni.tensor == nil {
+		return fmt.Sprintf("%s(%s)", ni.Type(), ni.shape)
+	} else {
+		return fmt.Sprintf("%s(%s: %v)", ni.Type(), ni.shape, ni.tensor.Value())
+	}
+}
+
 // ConstTensor returns a newly created constant node for the tensor x.
 //
 // The value of x is copied into the graph. It's recommended that for very large tensors,
 // even if constants, that they are passed as side inputNodes (or variables, see context package) instead.
-func ConstTensor(g *Graph, x *tensors.Tensor) *Node {
+func ConstTensor(g *Graph, x *tensors.Tensor) (node *Node) {
 	g.AssertBuilding()
-	x.AssertValid()
-	var literal *xla.Literal
+	nodeInputs := &nodeInputsConstant{
+		shape: x.Shape(),
+	}
+	if x.Size() < MinConstValueSizeToKeep {
+		nodeInputs.tensor = x.LocalClone()
+	}
+	var result backends.Op
 	x.ConstFlatData(func(flat any) {
-		literal = xla.NewArrayLiteralFromAny(flat, x.Shape().Dimensions...)
+		result = g.builder.Constant(flat, nodeInputs.shape.Dimensions...)
 	})
-	op, err := xla.Constant(g.build(), literal)
-	if err != nil {
-		panic(errors.WithMessagef(err, "ConstTensor(): "))
+	node = &Node{
+		graph:  g,
+		op:     result,
+		shape:  g.builder.OpShape(result),
+		inputs: nodeInputs,
 	}
-	n := newNode(g, op)
-	if x.Shape().Size() <= MinConstValueSizeToKeep {
-		n.constValue = x.Value()
-	}
-	return n
+	g.registerNode(node)
+	return
 }
 
 // Const creates constant nodes in the Graph. It can take a tensor as well as

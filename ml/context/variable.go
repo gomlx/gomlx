@@ -112,7 +112,7 @@ func (v *Variable) ParameterName() string {
 	return VariableParameterNameFromScopeAndName(v.Scope(), v.Name())
 }
 
-// VariableScopeAndNameFromParameterName extracts the scope and name from a variable's [ParameterName].
+// VariableScopeAndNameFromParameterName extracts the scope and name from a variable's [GetParameterName].
 // It will return empty strings for an invalid parameter name.
 func VariableScopeAndNameFromParameterName(parameterName string) (scope, name string) {
 	if !strings.HasPrefix(parameterName, VariableParameterPrefix) {

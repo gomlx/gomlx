@@ -478,7 +478,7 @@ func (e *Exec) CallWithGraph(args ...any) (outputs []tensors.Tensor, g *Graph) {
 	e.muChangedVars.Unlock()
 	//fmt.Printf("%d outputs, %d variables\n", len(outputs), len(changedVars))
 	for ii, v := range changedVars {
-		//fmt.Printf("\t%s: %d\n", v.ParameterName(), ii)
+		//fmt.Printf("\t%s: %d\n", v.GetParameterName(), ii)
 		v.SetValue(outputs[ii])
 	}
 	outputs = outputs[len(changedVars):]

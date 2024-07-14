@@ -336,7 +336,7 @@ type Handler struct {
 type serializedData struct {
 	Params []serializedParam
 
-	// Variables maps context.Variable.ParameterName() to its position in storage.
+	// Variables maps context.Variable.GetParameterName() to its position in storage.
 	Variables []serializedVar
 }
 
