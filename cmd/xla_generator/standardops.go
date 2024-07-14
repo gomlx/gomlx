@@ -29,7 +29,6 @@ import (
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/gopjrt/protos"
 	"github.com/gomlx/gopjrt/xlabuilder"
 	"github.com/pkg/errors"
 )
@@ -64,6 +63,9 @@ import (
 	for _, pad := range {{.}} {
 		xla_{{.}} = append(xla_{{.}}, convertPadAxis(pad))
 	}`))
+
+	convertFFTTypeTemplate = template.Must(template.New("convertFFTType").Parse(
+		`	var xla_{{.}} = convertFFTType({{.}})`))
 )
 
 type FuncInfo struct {
@@ -129,6 +131,8 @@ func GenerateStandardOpsImplementation(extractor *parsexlabuilder.NodeTextExtrac
 				pi.Type = "backends.ConvolveAxesConfig"
 			} else if pi.Type == "...PadAxis" {
 				pi.Type = "...backends.PadAxis"
+			} else if pi.Type == "protos.FftType" {
+				pi.Type = "backends.FFTType"
 			}
 			fi.Parameters = append(fi.Parameters, pi)
 
@@ -157,6 +161,11 @@ func GenerateStandardOpsImplementation(extractor *parsexlabuilder.NodeTextExtrac
 				for ii, name := range names {
 					fi.ValuesSpec = append(fi.ValuesSpec, execTemplate(convertPadAxisListTemplate, name))
 					names[ii] = "xla_" + name + "..."
+				}
+			} else if pi.Type == "backends.FFTType" {
+				for ii, name := range names {
+					fi.ValuesSpec = append(fi.ValuesSpec, execTemplate(convertFFTTypeTemplate, name))
+					names[ii] = "xla_" + name
 				}
 			} else if strings.HasPrefix(pi.Type, "...") {
 				for ii, name := range names {

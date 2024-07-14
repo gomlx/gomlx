@@ -7,7 +7,6 @@ import (
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/gopjrt/protos"
 	"github.com/gomlx/gopjrt/xlabuilder"
 	"github.com/pkg/errors"
 )
@@ -283,7 +282,7 @@ func (b *Builder) DotGeneral(lhs backends.Op, lhsContractingAxes, lhsBatchAxes [
 	return xla_result
 }
 
-// Two-arguments comparison ops:
+// Equal performs element-wise equality check, returns boolean results with the same dimensions as input.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) Equal(x0, x1 backends.Op) backends.Op {
 	xla_x0 := b.verifyAndCastOp(x0, "x0")
@@ -332,9 +331,10 @@ func (b *Builder) Expm1(x backends.Op) backends.Op {
 // FFT calls the XLA FFT operation, which implements {Forward, Inverse} x {Complex, Real} versions.
 // See documentation in https://www.tensorflow.org/xla/operation_semantics.
 // Underlying, CPU FFT is backed by Eigen's TensorFFT and GPU FFT uses cuFFT.
-func (b *Builder) FFT(operand backends.Op, fftType protos.FftType, fftLength []int) backends.Op {
+func (b *Builder) FFT(operand backends.Op, fftType backends.FFTType, fftLength []int) backends.Op {
 	xla_operand := b.verifyAndCastOp(operand, "operand")
-	xla_result, err := xlabuilder.FFT(xla_operand, fftType, fftLength)
+	var xla_fftType = convertFFTType(fftType)
+	xla_result, err := xlabuilder.FFT(xla_operand, xla_fftType, fftLength)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed FFT", BackendName))
 	}
@@ -389,7 +389,7 @@ func (b *Builder) Gather(operand, startIndices backends.Op, indexVectorAxis int,
 	return xla_result
 }
 
-// GreaterOrEqual returns the Op that represents the output of the corresponding operation.
+// GreaterOrEqual performs element-wise comparison, returns boolean results with the same dimensions as input.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) GreaterOrEqual(x0, x1 backends.Op) backends.Op {
 	xla_x0 := b.verifyAndCastOp(x0, "x0")
@@ -415,7 +415,7 @@ func (b *Builder) GreaterOrEqualTotalOrder(x0, x1 backends.Op) backends.Op {
 	return xla_result
 }
 
-// GreaterThan returns the Op that represents the output of the corresponding operation.
+// GreaterThan performs element-wise comparison, returns boolean results with the same dimensions as input.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) GreaterThan(x0, x1 backends.Op) backends.Op {
 	xla_x0 := b.verifyAndCastOp(x0, "x0")
@@ -463,7 +463,7 @@ func (b *Builder) Iota(shape shapes.Shape, iotaAxis int) backends.Op {
 	return xla_result
 }
 
-// LessOrEqual returns the Op that represents the output of the corresponding operation.
+// LessOrEqual performs element-wise comparison, returns boolean results with the same dimensions as input.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) LessOrEqual(x0, x1 backends.Op) backends.Op {
 	xla_x0 := b.verifyAndCastOp(x0, "x0")
@@ -489,7 +489,7 @@ func (b *Builder) LessOrEqualTotalOrder(x0, x1 backends.Op) backends.Op {
 	return xla_result
 }
 
-// LessThan returns the Op that represents the output of the corresponding operation.
+// LessThan performs element-wise comparison, returns boolean results with the same dimensions as input.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) LessThan(x0, x1 backends.Op) backends.Op {
 	xla_x0 := b.verifyAndCastOp(x0, "x0")
@@ -602,7 +602,7 @@ func (b *Builder) Neg(x backends.Op) backends.Op {
 	return xla_result
 }
 
-// NotEqual returns the Op that represents the output of the corresponding operation.
+// NotEqual performs element-wise inequality check, returns boolean results with the same dimensions as input.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) NotEqual(x0, x1 backends.Op) backends.Op {
 	xla_x0 := b.verifyAndCastOp(x0, "x0")

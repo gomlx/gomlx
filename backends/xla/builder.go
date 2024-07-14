@@ -5,6 +5,7 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/gopjrt/protos"
 	"github.com/gomlx/gopjrt/xlabuilder"
 	"github.com/pkg/errors"
 	"reflect"
@@ -141,4 +142,20 @@ func convertPadAxis(pad backends.PadAxis) (xlaPad xlabuilder.PadAxis) {
 		Interior: pad.Interior,
 	}
 	return
+}
+
+func convertFFTType(fftType backends.FFTType) protos.FftType {
+	switch fftType {
+	case backends.FFTForward:
+		return protos.FftType_FFT
+	case backends.FFTInverse:
+		return protos.FftType_IFFT
+	case backends.FFTForwardReal:
+		return protos.FftType_RFFT
+	case backends.FFTInverseReal:
+		return protos.FftType_IRFFT
+	default:
+		exceptions.Panicf("fft type %s is not supported", fftType)
+		panic(nil) // To quiet IDE warning.
+	}
 }

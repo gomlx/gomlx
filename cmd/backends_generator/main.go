@@ -7,10 +7,12 @@
 package main
 
 import (
+	"fmt"
 	"github.com/gomlx/gomlx/cmd/backends_generator/parsexlabuilder"
 )
 
 func main() {
+	fmt.Println("backends_generator:")
 	opsInfo := parsexlabuilder.ReadOpsInfo()
 	_ = opsInfo
 	extractor, xlaBuilderAst := parsexlabuilder.Parse()

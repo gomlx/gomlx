@@ -8,7 +8,6 @@ import (
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/gopjrt/protos"
 	"slices"
 	"strings"
 )
@@ -47,6 +46,7 @@ const (
 	NodeTypeGreaterOrEqualTotalOrder
 	NodeTypeGreaterThan
 	NodeTypeGreaterThanTotalOrder
+	NodeTypeIdentity
 	NodeTypeImag
 	NodeTypeIota
 	NodeTypeLessOrEqual
@@ -106,7 +106,7 @@ func (ni *nodeInputsAbs) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsAbs) String() string {
-	return fmt.Sprintf("%s(x=[#%d], )",
+	return fmt.Sprintf("%s(x=[#%d])",
 		ni.Type(),
 		ni.x.Id(),
 	)
@@ -144,7 +144,7 @@ func (ni *nodeInputsAdd) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsAdd) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d], )",
+	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
 		ni.Type(),
 		ni.x0.Id(),
 		ni.x1.Id(),
@@ -186,7 +186,7 @@ func (ni *nodeInputsAnd) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsAnd) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d], )",
+	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
 		ni.Type(),
 		ni.x0.Id(),
 		ni.x1.Id(),
@@ -229,7 +229,7 @@ func (ni *nodeInputsArgMinMax) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsArgMinMax) String() string {
-	return fmt.Sprintf("%s(x=[#%d], axis=%v, outputDType=%v, isMin=%v, )",
+	return fmt.Sprintf("%s(x=[#%d], axis=%v, outputDType=%v, isMin=%v)",
 		ni.Type(),
 		ni.x.Id(),
 		ni.axis,
@@ -285,7 +285,7 @@ func (ni *nodeInputsBatchNormInference) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsBatchNormInference) String() string {
-	return fmt.Sprintf("%s(operand=[#%d], scale=[#%d], offset=[#%d], mean=[#%d], variance=[#%d], epsilon=%v, axis=%v, )",
+	return fmt.Sprintf("%s(operand=[#%d], scale=[#%d], offset=[#%d], mean=[#%d], variance=[#%d], epsilon=%v, axis=%v)",
 		ni.Type(),
 		ni.operand.Id(),
 		ni.scale.Id(),
@@ -338,7 +338,7 @@ func (ni *nodeInputsBroadcast) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsBroadcast) String() string {
-	return fmt.Sprintf("%s(x=[#%d], prefixDims=%v, )",
+	return fmt.Sprintf("%s(x=[#%d], prefixDims=%v)",
 		ni.Type(),
 		ni.x.Id(),
 		ni.prefixDims,
@@ -379,7 +379,7 @@ func (ni *nodeInputsBroadcastInDim) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsBroadcastInDim) String() string {
-	return fmt.Sprintf("%s(x=[#%d], outputShape=%v, broadcastAxes=%v, )",
+	return fmt.Sprintf("%s(x=[#%d], outputShape=%v, broadcastAxes=%v)",
 		ni.Type(),
 		ni.x.Id(),
 		ni.outputShape,
@@ -434,7 +434,7 @@ func (ni *nodeInputsCeil) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsCeil) String() string {
-	return fmt.Sprintf("%s(x=[#%d], )",
+	return fmt.Sprintf("%s(x=[#%d])",
 		ni.Type(),
 		ni.x.Id(),
 	)
@@ -471,7 +471,7 @@ func (ni *nodeInputsClz) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsClz) String() string {
-	return fmt.Sprintf("%s(x=[#%d], )",
+	return fmt.Sprintf("%s(x=[#%d])",
 		ni.Type(),
 		ni.x.Id(),
 	)
@@ -509,7 +509,7 @@ func (ni *nodeInputsComplex) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsComplex) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d], )",
+	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
 		ni.Type(),
 		ni.x0.Id(),
 		ni.x1.Id(),
@@ -555,7 +555,7 @@ func (ni *nodeInputsConcatenate) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsConcatenate) String() string {
-	return fmt.Sprintf("%s(axis=%v, operands=[#%s], )",
+	return fmt.Sprintf("%s(axis=%v, operands=[#%s])",
 		ni.Type(),
 		ni.axis,
 		strings.Join(xslices.Map(ni.operands, func(node *Node) string { return fmt.Sprintf("#%d", node.Id()) }), ", "),
@@ -594,7 +594,7 @@ func (ni *nodeInputsConj) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsConj) String() string {
-	return fmt.Sprintf("%s(x=[#%d], )",
+	return fmt.Sprintf("%s(x=[#%d])",
 		ni.Type(),
 		ni.x.Id(),
 	)
@@ -639,7 +639,7 @@ func (ni *nodeInputsConvGeneralDilated) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsConvGeneralDilated) String() string {
-	return fmt.Sprintf("%s(operand=[#%d], filter=[#%d], axes=%+v, strides=%v, paddings=%v, inputDilation=%v, filterDilation=%v, filterGroupCount=%v, batchGroupCount=%v, )",
+	return fmt.Sprintf("%s(operand=[#%d], filter=[#%d], axes=%+v, strides=%v, paddings=%v, inputDilation=%v, filterDilation=%v, filterGroupCount=%v, batchGroupCount=%v)",
 		ni.Type(),
 		ni.operand.Id(),
 		ni.filter.Id(),
@@ -702,7 +702,7 @@ func (ni *nodeInputsConvertDType) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsConvertDType) String() string {
-	return fmt.Sprintf("%s(x=[#%d], dtype=%v, )",
+	return fmt.Sprintf("%s(x=[#%d], dtype=%v)",
 		ni.Type(),
 		ni.x.Id(),
 		ni.dtype,
@@ -741,7 +741,7 @@ func (ni *nodeInputsCos) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsCos) String() string {
-	return fmt.Sprintf("%s(x=[#%d], )",
+	return fmt.Sprintf("%s(x=[#%d])",
 		ni.Type(),
 		ni.x.Id(),
 	)
@@ -779,7 +779,7 @@ func (ni *nodeInputsDiv) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsDiv) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d], )",
+	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
 		ni.Type(),
 		ni.x0.Id(),
 		ni.x1.Id(),
@@ -821,7 +821,7 @@ func (ni *nodeInputsDot) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsDot) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d], )",
+	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
 		ni.Type(),
 		ni.x0.Id(),
 		ni.x1.Id(),
@@ -877,7 +877,7 @@ func (ni *nodeInputsDotGeneral) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsDotGeneral) String() string {
-	return fmt.Sprintf("%s(lhs=[#%d], lhsContractingAxes=%v, lhsBatchAxes=%v, rhs=[#%d], rhsContractingAxes=%v, rhsBatchAxes=%v, )",
+	return fmt.Sprintf("%s(lhs=[#%d], lhsContractingAxes=%v, lhsBatchAxes=%v, rhs=[#%d], rhsContractingAxes=%v, rhsBatchAxes=%v)",
 		ni.Type(),
 		ni.lhs.Id(),
 		ni.lhsContractingAxes,
@@ -936,14 +936,14 @@ func (ni *nodeInputsEqual) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsEqual) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d], )",
+	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
 		ni.Type(),
 		ni.x0.Id(),
 		ni.x1.Id(),
 	)
 }
 
-// Two-arguments comparison ops:
+// Equal performs element-wise equality check, returns boolean results with the same dimensions as input.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func Equal(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
@@ -977,7 +977,7 @@ func (ni *nodeInputsEqualTotalOrder) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsEqualTotalOrder) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d], )",
+	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
 		ni.Type(),
 		ni.x0.Id(),
 		ni.x1.Id(),
@@ -1019,7 +1019,7 @@ func (ni *nodeInputsExp) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsExp) String() string {
-	return fmt.Sprintf("%s(x=[#%d], )",
+	return fmt.Sprintf("%s(x=[#%d])",
 		ni.Type(),
 		ni.x.Id(),
 	)
@@ -1056,7 +1056,7 @@ func (ni *nodeInputsExpm1) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsExpm1) String() string {
-	return fmt.Sprintf("%s(x=[#%d], )",
+	return fmt.Sprintf("%s(x=[#%d])",
 		ni.Type(),
 		ni.x.Id(),
 	)
@@ -1084,7 +1084,7 @@ func Expm1(x *Node) (node *Node) {
 // nodeInputsFFT holds the inputs used for the call to backends.FFT.
 type nodeInputsFFT struct {
 	operand   *Node
-	fftType   protos.FftType
+	fftType   backends.FFTType
 	fftLength []int
 }
 
@@ -1095,7 +1095,7 @@ func (ni *nodeInputsFFT) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsFFT) String() string {
-	return fmt.Sprintf("%s(operand=[#%d], fftType=%v, fftLength=%v, )",
+	return fmt.Sprintf("%s(operand=[#%d], fftType=%s, fftLength=%v)",
 		ni.Type(),
 		ni.operand.Id(),
 		ni.fftType,
@@ -1103,10 +1103,8 @@ func (ni *nodeInputsFFT) String() string {
 	)
 }
 
-// FFT calls the XLA FFT operation, which implements {Forward, Inverse} x {Complex, Real} versions.
-// See documentation in https://www.tensorflow.org/xla/operation_semantics.
-// Underlying, CPU FFT is backed by Eigen's TensorFFT and GPU FFT uses cuFFT.
-func FFT(operand *Node, fftType protos.FftType, fftLength []int) (node *Node) {
+// backendFFT is a Graph wrapper for the backend.Builder.FFT method.
+func backendFFT(operand *Node, fftType backends.FFTType, fftLength []int) (node *Node) {
 	g := validateBuildingGraphFromInputs(operand)
 
 	inputs := &nodeInputsFFT{
@@ -1138,7 +1136,7 @@ func (ni *nodeInputsFloor) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsFloor) String() string {
-	return fmt.Sprintf("%s(x=[#%d], )",
+	return fmt.Sprintf("%s(x=[#%d])",
 		ni.Type(),
 		ni.x.Id(),
 	)
@@ -1182,7 +1180,7 @@ func (ni *nodeInputsGather) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsGather) String() string {
-	return fmt.Sprintf("%s(operand=[#%d], startIndices=[#%d], indexVectorAxis=%v, offsetAxes=%v, collapsedSliceAxes=%v, startIndexMap=%v, sliceSizes=%v, indicesAreSorted=%v, )",
+	return fmt.Sprintf("%s(operand=[#%d], startIndices=[#%d], indexVectorAxis=%v, offsetAxes=%v, collapsedSliceAxes=%v, startIndexMap=%v, sliceSizes=%v, indicesAreSorted=%v)",
 		ni.Type(),
 		ni.operand.Id(),
 		ni.startIndices.Id(),
@@ -1234,14 +1232,14 @@ func (ni *nodeInputsGreaterOrEqual) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsGreaterOrEqual) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d], )",
+	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
 		ni.Type(),
 		ni.x0.Id(),
 		ni.x1.Id(),
 	)
 }
 
-// GreaterOrEqual returns the Op that represents the output of the corresponding operation.
+// GreaterOrEqual performs element-wise comparison, returns boolean results with the same dimensions as input.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func GreaterOrEqual(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
@@ -1275,7 +1273,7 @@ func (ni *nodeInputsGreaterOrEqualTotalOrder) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsGreaterOrEqualTotalOrder) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d], )",
+	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
 		ni.Type(),
 		ni.x0.Id(),
 		ni.x1.Id(),
@@ -1318,14 +1316,14 @@ func (ni *nodeInputsGreaterThan) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsGreaterThan) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d], )",
+	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
 		ni.Type(),
 		ni.x0.Id(),
 		ni.x1.Id(),
 	)
 }
 
-// GreaterThan returns the Op that represents the output of the corresponding operation.
+// GreaterThan performs element-wise comparison, returns boolean results with the same dimensions as input.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func GreaterThan(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
@@ -1359,7 +1357,7 @@ func (ni *nodeInputsGreaterThanTotalOrder) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsGreaterThanTotalOrder) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d], )",
+	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
 		ni.Type(),
 		ni.x0.Id(),
 		ni.x1.Id(),
@@ -1389,6 +1387,44 @@ func GreaterThanTotalOrder(x0 *Node, x1 *Node) (node *Node) {
 	return
 }
 
+// nodeInputsIdentity holds the inputs used for the call to backends.Identity.
+type nodeInputsIdentity struct {
+	x *Node
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsIdentity) Type() NodeType {
+	return NodeTypeIdentity
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsIdentity) String() string {
+	return fmt.Sprintf("%s(x=[#%d])",
+		ni.Type(),
+		ni.x.Id(),
+	)
+}
+
+// Identity returns an Op whose output is the same as its input.
+// It's a no-op that can serve as a place-holder.
+func Identity(x *Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(x)
+
+	inputs := &nodeInputsIdentity{
+		x: x,
+	}
+	result := g.builder.Identity(x.op)
+	node = &Node{
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x},
+	}
+	g.registerNode(node)
+	return
+}
+
 // nodeInputsImag holds the inputs used for the call to backends.Imag.
 type nodeInputsImag struct {
 	x *Node
@@ -1401,7 +1437,7 @@ func (ni *nodeInputsImag) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsImag) String() string {
-	return fmt.Sprintf("%s(x=[#%d], )",
+	return fmt.Sprintf("%s(x=[#%d])",
 		ni.Type(),
 		ni.x.Id(),
 	)
@@ -1439,7 +1475,7 @@ func (ni *nodeInputsIota) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsIota) String() string {
-	return fmt.Sprintf("%s(shape=%v, iotaAxis=%v, )",
+	return fmt.Sprintf("%s(shape=%v, iotaAxis=%v)",
 		ni.Type(),
 		ni.shape,
 		ni.iotaAxis,
@@ -1478,14 +1514,14 @@ func (ni *nodeInputsLessOrEqual) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsLessOrEqual) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d], )",
+	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
 		ni.Type(),
 		ni.x0.Id(),
 		ni.x1.Id(),
 	)
 }
 
-// LessOrEqual returns the Op that represents the output of the corresponding operation.
+// LessOrEqual performs element-wise comparison, returns boolean results with the same dimensions as input.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func LessOrEqual(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
@@ -1519,7 +1555,7 @@ func (ni *nodeInputsLessOrEqualTotalOrder) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsLessOrEqualTotalOrder) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d], )",
+	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
 		ni.Type(),
 		ni.x0.Id(),
 		ni.x1.Id(),
@@ -1562,14 +1598,14 @@ func (ni *nodeInputsLessThan) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsLessThan) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d], )",
+	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
 		ni.Type(),
 		ni.x0.Id(),
 		ni.x1.Id(),
 	)
 }
 
-// LessThan returns the Op that represents the output of the corresponding operation.
+// LessThan performs element-wise comparison, returns boolean results with the same dimensions as input.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func LessThan(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
@@ -1603,7 +1639,7 @@ func (ni *nodeInputsLessThanTotalOrder) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsLessThanTotalOrder) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d], )",
+	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
 		ni.Type(),
 		ni.x0.Id(),
 		ni.x1.Id(),
@@ -1645,7 +1681,7 @@ func (ni *nodeInputsLog) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsLog) String() string {
-	return fmt.Sprintf("%s(x=[#%d], )",
+	return fmt.Sprintf("%s(x=[#%d])",
 		ni.Type(),
 		ni.x.Id(),
 	)
@@ -1682,7 +1718,7 @@ func (ni *nodeInputsLog1p) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsLog1p) String() string {
-	return fmt.Sprintf("%s(x=[#%d], )",
+	return fmt.Sprintf("%s(x=[#%d])",
 		ni.Type(),
 		ni.x.Id(),
 	)
@@ -1719,7 +1755,7 @@ func (ni *nodeInputsLogicalNot) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsLogicalNot) String() string {
-	return fmt.Sprintf("%s(x=[#%d], )",
+	return fmt.Sprintf("%s(x=[#%d])",
 		ni.Type(),
 		ni.x.Id(),
 	)
@@ -1756,7 +1792,7 @@ func (ni *nodeInputsLogistic) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsLogistic) String() string {
-	return fmt.Sprintf("%s(x=[#%d], )",
+	return fmt.Sprintf("%s(x=[#%d])",
 		ni.Type(),
 		ni.x.Id(),
 	)
@@ -1794,7 +1830,7 @@ func (ni *nodeInputsMax) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsMax) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d], )",
+	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
 		ni.Type(),
 		ni.x0.Id(),
 		ni.x1.Id(),
@@ -1835,7 +1871,7 @@ func (ni *nodeInputsMin) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsMin) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d], )",
+	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
 		ni.Type(),
 		ni.x0.Id(),
 		ni.x1.Id(),
@@ -1876,7 +1912,7 @@ func (ni *nodeInputsMul) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsMul) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d], )",
+	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
 		ni.Type(),
 		ni.x0.Id(),
 		ni.x1.Id(),
@@ -1917,7 +1953,7 @@ func (ni *nodeInputsNeg) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsNeg) String() string {
-	return fmt.Sprintf("%s(x=[#%d], )",
+	return fmt.Sprintf("%s(x=[#%d])",
 		ni.Type(),
 		ni.x.Id(),
 	)
@@ -1955,14 +1991,14 @@ func (ni *nodeInputsNotEqual) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsNotEqual) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d], )",
+	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
 		ni.Type(),
 		ni.x0.Id(),
 		ni.x1.Id(),
 	)
 }
 
-// NotEqual returns the Op that represents the output of the corresponding operation.
+// NotEqual performs element-wise inequality check, returns boolean results with the same dimensions as input.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func NotEqual(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
@@ -1996,7 +2032,7 @@ func (ni *nodeInputsNotEqualTotalOrder) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsNotEqualTotalOrder) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d], )",
+	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
 		ni.Type(),
 		ni.x0.Id(),
 		ni.x1.Id(),
@@ -2039,7 +2075,7 @@ func (ni *nodeInputsOr) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsOr) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d], )",
+	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
 		ni.Type(),
 		ni.x0.Id(),
 		ni.x1.Id(),
@@ -2081,7 +2117,7 @@ func (ni *nodeInputsPad) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsPad) String() string {
-	return fmt.Sprintf("%s(x=[#%d], fillValue=[#%d], axesConfig=%+v, )",
+	return fmt.Sprintf("%s(x=[#%d], fillValue=[#%d], axesConfig=%+v)",
 		ni.Type(),
 		ni.x.Id(),
 		ni.fillValue.Id(),
@@ -2123,7 +2159,7 @@ func (ni *nodeInputsPow) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsPow) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d], )",
+	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
 		ni.Type(),
 		ni.x0.Id(),
 		ni.x1.Id(),
@@ -2163,7 +2199,7 @@ func (ni *nodeInputsReal) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsReal) String() string {
-	return fmt.Sprintf("%s(x=[#%d], )",
+	return fmt.Sprintf("%s(x=[#%d])",
 		ni.Type(),
 		ni.x.Id(),
 	)
@@ -2201,7 +2237,7 @@ func (ni *nodeInputsReduceMax) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsReduceMax) String() string {
-	return fmt.Sprintf("%s(x=[#%d], axes=%v, )",
+	return fmt.Sprintf("%s(x=[#%d], axes=%v)",
 		ni.Type(),
 		ni.x.Id(),
 		ni.axes,
@@ -2241,7 +2277,7 @@ func (ni *nodeInputsReduceMin) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsReduceMin) String() string {
-	return fmt.Sprintf("%s(x=[#%d], axes=%v, )",
+	return fmt.Sprintf("%s(x=[#%d], axes=%v)",
 		ni.Type(),
 		ni.x.Id(),
 		ni.axes,
@@ -2281,7 +2317,7 @@ func (ni *nodeInputsReduceProduct) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsReduceProduct) String() string {
-	return fmt.Sprintf("%s(x=[#%d], axes=%v, )",
+	return fmt.Sprintf("%s(x=[#%d], axes=%v)",
 		ni.Type(),
 		ni.x.Id(),
 		ni.axes,
@@ -2322,7 +2358,7 @@ func (ni *nodeInputsReduceSum) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsReduceSum) String() string {
-	return fmt.Sprintf("%s(x=[#%d], axes=%v, )",
+	return fmt.Sprintf("%s(x=[#%d], axes=%v)",
 		ni.Type(),
 		ni.x.Id(),
 		ni.axes,
@@ -2362,7 +2398,7 @@ func (ni *nodeInputsRem) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsRem) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d], )",
+	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
 		ni.Type(),
 		ni.x0.Id(),
 		ni.x1.Id(),
@@ -2404,7 +2440,7 @@ func (ni *nodeInputsReshape) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsReshape) String() string {
-	return fmt.Sprintf("%s(x=[#%d], dimensions=%v, )",
+	return fmt.Sprintf("%s(x=[#%d], dimensions=%v)",
 		ni.Type(),
 		ni.x.Id(),
 		ni.dimensions,
@@ -2444,7 +2480,7 @@ func (ni *nodeInputsReverse) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsReverse) String() string {
-	return fmt.Sprintf("%s(x=[#%d], axes=%v, )",
+	return fmt.Sprintf("%s(x=[#%d], axes=%v)",
 		ni.Type(),
 		ni.x.Id(),
 		ni.axes,
@@ -2483,7 +2519,7 @@ func (ni *nodeInputsRound) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsRound) String() string {
-	return fmt.Sprintf("%s(x=[#%d], )",
+	return fmt.Sprintf("%s(x=[#%d])",
 		ni.Type(),
 		ni.x.Id(),
 	)
@@ -2520,7 +2556,7 @@ func (ni *nodeInputsRsqrt) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsRsqrt) String() string {
-	return fmt.Sprintf("%s(x=[#%d], )",
+	return fmt.Sprintf("%s(x=[#%d])",
 		ni.Type(),
 		ni.x.Id(),
 	)
@@ -2565,7 +2601,7 @@ func (ni *nodeInputsScatterAdd) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsScatterAdd) String() string {
-	return fmt.Sprintf("%s(operand=[#%d], scatterIndices=[#%d], updates=[#%d], indexVectorAxis=%v, updateWindowAxes=%v, insertedWindowAxes=%v, scatterAxesToOperandAxes=%v, indicesAreSorted=%v, uniqueIndices=%v, )",
+	return fmt.Sprintf("%s(operand=[#%d], scatterIndices=[#%d], updates=[#%d], indexVectorAxis=%v, updateWindowAxes=%v, insertedWindowAxes=%v, scatterAxesToOperandAxes=%v, indicesAreSorted=%v, uniqueIndices=%v)",
 		ni.Type(),
 		ni.operand.Id(),
 		ni.scatterIndices.Id(),
@@ -2579,8 +2615,8 @@ func (ni *nodeInputsScatterAdd) String() string {
 	)
 }
 
-// ScatterAdd values from updates pointed by scatterIndices to operand.
-func ScatterAdd(operand *Node, scatterIndices *Node, updates *Node, indexVectorAxis int, updateWindowAxes []int, insertedWindowAxes []int, scatterAxesToOperandAxes []int, indicesAreSorted bool, uniqueIndices bool) (node *Node) {
+// backendScatterAdd is a Graph wrapper for the backend.Builder.ScatterAdd method.
+func backendScatterAdd(operand *Node, scatterIndices *Node, updates *Node, indexVectorAxis int, updateWindowAxes []int, insertedWindowAxes []int, scatterAxesToOperandAxes []int, indicesAreSorted bool, uniqueIndices bool) (node *Node) {
 	g := validateBuildingGraphFromInputs(operand, scatterIndices, updates)
 
 	inputs := &nodeInputsScatterAdd{
@@ -2626,7 +2662,7 @@ func (ni *nodeInputsScatterMax) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsScatterMax) String() string {
-	return fmt.Sprintf("%s(operand=[#%d], scatterIndices=[#%d], updates=[#%d], indexVectorAxis=%v, updateWindowAxes=%v, insertedWindowAxes=%v, scatterAxesToOperandAxes=%v, indicesAreSorted=%v, uniqueIndices=%v, )",
+	return fmt.Sprintf("%s(operand=[#%d], scatterIndices=[#%d], updates=[#%d], indexVectorAxis=%v, updateWindowAxes=%v, insertedWindowAxes=%v, scatterAxesToOperandAxes=%v, indicesAreSorted=%v, uniqueIndices=%v)",
 		ni.Type(),
 		ni.operand.Id(),
 		ni.scatterIndices.Id(),
@@ -2687,7 +2723,7 @@ func (ni *nodeInputsScatterMin) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsScatterMin) String() string {
-	return fmt.Sprintf("%s(operand=[#%d], scatterIndices=[#%d], updates=[#%d], indexVectorAxis=%v, updateWindowAxes=%v, insertedWindowAxes=%v, scatterAxesToOperandAxes=%v, indicesAreSorted=%v, uniqueIndices=%v, )",
+	return fmt.Sprintf("%s(operand=[#%d], scatterIndices=[#%d], updates=[#%d], indexVectorAxis=%v, updateWindowAxes=%v, insertedWindowAxes=%v, scatterAxesToOperandAxes=%v, indicesAreSorted=%v, uniqueIndices=%v)",
 		ni.Type(),
 		ni.operand.Id(),
 		ni.scatterIndices.Id(),
@@ -2744,7 +2780,7 @@ func (ni *nodeInputsSelectAndScatterMax) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsSelectAndScatterMax) String() string {
-	return fmt.Sprintf("%s(operand=[#%d], source=[#%d], windowDimensions=%v, windowStrides=%v, paddings=%v, )",
+	return fmt.Sprintf("%s(operand=[#%d], source=[#%d], windowDimensions=%v, windowStrides=%v, paddings=%v)",
 		ni.Type(),
 		ni.operand.Id(),
 		ni.source.Id(),
@@ -2795,7 +2831,7 @@ func (ni *nodeInputsSelectAndScatterMin) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsSelectAndScatterMin) String() string {
-	return fmt.Sprintf("%s(operand=[#%d], source=[#%d], windowDimensions=%v, windowStrides=%v, paddings=%v, )",
+	return fmt.Sprintf("%s(operand=[#%d], source=[#%d], windowDimensions=%v, windowStrides=%v, paddings=%v)",
 		ni.Type(),
 		ni.operand.Id(),
 		ni.source.Id(),
@@ -2846,7 +2882,7 @@ func (ni *nodeInputsSelectAndScatterSum) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsSelectAndScatterSum) String() string {
-	return fmt.Sprintf("%s(operand=[#%d], source=[#%d], windowDimensions=%v, windowStrides=%v, paddings=%v, )",
+	return fmt.Sprintf("%s(operand=[#%d], source=[#%d], windowDimensions=%v, windowStrides=%v, paddings=%v)",
 		ni.Type(),
 		ni.operand.Id(),
 		ni.source.Id(),
@@ -2893,7 +2929,7 @@ func (ni *nodeInputsSign) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsSign) String() string {
-	return fmt.Sprintf("%s(x=[#%d], )",
+	return fmt.Sprintf("%s(x=[#%d])",
 		ni.Type(),
 		ni.x.Id(),
 	)
@@ -2930,7 +2966,7 @@ func (ni *nodeInputsSin) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsSin) String() string {
-	return fmt.Sprintf("%s(x=[#%d], )",
+	return fmt.Sprintf("%s(x=[#%d])",
 		ni.Type(),
 		ni.x.Id(),
 	)
@@ -2970,7 +3006,7 @@ func (ni *nodeInputsSlice) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsSlice) String() string {
-	return fmt.Sprintf("%s(x=[#%d], starts=%v, limits=%v, strides=%v, )",
+	return fmt.Sprintf("%s(x=[#%d], starts=%v, limits=%v, strides=%v)",
 		ni.Type(),
 		ni.x.Id(),
 		ni.starts,
@@ -2979,16 +3015,8 @@ func (ni *nodeInputsSlice) String() string {
 	)
 }
 
-// Slice extracts a sub-array from the input array.
-// The sub-array is of the same rank as the input and contains the values inside a bounding box within the input array
-// where the dimensions and indices of the bounding box are given as arguments to the slice operation.
-// The strides set the input stride of the slice in each axis and must be >= 1.
-// It is optional, and if missing it is assumed to be 1 for every dimension.
-// Examples:
-//
-//	Slice(x={0, 1, 2, 3, 4}, starts={2}, limits={4}, strides=nil) -> {2, 3}
-//	Slice(x={0, 1, 2, 3, 4}, starts={2}, limits={5}, strides={2}) -> {2, 4}
-func Slice(x *Node, starts []int, limits []int, strides []int) (node *Node) {
+// backendSlice is a Graph wrapper for the backend.Builder.Slice method.
+func backendSlice(x *Node, starts []int, limits []int, strides []int) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
 
 	inputs := &nodeInputsSlice{
@@ -3021,7 +3049,7 @@ func (ni *nodeInputsSqrt) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsSqrt) String() string {
-	return fmt.Sprintf("%s(x=[#%d], )",
+	return fmt.Sprintf("%s(x=[#%d])",
 		ni.Type(),
 		ni.x.Id(),
 	)
@@ -3059,7 +3087,7 @@ func (ni *nodeInputsSub) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsSub) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d], )",
+	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
 		ni.Type(),
 		ni.x0.Id(),
 		ni.x1.Id(),
@@ -3100,7 +3128,7 @@ func (ni *nodeInputsTanh) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsTanh) String() string {
-	return fmt.Sprintf("%s(x=[#%d], )",
+	return fmt.Sprintf("%s(x=[#%d])",
 		ni.Type(),
 		ni.x.Id(),
 	)
@@ -3138,17 +3166,15 @@ func (ni *nodeInputsTranspose) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsTranspose) String() string {
-	return fmt.Sprintf("%s(x=[#%d], permutations=%v, )",
+	return fmt.Sprintf("%s(x=[#%d], permutations=%v)",
 		ni.Type(),
 		ni.x.Id(),
 		ni.permutations,
 	)
 }
 
-// Transpose axes of x.
-// There should be one value in permutations for each axis in x.
-// The output will have: output.Shape.Dimension[permutation[i]] = x.Shape.Dimension[i].
-func Transpose(x *Node, permutations ...int) (node *Node) {
+// backendTranspose is a Graph wrapper for the backend.Builder.Transpose method.
+func backendTranspose(x *Node, permutations ...int) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
 
 	inputs := &nodeInputsTranspose{
@@ -3181,7 +3207,7 @@ func (ni *nodeInputsWhere) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsWhere) String() string {
-	return fmt.Sprintf("%s(condition=[#%d], onTrue=[#%d], onFalse=[#%d], )",
+	return fmt.Sprintf("%s(condition=[#%d], onTrue=[#%d], onFalse=[#%d])",
 		ni.Type(),
 		ni.condition.Id(),
 		ni.onTrue.Id(),
@@ -3223,7 +3249,7 @@ func (ni *nodeInputsXor) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsXor) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d], )",
+	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
 		ni.Type(),
 		ni.x0.Id(),
 		ni.x1.Id(),

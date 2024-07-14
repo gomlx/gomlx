@@ -83,3 +83,21 @@ func (c ConvolveAxesConfig) Clone() ConvolveAxesConfig {
 type PadAxis struct {
 	Start, End, Interior int
 }
+
+type FFTType int
+
+const (
+	// FFTForward - complex in, complex out.
+	FFTForward FFTType = iota
+
+	// FFTInverse - complex in, complex out.
+	FFTInverse
+
+	// FFTForwardReal - real in, fft_length / 2 + 1 complex out
+	FFTForwardReal
+
+	// FFTInverseReal - fft_length / 2 + 1 complex in
+	FFTInverseReal
+)
+
+//go:generate stringer -type FFTType -trimprefix=FFT

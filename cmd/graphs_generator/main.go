@@ -17,15 +17,19 @@ import (
 
 func main() {
 	flag.Parse()
+	fmt.Println("graphs_generator:")
 	methods := buildMethodInfo()
 	GenerateBackendOps(methods)
 }
 
 var (
+	// methodsNotExported list methods that will have a non-exported "backend<Method>" function written, that can
+	// be used by the public graphs implementation.
 	methodsNotExported = types.SetWith(
-		"Broadcast", "Concatenate", "Gather", "Iota", "Pad",
+		"Broadcast", "Concatenate", "FFT", "Gather", "Iota", "Pad",
 		"ReduceMax", "ReduceMin", "ReduceSum",
-		"Reshape", "Reverse", "Sign", "Where")
+		"Reshape", "Reverse", "ScatterAdd", "Sign", "Slice",
+		"Transpose", "Where")
 
 	// methodsToExclude from writing, but the corresponding will be written and maintained manually.
 	methodsToExclude = types.SetWith("Constant", "Parameter")
@@ -85,6 +89,9 @@ func buildMethodInfo() (methods []*MethodInfo) {
 					pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", paramName)
 					pi.ConvertStatement = fmt.Sprintf("inputs.%s...", paramName)
 					pi.Format = "%+v"
+				case "FFTType":
+					pi.BackendType = "backends." + pi.BackendType
+					pi.Format = "%s"
 				default:
 					if strings.HasPrefix(pi.BackendType, "...") {
 						pi.NodeInputType = "[]" + pi.BackendType[3:]
@@ -152,7 +159,6 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/gopjrt/protos"
 )
 
 type NodeType int
@@ -174,7 +180,7 @@ func (ni *nodeInputs{{.BackendName}}) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputs{{.BackendName}}) String() string {
-	return fmt.Sprintf("%s({{range .Inputs}}{{.Name}}={{.Format}}, {{end}})", 
+	return fmt.Sprintf("%s({{range $index, $input := .Inputs}}{{if $index}}, {{end}}{{$input.Name}}={{$input.Format}}{{end}})", 
 		ni.Type(),
 {{range .Inputs}}		{{.FormatValue}},
 {{end}}	)
@@ -219,7 +225,7 @@ func GenerateBackendOps(methods []*MethodInfo) {
 	cmd := exec.Command("gofmt", "-w", fileName)
 	fmt.Printf("\t%s\n", cmd)
 	must.M(cmd.Run())
-	fmt.Printf("Generated %q based on backends.Builder interface\n", fileName)
+	fmt.Printf("\tGenerated %q based on backends.Builder interface\n", fileName)
 
 	cmd = exec.Command("stringer", "-type", "NodeType", "-trimprefix", "NodeType", fileName)
 	fmt.Printf("\t%s\n", cmd)

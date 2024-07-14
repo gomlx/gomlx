@@ -1,8 +1,11 @@
 package graph
 
 import (
+	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gomlx/xla"
+	"github.com/gomlx/gopjrt/dtypes"
 )
 
 // FFT computes a forward 1D fast-fourier transformation of the operand, which is expected
@@ -19,7 +22,7 @@ func FFT(operand *Node) *Node {
 	if operand.Shape().IsScalar() {
 		Panicf("FFT requires a complex input with rank > 1, got scalar %s instead", operand.DType())
 	}
-	return fftXLA(operand, xla.FftForward, []int{xslices.At(operand.Shape().Dimensions, -1)})
+	return backendFFT(operand, xla.FftForward, []int{xslices.Last(operand.Shape().Dimensions)})
 }
 
 // InverseFFT computes an inverse fast-fourier transformation of the operand, which is expected to be complex.

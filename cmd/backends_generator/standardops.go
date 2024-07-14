@@ -26,7 +26,6 @@ package backends
 import (
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/gopjrt/protos"
 )
 
 type StandardOps interface { {{range .}}
@@ -77,6 +76,8 @@ func GenerateStandardOpsInterface(extractor *parsexlabuilder.NodeTextExtractor, 
 				pi.Type = "...Op"
 			} else if pi.Type == "Shape" {
 				pi.Type = "shapes.Shape"
+			} else if pi.Type == "protos.FftType" {
+				pi.Type = "FFTType"
 			}
 			params = append(params, pi)
 		}
@@ -104,5 +105,5 @@ func GenerateStandardOpsInterface(extractor *parsexlabuilder.NodeTextExtractor, 
 	cmd := exec.Command("gofmt", "-w", fileName)
 	fmt.Printf("\t%s\n", cmd)
 	must.M(cmd.Run())
-	fmt.Printf("Generated %q based on github.com/gomlx/gopjrt/xlabuilder\n", fileName)
+	fmt.Printf("\tgenerated %q based on github.com/gomlx/gopjrt/xlabuilder\n", fileName)
 }

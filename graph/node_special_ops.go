@@ -156,22 +156,11 @@ func ConstAs(base *Node, x any) *Node {
 	return ConstAsDType(base.Graph(), base.DType(), x)
 }
 
-// IdentityOp returns a new node whose output is the same as x.
-//
-// Basically, it's a no-op, that allows for different meta-data to be set (Node.StopGradient, trace information, logging, etc.)
-func IdentityOp(x *Node) *Node {
-	x.AssertValid()
-	g := x.graph
-	g.AssertBuilding()
-	op := xla.Identity(x.op)
-	return newNode(g, op)
-}
-
-// StopGradient creates an identity node (see IdentityOp), through which gradients don't back-propagate.
+// StopGradient creates an identity node (see Identity), through which gradients don't back-propagate.
 //
 // No new XLA op is created, so there are no costs to the computation execution speed.
 func StopGradient(x *Node) *Node {
-	n := IdentityOp(x)
+	n := Identity(x)
 	n.stopGradient = true
 	return n
 }
@@ -183,7 +172,7 @@ func StopGradient(x *Node) *Node {
 // the gradient of the loss (typically, but of whatever we are calculating the gradient of) with respect to `x`,
 // and we should return the updated `v`, that is, the customized gradient with respect to `x`.
 func IdentityWithCustomGradient(x *Node, gradientFn func(x, v *Node) *Node) *Node {
-	n := IdentityOp(x)
+	n := Identity(x)
 	n.customVJP = func(node, v *Node, _ shapes.Shape) []*Node {
 		return []*Node{gradientFn(node, v)}
 	}

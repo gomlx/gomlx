@@ -5,7 +5,6 @@ package backends
 import (
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/gopjrt/protos"
 )
 
 type StandardOps interface {
@@ -137,7 +136,7 @@ type StandardOps interface {
 	// It provides the basic means of implementing Einsum.
 	DotGeneral(lhs Op, lhsContractingAxes, lhsBatchAxes []int, rhs Op, rhsContractingAxes, rhsBatchAxes []int) Op
 
-	// Two-arguments comparison ops:
+	// Equal performs element-wise equality check, returns boolean results with the same dimensions as input.
 	// The op is created on the same XlaBuilder as used for x0 and x1.
 	Equal(x0, x1 Op) Op
 
@@ -156,7 +155,7 @@ type StandardOps interface {
 	// FFT calls the XLA FFT operation, which implements {Forward, Inverse} x {Complex, Real} versions.
 	// See documentation in https://www.tensorflow.org/xla/operation_semantics.
 	// Underlying, CPU FFT is backed by Eigen's TensorFFT and GPU FFT uses cuFFT.
-	FFT(operand Op, fftType protos.FftType, fftLength []int) Op
+	FFT(operand Op, fftType FFTType, fftLength []int) Op
 
 	// Floor returns the Op that represents the output of the corresponding operation.
 	Floor(x Op) Op
@@ -191,7 +190,7 @@ type StandardOps interface {
 	//     collapsedSliceAxes -- the value itself is an axis in the output shape.
 	Gather(operand, startIndices Op, indexVectorAxis int, offsetAxes, collapsedSliceAxes, startIndexMap, sliceSizes []int, indicesAreSorted bool) Op
 
-	// GreaterOrEqual returns the Op that represents the output of the corresponding operation.
+	// GreaterOrEqual performs element-wise comparison, returns boolean results with the same dimensions as input.
 	// The op is created on the same XlaBuilder as used for x0 and x1.
 	GreaterOrEqual(x0, x1 Op) Op
 
@@ -201,7 +200,7 @@ type StandardOps interface {
 	// The op is created on the same XlaBuilder as used for x0 and x1.
 	GreaterOrEqualTotalOrder(x0, x1 Op) Op
 
-	// GreaterThan returns the Op that represents the output of the corresponding operation.
+	// GreaterThan performs element-wise comparison, returns boolean results with the same dimensions as input.
 	// The op is created on the same XlaBuilder as used for x0 and x1.
 	GreaterThan(x0, x1 Op) Op
 
@@ -219,7 +218,7 @@ type StandardOps interface {
 	// returns [[0 0][1 1]].
 	Iota(shape shapes.Shape, iotaAxis int) Op
 
-	// LessOrEqual returns the Op that represents the output of the corresponding operation.
+	// LessOrEqual performs element-wise comparison, returns boolean results with the same dimensions as input.
 	// The op is created on the same XlaBuilder as used for x0 and x1.
 	LessOrEqual(x0, x1 Op) Op
 
@@ -229,7 +228,7 @@ type StandardOps interface {
 	// The op is created on the same XlaBuilder as used for x0 and x1.
 	LessOrEqualTotalOrder(x0, x1 Op) Op
 
-	// LessThan returns the Op that represents the output of the corresponding operation.
+	// LessThan performs element-wise comparison, returns boolean results with the same dimensions as input.
 	// The op is created on the same XlaBuilder as used for x0 and x1.
 	LessThan(x0, x1 Op) Op
 
@@ -267,7 +266,7 @@ type StandardOps interface {
 	// Neg returns the Op that represents the output of the corresponding operation.
 	Neg(x Op) Op
 
-	// NotEqual returns the Op that represents the output of the corresponding operation.
+	// NotEqual performs element-wise inequality check, returns boolean results with the same dimensions as input.
 	// The op is created on the same XlaBuilder as used for x0 and x1.
 	NotEqual(x0, x1 Op) Op
 
