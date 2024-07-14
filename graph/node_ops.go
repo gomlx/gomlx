@@ -9,7 +9,6 @@ import (
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
-	xla "github.com/gomlx/gopjrt/xlabuilder"
 	"github.com/pkg/errors"
 	"reflect"
 	"slices"
@@ -998,7 +997,7 @@ func intToBool(i int) bool {
 //
 // If operands are scalars, they will be concatenated to a vector (just use `axis=0`).
 func Concatenate(operands []*Node, axis int) *Node {
-	g := validateBuildingGraphFromInputs(operands...)
+	_ = validateBuildingGraphFromInputs(operands...)
 	if len(operands) == 0 {
 		exceptions.Panicf("cannot ConcatenateDimensions 0 operands")
 	}
@@ -1045,10 +1044,7 @@ func Concatenate(operands []*Node, axis int) *Node {
 			operands[ii+1] = ExpandDims(node, 0)
 		}
 	}
-	return newNode(g, &xla.SerializedNode{
-		Type: xla.ConcatenateNode,
-		Int:  axis,
-	}, operands)
+	return backendConcatenate(axis, operands...)
 }
 
 // concatenateVJP implements a VJP function for the ConcatenateNode operation.
@@ -1081,7 +1077,7 @@ func concatenateVJP(node, v *Node, _ shapes.Shape) []*Node {
 // the value indexed at `i` will be swapped with the value at indexed `(dimension_size - 1 - i)`.
 // The shape remains the same.
 func Reverse(x *Node, axes ...int) *Node {
-	g := validateBuildingGraphFromInputs(x)
+	_ = validateBuildingGraphFromInputs(x)
 	rank := x.shape.Rank()
 	adjustedAxes := slices.Clone(axes)
 	for ii, axis := range adjustedAxes {
@@ -1118,30 +1114,27 @@ func Transpose(x *Node, axisA, axisB int) *Node {
 
 // TransposeAllDims allows one to transpose any or all dimensions.
 // It permutes the operand axes with the given permutation, so ∀ i, 0 ≤ i < rank ⇒ input_dimensions[permutations[i]] = output_dimensions[i].
-func TransposeAllDims(x *Node, permutation ...int) *Node {
+func TransposeAllDims(x *Node, permutations ...int) *Node {
 	g := validateBuildingGraphFromInputs(x)
 	rank := x.shape.Rank()
-	if len(permutation) != rank {
-		exceptions.Panicf("in TransposeAllDims(x, %v), there must be one permutation per dimension in x, but x rank %d",
-			permutation, rank)
+	if len(permutations) != rank {
+		exceptions.Panicf("in TransposeAllDims(x, %v), there must be one permutations per dimension in x, but x rank %d",
+			permutations, rank)
 	}
 	used := make([]bool, rank)
-	for ii, idx := range permutation {
+	for ii, idx := range permutations {
 		if idx < 0 {
 			idx = rank + idx
-			permutation[ii] = idx
+			permutations[ii] = idx
 		}
 		if idx >= rank || idx < 0 {
-			exceptions.Panicf("in TransposeAllDims(x, %v), element %d id is %d which is out-of-limits for x rank %d", permutation, ii, idx, rank)
+			exceptions.Panicf("in TransposeAllDims(x, %v), element %d id is %d which is out-of-limits for x rank %d", permutations, ii, idx, rank)
 		}
 		if used[idx] {
-			exceptions.Panicf("in TransposeAllDims(x, %v), id %d appears more than once", permutation, idx)
+			exceptions.Panicf("in TransposeAllDims(x, %v), id %d appears more than once", permutations, idx)
 		}
 	}
-	return newNode(g, &xla.SerializedNode{
-		Type: xla.TransposeNode,
-		Ints: permutation,
-	}, []*Node{x})
+	return backendTranspose(x, permutations...)
 }
 
 // Einsum evaluates the "Einstein summation" various types of products (inner/outer/batched)

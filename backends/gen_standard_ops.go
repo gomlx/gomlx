@@ -382,7 +382,7 @@ type StandardOps interface {
 
 	// Transpose axes of x.
 	// There should be one value in permutations for each axis in x.
-	// The output will have: output.Shape.Dimension[permutation[i]] = x.Shape.Dimension[i].
+	// The output will have: output.Shape.Dimension[ii] = x.Shape.Dimension[permutations[i]].
 	Transpose(x Op, permutations ...int) Op
 
 	// Where takes element-wise values from onTrue or onFalse depending on the value of condition (expected to be boolean).

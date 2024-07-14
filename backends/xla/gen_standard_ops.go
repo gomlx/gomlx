@@ -928,7 +928,7 @@ func (b *Builder) Tanh(x backends.Op) backends.Op {
 
 // Transpose axes of x.
 // There should be one value in permutations for each axis in x.
-// The output will have: output.Shape.Dimension[permutation[i]] = x.Shape.Dimension[i].
+// The output will have: output.Shape.Dimension[ii] = x.Shape.Dimension[permutations[i]].
 func (b *Builder) Transpose(x backends.Op, permutations ...int) backends.Op {
 	xla_x := b.verifyAndCastOp(x, "x")
 	xla_result, err := xlabuilder.Transpose(xla_x, permutations...)
