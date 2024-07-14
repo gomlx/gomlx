@@ -1343,10 +1343,12 @@ func (e einsumOperandDesc) axisIndex(axis rune) int {
 // Consider trying both sides.
 func EinsumAxes(lhs, rhs *Node, contractingAxes, batchAxes [][2]int) (output *Node) {
 	_ = validateBuildingGraphFromInputs(lhs, rhs)
+	lhsRank := lhs.Rank()
+	rhsRank := rhs.Rank()
 
 	// Create function to process both, contractingAxes and batchAxes.
-	lhsSeen := types.MakeSet[int](rhs.Rank())
-	rhsSeen := types.MakeSet[int](rhs.Rank())
+	lhsSeen := types.MakeSet[int](lhsRank)
+	rhsSeen := types.MakeSet[int](rhsRank)
 	normalizePairs := func(name string, pairs [][2]int) (lhsAxes, rhsAxes []int) {
 		if len(pairs) == 0 {
 			return
@@ -1354,15 +1356,8 @@ func EinsumAxes(lhs, rhs *Node, contractingAxes, batchAxes [][2]int) (output *No
 		lhsAxes = make([]int, 0, len(contractingAxes))
 		rhsAxes = make([]int, 0, len(contractingAxes))
 		for _, pair := range pairs {
-			lhsAxis, rhsAxis := pair[0], pair[1]
-			// Convert negative axes to distance from last (-1 is the last axis).
-			if lhsAxis < 0 {
-				lhsAxis = lhs.Rank() + lhsAxis
-			}
-			if rhsAxis < 0 {
-				rhsAxis = rhs.Rank() + rhsAxis
-			}
-			// Check if axes are valid.
+			lhsAxis, rhsAxis := adjustAxisToRank(pair[0], lhsRank), adjustAxisToRank(pair[1], rhsRank)
+
 			if lhsAxis < 0 || lhsAxis >= lhs.Rank() {
 				exceptions.Panicf("EinsumAxes %s has out-of-bound axis for left-hand-side operand: %v",
 					name, pairs)
@@ -1373,6 +1368,7 @@ func EinsumAxes(lhs, rhs *Node, contractingAxes, batchAxes [][2]int) (output *No
 					name, pairs)
 			}
 			lhsSeen.Insert(lhsAxis)
+
 			if rhsAxis < 0 || rhsAxis >= rhs.Rank() {
 				exceptions.Panicf("EinsumAxes %s has out-of-bound axis for right-hand-side operand: %v", name, pairs)
 			}
