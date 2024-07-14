@@ -26,7 +26,8 @@ var (
 	// methodsNotExported list methods that will have a non-exported "backend<Method>" function written, that can
 	// be used by the public graphs implementation.
 	methodsNotExported = types.SetWith(
-		"Broadcast", "Concatenate", "FFT", "Gather", "Iota", "Pad",
+		"Broadcast", "BroadcastInDim",
+		"Concatenate", "FFT", "Gather", "Iota", "Pad",
 		"ReduceMax", "ReduceMin", "ReduceSum",
 		"Reshape", "Reverse", "ScatterAdd", "Sign", "Slice",
 		"Transpose", "Where")

@@ -387,22 +387,8 @@ func (ni *nodeInputsBroadcastInDim) String() string {
 	)
 }
 
-// BroadcastInDim broadcasts x to an output with the given shape.
-// broadcastAxes has an output axes value for each x axes (len(broadcastAxes) == x.Shape.Rank()).
-// The i-th axis of x is mapped to the broadcastDim[i]-th dimension of the output.
-// broadcastAxes must be also increasing: this operation cannot be used to transpose axes, it will only
-// broadcast and introduce new axes in-between.
-// This also requires that the i-th input dimension is either 1 or is the same as the
-// output dimension it's broadcasting into.
-// For example, say operand `x = (s32)[2]{1, 2}`; outputShape = `(s32)[2,2]`:
-//   - Specifying []int{1} as broadcast_dimension will generate output
-//     {{1, 2},
-//     {1, 2}}
-//   - On the other hand, specifying []int{0} as broadcast_dimension
-//     will generate output
-//     {{1 , 1},
-//     {2 , 2}}
-func BroadcastInDim(x *Node, outputShape shapes.Shape, broadcastAxes []int) (node *Node) {
+// backendBroadcastInDim is a Graph wrapper for the backend.Builder.BroadcastInDim method.
+func backendBroadcastInDim(x *Node, outputShape shapes.Shape, broadcastAxes []int) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
 
 	inputs := &nodeInputsBroadcastInDim{
