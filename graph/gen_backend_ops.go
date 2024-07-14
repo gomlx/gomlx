@@ -2101,8 +2101,10 @@ func (ni *nodeInputsPad) String() string {
 	)
 }
 
-// backendPad is a Graph wrapper for the backend.Builder.Pad method.
-func backendPad(x *Node, fillValue *Node, axesConfig ...backends.PadAxis) (node *Node) {
+// Pad injects padding on the start, end or interior (in between each element) of the given operand.
+// There must be at most `operand.Rank()` axesConfig values. Missing PadAxis are assumed to be zeros,
+// that is, no padding for those axes.
+func Pad(x *Node, fillValue *Node, axesConfig ...backends.PadAxis) (node *Node) {
 	g := validateBuildingGraphFromInputs(x, fillValue)
 
 	inputs := &nodeInputsPad{

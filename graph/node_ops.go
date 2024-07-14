@@ -16,6 +16,12 @@ import (
 	"strings"
 )
 
+// PadAxis defines the amount of padding preceding one axis (Start), at the end of axis (End)
+// or in between the inputNodes (Interior).
+// This is used as a parameter for the Pad function.
+// This is an alias to backends.PadAxis
+type PadAxis = backends.PadAxis
+
 // nodeInputsParameter holds the inputs used for the call to backends.Parameter.
 type nodeInputsParameter struct {
 	name   string
@@ -973,35 +979,6 @@ func Slice(x *Node, axesSpec ...SliceAxisSpec) *Node {
 		}
 	}
 	return SliceWithStridesXLA(x, starts, limits, strides)
-}
-
-// PadAxis defines the amount of padding preceding one axis (Start), at the end of axis (End)
-// or in between the inputNodes (Interior).
-// This is used as a parameter for the Pad function.
-type PadAxis struct {
-	Start, End, Interior int
-}
-
-// Pad injects padding on the start, end or interior (in between each element) of the given operand.
-// There must be at most `operand.Rank()` axesConfig values. Missing PadAxis are assumed to be zeros,
-// that is, no padding for those axes.
-func Pad(operand, fillValue *Node, axesConfig ...PadAxis) *Node {
-	g := validateBuildingGraphFromInputs(operand, fillValue)
-	rank := operand.Rank()
-
-	intArgs := make([]int, 0, 3*rank)
-	for axis := 0; axis < rank; axis++ {
-		var padding PadAxis
-		if axis < len(axesConfig) {
-			padding = axesConfig[axis]
-		}
-		intArgs = append(intArgs, padding.Start, padding.End, padding.Interior)
-	}
-
-	return newNode(g, &xla.SerializedNode{
-		Type: xla.PadNode,
-		Ints: intArgs,
-	}, []*Node{operand, fillValue})
 }
 
 func boolToInt(b bool) int {

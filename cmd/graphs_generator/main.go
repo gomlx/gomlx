@@ -27,7 +27,7 @@ var (
 	// be used by the public graphs implementation.
 	methodsNotExported = types.SetWith(
 		"ArgMinMax", "Broadcast", "BroadcastInDim",
-		"Concatenate", "FFT", "Gather", "Iota", "Pad",
+		"Concatenate", "FFT", "Gather", "Iota",
 		"ReduceMax", "ReduceMin", "ReduceProduct", "ReduceSum",
 		"Reshape", "Reverse", "ScatterAdd", "Sign", "Slice",
 		"Transpose", "Where")
