@@ -592,14 +592,14 @@ func ArgMin(x *Node, axis int, outputDType ...dtypes.DType) (output *Node) {
 // adjustAxesToRankAndSort not-inplace, it returns an adjusted copy of the given `axesWithNegatives`.
 // An axis set to -1 is converted to `rank - 1`.
 // It panics if any of the axes is out-of-range for given rank.
-func adjustAxesToRankAndSort(rank int, axesWithNegatives []int) []int {
+func adjustAxesToRankAndSort(rank int, axesWithNegatives []int, paramName string) []int {
 	axes := slices.Clone(axesWithNegatives)
 	for ii := range axes {
 		if axes[ii] < 0 {
 			axes[ii] = rank + axes[ii]
 		}
 		if axes[ii] < 0 || axes[ii] > rank {
-			exceptions.Panicf("axis #%d of axes given (%v) is out-of-range for rank %d",
+			exceptions.Panicf("axis #%d of %q axes given (%v) is out-of-range for rank %d",
 				ii, axesWithNegatives, rank)
 		}
 	}
@@ -614,7 +614,7 @@ func adjustAxesToRankAndSort(rank int, axesWithNegatives []int) []int {
 // See ReduceAndKeep for a version to preserve the reduced axes.
 func ReduceSum(x *Node, reduceAxes ...int) *Node {
 	_ = validateBuildingGraphFromInputs(x)
-	axes := adjustAxesToRankAndSort(x.Rank(), reduceAxes)
+	axes := adjustAxesToRankAndSort(x.Rank(), reduceAxes, "x")
 	return backendReduceSum(x, axes...)
 }
 
@@ -700,7 +700,7 @@ func MaskedReduceAllMean(x, mask *Node) *Node {
 // See ReduceAndKeep for a version to preserve the reduced axes.
 func ReduceMultiply(x *Node, reduceAxes ...int) *Node {
 	_ = validateBuildingGraphFromInputs(x)
-	axes := adjustAxesToRankAndSort(x.Rank(), reduceAxes)
+	axes := adjustAxesToRankAndSort(x.Rank(), reduceAxes, "x")
 	return backendReduceProduct(x, axes...)
 }
 
@@ -716,7 +716,7 @@ func ReduceAllMultiply(x *Node) *Node {
 // See ReduceAndKeep for a version to preserve the reduced axes.
 func ReduceMax(x *Node, reduceAxes ...int) *Node {
 	_ = validateBuildingGraphFromInputs(x)
-	axes := adjustAxesToRankAndSort(x.Rank(), reduceAxes)
+	axes := adjustAxesToRankAndSort(x.Rank(), reduceAxes, "x")
 	return backendReduceMax(x, axes...)
 }
 
@@ -763,7 +763,7 @@ var ReduceAllMaskedMax = MaskedReduceAllMax
 // See ReduceAndKeep for a version to preserve the reduced axes.
 func ReduceMin(x *Node, reduceAxes ...int) *Node {
 	_ = validateBuildingGraphFromInputs(x)
-	axes := adjustAxesToRankAndSort(x.Rank(), reduceAxes)
+	axes := adjustAxesToRankAndSort(x.Rank(), reduceAxes, "x")
 	return backendReduceMin(x, axes...)
 }
 
@@ -1392,7 +1392,27 @@ func EinsumAxes(lhs, rhs *Node, contractingAxes, batchAxes [][2]int) (output *No
 	lhsContractingAxes, rhsContractingAxes := normalizePairs("contractingAxes", contractingAxes)
 	lhsBatchAxes, rhsBatchAxes := normalizePairs("batchAxes", batchAxes)
 
-	// Execute dotGeneralXLA
-	output = dotGeneralXLA(lhs, lhsContractingAxes, lhsBatchAxes, rhs, rhsContractingAxes, rhsBatchAxes)
-	return
+	// Execute DotGeneral with parameters.
+	return backendDotGeneral(lhs, lhsContractingAxes, lhsBatchAxes, rhs, rhsContractingAxes, rhsBatchAxes)
+}
+
+// DotGeneral takes as input lhs (left-hand-side) and rhs (right-hand-side) specifications
+// for a general vector product -- a generalized "Einsum". Each axis can be:
+//   - Just aligned (batch axes), so the output has the same axes as the inputs. The dimensions
+//     must match in lhs and rhs.
+//   - Crossed (default), in which case the output is the combination (concatenation) of the
+//     dimensions.
+//   - Contracted (contracting axes), where the output does multiply the values and reduce sum
+//     those dimensions.
+//
+// It follows that the resulting dimension number starts with the batch dimension, then the 'lhs'
+// non-contracting/non-batch dimension, and finally the 'rhs' non-contracting/non-batch dimension.
+// It provides the basic means of implementing Einsum.
+func DotGeneral(lhs *Node, lhsContractingAxes, lhsBatchAxes []int, rhs *Node, rhsContractingAxes, rhsBatchAxes []int) backends.Op {
+	_ = validateBuildingGraphFromInputs(lhs, rhs)
+	lhsContractingAxes = adjustAxesToRankAndSort(lhs.Rank(), lhsContractingAxes, "lhsContractingAxes")
+	lhsBatchAxes = adjustAxesToRankAndSort(lhs.Rank(), lhsBatchAxes, "lhsBatchAxes")
+	rhsContractingAxes = adjustAxesToRankAndSort(rhs.Rank(), rhsContractingAxes, "rhsContractingAxes")
+	rhsBatchAxes = adjustAxesToRankAndSort(rhs.Rank(), rhsBatchAxes, "rhsBatchAxes")
+	return backendDotGeneral(lhs, lhsContractingAxes, lhsBatchAxes, rhs, rhsContractingAxes, rhsBatchAxes)
 }

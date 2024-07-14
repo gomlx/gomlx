@@ -245,7 +245,7 @@ func OneHot(indices *Node, depth int, dtype dtypes.DType) *Node {
 func ReduceAndKeep(x *Node, reduceFn func(x *Node, reduceAxes ...int) *Node, reduceAxes ...int) *Node {
 	_ = validateBuildingGraphFromInputs(x)
 	rank := x.Rank()
-	reduceAxes = adjustAxesToRankAndSort(rank, reduceAxes)
+	reduceAxes = adjustAxesToRankAndSort(rank, reduceAxes, "x")
 	reduced := reduceFn(x, reduceAxes...)
 	shapeWithRecoveredDims := x.Shape().Clone()
 	for ii := 0; ii < rank && len(reduceAxes) > 0; ii++ {
@@ -262,7 +262,7 @@ func ReduceAndKeep(x *Node, reduceFn func(x *Node, reduceAxes ...int) *Node, red
 func MaskedReduceAndKeep(x, mask *Node, reduceFn func(x, mask *Node, reduceAxes ...int) *Node, reduceAxes ...int) *Node {
 	_ = validateBuildingGraphFromInputs(x)
 	rank := x.Rank()
-	reduceAxes = adjustAxesToRankAndSort(rank, reduceAxes)
+	reduceAxes = adjustAxesToRankAndSort(rank, reduceAxes, "x")
 	reduced := reduceFn(x, mask, reduceAxes...)
 	shapeWithRecoveredDims := x.Shape().Clone()
 	for ii := 0; ii < rank && len(reduceAxes) > 0; ii++ {

@@ -3,10 +3,13 @@
 package graph
 
 import (
+	"fmt"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	"slices"
+	"strings"
 )
 
 type NodeType int
@@ -864,19 +867,8 @@ func (ni *nodeInputsDotGeneral) String() string {
 	)
 }
 
-// DotGeneral takes as input lhs (left-hand-side) and rhs (right-hand-side) specifications
-// for a general vector product -- a generalized "Einsum". Each axis can be:
-//   - Just aligned (batch axes), so the output has the same axes as the inputs. The dimensions
-//     must match in lhs and rhs.
-//   - Crossed (default), in which case the output is the combination (concatenation) of the
-//     dimensions.
-//   - Contracted (contracting axes), where the output does multiply the values and reduce sum
-//     those dimensions.
-//
-// It follows that the resulting dimension number starts with the batch dimension, then the 'lhs'
-// non-contracting/non-batch dimension, and finally the 'rhs' non-contracting/non-batch dimension.
-// It provides the basic means of implementing Einsum.
-func DotGeneral(lhs *Node, lhsContractingAxes []int, lhsBatchAxes []int, rhs *Node, rhsContractingAxes []int, rhsBatchAxes []int) (node *Node) {
+// backendDotGeneral is a Graph wrapper for the backend.Builder.DotGeneral method.
+func backendDotGeneral(lhs *Node, lhsContractingAxes []int, lhsBatchAxes []int, rhs *Node, rhsContractingAxes []int, rhsBatchAxes []int) (node *Node) {
 	g := validateBuildingGraphFromInputs(lhs, rhs)
 
 	inputs := &nodeInputsDotGeneral{
