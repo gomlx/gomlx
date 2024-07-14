@@ -38,6 +38,24 @@ func FromShape(shape shapes.Shape) (t *Tensor) {
 	return
 }
 
+// LocalClone creates a clone of the Tensor value with local backing.
+// It will trigger a transfer from on-device data to local, if the value is not present in local memory yet.
+func (t *Tensor) LocalClone() *Tensor {
+	var clone *Tensor
+	t.ConstFlatData(func(flat any) {
+		clone = newTensor(t.shape)
+		flatV := reflect.ValueOf(flat)
+		size := flatV.Len()
+		cloneFlatV := reflect.MakeSlice(flatV.Type(), size, size)
+		reflect.Copy(cloneFlatV, flatV)
+		clone.local = &local{
+			t:    clone,
+			flat: cloneFlatV.Interface(),
+		}
+	})
+	return clone
+}
+
 // IsFinalized returns true if the tensor has already been "finalized", and its
 // data freed.
 // It implements Tensor.IsFinalized.
@@ -107,8 +125,8 @@ func (t *Tensor) lockedConstFlatData(accessFn func(flat any)) {
 func ConstFlatData[T dtypes.Supported](t *Tensor, accessFn func(flat []T)) {
 	if t.shape.DType != dtypes.FromGenericsType[T]() {
 		var v T
-		exceptions.Panicf("ConstFlatData[%T] is incompatible with Tensor's dtype %s",
-			v, t.shape.DType)
+		exceptions.Panicf("ConstFlatData[%T] is incompatible with Tensor's dtype %s -- expected dtype %s",
+			v, t.shape.DType, dtypes.FromGenericsType[T]())
 	}
 	t.ConstFlatData(func(anyFlat any) {
 		flat := anyFlat.([]T)

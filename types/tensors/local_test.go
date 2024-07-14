@@ -346,3 +346,16 @@ func TestSaveLoad(t *testing.T) {
 	testSaveLoadBool(t)
 	testSaveLoadFloat16(t)
 }
+
+func TestClone(t *testing.T) {
+	tensor := FromValue([][]int32{{0, 1}, {3, 5}, {7, 11}})
+	clone := tensor.LocalClone()
+
+	// Change original tensor and check that cloned version is unchanged
+	tensor.MutableFlatData(func(flatAny any) {
+		flat := flatAny.([]int32)
+		flat[0] = 100
+	})
+	require.NoError(t, clone.Shape().Check(dtypes.Int32, 3, 2))
+	require.Equal(t, []int32{0, 1, 3, 5, 7, 11}, CopyFlatData[int32](clone))
+}
