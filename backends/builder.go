@@ -43,6 +43,10 @@ type Builder interface {
 	// even if constants, that they are passed as side inputNodes (or variables, see context package) instead.
 	Constant(flat any, dims ...int) Op
 
+	// Identity returns an Op whose output is the same as its input.
+	// It's a no-op that can serve as a place-holder.
+	Identity(x Op) Op
+
 	// StandardOps include automatically generated list of operations for the Builder.
 	StandardOps
 }

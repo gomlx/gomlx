@@ -25,9 +25,9 @@ var (
 package xla
 
 import (
-	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/protos"
 	"github.com/gomlx/gopjrt/xlabuilder"
@@ -48,32 +48,10 @@ import (
 `))
 
 	convertOpTemplate = template.Must(template.New("convertOp").Parse(
-		`	var xla_{{.}} *xlabuilder.Op
-	{
-		var ok bool
-		xla_{{.}}, ok = {{.}}.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to {{.}}, it must be an Op created by the builder") 
-		}
-		if xla_{{.}}.Builder() != b.builder {
-			exceptions.Panicf("{{.}} op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_{{.}}.Builder().Name(), b.Name()) 
-		}
-	}`))
+		`	xla_{{.}} := b.verifyAndCastOp({{.}}, "{{.}}")`))
 
 	convertOpListTemplate = template.Must(template.New("convertOpList").Parse(
-		`	var xla_{{.}} []*xlabuilder.Op
-	for ii, op := range {{.}} {
-		xlaOp, ok := op.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op #%d (%v) passed given to {{.}}, it must be an Op created by the builder", ii) 
-		}
-		if xlaOp.Builder() != b.builder {
-			exceptions.Panicf("{{.}} op #%d was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				ii, xlaOp.Builder().Name(), b.Name()) 
-		}
-		xla_{{.}} = append(xla_{{.}}, xlaOp)
-	}`))
+		`	xla_{{.}} := xslices.Map({{.}}, func (op backends.Op) *xlabuilder.Op { return b.verifyAndCastOp(op, "{{.}}") })`))
 
 	convertShapeTemplate = template.Must(template.New("convertShape").Parse(
 		`	var xla_{{.}} = shapeToXShape({{.}})`))
@@ -201,5 +179,5 @@ func GenerateStandardOpsImplementation(extractor *parsexlabuilder.NodeTextExtrac
 	cmd := exec.Command("gofmt", "-w", fileName)
 	fmt.Printf("\t%s\n", cmd)
 	must.M(cmd.Run())
-	fmt.Printf("Generated %q based on github.com/gomlx/gopjrt/xlabuilder\n", fileName)
+	fmt.Printf("\tGenerated %q based on github.com/gomlx/gopjrt/xlabuilder\n", fileName)
 }

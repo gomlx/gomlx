@@ -100,6 +100,25 @@ func (b *Builder) Constant(flat any, dims ...int) backends.Op {
 	return op
 }
 
+func (b *Builder) verifyAndCastOp(op backends.Op, paramName string) *xlabuilder.Op {
+	xlaOp, ok := op.(*xlabuilder.Op)
+	if !ok {
+		exceptions.Panicf("nil or invalid Op (%v) given to parameter %s, it must be an Op created by the same backend builder", op, paramName)
+	}
+	if xlaOp.Builder() != b.builder {
+		exceptions.Panicf("op given to parameter %s was created with a different builder (%s) than the builder (%s) it is being used in -- Ops cannot cross to different builders",
+			paramName, xlaOp.Builder().Name(), b.Name())
+	}
+	return xlaOp
+}
+
+// Identity returns an Op whose output is the same as its input.
+// It's a no-op that can serve as a place-holder.
+func (b *Builder) Identity(x backends.Op) backends.Op {
+	xlaX := b.verifyAndCastOp(x, "x")
+	return xlabuilder.Identity(xlaX)
+}
+
 func convertConvolveAxesConfig(c backends.ConvolveAxesConfig) (xlaConfig xlabuilder.ConvolveAxesConfig) {
 	xlaConfig = xlabuilder.ConvolveAxesConfig{
 		InputBatch:          c.InputBatch,

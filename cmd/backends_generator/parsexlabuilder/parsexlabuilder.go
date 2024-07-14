@@ -194,7 +194,6 @@ func EnumerateStandardOpsFunctions(extractor *NodeTextExtractor, xlaBuilderPkg *
 		if funcDecl.Type.Results.NumFields() != 2 {
 			return
 		}
-
 		if extractor.Get(funcDecl.Type.Results.List[0].Type) != "*Op" ||
 			extractor.Get(funcDecl.Type.Results.List[1].Type) != "error" {
 			return

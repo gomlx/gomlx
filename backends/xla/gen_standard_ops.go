@@ -3,9 +3,9 @@
 package xla
 
 import (
-	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/protos"
 	"github.com/gomlx/gopjrt/xlabuilder"
@@ -14,18 +14,7 @@ import (
 
 // Abs returns the Op that represents the output of the corresponding operation.
 func (b *Builder) Abs(x backends.Op) backends.Op {
-	var xla_x *xlabuilder.Op
-	{
-		var ok bool
-		xla_x, ok = x.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x, it must be an Op created by the builder")
-		}
-		if xla_x.Builder() != b.builder {
-			exceptions.Panicf("x op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x.Builder().Name(), b.Name())
-		}
-	}
+	xla_x := b.verifyAndCastOp(x, "x")
 	xla_result, err := xlabuilder.Abs(xla_x)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Abs", BackendName))
@@ -37,30 +26,8 @@ func (b *Builder) Abs(x backends.Op) backends.Op {
 // Standard broadcasting rules apply (see documentation).
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) Add(x0, x1 backends.Op) backends.Op {
-	var xla_x0 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x0, ok = x0.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x0, it must be an Op created by the builder")
-		}
-		if xla_x0.Builder() != b.builder {
-			exceptions.Panicf("x0 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x0.Builder().Name(), b.Name())
-		}
-	}
-	var xla_x1 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x1, ok = x1.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x1, it must be an Op created by the builder")
-		}
-		if xla_x1.Builder() != b.builder {
-			exceptions.Panicf("x1 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x1.Builder().Name(), b.Name())
-		}
-	}
+	xla_x0 := b.verifyAndCastOp(x0, "x0")
+	xla_x1 := b.verifyAndCastOp(x1, "x1")
 	xla_result, err := xlabuilder.Add(xla_x0, xla_x1)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Add", BackendName))
@@ -71,30 +38,8 @@ func (b *Builder) Add(x0, x1 backends.Op) backends.Op {
 // And returns the element-wise logic "and" operator.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) And(x0, x1 backends.Op) backends.Op {
-	var xla_x0 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x0, ok = x0.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x0, it must be an Op created by the builder")
-		}
-		if xla_x0.Builder() != b.builder {
-			exceptions.Panicf("x0 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x0.Builder().Name(), b.Name())
-		}
-	}
-	var xla_x1 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x1, ok = x1.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x1, it must be an Op created by the builder")
-		}
-		if xla_x1.Builder() != b.builder {
-			exceptions.Panicf("x1 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x1.Builder().Name(), b.Name())
-		}
-	}
+	xla_x0 := b.verifyAndCastOp(x0, "x0")
+	xla_x1 := b.verifyAndCastOp(x1, "x1")
 	xla_result, err := xlabuilder.And(xla_x0, xla_x1)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed And", BackendName))
@@ -111,18 +56,7 @@ func (b *Builder) And(x0, x1 backends.Op) backends.Op {
 //	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=1, isMin=true) -> {1, 0}  // (it chooses the 0 and the -3)
 //	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=0, isMin=false) -> {0, 1, 0} // (it choose the 2, 4 and 7)
 func (b *Builder) ArgMinMax(x backends.Op, axis int, outputDType dtypes.DType, isMin bool) backends.Op {
-	var xla_x *xlabuilder.Op
-	{
-		var ok bool
-		xla_x, ok = x.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x, it must be an Op created by the builder")
-		}
-		if xla_x.Builder() != b.builder {
-			exceptions.Panicf("x op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x.Builder().Name(), b.Name())
-		}
-	}
+	xla_x := b.verifyAndCastOp(x, "x")
 	xla_result, err := xlabuilder.ArgMinMax(xla_x, axis, outputDType, isMin)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed ArgMinMax", BackendName))
@@ -135,66 +69,11 @@ func (b *Builder) ArgMinMax(x backends.Op, axis int, outputDType dtypes.DType, i
 // Based on paper "Batch Normalization: Accelerating Deep Network Training by Reducing
 // Internal Covariate Shift" (Sergey Ioffe, Christian Szegedy), https://arxiv.org/abs/1502.03167.
 func (b *Builder) BatchNormInference(operand, scale, offset, mean, variance backends.Op, epsilon float32, axis int) backends.Op {
-	var xla_operand *xlabuilder.Op
-	{
-		var ok bool
-		xla_operand, ok = operand.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to operand, it must be an Op created by the builder")
-		}
-		if xla_operand.Builder() != b.builder {
-			exceptions.Panicf("operand op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_operand.Builder().Name(), b.Name())
-		}
-	}
-	var xla_scale *xlabuilder.Op
-	{
-		var ok bool
-		xla_scale, ok = scale.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to scale, it must be an Op created by the builder")
-		}
-		if xla_scale.Builder() != b.builder {
-			exceptions.Panicf("scale op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_scale.Builder().Name(), b.Name())
-		}
-	}
-	var xla_offset *xlabuilder.Op
-	{
-		var ok bool
-		xla_offset, ok = offset.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to offset, it must be an Op created by the builder")
-		}
-		if xla_offset.Builder() != b.builder {
-			exceptions.Panicf("offset op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_offset.Builder().Name(), b.Name())
-		}
-	}
-	var xla_mean *xlabuilder.Op
-	{
-		var ok bool
-		xla_mean, ok = mean.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to mean, it must be an Op created by the builder")
-		}
-		if xla_mean.Builder() != b.builder {
-			exceptions.Panicf("mean op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_mean.Builder().Name(), b.Name())
-		}
-	}
-	var xla_variance *xlabuilder.Op
-	{
-		var ok bool
-		xla_variance, ok = variance.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to variance, it must be an Op created by the builder")
-		}
-		if xla_variance.Builder() != b.builder {
-			exceptions.Panicf("variance op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_variance.Builder().Name(), b.Name())
-		}
-	}
+	xla_operand := b.verifyAndCastOp(operand, "operand")
+	xla_scale := b.verifyAndCastOp(scale, "scale")
+	xla_offset := b.verifyAndCastOp(offset, "offset")
+	xla_mean := b.verifyAndCastOp(mean, "mean")
+	xla_variance := b.verifyAndCastOp(variance, "variance")
 	xla_result, err := xlabuilder.BatchNormInference(xla_operand, xla_scale, xla_offset, xla_mean, xla_variance, epsilon, axis)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed BatchNormInference", BackendName))
@@ -212,18 +91,7 @@ func (b *Builder) BatchNormInference(operand, scale, offset, mean, variance back
 //
 //	output[i0, ..., iN, j0, ..., jM] = operand[j0, ..., jM]
 func (b *Builder) Broadcast(x backends.Op, prefixDims ...int) backends.Op {
-	var xla_x *xlabuilder.Op
-	{
-		var ok bool
-		xla_x, ok = x.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x, it must be an Op created by the builder")
-		}
-		if xla_x.Builder() != b.builder {
-			exceptions.Panicf("x op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x.Builder().Name(), b.Name())
-		}
-	}
+	xla_x := b.verifyAndCastOp(x, "x")
 	xla_result, err := xlabuilder.Broadcast(xla_x, prefixDims...)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Broadcast", BackendName))
@@ -247,18 +115,7 @@ func (b *Builder) Broadcast(x backends.Op, prefixDims ...int) backends.Op {
 //     {{1 , 1},
 //     {2 , 2}}
 func (b *Builder) BroadcastInDim(x backends.Op, outputShape shapes.Shape, broadcastAxes []int) backends.Op {
-	var xla_x *xlabuilder.Op
-	{
-		var ok bool
-		xla_x, ok = x.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x, it must be an Op created by the builder")
-		}
-		if xla_x.Builder() != b.builder {
-			exceptions.Panicf("x op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x.Builder().Name(), b.Name())
-		}
-	}
+	xla_x := b.verifyAndCastOp(x, "x")
 	var xla_outputShape = shapeToXShape(outputShape)
 	xla_result, err := xlabuilder.BroadcastInDim(xla_x, xla_outputShape, broadcastAxes)
 	if err != nil {
@@ -269,18 +126,7 @@ func (b *Builder) BroadcastInDim(x backends.Op, outputShape shapes.Shape, broadc
 
 // Ceil returns the Op that represents the output of the corresponding operation.
 func (b *Builder) Ceil(x backends.Op) backends.Op {
-	var xla_x *xlabuilder.Op
-	{
-		var ok bool
-		xla_x, ok = x.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x, it must be an Op created by the builder")
-		}
-		if xla_x.Builder() != b.builder {
-			exceptions.Panicf("x op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x.Builder().Name(), b.Name())
-		}
-	}
+	xla_x := b.verifyAndCastOp(x, "x")
 	xla_result, err := xlabuilder.Ceil(xla_x)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Ceil", BackendName))
@@ -290,18 +136,7 @@ func (b *Builder) Ceil(x backends.Op) backends.Op {
 
 // Clz returns element-wise the "count leading zeros" bits of input node x -- for integer values.
 func (b *Builder) Clz(x backends.Op) backends.Op {
-	var xla_x *xlabuilder.Op
-	{
-		var ok bool
-		xla_x, ok = x.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x, it must be an Op created by the builder")
-		}
-		if xla_x.Builder() != b.builder {
-			exceptions.Panicf("x op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x.Builder().Name(), b.Name())
-		}
-	}
+	xla_x := b.verifyAndCastOp(x, "x")
 	xla_result, err := xlabuilder.Clz(xla_x)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Clz", BackendName))
@@ -317,30 +152,8 @@ func (b *Builder) Clz(x backends.Op) backends.Op {
 // the value is broadcast to every other value.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) Complex(x0, x1 backends.Op) backends.Op {
-	var xla_x0 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x0, ok = x0.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x0, it must be an Op created by the builder")
-		}
-		if xla_x0.Builder() != b.builder {
-			exceptions.Panicf("x0 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x0.Builder().Name(), b.Name())
-		}
-	}
-	var xla_x1 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x1, ok = x1.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x1, it must be an Op created by the builder")
-		}
-		if xla_x1.Builder() != b.builder {
-			exceptions.Panicf("x1 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x1.Builder().Name(), b.Name())
-		}
-	}
+	xla_x0 := b.verifyAndCastOp(x0, "x0")
+	xla_x1 := b.verifyAndCastOp(x1, "x1")
 	xla_result, err := xlabuilder.Complex(xla_x0, xla_x1)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Complex", BackendName))
@@ -353,18 +166,7 @@ func (b *Builder) Complex(x0, x1 backends.Op) backends.Op {
 // It doesn't work with scalars -- use ExpandDims.
 // If there is only one operand, it is returned and this is a no-op.
 func (b *Builder) Concatenate(axis int, operands ...backends.Op) backends.Op {
-	var xla_operands []*xlabuilder.Op
-	for ii, op := range operands {
-		xlaOp, ok := op.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op #%d (%v) passed given to operands, it must be an Op created by the builder", ii)
-		}
-		if xlaOp.Builder() != b.builder {
-			exceptions.Panicf("operands op #%d was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				ii, xlaOp.Builder().Name(), b.Name())
-		}
-		xla_operands = append(xla_operands, xlaOp)
-	}
+	xla_operands := xslices.Map(operands, func(op backends.Op) *xlabuilder.Op { return b.verifyAndCastOp(op, "operands") })
 	xla_result, err := xlabuilder.Concatenate(axis, xla_operands...)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Concatenate", BackendName))
@@ -374,18 +176,7 @@ func (b *Builder) Concatenate(axis int, operands ...backends.Op) backends.Op {
 
 // Conj returns the conjugate of a complex number. E.g: Conj(1+3i) = 1-3i
 func (b *Builder) Conj(x backends.Op) backends.Op {
-	var xla_x *xlabuilder.Op
-	{
-		var ok bool
-		xla_x, ok = x.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x, it must be an Op created by the builder")
-		}
-		if xla_x.Builder() != b.builder {
-			exceptions.Panicf("x op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x.Builder().Name(), b.Name())
-		}
-	}
+	xla_x := b.verifyAndCastOp(x, "x")
 	xla_result, err := xlabuilder.Conj(xla_x)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Conj", BackendName))
@@ -404,30 +195,8 @@ func (b *Builder) Conj(x backends.Op) backends.Op {
 // (XLA documentation is unfortunately poor, much is guess-work).
 // Also useful, https://arxiv.org/pdf/1603.07285v1.pdf.
 func (b *Builder) ConvGeneralDilated(operand, filter backends.Op, axes backends.ConvolveAxesConfig, strides []int, paddings [][2]int, inputDilation, filterDilation []int, filterGroupCount, batchGroupCount int) backends.Op {
-	var xla_operand *xlabuilder.Op
-	{
-		var ok bool
-		xla_operand, ok = operand.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to operand, it must be an Op created by the builder")
-		}
-		if xla_operand.Builder() != b.builder {
-			exceptions.Panicf("operand op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_operand.Builder().Name(), b.Name())
-		}
-	}
-	var xla_filter *xlabuilder.Op
-	{
-		var ok bool
-		xla_filter, ok = filter.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to filter, it must be an Op created by the builder")
-		}
-		if xla_filter.Builder() != b.builder {
-			exceptions.Panicf("filter op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_filter.Builder().Name(), b.Name())
-		}
-	}
+	xla_operand := b.verifyAndCastOp(operand, "operand")
+	xla_filter := b.verifyAndCastOp(filter, "filter")
 	var xla_axes = convertConvolveAxesConfig(axes)
 	xla_result, err := xlabuilder.ConvGeneralDilated(xla_operand, xla_filter, xla_axes, strides, paddings, inputDilation, filterDilation, filterGroupCount, batchGroupCount)
 	if err != nil {
@@ -438,18 +207,7 @@ func (b *Builder) ConvGeneralDilated(operand, filter backends.Op, axes backends.
 
 // ConvertDType of x to dtype.
 func (b *Builder) ConvertDType(x backends.Op, dtype dtypes.DType) backends.Op {
-	var xla_x *xlabuilder.Op
-	{
-		var ok bool
-		xla_x, ok = x.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x, it must be an Op created by the builder")
-		}
-		if xla_x.Builder() != b.builder {
-			exceptions.Panicf("x op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x.Builder().Name(), b.Name())
-		}
-	}
+	xla_x := b.verifyAndCastOp(x, "x")
 	xla_result, err := xlabuilder.ConvertDType(xla_x, dtype)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed ConvertDType", BackendName))
@@ -459,18 +217,7 @@ func (b *Builder) ConvertDType(x backends.Op, dtype dtypes.DType) backends.Op {
 
 // Cos returns the Op that represents the output of the corresponding operation.
 func (b *Builder) Cos(x backends.Op) backends.Op {
-	var xla_x *xlabuilder.Op
-	{
-		var ok bool
-		xla_x, ok = x.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x, it must be an Op created by the builder")
-		}
-		if xla_x.Builder() != b.builder {
-			exceptions.Panicf("x op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x.Builder().Name(), b.Name())
-		}
-	}
+	xla_x := b.verifyAndCastOp(x, "x")
 	xla_result, err := xlabuilder.Cos(xla_x)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Cos", BackendName))
@@ -482,30 +229,8 @@ func (b *Builder) Cos(x backends.Op) backends.Op {
 // Standard broadcasting rules apply (see documentation).
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) Div(x0, x1 backends.Op) backends.Op {
-	var xla_x0 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x0, ok = x0.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x0, it must be an Op created by the builder")
-		}
-		if xla_x0.Builder() != b.builder {
-			exceptions.Panicf("x0 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x0.Builder().Name(), b.Name())
-		}
-	}
-	var xla_x1 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x1, ok = x1.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x1, it must be an Op created by the builder")
-		}
-		if xla_x1.Builder() != b.builder {
-			exceptions.Panicf("x1 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x1.Builder().Name(), b.Name())
-		}
-	}
+	xla_x0 := b.verifyAndCastOp(x0, "x0")
+	xla_x1 := b.verifyAndCastOp(x1, "x1")
 	xla_result, err := xlabuilder.Div(xla_x0, xla_x1)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Div", BackendName))
@@ -527,30 +252,8 @@ func (b *Builder) Div(x0, x1 backends.Op) backends.Op {
 // matrix/matrix multiplications.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) Dot(x0, x1 backends.Op) backends.Op {
-	var xla_x0 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x0, ok = x0.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x0, it must be an Op created by the builder")
-		}
-		if xla_x0.Builder() != b.builder {
-			exceptions.Panicf("x0 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x0.Builder().Name(), b.Name())
-		}
-	}
-	var xla_x1 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x1, ok = x1.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x1, it must be an Op created by the builder")
-		}
-		if xla_x1.Builder() != b.builder {
-			exceptions.Panicf("x1 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x1.Builder().Name(), b.Name())
-		}
-	}
+	xla_x0 := b.verifyAndCastOp(x0, "x0")
+	xla_x1 := b.verifyAndCastOp(x1, "x1")
 	xla_result, err := xlabuilder.Dot(xla_x0, xla_x1)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Dot", BackendName))
@@ -571,30 +274,8 @@ func (b *Builder) Dot(x0, x1 backends.Op) backends.Op {
 // non-contracting/non-batch dimension, and finally the 'rhs' non-contracting/non-batch dimension.
 // It provides the basic means of implementing Einsum.
 func (b *Builder) DotGeneral(lhs backends.Op, lhsContractingAxes, lhsBatchAxes []int, rhs backends.Op, rhsContractingAxes, rhsBatchAxes []int) backends.Op {
-	var xla_lhs *xlabuilder.Op
-	{
-		var ok bool
-		xla_lhs, ok = lhs.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to lhs, it must be an Op created by the builder")
-		}
-		if xla_lhs.Builder() != b.builder {
-			exceptions.Panicf("lhs op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_lhs.Builder().Name(), b.Name())
-		}
-	}
-	var xla_rhs *xlabuilder.Op
-	{
-		var ok bool
-		xla_rhs, ok = rhs.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to rhs, it must be an Op created by the builder")
-		}
-		if xla_rhs.Builder() != b.builder {
-			exceptions.Panicf("rhs op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_rhs.Builder().Name(), b.Name())
-		}
-	}
+	xla_lhs := b.verifyAndCastOp(lhs, "lhs")
+	xla_rhs := b.verifyAndCastOp(rhs, "rhs")
 	xla_result, err := xlabuilder.DotGeneral(xla_lhs, lhsContractingAxes, lhsBatchAxes, xla_rhs, rhsContractingAxes, rhsBatchAxes)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed DotGeneral", BackendName))
@@ -605,30 +286,8 @@ func (b *Builder) DotGeneral(lhs backends.Op, lhsContractingAxes, lhsBatchAxes [
 // Two-arguments comparison ops:
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) Equal(x0, x1 backends.Op) backends.Op {
-	var xla_x0 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x0, ok = x0.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x0, it must be an Op created by the builder")
-		}
-		if xla_x0.Builder() != b.builder {
-			exceptions.Panicf("x0 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x0.Builder().Name(), b.Name())
-		}
-	}
-	var xla_x1 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x1, ok = x1.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x1, it must be an Op created by the builder")
-		}
-		if xla_x1.Builder() != b.builder {
-			exceptions.Panicf("x1 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x1.Builder().Name(), b.Name())
-		}
-	}
+	xla_x0 := b.verifyAndCastOp(x0, "x0")
+	xla_x1 := b.verifyAndCastOp(x1, "x1")
 	xla_result, err := xlabuilder.Equal(xla_x0, xla_x1)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Equal", BackendName))
@@ -641,30 +300,8 @@ func (b *Builder) Equal(x0, x1 backends.Op) backends.Op {
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) EqualTotalOrder(x0, x1 backends.Op) backends.Op {
-	var xla_x0 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x0, ok = x0.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x0, it must be an Op created by the builder")
-		}
-		if xla_x0.Builder() != b.builder {
-			exceptions.Panicf("x0 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x0.Builder().Name(), b.Name())
-		}
-	}
-	var xla_x1 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x1, ok = x1.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x1, it must be an Op created by the builder")
-		}
-		if xla_x1.Builder() != b.builder {
-			exceptions.Panicf("x1 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x1.Builder().Name(), b.Name())
-		}
-	}
+	xla_x0 := b.verifyAndCastOp(x0, "x0")
+	xla_x1 := b.verifyAndCastOp(x1, "x1")
 	xla_result, err := xlabuilder.EqualTotalOrder(xla_x0, xla_x1)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed EqualTotalOrder", BackendName))
@@ -674,18 +311,7 @@ func (b *Builder) EqualTotalOrder(x0, x1 backends.Op) backends.Op {
 
 // Exp returns the Op that represents the output of the corresponding operation.
 func (b *Builder) Exp(x backends.Op) backends.Op {
-	var xla_x *xlabuilder.Op
-	{
-		var ok bool
-		xla_x, ok = x.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x, it must be an Op created by the builder")
-		}
-		if xla_x.Builder() != b.builder {
-			exceptions.Panicf("x op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x.Builder().Name(), b.Name())
-		}
-	}
+	xla_x := b.verifyAndCastOp(x, "x")
 	xla_result, err := xlabuilder.Exp(xla_x)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Exp", BackendName))
@@ -695,18 +321,7 @@ func (b *Builder) Exp(x backends.Op) backends.Op {
 
 // Expm1 returns the Op that represents the output of the corresponding operation.
 func (b *Builder) Expm1(x backends.Op) backends.Op {
-	var xla_x *xlabuilder.Op
-	{
-		var ok bool
-		xla_x, ok = x.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x, it must be an Op created by the builder")
-		}
-		if xla_x.Builder() != b.builder {
-			exceptions.Panicf("x op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x.Builder().Name(), b.Name())
-		}
-	}
+	xla_x := b.verifyAndCastOp(x, "x")
 	xla_result, err := xlabuilder.Expm1(xla_x)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Expm1", BackendName))
@@ -718,18 +333,7 @@ func (b *Builder) Expm1(x backends.Op) backends.Op {
 // See documentation in https://www.tensorflow.org/xla/operation_semantics.
 // Underlying, CPU FFT is backed by Eigen's TensorFFT and GPU FFT uses cuFFT.
 func (b *Builder) FFT(operand backends.Op, fftType protos.FftType, fftLength []int) backends.Op {
-	var xla_operand *xlabuilder.Op
-	{
-		var ok bool
-		xla_operand, ok = operand.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to operand, it must be an Op created by the builder")
-		}
-		if xla_operand.Builder() != b.builder {
-			exceptions.Panicf("operand op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_operand.Builder().Name(), b.Name())
-		}
-	}
+	xla_operand := b.verifyAndCastOp(operand, "operand")
 	xla_result, err := xlabuilder.FFT(xla_operand, fftType, fftLength)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed FFT", BackendName))
@@ -739,18 +343,7 @@ func (b *Builder) FFT(operand backends.Op, fftType protos.FftType, fftLength []i
 
 // Floor returns the Op that represents the output of the corresponding operation.
 func (b *Builder) Floor(x backends.Op) backends.Op {
-	var xla_x *xlabuilder.Op
-	{
-		var ok bool
-		xla_x, ok = x.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x, it must be an Op created by the builder")
-		}
-		if xla_x.Builder() != b.builder {
-			exceptions.Panicf("x op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x.Builder().Name(), b.Name())
-		}
-	}
+	xla_x := b.verifyAndCastOp(x, "x")
 	xla_result, err := xlabuilder.Floor(xla_x)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Floor", BackendName))
@@ -787,30 +380,8 @@ func (b *Builder) Floor(x backends.Op) backends.Op {
 //     be the gathered slices mapped to these `offsetAxes`. There must be one value per axis not collapsed with
 //     collapsedSliceAxes -- the value itself is an axis in the output shape.
 func (b *Builder) Gather(operand, startIndices backends.Op, indexVectorAxis int, offsetAxes, collapsedSliceAxes, startIndexMap, sliceSizes []int, indicesAreSorted bool) backends.Op {
-	var xla_operand *xlabuilder.Op
-	{
-		var ok bool
-		xla_operand, ok = operand.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to operand, it must be an Op created by the builder")
-		}
-		if xla_operand.Builder() != b.builder {
-			exceptions.Panicf("operand op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_operand.Builder().Name(), b.Name())
-		}
-	}
-	var xla_startIndices *xlabuilder.Op
-	{
-		var ok bool
-		xla_startIndices, ok = startIndices.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to startIndices, it must be an Op created by the builder")
-		}
-		if xla_startIndices.Builder() != b.builder {
-			exceptions.Panicf("startIndices op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_startIndices.Builder().Name(), b.Name())
-		}
-	}
+	xla_operand := b.verifyAndCastOp(operand, "operand")
+	xla_startIndices := b.verifyAndCastOp(startIndices, "startIndices")
 	xla_result, err := xlabuilder.Gather(xla_operand, xla_startIndices, indexVectorAxis, offsetAxes, collapsedSliceAxes, startIndexMap, sliceSizes, indicesAreSorted)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Gather", BackendName))
@@ -821,30 +392,8 @@ func (b *Builder) Gather(operand, startIndices backends.Op, indexVectorAxis int,
 // GreaterOrEqual returns the Op that represents the output of the corresponding operation.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) GreaterOrEqual(x0, x1 backends.Op) backends.Op {
-	var xla_x0 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x0, ok = x0.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x0, it must be an Op created by the builder")
-		}
-		if xla_x0.Builder() != b.builder {
-			exceptions.Panicf("x0 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x0.Builder().Name(), b.Name())
-		}
-	}
-	var xla_x1 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x1, ok = x1.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x1, it must be an Op created by the builder")
-		}
-		if xla_x1.Builder() != b.builder {
-			exceptions.Panicf("x1 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x1.Builder().Name(), b.Name())
-		}
-	}
+	xla_x0 := b.verifyAndCastOp(x0, "x0")
+	xla_x1 := b.verifyAndCastOp(x1, "x1")
 	xla_result, err := xlabuilder.GreaterOrEqual(xla_x0, xla_x1)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed GreaterOrEqual", BackendName))
@@ -857,30 +406,8 @@ func (b *Builder) GreaterOrEqual(x0, x1 backends.Op) backends.Op {
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) GreaterOrEqualTotalOrder(x0, x1 backends.Op) backends.Op {
-	var xla_x0 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x0, ok = x0.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x0, it must be an Op created by the builder")
-		}
-		if xla_x0.Builder() != b.builder {
-			exceptions.Panicf("x0 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x0.Builder().Name(), b.Name())
-		}
-	}
-	var xla_x1 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x1, ok = x1.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x1, it must be an Op created by the builder")
-		}
-		if xla_x1.Builder() != b.builder {
-			exceptions.Panicf("x1 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x1.Builder().Name(), b.Name())
-		}
-	}
+	xla_x0 := b.verifyAndCastOp(x0, "x0")
+	xla_x1 := b.verifyAndCastOp(x1, "x1")
 	xla_result, err := xlabuilder.GreaterOrEqualTotalOrder(xla_x0, xla_x1)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed GreaterOrEqualTotalOrder", BackendName))
@@ -891,30 +418,8 @@ func (b *Builder) GreaterOrEqualTotalOrder(x0, x1 backends.Op) backends.Op {
 // GreaterThan returns the Op that represents the output of the corresponding operation.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) GreaterThan(x0, x1 backends.Op) backends.Op {
-	var xla_x0 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x0, ok = x0.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x0, it must be an Op created by the builder")
-		}
-		if xla_x0.Builder() != b.builder {
-			exceptions.Panicf("x0 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x0.Builder().Name(), b.Name())
-		}
-	}
-	var xla_x1 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x1, ok = x1.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x1, it must be an Op created by the builder")
-		}
-		if xla_x1.Builder() != b.builder {
-			exceptions.Panicf("x1 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x1.Builder().Name(), b.Name())
-		}
-	}
+	xla_x0 := b.verifyAndCastOp(x0, "x0")
+	xla_x1 := b.verifyAndCastOp(x1, "x1")
 	xla_result, err := xlabuilder.GreaterThan(xla_x0, xla_x1)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed GreaterThan", BackendName))
@@ -927,30 +432,8 @@ func (b *Builder) GreaterThan(x0, x1 backends.Op) backends.Op {
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) GreaterThanTotalOrder(x0, x1 backends.Op) backends.Op {
-	var xla_x0 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x0, ok = x0.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x0, it must be an Op created by the builder")
-		}
-		if xla_x0.Builder() != b.builder {
-			exceptions.Panicf("x0 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x0.Builder().Name(), b.Name())
-		}
-	}
-	var xla_x1 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x1, ok = x1.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x1, it must be an Op created by the builder")
-		}
-		if xla_x1.Builder() != b.builder {
-			exceptions.Panicf("x1 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x1.Builder().Name(), b.Name())
-		}
-	}
+	xla_x0 := b.verifyAndCastOp(x0, "x0")
+	xla_x1 := b.verifyAndCastOp(x1, "x1")
 	xla_result, err := xlabuilder.GreaterThanTotalOrder(xla_x0, xla_x1)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed GreaterThanTotalOrder", BackendName))
@@ -960,18 +443,7 @@ func (b *Builder) GreaterThanTotalOrder(x0, x1 backends.Op) backends.Op {
 
 // Imag returns the imaginary part of a complex number. It returns 0 if the x is a float number.
 func (b *Builder) Imag(x backends.Op) backends.Op {
-	var xla_x *xlabuilder.Op
-	{
-		var ok bool
-		xla_x, ok = x.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x, it must be an Op created by the builder")
-		}
-		if xla_x.Builder() != b.builder {
-			exceptions.Panicf("x op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x.Builder().Name(), b.Name())
-		}
-	}
+	xla_x := b.verifyAndCastOp(x, "x")
 	xla_result, err := xlabuilder.Imag(xla_x)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Imag", BackendName))
@@ -994,30 +466,8 @@ func (b *Builder) Iota(shape shapes.Shape, iotaAxis int) backends.Op {
 // LessOrEqual returns the Op that represents the output of the corresponding operation.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) LessOrEqual(x0, x1 backends.Op) backends.Op {
-	var xla_x0 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x0, ok = x0.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x0, it must be an Op created by the builder")
-		}
-		if xla_x0.Builder() != b.builder {
-			exceptions.Panicf("x0 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x0.Builder().Name(), b.Name())
-		}
-	}
-	var xla_x1 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x1, ok = x1.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x1, it must be an Op created by the builder")
-		}
-		if xla_x1.Builder() != b.builder {
-			exceptions.Panicf("x1 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x1.Builder().Name(), b.Name())
-		}
-	}
+	xla_x0 := b.verifyAndCastOp(x0, "x0")
+	xla_x1 := b.verifyAndCastOp(x1, "x1")
 	xla_result, err := xlabuilder.LessOrEqual(xla_x0, xla_x1)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed LessOrEqual", BackendName))
@@ -1030,30 +480,8 @@ func (b *Builder) LessOrEqual(x0, x1 backends.Op) backends.Op {
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) LessOrEqualTotalOrder(x0, x1 backends.Op) backends.Op {
-	var xla_x0 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x0, ok = x0.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x0, it must be an Op created by the builder")
-		}
-		if xla_x0.Builder() != b.builder {
-			exceptions.Panicf("x0 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x0.Builder().Name(), b.Name())
-		}
-	}
-	var xla_x1 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x1, ok = x1.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x1, it must be an Op created by the builder")
-		}
-		if xla_x1.Builder() != b.builder {
-			exceptions.Panicf("x1 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x1.Builder().Name(), b.Name())
-		}
-	}
+	xla_x0 := b.verifyAndCastOp(x0, "x0")
+	xla_x1 := b.verifyAndCastOp(x1, "x1")
 	xla_result, err := xlabuilder.LessOrEqualTotalOrder(xla_x0, xla_x1)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed LessOrEqualTotalOrder", BackendName))
@@ -1064,30 +492,8 @@ func (b *Builder) LessOrEqualTotalOrder(x0, x1 backends.Op) backends.Op {
 // LessThan returns the Op that represents the output of the corresponding operation.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) LessThan(x0, x1 backends.Op) backends.Op {
-	var xla_x0 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x0, ok = x0.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x0, it must be an Op created by the builder")
-		}
-		if xla_x0.Builder() != b.builder {
-			exceptions.Panicf("x0 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x0.Builder().Name(), b.Name())
-		}
-	}
-	var xla_x1 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x1, ok = x1.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x1, it must be an Op created by the builder")
-		}
-		if xla_x1.Builder() != b.builder {
-			exceptions.Panicf("x1 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x1.Builder().Name(), b.Name())
-		}
-	}
+	xla_x0 := b.verifyAndCastOp(x0, "x0")
+	xla_x1 := b.verifyAndCastOp(x1, "x1")
 	xla_result, err := xlabuilder.LessThan(xla_x0, xla_x1)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed LessThan", BackendName))
@@ -1100,30 +506,8 @@ func (b *Builder) LessThan(x0, x1 backends.Op) backends.Op {
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) LessThanTotalOrder(x0, x1 backends.Op) backends.Op {
-	var xla_x0 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x0, ok = x0.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x0, it must be an Op created by the builder")
-		}
-		if xla_x0.Builder() != b.builder {
-			exceptions.Panicf("x0 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x0.Builder().Name(), b.Name())
-		}
-	}
-	var xla_x1 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x1, ok = x1.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x1, it must be an Op created by the builder")
-		}
-		if xla_x1.Builder() != b.builder {
-			exceptions.Panicf("x1 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x1.Builder().Name(), b.Name())
-		}
-	}
+	xla_x0 := b.verifyAndCastOp(x0, "x0")
+	xla_x1 := b.verifyAndCastOp(x1, "x1")
 	xla_result, err := xlabuilder.LessThanTotalOrder(xla_x0, xla_x1)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed LessThanTotalOrder", BackendName))
@@ -1133,18 +517,7 @@ func (b *Builder) LessThanTotalOrder(x0, x1 backends.Op) backends.Op {
 
 // Log returns the Op that represents the output of the corresponding operation.
 func (b *Builder) Log(x backends.Op) backends.Op {
-	var xla_x *xlabuilder.Op
-	{
-		var ok bool
-		xla_x, ok = x.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x, it must be an Op created by the builder")
-		}
-		if xla_x.Builder() != b.builder {
-			exceptions.Panicf("x op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x.Builder().Name(), b.Name())
-		}
-	}
+	xla_x := b.verifyAndCastOp(x, "x")
 	xla_result, err := xlabuilder.Log(xla_x)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Log", BackendName))
@@ -1154,18 +527,7 @@ func (b *Builder) Log(x backends.Op) backends.Op {
 
 // Log1p returns the expression log(x+1).
 func (b *Builder) Log1p(x backends.Op) backends.Op {
-	var xla_x *xlabuilder.Op
-	{
-		var ok bool
-		xla_x, ok = x.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x, it must be an Op created by the builder")
-		}
-		if xla_x.Builder() != b.builder {
-			exceptions.Panicf("x op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x.Builder().Name(), b.Name())
-		}
-	}
+	xla_x := b.verifyAndCastOp(x, "x")
 	xla_result, err := xlabuilder.Log1p(xla_x)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Log1p", BackendName))
@@ -1175,18 +537,7 @@ func (b *Builder) Log1p(x backends.Op) backends.Op {
 
 // LogicalNot returns the Op that represents the output of the corresponding operation.
 func (b *Builder) LogicalNot(x backends.Op) backends.Op {
-	var xla_x *xlabuilder.Op
-	{
-		var ok bool
-		xla_x, ok = x.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x, it must be an Op created by the builder")
-		}
-		if xla_x.Builder() != b.builder {
-			exceptions.Panicf("x op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x.Builder().Name(), b.Name())
-		}
-	}
+	xla_x := b.verifyAndCastOp(x, "x")
 	xla_result, err := xlabuilder.LogicalNot(xla_x)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed LogicalNot", BackendName))
@@ -1196,18 +547,7 @@ func (b *Builder) LogicalNot(x backends.Op) backends.Op {
 
 // Logistic returns the element-wise expression 1/(1+exp(-x)). Also known as the Sigmoid function.
 func (b *Builder) Logistic(x backends.Op) backends.Op {
-	var xla_x *xlabuilder.Op
-	{
-		var ok bool
-		xla_x, ok = x.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x, it must be an Op created by the builder")
-		}
-		if xla_x.Builder() != b.builder {
-			exceptions.Panicf("x op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x.Builder().Name(), b.Name())
-		}
-	}
+	xla_x := b.verifyAndCastOp(x, "x")
 	xla_result, err := xlabuilder.Logistic(xla_x)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Logistic", BackendName))
@@ -1218,30 +558,8 @@ func (b *Builder) Logistic(x backends.Op) backends.Op {
 // Max returns the element-wise highest value among the two.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) Max(x0, x1 backends.Op) backends.Op {
-	var xla_x0 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x0, ok = x0.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x0, it must be an Op created by the builder")
-		}
-		if xla_x0.Builder() != b.builder {
-			exceptions.Panicf("x0 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x0.Builder().Name(), b.Name())
-		}
-	}
-	var xla_x1 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x1, ok = x1.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x1, it must be an Op created by the builder")
-		}
-		if xla_x1.Builder() != b.builder {
-			exceptions.Panicf("x1 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x1.Builder().Name(), b.Name())
-		}
-	}
+	xla_x0 := b.verifyAndCastOp(x0, "x0")
+	xla_x1 := b.verifyAndCastOp(x1, "x1")
 	xla_result, err := xlabuilder.Max(xla_x0, xla_x1)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Max", BackendName))
@@ -1252,30 +570,8 @@ func (b *Builder) Max(x0, x1 backends.Op) backends.Op {
 // Min returns the element-wise smallest value among the two.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) Min(x0, x1 backends.Op) backends.Op {
-	var xla_x0 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x0, ok = x0.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x0, it must be an Op created by the builder")
-		}
-		if xla_x0.Builder() != b.builder {
-			exceptions.Panicf("x0 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x0.Builder().Name(), b.Name())
-		}
-	}
-	var xla_x1 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x1, ok = x1.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x1, it must be an Op created by the builder")
-		}
-		if xla_x1.Builder() != b.builder {
-			exceptions.Panicf("x1 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x1.Builder().Name(), b.Name())
-		}
-	}
+	xla_x0 := b.verifyAndCastOp(x0, "x0")
+	xla_x1 := b.verifyAndCastOp(x1, "x1")
 	xla_result, err := xlabuilder.Min(xla_x0, xla_x1)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Min", BackendName))
@@ -1287,30 +583,8 @@ func (b *Builder) Min(x0, x1 backends.Op) backends.Op {
 // Standard broadcasting rules apply (see documentation).
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) Mul(x0, x1 backends.Op) backends.Op {
-	var xla_x0 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x0, ok = x0.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x0, it must be an Op created by the builder")
-		}
-		if xla_x0.Builder() != b.builder {
-			exceptions.Panicf("x0 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x0.Builder().Name(), b.Name())
-		}
-	}
-	var xla_x1 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x1, ok = x1.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x1, it must be an Op created by the builder")
-		}
-		if xla_x1.Builder() != b.builder {
-			exceptions.Panicf("x1 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x1.Builder().Name(), b.Name())
-		}
-	}
+	xla_x0 := b.verifyAndCastOp(x0, "x0")
+	xla_x1 := b.verifyAndCastOp(x1, "x1")
 	xla_result, err := xlabuilder.Mul(xla_x0, xla_x1)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Mul", BackendName))
@@ -1320,18 +594,7 @@ func (b *Builder) Mul(x0, x1 backends.Op) backends.Op {
 
 // Neg returns the Op that represents the output of the corresponding operation.
 func (b *Builder) Neg(x backends.Op) backends.Op {
-	var xla_x *xlabuilder.Op
-	{
-		var ok bool
-		xla_x, ok = x.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x, it must be an Op created by the builder")
-		}
-		if xla_x.Builder() != b.builder {
-			exceptions.Panicf("x op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x.Builder().Name(), b.Name())
-		}
-	}
+	xla_x := b.verifyAndCastOp(x, "x")
 	xla_result, err := xlabuilder.Neg(xla_x)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Neg", BackendName))
@@ -1342,30 +605,8 @@ func (b *Builder) Neg(x backends.Op) backends.Op {
 // NotEqual returns the Op that represents the output of the corresponding operation.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) NotEqual(x0, x1 backends.Op) backends.Op {
-	var xla_x0 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x0, ok = x0.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x0, it must be an Op created by the builder")
-		}
-		if xla_x0.Builder() != b.builder {
-			exceptions.Panicf("x0 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x0.Builder().Name(), b.Name())
-		}
-	}
-	var xla_x1 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x1, ok = x1.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x1, it must be an Op created by the builder")
-		}
-		if xla_x1.Builder() != b.builder {
-			exceptions.Panicf("x1 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x1.Builder().Name(), b.Name())
-		}
-	}
+	xla_x0 := b.verifyAndCastOp(x0, "x0")
+	xla_x1 := b.verifyAndCastOp(x1, "x1")
 	xla_result, err := xlabuilder.NotEqual(xla_x0, xla_x1)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed NotEqual", BackendName))
@@ -1378,30 +619,8 @@ func (b *Builder) NotEqual(x0, x1 backends.Op) backends.Op {
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) NotEqualTotalOrder(x0, x1 backends.Op) backends.Op {
-	var xla_x0 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x0, ok = x0.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x0, it must be an Op created by the builder")
-		}
-		if xla_x0.Builder() != b.builder {
-			exceptions.Panicf("x0 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x0.Builder().Name(), b.Name())
-		}
-	}
-	var xla_x1 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x1, ok = x1.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x1, it must be an Op created by the builder")
-		}
-		if xla_x1.Builder() != b.builder {
-			exceptions.Panicf("x1 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x1.Builder().Name(), b.Name())
-		}
-	}
+	xla_x0 := b.verifyAndCastOp(x0, "x0")
+	xla_x1 := b.verifyAndCastOp(x1, "x1")
 	xla_result, err := xlabuilder.NotEqualTotalOrder(xla_x0, xla_x1)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed NotEqualTotalOrder", BackendName))
@@ -1412,30 +631,8 @@ func (b *Builder) NotEqualTotalOrder(x0, x1 backends.Op) backends.Op {
 // Or returns the element-wise logic "and" operator.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) Or(x0, x1 backends.Op) backends.Op {
-	var xla_x0 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x0, ok = x0.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x0, it must be an Op created by the builder")
-		}
-		if xla_x0.Builder() != b.builder {
-			exceptions.Panicf("x0 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x0.Builder().Name(), b.Name())
-		}
-	}
-	var xla_x1 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x1, ok = x1.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x1, it must be an Op created by the builder")
-		}
-		if xla_x1.Builder() != b.builder {
-			exceptions.Panicf("x1 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x1.Builder().Name(), b.Name())
-		}
-	}
+	xla_x0 := b.verifyAndCastOp(x0, "x0")
+	xla_x1 := b.verifyAndCastOp(x1, "x1")
 	xla_result, err := xlabuilder.Or(xla_x0, xla_x1)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Or", BackendName))
@@ -1447,30 +644,8 @@ func (b *Builder) Or(x0, x1 backends.Op) backends.Op {
 // There must be at most `operand.Rank()` axesConfig values. Missing PadAxis are assumed to be zeros,
 // that is, no padding for those axes.
 func (b *Builder) Pad(x, fillValue backends.Op, axesConfig ...backends.PadAxis) backends.Op {
-	var xla_x *xlabuilder.Op
-	{
-		var ok bool
-		xla_x, ok = x.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x, it must be an Op created by the builder")
-		}
-		if xla_x.Builder() != b.builder {
-			exceptions.Panicf("x op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x.Builder().Name(), b.Name())
-		}
-	}
-	var xla_fillValue *xlabuilder.Op
-	{
-		var ok bool
-		xla_fillValue, ok = fillValue.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to fillValue, it must be an Op created by the builder")
-		}
-		if xla_fillValue.Builder() != b.builder {
-			exceptions.Panicf("fillValue op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_fillValue.Builder().Name(), b.Name())
-		}
-	}
+	xla_x := b.verifyAndCastOp(x, "x")
+	xla_fillValue := b.verifyAndCastOp(fillValue, "fillValue")
 	var xla_axesConfig []xlabuilder.PadAxis
 	for _, pad := range axesConfig {
 		xla_axesConfig = append(xla_axesConfig, convertPadAxis(pad))
@@ -1485,30 +660,8 @@ func (b *Builder) Pad(x, fillValue backends.Op, axesConfig ...backends.PadAxis) 
 // Pow returns the Op that represents the output of the corresponding operation.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) Pow(x0, x1 backends.Op) backends.Op {
-	var xla_x0 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x0, ok = x0.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x0, it must be an Op created by the builder")
-		}
-		if xla_x0.Builder() != b.builder {
-			exceptions.Panicf("x0 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x0.Builder().Name(), b.Name())
-		}
-	}
-	var xla_x1 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x1, ok = x1.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x1, it must be an Op created by the builder")
-		}
-		if xla_x1.Builder() != b.builder {
-			exceptions.Panicf("x1 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x1.Builder().Name(), b.Name())
-		}
-	}
+	xla_x0 := b.verifyAndCastOp(x0, "x0")
+	xla_x1 := b.verifyAndCastOp(x1, "x1")
 	xla_result, err := xlabuilder.Pow(xla_x0, xla_x1)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Pow", BackendName))
@@ -1518,18 +671,7 @@ func (b *Builder) Pow(x0, x1 backends.Op) backends.Op {
 
 // Real return the real part of a complex number. It returns x if the x is a float number.
 func (b *Builder) Real(x backends.Op) backends.Op {
-	var xla_x *xlabuilder.Op
-	{
-		var ok bool
-		xla_x, ok = x.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x, it must be an Op created by the builder")
-		}
-		if xla_x.Builder() != b.builder {
-			exceptions.Panicf("x op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x.Builder().Name(), b.Name())
-		}
-	}
+	xla_x := b.verifyAndCastOp(x, "x")
 	xla_result, err := xlabuilder.Real(xla_x)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Real", BackendName))
@@ -1540,18 +682,7 @@ func (b *Builder) Real(x backends.Op) backends.Op {
 // ReduceMax is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the max value.
 // If no axes are given, it reduces the full array.
 func (b *Builder) ReduceMax(x backends.Op, axes ...int) backends.Op {
-	var xla_x *xlabuilder.Op
-	{
-		var ok bool
-		xla_x, ok = x.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x, it must be an Op created by the builder")
-		}
-		if xla_x.Builder() != b.builder {
-			exceptions.Panicf("x op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x.Builder().Name(), b.Name())
-		}
-	}
+	xla_x := b.verifyAndCastOp(x, "x")
 	xla_result, err := xlabuilder.ReduceMax(xla_x, axes...)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed ReduceMax", BackendName))
@@ -1562,18 +693,7 @@ func (b *Builder) ReduceMax(x backends.Op, axes ...int) backends.Op {
 // ReduceMin is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the min value.
 // If no axes are given, it reduces the full array.
 func (b *Builder) ReduceMin(x backends.Op, axes ...int) backends.Op {
-	var xla_x *xlabuilder.Op
-	{
-		var ok bool
-		xla_x, ok = x.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x, it must be an Op created by the builder")
-		}
-		if xla_x.Builder() != b.builder {
-			exceptions.Panicf("x op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x.Builder().Name(), b.Name())
-		}
-	}
+	xla_x := b.verifyAndCastOp(x, "x")
 	xla_result, err := xlabuilder.ReduceMin(xla_x, axes...)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed ReduceMin", BackendName))
@@ -1584,18 +704,7 @@ func (b *Builder) ReduceMin(x backends.Op, axes ...int) backends.Op {
 // ReduceProduct is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the product of the reduced axes.
 // If no axes are given, it reduces the full array.
 func (b *Builder) ReduceProduct(x backends.Op, axes ...int) backends.Op {
-	var xla_x *xlabuilder.Op
-	{
-		var ok bool
-		xla_x, ok = x.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x, it must be an Op created by the builder")
-		}
-		if xla_x.Builder() != b.builder {
-			exceptions.Panicf("x op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x.Builder().Name(), b.Name())
-		}
-	}
+	xla_x := b.verifyAndCastOp(x, "x")
 	xla_result, err := xlabuilder.ReduceProduct(xla_x, axes...)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed ReduceProduct", BackendName))
@@ -1606,18 +715,7 @@ func (b *Builder) ReduceProduct(x backends.Op, axes ...int) backends.Op {
 // ReduceSum is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the sum of the reduced axes.
 // If no axes are given, it reduces the full array.
 func (b *Builder) ReduceSum(x backends.Op, axes ...int) backends.Op {
-	var xla_x *xlabuilder.Op
-	{
-		var ok bool
-		xla_x, ok = x.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x, it must be an Op created by the builder")
-		}
-		if xla_x.Builder() != b.builder {
-			exceptions.Panicf("x op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x.Builder().Name(), b.Name())
-		}
-	}
+	xla_x := b.verifyAndCastOp(x, "x")
 	xla_result, err := xlabuilder.ReduceSum(xla_x, axes...)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed ReduceSum", BackendName))
@@ -1629,30 +727,8 @@ func (b *Builder) ReduceSum(x backends.Op, axes ...int) backends.Op {
 // Notice despite the name XLA implements Mod not IEEE754 Remainder operation.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) Rem(x0, x1 backends.Op) backends.Op {
-	var xla_x0 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x0, ok = x0.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x0, it must be an Op created by the builder")
-		}
-		if xla_x0.Builder() != b.builder {
-			exceptions.Panicf("x0 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x0.Builder().Name(), b.Name())
-		}
-	}
-	var xla_x1 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x1, ok = x1.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x1, it must be an Op created by the builder")
-		}
-		if xla_x1.Builder() != b.builder {
-			exceptions.Panicf("x1 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x1.Builder().Name(), b.Name())
-		}
-	}
+	xla_x0 := b.verifyAndCastOp(x0, "x0")
+	xla_x1 := b.verifyAndCastOp(x1, "x1")
 	xla_result, err := xlabuilder.Rem(xla_x0, xla_x1)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Rem", BackendName))
@@ -1664,18 +740,7 @@ func (b *Builder) Rem(x0, x1 backends.Op) backends.Op {
 // Total size cannot change, it's just a "reinterpretation" of the same flat data.
 // The dtype remains the same, see ConvertDType to actually convert the values.
 func (b *Builder) Reshape(x backends.Op, dimensions ...int) backends.Op {
-	var xla_x *xlabuilder.Op
-	{
-		var ok bool
-		xla_x, ok = x.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x, it must be an Op created by the builder")
-		}
-		if xla_x.Builder() != b.builder {
-			exceptions.Panicf("x op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x.Builder().Name(), b.Name())
-		}
-	}
+	xla_x := b.verifyAndCastOp(x, "x")
 	xla_result, err := xlabuilder.Reshape(xla_x, dimensions...)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Reshape", BackendName))
@@ -1687,18 +752,7 @@ func (b *Builder) Reshape(x backends.Op, dimensions ...int) backends.Op {
 // the value indexed at `i` will be swapped with the value at indexed `(dimension_size - 1 - i)`.
 // The shape remains the same.
 func (b *Builder) Reverse(x backends.Op, axes ...int) backends.Op {
-	var xla_x *xlabuilder.Op
-	{
-		var ok bool
-		xla_x, ok = x.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x, it must be an Op created by the builder")
-		}
-		if xla_x.Builder() != b.builder {
-			exceptions.Panicf("x op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x.Builder().Name(), b.Name())
-		}
-	}
+	xla_x := b.verifyAndCastOp(x, "x")
 	xla_result, err := xlabuilder.Reverse(xla_x, axes...)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Reverse", BackendName))
@@ -1708,18 +762,7 @@ func (b *Builder) Reverse(x backends.Op, axes ...int) backends.Op {
 
 // Round returns the Op that represents the output of the corresponding operation.
 func (b *Builder) Round(x backends.Op) backends.Op {
-	var xla_x *xlabuilder.Op
-	{
-		var ok bool
-		xla_x, ok = x.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x, it must be an Op created by the builder")
-		}
-		if xla_x.Builder() != b.builder {
-			exceptions.Panicf("x op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x.Builder().Name(), b.Name())
-		}
-	}
+	xla_x := b.verifyAndCastOp(x, "x")
 	xla_result, err := xlabuilder.Round(xla_x)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Round", BackendName))
@@ -1729,18 +772,7 @@ func (b *Builder) Round(x backends.Op) backends.Op {
 
 // Rsqrt returns the element-wise reciprocal of square root operation 1/sqrt(x).
 func (b *Builder) Rsqrt(x backends.Op) backends.Op {
-	var xla_x *xlabuilder.Op
-	{
-		var ok bool
-		xla_x, ok = x.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x, it must be an Op created by the builder")
-		}
-		if xla_x.Builder() != b.builder {
-			exceptions.Panicf("x op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x.Builder().Name(), b.Name())
-		}
-	}
+	xla_x := b.verifyAndCastOp(x, "x")
 	xla_result, err := xlabuilder.Rsqrt(xla_x)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Rsqrt", BackendName))
@@ -1750,42 +782,9 @@ func (b *Builder) Rsqrt(x backends.Op) backends.Op {
 
 // ScatterAdd values from updates pointed by scatterIndices to operand.
 func (b *Builder) ScatterAdd(operand, scatterIndices, updates backends.Op, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) backends.Op {
-	var xla_operand *xlabuilder.Op
-	{
-		var ok bool
-		xla_operand, ok = operand.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to operand, it must be an Op created by the builder")
-		}
-		if xla_operand.Builder() != b.builder {
-			exceptions.Panicf("operand op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_operand.Builder().Name(), b.Name())
-		}
-	}
-	var xla_scatterIndices *xlabuilder.Op
-	{
-		var ok bool
-		xla_scatterIndices, ok = scatterIndices.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to scatterIndices, it must be an Op created by the builder")
-		}
-		if xla_scatterIndices.Builder() != b.builder {
-			exceptions.Panicf("scatterIndices op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_scatterIndices.Builder().Name(), b.Name())
-		}
-	}
-	var xla_updates *xlabuilder.Op
-	{
-		var ok bool
-		xla_updates, ok = updates.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to updates, it must be an Op created by the builder")
-		}
-		if xla_updates.Builder() != b.builder {
-			exceptions.Panicf("updates op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_updates.Builder().Name(), b.Name())
-		}
-	}
+	xla_operand := b.verifyAndCastOp(operand, "operand")
+	xla_scatterIndices := b.verifyAndCastOp(scatterIndices, "scatterIndices")
+	xla_updates := b.verifyAndCastOp(updates, "updates")
 	xla_result, err := xlabuilder.ScatterAdd(xla_operand, xla_scatterIndices, xla_updates, indexVectorAxis, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes, indicesAreSorted, uniqueIndices)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed ScatterAdd", BackendName))
@@ -1795,42 +794,9 @@ func (b *Builder) ScatterAdd(operand, scatterIndices, updates backends.Op, index
 
 // ScatterMax scatter values from updates pointed by scatterIndices to operand, by taking the Max.
 func (b *Builder) ScatterMax(operand, scatterIndices, updates backends.Op, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) backends.Op {
-	var xla_operand *xlabuilder.Op
-	{
-		var ok bool
-		xla_operand, ok = operand.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to operand, it must be an Op created by the builder")
-		}
-		if xla_operand.Builder() != b.builder {
-			exceptions.Panicf("operand op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_operand.Builder().Name(), b.Name())
-		}
-	}
-	var xla_scatterIndices *xlabuilder.Op
-	{
-		var ok bool
-		xla_scatterIndices, ok = scatterIndices.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to scatterIndices, it must be an Op created by the builder")
-		}
-		if xla_scatterIndices.Builder() != b.builder {
-			exceptions.Panicf("scatterIndices op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_scatterIndices.Builder().Name(), b.Name())
-		}
-	}
-	var xla_updates *xlabuilder.Op
-	{
-		var ok bool
-		xla_updates, ok = updates.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to updates, it must be an Op created by the builder")
-		}
-		if xla_updates.Builder() != b.builder {
-			exceptions.Panicf("updates op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_updates.Builder().Name(), b.Name())
-		}
-	}
+	xla_operand := b.verifyAndCastOp(operand, "operand")
+	xla_scatterIndices := b.verifyAndCastOp(scatterIndices, "scatterIndices")
+	xla_updates := b.verifyAndCastOp(updates, "updates")
 	xla_result, err := xlabuilder.ScatterMax(xla_operand, xla_scatterIndices, xla_updates, indexVectorAxis, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes, indicesAreSorted, uniqueIndices)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed ScatterMax", BackendName))
@@ -1840,42 +806,9 @@ func (b *Builder) ScatterMax(operand, scatterIndices, updates backends.Op, index
 
 // ScatterMin scatter values from updates pointed by scatterIndices to operand, by taking the Min.
 func (b *Builder) ScatterMin(operand, scatterIndices, updates backends.Op, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) backends.Op {
-	var xla_operand *xlabuilder.Op
-	{
-		var ok bool
-		xla_operand, ok = operand.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to operand, it must be an Op created by the builder")
-		}
-		if xla_operand.Builder() != b.builder {
-			exceptions.Panicf("operand op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_operand.Builder().Name(), b.Name())
-		}
-	}
-	var xla_scatterIndices *xlabuilder.Op
-	{
-		var ok bool
-		xla_scatterIndices, ok = scatterIndices.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to scatterIndices, it must be an Op created by the builder")
-		}
-		if xla_scatterIndices.Builder() != b.builder {
-			exceptions.Panicf("scatterIndices op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_scatterIndices.Builder().Name(), b.Name())
-		}
-	}
-	var xla_updates *xlabuilder.Op
-	{
-		var ok bool
-		xla_updates, ok = updates.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to updates, it must be an Op created by the builder")
-		}
-		if xla_updates.Builder() != b.builder {
-			exceptions.Panicf("updates op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_updates.Builder().Name(), b.Name())
-		}
-	}
+	xla_operand := b.verifyAndCastOp(operand, "operand")
+	xla_scatterIndices := b.verifyAndCastOp(scatterIndices, "scatterIndices")
+	xla_updates := b.verifyAndCastOp(updates, "updates")
 	xla_result, err := xlabuilder.ScatterMin(xla_operand, xla_scatterIndices, xla_updates, indexVectorAxis, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes, indicesAreSorted, uniqueIndices)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed ScatterMin", BackendName))
@@ -1887,30 +820,8 @@ func (b *Builder) ScatterMin(operand, scatterIndices, updates backends.Op, index
 // It selects the values in the window such that it works as reverse for ScatterMax.
 // See details in https://openxla.org/xla/operation_semantics#selectandscatter
 func (b *Builder) SelectAndScatterMax(operand, source backends.Op, windowDimensions, windowStrides []int, paddings [][2]int) backends.Op {
-	var xla_operand *xlabuilder.Op
-	{
-		var ok bool
-		xla_operand, ok = operand.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to operand, it must be an Op created by the builder")
-		}
-		if xla_operand.Builder() != b.builder {
-			exceptions.Panicf("operand op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_operand.Builder().Name(), b.Name())
-		}
-	}
-	var xla_source *xlabuilder.Op
-	{
-		var ok bool
-		xla_source, ok = source.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to source, it must be an Op created by the builder")
-		}
-		if xla_source.Builder() != b.builder {
-			exceptions.Panicf("source op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_source.Builder().Name(), b.Name())
-		}
-	}
+	xla_operand := b.verifyAndCastOp(operand, "operand")
+	xla_source := b.verifyAndCastOp(source, "source")
 	xla_result, err := xlabuilder.SelectAndScatterMax(xla_operand, xla_source, windowDimensions, windowStrides, paddings)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed SelectAndScatterMax", BackendName))
@@ -1922,30 +833,8 @@ func (b *Builder) SelectAndScatterMax(operand, source backends.Op, windowDimensi
 // It selects the values in the window such that it works as reverse for ScatterMin.
 // See details in https://openxla.org/xla/operation_semantics#selectandscatter
 func (b *Builder) SelectAndScatterMin(operand, source backends.Op, windowDimensions, windowStrides []int, paddings [][2]int) backends.Op {
-	var xla_operand *xlabuilder.Op
-	{
-		var ok bool
-		xla_operand, ok = operand.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to operand, it must be an Op created by the builder")
-		}
-		if xla_operand.Builder() != b.builder {
-			exceptions.Panicf("operand op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_operand.Builder().Name(), b.Name())
-		}
-	}
-	var xla_source *xlabuilder.Op
-	{
-		var ok bool
-		xla_source, ok = source.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to source, it must be an Op created by the builder")
-		}
-		if xla_source.Builder() != b.builder {
-			exceptions.Panicf("source op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_source.Builder().Name(), b.Name())
-		}
-	}
+	xla_operand := b.verifyAndCastOp(operand, "operand")
+	xla_source := b.verifyAndCastOp(source, "source")
 	xla_result, err := xlabuilder.SelectAndScatterMin(xla_operand, xla_source, windowDimensions, windowStrides, paddings)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed SelectAndScatterMin", BackendName))
@@ -1957,30 +846,8 @@ func (b *Builder) SelectAndScatterMin(operand, source backends.Op, windowDimensi
 // It selects the values in the window such that it works as reverse for ScatterSum.
 // See details in https://openxla.org/xla/operation_semantics#selectandscatter
 func (b *Builder) SelectAndScatterSum(operand, source backends.Op, windowDimensions, windowStrides []int, paddings [][2]int) backends.Op {
-	var xla_operand *xlabuilder.Op
-	{
-		var ok bool
-		xla_operand, ok = operand.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to operand, it must be an Op created by the builder")
-		}
-		if xla_operand.Builder() != b.builder {
-			exceptions.Panicf("operand op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_operand.Builder().Name(), b.Name())
-		}
-	}
-	var xla_source *xlabuilder.Op
-	{
-		var ok bool
-		xla_source, ok = source.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to source, it must be an Op created by the builder")
-		}
-		if xla_source.Builder() != b.builder {
-			exceptions.Panicf("source op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_source.Builder().Name(), b.Name())
-		}
-	}
+	xla_operand := b.verifyAndCastOp(operand, "operand")
+	xla_source := b.verifyAndCastOp(source, "source")
 	xla_result, err := xlabuilder.SelectAndScatterSum(xla_operand, xla_source, windowDimensions, windowStrides, paddings)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed SelectAndScatterSum", BackendName))
@@ -1990,18 +857,7 @@ func (b *Builder) SelectAndScatterSum(operand, source backends.Op, windowDimensi
 
 // Sign returns element-wise +1, +/-0 or -1 depending on the sign of x. It returns NaN if the input is NaN.
 func (b *Builder) Sign(x backends.Op) backends.Op {
-	var xla_x *xlabuilder.Op
-	{
-		var ok bool
-		xla_x, ok = x.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x, it must be an Op created by the builder")
-		}
-		if xla_x.Builder() != b.builder {
-			exceptions.Panicf("x op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x.Builder().Name(), b.Name())
-		}
-	}
+	xla_x := b.verifyAndCastOp(x, "x")
 	xla_result, err := xlabuilder.Sign(xla_x)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Sign", BackendName))
@@ -2011,18 +867,7 @@ func (b *Builder) Sign(x backends.Op) backends.Op {
 
 // Sin returns the Op that represents the output of the corresponding operation.
 func (b *Builder) Sin(x backends.Op) backends.Op {
-	var xla_x *xlabuilder.Op
-	{
-		var ok bool
-		xla_x, ok = x.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x, it must be an Op created by the builder")
-		}
-		if xla_x.Builder() != b.builder {
-			exceptions.Panicf("x op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x.Builder().Name(), b.Name())
-		}
-	}
+	xla_x := b.verifyAndCastOp(x, "x")
 	xla_result, err := xlabuilder.Sin(xla_x)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Sin", BackendName))
@@ -2040,18 +885,7 @@ func (b *Builder) Sin(x backends.Op) backends.Op {
 //	Slice(x={0, 1, 2, 3, 4}, starts={2}, limits={4}, strides=nil) -> {2, 3}
 //	Slice(x={0, 1, 2, 3, 4}, starts={2}, limits={5}, strides={2}) -> {2, 4}
 func (b *Builder) Slice(x backends.Op, starts, limits, strides []int) backends.Op {
-	var xla_x *xlabuilder.Op
-	{
-		var ok bool
-		xla_x, ok = x.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x, it must be an Op created by the builder")
-		}
-		if xla_x.Builder() != b.builder {
-			exceptions.Panicf("x op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x.Builder().Name(), b.Name())
-		}
-	}
+	xla_x := b.verifyAndCastOp(x, "x")
 	xla_result, err := xlabuilder.Slice(xla_x, starts, limits, strides)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Slice", BackendName))
@@ -2061,18 +895,7 @@ func (b *Builder) Slice(x backends.Op, starts, limits, strides []int) backends.O
 
 // Sqrt returns the Op that represents the output of the corresponding operation.
 func (b *Builder) Sqrt(x backends.Op) backends.Op {
-	var xla_x *xlabuilder.Op
-	{
-		var ok bool
-		xla_x, ok = x.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x, it must be an Op created by the builder")
-		}
-		if xla_x.Builder() != b.builder {
-			exceptions.Panicf("x op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x.Builder().Name(), b.Name())
-		}
-	}
+	xla_x := b.verifyAndCastOp(x, "x")
 	xla_result, err := xlabuilder.Sqrt(xla_x)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Sqrt", BackendName))
@@ -2084,30 +907,8 @@ func (b *Builder) Sqrt(x backends.Op) backends.Op {
 // Standard broadcasting rules apply (see documentation).
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) Sub(x0, x1 backends.Op) backends.Op {
-	var xla_x0 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x0, ok = x0.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x0, it must be an Op created by the builder")
-		}
-		if xla_x0.Builder() != b.builder {
-			exceptions.Panicf("x0 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x0.Builder().Name(), b.Name())
-		}
-	}
-	var xla_x1 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x1, ok = x1.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x1, it must be an Op created by the builder")
-		}
-		if xla_x1.Builder() != b.builder {
-			exceptions.Panicf("x1 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x1.Builder().Name(), b.Name())
-		}
-	}
+	xla_x0 := b.verifyAndCastOp(x0, "x0")
+	xla_x1 := b.verifyAndCastOp(x1, "x1")
 	xla_result, err := xlabuilder.Sub(xla_x0, xla_x1)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Sub", BackendName))
@@ -2117,18 +918,7 @@ func (b *Builder) Sub(x0, x1 backends.Op) backends.Op {
 
 // Tanh returns the Op that represents the output of the corresponding operation.
 func (b *Builder) Tanh(x backends.Op) backends.Op {
-	var xla_x *xlabuilder.Op
-	{
-		var ok bool
-		xla_x, ok = x.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x, it must be an Op created by the builder")
-		}
-		if xla_x.Builder() != b.builder {
-			exceptions.Panicf("x op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x.Builder().Name(), b.Name())
-		}
-	}
+	xla_x := b.verifyAndCastOp(x, "x")
 	xla_result, err := xlabuilder.Tanh(xla_x)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Tanh", BackendName))
@@ -2140,18 +930,7 @@ func (b *Builder) Tanh(x backends.Op) backends.Op {
 // There should be one value in permutations for each axis in x.
 // The output will have: output.Shape.Dimension[permutation[i]] = x.Shape.Dimension[i].
 func (b *Builder) Transpose(x backends.Op, permutations ...int) backends.Op {
-	var xla_x *xlabuilder.Op
-	{
-		var ok bool
-		xla_x, ok = x.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x, it must be an Op created by the builder")
-		}
-		if xla_x.Builder() != b.builder {
-			exceptions.Panicf("x op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x.Builder().Name(), b.Name())
-		}
-	}
+	xla_x := b.verifyAndCastOp(x, "x")
 	xla_result, err := xlabuilder.Transpose(xla_x, permutations...)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Transpose", BackendName))
@@ -2161,42 +940,9 @@ func (b *Builder) Transpose(x backends.Op, permutations ...int) backends.Op {
 
 // Where takes element-wise values from onTrue or onFalse depending on the value of condition (expected to be boolean).
 func (b *Builder) Where(condition, onTrue, onFalse backends.Op) backends.Op {
-	var xla_condition *xlabuilder.Op
-	{
-		var ok bool
-		xla_condition, ok = condition.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to condition, it must be an Op created by the builder")
-		}
-		if xla_condition.Builder() != b.builder {
-			exceptions.Panicf("condition op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_condition.Builder().Name(), b.Name())
-		}
-	}
-	var xla_onTrue *xlabuilder.Op
-	{
-		var ok bool
-		xla_onTrue, ok = onTrue.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to onTrue, it must be an Op created by the builder")
-		}
-		if xla_onTrue.Builder() != b.builder {
-			exceptions.Panicf("onTrue op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_onTrue.Builder().Name(), b.Name())
-		}
-	}
-	var xla_onFalse *xlabuilder.Op
-	{
-		var ok bool
-		xla_onFalse, ok = onFalse.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to onFalse, it must be an Op created by the builder")
-		}
-		if xla_onFalse.Builder() != b.builder {
-			exceptions.Panicf("onFalse op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_onFalse.Builder().Name(), b.Name())
-		}
-	}
+	xla_condition := b.verifyAndCastOp(condition, "condition")
+	xla_onTrue := b.verifyAndCastOp(onTrue, "onTrue")
+	xla_onFalse := b.verifyAndCastOp(onFalse, "onFalse")
 	xla_result, err := xlabuilder.Where(xla_condition, xla_onTrue, xla_onFalse)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Where", BackendName))
@@ -2207,30 +953,8 @@ func (b *Builder) Where(condition, onTrue, onFalse backends.Op) backends.Op {
 // Xor returns the element-wise logic "and" operator.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) Xor(x0, x1 backends.Op) backends.Op {
-	var xla_x0 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x0, ok = x0.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x0, it must be an Op created by the builder")
-		}
-		if xla_x0.Builder() != b.builder {
-			exceptions.Panicf("x0 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x0.Builder().Name(), b.Name())
-		}
-	}
-	var xla_x1 *xlabuilder.Op
-	{
-		var ok bool
-		xla_x1, ok = x1.(*xlabuilder.Op)
-		if !ok {
-			exceptions.Panicf("nil or invalid Op (%v) given to x1, it must be an Op created by the builder")
-		}
-		if xla_x1.Builder() != b.builder {
-			exceptions.Panicf("x1 op was created with a different builder (%s) than the one it is being used -- Ops cannot cross to different builders",
-				xla_x1.Builder().Name(), b.Name())
-		}
-	}
+	xla_x0 := b.verifyAndCastOp(x0, "x0")
+	xla_x1 := b.verifyAndCastOp(x1, "x1")
 	xla_result, err := xlabuilder.Xor(xla_x0, xla_x1)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Xor", BackendName))
