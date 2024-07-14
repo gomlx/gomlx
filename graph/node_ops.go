@@ -182,6 +182,8 @@ func IdentityWithCustomGradient(x *Node, gradientFn func(x, v *Node) *Node) *Nod
 // Iota creates a constant of the given shape with increasing numbers (starting from 0)
 // on the given axis. So Iota([2,2], 1) returns [[0 1][0 1]], while Iota([2,2], 0)
 // returns [[0 0][1 1]].
+//
+// See also IotaFull.
 func Iota(g *Graph, shape shapes.Shape, iotaAxis int) *Node {
 	if shape.IsScalar() {
 		exceptions.Panicf("cannot Iota a scalar shape, shape=%s", shape)
@@ -190,12 +192,7 @@ func Iota(g *Graph, shape shapes.Shape, iotaAxis int) *Node {
 	if adjustedAxis < 0 || adjustedAxis >= shape.Rank() {
 		exceptions.Panicf("invalid axis #%d for Iota, when shape is rank %d", iotaAxis, shape.Rank())
 	}
-
-	return newNode(g, &xla.SerializedNode{
-		Type:  xla.IotaNode,
-		Shape: shape,
-		Int:   adjustedAxis,
-	}, nil)
+	return backendIota(g, shape, adjustedAxis)
 }
 
 // IotaFull creates a constant of the given shape with increasing numbers for all values.
@@ -318,43 +315,7 @@ func ExpandAndBroadcast(x *Node, newDimensions []int, expandedAxes []int) (outpu
 		}
 	}
 
-	return broadcastInDim(x, shapes.Make(x.DType(), newDimensions...), preservedAxes)
-}
-
-// broadcastInDim broadcasts x to an output with the given shape.
-// broadcastDims are the dimensions to be broadcasting into, i.e., the
-// i-th dimension of x is mapped to the broadcastDim[i]-th dimension of the output.
-// This also requires that the i-th input dimension is either 1 or is the same as the
-// output dimension it's broadcasting into.
-//
-// This is part of the XLA API, prefer using BroadcastAndExpand instead.
-//
-// For example, say operand `x = (s32)[2]{1, 2}`; shape = `(s32)[2,2]`:
-//   - Specifying []int{1} as broadcast_dimension will generate output
-//     {{1, 2},
-//     {1, 2}}
-//   - On the other hand, specifying []int{0} as broadcast_dimension
-//     will generate output
-//     {{1 , 1},
-//     {2 , 2}}
-//
-// This interface is cumbersome, so instead we expose
-func broadcastInDim(x *Node, shape shapes.Shape, broadcastDims []int) *Node {
-	g := validateBuildingGraphFromInputs(x)
-	for _, dim := range shape.Dimensions {
-		if dim <= 0 {
-			exceptions.Panicf("broadcastInDim(x.shape=%s, shape=%s): cannot create a shape with an axis with dimension <= 0", x.Shape(), shape)
-		}
-	}
-	if x.Rank() != len(broadcastDims) {
-		exceptions.Panicf("there must be one broadcastDim for each axis of x in broadcastInDim, but x.shape=%s and broadcastDims=%v",
-			x.shape, broadcastDims)
-	}
-	return newNode(g, &xla.SerializedNode{
-		Type:  xla.BroadcastInDimNode,
-		Shape: shape,
-		Ints:  broadcastDims,
-	}, []*Node{x})
+	return backendBroadcastInDim(x, shapes.Make(x.DType(), newDimensions...), preservedAxes)
 }
 
 // BroadcastToShape broadcasts x to the given shape. They must both have the
@@ -373,13 +334,13 @@ func BroadcastToShape(x *Node, shape shapes.Shape) *Node {
 		return x
 	}
 	if x.shape.IsScalar() {
-		return broadcastInDim(x, shape, nil)
+		return backendBroadcastInDim(x, shape, nil)
 	}
 	broadcastDims := make([]int, shape.Rank())
 	for ii := 0; ii < shape.Rank(); ii++ {
 		broadcastDims[ii] = ii
 	}
-	return broadcastInDim(x, shape, broadcastDims)
+	return backendBroadcastInDim(x, shape, broadcastDims)
 }
 
 // BroadcastToDims broadcasts x to the given dimensions.
