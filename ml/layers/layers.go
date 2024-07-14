@@ -26,7 +26,6 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/train"
-	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"golang.org/x/exp/constraints"
 )
@@ -366,7 +365,7 @@ func DropoutNormalize(ctx *context.Context, input *Node, dropoutRate *Node, norm
 	result := Where(LessOrEqual(rnd, broadcastRate), ZerosLike(input), input)
 	if normalize {
 		// Normalize input values, so mean value remains constant.
-		keepRate := ConvertType(OneMinus(dropoutRate), input.DType())
+		keepRate := ConvertDType(OneMinus(dropoutRate), input.DType())
 		result = Div(result, keepRate)
 	}
 	return result

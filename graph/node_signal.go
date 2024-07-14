@@ -126,7 +126,7 @@ func realFftVJP(node, v *Node) []*Node {
 	yMask := Iota(g, yMaskShape, -1)
 	yMask = ModScalar(yMask, 2.0)
 	yMask = Neg(AddScalar(MulScalar(yMask, 2), -1))
-	yMask = ConvertType(yMask, complexDType)
+	yMask = ConvertDType(yMask, complexDType)
 
 	y0 := Slice(v, AxisRange().Spacer(), AxisElem(0))
 	yLast := Slice(v, AxisRange().Spacer(), AxisElem(-1))
@@ -167,7 +167,7 @@ func inverseRealFftVJP(node, v *Node) []*Node {
 	mask.AssertDims(fftValueLastDim) // Our mask will apply to the fftValue (the input to the InverseRealFFT node).
 	mask = ExpandLeftToRank(mask, fftValue.Rank())
 	sizeNormalization := 1.0 / float64(xslices.Last(v.Shape().Dimensions))
-	normalizedMask := ConvertType(MulScalar(mask, sizeNormalization), complexDType)
+	normalizedMask := ConvertDType(MulScalar(mask, sizeNormalization), complexDType)
 	vjp := Mul(RealFFT(v), normalizedMask)
 	return []*Node{vjp}
 }

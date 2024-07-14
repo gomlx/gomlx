@@ -298,7 +298,7 @@ func poolMessagesWithFixedShape(ctx *context.Context, value, mask, degree *Node)
 			} else {
 				// Sum pondered by degree, that is, `mean(value)*degree`.
 				pooled = MaskedReduceMean(value, mask, reduceAxis)
-				pooled = Mul(pooled, ConvertType(degree, pooled.DType()))
+				pooled = Mul(pooled, ConvertDType(degree, pooled.DType()))
 			}
 			if poolType == "logsum" {
 				pooled = MirroredLog1p(pooled)
@@ -374,7 +374,7 @@ func poolMessagesWithAdjacency(ctx *context.Context, source, edgesSource, edgesT
 			// node, a source value may appear more than once. Shaped `[num_edges, emb_size]`.
 			values := Gather(source, edgesSource)
 			if dtypePool != dtype {
-				values = ConvertType(values, dtypePool)
+				values = ConvertDType(values, dtypePool)
 			}
 			pooled = Scatter(edgesTarget, values, shapes.Make(dtypePool, targetSize, embSize))
 
@@ -388,7 +388,7 @@ func poolMessagesWithAdjacency(ctx *context.Context, source, edgesSource, edgesT
 			}
 			if poolType != "mean" && degree != nil {
 				// Weight mean pooled value by `degree`.
-				pooled = Mul(pooled, ConvertType(degree, dtypePool))
+				pooled = Mul(pooled, ConvertDType(degree, dtypePool))
 			}
 			if poolType == "logsum" {
 				pooled = MirroredLog1p(pooled)
@@ -405,7 +405,7 @@ func poolMessagesWithAdjacency(ctx *context.Context, source, edgesSource, edgesT
 	}
 	all := Concatenate(parts, -1)
 	if dtype != dtypePool {
-		all = ConvertType(all, dtype)
+		all = ConvertDType(all, dtype)
 	}
 	return all
 }

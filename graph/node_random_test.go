@@ -31,7 +31,7 @@ func testRandomUniform[T interface {
 				includeSet := And(
 					GreaterOrEqual(r, Scalar(g, r.DType(), from)),
 					LessThan(r, Scalar(g, r.DType(), to)))
-				count := ConvertType(includeSet, dtypes.Float32)
+				count := ConvertDType(includeSet, dtypes.Float32)
 				count = ReduceAllSum(count)
 				count = DivScalar(count, shapeSize)
 				counts[ii] = count
@@ -63,7 +63,7 @@ func testRandomNormal[T interface {
 			_, r := RandomNormal(state, shape)
 			if dtype == dtypes.Float16 {
 				// 1M examples will overflow float16 resolution, so we convert to F32 to calculate the mean.
-				r = ConvertType(r, dtypes.Float32)
+				r = ConvertDType(r, dtypes.Float32)
 			}
 			mean := ReduceAllMean(r)
 			r2 := Square(r)
@@ -72,7 +72,7 @@ func testRandomNormal[T interface {
 			stddev := Sqrt(variance)
 
 			// Convert to float64 for to get same type result for all.
-			mean, stddev = ConvertType(mean, dtypes.Float64), ConvertType(stddev, dtypes.Float64)
+			mean, stddev = ConvertDType(mean, dtypes.Float64), ConvertDType(stddev, dtypes.Float64)
 			outputs = []*Node{mean, stddev}
 			return
 		},

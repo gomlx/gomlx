@@ -414,9 +414,9 @@ func convertTypeVJP(node, v *Node, _ shapes.Shape) []*Node {
 	inputDType := node.inputNodes[0].DType()
 	if node.DType().IsComplex() && inputDType.IsFloat() {
 		// Just take the real part of the adjoint, since the input has no effect on the imaginary output.
-		return []*Node{ConvertType(Real(v), inputDType)}
+		return []*Node{ConvertDType(Real(v), inputDType)}
 	}
-	return []*Node{ConvertType(v, inputDType)}
+	return []*Node{ConvertDType(v, inputDType)}
 }
 
 func negVJP(node, v *Node, _ shapes.Shape) []*Node {

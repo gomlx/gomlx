@@ -102,7 +102,7 @@ func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inpu
 			// Gather values from frozen paperEmbeddings. Mask remains unchanged.
 			graphInputs[name].Value = Gather(papersEmbeddings, ExpandDims(graphInputs[name].Value, -1))
 			if dtype != dtypeEmbed {
-				graphInputs[name].Value = ConvertType(graphInputs[name].Value, dtype)
+				graphInputs[name].Value = ConvertDType(graphInputs[name].Value, dtype)
 			}
 		}
 	}
@@ -122,7 +122,7 @@ func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inpu
 			}
 			graphInputs[name].Value = embedded
 			if dtype != dtypeEmbed {
-				graphInputs[name].Value = ConvertType(graphInputs[name].Value, dtype)
+				graphInputs[name].Value = ConvertDType(graphInputs[name].Value, dtype)
 			}
 		}
 	}
@@ -142,7 +142,7 @@ func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inpu
 			}
 			graphInputs[name].Value = embedded
 			if dtype != dtypeEmbed {
-				graphInputs[name].Value = ConvertType(graphInputs[name].Value, dtype)
+				graphInputs[name].Value = ConvertDType(graphInputs[name].Value, dtype)
 			}
 		}
 	}

@@ -3,13 +3,10 @@
 package graph
 
 import (
-	"fmt"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	"slices"
-	"strings"
 )
 
 type NodeType int
@@ -238,15 +235,8 @@ func (ni *nodeInputsArgMinMax) String() string {
 	)
 }
 
-// ArgMinMax calculates the "argmin" or "argmax" across an axis of the given input array x.
-// outputDType defines the output of the argmin/argmax, it doesn't need to be the same as the input.
-// It's a form of reduction on the given axis, and that axis goes away. So the rank of the result is one less than
-// the rank of x.
-// Examples:
-//
-//	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=1, isMin=true) -> {1, 0}  // (it chooses the 0 and the -3)
-//	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=0, isMin=false) -> {0, 1, 0} // (it choose the 2, 4 and 7)
-func ArgMinMax(x *Node, axis int, outputDType dtypes.DType, isMin bool) (node *Node) {
+// backendArgMinMax is a Graph wrapper for the backend.Builder.ArgMinMax method.
+func backendArgMinMax(x *Node, axis int, outputDType dtypes.DType, isMin bool) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
 
 	inputs := &nodeInputsArgMinMax{
@@ -2310,9 +2300,8 @@ func (ni *nodeInputsReduceProduct) String() string {
 	)
 }
 
-// ReduceProduct is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the product of the reduced axes.
-// If no axes are given, it reduces the full array.
-func ReduceProduct(x *Node, axes ...int) (node *Node) {
+// backendReduceProduct is a Graph wrapper for the backend.Builder.ReduceProduct method.
+func backendReduceProduct(x *Node, axes ...int) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
 
 	inputs := &nodeInputsReduceProduct{

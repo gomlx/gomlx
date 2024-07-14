@@ -34,7 +34,7 @@ func FnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 		return magVar.ValueGraph(g)
 	}
 	log1pMagVar := func(name string) *Node {
-		return Log1p(ConvertType(getMagVar(name), dtypes.Float32))
+		return Log1p(ConvertDType(getMagVar(name), dtypes.Float32))
 	}
 
 	// Gather and concatenate all features from the seeds (indices of papers).

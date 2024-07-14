@@ -104,7 +104,7 @@ func createDenseTestStateGraphWithMask(strategy *samplerPkg.Strategy, g *Graph, 
 		}
 	}
 	graphStates["authors"] = &samplerPkg.ValueMask[*Node]{
-		Value: ConvertType(DivScalar(Const(g, authorsStates), 1000.0), dtype),
+		Value: ConvertDType(DivScalar(Const(g, authorsStates), 1000.0), dtype),
 		Mask:  Const(g, authorsMask),
 	}
 	if withCitation {

@@ -204,7 +204,7 @@ func (c *InterpolationConfig) Done() (output *Node) {
 
 		// Broadcast spanStart to common shape so it can be combined with other interpolation axes.
 		// The final shape will be [interpolationDims..., 1].
-		broadcastSpanStart := ConvertType(spanStart, dtypes.Int32)
+		broadcastSpanStart := ConvertDType(spanStart, dtypes.Int32)
 		{
 			spanExpandAxes := make([]int, 0, numAxesToInterpolate)
 			for axis := 0; axis < axisIdx; axis++ {

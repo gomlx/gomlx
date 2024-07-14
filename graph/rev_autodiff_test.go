@@ -380,7 +380,7 @@ func TestGradientConvertType(t *testing.T) {
 	testGradients(t, "gradient_of_ConvertType",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			inputs := Const(g, []float32{1e6, 1e-6, 0, -1e-8, -1e6})
-			values := ConvertType(inputs, dtypes.Float64)
+			values := ConvertDType(inputs, dtypes.Float64)
 			output = Mul(Const(g, []float64{2, 1, 3, -4, 5}), values)
 			return output, []*Node{inputs}
 		}, []any{[]float32{2, 1, 3, -4, 5}},
@@ -388,7 +388,7 @@ func TestGradientConvertType(t *testing.T) {
 	testGradients(t, "gradient_of_ConvertType",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			inputs := Const(g, []float32{1e6, 1e-6, 0, -1e-8, -1e6})
-			values := ConvertType(inputs, shapes.Complex64)
+			values := ConvertDType(inputs, shapes.Complex64)
 			scaled := Mul(Const(g, []complex64{2, 1, 3, -4, 5}), values)
 			output = ReduceAllSum(Add(Real(scaled), Imag(scaled)))
 			return output, []*Node{values, inputs}
@@ -414,7 +414,7 @@ func TestGradientAbs(t *testing.T) {
 			in1 := Const(g, []complex128{1 + 1i, 3 - 4i, -4 + 3i, -1 - 1i})
 			out0 := ReduceAllSum(Abs(in0))
 			out1 := ReduceAllSum(Abs(in1))
-			output = Add(ConvertType(out0, dtypes.Float64), out1)
+			output = Add(ConvertDType(out0, dtypes.Float64), out1)
 			return output, []*Node{in0, in1}
 		}, []any{
 			[]complex64{0.70710677 + 0.70710677i, 0.6 - 0.8i, -0.8 + 0.6i, -0.70710677 - 0.70710677i},

@@ -244,9 +244,9 @@ func TestConvertType(t *testing.T) {
 			Const(g, wantF32),
 			Const(g, wantF64),
 		}
-		c64 := ConvertType(inputs[0], shapes.Complex64)
+		c64 := ConvertDType(inputs[0], shapes.Complex64)
 		assert.Equal(t, shapes.Complex64, c64.DType())
-		c128 := ConvertType(inputs[1], shapes.Complex128)
+		c128 := ConvertDType(inputs[1], shapes.Complex128)
 		assert.Equal(t, shapes.Complex128, c128.DType())
 		outputs = []*Node{Real(c64), Real(c128)}
 		return

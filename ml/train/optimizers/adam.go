@@ -234,7 +234,7 @@ func (o *adam) applyAdamGraph(ctx *context.Context, g *Graph, v *context.Variabl
 	// Adam runs on a fixed dtype -- defaults to the dtype of the loss, but it can be configured.
 	// We convert the grad to the dtype used by Adam for its computation.
 	if grad.DType() != dtype {
-		grad = ConvertType(grad, dtype)
+		grad = ConvertDType(grad, dtype)
 	}
 
 	// Do gradient step with momentum.
@@ -265,7 +265,7 @@ func (o *adam) applyAdamGraph(ctx *context.Context, g *Graph, v *context.Variabl
 
 	value := v.ValueGraph(g)
 	if value.DType() != dtype {
-		value = ConvertType(value, dtype)
+		value = ConvertDType(value, dtype)
 	}
 	stepDirection := Mul(learningRate, debiasedMoment1)
 	stepDirection = Div(stepDirection, denominator)
@@ -285,7 +285,7 @@ func (o *adam) applyAdamGraph(ctx *context.Context, g *Graph, v *context.Variabl
 	updated := Sub(value, stepDirection)
 	if v.Shape().DType != dtype {
 		// Convert back to the variable type.
-		updated = ConvertType(updated, v.Shape().DType)
+		updated = ConvertDType(updated, v.Shape().DType)
 	}
 	v.SetValueGraph(updated)
 	return

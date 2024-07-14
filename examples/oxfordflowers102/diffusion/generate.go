@@ -180,12 +180,12 @@ func PlotModelEvolution(imagesPerSample int, animate bool) {
 func DenoiseStepGraph(ctx *context.Context, noisyImages, diffusionTime, nextDiffusionTime, flowerIds *Node) (
 	predictedImages, nextNoisyImages *Node) {
 	numImages := noisyImages.Shape().Dimensions[0]
-	diffusionTimes := BroadcastToDims(ConvertType(diffusionTime, DType), numImages, 1, 1, 1)
+	diffusionTimes := BroadcastToDims(ConvertDType(diffusionTime, DType), numImages, 1, 1, 1)
 	signalRatios, noiseRatios := DiffusionSchedule(diffusionTimes, false)
 	var predictedNoises *Node
 	predictedImages, predictedNoises = Denoise(ctx, noisyImages, signalRatios, noiseRatios, flowerIds)
 
-	nextDiffusionTimes := BroadcastToDims(ConvertType(nextDiffusionTime, DType), numImages, 1, 1, 1)
+	nextDiffusionTimes := BroadcastToDims(ConvertDType(nextDiffusionTime, DType), numImages, 1, 1, 1)
 	nextSignalRatios, nextNoiseRatios := DiffusionSchedule(nextDiffusionTimes, false)
 	nextNoisyImages = Add(
 		Mul(predictedImages, nextSignalRatios),

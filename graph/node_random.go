@@ -87,7 +87,7 @@ func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Nod
 		bitsShape.DType = dtypes.Uint64
 		var randomBits *Node
 		newRngState, randomBits = RngBitGeneratorXLA(rngState, bitsShape)
-		values = ConvertType(randomBits, dtypes.Float64)
+		values = ConvertDType(randomBits, dtypes.Float64)
 		values = MulScalar(values, math.Pow(2.0, -64))
 		values = MinScalar(values, math.Nextafter(1.0, 0.0))
 		values = StopGradient(values)
@@ -96,7 +96,7 @@ func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Nod
 		bitsShape.DType = dtypes.Uint32
 		var randomBits *Node
 		newRngState, randomBits = RngBitGeneratorXLA(rngState, bitsShape)
-		values = ConvertType(randomBits, dtypes.Float32)
+		values = ConvertDType(randomBits, dtypes.Float32)
 		values = MulScalar(values, 1.0/(float64(1<<32)))
 		values = MinScalar(values, float64(math.Nextafter32(1.0, 0.0)))
 		values = StopGradient(values)
@@ -104,7 +104,7 @@ func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Nod
 		shapeF32 := shape.Clone()
 		shapeF32.DType = dtypes.Float32
 		newRngState, values = RandomUniform(rngState, shapeF32)
-		values = ConvertType(values, shape.DType)
+		values = ConvertDType(values, shape.DType)
 		values = StopGradient(values)
 	case shapes.Complex64:
 		componentShape := shape.Clone()

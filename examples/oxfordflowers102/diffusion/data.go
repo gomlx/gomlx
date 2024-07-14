@@ -109,7 +109,7 @@ func PreprocessImages(images *Node, normalize bool) *Node {
 	g := images.Graph()
 
 	// ReduceAllMax(images).SetLogged("Max(uint8):")
-	images = ConvertType(images, DType)
+	images = ConvertDType(images, DType)
 	if !normalize {
 		return images
 	}

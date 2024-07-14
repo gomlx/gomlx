@@ -155,7 +155,7 @@ func TestLayerWiseInferenceLogits(t *testing.T) {
 		// Execute normal inference model for the inputs.
 		executor := context.NewExec(manager, ctx, func(ctx *context.Context, inputs []*Node) *Node {
 			predictionsAndMask := MagModelGraph(ctx, strategy, inputs)
-			return ConvertType(predictionsAndMask[0], dtypes.Float32)
+			return ConvertDType(predictionsAndMask[0], dtypes.Float32)
 		})
 		var results []tensors.Tensor
 		require.NotPanics(t, func() { results = executor.Call(inputs) })
@@ -166,7 +166,7 @@ func TestLayerWiseInferenceLogits(t *testing.T) {
 		modelFn := BuildLayerWiseInferenceModel(strategy, false) // Function that builds the LW inference model.
 		executor = context.NewExec(ctx.Manager(), ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
 			allPredictions := modelFn(ctx, g)
-			return ConvertType(
+			return ConvertDType(
 				Slice(allPredictions, AxisElem(seedId), AxisRange()),
 				dtypes.Float32)
 		})
@@ -223,10 +223,10 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 		predictionsAndMask := MagModelGraph(ctx, strategy, inputs)
 		predictions := ArgMax(predictionsAndMask[0], -1, dtypes.Int32)
 		mask := predictionsAndMask[1]
-		correct := ConvertType(Equal(predictions, Squeeze(labels, -1)), dtypes.Int32)
+		correct := ConvertDType(Equal(predictions, Squeeze(labels, -1)), dtypes.Int32)
 		correct = Where(mask, correct, ZerosLike(correct))
 		correct = ReduceAllSum(correct)
-		count := ReduceAllSum(ConvertType(mask, dtypes.Int32))
+		count := ReduceAllSum(ConvertDType(mask, dtypes.Int32))
 		return []*Node{correct, count, predictions}
 	})
 	var correct, total int

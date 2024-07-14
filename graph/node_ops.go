@@ -353,21 +353,19 @@ func BroadcastToDims(x *Node, dimensions ...int) *Node {
 	return BroadcastToShape(x, shape)
 }
 
-// ConvertType converts x to a different primitive type. See shapes.Supported for the supported types.
+// ConvertType is an alias to ConvertDType.
+// Deprecated: use ConvertDType instead.
 func ConvertType(x *Node, dtype dtypes.DType) *Node {
-	g := validateBuildingGraphFromInputs(x)
+	_ = validateBuildingGraphFromInputs(x)
 	if !dtype.IsSupported() {
 		exceptions.Panicf("converting to an unsupported dtype %s", dtype)
 	}
-	return newNode(g, &xla.SerializedNode{
-		Type: xla.ConvertTypeNode,
-		Int:  int(dtype),
-	}, []*Node{x})
+	return ConvertDType(x, dtype)
 }
 
 // Where takes element-wise values from onTrue or onFalse depending on the value of condition (expected to be boolean).
 func Where(condition, onTrue, onFalse *Node) *Node {
-	g := validateBuildingGraphFromInputs(condition)
+	_ = validateBuildingGraphFromInputs(condition)
 	if condition.DType() != dtypes.Bool {
 		exceptions.Panicf("Where(condition, onTrue, onFalse) requires condition to be of dtype Bool, got %s instead",
 			condition.Shape())
@@ -432,7 +430,7 @@ func Reshape(x *Node, dimensions ...int) *Node {
 // Total size cannot change, neither the DType is allowed to change.
 // Conceptually, this is a limited form of "shape casting."
 func ReshapeWithShape(x *Node, shape shapes.Shape) *Node {
-	g := validateBuildingGraphFromInputs(x)
+	_ = validateBuildingGraphFromInputs(x)
 	if shape.DType != x.shape.DType {
 		exceptions.Panicf("cannot change dtype (from %s to %s) with ReshapeWithShape",
 			x.shape.DType, shape.DType)
@@ -470,7 +468,7 @@ func ExpandDims(x *Node, axes ...int) *Node {
 			axes[ii] = fromRank + 1 + axis
 		}
 	}
-	sort.Ints(axes)
+	slices.Sort(axes)
 
 	// Create new target shape.
 	toShape := shapes.Shape{DType: x.shape.DType, Dimensions: make([]int, toRank)}
@@ -552,44 +550,6 @@ func Squeeze(x *Node, axes ...int) *Node {
 	return Reshape(x, newDims...)
 }
 
-// Tuple creates a tuple of several values.
-// It is the mean to return several values from one Graph computation.
-func Tuple(nodes ...*Node) *Node {
-	g := validateBuildingGraphFromInputs(nodes...)
-	return newNode(g, &xla.SerializedNode{
-		Type: xla.TupleNode,
-	}, nodes)
-}
-
-// GetTupleElement extracts one element from a Tuple.
-func GetTupleElement(tuple *Node, index int) *Node {
-	g := validateBuildingGraphFromInputs(tuple)
-	return newNode(g, &xla.SerializedNode{
-		Type: xla.GetTupleElementNode,
-		Int:  index,
-	}, []*Node{tuple})
-}
-
-// SplitTuple is a convenience wrapper around GetTupleElement, it will return an array with all the nodes.
-func SplitTuple(tuple *Node) []*Node {
-	_ = validateBuildingGraphFromInputs(tuple)
-	numElements := tuple.Shape().TupleSize()
-	nodes := make([]*Node, numElements)
-	for ii := 0; ii < numElements; ii++ {
-		nodes[ii] = GetTupleElement(tuple, ii)
-	}
-	return nodes
-}
-
-// reduceHelper helps implements all the Reduce<X> functions.
-func reduceHelper(x, init *Node, reduceAxes []int, nodeType xla.NodeType) *Node {
-	g := validateBuildingGraphFromInputs(x)
-	return newNode(g, &xla.SerializedNode{
-		Type: nodeType,
-		Ints: convertNegativeAxesAndSort(x.shape.Rank(), reduceAxes),
-	}, []*Node{x, init})
-}
-
 // ArgMax returns the index of the largest element across the given axis.
 //
 // The selected axis is reduced, and the output has one fewer axes (rank `x.Rank() - 1`).
@@ -604,7 +564,7 @@ func ArgMax(x *Node, axis int, outputDType ...dtypes.DType) (output *Node) {
 	} else if len(outputDType) == 1 {
 		dtype = outputDType[0]
 	}
-	return argMinMax(x, axis, dtype, false)
+	return backendArgMinMax(x, axis, dtype, false)
 }
 
 // ArgMin returns the index of the smallest element across the given axis.
@@ -621,36 +581,25 @@ func ArgMin(x *Node, axis int, outputDType ...dtypes.DType) (output *Node) {
 	} else if len(outputDType) == 1 {
 		dtype = outputDType[0]
 	}
-	return argMinMax(x, axis, dtype, true)
+	return backendArgMinMax(x, axis, dtype, false)
 }
 
-func argMinMax(x *Node, axis int, outputDType dtypes.DType, isMin bool) (output *Node) {
-	g := validateBuildingGraphFromInputs(x)
-	adjustedAxis := AdjustAxis(x, axis)
-	output = newNode(g, &xla.SerializedNode{
-		Type: xla.ArgMinMaxNode,
-		Int:  adjustedAxis,
-		Ints: []int{boolToInt(isMin), int(outputDType)},
-	}, []*Node{x})
-
-	// We don't define a gradient for the ArgMax result. It's a discrete quantity, not
-	// something one usually wants to differentiate from anyway.
-	// Presumably, it's either 0 or undefined if there are another more than one element with the max value.
-	return StopGradient(output)
-}
-
-// convertNegativeAxesAndSort in a copy of `axesWithNegatives`.
+// adjustAxesToRankAndSort not-inplace, it returns an adjusted copy of the given `axesWithNegatives`.
 // An axis set to -1 is converted to `rank - 1`.
-func convertNegativeAxesAndSort(rank int, axesWithNegatives []int) []int {
-	copyDims := make([]int, len(axesWithNegatives))
-	copy(copyDims, axesWithNegatives)
-	for ii := range copyDims {
-		if copyDims[ii] < 0 {
-			copyDims[ii] = rank + copyDims[ii]
+// It panics if any of the axes is out-of-range for given rank.
+func adjustAxesToRankAndSort(rank int, axesWithNegatives []int) []int {
+	axes := slices.Clone(axesWithNegatives)
+	for ii := range axes {
+		if axes[ii] < 0 {
+			axes[ii] = rank + axes[ii]
+		}
+		if axes[ii] < 0 || axes[ii] > rank {
+			exceptions.Panicf("axis #%d of axes given (%v) is out-of-range for rank %d",
+				ii, axesWithNegatives, rank)
 		}
 	}
-	sort.Ints(copyDims)
-	return copyDims
+	slices.Sort(axes)
+	return axes
 }
 
 // ReduceSum reduces by summing over X elements over the selected axes.
@@ -659,9 +608,9 @@ func convertNegativeAxesAndSort(rank int, axesWithNegatives []int) []int {
 // The reduced axes of `x` are removed in the output -- so the rank is reduced.
 // See ReduceAndKeep for a version to preserve the reduced axes.
 func ReduceSum(x *Node, reduceAxes ...int) *Node {
-	g := validateBuildingGraphFromInputs(x)
-	zero := ScalarZero(g, x.DType())
-	return reduceHelper(x, zero, reduceAxes, xla.ReduceSumNode)
+	_ = validateBuildingGraphFromInputs(x)
+	axes := adjustAxesToRankAndSort(x.Rank(), reduceAxes)
+	return backendReduceSum(x, axes...)
 }
 
 // ReduceAllSum reduces all dimensions to a scalar by summing.
@@ -707,7 +656,7 @@ func ReduceMean(x *Node, reduceAxes ...int) *Node {
 	_ = validateBuildingGraphFromInputs(x)
 	sum := ReduceSum(x, reduceAxes...)
 	denominator := x.Shape().Size() / sum.Shape().Size()
-	return Div(sum, ConstAs(sum, denominator))
+	return MulScalar(sum, 1.0/float64(denominator))
 }
 
 // ReduceAllMean reduces all dimensions to a scalar by taking the mean.
@@ -729,6 +678,7 @@ func MaskedReduceMean(x, mask *Node, reduceAxes ...int) *Node {
 	denominator := Where(mask, ones, zeros)
 	denominator = ReduceSum(denominator, reduceAxes...)
 	denominator = Max(denominator, OnesLike(denominator))
+	denominator.stopGradient = true
 	return Div(sum, denominator)
 }
 
@@ -744,9 +694,9 @@ func MaskedReduceAllMean(x, mask *Node) *Node {
 // The reduced axes of `x` are removed in the output -- so the rank is reduced.
 // See ReduceAndKeep for a version to preserve the reduced axes.
 func ReduceMultiply(x *Node, reduceAxes ...int) *Node {
-	g := validateBuildingGraphFromInputs(x)
-	one := ScalarOne(g, x.DType())
-	return reduceHelper(x, one, reduceAxes, xla.ReduceMultiplyNode)
+	_ = validateBuildingGraphFromInputs(x)
+	axes := adjustAxesToRankAndSort(x.Rank(), reduceAxes)
+	return backendReduceProduct(x, axes...)
 }
 
 // ReduceAllMultiply reduces all dimensions to a scalar by multiplying.
@@ -760,9 +710,9 @@ func ReduceAllMultiply(x *Node) *Node {
 // The reduced axes of `x` are removed in the output -- so the rank is reduced.
 // See ReduceAndKeep for a version to preserve the reduced axes.
 func ReduceMax(x *Node, reduceAxes ...int) *Node {
-	g := validateBuildingGraphFromInputs(x)
-	lowest := lowestForDType(g, x.DType())
-	return reduceHelper(x, lowest, reduceAxes, xla.ReduceMaxNode)
+	_ = validateBuildingGraphFromInputs(x)
+	axes := adjustAxesToRankAndSort(x.Rank(), reduceAxes)
+	return backendReduceMax(x, axes...)
 }
 
 // ReduceAllMax reduces all dimensions to a scalar by taking the max.
@@ -800,6 +750,43 @@ func MaskedReduceAllMax(x, mask *Node) *Node {
 //
 // Deprecated: all functions that take mask are prefixed with `Masked...`
 var ReduceAllMaskedMax = MaskedReduceAllMax
+
+// ReduceMin reduces by taking the max over the elements of the selected axes.
+// If reduceAxes is nil, reduce over all dimensions to a scalar.
+//
+// The reduced axes of `x` are removed in the output -- so the rank is reduced.
+// See ReduceAndKeep for a version to preserve the reduced axes.
+func ReduceMin(x *Node, reduceAxes ...int) *Node {
+	_ = validateBuildingGraphFromInputs(x)
+	axes := adjustAxesToRankAndSort(x.Rank(), reduceAxes)
+	return backendReduceMin(x, axes...)
+}
+
+// ReduceAllMin reduces all dimensions to a scalar by taking the max.
+func ReduceAllMin(x *Node) *Node {
+	return ReduceMin(x)
+}
+
+// MaskedReduceMin reduces by taking the max of `x` elements over the selected axes.
+// If reduceAxes is nil, reduce over all dimensions to a scalar.
+//
+// It ignores values for which the corresponding mask is false.
+// The shapes of `mask and x must be the same.
+func MaskedReduceMin(x, mask *Node, reduceAxes ...int) *Node {
+	g := x.Graph()
+	lowest := lowestForDType(g, x.DType())
+	broadcastLowest := BroadcastToDims(lowest, x.Shape().Dimensions...)
+	maskedX := Where(mask, x, broadcastLowest)
+	return ReduceMin(maskedX, reduceAxes...)
+}
+
+// MaskedReduceAllMin reduces all dimensions to a scalar by taking the max.
+//
+// It ignores values for which the corresponding mask is false.
+// The shapes of `mask and x must be the same.
+func MaskedReduceAllMin(x, mask *Node) *Node {
+	return MaskedReduceMin(x, mask)
+}
 
 // SliceAxisSpec specifies the range and stride of an axis to include in a Slice.
 //

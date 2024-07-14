@@ -149,7 +149,7 @@ func IncrementGlobalStepGraph(ctx *context.Context, g *Graph, dtype dtypes.DType
 	globalStep = Add(globalStep, OnesLike(globalStep))
 	globalStepVar.SetValueGraph(globalStep)
 	if dtype != dtypes.Int64 {
-		globalStep = ConvertType(globalStep, dtype)
+		globalStep = ConvertDType(globalStep, dtype)
 	}
 	return globalStep
 }
@@ -254,7 +254,7 @@ func addGradientsToVariablesGraph(ctx *context.Context, loss, learningRate, glob
 			// as the loss), so we need to cast it.
 			// Two common reasons: variables can have different resolution (to save space); variables could be
 			// complex.
-			lrCast = ConvertType(learningRate, grads[ii].DType())
+			lrCast = ConvertDType(learningRate, grads[ii].DType())
 		}
 		scaledGradient := Mul(grads[ii], lrCast)
 		scaledGradient = ClipStepByValue(ctx, scaledGradient)

@@ -294,7 +294,7 @@ func convertPapersEmbeddings(ctx *context.Context) {
 	}
 
 	e := context.NewExec(ctx.Manager(), ctx, func(ctx *context.Context, g *Graph) *Node {
-		return ConvertType(papersVar.ValueGraph(g), dtype)
+		return ConvertDType(papersVar.ValueGraph(g), dtype)
 	})
 	converted := e.Call()[0]
 	papersVar.SetValuePreservingOld(converted) // We don't want to destroy the unconverted values, in case we need it again (it happens in tests).

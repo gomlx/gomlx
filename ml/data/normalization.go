@@ -114,7 +114,7 @@ func Normalization(manager *Manager, ds train.Dataset, inputsIndex int, independ
 			sumSquareVar := ctx.InspectVariable(ctx.Scope(), "sum^2")
 			sumSquare := sumSquareVar.ValueGraph(g)
 
-			count = ConvertType(count, sum.DType())
+			count = ConvertDType(count, sum.DType())
 			mean := Div(sum, count)
 			variance := Sub(
 				Div(sumSquare, count),
