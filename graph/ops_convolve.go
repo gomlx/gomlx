@@ -51,16 +51,16 @@ type ConvolutionBuilder struct {
 // the convolved x. Browse through ConvolutionBuilder to see its capabilities
 // and defaults.
 //
-// The shape of x should be `[batch, <spatial_dimensions...>, input_channels]` if
+// The outputShapes of x should be `[batch, <spatial_dimensions...>, input_channels]` if
 // configured with `ConvolutionBuilder.ChannelsAxis(timage.ChannelsLast)`, the default.
-// If one sets `ConvolutionBuilder.ChannelsAxis(timage.ChannelsFirst)`, the shape should be
+// If one sets `ConvolutionBuilder.ChannelsAxis(timage.ChannelsFirst)`, the outputShapes should be
 // `[batch, input_channels, <spatial_dimensions...>]` instead.
 //
 // Note: `timage` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
 //
-// The shape of kernel should be `[<spatial_dimensions...>, input_channels, output_channels]` if
+// The outputShapes of kernel should be `[<spatial_dimensions...>, input_channels, output_channels]` if
 // configured with `ConvolutionBuilder.ChannelsAxis(timage.ChannelsLast)`, the default. If one
-// sets `ConvolutionBuilder.ChannelsAxis(timage.ChannelsFirst)`, the shape should be
+// sets `ConvolutionBuilder.ChannelsAxis(timage.ChannelsFirst)`, the outputShapes should be
 // `[input_channels, <spatial_dimensions...>, output_channels]` instead.
 //
 // Notice x and kernel must have the same rank.
@@ -174,7 +174,7 @@ func (conv *ConvolutionBuilder) StridePerDim(strides ...int) *ConvolutionBuilder
 }
 
 // PadSame adds paddings on the edges of x such that in the end the output
-// of the convolution has the same shape as the input (assuming strides=1).
+// of the convolution has the same outputShapes as the input (assuming strides=1).
 //
 // The default is no padding. See also NoPadding and PaddingPerDim.
 func (conv *ConvolutionBuilder) PadSame() *ConvolutionBuilder {
@@ -184,7 +184,7 @@ func (conv *ConvolutionBuilder) PadSame() *ConvolutionBuilder {
 }
 
 // NoPadding removes any paddings, so if the kernel spatial dimensions > 1,
-// the output shape will be reduced on the edges. This is the default.
+// the output outputShapes will be reduced on the edges. This is the default.
 //
 // See also PadSame and PaddingPerDim.
 func (conv *ConvolutionBuilder) NoPadding() *ConvolutionBuilder {
@@ -351,9 +351,9 @@ func convGeneralDilatedVJP(node, v *Node, _ shapes.Shape) []*Node {
 			"this may occur when trying to do the gradient of a gradient.")
 	}
 
-	//fmt.Printf("\tx.shape=%s\n", x.Shape())
-	//fmt.Printf("\tkernel.shape=%s\n", kernel.Shape())
-	//fmt.Printf("\tnode.shape=%s\n", node.Shape())
+	//fmt.Printf("\tx.outputShapes=%s\n", x.Shape())
+	//fmt.Printf("\tkernel.outputShapes=%s\n", kernel.Shape())
+	//fmt.Printf("\tnode.outputShapes=%s\n", node.Shape())
 
 	vjpX := convVJPWrtX(node, x, kernel, v, numSpatialDims, params.axes,
 		params.strides, params.paddings, params.filterDilation)
@@ -418,7 +418,7 @@ func convVJPWrtX(node, x, kernel, v *Node, numSpatialDims int, axes ConvolveAxes
 
 		// Start/End positions on the output for the reverse convolution.
 		// Values below 0 or above outputDimSize means padding. It has to be such that it will regenerate
-		// the original input spatial shape.
+		// the original input spatial outputShapes.
 		// Stride in the input will be become inputDilation in the reverse convolution.
 		outputDimStart := -inputDimStart - ((kernelSize - 1) / 2)
 		if outputDimStart > 0 {
@@ -464,7 +464,7 @@ func expectedOutputSize(inputSize, kernelSize, dilation, stride int, padding [2]
 func convVJPWrtKernel(node, x, kernel, v *Node, numSpatialDims int, axes ConvolveAxesConfig,
 	strides []int, paddings [][2]int, filterDilation []int) *Node {
 	//fmt.Printf("\nconvVJPWrtKernel input:\n")
-	//fmt.Printf("\tnode.shape=%s, x.shape=%s, kernel.shape=%s, v.shape=%s\n", node.Shape(), x.Shape(), kernel.Shape(), v.Shape())
+	//fmt.Printf("\tnode.outputShapes=%s, x.outputShapes=%s, kernel.outputShapes=%s, v.outputShapes=%s\n", node.Shape(), x.Shape(), kernel.Shape(), v.Shape())
 	//fmt.Printf("\tnumSpatialDims=%d, axes=%+v\n", numSpatialDims, axes)
 	//fmt.Printf("\tstrides=%v, paddings=%v, filterDilation=%v\n", strides, paddings, filterDilation)
 
@@ -481,7 +481,7 @@ func convVJPWrtKernel(node, x, kernel, v *Node, numSpatialDims int, axes Convolv
 	reverseAxes.InputBatch, reverseAxes.InputChannel = axes.InputChannel, axes.InputBatch
 	reverseAxes.InputSpatial = axes.InputSpatial
 
-	// The output of the reverse convolve is the original kernel shape. The kernel input channels axis
+	// The output of the reverse convolve is the original kernel outputShapes. The kernel input channels axis
 	// is the reverse output batch axis. The output channel of the reverse convolve will goes into
 	// the original kernel output channel.
 	reverseAxes.OutputBatch, reverseAxes.OutputChannel = axes.KernelInputChannel, axes.KernelOutputChannel
@@ -572,7 +572,7 @@ func convVJPWrtKernel(node, x, kernel, v *Node, numSpatialDims int, axes Convolv
 	}
 	output := revConv.Done()
 	//fmt.Printf("convVJPWrtKernel output:\n")
-	//fmt.Printf("\trev: x.shape=%s, kernel.shape=%s, output.shape=%s\n", x.Shape(), reverseKernel.Shape(), output.Shape())
+	//fmt.Printf("\trev: x.outputShapes=%s, kernel.outputShapes=%s, output.outputShapes=%s\n", x.Shape(), reverseKernel.Shape(), output.Shape())
 	//fmt.Printf("\tnumSpatialDims=%d, axes=%+v\n", revConv.numSpatialDims, revConv.axes)
 	//fmt.Printf("\tstrides=%v, paddings=%v, filterDilation=%v\n", revConv.strides, revConv.paddings, revConv.filterDilation)
 	//fmt.Printf("\n")

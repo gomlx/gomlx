@@ -541,7 +541,7 @@ func TestGradientGatherSlices(t *testing.T) {
 // TestGradientBroadcastInDim test the underlying XLA's broadcastInDim operator, since
 // it powers BroadcastToShape, BroadcastToDims and ExpandAndBroadcast operators.
 func TestGradientBroadcastInDim(t *testing.T) {
-	testGradients(t, "broadcastInDim: scalar to shape",
+	testGradients(t, "broadcastInDim: scalar to outputShapes",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			input := Const(g, float32(1))
 			output = BroadcastToDims(input, 2, 2)
@@ -628,7 +628,7 @@ func TestIdentityWithCustomGradient(t *testing.T) {
 			input := IotaFull(g, shapes.Make(dtypes.Float32, 5))
 			output = IdentityWithCustomGradient(input, func(x, v *Node) *Node {
 				factor := AddScalar(Neg(x), 5)
-				fmt.Printf("> custom gradient: x.shape=%s, v.shape=%s\n", x.Shape(), v.Shape())
+				fmt.Printf("> custom gradient: x.outputShapes=%s, v.outputShapes=%s\n", x.Shape(), v.Shape())
 				return Mul(v, factor)
 			})
 			output = MulScalar(output, 2)

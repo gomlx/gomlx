@@ -81,7 +81,7 @@ func TestExec(t *testing.T) {
 		testForDim(dim)
 	}
 
-	// Try a different shape (float64) so that we run out of cache.
+	// Try a different outputShapes (float64) so that we run out of cache.
 	{
 		a := []float64{0, 0}
 		b := []float64{1, 1}

@@ -146,6 +146,22 @@ func (b *Builder) ReduceWindow(x backends.Op, reductionType backends.ReduceOpTyp
 	return op
 }
 
+// RngBitGenerator generates the given shape filled with random bits.
+// It takes as input the current random number generator (RNG) state, see RngState or RngStateFromSeed.
+// The algorithm is hard-coded to use Philox algorithm for now.
+//
+// It returns the new state of the RNG and the generated values (with random bits) with the given shape.
+func (b *Builder) RngBitGenerator(state backends.Op, shape shapes.Shape) (newState, values backends.Op) {
+	xlaState := b.verifyAndCastOp(state, "x")
+	xlaShape := shapeToXShape(shape)
+	var err error
+	newState, values, err = xlabuilder.RngBitGenerator(xlaState, xlaShape)
+	if err != nil {
+		panic(errors.WithMessagef(err, "backend %q builder %q: RngBitGenerator(shape=%s)", b.backend.Name(), b.name, shape))
+	}
+	return
+}
+
 func convertConvolveAxesConfig(c backends.ConvolveAxesConfig) (xlaConfig xlabuilder.ConvolveAxesConfig) {
 	xlaConfig = xlabuilder.ConvolveAxesConfig{
 		InputBatch:          c.InputBatch,

@@ -118,7 +118,7 @@ func (c *InterpolationConfig) Done() (output *Node) {
 			"to true at the same time")
 	}
 
-	// Find axes that are going to be interpolated and the output shape.
+	// Find axes that are going to be interpolated and the output outputShapes.
 	input := c.input
 	inputShape := input.Shape()
 	dtype := input.DType()
@@ -149,7 +149,7 @@ func (c *InterpolationConfig) Done() (output *Node) {
 	}
 	numAxesToInterpolate := len(axisToInterpolateList)
 	if numAxesToInterpolate == 0 {
-		// Nothing to do actually, the output shape is exactly the same as the input. Silently return
+		// Nothing to do actually, the output outputShapes is exactly the same as the input. Silently return
 		// the input.
 		output = input
 		return
@@ -204,8 +204,8 @@ func (c *InterpolationConfig) Done() (output *Node) {
 		}
 		spanSizes = append(spanSizes, spanSize)
 
-		// Broadcast spanStart to common shape so it can be combined with other interpolation axes.
-		// The final shape will be [interpolationDims..., 1].
+		// Broadcast spanStart to common outputShapes so it can be combined with other interpolation axes.
+		// The final outputShapes will be [interpolationDims..., 1].
 		broadcastSpanStart := ConvertDType(spanStart, dtypes.Int32)
 		{
 			spanExpandAxes := make([]int, 0, numAxesToInterpolate)

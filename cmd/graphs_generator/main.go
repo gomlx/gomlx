@@ -29,7 +29,7 @@ var (
 		"ArgMinMax", "Broadcast", "BroadcastInDim",
 		"Concatenate", "ConvGeneralDilated", "DotGeneral", "FFT", "Gather", "Iota",
 		"ReduceMax", "ReduceMin", "ReduceProduct", "ReduceSum", "ReduceWindow",
-		"Reshape", "Reverse",
+		"Reshape", "Reverse", "RngBitGenerator",
 		"ScatterAdd", "SelectAndScatterSum", "SelectAndScatterMax", "SelectAndScatterMin",
 		"Sign", "Slice",
 		"Transpose", "Where")
@@ -64,7 +64,7 @@ func buildMethodInfo() (methods []*MethodInfo) {
 				case "Op":
 					pi.BackendType = "backends.Op"
 					pi.GraphType = "*Node"
-					pi.ConvertStatement = fmt.Sprintf("%s.op", paramName)
+					pi.ConvertStatement = fmt.Sprintf("%s.outputOps[0]", paramName)
 					mi.OpInputs = append(mi.OpInputs, paramName)
 					pi.Format = "[#%d]"
 					pi.FormatValue = fmt.Sprintf("ni.%s.Id()", paramName)
@@ -74,7 +74,7 @@ func buildMethodInfo() (methods []*MethodInfo) {
 					mi.OpInputsList = paramName
 					pi.NodeInputType = "[]*Node"
 					pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", paramName)
-					pi.ConvertStatement = fmt.Sprintf("xslices.Map(%s, func(node *Node) backends.Op { return node.op })", paramName)
+					pi.ConvertStatement = fmt.Sprintf("xslices.Map(%s, func(node *Node) backends.Op { return node.outputOps[0] })", paramName)
 					pi.Format = "[#%s]"
 					pi.FormatValue = fmt.Sprintf(
 						`strings.Join(xslices.Map(ni.%s, func (node *Node) string { return fmt.Sprintf("#%%d", node.Id()) }), ", ")`,
@@ -124,6 +124,16 @@ func buildMethodInfo() (methods []*MethodInfo) {
 				}
 			}
 			mi.HasGraph = mi.OpInputsList == "" && len(mi.OpInputs) == 0
+
+		}
+		for _, field := range funcInfo.Type.Results.List {
+			for _, nameIdent := range field.Names {
+				// Save the names of the outputs: we assume all outputs are of type Op (to be converted to *Node in graphs package).
+				mi.OutputNames = append(mi.OutputNames, nameIdent.Name)
+			}
+		}
+		if len(mi.OutputNames) > 1 {
+			mi.HasMultipleOutputs = true
 		}
 	}
 	return methods
@@ -137,6 +147,9 @@ type MethodInfo struct {
 	Inputs                 []*ParameterInfo
 	Exported, Excluded     bool
 	Comments               []string
+
+	HasMultipleOutputs bool
+	OutputNames        []string
 }
 
 // ParameterInfo represents one parameter only.
@@ -158,9 +171,12 @@ var (
 package graph
 
 import (
+	"fmt"
 	"slices"
+	"strings"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 )
 
@@ -168,6 +184,7 @@ type NodeType int
 
 const (
 	NodeTypeInvalid NodeType = iota
+	NodeTypeSplitNode
 {{range .}}	NodeType{{.BackendName}}
 {{end}})
 
@@ -191,27 +208,52 @@ func (ni *nodeInputs{{.BackendName}}) String() string {
 
 {{if not .Exported}}// {{.GraphName}} is a Graph wrapper for the backend.Builder.{{.BackendName}} method.
 {{else}}{{range .Comments}}{{.}}
-{{end}}{{end}}func {{.GraphName}}({{if .HasGraph}}g *Graph, {{end}}{{range .Inputs}}{{.Name}} {{.GraphType}}, {{end}}) (node *Node) {
+{{end}}{{end}}func {{/*
+
+Inputs:  */}}{{.GraphName}}({{if .HasGraph}}g *Graph, {{end}}{{range .Inputs}}{{.Name}} {{.GraphType}}, {{end}}) ({{/*
+
+Outputs: */}}{{if not .HasMultipleOutputs}}node *Node{{/*
+*/}} {{else}} {{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}{{$name}}{{end}} *Node{{/*
+*/}}{{end}}) {{/*
+
+Body: */}}{
 {{if .HasGraph}}	g.AssertBuilding()
 {{else}}{{if ne .OpInputsList ""}}	g := validateBuildingGraphFromInputs({{.OpInputsList}}...)
 {{else}}	g := validateBuildingGraphFromInputs({{range .OpInputs}}{{.}}, {{end}})
-{{end}}{{end}}
-	inputs := &nodeInputs{{.BackendName}}{
+{{end}}{{end}}	inputs := &nodeInputs{{.BackendName}}{
 {{range .Inputs}}		{{.Name}}: {{.CopyStatement}},		
 {{end}}	}
-	result := g.builder.{{.BackendName}}({{range .Inputs}}{{.ConvertStatement}}, {{end}})
-	node = &Node{
-		graph: g,
-		op: result,
-		shape: g.builder.OpShape(result),
-		inputs: inputs,
-{{if not .HasGraph}}{{if eq .OpInputsList ""}}	inputNodes: []*Node{ {{range .OpInputs}}{{.}}, {{end}} }, 
-{{else}}	inputNodes: {{.OpInputsList}},
-{{end}}{{end}}	}
-	g.registerNode(node)
-	return
-}
+{{if not .HasGraph}}	{{if eq .OpInputsList ""}}inputNodes := []*Node{ {{range .OpInputs}}{{.}}, {{end}} } 
+{{else}}	inputNodes := {{.OpInputsList}}
+{{end}}{{end}}{{/*
 
+Convert result(s) to node(s):
+
+*/}}{{if not .HasMultipleOutputs}}	result := g.builder.{{.BackendName}}({{range .Inputs}}{{.ConvertStatement}}, {{end}})
+	node = &Node{
+		outputOps: []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+{{else}}{{/*
+
+Version with multiple outputs:
+
+*/}}{{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}v{{$ii}}{{end}} := g.builder.{{.BackendName}}({{range .Inputs}}{{.ConvertStatement}}, {{end}})
+	node := &Node{
+		outputOps: []backends.Op{ {{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}v{{$ii}}{{end}} },
+		outputShapes: []shapes.Shape{ {{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}g.builder.OpShape(v{{$ii}}){{end}} },
+{{end}}		graph: g,
+		inputs: inputs,
+{{if not .HasGraph}}		inputNodes: inputNodes,
+{{end}}	}
+	g.registerNode(node)
+{{/*
+
+If multiple-outputs, split node into each separate one:
+
+*/}}{{if .HasMultipleOutputs}}	splitNodes := splitNode(node)
+	{{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}{{$name}}{{end}} = {{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}splitNodes[{{$ii}}]{{end}}
+{{end}}	return
+}
 {{end}}{{end}}
 `))
 )

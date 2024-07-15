@@ -120,7 +120,7 @@ func TestMemoryLeaksShapedBuffer(t *testing.T) {
 	}
 }
 
-// TestMemoryLeaksExec creates and executes a simple computation graph at different shape sizes. It then destroys
+// TestMemoryLeaksExec creates and executes a simple computation graph at different outputShapes sizes. It then destroys
 // the returning tensor.Device objects (xla.OnDeviceBuffer), and checks that memory doesn't get out of control.
 func TestMemoryLeaksExec(t *testing.T) {
 	manager := buildTestManager()
@@ -141,7 +141,7 @@ func TestMemoryLeaksExec(t *testing.T) {
 					results := exec.Call(xslices.SliceWithValue(size, xV), float64(size))
 					addedT, reducedT := results[0], results[1]
 					if addedT.Rank() != 1 && addedT.Shape().Dimensions[0] != size {
-						t.Errorf("Unexpected shape %s for size %d, value %f", addedT.Shape(), size, xV)
+						t.Errorf("Unexpected outputShapes %s for size %d, value %f", addedT.Shape(), size, xV)
 					}
 					reduced := reducedT.Local().Value().(float64)
 					want := float64(size) * (xV + float64(size))

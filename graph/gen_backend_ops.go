@@ -3,16 +3,20 @@
 package graph
 
 import (
+	"fmt"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	"slices"
+	"strings"
 )
 
 type NodeType int
 
 const (
 	NodeTypeInvalid NodeType = iota
+	NodeTypeSplitNode
 	NodeTypeAbs
 	NodeTypeAdd
 	NodeTypeAnd
@@ -73,6 +77,7 @@ const (
 	NodeTypeRem
 	NodeTypeReshape
 	NodeTypeReverse
+	NodeTypeRngBitGenerator
 	NodeTypeRound
 	NodeTypeRsqrt
 	NodeTypeScatterAdd
@@ -113,17 +118,17 @@ func (ni *nodeInputsAbs) String() string {
 // Abs returns the Op that represents the output of the corresponding operation.
 func Abs(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
-
 	inputs := &nodeInputsAbs{
 		x: x,
 	}
-	result := g.builder.Abs(x.op)
+	inputNodes := []*Node{x}
+	result := g.builder.Abs(x.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -154,18 +159,18 @@ func (ni *nodeInputsAdd) String() string {
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func Add(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
-
 	inputs := &nodeInputsAdd{
 		x0: x0,
 		x1: x1,
 	}
-	result := g.builder.Add(x0.op, x1.op)
+	inputNodes := []*Node{x0, x1}
+	result := g.builder.Add(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x0, x1},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -195,18 +200,18 @@ func (ni *nodeInputsAnd) String() string {
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func And(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
-
 	inputs := &nodeInputsAnd{
 		x0: x0,
 		x1: x1,
 	}
-	result := g.builder.And(x0.op, x1.op)
+	inputNodes := []*Node{x0, x1}
+	result := g.builder.And(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x0, x1},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -239,20 +244,20 @@ func (ni *nodeInputsArgMinMax) String() string {
 // backendArgMinMax is a Graph wrapper for the backend.Builder.ArgMinMax method.
 func backendArgMinMax(x *Node, axis int, outputDType dtypes.DType, isMin bool) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
-
 	inputs := &nodeInputsArgMinMax{
 		x:           x,
 		axis:        axis,
 		outputDType: outputDType,
 		isMin:       isMin,
 	}
-	result := g.builder.ArgMinMax(x.op, inputs.axis, inputs.outputDType, inputs.isMin)
+	inputNodes := []*Node{x}
+	result := g.builder.ArgMinMax(x.outputOps[0], inputs.axis, inputs.outputDType, inputs.isMin)
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -294,7 +299,6 @@ func (ni *nodeInputsBatchNormInference) String() string {
 // Internal Covariate Shift" (Sergey Ioffe, Christian Szegedy), https://arxiv.org/abs/1502.03167.
 func BatchNormInference(operand *Node, scale *Node, offset *Node, mean *Node, variance *Node, epsilon float32, axis int) (node *Node) {
 	g := validateBuildingGraphFromInputs(operand, scale, offset, mean, variance)
-
 	inputs := &nodeInputsBatchNormInference{
 		operand:  operand,
 		scale:    scale,
@@ -304,13 +308,14 @@ func BatchNormInference(operand *Node, scale *Node, offset *Node, mean *Node, va
 		epsilon:  epsilon,
 		axis:     axis,
 	}
-	result := g.builder.BatchNormInference(operand.op, scale.op, offset.op, mean.op, variance.op, inputs.epsilon, inputs.axis)
+	inputNodes := []*Node{operand, scale, offset, mean, variance}
+	result := g.builder.BatchNormInference(operand.outputOps[0], scale.outputOps[0], offset.outputOps[0], mean.outputOps[0], variance.outputOps[0], inputs.epsilon, inputs.axis)
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{operand, scale, offset, mean, variance},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -339,18 +344,18 @@ func (ni *nodeInputsBroadcast) String() string {
 // backendBroadcast is a Graph wrapper for the backend.Builder.Broadcast method.
 func backendBroadcast(x *Node, prefixDims ...int) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
-
 	inputs := &nodeInputsBroadcast{
 		x:          x,
 		prefixDims: slices.Clone(prefixDims),
 	}
-	result := g.builder.Broadcast(x.op, inputs.prefixDims...)
+	inputNodes := []*Node{x}
+	result := g.builder.Broadcast(x.outputOps[0], inputs.prefixDims...)
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -381,19 +386,19 @@ func (ni *nodeInputsBroadcastInDim) String() string {
 // backendBroadcastInDim is a Graph wrapper for the backend.Builder.BroadcastInDim method.
 func backendBroadcastInDim(x *Node, outputShape shapes.Shape, broadcastAxes []int) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
-
 	inputs := &nodeInputsBroadcastInDim{
 		x:             x,
 		outputShape:   outputShape,
 		broadcastAxes: broadcastAxes,
 	}
-	result := g.builder.BroadcastInDim(x.op, inputs.outputShape, inputs.broadcastAxes)
+	inputNodes := []*Node{x}
+	result := g.builder.BroadcastInDim(x.outputOps[0], inputs.outputShape, inputs.broadcastAxes)
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -420,17 +425,17 @@ func (ni *nodeInputsCeil) String() string {
 // Ceil returns the Op that represents the output of the corresponding operation.
 func Ceil(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
-
 	inputs := &nodeInputsCeil{
 		x: x,
 	}
-	result := g.builder.Ceil(x.op)
+	inputNodes := []*Node{x}
+	result := g.builder.Ceil(x.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -457,17 +462,17 @@ func (ni *nodeInputsClz) String() string {
 // Clz returns element-wise the "count leading zeros" bits of input node x -- for integer values.
 func Clz(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
-
 	inputs := &nodeInputsClz{
 		x: x,
 	}
-	result := g.builder.Clz(x.op)
+	inputNodes := []*Node{x}
+	result := g.builder.Clz(x.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -502,18 +507,18 @@ func (ni *nodeInputsComplex) String() string {
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func Complex(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
-
 	inputs := &nodeInputsComplex{
 		x0: x0,
 		x1: x1,
 	}
-	result := g.builder.Complex(x0.op, x1.op)
+	inputNodes := []*Node{x0, x1}
+	result := g.builder.Complex(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x0, x1},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -542,18 +547,18 @@ func (ni *nodeInputsConcatenate) String() string {
 // backendConcatenate is a Graph wrapper for the backend.Builder.Concatenate method.
 func backendConcatenate(axis int, operands ...*Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(operands...)
-
 	inputs := &nodeInputsConcatenate{
 		axis:     axis,
 		operands: slices.Clone(operands),
 	}
-	result := g.builder.Concatenate(inputs.axis, xslices.Map(operands, func(node *Node) backends.Op { return node.op }))
+	inputNodes := operands
+	result := g.builder.Concatenate(inputs.axis, xslices.Map(operands, func(node *Node) backends.Op { return node.outputOps[0] }))
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: operands,
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -580,17 +585,17 @@ func (ni *nodeInputsConj) String() string {
 // Conj returns the conjugate of a complex number. E.g: Conj(1+3i) = 1-3i
 func Conj(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
-
 	inputs := &nodeInputsConj{
 		x: x,
 	}
-	result := g.builder.Conj(x.op)
+	inputNodes := []*Node{x}
+	result := g.builder.Conj(x.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -633,7 +638,6 @@ func (ni *nodeInputsConvGeneralDilated) String() string {
 // backendConvGeneralDilated is a Graph wrapper for the backend.Builder.ConvGeneralDilated method.
 func backendConvGeneralDilated(operand *Node, filter *Node, axes backends.ConvolveAxesConfig, strides []int, paddings [][2]int, inputDilation []int, filterDilation []int, filterGroupCount int, batchGroupCount int) (node *Node) {
 	g := validateBuildingGraphFromInputs(operand, filter)
-
 	inputs := &nodeInputsConvGeneralDilated{
 		operand:          operand,
 		filter:           filter,
@@ -645,13 +649,14 @@ func backendConvGeneralDilated(operand *Node, filter *Node, axes backends.Convol
 		filterGroupCount: filterGroupCount,
 		batchGroupCount:  batchGroupCount,
 	}
-	result := g.builder.ConvGeneralDilated(operand.op, filter.op, inputs.axes, inputs.strides, inputs.paddings, inputs.inputDilation, inputs.filterDilation, inputs.filterGroupCount, inputs.batchGroupCount)
+	inputNodes := []*Node{operand, filter}
+	result := g.builder.ConvGeneralDilated(operand.outputOps[0], filter.outputOps[0], inputs.axes, inputs.strides, inputs.paddings, inputs.inputDilation, inputs.filterDilation, inputs.filterGroupCount, inputs.batchGroupCount)
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{operand, filter},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -680,18 +685,18 @@ func (ni *nodeInputsConvertDType) String() string {
 // ConvertDType of x to dtype.
 func ConvertDType(x *Node, dtype dtypes.DType) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
-
 	inputs := &nodeInputsConvertDType{
 		x:     x,
 		dtype: dtype,
 	}
-	result := g.builder.ConvertDType(x.op, inputs.dtype)
+	inputNodes := []*Node{x}
+	result := g.builder.ConvertDType(x.outputOps[0], inputs.dtype)
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -718,17 +723,17 @@ func (ni *nodeInputsCos) String() string {
 // Cos returns the Op that represents the output of the corresponding operation.
 func Cos(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
-
 	inputs := &nodeInputsCos{
 		x: x,
 	}
-	result := g.builder.Cos(x.op)
+	inputNodes := []*Node{x}
+	result := g.builder.Cos(x.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -759,18 +764,18 @@ func (ni *nodeInputsDiv) String() string {
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func Div(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
-
 	inputs := &nodeInputsDiv{
 		x0: x0,
 		x1: x1,
 	}
-	result := g.builder.Div(x0.op, x1.op)
+	inputNodes := []*Node{x0, x1}
+	result := g.builder.Div(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x0, x1},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -811,18 +816,18 @@ func (ni *nodeInputsDot) String() string {
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func Dot(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
-
 	inputs := &nodeInputsDot{
 		x0: x0,
 		x1: x1,
 	}
-	result := g.builder.Dot(x0.op, x1.op)
+	inputNodes := []*Node{x0, x1}
+	result := g.builder.Dot(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x0, x1},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -859,7 +864,6 @@ func (ni *nodeInputsDotGeneral) String() string {
 // backendDotGeneral is a Graph wrapper for the backend.Builder.DotGeneral method.
 func backendDotGeneral(lhs *Node, lhsContractingAxes []int, lhsBatchAxes []int, rhs *Node, rhsContractingAxes []int, rhsBatchAxes []int) (node *Node) {
 	g := validateBuildingGraphFromInputs(lhs, rhs)
-
 	inputs := &nodeInputsDotGeneral{
 		lhs:                lhs,
 		lhsContractingAxes: lhsContractingAxes,
@@ -868,13 +872,14 @@ func backendDotGeneral(lhs *Node, lhsContractingAxes []int, lhsBatchAxes []int, 
 		rhsContractingAxes: rhsContractingAxes,
 		rhsBatchAxes:       rhsBatchAxes,
 	}
-	result := g.builder.DotGeneral(lhs.op, inputs.lhsContractingAxes, inputs.lhsBatchAxes, rhs.op, inputs.rhsContractingAxes, inputs.rhsBatchAxes)
+	inputNodes := []*Node{lhs, rhs}
+	result := g.builder.DotGeneral(lhs.outputOps[0], inputs.lhsContractingAxes, inputs.lhsBatchAxes, rhs.outputOps[0], inputs.rhsContractingAxes, inputs.rhsBatchAxes)
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{lhs, rhs},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -904,18 +909,18 @@ func (ni *nodeInputsEqual) String() string {
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func Equal(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
-
 	inputs := &nodeInputsEqual{
 		x0: x0,
 		x1: x1,
 	}
-	result := g.builder.Equal(x0.op, x1.op)
+	inputNodes := []*Node{x0, x1}
+	result := g.builder.Equal(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x0, x1},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -947,18 +952,18 @@ func (ni *nodeInputsEqualTotalOrder) String() string {
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func EqualTotalOrder(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
-
 	inputs := &nodeInputsEqualTotalOrder{
 		x0: x0,
 		x1: x1,
 	}
-	result := g.builder.EqualTotalOrder(x0.op, x1.op)
+	inputNodes := []*Node{x0, x1}
+	result := g.builder.EqualTotalOrder(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x0, x1},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -985,17 +990,17 @@ func (ni *nodeInputsExp) String() string {
 // Exp returns the Op that represents the output of the corresponding operation.
 func Exp(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
-
 	inputs := &nodeInputsExp{
 		x: x,
 	}
-	result := g.builder.Exp(x.op)
+	inputNodes := []*Node{x}
+	result := g.builder.Exp(x.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -1022,17 +1027,17 @@ func (ni *nodeInputsExpm1) String() string {
 // Expm1 returns the Op that represents the output of the corresponding operation.
 func Expm1(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
-
 	inputs := &nodeInputsExpm1{
 		x: x,
 	}
-	result := g.builder.Expm1(x.op)
+	inputNodes := []*Node{x}
+	result := g.builder.Expm1(x.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -1063,19 +1068,19 @@ func (ni *nodeInputsFFT) String() string {
 // backendFFT is a Graph wrapper for the backend.Builder.FFT method.
 func backendFFT(operand *Node, fftType backends.FFTType, fftLength []int) (node *Node) {
 	g := validateBuildingGraphFromInputs(operand)
-
 	inputs := &nodeInputsFFT{
 		operand:   operand,
 		fftType:   fftType,
 		fftLength: fftLength,
 	}
-	result := g.builder.FFT(operand.op, inputs.fftType, inputs.fftLength)
+	inputNodes := []*Node{operand}
+	result := g.builder.FFT(operand.outputOps[0], inputs.fftType, inputs.fftLength)
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{operand},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -1102,17 +1107,17 @@ func (ni *nodeInputsFloor) String() string {
 // Floor returns the Op that represents the output of the corresponding operation.
 func Floor(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
-
 	inputs := &nodeInputsFloor{
 		x: x,
 	}
-	result := g.builder.Floor(x.op)
+	inputNodes := []*Node{x}
+	result := g.builder.Floor(x.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -1153,7 +1158,6 @@ func (ni *nodeInputsGather) String() string {
 // backendGather is a Graph wrapper for the backend.Builder.Gather method.
 func backendGather(operand *Node, startIndices *Node, indexVectorAxis int, offsetAxes []int, collapsedSliceAxes []int, startIndexMap []int, sliceSizes []int, indicesAreSorted bool) (node *Node) {
 	g := validateBuildingGraphFromInputs(operand, startIndices)
-
 	inputs := &nodeInputsGather{
 		operand:            operand,
 		startIndices:       startIndices,
@@ -1164,13 +1168,14 @@ func backendGather(operand *Node, startIndices *Node, indexVectorAxis int, offse
 		sliceSizes:         sliceSizes,
 		indicesAreSorted:   indicesAreSorted,
 	}
-	result := g.builder.Gather(operand.op, startIndices.op, inputs.indexVectorAxis, inputs.offsetAxes, inputs.collapsedSliceAxes, inputs.startIndexMap, inputs.sliceSizes, inputs.indicesAreSorted)
+	inputNodes := []*Node{operand, startIndices}
+	result := g.builder.Gather(operand.outputOps[0], startIndices.outputOps[0], inputs.indexVectorAxis, inputs.offsetAxes, inputs.collapsedSliceAxes, inputs.startIndexMap, inputs.sliceSizes, inputs.indicesAreSorted)
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{operand, startIndices},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -1200,18 +1205,18 @@ func (ni *nodeInputsGreaterOrEqual) String() string {
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func GreaterOrEqual(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
-
 	inputs := &nodeInputsGreaterOrEqual{
 		x0: x0,
 		x1: x1,
 	}
-	result := g.builder.GreaterOrEqual(x0.op, x1.op)
+	inputNodes := []*Node{x0, x1}
+	result := g.builder.GreaterOrEqual(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x0, x1},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -1243,18 +1248,18 @@ func (ni *nodeInputsGreaterOrEqualTotalOrder) String() string {
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func GreaterOrEqualTotalOrder(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
-
 	inputs := &nodeInputsGreaterOrEqualTotalOrder{
 		x0: x0,
 		x1: x1,
 	}
-	result := g.builder.GreaterOrEqualTotalOrder(x0.op, x1.op)
+	inputNodes := []*Node{x0, x1}
+	result := g.builder.GreaterOrEqualTotalOrder(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x0, x1},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -1284,18 +1289,18 @@ func (ni *nodeInputsGreaterThan) String() string {
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func GreaterThan(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
-
 	inputs := &nodeInputsGreaterThan{
 		x0: x0,
 		x1: x1,
 	}
-	result := g.builder.GreaterThan(x0.op, x1.op)
+	inputNodes := []*Node{x0, x1}
+	result := g.builder.GreaterThan(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x0, x1},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -1327,18 +1332,18 @@ func (ni *nodeInputsGreaterThanTotalOrder) String() string {
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func GreaterThanTotalOrder(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
-
 	inputs := &nodeInputsGreaterThanTotalOrder{
 		x0: x0,
 		x1: x1,
 	}
-	result := g.builder.GreaterThanTotalOrder(x0.op, x1.op)
+	inputNodes := []*Node{x0, x1}
+	result := g.builder.GreaterThanTotalOrder(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x0, x1},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -1366,17 +1371,17 @@ func (ni *nodeInputsIdentity) String() string {
 // It's a no-op that can serve as a place-holder.
 func Identity(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
-
 	inputs := &nodeInputsIdentity{
 		x: x,
 	}
-	result := g.builder.Identity(x.op)
+	inputNodes := []*Node{x}
+	result := g.builder.Identity(x.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -1403,17 +1408,17 @@ func (ni *nodeInputsImag) String() string {
 // Imag returns the imaginary part of a complex number. It returns 0 if the x is a float number.
 func Imag(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
-
 	inputs := &nodeInputsImag{
 		x: x,
 	}
-	result := g.builder.Imag(x.op)
+	inputNodes := []*Node{x}
+	result := g.builder.Imag(x.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -1442,17 +1447,16 @@ func (ni *nodeInputsIota) String() string {
 // backendIota is a Graph wrapper for the backend.Builder.Iota method.
 func backendIota(g *Graph, shape shapes.Shape, iotaAxis int) (node *Node) {
 	g.AssertBuilding()
-
 	inputs := &nodeInputsIota{
 		shape:    shape,
 		iotaAxis: iotaAxis,
 	}
 	result := g.builder.Iota(inputs.shape, inputs.iotaAxis)
 	node = &Node{
-		graph:  g,
-		op:     result,
-		shape:  g.builder.OpShape(result),
-		inputs: inputs,
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
 	}
 	g.registerNode(node)
 	return
@@ -1482,18 +1486,18 @@ func (ni *nodeInputsLessOrEqual) String() string {
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func LessOrEqual(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
-
 	inputs := &nodeInputsLessOrEqual{
 		x0: x0,
 		x1: x1,
 	}
-	result := g.builder.LessOrEqual(x0.op, x1.op)
+	inputNodes := []*Node{x0, x1}
+	result := g.builder.LessOrEqual(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x0, x1},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -1525,18 +1529,18 @@ func (ni *nodeInputsLessOrEqualTotalOrder) String() string {
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func LessOrEqualTotalOrder(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
-
 	inputs := &nodeInputsLessOrEqualTotalOrder{
 		x0: x0,
 		x1: x1,
 	}
-	result := g.builder.LessOrEqualTotalOrder(x0.op, x1.op)
+	inputNodes := []*Node{x0, x1}
+	result := g.builder.LessOrEqualTotalOrder(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x0, x1},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -1566,18 +1570,18 @@ func (ni *nodeInputsLessThan) String() string {
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func LessThan(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
-
 	inputs := &nodeInputsLessThan{
 		x0: x0,
 		x1: x1,
 	}
-	result := g.builder.LessThan(x0.op, x1.op)
+	inputNodes := []*Node{x0, x1}
+	result := g.builder.LessThan(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x0, x1},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -1609,18 +1613,18 @@ func (ni *nodeInputsLessThanTotalOrder) String() string {
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func LessThanTotalOrder(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
-
 	inputs := &nodeInputsLessThanTotalOrder{
 		x0: x0,
 		x1: x1,
 	}
-	result := g.builder.LessThanTotalOrder(x0.op, x1.op)
+	inputNodes := []*Node{x0, x1}
+	result := g.builder.LessThanTotalOrder(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x0, x1},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -1647,17 +1651,17 @@ func (ni *nodeInputsLog) String() string {
 // Log returns the Op that represents the output of the corresponding operation.
 func Log(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
-
 	inputs := &nodeInputsLog{
 		x: x,
 	}
-	result := g.builder.Log(x.op)
+	inputNodes := []*Node{x}
+	result := g.builder.Log(x.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -1684,17 +1688,17 @@ func (ni *nodeInputsLog1p) String() string {
 // Log1p returns the expression log(x+1).
 func Log1p(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
-
 	inputs := &nodeInputsLog1p{
 		x: x,
 	}
-	result := g.builder.Log1p(x.op)
+	inputNodes := []*Node{x}
+	result := g.builder.Log1p(x.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -1721,17 +1725,17 @@ func (ni *nodeInputsLogicalNot) String() string {
 // LogicalNot returns the Op that represents the output of the corresponding operation.
 func LogicalNot(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
-
 	inputs := &nodeInputsLogicalNot{
 		x: x,
 	}
-	result := g.builder.LogicalNot(x.op)
+	inputNodes := []*Node{x}
+	result := g.builder.LogicalNot(x.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -1758,17 +1762,17 @@ func (ni *nodeInputsLogistic) String() string {
 // Logistic returns the element-wise expression 1/(1+exp(-x)). Also known as the Sigmoid function.
 func Logistic(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
-
 	inputs := &nodeInputsLogistic{
 		x: x,
 	}
-	result := g.builder.Logistic(x.op)
+	inputNodes := []*Node{x}
+	result := g.builder.Logistic(x.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -1798,18 +1802,18 @@ func (ni *nodeInputsMax) String() string {
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func Max(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
-
 	inputs := &nodeInputsMax{
 		x0: x0,
 		x1: x1,
 	}
-	result := g.builder.Max(x0.op, x1.op)
+	inputNodes := []*Node{x0, x1}
+	result := g.builder.Max(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x0, x1},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -1839,18 +1843,18 @@ func (ni *nodeInputsMin) String() string {
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func Min(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
-
 	inputs := &nodeInputsMin{
 		x0: x0,
 		x1: x1,
 	}
-	result := g.builder.Min(x0.op, x1.op)
+	inputNodes := []*Node{x0, x1}
+	result := g.builder.Min(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x0, x1},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -1881,18 +1885,18 @@ func (ni *nodeInputsMul) String() string {
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func Mul(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
-
 	inputs := &nodeInputsMul{
 		x0: x0,
 		x1: x1,
 	}
-	result := g.builder.Mul(x0.op, x1.op)
+	inputNodes := []*Node{x0, x1}
+	result := g.builder.Mul(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x0, x1},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -1919,17 +1923,17 @@ func (ni *nodeInputsNeg) String() string {
 // Neg returns the Op that represents the output of the corresponding operation.
 func Neg(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
-
 	inputs := &nodeInputsNeg{
 		x: x,
 	}
-	result := g.builder.Neg(x.op)
+	inputNodes := []*Node{x}
+	result := g.builder.Neg(x.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -1959,18 +1963,18 @@ func (ni *nodeInputsNotEqual) String() string {
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func NotEqual(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
-
 	inputs := &nodeInputsNotEqual{
 		x0: x0,
 		x1: x1,
 	}
-	result := g.builder.NotEqual(x0.op, x1.op)
+	inputNodes := []*Node{x0, x1}
+	result := g.builder.NotEqual(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x0, x1},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -2002,18 +2006,18 @@ func (ni *nodeInputsNotEqualTotalOrder) String() string {
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func NotEqualTotalOrder(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
-
 	inputs := &nodeInputsNotEqualTotalOrder{
 		x0: x0,
 		x1: x1,
 	}
-	result := g.builder.NotEqualTotalOrder(x0.op, x1.op)
+	inputNodes := []*Node{x0, x1}
+	result := g.builder.NotEqualTotalOrder(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x0, x1},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -2043,18 +2047,18 @@ func (ni *nodeInputsOr) String() string {
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func Or(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
-
 	inputs := &nodeInputsOr{
 		x0: x0,
 		x1: x1,
 	}
-	result := g.builder.Or(x0.op, x1.op)
+	inputNodes := []*Node{x0, x1}
+	result := g.builder.Or(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x0, x1},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -2087,19 +2091,19 @@ func (ni *nodeInputsPad) String() string {
 // that is, no padding for those axes.
 func Pad(x *Node, fillValue *Node, axesConfig ...backends.PadAxis) (node *Node) {
 	g := validateBuildingGraphFromInputs(x, fillValue)
-
 	inputs := &nodeInputsPad{
 		x:          x,
 		fillValue:  fillValue,
 		axesConfig: slices.Clone(axesConfig),
 	}
-	result := g.builder.Pad(x.op, fillValue.op, inputs.axesConfig...)
+	inputNodes := []*Node{x, fillValue}
+	result := g.builder.Pad(x.outputOps[0], fillValue.outputOps[0], inputs.axesConfig...)
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x, fillValue},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -2129,18 +2133,18 @@ func (ni *nodeInputsPow) String() string {
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func Pow(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
-
 	inputs := &nodeInputsPow{
 		x0: x0,
 		x1: x1,
 	}
-	result := g.builder.Pow(x0.op, x1.op)
+	inputNodes := []*Node{x0, x1}
+	result := g.builder.Pow(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x0, x1},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -2167,17 +2171,17 @@ func (ni *nodeInputsReal) String() string {
 // Real return the real part of a complex number. It returns x if the x is a float number.
 func Real(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
-
 	inputs := &nodeInputsReal{
 		x: x,
 	}
-	result := g.builder.Real(x.op)
+	inputNodes := []*Node{x}
+	result := g.builder.Real(x.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -2206,18 +2210,18 @@ func (ni *nodeInputsReduceMax) String() string {
 // backendReduceMax is a Graph wrapper for the backend.Builder.ReduceMax method.
 func backendReduceMax(x *Node, axes ...int) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
-
 	inputs := &nodeInputsReduceMax{
 		x:    x,
 		axes: slices.Clone(axes),
 	}
-	result := g.builder.ReduceMax(x.op, inputs.axes...)
+	inputNodes := []*Node{x}
+	result := g.builder.ReduceMax(x.outputOps[0], inputs.axes...)
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -2246,18 +2250,18 @@ func (ni *nodeInputsReduceMin) String() string {
 // backendReduceMin is a Graph wrapper for the backend.Builder.ReduceMin method.
 func backendReduceMin(x *Node, axes ...int) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
-
 	inputs := &nodeInputsReduceMin{
 		x:    x,
 		axes: slices.Clone(axes),
 	}
-	result := g.builder.ReduceMin(x.op, inputs.axes...)
+	inputNodes := []*Node{x}
+	result := g.builder.ReduceMin(x.outputOps[0], inputs.axes...)
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -2286,18 +2290,18 @@ func (ni *nodeInputsReduceProduct) String() string {
 // backendReduceProduct is a Graph wrapper for the backend.Builder.ReduceProduct method.
 func backendReduceProduct(x *Node, axes ...int) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
-
 	inputs := &nodeInputsReduceProduct{
 		x:    x,
 		axes: slices.Clone(axes),
 	}
-	result := g.builder.ReduceProduct(x.op, inputs.axes...)
+	inputNodes := []*Node{x}
+	result := g.builder.ReduceProduct(x.outputOps[0], inputs.axes...)
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -2326,18 +2330,18 @@ func (ni *nodeInputsReduceSum) String() string {
 // backendReduceSum is a Graph wrapper for the backend.Builder.ReduceSum method.
 func backendReduceSum(x *Node, axes ...int) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
-
 	inputs := &nodeInputsReduceSum{
 		x:    x,
 		axes: slices.Clone(axes),
 	}
-	result := g.builder.ReduceSum(x.op, inputs.axes...)
+	inputNodes := []*Node{x}
+	result := g.builder.ReduceSum(x.outputOps[0], inputs.axes...)
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -2376,7 +2380,6 @@ func (ni *nodeInputsReduceWindow) String() string {
 // backendReduceWindow is a Graph wrapper for the backend.Builder.ReduceWindow method.
 func backendReduceWindow(x *Node, reductionType ReduceOpType, windowDimensions []int, strides []int, baseDilations []int, windowDilations []int, paddings [][2]int) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
-
 	inputs := &nodeInputsReduceWindow{
 		x:                x,
 		reductionType:    reductionType,
@@ -2386,13 +2389,14 @@ func backendReduceWindow(x *Node, reductionType ReduceOpType, windowDimensions [
 		windowDilations:  windowDilations,
 		paddings:         paddings,
 	}
-	result := g.builder.ReduceWindow(x.op, inputs.reductionType, inputs.windowDimensions, inputs.strides, inputs.baseDilations, inputs.windowDilations, inputs.paddings)
+	inputNodes := []*Node{x}
+	result := g.builder.ReduceWindow(x.outputOps[0], inputs.reductionType, inputs.windowDimensions, inputs.strides, inputs.baseDilations, inputs.windowDilations, inputs.paddings)
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -2423,18 +2427,18 @@ func (ni *nodeInputsRem) String() string {
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func Rem(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
-
 	inputs := &nodeInputsRem{
 		x0: x0,
 		x1: x1,
 	}
-	result := g.builder.Rem(x0.op, x1.op)
+	inputNodes := []*Node{x0, x1}
+	result := g.builder.Rem(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x0, x1},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -2463,18 +2467,18 @@ func (ni *nodeInputsReshape) String() string {
 // backendReshape is a Graph wrapper for the backend.Builder.Reshape method.
 func backendReshape(x *Node, dimensions ...int) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
-
 	inputs := &nodeInputsReshape{
 		x:          x,
 		dimensions: slices.Clone(dimensions),
 	}
-	result := g.builder.Reshape(x.op, inputs.dimensions...)
+	inputNodes := []*Node{x}
+	result := g.builder.Reshape(x.outputOps[0], inputs.dimensions...)
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -2503,20 +2507,62 @@ func (ni *nodeInputsReverse) String() string {
 // backendReverse is a Graph wrapper for the backend.Builder.Reverse method.
 func backendReverse(x *Node, axes ...int) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
-
 	inputs := &nodeInputsReverse{
 		x:    x,
 		axes: slices.Clone(axes),
 	}
-	result := g.builder.Reverse(x.op, inputs.axes...)
+	inputNodes := []*Node{x}
+	result := g.builder.Reverse(x.outputOps[0], inputs.axes...)
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
+	return
+}
+
+// nodeInputsRngBitGenerator holds the inputs used for the call to backends.RngBitGenerator.
+type nodeInputsRngBitGenerator struct {
+	state *Node
+	shape shapes.Shape
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsRngBitGenerator) Type() NodeType {
+	return NodeTypeRngBitGenerator
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsRngBitGenerator) String() string {
+	return fmt.Sprintf("%s(state=[#%d], shape=%v)",
+		ni.Type(),
+		ni.state.Id(),
+		ni.shape,
+	)
+}
+
+// backendRngBitGenerator is a Graph wrapper for the backend.Builder.RngBitGenerator method.
+func backendRngBitGenerator(state *Node, shape shapes.Shape) (newState, values *Node) {
+	g := validateBuildingGraphFromInputs(state)
+	inputs := &nodeInputsRngBitGenerator{
+		state: state,
+		shape: shape,
+	}
+	inputNodes := []*Node{state}
+	v0, v1 := g.builder.RngBitGenerator(state.outputOps[0], inputs.shape)
+	node := &Node{
+		outputOps:    []backends.Op{v0, v1},
+		outputShapes: []shapes.Shape{g.builder.OpShape(v0), g.builder.OpShape(v1)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	splitNodes := splitNode(node)
+	newState, values = splitNodes[0], splitNodes[1]
 	return
 }
 
@@ -2541,17 +2587,17 @@ func (ni *nodeInputsRound) String() string {
 // Round returns the Op that represents the output of the corresponding operation.
 func Round(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
-
 	inputs := &nodeInputsRound{
 		x: x,
 	}
-	result := g.builder.Round(x.op)
+	inputNodes := []*Node{x}
+	result := g.builder.Round(x.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -2578,17 +2624,17 @@ func (ni *nodeInputsRsqrt) String() string {
 // Rsqrt returns the element-wise reciprocal of square root operation 1/sqrt(x).
 func Rsqrt(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
-
 	inputs := &nodeInputsRsqrt{
 		x: x,
 	}
-	result := g.builder.Rsqrt(x.op)
+	inputNodes := []*Node{x}
+	result := g.builder.Rsqrt(x.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -2631,7 +2677,6 @@ func (ni *nodeInputsScatterAdd) String() string {
 // backendScatterAdd is a Graph wrapper for the backend.Builder.ScatterAdd method.
 func backendScatterAdd(operand *Node, scatterIndices *Node, updates *Node, indexVectorAxis int, updateWindowAxes []int, insertedWindowAxes []int, scatterAxesToOperandAxes []int, indicesAreSorted bool, uniqueIndices bool) (node *Node) {
 	g := validateBuildingGraphFromInputs(operand, scatterIndices, updates)
-
 	inputs := &nodeInputsScatterAdd{
 		operand:                  operand,
 		scatterIndices:           scatterIndices,
@@ -2643,13 +2688,14 @@ func backendScatterAdd(operand *Node, scatterIndices *Node, updates *Node, index
 		indicesAreSorted:         indicesAreSorted,
 		uniqueIndices:            uniqueIndices,
 	}
-	result := g.builder.ScatterAdd(operand.op, scatterIndices.op, updates.op, inputs.indexVectorAxis, inputs.updateWindowAxes, inputs.insertedWindowAxes, inputs.scatterAxesToOperandAxes, inputs.indicesAreSorted, inputs.uniqueIndices)
+	inputNodes := []*Node{operand, scatterIndices, updates}
+	result := g.builder.ScatterAdd(operand.outputOps[0], scatterIndices.outputOps[0], updates.outputOps[0], inputs.indexVectorAxis, inputs.updateWindowAxes, inputs.insertedWindowAxes, inputs.scatterAxesToOperandAxes, inputs.indicesAreSorted, inputs.uniqueIndices)
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{operand, scatterIndices, updates},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -2692,7 +2738,6 @@ func (ni *nodeInputsScatterMax) String() string {
 // ScatterMax scatter values from updates pointed by scatterIndices to operand, by taking the Max.
 func ScatterMax(operand *Node, scatterIndices *Node, updates *Node, indexVectorAxis int, updateWindowAxes []int, insertedWindowAxes []int, scatterAxesToOperandAxes []int, indicesAreSorted bool, uniqueIndices bool) (node *Node) {
 	g := validateBuildingGraphFromInputs(operand, scatterIndices, updates)
-
 	inputs := &nodeInputsScatterMax{
 		operand:                  operand,
 		scatterIndices:           scatterIndices,
@@ -2704,13 +2749,14 @@ func ScatterMax(operand *Node, scatterIndices *Node, updates *Node, indexVectorA
 		indicesAreSorted:         indicesAreSorted,
 		uniqueIndices:            uniqueIndices,
 	}
-	result := g.builder.ScatterMax(operand.op, scatterIndices.op, updates.op, inputs.indexVectorAxis, inputs.updateWindowAxes, inputs.insertedWindowAxes, inputs.scatterAxesToOperandAxes, inputs.indicesAreSorted, inputs.uniqueIndices)
+	inputNodes := []*Node{operand, scatterIndices, updates}
+	result := g.builder.ScatterMax(operand.outputOps[0], scatterIndices.outputOps[0], updates.outputOps[0], inputs.indexVectorAxis, inputs.updateWindowAxes, inputs.insertedWindowAxes, inputs.scatterAxesToOperandAxes, inputs.indicesAreSorted, inputs.uniqueIndices)
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{operand, scatterIndices, updates},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -2753,7 +2799,6 @@ func (ni *nodeInputsScatterMin) String() string {
 // ScatterMin scatter values from updates pointed by scatterIndices to operand, by taking the Min.
 func ScatterMin(operand *Node, scatterIndices *Node, updates *Node, indexVectorAxis int, updateWindowAxes []int, insertedWindowAxes []int, scatterAxesToOperandAxes []int, indicesAreSorted bool, uniqueIndices bool) (node *Node) {
 	g := validateBuildingGraphFromInputs(operand, scatterIndices, updates)
-
 	inputs := &nodeInputsScatterMin{
 		operand:                  operand,
 		scatterIndices:           scatterIndices,
@@ -2765,13 +2810,14 @@ func ScatterMin(operand *Node, scatterIndices *Node, updates *Node, indexVectorA
 		indicesAreSorted:         indicesAreSorted,
 		uniqueIndices:            uniqueIndices,
 	}
-	result := g.builder.ScatterMin(operand.op, scatterIndices.op, updates.op, inputs.indexVectorAxis, inputs.updateWindowAxes, inputs.insertedWindowAxes, inputs.scatterAxesToOperandAxes, inputs.indicesAreSorted, inputs.uniqueIndices)
+	inputNodes := []*Node{operand, scatterIndices, updates}
+	result := g.builder.ScatterMin(operand.outputOps[0], scatterIndices.outputOps[0], updates.outputOps[0], inputs.indexVectorAxis, inputs.updateWindowAxes, inputs.insertedWindowAxes, inputs.scatterAxesToOperandAxes, inputs.indicesAreSorted, inputs.uniqueIndices)
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{operand, scatterIndices, updates},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -2806,7 +2852,6 @@ func (ni *nodeInputsSelectAndScatterMax) String() string {
 // backendSelectAndScatterMax is a Graph wrapper for the backend.Builder.SelectAndScatterMax method.
 func backendSelectAndScatterMax(operand *Node, source *Node, windowDimensions []int, windowStrides []int, paddings [][2]int) (node *Node) {
 	g := validateBuildingGraphFromInputs(operand, source)
-
 	inputs := &nodeInputsSelectAndScatterMax{
 		operand:          operand,
 		source:           source,
@@ -2814,13 +2859,14 @@ func backendSelectAndScatterMax(operand *Node, source *Node, windowDimensions []
 		windowStrides:    windowStrides,
 		paddings:         paddings,
 	}
-	result := g.builder.SelectAndScatterMax(operand.op, source.op, inputs.windowDimensions, inputs.windowStrides, inputs.paddings)
+	inputNodes := []*Node{operand, source}
+	result := g.builder.SelectAndScatterMax(operand.outputOps[0], source.outputOps[0], inputs.windowDimensions, inputs.windowStrides, inputs.paddings)
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{operand, source},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -2855,7 +2901,6 @@ func (ni *nodeInputsSelectAndScatterMin) String() string {
 // backendSelectAndScatterMin is a Graph wrapper for the backend.Builder.SelectAndScatterMin method.
 func backendSelectAndScatterMin(operand *Node, source *Node, windowDimensions []int, windowStrides []int, paddings [][2]int) (node *Node) {
 	g := validateBuildingGraphFromInputs(operand, source)
-
 	inputs := &nodeInputsSelectAndScatterMin{
 		operand:          operand,
 		source:           source,
@@ -2863,13 +2908,14 @@ func backendSelectAndScatterMin(operand *Node, source *Node, windowDimensions []
 		windowStrides:    windowStrides,
 		paddings:         paddings,
 	}
-	result := g.builder.SelectAndScatterMin(operand.op, source.op, inputs.windowDimensions, inputs.windowStrides, inputs.paddings)
+	inputNodes := []*Node{operand, source}
+	result := g.builder.SelectAndScatterMin(operand.outputOps[0], source.outputOps[0], inputs.windowDimensions, inputs.windowStrides, inputs.paddings)
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{operand, source},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -2904,7 +2950,6 @@ func (ni *nodeInputsSelectAndScatterSum) String() string {
 // backendSelectAndScatterSum is a Graph wrapper for the backend.Builder.SelectAndScatterSum method.
 func backendSelectAndScatterSum(operand *Node, source *Node, windowDimensions []int, windowStrides []int, paddings [][2]int) (node *Node) {
 	g := validateBuildingGraphFromInputs(operand, source)
-
 	inputs := &nodeInputsSelectAndScatterSum{
 		operand:          operand,
 		source:           source,
@@ -2912,13 +2957,14 @@ func backendSelectAndScatterSum(operand *Node, source *Node, windowDimensions []
 		windowStrides:    windowStrides,
 		paddings:         paddings,
 	}
-	result := g.builder.SelectAndScatterSum(operand.op, source.op, inputs.windowDimensions, inputs.windowStrides, inputs.paddings)
+	inputNodes := []*Node{operand, source}
+	result := g.builder.SelectAndScatterSum(operand.outputOps[0], source.outputOps[0], inputs.windowDimensions, inputs.windowStrides, inputs.paddings)
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{operand, source},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -2945,17 +2991,17 @@ func (ni *nodeInputsSign) String() string {
 // backendSign is a Graph wrapper for the backend.Builder.Sign method.
 func backendSign(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
-
 	inputs := &nodeInputsSign{
 		x: x,
 	}
-	result := g.builder.Sign(x.op)
+	inputNodes := []*Node{x}
+	result := g.builder.Sign(x.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -2982,17 +3028,17 @@ func (ni *nodeInputsSin) String() string {
 // Sin returns the Op that represents the output of the corresponding operation.
 func Sin(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
-
 	inputs := &nodeInputsSin{
 		x: x,
 	}
-	result := g.builder.Sin(x.op)
+	inputNodes := []*Node{x}
+	result := g.builder.Sin(x.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -3025,20 +3071,20 @@ func (ni *nodeInputsSlice) String() string {
 // backendSlice is a Graph wrapper for the backend.Builder.Slice method.
 func backendSlice(x *Node, starts []int, limits []int, strides []int) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
-
 	inputs := &nodeInputsSlice{
 		x:       x,
 		starts:  starts,
 		limits:  limits,
 		strides: strides,
 	}
-	result := g.builder.Slice(x.op, inputs.starts, inputs.limits, inputs.strides)
+	inputNodes := []*Node{x}
+	result := g.builder.Slice(x.outputOps[0], inputs.starts, inputs.limits, inputs.strides)
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -3065,17 +3111,17 @@ func (ni *nodeInputsSqrt) String() string {
 // Sqrt returns the Op that represents the output of the corresponding operation.
 func Sqrt(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
-
 	inputs := &nodeInputsSqrt{
 		x: x,
 	}
-	result := g.builder.Sqrt(x.op)
+	inputNodes := []*Node{x}
+	result := g.builder.Sqrt(x.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -3106,18 +3152,18 @@ func (ni *nodeInputsSub) String() string {
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func Sub(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
-
 	inputs := &nodeInputsSub{
 		x0: x0,
 		x1: x1,
 	}
-	result := g.builder.Sub(x0.op, x1.op)
+	inputNodes := []*Node{x0, x1}
+	result := g.builder.Sub(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x0, x1},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -3144,17 +3190,17 @@ func (ni *nodeInputsTanh) String() string {
 // Tanh returns the Op that represents the output of the corresponding operation.
 func Tanh(x *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
-
 	inputs := &nodeInputsTanh{
 		x: x,
 	}
-	result := g.builder.Tanh(x.op)
+	inputNodes := []*Node{x}
+	result := g.builder.Tanh(x.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -3183,18 +3229,18 @@ func (ni *nodeInputsTranspose) String() string {
 // backendTranspose is a Graph wrapper for the backend.Builder.Transpose method.
 func backendTranspose(x *Node, permutations ...int) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
-
 	inputs := &nodeInputsTranspose{
 		x:            x,
 		permutations: slices.Clone(permutations),
 	}
-	result := g.builder.Transpose(x.op, inputs.permutations...)
+	inputNodes := []*Node{x}
+	result := g.builder.Transpose(x.outputOps[0], inputs.permutations...)
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -3225,19 +3271,19 @@ func (ni *nodeInputsWhere) String() string {
 // backendWhere is a Graph wrapper for the backend.Builder.Where method.
 func backendWhere(condition *Node, onTrue *Node, onFalse *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(condition, onTrue, onFalse)
-
 	inputs := &nodeInputsWhere{
 		condition: condition,
 		onTrue:    onTrue,
 		onFalse:   onFalse,
 	}
-	result := g.builder.Where(condition.op, onTrue.op, onFalse.op)
+	inputNodes := []*Node{condition, onTrue, onFalse}
+	result := g.builder.Where(condition.outputOps[0], onTrue.outputOps[0], onFalse.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{condition, onTrue, onFalse},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -3267,18 +3313,18 @@ func (ni *nodeInputsXor) String() string {
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func Xor(x0 *Node, x1 *Node) (node *Node) {
 	g := validateBuildingGraphFromInputs(x0, x1)
-
 	inputs := &nodeInputsXor{
 		x0: x0,
 		x1: x1,
 	}
-	result := g.builder.Xor(x0.op, x1.op)
+	inputNodes := []*Node{x0, x1}
+	result := g.builder.Xor(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
-		graph:      g,
-		op:         result,
-		shape:      g.builder.OpShape(result),
-		inputs:     inputs,
-		inputNodes: []*Node{x0, x1},
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return

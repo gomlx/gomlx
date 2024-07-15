@@ -34,10 +34,10 @@ const (
 //
 // Almost every new node type implementation will rely on the Node.
 type Node struct {
-	graph *Graph
-	shape shapes.Shape
-	id    NodeId // id within graph.
-	op    backends.Op
+	graph        *Graph
+	id           NodeId // id within graph.
+	outputShapes []shapes.Shape
+	outputOps    []backends.Op
 
 	// inputNodes are the edges of the computation graph.
 	// Notice that other static inputs to the node are registered in inputs
@@ -91,25 +91,25 @@ func (n *Node) Graph() *Graph {
 
 // Shape of the Node's output. It can be `nil`, for nodes that simply have a side effect, like a "Print" Node.
 func (n *Node) Shape() shapes.Shape {
-	if n == nil {
+	if n == nil || n.numOutputs() != 1 {
 		return shapes.Shape{}
 	}
-	return n.shape
+	return n.outputShapes[0]
 }
 
-// DType returns the DType of the node's shape.
+// DType returns the DType of the node's outputShapes.
 func (n *Node) DType() dtypes.DType {
-	return n.shape.DType
+	return n.outputShapes.DType
 }
 
-// Rank returns the rank of the node's shape.
+// Rank returns the rank of the node's outputShapes.
 func (n *Node) Rank() int {
-	return n.shape.Rank()
+	return n.outputShapes.Rank()
 }
 
-// IsScalar returns whether the node's shape is a scalar.
+// IsScalar returns whether the node's outputShapes is a scalar.
 func (n *Node) IsScalar() bool {
-	return n.shape.IsScalar()
+	return n.outputShapes.IsScalar()
 }
 
 // Id is the unique id of this node within the Graph.
@@ -140,6 +140,12 @@ func (n *Node) GetParameterName() string {
 // Inputs are the other nodes that are direct inputNodes to the node.
 // This doesn't include static inputNodes for some operations that are not given by other Graph nodes.
 func (n *Node) Inputs() []*Node { return n.inputNodes }
+
+// numOutputs returns the number of outputs for a node.
+// Used internally only, all Graph public operations will return nodes with one output only.
+func (n *Node) numOutputs() int {
+	return len(n.outputOps)
+}
 
 // AssertValid panics if `n` is nil, or if its graph is invalid.
 func (n *Node) AssertValid() {
@@ -199,7 +205,7 @@ func (n *Node) String() (str string) {
 		parts = append(parts, "[CustomVJP]")
 	}
 
-	str = fmt.Sprintf("%s -> %s", strings.Join(parts, " "), n.shape)
+	str = fmt.Sprintf("%s -> %s", strings.Join(parts, " "), n.outputShapes)
 	return
 }
 

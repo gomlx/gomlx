@@ -29,7 +29,7 @@ func Scalar(g *Graph, dtype dtypes.DType, value float64) *Node {
 	return g.getScalarConst(dtype, value)
 }
 
-// FillScalar creates a Node with a value with the given shape, filled with the given value.
+// FillScalar creates a Node with a value with the given outputShapes, filled with the given value.
 // It's implemented indirectly using other nodes.
 func FillScalar(g *Graph, shape shapes.Shape, value float64) *Node {
 	return BroadcastPrefix(Scalar(g, shape.DType, value), shape.Dimensions...)
@@ -110,13 +110,13 @@ func lowestForDType(g *Graph, dtype dtypes.DType) *Node {
 	return Const(g, dtype.LowestValue())
 }
 
-// OnesLike returns a tensor with the same shape of x, filled with 1's.
+// OnesLike returns a tensor with the same outputShapes of x, filled with 1's.
 func OnesLike(x *Node) *Node {
 	g := validateBuildingGraphFromInputs(x)
 	return Ones(g, x.Shape())
 }
 
-// Ones creates a computation with the same shape as the input, but with the value 1.
+// Ones creates a computation with the same outputShapes as the input, but with the value 1.
 // It's implemented indirectly using other nodes.
 func Ones(g *Graph, shape shapes.Shape) *Node {
 	g.AssertValid()
@@ -127,13 +127,13 @@ func Ones(g *Graph, shape shapes.Shape) *Node {
 	return BroadcastPrefix(scalar, shape.Dimensions...)
 }
 
-// ZerosLike returns a tensor with the same shape of x, filled with 0's.
+// ZerosLike returns a tensor with the same outputShapes of x, filled with 0's.
 func ZerosLike(x *Node) *Node {
 	g := validateBuildingGraphFromInputs(x)
 	return Zeros(g, x.Shape())
 }
 
-// Zeros creates a computation with the same shape as the input, but with the value 0.
+// Zeros creates a computation with the same outputShapes as the input, but with the value 0.
 // It's implemented indirectly using other nodes.
 func Zeros(g *Graph, shape shapes.Shape) *Node {
 	g.AssertValid()
@@ -173,7 +173,7 @@ func SignPlusOrMinus(x *Node) *Node {
 }
 
 // PositiveIndicator returns 1 where x >= 0, 0 otherwise. See also StrictlyPositiveIndicator.
-// E.g: PositiveIndicator({1.0, 0.0001, 0, -0.2, -3.0}) -> [1, 1, 1, 0, 0], with the same shape/dtype as x.
+// E.g: PositiveIndicator({1.0, 0.0001, 0, -0.2, -3.0}) -> [1, 1, 1, 0, 0], with the same outputShapes/dtype as x.
 func PositiveIndicator(x *Node) *Node {
 	g := validateBuildingGraphFromInputs(x)
 	one := ScalarOne(g, x.DType())
@@ -187,7 +187,7 @@ func MirroredLog1p(x *Node) *Node {
 }
 
 // StrictlyPositiveIndicator returns 1 where x > 0, 0 otherwise.
-// E.g: StrictlyPositiveIndicator({1.0, 0.0001, 0, -0.2, -3.0}) -> [1, 1, 0, 0, 0], with the same shape/dtype as x.
+// E.g: StrictlyPositiveIndicator({1.0, 0.0001, 0, -0.2, -3.0}) -> [1, 1, 0, 0, 0], with the same outputShapes/dtype as x.
 func StrictlyPositiveIndicator(x *Node) *Node {
 	g := validateBuildingGraphFromInputs(x)
 	one := ScalarOne(g, x.DType())
@@ -214,15 +214,15 @@ func ClipScalar(x *Node, min, max float64) *Node {
 // TODO: implement with Select once it's implemented, since it's likely going to be faster (TensorFlow uses that).
 func OneHot(indices *Node, depth int, dtype dtypes.DType) *Node {
 	g := indices.Graph()
-	if !indices.shape.DType.IsInt() {
-		Panicf("invalid indices dtype (%s), it must be integer", indices.shape.DType)
+	if !indices.outputShapes.DType.IsInt() {
+		Panicf("invalid indices dtype (%s), it must be integer", indices.outputShapes.DType)
 	}
 
 	// Add an expanded dimension at the end, which will contain the one-hot representation.
 	indices = ExpandDims(indices, -1)
 
-	// The target shape will expand the indices dimension (last/innermost one) to depth.
-	targetShape := indices.shape.Clone()
+	// The target outputShapes will expand the indices dimension (last/innermost one) to depth.
+	targetShape := indices.outputShapes.Clone()
 	targetShape.Dimensions[targetShape.Rank()-1] = depth
 	targetShape.DType = dtype
 
@@ -230,14 +230,14 @@ func OneHot(indices *Node, depth int, dtype dtypes.DType) *Node {
 	// * Create one sub-id per leading dimension on indices.
 	// * ConcatenateDimensions them, along with the indices themselves (the last dimension).
 	// * Flatten them.
-	parts := make([]*Node, 0, indices.shape.Rank())
-	for dimIdx := 0; dimIdx < indices.shape.Rank()-1; dimIdx++ {
-		parts = append(parts, Iota(g, indices.shape, dimIdx))
+	parts := make([]*Node, 0, indices.outputShapes.Rank())
+	for dimIdx := 0; dimIdx < indices.outputShapes.Rank()-1; dimIdx++ {
+		parts = append(parts, Iota(g, indices.outputShapes, dimIdx))
 	}
 	parts = append(parts, indices)
 	scatterIndices := Concatenate(parts, -1)
-	scatterIndices = Reshape(scatterIndices, indices.shape.Size(), indices.shape.Rank())
-	ones := Ones(g, shapes.Make(dtype, indices.shape.Size()))
+	scatterIndices = Reshape(scatterIndices, indices.outputShapes.Size(), indices.outputShapes.Rank())
+	ones := Ones(g, shapes.Make(dtype, indices.outputShapes.Size()))
 	return Scatter(scatterIndices, ones, targetShape)
 }
 
@@ -293,8 +293,8 @@ var ReduceAndKeepMasked = MaskedReduceAndKeep
 // be [-1], meaning, the last axes.
 func Softmax(logits *Node, axes ...int) *Node {
 	_ = validateBuildingGraphFromInputs(logits)
-	if !logits.shape.DType.IsFloat() {
-		Panicf("invalid logits dtype (%s), it must be float", logits.shape.DType)
+	if !logits.outputShapes.DType.IsFloat() {
+		Panicf("invalid logits dtype (%s), it must be float", logits.outputShapes.DType)
 	}
 	if len(axes) == 0 {
 		axes = []int{-1}
@@ -320,11 +320,11 @@ func Softmax(logits *Node, axes ...int) *Node {
 // be [-1], meaning, the last axes.
 //
 // It ignores values for which the corresponding mask is false, and will return 0 for
-// those fields. mask and logits must have the same shape.
+// those fields. mask and logits must have the same outputShapes.
 func MaskedSoftmax(logits, mask *Node, axes ...int) *Node {
 	_ = validateBuildingGraphFromInputs(logits)
-	if !logits.shape.DType.IsFloat() {
-		Panicf("invalid logits dtype (%s), it must be float", logits.shape.DType)
+	if !logits.outputShapes.DType.IsFloat() {
+		Panicf("invalid logits dtype (%s), it must be float", logits.outputShapes.DType)
 	}
 	if len(axes) == 0 {
 		axes = []int{-1}
@@ -394,7 +394,7 @@ func L2NormalizeWithEpsilon(x *Node, epsilon float64, reduceAxis int, moreReduce
 	return Div(x, AddScalar(L2Norm(x, reduceAxes...), epsilon))
 }
 
-// LowerTriangular returns a lower-triangular boolean square matrix of shape `[dim, dim]`.
+// LowerTriangular returns a lower-triangular boolean square matrix of outputShapes `[dim, dim]`.
 //
 // This can be combined with `Where` to select values of any arbitrary other matrix.
 func LowerTriangular(g *Graph, dim int) *Node {
@@ -404,7 +404,7 @@ func LowerTriangular(g *Graph, dim int) *Node {
 	return LessOrEqual(cols, rows)
 }
 
-// UpperTriangular returns an upper-triangular boolean square matrix of shape `[dim, dim]`.
+// UpperTriangular returns an upper-triangular boolean square matrix of outputShapes `[dim, dim]`.
 //
 // This can be combined with `Where` to select values of any arbitrary other matrix.
 func UpperTriangular(g *Graph, dim int) *Node {
@@ -414,7 +414,7 @@ func UpperTriangular(g *Graph, dim int) *Node {
 	return GreaterOrEqual(cols, rows)
 }
 
-// Diagonal returns a diagonal boolean square matrix of shape `[dim, dim]`.
+// Diagonal returns a diagonal boolean square matrix of outputShapes `[dim, dim]`.
 //
 // This can be combined with `Where` to select values of any arbitrary other matrix.
 func Diagonal(g *Graph, dim int) *Node {
@@ -424,7 +424,7 @@ func Diagonal(g *Graph, dim int) *Node {
 	return Equal(cols, rows)
 }
 
-// DiagonalWithValue returns a diagonal matrix of shape `[dim, dim]` with
+// DiagonalWithValue returns a diagonal matrix of outputShapes `[dim, dim]` with
 // scalar in the diagonal and zero elsewhere. Set scalar to `ScalarOne()`
 // and you get an identity matrix.
 func DiagonalWithValue(scalar *Node, dim int) *Node {
@@ -520,10 +520,10 @@ func genericShiftImpl(x *Node, axis int, shiftDir ShiftDirection, n int, fill fl
 	dims := x.Shape().Dimensions
 	shiftAxis := AdjustAxisToRank(x, axis)
 	if n > dims[shiftAxis] {
-		exceptions.Panicf("cannot shift %d positions for axis %d, x.shape=%s", n, axis, x.Shape())
+		exceptions.Panicf("cannot shift %d positions for axis %d, x.outputShapes=%s", n, axis, x.Shape())
 	}
 	if value != nil && value.DType() != dtype {
-		exceptions.Panicf("cannot shift x.shape=%s using value.shape=%s with a different dtype", x.Shape(), value.Shape())
+		exceptions.Panicf("cannot shift x.outputShapes=%s using value.outputShapes=%s with a different dtype", x.Shape(), value.Shape())
 	}
 	if n == 0 {
 		// Trivial solution.

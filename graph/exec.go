@@ -88,7 +88,7 @@ type LoggerFn func(graph *Graph, messages []string, values []tensors.Tensor, nod
 //	}
 //
 // To actually use it with real values, one need to build
-// the graph to a specific shape of x, and then execute it,
+// the graph to a specific outputShapes of x, and then execute it,
 // which is not straight forward -- JIT compilation makes things
 // faster, but it imposes some bureaucracy.
 //
@@ -389,7 +389,7 @@ func (e *Exec) compileAndExecute(execute bool, args ...any) (results []tensors.T
 	if entry == nil {
 		exceptions.Panicf(
 			"maximum cache size of %d reached for %q, cannot create another g -- "+
-				"a new computation g needs to be created+compiled for each different shape of "+
+				"a new computation g needs to be created+compiled for each different outputShapes of "+
 				"the input, consider using padding, or if this is not a concern change "+
 				"the cache size with executable.SetMaxCache()", e.maxCacheSize, e.Name())
 	}

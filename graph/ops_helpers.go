@@ -23,7 +23,7 @@ import (
 	"github.com/gomlx/gomlx/xla"
 )
 
-// AdjustAxisToRank returns the positive axis to the operand shape, adjusting in case the axis given is negative.
+// AdjustAxisToRank returns the positive axis to the operand outputShapes, adjusting in case the axis given is negative.
 //
 // It panics if axis given is not in the operand's rank range.
 func AdjustAxisToRank(operand *Node, axis int) int {
@@ -194,19 +194,19 @@ func dotGeneralVJP(node, v *Node, _ shapes.Shape) []*Node {
 		numContractionAxes := len(thisContractingAxes) // == len(otherContractingAxes)
 		//numCrossedAxes := len(thisCrossAxes) + len(otherCrossAxes)
 
-		// Project output (of the DotGeneral) shaped v to "this" (this node) shape.
+		// Project output (of the DotGeneral) shaped v to "this" (this node) outputShapes.
 
 		// * Add back contracted dimensions, with size 1.
-		//   thisVJP shape will be [batch_dims..., lhs_cross_dims..., rhs_cross_dims..., 1 x (numContractionAxes)].
+		//   thisVJP outputShapes will be [batch_dims..., lhs_cross_dims..., rhs_cross_dims..., 1 x (numContractionAxes)].
 		thisVJP := v
 		if numContractionAxes > 0 {
 			thisVJP = ExpandDims(thisVJP, xslices.SliceWithValue(numContractionAxes, -1)...)
 		}
 
 		// * Project other operand with contracted dimensions.
-		//   otherProjected shape for this=lhs will be [batch_dims..., 1 x (this_cross_dims), rhs_cross_dims, contracted_dims]
+		//   otherProjected outputShapes for this=lhs will be [batch_dims..., 1 x (this_cross_dims), rhs_cross_dims, contracted_dims]
 		otherProjected := otherInput
-		otherRank := otherProjected.shape.Rank()
+		otherRank := otherProjected.outputShapes.Rank()
 		{
 			permutations := make([]int, 0, otherRank)
 			for _, axis := range otherBatchAxes {
@@ -251,7 +251,7 @@ func dotGeneralVJP(node, v *Node, _ shapes.Shape) []*Node {
 		}
 
 		// * Transpose thisVJP axes back to its inputNodes.
-		thisRank := thisVJP.shape.Rank()
+		thisRank := thisVJP.outputShapes.Rank()
 		{
 			permutation := make([]int, thisRank)
 			for ii, axis := range thisBatchAxes {

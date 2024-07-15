@@ -56,6 +56,13 @@ type Builder interface {
 	// If paddings are nil they are assumed to be 0.
 	ReduceWindow(x Op, reductionType ReduceOpType, windowDimensions, strides, baseDilations, windowDilations []int, paddings [][2]int) Op
 
+	// RngBitGenerator generates the given shape filled with random bits.
+	// It takes as input the current random number generator (RNG) state, see RngState or RngStateFromSeed.
+	// The algorithm is hard-coded to use Philox algorithm for now.
+	//
+	// It returns the new state of the RNG and the generated values (with random bits) with the given shape.
+	RngBitGenerator(state Op, shape shapes.Shape) (newState, values Op)
+
 	// StandardOps include automatically generated list of operations for the Builder.
 	StandardOps
 }

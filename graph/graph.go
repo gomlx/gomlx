@@ -33,8 +33,8 @@
 //     be "just-in-time" compiled and executed efficiently.
 //     To construct a `Graph` one puts together nodes or "ops" defining the desired sequence of operations.
 //
-//   - Node: represents the result of an operation ("op" for short). E.g: Add, Sub, Mul, Sigmoid,
-//     Reshape, etc. Each node has a fixed shape that is known in "graph building time" (see discussion
+//   - Node: represents the result of an operation ("outputOps" for short). E.g: Add, Sub, Mul, Sigmoid,
+//     Reshape, etc. Each node has a fixed outputShapes that is known in "graph building time" (see discussion
 //     below).
 //
 //   - context.Context: created by the Manager, a higher level abstraction convenient when building gradient
@@ -58,10 +58,10 @@
 // upfront, to have the right mental model:
 //
 //   - **Compile time**: this is during Go compilation. Some amount of type checking is done here, but
-//     most of the tensor shape compatibility cannot be done statically here, unfortunately. Even if for
+//     most of the tensor outputShapes compatibility cannot be done statically here, unfortunately. Even if for
 //     a human it would be obvious without compiling and running a program that some operation among
 //     different shaped tensors shouldn't be allowed, there is no way in Go to run
-//     arbitrary logic in compile time to validate tensor shape compatibility. So most of the checking is
+//     arbitrary logic in compile time to validate tensor outputShapes compatibility. So most of the checking is
 //     left to "graph building time".
 //     Maybe one day one can write a gomlx_linter the runs before the compiler that could catch some of these.
 //
@@ -305,7 +305,7 @@ func (g *Graph) SetTraced(traced bool) {
 	g.traced = traced
 }
 
-// registerNode in the graph mapping its underlying op and returns a new unique id within the Graph.
+// registerNode in the graph mapping its underlying outputOps and returns a new unique id within the Graph.
 // If Graph.traced is set, it also sets Node.trace to an error with a stack-trace.
 func (g *Graph) registerNode(node *Node) (id NodeId) {
 	g.AssertBuilding()
@@ -336,6 +336,11 @@ func (g *Graph) Compile(outputs ...*Node) {
 	if len(outputs) == 0 {
 		exceptions.Panicf("no outputs selected when Graph.Compile graph %q", g.name)
 	}
+	for ii, output := range outputs {
+		if output.numOutputs() != 1 {
+			exceptions.Panicf("Graph(%q).Compile cannot take multi-output nodes (output #%d: %s), this type of Node is internal only", g.name, ii, output)
+		}
+	}
 	// Check all nodes are from this graph.
 	for ii, node := range outputs {
 		if node == nil {
@@ -356,7 +361,7 @@ func (g *Graph) Compile(outputs ...*Node) {
 		}()
 	}
 
-	outputsOps := xslices.Map(outputs, func(node *Node) backends.Op { return node.op })
+	outputsOps := xslices.Map(outputs, func(node *Node) backends.Op { return node.outputOps })
 	g.executable = g.builder.Compile(outputsOps...)
 	return
 }

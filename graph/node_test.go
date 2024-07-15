@@ -70,7 +70,7 @@ func TestConstant(t *testing.T) {
 		n := Const(g, 5)
 		shape := n.Shape()
 		if shape.DType != dtypes.Int64 || shape.Rank() != 0 {
-			t.Errorf("ConstTensor has invalid shape: %s", shape)
+			t.Errorf("ConstTensor has invalid outputShapes: %s", shape)
 		}
 	}
 	{
@@ -79,7 +79,7 @@ func TestConstant(t *testing.T) {
 		shape := n.Shape()
 		if shape.DType != dtypes.Float32 || !reflect.DeepEqual(shape.Dimensions, []int{3, 2}) {
 			fmt.Printf("\tTestConstant: node %s\n", n)
-			t.Errorf("ConstTensor has invalid shape: %s", shape)
+			t.Errorf("ConstTensor has invalid outputShapes: %s", shape)
 		}
 	}
 }
@@ -100,7 +100,7 @@ func TestAdd(t *testing.T) {
 		y := Const(g, 7)
 		n := Add(x, y)
 		wantShape := shapes.Shape{DType: dtypes.Int64}
-		require.Truef(t, n.Shape().Eq(wantShape), "Add invalid shape %s, wanted %s", n.Shape(), wantShape)
+		require.Truef(t, n.Shape().Eq(wantShape), "Add invalid outputShapes %s, wanted %s", n.Shape(), wantShape)
 		local := compileRunTransfer(t, g, "scalar Graph")
 		got := local.Value().(int64)
 		if got != 12 {
@@ -117,7 +117,7 @@ func TestAdd(t *testing.T) {
 		n := Add(x, y)
 		wantShape := shapes.Make(dtypes.Float32, 2, 2)
 		if !n.Shape().Eq(wantShape) {
-			t.Fatalf("Add invalid shape %s, wanted %s", n.Shape(), wantShape)
+			t.Fatalf("Add invalid outputShapes %s, wanted %s", n.Shape(), wantShape)
 		}
 		local := compileRunTransfer(t, g, "[2, 2] Graph")
 		got := local.Value().([][]float32)
@@ -136,7 +136,7 @@ func TestAdd(t *testing.T) {
 		n := Add(x, y)
 		wantShape := shapes.Make(dtypes.Float32, 2, 2)
 		if !n.Shape().Eq(wantShape) {
-			t.Fatalf("Add invalid shape %s, wanted %s", n.Shape(), wantShape)
+			t.Fatalf("Add invalid outputShapes %s, wanted %s", n.Shape(), wantShape)
 		}
 		local := compileRunTransfer(t, g, "[2, 2] Graph")
 		got := local.Value().([][]float32)
@@ -155,7 +155,7 @@ func TestAdd(t *testing.T) {
 		n := Add(x, y)
 		wantShape := shapes.Make(dtypes.Float32, 2, 2)
 		if !n.Shape().Eq(wantShape) {
-			t.Fatalf("Add invalid shape %s, wanted %s", n.Shape(), wantShape)
+			t.Fatalf("Add invalid outputShapes %s, wanted %s", n.Shape(), wantShape)
 		}
 		local := compileRunTransfer(t, g, "[2, 2] Graph")
 		got := local.Value().([][]float32)
@@ -173,9 +173,9 @@ func testTupleParameter(t *testing.T, manager *Manager) {
 	xyS := shapes.MakeTuple([]shapes.Shape{shapes.Scalar[float64](), shapes.Scalar[float64]()})
 	xy := g.Parameter("xy", xyS)
 	if !xy.Shape().Eq(xyS) {
-		fmt.Printf("\t(before) xy.shape=%s\n", xyS)
-		fmt.Printf("\t(after) xy.shape=%s\n", xy.Shape())
-		t.Fatalf("Tuple shape changed after creating parameter.")
+		fmt.Printf("\t(before) xy.outputShapes=%s\n", xyS)
+		fmt.Printf("\t(after) xy.outputShapes=%s\n", xy.Shape())
+		t.Fatalf("Tuple outputShapes changed after creating parameter.")
 	}
 	x := GetTupleElement(xy, 0)
 	y := GetTupleElement(xy, 1)
@@ -294,7 +294,7 @@ func TestTwoArgsOps(t *testing.T) {
 			n := test.fnGraph(x, y)
 			wantShape := shapes.Make(dtypes.Float32, 2, 2)
 			if !n.Shape().Eq(wantShape) {
-				t.Fatalf("Add invalid shape %s, wanted %s", n.Shape(), wantShape)
+				t.Fatalf("Add invalid outputShapes %s, wanted %s", n.Shape(), wantShape)
 			}
 			local := compileRunTransfer(t, g, "[2, 2] Graph")
 			got := local.Value().([][]float32)
@@ -327,7 +327,7 @@ func TestTwoArgsOps(t *testing.T) {
 			n := test.fnGraph(x, y)
 			wantShape := shapes.Make(dtypes.Int64, 2, 2)
 			if !n.Shape().Eq(wantShape) {
-				t.Fatalf("Add invalid shape %s, wanted %s", n.Shape(), wantShape)
+				t.Fatalf("Add invalid outputShapes %s, wanted %s", n.Shape(), wantShape)
 			}
 			local := compileRunTransfer(t, g, "[2, 2] Graph")
 			got := local.Value().([][]int64)
@@ -386,7 +386,7 @@ func TestOneArgOps(t *testing.T) {
 		n := test.fnGraph(x)
 		wantShape := shapes.Make(dtypes.Float64, 2, 2)
 		if !n.Shape().Eq(wantShape) {
-			t.Fatalf("Add invalid shape %s, wanted %s", n.Shape(), wantShape)
+			t.Fatalf("Add invalid outputShapes %s, wanted %s", n.Shape(), wantShape)
 		}
 		local := compileRunTransfer(t, g, "[2, 2] graph for one-arg operation")
 		got := local.Value().([][]float64)
@@ -448,9 +448,9 @@ func TestDot(t *testing.T) {
 
 	// Shape: [batch=4, dims=3]
 	inputs := Const(g, [][]float32{{1.1, 2.2, 3.3}, {11, 22, 33}, {111, 222, 333}, {1111, 2222, 3333}})
-	// Layer 0: shape [3, 2], that is the inputNodes have dim=3, and should output dims=2
+	// Layer 0: outputShapes [3, 2], that is the inputNodes have dim=3, and should output dims=2
 	w0 := Const(g, [][]float32{{1, 0}, {1, -1}, {-1, 1}})
-	// Dot(inputNodes, w0) -> shape [batch=4, dims=2]
+	// Dot(inputNodes, w0) -> outputShapes [batch=4, dims=2]
 	Dot(inputs, w0) // Last node created in the graph is taken as output by default.
 	got := compileAndRun(g)
 	want := [][]float32{{0, 1.1}, {0, 11}, {0, 111}, {0, 1111}}
@@ -629,7 +629,7 @@ func TestTuple(t *testing.T) {
 		b := Const(g, 5)
 		tuple := Tuple(a, b)
 		if !tuple.Shape().IsTuple() {
-			t.Errorf("Expected shape to be tuple, got %s instead", tuple.Shape())
+			t.Errorf("Expected outputShapes to be tuple, got %s instead", tuple.Shape())
 		}
 		GetTupleElement(tuple, 0)
 		got := compileAndRun(g)
@@ -647,12 +647,12 @@ func TestTuple(t *testing.T) {
 		b := Const(g, 5)
 		tupleN := Tuple(a, b)
 		if !tupleN.Shape().IsTuple() {
-			t.Errorf("Expected shape to be tuple, got %s instead", tupleN.Shape())
+			t.Errorf("Expected outputShapes to be tuple, got %s instead", tupleN.Shape())
 		}
 		g.Compile()
 		tupleT := g.Run(nil)
 		if !tupleT.IsTuple() {
-			t.Errorf("Expected tensor shape to be tuple, got %s instead", tupleN.Shape())
+			t.Errorf("Expected tensor outputShapes to be tuple, got %s instead", tupleN.Shape())
 		}
 		/*
 			splits := tupleT.SplitTupleError()
