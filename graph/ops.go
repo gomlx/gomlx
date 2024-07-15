@@ -865,6 +865,18 @@ func AxisRange(indices ...int) SliceAxisSpec {
 	return SliceAxisSpec{Start: indices[0], End: indices[1]}
 }
 
+// AxisRangeToEnd defines a range from the given value to the end of the axis.
+// It's return value is to be used by Slice to specify one axis.
+func AxisRangeToEnd(from int) SliceAxisSpec {
+	return SliceAxisSpec{Start: from, NoEnd: true}
+}
+
+// AxisRangeFromStart defines a range from the start (0) to the given value for the axis.
+// It's return value is to be used by Slice to specify one axis.
+func AxisRangeFromStart(to int) SliceAxisSpec {
+	return SliceAxisSpec{Start: 0, End: to}
+}
+
 // AxisElem defines a range of one element to take for an axis in Slice.
 // It returns an `SliceAxisSpec` object.
 func AxisElem(index int) SliceAxisSpec {
@@ -892,11 +904,12 @@ func adjustAxisToRank(axis, rank int) int {
 //
 // Examples:
 //
-// - For `x = {1, 2, 3, 4}`:
-//   - `Slice(x) = {1, 2, 3, 4}`  // SliceAxisSpec not given is taken in full.
-//   - `Slice(x, AxisRange()) = {1, 2, 3, 4}`  // Default for AxisRange is the full range.
-//   - `Slice(x, AxisRange(2)) = {3, 4}`  // If only start is given, it is taken to the end.
-//   - `Slice(x, AxisRange(1,-1)) = {2, 3}`  // Negative values are taken from the end of the axis dimension.
+// - For `x = {10, 20, 30, 40}`:
+//   - `Slice(x) = {10, 20, 30, 40}`  // SliceAxisSpec not given is taken in full.
+//   - `Slice(x, AxisRange()) = {10, 20, 30, 40}`  // Default for AxisRange is the full range.
+//   - `Slice(x, AxisRange(1,-1)) = {20, 30}`  // Negative values are taken from the end of the axis dimension.
+//   - `Slice(x, AxisRangeFromStart(-2)) = {10, 20}`  // Negative values are taken from the end of the axis dimension.
+//   - `Slice(x, AxisRangeToEnd(2)) = {30, 40}`  // Negative values are taken from the end of the axis dimension.
 //   - `Slice(x, AxisElem(2)) = {3}`  // Take only one element of an axis.
 //
 // - For `x = {{1, 2, 3}, {4, 5, 6}}`:
@@ -977,7 +990,7 @@ func Slice(x *Node, axesSpec ...SliceAxisSpec) *Node {
 			strides[ii] = axesSpec[ii].StrideValue
 		}
 	}
-	return SliceWithStridesXLA(x, starts, limits, strides)
+	return backendSlice(x, starts, limits, strides)
 }
 
 func boolToInt(b bool) int {
@@ -1050,25 +1063,28 @@ func Concatenate(operands []*Node, axis int) *Node {
 // concatenateVJP implements a VJP function for the ConcatenateNode operation.
 func concatenateVJP(node, v *Node, _ shapes.Shape) []*Node {
 	vjps := make([]*Node, 0, len(node.inputNodes))
-	concatDimension := node.serializedNode.Int
-	concatDimStart := 0
+	params := node.inputs.(*nodeInputsConcatenate)
+	concatAxis := params.axis
 	shape := node.shape
 
 	// Set starts and limits for slices that are shared among all concatenated inputNodes.
 	starts, limits := make([]int, shape.Rank()), make([]int, shape.Rank())
+	ranges := make([]SliceAxisSpec, shape.Rank())
 	for dim := 0; dim < shape.Rank(); dim++ {
-		if dim == concatDimension {
+		if dim == concatAxis {
 			continue
 		}
+		ranges[dim] = AxisRange()
 		starts[dim], limits[dim] = 0, shape.Dimensions[dim]
 	}
 
 	// Take slice for each concatenated input.
+	concatDimStart := 0
 	for _, input := range node.inputNodes {
-		starts[concatDimension] = concatDimStart
-		concatDimStart += input.shape.Dimensions[concatDimension]
-		limits[concatDimension] = concatDimStart
-		vjps = append(vjps, SliceXLA(v, starts, limits))
+		concatDimEnd := concatDimStart + input.shape.Dimensions[concatAxis]
+		ranges[concatAxis] = AxisRange(concatDimStart, concatDimEnd)
+		concatDimStart = concatDimEnd
+		vjps = append(vjps, Slice(v, ranges...))
 	}
 	return vjps
 }
@@ -1115,7 +1131,7 @@ func Transpose(x *Node, axisA, axisB int) *Node {
 // TransposeAllDims allows one to transpose any or all dimensions.
 // It permutes the operand axes with the given permutation, so ∀ i, 0 ≤ i < rank ⇒ input_dimensions[permutations[i]] = output_dimensions[i].
 func TransposeAllDims(x *Node, permutations ...int) *Node {
-	g := validateBuildingGraphFromInputs(x)
+	_ = validateBuildingGraphFromInputs(x)
 	rank := x.shape.Rank()
 	if len(permutations) != rank {
 		exceptions.Panicf("in TransposeAllDims(x, %v), there must be one permutations per dimension in x, but x rank %d",

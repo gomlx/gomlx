@@ -17,8 +17,11 @@
 package graph
 
 import (
+	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/xslices"
+	"github.com/gomlx/gopjrt/dtypes"
 )
 
 // Gather values in params from the pointers in indices.
@@ -102,7 +105,7 @@ func Gather(params, indices *Node) *Node {
 
 	// Make no assumptions about indices being sorted or unique.
 	// TODO: add version where these can be set.
-	return gatherXLA(params, indices, indexVectorDim, offsetDims, collapsedSliceDims, startIndexMap, sliceSizes,
+	return backendGather(params, indices, indexVectorDim, offsetDims, collapsedSliceDims, startIndexMap, sliceSizes,
 		false)
 }
 
@@ -212,7 +215,7 @@ func GatherSlices(input *Node, slicedAxes []int, start *Node, sizes []int) (gath
 
 	// Make no assumptions about indices being sorted or unique.
 	// TODO: add version where these can be set.
-	return gatherXLA(input, start, indexVectorDim, offsetDims, collapsedSliceDims, startIndexMap, sliceSizes, false)
+	return backendGather(input, start, indexVectorDim, offsetDims, collapsedSliceDims, startIndexMap, sliceSizes, false)
 }
 
 // GatherWithBatchDims values in params from pointers in indices.
@@ -379,6 +382,6 @@ func ScatterAdd(operand, indices, updates *Node, sorted, unique bool) *Node {
 	for ii := 0; ii < indexedRank; ii++ {
 		scatterDimsToOperandDims = append(scatterDimsToOperandDims, ii)
 	}
-	return scatterXLA(operand, indices, updates, indicesRank-1, updateWindowsDims, insertedWindowDims, scatterDimsToOperandDims,
+	return backendScatterAdd(operand, indices, updates, indicesRank-1, updateWindowsDims, insertedWindowDims, scatterDimsToOperandDims,
 		sorted, unique)
 }

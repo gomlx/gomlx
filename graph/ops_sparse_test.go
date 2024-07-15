@@ -21,6 +21,8 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/types/shapes"
 	xslices "github.com/gomlx/gomlx/types/slices"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gopjrt/dtypes"
 	"golang.org/x/exp/rand"
 	"slices"
 	"testing"
