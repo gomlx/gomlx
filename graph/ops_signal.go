@@ -2,9 +2,9 @@ package graph
 
 import (
 	. "github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/xslices"
-	"github.com/gomlx/gomlx/xla"
 	"github.com/gomlx/gopjrt/dtypes"
 )
 
@@ -22,7 +22,7 @@ func FFT(operand *Node) *Node {
 	if operand.Shape().IsScalar() {
 		Panicf("FFT requires a complex input with rank > 1, got scalar %s instead", operand.DType())
 	}
-	return backendFFT(operand, xla.FftForward, []int{xslices.Last(operand.Shape().Dimensions)})
+	return backendFFT(operand, backends.FFTForward, []int{xslices.Last(operand.Shape().Dimensions)})
 }
 
 // InverseFFT computes an inverse fast-fourier transformation of the operand, which is expected to be complex.
@@ -38,7 +38,7 @@ func InverseFFT(operand *Node) *Node {
 	if operand.Shape().IsScalar() {
 		Panicf("InverseFFT requires a complex input with rank > 1, got scalar %s instead", operand.DType())
 	}
-	return fftXLA(operand, xla.FftInverse, []int{xslices.At(operand.Shape().Dimensions, -1)})
+	return fftXLA(operand, backends.FFTInverse, []int{xslices.At(operand.Shape().Dimensions, -1)})
 }
 
 // RealFFT computes a forward 1D fast-fourier transformation on a real (float) input.
@@ -57,7 +57,7 @@ func RealFFT(operand *Node) *Node {
 	if operand.Shape().IsScalar() {
 		Panicf("RealFFT requires a real (float) input with rank > 1, got scalar %s instead", operand.DType())
 	}
-	return fftXLA(operand, xla.FftForwardReal, []int{xslices.At(operand.Shape().Dimensions, -1)})
+	return fftXLA(operand, backends.FFTForwardReal, []int{xslices.At(operand.Shape().Dimensions, -1)})
 }
 
 // InverseRealFFT computes the inverse of a forward 1D fast-fourier transformation.
@@ -77,27 +77,27 @@ func InverseRealFFT(operand *Node) *Node {
 		Panicf("RealFFT requires a real (float) input with rank > 1, got scalar %s instead", operand.DType())
 	}
 	lastDim := (xslices.At(operand.Shape().Dimensions, -1) - 1) * 2
-	return fftXLA(operand, xla.FftInverseReal, []int{lastDim})
+	return fftXLA(operand, backends.FFTInverseReal, []int{lastDim})
 }
 
 // fftVJP implements the auto-grad for all the FFT variations.
 func fftVJP(node, v *Node, _ shapes.Shape) []*Node {
-	fftType := xla.FftType(node.serializedNode.Int)
-	switch fftType {
-	case xla.FftForward:
+	params := node.inputs.(*nodeInputsFFT)
+	switch params.fftType {
+	case backends.FFTForward:
 		size := float64(xslices.At(v.Shape().Dimensions, -1))
 		return []*Node{MulScalar(InverseFFT(v), size)}
-	case xla.FftInverse:
+	case backends.FFTInverse:
 		invSize := 1.0 / float64(xslices.At(v.Shape().Dimensions, -1))
 		return []*Node{MulScalar(FFT(v), invSize)}
-	case xla.FftForwardReal:
+	case backends.FFTForwardReal:
 		return realFftVJP(node, v)
-	case xla.FftInverseReal:
+	case backends.FFTInverseReal:
 		return inverseRealFftVJP(node, v)
 	}
 
 	Panicf("Sorry, gradient for FFT of type %s not implemented, please add an issue in github.com/gomlx/gomlx if you need it!",
-		fftType)
+		params.fftType)
 	return nil
 }
 
@@ -107,8 +107,9 @@ func fftVJP(node, v *Node, _ shapes.Shape) []*Node {
 //
 // Experimental, not well tested yet.
 func realFftVJP(node, v *Node) []*Node {
-	fftLength := node.serializedNode.Ints
-	isEven := 1.0 - float64(xslices.At(fftLength, -1)%2)
+	params := node.inputs.(*nodeInputsFFT)
+	fftLength := params.fftLength
+	isEven := 1.0 - float64(xslices.Last(fftLength)%2)
 	operand := node.inputNodes[0]
 	rank := operand.Rank()
 	complexDType := v.DType()
@@ -135,7 +136,7 @@ func realFftVJP(node, v *Node) []*Node {
 	// The gradient of RFFT is the IRFFT of the incoming gradient times a scaling
 	// factor, plus some additional terms to make up for the components dropped
 	// due to Hermitian symmetry.
-	irFft := fftXLA(v, xla.FftInverseReal, fftLength)
+	irFft := backendFFT(v, backends.FFTInverseReal, fftLength)
 	newVJP := MulScalar(Add(MulScalar(irFft, float64(operandLastDim)), Real(extraTerms)), 0.5)
 	return []*Node{newVJP}
 }
@@ -147,11 +148,12 @@ func realFftVJP(node, v *Node) []*Node {
 // Experimental, not well tested yet.
 func inverseRealFftVJP(node, v *Node) []*Node {
 	g := node.Graph()
+	params := node.inputs.(*nodeInputsFFT)
 	realDType := v.DType()
-	fftValue := node.inputNodes[0]
+	fftValue := params.operand
 	complexDType := fftValue.DType()
 	fftValueLastDim := xslices.Last(fftValue.Shape().Dimensions)
-	fftLength := node.serializedNode.Ints
+	fftLength := params.fftLength
 	isFftLengthOdd := xslices.Last(fftLength) % 2 // 1 if fftLength is odd, 0 if even.
 
 	// Create a simple mask like [1.0, 2.0, 2.0, ..., 2.0, 2.0, 1.0] for even-length FFTs
