@@ -3,13 +3,10 @@
 package graph
 
 import (
-	"fmt"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	"slices"
-	"strings"
 )
 
 type NodeType int
@@ -632,17 +629,8 @@ func (ni *nodeInputsConvGeneralDilated) String() string {
 	)
 }
 
-// ConvGeneralDilated is a generic Convolution operation offered by XLA.
-// featureAxisAfter defines whether the features (aka. channels or depth) axis comes after the
-// spatial dimension. Example: a 2D input can be one of the two:
-//   - featureAxisAfter=false: input=[batch_size, features, height, width], filter=[output_features, input_features, height, width]
-//   - featureAxisAfter=true:  input=[batch_size, height, width, features], filter=[output_features, height, width, input_features]
-//
-// Some details in https://www.tensorflow.org/xla/operation_semantics#convwithgeneralpadding_convolution.
-// There operand and filter are called lhs and rhs.
-// (XLA documentation is unfortunately poor, much is guess-work).
-// Also useful, https://arxiv.org/pdf/1603.07285v1.pdf.
-func ConvGeneralDilated(operand *Node, filter *Node, axes backends.ConvolveAxesConfig, strides []int, paddings [][2]int, inputDilation []int, filterDilation []int, filterGroupCount int, batchGroupCount int) (node *Node) {
+// backendConvGeneralDilated is a Graph wrapper for the backend.Builder.ConvGeneralDilated method.
+func backendConvGeneralDilated(operand *Node, filter *Node, axes backends.ConvolveAxesConfig, strides []int, paddings [][2]int, inputDilation []int, filterDilation []int, filterGroupCount int, batchGroupCount int) (node *Node) {
 	g := validateBuildingGraphFromInputs(operand, filter)
 
 	inputs := &nodeInputsConvGeneralDilated{

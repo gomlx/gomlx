@@ -1,12 +1,14 @@
 package graph
 
 import (
+	. "github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/xla"
+	"github.com/gomlx/gopjrt/dtypes"
 	"math"
 	"math/rand"
 	"time"
-
-	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/xla"
 )
 
 var (

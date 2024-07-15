@@ -17,9 +17,11 @@
 package graph
 
 import (
+	. "github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
-	timage "github.com/gomlx/gomlx/types/tensor/image"
-	"github.com/gomlx/gomlx/xla"
+	timage "github.com/gomlx/gomlx/types/tensors/images"
+	"github.com/gomlx/gomlx/types/xslices"
 )
 
 // This file contains all parts of the Convolve implementation.
@@ -303,7 +305,7 @@ func (conv *ConvolutionBuilder) Done() *Node {
 			conv.strides, conv.filterDilation)
 	}
 
-	return convGeneralDilatedXLA(conv.x, conv.kernel,
+	return checkedConvGeneralDilated(conv.x, conv.kernel,
 		conv.axes, conv.strides,
 		paddings, conv.inputDilation, conv.filterDilation,
 		conv.filterGroupCount, conv.batchGroupCount)
@@ -312,19 +314,9 @@ func (conv *ConvolutionBuilder) Done() *Node {
 // ConvolveAxesConfig defines the interpretation of the input/kernel/output tensor axes.
 // There must be the same number of spatial dimensions (axes) for each of the 3 tensors.
 // Input and output has batch and channel axes. Kernel has inputChannel and outputChannel axes.
-type ConvolveAxesConfig struct {
-	InputBatch, InputChannel int
-	InputSpatial             []int
+type ConvolveAxesConfig = backends.ConvolveAxesConfig
 
-	KernelInputChannel, KernelOutputChannel int
-	KernelSpatial                           []int
-
-	OutputBatch, OutputChannel int
-	OutputSpatial              []int
-}
-
-// convGeneralDilatedXLA is a generic Convolution operation offered by XLA. See Convolve
-// for the simpler version.
+// checkedConvGeneralDilated is a generic Convolution operation. See Convolve for the simpler version.
 // featureAxisAfter defines whether the features (aka. channels or depth) axis comes after the
 // spatial dimension. Example: a 2D input can be one of the two:
 //
@@ -335,96 +327,25 @@ type ConvolveAxesConfig struct {
 // (XLA documentation is really poor here, much is guess-work).
 // Also useful is https://arxiv.org/pdf/1603.07285v1.pdf.
 // Not exported for now, hopefully Convolve will suffice.
-func convGeneralDilatedXLA(input, filter *Node, axes ConvolveAxesConfig,
+func checkedConvGeneralDilated(input, filter *Node, axes ConvolveAxesConfig,
 	strides []int, paddings [][2]int, inputDilation, filterDilation []int,
 	filterGroupCount, batchGroupCount int) *Node {
-	g := validateBuildingGraphFromInputs(input, filter)
+	_ = validateBuildingGraphFromInputs(input, filter)
 	numSpatialDims := input.Rank() - 2
 	if len(axes.InputSpatial) != numSpatialDims || len(axes.OutputSpatial) != numSpatialDims || len(axes.KernelSpatial) != numSpatialDims {
-		Panicf("convGeneralDilatedXLA: input has %d spatial dimensions, but axes configuration has %d, %d, %d spatial axes configured "+
+		Panicf("checkedConvGeneralDilated: input has %d spatial dimensions, but axes configuration has %d, %d, %d spatial axes configured "+
 			"for input/kernel/output", numSpatialDims, len(axes.InputSpatial), len(axes.KernelSpatial), len(axes.OutputSpatial))
 	}
-
-	// Encoding of the values as follows. IMPORTANT: this code needs to be in sync with corresponding
-	// decoding code in c/gomlx/computation.cpp, in function ComputationAddOp, under GatherNode case.
-	//  * 8 first elements store the various parameters and lengths:
-	axesConfigLen := 3 * (numSpatialDims + 2)
-	ints := make([]int, 0, 7+axesConfigLen+len(strides)+2*len(paddings)+len(inputDilation)+len(filterDilation))
-	encode := func(values ...int) {
-		ints = append(ints, values...)
-	}
-
-	// Encode dimensions.
-	encode(numSpatialDims, filterGroupCount, batchGroupCount)
-	encode(len(strides), len(paddings), len(inputDilation), len(filterDilation))
-
-	// Append axes configuration.
-	encode(axes.InputBatch, axes.InputChannel)
-	encode(axes.InputSpatial...)
-	encode(axes.KernelInputChannel, axes.KernelOutputChannel)
-	encode(axes.KernelSpatial...)
-	encode(axes.OutputBatch, axes.OutputChannel)
-	encode(axes.OutputSpatial...)
-
-	// Append arrays of ints.
-	encode(strides...)
-	for _, pair := range paddings {
-		encode(pair[0], pair[1])
-	}
-	encode(inputDilation...)
-	encode(filterDilation...)
-
-	return newNode(g, &xla.SerializedNode{
-		Type: xla.ConvGeneralDilatedNode,
-		Ints: ints,
-	}, []*Node{input, filter})
+	return backendConvGeneralDilated(input, filter, axes, strides, paddings, inputDilation, filterDilation, filterGroupCount, batchGroupCount)
 }
 
 func convGeneralDilatedVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// Recover parameters from serialized node.
 	x := node.inputNodes[0]
 	kernel := node.inputNodes[1]
-	packedPos := 0
-	decode := func() int {
-		i := node.serializedNode.Ints[packedPos]
-		packedPos++
-		return i
-	}
-	decodeN := func(n int) []int {
-		slice := node.serializedNode.Ints[packedPos : packedPos+n]
-		packedPos += n
-		return slice
-	}
-
-	numSpatialDims := decode()
-	filterGroupCount, batchGroupCount := decode(), decode()
-	lenStrides := decode()
-	lenPadding := decode()
-	lenInputDilation := decode()
-	lenFilterDilation := decode()
-
-	var axes ConvolveAxesConfig
-	axes.InputBatch, axes.InputChannel = decode(), decode()
-	axes.InputSpatial = decodeN(numSpatialDims)
-	axes.KernelInputChannel, axes.KernelOutputChannel = decode(), decode()
-	axes.KernelSpatial = decodeN(numSpatialDims)
-	axes.OutputBatch, axes.OutputChannel = decode(), decode()
-	axes.OutputSpatial = decodeN(numSpatialDims)
-
-	strides := decodeN(lenStrides)
-	paddings := make([][2]int, lenPadding)
-	for ii := range paddings {
-		paddings[ii][0] = decode()
-		paddings[ii][1] = decode()
-	}
-	inputDilation := decodeN(lenInputDilation)
-	filterDilation := decodeN(lenFilterDilation)
-
-	// Not used.
-	_, _ = filterGroupCount, batchGroupCount
-	_ = inputDilation
-
-	if lenInputDilation > 0 {
+	params := node.inputs.(*nodeInputsConvGeneralDilated)
+	numSpatialDims := x.Rank() - 2
+	if len(params.inputDilation) > 0 {
 		Panicf("gradient of Convolve with input dilation not defined, " +
 			"usually it's only used to calculate the gradient of a convolution, so " +
 			"this may occur when trying to do the gradient of a gradient.")
@@ -434,10 +355,10 @@ func convGeneralDilatedVJP(node, v *Node, _ shapes.Shape) []*Node {
 	//fmt.Printf("\tkernel.shape=%s\n", kernel.Shape())
 	//fmt.Printf("\tnode.shape=%s\n", node.Shape())
 
-	vjpX := convVJPWrtX(node, x, kernel, v, numSpatialDims, axes,
-		strides, paddings, filterDilation)
-	vjpKernel := convVJPWrtKernel(node, x, kernel, v, numSpatialDims, axes,
-		strides, paddings, filterDilation)
+	vjpX := convVJPWrtX(node, x, kernel, v, numSpatialDims, params.axes,
+		params.strides, params.paddings, params.filterDilation)
+	vjpKernel := convVJPWrtKernel(node, x, kernel, v, numSpatialDims, params.axes,
+		params.strides, params.paddings, params.filterDilation)
 	return []*Node{vjpX, vjpKernel}
 }
 

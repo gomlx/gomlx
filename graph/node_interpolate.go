@@ -1,6 +1,7 @@
 package graph
 
 import (
+	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"golang.org/x/exp/constraints"
 )

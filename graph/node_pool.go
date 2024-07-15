@@ -17,8 +17,9 @@
 package graph
 
 import (
+	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
-	timage "github.com/gomlx/gomlx/types/tensor/image"
+	timage "github.com/gomlx/gomlx/types/tensors/images"
 	"github.com/gomlx/gomlx/xla"
 )
 
