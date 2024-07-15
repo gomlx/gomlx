@@ -47,6 +47,15 @@ type Builder interface {
 	// It's a no-op that can serve as a place-holder.
 	Identity(x Op) Op
 
+	// ReduceWindow runs a reduction function of the type given by reductionType,
+	// it can be either ReduceMaxNode, ReduceSumNode or ReduceMultiplyNode.
+	//
+	// The parameter windowDimensions must be set and have a value for each axis.
+	// If strides is nil, it's assumed to be the same as windowDimensions -- that is, the strides jump a window at a time.
+	// If baseDilations, windowDilations are nil, they are assumed to be 1 (no dilation).
+	// If paddings are nil they are assumed to be 0.
+	ReduceWindow(x Op, reductionType ReduceOpType, windowDimensions, strides, baseDilations, windowDilations []int, paddings [][2]int) Op
+
 	// StandardOps include automatically generated list of operations for the Builder.
 	StandardOps
 }
@@ -101,3 +110,25 @@ const (
 )
 
 //go:generate stringer -type FFTType -trimprefix=FFT
+
+// ReduceOpType select among the basic types of reduction supported, see XlaBuilder.ReduceComputation.
+type ReduceOpType int
+
+const (
+	// ReduceOpUndefined is an undefined value.
+	ReduceOpUndefined ReduceOpType = iota
+
+	// ReduceOpSum reduces by summing all elements being reduced.
+	ReduceOpSum
+
+	// ReduceOpProduct reduces by multiplying all elements being reduced.
+	ReduceOpProduct
+
+	// ReduceOpMax reduces by taking the maximum value.
+	ReduceOpMax
+
+	// ReduceOpMin reduces by taking the minimum value.
+	ReduceOpMin
+)
+
+//go:generate stringer -type ReduceOpType -trimprefix=ReduceOp

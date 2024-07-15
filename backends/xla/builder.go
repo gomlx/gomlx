@@ -96,7 +96,7 @@ func (b *Builder) Constant(flat any, dims ...int) backends.Op {
 	literal := xlabuilder.NewArrayLiteralFromAny(flat, dims...)
 	op, err := xlabuilder.Constant(b.builder, literal)
 	if err != nil {
-		panic(errors.WithMessagef(err, "backend %q: Constant(%T, dims=%v)", b.name, flat, dims))
+		panic(errors.WithMessagef(err, "backend %q builder %q: Constant(%T, dims=%v)", b.backend.Name(), b.name, flat, dims))
 	}
 	return op
 }
@@ -118,6 +118,32 @@ func (b *Builder) verifyAndCastOp(op backends.Op, paramName string) *xlabuilder.
 func (b *Builder) Identity(x backends.Op) backends.Op {
 	xlaX := b.verifyAndCastOp(x, "x")
 	return xlabuilder.Identity(xlaX)
+}
+
+func (b *Builder) ReduceWindow(x backends.Op, reductionType backends.ReduceOpType, windowDimensions, strides, baseDilations, windowDilations []int, paddings [][2]int) backends.Op {
+	xlaX := b.verifyAndCastOp(x, "x")
+	cfg := xlabuilder.ReduceWindow(xlaX, windowDimensions).
+		WithStrides(strides).
+		WithBaseDilations(baseDilations).
+		WithWindowDilations(windowDilations).
+		WithPadding(paddings)
+	switch reductionType {
+	case backends.ReduceOpSum:
+		cfg = cfg.Sum()
+	case backends.ReduceOpMax:
+		cfg = cfg.Max()
+	case backends.ReduceOpMin:
+		cfg = cfg.Min()
+	case backends.ReduceOpProduct:
+		cfg = cfg.Product()
+	default:
+		exceptions.Panicf("unknown reduction type %s given to ReduceWindow (building %q)", reductionType, b.name)
+	}
+	op, err := cfg.Done()
+	if err != nil {
+		panic(errors.WithMessagef(err, "backend %q builder %q: ReduceWindow(reductionType=%s)", b.backend.Name(), b.name, reductionType))
+	}
+	return op
 }
 
 func convertConvolveAxesConfig(c backends.ConvolveAxesConfig) (xlaConfig xlabuilder.ConvolveAxesConfig) {

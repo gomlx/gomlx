@@ -162,7 +162,7 @@ func (conv *ConvBuilder) Strides(strides int) *ConvBuilder {
 // One cannot use strides and dilation at the same time.
 func (conv *ConvBuilder) StridePerDim(strides ...int) *ConvBuilder {
 	if len(strides) != conv.numSpatialDims {
-		Panicf("received %d strides in StridePerDim, but x has %d spatial dimensions",
+		Panicf("received %d strides in StridePerAxis, but x has %d spatial dimensions",
 			len(strides), conv.numSpatialDims)
 		return conv
 	}

@@ -31,13 +31,6 @@ type NodeType int32
 
 //go:generate stringer -type=NodeType node.go
 
-// XlaWrapperVersion is the version of the library.
-// It should match the C++ one, if they are out-of-sync very odd mistakes happen.
-//
-// Please bump whenever a new NodeType is created, and keep the C++ (in `c/gomlx/status.h`) and Go version numbers
-// in sync.
-const XlaWrapperVersion = 14
-
 // NodeType values need to be exactly the same as defined in the C++ code, in `c/gomlx/node.h`
 // TODO: keep those in sync using some generator script.
 const (
@@ -160,29 +153,4 @@ const (
 	// RngPhilox algorithm to generate random numbers in parallel. The initial_state shape is `U64[3]` with arbitrary values.
 	// [Salmon et al. SC 2011. Parallel random numbers: as easy as 1, 2, 3](https://www.thesalmons.org/john/random123/papers/random123sc11.pdf).
 	RngPhilox
-)
-
-// FftType should be aligned with the constants in `xla_data.proto` file in the XLA code base.
-//
-// The XLA's FFT operator can work i different ways, this defines how.
-type FftType int
-
-//go:generate stringer -type=FftType node.go
-
-const (
-	// FftForward does a forward FFT: complex in, complex out.
-	// FFT in the proto.
-	FftForward FftType = iota
-
-	// FftInverse does an inverse FFT: complex in, complex out.
-	// IFFT in the proto.
-	FftInverse
-
-	// FftForwardReal does a forward real FFT: real in, fft_length / 2 + 1 complex out
-	// RFFT in the proto.
-	FftForwardReal
-
-	// FftInverseReal does an inverse real FFT: fft_length / 2 + 1 complex in, real out
-	// IRFFT in the proto.
-	FftInverseReal
 )

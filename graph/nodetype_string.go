@@ -65,31 +65,32 @@ func _() {
 	_ = x[NodeTypeReduceMin-54]
 	_ = x[NodeTypeReduceProduct-55]
 	_ = x[NodeTypeReduceSum-56]
-	_ = x[NodeTypeRem-57]
-	_ = x[NodeTypeReshape-58]
-	_ = x[NodeTypeReverse-59]
-	_ = x[NodeTypeRound-60]
-	_ = x[NodeTypeRsqrt-61]
-	_ = x[NodeTypeScatterAdd-62]
-	_ = x[NodeTypeScatterMax-63]
-	_ = x[NodeTypeScatterMin-64]
-	_ = x[NodeTypeSelectAndScatterMax-65]
-	_ = x[NodeTypeSelectAndScatterMin-66]
-	_ = x[NodeTypeSelectAndScatterSum-67]
-	_ = x[NodeTypeSign-68]
-	_ = x[NodeTypeSin-69]
-	_ = x[NodeTypeSlice-70]
-	_ = x[NodeTypeSqrt-71]
-	_ = x[NodeTypeSub-72]
-	_ = x[NodeTypeTanh-73]
-	_ = x[NodeTypeTranspose-74]
-	_ = x[NodeTypeWhere-75]
-	_ = x[NodeTypeXor-76]
+	_ = x[NodeTypeReduceWindow-57]
+	_ = x[NodeTypeRem-58]
+	_ = x[NodeTypeReshape-59]
+	_ = x[NodeTypeReverse-60]
+	_ = x[NodeTypeRound-61]
+	_ = x[NodeTypeRsqrt-62]
+	_ = x[NodeTypeScatterAdd-63]
+	_ = x[NodeTypeScatterMax-64]
+	_ = x[NodeTypeScatterMin-65]
+	_ = x[NodeTypeSelectAndScatterMax-66]
+	_ = x[NodeTypeSelectAndScatterMin-67]
+	_ = x[NodeTypeSelectAndScatterSum-68]
+	_ = x[NodeTypeSign-69]
+	_ = x[NodeTypeSin-70]
+	_ = x[NodeTypeSlice-71]
+	_ = x[NodeTypeSqrt-72]
+	_ = x[NodeTypeSub-73]
+	_ = x[NodeTypeTanh-74]
+	_ = x[NodeTypeTranspose-75]
+	_ = x[NodeTypeWhere-76]
+	_ = x[NodeTypeXor-77]
 }
 
-const _NodeType_name = "InvalidAbsAddAndArgMinMaxBatchNormInferenceBroadcastBroadcastInDimCeilClzComplexConcatenateConjConstantConvGeneralDilatedConvertDTypeCosDivDotDotGeneralEqualEqualTotalOrderExpExpm1FFTFloorGatherGreaterOrEqualGreaterOrEqualTotalOrderGreaterThanGreaterThanTotalOrderIdentityImagIotaLessOrEqualLessOrEqualTotalOrderLessThanLessThanTotalOrderLogLog1pLogicalNotLogisticMaxMinMulNegNotEqualNotEqualTotalOrderOrPadParameterPowRealReduceMaxReduceMinReduceProductReduceSumRemReshapeReverseRoundRsqrtScatterAddScatterMaxScatterMinSelectAndScatterMaxSelectAndScatterMinSelectAndScatterSumSignSinSliceSqrtSubTanhTransposeWhereXor"
+const _NodeType_name = "InvalidAbsAddAndArgMinMaxBatchNormInferenceBroadcastBroadcastInDimCeilClzComplexConcatenateConjConstantConvGeneralDilatedConvertDTypeCosDivDotDotGeneralEqualEqualTotalOrderExpExpm1FFTFloorGatherGreaterOrEqualGreaterOrEqualTotalOrderGreaterThanGreaterThanTotalOrderIdentityImagIotaLessOrEqualLessOrEqualTotalOrderLessThanLessThanTotalOrderLogLog1pLogicalNotLogisticMaxMinMulNegNotEqualNotEqualTotalOrderOrPadParameterPowRealReduceMaxReduceMinReduceProductReduceSumReduceWindowRemReshapeReverseRoundRsqrtScatterAddScatterMaxScatterMinSelectAndScatterMaxSelectAndScatterMinSelectAndScatterSumSignSinSliceSqrtSubTanhTransposeWhereXor"
 
-var _NodeType_index = [...]uint16{0, 7, 10, 13, 16, 25, 43, 52, 66, 70, 73, 80, 91, 95, 103, 121, 133, 136, 139, 142, 152, 157, 172, 175, 180, 183, 188, 194, 208, 232, 243, 264, 272, 276, 280, 291, 312, 320, 338, 341, 346, 356, 364, 367, 370, 373, 376, 384, 402, 404, 407, 416, 419, 423, 432, 441, 454, 463, 466, 473, 480, 485, 490, 500, 510, 520, 539, 558, 577, 581, 584, 589, 593, 596, 600, 609, 614, 617}
+var _NodeType_index = [...]uint16{0, 7, 10, 13, 16, 25, 43, 52, 66, 70, 73, 80, 91, 95, 103, 121, 133, 136, 139, 142, 152, 157, 172, 175, 180, 183, 188, 194, 208, 232, 243, 264, 272, 276, 280, 291, 312, 320, 338, 341, 346, 356, 364, 367, 370, 373, 376, 384, 402, 404, 407, 416, 419, 423, 432, 441, 454, 463, 475, 478, 485, 492, 497, 502, 512, 522, 532, 551, 570, 589, 593, 596, 601, 605, 608, 612, 621, 626, 629}
 
 func (i NodeType) String() string {
 	if i < 0 || i >= NodeType(len(_NodeType_index)-1) {

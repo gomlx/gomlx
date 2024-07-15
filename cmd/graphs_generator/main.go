@@ -28,7 +28,7 @@ var (
 	methodsNotExported = types.SetWith(
 		"ArgMinMax", "Broadcast", "BroadcastInDim",
 		"Concatenate", "ConvGeneralDilated", "DotGeneral", "FFT", "Gather", "Iota",
-		"ReduceMax", "ReduceMin", "ReduceProduct", "ReduceSum",
+		"ReduceMax", "ReduceMin", "ReduceProduct", "ReduceSum", "ReduceWindow",
 		"Reshape", "Reverse", "ScatterAdd", "Sign", "Slice",
 		"Transpose", "Where")
 

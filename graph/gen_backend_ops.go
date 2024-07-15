@@ -69,6 +69,7 @@ const (
 	NodeTypeReduceMin
 	NodeTypeReduceProduct
 	NodeTypeReduceSum
+	NodeTypeReduceWindow
 	NodeTypeRem
 	NodeTypeReshape
 	NodeTypeReverse
@@ -2331,6 +2332,61 @@ func backendReduceSum(x *Node, axes ...int) (node *Node) {
 		axes: slices.Clone(axes),
 	}
 	result := g.builder.ReduceSum(x.op, inputs.axes...)
+	node = &Node{
+		graph:      g,
+		op:         result,
+		shape:      g.builder.OpShape(result),
+		inputs:     inputs,
+		inputNodes: []*Node{x},
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsReduceWindow holds the inputs used for the call to backends.ReduceWindow.
+type nodeInputsReduceWindow struct {
+	x                *Node
+	reductionType    ReduceOpType
+	windowDimensions []int
+	strides          []int
+	baseDilations    []int
+	windowDilations  []int
+	paddings         [][2]int
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsReduceWindow) Type() NodeType {
+	return NodeTypeReduceWindow
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsReduceWindow) String() string {
+	return fmt.Sprintf("%s(x=[#%d], reductionType=%v, windowDimensions=%v, strides=%v, baseDilations=%v, windowDilations=%v, paddings=%v)",
+		ni.Type(),
+		ni.x.Id(),
+		ni.reductionType,
+		ni.windowDimensions,
+		ni.strides,
+		ni.baseDilations,
+		ni.windowDilations,
+		ni.paddings,
+	)
+}
+
+// backendReduceWindow is a Graph wrapper for the backend.Builder.ReduceWindow method.
+func backendReduceWindow(x *Node, reductionType ReduceOpType, windowDimensions []int, strides []int, baseDilations []int, windowDilations []int, paddings [][2]int) (node *Node) {
+	g := validateBuildingGraphFromInputs(x)
+
+	inputs := &nodeInputsReduceWindow{
+		x:                x,
+		reductionType:    reductionType,
+		windowDimensions: windowDimensions,
+		strides:          strides,
+		baseDilations:    baseDilations,
+		windowDilations:  windowDilations,
+		paddings:         paddings,
+	}
+	result := g.builder.ReduceWindow(x.op, inputs.reductionType, inputs.windowDimensions, inputs.strides, inputs.baseDilations, inputs.windowDilations, inputs.paddings)
 	node = &Node{
 		graph:      g,
 		op:         result,

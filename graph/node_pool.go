@@ -18,12 +18,16 @@ package graph
 
 import (
 	. "github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
-	timage "github.com/gomlx/gomlx/types/tensors/images"
+	"github.com/gomlx/gomlx/types/tensors/images"
+	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gomlx/xla"
 )
 
 // This file contains all parts of the {Max|Sum|Prod}Pool implementation.
+
+type ReduceOpType = backends.ReduceOpType
 
 // PoolBuilder is a helper to build a pool computation.
 // Create it with {Max|Sum|Mean|Prod}Pool, set the desired parameters and
@@ -31,9 +35,9 @@ import (
 type PoolBuilder struct {
 	graph                *Graph
 	x                    *Node
-	reductionType        xla.NodeType
+	reductionType        ReduceOpType
 	numSpatialDims       int
-	channelsAxisConfig   timage.ChannelsAxisConfig
+	channelsAxisConfig   images.ChannelsAxisConfig
 	spatialAxes          []int // Indices of spatial axes.
 	channelsAxis         int
 	windowSizes, strides []int
@@ -46,89 +50,117 @@ type PoolBuilder struct {
 // number of spatial dimensions (1D, 2D, 3D, etc.). It returns the max value
 // for the selected window, on given strides.
 //
-// It is very flexible and to ease setting its parameters it returns a
+// It is very flexible and to ease configuring of its parameters it returns a
 // PoolBuilder for configuration. Once it is set up
 // call `PoolBuilder.Done` and it will return the pooled
 // x. Browse through PoolBuilder to see the capabilities, and the defaults.
 //
-// The window sizes must be set with PoolBuilder.Window or PoolBuilder.WindowPerDim.
+// The window sizes must be set with PoolBuilder.Window or PoolBuilder.WindowPerAxis.
 //
 // The shape of x should be `[batch, <spatial_dimensions...>, input_channels]` if
-// configured with `PoolBuilder.ChannelsAxis(timage.ChannelsLast)`, the default. If one
-// sets `PoolBuilder.ChannelsAxis(timage.ChannelsFirst)`, the shape should be
+// configured with `PoolBuilder.ChannelsAxis(images.ChannelsLast)`, the default. If one
+// sets `PoolBuilder.ChannelsAxis(images.ChannelsFirst)`, the shape should be
 // `[batch, input_channels, <spatial_dimensions...>]` instead.
 //
 // The "channels" axis is also known as depth or feature axis.
 //
-// Note: `timage` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
+// Note: `images` refers to package `github.com/gomlx/gomlx/types/tensors/images`.
 //
 // The shape of kernel should be `[<spatial_dimensions...>, input_channels, output_channels]` if
-// configured with `PoolBuilder.ChannelsAxis(timage.ChannelsLast)`, the default. If one
-// sets `PoolBuilder.ChannelsAxis(timage.Channels)`, the shape should be
+// configured with `PoolBuilder.ChannelsAxis(images.ChannelsLast)`, the default. If one
+// sets `PoolBuilder.ChannelsAxis(images.Channels)`, the shape should be
 // `[input_channels, <spatial_dimensions...>, output_channels]` instead.
 func MaxPool(x *Node) *PoolBuilder {
-	return makePoolBuilder(x, xla.ReduceMaxNode)
+	return makePoolBuilder(x, backends.ReduceOpMax)
+}
+
+// MinPool prepares a min pooling on x with the given kernel for arbitrary
+// number of spatial dimensions (1D, 2D, 3D, etc.). It returns the min value
+// for the selected window, on given strides.
+//
+// It is very flexible and to ease configuring of its parameters it returns a
+// PoolBuilder for configuration. Once it is set up
+// call `PoolBuilder.Done` and it will return the pooled
+// x. Browse through PoolBuilder to see the capabilities, and the defaults.
+//
+// The window sizes must be set with PoolBuilder.Window or PoolBuilder.WindowPerAxis.
+//
+// The shape of x should be `[batch, <spatial_dimensions...>, input_channels]` if
+// configured with `PoolBuilder.ChannelsAxis(images.ChannelsLast)`, the default. If one
+// sets `PoolBuilder.ChannelsAxis(images.ChannelsFirst)`, the shape should be
+// `[batch, input_channels, <spatial_dimensions...>]` instead.
+//
+// The "channels" axis is also known as depth or feature axis.
+//
+// Note: `images` refers to package `github.com/gomlx/gomlx/types/tensors/images`.
+//
+// The shape of kernel should be `[<spatial_dimensions...>, input_channels, output_channels]` if
+// configured with `PoolBuilder.ChannelsAxis(images.ChannelsLast)`, the default. If one
+// sets `PoolBuilder.ChannelsAxis(images.Channels)`, the shape should be
+// `[input_channels, <spatial_dimensions...>, output_channels]` instead.
+func MinPool(x *Node) *PoolBuilder {
+	return makePoolBuilder(x, backends.ReduceOpMin)
 }
 
 // SumPool prepares a sum pooling on x with the given kernel for arbitrary
 // number of spatial dimensions (1D, 2D, 3D, etc.). It returns the sum value
 // for the selected window, on given strides.
 //
-// It is very flexible and to ease setting its parameters it returns a
+// It is very flexible and to ease configuring of its parameters it returns a
 // PoolBuilder for configuration. Once it is set up
 // call `PoolBuilder.Done` and it will return the pooled
 // x. Browse through PoolBuilder to see the capabilities, and the defaults.
 //
-// The window sizes must be set with PoolBuilder.Window or PoolBuilder.WindowPerDim.
+// The window sizes must be set with PoolBuilder.Window or PoolBuilder.WindowPerAxis.
 //
 // The shape of x should be `[batch, <spatial_dimensions...>, input_channels]` if
-// configured with `PoolBuilder.ChannelsAxis(timage.ChannelsLast)`, the default. If one
-// sets `PoolBuilder.ChannelsAxis(timage.ChannelsFirst)`, the shape should be
+// configured with `PoolBuilder.ChannelsAxis(images.ChannelsLast)`, the default. If one
+// sets `PoolBuilder.ChannelsAxis(images.ChannelsFirst)`, the shape should be
 // `[batch, input_channels, <spatial_dimensions...>]` instead.
 //
 // The "channels" axis is also known as depth or feature axis.
 //
-// Note: `timage` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
+// Note: `images` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
 //
 // The shape of kernel should be `[<spatial_dimensions...>, input_channels, output_channels]` if
-// configured with `PoolBuilder.ChannelsAxis(timage.ChannelsLast)`, the default. If one
-// sets `PoolBuilder.ChannelsAxis(timage.Channels)`, the shape should be
+// configured with `PoolBuilder.ChannelsAxis(images.ChannelsLast)`, the default. If one
+// sets `PoolBuilder.ChannelsAxis(images.Channels)`, the shape should be
 // `[input_channels, <spatial_dimensions...>, output_channels]` instead.
 func SumPool(x *Node) *PoolBuilder {
-	return makePoolBuilder(x, xla.ReduceSumNode)
+	return makePoolBuilder(x, backends.ReduceOpSum)
 }
 
 // MeanPool prepares a mean pooling on x with the given kernel for arbitrary
 // number of spatial dimensions (1D, 2D, 3D, etc.). It returns the mean value
 // for the selected window, on given strides.
 //
-// It is very flexible and to ease setting its parameters it returns a
+// It is very flexible and to ease configuring of its parameters it returns a
 // PoolBuilder for configuration. Once it is set up
 // call `PoolBuilder.Done` and it will return the pooled
 // x. Browse through PoolBuilder to see the capabilities, and the defaults.
 //
-// The window sizes must be set with PoolBuilder.Window or PoolBuilder.WindowPerDim.
+// The window sizes must be set with PoolBuilder.Window or PoolBuilder.WindowPerAxis.
 //
 // The shape of x should be `[batch, <spatial_dimensions...>, input_channels]` if
-// configured with `PoolBuilder.ChannelsAxis(timage.ChannelsLast)`, the default. If one
-// sets `PoolBuilder.ChannelsAxis(timage.ChannelsFirst)`, the shape should be
+// configured with `PoolBuilder.ChannelsAxis(images.ChannelsLast)`, the default. If one
+// sets `PoolBuilder.ChannelsAxis(images.ChannelsFirst)`, the shape should be
 // `[batch, input_channels, <spatial_dimensions...>]` instead.
 //
 // The "channels" axis is also known as depth or feature axis.
 //
-// Note: `timage` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
+// Note: `images` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
 //
 // The shape of kernel should be `[<spatial_dimensions...>, input_channels, output_channels]` if
-// configured with `PoolBuilder.ChannelsAxis(timage.ChannelsLast)`, the default. If one
-// sets `PoolBuilder.ChannelsAxis(timage.Channels)`, the shape should be
+// configured with `PoolBuilder.ChannelsAxis(images.ChannelsLast)`, the default. If one
+// sets `PoolBuilder.ChannelsAxis(images.Channels)`, the shape should be
 // `[input_channels, <spatial_dimensions...>, output_channels]` instead.
 func MeanPool(x *Node) *PoolBuilder {
-	pool := makePoolBuilder(x, xla.ReduceSumNode)
+	pool := makePoolBuilder(x, backends.ReduceOpSum)
 	pool.isMean = true
 	return pool
 }
 
-func makePoolBuilder(x *Node, reductionType xla.NodeType) *PoolBuilder {
+func makePoolBuilder(x *Node, reductionType ReduceOpType) *PoolBuilder {
 	g := validateBuildingGraphFromInputs(x)
 	pool := &PoolBuilder{
 		graph:         g,
@@ -140,39 +172,39 @@ func makePoolBuilder(x *Node, reductionType xla.NodeType) *PoolBuilder {
 		Panicf("Input x must have rank >= 3, shaped by default as [batch, <spatial_dimensions...>, channels] (alternatively channels come first), "+
 			"but x rank is %d", x.Rank())
 	}
-	return pool.ChannelsAxis(timage.ChannelsLast).NoPadding()
+	return pool.ChannelsAxis(images.ChannelsLast).NoPadding()
 }
 
 // ChannelsAxis configures the axis for the channels (aka. "depth" or "features") dimension. The default is
-// `timage.ChannelsLast`, meaning the "channels" dimension comes last.
+// `images.ChannelsLast`, meaning the "channels" dimension comes last.
 //
-// Note: `timage` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
+// Note: `images` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
 //
 // It returns the modified Config object, so calls can be cascaded.
-func (pool *PoolBuilder) ChannelsAxis(channelsAxisConfig timage.ChannelsAxisConfig) *PoolBuilder {
+func (pool *PoolBuilder) ChannelsAxis(channelsAxisConfig images.ChannelsAxisConfig) *PoolBuilder {
 	pool.channelsAxisConfig = channelsAxisConfig
-	pool.channelsAxis = timage.GetChannelsAxis(pool.x, channelsAxisConfig)
-	pool.spatialAxes = timage.GetSpatialAxes(pool.x, channelsAxisConfig)
+	pool.channelsAxis = images.GetChannelsAxis(pool.x, channelsAxisConfig)
+	pool.spatialAxes = images.GetSpatialAxes(pool.x, channelsAxisConfig)
 	return pool
 }
 
 // Window sets the pooling window size for all spatial dimensions to the same windowSize.
 //
-// There is no default, and this must be set either with Window or WindowPerDim.
+// There is no default, and this must be set either with Window or WindowPerAxis.
 func (pool *PoolBuilder) Window(windowSize int) *PoolBuilder {
 	windowSizes := make([]int, pool.numSpatialDims)
 	for ii := range windowSizes {
 		windowSizes[ii] = windowSize
 	}
-	return pool.WindowPerDim(windowSizes...)
+	return pool.WindowPerAxis(windowSizes...)
 }
 
-// WindowPerDim sets the pooling window size for each spatial dimension.
+// WindowPerAxis sets the pooling window size for each spatial dimension.
 //
-// There is no default, and this must be set either with Window or WindowPerDim.
-func (pool *PoolBuilder) WindowPerDim(sizes ...int) *PoolBuilder {
+// There is no default, and this must be set either with Window or WindowPerAxis.
+func (pool *PoolBuilder) WindowPerAxis(sizes ...int) *PoolBuilder {
 	if len(sizes) != pool.numSpatialDims {
-		Panicf("received %d window sizes in WindowPerDim, but x has %d spatial dimensions",
+		Panicf("received %d window sizes in WindowPerAxis, but x has %d spatial dimensions",
 			len(sizes), pool.numSpatialDims)
 	}
 	pool.windowSizes = sizes
@@ -181,33 +213,32 @@ func (pool *PoolBuilder) WindowPerDim(sizes ...int) *PoolBuilder {
 
 // Strides sets the strides of the pooling. It sets the same value for every spatial dimension.
 //
-// The default is the same value as the window size (set with Window or WindowPerDim).
+// The default is the same value as the window size (set with Window or WindowPerAxis) -- except if one
+// uses PadSame, then the default changes to 1.
 //
 // The stride is how many steps to move after the pooling of a window. A value of 2 will halve the
 // input size, since the pooling will be done at every other position, and so on. It can be defined
-// separately per dimension with StridePerDim.
+// separately per dimension with StridePerAxis.
 //
 // One cannot use strides and dilation at the same time.
 func (pool *PoolBuilder) Strides(strides int) *PoolBuilder {
-	stridesPerAxis := make([]int, pool.numSpatialDims)
-	for ii := range stridesPerAxis {
-		stridesPerAxis[ii] = strides
-	}
-	return pool.StridePerDim(stridesPerAxis...)
+	stridesPerAxis := xslices.SliceWithValue(pool.numSpatialDims, strides)
+	return pool.StridePerAxis(stridesPerAxis...)
 }
 
-// StridePerDim sets the strides for each spatial dimension of the pooling.
+// StridePerAxis sets the strides for each spatial dimension of the pooling.
 //
-// The default is the same value as the window size (set with Window or WindowPerDim).
+// The default is the same value as the window size (set with Window or WindowPerAxis) -- except if one
+// uses PadSame, then the default changes to 1.
 //
 // The stride is how many steps to move after a pooling. A value of 2 will half the input
 // size, since a pooling will be done at every other position, and so on. It can be defined
 // separately per dimension.
 //
 // One cannot use strides and dilation at the same time.
-func (pool *PoolBuilder) StridePerDim(strides ...int) *PoolBuilder {
+func (pool *PoolBuilder) StridePerAxis(strides ...int) *PoolBuilder {
 	if len(strides) != pool.numSpatialDims {
-		Panicf("received %d strides in StridePerDim, but x has %d spatial dimensions",
+		Panicf("received %d strides in StridePerAxis, but x has %d spatial dimensions",
 			len(strides), pool.numSpatialDims)
 	}
 	pool.strides = strides
@@ -215,7 +246,11 @@ func (pool *PoolBuilder) StridePerDim(strides ...int) *PoolBuilder {
 }
 
 // PadSame adds paddings on the edges of x such that in the end the output
-// of the convolution has the same shape as the input (assuming strides=1).
+// of the convolution has the same shape as the input.
+//
+// This changes the default value of Strides to 1, if it is not set -- if set to something else, PadSame won't really
+// output the same shape as the input.
+//
 // The default is NoPadding.
 func (pool *PoolBuilder) PadSame() *PoolBuilder {
 	pool.paddings = nil
@@ -253,11 +288,8 @@ func (pool *PoolBuilder) Done() *Node {
 
 	// Closure to create slice with value for every axis, using a default value
 	// and the corresponding spatial values.
-	makeSlice := func(d int, valuesForSpatialDims []int) []int {
-		s := make([]int, rank)
-		for ii := range s {
-			s[ii] = d
-		}
+	makeSlice := func(defaultValue int, valuesForSpatialDims []int) []int {
+		s := xslices.SliceWithValue(rank, defaultValue)
 		if len(valuesForSpatialDims) > 0 {
 			for ii, axis := range pool.spatialAxes {
 				s[axis] = valuesForSpatialDims[ii]
@@ -268,7 +300,7 @@ func (pool *PoolBuilder) Done() *Node {
 
 	// windowSizes is obligatory.
 	if len(pool.windowSizes) == 0 {
-		Panicf("window sizes required but not configured -- use .Window() or .WindowPerDim()")
+		Panicf("window sizes required but not configured -- use .Window() or .WindowPerAxis()")
 	}
 	windowDimensions := makeSlice(1, pool.windowSizes)
 
@@ -277,7 +309,13 @@ func (pool *PoolBuilder) Done() *Node {
 	if len(pool.strides) > 0 {
 		strides = makeSlice(1, pool.strides)
 	} else {
-		strides = makeSlice(1, pool.windowSizes)
+		if pool.padSame {
+			// if PadSame(), then the strides default to 1, to preserve the image size.
+			strides = makeSlice(1, nil)
+		} else {
+			// strides default to the window size.
+			strides = makeSlice(1, pool.windowSizes)
+		}
 	}
 
 	// spatialPaddings can only be calculated after we are sure about the channels positioning.
@@ -298,11 +336,11 @@ func (pool *PoolBuilder) Done() *Node {
 			paddings[axis] = spatialPaddings[ii]
 		}
 	}
-	pooled := reduceWindowXLA(pool.x, pool.reductionType,
+	pooled := checkedReduceWindow(pool.x, pool.reductionType,
 		windowDimensions, strides, nil, nil, paddings)
 
 	// Take the mean.
-	if pool.isMean && pool.reductionType == xla.ReduceSumNode {
+	if pool.isMean && pool.reductionType == backends.ReduceOpSum {
 		if len(paddings) == 0 {
 			// If no padding, the number of elements to take the mean is fixed:
 			totalWindowSize := 1
@@ -321,86 +359,38 @@ func (pool *PoolBuilder) Done() *Node {
 // takeMeanOfContributions divides the pooled sum by the number of contributions at each position.
 func takeMeanOfContributions(x, pooledSum *Node, channelsAxis int, windowDimensions, strides []int, paddings [][2]int) *Node {
 	// We need to normalize the sum by the number of elements that were actually used, ignoring the padding.
-	// We use a similar reduceWindowXLA configuration, but as input a tensor with 1s and dropping the
+	// We use a similar checkedReduceWindow configuration, but as input a tensor with 1s and dropping the
 	// batch and channels axes, since they will are the same.
 	shapeNoBatchOrChannels := x.shape.Clone()
 	shapeNoBatchOrChannels.Dimensions[0] = 1
 	shapeNoBatchOrChannels.Dimensions[channelsAxis] = 1
 	ones := Ones(x.graph, shapeNoBatchOrChannels)
-	pooledOnes := reduceWindowXLA(ones, xla.ReduceSumNode,
+	pooledOnes := checkedReduceWindow(ones, backends.ReduceOpSum,
 		windowDimensions, strides, nil, nil, paddings)
 	pooledOnes = StopGradient(pooledOnes)
 	return Div(pooledSum, pooledOnes)
 }
 
-// reduceWindowXLA runs a reduction function, here limited to the value given by reductionType,
-// it can be either ReduceMaxNode, ReduceSumNode or ReduceMultiplyNode.
-//
-// The parameter windowDimensions must be set and have a value for each axis. The parameters `strides`, `baseDilations`
-// and `windowDilations` and `paddings` can be left as nil if not used.
-func reduceWindowXLA(x *Node, reductionType xla.NodeType, windowDimensions, strides, baseDilations, windowDilations []int, paddings [][2]int) *Node {
-	g := validateBuildingGraphFromInputs(x)
-	dtype := x.DType()
+// checkedReduceWindow is a checked version of backendReduceWindow.
+func checkedReduceWindow(x *Node, reductionType ReduceOpType, windowDimensions, strides, baseDilations, windowDilations []int, paddings [][2]int) *Node {
+	_ = validateBuildingGraphFromInputs(x)
 	rank := x.Rank()
 	if len(windowDimensions) != rank {
-		Panicf("windowSizes (length %d) must have same length as rank of input x (rank %d)", len(windowDimensions), rank)
+		Panicf("windowDimensions (length %d) must have the same length as the rank of x (rank %d)", len(windowDimensions), rank)
 	}
 	if len(strides) != 0 && len(strides) != rank {
-		Panicf("strides (length %d) must have same length as rank of input x (rank %d)", len(strides), rank)
+		Panicf("strides (length %d) if gieven must have the same length as the rank of x (rank %d)", len(strides), rank)
+	}
+	if len(baseDilations) > 0 && len(baseDilations) != rank {
+		Panicf("baseDilations (length %d) if given must have the same length as the rank of x (rank %d)", len(paddings), rank)
+	}
+	if len(windowDilations) > 0 && len(windowDilations) != rank {
+		Panicf("windowDilations (length %d) if given must have the same length as the rank of x (rank %d)", len(paddings), rank)
 	}
 	if len(paddings) > 0 && len(paddings) != rank {
-		Panicf("paddings (length %d) if given must have same length as rank of input x (rank %d)", len(paddings), rank)
+		Panicf("paddings (length %d) if given must have the same length as the rank of x (rank %d)", len(paddings), rank)
 	}
-
-	// Define the initial value for the reduction:
-	var init *Node
-	switch reductionType {
-	case xla.ReduceMaxNode:
-		init = lowestForDType(g, dtype)
-	case xla.ReduceSumNode:
-		init = ScalarZero(g, dtype)
-	case xla.ReduceMultiplyNode:
-		init = ScalarOne(g, dtype)
-	default:
-		Panicf("unsupported type of ReduceWindow: %s -- only %s, %s and %s are supported",
-			reductionType, xla.ReduceMaxNode, xla.ReduceSumNode, xla.ReduceMultiplyNode)
-	}
-
-	// `strides` must always have rank elements. It defaults to 1.
-	if strides == nil {
-		strides = xslices.SliceWithValue[int](rank, 1)
-	}
-
-	// Encode parameters in ints.
-	ints := make([]int, 0, 4+2*rank+len(baseDilations)+len(windowDilations)+2*len(paddings))
-	encode := func(values ...int) {
-		ints = append(ints, values...)
-	}
-	encode(rank, len(baseDilations), len(windowDilations), len(paddings))
-	encode(windowDimensions...) // rank elements.
-	encode(strides...)          // rank elements.
-	encode(baseDilations...)
-	encode(windowDilations...)
-	for _, pair := range paddings {
-		encode(pair[0], pair[1])
-	}
-
-	//fmt.Printf("ReduceWindow(%s):\n", reductionType)
-	//fmt.Printf("\tx.shape=%s\n", x.Shape())
-	//fmt.Printf("\twindowDimensions=%v\n", windowDimensions)
-	//fmt.Printf("\tstrides=%v\n", strides)
-	//fmt.Printf("\tpaddings=%v\n", paddings)
-
-	// Create graph new node.
-	output := newNode(g, &xla.SerializedNode{
-		Type: xla.ReduceWindowNode,
-		Int:  int(reductionType),
-		Ints: ints,
-	}, []*Node{x, init})
-
-	//fmt.Printf("\toutput shape=%s\n", output.shape)
-	//fmt.Println()
-	return output
+	return backendReduceWindow(x, reductionType, windowDimensions, strides, baseDilations, windowDilations, paddings)
 }
 
 // selectAndScatterWithGeneralPaddingXLA selects (largest) element from a window and scatter to those positions
@@ -510,7 +500,7 @@ func reduceWindowVJP(node, v *Node, _ shapes.Shape) []*Node {
 
 // dilateConvolveToMatchSumPooling convolves the `backProp` to match `x`.
 //
-// Since the convolution would be with a kernel of 1s we instead use `graph.Pad` and reduceWindowXLA instead.
+// Since the convolution would be with a kernel of 1s we instead use `graph.Pad` and checkedReduceWindow instead.
 func dilateConvolveToMatchSumPooling(x, backProp *Node, windowDimensions, strides []int, paddings [][2]int) *Node {
 	g := validateBuildingGraphFromInputs(x, backProp)
 	dtype := x.DType()
@@ -518,13 +508,13 @@ func dilateConvolveToMatchSumPooling(x, backProp *Node, windowDimensions, stride
 	//dims := x.Shape().Dimensions
 
 	if len(windowDimensions) != rank {
-		Panicf("windowSizes (length %d) must have same length as rank of input x (rank %d)", len(windowDimensions), rank)
+		Panicf("windowSizes (length %d) must have the same length as the rank of x (rank %d)", len(windowDimensions), rank)
 	}
 	if len(strides) != rank {
-		Panicf("strides (length %d) must have same length as rank of input x (rank %d)", len(strides), rank)
+		Panicf("strides (length %d) must have the same length as the rank of x (rank %d)", len(strides), rank)
 	}
 	if len(paddings) > 0 && len(paddings) != rank {
-		Panicf("paddings (length %d) if given must have same length as rank of input x (rank %d)", len(paddings), rank)
+		Panicf("paddings (length %d) if given must have the same length as the rank of x (rank %d)", len(paddings), rank)
 	}
 
 	// Configure the padding needed to expand the backprop back to its original size.
@@ -551,7 +541,8 @@ func dilateConvolveToMatchSumPooling(x, backProp *Node, windowDimensions, stride
 		padSame[axis][0] = (windowSize - 1) / 2 // For even sized kernels, the padding is asymmetric.
 		padSame[axis][1] = windowSize / 2
 	}
-	expanded = reduceWindowXLA(expanded, xla.ReduceSumNode, windowDimensions, nil, nil, nil, padSame)
+	stridesOne := xslices.SliceWithValue(rank, 1)
+	expanded = checkedReduceWindow(expanded, backends.ReduceOpSum, windowDimensions, stridesOne, nil, nil, padSame)
 
 	// We may need to trim the extra padding that was used originally, since we don't want to re-generate
 	// the original padding. We many also need to pad extra, in case not everything from the input tensor
