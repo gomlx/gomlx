@@ -3,6 +3,7 @@ package graph
 import (
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gopjrt/dtypes"
 	"golang.org/x/exp/constraints"
 )
 
