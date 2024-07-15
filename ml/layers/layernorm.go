@@ -165,7 +165,7 @@ func (builder *LayerNormBuilder) Done() *Node {
 
 	// Convert negative axes to their actual value.
 	for ii := range builder.normalizingAxes {
-		builder.normalizingAxes[ii] = AdjustAxis(x, builder.normalizingAxes[ii])
+		builder.normalizingAxes[ii] = AdjustAxisToRank(x, builder.normalizingAxes[ii])
 	}
 
 	// LearnedGain and offset to be applied to the normalized value.

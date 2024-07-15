@@ -17,6 +17,7 @@
 package graph
 
 import (
+	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/xla"
 	"github.com/pkg/errors"
@@ -721,32 +722,28 @@ func gatherVJP(node, v *Node, _ shapes.Shape) []*Node {
 	input := node.inputNodes[0]
 	indices := node.inputNodes[1]
 	inputShape := input.Shape()
-	indexVectorDim, offsetDims, collapsedSliceDims, startIndexMap, sliceSizes, indicesAreSorted, err := deserializeGatherXLA(node.serializedNode)
-	_ = offsetDims // We don't need it here.
-	if err != nil {
-		panic(errors.WithMessagef(err, "gatherVJP failed to deserialize its parameters"))
-	}
+	params := node.inputs.(*nodeInputsGather)
 
-	// Gather() case: sliceSizes is 1 for the first dimensions, and full in the last. Plus the initial
+	// Gather() case: params.sliceSizes is 1 for the first dimensions, and full in the last. Plus the initial
 	// dimensions are all collapsed.
-	if len(sliceSizes) != inputShape.Rank() {
-		Panicf("gradient from Gather with len(sliceSizes) != input.Rank() not defined -- sliceSizes=%v, input.Shape()=%s",
-			sliceSizes, inputShape)
+	if len(params.sliceSizes) != inputShape.Rank() {
+		Panicf("gradient from Gather with len(params.sliceSizes) != input.Rank() not defined -- params.sliceSizes=%v, input.Shape()=%s",
+			params.sliceSizes, inputShape)
 	}
 	isSimpleGather := true // Whether all indexed axes are at the start, and slices are the full dimension.
 	for axis, inputSize := range inputShape.Dimensions {
-		if axis < len(collapsedSliceDims) {
-			if collapsedSliceDims[axis] != axis {
+		if axis < len(params.collapsedSliceAxes) {
+			if params.collapsedSliceAxes[axis] != axis {
 				isSimpleGather = false
 				break
 			}
-			if sliceSizes[axis] != 1 {
+			if params.sliceSizes[axis] != 1 {
 				isSimpleGather = false
 				break
 			}
 		} else {
 			// For non-collapsed axes, we expect the slice to be the full dimension.
-			if sliceSizes[axis] != inputSize {
+			if params.sliceSizes[axis] != inputSize {
 				isSimpleGather = false
 				break
 			}
@@ -754,15 +751,15 @@ func gatherVJP(node, v *Node, _ shapes.Shape) []*Node {
 	}
 	if isSimpleGather {
 		return []*Node{
-			ScatterAdd(Zeros(node.graph, inputShape), indices, v, indicesAreSorted, false),
+			ScatterAdd(Zeros(node.graph, inputShape), indices, v, params.indicesAreSorted, false),
 			nil, // No gradients for indices.
 		}
 	}
 
-	// GatherSlices(): sliceSizes are variable, but there are no collapsedSliceDims.
-	//fmt.Printf("\tgatherVJP: operand=%s, start=%s, indexVectorDim=%d, offsetDims=%v, collapsedSliceDims=%v, startIndexMap=%v, sliceSizes=%v\n",
-	//	input.shape, indices.shape, indexVectorDim, offsetDims, collapsedSliceDims, startIndexMap, sliceSizes)
-	isGatherSlices := len(collapsedSliceDims) == 0
+	// GatherSlices(): params.sliceSizes are variable, but there are no paramsCollapsedSliceDims.
+	//fmt.Printf("\tgatherVJP: operand=%s, start=%s, paramsIndexVectorAxis=%d, offsetDims=%v, paramsCollapsedSliceDims=%v, params.startIndexMap=%v, params.sliceSizes=%v\n",
+	//	input.shape, indices.shape, paramsIndexVectorAxis, offsetDims, paramsCollapsedSliceDims, params.startIndexMap, params.sliceSizes)
+	isGatherSlices := len(params.collapsedSliceAxes) == 0
 	if !isGatherSlices {
 		Panicf("xlaGather operation for which no gradient was defined. Please use only Gather() or GatherSlices().")
 	}
@@ -779,12 +776,12 @@ func gatherVJP(node, v *Node, _ shapes.Shape) []*Node {
 	for ii := 0; ii < inputShape.Rank(); ii++ {
 		updateWindowsDims = append(updateWindowsDims, ii+outputPrefixRank)
 	}
-	var insertedWindowDims []int              // Empty, since the original GatherSlice don's have any collapsedSliceDims.
-	scatterDimsToOperandDims := startIndexMap // Same map used in GatherSlice.
+	var insertedWindowDims []int                     // Empty, since the original GatherSlice don's have any paramsCollapsedSliceDims.
+	scatterDimsToOperandDims := params.startIndexMap // Same map used in GatherSlice.
 	// We don't make any assumptions on uniqueness or sortedness of the indices. Likely the slices will overlap.
 	return []*Node{
-		scatterXLA(operand, startIndices, updates, indexVectorDim, updateWindowsDims, insertedWindowDims, scatterDimsToOperandDims,
-			indicesAreSorted, false),
+		backendScatterAdd(operand, startIndices, updates, params.indexVectorAxis, updateWindowsDims, insertedWindowDims, scatterDimsToOperandDims,
+			params.indicesAreSorted, false),
 		nil, // No gradients for indices.
 	}
 }

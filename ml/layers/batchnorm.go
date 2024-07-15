@@ -157,7 +157,7 @@ func (builder *BatchNormBuilder) Done() *Node {
 	}
 	ctx := builder.ctx
 
-	featureAxis := AdjustAxis(x, builder.featureAxis)
+	featureAxis := AdjustAxisToRank(x, builder.featureAxis)
 	featureDim := x.Shape().Dimensions[featureAxis]
 
 	// Scale and offset applied to the normalized value.
@@ -219,7 +219,7 @@ func (builder *BatchNormBuilder) Done() *Node {
 
 // directBatchNormGraph calculates the batch normalized x without using XLA -- so it's differentiable.
 func (builder *BatchNormBuilder) directBatchNormGraph(x, scale, offset, mean, variance *Node) *Node {
-	featureAxis := AdjustAxis(x, builder.featureAxis)
+	featureAxis := AdjustAxisToRank(x, builder.featureAxis)
 	featureDim := x.Shape().Dimensions[featureAxis]
 
 	dims := xslices.SliceWithValue(x.Rank(), 1)

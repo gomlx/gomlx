@@ -46,7 +46,7 @@ func Normalization(manager *Manager, ds train.Dataset, inputsIndex int, independ
 		// Find axes to reduce from the input.
 		mapIndependentAxes := make([]bool, batch.Rank())
 		for _, axis := range independentAxes {
-			adjustedAxis := AdjustAxis(batch, axis)
+			adjustedAxis := AdjustAxisToRank(batch, axis)
 			mapIndependentAxes[adjustedAxis] = true
 		}
 		reduceAxes := make([]int, 0, batch.Rank()-len(independentAxes))

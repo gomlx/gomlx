@@ -492,7 +492,7 @@ func ShiftWithValue(x *Node, axis int, shiftDir ShiftDirection, n int, value *No
 func Shift(x *Node, axis int, shiftDir ShiftDirection, n int) *Node {
 	rank := x.Rank()
 	dims := x.Shape().Dimensions
-	shiftAxis := AdjustAxis(x, axis)
+	shiftAxis := AdjustAxisToRank(x, axis)
 
 	// Find slice of left-most / right-most values to use for filling.
 	axisRanges := make([]SliceAxisSpec, rank)
@@ -518,7 +518,7 @@ func genericShiftImpl(x *Node, axis int, shiftDir ShiftDirection, n int, fill fl
 	dtype := x.DType()
 	rank := x.Rank()
 	dims := x.Shape().Dimensions
-	shiftAxis := AdjustAxis(x, axis)
+	shiftAxis := AdjustAxisToRank(x, axis)
 	if n > dims[shiftAxis] {
 		exceptions.Panicf("cannot shift %d positions for axis %d, x.shape=%s", n, axis, x.Shape())
 	}

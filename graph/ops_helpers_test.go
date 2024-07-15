@@ -19,6 +19,8 @@ package graph
 import (
 	"fmt"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/xslices"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
@@ -41,12 +43,12 @@ func testFuncOneInput(t *testing.T, testName string, graphFn graphFnOneInputToTe
 	})
 }
 
-func TestSliceXLA(t *testing.T) {
+func TestBackendSlice(t *testing.T) {
 	manager := buildTestManager()
 	g := manager.NewGraph().WithName("iota0")
 	numbers := Iota(g, shapes.Make(dtypes.Float64, 9), 0)
 	numbers = ReshapeWithShape(numbers, shapes.Make(dtypes.Float64, 3, 3))
-	SliceXLA(numbers, []int{1, 1}, []int{2, 3})
+	backendSlice(numbers, []int{1, 1}, []int{2, 3}, []int{1, 1})
 	g.Compile()
 	got := g.Run(nil).Local().Value()
 	want := [][]float64{{4, 5}}
@@ -55,13 +57,13 @@ func TestSliceXLA(t *testing.T) {
 	}
 }
 
-func TestGatherXLA(t *testing.T) {
+func TestBackendGather(t *testing.T) {
 	manager := buildTestManager()
 	g := manager.NewGraph().WithName("iota0")
 	// numbers=(Float64)[5 3]: [[0 1 2] [3 4 5] [6 7 8] [9 10 11] [12 13 14]]
 	numbers := ReshapeWithShape(Iota(g, shapes.Make(dtypes.Float64, 5*3), 0), shapes.Make(dtypes.Float64, 5, 3))
 	indices := Const(g, [][]int{{2}, {0}})
-	gather := gatherXLA(numbers, indices, 1,
+	gather := backendGather(numbers, indices, 1,
 		/* offsetDims */ []int{1},
 		/* collapsed_slice_dims */ []int{0},
 		/* start_index_map */ []int{0},

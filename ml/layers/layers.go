@@ -27,6 +27,7 @@ import (
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gopjrt/dtypes"
 	"golang.org/x/exp/constraints"
 )
 
@@ -254,11 +255,12 @@ func PieceWiseLinearCalibration(ctx *context.Context, input, keypoints *Node, ou
 
 	// left and right weights are shifted by one from one another. And we need to add the weights
 	// on the edge keypoints.
-	leftEdge := ExpandDims(SliceXLA(keypoints, []int{0}, []int{1}), 0)
+	//leftEdge := ExpandDims(SliceLists(keypoints, []int{0}, []int{1}), 0)
+	leftEdge := ExpandDims(Slice(keypoints, AxisRangeFromStart(1)), 0)
 	leftEdge = PositiveIndicator(Sub(leftEdge, input2D))
 	leftWeights = Concatenate([]*Node{leftEdge, leftWeights}, -1)
 
-	rightEdge := ExpandDims(SliceXLA(keypoints, []int{numKeypoints - 1}, []int{numKeypoints}), 0)
+	rightEdge := ExpandDims(Slice(keypoints, AxisRangeToEnd(-1)), 0)
 	rightEdge = PositiveIndicator(Sub(input2D, rightEdge))
 	rightWeights = Concatenate([]*Node{rightWeights, rightEdge}, -1)
 
@@ -313,8 +315,9 @@ func PieceWiseLinearCalibrationCascaded(ctx *context.Context, input, keypoints *
 	}
 
 	// Calculate lengths of each linear piece: all in shape [1, numKeypoints-1]
-	kpStarts := ExpandDims(SliceXLA(keypoints, []int{0}, []int{numKeypoints - 1}), 0)
-	kpEnds := ExpandDims(SliceXLA(keypoints, []int{1}, []int{numKeypoints}), 0)
+	kpStarts := ExpandDims(Slice(keypoints, AxisRangeFromStart(-1)), 0)
+	//kpStarts := ExpandDims(SliceLists(keypoints, []int{0}, []int{numKeypoints - 1}), 0)
+	kpEnds := ExpandDims(Slice(keypoints, AxisRangeToEnd(1)), 0)
 	lengths := Sub(kpEnds, kpStarts)
 
 	// weights so far applies to outputKeypoints[1:]: it is shaped [numInputs, numKeypoints-1]
