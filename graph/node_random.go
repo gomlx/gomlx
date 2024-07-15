@@ -27,16 +27,16 @@ var (
 //
 // Notice it returns a concrete tensor value that can be used to set a variable or
 // constant to be used in a graph.
-func RngStateFromSeed(seed int64) tensors.Tensor {
+func RngStateFromSeed(seed int64) *tensors.Tensor {
 	rngSrc := rand.NewSource(seed)
 	rng := rand.New(rngSrc)
 	state := tensors.FromShape(RngStateShape)
-	ref := state.AcquireData()
-	defer ref.Release()
-	data := ref.Flat().([]uint64)
-	for ii := range data {
-		data[ii] = rng.Uint64()
-	}
+	state.MutableFlatData(func(flatAny any) {
+		flat := flatAny.([]uint64)
+		for ii := range flat {
+			flat[ii] = rng.Uint64()
+		}
+	})
 	return state
 }
 
@@ -45,7 +45,7 @@ func RngStateFromSeed(seed int64) tensors.Tensor {
 //
 // Notice it returns a concrete tensor value that can be used to set a variable or
 // constant to be used in a graph.
-func RngState() tensors.Tensor {
+func RngState() *tensors.Tensor {
 	return RngStateFromSeed(time.Now().UTC().UnixNano())
 }
 
