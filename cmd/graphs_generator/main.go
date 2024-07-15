@@ -29,7 +29,9 @@ var (
 		"ArgMinMax", "Broadcast", "BroadcastInDim",
 		"Concatenate", "ConvGeneralDilated", "DotGeneral", "FFT", "Gather", "Iota",
 		"ReduceMax", "ReduceMin", "ReduceProduct", "ReduceSum", "ReduceWindow",
-		"Reshape", "Reverse", "ScatterAdd", "Sign", "Slice",
+		"Reshape", "Reverse",
+		"ScatterAdd", "SelectAndScatterSum", "SelectAndScatterMax", "SelectAndScatterMin",
+		"Sign", "Slice",
 		"Transpose", "Where")
 
 	// methodsToExclude from writing, but the corresponding will be written and maintained manually.

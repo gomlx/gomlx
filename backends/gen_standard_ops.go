@@ -339,17 +339,17 @@ type StandardOps interface {
 	ScatterMin(operand, scatterIndices, updates Op, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) Op
 
 	// SelectAndScatterMax runs windows (similar to ReduceWindow) over the operand, selects values to updates the output (like ScatterAdd)
-	// It selects the values in the window such that it works as reverse for ScatterMax.
+	// It selects the values in the window such that it works as reverse for a PoolMax operation.
 	// See details in https://openxla.org/xla/operation_semantics#selectandscatter
 	SelectAndScatterMax(operand, source Op, windowDimensions, windowStrides []int, paddings [][2]int) Op
 
 	// SelectAndScatterMin runs windows (similar to ReduceWindow) over the operand, selects values to updates the output (like ScatterAdd)
-	// It selects the values in the window such that it works as reverse for ScatterMin.
+	// It selects the values in the window such that it works as reverse for a PoolMin operation.
 	// See details in https://openxla.org/xla/operation_semantics#selectandscatter
 	SelectAndScatterMin(operand, source Op, windowDimensions, windowStrides []int, paddings [][2]int) Op
 
 	// SelectAndScatterSum runs windows (similar to ReduceWindow) over the operand, selects values to updates the output (like ScatterAdd)
-	// It selects the values in the window such that it works as reverse for ScatterSum.
+	// It selects the values in the window such that it works as reverse for a PoolSum operation.
 	// See details in https://openxla.org/xla/operation_semantics#selectandscatter
 	SelectAndScatterSum(operand, source Op, windowDimensions, windowStrides []int, paddings [][2]int) Op
 

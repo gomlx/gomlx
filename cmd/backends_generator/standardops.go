@@ -49,7 +49,7 @@ func selectAndScatterComments(funcName string) []string {
 	aggregation := funcName[len(funcName)-3:]
 	return []string{
 		funcName + " runs windows (similar to ReduceWindow) over the operand, selects values to updates the output (like ScatterAdd)",
-		"It selects the values in the window such that it works as reverse for Scatter" + aggregation + ".",
+		"It selects the values in the window such that it works as reverse for a Pool" + aggregation + " operation.",
 		"See details in https://openxla.org/xla/operation_semantics#selectandscatter",
 	}
 }

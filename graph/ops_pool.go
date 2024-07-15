@@ -19,10 +19,10 @@ package graph
 import (
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors/images"
 	"github.com/gomlx/gomlx/types/xslices"
-	"github.com/gomlx/gomlx/xla"
 )
 
 // This file contains all parts of the {Max|Sum|Prod}Pool implementation.
@@ -393,11 +393,10 @@ func checkedReduceWindow(x *Node, reductionType ReduceOpType, windowDimensions, 
 	return backendReduceWindow(x, reductionType, windowDimensions, strides, baseDilations, windowDilations, paddings)
 }
 
-// selectAndScatterWithGeneralPaddingXLA selects (largest) element from a window and scatter to those positions
+// checkedSelectAndScatter selects (largest) the element (according to reduceOp) from a window and scatter to those positions
 // the value from source. It's used to calculate the gradient of a MaxPool.
-func selectAndScatterWithGeneralPaddingXLA(x, source *Node, windowDimensions, strides []int, paddings [][2]int) *Node {
-	g := validateBuildingGraphFromInputs(x, source)
-	dtype := x.DType()
+func checkedSelectAndScatter(x, source *Node, reduceOp ReduceOpType, windowDimensions, strides []int, paddings [][2]int) *Node {
+	_ = validateBuildingGraphFromInputs(x, source)
 	rank := x.Rank()
 	if len(windowDimensions) != rank {
 		Panicf("windowSizes (length %d) must have same length as rank of input x (rank %d)", len(windowDimensions), rank)
@@ -409,74 +408,31 @@ func selectAndScatterWithGeneralPaddingXLA(x, source *Node, windowDimensions, st
 		Panicf("paddings (length %d) if given must have same length as rank of input x (rank %d)", len(paddings), rank)
 	}
 
-	init := ScalarZero(g, dtype)
-	ints := make([]int, 0, 2+2*rank+2*len(paddings))
-	encode := func(values ...int) {
-		ints = append(ints, values...)
+	switch reduceOp {
+	case backends.ReduceOpMax:
+		return backendSelectAndScatterMax(x, source, windowDimensions, strides, paddings)
+	case backends.ReduceOpMin:
+		return backendSelectAndScatterMin(x, source, windowDimensions, strides, paddings)
+	case backends.ReduceOpSum:
+		return backendSelectAndScatterSum(x, source, windowDimensions, strides, paddings)
+	default:
+		Panicf("SelectAndScatter not defined for original reduce operation %s", reduceOp)
+		panic(nil) // Disable lint warning.
 	}
-	encode(rank, len(paddings))
-	encode(windowDimensions...)
-	encode(strides...)
-	for _, pair := range paddings {
-		encode(pair[0], pair[1])
-	}
-
-	return newNode(g, &xla.SerializedNode{
-		Type: xla.SelectAndScatterNode,
-		Ints: ints,
-	}, []*Node{x, source, init})
 }
+
+var vjpReductionTypes = types.SetWith(backends.ReduceOpMax, backends.ReduceOpMin, backends.ReduceOpSum)
 
 // reduceWindowVJP calculates v*d(reduceWindow(x))/{dx, d_kernel).
 func reduceWindowVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// Recover parameters from serialized node.
-	x := node.inputNodes[0]
-	initValue := node.inputNodes[1]
-	reductionType := xla.NodeType(node.serializedNode.Int)
-	if reductionType != xla.ReduceMaxNode && reductionType != xla.ReduceSumNode {
-		Panicf("ReduceWindow gradient only defined for ReduceMax or ReduceSum operation, instead got %s", reductionType)
+	params := node.inputs.(*nodeInputsReduceWindow)
+	if !vjpReductionTypes.Has(params.reductionType) {
+		Panicf("ReduceWindow gradient only defined for %q operations, instead got %q", vjpReductionTypes, params.reductionType)
 	}
 
-	packedPos := 0
-	decode := func() int {
-		i := node.serializedNode.Ints[packedPos]
-		packedPos++
-		return i
-	}
-	decodeN := func(n int) []int {
-		slice := node.serializedNode.Ints[packedPos : packedPos+n]
-		packedPos += n
-		return slice
-	}
-
-	rank := decode()
-	lenBaseDilations := decode()
-	if lenBaseDilations > 0 {
-		Panicf("reduceWindow(%s) does not define a gradient if using baseDilations", reductionType)
-		return nil
-	}
-	lenWindowDilations := decode()
-	if lenWindowDilations > 0 {
-		Panicf("reduceWindow(%s) does not define a gradient if using windowDilations", reductionType)
-		return nil
-	}
-	lenPaddings := decode()
-
-	windowDimensions := decodeN(rank)
-	strides := decodeN(rank)
-	baseDilations := decodeN(lenBaseDilations)
-	windowDilations := decodeN(lenWindowDilations)
-	paddings := make([][2]int, lenPaddings)
-	for ii := range paddings {
-		paddings[ii][0] = decode()
-		paddings[ii][1] = decode()
-	}
-
-	// Not used.
-	_, _ = baseDilations, windowDilations
-
-	if lenBaseDilations > 0 || lenWindowDilations > 0 {
-		Panicf("gradient of ReduceWindow with base or window dilation not defined")
+	if len(params.baseDilations) > 0 || len(params.windowDilations) > 0 {
+		Panicf("gradient of ReduceWindow with base or window dilations is not defined")
 	}
 
 	//fmt.Printf("Grad(reduceWindow(%s):\n", reductionType)
@@ -487,15 +443,15 @@ func reduceWindowVJP(node, v *Node, _ shapes.Shape) []*Node {
 	//fmt.Printf("\tstrides=%v\n", strides)
 	//fmt.Printf("\tpaddings=%v\n", paddings)
 
-	var vjpX *Node
-	if reductionType == xla.ReduceMaxNode {
-		vjpX = selectAndScatterWithGeneralPaddingXLA(x, v, windowDimensions, strides, paddings)
-	} else if reductionType == xla.ReduceSumNode {
-		vjpX = dilateConvolveToMatchSumPooling(x, v, windowDimensions, strides, paddings)
-	} else {
-		Panicf("ReduceWindow gradient only defined for ReduceMax or ReduceSum operation, instead got %s", reductionType)
-	}
-	return []*Node{vjpX, ZerosLike(initValue)}
+	vjpX := checkedSelectAndScatter(params.x, v, params.reductionType, params.windowDimensions, params.strides, params.paddings)
+	// Original implementation:
+	/*
+		...
+		else if reductionType == backends.ReduceOpSum {
+			vjpX = dilateConvolveToMatchSumPooling(x, v, windowDimensions, strides, paddings)
+		}
+	*/
+	return []*Node{vjpX}
 }
 
 // dilateConvolveToMatchSumPooling convolves the `backProp` to match `x`.

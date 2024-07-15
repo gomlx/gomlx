@@ -2803,10 +2803,8 @@ func (ni *nodeInputsSelectAndScatterMax) String() string {
 	)
 }
 
-// SelectAndScatterMax runs windows (similar to ReduceWindow) over the operand, selects values to updates the output (like ScatterAdd)
-// It selects the values in the window such that it works as reverse for ScatterMax.
-// See details in https://openxla.org/xla/operation_semantics#selectandscatter
-func SelectAndScatterMax(operand *Node, source *Node, windowDimensions []int, windowStrides []int, paddings [][2]int) (node *Node) {
+// backendSelectAndScatterMax is a Graph wrapper for the backend.Builder.SelectAndScatterMax method.
+func backendSelectAndScatterMax(operand *Node, source *Node, windowDimensions []int, windowStrides []int, paddings [][2]int) (node *Node) {
 	g := validateBuildingGraphFromInputs(operand, source)
 
 	inputs := &nodeInputsSelectAndScatterMax{
@@ -2854,10 +2852,8 @@ func (ni *nodeInputsSelectAndScatterMin) String() string {
 	)
 }
 
-// SelectAndScatterMin runs windows (similar to ReduceWindow) over the operand, selects values to updates the output (like ScatterAdd)
-// It selects the values in the window such that it works as reverse for ScatterMin.
-// See details in https://openxla.org/xla/operation_semantics#selectandscatter
-func SelectAndScatterMin(operand *Node, source *Node, windowDimensions []int, windowStrides []int, paddings [][2]int) (node *Node) {
+// backendSelectAndScatterMin is a Graph wrapper for the backend.Builder.SelectAndScatterMin method.
+func backendSelectAndScatterMin(operand *Node, source *Node, windowDimensions []int, windowStrides []int, paddings [][2]int) (node *Node) {
 	g := validateBuildingGraphFromInputs(operand, source)
 
 	inputs := &nodeInputsSelectAndScatterMin{
@@ -2905,10 +2901,8 @@ func (ni *nodeInputsSelectAndScatterSum) String() string {
 	)
 }
 
-// SelectAndScatterSum runs windows (similar to ReduceWindow) over the operand, selects values to updates the output (like ScatterAdd)
-// It selects the values in the window such that it works as reverse for ScatterSum.
-// See details in https://openxla.org/xla/operation_semantics#selectandscatter
-func SelectAndScatterSum(operand *Node, source *Node, windowDimensions []int, windowStrides []int, paddings [][2]int) (node *Node) {
+// backendSelectAndScatterSum is a Graph wrapper for the backend.Builder.SelectAndScatterSum method.
+func backendSelectAndScatterSum(operand *Node, source *Node, windowDimensions []int, windowStrides []int, paddings [][2]int) (node *Node) {
 	g := validateBuildingGraphFromInputs(operand, source)
 
 	inputs := &nodeInputsSelectAndScatterSum{

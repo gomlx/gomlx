@@ -78,11 +78,11 @@ func TestBackendGather(t *testing.T) {
 }
 
 func TestSelectAndScatterWithGeneralPaddingXLA(t *testing.T) {
-	testFuncOneInput(t, "selectAndScatterWithGeneralPaddingXLA()",
+	testFuncOneInput(t, "checkedSelectAndScatter()",
 		func(g *Graph) (input, output *Node) {
 			input = IotaFull(g, shapes.Make(dtypes.Float64, 1, 6, 1))
 			source := Add(IotaFull(g, shapes.Make(dtypes.Float64, 1, 2, 1)), Const(g, 1.0))
-			output = selectAndScatterWithGeneralPaddingXLA(input, source, []int{1, 3, 1}, []int{1, 3, 1}, nil)
+			output = checkedSelectAndScatter(input, source, []int{1, 3, 1}, []int{1, 3, 1}, nil)
 			return
 		}, [][][]float64{{{0}, {0}, {1}, {0}, {0}, {2}}})
 }
