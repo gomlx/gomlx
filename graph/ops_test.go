@@ -18,6 +18,7 @@ package graph_test
 
 import (
 	"fmt"
+	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/types/shapes"
@@ -82,8 +83,12 @@ func TestConstant(t *testing.T) {
 }
 
 func compileRunAndTakeFirst(t *testing.T, g *Graph) *tensors.Tensor {
-	g.Compile()
-	return g.Run(nil)[0]
+	var output *tensors.Tensor
+	require.NotPanics(t, func() {
+		g.Compile()
+		output = g.Run(nil)[0]
+	})
+	return output
 }
 
 func TestAdd(t *testing.T) {
@@ -333,18 +338,18 @@ func TestOneArgOps(t *testing.T) {
 		{Sin, func(x float64) float64 { return math.Sin(x) }},
 		{Tanh, func(x float64) float64 { return math.Tanh(x) }},
 		{Sqrt, func(x float64) float64 { return math.Sqrt(x) }},
-		{RSqrt, func(x float64) float64 { return 1.0 / math.Sqrt(x) }},
+		{Rsqrt, func(x float64) float64 { return 1.0 / math.Sqrt(x) }},
 	}
 	xSlices := [][]float64{{11.1, 12.8}, {-13.2, -14.9}}
 	for _, test := range casesFloat64 {
-		g := NewGraph(backend, "")
+		g := NewGraph(backend, "[2, 2] graph for one-arg operation")
 		x := Const(g, xSlices)
 		n := test.fnGraph(x)
 		wantShape := shapes.Make(dtypes.Float64, 2, 2)
 		if !n.Shape().Equal(wantShape) {
 			t.Fatalf("Add invalid outputShapes %s, wanted %s", n.Shape(), wantShape)
 		}
-		local := compileRunAndTakeFirst(t, g, "[2, 2] graph for one-arg operation")
+		local := compileRunAndTakeFirst(t, g)
 		got := local.Value().([][]float64)
 		want := [][]float64{{0, 0}, {0, 0}}
 		for i0, x0Slice := range xSlices {
@@ -380,24 +385,6 @@ func TestClzOp(t *testing.T) {
 		}, []int64{64 - 5, 64 - 4})
 }
 
-func TestLogicalOps(t *testing.T) {
-	//fmt.Printf("Node type %s: #%d\n", xla.LogicalNotNode, xla.LogicalNotNode)
-	//testFuncOneInput(t, "Not()",
-	//	func(g *Graph) (input, output *Node) {
-	//		input = Const(g, []bool{true, false, true, true})
-	//		output = Not(input)
-	//		return
-	//	}, []bool{false, true, false, false})
-}
-
-// compileAndRun compiles, runs and returns the value on the tensor. Doesn't work for tuples though.
-func compileAndRun(g *Graph) any {
-	g.Compile()
-	device := g.Run(nil)
-	got := device.Local().Value()
-	return got
-}
-
 func TestDot(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 	g := NewGraph(backend, "").WithName("Dot")
@@ -408,9 +395,9 @@ func TestDot(t *testing.T) {
 	w0 := Const(g, [][]float32{{1, 0}, {1, -1}, {-1, 1}})
 	// Dot(inputNodes, w0) -> outputShapes [batch=4, dims=2]
 	Dot(inputs, w0) // Last node created in the graph is taken as output by default.
-	got := compileAndRun(g)
-	want := [][]float32{{0, 1.1}, {0, 11}, {0, 111}, {0, 1111}}
-	if !xslices.DeepSliceCmp(got, want, xslices.Close[float32]) {
+	got := compileRunAndTakeFirst(t, g)
+	want := tensors.FromValue([][]float32{{0, 1.1}, {0, 11}, {0, 111}, {0, 1111}})
+	if !want.InDelta(got, Epsilon) {
 		fmt.Printf("%s\n", g)
 		fmt.Printf("\tResult=%v\n", got)
 		t.Errorf("Wanted %v, got %v", want, got)
@@ -423,18 +410,18 @@ func TestBroadcast(t *testing.T) {
 		g := NewGraph(backend, "")
 		input := Const(g, 7)
 		BroadcastToDims(input, 2, 3) // Last node created in the graph is taken as output by default.
-		got := compileAndRun(g)
+		got := compileRunAndTakeFirst(t, g)
 		want := [][]int64{{7, 7, 7}, {7, 7, 7}}
-		assert.Equal(t, want, got)
+		assert.Equal(t, want, got.Value())
 	}
 
 	{
 		g := NewGraph(backend, "")
 		input := Const(g, []float32{1.1, 1.2})
 		BroadcastPrefix(input, 2, 1) // The last node created in the graph is taken as output by default.
-		got := compileAndRun(g)
+		got := compileRunAndTakeFirst(t, g)
 		want := [][][]float32{{{1.1, 1.2}}, {{1.1, 1.2}}} // Shape [2, 1, 2].
-		assert.Equal(t, want, got)
+		assert.Equal(t, want, got.Value())
 	}
 
 	// Using now the new testFuncOneInput testing tool:
@@ -458,7 +445,7 @@ func TestFill(t *testing.T) {
 	{
 		g := NewGraph(backend, "").WithName("FillScalar")
 		FillScalar(g, shapes.Make(dtypes.Int64, 3, 1), 4.0)
-		got := compileAndRun(g)
+		got := compileRunAndTakeFirst(t, g)
 		want := [][]int64{{4}, {4}, {4}}
 		if !xslices.DeepSliceCmp(got, want, xslices.EqualAny[int64]) {
 			t.Errorf("Wanted %#v, got %#v", want, got)
@@ -467,7 +454,7 @@ func TestFill(t *testing.T) {
 	{
 		g := NewGraph(backend, "").WithName("Ones")
 		Ones(g, shapes.Make(dtypes.Float32, 3, 1))
-		got := compileAndRun(g)
+		got := compileRunAndTakeFirst(t, g)
 		want := [][]float32{{1}, {1}, {1}}
 		if !xslices.DeepSliceCmp(got, want, xslices.EqualAny[float32]) {
 			t.Errorf("Wanted %#v, got %#v", want, got)
@@ -476,7 +463,7 @@ func TestFill(t *testing.T) {
 	{
 		g := NewGraph(backend, "").WithName("Zeros")
 		Zeros(g, shapes.Make(dtypes.Float64, 3, 1))
-		got := compileAndRun(g)
+		got := compileRunAndTakeFirst(t, g)
 		want := [][]float64{{0}, {0}, {0}}
 		if !xslices.DeepSliceCmp(got, want, xslices.EqualAny[float64]) {
 			t.Errorf("Wanted %#v, got %#v", want, got)
@@ -484,8 +471,8 @@ func TestFill(t *testing.T) {
 	}
 }
 
-func reduceSumGraph(t *testing.T, m *Manager, reduceDims []int) *Graph {
-	g := m.NewGraph().WithName("main")
+func reduceSumGraph(t *testing.T, backend backends.Backend, reduceDims []int) *Graph {
+	g := NewGraph(backend, "main")
 	n0 := Const(g, [][]float64{{5.0, 1.0}})
 	n1 := Ones(g, shapes.Make(dtypes.Float64, 2, 1))
 	n2 := Add(n1, n0)
@@ -506,9 +493,9 @@ func TestReduceSum(t *testing.T) {
 	}
 	for _, testCase := range cases {
 		g := reduceSumGraph(t, backend, testCase.dims)
-		gotT := g.Run(nil)
-		got := gotT.Local().Value()
-		if !xslices.DeepSliceCmp(got, testCase.want, xslices.Close[float64]) {
+		got := g.Run(nil)[0]
+		wantT := tensors.FromAnyValue(testCase.want)
+		if !wantT.InDelta(got, Epsilon) {
 			t.Errorf("Wanted %v, got %v", testCase.want, got)
 		}
 	}
@@ -567,71 +554,13 @@ func TestReshape(t *testing.T) {
 		g := NewGraph(backend, "")
 		input := Const(g, [][][]float32{{{1.1, 1.2}}}) // Shape [1, 1, 2]
 		ReshapeWithShape(input, shapes.Make(input.DType(), 2, 1))
-		got := compileAndRun(g)
-		want := [][]float32{{1.1}, {1.2}}
-		if !xslices.DeepSliceCmp(got, want, xslices.EqualAny[float32]) {
+		got := compileRunAndTakeFirst(t, g)
+		want := tensors.FromValue([][]float32{{1.1}, {1.2}})
+		if !want.Equal(got) {
 			fmt.Printf("%s\n", g)
 			fmt.Printf("\tResult=%v\n", got)
 			t.Errorf("Wanted %v, got %v", want, got)
 		}
-	}
-}
-
-func TestTuple(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
-	{
-		g := NewGraph(backend, "")
-		a := Const(g, []float32{1.1, 1.2})
-		b := Const(g, 5)
-		tuple := Tuple(a, b)
-		if !tuple.Shape().IsTuple() {
-			t.Errorf("Expected outputShapes to be tuple, got %s instead", tuple.Shape())
-		}
-		GetTupleElement(tuple, 0)
-		got := compileAndRun(g)
-		want := []float32{1.1, 1.2}
-		if !xslices.DeepSliceCmp(got, want, xslices.EqualAny[float32]) {
-			fmt.Printf("%s\n", g)
-			fmt.Printf("\tResult=%v\n", got)
-			t.Errorf("Wanted %v, got %v", want, got)
-		}
-	}
-
-	{
-		g := NewGraph(backend, "")
-		a := Const(g, []float32{1.1, 1.2})
-		b := Const(g, 5)
-		tupleN := Tuple(a, b)
-		if !tupleN.Shape().IsTuple() {
-			t.Errorf("Expected outputShapes to be tuple, got %s instead", tupleN.Shape())
-		}
-		g.Compile()
-		tupleT := g.Run(nil)
-		if !tupleT.IsTuple() {
-			t.Errorf("Expected tensor outputShapes to be tuple, got %s instead", tupleN.Shape())
-		}
-		/*
-			splits := tupleT.SplitTupleError()
-			if splits == nil {
-				t.Errorf("Failed to split Device tuple: %v", tupleT.error)
-			}
-			want := []any{[]float32{1.1, 1.2}, 5}
-			if !types.DeepSliceCmp(splits[0].Local().Value(), want[0], types.EqualAny[float32]) || splits[1].Local().Value().(int) != 5 {
-				fmt.Printf("%s\n", g)
-				fmt.Printf("\tResult=(%v, %v)\n", splits[0].Local().Value(), splits[1].Local().Value())
-				t.Fatalf("Wanted %v", want)
-			}
-
-			// Split a second time, to check that works.
-			splits = tupleT.SplitTupleError()
-			if splits == nil {
-				t.Errorf("Failed to split result tuple a second time: %v", tupleT.error)
-			}
-			if !types.DeepSliceCmp(splits[0].Local().Value(), want[0], types.EqualAny[float32]) || splits[1].Local().Value().(int) != 5 {
-				fmt.Printf("\tResult=(%v, %v)\n", splits[0].Local().Value(), splits[1].Local().Value())
-				t.Errorf("Failed at 2nd split of tuple: wanted %v", want)
-			}
-		*/
 	}
 }
 
@@ -641,9 +570,9 @@ func TestIota(t *testing.T) {
 		g := NewGraph(backend, "").WithName("iota0")
 		Iota(g, MakeShape(F64, 2, 2), 0)
 		g.Compile()
-		got := g.Run(nil).Local().Value()
-		want := [][]float64{{0, 0}, {1, 1}}
-		if !xslices.DeepSliceCmp(got, want, xslices.EqualAny[float64]) {
+		got := g.Run(nil)[0]
+		want := tensors.FromValue([][]float64{{0, 0}, {1, 1}})
+		if !want.Equal(got) {
 			t.Fatalf("Iota: want %v, got %v", want, got)
 		}
 	}
@@ -651,9 +580,9 @@ func TestIota(t *testing.T) {
 		g := NewGraph(backend, "").WithName("iota0")
 		Iota(g, MakeShape(F64, 2, 2), 1)
 		g.Compile()
-		got := g.Run(nil).Local().Value()
-		want := [][]float64{{0, 1}, {0, 1}}
-		if !xslices.DeepSliceCmp(got, want, xslices.EqualAny[float64]) {
+		got := g.Run(nil)[0]
+		want := tensors.FromValue([][]float64{{0, 1}, {0, 1}})
+		if !want.Equal(got) {
 			t.Fatalf("Iota: want %v, got %v", want, got)
 		}
 	}
@@ -731,7 +660,7 @@ func TestPad(t *testing.T) {
 		}, []any{
 			[][]int64{{1, 2}, {3, 4}},
 			[][]int64{{0, 1, 0, 2}, {0, 3, 0, 4}},
-		}, xslices.Epsilon)
+		}, Epsilon)
 }
 
 func TestConcatenate(t *testing.T) {
@@ -744,10 +673,10 @@ func TestConcatenate(t *testing.T) {
 		x2 := Add(IotaFull(g, MakeShape(F64, 5)), Const(g, float64(3)))
 		concat := Concatenate([]*Node{x1, x2}, 0)
 		g.Compile(concat)
-		got := g.Run(nil).Local()
+		got := g.Run(nil)[0]
 		fmt.Printf("\t\tresult=%s\n", got.GoStr())
-		want := []float64{0, 1, 2, 3, 4, 5, 6, 7}
-		if !xslices.DeepSliceCmp(got.Value(), want, xslices.EqualAny[float64]) {
+		want := tensors.FromValue([]float64{0, 1, 2, 3, 4, 5, 6, 7})
+		if !want.Equal(got) {
 			t.Errorf("scatter: want %v, got %v", want, got)
 		}
 	}
@@ -759,10 +688,10 @@ func TestConcatenate(t *testing.T) {
 		x2 := Add(IotaFull(g, MakeShape(F64, 2, 1, 2)), Const(g, float64(8)))
 		concat := Concatenate([]*Node{x1, x2}, 1)
 		g.Compile(concat)
-		got := g.Run(nil).Local()
+		got := g.Run(nil)[0]
 		fmt.Printf("\t\tresult=%s\n", got.GoStr())
-		want := [][][]float64{{{0, 1}, {2, 3}, {8, 9}}, {{4, 5}, {6, 7}, {10, 11}}}
-		if !xslices.DeepSliceCmp(got.Value(), want, xslices.EqualAny[float64]) {
+		want := tensors.FromValue([][][]float64{{{0, 1}, {2, 3}, {8, 9}}, {{4, 5}, {6, 7}, {10, 11}}})
+		if !want.Equal(got) {
 			t.Errorf("scatter: want %v, got %v", want, got)
 		}
 	}
@@ -869,7 +798,7 @@ func TestTranspose(t *testing.T) {
 		}, [][][]float32{{{0, 4}, {1, 5}, {2, 6}, {3, 7}}, {{8, 12}, {9, 13}, {10, 14}, {11, 15}}, {{16, 20}, {17, 21}, {18, 22}, {19, 23}}})
 }
 
-func TestBatchNormInferenceXLA(t *testing.T) {
+func TestInternalBatchNormForInference(t *testing.T) {
 	testFuncOneInput(t, "BatchNormInference()",
 		func(g *Graph) (input, output *Node) {
 			input = Iota(g, MakeShape(dtypes.Float32, 7, 3), 0) // Values from 0.0 to 6.0 on batch axis.
@@ -877,7 +806,7 @@ func TestBatchNormInferenceXLA(t *testing.T) {
 			offset := Const(g, []float32{10.0, 100.0, 1000.0})
 			mean := Const(g, []float32{0.5, 0.5, 1.0})
 			variance := Const(g, []float32{1.0, 1.0, 10.0})
-			output = BatchNormInferenceXLA(input, scale, offset, mean, variance, 1e-7, -1)
+			output = InternalBatchNormForInference(input, scale, offset, mean, variance, 1e-7, -1)
 			return
 		}, [][]float32{
 			{9.5, 99, 999.05133},
