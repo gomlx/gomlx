@@ -19,7 +19,7 @@ package graph
 import (
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/xla"
+	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/pkg/errors"
 )
 
@@ -209,7 +209,7 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 				Panicf("invalid Gradient calculation for node %q: invalid outputShapes for calculated AccumulatedVJP for "+
 					"input #%d (out of %d): input outputShapes=%s, calculated AccumulatedVJP outputShapes=%s (wanted %s)"+
 					" -- this probably indicates a bug in the code, please report the issue.",
-					node, ii, len(node.Inputs()), input.outputShapes, vjp.outputShapes, combinedShape)
+					node, ii, len(node.Inputs()), input.Shape(), vjp.Shape(), combinedShape)
 			}
 			rInput := rg.ReverseNodes[input.Id()]
 			if rInput.AccumulatedVJP == nil {
@@ -419,10 +419,10 @@ func vjpForDefaultBroadcast(node, input, v *Node) *Node {
 	// original input format.
 	var vjp *Node
 	err := TryCatch[error](func() {
-		vjp = ReshapeWithShape(reduced, input.outputShapes)
+		vjp = ReshapeWithShape(reduced, input.Shape())
 	})
 	if err != nil {
-		err = errors.WithMessagef(err, "AutoGrad: calculating the AccumulatedVJP of a broadcast: v.outputShapes=%s, input.outputShapes=%s", v.Shape(), input.Shape())
+		err = errors.WithMessagef(err, "AutoGrad: calculating the AccumulatedVJP of a broadcast: v.Shape()=%s, input.Shape()=%s", v.Shape(), input.Shape())
 		panic(err)
 	}
 	return vjp
@@ -553,8 +553,8 @@ func mulVJP(node, v *Node, _ shapes.Shape) []*Node {
 	broadcastInputs := make([]*Node, 2)
 	for ii := 0; ii < 2; ii++ {
 		broadcastInputs[ii] = node.inputNodes[ii]
-		if !broadcastInputs[ii].Shape().Eq(node.outputShapes) {
-			broadcastInputs[ii] = BroadcastToShape(broadcastInputs[ii], node.outputShapes)
+		if !broadcastInputs[ii].Shape().Eq(node.Shape()) {
+			broadcastInputs[ii] = BroadcastToShape(broadcastInputs[ii], node.Shape())
 		}
 	}
 	for ii := 0; ii < 2; ii++ {
@@ -571,8 +571,8 @@ func divVJP(node, v *Node, _ shapes.Shape) []*Node {
 	broadcastInputs := make([]*Node, 2)
 	for ii := 0; ii < 2; ii++ {
 		broadcastInputs[ii] = node.inputNodes[ii]
-		if !broadcastInputs[ii].Shape().Eq(node.outputShapes) {
-			broadcastInputs[ii] = BroadcastToShape(broadcastInputs[ii], node.outputShapes)
+		if !broadcastInputs[ii].Shape().Eq(node.Shape()) {
+			broadcastInputs[ii] = BroadcastToShape(broadcastInputs[ii], node.Shape())
 		}
 	}
 	a := broadcastInputs[0]
@@ -589,7 +589,7 @@ func minMaxVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// (as opposed to 0).
 	side0Indicator := PositiveIndicator(Sub(node.inputNodes[0], node.inputNodes[1]))
 	side1Indicator := OneMinus(side0Indicator)
-	if node.Type() == xla.MinNode {
+	if node.Type() == NodeTypeMin {
 		// If min, swap directions.
 		side0Indicator, side1Indicator = side1Indicator, side0Indicator
 	}
@@ -601,19 +601,17 @@ func minMaxVJP(node, v *Node, _ shapes.Shape) []*Node {
 
 func reduceSumVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// Reconstruct exactly the reduced dimensions.
-	rankInput := node.inputNodes[0].Rank()
-	reducedDims := node.serializedNode.Ints
+	params := node.inputs.(*nodeInputsReduceSum)
+	x := params.x
+	reducedDims := params.axes
 	if len(reducedDims) == 0 {
 		// Reduced all dims, reconstruct those.
-		reducedDims = make([]int, rankInput)
-		for ii := 0; ii < rankInput; ii++ {
-			reducedDims[ii] = ii
-		}
+		reducedDims = xslices.Iota(0, x.Rank())
 	}
 
 	// Expand rank of v to match the input, by re-creating
 	// the reduced dimensions with size 1.
-	newShape := node.inputNodes[0].Shape().Clone()
+	newShape := x.Shape().Clone()
 	for _, dim := range reducedDims {
 		newShape.Dimensions[dim] = 1
 	}
@@ -622,23 +620,21 @@ func reduceSumVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// Now all we need it to broadcast the v on the reduced dimensions.
 	// Notice the second input to a reduction is its initial value, a constant. There
 	// is no need to push a gradient to that.
-	vjp := BroadcastToShape(expandedV, node.inputNodes[0].Shape())
+	vjp := BroadcastToShape(expandedV, x.Shape())
 	return []*Node{vjp, nil}
 }
 
 func reduceMaxVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// Reconstruct exactly the reduced dimensions, and build a newShape
 	// (same outputShapes as if we had done ReduceAndKeep(input[0]))
-	rankInput := node.inputNodes[0].Rank()
-	reducedDims := node.serializedNode.Ints
+	params := node.inputs.(*nodeInputsReduceMax)
+	x := params.x
+	reducedDims := params.axes
 	if len(reducedDims) == 0 {
 		// Reduced all dims, reconstruct those.
-		reducedDims = make([]int, rankInput)
-		for ii := 0; ii < rankInput; ii++ {
-			reducedDims[ii] = ii
-		}
+		reducedDims = xslices.Iota(0, x.Rank())
 	}
-	newShape := node.inputNodes[0].Shape().Clone()
+	newShape := x.Shape().Clone()
 	for _, dim := range reducedDims {
 		newShape.Dimensions[dim] = 1
 	}
@@ -646,12 +642,12 @@ func reduceMaxVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// Expand the node output (with max) to match the input. And then creates
 	// an indicator to which positions are at the max values.
 	maxAtOriginalRank := ReshapeWithShape(node, newShape)
-	maxIndicatorAtInput := PositiveIndicator(Sub(node.inputNodes[0], maxAtOriginalRank))
+	maxIndicatorAtInput := PositiveIndicator(Sub(x, maxAtOriginalRank))
 
 	// Expand rank of v to match the input, by re-creating
 	// the reduced dimensions with size 1 and then broadcasting.
 	expandedV := ReshapeWithShape(v, newShape)
-	expandedV = BroadcastToShape(expandedV, node.inputNodes[0].outputShapes)
+	expandedV = BroadcastToShape(expandedV, x.Shape())
 
 	// vjp is only propagated to the elements at the max value.
 	vjp := Mul(expandedV, maxIndicatorAtInput)
@@ -660,7 +656,7 @@ func reduceMaxVJP(node, v *Node, _ shapes.Shape) []*Node {
 
 func reshapeVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// ReshapeWithShape back to its inputNodes outputShapes.
-	return []*Node{ReshapeWithShape(v, node.inputNodes[0].outputShapes)}
+	return []*Node{ReshapeWithShape(v, node.inputNodes[0].Shape())}
 }
 
 func logisticVJP(node, v *Node, _ shapes.Shape) []*Node {
@@ -684,7 +680,7 @@ func dotVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// Case 2: matrix[i, j] x vector[j] -> vector[i]
 	if node.inputNodes[0].Rank() == 2 && node.inputNodes[1].Rank() == 1 {
 		v = ExpandDims(v, -1)
-		v = BroadcastToShape(v, node.inputNodes[0].outputShapes)
+		v = BroadcastToShape(v, node.inputNodes[0].Shape())
 		return []*Node{
 			Mul(v, ExpandDims(node.inputNodes[1], 0)),
 			ReduceSum(Mul(v, node.inputNodes[0]), 0),
@@ -693,7 +689,7 @@ func dotVJP(node, v *Node, _ shapes.Shape) []*Node {
 
 	// Case 3: matrix[i, j] x matrix[j, k] -> matrix[i, k]
 	if node.inputNodes[0].Rank() != 2 || node.inputNodes[1].Rank() != 2 {
-		Panicf("Dot node with combination of ranks not accepted: %s, %s", node.inputNodes[0].outputShapes, node.inputNodes[1].outputShapes)
+		Panicf("Dot node with combination of ranks not accepted: %s, %s", node.inputNodes[0].Shape(), node.inputNodes[1].Shape())
 	}
 	dimI, dimJ, dimK := node.Shape().Dimensions[0], node.inputNodes[0].Shape().Dimensions[1], node.Shape().Dimensions[1]
 	v = ExpandDims(v, 1) // Shape [i, 1, k]
@@ -708,28 +704,25 @@ func dotVJP(node, v *Node, _ shapes.Shape) []*Node {
 // SliceWithStridesXLA function.
 func sliceVJP(node, v *Node, _ shapes.Shape) []*Node {
 	g := node.Graph()
-	x := node.Inputs()[0]
-	serialized := node.serializedNode
+	params := node.inputs.(*nodeInputsSlice)
+	x := params.x
+	rank := x.Rank()
+	dimensions := x.Shape().Dimensions
 
 	// The incoming adjoint v must be applied only where the slice came from, and
 	// the new adjoint will have zero, filled with padding (`Pad()`) elsewhere.
 	//
 	// Here we build the PadAxis configuration for each axis.
-	rank := x.Rank()
-	dimensions := x.Shape().Dimensions
-	starts := serialized.Ints[0:rank]
-	limits := serialized.Ints[rank : 2*rank]
-	strides := serialized.Ints[2*rank:]
 	padding := make([]PadAxis, rank)
 	for ii := range padding {
-		padding[ii].Start = starts[ii]
-		if strides[ii] <= 1 {
-			padding[ii].End = dimensions[ii] - limits[ii]
+		padding[ii].Start = params.starts[ii]
+		if params.strides[ii] <= 1 {
+			padding[ii].End = dimensions[ii] - params.limits[ii]
 		} else {
 			// Padding at the end may be affected by the strides.
-			padding[ii].Interior = strides[ii] - 1
-			dimToPad := dimensions[ii] - starts[ii]
-			dimToPad -= (v.Shape().Dimensions[ii]-1)*strides[ii] + 1
+			padding[ii].Interior = params.strides[ii] - 1
+			dimToPad := dimensions[ii] - params.starts[ii]
+			dimToPad -= (v.Shape().Dimensions[ii]-1)*params.strides[ii] + 1
 			padding[ii].End = dimToPad // What is missing to make v the same outputShapes as x at axis ii.
 		}
 	}
@@ -781,7 +774,7 @@ func gatherVJP(node, v *Node, _ shapes.Shape) []*Node {
 
 	// GatherSlices(): params.sliceSizes are variable, but there are no paramsCollapsedSliceDims.
 	//fmt.Printf("\tgatherVJP: operand=%s, start=%s, paramsIndexVectorAxis=%d, offsetDims=%v, paramsCollapsedSliceDims=%v, params.startIndexMap=%v, params.sliceSizes=%v\n",
-	//	input.outputShapes, indices.outputShapes, paramsIndexVectorAxis, offsetDims, paramsCollapsedSliceDims, params.startIndexMap, params.sliceSizes)
+	//	input.Shape(), indices.Shape(), paramsIndexVectorAxis, offsetDims, paramsCollapsedSliceDims, params.startIndexMap, params.sliceSizes)
 	isGatherSlices := len(params.collapsedSliceAxes) == 0
 	if !isGatherSlices {
 		Panicf("xlaGather operation for which no gradient was defined. Please use only Gather() or GatherSlices().")
@@ -792,7 +785,7 @@ func gatherVJP(node, v *Node, _ shapes.Shape) []*Node {
 	startIndices := indices
 	outputPrefixRank := startIndices.Rank() - 1 // Prefix dimensions of the output of the GatherSlice.
 	updates := v
-	//fmt.Printf("\tgatherVJP: updates=%s\n", updates.outputShapes)
+	//fmt.Printf("\tgatherVJP: updates=%s\n", updates.Shape())
 
 	// updateWindowsDims: one per every dimension of the input, offset by the initial outputPrefixRank.
 	updateWindowsDims := make([]int, 0, inputShape.Rank())
@@ -820,16 +813,16 @@ func batchNormForTrainingVJP(node *Node, vjps []*Node, _ shapes.Shape) []*Node {
 	splitOutputs := splitNode(node)
 	mean, variance := splitOutputs[1], splitOutputs[2]
 	gradOutput := vjps[0]
-	gradOperand, gradScale, gradOffset := batchNormGradXLA(operand, scale, mean, variance, gradOutput, epsilon, featureAxis)
+	gradOperand, gradScale, gradOffset := backendBatchNormGradient(operand, scale, mean, variance, gradOutput, epsilon, featureAxis)
 	return []*Node{gradOperand, gradScale, gradOffset}
 }
 
 // transposeVJP generates the "vector dot jacobian" w.r.t. the input of transpose. It's
 // simply the transpose of the incoming vector.
 func transposeVJP(node, v *Node, _ shapes.Shape) []*Node {
-	permutations := node.serializedNode.Ints
-	reversePermutations := make([]int, len(permutations))
-	for to, from := range permutations {
+	params := node.inputs.(*nodeInputsTranspose)
+	reversePermutations := make([]int, len(params.permutations))
+	for to, from := range params.permutations {
 		reversePermutations[from] = to
 	}
 	vjp := TransposeAllDims(v, reversePermutations...)
@@ -839,18 +832,17 @@ func transposeVJP(node, v *Node, _ shapes.Shape) []*Node {
 // broadcastInDimVJP generates the "vector dot jacobian" w.r.t. the input of broadcast.
 // One just needs to reduce the broadcast dimensions.
 func broadcastInDimVJP(node, v *Node, _ shapes.Shape) []*Node {
-	x := node.inputNodes[0]
-	outputShape := v.Shape()
-	shape := node.serializedNode.Shape
-	broadcastDims := node.serializedNode.Ints
+	params := node.inputs.(*nodeInputsBroadcastInDim)
+	x := params.x
+	shape := params.outputShape
 
-	if x.Rank() != len(broadcastDims) {
-		Panicf("there must be a broadcastDim for each axis in x, instead got x.outputShapes=%s and broadcastDims=%v",
-			x.outputShapes, broadcastDims)
+	if x.Rank() != len(params.broadcastAxes) {
+		Panicf("there must be a broadcastAxes for each axis in x, instead got x.Shape()=%s and broadcastAxes=%v",
+			x.Shape(), params.broadcastAxes)
 	}
 
-	axesPreserved := make([]bool, outputShape.Rank())
-	for inputAxis, outputAxis := range broadcastDims {
+	axesPreserved := make([]bool, shape.Rank())
+	for inputAxis, outputAxis := range params.broadcastAxes {
 		if x.Shape().Dimensions[inputAxis] == shape.Dimensions[outputAxis] {
 			axesPreserved[outputAxis] = true
 		} else {
@@ -860,15 +852,15 @@ func broadcastInDimVJP(node, v *Node, _ shapes.Shape) []*Node {
 			}
 		}
 	}
-	dimsToReduce := make([]int, 0, outputShape.Rank())
+	axesToReduce := make([]int, 0, shape.Rank())
 	for axis, preserved := range axesPreserved {
 		if !preserved {
-			dimsToReduce = append(dimsToReduce, axis)
+			axesToReduce = append(axesToReduce, axis)
 		}
 	}
 	gradWrtX := v
-	if len(dimsToReduce) > 0 {
-		gradWrtX = ReduceSum(v, dimsToReduce...)
+	if len(axesToReduce) > 0 {
+		gradWrtX = ReduceSum(v, axesToReduce...)
 	}
 	if gradWrtX.Rank() != x.Rank() {
 		// X had some axes of dimension 1 that were reduced, we simply reshape it here.
