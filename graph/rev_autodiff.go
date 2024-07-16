@@ -75,8 +75,9 @@ type reverseNode struct {
 	// its VJP to its inputNodes.
 	AccumulatedVJP *Node
 
-	// VJPsForTuple holds the individual VJPs for a tuple: they are only collapsed to a VJP at the end.
-	VJPsForTuple []*Node
+	// VJPsForMultiOutputs holds the individual VJPs for a multi-outputs nodes: they are only collapsed to a VJP when
+	// all the VJPs for the outputs have been calculated.
+	VJPsForMultiOutputs []*Node
 }
 
 // The jacobian
@@ -138,34 +139,48 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 			continue
 		}
 
-		// Special case for tuples: their vjp need to be aggregated differently.
-		if node.outputShapes.IsTuple() {
-			for ii, shape := range node.outputShapes.TupleShapes {
-				if rNode.VJPsForTuple[ii] == nil {
-					rNode.VJPsForTuple[ii] = Zeros(node.Graph(), shape)
+		// Special case for multiple-outputs: their vjp need to be aggregated differently.
+		if node.numOutputs() > 1 {
+			var hasVJP bool
+			for ii := range node.numOutputs() {
+				if rNode.VJPsForMultiOutputs[ii] != nil {
+					hasVJP = true
+					break
 				}
 			}
-			rNode.AccumulatedVJP = Tuple(rNode.VJPsForTuple...)
+			if !hasVJP {
+				// Skip back-propagation for this node, since there are no arriving VJPs.
+				continue
+			}
+			// Fill missing VJPs with zeros.
+			for ii, shape := range node.outputShapes {
+				if rNode.VJPsForMultiOutputs[ii] == nil {
+					rNode.VJPsForMultiOutputs[ii] = Zeros(node.Graph(), shape)
+				}
+			}
+
+		} else if rNode.AccumulatedVJP == nil {
+			// For the usual nodes with single outputs, if there are no gradients arriving to rNode -- e.g.:
+			// there was a `stopGradient`, we can't propagate the gradient either.
+			continue
 		}
-		if node.Type() == xla.GetTupleElementNode {
-			// GetTupleElement just pushes v to the specific element of the tuple.
-			elementIdx := node.serializedNode.Int
-			input := node.inputNodes[0]
-			rInput := rg.ReverseNodes[input.Id()]
-			if rInput.VJPsForTuple[elementIdx] == nil {
-				rInput.VJPsForTuple[elementIdx] = rNode.AccumulatedVJP
+
+		if node.Type() == NodeTypeSplitNode {
+			// SplitNode just pushes v to the specific element of the tuple.
+			// This is a special case because it doesn't return a single VJP to accumulate, but needs to be set
+			// in a special way.
+			params := node.inputs.(*nodeInputsSplitNode)
+			rInput := rg.ReverseNodes[params.multiOutputNode.Id()]
+			if rInput.VJPsForMultiOutputs[params.index] == nil {
+				rInput.VJPsForMultiOutputs[params.index] = rNode.AccumulatedVJP
 			} else {
-				rInput.VJPsForTuple[elementIdx] = Add(rInput.VJPsForTuple[elementIdx], rNode.AccumulatedVJP)
+				// This usually shouldn't happen, since a Node is only split once ... but just in case.
+				rInput.VJPsForMultiOutputs[params.index] = Add(rInput.VJPsForMultiOutputs[params.index], rNode.AccumulatedVJP)
 			}
 			continue
 		}
 
-		if rNode.AccumulatedVJP == nil {
-			// No gradients arriving to rNode -- e.g.: there was a `stopGradient`. So we can't propagate the gradient
-			// either.
-			continue
-		}
-
+		// Find vjpFn that calculates backpropagation for this node.
 		vjpFn := node.customVJP
 		if vjpFn == nil {
 			var ok bool
@@ -183,12 +198,12 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 		for ii, input := range node.Inputs() {
 			vjp := inputsVJPs[ii]
 			if vjp == nil {
-				// Skip this vjp, input is assumed to be static.
+				// Skip this vjp, input is assumed to be static (or gradient stopped for some other reason)
 				continue
 			}
 			//fmt.Printf("\t\tSetting vjp for %s: %s\n", input, vjp)
-			combinedShape := combineOutputShape(outputShape, input.outputShapes)
-			if !vjp.outputShapes.Eq(combinedShape) {
+			combinedShape := combineOutputShape(outputShape, input.Shape())
+			if !vjp.Shape().Eq(combinedShape) {
 				Panicf("invalid Gradient calculation for node %q: invalid outputShapes for calculated AccumulatedVJP for "+
 					"input #%d (out of %d): input outputShapes=%s, calculated AccumulatedVJP outputShapes=%s (wanted %s)"+
 					" -- this probably indicates a bug in the code, please report the issue.",
@@ -235,8 +250,8 @@ func newReverseGraph(g *Graph, root *Node, gradientNodes []*Node) *reverseGraph 
 	for ii, node := range g.nodes {
 		rNode := &reverseNode{Node: node}
 		rg.ReverseNodes[ii] = rNode
-		if node.outputShapes.IsTuple() {
-			rNode.VJPsForTuple = make([]*Node, node.outputShapes.TupleSize())
+		if node.numOutputs() > 1 {
+			rNode.VJPsForMultiOutputs = make([]*Node, node.numOutputs())
 		}
 		for _, input := range node.inputNodes {
 			rg.NumConsumers[input.Id()] += 1
@@ -292,7 +307,7 @@ func recursiveMarkAsUseful(rg *reverseGraph, rNode *reverseNode) {
 // VJP returns the $v \dot Jacobian$ of the given `node`, with respect to each of its inputNodes (given
 // by `node.Inputs()`).
 //
-// outputShape is the outputShapes of the value for which we are calculating the gradient for.
+// outputShape is the shape of the value for which we are calculating the gradient for.
 // For now this is only used for Gradient, so one can expect outputShape to be scalar, and `v.Shape()`
 // to be the same as `output.Shape()`. But this won't be true once Jacobian functionality (like a
 // Gradient where output is a non-scalar tensor),
@@ -318,47 +333,47 @@ type VJP func(node, v *Node, outputShape shapes.Shape) []*Node
 //
 // Notice xla.GetTupleElementNode is specialized inside the main reverse autodiff code, and is not
 // in the table here.
-var VJPRegistration = map[xla.NodeType]VJP{
-	xla.InvalidNode:     noOpVJP, // NoOp
-	xla.ConstantNode:    nilVJP,
-	xla.ParameterNode:   nilVJP,
-	xla.ConvertTypeNode: convertTypeVJP,
-	xla.WhereNode:       whereVJP,
-	xla.NegNode:         negVJP,
-	xla.AbsNode:         absVJP,
-	xla.ExpNode:         expVJP,
-	xla.LogNode:         logVJP,
-	xla.Log1pNode:       log1pVJP,
-	xla.TanhNode:        tanhVJP,
-	xla.AddNode:         addVJP,
-	xla.SubNode:         subVJP,
-	xla.MulNode:         mulVJP,
-	xla.DivNode:         divVJP,
-	xla.SqrtNode:        sqrtVJP,
+var VJPRegistration = map[NodeType]VJP{
+	NodeTypeInvalid:      noOpVJP, // NoOp
+	NodeTypeConstant:     nilVJP,
+	NodeTypeParameter:    nilVJP,
+	NodeTypeConvertDType: convertDTypeVJP,
+	NodeTypeWhere:        whereVJP,
+	NodeTypeNeg:          negVJP,
+	NodeTypeAbs:          absVJP,
+	NodeTypeExp:          expVJP,
+	NodeTypeLog:          logVJP,
+	NodeTypeLog1p:        log1pVJP,
+	NodeTypeTanh:         tanhVJP,
+	NodeTypeAdd:          addVJP,
+	NodeTypeSub:          subVJP,
+	NodeTypeMul:          mulVJP,
+	NodeTypeDiv:          divVJP,
+	NodeTypeSqrt:         sqrtVJP,
 
 	// Complex numbers.
-	xla.RealNode:    realVJP,
-	xla.ImagNode:    imagVJP,
-	xla.ConjNode:    conjVJP,
-	xla.ComplexNode: complexVJP,
+	NodeTypeReal:    realVJP,
+	NodeTypeImag:    imagVJP,
+	NodeTypeConj:    conjVJP,
+	NodeTypeComplex: complexVJP,
 
-	xla.MaxNode:                minMaxVJP,
-	xla.MinNode:                minMaxVJP,
-	xla.ReshapeNode:            reshapeVJP,
-	xla.ReduceSumNode:          reduceSumVJP,
-	xla.ReduceMaxNode:          reduceMaxVJP,
-	xla.LogisticNode:           logisticVJP,
-	xla.DotNode:                dotVJP,
-	xla.DotGeneralNode:         dotGeneralVJP,
-	xla.SliceNode:              sliceVJP,
-	xla.GatherNode:             gatherVJP,
-	xla.ConcatenateNode:        concatenateVJP,
-	xla.ConvGeneralDilatedNode: convGeneralDilatedVJP,
-	xla.ReduceWindowNode:       reduceWindowVJP,
-	xla.BatchNormTrainingNode:  batchNormTrainingVJP,
-	xla.TransposeNode:          transposeVJP,
-	xla.BroadcastInDimNode:     broadcastInDimVJP,
-	xla.FftNode:                fftVJP,
+	NodeTypeMax:                minMaxVJP,
+	NodeTypeMin:                minMaxVJP,
+	NodeTypeReshape:            reshapeVJP,
+	NodeTypeReduceSum:          reduceSumVJP,
+	NodeTypeReduceMax:          reduceMaxVJP,
+	NodeTypeLogistic:           logisticVJP,
+	NodeTypeDot:                dotVJP,
+	NodeTypeDotGeneral:         dotGeneralVJP,
+	NodeTypeSlice:              sliceVJP,
+	NodeTypeGather:             gatherVJP,
+	NodeTypeConcatenate:        concatenateVJP,
+	NodeTypeConvGeneralDilated: convGeneralDilatedVJP,
+	NodeTypeReduceWindow:       reduceWindowVJP,
+	NodeTypeBatchNormTraining:  batchNormTrainingVJP,
+	NodeTypeTranspose:          transposeVJP,
+	NodeTypeBroadcastInDim:     broadcastInDimVJP,
+	NodeTypeFFT:                fftVJP,
 }
 
 // nilVJP returns no gradient, for functions without any inputNodes.
@@ -375,10 +390,10 @@ func noOpVJP(node, v *Node, _ shapes.Shape) []*Node {
 // It is a reduce-sum of the broadcast dimensions.
 func vjpForDefaultBroadcast(node, input, v *Node) *Node {
 	_ = validateBuildingGraphFromInputs(node, input, v)
-	if input.outputShapes.Eq(node.outputShapes) {
+	if input.Shape().Eq(node.outputShapes) {
 		// If there was no broadcast involved, VJP is the identity.
 		return v
-	} else if input.outputShapes.IsScalar() {
+	} else if input.IsScalar() {
 		// If there was a broadcast from a scalar, the VJP is the full reduction of the V tensor.
 		return ReduceAllSum(v)
 	}
@@ -386,8 +401,8 @@ func vjpForDefaultBroadcast(node, input, v *Node) *Node {
 	// Reduce-sum on the dimensions it was broadcast during the sum. Search for all dimensions that
 	// are 1 in the input, and > 1 in the output.
 	var reduceDims []int
-	for ii, dim := range input.outputShapes.Dimensions {
-		if dim == 1 && v.outputShapes.Dimensions[ii] > 1 {
+	for ii, dim := range input.Shape().Dimensions {
+		if dim == 1 && v.Shape().Dimensions[ii] > 1 {
 			reduceDims = append(reduceDims, ii)
 		}
 	}
@@ -410,7 +425,7 @@ func vjpForDefaultBroadcast(node, input, v *Node) *Node {
 //
 // Except if the conversion is from float->complex: it's a valid conversion, but for the back-propagation
 // we propagate back only the real part.
-func convertTypeVJP(node, v *Node, _ shapes.Shape) []*Node {
+func convertDTypeVJP(node, v *Node, _ shapes.Shape) []*Node {
 	_ = node
 	inputDType := node.inputNodes[0].DType()
 	if node.DType().IsComplex() && inputDType.IsFloat() {
@@ -530,7 +545,7 @@ func mulVJP(node, v *Node, _ shapes.Shape) []*Node {
 	broadcastInputs := make([]*Node, 2)
 	for ii := 0; ii < 2; ii++ {
 		broadcastInputs[ii] = node.inputNodes[ii]
-		if !broadcastInputs[ii].outputShapes.Eq(node.outputShapes) {
+		if !broadcastInputs[ii].Shape().Eq(node.outputShapes) {
 			broadcastInputs[ii] = BroadcastToShape(broadcastInputs[ii], node.outputShapes)
 		}
 	}
@@ -548,7 +563,7 @@ func divVJP(node, v *Node, _ shapes.Shape) []*Node {
 	broadcastInputs := make([]*Node, 2)
 	for ii := 0; ii < 2; ii++ {
 		broadcastInputs[ii] = node.inputNodes[ii]
-		if !broadcastInputs[ii].outputShapes.Eq(node.outputShapes) {
+		if !broadcastInputs[ii].Shape().Eq(node.outputShapes) {
 			broadcastInputs[ii] = BroadcastToShape(broadcastInputs[ii], node.outputShapes)
 		}
 	}
@@ -578,7 +593,7 @@ func minMaxVJP(node, v *Node, _ shapes.Shape) []*Node {
 
 func reduceSumVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// Reconstruct exactly the reduced dimensions.
-	rankInput := node.inputNodes[0].outputShapes.Rank()
+	rankInput := node.inputNodes[0].Rank()
 	reducedDims := node.serializedNode.Ints
 	if len(reducedDims) == 0 {
 		// Reduced all dims, reconstruct those.
@@ -590,7 +605,7 @@ func reduceSumVJP(node, v *Node, _ shapes.Shape) []*Node {
 
 	// Expand rank of v to match the input, by re-creating
 	// the reduced dimensions with size 1.
-	newShape := node.inputNodes[0].outputShapes.Clone()
+	newShape := node.inputNodes[0].Shape().Clone()
 	for _, dim := range reducedDims {
 		newShape.Dimensions[dim] = 1
 	}
@@ -599,14 +614,14 @@ func reduceSumVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// Now all we need it to broadcast the v on the reduced dimensions.
 	// Notice the second input to a reduction is its initial value, a constant. There
 	// is no need to push a gradient to that.
-	vjp := BroadcastToShape(expandedV, node.inputNodes[0].outputShapes)
+	vjp := BroadcastToShape(expandedV, node.inputNodes[0].Shape())
 	return []*Node{vjp, nil}
 }
 
 func reduceMaxVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// Reconstruct exactly the reduced dimensions, and build a newShape
 	// (same outputShapes as if we had done ReduceAndKeep(input[0]))
-	rankInput := node.inputNodes[0].outputShapes.Rank()
+	rankInput := node.inputNodes[0].Rank()
 	reducedDims := node.serializedNode.Ints
 	if len(reducedDims) == 0 {
 		// Reduced all dims, reconstruct those.
@@ -615,7 +630,7 @@ func reduceMaxVJP(node, v *Node, _ shapes.Shape) []*Node {
 			reducedDims[ii] = ii
 		}
 	}
-	newShape := node.inputNodes[0].outputShapes.Clone()
+	newShape := node.inputNodes[0].Shape().Clone()
 	for _, dim := range reducedDims {
 		newShape.Dimensions[dim] = 1
 	}
@@ -644,14 +659,14 @@ func logisticVJP(node, v *Node, _ shapes.Shape) []*Node {
 	g := node.Graph()
 	// d\sigma(x)/dx = sigma(x) * (1 - sigma(x)
 	// See https://towardsdatascience.com/derivative-of-the-sigmoid-function-536880cf918e
-	grad := Mul(node, Sub(ScalarOne(g, node.outputShapes.DType), node))
+	grad := Mul(node, Sub(ScalarOne(g, node.Shape().DType), node))
 	vjp := Mul(v, grad)
 	return []*Node{vjp}
 }
 
 func dotVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// Case 1: dot product of two vectors.
-	if node.inputNodes[0].outputShapes.Rank() == 1 && node.inputNodes[1].outputShapes.Rank() == 1 {
+	if node.inputNodes[0].Rank() == 1 && node.inputNodes[1].Rank() == 1 {
 		return []*Node{
 			Mul(v, node.inputNodes[1]),
 			Mul(v, node.inputNodes[0]),
@@ -659,7 +674,7 @@ func dotVJP(node, v *Node, _ shapes.Shape) []*Node {
 	}
 
 	// Case 2: matrix[i, j] x vector[j] -> vector[i]
-	if node.inputNodes[0].outputShapes.Rank() == 2 && node.inputNodes[1].outputShapes.Rank() == 1 {
+	if node.inputNodes[0].Rank() == 2 && node.inputNodes[1].Rank() == 1 {
 		v = ExpandDims(v, -1)
 		v = BroadcastToShape(v, node.inputNodes[0].outputShapes)
 		return []*Node{
@@ -669,12 +684,12 @@ func dotVJP(node, v *Node, _ shapes.Shape) []*Node {
 	}
 
 	// Case 3: matrix[i, j] x matrix[j, k] -> matrix[i, k]
-	if node.inputNodes[0].outputShapes.Rank() != 2 || node.inputNodes[1].outputShapes.Rank() != 2 {
+	if node.inputNodes[0].Rank() != 2 || node.inputNodes[1].Rank() != 2 {
 		Panicf("Dot node with combination of ranks not accepted: %s, %s", node.inputNodes[0].outputShapes, node.inputNodes[1].outputShapes)
 	}
-	dimI, dimJ, dimK := node.outputShapes.Dimensions[0], node.inputNodes[0].outputShapes.Dimensions[1], node.outputShapes.Dimensions[1]
+	dimI, dimJ, dimK := node.Shape().Dimensions[0], node.inputNodes[0].Shape().Dimensions[1], node.Shape().Dimensions[1]
 	v = ExpandDims(v, 1) // Shape [i, 1, k]
-	v = BroadcastToShape(v, shapes.Make(node.outputShapes.DType, dimI, dimJ, dimK))
+	v = BroadcastToShape(v, shapes.Make(node.Shape().DType, dimI, dimJ, dimK))
 	return []*Node{
 		ReduceSum(Mul(v, ExpandDims(node.inputNodes[1], 0)), 2),
 		ReduceSum(Mul(v, ExpandDims(node.inputNodes[0], -1)), 0),

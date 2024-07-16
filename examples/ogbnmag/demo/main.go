@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/gomlx/gomlx/backends"
 	mag "github.com/gomlx/gomlx/examples/ogbnmag"
 	"github.com/gomlx/gomlx/examples/ogbnmag/gnn"
 	. "github.com/gomlx/gomlx/graph"
@@ -86,8 +87,8 @@ func SetTrainSteps(ctx *context.Context) {
 
 func main() {
 	// Init GoMLX manager and default context.
-	manager := NewManager()
-	ctx := createDefaultContext(manager)
+	backend := backends.New()
+	ctx := createDefaultContext()
 
 	// Flags with context settings.
 	settings := commandline.CreateContextSettingsFlag(ctx, "")
