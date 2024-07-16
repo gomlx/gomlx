@@ -17,7 +17,7 @@
 package graph
 
 import (
-	"github.com/gomlx/exceptions"
+	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 )
@@ -119,7 +119,7 @@ func OnesLike(x *Node) *Node {
 // Ones creates a computation with the same outputShapes as the input, but with the value 1.
 // It's implemented indirectly using other nodes.
 func Ones(g *Graph, shape shapes.Shape) *Node {
-	g.AssertValid()
+	g.AssertBuilding()
 	scalar := ScalarOne(g, shape.DType)
 	if scalar == nil {
 		return nil
@@ -136,7 +136,7 @@ func ZerosLike(x *Node) *Node {
 // Zeros creates a computation with the same outputShapes as the input, but with the value 0.
 // It's implemented indirectly using other nodes.
 func Zeros(g *Graph, shape shapes.Shape) *Node {
-	g.AssertValid()
+	g.AssertBuilding()
 	return BroadcastPrefix(ScalarZero(g, shape.DType), shape.Dimensions...)
 }
 
@@ -214,15 +214,15 @@ func ClipScalar(x *Node, min, max float64) *Node {
 // TODO: implement with Select once it's implemented, since it's likely going to be faster (TensorFlow uses that).
 func OneHot(indices *Node, depth int, dtype dtypes.DType) *Node {
 	g := indices.Graph()
-	if !indices.outputShapes.DType.IsInt() {
-		Panicf("invalid indices dtype (%s), it must be integer", indices.outputShapes.DType)
+	if !indices.DType().IsInt() {
+		Panicf("invalid indices dtype (%s), it must be integer", indices.DType())
 	}
 
 	// Add an expanded dimension at the end, which will contain the one-hot representation.
 	indices = ExpandDims(indices, -1)
 
 	// The target outputShapes will expand the indices dimension (last/innermost one) to depth.
-	targetShape := indices.outputShapes.Clone()
+	targetShape := indices.Shape().Clone()
 	targetShape.Dimensions[targetShape.Rank()-1] = depth
 	targetShape.DType = dtype
 
@@ -230,14 +230,14 @@ func OneHot(indices *Node, depth int, dtype dtypes.DType) *Node {
 	// * Create one sub-id per leading dimension on indices.
 	// * ConcatenateDimensions them, along with the indices themselves (the last dimension).
 	// * Flatten them.
-	parts := make([]*Node, 0, indices.outputShapes.Rank())
-	for dimIdx := 0; dimIdx < indices.outputShapes.Rank()-1; dimIdx++ {
-		parts = append(parts, Iota(g, indices.outputShapes, dimIdx))
+	parts := make([]*Node, 0, indices.Rank())
+	for dimIdx := 0; dimIdx < indices.Rank()-1; dimIdx++ {
+		parts = append(parts, Iota(g, indices.Shape(), dimIdx))
 	}
 	parts = append(parts, indices)
 	scatterIndices := Concatenate(parts, -1)
-	scatterIndices = Reshape(scatterIndices, indices.outputShapes.Size(), indices.outputShapes.Rank())
-	ones := Ones(g, shapes.Make(dtype, indices.outputShapes.Size()))
+	scatterIndices = Reshape(scatterIndices, indices.Shape().Rank(), indices.Rank())
+	ones := Ones(g, shapes.Make(dtype, indices.Shape().Rank()))
 	return Scatter(scatterIndices, ones, targetShape)
 }
 
@@ -293,8 +293,8 @@ var ReduceAndKeepMasked = MaskedReduceAndKeep
 // be [-1], meaning, the last axes.
 func Softmax(logits *Node, axes ...int) *Node {
 	_ = validateBuildingGraphFromInputs(logits)
-	if !logits.outputShapes.DType.IsFloat() {
-		Panicf("invalid logits dtype (%s), it must be float", logits.outputShapes.DType)
+	if !logits.DType().IsFloat() {
+		Panicf("invalid logits dtype (%s), it must be float", logits.DType())
 	}
 	if len(axes) == 0 {
 		axes = []int{-1}
@@ -323,8 +323,8 @@ func Softmax(logits *Node, axes ...int) *Node {
 // those fields. mask and logits must have the same outputShapes.
 func MaskedSoftmax(logits, mask *Node, axes ...int) *Node {
 	_ = validateBuildingGraphFromInputs(logits)
-	if !logits.outputShapes.DType.IsFloat() {
-		Panicf("invalid logits dtype (%s), it must be float", logits.outputShapes.DType)
+	if !logits.DType().IsFloat() {
+		Panicf("invalid logits dtype (%s), it must be float", logits.DType())
 	}
 	if len(axes) == 0 {
 		axes = []int{-1}
@@ -520,10 +520,10 @@ func genericShiftImpl(x *Node, axis int, shiftDir ShiftDirection, n int, fill fl
 	dims := x.Shape().Dimensions
 	shiftAxis := AdjustAxisToRank(x, axis)
 	if n > dims[shiftAxis] {
-		exceptions.Panicf("cannot shift %d positions for axis %d, x.outputShapes=%s", n, axis, x.Shape())
+		Panicf("cannot shift %d positions for axis %d, x.outputShapes=%s", n, axis, x.Shape())
 	}
 	if value != nil && value.DType() != dtype {
-		exceptions.Panicf("cannot shift x.outputShapes=%s using value.outputShapes=%s with a different dtype", x.Shape(), value.Shape())
+		Panicf("cannot shift x.outputShapes=%s using value.outputShapes=%s with a different dtype", x.Shape(), value.Shape())
 	}
 	if n == 0 {
 		// Trivial solution.
