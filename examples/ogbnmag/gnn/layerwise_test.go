@@ -190,7 +190,7 @@ func setCommonTestParams(ctx *context.Context) {
 // weights and minimal configuration get expected results.
 func TestLayerWiseInferenceMinimal(t *testing.T) {
 	withCitation := false
-	manager := graphtest.BuildTestManager()
+	manager := graphtest.BuildTestBackend()
 	_, strategy := createDenseTestStrategy(withCitation)
 	ctx := context.NewContext(manager)
 	setMinimalTestParams(ctx)
@@ -244,7 +244,7 @@ func TestLayerWiseInferenceMinimal(t *testing.T) {
 func TestLayerWiseInferenceCommon(t *testing.T) {
 	for _, withCitation := range []bool{false, true} {
 		fmt.Printf("\nwithCitation=%v:\n", withCitation)
-		manager := graphtest.BuildTestManager()
+		manager := graphtest.BuildTestBackend()
 		_, strategy := createDenseTestStrategy(withCitation)
 		ctx := context.NewContext(manager)
 		setCommonTestParams(ctx)

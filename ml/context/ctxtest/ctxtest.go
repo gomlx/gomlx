@@ -36,7 +36,7 @@ type TestContextGraphFn func(ctx *context.Context, g *Graph) (inputs, outputs []
 // delta is the margin of value on the difference of output and want values that are acceptable.
 // Values of delta <= 0 means only exact equality is accepted.
 func RunTestGraphFn(t *testing.T, testName string, graphFn TestContextGraphFn, want []any, delta float64) {
-	manager := graphtest.BuildTestManager()
+	manager := graphtest.BuildTestBackend()
 	ctx := context.NewContext(manager)
 
 	var numInputs, numOutputs int

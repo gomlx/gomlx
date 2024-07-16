@@ -40,7 +40,7 @@ var (
 
 // buildTestManager using "Host" by default -- can be overwritten by GOMLX_PLATFORM environment variable.
 func buildTestManager() *Manager {
-	return graphtest.BuildTestManager()
+	return graphtest.BuildTestBackend()
 }
 
 type graphFnOneInputToTest func(g *Graph) (input, output *Node)
@@ -100,7 +100,7 @@ func TestAdd(t *testing.T) {
 		y := Const(g, 7)
 		n := Add(x, y)
 		wantShape := shapes.Shape{DType: dtypes.Int64}
-		require.Truef(t, n.Shape().Eq(wantShape), "Add invalid outputShapes %s, wanted %s", n.Shape(), wantShape)
+		require.Truef(t, n.Shape().Equal(wantShape), "Add invalid outputShapes %s, wanted %s", n.Shape(), wantShape)
 		local := compileRunTransfer(t, g, "scalar Graph")
 		got := local.Value().(int64)
 		if got != 12 {
@@ -116,7 +116,7 @@ func TestAdd(t *testing.T) {
 		y := Const(g, [][]float32{{10, 10}, {20, 20}})
 		n := Add(x, y)
 		wantShape := shapes.Make(dtypes.Float32, 2, 2)
-		if !n.Shape().Eq(wantShape) {
+		if !n.Shape().Equal(wantShape) {
 			t.Fatalf("Add invalid outputShapes %s, wanted %s", n.Shape(), wantShape)
 		}
 		local := compileRunTransfer(t, g, "[2, 2] Graph")
@@ -135,7 +135,7 @@ func TestAdd(t *testing.T) {
 		y := Const(g, [][]float32{{1}, {10}})
 		n := Add(x, y)
 		wantShape := shapes.Make(dtypes.Float32, 2, 2)
-		if !n.Shape().Eq(wantShape) {
+		if !n.Shape().Equal(wantShape) {
 			t.Fatalf("Add invalid outputShapes %s, wanted %s", n.Shape(), wantShape)
 		}
 		local := compileRunTransfer(t, g, "[2, 2] Graph")
@@ -154,7 +154,7 @@ func TestAdd(t *testing.T) {
 		y := Const(g, float32(1))
 		n := Add(x, y)
 		wantShape := shapes.Make(dtypes.Float32, 2, 2)
-		if !n.Shape().Eq(wantShape) {
+		if !n.Shape().Equal(wantShape) {
 			t.Fatalf("Add invalid outputShapes %s, wanted %s", n.Shape(), wantShape)
 		}
 		local := compileRunTransfer(t, g, "[2, 2] Graph")
@@ -293,7 +293,7 @@ func TestTwoArgsOps(t *testing.T) {
 			y := Const(g, yValue)
 			n := test.fnGraph(x, y)
 			wantShape := shapes.Make(dtypes.Float32, 2, 2)
-			if !n.Shape().Eq(wantShape) {
+			if !n.Shape().Equal(wantShape) {
 				t.Fatalf("Add invalid outputShapes %s, wanted %s", n.Shape(), wantShape)
 			}
 			local := compileRunTransfer(t, g, "[2, 2] Graph")
@@ -326,7 +326,7 @@ func TestTwoArgsOps(t *testing.T) {
 			y := Const(g, yValue)
 			n := test.fnGraph(x, y)
 			wantShape := shapes.Make(dtypes.Int64, 2, 2)
-			if !n.Shape().Eq(wantShape) {
+			if !n.Shape().Equal(wantShape) {
 				t.Fatalf("Add invalid outputShapes %s, wanted %s", n.Shape(), wantShape)
 			}
 			local := compileRunTransfer(t, g, "[2, 2] Graph")
@@ -385,7 +385,7 @@ func TestOneArgOps(t *testing.T) {
 		x := Const(g, xSlices)
 		n := test.fnGraph(x)
 		wantShape := shapes.Make(dtypes.Float64, 2, 2)
-		if !n.Shape().Eq(wantShape) {
+		if !n.Shape().Equal(wantShape) {
 			t.Fatalf("Add invalid outputShapes %s, wanted %s", n.Shape(), wantShape)
 		}
 		local := compileRunTransfer(t, g, "[2, 2] graph for one-arg operation")
@@ -504,7 +504,7 @@ func TestFill(t *testing.T) {
 		FillScalar(g, shapes.Make(dtypes.Int64, 3, 1), 4.0)
 		got := compileAndRun(g)
 		want := [][]int64{{4}, {4}, {4}}
-		if !xslices.DeepSliceCmp(got, want, xslices.Equal[int64]) {
+		if !xslices.DeepSliceCmp(got, want, xslices.EqualAny[int64]) {
 			t.Errorf("Wanted %#v, got %#v", want, got)
 		}
 	}
@@ -513,7 +513,7 @@ func TestFill(t *testing.T) {
 		Ones(g, shapes.Make(dtypes.Float32, 3, 1))
 		got := compileAndRun(g)
 		want := [][]float32{{1}, {1}, {1}}
-		if !xslices.DeepSliceCmp(got, want, xslices.Equal[float32]) {
+		if !xslices.DeepSliceCmp(got, want, xslices.EqualAny[float32]) {
 			t.Errorf("Wanted %#v, got %#v", want, got)
 		}
 	}
@@ -522,7 +522,7 @@ func TestFill(t *testing.T) {
 		Zeros(g, shapes.Make(dtypes.Float64, 3, 1))
 		got := compileAndRun(g)
 		want := [][]float64{{0}, {0}, {0}}
-		if !xslices.DeepSliceCmp(got, want, xslices.Equal[float64]) {
+		if !xslices.DeepSliceCmp(got, want, xslices.EqualAny[float64]) {
 			t.Errorf("Wanted %#v, got %#v", want, got)
 		}
 	}
@@ -613,7 +613,7 @@ func TestReshape(t *testing.T) {
 		ReshapeWithShape(input, shapes.Make(input.DType(), 2, 1))
 		got := compileAndRun(g)
 		want := [][]float32{{1.1}, {1.2}}
-		if !xslices.DeepSliceCmp(got, want, xslices.Equal[float32]) {
+		if !xslices.DeepSliceCmp(got, want, xslices.EqualAny[float32]) {
 			fmt.Printf("%s\n", g)
 			fmt.Printf("\tResult=%v\n", got)
 			t.Errorf("Wanted %v, got %v", want, got)
@@ -634,7 +634,7 @@ func TestTuple(t *testing.T) {
 		GetTupleElement(tuple, 0)
 		got := compileAndRun(g)
 		want := []float32{1.1, 1.2}
-		if !xslices.DeepSliceCmp(got, want, xslices.Equal[float32]) {
+		if !xslices.DeepSliceCmp(got, want, xslices.EqualAny[float32]) {
 			fmt.Printf("%s\n", g)
 			fmt.Printf("\tResult=%v\n", got)
 			t.Errorf("Wanted %v, got %v", want, got)
@@ -660,7 +660,7 @@ func TestTuple(t *testing.T) {
 				t.Errorf("Failed to split Device tuple: %v", tupleT.error)
 			}
 			want := []any{[]float32{1.1, 1.2}, 5}
-			if !types.DeepSliceCmp(splits[0].Local().Value(), want[0], types.Equal[float32]) || splits[1].Local().Value().(int) != 5 {
+			if !types.DeepSliceCmp(splits[0].Local().Value(), want[0], types.EqualAny[float32]) || splits[1].Local().Value().(int) != 5 {
 				fmt.Printf("%s\n", g)
 				fmt.Printf("\tResult=(%v, %v)\n", splits[0].Local().Value(), splits[1].Local().Value())
 				t.Fatalf("Wanted %v", want)
@@ -671,7 +671,7 @@ func TestTuple(t *testing.T) {
 			if splits == nil {
 				t.Errorf("Failed to split result tuple a second time: %v", tupleT.error)
 			}
-			if !types.DeepSliceCmp(splits[0].Local().Value(), want[0], types.Equal[float32]) || splits[1].Local().Value().(int) != 5 {
+			if !types.DeepSliceCmp(splits[0].Local().Value(), want[0], types.EqualAny[float32]) || splits[1].Local().Value().(int) != 5 {
 				fmt.Printf("\tResult=(%v, %v)\n", splits[0].Local().Value(), splits[1].Local().Value())
 				t.Errorf("Failed at 2nd split of tuple: wanted %v", want)
 			}
@@ -687,7 +687,7 @@ func TestIota(t *testing.T) {
 		g.Compile()
 		got := g.Run(nil).Local().Value()
 		want := [][]float64{{0, 0}, {1, 1}}
-		if !xslices.DeepSliceCmp(got, want, xslices.Equal[float64]) {
+		if !xslices.DeepSliceCmp(got, want, xslices.EqualAny[float64]) {
 			t.Fatalf("Iota: want %v, got %v", want, got)
 		}
 	}
@@ -697,7 +697,7 @@ func TestIota(t *testing.T) {
 		g.Compile()
 		got := g.Run(nil).Local().Value()
 		want := [][]float64{{0, 1}, {0, 1}}
-		if !xslices.DeepSliceCmp(got, want, xslices.Equal[float64]) {
+		if !xslices.DeepSliceCmp(got, want, xslices.EqualAny[float64]) {
 			t.Fatalf("Iota: want %v, got %v", want, got)
 		}
 	}
@@ -791,7 +791,7 @@ func TestConcatenate(t *testing.T) {
 		got := g.Run(nil).Local()
 		fmt.Printf("\t\tresult=%s\n", got.GoStr())
 		want := []float64{0, 1, 2, 3, 4, 5, 6, 7}
-		if !xslices.DeepSliceCmp(got.Value(), want, xslices.Equal[float64]) {
+		if !xslices.DeepSliceCmp(got.Value(), want, xslices.EqualAny[float64]) {
 			t.Errorf("scatter: want %v, got %v", want, got)
 		}
 	}
@@ -806,7 +806,7 @@ func TestConcatenate(t *testing.T) {
 		got := g.Run(nil).Local()
 		fmt.Printf("\t\tresult=%s\n", got.GoStr())
 		want := [][][]float64{{{0, 1}, {2, 3}, {8, 9}}, {{4, 5}, {6, 7}, {10, 11}}}
-		if !xslices.DeepSliceCmp(got.Value(), want, xslices.Equal[float64]) {
+		if !xslices.DeepSliceCmp(got.Value(), want, xslices.EqualAny[float64]) {
 			t.Errorf("scatter: want %v, got %v", want, got)
 		}
 	}

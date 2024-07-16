@@ -280,7 +280,7 @@ func GatherWithBatchDims(params, indices *Node, batchDims int) *Node {
 	// Grow indices to include batch dimensions: "example" here mean one element of the batch
 	// dimensions. This is because the underlying gatherXLA doesn't support batch dimensions.
 	if batchDims > 0 {
-		if !types.DeepSliceCmp(params.Shape().Dimensions[0:batchDims], indices.Shape().Dimensions[0:batchDims], types.Equal[int]) {
+		if !types.DeepSliceCmp(params.Shape().Dimensions[0:batchDims], indices.Shape().Dimensions[0:batchDims], types.EqualAny[int]) {
 			Panicf("batch dimensions (first %d dimensions) from params (outputShapes=%s) and indices (outputShapes=%s) don't match",
 				batchDims, params.outputShapes, indices.outputShapes))
 		}
@@ -356,14 +356,14 @@ func ScatterAdd(operand, indices, updates *Node, sorted, unique bool) *Node {
 	indicesRank := indices.Rank()
 	indexedRank := indices.Shape().Dimensions[indicesRank-1]
 	updatesRank := updates.Rank()
-	if updatesRank < indicesRank-1 || !xslices.DeepSliceCmp(updates.Shape().Dimensions[:indicesRank-1], indices.Shape().Dimensions[:indicesRank-1], xslices.Equal[int]) {
+	if updatesRank < indicesRank-1 || !xslices.DeepSliceCmp(updates.Shape().Dimensions[:indicesRank-1], indices.Shape().Dimensions[:indicesRank-1], xslices.EqualAny[int]) {
 		Panicf("updates rank prefix (outputShapes=%s) must match the first n-1 dimensions of the indices (outputShapes=%s)",
 			updates.outputShapes, indices.outputShapes)
 	}
 	slicesRank := updatesRank - (indicesRank - 1)
 	slicesDims := updates.Shape().Dimensions[indicesRank-1:]
 	operandRank := operand.Shape().Rank()
-	if operandRank != indexedRank+slicesRank || !xslices.DeepSliceCmp(operand.Shape().Dimensions[indexedRank:], slicesDims, xslices.Equal[int]) {
+	if operandRank != indexedRank+slicesRank || !xslices.DeepSliceCmp(operand.Shape().Dimensions[indexedRank:], slicesDims, xslices.EqualAny[int]) {
 		Panicf("operand outputShapes (%s) has to be a combination of the indexed rank (%d, the last dimension of indices outputShapes %s) and "+
 			"the slices coming from updates (the last %d dimensions %v of the updates, shaped %s)",
 			operand.outputShapes, indexedRank, indices.outputShapes, slicesRank, slicesDims, updates.outputShapes)

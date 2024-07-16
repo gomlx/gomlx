@@ -26,7 +26,7 @@ import (
 )
 
 func TestNanLogger(t *testing.T) {
-	manager := graphtest.BuildTestManager()
+	manager := graphtest.BuildTestBackend()
 
 	var numHandlerCalls, numNan, numInf int
 	var lastHandledScope []string

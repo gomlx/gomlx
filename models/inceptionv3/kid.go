@@ -96,7 +96,7 @@ func (builder *KidBuilder) BuildGraph(ctx *context.Context, labels, predictions 
 
 	images := [2]*Node{labels[0], predictions[0]}
 	imagesShape := images[0].Shape()
-	if !imagesShape.Eq(images[1].Shape()) {
+	if !imagesShape.Equal(images[1].Shape()) {
 		Panicf("Labels (%s) and predictions (%s) have different shapes",
 			images[0].Shape(), images[1].Shape())
 	}

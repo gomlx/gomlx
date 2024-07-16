@@ -6,7 +6,6 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/types/shapes"
 	timage "github.com/gomlx/gomlx/types/tensor/image"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -23,7 +22,7 @@ func TestBuildGraph(t *testing.T) {
 		fmt.Println("- github.com/gomlx/gomlx/models/inceptionv3: TestBuildGraph disabled for go test --short because it requires downloading a large file with weights.")
 		return
 	}
-	manager := graphtest.BuildTestManager()
+	manager := graphtest.BuildTestBackend()
 
 	// Load GoMLX gopher mascot image and scale to inception's size
 	// for classification (299x299 == ClassificationImageSize).

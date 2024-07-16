@@ -289,7 +289,7 @@ func (b *Builder) Equal(x0, x1 backends.Op) backends.Op {
 	xla_x1 := b.verifyAndCastOp(x1, "x1")
 	xla_result, err := xlabuilder.Equal(xla_x0, xla_x1)
 	if err != nil {
-		panic(errors.WithMessagef(err, "Backend %q: failed Equal", BackendName))
+		panic(errors.WithMessagef(err, "Backend %q: failed EqualAny", BackendName))
 	}
 	return xla_result
 }

@@ -703,7 +703,7 @@ func (ctx *Context) VariableWithShape(name string, shape shapes.Shape) *Variable
 	}
 
 	if v != nil {
-		if !shape.Eq(v.shape) {
+		if !shape.Equal(v.shape) {
 			Panicf("requested to reuse variable %q in scope %q, but with different shape from original: previous shape=%s, requested shape=%s",
 				name, ctx.scope, v.shape, shape)
 		}
@@ -773,7 +773,7 @@ func (ctx *Context) VariableWithValue(name string, value any) *Variable {
 
 	if v != nil {
 		// Pre-existing variable to reuse: check that the requested and previous shapes are the same.
-		if !valueT.Shape().Eq(v.shape) {
+		if !valueT.Shape().Equal(v.shape) {
 			Panicf("requested to reuse variable %q in scope %q, but with value with different shape from original: previous shape=%s, requested value shape=%s",
 				name, ctx.scope, v.shape, valueT.Shape())
 		}

@@ -27,7 +27,6 @@ import (
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
-	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"os"
@@ -35,7 +34,7 @@ import (
 )
 
 func TestCheckpoints(t *testing.T) {
-	manager := graphtest.BuildTestManager()
+	manager := graphtest.BuildTestBackend()
 
 	// Graph function to test: it simply creates, increments and returns the global step.
 	testGraphFn := func(ctx *context.Context, g *Graph) *Node {
@@ -109,7 +108,7 @@ func TestCheckpoints(t *testing.T) {
 }
 
 func TestMergedCheckpoints(t *testing.T) {
-	manager := graphtest.BuildTestManager()
+	manager := graphtest.BuildTestBackend()
 	var dir string
 	{
 		ctx := context.NewContext(manager).Checked(false)
@@ -147,7 +146,7 @@ func TestMergedCheckpoints(t *testing.T) {
 }
 
 func TestParams(t *testing.T) {
-	manager := graphtest.BuildTestManager()
+	manager := graphtest.BuildTestBackend()
 
 	var (
 		dir                            string

@@ -57,7 +57,7 @@ func epsilonForDType(g *Graph, dtype dtypes.DType) *Node {
 func MeanSquaredError(labels, predictions []*Node) (loss *Node) {
 	predictions0 := predictions[0]
 	labels0 := labels[0]
-	if !labels0.Shape().Eq(predictions0.Shape()) {
+	if !labels0.Shape().Equal(predictions0.Shape()) {
 		Panicf("labels[0] (%s) and predictions[0] (%s) must have same shape", labels0.Shape(), predictions0.Shape())
 	}
 	weights, mask := CheckLabelsForWeightsAndMask(labels0.Shape(), labels)
@@ -86,9 +86,9 @@ func CheckLabelsForWeightsAndMask(weightsShape shapes.Shape, labels []*Node) (we
 	maskShape := shapes.Make(dtypes.Bool, weightsShape.Dimensions...)
 	// We skip labels[0] because that contains the actual labels.
 	for ii, extra := range labels[1:] {
-		if weights == nil && extra.Shape().Eq(weightsShape) {
+		if weights == nil && extra.Shape().Equal(weightsShape) {
 			weights = extra
-		} else if mask == nil && extra.Shape().Eq(maskShape) {
+		} else if mask == nil && extra.Shape().Equal(maskShape) {
 			mask = extra
 		} else {
 			Panicf("labels ([]*Node) provided by the dataset to the loss function has extra tensors whose use is unknown: labels[%d].shape=%s "+
@@ -110,7 +110,7 @@ func CheckLabelsForWeightsAndMask(weightsShape shapes.Shape, labels []*Node) (we
 func MeanAbsoluteError(labels, predictions []*Node) (loss *Node) {
 	predictions0 := predictions[0]
 	labels0 := labels[0]
-	if !labels0.Shape().Eq(predictions0.Shape()) {
+	if !labels0.Shape().Equal(predictions0.Shape()) {
 		Panicf("labels[0] (%s) and predictions[0] (%s) must have same shape", labels0.Shape(), predictions0.Shape())
 	}
 
@@ -142,7 +142,7 @@ func MeanAbsoluteError(labels, predictions []*Node) (loss *Node) {
 func BinaryCrossentropy(labels, predictions []*Node) *Node {
 	predictions0 := predictions[0]
 	labels0 := labels[0]
-	if !labels0.Shape().Eq(predictions0.Shape()) {
+	if !labels0.Shape().Equal(predictions0.Shape()) {
 		Panicf("labels[0] (%s) and predictions[0] (%s) must have same shape", labels0.Shape(), predictions0.Shape())
 	}
 	losses := Neg(Add(
@@ -258,7 +258,7 @@ func CategoricalCrossEntropyLogits(labels, logits []*Node) *Node {
 // nodes only (as opposed to slices).
 func categoricalCrossEntropyLogitsImpl(labels, logits, weights, mask *Node) *Node {
 	shape := labels.Shape()
-	if !shape.Eq(logits.Shape()) {
+	if !shape.Equal(logits.Shape()) {
 		Panicf("labels(%s) and logits(%s) must different shapes", shape, logits.Shape())
 	}
 	predictions := Softmax(logits)
@@ -288,7 +288,7 @@ func categoricalCrossEntropyImpl(labels, predictions, weights, mask *Node) *Node
 	g := predictions.Graph()
 	shape := labels.Shape()
 	dtype := labels.DType()
-	if !shape.Eq(predictions.Shape()) {
+	if !shape.Equal(predictions.Shape()) {
 		Panicf("labels(%s) and predictions(%s) must different shapes", shape, predictions.Shape())
 	}
 	epsilon := epsilonForDType(g, dtype)

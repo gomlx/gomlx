@@ -50,7 +50,7 @@ const LeakThreshold int64 = 300000
 // It then destroys the returning tensor.Device objects (xla.OnDeviceBuffer), and checks that memory doesn't get
 // out of control.
 func TestMemoryLeaksCtxExec(t *testing.T) {
-	manager := graphtest.BuildTestManager()
+	manager := graphtest.BuildTestBackend()
 	initialValue := xslices.SliceWithValue(100, 0.0)
 
 	graphFn := func(ctx *Context, x *Node) []*Node {

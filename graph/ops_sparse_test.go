@@ -37,7 +37,7 @@ func TestIndicesForShape(t *testing.T) {
 	got := g.Run(nil).Local()
 	fmt.Printf("\tIndicesForShape(%s)=%v\n", shape, got)
 	want := [][]int64{{0, 0, 0}, {0, 0, 1}, {0, 0, 2}, {0, 0, 3}, {0, 1, 0}, {0, 1, 1}, {0, 1, 2}, {0, 1, 3}, {0, 2, 0}, {0, 2, 1}, {0, 2, 2}, {0, 2, 3}, {1, 0, 0}, {1, 0, 1}, {1, 0, 2}, {1, 0, 3}, {1, 1, 0}, {1, 1, 1}, {1, 1, 2}, {1, 1, 3}, {1, 2, 0}, {1, 2, 1}, {1, 2, 2}, {1, 2, 3}}
-	if !xslices.DeepSliceCmp(got.Value(), want, xslices.Equal[int64]) {
+	if !xslices.DeepSliceCmp(got.Value(), want, xslices.EqualAny[int64]) {
 		t.Errorf("IndicesForShape(%s): want %v, got %v", shape, want, got)
 	}
 }
@@ -55,7 +55,7 @@ func TestGather(t *testing.T) {
 		got := g.Run(nil).Local()
 		fmt.Printf("\t\tGather=%v\n", got)
 		want := []float64{3, 4, 5}
-		if !xslices.DeepSliceCmp(got.Value(), want, xslices.Equal[float64]) {
+		if !xslices.DeepSliceCmp(got.Value(), want, xslices.EqualAny[float64]) {
 			t.Errorf("Gather: want %v, got %v", want, got)
 		}
 	}
@@ -71,7 +71,7 @@ func TestGather(t *testing.T) {
 		got := g.Run(nil).Local()
 		fmt.Printf("\t\tGather=%v\n", got)
 		want := [][]float64{{6, 7, 8}, {0, 1, 2}}
-		if !xslices.DeepSliceCmp(got.Value(), want, xslices.Equal[float64]) {
+		if !xslices.DeepSliceCmp(got.Value(), want, xslices.EqualAny[float64]) {
 			t.Errorf("Gather: want %v, got %v", want, got)
 		}
 	}
@@ -87,7 +87,7 @@ func TestGather(t *testing.T) {
 		got := g.Run(nil).Local()
 		fmt.Printf("\t\tGather=%v\n", got)
 		want := [][][]float64{{{6, 7, 8}, {0, 1, 2}}, {{6, 7, 8}, {3, 4, 5}}}
-		if !xslices.DeepSliceCmp(got.Value(), want, xslices.Equal[float64]) {
+		if !xslices.DeepSliceCmp(got.Value(), want, xslices.EqualAny[float64]) {
 			t.Errorf("Gather: want %v, got %v", want, got)
 		}
 	}
@@ -103,7 +103,7 @@ func TestGather(t *testing.T) {
 		got := g.Run(nil).Local()
 		fmt.Printf("\t\tGather=%v\n", got)
 		want := [][][]float64{{{8, 9}, {10, 11}}, {{0, 1}, {2, 3}}, {{4, 5}, {6, 7}}, {{12, 13}, {14, 15}}}
-		if !xslices.DeepSliceCmp(got.Value(), want, xslices.Equal[float64]) {
+		if !xslices.DeepSliceCmp(got.Value(), want, xslices.EqualAny[float64]) {
 			t.Errorf("Gather: want %v, got %v", want, got.GoStr())
 		}
 	}
@@ -152,7 +152,7 @@ func TestScatter(t *testing.T) {
 		got := g.Run(nil).Local()
 		fmt.Printf("\t\tscatter=%v\n", got)
 		want := [][]float64{{0, 0, 0}, {2, 3, 4}}
-		if !xslices.DeepSliceCmp(got.Value(), want, xslices.Equal[float64]) {
+		if !xslices.DeepSliceCmp(got.Value(), want, xslices.EqualAny[float64]) {
 			t.Errorf("scatter: want %v, got %v", want, got)
 		}
 	}
@@ -169,7 +169,7 @@ func TestScatter(t *testing.T) {
 		got := g.Run(nil).Local()
 		fmt.Printf("\t\tscatter=%v\n", got)
 		want := [][][]float64{{{4}, {5}, {6}}, {{1}, {1}, {1}}, {{1}, {2}, {3}}}
-		if !xslices.DeepSliceCmp(got.Value(), want, xslices.Equal[float64]) {
+		if !xslices.DeepSliceCmp(got.Value(), want, xslices.EqualAny[float64]) {
 			t.Errorf("scatter: want %v, got %v", want, got)
 		}
 	}

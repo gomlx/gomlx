@@ -160,8 +160,8 @@ func CloseToEpsilon[T interface{ float32 | float64 }](epsilon T) func(e0, e1 any
 	}
 }
 
-// Equal is a comparison function that tests for exact equality, and can be fed to DeepSliceCmp.
-func Equal[T comparable](e0, e1 any) bool {
+// EqualAny is a comparison function that tests for exact equality, and can be fed to DeepSliceCmp.
+func EqualAny[T comparable](e0, e1 any) bool {
 	e0v, ok := e0.(T)
 	if !ok {
 		return false

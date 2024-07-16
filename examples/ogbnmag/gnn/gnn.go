@@ -342,7 +342,7 @@ func poolMessagesWithAdjacency(ctx *context.Context, source, edgesSource, edgesT
 	if source.Rank() != 2 {
 		Panicf("poolMessagesWithAdjacency(): source is expected to be shaped `[num_nodes, emb_size]`, instead got %s", source.Shape())
 	}
-	if (edgesSource.Rank() != 1 && edgesSource.Rank() != 2) || !edgesSource.Shape().Eq(edgesTarget.Shape()) ||
+	if (edgesSource.Rank() != 1 && edgesSource.Rank() != 2) || !edgesSource.Shape().Equal(edgesTarget.Shape()) ||
 		(edgesSource.Rank() == 2 && edgesSource.Shape().Dimensions[1] != 1) {
 		Panicf("poolMessagesWithAdjacency(): edgesSource and edgesTarget must have the same shape: either [num_edges] or [num_edges, 1] and be of "+
 			"some integer dtype, instead got edgesSource.shape=%s edgesTarget.shape=%s", edgesSource.Shape(), edgesTarget.Shape())
@@ -433,7 +433,7 @@ func updateState(ctx *context.Context, prevState, input, mask *Node) *Node {
 	state = layers.ActivationFromContext(ctx, state)
 	state = layers.DropoutFromContext(ctx, state)
 
-	if updateType == "residual" && prevState.Shape().Eq(state.Shape()) {
+	if updateType == "residual" && prevState.Shape().Equal(state.Shape()) {
 		state = Add(state, prevState)
 	}
 	state = layers.MaskedNormalizeFromContext(ctx.In("normalization"), state, mask)

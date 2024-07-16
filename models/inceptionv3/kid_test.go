@@ -4,7 +4,6 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/types/shapes"
 	timage "github.com/gomlx/gomlx/types/tensor/image"
 	"github.com/stretchr/testify/require"
 	"image"
@@ -50,7 +49,7 @@ func noisyImages(t *testing.T, manager *Manager, batch tensors.Tensor) tensors.T
 
 func TestKidMetric(t *testing.T) {
 	require.NoError(t, DownloadAndUnpackWeights(*flagDataDir))
-	manager := graphtest.BuildTestManager()
+	manager := graphtest.BuildTestBackend()
 
 	ImagePaths := []string{
 		"gomlx_gopher_299.png",

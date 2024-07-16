@@ -52,7 +52,7 @@ func TestMeanAbsoluteError(t *testing.T) {
 type gradTestFunc func(g *Graph) (output *Node, nodesForGrad []*Node)
 
 func testGradients[T interface{ float32 | float64 }](t *testing.T, name string, testFn gradTestFunc, wantForGrad [][]T) {
-	manager := graphtest.BuildTestManager()
+	manager := graphtest.BuildTestBackend()
 	g := manager.NewGraph(name)
 	fmt.Printf("%s:\n", name)
 	output, nodesForGrad := testFn(g)
@@ -98,7 +98,7 @@ type fnToTest func(g *Graph) (input, output *Node)
 
 func testSomeFunc[T interface{ float32 | float64 }](t *testing.T, name string, fn fnToTest, want any, close bool) {
 	fmt.Printf("%s\n", name)
-	manager := graphtest.BuildTestManager()
+	manager := graphtest.BuildTestBackend()
 	g := manager.NewGraph(name)
 	input, output := fn(g)
 	g.Compile(input, output)

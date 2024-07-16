@@ -33,12 +33,12 @@ func TestOnDeviceBuffer(t *testing.T) {
 		t.Fatalf("failed to move Literal to device:%v", err)
 	}
 	got := buffer.Shape()
-	if !got.Eq(want) {
+	if !got.Equal(want) {
 		t.Fatalf("Created literal with shape %s, got ScopedBuffer of shape %s.", want, got)
 	}
 
 	got2, err := FromOnDeviceBuffer(buffer)
-	if !got2.Shape().Eq(want) {
+	if !got2.Shape().Equal(want) {
 		t.Fatalf("Created literal with shape %s, converted to and back from ScopedBuffer and got shape %s.", want, got2.Shape())
 	}
 }

@@ -28,7 +28,7 @@ import (
 )
 
 func TestContextVariables(t *testing.T) {
-	manager := graphtest.BuildTestManager()
+	manager := graphtest.BuildTestBackend()
 	ctx := NewContext(manager)
 	ctx2 := ctx.In("a")
 
@@ -62,7 +62,7 @@ func TestContextVariables(t *testing.T) {
 }
 
 func TestContextVariablesInitialization(t *testing.T) {
-	manager := graphtest.BuildTestManager()
+	manager := graphtest.BuildTestBackend()
 	ctx := NewContext(manager)
 	ctx0 := ctx.In("a").WithInitializer(initializers.RandomUniformFn(42, 1.5, 2.5))
 	v0 := ctx0.VariableWithShape("x", shapes.Make(dtypes.Float32))
@@ -90,7 +90,7 @@ func TestContextVariablesInitialization(t *testing.T) {
 }
 
 func TestParams(t *testing.T) {
-	manager := graphtest.BuildTestManager()
+	manager := graphtest.BuildTestBackend()
 	ctx := NewContext(manager)
 	ctx.SetParam("x", 7.0)
 	got, found := ctx.GetParam("x")
@@ -115,7 +115,7 @@ func TestParams(t *testing.T) {
 }
 
 func TestEnumerateVariables(t *testing.T) {
-	manager := graphtest.BuildTestManager()
+	manager := graphtest.BuildTestBackend()
 	ctx := NewContext(manager)
 	ctx0 := ctx.In("a")
 	_ = ctx0.VariableWithShape("x", shapes.Make(dtypes.Float32))
@@ -146,7 +146,7 @@ func TestEnumerateVariables(t *testing.T) {
 }
 
 func TestDeleteVariable(t *testing.T) {
-	manager := graphtest.BuildTestManager()
+	manager := graphtest.BuildTestBackend()
 	ctx := NewContext(manager)
 	ctx0 := ctx.In("a")
 	_ = ctx0.VariableWithShape("x", shapes.Make(dtypes.Float32))
@@ -167,7 +167,7 @@ func TestDeleteVariable(t *testing.T) {
 }
 
 func TestDeleteVariablesInScope(t *testing.T) {
-	manager := graphtest.BuildTestManager()
+	manager := graphtest.BuildTestBackend()
 	ctx := NewContext(manager)
 	ctx0 := ctx.In("a")
 	_ = ctx0.VariableWithShape("x", shapes.Make(dtypes.Float32))
@@ -210,7 +210,7 @@ func (l *ConstantLoader) LoadVariable(ctx *Context, scope, name string) (value t
 }
 
 func TestContext_SetLoader(t *testing.T) {
-	manager := graphtest.BuildTestManager()
+	manager := graphtest.BuildTestBackend()
 	ctx := NewContext(manager)
 	ctx.SetLoader(&ConstantLoader{
 		Values: map[string]map[string]tensors.Tensor{

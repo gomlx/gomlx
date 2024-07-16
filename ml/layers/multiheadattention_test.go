@@ -37,7 +37,7 @@ import (
 )
 
 func TestMultiHeadAttentionGraph(t *testing.T) {
-	manager := graphtest.BuildTestManager()
+	manager := graphtest.BuildTestBackend()
 	{
 		ctx := context.NewContext(manager)
 		g := manager.NewGraph().WithName("test")
@@ -177,7 +177,7 @@ func TestMultiHeadAttentionTraining(t *testing.T) {
 	}
 
 	// Backend handles creation of ML computation graphs, accelerator resources, etc.
-	manager := graphtest.BuildTestManager()
+	manager := graphtest.BuildTestBackend()
 
 	// Context and optimizer used for training.
 	ctx := context.NewContext(manager)

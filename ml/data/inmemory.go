@@ -239,7 +239,7 @@ func (mds *InMemoryDataset) readDataset(ds train.Dataset, dsIsBatched bool) (err
 				if dsIsBatched {
 					validShapes = isEqualButBatchDimension(inputsAndLabelsShapes[ii], t.Shape())
 				} else {
-					validShapes = inputsAndLabelsShapes[ii].Eq(t.Shape())
+					validShapes = inputsAndLabelsShapes[ii].Equal(t.Shape())
 				}
 				if !validShapes {
 					err = errors.Errorf("shape of %s incompatible: other examples shape was %s, for example #%d got shape %s",

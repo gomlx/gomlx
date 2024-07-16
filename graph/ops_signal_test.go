@@ -141,7 +141,7 @@ func realFftExample(manager *Manager, realDType dtypes.DType, numPoints int, fre
 //
 // See plots of this in `examples/fft/fft.ipynb`.
 func TestGradientRealFFT(t *testing.T) {
-	manager := graphtest.BuildTestManager()
+	manager := graphtest.BuildTestBackend()
 	// trueX is real, and trueY is the fft, a complex tensor.
 	trueX, trueY := realFftExample(manager, dtypes.Float32, 100, 2)
 	ctx := context.NewContext(manager)
@@ -181,7 +181,7 @@ func TestGradientRealFFT(t *testing.T) {
 // This works similar to TestGradientRealFFT, but inverts what we are predicting:
 // we are trying to learn the FFT value that generates the sinusoidal curve.
 func TestGradientInverseRealFFT(t *testing.T) {
-	manager := graphtest.BuildTestManager()
+	manager := graphtest.BuildTestBackend()
 	// We revert the x/y of realFftExample: trueX is the fft, a complex tensor, and trueY is the real sinusoidal curve.
 	trueY, trueX := realFftExample(manager, dtypes.Float64, 10, 2)
 	ctx := context.NewContext(manager)

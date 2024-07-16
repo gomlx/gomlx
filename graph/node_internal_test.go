@@ -47,7 +47,7 @@ func TestBroadcastInDim(t *testing.T) {
 		broadcastInDim(input, shapes.Make(dtypes.Float32, 2, 1, 2), []int{0, 1, 2})
 		got := compileAndRun(g)
 		want := [][][]float32{{{1.1, 1.2}}, {{1.1, 1.2}}} // Shape [2, 1, 2].
-		if !xslices.DeepSliceCmp(got, want, xslices.Equal[float32]) {
+		if !xslices.DeepSliceCmp(got, want, xslices.EqualAny[float32]) {
 			fmt.Printf("%s\n", g)
 			fmt.Printf("\tResult=%v\n", got)
 			t.Errorf("Wanted %v, got %v", want, got)

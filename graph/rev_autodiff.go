@@ -205,7 +205,7 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 			}
 			//fmt.Printf("\t\tSetting vjp for %s: %s\n", input, vjp)
 			combinedShape := combineOutputShape(outputShape, input.Shape())
-			if !vjp.Shape().Eq(combinedShape) {
+			if !vjp.Shape().Equal(combinedShape) {
 				Panicf("invalid Gradient calculation for node %q: invalid outputShapes for calculated AccumulatedVJP for "+
 					"input #%d (out of %d): input outputShapes=%s, calculated AccumulatedVJP outputShapes=%s (wanted %s)"+
 					" -- this probably indicates a bug in the code, please report the issue.",
@@ -398,7 +398,7 @@ func noOpVJP(node, v *Node, _ shapes.Shape) []*Node {
 // It is a reduce-sum of the broadcast dimensions.
 func vjpForDefaultBroadcast(node, input, v *Node) *Node {
 	_ = validateBuildingGraphFromInputs(node, input, v)
-	if input.Shape().Eq(node.Shape()) {
+	if input.Shape().Equal(node.Shape()) {
 		// If there was no broadcast involved, VJP is the identity.
 		return v
 	} else if input.IsScalar() {
@@ -553,7 +553,7 @@ func mulVJP(node, v *Node, _ shapes.Shape) []*Node {
 	broadcastInputs := make([]*Node, 2)
 	for ii := 0; ii < 2; ii++ {
 		broadcastInputs[ii] = node.inputNodes[ii]
-		if !broadcastInputs[ii].Shape().Eq(node.Shape()) {
+		if !broadcastInputs[ii].Shape().Equal(node.Shape()) {
 			broadcastInputs[ii] = BroadcastToShape(broadcastInputs[ii], node.Shape())
 		}
 	}
@@ -571,7 +571,7 @@ func divVJP(node, v *Node, _ shapes.Shape) []*Node {
 	broadcastInputs := make([]*Node, 2)
 	for ii := 0; ii < 2; ii++ {
 		broadcastInputs[ii] = node.inputNodes[ii]
-		if !broadcastInputs[ii].Shape().Eq(node.Shape()) {
+		if !broadcastInputs[ii].Shape().Equal(node.Shape()) {
 			broadcastInputs[ii] = BroadcastToShape(broadcastInputs[ii], node.Shape())
 		}
 	}

@@ -297,7 +297,7 @@ func BinaryAccuracyGraph(_ *context.Context, labels, predictions []*Node) *Node 
 		Panicf("BinaryAccuracy requires one labels tensor, got (%d) instead", len(labels))
 	}
 	label := labels[0]
-	if !prediction.Shape().Eq(label.Shape()) {
+	if !prediction.Shape().Equal(label.Shape()) {
 		Panicf("prediction (%s) and label (%s) have different shapes, can't calculate binary accuracy",
 			prediction.Shape(), label.Shape())
 	}
@@ -346,7 +346,7 @@ func BinaryLogitsAccuracyGraph(_ *context.Context, labels, logits []*Node) *Node
 		Panicf("logits0 (%s) and labels0 (%s) have different shapes (different total sizes), can't calculate binary accuracy",
 			logits0.Shape(), labels0.Shape())
 	}
-	if !logits0.Shape().Eq(labels0.Shape()) {
+	if !logits0.Shape().Equal(labels0.Shape()) {
 		// They are the same size, so we assume the labels0 can simply be re-shaped.
 		// Not strictly true, depending on how they are organized, but generally yes, and
 		// this is very convenient functionality.

@@ -12,7 +12,7 @@ import (
 )
 
 func TestUNetModelGraph(t *testing.T) {
-	manager = graphtest.BuildTestManager()
+	manager = graphtest.BuildTestBackend()
 	Init()
 	g := manager.NewGraph().WithName("test")
 	ctx := context.NewContext(manager)
@@ -21,7 +21,7 @@ func TestUNetModelGraph(t *testing.T) {
 	flowerIds := Zeros(g, shapes.Make(dtypes.Int32, numExamples))
 	fmt.Printf("  noisyImages.shape:\t%s\n", noisyImages.Shape())
 	filtered := UNetModelGraph(ctx, noisyImages, Ones(g, shapes.Make(DType, numExamples, 1, 1, 1)), flowerIds)
-	assert.True(t, noisyImages.Shape().Eq(filtered.Shape()), "Filtered images after UNetModelGraph should have the same shape as its input images")
+	assert.True(t, noisyImages.Shape().Equal(filtered.Shape()), "Filtered images after UNetModelGraph should have the same shape as its input images")
 	fmt.Printf("     filtered.shape:\t%s\n", filtered.Shape())
 	fmt.Printf("U-Net Model #params:\t%d\n", ctx.NumParameters())
 	fmt.Printf(" U-Net Model memory:\t%s\n", data.ByteCountIEC(ctx.Memory()))
@@ -42,7 +42,7 @@ func TestTrainingModelGraph(t *testing.T) {
 		fmt.Println("TestTrainingModelGraph skipped with go test -short: it requires downloading and preprocessing data.")
 		return
 	}
-	manager = graphtest.BuildTestManager()
+	manager = graphtest.BuildTestBackend()
 	Init()
 	g := manager.NewGraph().WithName("test")
 	ctx := context.NewContext(manager)
@@ -68,7 +68,7 @@ func TestImagesGenerator(t *testing.T) {
 	numImages := 5
 	numDiffusionSteps := 3
 
-	manager = graphtest.BuildTestManager()
+	manager = graphtest.BuildTestBackend()
 	ctx := context.NewContext(manager)
 	// ctx.RngStateReset() --> to truly randomize each run uncomment this.
 	g := manager.NewGraph().WithName("test")

@@ -44,7 +44,7 @@ func CnnEmbeddings(ctx *context.Context, images *Node) (embeddings *Node) {
 			if dropoutNode != nil {
 				logits = layers.Dropout(ctx, logits, dropoutNode)
 			}
-			if residual.Shape().Eq(logits.Shape()) {
+			if residual.Shape().Equal(logits.Shape()) {
 				logits = Add(logits, residual)
 			}
 		}

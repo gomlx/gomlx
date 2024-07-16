@@ -992,7 +992,7 @@ func backendDotGeneral(lhs *Node, lhsContractingAxes []int, lhsBatchAxes []int, 
 	return
 }
 
-// nodeInputsEqual holds the inputs used for the call to backends.Equal.
+// nodeInputsEqual holds the inputs used for the call to backends.EqualAny.
 type nodeInputsEqual struct {
 	x0 *Node
 	x1 *Node

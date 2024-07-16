@@ -75,7 +75,7 @@ func useRngState(g *Graph, initialSeed int64, fn func(rngState *Node) (newRngSta
 		}
 	}
 	newRngState := fn(rngState)
-	if !rngState.Shape().Eq(newRngState.Shape()) {
+	if !rngState.Shape().Equal(newRngState.Shape()) {
 		Panicf("updated rngState for the random number generator has invalid shape: %s (should be %s)",
 			newRngState.Shape(), rngState.Shape())
 	}

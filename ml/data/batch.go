@@ -178,7 +178,7 @@ func (ds *batchedDataset) lockedBatchBuffer() (batched batchElement, err error) 
 			return
 		}
 		for ii, input := range e.inputs {
-			if !inputsShapes[ii].Eq(input.Shape()) {
+			if !inputsShapes[ii].Equal(input.Shape()) {
 				err = errors.Errorf("input #%d returned by Yield has varying shapes (seen %s and %s)",
 					ii, inputsShapes[ii], input.Shape())
 				return
@@ -190,7 +190,7 @@ func (ds *batchedDataset) lockedBatchBuffer() (batched batchElement, err error) 
 			return
 		}
 		for ii, label := range e.labels {
-			if !labelsShapes[ii].Eq(label.Shape()) {
+			if !labelsShapes[ii].Equal(label.Shape()) {
 				err = errors.Errorf("label #%d returned by Yield has varying shapes (seen %s and %s)",
 					ii, labelsShapes[ii], label.Shape())
 				return

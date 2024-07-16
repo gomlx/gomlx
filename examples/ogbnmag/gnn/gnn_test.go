@@ -9,7 +9,7 @@ import (
 )
 
 func TestPoolMessagesWithFixedShape(t *testing.T) {
-	manager := graphtest.BuildTestManager()
+	manager := graphtest.BuildTestBackend()
 	ctx := context.NewContext(manager)
 	ctx.SetParam(ParamPoolingType, "sum|max")
 	graphtest.RunTestGraphFn(
@@ -38,7 +38,7 @@ func TestPoolMessagesWithFixedShape(t *testing.T) {
 }
 
 func TestPoolMessagesWithAdjacency(t *testing.T) {
-	manager := graphtest.BuildTestManager()
+	manager := graphtest.BuildTestBackend()
 	ctx := context.NewContext(manager)
 	ctx.SetParam(ParamPoolingType, "sum|mean")
 	graphtest.RunTestGraphFn(

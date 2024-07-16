@@ -591,7 +591,7 @@ func shapeForValueRecursive(shape *shapes.Shape, v reflect.Value, t reflect.Type
 			if err != nil {
 				return err
 			}
-			if !shape.Eq(shapeTest) {
+			if !shape.Equal(shapeTest) {
 				return fmt.Errorf("sub-slices have irregular shapes, found shapes %q, and %q", shape, shapeTest)
 			}
 		}
@@ -613,4 +613,65 @@ func baseType(valueType reflect.Type) reflect.Type {
 		valueType = valueType.Elem()
 	}
 	return valueType
+}
+
+// Equal checks weather t == otherTensor.
+// If they are the same pointer they are considered equal.
+// If the shapes are different it returns false.
+// If either are invalid (nil) it panics.
+//
+// Slow implementation: fine for small tensors, but write something specialized for the DType if speed is desired.
+func (t *Tensor) Equal(otherTensor *Tensor) bool {
+	t.AssertValid()
+	otherTensor.AssertValid()
+
+	if t == otherTensor {
+		return true
+	}
+	if !t.shape.Equal(otherTensor.shape) {
+		return false
+	}
+	equal := true // Set to false at the first difference.
+	t.ConstFlatData(func(flat0 any) {
+		otherTensor.ConstFlatData(func(flat1 any) {
+			t0V := reflect.ValueOf(flat0)
+			t1V := reflect.ValueOf(flat1)
+			if t0V.Len() != t1V.Len() {
+				equal = false
+				return
+			}
+			for ii := range t0V.Len() {
+				if !t0V.Index(ii).Equal(t1V.Index(ii)) {
+					equal = false
+					return
+				}
+			}
+		})
+	})
+	return equal
+}
+
+// InDelta checks weather Abs(t - otherTensor) < delta for every element.
+// If they are the same pointer they are considered equal.
+// If the shapes are different it returns false.
+// If either are invalid (nil) it panics. If the DType is not a float or complex, it also panics.
+//
+// Slow implementation: fine for small tensors, but write something specialized for the DType if speed is desired.
+func (t *Tensor) InDelta(otherTensor *Tensor, delta float64) bool {
+	t.AssertValid()
+	otherTensor.AssertValid()
+
+	if t == otherTensor {
+		return true
+	}
+	if !t.shape.Equal(otherTensor.shape) {
+		return false
+	}
+	inDelta := true // Set to false at the first difference.
+	t.ConstFlatData(func(flat0 any) {
+		otherTensor.ConstFlatData(func(flat1 any) {
+			inDelta = xslices.SlicesInDelta(flat0, flat1, delta)
+		})
+	})
+	return inDelta
 }

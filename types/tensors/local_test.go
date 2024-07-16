@@ -34,7 +34,7 @@ func cmpShapes(t *testing.T, shape, wantShape shapes.Shape, err error) {
 	if err != nil {
 		t.Fatalf("Failed to get shape (wanted %q) from value: %v", wantShape, err)
 	}
-	if !wantShape.Eq(shape) {
+	if !wantShape.Equal(shape) {
 		t.Fatalf("Invalid shape %q, wanted %q", shape, wantShape)
 	}
 }

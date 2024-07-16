@@ -422,7 +422,7 @@ func Where(condition, onTrue, onFalse *Node) *Node {
 		exceptions.Panicf("Where(condition, onTrue, onFalse) requires condition to be of dtype Bool, got %s instead",
 			condition.Shape())
 	}
-	if !onTrue.Shape().Eq(onFalse.Shape()) {
+	if !onTrue.Shape().Equal(onFalse.Shape()) {
 		exceptions.Panicf("Where(condition, onTrue, onFalse) requires onTrue (%s) and onFalse (%s) to be the same outputShapes",
 			onTrue.Shape(), onFalse.Shape())
 	}

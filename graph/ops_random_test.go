@@ -44,7 +44,7 @@ func testRandomUniform[T interface {
 }
 
 func TestRandomUniform(t *testing.T) {
-	manager := graphtest.BuildTestManager()
+	manager := graphtest.BuildTestBackend()
 	testRandomUniform[float32](t, manager)
 	testRandomUniform[float64](t, manager)
 	testRandomUniform[float16.Float16](t, manager)
@@ -81,7 +81,7 @@ func testRandomNormal[T interface {
 }
 
 func TestRandomNormal(t *testing.T) {
-	manager := graphtest.BuildTestManager()
+	manager := graphtest.BuildTestBackend()
 	testRandomNormal[float32](t, manager)
 	testRandomNormal[float64](t, manager)
 	testRandomNormal[float16.Float16](t, manager)

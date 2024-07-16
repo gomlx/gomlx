@@ -34,7 +34,7 @@ func oneLayerGraph(ctx *context.Context, x *Node) *Node {
 }
 
 func TestExec(t *testing.T) {
-	manager := graphtest.BuildTestManager()
+	manager := graphtest.BuildTestBackend()
 	oneLayer, err := context.NewExecAny(manager, nil, oneLayerGraph)
 	if err != nil {
 		t.Fatalf("Failed to create context.Exec for oneLayer: %+v", err)
@@ -68,7 +68,7 @@ func oneLayerManyInputsGraph(ctx *context.Context, inputs []*Node) *Node {
 }
 
 func TestExecWithSlices(t *testing.T) {
-	manager := graphtest.BuildTestManager()
+	manager := graphtest.BuildTestBackend()
 	oneLayer, err := context.NewExecAny(manager, nil, oneLayerManyInputsGraph)
 	if err != nil {
 		t.Fatalf("Failed to create context.Exec for oneLayer: %+v", err)
@@ -94,7 +94,7 @@ func TestExecWithSlices(t *testing.T) {
 }
 
 func TestExecWithVariableUpdates(t *testing.T) {
-	manager := graphtest.BuildTestManager()
+	manager := graphtest.BuildTestBackend()
 	ctx := context.NewContext(manager)
 	counter := context.NewExec(manager, ctx, func(ctx *context.Context, g *Graph) *Node {
 		dtype := dtypes.Int64

@@ -171,8 +171,8 @@ func (s Shape) TupleSize() int {
 	return len(s.TupleShapes)
 }
 
-// Eq compares two shapes for equality: dtype and dimensions are compared.
-func (s Shape) Eq(s2 Shape) bool {
+// Equal compares two shapes for equality: dtype and dimensions are compared.
+func (s Shape) Equal(s2 Shape) bool {
 	if s.DType != s2.DType {
 		return false
 	}
@@ -181,7 +181,7 @@ func (s Shape) Eq(s2 Shape) bool {
 			return false
 		}
 		for ii, element := range s.TupleShapes {
-			if !element.Eq(s2.TupleShapes[ii]) {
+			if !element.Equal(s2.TupleShapes[ii]) {
 				return false
 			}
 		}
@@ -197,8 +197,8 @@ func (s Shape) Eq(s2 Shape) bool {
 	return slices.Equal(s.Dimensions, s2.Dimensions)
 }
 
-// EqDimensions compares two shapes for equality of dimensions. Dtypes can be different.
-func (s Shape) EqDimensions(s2 Shape) bool {
+// EqualDimensions compares two shapes for equality of dimensions. Dtypes can be different.
+func (s Shape) EqualDimensions(s2 Shape) bool {
 	if s.IsTuple() {
 		if !s2.IsTuple() {
 			return false
@@ -207,7 +207,7 @@ func (s Shape) EqDimensions(s2 Shape) bool {
 			return false
 		}
 		for ii, element := range s.TupleShapes {
-			if !element.EqDimensions(s2.TupleShapes[ii]) {
+			if !element.EqualDimensions(s2.TupleShapes[ii]) {
 				return false
 			}
 		}

@@ -530,7 +530,7 @@ LoopCache:
 			continue
 		}
 		for ii, shape := range argsShapes {
-			if !shape.Eq(entry.argsShapes[ii]) {
+			if !shape.Equal(entry.argsShapes[ii]) {
 				continue LoopCache
 			}
 		}

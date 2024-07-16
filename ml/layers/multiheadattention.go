@@ -210,7 +210,7 @@ func (b *MultiHeadAttentionBuilder) SetQueryKeyMatrixMask(queryKeyMatrixMask *No
 	if b.keyMask != nil || b.queryMask != nil {
 		Panicf("a mask can be set either with SetKeyMask and SetQueryMask separately or with SetKeyQueryMatrixMask, but not both")
 	}
-	if queryKeyMatrixMask.Shape().Eq(b.attentionShape) {
+	if queryKeyMatrixMask.Shape().Equal(b.attentionShape) {
 		// Simplest case: queryKeyMatrixMask provided with attentionShape.
 		b.queryKeyMatrixMask = queryKeyMatrixMask
 		return b
@@ -222,7 +222,7 @@ func (b *MultiHeadAttentionBuilder) SetQueryKeyMatrixMask(queryKeyMatrixMask *No
 		shapeWithoutHeads.Dimensions[ii] = shapeWithoutHeads.Dimensions[ii+1]
 	}
 	shapeWithoutHeads.Dimensions = shapeWithoutHeads.Dimensions[0 : b.attentionShape.Rank()-1]
-	if !queryKeyMatrixMask.Shape().Eq(shapeWithoutHeads) {
+	if !queryKeyMatrixMask.Shape().Equal(shapeWithoutHeads) {
 		Panicf("invalid shape for queryKeyMatrixMask %s: expected either %s (with per-head mask) or %s",
 			queryKeyMatrixMask.Shape(), b.attentionShape, shapeWithoutHeads)
 	}

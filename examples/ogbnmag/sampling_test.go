@@ -17,7 +17,7 @@ func TestDatasets(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping long-running test.")
 	}
-	manager := graphtest.BuildTestManager()
+	manager := graphtest.BuildTestBackend()
 	ctx := context.NewContext(manager)
 	err := Download(*flagDataDir)
 	require.NoError(t, err, "failed to download OGBN-MAG dataset")

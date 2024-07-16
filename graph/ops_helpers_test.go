@@ -52,7 +52,7 @@ func TestBackendSlice(t *testing.T) {
 	g.Compile()
 	got := g.Run(nil).Local().Value()
 	want := [][]float64{{4, 5}}
-	if !xslices.DeepSliceCmp(got, want, xslices.Equal[float64]) {
+	if !xslices.DeepSliceCmp(got, want, xslices.EqualAny[float64]) {
 		t.Fatalf("Iota: want %v, got %v", want, got)
 	}
 }
@@ -72,7 +72,7 @@ func TestBackendGather(t *testing.T) {
 	got := g.Run(nil).Local()
 	fmt.Printf("\tgatherXLA=%v\n", got)
 	want := [][]float64{{6, 7, 8}, {0, 1, 2}}
-	if !xslices.DeepSliceCmp(got.Value(), want, xslices.Equal[float64]) {
+	if !xslices.DeepSliceCmp(got.Value(), want, xslices.EqualAny[float64]) {
 		t.Fatalf("gatherXLA: want %v, got %v", want, got)
 	}
 }
