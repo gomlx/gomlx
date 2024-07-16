@@ -99,17 +99,17 @@ func (n *Node) Shape() shapes.Shape {
 
 // DType returns the DType of the node's outputShapes.
 func (n *Node) DType() dtypes.DType {
-	return n.outputShapes.DType
+	return n.Shape().DType
 }
 
 // Rank returns the rank of the node's outputShapes.
 func (n *Node) Rank() int {
-	return n.outputShapes.Rank()
+	return n.Shape().Rank()
 }
 
 // IsScalar returns whether the node's outputShapes is a scalar.
 func (n *Node) IsScalar() bool {
-	return n.outputShapes.IsScalar()
+	return n.Shape().IsScalar()
 }
 
 // Id is the unique id of this node within the Graph.

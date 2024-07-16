@@ -159,9 +159,11 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 				}
 			}
 
-		} else if rNode.AccumulatedVJP == nil {
-			// For the usual nodes with single outputs, if there are no gradients arriving to rNode -- e.g.:
-			// there was a `stopGradient`, we can't propagate the gradient either.
+		}
+
+		// For the usual single output nodes, if there are no gradients arriving to rNode -- e.g.:
+		// there was a `stopGradient`, we can't propagate the gradient either.
+		if rNode.AccumulatedVJP == nil {
 			continue
 		}
 
@@ -328,6 +330,9 @@ func recursiveMarkAsUseful(rg *reverseGraph, rNode *reverseNode) {
 //	whatever we are calculating the gradient of) with respect to each of the `node` inputNodes.
 type VJP func(node, v *Node, outputShape shapes.Shape) []*Node
 
+// VJPMultiOutputs is the version of VJP for nodes with multiple outputs.
+type VJPMultiOutputs func(node *Node, vjps []*Node, outputShape shapes.Shape) []*Node
+
 // VJPRegistration maps each node type to its implementation of VJP. If implementing a new outputOps, or
 // for experimentation, one can dynamically change this.
 //
@@ -370,10 +375,13 @@ var VJPRegistration = map[NodeType]VJP{
 	NodeTypeConcatenate:        concatenateVJP,
 	NodeTypeConvGeneralDilated: convGeneralDilatedVJP,
 	NodeTypeReduceWindow:       reduceWindowVJP,
-	NodeTypeBatchNormTraining:  batchNormTrainingVJP,
 	NodeTypeTranspose:          transposeVJP,
 	NodeTypeBroadcastInDim:     broadcastInDimVJP,
 	NodeTypeFFT:                fftVJP,
+}
+
+var VJPMultiOutputsRegistration = map[NodeType]VJPMultiOutputs{
+	NodeTypeBatchNormForTraining: batchNormForTrainingVJP,
 }
 
 // nilVJP returns no gradient, for functions without any inputNodes.
@@ -390,7 +398,7 @@ func noOpVJP(node, v *Node, _ shapes.Shape) []*Node {
 // It is a reduce-sum of the broadcast dimensions.
 func vjpForDefaultBroadcast(node, input, v *Node) *Node {
 	_ = validateBuildingGraphFromInputs(node, input, v)
-	if input.Shape().Eq(node.outputShapes) {
+	if input.Shape().Eq(node.Shape()) {
 		// If there was no broadcast involved, VJP is the identity.
 		return v
 	} else if input.IsScalar() {
@@ -801,15 +809,17 @@ func gatherVJP(node, v *Node, _ shapes.Shape) []*Node {
 	}
 }
 
-// batchNormTrainingVJP generates the gradient with respect to the operand and the scale and offset
+// batchNormForTrainingVJP generates the gradient with respect to the operand and the scale and offset
 // parameters. It uses the XLA implemented gradient.
-func batchNormTrainingVJP(node, v *Node, _ shapes.Shape) []*Node {
-	operand, scale := node.inputNodes[0], node.inputNodes[1]
-	mean := GetTupleElement(node, 1)     // Output 1 of batchNormTraining, the batchMean.
-	variance := GetTupleElement(node, 2) // Output 2 of batchNormTraining, the batchVariance.
-	epsilon := node.serializedNode.Float
-	featureAxis := node.serializedNode.Int
-	gradOutput := GetTupleElement(v, 0)
+func batchNormForTrainingVJP(node *Node, vjps []*Node, _ shapes.Shape) []*Node {
+	params := node.inputs.(*nodeInputsBatchNormForTraining)
+	operand, scale := params.operand, params.scale
+	epsilon := params.epsilon
+	featureAxis := params.axis
+
+	splitOutputs := splitNode(node)
+	mean, variance := splitOutputs[1], splitOutputs[2]
+	gradOutput := vjps[0]
 	gradOperand, gradScale, gradOffset := batchNormGradXLA(operand, scale, mean, variance, gradOutput, epsilon, featureAxis)
 	return []*Node{gradOperand, gradScale, gradOffset}
 }

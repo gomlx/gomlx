@@ -63,19 +63,19 @@ func (b *Builder) ArgMinMax(x backends.Op, axis int, outputDType dtypes.DType, i
 	return xla_result
 }
 
-// BatchNormInference implements Batch Norm for inference. See details in
-// https://www.tensorflow.org/xla/operation_semantics#batchnorminference.
+// BatchNormForInference implements Batch Norm for inference. See details in
+// https://www.tensorflow.org/xla/operation_semantics#batchnorminference
 // Based on paper "Batch Normalization: Accelerating Deep Network Training by Reducing
 // Internal Covariate Shift" (Sergey Ioffe, Christian Szegedy), https://arxiv.org/abs/1502.03167.
-func (b *Builder) BatchNormInference(operand, scale, offset, mean, variance backends.Op, epsilon float32, axis int) backends.Op {
+func (b *Builder) BatchNormForInference(operand, scale, offset, mean, variance backends.Op, epsilon float32, axis int) backends.Op {
 	xla_operand := b.verifyAndCastOp(operand, "operand")
 	xla_scale := b.verifyAndCastOp(scale, "scale")
 	xla_offset := b.verifyAndCastOp(offset, "offset")
 	xla_mean := b.verifyAndCastOp(mean, "mean")
 	xla_variance := b.verifyAndCastOp(variance, "variance")
-	xla_result, err := xlabuilder.BatchNormInference(xla_operand, xla_scale, xla_offset, xla_mean, xla_variance, epsilon, axis)
+	xla_result, err := xlabuilder.BatchNormForInference(xla_operand, xla_scale, xla_offset, xla_mean, xla_variance, epsilon, axis)
 	if err != nil {
-		panic(errors.WithMessagef(err, "Backend %q: failed BatchNormInference", BackendName))
+		panic(errors.WithMessagef(err, "Backend %q: failed BatchNormForInference", BackendName))
 	}
 	return xla_result
 }

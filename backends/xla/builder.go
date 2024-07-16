@@ -162,6 +162,49 @@ func (b *Builder) RngBitGenerator(state backends.Op, shape shapes.Shape) (newSta
 	return
 }
 
+// BatchNormForTraining implements Batch Norm for training. See details in
+// https://www.tensorflow.org/xla/operation_semantics#batchnormtraining.
+//
+// It returns the normalized tensor, the batchMean and the batchVariance.
+//
+// Based on paper "Batch Normalization: Accelerating Deep Network Training by Reducing
+// Internal Covariate Shift" (Sergey Ioffe, Christian Szegedy), https://arxiv.org/abs/1502.03167.
+func (b *Builder) BatchNormForTraining(operand, scale, offset backends.Op, epsilon float32, axis int) (normalized, batchMean, batchVariance backends.Op) {
+	xlaOperand := b.verifyAndCastOp(operand, "operand")
+	xlaScale := b.verifyAndCastOp(scale, "scale")
+	xlaOffset := b.verifyAndCastOp(offset, "offset")
+	var err error
+	normalized, batchMean, batchVariance, err = xlabuilder.BatchNormForTraining(xlaOperand, xlaScale, xlaOffset, epsilon, axis)
+	if err != nil {
+		panic(errors.WithMessagef(err, "backend %q builder %q: BatchNormForTraining(operand=%s)", b.backend.Name(), b.name, xlaOperand.Shape))
+	}
+	return
+}
+
+// BatchNormGradient calculates the BatchNorm gradient. See details in
+// https://openxla.org/xla/operation_semantics#batchnormgrad
+//
+// The gradOutput is the adjoint gradient, that is, the gradient with respect to the output of the
+// batch normalization.
+//
+// It returns  as a tuple with the 3 elements.
+//
+// Based on paper "Batch Normalization: Accelerating Deep Network Training by Reducing
+// Internal Covariate Shift" (Sergey Ioffe, Christian Szegedy), https://arxiv.org/abs/1502.03167.
+func (b *Builder) BatchNormGradient(operand, scale, mean, variance, gradOutput backends.Op, epsilon float32, axis int) (gradOperand, gradScale, gradOffset backends.Op) {
+	xlaOperand := b.verifyAndCastOp(operand, "operand")
+	xlaScale := b.verifyAndCastOp(scale, "scale")
+	xlaMean := b.verifyAndCastOp(mean, "mean")
+	xlaVariance := b.verifyAndCastOp(variance, "variance")
+	xlaGradOutput := b.verifyAndCastOp(gradOutput, "gradOutput")
+	var err error
+	gradOperand, gradScale, gradOffset, err = xlabuilder.BatchNormGradient(xlaOperand, xlaScale, xlaMean, xlaVariance, xlaGradOutput, epsilon, axis)
+	if err != nil {
+		panic(errors.WithMessagef(err, "backend %q builder %q: BatchNormGradient(operand=%s)", b.backend.Name(), b.name, xlaOperand.Shape))
+	}
+	return
+}
+
 func convertConvolveAxesConfig(c backends.ConvolveAxesConfig) (xlaConfig xlabuilder.ConvolveAxesConfig) {
 	xlaConfig = xlabuilder.ConvolveAxesConfig{
 		InputBatch:          c.InputBatch,

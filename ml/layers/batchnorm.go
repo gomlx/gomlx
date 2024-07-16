@@ -21,6 +21,7 @@ import (
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/xslices"
 )
 
 // BatchNormBuilder is a helper to build a batch normalization computation. Create it with BatchNormalization, set the
@@ -187,7 +188,7 @@ func (builder *BatchNormBuilder) Done() *Node {
 	if builder.trainable && ctx.IsTraining(g) {
 		// Training: take batch's mean and variance and use it to update averages.
 		var batchMean, batchVariance *Node
-		normalized, batchMean, batchVariance = BatchNormTrainingXLA(x, scale, offset, float32(builder.epsilon), featureAxis)
+		normalized, batchMean, batchVariance = InternalBatchNormForTraining(x, scale, offset, float32(builder.epsilon), featureAxis)
 		builder.updateMeanAndVariance(ctx, g, batchMean, batchVariance, meanAverageVar, varianceAverageVar, weightVar)
 
 	} else {
@@ -195,7 +196,7 @@ func (builder *BatchNormBuilder) Done() *Node {
 		mean, variance := meanAverageVar.ValueGraph(g), varianceAverageVar.ValueGraph(g)
 		if builder.useXlaInference {
 			// Uses dedicated op.
-			normalized = BatchNormInferenceXLA(x, scale, offset, mean, variance, float32(builder.epsilon), featureAxis)
+			normalized = InternalBatchNormForInference(x, scale, offset, mean, variance, float32(builder.epsilon), featureAxis)
 
 		} else {
 			// Direct batch normalization: it is differentiable.

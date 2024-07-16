@@ -63,6 +63,34 @@ type Builder interface {
 	// It returns the new state of the RNG and the generated values (with random bits) with the given shape.
 	RngBitGenerator(state Op, shape shapes.Shape) (newState, values Op)
 
+	// BatchNormForInference implements Batch Norm for inference. See details in
+	// https://www.tensorflow.org/xla/operation_semantics#batchnorminference.
+	//
+	// Based on paper "Batch Normalization: Accelerating Deep Network Training by Reducing
+	// Internal Covariate Shift" (Sergey Ioffe, Christian Szegedy), https://arxiv.org/abs/1502.03167.
+	BatchNormForInference(operand, scale, offset, mean, variance Op, epsilon float32, axis int) Op
+
+	// BatchNormForTraining implements Batch Norm for training. See details in
+	// https://www.tensorflow.org/xla/operation_semantics#batchnormtraining.
+	//
+	// It returns the normalized tensor, the batchMean and the batchVariance.
+	//
+	// Based on paper "Batch Normalization: Accelerating Deep Network Training by Reducing
+	// Internal Covariate Shift" (Sergey Ioffe, Christian Szegedy), https://arxiv.org/abs/1502.03167.
+	BatchNormForTraining(operand, scale, offset Op, epsilon float32, axis int) (normalized, batchMean, batchVariance Op)
+
+	// BatchNormGradient calculates the BatchNorm gradient. See details in
+	// https://openxla.org/xla/operation_semantics#batchnormgrad
+	//
+	// The gradOutput is the adjoint gradient, that is, the gradient with respect to the output of the
+	// batch normalization.
+	//
+	// It returns  as a tuple with the 3 elements.
+	//
+	// Based on paper "Batch Normalization: Accelerating Deep Network Training by Reducing
+	// Internal Covariate Shift" (Sergey Ioffe, Christian Szegedy), https://arxiv.org/abs/1502.03167.
+	BatchNormGradient(operand, scale, mean, variance, gradOutput Op, epsilon float32, axis int) (gradOperand, gradScale, gradOffset Op)
+
 	// StandardOps include automatically generated list of operations for the Builder.
 	StandardOps
 }

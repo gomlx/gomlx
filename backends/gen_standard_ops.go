@@ -29,12 +29,6 @@ type StandardOps interface {
 	// 	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=0, isMin=false) -> {0, 1, 0} // (it choose the 2, 4 and 7)
 	ArgMinMax(x Op, axis int, outputDType dtypes.DType, isMin bool) Op
 
-	// BatchNormInference implements Batch Norm for inference. See details in
-	// https://www.tensorflow.org/xla/operation_semantics#batchnorminference.
-	// Based on paper "Batch Normalization: Accelerating Deep Network Training by Reducing
-	// Internal Covariate Shift" (Sergey Ioffe, Christian Szegedy), https://arxiv.org/abs/1502.03167.
-	BatchNormInference(operand, scale, offset, mean, variance Op, epsilon float32, axis int) Op
-
 	// Broadcast prefixes dimensions to an array by duplicating the data in the array.
 	// See BroadcastInDim for a broadcast in between the axes.
 	// The new dimensions dims are inserted on the left, i.e., if

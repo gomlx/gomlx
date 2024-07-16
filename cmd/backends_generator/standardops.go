@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/gomlx/gomlx/cmd/backends_generator/parsexlabuilder"
+	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/janpfeifer/must"
 	"go/ast"
@@ -16,6 +17,9 @@ import (
 const (
 	standardOpsInterfaceFile = "gen_standard_ops.go"
 )
+
+// methodsToExclude from generating the API, they are maintained manually.
+var methodsToExclude = types.SetWith("BatchNormForInference", "BatchNormForTraining", "BatchNormGradient")
 
 var (
 	standardOpsTemplate = template.Must(template.New(standardOpsInterfaceFile).Parse(`
@@ -59,6 +63,9 @@ func selectAndScatterComments(funcName string) []string {
 func GenerateStandardOpsInterface(extractor *parsexlabuilder.NodeTextExtractor, xlaBuilderPkg *ast.Package) {
 	var standardOps []FuncInfo
 	parsexlabuilder.EnumerateStandardOpsFunctions(extractor, xlaBuilderPkg, func(funcDecl *ast.FuncDecl) {
+		if methodsToExclude.Has(funcDecl.Name.Name) {
+			return
+		}
 		var params []*ParamInfo
 		for _, param := range funcDecl.Type.Params.List {
 			if param.Names[0].Name == "builder" {

@@ -87,13 +87,13 @@ func TestSelectAndScatterWithGeneralPaddingXLA(t *testing.T) {
 		}, [][][]float64{{{0}, {0}, {1}, {0}, {0}, {2}}})
 }
 
-func TestDotGeneralXLA(t *testing.T) {
+func TestDotGeneral(t *testing.T) {
 	testFuncOneInput(t, "dotGeneralXLA(lhs=Iota([3,4]), rhs=0.1*Ones([3,4]))",
 		func(g *Graph) (input, output *Node) {
 			input = IotaFull(g, shapes.Make(dtypes.Float32, 3, 4))
 			input = OnePlus(input)
 			rhs := MulScalar(Ones(g, shapes.Make(dtypes.Float32, 3, 4)), 0.1)
-			output = dotGeneralXLA(input, []int{1}, []int{0}, rhs, []int{1}, []int{0})
+			output = DotGeneral(input, []int{1}, []int{0}, rhs, []int{1}, []int{0})
 			return
 		}, []float32{1, 2.6, 4.2})
 
@@ -102,7 +102,7 @@ func TestDotGeneralXLA(t *testing.T) {
 			input = IotaFull(g, shapes.Make(dtypes.Float32, 3, 2, 4))
 			input = OnePlus(input)
 			rhs := MulScalar(Ones(g, shapes.Make(dtypes.Float32, 3, 5, 4)), 0.1)
-			output = dotGeneralXLA(input, []int{2}, []int{0}, rhs, []int{2}, []int{0})
+			output = DotGeneral(input, []int{2}, []int{0}, rhs, []int{2}, []int{0})
 			return
 		}, [][][]float32{
 			{
@@ -185,7 +185,7 @@ func TestGradDotGeneralXLABatchContracting(t *testing.T) {
 				rhsContractingAxes := gatherSlice([]int{1, 2}, revRhsPermutation)
 				fmt.Printf("\trhs: p:%v, rev:%v, batch: %v, contracting: %v\n", rhsPermutation, revRhsPermutation, rhsBatchAxes, rhsContractingAxes)
 				fmt.Printf("\t\trhs.outputShapes=%s\n", rhs.Shape())
-				dot := dotGeneralXLA(lhs, lhsContractingAxes, lhsBatchAxes, rhs, rhsContractingAxes, rhsBatchAxes)
+				dot := DotGeneral(lhs, lhsContractingAxes, lhsBatchAxes, rhs, rhsContractingAxes, rhsBatchAxes)
 				fmt.Printf("\t\tdot.outputShapes=%s\n", dot.Shape())
 				// loss is the product of dot and iota (increasing numbers), all reduced sum.
 				incremental := OnePlus(IotaFull(g, dot.Shape()))
@@ -260,7 +260,7 @@ func TestGradDotGeneralXLABatchContractingCrossing(t *testing.T) {
 				rhsContractingAxes := gatherSlice([]int{2}, revRhsPermutation)
 				fmt.Printf("\trhs: p:%v, rev:%v, batch: %v, contracting: %v\n", rhsPermutation, revRhsPermutation, rhsBatchAxes, rhsContractingAxes)
 				fmt.Printf("\t\trhs.outputShapes=%s\n", rhs.Shape())
-				dot := dotGeneralXLA(lhs, lhsContractingAxes, lhsBatchAxes, rhs, rhsContractingAxes, rhsBatchAxes)
+				dot := DotGeneral(lhs, lhsContractingAxes, lhsBatchAxes, rhs, rhsContractingAxes, rhsBatchAxes)
 				fmt.Printf("\t\tdot.outputShapes=%s\n", dot.Shape())
 
 				// loss is the product of dot and iota (increasing numbers), all reduced sum.

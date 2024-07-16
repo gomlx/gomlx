@@ -1327,7 +1327,7 @@ func Einsum(equation string, lhs, rhs *Node) *Node {
 		dotOutputDesc = append(dotOutputDesc, outputCrossAxes...)
 	}
 
-	output := dotGeneralXLA(lhs, lhsContractingAxes, lhsBatchAxes,
+	output := DotGeneral(lhs, lhsContractingAxes, lhsBatchAxes,
 		rhs, rhsContractingAxes, rhsBatchAxes)
 
 	// Calculate the target permutation.
@@ -1467,11 +1467,29 @@ func EinsumAxes(lhs, rhs *Node, contractingAxes, batchAxes [][2]int) (output *No
 // It follows that the resulting dimension number starts with the batch dimension, then the 'lhs'
 // non-contracting/non-batch dimension, and finally the 'rhs' non-contracting/non-batch dimension.
 // It provides the basic means of implementing Einsum.
-func DotGeneral(lhs *Node, lhsContractingAxes, lhsBatchAxes []int, rhs *Node, rhsContractingAxes, rhsBatchAxes []int) backends.Op {
+func DotGeneral(lhs *Node, lhsContractingAxes, lhsBatchAxes []int, rhs *Node, rhsContractingAxes, rhsBatchAxes []int) *Node {
 	_ = validateBuildingGraphFromInputs(lhs, rhs)
 	lhsContractingAxes = adjustAxesToRankAndSort(lhs.Rank(), lhsContractingAxes, "lhsContractingAxes")
 	lhsBatchAxes = adjustAxesToRankAndSort(lhs.Rank(), lhsBatchAxes, "lhsBatchAxes")
 	rhsContractingAxes = adjustAxesToRankAndSort(rhs.Rank(), rhsContractingAxes, "rhsContractingAxes")
 	rhsBatchAxes = adjustAxesToRankAndSort(rhs.Rank(), rhsBatchAxes, "rhsBatchAxes")
 	return backendDotGeneral(lhs, lhsContractingAxes, lhsBatchAxes, rhs, rhsContractingAxes, rhsBatchAxes)
+}
+
+// InternalBatchNormForTraining is a wrapper to the backend function.
+// Don't use this directly, instead use layers.BatchNormalization.
+func InternalBatchNormForTraining(operand *Node, scale *Node, offset *Node, epsilon float32, axis int) (normalized, batchMean, batchVariance *Node) {
+	return backendBatchNormForTraining(operand, scale, offset, epsilon, axis)
+}
+
+// InternalBatchNormForInference is a wrapper to the backend function.
+// Don't use this directly, instead use layers.BatchNormalization.
+func InternalBatchNormForInference(operand *Node, scale *Node, offset *Node, mean *Node, variance *Node, epsilon float32, axis int) (node *Node) {
+	return backendBatchNormForInference(operand, scale, offset, mean, variance, epsilon, axis)
+}
+
+// InternalBatchNormGradient is a wrapper to the backend function.
+// Don't use this directly, instead use layers.BatchNormalization.
+func InternalBatchNormGradient(operand *Node, scale *Node, mean *Node, variance *Node, gradOutput *Node, epsilon float32, axis int) (gradOperand, gradScale, gradOffset *Node) {
+	return backendBatchNormGradient(operand, scale, mean, variance, gradOutput, epsilon, axis)
 }
