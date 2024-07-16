@@ -18,7 +18,8 @@ package graph
 
 import (
 	"fmt"
-	"github.com/gomlx/exceptions"
+	. "github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/types/xslices"
@@ -69,68 +70,64 @@ type ExecGraphFn interface {
 }
 
 // SideParamsFn is the functions that sets side parameters during execution
-// for Graphs that defines those. Typically, this is used to set the variables.
-type SideParamsFn func(graph *Graph, params []*tensors.Device)
+// for Graphs that defines those. Typically, this is used to set the variables of a model.
+type SideParamsFn func(graph *Graph, params []*tensors.Tensor)
 
 // LoggerFn is the function used to log nodes marked for logging. It is called
 // after the Call method, with the list of messages and corresponding values
 // of the evaluated nodes.
-type LoggerFn func(graph *Graph, messages []string, values []tensors.Tensor, nodes []NodeId)
+type LoggerFn func(graph *Graph, messages []string, values []*tensors.Tensor, nodes []NodeId)
 
 // Exec creates and executes computation graphs as needed
-// based on the inputNodes shapes.
+// based on the inputs shapes.
 //
 // It simplifies the process of executing a graph building
 // function with real values. For example, assume you wrote:
 //
-//	def LengthGraph(x *Node) *Node {
-//	  return Sqrt(ReduceAllSum(Mul(x, x)))
+//	def L2Norm(x *Node) *Node {
+//		return Sqrt(ReduceAllSum(Mul(x, x)))
 //	}
 //
-// To actually use it with real values, one need to build
-// the graph to a specific outputShapes of x, and then execute it,
-// which is not straight forward -- JIT compilation makes things
+// To use it with actual values (tensors.Tensor's), one needs to build
+// the computation graph for the specific shape of x, and then execute it.
+// While this is straight forward, it's lots of boilerplate code -- JIT compilation makes things
 // faster, but it imposes some bureaucracy.
 //
 // With Exec one can do:
 //
-//	var Length = NewExec(LengthGraph)
-//	x0 := []float32{4}
-//	fmt.Printf("Length(%v) = %v\n", x0, Length.Call(x0)[0].Value())
-//	x1 := []float64{1, 2, 3}
-//	fmt.Printf("Length(%v) = %v\n", x1, Length.Call(x1)[0].Value())
+//	var l2NormExec = NewExec(L2Norm)
+//	x0 := []float32{2}
+//	fmt.Printf("L2Norm(%v) = %v\n", x0, l2NormExec.Call(x0)[0].Value())
+//	x1 := []float64{4, 3}
+//	fmt.Printf("L2Norm(%v) = %v\n", x1, l2NormExec.Call(x1)[0].Value())
 //
 // Notice that both calls to Length.Call will need to create different
 // graphs (for different shapes of the input), but they will be cached,
 // and if the same shapes are used in Call again, the cached compiled graph
 // is reused.
 //
-// Also Call outputs a slice with all the outputs, even when there is only
+// Also, Call outputs a slice with all the outputs, even when there is only
 // one output.
 //
-// If there are no inputNodes (for instance for some initialization function), then
-// one needs to take a *Graph as the first parameter of graphFn. Example:
+// If there are no inputs (for instance for some initialization function), then
+// one needs to take a *Graph as the first parameter of the graph function (graphFn).
+// Example:
 //
-//	```
 //	iotaMatrixExec := NewExec(func (g *Graph) *Node {
 //		return IotaFull(g, types.Make(types.Float32, 3, 3))
 //	})
-//	fmt.Printf("IotaFull(3x3 matrix, float32)=%v\n", iotaMatrixExec.Call()[0].Value().([][]float32))
-//	```
+//	fmt.Printf("IotaFull(3x3 matrix, float32)=%v\n", iotaMatrixExec.Call()[0].Value())
 //
 // The need to build different graphs for different shapes can be expensive
-// when sizes of the inputNodes varies a lot. The usual solution is to use shapes
-// with size in a power scale (for instance powers of 2) and masking of tensors
+// when the shapes of the inputs varies a lot. The usual solution is to use shapes
+// with dimensions in a power scale (for instance powers of 2) and masking of tensors
 // for unused slices. For safety concerns there are a maximum number of different
 // instantiations of the graph. It can be set or disabled with SetMaxCache.
 //
-// Errors are returned inside the returned tensors.
-//
-// There is concurrency safety with the cache, but XLA concurrency is
-// not documented. TODO: figure it out.
+// Errors are returned as panic. See Panicf.
 type Exec struct {
-	manager   *Manager
-	deviceNum int
+	backend   backends.Backend
+	deviceNum backends.DeviceNum
 
 	graphFn                     any
 	numInputs, numOutputs       int
@@ -161,22 +158,25 @@ type execCacheEntry struct {
 	loggedNodeIds  []NodeId
 }
 
-const DefaultExecMaxCacheSize = 32
+// DefaultExecMaxCacheSize is the value used to initialize new Exec objects.
+var DefaultExecMaxCacheSize = 32
 
 // NewExecAny constructs an Exec object that uses the given graphFn to build
 // computation graphs.
 // `graphFn` can take only *Node parameters as input and returns one or more *Node.
-// Except if there are no inputNodes, in which case graphFn needs to take a *Graph as the first parameter.
 //
-// If any input or output parameter of graphFn is not a *Node (or *Graph is there are no inputNodes),
-// or if there are no inputNodes or outputs, it panics with a corresponding error message.
-func NewExecAny(manager *Manager, graphFn any) *Exec {
+// Except if there are no inputs, in which case graphFn needs to take a *Graph as the first parameter.
+//
+// It will panic if the inputs are invalid.
+//
+// See also the generics NewExec, which checks for valid graphFn in compile time.
+func NewExecAny(backend backends.Backend, graphFn any) *Exec {
 	graphFnT := reflect.TypeOf(graphFn)
 	funcName := runtime.FuncForPC(reflect.ValueOf(graphFn).Pointer()).Name()
 	exec := &Exec{
-		manager:   manager,
+		backend:   backend,
 		name:      fmt.Sprintf("Exec:%s", funcName),
-		deviceNum: manager.DefaultDeviceNum(),
+		deviceNum: 0,
 
 		graphFn:      graphFn,
 		numInputs:    graphFnT.NumIn(),
@@ -187,7 +187,7 @@ func NewExecAny(manager *Manager, graphFn any) *Exec {
 
 	// Verify parameters.
 	if graphFnT.Kind() != reflect.Func {
-		exceptions.Panicf("graphFn must be a function")
+		Panicf("graphFn must be a function")
 	}
 
 	var node *Node
@@ -197,56 +197,60 @@ func NewExecAny(manager *Manager, graphFn any) *Exec {
 
 	if graphFnT.NumIn() < 1 || graphFnT.NumOut() < 1 {
 		// It requires at least one input and one output.
-		exceptions.Panicf("not enough input (%d)/output (%d) parameters, both need to be > 0",
+		Panicf("not enough input (%d)/output (%d) parameters, both need to be > 0",
 			graphFnT.NumIn(), graphFnT.NumOut())
 	}
 	for ii := 0; ii < graphFnT.NumIn(); ii++ {
 		if graphFnT.In(ii).Kind() == reflect.Slice && graphFnT.In(ii).Elem() == nodeType {
 			if graphFnT.NumIn() != 1 {
-				exceptions.Panicf("[]*Node parameters are only accepted as input if they are the only input, got function type %s instead", graphFnT)
+				Panicf("[]*Node parameters are only accepted as input if they are the only input, got function type %s instead", graphFnT)
 			}
 			exec.inputAsSlice = true
 			break
 		}
 		if graphFnT.In(ii) == graphType {
 			if graphFnT.NumIn() != 1 {
-				exceptions.Panicf("*Graph parameter only accepted as input if they are the only input, got function type %s instead", graphFnT)
+				Panicf("*Graph parameter only accepted as input if they are the only input, got function type %s instead", graphFnT)
 			}
 			exec.inputIsGraph = true
 			exec.numInputs = 0
 			break
 		}
 		if graphFnT.In(ii) != nodeType {
-			exceptions.Panicf("input parameter %d is not of type *Node or []*Node", ii)
+			Panicf("input parameter %d is not of type *Node or []*Node", ii)
 		}
 	}
 	for ii := 0; ii < graphFnT.NumOut(); ii++ {
 		if graphFnT.Out(ii).Kind() == reflect.Slice && graphFnT.Out(ii).Elem() == nodeType {
 			if graphFnT.NumOut() != 1 {
-				exceptions.Panicf("[]*Node parameters are only accepted as output if they are the only output, got function type %s instead", graphFnT)
+				Panicf("[]*Node parameters are only accepted as output if they are the only output, got function type %s instead", graphFnT)
 			}
 			exec.outputAsSlice = true
 			break
 		}
 		if graphFnT.Out(ii) != nodeType {
-			exceptions.Panicf("output parameter %d is not of type *Node", ii)
+			Panicf("output parameter %d is not of type *Node", ii)
 		}
 	}
 	return exec
 }
 
 // NewExec constructs an Exec object that uses the given graphFn to build
-// computation graphs. graphFn should take *Node as input and return a *Node.
+// computation graphs.
+//
+// graphFn should take *Node as input and return a *Node -- except if there are no (Node) inputs,
+// in which case it should take a single *Graph input.
+//
 // It's a wrapper for NewExecAny, but uses generics to type check that
 // graphFn is valid.
-func NewExec[F ExecGraphFn](manager *Manager, graphFn F) *Exec {
-	return NewExecAny(manager, graphFn)
+func NewExec[F ExecGraphFn](backend backends.Backend, graphFn F) *Exec {
+	return NewExecAny(backend, graphFn)
 }
 
 // InDevice sets the device num to be used by graphs constructed by Exec.
 // This should be called before any invocations of Call().
 // It returns a reference to itself so calls can be cascaded.
-func (e *Exec) InDevice(deviceNum int) *Exec {
+func (e *Exec) InDevice(deviceNum backends.DeviceNum) *Exec {
 	e.deviceNum = deviceNum
 	return e
 }
@@ -318,26 +322,9 @@ func (e *Exec) GetNodeLogger() LoggerFn {
 // It returns the outputs in a slice, even if there is only one output.
 //
 // Errors (with full stack-traces) are raised with `panic`.
-func (e *Exec) Call(args ...any) []tensors.Tensor {
+func (e *Exec) Call(args ...any) []*tensors.Tensor {
 	results, _ := e.CallWithGraph(args...)
 	return results
-}
-
-// unwrapListOfTensors will convert something like []any{[]tensor.Tensor{t1, t2, ...}} to []any{t1, t2,...}
-func convertToListOfTensors(args []any) []any {
-	if len(args) != 1 {
-		return args
-	}
-	switch v := args[0].(type) {
-	case []tensors.Tensor:
-		return xslices.Map(v, func(x tensors.Tensor) any { return x })
-	case []*tensors.Local:
-		return xslices.Map(v, func(x *tensors.Local) any { return x })
-	case []*tensors.Device:
-		return xslices.Map(v, func(x *tensors.Device) any { return x })
-	}
-	// Otherwise, process as usual.
-	return args
 }
 
 // CallWithGraph is similar to Call, but it also returns the computation graph used
@@ -349,65 +336,87 @@ func convertToListOfTensors(args []any) []any {
 // to execute the computation.
 //
 // Errors (with full stack-traces) are raised with `panic`.
-func (e *Exec) CallWithGraph(args ...any) (results []tensors.Tensor, g *Graph) {
+func (e *Exec) CallWithGraph(args ...any) (results []*tensors.Tensor, g *Graph) {
 	return e.compileAndExecute(true, args...)
+}
+
+// unwrapListOfTensors will convert something like []any{[]tensor.Tensor{t1, t2, ...}} to []any{t1, t2,...}
+func unwrapListOfTensors(args []any) []any {
+	if len(args) != 1 {
+		return args
+	}
+	switch v := args[0].(type) {
+	case []*tensors.Tensor:
+		return xslices.Map(v, func(x *tensors.Tensor) any { return x })
+	}
+	// Otherwise, process as usual.
+	return args
 }
 
 // PreCompile will build the computation graph and compile it, but not yet execute.
 // Useful when one wants to measure the time separately, from graph compilation and its execution.
+//
+// Notice, this will include the time to convert args to tensors. If you want to isolate that time,
+// pre-convert args to tensors first.
 func (e *Exec) PreCompile(args ...any) {
 	_, _ = e.compileAndExecute(false, args...)
 	return
 }
 
 // compileAndExecute compiles graph for arguments and optionally executes it.
-func (e *Exec) compileAndExecute(execute bool, args ...any) (results []tensors.Tensor, g *Graph) {
-	args = convertToListOfTensors(args)
+func (e *Exec) compileAndExecute(execute bool, args ...any) (results []*tensors.Tensor, g *Graph) {
+	args = unwrapListOfTensors(args)
 	if !e.inputAsSlice && len(args) != e.numInputs {
-		exceptions.Panicf(
+		Panicf(
 			"# of arguments to call (#args=%d) don't match # arguments to the graph function (#args=%d) for %q",
 			len(args), e.numInputs, e.Name())
 	}
 
 	// Convert args to tensors.
-	argsShapes := make([]shapes.Shape, 0, len(args))
-	tensors := make([]*tensors.Device, 0, len(args)) // There may be more parameters, set with Exec.setSideParams later.
-	for ii := range args {
-		var deviceT *tensors.Device
-		err := TryCatch[error](func() { deviceT = anyToBuffer(e.manager, e.deviceNum, args[ii]) })
+	argsAsTensors := make([]*tensors.Tensor, 0, len(args)) // There may be more parameters, set with Exec.setSideParams later.
+	argsShapes := make([]shapes.Shape, 0, len(args))       // There may be more parameters, set with Exec.setSideParams later.
+	for ii, arg := range args {
+		var tensor *tensors.Tensor
+		err := TryCatch[error](func() {
+			var ok bool
+			tensor, ok = arg.(*tensors.Tensor)
+			if !ok {
+				tensor = tensors.FromAnyValue(arg)
+			}
+		})
 		if err != nil {
 			fmt.Printf("Original error: %+v\n", err)
 			panic(errors.WithMessagef(err, "Failed to convert argument #%d of %d to device(%d) -- type %T: %v",
 				ii, len(args), e.deviceNum, args[ii], args[ii]))
 		}
-		tensors = append(tensors, deviceT)
-		argsShapes = append(argsShapes, deviceT.Shape())
+		argsAsTensors = append(argsAsTensors, tensor)
 	}
 
 	// Get or build the graph.
 	entry := e.findCacheEntry(argsShapes)
 	if entry == nil {
-		exceptions.Panicf(
+		Panicf(
 			"maximum cache size of %d reached for %q, cannot create another g -- "+
 				"a new computation g needs to be created+compiled for each different outputShapes of "+
 				"the input, consider using padding, or if this is not a concern change "+
 				"the cache size with executable.SetMaxCache()", e.maxCacheSize, e.Name())
+		panic(nil) // Disable lint error.
 	}
 	g = entry.graph
 
 	// Set extra input parameters created by the graph.
-	if g.NumParameters() > len(args) {
-		tmp := make([]*tensors.Tensor, g.NumParameters())
-		copy(tmp, tensors)
-		tensors = tmp
+	numExtraInputs := g.NumParameters() - len(args)
+	for numExtraInputs > 0 {
+		argsAsTensors = append(argsAsTensors, nil)
+		numExtraInputs--
 	}
 	if e.setSideParams != nil {
-		e.setSideParams(g, tensors)
+		e.setSideParams(g, argsAsTensors)
 	}
 	if g.NumParameters() > len(args) {
-		for ii, t := range tensors {
+		for ii, t := range argsAsTensors {
 			if t == nil {
-				exceptions.Panicf("parameter %d (%q) is nil or invalid, maybe a variable value not set as a "+
+				Panicf("parameter %d (%q) is nil or invalid, maybe a variable value not set as a "+
 					"parameter, cannot execute g", ii, g.GetParameterByHandle(ParameterHandle(ii)).GetParameterName())
 			}
 		}
@@ -417,23 +426,12 @@ func (e *Exec) compileAndExecute(execute bool, args ...any) (results []tensors.T
 	if !execute {
 		return
 	}
-	var outputT *tensors.Device
-	outputT = g.RunWithTensors(tensors)
-	if entry.numOutputs == 1 {
-		results = []tensors.Tensor{outputT}
-	} else if entry.numOutputs > 1 {
-		outputsDevice := outputT.SplitTuple()
-		results = make([]tensors.Tensor, len(outputsDevice))
-		for ii := range outputsDevice {
-			results[ii] = outputsDevice[ii]
-		}
-		outputT.Finalize()
-	}
+	results = g.RunWithTensors(argsAsTensors)
 
 	// Call logger on logged nodes, even if no node is marked for logging (it serves as a hook).
 	numGraphFnOutputs := entry.numOutputs - len(entry.loggedMessages)
 	if e.loggerFn != nil {
-		var loggerResults []tensors.Tensor
+		var loggerResults []*tensors.Tensor
 		if len(entry.loggedMessages) > 0 {
 			loggerResults = results[numGraphFnOutputs:]
 		}
@@ -453,7 +451,7 @@ func (e *Exec) createAndCacheGraph(argsShapes []shapes.Shape) (entry *execCacheE
 	if len(e.cache) >= e.maxCacheSize {
 		return nil
 	}
-	entry = &execCacheEntry{graph: e.manager.NewGraph(fmt.Sprintf("%s#%d", e.name, len(e.cache)))}
+	entry = &execCacheEntry{graph: NewGraph(e.backend, fmt.Sprintf("%s#%d", e.name, len(e.cache)))}
 	g := entry.graph
 	var argsV []reflect.Value
 	var args []*Node
@@ -466,7 +464,7 @@ func (e *Exec) createAndCacheGraph(argsShapes []shapes.Shape) (entry *execCacheE
 		argsV = make([]reflect.Value, 0, len(argsShapes))
 	}
 	for ii, shape := range argsShapes {
-		arg := g.Parameter(fmt.Sprintf("arg#%d", ii), shape)
+		arg := Parameter(g, fmt.Sprintf("arg#%d", ii), shape)
 		if e.inputAsSlice {
 			args = append(args, arg)
 		} else {
@@ -490,7 +488,7 @@ func (e *Exec) createAndCacheGraph(argsShapes []shapes.Shape) (entry *execCacheE
 	var outputs []*Node
 	if e.outputAsSlice {
 		if len(outputsV) != 1 {
-			exceptions.Panicf("graphFn for %q returned %d results, as opposed to simply a slice of nodes -- []*Node",
+			Panicf("graphFn for %q returned %d results, as opposed to simply a slice of nodes -- []*Node",
 				e.Name(), len(outputsV))
 		}
 		outputs = outputsV[0].Interface().([]*Node)
@@ -543,7 +541,7 @@ LoopCache:
 	return e.createAndCacheGraph(argsShapes)
 }
 
-// Finalize clears the cache, finalizing the graphs. The Exec object shouldn't be
+// Finalize clears the cache, finalizing the compiled graphs. The Exec object shouldn't be
 // used after that.
 func (e *Exec) Finalize() {
 	e.cacheMu.Lock()
@@ -558,7 +556,7 @@ func (e *Exec) Finalize() {
 
 // DefaultNodeLogger for nodes marked to be logged. It prints the message and
 // the node value for each logged node.
-func DefaultNodeLogger(g *Graph, messages []string, values []tensors.Tensor, nodes []NodeId) {
+func DefaultNodeLogger(g *Graph, messages []string, values []*tensors.Tensor, nodes []NodeId) {
 	if len(messages) == 0 {
 		return
 	}
