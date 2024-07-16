@@ -19,7 +19,8 @@ package graph_test
 import (
 	"fmt"
 	. "github.com/gomlx/gomlx/graph"
-	timage "github.com/gomlx/gomlx/types/tensor/image"
+	"github.com/gomlx/gomlx/types/tensors/images"
+	"github.com/gomlx/gopjrt/dtypes"
 	"testing"
 )
 
@@ -29,7 +30,7 @@ func TestMaxPool(t *testing.T) {
 			channelA := Iota(g, MakeShape(dtypes.Float32, 1, 1, 3, 3), 2)
 			channelB := Mul(channelA, Const(g, float32(0.1)))
 			input = Concatenate([]*Node{channelA, channelB}, 1)
-			output = MaxPool(input).ChannelsAxis(timage.ChannelsFirst).Window(3).NoPadding().Done()
+			output = MaxPool(input).ChannelsAxis(images.ChannelsFirst).Window(3).NoPadding().Done()
 			return
 		}, [][][][]float32{{{{2}}, {{0.2}}}})
 
@@ -38,7 +39,7 @@ func TestMaxPool(t *testing.T) {
 			channelA := Iota(g, MakeShape(dtypes.Float64, 1, 3, 3, 1), 2)
 			channelB := Mul(channelA, Const(g, 0.1))
 			input = Concatenate([]*Node{channelA, channelB}, -1)
-			output = MaxPool(input).Window(3).ChannelsAxis(timage.ChannelsLast).NoPadding().Done()
+			output = MaxPool(input).Window(3).ChannelsAxis(images.ChannelsLast).NoPadding().Done()
 			return
 		}, [][][][]float64{{{{2, 0.2}}}})
 
@@ -47,7 +48,7 @@ func TestMaxPool(t *testing.T) {
 			channelA := Iota(g, MakeShape(dtypes.Float32, 1, 1, 3, 3), 2)
 			channelB := Mul(channelA, Const(g, float32(0.1)))
 			input = Concatenate([]*Node{channelA, channelB}, 1)
-			output = MaxPool(input).Window(3).ChannelsAxis(timage.ChannelsFirst).PadSame().Strides(1).Done()
+			output = MaxPool(input).Window(3).ChannelsAxis(images.ChannelsFirst).PadSame().Strides(1).Done()
 			return
 		}, [][][][]float32{{{{1, 1, 1}, {2, 2, 2}, {2, 2, 2}}, {{0.1, 0.1, 0.1}, {0.2, 0.2, 0.2}, {0.2, 0.2, 0.2}}}})
 
@@ -114,7 +115,7 @@ func TestSumPool(t *testing.T) {
 			channelA := IotaFull(g, MakeShape(dtypes.Float64, 1, 3, 3, 1))
 			channelB := Mul(channelA, Const(g, 0.1))
 			input = Concatenate([]*Node{channelA, channelB}, -1)
-			output = SumPool(input).Window(3).ChannelsAxis(timage.ChannelsLast).NoPadding().Done()
+			output = SumPool(input).Window(3).ChannelsAxis(images.ChannelsLast).NoPadding().Done()
 			return
 		}, [][][][]float64{{{{36, 3.6}}}})
 }
@@ -177,7 +178,7 @@ func TestMeanPool(t *testing.T) {
 			channelA := IotaFull(g, MakeShape(dtypes.Float64, 1, 3, 3, 1))
 			channelB := Mul(channelA, Const(g, 0.1))
 			input = Concatenate([]*Node{channelA, channelB}, -1)
-			output = MeanPool(input).Window(3).ChannelsAxis(timage.ChannelsLast).NoPadding().Done()
+			output = MeanPool(input).Window(3).ChannelsAxis(images.ChannelsLast).NoPadding().Done()
 			return
 		}, [][][][]float64{{{{4, 0.4}}}})
 
@@ -188,7 +189,7 @@ func TestMeanPool(t *testing.T) {
 			channelB := Mul(channelA, Const(g, 0.1))
 			input = Concatenate([]*Node{channelA, channelB}, -1)
 			input = Concatenate([]*Node{input, input}, 0) // Batch of 2.
-			output = MeanPool(input).Window(3).ChannelsAxis(timage.ChannelsLast).PadSame().Strides(1).Done()
+			output = MeanPool(input).Window(3).ChannelsAxis(images.ChannelsLast).PadSame().Strides(1).Done()
 			return
 		}, [][][][]float64{{
 			{{2.0, 0.20}, {2.5, 0.25}, {3.0, 0.30}},
@@ -245,7 +246,7 @@ func TestGradientMeanPool(t *testing.T) {
 			channelA := IotaFull(g, MakeShape(dtypes.Float32, 1, 1, 3, 3))
 			channelB := Mul(channelA, Const(g, float32(0.1)))
 			input := Concatenate([]*Node{channelA, channelB}, 1)
-			output = MeanPool(input).ChannelsAxis(timage.ChannelsFirst).Window(3).PadSame().Strides(1).Done()
+			output = MeanPool(input).ChannelsAxis(images.ChannelsFirst).Window(3).PadSame().Strides(1).Done()
 			return output, []*Node{input}
 		}, []any{
 			[][][][]float32{{{

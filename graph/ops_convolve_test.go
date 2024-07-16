@@ -18,38 +18,40 @@ package graph_test
 
 import (
 	. "github.com/gomlx/gomlx/graph"
-	timage "github.com/gomlx/gomlx/types/tensor/image"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/types/tensors/images"
+	"github.com/gomlx/gopjrt/dtypes"
 	"testing"
 )
 
 func TestConvolve(t *testing.T) {
-	testFuncOneInput(t, "Convolve(...).ChannelsAxis(timage.ChannelsFirst).NoPadding()",
+	testFuncOneInput(t, "Convolve(...).ChannelsAxis(images.ChannelsFirst).NoPadding()",
 		func(g *Graph) (input, output *Node) {
 			channelA := Iota(g, MakeShape(dtypes.Float32, 1, 1, 3, 3), 2)
 			channelB := Mul(channelA, Const(g, float32(0.1)))
 			input = Concatenate([]*Node{channelA, channelB}, 1)
 			kernel := Ones(g, MakeShape(dtypes.Float32, 2, 3, 3, 1))
-			output = Convolve(input, kernel).ChannelsAxis(timage.ChannelsFirst).NoPadding().Done()
+			output = Convolve(input, kernel).ChannelsAxis(images.ChannelsFirst).NoPadding().Done()
 			return
 		}, [][][][]float32{{{{9.9}}}})
 
-	testFuncOneInput(t, "Convolve(...).ChannelsAxis(timage.ChannelsLast).NoPadding()",
+	testFuncOneInput(t, "Convolve(...).ChannelsAxis(images.ChannelsLast).NoPadding()",
 		func(g *Graph) (input, output *Node) {
 			channelA := Iota(g, MakeShape(dtypes.Float64, 1, 3, 3, 1), 2)
 			channelB := Mul(channelA, Const(g, 0.1))
 			input = Concatenate([]*Node{channelA, channelB}, -1)
 			kernel := Ones(g, MakeShape(dtypes.Float64, 3, 3, 2, 1))
-			output = Convolve(input, kernel).ChannelsAxis(timage.ChannelsLast).NoPadding().Done()
+			output = Convolve(input, kernel).ChannelsAxis(images.ChannelsLast).NoPadding().Done()
 			return
 		}, [][][][]float64{{{{9.9}}}})
 
-	testFuncOneInput(t, "Convolve(...).ChannelsAxis(timage.ChannelsFirst).PadSame()",
+	testFuncOneInput(t, "Convolve(...).ChannelsAxis(images.ChannelsFirst).PadSame()",
 		func(g *Graph) (input, output *Node) {
 			channelA := Iota(g, MakeShape(dtypes.Float32, 1, 1, 3, 3), 2)
 			channelB := Mul(channelA, Const(g, float32(0.1)))
 			input = Concatenate([]*Node{channelA, channelB}, 1)
 			kernel := Ones(g, MakeShape(dtypes.Float32, 2, 3, 3, 1))
-			output = Convolve(input, kernel).ChannelsAxis(timage.ChannelsFirst).PadSame().Done()
+			output = Convolve(input, kernel).ChannelsAxis(images.ChannelsFirst).PadSame().Done()
 			return
 		}, [][][][]float32{{{{2.2, 3.3, 2.2}, {6.6, 9.9, 6.6}, {6.6, 9.9, 6.6}}}})
 
