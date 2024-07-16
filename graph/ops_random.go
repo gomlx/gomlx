@@ -4,7 +4,6 @@ import (
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
-	"github.com/gomlx/gomlx/xla"
 	"github.com/gomlx/gopjrt/dtypes"
 	"math"
 	"math/rand"
@@ -12,11 +11,6 @@ import (
 )
 
 var (
-	// RngAlgorithm used in all Random* functions. XLA supports more than one, but we didn't
-	// want to make the API more complex for now.
-	// It may change in the future.
-	RngAlgorithm = xla.RngPhilox
-
 	// RngStateShape is the outputShapes of the random number generator state, used
 	// in all Random* functions.
 	// This is dependent on the algorithm, that for now is fixed.

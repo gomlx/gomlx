@@ -20,7 +20,6 @@ import (
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/xslices"
-	"github.com/gomlx/gomlx/xla"
 )
 
 // AdjustAxisToRank returns the positive axis to the operand outputShapes, adjusting in case the axis given is negative.
@@ -60,30 +59,10 @@ func dotCrossAxes(input *Node, contractingAxes, batchAxes []int) (crossAxes []in
 
 // dotGeneralVJP generates the gradient with respect to the lhs (left-hand-side) and rhs (right-hand-side) operands.
 func dotGeneralVJP(node, v *Node, _ shapes.Shape) []*Node {
-	lhs, rhs := node.inputNodes[0], node.inputNodes[1]
-
-	// Rebuild axes lists.
-	ints := node.serializedNode.Ints
-	decode := func() (value int) {
-		value = ints[0]
-		ints = ints[1:]
-		return
-	}
-	decodeN := func(n int) (values []int) {
-		values = ints[:n]
-		ints = ints[n:]
-		return
-	}
-	listsLen := make([]int, 4)
-	for ii := range listsLen {
-		listsLen[ii] = decode()
-	}
-	lhsContractingAxes := decodeN(listsLen[0])
-	lhsBatchAxes := decodeN(listsLen[1])
-	lhsCrossAxes := dotCrossAxes(lhs, lhsContractingAxes, lhsBatchAxes)
-	rhsContractingAxes := decodeN(listsLen[2])
-	rhsBatchAxes := decodeN(listsLen[3])
-	rhsCrossAxes := dotCrossAxes(rhs, rhsContractingAxes, rhsBatchAxes)
+	params := node.inputs.(*nodeInputsDotGeneral)
+	lhs, rhs := params.lhs, params.rhs
+	lhsCrossAxes := dotCrossAxes(lhs, params.lhsContractingAxes, params.lhsBatchAxes)
+	rhsCrossAxes := dotCrossAxes(rhs, params.rhsContractingAxes, params.rhsBatchAxes)
 
 	// Gradient with respect to lhs:
 	gradFn := func(thisInput *Node, thisBatchAxes, thisContractingAxes, thisCrossAxes []int, thisCrossesFirst bool,
@@ -105,7 +84,7 @@ func dotGeneralVJP(node, v *Node, _ shapes.Shape) []*Node {
 		// * Project other operand with contracted dimensions.
 		//   otherProjected outputShapes for this=lhs will be [batch_dims..., 1 x (this_cross_dims), rhs_cross_dims, contracted_dims]
 		otherProjected := otherInput
-		otherRank := otherProjected.outputShapes.Rank()
+		otherRank := otherProjected.Rank()
 		{
 			permutations := make([]int, 0, otherRank)
 			for _, axis := range otherBatchAxes {
@@ -150,7 +129,7 @@ func dotGeneralVJP(node, v *Node, _ shapes.Shape) []*Node {
 		}
 
 		// * Transpose thisVJP axes back to its inputNodes.
-		thisRank := thisVJP.outputShapes.Rank()
+		thisRank := thisVJP.Rank()
 		{
 			permutation := make([]int, thisRank)
 			for ii, axis := range thisBatchAxes {
@@ -168,20 +147,7 @@ func dotGeneralVJP(node, v *Node, _ shapes.Shape) []*Node {
 	}
 
 	return []*Node{
-		gradFn(lhs, lhsBatchAxes, lhsContractingAxes, lhsCrossAxes, true, rhs, rhsBatchAxes, rhsContractingAxes, rhsCrossAxes),  // grad wrt lhs
-		gradFn(rhs, rhsBatchAxes, rhsContractingAxes, rhsCrossAxes, false, lhs, lhsBatchAxes, lhsContractingAxes, lhsCrossAxes), // grad wrt rhs
+		gradFn(lhs, params.lhsBatchAxes, params.lhsContractingAxes, lhsCrossAxes, true, rhs, params.rhsBatchAxes, params.rhsContractingAxes, rhsCrossAxes),  // grad wrt lhs
+		gradFn(rhs, params.rhsBatchAxes, params.rhsContractingAxes, rhsCrossAxes, false, lhs, params.lhsBatchAxes, params.lhsContractingAxes, lhsCrossAxes), // grad wrt rhs
 	}
-}
-
-// fftXLA calls the XLA FFT operation, which implements {Forward, Inverse} x {Complex, Real} versions.
-//
-// See documentation in https://www.tensorflow.org/xla/operation_semantics.
-// Underlying, CPU FFT is backed by Eigen's TensorFFT and GPU FFT uses cuFFT.
-func fftXLA(operand *Node, fftType xla.FftType, fftLength []int) *Node {
-	g := validateBuildingGraphFromInputs(operand)
-	return newNode(g, &xla.SerializedNode{
-		Type: xla.FftNode,
-		Int:  int(fftType),
-		Ints: xslices.Copy(fftLength),
-	}, []*Node{operand})
 }

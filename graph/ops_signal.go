@@ -38,7 +38,7 @@ func InverseFFT(operand *Node) *Node {
 	if operand.Shape().IsScalar() {
 		Panicf("InverseFFT requires a complex input with rank > 1, got scalar %s instead", operand.DType())
 	}
-	return fftXLA(operand, backends.FFTInverse, []int{xslices.At(operand.Shape().Dimensions, -1)})
+	return backendFFT(operand, backends.FFTInverse, []int{xslices.At(operand.Shape().Dimensions, -1)})
 }
 
 // RealFFT computes a forward 1D fast-fourier transformation on a real (float) input.
@@ -57,7 +57,7 @@ func RealFFT(operand *Node) *Node {
 	if operand.Shape().IsScalar() {
 		Panicf("RealFFT requires a real (float) input with rank > 1, got scalar %s instead", operand.DType())
 	}
-	return fftXLA(operand, backends.FFTForwardReal, []int{xslices.At(operand.Shape().Dimensions, -1)})
+	return backendFFT(operand, backends.FFTForwardReal, []int{xslices.At(operand.Shape().Dimensions, -1)})
 }
 
 // InverseRealFFT computes the inverse of a forward 1D fast-fourier transformation.
@@ -77,7 +77,7 @@ func InverseRealFFT(operand *Node) *Node {
 		Panicf("RealFFT requires a real (float) input with rank > 1, got scalar %s instead", operand.DType())
 	}
 	lastDim := (xslices.At(operand.Shape().Dimensions, -1) - 1) * 2
-	return fftXLA(operand, backends.FFTInverseReal, []int{lastDim})
+	return backendFFT(operand, backends.FFTInverseReal, []int{lastDim})
 }
 
 // fftVJP implements the auto-grad for all the FFT variations.
