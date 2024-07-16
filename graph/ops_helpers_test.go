@@ -18,63 +18,58 @@ package graph
 
 import (
 	"fmt"
+	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
 
+const margin = 1e-4
+
 type graphFnOneInputToTest func(g *Graph) (input, output *Node)
 
 func testFuncOneInput(t *testing.T, testName string, graphFn graphFnOneInputToTest, want any) {
 	require.NotPanics(t, func() {
 		fmt.Printf("%s\n", testName)
-		manager := graphtest.BuildTestBackend()
-		g := manager.NewGraph(testName)
+		backend := graphtest.BuildTestBackend()
+		g := NewGraph(backend, testName)
 		input, output := graphFn(g)
 		g.Compile(input, output)
-		tuple := g.Run(nil)
-		results := tuple.SplitTuple()
-		fmt.Printf("\t%s(%s) = %s\n", testName, results[0].Local().GoStr(), results[1].Local().GoStr())
-		if !xslices.SlicesInDelta(results[1].Local().Value(), want, xslices.Epsilon) {
-			t.Errorf("%s(%v): want=%v, got=%v", testName, results[0].Local(), want, results[1].Local().GoStr())
-		}
+		outputs := g.Run(nil)
+		fmt.Printf("\t%s(%s) = %s\n", testName, outputs[0].GoStr(), outputs[1].GoStr())
+		wantTensor := tensors.FromAnyValue(want)
+		require.Truef(t, wantTensor.InDelta(outputs[1], margin), "%s(%v): want=%v, got=%v", testName, outputs[0], wantTensor, outputs[1])
 	})
 }
 
 func TestBackendSlice(t *testing.T) {
-	manager := graphtest.BuildTestBackend()
-	g := manager.NewGraph().WithName("iota0")
+	backend := graphtest.BuildTestBackend()
+	g := NewGraph(backend, "iota0")
 	numbers := Iota(g, shapes.Make(dtypes.Float64, 9), 0)
 	numbers = ReshapeWithShape(numbers, shapes.Make(dtypes.Float64, 3, 3))
 	backendSlice(numbers, []int{1, 1}, []int{2, 3}, []int{1, 1})
 	g.Compile()
-	got := g.Run(nil).Local().Value()
+	got := g.Run(nil)[0]
 	want := [][]float64{{4, 5}}
-	if !xslices.DeepSliceCmp(got, want, xslices.EqualAny[float64]) {
-		t.Fatalf("Iota: want %v, got %v", want, got)
-	}
+	require.Equalf(t, want, got.Value(), "Iota: want %v, got %v", want, got)
 }
 
 func TestBackendGather(t *testing.T) {
-	manager := graphtest.BuildTestBackend()
-	g := manager.NewGraph().WithName("iota0")
-	// numbers=(Float64)[5 3]: [[0 1 2] [3 4 5] [6 7 8] [9 10 11] [12 13 14]]
-	numbers := ReshapeWithShape(Iota(g, shapes.Make(dtypes.Float64, 5*3), 0), shapes.Make(dtypes.Float64, 5, 3))
-	indices := Const(g, [][]int{{2}, {0}})
-	gather := backendGather(numbers, indices, 1,
-		/* offsetDims */ []int{1},
-		/* collapsed_slice_dims */ []int{0},
-		/* start_index_map */ []int{0},
-		/* slice_sizes */ []int{1, 3}, false)
-	g.Compile(gather)
-	got := g.Run(nil).Local()
-	fmt.Printf("\tgatherXLA=%v\n", got)
-	want := [][]float64{{6, 7, 8}, {0, 1, 2}}
-	if !xslices.DeepSliceCmp(got.Value(), want, xslices.EqualAny[float64]) {
-		t.Fatalf("gatherXLA: want %v, got %v", want, got)
-	}
+	testFuncOneInput(t, t.Name(), func(g *Graph) (input, output *Node) {
+		// input=(Float64)[5 3]: [[0 1 2] [3 4 5] [6 7 8] [9 10 11] [12 13 14]]
+		input = ReshapeWithShape(Iota(g, shapes.Make(dtypes.Float64, 5*3), 0), shapes.Make(dtypes.Float64, 5, 3))
+		indices := Const(g, [][]int{{2}, {0}})
+		output = backendGather(input, indices, 1,
+			/* offsetDims */ []int{1},
+			/* collapsed_slice_dims */ []int{0},
+			/* start_index_map */ []int{0},
+			/* slice_sizes */ []int{1, 3}, false)
+		return
+	}, [][]float64{{6, 7, 8}, {0, 1, 2}})
 }
 
 func TestSelectAndScatterWithGeneralPaddingXLA(t *testing.T) {
@@ -82,7 +77,7 @@ func TestSelectAndScatterWithGeneralPaddingXLA(t *testing.T) {
 		func(g *Graph) (input, output *Node) {
 			input = IotaFull(g, shapes.Make(dtypes.Float64, 1, 6, 1))
 			source := Add(IotaFull(g, shapes.Make(dtypes.Float64, 1, 2, 1)), Const(g, 1.0))
-			output = checkedSelectAndScatter(input, source, []int{1, 3, 1}, []int{1, 3, 1}, nil)
+			output = checkedSelectAndScatter(input, source, backends.ReduceOpMax, []int{1, 3, 1}, []int{1, 3, 1}, nil)
 			return
 		}, [][][]float64{{{0}, {0}, {1}, {0}, {0}, {2}}})
 }
@@ -154,7 +149,7 @@ func reversePermutation(permutation []int) []int {
 }
 
 func TestGradDotGeneralXLABatchContracting(t *testing.T) {
-	manager := graphtest.BuildTestBackend()
+	backend := graphtest.BuildTestBackend()
 
 	dimensions := []int{2, 3, 4}
 	lhsPermutations := allPermutations(len(dimensions))
@@ -197,11 +192,11 @@ func TestGradDotGeneralXLABatchContracting(t *testing.T) {
 				return []*Node{lhs, rhs, dot, grads[0], grads[1]}
 			}
 
-			exec := NewExec(manager, testFn)
+			exec := NewExec(backend, testFn)
 			fmt.Printf("Executing TestGradDotGeneralXLA:\n")
 			parts := exec.Call()
 			for ii, name := range []string{"lhs", "rhs", "dot", "grad_lhs", "grad_rhs"} {
-				fmt.Printf("\t%s: %s\n", name, parts[ii].Local().GoStr())
+				fmt.Printf("\t%s: %s\n", name, parts[ii].GoStr())
 			}
 
 			// require.InDeltaSlice is not working for some reason.
@@ -227,7 +222,7 @@ func TestGradDotGeneralXLABatchContracting(t *testing.T) {
 }
 
 func TestGradDotGeneralXLABatchContractingCrossing(t *testing.T) {
-	manager := graphtest.BuildTestBackend()
+	backend := graphtest.BuildTestBackend()
 
 	lhsDimensions := []int{4, 2, 5}
 	rhsDimensions := []int{4, 3, 5}
@@ -272,11 +267,11 @@ func TestGradDotGeneralXLABatchContractingCrossing(t *testing.T) {
 				return []*Node{lhs, rhs, dot, grads[0], grads[1]}
 			}
 
-			exec := NewExec(manager, testFn)
+			exec := NewExec(backend, testFn)
 			parts := exec.Call()
 			fmt.Printf("Executing TestGradDotGeneralXLA:\n")
 			for ii, name := range []string{"lhs", "rhs", "dot", "grad_lhs", "grad_rhs"} {
-				fmt.Printf("\t%s: %s\n", name, parts[ii].Local().GoStr())
+				fmt.Printf("\t%s: %s\n", name, parts[ii].GoStr())
 			}
 
 			// require.InDeltaSlice is not working for some reason.
