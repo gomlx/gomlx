@@ -19,7 +19,6 @@ package graph
 import (
 	"fmt"
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/types/xslices"
@@ -30,12 +29,18 @@ import (
 
 const margin = 1e-4
 
+// buildTestBackend and sets backends.DefaultConfig to "xla:cpu" -- it can be overwritten by GOMLX_BACKEND environment variable.
+func buildTestBackend() backends.Backend {
+	backends.DefaultConfig = "xla:cpu"
+	return backends.New()
+}
+
 type graphFnOneInputToTest func(g *Graph) (input, output *Node)
 
 func testFuncOneInput(t *testing.T, testName string, graphFn graphFnOneInputToTest, want any) {
 	require.NotPanics(t, func() {
 		fmt.Printf("%s\n", testName)
-		backend := graphtest.BuildTestBackend()
+		backend := buildTestBackend()
 		g := NewGraph(backend, testName)
 		input, output := graphFn(g)
 		g.Compile(input, output)
@@ -47,7 +52,7 @@ func testFuncOneInput(t *testing.T, testName string, graphFn graphFnOneInputToTe
 }
 
 func TestBackendSlice(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := buildTestBackend()
 	g := NewGraph(backend, "iota0")
 	numbers := Iota(g, shapes.Make(dtypes.Float64, 9), 0)
 	numbers = ReshapeWithShape(numbers, shapes.Make(dtypes.Float64, 3, 3))
@@ -149,7 +154,7 @@ func reversePermutation(permutation []int) []int {
 }
 
 func TestGradDotGeneralXLABatchContracting(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := buildTestBackend()
 
 	dimensions := []int{2, 3, 4}
 	lhsPermutations := allPermutations(len(dimensions))
@@ -222,7 +227,7 @@ func TestGradDotGeneralXLABatchContracting(t *testing.T) {
 }
 
 func TestGradDotGeneralXLABatchContractingCrossing(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := buildTestBackend()
 
 	lhsDimensions := []int{4, 2, 5}
 	rhsDimensions := []int{4, 3, 5}

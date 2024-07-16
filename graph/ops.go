@@ -646,8 +646,8 @@ func adjustAxesToRankAndSort(rank int, axesWithNegatives []int, paramName string
 			axes[ii] = rank + axes[ii]
 		}
 		if axes[ii] < 0 || axes[ii] > rank {
-			exceptions.Panicf("axis #%d of %q axes given (%v) is out-of-range for rank %d",
-				ii, axesWithNegatives, rank)
+			exceptions.Panicf("axis #%d of %v = %v given is out-of-range for rank %d",
+				ii, axesWithNegatives, axesWithNegatives[ii], rank)
 		}
 	}
 	slices.Sort(axes)

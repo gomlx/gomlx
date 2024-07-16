@@ -230,10 +230,7 @@ func (g *Graph) Finalize() {
 		g.builder = nil
 	}
 	if g.executable != nil {
-		err := g.executable.Finalize
-		if err != nil {
-			klog.Errorf("Failure while destroying Graph executable: %+v", err)
-		}
+		g.executable.Finalize()
 		g.executable = nil
 	}
 	g.nodes = nil

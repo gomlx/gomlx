@@ -5,14 +5,15 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/x448/float16"
 	"testing"
 )
 
 func testRandomUniform[T interface {
 	float32 | float64 | float16.Float16 | complex64 | complex128
-}](t *testing.T, manager *Manager) {
-	dtype := shapes.FromGoType[T]()
+}](t *testing.T) {
+	dtype := dtypes.FromGenericsType[T]()
 	graphtest.RunTestGraphFn(t, fmt.Sprintf("TestRandomUniform(%s)", dtype),
 		func(g *Graph) (inputs []*Node, outputs []*Node) {
 			state := Const(g, RngStateFromSeed(42))
@@ -44,18 +45,17 @@ func testRandomUniform[T interface {
 }
 
 func TestRandomUniform(t *testing.T) {
-	manager := graphtest.BuildTestBackend()
-	testRandomUniform[float32](t, manager)
-	testRandomUniform[float64](t, manager)
-	testRandomUniform[float16.Float16](t, manager)
-	testRandomUniform[complex64](t, manager)
-	testRandomUniform[complex128](t, manager)
+	testRandomUniform[float32](t)
+	testRandomUniform[float64](t)
+	testRandomUniform[float16.Float16](t)
+	testRandomUniform[complex64](t)
+	testRandomUniform[complex128](t)
 }
 
 func testRandomNormal[T interface {
 	float32 | float64 | float16.Float16
-}](t *testing.T, manager *Manager) {
-	dtype := shapes.FromGoType[T]()
+}](t *testing.T) {
+	dtype := dtypes.FromGenericsType[T]()
 	graphtest.RunTestGraphFn(t, fmt.Sprintf("TestRandomNormal(%s)", dtype),
 		func(g *Graph) (inputs []*Node, outputs []*Node) {
 			state := Const(g, RngStateFromSeed(42))
@@ -81,8 +81,7 @@ func testRandomNormal[T interface {
 }
 
 func TestRandomNormal(t *testing.T) {
-	manager := graphtest.BuildTestBackend()
-	testRandomNormal[float32](t, manager)
-	testRandomNormal[float64](t, manager)
-	testRandomNormal[float16.Float16](t, manager)
+	testRandomNormal[float32](t)
+	testRandomNormal[float64](t)
+	testRandomNormal[float16.Float16](t)
 }

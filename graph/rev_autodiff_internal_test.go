@@ -22,7 +22,7 @@ import (
 )
 
 func testState(t *testing.T, rg *reverseGraph, node *Node, selected, included, useful bool) {
-	rNode := rg.ReverseNodes[node.xlaHandle]
+	rNode := rg.ReverseNodes[node.Id()]
 	if rNode.Selected != selected || rNode.Included != included || rNode.Useful != useful {
 		t.Errorf("Node %q has unexpected state (%v, %v, %v), wanted (%v, %v, %v)",
 			node, rNode.Selected, rNode.Included, rNode.Useful, selected, included, useful)
@@ -30,12 +30,12 @@ func testState(t *testing.T, rg *reverseGraph, node *Node, selected, included, u
 }
 
 func TestReverseGraph(t *testing.T) {
-	manager := graphtest.BuildTestBackend()
+	backend := buildTestBackend()
 
-	g := manager.NewGraph()
-	n0 := g.Parameter("n0", shapes.Scalar[float32]())
-	n1 := g.Parameter("n1", shapes.Scalar[float32]())
-	n2 := g.Parameter("n2", shapes.Scalar[float32]())
+	g := NewGraph(backend, "TestReverseGraph")
+	n0 := Parameter(g, "n0", shapes.Scalar[float32]())
+	n1 := Parameter(g, "n1", shapes.Scalar[float32]())
+	n2 := Parameter(g, "n2", shapes.Scalar[float32]())
 	n3 := Add(n0, n1)
 	n4 := Mul(n3, n2)
 	n5 := Div(n3, n2)

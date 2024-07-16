@@ -17,16 +17,19 @@
 package graph_test
 
 import (
+	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
 
 func TestAsserts(t *testing.T) {
-	manager := graphtest.BuildTestBackend()
-	g := manager.NewGraph().WithName("TestAssertGraph")
-	node := g.Parameter("node", shapes.Make(dtypes.Float32, 3, 2))
-	scalar := g.Parameter("scalar", shapes.Make(dtypes.Int64))
+	backend := graphtest.BuildTestBackend()
+	g := NewGraph(backend, "TestAssertGraph")
+	node := Parameter(g, "node", shapes.Make(dtypes.Float32, 3, 2))
+	scalar := Parameter(g, "scalar", shapes.Make(dtypes.Int64))
 
 	// Check true asserts.
 	require.NotPanics(t, func() { node.AssertDims(3, 2) })
