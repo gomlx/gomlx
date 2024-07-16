@@ -21,6 +21,7 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/assert"
@@ -36,12 +37,9 @@ var (
 	MakeShape = shapes.Make
 	F32       = dtypes.Float32
 	F64       = dtypes.Float64
-)
 
-// buildTestManager using "Host" by default -- can be overwritten by GOMLX_PLATFORM environment variable.
-func buildTestManager() *Manager {
-	return graphtest.BuildTestBackend()
-}
+	Epsilon = 1e-4
+)
 
 type graphFnOneInputToTest func(g *Graph) (input, output *Node)
 
@@ -50,23 +48,22 @@ type graphFnOneInputToTest func(g *Graph) (input, output *Node)
 // result is as expected.
 func testFuncOneInput(t *testing.T, testName string, graphFn graphFnOneInputToTest, want any) {
 	fmt.Printf("%s\n", testName)
-	manager := buildTestManager()
-	g := manager.NewGraph(testName)
+	wantTensor := tensors.FromAnyValue(want)
+	backend := graphtest.BuildTestBackend()
+	g := NewGraph(backend, testName)
 	inputNode, outputNode := graphFn(g)
 	g.Compile(inputNode, outputNode)
-	results := g.Run(nil).SplitTuple()
-	input, got := results[0].Value(), results[1].Value()
-	if !xslices.SlicesInDelta(want, got, xslices.Epsilon) {
-		t.Errorf("%s(%#v): want=%v, got=%s", testName, input, want, results[1].Local().GoStr())
+	results := g.Run(nil)
+	input, got := results[0], results[1]
+	if !wantTensor.InDelta(got, Epsilon) {
+		t.Errorf("%s(%#v): want=%v, got=%s", testName, input, wantTensor.GoStr(), got.GoStr())
 	}
 }
 
 func TestConstant(t *testing.T) {
-	platforms, _ := GetPlatforms()
-	fmt.Printf("Platforms: %v\n", platforms)
-	manager := buildTestManager()
+	backend := graphtest.BuildTestBackend()
 	{
-		g := manager.NewGraph()
+		g := NewGraph(backend, "")
 		n := Const(g, 5)
 		shape := n.Shape()
 		if shape.DType != dtypes.Int64 || shape.Rank() != 0 {
@@ -74,7 +71,7 @@ func TestConstant(t *testing.T) {
 		}
 	}
 	{
-		g := manager.NewGraph()
+		g := NewGraph(backend, "")
 		n := Const(g, [][]float32{{1.2, 1.3}, {2.4, 2.5}, {2.6, 2.7}})
 		shape := n.Shape()
 		if shape.DType != dtypes.Float32 || !reflect.DeepEqual(shape.Dimensions, []int{3, 2}) {
@@ -84,34 +81,32 @@ func TestConstant(t *testing.T) {
 	}
 }
 
-func compileRunTransfer(t *testing.T, g *Graph, msg string) *tensors.Local {
+func compileRunAndTakeFirst(t *testing.T, g *Graph) *tensors.Tensor {
 	g.Compile()
-	device := g.Run(nil)
-	local := device.Local()
-	return local
+	return g.Run(nil)[0]
 }
 
 func TestAdd(t *testing.T) {
-	manager := buildTestManager()
+	backend := graphtest.BuildTestBackend()
 	{
 		// Test scalars.
-		g := manager.NewGraph()
+		g := NewGraph(backend, "scalar graph")
 		x := Const(g, 5)
 		y := Const(g, 7)
 		n := Add(x, y)
 		wantShape := shapes.Shape{DType: dtypes.Int64}
 		require.Truef(t, n.Shape().Equal(wantShape), "Add invalid outputShapes %s, wanted %s", n.Shape(), wantShape)
-		local := compileRunTransfer(t, g, "scalar Graph")
-		got := local.Value().(int64)
+		gotTensor := compileRunAndTakeFirst(t, g)
+		got := tensors.ToScalar[int64](gotTensor)
 		if got != 12 {
 			fmt.Printf("%s\n", g)
-			fmt.Printf("\tResult: %d %s\n", got, local.Shape())
+			fmt.Printf("\tResult: %d %s\n", got, gotTensor.Shape())
 			t.Errorf("Wanted 5 + 7 = 12, got %d", got)
 		}
 	}
 	{
 		// Test multi-dimension arrays.
-		g := manager.NewGraph()
+		g := NewGraph(backend, "[2, 2] Graph")
 		x := Const(g, [][]float32{{1.1, 1.2}, {1.3, 1.4}})
 		y := Const(g, [][]float32{{10, 10}, {20, 20}})
 		n := Add(x, y)
@@ -119,18 +114,17 @@ func TestAdd(t *testing.T) {
 		if !n.Shape().Equal(wantShape) {
 			t.Fatalf("Add invalid outputShapes %s, wanted %s", n.Shape(), wantShape)
 		}
-		local := compileRunTransfer(t, g, "[2, 2] Graph")
-		got := local.Value().([][]float32)
-		want := [][]float32{{11.1, 11.2}, {21.3, 21.4}}
-		if !reflect.DeepEqual(got, want) {
+		got := compileRunAndTakeFirst(t, g)
+		want := tensors.FromValue([][]float32{{11.1, 11.2}, {21.3, 21.4}})
+		if !want.Equal(got) {
 			fmt.Printf("%s\n", g)
-			fmt.Printf("\tResult: %v %s\n", got, local.Shape())
+			fmt.Printf("\tResult: %v %s\n", got, got.Shape())
 			t.Errorf("Wanted %v, got %v", want, got)
 		}
 	}
 	{
 		// Test multi-dimension arrays of same rank with broadcast.
-		g := manager.NewGraph()
+		g := NewGraph(backend, "[2, 2] Graph")
 		x := Const(g, [][]float32{{1.1, 1.2}, {1.3, 1.4}})
 		y := Const(g, [][]float32{{1}, {10}})
 		n := Add(x, y)
@@ -138,7 +132,7 @@ func TestAdd(t *testing.T) {
 		if !n.Shape().Equal(wantShape) {
 			t.Fatalf("Add invalid outputShapes %s, wanted %s", n.Shape(), wantShape)
 		}
-		local := compileRunTransfer(t, g, "[2, 2] Graph")
+		local := compileRunAndTakeFirst(t, g)
 		got := local.Value().([][]float32)
 		want := [][]float32{{2.1, 2.2}, {11.3, 11.4}}
 		if !reflect.DeepEqual(got, want) {
@@ -149,7 +143,7 @@ func TestAdd(t *testing.T) {
 	}
 	{
 		// Test add multi-dimension array with a scalar (different ranks).
-		g := manager.NewGraph()
+		g := NewGraph(backend, "[2, 2] Graph")
 		x := Const(g, [][]float32{{1.1, 1.2}, {1.3, 1.4}})
 		y := Const(g, float32(1))
 		n := Add(x, y)
@@ -157,7 +151,7 @@ func TestAdd(t *testing.T) {
 		if !n.Shape().Equal(wantShape) {
 			t.Fatalf("Add invalid outputShapes %s, wanted %s", n.Shape(), wantShape)
 		}
-		local := compileRunTransfer(t, g, "[2, 2] Graph")
+		local := compileRunAndTakeFirst(t, g)
 		got := local.Value().([][]float32)
 		want := [][]float32{{2.1, 2.2}, {2.3, 2.4}}
 		if !reflect.DeepEqual(got, want) {
@@ -168,74 +162,36 @@ func TestAdd(t *testing.T) {
 	}
 }
 
-func testTupleParameter(t *testing.T, manager *Manager) {
-	g := manager.NewGraph()
-	xyS := shapes.MakeTuple([]shapes.Shape{shapes.Scalar[float64](), shapes.Scalar[float64]()})
-	xy := g.Parameter("xy", xyS)
-	if !xy.Shape().Eq(xyS) {
-		fmt.Printf("\t(before) xy.outputShapes=%s\n", xyS)
-		fmt.Printf("\t(after) xy.outputShapes=%s\n", xy.Shape())
-		t.Fatalf("Tuple outputShapes changed after creating parameter.")
-	}
-	x := GetTupleElement(xy, 0)
-	y := GetTupleElement(xy, 1)
-	// x^2 + 2*y
-	Add(Mul(x, x), Mul(Const(g, 2.0), y))
-	if xy.ParameterHandle() == InvalidParameterHandle {
-		t.Fatalf("Invalid parameter xlaHandle for tuple")
-	}
-	g.Compile()
-
-	// Tests for various parameters.
-	for xV := float64(0); xV < 20; xV += 1 {
-		for yV := float64(0); yV < 20; yV += 1 {
-			xyV := tensors.MakeLocalTupleAny(xV, yV)
-			device := g.Run(ParamsMap{xy: xyV})
-			local := device.Local()
-			got := local.Value().(float64)
-			want := xV*xV + 2*yV
-			if got != want {
-				fmt.Printf("%s\n", g)
-				t.Errorf("%f + %f : got %s, wanted %f", xV, yV, local, want)
-			}
-		}
-	}
-}
-
 func TestParameter(t *testing.T) {
-	manager := buildTestManager()
+	backend := graphtest.BuildTestBackend()
 
 	// Test passing of values.
 	{
 		// Test scalars.
-		g := manager.NewGraph()
-		x := g.Parameter("x", shapes.Scalar[float32]())
-		y := g.Parameter("y", shapes.Scalar[float32]())
+		g := NewGraph(backend, "")
+		x := Parameter(g, "x", shapes.Scalar[float32]())
+		y := Parameter(g, "y", shapes.Scalar[float32]())
 		Add(x, y)
-		if x.ParameterHandle() == InvalidParameterHandle || y.ParameterHandle() == InvalidParameterHandle || x.ParameterHandle() == y.ParameterHandle() {
-			t.Fatalf("Invalid parameter handles: x=%d, y=%d", x.ParameterHandle(), y.ParameterHandle())
+		if x.GetParameterHandle() == InvalidParameterHandle || y.GetParameterHandle() == InvalidParameterHandle || x.GetParameterHandle() == y.GetParameterHandle() {
+			t.Fatalf("Invalid parameter handles: x=%d, y=%d", x.GetParameterHandle(), y.GetParameterHandle())
 		}
 		g.Compile()
 
 		// Tests for various parameters.
 		for xV := float32(0); xV < 3; xV += 1 {
 			for yV := float32(0); yV < 3; yV += 1 {
-				device := g.Run(ParamsMap{x: xV, y: yV})
-				local := device.Local()
-				got := local.Value().(float32)
+				gotTensor := g.Run(ParamsMap{x: xV, y: yV})[0]
+				got := tensors.ToScalar[float32](gotTensor)
 				if got != xV+yV {
 					fmt.Printf("%s\n", g)
-					t.Errorf("%f + %f : got %s, wanted %f", xV, yV, local, xV+yV)
+					t.Errorf("%f + %f : got %s, wanted %f", xV, yV, gotTensor, xV+yV)
 				}
 			}
 		}
 	}
-
-	// Test tuple parameters.
-	testTupleParameter(t, manager)
 }
 
-func TestConvertType(t *testing.T) {
+func TestConvertDType(t *testing.T) {
 	// Test that number can be converted to complex types.
 	wantF32 := []float32{3.0, -5.0}
 	wantF64 := []float64{-7.0, 11.0}
@@ -244,22 +200,22 @@ func TestConvertType(t *testing.T) {
 			Const(g, wantF32),
 			Const(g, wantF64),
 		}
-		c64 := ConvertDType(inputs[0], shapes.Complex64)
-		assert.Equal(t, shapes.Complex64, c64.DType())
-		c128 := ConvertDType(inputs[1], shapes.Complex128)
-		assert.Equal(t, shapes.Complex128, c128.DType())
+		c64 := ConvertDType(inputs[0], dtypes.Complex64)
+		assert.Equal(t, dtypes.Complex64, c64.DType())
+		c128 := ConvertDType(inputs[1], dtypes.Complex128)
+		assert.Equal(t, dtypes.Complex128, c128.DType())
 		outputs = []*Node{Real(c64), Real(c128)}
 		return
 	}, []any{wantF32, wantF64}, -1)
 }
 
-type TwoArgsTestCase[T shapes.Number] struct {
+type TwoArgsTestCase[T dtypes.Number] struct {
 	fnGraph  func(x, y *Node) *Node
 	fnScalar func(x, y T) T
 }
 
 func TestTwoArgsOps(t *testing.T) {
-	manager := buildTestManager()
+	backend := graphtest.BuildTestBackend()
 
 	{
 		casesFloat32 := []TwoArgsTestCase[float32]{
@@ -288,7 +244,7 @@ func TestTwoArgsOps(t *testing.T) {
 		xSlices := [][]float32{{11, 12}, {13, 14}}
 		yValue := float32(3)
 		for _, test := range casesFloat32 {
-			g := manager.NewGraph()
+			g := NewGraph(backend, "TwoArgsOps [2, 2] Graph")
 			x := Const(g, xSlices)
 			y := Const(g, yValue)
 			n := test.fnGraph(x, y)
@@ -296,7 +252,7 @@ func TestTwoArgsOps(t *testing.T) {
 			if !n.Shape().Equal(wantShape) {
 				t.Fatalf("Add invalid outputShapes %s, wanted %s", n.Shape(), wantShape)
 			}
-			local := compileRunTransfer(t, g, "[2, 2] Graph")
+			local := compileRunAndTakeFirst(t, g)
 			got := local.Value().([][]float32)
 			want := [][]float32{{11, 12}, {13, 14}}
 			for _, s1 := range want {
@@ -321,7 +277,7 @@ func TestTwoArgsOps(t *testing.T) {
 		xSlices := [][]int64{{11, 12}, {13, 14}}
 		yValue := int64(3)
 		for _, test := range casesInt {
-			g := manager.NewGraph()
+			g := NewGraph(backend, "TwoArgs: logical functions [2, 2] Graph")
 			x := Const(g, xSlices)
 			y := Const(g, yValue)
 			n := test.fnGraph(x, y)
@@ -329,7 +285,7 @@ func TestTwoArgsOps(t *testing.T) {
 			if !n.Shape().Equal(wantShape) {
 				t.Fatalf("Add invalid outputShapes %s, wanted %s", n.Shape(), wantShape)
 			}
-			local := compileRunTransfer(t, g, "[2, 2] Graph")
+			local := compileRunAndTakeFirst(t, g)
 			got := local.Value().([][]int64)
 			want := [][]int64{{11, 12}, {13, 14}}
 			for _, s1 := range want {
@@ -346,13 +302,13 @@ func TestTwoArgsOps(t *testing.T) {
 	}
 }
 
-type OneArgTestCase[T shapes.Number] struct {
+type OneArgTestCase[T dtypes.Number] struct {
 	fnGraph    func(x *Node) *Node
 	goFnScalar func(x T) T
 }
 
 func TestOneArgOps(t *testing.T) {
-	manager := buildTestManager()
+	backend := graphtest.BuildTestBackend()
 
 	casesFloat64 := []OneArgTestCase[float64]{
 		{Abs, func(x float64) float64 { return math.Abs(x) }},
@@ -381,14 +337,14 @@ func TestOneArgOps(t *testing.T) {
 	}
 	xSlices := [][]float64{{11.1, 12.8}, {-13.2, -14.9}}
 	for _, test := range casesFloat64 {
-		g := manager.NewGraph()
+		g := NewGraph(backend, "")
 		x := Const(g, xSlices)
 		n := test.fnGraph(x)
 		wantShape := shapes.Make(dtypes.Float64, 2, 2)
 		if !n.Shape().Equal(wantShape) {
 			t.Fatalf("Add invalid outputShapes %s, wanted %s", n.Shape(), wantShape)
 		}
-		local := compileRunTransfer(t, g, "[2, 2] graph for one-arg operation")
+		local := compileRunAndTakeFirst(t, g, "[2, 2] graph for one-arg operation")
 		got := local.Value().([][]float64)
 		want := [][]float64{{0, 0}, {0, 0}}
 		for i0, x0Slice := range xSlices {
@@ -443,8 +399,8 @@ func compileAndRun(g *Graph) any {
 }
 
 func TestDot(t *testing.T) {
-	manager := buildTestManager()
-	g := manager.NewGraph().WithName("Dot")
+	backend := graphtest.BuildTestBackend()
+	g := NewGraph(backend, "").WithName("Dot")
 
 	// Shape: [batch=4, dims=3]
 	inputs := Const(g, [][]float32{{1.1, 2.2, 3.3}, {11, 22, 33}, {111, 222, 333}, {1111, 2222, 3333}})
@@ -462,9 +418,9 @@ func TestDot(t *testing.T) {
 }
 
 func TestBroadcast(t *testing.T) {
-	manager := buildTestManager()
+	backend := graphtest.BuildTestBackend()
 	{
-		g := manager.NewGraph()
+		g := NewGraph(backend, "")
 		input := Const(g, 7)
 		BroadcastToDims(input, 2, 3) // Last node created in the graph is taken as output by default.
 		got := compileAndRun(g)
@@ -473,7 +429,7 @@ func TestBroadcast(t *testing.T) {
 	}
 
 	{
-		g := manager.NewGraph()
+		g := NewGraph(backend, "")
 		input := Const(g, []float32{1.1, 1.2})
 		BroadcastPrefix(input, 2, 1) // The last node created in the graph is taken as output by default.
 		got := compileAndRun(g)
@@ -498,9 +454,9 @@ func TestBroadcast(t *testing.T) {
 }
 
 func TestFill(t *testing.T) {
-	manager := buildTestManager()
+	backend := graphtest.BuildTestBackend()
 	{
-		g := manager.NewGraph().WithName("FillScalar")
+		g := NewGraph(backend, "").WithName("FillScalar")
 		FillScalar(g, shapes.Make(dtypes.Int64, 3, 1), 4.0)
 		got := compileAndRun(g)
 		want := [][]int64{{4}, {4}, {4}}
@@ -509,7 +465,7 @@ func TestFill(t *testing.T) {
 		}
 	}
 	{
-		g := manager.NewGraph().WithName("Ones")
+		g := NewGraph(backend, "").WithName("Ones")
 		Ones(g, shapes.Make(dtypes.Float32, 3, 1))
 		got := compileAndRun(g)
 		want := [][]float32{{1}, {1}, {1}}
@@ -518,7 +474,7 @@ func TestFill(t *testing.T) {
 		}
 	}
 	{
-		g := manager.NewGraph().WithName("Zeros")
+		g := NewGraph(backend, "").WithName("Zeros")
 		Zeros(g, shapes.Make(dtypes.Float64, 3, 1))
 		got := compileAndRun(g)
 		want := [][]float64{{0}, {0}, {0}}
@@ -539,7 +495,7 @@ func reduceSumGraph(t *testing.T, m *Manager, reduceDims []int) *Graph {
 }
 
 func TestReduceSum(t *testing.T) {
-	manager := buildTestManager()
+	backend := graphtest.BuildTestBackend()
 	cases := []struct {
 		dims []int
 		want any
@@ -549,7 +505,7 @@ func TestReduceSum(t *testing.T) {
 		{dims: []int{1}, want: []float64{8, 8}},
 	}
 	for _, testCase := range cases {
-		g := reduceSumGraph(t, manager, testCase.dims)
+		g := reduceSumGraph(t, backend, testCase.dims)
 		gotT := g.Run(nil)
 		got := gotT.Local().Value()
 		if !xslices.DeepSliceCmp(got, testCase.want, xslices.Close[float64]) {
@@ -606,9 +562,9 @@ func TestReduceMaskedMax(t *testing.T) {
 }
 
 func TestReshape(t *testing.T) {
-	manager := buildTestManager()
+	backend := graphtest.BuildTestBackend()
 	{
-		g := manager.NewGraph()
+		g := NewGraph(backend, "")
 		input := Const(g, [][][]float32{{{1.1, 1.2}}}) // Shape [1, 1, 2]
 		ReshapeWithShape(input, shapes.Make(input.DType(), 2, 1))
 		got := compileAndRun(g)
@@ -622,9 +578,9 @@ func TestReshape(t *testing.T) {
 }
 
 func TestTuple(t *testing.T) {
-	manager := buildTestManager()
+	backend := graphtest.BuildTestBackend()
 	{
-		g := manager.NewGraph()
+		g := NewGraph(backend, "")
 		a := Const(g, []float32{1.1, 1.2})
 		b := Const(g, 5)
 		tuple := Tuple(a, b)
@@ -642,7 +598,7 @@ func TestTuple(t *testing.T) {
 	}
 
 	{
-		g := manager.NewGraph()
+		g := NewGraph(backend, "")
 		a := Const(g, []float32{1.1, 1.2})
 		b := Const(g, 5)
 		tupleN := Tuple(a, b)
@@ -680,9 +636,9 @@ func TestTuple(t *testing.T) {
 }
 
 func TestIota(t *testing.T) {
-	manager := buildTestManager()
+	backend := graphtest.BuildTestBackend()
 	{
-		g := manager.NewGraph().WithName("iota0")
+		g := NewGraph(backend, "").WithName("iota0")
 		Iota(g, MakeShape(F64, 2, 2), 0)
 		g.Compile()
 		got := g.Run(nil).Local().Value()
@@ -692,7 +648,7 @@ func TestIota(t *testing.T) {
 		}
 	}
 	{
-		g := manager.NewGraph().WithName("iota0")
+		g := NewGraph(backend, "").WithName("iota0")
 		Iota(g, MakeShape(F64, 2, 2), 1)
 		g.Compile()
 		got := g.Run(nil).Local().Value()
@@ -779,10 +735,10 @@ func TestPad(t *testing.T) {
 }
 
 func TestConcatenate(t *testing.T) {
-	manager := buildTestManager()
+	backend := graphtest.BuildTestBackend()
 	{
 		fmt.Println("\tConcatenate(): 1D concatenation.")
-		g := manager.NewGraph()
+		g := NewGraph(backend, "")
 		// numbers=(Float64)[3]: [2 3 4]
 		x1 := IotaFull(g, MakeShape(F64, 3))
 		x2 := Add(IotaFull(g, MakeShape(F64, 5)), Const(g, float64(3)))
@@ -797,7 +753,7 @@ func TestConcatenate(t *testing.T) {
 	}
 	{
 		fmt.Println("\tConcatenate(): 3D concatenation at middle dimension.")
-		g := manager.NewGraph()
+		g := NewGraph(backend, "")
 		// numbers=(Float64)[3]: [2 3 4]
 		x1 := IotaFull(g, MakeShape(F64, 2, 2, 2))
 		x2 := Add(IotaFull(g, MakeShape(F64, 2, 1, 2)), Const(g, float64(8)))

@@ -34,13 +34,13 @@ func compileAndRun(g *Graph) any {
 	return got
 }
 
-// buildTestManager using "Host" by default -- can be overwritten by GOMLX_PLATFORM environment variable.
-func buildTestManager() *Manager {
+// graphtest.BuildTestBackend using "Host" by default -- can be overwritten by GOMLX_PLATFORM environment variable.
+func graphtest.BuildTestBackend() *Manager {
 	return BuildManager().WithDefaultPlugin("cpu").Done()
 }
 
 func TestBroadcastInDim(t *testing.T) {
-	manager := buildTestManager()
+	manager := graphtest.BuildTestBackend()
 	{
 		g := manager.NewGraph()
 		input := Const(g, [][][]float32{{{1.1, 1.2}}}) // Shape [1, 1, 2]

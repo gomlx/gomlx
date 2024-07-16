@@ -29,7 +29,7 @@ import (
 )
 
 func TestIndicesForShape(t *testing.T) {
-	manager := buildTestManager()
+	manager := graphtest.BuildTestBackend()
 	g := manager.NewGraph()
 	shape := MakeShape(F64, 2, 3, 4)
 	numbers := IndicesForShape(g, shape)
@@ -43,7 +43,7 @@ func TestIndicesForShape(t *testing.T) {
 }
 
 func TestGather(t *testing.T) {
-	manager := buildTestManager()
+	manager := graphtest.BuildTestBackend()
 	{ // Trivial scalar gather.
 		fmt.Println("\tGather(): trivial scalar gather.")
 		g := manager.NewGraph()
@@ -140,7 +140,7 @@ func TestGatherSlices(t *testing.T) {
 }
 
 func TestScatter(t *testing.T) {
-	manager := buildTestManager()
+	manager := graphtest.BuildTestBackend()
 	{ // Trivial scalar scatter.
 		fmt.Println("\tScatter(): trivial scalar scatter.")
 		g := manager.NewGraph()
@@ -178,7 +178,7 @@ func TestScatter(t *testing.T) {
 // BenchmarkScatter tests the various scatter combinations: sorted or unique and different dtypes.
 // The auto-differentiation of a gather is a scatter: it is used in update of large embedding tables.
 func BenchmarkScatter(b *testing.B) {
-	manager := buildTestManager()
+	manager := graphtest.BuildTestBackend()
 	const (
 		NumEntries          = 1_000_000
 		EmbeddingSize       = 32

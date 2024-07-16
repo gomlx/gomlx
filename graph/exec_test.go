@@ -32,7 +32,7 @@ func EuclideanDistance(a, b *Node) *Node {
 }
 
 func TestExec(t *testing.T) {
-	manager := buildTestManager()
+	manager := graphtest.BuildTestBackend()
 	dist := NewExec(manager, EuclideanDistance).SetMaxCache(10)
 	fmt.Printf("\tExec name: %s\n", dist.Name())
 	testForDim := func(dim int) {
@@ -120,7 +120,7 @@ func addScalarTest(x *Node) *Node {
 }
 
 func TestExecWithSideParams(t *testing.T) {
-	manager := buildTestManager()
+	manager := graphtest.BuildTestBackend()
 	scalar := tensors.FromValue(3.0).Device(manager, manager.DefaultDeviceNum())
 	setSideParams := func(g *Graph, tensors []*tensors.Device) {
 		node := g.GetParameterByName(scalarParamName)
@@ -162,7 +162,7 @@ func addSubGraph(a, b *Node) []*Node {
 }
 
 func TestExecWithSlices(t *testing.T) {
-	manager := buildTestManager()
+	manager := graphtest.BuildTestBackend()
 	concat := NewExecAny(manager, concatGraph)
 
 	a := [][]float64{{1, 2}, {3, 4}}
@@ -215,7 +215,7 @@ func concatWithLoggedFirstNodeGraph(nodes []*Node) *Node {
 }
 
 func TestExecWithLogger(t *testing.T) {
-	manager := buildTestManager()
+	manager := graphtest.BuildTestBackend()
 
 	concat := NewExecAny(manager, concatWithLoggedFirstNodeGraph)
 	var firstNodeValue tensors.Tensor
@@ -244,7 +244,7 @@ func TestExecWithLogger(t *testing.T) {
 }
 
 func TestExecWithNoInputs(t *testing.T) {
-	manager := buildTestManager()
+	manager := graphtest.BuildTestBackend()
 	matrixInitFn := NewExec(manager, func(g *Graph) *Node {
 		return IotaFull(g, shapes.Make(dtypes.Int64, 3, 3))
 	})
