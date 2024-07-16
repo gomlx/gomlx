@@ -1,8 +1,8 @@
 package inceptionv3
 
 import (
+	"github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/types/exceptions"
 	timage "github.com/gomlx/gomlx/types/tensor/image"
 	"math"
 )

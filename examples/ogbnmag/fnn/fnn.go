@@ -3,6 +3,7 @@ package fnn
 
 import (
 	"fmt"
+	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/examples/notebook/gonb/margaid"
 	mag "github.com/gomlx/gomlx/examples/ogbnmag"
 	. "github.com/gomlx/gomlx/graph"
@@ -15,8 +16,6 @@ import (
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
-	"github.com/gomlx/gomlx/types/exceptions"
-	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 	"time"

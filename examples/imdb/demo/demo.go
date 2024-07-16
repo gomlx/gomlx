@@ -20,6 +20,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/examples/imdb"
 	"github.com/gomlx/gomlx/examples/notebook/gonb/margaid"
 	"github.com/gomlx/gomlx/ml/context"
@@ -31,7 +32,6 @@ import (
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
-	"github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"log"
 	"os"
