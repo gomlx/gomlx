@@ -19,93 +19,84 @@ package graph_test
 import (
 	"fmt"
 	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
-	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/rand"
 	"slices"
 	"testing"
 )
 
 func TestIndicesForShape(t *testing.T) {
-	manager := graphtest.BuildTestBackend()
-	g := manager.NewGraph()
+	backend := graphtest.BuildTestBackend()
+	g := NewGraph(backend, t.Name())
 	shape := MakeShape(F64, 2, 3, 4)
 	numbers := IndicesForShape(g, shape)
 	g.Compile(numbers)
-	got := g.Run(nil).Local()
+	got := g.Run(nil)[0]
 	fmt.Printf("\tIndicesForShape(%s)=%v\n", shape, got)
 	want := [][]int64{{0, 0, 0}, {0, 0, 1}, {0, 0, 2}, {0, 0, 3}, {0, 1, 0}, {0, 1, 1}, {0, 1, 2}, {0, 1, 3}, {0, 2, 0}, {0, 2, 1}, {0, 2, 2}, {0, 2, 3}, {1, 0, 0}, {1, 0, 1}, {1, 0, 2}, {1, 0, 3}, {1, 1, 0}, {1, 1, 1}, {1, 1, 2}, {1, 1, 3}, {1, 2, 0}, {1, 2, 1}, {1, 2, 2}, {1, 2, 3}}
-	if !xslices.DeepSliceCmp(got.Value(), want, xslices.EqualAny[int64]) {
-		t.Errorf("IndicesForShape(%s): want %v, got %v", shape, want, got)
-	}
+	require.Equalf(t, want, got.Value(), "IndicesForShape(%s): want %v, got %v", shape, want, got)
 }
 
 func TestGather(t *testing.T) {
-	manager := graphtest.BuildTestBackend()
+	backend := graphtest.BuildTestBackend()
 	{ // Trivial scalar gather.
 		fmt.Println("\tGather(): trivial scalar gather.")
-		g := manager.NewGraph()
+		g := NewGraph(backend, t.Name())
 		// numbers=(Float64)[5 3]: [[0 1 2] [3 4 5] [6 7 8] [9 10 11] [12 13 14]]
 		numbers := IotaFull(g, MakeShape(F64, 5, 3))
 		indices := Const(g, 1)
 		gather := Gather(numbers, indices)
 		g.Compile(gather)
-		got := g.Run(nil).Local()
+		got := g.Run(nil)[0]
 		fmt.Printf("\t\tGather=%v\n", got)
 		want := []float64{3, 4, 5}
-		if !xslices.DeepSliceCmp(got.Value(), want, xslices.EqualAny[float64]) {
-			t.Errorf("Gather: want %v, got %v", want, got)
-		}
+		require.Equalf(t, want, got.Value(), "Gather: want %v, got %v", want, got)
 	}
 
 	{ // Simple leading indices dimension.
 		fmt.Println("\tGather(): simple leading indices dimension.")
-		g := manager.NewGraph()
+		g := NewGraph(backend, "Gather(): simple leading indices dimension.")
 		// numbers=(Float64)[5 3]: [[0 1 2] [3 4 5] [6 7 8] [9 10 11] [12 13 14]]
 		numbers := IotaFull(g, MakeShape(F64, 5, 3))
 		indices := Const(g, [][]int{{2}, {0}})
 		gather := Gather(numbers, indices)
 		g.Compile(gather)
-		got := g.Run(nil).Local()
+		got := g.Run(nil)[0]
 		fmt.Printf("\t\tGather=%v\n", got)
 		want := [][]float64{{6, 7, 8}, {0, 1, 2}}
-		if !xslices.DeepSliceCmp(got.Value(), want, xslices.EqualAny[float64]) {
-			t.Errorf("Gather: want %v, got %v", want, got)
-		}
+		require.Equalf(t, want, got.Value(), "Gather: want %v, got %v", want, got)
 	}
 
 	{ // With 2D leading indices dimension.
 		fmt.Println("\tGather(): with 2D leading indices dimension.")
-		g := manager.NewGraph()
+		g := NewGraph(backend, "Gather(): with 2D leading indices dimension.")
 		// numbers=(Float64)[5 3]: [[0 1 2] [3 4 5] [6 7 8] [9 10 11] [12 13 14]]
 		numbers := IotaFull(g, MakeShape(F64, 5, 3))
 		indices := Const(g, [][][]int{{{2}, {0}}, {{2}, {1}}})
 		gather := Gather(numbers, indices)
 		g.Compile(gather)
-		got := g.Run(nil).Local()
+		got := g.Run(nil)[0]
 		fmt.Printf("\t\tGather=%v\n", got)
 		want := [][][]float64{{{6, 7, 8}, {0, 1, 2}}, {{6, 7, 8}, {3, 4, 5}}}
-		if !xslices.DeepSliceCmp(got.Value(), want, xslices.EqualAny[float64]) {
-			t.Errorf("Gather: want %v, got %v", want, got)
-		}
+		require.Equalf(t, want, got.Value(), "Gather: want %v, got %v", want, got)
 	}
 
 	{ // With leading indices dimension, and 3D params tailing dimensions.
 		fmt.Println("\tGather(): With leading indices dimension, and 2D params tailing dimensions.")
-		g := manager.NewGraph()
+		g := NewGraph(backend, "Gather(): With leading indices dimension, and 2D params tailing dimensions.")
 		// numbers=(Float64)[5 3]: [[0 1 2] [3 4 5] [6 7 8] [9 10 11] [12 13 14]]
 		numbers := IotaFull(g, MakeShape(F64, 5, 2, 2))
 		indices := Const(g, [][]int{{2}, {0}, {1}, {3}})
 		gather := Gather(numbers, indices)
 		g.Compile(gather)
-		got := g.Run(nil).Local()
+		got := g.Run(nil)[0]
 		fmt.Printf("\t\tGather=%v\n", got)
 		want := [][][]float64{{{8, 9}, {10, 11}}, {{0, 1}, {2, 3}}, {{4, 5}, {6, 7}}, {{12, 13}, {14, 15}}}
-		if !xslices.DeepSliceCmp(got.Value(), want, xslices.EqualAny[float64]) {
-			t.Errorf("Gather: want %v, got %v", want, got.GoStr())
-		}
+		require.Equalf(t, want, got.Value(), "Gather: want %v, got %v", want, got)
 	}
 
 }
@@ -140,45 +131,41 @@ func TestGatherSlices(t *testing.T) {
 }
 
 func TestScatter(t *testing.T) {
-	manager := graphtest.BuildTestBackend()
+	backend := graphtest.BuildTestBackend()
 	{ // Trivial scalar scatter.
 		fmt.Println("\tScatter(): trivial scalar scatter.")
-		g := manager.NewGraph()
+		g := NewGraph(backend, "Scatter(): trivial scalar scatter")
 		// numbers=(Float64)[3]: [2 3 4]
 		numbers := Add(IotaFull(g, MakeShape(F64, 3)), Const(g, float64(2)))
 		indices := Const(g, 1)
 		scatter := Scatter(indices, numbers, MakeShape(F64, 2, 3))
 		g.Compile(scatter)
-		got := g.Run(nil).Local()
+		got := g.Run(nil)[0]
 		fmt.Printf("\t\tscatter=%v\n", got)
 		want := [][]float64{{0, 0, 0}, {2, 3, 4}}
-		if !xslices.DeepSliceCmp(got.Value(), want, xslices.EqualAny[float64]) {
-			t.Errorf("scatter: want %v, got %v", want, got)
-		}
+		require.Equalf(t, want, got.Value(), "Scatter: want %v, got %v", want, got)
 	}
 
 	{ // Simple leading indices dimension.
 		fmt.Println("\tScatterAdd(): leading indices dimension, and deeper slice dimension.")
-		g := manager.NewGraph()
+		g := NewGraph(backend, "ScatterAdd(): leading indices dimension, and deeper slice dimension.")
 		// numbers=(Float64)[5 3, 1]: [[[0] [1] [2]] [[3] [4] [5]]]
 		numbers := IotaFull(g, MakeShape(F64, 2, 3, 1))
 		indices := Const(g, [][]int{{2}, {0}})
 		operand := Ones(g, MakeShape(F64, 3, 3, 1))
 		scatter := ScatterAdd(operand, indices, numbers, false, true)
 		g.Compile(scatter)
-		got := g.Run(nil).Local()
+		got := g.Run(nil)[0]
 		fmt.Printf("\t\tscatter=%v\n", got)
 		want := [][][]float64{{{4}, {5}, {6}}, {{1}, {1}, {1}}, {{1}, {2}, {3}}}
-		if !xslices.DeepSliceCmp(got.Value(), want, xslices.EqualAny[float64]) {
-			t.Errorf("scatter: want %v, got %v", want, got)
-		}
+		require.Equalf(t, want, got.Value(), "Scatter: want %v, got %v", want, got)
 	}
 }
 
 // BenchmarkScatter tests the various scatter combinations: sorted or unique and different dtypes.
 // The auto-differentiation of a gather is a scatter: it is used in update of large embedding tables.
 func BenchmarkScatter(b *testing.B) {
-	manager := graphtest.BuildTestBackend()
+	backend := graphtest.BuildTestBackend()
 	const (
 		NumEntries          = 1_000_000
 		EmbeddingSize       = 32
@@ -195,7 +182,7 @@ func BenchmarkScatter(b *testing.B) {
 
 	for _, sorted := range []bool{true, false} {
 		for _, unique := range []bool{true, false} {
-			scatterExec := NewExec(manager, func(state, indices, values *Node) *Node {
+			scatterExec := NewExec(backend, func(state, indices, values *Node) *Node {
 				g := values.Graph()
 				dtype := values.DType()
 				zeros := Zeros(g, shapes.Make(dtype, NumEntries, EmbeddingSize))
@@ -209,7 +196,7 @@ func BenchmarkScatter(b *testing.B) {
 			})
 			for _, dtype := range []dtypes.DType{dtypes.Float64, dtypes.Float32, dtypes.Float16} { //
 				// Create random values tensor shaped [BatchSize, EmbeddingSize] of the given dtype.
-				results := NewExec(manager, func(rngState *Node) (state, value *Node) {
+				results := NewExec(backend, func(rngState *Node) (state, value *Node) {
 					_, state = RandomNormal(rngState, shapes.Make(dtype, NumEntries, EmbeddingSize))
 					_, value = RandomNormal(rngState, shapes.Make(dtype, BatchSize, EmbeddingSize))
 					return
