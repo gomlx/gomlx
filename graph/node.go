@@ -185,8 +185,8 @@ func (n *Node) String() (str string) {
 	if n == nil {
 		return "Node(nil)"
 	}
-	if n.graph == nil || n.graph.IsValid() {
-		return "Node(invalid)"
+	if n.graph == nil || !n.graph.IsValid() {
+		return "Node(invalid graph)"
 	}
 	if n.Type() == NodeTypeInvalid {
 		str = "Invalid(?)"

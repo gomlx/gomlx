@@ -190,7 +190,6 @@ func TestGradDotGeneralBatchContracting(t *testing.T) {
 				// loss is the product of dot and iota (increasing numbers), all reduced sum.
 				incremental := OnePlus(IotaFull(g, dot.Shape()))
 				loss := ReduceAllSum(Mul(incremental, dot))
-				fmt.Printf("\nGraph:\n%s\n\n", g)
 				grads := Gradient(loss, lhs, rhs)
 				grads[0] = TransposeAllDims(grads[0], revLhsPermutation...)
 				grads[1] = TransposeAllDims(grads[1], revRhsPermutation...)

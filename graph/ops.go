@@ -636,10 +636,10 @@ func ArgMin(x *Node, axis int, outputDType ...dtypes.DType) (output *Node) {
 	return backendArgMinMax(x, axis, dtype, false)
 }
 
-// adjustAxesToRankAndSort not-inplace, it returns an adjusted copy of the given `axesWithNegatives`.
+// adjustAxesToRank not-inplace, it returns an adjusted copy of the given `axesWithNegatives`.
 // An axis set to -1 is converted to `rank - 1`.
 // It panics if any of the axes is out-of-range for given rank.
-func adjustAxesToRankAndSort(rank int, axesWithNegatives []int, paramName string) []int {
+func adjustAxesToRank(rank int, axesWithNegatives []int, paramName string) []int {
 	axes := slices.Clone(axesWithNegatives)
 	for ii := range axes {
 		if axes[ii] < 0 {
@@ -650,6 +650,15 @@ func adjustAxesToRankAndSort(rank int, axesWithNegatives []int, paramName string
 				ii, axesWithNegatives, axesWithNegatives[ii], rank)
 		}
 	}
+	return axes
+}
+
+// adjustAxesToRankAndSort not-inplace, it returns an adjusted copy of the given `axesWithNegatives`.
+// Finally, it sorts the axes -- careful not to use it where the order matters.
+// An axis set to -1 is converted to `rank - 1`.
+// It panics if any of the axes is out-of-range for given rank.
+func adjustAxesToRankAndSort(rank int, axesWithNegatives []int, paramName string) []int {
+	axes := adjustAxesToRank(rank, axesWithNegatives, paramName)
 	slices.Sort(axes)
 	return axes
 }
@@ -1469,10 +1478,10 @@ func EinsumAxes(lhs, rhs *Node, contractingAxes, batchAxes [][2]int) (output *No
 // It provides the basic means of implementing Einsum.
 func DotGeneral(lhs *Node, lhsContractingAxes, lhsBatchAxes []int, rhs *Node, rhsContractingAxes, rhsBatchAxes []int) *Node {
 	_ = validateBuildingGraphFromInputs(lhs, rhs)
-	lhsContractingAxes = adjustAxesToRankAndSort(lhs.Rank(), lhsContractingAxes, "lhsContractingAxes")
-	lhsBatchAxes = adjustAxesToRankAndSort(lhs.Rank(), lhsBatchAxes, "lhsBatchAxes")
-	rhsContractingAxes = adjustAxesToRankAndSort(rhs.Rank(), rhsContractingAxes, "rhsContractingAxes")
-	rhsBatchAxes = adjustAxesToRankAndSort(rhs.Rank(), rhsBatchAxes, "rhsBatchAxes")
+	lhsContractingAxes = adjustAxesToRank(lhs.Rank(), lhsContractingAxes, "lhsContractingAxes")
+	lhsBatchAxes = adjustAxesToRank(lhs.Rank(), lhsBatchAxes, "lhsBatchAxes")
+	rhsContractingAxes = adjustAxesToRank(rhs.Rank(), rhsContractingAxes, "rhsContractingAxes")
+	rhsBatchAxes = adjustAxesToRank(rhs.Rank(), rhsBatchAxes, "rhsBatchAxes")
 	return backendDotGeneral(lhs, lhsContractingAxes, lhsBatchAxes, rhs, rhsContractingAxes, rhsBatchAxes)
 }
 

@@ -390,7 +390,7 @@ func (g *Graph) RunWithTensors(inputs []*tensors.Tensor) (outputs []*tensors.Ten
 	g.AssertCompiled()
 	deviceNum := backends.DeviceNum(0)
 	inputBuffers := xslices.Map(inputs, func(tensor *tensors.Tensor) backends.Buffer { return tensor.Buffer(g.backend, deviceNum) })
-	results := g.executable.Execute(inputBuffers)
+	results := g.executable.Execute(inputBuffers...)
 	outputs = xslices.Map(results, func(buf backends.Buffer) *tensors.Tensor { return tensors.FromBuffer(g.backend, buf) })
 	return
 }

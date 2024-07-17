@@ -618,10 +618,8 @@ func reduceSumVJP(node, v *Node, _ shapes.Shape) []*Node {
 	expandedV := ReshapeWithShape(v, newShape)
 
 	// Now all we need it to broadcast the v on the reduced dimensions.
-	// Notice the second input to a reduction is its initial value, a constant. There
-	// is no need to push a gradient to that.
 	vjp := BroadcastToShape(expandedV, x.Shape())
-	return []*Node{vjp, nil}
+	return []*Node{vjp}
 }
 
 func reduceMaxVJP(node, v *Node, _ shapes.Shape) []*Node {
