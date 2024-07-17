@@ -86,7 +86,7 @@ func TestConstant(t *testing.T) {
 func compileRunAndTakeFirst(t *testing.T, g *Graph) *tensors.Tensor {
 	var output *tensors.Tensor
 	require.NotPanics(t, func() {
-		g.Compile()
+		g.Compile(g.LastNode())
 		output = g.Run(nil)[0]
 	})
 	return output

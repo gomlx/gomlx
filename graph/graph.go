@@ -324,6 +324,12 @@ func (g *Graph) NodeById(id NodeId) *Node {
 	return g.nodes[id]
 }
 
+// LastNode returns the last node created.
+// It returns nil if no node has been created for this graph yet.
+func (g *Graph) LastNode() *Node {
+	return xslices.Last(g.nodes)
+}
+
 // Compile just-in-time (JIT) compiles the Graph into a Computation that can be executed.
 //
 // At least one output must be given.
