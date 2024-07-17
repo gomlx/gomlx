@@ -181,7 +181,7 @@ func TestParameter(t *testing.T) {
 		if x.GetParameterHandle() == InvalidParameterHandle || y.GetParameterHandle() == InvalidParameterHandle || x.GetParameterHandle() == y.GetParameterHandle() {
 			t.Fatalf("Invalid parameter handles: x=%d, y=%d", x.GetParameterHandle(), y.GetParameterHandle())
 		}
-		g.Compile()
+		g.Compile(g.LastNode())
 
 		// Tests for various parameters.
 		for xV := float32(0); xV < 3; xV += 1 {
@@ -570,7 +570,7 @@ func TestIota(t *testing.T) {
 	{
 		g := NewGraph(backend, "").WithName("iota0")
 		Iota(g, MakeShape(F64, 2, 2), 0)
-		g.Compile()
+		g.Compile(g.LastNode())
 		got := g.Run(nil)[0]
 		want := tensors.FromValue([][]float64{{0, 0}, {1, 1}})
 		if !want.Equal(got) {
@@ -580,7 +580,7 @@ func TestIota(t *testing.T) {
 	{
 		g := NewGraph(backend, "").WithName("iota0")
 		Iota(g, MakeShape(F64, 2, 2), 1)
-		g.Compile()
+		g.Compile(g.LastNode())
 		got := g.Run(nil)[0]
 		want := tensors.FromValue([][]float64{{0, 1}, {0, 1}})
 		if !want.Equal(got) {
