@@ -104,7 +104,8 @@ func (b *Builder) Constant(flat any, dims ...int) backends.Op {
 func (b *Builder) verifyAndCastOp(op backends.Op, paramName string) *xlabuilder.Op {
 	xlaOp, ok := op.(*xlabuilder.Op)
 	if !ok {
-		exceptions.Panicf("nil or invalid Op (%v) given to parameter %s, it must be an Op created by the same backend builder", op, paramName)
+		exceptions.Panicf("nil or invalid Op (%T: %v) given as an input %s, it must be an Op created by the same backend builder (%s:%s)",
+			op, op, paramName, b.backend.Name(), b.name)
 	}
 	if xlaOp.Builder() != b.builder {
 		exceptions.Panicf("op given to parameter %s was created with a different builder (%s) than the builder (%s) it is being used in -- Ops cannot cross to different builders",

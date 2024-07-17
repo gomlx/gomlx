@@ -659,7 +659,7 @@ func backendConcatenate(axis int, operands ...*Node) (node *Node) {
 		operands: slices.Clone(operands),
 	}
 	inputNodes := operands
-	result := g.builder.Concatenate(inputs.axis, xslices.Map(operands, func(node *Node) backends.Op { return node.outputOps[0] }))
+	result := g.builder.Concatenate(inputs.axis, xslices.Map(operands, func(node *Node) backends.Op { return node.outputOps[0] })...)
 	node = &Node{
 		outputOps:    []backends.Op{result},
 		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
@@ -992,7 +992,7 @@ func backendDotGeneral(lhs *Node, lhsContractingAxes []int, lhsBatchAxes []int, 
 	return
 }
 
-// nodeInputsEqual holds the inputs used for the call to backends.EqualAny.
+// nodeInputsEqual holds the inputs used for the call to backends.Equal.
 type nodeInputsEqual struct {
 	x0 *Node
 	x1 *Node

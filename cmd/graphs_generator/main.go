@@ -75,7 +75,7 @@ func buildMethodInfo() (methods []*MethodInfo) {
 					mi.OpInputsList = paramName
 					pi.NodeInputType = "[]*Node"
 					pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", paramName)
-					pi.ConvertStatement = fmt.Sprintf("xslices.Map(%s, func(node *Node) backends.Op { return node.outputOps[0] })", paramName)
+					pi.ConvertStatement = fmt.Sprintf("xslices.Map(%s, func(node *Node) backends.Op { return node.outputOps[0] })...", paramName)
 					pi.Format = "[#%s]"
 					pi.FormatValue = fmt.Sprintf(
 						`strings.Join(xslices.Map(ni.%s, func (node *Node) string { return fmt.Sprintf("#%%d", node.Id()) }), ", ")`,
