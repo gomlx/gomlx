@@ -43,7 +43,15 @@ func NewWithOptions(pluginName string, options pjrt.NamedValuesMap) *Backend {
 	if err != nil {
 		panic(errors.WithMessagef(err, "backend %q:", BackendName))
 	}
-	client, err := plugin.NewClient(options)
+	var client *pjrt.Client
+	if pluginName == "cpu" {
+		// Hack to disable spurious logging at the start.
+		pjrt.SuppressAbseilLoggingHack(func() {
+			client, err = plugin.NewClient(options)
+		})
+	} else {
+		client, err = plugin.NewClient(options)
+	}
 	if err != nil {
 		panic(errors.WithMessagef(err, "backend %q:", BackendName))
 	}
