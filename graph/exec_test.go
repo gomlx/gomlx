@@ -23,6 +23,7 @@ import (
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -41,10 +42,7 @@ func TestExec(t *testing.T) {
 	fmt.Printf("\tExec name: %s\n", dist.Name())
 	testForDim := func(dim int) {
 		a := make([]float32, dim)
-		b := make([]float32, dim)
-		for ii := range b {
-			b[ii] = 1
-		}
+		b := xslices.SliceWithValue(dim, float32(1))
 		outputs := dist.Call(a, b)
 		if len(outputs) != 1 {
 			t.Fatalf("Failed to %q.Call(), returned %d elements, wanted exactly 1.", dist.Name(), len(outputs))

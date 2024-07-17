@@ -208,6 +208,7 @@ func ToScalar[T dtypes.Supported](t *Tensor) T {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.AssertValid()
+	t.lockedMaterializeLocal()
 	if t.shape.DType != dtypes.FromGenericsType[T]() {
 		var v T
 		exceptions.Panicf("ToScalar[%T] is incompatible with Tensor's dtype %s",
@@ -217,7 +218,6 @@ func ToScalar[T dtypes.Supported](t *Tensor) T {
 		var v T
 		exceptions.Panicf("ToScalar[%T] requires scalar Tensor, got shape %s instead", v, t.shape)
 	}
-	// t.lockedMaterializeLocal()
 	return t.local.flat.([]T)[0]
 }
 

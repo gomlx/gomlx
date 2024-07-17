@@ -385,11 +385,11 @@ func (e *Exec) compileAndExecute(execute bool, args ...any) (results []*tensors.
 			}
 		})
 		if err != nil {
-			fmt.Printf("Original error: %+v\n", err)
 			panic(errors.WithMessagef(err, "Failed to convert argument #%d of %d to device(%d) -- type %T: %v",
 				ii, len(args), e.deviceNum, args[ii], args[ii]))
 		}
 		argsAsTensors = append(argsAsTensors, tensor)
+		argsShapes = append(argsShapes, tensor.Shape())
 	}
 
 	// Get or build the graph.
