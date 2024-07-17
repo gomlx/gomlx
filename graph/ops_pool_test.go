@@ -68,12 +68,57 @@ func TestMaxPool(t *testing.T) {
 		}, [][][][]float64{{{{6}, {8}}, {{16}, {18}}}})
 }
 
+func TestMinPool(t *testing.T) {
+	testFuncOneInput(t, "MinPool(...).ChannelsFirst().NoPadding()",
+		func(g *Graph) (input, output *Node) {
+			channelA := AddScalar(Iota(g, MakeShape(dtypes.Float32, 1, 1, 3, 3), 2), 1)
+			channelB := MulScalar(channelA, 0.1)
+			input = Concatenate([]*Node{channelA, channelB}, 1)
+			output = MinPool(input).ChannelsAxis(images.ChannelsFirst).Window(3).NoPadding().Done()
+			return
+		}, [][][][]float32{{{{1}}, {{0.1}}}})
+
+	testFuncOneInput(t, "MinPool(...).ChannelsAfter().NoPadding()",
+		func(g *Graph) (input, output *Node) {
+			channelA := AddScalar(Iota(g, MakeShape(dtypes.Float32, 1, 3, 3, 1), 2), 1)
+			channelB := MulScalar(channelA, 0.1)
+			input = Concatenate([]*Node{channelA, channelB}, -1)
+			output = MinPool(input).Window(3).ChannelsAxis(images.ChannelsLast).NoPadding().Done()
+			return
+		}, [][][][]float32{{{{1, 0.1}}}})
+
+	testFuncOneInput(t, "MinPool(...).Window(3).ChannelsFirst().PadSame().Strides(1)",
+		func(g *Graph) (input, output *Node) {
+			channelA := AddScalar(Iota(g, MakeShape(dtypes.Float32, 1, 1, 3, 3), 2), 1)
+			channelB := MulScalar(channelA, 0.1)
+			input = Concatenate([]*Node{channelA, channelB}, 1)
+			output = MinPool(input).Window(3).ChannelsAxis(images.ChannelsFirst).PadSame().Strides(1).Done()
+			return
+		}, [][][][]float32{{{{1, 1, 1}, {1, 1, 1}, {2, 2, 2}}, {{0.1, 0.1, 0.1}, {0.1, 0.1, 0.1}, {0.2, 0.2, 0.2}}}})
+
+	testFuncOneInput(t, "MinPool(...).Window(2).Strides(1)",
+		func(g *Graph) (input, output *Node) {
+			channelA := AddScalar(IotaFull(g, MakeShape(dtypes.Float64, 1, 5, 1)), 1)
+			channelB := MulScalar(channelA, 0.1)
+			input = Concatenate([]*Node{channelA, channelB}, -1)
+			output = MinPool(input).Window(2).Strides(1).Done()
+			return
+		}, [][][]float64{{{1, 0.1}, {2, 0.2}, {3, 0.3}, {4, 0.4}}})
+
+	testFuncOneInput(t, "MinPool(...).Window(2)",
+		func(g *Graph) (input, output *Node) {
+			input = AddScalar(IotaFull(g, MakeShape(dtypes.Float64, 1, 5, 5, 1)), 1)
+			output = MinPool(input).Window(2).Done()
+			return
+		}, [][][][]float64{{{{1}, {3}}, {{11}, {13}}}})
+}
+
 func TestGradientMaxPool(t *testing.T) {
 	testGradients(t, "Gradient 1D MaxPool().NoPadding() -- scaled output",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
-			input := Add(IotaFull(g, MakeShape(dtypes.Float32, 1, 6, 1)), Const(g, float32(1.0)))
+			input := AddScalar(IotaFull(g, MakeShape(dtypes.Float32, 1, 6, 1)), 1)
 			output = MaxPool(input).NoPadding().Window(3).Strides(1).Done()
-			scale := Add(IotaFull(g, output.Shape()), Const(g, float32(1.0)))
+			scale := AddScalar(IotaFull(g, output.Shape()), 1)
 			output = Mul(output, scale)
 			return output, []*Node{input}
 		}, []any{
@@ -102,6 +147,45 @@ func TestGradientMaxPool(t *testing.T) {
 				{{0}, {1}, {0}, {1}, {0}},
 				{{0}, {0}, {0}, {0}, {0}},
 				{{0}, {1}, {0}, {1}, {0}},
+				{{0}, {0}, {0}, {0}, {0}},
+			}},
+		})
+}
+
+func TestGradientMinPool(t *testing.T) {
+	testGradients(t, "Gradient 1D MinPool().NoPadding() -- scaled output",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			input := AddScalar(IotaFull(g, MakeShape(dtypes.Float32, 1, 6, 1)), 1)
+			output = MinPool(input).NoPadding().Window(3).Strides(1).Done()
+			scale := AddScalar(IotaFull(g, output.Shape()), 1)
+			output = Mul(output, scale)
+			return output, []*Node{input}
+		}, []any{
+			[][][]float32{{{1}, {2}, {3}, {4}, {0}, {0}}},
+		})
+
+	testGradients(t, "Gradient 1D MinPool(...).Window(2).Strides(1)",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			channelA := IotaFull(g, MakeShape(dtypes.Float64, 1, 5, 1))
+			channelB := Mul(channelA, Const(g, 0.1))
+			input := Concatenate([]*Node{channelA, channelB}, -1)
+			output = MinPool(input).Window(2).Strides(1).Done()
+			return output, []*Node{input}
+		}, []any{
+			[][][]float64{{{1, 1}, {1, 1}, {1, 1}, {1, 1}, {0, 0}}},
+		})
+
+	testGradients(t, "Gradient 2D MinPool(...).Window(2)",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			input := IotaFull(g, MakeShape(dtypes.Float64, 1, 5, 5, 1))
+			output = MinPool(input).Window(2).Done()
+			return output, []*Node{input}
+		}, []any{
+			[][][][]float64{{
+				{{1}, {0}, {1}, {0}, {0}},
+				{{0}, {0}, {0}, {0}, {0}},
+				{{1}, {0}, {1}, {0}, {0}},
+				{{0}, {0}, {0}, {0}, {0}},
 				{{0}, {0}, {0}, {0}, {0}},
 			}},
 		})

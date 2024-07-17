@@ -1068,52 +1068,42 @@ func intToBool(i int) bool {
 func Concatenate(operands []*Node, axis int) *Node {
 	_ = validateBuildingGraphFromInputs(operands...)
 	if len(operands) == 0 {
-		exceptions.Panicf("cannot ConcatenateDimensions 0 operands")
+		exceptions.Panicf("cannot Concatenate with 0 operands")
+	}
+	rank := operands[0].Rank()
+	if rank == 0 {
+		// Scalars will be converted to [1] before concatenating.
+		operands = xslices.Map(operands, func(x *Node) *Node { return ExpandDims(x, 0) })
+		rank = 1
 	}
 	if len(operands) == 1 {
 		// Trivial solution.
 		return operands[0]
 	}
 	baseShape := operands[0].Shape()
-	rank := baseShape.Rank()
-	targetRank := rank
-	if rank == 0 {
-		// Scalars will be converted to [1] before concatenating.
-		targetRank = 1
-		operands[0] = ExpandDims(operands[0], 0)
-	}
-	if axis >= targetRank || axis < -targetRank {
-		exceptions.Panicf("invalid axis %d for ConcatenateDimensions, where first element has rank %d",
-			axis, rank)
-	}
-	if axis < 0 {
-		axis = rank + axis
-	}
+	adjustedAxis := adjustAxisToRank(axis, rank)
 	for ii, node := range operands[1:] {
 		if node.DType() != baseShape.DType {
-			exceptions.Panicf("ConcatenateDimensions operand %d has different dtype (%s) than operand 0's dtype (%s)",
+			exceptions.Panicf("Concatenate operand #%d has different dtype (%s) than operand 0's dtype (%s)",
 				ii+1, node.DType(), baseShape.DType)
 		}
 		if node.Rank() != rank {
-			exceptions.Panicf("ConcatenateDimensions operand %d has different rank (%s) than operand 0's rank (%s)",
-				ii+1, node.Shape(), operands[0].Shape())
+			exceptions.Panicf("Concatenate operand #%d has different rank (%d) than operand 0's rank (%d)",
+				ii+1, node.Rank(), operands[0].Rank())
 		}
 		for ii, nodeDim := range node.Shape().Dimensions {
-			if ii == axis {
+			if ii == adjustedAxis {
 				// Dimension being concatenated can be different.
 				continue
 			}
 			if baseShape.Dimensions[ii] != nodeDim {
-				exceptions.Panicf("ConcatenateDimensions operand %d has incompatible outputShapes (%s) with operand 0's outputShapes (%s)",
-					ii+1, node.outputShapes, baseShape)
+				exceptions.Panicf("Concatenate(axis=%d) operand #%d has incompatible shape (%s) with operand 0's shape (%s) "+
+					"-- except for axis %d, the dimensions on all other axes must match",
+					axis, ii+1, node.outputShapes, baseShape, axis)
 			}
 		}
-		if node.Rank() == 0 {
-			// Convert scalar to rank-1.
-			operands[ii+1] = ExpandDims(node, 0)
-		}
 	}
-	return backendConcatenate(axis, operands...)
+	return backendConcatenate(adjustedAxis, operands...)
 }
 
 // concatenateVJP implements a VJP function for the ConcatenateNode operation.

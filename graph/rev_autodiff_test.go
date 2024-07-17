@@ -208,7 +208,7 @@ func testGradients(t *testing.T, name string, testFn gradTestFunc, wantForGrad [
 	require.Equalf(t, len(wantForGrad), len(gradients), "%s: number of wanted results different from number of gradients", name)
 	for ii, output := range gradients {
 		require.Truef(t, tensors.FromAnyValue(wantForGrad[ii]).InDelta(output, Epsilon),
-			"%s: gradient #%d doesn't match wanted value %#v", name, ii, wantForGrad[ii])
+			"%s: gradient #%d doesn't match wanted value\n\t%v", name, ii, wantForGrad[ii])
 	}
 }
 

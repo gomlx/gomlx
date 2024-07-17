@@ -435,22 +435,21 @@ func reduceWindowVJP(node, v *Node, _ shapes.Shape) []*Node {
 		Panicf("gradient of ReduceWindow with base or window dilations is not defined")
 	}
 
-	//fmt.Printf("Grad(reduceWindow(%s):\n", reductionType)
-	//fmt.Printf("\tx.outputShapes=%s\n", x.Shape())
-	//fmt.Printf("\tnode.outputShapes=%s\n", node.Shape())
-	//fmt.Printf("\tv.outputShapes=%s\n", v.Shape())
-	//fmt.Printf("\twindowDimensions=%v\n", windowDimensions)
-	//fmt.Printf("\tstrides=%v\n", strides)
-	//fmt.Printf("\tpaddings=%v\n", paddings)
+	//fmt.Printf("Grad(reduceWindow(%s):\n", params.reductionType)
+	//fmt.Printf("\tx.shape=%s\n", params.x.Shape())
+	//fmt.Printf("\tnode.shape=%s\n", node.Shape())
+	//fmt.Printf("\tv.shape=%s\n", v.Shape())
+	//fmt.Printf("\twindowDimensions=%v\n", params.windowDimensions)
+	//fmt.Printf("\tstrides=%v\n", params.strides)
+	//fmt.Printf("\tpaddings=%v\n", params.paddings)
 
-	vjpX := checkedSelectAndScatter(params.x, v, params.reductionType, params.windowDimensions, params.strides, params.paddings)
-	// Original implementation:
-	/*
-		...
-		else if reductionType == backends.ReduceOpSum {
-			vjpX = dilateConvolveToMatchSumPooling(x, v, windowDimensions, strides, paddings)
-		}
-	*/
+	var vjpX *Node
+	if params.reductionType == backends.ReduceOpMax || params.reductionType == backends.ReduceOpMin {
+		vjpX = checkedSelectAndScatter(params.x, v, params.reductionType, params.windowDimensions, params.strides, params.paddings)
+	} else {
+		// params.reductionType == backends.ReduceOpSum
+		vjpX = dilateConvolveToMatchSumPooling(params.x, v, params.windowDimensions, params.strides, params.paddings)
+	}
 	return []*Node{vjpX}
 }
 

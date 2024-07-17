@@ -58,7 +58,7 @@ func testFuncOneInput(t *testing.T, testName string, graphFn graphFnOneInputToTe
 	results := g.Run(nil)
 	input, got := results[0], results[1]
 	if !wantTensor.InDelta(got, Epsilon) {
-		t.Errorf("%s(%#v): want=%v, got=%s", testName, input, wantTensor.GoStr(), got.GoStr())
+		t.Errorf("%s(%#v):\n\twant=%v, got=%s", testName, input, wantTensor.GoStr(), got.GoStr())
 	}
 }
 
