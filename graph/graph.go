@@ -358,7 +358,7 @@ func (g *Graph) Compile(outputs ...*Node) {
 		}()
 	}
 
-	outputsOps := xslices.Map(outputs, func(node *Node) backends.Op { return node.outputOps })
+	outputsOps := xslices.Map(outputs, func(node *Node) backends.Op { return node.outputOps[0] })
 	g.executable = g.builder.Compile(outputsOps...)
 	return
 }
@@ -379,7 +379,7 @@ func (g *Graph) Run(inputs ParamsMap) (outputs []*tensors.Tensor) {
 		}
 	}
 	inputBuffers := g.inputsMapToBuffers(inputs, 0)
-	results := g.executable.Execute(inputBuffers)
+	results := g.executable.Execute(inputBuffers...)
 	outputs = xslices.Map(results, func(buf backends.Buffer) *tensors.Tensor { return tensors.FromBuffer(g.backend, buf) })
 	return
 }

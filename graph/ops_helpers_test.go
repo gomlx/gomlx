@@ -56,8 +56,8 @@ func TestBackendSlice(t *testing.T) {
 	g := NewGraph(backend, "iota0")
 	numbers := Iota(g, shapes.Make(dtypes.Float64, 9), 0)
 	numbers = ReshapeWithShape(numbers, shapes.Make(dtypes.Float64, 3, 3))
-	backendSlice(numbers, []int{1, 1}, []int{2, 3}, []int{1, 1})
-	g.Compile()
+	slice := backendSlice(numbers, []int{1, 1}, []int{2, 3}, []int{1, 1})
+	g.Compile(slice)
 	got := g.Run(nil)[0]
 	want := [][]float64{{4, 5}}
 	require.Equalf(t, want, got.Value(), "Iota: want %v, got %v", want, got)
@@ -77,7 +77,7 @@ func TestBackendGather(t *testing.T) {
 	}, [][]float64{{6, 7, 8}, {0, 1, 2}})
 }
 
-func TestSelectAndScatterWithGeneralPaddingXLA(t *testing.T) {
+func TestCheckedSelectAndScatter(t *testing.T) {
 	testFuncOneInput(t, "checkedSelectAndScatter()",
 		func(g *Graph) (input, output *Node) {
 			input = IotaFull(g, shapes.Make(dtypes.Float64, 1, 6, 1))

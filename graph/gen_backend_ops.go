@@ -608,7 +608,7 @@ func (ni *nodeInputsComplex) String() string {
 // Complex returns the complex number taking x0 as the real part and x1 as the imaginary part.
 // The real (x0) and imaginary (x1) must have the same dtype, and they must be either `dtypes.Float32` or
 // `dtypes.Float64`.
-// The output will be either `shapes.Complex64` or `shapes.Complex128`, depending on x0 and x1 dtypes.
+// The output will be either `dtypes.Complex64` or `dtypes.Complex128`, depending on x0 and x1 dtypes.
 // The shapes of `real` or `imaginary` must be the same, or one must be a scalar, in which case
 // the value is broadcast to every other value.
 // The op is created on the same XlaBuilder as used for x0 and x1.

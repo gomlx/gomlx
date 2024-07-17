@@ -163,6 +163,7 @@ func ConstTensor(g *Graph, x *tensors.Tensor) (node *Node) {
 		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
 		inputs:       nodeInputs,
 	}
+	fmt.Printf("inputs.shape=%s, output.shape=%s\n", nodeInputs.shape, node.outputShapes[0])
 	g.registerNode(node)
 	return
 }

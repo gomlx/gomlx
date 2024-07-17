@@ -136,7 +136,7 @@ func (s Shape) String() string {
 		return fmt.Sprintf("Tuple<%s>", strings.Join(parts, ", "))
 	}
 	if s.Rank() == 0 {
-		return fmt.Sprintf("(%s)[]", s.DType)
+		return fmt.Sprintf("(%s)", s.DType)
 	}
 	return fmt.Sprintf("(%s)%v", s.DType, s.Dimensions)
 }
