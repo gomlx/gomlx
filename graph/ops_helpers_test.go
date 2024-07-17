@@ -153,7 +153,7 @@ func reversePermutation(permutation []int) []int {
 	return reverse
 }
 
-func TestGradDotGeneralXLABatchContracting(t *testing.T) {
+func TestGradDotGeneralBatchContracting(t *testing.T) {
 	backend := buildTestBackend()
 
 	dimensions := []int{2, 3, 4}
@@ -179,17 +179,18 @@ func TestGradDotGeneralXLABatchContracting(t *testing.T) {
 
 				lhsBatchAxes := gatherSlice([]int{0}, revLhsPermutation)
 				lhsContractingAxes := gatherSlice([]int{1, 2}, revLhsPermutation)
-				fmt.Printf("\tlhs: p:%v, rev:%v, batch: %v, contracting: %v\n", lhsPermutation, revLhsPermutation, lhsBatchAxes, lhsContractingAxes)
-				fmt.Printf("\t\tlhs.outputShapes=%s\n", lhs.Shape())
+				fmt.Printf("\t\tlhs: p:%v, rev:%v, batch: %v, contracting: %v\n", lhsPermutation, revLhsPermutation, lhsBatchAxes, lhsContractingAxes)
+				fmt.Printf("\tlhs.shape=%s\n", lhs.Shape())
 				rhsBatchAxes := gatherSlice([]int{0}, revRhsPermutation)
 				rhsContractingAxes := gatherSlice([]int{1, 2}, revRhsPermutation)
-				fmt.Printf("\trhs: p:%v, rev:%v, batch: %v, contracting: %v\n", rhsPermutation, revRhsPermutation, rhsBatchAxes, rhsContractingAxes)
-				fmt.Printf("\t\trhs.outputShapes=%s\n", rhs.Shape())
+				fmt.Printf("\t\trhs: p:%v, rev:%v, batch: %v, contracting: %v\n", rhsPermutation, revRhsPermutation, rhsBatchAxes, rhsContractingAxes)
+				fmt.Printf("\trhs.shape=%s\n", rhs.Shape())
 				dot := DotGeneral(lhs, lhsContractingAxes, lhsBatchAxes, rhs, rhsContractingAxes, rhsBatchAxes)
-				fmt.Printf("\t\tdot.outputShapes=%s\n", dot.Shape())
+				fmt.Printf("\t\tdot.shape=%s\n", dot.Shape())
 				// loss is the product of dot and iota (increasing numbers), all reduced sum.
 				incremental := OnePlus(IotaFull(g, dot.Shape()))
 				loss := ReduceAllSum(Mul(incremental, dot))
+				fmt.Printf("\nGraph:\n%s\n\n", g)
 				grads := Gradient(loss, lhs, rhs)
 				grads[0] = TransposeAllDims(grads[0], revLhsPermutation...)
 				grads[1] = TransposeAllDims(grads[1], revRhsPermutation...)
@@ -198,7 +199,7 @@ func TestGradDotGeneralXLABatchContracting(t *testing.T) {
 			}
 
 			exec := NewExec(backend, testFn)
-			fmt.Printf("Executing TestGradDotGeneralXLA:\n")
+			fmt.Printf("Executing GradDotGeneralBatchContracting:\n")
 			parts := exec.Call()
 			for ii, name := range []string{"lhs", "rhs", "dot", "grad_lhs", "grad_rhs"} {
 				fmt.Printf("\t%s: %s\n", name, parts[ii].GoStr())
@@ -226,7 +227,7 @@ func TestGradDotGeneralXLABatchContracting(t *testing.T) {
 	}
 }
 
-func TestGradDotGeneralXLABatchContractingCrossing(t *testing.T) {
+func TestGradDotGeneralBatchContractingCrossing(t *testing.T) {
 	backend := buildTestBackend()
 
 	lhsDimensions := []int{4, 2, 5}
@@ -254,14 +255,14 @@ func TestGradDotGeneralXLABatchContractingCrossing(t *testing.T) {
 
 				lhsBatchAxes := gatherSlice([]int{0}, revLhsPermutation)
 				lhsContractingAxes := gatherSlice([]int{2}, revLhsPermutation)
-				fmt.Printf("\tlhs: p:%v, rev:%v, batch: %v, contracting: %v\n", lhsPermutation, revLhsPermutation, lhsBatchAxes, lhsContractingAxes)
-				fmt.Printf("\t\tlhs.outputShapes=%s\n", lhs.Shape())
+				fmt.Printf("\t\tlhs: p:%v, rev:%v, batch: %v, contracting: %v\n", lhsPermutation, revLhsPermutation, lhsBatchAxes, lhsContractingAxes)
+				fmt.Printf("\tlhs.shape=%s\n", lhs.Shape())
 				rhsBatchAxes := gatherSlice([]int{0}, revRhsPermutation)
 				rhsContractingAxes := gatherSlice([]int{2}, revRhsPermutation)
-				fmt.Printf("\trhs: p:%v, rev:%v, batch: %v, contracting: %v\n", rhsPermutation, revRhsPermutation, rhsBatchAxes, rhsContractingAxes)
-				fmt.Printf("\t\trhs.outputShapes=%s\n", rhs.Shape())
+				fmt.Printf("\t\trhs: p:%v, rev:%v, batch: %v, contracting: %v\n", rhsPermutation, revRhsPermutation, rhsBatchAxes, rhsContractingAxes)
+				fmt.Printf("\trhs.shape=%s\n", rhs.Shape())
 				dot := DotGeneral(lhs, lhsContractingAxes, lhsBatchAxes, rhs, rhsContractingAxes, rhsBatchAxes)
-				fmt.Printf("\t\tdot.outputShapes=%s\n", dot.Shape())
+				fmt.Printf("\tdot.shape=%s\n", dot.Shape())
 
 				// loss is the product of dot and iota (increasing numbers), all reduced sum.
 				incremental := OnePlus(IotaFull(g, dot.Shape()))
@@ -274,7 +275,7 @@ func TestGradDotGeneralXLABatchContractingCrossing(t *testing.T) {
 
 			exec := NewExec(backend, testFn)
 			parts := exec.Call()
-			fmt.Printf("Executing TestGradDotGeneralXLA:\n")
+			fmt.Printf("Executing TestGradDotGeneral:\n")
 			for ii, name := range []string{"lhs", "rhs", "dot", "grad_lhs", "grad_rhs"} {
 				fmt.Printf("\t%s: %s\n", name, parts[ii].GoStr())
 			}
