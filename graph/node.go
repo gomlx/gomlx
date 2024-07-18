@@ -29,10 +29,17 @@ const (
 	MaxSizeToPrint = 5
 )
 
-// Node implements Node and is a standard node implementation that using a xla.SerializedNode definition
-// can be used by most ops (node types).
+// Node represents the result of an operation in the computation graph, and can be used as input to further operations.
 //
-// Almost every new node type implementation will rely on the Node.
+// Internally, it keeps tracks of all parameters used for the computation: this is later used for auto-differentiation
+// (see Gradient).
+//
+// It also stores meta-information: see Node.SetLogged, Node.StopGradient.
+//
+// Notice some complex methods offered in this package may be implemented with several instances of simpler operations
+// and yield several nodes in the graph, that's normal.
+//
+// Node.String allows for a pretty-printing of node. To see the full graph with all nodes, use Graph.String.
 type Node struct {
 	graph        *Graph
 	id           NodeId // id within graph.
