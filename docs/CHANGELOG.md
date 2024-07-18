@@ -1,8 +1,8 @@
 # GoMLX changelog
 
-## 0.11.0 
+## 0.11.0 BREAKING CHANGE: Multi-Backend support; Added XLA/PJRT support (with gopjrt); meaningful speed ups; No more C code (all goes through gopjrt) 
 
-* MAJOR REFACTORING. Very breaking compatibility changes -- it would be a major release number change, if it were > v1 already.
+* MAJOR REFACTORING. Many breaking compatibility changes -- it would be a major release number change, if it were > v1 already.
 * New package `backends`: no GoMLX can support different backends -- but for now only xla is implemented.
   * Sub-package `xla` implements the XLA/PJRT version, based on [`github.com/gomlx/gopjrt`](github.com/gomlx/gopjrt) project.
 * Package `tensors':
