@@ -19,6 +19,7 @@ package layers
 import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
+	"github.com/gomlx/gomlx/types/xslices"
 	"log"
 )
 

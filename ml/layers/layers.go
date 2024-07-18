@@ -23,6 +23,7 @@ package layers
 
 import (
 	"fmt"
+	. "github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/train"
@@ -46,7 +47,7 @@ const (
 	L2RegularizationKey = ParamL2Regularization
 
 	// ParamDropoutRate context hyperparameter defines the amount of dropout applied when DropoutFromContext is used.
-	// Should be a value from `0.0` to `1.0`, where 0 means no dropout, and 1 would dropout everything.
+	// Should be a value from `0.0` to `1.0`, where 0 means no dropout, and 1 would drop everything out.
 	//
 	// It is only applied if `Context.IsTraining() == true`, that is, during evaluation/inference it is
 	// ignored.
@@ -377,7 +378,7 @@ func DropoutNormalize(ctx *context.Context, input *Node, dropoutRate *Node, norm
 // DropoutFromContext applies a dropout configured in the context parameters keyed by [ParamDropoutRate].
 //
 // If it is 0.0 this is a no-op.
-// If `Context.IsTraining() == false` this is a also a no-op, so it doesn't impact evaluation or inference.
+// If `Context.IsTraining() == false` this is also a no-op, so it doesn't impact evaluation or inference.
 func DropoutFromContext(ctx *context.Context, x *Node) *Node {
 	dropoutRate := context.GetParamOr(ctx, ParamDropoutRate, 0.0)
 	if dropoutRate > 0 {

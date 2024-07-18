@@ -13,7 +13,7 @@ const (
 	ParamActivation = "activation"
 )
 
-// ActivationFromContext picks an activation function from the context using [ParamActivation] paramter,
+// ActivationFromContext picks an activation function from the context using [ParamActivation] parameter,
 // and applies it to `x`.
 func ActivationFromContext(ctx *context.Context, x *Node) *Node {
 	activation := context.GetParamOr(ctx, ParamActivation, "relu")

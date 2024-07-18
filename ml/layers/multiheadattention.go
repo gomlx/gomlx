@@ -18,9 +18,11 @@ package layers
 
 import (
 	"fmt"
+	. "github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/xslices"
 	"math"
 	"reflect"
 )
@@ -156,7 +158,7 @@ func (b *MultiHeadAttentionBuilder) SetOutputDim(outputDim int) *MultiHeadAttent
 // for every head.
 //
 // Either use SetKeyMask and SetQueryMask separately or use SetKeyQueryMatrixMask, but
-// not both. Opionally one can also UseCausalMask, which is combined (logical-and) to
+// not both. Optionally, one can also UseCausalMask, which is combined (logical-and) to
 // any given mask.
 func (b *MultiHeadAttentionBuilder) SetKeyMask(keyMask *Node) *MultiHeadAttentionBuilder {
 	if b.queryKeyMatrixMask != nil {
@@ -181,7 +183,7 @@ func (b *MultiHeadAttentionBuilder) SetKeyMask(keyMask *Node) *MultiHeadAttentio
 //
 // Either use SetKeyMask and SetQueryMask separately or use SetKeyQueryMatrixMask, but
 // not both.
-// Opionally, one can also UseCausalMask, which is combined (logical-and) to any given mask.
+// Optionally, one can also UseCausalMask, which is combined (logical-and) to any given mask.
 func (b *MultiHeadAttentionBuilder) SetQueryMask(queryMask *Node) *MultiHeadAttentionBuilder {
 	if b.queryKeyMatrixMask != nil {
 		Panicf("a mask can be set either with SetKeyMask and SetQueryMask separately or with SetKeyQueryMatrixMask, but not both")
@@ -418,7 +420,7 @@ func (b *MultiHeadAttentionBuilder) buildMaskFromSplitMasks() (mask *Node) {
 	trueNode := Const(b.g, true)
 	var keyMask *Node
 	if b.keyMask == nil {
-		// keyMask nil, create a skeleton (to be broadcasted) keyMask filled with `true`.
+		// keyMask nil, create a skeleton (to be broadcast) keyMask filled with `true`.
 		keyMask = Reshape(trueNode, xslices.SliceWithValue(b.attentionShape.Rank(), 1)...)
 		keyMask = BroadcastToDims(keyMask, b.attentionShape.Dimensions...)
 	} else {
@@ -430,7 +432,7 @@ func (b *MultiHeadAttentionBuilder) buildMaskFromSplitMasks() (mask *Node) {
 	}
 	var queryMask *Node
 	if b.queryMask == nil {
-		// queryMask nil, create a skeleton (to be broadcasted) queryMask filled with `true`.
+		// queryMask nil, create a skeleton (to be broadcast) queryMask filled with `true`.
 		queryMask = Reshape(trueNode, xslices.SliceWithValue(b.attentionShape.Rank(), 1)...)
 		queryMask = BroadcastToDims(queryMask, b.attentionShape.Dimensions...)
 	} else {
@@ -446,7 +448,7 @@ func (b *MultiHeadAttentionBuilder) buildCausalMask() (mask *Node) {
 	keyShape := b.key.Shape()
 	dim := keyShape.Dimensions[1] // Same as queryShape.Dimensions[1].
 
-	// mask is [<query_elemens>, <key_elemens>]
+	// mask is [<query_elements>, <key_elements>]
 	mask = LowerTriangular(b.g, dim)
 
 	// Broadcast mask to target shape of `[batch, <query_elements>, numHeads, <key_elements>]`

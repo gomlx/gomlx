@@ -21,6 +21,7 @@ import (
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/xslices"
 )
 
 // LayerNormBuilder is a helper to build a layer normalization computation. Create it with LayerNormalization,

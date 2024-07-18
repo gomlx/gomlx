@@ -24,6 +24,9 @@ import (
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/types/xslices"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
 	"gonum.org/v1/plot/plotter"
 	"gonum.org/v1/plot/vg"
@@ -45,7 +48,7 @@ var (
 )
 
 func IotaP1Initializer(g *Graph, shape Shape) *Node {
-	return Add(Iota(g, shape, 0), Const(g, float32(1.0)))
+	return AddScalar(Iota(g, shape, 0), 1.0)
 }
 
 func TestDense(t *testing.T) {
@@ -240,6 +243,7 @@ func TestLayerNormalization(t *testing.T) {
 		},
 		[][]float32{{-1, 1}, {-1, 1}, {-1, 1}},
 	)
+
 	testSimpleFunc(t, "LayerNormalization()",
 		[][]float32{{0, 10}, {20, 30}, {40, 50}},
 		func(ctx *context.Context, input *Node) *Node {

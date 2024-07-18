@@ -17,10 +17,12 @@
 package layers
 
 import (
+	. "github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/types/shapes"
-	timage "github.com/gomlx/gomlx/types/tensor/image"
+	"github.com/gomlx/gomlx/types/tensors/images"
+	"github.com/gomlx/gomlx/types/xslices"
 )
 
 // This file contains all parts of the layers.Convolve implementation.
@@ -32,7 +34,7 @@ type ConvBuilder struct {
 	graph              *Graph
 	x                  *Node
 	numSpatialDims     int
-	channelsAxisConfig timage.ChannelsAxisConfig
+	channelsAxisConfig images.ChannelsAxisConfig
 	filters            int
 	kernelSize         []int
 	bias               bool
@@ -53,8 +55,8 @@ type ConvBuilder struct {
 // if they are not set.
 //
 // The shape of x should be `[batch, <spatial_dimensions...>, input_channels]` if
-// configured with `ConvBuilder.ChannelsAxis(timage.ChannelsLast)`, the default. If one
-// sets `ConvBuilder.ChannelsAxis(timage.ChannelsFirst)`, the shape should be
+// configured with `ConvBuilder.ChannelsAxis(images.ChannelsLast)`, the default. If one
+// sets `ConvBuilder.ChannelsAxis(images.ChannelsFirst)`, the shape should be
 // `[batch, input_channels, <spatial_dimensions...>]` instead.
 func Convolution(ctx *context.Context, x *Node) *ConvBuilder {
 	conv := &ConvBuilder{
@@ -68,7 +70,7 @@ func Convolution(ctx *context.Context, x *Node) *ConvBuilder {
 		Panicf("Input x must have rank >= 3, shaped by default as [batch, <spatial_dimensions...>, channels], "+
 			"but x rank is %d", x.Rank())
 	}
-	return conv.ChannelsAxis(timage.ChannelsLast).NoPadding().UseBias(true).Strides(1)
+	return conv.ChannelsAxis(images.ChannelsLast).NoPadding().UseBias(true).Strides(1)
 }
 
 // Filters sets the number of filters -- specifies the number of output channels. There is no default
@@ -111,12 +113,12 @@ func (conv *ConvBuilder) UseBias(useBias bool) *ConvBuilder {
 }
 
 // ChannelsAxis configures the axis for the channels (aka. "depth" or "features") dimension. The default is
-// `timage.ChannelsLast`, meaning the "channels" dimension comes last.
+// `images.ChannelsLast`, meaning the "channels" dimension comes last.
 //
-// Note: `timage` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
+// Note: `images` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
 //
 // It returns the modified Config object, so calls can be cascaded.
-func (conv *ConvBuilder) ChannelsAxis(channelsAxisConfig timage.ChannelsAxisConfig) *ConvBuilder {
+func (conv *ConvBuilder) ChannelsAxis(channelsAxisConfig images.ChannelsAxisConfig) *ConvBuilder {
 	conv.channelsAxisConfig = channelsAxisConfig
 	return conv
 }
@@ -255,9 +257,9 @@ func (conv *ConvBuilder) Done() *Node {
 	dtype := xShape.DType
 	kernelShape := shapes.Make(dtype)
 	kernelShape.Dimensions = make([]int, 0, conv.numSpatialDims+2)
-	channelsAxis := timage.GetChannelsAxis(xShape, conv.channelsAxisConfig)
+	channelsAxis := images.GetChannelsAxis(xShape, conv.channelsAxisConfig)
 	inputChannels := xShape.Dimensions[channelsAxis]
-	if conv.channelsAxisConfig == timage.ChannelsFirst {
+	if conv.channelsAxisConfig == images.ChannelsFirst {
 		kernelShape.Dimensions = append(kernelShape.Dimensions, inputChannels)
 		kernelShape.Dimensions = append(kernelShape.Dimensions, conv.kernelSize...)
 		kernelShape.Dimensions = append(kernelShape.Dimensions, conv.filters)
@@ -284,7 +286,7 @@ func (conv *ConvBuilder) Done() *Node {
 		biasVar := ctxInScope.VariableWithShape("biases", shapes.Make(dtype, conv.filters))
 		bias := biasVar.ValueGraph(conv.graph)
 		expandedDims := xslices.SliceWithValue(output.Rank(), 1)
-		outputChannelsAxis := timage.GetChannelsAxis(output, conv.channelsAxisConfig)
+		outputChannelsAxis := images.GetChannelsAxis(output, conv.channelsAxisConfig)
 		expandedDims[outputChannelsAxis] = conv.filters
 		bias = Reshape(bias, expandedDims...)
 		output = Add(output, bias)
