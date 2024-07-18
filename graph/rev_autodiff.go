@@ -17,6 +17,7 @@
 package graph
 
 import (
+	fmt "fmt"
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/xslices"
@@ -152,18 +153,18 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 				// Skip back-propagation for this node, since there are no arriving VJPs.
 				continue
 			}
+
 			// Fill missing VJPs with zeros.
 			for ii, shape := range node.outputShapes {
 				if rNode.VJPsForMultiOutputs[ii] == nil {
 					rNode.VJPsForMultiOutputs[ii] = Zeros(node.Graph(), shape)
 				}
 			}
-
 		}
 
 		// For the usual single output nodes, if there are no gradients arriving to rNode -- e.g.:
 		// there was a `stopGradient`, we can't propagate the gradient either.
-		if rNode.AccumulatedVJP == nil {
+		if node.numOutputs() == 1 && rNode.AccumulatedVJP == nil {
 			continue
 		}
 
@@ -191,12 +192,16 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 				Panicf("graph has node %s, for which no gradient is defined yet, cannot generate graph gradient", node)
 			}
 		}
-		inputsVJPs := vjpFn(node, rNode.AccumulatedVJP, outputShape)
+
+		vjpsForOutputs := rNode.VJPsForMultiOutputs
+		if node.numOutputs() == 1 {
+			vjpsForOutputs = []*Node{rNode.AccumulatedVJP}
+		}
+		inputsVJPs := vjpFn(node, vjpsForOutputs, outputShape)
 		if len(inputsVJPs) != len(node.Inputs()) {
 			Panicf("AccumulatedVJP(%s) returned %d VJPs, but it has %d inputNodes, implementation of auto-differentiation for node failed",
 				node, len(inputsVJPs), len(node.Inputs()))
 		}
-		//fmt.Printf("\tFrom node %s\n", node)
 		for ii, input := range node.Inputs() {
 			vjp := inputsVJPs[ii]
 			if vjp == nil {
@@ -206,8 +211,8 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 			//fmt.Printf("\t\tSetting vjp for %s: %s\n", input, vjp)
 			combinedShape := combineOutputShape(outputShape, input.Shape())
 			if !vjp.Shape().Equal(combinedShape) {
-				Panicf("invalid Gradient calculation for node %q: invalid outputShapes for calculated AccumulatedVJP for "+
-					"input #%d (out of %d): input outputShapes=%s, calculated AccumulatedVJP outputShapes=%s (wanted %s)"+
+				Panicf("invalid Gradient calculation for node %q: invalid shape (or DType) for calculated AccumulatedVJP for "+
+					"input #%d (out of %d): input shape=%s, calculated AccumulatedVJP shape=%s (wanted %s)"+
 					" -- this probably indicates a bug in the code, please report the issue.",
 					node, ii, len(node.Inputs()), input.Shape(), vjp.Shape(), combinedShape)
 			}
@@ -326,12 +331,19 @@ func recursiveMarkAsUseful(rg *reverseGraph, rNode *reverseNode) {
 //
 // Returns:
 //
-//	The adjoint (the updated `v`) to each of `node` inputNodes. That is, the gradient of the loss (typically, but of
+//	The adjoint (the updated `vjps`) to each of `node` inputNodes. That is, the gradient of the loss (typically, but of
 //	whatever we are calculating the gradient of) with respect to each of the `node` inputNodes.
-type VJP func(node, v *Node, outputShape shapes.Shape) []*Node
+type VJP func(node *Node, vjpOutputs []*Node, outputShape shapes.Shape) []*Node
 
-// VJPMultiOutputs is the version of VJP for nodes with multiple outputs.
-type VJPMultiOutputs func(node *Node, vjps []*Node, outputShape shapes.Shape) []*Node
+// SingleOutputVJP for VJP of ops that have a single output (most of them).
+type SingleOutputVJP func(node, v *Node, outputShape shapes.Shape) []*Node
+
+// vjpForSingle is simple converter from SingleOutputVJP to generic VJP.
+func vjpForSingle(vjpFn SingleOutputVJP) VJP {
+	return func(node *Node, vjpOutputs []*Node, outputShape shapes.Shape) []*Node {
+		return vjpFn(node, vjpOutputs[0], outputShape)
+	}
+}
 
 // VJPRegistration maps each node type to its implementation of VJP. If implementing a new outputOps, or
 // for experimentation, one can dynamically change this.
@@ -339,49 +351,46 @@ type VJPMultiOutputs func(node *Node, vjps []*Node, outputShape shapes.Shape) []
 // Notice xla.GetTupleElementNode is specialized inside the main reverse autodiff code, and is not
 // in the table here.
 var VJPRegistration = map[NodeType]VJP{
-	NodeTypeInvalid:      noOpVJP, // NoOp
-	NodeTypeConstant:     nilVJP,
-	NodeTypeParameter:    nilVJP,
-	NodeTypeConvertDType: convertDTypeVJP,
-	NodeTypeWhere:        whereVJP,
-	NodeTypeNeg:          negVJP,
-	NodeTypeAbs:          absVJP,
-	NodeTypeExp:          expVJP,
-	NodeTypeLog:          logVJP,
-	NodeTypeLog1p:        log1pVJP,
-	NodeTypeTanh:         tanhVJP,
-	NodeTypeAdd:          addVJP,
-	NodeTypeSub:          subVJP,
-	NodeTypeMul:          mulVJP,
-	NodeTypeDiv:          divVJP,
-	NodeTypeSqrt:         sqrtVJP,
+	NodeTypeInvalid:              vjpForSingle(noOpVJP),
+	NodeTypeConstant:             vjpForSingle(nilVJP),
+	NodeTypeParameter:            vjpForSingle(nilVJP),
+	NodeTypeConvertDType:         vjpForSingle(convertDTypeVJP),
+	NodeTypeWhere:                vjpForSingle(whereVJP),
+	NodeTypeNeg:                  vjpForSingle(negVJP),
+	NodeTypeAbs:                  vjpForSingle(absVJP),
+	NodeTypeExp:                  vjpForSingle(expVJP),
+	NodeTypeLog:                  vjpForSingle(logVJP),
+	NodeTypeLog1p:                vjpForSingle(log1pVJP),
+	NodeTypeTanh:                 vjpForSingle(tanhVJP),
+	NodeTypeAdd:                  vjpForSingle(addVJP),
+	NodeTypeSub:                  vjpForSingle(subVJP),
+	NodeTypeMul:                  vjpForSingle(mulVJP),
+	NodeTypeDiv:                  vjpForSingle(divVJP),
+	NodeTypeSqrt:                 vjpForSingle(sqrtVJP),
+	NodeTypeBatchNormForTraining: batchNormForTrainingVJP,
 
 	// Complex numbers.
-	NodeTypeReal:    realVJP,
-	NodeTypeImag:    imagVJP,
-	NodeTypeConj:    conjVJP,
-	NodeTypeComplex: complexVJP,
+	NodeTypeReal:    vjpForSingle(realVJP),
+	NodeTypeImag:    vjpForSingle(imagVJP),
+	NodeTypeConj:    vjpForSingle(conjVJP),
+	NodeTypeComplex: vjpForSingle(complexVJP),
 
-	NodeTypeMax:                minMaxVJP,
-	NodeTypeMin:                minMaxVJP,
-	NodeTypeReshape:            reshapeVJP,
-	NodeTypeReduceSum:          reduceSumVJP,
-	NodeTypeReduceMax:          reduceMaxVJP,
-	NodeTypeLogistic:           logisticVJP,
-	NodeTypeDot:                dotVJP,
-	NodeTypeDotGeneral:         dotGeneralVJP,
-	NodeTypeSlice:              sliceVJP,
-	NodeTypeGather:             gatherVJP,
-	NodeTypeConcatenate:        concatenateVJP,
-	NodeTypeConvGeneralDilated: convGeneralDilatedVJP,
-	NodeTypeReduceWindow:       reduceWindowVJP,
-	NodeTypeTranspose:          transposeVJP,
-	NodeTypeBroadcastInDim:     broadcastInDimVJP,
-	NodeTypeFFT:                fftVJP,
-}
-
-var VJPMultiOutputsRegistration = map[NodeType]VJPMultiOutputs{
-	NodeTypeBatchNormForTraining: batchNormForTrainingVJP,
+	NodeTypeMax:                vjpForSingle(minMaxVJP),
+	NodeTypeMin:                vjpForSingle(minMaxVJP),
+	NodeTypeReshape:            vjpForSingle(reshapeVJP),
+	NodeTypeReduceSum:          vjpForSingle(reduceSumVJP),
+	NodeTypeReduceMax:          vjpForSingle(reduceMaxVJP),
+	NodeTypeLogistic:           vjpForSingle(logisticVJP),
+	NodeTypeDot:                vjpForSingle(dotVJP),
+	NodeTypeDotGeneral:         vjpForSingle(dotGeneralVJP),
+	NodeTypeSlice:              vjpForSingle(sliceVJP),
+	NodeTypeGather:             vjpForSingle(gatherVJP),
+	NodeTypeConcatenate:        vjpForSingle(concatenateVJP),
+	NodeTypeConvGeneralDilated: vjpForSingle(convGeneralDilatedVJP),
+	NodeTypeReduceWindow:       vjpForSingle(reduceWindowVJP),
+	NodeTypeTranspose:          vjpForSingle(transposeVJP),
+	NodeTypeBroadcastInDim:     vjpForSingle(broadcastInDimVJP),
+	NodeTypeFFT:                vjpForSingle(fftVJP),
 }
 
 // nilVJP returns no gradient, for functions without any inputNodes.
@@ -649,7 +658,7 @@ func reduceMaxVJP(node, v *Node, _ shapes.Shape) []*Node {
 
 	// vjp is only propagated to the elements at the max value.
 	vjp := Mul(expandedV, maxIndicatorAtInput)
-	return []*Node{vjp, nil}
+	return []*Node{vjp}
 }
 
 func reshapeVJP(node, v *Node, _ shapes.Shape) []*Node {
@@ -804,14 +813,18 @@ func gatherVJP(node, v *Node, _ shapes.Shape) []*Node {
 // parameters. It uses the XLA implemented gradient.
 func batchNormForTrainingVJP(node *Node, vjps []*Node, _ shapes.Shape) []*Node {
 	params := node.inputs.(*nodeInputsBatchNormForTraining)
-	operand, scale := params.operand, params.scale
-	epsilon := params.epsilon
-	featureAxis := params.axis
-
 	splitOutputs := splitNode(node)
 	mean, variance := splitOutputs[1], splitOutputs[2]
 	gradOutput := vjps[0]
-	gradOperand, gradScale, gradOffset := backendBatchNormGradient(operand, scale, mean, variance, gradOutput, epsilon, featureAxis)
+	fmt.Printf("operand: %s\n", params.operand)
+	fmt.Printf("scale: %s\n", params.scale)
+	params.operand.SetLogged("operand")
+	params.scale.SetLogged("scale")
+	mean.SetLogged("mean")
+	variance.SetLogged("variance")
+	fmt.Printf("batchNormForTrainingVJP: epsilon=%g\n", params.epsilon)
+	gradOperand, gradScale, gradOffset := InternalBatchNormGradient(
+		params.operand, params.scale, mean, variance, gradOutput, params.epsilon, params.axis)
 	return []*Node{gradOperand, gradScale, gradOffset}
 }
 

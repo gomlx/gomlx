@@ -89,7 +89,7 @@ func TestGradientDot(t *testing.T) {
 		outputs = append([]*Node{output}, gradients...)
 		return
 	}, []any{
-		float32(60),                             // dot product output
+		[]float32{24, 36},                       // dot product output
 		[][]float32{{3, 3, 3, 3}, {3, 3, 3, 3}}, // gradient with respect to v1
 		[]float32{5, 5, 5, 5},                   // gradient with respect to v2
 	}, Epsilon)
@@ -105,7 +105,7 @@ func TestGradientDot(t *testing.T) {
 		outputs = append([]*Node{output}, gradients...)
 		return
 	}, []any{
-		float32(50),                             // dot product output
+		[][]float32{{20}, {30}},                 // dot product output
 		[][]float32{{1, 2, 3, 4}, {1, 2, 3, 4}}, // gradient with respect to v1
 		[][]float32{{5}, {5}, {5}, {5}},         // gradient with respect to v2
 	}, Epsilon)
@@ -240,7 +240,7 @@ func testGradientsExact(t *testing.T, name string, testFn gradTestFunc, wantForG
 	}
 }
 
-func TestGradientConvertType(t *testing.T) {
+func TestGradientConvertDType(t *testing.T) {
 	testGradients(t, "gradient_of_ConvertType",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			inputs := Const(g, []float32{1e6, 1e-6, 0, -1e-8, -1e6})
@@ -342,10 +342,10 @@ func TestGradientReduceMax(t *testing.T) {
 }
 
 func TestGradientBatchNorm(t *testing.T) {
-	testGradients(t, "BatchNorm",
+	testGradients(t, "BatchNorm - offset dependent",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
-			input := Iota(g, MakeShape(dtypes.Float32, 11, 3), 0) // Values from 0.0 to 6.0 on batch axis.
-			input = Div(input, Const(g, float32(10)))
+			input := Iota(g, MakeShape(dtypes.Float32, 11, 3), 0)
+			input = Div(input, Const(g, float32(10))) // Values from 0.0 to 1.0 (step 0.1) on batch axis.
 			scale := Const(g, []float32{1.0, 2.0, 3.0})
 			offset := Const(g, []float32{1.0, 10.0, 100.0})
 			var mean, variance *Node
@@ -355,21 +355,47 @@ func TestGradientBatchNorm(t *testing.T) {
 			nodesForGrad = []*Node{input, scale, offset}
 			return
 		}, []any{
+			// Notice the gradient of the output with respect to the inputs is ~0 because we sum everything, and if
+			// one input change a bit, all outputs are changed to preserve the mean, and in the end the sum remains
+			// the same.
 			[][]float32{
-				{-1.7135108e-07, -3.4270215e-07, -5.140532e-07},
-				{-1.3708086e-07, -2.7416172e-07, -4.1124258e-07},
-				{-1.02810645e-07, -2.0562129e-07, -3.0843194e-07},
-				{-6.854043e-08, -1.3708086e-07, -2.0562129e-07},
-				{-3.4270215e-08, -6.854043e-08, -1.0281065e-07},
-				{-5.10666e-15, -1.021332e-14, -1.531998e-14},
-				{3.4270215e-08, 6.854043e-08, 1.0281065e-07},
-				{6.8540416e-08, 1.3708083e-07, 2.0562126e-07},
-				{1.02810645e-07, 2.0562129e-07, 3.0843194e-07},
-				{1.3708086e-07, 2.7416172e-07, 4.112426e-07},
-				{1.7135108e-07, 3.4270215e-07, 5.140532e-07}},
-			[]float32{-3.769727e-07, -3.769727e-07, -3.769727e-07},
+				{0, 0, 0},
+				{0, 0, 0},
+				{0, 0, 0},
+				{0, 0, 0},
+				{0, 0, 0},
+				{0, 0, 0},
+				{0, 0, 0},
+				{0, 0, 0},
+				{0, 0, 0},
+				{0, 0, 0},
+				{0, 0, 0},
+			},
+			[]float32{0, 0, 0},
 			[]float32{11, 11, 11},
 		})
+
+	graphtest.RunTestGraphFn(t, "BatchNorm gradient - operand dependent", func(g *Graph) (inputs, outputs []*Node) {
+		input := Iota(g, MakeShape(dtypes.Float32, 11, 3), 0)
+		input = Div(input, Const(g, float32(10))) // Values from 0.0 to 1.0 (step 0.1) on batch axis.
+		inputs = []*Node{input}
+		scale := Const(g, []float32{1.0, 2.0, 3.0})
+		offset := Const(g, []float32{1.0, 10.0, 100.0})
+		output, mean, variance := InternalBatchNormForTraining(input, scale, offset, 1e-7, -1)
+		output.SetLogged("\tbatch normalized output")
+		mean.SetLogged("\tmean")
+		variance.SetLogged("\tvariance")
+		scaleContributions := Pow(Scalar(g, input.DType(), 10.0), Iota(g, output.Shape(), -1))
+		scaleContributions.SetLogged("\tcontributions")
+		loss := ReduceSum(Mul(output, scaleContributions))
+		loss.SetLogged("\tloss")
+		outputs = Gradient(loss, input, scale, offset)
+		return
+	}, []any{
+		[][]float32{{0, 1.3708086e-06, 1.6449703e-05}, {0, 1.0966469e-06, 1.3159763e-05}, {0, 8.2248516e-07, 9.869822e-06}, {0, 5.483234e-07, 6.579881e-06}, {0, 2.741617e-07, 3.2899404e-06}, {0, 0, 0}, {0, -2.7416178e-07, -3.2899416e-06}, {0, -5.483234e-07, -6.579881e-06}, {0, -8.2248516e-07, -9.869822e-06}, {0, -1.0966469e-06, -1.31597635e-05}, {0, -1.3708086e-06, -1.6449703e-05}},
+		[]float32{0, 1.5078908e-06, 1.2063127e-05},
+		[]float32{11, 110, 1100},
+	}, 1e-05)
 }
 
 func TestStopGradient(t *testing.T) {

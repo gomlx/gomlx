@@ -442,34 +442,23 @@ func TestBroadcast(t *testing.T) {
 }
 
 func TestFill(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
-	{
-		g := NewGraph(backend, "").WithName("FillScalar")
-		FillScalar(g, shapes.Make(dtypes.Int64, 3, 1), 4.0)
-		got := compileRunAndTakeFirst(t, g)
-		want := [][]int64{{4}, {4}, {4}}
-		if !xslices.DeepSliceCmp(got, want, xslices.EqualAny[int64]) {
-			t.Errorf("Wanted %#v, got %#v", want, got)
-		}
-	}
-	{
-		g := NewGraph(backend, "").WithName("Ones")
-		Ones(g, shapes.Make(dtypes.Float32, 3, 1))
-		got := compileRunAndTakeFirst(t, g)
-		want := [][]float32{{1}, {1}, {1}}
-		if !xslices.DeepSliceCmp(got, want, xslices.EqualAny[float32]) {
-			t.Errorf("Wanted %#v, got %#v", want, got)
-		}
-	}
-	{
-		g := NewGraph(backend, "").WithName("Zeros")
-		Zeros(g, shapes.Make(dtypes.Float64, 3, 1))
-		got := compileRunAndTakeFirst(t, g)
-		want := [][]float64{{0}, {0}, {0}}
-		if !xslices.DeepSliceCmp(got, want, xslices.EqualAny[float64]) {
-			t.Errorf("Wanted %#v, got %#v", want, got)
-		}
-	}
+	testFuncOneInput(t, "FillScalar", func(g *Graph) (input, output *Node) {
+		input = FillScalar(g, shapes.Make(dtypes.Int64, 3, 1), 4.0)
+		output = input
+		return
+	}, [][]int64{{4}, {4}, {4}})
+
+	testFuncOneInput(t, "Ones", func(g *Graph) (input, output *Node) {
+		input = Ones(g, shapes.Make(dtypes.Float32, 3, 1))
+		output = input
+		return
+	}, [][]float32{{1}, {1}, {1}})
+
+	testFuncOneInput(t, "Zeros", func(g *Graph) (input, output *Node) {
+		input = Zeros(g, shapes.Make(dtypes.Float64, 3, 1))
+		output = input
+		return
+	}, [][]float64{{0}, {0}, {0}})
 }
 
 func reduceSumGraph(t *testing.T, backend backends.Backend, reduceDims []int) *Graph {

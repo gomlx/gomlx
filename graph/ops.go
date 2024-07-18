@@ -223,8 +223,8 @@ func StopGradient(x *Node) *Node {
 // and we should return the updated `v`, that is, the customized gradient with respect to `x`.
 func IdentityWithCustomGradient(x *Node, gradientFn func(x, v *Node) *Node) *Node {
 	n := Identity(x)
-	n.customVJP = func(node, v *Node, _ shapes.Shape) []*Node {
-		return []*Node{gradientFn(node, v)}
+	n.customVJP = func(node *Node, vjpForOutputs []*Node, _ shapes.Shape) []*Node {
+		return []*Node{gradientFn(node, vjpForOutputs[0])}
 	}
 	return n
 }
@@ -617,6 +617,7 @@ func ArgMax(x *Node, axis int, outputDType ...dtypes.DType) (output *Node) {
 	} else if len(outputDType) == 1 {
 		dtype = outputDType[0]
 	}
+	axis = adjustAxisToRank(axis, x.Rank())
 	return backendArgMinMax(x, axis, dtype, false)
 }
 
@@ -634,7 +635,7 @@ func ArgMin(x *Node, axis int, outputDType ...dtypes.DType) (output *Node) {
 	} else if len(outputDType) == 1 {
 		dtype = outputDType[0]
 	}
-	return backendArgMinMax(x, axis, dtype, false)
+	return backendArgMinMax(x, axis, dtype, true)
 }
 
 // adjustAxesToRank not-inplace, it returns an adjusted copy of the given `axesWithNegatives`.
@@ -1480,6 +1481,10 @@ func DotGeneral(lhs *Node, lhsContractingAxes, lhsBatchAxes []int, rhs *Node, rh
 // Don't use this directly, instead use layers.BatchNormalization.
 func InternalBatchNormForTraining(operand *Node, scale *Node, offset *Node, epsilon float32, axis int) (normalized, batchMean, batchVariance *Node) {
 	_ = validateBuildingGraphFromInputs(operand, scale, offset)
+	dtype := operand.DType()
+	if scale.DType() != dtype || offset.DType() != dtype {
+		exceptions.Panicf("InternalBatchNormForTraining: operand (%s), scale (%s) and offset (%s) must all have the same DType", operand.Shape(), scale.Shape(), offset.Shape())
+	}
 	axis = adjustAxisToRank(axis, operand.Rank())
 	return backendBatchNormForTraining(operand, scale, offset, epsilon, axis)
 }
@@ -1488,6 +1493,10 @@ func InternalBatchNormForTraining(operand *Node, scale *Node, offset *Node, epsi
 // Don't use this directly, instead use layers.BatchNormalization.
 func InternalBatchNormForInference(operand *Node, scale *Node, offset *Node, mean *Node, variance *Node, epsilon float32, axis int) (node *Node) {
 	_ = validateBuildingGraphFromInputs(operand, scale, offset, mean, variance)
+	dtype := operand.DType()
+	if scale.DType() != dtype || offset.DType() != dtype {
+		exceptions.Panicf("InternalBatchNormForInference: operand (%s), scale (%s) and offset (%s) must all have the same DType", operand.Shape(), scale.Shape(), offset.Shape())
+	}
 	axis = adjustAxisToRank(axis, operand.Rank())
 	return backendBatchNormForInference(operand, scale, offset, mean, variance, epsilon, axis)
 }
@@ -1496,6 +1505,11 @@ func InternalBatchNormForInference(operand *Node, scale *Node, offset *Node, mea
 // Don't use this directly, instead use layers.BatchNormalization.
 func InternalBatchNormGradient(operand *Node, scale *Node, mean *Node, variance *Node, gradOutput *Node, epsilon float32, axis int) (gradOperand, gradScale, gradOffset *Node) {
 	_ = validateBuildingGraphFromInputs(operand, scale, mean, variance)
+	dtype := operand.DType()
+	if scale.DType() != dtype || mean.DType() != dtype || variance.DType() != dtype {
+		exceptions.Panicf("InternalBatchNormForInference: operand (%s), scale (%s), mean (%s) and variance (%s) must all have the same DType",
+			operand.Shape(), scale.Shape(), mean.Shape(), variance.DType())
+	}
 	axis = adjustAxisToRank(axis, operand.Rank())
 	return backendBatchNormGradient(operand, scale, mean, variance, gradOutput, epsilon, axis)
 }

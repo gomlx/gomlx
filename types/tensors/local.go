@@ -578,6 +578,9 @@ func shapeForValueRecursive(shape *shapes.Shape, v reflect.Value, t reflect.Type
 		shapePrefix := shape.Clone()
 
 		// The first element is the reference
+		if v.Len() == 0 {
+			exceptions.Panicf("value with empty slice not valid for Tensor conversion: %T: %v", v.Interface(), v)
+		}
 		v0 := v.Index(0)
 		err := shapeForValueRecursive(shape, v0, t)
 		if err != nil {
