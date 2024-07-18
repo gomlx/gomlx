@@ -1479,17 +1479,23 @@ func DotGeneral(lhs *Node, lhsContractingAxes, lhsBatchAxes []int, rhs *Node, rh
 // InternalBatchNormForTraining is a wrapper to the backend function.
 // Don't use this directly, instead use layers.BatchNormalization.
 func InternalBatchNormForTraining(operand *Node, scale *Node, offset *Node, epsilon float32, axis int) (normalized, batchMean, batchVariance *Node) {
+	_ = validateBuildingGraphFromInputs(operand, scale, offset)
+	axis = adjustAxisToRank(axis, operand.Rank())
 	return backendBatchNormForTraining(operand, scale, offset, epsilon, axis)
 }
 
 // InternalBatchNormForInference is a wrapper to the backend function.
 // Don't use this directly, instead use layers.BatchNormalization.
 func InternalBatchNormForInference(operand *Node, scale *Node, offset *Node, mean *Node, variance *Node, epsilon float32, axis int) (node *Node) {
+	_ = validateBuildingGraphFromInputs(operand, scale, offset, mean, variance)
+	axis = adjustAxisToRank(axis, operand.Rank())
 	return backendBatchNormForInference(operand, scale, offset, mean, variance, epsilon, axis)
 }
 
 // InternalBatchNormGradient is a wrapper to the backend function.
 // Don't use this directly, instead use layers.BatchNormalization.
 func InternalBatchNormGradient(operand *Node, scale *Node, mean *Node, variance *Node, gradOutput *Node, epsilon float32, axis int) (gradOperand, gradScale, gradOffset *Node) {
+	_ = validateBuildingGraphFromInputs(operand, scale, mean, variance)
+	axis = adjustAxisToRank(axis, operand.Rank())
 	return backendBatchNormGradient(operand, scale, mean, variance, gradOutput, epsilon, axis)
 }
