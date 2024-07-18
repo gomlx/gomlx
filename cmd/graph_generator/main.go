@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/gomlx/gomlx/cmd/graphs_generator/parsebackends"
+	"github.com/gomlx/gomlx/cmd/graph_generator/parsebackends"
 	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/janpfeifer/must"
@@ -17,7 +17,7 @@ import (
 
 func main() {
 	flag.Parse()
-	fmt.Println("graphs_generator:")
+	fmt.Println("graph_generator:")
 	methods := buildMethodInfo()
 	GenerateBackendOps(methods)
 }

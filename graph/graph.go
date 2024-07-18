@@ -87,7 +87,7 @@
 //     in the middle of computation — handy to debug the math.
 package graph
 
-//go:generate go run ../cmd/graphs_generator
+//go:generate go run ../cmd/graph_generator
 //go:generate stringer -type NodeType -trimprefix NodeType gen_backend_ops.go
 
 import (
