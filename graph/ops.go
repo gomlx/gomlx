@@ -94,7 +94,8 @@ func splitNode(multiOutputNode *Node) (splitNodes []*Node) {
 	if multiOutputNode.numOutputs() <= 1 {
 		exceptions.Panicf("splitNode expects as input a node with multiple-outputs, but node had only one output %d", multiOutputNode.numOutputs())
 	}
-	g := validateBuildingGraphFromInputs(multiOutputNode)
+	g := multiOutputNode.Graph()
+	g.AssertBuilding()
 	splitNodes = make([]*Node, 0, multiOutputNode.numOutputs())
 	for ii, op := range multiOutputNode.outputOps {
 		inputs := &nodeInputsSplitNode{
