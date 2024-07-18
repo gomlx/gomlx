@@ -32,7 +32,7 @@ import (
 )
 
 // InMemoryDataset represents a Dataset that has been completely read into the memory of the device
-// it was created with -- the platform of the associated `graph.Manager`.
+// it was created with -- the platform of the associated `graph.Backend`.
 //
 // It supports batching, shuffling (with and without replacement) and can be duplicated (only one copy
 // of the underlying data is used).
@@ -90,7 +90,7 @@ type InMemoryDataset struct {
 
 // InMemory creates dataset that reads the whole contents of `ds` into memory.
 //
-// It uses GoMLX to batch the tensors themselves, so it takes a graph.Manager as its first
+// It uses GoMLX to batch the tensors themselves, so it takes a graph.Backend as its first
 // parameter. Flat will be cached in the platform (device) the Backend was configured with.
 //
 // Args:
@@ -618,7 +618,7 @@ func (mds *InMemoryDataset) FinalizeAll() {
 
 // GobSerialize in-memory content to the encoder.
 //
-// Only the underlying data is serialized. The graph.Manager or the sampling configuration is not serialized.
+// Only the underlying data is serialized. The graph.Backend or the sampling configuration is not serialized.
 // The contents of the `spec` (see WithSpec) is also not serialized.
 func (mds *InMemoryDataset) GobSerialize(encoder *gob.Encoder) (err error) {
 	enc := func(data any) {
@@ -652,7 +652,7 @@ func (mds *InMemoryDataset) GobSerialize(encoder *gob.Encoder) (err error) {
 	return
 }
 
-// GobDeserializeInMemory dataset from the decoder. It requires a `graph.Manager` to properly be recreated.
+// GobDeserializeInMemory dataset from the decoder. It requires a `graph.Backend` to properly be recreated.
 //
 // No sampling configuration is recovered, and the InMemoryDataset created is sequential (no random sampling)
 // that reads through only one epoch. The random number generator is also newly initialized (see

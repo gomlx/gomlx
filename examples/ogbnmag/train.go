@@ -168,7 +168,7 @@ func newTrainer(ctx *context.Context) *train.Trainer {
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
-	trainer := train.NewTrainer(ctx.Manager(), ctx, MagModelGraph,
+	trainer := train.NewTrainer(ctx.Backend(), ctx, MagModelGraph,
 		lossFn,
 		optimizers.FromContext(ctx), // Based on `ctx.GetParam("optimizer")`.
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
@@ -293,7 +293,7 @@ func convertPapersEmbeddings(ctx *context.Context) {
 		return
 	}
 
-	e := context.NewExec(ctx.Manager(), ctx, func(ctx *context.Context, g *Graph) *Node {
+	e := context.NewExec(ctx.Backend(), ctx, func(ctx *context.Context, g *Graph) *Node {
 		return ConvertDType(papersVar.ValueGraph(g), dtype)
 	})
 	converted := e.Call()[0]

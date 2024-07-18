@@ -18,9 +18,11 @@ package context
 
 import (
 	"fmt"
+	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/tensors"
 	"strings"
 )
 
@@ -47,7 +49,7 @@ type Variable struct {
 
 	shape       shapes.Shape
 	initializer VariableInitializer // Set if variable is not yet initialized.
-	value       tensors.Tensor      // Value of the variable.
+	value       *tensors.Tensor     // Value of the variable.
 
 	// graphToNodes maps graph ids in which this variable was used to its parameter Node and
 	// its last value Node.
@@ -146,7 +148,7 @@ func VariableParameterNameFromScopeAndName(scope, name string) string {
 // by a previous call to Value to become invalid. The recommendation
 // is not to use this is a concurrent set up -- or to create proper
 // locking mechanisms.
-func (v *Variable) Value() tensors.Tensor {
+func (v *Variable) Value() *tensors.Tensor {
 	v.AssertValid()
 	return v.value
 }
@@ -154,7 +156,7 @@ func (v *Variable) Value() tensors.Tensor {
 // SetValue updates the tensor holding the variable value.
 // NOTE: Because often variables are large, the previous value is immediately freed (as opposed to
 // wait for garbage collection). If the previous value is used somewhere else, use SetValuePreservingOld.
-func (v *Variable) SetValue(value tensors.Tensor) {
+func (v *Variable) SetValue(value *tensors.Tensor) {
 	if v.value != nil {
 		v.value.FinalizeAll()
 	}
@@ -163,7 +165,7 @@ func (v *Variable) SetValue(value tensors.Tensor) {
 
 // SetValuePreservingOld updates the tensor holding the variable value, and dont' free old value. If previous
 // value is not used, use SetValue instead that will free it immediately.
-func (v *Variable) SetValuePreservingOld(value tensors.Tensor) {
+func (v *Variable) SetValuePreservingOld(value *tensors.Tensor) {
 	v.value = value
 	v.shape = value.Shape()
 }
@@ -235,7 +237,7 @@ func (v *Variable) ParamNode(g *Graph) *Node {
 	nodes, found := v.graphToNodes[g.GraphId()]
 	if !found {
 		paramName := v.ParameterName()
-		paramNode := g.Parameter(paramName, v.shape)
+		paramNode := graph.Parameter(g, paramName, v.shape)
 		nodes = &variableNodes{valueNode: paramNode, paramNode: paramNode}
 		v.graphToNodes[g.GraphId()] = nodes
 	}

@@ -44,7 +44,7 @@ type batchedDataset struct {
 
 // Batch creates dataset that batches `ds` into batches of size `batchSize`.
 //
-// It uses GoMLX to batch the tensors themselves, so it takes a graph.Manager as its first
+// It uses GoMLX to batch the tensors themselves, so it takes a graph.Backend as its first
 // parameter. Also, it means that it yields examples already stored "on device" -- whichever
 // the platform Backend was configured with.
 //

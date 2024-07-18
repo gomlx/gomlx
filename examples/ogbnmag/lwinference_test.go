@@ -164,7 +164,7 @@ func TestLayerWiseInferenceLogits(t *testing.T) {
 
 		// Layer-Wise inference
 		modelFn := BuildLayerWiseInferenceModel(strategy, false) // Function that builds the LW inference model.
-		executor = context.NewExec(ctx.Manager(), ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
+		executor = context.NewExec(ctx.Backend(), ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
 			allPredictions := modelFn(ctx, g)
 			return ConvertDType(
 				Slice(allPredictions, AxisElem(seedId), AxisRange()),
@@ -260,7 +260,7 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 	// Layer-Wise inference
 	modelFn := BuildLayerWiseInferenceModel(strategy, false) // Function that builds the LW inference model.
 	numToCompare := len(predictionsGNN)
-	executor = context.NewExec(ctx.Manager(), ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
+	executor = context.NewExec(ctx.Backend(), ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
 		logits := modelFn(ctx, g)
 		predictions := ArgMax(logits, -1, dtypes.Int32)
 		predictions = Slice(predictions, AxisRange(0, numToCompare))

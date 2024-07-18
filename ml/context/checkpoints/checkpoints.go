@@ -60,6 +60,7 @@ package checkpoints
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/data"
@@ -67,6 +68,9 @@ import (
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/types/xslices"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 	"os"
 	"path"
@@ -601,8 +605,8 @@ func (h *Handler) takeMean(baseNames []string) error {
 	}
 
 	// Create merger graph executor.
-	manager := graph.BuildManager().Platform("CPU").Done()
-	h.mergeExec = graph.NewExec(manager, func(a, b, bWeight *graph.Node) *graph.Node {
+	backend := backends.New()
+	h.mergeExec = graph.NewExec(backend, func(a, b, bWeight *graph.Node) *graph.Node {
 		return graph.Add(
 			graph.Mul(a, graph.OneMinus(bWeight)),
 			graph.Mul(b, bWeight))

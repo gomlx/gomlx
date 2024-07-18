@@ -19,6 +19,7 @@ package context
 import (
 	"fmt"
 	"github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/pkg/errors"
 	"log"
 	"reflect"
@@ -91,8 +92,8 @@ type ExecGraphFn interface {
 //
 // And then with Exec one can do:
 //
-//	 ctx := context.NewContext(manager)
-//		var logitsFn = context.NewExec(manager, ctx, LogitsGraph)
+//	 ctx := context.NewContext(backend)
+//		var logitsFn = context.NewExec(backend, ctx, LogitsGraph)
 //		batch := [][]float32{ {1, 2, 3}, {4, 5, 6} } // 2 examples with 3 features (shape=[2,3])
 //		fmt.Printf("Logits(%v) = %v\n", batch, logitsFn.Call(batch)[0].Value())
 //
@@ -112,8 +113,8 @@ type ExecGraphFn interface {
 //
 // ```
 //
-//	 ctx := context.NewContext(manager)
-//	 counter := context.NewExec(manager, ctx, func(ctx *context.Context, g *Graph) *Node {
+//	 ctx := context.NewContext(backend)
+//	 counter := context.NewExec(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
 //		  dtype := types.Int64
 //		  counterVar := ctx.WithInitializer(initializers.Zeros).VariableWithShape("counter", types.MakeShape(dtype))
 //		  counterNode := counterVar.ValueGraph(graph)
@@ -176,7 +177,7 @@ type Exec struct {
 //
 // If any input or output parameter of ctxGraphFn is not a *Node (except the *Context and optionally
 // a *Graph), or if there are no inputs or outputs, it returns an error.
-func NewExecAny(manager *Manager, ctx *Context, ctxGraphFn any) (*Exec, error) {
+func NewExecAny(manager *Backend, ctx *Context, ctxGraphFn any) (*Exec, error) {
 	if ctx == nil {
 		ctx = NewContext(manager)
 	}
@@ -350,7 +351,7 @@ func (e *Exec) Finalize() {
 
 // setSideParams is used by computation.Exec.SetSideParamsHook to set up
 // the variable values as parameters just before graph execution.
-func (e *Exec) setSideParams(graph *Graph, tensors []*tensors.Device) {
+func (e *Exec) setSideParams(graph *Graph, tensors []*tensors.Tensor) {
 	// Initialize variables if needed.
 	if e.context.NeedsInitialization() {
 		e.context.InitializeVariables()
@@ -383,7 +384,7 @@ func (e *Exec) GetNodeLogger() graph.LoggerFn {
 //
 // This is a generic wrapper around NewExecAny that check that types are
 // correct (but doesn't support all possible types of ctxGraphFn).
-func NewExec[F ExecGraphFn](manager *Manager, ctx *Context, ctxGraphFn F) *Exec {
+func NewExec[F ExecGraphFn](manager *Backend, ctx *Context, ctxGraphFn F) *Exec {
 	e, err := NewExecAny(manager, ctx, ctxGraphFn)
 	if err != nil {
 		log.Fatalf("Failed to create Exec object: %+v", err)

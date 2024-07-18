@@ -26,10 +26,10 @@
 //
 // The main elements in the package (or related) are:
 //
-//   - Manager: manages an XLA/PJRT (through gopjrt) connection: a PJRT plugin and a client.
-//     The whole computation building, compilation and execution runs within the scope of a Manager.
+//   - Backend: manages an XLA/PJRT (through gopjrt) connection: a PJRT plugin and a client.
+//     The whole computation building, compilation and execution runs within the scope of a Backend.
 //
-//   - Graph: created by the Manager, this is used to construct a computation graph that can then
+//   - Graph: created by the Backend, this is used to construct a computation graph that can then
 //     be "just-in-time" compiled and executed efficiently.
 //     To construct a `Graph` one puts together nodes or "ops" defining the desired sequence of operations.
 //
@@ -37,7 +37,7 @@
 //     Reshape, etc. Each node has a fixed outputShapes that is known in "graph building time" (see discussion
 //     below).
 //
-//   - context.Context: created by the Manager, a higher level abstraction convenient when building gradient
+//   - context.Context: created by the Backend, a higher level abstraction convenient when building gradient
 //     descent based machine learning (ML) models (like Neural Networks). It organizes Variable objects into
 //     "scope", which usually holds the learnable weights for ML. It also allows for loading/saving of these values.
 //
@@ -241,7 +241,7 @@ func (g *Graph) Finalize() {
 	g.backend = nil
 }
 
-// GraphId is a globally unique id (even across Manager's) of the graph. It's a counter that starts with 0.
+// GraphId is a globally unique id (even across Backend's) of the graph. It's a counter that starts with 0.
 func (g *Graph) GraphId() GraphId {
 	return g.id
 }
@@ -372,7 +372,7 @@ func (g *Graph) Compile(outputs ...*Node) {
 // Run runs the compiled graph with the given parameters.
 //
 // The params can use Go values, Local tensors or Device tensors. Go values and Local tensors will be transferred to
-// Device tensors (located in the Manager's accelerator memory) before the graph is executed.
+// Device tensors (located in the Backend's accelerator memory) before the graph is executed.
 func (g *Graph) Run(inputs ParamsMap) (outputs []*tensors.Tensor) {
 	g.AssertCompiled()
 	numParams := g.NumParameters()

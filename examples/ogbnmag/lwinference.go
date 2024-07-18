@@ -20,7 +20,7 @@ import (
 // LayerWiseEvaluation returns the train, validation and test accuracy of the model, using layer-wise inference.
 func LayerWiseEvaluation(ctx *context.Context, strategy *sampler.Strategy) (train, validation, test float64) {
 	var predictionsT tensors.Tensor
-	exec := context.NewExec(ctx.Manager(), ctx.Reuse(), BuildLayerWiseInferenceModel(strategy, true))
+	exec := context.NewExec(ctx.Backend(), ctx.Reuse(), BuildLayerWiseInferenceModel(strategy, true))
 
 	if klog.V(1).Enabled() {
 		// Report timings.
@@ -59,7 +59,7 @@ func layerWiseCalculateAccuracies(predictions []int16, labels []int32) (train, v
 }
 
 func BuildLayerWiseCustomMetricFn(ctx *context.Context, strategy *sampler.Strategy) plots.CustomMetricFn {
-	exec := context.NewExec(ctx.Manager(), ctx.Reuse(), BuildLayerWiseInferenceModel(strategy, true))
+	exec := context.NewExec(ctx.Backend(), ctx.Reuse(), BuildLayerWiseInferenceModel(strategy, true))
 	ctx = ctx.Reuse()
 	labels := PapersLabels.Local().FlatCopy().([]int32)
 	return func(plotter plots.Plotter, step float64) error {

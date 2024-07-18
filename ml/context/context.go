@@ -41,7 +41,7 @@ import (
 // The Context organizes 3 types of information used by a model, and its graphs:
 //
 //  1. Variables: model variables or weights.
-//  2. Parameters (normal): hyperparameters and also any arbitrary information that
+//  2. Parameters: hyperparameters and also any arbitrary information that
 //     needs sharing among the graph building functions using the Context.
 //  3. Per-graph parameters: each graph will have it's own value. E.g: the parameter
 //     "training" indicates if the model is being used for training or inference, and this value will be different
@@ -54,24 +54,22 @@ import (
 //
 // One could create a new context with:
 //
-// ```
+//	func main() {
+//		ctx := context.NewContext(backend)
+//		ctx.SetParam("dropout_rate") = 0.2  // Set default dropout to 0.2
+//		...
+//	}
 //
-//		func main() {
-//			ctx := context.NewContext(manager)
-//			ctx.SetParam("dropout_rate") = 0.2  // Set default dropout to 0.2
-//			...
-//		}
+//	func ModelGraph(ctx *context.Context, inputs []*Node) (logits *Node) {
+//		...
+//		{
+//			ctx := ctx.In("output_layer")  // Enter "output_layer" scope in temporary new context (same data, different scope)
+//			ctx.SetParam("dropout_rate", 0.6)  // Let's say we want the "output_layer" only to have dropout=0.6
+//			logits = Dense(ctx, logits, output_dim)
+//		}  // Exiting "output_later" scope, ctx is back to it's original scope.
+//	}
 //
-//		func ModelGraph(ctx *context.Context, inputs []*Node) (logits *Node) {
-//			...
-//			{
-//				ctx := ctx.In("output_layer")  // Enter "output_layer" scope in temporary new context (same data, different scope)
-//	        	ctx.SetParam("dropout_rate", 0.6)  // Let's say we want the "output_layer" only to have dropout=0.6
-//	         	logits = Dense(ctx, logits, output_dim)
-//			}  // Exiting "output_later" scope, ctx is back to it's original scope.
-//		}
-//
-// Finally, Context also allows one to checkpoint the variable values (save and load). See checkpoint package.
+// Finally, Context also allows one to checkpoint the variable values (save and load). See the checkpoints package.
 //
 // Variable duplicate creation checking:
 // the context is by default configure to with Context.Checked(true), which checks at every variable creation whether
@@ -97,7 +95,7 @@ type Context struct {
 	checked bool
 
 	// deviceNumber where to store new variables.
-	deviceNumber int
+	deviceNumber backends.DeviceNum
 
 	// initializer is used to initialize variable values for a given shape.
 	initializer VariableInitializer
@@ -112,7 +110,7 @@ type scopedVariableMap map[string]*Variable
 // contextData stores all context information and is shared among various Context, which
 // serve only as scoped references.
 type contextData struct {
-	manager *Manager
+	backend Backend
 
 	// params holds a model's building (hyper)parameters. Context
 	// is agnostic about the semantics here, hence it's a scoped map of scope+key (both strings)
@@ -162,17 +160,17 @@ type Loader interface {
 	//
 	// It is called at most once for each variable: if a values is loaded owner is transferred and the Loader
 	// can "forget" about that variable, it's assumed to be transferred to the context.
-	LoadVariable(ctx *Context, scope, name string) (value tensors.Tensor, found bool)
+	LoadVariable(ctx *Context, scope, name string) (value *tensors.Tensor, found bool)
 }
 
 // NewContext constructs a new and empty context.
-func NewContext(manager *Manager) *Context {
+func NewContext(backend Backend) *Context {
 	ctx := &Context{
 		scope:        RootScope,
-		deviceNumber: manager.DefaultDeviceNum(),
+		deviceNumber: 0,
 		checked:      true,
 		data: &contextData{
-			manager:      manager,
+			backend:      backend,
 			params:       NewScopedParams(),
 			graphParams:  make(map[graph.GraphId]*ScopedParams),
 			variablesMap: make(map[string]scopedVariableMap),
@@ -198,9 +196,9 @@ func (ctx *Context) copy() *Context {
 	return ctx2
 }
 
-// Manager returns the manager associated with this context.
-func (ctx *Context) Manager() *Manager {
-	return ctx.data.manager
+// Backend returns the backend associated with this context.
+func (ctx *Context) Backend() Backend {
+	return ctx.data.backend
 }
 
 // Scope returns the full scope path.
@@ -517,20 +515,20 @@ func (ctx *Context) InitializeVariables() {
 		// Nothing to do.
 		return
 	}
-	g := ctx.data.manager.NewGraph().WithName("InitializeVariables")
+	g := graph.NewGraph(ctx.data.backend, "InitializeVariables")
 	valuesNodes := make([]*Node, 0, len(variablesToInitialize))
 	for _, variable := range variablesToInitialize {
 		valuesNodes = append(valuesNodes, variable.initializer(g, variable.shape))
 	}
-	var tuple *tensors.Device
+
+	var values []*tensors.Tensor
 	err := TryCatch[error](func() {
-		g.Compile(graph.Tuple(valuesNodes...))
-		tuple = g.Run(nil)
+		g.Compile(valuesNodes...)
+		values = g.Run(nil)
 	})
 	if err != nil {
 		panic(errors.WithMessagef(err, "failed to compile/run variable initialization graph"))
 	}
-	values := tuple.SplitTuple()
 	for ii, variable := range variablesToInitialize {
 		variable.value = values[ii]
 	}
@@ -548,7 +546,7 @@ func (ctx *Context) ExecSetVariablesInParams(params graph.ParamsMap, g *Graph) {
 			if v.value == nil {
 				Panicf("variable %q not initialized", v.ParameterName())
 			}
-			params[v.ParamNode(g)] = v.Value().Device(g, g.DeviceNum())
+			params[v.ParamNode(g)] = v.value
 		}
 	})
 }
@@ -727,8 +725,8 @@ func (ctx *Context) VariableWithShape(name string, shape shapes.Shape) *Variable
 	return v
 }
 
-func valueToTensor(value any) tensors.Tensor {
-	if tensorValue, ok := value.(tensors.Tensor); ok {
+func valueToTensor(value any) *tensors.Tensor {
+	if tensorValue, ok := value.(*tensors.Tensor); ok {
 		return tensorValue
 	}
 	if node, ok := value.(*Node); ok {
@@ -765,7 +763,7 @@ func (ctx *Context) VariableWithValue(name string, value any) *Variable {
 		Panicf("variable %q for scope %q already exists", name, ctx.scope)
 	}
 
-	var valueT tensors.Tensor
+	var valueT *tensors.Tensor
 	err := TryCatch[error](func() { valueT = valueToTensor(value) })
 	if err != nil {
 		panic(errors.WithMessagef(err, "failed to parse value %v for variable %q in scope %q", value, name, ctx.scope))

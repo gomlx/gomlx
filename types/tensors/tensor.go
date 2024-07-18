@@ -135,7 +135,7 @@ func (t *Tensor) AssertValid() {
 }
 
 // HasClient accepts anything that can return a xla.Client. That includes xla.Client itself and
-// graph.Manager.
+// graph.Backend.
 type HasClient interface {
 	Client() *pjrt.Client
 }
