@@ -725,10 +725,16 @@ func TestOneHot(t *testing.T) {
 		}, [][]float32{{0, 1, 0, 0}, {1, 0, 0, 0}, {0, 0, 0, 1}})
 	testFuncOneInput(t, "OneHot 2 leading dimensions",
 		func(g *Graph) (input, output *Node) {
-			input = Const(g, [][]int{{1, 0}, {0, 2}, {3, 1}})
+			input = Const(g, [][][]int{ // shape [2, 3, 2]
+				{{1, 0}, {0, 2}, {3, 1}},
+				{{2, 3}, {3, 1}, {0, 2}},
+			})
 			output = OneHot(input, 4, dtypes.Float32)
 			return
-		}, [][][]float32{{{0, 1, 0, 0}, {1, 0, 0, 0}}, {{1, 0, 0, 0}, {0, 0, 1, 0}}, {{0, 0, 0, 1}, {0, 1, 0, 0}}})
+		}, [][][][]float32{
+			{{{0, 1, 0, 0}, {1, 0, 0, 0}}, {{1, 0, 0, 0}, {0, 0, 1, 0}}, {{0, 0, 0, 1}, {0, 1, 0, 0}}},
+			{{{0, 0, 1, 0}, {0, 0, 0, 1}}, {{0, 0, 0, 1}, {0, 1, 0, 0}}, {{1, 0, 0, 0}, {0, 0, 1, 0}}},
+		})
 }
 
 func TestReduceAndKeep(t *testing.T) {

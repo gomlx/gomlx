@@ -211,7 +211,6 @@ func ClipScalar(x *Node, min, max float64) *Node {
 // tensor with the indices position set to 1, and the other positions set to 0. The returned tensor has one extra
 // dimension at the end.
 // For example `OneHot([][]INT64{1, 0, 3}, 4, types.Float32)` returns  `[][]F32{{0, 1, 0, 0}, {1, 0, 0, 0}, {0, 0, 0, 1}}`
-// TODO: implement with Select once it's implemented, since it's likely going to be faster (TensorFlow uses that).
 func OneHot(indices *Node, depth int, dtype dtypes.DType) *Node {
 	g := indices.Graph()
 	if !indices.DType().IsInt() {
@@ -226,19 +225,10 @@ func OneHot(indices *Node, depth int, dtype dtypes.DType) *Node {
 	targetShape.Dimensions[targetShape.Rank()-1] = depth
 	targetShape.DType = dtype
 
-	// scatterIndices must create the full indices (for all dimensions, not only for the last being set to 1).
-	// * Create one sub-id per leading dimension on indices.
-	// * ConcatenateDimensions them, along with the indices themselves (the last dimension).
-	// * Flatten them.
-	parts := make([]*Node, 0, indices.Rank())
-	for dimIdx := 0; dimIdx < indices.Rank()-1; dimIdx++ {
-		parts = append(parts, Iota(g, indices.Shape(), dimIdx))
-	}
-	parts = append(parts, indices)
-	scatterIndices := Concatenate(parts, -1)
-	scatterIndices = Reshape(scatterIndices, indices.Shape().Rank(), indices.Rank())
-	ones := Ones(g, shapes.Make(dtype, indices.Shape().Rank()))
-	return Scatter(scatterIndices, ones, targetShape)
+	broadcastIndices := BroadcastToDims(indices, targetShape.Dimensions...)
+	positionIndices := Iota(g, broadcastIndices.Shape(), -1) // Indices for each "bit" in position.
+	return Where(Equal(broadcastIndices, positionIndices),
+		Ones(g, targetShape), Zeros(g, targetShape))
 }
 
 // ReduceAndKeep applies the given reduction function but regenerate the reduced dimensions with size 1.
