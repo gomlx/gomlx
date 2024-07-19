@@ -28,6 +28,7 @@ import (
 	"os"
 	"strconv"
 	"testing"
+	"unsafe"
 )
 
 func cmpShapes(t *testing.T, shape, wantShape shapes.Shape, err error) {
@@ -358,4 +359,20 @@ func TestClone(t *testing.T) {
 	})
 	require.NoError(t, clone.Shape().Check(dtypes.Int32, 3, 2))
 	require.Equal(t, []int32{0, 1, 3, 5, 7, 11}, CopyFlatData[int32](clone))
+}
+
+func TestBytes(t *testing.T) {
+	tensor := FromValue([][]int32{{0, 1}, {3, 5}, {7, 11}})
+	tensor.ConstBytes(func(data []byte) {
+		require.Equal(t, 6*4 /* sizeof(int32) */, len(data))
+		flat := unsafe.Slice((*int32)(unsafe.Pointer(&data[0])), 6)
+		require.Equal(t, []int32{0, 1, 3, 5, 7, 11}, flat)
+	})
+	tensor.MutableBytes(func(data []byte) {
+		require.Equal(t, 6*4 /* sizeof(int32) */, len(data))
+		flat := unsafe.Slice((*int32)(unsafe.Pointer(&data[0])), 6)
+		flat[0] = 13
+		flat[5] = 17
+	})
+	require.Equal(t, [][]int32{{13, 1}, {3, 5}, {7, 17}}, tensor.Value())
 }

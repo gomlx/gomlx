@@ -134,6 +134,26 @@ func ConstFlatData[T dtypes.Supported](t *Tensor, accessFn func(flat []T)) {
 	})
 }
 
+// ConstBytes calls accessFn with the data as a bytes slice.
+// Even scalar values have a bytes data representation of one element.
+// It locks the Tensor until accessFn returns.
+//
+// This provides accessFn with the actual Tensor data (not a copy), and it's owned by the Tensor, but it should not be
+// changed -- the contents of the corresponding "on device" tensors would go out-of-sync.
+// See Tensor.MutableBytes to access a mutable version of the data as bytes.
+//
+// It panics if the tensor is in an invalid state (if it was finalized), or if it is a tuple.
+func (t *Tensor) ConstBytes(accessFn func(data []byte)) {
+	t.ConstFlatData(func(flat any) {
+		flatV := reflect.ValueOf(flat)
+		element0 := flatV.Index(0)
+		flatValuesPtr := element0.Addr().UnsafePointer()
+		sizeBytes := uintptr(flatV.Len()) * element0.Type().Size()
+		data := unsafe.Slice((*byte)(flatValuesPtr), sizeBytes)
+		accessFn(data)
+	})
+}
+
 // MutableFlatData invalidates and frees any copy of the data on device, calls accessFn with the local flattened data
 // as a slice of the Go type corresponding to the DType type.
 // The contents of the slice itself can be changed until accessFn returns. During this time the Tensor is locked.
@@ -142,17 +162,16 @@ func ConstFlatData[T dtypes.Supported](t *Tensor, accessFn func(flat []T)) {
 //
 // the flattened data as a slice of the Go type corresponding to the DType type.
 //
-// It triggers a synchronous transfer from device to local, if the tensor is only on device.
+// It triggers a synchronous transfer from device to local, if the tensor is only on device, and it invalidates
+// the device storage, since it's assumed they will be out-of-date.
 //
-// This returns the actual Tensor data (not a copy), and it's owned by the Tensor, and should not be changed --
-// the contents of the corresponding "on device" tensors would go out-of-sync.
+// This returns the actual Tensor data (not a copy), and the slice is owned by the Tensor -- but it's contents can
+// be changed.
 //
-// See Tensor.MutableFlatData to access a mutable version of the flat data.
+// See Tensor.ConstFlatData to access a mutable version of the flat data.
 //
 // See Tensor.Size for the number of elements, and Tensor.LayoutStrides to calculate the offset of individual positions,
 // given the indices at each axis.
-//
-// It is only valid while `ref` hasn't been released.
 //
 // It panics if the tensor is in an invalid state (if it was finalized), or if it is a tuple.
 func (t *Tensor) MutableFlatData(accessFn func(flat any)) {
@@ -162,6 +181,27 @@ func (t *Tensor) MutableFlatData(accessFn func(flat any)) {
 	t.lockedMaterializeLocal()
 	t.lockedInvalidateOnDevice()
 	accessFn(t.local.flat)
+}
+
+// MutableBytes gives mutable access to the local storage of the values for the tensor.
+// It's similar to MutableFlatData, but provide a bytes view to the same data.
+//
+// It triggers a synchronous transfer from device to local, if the tensor is only on device, and it invalidates
+// the device storage, since it's assumed they will be out-of-date.
+//
+// This returns the actual Tensor data (not a copy), and the bytes slice is owned by the Tensor -- but it's contents can
+// be changed.
+//
+// See Tensor.ConstBytes for constant access to the data as bytes -- that doesn't invalidate the device storage.
+func (t *Tensor) MutableBytes(accessFn func(data []byte)) {
+	t.MutableFlatData(func(flat any) {
+		flatV := reflect.ValueOf(flat)
+		element0 := flatV.Index(0)
+		flatValuesPtr := element0.Addr().UnsafePointer()
+		sizeBytes := uintptr(flatV.Len()) * element0.Type().Size()
+		data := unsafe.Slice((*byte)(flatValuesPtr), sizeBytes)
+		accessFn(data)
+	})
 }
 
 // MutableFlatData invalidates and frees any copy of the data on device, calls accessFn with the local flattened data
