@@ -369,58 +369,118 @@ func (g *Graph) Compile(outputs ...*Node) {
 	return
 }
 
-// Run runs the compiled graph with the given parameters.
+// donateBuffer holds a buffer to be donated to the execution of a graph.
+// It is built using DonateTensor.
+type donateBuffer struct {
+	buffer backends.Buffer
+	shape  shapes.Shape
+}
+
+// DonateTensorBuffer can be used by Graph.Run or Graph.RunWithMap and with mark the Tensor to donate it's on-device
+// buffer to the execution. It requires the backend and the deviceNum (defaults to 0) of the device buffer to donate.
 //
-// The params can use Go values, Local tensors or Device tensors. Go values and Local tensors will be transferred to
-// Device tensors (located in the Backend's accelerator memory) before the graph is executed.
-func (g *Graph) Run(inputs ParamsMap) (outputs []*tensors.Tensor) {
+// What it means is that if the tensor is to be used again for another execution, it will need to transfer its
+// value from local again.
+func DonateTensorBuffer(t *tensors.Tensor, backend backends.Backend, deviceNum ...backends.DeviceNum) any {
+	d := &donateBuffer{shape: t.Shape()}
+	d.buffer = t.DonateBuffer(backend, deviceNum...) // DonateBuffer may destroy the tensor, if there is no local storage.
+	return d
+}
+
+// Run the compiled Graph with the inputs given in order -- same order as the parameters were created.
+//
+// The values for inputs can be:
+//
+// 1. A tensors.Tensor.
+// 2. Any multi-dimensional slice (e.g.: [][]float32 for a 2D float32 value) that is dynamically converted to a temporary tensor.
+// 3. The output of DonateTensorBuffer, which then donates the device buffer being used by a tensor -- if there are any.
+func (g *Graph) Run(inputs ...any) (outputs []*tensors.Tensor) {
 	g.AssertCompiled()
+	deviceNum := backends.DeviceNum(0) // Hard-coded for now.
+
 	numParams := g.NumParameters()
 	if len(inputs) != numParams {
 		exceptions.Panicf("graph %q takes %d parameters, but %d were given to Run()", g.name, numParams, len(inputs))
 	}
+	buffers := make([]backends.Buffer, numParams)
+	donate := make([]bool, numParams)
+	for ii, input := range inputs {
+		buffers[ii], _, donate[ii] = anyToBuffer(g.backend, deviceNum, input)
+	}
+	return g.RunWithBuffers(buffers, donate)
+}
+
+// RunWithMap runs the compiled graph with the inputs given as a map of the corresponding parameter node to tensor value to use.
+//
+// The params can use Go values, Local tensors or Device tensors. Go values and Local tensors will be transferred to
+// Device tensors (located in the Backend's accelerator memory) before the graph is executed.
+func (g *Graph) RunWithMap(inputs ParamsMap) (outputs []*tensors.Tensor) {
+	g.AssertCompiled()
+	deviceNum := backends.DeviceNum(0) // Hard-coded for now.
+
+	numParams := g.NumParameters()
+	if len(inputs) != numParams {
+		exceptions.Panicf("graph %q takes %d parameters, but %d were given to RunWithMap()", g.name, numParams, len(inputs))
+	}
 	for node := range inputs {
 		if node.Type() != NodeTypeParameter {
-			exceptions.Panicf("graph %q Run() received a non-parameter node as key to an input", g.name)
+			exceptions.Panicf("graph %q RunWithMap() received a non-parameter node as key to an input", g.name)
 		}
 	}
-	inputBuffers := g.inputsMapToBuffers(inputs, 0)
-	results := g.executable.Execute(inputBuffers...)
-	outputs = xslices.Map(results, func(buf backends.Buffer) *tensors.Tensor { return tensors.FromBuffer(g.backend, buf) })
-	return
-}
-
-// RunWithTensors is a slightly faster execution path for the graph, but inputNodes
-// must be provided already in Device tensors and in order.
-func (g *Graph) RunWithTensors(inputs []*tensors.Tensor) (outputs []*tensors.Tensor) {
-	g.AssertCompiled()
-	deviceNum := backends.DeviceNum(0)
-	inputBuffers := xslices.Map(inputs, func(tensor *tensors.Tensor) backends.Buffer { return tensor.Buffer(g.backend, deviceNum) })
-	results := g.executable.Execute(inputBuffers...)
-	outputs = xslices.Map(results, func(buf backends.Buffer) *tensors.Tensor { return tensors.FromBuffer(g.backend, buf) })
-	return
-}
-
-// inputsMapToBuffers converts each input to a tensors.Tensor and then to a backends.Buffer.
-func (g *Graph) inputsMapToBuffers(inputs ParamsMap, deviceNum backends.DeviceNum) (buffers []backends.Buffer) {
-	buffers = make([]backends.Buffer, g.NumParameters())
+	buffers := make([]backends.Buffer, g.NumParameters())
+	donate := make([]bool, g.NumParameters())
 	for node, value := range inputs {
 		handle := node.GetParameterHandle()
 		if buffers[handle] != nil {
 			exceptions.Panicf("Graph %q input for node %q defined more than once", g.name, node)
 		}
-		buffers[handle] = anyToBuffer(g.backend, deviceNum, value)
+		buffers[handle], _, donate[handle] = anyToBuffer(g.backend, deviceNum, value)
 	}
+	return g.RunWithBuffers(buffers, donate)
+}
+
+// RunWithBuffers executes the graph using as inputs the on-device buffers.
+//
+// For the normal user, consider using the Exec wrapper, or Graph.Run.
+//
+// The donate slice indicates which buffers can be donated to the execution -- they are immediately finalized after
+// the execution is finished.
+func (g *Graph) RunWithBuffers(inputs []backends.Buffer, donate []bool) (outputs []*tensors.Tensor) {
+	g.AssertCompiled()
+	numParams := g.NumParameters()
+	if len(inputs) != numParams {
+		exceptions.Panicf("graph %q takes %d parameters, but %d were given to RunWithBuffers()", g.name, numParams, len(inputs))
+	}
+	if len(donate) != numParams {
+		exceptions.Panicf("graph %q takes %d donate values for the input parameters, but %d were given to RunWithBuffers()", g.name, numParams, len(donate))
+	}
+	results := g.executable.Execute(inputs, donate)
+	for ii, wasDonated := range donate {
+		if wasDonated {
+			g.backend.BufferFinalize(inputs[ii])
+		}
+	}
+	outputs = xslices.Map(results, func(buf backends.Buffer) *tensors.Tensor { return tensors.FromBuffer(g.backend, buf) })
 	return
 }
 
-// anyToBuffer converts generic values to a tensor.Device on the requested device number.
-func anyToBuffer(backend backends.Backend, deviceNum backends.DeviceNum, value any) backends.Buffer {
+// anyToBuffer converts generic values to a tensor.Device on the requested device number, and whether the buffer can
+// be donated.
+func anyToBuffer(backend backends.Backend, deviceNum backends.DeviceNum, value any) (backends.Buffer, shapes.Shape, bool) {
 	t, ok := value.(*tensors.Tensor)
-	if !ok {
-		t = tensors.FromAnyValue(value)
+	if ok {
+		// If a Tensor is given without Donate, it is assumed not for donation.
+		return t.Buffer(backend, deviceNum), t.Shape(), false
 	}
-	return t.Buffer(backend, deviceNum)
+	b, ok := value.(*donateBuffer)
+	if ok {
+		return b.buffer, b.shape, true
+	}
+	// A Go value by default is converted to a buffer and can be donated.
+	t = tensors.FromAnyValue(value)
+	shape := t.Shape()
+	return t.DonateBuffer(backend, deviceNum), shape, true
+
 }
 
 // NumParameters returns the number of parameters created for this graph.

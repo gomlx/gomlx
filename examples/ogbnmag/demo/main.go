@@ -6,7 +6,6 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	mag "github.com/gomlx/gomlx/examples/ogbnmag"
 	"github.com/gomlx/gomlx/examples/ogbnmag/gnn"
-	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	mldata "github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"
@@ -120,7 +119,7 @@ func main() {
 	fmt.Printf("elapsed: %s\n", time.Since(start))
 	SetTrainSteps(ctx) // Can only be set after mag data is loaded.
 
-	// Run train / eval.
+	// RunWithMap train / eval.
 	mag.WithReplacement = context.GetParamOr(ctx, paramWithReplacement, false)
 	var err error
 	if *flagEval {

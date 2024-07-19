@@ -514,7 +514,7 @@ func (ctx *Context) InitializeVariables(backend backends.Backend) {
 	var values []*tensors.Tensor
 	err := TryCatch[error](func() {
 		g.Compile(valuesNodes...)
-		values = g.Run(nil)
+		values = g.Run()
 	})
 	if err != nil {
 		panic(errors.WithMessagef(err, "failed to compile/run variable initialization graph"))

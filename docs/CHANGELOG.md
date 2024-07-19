@@ -12,6 +12,7 @@
   * On-device storage now using generic `backends.Backend` api.
   * Improved testing using xla, greatly simplified.
 * Package `graph`:
+  * Added support for donated tensors for execution. 
   * Updated `OneHot` to use `Where`.
 * Package `exceptions` removed: using the (same) now external [`github.com/gomlx/exceptions`](github.com/gomlx/exceptions) instead.
 * Package `slices` renamed to `xslices`, not to mix up with the new standard pacakge `slices`.

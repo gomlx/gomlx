@@ -136,7 +136,7 @@ func Download(baseDir string) error {
 }
 
 // downloadZip downloads, uncompress and then removes the Zip file.
-// Run this only if tensor files are not available.
+// RunWithMap this only if tensor files are not available.
 func downloadZip(downloadDir string) error {
 	if err := os.MkdirAll(downloadDir, 0777); err != nil && !os.IsExist(err) {
 		return errors.Wrapf(err, "Failed to create path for downloading %q", downloadDir)

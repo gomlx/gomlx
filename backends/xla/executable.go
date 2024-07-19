@@ -95,13 +95,22 @@ func (e *Executable) Outputs() (outputShapes []shapes.Shape) {
 }
 
 // Execute the executable on the default device (0). The number and shapes of the inputs must match those returned by Inputs.
-func (e *Executable) Execute(inputs ...backends.Buffer) []backends.Buffer {
+func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) []backends.Buffer {
 	e.AssertValid()
 	if len(inputs) != len(e.parameterShapes) {
 		exceptions.Panicf("backend %q: wrong number of parameters to Execute %q: %d given, %d expected", BackendName, e.name, len(inputs), len(e.parameterShapes))
 	}
+	if len(donate) > 0 && len(donate) != len(e.parameterShapes) {
+		exceptions.Panicf("backend %q: wrong number of donate values to Execute %q: %d given, nil or %d expected", BackendName, e.name, len(donate), len(e.parameterShapes))
+	}
 	pInputs := xslices.Map(inputs, castToPJRT)
-	pOutputs, err := e.exec.Execute(pInputs...).NotDonatable().Done()
+	var pOutputs []*pjrt.Buffer
+	var err error
+	if len(donate) == 0 {
+		pOutputs, err = e.exec.Execute(pInputs...).DonateNone().Done()
+	} else {
+		pOutputs, err = e.exec.Execute(pInputs...).SetDonate(donate).Done()
+	}
 	if err != nil {
 		panic(errors.WithMessagef(err, "backend %q: failed to execute computation %q", BackendName, e.name))
 	}

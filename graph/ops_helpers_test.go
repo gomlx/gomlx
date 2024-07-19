@@ -44,7 +44,7 @@ func testFuncOneInput(t *testing.T, testName string, graphFn graphFnOneInputToTe
 		g := NewGraph(backend, testName)
 		input, output := graphFn(g)
 		g.Compile(input, output)
-		outputs := g.Run(nil)
+		outputs := g.Run()
 		fmt.Printf("\t%s(%s) = %s\n", testName, outputs[0].GoStr(), outputs[1].GoStr())
 		wantTensor := tensors.FromAnyValue(want)
 		require.Truef(t, wantTensor.InDelta(outputs[1], margin), "%s(%v): want=%v, got=%v", testName, outputs[0], wantTensor, outputs[1])
@@ -58,7 +58,7 @@ func TestBackendSlice(t *testing.T) {
 	numbers = ReshapeWithShape(numbers, shapes.Make(dtypes.Float64, 3, 3))
 	slice := backendSlice(numbers, []int{1, 1}, []int{2, 3}, []int{1, 1})
 	g.Compile(slice)
-	got := g.Run(nil)[0]
+	got := g.Run()[0]
 	want := [][]float64{{4, 5}}
 	require.Equalf(t, want, got.Value(), "Iota: want %v, got %v", want, got)
 }

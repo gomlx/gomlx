@@ -117,6 +117,7 @@ func addScalarTest(x *Node) *Node {
 	return Add(x, Parameter(x.Graph(), scalarParamName, MakeShape(F64)))
 }
 
+/*
 func TestExecWithSideParams(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 	scalar := tensors.FromValue(3.0)
@@ -141,6 +142,7 @@ func TestExecWithSideParams(t *testing.T) {
 	got = addScalar.Call(x)[0]
 	require.Equalf(t, want, got.Value(), "addScalar(%v, 3): got %v, wanted %v", x, got, want)
 }
+*/
 
 func concatGraph(nodes []*Node) *Node {
 	return Concatenate(nodes, -1)

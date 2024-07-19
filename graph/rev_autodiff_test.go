@@ -40,7 +40,7 @@ func TestGradientAdd(t *testing.T) {
 		outputs = append(outputs, gradients...)
 		g.Compile(outputs...)
 	}
-	outputs := g.Run(nil)
+	outputs := g.Run()
 
 	{
 		got := outputs[0]

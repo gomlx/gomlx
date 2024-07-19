@@ -55,7 +55,7 @@ func testFuncOneInput(t *testing.T, testName string, graphFn graphFnOneInputToTe
 	g := NewGraph(backend, testName)
 	inputNode, outputNode := graphFn(g)
 	g.Compile(inputNode, outputNode)
-	results := g.Run(nil)
+	results := g.Run()
 	input, got := results[0], results[1]
 	if !wantTensor.InDelta(got, Epsilon) {
 		t.Errorf("%s(%#v):\n\twant=%v, got=%s", testName, input, wantTensor.GoStr(), got.GoStr())
@@ -87,7 +87,7 @@ func compileRunAndTakeFirst(t *testing.T, g *Graph) *tensors.Tensor {
 	var output *tensors.Tensor
 	require.NotPanics(t, func() {
 		g.Compile(g.LastNode())
-		output = g.Run(nil)[0]
+		output = g.Run()[0]
 	})
 	return output
 }
@@ -186,7 +186,7 @@ func TestParameter(t *testing.T) {
 		// Tests for various parameters.
 		for xV := float32(0); xV < 3; xV += 1 {
 			for yV := float32(0); yV < 3; yV += 1 {
-				gotTensor := g.Run(ParamsMap{x: xV, y: yV})[0]
+				gotTensor := g.RunWithMap(ParamsMap{x: xV, y: yV})[0]
 				got := tensors.ToScalar[float32](gotTensor)
 				if got != xV+yV {
 					fmt.Printf("%s\n", g)
@@ -483,7 +483,7 @@ func TestReduceSum(t *testing.T) {
 	}
 	for _, testCase := range cases {
 		g := reduceSumGraph(t, backend, testCase.dims)
-		got := g.Run(nil)[0]
+		got := g.Run()[0]
 		wantT := tensors.FromAnyValue(testCase.want)
 		if !wantT.InDelta(got, Epsilon) {
 			t.Errorf("Wanted %v, got %v", testCase.want, got)
@@ -560,7 +560,7 @@ func TestIota(t *testing.T) {
 		g := NewGraph(backend, "").WithName("iota0")
 		Iota(g, MakeShape(F64, 2, 2), 0)
 		g.Compile(g.LastNode())
-		got := g.Run(nil)[0]
+		got := g.Run()[0]
 		want := tensors.FromValue([][]float64{{0, 0}, {1, 1}})
 		if !want.Equal(got) {
 			t.Fatalf("Iota: want %v, got %v", want, got)
@@ -570,7 +570,7 @@ func TestIota(t *testing.T) {
 		g := NewGraph(backend, "").WithName("iota0")
 		Iota(g, MakeShape(F64, 2, 2), 1)
 		g.Compile(g.LastNode())
-		got := g.Run(nil)[0]
+		got := g.Run()[0]
 		want := tensors.FromValue([][]float64{{0, 1}, {0, 1}})
 		if !want.Equal(got) {
 			t.Fatalf("Iota: want %v, got %v", want, got)
@@ -663,7 +663,7 @@ func TestConcatenate(t *testing.T) {
 		x2 := Add(IotaFull(g, MakeShape(F64, 5)), Const(g, float64(3)))
 		concat := Concatenate([]*Node{x1, x2}, 0)
 		g.Compile(concat)
-		got := g.Run(nil)[0]
+		got := g.Run()[0]
 		fmt.Printf("\t\tresult=%s\n", got.GoStr())
 		want := tensors.FromValue([]float64{0, 1, 2, 3, 4, 5, 6, 7})
 		if !want.Equal(got) {
@@ -678,7 +678,7 @@ func TestConcatenate(t *testing.T) {
 		x2 := Add(IotaFull(g, MakeShape(F64, 2, 1, 2)), Const(g, float64(8)))
 		concat := Concatenate([]*Node{x1, x2}, 1)
 		g.Compile(concat)
-		got := g.Run(nil)[0]
+		got := g.Run()[0]
 		fmt.Printf("\t\tresult=%s\n", got.GoStr())
 		want := tensors.FromValue([][][]float64{{{0, 1}, {2, 3}, {8, 9}}, {{4, 5}, {6, 7}, {10, 11}}})
 		if !want.Equal(got) {

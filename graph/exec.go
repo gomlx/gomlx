@@ -373,23 +373,17 @@ func (e *Exec) compileAndExecute(execute bool, args ...any) (results []*tensors.
 	}
 
 	// Convert args to tensors.
-	argsAsTensors := make([]*tensors.Tensor, 0, len(args)) // There may be more parameters, set with Exec.setSideParams later.
-	argsShapes := make([]shapes.Shape, 0, len(args))       // There may be more parameters, set with Exec.setSideParams later.
+	argsAsBuffer := make([]backends.Buffer, len(args)) // There may be more parameters, set with Exec.setSideParams later.
+	argsShapes := make([]shapes.Shape, len(args))      // There may be more parameters, set with Exec.setSideParams later.
+	argsDonate := make([]bool, len(args))
 	for ii, arg := range args {
-		var tensor *tensors.Tensor
 		err := TryCatch[error](func() {
-			var ok bool
-			tensor, ok = arg.(*tensors.Tensor)
-			if !ok {
-				tensor = tensors.FromAnyValue(arg)
-			}
+			argsAsBuffer[ii], argsShapes[ii], argsDonate[ii] = anyToBuffer(e.backend, e.deviceNum, arg)
 		})
 		if err != nil {
 			panic(errors.WithMessagef(err, "Failed to convert argument #%d of %d to device(%d) -- type %T: %v",
 				ii, len(args), e.deviceNum, args[ii], args[ii]))
 		}
-		argsAsTensors = append(argsAsTensors, tensor)
-		argsShapes = append(argsShapes, tensor.Shape())
 	}
 
 	// Get or build the graph.
@@ -405,20 +399,23 @@ func (e *Exec) compileAndExecute(execute bool, args ...any) (results []*tensors.
 	g = entry.graph
 
 	// Set extra input parameters created by the graph.
-	numExtraInputs := g.NumParameters() - len(args)
-	for numExtraInputs > 0 {
-		argsAsTensors = append(argsAsTensors, nil)
-		numExtraInputs--
+	//numExtraInputs := g.NumParameters() - len(args)
+	//for numExtraInputs > 0 {
+	//	argsAsTensors = append(argsAsTensors, nil)
+	//	numExtraInputs--
+	//}
+	//if e.setSideParams != nil {
+	//	e.setSideParams(g, argsAsTensors)
+	//}
+	if g.NumParameters() != len(args) {
+		Panicf(
+			"# of arguments to call (#args=%d) don't match # arguments to the graph function (#args=%d) for %q",
+			len(args), e.numInputs, e.Name())
 	}
-	if e.setSideParams != nil {
-		e.setSideParams(g, argsAsTensors)
-	}
-	if g.NumParameters() > len(args) {
-		for ii, t := range argsAsTensors {
-			if t == nil {
-				Panicf("parameter %d (%q) is nil or invalid, maybe a variable value not set as a "+
-					"parameter, cannot execute g", ii, g.GetParameterByHandle(ParameterHandle(ii)).GetParameterName())
-			}
+	for ii, t := range argsAsBuffer {
+		if t == nil {
+			Panicf("parameter %d (%q) is nil or invalid, maybe a variable value not set as a "+
+				"parameter, cannot execute g", ii, g.GetParameterByHandle(ParameterHandle(ii)).GetParameterName())
 		}
 	}
 
@@ -426,7 +423,7 @@ func (e *Exec) compileAndExecute(execute bool, args ...any) (results []*tensors.
 	if !execute {
 		return
 	}
-	results = g.RunWithTensors(argsAsTensors)
+	results = g.RunWithBuffers(argsAsBuffer, argsDonate)
 
 	// Call logger on logged nodes, even if no node is marked for logging (it serves as a hook).
 	numGraphFnOutputs := entry.numOutputs - len(entry.loggedMessages)

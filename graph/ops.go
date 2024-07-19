@@ -43,7 +43,7 @@ func (ni *nodeInputsParameter) String() string {
 // When created they get a handle (a plain index) but they can also be accessed
 // It can be used in two different ways: as a Node when building the Graph, so when defining a
 // function that uses the parameter, or as the key in the map of the inputNodes when executing
-// the computation Graph (see Backend.Run).
+// the computation Graph (see Backend.RunWithMap).
 func Parameter(g *Graph, name string, shape shapes.Shape) (node *Node) {
 	g.AssertBuilding()
 	handle := ParameterHandle(len(g.parameters))

@@ -31,9 +31,6 @@ func FromBuffer(backend backends.Backend, buffer backends.Buffer) (t *Tensor) {
 // Buffer returns the backend buffer for the tensor.
 // It triggers the transfer from local to the device, if the tensor is not already store on device.
 //
-// If you use the returned buffer in a "donatable" fashion (the accelerator may rewrite the buffer), remember to
-// finalize and invalidate the tensor -- it doesn't happen automatically.
-//
 // The deviceNum is optional. But only one can be given. The default value is 0.
 func (t *Tensor) Buffer(backend backends.Backend, deviceNum ...backends.DeviceNum) backends.Buffer {
 	t.mu.Lock()
@@ -47,6 +44,34 @@ func (t *Tensor) Buffer(backend backends.Backend, deviceNum ...backends.DeviceNu
 	}
 	t.lockedMaterializeOnDevices(backend, deviceNum...)
 	return t.onDevices[deviceNum[0]].buffer
+}
+
+// DonateBuffer returns the backend buffer for the tensor, and transfers the ownership of the buffer to the caller.
+// This may invalidate the tensor, if there is no other on-device storage or local storage.
+//
+// Mostly used internally -- by graph.Graph.Run and graph.Exec when the value in the buffer is no longer needed
+// after execution.
+//
+// It triggers the transfer from local to the device, if the tensor is not already store on device.
+//
+// The deviceNum is optional. But only one can be given. The default value is 0.
+func (t *Tensor) DonateBuffer(backend backends.Backend, deviceNum ...backends.DeviceNum) backends.Buffer {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.AssertValid()
+	if len(deviceNum) > 1 {
+		exceptions.Panicf("Tensor.Buffer takes at most one deviceNum, %v given", deviceNum)
+	}
+	if len(deviceNum) == 0 {
+		deviceNum = defaultDeviceNums
+	}
+	t.lockedMaterializeOnDevices(backend, deviceNum...)
+	buf := t.onDevices[deviceNum[0]].buffer
+	delete(t.onDevices, deviceNum[0])
+	if t.local == nil && len(t.onDevices) == 0 {
+		t.FinalizeAll()
+	}
+	return buf
 }
 
 // IsFinalized returns true if the tensor has already been "finalized", and its

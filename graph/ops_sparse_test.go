@@ -35,7 +35,7 @@ func TestIndicesForShape(t *testing.T) {
 	shape := MakeShape(F64, 2, 3, 4)
 	numbers := IndicesForShape(g, shape)
 	g.Compile(numbers)
-	got := g.Run(nil)[0]
+	got := g.Run()[0]
 	fmt.Printf("\tIndicesForShape(%s)=%v\n", shape, got)
 	want := [][]int64{{0, 0, 0}, {0, 0, 1}, {0, 0, 2}, {0, 0, 3}, {0, 1, 0}, {0, 1, 1}, {0, 1, 2}, {0, 1, 3}, {0, 2, 0}, {0, 2, 1}, {0, 2, 2}, {0, 2, 3}, {1, 0, 0}, {1, 0, 1}, {1, 0, 2}, {1, 0, 3}, {1, 1, 0}, {1, 1, 1}, {1, 1, 2}, {1, 1, 3}, {1, 2, 0}, {1, 2, 1}, {1, 2, 2}, {1, 2, 3}}
 	require.Equalf(t, want, got.Value(), "IndicesForShape(%s): want %v, got %v", shape, want, got)
@@ -51,7 +51,7 @@ func TestGather(t *testing.T) {
 		indices := Const(g, 1)
 		gather := Gather(numbers, indices)
 		g.Compile(gather)
-		got := g.Run(nil)[0]
+		got := g.Run()[0]
 		fmt.Printf("\t\tGather=%v\n", got)
 		want := []float64{3, 4, 5}
 		require.Equalf(t, want, got.Value(), "Gather: want %v, got %v", want, got)
@@ -65,7 +65,7 @@ func TestGather(t *testing.T) {
 		indices := Const(g, [][]int{{2}, {0}})
 		gather := Gather(numbers, indices)
 		g.Compile(gather)
-		got := g.Run(nil)[0]
+		got := g.Run()[0]
 		fmt.Printf("\t\tGather=%v\n", got)
 		want := [][]float64{{6, 7, 8}, {0, 1, 2}}
 		require.Equalf(t, want, got.Value(), "Gather: want %v, got %v", want, got)
@@ -79,7 +79,7 @@ func TestGather(t *testing.T) {
 		indices := Const(g, [][][]int{{{2}, {0}}, {{2}, {1}}})
 		gather := Gather(numbers, indices)
 		g.Compile(gather)
-		got := g.Run(nil)[0]
+		got := g.Run()[0]
 		fmt.Printf("\t\tGather=%v\n", got)
 		want := [][][]float64{{{6, 7, 8}, {0, 1, 2}}, {{6, 7, 8}, {3, 4, 5}}}
 		require.Equalf(t, want, got.Value(), "Gather: want %v, got %v", want, got)
@@ -93,7 +93,7 @@ func TestGather(t *testing.T) {
 		indices := Const(g, [][]int{{2}, {0}, {1}, {3}})
 		gather := Gather(numbers, indices)
 		g.Compile(gather)
-		got := g.Run(nil)[0]
+		got := g.Run()[0]
 		fmt.Printf("\t\tGather=%v\n", got)
 		want := [][][]float64{{{8, 9}, {10, 11}}, {{0, 1}, {2, 3}}, {{4, 5}, {6, 7}}, {{12, 13}, {14, 15}}}
 		require.Equalf(t, want, got.Value(), "Gather: want %v, got %v", want, got)
@@ -140,7 +140,7 @@ func TestScatter(t *testing.T) {
 		indices := Const(g, 1)
 		scatter := Scatter(indices, numbers, MakeShape(F64, 2, 3))
 		g.Compile(scatter)
-		got := g.Run(nil)[0]
+		got := g.Run()[0]
 		fmt.Printf("\t\tscatter=%v\n", got)
 		want := [][]float64{{0, 0, 0}, {2, 3, 4}}
 		require.Equalf(t, want, got.Value(), "Scatter: want %v, got %v", want, got)
@@ -155,7 +155,7 @@ func TestScatter(t *testing.T) {
 		operand := Ones(g, MakeShape(F64, 3, 3, 1))
 		scatter := ScatterAdd(operand, indices, numbers, false, true)
 		g.Compile(scatter)
-		got := g.Run(nil)[0]
+		got := g.Run()[0]
 		fmt.Printf("\t\tscatter=%v\n", got)
 		want := [][][]float64{{{4}, {5}, {6}}, {{1}, {1}, {1}}, {{1}, {2}, {3}}}
 		require.Equalf(t, want, got.Value(), "Scatter: want %v, got %v", want, got)

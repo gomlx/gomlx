@@ -204,7 +204,7 @@ func AttachProgressBar(loop *train.Loop) {
 		}()
 	}
 	loop.OnStart(ProgressBarName, 0, pBar.onStart)
-	// Run at least 1000 during loop or at least every 3 seconds.
+	// RunWithMap at least 1000 during loop or at least every 3 seconds.
 	train.NTimesDuringLoop(loop, 1000, ProgressBarName, 0, pBar.onStep)
 	train.PeriodicCallback(loop, 3*time.Second, false, ProgressBarName, 0, pBar.onStep)
 	loop.OnEnd(ProgressBarName, 0, pBar.onEnd)
