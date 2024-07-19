@@ -55,7 +55,7 @@ import (
 // One could create a new context with:
 //
 //	func main() {
-//		ctx := context.NewContext(backend)
+//		ctx := context.NewContext()
 //		ctx.SetParam("dropout_rate") = 0.2  // Set default dropout to 0.2
 //		...
 //	}
@@ -94,9 +94,6 @@ type Context struct {
 	// to false it makes reuse irrelevant.
 	checked bool
 
-	// deviceNumber where to store new variables.
-	deviceNumber backends.DeviceNum
-
 	// initializer is used to initialize variable values for a given shape.
 	initializer VariableInitializer
 
@@ -110,8 +107,6 @@ type scopedVariableMap map[string]*Variable
 // contextData stores all context information and is shared among various Context, which
 // serve only as scoped references.
 type contextData struct {
-	backend Backend
-
 	// params holds a model's building (hyper)parameters. Context
 	// is agnostic about the semantics here, hence it's a scoped map of scope+key (both strings)
 	// to any type of which Context has no knowledge. These values are interpreted by
@@ -121,7 +116,7 @@ type contextData struct {
 	//
 	// Usually the root values are set just after context creation. But layers of a model
 	// may set values within scopes for its sub-layers.
-	params *ScopedParams
+	params *scopedParams
 
 	// graphParams hold models parameters for a particular graph. It's scoped like params,
 	// and these values are interpreted by the various model components independently. E.g:
@@ -130,7 +125,7 @@ type contextData struct {
 	//   indicate whether the graph is being used for training or for inference. This is
 	//   used by layers that behave differently when training and inference (e.g: Dropout,
 	//   BatchNorm, etc.).
-	graphParams map[graph.GraphId]*ScopedParams
+	graphParams map[graph.GraphId]*scopedParams
 
 	// variablesMap for this context organized per scope.
 	variablesMap map[string]scopedVariableMap
@@ -164,15 +159,13 @@ type Loader interface {
 }
 
 // NewContext constructs a new and empty context.
-func NewContext(backend Backend) *Context {
+func NewContext() *Context {
 	ctx := &Context{
-		scope:        RootScope,
-		deviceNumber: 0,
-		checked:      true,
+		scope:   RootScope,
+		checked: true,
 		data: &contextData{
-			backend:      backend,
-			params:       NewScopedParams(),
-			graphParams:  make(map[graph.GraphId]*ScopedParams),
+			params:       newScopedParams(),
+			graphParams:  make(map[graph.GraphId]*scopedParams),
 			variablesMap: make(map[string]scopedVariableMap),
 		},
 	}
@@ -194,11 +187,6 @@ func (ctx *Context) copy() *Context {
 	ctx2 := &Context{}
 	*ctx2 = *ctx
 	return ctx2
-}
-
-// Backend returns the backend associated with this context.
-func (ctx *Context) Backend() Backend {
-	return ctx.data.backend
 }
 
 // Scope returns the full scope path.
@@ -406,7 +394,7 @@ func (ctx *Context) EnumerateParams(fn func(scope, key string, value any)) {
 // set this state, as the same Context is used for evaluation/inference graphs and
 // training graphs, and they will have different values.
 func (ctx *Context) GetGraphParam(g *Graph, key string) (value any, found bool) {
-	var graphParams *ScopedParams
+	var graphParams *scopedParams
 	graphParams, found = ctx.data.graphParams[g.GraphId()]
 	if !found {
 		return
@@ -474,7 +462,7 @@ func GetGraphParamOr[T any](ctx *Context, g *Graph, key string, defaultValue T) 
 func (ctx *Context) SetGraphParam(g *Graph, key string, value any) {
 	graphParams, found := ctx.data.graphParams[g.GraphId()]
 	if !found {
-		graphParams = NewScopedParams()
+		graphParams = newScopedParams()
 		ctx.data.graphParams[g.GraphId()] = graphParams
 	}
 	graphParams.Set(ctx.scope, key, value)
@@ -504,7 +492,9 @@ func (ctx *Context) NeedsInitialization() bool {
 //
 // Notice that variables information is stored in the "data" component of Context objects, and is shared
 // among all connected context references.
-func (ctx *Context) InitializeVariables() {
+//
+// Initialization functions are executed on the given backend.
+func (ctx *Context) InitializeVariables(backend backends.Backend) {
 	var variablesToInitialize []*Variable
 	ctx.EnumerateVariables(func(v *Variable) {
 		if v.value == nil {
@@ -515,7 +505,7 @@ func (ctx *Context) InitializeVariables() {
 		// Nothing to do.
 		return
 	}
-	g := graph.NewGraph(ctx.data.backend, "InitializeVariables")
+	g := graph.NewGraph(backend, "InitializeVariables")
 	valuesNodes := make([]*Node, 0, len(variablesToInitialize))
 	for _, variable := range variablesToInitialize {
 		valuesNodes = append(valuesNodes, variable.initializer(g, variable.shape))
@@ -895,9 +885,11 @@ func (ctx *Context) ExecPopulateGraphParamsMap(g *Graph, params graph.ParamsMap)
 // execPopulateGraphParamsSlice will fill the graph parameter values for every variable used in the given graph.
 // It keeps a cache of the variables' mapping for faster access.
 //
+// It's assumed len(params) = g.NumParameters()
+//
 // `Exec*` methods are used by those implementing an executor (context.Exec) or related tests, not normally
 // needed by end users.
-func (ctx *Context) execPopulateGraphParamsSlice(g *Graph, params []*tensors.Tensor, deviceNum backends.DeviceNum) {
+func (ctx *Context) execPopulateGraphParamsSlice(g *Graph, params []*tensors.Tensor) {
 	graphId := g.GraphId()
 	ctx.EnumerateVariables(func(v *Variable) {
 		nodes, found := v.graphToNodes[graphId]
@@ -907,13 +899,7 @@ func (ctx *Context) execPopulateGraphParamsSlice(g *Graph, params []*tensors.Ten
 		if nodes == nil || nodes.paramNode == nil || nodes.paramNode.Type() != graph.NodeTypeParameter {
 			Panicf("invalid paramNode for variable %q", v.ParameterName())
 		}
-		var tensor *tensors.Tensor
-		err := TryCatch[error](func() { tensor = v.Value().Device(g.Backend(), deviceNum) })
-		if err != nil {
-			panic(errors.WithMessagef(err, "failed to transfer variable \"%s::%s\" value to accelerator device %d",
-				v.Scope(), v.Name(), deviceNum))
-		}
-		params[nodes.paramNode.GetParameterHandle()] = tensor
+		params[nodes.paramNode.GetParameterHandle()] = v.Value()
 	})
 }
 

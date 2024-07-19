@@ -18,6 +18,8 @@ package context
 
 import (
 	"fmt"
+	. "github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/pkg/errors"
@@ -145,7 +147,7 @@ type ExecGraphFn interface {
 // There is concurrency safety with the cache of Graphs, but XLA concurrency is
 // not documented. TODO: figure it out.
 type Exec struct {
-	manager *graph.Manager
+	backend backends.Backend
 	context *Context
 	exec    *graph.Exec
 
@@ -177,12 +179,12 @@ type Exec struct {
 //
 // If any input or output parameter of ctxGraphFn is not a *Node (except the *Context and optionally
 // a *Graph), or if there are no inputs or outputs, it returns an error.
-func NewExecAny(manager *Backend, ctx *Context, ctxGraphFn any) (*Exec, error) {
+func NewExecAny(backend backends.Backend, ctx *Context, ctxGraphFn any) (*Exec, error) {
 	if ctx == nil {
-		ctx = NewContext(manager)
+		ctx = NewContext()
 	}
 	e := &Exec{
-		manager:     manager,
+		backend:     backend,
 		context:     ctx,
 		ctxGraphFn:  ctxGraphFn,
 		changedVars: make(map[graph.GraphId][]*Variable),
@@ -241,7 +243,7 @@ func NewExecAny(manager *Backend, ctx *Context, ctxGraphFn any) (*Exec, error) {
 	}
 
 	e.buildGraphFn()
-	e.exec = graph.NewExecAny(manager, e.graphFn)
+	e.exec = graph.NewExecAny(backend, e.graphFn)
 	funcName := runtime.FuncForPC(reflect.ValueOf(ctxGraphFn).Pointer()).Name()
 	e.exec.SetName(fmt.Sprintf("Context.Exec:%s", funcName))
 	e.exec.SetSideParamsHook(e.setSideParams)
@@ -354,7 +356,7 @@ func (e *Exec) Finalize() {
 func (e *Exec) setSideParams(graph *Graph, tensors []*tensors.Tensor) {
 	// Initialize variables if needed.
 	if e.context.NeedsInitialization() {
-		e.context.InitializeVariables()
+		e.context.InitializeVariables(e.backend)
 	}
 	e.context.execPopulateGraphParamsSlice(graph, tensors)
 }
@@ -384,8 +386,8 @@ func (e *Exec) GetNodeLogger() graph.LoggerFn {
 //
 // This is a generic wrapper around NewExecAny that check that types are
 // correct (but doesn't support all possible types of ctxGraphFn).
-func NewExec[F ExecGraphFn](manager *Backend, ctx *Context, ctxGraphFn F) *Exec {
-	e, err := NewExecAny(manager, ctx, ctxGraphFn)
+func NewExec[F ExecGraphFn](backend backends.Backend, ctx *Context, ctxGraphFn F) *Exec {
+	e, err := NewExecAny(backend, ctx, ctxGraphFn)
 	if err != nil {
 		log.Fatalf("Failed to create Exec object: %+v", err)
 	}
@@ -395,7 +397,7 @@ func NewExec[F ExecGraphFn](manager *Backend, ctx *Context, ctxGraphFn F) *Exec 
 // InDevice sets the device num to be used by graphs constructed by Exec.
 // This should be called before any invocations of Call().
 // It returns a reference to itself so calls can be cascaded.
-func (e *Exec) InDevice(deviceNum int) *Exec {
+func (e *Exec) InDevice(deviceNum backends.DeviceNum) *Exec {
 	e.exec.InDevice(deviceNum)
 	return e
 }
@@ -453,7 +455,7 @@ func (e *Exec) SetContext(context *Context) *Exec {
 // It returns the outputs in a slice, even if there is only one output.
 //
 // It panics with an informative error if something goes wrong.
-func (e *Exec) Call(args ...any) []tensors.Tensor {
+func (e *Exec) Call(args ...any) []*tensors.Tensor {
 	outputs, _ := e.CallWithGraph(args...)
 	return outputs
 }
@@ -467,7 +469,7 @@ func (e *Exec) Call(args ...any) []tensors.Tensor {
 // to execute the computation.
 //
 // It panics with an informative error if something goes wrong.
-func (e *Exec) CallWithGraph(args ...any) (outputs []tensors.Tensor, g *Graph) {
+func (e *Exec) CallWithGraph(args ...any) (outputs []*tensors.Tensor, g *Graph) {
 	outputs, g = e.exec.CallWithGraph(args...)
 	if len(outputs) == 0 {
 		Panicf("No outputs from ModelFn function for %q", e.Name())
