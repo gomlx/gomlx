@@ -122,7 +122,25 @@ func (t *Tensor) lockedMaterializeOnDevices(backend backends.Backend, deviceNums
 	}
 }
 
-// lockedInvalidateOnDevice destroys all on-device copies of the Tensor. Automatically called when the Tensor is mutated (e.g.: Tensor.MutableFlatData).
+// InvalidateOnDevice destroys all on-device copies of the Tensor.
+//
+// This is automatically called when the Tensor is mutated (e.g.: Tensor.MutableFlatData) or when the on-device value
+// is donated to the execution of a graph.
+//
+// If there is no local copy of the Tensor, this will invalidate the whole tensor.
+//
+// Usually, this is called automatically. Mostly for internal use.
+func (t *Tensor) InvalidateOnDevice() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.lockedInvalidateOnDevice()
+}
+
+// lockedInvalidateOnDevice destroys all on-device copies of the Tensor.
+//
+// This is automatically called when the Tensor is mutated (e.g.: Tensor.MutableFlatData) or when the on-device value
+// is donated to the execution of a graph.
+//
 // If there is no local copy of the Tensor, this will invalidate the tensor.
 //
 // Usually, this is called automatically. Mostly for internal use.
@@ -136,7 +154,16 @@ func (t *Tensor) lockedInvalidateOnDevice() {
 	})
 }
 
-// lockedMaterializeLocal will transfer a Tensor stored on-device to local storage, that can be accessed by Go.
+// MaterializeLocal will make sure there is a local storage of the tensor.
+// If there isn't already a local copy, this triggers a transfer from an on-device storage to a local copy.
+func (t *Tensor) MaterializeLocal() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.lockedMaterializeLocal()
+}
+
+// lockedMaterializeLocal will make sure there is a local storage copy of the tensor.
+// If there isn't already a local copy, this triggers a transfer from an on-device storage to a local copy.
 //
 // Usually, this is called automatically by all methods that provide Go access to the data (e.g.: Tensor.ConstFlatData).
 func (t *Tensor) lockedMaterializeLocal() {
