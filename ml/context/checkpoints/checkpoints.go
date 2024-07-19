@@ -60,6 +60,7 @@ package checkpoints
 import (
 	"encoding/json"
 	"fmt"
+	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
@@ -96,11 +97,14 @@ type Config struct {
 
 	err error
 
-	dir             string
-	includeParams   bool
-	immediate       bool
-	keep            int
-	takeMean        int
+	dir           string
+	includeParams bool
+	immediate     bool
+	keep          int
+
+	backend  backends.Backend // used when taking the mean.
+	takeMean int
+
 	excludeFromSave types.Set[*context.Variable]
 }
 
@@ -238,10 +242,25 @@ func (c *Config) Keep(n int) *Config {
 //
 // The default is 1, so only load the most recent checkpoint.
 //
+// If n != 1, it requires a backend that will be used to calculate the mean.
+// If n == 1, the backend argument is ignored and can be nil.
+//
 // Notice the mean is taken one tensor at a time, so at any time there is only one copy
 // of the model weights in memory, plus the tensor being merged.
-func (c *Config) TakeMean(n int) *Config {
+//
+// If a mean is calculated, the values of the variables will be stored on-device. This can be good -- if their values
+// are going to be used on-device anyway -- or bad -- if they are not needed on-device, and it's using the limited
+// on-device space. Consider tensors.Tensor.MaterializeLocal and tensors.Tensor.InvalidateOnDevice to have them
+// moved locally if so desired.
+func (c *Config) TakeMean(n int, backend backends.Backend) *Config {
+	if c.err != nil {
+		return c
+	}
 	c.takeMean = n
+	c.backend = backend
+	if n != 1 && backend == nil {
+		c.err = errors.Errorf("TakeMean(n=%d, backend=nil) requires a valid backend for n != 1, it is the backend used to calculate the mean", n)
+	}
 	return c
 }
 
@@ -330,7 +349,7 @@ type Handler struct {
 	prevContextLoader context.Loader
 
 	serialized     *serializedData
-	variableValues map[string]tensors.Tensor
+	variableValues map[string]*tensors.Tensor
 	mergeExec      *graph.Exec
 
 	checkpointsCount int
@@ -542,50 +561,45 @@ func (h *Handler) loadCheckpoint(baseName string, merge bool, mergeWeight float6
 	if !merge {
 		// We are loading all the variables, as opposed to merging them.
 		h.serialized = serialized
-		h.variableValues = make(map[string]tensors.Tensor, len(h.serialized.Variables))
+		h.variableValues = make(map[string]*tensors.Tensor, len(h.serialized.Variables))
 	}
 
 	// Load variable values.
 	for _, varInfo := range serialized.Variables {
-		localT := tensors.FromShape(shapes.Make(varInfo.DType, varInfo.Dimensions...))
-		dataRef := localT.AcquireData()
-		rawBytes := dataRef.Bytes()
-		var n int
-		n, err = varFile.Read(rawBytes)
-		dataRef.Release()
-
+		tensor := tensors.FromShape(shapes.Make(varInfo.DType, varInfo.Dimensions...))
+		var n, memoryLen int
+		tensor.MutableBytes(func(data []byte) {
+			memoryLen = len(data)
+			n, err = varFile.Read(data)
+		})
 		if err != nil {
 			return errors.Wrapf(err, "%s: failed to read variable contents of checkpoint data file %s at position %d", h, varFileName, varInfo.Pos)
 		}
-		if n != len(rawBytes) {
+		if n != memoryLen {
 			return errors.Errorf("%s: failed to read variable contents of checkpoint data file %s "+
-				"at position %d -- read %d bytes, wanted %d bytes", h, varFileName, varInfo.Pos, n, len(rawBytes))
+				"at position %d -- read %d bytes, wanted %d bytes", h, varFileName, varInfo.Pos, n, memoryLen)
 		}
 
 		if !merge {
 			// Load the value.
-			h.variableValues[varInfo.ParameterName] = localT
+			h.variableValues[varInfo.ParameterName] = tensor
 		} else {
-			// Make sure we have enough variations of mergeExec for each variable, if they
-			// are of different shape.
-			h.mergeExec.SetMaxCache(len(h.variableValues))
-
 			// Merge value:
 			current, found := h.variableValues[varInfo.ParameterName]
 			if !found || !varInfo.DType.IsFloat() {
 				// Variable not found in last checkpoint or not merge-able, just ignore it.
 				continue
 			}
-			var results []tensors.Tensor
+			var results []*tensors.Tensor
 			err := TryCatch[error](func() {
-				results = h.mergeExec.Call(current, localT, shapes.CastAsDType(mergeWeight, varInfo.DType))
+				results = h.mergeExec.Call(current, tensor, shapes.CastAsDType(mergeWeight, varInfo.DType))
 			})
 			if err != nil {
 				panic(errors.WithMessagef(err, "when taking the mean of variable %q", varInfo.ParameterName))
 			}
 			current.FinalizeAll()
 			h.variableValues[varInfo.ParameterName] = results[0]
-			localT.FinalizeAll()
+			tensor.FinalizeAll()
 		}
 	}
 	return nil
@@ -605,12 +619,12 @@ func (h *Handler) takeMean(baseNames []string) error {
 	}
 
 	// Create merger graph executor.
-	backend := backends.New()
-	h.mergeExec = graph.NewExec(backend, func(a, b, bWeight *graph.Node) *graph.Node {
+	h.mergeExec = graph.NewExec(h.config.backend, func(a, b, bWeight *graph.Node) *graph.Node {
 		return graph.Add(
 			graph.Mul(a, graph.OneMinus(bWeight)),
 			graph.Mul(b, bWeight))
 	})
+	h.mergeExec.SetMaxCache(-1) // No max number of graphs, since each variable may be of different shape.
 
 	// Then merge all other weights -- the order doesn't matter.
 	for ii, baseName := range baseNames[:len(baseNames)-1] {
@@ -624,16 +638,6 @@ func (h *Handler) takeMean(baseNames []string) error {
 	// Free merge executor.
 	h.mergeExec.Finalize()
 	h.mergeExec = nil
-
-	// Move all variables to a local tensor.
-	for key, t := range h.variableValues {
-		deviceT := t.CurrentDevice()
-		if deviceT != nil {
-			// Tensor is on device: convert to local, and free the device version.
-			h.variableValues[key] = deviceT.Local()
-			deviceT.Finalize()
-		}
-	}
 	return nil
 }
 
@@ -680,28 +684,31 @@ func (h *Handler) Save() error {
 	h.serialized.Variables = make([]serializedVar, 0, h.ctx.NumVariables()+len(h.variableValues))
 	pos := 0
 	// * Closure to save the contents of a variable.
-	saveVar := func(name string, value *tensors.Local) error {
-		shape := value.Shape()
-		dataRef := value.AcquireData()
-		defer dataRef.Release()
-		rawData := dataRef.Bytes()
-		n, err := varFile.Write(rawData)
+	saveVar := func(name string, tensor *tensors.Tensor) error {
+		shape := tensor.Shape()
+		var err error
+		var n, memoryLen int
+		tensor.ConstBytes(func(rawData []byte) {
+			memoryLen = len(rawData)
+			n, err = varFile.Write(rawData)
+		})
 		if err != nil {
-			return errors.Wrapf(err, "%s: failed to write variable %s", h, name)
+			err = errors.Wrapf(err, "%s: failed to write variable %s", h, name)
 		}
-		if n != len(rawData) {
-			return errors.Errorf("%s: failed to write variable %s -- %d bytes requested, %d bytes written", h, name, len(rawData), n)
+		if n != memoryLen {
+			return errors.Errorf("%s: failed to write variable %s -- %d bytes requested, %d bytes written", h, name, memoryLen, n)
 		}
 		h.serialized.Variables = append(h.serialized.Variables, serializedVar{
 			ParameterName: name,
 			Dimensions:    shape.Dimensions,
 			DType:         shape.DType,
 			Pos:           pos,
-			Length:        len(rawData),
+			Length:        memoryLen,
 		})
-		pos += len(rawData)
+		pos += memoryLen
 		return nil
 	}
+
 	// * Loop over variables in context.
 	h.ctx.EnumerateVariables(func(v *context.Variable) {
 		if err != nil {
@@ -710,14 +717,15 @@ func (h *Handler) Save() error {
 		if h.config.excludeFromSave.Has(v) {
 			return
 		}
-		err = saveVar(v.ParameterName(), v.Value().Local())
+		err = saveVar(v.ParameterName(), v.Value())
 	})
+
 	// * Loop over current loaded variables.
-	for name, value := range h.variableValues {
+	for name, tensor := range h.variableValues {
 		if err != nil {
 			break
 		}
-		err = saveVar(name, value.Local())
+		err = saveVar(name, tensor)
 	}
 	if err != nil {
 		return err
@@ -745,7 +753,7 @@ func (h *Handler) Save() error {
 
 // OnStepFn implements `train.OnStepFn`, and make it convenient to attach to a training loop.
 // It simply calls save.
-func (h *Handler) OnStepFn(_ *train.Loop, _ []tensors.Tensor) error {
+func (h *Handler) OnStepFn(_ *train.Loop, _ []*tensors.Tensor) error {
 	return h.Save()
 }
 
@@ -815,7 +823,7 @@ func (h *Handler) Dir() string {
 // LoadVariable implements context.Loader.
 // This is called by context.Context when the variable is used for the first time.
 // The user may want to use this function to inspect loaded values for testing.
-func (h *Handler) LoadVariable(ctx *context.Context, scope, name string) (value tensors.Tensor, found bool) {
+func (h *Handler) LoadVariable(ctx *context.Context, scope, name string) (value *tensors.Tensor, found bool) {
 	// Priority is based on the installation order. That means we attempt first the previously configured loaders.
 	if h.prevContextLoader != nil {
 		value, found = h.prevContextLoader.LoadVariable(ctx, scope, name)
@@ -841,7 +849,7 @@ func (h *Handler) LoadVariable(ctx *context.Context, scope, name string) (value 
 // context, since they are actually used only when a model asks for the variable.
 //
 // The Handler owns the returned map, don't change it -- the behavior is undefined if you do.
-func (h *Handler) LoadedVariables() map[string]tensors.Tensor {
+func (h *Handler) LoadedVariables() map[string]*tensors.Tensor {
 	return h.variableValues
 }
 
