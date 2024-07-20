@@ -68,7 +68,7 @@ func TestKidMetric(t *testing.T) {
 	noisyBatch := noisyImages(t, manager, imagesBatch)
 
 	kidBuilder := NewKidBuilder(*flagDataDir, 75, 255.0, timage.ChannelsLast)
-	ctx := context.NewContext(manager)
+	ctx := context.NewContext()
 	kidExec := context.NewExec(manager, ctx, func(ctx *context.Context, images []*Node) *Node {
 		return kidBuilder.BuildGraph(ctx, []*Node{images[0]}, []*Node{images[1]})
 	})

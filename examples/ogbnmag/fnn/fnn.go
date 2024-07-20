@@ -4,6 +4,7 @@ package fnn
 import (
 	"fmt"
 	"github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/examples/notebook/gonb/margaid"
 	mag "github.com/gomlx/gomlx/examples/ogbnmag"
 	. "github.com/gomlx/gomlx/graph"
@@ -16,6 +17,8 @@ import (
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 	"time"
@@ -66,9 +69,8 @@ func FnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 var ModelFn = FnnModelGraph
 
 // Train FNN model based on configuration in `ctx`.
-func Train(ctx *context.Context) error {
-	manager := ctx.Backend()
-	trainDS, validDS, testDS, err := mag.PapersSeedDatasets(manager)
+func Train(backend backends.Backend, ctx *context.Context) error {
+	trainDS, validDS, testDS, err := mag.PapersSeedDatasets(backend)
 	mag.UploadOgbnMagVariables(ctx)
 	//ctx.EnumerateVariables(func(v *context.Variable) {
 	//	fmt.Printf("%s :: %s:\t%s\n", v.Scope(), v.Name(), v.Value().Shape())
@@ -100,7 +102,7 @@ func Train(ctx *context.Context) error {
 			numCheckpointsToKeep = -1
 		}
 		if numCheckpointsToKeep > 0 {
-			checkpoint, err = checkpoints.Build(ctx).Dir(checkpointPath).Keep(numCheckpointsToKeep).TakeMean(3).Done()
+			checkpoint, err = checkpoints.Build(ctx).Dir(checkpointPath).Keep(numCheckpointsToKeep).TakeMean(3, backend).Done()
 		} else {
 			checkpoint, err = checkpoints.Build(ctx).Dir(checkpointPath).Done()
 		}
@@ -124,7 +126,7 @@ func Train(ctx *context.Context) error {
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
 	optimizer := optimizers.MustOptimizerByName(ctx, context.GetParamOr(ctx, "optimizer", "adamw"))
-	trainer := train.NewTrainer(manager, ctx, ModelFn,
+	trainer := train.NewTrainer(backend, ctx, ModelFn,
 		lossFn,
 		optimizer,
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics

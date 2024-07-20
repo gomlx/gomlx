@@ -39,7 +39,7 @@ func TestBuildGraph(t *testing.T) {
 	require.NoError(t, DownloadAndUnpackWeights(*flagDataDir))
 
 	// InceptionV3 classification.
-	ctx := context.NewContext(manager)
+	ctx := context.NewContext()
 	inceptionV3Exec := context.NewExec(manager, ctx, func(ctx *context.Context, img *Node) *Node {
 		img = ExpandDims(img, 0) // Add batch dimension
 		img = PreprocessImage(img, 255.0, timage.ChannelsLast)

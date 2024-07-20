@@ -5,7 +5,6 @@ import (
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/stretchr/testify/require"
 	"io"
 	"testing"
@@ -57,7 +56,7 @@ func loopDataset(b *testing.B, ds train.Dataset, n int) {
 func BenchmarkDatasets(b *testing.B) {
 	Init()
 	ds := flowers.NewDataset(dtypes.Float32, ImageSize)
-	dsBatched := data.Batch(manager, ds, BatchSize, true, true)
+	dsBatched := data.Batch(backend, ds, BatchSize, true, true)
 	require.NoError(b, flowers.DownloadAndParse(DataDir))
 
 	dsParallel := data.Parallel(dsBatched)

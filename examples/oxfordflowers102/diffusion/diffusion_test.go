@@ -7,15 +7,16 @@ import (
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
 
 func TestUNetModelGraph(t *testing.T) {
-	manager = graphtest.BuildTestBackend()
+	backend = graphtest.BuildTestBackend()
 	Init()
-	g := manager.NewGraph().WithName("test")
-	ctx := context.NewContext(manager)
+	g := NewGraph(backend, "test")
+	ctx := context.NewContext()
 	numExamples := 5
 	noisyImages := Zeros(g, shapes.Make(DType, numExamples, 64, 64, 3))
 	flowerIds := Zeros(g, shapes.Make(dtypes.Int32, numExamples))
@@ -42,10 +43,10 @@ func TestTrainingModelGraph(t *testing.T) {
 		fmt.Println("TestTrainingModelGraph skipped with go test -short: it requires downloading and preprocessing data.")
 		return
 	}
-	manager = graphtest.BuildTestBackend()
+	backend = graphtest.BuildTestBackend()
 	Init()
-	g := manager.NewGraph().WithName("test")
-	ctx := context.NewContext(manager)
+	g := backend.NewGraph().WithName("test")
+	ctx := context.NewContext()
 	numExamples := 5
 	predictions := getZeroPredictions(ctx, g, numExamples)
 	predictedImages, loss := predictions[0], predictions[1]
@@ -68,10 +69,10 @@ func TestImagesGenerator(t *testing.T) {
 	numImages := 5
 	numDiffusionSteps := 3
 
-	manager = graphtest.BuildTestBackend()
-	ctx := context.NewContext(manager)
+	backend = graphtest.BuildTestBackend()
+	ctx := context.NewContext()
 	// ctx.RngStateReset() --> to truly randomize each run uncomment this.
-	g := manager.NewGraph().WithName("test")
+	g := backend.NewGraph().WithName("test")
 	_ = getZeroPredictions(ctx, g, 2) // Batch size won't matter, we only call this to create the model weights.
 	noise := GenerateNoise(numImages)
 	flowerIds := GenerateFlowerIds(numImages)

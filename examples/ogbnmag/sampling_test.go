@@ -18,7 +18,7 @@ func TestDatasets(t *testing.T) {
 		t.Skip("Skipping long-running test.")
 	}
 	manager := graphtest.BuildTestBackend()
-	ctx := context.NewContext(manager)
+	ctx := context.NewContext()
 	err := Download(*flagDataDir)
 	require.NoError(t, err, "failed to download OGBN-MAG dataset")
 	UploadOgbnMagVariables(ctx) // Uploads the Papers frozen embedding table.

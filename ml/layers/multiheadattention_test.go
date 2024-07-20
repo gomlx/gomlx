@@ -39,7 +39,7 @@ import (
 func TestMultiHeadAttentionGraph(t *testing.T) {
 	manager := graphtest.BuildTestBackend()
 	{
-		ctx := context.NewContext(manager)
+		ctx := context.NewContext()
 		g := manager.NewGraph().WithName("test")
 		batchSize := 3
 		key := IotaFull(g, shapes.Make(F32, batchSize, 4, 5, 3))
@@ -180,7 +180,7 @@ func TestMultiHeadAttentionTraining(t *testing.T) {
 	manager := graphtest.BuildTestBackend()
 
 	// Context and optimizer used for training.
-	ctx := context.NewContext(manager)
+	ctx := context.NewContext()
 	opt := optimizers.Adam().LearningRate(0.001).Done()
 
 	trainer := train.NewTrainer(manager, ctx, buildSyntheticAttentionModelFn(false),

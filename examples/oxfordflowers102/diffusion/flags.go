@@ -43,8 +43,8 @@ var (
 func Init() {
 	initialized.Do(func() {
 		flag.Parse()
-		if manager == nil {
-			manager = BuildManager().Platform(*flagPlatform).Done()
+		if backend == nil {
+			backend = BuildManager().Platform(*flagPlatform).Done()
 		}
 		DType = MustNoError(dtypes.DTypeString(*flagDType))
 		DataDir = data.ReplaceTildeInDir(*flagDataDir)
@@ -60,5 +60,5 @@ func Init() {
 
 func GetManager() backends.Backend {
 	Init()
-	return manager
+	return backend
 }

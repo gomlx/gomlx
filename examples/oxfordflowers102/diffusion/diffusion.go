@@ -14,6 +14,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/backends"
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/nanlogger"
@@ -23,13 +24,15 @@ import (
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/types/shapes"
-	timage "github.com/gomlx/gomlx/types/tensor/image"
+	timage "github.com/gomlx/gomlx/types/tensors/images"
+	"github.com/gomlx/gomlx/types/xslices"
+	"github.com/gomlx/gopjrt/dtypes"
 	"math"
 	"strconv"
 )
 
 var (
-	manager backends.Backend
+	backend backends.Backend
 	DType   dtypes.DType
 )
 

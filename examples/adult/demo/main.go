@@ -115,7 +115,7 @@ func main() {
 	movingAccuracyMetric := metrics.NewMovingAverageBinaryLogitsAccuracy("Moving Average Accuracy", "~acc", 0.01)
 
 	// Context holds the variables and hyperparameters for the model.
-	ctx := context.NewContext(manager)
+	ctx := context.NewContext()
 	ctx.SetParam(optimizers.ParamLearningRate, *flagLearningRate)
 
 	// Checkpoints saving.

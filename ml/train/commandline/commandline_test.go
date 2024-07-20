@@ -10,7 +10,7 @@ import (
 
 func createTestContext() *context.Context {
 	manager := graphtest.BuildTestBackend()
-	ctx := context.NewContext(manager)
+	ctx := context.NewContext()
 	ctx.SetParam("x", 11.0)
 	ctx.SetParam("y", 7)
 	ctx.SetParam("z", false)

@@ -38,10 +38,10 @@ var (
 func CreateInMemoryDatasets() (trainDS, validationDS *data.InMemoryDataset) {
 	Init()
 	var err error
-	trainDS, err = flowers.InMemoryDataset(manager, DataDir, ImageSize, "train", PartitionSeed, ValidationFraction, 1.0)
+	trainDS, err = flowers.InMemoryDataset(backend, DataDir, ImageSize, "train", PartitionSeed, ValidationFraction, 1.0)
 	AssertNoError(err)
 
-	validationDS, err = flowers.InMemoryDataset(manager, DataDir, ImageSize, "validation", PartitionSeed, 0.0, ValidationFraction)
+	validationDS, err = flowers.InMemoryDataset(backend, DataDir, ImageSize, "validation", PartitionSeed, 0.0, ValidationFraction)
 	AssertNoError(err)
 	return
 }
@@ -83,11 +83,11 @@ func NormalizationValues() (mean, stddev *tensors.Tensor) {
 
 	trainDS, _ := CreateInMemoryDatasets()
 	trainDS.BatchSize(128, false)
-	ds := data.MapWithGraphFn(manager, nil, trainDS, func(ctx *context.Context, inputs, labels []*Node) (mappedInputs, mappedLabels []*Node) {
+	ds := data.MapWithGraphFn(backend, nil, trainDS, func(ctx *context.Context, inputs, labels []*Node) (mappedInputs, mappedLabels []*Node) {
 		images := PreprocessImages(inputs[0], false)
 		return []*Node{images}, labels
 	})
-	normalizationMean, normalizationStdDev, err = data.Normalization(manager, ds, 0, -1) // mean/stddev for each channel (axis=-1) separately.
+	normalizationMean, normalizationStdDev, err = data.Normalization(backend, ds, 0, -1) // mean/stddev for each channel (axis=-1) separately.
 	AssertNoError(err)
 
 	// Save for future times.

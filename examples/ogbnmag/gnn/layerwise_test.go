@@ -192,7 +192,7 @@ func TestLayerWiseInferenceMinimal(t *testing.T) {
 	withCitation := false
 	manager := graphtest.BuildTestBackend()
 	_, strategy := createDenseTestStrategy(withCitation)
-	ctx := context.NewContext(manager)
+	ctx := context.NewContext()
 	setMinimalTestParams(ctx)
 	// Set weights to fixed values, that makes it easier to interpret:
 	{
@@ -246,7 +246,7 @@ func TestLayerWiseInferenceCommon(t *testing.T) {
 		fmt.Printf("\nwithCitation=%v:\n", withCitation)
 		manager := graphtest.BuildTestBackend()
 		_, strategy := createDenseTestStrategy(withCitation)
-		ctx := context.NewContext(manager)
+		ctx := context.NewContext()
 		setCommonTestParams(ctx)
 
 		// Normal GNN executor.

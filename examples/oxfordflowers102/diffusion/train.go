@@ -3,6 +3,7 @@ package diffusion
 import (
 	"flag"
 	"fmt"
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/examples/notebook/gonb/margaid"
 	stdplots "github.com/gomlx/gomlx/examples/notebook/gonb/plots"
 	. "github.com/gomlx/gomlx/graph"
@@ -16,6 +17,7 @@ import (
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/tensors"
 	"k8s.io/klog/v2"
 	"os"
 	"path"
@@ -48,7 +50,7 @@ const (
 //   - It creates the file `args.txt` with a copy of the arguments used to create the model.
 //     Later, if the same model is used, it checks that the arguments match (with some exceptions),
 //     and warns about mismatches.
-func LoadCheckpointToContext(ctx *context.Context) (checkpoint *checkpoints.Handler, noise, flowerIds *tensors.Tensor) {
+func LoadCheckpointToContext(backend backends.Backend, ctx *context.Context) (checkpoint *checkpoints.Handler, noise, flowerIds *tensors.Tensor) {
 	Init()
 	if *flagCheckpoint == "" {
 		return
@@ -60,7 +62,7 @@ func LoadCheckpointToContext(ctx *context.Context) (checkpoint *checkpoints.Hand
 	}
 	var err error
 	checkpoint, err = checkpoints.Build(ctx).Dir(checkpointPath).
-		Keep(*flagCheckpointKeep).TakeMean(*flagCheckpointTakeMean).
+		Keep(*flagCheckpointKeep).TakeMean(*flagCheckpointTakeMean, backend).
 		Done()
 	AssertNoError(err)
 
@@ -106,8 +108,8 @@ func LoadCheckpointToContext(ctx *context.Context) (checkpoint *checkpoints.Hand
 	// Create new noise and flower ids -- and save it for future training.
 	noise = GenerateNoise(*flagTrainGeneratedSamples)
 	flowerIds = GenerateFlowerIds(*flagTrainGeneratedSamples)
-	AssertNoError(noise.Local().Save(noisePath))
-	AssertNoError(flowerIds.Local().Save(flowerIdsPath))
+	AssertNoError(noise.Save(noisePath))
+	AssertNoError(flowerIds.Save(flowerIdsPath))
 	return
 }
 
@@ -156,12 +158,12 @@ func TrainModel() {
 	validationDS.BatchSize(EvalBatchSize, false)
 
 	// Context holds the variables and hyperparameters for the model.
-	ctx := context.NewContext(manager)
+	ctx := context.NewContext()
 	ctx.SetParam(optimizers.ParamLearningRate, *flagLearningRate)
 	ctx.SetParam(layers.ParamL2Regularization, *flagL2Regularization)
 
 	// Checkpoints saving.
-	checkpoint, noise, flowerIds := LoadCheckpointToContext(ctx)
+	checkpoint, noise, flowerIds := LoadCheckpointToContext(backend, ctx)
 	if noise == nil {
 		klog.Exitf("A checkpoint directory name with --checkpoint is required, none given")
 	}
@@ -193,7 +195,7 @@ func TrainModel() {
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
 	trainer := train.NewTrainer(
-		manager, ctx, TrainingModelGraph, customLoss,
+		backend, ctx, TrainingModelGraph, customLoss,
 		optimizers.Adam().WeightDecay(1e-4).Done(),
 		[]metrics.Interface{movingImagesLoss}, // trainMetrics
 		[]metrics.Interface{meanImagesLoss})   // evalMetrics
@@ -290,15 +292,15 @@ func TrainingMonitor(checkpoint *checkpoints.Handler, loop *train.Loop, metrics 
 	images := generator.Generate()
 	imagesPath := fmt.Sprintf("%s%07d.tensor", GeneratedSamplesPrefix, loop.LoopStep)
 	imagesPath = path.Join(checkpoint.Dir(), imagesPath)
-	AssertNoError(images.Local().Save(imagesPath))
+	AssertNoError(images.Save(imagesPath))
 	return nil
 }
 
 // DisplayTrainingPlots simply display the training plots of a model, without any training.
 func DisplayTrainingPlots() {
 	Init()
-	ctx := context.NewContext(manager)
-	checkpoint, _, _ := LoadCheckpointToContext(ctx)
+	ctx := context.NewContext()
+	checkpoint, _, _ := LoadCheckpointToContext(backend, ctx)
 	if checkpoint == nil {
 		fmt.Printf("You must set --checkpoint='model_sub_dir'!")
 		return

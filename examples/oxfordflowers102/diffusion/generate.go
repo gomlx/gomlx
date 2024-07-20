@@ -198,7 +198,7 @@ func DenoiseStepGraph(ctx *context.Context, noisyImages, diffusionTime, nextDiff
 //
 // Plotting results only work if in a Jupyter (with GoNB kernel) notebook.
 func DisplayImagesAcrossDiffusionSteps(numImages int, numDiffusionSteps int, displayEveryNSteps int) {
-	ctx := context.NewContext(manager).Checked(false)
+	ctx := context.NewContext().Checked(false)
 	_, _, _ = LoadCheckpointToContext(ctx)
 	ctx.RngStateReset()
 	noise := GenerateNoise(numImages)
@@ -288,7 +288,7 @@ func SliderDiffusionSteps(cacheKey string, ctx *context.Context, numImages int, 
 // GenerateImagesOfFlowerType is similar to DisplayImagesAcrossDiffusionSteps, but it limits itself to generating images of only one
 // flower type.
 func GenerateImagesOfFlowerType(numImages int, flowerType int32, numDiffusionSteps int) (predictedImages *tensors.Tensor) {
-	ctx := context.NewContext(manager).Checked(false)
+	ctx := context.NewContext().Checked(false)
 	_, _, _ = LoadCheckpointToContext(ctx)
 	ctx.RngStateReset()
 	noise := GenerateNoise(numImages)
@@ -353,10 +353,10 @@ func DropdownFlowerTypes(cacheKey string, ctx *context.Context, numImages, numDi
 // GenerateImagesOfAllFlowerTypes takes one random noise, and generate the flower for each of the 102 types.
 func GenerateImagesOfAllFlowerTypes(numDiffusionSteps int) (predictedImages *tensors.Tensor) {
 	numImages := flowers.NumLabels
-	ctx := context.NewContext(manager).Checked(false)
+	ctx := context.NewContext().Checked(false)
 	_, _, _ = LoadCheckpointToContext(ctx)
 	ctx.RngStateReset()
-	noise := NewExec(manager, func(g *Graph) *Node {
+	noise := NewExec(backend, func(g *Graph) *Node {
 		state := Const(g, RngState())
 		_, noise := RandomNormal(state, shapes.Make(DType, 1, ImageSize, ImageSize, 3))
 		noise = BroadcastToDims(noise, numImages, ImageSize, ImageSize, 3)
@@ -397,8 +397,8 @@ func NewImagesGenerator(ctx *context.Context, noise, flowerIds *tensors.Tensor, 
 		flowerIds:         flowerIds,
 		numImages:         numImages,
 		numDiffusionSteps: numDiffusionSteps,
-		diffusionStepExec: context.NewExec(manager, ctx, DenoiseStepGraph),
-		denormalizerExec:  NewExec(manager, DenormalizeImages),
+		diffusionStepExec: context.NewExec(backend, ctx, DenoiseStepGraph),
+		denormalizerExec:  NewExec(backend, DenormalizeImages),
 	}
 }
 
@@ -449,7 +449,7 @@ func (g *ImagesGenerator) Generate() (batchedImages *tensors.Tensor) {
 
 // GenerateNoise generates random noise that can be used to generate images.
 func GenerateNoise(numImages int) *tensors.Tensor {
-	return NewExec(manager, func(g *Graph) *Node {
+	return NewExec(backend, func(g *Graph) *Node {
 		state := Const(g, RngState())
 		_, noise := RandomNormal(state, shapes.Make(DType, numImages, ImageSize, ImageSize, 3))
 		return noise
@@ -488,12 +488,12 @@ func NewKidGenerator(ctx *context.Context, evalDS train.Dataset, numDiffusionSte
 	AssertNoError(inceptionv3.DownloadAndUnpackWeights(i3Path))
 	kg := &KidGenerator{
 		ctxGenerator:   ctx,
-		ctxInceptionV3: context.NewContext(manager).Checked(false),
+		ctxInceptionV3: context.NewContext().Checked(false),
 		ds:             evalDS,
 		generator:      NewImagesGenerator(ctx, noise, flowerIds, numDiffusionStep),
 		kid:            inceptionv3.KidMetric(i3Path, inceptionv3.MinimumImageSize, 255.0, timage.ChannelsLast),
 	}
-	kg.evalExec = context.NewExec(manager, kg.ctxInceptionV3, kg.EvalStepGraph)
+	kg.evalExec = context.NewExec(backend, kg.ctxInceptionV3, kg.EvalStepGraph)
 	return kg
 }
 
