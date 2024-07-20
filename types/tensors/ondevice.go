@@ -220,3 +220,12 @@ func (t *Tensor) lockedMaterializeLocal() {
 	}
 	t.backend.BufferToFlatData(d.buffer, t.local.flat)
 }
+
+// IsOnDevice checks whether the Tensor has an on-device copy on the given deviceNum.
+//
+// See MaterializeOnDevices to trigger a transfer/copy to the given device.
+func (t *Tensor) IsOnDevice(deviceNum backends.DeviceNum) bool {
+	t.AssertValid()
+	_, ok := t.onDevices[deviceNum]
+	return ok
+}

@@ -121,6 +121,12 @@ func (t *Tensor) Size() int { return t.shape.Size() }
 // Memory returns the number of bytes used to store the tensor. An alias to Tensor.Shape().Memory().
 func (t *Tensor) Memory() uintptr { return t.shape.Memory() }
 
+// Ok returns whether the Tensor is in a valid state: it is not nil, and it hasn't been finalized.
+func (t *Tensor) Ok() bool {
+	return t != nil && t.shape.Ok() &&
+		(!t.local.IsFinalized() || len(t.onDevices) > 0)
+}
+
 // AssertValid panics if local is nil, or if its shape is invalid.
 func (t *Tensor) AssertValid() {
 	if t == nil {
