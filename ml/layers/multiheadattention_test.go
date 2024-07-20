@@ -40,7 +40,7 @@ func TestMultiHeadAttentionGraph(t *testing.T) {
 	manager := graphtest.BuildTestBackend()
 	{
 		ctx := context.NewContext()
-		g := manager.NewGraph().WithName("test")
+		g := NewGraph(manager).WithName("test")
 		batchSize := 3
 		key := IotaFull(g, shapes.Make(F32, batchSize, 4, 5, 3))
 		query := IotaFull(g, shapes.Make(F32, batchSize, 7, 1, 2))

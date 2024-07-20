@@ -54,7 +54,7 @@ func IotaP1Initializer(g *Graph, shape Shape) *Node {
 func TestDense(t *testing.T) {
 	manager := graphtest.BuildTestBackend()
 	ctx := context.NewContext().WithInitializer(IotaP1Initializer)
-	g := manager.NewGraph().WithName("TestDense")
+	g := NewGraph(manager).WithName("TestDense")
 	input := tensors.FromValue([][]float32{{1, 2}, {10, 20}, {100, 200}})
 	fmt.Printf("\tinput=%v\n", input)
 
@@ -188,7 +188,7 @@ func TestPieceWiseLinearCalibration(t *testing.T) {
 	manager := graphtest.BuildTestBackend()
 	{
 		ctx := context.NewContext()
-		g := manager.NewGraph().WithName("test")
+		g := NewGraph(manager).WithName("test")
 		const numKeypoints = 5
 		const maxInput = 100
 

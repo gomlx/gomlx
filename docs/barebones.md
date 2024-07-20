@@ -14,14 +14,14 @@ import (
 
 func main() {
 	manager := BuildManager().Platform("Host").MustDone()
-	g := manager.NewGraph().WithName("sum")
+	g := NewGraph(manager).WithName("sum")
 	one := Const(g, 1)
 	sum := SumGraph(one, one)
 	if !g.Ok() {
 		log.Fatalf("Failed to create graph: %+v", g.Error())
 	}
 	g.Compile(sum)
-	fmt.Printf("1+1=%s\n", g.Run(nil))
+	fmt.Printf("1+1=%s\n", g.Run())
 }
 ```
 
@@ -37,7 +37,7 @@ One line at a time, this is what is happening:
     * The *platform* is where to execute the computation graphs, either the CPU ("Host" as in this case), or
       an accelerator (e.g: "CUDA" or "TPU"). One can list available and supported platforms with
       `GetPlatforms()`.
-* `manager.NewGraph().WithName("sum")`: creates an empty new computation graph, that we are going to build.
+* `NewGraph(manager).WithName("sum")`: creates an empty new computation graph, that we are going to build.
 * `C(graph, 1)`: creates a new constant node initialized with the value of `int(1)` in the g.
   It returns a `*Node` type. Notice that our graphs only support a few data types
   (called `types.DType`), as of now only `Int64`, `Float32` and `Float64`, which maps to the
@@ -49,7 +49,7 @@ One line at a time, this is what is happening:
   a more detailed discussion, see [error_handling.md](docs/error_handling.md).
 * `g.Compile(sum)` compiles the g. After it is compiled it can no longer be changed. It
   takes as input a list of `*Node` that are the output of the graph execution.
-* `g.Run(nil)` executes the graph passing `nil` as a map of the graph parameters -- more on that
+* `g.Run()` executes the graph passing `nil` as a map of the graph parameters -- more on that
   on next section. Here it outputs whatever is evaluated for the `sum` node, since that was the node
   passed as output for `g.Compile`.
 
@@ -76,7 +76,7 @@ way of doing this, the simpler way will be explained in the next session.
 ```go
 func main() {
 	manager := BuildManager().Platform("Host").MustDone()
-	g := manager.NewGraph().WithName("euclidean")
+	g := NewGraph(manager).WithName("euclidean")
 
 	vectorShape := types.MakeShape(types.Float64, 3) // 3D vectors.
 	a := g.Parameter("a", vectorShape)
