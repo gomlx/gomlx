@@ -15,6 +15,7 @@ type onDevice struct {
 }
 
 // FromBuffer creates a Tensor from a backend's buffer. It requires the deviceNum information as well.
+// The ownership of the buffer is transferred to the new Tensor.
 func FromBuffer(backend backends.Backend, buffer backends.Buffer) (t *Tensor) {
 	// Create tensor.
 	t = newTensor(backend.BufferShape(buffer))
@@ -32,6 +33,8 @@ func FromBuffer(backend backends.Backend, buffer backends.Buffer) (t *Tensor) {
 // It triggers the transfer from local to the device, if the tensor is not already store on device.
 //
 // The deviceNum is optional. But only one can be given. The default value is 0.
+//
+// Careful not to finalize the buffer while the buffer is in use.
 func (t *Tensor) Buffer(backend backends.Backend, deviceNum ...backends.DeviceNum) backends.Buffer {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -82,6 +85,8 @@ func (d *onDevice) IsFinalized() bool {
 }
 
 // Finalize releases the associated buffer in the PJRT client.
+// It's the caller responsibility to ensure this buffer is not being used elsewhere (like in the middle of an execution).
+//
 // It doesn't clear the pointer to this Device in the Tensor object.
 func (d *onDevice) Finalize() {
 	if d.IsFinalized() {
@@ -148,6 +153,8 @@ func (t *Tensor) lockedMaterializeOnDevices(backend backends.Backend, deviceNums
 }
 
 // InvalidateOnDevice destroys all on-device copies of the Tensor.
+//
+// It's the caller responsibility to ensure this buffer is not being used elsewhere (like in the middle of an execution).
 //
 // This is automatically called when the Tensor is mutated (e.g.: Tensor.MutableFlatData) or when the on-device value
 // is donated to the execution of a graph.

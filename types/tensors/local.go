@@ -499,7 +499,7 @@ func FromValue[S MultiDimensionSlice](value S) *Tensor {
 	return FromAnyValue(value)
 }
 
-// FromAnyValue is a non-generic version of FromValue that returns a tensor.Tensor (not specified if local or on device).
+// FromAnyValue is a non-generic version of FromValue that returns a *tensors.Tensor (not specified if local or on device).
 // The input is expected to be either a scalar or a slice of slices with homogeneous dimensions.
 // If the input is a tensor already (Local or Device), it is simply returned.
 // If value is anything but a Device tensor, it will return a Local tensor.
@@ -717,4 +717,24 @@ func (t *Tensor) InDelta(otherTensor *Tensor, delta float64) bool {
 		})
 	})
 	return inDelta
+}
+
+// IsLocal returns true if there is a local storage copy of the tensor.
+//
+// See MaterializeLocal to trigger a transfer/copy to the local storage.
+func (t *Tensor) IsLocal() bool {
+	t.AssertValid()
+	return t.local != nil && !t.local.IsFinalized()
+}
+
+// FinalizeLocal immediately frees the local storage copy of the tensor. If there are no on-device copies of the tensor,
+// it becomes invalid.
+func (t *Tensor) FinalizeLocal() {
+	t.AssertValid()
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	t.local.flat = nil
+	t.local.t = nil
+	t.local = nil
 }

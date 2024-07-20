@@ -146,7 +146,9 @@ type HasClient interface {
 	Client() *pjrt.Client
 }
 
-// FinalizeAll will finalize (free) all associated data and leave Tensor in an invalid state. Shape is cleared also.
+// FinalizeAll immediately frees all associated data and leave Tensor in an invalid state. Shape is cleared also.
+//
+// It's the caller responsibility to ensure the tensor buffers are not being used elsewhere (like in the middle of an execution).
 func (t *Tensor) FinalizeAll() {
 	// Get the list of local and device tensors to finalize.
 	t.mu.Lock()
