@@ -455,7 +455,7 @@ func (e *Exec) compileAndExecute(execute bool, args ...any) (results []*tensors.
 // Returns nil if the cache size is >= MaxCacheSize.
 // Should be called with cacheMu locked.
 func (e *Exec) createAndCacheGraph(argsShapes []shapes.Shape) (entry *execGraphCacheEntry) {
-	if len(e.cache) >= e.maxCacheSize {
+	if e.maxCacheSize > 0 && len(e.cache) >= e.maxCacheSize {
 		return nil
 	}
 	entry = &execGraphCacheEntry{graph: NewGraph(e.backend, fmt.Sprintf("%s#%d", e.name, len(e.cache)))}

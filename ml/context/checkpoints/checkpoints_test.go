@@ -27,14 +27,18 @@ import (
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"os"
 	"testing"
+
+	_ "github.com/gomlx/gomlx/backends/xla"
 )
 
 func TestCheckpoints(t *testing.T) {
-	manager := graphtest.BuildTestBackend()
+	backend := graphtest.BuildTestBackend()
 
 	// Graph function to test: it simply creates, increments and returns the global step.
 	testGraphFn := func(ctx *context.Context, g *Graph) *Node {
@@ -43,7 +47,7 @@ func TestCheckpoints(t *testing.T) {
 	var dir string
 	{
 		// Build model, checkpoint a few times.
-		ctx := context.NewContext(manager)
+		ctx := context.NewContext()
 		ctx.SetParam("learning_rate", 0.01)
 		ctx.SetParam(layers.ParamL2Regularization, 0.001)
 		ctx.In("layer_1").SetParam(layers.ParamL2Regularization, 0.004)
@@ -51,10 +55,10 @@ func TestCheckpoints(t *testing.T) {
 		assert.Equal(t, 0, checkpoint.checkpointsCount)
 		dir = checkpoint.Dir()
 		fmt.Printf("Checkpoint directory: %s\n", dir)
-		e := context.NewExec(manager, ctx, testGraphFn)
+		e := context.NewExec(backend, ctx, testGraphFn)
 		for ii := 0; ii < 10; ii++ {
 			results := e.Call()
-			globalStep := results[0].Local().Value().(float64)
+			globalStep := tensors.ToScalar[float64](results[0])
 			assert.Equal(t, float64(ii)+1, globalStep, "LoopStep")
 			assert.NoError(t, checkpoint.Save(), "Saving checkpoint")
 		}
@@ -70,7 +74,7 @@ func TestCheckpoints(t *testing.T) {
 	// Test loading of values
 	{
 		// Build model, checkpoint a few times.
-		ctx := context.NewContext(manager)
+		ctx := context.NewContext()
 		ctx.SetParam("learning_rate", 5.0) // Value should be overwritten when loading.
 		checkpoint := Build(ctx).Dir(dir).Keep(3).MustDone()
 
@@ -87,9 +91,9 @@ func TestCheckpoints(t *testing.T) {
 		assert.Equal(t, 0.004, l2.(float64), "Params[%s]", layers.ParamL2Regularization)
 
 		// Re-execute testGraphFn: it should load global step at 10, increment and return it at 11.
-		e := context.NewExec(manager, ctx, testGraphFn)
+		e := context.NewExec(backend, ctx, testGraphFn)
 		results := e.Call()
-		globalStep := results[0].Local().Value().(float64)
+		globalStep := tensors.ToScalar[float64](results[0])
 		assert.Equal(t, 11.0, globalStep, "Re-loaded global step")
 		assert.NoError(t, checkpoint.Save(), "Saving checkpoint")
 
@@ -108,10 +112,10 @@ func TestCheckpoints(t *testing.T) {
 }
 
 func TestMergedCheckpoints(t *testing.T) {
-	manager := graphtest.BuildTestBackend()
+	backend := graphtest.BuildTestBackend()
 	var dir string
 	{
-		ctx := context.NewContext(manager).Checked(false)
+		ctx := context.NewContext().Checked(false)
 		checkpoint := Build(ctx).TempDir("", "test_checkpoints_").Keep(2).MustDone()
 		dir = checkpoint.Dir()
 		globalStepV := optimizers.GetGlobalStepVar(ctx)
@@ -127,8 +131,8 @@ func TestMergedCheckpoints(t *testing.T) {
 	}
 	{
 		// Check that the values were averaged:
-		ctx := context.NewContext(manager).Checked(false)
-		_ = Build(ctx).Dir(dir).Keep(2).TakeMean(-1).MustDone()
+		ctx := context.NewContext().Checked(false)
+		_ = Build(ctx).Dir(dir).Keep(2).TakeMean(-1, backend).MustDone()
 		globalStep := optimizers.GetGlobalStep(ctx)
 		assert.Equal(t, int64(10), globalStep, "GlobalStep")
 		xV := ctx.VariableWithValue("x", []float64{1.0, 1.0, 1.0})
@@ -146,8 +150,6 @@ func TestMergedCheckpoints(t *testing.T) {
 }
 
 func TestParams(t *testing.T) {
-	manager := graphtest.BuildTestBackend()
-
 	var (
 		dir                            string
 		xFloat64, xFloat32, xInt, xStr = 0.01, float32(7.1), 11, "bar"
@@ -157,7 +159,7 @@ func TestParams(t *testing.T) {
 
 	{
 		// Build model, checkpoint a few times.
-		ctx := context.NewContext(manager)
+		ctx := context.NewContext()
 		ctx.SetParam("xFloat64", xFloat64)
 		ctx.SetParam("xFloat32", xFloat32)
 		ctx.SetParam("xInt", xInt)
@@ -174,7 +176,7 @@ func TestParams(t *testing.T) {
 	// Test loading of values
 	{
 		// Build model, checkpoint a few times.
-		ctx := context.NewContext(manager)
+		ctx := context.NewContext()
 		_ = Build(ctx).Dir(dir).Keep(3).MustDone()
 
 		got, found := ctx.GetParam("xFloat64")
