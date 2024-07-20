@@ -23,6 +23,7 @@ import (
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gopjrt/dtypes"
 )
 
 const (
@@ -61,7 +62,7 @@ func Adam() *AdamConfig {
 		beta2:        0.999,
 		epsilon:      1e-7,
 		amsGrad:      false,
-		dtype:        shapes.InvalidDType,
+		dtype:        dtypes.InvalidDType,
 	}
 }
 
@@ -179,7 +180,7 @@ func (o *adam) UpdateGraph(ctx *context.Context, g *Graph, loss *Node) {
 		return
 	}
 	dtype := o.config.dtype
-	if dtype == shapes.InvalidDType {
+	if dtype == dtypes.InvalidDType {
 		dtype = loss.DType()
 	}
 
