@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 	"github.com/schollz/progressbar/v3"
@@ -223,8 +224,8 @@ func (ds *Hdf5Dataset) Load() (rawContent []byte, err error) {
 	return
 }
 
-// ToTensor reads the HDF5 dataset into GoMLX's `tensor.Local`.
-func (ds *Hdf5Dataset) ToTensor() (local *tensors.Local, err error) {
+// ToTensor reads the HDF5 dataset into GoMLX's tensors.Tensor.
+func (ds *Hdf5Dataset) ToTensor() (tensor *tensors.Tensor, err error) {
 	if !ds.Shape.Ok() {
 		err = errors.Errorf("no shape information from HDF5 dataset, can't convert to tenosr")
 		return
@@ -233,17 +234,16 @@ func (ds *Hdf5Dataset) ToTensor() (local *tensors.Local, err error) {
 	if err != nil {
 		return
 	}
-	local = tensors.FromShape(ds.Shape)
-	localRef := local.AcquireData()
-	defer localRef.Release()
-	localData := localRef.Bytes()
-	if len(loadedData) != len(localData) {
-		err = errors.Errorf("for shape %s: loaded %d bytes, but tensor uses %d bytes -- not sure how to load it!?",
-			ds.Shape, len(loadedData), len(localData))
-		local = nil
-		return
-	}
-	copy(localData, loadedData)
+	tensor = tensors.FromShape(ds.Shape)
+	tensor.MutableBytes(func(localData []byte) {
+		if len(loadedData) != len(localData) {
+			err = errors.Errorf("for shape %s: loaded %d bytes, but tensor uses %d bytes -- not sure how to load it!?",
+				ds.Shape, len(loadedData), len(localData))
+			tensor = nil
+			return
+		}
+		copy(localData, loadedData)
+	})
 	return
 }
 

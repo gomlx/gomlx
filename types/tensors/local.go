@@ -483,9 +483,24 @@ func FromFlatDataAndDimensions[T dtypes.Supported](data []T, dimensions ...int) 
 		exceptions.Panicf("FromFlatDataAndDimensions(%s): data size is %d, but dimensions size is %d", shape, len(data), shape.Size())
 	}
 	t = FromShape(shape)
-	MutableFlatData[T](t, func(flat []T) {
-		copy(flat, data)
-	})
+	var dummy T
+	switch any(dummy).(type) {
+	case int:
+		// The underlying tensor data could be int32 or int64 depending on the type int for the platform.
+		// In this case we just copy the bytes.
+		t.MutableBytes(func(tensorData []byte) {
+			dataAsBytes := unsafe.Slice((*byte)(unsafe.Pointer(unsafe.SliceData(data))), uintptr(len(data))*unsafe.Sizeof(dummy))
+			if len(dataAsBytes) != len(tensorData) {
+				exceptions.Panicf("failed to convert FromFlatDataAndDimentions for type int: data has %d bytes (%d elements), but corresponding tensor will have %d bytes -- pls report, this shouldnt happen",
+					len(dataAsBytes), len(data), len(tensorData))
+			}
+			copy(tensorData, dataAsBytes)
+		})
+	default:
+		MutableFlatData[T](t, func(flat []T) {
+			copy(flat, data)
+		})
+	}
 	return
 }
 

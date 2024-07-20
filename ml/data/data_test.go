@@ -24,14 +24,18 @@ import (
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/types/xslices"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"io"
 	"math"
 	"math/rand"
 	"sync/atomic"
 	"testing"
 
-	"github.com/stretchr/testify/require"
+	_ "github.com/gomlx/gomlx/backends/xla"
 )
 
 type testDS struct {
@@ -142,29 +146,29 @@ func (ds *testSlicesDS) Yield() (spec any, inputs []*tensors.Tensor, labels []*t
 }
 
 func TestInMemoryDataset(t *testing.T) {
-	manager := graphtest.BuildTestBackend()
+	backend := graphtest.BuildTestBackend()
 	ds := &testSlicesDS{numExamples: 17}
 	const bytesPerValue = 8 // int uses dtypes.Int64, 8 bytes per value.
 	const valuesPerExample = 3
 
 	// Test as if each element is int[3]
-	mds, err := InMemory(manager, ds, false)
+	mds, err := InMemory(backend, ds, false)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(mds.inputsAndLabelsData))
 	require.Equal(t, 1, mds.numInputsTensors)
 	require.Equal(t, ds.numExamples, mds.numExamples)
-	require.Equal(t, int64(2*ds.numExamples*valuesPerExample*bytesPerValue), mds.Memory())
+	require.Equal(t, uintptr(2*ds.numExamples*valuesPerExample*bytesPerValue), mds.Memory())
 	require.True(t, shapes.Make(dtypes.Int64, ds.numExamples, valuesPerExample).Equal(mds.inputsAndLabelsData[0].Shape()))
 	require.True(t, shapes.Make(dtypes.Int64, ds.numExamples, valuesPerExample).Equal(mds.inputsAndLabelsData[0].Shape()))
 
 	// Test as if ds provided a batch of 3 elements each time.
 	ds.Reset()
-	mds, err = InMemory(manager, ds, true)
+	mds, err = InMemory(backend, ds, true)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(mds.inputsAndLabelsData))
 	require.Equal(t, 1, mds.numInputsTensors)
 	require.Equal(t, ds.numExamples*valuesPerExample, mds.numExamples)
-	require.Equal(t, int64(2*ds.numExamples*valuesPerExample*bytesPerValue), mds.Memory())
+	require.Equal(t, uintptr(2*ds.numExamples*valuesPerExample*bytesPerValue), mds.Memory())
 	require.True(t, shapes.Make(dtypes.Int64, ds.numExamples*valuesPerExample).Equal(mds.inputsAndLabelsData[0].Shape()))
 	require.True(t, shapes.Make(dtypes.Int64, ds.numExamples*valuesPerExample).Equal(mds.inputsAndLabelsData[0].Shape()))
 
@@ -243,7 +247,7 @@ func TestInMemoryDataset(t *testing.T) {
 	enc := gob.NewEncoder(buf)
 	require.NoError(t, mds.GobSerialize(enc))
 	dec := gob.NewDecoder(buf)
-	mds, err = GobDeserializeInMemory(manager, dec)
+	mds, err = GobDeserializeInMemory(backend, nil, dec)
 	require.NoError(t, err)
 
 	// Check that the recovered InMemoryDataset yields the same.
@@ -315,16 +319,17 @@ func TestNormalization(t *testing.T) {
 		wantStddev[featureIdx] = baseStddev + float64(featureIdx)
 	}
 	input := tensors.FromShape(shapes.Make(dtypes.Float64, numExamples, midDim, numFeatures))
-	ref := input.AcquireData()
-	data := ref.Flat().([]float64)
-	for ii := range data {
-		featureIdx := ii % numFeatures
-		data[ii] = rng.NormFloat64()*wantStddev[featureIdx] + wantMean[featureIdx]
-	}
-	ref.Release()
+	input.MutableFlatData(func(flat any) {
+		data := flat.([]float64)
+		for ii := range data {
+			featureIdx := ii % numFeatures
+			data[ii] = rng.NormFloat64()*wantStddev[featureIdx] + wantMean[featureIdx]
+		}
+	})
 
 	const batchSize = 32
 	mds, err := InMemoryFromData(manager, "test", []any{input}, nil)
+	require.NoError(t, err)
 	mds.BatchSize(batchSize, true)
 
 	meanT, stddevT, err := Normalization(manager, mds, 0, -1)
