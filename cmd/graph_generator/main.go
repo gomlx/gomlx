@@ -273,7 +273,7 @@ func GenerateBackendOps(methods []*MethodInfo) {
 	must.M(cmd.Run())
 	fmt.Printf("\tGenerated %q based on backends.Builder interface\n", fileName)
 
-	cmd = exec.Command("stringer", "-type", "NodeType", "-trimprefix", "NodeType", fileName)
+	cmd = exec.Command("enumer", "-type=NodeType", "-trimprefix=NodeType", "-yaml", "-json", "-text", "-values", fileName)
 	fmt.Printf("\t%s\n", cmd)
 	must.M(cmd.Run())
 
