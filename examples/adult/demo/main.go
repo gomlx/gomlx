@@ -21,8 +21,10 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/examples/adult"
 	"github.com/gomlx/gomlx/examples/notebook/gonb/margaid"
+	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/ml/data"
@@ -32,9 +34,14 @@ import (
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/types/xslices"
+	"github.com/gomlx/gopjrt/dtypes"
 	"log"
 	"path"
 	"time"
+
+	_ "github.com/gomlx/gomlx/backends/xla"
 )
 
 var (
@@ -94,18 +101,18 @@ func main() {
 	adult.LoadAndPreprocessData(*flagDataDir, *flagNumQuantiles, *flagForceDownload, *flagVerbosity)
 
 	// Crate Backend and upload data to device tensors.
-	manager := NewManager()
+	backend := backends.New()
 	if *flagVerbosity >= 1 {
-		fmt.Printf("PluginDescription: %s\n", manager.Platform())
+		fmt.Printf("Backend: %s\n", backend.Name())
 	}
 	if *flagVerbosity >= 2 {
-		adult.PrintBatchSamples(manager, adult.Data.Train)
+		adult.PrintBatchSamples(backend, adult.Data.Train)
 	}
 
 	// Create datasets for training and evaluation.
-	trainDS := adult.NewDataset(manager, adult.Data.Train, "batched train")
+	trainDS := adult.NewDataset(backend, adult.Data.Train, "batched train")
 	trainEvalDS := trainDS.Copy().BatchSize(*flagBatchSize, false)
-	testEvalDS := adult.NewDataset(manager, adult.Data.Test, "test").
+	testEvalDS := adult.NewDataset(backend, adult.Data.Test, "test").
 		BatchSize(*flagBatchSize, false)
 	// For training, we shuffle and loop indefinitely.
 	trainDS.BatchSize(*flagBatchSize, true).Shuffle().Infinite(true)
@@ -128,7 +135,7 @@ func main() {
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
-	trainer := train.NewTrainer(manager, ctx, ModelGraph, losses.BinaryCrossentropyLogits,
+	trainer := train.NewTrainer(backend, ctx, ModelGraph, losses.BinaryCrossentropyLogits,
 		optimizerFn(ctx),
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
 		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics

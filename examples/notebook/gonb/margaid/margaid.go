@@ -44,6 +44,8 @@ import (
 	mg "github.com/erkkah/margaid"
 	stdplots "github.com/gomlx/gomlx/examples/notebook/gonb/plots"
 	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/janpfeifer/gonb/gonbui"
 	"github.com/pkg/errors"
 	"io"

@@ -33,6 +33,7 @@ package adult
 
 import (
 	"fmt"
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/pkg/errors"
 	"log"
@@ -40,9 +41,9 @@ import (
 
 // NewDataset creates a new `data.InMemoryDataset` (can be used for training and evaluation) for the
 // MCI Adult dataset.
-func NewDataset(manager backends.Backend, rawData *RawData, name string) *data.InMemoryDataset {
-	tensorData := rawData.CreateTensors(manager)
-	ds, err := data.InMemoryFromData(manager, name,
+func NewDataset(backend backends.Backend, rawData *RawData, name string) *data.InMemoryDataset {
+	tensorData := rawData.CreateTensors(backend)
+	ds, err := data.InMemoryFromData(backend, name,
 		[]any{tensorData.CategoricalTensor, tensorData.ContinuousTensor, tensorData.WeightsTensor},
 		[]any{tensorData.LabelsTensor})
 	if err != nil {
@@ -53,8 +54,8 @@ func NewDataset(manager backends.Backend, rawData *RawData, name string) *data.I
 
 // PrintBatchSamples just generate a couple of batches of size 3 and print on the output.
 // Just for debugging.
-func PrintBatchSamples(manager backends.Backend, data *RawData) {
-	sampler := NewDataset(manager, data, "batched sample dataset")
+func PrintBatchSamples(backend backends.Backend, data *RawData) {
+	sampler := NewDataset(backend, data, "batched sample dataset")
 	sampler.BatchSize(3, true)
 	for ii := 0; ii < 2; ii++ {
 		fmt.Printf("\nSample batch %d:\n", ii)

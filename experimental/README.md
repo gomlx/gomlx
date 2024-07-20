@@ -1,4 +1,4 @@
-## Experimental Pacakges
+## Experimental Packages
 
 This directory holds experimental extensions that haven't made yet
 to the main API. 

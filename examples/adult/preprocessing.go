@@ -19,6 +19,8 @@ package adult
 import (
 	"encoding/gob"
 	"fmt"
+	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/types/tensors"
 	"math/rand"
 	"os"
 	"path"
@@ -28,7 +30,6 @@ import (
 
 	"github.com/go-gota/gota/dataframe"
 	"github.com/go-gota/gota/series"
-	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/pkg/errors"
 )
@@ -495,7 +496,7 @@ type TensorData struct {
 }
 
 // CreateTensors of dataset, for faster ML interaction.
-func (r *RawData) CreateTensors(manager *graph.Manager) *TensorData {
+func (r *RawData) CreateTensors(backend backends.Backend) *TensorData {
 	return &TensorData{
 		CategoricalTensor: tensors.FromFlatDataAndDimensions(r.Categorical, r.NumRows, r.NumCategorical),
 		ContinuousTensor:  tensors.FromFlatDataAndDimensions(r.Continuous, r.NumRows, r.NumContinuous),
