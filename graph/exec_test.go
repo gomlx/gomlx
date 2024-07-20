@@ -37,8 +37,8 @@ func EuclideanDistance(a, b *Node) *Node {
 }
 
 func TestExec(t *testing.T) {
-	manager := graphtest.BuildTestBackend()
-	dist := NewExec(manager, EuclideanDistance).SetMaxCache(10)
+	backend := graphtest.BuildTestBackend()
+	dist := NewExec(backend, EuclideanDistance).SetMaxCache(10)
 	fmt.Printf("\tExec name: %s\n", dist.Name())
 	testForDim := func(dim int) {
 		a := make([]float32, dim)
@@ -97,7 +97,7 @@ func TestExec(t *testing.T) {
 		return Add(a, b), Sub(a, b)
 	}
 
-	addAndSub := NewExec(manager, addAndSubGraph)
+	addAndSub := NewExec(backend, addAndSubGraph)
 	{
 		a := []float32{2, 2}
 		b := []float32{1, 1}
@@ -112,6 +112,28 @@ func TestExec(t *testing.T) {
 }
 
 const scalarParamName = "scalar"
+
+func TestDonate(t *testing.T) {
+	backend := graphtest.BuildTestBackend()
+	g := NewGraph(backend, "TestDonate")
+	x := Parameter(g, "x", shapes.Make(dtypes.Float64))
+	p1 := AddScalar(x, 1)
+	g.Compile(p1)
+
+	input := tensors.FromValue(5.0)
+
+	// Do not donate input:
+	output := g.Run(input)[0]
+	require.Equal(t, 6.0, output.Value())
+	require.True(t, input.Ok()) // input should still be valid.
+	require.True(t, input.IsOnDevice(0))
+
+	// Donate input:
+	output = g.Run(DonateTensorBuffer(input, backend, 0))[0]
+	require.Equal(t, 6.0, output.Value())
+	require.True(t, input.Ok()) // input should still be valid.
+	require.False(t, input.IsOnDevice(0))
+}
 
 func addScalarTest(x *Node) *Node {
 	return Add(x, Parameter(x.Graph(), scalarParamName, MakeShape(F64)))
