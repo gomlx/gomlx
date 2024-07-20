@@ -19,6 +19,7 @@ package graph_test
 import (
 	"fmt"
 	"github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/types/shapes"
@@ -111,8 +112,6 @@ func TestExec(t *testing.T) {
 	}
 }
 
-const scalarParamName = "scalar"
-
 func TestDonate(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 	g := NewGraph(backend, "TestDonate")
@@ -135,36 +134,40 @@ func TestDonate(t *testing.T) {
 	require.False(t, input.IsOnDevice(0))
 }
 
+const scalarParamName = "scalar"
+
 func addScalarTest(x *Node) *Node {
-	return Add(x, Parameter(x.Graph(), scalarParamName, MakeShape(F64)))
+	sideParam := Parameter(x.Graph(), scalarParamName, shapes.Make(dtypes.Float64))
+	return Add(x, sideParam)
 }
 
-/*
 func TestExecWithSideParams(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
-	scalar := tensors.FromValue(3.0)
-	setSideParams := func(g *Graph, tensors []*tensors.Tensor) {
-		node := g.GetParameterByName(scalarParamName)
-		tensors[node.GetParameterHandle()] = scalar
-	}
-	addScalar := NewExec(backend, addScalarTest).SetSideParamsHook(setSideParams)
 
+	scalarBuffer := tensors.FromValue(3.0).DonateBuffer(backend, 0)
+	setSideParams := func(g *Graph, inputBuffers []backends.Buffer, donate []bool) {
+		node := g.GetParameterByName(scalarParamName)
+		handle := node.GetParameterHandle()
+		inputBuffers[handle] = scalarBuffer
+		donate[handle] = false
+	}
+
+	addScalar := NewExec(backend, addScalarTest).SetSideParamsHook(setSideParams)
 	x := []float64{1, 2}
 	want := []float64{4, 5}
 	got := addScalar.Call(x)[0]
-	require.Equalf(t, want, got.Value(), "addScalar(%v, 3): got %v, wanted %v", x, got, want)
+	require.Equal(t, want, got.Value(), "addScalar(%v, 3): got %v, wanted %v", x, got, want)
 
-	scalar = tensors.FromValue(10.0)
+	scalarBuffer = tensors.FromValue(10.0).DonateBuffer(backend, 0)
 	want = []float64{11, 12}
 	got = addScalar.Call(x)[0]
-	require.Equalf(t, want, got.Value(), "addScalar(%v, 3): got %v, wanted %v", x, got, want)
+	require.Equal(t, want, got.Value(), "addScalar(%v, 10): got %v, wanted %v", x, got, want)
 
 	x = []float64{0, 1, 2}
 	want = []float64{10, 11, 12}
 	got = addScalar.Call(x)[0]
-	require.Equalf(t, want, got.Value(), "addScalar(%v, 3): got %v, wanted %v", x, got, want)
+	require.Equal(t, want, got.Value(), "addScalar(%v, 10): got %v, wanted %v", x, got, want)
 }
-*/
 
 func concatGraph(nodes []*Node) *Node {
 	return Concatenate(nodes, -1)

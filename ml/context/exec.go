@@ -353,12 +353,41 @@ func (e *Exec) Finalize() {
 
 // setSideParams is used by computation.Exec.SetSideParamsHook to set up
 // the variable values as parameters just before graph execution.
-func (e *Exec) setSideParams(graph *Graph, tensors []*tensors.Tensor) {
+//
+// It fills the graph parameter values for every variable used in the given graph.
+// It keeps a cache of the variables' mapping for faster access.
+//
+// It's assumed len(inputBuffers) = len(donate) = g.NumParameters()
+//
+// `Exec*` methods are used by those implementing an executor (context.Exec) or related tests, not normally
+// needed by end users.
+func (e *Exec) setSideParams(g *Graph, inputBuffers []backends.Buffer, donate []bool) {
 	// Initialize variables if needed.
-	if e.context.NeedsInitialization() {
-		e.context.InitializeVariables(e.backend)
+	ctx := e.context
+	if ctx.NeedsInitialization() {
+		ctx.InitializeVariables(e.backend)
 	}
-	e.context.execPopulateGraphParamsSlice(graph, tensors)
+
+	graphId := g.GraphId()
+	ctx.EnumerateVariables(func(v *Variable) {
+		nodes, found := v.graphToNodes[graphId]
+		if !found {
+			return
+		}
+		if nodes == nil || nodes.paramNode == nil || nodes.paramNode.Type() != graph.NodeTypeParameter {
+			Panicf("invalid paramNode for variable %q", v.ParameterName())
+		}
+		handle := nodes.paramNode.GetParameterHandle()
+
+		if v.ChangedInGraph(g) {
+			// We donate the buffer, since we are getting a new one on the output.
+			inputBuffers[handle] = v.Value().DonateBuffer(e.backend, e.exec.DeviceNum())
+			donate[handle] = true
+		} else {
+			inputBuffers[handle] = v.Value().Buffer(e.backend, e.exec.DeviceNum())
+			donate[handle] = false
+		}
+	})
 }
 
 // SetNodeLogger with the function to be called for the nodes

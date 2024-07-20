@@ -882,27 +882,6 @@ func (ctx *Context) ExecPopulateGraphParamsMap(g *Graph, params graph.ParamsMap)
 	})
 }
 
-// execPopulateGraphParamsSlice will fill the graph parameter values for every variable used in the given graph.
-// It keeps a cache of the variables' mapping for faster access.
-//
-// It's assumed len(params) = g.NumParameters()
-//
-// `Exec*` methods are used by those implementing an executor (context.Exec) or related tests, not normally
-// needed by end users.
-func (ctx *Context) execPopulateGraphParamsSlice(g *Graph, params []*tensors.Tensor) {
-	graphId := g.GraphId()
-	ctx.EnumerateVariables(func(v *Variable) {
-		nodes, found := v.graphToNodes[graphId]
-		if !found {
-			return
-		}
-		if nodes == nil || nodes.paramNode == nil || nodes.paramNode.Type() != graph.NodeTypeParameter {
-			Panicf("invalid paramNode for variable %q", v.ParameterName())
-		}
-		params[nodes.paramNode.GetParameterHandle()] = v.Value()
-	})
-}
-
 // BuildTrainableVariablesGradientsGraph returns the gradient of the loss with respect to each trainable variable
 // in the context that was used in the current graph.
 // It returns a tuple Node.

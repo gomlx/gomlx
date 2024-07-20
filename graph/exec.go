@@ -27,6 +27,7 @@ import (
 	"k8s.io/klog/v2"
 	"reflect"
 	"runtime"
+	"slices"
 	"sync"
 	"time"
 )
@@ -71,7 +72,7 @@ type ExecGraphFn interface {
 
 // SideParamsFn is the functions that sets side parameters during execution
 // for Graphs that defines those. Typically, this is used to set the variables of a model.
-type SideParamsFn func(graph *Graph, params []*tensors.Tensor)
+type SideParamsFn func(graph *Graph, inputBuffers []backends.Buffer, donate []bool)
 
 // LoggerFn is the function used to log nodes marked for logging. It is called
 // after the Call method, with the list of messages and corresponding values
@@ -145,12 +146,12 @@ type Exec struct {
 
 	// Protects cache structure.
 	cacheMu sync.Mutex
-	cache   []*execCacheEntry
+	cache   []*execGraphCacheEntry
 }
 
-// execCacheEntry: no hashing, just a simple list. This is faster
+// execGraphCacheEntry: no hashing, just a simple list. This is faster
 // for smaller tables. TODO: add a hashtable for cases with large caches.
-type execCacheEntry struct {
+type execGraphCacheEntry struct {
 	argsShapes     []shapes.Shape
 	graph          *Graph
 	numOutputs     int      // Number of flattened outputs for this graph, including logged nodes.
@@ -163,8 +164,8 @@ var DefaultExecMaxCacheSize = 32
 
 // NewExecAny constructs an Exec object that uses the given graphFn to build
 // computation graphs.
-// `graphFn` can take only *Node parameters as input and returns one or more *Node.
 //
+// `graphFn` can take only *Node parameters as input and returns one or more *Node.
 // Except if there are no inputs, in which case graphFn needs to take a *Graph as the first parameter.
 //
 // It will panic if the inputs are invalid.
@@ -255,6 +256,12 @@ func (e *Exec) InDevice(deviceNum backends.DeviceNum) *Exec {
 	return e
 }
 
+// DeviceNum returns the device being used by this Exec.
+// It defaults to 0 and can be changed with Exec.InDevice.
+func (e *Exec) DeviceNum() backends.DeviceNum {
+	return e.deviceNum
+}
+
 // SetName sets the name of Exec, used to provide the name to graphs created.
 // This should be called before any invocations of Call().
 // It returns a reference to itself so calls can be cascaded.
@@ -278,26 +285,26 @@ func (e *Exec) SetMaxCache(maxCacheSize int) *Exec {
 	return e
 }
 
-// SetSideParamsHook makes Exec call the given function everytime
-// before executing a graph with the list of parameters.
+// SetSideParamsHook configures a function to be called just before executing a graph, so it can set extra parameters.
 //
-// Side parameters are parameters created by the graphFn itself,
-// and are not passed to it as input parameters. These could
-// be variables in a model, or some global values. Exec
-// has no knowledge of them, hence cannot set their values,
-// and this serves as a hook to set them up just before
-// the graph is executed.
+// Exec takes care of creating parameters (with graph.Parameter) for every value passed to Call before
+// calling the graph building function (the graph building function is executed only the first time, after the
+// graph is compiled it is re-used for future executions).
 //
-// The function is called anyway, even if there are no
-// side parameters to be set, so it can be used as a hook
-// just before graph execution.
+// But a graph building functions may want to create extra parameters itself (with graph.Parameter), which we call
+// "side parameters".
 //
-// SideParamsFn is a function that takes as input a slice
-// of Device tensors that will be passed as input to graph
-// execution. The first elements of the slice are the
-// input parameters to graphFn function (given during
-// the construction of Exec), and they will be filled
-// already with the correct values.
+// The values to feed these "side parameters" are not passed to Exec.Call, but instead set with a SideParamsFn, which
+// is configured here.
+//
+// Mostly, this is for internal use end users will not likely need this. The context.Exec object uses this to pass
+// the variable values as side inputs to the graph.
+//
+// SideParamsFn is called after the graph is already built, just before the execution.
+// It is passed with a slice of the backend.Buffer to be fed to the graph execution.
+// The side parameters in this slice will be left nil, and it's expected that SideParamsFn will set
+// them to the appropriate input. It also includes the boolean map of the inputs to donate, which SideParamsFn
+// can set accordingly (for the side parameters).
 func (e *Exec) SetSideParamsHook(fn SideParamsFn) *Exec {
 	e.setSideParams = fn
 	return e
@@ -387,7 +394,7 @@ func (e *Exec) compileAndExecute(execute bool, args ...any) (results []*tensors.
 	}
 
 	// Get or build the graph.
-	entry := e.findCacheEntry(argsShapes)
+	entry := e.findOrCreateGraph(argsShapes)
 	if entry == nil {
 		Panicf(
 			"maximum cache size of %d reached for %q, cannot create another g -- "+
@@ -398,20 +405,23 @@ func (e *Exec) compileAndExecute(execute bool, args ...any) (results []*tensors.
 	}
 	g = entry.graph
 
-	// Set extra input parameters created by the graph.
-	//numExtraInputs := g.NumParameters() - len(args)
-	//for numExtraInputs > 0 {
-	//	argsAsTensors = append(argsAsTensors, nil)
-	//	numExtraInputs--
-	//}
-	//if e.setSideParams != nil {
-	//	e.setSideParams(g, argsAsTensors)
-	//}
-	if g.NumParameters() != len(args) {
-		Panicf(
-			"# of arguments to call (#args=%d) don't match # arguments to the graph function (#args=%d) for %q",
-			len(args), e.numInputs, e.Name())
+	// Now that the graph is created, we know the exact number of parameters: if the graph building function created
+	// new graph.Parameter, we may need to include those in our argsAsBuffer and argsDonate accordingly.
+	if g.NumParameters() > len(argsAsBuffer) {
+		numNew := g.NumParameters() - len(argsAsBuffer)
+		argsAsBuffer = slices.Grow(argsAsBuffer, numNew)
+		argsAsBuffer = argsAsBuffer[:g.NumParameters()]
+		argsDonate = slices.Grow(argsDonate, numNew)
+		argsDonate = argsDonate[:g.NumParameters()]
 	}
+
+	// The new parameters (if any) created are still nil, and need to be set. This is done by a "SideParamsFn",
+	// configured by Exec.SetSideParamsHooks.
+	if e.setSideParams != nil {
+		e.setSideParams(g, argsAsBuffer, argsDonate)
+	}
+
+	// Check all parameters were set.
 	for ii, t := range argsAsBuffer {
 		if t == nil {
 			Panicf("parameter %d (%q) is nil or invalid, maybe a variable value not set as a "+
@@ -444,11 +454,11 @@ func (e *Exec) compileAndExecute(execute bool, args ...any) (results []*tensors.
 // shapes. It creates and stores a cache entry for it and returns it.
 // Returns nil if the cache size is >= MaxCacheSize.
 // Should be called with cacheMu locked.
-func (e *Exec) createAndCacheGraph(argsShapes []shapes.Shape) (entry *execCacheEntry) {
+func (e *Exec) createAndCacheGraph(argsShapes []shapes.Shape) (entry *execGraphCacheEntry) {
 	if len(e.cache) >= e.maxCacheSize {
 		return nil
 	}
-	entry = &execCacheEntry{graph: NewGraph(e.backend, fmt.Sprintf("%s#%d", e.name, len(e.cache)))}
+	entry = &execGraphCacheEntry{graph: NewGraph(e.backend, fmt.Sprintf("%s#%d", e.name, len(e.cache)))}
 	g := entry.graph
 	var argsV []reflect.Value
 	var args []*Node
@@ -515,9 +525,9 @@ func (e *Exec) createAndCacheGraph(argsShapes []shapes.Shape) (entry *execCacheE
 	return entry
 }
 
-// findCacheEntry returns the graph for the given arguments shapes, or nil
+// findOrCreateGraph returns the graph for the given arguments shapes: either from cache or by creating a new one.
 // if no cache entry exists.
-func (e *Exec) findCacheEntry(argsShapes []shapes.Shape) *execCacheEntry {
+func (e *Exec) findOrCreateGraph(argsShapes []shapes.Shape) *execGraphCacheEntry {
 	e.cacheMu.Lock()
 	defer e.cacheMu.Unlock()
 
