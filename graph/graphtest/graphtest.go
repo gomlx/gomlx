@@ -24,16 +24,25 @@ import (
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/stretchr/testify/require"
+	"sync"
 	"testing"
 )
 
 // TestGraphFn should build its own inputs, and return both inputs and outputs
 type TestGraphFn func(g *graph.Graph) (inputs, outputs []*graph.Node)
 
+var (
+	backendOnce   sync.Once
+	cachedBackend backends.Backend
+)
+
 // BuildTestBackend and sets backends.DefaultConfig to "xla:cpu" -- it can be overwritten by GOMLX_BACKEND environment variable.
 func BuildTestBackend() backends.Backend {
 	backends.DefaultConfig = "xla:cpu"
-	return backends.New()
+	backendOnce.Do(func() {
+		cachedBackend = backends.New()
+	})
+	return cachedBackend
 }
 
 // RunTestGraphFn tests a graph building function graphFn by executing it and comparing
