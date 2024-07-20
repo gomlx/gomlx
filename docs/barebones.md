@@ -14,7 +14,7 @@ import (
 
 func main() {
 	manager := BuildManager().Platform("Host").MustDone()
-	g := NewGraph(manager).WithName("sum")
+	g := NewGraph(manager, "sum")
 	one := Const(g, 1)
 	sum := SumGraph(one, one)
 	if !g.Ok() {
@@ -37,7 +37,7 @@ One line at a time, this is what is happening:
     * The *platform* is where to execute the computation graphs, either the CPU ("Host" as in this case), or
       an accelerator (e.g: "CUDA" or "TPU"). One can list available and supported platforms with
       `GetPlatforms()`.
-* `NewGraph(manager).WithName("sum")`: creates an empty new computation graph, that we are going to build.
+* `NewGraph(manager, "sum")`: creates an empty new computation graph, that we are going to build.
 * `C(graph, 1)`: creates a new constant node initialized with the value of `int(1)` in the g.
   It returns a `*Node` type. Notice that our graphs only support a few data types
   (called `types.DType`), as of now only `Int64`, `Float32` and `Float64`, which maps to the
@@ -76,7 +76,7 @@ way of doing this, the simpler way will be explained in the next session.
 ```go
 func main() {
 	manager := BuildManager().Platform("Host").MustDone()
-	g := NewGraph(manager).WithName("euclidean")
+	g := NewGraph(manager, "euclidean")
 
 	vectorShape := types.MakeShape(types.Float64, 3) // 3D vectors.
 	a := g.Parameter("a", vectorShape)
