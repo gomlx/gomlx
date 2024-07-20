@@ -244,7 +244,7 @@ func (v *Variable) ParamNode(g *Graph) *Node {
 	return nodes.paramNode
 }
 
-// SetTrainable sets the variable trainable status. Returns itself, so calls can be cascated.
+// SetTrainable sets the variable trainable status. Returns itself, so calls can be cascaded.
 func (v *Variable) SetTrainable(trainable bool) *Variable {
 	v.AssertValid()
 	v.Trainable = trainable

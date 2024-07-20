@@ -27,6 +27,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"testing"
+
+	_ "github.com/gomlx/gomlx/backends/xla"
 )
 
 func TestContextVariables(t *testing.T) {

@@ -24,6 +24,7 @@ import (
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -34,8 +35,8 @@ func oneLayerGraph(ctx *context.Context, x *Node) *Node {
 }
 
 func TestExec(t *testing.T) {
-	manager := graphtest.BuildTestBackend()
-	oneLayer, err := context.NewExecAny(manager, nil, oneLayerGraph)
+	backend := graphtest.BuildTestBackend()
+	oneLayer, err := context.NewExecAny(backend, nil, oneLayerGraph)
 	if err != nil {
 		t.Fatalf("Failed to create context.Exec for oneLayer: %+v", err)
 	}
@@ -68,8 +69,8 @@ func oneLayerManyInputsGraph(ctx *context.Context, inputs []*Node) *Node {
 }
 
 func TestExecWithSlices(t *testing.T) {
-	manager := graphtest.BuildTestBackend()
-	oneLayer, err := context.NewExecAny(manager, nil, oneLayerManyInputsGraph)
+	backend := graphtest.BuildTestBackend()
+	oneLayer, err := context.NewExecAny(backend, nil, oneLayerManyInputsGraph)
 	if err != nil {
 		t.Fatalf("Failed to create context.Exec for oneLayer: %+v", err)
 	}
@@ -87,16 +88,14 @@ func TestExecWithSlices(t *testing.T) {
 	oneElementOfX := [][]float64{{1}}
 	got2 := oneLayer.Call(oneElementOfX, oneElementOfX, oneElementOfX)[0].Value().([][]float64)
 	fmt.Printf("\toneLayer(%v, %v, %v)=%v\n", oneElementOfX, oneElementOfX, oneElementOfX, got)
-	if !xslices.DeepSliceCmp(got, got2, xslices.Equal[float64]) {
-		t.Fatalf("oneLayer(%v) should have been the same as oneLayer(%v, %v, %v), but got %v and %v",
-			x, oneElementOfX, oneElementOfX, oneElementOfX, got, got2)
-	}
+	require.Equal(t, got, got2, "oneLayer(%v) should have been the same as oneLayer(%v, %v, %v), but got %v and %v",
+		x, oneElementOfX, oneElementOfX, oneElementOfX, got, got2)
 }
 
 func TestExecWithVariableUpdates(t *testing.T) {
-	manager := graphtest.BuildTestBackend()
-	ctx := context.NewContext(manager)
-	counter := context.NewExec(manager, ctx, func(ctx *context.Context, g *Graph) *Node {
+	backend := graphtest.BuildTestBackend()
+	ctx := context.NewContext()
+	counter := context.NewExec(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
 		dtype := dtypes.Int64
 		counterVar := ctx.WithInitializer(initializers.Zero).VariableWithShape("counter", shapes.Make(dtype))
 		counterNode := counterVar.ValueGraph(g)
