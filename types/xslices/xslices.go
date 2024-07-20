@@ -320,13 +320,13 @@ func recursiveMDSlice[T any](dims []int, data []T, dataPos int) (reflect.Value, 
 
 	// Create first sub-slice, and use its type to create the higher order slice.
 	var subSlice reflect.Value
-	subSlice, dataPos = recursiveMDSlice(dims[1:], data, dataPos)
+	subSlice, dataPos = recursiveMDSlice[T](dims[1:], data, dataPos)
 	slice := reflect.MakeSlice(reflect.SliceOf(subSlice.Type()), dims[0], dims[0])
 	slice.Index(0).Set(subSlice)
 
 	// Now create the other sub-slices:
 	for ii := 1; ii < dims[0]; ii++ {
-		subSlice, dataPos = recursiveMDSlice(dims[1:], data, dataPos)
+		subSlice, dataPos = recursiveMDSlice[T](dims[1:], data, dataPos)
 		slice.Index(ii).Set(subSlice)
 	}
 	return slice, dataPos
@@ -462,7 +462,8 @@ func recursiveDeepSliceCmp(s0, s1 reflect.Value, cmpFn func(e0, e1 any) bool) bo
 	return true
 }
 
-// Flag creates a flag with the given name, description and default value.
+// Flag creates a flag for []T with the given name, description and default value.
+// It takes as input a parser for an individual T value.
 func Flag[T any](name string, defaultValue []T, usage string,
 	parserFn func(valueStr string) (T, error)) *[]T {
 	f := &genericSliceFlagImpl[T]{
