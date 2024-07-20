@@ -48,14 +48,14 @@ func CreateInMemoryDatasets() (trainDS, validationDS *data.InMemoryDataset) {
 
 var (
 	// Cached results for NormalizationValues.
-	normalizationMean, normalizationStdDev tensors.Tensor
+	normalizationMean, normalizationStdDev *tensors.Tensor
 
 	// NormalizationInfoFile where NormalizationValues results are saved (and loaded from).
 	NormalizationInfoFile = "normalization_data.bin"
 )
 
 // NormalizationValues for the flowers dataset -- only look at the training data.
-func NormalizationValues() (mean, stddev tensors.Tensor) {
+func NormalizationValues() (mean, stddev *tensors.Tensor) {
 	Init()
 
 	// Check if values have already been retrieved.
@@ -142,7 +142,7 @@ func DenormalizeImages(images *Node) *Node {
 
 }
 
-func finalize(tensors []tensors.Tensor) {
+func finalize(tensors []*tensors.Tensor) {
 	for _, t := range tensors {
 		t.FinalizeAll()
 	}

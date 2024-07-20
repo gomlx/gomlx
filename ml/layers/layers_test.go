@@ -114,7 +114,7 @@ func testSimpleFunc(t *testing.T, name string, input any,
 	manager := graphtest.BuildTestBackend()
 	ctx := context.NewContext(manager).WithInitializer(IotaP1Initializer)
 	exec := context.NewExec(manager, ctx, fn)
-	var outputs []tensors.Tensor
+	var outputs []*tensors.Tensor
 	require.NotPanicsf(t, func() { outputs = exec.Call(input) }, "%s: failed to exec graph", name)
 	fmt.Printf("\t%s(%v) = %s\n", name, input, outputs[0].Local().GoStr())
 	require.Truef(t, xslices.SlicesInDelta(outputs[0].Local().Value(), want, xslices.Epsilon),
@@ -126,7 +126,7 @@ func testSimpleFuncMany(t *testing.T, name string, inputs []any,
 	manager := graphtest.BuildTestBackend()
 	ctx := context.NewContext(manager).WithInitializer(IotaP1Initializer)
 	exec := context.NewExec(manager, ctx, fn)
-	var outputs []tensors.Tensor
+	var outputs []*tensors.Tensor
 	require.NotPanicsf(t, func() { outputs = exec.Call(inputs...) }, "%s: failed to exec graph", name)
 	parts := make([]string, len(inputs))
 	for ii, input := range inputs {

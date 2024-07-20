@@ -35,7 +35,7 @@ func TestDatasets(t *testing.T) {
 	for _, testCase := range []struct {
 		Name  string
 		DS    train.Dataset
-		Seeds tensors.Tensor
+		Seeds *tensors.Tensor
 	}{
 		{"valid", validDS, ValidSplit},
 		{"test", testDS, TestSplit},

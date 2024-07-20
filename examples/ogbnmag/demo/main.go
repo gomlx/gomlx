@@ -28,8 +28,8 @@ var (
 
 const paramWithReplacement = "mag_with_replacement"
 
-func createDefaultContext(manager *Manager) *context.Context {
-	ctx := context.NewContext(manager)
+func createDefaultContext() *context.Context {
+	ctx := context.NewContext()
 	ctx.RngStateReset()
 	ctx.SetParams(map[string]any{
 		"checkpoint":         "",
@@ -123,14 +123,14 @@ func main() {
 	mag.WithReplacement = context.GetParamOr(ctx, paramWithReplacement, false)
 	var err error
 	if *flagEval {
-		err = mag.Eval(ctx, *flagDataDir, *flagLayerWise, *flagSkipTrainEval)
+		err = mag.Eval(backend, ctx, *flagDataDir, *flagLayerWise, *flagSkipTrainEval)
 	} else {
 		if mag.WithReplacement {
 			fmt.Println("Training dataset with replacement")
 		}
 
 		// Train.
-		err = mag.Train(ctx, *flagDataDir, *flagLayerWise, !*flagSkipReport)
+		err = mag.Train(backend, ctx, *flagDataDir, *flagLayerWise, !*flagSkipReport)
 	}
 	if err != nil {
 		fmt.Printf("%+v\n", err)

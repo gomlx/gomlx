@@ -5,6 +5,7 @@ package ogbnmag
 import (
 	"fmt"
 	. "github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/examples/notebook/gonb/margaid"
 	"github.com/gomlx/gomlx/examples/notebook/gonb/plotly"
 	. "github.com/gomlx/gomlx/graph"
@@ -17,6 +18,8 @@ import (
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/janpfeifer/must"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
@@ -42,7 +45,7 @@ var (
 )
 
 // Train GNN model based on configuration in `ctx`.
-func Train(ctx *context.Context, baseDir string, layerWiseEval, report bool) error {
+func Train(backend backends.Backend, ctx *context.Context, baseDir string, layerWiseEval, report bool) error {
 	baseDir = mldata.ReplaceTildeInDir(baseDir)
 	ReuseShareableKernels = context.GetParamOr(ctx, ParamReuseKernels, true)
 	IdentitySubSeeds = context.GetParamOr(ctx, ParamIdentitySubSeeds, true)
@@ -97,7 +100,7 @@ func Train(ctx *context.Context, baseDir string, layerWiseEval, report bool) err
 	}
 
 	// Create trainer and loop.
-	trainer := newTrainer(ctx)
+	trainer := newTrainer(backend, ctx)
 	loop := train.NewLoop(trainer)
 	commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
 
@@ -105,7 +108,7 @@ func Train(ctx *context.Context, baseDir string, layerWiseEval, report bool) err
 	if checkpoint != nil && numCheckpointsToKeep > 1 {
 		period := time.Minute * 3
 		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
-			func(loop *train.Loop, metrics []tensors.Tensor) error {
+			func(loop *train.Loop, metrics []*tensors.Tensor) error {
 				return checkpoint.Save()
 			})
 	}
@@ -158,7 +161,7 @@ func Train(ctx *context.Context, baseDir string, layerWiseEval, report bool) err
 	return nil
 }
 
-func newTrainer(ctx *context.Context) *train.Trainer {
+func newTrainer(backend backends.Backend, ctx *context.Context) *train.Trainer {
 	// Loss: multi-class classification problem.
 	lossFn := losses.SparseCategoricalCrossEntropyLogits
 
@@ -168,7 +171,7 @@ func newTrainer(ctx *context.Context) *train.Trainer {
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
-	trainer := train.NewTrainer(ctx.Backend(), ctx, MagModelGraph,
+	trainer := train.NewTrainer(backend, ctx, MagModelGraph,
 		lossFn,
 		optimizers.FromContext(ctx), // Based on `ctx.GetParam("optimizer")`.
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
@@ -176,14 +179,14 @@ func newTrainer(ctx *context.Context) *train.Trainer {
 	return trainer
 }
 
-func Eval(ctx *context.Context, baseDir string, layerWise, skipTrain bool) error {
+func Eval(backend backends.Backend, ctx *context.Context, baseDir string, layerWise, skipTrain bool) error {
 	if err := loadCheckpointToContext(ctx, baseDir); err != nil {
 		return err
 	}
-	return evalWithContext(ctx, baseDir, layerWise, skipTrain)
+	return evalWithContext(backend, ctx, baseDir, layerWise, skipTrain)
 }
 
-func evalWithContext(ctx *context.Context, baseDir string, layerWise, skipTrain bool) error {
+func evalWithContext(backend backends.Backend, ctx *context.Context, baseDir string, layerWise, skipTrain bool) error {
 	if layerWise {
 		return evalLayerWise(ctx, baseDir)
 	}
@@ -191,16 +194,16 @@ func evalWithContext(ctx *context.Context, baseDir string, layerWise, skipTrain 
 	// Evaluate on various datasets.
 	_, trainEvalDS, validEvalDS, testEvalDS := must.M4(MakeDatasets(baseDir))
 	if skipTrain {
-		return evalSampled(ctx, validEvalDS, testEvalDS)
+		return evalSampled(backend, ctx, validEvalDS, testEvalDS)
 	} else {
-		return evalSampled(ctx, trainEvalDS, validEvalDS, testEvalDS)
+		return evalSampled(backend, ctx, trainEvalDS, validEvalDS, testEvalDS)
 	}
 }
 
 // evalSampled evaluates GNN model based on configuration in `ctx` using sampled sub-graphs.
-func evalSampled(ctx *context.Context, datasets ...train.Dataset) error {
+func evalSampled(backend backends.Backend, ctx *context.Context, datasets ...train.Dataset) error {
 	// Evaluation on the various eval datasets.
-	trainer := newTrainer(ctx)
+	trainer := newTrainer(backend, ctx)
 	for _, ds := range datasets {
 		start := time.Now()
 		err := commandline.ReportEval(trainer, ds)

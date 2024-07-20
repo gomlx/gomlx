@@ -130,7 +130,7 @@ func TestDataset(t *testing.T) {
 	strategy := createTestStrategy(t, s)
 
 	// checkInputsFn make automatic checks of expected dimensions and errors.
-	checkInputsFn := func(t *testing.T, spec any, inputs, labels []tensors.Tensor, err error) map[string]*ValueMask[tensors.Tensor] {
+	checkInputsFn := func(t *testing.T, spec any, inputs, labels []*tensors.Tensor, err error) map[string]*ValueMask[tensors.Tensor] {
 		require.NoError(t, err)
 		require.Empty(t, labels)
 		require.Equal(t, strategy, spec.(*Strategy))

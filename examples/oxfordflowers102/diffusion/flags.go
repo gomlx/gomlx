@@ -58,7 +58,7 @@ func Init() {
 	})
 }
 
-func GetManager() *Manager {
+func GetManager() backends.Backend {
 	Init()
 	return manager
 }

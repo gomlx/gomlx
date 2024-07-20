@@ -33,7 +33,6 @@ package adult
 
 import (
 	"fmt"
-	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/pkg/errors"
 	"log"
@@ -41,7 +40,7 @@ import (
 
 // NewDataset creates a new `data.InMemoryDataset` (can be used for training and evaluation) for the
 // MCI Adult dataset.
-func NewDataset(manager *Manager, rawData *RawData, name string) *data.InMemoryDataset {
+func NewDataset(manager backends.Backend, rawData *RawData, name string) *data.InMemoryDataset {
 	tensorData := rawData.CreateTensors(manager)
 	ds, err := data.InMemoryFromData(manager, name,
 		[]any{tensorData.CategoricalTensor, tensorData.ContinuousTensor, tensorData.WeightsTensor},
@@ -54,7 +53,7 @@ func NewDataset(manager *Manager, rawData *RawData, name string) *data.InMemoryD
 
 // PrintBatchSamples just generate a couple of batches of size 3 and print on the output.
 // Just for debugging.
-func PrintBatchSamples(manager *Manager, data *RawData) {
+func PrintBatchSamples(manager backends.Backend, data *RawData) {
 	sampler := NewDataset(manager, data, "batched sample dataset")
 	sampler.BatchSize(3, true)
 	for ii := 0; ii < 2; ii++ {

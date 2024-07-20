@@ -48,7 +48,7 @@ const (
 //   - It creates the file `args.txt` with a copy of the arguments used to create the model.
 //     Later, if the same model is used, it checks that the arguments match (with some exceptions),
 //     and warns about mismatches.
-func LoadCheckpointToContext(ctx *context.Context) (checkpoint *checkpoints.Handler, noise, flowerIds tensors.Tensor) {
+func LoadCheckpointToContext(ctx *context.Context) (checkpoint *checkpoints.Handler, noise, flowerIds *tensors.Tensor) {
 	Init()
 	if *flagCheckpoint == "" {
 		return
@@ -182,7 +182,7 @@ func TrainModel() {
 	imgMetricFn := func(ctx *context.Context, labels, predictions []*Node) *Node {
 		return predictions[2]
 	}
-	pprintLossFn := func(t tensors.Tensor) string {
+	pprintLossFn := func(t *tensors.Tensor) string {
 		return fmt.Sprintf("%.3f", t.Value())
 	}
 	meanImagesLoss := metrics.NewMeanMetric(
@@ -210,7 +210,7 @@ func TrainModel() {
 	if checkpoint != nil {
 		period := time.Second * time.Duration(*flagCheckpointPeriod)
 		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
-			func(loop *train.Loop, metrics []tensors.Tensor) error {
+			func(loop *train.Loop, metrics []*tensors.Tensor) error {
 				fmt.Printf("\n[saving checkpoint@%d] [median train step (ms): %d]\n", loop.LoopStep, loop.MedianTrainStepDuration().Milliseconds())
 				return checkpoint.Save()
 			})
@@ -239,7 +239,7 @@ func TrainModel() {
 	}
 
 	train.ExponentialCallback(loop, *flagTrainMonitorStartFrequency, *flagTrainMonitorFrequencyFactor, true,
-		"Monitor", 0, func(loop *train.Loop, metrics []tensors.Tensor) error {
+		"Monitor", 0, func(loop *train.Loop, metrics []*tensors.Tensor) error {
 			return TrainingMonitor(checkpoint, loop, metrics, plotter, plotter.EvalDatasets, generator, kid)
 		})
 
@@ -264,7 +264,7 @@ func TrainModel() {
 
 // TrainingMonitor is periodically called during training, and is used to report metrics and generate sample images at
 // the current training step.
-func TrainingMonitor(checkpoint *checkpoints.Handler, loop *train.Loop, metrics []tensors.Tensor,
+func TrainingMonitor(checkpoint *checkpoints.Handler, loop *train.Loop, metrics []*tensors.Tensor,
 	plotter stdplots.Plotter, evalDatasets []train.Dataset, generator *ImagesGenerator, kid *KidGenerator) error {
 
 	fmt.Printf("\n[... evaluating@%d ...] [median train step (ms): %d]\n", loop.LoopStep, loop.MedianTrainStepDuration().Milliseconds())

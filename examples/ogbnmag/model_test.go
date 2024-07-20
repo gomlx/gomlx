@@ -38,7 +38,7 @@ func TestModel(t *testing.T) {
 	}
 	testGraphExec := context.NewExec(manager, ctx, testGraphFn)
 
-	var inputs []tensors.Tensor
+	var inputs []*tensors.Tensor
 	spec, inputs, _, err = trainDS.Yield()
 	totalSizeBytes := uint64(0)
 	for _, input := range inputs {

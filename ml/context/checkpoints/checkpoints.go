@@ -250,7 +250,7 @@ func (c *Config) Keep(n int) *Config {
 //
 // If a mean is calculated, the values of the variables will be stored on-device. This can be good -- if their values
 // are going to be used on-device anyway -- or bad -- if they are not needed on-device, and it's using the limited
-// on-device space. Consider tensors.Tensor.MaterializeLocal and tensors.Tensor.InvalidateOnDevice to have them
+// on-device space. Consider *tensors.Tensor.MaterializeLocal and *tensors.Tensor.InvalidateOnDevice to have them
 // moved locally if so desired.
 func (c *Config) TakeMean(n int, backend backends.Backend) *Config {
 	if c.err != nil {

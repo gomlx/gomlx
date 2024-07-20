@@ -135,7 +135,7 @@ func (pc *PlotConfig) WithCustomMetricFn(fn plots.CustomMetricFn) *PlotConfig {
 	return pc
 }
 
-func (pc *PlotConfig) addMetrics(loop *train.Loop, metrics []tensors.Tensor) error {
+func (pc *PlotConfig) addMetrics(loop *train.Loop, metrics []*tensors.Tensor) error {
 	// Only add metrics once per step: multiple calls here can happen if plotting was scheduled more than
 	// one way with functions `Schedule*`.
 	if pc.lastStepCollected >= loop.LoopStep {
@@ -161,7 +161,7 @@ func (pc *PlotConfig) attachOnEnd(loop *train.Loop) {
 		return
 	}
 	pc.scheduledFinalPlot = true
-	loop.OnEnd("plotly.DynamicPlot", 120, func(_ *train.Loop, _ []tensors.Tensor) error {
+	loop.OnEnd("plotly.DynamicPlot", 120, func(_ *train.Loop, _ []*tensors.Tensor) error {
 		// Final plot: only called once to the transient plots
 		if pc.gonbId != "" && !pc.finalPlot {
 			// Erase intermediary transient plots.

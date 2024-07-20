@@ -135,7 +135,7 @@ func main() {
 }
 
 // NewContext returns a new context with the parameters set from the flags values.
-func NewContext(manager *Manager) *context.Context {
+func NewContext(manager backends.Backend) *context.Context {
 	ctx := context.NewContext(manager)
 	ctx.RngStateReset()
 	ctx.SetParam(optimizers.ParamOptimizer, *flagOptimizer) // Just so it is saved along with the context.
@@ -248,7 +248,7 @@ func trainModel(config *dogsvscats.Configuration) {
 	if checkpoint != nil && *flagCheckpointKeep > 1 {
 		period := time.Minute * 1
 		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
-			func(loop *train.Loop, metrics []tensors.Tensor) error {
+			func(loop *train.Loop, metrics []*tensors.Tensor) error {
 				return checkpoint.Save()
 			})
 	}

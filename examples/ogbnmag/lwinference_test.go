@@ -157,7 +157,7 @@ func TestLayerWiseInferenceLogits(t *testing.T) {
 			predictionsAndMask := MagModelGraph(ctx, strategy, inputs)
 			return ConvertDType(predictionsAndMask[0], dtypes.Float32)
 		})
-		var results []tensors.Tensor
+		var results []*tensors.Tensor
 		require.NotPanics(t, func() { results = executor.Call(inputs) })
 		predictionsGNN := results[0]
 		fmt.Printf("predictionsGNN:\n%s\n", predictionsGNN)
@@ -245,7 +245,7 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 		}
 		require.NoError(t, err, "Dataset.Yield")
 		inputs = append(inputs, labels[0])
-		var results []tensors.Tensor
+		var results []*tensors.Tensor
 		require.NotPanics(t, func() { results = executor.Call(inputs) })
 		correct += int(results[0].Value().(int32))
 		total += int(results[1].Value().(int32))
@@ -266,7 +266,7 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 		predictions = Slice(predictions, AxisRange(0, numToCompare))
 		return predictions
 	})
-	var results []tensors.Tensor
+	var results []*tensors.Tensor
 	require.NotPanics(t, func() { results = executor.Call() })
 	predictionsLW := results[0].Value().([]int32)
 	correct = 0

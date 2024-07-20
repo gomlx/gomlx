@@ -39,7 +39,7 @@ const (
 
 // initCoefficients chooses random coefficients and bias. These are the true values the model will
 // attempt to learn.
-func initCoefficients(manager *Manager, numVariables int) (coefficients, bias tensors.Tensor) {
+func initCoefficients(manager backends.Backend, numVariables int) (coefficients, bias *tensors.Tensor) {
 	e := NewExec(manager, func(g *Graph) (coefficients, bias *Node) {
 		rngState := Const(g, RngState())
 		rngState, coefficients = RandomNormal(rngState, shapes.Make(dtypes.Float64, numVariables))
@@ -55,7 +55,7 @@ func initCoefficients(manager *Manager, numVariables int) (coefficients, bias te
 	return
 }
 
-func buildExamples(manager *Manager, coef, bias tensors.Tensor, numExamples int, noise float64) (inputs, labels tensors.Tensor) {
+func buildExamples(manager backends.Backend, coef, bias *tensors.Tensor, numExamples int, noise float64) (inputs, labels *tensors.Tensor) {
 	e := NewExec(manager, func(coef, bias *Node) (inputs, labels *Node) {
 		g := coef.Graph()
 		numFeatures := coef.Shape().Dimensions[0]
@@ -103,13 +103,13 @@ var (
 // Dataset is a trivial dataset that always returns the whole data.
 type Dataset struct {
 	name           string
-	inputs, labels []tensors.Tensor
+	inputs, labels []*tensors.Tensor
 }
 
 func (ds *Dataset) Name() string { return ds.name }
 
 // Yield implements train.Dataset
-func (ds *Dataset) Yield() (spec any, inputs, labels []tensors.Tensor, err error) {
+func (ds *Dataset) Yield() (spec any, inputs, labels []*tensors.Tensor, err error) {
 	return nil, ds.inputs, ds.labels, nil
 }
 
@@ -126,7 +126,7 @@ func main() {
 
 	inputs, labels := buildExamples(manager, trueCoefficients, trueBias, *flagNumExamples, *flagNoise)
 	fmt.Printf("Training data (inputs, labels): (%s, %s)\n\n", inputs.Shape(), labels.Shape())
-	dataset := &Dataset{"training", []tensors.Tensor{inputs}, []tensors.Tensor{labels}}
+	dataset := &Dataset{"training", []*tensors.Tensor{inputs}, []*tensors.Tensor{labels}}
 
 	// Creates Context with learned weights and bias.
 	ctx := context.NewContext(manager)

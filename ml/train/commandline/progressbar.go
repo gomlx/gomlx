@@ -72,7 +72,7 @@ func (pBar *progressBar) onStart(loop *train.Loop, _ train.Dataset) error {
 	return nil
 }
 
-func (pBar *progressBar) onStep(loop *train.Loop, metrics []tensors.Tensor) error {
+func (pBar *progressBar) onStep(loop *train.Loop, metrics []*tensors.Tensor) error {
 	// Check whether it is finished.
 	if pBar.bar.IsFinished() {
 		return nil
@@ -116,7 +116,7 @@ func (pBar *progressBar) onStep(loop *train.Loop, metrics []tensors.Tensor) erro
 	return nil
 }
 
-func (pBar *progressBar) onEnd(loop *train.Loop, metrics []tensors.Tensor) error {
+func (pBar *progressBar) onEnd(loop *train.Loop, metrics []*tensors.Tensor) error {
 	if pBar.updates != nil {
 		close(pBar.updates)
 	}

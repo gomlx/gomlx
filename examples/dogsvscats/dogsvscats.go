@@ -443,7 +443,7 @@ var muT sync.Mutex
 //   - spec: not used, left as nil.
 //   - inputs: two tensors, the first is the images batch (shaped `[batch_size, height, width, depth==4]`) and
 //     the second holds the indices of the images as int (I64), shaped `[batch_size]`.
-func (ds *Dataset) Yield() (spec any, inputs, labels []tensors.Tensor, err error) {
+func (ds *Dataset) Yield() (spec any, inputs, labels []*tensors.Tensor, err error) {
 	muT.Lock()
 	defer muT.Unlock()
 
@@ -458,16 +458,16 @@ func (ds *Dataset) Yield() (spec any, inputs, labels []tensors.Tensor, err error
 	if ds.yieldPairs {
 		numExamples := len(indices)
 		firstHalf, secondHalf := ds.toTensor.Batch(images[:numExamples]), ds.toTensor.Batch(images[numExamples:])
-		inputs = []tensors.Tensor{
+		inputs = []*tensors.Tensor{
 			firstHalf,
 			tensors.FromValue(indices),
 			secondHalf,
 		}
 	} else {
 		// No paired image.
-		inputs = []tensors.Tensor{ds.toTensor.Batch(images), tensors.FromValue(indices)}
+		inputs = []*tensors.Tensor{ds.toTensor.Batch(images), tensors.FromValue(indices)}
 	}
-	labels = []tensors.Tensor{tensors.FromAnyValue(shapes.CastAsDType(labelsAsTypes, ds.dtype))}
+	labels = []*tensors.Tensor{tensors.FromAnyValue(shapes.CastAsDType(labelsAsTypes, ds.dtype))}
 	return
 }
 
@@ -758,7 +758,7 @@ func (pds *PreGeneratedDataset) entrySize() int {
 }
 
 // Yield implements train.Dataset.
-func (pds *PreGeneratedDataset) Yield() (spec any, inputs, labels []tensors.Tensor, err error) {
+func (pds *PreGeneratedDataset) Yield() (spec any, inputs, labels []*tensors.Tensor, err error) {
 	retries := 0
 
 	// Check if maxSteps is reached.
@@ -805,7 +805,7 @@ func (pds *PreGeneratedDataset) Yield() (spec any, inputs, labels []tensors.Tens
 		for ii := 0; ii < pds.batchSize; ii++ {
 			pds.labelsAsTypes[ii] = DorOrCat(pds.buffer[ii*entrySize])
 		}
-		labels = []tensors.Tensor{tensors.FromAnyValue(shapes.CastAsDType(pds.labelsAsTypes, pds.dtype))}
+		labels = []*tensors.Tensor{tensors.FromAnyValue(shapes.CastAsDType(pds.labelsAsTypes, pds.dtype))}
 		var t, pairT *tensors.Local
 		switch pds.dtype {
 		case dtypes.Float32:
@@ -823,9 +823,9 @@ func (pds *PreGeneratedDataset) Yield() (spec any, inputs, labels []tensors.Tens
 			return nil, nil, nil, pds.err
 		}
 		if pds.yieldPairs {
-			inputs = []tensors.Tensor{t, pairT}
+			inputs = []*tensors.Tensor{t, pairT}
 		} else {
-			inputs = []tensors.Tensor{t}
+			inputs = []*tensors.Tensor{t}
 		}
 		break
 	}

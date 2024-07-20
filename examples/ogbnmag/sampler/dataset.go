@@ -133,7 +133,7 @@ func (ds *Dataset) Reset() {
 // Yield implements train.Dataset.
 // The returned spec is a pointer to the Strategy, and can be used to build a map of the names to the sampled
 // tensors.
-func (ds *Dataset) Yield() (spec any, inputs, labels []tensors.Tensor, err error) {
+func (ds *Dataset) Yield() (spec any, inputs, labels []*tensors.Tensor, err error) {
 	ds.muSample.Lock()
 	var unlocked bool
 	defer func() {
@@ -151,10 +151,10 @@ func (ds *Dataset) Yield() (spec any, inputs, labels []tensors.Tensor, err error
 	if ds.strategy.KeepDegrees {
 		// 2 tensors per node (value and mask), plus one tensor per edge (degree).
 		numEdges := len(ds.strategy.Rules) - len(ds.strategy.Seeds)
-		inputs = make([]tensors.Tensor, 0, 2*len(ds.strategy.Rules)+numEdges)
+		inputs = make([]*tensors.Tensor, 0, 2*len(ds.strategy.Rules)+numEdges)
 	} else {
 		// 2 tensors per node: value and mask.
-		inputs = make([]tensors.Tensor, 0, 2*len(ds.strategy.Rules))
+		inputs = make([]*tensors.Tensor, 0, 2*len(ds.strategy.Rules))
 	}
 	ds.frozen = true
 	if ds.startOfEpoch {
@@ -254,7 +254,7 @@ func (ds *Dataset) sampleSeeds(seedIdx int, rule *Rule) (seeds, mask *tensors.Lo
 
 // recursivelySampleEdges in the dependency tree of Rules, storing the results that will become the yielded values
 // by the Dataset.
-func recursivelySampleEdges(rule *Rule, nodes, mask *tensors.Local, store []tensors.Tensor) []tensors.Tensor {
+func recursivelySampleEdges(rule *Rule, nodes, mask *tensors.Local, store []*tensors.Tensor) []*tensors.Tensor {
 	for _, subRule := range rule.Dependents {
 		subNodes, subMask, degrees := sampleEdges(subRule, nodes, mask)
 		store = append(store, subNodes, subMask)

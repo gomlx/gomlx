@@ -154,7 +154,7 @@ func trainModel() {
 	if checkpoint != nil {
 		period := time.Minute * 1
 		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
-			func(loop *train.Loop, metrics []tensors.Tensor) error {
+			func(loop *train.Loop, metrics []*tensors.Tensor) error {
 				fmt.Printf("\n[saving checkpoint@%d] [median train step (ms): %d]\n", loop.LoopStep, loop.MedianTrainStepDuration().Milliseconds())
 				return checkpoint.Save()
 			})
@@ -183,7 +183,7 @@ func trainModel() {
 	cifar.ResetCache()
 }
 
-func CreateDatasets(manager *Manager, dataDir string) (trainDS, trainEvalDS, validationEvalDS train.Dataset) {
+func CreateDatasets(manager backends.Backend, dataDir string) (trainDS, trainEvalDS, validationEvalDS train.Dataset) {
 	baseTrain := cifar.NewDataset(manager, "Training", dataDir, cifar.C10, DType, cifar.Train)
 	baseTest := cifar.NewDataset(manager, "Validation", dataDir, cifar.C10, DType, cifar.Test)
 	trainDS = baseTrain.Copy().BatchSize(*flagBatchSize, true).Shuffle().Infinite(true)

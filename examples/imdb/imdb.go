@@ -451,7 +451,7 @@ func (ds *Dataset) Name() string { return ds.name }
 // It returns `spec==nil` always, since `inputs` and `labels` have always the same type of content.
 //
 // It can be called concurrently.
-func (ds *Dataset) Yield() (spec any, inputs, labels []tensors.Tensor, err error) {
+func (ds *Dataset) Yield() (spec any, inputs, labels []*tensors.Tensor, err error) {
 	// Lock only while selecting the indices for the batch.
 	ds.muIndices.Lock()
 	if !ds.Infinite && ds.Pos+ds.BatchSize > len(ds.Examples) {
@@ -496,8 +496,8 @@ func (ds *Dataset) Yield() (spec any, inputs, labels []tensors.Tensor, err error
 			exInput[ds.MaxLen-len(content)-1] = 1 // Token "<START>"
 		}
 	}
-	inputs = []tensors.Tensor{input}
-	labels = []tensors.Tensor{tensors.FromAnyValue(shapes.CastAsDType(labelsData, ds.LabelDType))}
+	inputs = []*tensors.Tensor{input}
+	labels = []*tensors.Tensor{tensors.FromAnyValue(shapes.CastAsDType(labelsData, ds.LabelDType))}
 	return
 }
 
@@ -523,7 +523,7 @@ func (ds *Dataset) resetLocked() {
 
 // InputToString returns a string rendered content of one row (pointed to by batchIdx) of an input.
 // The input is assumed to be a batch created by a Dataset object.
-func InputToString(input tensors.Tensor, batchIdx int) string {
+func InputToString(input *tensors.Tensor, batchIdx int) string {
 	if batchIdx < 0 || batchIdx >= input.Shape().Dimensions[0] {
 		return fmt.Sprintf("invalid batch idx %d: input shape is %s", batchIdx, input.Shape())
 	}

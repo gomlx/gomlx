@@ -4,7 +4,6 @@ import (
 	"encoding/gob"
 	"fmt"
 	"github.com/disintegration/imaging"
-	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
 	timage "github.com/gomlx/gomlx/types/tensor/image"
@@ -157,7 +156,7 @@ func (ds *Dataset) Name() string {
 //     (into training/validation/test).
 //   - `labels`: the type of flower (same as `inputs[2]`), an `int32` value from 0 to `NumLabels-1`
 //     with the label.
-func (ds *Dataset) Yield() (spec any, inputs []tensors.Tensor, labels []tensors.Tensor, err error) {
+func (ds *Dataset) Yield() (spec any, inputs []*tensors.Tensor, labels []*tensors.Tensor, err error) {
 	spec = ds
 	index := ds.nextIndex()
 	if index == -1 {
@@ -196,8 +195,8 @@ func (ds *Dataset) Yield() (spec any, inputs []tensors.Tensor, labels []tensors.
 		img = imaging.Crop(img, image.Rect(0, start, ds.imageSize, start+ds.imageSize))
 	}
 
-	inputs = []tensors.Tensor{ds.toTensor.Single(img), tensors.FromValue(index), tensors.FromValue(label)}
-	labels = []tensors.Tensor{tensors.FromValue(label)}
+	inputs = []*tensors.Tensor{ds.toTensor.Single(img), tensors.FromValue(index), tensors.FromValue(label)}
+	labels = []*tensors.Tensor{tensors.FromValue(label)}
 	return
 }
 
@@ -223,7 +222,7 @@ func (ds *Dataset) Reset() {
 //
 // If the cache is not found, it automatically calls DownloadAndParse to download and untar the original
 // images, if they are not yet downloaded.
-func InMemoryDataset(manager *Manager, baseDir string, imageSize int, name string,
+func InMemoryDataset(manager backends.Backend, baseDir string, imageSize int, name string,
 	partitionSeed int64, partitionFrom, partitionTo float64) (
 	inMemoryDataset *data.InMemoryDataset, err error) {
 	var f *os.File

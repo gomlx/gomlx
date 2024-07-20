@@ -138,7 +138,7 @@ func Train(ctx *context.Context) error {
 	if checkpoint != nil && numCheckpointsToKeep > 1 {
 		period := time.Minute * 1
 		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
-			func(loop *train.Loop, metrics []tensors.Tensor) error {
+			func(loop *train.Loop, metrics []*tensors.Tensor) error {
 				return checkpoint.Save()
 			})
 	}

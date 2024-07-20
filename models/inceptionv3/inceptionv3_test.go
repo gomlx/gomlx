@@ -31,7 +31,7 @@ func TestBuildGraph(t *testing.T) {
 	img, _, err := image.Decode(f)
 	require.NoError(t, err)
 	require.NoError(t, f.Close())
-	var imgT tensors.Tensor
+	var imgT *tensors.Tensor
 	imgT = timage.ToTensor(dtypes.Float32).MaxValue(255.0).Single(img)
 	fmt.Printf("\tImage shape=%s\n", imgT.Shape())
 

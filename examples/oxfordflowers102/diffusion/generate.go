@@ -33,7 +33,7 @@ import (
 // It assumes image's MaxValue of 255.
 //
 // This only works in a Jupyter (GoNB kernel) notebook.
-func PlotImagesTensor(imagesT tensors.Tensor) {
+func PlotImagesTensor(imagesT *tensors.Tensor) {
 	if gonbui.IsNotebook {
 		images := MustNoError(timage.ToImage().MaxValue(255.0).Batch(imagesT))
 		PlotImages(images)
@@ -287,7 +287,7 @@ func SliderDiffusionSteps(cacheKey string, ctx *context.Context, numImages int, 
 
 // GenerateImagesOfFlowerType is similar to DisplayImagesAcrossDiffusionSteps, but it limits itself to generating images of only one
 // flower type.
-func GenerateImagesOfFlowerType(numImages int, flowerType int32, numDiffusionSteps int) (predictedImages tensors.Tensor) {
+func GenerateImagesOfFlowerType(numImages int, flowerType int32, numDiffusionSteps int) (predictedImages *tensors.Tensor) {
 	ctx := context.NewContext(manager).Checked(false)
 	_, _, _ = LoadCheckpointToContext(ctx)
 	ctx.RngStateReset()
@@ -351,7 +351,7 @@ func DropdownFlowerTypes(cacheKey string, ctx *context.Context, numImages, numDi
 }
 
 // GenerateImagesOfAllFlowerTypes takes one random noise, and generate the flower for each of the 102 types.
-func GenerateImagesOfAllFlowerTypes(numDiffusionSteps int) (predictedImages tensors.Tensor) {
+func GenerateImagesOfAllFlowerTypes(numDiffusionSteps int) (predictedImages *tensors.Tensor) {
 	numImages := flowers.NumLabels
 	ctx := context.NewContext(manager).Checked(false)
 	_, _, _ = LoadCheckpointToContext(ctx)
@@ -371,7 +371,7 @@ func GenerateImagesOfAllFlowerTypes(numDiffusionSteps int) (predictedImages tens
 // Use it with NewImagesGenerator.
 type ImagesGenerator struct {
 	ctx               *context.Context
-	noise, flowerIds  tensors.Tensor
+	noise, flowerIds  *tensors.Tensor
 	numImages         int
 	numDiffusionSteps int
 	denormalizerExec  *Exec
@@ -380,7 +380,7 @@ type ImagesGenerator struct {
 
 // NewImagesGenerator generates flowers given initial `noise` and `flowerIds`, in `numDiffusionSteps`.
 // Typically, 20 diffusion steps will suffice.
-func NewImagesGenerator(ctx *context.Context, noise, flowerIds tensors.Tensor, numDiffusionSteps int) *ImagesGenerator {
+func NewImagesGenerator(ctx *context.Context, noise, flowerIds *tensors.Tensor, numDiffusionSteps int) *ImagesGenerator {
 	ctx = ctx.Reuse()
 	if numDiffusionSteps <= 0 {
 		exceptions.Panicf("Expected numDiffusionSteps > 0, got %d", numDiffusionSteps)
@@ -412,11 +412,11 @@ func NewImagesGenerator(ctx *context.Context, noise, flowerIds tensors.Tensor, n
 // It returns a slice of batches of images, one batch per intermediary diffusion step,
 // a slice with the step used for each batch, and another slice with the "diffusionTime"
 // of the intermediary images (it will be 1.0 for the last)
-func (g *ImagesGenerator) GenerateEveryN(n int) (predictedImages []tensors.Tensor,
+func (g *ImagesGenerator) GenerateEveryN(n int) (predictedImages []*tensors.Tensor,
 	diffusionSteps []int, diffusionTimes []float64) {
 	noisyImages := g.noise
 
-	var imagesBatch tensors.Tensor
+	var imagesBatch *tensors.Tensor
 	stepSize := 1.0 / float64(g.numDiffusionSteps)
 	for step := 0; step < g.numDiffusionSteps; step++ {
 		diffusionTime := 1.0 - float64(step)*stepSize
@@ -442,13 +442,13 @@ func (g *ImagesGenerator) GenerateEveryN(n int) (predictedImages []tensors.Tenso
 //
 // It can be called multiple times if the context changed, if the model was further trained.
 // Otherwise, it will always return the same images.
-func (g *ImagesGenerator) Generate() (batchedImages tensors.Tensor) {
+func (g *ImagesGenerator) Generate() (batchedImages *tensors.Tensor) {
 	allBatches, _, _ := g.GenerateEveryN(0)
 	return allBatches[0]
 }
 
 // GenerateNoise generates random noise that can be used to generate images.
-func GenerateNoise(numImages int) tensors.Tensor {
+func GenerateNoise(numImages int) *tensors.Tensor {
 	return NewExec(manager, func(g *Graph) *Node {
 		state := Const(g, RngState())
 		_, noise := RandomNormal(state, shapes.Make(DType, numImages, ImageSize, ImageSize, 3))
@@ -457,7 +457,7 @@ func GenerateNoise(numImages int) tensors.Tensor {
 }
 
 // GenerateFlowerIds generates random flower ids: this is the type of flowers, one of the 102.
-func GenerateFlowerIds(numImages int) tensors.Tensor {
+func GenerateFlowerIds(numImages int) *tensors.Tensor {
 	flowerIds := make([]int32, numImages)
 	for ii := range flowerIds {
 		flowerIds[ii] = int32(rand.Intn(flowers.NumLabels))
@@ -508,7 +508,7 @@ func (kg *KidGenerator) EvalStepGraph(ctx *context.Context, allImages []*Node) (
 	return
 }
 
-func (kg *KidGenerator) Eval() (metric tensors.Tensor) {
+func (kg *KidGenerator) Eval() (metric *tensors.Tensor) {
 	kg.ds.Reset()
 	kg.kid.Reset(kg.ctxInceptionV3)
 	generatedImages := kg.generator.Generate()

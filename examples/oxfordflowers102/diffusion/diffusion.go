@@ -29,7 +29,7 @@ import (
 )
 
 var (
-	manager *Manager
+	manager backends.Backend
 	DType   dtypes.DType
 )
 

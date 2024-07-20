@@ -347,7 +347,7 @@ func (e *Exec) CallWithGraph(args ...any) (results []*tensors.Tensor, g *Graph) 
 	return e.compileAndExecute(true, args...)
 }
 
-// unwrapListOfTensors will convert something like []any{[]tensor.Tensor{t1, t2, ...}} to []any{t1, t2,...}
+// unwrapListOfTensors will convert something like []any{[]*tensors.Tensor{t1, t2, ...}} to []any{t1, t2,...}
 func unwrapListOfTensors(args []any) []any {
 	if len(args) != 1 {
 		return args

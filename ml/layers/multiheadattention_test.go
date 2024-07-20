@@ -137,7 +137,7 @@ func (ds *attentionTestDataset) Reset() {
 	ds.count = 0
 }
 
-func (ds *attentionTestDataset) Yield() (spec any, inputs []tensors.Tensor, labels []tensors.Tensor, err error) {
+func (ds *attentionTestDataset) Yield() (spec any, inputs []*tensors.Tensor, labels []*tensors.Tensor, err error) {
 	if !ds.infinite && ds.count+ds.batchSize > ds.maxCount {
 		return nil, nil, nil, io.EOF
 	}
@@ -156,8 +156,8 @@ func (ds *attentionTestDataset) Yield() (spec any, inputs []tensors.Tensor, labe
 			}
 		}
 	}
-	inputs = []tensors.Tensor{tensors.FromValue(batch)}
-	labels = []tensors.Tensor{tensors.FromValue(batchLabel)}
+	inputs = []*tensors.Tensor{tensors.FromValue(batch)}
+	labels = []*tensors.Tensor{tensors.FromValue(batchLabel)}
 	//fmt.Printf("inputs: %v\n", batch)
 	//fmt.Printf("labels: %v\n", labels)
 	return
@@ -204,7 +204,7 @@ func TestMultiHeadAttentionTraining(t *testing.T) {
 		evalDS := &attentionTestDataset{}
 		*evalDS = *trainDS
 		evalDS.batchSize = 1
-		var results []tensors.Tensor
+		var results []*tensors.Tensor
 
 		modelFn := buildSyntheticAttentionModelFn(false)
 		inferenceFn := func(ctx *context.Context, inputs []*Node) *Node {

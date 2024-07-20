@@ -143,7 +143,7 @@ func NewDefault(loop *train.Loop, dir string, startStep int, stepFactor float64,
 	// Notice that plot points will be generated even if not running in a notebook -- just no plot will be displayed.
 	// Register plot points at exponential steps.
 	train.ExponentialCallback(loop, startStep, stepFactor, true,
-		"margaid.Plot", 0, func(loop *train.Loop, metrics []tensors.Tensor) error {
+		"margaid.Plot", 0, func(loop *train.Loop, metrics []*tensors.Tensor) error {
 			// Update plots with metrics.
 			return stdplots.AddTrainAndEvalMetrics(plots, loop, metrics, plots.EvalDatasets)
 		})
@@ -169,7 +169,7 @@ type Plot struct {
 // an evaluation at given points.
 func (ps *Plots) PlotEveryNSteps(loop *train.Loop, n int) {
 	train.EveryNSteps(loop, n, "margaid.Plot", 0,
-		func(loop *train.Loop, metrics []tensors.Tensor) error {
+		func(loop *train.Loop, metrics []*tensors.Tensor) error {
 			// Update plots with metrics.
 			return stdplots.AddTrainAndEvalMetrics(ps, loop, metrics, ps.EvalDatasets)
 		})
@@ -305,7 +305,7 @@ func (ps *Plots) WithEvalLossType(evalLossMetricType string) *Plots {
 
 // attachOnEnd of the loop to draw the final plot -- and clear the transient area if using dynamic plots.
 func (ps *Plots) attachOnEnd(loop *train.Loop) {
-	loop.OnEnd("margaid plots", 120, func(_ *train.Loop, _ []tensors.Tensor) error {
+	loop.OnEnd("margaid plots", 120, func(_ *train.Loop, _ []*tensors.Tensor) error {
 		// Final plot.
 		if ps.gonbID != "" {
 			// Erase intermediary transient plots.
@@ -323,7 +323,7 @@ func (ps *Plots) attachOnEnd(loop *train.Loop) {
 // It automatically calls Plots.Plot at the end of the loop (`loop.OnEnd()`).
 func (ps *Plots) Attach(loop *train.Loop, numPoints int) {
 	train.NTimesDuringLoop(loop, numPoints, "margaid plots", 0,
-		func(loop *train.Loop, metrics []tensors.Tensor) error {
+		func(loop *train.Loop, metrics []*tensors.Tensor) error {
 			return stdplots.AddTrainAndEvalMetrics(ps, loop, metrics, ps.EvalDatasets)
 		})
 	ps.attachOnEnd(loop)

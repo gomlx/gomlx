@@ -175,7 +175,7 @@ func (s *Sampler) AddNodeType(name string, count int) {
 // The `edges` tensor must have Shape `(Int32)[N, 2]`. It's contents are changed in place
 // -- they are sorted by the source node type (or target if reversed).
 // But the edges information themselves are not lost.
-func (s *Sampler) AddEdgeType(name, sourceNodeType, targetNodeType string, edges tensors.Tensor, reverse bool) {
+func (s *Sampler) AddEdgeType(name, sourceNodeType, targetNodeType string, edges *tensors.Tensor, reverse bool) {
 	if s.Frozen {
 		Panicf("Sampler is frozen, that is, a strategy was already created with NewStrategy() and hence can no longer be modified.")
 	}

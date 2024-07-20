@@ -491,7 +491,7 @@ func (r *RawData) SampleWithReplacement(numExamples int) *RawData {
 
 // TensorData contains a RawData converted to tensors.
 type TensorData struct {
-	CategoricalTensor, ContinuousTensor, WeightsTensor, LabelsTensor tensors.Tensor
+	CategoricalTensor, ContinuousTensor, WeightsTensor, LabelsTensor *tensors.Tensor
 }
 
 // CreateTensors of dataset, for faster ML interaction.
