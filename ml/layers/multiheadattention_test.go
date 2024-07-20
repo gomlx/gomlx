@@ -28,6 +28,8 @@ import (
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"io"
@@ -177,13 +179,13 @@ func TestMultiHeadAttentionTraining(t *testing.T) {
 	}
 
 	// Backend handles creation of ML computation graphs, accelerator resources, etc.
-	manager := graphtest.BuildTestBackend()
+	backend := graphtest.BuildTestBackend()
 
 	// Context and optimizer used for training.
 	ctx := context.NewContext()
 	opt := optimizers.Adam().LearningRate(0.001).Done()
 
-	trainer := train.NewTrainer(manager, ctx, buildSyntheticAttentionModelFn(false),
+	trainer := train.NewTrainer(backend, ctx, buildSyntheticAttentionModelFn(false),
 		losses.MeanSquaredError,
 		opt,
 		nil, // trainMetrics
@@ -196,7 +198,7 @@ func TestMultiHeadAttentionTraining(t *testing.T) {
 	require.NoErrorf(t, err, "Failed training: %+v", err)
 	fmt.Printf("Metrics:\n")
 	for ii, m := range metrics {
-		fmt.Printf("\t%s: %s\n", trainer.TrainMetrics()[ii].Name(), m.Local().GoStr())
+		fmt.Printf("\t%s: %s\n", trainer.TrainMetrics()[ii].Name(), m)
 	}
 
 	{
@@ -210,7 +212,7 @@ func TestMultiHeadAttentionTraining(t *testing.T) {
 		inferenceFn := func(ctx *context.Context, inputs []*Node) *Node {
 			return modelFn(ctx, nil, inputs)[0]
 		}
-		inferenceExec := context.NewExec(manager, ctx.Reuse(), inferenceFn)
+		inferenceExec := context.NewExec(backend, ctx.Reuse(), inferenceFn)
 		for ii := 0; ii < 3; ii++ {
 			_, inputs, labels, err := evalDS.Yield()
 			require.NoErrorf(t, err, "Failed datasets: %+v", err)
