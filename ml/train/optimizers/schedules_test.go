@@ -19,19 +19,22 @@ package optimizers
 import (
 	"fmt"
 	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"math"
 	"testing"
+
+	_ "github.com/gomlx/gomlx/backends/xla"
 )
 
 func TestCosineAnnealingSchedule(t *testing.T) {
-	manager := BuildManager().Platform("Host").Done()
+	backend := graphtest.BuildTestBackend()
 	periodInSteps := 100
 	ctx := context.NewContext().Checked(false)
-	cosineExec := context.NewExec(manager, ctx, func(ctx *context.Context, graph *Graph) *Node {
+	cosineExec := context.NewExec(backend, ctx, func(ctx *context.Context, graph *Graph) *Node {
 		ctx.SetTraining(graph, true)
 		CosineAnnealingSchedule(ctx, graph, dtypes.Float32).
 			PeriodInSteps(periodInSteps).
@@ -65,7 +68,7 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 		fmt.Printf("Step %d: %f\n", ii, wantLR)
 	}
 
-	cosineExec = context.NewExec(manager, ctx, func(ctx *context.Context, graph *Graph) *Node {
+	cosineExec = context.NewExec(backend, ctx, func(ctx *context.Context, graph *Graph) *Node {
 		ctx.SetTraining(graph, false)
 		CosineAnnealingSchedule(ctx, graph, dtypes.Float32).
 			PeriodInSteps(50).

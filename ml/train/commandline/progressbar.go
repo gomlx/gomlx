@@ -6,6 +6,7 @@ import (
 	lgtable "github.com/charmbracelet/lipgloss/table"
 	"github.com/gomlx/gomlx/examples/notebook"
 	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/muesli/termenv"
 	"github.com/schollz/progressbar/v3"
 	"os"
@@ -98,7 +99,7 @@ func (pBar *progressBar) onStep(loop *train.Loop, metrics []*tensors.Tensor) err
 		_ = pBar.bar.Add(amount) // Triggers print, see [pBar.Write] method.
 
 	} else {
-		// For command line instead we create and enqueue an udpate to be asynchronously printed.
+		// For command line instead we create and enqueue an update to be asynchronously printed.
 		update := progressBarUpdate{
 			amount:  amount,
 			metrics: make([]string, 0, len(trainMetrics)+1),
@@ -116,7 +117,7 @@ func (pBar *progressBar) onStep(loop *train.Loop, metrics []*tensors.Tensor) err
 	return nil
 }
 
-func (pBar *progressBar) onEnd(loop *train.Loop, metrics []*tensors.Tensor) error {
+func (pBar *progressBar) onEnd(_ *train.Loop, _ []*tensors.Tensor) error {
 	if pBar.updates != nil {
 		close(pBar.updates)
 	}

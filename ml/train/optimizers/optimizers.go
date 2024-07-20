@@ -231,7 +231,7 @@ func (sgd *sgd) UpdateGraph(ctx *context.Context, g *Graph, loss *Node) {
 // Clear all optimizer variables.
 // There are none for SGD, so this is a non-op.
 // It implements optimizers.Interface.
-func (sgd *sgd) Clear(ctx *context.Context) {}
+func (sgd *sgd) Clear(_ *context.Context) {}
 
 // addGradientsToVariablesGraph takes the output of Context.BuildTrainableVariablesGradientsGraph,
 // multiply by (-learningRate) and add to the current value of the variablesMap.

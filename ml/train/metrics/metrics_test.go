@@ -24,6 +24,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"testing"
+
+	_ "github.com/gomlx/gomlx/backends/xla"
 )
 
 // takeFirstFn wraps the given `metricFn` with a function that takes a single node for labels and predictions as
@@ -71,18 +73,18 @@ func TestNewMeanBinaryAccuracy(t *testing.T) {
 	// List and check variables.
 	fmt.Println("Variables:")
 	ctx.EnumerateVariables(func(v *context.Variable) {
-		fmt.Printf("\t%s / %s=%s\n", v.Scope(), v.Name(), v.Value().Local())
+		fmt.Printf("\t%s / %s=%s\n", v.Scope(), v.Name(), v.Value())
 	})
 
 	metricScope := ctx.In(accMetric.ScopeName()).Scope()
 	totalVar := ctx.InspectVariable(metricScope, "total")
 	require.NotNilf(t, totalVar, "Variable \"total\" was not created in %s / total", metricScope)
-	total := totalVar.Value().Local().Value().(float32)
+	total := totalVar.Value().Value().(float32)
 	assert.Equal(t, float32(2), total, "MeanBinaryAccuracy total value")
 
 	weightVar := ctx.InspectVariable(metricScope, "weight")
 	require.NotNilf(t, weightVar, "Variable \"weight\" was not created in %s / total", metricScope)
-	weight := weightVar.Value().Local().Value().(float32)
+	weight := weightVar.Value().Value().(float32)
 	assert.Equal(t, float32(6), weight, "MeanBinaryAccuracy weight value")
 
 	// Second batch:
@@ -94,8 +96,8 @@ func TestNewMeanBinaryAccuracy(t *testing.T) {
 
 	// Zeros the state.
 	accMetric.Reset(ctx)
-	total = totalVar.Value().Local().Value().(float32)
-	weight = weightVar.Value().Local().Value().(float32)
+	total = totalVar.Value().Value().(float32)
+	weight = weightVar.Value().Value().(float32)
 	assert.Zero(t, total, "Expected total variable to be 0 after Reset()")
 	assert.Zero(t, weight, "Expected weight variable to be 0 after Reset()")
 }

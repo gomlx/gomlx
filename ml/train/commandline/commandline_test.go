@@ -1,7 +1,6 @@
 package commandline
 
 import (
-	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -9,7 +8,6 @@ import (
 )
 
 func createTestContext() *context.Context {
-	manager := graphtest.BuildTestBackend()
 	ctx := context.NewContext()
 	ctx.SetParam("x", 11.0)
 	ctx.SetParam("y", 7)
