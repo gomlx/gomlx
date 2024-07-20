@@ -20,8 +20,57 @@ import (
 	"fmt"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
+	"github.com/stretchr/testify/require"
 	"testing"
+
+	_ "github.com/gomlx/gomlx/backends/xla"
 )
+
+// gradTestFunc takes a graph and returns the output being tested, along the nodes that
+// we want the gradients for.
+type gradTestFunc func(g *Graph) (output *Node, nodesForGrad []*Node)
+
+const deltaForTests = 1e-3
+
+func testGradients[T interface{ float32 | float64 }](t *testing.T, name string, testFn gradTestFunc, wantForGrad [][]T) {
+	manager := graphtest.BuildTestBackend()
+	g := NewGraph(manager, name)
+	fmt.Printf("%s:\n", name)
+	output, nodesForGrad := testFn(g)
+	grads := Gradient(ReduceAllSum(output), nodesForGrad...)
+	all := make([]*Node, len(grads)+1)
+	all[0] = output
+	copy(all[1:], grads)
+	g.Compile(all...)
+	results := g.Run()
+	fmt.Printf("\toutput=%v\n", results[0])
+	for ii, want := range wantForGrad {
+		got := results[ii+1]
+		fmt.Printf("\tgrad(f)/grad(x_%d): got=%v\n", ii, got)
+		require.InDeltaSlicef(t, want, got.Value(), deltaForTests, "grad f(x)/x_%d: want %v, got %v", ii, want, got)
+	}
+}
+
+type fnToTest func(g *Graph) (input, output *Node)
+
+func testSomeFunc[T interface{ float32 | float64 }](t *testing.T, name string, fn fnToTest, want any, inDelta bool) {
+	fmt.Printf("%s\n", name)
+	manager := graphtest.BuildTestBackend()
+	g := NewGraph(manager, name)
+	input, output := fn(g)
+	g.Compile(input, output)
+	results := g.Run()
+	fmt.Printf("\t%s(%s) = %s\n", name, results[0], results[1])
+	if inDelta {
+		if results[1].IsScalar() {
+			require.InDeltaf(t, want, results[1].Value(), deltaForTests, "%s(%v): want=%v, got=%v", name, results[0], want, results[1])
+		} else {
+			require.InDeltaSlicef(t, want, results[1].Value(), deltaForTests, "%s(%v): want=%v, got=%v", name, results[0], want, results[1])
+		}
+	} else {
+		require.Equal(t, want, results[1].Value(), deltaForTests, "%s(%v): want=%v, got=%v", name, results[0], want, results[1])
+	}
+}
 
 func TestMeanSquaredError(t *testing.T) {
 	testSomeFunc[float32](t, "MeanSquaredErrorWithWeightsAndMask",
@@ -47,32 +96,6 @@ func TestMeanAbsoluteError(t *testing.T) {
 		}, float32(5.0*1.0+1.0*2.0)/3, true)
 }
 
-// gradTestFunc takes a graph and returns the output being tested, along the nodes that
-// we want the gradients for.
-type gradTestFunc func(g *Graph) (output *Node, nodesForGrad []*Node)
-
-func testGradients[T interface{ float32 | float64 }](t *testing.T, name string, testFn gradTestFunc, wantForGrad [][]T) {
-	manager := graphtest.BuildTestBackend()
-	g := manager.NewGraph(name)
-	fmt.Printf("%s:\n", name)
-	output, nodesForGrad := testFn(g)
-	grads := Gradient(ReduceAllSum(output), nodesForGrad...)
-	all := make([]*Node, len(grads)+1)
-	all[0] = output
-	copy(all[1:], grads)
-	g.Compile(all...)
-	tuple := g.Run(nil)
-	results := tuple.SplitTuple()
-	fmt.Printf("\toutput=%v\n", results[0].Local().GoStr())
-	for ii, want := range wantForGrad {
-		got := results[ii+1].Local()
-		fmt.Printf("\tgrad(f)/grad(x_%d): got=%v\n", ii, got.GoStr())
-		if !xslices.DeepSliceCmp(got.Value(), want, xslices.Close[T]) {
-			t.Errorf("grad f(x)/x_%d: want %v, got %v", ii, want, got.GoStr())
-		}
-	}
-}
-
 func TestGradientBinaryCrossentropy(t *testing.T) {
 	testGradients[float64](t, "Gradient BinaryCrossentropy",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
@@ -81,7 +104,7 @@ func TestGradientBinaryCrossentropy(t *testing.T) {
 			labels := Const(g, []float64{1, 0, 1, 0, 0, 1})
 			output = ReduceAllSum(BinaryCrossentropy([]*Node{labels}, []*Node{predictions}))
 			return output, []*Node{logits}
-		}, [][]float64{{-0.00669285, 0.50000025, -0.5, 0.5, 0.49999975, -0.99330715}})
+		}, [][]float64{{-0.00669, 0.5, -0.5, 0.5, 0.5, -0.9933}})
 }
 
 func TestGradientBinaryCrossentropyLogits(t *testing.T) {
@@ -92,30 +115,6 @@ func TestGradientBinaryCrossentropyLogits(t *testing.T) {
 			output = ReduceAllSum(BinaryCrossentropyLogits([]*Node{labels}, []*Node{logits}))
 			return output, []*Node{logits}
 		}, [][]float64{{-0.00669285, 0.50000025, -0.5, 0.5, 0.49999975, -0.99330715}})
-}
-
-type fnToTest func(g *Graph) (input, output *Node)
-
-func testSomeFunc[T interface{ float32 | float64 }](t *testing.T, name string, fn fnToTest, want any, close bool) {
-	fmt.Printf("%s\n", name)
-	manager := graphtest.BuildTestBackend()
-	g := manager.NewGraph(name)
-	input, output := fn(g)
-	g.Compile(input, output)
-	tuple := g.Run(nil)
-	results := tuple.SplitTuple()
-	fmt.Printf("\t%s(%s) = %s\n", name, results[0].Local().GoStr(), results[1].Local().GoStr())
-	if close {
-		// Check close.
-		if !xslices.DeepSliceCmp(results[1].Local().Value(), want, xslices.Close[T]) {
-			t.Errorf("%s(%v): want=%v, got=%v", name, results[0].Local(), want, results[1].Local().GoStr())
-		}
-	} else {
-		// Check equality.
-		if !xslices.DeepSliceCmp(results[1].Local().Value(), want, xslices.Equal[T]) {
-			t.Errorf("%s(%v): want=%v, got=%v", name, results[0].Local(), want, results[1].Local().GoStr())
-		}
-	}
 }
 
 func TestCategoricalCrossEntropy(t *testing.T) {
