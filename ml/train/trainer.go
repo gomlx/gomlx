@@ -24,10 +24,13 @@ package train
 
 import (
 	"fmt"
+	. "github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/pkg/errors"
 	"io"
 )
@@ -51,9 +54,9 @@ const (
 //
 // See Loop for a flexible and extensible (different UIs) way to run this in a training loop.
 type Trainer struct {
-	manager   *graph.Manager
+	backend   backends.Backend
 	context   *context.Context
-	deviceNum int
+	deviceNum backends.DeviceNum
 	modelFn   ModelFn
 	lossFn    LossFn
 	optimizer optimizers.Interface
@@ -115,7 +118,7 @@ const (
 //
 // Its arguments are:
 //
-//   - manager needed to create and compile computation graphs.
+//   - backend needed to create and compile computation graphs.
 //
 //   - ctx (will) hold the variables, hyperparameters and related information for the model.
 //
@@ -137,14 +140,14 @@ const (
 //   - evalMetrics are output by trainer.EvalStep and trainer.Eval. Here it's recommend to use mean metrics, since the model
 //     is presumably frozen, and it sees each example exactly once. The mean of the loss of the dataset is always provided
 //     as the first metric. It's ok to be empty (nil).
-func NewTrainer(manager *graph.Manager, ctx *context.Context,
+func NewTrainer(backend backends.Backend, ctx *context.Context,
 	modelFn ModelFn, lossFn LossFn, optimizer optimizers.Interface,
 	trainMetrics, evalMetrics []metrics.Interface) *Trainer {
 
 	r := &Trainer{
-		manager:   manager,
+		backend:   backend,
 		context:   ctx,
-		deviceNum: manager.DefaultDeviceNum(),
+		deviceNum: 0,
 		modelFn:   modelFn,
 		lossFn:    lossFn,
 		optimizer: optimizer,
@@ -203,7 +206,7 @@ func (r *Trainer) enumerateExecs(fn func(exec *context.Exec)) {
 // TODO: Add support for training across multiple devices -- maybe a different Trainer for that, in principle should be simple.
 // This should be called before any invocations of TrainStep.
 // It returns a reference to itself so calls can be cascaded.
-func (r *Trainer) InDevice(deviceNum int) *Trainer {
+func (r *Trainer) InDevice(deviceNum backends.DeviceNum) *Trainer {
 	r.deviceNum = deviceNum
 	r.enumerateExecs(func(exec *context.Exec) {
 		exec.InDevice(deviceNum)
@@ -258,7 +261,7 @@ func (r *Trainer) createExecutor(spec any, inputsLen, labelsLen int,
 	if _, found := spec.(fmt.Stringer); found {
 		trainerName = fmt.Sprintf("Trainer: spec=%s", spec)
 	}
-	return context.NewExec(r.manager, r.context,
+	return context.NewExec(r.backend, r.context,
 		func(ctx *context.Context, inputsAndLabels []*graph.Node) (metrics []*graph.Node) {
 			inputs := inputsAndLabels[:inputsLen]
 			labels := inputsAndLabels[inputsLen:]
@@ -268,7 +271,7 @@ func (r *Trainer) createExecutor(spec any, inputsLen, labelsLen int,
 
 // lossFnScalarLoss calls `r.lossFn` and [ReduceAllMean] to a scalar.
 // It assumes `r.lossFn != nil`.
-func (r *Trainer) lossFnScalarLoss(ctx *context.Context, labels, predictions []*graph.Node) *graph.Node {
+func (r *Trainer) lossFnScalarLoss(_ *context.Context, labels, predictions []*graph.Node) *graph.Node {
 	loss := r.lossFn(labels, predictions)
 	if !loss.Shape().IsScalar() {
 		loss = graph.ReduceAllMean(loss)
@@ -294,6 +297,7 @@ func (r *Trainer) trainStepGraph(spec any, ctx *context.Context, inputs, labels 
 	loss := GetLosses(ctx, g)
 	if loss == nil {
 		Panicf("no loss function defined (or it returned nil), and no loss set with AddLoss(), there is nothing to optimize!?")
+		panic(nil) // Disable linter error.
 	}
 
 	// Optimizer: it will create graph for gradient.
@@ -310,7 +314,7 @@ func (r *Trainer) trainStepGraph(spec any, ctx *context.Context, inputs, labels 
 	})
 
 	if len(predictions) == 0 {
-		// We create an zero prediction (same dtype as loss), because the metrics require something.
+		// We create a zero prediction (same dtype as loss), because the metrics require something.
 		predictions = []*graph.Node{graph.ScalarZero(g, loss.DType())}
 	}
 
@@ -324,7 +328,7 @@ func (r *Trainer) trainStepGraph(spec any, ctx *context.Context, inputs, labels 
 func (r *Trainer) callGraphFn(
 	graphFn func(spec any, ctx *context.Context, inputs, labels []*graph.Node) (metrics []*graph.Node),
 	graphType GraphType,
-	spec any, inputs, labels []tensors.Tensor) (metrics []tensors.Tensor) {
+	spec any, inputs, labels []*tensors.Tensor) (metrics []*tensors.Tensor) {
 	if len(inputs) == 0 {
 		Panicf("there are no inputs, at least one is required")
 	}
@@ -408,7 +412,7 @@ func (r *Trainer) metricsUpdatesGraph(ctx *context.Context, labels, predictions 
 // of the batch loss, plus the other `trainMetrics` configured during the creation of the Trainer.
 //
 // Errors are thrown using `panic` -- they are usually informative and include a stack-trace.
-func (r *Trainer) TrainStep(spec any, inputs, labels []tensors.Tensor) (metrics []tensors.Tensor) {
+func (r *Trainer) TrainStep(spec any, inputs, labels []*tensors.Tensor) (metrics []*tensors.Tensor) {
 	return r.callGraphFn(r.trainStepGraph, TrainType, spec, inputs, labels)
 }
 
@@ -451,7 +455,7 @@ func (r *Trainer) ResetTrainMetrics() error {
 // It returns the current value for the registered eval metrics.
 //
 // Errors are thrown using `panic` -- they are usually informative and include a stack-trace.
-func (r *Trainer) EvalStep(spec any, inputs, labels []tensors.Tensor) (metrics []tensors.Tensor) {
+func (r *Trainer) EvalStep(spec any, inputs, labels []*tensors.Tensor) (metrics []*tensors.Tensor) {
 	return r.callGraphFn(r.evalStepGraph, EvalType, spec, inputs, labels)
 }
 
@@ -468,7 +472,7 @@ func (r *Trainer) resetEvalMetrics() {
 // Eval returns the computation of loss and metrics over the given dataset. The dataset
 // has to be finite (yield io.EOF at the end). The function will reset the dataset
 // at the start.
-func (r *Trainer) Eval(ds Dataset) (lossAndMetrics []tensors.Tensor) {
+func (r *Trainer) Eval(ds Dataset) (lossAndMetrics []*tensors.Tensor) {
 	ds.Reset()
 	r.resetEvalMetrics()
 	count := 0
