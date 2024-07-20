@@ -5,6 +5,7 @@ package ogbnmag
 import (
 	"fmt"
 	. "github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/examples/notebook/gonb/plots"
 	"github.com/gomlx/gomlx/examples/ogbnmag/gnn"
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
@@ -13,14 +14,16 @@ import (
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gopjrt/dtypes"
 	"k8s.io/klog/v2"
 	"time"
 )
 
 // LayerWiseEvaluation returns the train, validation and test accuracy of the model, using layer-wise inference.
-func LayerWiseEvaluation(ctx *context.Context, strategy *sampler.Strategy) (train, validation, test float64) {
+func LayerWiseEvaluation(backend backends.Backend, ctx *context.Context, strategy *sampler.Strategy) (train, validation, test float64) {
 	var predictionsT *tensors.Tensor
-	exec := context.NewExec(ctx.Backend(), ctx.Reuse(), BuildLayerWiseInferenceModel(strategy, true))
+	exec := context.NewExec(backend, ctx.Reuse(), BuildLayerWiseInferenceModel(strategy, true))
 
 	if klog.V(1).Enabled() {
 		// Report timings.
@@ -38,15 +41,15 @@ func LayerWiseEvaluation(ctx *context.Context, strategy *sampler.Strategy) (trai
 		predictionsT = exec.Call()[0]
 	}
 
-	predictions := predictionsT.Local().Value().([]int16)
-	labels := PapersLabels.Local().FlatCopy().([]int32)
+	predictions := predictionsT.Value().([]int16)
+	labels := tensors.CopyFlatData[int32](PapersLabels)
 	return layerWiseCalculateAccuracies(predictions, labels)
 }
 
 func layerWiseCalculateAccuracies(predictions []int16, labels []int32) (train, validation, test float64) {
 	splitVars := []*float64{&train, &validation, &test}
 	for splitIdx, splitT := range []*tensors.Tensor{TrainSplit, ValidSplit, TestSplit} {
-		split := splitT.Local().FlatCopy().([]int32)
+		split := tensors.CopyFlatData[int32](splitT)
 		numCorrect := 0
 		for _, paperIdx := range split {
 			if int(predictions[paperIdx]) == int(labels[paperIdx]) {
@@ -58,12 +61,12 @@ func layerWiseCalculateAccuracies(predictions []int16, labels []int32) (train, v
 	return
 }
 
-func BuildLayerWiseCustomMetricFn(ctx *context.Context, strategy *sampler.Strategy) plots.CustomMetricFn {
-	exec := context.NewExec(ctx.Backend(), ctx.Reuse(), BuildLayerWiseInferenceModel(strategy, true))
+func BuildLayerWiseCustomMetricFn(backend backends.Backend, ctx *context.Context, strategy *sampler.Strategy) plots.CustomMetricFn {
+	exec := context.NewExec(backend, ctx.Reuse(), BuildLayerWiseInferenceModel(strategy, true))
 	ctx = ctx.Reuse()
-	labels := PapersLabels.Local().FlatCopy().([]int32)
+	labels := tensors.CopyFlatData[int32](PapersLabels)
 	return func(plotter plots.Plotter, step float64) error {
-		predictions := exec.Call()[0].Local().Value().([]int16)
+		predictions := exec.Call()[0].Value().([]int16)
 		train, validation, test := layerWiseCalculateAccuracies(predictions, labels)
 		accuracies := []float64{train, validation, test}
 		names := []string{"Train", "Validation", "Test"}

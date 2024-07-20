@@ -428,7 +428,7 @@ var (
 // it can be used by models.
 //
 // They will be stored under the "ogbnmag" scope.
-func UploadOgbnMagVariables(ctx *context.Context) *context.Context {
+func UploadOgbnMagVariables(backend backends.Backend, ctx *context.Context) *context.Context {
 	ctxMag := ctx.InAbsPath(OgbnMagVariablesScope)
 	for name, tPtr := range OgbnMagVariablesRef {
 		if *tPtr == nil {
@@ -437,7 +437,7 @@ func UploadOgbnMagVariables(ctx *context.Context) *context.Context {
 		v := ctxMag.VariableWithValue(name, *tPtr)
 		v.Trainable = false
 	}
-	convertPapersEmbeddings(ctx) // Convert to the selected dtype.
+	convertPapersEmbeddings(backend, ctx) // Convert to the selected dtype.
 	return ctx
 }
 

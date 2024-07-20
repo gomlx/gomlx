@@ -17,7 +17,6 @@ import (
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
-	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/janpfeifer/must"
@@ -55,7 +54,7 @@ func Train(backend backends.Backend, ctx *context.Context, baseDir string, layer
 	if err != nil {
 		return err
 	}
-	UploadOgbnMagVariables(ctx)
+	UploadOgbnMagVariables(backend, ctx)
 
 	// Context values (both parameters and variables) are reloaded from checkpoint,
 	// any values that we don't want overwritten need to be read before the checkpointing.
@@ -125,7 +124,7 @@ func Train(backend backends.Backend, ctx *context.Context, baseDir string, layer
 		if layerWiseEval {
 			magSampler := must.M1(NewSampler(baseDir))
 			layerWiseStrategy := NewSamplerStrategy(magSampler, 1, nil)
-			plots = plots.WithCustomMetricFn(BuildLayerWiseCustomMetricFn(ctx, layerWiseStrategy))
+			plots = plots.WithCustomMetricFn(BuildLayerWiseCustomMetricFn(backend, ctx, layerWiseStrategy))
 		} else {
 			plots = plots.WithDatasets(trainEvalDS, validEvalDS)
 		}
@@ -153,7 +152,7 @@ func Train(backend backends.Backend, ctx *context.Context, baseDir string, layer
 	// Finally, print an evaluation on train and test datasets.
 	if report {
 		fmt.Println()
-		err = evalWithContext(ctx, baseDir, layerWiseEval, false)
+		err = evalWithContext(backend, ctx, baseDir, layerWiseEval, false)
 		if err != nil {
 			return errors.WithMessage(err, "while reporting eval")
 		}
@@ -180,7 +179,7 @@ func newTrainer(backend backends.Backend, ctx *context.Context) *train.Trainer {
 }
 
 func Eval(backend backends.Backend, ctx *context.Context, baseDir string, layerWise, skipTrain bool) error {
-	if err := loadCheckpointToContext(ctx, baseDir); err != nil {
+	if err := loadCheckpointToContext(backend, ctx, baseDir); err != nil {
 		return err
 	}
 	return evalWithContext(backend, ctx, baseDir, layerWise, skipTrain)
@@ -188,7 +187,7 @@ func Eval(backend backends.Backend, ctx *context.Context, baseDir string, layerW
 
 func evalWithContext(backend backends.Backend, ctx *context.Context, baseDir string, layerWise, skipTrain bool) error {
 	if layerWise {
-		return evalLayerWise(ctx, baseDir)
+		return evalLayerWise(backend, ctx, baseDir)
 	}
 
 	// Evaluate on various datasets.
@@ -217,14 +216,14 @@ func evalSampled(backend backends.Backend, ctx *context.Context, datasets ...tra
 }
 
 // evalLayerWise evaluates GNN model based on configuration in `ctx` using layer-wise inference.
-func evalLayerWise(ctx *context.Context, baseDir string) error {
+func evalLayerWise(backend backends.Backend, ctx *context.Context, baseDir string) error {
 	// Create the OGBN-MAG strategy, used by the layer-wise inference: batch-size is irrelevant.
 	magSampler, err := NewSampler(baseDir)
 	if err != nil {
 		return err
 	}
 	magStrategy := NewSamplerStrategy(magSampler, 1, nil)
-	trainAcc, validationAcc, testAcc := LayerWiseEvaluation(ctx, magStrategy)
+	trainAcc, validationAcc, testAcc := LayerWiseEvaluation(backend, ctx, magStrategy)
 	fmt.Printf("Train Accuracy:     \t%.2f%%\n", 100*trainAcc)
 	fmt.Printf("Validation Accuracy:\t%.2f%%\n", 100*validationAcc)
 	fmt.Printf("Test Accuracy:      \t%.2f%%\n", 100*testAcc)
@@ -234,7 +233,7 @@ func evalLayerWise(ctx *context.Context, baseDir string) error {
 	return nil
 }
 
-func loadCheckpointToContext(ctx *context.Context, baseDir string) error {
+func loadCheckpointToContext(backend backends.Backend, ctx *context.Context, baseDir string) error {
 	baseDir = mldata.ReplaceTildeInDir(baseDir)
 	checkpointPath := context.GetParamOr(ctx, ParamCheckpointPath, "")
 	if checkpointPath == "" {
@@ -255,7 +254,7 @@ func loadCheckpointToContext(ctx *context.Context, baseDir string) error {
 	fmt.Printf("Model in %q trained for %d steps.\n", checkpointPath, globalStep)
 
 	// Upload OGBN-MAG variables -- and possibly convert them.
-	_ = UploadOgbnMagVariables(ctx)
+	_ = UploadOgbnMagVariables(backend, ctx)
 	return nil
 }
 
@@ -266,19 +265,19 @@ func getDType(ctx *context.Context) dtypes.DType {
 	case "float32":
 		return dtypes.Float32
 	case "float16":
-		return shapes.F16
+		return dtypes.Float16
 	case "float64":
 		return dtypes.Float64
 	default:
 		Panicf("Invalid DType %q given to parameters %q", dtypeStr, ParamDType)
 	}
-	return shapes.InvalidDType
+	return dtypes.InvalidDType
 }
 
 // convertPaperEmbeddings converts the "PapersEmbeddings" variable to the selected dtype, if needed.
 //
 // One should be careful not to save the converted values -- ideally, the values are saved in the original Float32.
-func convertPapersEmbeddings(ctx *context.Context) {
+func convertPapersEmbeddings(backend backends.Backend, ctx *context.Context) {
 	dtype := getDType(ctx)
 	dtypeEmbed := dtype
 	if dtype == dtypes.Float16 {
@@ -296,7 +295,7 @@ func convertPapersEmbeddings(ctx *context.Context) {
 		return
 	}
 
-	e := context.NewExec(ctx.Backend(), ctx, func(ctx *context.Context, g *Graph) *Node {
+	e := context.NewExec(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
 		return ConvertDType(papersVar.ValueGraph(g), dtype)
 	})
 	converted := e.Call()[0]
