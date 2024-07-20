@@ -18,10 +18,12 @@ package data
 
 import (
 	"github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/pkg/errors"
 	"io"
 )
@@ -37,9 +39,9 @@ import (
 //
 // Notice for any feature that happens to be constant, the `stddev` will be 0. If trying to normalize (divide)
 // by that will result in error. Use ReplaceZerosByOnes below to avoid the numeric issues.
-func Normalization(manager *Manager, ds train.Dataset, inputsIndex int, independentAxes ...int) (mean, stddev tensors.Tensor, err error) {
-	ctx := context.NewContext(manager)
-	updateValuesWithInput := context.NewExec(manager, ctx, func(ctx *context.Context, batch *Node) {
+func Normalization(backend backends.Backend, ds train.Dataset, inputsIndex int, independentAxes ...int) (mean, stddev *tensors.Tensor, err error) {
+	ctx := context.NewContext()
+	updateValuesWithInput := context.NewExec(backend, ctx, func(ctx *context.Context, batch *Node) {
 		g := batch.Graph()
 		ctx = ctx.WithInitializer(initializers.Zero)
 
@@ -73,7 +75,7 @@ func Normalization(manager *Manager, ds train.Dataset, inputsIndex int, independ
 
 	// Read through dataset updating measurements.
 	batchNum := 0
-	var inputs []tensors.Tensor
+	var inputs []*tensors.Tensor
 	for {
 		_, inputs, _, err = ds.Yield()
 		if err == io.EOF {
@@ -102,9 +104,9 @@ func Normalization(manager *Manager, ds train.Dataset, inputsIndex int, independ
 	}
 
 	// Calculate mean and stddev, using a graph.
-	var results []tensors.Tensor
+	var results []*tensors.Tensor
 	err = exceptions.TryCatch[error](func() {
-		results = context.NewExec(manager, ctx, func(ctx *context.Context, g *Graph) []*Node {
+		results = context.NewExec(backend, ctx, func(ctx *context.Context, g *Graph) []*Node {
 			countVar := ctx.InspectVariable(ctx.Scope(), "count")
 			count := countVar.ValueGraph(g)
 

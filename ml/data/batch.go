@@ -2,16 +2,19 @@ package data
 
 import (
 	"fmt"
+	. "github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/pkg/errors"
 	"io"
 	"sync"
 )
 
 type batchElement struct {
-	inputs, labels []tensors.Tensor
+	inputs, labels []*tensors.Tensor
 	spec           any
 }
 
@@ -30,7 +33,7 @@ func (e *batchElement) FinalizeAll() {
 //
 // See details in Batch, the function used to create it.
 type batchedDataset struct {
-	manager *Manager
+	backend backends.Backend
 	ds      train.Dataset // Source Dataset.
 
 	batchSize                              int
@@ -53,7 +56,7 @@ type batchedDataset struct {
 // even with a buffer of only 1.
 //
 // Args:
-//   - `manager`: will be used to create the graph that actually does the batching.
+//   - `backend`: will be used to create the graph that actually does the batching.
 //   - `ds`: the dataset to be batched.
 //   - `batch_size`: size of each batch, except when there are no more examples, in which
 //     case batches can be smaller (except if `dropIncompleteBatch` was selected).
@@ -66,15 +69,15 @@ type batchedDataset struct {
 //     Usually desirable for evaluation, but not desirable for training.
 //
 // Returns a `train.Dataset` that yields batched examples.
-func Batch(manager *Manager, ds train.Dataset, batchSize int, createLeadingAxis, dropIncompleteBatch bool) train.Dataset {
+func Batch(backend backends.Backend, ds train.Dataset, batchSize int, createLeadingAxis, dropIncompleteBatch bool) train.Dataset {
 	batched := &batchedDataset{
-		manager:             manager,
+		backend:             backend,
 		ds:                  ds,
 		batchSize:           batchSize,
 		createLeadingAxis:   createLeadingAxis,
 		dropIncompleteBatch: dropIncompleteBatch,
 	}
-	batched.batchExec = NewExec(manager, batched.batchTensorsGraph)
+	batched.batchExec = NewExec(backend, batched.batchTensorsGraph)
 	return batched
 }
 
@@ -100,11 +103,11 @@ func (ds *batchedDataset) lockedFreeBuffer() {
 }
 
 // Yield implements train.Dataset.
-func (ds *batchedDataset) Yield() (spec any, inputs []tensors.Tensor, labels []tensors.Tensor, err error) {
+func (ds *batchedDataset) Yield() (spec any, inputs []*tensors.Tensor, labels []*tensors.Tensor, err error) {
 	defer ds.mu.Unlock()
 	for {
 		var eSpec any
-		var eInputs, eLabels []tensors.Tensor
+		var eInputs, eLabels []*tensors.Tensor
 		eSpec, eInputs, eLabels, err = ds.ds.Yield()
 		ds.mu.Lock()
 		if err == io.EOF {
@@ -198,8 +201,8 @@ func (ds *batchedDataset) lockedBatchBuffer() (batched batchElement, err error) 
 		}
 	}
 
-	allInputs := make([][]tensors.Tensor, 0, len(ds.buffer))
-	allLabels := make([][]tensors.Tensor, 0, len(ds.buffer))
+	allInputs := make([][]*tensors.Tensor, 0, len(ds.buffer))
+	allLabels := make([][]*tensors.Tensor, 0, len(ds.buffer))
 	for _, e := range ds.buffer {
 		allInputs = append(allInputs, e.inputs)
 		allLabels = append(allLabels, e.labels)
@@ -214,17 +217,18 @@ func (ds *batchedDataset) lockedBatchBuffer() (batched batchElement, err error) 
 
 // lockedBatchTensorsList receives a list of inputs or labels collections, and concatenate them
 // into a batch. Returns the list of the concatenated tensors.
+//
 // The batching happens on the tensors on the first axis of the `inputs` slice.
-func (ds *batchedDataset) lockedBatchTensorsList(inputs [][]tensors.Tensor) (batchedTensors []tensors.Tensor, err error) {
+func (ds *batchedDataset) lockedBatchTensorsList(inputs [][]*tensors.Tensor) (batchedTensors []*tensors.Tensor, err error) {
 	numBatchedTensors := len(inputs[0])
 	numParts := len(inputs)
-	batchedTensors = make([]tensors.Tensor, 0, numBatchedTensors)
-	parts := make([]tensors.Tensor, numParts)
+	batchedTensors = make([]*tensors.Tensor, 0, numBatchedTensors)
+	parts := make([]*tensors.Tensor, numParts)
 	for batchedTensorIdx := 0; batchedTensorIdx < numBatchedTensors; batchedTensorIdx++ {
-		for ii, tensors := range inputs {
-			parts[ii] = tensors[batchedTensorIdx]
+		for ii, inputTensors := range inputs {
+			parts[ii] = inputTensors[batchedTensorIdx]
 		}
-		var batchedTensor tensors.Tensor
+		var batchedTensor *tensors.Tensor
 		batchedTensor, err = ds.lockedBatchTensor(parts)
 		if err != nil {
 			return
@@ -235,7 +239,7 @@ func (ds *batchedDataset) lockedBatchTensorsList(inputs [][]tensors.Tensor) (bat
 }
 
 // lockedBatchTensor batches the given tensor list, all should already have the same shape.
-func (ds *batchedDataset) lockedBatchTensor(parts []tensors.Tensor) (batched tensors.Tensor, err error) {
+func (ds *batchedDataset) lockedBatchTensor(parts []*tensors.Tensor) (batched *tensors.Tensor, err error) {
 	partsAny := make([]any, 0, len(parts))
 	for _, part := range parts {
 		partsAny = append(partsAny, part)

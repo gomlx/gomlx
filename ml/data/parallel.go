@@ -2,6 +2,7 @@ package data
 
 import (
 	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/pkg/errors"
 	"io"
 	"k8s.io/klog/v2"
@@ -36,8 +37,8 @@ type ParallelDataset struct {
 
 type yieldUnit struct {
 	spec   any
-	inputs []tensors.Tensor
-	labels []tensors.Tensor
+	inputs []*tensors.Tensor
+	labels []*tensors.Tensor
 }
 
 // parallelDatasetImpl separates the implementation of ParallelDataset. It's important
@@ -275,7 +276,7 @@ drainDataset: //
 }
 
 // Yield implements train.Dataset.
-func (pd *ParallelDataset) Yield() (spec any, inputs []tensors.Tensor, labels []tensors.Tensor, err error) {
+func (pd *ParallelDataset) Yield() (spec any, inputs []*tensors.Tensor, labels []*tensors.Tensor, err error) {
 	impl := pd.impl
 	if impl == nil {
 		err = errors.Errorf("ParallelDataset.Yield was called before it was started with ParallelDataset.Start")
