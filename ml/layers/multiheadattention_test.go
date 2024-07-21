@@ -39,10 +39,10 @@ import (
 )
 
 func TestMultiHeadAttentionGraph(t *testing.T) {
-	manager := graphtest.BuildTestBackend()
+	backend := graphtest.BuildTestBackend()
 	{
 		ctx := context.NewContext()
-		g := NewGraph(manager, "test")
+		g := NewGraph(backend, "test")
 		batchSize := 3
 		key := IotaFull(g, shapes.Make(F32, batchSize, 4, 5, 3))
 		query := IotaFull(g, shapes.Make(F32, batchSize, 7, 1, 2))
