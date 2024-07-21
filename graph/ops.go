@@ -464,7 +464,7 @@ func Reshape(x *Node, dimensions ...int) *Node {
 	if missingIdx != -1 {
 		tmpDim := slices.Clone(dimensions)
 		tmpDim[missingIdx] = totalSize / newSize
-		newSize *= dimensions[missingIdx]
+		newSize *= tmpDim[missingIdx]
 		if newSize != totalSize {
 			exceptions.Panicf("cannot find new dimension for axis %d that will make new dimensions %v match original the input size %d (dimensions %v)",
 				missingIdx, dimensions, totalSize, x.Shape().Dimensions)

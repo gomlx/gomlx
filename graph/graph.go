@@ -88,7 +88,6 @@
 package graph
 
 //go:generate go run ../cmd/graph_generator
-//go:generate stringer -type NodeType -trimprefix NodeType gen_backend_ops.go
 
 import (
 	"fmt"

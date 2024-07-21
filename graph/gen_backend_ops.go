@@ -214,6 +214,7 @@ func And(x0 *Node, x1 *Node) (node *Node) {
 		graph:        g,
 		inputs:       inputs,
 		inputNodes:   inputNodes,
+		stopGradient: true,
 	}
 	g.registerNode(node)
 	return
@@ -1028,6 +1029,7 @@ func Equal(x0 *Node, x1 *Node) (node *Node) {
 		graph:        g,
 		inputs:       inputs,
 		inputNodes:   inputNodes,
+		stopGradient: true,
 	}
 	g.registerNode(node)
 	return
@@ -1071,6 +1073,7 @@ func EqualTotalOrder(x0 *Node, x1 *Node) (node *Node) {
 		graph:        g,
 		inputs:       inputs,
 		inputNodes:   inputNodes,
+		stopGradient: true,
 	}
 	g.registerNode(node)
 	return
@@ -1324,6 +1327,7 @@ func GreaterOrEqual(x0 *Node, x1 *Node) (node *Node) {
 		graph:        g,
 		inputs:       inputs,
 		inputNodes:   inputNodes,
+		stopGradient: true,
 	}
 	g.registerNode(node)
 	return
@@ -1367,6 +1371,7 @@ func GreaterOrEqualTotalOrder(x0 *Node, x1 *Node) (node *Node) {
 		graph:        g,
 		inputs:       inputs,
 		inputNodes:   inputNodes,
+		stopGradient: true,
 	}
 	g.registerNode(node)
 	return
@@ -1408,6 +1413,7 @@ func GreaterThan(x0 *Node, x1 *Node) (node *Node) {
 		graph:        g,
 		inputs:       inputs,
 		inputNodes:   inputNodes,
+		stopGradient: true,
 	}
 	g.registerNode(node)
 	return
@@ -1451,6 +1457,7 @@ func GreaterThanTotalOrder(x0 *Node, x1 *Node) (node *Node) {
 		graph:        g,
 		inputs:       inputs,
 		inputNodes:   inputNodes,
+		stopGradient: true,
 	}
 	g.registerNode(node)
 	return
@@ -1605,6 +1612,7 @@ func LessOrEqual(x0 *Node, x1 *Node) (node *Node) {
 		graph:        g,
 		inputs:       inputs,
 		inputNodes:   inputNodes,
+		stopGradient: true,
 	}
 	g.registerNode(node)
 	return
@@ -1648,6 +1656,7 @@ func LessOrEqualTotalOrder(x0 *Node, x1 *Node) (node *Node) {
 		graph:        g,
 		inputs:       inputs,
 		inputNodes:   inputNodes,
+		stopGradient: true,
 	}
 	g.registerNode(node)
 	return
@@ -1689,6 +1698,7 @@ func LessThan(x0 *Node, x1 *Node) (node *Node) {
 		graph:        g,
 		inputs:       inputs,
 		inputNodes:   inputNodes,
+		stopGradient: true,
 	}
 	g.registerNode(node)
 	return
@@ -1732,6 +1742,7 @@ func LessThanTotalOrder(x0 *Node, x1 *Node) (node *Node) {
 		graph:        g,
 		inputs:       inputs,
 		inputNodes:   inputNodes,
+		stopGradient: true,
 	}
 	g.registerNode(node)
 	return
@@ -1843,6 +1854,7 @@ func LogicalNot(x *Node) (node *Node) {
 		graph:        g,
 		inputs:       inputs,
 		inputNodes:   inputNodes,
+		stopGradient: true,
 	}
 	g.registerNode(node)
 	return
@@ -2082,6 +2094,7 @@ func NotEqual(x0 *Node, x1 *Node) (node *Node) {
 		graph:        g,
 		inputs:       inputs,
 		inputNodes:   inputNodes,
+		stopGradient: true,
 	}
 	g.registerNode(node)
 	return
@@ -2125,6 +2138,7 @@ func NotEqualTotalOrder(x0 *Node, x1 *Node) (node *Node) {
 		graph:        g,
 		inputs:       inputs,
 		inputNodes:   inputNodes,
+		stopGradient: true,
 	}
 	g.registerNode(node)
 	return
@@ -2166,6 +2180,7 @@ func Or(x0 *Node, x1 *Node) (node *Node) {
 		graph:        g,
 		inputs:       inputs,
 		inputNodes:   inputNodes,
+		stopGradient: true,
 	}
 	g.registerNode(node)
 	return
@@ -3432,6 +3447,7 @@ func Xor(x0 *Node, x1 *Node) (node *Node) {
 		graph:        g,
 		inputs:       inputs,
 		inputNodes:   inputNodes,
+		stopGradient: true,
 	}
 	g.registerNode(node)
 	return

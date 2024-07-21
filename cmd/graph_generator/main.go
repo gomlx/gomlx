@@ -37,17 +37,24 @@ var (
 
 	// methodsToExclude from writing, but the corresponding will be written and maintained manually.
 	methodsToExclude = types.SetWith("Constant", "Parameter")
+
+	// methodsNoGradient will add a stop gradient to the node.
+	methodsNoGradient = types.SetWith(
+		"And", "Or", "Xor", "LogicalNot",
+		"Equal", "NotEqual", "GreaterOrEqual", "GreaterThan", "LessOrEqual", "LessThan",
+		"EqualTotalOrder", "NotEqualTotalOrder", "GreaterOrEqualTotalOrder", "GreaterThanTotalOrder", "LessOrEqualTotalOrder", "LessThanTotalOrder")
 )
 
 func buildMethodInfo() (methods []*MethodInfo) {
 	extractor, funcs := parsebackends.ParseBuilder()
 	for name, funcInfo := range funcs {
 		mi := &MethodInfo{
-			BackendName: name,
-			GraphName:   name,
-			Exported:    !methodsNotExported.Has(name),
-			Excluded:    methodsToExclude.Has(name),
-			Comments:    funcInfo.Comments,
+			BackendName:  name,
+			GraphName:    name,
+			Exported:     !methodsNotExported.Has(name),
+			Excluded:     methodsToExclude.Has(name),
+			Comments:     funcInfo.Comments,
+			StopGradient: methodsNoGradient.Has(name),
 		}
 		methods = append(methods, mi)
 		if !mi.Exported {
@@ -148,6 +155,7 @@ type MethodInfo struct {
 	Inputs                 []*ParameterInfo
 	Exported, Excluded     bool
 	Comments               []string
+	StopGradient           bool
 
 	HasMultipleOutputs bool
 	OutputNames        []string
@@ -245,7 +253,9 @@ Version with multiple outputs:
 {{end}}		graph: g,
 		inputs: inputs,
 {{if not .HasGraph}}		inputNodes: inputNodes,
-{{end}}	}
+{{end}}{{/*
+*/}}{{if .StopGradient}}	stopGradient: true,
+{{end}}}
 	g.registerNode(node)
 {{/*
 
