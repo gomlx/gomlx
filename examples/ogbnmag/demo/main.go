@@ -15,6 +15,8 @@ import (
 	"k8s.io/klog/v2"
 	"path"
 	"time"
+
+	_ "github.com/gomlx/gomlx/backends/xla"
 )
 
 var (
@@ -35,6 +37,7 @@ func createDefaultContext() *context.Context {
 		"checkpoint":         "",
 		"num_checkpoints":    3,
 		"train_steps":        0,
+		"batch_size":         128,
 		"plots":              true,
 		paramWithReplacement: false,
 
@@ -111,6 +114,8 @@ func main() {
 	} else if *flagEval {
 		klog.Fatal("To run eval (--eval) you need to specify a checkpoint (--checkpoint).")
 	}
+	
+	mag.BatchSize = context.GetParamOr(ctx, "batch_size", 128)
 
 	// Load data from OGBN-MAG.
 	fmt.Printf("Loading data ... ")

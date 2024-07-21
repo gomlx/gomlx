@@ -5,11 +5,12 @@ import (
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/xslices"
+	"github.com/gomlx/gopjrt/dtypes"
 	"testing"
 )
 
 func TestPoolMessagesWithFixedShape(t *testing.T) {
-	manager := graphtest.BuildTestBackend()
 	ctx := context.NewContext()
 	ctx.SetParam(ParamPoolingType, "sum|max")
 	graphtest.RunTestGraphFn(
@@ -38,7 +39,6 @@ func TestPoolMessagesWithFixedShape(t *testing.T) {
 }
 
 func TestPoolMessagesWithAdjacency(t *testing.T) {
-	manager := graphtest.BuildTestBackend()
 	ctx := context.NewContext()
 	ctx.SetParam(ParamPoolingType, "sum|mean")
 	graphtest.RunTestGraphFn(

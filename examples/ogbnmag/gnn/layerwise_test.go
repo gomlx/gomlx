@@ -8,8 +8,12 @@ import (
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
 	"testing"
+
+	_ "github.com/gomlx/gomlx/backends/xla"
 )
 
 // Test sampler constants.
@@ -32,14 +36,13 @@ func createDenseTestSampler(withCitation bool) *samplerPkg.Sampler {
 	authorWritesPapers := tensors.FromShape(shapes.Make(dtypes.Int32, lwNumAuthors, 2))
 	{
 		// Each paper is written by 5 authors.
-		ref := authorWritesPapers.AcquireData()
-		authorData := ref.Flat().([]int32)
-		for authorIdx := range int32(lwNumAuthors) {
-			paperIdx := authorIdx / 5
-			authorData[authorIdx*2] = authorIdx
-			authorData[authorIdx*2+1] = paperIdx
-		}
-		ref.Release()
+		tensors.MutableFlatData[int32](authorWritesPapers, func(authorData []int32) {
+			for authorIdx := range int32(lwNumAuthors) {
+				paperIdx := authorIdx / 5
+				authorData[authorIdx*2] = authorIdx
+				authorData[authorIdx*2+1] = paperIdx
+			}
+		})
 	}
 	sampler.AddEdgeType("writes", "authors", "papers", authorWritesPapers, false)
 	sampler.AddEdgeType("writtenBy", "authors", "papers", authorWritesPapers, true)
@@ -48,16 +51,15 @@ func createDenseTestSampler(withCitation bool) *samplerPkg.Sampler {
 		paperCitesPaper := tensors.FromShape(shapes.Make(dtypes.Int32, lwNumPapers*lwFactor, 2))
 		{
 			// Each paper is written by 5 authors.
-			ref := paperCitesPaper.AcquireData()
-			citesData := ref.Flat().([]int32)
-			for citing := range int32(lwNumPapers) {
-				for ii := range int32(lwFactor) {
-					cited := (citing + ii + 1) % lwNumPapers
-					citesData[(citing*lwFactor+ii)*2] = citing
-					citesData[(citing*lwFactor+ii)*2+1] = cited
+			tensors.MutableFlatData[int32](paperCitesPaper, func(citesData []int32) {
+				for citing := range int32(lwNumPapers) {
+					for ii := range int32(lwFactor) {
+						cited := (citing + ii + 1) % lwNumPapers
+						citesData[(citing*lwFactor+ii)*2] = citing
+						citesData[(citing*lwFactor+ii)*2+1] = cited
+					}
 				}
-			}
-			ref.Release()
+			})
 		}
 		sampler.AddEdgeType("cites", "papers", "papers", paperCitesPaper, false)
 		sampler.AddEdgeType("citedBy", "papers", "papers", paperCitesPaper, true)
@@ -215,9 +217,9 @@ func TestLayerWiseInferenceMinimal(t *testing.T) {
 
 	// For each paper: paperIdx (residual connection) + 1000*paperIdx + 0.025*paperIdx + (0+1+2+3+4)/1000
 	logits := execGnn.Call()[0]
-	fmt.Printf("\tGNN seeds states: %s\n", logits.Local().GoStr())
+	fmt.Printf("\tGNN seeds states: %s\n", logits)
 	want := [][]float32{{0.010}, {1001.035}, {2002.060}, {3003.085}, {4004.110}, {5005.135}, {6006.160}, {7007.185}, {8008.210}, {9009.235}}
-	require.Equal(t, want, logits.Local().Value().([][]float32))
+	require.Equal(t, want, logits.Value())
 
 	// Uncomment to list variables used in model.
 	/*
@@ -235,8 +237,8 @@ func TestLayerWiseInferenceMinimal(t *testing.T) {
 		return graphStates["seeds"]
 	})
 	logits = execLayerWise.Call()[0]
-	fmt.Printf("\tLayerWiseGNN seeds states: %s\n", logits.Local().GoStr())
-	require.Equal(t, want, logits.Local().Value().([][]float32))
+	fmt.Printf("\tLayerWiseGNN seeds states: %s\n", logits)
+	require.Equal(t, want, logits.Value())
 }
 
 // TestLayerWiseInferenceCommon makes sure sampled and layer-wise inference get the same results under
@@ -257,7 +259,7 @@ func TestLayerWiseInferenceCommon(t *testing.T) {
 		})
 
 		sampledLogits := execGnn.Call()[0]
-		fmt.Printf("\tGNN seeds states: %s\n", sampledLogits.Local().GoStr())
+		fmt.Printf("\tGNN seeds states: %s\n", sampledLogits.GoStr())
 
 		// Uncomment to list variables used in model.
 		/*
@@ -275,11 +277,7 @@ func TestLayerWiseInferenceCommon(t *testing.T) {
 			return graphStates["seeds"]
 		})
 		lwLogits := execLayerWise.Call()[0]
-		fmt.Printf("\tLayerWiseGNN seeds states: %s\n", lwLogits.Local().GoStr())
-		require.True(t,
-			xslices.DeepSliceCmp(
-				sampledLogits.Local().Value().([][]float32),
-				lwLogits.Local().Value().([][]float32),
-				xslices.Close[float32]))
+		fmt.Printf("\tLayerWiseGNN seeds states: %s\n", lwLogits.GoStr())
+		require.True(t, sampledLogits.InDelta(lwLogits, 1e-4))
 	}
 }

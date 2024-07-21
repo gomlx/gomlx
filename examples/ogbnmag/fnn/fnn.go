@@ -71,7 +71,7 @@ var ModelFn = FnnModelGraph
 // Train FNN model based on configuration in `ctx`.
 func Train(backend backends.Backend, ctx *context.Context) error {
 	trainDS, validDS, testDS, err := mag.PapersSeedDatasets(backend)
-	mag.UploadOgbnMagVariables(ctx)
+	mag.UploadOgbnMagVariables(backend, ctx)
 	//ctx.EnumerateVariables(func(v *context.Variable) {
 	//	fmt.Printf("%s :: %s:\t%s\n", v.Scope(), v.Name(), v.Value().Shape())
 	//})

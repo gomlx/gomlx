@@ -4,11 +4,15 @@ import (
 	"fmt"
 	mldata "github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/constraints"
 	"path"
 	"testing"
+
+	_ "github.com/gomlx/gomlx/backends/xla"
 )
 
 func createTestSampler(t *testing.T) *Sampler {
@@ -130,15 +134,15 @@ func TestDataset(t *testing.T) {
 	strategy := createTestStrategy(t, s)
 
 	// checkInputsFn make automatic checks of expected dimensions and errors.
-	checkInputsFn := func(t *testing.T, spec any, inputs, labels []*tensors.Tensor, err error) map[string]*ValueMask[tensors.Tensor] {
+	checkInputsFn := func(t *testing.T, spec any, inputs, labels []*tensors.Tensor, err error) map[string]*ValueMask[*tensors.Tensor] {
 		require.NoError(t, err)
 		require.Empty(t, labels)
 		require.Equal(t, strategy, spec.(*Strategy))
-		graphSample, remaining := MapInputsToStates[tensors.Tensor](strategy, inputs)
+		graphSample, remaining := MapInputsToStates[*tensors.Tensor](strategy, inputs)
 		require.Empty(t, remaining)
 		if strategy.KeepDegrees == true {
-			seeds := graphSample["Seeds"].Value.Local().FlatCopy().([]int32)
-			degrees := graphSample[NameForNodeDependentDegree("Seeds", "authors")].Value.Local().FlatCopy().([]int32)
+			seeds := tensors.CopyFlatData[int32](graphSample["Seeds"].Value)
+			degrees := tensors.CopyFlatData[int32](graphSample[NameForNodeDependentDegree("Seeds", "authors")].Value)
 			for ii, paper := range seeds {
 				var want int32
 				switch paper {
@@ -158,8 +162,8 @@ func TestDataset(t *testing.T) {
 			}
 
 			// Test degrees of identity.
-			degrees = graphSample[NameForNodeDependentDegree("Seeds", "SubSeeds")].Value.Local().FlatCopy().([]int32)
-			seedsMask := graphSample["Seeds"].Mask.Local().FlatCopy().([]bool)
+			degrees = tensors.CopyFlatData[int32](graphSample[NameForNodeDependentDegree("Seeds", "SubSeeds")].Value)
+			seedsMask := tensors.CopyFlatData[bool](graphSample["Seeds"].Mask)
 			for ii, paperMask := range seedsMask {
 				if !paperMask {
 					continue
@@ -170,7 +174,7 @@ func TestDataset(t *testing.T) {
 		for name, rule := range strategy.Rules {
 			require.Containsf(t, graphSample, name, "Missing input for rule %q", name)
 			value, mask := graphSample[name].Value, graphSample[name].Mask
-			require.True(t, value.Shape().Eq(rule.Shape), "Mismatch of shapes for value of rule %q: value.Shape=%s, rule.Shape=%s", name,
+			require.True(t, value.Shape().Equal(rule.Shape), "Mismatch of shapes for value of rule %q: value.Shape=%s, rule.Shape=%s", name,
 				value.Shape(), rule.Shape)
 			require.NoErrorf(t, mask.Shape().Check(dtypes.Bool, rule.Shape.Dimensions...),
 				"Mismatch of shapes for mask of rule %q", name)
@@ -179,7 +183,7 @@ func TestDataset(t *testing.T) {
 				degrees := graphSample[degreeName].Value
 				wantShape := value.Shape().Clone()
 				wantShape.Dimensions[wantShape.Rank()-1] = 1
-				require.Truef(t, degrees.Shape().Eq(wantShape), "Mismatch degree shapes for %q: degree shape is %s, wanted %s",
+				require.Truef(t, degrees.Shape().Equal(wantShape), "Mismatch degree shapes for %q: degree shape is %s, wanted %s",
 					degreeName, degrees.Shape(), wantShape)
 			}
 		}
@@ -200,7 +204,7 @@ func TestDataset(t *testing.T) {
 
 		ds = strategy.NewDataset("one_epoch_in_order").Infinite().Shuffle()
 		parallelDS := mldata.Parallel(ds)
-		for _ = range 100 { // Sample 100 using parallel datasets, and checks that it works ok.
+		for range 100 { // Sample 100 using parallel datasets, and checks that it works ok.
 			spec, inputs, labels, err := parallelDS.Yield()
 			_ = checkInputsFn(t, spec, inputs, labels, err)
 		}
@@ -248,20 +252,20 @@ func TestSamplingRandomness(t *testing.T) {
 			authorsPerPapersCounts[ii] = make([]int, numAuthors)
 		}
 
-		for _ = range numSamples {
+		for range numSamples {
 			_, inputs, _, err := parallelDS.Yield()
 			require.NoErrorf(t, err, "while testing dataset %q", dsNames[dsIdx])
-			graphSample, remaining := MapInputsToStates[tensors.Tensor](strategy, inputs)
+			graphSample, remaining := MapInputsToStates[*tensors.Tensor](strategy, inputs)
 			require.Empty(t, remaining)
 
 			require.NoErrorf(t, graphSample["seeds"].Value.Shape().CheckDims(1), "while testing dataset %q", dsNames[dsIdx])
-			sampledPaper := graphSample["seeds"].Value.Local().FlatCopy().([]int32)[0]
+			sampledPaper := tensors.CopyFlatData[int32](graphSample["seeds"].Value)[0]
 			papersCounts[sampledPaper]++
 
 			require.NoErrorf(t, graphSample["authors"].Value.Shape().CheckDims(1, 2), "while testing dataset %q", dsNames[dsIdx])
 			require.NoErrorf(t, graphSample["authors"].Mask.Shape().CheckDims(1, 2), "while testing dataset %q", dsNames[dsIdx])
-			authors := graphSample["authors"].Value.Local().FlatCopy().([]int32)
-			authorsMask := graphSample["authors"].Mask.Local().FlatCopy().([]bool)
+			authors := tensors.CopyFlatData[int32](graphSample["authors"].Value)
+			authorsMask := tensors.CopyFlatData[bool](graphSample["authors"].Mask)
 			for ii, author := range authors {
 				require.True(t, authorsMask[ii])
 				authorsPerPapersCounts[sampledPaper][author]++
@@ -306,7 +310,7 @@ func TestRandKOfN(t *testing.T) {
 	for ii, fn := range []func([]int32, int){randKOfNLinear, randKOfNReservoir} {
 		name := names[ii]
 		counts := make([]int, n)
-		for _ = range numRepeats {
+		for range numRepeats {
 			fn(sample, n)
 			for ii, x := range sample {
 				for jj := 0; jj < ii; jj++ {

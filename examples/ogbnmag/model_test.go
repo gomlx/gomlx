@@ -9,9 +9,13 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"testing"
+
+	_ "github.com/gomlx/gomlx/backends/xla"
 )
 
 var (
@@ -22,11 +26,11 @@ func TestModel(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping long-running test.")
 	}
-	manager := graphtest.BuildTestBackend()
+	backend := graphtest.BuildTestBackend()
 	ctx := context.NewContext()
 	err := Download(*flagDataDir)
 	require.NoError(t, err, "failed to download OGBN-MAG dataset")
-	UploadOgbnMagVariables(ctx) // Uploads the Papers frozen embedding table.
+	UploadOgbnMagVariables(backend, ctx) // Uploads the Papers frozen embedding table.
 
 	trainDS, _, _, _, err := MakeDatasets(*flagDataDir)
 	require.NoError(t, err, "failed to make datasets")
@@ -36,7 +40,7 @@ func TestModel(t *testing.T) {
 	testGraphFn := func(ctx *context.Context, inputs []*Node) []*Node {
 		return MagModelGraph(ctx, spec, inputs)
 	}
-	testGraphExec := context.NewExec(manager, ctx, testGraphFn)
+	testGraphExec := context.NewExec(backend, ctx, testGraphFn)
 
 	var inputs []*tensors.Tensor
 	spec, inputs, _, err = trainDS.Yield()

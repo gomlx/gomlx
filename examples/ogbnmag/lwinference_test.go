@@ -12,6 +12,8 @@ import (
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/schollz/progressbar/v3"
 	"github.com/stretchr/testify/require"
 	"io"
@@ -44,7 +46,7 @@ func findSmallestDegreeSubgraph(t *testing.T) int32 {
 			if !strings.HasSuffix(name, ".degree") {
 				continue
 			}
-			values := state.Value.Local().FlatCopy().([]int32)
+			values := tensors.CopyFlatData[int32](state.Value)
 			for _, v := range values {
 				if v > maxDegree {
 					maxDegree = v
@@ -131,14 +133,14 @@ func TestLayerWiseInferenceLogits(t *testing.T) {
 	_, inputs, _, err := ds.Yield()
 	require.NoError(t, err, "Dataset.Yield")
 
-	manager := graphtest.BuildTestBackend()
+	backend := graphtest.BuildTestBackend()
 	for ctxSourceIdx := 0; ctxSourceIdx < 2; ctxSourceIdx++ {
 		// Create context.
 		ctx := context.NewContext()
 		if ctxSourceIdx == 0 {
 			fmt.Printf("\nRandomly initialized context:\n")
 			configureLayerWiseTestContext(ctx)
-			UploadOgbnMagVariables(ctx)
+			UploadOgbnMagVariables(backend, ctx)
 
 		} else {
 			// Load from pre-trained checkpoint.
@@ -148,12 +150,12 @@ func TestLayerWiseInferenceLogits(t *testing.T) {
 			checkpoint, err := checkpoints.Build(ctx).DirFromBase("test_checkpoint", baseDir).Done()
 			fmt.Printf("\nLoaded trained context: %s\n", checkpoint.Dir())
 			require.NoError(t, err, "Checkpoint loading.")
-			UploadOgbnMagVariables(ctx)
+			UploadOgbnMagVariables(backend, ctx)
 			ctx = ctx.Reuse()
 		}
 
 		// Execute normal inference model for the inputs.
-		executor := context.NewExec(manager, ctx, func(ctx *context.Context, inputs []*Node) *Node {
+		executor := context.NewExec(backend, ctx, func(ctx *context.Context, inputs []*Node) *Node {
 			predictionsAndMask := MagModelGraph(ctx, strategy, inputs)
 			return ConvertDType(predictionsAndMask[0], dtypes.Float32)
 		})
@@ -164,7 +166,7 @@ func TestLayerWiseInferenceLogits(t *testing.T) {
 
 		// Layer-Wise inference
 		modelFn := BuildLayerWiseInferenceModel(strategy, false) // Function that builds the LW inference model.
-		executor = context.NewExec(ctx.Backend(), ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
+		executor = context.NewExec(backend, ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
 			allPredictions := modelFn(ctx, g)
 			return ConvertDType(
 				Slice(allPredictions, AxisElem(seedId), AxisRange()),
@@ -173,12 +175,7 @@ func TestLayerWiseInferenceLogits(t *testing.T) {
 		require.NotPanics(t, func() { results = executor.Call() })
 		predictionsLW := results[0]
 		fmt.Printf("\npredictionsLW:\n%s\n", predictionsLW)
-
-		require.True(t,
-			xslices.DeepSliceCmp(
-				predictionsGNN.Local().Value().([][]float32),
-				predictionsLW.Local().Value().([][]float32),
-				xslices.CloseToEpsilon(float32(0.05))))
+		require.True(t, predictionsGNN.InDelta(predictionsLW, 0.05))
 	}
 }
 
@@ -204,7 +201,7 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 	ds = mldata.Map(ds, ExtractLabelsFromInput)
 
 	// Create context and load from pre-trained checkpoint.
-	manager := graphtest.BuildTestBackend()
+	backend := graphtest.BuildTestBackend()
 	ctx := context.NewContext()
 	_, fileName, _, ok := runtime.Caller(0)
 	require.True(t, ok, "Failed to get caller information to find out test source directory.")
@@ -213,11 +210,11 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 	require.NoError(t, err, "Checkpoint loading.")
 	fmt.Printf("\nLoaded trained context: %s\n", checkpoint.Dir())
 	fmt.Printf("\t%s=%q\n", ParamDType, context.GetParamOr(ctx, ParamDType, ""))
-	UploadOgbnMagVariables(ctx)
+	UploadOgbnMagVariables(backend, ctx)
 	ctx = ctx.Reuse()
 
 	// Execute normal inference model for the inputs.
-	executor := context.NewExec(manager, ctx, func(ctx *context.Context, inputs []*Node) []*Node {
+	executor := context.NewExec(backend, ctx, func(ctx *context.Context, inputs []*Node) []*Node {
 		labels := inputs[len(inputs)-1]
 		inputs = inputs[:len(inputs)-1]
 		predictionsAndMask := MagModelGraph(ctx, strategy, inputs)
@@ -260,7 +257,7 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 	// Layer-Wise inference
 	modelFn := BuildLayerWiseInferenceModel(strategy, false) // Function that builds the LW inference model.
 	numToCompare := len(predictionsGNN)
-	executor = context.NewExec(ctx.Backend(), ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
+	executor = context.NewExec(backend, ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
 		logits := modelFn(ctx, g)
 		predictions := ArgMax(logits, -1, dtypes.Int32)
 		predictions = Slice(predictions, AxisRange(0, numToCompare))
@@ -270,7 +267,7 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 	require.NotPanics(t, func() { results = executor.Call() })
 	predictionsLW := results[0].Value().([]int32)
 	correct = 0
-	labels := PapersLabels.Local().FlatCopy().([]int32)
+	labels := tensors.CopyFlatData[int32](PapersLabels)
 	for ii, value := range predictionsLW {
 		if value == labels[ii] {
 			correct++

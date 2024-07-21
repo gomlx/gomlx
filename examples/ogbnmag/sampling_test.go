@@ -8,6 +8,7 @@ import (
 	mldata "github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types"
+	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/stretchr/testify/require"
 	"io"
 	"testing"
@@ -17,11 +18,11 @@ func TestDatasets(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping long-running test.")
 	}
-	manager := graphtest.BuildTestBackend()
+	backend := graphtest.BuildTestBackend()
 	ctx := context.NewContext()
 	err := Download(*flagDataDir)
 	require.NoError(t, err, "failed to download OGBN-MAG dataset")
-	UploadOgbnMagVariables(ctx) // Uploads the Papers frozen embedding table.
+	UploadOgbnMagVariables(backend, ctx) // Uploads the Papers frozen embedding table.
 
 	_, trainDS, validDS, testDS, err := MakeDatasets(*flagDataDir)
 	require.NoError(t, err, "failed to make datasets")
@@ -42,7 +43,7 @@ func TestDatasets(t *testing.T) {
 		{"train", trainDS, TrainSplit},
 		{"shuffled_train", shuffledTrainDS, TrainSplit},
 	} {
-		seedsInSplit := testCase.Seeds.Local().FlatCopy().([]int32)
+		seedsInSplit := tensors.CopyFlatData[int32](testCase.Seeds)
 		wanted := types.MakeSet[int32](len(seedsInSplit))
 		seen := types.MakeSet[int32](len(seedsInSplit))
 		for _, idx := range seedsInSplit {
@@ -61,10 +62,10 @@ func TestDatasets(t *testing.T) {
 			}
 			require.NoError(t, err)
 			strategy := spec.(*sampler.Strategy)
-			graphSample, remaining := sampler.MapInputsToStates[tensors.Tensor](strategy, inputs)
+			graphSample, remaining := sampler.MapInputsToStates[*tensors.Tensor](strategy, inputs)
 			require.Empty(t, remaining)
-			seeds := graphSample["seeds"].Value.Local().FlatCopy().([]int32)
-			mask := graphSample["seeds"].Mask.Local().FlatCopy().([]bool)
+			seeds := tensors.CopyFlatData[int32](graphSample["seeds"].Value)
+			mask := tensors.CopyFlatData[bool](graphSample["seeds"].Mask)
 			for ii, idx := range seeds {
 				if !mask[ii] {
 					continue

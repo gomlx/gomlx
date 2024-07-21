@@ -6,6 +6,7 @@ import (
 	mldata "github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/tensors"
 	"os"
 	"path"
 )
@@ -89,7 +90,7 @@ func NewSamplerStrategy(magSampler *sampler.Sampler, batchSize int, seedIdsCandi
 	if seedIdsCandidates == nil {
 		seeds = strategy.Nodes("seeds", "papers", batchSize)
 	} else {
-		seedIdsData := seedIdsCandidates.Local().FlatCopy().([]int32)
+		seedIdsData := tensors.CopyFlatData[int32](seedIdsCandidates)
 		seeds = strategy.NodesFromSet("seeds", "papers", batchSize, seedIdsData)
 	}
 	citations := seeds.FromEdges("citations", "cites", 8)
@@ -143,23 +144,18 @@ func NewSamplerStrategy(magSampler *sampler.Sampler, batchSize int, seedIdsCandi
 // ExtractLabelsFromInput create the labels from the input seed indices.
 // It returns the same inputs and the extracted labels (with mask).
 func ExtractLabelsFromInput(inputs, labels []*tensors.Tensor) ([]*tensors.Tensor, []*tensors.Tensor) {
-	seedsRef := inputs[0].Local().AcquireData()
-	defer seedsRef.Release()
-	seedsData := seedsRef.Flat().([]int32)
+	seeds := inputs[0]
 	seedsMask := inputs[1]
-
-	seedsLabels := tensors.FromShape(shapes.Make(inputs[0].DType(), inputs[0].Shape().Size(), 1))
-	labelsRef := seedsLabels.AcquireData()
-	defer labelsRef.Release()
-	labelsData := labelsRef.Flat().([]int32)
-
-	papersLabelsRef := PapersLabels.Local().AcquireData()
-	defer papersLabelsRef.Release()
-	papersLabelData := papersLabelsRef.Flat().([]int32)
-
-	for ii, paperIdx := range seedsData {
-		labelsData[ii] = papersLabelData[paperIdx]
-	}
+	seedsLabels := tensors.FromShape(shapes.Make(seeds.DType(), seeds.Shape().Size(), 1))
+	tensors.ConstFlatData[int32](seeds, func(seedsData []int32) {
+		tensors.ConstFlatData[int32](PapersLabels, func(papersLabelsData []int32) {
+			tensors.MutableFlatData[int32](seedsLabels, func(labelsData []int32) {
+				for ii, paperIdx := range seedsData {
+					labelsData[ii] = papersLabelsData[paperIdx]
+				}
+			})
+		})
+	})
 	return inputs, []*tensors.Tensor{seedsLabels, seedsMask}
 }
 
