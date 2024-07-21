@@ -89,6 +89,7 @@ func Train(backend backends.Backend, ctx *context.Context, baseDir string, layer
 		globalStep := optimizers.GetGlobalStep(ctx)
 		if globalStep != 0 {
 			fmt.Printf("> restarting training from global_step=%d (training until %d)\n", globalStep, trainSteps)
+			ctx = ctx.Reuse()
 		}
 		if trainSteps <= int(globalStep) {
 			fmt.Printf("> training already reached target train_steps=%d. To train further, set a number additional "+
