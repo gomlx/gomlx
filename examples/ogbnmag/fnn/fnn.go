@@ -90,10 +90,14 @@ func Train(backend backends.Backend, ctx *context.Context) error {
 	validDS = validDS.BatchSize(evalBatchSize, false).Infinite(false)
 	testDS = testDS.BatchSize(evalBatchSize, false).Infinite(false)
 
+	// Get trainSteps before a checkpoint is loaded -- in which case it will be overwritten.
+	trainSteps := context.GetParamOr(ctx, "train_steps", 100)
+
 	// Checkpoint: it loads if already exists, and it will save as we train.
 	checkpointPath := context.GetParamOr(ctx, "checkpoint", "")
 	numCheckpointsToKeep := context.GetParamOr(ctx, "num_checkpoints", 10)
 	var checkpoint *checkpoints.Handler
+	var globalStep int64
 	if checkpointPath != "" {
 		checkpointPath = mldata.ReplaceTildeInDir(checkpointPath) // If the path starts with "~", it is replaced.
 		var err error
@@ -110,10 +114,12 @@ func Train(backend backends.Backend, ctx *context.Context) error {
 			return errors.WithMessagef(err, "while setting up checkpoint to %q (keep=%d)",
 				checkpointPath, numCheckpointsToKeep)
 		}
-		globalStep := optimizers.GetGlobalStep(ctx)
+		globalStep = optimizers.GetGlobalStep(ctx)
 		if globalStep != 0 {
 			fmt.Printf("> restarting training from global_step=%d\n", globalStep)
+			ctx = ctx.Reuse()
 		}
+		ctx.SetParam("train_steps", trainSteps)
 	}
 
 	// Loss: multi-class classification problem.
@@ -154,18 +160,19 @@ func Train(backend backends.Backend, ctx *context.Context) error {
 	}
 
 	// Loop for given number of steps
-	trainSteps := context.GetParamOr(ctx, "train_steps", 100)
-	_, err = loop.RunSteps(trainDS, trainSteps)
-	if err != nil {
-		return errors.WithMessage(err, "while running steps")
-	}
-	fmt.Printf("\t[Step %d] median train step: %d microseconds\n",
-		loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
-	if checkpoint != nil && numCheckpointsToKeep <= 1 {
-		// Save checkpoint at end of training.
-		err = checkpoint.Save()
+	if int(globalStep) < trainSteps {
+		_, err = loop.RunSteps(trainDS, trainSteps-int(globalStep))
 		if err != nil {
-			klog.Errorf("Failed to save final checkpoint in %q: %+v", checkpointPath, err)
+			return errors.WithMessage(err, "while running steps")
+		}
+		fmt.Printf("\t[Step %d] median train step: %d microseconds\n",
+			loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
+		if checkpoint != nil && numCheckpointsToKeep <= 1 {
+			// Save checkpoint at end of training.
+			err = checkpoint.Save()
+			if err != nil {
+				klog.Errorf("Failed to save final checkpoint in %q: %+v", checkpointPath, err)
+			}
 		}
 	}
 
