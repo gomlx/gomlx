@@ -41,6 +41,10 @@ func createDefaultContext() *context.Context {
 		"plots":              true,
 		paramWithReplacement: false,
 
+		// KAN network parameters:
+		"kan":                    false, // Enable kan
+		"kan_bspline_num_points": 20,    // Number of control points
+
 		optimizers.ParamOptimizer:           "adam",
 		optimizers.ParamLearningRate:        0.001,
 		optimizers.ParamCosineScheduleSteps: 0,
@@ -114,7 +118,7 @@ func main() {
 	} else if *flagEval {
 		klog.Fatal("To run eval (--eval) you need to specify a checkpoint (--checkpoint).")
 	}
-	
+
 	mag.BatchSize = context.GetParamOr(ctx, "batch_size", 128)
 
 	// Load data from OGBN-MAG.

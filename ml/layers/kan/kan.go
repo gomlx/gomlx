@@ -19,6 +19,7 @@ import (
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/pkg/errors"
+	"k8s.io/klog/v2"
 	"slices"
 )
 
@@ -78,7 +79,7 @@ func New(ctx *context.Context, x *Node, numOutputNodes int) *Config {
 // The value for numHiddenNodes can also be configured with the hyperparameter
 // // ParamNumHiddenLayers in the context (ctx).
 func (c *Config) NumHiddenLayers(numLayers, numHiddenNodes int) *Config {
-	if numLayers < 0 || numHiddenNodes < 1 {
+	if numLayers < 0 || (numLayers > 0 && numHiddenNodes < 1) {
 		c.err = errors.Errorf("numHiddenLayers (%d) must be greater or equal to 0 and numHiddenNodes (%d) must be greater or equal to 1",
 			numLayers, numHiddenNodes)
 	}
@@ -145,6 +146,12 @@ func (c *Config) layer(ctx *context.Context, x *Node, numOutputNodes int) *Node 
 	residual := x
 	numInputNodes := x.Shape().Dimensions[x.Rank()-1]
 	batchSize := x.Shape().Dimensions[0]
+
+	if klog.V(2).Enabled() {
+		klog.Infof("KAN layer (%s): (%d+2) x %d x %d = %d weights\n",
+			ctx.Scope(), c.bsplineNumControlPoints, numInputNodes, numOutputNodes,
+			(c.bsplineNumControlPoints+2)*numInputNodes*numOutputNodes)
+	}
 
 	// Magnitude terms w_b (residual) and w_s (spline) from the paper.
 	var weightsSplines, weightsResidual *Node

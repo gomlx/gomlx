@@ -12,7 +12,6 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"
-	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
@@ -114,7 +113,7 @@ func BuildLayerWiseInferenceModel(strategy *sampler.Strategy, predictions bool) 
 		}
 		lw.NodePrediction(ctx, graphStates, edges) // Last layer outputs the logits for the `NumLabels` classes.
 		readoutState := graphStates[strategy.Seeds[0].Name]
-		readoutState = layers.DenseWithBias(ctx.In("logits"), readoutState, NumLabels)
+		readoutState = logitsGraph(ctx, readoutState)
 		if predictions {
 			return ArgMax(readoutState, -1, dtypes.Int16)
 		}

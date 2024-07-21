@@ -105,6 +105,8 @@ func NewSamplerStrategy(magSampler *sampler.Sampler, batchSize int, seedIdsCandi
 		seedsBase = seeds
 	}
 
+	const defaultSamplingCount = 8
+
 	// Authors
 	const authorsCount = 8
 	seedsAuthors := seedsBase.FromEdges("seedsAuthors", "writtenBy", authorsCount)
@@ -114,15 +116,15 @@ func NewSamplerStrategy(magSampler *sampler.Sampler, batchSize int, seedIdsCandi
 	}
 
 	// Other papers by authors.
-	papersByAuthors := seedsAuthors.FromEdges("papersByAuthors", "writes", 8)
-	papersByCitationAuthors := citationsAuthors.FromEdges("papersByCitationAuthors", "writes", 8)
+	papersByAuthors := seedsAuthors.FromEdges("papersByAuthors", "writes", defaultSamplingCount)
+	papersByCitationAuthors := citationsAuthors.FromEdges("papersByCitationAuthors", "writes", defaultSamplingCount)
 	if ReuseShareableKernels {
 		papersByCitationAuthors.WithKernelScopeName(papersByAuthors.ConvKernelScopeName)
 	}
 
 	// Affiliations
-	authorsInstitutions := seedsAuthors.FromEdges("authorsInstitutions", "affiliatedWith", 8)
-	citationAuthorsInstitutions := citationsAuthors.FromEdges("citationAuthorsInstitutions", "affiliatedWith", 8)
+	authorsInstitutions := seedsAuthors.FromEdges("authorsInstitutions", "affiliatedWith", defaultSamplingCount)
+	citationAuthorsInstitutions := citationsAuthors.FromEdges("citationAuthorsInstitutions", "affiliatedWith", defaultSamplingCount)
 	if ReuseShareableKernels {
 		citationAuthorsInstitutions.WithKernelScopeName(authorsInstitutions.ConvKernelScopeName)
 	}

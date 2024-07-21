@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/examples/notebook/gonb/margaid"
+	"github.com/gomlx/gomlx/examples/notebook/gonb/plotly"
 	mag "github.com/gomlx/gomlx/examples/ogbnmag"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	mldata "github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/layers/kan"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/commandline"
 	"github.com/gomlx/gomlx/ml/train/losses"
@@ -51,17 +52,23 @@ func FnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	// Build FNN.
 	numLayers := context.GetParamOr(ctx, "hidden_layers", 2)
 	numNodes := context.GetParamOr(ctx, "num_nodes", 128)
-	for layerNum := range numLayers {
-		layerName := fmt.Sprintf("layer-%d", layerNum)
-		logits = layers.DenseWithBias(ctx.In(layerName), logits, numNodes)
-		logits = layers.LeakyRelu(logits)
-		dropoutRate := context.GetParamOr(ctx, "dropout_rate", 0.0)
-		if dropoutRate > 0 {
-			dropoutRateNode := Scalar(g, dtypes.Float32, dropoutRate)
-			logits = layers.Dropout(ctx, logits, dropoutRateNode)
+	useKan := context.GetParamOr(ctx, "kan", false)
+	if useKan {
+		logits = kan.New(ctx, logits, mag.NumLabels).NumHiddenLayers(numLayers, numNodes).Done()
+	} else {
+		// Normal FNN
+		for layerNum := range numLayers {
+			layerName := fmt.Sprintf("layer-%d", layerNum)
+			logits = layers.DenseWithBias(ctx.In(layerName), logits, numNodes)
+			logits = layers.LeakyRelu(logits)
+			dropoutRate := context.GetParamOr(ctx, "dropout_rate", 0.0)
+			if dropoutRate > 0 {
+				dropoutRateNode := Scalar(g, dtypes.Float32, dropoutRate)
+				logits = layers.Dropout(ctx, logits, dropoutRateNode)
+			}
 		}
+		logits = layers.DenseWithBias(ctx.In("readout"), logits, mag.NumLabels)
 	}
-	logits = layers.DenseWithBias(ctx.In("readout"), logits, mag.NumLabels)
 
 	return []*Node{logits} // Return only the logits.
 }
@@ -154,9 +161,14 @@ func Train(backend backends.Backend, ctx *context.Context) error {
 	// Attach a margaid plots: plot points at exponential steps.
 	// The points generated are saved along the checkpoint directory (if one is given).
 	usePlots := context.GetParamOr(ctx, "plots", false)
+	var plots *plotly.PlotConfig
 	if usePlots {
-		_ = margaid.NewDefault(loop, checkpoint.Dir(), 100, 1.1, validDS, testDS, trainEvalDS).
-			WithEvalLossType("eval-loss")
+		plots = plotly.New().Dynamic().
+			ScheduleExponential(loop, 100, 1.1).
+			WithDatasets(validDS, testDS, trainEvalDS)
+		if checkpoint != nil {
+			plots = plots.WithCheckpoint(checkpoint.Dir())
+		}
 	}
 
 	// Loop for given number of steps

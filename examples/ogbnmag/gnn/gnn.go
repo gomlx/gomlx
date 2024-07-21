@@ -10,6 +10,7 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/layers/kan"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
@@ -261,8 +262,15 @@ func sampledConvolveEdgeSet(ctx *context.Context, value, mask, degree *Node) *No
 // look like: `[batch_size, ..., num_edges, source_node_state_dim]`.
 func edgeMessageGraph(ctx *context.Context, gatheredStates, gatheredMask *Node) (messages, mask *Node) {
 	messageDim := context.GetParamOr(ctx, ParamMessageDim, 128)
-	messages = layers.DenseWithBias(ctx, gatheredStates, messageDim)
-	messages = layers.ActivationFromContext(ctx, messages)
+
+	useKan := context.GetParamOr(ctx, "kan", false)
+	if useKan {
+		messages = kan.New(ctx, gatheredStates, messageDim).NumHiddenLayers(0, 0).Done()
+	} else {
+		// Normal FNN
+		messages = layers.DenseWithBias(ctx, gatheredStates, messageDim)
+		messages = layers.ActivationFromContext(ctx, messages)
+	}
 
 	mask = gatheredMask
 	if mask != nil {
@@ -415,6 +423,10 @@ func poolMessagesWithAdjacency(ctx *context.Context, source, edgesSource, edgesT
 // updateState of a node set, given the `input` (should be a concatenation of previous
 // state and all pooled messages) and its `mask`.
 func updateState(ctx *context.Context, prevState, input, mask *Node) *Node {
+	useKan := context.GetParamOr(ctx, "kan", false)
+	if useKan {
+		return kanUpdateState(ctx, prevState, input, mask)
+	}
 	updateType := context.GetParamOr(ctx, ParamUpdateStateType, "residual")
 	if updateType != "residual" && updateType != "none" {
 		Panicf("invalid GNN update type %q (given by parameter %q) -- valid values are 'residual' and 'none'",
@@ -440,4 +452,11 @@ func updateState(ctx *context.Context, prevState, input, mask *Node) *Node {
 	}
 	state = layers.MaskedNormalizeFromContext(ctx.In("normalization"), state, mask)
 	return state
+}
+
+// kanUpdateState is a version of updateState using KAN networks.
+func kanUpdateState(ctx *context.Context, prevState, input, mask *Node) *Node {
+	stateDim := context.GetParamOr(ctx, ParamStateDim, 128)
+	numHiddenLayers := context.GetParamOr(ctx, ParamUpdateNumHiddenLayers, 0)
+	return kan.New(ctx.In("kan_update_state"), input, stateDim).NumHiddenLayers(numHiddenLayers, stateDim).Done()
 }

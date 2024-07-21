@@ -8,6 +8,7 @@ import (
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/layers/kan"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gopjrt/dtypes"
 )
@@ -31,6 +32,18 @@ func getMagVar(ctx *context.Context, g *Graph, name string) *Node {
 		panic(nil) // Quiet linter.
 	}
 	return magVar.ValueGraph(g)
+}
+
+// logitsGraph converts the readout state of the seed nodes to its logits.
+func logitsGraph(ctx *context.Context, readout *Node) *Node {
+	useKan := context.GetParamOr(ctx, "kan", false)
+	if useKan {
+		readout = kan.New(ctx.In("logits_kan"), readout, NumLabels).NumHiddenLayers(0, 0).Done()
+	} else {
+		// Normal FNN
+		readout = layers.DenseWithBias(ctx.In("logits"), readout, NumLabels)
+	}
+	return readout
 }
 
 // MagModelGraph builds a OGBN-MAG GNN model that sends [ParamNumGraphUpdates] along its sampling
@@ -65,7 +78,7 @@ func MagModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 
 	// Last layer outputs the logits for the `NumLabels` classes.
 	readoutState := graphStates[strategy.Seeds[0].Name]
-	readoutState.Value = layers.DenseWithBias(ctx.In("logits"), readoutState.Value, NumLabels)
+	readoutState.Value = logitsGraph(ctx, readoutState.Value)
 	return []*Node{readoutState.Value, readoutState.Mask}
 }
 
