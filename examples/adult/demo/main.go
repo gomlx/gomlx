@@ -29,6 +29,7 @@ import (
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/layers/kan"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/commandline"
 	"github.com/gomlx/gomlx/ml/train/losses"
@@ -62,8 +63,9 @@ var (
 	flagNumQuantiles    = flag.Int("quantiles", 100, "Max number of quantiles to use for numeric features, used during piece-wise linear calibration. It will only use unique values, so if there are fewer variability, fewer quantiles are used.")
 	flagEmbeddingDim    = flag.Int("embedding_dim", 8, "Default embedding dimension for categorical values.")
 	flagVerbosity       = flag.Int("verbosity", 0, "Level of verbosity, the higher the more verbose.")
-	flagNumHiddenLayers = flag.Int("hidden_layers", 8, "Number of hidden layers, stacked with residual connection.")
-	flagNumNodes        = flag.Int("num_nodes", 32, "Number of nodes in hidden layers.")
+	flagNumHiddenLayers = flag.Int("num_hidden_layers", 8, "Number of hidden layers, stacked with residual connection.")
+	flagNumHiddenNodes  = flag.Int("num_hidden_nodes", 32, "Number of nodes in hidden layers.")
+	flagUseKAN          = flag.Bool("kan", false, "Use KAN - Kolmogorov–Arnold Networks")
 	flagDropoutRate     = flag.Float64("dropout", 0, "Dropout rate")
 
 	flagUseCategorical       = flag.Bool("use_categorical", true, "Use categorical features.")
@@ -224,19 +226,27 @@ func ModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	layer := Concatenate(allEmbeddings, -1)
 	layer.AssertDims(batchSize, -1) // 2-dim tensor, with batch size as the leading dimension (-1 means it is not checked).
 
-	layer = layers.DenseWithBias(ctx.In(fmt.Sprintf("DenseLayer_%d", 0)), layer, *flagNumNodes)
-	for ii := 1; ii < *flagNumHiddenLayers; ii++ {
-		ctx := ctx.In(fmt.Sprintf("DenseLayer_%d", ii))
-		// Add layer with residual connection.
-		tmp := Sigmoid(layer)
-		if *flagDropoutRate > 0 {
-			tmp = layers.Dropout(ctx, tmp, Scalar(g, ModelDType, *flagDropoutRate))
+	var logits *Node
+	if *flagUseKAN {
+		logits = kan.New(ctx.In("kan_layers"), layer, 1).
+			NumHiddenLayers(*flagNumHiddenLayers, *flagNumHiddenNodes).
+			Done()
+	} else {
+		// Normal FNN
+		layer = layers.DenseWithBias(ctx.In(fmt.Sprintf("DenseLayer_%d", 0)), layer, *flagNumHiddenNodes)
+		for ii := 1; ii < *flagNumHiddenLayers; ii++ {
+			ctx := ctx.In(fmt.Sprintf("DenseLayer_%d", ii))
+			// Add layer with residual connection.
+			tmp := Sigmoid(layer)
+			if *flagDropoutRate > 0 {
+				tmp = layers.Dropout(ctx, tmp, Scalar(g, ModelDType, *flagDropoutRate))
+			}
+			tmp = layers.DenseWithBias(ctx, tmp, *flagNumHiddenNodes)
+			layer = Add(layer, tmp) // Residual connections
 		}
-		tmp = layers.DenseWithBias(ctx, tmp, *flagNumNodes)
-		layer = Add(layer, tmp) // Residual connections
+		layer = Sigmoid(layer)
+		logits = layers.DenseWithBias(ctx.In("DenseFinal"), layer, 1)
 	}
-	layer = Sigmoid(layer)
-	logits := layers.DenseWithBias(ctx.In("DenseFinal"), layer, 1)
 	logits.AssertDims(batchSize, 1) // 2-dim tensor, with batch size as the leading dimension.
 	return []*Node{logits}
 }

@@ -21,7 +21,7 @@ func ActivationFromContext(ctx *context.Context, x *Node) *Node {
 }
 
 // Activation allows a configurable activation.
-// Currently supported activations are "relu", "sigmoid", "leaky_relu", "swish", "tanh".
+// Currently supported activations are "relu", "sigmoid", "leaky_relu", "swish" (== "silu"), "tanh".
 func Activation(activation string, x *Node) *Node {
 	switch activation {
 	case "none":
