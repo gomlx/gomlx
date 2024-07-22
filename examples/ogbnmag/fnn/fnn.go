@@ -164,7 +164,7 @@ func Train(backend backends.Backend, ctx *context.Context) error {
 	var plots *plotly.PlotConfig
 	if usePlots {
 		plots = plotly.New().Dynamic().
-			ScheduleExponential(loop, 100, 1.1).
+			ScheduleExponential(loop, 400, 1.2).
 			WithDatasets(validDS, testDS, trainEvalDS)
 		if checkpoint != nil {
 			plots = plots.WithCheckpoint(checkpoint.Dir())

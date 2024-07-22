@@ -26,6 +26,7 @@ import (
 	. "github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
+	"github.com/gomlx/gomlx/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
@@ -35,16 +36,14 @@ import (
 const (
 	// ParamL2Regularization context hyperparameter defines the L2 regularization of kernels.
 	// Each layer may decide independently to implement it or not.
-	// Dense, DenseWithBias and Convolution kernels look at this hyperparameter.
+	//
+	// This is an alias to regularizers.ParamL2
+	// Dense, DenseWithBias, FNN, kan and Convolution kernels look at this hyperparameter.
 	// The value should be a float64.
 	// The default is `0.0`.
-	ParamL2Regularization = "l2_regularization"
-
-	// L2RegularizationKey is an alias for ParamL2Regularization.
 	//
-	// Deprecated: all context parameters constants are prefixed now with "Param", to make it easy
-	// to find them.
-	L2RegularizationKey = ParamL2Regularization
+	// Deprecated: use regularizers.ParamL2
+	ParamL2Regularization = "l2_regularization"
 
 	// ParamDropoutRate context hyperparameter defines the amount of dropout applied when DropoutFromContext is used.
 	// Should be a value from `0.0` to `1.0`, where 0 means no dropout, and 1 would drop everything out.
@@ -56,22 +55,30 @@ const (
 	ParamDropoutRate = "dropout_rate"
 )
 
-// DenseWithBias adds a dense linear layer, a learnable linear transformation plus a bias term.
+// DenseWithBias adds a single dense linear layer, a learnable linear transformation plus a bias term.
 //
 // It the input has shape `[<batch dimensions...>, featureDimension]`, the output will have
 // shape `[<batch dimensions...>, <outputDimensions...>]`.
+//
+// See also FNN for a more configurable (including hidden layers) version.
 func DenseWithBias(ctx *context.Context, input *Node, outputDimensions ...int) *Node {
 	return Dense(ctx, input, true, outputDimensions...)
 }
 
-// Dense adds a dense linear layer, a learnable linear transformation. Optionally it
-// can include a bias term.
+// Dense adds a single dense linear layer, a learnable linear transformation.
+// Optionally, it can include a bias term.
+//
+// It automatically adds regularization to the weights (not to biases) configured in hyperparameters -- see regularizers.FromContext.
 //
 // It the input has shape `[<batch dimensions...>, featureDimension]`, the output will have
 // shape `[<batch dimensions...>, <outputDimensions...>]`.
+//
+// See also FNN for a more configurable (including hidden layers) version.
 func Dense(ctx *context.Context, input *Node, useBias bool, outputDimensions ...int) *Node {
 	g := input.Graph()
 	ctx = ctx.In("dense")
+	regularizer := regularizers.FromContext(ctx)
+
 	inputShape := input.Shape()
 	inputRank := inputShape.Rank()
 	if inputRank == 0 {
@@ -87,6 +94,10 @@ func Dense(ctx *context.Context, input *Node, useBias bool, outputDimensions ...
 	weightsDims[0] = inputLastDimension
 	copy(weightsDims[1:], outputDimensions)
 	weightsVar := ctx.VariableWithShape("weights", shapes.Make(inputShape.DType, weightsDims...))
+	if regularizer != nil {
+		// Only for the weights, not for the bias.
+		regularizer(ctx, g, weightsVar)
+	}
 	weights := weightsVar.ValueGraph(g)
 	var output *Node
 	if inputRank <= 2 && len(outputDimensions) == 1 {
@@ -112,7 +123,7 @@ func Dense(ctx *context.Context, input *Node, useBias bool, outputDimensions ...
 		output = Einsum(equationPrefix, input, weights)
 	}
 
-	// Add bias.
+	// Add bias: it takes no regularizer by default.
 	if useBias {
 		biasVar := ctx.VariableWithShape("biases", shapes.Make(inputShape.DType, outputDimensions...))
 		bias := biasVar.ValueGraph(g)
@@ -124,7 +135,6 @@ func Dense(ctx *context.Context, input *Node, useBias bool, outputDimensions ...
 		output = Add(output, expandedBias)
 	}
 
-	// Add regularization -- notice not for the bias term.
 	if l2any, found := ctx.GetParam(ParamL2Regularization); found {
 		l2 := l2any.(float64)
 		if l2 > 0 {

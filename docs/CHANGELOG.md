@@ -12,8 +12,12 @@
   * On-device storage now using generic `backends.Backend` api.
   * Improved testing using xla, greatly simplified.
 * Package `graph`:
-  * Added support for donated tensors for execution. 
+  * Added support for donated tensors for execution.
+  * Added Nodes to introspect nodes of the graph -- e.g.: investigate the largest nodes if one is running out of memory.
   * Updated `OneHot` to use `Where`.
+* Package `layers`:
+  * Added sub-package `kan` for Kolmogorov–Arnold Networks.
+  * Added sub-package `regularizers` with automatic regularizer configuration. Layers `Dense`, `DenseWithBias` and `kan` use it by default.
 * Package `exceptions` removed: using the (same) now external [`github.com/gomlx/exceptions`](github.com/gomlx/exceptions) instead.
 * Package `slices` renamed to `xslices`, not to mix up with the new standard pacakge `slices`.
 * Package `tensors/image` renamed `tensors/images`.
