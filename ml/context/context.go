@@ -222,6 +222,18 @@ func (ctx *Context) In(scope string) *Context {
 	return ctx.InAbsPath(newScope)
 }
 
+// Inf returns a new reference to the Context with the extra given scope. No ScopeSeparator ("/") is
+// allowed in scope.
+// The name of the new scope is given as a format + args, which are passed to fmt.Sprintf.
+//
+// It is a shortcut to Context.In combined with fmt.Sprintf.
+//
+// Notice that Scope is part of the "reference" component of a Context.
+func (ctx *Context) Inf(format string, args ...any) *Context {
+	scope := fmt.Sprintf(format, args...)
+	return ctx.In(scope)
+}
+
 // InAbsPath returns a new reference to the Context with the extra given scope. It should start and have each element
 // separated by ScopeSeparator. Use RootScope for the root scope.
 //

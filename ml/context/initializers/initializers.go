@@ -90,7 +90,7 @@ const NoSeed = int64(0)
 // and mean set to 0.
 //
 // The parameter `initialSeed` is used to initialize the random number generator -- only the first time it is
-// used for a graph.
+// used for a graph, later it continues to pool from the same rng state shared by all initializers.
 // If it is set to 0 (NoSeed), a random seed is instead generated (from the nanosecond clock).
 //
 // Non-float and non-complex variables are initialized with zero instead.
@@ -111,7 +111,7 @@ func RandomNormalFn(initialSeed int64, stddev float64) VariableInitializer {
 // RandomUniformFn return an initializer that generates a random uniform values from [min, max).
 //
 // The parameter `initialSeed` is used to initialize the random number generator -- only the first time it is
-// used for a graph.
+// used for a graph, later it continues to pool from the same rng state shared by all initializers.
 // If it is set to 0 (NoSeed), a random seed is instead generated (from the nanosecond clock).
 //
 // Non-float and non-complex variables are initialized with zero instead.
@@ -129,6 +129,19 @@ func RandomUniformFn(initialSeed int64, min, max float64) VariableInitializer {
 		values = AddScalar(values, min)
 		return values
 	}
+}
+
+// XavierFn returns an initializer that generates random normal values with a uniform distribution with a range
+// defined by +/- sqrt(6 / (fanIn+fanOut)). See description in https://paperswithcode.com/method/xavier-initialization
+//
+// The parameter `initialSeed` is used to initialize the random number generator -- only the first time it is
+// used for a graph, later it continues to pool from the same rng state shared by all initializers.
+// If it is set to 0 (NoSeed), a random seed is instead generated (from the nanosecond clock).
+//
+// Non-float and non-complex variables are initialized with zero instead.
+func XavierFn(initialSeed, fanIn, fanOut int) VariableInitializer {
+	limit := math.Sqrt(6.0 / float64(fanIn+fanOut))
+	return RandomUniformFn(0, -limit, limit)
 }
 
 // GlorotUniformFn return a Glorot uniform initializer, also called Xavier uniform initializer.
