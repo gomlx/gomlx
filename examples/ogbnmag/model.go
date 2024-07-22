@@ -11,6 +11,7 @@ import (
 	"github.com/gomlx/gomlx/ml/layers/kan"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gopjrt/dtypes"
+	"k8s.io/klog/v2"
 )
 
 var (
@@ -55,8 +56,11 @@ func logitsGraph(ctx *context.Context, readout *Node) *Node {
 func MagModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	ctx = ctx.WithInitializer(initializers.GlorotUniformFn(initializers.NoSeed))
 	dtype := getDType(ctx) // Default is Float32
-
 	g := inputs[0].Graph()
+	if klog.V(3).Enabled() {
+		// The trace is used below to print the largest node.
+		g.SetTraced(true)
+	}
 
 	lrDType := dtype
 	if adamDType := context.GetParamOr(ctx, optimizers.ParamAdamDType, ""); adamDType != "" {
@@ -79,6 +83,26 @@ func MagModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	// Last layer outputs the logits for the `NumLabels` classes.
 	readoutState := graphStates[strategy.Seeds[0].Name]
 	readoutState.Value = logitsGraph(ctx, readoutState.Value)
+
+	if klog.V(2).Enabled() {
+		// Log the largest non-parameter node.
+		var largest *Node
+		var largestSize uintptr
+		for _, node := range g.Nodes() {
+			if node.Type() == NodeTypeParameter || node.NumOutputs() > 1 {
+				continue
+			}
+			if largest == nil || node.Shape().Memory() > largestSize {
+				largest = node
+				largestSize = node.Shape().Memory()
+			}
+		}
+		if largest != nil {
+			klog.Infof("Largest node in graph: #%d %s", largest.Id(), largest)
+			klog.V(3).Infof("\n%+v", largest.Trace())
+		}
+	}
+
 	return []*Node{readoutState.Value, readoutState.Mask}
 }
 
