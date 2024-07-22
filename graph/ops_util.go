@@ -218,16 +218,13 @@ func OneHot(indices *Node, depth int, dtype dtypes.DType) *Node {
 	}
 
 	// Add an expanded dimension at the end, which will contain the one-hot representation.
+	// The new last axis will be broadcast to the same dimension as positionIndices
 	indices = ExpandDims(indices, -1)
 
-	// The target outputShapes will expand the indices dimension (last/innermost one) to depth.
-	targetShape := indices.Shape().Clone()
-	targetShape.Dimensions[targetShape.Rank()-1] = depth
-	targetShape.DType = dtype
-
-	broadcastIndices := BroadcastToDims(indices, targetShape.Dimensions...)
-	positionIndices := Iota(g, broadcastIndices.Shape(), -1) // Indices for each "bit" in position.
-	return ConvertDType(Equal(broadcastIndices, positionIndices), dtype)
+	positionIndicesShape := indices.Shape().Clone()
+	positionIndicesShape.Dimensions[positionIndicesShape.Rank()-1] = depth
+	positionIndices := Iota(g, positionIndicesShape, -1) // Indices for each "bit" in position.
+	return ConvertDType(Equal(indices, positionIndices), dtype)
 }
 
 // ReduceAndKeep applies the given reduction function but regenerate the reduced dimensions with size 1.
