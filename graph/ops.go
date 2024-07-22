@@ -91,12 +91,12 @@ func (ni *nodeInputsSplitNode) String() string {
 // Internal only: users should only need to handle nodes with one output, so any method that returns many outputs
 // must call splitNode before returning to the user.
 func splitNode(multiOutputNode *Node) (splitNodes []*Node) {
-	if multiOutputNode.numOutputs() <= 1 {
-		exceptions.Panicf("splitNode expects as input a node with multiple-outputs, but node had only one output %d", multiOutputNode.numOutputs())
+	if multiOutputNode.NumOutputs() <= 1 {
+		exceptions.Panicf("splitNode expects as input a node with multiple-outputs, but node had only one output %d", multiOutputNode.NumOutputs())
 	}
 	g := multiOutputNode.Graph()
 	g.AssertBuilding()
-	splitNodes = make([]*Node, 0, multiOutputNode.numOutputs())
+	splitNodes = make([]*Node, 0, multiOutputNode.NumOutputs())
 	for ii, op := range multiOutputNode.outputOps {
 		inputs := &nodeInputsSplitNode{
 			multiOutputNode: multiOutputNode,
@@ -268,7 +268,7 @@ func validateBuildingGraphFromInputs(inputs ...*Node) (g *Graph) {
 		if err := exceptions.TryCatch[error](n.AssertValid); err != nil {
 			panic(errors.WithMessagef(err, "invalid input[%d]", ii))
 		}
-		if n.numOutputs() != 1 {
+		if n.NumOutputs() != 1 {
 			exceptions.Panicf("input[%d](%s) has multiple-outputs, it has to be split with selectOutput calls first", ii, n)
 		}
 		if g == nil {

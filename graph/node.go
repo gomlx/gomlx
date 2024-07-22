@@ -18,9 +18,11 @@ package graph
 
 import (
 	"fmt"
+	"github.com/dustin/go-humanize"
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	"strings"
 )
@@ -98,7 +100,7 @@ func (n *Node) Graph() *Graph {
 
 // Shape of the Node's output. It can be `nil`, for nodes that simply have a side effect, like a "Print" Node.
 func (n *Node) Shape() shapes.Shape {
-	if n == nil || n.numOutputs() != 1 {
+	if n == nil || n.NumOutputs() != 1 {
 		return shapes.Shape{}
 	}
 	return n.outputShapes[0]
@@ -148,9 +150,13 @@ func (n *Node) GetParameterName() string {
 // This doesn't include static inputNodes for some operations that are not given by other Graph nodes.
 func (n *Node) Inputs() []*Node { return n.inputNodes }
 
-// numOutputs returns the number of outputs for a node.
+// NumOutputs returns the number of outputs for a node.
+//
+// Almost every node will have one output only. But a few (like "RngBitGenerator") will output various outputs
+// that are split before usage. These nodes are marked with an invalid dtype.
+//
 // Used internally only, all Graph public operations will return nodes with one output only.
-func (n *Node) numOutputs() int {
+func (n *Node) NumOutputs() int {
 	return len(n.outputOps)
 }
 
@@ -212,7 +218,11 @@ func (n *Node) String() (str string) {
 		parts = append(parts, "[CustomVJP]")
 	}
 
-	str = fmt.Sprintf("%s -> %s", strings.Join(parts, " "), n.outputShapes)
+	memory := xslices.Map(n.outputShapes, func(shape shapes.Shape) string {
+		return humanize.Bytes(uint64(shape.Memory()))
+	})
+
+	str = fmt.Sprintf("%s -> %s - mem: %v", strings.Join(parts, " "), n.outputShapes, memory)
 	return
 }
 

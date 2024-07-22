@@ -305,6 +305,9 @@ func (g *Graph) SetTraced(traced bool) {
 // If Graph.traced is set, it also sets Node.trace to an error with a stack-trace.
 func (g *Graph) registerNode(node *Node) (id NodeId) {
 	g.AssertBuilding()
+	if node.NumOutputs() == 1 && node.DType() == dtypes.InvalidDType {
+		exceptions.Panicf("trying to add non-multioutput node with invalid DType: %s", node)
+	}
 	id = NodeId(len(g.nodes))
 	g.nodes = append(g.nodes, node)
 	node.id = id
@@ -329,6 +332,12 @@ func (g *Graph) LastNode() *Node {
 	return xslices.Last(g.nodes)
 }
 
+// Nodes return a slice of all nodes.
+// The slice is owned by Graph and shouldn't be changed.
+func (g *Graph) Nodes() []*Node {
+	return g.nodes
+}
+
 // Compile just-in-time (JIT) compiles the Graph into a Computation that can be executed.
 //
 // At least one output must be given.
@@ -339,7 +348,7 @@ func (g *Graph) Compile(outputs ...*Node) {
 		exceptions.Panicf("no outputs selected when Graph.Compile graph %q", g.name)
 	}
 	for ii, output := range outputs {
-		if output.numOutputs() != 1 {
+		if output.NumOutputs() != 1 {
 			exceptions.Panicf("Graph(%q).Compile cannot take multi-output nodes (output #%d: %s), this type of Node is internal only", g.name, ii, output)
 		}
 	}

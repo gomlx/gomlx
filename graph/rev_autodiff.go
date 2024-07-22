@@ -141,9 +141,9 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 		}
 
 		// Special case for multiple-outputs: their vjp need to be aggregated differently.
-		if node.numOutputs() > 1 {
+		if node.NumOutputs() > 1 {
 			var hasVJP bool
-			for ii := range node.numOutputs() {
+			for ii := range node.NumOutputs() {
 				if rNode.VJPsForMultiOutputs[ii] != nil {
 					hasVJP = true
 					break
@@ -164,7 +164,7 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 
 		// For the usual single output nodes, if there are no gradients arriving to rNode -- e.g.:
 		// there was a `stopGradient`, we can't propagate the gradient either.
-		if node.numOutputs() == 1 && rNode.AccumulatedVJP == nil {
+		if node.NumOutputs() == 1 && rNode.AccumulatedVJP == nil {
 			continue
 		}
 
@@ -194,7 +194,7 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 		}
 
 		vjpsForOutputs := rNode.VJPsForMultiOutputs
-		if node.numOutputs() == 1 {
+		if node.NumOutputs() == 1 {
 			vjpsForOutputs = []*Node{rNode.AccumulatedVJP}
 		}
 		inputsVJPs := vjpFn(node, vjpsForOutputs, outputShape)
@@ -257,8 +257,8 @@ func newReverseGraph(g *Graph, root *Node, gradientNodes []*Node) *reverseGraph 
 	for ii, node := range g.nodes {
 		rNode := &reverseNode{Node: node}
 		rg.ReverseNodes[ii] = rNode
-		if node.numOutputs() > 1 {
-			rNode.VJPsForMultiOutputs = make([]*Node, node.numOutputs())
+		if node.NumOutputs() > 1 {
+			rNode.VJPsForMultiOutputs = make([]*Node, node.NumOutputs())
 		}
 		for _, input := range node.inputNodes {
 			rg.NumConsumers[input.Id()] += 1
