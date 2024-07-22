@@ -227,8 +227,7 @@ func OneHot(indices *Node, depth int, dtype dtypes.DType) *Node {
 
 	broadcastIndices := BroadcastToDims(indices, targetShape.Dimensions...)
 	positionIndices := Iota(g, broadcastIndices.Shape(), -1) // Indices for each "bit" in position.
-	return Where(Equal(broadcastIndices, positionIndices),
-		Ones(g, targetShape), Zeros(g, targetShape))
+	return ConvertDType(Equal(broadcastIndices, positionIndices), dtype)
 }
 
 // ReduceAndKeep applies the given reduction function but regenerate the reduced dimensions with size 1.
