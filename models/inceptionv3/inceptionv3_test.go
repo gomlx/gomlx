@@ -6,13 +6,17 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
-	timage "github.com/gomlx/gomlx/types/tensor/image"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/types/tensors/images"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"image"
 	_ "image/png"
 	"os"
 	"testing"
+
+	_ "github.com/gomlx/gomlx/backends/xla"
 )
 
 var flagDataDir = flag.String("data", "/tmp/gomlx_inceptionv3", "Directory where to save and load model data.")
@@ -22,7 +26,7 @@ func TestBuildGraph(t *testing.T) {
 		fmt.Println("- github.com/gomlx/gomlx/models/inceptionv3: TestBuildGraph disabled for go test --short because it requires downloading a large file with weights.")
 		return
 	}
-	manager := graphtest.BuildTestBackend()
+	backend := graphtest.BuildTestBackend()
 
 	// Load GoMLX gopher mascot image and scale to inception's size
 	// for classification (299x299 == ClassificationImageSize).
@@ -32,7 +36,7 @@ func TestBuildGraph(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, f.Close())
 	var imgT *tensors.Tensor
-	imgT = timage.ToTensor(dtypes.Float32).MaxValue(255.0).Single(img)
+	imgT = images.ToTensor(dtypes.Float32).MaxValue(255.0).Single(img)
 	fmt.Printf("\tImage shape=%s\n", imgT.Shape())
 
 	// Download InceptionV3 weights.
@@ -40,9 +44,9 @@ func TestBuildGraph(t *testing.T) {
 
 	// InceptionV3 classification.
 	ctx := context.NewContext()
-	inceptionV3Exec := context.NewExec(manager, ctx, func(ctx *context.Context, img *Node) *Node {
+	inceptionV3Exec := context.NewExec(backend, ctx, func(ctx *context.Context, img *Node) *Node {
 		img = ExpandDims(img, 0) // Add batch dimension
-		img = PreprocessImage(img, 255.0, timage.ChannelsLast)
+		img = PreprocessImage(img, 255.0, images.ChannelsLast)
 		return BuildGraph(ctx, img).PreTrained(*flagDataDir).ClassificationTop(true).Done()
 	})
 	predictionT := inceptionV3Exec.Call(imgT)[0]
@@ -53,7 +57,7 @@ func TestBuildGraph(t *testing.T) {
 	require.NoError(t, err)
 	want := wantT.Value().([][]float32)[0] // The last [0] takes the first element of the batch of 1.
 
-	diffStats := NewExec(manager, func(a, b *Node) (max, mean *Node) {
+	diffStats := NewExec(backend, func(a, b *Node) (max, mean *Node) {
 		diff := Abs(Sub(a, b))
 		max, mean = ReduceAllMax(diff), ReduceAllMean(diff)
 		return

@@ -3,7 +3,7 @@ package inceptionv3
 import (
 	"github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
-	timage "github.com/gomlx/gomlx/types/tensor/image"
+	"github.com/gomlx/gomlx/types/tensors/images"
 	"math"
 )
 
@@ -21,7 +21,7 @@ import (
 //
 // Input `image` must have a batch dimension (rank=4), be either 3 or 4 channels, and its
 // values must be scaled from 0 to maxValue (except if it is set to -1).
-func PreprocessImage(image *Node, maxValue float64, channelsConfig timage.ChannelsAxisConfig) *Node {
+func PreprocessImage(image *Node, maxValue float64, channelsConfig images.ChannelsAxisConfig) *Node {
 	if image.Rank() != 4 {
 		exceptions.Panicf("inceptionv3.PreprocessImage requires image to be rank-4, got rank-%d instead", image.Rank())
 	}
@@ -34,7 +34,7 @@ func PreprocessImage(image *Node, maxValue float64, channelsConfig timage.Channe
 
 	// Remove alpha-channel, if given.
 	shape := image.Shape()
-	channelsAxis := timage.GetChannelsAxis(image, channelsConfig)
+	channelsAxis := images.GetChannelsAxis(image, channelsConfig)
 	if shape.Dimensions[channelsAxis] == 4 {
 		axesRanges := make([]SliceAxisSpec, image.Rank())
 		for ii := range axesRanges {
@@ -48,7 +48,7 @@ func PreprocessImage(image *Node, maxValue float64, channelsConfig timage.Channe
 	}
 
 	// Scale to minimum size (75x75).
-	spatialDims := timage.GetSpatialAxes(image, channelsConfig)
+	spatialDims := images.GetSpatialAxes(image, channelsConfig)
 	upScale := 1.0
 	for _, ii := range spatialDims {
 		ratio := float64(MinimumImageSize) / float64(shape.Dimensions[ii])
@@ -78,6 +78,8 @@ func PreprocessImage(image *Node, maxValue float64, channelsConfig timage.Channe
 // But not necessary if training from scratch.
 //
 // Careful with setting maxValue, setting it wrong can cause odd behavior. It's recommended checking.
+/*
 func ScaleImageValues(image *Node, maxValue float64) *Node {
 	return image
 }
+*/

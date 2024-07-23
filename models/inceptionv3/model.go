@@ -32,7 +32,7 @@ Transfer learning model example:
 	func ModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 		_ = spec // Not needed.
 		image := inputs[0]
-		channelsConfig := timage.ChannelsLast
+		channelsConfig := images.ChannelsLast
 		image = inceptionv3.PreprocessImage(image, channelsConfig)
 		image = inceptionv3.ScaleImageValuesTorch(image)
 
@@ -62,12 +62,14 @@ package inceptionv3
 
 import (
 	"fmt"
+	. "github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"
-	"github.com/gomlx/gomlx/types/shapes"
-	timage "github.com/gomlx/gomlx/types/tensor/image"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/types/tensors/images"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 	"path"
 	"strings"
@@ -127,7 +129,7 @@ func BuildGraph(ctx *context.Context, image *Node) *Config {
 		batchNormEpsilon: 0.001,
 		batchNormScale:   false,
 	}
-	cfg.ChannelsAxis(timage.ChannelsLast)
+	cfg.ChannelsAxis(images.ChannelsLast)
 	return cfg
 }
 
@@ -141,7 +143,7 @@ type Config struct {
 	image   *Node
 	baseDir string
 
-	channelsAxisConfig timage.ChannelsAxisConfig
+	channelsAxisConfig images.ChannelsAxisConfig
 	channelsAxis       int
 	spatialAxes        []int
 	trainable          bool
@@ -182,15 +184,15 @@ func (cfg *Config) Trainable(trainable bool) *Config {
 }
 
 // ChannelsAxis configures the axis for the channels (aka. "depth" or "features") dimension.
-// The default is `timage.ChannelsLast`, meaning the "channels" dimension comes last.
+// The default is `images.ChannelsLast`, meaning the "channels" dimension comes last.
 //
-// Note: `timage` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
+// Note: `images` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
 //
 // It returns the modified Config object, so calls can be cascaded.
-func (cfg *Config) ChannelsAxis(channelsAxisConfig timage.ChannelsAxisConfig) *Config {
+func (cfg *Config) ChannelsAxis(channelsAxisConfig images.ChannelsAxisConfig) *Config {
 	cfg.channelsAxisConfig = channelsAxisConfig
-	cfg.channelsAxis = timage.GetChannelsAxis(cfg.image, channelsAxisConfig)
-	cfg.spatialAxes = timage.GetSpatialAxes(cfg.image, channelsAxisConfig)
+	cfg.channelsAxis = images.GetChannelsAxis(cfg.image, channelsAxisConfig)
+	cfg.spatialAxes = images.GetSpatialAxes(cfg.image, channelsAxisConfig)
 	return cfg
 }
 
@@ -268,7 +270,7 @@ func (cfg *Config) Done() (output *Node) {
 		if cfg.baseDir == "" {
 			Panicf("inceptionv3.BuildGraph(): classification top is only available is using pre-trained weights, see PreTrained method")
 		}
-		spatialAxes := timage.GetSpatialAxes(x, cfg.channelsAxisConfig)
+		spatialAxes := images.GetSpatialAxes(x, cfg.channelsAxisConfig)
 		for _, spatialAxis := range spatialAxes {
 			if x.Shape().Dimensions[spatialAxis] != 299 {
 				Panicf("inceptionv3.BuildGraph(): image dimensions must be 299x299 if using classification top,  got shape %s instead", x.Shape())

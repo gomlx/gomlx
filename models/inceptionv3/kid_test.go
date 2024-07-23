@@ -1,15 +1,20 @@
 package inceptionv3
 
 import (
+	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
-	timage "github.com/gomlx/gomlx/types/tensor/image"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/types/tensors/images"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
 	"image"
 	"os"
 	"sync"
 	"testing"
+
+	_ "github.com/gomlx/gomlx/backends/xla"
 )
 
 func loadImage(filePath string) (img image.Image, err error) {
@@ -64,14 +69,14 @@ func TestKidMetric(t *testing.T) {
 		Images[ii], err = loadImage(p)
 		require.NoError(t, err)
 	}
-	imagesBatch := timage.ToTensor(dtypes.Float32).MaxValue(255.0).Batch(Images)
+	imagesBatch := images.ToTensor(dtypes.Float32).MaxValue(255.0).Batch(Images)
 	noisyBatch := noisyImages(t, manager, imagesBatch)
 
-	kidBuilder := NewKidBuilder(*flagDataDir, 75, 255.0, timage.ChannelsLast)
+	kidBuilder := NewKidBuilder(*flagDataDir, 75, 255.0, images.ChannelsLast)
 	ctx := context.NewContext()
-	kidExec := context.NewExec(manager, ctx, func(ctx *context.Context, images []*Node) *Node {
-		return kidBuilder.BuildGraph(ctx, []*Node{images[0]}, []*Node{images[1]})
+	kidExec := context.NewExec(manager, ctx, func(ctx *context.Context, imagesPair []*Node) *Node {
+		return kidBuilder.BuildGraph(ctx, []*Node{imagesPair[0]}, []*Node{imagesPair[1]})
 	})
-	kid := kidExec.Call(imagesBatch, noisyBatch)[0].Local().Value().(float32)
+	kid := kidExec.Call(imagesBatch, noisyBatch)[0].Value().(float32)
 	require.InDelta(t, -1.5861, kid, 0.001, "KID value different from expected for batch.")
 }
