@@ -248,7 +248,7 @@ func (c *Config) Done() *Node {
 		weightsVar := layerCtx.VariableWithShape("weights", shapes.Make(dtype, weightsDims...))
 		if c.regularizer != nil {
 			// Only for the weights, not for the bias.
-			c.regularizer(ctx, g, weightsVar)
+			c.regularizer(layerCtx, g, weightsVar)
 		}
 		weights := weightsVar.ValueGraph(g)
 		if x.Rank() <= 2 && len(outputDims) == 1 {
@@ -265,7 +265,7 @@ func (c *Config) Done() *Node {
 
 		// Add bias
 		if c.useBias {
-			biasVar := ctx.VariableWithShape("biases", shapes.Make(dtype, outputDims...))
+			biasVar := layerCtx.VariableWithShape("biases", shapes.Make(dtype, outputDims...))
 			bias := biasVar.ValueGraph(g)
 			expandedBiasShape := x.Shape().Clone()
 			for ii := range expandedBiasShape.Dimensions[:x.Rank()-len(outputDims)] {

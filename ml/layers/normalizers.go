@@ -38,7 +38,7 @@ var (
 		"batch": func(ctx *context.Context, input *Node) *Node {
 			return BatchNormalization(ctx, input, -1).Done()
 		},
-		"norm": func(ctx *context.Context, input *Node) *Node {
+		"layer": func(ctx *context.Context, input *Node) *Node {
 			return LayerNormalization(ctx, input, -1).Done()
 		},
 		"none": func(ctx *context.Context, input *Node) *Node {
@@ -56,7 +56,9 @@ var (
 // It's a simple wrapper around KnownNormalizers, if one wants to handle errors, just
 // check for its values. For valid values see KnownNormalizers.
 //
-// Typical use:
+// Some layer libraries will use this by default for you, taking the value from the context -- e.g: fnn.New.
+//
+// But if not, one example use:
 //
 // ```
 // var flagNormalization = flag.String("norm", "none",

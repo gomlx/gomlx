@@ -24,20 +24,24 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/examples/adult"
 	"github.com/gomlx/gomlx/examples/notebook/gonb/margaid"
+	"github.com/gomlx/gomlx/examples/notebook/gonb/plotly"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/layers/fnn"
 	"github.com/gomlx/gomlx/ml/layers/kan"
+	"github.com/gomlx/gomlx/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/commandline"
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/tensors"
-	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/janpfeifer/must"
+	"k8s.io/klog/v2"
 	"log"
 	"path"
 	"time"
@@ -50,29 +54,57 @@ var (
 	ModelDType = dtypes.Float32
 )
 
-var (
-	flagDataDir        = flag.String("data", "~/tmp/uci-adult", "Directory to save and load downloaded and generated dataset files.")
-	flagCheckpoint     = flag.String("checkpoint", "", "Directory save and load checkpoints from (relative to --data). If left empty, no checkpoints are created.")
-	flagCheckpointKeep = flag.Int("checkpoint_keep", 10, "Number of checkpoints to keep, if --checkpoint is set.")
-	flagBatchSize      = flag.Int("batch", 128, "Dataset size for training")
-	flagNumSteps       = flag.Int("steps", 5000, "Number of gradient descent steps to perform")
-	flagForceDownload  = flag.Bool("force_download", false, "Force re-download of Adult dataset files.")
+func createDefaultContext() *context.Context {
+	ctx := context.NewContext()
+	ctx.RngStateReset()
+	ctx.SetParams(map[string]any{
+		"checkpoint":      "",
+		"num_checkpoints": 3,
+		"train_steps":     5000,
+		"batch_size":      128,
+		"plots":           true,
 
-	flagOptimizer       = flag.String("optimizer", "adam", "Type of optimizer to use: 'sgd' or 'adam'")
-	flagLearningRate    = flag.Float64("learning_rate", 0.001, "Initial learning rate.")
-	flagNumQuantiles    = flag.Int("quantiles", 100, "Max number of quantiles to use for numeric features, used during piece-wise linear calibration. It will only use unique values, so if there are fewer variability, fewer quantiles are used.")
-	flagEmbeddingDim    = flag.Int("embedding_dim", 8, "Default embedding dimension for categorical values.")
-	flagVerbosity       = flag.Int("verbosity", 0, "Level of verbosity, the higher the more verbose.")
-	flagNumHiddenLayers = flag.Int("num_hidden_layers", 8, "Number of hidden layers, stacked with residual connection.")
-	flagNumHiddenNodes  = flag.Int("num_hidden_nodes", 32, "Number of nodes in hidden layers.")
-	flagUseKAN          = flag.Bool("kan", false, "Use KAN - Kolmogorov–Arnold Networks")
-	flagDropoutRate     = flag.Float64("dropout", 0, "Dropout rate")
+		optimizers.ParamOptimizer:           "adam",
+		optimizers.ParamLearningRate:        0.001,
+		optimizers.ParamAdamEpsilon:         1e-7,
+		optimizers.ParamAdamDType:           "",
+		optimizers.ParamCosineScheduleSteps: 0,
+		layers.ParamActivation:              "sigmoid",
+		layers.ParamDropoutRate:             0.0,
+		regularizers.ParamL2:                1e-5,
+		regularizers.ParamL1:                1e-5,
+
+		// FNN network parameters:
+		fnn.ParamNumHiddenLayers: 1,
+		fnn.ParamNumHiddenNodes:  4,
+		fnn.ParamResidual:        true,
+		fnn.ParamNormalization:   "layer",
+
+		// KAN network parameters:
+		"kan":                            false, // Enable kan
+		kan.ParamBSplineNumControlPoints: 20,    // Number of control points
+		kan.ParamNumHiddenNodes:          4,
+		kan.ParamNumHiddenLayers:         1,
+		kan.ParamBSplineDegree:           2,
+		kan.ParamBSplineMagnitudeL1:      1e-5,
+		kan.ParamBSplineMagnitudeL2:      0.0,
+	})
+	return ctx
+}
+
+var (
+	flagDataDir    = flag.String("data", "~/tmp/uci-adult", "Directory to save and load downloaded and generated dataset files.")
+	flagCheckpoint = flag.String("checkpoint", "", "Checkpoint subdirectory under the --data directory. "+
+		"If empty does not use checkpoints. If absolute path, use that instead.")
+	flagForceDownload = flag.Bool("force_download", false, "Force re-download of Adult dataset files.")
+
+	flagNumQuantiles = flag.Int("quantiles", 100, "Max number of quantiles to use for numeric features, used during piece-wise linear calibration. It will only use unique values, so if there are fewer variability, fewer quantiles are used.")
+	flagEmbeddingDim = flag.Int("embedding_dim", 8, "Default embedding dimension for categorical values.")
+	flagVerbosity    = flag.Int("verbosity", 0, "Level of verbosity, the higher the more verbose.")
 
 	flagUseCategorical       = flag.Bool("use_categorical", true, "Use categorical features.")
 	flagUseContinuous        = flag.Bool("use_continuous", true, "Use continuous features.")
 	flagTrainableCalibration = flag.Bool("trainable_calibration", true, "Allow piece-wise linear calibration to adjust outputs.")
-	flagPlots                = flag.Bool("plots", true, "Plots during training: perform periodic evaluations, "+
-		"save results if --checkpoint is set and draw plots, if in a Jupyter notebook.")
 )
 
 // AssertNoError logs err and panics, if it is not nil.
@@ -83,27 +115,53 @@ func AssertNoError(err error) {
 }
 
 func main() {
-	flag.Parse()
+	// Init GoMLX manager and default context.
+	backend := backends.New()
+	ctx := createDefaultContext()
 
-	// Fixes directories.
+	// Flags with context settings.
+	settings := commandline.CreateContextSettingsFlag(ctx, "")
+	klog.InitFlags(nil)
+	flag.Parse()
+	must.M(commandline.ParseContextSettings(ctx, *settings))
+	if *flagVerbosity >= 1 {
+		fmt.Println(commandline.SprintContextSettings(ctx))
+	}
+	// Fixes directories and get checkpointPath.
 	*flagDataDir = data.ReplaceTildeInDir(*flagDataDir)
-	*flagCheckpoint = data.ReplaceTildeInDir(*flagCheckpoint)
-	if *flagCheckpoint != "" && !path.IsAbs(*flagCheckpoint) {
-		*flagCheckpoint = path.Join(*flagDataDir, *flagCheckpoint)
+	checkpointPath := data.ReplaceTildeInDir(*flagCheckpoint)
+	if checkpointPath != "" && !path.IsAbs(checkpointPath) {
+		checkpointPath = path.Join(*flagDataDir, checkpointPath)
+	}
+	if checkpointPath != "" {
+		ctx.SetParam("checkpoint", checkpointPath)
+	} else {
+		checkpointPath = context.GetParamOr(ctx, "checkpoint", "")
 	}
 
-	// Check variables validity.
-	optimizerFn, found := optimizers.KnownOptimizers[*flagOptimizer]
-	if !found {
-		log.Fatalf("Unknown optimizer %q, please use one of %v",
-			*flagOptimizer, xslices.Keys(optimizers.KnownOptimizers))
+	var globalStep int
+	var checkpoint *checkpoints.Handler
+	if checkpointPath != "" {
+		var err error
+		numCheckpointsToKeep := context.GetParamOr(ctx, "num_checkpoints", 5)
+		if numCheckpointsToKeep < 1 {
+			// Only limit the amount of checkpoints kept if >= 1.
+			checkpoint, err = checkpoints.Build(ctx).Dir(checkpointPath).Done()
+		} else {
+			checkpoint, err = checkpoints.Build(ctx).Dir(checkpointPath).Keep(numCheckpointsToKeep).Done()
+		}
+		AssertNoError(err)
+		globalStep = int(optimizers.GetGlobalStep(ctx))
+		if globalStep != 0 {
+			fmt.Printf("\t- restarting training from global_step=%d\n", globalStep)
+			ctx = ctx.Reuse()
+		}
 	}
 
 	// Load training data and initialize statistics (vocabularies and quantiles).
 	adult.LoadAndPreprocessData(*flagDataDir, *flagNumQuantiles, *flagForceDownload, *flagVerbosity)
 
 	// Crate Backend and upload data to device tensors.
-	backend := backends.New()
 	if *flagVerbosity >= 1 {
 		fmt.Printf("Backend: %s\n", backend.Name())
 	}
@@ -112,33 +170,22 @@ func main() {
 	}
 
 	// Create datasets for training and evaluation.
+	batchSize := context.GetParamOr(ctx, "batch_size", 128)
 	trainDS := adult.NewDataset(backend, adult.Data.Train, "batched train")
-	trainEvalDS := trainDS.Copy().BatchSize(*flagBatchSize, false)
+	trainEvalDS := trainDS.Copy().BatchSize(batchSize, false)
 	testEvalDS := adult.NewDataset(backend, adult.Data.Test, "test").
-		BatchSize(*flagBatchSize, false)
+		BatchSize(batchSize, false)
 	// For training, we shuffle and loop indefinitely.
-	trainDS.BatchSize(*flagBatchSize, true).Shuffle().Infinite(true)
+	trainDS.BatchSize(batchSize, true).Shuffle().Infinite(true)
 
 	// Metrics we are interested.
 	meanAccuracyMetric := metrics.NewMeanBinaryLogitsAccuracy("Mean Accuracy", "#acc")
 	movingAccuracyMetric := metrics.NewMovingAverageBinaryLogitsAccuracy("Moving Average Accuracy", "~acc", 0.01)
 
-	// Context holds the variables and hyperparameters for the model.
-	ctx := context.NewContext()
-	ctx.SetParam(optimizers.ParamLearningRate, *flagLearningRate)
-
-	// Checkpoints saving.
-	var checkpoint *checkpoints.Handler
-	if *flagCheckpoint != "" {
-		var err error
-		checkpoint, err = checkpoints.Build(ctx).Dir(*flagCheckpoint).Keep(*flagCheckpointKeep).Done()
-		AssertNoError(err)
-	}
-
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
 	trainer := train.NewTrainer(backend, ctx, ModelGraph, losses.BinaryCrossentropyLogits,
-		optimizerFn(ctx),
+		optimizers.FromContext(ctx),
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
 		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
 
@@ -156,19 +203,38 @@ func main() {
 			})
 	}
 
-	// Attach a margaid plots: plot points at exponential steps,
-	// that are saved along the checkpoint directory (if one is given).
-	if *flagPlots {
-		_ = margaid.NewDefault(loop, checkpoint.Dir(), 100, 1.1, trainEvalDS, testEvalDS)
+	// Attach Plotly plots: plot points at exponential steps.
+	// The points generated are saved along the checkpoint directory (if one is given).
+	usePlots := context.GetParamOr(ctx, margaid.ParamPlots, false)
+	if usePlots {
+		_ = plotly.New().Dynamic().
+			ScheduleExponential(loop, 200, 1.2).
+			WithDatasets(trainEvalDS, testEvalDS)
 	}
 
 	// Train for the selected *flagNumSteps
-	_, err := loop.RunSteps(trainDS, *flagNumSteps)
-	AssertNoError(err)
-	fmt.Printf("\t[Step %d] median train step: %d microseconds\n", loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
+	numTrainSteps := context.GetParamOr(ctx, "train_steps", 0)
+	if globalStep < numTrainSteps {
+		_, err := loop.RunSteps(trainDS, numTrainSteps-globalStep)
+		AssertNoError(err)
+		fmt.Printf("\t[Step %d] median train step: %d microseconds\n", loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
+		fmt.Println()
+	} else {
+		fmt.Printf("\t - target train_steps=%d already reached. To train further, set a number additional "+
+			"to current global step.\n", numTrainSteps)
+	}
+
+	if *flagVerbosity >= 2 {
+		fmt.Println("\nVariables:")
+		ctx.EnumerateVariables(func(v *context.Variable) {
+			if !v.Trainable {
+				return
+			}
+			fmt.Printf("\t%s : %s -> %s\n", v.Scope(), v.Name(), v.Shape())
+		})
+	}
 
 	// Finally, print an evaluation on train and test datasets.
-	fmt.Println()
 	AssertNoError(commandline.ReportEval(trainer, trainEvalDS, testEvalDS))
 }
 
@@ -180,16 +246,16 @@ func main() {
 func ModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	_ = spec // Not used, since the dataset is always the same.
 	g := inputs[0].Graph()
+	dtype := inputs[1].DType() // From continuous features.
 
-	// Use Cosine schedule of the learning rate.
-	optimizers.CosineAnnealingSchedule(ctx, g, ModelDType).
-		PeriodInSteps(*flagNumSteps / 3).Done()
+	// Use Cosine schedule of the learning rate, if hyperparameter is set to a value > 0.
+	optimizers.CosineAnnealingSchedule(ctx, g, dtype).FromContext().Done()
 
 	categorical, continuous := inputs[0], inputs[1]
 	batchSize := categorical.Shape().Dimensions[0]
 
+	// Feature preprocessing:
 	var allEmbeddings []*Node
-
 	if *flagUseCategorical {
 		// Embedding of categorical values, each with its own vocabulary.
 		numCategorical := categorical.Shape().Dimensions[1]
@@ -222,30 +288,16 @@ func ModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 			allEmbeddings = append(allEmbeddings, calibrated)
 		}
 	}
+	logits := Concatenate(allEmbeddings, -1)
+	logits.AssertDims(batchSize, -1) // 2-dim tensor, with batch size as the leading dimension (-1 means it is not checked).
 
-	layer := Concatenate(allEmbeddings, -1)
-	layer.AssertDims(batchSize, -1) // 2-dim tensor, with batch size as the leading dimension (-1 means it is not checked).
-
-	var logits *Node
-	if *flagUseKAN {
-		logits = kan.New(ctx.In("kan_layers"), layer, 1).
-			NumHiddenLayers(*flagNumHiddenLayers, *flagNumHiddenNodes).
-			Done()
+	// Model itself is an FNN or a KAN.
+	if context.GetParamOr(ctx, "kan", false) {
+		// Use KAN, all configured by context hyperparameters. See createDefaultContext for defaults.
+		logits = kan.New(ctx.In("kan"), logits, 1).Done()
 	} else {
-		// Normal FNN
-		layer = layers.DenseWithBias(ctx.In(fmt.Sprintf("DenseLayer_%d", 0)), layer, *flagNumHiddenNodes)
-		for ii := 1; ii < *flagNumHiddenLayers; ii++ {
-			ctx := ctx.In(fmt.Sprintf("DenseLayer_%d", ii))
-			// Add layer with residual connection.
-			tmp := Sigmoid(layer)
-			if *flagDropoutRate > 0 {
-				tmp = layers.Dropout(ctx, tmp, Scalar(g, ModelDType, *flagDropoutRate))
-			}
-			tmp = layers.DenseWithBias(ctx, tmp, *flagNumHiddenNodes)
-			layer = Add(layer, tmp) // Residual connections
-		}
-		layer = Sigmoid(layer)
-		logits = layers.DenseWithBias(ctx.In("DenseFinal"), layer, 1)
+		// Normal FNN, all configured by context hyperparameters. See createDefaultContext for defaults.
+		logits = fnn.New(ctx.In("fnn"), logits, 1).Done()
 	}
 	logits.AssertDims(batchSize, 1) // 2-dim tensor, with batch size as the leading dimension.
 	return []*Node{logits}

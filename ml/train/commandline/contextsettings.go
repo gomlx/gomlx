@@ -128,3 +128,17 @@ func CreateContextSettingsFlag(ctx *context.Context, name string) *string {
 	flag.StringVar(&settings, name, "", usage)
 	return &settings
 }
+
+// SprintContextSettings pretty-print values for the current hyperparameters settings into a string.
+func SprintContextSettings(ctx *context.Context) string {
+	var parts []string
+	parts = append(parts, "Context hyperparameters:")
+	ctx.EnumerateParams(func(scope, key string, value any) {
+		if scope == context.RootScope {
+			parts = append(parts, fmt.Sprintf("%q: (%T) %v", key, value, value))
+		} else {
+			parts = append(parts, fmt.Sprintf("%q / %q: (%T) %q", scope, key, value, value))
+		}
+	})
+	return strings.Join(parts, "\n\t")
+}
