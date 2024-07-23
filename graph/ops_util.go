@@ -222,6 +222,9 @@ func OneHot(indices *Node, depth int, dtype dtypes.DType) *Node {
 	indices = ExpandDims(indices, -1)
 
 	positionIndicesShape := indices.Shape().Clone()
+	for ii := range indices.Rank() - 1 {
+		positionIndicesShape.Dimensions[ii] = 1
+	}
 	positionIndicesShape.Dimensions[positionIndicesShape.Rank()-1] = depth
 	positionIndices := Iota(g, positionIndicesShape, -1) // Indices for each "bit" in position.
 	return ConvertDType(Equal(indices, positionIndices), dtype)
