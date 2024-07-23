@@ -20,7 +20,6 @@ import (
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 	"slices"
 )
@@ -68,20 +67,21 @@ type Config struct {
 	bsplineNumControlPoints, bsplineDegree int
 	bsplineMagnitudeTerms, bsplineResidual bool
 	bsplineMagnitudeRegularizer            regularizers.Regularizer
-
-	err error
 }
 
 // New returns the configuration for a KAN layer(s) to be applied to the input x.
 // See methods for optional configurations.
 // When finished configuring call Done, and it will return "KAN(x)".
 //
+// The input is expected to have shape `[<batch dimensions...>, <featureDimension>]`, the output will have
+// shape `[<batch dimensions...>, <numOutputNodes>]`.
+//
 // It will apply KAN-like transformations to the last axis (the "feature axis") of x, while preserving all leading
 // axes (we'll call them "batch axes").
-func New(ctx *context.Context, x *Node, numOutputNodes int) *Config {
+func New(ctx *context.Context, input *Node, numOutputNodes int) *Config {
 	c := &Config{
 		ctx:             ctx,
-		input:           x,
+		input:           input,
 		numOutputNodes:  numOutputNodes,
 		numHiddenLayers: context.GetParamOr(ctx, ParamNumHiddenLayers, 0),
 		numHiddenNodes:  context.GetParamOr(ctx, ParamNumHiddenNodes, 10),
@@ -105,23 +105,22 @@ func New(ctx *context.Context, x *Node, numOutputNodes int) *Config {
 	}
 	c.bsplineMagnitudeRegularizer = regularizers.Combine(magRegs...)
 
-	if x.Rank() < 2 {
-		exceptions.Panicf("kan.New(): x must be rank at least 2, got x.shape=%s", x.Shape())
+	if input.Rank() < 2 {
+		exceptions.Panicf("kan: input must be rank at least 2, got input.shape=%s", input.Shape())
 	}
 
 	return c
 }
 
-// NumHiddenLayers configure the number of hidden layers between x and the output.
+// NumHiddenLayers configure the number of hidden layers between the input and the output.
 // Each layer will have numHiddenNodes nodes.
 //
 // The default is 0 (no hidden layers), but it will be overridden if the hyperparameter
 // ParamNumHiddenLayers is set in the context (ctx).
-// The value for numHiddenNodes can also be configured with the hyperparameter
-// // ParamNumHiddenLayers in the context (ctx).
+// The value for numHiddenNodes can also be configured with the hyperparameter ParamNumHiddenNodes.
 func (c *Config) NumHiddenLayers(numLayers, numHiddenNodes int) *Config {
 	if numLayers < 0 || (numLayers > 0 && numHiddenNodes < 1) {
-		c.err = errors.Errorf("numHiddenLayers (%d) must be greater or equal to 0 and numHiddenNodes (%d) must be greater or equal to 1",
+		exceptions.Panicf("kan: numHiddenLayers (%d) must be greater or equal to 0 and numHiddenNodes (%d) must be greater or equal to 1",
 			numLayers, numHiddenNodes)
 	}
 	c.numHiddenLayers = numLayers
@@ -138,11 +137,15 @@ func (c *Config) Activation(activation string) *Config {
 	return c
 }
 
-// WithRegularizer to be applied to the learned weights.
+// Regularizer to be applied to the learned weights.
 // Default is none.
 //
+// To use more than one type of Regularizer, use regularizers.Combine, and set the returned combined regularizer here.
+//
 // For BSpline models it applies the regularizer to the control-points.
-func (c *Config) WithRegularizer(regularizer regularizers.Regularizer) *Config {
+//
+// The default is no regularizer, but it can be configured by regularizers.ParamL1 and regularizers.ParamL2.
+func (c *Config) Regularizer(regularizer regularizers.Regularizer) *Config {
 	c.regularizer = regularizer
 	return c
 }
@@ -168,9 +171,6 @@ func (c *Config) WithBSplineMagnitudeRegularizer(regularizer regularizers.Regula
 // Done takes the configuration and apply the KAN layer(s) configured.
 func (c *Config) Done() *Node {
 	ctx := c.ctx
-	if c.err != nil {
-		exceptions.Panicf("KAN layer configuration invalid: %+v", c.err)
-	}
 
 	// Reshape to rank-2: [batch, features]
 	numInputNodes := c.input.Shape().Dimensions[c.input.Rank()-1]
@@ -207,7 +207,7 @@ func (c *Config) layer(ctx *context.Context, x *Node, numOutputNodes int) *Node 
 	batchSize := x.Shape().Dimensions[0]
 
 	if klog.V(2).Enabled() {
-		klog.Infof("KAN layer (%s): (%d+2) x %d x %d = %d weights\n",
+		klog.Infof("kan layer (%s): (%d+2) x %d x %d = %d weights\n",
 			ctx.Scope(), c.bsplineNumControlPoints, numInputNodes, numOutputNodes,
 			(c.bsplineNumControlPoints+2)*numInputNodes*numOutputNodes)
 	}
