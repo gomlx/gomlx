@@ -17,7 +17,7 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"
-	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/types/shapes"
 	"k8s.io/klog/v2"
@@ -61,7 +61,7 @@ type Config struct {
 	input                           *Node
 	numOutputNodes                  int
 	numHiddenLayers, numHiddenNodes int
-	activation                      string
+	activation                      activations.Type
 	regularizer                     regularizers.Regularizer
 
 	bsplineNumControlPoints, bsplineDegree int
@@ -85,7 +85,7 @@ func New(ctx *context.Context, input *Node, numOutputNodes int) *Config {
 		numOutputNodes:  numOutputNodes,
 		numHiddenLayers: context.GetParamOr(ctx, ParamNumHiddenLayers, 0),
 		numHiddenNodes:  context.GetParamOr(ctx, ParamNumHiddenNodes, 10),
-		activation:      context.GetParamOr(ctx, layers.ParamActivation, "silu"),
+		activation:      activations.FromName(context.GetParamOr(ctx, activations.ParamActivation, "silu")),
 		regularizer:     regularizers.FromContext(ctx),
 
 		bsplineNumControlPoints: context.GetParamOr(ctx, ParamBSplineNumControlPoints, 20),
@@ -132,7 +132,7 @@ func (c *Config) NumHiddenLayers(numLayers, numHiddenNodes int) *Config {
 //
 // Following the paper, it defaults to "silu" (== "swish"), but it will be overridden if the hyperparameter
 // layers.ParamActivation (="activation") is set in the context.
-func (c *Config) Activation(activation string) *Config {
+func (c *Config) Activation(activation activations.Type) *Config {
 	c.activation = activation
 	return c
 }
@@ -248,7 +248,7 @@ func (c *Config) layer(ctx *context.Context, x *Node, numOutputNodes int) *Node 
 		output = Mul(output, weightsSplines)
 	}
 	if c.bsplineResidual {
-		residual = layers.Activation(c.activation, residual)
+		residual = activations.Apply(c.activation, residual)
 		residual = ExpandDims(residual, 1)
 		residual.AssertDims(batchSize, 1, numInputNodes)
 		if c.bsplineMagnitudeTerms {

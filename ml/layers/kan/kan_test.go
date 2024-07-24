@@ -70,7 +70,7 @@ func lossGraphFn(labels []*Node, predictions []*Node) (loss *Node) {
 	return
 }
 
-func TestKan(t *testing.T) {
+func TestKAN(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 	ctx := context.NewContext()
 	ctx.RngStateFromSeed(42)
@@ -85,9 +85,9 @@ func TestKan(t *testing.T) {
 	loop := train.NewLoop(trainer)
 	commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
 	metrics, err := loop.RunSteps(ds, 5000)
+	require.NoErrorf(t, err, "Failed building the model / training")
 	loss := metrics[1].Value().(float64)
 	assert.Truef(t, loss < 0.04, "Expected a loss < 0.04, got %g instead", loss)
-	require.NoErrorf(t, err, "Failed training: %+v", err)
 	fmt.Printf("Metrics:\n")
 	for ii, m := range metrics {
 		fmt.Printf("\t%s: %s\n", trainer.TrainMetrics()[ii].Name(), m)
@@ -109,7 +109,7 @@ func kanLargeGraphModel(ctx *context.Context, spec any, inputs []*Node) []*Node 
 	return []*Node{output, labels}
 }
 
-func TestKanRegularized(t *testing.T) {
+func TestKANRegularized(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 	ctx := context.NewContext()
 	ctx.RngStateFromSeed(42)
@@ -125,9 +125,9 @@ func TestKanRegularized(t *testing.T) {
 	loop := train.NewLoop(trainer)
 	commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
 	metrics, err := loop.RunSteps(ds, 20_000)
+	require.NoErrorf(t, err, "Failed building the model / training")
 	loss := metrics[1].Value().(float64)
 	assert.Truef(t, loss < 0.04, "Expected a loss < 0.04, got %g instead", loss)
-	require.NoErrorf(t, err, "Failed training: %+v", err)
 	fmt.Println("Metrics:")
 	for ii, m := range metrics {
 		fmt.Printf("\t%s: %s\n", trainer.TrainMetrics()[ii].Name(), m)
