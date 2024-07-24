@@ -102,6 +102,11 @@ var (
 )
 
 func TestFNN(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping testing in short mode")
+		return
+	}
+
 	backend := graphtest.BuildTestBackend()
 	ds := &fnnTestDataset{batchSize: 128}
 
@@ -130,6 +135,10 @@ func TestFNN(t *testing.T) {
 }
 
 func TestFNNRegularized(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping testing in short mode")
+		return
+	}
 	backend := graphtest.BuildTestBackend()
 	ctx := context.NewContext()
 	ctx.RngStateFromSeed(42)

@@ -71,6 +71,10 @@ func lossGraphFn(labels []*Node, predictions []*Node) (loss *Node) {
 }
 
 func TestKAN(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping testing in short mode")
+		return
+	}
 	backend := graphtest.BuildTestBackend()
 	ctx := context.NewContext()
 	ctx.RngStateFromSeed(42)
@@ -110,6 +114,10 @@ func kanLargeGraphModel(ctx *context.Context, spec any, inputs []*Node) []*Node 
 }
 
 func TestKANRegularized(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping testing in short mode")
+		return
+	}
 	backend := graphtest.BuildTestBackend()
 	ctx := context.NewContext()
 	ctx.RngStateFromSeed(42)
