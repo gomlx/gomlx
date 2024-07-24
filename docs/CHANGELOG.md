@@ -16,8 +16,10 @@
   * Added Nodes to introspect nodes of the graph -- e.g.: investigate the largest nodes if one is running out of memory.
   * Updated `OneHot` to use `Where`.
 * Package `layers`:
+  * Added sub-package `fnn` for a simplified Feedforward Neural Networks implementation.
   * Added sub-package `kan` for Kolmogorov–Arnold Networks.
   * Added sub-package `regularizers` with automatic regularizer configuration. Layers `Dense`, `DenseWithBias` and `kan` use it by default.
+  * Added sub-package `activations` -- just a refactor of the code already in layers.
 * Package `exceptions` removed: using the (same) now external [`github.com/gomlx/exceptions`](github.com/gomlx/exceptions) instead.
 * Package `slices` renamed to `xslices`, not to mix up with the new standard pacakge `slices`.
 * Package `tensors/image` renamed `tensors/images`.

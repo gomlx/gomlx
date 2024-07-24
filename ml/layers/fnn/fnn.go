@@ -10,7 +10,7 @@
 //		x := inputs[0]
 //		logits := fnn.New(ctx.In("model"), x, NumClasses).
 //			NumHiddenLayers(3).
-//			Activation("swish").
+//			Apply("swish").
 //			Dropout(0.3).
 //			UseResidual(true).
 //			Done()
@@ -23,6 +23,7 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/xslices"
@@ -57,7 +58,8 @@ type Config struct {
 	input                           *Node
 	outputDimensions                []int
 	numHiddenLayers, numHiddenNodes int
-	activation, normalization       string
+	activation                      activations.Type
+	normalization                   string
 	dropoutRatio                    float64
 	useBias, useResidual            bool
 
@@ -80,7 +82,7 @@ type Config struct {
 //		x := inputs[0]
 //		logits := fnn.New(ctx.In("model"), x, NumClasses).
 //			NumHiddenLayers(3).
-//			Activation("swish").
+//			Apply("swish").
 //			Dropout(0.3).
 //			Normalization("layer").
 //			UseResidual(true).
@@ -106,14 +108,13 @@ func New(ctx *context.Context, input *Node, outputDimensions ...int) *Config {
 		outputDimensions: outputDimensions,
 		numHiddenLayers:  context.GetParamOr(ctx, ParamNumHiddenLayers, 0),
 		numHiddenNodes:   context.GetParamOr(ctx, ParamNumHiddenNodes, 10),
-		activation:       context.GetParamOr(ctx, layers.ParamActivation, "relu"),
+		activation:       activations.FromName(context.GetParamOr(ctx, activations.ParamActivation, "relu")),
 		normalization:    context.GetParamOr(ctx, ParamNormalization, "none"),
 		regularizer:      regularizers.FromContext(ctx),
 		dropoutRatio:     context.GetParamOr(ctx, layers.ParamDropoutRate, 0.0),
 		useResidual:      context.GetParamOr(ctx, ParamResidual, false),
 		useBias:          true,
 	}
-
 	return c
 }
 
@@ -145,8 +146,17 @@ func (c *Config) UseBias(useBias bool) *Config {
 //
 // The default is "relu", but it can be overridden by setting the hyperparameter layers.ParamActivation (="activation")
 // in the context.
-func (c *Config) Activation(activation string) *Config {
+func (c *Config) Activation(activation activations.Type) *Config {
 	c.activation = activation
+	return c
+}
+
+// Residual configures if residual connections in between layers with the same number of nodes should be used.
+// They are very useful for deep models.
+//
+// The default is false, and it may be configured with the hyperparameter ParamResidual.
+func (c *Config) Residual(useResidual bool) *Config {
+	c.useResidual = useResidual
 	return c
 }
 
@@ -223,7 +233,7 @@ func (c *Config) Done() *Node {
 
 		// In between-layers: some don't apply to the input (ii == 0)
 		if ii > 0 {
-			x = layers.Activation(c.activation, x)
+			x = activations.Apply(c.activation, x)
 		}
 		if dropoutRatio != nil {
 			x = layers.DropoutNormalize(layerCtx, x, dropoutRatio, true)
