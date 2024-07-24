@@ -26,6 +26,7 @@ import (
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/commandline"
 	"github.com/gomlx/gomlx/ml/train/losses"
@@ -273,14 +274,14 @@ func CNNModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 		ctx := ctx.In("conv_0")
 		logits = layers.Convolution(ctx, logits).Filters(32).KernelSize(3).Done()
 		logits = normalizeImage(ctx, logits)
-		logits = layers.Relu(logits)
+		logits = activations.Relu(logits)
 		logits = MaxPool(logits).Window(2).Done()
 	}
 	{
 		ctx := ctx.In("conv_1")
 		logits = layers.Convolution(ctx, logits).Filters(64).KernelSize(3).Done()
 		logits = normalizeImage(ctx, logits)
-		logits = layers.Relu(logits)
+		logits = activations.Relu(logits)
 		logits = MaxPool(logits).Window(2).Done()
 	}
 	{
@@ -288,7 +289,7 @@ func CNNModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 		logits = layers.Convolution(ctx, logits).Filters(64).KernelSize(3).Done()
 		logits = normalizeImage(ctx, logits)
 		logits = Reshape(logits, batchSize, -1)
-		logits = layers.Relu(logits)
+		logits = activations.Relu(logits)
 	}
 	{
 		ctx := ctx.In("dense_0")
@@ -298,7 +299,7 @@ func CNNModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	for ii := 1; ii < *flagNumHiddenLayers; ii++ {
 		ctx := ctx.In(fmt.Sprintf("dense_%d", ii))
 		// Add layer with residual connection.
-		tmp := layers.Relu(logits)
+		tmp := activations.Relu(logits)
 		if *flagDropoutRate > 0 {
 			tmp = layers.Dropout(ctx, tmp, Const(g, shapes.CastAsDType(*flagDropoutRate, tmp.DType())))
 		}
@@ -306,7 +307,7 @@ func CNNModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 		tmp = normalizeFeatures(ctx, tmp)
 		logits = Add(logits, tmp)
 	}
-	logits = layers.Relu(logits)
+	logits = activations.Relu(logits)
 	logits = layers.DenseWithBias(ctx.In("denseFinal"), logits, len(cifar.C10Labels))
 	return []*Node{logits}
 }

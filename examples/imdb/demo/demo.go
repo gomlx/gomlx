@@ -27,6 +27,7 @@ import (
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/commandline"
 	"github.com/gomlx/gomlx/ml/train/losses"
@@ -310,7 +311,7 @@ func ReadoutGraph(ctx *context.Context, embed *Node) *Node {
 
 // Activation function used for models.
 func Activation(x *Node) *Node {
-	return layers.Relu(x)
+	return activations.Relu(x)
 }
 
 func Conv1DGraph(ctx *context.Context, embed, mask *Node) *Node {

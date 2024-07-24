@@ -7,6 +7,7 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/layers/activations"
 )
 
 // CnnModelGraph builds the CNN model for our demo.
@@ -40,7 +41,7 @@ func CnnEmbeddings(ctx *context.Context, images *Node) (embeddings *Node) {
 			ctx := ctx.In(fmt.Sprintf("repeat_%d", repeat))
 			residual := logits
 			logits = layers.Convolution(ctx, logits).Filters(filterSize).KernelSize(3).PadSame().Done()
-			logits = layers.Relu(logits)
+			logits = activations.Relu(logits)
 			if dropoutNode != nil {
 				logits = layers.Dropout(ctx, logits, dropoutNode)
 			}
@@ -79,7 +80,7 @@ func FnnOnTop(ctx *context.Context, logits *Node) *Node {
 		if dropoutNode != nil {
 			logits = layers.Dropout(ctx, logits, dropoutNode)
 		}
-		logits = layers.Relu(logits)
+		logits = activations.Relu(logits)
 		logits = layers.DenseWithBias(ctx, logits, numNodes)
 		logits = normalizeFeatures(ctx, logits)
 		if ii >= 1 {

@@ -10,6 +10,7 @@ import (
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/models/inceptionv3"
 	timage "github.com/gomlx/gomlx/types/tensor/image"
@@ -141,7 +142,7 @@ func byolProjection(ctx *context.Context, embeddings *Node) *Node {
 	hiddenCtx := ctx.In("hidden")
 	embeddings = layers.Dense(hiddenCtx, embeddings, true, projectionHiddenNodes)
 	embeddings = normalizeFeatures(hiddenCtx, embeddings)
-	embeddings = layers.Relu(embeddings)
+	embeddings = activations.Relu(embeddings)
 	embeddings = layers.Dense(ctx.In("projection"), embeddings, true, projectionNodes)
 	return embeddings
 }
@@ -154,7 +155,7 @@ func byolOnlinePrediction(ctx *context.Context, projection *Node) *Node {
 	hiddenCtx := ctx.In("hidden")
 	projection = layers.Dense(hiddenCtx, projection, true, projectionHiddenNodes)
 	projection = normalizeFeatures(hiddenCtx, projection)
-	projection = layers.Relu(projection)
+	projection = activations.Relu(projection)
 	projection = layers.Dense(ctx.In("projection"), projection, true, projectionNodes)
 	return projection
 }

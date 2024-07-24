@@ -30,6 +30,7 @@ import (
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/ml/layers/fnn"
 	"github.com/gomlx/gomlx/ml/layers/kan"
 	"github.com/gomlx/gomlx/ml/layers/regularizers"
@@ -69,7 +70,7 @@ func createDefaultContext() *context.Context {
 		optimizers.ParamAdamEpsilon:         1e-7,
 		optimizers.ParamAdamDType:           "",
 		optimizers.ParamCosineScheduleSteps: 0,
-		layers.ParamActivation:              "sigmoid",
+		activations.ParamActivation:         "sigmoid",
 		layers.ParamDropoutRate:             0.0,
 		regularizers.ParamL2:                1e-5,
 		regularizers.ParamL1:                1e-5,

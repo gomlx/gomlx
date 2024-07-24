@@ -7,6 +7,7 @@ import (
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
@@ -151,7 +152,7 @@ func createDenseTestStateGraphLayerWise(strategy *samplerPkg.Strategy, g *Graph,
 func setMinimalTestParams(ctx *context.Context) {
 	ctx.SetParams(map[string]any{
 		layers.ParamDropoutRate:       0.0,
-		layers.ParamActivation:        "none", // No activation, to make math simpler.
+		activations.ParamActivation:   "none", // No activation, to make math simpler.
 		layers.ParamNormalizationType: "none",
 
 		ParamEdgeDropoutRate:       0.0,
@@ -171,7 +172,7 @@ func setMinimalTestParams(ctx *context.Context) {
 func setCommonTestParams(ctx *context.Context) {
 	ctx.SetParams(map[string]any{
 		layers.ParamDropoutRate:       0.0,
-		layers.ParamActivation:        "swish",
+		activations.ParamActivation:   "swish",
 		layers.ParamNormalizationType: "layer",
 
 		ParamEdgeDropoutRate:       0.0,

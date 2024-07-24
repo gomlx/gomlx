@@ -10,6 +10,7 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/ml/layers/kan"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/xslices"
@@ -269,7 +270,7 @@ func edgeMessageGraph(ctx *context.Context, gatheredStates, gatheredMask *Node) 
 	} else {
 		// Normal FNN
 		messages = layers.DenseWithBias(ctx, gatheredStates, messageDim)
-		messages = layers.ActivationFromContext(ctx, messages)
+		messages = activations.ApplyFromContext(ctx, messages)
 	}
 
 	mask = gatheredMask
@@ -441,10 +442,10 @@ func updateState(ctx *context.Context, prevState, input, mask *Node) *Node {
 	for ii := range numHiddenLayers {
 		ctxHiddenLayer := ctx.In(fmt.Sprintf("hidden_%d", ii))
 		state = layers.DenseWithBias(ctxHiddenLayer, state, stateDim)
-		state = layers.ActivationFromContext(ctx.In(fmt.Sprintf("hidden_%d", ii)), state)
+		state = activations.ApplyFromContext(ctx.In(fmt.Sprintf("hidden_%d", ii)), state)
 	}
 	state = layers.DenseWithBias(ctx, state, stateDim)
-	state = layers.ActivationFromContext(ctx, state)
+	state = activations.ApplyFromContext(ctx, state)
 	state = layers.DropoutFromContext(ctx, state)
 
 	if updateType == "residual" && prevState.Shape().Equal(state.Shape()) {

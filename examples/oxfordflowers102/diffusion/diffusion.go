@@ -21,6 +21,7 @@ import (
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/types/shapes"
@@ -101,7 +102,7 @@ func NormalizeLayer(ctx *context.Context, x *Node) *Node {
 
 // ActivationLayer can be configured.
 func ActivationLayer(x *Node) *Node {
-	x = layers.Activation(*flagActivation, x)
+	x = activations.Apply(activations.FromName(*flagActivation), x)
 	nanLogger.Trace(x)
 	return x
 }

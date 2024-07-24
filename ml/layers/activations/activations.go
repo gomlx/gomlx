@@ -1,4 +1,9 @@
-package layers
+// Package activations implements several common activations, and includes a generic Apply method to apply an
+// activation by its type.
+//
+// There is also FromName to convert an activation name (string) to its type, and ApplyFromContext that applies
+// an activation based on the hyperparameter ParamActivation defined in a context.
+package activations
 
 import (
 	. "github.com/gomlx/exceptions"
@@ -7,43 +12,84 @@ import (
 )
 
 const (
-	// ParamActivation context hyperparameter defines the activation to use, for models using ActivationFromContext.
+	// ParamActivation context hyperparameter defines the activation to use, for models using ApplyFromContext.
 	// Available values are: `none`, `relu`, `leaky_relu`, `sigmoid`, `tanh` or `swish` (same as `silu`).
 	// The default is `relu`.
+	// See activations.TypeValues for complete list.
 	ParamActivation = "activation"
 )
 
-// ActivationFromContext picks an activation function from the context using [ParamActivation] parameter,
-// and applies it to `x`.
-func ActivationFromContext(ctx *context.Context, x *Node) *Node {
-	activation := context.GetParamOr(ctx, ParamActivation, "relu")
-	return Activation(activation, x)
+// Type is an enum for the supported activation functions.
+//
+// It is converted to snake-format strings (e.g.: TypeLeakyRelu -> "leaky_relu"), and can be converted
+// from string by using
+type Type int
+
+const (
+	TypeNone Type = iota
+	TypeRelu
+	TypeSigmoid
+	TypeLeakyRelu
+	TypeSelu
+
+	TypeSwish
+
+	// TypeSilu is an alias to TypeSwish
+	TypeSilu
+
+	TypeTanh
+)
+
+//go:generate enumer -type=Type -trimprefix=Type -transform=snake -values -text -json -yaml activations.go
+
+// ApplyFromContext picks an activation function from the context using [ParamActivation] parameter,
+// and applies it to x.
+//
+// It defaults to "relu".
+func ApplyFromContext(ctx *context.Context, x *Node) *Node {
+	activationName := context.GetParamOr(ctx, ParamActivation, "relu")
+	return Apply(FromName(activationName), x)
 }
 
-// Activation allows a configurable activation.
-// Currently supported activations are "relu", "sigmoid", "leaky_relu", "swish" (== "silu"), "tanh".
-func Activation(activation string, x *Node) *Node {
+// Apply the given activation type.
+// The TypeNone activation is a no-op.
+//
+// See TypeValues for valid values.
+func Apply(activation Type, x *Node) *Node {
 	switch activation {
-	case "none":
+	case TypeNone:
 		return x
-	case "relu":
+	case TypeRelu:
 		return Relu(x)
-	case "leaky_relu":
+	case TypeLeakyRelu:
 		return LeakyRelu(x)
-	case "sigmoid":
+	case TypeSigmoid:
 		return Sigmoid(x)
-	case "tanh":
+	case TypeTanh:
 		return Tanh(x)
-	case "swish":
+	case TypeSwish, TypeSilu:
 		return Swish(x)
-	case "silu":
-		return Swish(x)
-	case "selu":
+	case TypeSelu:
 		return Selu(x)
 	default:
-		Panicf("invalid activation type %q, valid types are: \"relu\", \"sigmoid\", \"leaky_relu\", \"selu\", \"silu\", \"swish\", \"tanh\"", activation)
+		Panicf("Apply got invalid activation value %q: options are %v", activation, TypeValues())
 	}
 	return nil
+}
+
+// FromName converts the name of an activation to its type.
+// It panics with a helpful message if name is invalid.
+//
+// And empty string is converted to TypeNone.
+func FromName(activationName string) Type {
+	if activationName == "" {
+		return TypeNone
+	}
+	activation, err := TypeString(activationName)
+	if err != nil {
+		Panicf("invalid activation name %q: options are %v", activationName, TypeValues())
+	}
+	return activation
 }
 
 // Relu activation function. It returns Max(x, 0), and is commonly used as an activation function in neural networks.
@@ -77,7 +123,7 @@ func LeakyReluWithAlpha(x *Node, alpha float64) *Node {
 // "Sigmoid-Weighted Linear Units for Neural Network Function Approximation in
 // Reinforcement Learning"
 // [Elfwing et al. 2017](https://arxiv.org/abs/1702.03118) and was independently
-// discovered (and called swish) in "Searching for Activation Functions"
+// discovered (and called swish) in "Searching for Apply Functions"
 // [Ramachandran et al. 2017](https://arxiv.org/abs/1710.05941)
 //
 // Here the beta parameter is fixed at 1.0.

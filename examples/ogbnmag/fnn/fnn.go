@@ -12,6 +12,7 @@ import (
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	mldata "github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/ml/layers/kan"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/commandline"
@@ -60,7 +61,7 @@ func FnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 		for layerNum := range numLayers {
 			layerName := fmt.Sprintf("layer-%d", layerNum)
 			logits = layers.DenseWithBias(ctx.In(layerName), logits, numNodes)
-			logits = layers.LeakyRelu(logits)
+			logits = activations.LeakyRelu(logits)
 			dropoutRate := context.GetParamOr(ctx, "dropout_rate", 0.0)
 			if dropoutRate > 0 {
 				dropoutRateNode := Scalar(g, dtypes.Float32, dropoutRate)
