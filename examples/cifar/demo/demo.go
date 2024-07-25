@@ -20,52 +20,43 @@ package main
 import (
 	"flag"
 	"fmt"
+	. "github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/examples/cifar"
 	"github.com/gomlx/gomlx/examples/notebook/gonb/margaid"
+	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activations"
+	"github.com/gomlx/gomlx/ml/layers/fnn"
+	"github.com/gomlx/gomlx/ml/layers/kan"
+	"github.com/gomlx/gomlx/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/commandline"
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/janpfeifer/must"
+	"k8s.io/klog/v2"
 	"log"
 	"os"
 	"time"
-)
 
-func AssertNoError(err error) {
-	if err != nil {
-		panic(err)
-	}
-}
+	_ "github.com/gomlx/gomlx/backends/xla"
+)
 
 var (
 	flagDataDir = flag.String("data", "~/work/cifar", "Directory to cache downloaded and generated dataset files.")
 
-	// ML Backend creation:
-	flagNumThreads  = flag.Int("num_threads", -1, "Number of threads. Leave as -1 to use as many as there are cores.")
-	flagNumReplicas = flag.Int("num_replicas", 1, "Number of replicas.")
-	flagPlatform    = flag.String("platform", "", "PluginDescription to use, if empty uses the default one.")
-
 	// Training hyperparameters:
-	flagModel        = flag.String("model", "fnn", "Model type: fnn or cnn.")
-	flagOptimizer    = flag.String("optimizer", "adamw", fmt.Sprintf("Optimizer, options: %v", xslices.Keys(optimizers.KnownOptimizers)))
-	flagNumSteps     = flag.Int("steps", 2000, "Number of gradient descent steps to perform")
-	flagBatchSize    = flag.Int("batch", 50, "Batch size for training")
-	flagLearningRate = flag.Float64("learning_rate", 0.0001, "Initial learning rate.")
-	flagEval         = flag.Bool("eval", true, "Whether to evaluate the model on the validation data in the end.")
-
-	// Model hyperparameters:
-	flagNumHiddenLayers  = flag.Int("hidden_layers", 8, "Number of hidden layers, stacked with residual connection.")
-	flagNumNodes         = flag.Int("num_nodes", 128, "Number of nodes in hidden layers.")
-	flagDropoutRate      = flag.Float64("dropout", 0, "Dropout rate")
-	flagL2Regularization = flag.Float64("l2_reg", 0, "L2 regularization on kernels. It doesn't interact well with --batch_norm.")
-	flagNormalization    = flag.String("norm", "layer", "Type of normalization to use. Valid values are \"none\", \"batch\", \"layer\".")
+	validModels = []string{"fnn", "kan", "cnn"}
+	flagModel   = flag.String("model", validModels[0], fmt.Sprintf("Valid model types: %v", validModels))
+	flagEval    = flag.Bool("eval", true, "Whether to evaluate the model on the validation data in the end.")
 
 	// UI
 	flagPlots = flag.Bool("plots", true, "Plots during training: perform periodic evaluations, "+
@@ -73,8 +64,47 @@ var (
 
 	// Checkpointing.
 	flagCheckpoint     = flag.String("checkpoint", "", "Directory save and load checkpoints from. If left empty, no checkpoints are created.")
-	flagCheckpointKeep = flag.Int("checkpoint_keep", 10, "Number of checkpoints to keep, if --checkpoint is set.")
+	flagCheckpointKeep = flag.Int("checkpoint_keep", 3, "Number of checkpoints to keep, if --checkpoint is set.")
 )
+
+// createDefaultContext sets the context with default hyperparameters
+func createDefaultContext() *context.Context {
+	ctx := context.NewContext()
+	ctx.RngStateReset()
+	ctx.SetParams(map[string]any{
+		"checkpoint":      "",
+		"num_checkpoints": 3,
+		"train_steps":     2000,
+		"batch_size":      50,
+		"plots":           true,
+
+		optimizers.ParamOptimizer:           "adamw",
+		optimizers.ParamLearningRate:        1e-4,
+		optimizers.ParamAdamEpsilon:         1e-7,
+		optimizers.ParamAdamDType:           "",
+		optimizers.ParamCosineScheduleSteps: 0,
+		activations.ParamActivation:         "sigmoid",
+		layers.ParamDropoutRate:             0.0,
+		regularizers.ParamL2:                1e-5,
+		regularizers.ParamL1:                1e-5,
+
+		// FNN network parameters:
+		fnn.ParamNumHiddenLayers: 8,
+		fnn.ParamNumHiddenNodes:  128,
+		fnn.ParamResidual:        true,
+		fnn.ParamNormalization:   "layer",
+
+		// KAN network parameters:
+		"kan":                       false, // Enable kan
+		kan.ParamNumControlPoints:   20,    // Number of control points
+		kan.ParamNumHiddenNodes:     4,
+		kan.ParamNumHiddenLayers:    1,
+		kan.ParamBSplineDegree:      2,
+		kan.ParamBSplineMagnitudeL1: 1e-5,
+		kan.ParamBSplineMagnitudeL2: 0.0,
+	})
+	return ctx
+}
 
 // DType used in the mode.
 var DType = dtypes.Float32
@@ -83,35 +113,42 @@ var DType = dtypes.Float32
 const EvalBatchSize = 2000
 
 func main() {
+	// Flags with context settings.
+	ctx := createDefaultContext()
+	settings := commandline.CreateContextSettingsFlag(ctx, "")
+	klog.InitFlags(nil)
 	flag.Parse()
+
 	*flagDataDir = data.ReplaceTildeInDir(*flagDataDir)
 	if !data.FileExists(*flagDataDir) {
-		AssertNoError(os.MkdirAll(*flagDataDir, 0777))
+		must.M(os.MkdirAll(*flagDataDir, 0777))
 	}
-	AssertNoError(cifar.DownloadCifar10(*flagDataDir))
-	AssertNoError(cifar.DownloadCifar100(*flagDataDir))
+	must.M(commandline.ParseContextSettings(ctx, *settings))
 
 	// Training:
 	if *flagModel != "fnn" && *flagModel != "cnn" {
 		log.Fatalf("Flag --model can only take values fnn or cnn, %q given.", *flagModel)
 	}
-	trainModel()
+	trainModel(ctx)
 }
 
-func trainModel() {
+func trainModel(ctx *context.Context) {
+	must.M(cifar.DownloadCifar10(*flagDataDir))
+	must.M(cifar.DownloadCifar100(*flagDataDir))
+
 	// Backend handles creation of ML computation graphs, accelerator resources, etc.
-	manager := BuildManager().NumThreads(*flagNumThreads).NumReplicas(*flagNumReplicas).Platform(*flagPlatform).Done()
-	fmt.Printf("PluginDescription: %s\n", manager.Platform())
+	backend := backends.New()
+	fmt.Printf("Backend %q:\t%s\n", backend.Name(), backend.Description())
 
 	// Create datasets used for training and evaluation.
-	trainDS, evalOnTrainDS, evalOnTestDS := CreateDatasets(manager, *flagDataDir)
+	trainDS, evalOnTrainDS, evalOnTestDS := CreateDatasets(backend, *flagDataDir)
 
 	// Create closure for model graph building function, that uses statically the dataset
 	// used for its Dataset.GatherImage, to convert image indices to the actual images.
 	// This is the signature of model function that the train.Trainer accepts.
-	modelFn := FNNModelGraph
+	modelFn := PlainModelGraph
 	if *flagModel == "cnn" {
-		modelFn = CNNModelGraph
+		modelFn = ConvolutionModelGraph
 	}
 
 	// Metrics we are interested.
@@ -119,31 +156,28 @@ func trainModel() {
 	movingAccuracyMetric := metrics.NewMovingAverageSparseCategoricalAccuracy("Moving Average Accuracy", "~acc", 0.01)
 
 	// Context holds the variables and hyperparameters for the model.
-	ctx := context.NewContext()
-	ctx.SetParam(optimizers.ParamLearningRate, *flagLearningRate)
-	ctx.SetParam(layers.ParamL2Regularization, *flagL2Regularization)
+	ctx := createDefaultContext()
 
 	// Checkpoints saving.
 	var checkpoint *checkpoints.Handler
+	var globalStep int
 	if *flagCheckpoint != "" {
-		var err error
-		checkpoint, err = checkpoints.Build(ctx).
-			DirFromBase(*flagCheckpoint, *flagDataDir).Keep(*flagCheckpointKeep).Done()
-		if err != nil {
-			panic(err)
-		}
+		checkpointPath := data.ReplaceTildeInDir(*flagCheckpoint)
+		checkpoint = must.M1(checkpoints.Build(ctx).
+			DirFromBase(checkpointPath, *flagDataDir).Keep(*flagCheckpointKeep).Done())
 		fmt.Printf("Checkpointing model to %q\n", checkpoint.Dir())
-		globalStep := optimizers.GetGlobalStepVar(ctx).Value().Value().(int)
+		globalStep = int(optimizers.GetGlobalStep(ctx))
 		if globalStep != 0 {
 			fmt.Printf("Restarting training from global_step=%d\n", globalStep)
+			ctx = ctx.Reuse()
 		}
 	}
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
-	trainer := train.NewTrainer(manager, ctx, modelFn,
+	trainer := train.NewTrainer(backend, ctx, modelFn,
 		losses.SparseCategoricalCrossEntropyLogits,
-		optimizers.MustOptimizerByName(ctx, *flagOptimizer),
+		optimizers.FromContext(ctx),
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
 		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
 
@@ -169,7 +203,7 @@ func trainModel() {
 
 	// Loop for given number of steps.
 	_, err := loop.RunSteps(trainDS, *flagNumSteps)
-	AssertNoError(err)
+	must.M(err)
 	fmt.Printf("\t[Step %d] median train step: %d microseconds\n",
 		loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
 
@@ -177,7 +211,7 @@ func trainModel() {
 	if *flagEval {
 		fmt.Println()
 		err = commandline.ReportEval(trainer, evalOnTestDS, evalOnTrainDS)
-		AssertNoError(err)
+		must.M(err)
 	}
 
 	// Release memory -- not really needed since we are exiting, just for the example.
@@ -221,7 +255,7 @@ func normalizeFeatures(ctx *context.Context, x *Node) *Node {
 	return nil
 }
 
-// FNNModelGraph implements train.ModelFn, and returns the logit Node, given the input image.
+// PlainModelGraph implements train.ModelFn, and returns the logit Node, given the input image.
 // It's a basic FNN (Feedforward Neural Network), so no convolutions. It is meant only as an example.
 //
 // If dataset is not nil, assumes batchImage contain instead indices, and that the images need to be
@@ -229,7 +263,7 @@ func normalizeFeatures(ctx *context.Context, x *Node) *Node {
 //
 // Notice this cannot be used as a ModelFn for train.Trainer because of the dataset static parameter: one need
 // to create a small closure for that, see above for an example.
-func FNNModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
+func PlainModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	g := inputs[0].Graph()
 	batchedImages := inputs[0]
 	batchSize := batchedImages.Shape().Dimensions[0]
@@ -255,7 +289,7 @@ func FNNModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	return []*Node{logits}
 }
 
-// CNNModelGraph implements train.ModelFn and returns the logit Node, given the input image.
+// ConvolutionModelGraph implements train.ModelFn and returns the logit Node, given the input image.
 // It's a straight forward CNN (Convolution Neural Network) model.
 //
 // If dataset is not nil, assumes batchImage contain instead indices, and that the images need to be
@@ -265,7 +299,7 @@ func FNNModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 //
 // Notice this cannot be used as a ModelFn for train.Trainer because of the dataset static parameter: one need
 // to create a small closure for that, see above for an example.
-func CNNModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
+func ConvolutionModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	g := inputs[0].Graph()
 	batchedImages := inputs[0]
 	batchSize := batchedImages.Shape().Dimensions[0]
