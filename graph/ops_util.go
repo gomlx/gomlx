@@ -19,6 +19,7 @@ package graph
 import (
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 )
 
@@ -558,6 +559,55 @@ func genericShiftImpl(x *Node, axis int, shiftDir ShiftDirection, n int, fill fl
 		x = Concatenate([]*Node{xSlice, xFill}, shiftAxis)
 	} else {
 		x = Concatenate([]*Node{xFill, xSlice}, shiftAxis)
+	}
+	return x
+}
+
+// GrowLeft will grow the dimension of the given axis by concatenating n elements to the left (start).
+// Those elements are filled with value (converted to the corresponding dtype).
+func GrowLeft(x *Node, axis int, n int, fillValue float64) *Node {
+	return growImpl(x, axis, ShiftDirRight, n, fillValue)
+}
+
+// GrowRight will grow the dimension of the given axis by concatenating n elements to the left (start).
+// Those elements are filled with fillValue (converted to the corresponding dtype).
+func GrowRight(x *Node, axis int, n int, fillValue float64) *Node {
+	return growImpl(x, axis, ShiftDirLeft, n, fillValue)
+}
+
+func growImpl(x *Node, axis int, dir ShiftDirection, n int, fillValue float64) *Node {
+	g := x.Graph()
+	rank := x.Rank()
+	dtype := x.DType()
+	growAxis := AdjustAxisToRank(x, axis)
+	dims := x.Shape().Dimensions
+
+	// Create slice to be concatenated for our desired growth: the slice is the same, independent of the direction.
+	fillDims := make([]int, rank)
+	for fillAxis := range rank {
+		if fillAxis == growAxis {
+			fillDims[fillAxis] = n
+		} else {
+			fillDims[fillAxis] = dims[fillAxis]
+		}
+	}
+
+	// Fill slice with given value.
+	var fill *Node
+	if fillValue == 0 {
+		fill = Zeros(g, shapes.Make(dtype, fillDims...))
+	} else if fillValue == 1 {
+		fill = Ones(g, shapes.Make(dtype, fillDims...))
+	} else {
+		fill = Scalar(g, dtype, fillValue)
+		expandDims := xslices.Iota(int(0), rank)
+		fill = ExpandAndBroadcast(fill, fillDims, expandDims)
+	}
+
+	if dir == ShiftDirLeft {
+		x = Concatenate([]*Node{x, fill}, growAxis)
+	} else {
+		x = Concatenate([]*Node{fill, x}, growAxis)
 	}
 	return x
 }

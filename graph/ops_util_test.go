@@ -311,3 +311,28 @@ func TestOneHot(t *testing.T) {
 			{{{0, 0, 1, 0}, {0, 0, 0, 1}}, {{0, 0, 0, 1}, {0, 1, 0, 0}}, {{1, 0, 0, 0}, {0, 0, 1, 0}}},
 		})
 }
+
+func TestGrow(t *testing.T) {
+	testFuncOneInput(t, "GrowLeft",
+		func(g *Graph) (input, output *Node) {
+			input = IotaFull(g, shapes.Make(dtypes.Int32, 3, 2))
+			output = GrowLeft(input, 0, 2, 111)
+			return
+		}, [][]int32{
+			{111, 111},
+			{111, 111},
+			{0, 1},
+			{2, 3},
+			{4, 5},
+		})
+	testFuncOneInput(t, "GrowRight",
+		func(g *Graph) (input, output *Node) {
+			input = IotaFull(g, shapes.Make(dtypes.Float32, 3, 2))
+			output = GrowRight(input, 1, 1, 111)
+			return
+		}, [][]float32{
+			{0, 1, 111},
+			{2, 3, 111},
+			{4, 5, 111},
+		})
+}
