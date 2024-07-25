@@ -82,13 +82,13 @@ func createDefaultContext() *context.Context {
 		fnn.ParamNormalization:   "layer",
 
 		// KAN network parameters:
-		"kan":                            false, // Enable kan
-		kan.ParamBSplineNumControlPoints: 20,    // Number of control points
-		kan.ParamNumHiddenNodes:          4,
-		kan.ParamNumHiddenLayers:         1,
-		kan.ParamBSplineDegree:           2,
-		kan.ParamBSplineMagnitudeL1:      1e-5,
-		kan.ParamBSplineMagnitudeL2:      0.0,
+		"kan":                       false, // Enable kan
+		kan.ParamNumControlPoints:   20,    // Number of control points
+		kan.ParamNumHiddenNodes:     4,
+		kan.ParamNumHiddenLayers:    1,
+		kan.ParamBSplineDegree:      2,
+		kan.ParamBSplineMagnitudeL1: 1e-5,
+		kan.ParamBSplineMagnitudeL2: 0.0,
 	})
 	return ctx
 }
