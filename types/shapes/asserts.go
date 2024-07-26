@@ -43,7 +43,7 @@ func (s Shape) CheckDims(dimensions ...int) error {
 	}
 	for ii, wantDim := range dimensions {
 		if wantDim != -1 && s.Dimensions[ii] != wantDim {
-			return errors.Errorf("shape (%s) axis %d has dimension %d, wanted %d", s, ii, s.Dimensions[ii], wantDim)
+			return errors.Errorf("shape (%s) axis %d has dimension %d, wanted %d (shape wanted=%v)", s, ii, s.Dimensions[ii], wantDim, dimensions)
 		}
 	}
 	return nil
