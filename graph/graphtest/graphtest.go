@@ -65,7 +65,17 @@ func RunTestGraphFn(t *testing.T, testName string, graphFn TestGraphFn, want []a
 	var inputsAndOutputs []*tensors.Tensor
 	require.NotPanicsf(t, func() { inputsAndOutputs = exec.Call() }, "%s: failed to execute graph", testName)
 	inputs := inputsAndOutputs[:numInputs]
+	for ii, input := range inputs {
+		if input == nil {
+			t.Fatalf("%q: inputs[%d] is nil!?", testName, ii)
+		}
+	}
 	outputs := inputsAndOutputs[numInputs:]
+	for ii, input := range inputs {
+		if input == nil {
+			t.Fatalf("%q: outputs[%d] is nil!?", testName, ii)
+		}
+	}
 
 	fmt.Printf("\n%s:\n", testName)
 	for ii, input := range inputs {
