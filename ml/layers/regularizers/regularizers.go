@@ -10,6 +10,7 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/train"
+	"slices"
 )
 
 const (
@@ -103,6 +104,8 @@ func L1(amount float64) Regularizer {
 // If regs has only one element, it is returned.
 // If any of the regs is nil, it is skipped.
 func Combine(regs ...Regularizer) Regularizer {
+	// Filter out nil regularizers.
+	regs = slices.DeleteFunc(regs, func(r Regularizer) bool { return r == nil })
 	if len(regs) == 0 {
 		return nil
 	}

@@ -33,10 +33,13 @@ const (
 	// Default is 10.
 	ParamNumHiddenNodes = "kan_num_hidden_nodes"
 
-	// ParamBSplineNumControlPoints is the hyperparameter that defines the default number of control points
+	// ParamNumControlPoints is the hyperparameter that defines the default number of control points
 	// for the bsplines used in the univariate KAN functions.
+	//
+	// If used Discrete-KAN it also defines the number of control points.
+	//
 	// Default is 20.
-	ParamBSplineNumControlPoints = "kan_bspline_num_points"
+	ParamNumControlPoints = "kan_num_points"
 
 	// ParamBSplineDegree is the hyperparameter that defines the default value for the bspline degree used in
 	// the univariate KAN functions.
@@ -67,9 +70,13 @@ type Config struct {
 	bsplineNumControlPoints, bsplineDegree int
 	bsplineMagnitudeTerms, bsplineResidual bool
 	bsplineMagnitudeRegularizer            regularizers.Regularizer
+
+	useDiscrete           bool
+	discreteControlPoints int
+	discreteSoftness      float64
 }
 
-// New returns the configuration for a KAN layer(s) to be applied to the input x.
+// New returns the configuration for a KAN bsplineLayer(s) to be applied to the input x.
 // See methods for optional configurations.
 // When finished configuring call Done, and it will return "KAN(x)".
 //
@@ -88,10 +95,14 @@ func New(ctx *context.Context, input *Node, numOutputNodes int) *Config {
 		activation:      activations.FromName(context.GetParamOr(ctx, activations.ParamActivation, "silu")),
 		regularizer:     regularizers.FromContext(ctx),
 
-		bsplineNumControlPoints: context.GetParamOr(ctx, ParamBSplineNumControlPoints, 20),
+		bsplineNumControlPoints: context.GetParamOr(ctx, ParamNumControlPoints, 20),
 		bsplineDegree:           context.GetParamOr(ctx, ParamBSplineDegree, 2),
 		bsplineResidual:         true,
 		bsplineMagnitudeTerms:   true,
+
+		useDiscrete:           context.GetParamOr(ctx, ParamDiscrete, false),
+		discreteControlPoints: context.GetParamOr(ctx, ParamNumControlPoints, 20),
+		discreteSoftness:      context.GetParamOr(ctx, ParamDiscreteSoftness, 0.1),
 	}
 
 	var magRegs []regularizers.Regularizer
@@ -108,12 +119,11 @@ func New(ctx *context.Context, input *Node, numOutputNodes int) *Config {
 	if input.Rank() < 2 {
 		exceptions.Panicf("kan: input must be rank at least 2, got input.shape=%s", input.Shape())
 	}
-
 	return c
 }
 
 // NumHiddenLayers configure the number of hidden layers between the input and the output.
-// Each layer will have numHiddenNodes nodes.
+// Each bsplineLayer will have numHiddenNodes nodes.
 //
 // The default is 0 (no hidden layers), but it will be overridden if the hyperparameter
 // ParamNumHiddenLayers is set in the context (ctx).
@@ -150,12 +160,14 @@ func (c *Config) Regularizer(regularizer regularizers.Regularizer) *Config {
 	return c
 }
 
-// BSpline configures the KAN to use b-splines to model \phi(x) (the function used in the paper), and set the number
-// of control points to use to model the function.
+// BSpline configures the KAN to use b-splines to model \phi(x), the univariate function described in the KAN the paper.
+// It also sets the number of control points to use to model the function.
 //
 // The numControlPoints must be greater or equal to 3, and it defaults to 20 and can also be set by using the
-// hyperparameter ParamBSplineNumControlPoints ("kan_bspline_num_points").
+// hyperparameter ParamNumControlPoints ("kan_num_points").
 func (c *Config) BSpline(numControlPoints int) *Config {
+	c.useDiscrete = false
+	c.bsplineNumControlPoints = numControlPoints
 	return c
 }
 
@@ -168,7 +180,7 @@ func (c *Config) WithBSplineMagnitudeRegularizer(regularizer regularizers.Regula
 	return c
 }
 
-// Done takes the configuration and apply the KAN layer(s) configured.
+// Done takes the configuration and apply the KAN bsplineLayer(s) configured.
 func (c *Config) Done() *Node {
 	ctx := c.ctx
 
@@ -182,11 +194,19 @@ func (c *Config) Done() *Node {
 	// Apply hidden layers.
 	for ii := range c.numHiddenLayers {
 		layerCtx := ctx.In(fmt.Sprintf("kan_hidden_%d", ii))
-		x = c.layer(layerCtx, x, c.numHiddenNodes)
+		if c.useDiscrete {
+			x = c.discreteLayer(layerCtx, x, c.numHiddenNodes)
+		} else {
+			x = c.bsplineLayer(layerCtx, x, c.numHiddenNodes)
+		}
 	}
 
-	// Apply last layer.
-	x = c.layer(ctx.In("kan_output_layer"), x, c.numOutputNodes)
+	// Apply last bsplineLayer.
+	if c.useDiscrete {
+		x = c.discreteLayer(ctx.In("kan_output_layer"), x, c.numOutputNodes)
+	} else {
+		x = c.bsplineLayer(ctx.In("kan_output_layer"), x, c.numOutputNodes)
+	}
 
 	// Reshape back the batch axes.
 	// x here is shaped [batchSize, numOutputNodes]
@@ -198,8 +218,8 @@ func (c *Config) Done() *Node {
 	return x
 }
 
-// layer implements one KAN layer. x is expected to be rank-2.
-func (c *Config) layer(ctx *context.Context, x *Node, numOutputNodes int) *Node {
+// bsplineLayer implements one KAN bsplineLayer. x is expected to be rank-2.
+func (c *Config) bsplineLayer(ctx *context.Context, x *Node, numOutputNodes int) *Node {
 	g := x.Graph()
 	dtype := x.DType()
 	residual := x
@@ -207,7 +227,7 @@ func (c *Config) layer(ctx *context.Context, x *Node, numOutputNodes int) *Node 
 	batchSize := x.Shape().Dimensions[0]
 
 	if klog.V(2).Enabled() {
-		klog.Infof("kan layer (%s): (%d+2) x %d x %d = %d weights\n",
+		klog.Infof("kan bsplineLayer (%s): (%d+2) x %d x %d = %d weights\n",
 			ctx.Scope(), c.bsplineNumControlPoints, numInputNodes, numOutputNodes,
 			(c.bsplineNumControlPoints+2)*numInputNodes*numOutputNodes)
 	}

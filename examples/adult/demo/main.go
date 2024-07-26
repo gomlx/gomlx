@@ -89,6 +89,8 @@ func createDefaultContext() *context.Context {
 		kan.ParamBSplineDegree:      2,
 		kan.ParamBSplineMagnitudeL1: 1e-5,
 		kan.ParamBSplineMagnitudeL2: 0.0,
+		kan.ParamDiscrete:           false,
+		kan.ParamDiscreteSoftness:   0.1,
 	})
 	return ctx
 }
