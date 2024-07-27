@@ -38,13 +38,13 @@ import (
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
-	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
 	"log"
 	"os"
+	"slices"
 	"time"
 
 	_ "github.com/gomlx/gomlx/backends/xla"
@@ -95,13 +95,17 @@ func createDefaultContext() *context.Context {
 		fnn.ParamNormalization:   "layer",
 
 		// KAN network parameters:
-		"kan":                       false, // Enable kan
-		kan.ParamNumControlPoints:   20,    // Number of control points
-		kan.ParamNumHiddenNodes:     4,
-		kan.ParamNumHiddenLayers:    1,
+		kan.ParamNumControlPoints:   20, // Number of control points
+		kan.ParamNumHiddenNodes:     32,
+		kan.ParamNumHiddenLayers:    4,
 		kan.ParamBSplineDegree:      2,
 		kan.ParamBSplineMagnitudeL1: 1e-5,
 		kan.ParamBSplineMagnitudeL2: 0.0,
+		kan.ParamDiscrete:           false,
+		kan.ParamDiscreteSoftness:   0.1,
+
+		// CNN
+		layers.ParamNormalizationType: "layer",
 	})
 	return ctx
 }
@@ -124,10 +128,11 @@ func main() {
 		must.M(os.MkdirAll(*flagDataDir, 0777))
 	}
 	must.M(commandline.ParseContextSettings(ctx, *settings))
+	fmt.Println(commandline.SprintContextSettings(ctx))
 
 	// Training:
-	if *flagModel != "fnn" && *flagModel != "cnn" {
-		log.Fatalf("Flag --model can only take values fnn or cnn, %q given.", *flagModel)
+	if slices.Index(validModels, *flagModel) == -1 {
+		log.Fatalf("Flag --model must take one value from %v, got %q", validModels, *flagModel)
 	}
 	trainModel(ctx)
 }
@@ -141,7 +146,11 @@ func trainModel(ctx *context.Context) {
 	fmt.Printf("Backend %q:\t%s\n", backend.Name(), backend.Description())
 
 	// Create datasets used for training and evaluation.
-	trainDS, evalOnTrainDS, evalOnTestDS := CreateDatasets(backend, *flagDataDir)
+	batchSize := context.GetParamOr(ctx, "batch_size", int(0))
+	if batchSize <= 0 {
+		Panicf("Batch size must be > 0 (maybe it was not set?): %d", batchSize)
+	}
+	trainDS, evalOnTrainDS, evalOnTestDS := CreateDatasets(backend, *flagDataDir, batchSize)
 
 	// Create closure for model graph building function, that uses statically the dataset
 	// used for its Dataset.GatherImage, to convert image indices to the actual images.
@@ -150,13 +159,11 @@ func trainModel(ctx *context.Context) {
 	if *flagModel == "cnn" {
 		modelFn = ConvolutionModelGraph
 	}
+	fmt.Printf("Model: %s\n", *flagModel)
 
 	// Metrics we are interested.
 	meanAccuracyMetric := metrics.NewSparseCategoricalAccuracy("Mean Accuracy", "#acc")
 	movingAccuracyMetric := metrics.NewMovingAverageSparseCategoricalAccuracy("Moving Average Accuracy", "~acc", 0.01)
-
-	// Context holds the variables and hyperparameters for the model.
-	ctx := createDefaultContext()
 
 	// Checkpoints saving.
 	var checkpoint *checkpoints.Handler
@@ -202,26 +209,32 @@ func trainModel(ctx *context.Context) {
 	}
 
 	// Loop for given number of steps.
-	_, err := loop.RunSteps(trainDS, *flagNumSteps)
-	must.M(err)
+	numTrainSteps := context.GetParamOr(ctx, "train_steps", 0)
+	if globalStep < numTrainSteps {
+		_ = must.M1(loop.RunSteps(trainDS, numTrainSteps-globalStep))
+		fmt.Printf("\t[Step %d] median train step: %d microseconds\n", loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
+		fmt.Println()
+	} else {
+		fmt.Printf("\t - target train_steps=%d already reached. To train further, set a number additional "+
+			"to current global step.\n", numTrainSteps)
+	}
 	fmt.Printf("\t[Step %d] median train step: %d microseconds\n",
 		loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
 
 	// Finally, print an evaluation on train and test datasets.
 	if *flagEval {
 		fmt.Println()
-		err = commandline.ReportEval(trainer, evalOnTestDS, evalOnTrainDS)
-		must.M(err)
+		must.M(commandline.ReportEval(trainer, evalOnTestDS, evalOnTrainDS))
 	}
 
 	// Release memory -- not really needed since we are exiting, just for the example.
 	cifar.ResetCache()
 }
 
-func CreateDatasets(manager backends.Backend, dataDir string) (trainDS, trainEvalDS, validationEvalDS train.Dataset) {
-	baseTrain := cifar.NewDataset(manager, "Training", dataDir, cifar.C10, DType, cifar.Train)
-	baseTest := cifar.NewDataset(manager, "Validation", dataDir, cifar.C10, DType, cifar.Test)
-	trainDS = baseTrain.Copy().BatchSize(*flagBatchSize, true).Shuffle().Infinite(true)
+func CreateDatasets(backend backends.Backend, dataDir string, batchSize int) (trainDS, trainEvalDS, validationEvalDS train.Dataset) {
+	baseTrain := cifar.NewDataset(backend, "Training", dataDir, cifar.C10, DType, cifar.Train)
+	baseTest := cifar.NewDataset(backend, "Validation", dataDir, cifar.C10, DType, cifar.Test)
+	trainDS = baseTrain.Copy().BatchSize(batchSize, true).Shuffle().Infinite(true)
 	trainEvalDS = baseTrain.BatchSize(EvalBatchSize, false)
 	validationEvalDS = baseTest.BatchSize(EvalBatchSize, false)
 	return
@@ -229,29 +242,16 @@ func CreateDatasets(manager backends.Backend, dataDir string) (trainDS, trainEva
 
 func normalizeImage(ctx *context.Context, x *Node) *Node {
 	x.AssertRank(4) // [batch_size, width, height, depth]
-	switch *flagNormalization {
+	normalizationType := context.GetParamOr(ctx, layers.ParamNormalizationType, "none")
+	switch normalizationType {
 	case "layer":
 		return layers.LayerNormalization(ctx, x, 1, 2).ScaleNormalization(false).Done()
 	case "batch":
 		return layers.BatchNormalization(ctx, x, -1).Done()
-	case "none":
+	case "none", "":
 		return x
 	}
-	Panicf("invalid normalization selected %q -- valid values are batch, layer, none", *flagNormalization)
-	return nil
-}
-
-func normalizeFeatures(ctx *context.Context, x *Node) *Node {
-	x.AssertRank(2) // [batch_size, embedding_dim]
-	switch *flagNormalization {
-	case "layer":
-		return layers.LayerNormalization(ctx, x, -1).Done()
-	case "batch":
-		return layers.BatchNormalization(ctx, x, -1).Done()
-	case "none":
-		return x
-	}
-	Panicf("invalid normalization selected %q -- valid values are batch, layer, none", *flagNormalization)
+	Panicf("invalid normalization type selected %q (hyperparameter %q) -- valid values are batch, layer, none", normalizationType, layers.ParamNormalizationType)
 	return nil
 }
 
@@ -264,28 +264,17 @@ func normalizeFeatures(ctx *context.Context, x *Node) *Node {
 // Notice this cannot be used as a ModelFn for train.Trainer because of the dataset static parameter: one need
 // to create a small closure for that, see above for an example.
 func PlainModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
-	g := inputs[0].Graph()
 	batchedImages := inputs[0]
 	batchSize := batchedImages.Shape().Dimensions[0]
 	logits := Reshape(batchedImages, batchSize, -1)
-	{
-		ctx := ctx.In("Dense_0")
-		logits = layers.DenseWithBias(ctx, logits, *flagNumNodes)
-		logits = normalizeFeatures(ctx, logits)
+	numClasses := len(cifar.C10Labels)
+	if *flagModel == "kan" {
+		// Configuration of the KAN layer(s) use the context hyperparameters.
+		logits = kan.New(ctx, logits, numClasses).Done()
+	} else {
+		// Configuration of the FNN layer(s) use the context hyperparameters.
+		logits = fnn.New(ctx, logits, numClasses).Done()
 	}
-	for ii := 1; ii < *flagNumHiddenLayers; ii++ {
-		ctx := ctx.In(fmt.Sprintf("Dense_%d", ii))
-		// Add layer with residual connection.
-		tmp := Sigmoid(logits)
-		if *flagDropoutRate > 0 {
-			tmp = layers.Dropout(ctx, tmp, Const(g, shapes.CastAsDType(*flagDropoutRate, tmp.DType())))
-		}
-		tmp = layers.DenseWithBias(ctx, tmp, *flagNumNodes)
-		tmp = normalizeFeatures(ctx, tmp)
-		logits = Add(logits, tmp)
-	}
-	logits = Sigmoid(logits)
-	logits = layers.DenseWithBias(ctx.In("denseFinal"), logits, len(cifar.C10Labels))
 	return []*Node{logits}
 }
 
@@ -300,7 +289,6 @@ func PlainModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 // Notice this cannot be used as a ModelFn for train.Trainer because of the dataset static parameter: one need
 // to create a small closure for that, see above for an example.
 func ConvolutionModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
-	g := inputs[0].Graph()
 	batchedImages := inputs[0]
 	batchSize := batchedImages.Shape().Dimensions[0]
 	logits := batchedImages
@@ -325,23 +313,15 @@ func ConvolutionModelGraph(ctx *context.Context, spec any, inputs []*Node) []*No
 		logits = Reshape(logits, batchSize, -1)
 		logits = activations.Relu(logits)
 	}
-	{
-		ctx := ctx.In("dense_0")
-		logits = layers.DenseWithBias(ctx, logits, *flagNumNodes)
-		logits = normalizeFeatures(ctx, logits)
+
+	// Here logits are flat, and we can use the usual FNN/KAN.
+	numClasses := len(cifar.C10Labels)
+	if *flagModel == "kan" {
+		// Configuration of the KAN layer(s) use the context hyperparameters.
+		logits = kan.New(ctx, logits, numClasses).Done()
+	} else {
+		// Configuration of the FNN layer(s) use the context hyperparameters.
+		logits = fnn.New(ctx, logits, numClasses).Done()
 	}
-	for ii := 1; ii < *flagNumHiddenLayers; ii++ {
-		ctx := ctx.In(fmt.Sprintf("dense_%d", ii))
-		// Add layer with residual connection.
-		tmp := activations.Relu(logits)
-		if *flagDropoutRate > 0 {
-			tmp = layers.Dropout(ctx, tmp, Const(g, shapes.CastAsDType(*flagDropoutRate, tmp.DType())))
-		}
-		tmp = layers.DenseWithBias(ctx, tmp, *flagNumNodes)
-		tmp = normalizeFeatures(ctx, tmp)
-		logits = Add(logits, tmp)
-	}
-	logits = activations.Relu(logits)
-	logits = layers.DenseWithBias(ctx.In("denseFinal"), logits, len(cifar.C10Labels))
 	return []*Node{logits}
 }
