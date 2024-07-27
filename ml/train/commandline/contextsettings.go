@@ -9,8 +9,7 @@ import (
 	"strings"
 )
 
-// ParseContextSettings from for example a flag definition.
-//
+// ParseContextSettings from settings -- typically the contents of a flag set by the user.
 // The settings are a list separated by ";": e.g.: "param1=value1;param2=value2;...".
 //
 // All the parameters "param1", "param2", etc. must be already set with default values
@@ -23,7 +22,19 @@ import (
 // Note, one can also provide a scope for the parameters: "layer_1/l2_regularization=0.1"
 // will work, as long as a default "l2_regularization" is defined in `ctx`.
 //
-// See example in [CreateContextSettingsFlag], which will create a flag for the settings.
+// See example in CreateContextSettingsFlag, which will create a flag for the settings.
+//
+// Example usage:
+//
+//	func main() {
+//		ctx := createDefaultContext()
+//		settings := commandline.CreateContextSettingsFlag(ctx, "")
+//		flag.Parse()
+//		err := commandline.ParseContextSettings(ctx, *settings)
+//		if err != nil { panic(err) }
+//		fmt.Println(commandline.SprintContextSettings(ctx))
+//		...
+//	}
 func ParseContextSettings(ctx *context.Context, settings string) error {
 	settingsList := strings.Split(settings, ";")
 	for _, setting := range settingsList {
@@ -91,24 +102,25 @@ func ParseContextSettings(ctx *context.Context, settings string) error {
 	return nil
 }
 
-// CreateContextSettingsFlag create a string flag with the given name (if empty it will be named
+// CreateContextSettingsFlag create a string flag with the given flagName (if empty it will be named
 // "set") and with a description of the current defined parameters in the context `ctx`.
 //
 // The flag should be created before the call to `flags.Parse()`.
 //
-// Example:
+// Example usage:
 //
 //	func main() {
 //		ctx := createDefaultContext()
-//		settings := CreateContextSettingsFlag(ctx, "")
-//		flags.Parse()
-//		err := ParseContextSettings(ctx, *settings)
-//		if err != nil {...}
+//		settings := commandline.CreateContextSettingsFlag(ctx, "")
+//		flag.Parse()
+//		err := commandline.ParseContextSettings(ctx, *settings)
+//		if err != nil { panic(err) }
+//		fmt.Println(commandline.SprintContextSettings(ctx))
 //		...
 //	}
-func CreateContextSettingsFlag(ctx *context.Context, name string) *string {
-	if name == "" {
-		name = "set"
+func CreateContextSettingsFlag(ctx *context.Context, flagName string) *string {
+	if flagName == "" {
+		flagName = "set"
 	}
 	var parts []string
 	parts = append(parts, fmt.Sprintf(
@@ -125,7 +137,7 @@ func CreateContextSettingsFlag(ctx *context.Context, name string) *string {
 	})
 	usage := strings.Join(parts, "\n")
 	var settings string
-	flag.StringVar(&settings, name, "", usage)
+	flag.StringVar(&settings, flagName, "", usage)
 	return &settings
 }
 
