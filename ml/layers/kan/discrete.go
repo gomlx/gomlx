@@ -112,8 +112,10 @@ func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int
 		output = Add(output, residual)
 	}
 
-	// ReduceSum the inputs to get the outputs.
-	output = ReduceSum(output, -1)
+	// ReduceMean the inputs to get the outputs: we use the mean (and not sum) because if the number of inputs is large
+	// with ReduceSum we would get large numbers (and gradients) that are harder for the gradient descent to learn.
+	// In particular for multiple hidden-layers: there is a geometric growth of the values per number of layers.
+	output = ReduceMean(output, -1)
 	output.AssertDims(batchSize, numOutputNodes) // Shape=[batch, outputs]
 	return output
 }
