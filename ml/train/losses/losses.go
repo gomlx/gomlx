@@ -82,6 +82,8 @@ func MeanSquaredError(labels, predictions []*Node) (loss *Node) {
 // `weightsShape` is the expected shape for weights (if present) and the dimensions for a mask (if present), although
 // a mask is assumed to be of dtype `Bool`.
 //
+// If weights and masks are present, weights are converted to zero for masked out values (where mask is false).
+//
 // If there is an extra `labels` `*Node` with the shape of `weightsShape`, it is assumed to be weights.
 // If there is an extra `labels` `*Node` with booleans with the same dimension as `weightsShape`, it is assumed to be a mask.
 func CheckLabelsForWeightsAndMask(weightsShape shapes.Shape, labels []*Node) (weights, mask *Node) {
@@ -96,6 +98,9 @@ func CheckLabelsForWeightsAndMask(weightsShape shapes.Shape, labels []*Node) (we
 			Panicf("labels ([]*Node) provided by the dataset to the loss function has extra tensors whose use is unknown: labels[%d].shape=%s "+
 				"-- label weights shape would be %s, labels mask shape would be %s", ii+1, extra.Shape(), weightsShape, maskShape)
 		}
+	}
+	if weights != nil && mask != nil {
+		weights = Where(mask, weights, ZerosLike(weights))
 	}
 	return
 }
