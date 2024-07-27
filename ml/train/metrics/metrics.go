@@ -386,9 +386,11 @@ func SparseCategoricalAccuracyGraph(_ *context.Context, labels, logits []*Node) 
 	g := logits0.Graph()
 	labels0 := labels[0]
 	labelsShape := labels0.Shape()
+	labelsDType := labels0.DType()
 	labelsRank := labelsShape.Rank()
 	logitsShape := logits0.Shape()
 	logitsRank := logitsShape.Rank()
+	logitsDType := logits0.DType()
 	if !labelsShape.DType.IsInt() {
 		Panicf("labels0 indices dtype (%s), it must be integer", labelsShape.DType)
 	}
@@ -400,28 +402,12 @@ func SparseCategoricalAccuracyGraph(_ *context.Context, labels, logits []*Node) 
 	}
 
 	// Weights and masks: checks whether either are defined.
-	weightsShape := shapes.Make(logits0.DType(), logits0.Shape().Dimensions[:logits0.Rank()-1]...)
+	weightsShape := shapes.Make(logitsDType, logits0.Shape().Dimensions[:logits0.Rank()-1]...)
 	weights, mask := losses.CheckLabelsForWeightsAndMask(weightsShape, labels)
-	// TODO: implement with argmax
+	modelChoices := ArgMax(logits0, -1, labelsDType)
+	correctExamples := ConvertDType(Equal(modelChoices, Squeeze(labels0, -1)), logitsDType) // correctExamples -> 0/1 per example.
 
-	// Convert logits0 such that only those with the maximum value become 1, the rest 0.
-	logitsMax := ReduceAndKeep(logits0, ReduceMax, -1)
-	logitsMaxIndicator := PositiveIndicator(Sub(logits0, logitsMax)) // Notice 0s become 1s.
-
-	// Now the problem is that ties will have more than one indicator, we eliminate those by subtracting
-	// the sum. Any row with a sum != 1, will become zero.
-	logitsSum := ReduceAndKeep(logitsMaxIndicator, ReduceMax, -1)
-	logitsMaxIndicator = PositiveIndicator(Sub(logitsMaxIndicator, logitsSum))
-
-	// Convert labels0 to one hot encoding.
-	// Remove last dimension, it will be re-added by OneHot
-	reducedLabels := Reshape(labels0, labels0.Shape().Dimensions[:labelsRank-1]...)
-	labelsValues := OneHot(reducedLabels, logitsShape.Dimensions[logitsRank-1], logitsShape.DType)
-
-	// correctExamples will be those where labelsValues and logitsMaxIndicator are 1.
-	// We reduce the last axis, because only one column can be correct (==1), and any column correct means the
-	// whole example is correct.
-	correctExamples := ReduceSum(Mul(logitsMaxIndicator, labelsValues), -1)
+	// Apply mask.
 	if mask != nil {
 		correctExamples = Where(mask, correctExamples, ZerosLike(correctExamples))
 	}
@@ -432,17 +418,14 @@ func SparseCategoricalAccuracyGraph(_ *context.Context, labels, logits []*Node) 
 	var totalWeight *Node
 	if weights == nil && mask == nil {
 		// Simple count of examples.
-		totalWeight = Scalar(g, correctExamples.DType(), float64(correctExamples.Shape().Size()))
+		totalWeight = Scalar(g, logitsDType, float64(correctExamples.Shape().Size()))
+	} else if weights == nil {
+		// Count of # of elements in the mask set to true.
+		totalWeight = ReduceAllSum(ConvertDType(mask, logitsDType))
 	} else {
-		if weights != nil {
-			totalWeight = weights
-		} else {
-			totalWeight = OnesLike(correctExamples)
-		}
-		if mask != nil {
-			totalWeight = Where(mask, totalWeight, ZerosLike(totalWeight))
-		}
-		totalWeight = ReduceAllSum(totalWeight)
+		// Since if mask != nil the corresponding weights will be set to zero, we just need to sum the
+		// remaining weights.
+		totalWeight = ReduceAllSum(weights)
 	}
 	return Div(ReduceAllSum(correctExamples), totalWeight)
 }
