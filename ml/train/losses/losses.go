@@ -261,20 +261,34 @@ func CategoricalCrossEntropyLogits(labels, logits []*Node) *Node {
 	return categoricalCrossEntropyLogitsImpl(labels0, logits0, weights, mask)
 }
 
-// categoricalCrossEntropyLogitsImpl implements CategoricalCrossEntropyLogits taking as input the
-// nodes only (as opposed to slices).
+// categoricalCrossEntropyLogitsImpl implements CategoricalCrossEntropyLogits.
 func categoricalCrossEntropyLogitsImpl(labels, logits, weights, mask *Node) *Node {
+	g := logits.Graph()
+	dtype := logits.DType()
 	shape := labels.Shape()
 	if !shape.Equal(logits.Shape()) {
 		Panicf("labels(%s) and logits(%s) must different shapes", shape, logits.Shape())
 	}
-	predictions := Softmax(logits)
-	return categoricalCrossEntropyImpl(labels, predictions, weights, mask)
+	var expandedMask *Node
+	if mask != nil {
+		expandedMask = BroadcastToShape(ExpandDims(mask, -1), logits.Shape())
+		logits = Where(expandedMask, logits, ScalarZero(g, dtype))
+	}
+	logPredictions := LogSoftmax(logits)
+	losses := ReduceSum(Neg(Mul(labels, logPredictions)), -1)
+	// Losses will usually be shaped `[batch_size]` now.
+	if weights != nil {
+		losses = Mul(losses, weights)
+	}
+	if mask != nil {
+		losses = Where(mask, losses, ZerosLike(losses))
+	}
+	return losses
 }
 
 // CategoricalCrossEntropy returns the cross-entropy loss of the predictions, given the labels.
 // The labels are provided in "dense" format, they should have the exact same shape as predictions, and be set 1 for
-// the true (labeled) category, and 0 for the others -- or any other distribution that sum to 1.
+// the true (labeled) category, and 0 for the others (one-hot encoding) -- or any other distribution that sums to 1.
 // predictions should hold probabilities that must sum to 1.0.
 //
 // It *does not* reduce-mean the losses, they are returned individually for each element of the batch and need
@@ -299,7 +313,7 @@ func categoricalCrossEntropyImpl(labels, predictions, weights, mask *Node) *Node
 		Panicf("labels(%s) and predictions(%s) must different shapes", shape, predictions.Shape())
 	}
 	epsilon := epsilonForDType(g, dtype)
-	predictions = Clip(predictions, epsilon, Sub(ScalarOne(g, dtype), epsilon))
+	predictions = Clip(predictions, epsilon, OneMinus(epsilon))
 	losses := ReduceSum(Neg(Mul(labels, Log(predictions))), -1)
 	// Losses will usually be shaped `[batch_size]` now, ready to apply weights multiplication and/or a mask.
 	if weights != nil {
