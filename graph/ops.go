@@ -2,7 +2,7 @@ package graph
 
 import (
 	"fmt"
-	exceptions "github.com/gomlx/exceptions"
+	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/shapes"
@@ -119,7 +119,7 @@ func splitNode(multiOutputNode *Node) (splitNodes []*Node) {
 // for printing/debugging purposes
 //
 // If set to 0, no value is kept.
-var MinConstValueSizeToKeep = int(32)
+var MinConstValueSizeToKeep = 32
 
 // nodeInputsConstant holds the inputs used for the call to backends.Parameter.
 type nodeInputsConstant struct {
@@ -384,40 +384,44 @@ func ExpandAndBroadcast(x *Node, newDimensions []int, expandedAxes []int) (outpu
 	return backendBroadcastInDim(x, shapes.Make(x.DType(), newDimensions...), preservedAxes)
 }
 
-// BroadcastToShape broadcasts x to the given shape. They must both have the
-// same rank, and the dimensions in x being broadcast (that is, where its corresponding
-// dimension is different) must be of size 1.
+// BroadcastToShape broadcasts x to the given shape.
+// x must have an equal or lower rank than shape, and if shape has higher rank, x will be expanded at the end (so new axes will be appended to x).
+// Dimensions of x must either match the corresponding dimension in shape, or they must be 1, in which case they are broadcast.
 //
-// One exception is if x is a scalar, in which case it can be broadcast to any shape.
+// It works as expected if x is a scalar.
 //
 // Notice that the dtype of shape is ignored, the returned value preserves the dtype of x.
+//
+// This is equivalent to BroadcastToDims(x, shape.Dimensions...).
 func BroadcastToShape(x *Node, shape shapes.Shape) *Node {
 	_ = validateBuildingGraphFromInputs(x)
+	return BroadcastToDims(x, shape.Dimensions...)
+}
+
+// BroadcastToDims broadcasts x to the given dimensions.
+// x must have an equal or lower rank than the given dimensions, and if there are more dimensions than x rank,
+// x will be expanded at the end (so new axes will be appended to x).
+// Dimensions of x must either match the corresponding value in dimensions, or they must be 1, in which case they
+// are broadcast.
+//
+// It works as expected if x is a scalar.
+//
+// See also the equivalent BroadcastToShape.
+func BroadcastToDims(x *Node, dimensions ...int) *Node {
+	_ = validateBuildingGraphFromInputs(x)
+	shape := shapes.Make(x.DType(), dimensions...)
 	if x.Shape().IsScalar() && shape.IsScalar() {
 		// Assume nothing to do.
 		return x
 	}
-	if shape.DType != x.DType() {
-		shape = shapes.Make(x.DType(), shape.Dimensions...)
-	}
 	if x.Shape().IsScalar() {
 		return backendBroadcastInDim(x, shape, nil)
 	}
-	broadcastDims := make([]int, shape.Rank())
-	for ii := range shape.Rank() {
+	broadcastDims := make([]int, x.Rank())
+	for ii := range x.Rank() {
 		broadcastDims[ii] = ii
 	}
 	return backendBroadcastInDim(x, shape, broadcastDims)
-}
-
-// BroadcastToDims broadcasts x to the given dimensions.
-// If [x] is not scalar, it must have the same rank of the target dimensions, and where the corresponding requested
-// dimension is different than [x]'s, [x]'s dimension must be of size 1.
-//
-// This is a convenient wrapper for BroadcastToShape.
-func BroadcastToDims(x *Node, dimensions ...int) *Node {
-	shape := shapes.Make(x.DType(), dimensions...)
-	return BroadcastToShape(x, shape)
 }
 
 // ConvertType is an alias to ConvertDType.
@@ -663,8 +667,8 @@ func adjustAxesToRank(rank int, axesWithNegatives []int, paramName string) []int
 			axes[ii] = rank + axes[ii]
 		}
 		if axes[ii] < 0 || axes[ii] > rank {
-			exceptions.Panicf("axis #%d of %v = %v given is out-of-range for rank %d",
-				ii, axesWithNegatives, axesWithNegatives[ii], rank)
+			exceptions.Panicf("%s's axis #%d of %v = %v given is out-of-range for rank %d",
+				paramName, ii, axesWithNegatives, axesWithNegatives[ii], rank)
 		}
 	}
 	return axes
@@ -712,11 +716,6 @@ func MaskedReduceSum(x, mask *Node, reduceAxes ...int) *Node {
 	return ReduceSum(maskedX, reduceAxes...)
 }
 
-// ReduceMaskedSum is an alias for MaskedReduceSum.
-//
-// Deprecated: all functions that take mask are prefixed with `Masked...`
-var ReduceMaskedSum = MaskedReduceSum
-
 // MaskedReduceAllSum reduces all dimensions to a scalar by summing.
 //
 // It ignores values for which the corresponding mask is false.
@@ -724,11 +723,6 @@ var ReduceMaskedSum = MaskedReduceSum
 func MaskedReduceAllSum(x, mask *Node) *Node {
 	return MaskedReduceSum(x, mask)
 }
-
-// ReduceAllMaskedSum is an alias for MaskedReduceAllSum.
-//
-// Deprecated: all functions that take mask are prefixed with `Masked...`
-var ReduceAllMaskedSum = MaskedReduceAllSum
 
 // ReduceMean reduces by taking the mean over the elements of the selected axes.
 //
@@ -823,11 +817,6 @@ func MaskedReduceMax(x, mask *Node, reduceAxes ...int) *Node {
 	return ReduceMax(maskedX, reduceAxes...)
 }
 
-// ReduceMaskedMax is an alias for MaskedReduceMax.
-//
-// Deprecated: all functions that take mask are prefixed with `Masked...`
-var ReduceMaskedMax = MaskedReduceMax
-
 // MaskedReduceAllMax reduces all dimensions to a scalar by taking the max.
 //
 // It ignores values for which the corresponding mask is false.
@@ -835,11 +824,6 @@ var ReduceMaskedMax = MaskedReduceMax
 func MaskedReduceAllMax(x, mask *Node) *Node {
 	return MaskedReduceMax(x, mask)
 }
-
-// ReduceAllMaskedMax is an alias for MaskedReduceAllMax.
-//
-// Deprecated: all functions that take mask are prefixed with `Masked...`
-var ReduceAllMaskedMax = MaskedReduceAllMax
 
 // ReduceMin reduces by taking the max over the elements of the selected axes.
 // If reduceAxes is nil, reduce over all dimensions to a scalar.
@@ -1081,18 +1065,6 @@ func Slice(x *Node, axesSpec ...SliceAxisSpec) *Node {
 		}
 	}
 	return backendSlice(x, starts, limits, strides)
-}
-
-func boolToInt(b bool) int {
-	if b {
-		return 1
-	} else {
-		return 0
-	}
-}
-
-func intToBool(i int) bool {
-	return i != 0
 }
 
 // Concatenate results on the given axis. A negative axis will be counted from

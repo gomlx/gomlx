@@ -441,6 +441,36 @@ func TestBroadcast(t *testing.T) {
 
 }
 
+// TestBroadcastToDims and BroadcastToShape.
+func TestBroadcastToDims(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "BroadcastToDims: scalar", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = []*Node{Scalar(g, dtypes.Float32, 3.0)}
+		outputs = []*Node{BroadcastToDims(inputs[0], 1, 3)}
+		return
+	}, []any{
+		[][]float32{{3, 3, 3}},
+	}, -1)
+
+	graphtest.RunTestGraphFn(t, "BroadcastToDims: expansion", func(g *Graph) (inputs, outputs []*Node) {
+		// DType of shape should be ignored, and an extra dimension should be added to the input.
+		inputs = []*Node{Const(g, []float32{3})}
+		outputs = []*Node{BroadcastToShape(inputs[0], shapes.Make(dtypes.Bool, 1, 3))}
+		return
+	}, []any{
+		[][]float32{{3, 3, 3}},
+	}, -1)
+
+	graphtest.RunTestGraphFn(t, "BroadcastToDims: normal", func(g *Graph) (inputs, outputs []*Node) {
+		// DType of shape should be ignored, and an extra dimension should be added to the input.
+		inputs = []*Node{Const(g, [][]float32{{3}})}
+		outputs = []*Node{BroadcastToDims(inputs[0], 3, 1)}
+		return
+	}, []any{
+		[][]float32{{3}, {3}, {3}},
+	}, -1)
+
+}
+
 func TestFill(t *testing.T) {
 	testFuncOneInput(t, "FillScalar", func(g *Graph) (input, output *Node) {
 		input = FillScalar(g, shapes.Make(dtypes.Int64, 3, 1), 4.0)
@@ -462,12 +492,15 @@ func TestFill(t *testing.T) {
 }
 
 func reduceSumGraph(t *testing.T, backend backends.Backend, reduceDims []int) *Graph {
-	g := NewGraph(backend, "main")
-	n0 := Const(g, [][]float64{{5.0, 1.0}})
-	n1 := Ones(g, shapes.Make(dtypes.Float64, 2, 1))
-	n2 := Add(n1, n0)
-	o0 := ReduceSum(n2, reduceDims...)
-	g.Compile(o0)
+	var g *Graph
+	require.NotPanics(t, func() {
+		g = NewGraph(backend, "main")
+		n0 := Const(g, [][]float64{{5.0, 1.0}})
+		n1 := Ones(g, shapes.Make(dtypes.Float64, 2, 1))
+		n2 := Add(n1, n0)
+		o0 := ReduceSum(n2, reduceDims...)
+		g.Compile(o0)
+	})
 	return g
 }
 
