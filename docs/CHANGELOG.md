@@ -15,12 +15,19 @@
   * Added support for donated tensors for execution.
   * Added Nodes to introspect nodes of the graph -- e.g.: investigate the largest nodes if one is running out of memory.
   * Updated `OneHot` to use `Where`.
-  * Added `GrowLeft` and `GrowRigth`
+  * Added `GrowLeft`, `GrowRigth`, `Infinity`, `LogSoftmax`, `MaskedLogSoftmax`
+  * `BroadcastToDims` and `BroadcastToShape` will automatically expand x to match.
 * Package `layers`:
   * Added sub-package `fnn` for a simplified Feedforward Neural Networks implementation.
-  * Added sub-package `kan` for Kolmogorov–Arnold Networks.
+  * Added sub-package `kan` for Kolmogorov–Arnold Networks, and Discrete-KAN.
   * Added sub-package `regularizers` with automatic regularizer configuration. Layers `Dense`, `DenseWithBias` and `kan` use it by default.
   * Added sub-package `activations` -- just a refactor of the code already in layers.
+* Package `initializers`:
+  * Added `XavierFn` initializer.
+* Package `losses`:
+  * Fixed CategoricalCrossEntropyLogits and 
+* Package `metrics`:
+  * Fixed 
 * Package `exceptions` moved to a separate repository in [`github.com/gomlx/exceptions`](github.com/gomlx/exceptions).
 * Package `slices` renamed to `xslices`, not to mix up with the new standard pacakge `slices`.
 * Package `tensors/image` renamed `tensors/images`.
