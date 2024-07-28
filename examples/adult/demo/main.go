@@ -14,8 +14,9 @@
  *	limitations under the License.
  */
 
-// Linear generates random synthetic data, based on some linear mode + noise. Then it tries
-// to learn the weights used to generate the data.
+// UCI-Adult demo trainer.
+// It supports FNNs, KAN and DiscreteKAN models, with many different options.
+// All input features are calibrated with piecewise linear functions.
 package main
 
 import (
