@@ -57,18 +57,18 @@ type PoolBuilder struct {
 //
 // The window sizes must be set with PoolBuilder.Window or PoolBuilder.WindowPerAxis.
 //
-// The outputShapes of x should be `[batch, <spatial_dimensions...>, input_channels]` if
+// The shapes of x should be `[batch, <spatial_dimensions...>, input_channels]` if
 // configured with `PoolBuilder.ChannelsAxis(images.ChannelsLast)`, the default. If one
-// sets `PoolBuilder.ChannelsAxis(images.ChannelsFirst)`, the outputShapes should be
+// sets `PoolBuilder.ChannelsAxis(images.ChannelsFirst)`, the shapes should be
 // `[batch, input_channels, <spatial_dimensions...>]` instead.
 //
 // The "channels" axis is also known as depth or feature axis.
 //
 // Note: `images` refers to package `github.com/gomlx/gomlx/types/tensors/images`.
 //
-// The outputShapes of kernel should be `[<spatial_dimensions...>, input_channels, output_channels]` if
+// The shapes of kernel should be `[<spatial_dimensions...>, input_channels, output_channels]` if
 // configured with `PoolBuilder.ChannelsAxis(images.ChannelsLast)`, the default. If one
-// sets `PoolBuilder.ChannelsAxis(images.Channels)`, the outputShapes should be
+// sets `PoolBuilder.ChannelsAxis(images.Channels)`, the shapes should be
 // `[input_channels, <spatial_dimensions...>, output_channels]` instead.
 func MaxPool(x *Node) *PoolBuilder {
 	return makePoolBuilder(x, backends.ReduceOpMax)
@@ -85,18 +85,18 @@ func MaxPool(x *Node) *PoolBuilder {
 //
 // The window sizes must be set with PoolBuilder.Window or PoolBuilder.WindowPerAxis.
 //
-// The outputShapes of x should be `[batch, <spatial_dimensions...>, input_channels]` if
+// The shapes of x should be `[batch, <spatial_dimensions...>, input_channels]` if
 // configured with `PoolBuilder.ChannelsAxis(images.ChannelsLast)`, the default. If one
-// sets `PoolBuilder.ChannelsAxis(images.ChannelsFirst)`, the outputShapes should be
+// sets `PoolBuilder.ChannelsAxis(images.ChannelsFirst)`, the shapes should be
 // `[batch, input_channels, <spatial_dimensions...>]` instead.
 //
 // The "channels" axis is also known as depth or feature axis.
 //
 // Note: `images` refers to package `github.com/gomlx/gomlx/types/tensors/images`.
 //
-// The outputShapes of kernel should be `[<spatial_dimensions...>, input_channels, output_channels]` if
+// The shapes of kernel should be `[<spatial_dimensions...>, input_channels, output_channels]` if
 // configured with `PoolBuilder.ChannelsAxis(images.ChannelsLast)`, the default. If one
-// sets `PoolBuilder.ChannelsAxis(images.Channels)`, the outputShapes should be
+// sets `PoolBuilder.ChannelsAxis(images.Channels)`, the shapes should be
 // `[input_channels, <spatial_dimensions...>, output_channels]` instead.
 func MinPool(x *Node) *PoolBuilder {
 	return makePoolBuilder(x, backends.ReduceOpMin)
@@ -113,18 +113,18 @@ func MinPool(x *Node) *PoolBuilder {
 //
 // The window sizes must be set with PoolBuilder.Window or PoolBuilder.WindowPerAxis.
 //
-// The outputShapes of x should be `[batch, <spatial_dimensions...>, input_channels]` if
+// The shapes of x should be `[batch, <spatial_dimensions...>, input_channels]` if
 // configured with `PoolBuilder.ChannelsAxis(images.ChannelsLast)`, the default. If one
-// sets `PoolBuilder.ChannelsAxis(images.ChannelsFirst)`, the outputShapes should be
+// sets `PoolBuilder.ChannelsAxis(images.ChannelsFirst)`, the shapes should be
 // `[batch, input_channels, <spatial_dimensions...>]` instead.
 //
 // The "channels" axis is also known as depth or feature axis.
 //
 // Note: `images` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
 //
-// The outputShapes of kernel should be `[<spatial_dimensions...>, input_channels, output_channels]` if
+// The shapes of kernel should be `[<spatial_dimensions...>, input_channels, output_channels]` if
 // configured with `PoolBuilder.ChannelsAxis(images.ChannelsLast)`, the default. If one
-// sets `PoolBuilder.ChannelsAxis(images.Channels)`, the outputShapes should be
+// sets `PoolBuilder.ChannelsAxis(images.Channels)`, the shapes should be
 // `[input_channels, <spatial_dimensions...>, output_channels]` instead.
 func SumPool(x *Node) *PoolBuilder {
 	return makePoolBuilder(x, backends.ReduceOpSum)
@@ -141,18 +141,18 @@ func SumPool(x *Node) *PoolBuilder {
 //
 // The window sizes must be set with PoolBuilder.Window or PoolBuilder.WindowPerAxis.
 //
-// The outputShapes of x should be `[batch, <spatial_dimensions...>, input_channels]` if
+// The shapes of x should be `[batch, <spatial_dimensions...>, input_channels]` if
 // configured with `PoolBuilder.ChannelsAxis(images.ChannelsLast)`, the default. If one
-// sets `PoolBuilder.ChannelsAxis(images.ChannelsFirst)`, the outputShapes should be
+// sets `PoolBuilder.ChannelsAxis(images.ChannelsFirst)`, the shapes should be
 // `[batch, input_channels, <spatial_dimensions...>]` instead.
 //
 // The "channels" axis is also known as depth or feature axis.
 //
 // Note: `images` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
 //
-// The outputShapes of kernel should be `[<spatial_dimensions...>, input_channels, output_channels]` if
+// The shapes of kernel should be `[<spatial_dimensions...>, input_channels, output_channels]` if
 // configured with `PoolBuilder.ChannelsAxis(images.ChannelsLast)`, the default. If one
-// sets `PoolBuilder.ChannelsAxis(images.Channels)`, the outputShapes should be
+// sets `PoolBuilder.ChannelsAxis(images.Channels)`, the shapes should be
 // `[input_channels, <spatial_dimensions...>, output_channels]` instead.
 func MeanPool(x *Node) *PoolBuilder {
 	pool := makePoolBuilder(x, backends.ReduceOpSum)
@@ -246,10 +246,10 @@ func (pool *PoolBuilder) StridePerAxis(strides ...int) *PoolBuilder {
 }
 
 // PadSame adds paddings on the edges of x such that in the end the output
-// of the convolution has the same outputShapes as the input.
+// of the convolution has the same shapes as the input.
 //
 // This changes the default value of Strides to 1, if it is not set -- if set to something else, PadSame won't really
-// output the same outputShapes as the input.
+// output the same shapes as the input.
 //
 // The default is NoPadding.
 func (pool *PoolBuilder) PadSame() *PoolBuilder {
@@ -259,7 +259,7 @@ func (pool *PoolBuilder) PadSame() *PoolBuilder {
 }
 
 // NoPadding removes any paddings, so if the kernel spatial dimensions > 1,
-// the output outputShapes will be reduced on the edges.
+// the output shapes will be reduced on the edges.
 // This is the default.
 func (pool *PoolBuilder) NoPadding() *PoolBuilder {
 	pool.paddings = nil
@@ -490,7 +490,7 @@ func dilateConvolveToMatchSumPooling(x, backProp *Node, windowDimensions, stride
 	expanded := Pad(backProp, zero, padConfig...)
 
 	// For each position on expanded, just sum the values that reach it.
-	padSame := make([][2]int, rank) // pad to preserve expanded outputShapes.
+	padSame := make([][2]int, rank) // pad to preserve expanded shapes.
 	for axis := range padSame {
 		windowSize := windowDimensions[axis]    // for this axis.
 		padSame[axis][0] = (windowSize - 1) / 2 // For even sized kernels, the padding is asymmetric.

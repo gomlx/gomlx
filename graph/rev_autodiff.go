@@ -231,7 +231,7 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 		if rNode.AccumulatedVJP == nil {
 			// If there is no path from the output to the gradient node (possibly because of
 			// a StopGradient) return zero.
-			// TODO: fix the outputShapes if the output wrt which we are calculating the gradient is not a scalar.
+			// TODO: fix the shape if the output wrt which we are calculating the gradient is not a scalar.
 			gradients[ii] = ZerosLike(node)
 
 		} else {
@@ -322,12 +322,12 @@ func recursiveMarkAsUseful(rg *reverseGraph, rNode *reverseNode) {
 //
 // Args:
 //
-//	`node`: node for which we are calculating the backward gradient. An important part of `node` are its inputNodes
+//	node: node for which we are calculating the backward gradient. An important part of `node` are its inputNodes
 //	   given by `node.Inputs()`. The VJP function must one gradient per input.
-//	`v`: gradient (or jacobian) of what we care about with the respect to the output of `node`, also known as the
+//	v: gradient (or jacobian) of what we care about with the respect to the output of `node`, also known as the
 //	   adjoint. VJP needs to calculate the next adjoint (`v`) but with respect to the inputNodes of `node` instead.
-//	`outputShape`: for now fixed as scalar, and can be ignored. When we add support for Jacobian this will hold
-//	   the outputShapes of the thing we are calculating the Jacobian for.
+//	outputShape: for now fixed as scalar, and can be ignored. When we add support for Jacobian this will hold
+//	   the outputShape of the thing we are calculating the Jacobian for.
 //
 // Returns:
 //
@@ -633,7 +633,7 @@ func reduceSumVJP(node, v *Node, _ shapes.Shape) []*Node {
 
 func reduceMaxVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// Reconstruct exactly the reduced dimensions, and build a newShape
-	// (same outputShapes as if we had done ReduceAndKeep(input[0]))
+	// (same shape as if we had done ReduceAndKeep(input[0]))
 	params := node.inputs.(*nodeInputsReduceMax)
 	x := params.x
 	reducedDims := params.axes
@@ -662,7 +662,7 @@ func reduceMaxVJP(node, v *Node, _ shapes.Shape) []*Node {
 }
 
 func reshapeVJP(node, v *Node, _ shapes.Shape) []*Node {
-	// ReshapeWithShape back to its inputNodes outputShapes.
+	// ReshapeWithShape back to its inputNodes shape.
 	return []*Node{ReshapeWithShape(v, node.inputNodes[0].Shape())}
 }
 
@@ -730,7 +730,7 @@ func sliceVJP(node, v *Node, _ shapes.Shape) []*Node {
 			padding[ii].Interior = params.strides[ii] - 1
 			dimToPad := dimensions[ii] - params.starts[ii]
 			dimToPad -= (v.Shape().Dimensions[ii]-1)*params.strides[ii] + 1
-			padding[ii].End = dimToPad // What is missing to make v the same outputShapes as x at axis ii.
+			padding[ii].End = dimToPad // What is missing to make v the same shape as x at axis ii.
 		}
 	}
 	return []*Node{
@@ -858,7 +858,7 @@ func broadcastInDimVJP(node, v *Node, _ shapes.Shape) []*Node {
 			axesPreserved[outputAxis] = true
 		} else {
 			if x.Shape().Dimensions[inputAxis] != 1 {
-				Panicf("unexpected broadcast from outputShapes %s to outputShapes %s at axis %d -- don't know how to calculate gradient",
+				Panicf("unexpected broadcast from shape %s to shape %s at axis %d -- don't know how to calculate gradient",
 					x.Shape(), shape, inputAxis)
 			}
 		}

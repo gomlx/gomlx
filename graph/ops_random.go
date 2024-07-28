@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	// RngStateShape is the outputShapes of the random number generator state, used
+	// RngStateShape is the shapes of the random number generator state, used
 	// in all Random* functions.
 	// This is dependent on the algorithm, that for now is fixed.
 	RngStateShape = shapes.Make(dtypes.Uint64, 3)
@@ -50,7 +50,7 @@ func RngStateSplit(rngState *Node) (newRngState1, newRngState2 *Node) {
 }
 
 // RandomUniform generates random uniform values from 0.0 to 1.0 (half-open `[0.0, 1.0)`, so 1.0 is never returned)
-// for float numbers in the given outputShapes.
+// for float numbers in the given shapes.
 //
 // It will signal an error if the dtype is not float -- see RandomIntN for random integers.
 //
@@ -98,13 +98,13 @@ func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Nod
 		newRngState, im = RandomUniform(rngState, componentShape)
 		values = Complex(re, im)
 	default:
-		Panicf("RandomUniform() only accepts Float16, Float32, Float64, Complex64 and Complex128 dtypes, outputShapes %s given", shape)
+		Panicf("RandomUniform() only accepts Float16, Float32, Float64, Complex64 and Complex128 dtypes, shapes %s given", shape)
 	}
 	return
 }
 
 // RandomNormal generates random numbers from a normal distribution, with mean 0.0 and standard deviation 1.0.
-// It generates values with the given outputShapes, each value pseudo-randomly generated.
+// It generates values with the given shapes, each value pseudo-randomly generated.
 //
 // If you need a different mean and standard deviation, just do something like the example below, where `mean`
 // and `stddev` are the desired mean and standard deviation:

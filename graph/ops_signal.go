@@ -12,7 +12,7 @@ import (
 // to be complex.
 // The FFT is computed on the last dimension, in case `operand.Rank() > 1`.
 //
-// The resulting tensor (Node) has the same outputShapes as the input, and has the values on the frequency
+// The resulting tensor (Node) has the same shapes as the input, and has the values on the frequency
 // domain. Use InverseFFT to reverse the result.
 func FFT(operand *Node) *Node {
 	_ = validateBuildingGraphFromInputs(operand)
@@ -28,7 +28,7 @@ func FFT(operand *Node) *Node {
 // InverseFFT computes an inverse fast-fourier transformation of the operand, which is expected to be complex.
 // The InverseFFT is computed on the last dimension, in case `operand.Rank() > 1`.
 //
-// The resulting tensor (Node) has the same outputShapes as the input, and has the values on the frequency
+// The resulting tensor (Node) has the same shapes as the input, and has the values on the frequency
 // domain.
 func InverseFFT(operand *Node) *Node {
 	_ = validateBuildingGraphFromInputs(operand)
@@ -44,7 +44,7 @@ func InverseFFT(operand *Node) *Node {
 // RealFFT computes a forward 1D fast-fourier transformation on a real (float) input.
 // The FFT is computed on the last dimension, in case `operand.Rank() > 1`.
 //
-// The resulting tensor (Node) has the outputShapes equal to the input, except the last dimension (where the FFT is computed)
+// The resulting tensor (Node) has the shapes equal to the input, except the last dimension (where the FFT is computed)
 // which has dimension `dim/2 + 1`, where `dim` is the last dimensions of `operand`.
 //
 // Note that because of the last dimension change in `RealFFT`, this cannot be perfectly reversed if
@@ -63,7 +63,7 @@ func RealFFT(operand *Node) *Node {
 // InverseRealFFT computes the inverse of a forward 1D fast-fourier transformation.
 // The inverse FFT is computed on the last dimension, in case `operand.Rank() > 1`.
 //
-// The resulting tensor (Node) has the outputShapes equal to the input, except the last dimension (where the FFT is computed)
+// The resulting tensor (Node) has the shapes equal to the input, except the last dimension (where the FFT is computed)
 // which is reversed back to the original, `(dim-1)*2`, where `dim` is the last dimensions of `operand`.
 //
 // Note that because of the last dimension change in `RealFFT`, this cannot be perfectly reversed if

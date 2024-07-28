@@ -34,7 +34,7 @@
 //     To construct a `Graph` one puts together nodes or "ops" defining the desired sequence of operations.
 //
 //   - Node: represents the result of an operation ("outputOps" for short). E.g: Add, Sub, Mul, Sigmoid,
-//     Reshape, etc. Each node has a fixed outputShapes that is known in "graph building time" (see discussion
+//     Reshape, etc. Each node has a fixed shape that is known in "graph building time" (see discussion
 //     below).
 //
 //   - context.Context: created by the Backend, a higher level abstraction convenient when building gradient
@@ -58,10 +58,10 @@
 // upfront, to have the right mental model:
 //
 //   - **Compile time**: this is during Go compilation. Some amount of type checking is done here, but
-//     most of the tensor outputShapes compatibility cannot be done statically here, unfortunately. Even if for
+//     most of the tensor shape compatibility cannot be done statically here, unfortunately. Even if for
 //     a human it would be obvious without compiling and running a program that some operation among
 //     different shaped tensors shouldn't be allowed, there is no way in Go to run
-//     arbitrary logic in compile time to validate tensor outputShapes compatibility. So most of the checking is
+//     arbitrary logic in compile time to validate tensor shape compatibility. So most of the checking is
 //     left to "graph building time".
 //     Maybe one day one can write a gomlx_linter the runs before the compiler that could catch some of these.
 //

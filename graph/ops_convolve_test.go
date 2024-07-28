@@ -218,7 +218,7 @@ func TestGradientConvolve(t *testing.T) {
 			},
 		})
 
-	testGradients(t, "Gradient 2D Convolve().NoPadding().Strides(2): outputShapes check",
+	testGradients(t, "Gradient 2D Convolve().NoPadding().Strides(2): shape check",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			input := Zeros(g, MakeShape(dtypes.Float64, 2, 8, 7, 3))
 			kernel := Zeros(g, MakeShape(dtypes.Float64, 1, 1, 3, 6))
@@ -229,7 +229,7 @@ func TestGradientConvolve(t *testing.T) {
 			tensors.FromScalarAndDimensions(0.0, 1, 1, 3, 6).Value(),
 		})
 
-	testGradients(t, "Gradient 2D Convolve().NoPadding().Dilations(2): outputShapes check",
+	testGradients(t, "Gradient 2D Convolve().NoPadding().Dilations(2): shape check",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			input := Zeros(g, MakeShape(dtypes.Float64, 2, 5, 5, 3))
 			kernel := Zeros(g, MakeShape(dtypes.Float64, 2, 2, 3, 6))

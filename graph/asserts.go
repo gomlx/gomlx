@@ -17,6 +17,7 @@
 package graph
 
 import (
+	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/pkg/errors"
 )
@@ -24,14 +25,14 @@ import (
 // This file implements various asserts (checks) that can be done on the Node.
 // They are derived from the asserts in the shapes package.
 
-// AssertDims checks whether the outputShapes has the given dimensions and rank.
+// AssertDims checks whether the shape has the given dimensions and rank.
 // A value of -1 in dimensions means it can take any value and is not checked.
 //
-// If the outputShapes is not what was expected, it panics with an error message.
+// If the shape is not what was expected, it panics with an error message.
 //
 // This often serves as documentation for the code when implementing some complex computational
 // graphs.
-// This allows the reader of the code to corroborate what is the expected outputShapes of a node.
+// This allows the reader of the code to corroborate what is the expected shape of a node.
 //
 // Example:
 //
@@ -41,19 +42,22 @@ import (
 //	layer.AssertDims(batchSize, -1) // 2D tensor, with batch size as the leading dimension.
 func (n *Node) AssertDims(dimensions ...int) {
 	n.AssertValid()
+	if n.NumOutputs() != 1 {
+		exceptions.Panicf("node has %d outputs, cannot AssertDims", n.NumOutputs())
+	}
 	err := shapes.CheckDims(n, dimensions...)
 	if err != nil {
 		panic(errors.WithMessagef(err, "AssertDims(%v)", dimensions))
 	}
 }
 
-// AssertRank checks whether the outputShapes has the given rank.
+// AssertRank checks whether the shape has the given rank.
 //
 // If the rank is not what was expected, it panics with an error message.
 //
 // This often serves as documentation for the code when implementing some complex computational
 // graphs.
-// This allows the reader of the code to corroborate what is the expected outputShapes of a node.
+// This allows the reader of the code to corroborate what is the expected shape of a node.
 //
 // It can be used in a similar fashion as AssertDims.
 func (n *Node) AssertRank(rank int) {
@@ -64,7 +68,7 @@ func (n *Node) AssertRank(rank int) {
 	}
 }
 
-// AssertScalar checks whether the outputShapes is a scalar.
+// AssertScalar checks whether the shape is a scalar.
 //
 // If the rank is not what was expected, it panics with an error message.
 //

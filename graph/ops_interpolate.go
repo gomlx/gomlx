@@ -118,7 +118,7 @@ func (c *InterpolationConfig) Done() (output *Node) {
 			"to true at the same time")
 	}
 
-	// Find axes that are going to be interpolated and the output outputShapes.
+	// Find axes that are going to be interpolated and the output shapes.
 	input := c.input
 	inputShape := input.Shape()
 	dtype := input.DType()
@@ -131,7 +131,7 @@ func (c *InterpolationConfig) Done() (output *Node) {
 	// Find axisToInterpolateList, and their target dimensions in interpolationDims:
 	axisToInterpolateList := make([]int, 0, input.Rank())
 	axisToInterpolateMap := make([]bool, input.Rank()) // Set to true if the axis is marked for interpolation.
-	outputShape := inputShape.Clone()
+	shape := inputShape.Clone()
 	interpolationDims := make([]int, 0, input.Rank()+1)
 	for axis, s := range outputSizes {
 		if s != NoInterpolation && s <= 0 {
@@ -144,12 +144,12 @@ func (c *InterpolationConfig) Done() (output *Node) {
 		// Axis marked for interpolation:
 		axisToInterpolateList = append(axisToInterpolateList, axis)
 		axisToInterpolateMap[axis] = true
-		outputShape.Dimensions[axis] = s
+		shape.Dimensions[axis] = s
 		interpolationDims = append(interpolationDims, s)
 	}
 	numAxesToInterpolate := len(axisToInterpolateList)
 	if numAxesToInterpolate == 0 {
-		// Nothing to do actually, the output outputShapes is exactly the same as the input. Silently return
+		// Nothing to do actually, the output shapes is exactly the same as the input. Silently return
 		// the input.
 		output = input
 		return
@@ -161,7 +161,7 @@ func (c *InterpolationConfig) Done() (output *Node) {
 	weights := make([]*Node, 0, len(axisToInterpolateList))
 	for axisIdx, axis := range axisToInterpolateList {
 		inSize := inputShape.Dimensions[axis]
-		outSize := outputShape.Dimensions[axis]
+		outSize := shape.Dimensions[axis]
 		var scale float64
 		if c.alignCorner && outSize > 1 {
 			// If alignCorner, then range is one less the size, since the half corner at the start and end
@@ -204,8 +204,8 @@ func (c *InterpolationConfig) Done() (output *Node) {
 		}
 		spanSizes = append(spanSizes, spanSize)
 
-		// Broadcast spanStart to common outputShapes so it can be combined with other interpolation axes.
-		// The final outputShapes will be [interpolationDims..., 1].
+		// Broadcast spanStart to common shapes so it can be combined with other interpolation axes.
+		// The final shapes will be [interpolationDims..., 1].
 		broadcastSpanStart := ConvertDType(spanStart, dtypes.Int32)
 		{
 			spanExpandAxes := make([]int, 0, numAxesToInterpolate)

@@ -106,17 +106,17 @@ func (n *Node) Shape() shapes.Shape {
 	return n.outputShapes[0]
 }
 
-// DType returns the DType of the node's outputShapes.
+// DType returns the DType of the node's shapes.
 func (n *Node) DType() dtypes.DType {
 	return n.Shape().DType
 }
 
-// Rank returns the rank of the node's outputShapes.
+// Rank returns the rank of the node's shape.
 func (n *Node) Rank() int {
 	return n.Shape().Rank()
 }
 
-// IsScalar returns whether the node's outputShapes is a scalar.
+// IsScalar returns whether the node's shape is a scalar.
 func (n *Node) IsScalar() bool {
 	return n.Shape().IsScalar()
 }

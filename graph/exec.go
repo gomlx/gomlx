@@ -398,7 +398,7 @@ func (e *Exec) compileAndExecute(execute bool, args ...any) (results []*tensors.
 	if entry == nil {
 		Panicf(
 			"maximum cache size of %d reached for %q, cannot create another g -- "+
-				"a new computation g needs to be created+compiled for each different outputShapes of "+
+				"a new computation g needs to be created+compiled for each different shape of "+
 				"the input, consider using padding, or if this is not a concern change "+
 				"the cache size with executable.SetMaxCache()", e.maxCacheSize, e.Name())
 		panic(nil) // Disable lint error.

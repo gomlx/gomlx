@@ -27,19 +27,19 @@ import (
 // Gather values in params from the pointers in indices.
 // The outputs are slices of `params` selected by `indices`, stitched together.
 //
-// Let's assume params has outputShapes `[i_0, ..., i_M, s_0, ..., s_o]`, where:
+// Let's assume params has shapes `[i_0, ..., i_M, s_0, ..., s_o]`, where:
 //
 //   - `i_0, ..., i_N` are the N "indexed dimensions", that is, the dimensions indexed by `indices`.
 //   - `s_0, ..., s_S` are the S dimensions of the slices that are going to be "gathered" (copied over).
 //
-// And let's assume indices has outputShapes `[o_0,...,o_O, N]`, where:
+// And let's assume indices has shapes `[o_0,...,o_O, N]`, where:
 //
 //   - `o_0, ..., o_O` are enumerations of the slices from `params` to gather.
 //     E.g.: let's say O=1, and o_0=3, that means there will be 3 slices to gather.
 //   - Last dimension `N`: this is the number of indices in `params` to point to. `N` is the number of
 //     dimensions indexed `i_0, ..., i_N` in `params` above.
 //
-// The output will have outputShapes `[o_0,...,o_O, s_0, ... s_S]`, where:
+// The output will have shapes `[o_0,...,o_O, s_0, ... s_S]`, where:
 //
 //   - `o_0, ..., o_O` come from indices, and are enumerations of the slices from params to gather.
 //   - `s_0, ..., s_S` are the slice sizes copied from params.
@@ -50,18 +50,18 @@ import (
 //	indices := [][]int{{1}, {0}}
 //	Gather(params, indices) would return {{3, 4, 5}, {0, 1, 2}}
 //
-// In the case above params outputShapes is interpreted as `[i_0=3, s_0=3]`, and indices' outputShapes is
-// `[o_0=2, N=1]`. The output outputShapes is `[o_0=2, s_0=3]`.
+// In the case above params shapes is interpreted as `[i_0=3, s_0=3]`, and indices' shapes is
+// `[o_0=2, N=1]`. The output shapes is `[o_0=2, s_0=3]`.
 func Gather(params, indices *Node) *Node {
 	_ = validateBuildingGraphFromInputs(params, indices)
 	if params.IsScalar() {
-		Panicf("cannot Gather from scalar or tuple, params outputShapes is %s", params.Shape())
+		Panicf("cannot Gather from scalar or tuple, params shapes is %s", params.Shape())
 	}
 	if !indices.DType().IsInt() {
-		Panicf("Gather requires indices to have an integer type, got outputShapes %q instead", indices.Shape())
+		Panicf("Gather requires indices to have an integer type, got shapes %q instead", indices.Shape())
 	}
 
-	// If indices is a scalar, simply convert it to outputShapes `[1]`.
+	// If indices is a scalar, simply convert it to shapes `[1]`.
 	if indices.IsScalar() {
 		indices = ExpandDims(indices, 0)
 	}
@@ -111,7 +111,7 @@ func Gather(params, indices *Node) *Node {
 
 // GatherSlices from inputNodes. Each axis listed in slicedAxes have corresponding start position and size for each
 // slice indexed by `start` (a graph Node, can be dynamically generated in the graph) and `sizes`, which will
-// define the output final outputShapes, and must be statically given.
+// define the output final shapes, and must be statically given.
 //
 // Axes in slicedAxes can be given as negative numbers, which are taken from the the end of the input rank --
 // that is axis -1 means the last axis in the input. Axes not given in slicedAxes (and in `start` and `sizes`)
@@ -120,7 +120,7 @@ func Gather(params, indices *Node) *Node {
 // Axes in slicedAxes must be given sorted in increasing order.
 //
 // The output has a rank equal to the prefixing rank of `start` (== `start.Rank()-1`) plus the rank of `input`.
-// And the outputShapes will depend on the sizes of the slices.
+// And the shapes will depend on the sizes of the slices.
 //
 //   - TODO: Add an option to support batch axes, present in both the input and in the start indices.
 //     This will need to automatically concatenate the batch index in the start Node as a iota of each
@@ -138,10 +138,10 @@ func Gather(params, indices *Node) *Node {
 func GatherSlices(input *Node, slicedAxes []int, start *Node, sizes []int) (gathered *Node) {
 	_ = validateBuildingGraphFromInputs(input, start)
 	if input.Shape().IsScalar() || input.Shape().IsTuple() {
-		Panicf("cannot GatherSlices from scalar or tuple, input outputShapes is %s", input.Shape())
+		Panicf("cannot GatherSlices from scalar or tuple, input shapes is %s", input.Shape())
 	}
-	if !start.Shape().DType.IsInt() {
-		Panicf("GatherSlices requires start indices to have an integer type, got outputShapes %q instead",
+	if !start.DType().IsInt() {
+		Panicf("GatherSlices requires start indices to have an integer type, got shapes %q instead",
 			start.Shape())
 	}
 	if start.Shape().IsScalar() {
@@ -222,14 +222,14 @@ func GatherSlices(input *Node, slicedAxes []int, start *Node, sizes []int) (gath
 // It works exactly the same as tensorflow's gather_nd operation, described in
 // https://www.tensorflow.org/api_docs/python/tf/gather_nd.
 //
-// Let's assume params has outputShapes `[b_0,...,b_{batchDim}, i_0, ..., i_M, s_0, ..., s_o]`, where:
+// Let's assume params has shapes `[b_0,...,b_{batchDim}, i_0, ..., i_M, s_0, ..., s_o]`, where:
 //
 //   - `b_0, ..., b_{batchDim}` are the batchDims batch dimensions, dimensions that are shared
 //     in params, indices and will also be present in the output.
 //   - `i_0, ..., i_N` are the N "indexed dimensions," that is, the dimensions indexed by indices.
 //   - `s_0, ..., s_S` are the `S` dimensions of the slices that are going to be "gathered" (copied over).
 //
-// And, let's assume indices has outputShapes `[b_0, ... b_{batchDim}, o_0,...,o_O, N]`, where:
+// And, let's assume indices has shapes `[b_0, ... b_{batchDim}, o_0,...,o_O, N]`, where:
 //
 //   - `b_0, ..., b_{batchDim}` are the batchDims batch dimensions, dimensions that are shared
 //     in params, indices and will also be present in the output.
@@ -238,7 +238,7 @@ func GatherSlices(input *Node, slicedAxes []int, start *Node, sizes []int) (gath
 //   - Last dimension N: this is the number of indices in params to point to. N is the same value as
 //     the dimension `i_0, ..., i_N` in params above.
 //
-// The output will have outputShapes `[b_0, ... b_{batchDim}, o_0,...,o_O, s_0, ... s_S]`, where:
+// The output will have shapes `[b_0, ... b_{batchDim}, o_0,...,o_O, s_0, ... s_S]`, where:
 //
 //   - `b_0, ..., b_{batchDim}` are the batchDims batch dimensions, dimensions that are shared
 //     in params, indices and will also be present in the output.
@@ -250,13 +250,13 @@ func GatherSlices(input *Node, slicedAxes []int, start *Node, sizes []int) (gath
 func GatherWithBatchDims(params, indices *Node, batchDims int) *Node {
 	g := validateBuildingGraphFromInputs(params, indices)
 	if params.Shape().IsScalar() || params.Shape().IsTuple() {
-		Panicf("cannot Gather from scalar or tuple, params outputShapes is %s", params.Shape())
+		Panicf("cannot Gather from scalar or tuple, params shapes is %s", params.Shape())
 	}
-	if !indices.Shape().DType.IsInt() {
-		Panicf("Gather requires indices to have an integer type, got outputShapes %q instead", indices.Shape())
+	if !indices.DType().IsInt() {
+		Panicf("Gather requires indices to have an integer type, got shapes %q instead", indices.Shape())
 	}
 
-	// If indices is a scalar, simply convert it to outputShapes `[1]`.
+	// If indices is a scalar, simply convert it to shapes `[1]`.
 	if indices.Shape().IsScalar() {
 		indices = ReshapeWithShape(indices, shapes.Make(indices.DType(), 1))
 	}
@@ -281,8 +281,8 @@ func GatherWithBatchDims(params, indices *Node, batchDims int) *Node {
 	// dimensions. This is because the underlying gatherXLA doesn't support batch dimensions.
 	if batchDims > 0 {
 		if !types.DeepSliceCmp(params.Shape().Dimensions[0:batchDims], indices.Shape().Dimensions[0:batchDims], types.EqualAny[int]) {
-			Panicf("batch dimensions (first %d dimensions) from params (outputShapes=%s) and indices (outputShapes=%s) don't match",
-				batchDims, params.outputShapes, indices.outputShapes))
+			Panicf("batch dimensions (first %d dimensions) from params (shapes=%s) and indices (shapes=%s) don't match",
+				batchDims, params.Shape(), indices.Shape()))
 		}
 		batchIndices := IndicesForShape(g, shapes.Make(types.Int64, indices.Shape().Dimensions[0:batchDims]))
 		// Now batchIndices need to be broadcast to each id for the gather.
@@ -294,33 +294,33 @@ func GatherWithBatchDims(params, indices *Node, batchDims int) *Node {
 }
 */
 
-// IndicesForShape enumerates a list of indices for all elements of the given outputShapes. It will always
-// return a node with outputShapes [outputShapes.Size(), outputShapes.Rank()].
-// E.g: if outputShapes=[3, 2], it returns `[[0 0] [0 1] [1 0] [1 1] [2 0] [2 1]]`.
+// IndicesForShape enumerates a list of indices for all elements of the given shapes. It will always
+// return a node with shapes [shapes.Size(), shapes.Rank()].
+// E.g: if shapes=[3, 2], it returns `[[0 0] [0 1] [1 0] [1 1] [2 0] [2 1]]`.
 func IndicesForShape(g *Graph, shape shapes.Shape) *Node {
 	if shape.IsScalar() {
-		Panicf("can't generate IndicesForShape for scalars (outputShapes=%s)", shape)
+		Panicf("can't generate IndicesForShape for scalars (shapes=%s)", shape)
 	}
 	indices := Iota(g, shapes.Make(dtypes.Int64, shape.Size(), 1), 0)
 	indices = BroadcastToShape(indices, shapes.Make(dtypes.Int64, shape.Size(), shape.Rank()))
-	// Example of indices' value here: for outputShapes=`[3, 2]`, indices=`{{0, 0}, {1, 1}, {2, 2}, {3, 3}, {4, 4}, {5, 5}}`
+	// Example of indices' value here: for shapes=`[3, 2]`, indices=`{{0, 0}, {1, 1}, {2, 2}, {3, 3}, {4, 4}, {5, 5}}`
 
 	dividers := make([]int, shape.Rank())
 	dividers[shape.Rank()-1] = 1
 	for ii := shape.Rank() - 2; ii >= 0; ii -= 1 {
 		dividers[ii] = dividers[ii+1] * shape.Dimensions[ii+1]
 	}
-	//fmt.Printf("outputShapes=%s, dividers=%v, size=%v\n", outputShapes, dividers, outputShapes.Size())
+	//fmt.Printf("shapes=%s, dividers=%v, size=%v\n", shapes, dividers, shapes.Size())
 	indices = Div(indices, Const(g, [][]int{dividers}))
 	indices = Mod(indices, Const(g, [][]int{shape.Dimensions}))
 	return indices
 }
 
-// Scatter sums up the slices in updates into a new tensor of the given outputShapes, at the locations pointed by indices.
+// Scatter sums up the slices in updates into a new tensor of the given shapes, at the locations pointed by indices.
 // It does the opposite of Gather.
 //
 // In the simplest form, [indices] is shaped `[num_updates, 1]`, [updates] is shaped `[num_updates, update_size]` and
-// [outputShapes] is of the form `[output_size, update_size]`. The indices values should be in between 0 and `output_size-1`.
+// [shapes] is of the form `[output_size, update_size]`. The indices values should be in between 0 and `output_size-1`.
 func Scatter(indices, updates *Node, shape shapes.Shape) *Node {
 	g := validateBuildingGraphFromInputs(indices, updates)
 	zeros := Zeros(g, shape)
@@ -336,17 +336,17 @@ func Scatter(indices, updates *Node, shape shapes.Shape) *Node {
 func ScatterAdd(operand, indices, updates *Node, sorted, unique bool) *Node {
 	_ = validateBuildingGraphFromInputs(operand, indices, updates)
 
-	if !indices.Shape().DType.IsInt() {
-		Panicf("scatter operations require integer indices, instead got outputShapes %s", indices.outputShapes)
+	if !indices.DType().IsInt() {
+		Panicf("scatter operations require integer indices, instead got shapes %s", indices.Shape())
 	}
-	if operand.Shape().DType != updates.Shape().DType {
+	if operand.DType() != updates.DType() {
 		Panicf(
 			"scatter operations require operand and updates to have the same DType, instead got shapes %s (operand) and %s (updates)",
-			operand.outputShapes, updates.outputShapes)
+			operand.Shape(), updates.Shape())
 	}
 	if indices.Shape().IsTuple() || operand.Shape().IsTuple() || updates.Shape().IsTuple() {
-		Panicf("tuples are not supported in ScatterAdd, operand.outputShapes=%s, indices.outputShapes=%s, updates.outputShapes=%s",
-			operand.outputShapes, indices.outputShapes, updates.outputShapes)
+		Panicf("tuples are not supported in ScatterAdd, operand.Shape()=%s, indices.Shape()=%s, updates.Shape()=%s",
+			operand.Shape(), indices.Shape(), updates.Shape())
 	}
 	if indices.Shape().IsScalar() {
 		indices = ExpandDims(indices, 0)
@@ -357,16 +357,16 @@ func ScatterAdd(operand, indices, updates *Node, sorted, unique bool) *Node {
 	indexedRank := indices.Shape().Dimensions[indicesRank-1]
 	updatesRank := updates.Rank()
 	if updatesRank < indicesRank-1 || !xslices.DeepSliceCmp(updates.Shape().Dimensions[:indicesRank-1], indices.Shape().Dimensions[:indicesRank-1], xslices.EqualAny[int]) {
-		Panicf("updates rank prefix (outputShapes=%s) must match the first n-1 dimensions of the indices (outputShapes=%s)",
-			updates.outputShapes, indices.outputShapes)
+		Panicf("updates rank prefix (shapes=%s) must match the first n-1 dimensions of the indices (shapes=%s)",
+			updates.Shape(), indices.Shape())
 	}
 	slicesRank := updatesRank - (indicesRank - 1)
 	slicesDims := updates.Shape().Dimensions[indicesRank-1:]
 	operandRank := operand.Shape().Rank()
 	if operandRank != indexedRank+slicesRank || !xslices.DeepSliceCmp(operand.Shape().Dimensions[indexedRank:], slicesDims, xslices.EqualAny[int]) {
-		Panicf("operand outputShapes (%s) has to be a combination of the indexed rank (%d, the last dimension of indices outputShapes %s) and "+
+		Panicf("operand shapes (%s) has to be a combination of the indexed rank (%d, the last dimension of indices shapes %s) and "+
 			"the slices coming from updates (the last %d dimensions %v of the updates, shaped %s)",
-			operand.outputShapes, indexedRank, indices.outputShapes, slicesRank, slicesDims, updates.outputShapes)
+			operand.Shape(), indexedRank, indices.Shape(), slicesRank, slicesDims, updates.Shape())
 	}
 
 	// Set scatterXLA parameters:
