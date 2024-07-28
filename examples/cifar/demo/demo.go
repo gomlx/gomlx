@@ -14,12 +14,14 @@
  *	limitations under the License.
  */
 
-// Demo for cifar library: it implements 2 models, a FNN and a CNN.
+// CIFAR-10 demo trainer.
+// It supports CNNs, FNNs, KAN and DiscreteKAN models, with many different options.
 package main
 
 import (
 	"flag"
 	"fmt"
+	"github.com/dustin/go-humanize"
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/examples/cifar"
@@ -42,9 +44,9 @@ import (
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
-	"log"
 	"os"
 	"slices"
+	"strings"
 	"time"
 
 	_ "github.com/gomlx/gomlx/backends/xla"
@@ -54,9 +56,10 @@ var (
 	flagDataDir = flag.String("data", "~/work/cifar", "Directory to cache downloaded and generated dataset files.")
 
 	// Training hyperparameters:
-	validModels = []string{"fnn", "kan", "cnn"}
-	flagModel   = flag.String("model", validModels[0], fmt.Sprintf("Valid model types: %v", validModels))
-	flagEval    = flag.Bool("eval", true, "Whether to evaluate the model on the validation data in the end.")
+	validModels   = []string{"fnn", "kan", "cnn", "cnn-kan"}
+	flagModel     = flag.String("model", validModels[0], fmt.Sprintf("Valid model types: %v", validModels))
+	flagEval      = flag.Bool("eval", true, "Whether to evaluate the model on the validation data in the end.")
+	flagVerbosity = flag.Int("verbosity", 1, "Level of verbosity, the higher the more verbose.")
 
 	// UI
 	flagPlots = flag.Bool("plots", true, "Plots during training: perform periodic evaluations, "+
@@ -74,8 +77,13 @@ func createDefaultContext() *context.Context {
 	ctx.SetParams(map[string]any{
 		"checkpoint":      "",
 		"num_checkpoints": 3,
-		"train_steps":     2000,
-		"batch_size":      50,
+		"train_steps":     3000,
+
+		// batch_size for training.
+		"batch_size": 50,
+
+		// eval_batch_size can be larger than training, it's more efficient.
+		"eval_batch_size": 200,
 		"plots":           true,
 
 		optimizers.ParamOptimizer:           "adamw",
@@ -95,8 +103,8 @@ func createDefaultContext() *context.Context {
 		fnn.ParamNormalization:   "layer",
 
 		// KAN network parameters:
-		kan.ParamNumControlPoints:   20, // Number of control points
-		kan.ParamNumHiddenNodes:     32,
+		kan.ParamNumControlPoints:   10, // Number of control points
+		kan.ParamNumHiddenNodes:     64,
 		kan.ParamNumHiddenLayers:    4,
 		kan.ParamBSplineDegree:      2,
 		kan.ParamBSplineMagnitudeL1: 1e-5,
@@ -113,9 +121,6 @@ func createDefaultContext() *context.Context {
 // DType used in the mode.
 var DType = dtypes.Float32
 
-// EvalBatchSize can be larger than training, it's more efficient.
-const EvalBatchSize = 2000
-
 func main() {
 	// Flags with context settings.
 	ctx := createDefaultContext()
@@ -128,12 +133,11 @@ func main() {
 		must.M(os.MkdirAll(*flagDataDir, 0777))
 	}
 	must.M(commandline.ParseContextSettings(ctx, *settings))
-	fmt.Println(commandline.SprintContextSettings(ctx))
+	if *flagVerbosity >= 1 {
+		fmt.Println(commandline.SprintContextSettings(ctx))
+	}
 
 	// Training:
-	if slices.Index(validModels, *flagModel) == -1 {
-		log.Fatalf("Flag --model must take one value from %v, got %q", validModels, *flagModel)
-	}
 	trainModel(ctx)
 }
 
@@ -143,20 +147,29 @@ func trainModel(ctx *context.Context) {
 
 	// Backend handles creation of ML computation graphs, accelerator resources, etc.
 	backend := backends.New()
-	fmt.Printf("Backend %q:\t%s\n", backend.Name(), backend.Description())
+	if *flagVerbosity >= 1 {
+		fmt.Printf("Backend %q:\t%s\n", backend.Name(), backend.Description())
+	}
 
 	// Create datasets used for training and evaluation.
 	batchSize := context.GetParamOr(ctx, "batch_size", int(0))
 	if batchSize <= 0 {
 		Panicf("Batch size must be > 0 (maybe it was not set?): %d", batchSize)
 	}
-	trainDS, evalOnTrainDS, evalOnTestDS := CreateDatasets(backend, *flagDataDir, batchSize)
+	evalBatchSize := context.GetParamOr(ctx, "eval_batch_size", int(0))
+	if evalBatchSize <= 0 {
+		evalBatchSize = batchSize
+	}
+	trainDS, evalOnTrainDS, evalOnTestDS := CreateDatasets(backend, *flagDataDir, batchSize, evalBatchSize)
 
 	// Create closure for model graph building function, that uses statically the dataset
 	// used for its Dataset.GatherImage, to convert image indices to the actual images.
 	// This is the signature of model function that the train.Trainer accepts.
 	modelFn := PlainModelGraph
-	if *flagModel == "cnn" {
+	if slices.Index(validModels, *flagModel) == -1 {
+		Panicf("Flag --model must take one value from %v, got %q", validModels, *flagModel)
+	}
+	if strings.HasPrefix(*flagModel, "cnn") {
 		modelFn = ConvolutionModelGraph
 	}
 	fmt.Printf("Model: %s\n", *flagModel)
@@ -190,7 +203,9 @@ func trainModel(ctx *context.Context) {
 
 	// Use standard training loop.
 	loop := train.NewLoop(trainer)
-	commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
+	if *flagVerbosity >= 0 {
+		commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
+	}
 
 	// Attach a checkpoint: checkpoint every 1 minute of training.
 	if checkpoint != nil {
@@ -212,18 +227,42 @@ func trainModel(ctx *context.Context) {
 	numTrainSteps := context.GetParamOr(ctx, "train_steps", 0)
 	if globalStep < numTrainSteps {
 		_ = must.M1(loop.RunSteps(trainDS, numTrainSteps-globalStep))
-		fmt.Printf("\t[Step %d] median train step: %d microseconds\n", loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
-		fmt.Println()
+		if *flagVerbosity >= 1 {
+			fmt.Printf("\t[Step %d] median train step: %d microseconds\n",
+				loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
+		}
 	} else {
 		fmt.Printf("\t - target train_steps=%d already reached. To train further, set a number additional "+
 			"to current global step.\n", numTrainSteps)
 	}
-	fmt.Printf("\t[Step %d] median train step: %d microseconds\n",
-		loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
+
+	if *flagVerbosity >= 1 {
+		var modelSize int
+		var modelMemory uintptr
+		if *flagVerbosity >= 2 {
+			fmt.Println("Variables:")
+		}
+		ctx.EnumerateVariables(func(v *context.Variable) {
+			if !strings.HasPrefix(v.Scope(), "/model/") {
+				return
+			}
+			shape := v.Shape()
+			if *flagVerbosity >= 2 {
+				fmt.Printf("\t%s : %s - %s, %s elements, %s bytes\n", v.Scope(), v.Name(),
+					shape, humanize.Comma(int64(shape.Size())), humanize.Bytes(uint64(shape.Memory())))
+			}
+			modelSize += shape.Size()
+			modelMemory += shape.Memory()
+		})
+		fmt.Printf("Model size: %s elements, %s bytes\n",
+			humanize.Comma(int64(modelSize)), humanize.Bytes(uint64(modelMemory)))
+	}
 
 	// Finally, print an evaluation on train and test datasets.
 	if *flagEval {
-		fmt.Println()
+		if *flagVerbosity >= 1 {
+			fmt.Println()
+		}
 		must.M(commandline.ReportEval(trainer, evalOnTestDS, evalOnTrainDS))
 	}
 
@@ -231,12 +270,12 @@ func trainModel(ctx *context.Context) {
 	cifar.ResetCache()
 }
 
-func CreateDatasets(backend backends.Backend, dataDir string, batchSize int) (trainDS, trainEvalDS, validationEvalDS train.Dataset) {
+func CreateDatasets(backend backends.Backend, dataDir string, batchSize, evalBatchSize int) (trainDS, trainEvalDS, validationEvalDS train.Dataset) {
 	baseTrain := cifar.NewDataset(backend, "Training", dataDir, cifar.C10, DType, cifar.Train)
 	baseTest := cifar.NewDataset(backend, "Validation", dataDir, cifar.C10, DType, cifar.Test)
 	trainDS = baseTrain.Copy().BatchSize(batchSize, true).Shuffle().Infinite(true)
-	trainEvalDS = baseTrain.BatchSize(EvalBatchSize, false)
-	validationEvalDS = baseTest.BatchSize(EvalBatchSize, false)
+	trainEvalDS = baseTrain.BatchSize(evalBatchSize, false)
+	validationEvalDS = baseTest.BatchSize(evalBatchSize, false)
 	return
 }
 
@@ -264,6 +303,7 @@ func normalizeImage(ctx *context.Context, x *Node) *Node {
 // Notice this cannot be used as a ModelFn for train.Trainer because of the dataset static parameter: one need
 // to create a small closure for that, see above for an example.
 func PlainModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
+	ctx = ctx.In("model")
 	batchedImages := inputs[0]
 	batchSize := batchedImages.Shape().Dimensions[0]
 	logits := Reshape(batchedImages, batchSize, -1)
@@ -275,6 +315,7 @@ func PlainModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 		// Configuration of the FNN layer(s) use the context hyperparameters.
 		logits = fnn.New(ctx, logits, numClasses).Done()
 	}
+	logits.AssertDims(batchSize, numClasses)
 	return []*Node{logits}
 }
 
@@ -289,6 +330,7 @@ func PlainModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 // Notice this cannot be used as a ModelFn for train.Trainer because of the dataset static parameter: one need
 // to create a small closure for that, see above for an example.
 func ConvolutionModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
+	ctx = ctx.In("model")
 	batchedImages := inputs[0]
 	batchSize := batchedImages.Shape().Dimensions[0]
 	logits := batchedImages
@@ -316,7 +358,7 @@ func ConvolutionModelGraph(ctx *context.Context, spec any, inputs []*Node) []*No
 
 	// Here logits are flat, and we can use the usual FNN/KAN.
 	numClasses := len(cifar.C10Labels)
-	if *flagModel == "kan" {
+	if *flagModel == "cnn-kan" {
 		// Configuration of the KAN layer(s) use the context hyperparameters.
 		logits = kan.New(ctx, logits, numClasses).Done()
 	} else {
