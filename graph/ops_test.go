@@ -726,34 +726,6 @@ func TestReduceAndKeep(t *testing.T) {
 		}, [][][]float32{{{1, 0, 3}, {2, -1, 1}}}) // Nothing happened here, since dimensions[0] == 1, nothing to reduce.
 }
 
-func TestSoftmax(t *testing.T) {
-	graphtest.RunTestGraphFn(t, "TestSoftmax()",
-		func(g *Graph) (inputs, outputs []*Node) {
-			logits := Const(g, [][]float64{{-1, 0, 1.}, {-1, 0, 0}})
-			inputs = []*Node{logits}
-			outputs = []*Node{Softmax(logits)}
-			return
-		}, []any{
-			[][]float64{
-				{0.09003057317038046, 0.24472847105479764, 0.6652409557748218},
-				{0.15536240349696362, 0.4223187982515182, 0.4223187982515182}},
-		}, xslices.Epsilon)
-}
-
-func TestMaskedSoftmax(t *testing.T) {
-	// Values checked with Tensorflow's `tf.nn.softmax()` function.
-	graphtest.RunTestGraphFn(t, "TestMaskedSoftmax()",
-		func(g *Graph) (inputs, outputs []*Node) {
-			logits := Const(g, [][]float64{{-1, 0, 1.}, {-1, 5, 10}})
-			mask := Const(g, [][]bool{{true, true, true}, {true, false, false}})
-			inputs = []*Node{logits, mask}
-			outputs = []*Node{MaskedSoftmax(logits, mask, -1)}
-			return
-		}, []any{
-			[][]float64{{0.09003057317038046, 0.24472847105479764, 0.6652409557748218}, {1, 0, 0}},
-		}, xslices.Epsilon)
-}
-
 func TestReverse(t *testing.T) {
 	testFuncOneInput(t, "Reverse(dimensions={1, 2})",
 		func(g *Graph) (input, output *Node) {
@@ -861,5 +833,43 @@ func TestComplex(t *testing.T) {
 	}, []any{
 		[]complex64{complex(re[0], im[0]), complex(re[1], im[1])},
 		[]complex128{complex(re64[0], 1.0), complex(re64[1], 1.0)},
+	}, -1)
+}
+
+func TestWhere(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "Where: no broadcast", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = []*Node{
+			Const(g, []bool{true, false, true}),
+			Const(g, []float32{1, 1, 1}),
+			Const(g, []float32{0, 0, 0}),
+		}
+		outputs = []*Node{Where(inputs[0], inputs[1], inputs[2])}
+		return
+	}, []any{
+		[]float32{1, 0, 1},
+	}, -1)
+
+	graphtest.RunTestGraphFn(t, "Where: broadcast from scalar", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = []*Node{
+			Const(g, []bool{true, false, true}),
+			Const(g, float32(1)),
+			Const(g, []float32{0, 0, 0}),
+		}
+		outputs = []*Node{Where(inputs[0], inputs[1], inputs[2])}
+		return
+	}, []any{
+		[]float32{1, 0, 1},
+	}, -1)
+
+	graphtest.RunTestGraphFn(t, "Where: broadcast from scalar", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = []*Node{
+			Const(g, []bool{true, false, true}),
+			Const(g, float32(1)),
+			Const(g, float32(0)),
+		}
+		outputs = []*Node{Where(inputs[0], inputs[1], inputs[2])}
+		return
+	}, []any{
+		[]float32{1, 0, 1},
 	}, -1)
 }

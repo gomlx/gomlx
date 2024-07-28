@@ -10,7 +10,6 @@ import (
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
-	"reflect"
 	"slices"
 	"strings"
 )
@@ -204,6 +203,20 @@ func ConstAsDType(g *Graph, dtype dtypes.DType, x any) *Node {
 // the given base.
 func ConstAs(base *Node, x any) *Node {
 	return ConstAsDType(base.Graph(), base.DType(), x)
+}
+
+// Infinity returns the positive/negative (depending on the value of sign, which must be 1 or -1) for the given dtype.
+// For integer dtypes, it returns the highest/lowest values.
+func Infinity(g *Graph, dtype dtypes.DType, sign int) *Node {
+	switch sign {
+	case 1:
+		return Const(g, dtype.HighestValue())
+	case -1:
+		return Const(g, dtype.LowestValue())
+	default:
+		exceptions.Panicf("Infinity's sign must be 1 or -1, got %d", sign)
+		panic(nil) // Disable lint warning.
+	}
 }
 
 // StopGradient creates an identity node (see Identity), through which gradients don't back-propagate.
@@ -417,29 +430,30 @@ func ConvertType(x *Node, dtype dtypes.DType) *Node {
 }
 
 // Where takes element-wise values from onTrue or onFalse depending on the value of condition (expected to be boolean).
+//
+// Usual implicit broadcasting rules don't apply.
+// But it will implicitly broadcast a scalar value for onTrue or onFalse.
 func Where(condition, onTrue, onFalse *Node) *Node {
 	_ = validateBuildingGraphFromInputs(condition)
 	if condition.DType() != dtypes.Bool {
 		exceptions.Panicf("Where(condition, onTrue, onFalse) requires condition to be of dtype Bool, got %s instead",
 			condition.Shape())
 	}
-	if !onTrue.Shape().Equal(onFalse.Shape()) {
-		exceptions.Panicf("Where(condition, onTrue, onFalse) requires onTrue (%s) and onFalse (%s) to be the same outputShapes",
-			onTrue.Shape(), onFalse.Shape())
-	}
-	if condition.Rank() > onTrue.Rank() || !reflect.DeepEqual(condition.Shape().Dimensions, onTrue.Shape().Dimensions[:condition.Rank()]) {
+	if (!onTrue.IsScalar() && !condition.Shape().EqualDimensions(onTrue.Shape())) ||
+		(!onFalse.IsScalar() && !condition.Shape().EqualDimensions(onFalse.Shape())) {
 		exceptions.Panicf(
-			"Where(condition, onTrue, onFalse) requires condition (%s) dimensions to be the same "+
-				"or a prefix to onTrue (%s) and onFalse (%s) dimensions",
-			condition.Shape(), onTrue.Shape(), onFalse.Shape())
+			"Where(condition, onTrue, onFalse) requires onTrue(%s)/onFalse(%s) to either be a scalar or has "+
+				"the same dimensions as condition (%s)",
+			onTrue.Shape(), onFalse.Shape(), condition.Shape())
 	}
-	if condition.Rank() < onTrue.Rank() {
-		// If condition's outputShapes is a prefix to onTrue and onFalse, then simply broadcast to their outputShapes.
-		// This allows masks to work for embeddings, which has one extra axis.
-		extraAxes := onTrue.Rank() - condition.Rank()
-		condition = ExpandDims(condition, xslices.SliceWithValue(extraAxes, -1)...)
-		condition = BroadcastToDims(condition, onTrue.Shape().Dimensions...)
-	}
+	//if condition.Rank() > onTrue.Rank() || !reflect.DeepEqual(condition.Shape().Dimensions, onTrue.Shape().Dimensions[:condition.Rank()]) {
+	//if condition.Rank() < onTrue.Rank() {
+	//	// If condition's outputShapes is a prefix to onTrue and onFalse, then simply broadcast to their outputShapes.
+	//	// This allows masks to work for embeddings, which has one extra axis.
+	//	extraAxes := onTrue.Rank() - condition.Rank()
+	//	condition = ExpandDims(condition, xslices.SliceWithValue(extraAxes, -1)...)
+	//	condition = BroadcastToDims(condition, onTrue.Shape().Dimensions...)
+	//}
 	return backendWhere(condition, onTrue, onFalse)
 }
 

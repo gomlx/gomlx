@@ -305,6 +305,9 @@ func Softmax(logits *Node, axes ...int) *Node {
 //
 // But implemented in a numerical stable way.
 //
+// It takes a mask that is true on the values to be considered, and false for the values
+// not to be considered.
+//
 // The list axes defines which axes is it supposed to run the softmax over
 // (the axes that will be summed over). If no axes are given, it is assumed to
 // be [-1], meaning, the last axes.
@@ -312,7 +315,10 @@ func Softmax(logits *Node, axes ...int) *Node {
 // It ignores values for which the corresponding mask is false, and will return 0 for
 // those fields. mask and logits must have the same outputShapes.
 func MaskedSoftmax(logits, mask *Node, axes ...int) *Node {
-	_ = validateBuildingGraphFromInputs(logits)
+	if mask == nil {
+		return Softmax(logits, axes...)
+	}
+	_ = validateBuildingGraphFromInputs(logits, mask)
 	if !logits.DType().IsFloat() {
 		Panicf("invalid logits dtype (%s), it must be float", logits.DType())
 	}
@@ -330,6 +336,59 @@ func MaskedSoftmax(logits, mask *Node, axes ...int) *Node {
 	result := Div(numerator, denominator)
 	result = Where(mask, result, zeros)
 	return result
+}
+
+// LogSoftmax computes the logarithm of the Softmax function, which rescales
+// elements to the range $[-\infty, 0)$.
+//
+//	$$
+//	\mathrm{log\_softmax}(x)_i = \log \left( \frac{\exp(x_i)}{\sum_j \exp(x_j)}
+//	\right)
+//	$$
+//
+// The axes define over which axes the LogSoftmax should be computed. If missing it is assumed to be -1.
+//
+// If any input values are "+inf", the result will be all "NaN": this reflects the
+// fact that "inf / inf" is not well-defined in the context of floating-point math.
+func LogSoftmax(logits *Node, axes ...int) *Node {
+	_ = validateBuildingGraphFromInputs(logits)
+	if !logits.DType().IsFloat() {
+		Panicf("invalid logits dtype (%s), it must be float", logits.DType())
+	}
+	if len(axes) == 0 {
+		axes = []int{-1}
+	}
+	adjustedAxes := adjustAxesToRankAndSort(logits.Rank(), axes, "logits")
+	normalizingMax := StopGradient(ReduceAndKeep(logits, ReduceMax, adjustedAxes...))
+	shiftedLogits := Sub(logits, normalizingMax)
+	shiftedLogSumExp := Log(ReduceAndKeep(Exp(shiftedLogits), ReduceSum, adjustedAxes...))
+	return Sub(shiftedLogits, shiftedLogSumExp)
+}
+
+// MaskedLogSoftmax computes the logarithm of the MaskedSoftmax function, which rescales
+// elements to the range $[-\infty, 0)$.
+//
+// It takes a mask that is true on the values to be considered, and false for the values
+// not to be considered.
+//
+// See LogSoftmax for details.
+func MaskedLogSoftmax(logits, mask *Node, axes ...int) *Node {
+	if mask == nil {
+		return LogSoftmax(logits, axes...)
+	}
+	g := validateBuildingGraphFromInputs(logits, mask)
+	dtype := logits.DType()
+	if !dtype.IsFloat() {
+		Panicf("invalid logits dtype (%s), it must be float", logits.DType())
+	}
+	if len(axes) == 0 {
+		axes = []int{-1}
+	}
+	adjustedAxes := adjustAxesToRankAndSort(logits.Rank(), axes, "logits")
+	normalizingMax := StopGradient(MaskedReduceAndKeep(logits, mask, MaskedReduceMax, adjustedAxes...))
+	shiftedLogits := Sub(logits, normalizingMax)
+	shiftedLogSumExp := Log(MaskedReduceAndKeep(Exp(shiftedLogits), mask, MaskedReduceSum, adjustedAxes...))
+	return Where(mask, Sub(shiftedLogits, shiftedLogSumExp), Infinity(g, dtype, -1))
 }
 
 // L1Norm returns the L1 norm (same as Manhattan length) of the last axis of x.
