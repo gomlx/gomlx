@@ -29,6 +29,13 @@ import (
 	"path"
 )
 
+var (
+	// ParamPlots is the context parameter to trigger generating of plot points and
+	// displaying them.
+	// A boolean value that defaults to false.
+	ParamPlots = "plots"
+)
+
 // PlotConfig hold the configuration object that will generate the plot. Create it with [New].
 type PlotConfig struct {
 	// figs is the list of figures, one per metric type.

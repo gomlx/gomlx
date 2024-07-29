@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"testing"
 )
 
@@ -10,7 +9,7 @@ func TestMainFunc(t *testing.T) {
 		t.Skip("skipping testing in short mode")
 		return
 	}
-	flag.Parse()
-	*flagNumSteps = 10
-	main()
+	ctx := createDefaultContext()
+	ctx.SetParam("train_steps", 10)
+	mainWithContext(ctx)
 }

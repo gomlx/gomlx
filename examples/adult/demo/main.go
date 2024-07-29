@@ -44,7 +44,6 @@ import (
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
-	"log"
 	"path"
 	"time"
 
@@ -52,7 +51,7 @@ import (
 )
 
 var (
-	// ModelDType used for the model. AssertNoError match RawData Go types.
+	// ModelDType used for the model.
 	ModelDType = dtypes.Float32
 )
 
@@ -104,33 +103,30 @@ var (
 
 	flagNumQuantiles = flag.Int("quantiles", 100, "Max number of quantiles to use for numeric features, used during piece-wise linear calibration. It will only use unique values, so if there are fewer variability, fewer quantiles are used.")
 	flagEmbeddingDim = flag.Int("embedding_dim", 8, "Default embedding dimension for categorical values.")
-	flagVerbosity    = flag.Int("verbosity", 0, "Level of verbosity, the higher the more verbose.")
+	flagVerbosity    = flag.Int("verbosity", 1, "Level of verbosity, the higher the more verbose.")
 
 	flagUseCategorical       = flag.Bool("use_categorical", true, "Use categorical features.")
 	flagUseContinuous        = flag.Bool("use_continuous", true, "Use continuous features.")
 	flagTrainableCalibration = flag.Bool("trainable_calibration", true, "Allow piece-wise linear calibration to adjust outputs.")
 )
 
-// AssertNoError logs err and panics, if it is not nil.
-func AssertNoError(err error) {
-	if err != nil {
-		log.Fatalf("Failed: %+v", err)
-	}
-}
-
 func main() {
-	// Init GoMLX manager and default context.
-	backend := backends.New()
-	ctx := createDefaultContext()
-
 	// Flags with context settings.
+	ctx := createDefaultContext()
 	settings := commandline.CreateContextSettingsFlag(ctx, "")
 	klog.InitFlags(nil)
 	flag.Parse()
 	must.M(commandline.ParseContextSettings(ctx, *settings))
+	mainWithContext(ctx)
+}
+
+func mainWithContext(ctx *context.Context) {
+	backend := backends.New()
 	if *flagVerbosity >= 1 {
+		fmt.Printf("Backend: %s\n\t%s\n", backend.Name(), backend.Description())
 		fmt.Println(commandline.SprintContextSettings(ctx))
 	}
+
 	// Fixes directories and get checkpointPath.
 	*flagDataDir = data.ReplaceTildeInDir(*flagDataDir)
 	checkpointPath := data.ReplaceTildeInDir(*flagCheckpoint)
@@ -143,18 +139,18 @@ func main() {
 		checkpointPath = context.GetParamOr(ctx, "checkpoint", "")
 	}
 
+	// Checkpoints loading (and saving): notice hyperparameters will be overwritten by values read from checkpoint.
+	trainSteps := context.GetParamOr(ctx, "train_steps", 0)
 	var globalStep int
 	var checkpoint *checkpoints.Handler
 	if checkpointPath != "" {
-		var err error
 		numCheckpointsToKeep := context.GetParamOr(ctx, "num_checkpoints", 5)
 		if numCheckpointsToKeep < 1 {
 			// Only limit the amount of checkpoints kept if >= 1.
-			checkpoint, err = checkpoints.Build(ctx).Dir(checkpointPath).Done()
+			checkpoint = must.M1(checkpoints.Build(ctx).Dir(checkpointPath).Done())
 		} else {
-			checkpoint, err = checkpoints.Build(ctx).Dir(checkpointPath).Keep(numCheckpointsToKeep).Done()
+			checkpoint = must.M1(checkpoints.Build(ctx).Dir(checkpointPath).Keep(numCheckpointsToKeep).Done())
 		}
-		AssertNoError(err)
 		globalStep = int(optimizers.GetGlobalStep(ctx))
 		if globalStep != 0 {
 			fmt.Printf("\t- restarting training from global_step=%d\n", globalStep)
@@ -197,7 +193,7 @@ func main() {
 	loop := train.NewLoop(trainer)
 	commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
 
-	// Attach a checkpoint.
+	// Attach a checkpoint saver.
 	if checkpoint != nil {
 		period := time.Minute * 1
 		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
@@ -216,16 +212,14 @@ func main() {
 			WithDatasets(trainEvalDS, testEvalDS)
 	}
 
-	// Train for the selected *flagNumSteps
-	numTrainSteps := context.GetParamOr(ctx, "train_steps", 0)
-	if globalStep < numTrainSteps {
-		_, err := loop.RunSteps(trainDS, numTrainSteps-globalStep)
-		AssertNoError(err)
+	// Train up to "train_steps".
+	if globalStep < trainSteps {
+		_ = must.M1(loop.RunSteps(trainDS, trainSteps-globalStep))
 		fmt.Printf("\t[Step %d] median train step: %d microseconds\n", loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
 		fmt.Println()
 	} else {
 		fmt.Printf("\t - target train_steps=%d already reached. To train further, set a number additional "+
-			"to current global step.\n", numTrainSteps)
+			"to current global step.\n", trainSteps)
 	}
 
 	if *flagVerbosity >= 2 {
@@ -239,7 +233,7 @@ func main() {
 	}
 
 	// Finally, print an evaluation on train and test datasets.
-	AssertNoError(commandline.ReportEval(trainer, trainEvalDS, testEvalDS))
+	must.M(commandline.ReportEval(trainer, trainEvalDS, testEvalDS))
 }
 
 // ModelGraph outputs the logits (not the probabilities). The parameter inputs should contain 3 tensors:
