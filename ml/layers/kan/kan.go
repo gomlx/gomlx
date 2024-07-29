@@ -71,9 +71,10 @@ type Config struct {
 	bsplineMagnitudeTerms, bsplineResidual bool
 	bsplineMagnitudeRegularizer            regularizers.Regularizer
 
-	useDiscrete           bool
-	discreteControlPoints int
-	discreteSoftness      float64
+	useDiscrete                  bool
+	discreteControlPoints        int
+	discreteSoftness             float64
+	discreteSplitPointsTrainable bool
 }
 
 // New returns the configuration for a KAN bsplineLayer(s) to be applied to the input x.
@@ -100,9 +101,10 @@ func New(ctx *context.Context, input *Node, numOutputNodes int) *Config {
 		bsplineResidual:         true,
 		bsplineMagnitudeTerms:   true,
 
-		useDiscrete:           context.GetParamOr(ctx, ParamDiscrete, false),
-		discreteControlPoints: context.GetParamOr(ctx, ParamNumControlPoints, 20),
-		discreteSoftness:      context.GetParamOr(ctx, ParamDiscreteSoftness, 0.1),
+		useDiscrete:                  context.GetParamOr(ctx, ParamDiscrete, false),
+		discreteControlPoints:        context.GetParamOr(ctx, ParamNumControlPoints, 20),
+		discreteSoftness:             context.GetParamOr(ctx, ParamDiscreteSoftness, 0.1),
+		discreteSplitPointsTrainable: true,
 	}
 
 	var magRegs []regularizers.Regularizer
@@ -277,7 +279,8 @@ func (c *Config) bsplineLayer(ctx *context.Context, x *Node, numOutputNodes int)
 		output = Add(output, residual)
 	}
 
-	// ReduceSum the inputs to get the outputs.
+	// ReduceSum the inputs to get the outputs: notice this requires Xavier initialization (initializer.XavierFn)
+	// whose magnitude is Sqrt(6/(fanIn+fanOut)) not to grow exponentially with the number of layers.
 	output = ReduceSum(output, -1)
 	output.AssertDims(batchSize, numOutputNodes) // Shape=[batch, outputs]
 	return output

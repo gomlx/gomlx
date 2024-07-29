@@ -10,6 +10,7 @@ import (
 	"github.com/gomlx/gopjrt/dtypes"
 	"k8s.io/klog/v2"
 	"math"
+	"reflect"
 )
 
 // Discrete-KAN is a variation of KAN that uses a piecewise-constant function (PCF for short) as
@@ -36,9 +37,13 @@ var (
 	// ParamDiscrete indicates whether to use Discrete-KAN as the univariate function to learn.
 	ParamDiscrete = "kan_discrete"
 
-	// ParamDiscreteSoftness indicates whether to soften the PCF (piecewise contant functions) during training,
+	// ParamDiscreteSoftness indicates whether to soften the PCF (piecewise constant functions) during training,
 	// and by how much.
 	ParamDiscreteSoftness = "kan_discrete_softness"
+
+	// ParamDiscreteSplitPointsTrainable indicates whether the split points are trainable and can move around.
+	// Default is true.
+	ParamDiscreteSplitPointsTrainable = "kan_discrete_splits_trainable"
 )
 
 // Discrete configures the KAN to use a "piecewise-constant" functions (as opposed to splines) to model \phi(x),
@@ -85,15 +90,36 @@ func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int
 		c.regularizer(ctx, g, controlPointsVar)
 	}
 	controlPoints := controlPointsVar.ValueGraph(g)
-	// splitPoints are fixed, and invariant to the nodes: they are always the same.
-	splitPoints := Iota(g, shapes.Make(dtype, 1, 1, c.discreteControlPoints-1), -1)
-	if c.discreteControlPoints > 2 {
-		splitPoints = DivScalar(splitPoints, float64(c.discreteControlPoints-2))
+
+	// splitPoints: start from values distributed between -1 and 2, and let them be trained.
+	var splitPoints *Node
+	if c.discreteSplitPointsTrainable {
+		// Trainable split points:
+		keys := make([]float64, c.discreteControlPoints-1)
+		if c.discreteControlPoints > 2 {
+			for ii := range keys {
+				keys[ii] = 2.0*float64(ii)/float64(c.discreteControlPoints-2) - 1.0
+			}
+		}
+		goDType := dtype.GoType()
+		keysDType := reflect.MakeSlice(reflect.SliceOf(goDType), len(keys), len(keys))
+		for ii, v := range keys {
+			keysDType.Index(ii).Set(reflect.ValueOf(v).Convert(goDType))
+		}
+		splitPointsVar := ctx.VariableWithValue("split_points", keysDType.Interface())
+		splitPoints = splitPointsVar.ValueGraph(g)
+
 	} else {
-		// For 2 control points, splitPoints is 0.5
-		splitPoints = AddScalar(splitPoints, 0.5)
+		// Fixed split points.
+		splitPoints = Iota(g, shapes.Make(dtype, 1, 1, c.discreteControlPoints-1), -1)
+		if c.discreteControlPoints > 2 {
+			splitPoints = DivScalar(splitPoints, float64(c.discreteControlPoints-2))
+		} else {
+			// For 2 control points, splitPoints is 0.5
+			splitPoints = AddScalar(splitPoints, 0.5)
+		}
+		splitPoints = AddScalar(MulScalar(splitPoints, 2), -1)
 	}
-	splitPoints = AddScalar(MulScalar(splitPoints, 2), -1)
 
 	var output *Node
 	if c.discreteSoftness <= 0 {
@@ -104,13 +130,10 @@ func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int
 	}
 	output.AssertDims(batchSize, numOutputNodes, numInputNodes) // Shape=[batch, outputs, inputs]
 
-	// Per section "2.2 Kan Architecture"
-	if c.bsplineResidual {
-		residual = activations.Apply(c.activation, residual)
-		residual = ExpandDims(residual, 1)
-		residual.AssertDims(batchSize, 1, numInputNodes)
-		output = Add(output, residual)
-	}
+	residual = activations.Apply(c.activation, residual)
+	residual = ExpandDims(residual, 1)
+	residual.AssertDims(batchSize, 1, numInputNodes)
+	output = Add(output, residual)
 
 	// ReduceMean the inputs to get the outputs: we use the mean (and not sum) because if the number of inputs is large
 	// with ReduceSum we would get large numbers (and gradients) that are harder for the gradient descent to learn.
