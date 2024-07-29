@@ -25,7 +25,8 @@
 * Package `initializers`:
   * Added `XavierFn` initializer.
 * Package `losses`:
-  * Fixed CategoricalCrossEntropyLogits and 
+  * Fixed `CategoricalCrossEntropyLogits` and `SparseCategoricalCrossEntropyLogits`.
+  * Added `MakeHuberLoss`
 * Package `metrics`:
   * Fixed 
 * Package `exceptions` moved to a separate repository in [`github.com/gomlx/exceptions`](github.com/gomlx/exceptions).
