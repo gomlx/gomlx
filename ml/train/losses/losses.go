@@ -27,6 +27,19 @@ import (
 	"github.com/gomlx/gopjrt/dtypes"
 )
 
+// LossFn is the interface used bye train.Trainer to train models.
+//
+// It takes as inputs the labels and predictions:
+//   - labels comes from the dataset.
+//   - predictions comes from the model.
+//   - the returned loss will be graph.ReduceAllMean by train.Trainer to a scalar, before being used for gradient descent.
+//     That means that the loss function is free to return a loss per example or an already reduced scalar loss.
+//
+// Most of the predefined losses in package `gomlx/ml/train/losses` assume labels and predictions are
+// both of length one. For multi-head models, it's very easy to write a small custom LossFn that splits
+// the slice and send each label/prediction pair to a predefined loss.
+type LossFn func(labels, predictions []*Node) (loss *Node)
+
 const (
 	Epsilon16 = 1e-4
 	Epsilon32 = 1e-7
@@ -52,10 +65,10 @@ func epsilonForDType(g *Graph, dtype dtypes.DType) *Node {
 //
 // labels and predictions must have the same shape.
 //
-// If there is an extra `labels` `*Node` with the shape of the `labels[0]` (usually simply `[bath_size]`),
+// If there is an extra element in the input labels with the shape of the labels[0] (usually simply `[bath_size]`),
 // it is assumed to be weights tensor to be applied to the losses.
-// If there is an extra `labels` `*Node` with booleans and the same dimensions as `labels[0]` (usually simply `batch_size`),
-// it assumed to be a mask tensor to be applied to the losses.
+// If there is an extra element in the input labels  with booleans and the same dimensions as `labels[0]` (usually
+// simply `batch_size`), it assumed to be a mask tensor to be applied to the losses.
 func MeanSquaredError(labels, predictions []*Node) (loss *Node) {
 	predictions0 := predictions[0]
 	labels0 := labels[0]
@@ -323,4 +336,62 @@ func categoricalCrossEntropyImpl(labels, predictions, weights, mask *Node) *Node
 		losses = Where(mask, losses, ZerosLike(losses))
 	}
 	return losses
+}
+
+var (
+	// ParamHuberLossDelta is the name of the hyperparameter that defines the Huber loss delta.
+	// See HuberLossBuilder.
+	// It defaults to 1.0
+	ParamHuberLossDelta = "huber_loss_delta"
+)
+
+// MakeHuberLoss returns a Huber loss function: it's similar to an L2 (MeanSquaredLoss) close to the target,
+// and it becomes L1 (linear) away from the target.
+//
+// The delta parameter configures the range where the loss behaves as L2: if the prediction is further than
+// delta it becomes linear. It also defines the slope. A good default value is 1.0.
+//
+// For the returned loss function:
+//   - If there is an extra element in the input labels with the shape of the labels[0] (usually simply `[bath_size]`),
+//     it is assumed to be weights tensor to be applied to the losses.
+//   - If there is an extra element in the input labels  with booleans and the same dimensions as `labels[0]` (usually
+//     simply `batch_size`), it assumed to be a mask tensor to be applied to the losses.
+//   - The loss is returned per element, and not automatically reduced. train.Trainer will by default take the
+//     mean of it.
+//
+// See https://en.wikipedia.org/wiki/Huber_loss
+func MakeHuberLoss(delta float64) LossFn {
+	if delta <= 0.0 {
+		Panicf("MakeHuberLoss requires delta > 0 (1.0 being a good default), delta=%f given", delta)
+	}
+	return func(labels, predictions []*Node) (loss *Node) {
+		predictions0 := predictions[0]
+		g := predictions0.Graph()
+		dtype := predictions0.DType()
+		labels0 := labels[0]
+		if !labels0.Shape().Equal(predictions0.Shape()) {
+			Panicf("labels[0] (%s) and predictions[0] (%s) must have same shape", labels0.Shape(), predictions0.Shape())
+		}
+		weights, mask := CheckLabelsForWeightsAndMask(labels0.Shape(), labels)
+
+		// Calculate Huber loss.
+		deltaConst := Scalar(g, dtype, delta)
+		absErrors := Abs(Sub(labels0, predictions0))
+		quadratic := Min(absErrors, deltaConst)
+		// Same as max(absErrors - deltaConst, 0) but avoids potentially doubling gradient. (From Jax implementation)
+		linear := Sub(absErrors, quadratic)
+		loss = Add(
+			MulScalar(Square(quadratic), 0.5),
+			Mul(deltaConst, linear),
+		)
+
+		// Apply weights and mask.
+		if weights != nil {
+			loss = Mul(loss, weights)
+		}
+		if mask != nil {
+			loss = Where(mask, loss, ZerosLike(loss))
+		}
+		return loss
+	}
 }

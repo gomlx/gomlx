@@ -154,3 +154,32 @@ func TestCategoricalCrossEntropy(t *testing.T) {
 			return predictions, output
 		}, []float32{0, 10.0, 0}, true)
 }
+
+func TestHuberLoss(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "MakeHuberLoss", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = []*Node{
+			Const(g, []float32{1.1, 0.9, 3.0, -1.0}), // Predictions
+			Const(g, []float32{1, 1, 1, 1}),          // Labels
+		}
+		lossFn := MakeHuberLoss(1.0)
+		predictions := []*Node{inputs[0]}
+		labels := []*Node{inputs[1]}
+		outputs = []*Node{lossFn(labels, predictions)}
+		return
+	}, []any{
+		[]float32{0.005, 0.005, 1.5, 1.5},
+	}, 1e-4)
+
+	testGradients[float64](t, "MakeHuberLoss: Gradient",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			predictions := Const(g, []float64{1.1, 0.9, 3.0, -1.0})
+			labels := Const(g, []float64{1, 1, 1, 1})
+			lossFn := MakeHuberLoss(1.0)
+			output = ReduceAllSum(lossFn([]*Node{labels}, []*Node{predictions}))
+			return output, []*Node{predictions}
+		}, [][]float64{{
+			0.1, -0.1, // L2 region: gradient is the absolute error +/- 0.1
+			1, -1, // L1 region: gradient is constant +/- 1 (while absolute error is +/- 2).
+		}})
+
+}

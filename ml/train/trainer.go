@@ -28,6 +28,7 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
+	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/tensors"
@@ -99,7 +100,9 @@ type ModelFn func(ctx *context.Context, spec any, inputs []*graph.Node) (predict
 // Most of the predefined losses in package `gomlx/ml/train/losses` assume labels and predictions are
 // both of length one. For multi-head models, it's very easy to write a small custom LossFn that splits
 // the slice and send each label/prediction pair to a predefined loss.
-type LossFn func(labels, predictions []*graph.Node) *graph.Node
+//
+// Interface is defined in the losses package.
+type LossFn = losses.LossFn
 
 // DefaultMaxExecutors used for Trainer objects. Each different `spec` value from a Dataset triggers
 // the creation of a new executor.
