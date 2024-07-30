@@ -91,7 +91,7 @@ func createDefaultContext() *context.Context {
 		optimizers.ParamAdamEpsilon:         1e-7,
 		optimizers.ParamAdamDType:           "",
 		optimizers.ParamCosineScheduleSteps: 0,
-		activations.ParamActivation:         "sigmoid",
+		activations.ParamActivation:         "swish",
 		layers.ParamDropoutRate:             0.0,
 		regularizers.ParamL2:                1e-5,
 		regularizers.ParamL1:                1e-5,
@@ -100,7 +100,7 @@ func createDefaultContext() *context.Context {
 		fnn.ParamNumHiddenLayers: 8,
 		fnn.ParamNumHiddenNodes:  128,
 		fnn.ParamResidual:        true,
-		fnn.ParamNormalization:   "layer",
+		fnn.ParamNormalization:   "none",
 
 		// KAN network parameters:
 		kan.ParamNumControlPoints:   10, // Number of control points
