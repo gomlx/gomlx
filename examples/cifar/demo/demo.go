@@ -113,7 +113,7 @@ func createDefaultContext() *context.Context {
 		kan.ParamDiscreteSoftness:   0.1,
 
 		// CNN
-		layers.ParamNormalizationType: "layer",
+		"cnn_normalization": "layer",
 	})
 	return ctx
 }
@@ -281,7 +281,7 @@ func CreateDatasets(backend backends.Backend, dataDir string, batchSize, evalBat
 
 func normalizeImage(ctx *context.Context, x *Node) *Node {
 	x.AssertRank(4) // [batch_size, width, height, depth]
-	normalizationType := context.GetParamOr(ctx, layers.ParamNormalizationType, "none")
+	normalizationType := context.GetParamOr(ctx, "cnn_normalization", "none")
 	switch normalizationType {
 	case "layer":
 		return layers.LayerNormalization(ctx, x, 1, 2).ScaleNormalization(false).Done()
@@ -290,7 +290,7 @@ func normalizeImage(ctx *context.Context, x *Node) *Node {
 	case "none", "":
 		return x
 	}
-	Panicf("invalid normalization type selected %q (hyperparameter %q) -- valid values are batch, layer, none", normalizationType, layers.ParamNormalizationType)
+	Panicf("invalid normalization type selected %q (hyperparameter %q) -- valid values are batch, layer, none", normalizationType, layers.ParamNormalization)
 	return nil
 }
 
