@@ -25,7 +25,7 @@ import (
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/examples/cifar"
-	"github.com/gomlx/gomlx/examples/notebook/gonb/margaid"
+	"github.com/gomlx/gomlx/examples/notebook/gonb/plotly"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
@@ -178,6 +178,10 @@ func trainModel(ctx *context.Context) {
 	meanAccuracyMetric := metrics.NewSparseCategoricalAccuracy("Mean Accuracy", "#acc")
 	movingAccuracyMetric := metrics.NewMovingAverageSparseCategoricalAccuracy("Moving Average Accuracy", "~acc", 0.01)
 
+	// Read hyperparameters from context that we don't want overwritten by loading fo the context from a checkpoint.
+	numTrainSteps := context.GetParamOr(ctx, "train_steps", 0)
+	usePlots := context.GetParamOr(ctx, plotly.ParamPlots, false)
+
 	// Checkpoints saving.
 	var checkpoint *checkpoints.Handler
 	var globalStep int
@@ -217,14 +221,15 @@ func trainModel(ctx *context.Context) {
 			})
 	}
 
-	// Attach a margaid plots: plot points at exponential steps.
+	// Attach Plotly plots: plot points at exponential steps.
 	// The points generated are saved along the checkpoint directory (if one is given).
-	if *flagPlots {
-		_ = margaid.NewDefault(loop, checkpoint.Dir(), 100, 1.1, evalOnTrainDS, evalOnTestDS)
+	if usePlots {
+		_ = plotly.New().Dynamic().
+			ScheduleExponential(loop, 200, 1.2).
+			WithDatasets(evalOnTrainDS, evalOnTestDS)
 	}
 
 	// Loop for given number of steps.
-	numTrainSteps := context.GetParamOr(ctx, "train_steps", 0)
 	if globalStep < numTrainSteps {
 		_ = must.M1(loop.RunSteps(trainDS, numTrainSteps-globalStep))
 		if *flagVerbosity >= 1 {
@@ -279,21 +284,6 @@ func CreateDatasets(backend backends.Backend, dataDir string, batchSize, evalBat
 	return
 }
 
-func normalizeImage(ctx *context.Context, x *Node) *Node {
-	x.AssertRank(4) // [batch_size, width, height, depth]
-	normalizationType := context.GetParamOr(ctx, "cnn_normalization", "none")
-	switch normalizationType {
-	case "layer":
-		return layers.LayerNormalization(ctx, x, 1, 2).ScaleNormalization(false).Done()
-	case "batch":
-		return layers.BatchNormalization(ctx, x, -1).Done()
-	case "none", "":
-		return x
-	}
-	Panicf("invalid normalization type selected %q (hyperparameter %q) -- valid values are batch, layer, none", normalizationType, layers.ParamNormalization)
-	return nil
-}
-
 // PlainModelGraph implements train.ModelFn, and returns the logit Node, given the input image.
 // It's a basic FNN (Feedforward Neural Network), so no convolutions. It is meant only as an example.
 //
@@ -317,6 +307,22 @@ func PlainModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	}
 	logits.AssertDims(batchSize, numClasses)
 	return []*Node{logits}
+}
+
+// normalizeImage to be used in between convolutions.
+func normalizeImage(ctx *context.Context, x *Node) *Node {
+	x.AssertRank(4) // [batch_size, width, height, depth]
+	normalizationType := context.GetParamOr(ctx, "cnn_normalization", "none")
+	switch normalizationType {
+	case "layer":
+		return layers.LayerNormalization(ctx, x, 1, 2).ScaleNormalization(false).Done()
+	case "batch":
+		return layers.BatchNormalization(ctx, x, -1).Done()
+	case "none", "":
+		return x
+	}
+	Panicf("invalid normalization type selected %q (hyperparameter %q) -- valid values are batch, layer, none", normalizationType, layers.ParamNormalization)
+	return nil
 }
 
 // ConvolutionModelGraph implements train.ModelFn and returns the logit Node, given the input image.
