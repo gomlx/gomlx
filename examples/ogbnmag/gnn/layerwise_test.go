@@ -151,9 +151,9 @@ func createDenseTestStateGraphLayerWise(strategy *samplerPkg.Strategy, g *Graph,
 
 func setMinimalTestParams(ctx *context.Context) {
 	ctx.SetParams(map[string]any{
-		layers.ParamDropoutRate:       0.0,
-		activations.ParamActivation:   "none", // No activation, to make math simpler.
-		layers.ParamNormalizationType: "none",
+		layers.ParamDropoutRate:     0.0,
+		activations.ParamActivation: "none", // No activation, to make math simpler.
+		layers.ParamNormalization:   "none",
 
 		ParamEdgeDropoutRate:       0.0,
 		ParamNumGraphUpdates:       1, // gnn_num_messages
@@ -171,9 +171,9 @@ func setMinimalTestParams(ctx *context.Context) {
 
 func setCommonTestParams(ctx *context.Context) {
 	ctx.SetParams(map[string]any{
-		layers.ParamDropoutRate:       0.0,
-		activations.ParamActivation:   "swish",
-		layers.ParamNormalizationType: "layer",
+		layers.ParamDropoutRate:     0.0,
+		activations.ParamActivation: "swish",
+		layers.ParamNormalization:   "layer",
 
 		ParamEdgeDropoutRate:       0.0,
 		ParamNumGraphUpdates:       3, // gnn_num_messages

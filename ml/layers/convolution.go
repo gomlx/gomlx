@@ -44,7 +44,7 @@ type ConvBuilder struct {
 	newScope           bool
 }
 
-// Convolution prepares a convolution on x with the given kernel for arbitrary
+// Convolution prepares one convolution on x with the given kernel for arbitrary
 // number of spatial dimensions (1D, 2D, 3D, etc.).
 //
 // It is very flexible and to ease setting its parameters it returns a ConvBuilder object for configuration. Once it is
