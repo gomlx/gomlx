@@ -34,7 +34,7 @@ func TestMaxPool(t *testing.T) {
 			return
 		}, [][][][]float32{{{{2}}, {{0.2}}}})
 
-	testFuncOneInput(t, "MaxPool(...).ChannelsAfter().NoPadding()",
+	testFuncOneInput(t, "MaxPool(...).ChannelsLast.NoPadding()",
 		func(g *Graph) (input, output *Node) {
 			channelA := Iota(g, MakeShape(dtypes.Float64, 1, 3, 3, 1), 2)
 			channelB := Mul(channelA, Const(g, 0.1))
@@ -43,7 +43,7 @@ func TestMaxPool(t *testing.T) {
 			return
 		}, [][][][]float64{{{{2, 0.2}}}})
 
-	testFuncOneInput(t, "MaxPool(...).Window(3).ChannelsFirst().PadSame().Strides(1)",
+	testFuncOneInput(t, "MaxPool(...).Window(3).ChannelAxis(ChannelsFirst).PadSame().Strides(1)",
 		func(g *Graph) (input, output *Node) {
 			channelA := Iota(g, MakeShape(dtypes.Float32, 1, 1, 3, 3), 2)
 			channelB := Mul(channelA, Const(g, float32(0.1)))
@@ -51,6 +51,15 @@ func TestMaxPool(t *testing.T) {
 			output = MaxPool(input).Window(3).ChannelsAxis(images.ChannelsFirst).PadSame().Strides(1).Done()
 			return
 		}, [][][][]float32{{{{1, 1, 1}, {2, 2, 2}, {2, 2, 2}}, {{0.1, 0.1, 0.1}, {0.2, 0.2, 0.2}, {0.2, 0.2, 0.2}}}})
+
+	testFuncOneInput(t, "MaxPool(...).Window(3).ChannelsLast.PadSame().Strides(1)",
+		func(g *Graph) (input, output *Node) {
+			channelA := IotaFull(g, MakeShape(dtypes.Float32, 1, 3, 3, 1))
+			channelB := Mul(channelA, Const(g, float32(0.1)))
+			input = Concatenate([]*Node{channelA, channelB}, -1)
+			output = MaxPool(input).Window(3).ChannelsAxis(images.ChannelsLast).PadSame().Strides(1).Done()
+			return
+		}, [][][][]float32{{{{4, 0.4}, {5, 0.5}, {5, 0.5}}, {{7, 0.7}, {8, 0.8}, {8, 0.8}}, {{7, 0.7}, {8, 0.8}, {8, 0.8}}}})
 
 	testFuncOneInput(t, "MaxPool(...).Window(2).Strides(1)",
 		func(g *Graph) (input, output *Node) {
