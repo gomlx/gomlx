@@ -94,7 +94,7 @@ func TestExecWithSlices(t *testing.T) {
 
 func TestExecWithVariableUpdates(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
-	ctx := context.NewContext()
+	ctx := context.New()
 	counter := context.NewExec(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
 		dtype := dtypes.Int64
 		counterVar := ctx.WithInitializer(initializers.Zero).VariableWithShape("counter", shapes.Make(dtype))

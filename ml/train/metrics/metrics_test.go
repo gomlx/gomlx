@@ -45,7 +45,7 @@ func takeLabelsMaskWeightPredictionsFn(metricFn func(ctx *context.Context, label
 
 func TestBinaryAccuracyGraph(t *testing.T) {
 	manager := graphtest.BuildTestBackend()
-	ctx := context.NewContext()
+	ctx := context.New()
 	accuracyExec := context.NewExec(manager, ctx, takeFirstFn(BinaryAccuracyGraph))
 	labels, probs := []float32{0, 1, 0, 1, 0, 1}, []float32{0.1, 0.1, 0.5, 0.5, 0.8, 0.8}
 	results := accuracyExec.Call(labels, probs)
@@ -57,7 +57,7 @@ func TestBinaryAccuracyGraph(t *testing.T) {
 
 func TestNewMeanBinaryAccuracy(t *testing.T) {
 	manager := graphtest.BuildTestBackend()
-	ctx := context.NewContext().Checked(false)
+	ctx := context.New().Checked(false)
 	accMetric := NewMeanBinaryAccuracy("accuracy", "acc")
 	accExec := context.NewExec(manager, ctx, func(ctx *context.Context, labels, predictions *Node) *Node {
 		return accMetric.UpdateGraph(ctx, []*Node{labels}, []*Node{predictions})
@@ -104,7 +104,7 @@ func TestNewMeanBinaryAccuracy(t *testing.T) {
 
 func TestBinaryLogitsAccuracyGraph(t *testing.T) {
 	manager := graphtest.BuildTestBackend()
-	ctx := context.NewContext()
+	ctx := context.New()
 	accuracyExec := context.NewExec(manager, ctx, takeFirstFn(BinaryLogitsAccuracyGraph))
 	labels, logits := []float32{0, 1, 0, 1, 0, 1}, []float32{-0.1, -0.1, 0, 0, 0.2, 10.0}
 	results := accuracyExec.Call(labels, logits)
@@ -114,7 +114,7 @@ func TestBinaryLogitsAccuracyGraph(t *testing.T) {
 
 func TestSparseCategoricalAccuracyGraph(t *testing.T) {
 	manager := graphtest.BuildTestBackend()
-	ctx := context.NewContext()
+	ctx := context.New()
 	{
 		accuracyExec := context.NewExec(manager, ctx, takeFirstFn(SparseCategoricalAccuracyGraph))
 		labels, logits := [][]int{{0}, {1}, {2}}, [][]float32{

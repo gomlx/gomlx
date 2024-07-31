@@ -16,7 +16,7 @@ func TestUNetModelGraph(t *testing.T) {
 	backend = graphtest.BuildTestBackend()
 	Init()
 	g := NewGraph(backend, "test")
-	ctx := context.NewContext()
+	ctx := context.New()
 	numExamples := 5
 	noisyImages := Zeros(g, shapes.Make(DType, numExamples, 64, 64, 3))
 	flowerIds := Zeros(g, shapes.Make(dtypes.Int32, numExamples))
@@ -46,7 +46,7 @@ func TestTrainingModelGraph(t *testing.T) {
 	backend = graphtest.BuildTestBackend()
 	Init()
 	g := backend.NewGraph().WithName("test")
-	ctx := context.NewContext()
+	ctx := context.New()
 	numExamples := 5
 	predictions := getZeroPredictions(ctx, g, numExamples)
 	predictedImages, loss := predictions[0], predictions[1]
@@ -70,7 +70,7 @@ func TestImagesGenerator(t *testing.T) {
 	numDiffusionSteps := 3
 
 	backend = graphtest.BuildTestBackend()
-	ctx := context.NewContext()
+	ctx := context.New()
 	// ctx.RngStateReset() --> to truly randomize each run uncomment this.
 	g := backend.NewGraph().WithName("test")
 	_ = getZeroPredictions(ctx, g, 2) // Batch size won't matter, we only call this to create the model weights.

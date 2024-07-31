@@ -129,7 +129,7 @@ func main() {
 	dataset := &Dataset{"training", []*tensors.Tensor{inputs}, []*tensors.Tensor{labels}}
 
 	// Creates Context with learned weights and bias.
-	ctx := context.NewContext()
+	ctx := context.New()
 	ctx.SetParam(optimizers.ParamLearningRate, *flagLearningRate)
 
 	// train.Trainer executes a training step.

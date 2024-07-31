@@ -17,7 +17,6 @@
 package graph
 
 import (
-	fmt "fmt"
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/xslices"
@@ -816,13 +815,13 @@ func batchNormForTrainingVJP(node *Node, vjps []*Node, _ shapes.Shape) []*Node {
 	splitOutputs := splitNode(node)
 	mean, variance := splitOutputs[1], splitOutputs[2]
 	gradOutput := vjps[0]
-	fmt.Printf("operand: %s\n", params.operand)
-	fmt.Printf("scale: %s\n", params.scale)
-	params.operand.SetLogged("operand")
-	params.scale.SetLogged("scale")
-	mean.SetLogged("mean")
-	variance.SetLogged("variance")
-	fmt.Printf("batchNormForTrainingVJP: epsilon=%g\n", params.epsilon)
+	//fmt.Printf("operand: %s\n", params.operand)
+	//fmt.Printf("scale: %s\n", params.scale)
+	//params.operand.SetLogged("operand")
+	//params.scale.SetLogged("scale")
+	//mean.SetLogged("mean")
+	//variance.SetLogged("variance")
+	//fmt.Printf("batchNormForTrainingVJP: epsilon=%g\n", params.epsilon)
 	gradOperand, gradScale, gradOffset := InternalBatchNormGradient(
 		params.operand, params.scale, mean, variance, gradOutput, params.epsilon, params.axis)
 	return []*Node{gradOperand, gradScale, gradOffset}

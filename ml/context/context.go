@@ -55,7 +55,7 @@ import (
 // One could create a new context with:
 //
 //	func main() {
-//		ctx := context.NewContext()
+//		ctx := context.New()
 //		ctx.SetParam("dropout_rate") = 0.2  // Set default dropout to 0.2
 //		...
 //	}
@@ -158,8 +158,8 @@ type Loader interface {
 	LoadVariable(ctx *Context, scope, name string) (value *tensors.Tensor, found bool)
 }
 
-// NewContext constructs a new and empty context.
-func NewContext() *Context {
+// New returns an empty context, associated with a freshly created data.
+func New() *Context {
 	ctx := &Context{
 		scope:   RootScope,
 		checked: true,
@@ -171,6 +171,12 @@ func NewContext() *Context {
 	}
 	ctx.initializer = initializers.RandomUniformFn(initializers.NoSeed, -0.05, 0.05)
 	return ctx
+}
+
+// NewContext is an alias to New, it returns an empty Context.
+// Deprecated: use New instead.
+func NewContext() *Context {
+	return New()
 }
 
 const (

@@ -56,7 +56,7 @@ var (
 )
 
 func createDefaultContext() *context.Context {
-	ctx := context.NewContext()
+	ctx := context.New()
 	ctx.RngStateReset()
 	ctx.SetParams(map[string]any{
 		"checkpoint":      "",

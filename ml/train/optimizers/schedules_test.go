@@ -33,7 +33,7 @@ import (
 func TestCosineAnnealingSchedule(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 	periodInSteps := 100
-	ctx := context.NewContext().Checked(false)
+	ctx := context.New().Checked(false)
 	cosineExec := context.NewExec(backend, ctx, func(ctx *context.Context, graph *Graph) *Node {
 		ctx.SetTraining(graph, true)
 		CosineAnnealingSchedule(ctx, graph, dtypes.Float32).

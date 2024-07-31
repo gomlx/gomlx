@@ -94,7 +94,7 @@ type ExecGraphFn interface {
 //
 // And then with Exec one can do:
 //
-//	 ctx := context.NewContext(backend)
+//	 ctx := context.New(backend)
 //		var logitsFn = context.NewExec(backend, ctx, LogitsGraph)
 //		batch := [][]float32{ {1, 2, 3}, {4, 5, 6} } // 2 examples with 3 features (shape=[2,3])
 //		fmt.Printf("Logits(%v) = %v\n", batch, logitsFn.Call(batch)[0].Value())
@@ -115,7 +115,7 @@ type ExecGraphFn interface {
 //
 // ```
 //
-//	 ctx := context.NewContext(backend)
+//	 ctx := context.New(backend)
 //	 counter := context.NewExec(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
 //		  dtype := types.Int64
 //		  counterVar := ctx.WithInitializer(initializers.Zeros).VariableWithShape("counter", types.MakeShape(dtype))
@@ -181,7 +181,7 @@ type Exec struct {
 // a *Graph), or if there are no inputs or outputs, it returns an error.
 func NewExecAny(backend backends.Backend, ctx *Context, ctxGraphFn any) (*Exec, error) {
 	if ctx == nil {
-		ctx = NewContext()
+		ctx = New()
 	}
 	e := &Exec{
 		backend:     backend,

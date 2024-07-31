@@ -55,7 +55,7 @@ func IotaP1Initializer(g *Graph, shape Shape) *Node {
 func testSimpleFunc(t *testing.T, name string, input any,
 	fn func(ctx *context.Context, input *Node) *Node, want any) {
 	backend := graphtest.BuildTestBackend()
-	ctx := context.NewContext().WithInitializer(IotaP1Initializer)
+	ctx := context.New().WithInitializer(IotaP1Initializer)
 	exec := context.NewExec(backend, ctx, fn)
 	var outputs []*tensors.Tensor
 	require.NotPanicsf(t, func() { outputs = exec.Call(input) }, "%s: failed to exec graph", name)
@@ -67,7 +67,7 @@ func testSimpleFunc(t *testing.T, name string, input any,
 func testSimpleFuncMany(t *testing.T, name string, inputs []any,
 	fn func(ctx *context.Context, inputs []*Node) *Node, want any) {
 	backend := graphtest.BuildTestBackend()
-	ctx := context.NewContext().WithInitializer(IotaP1Initializer)
+	ctx := context.New().WithInitializer(IotaP1Initializer)
 	exec := context.NewExec(backend, ctx, fn)
 	var outputs []*tensors.Tensor
 	require.NotPanicsf(t, func() { outputs = exec.Call(inputs...) }, "%s: failed to exec graph", name)
@@ -83,7 +83,7 @@ func testSimpleFuncMany(t *testing.T, name string, inputs []any,
 
 func TestDense(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
-	ctx := context.NewContext().WithInitializer(IotaP1Initializer)
+	ctx := context.New().WithInitializer(IotaP1Initializer)
 	g := NewGraph(backend, "TestDense")
 	input := tensors.FromValue([][]float32{{1, 2}, {10, 20}, {100, 200}})
 	fmt.Printf("\tinput=%v\n", input)
@@ -184,7 +184,7 @@ func plotComputation(title string, start, end float64, fns ...func(x float64) fl
 func TestPieceWiseLinearCalibration(t *testing.T) {
 	manager := graphtest.BuildTestBackend()
 	{
-		ctx := context.NewContext()
+		ctx := context.New()
 		g := NewGraph(manager, "test")
 		const numKeypoints = 5
 		const maxInput = 100

@@ -11,7 +11,7 @@ import (
 )
 
 func TestPoolMessagesWithFixedShape(t *testing.T) {
-	ctx := context.NewContext()
+	ctx := context.New()
 	ctx.SetParam(ParamPoolingType, "sum|max")
 	graphtest.RunTestGraphFn(
 		t, "poolMessagesWithFixedShape()",
@@ -39,7 +39,7 @@ func TestPoolMessagesWithFixedShape(t *testing.T) {
 }
 
 func TestPoolMessagesWithAdjacency(t *testing.T) {
-	ctx := context.NewContext()
+	ctx := context.New()
 	ctx.SetParam(ParamPoolingType, "sum|mean")
 	graphtest.RunTestGraphFn(
 		t, "poolMessagesWithAdjacency()",

@@ -137,7 +137,7 @@ func TestLayerWiseInferenceLogits(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 	for ctxSourceIdx := 0; ctxSourceIdx < 2; ctxSourceIdx++ {
 		// Create context.
-		ctx := context.NewContext()
+		ctx := context.New()
 		if ctxSourceIdx == 0 {
 			fmt.Printf("\nRandomly initialized context:\n")
 			configureLayerWiseTestContext(ctx)
@@ -203,7 +203,7 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 
 	// Create context and load from pre-trained checkpoint.
 	backend := graphtest.BuildTestBackend()
-	ctx := context.NewContext()
+	ctx := context.New()
 	_, fileName, _, ok := runtime.Caller(0)
 	require.True(t, ok, "Failed to get caller information to find out test source directory.")
 	baseDir := filepath.Dir(fileName)

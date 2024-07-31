@@ -158,7 +158,7 @@ func TrainModel() {
 	validationDS.BatchSize(EvalBatchSize, false)
 
 	// Context holds the variables and hyperparameters for the model.
-	ctx := context.NewContext()
+	ctx := context.New()
 	ctx.SetParam(optimizers.ParamLearningRate, *flagLearningRate)
 	ctx.SetParam(layers.ParamL2Regularization, *flagL2Regularization)
 
@@ -299,7 +299,7 @@ func TrainingMonitor(checkpoint *checkpoints.Handler, loop *train.Loop, metrics 
 // DisplayTrainingPlots simply display the training plots of a model, without any training.
 func DisplayTrainingPlots() {
 	Init()
-	ctx := context.NewContext()
+	ctx := context.New()
 	checkpoint, _, _ := LoadCheckpointToContext(backend, ctx)
 	if checkpoint == nil {
 		fmt.Printf("You must set --checkpoint='model_sub_dir'!")

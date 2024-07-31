@@ -76,7 +76,7 @@ func TestKAN(t *testing.T) {
 		return
 	}
 	backend := graphtest.BuildTestBackend()
-	ctx := context.NewContext()
+	ctx := context.New()
 	ctx.RngStateFromSeed(42)
 	ds := &kanTestDataset{batchSize: 128}
 
@@ -119,7 +119,7 @@ func TestKANRegularized(t *testing.T) {
 		return
 	}
 	backend := graphtest.BuildTestBackend()
-	ctx := context.NewContext()
+	ctx := context.New()
 	ctx.RngStateFromSeed(42)
 	ctx.SetParam(kan.ParamBSplineMagnitudeL1, 0.01)
 	ds := &kanTestDataset{batchSize: 128}

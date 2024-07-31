@@ -61,10 +61,6 @@ var (
 	flagEval      = flag.Bool("eval", true, "Whether to evaluate the model on the validation data in the end.")
 	flagVerbosity = flag.Int("verbosity", 1, "Level of verbosity, the higher the more verbose.")
 
-	// UI
-	flagPlots = flag.Bool("plots", true, "Plots during training: perform periodic evaluations, "+
-		"save results if --checkpoint is set and draw plots, if in a Jupyter notebook.")
-
 	// Checkpointing.
 	flagCheckpoint     = flag.String("checkpoint", "", "Directory save and load checkpoints from. If left empty, no checkpoints are created.")
 	flagCheckpointKeep = flag.Int("checkpoint_keep", 3, "Number of checkpoints to keep, if --checkpoint is set.")
@@ -72,7 +68,7 @@ var (
 
 // createDefaultContext sets the context with default hyperparameters
 func createDefaultContext() *context.Context {
-	ctx := context.NewContext()
+	ctx := context.New()
 	ctx.RngStateReset()
 	ctx.SetParams(map[string]any{
 		"checkpoint":      "",
@@ -80,11 +76,14 @@ func createDefaultContext() *context.Context {
 		"train_steps":     3000,
 
 		// batch_size for training.
-		"batch_size": 50,
+		"batch_size": 64,
 
 		// eval_batch_size can be larger than training, it's more efficient.
 		"eval_batch_size": 200,
-		"plots":           true,
+
+		// "plots" trigger generating intermediary eval data for plotting, and if running in GoNB, to actually
+		// draw the plot with Plotly.
+		plotly.ParamPlots: true,
 
 		optimizers.ParamOptimizer:           "adamw",
 		optimizers.ParamLearningRate:        1e-4,
@@ -114,6 +113,8 @@ func createDefaultContext() *context.Context {
 
 		// CNN
 		"cnn_normalization": "layer",
+		"cnn_num_layers":    4,
+		"cnn_num_filters":   32,
 	})
 	return ctx
 }
@@ -216,7 +217,6 @@ func trainModel(ctx *context.Context) {
 		period := time.Minute * 1
 		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
 			func(loop *train.Loop, metrics []*tensors.Tensor) error {
-				fmt.Printf("\n[saving checkpoint@%d] [median train step (ms): %d]\n", loop.LoopStep, loop.MedianTrainStepDuration().Milliseconds())
 				return checkpoint.Save()
 			})
 	}
@@ -224,9 +224,12 @@ func trainModel(ctx *context.Context) {
 	// Attach Plotly plots: plot points at exponential steps.
 	// The points generated are saved along the checkpoint directory (if one is given).
 	if usePlots {
-		_ = plotly.New().Dynamic().
+		plots := plotly.New().Dynamic().
 			ScheduleExponential(loop, 200, 1.2).
 			WithDatasets(evalOnTrainDS, evalOnTestDS)
+		if checkpoint != nil {
+			plots.WithCheckpoint(checkpoint.Dir())
+		}
 	}
 
 	// Loop for given number of steps.
@@ -239,6 +242,14 @@ func trainModel(ctx *context.Context) {
 	} else {
 		fmt.Printf("\t - target train_steps=%d already reached. To train further, set a number additional "+
 			"to current global step.\n", numTrainSteps)
+	}
+
+	// Finally, print an evaluation on train and test datasets.
+	if *flagEval {
+		if *flagVerbosity >= 1 {
+			fmt.Println()
+		}
+		must.M(commandline.ReportEval(trainer, evalOnTestDS, evalOnTrainDS))
 	}
 
 	if *flagVerbosity >= 1 {
@@ -262,17 +273,6 @@ func trainModel(ctx *context.Context) {
 		fmt.Printf("Model size: %s elements, %s bytes\n",
 			humanize.Comma(int64(modelSize)), humanize.Bytes(uint64(modelMemory)))
 	}
-
-	// Finally, print an evaluation on train and test datasets.
-	if *flagEval {
-		if *flagVerbosity >= 1 {
-			fmt.Println()
-		}
-		must.M(commandline.ReportEval(trainer, evalOnTestDS, evalOnTrainDS))
-	}
-
-	// Release memory -- not really needed since we are exiting, just for the example.
-	cifar.ResetCache()
 }
 
 func CreateDatasets(backend backends.Backend, dataDir string, batchSize, evalBatchSize int) (trainDS, trainEvalDS, validationEvalDS train.Dataset) {
@@ -338,31 +338,47 @@ func normalizeImage(ctx *context.Context, x *Node) *Node {
 func ConvolutionModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	ctx = ctx.In("model")
 	batchedImages := inputs[0]
+	g := batchedImages.Graph()
+	dtype := batchedImages.DType()
 	batchSize := batchedImages.Shape().Dimensions[0]
 	logits := batchedImages
-	{
-		ctx := ctx.In("conv_0")
-		logits = layers.Convolution(ctx, logits).Filters(32).KernelSize(3).Done()
-		logits = normalizeImage(ctx, logits)
-		logits = activations.Relu(logits)
-		logits = MaxPool(logits).Window(2).Done()
+	numFilters := context.GetParamOr(ctx, "cnn_num_filters", 32)
+	numLayers := context.GetParamOr(ctx, "cnn_num_layers", 4)
+	var dropoutRate *Node
+	dropoutRateConfig := context.GetParamOr(ctx, layers.ParamDropoutRate, 0.0)
+	if dropoutRateConfig > 0 {
+		dropoutRate = Scalar(g, dtype, dropoutRateConfig)
 	}
-	{
-		ctx := ctx.In("conv_1")
-		logits = layers.Convolution(ctx, logits).Filters(64).KernelSize(3).Done()
+	//fmt.Printf("logits[0].shape=%s\n", logits.Shape())
+	for ii := range numLayers + 3 {
+		ctx := ctx.Inf("conv_layer_%d", ii)
+		residual := logits
+		conv := layers.Convolution(ctx, logits).Filters(numFilters).KernelSize(3)
+		if ii < numLayers {
+			conv = conv.PadSame()
+		}
+		logits = conv.Done()
 		logits = normalizeImage(ctx, logits)
-		logits = activations.Relu(logits)
-		logits = MaxPool(logits).Window(2).Done()
+		logits = activations.ApplyFromContext(ctx, logits)
+		if dropoutRate != nil {
+			logits = layers.DropoutNormalize(ctx, logits, dropoutRate, true)
+		}
+		if ii >= numLayers {
+			// Shrink image, while increasing number of filters.
+			logits = MaxPool(logits).Window(2).Strides(2).Done()
+			numFilters *= 2 // Could be 4, since we are reducing the image by a factor of 4.
+		}
+		if logits.Shape().Equal(residual.Shape()) {
+			logits = Add(residual, logits)
+		}
+		//fmt.Printf("logits[%d].shape=%s\n", ii+1, logits.Shape())
 	}
-	{
-		ctx := ctx.In("conv_2")
-		logits = layers.Convolution(ctx, logits).Filters(64).KernelSize(3).Done()
-		logits = normalizeImage(ctx, logits)
-		logits = Reshape(logits, batchSize, -1)
-		logits = activations.Relu(logits)
-	}
+	//fmt.Println()
+	//fmt.Println()
+	//fmt.Println()
 
-	// Here logits are flat, and we can use the usual FNN/KAN.
+	// Flatten logits, and we can use the usual FNN/KAN.
+	logits = Reshape(logits, batchSize, -1)
 	numClasses := len(cifar.C10Labels)
 	if *flagModel == "cnn-kan" {
 		// Configuration of the KAN layer(s) use the context hyperparameters.

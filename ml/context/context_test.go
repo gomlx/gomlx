@@ -32,7 +32,7 @@ import (
 )
 
 func TestContextVariables(t *testing.T) {
-	ctx := NewContext()
+	ctx := New()
 	ctx2 := ctx.In("a")
 
 	if ctx.Scope() != ScopeSeparator {
@@ -65,7 +65,7 @@ func TestContextVariables(t *testing.T) {
 }
 
 func TestContextVariablesInitialization(t *testing.T) {
-	ctx := NewContext()
+	ctx := New()
 	ctx0 := ctx.In("a").WithInitializer(initializers.RandomUniformFn(42, 1.5, 2.5))
 	v0 := ctx0.VariableWithShape("x", shapes.Make(dtypes.Float32))
 	ctx1 := ctx.In("b").WithInitializer(initializers.RandomNormalFn(42, 1.0))
@@ -92,7 +92,7 @@ func TestContextVariablesInitialization(t *testing.T) {
 }
 
 func TestParams(t *testing.T) {
-	ctx := NewContext()
+	ctx := New()
 	ctx.SetParam("x", 7.0)
 	got, found := ctx.GetParam("x")
 	assert.True(t, found)
@@ -116,7 +116,7 @@ func TestParams(t *testing.T) {
 }
 
 func TestEnumerateVariables(t *testing.T) {
-	ctx := NewContext()
+	ctx := New()
 	ctx0 := ctx.In("a")
 	_ = ctx0.VariableWithShape("x", shapes.Make(dtypes.Float32))
 	ctx1 := ctx.In("b")
@@ -148,7 +148,7 @@ func TestEnumerateVariables(t *testing.T) {
 }
 
 func TestDeleteVariable(t *testing.T) {
-	ctx := NewContext()
+	ctx := New()
 	ctx0 := ctx.In("a")
 	_ = ctx0.VariableWithShape("x", shapes.Make(dtypes.Float32))
 	ctx1 := ctx.In("b")
@@ -170,7 +170,7 @@ func TestDeleteVariable(t *testing.T) {
 }
 
 func TestDeleteVariablesInScope(t *testing.T) {
-	ctx := NewContext()
+	ctx := New()
 	ctx0 := ctx.In("a")
 	_ = ctx0.VariableWithShape("x", shapes.Make(dtypes.Float32))
 	ctx1 := ctx.In("b")
@@ -215,7 +215,7 @@ func (l *ConstantLoader) LoadVariable(_ *Context, scope, name string) (value *te
 }
 
 func TestContext_SetLoader(t *testing.T) {
-	ctx := NewContext()
+	ctx := New()
 	ctx.SetLoader(&ConstantLoader{
 		Values: map[string]map[string]*tensors.Tensor{
 			"/": {

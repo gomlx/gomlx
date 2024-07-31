@@ -30,7 +30,7 @@
 // ```
 //
 //	…
-//	ctx := context.NewContext()
+//	ctx := context.New()
 //	ctx.SetParam(optimizers.ParamLearningRate, *flagLearningRate)
 //
 //	var checkpoint *checkpoints.Handler
@@ -73,6 +73,7 @@ import (
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
+	"k8s.io/klog/v2"
 	"os"
 	"path"
 	"path/filepath"
@@ -523,7 +524,9 @@ func maxCheckPointCountFromCheckpoints(checkpoints []string) int {
 // If `merge` is set to true, only trainable weights are merged into the current values, using
 // `mergeWeight` for the current weight. For merging one must set up `h.mergeExec` as well.
 func (h *Handler) loadCheckpoint(baseName string, merge bool, mergeWeight float64) error {
-	fmt.Printf("loading: %q\n", baseName)
+	if klog.V(1).Enabled() {
+		klog.Infof("loading: %q\n", baseName)
+	}
 	if h.ctx != nil {
 		return errors.Errorf("%s tried to loadCheckpoint(%q) after being attached to a Context, this is not allowed", h, baseName)
 	}

@@ -41,7 +41,7 @@ func MapWithGraphFn(backend backends.Backend, ctx *context.Context, dataset trai
 		mapGraphFn: graphFn,
 	}
 	if mapDS.ctx == nil {
-		mapDS.ctx = context.NewContext()
+		mapDS.ctx = context.New()
 	}
 	return mapDS
 }

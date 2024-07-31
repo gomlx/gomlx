@@ -47,7 +47,7 @@ func TestCheckpoints(t *testing.T) {
 	var dir string
 	{
 		// Build model, checkpoint a few times.
-		ctx := context.NewContext()
+		ctx := context.New()
 		ctx.SetParam("learning_rate", 0.01)
 		ctx.SetParam(layers.ParamL2Regularization, 0.001)
 		ctx.In("layer_1").SetParam(layers.ParamL2Regularization, 0.004)
@@ -74,7 +74,7 @@ func TestCheckpoints(t *testing.T) {
 	// Test loading of values
 	{
 		// Build model, checkpoint a few times.
-		ctx := context.NewContext()
+		ctx := context.New()
 		ctx.SetParam("learning_rate", 5.0) // Value should be overwritten when loading.
 		checkpoint := Build(ctx).Dir(dir).Keep(3).MustDone()
 
@@ -115,7 +115,7 @@ func TestMergedCheckpoints(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 	var dir string
 	{
-		ctx := context.NewContext().Checked(false)
+		ctx := context.New().Checked(false)
 		checkpoint := Build(ctx).TempDir("", "test_checkpoints_").Keep(2).MustDone()
 		dir = checkpoint.Dir()
 		globalStepV := optimizers.GetGlobalStepVar(ctx)
@@ -131,7 +131,7 @@ func TestMergedCheckpoints(t *testing.T) {
 	}
 	{
 		// Check that the values were averaged:
-		ctx := context.NewContext().Checked(false)
+		ctx := context.New().Checked(false)
 		_ = Build(ctx).Dir(dir).Keep(2).TakeMean(-1, backend).MustDone()
 		globalStep := optimizers.GetGlobalStep(ctx)
 		assert.Equal(t, int64(10), globalStep, "GlobalStep")
@@ -159,7 +159,7 @@ func TestParams(t *testing.T) {
 
 	{
 		// Build model, checkpoint a few times.
-		ctx := context.NewContext()
+		ctx := context.New()
 		ctx.SetParam("xFloat64", xFloat64)
 		ctx.SetParam("xFloat32", xFloat32)
 		ctx.SetParam("xInt", xInt)
@@ -176,7 +176,7 @@ func TestParams(t *testing.T) {
 	// Test loading of values
 	{
 		// Build model, checkpoint a few times.
-		ctx := context.NewContext()
+		ctx := context.New()
 		_ = Build(ctx).Dir(dir).Keep(3).MustDone()
 
 		got, found := ctx.GetParam("xFloat64")

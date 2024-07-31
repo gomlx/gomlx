@@ -8,7 +8,7 @@ import (
 )
 
 func createTestContext() *context.Context {
-	ctx := context.NewContext()
+	ctx := context.New()
 	ctx.SetParam("x", 11.0)
 	ctx.SetParam("y", 7)
 	ctx.SetParam("z", false)

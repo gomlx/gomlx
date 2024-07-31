@@ -40,7 +40,7 @@ import (
 // Notice for any feature that happens to be constant, the `stddev` will be 0. If trying to normalize (divide)
 // by that will result in error. Use ReplaceZerosByOnes below to avoid the numeric issues.
 func Normalization(backend backends.Backend, ds train.Dataset, inputsIndex int, independentAxes ...int) (mean, stddev *tensors.Tensor, err error) {
-	ctx := context.NewContext()
+	ctx := context.New()
 	updateValuesWithInput := context.NewExec(backend, ctx, func(ctx *context.Context, batch *Node) {
 		g := batch.Graph()
 		ctx = ctx.WithInitializer(initializers.Zero)

@@ -136,7 +136,7 @@ func main() {
 
 // NewContext returns a new context with the parameters set from the flags values.
 func NewContext(manager backends.Backend) *context.Context {
-	ctx := context.NewContext()
+	ctx := context.New()
 	ctx.RngStateReset()
 	ctx.SetParam(optimizers.ParamOptimizer, *flagOptimizer) // Just so it is saved along with the context.
 	ctx.SetParam(optimizers.ParamLearningRate, *flagLearningRate)

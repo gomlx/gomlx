@@ -149,7 +149,7 @@ func trainModel() {
 	movingAccuracyMetric := metrics.NewMovingAverageBinaryLogitsAccuracy("Moving Average Accuracy", "~acc", 0.01)
 
 	// Context holds the variables and hyperparameters for the model.
-	ctx := context.NewContext()
+	ctx := context.New()
 	ctx.SetParam(optimizers.ParamLearningRate, *flagLearningRate)
 	ctx.SetParam(layers.ParamL2Regularization, *flagL2Regularization)
 	if *flagEval {

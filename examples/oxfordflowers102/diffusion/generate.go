@@ -198,7 +198,7 @@ func DenoiseStepGraph(ctx *context.Context, noisyImages, diffusionTime, nextDiff
 //
 // Plotting results only work if in a Jupyter (with GoNB kernel) notebook.
 func DisplayImagesAcrossDiffusionSteps(numImages int, numDiffusionSteps int, displayEveryNSteps int) {
-	ctx := context.NewContext().Checked(false)
+	ctx := context.New().Checked(false)
 	_, _, _ = LoadCheckpointToContext(ctx)
 	ctx.RngStateReset()
 	noise := GenerateNoise(numImages)
@@ -288,7 +288,7 @@ func SliderDiffusionSteps(cacheKey string, ctx *context.Context, numImages int, 
 // GenerateImagesOfFlowerType is similar to DisplayImagesAcrossDiffusionSteps, but it limits itself to generating images of only one
 // flower type.
 func GenerateImagesOfFlowerType(numImages int, flowerType int32, numDiffusionSteps int) (predictedImages *tensors.Tensor) {
-	ctx := context.NewContext().Checked(false)
+	ctx := context.New().Checked(false)
 	_, _, _ = LoadCheckpointToContext(ctx)
 	ctx.RngStateReset()
 	noise := GenerateNoise(numImages)
@@ -353,7 +353,7 @@ func DropdownFlowerTypes(cacheKey string, ctx *context.Context, numImages, numDi
 // GenerateImagesOfAllFlowerTypes takes one random noise, and generate the flower for each of the 102 types.
 func GenerateImagesOfAllFlowerTypes(numDiffusionSteps int) (predictedImages *tensors.Tensor) {
 	numImages := flowers.NumLabels
-	ctx := context.NewContext().Checked(false)
+	ctx := context.New().Checked(false)
 	_, _, _ = LoadCheckpointToContext(ctx)
 	ctx.RngStateReset()
 	noise := NewExec(backend, func(g *Graph) *Node {
@@ -488,7 +488,7 @@ func NewKidGenerator(ctx *context.Context, evalDS train.Dataset, numDiffusionSte
 	AssertNoError(inceptionv3.DownloadAndUnpackWeights(i3Path))
 	kg := &KidGenerator{
 		ctxGenerator:   ctx,
-		ctxInceptionV3: context.NewContext().Checked(false),
+		ctxInceptionV3: context.New().Checked(false),
 		ds:             evalDS,
 		generator:      NewImagesGenerator(ctx, noise, flowerIds, numDiffusionStep),
 		kid:            inceptionv3.KidMetric(i3Path, inceptionv3.MinimumImageSize, 255.0, timage.ChannelsLast),
