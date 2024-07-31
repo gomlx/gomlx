@@ -33,6 +33,9 @@ type Point struct {
 	// MetricName of this point.
 	MetricName string
 
+	// Short name
+	Short string
+
 	// MetricType typically will be "loss", "accuracy".
 	// It's used in plotting to aggregate similar metric types in the same plot.
 	MetricType string
@@ -81,7 +84,12 @@ func AddTrainAndEvalMetrics(plotter Plotter, loop *train.Loop, trainMetrics []*t
 			incomplete = true
 			continue
 		}
-		plotter.AddPoint(Point{MetricName: "Train: " + desc.Name(), MetricType: desc.MetricType(), Step: step, Value: metric})
+		plotter.AddPoint(Point{
+			MetricName: "Train: " + desc.Name(),
+			Short:      fmt.Sprintf("T/%s", desc.ShortName()),
+			MetricType: desc.MetricType(),
+			Step:       step,
+			Value:      metric})
 	}
 
 	// Eval metrics, if given
@@ -97,7 +105,12 @@ func AddTrainAndEvalMetrics(plotter Plotter, loop *train.Loop, trainMetrics []*t
 				continue
 			}
 			metricType := desc.MetricType()
-			plotter.AddPoint(Point{MetricName: fmt.Sprintf("Eval on %s: %s", ds.Name(), desc.Name()), MetricType: metricType, Step: step, Value: metric})
+			plotter.AddPoint(Point{
+				MetricName: fmt.Sprintf("Eval on %s: %s", ds.Name(), desc.Name()),
+				Short:      fmt.Sprintf("E(%3s)/%s", ds.Name()[:3], desc.ShortName()),
+				MetricType: metricType,
+				Step:       step,
+				Value:      metric})
 		}
 	}
 

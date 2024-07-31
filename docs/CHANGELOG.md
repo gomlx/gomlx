@@ -34,9 +34,14 @@
 * Package `tensors/image` renamed `tensors/images`.
   * Added all numeric dtypes support; Added conversion tests to all types.
   * Added support to `dtypes.Float16`.
+* Package `context`
+  * Renamed `context.NewContext` to `context.New`.
+* Package `plots`
+  * Added `Point.Short` for short-name of metrics in saved metrics.
 * C/C++ code:
   * Completely removed, all C/C++ dependencies are in `gopjrt` project now.
   * Removed reference to AOT compilation, see #52.
+* Added command-line tool `gomlx_checkpoints` to introspect checkpoints.
 
 ## 0.10.0 - 2024/06/12
 
