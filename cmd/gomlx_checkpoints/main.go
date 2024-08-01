@@ -62,7 +62,7 @@ var (
 	titleStyle = lipgloss.NewStyle().Bold(true).Padding(1, 4, 1, 4)
 )
 
-func newPlainTable(withHeader bool) *lgtable.Table {
+func newPlainTable(withHeader bool, alignments ...lipgloss.Position) *lgtable.Table {
 	return lgtable.New().
 		Border(lipgloss.NormalBorder()).
 		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("99"))).
@@ -79,11 +79,13 @@ func newPlainTable(withHeader bool) *lgtable.Table {
 				// Odd row style
 				s = evenRowStyle
 			}
-			if col == 0 {
-				s = s.Align(lipgloss.Right)
-			} else {
-				s = s.Align(lipgloss.Left)
+			alignment := lipgloss.Left
+			if col < len(alignments) {
+				alignment = alignments[col]
+			} else if len(alignments) > 0 {
+				alignment = alignments[len(alignments)-1]
 			}
+			s = s.Align(alignment)
 			return
 		})
 }
@@ -102,7 +104,7 @@ func report(checkpointPath string) {
 	// Summary table.
 	if *flagSummary {
 		fmt.Println(titleStyle.Render("Summary"))
-		table := newPlainTable(false)
+		table := newPlainTable(false, lipgloss.Right, lipgloss.Left)
 		table.Row("checkpoint", checkpointPath)
 		table.Row("scope", *flagScope)
 		globalStep := int64(optimizers.GetGlobalStep(ctx))
@@ -221,7 +223,7 @@ func metrics(checkpointPath string) {
 		nextPos++
 	}
 
-	table := newPlainTable(true)
+	table := newPlainTable(true, lipgloss.Right)
 	header := make([]string, 1+len(metricsUsed))
 	header[0] = "Global Step"
 	for name, idx := range metricsOrder {
@@ -248,7 +250,7 @@ func metrics(checkpointPath string) {
 			case "accuracy":
 				value = fmt.Sprintf("%.2f%%", 100.0*point.Value)
 			default:
-				value = fmt.Sprintf("%f", point.Value)
+				value = fmt.Sprintf("%.3f", point.Value)
 			}
 			currentRow[idx] = value
 		}
