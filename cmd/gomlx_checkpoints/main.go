@@ -243,7 +243,14 @@ func metrics(checkpointPath string) {
 		}
 		idx, found := metricsOrder[point.Short]
 		if found {
-			currentRow[idx] = fmt.Sprintf("%f", point.Value)
+			var value string
+			switch point.MetricType {
+			case "accuracy":
+				value = fmt.Sprintf("%.2f%%", 100.0*point.Value)
+			default:
+				value = fmt.Sprintf("%f", point.Value)
+			}
+			currentRow[idx] = value
 		}
 	}
 	if currentStep != -1 {
