@@ -799,6 +799,42 @@ func TestInternalBatchNormForInference(t *testing.T) {
 		})
 }
 
+func TestInternalBatchNormForTraining(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "BatchNormInference()",
+		func(g *Graph) (inputs, outputs []*Node) {
+			input := Iota(g, MakeShape(dtypes.Float32, 7, 3), 0) // Values from 0.0 to 6.0 on batch axis.
+			inputs = []*Node{input}
+			scale := Const(g, []float32{1.0, 2.0, 3.0})
+			offset := Const(g, []float32{10.0, 100.0, 1000.0})
+			normalized, batchMean, batchVariance := InternalBatchNormForTraining(input, scale, offset, 1e-7, -1)
+			normalized2 := InternalBatchNormForInference(input, scale, offset, batchMean, batchVariance, 1e-7, -1)
+			outputs = []*Node{normalized, normalized2, batchMean, batchVariance}
+
+			return
+		}, []any{
+			[][]float32{
+				{8.5, 97, 995.5},
+				{9, 98, 997},
+				{9.5, 99, 998.5},
+				{10, 100, 1000},
+				{10.5, 101, 1001.5},
+				{11, 102, 1003},
+				{11.5, 103, 1004.5},
+			},
+			[][]float32{
+				{8.5, 97, 995.5},
+				{9, 98, 997},
+				{9.5, 99, 998.5},
+				{10, 100, 1000},
+				{10.5, 101, 1001.5},
+				{11, 102, 1003},
+				{11.5, 103, 1004.5},
+			},
+			[]float32{3, 3, 3}, // Mean = (0+1+2+3+4+5+6) / 7 = 3
+			[]float32{4, 4, 4}, // Variance = (9+4+1+0+1+4+9) / 7 = 4
+		}, 1e-4)
+}
+
 func TestSqueeze(t *testing.T) {
 	graphtest.RunTestGraphFn(t, "Squeeze()",
 		func(g *Graph) (inputs, outputs []*Node) {

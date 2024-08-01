@@ -171,9 +171,15 @@ func (n *Node) AssertValid() {
 	n.graph.AssertValid()
 }
 
-// SetLogged indicates that a node should be logged by executors.
+// SetLogged indicates that a node should be logged by executors, with the given message.
 func (n *Node) SetLogged(message string) {
 	n.logMessage = message
+}
+
+// SetLoggedf indicates that a node should be logged by executors, with the given formatted message.
+// See SetLogged.
+func (n *Node) SetLoggedf(format string, args ...any) {
+	n.SetLogged(fmt.Sprintf(format, args...))
 }
 
 // IsLogged returns whether node is marked to be logged.
