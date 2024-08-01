@@ -17,11 +17,13 @@
   * Updated `OneHot` to use `Where`.
   * Added `GrowLeft`, `GrowRigth`, `Infinity`, `LogSoftmax`, `MaskedLogSoftmax`
   * `BroadcastToDims` and `BroadcastToShape` will automatically expand x to match.
+  * `AdjustAxisToOperandRank` made public.
 * Package `layers`:
   * Added sub-package `fnn` for a simplified Feedforward Neural Networks implementation.
   * Added sub-package `kan` for Kolmogorov–Arnold Networks, and Discrete-KAN.
   * Added sub-package `regularizers` with automatic regularizer configuration. Layers `Dense`, `DenseWithBias` and `kan` use it by default.
   * Added sub-package `activations` -- just a refactor of the code already in layers.
+  * Added `train.BatchNormAveragesUpdate` to update the average of the means and variances used for normalization.
 * Package `initializers`:
   * Added `XavierFn` initializer.
 * Package `losses`:

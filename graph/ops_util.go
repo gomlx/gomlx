@@ -542,7 +542,7 @@ func ShiftWithValue(x *Node, axis int, shiftDir ShiftDirection, n int, value *No
 func Shift(x *Node, axis int, shiftDir ShiftDirection, n int) *Node {
 	rank := x.Rank()
 	dims := x.Shape().Dimensions
-	shiftAxis := AdjustAxisToRank(x, axis)
+	shiftAxis := AdjustAxisToOperandRank(x, axis)
 
 	// Find slice of left-most / right-most values to use for filling.
 	axisRanges := make([]SliceAxisSpec, rank)
@@ -568,7 +568,7 @@ func genericShiftImpl(x *Node, axis int, shiftDir ShiftDirection, n int, fill fl
 	dtype := x.DType()
 	rank := x.Rank()
 	dims := x.Shape().Dimensions
-	shiftAxis := AdjustAxisToRank(x, axis)
+	shiftAxis := AdjustAxisToOperandRank(x, axis)
 	if n > dims[shiftAxis] {
 		Panicf("cannot shift %d positions for axis %d, x.shape=%s", n, axis, x.Shape())
 	}
@@ -639,7 +639,7 @@ func growImpl(x *Node, axis int, dir ShiftDirection, n int, fillValue float64) *
 	g := x.Graph()
 	rank := x.Rank()
 	dtype := x.DType()
-	growAxis := AdjustAxisToRank(x, axis)
+	growAxis := AdjustAxisToOperandRank(x, axis)
 	dims := x.Shape().Dimensions
 
 	// Create slice to be concatenated for our desired growth: the slice is the same, independent of the direction.

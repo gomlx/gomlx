@@ -22,10 +22,10 @@ import (
 	"github.com/gomlx/gomlx/types/xslices"
 )
 
-// AdjustAxisToRank returns the positive axis to the operand shapes, adjusting in case the axis given is negative.
+// AdjustAxisToOperandRank returns the positive axis to the operand shapes, adjusting in case the axis given is negative.
 //
 // It panics if axis given is not in the operand's rank range.
-func AdjustAxisToRank(operand *Node, axis int) int {
+func AdjustAxisToOperandRank(operand *Node, axis int) int {
 	adjustedAxis := axis
 	if axis < 0 {
 		adjustedAxis = operand.Rank() + axis
