@@ -20,21 +20,29 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"
+	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/xslices"
+	"strings"
 )
 
 // BatchNormBuilder is a helper to build a batch normalization computation. Create it with BatchNormalization, set the
 // desired parameters, and when all is set, call Done.
 type BatchNormBuilder struct {
-	ctx                        *context.Context
-	x                          *Node
-	featureAxis                int
-	momentum, epsilon          float64
-	center, scale              bool
-	newScope                   bool
-	trainable, useXlaInference bool
+	ctx                 *context.Context
+	x                   *Node
+	featureAxis         int
+	momentum, epsilon   float64
+	center, scale       bool
+	newScope            bool
+	trainable           bool
+	useBackendInference bool
 }
+
+const (
+	// BatchNormalizationScopeName is used as sub-scope for all batch normalization variables.
+	BatchNormalizationScopeName = "batch_normalization"
+)
 
 // BatchNormalization performs a batch normalization layer on the input. It includes a scaling and offset factor,
 // and normalization over the batch entries. It maintains a moving average mean and variance of the inputs
@@ -66,15 +74,16 @@ type BatchNormBuilder struct {
 // 2. Support selection of multiple features axes.
 func BatchNormalization(ctx *context.Context, x *Node, featureAxis int) *BatchNormBuilder {
 	return &BatchNormBuilder{
-		ctx:         ctx,
-		x:           x,
-		featureAxis: featureAxis,
-		momentum:    0.99,
-		epsilon:     1e-03,
-		center:      true,
-		scale:       true,
-		newScope:    true,
-		trainable:   true,
+		ctx:                 ctx,
+		x:                   x,
+		featureAxis:         featureAxis,
+		momentum:            0.99,
+		epsilon:             1e-03,
+		center:              true,
+		scale:               true,
+		newScope:            true,
+		trainable:           true,
+		useBackendInference: true,
 	}
 }
 
@@ -117,10 +126,9 @@ func (builder *BatchNormBuilder) Scale(value bool) *BatchNormBuilder {
 	return builder
 }
 
-// CurrentScope configures the convolution not to create a sub-scope for the kernel weights it needs,
-// and instead use the current one provided in Convolution.
-//
-// By default, Convolution will create a sub-scope named "conv".
+// CurrentScope configures BatchNormalization not to create a new sub-scope named BatchNormalizationScopeName for its variables.
+// This allows more control on scope names, but it breaks things that rely on batch normalization variables to be under
+// BatchNormalizationScopeName (e.g.: BatchNormalizationResetWeights).
 func (builder *BatchNormBuilder) CurrentScope() *BatchNormBuilder {
 	builder.newScope = false
 	return builder
@@ -138,11 +146,13 @@ func (builder *BatchNormBuilder) Trainable(trainable bool) *BatchNormBuilder {
 	return builder
 }
 
-// UseXLAInference uses a dedicated XLA op for batch normalization inference.
-// XLA offers it, but it is not necessarily faster, and it is **not differentiable**.
-// The default is false.
-func (builder *BatchNormBuilder) UseXLAInference(value bool) *BatchNormBuilder {
-	builder.useXlaInference = value
+// UseBackendInference uses a backend version of batch normalization inference.
+// The alternative is a manually defined batch normalization inference, which is differentiable.
+// Only used if training is false.
+//
+// The default is true.
+func (builder *BatchNormBuilder) UseBackendInference(value bool) *BatchNormBuilder {
+	builder.useBackendInference = value
 	return builder
 }
 
@@ -158,7 +168,7 @@ func (builder *BatchNormBuilder) Done() *Node {
 	}
 	ctx := builder.ctx
 
-	featureAxis := AdjustAxisToRank(x, builder.featureAxis)
+	featureAxis := AdjustAxisToOperandRank(x, builder.featureAxis)
 	featureDim := x.Shape().Dimensions[featureAxis]
 
 	// Scale and offset applied to the normalized value.
@@ -185,16 +195,35 @@ func (builder *BatchNormBuilder) Done() *Node {
 	weightVar := ctx.WithInitializer(initializers.Zero).VariableWithShape("avg_weight", varShape).SetTrainable(false)
 
 	var normalized *Node
-	if builder.trainable && ctx.IsTraining(g) {
-		// Training: take batch's mean and variance and use it to update averages.
+	mean, variance := meanAverageVar.ValueGraph(g), varianceAverageVar.ValueGraph(g)
+	averagesUpdatePhase := context.GetGraphParamOr(ctx, g, train.BatchNormalizationUpdatePhase, -1)
+	if averagesUpdatePhase >= 0 {
 		var batchMean, batchVariance *Node
-		normalized, batchMean, batchVariance = InternalBatchNormForTraining(x, scale, offset, float32(builder.epsilon), featureAxis)
+		batchMean, batchVariance = builder.batchMeanAndVariance(x)
 		builder.updateMeanAndVariance(ctx, g, batchMean, batchVariance, meanAverageVar, varianceAverageVar, weightVar)
+		if averagesUpdatePhase > 0 {
+			// Use updated mean, variance to normalize.
+			mean, variance = meanAverageVar.ValueGraph(g), varianceAverageVar.ValueGraph(g)
+		} else {
+			mean, variance = batchMean, batchVariance
+		}
+		normalized = builder.directBatchNormGraph(x, scale, offset, mean, variance)
+
+	} else if builder.trainable && ctx.IsTraining(g) {
+		// Training: take batch's mean and variance and use it to update averages.
+		if builder.useBackendInference {
+			var batchMean, batchVariance *Node
+			normalized, batchMean, batchVariance = InternalBatchNormForTraining(x, scale, offset, float32(builder.epsilon), featureAxis)
+			builder.updateMeanAndVariance(ctx, g, batchMean, batchVariance, meanAverageVar, varianceAverageVar, weightVar)
+		} else {
+			batchMean, batchVariance := builder.batchMeanAndVariance(x)
+			builder.updateMeanAndVariance(ctx, g, batchMean, batchVariance, meanAverageVar, varianceAverageVar, weightVar)
+			normalized = builder.directBatchNormGraph(x, scale, offset, batchMean, batchVariance)
+		}
 
 	} else {
 		// Inference: use stored mean/variance.
-		mean, variance := meanAverageVar.ValueGraph(g), varianceAverageVar.ValueGraph(g)
-		if builder.useXlaInference {
+		if builder.useBackendInference {
 			// Uses dedicated op.
 			normalized = InternalBatchNormForInference(x, scale, offset, mean, variance, float32(builder.epsilon), featureAxis)
 
@@ -218,9 +247,25 @@ func (builder *BatchNormBuilder) Done() *Node {
 	return normalized
 }
 
+func (builder *BatchNormBuilder) batchMeanAndVariance(x *Node) (batchMean, batchVariance *Node) {
+	featureAxis := AdjustAxisToOperandRank(x, builder.featureAxis)
+	nonFeatureAxes := make([]int, 0, x.Rank()-1)
+	for ii := range x.Rank() {
+		if ii != featureAxis {
+			nonFeatureAxes = append(nonFeatureAxes, ii)
+		}
+	}
+	batchMean = ReduceAndKeep(x, ReduceMean, nonFeatureAxes...)
+	batchVariance = ReduceMean(Square(Sub(x, batchMean)), nonFeatureAxes...)
+	batchMean = Reshape(batchMean, batchVariance.Shape().Dimensions...)
+	batchMean = StopGradient(batchMean)
+	batchVariance = StopGradient(batchVariance)
+	return
+}
+
 // directBatchNormGraph calculates the batch normalized x without using XLA -- so it's differentiable.
 func (builder *BatchNormBuilder) directBatchNormGraph(x, scale, offset, mean, variance *Node) *Node {
-	featureAxis := AdjustAxisToRank(x, builder.featureAxis)
+	featureAxis := AdjustAxisToOperandRank(x, builder.featureAxis)
 	featureDim := x.Shape().Dimensions[featureAxis]
 
 	dims := xslices.SliceWithValue(x.Rank(), 1)
@@ -253,10 +298,9 @@ type batchNormUpdater struct {
 // examples have been seen so far -- it's incremented at every step.
 func (builder *BatchNormBuilder) updateMeanAndVariance(ctx *context.Context, graph *Graph, batchMean, batchVariance *Node, meanAverageVar, varianceAverageVar, weightVar *context.Variable) {
 	_ = ctx
-	momentum := ConstAs(batchMean, builder.momentum)
+	momentum := Scalar(batchMean.Graph(), batchMean.DType(), builder.momentum)
 
-	weight := weightVar.ValueGraph(graph)
-	weight = Add(weight, OnesLike(weight))
+	weight := OnePlus(weightVar.ValueGraph(graph))
 	weightVar.SetValueGraph(weight)
 	debiasedMomentum := Min(momentum, OneMinus(Inverse(weight)))
 
@@ -271,4 +315,15 @@ func (builder *BatchNormBuilder) updateMeanAndVariance(ctx *context.Context, gra
 		Mul(debiasedMomentum, varianceAverage),         // Current variance.
 		Mul(OneMinus(debiasedMomentum), batchVariance)) // New variance.
 	varianceAverageVar.SetValueGraph(varianceAverage)
+}
+
+// BatchNormalizationResetWeights reset the weights to the moving averages, forcing them to be reinitialized to 0.
+// It searches for all variables under scope named "batch_normalization"
+func BatchNormalizationResetWeights(ctx *context.Context) {
+	suffix := "/" + BatchNormalizationScopeName
+	ctx.EnumerateVariablesInScope(func(v *context.Variable) {
+		if strings.HasSuffix(v.Scope(), suffix) && v.Name() == "avg_weight" {
+			v.Reset()
+		}
+	})
 }

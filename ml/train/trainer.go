@@ -76,6 +76,9 @@ type Trainer struct {
 	evalStepExecMap map[any]*context.Exec
 	evalMetrics     []metrics.Interface
 
+	// BatchNormAverages data
+	batchNormStepExecMap map[any]*context.Exec
+
 	// onExecCreationHandlers are hooks called during executor creation.
 	onExecCreationHandlers []OnExecFn
 }
@@ -114,6 +117,7 @@ type GraphType int
 const (
 	TrainType GraphType = iota
 	EvalType
+	BatchNormAveragesType
 )
 
 // NewTrainer constructs a trainer that can be used for training steps and evaluation. It also creates a new Context
@@ -159,6 +163,7 @@ func NewTrainer(backend backends.Backend, ctx *context.Context,
 		inputsAndLabelsLenPerSpec: make(map[any][2]int),
 		trainStepExecMap:          make(map[any]*context.Exec),
 		evalStepExecMap:           make(map[any]*context.Exec),
+		batchNormStepExecMap:      make(map[any]*context.Exec),
 	}
 
 	// Create a context executor for TrainStep. Automatically include batch loss and moving average loss metrics.
@@ -201,6 +206,9 @@ func (r *Trainer) enumerateExecs(fn func(exec *context.Exec)) {
 		fn(exec)
 	}
 	for _, exec := range r.evalStepExecMap {
+		fn(exec)
+	}
+	for _, exec := range r.batchNormStepExecMap {
 		fn(exec)
 	}
 }
@@ -365,6 +373,8 @@ func (r *Trainer) callGraphFn(
 		execsMap = r.trainStepExecMap
 	case EvalType:
 		execsMap = r.evalStepExecMap
+	case BatchNormAveragesType:
+		execsMap = r.batchNormStepExecMap
 	}
 	exec, found := execsMap[spec]
 	if !found {

@@ -21,7 +21,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/dustin/go-humanize"
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/examples/cifar"
@@ -134,9 +133,6 @@ func main() {
 		must.M(os.MkdirAll(*flagDataDir, 0777))
 	}
 	must.M(commandline.ParseContextSettings(ctx, *settings))
-	if *flagVerbosity >= 1 {
-		fmt.Println(commandline.SprintContextSettings(ctx))
-	}
 
 	// Training:
 	trainModel(ctx)
@@ -197,6 +193,9 @@ func trainModel(ctx *context.Context) {
 			ctx = ctx.Reuse()
 		}
 	}
+	if *flagVerbosity >= 2 {
+		fmt.Println(commandline.SprintContextSettings(ctx))
+	}
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
@@ -239,6 +238,16 @@ func trainModel(ctx *context.Context) {
 			fmt.Printf("\t[Step %d] median train step: %d microseconds\n",
 				loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
 		}
+
+		if context.GetParamOr(ctx, "cnn_normalization", "none") == "batch" ||
+			context.GetParamOr(ctx, fnn.ParamNormalization, "none") == "batch" {
+			layers.BatchNormalizationResetWeights(ctx)
+			trainer.BatchNormAveragesUpdate(evalOnTrainDS)
+			if checkpoint != nil {
+				must.M(checkpoint.Save())
+			}
+		}
+
 	} else {
 		fmt.Printf("\t - target train_steps=%d already reached. To train further, set a number additional "+
 			"to current global step.\n", numTrainSteps)
@@ -250,28 +259,6 @@ func trainModel(ctx *context.Context) {
 			fmt.Println()
 		}
 		must.M(commandline.ReportEval(trainer, evalOnTestDS, evalOnTrainDS))
-	}
-
-	if *flagVerbosity >= 1 {
-		var modelSize int
-		var modelMemory uintptr
-		if *flagVerbosity >= 2 {
-			fmt.Println("Variables:")
-		}
-		ctx.EnumerateVariables(func(v *context.Variable) {
-			if !strings.HasPrefix(v.Scope(), "/model/") {
-				return
-			}
-			shape := v.Shape()
-			if *flagVerbosity >= 2 {
-				fmt.Printf("\t%s : %s - %s, %s elements, %s bytes\n", v.Scope(), v.Name(),
-					shape, humanize.Comma(int64(shape.Size())), humanize.Bytes(uint64(shape.Memory())))
-			}
-			modelSize += shape.Size()
-			modelMemory += shape.Memory()
-		})
-		fmt.Printf("Model size: %s elements, %s bytes\n",
-			humanize.Comma(int64(modelSize)), humanize.Bytes(uint64(modelMemory)))
 	}
 }
 
@@ -313,11 +300,18 @@ func PlainModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 func normalizeImage(ctx *context.Context, x *Node) *Node {
 	x.AssertRank(4) // [batch_size, width, height, depth]
 	normalizationType := context.GetParamOr(ctx, "cnn_normalization", "none")
+
+	/*
+		wasTraining := ctx.IsTraining(x.Graph())
+		ctx.SetTraining(x.Graph(), true)
+		defer func() { ctx.SetTraining(x.Graph(), wasTraining) }()
+	*/
+
 	switch normalizationType {
 	case "layer":
 		return layers.LayerNormalization(ctx, x, 1, 2).ScaleNormalization(false).Done()
 	case "batch":
-		return layers.BatchNormalization(ctx, x, -1).Done()
+		return layers.BatchNormalization(ctx, x, -1).Epsilon(1e-03).UseBackendInference(false).Done()
 	case "none", "":
 		return x
 	}

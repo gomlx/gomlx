@@ -38,6 +38,7 @@
   * Added support to `dtypes.Float16`.
 * Package `context`
   * Renamed `context.NewContext` to `context.New`.
+  * Added `Variable.Reset`: reset a variable, to be reinitialialized.
 * Package `plots`
   * Added `Point.Short` for short-name of metrics in saved metrics.
 * C/C++ code:
