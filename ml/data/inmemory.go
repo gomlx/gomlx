@@ -90,6 +90,10 @@ type InMemoryDataset struct {
 
 	// randomNumberGenerator used when random sampling, allows for deterministic random datasets.
 	randomNumberGenerator *rand.Rand
+
+	// takeN is the maximum number of examples to take, before forcing an end of epoch.
+	// If <= 0, take as many as available (or continuously if InMemoryDataset.infinite=true)
+	takeN int
 }
 
 // InMemory creates dataset that reads the whole contents of `ds` into memory.
@@ -375,6 +379,7 @@ func (mds *InMemoryDataset) Copy() *InMemoryDataset {
 		numInputsTensors:      mds.numInputsTensors,
 		numExamples:           mds.numExamples,
 		gatherExec:            mds.gatherExec,
+		takeN:                 mds.takeN,
 		randomNumberGenerator: rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }
@@ -429,6 +434,9 @@ func (mds *InMemoryDataset) indicesNextYield() (indices []int) {
 		indices = nil
 	}
 	if mds.next >= mds.numExamples {
+		mds.next = -1
+	}
+	if mds.takeN > 0 && mds.next >= mds.takeN*n {
 		mds.next = -1
 	}
 	return
@@ -604,6 +612,19 @@ func (mds *InMemoryDataset) Infinite(infinite bool) *InMemoryDataset {
 	mds.muSampling.Lock()
 	defer mds.muSampling.Unlock()
 	mds.infinite = infinite
+	return mds
+}
+
+// TakeN configures dataset to only take N examples before returning io.EOF.
+// If set to 0 or -1, it takes as many as there is data.
+// If configured, it automatically disables InMemoryDataset.Infinite
+func (mds *InMemoryDataset) TakeN(n int) *InMemoryDataset {
+	if n > 0 {
+		mds.Infinite(false)
+	}
+	mds.muSampling.Lock()
+	defer mds.muSampling.Unlock()
+	mds.takeN = n
 	return mds
 }
 
