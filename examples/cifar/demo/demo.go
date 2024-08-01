@@ -51,12 +51,13 @@ import (
 	_ "github.com/gomlx/gomlx/backends/xla"
 )
 
+// ValidModels is the list of model types supported.
+var ValidModels = []string{"fnn", "kan", "cnn", "cnn-kan"}
+
 var (
 	flagDataDir = flag.String("data", "~/work/cifar", "Directory to cache downloaded and generated dataset files.")
 
 	// Training hyperparameters:
-	validModels   = []string{"fnn", "kan", "cnn", "cnn-kan"}
-	flagModel     = flag.String("model", validModels[0], fmt.Sprintf("Valid model types: %v", validModels))
 	flagEval      = flag.Bool("eval", true, "Whether to evaluate the model on the validation data in the end.")
 	flagVerbosity = flag.Int("verbosity", 1, "Level of verbosity, the higher the more verbose.")
 
@@ -70,6 +71,7 @@ func createDefaultContext() *context.Context {
 	ctx := context.New()
 	ctx.RngStateReset()
 	ctx.SetParams(map[string]any{
+		"model":           ValidModels[0],
 		"checkpoint":      "",
 		"num_checkpoints": 3,
 		"train_steps":     3000,
@@ -83,6 +85,9 @@ func createDefaultContext() *context.Context {
 		// "plots" trigger generating intermediary eval data for plotting, and if running in GoNB, to actually
 		// draw the plot with Plotly.
 		plotly.ParamPlots: true,
+
+		// If "normalization" is set, it overrides "fnn_normalization" and "cnn_normalization".
+		layers.ParamNormalization: "none",
 
 		optimizers.ParamOptimizer:           "adamw",
 		optimizers.ParamLearningRate:        1e-4,
@@ -98,7 +103,8 @@ func createDefaultContext() *context.Context {
 		fnn.ParamNumHiddenLayers: 8,
 		fnn.ParamNumHiddenNodes:  128,
 		fnn.ParamResidual:        true,
-		fnn.ParamNormalization:   "none",
+		fnn.ParamNormalization:   "",   // Set to none for no normalization, otherwise it falls back to layers.ParamNormalization.
+		fnn.ParamDropoutRate:     -1.0, // Set to 0.0 for no dropout, otherwise it falls back to layers.ParamDropoutRate.
 
 		// KAN network parameters:
 		kan.ParamNumControlPoints:   10, // Number of control points
@@ -111,7 +117,8 @@ func createDefaultContext() *context.Context {
 		kan.ParamDiscreteSoftness:   0.1,
 
 		// CNN
-		"cnn_normalization": "layer",
+		"cnn_normalization": "",   // "" means fallback to layers.ParamNormalization.
+		"cnn_dropout_rate":  -1.0, // -1 means fallback to layers.ParamDropoutRate.
 		"cnn_num_layers":    4,
 		"cnn_num_filters":   32,
 	})
@@ -159,22 +166,6 @@ func trainModel(ctx *context.Context) {
 	}
 	trainDS, evalOnTrainDS, evalOnTestDS := CreateDatasets(backend, *flagDataDir, batchSize, evalBatchSize)
 
-	// Create closure for model graph building function, that uses statically the dataset
-	// used for its Dataset.GatherImage, to convert image indices to the actual images.
-	// This is the signature of model function that the train.Trainer accepts.
-	modelFn := PlainModelGraph
-	if slices.Index(validModels, *flagModel) == -1 {
-		Panicf("Flag --model must take one value from %v, got %q", validModels, *flagModel)
-	}
-	if strings.HasPrefix(*flagModel, "cnn") {
-		modelFn = ConvolutionModelGraph
-	}
-	fmt.Printf("Model: %s\n", *flagModel)
-
-	// Metrics we are interested.
-	meanAccuracyMetric := metrics.NewSparseCategoricalAccuracy("Mean Accuracy", "#acc")
-	movingAccuracyMetric := metrics.NewMovingAverageSparseCategoricalAccuracy("Moving Average Accuracy", "~acc", 0.01)
-
 	// Read hyperparameters from context that we don't want overwritten by loading fo the context from a checkpoint.
 	numTrainSteps := context.GetParamOr(ctx, "train_steps", 0)
 	usePlots := context.GetParamOr(ctx, plotly.ParamPlots, false)
@@ -196,6 +187,21 @@ func trainModel(ctx *context.Context) {
 	if *flagVerbosity >= 2 {
 		fmt.Println(commandline.SprintContextSettings(ctx))
 	}
+
+	// Select model graph building function.
+	modelFn := PlainModelGraph
+	modelType := context.GetParamOr(ctx, "model", ValidModels[0])
+	if slices.Index(ValidModels, modelType) == -1 {
+		Panicf("Parameter \"model\" must take one value from %v, got %q", ValidModels, modelType)
+	}
+	if strings.HasPrefix(modelType, "cnn") {
+		modelFn = ConvolutionModelGraph
+	}
+	fmt.Printf("Model: %s\n", modelType)
+
+	// Metrics we are interested.
+	meanAccuracyMetric := metrics.NewSparseCategoricalAccuracy("Mean Accuracy", "#acc")
+	movingAccuracyMetric := metrics.NewMovingAverageSparseCategoricalAccuracy("Moving Average Accuracy", "~acc", 0.01)
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
@@ -239,10 +245,10 @@ func trainModel(ctx *context.Context) {
 				loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
 		}
 
-		if context.GetParamOr(ctx, "cnn_normalization", "none") == "batch" ||
-			context.GetParamOr(ctx, fnn.ParamNormalization, "none") == "batch" {
-			layers.BatchNormalizationResetWeights(ctx)
-			trainer.BatchNormAveragesUpdate(evalOnTrainDS)
+		// Update batch normalization averages, if they are used.
+		layers.BatchNormalizationResetWeights(ctx)
+		if trainer.BatchNormalizationAveragesUpdate(evalOnTrainDS) {
+			fmt.Println("\tUpdated batch normalization mean/variances averages.")
 			if checkpoint != nil {
 				must.M(checkpoint.Save())
 			}
@@ -285,7 +291,8 @@ func PlainModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	batchSize := batchedImages.Shape().Dimensions[0]
 	logits := Reshape(batchedImages, batchSize, -1)
 	numClasses := len(cifar.C10Labels)
-	if *flagModel == "kan" {
+	modelType := context.GetParamOr(ctx, "model", ValidModels[0])
+	if modelType == "kan" {
 		// Configuration of the KAN layer(s) use the context hyperparameters.
 		logits = kan.New(ctx, logits, numClasses).Done()
 	} else {
@@ -299,13 +306,10 @@ func PlainModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 // normalizeImage to be used in between convolutions.
 func normalizeImage(ctx *context.Context, x *Node) *Node {
 	x.AssertRank(4) // [batch_size, width, height, depth]
-	normalizationType := context.GetParamOr(ctx, "cnn_normalization", "none")
-
-	/*
-		wasTraining := ctx.IsTraining(x.Graph())
-		ctx.SetTraining(x.Graph(), true)
-		defer func() { ctx.SetTraining(x.Graph(), wasTraining) }()
-	*/
+	normalizationType := context.GetParamOr(ctx, "cnn_normalization", "")
+	if normalizationType == "" {
+		normalizationType = context.GetParamOr(ctx, layers.ParamNormalization, "")
+	}
 
 	switch normalizationType {
 	case "layer":
@@ -316,7 +320,7 @@ func normalizeImage(ctx *context.Context, x *Node) *Node {
 		return x
 	}
 	Panicf("invalid normalization type selected %q (hyperparameter %q) -- valid values are batch, layer, none", normalizationType, layers.ParamNormalization)
-	return nil
+	return nil // Never reached.
 }
 
 // ConvolutionModelGraph implements train.ModelFn and returns the logit Node, given the input image.
@@ -339,42 +343,37 @@ func ConvolutionModelGraph(ctx *context.Context, spec any, inputs []*Node) []*No
 	numFilters := context.GetParamOr(ctx, "cnn_num_filters", 32)
 	numLayers := context.GetParamOr(ctx, "cnn_num_layers", 4)
 	var dropoutRate *Node
-	dropoutRateConfig := context.GetParamOr(ctx, layers.ParamDropoutRate, 0.0)
+	dropoutRateConfig := context.GetParamOr(ctx, "cnn_dropout_rate",
+		context.GetParamOr(ctx, layers.ParamDropoutRate, 0.0))
 	if dropoutRateConfig > 0 {
 		dropoutRate = Scalar(g, dtype, dropoutRateConfig)
 	}
-	//fmt.Printf("logits[0].shape=%s\n", logits.Shape())
-	for ii := range numLayers + 3 {
+	//fmt.Printf("\tlogits[0].shape=%s\n", logits.Shape())
+	for ii := range numLayers {
 		ctx := ctx.Inf("conv_layer_%d", ii)
 		residual := logits
-		conv := layers.Convolution(ctx, logits).Filters(numFilters).KernelSize(3)
-		if ii < numLayers {
-			conv = conv.PadSame()
-		}
+		conv := layers.Convolution(ctx, logits).Filters(numFilters).KernelSize(3).PadSame()
 		logits = conv.Done()
 		logits = normalizeImage(ctx, logits)
 		logits = activations.ApplyFromContext(ctx, logits)
 		if dropoutRate != nil {
 			logits = layers.DropoutNormalize(ctx, logits, dropoutRate, true)
 		}
-		if ii >= numLayers {
-			// Shrink image, while increasing number of filters.
-			logits = MaxPool(logits).Window(2).Strides(2).Done()
-			numFilters *= 2 // Could be 4, since we are reducing the image by a factor of 4.
-		}
+		//fmt.Printf("\t\t[pool %d] in=%s\n", ii, logits.Shape())
+		logits = MaxPool(logits).Window(2).Strides(2).PadSame().Done()
+		//fmt.Printf("\t\t        out=%s\n", logits.Shape())
 		if logits.Shape().Equal(residual.Shape()) {
 			logits = Add(residual, logits)
 		}
-		//fmt.Printf("logits[%d].shape=%s\n", ii+1, logits.Shape())
+		//fmt.Printf("\tlogits[%d].shape=%s\n", ii+1, logits.Shape())
 	}
-	//fmt.Println()
-	//fmt.Println()
 	//fmt.Println()
 
 	// Flatten logits, and we can use the usual FNN/KAN.
 	logits = Reshape(logits, batchSize, -1)
 	numClasses := len(cifar.C10Labels)
-	if *flagModel == "cnn-kan" {
+	modelType := context.GetParamOr(ctx, "model", ValidModels[0])
+	if modelType == "cnn-kan" {
 		// Configuration of the KAN layer(s) use the context hyperparameters.
 		logits = kan.New(ctx, logits, numClasses).Done()
 	} else {
