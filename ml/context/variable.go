@@ -90,6 +90,14 @@ func (v *Variable) AssertValid() {
 	}
 }
 
+// Reset sets the variable value to nil while preserving the shape, and marks the context that it needs initialization.
+//
+// This will force to be variable to be reinitialized the next time a graph using the variable is executed.
+func (v *Variable) Reset() {
+	v.ctx.data.needsInitialization = true
+	v.value = nil
+}
+
 // Scope where the variable was created.
 func (v *Variable) Scope() string {
 	v.AssertValid()
