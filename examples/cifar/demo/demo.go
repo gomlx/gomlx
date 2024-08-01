@@ -52,7 +52,7 @@ import (
 )
 
 // ValidModels is the list of model types supported.
-var ValidModels = []string{"fnn", "kan", "cnn", "cnn-kan"}
+var ValidModels = []string{"fnn", "kan", "cnn"}
 
 var (
 	flagDataDir = flag.String("data", "~/work/cifar", "Directory to cache downloaded and generated dataset files.")
@@ -135,13 +135,14 @@ func main() {
 	klog.InitFlags(nil)
 	flag.Parse()
 
+	// Data directory: datasets and top-level directory holding checkpoints for different models.
 	*flagDataDir = data.ReplaceTildeInDir(*flagDataDir)
 	if !data.FileExists(*flagDataDir) {
 		must.M(os.MkdirAll(*flagDataDir, 0777))
 	}
 	must.M(commandline.ParseContextSettings(ctx, *settings))
 
-	// Training:
+	// Train.
 	trainModel(ctx)
 }
 
@@ -279,12 +280,6 @@ func CreateDatasets(backend backends.Backend, dataDir string, batchSize, evalBat
 
 // PlainModelGraph implements train.ModelFn, and returns the logit Node, given the input image.
 // It's a basic FNN (Feedforward Neural Network), so no convolutions. It is meant only as an example.
-//
-// If dataset is not nil, assumes batchImage contain instead indices, and that the images need to be
-// gathered from the dataset table (cifar.Dataset.GatherImagesGraph).
-//
-// Notice this cannot be used as a ModelFn for train.Trainer because of the dataset static parameter: one need
-// to create a small closure for that, see above for an example.
 func PlainModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	ctx = ctx.In("model")
 	batchedImages := inputs[0]
@@ -303,36 +298,12 @@ func PlainModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	return []*Node{logits}
 }
 
-// normalizeImage to be used in between convolutions.
-func normalizeImage(ctx *context.Context, x *Node) *Node {
-	x.AssertRank(4) // [batch_size, width, height, depth]
-	normalizationType := context.GetParamOr(ctx, "cnn_normalization", "")
-	if normalizationType == "" {
-		normalizationType = context.GetParamOr(ctx, layers.ParamNormalization, "")
-	}
-
-	switch normalizationType {
-	case "layer":
-		return layers.LayerNormalization(ctx, x, 1, 2).ScaleNormalization(false).Done()
-	case "batch":
-		return layers.BatchNormalization(ctx, x, -1).Epsilon(1e-03).UseBackendInference(false).Done()
-	case "none", "":
-		return x
-	}
-	Panicf("invalid normalization type selected %q (hyperparameter %q) -- valid values are batch, layer, none", normalizationType, layers.ParamNormalization)
-	return nil // Never reached.
-}
-
 // ConvolutionModelGraph implements train.ModelFn and returns the logit Node, given the input image.
 // It's a straight forward CNN (Convolution Neural Network) model.
 //
-// If dataset is not nil, assumes batchImage contain instead indices, and that the images need to be
-// gathered from the dataset table (cifar.Dataset.GatherImagesGraph).
-//
-// This is modeled after the TensorFlow/Keras example in https://www.tensorflow.org/tutorials/images/cnn.
-//
-// Notice this cannot be used as a ModelFn for train.Trainer because of the dataset static parameter: one need
-// to create a small closure for that, see above for an example.
+// This is modeled after the Keras example in Kaggle:
+// https://www.kaggle.com/code/ektasharma/simple-cifar10-cnn-keras-code-with-88-accuracy
+// (Thanks @ektasharma)
 func ConvolutionModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	ctx = ctx.In("model")
 	batchedImages := inputs[0]
@@ -340,45 +311,56 @@ func ConvolutionModelGraph(ctx *context.Context, spec any, inputs []*Node) []*No
 	dtype := batchedImages.DType()
 	batchSize := batchedImages.Shape().Dimensions[0]
 	logits := batchedImages
-	numFilters := context.GetParamOr(ctx, "cnn_num_filters", 32)
-	numLayers := context.GetParamOr(ctx, "cnn_num_layers", 4)
-	var dropoutRate *Node
-	dropoutRateConfig := context.GetParamOr(ctx, "cnn_dropout_rate",
-		context.GetParamOr(ctx, layers.ParamDropoutRate, 0.0))
-	if dropoutRateConfig > 0 {
-		dropoutRate = Scalar(g, dtype, dropoutRateConfig)
+
+	layerIdx := 0
+	nextCtx := func(name string) *context.Context {
+		newCtx := ctx.Inf("%03d_%s", layerIdx, name)
+		layerIdx++
+		return newCtx
 	}
-	//fmt.Printf("\tlogits[0].shape=%s\n", logits.Shape())
-	for ii := range numLayers {
-		ctx := ctx.Inf("conv_layer_%d", ii)
-		residual := logits
-		conv := layers.Convolution(ctx, logits).Filters(numFilters).KernelSize(3).PadSame()
-		logits = conv.Done()
-		logits = normalizeImage(ctx, logits)
-		logits = activations.ApplyFromContext(ctx, logits)
-		if dropoutRate != nil {
-			logits = layers.DropoutNormalize(ctx, logits, dropoutRate, true)
-		}
-		//fmt.Printf("\t\t[pool %d] in=%s\n", ii, logits.Shape())
-		logits = MaxPool(logits).Window(2).Strides(2).PadSame().Done()
-		//fmt.Printf("\t\t        out=%s\n", logits.Shape())
-		if logits.Shape().Equal(residual.Shape()) {
-			logits = Add(residual, logits)
-		}
-		//fmt.Printf("\tlogits[%d].shape=%s\n", ii+1, logits.Shape())
-	}
-	//fmt.Println()
+
+	logits = layers.Convolution(nextCtx("conv"), logits).Filters(32).KernelSize(3).PadSame().Done()
+	logits.AssertDims(batchSize, 32, 32, 32)
+	logits = activations.Relu(logits)
+	logits = layers.BatchNormalization(nextCtx("batchnorm"), logits, -1).Done()
+	logits = layers.Convolution(nextCtx("conv"), logits).Filters(32).KernelSize(3).PadSame().Done()
+	logits = activations.Relu(logits)
+	logits = layers.BatchNormalization(nextCtx("batchnorm"), logits, -1).Done()
+	logits = MaxPool(logits).Window(2).Done()
+	logits = layers.DropoutNormalize(nextCtx("dropout"), logits, Scalar(g, dtype, 0.3), true)
+	logits.AssertDims(batchSize, 16, 16, 32)
+
+	logits = layers.Convolution(nextCtx("conv"), logits).Filters(64).KernelSize(3).PadSame().Done()
+	logits.AssertDims(batchSize, 16, 16, 64)
+	logits = activations.Relu(logits)
+	logits = layers.BatchNormalization(nextCtx("batchnorm"), logits, -1).Done()
+	logits = layers.Convolution(nextCtx("conv"), logits).Filters(64).KernelSize(3).PadSame().Done()
+	logits.AssertDims(batchSize, 16, 16, 64)
+	logits = activations.Relu(logits)
+	logits = layers.BatchNormalization(nextCtx("batchnorm"), logits, -1).Done()
+	logits = MaxPool(logits).Window(2).Done()
+	logits = layers.DropoutNormalize(nextCtx("dropout"), logits, Scalar(g, dtype, 0.5), true)
+	logits.AssertDims(batchSize, 8, 8, 64)
+
+	logits = layers.Convolution(nextCtx("conv"), logits).Filters(128).KernelSize(3).PadSame().Done()
+	logits.AssertDims(batchSize, 8, 8, 128)
+	logits = activations.Relu(logits)
+	logits = layers.BatchNormalization(nextCtx("batchnorm"), logits, -1).Done()
+	logits = layers.Convolution(nextCtx("conv"), logits).Filters(128).KernelSize(3).PadSame().Done()
+	logits.AssertDims(batchSize, 8, 8, 128)
+	logits = activations.Relu(logits)
+	logits = layers.BatchNormalization(nextCtx("batchnorm"), logits, -1).Done()
+	logits = MaxPool(logits).Window(2).Done()
+	logits = layers.DropoutNormalize(nextCtx("dropout"), logits, Scalar(g, dtype, 0.5), true)
+	logits.AssertDims(batchSize, 4, 4, 128)
 
 	// Flatten logits, and we can use the usual FNN/KAN.
 	logits = Reshape(logits, batchSize, -1)
+	logits = layers.Dense(nextCtx("dense"), logits, true, 128)
+	logits = activations.Relu(logits)
+	logits = layers.BatchNormalization(nextCtx("batchnorm"), logits, -1).Done()
+	logits = layers.DropoutNormalize(nextCtx("dropout"), logits, Scalar(g, dtype, 0.5), true)
 	numClasses := len(cifar.C10Labels)
-	modelType := context.GetParamOr(ctx, "model", ValidModels[0])
-	if modelType == "cnn-kan" {
-		// Configuration of the KAN layer(s) use the context hyperparameters.
-		logits = kan.New(ctx, logits, numClasses).Done()
-	} else {
-		// Configuration of the FNN layer(s) use the context hyperparameters.
-		logits = fnn.New(ctx, logits, numClasses).Done()
-	}
+	logits = layers.Dense(nextCtx("dense"), logits, true, numClasses)
 	return []*Node{logits}
 }
