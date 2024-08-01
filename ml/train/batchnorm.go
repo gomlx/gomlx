@@ -12,19 +12,30 @@ import (
 
 const (
 	// BatchNormalizationUpdatePhase is a graph parameter name used to indicate that the graph is only
-	// running to update the mean/average parameters. See Trainer.BatchNormAveragesUpdate method.
+	// running to update the mean/average parameters. See Trainer.BatchNormalizationAveragesUpdate method.
 	BatchNormalizationUpdatePhase = "batch_normalization_update_phase"
+
+	// BatchNormalizationAveragesUpdatesTriggerParam is a boolean parameter set in case batch normalization was used.
+	// See train.BatchNormalizationAveragesUpdate.
+	BatchNormalizationAveragesUpdatesTriggerParam = "batch_normalization_averages_updates_trigger"
 )
 
-// BatchNormAveragesUpdate runs through the dataset ds once -- generally it would be 1 epoch of the training data --
-// updating the running averages for mean and variance.
+// BatchNormalizationAveragesUpdate runs through the dataset ds once, if batch normalization was used, updating the
+// running averages for mean and variance and returns true.
 //
-// It's recommended one resets the batch normalization weights with layers.BatchNormalizationResetWeights.
+// If the model didn't use any batch normalization, this does nothing and returns false.
+//
+// It's recommended one resets the batch normalization weights with layers.BatchNormalizationResetWeights before
+// calling this function.
 //
 // See discussions:
 // - https://www.mindee.com/blog/batch-normalization
 // - https://discuss.pytorch.org/t/batch-norm-instability/32159/14
-func (r *Trainer) BatchNormAveragesUpdate(ds Dataset) {
+func (r *Trainer) BatchNormalizationAveragesUpdate(ds Dataset) bool {
+	if !context.GetParamOr(r.context, BatchNormalizationAveragesUpdatesTriggerParam, false) {
+		// No-op.
+		return false
+	}
 	for phase := range 2 {
 		// Reset models from previous phases.
 		r.batchNormStepExecMap = make(map[any]*context.Exec)
@@ -37,20 +48,21 @@ func (r *Trainer) BatchNormAveragesUpdate(ds Dataset) {
 				break
 			}
 			if err != nil {
-				panic(errors.Wrapf(err, "dataset returned an error during BatchNormAveragesUpdate(phase=%d)", phase))
+				panic(errors.Wrapf(err, "dataset returned an error during BatchNormalizationAveragesUpdate(phase=%d)", phase))
 			}
 			count++
-			r.BatchNormAveragesStep(phase, spec, inputs, labels)
+			r.batchNormAveragesStep(phase, spec, inputs, labels)
 		}
 		if count == 0 {
-			Panicf("BatchNormAveragesUpdate: dataset yielded no batches, no data to calculate running mean/average")
+			Panicf("BatchNormalizationAveragesUpdate: dataset yielded no batches, no data to calculate running mean/average")
 		}
 	}
+	return true
 }
 
-// BatchNormAveragesStep runs one forward step on the model, with the model frozen, except
+// batchNormAveragesStep runs one forward step on the model, with the model frozen, except
 // for non-gradient updated variables, like batch normalization moving averages.
-func (r *Trainer) BatchNormAveragesStep(phase int, spec any, inputs, labels []*tensors.Tensor) {
+func (r *Trainer) batchNormAveragesStep(phase int, spec any, inputs, labels []*tensors.Tensor) {
 	lossAndMetrics := r.callGraphFn(r.batchNormsAverageStepGraphFn(phase), BatchNormAveragesType, spec, inputs, labels)
 	for _, t := range lossAndMetrics {
 		t.FinalizeAll()

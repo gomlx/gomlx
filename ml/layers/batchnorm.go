@@ -162,6 +162,9 @@ func (builder *BatchNormBuilder) Done() *Node {
 	g := x.Graph()
 	dtype := x.DType()
 
+	// Set about batch normalization usage.
+	builder.ctx.InAbsPath(context.RootScope).SetParam(train.BatchNormalizationAveragesUpdatesTriggerParam, true)
+
 	// Creates new scope for variables.
 	if builder.newScope {
 		builder.ctx = builder.ctx.In("batch_normalization")
@@ -319,6 +322,8 @@ func (builder *BatchNormBuilder) updateMeanAndVariance(ctx *context.Context, gra
 
 // BatchNormalizationResetWeights reset the weights to the moving averages, forcing them to be reinitialized to 0.
 // It searches for all variables under scope named "batch_normalization"
+//
+// It is a no-op if no batch-normalization was used.
 func BatchNormalizationResetWeights(ctx *context.Context) {
 	suffix := "/" + BatchNormalizationScopeName
 	ctx.EnumerateVariablesInScope(func(v *context.Variable) {

@@ -47,8 +47,16 @@ const (
 	// ParamNormalization is the name of the normalization to use in between layers.
 	// It is only applied if there are hidden layers.
 	// See layers.KnownNormalizer: "layer" and "batch" are the most common normalization strategies.
-	// Default to "none" (same as ""), which is no normalization.
+	//
+	// Defaults to the parameter "normalization" (layers.ParamNormalization) and if that is not set, to "none"
+	// (same as ""), which is no normalization.
 	ParamNormalization = "fnn_normalization"
+
+	// ParamDropoutRate is the name of the dropout rate to use in between layers.
+	// It is only applied if there are hidden layers.
+	//
+	// Defaults to the parameter "dropout_rate" (layers.ParamDropoutRate) and if that is not set, to 0.0 (no dropout)
+	ParamDropoutRate = "fnn_dropout_rate"
 )
 
 // Config is created with New and can be configured with its methods, or simply setting the corresponding
@@ -109,11 +117,19 @@ func New(ctx *context.Context, input *Node, outputDimensions ...int) *Config {
 		numHiddenLayers:  context.GetParamOr(ctx, ParamNumHiddenLayers, 0),
 		numHiddenNodes:   context.GetParamOr(ctx, ParamNumHiddenNodes, 10),
 		activation:       activations.FromName(context.GetParamOr(ctx, activations.ParamActivation, "relu")),
-		normalization:    context.GetParamOr(ctx, ParamNormalization, "none"),
+		normalization:    context.GetParamOr(ctx, ParamNormalization, ""),
 		regularizer:      regularizers.FromContext(ctx),
-		dropoutRatio:     context.GetParamOr(ctx, layers.ParamDropoutRate, 0.0),
+		dropoutRatio:     context.GetParamOr(ctx, ParamDropoutRate, -1.0),
 		useResidual:      context.GetParamOr(ctx, ParamResidual, false),
 		useBias:          true,
+	}
+
+	// Fallback parameters.
+	if c.normalization == "" {
+		c.normalization = context.GetParamOr(ctx, layers.ParamNormalization, "none")
+	}
+	if c.dropoutRatio < 0 {
+		c.dropoutRatio = context.GetParamOr(ctx, layers.ParamDropoutRate, 0.0)
 	}
 	return c
 }
