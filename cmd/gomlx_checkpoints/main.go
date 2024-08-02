@@ -32,6 +32,9 @@ var (
 	flagVars    = flag.Bool("vars", false, "Lists the variables under --scope.")
 	flagMetrics = flag.Bool("metrics", false,
 		fmt.Sprintf("Lists the metrics collected for plotting in file %q", plots.TrainingPlotFileName))
+	flagMetricsLabels = flag.Bool("metrics_labels", false,
+		fmt.Sprintf("Lists the metrics labels (short names) with their full description from file %q", plots.TrainingPlotFileName))
+
 	flagMetricsNames = flag.String("metrics_names", "", "Comma-separate list of metric names to include in metrics report.")
 	flagMetricsTypes = flag.String("metrics_types", "", "Comma-separate list of metric types to include in metrics report. ")
 
@@ -179,7 +182,7 @@ func report(checkpointPath string) {
 		fmt.Println(table.Render())
 	}
 
-	if *flagMetrics {
+	if *flagMetrics || *flagMetricsLabels {
 		metrics(checkpointPath)
 	}
 }
@@ -190,7 +193,6 @@ func metrics(checkpointPath string) {
 	if len(points) == 0 {
 		klog.Errorf("No metrics found in %q", trainingMetricsPath)
 	}
-	fmt.Println(titleStyle.Render("Metrics"))
 
 	var metricsNames, metricsTypes types.Set[string]
 	if *flagMetricsNames != "" {
@@ -207,8 +209,10 @@ func metrics(checkpointPath string) {
 	}
 	metricsUsed := types.MakeSet[string]()
 	nameToShort := make(map[string]string)
+	shortToName := make(map[string]string)
 	for _, point := range points {
 		nameToShort[point.MetricName] = point.Short
+		shortToName[point.Short] = point.MetricName
 		if metricsNames != nil || metricsTypes != nil {
 			foundName := metricsNames != nil && (metricsNames.Has(point.MetricName) || metricsNames.Has(point.Short))
 			foundType := metricsTypes != nil && metricsTypes.Has(point.MetricType)
@@ -243,40 +247,63 @@ func metrics(checkpointPath string) {
 		nextPos++
 	}
 
-	table := newPlainTable(true, lipgloss.Right)
-	header := make([]string, 1+len(metricsUsed))
-	header[0] = "Global Step"
-	for name, idx := range metricsOrder {
-		header[idx] = name
+	if *flagMetricsLabels {
+		fmt.Println(titleStyle.Render("Metrics Labels"))
+		table := newPlainTable(true, lipgloss.Center, lipgloss.Left)
+		table.Row("Short", "MetricName")
+		rows := make([][]string, len(metricsOrder))
+		for short, idx := range metricsOrder {
+			name, found := shortToName[short]
+			if !found {
+				// metric manually selected by name:
+				name = short
+				short = nameToShort[name]
+			}
+			rows[idx-1] = []string{short, name}
+		}
+		for _, row := range rows {
+			table.Row(row...)
+		}
+		fmt.Println(table.Render())
 	}
-	table.Row(header...)
 
-	currentStep := int64(-1)
-	var currentRow []string
-	for _, point := range points {
-		step := int64(point.Step)
-		if step != currentStep {
-			if currentStep != -1 {
-				table.Row(currentRow...)
-			}
-			currentStep = step
-			currentRow = make([]string, 1+len(metricsUsed))
-			currentRow[0] = humanize.Comma(step)
+	if *flagMetrics {
+		fmt.Println(titleStyle.Render("Metrics"))
+		table := newPlainTable(true, lipgloss.Right)
+		header := make([]string, 1+len(metricsUsed))
+		header[0] = "Global Step"
+		for name, idx := range metricsOrder {
+			header[idx] = name
 		}
-		idx, found := metricsOrder[point.Short]
-		if found {
-			var value string
-			switch point.MetricType {
-			case "accuracy":
-				value = fmt.Sprintf("%.2f%%", 100.0*point.Value)
-			default:
-				value = fmt.Sprintf("%.3f", point.Value)
+		table.Row(header...)
+
+		currentStep := int64(-1)
+		var currentRow []string
+		for _, point := range points {
+			step := int64(point.Step)
+			if step != currentStep {
+				if currentStep != -1 {
+					table.Row(currentRow...)
+				}
+				currentStep = step
+				currentRow = make([]string, 1+len(metricsUsed))
+				currentRow[0] = humanize.Comma(step)
 			}
-			currentRow[idx] = value
+			idx, found := metricsOrder[point.Short]
+			if found {
+				var value string
+				switch point.MetricType {
+				case "accuracy":
+					value = fmt.Sprintf("%.2f%%", 100.0*point.Value)
+				default:
+					value = fmt.Sprintf("%.3f", point.Value)
+				}
+				currentRow[idx] = value
+			}
 		}
+		if currentStep != -1 {
+			table.Row(currentRow...)
+		}
+		fmt.Println(table.Render())
 	}
-	if currentStep != -1 {
-		table.Row(currentRow...)
-	}
-	fmt.Println(table.Render())
 }
