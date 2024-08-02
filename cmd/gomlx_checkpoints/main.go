@@ -18,6 +18,7 @@ import (
 	"path"
 	"slices"
 	"strings"
+	"time"
 )
 
 var (
@@ -33,6 +34,10 @@ var (
 		fmt.Sprintf("Lists the metrics collected for plotting in file %q", plots.TrainingPlotFileName))
 	flagMetricsNames = flag.String("metrics_names", "", "Comma-separate list of metric names to include in metrics report.")
 	flagMetricsTypes = flag.String("metrics_types", "", "Comma-separate list of metric types to include in metrics report. ")
+
+	flagLoop = flag.Duration("loop", 0, "Sets looping with the given period. "+
+		"This is used to monitor the training of a program, usually used in conjunction with --metrics. "+
+		"It will also clear the terminal in between printing out the metrics")
 )
 
 func main() {
@@ -47,19 +52,34 @@ func main() {
 		klog.Errorf("Too many arguments. See 'gomlx_checkpoint -help'.")
 		os.Exit(1)
 	}
+
+	if *flagLoop > 0 {
+		for {
+			ClearScreen()
+			report(args[0])
+			fmt.Println(italicStyle.Render(fmt.Sprintf("(... refreshing every %s ...)", *flagLoop)))
+			time.Sleep(*flagLoop)
+		}
+	}
 	report(args[0])
+}
+
+func ClearScreen() {
+	fmt.Printf("\033c")
 }
 
 var (
 	headerRowStyle = lipgloss.NewStyle().Reverse(true).
 			Padding(0, 2, 0, 2).Align(lipgloss.Center)
 
-	oddRowStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFF")).
+	oddRowStyle = lipgloss.NewStyle().Faint(false).
 			PaddingLeft(1).PaddingRight(1)
-	evenRowStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#999")).
+	evenRowStyle = lipgloss.NewStyle().Faint(true).
 			PaddingLeft(1).PaddingRight(1)
 
 	titleStyle = lipgloss.NewStyle().Bold(true).Padding(1, 4, 1, 4)
+
+	italicStyle = lipgloss.NewStyle().PaddingTop(1).Italic(true).Faint(true)
 )
 
 func newPlainTable(withHeader bool, alignments ...lipgloss.Position) *lgtable.Table {
