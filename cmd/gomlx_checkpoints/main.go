@@ -1,3 +1,7 @@
+// gomlx_checkpoints reports back on model size (and memory) usage (--summary), individual variables shapes and sizes (--vars),
+// hyperparameters used with the model (--params) or metrics collected during model training (--metrics, --metrics_labels).
+//
+// See gomlx_checkpoint --help for details.
 package main
 
 import (
@@ -44,6 +48,18 @@ var (
 )
 
 func main() {
+	flag.Usage = func() {
+		pf := func(format string, args ...any) {
+			_ = must.M1(fmt.Fprintf(flag.CommandLine.Output(), format, args...))
+		}
+		pf("Usage of gomlx_checkpoints (%q):\n", os.Args[0])
+		pf("\n\t$ gomlx_checkpoints [flags...] <checkpoint_path>\n" +
+			"\ngomlx_checkpoints reports back on model size (and memory) usage (--summary), individual variables shapes and sizes (--vars), " +
+			"hyperparameters used with the model (--params) or metrics collected during model training (--metrics, --metrics_labels).\n" +
+			"\n\t<checkpoint_path> is the path of a checkpoint directory used to save a GoMLX model (see package github.com/gomlx/gomlx/ml/context/checkpoints)\n\n" +
+			"Flags:\n\n")
+		flag.PrintDefaults()
+	}
 	flag.Parse()
 
 	args := flag.Args()
