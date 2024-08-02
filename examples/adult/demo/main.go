@@ -32,6 +32,7 @@ import (
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activations"
+	"github.com/gomlx/gomlx/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/ml/layers/fnn"
 	"github.com/gomlx/gomlx/ml/layers/kan"
 	"github.com/gomlx/gomlx/ml/layers/regularizers"
@@ -59,11 +60,18 @@ func createDefaultContext() *context.Context {
 	ctx := context.New()
 	ctx.RngStateReset()
 	ctx.SetParams(map[string]any{
-		"checkpoint":      "",
-		"num_checkpoints": 3,
-		"train_steps":     5000,
-		"batch_size":      128,
-		"plots":           true,
+		// Number of steps to take during training.
+		"train_steps": 5000,
+		"batch_size":  128,
+
+		// "plots" trigger generating intermediary eval data for plotting, and if running in GoNB, to actually
+		// draw the plot with Plotly.
+		//
+		// From the command-line, an easy way to monitor the metrics being generated during the training of a model
+		// is using the gomlx_checkpoints tool:
+		//
+		//	$ gomlx_checkpoints --metrics --metrics_labels --metrics_types=accuracy  --metrics_names='E(bat)/#loss,E(tes)/#loss' --loop=3s fnn
+		"plots": true,
 
 		optimizers.ParamOptimizer:           "adam",
 		optimizers.ParamLearningRate:        0.001,
@@ -133,14 +141,11 @@ func mainWithContext(ctx *context.Context) {
 	if checkpointPath != "" && !path.IsAbs(checkpointPath) {
 		checkpointPath = path.Join(*flagDataDir, checkpointPath)
 	}
-	if checkpointPath != "" {
-		ctx.SetParam("checkpoint", checkpointPath)
-	} else {
-		checkpointPath = context.GetParamOr(ctx, "checkpoint", "")
-	}
 
 	// Checkpoints loading (and saving): notice hyperparameters will be overwritten by values read from checkpoint.
 	trainSteps := context.GetParamOr(ctx, "train_steps", 0)
+	usePlots := context.GetParamOr(ctx, margaid.ParamPlots, false)
+
 	var globalStep int
 	var checkpoint *checkpoints.Handler
 	if checkpointPath != "" {
@@ -205,11 +210,15 @@ func mainWithContext(ctx *context.Context) {
 
 	// Attach Plotly plots: plot points at exponential steps.
 	// The points generated are saved along the checkpoint directory (if one is given).
-	usePlots := context.GetParamOr(ctx, margaid.ParamPlots, false)
 	if usePlots {
-		_ = plotly.New().Dynamic().
+		fmt.Println("Using plots")
+		plots := plotly.New().Dynamic().
+			WithDatasets(trainEvalDS, testEvalDS).
 			ScheduleExponential(loop, 200, 1.2).
-			WithDatasets(trainEvalDS, testEvalDS)
+			WithBatchNormalizationAveragesUpdate(trainEvalDS)
+		if checkpoint != nil {
+			plots.WithCheckpoint(checkpoint.Dir())
+		}
 	}
 
 	// Train up to "train_steps".
@@ -217,9 +226,17 @@ func mainWithContext(ctx *context.Context) {
 		_ = must.M1(loop.RunSteps(trainDS, trainSteps-globalStep))
 		fmt.Printf("\t[Step %d] median train step: %d microseconds\n", loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
 		fmt.Println()
+		// Update batch normalization averages, if they are used.
+		if batchnorm.UpdateAverages(trainer, trainEvalDS) {
+			fmt.Println("\tUpdated batch normalization mean/variances averages.")
+			if checkpoint != nil {
+				must.M(checkpoint.Save())
+			}
+		}
+
 	} else {
-		fmt.Printf("\t - target train_steps=%d already reached. To train further, set a number additional "+
-			"to current global step.\n", trainSteps)
+		fmt.Printf("\t - target train_steps=%d already reached. To train further, set a number larger than "+
+			"current global step.\n", trainSteps)
 	}
 
 	if *flagVerbosity >= 2 {
