@@ -16,6 +16,7 @@ import (
 	"fmt"
 	grob "github.com/MetalBlueberry/go-plotly/graph_objects"
 	"github.com/gomlx/gomlx/examples/notebook/gonb/plots"
+	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types"
@@ -85,12 +86,12 @@ type PlotConfig struct {
 //	usePlots := context.GetParamOr(ctx, plotly.ParamPlots, false)
 //	...
 //	if usePlots {
-//		plots := plotly.New().Dynamic().WithDatasets(evalOnTrainDS, evalOnTestDS).
+//		_ = plotly.New().
+//			WithCheckpoint(checkpoint).
+//			Dynamic().
+//			WithDatasets(evalOnTrainDS, evalOnTestDS).
 //			ScheduleExponential(loop, 200, 1.2).
 //			WithBatchNormalizationAveragesUpdate(evalOnTrainDS)
-//		if checkpoint != nil {
-//			plots.WithCheckpoint(checkpoint.Dir())
-//		}
 //	}
 func New() *PlotConfig {
 	return &PlotConfig{
@@ -214,14 +215,20 @@ func (pc *PlotConfig) attachOnEnd(loop *train.Loop) {
 	})
 }
 
-// WithCheckpoint uses the `checkpointDir` both to load data points and to save any new data points.
+// WithCheckpoint uses the checkpoint both to load data points and to save any new data points.
 // Usually, used with [PlotConfig.Dynamic].
+// If checkpoint is nil, it's a no-op.
 //
 // New data-points are saved asynchronously -- not to slow down training, with the downside of
 // potentially having I/O issues reported asynchronously.
 //
 // It returns itself to allow cascading configuration method calls.
-func (pc *PlotConfig) WithCheckpoint(checkpointDir string) *PlotConfig {
+func (pc *PlotConfig) WithCheckpoint(checkpoint *checkpoints.Handler) *PlotConfig {
+	if checkpoint == nil {
+		return pc
+	}
+	checkpointDir := checkpoint.Dir()
+
 	// Ignore errors while loading: maybe nothing was written yet.
 	_ = pc.LoadCheckpointData(checkpointDir)
 	checkpointDir = data.ReplaceTildeInDir(checkpointDir)

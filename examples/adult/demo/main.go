@@ -212,13 +212,12 @@ func mainWithContext(ctx *context.Context) {
 	// The points generated are saved along the checkpoint directory (if one is given).
 	if usePlots {
 		fmt.Println("Using plots")
-		plots := plotly.New().Dynamic().
+		_ = plotly.New().
+			WithCheckpoint(checkpoint).
+			Dynamic().
 			WithDatasets(trainEvalDS, testEvalDS).
 			ScheduleExponential(loop, 200, 1.2).
 			WithBatchNormalizationAveragesUpdate(trainEvalDS)
-		if checkpoint != nil {
-			plots.WithCheckpoint(checkpoint.Dir())
-		}
 	}
 
 	// Train up to "train_steps".

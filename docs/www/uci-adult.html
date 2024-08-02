@@ -7519,6 +7519,7 @@ a.anchor-link {
 <h1 id="UCI-Adult-Dataset-or-Census-Income">UCI Adult Dataset or Census Income<a class="anchor-link" href="#UCI-Adult-Dataset-or-Census-Income">¶</a></h1><p>This is a very popular ML task, with tabular data. The objective is to predict whether income exceeds $50K/yr based on census data.
 Also known as "Census Income" dataset.</p>
 <p>The data is old and biased on different ways ... but it can be used opaquely for ML experimentation.</p>
+<p>The source code of this example in one piece can be seen in the demo under <a href="https://github.com/gomlx/gomlx/tree/main/examples/adult/demo">.../examples/adult/demo/</a>.</p>
 </div>
 </div>
 </div>
@@ -7557,10 +7558,10 @@ Also known as "Census Income" dataset.</p>
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>	- Added replace rule for module "github.com/gomlx/gomlx" to local directory "/home/janpf/Projects/gomlx".
-	- Added replace rule for module "github.com/janpfeifer/gonb" to local directory "/home/janpf/Projects/gonb".
+<pre>	- Added replace rule for module "github.com/janpfeifer/gonb" to local directory "/home/janpf/Projects/gonb".
 	- Added replace rule for module "github.com/gomlx/gopjrt" to local directory "/home/janpf/Projects/gopjrt".
 	- Added replace rule for module "github.com/gomlx/bsplines" to local directory "/home/janpf/Projects/bsplines".
+	- Added replace rule for module "github.com/gomlx/gomlx" to local directory "/home/janpf/Projects/gomlx".
 </pre>
 </div>
 </div>
@@ -7665,7 +7666,10 @@ Sample Continuous:
 -rw-r--r-- 1 janpf janpf 3.8M Jul 20 18:36 adult.data
 -rw-r--r-- 1 janpf janpf 1.3M Jul 20 18:36 adult_data-100_quantiles.bin
 -rw-r--r-- 1 janpf janpf 2.0M Jul 20 18:36 adult.test
+drwxr-x--- 2 janpf janpf 4.0K Aug  2 12:59 base_model
+drwxr-x--- 2 janpf janpf 4.0K Aug  2 10:47 fnn
 drwxr-x--- 2 janpf janpf 4.0K Jul 21 20:24 kan_baseline
+drwxr-x--- 2 janpf janpf 4.0K Aug  2 12:59 kan_model
 </pre>
 </div>
 </div>
@@ -7709,8 +7713,6 @@ drwxr-x--- 2 janpf janpf 4.0K Jul 21 20:24 kan_baseline
 	<span class="n">ctx</span> <span class="o">:=</span> <span class="n">context</span><span class="o">.</span><span class="n">NewContext</span><span class="p">()</span>
 	<span class="n">ctx</span><span class="o">.</span><span class="n">RngStateReset</span><span class="p">()</span>
 	<span class="n">ctx</span><span class="o">.</span><span class="n">SetParams</span><span class="p">(</span><span class="nb">map</span><span class="p">[</span><span class="n">string</span><span class="p">]</span><span class="nb">any</span><span class="p">{</span>
-		<span class="s2">"checkpoint"</span><span class="p">:</span>      <span class="s2">""</span><span class="p">,</span>
-		<span class="s2">"num_checkpoints"</span><span class="p">:</span> <span class="mi">3</span><span class="p">,</span>
 		<span class="s2">"train_steps"</span><span class="p">:</span>     <span class="mi">5000</span><span class="p">,</span>
 		<span class="s2">"batch_size"</span><span class="p">:</span>      <span class="mi">128</span><span class="p">,</span>
 		<span class="s2">"eval_batch_size"</span><span class="p">:</span>      <span class="mi">1000</span><span class="p">,</span>
@@ -7891,11 +7893,11 @@ train, or our eval loop to draw batches to evaluate.</p>
 <pre>Inputs of batch (size 128):
 	categorical:
 		Features=[workclass education marital-status occupation relationship race sex native-country]
-		Values: (Int64)[128 8]: (... too large, 1024 values ..., first 16 values: [2 13 5 10 2 5 1 39 4 16 3 3 1 5 2 39])
+		Values: (Int64)[128 8]: (... too large, 1024 values ..., first 16 values: [4 12 6 10 5 1 1 39 4 10 1 10 2 5 1 39])
 	continuous:
 		Features=[age education-num capital-gain capital-loss hours-per-week]
-		Values: (Float32)[128 5]: (... too large, 640 values ..., first 10 values: [40 14 0 0 40 53 10 0 0 40])
-	weights: (Float32)[128 1]: (... too large, 128 values ..., first 5 values: [26929 240914 151977 557236 262425])
+		Values: (Float32)[128 5]: (... too large, 640 values ..., first 10 values: [37 9 0 0 40 49 13 0 0 50])
+	weights: (Float32)[128 1]: (... too large, 128 values ..., first 5 values: [25864 98010 65466 320451 223004])
 
 Labels of batch:
 	(Float32)[128 1]: (... too large, 128 values ..., first 10 values: [0 0 0 0 0 0 0 0 0 0])
@@ -8166,16 +8168,14 @@ it is working.</p>
     <span class="p">}</span>
 
 	<span class="o">//</span> <span class="n">Attach</span> <span class="n">plots</span> <span class="p">(</span><span class="n">using</span> <span class="n">plotly</span><span class="p">):</span> <span class="n">plot</span> <span class="n">points</span> <span class="n">at</span> <span class="n">exponential</span> <span class="n">steps</span><span class="o">.</span>
-    <span class="o">//</span> <span class="n">Points</span> <span class="p">(</span><span class="n">metrics</span><span class="p">)</span> <span class="n">are</span> <span class="n">saved</span> <span class="n">along</span> <span class="n">the</span> <span class="n">checkpoint</span> <span class="n">directory</span> <span class="p">(</span><span class="k">if</span> <span class="n">one</span> <span class="ow">is</span> <span class="n">given</span><span class="p">)</span><span class="o">.</span>
+    <span class="o">//</span> <span class="n">Points</span> <span class="p">(</span><span class="n">metrics</span><span class="p">)</span> <span class="n">are</span> <span class="n">loaded</span> <span class="ow">and</span> <span class="n">saved</span> <span class="n">from</span><span class="o">/</span><span class="n">to</span> <span class="n">the</span> <span class="n">checkpoint</span> <span class="p">(</span><span class="k">if</span> <span class="n">it</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">nil</span><span class="p">)</span><span class="o">.</span>
 	<span class="n">usePlots</span> <span class="o">:=</span> <span class="n">context</span><span class="o">.</span><span class="n">GetParamOr</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">plotly</span><span class="o">.</span><span class="n">ParamPlots</span><span class="p">,</span> <span class="n">false</span><span class="p">)</span>
 	<span class="k">if</span> <span class="n">usePlots</span> <span class="p">{</span>
-		<span class="n">plots</span> <span class="o">:=</span> <span class="n">plotly</span><span class="o">.</span><span class="n">New</span><span class="p">()</span><span class="o">.</span><span class="n">Dynamic</span><span class="p">()</span><span class="o">.</span>
+		<span class="n">_</span> <span class="o">=</span> <span class="n">plotly</span><span class="o">.</span><span class="n">New</span><span class="p">()</span><span class="o">.</span>
+            <span class="n">WithCheckpoint</span><span class="p">(</span><span class="n">checkpoint</span><span class="p">)</span><span class="o">.</span>
 			<span class="n">ScheduleExponential</span><span class="p">(</span><span class="n">loop</span><span class="p">,</span> <span class="mi">200</span><span class="p">,</span> <span class="mf">1.2</span><span class="p">)</span><span class="o">.</span>
 			<span class="n">WithDatasets</span><span class="p">(</span><span class="n">trainEvalDS</span><span class="p">,</span> <span class="n">testEvalDS</span><span class="p">)</span><span class="o">.</span>
             <span class="n">Dynamic</span><span class="p">()</span>
-        <span class="k">if</span> <span class="n">checkpoint</span> <span class="o">!=</span> <span class="n">nil</span> <span class="p">{</span>
-            <span class="n">plots</span><span class="o">.</span><span class="n">WithCheckpoint</span><span class="p">(</span><span class="n">checkpoint</span><span class="o">.</span><span class="n">Dir</span><span class="p">())</span>
-        <span class="p">}</span>
 	<span class="p">}</span>
 
 	<span class="o">//</span> <span class="n">Train</span> <span class="n">up</span> <span class="n">to</span> <span class="s2">"train_steps"</span><span class="o">.</span>
@@ -8208,17 +8208,17 @@ it is working.</p>
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Training (100 steps):  100% [<span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span>] (87 steps/s) [step=99] [loss+=0.536] [~loss+=0.628] [~loss=0.628] [~acc=76.05%]        
-	[Step 100] median train step: 1899 microseconds
+<pre>Training (100 steps):  100% [<span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span>] (80 steps/s) [step=99] [loss+=0.565] [~loss+=0.632] [~loss=0.632] [~acc=74.45%]         
+	[Step 100] median train step: 1652 microseconds
 
 Results on batched train:
-	Mean Loss+Regularization (#loss+): 0.542
-	Mean Loss (#loss): 0.542
-	Mean Accuracy (#acc): 82.22%
+	Mean Loss+Regularization (#loss+): 0.572
+	Mean Loss (#loss): 0.572
+	Mean Accuracy (#acc): 75.93%
 Results on test:
-	Mean Loss+Regularization (#loss+): 0.540
-	Mean Loss (#loss): 0.540
-	Mean Accuracy (#acc): 82.31%
+	Mean Loss+Regularization (#loss+): 0.570
+	Mean Loss (#loss): 0.570
+	Mean Accuracy (#acc): 76.39%
 </pre>
 </div>
 </div>
@@ -8275,7 +8275,12 @@ Results on test:
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
-(...collecting metrics, minimum 3 required to start plotting...)
+</div>
+</div>
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>Training (5000 steps):   14% [<span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">&gt;</span>...................................] (257 steps/s) [2s:16s] [step=724] [loss+=0.347] [~loss+=0.320] [~loss=0.320] [~acc=85.96%]        </pre>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -8286,18 +8291,7 @@ Results on test:
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Training (5000 steps):   14% [<span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">&gt;</span>...................................] (296 steps/s) [3s:14s] [step=724] [loss+=0.331] [~loss+=0.325] [~loss=0.325] [~acc=85.84%]        </pre>
-</div>
-</div>
-<div class="jp-OutputArea-child">
-<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
-<div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
-</div>
-</div>
-<div class="jp-OutputArea-child">
-<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
-<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Training (5000 steps):  100% [<span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span>] (453 steps/s) [step=4999] [loss+=0.244] [~loss+=0.270] [~loss=0.270] [~acc=87.33%]        
+<pre>Training (5000 steps):  100% [<span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span>] (487 steps/s) [step=4999] [loss+=0.174] [~loss+=0.269] [~loss=0.269] [~acc=87.59%]        
 
 [saving checkpoint@5000] [median train step (ms): 1]
 </pre>
@@ -8312,7 +8306,7 @@ Results on test:
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
-<div id="4c56257e"></div>
+<div id="9bc4cd21"></div>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -8326,8 +8320,8 @@ Results on test:
 	if (!module) {
 		module = window.Plotly;
 	}
-	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Accuracy","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.7874082922935486,0.8426163792610168,0.857791006565094,0.8654744029045105,0.8695554733276367,0.8730016946792603,0.8734694123268127,0.8726642727851868,0.8723989725112915,0.8732985258102417]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on batched train: Mean Accuracy","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.8418967723846436,0.8525843620300293,0.8595559000968933,0.8660053610801697,0.8720555305480957,0.8734375834465027,0.8738061189651489,0.874021053314209,0.8736218214035034,0.8746660351753235]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on test: Mean Accuracy","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.8436827659606934,0.8547385931015015,0.8600208163261414,0.8614335060119629,0.8694182634353638,0.8699096441268921,0.8721207976341248,0.8717522621154785,0.871383786201477,0.8705852627754211]}],"layout":{"legend":{},"title":{"text":"accuracy"},"xaxis":{"showgrid":true,"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
-	module.newPlot('4c56257e', data);
+	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Accuracy","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.79742032289505,0.8480488061904907,0.8600007891654968,0.867789626121521,0.86802738904953,0.8674853444099426,0.8757627010345459,0.872442901134491,0.876616358757019,0.8759357333183289]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on batched train: Mean Accuracy","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.8396854996681213,0.8553484082221985,0.8628113269805908,0.8695986270904541,0.8681551814079285,0.8733454346656799,0.8751574158668518,0.8707349300384521,0.8736832737922668,0.8734068274497986]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on test: Mean Accuracy","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.8426386117935181,0.8553528189659119,0.8636446595191956,0.8670228719711304,0.8632147312164307,0.8713223338127136,0.8718137145042419,0.8662243485450745,0.8699096441268921,0.8718751072883606]}],"layout":{"legend":{},"title":{"text":"accuracy"},"xaxis":{"showgrid":true,"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
+	module.newPlot('9bc4cd21', data);
 
 	}
 	
@@ -8374,7 +8368,7 @@ Results on test:
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
-<div id="038356c8"></div>
+<div id="d504ab3b"></div>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -8388,8 +8382,8 @@ Results on test:
 	if (!module) {
 		module = window.Plotly;
 	}
-	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Batch Loss+Regularization","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.42113396525382996,0.36832717061042786,0.252225399017334,0.26301082968711853,0.2555369734764099,0.27840107679367065,0.2839052677154541,0.27309146523475647,0.27913230657577515,0.24389903247356415]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss+Regularization","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.5428531765937805,0.3824126720428467,0.32592496275901794,0.2991558909416199,0.2868157625198364,0.2789943814277649,0.2771625220775604,0.27576467394828796,0.2729857861995697,0.27007877826690674]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.5426512360572815,0.38212326169013977,0.32562533020973206,0.29886069893836975,0.28651949763298035,0.27868831157684326,0.27685022354125977,0.2754414677619934,0.27265381813049316,0.26974058151245117]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on batched train: Mean Loss+Regularization","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.4379507303237915,0.34631600975990295,0.31440865993499756,0.29515787959098816,0.2828119099140167,0.2770327925682068,0.27512189745903015,0.2717907428741455,0.2710023820400238,0.27021288871765137]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on batched train: Mean Loss","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.4376775324344635,0.3460167944431305,0.3141072988510132,0.29486361145973206,0.2825152575969696,0.27672553062438965,0.27480655908584595,0.27146807312965393,0.2706697881221771,0.2698724567890167]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on test: Mean Loss+Regularization","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.43470481038093567,0.3443957567214966,0.3160542845726013,0.3008141815662384,0.2896974980831146,0.2850625216960907,0.2841043770313263,0.2805688977241516,0.2806321978569031,0.28140097856521606]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on test: Mean Loss","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.43443161249160767,0.34409648180007935,0.3157529830932617,0.3005199432373047,0.2894008755683899,0.28475525975227356,0.2837890684604645,0.28024622797966003,0.28029966354370117,0.28106048703193665]}],"layout":{"legend":{},"title":{"text":"loss"},"xaxis":{"showgrid":true,"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
-	module.newPlot('038356c8', data);
+	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Batch Loss+Regularization","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.40613141655921936,0.31863850355148315,0.33315834403038025,0.274858295917511,0.2775038480758667,0.3672237992286682,0.28914642333984375,0.2608291506767273,0.26313596963882446,0.1736120730638504]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss+Regularization","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.5298148989677429,0.37090110778808594,0.31868255138397217,0.2960769832134247,0.28554216027259827,0.28437530994415283,0.27153268456459045,0.27707216143608093,0.26969823241233826,0.2694123685359955]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.5296037793159485,0.37062394618988037,0.31841394305229187,0.29581788182258606,0.2852839529514313,0.28411340713500977,0.27126631140708923,0.27680087089538574,0.2694209814071655,0.26912832260131836]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on batched train: Mean Loss+Regularization","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.42384302616119385,0.33895212411880493,0.30717968940734863,0.2904236614704132,0.2863101363182068,0.2771502733230591,0.2739831805229187,0.27692535519599915,0.2715953588485718,0.27179768681526184]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on batched train: Mean Loss","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.42356371879577637,0.33867472410202026,0.30691298842430115,0.29016369581222534,0.28605183959007263,0.27688825130462646,0.273715615272522,0.2766554355621338,0.27131620049476624,0.27151069045066833]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on test: Mean Loss+Regularization","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.4206213653087616,0.3372052013874054,0.3107515275478363,0.29649317264556885,0.29332736134529114,0.2848365306854248,0.2823268175125122,0.2852063477039337,0.28056395053863525,0.2816283106803894]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on test: Mean Loss","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.4203420877456665,0.3369278609752655,0.3104848265647888,0.29623323678970337,0.2930689752101898,0.2845744788646698,0.28205931186676025,0.28493645787239075,0.2802848517894745,0.2813413143157959]}],"layout":{"legend":{},"title":{"text":"loss"},"xaxis":{"showgrid":true,"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
+	module.newPlot('d504ab3b', data);
 
 	}
 	
@@ -8430,16 +8424,16 @@ Results on test:
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>	[Step 5000] median train step: 1686 microseconds
+<pre>	[Step 5000] median train step: 1581 microseconds
 
 Results on batched train:
-	Mean Loss+Regularization (#loss+): 0.270
-	Mean Loss (#loss): 0.270
-	Mean Accuracy (#acc): 87.47%
+	Mean Loss+Regularization (#loss+): 0.272
+	Mean Loss (#loss): 0.272
+	Mean Accuracy (#acc): 87.34%
 Results on test:
-	Mean Loss+Regularization (#loss+): 0.281
+	Mean Loss+Regularization (#loss+): 0.282
 	Mean Loss (#loss): 0.281
-	Mean Accuracy (#acc): 87.06%
+	Mean Accuracy (#acc): 87.19%
 </pre>
 </div>
 </div>
@@ -8484,7 +8478,6 @@ let's train further, another 5k steps, for 10K steps in total.</p>
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
 <pre>train_steps=10000
-loading: "checkpoint-n0000000-20240729-120437-step-00005000"
 	- restarting training from global_step=5000
 </pre>
 </div>
@@ -8492,7 +8485,6 @@ loading: "checkpoint-n0000000-20240729-120437-step-00005000"
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
-(...collecting metrics, minimum 3 required to start plotting...)
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -8503,18 +8495,7 @@ loading: "checkpoint-n0000000-20240729-120437-step-00005000"
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Training (5000 steps):    4% [<span class="ansi-green-fg">&gt;</span>.......................................] (2 steps/s) [0s:43m35s] [step=5199] [loss+=0.209] [~loss+=0.271] [~loss=0.271] [~acc=87.34%]        </pre>
-</div>
-</div>
-<div class="jp-OutputArea-child">
-<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
-<div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
-</div>
-</div>
-<div class="jp-OutputArea-child">
-<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
-<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Training (5000 steps):  100% [<span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span>] (483 steps/s) [step=9999] [loss+=0.260] [~loss+=0.269] [~loss=0.269] [~acc=87.59%]        
+<pre>Training (5000 steps):  100% [<span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span>] (518 steps/s) [step=9999] [loss+=0.268] [~loss+=0.268] [~loss=0.268] [~acc=87.31%]        
 
 [saving checkpoint@10000] [median train step (ms): 1]
 </pre>
@@ -8529,7 +8510,7 @@ loading: "checkpoint-n0000000-20240729-120437-step-00005000"
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
-<div id="c0eeac89"></div>
+<div id="8f3068a4"></div>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -8543,8 +8524,8 @@ loading: "checkpoint-n0000000-20240729-120437-step-00005000"
 	if (!module) {
 		module = window.Plotly;
 	}
-	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Accuracy","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000,5199,6440,7929,9716,10000],"y":[0.7874082922935486,0.8426163792610168,0.857791006565094,0.8654744029045105,0.8695554733276367,0.8730016946792603,0.8734694123268127,0.8726642727851868,0.8723989725112915,0.8732985258102417,0.8734074234962463,0.8744443655014038,0.8748952150344849,0.8725854158401489,0.8758950233459473]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on batched train: Mean Accuracy","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000,5199,6440,7929,9716,10000],"y":[0.8418967723846436,0.8525843620300293,0.8595559000968933,0.8660053610801697,0.8720555305480957,0.8734375834465027,0.8738061189651489,0.874021053314209,0.8736218214035034,0.8746660351753235,0.8741746544837952,0.8741746544837952,0.8747581839561462,0.8744510412216187,0.873928964138031]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on test: Mean Accuracy","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000,5199,6440,7929,9716,10000],"y":[0.8436827659606934,0.8547385931015015,0.8600208163261414,0.8614335060119629,0.8694182634353638,0.8699096441268921,0.8721207976341248,0.8717522621154785,0.871383786201477,0.8705852627754211,0.8708924055099487,0.871383786201477,0.8725507855415344,0.870339572429657,0.8702781796455383]}],"layout":{"legend":{},"title":{"text":"accuracy"},"xaxis":{"showgrid":true,"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
-	module.newPlot('c0eeac89', data);
+	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Accuracy","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000,5199,6440,7929,9716,10000],"y":[0.79742032289505,0.8480488061904907,0.8600007891654968,0.867789626121521,0.86802738904953,0.8674853444099426,0.8757627010345459,0.872442901134491,0.876616358757019,0.8759357333183289,0.8732091784477234,0.8731598854064941,0.8724443316459656,0.8759616017341614,0.8731194138526917]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on batched train: Mean Accuracy","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000,5199,6440,7929,9716,10000],"y":[0.8396854996681213,0.8553484082221985,0.8628113269805908,0.8695986270904541,0.8681551814079285,0.8733454346656799,0.8751574158668518,0.8707349300384521,0.8736832737922668,0.8734068274497986,0.8748502731323242,0.8734068274497986,0.8746045827865601,0.8750038743019104,0.8742974996566772]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on test: Mean Accuracy","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000,5199,6440,7929,9716,10000],"y":[0.8426386117935181,0.8553528189659119,0.8636446595191956,0.8670228719711304,0.8632147312164307,0.8713223338127136,0.8718137145042419,0.8662243485450745,0.8699096441268921,0.8718751072883606,0.8723664879798889,0.8684355616569519,0.8727964758872986,0.8720594048500061,0.8715680241584778]}],"layout":{"legend":{},"title":{"text":"accuracy"},"xaxis":{"showgrid":true,"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
+	module.newPlot('8f3068a4', data);
 
 	}
 	
@@ -8591,7 +8572,7 @@ loading: "checkpoint-n0000000-20240729-120437-step-00005000"
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
-<div id="6766e3ec"></div>
+<div id="16d73943"></div>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -8605,8 +8586,8 @@ loading: "checkpoint-n0000000-20240729-120437-step-00005000"
 	if (!module) {
 		module = window.Plotly;
 	}
-	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Batch Loss+Regularization","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000,5199,6440,7929,9716,10000],"y":[0.42113396525382996,0.36832717061042786,0.252225399017334,0.26301082968711853,0.2555369734764099,0.27840107679367065,0.2839052677154541,0.27309146523475647,0.27913230657577515,0.24389903247356415,0.20923100411891937,0.32753288745880127,0.23390081524848938,0.30744796991348267,0.2597227692604065]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss+Regularization","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000,5199,6440,7929,9716,10000],"y":[0.5428531765937805,0.3824126720428467,0.32592496275901794,0.2991558909416199,0.2868157625198364,0.2789943814277649,0.2771625220775604,0.27576467394828796,0.2729857861995697,0.27007877826690674,0.27123862504959106,0.2691199779510498,0.26941487193107605,0.2721617519855499,0.26926952600479126]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000,5199,6440,7929,9716,10000],"y":[0.5426512360572815,0.38212326169013977,0.32562533020973206,0.29886069893836975,0.28651949763298035,0.27868831157684326,0.27685022354125977,0.2754414677619934,0.27265381813049316,0.26974058151245117,0.2708979547023773,0.2687701880931854,0.26905640959739685,0.271794855594635,0.2689014673233032]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on batched train: Mean Loss+Regularization","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000,5199,6440,7929,9716,10000],"y":[0.4379507303237915,0.34631600975990295,0.31440865993499756,0.29515787959098816,0.2828119099140167,0.2770327925682068,0.27512189745903015,0.2717907428741455,0.2710023820400238,0.27021288871765137,0.2697414755821228,0.26943325996398926,0.26836785674095154,0.26937976479530334,0.2688692510128021]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on batched train: Mean Loss","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000,5199,6440,7929,9716,10000],"y":[0.4376775324344635,0.3460167944431305,0.3141072988510132,0.29486361145973206,0.2825152575969696,0.27672553062438965,0.27480655908584595,0.27146807312965393,0.2706697881221771,0.2698724567890167,0.2694017291069031,0.2690836191177368,0.26800909638404846,0.2690134346485138,0.26850074529647827]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on test: Mean Loss+Regularization","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000,5199,6440,7929,9716,10000],"y":[0.43470481038093567,0.3443957567214966,0.3160542845726013,0.3008141815662384,0.2896974980831146,0.2850625216960907,0.2841043770313263,0.2805688977241516,0.2806321978569031,0.28140097856521606,0.28063639998435974,0.2803906202316284,0.2799118459224701,0.28101295232772827,0.28073838353157043]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on test: Mean Loss","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000,5199,6440,7929,9716,10000],"y":[0.43443161249160767,0.34409648180007935,0.3157529830932617,0.3005199432373047,0.2894008755683899,0.28475525975227356,0.2837890684604645,0.28024622797966003,0.28029966354370117,0.28106048703193665,0.28029665350914,0.280040979385376,0.2795531153678894,0.28064653277397156,0.28036999702453613]}],"layout":{"legend":{},"title":{"text":"loss"},"xaxis":{"showgrid":true,"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
-	module.newPlot('6766e3ec', data);
+	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Batch Loss+Regularization","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000,5199,6440,7929,9716,10000],"y":[0.40613141655921936,0.31863850355148315,0.33315834403038025,0.274858295917511,0.2775038480758667,0.3672237992286682,0.28914642333984375,0.2608291506767273,0.26313596963882446,0.1736120730638504,0.2883206307888031,0.29920023679733276,0.24347317218780518,0.28037989139556885,0.2677115499973297]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss+Regularization","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000,5199,6440,7929,9716,10000],"y":[0.5298148989677429,0.37090110778808594,0.31868255138397217,0.2960769832134247,0.28554216027259827,0.28437530994415283,0.27153268456459045,0.27707216143608093,0.26969823241233826,0.2694123685359955,0.272215873003006,0.2716979384422302,0.26972219347953796,0.2672950327396393,0.26818573474884033]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000,5199,6440,7929,9716,10000],"y":[0.5296037793159485,0.37062394618988037,0.31841394305229187,0.29581788182258606,0.2852839529514313,0.28411340713500977,0.27126631140708923,0.27680087089538574,0.2694209814071655,0.26912832260131836,0.27193009853363037,0.2714029848575592,0.2694181799888611,0.26697906851768494,0.26786941289901733]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on batched train: Mean Loss+Regularization","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000,5199,6440,7929,9716,10000],"y":[0.42384302616119385,0.33895212411880493,0.30717968940734863,0.2904236614704132,0.2863101363182068,0.2771502733230591,0.2739831805229187,0.27692535519599915,0.2715953588485718,0.27179768681526184,0.26950106024742126,0.27074816823005676,0.2691703140735626,0.26890796422958374,0.2683268189430237]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on batched train: Mean Loss","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000,5199,6440,7929,9716,10000],"y":[0.42356371879577637,0.33867472410202026,0.30691298842430115,0.29016369581222534,0.28605183959007263,0.27688825130462646,0.273715615272522,0.2766554355621338,0.27131620049476624,0.27151069045066833,0.26921409368515015,0.2704513669013977,0.26886633038520813,0.26859161257743835,0.2680094242095947]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on test: Mean Loss+Regularization","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000,5199,6440,7929,9716,10000],"y":[0.4206213653087616,0.3372052013874054,0.3107515275478363,0.29649317264556885,0.29332736134529114,0.2848365306854248,0.2823268175125122,0.2852063477039337,0.28056395053863525,0.2816283106803894,0.279314786195755,0.2817439138889313,0.2797914445400238,0.28081852197647095,0.2796515226364136]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on test: Mean Loss","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000,5199,6440,7929,9716,10000],"y":[0.4203420877456665,0.3369278609752655,0.3104848265647888,0.29623323678970337,0.2930689752101898,0.2845744788646698,0.28205931186676025,0.28493645787239075,0.2802848517894745,0.2813413143157959,0.27902787923812866,0.2814471125602722,0.2794874906539917,0.28050222992897034,0.2793341279029846]}],"layout":{"legend":{},"title":{"text":"loss"},"xaxis":{"showgrid":true,"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
+	module.newPlot('16d73943', data);
 
 	}
 	
@@ -8647,16 +8628,16 @@ loading: "checkpoint-n0000000-20240729-120437-step-00005000"
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>	[Step 10000] median train step: 1665 microseconds
+<pre>	[Step 10000] median train step: 1552 microseconds
 
 Results on batched train:
-	Mean Loss+Regularization (#loss+): 0.269
-	Mean Loss (#loss): 0.269
-	Mean Accuracy (#acc): 87.39%
+	Mean Loss+Regularization (#loss+): 0.268
+	Mean Loss (#loss): 0.268
+	Mean Accuracy (#acc): 87.43%
 Results on test:
-	Mean Loss+Regularization (#loss+): 0.281
-	Mean Loss (#loss): 0.280
-	Mean Accuracy (#acc): 87.03%
+	Mean Loss+Regularization (#loss+): 0.280
+	Mean Loss (#loss): 0.279
+	Mean Accuracy (#acc): 87.16%
 </pre>
 </div>
 </div>
@@ -8679,7 +8660,7 @@ Results on test:
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [13]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In [11]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
 <div class="highlight hl-ipython3"><pre><span></span><span class="o">//</span> <span class="n">Remove</span> <span class="n">previously</span> <span class="n">trained</span> <span class="n">model</span> <span class="o">--</span> <span class="n">skip</span> <span class="n">this</span> <span class="n">cell</span><span class="p">,</span> <span class="k">if</span> <span class="n">you</span> <span class="n">want</span> <span class="n">to</span> <span class="k">continue</span> <span class="n">training</span><span class="o">.</span>
@@ -8694,7 +8675,7 @@ Results on test:
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [14]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In [12]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
 <div class="highlight hl-ipython3"><pre><span></span><span class="o">%%</span> <span class="o">--</span><span class="n">checkpoint</span> <span class="n">kan_model</span> <span class="o">-</span><span class="nb">set</span><span class="o">=</span><span class="s2">"kan=true;activation=swish;plots=true;train_steps=5000"</span>
@@ -8711,7 +8692,12 @@ Results on test:
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
-(...collecting metrics, minimum 3 required to start plotting...)
+</div>
+</div>
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>Training (5000 steps):   14% [<span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">&gt;</span>...................................] (220 steps/s) [4s:19s] [step=724] [loss+=0.373] [~loss+=0.290] [~loss=0.287] [~acc=86.79%]        </pre>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -8722,18 +8708,7 @@ Results on test:
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Training (5000 steps):   14% [<span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">&gt;</span>...................................] (249 steps/s) [4s:17s] [step=724] [loss+=0.347] [~loss+=0.286] [~loss=0.283] [~acc=87.02%]        </pre>
-</div>
-</div>
-<div class="jp-OutputArea-child">
-<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
-<div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
-</div>
-</div>
-<div class="jp-OutputArea-child">
-<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
-<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Training (5000 steps):  100% [<span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span>] (381 steps/s) [step=4999] [loss+=0.263] [~loss+=0.268] [~loss=0.265] [~acc=87.79%]        
+<pre>Training (5000 steps):  100% [<span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span><span class="ansi-green-fg">=</span>] (407 steps/s) [step=4999] [loss+=0.262] [~loss+=0.272] [~loss=0.269] [~acc=87.34%]        
 
 [saving checkpoint@5000] [median train step (ms): 1]
 </pre>
@@ -8748,7 +8723,7 @@ Results on test:
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
-<div id="ca7fa042"></div>
+<div id="b6915754"></div>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -8762,8 +8737,8 @@ Results on test:
 	if (!module) {
 		module = window.Plotly;
 	}
-	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Accuracy","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.8405987620353699,0.8631916642189026,0.8712633848190308,0.8730942010879517,0.869725227355957,0.8753353357315063,0.8704546689987183,0.873787522315979,0.8754577040672302,0.8778768181800842]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on batched train: Mean Accuracy","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.8634870052337646,0.8702128529548645,0.8727926015853882,0.8734068274497986,0.8714413046836853,0.8672031164169312,0.8742053508758545,0.8744203448295593,0.8766930103302002,0.8754644989967346]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on test: Mean Accuracy","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.8606350421905518,0.8705238699913025,0.8699710965156555,0.8702167272567749,0.86640864610672,0.8591609001159668,0.8738406300544739,0.8727964758872986,0.8686811923980713,0.8710152506828308]}],"layout":{"legend":{},"title":{"text":"accuracy"},"xaxis":{"showgrid":true,"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
-	module.newPlot('ca7fa042', data);
+	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Accuracy","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.8391783237457275,0.8662722706794739,0.8686350584030151,0.869591236114502,0.8716350197792053,0.8714936375617981,0.8696949481964111,0.8729804158210754,0.877238929271698,0.8734132647514343]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on batched train: Mean Accuracy","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.8605079650878906,0.8671109676361084,0.8723933696746826,0.8710113167762756,0.8738368153572083,0.8715334534645081,0.8745124936103821,0.875065267086029,0.8733147382736206,0.8765701651573181]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on test: Mean Accuracy","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.8585467338562012,0.8658558130264282,0.8684355616569519,0.8678827285766602,0.8694797158241272,0.8681284189224243,0.868558406829834,0.8720594048500061,0.8675756454467773,0.872489333152771]}],"layout":{"legend":{},"title":{"text":"accuracy"},"xaxis":{"showgrid":true,"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
+	module.newPlot('b6915754', data);
 
 	}
 	
@@ -8810,7 +8785,7 @@ Results on test:
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
-<div id="42c307fb"></div>
+<div id="72cddaa3"></div>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -8824,8 +8799,8 @@ Results on test:
 	if (!module) {
 		module = window.Plotly;
 	}
-	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Batch Loss+Regularization","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.2806485891342163,0.3531215488910675,0.2546955347061157,0.2650430500507355,0.3038308918476105,0.24028214812278748,0.25730326771736145,0.32335567474365234,0.26237615942955017,0.26296380162239075]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss+Regularization","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.34840455651283264,0.3037789463996887,0.28488975763320923,0.2812519967556,0.28016307950019836,0.27557650208473206,0.27680858969688416,0.2745830714702606,0.270990788936615,0.26830756664276123]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.344898521900177,0.3001766502857208,0.2812275290489197,0.2775592803955078,0.2764398753643036,0.2718357443809509,0.27306413650512695,0.2708583176136017,0.26731470227241516,0.2646925151348114]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on batched train: Mean Loss+Regularization","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.3024562895298004,0.28435418009757996,0.2781507968902588,0.2781412601470947,0.28084641695022583,0.28366023302078247,0.27125751972198486,0.270687460899353,0.2692621052265167,0.26791873574256897]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on batched train: Mean Loss","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.29889437556266785,0.28072595596313477,0.27447786927223206,0.2744448482990265,0.2771247625350952,0.279918372631073,0.26751017570495605,0.26696863770484924,0.26559415459632874,0.2643176019191742]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on test: Mean Loss+Regularization","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.3060847222805023,0.2896190285682678,0.2839473783969879,0.284656822681427,0.2880242168903351,0.29339954257011414,0.28327852487564087,0.283797025680542,0.2857917845249176,0.28335732221603394]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on test: Mean Loss","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.30252280831336975,0.28599074482917786,0.2802743911743164,0.2809603810310364,0.2843025326728821,0.2896576523780823,0.2795311510562897,0.2800781726837158,0.2821238338947296,0.2797561585903168]}],"layout":{"legend":{},"title":{"text":"loss"},"xaxis":{"showgrid":true,"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
-	module.newPlot('42c307fb', data);
+	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Batch Loss+Regularization","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.313633531332016,0.32536861300468445,0.23780132830142975,0.23306913673877716,0.2096318155527115,0.21829934418201447,0.21450087428092957,0.23851421475410461,0.30215856432914734,0.26181092858314514]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss+Regularization","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.34939587116241455,0.2972661256790161,0.2896273732185364,0.28382301330566406,0.28109174966812134,0.2780018150806427,0.2774908244609833,0.27401435375213623,0.26915591955184937,0.2720126211643219]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.34590065479278564,0.293707937002182,0.28604331612586975,0.2802446484565735,0.2775375545024872,0.2744649648666382,0.2739971876144409,0.2705777585506439,0.26580390334129333,0.2687166631221771]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on batched train: Mean Loss+Regularization","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.30745238065719604,0.28918448090553284,0.2801932394504547,0.27836206555366516,0.2754546105861664,0.2765279710292816,0.2729872167110443,0.2708030641078949,0.2734456956386566,0.2683008313179016]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on batched train: Mean Loss","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.3039158582687378,0.2856104373931885,0.2766062021255493,0.27478453516960144,0.27190372347831726,0.27299848198890686,0.26949310302734375,0.26737287640571594,0.27009814977645874,0.265014111995697]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on test: Mean Loss+Regularization","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.31105950474739075,0.29416826367378235,0.2858960032463074,0.2853161096572876,0.28413164615631104,0.28469765186309814,0.2825593054294586,0.281816303730011,0.2859887182712555,0.2814752459526062]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Eval on test: Mean Loss","x":[200,440,728,1074,1489,1987,2585,3303,4165,5000],"y":[0.3075230121612549,0.2905942499637604,0.28230905532836914,0.28173860907554626,0.2805807888507843,0.2811681628227234,0.27906522154808044,0.27838611602783203,0.28264114260673523,0.278188556432724]}],"layout":{"legend":{},"title":{"text":"loss"},"xaxis":{"showgrid":true,"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
+	module.newPlot('72cddaa3', data);
 
 	}
 	
@@ -8866,16 +8841,16 @@ Results on test:
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>	[Step 5000] median train step: 1868 microseconds
+<pre>	[Step 5000] median train step: 1754 microseconds
 
 Results on batched train:
 	Mean Loss+Regularization (#loss+): 0.268
-	Mean Loss (#loss): 0.264
-	Mean Accuracy (#acc): 87.55%
+	Mean Loss (#loss): 0.265
+	Mean Accuracy (#acc): 87.66%
 Results on test:
-	Mean Loss+Regularization (#loss+): 0.283
-	Mean Loss (#loss): 0.280
-	Mean Accuracy (#acc): 87.10%
+	Mean Loss+Regularization (#loss+): 0.281
+	Mean Loss (#loss): 0.278
+	Mean Accuracy (#acc): 87.25%
 </pre>
 </div>
 </div>
