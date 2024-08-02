@@ -162,14 +162,13 @@ func Train(backend backends.Backend, ctx *context.Context) error {
 	// Attach a margaid plots: plot points at exponential steps.
 	// The points generated are saved along the checkpoint directory (if one is given).
 	usePlots := context.GetParamOr(ctx, "plots", false)
-	var plots *plotly.PlotConfig
 	if usePlots {
-		plots = plotly.New().Dynamic().
-			ScheduleExponential(loop, 400, 1.2).
-			WithDatasets(validDS, testDS, trainEvalDS)
-		if checkpoint != nil {
-			plots = plots.WithCheckpoint(checkpoint.Dir())
-		}
+		_ = plotly.New().
+			WithCheckpoint(checkpoint).
+			Dynamic().
+			WithDatasets(validDS, testDS, trainEvalDS).
+			ScheduleExponential(loop, 200, 1.2).
+			WithBatchNormalizationAveragesUpdate(trainEvalDS)
 	}
 
 	// Loop for given number of steps

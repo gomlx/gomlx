@@ -119,7 +119,7 @@ func Train(backend backends.Backend, ctx *context.Context, baseDir string, layer
 	usePlots := context.GetParamOr(ctx, margaid.ParamPlots, false)
 	if usePlots {
 		stepsPerEpoch := TrainSplit.Shape().Size()/BatchSize + 1
-		plots = plotly.New().Dynamic().
+		plots = plotly.New().WithCheckpoint(checkpoint).Dynamic().
 			ScheduleExponential(loop, 200, 1.2).
 			ScheduleEveryNSteps(loop, stepsPerEpoch)
 		if layerWiseEval {
@@ -128,9 +128,6 @@ func Train(backend backends.Backend, ctx *context.Context, baseDir string, layer
 			plots = plots.WithCustomMetricFn(BuildLayerWiseCustomMetricFn(backend, ctx, layerWiseStrategy))
 		} else {
 			plots = plots.WithDatasets(trainEvalDS, validEvalDS)
-		}
-		if checkpoint != nil {
-			plots = plots.WithCheckpoint(checkpoint.Dir())
 		}
 	}
 
