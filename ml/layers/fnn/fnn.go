@@ -196,8 +196,7 @@ func (c *Config) Normalization(normalization string) *Config {
 //
 // To use more than one type of Regularizer, use regularizers.Combine, and set the returned combined regularizer here.
 //
-// The default is no regularizer, but it can be configured by regularizers.ParamL1 and regularizers.ParamL2 --
-// see also regularizers.FromContext.
+// The default is regularizers.FromContext, which is configured by regularizers.ParamL1 and regularizers.ParamL2.
 func (c *Config) Regularizer(regularizer regularizers.Regularizer) *Config {
 	c.regularizer = regularizer
 	return c

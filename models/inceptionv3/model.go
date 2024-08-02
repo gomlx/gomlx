@@ -68,6 +68,7 @@ import (
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activations"
+	"github.com/gomlx/gomlx/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/types/tensors/images"
 	"github.com/gomlx/gopjrt/dtypes"
@@ -488,7 +489,7 @@ func (cfg *Config) conv2DWithBatchNorm(ctx *context.Context, x *Node, kernelFilt
 
 	// Batch Normalization:
 	ctxWithWeights = cfg.readNextBatchNormalization(ctx, g) // Create a new context scope and read weights from `.h5` file.
-	x = layers.BatchNormalization(ctxWithWeights, x, cfg.channelsAxis).CurrentScope().
+	x = batchnorm.New(ctxWithWeights, x, cfg.channelsAxis).CurrentScope().
 		Scale(cfg.batchNormScale).Epsilon(cfg.batchNormEpsilon).Trainable(cfg.trainable).Done()
 
 	// Apply:
@@ -559,7 +560,7 @@ func (cfg *Config) readPredictionsWeights(ctx *context.Context, graph *Graph) (c
 // readNextBatchNormalization enters a new scope and initializes it with the pre-trained weights for the next
 // batch normalization layer.
 //
-// It returns the modified scope to use for `layers.BatchNormalization`.
+// It returns the modified scope to use for `batchnorm.New`.
 func (cfg *Config) readNextBatchNormalization(ctx *context.Context, graph *Graph) (ctxInScope *context.Context) {
 	ctxInScope = ctx
 

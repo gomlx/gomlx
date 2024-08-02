@@ -77,6 +77,9 @@ type Plots struct {
 	// EvalDatasets will be evaluated with `train.Trainer.Eval()` and its metrics collected.
 	EvalDatasets []train.Dataset
 
+	// batchNormAveragesDS is used to update the batch normalization averages, if configured.
+	batchNormAveragesDS train.Dataset
+
 	// Plot per metric name.
 	PerMetricType map[string]*Plot
 
@@ -147,7 +150,7 @@ func NewDefault(loop *train.Loop, dir string, startStep int, stepFactor float64,
 	train.ExponentialCallback(loop, startStep, stepFactor, true,
 		"margaid.Plot", 0, func(loop *train.Loop, metrics []*tensors.Tensor) error {
 			// Update plots with metrics.
-			return stdplots.AddTrainAndEvalMetrics(plots, loop, metrics, plots.EvalDatasets)
+			return stdplots.AddTrainAndEvalMetrics(plots, loop, metrics, plots.EvalDatasets, plots.batchNormAveragesDS)
 		})
 	plots.attachOnEnd(loop)
 	return plots
@@ -173,7 +176,7 @@ func (ps *Plots) PlotEveryNSteps(loop *train.Loop, n int) {
 	train.EveryNSteps(loop, n, "margaid.Plot", 0,
 		func(loop *train.Loop, metrics []*tensors.Tensor) error {
 			// Update plots with metrics.
-			return stdplots.AddTrainAndEvalMetrics(ps, loop, metrics, ps.EvalDatasets)
+			return stdplots.AddTrainAndEvalMetrics(ps, loop, metrics, ps.EvalDatasets, ps.batchNormAveragesDS)
 		})
 	ps.attachOnEnd(loop)
 }
@@ -194,6 +197,19 @@ func (ps *Plots) WithFile(filePath string) (*Plots, error) {
 	}
 	ps.fileWriter, ps.errFileWriter = stdplots.CreatePointsWriter(filePath)
 	return ps, nil
+}
+
+// WithBatchNormalizationAveragesUpdate configures a dataset to use to update the averages (of mean and variance)
+// for batch normalization.
+//
+// The oneEpochDS dataset (typically, the same as a training data evaluation dataset) should be a 1-epoch training
+// data dataset, and it can use evaluation batch sizes.
+// If oneEpochDS is nil, it disabled the updating of the averages.
+//
+// If the model is not using batch normalization this is a no-op and nothing is executed.
+func (ps *Plots) WithBatchNormalizationAveragesUpdate(oneEpochDS train.Dataset) *Plots {
+	ps.batchNormAveragesDS = oneEpochDS
+	return ps
 }
 
 // PreloadFile uses the filePath both to load data points.
@@ -326,7 +342,7 @@ func (ps *Plots) attachOnEnd(loop *train.Loop) {
 func (ps *Plots) Attach(loop *train.Loop, numPoints int) {
 	train.NTimesDuringLoop(loop, numPoints, "margaid plots", 0,
 		func(loop *train.Loop, metrics []*tensors.Tensor) error {
-			return stdplots.AddTrainAndEvalMetrics(ps, loop, metrics, ps.EvalDatasets)
+			return stdplots.AddTrainAndEvalMetrics(ps, loop, metrics, ps.EvalDatasets, ps.batchNormAveragesDS)
 		})
 	ps.attachOnEnd(loop)
 }

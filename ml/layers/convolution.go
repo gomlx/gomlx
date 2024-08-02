@@ -20,6 +20,7 @@ import (
 	. "github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
+	"github.com/gomlx/gomlx/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors/images"
 	"github.com/gomlx/gomlx/types/xslices"
@@ -42,6 +43,7 @@ type ConvBuilder struct {
 	padSame            bool
 	dilations          []int
 	newScope           bool
+	regularizer        regularizers.Regularizer
 }
 
 // Convolution prepares one convolution on x with the given kernel for arbitrary
@@ -60,10 +62,11 @@ type ConvBuilder struct {
 // `[batch, input_channels, <spatial_dimensions...>]` instead.
 func Convolution(ctx *context.Context, x *Node) *ConvBuilder {
 	conv := &ConvBuilder{
-		ctx:      ctx,
-		graph:    x.Graph(),
-		x:        x,
-		newScope: true,
+		ctx:         ctx,
+		graph:       x.Graph(),
+		x:           x,
+		newScope:    true,
+		regularizer: regularizers.FromContext(ctx),
 	}
 	conv.numSpatialDims = x.Rank() - 2
 	if conv.numSpatialDims < 0 {
@@ -214,6 +217,17 @@ func (conv *ConvBuilder) CurrentScope() *ConvBuilder {
 	return conv
 }
 
+// Regularizer to be applied to the learned weights (but not the biases).
+// Default is none.
+//
+// To use more than one type of Regularizer, use regularizers.Combine, and set the returned combined regularizer here.
+//
+// The default is regularizers.FromContext, which is configured by regularizers.ParamL1 and regularizers.ParamL2.
+func (conv *ConvBuilder) Regularizer(regularizer regularizers.Regularizer) *ConvBuilder {
+	conv.regularizer = regularizer
+	return conv
+}
+
 // Done indicates that the Convolution layer is finished being configured. It then
 // creates the convolution and it's kernels (variables) and returns the resulting
 // Node.
@@ -269,6 +283,9 @@ func (conv *ConvBuilder) Done() *Node {
 		kernelShape.Dimensions = append(kernelShape.Dimensions, conv.filters)
 	}
 	kernelVar := ctxInScope.VariableWithShape("weights", kernelShape)
+	if conv.regularizer != nil {
+		conv.regularizer(ctxInScope, conv.graph, kernelVar)
+	}
 	kernel := kernelVar.ValueGraph(conv.graph)
 	convOpts := Convolve(conv.x, kernel).StridePerDim(conv.strides...).ChannelsAxis(conv.channelsAxisConfig)
 	if len(conv.dilations) > 0 {

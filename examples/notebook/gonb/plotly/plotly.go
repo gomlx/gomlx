@@ -7,7 +7,9 @@
 // The advantage of `plotly` over `margaid` plots is that it uses Javascript to make the plot interactive (it displays
 // information on mouse hover).
 //
-// The disadvantage is that saving doesn't work, because of the javascript nature.
+// The disadvantage is that saving of the notebook doesn't include the Javascript -- but exporting to HTML does.
+//
+// See New to get started and an example.
 package plotly
 
 import (
@@ -54,6 +56,9 @@ type PlotConfig struct {
 	// EvalDatasets registered to be used during evaluation when dynamically capturing points during training.
 	EvalDatasets []train.Dataset
 
+	// batchNormAveragesDS is used to update the batch normalization averages, if configured.
+	batchNormAveragesDS train.Dataset
+
 	// gonbId of the `<div>` tag where to generate dynamic plots.
 	gonbId string
 
@@ -73,6 +78,20 @@ type PlotConfig struct {
 }
 
 // New creates a new PlotConfig, that can be used to generate plots.
+//
+// This is used when configuring the train.Loop, and a typical use example, triggered by a "plots" parameter,
+// might look like:
+//
+//	usePlots := context.GetParamOr(ctx, plotly.ParamPlots, false)
+//	...
+//	if usePlots {
+//		plots := plotly.New().Dynamic().WithDatasets(evalOnTrainDS, evalOnTestDS).
+//			ScheduleExponential(loop, 200, 1.2).
+//			WithBatchNormalizationAveragesUpdate(evalOnTrainDS)
+//		if checkpoint != nil {
+//			plots.WithCheckpoint(checkpoint.Dir())
+//		}
+//	}
 func New() *PlotConfig {
 	return &PlotConfig{
 		metricsTypesToFig: make(map[string]int),
@@ -82,6 +101,19 @@ func New() *PlotConfig {
 // WithDatasets configures the datasets to evaluate at each collecting step (see `Schedule*` methods).
 func (pc *PlotConfig) WithDatasets(datasets ...train.Dataset) *PlotConfig {
 	pc.EvalDatasets = datasets
+	return pc
+}
+
+// WithBatchNormalizationAveragesUpdate configures a dataset to use to update the averages (of mean and variance)
+// for batch normalization.
+//
+// The oneEpochDS dataset (typically, the same as a training data evaluation dataset) should be a 1-epoch training
+// data dataset, and it can use evaluation batch sizes.
+// If oneEpochDS is nil, it disabled the updating of the averages.
+//
+// If the model is not using batch normalization this is a no-op and nothing is executed.
+func (pc *PlotConfig) WithBatchNormalizationAveragesUpdate(oneEpochDS train.Dataset) *PlotConfig {
+	pc.batchNormAveragesDS = oneEpochDS
 	return pc
 }
 
@@ -160,7 +192,7 @@ func (pc *PlotConfig) addMetrics(loop *train.Loop, metrics []*tensors.Tensor) er
 		}
 	}
 
-	return plots.AddTrainAndEvalMetrics(pc, loop, metrics, pc.EvalDatasets)
+	return plots.AddTrainAndEvalMetrics(pc, loop, metrics, pc.EvalDatasets, pc.batchNormAveragesDS)
 }
 
 // attachOnEnd registers a final call to DynamicPlot when training finishes. After that no more dynamic plots

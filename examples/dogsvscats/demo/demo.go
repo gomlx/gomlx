@@ -33,6 +33,7 @@ import (
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/commandline"
 	"github.com/gomlx/gomlx/ml/train/losses"
@@ -303,7 +304,7 @@ func normalizeImage(ctx *context.Context, x *Node) *Node {
 	case "layer":
 		return layers.LayerNormalization(ctx, x, 1, 2).ScaleNormalization(false).Done()
 	case "batch":
-		return layers.BatchNormalization(ctx, x, -1).Done()
+		return batchnorm.New(ctx, x, -1).Done()
 	case "none":
 		return x
 	}
@@ -318,7 +319,7 @@ func normalizeFeatures(ctx *context.Context, x *Node) *Node {
 	case "layer":
 		return layers.LayerNormalization(ctx, x, -1).Done()
 	case "batch":
-		return layers.BatchNormalization(ctx, x, -1).Done()
+		return batchnorm.New(ctx, x, -1).Done()
 	case "none":
 		return x
 	}

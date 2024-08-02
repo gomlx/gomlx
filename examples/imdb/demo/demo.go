@@ -28,6 +28,7 @@ import (
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activations"
+	"github.com/gomlx/gomlx/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/commandline"
 	"github.com/gomlx/gomlx/ml/train/losses"
@@ -543,7 +544,7 @@ func Normalize(ctx *context.Context, x *Node) *Node {
 			return layers.LayerNormalization(ctx, x, -1).Done()
 		}
 	case "batch":
-		return layers.BatchNormalization(ctx, x, -1).Done()
+		return batchnorm.New(ctx, x, -1).Done()
 	case "none":
 		return x
 	}

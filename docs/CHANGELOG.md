@@ -23,7 +23,9 @@
   * Added sub-package `kan` for Kolmogorov–Arnold Networks, and Discrete-KAN.
   * Added sub-package `regularizers` with automatic regularizer configuration. Layers `Dense`, `DenseWithBias` and `kan` use it by default.
   * Added sub-package `activations` -- just a refactor of the code already in layers.
-  * Added `train.BatchNormAveragesUpdate` to update the average of the means and variances used for normalization.
+  * Added sub-package `batchnorm`: refactored out batch normalization code. 
+    * Added `batchnorm.AveragesUpdate` to update the average of the means and variances used for normalization.
+      Also connected it to evaluation in plots libraries.
 * Package `initializers`:
   * Added `XavierFn` initializer.
 * Package `losses`:

@@ -31,6 +31,7 @@ import (
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activations"
+	"github.com/gomlx/gomlx/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/ml/layers/fnn"
 	"github.com/gomlx/gomlx/ml/layers/kan"
 	"github.com/gomlx/gomlx/ml/layers/regularizers"
@@ -218,9 +219,9 @@ func trainModel(ctx *context.Context) {
 		commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
 	}
 
-	// Attach a checkpoint: checkpoint every 1 minute of training.
+	// Checkpoint saving: every 3 minutes of training.
 	if checkpoint != nil {
-		period := time.Minute * 1
+		period := time.Minute * 3
 		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
 			func(loop *train.Loop, metrics []*tensors.Tensor) error {
 				return checkpoint.Save()
@@ -232,6 +233,7 @@ func trainModel(ctx *context.Context) {
 	if usePlots {
 		plots := plotly.New().Dynamic().
 			ScheduleExponential(loop, 200, 1.2).
+			WithBatchNormalizationAveragesUpdate(evalOnTrainDS).
 			WithDatasets(evalOnTrainDS, evalOnTestDS)
 		if checkpoint != nil {
 			plots.WithCheckpoint(checkpoint.Dir())
@@ -247,8 +249,7 @@ func trainModel(ctx *context.Context) {
 		}
 
 		// Update batch normalization averages, if they are used.
-		layers.BatchNormalizationResetWeights(ctx)
-		if trainer.BatchNormalizationAveragesUpdate(evalOnTrainDS) {
+		if batchnorm.UpdateAverages(trainer, evalOnTrainDS) {
 			fmt.Println("\tUpdated batch normalization mean/variances averages.")
 			if checkpoint != nil {
 				must.M(checkpoint.Save())
@@ -322,10 +323,10 @@ func ConvolutionModelGraph(ctx *context.Context, spec any, inputs []*Node) []*No
 	logits = layers.Convolution(nextCtx("conv"), logits).Filters(32).KernelSize(3).PadSame().Done()
 	logits.AssertDims(batchSize, 32, 32, 32)
 	logits = activations.Relu(logits)
-	logits = layers.BatchNormalization(nextCtx("batchnorm"), logits, -1).Done()
+	logits = batchnorm.New(nextCtx("batchnorm"), logits, -1).Done()
 	logits = layers.Convolution(nextCtx("conv"), logits).Filters(32).KernelSize(3).PadSame().Done()
 	logits = activations.Relu(logits)
-	logits = layers.BatchNormalization(nextCtx("batchnorm"), logits, -1).Done()
+	logits = batchnorm.New(nextCtx("batchnorm"), logits, -1).Done()
 	logits = MaxPool(logits).Window(2).Done()
 	logits = layers.DropoutNormalize(nextCtx("dropout"), logits, Scalar(g, dtype, 0.3), true)
 	logits.AssertDims(batchSize, 16, 16, 32)
@@ -333,11 +334,11 @@ func ConvolutionModelGraph(ctx *context.Context, spec any, inputs []*Node) []*No
 	logits = layers.Convolution(nextCtx("conv"), logits).Filters(64).KernelSize(3).PadSame().Done()
 	logits.AssertDims(batchSize, 16, 16, 64)
 	logits = activations.Relu(logits)
-	logits = layers.BatchNormalization(nextCtx("batchnorm"), logits, -1).Done()
+	logits = batchnorm.New(nextCtx("batchnorm"), logits, -1).Done()
 	logits = layers.Convolution(nextCtx("conv"), logits).Filters(64).KernelSize(3).PadSame().Done()
 	logits.AssertDims(batchSize, 16, 16, 64)
 	logits = activations.Relu(logits)
-	logits = layers.BatchNormalization(nextCtx("batchnorm"), logits, -1).Done()
+	logits = batchnorm.New(nextCtx("batchnorm"), logits, -1).Done()
 	logits = MaxPool(logits).Window(2).Done()
 	logits = layers.DropoutNormalize(nextCtx("dropout"), logits, Scalar(g, dtype, 0.5), true)
 	logits.AssertDims(batchSize, 8, 8, 64)
@@ -345,11 +346,11 @@ func ConvolutionModelGraph(ctx *context.Context, spec any, inputs []*Node) []*No
 	logits = layers.Convolution(nextCtx("conv"), logits).Filters(128).KernelSize(3).PadSame().Done()
 	logits.AssertDims(batchSize, 8, 8, 128)
 	logits = activations.Relu(logits)
-	logits = layers.BatchNormalization(nextCtx("batchnorm"), logits, -1).Done()
+	logits = batchnorm.New(nextCtx("batchnorm"), logits, -1).Done()
 	logits = layers.Convolution(nextCtx("conv"), logits).Filters(128).KernelSize(3).PadSame().Done()
 	logits.AssertDims(batchSize, 8, 8, 128)
 	logits = activations.Relu(logits)
-	logits = layers.BatchNormalization(nextCtx("batchnorm"), logits, -1).Done()
+	logits = batchnorm.New(nextCtx("batchnorm"), logits, -1).Done()
 	logits = MaxPool(logits).Window(2).Done()
 	logits = layers.DropoutNormalize(nextCtx("dropout"), logits, Scalar(g, dtype, 0.5), true)
 	logits.AssertDims(batchSize, 4, 4, 128)
@@ -358,7 +359,7 @@ func ConvolutionModelGraph(ctx *context.Context, spec any, inputs []*Node) []*No
 	logits = Reshape(logits, batchSize, -1)
 	logits = layers.Dense(nextCtx("dense"), logits, true, 128)
 	logits = activations.Relu(logits)
-	logits = layers.BatchNormalization(nextCtx("batchnorm"), logits, -1).Done()
+	logits = batchnorm.New(nextCtx("batchnorm"), logits, -1).Done()
 	logits = layers.DropoutNormalize(nextCtx("dropout"), logits, Scalar(g, dtype, 0.5), true)
 	numClasses := len(cifar.C10Labels)
 	logits = layers.Dense(nextCtx("dense"), logits, true, numClasses)

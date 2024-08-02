@@ -134,15 +134,6 @@ func Dense(ctx *context.Context, input *Node, useBias bool, outputDimensions ...
 		expandedBias := ReshapeWithShape(bias, expandedBiasShape)
 		output = Add(output, expandedBias)
 	}
-
-	if l2any, found := ctx.GetParam(ParamL2Regularization); found {
-		l2 := l2any.(float64)
-		if l2 > 0 {
-			l2Node := Const(g, shapes.CastAsDType(l2, inputShape.DType))
-			AddL2Regularization(ctx, l2Node, weights)
-		}
-	}
-
 	return output
 }
 
@@ -401,6 +392,8 @@ func DropoutFromContext(ctx *context.Context, x *Node) *Node {
 }
 
 // AddL2RegularizationStatic is like AddL2Regularization, but takes the `amount` as a static Go float64 value.
+//
+// Deprecated: use package regularizers instead.
 func AddL2RegularizationStatic(ctx *context.Context, amount float64, values ...*Node) {
 	if len(values) == 0 {
 		Panicf("no values given to AddL2RegularizationAsFloat")
@@ -413,6 +406,8 @@ func AddL2RegularizationStatic(ctx *context.Context, amount float64, values ...*
 // AddL2Regularization calculates the L2 of the given values (typically variable nodes returned
 // by context.Variable.ValueGraph()), scale by the given amount (typically a constant) and then
 // train.AddLoss the resulting value, having the effect of regularizing the weights (variables).
+//
+// Deprecated: use package regularizers instead.
 func AddL2Regularization(ctx *context.Context, amount *Node, values ...*Node) {
 	if len(values) == 0 {
 		Panicf("no values given to AddL2Regularization")

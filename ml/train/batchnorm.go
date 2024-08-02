@@ -12,30 +12,17 @@ import (
 
 const (
 	// BatchNormalizationUpdatePhase is a graph parameter name used to indicate that the graph is only
-	// running to update the mean/average parameters. See Trainer.BatchNormalizationAveragesUpdate method.
+	// running to update the mean/average parameters. See batchnorm.UpdateAveragesUpdate method.
 	BatchNormalizationUpdatePhase = "batch_normalization_update_phase"
-
-	// BatchNormalizationAveragesUpdatesTriggerParam is a boolean parameter set in case batch normalization was used.
-	// See train.BatchNormalizationAveragesUpdate.
-	BatchNormalizationAveragesUpdatesTriggerParam = "batch_normalization_averages_updates_trigger"
 )
 
-// BatchNormalizationAveragesUpdate runs through the dataset ds once, if batch normalization was used, updating the
-// running averages for mean and variance and returns true.
-//
-// If the model didn't use any batch normalization, this does nothing and returns false.
+// BatchNormalizationAveragesUpdate runs through the dataset ds twice, updating the running averages for mean and variance.
 //
 // It's recommended one resets the batch normalization weights with layers.BatchNormalizationResetWeights before
 // calling this function.
 //
-// See discussions:
-// - https://www.mindee.com/blog/batch-normalization
-// - https://discuss.pytorch.org/t/batch-norm-instability/32159/14
-func (r *Trainer) BatchNormalizationAveragesUpdate(ds Dataset) bool {
-	if !context.GetParamOr(r.context, BatchNormalizationAveragesUpdatesTriggerParam, false) {
-		// No-op.
-		return false
-	}
+// Usually this method is not used directly, instead use batchnorm.UpdateAverages.
+func (r *Trainer) BatchNormalizationAveragesUpdate(ds Dataset) {
 	for phase := range 2 {
 		// Reset models from previous phases.
 		r.batchNormStepExecMap = make(map[any]*context.Exec)
@@ -57,7 +44,6 @@ func (r *Trainer) BatchNormalizationAveragesUpdate(ds Dataset) bool {
 			Panicf("BatchNormalizationAveragesUpdate: dataset yielded no batches, no data to calculate running mean/average")
 		}
 	}
-	return true
 }
 
 // batchNormAveragesStep runs one forward step on the model, with the model frozen, except

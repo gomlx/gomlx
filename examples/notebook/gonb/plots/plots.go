@@ -8,6 +8,7 @@ import (
 	lgtable "github.com/charmbracelet/lipgloss/table"
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/ml/data"
+	"github.com/gomlx/gomlx/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/ml/train"
 	types "github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/shapes"
@@ -69,7 +70,20 @@ type CustomMetricFn func(plotter Plotter, step float64) error
 //
 // Notice it evaluate on the datasets sequentially -- presumably the training could go in parallel if there is
 // enough accelerator processing / memory. But this doesn't assume that.
-func AddTrainAndEvalMetrics(plotter Plotter, loop *train.Loop, trainMetrics []*tensors.Tensor, evalDatasets []train.Dataset) error {
+//
+// If batchNormAveragesDS is given, and the model uses batch normalization, it will first go over this dataset and
+// update the averages of the mean and variance accordingly.
+func AddTrainAndEvalMetrics(plotter Plotter, loop *train.Loop, trainMetrics []*tensors.Tensor,
+	evalDatasets []train.Dataset, batchNormAveragesDS train.Dataset) error {
+	if batchNormAveragesDS != nil {
+		err := exceptions.TryCatch[error](func() {
+			batchnorm.UpdateAverages(loop.Trainer, batchNormAveragesDS)
+		})
+		if err != nil {
+			return errors.WithMessagef(err, "Updating batch normalization averages before evaluation: ")
+		}
+	}
+
 	// Training metrics are pre-generated and given.
 	step := float64(loop.LoopStep)
 	var incomplete bool
