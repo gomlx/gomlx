@@ -246,8 +246,13 @@ func (builder *Config) Done() *Node {
 		}
 
 	} else if builder.trainable && ctx.IsTraining(g) {
-		// Training: take batch's mean and variance and use it to update averages.
-		if builder.useBackendInference {
+		if builder.frozenAverages {
+			// Here we want to use the frozen mean and variance, and not the batch one, since these are different
+			// quantities and in inference we will use the frozen ones.
+			normalized = builder.directBatchNormGraph(x, scale, offset, mean, variance)
+
+		} else if builder.useBackendInference {
+			// Training: take batch's mean and variance and use it to update averages.
 			var batchMean, batchVariance *Node
 			normalized, batchMean, batchVariance = InternalBatchNormForTraining(x, scale, offset, float32(builder.epsilon), featureAxis)
 			builder.updateMeanAndVariance(ctx, g, batchMean, batchVariance, meanAverageVar, varianceAverageVar, weightVar)
