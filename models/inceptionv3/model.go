@@ -40,12 +40,11 @@ Transfer learning model example:
 		if *flagInceptionPreTrained {
 			preTrainedPath = *flagDataDir
 		}
-		logits := inceptionv3.BuildGraph(ctx, image).PreTrained(preTrainedPath).
-			SetPooling(inceptionv3.MaxPooling).Trainable(*flagInceptionFineTuning).Done()
-		if !*flagInceptionFineTuning {
-			logits = StopGradient(logits) // We don't want to train the inception model.
-		}
-		logits = FnnOnTop(ctx, logits)
+		logits := inceptionv3.BuildGraph(ctx, image).
+			PreTrained(preTrainedPath).
+			SetPooling(inceptionv3.MaxPooling).
+			Trainable(*flagInceptionFineTuning).Done()
+		logits = fnn.New(ctx, logits, 1).Done()
 		return []*Node{logits}
 	}
 
@@ -163,6 +162,8 @@ type Config struct {
 // downloaded with DownloadAndUnpackWeights -- use the same value used there.
 //
 // The default is not to use the pre-trained weights, which will build an untrained InceptionV3 graph.
+//
+// An empty value ("") indicates not to use any pre-trained weights (the default).
 //
 // It returns the modified Config object, so calls can be cascaded.
 func (cfg *Config) PreTrained(baseDir string) *Config {
