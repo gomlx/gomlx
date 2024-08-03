@@ -45,7 +45,6 @@ import (
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
-	"path"
 	"time"
 
 	_ "github.com/gomlx/gomlx/backends/xla"
@@ -125,46 +124,30 @@ func main() {
 	klog.InitFlags(nil)
 	flag.Parse()
 	must.M(commandline.ParseContextSettings(ctx, *settings))
-	mainWithContext(ctx)
+	mainWithContext(ctx, *flagDataDir, *flagCheckpoint)
 }
 
-func mainWithContext(ctx *context.Context) {
+func mainWithContext(ctx *context.Context, dataDir, checkpointPath string) {
 	backend := backends.New()
+	dataDir = data.ReplaceTildeInDir(dataDir)
 	if *flagVerbosity >= 1 {
 		fmt.Printf("Backend: %s\n\t%s\n", backend.Name(), backend.Description())
 		fmt.Println(commandline.SprintContextSettings(ctx))
 	}
 
-	// Fixes directories and get checkpointPath.
-	*flagDataDir = data.ReplaceTildeInDir(*flagDataDir)
-	checkpointPath := data.ReplaceTildeInDir(*flagCheckpoint)
-	if checkpointPath != "" && !path.IsAbs(checkpointPath) {
-		checkpointPath = path.Join(*flagDataDir, checkpointPath)
-	}
-
-	// Checkpoints loading (and saving): notice hyperparameters will be overwritten by values read from checkpoint.
-	trainSteps := context.GetParamOr(ctx, "train_steps", 0)
-	usePlots := context.GetParamOr(ctx, margaid.ParamPlots, false)
-
-	var globalStep int
+	// Checkpoints loading (and saving)
 	var checkpoint *checkpoints.Handler
 	if checkpointPath != "" {
-		numCheckpointsToKeep := context.GetParamOr(ctx, "num_checkpoints", 5)
-		if numCheckpointsToKeep < 1 {
-			// Only limit the amount of checkpoints kept if >= 1.
-			checkpoint = must.M1(checkpoints.Build(ctx).Dir(checkpointPath).Done())
-		} else {
-			checkpoint = must.M1(checkpoints.Build(ctx).Dir(checkpointPath).Keep(numCheckpointsToKeep).Done())
-		}
-		globalStep = int(optimizers.GetGlobalStep(ctx))
-		if globalStep != 0 {
-			fmt.Printf("\t- restarting training from global_step=%d\n", globalStep)
-			ctx = ctx.Reuse()
-		}
+		numCheckpointsToKeep := context.GetParamOr(ctx, "num_checkpoints", 3)
+		checkpoint = must.M1(checkpoints.Build(ctx).
+			DirFromBase(checkpointPath, dataDir).
+			Keep(numCheckpointsToKeep).
+			ExcludeParams("train_steps", "plots", "num_checkpoints").
+			Done())
 	}
 
 	// Load training data and initialize statistics (vocabularies and quantiles).
-	adult.LoadAndPreprocessData(*flagDataDir, *flagNumQuantiles, *flagForceDownload, *flagVerbosity)
+	adult.LoadAndPreprocessData(dataDir, *flagNumQuantiles, *flagForceDownload, *flagVerbosity)
 
 	// Crate Backend and upload data to device tensors.
 	if *flagVerbosity >= 1 {
@@ -210,8 +193,7 @@ func mainWithContext(ctx *context.Context) {
 
 	// Attach Plotly plots: plot points at exponential steps.
 	// The points generated are saved along the checkpoint directory (if one is given).
-	if usePlots {
-		fmt.Println("Using plots")
+	if context.GetParamOr(ctx, margaid.ParamPlots, false) {
 		_ = plotly.New().
 			WithCheckpoint(checkpoint).
 			Dynamic().
@@ -221,16 +203,20 @@ func mainWithContext(ctx *context.Context) {
 	}
 
 	// Train up to "train_steps".
+	globalStep := int(optimizers.GetGlobalStep(ctx))
+	trainSteps := context.GetParamOr(ctx, "train_steps", 0)
 	if globalStep < trainSteps {
+		if globalStep != 0 {
+			fmt.Printf("\t- restarting training from global_step=%d\n", globalStep)
+			trainer.SetContext(ctx.Reuse())
+		}
 		_ = must.M1(loop.RunSteps(trainDS, trainSteps-globalStep))
 		fmt.Printf("\t[Step %d] median train step: %d microseconds\n", loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
 		fmt.Println()
 		// Update batch normalization averages, if they are used.
 		if batchnorm.UpdateAverages(trainer, trainEvalDS) {
 			fmt.Println("\tUpdated batch normalization mean/variances averages.")
-			if checkpoint != nil {
-				must.M(checkpoint.Save())
-			}
+			must.M(checkpoint.Save())
 		}
 
 	} else {

@@ -11,5 +11,5 @@ func TestMainFunc(t *testing.T) {
 	}
 	ctx := createDefaultContext()
 	ctx.SetParam("train_steps", 10)
-	mainWithContext(ctx)
+	mainWithContext(ctx, *flagDataDir, *flagCheckpoint)
 }
