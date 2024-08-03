@@ -25,7 +25,7 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
@@ -49,9 +49,11 @@ func TestCheckpoints(t *testing.T) {
 		// Build model, checkpoint a few times.
 		ctx := context.New()
 		ctx.SetParam("learning_rate", 0.01)
-		ctx.SetParam(layers.ParamL2Regularization, 0.001)
-		ctx.In("layer_1").SetParam(layers.ParamL2Regularization, 0.004)
-		checkpoint := Build(ctx).TempDir("", "test_checkpoints_").Keep(3).MustDone()
+		ctx.SetParam(regularizers.ParamL2, 0.001)
+		ctx.SetParam(regularizers.ParamL1, 1.0e7)
+		ctx.In("layer_1").SetParam(regularizers.ParamL2, 0.004)
+		checkpoint := Build(ctx).TempDir("", "test_checkpoints_").
+			Keep(3).MustDone()
 		assert.Equal(t, 0, checkpoint.checkpointsCount)
 		dir = checkpoint.Dir()
 		fmt.Printf("Checkpoint directory: %s\n", dir)
@@ -75,20 +77,22 @@ func TestCheckpoints(t *testing.T) {
 	{
 		// Build model, checkpoint a few times.
 		ctx := context.New()
-		ctx.SetParam("learning_rate", 5.0) // Value should be overwritten when loading.
-		checkpoint := Build(ctx).Dir(dir).Keep(3).MustDone()
+		ctx.SetParam("learning_rate", 5.0)       // Value should be overwritten when loading.
+		ctx.SetParam(regularizers.ParamL1, 17.0) // Value should NOT be overwritten when loading.
+		checkpoint := Build(ctx).Dir(dir).Keep(3).ExcludeParams(regularizers.ParamL1).MustDone()
 
 		lr, found := ctx.GetParam("learning_rate")
 		assert.True(t, found, "learning_rate should be set")
 		assert.Equal(t, 0.01, lr.(float64), "Params[learning_rate]")
+		assert.Equal(t, 17.0, context.GetParamOr(ctx, regularizers.ParamL1, 0.0))
 
 		var l2 any
-		l2, found = ctx.GetParam(layers.ParamL2Regularization)
-		assert.Truef(t, found, "%s should have been set", layers.ParamL2Regularization)
-		assert.Equal(t, 0.001, l2.(float64), "(Scope=%s) Params[%s]", ctx.Scope(), layers.ParamL2Regularization)
-		l2, found = ctx.In("layer_1").GetParam(layers.ParamL2Regularization)
-		assert.Truef(t, found, "%s should have been set", layers.ParamL2Regularization)
-		assert.Equal(t, 0.004, l2.(float64), "Params[%s]", layers.ParamL2Regularization)
+		l2, found = ctx.GetParam(regularizers.ParamL2)
+		assert.Truef(t, found, "%s should have been set", regularizers.ParamL2)
+		assert.Equal(t, 0.001, l2.(float64), "(Scope=%s) Params[%s]", ctx.Scope(), regularizers.ParamL2)
+		l2, found = ctx.In("layer_1").GetParam(regularizers.ParamL2)
+		assert.Truef(t, found, "%s should have been set", regularizers.ParamL2)
+		assert.Equal(t, 0.004, l2.(float64), "Params[%s]", regularizers.ParamL2)
 
 		// Re-execute testGraphFn: it should load global step at 10, increment and return it at 11.
 		e := context.NewExec(backend, ctx, testGraphFn)

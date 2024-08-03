@@ -98,15 +98,17 @@ type Config struct {
 
 	err error
 
-	dir           string
-	includeParams bool
-	immediate     bool
-	keep          int
+	dir       string
+	immediate bool
+	keep      int
+
+	includeParams   bool              // whether to includeParams in loading/saving.
+	paramsToExclude types.Set[string] // specific parameter names to exclude from loading/saving.
 
 	backend  backends.Backend // used when taking the mean.
 	takeMean int
 
-	excludeFromSave types.Set[*context.Variable]
+	varsToExclude types.Set[*context.Variable]
 }
 
 // Build a configuration for building a checkpoints.Handler. After configuring the
@@ -117,7 +119,8 @@ func Build(ctx *context.Context) *Config {
 		includeParams:   true,
 		keep:            1,
 		takeMean:        1,
-		excludeFromSave: types.MakeSet[*context.Variable](),
+		paramsToExclude: types.MakeSet[string](),
+		varsToExclude:   types.MakeSet[*context.Variable](),
 	}
 	return c
 }
@@ -207,23 +210,41 @@ func (c *Config) TempDir(dir, pattern string) *Config {
 	return c
 }
 
-// ExcludeParams configures Handler to exclude the Context parameters (values usually
-// read/written by Context.GetParam and context.SetParam).
+// ExcludeAllParams configures Handler to exclude Context parameters (values usually
+// read/written by Context.GetParam and context.SetParam) from being read.
 //
 // By default, Params are loaded and set into Context the moment Handler is created
 // (when Done() is called), overriding values already present in the Context.
-func (c *Config) ExcludeParams() *Config {
+//
+// See also ExcludeParams to exclude specific params from being read.
+func (c *Config) ExcludeAllParams() *Config {
 	c.includeParams = false
 	return c
 }
 
-// ExcludeVarsFromSaving enumerate variables to be excluded from saving.
+// ExcludeParams configures Handler to exclude certain Context parameters (values usually
+// read/written by Context.GetParam and context.SetParam) from being read and saved.
+// It can be called multiple times, each call adds new parameters to be excluded.
+//
+// paramsToExclude should be the name of the parameter, and the exclusion applies to all scopes.
+//
+// By default, no parameters are excluded.
+//
+// See also ExcludeAllParams to exclude all params from being read.
+func (c *Config) ExcludeParams(paramsToExclude ...string) *Config {
+	for _, name := range paramsToExclude {
+		c.paramsToExclude.Insert(name)
+	}
+	return c
+}
+
+// ExcludeVars enumerate variables to be excluded from saving.
 // The function can be called multiple times, adding variables to be excluded from saving.
 //
 // It can also be called after the [Handler] object is built as new variables are created.
-func (c *Config) ExcludeVarsFromSaving(vars ...*context.Variable) *Config {
+func (c *Config) ExcludeVars(vars ...*context.Variable) *Config {
 	for _, v := range vars {
-		c.excludeFromSave.Insert(v)
+		c.varsToExclude.Insert(v)
 	}
 	return c
 }
@@ -325,7 +346,7 @@ func (c *Config) MustDone() *Handler {
 // Config.Done().
 //
 // Loading data into Handler happens at its creation time: it loads from the latest checkpoint.
-// (Hyper-)Parameters are immediately loaded into the context then (if not Config.ExcludeParams)
+// (Hyper-)Parameters are immediately loaded into the context then (if not Config.ExcludeAllParams)
 // but the loaded variable values are only "consumed" (used) one at a time, as the variables are
 // created during the graph building (e.g: when building the model).
 //
@@ -489,7 +510,7 @@ func (h *Handler) HasCheckpoints() (bool, error) {
 	return len(list) > 0, err
 }
 
-var checkpointCountRexex = regexp.MustCompile(`^checkpoint-n(\d+)-`)
+var checkpointCountRegex = regexp.MustCompile(`^checkpoint-n(\d+)-`)
 
 // maxCheckPointCountFromCheckpoints returns the largest `checkpointCount` in the saved
 // checkpoints -- so the next checkpoint saved uses this count+1.
@@ -498,7 +519,7 @@ var checkpointCountRexex = regexp.MustCompile(`^checkpoint-n(\d+)-`)
 func maxCheckPointCountFromCheckpoints(checkpoints []string) int {
 	maxId := -1
 	for _, name := range checkpoints {
-		matches := checkpointCountRexex.FindAllStringSubmatch(name, 1)
+		matches := checkpointCountRegex.FindAllStringSubmatch(name, 1)
 		if len(matches) != 1 || len(matches[0]) != 2 {
 			continue
 		}
@@ -668,6 +689,9 @@ func (h *Handler) Save() error {
 	if h.config.includeParams {
 		h.serialized.Params = nil
 		h.ctx.EnumerateParams(func(scope, key string, value any) {
+			if h.config.paramsToExclude.Has(key) {
+				return
+			}
 			h.serialized.Params = append(h.serialized.Params,
 				serializedParam{
 					Scope: scope, Key: key, Value: value, ValueType: fmt.Sprintf("%T", value)})
@@ -723,7 +747,7 @@ func (h *Handler) Save() error {
 		if err != nil {
 			return
 		}
-		if h.config.excludeFromSave.Has(v) {
+		if h.config.varsToExclude.Has(v) {
 			return
 		}
 		err = saveVar(v.ParameterName(), v.Value())
@@ -797,7 +821,7 @@ func (h *Handler) keepNCheckpoints() error {
 
 // attachTo attaches Handler to a context.Context. The first thing it does if there is a checkpoint
 // loaded is to set the Context's Params from the loaded values (except if the Handler was configured
-// with ExcludeParams).
+// with ExcludeAllParams).
 //
 // attachTo can only be called once. It will fail, and set the given context to an error state if
 // requested to attach more than once.
@@ -812,6 +836,9 @@ func (h *Handler) attachTo(ctx *context.Context) {
 	// Sets ctx.Params with values read, if any.
 	if h.config.includeParams {
 		for _, p := range h.serialized.Params {
+			if h.config.paramsToExclude.Has(p.Key) {
+				continue
+			}
 			tmpCtx := ctx.InAbsPath(p.Scope)
 			tmpCtx.SetParam(p.Key, p.Value)
 		}
@@ -866,6 +893,6 @@ func (h *Handler) LoadedVariables() map[string]*tensors.Tensor {
 // The function can be called multiple times, adding variables to be excluded from saving.
 func (h *Handler) ExcludeVarsFromSaving(vars ...*context.Variable) {
 	for _, v := range vars {
-		h.config.excludeFromSave.Insert(v)
+		h.config.varsToExclude.Insert(v)
 	}
 }

@@ -41,6 +41,7 @@
 * Package `context`
   * Renamed `context.NewContext` to `context.New`.
   * Added `Variable.Reset`: reset a variable, to be reinitialialized.
+* Package `checkpoints`: added `ExcludeParams` and `ExcludeAllParams`.
 * Package `plots`
   * Added `Point.Short` for short-name of metrics in saved metrics.
 * C/C++ code:
