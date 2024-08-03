@@ -103,6 +103,8 @@ func MustNormalizeByName(ctx *context.Context, normalization string, input *Node
 
 // NormalizeFromContext applies a normalization (or none) according to the hyperparameter
 // ParamNormalization configured in the context.
+//
+// This is not recommended for images, since one may want to normalize over specific axes.
 func NormalizeFromContext(ctx *context.Context, input *Node) *Node {
 	return MaskedNormalizeFromContext(ctx, input, nil)
 }
@@ -110,6 +112,8 @@ func NormalizeFromContext(ctx *context.Context, input *Node) *Node {
 // MaskedNormalizeFromContext applies a normalization (or none) according to the hyperparameter
 // ParamNormalization configured in the context.
 // The `mask` is actually optional, and can be set to nil if not using a mask.
+//
+// This is not recommended for images, since one may want to normalize over specific axes.
 func MaskedNormalizeFromContext(ctx *context.Context, input, mask *Node) *Node {
 	normType := context.GetParamOr(ctx, ParamNormalization, "layer")
 	switch normType {
