@@ -23,7 +23,9 @@ import (
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/shapes"
-	timage "github.com/gomlx/gomlx/types/tensor/image"
+	"github.com/gomlx/gomlx/types/tensors"
+	timage "github.com/gomlx/gomlx/types/tensors/images"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 	"github.com/schollz/progressbar/v3"
 	"hash/crc32"
@@ -806,7 +808,7 @@ func (pds *PreGeneratedDataset) Yield() (spec any, inputs, labels []*tensors.Ten
 			pds.labelsAsTypes[ii] = DorOrCat(pds.buffer[ii*entrySize])
 		}
 		labels = []*tensors.Tensor{tensors.FromAnyValue(shapes.CastAsDType(pds.labelsAsTypes, pds.dtype))}
-		var t, pairT *tensors.Local
+		var t, pairT *tensors.Tensor
 		switch pds.dtype {
 		case dtypes.Float32:
 			t = BytesToTensor[float32](pds.buffer, pds.batchSize, pds.width, pds.height)
@@ -857,31 +859,32 @@ func (pds *PreGeneratedDataset) Reset() {
 
 // BytesToTensor converts a batch of saved images as bytes to a tensor.Local with 4 channels: R,G,B and A. It assumes
 // all images have the exact same size. There should be one byte with the label before each image.
-func BytesToTensor[T shapes.NumberNotComplex](buffer []byte, numImages, width, height int) (t *tensors.Local) {
+func BytesToTensor[T interface {
+	float32 | float64 | int | int16 | int32 | int64 | uint16 | uint32 | uint64
+}](
+	buffer []byte, numImages, width, height int) (t *tensors.Tensor) {
 	var zero T
-	t = tensors.FromShape(shapes.Make(shapes.FromType(reflect.TypeOf(zero)), numImages, height, width, 4))
-	ref := t.AcquireData()
-	defer ref.Release()
-	tensorData := tensors.FlatFromRef[T](ref)
-	dataPos := 0
-	bufferPos := 0
-
-	convertToDType := func(val byte) T {
-		return T(val) / T(0xFF)
-	}
-
-	for imgIdx := 0; imgIdx < numImages; imgIdx++ {
-		bufferPos += 1 // Skip the label.
-		for y := 0; y < height; y++ {
-			for x := 0; x < width; x++ {
-				// Channel varies through RGBA (4)
-				for channel := 0; channel < 4; channel++ {
-					tensorData[dataPos] = convertToDType(buffer[bufferPos])
-					dataPos++
-					bufferPos++
+	t = tensors.FromShape(shapes.Make(dtypes.FromGoType(reflect.TypeOf(zero)), numImages, height, width, 4))
+	t.MutableFlatData(func(flatAny any) {
+		tensorData := flatAny.([]T)
+		dataPos := 0
+		bufferPos := 0
+		convertToDType := func(val byte) T {
+			return T(val) / T(0xFF)
+		}
+		for imgIdx := 0; imgIdx < numImages; imgIdx++ {
+			bufferPos += 1 // Skip the label.
+			for y := 0; y < height; y++ {
+				for x := 0; x < width; x++ {
+					// Channel varies through RGBA (4)
+					for channel := 0; channel < 4; channel++ {
+						tensorData[dataPos] = convertToDType(buffer[bufferPos])
+						dataPos++
+						bufferPos++
+					}
 				}
 			}
 		}
-	}
+	})
 	return
 }

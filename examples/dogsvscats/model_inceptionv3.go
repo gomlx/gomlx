@@ -1,14 +1,22 @@
-package main
+package dogsvscats
 
 import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/context/checkpoints"
+	"github.com/gomlx/gomlx/ml/layers/fnn"
 	"github.com/gomlx/gomlx/models/inceptionv3"
-	timage "github.com/gomlx/gomlx/types/tensor/image"
+	timage "github.com/gomlx/gomlx/types/tensors/images"
+	"github.com/janpfeifer/must"
 )
 
-// This file implements the baseline CNN model, including the FNN layers on top.
+// InceptionV3ModelPrep is executed before training: it downloads the inceptionv3 weights.
+func InceptionV3ModelPrep(ctx *context.Context, dataDir string, checkpoint *checkpoints.Handler) {
+	ctx.SetParam("data_dir", dataDir)
+	if context.GetParamOr(ctx, "inception_pretrained", true) {
+		must.M(inceptionv3.DownloadAndUnpackWeights(dataDir))
+	}
+}
 
 // InceptionV3ModelGraph uses an optionally pre-trained inception model.
 //
@@ -24,28 +32,17 @@ func InceptionV3ModelGraph(ctx *context.Context, spec any, inputs []*Node) []*No
 	images := inputs[0] // Images scaled from 0.0 to 1.0
 	channelsConfig := timage.ChannelsLast
 	images = inceptionv3.PreprocessImage(images, 1.0, channelsConfig) // Adjust image to format used by Inception.
-
+	dataDir := context.GetParamOr(ctx, "data_dir", ".")
 	var preTrainedPath string
-	if *flagInceptionPreTrained {
+	if context.GetParamOr(ctx, "inception_pretrained", true) {
 		// Use pre-trained
-		preTrainedPath = *flagDataDir
-		err := inceptionv3.DownloadAndUnpackWeights(*flagDataDir) // Only downloads/unpacks the first time.
-		AssertNoError(err)
+		preTrainedPath = dataDir
 	}
-	inceptionV3Builder := inceptionv3.BuildGraph(ctx, images).
+	logits := inceptionv3.BuildGraph(ctx, images).
 		PreTrained(preTrainedPath).
 		SetPooling(inceptionv3.MaxPooling).
-		Trainable(*flagInceptionFineTuning)
-	if *flagInceptionPreTrained {
-		inceptionV3Builder = inceptionV3Builder.PreTrained(preTrainedPath)
-	}
-	logits := inceptionV3Builder.Done()
-
-	if !*flagInceptionFineTuning {
-		logits = StopGradient(logits) // We don't want to train the inception model.
-	}
-
-	logits = FnnOnTop(ctx, logits)
-	logits = layers.DenseWithBias(ctx.In("readout"), logits, 1)
+		Trainable(context.GetParamOr(ctx, "inception_finetuning", false)).
+		Done()
+	logits = fnn.New(ctx.In("fnn"), logits, 1).Done()
 	return []*Node{logits}
 }
