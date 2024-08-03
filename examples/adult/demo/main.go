@@ -103,7 +103,7 @@ func createDefaultContext() *context.Context {
 }
 
 var (
-	flagDataDir    = flag.String("data", "~/tmp/uci-adult", "Directory to save and load downloaded and generated dataset files.")
+	flagDataDir    = flag.String("data", "~/work/uci-adult", "Directory to save and load downloaded and generated dataset files.")
 	flagCheckpoint = flag.String("checkpoint", "", "Checkpoint subdirectory under the --data directory. "+
 		"If empty does not use checkpoints. If absolute path, use that instead.")
 	flagForceDownload = flag.Bool("force_download", false, "Force re-download of Adult dataset files.")
