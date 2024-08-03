@@ -650,7 +650,13 @@ func (h *Handler) takeMean(baseNames []string) error {
 // to load the variables only for a part of the model, update that part and save again with everything.
 //
 // Params is (de-) serialized with package json.
+//
+// If the handler is nil, this is a no-op: so it's safe to simply be called, even if the user hasn't configured a
+// checkpoint.
 func (h *Handler) Save() error {
+	if h == nil {
+		return nil
+	}
 	if h.ctx == nil {
 		return errors.Errorf("%s not attached to a context.Context yet.", h)
 	}
