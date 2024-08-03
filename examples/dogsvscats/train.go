@@ -227,14 +227,12 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string) {
 				ScheduleExponential(loop, 200, 1.2).
 				Dynamic()
 		} else {
-			plots := plotly.New().
+			_ = plotly.New().
 				WithCheckpoint(checkpoint).
 				Dynamic().
 				WithDatasets(trainEvalDS, validationEvalDS).
-				ScheduleExponential(loop, 200, 1.2)
-			if modelType != "inception" {
-				plots.WithBatchNormalizationAveragesUpdate(trainEvalDS)
-			}
+				ScheduleExponential(loop, 200, 1.2).
+				WithBatchNormalizationAveragesUpdate(trainEvalDS)
 		}
 	}
 
@@ -247,11 +245,9 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string) {
 	if globalStep < numTrainSteps {
 		_ = must.M1(loop.RunSteps(trainDS, int(numTrainSteps-globalStep)))
 		fmt.Printf("\t[Step %d] median train step: %d microseconds\n", loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
-		if modelType != "inception" {
-			if batchnorm.UpdateAverages(trainer, trainEvalDS) {
-				fmt.Println("\tUpdated batch normalization mean/variances averages.")
-				must.M(checkpoint.Save())
-			}
+		if batchnorm.UpdateAverages(trainer, trainEvalDS) {
+			fmt.Println("\tUpdated batch normalization mean/variances averages.")
+			must.M(checkpoint.Save())
 		}
 	} else {
 		fmt.Printf("\t - target train_steps=%d already reached. To train further, set a number additional "+
