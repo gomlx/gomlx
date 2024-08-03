@@ -118,6 +118,7 @@ var (
 // Notice some configuration parameters depends on the model type ("model" hyperparameter): "inception" has a
 // specific size, "byol" model requires image pairs.
 func NewPreprocessingConfigurationFromContext(ctx *context.Context, dataDir string) *PreprocessingConfiguration {
+	dataDir = data.ReplaceTildeInDir(dataDir)
 	modelType := context.GetParamOr(ctx, "model", "")
 	config := &PreprocessingConfiguration{}
 	*config = *DefaultConfig
