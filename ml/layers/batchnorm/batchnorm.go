@@ -37,14 +37,14 @@ import (
 // Config for a batch normalization layer.
 // Create it with New, set the desired parameters, and when all is set, call Done.
 type Config struct {
-	ctx                 *context.Context
-	x                   *Node
-	featureAxis         int
-	momentum, epsilon   float64
-	center, scale       bool
-	newScope            bool
-	trainable           bool
-	useBackendInference bool
+	ctx                       *context.Context
+	x                         *Node
+	featureAxis               int
+	momentum, epsilon         float64
+	center, scale             bool
+	newScope                  bool
+	trainable, frozenAverages bool
+	useBackendInference       bool
 }
 
 const (
@@ -159,6 +159,16 @@ func (builder *Config) Trainable(trainable bool) *Config {
 	return builder
 }
 
+// FrozenAverages defines whether the moving averages for mean and variance should be kept frozen
+// for this layer.
+//
+// This is useful in transfer learning when the sub-model being incorporated was trained on a different
+// distribution, and we don't want to impact that.
+func (builder *Config) FrozenAverages(frozen bool) *Config {
+	builder.frozenAverages = frozen
+	return builder
+}
+
 // UseBackendInference uses a backend version of batch normalization inference.
 // The alternative is a manually defined batch normalization inference, which is differentiable.
 // Only used if training is false.
@@ -176,7 +186,9 @@ func (builder *Config) Done() *Node {
 	dtype := x.DType()
 
 	// Set about batch normalization usage.
-	builder.ctx.InAbsPath(context.RootScope).SetParam(AveragesUpdatesTriggerParam, true)
+	if builder.trainable && !builder.frozenAverages {
+		builder.ctx.InAbsPath(context.RootScope).SetParam(AveragesUpdatesTriggerParam, true)
+	}
 
 	// Creates new scope for variables.
 	if builder.newScope {
@@ -214,16 +226,24 @@ func (builder *Config) Done() *Node {
 	mean, variance := meanAverageVar.ValueGraph(g), varianceAverageVar.ValueGraph(g)
 	averagesUpdatePhase := context.GetGraphParamOr(ctx, g, train.BatchNormalizationUpdatePhase, -1)
 	if averagesUpdatePhase >= 0 {
-		var batchMean, batchVariance *Node
-		batchMean, batchVariance = builder.batchMeanAndVariance(x)
-		builder.updateMeanAndVariance(ctx, g, batchMean, batchVariance, meanAverageVar, varianceAverageVar, weightVar)
-		if averagesUpdatePhase > 0 {
-			// Use updated mean, variance to normalize.
-			mean, variance = meanAverageVar.ValueGraph(g), varianceAverageVar.ValueGraph(g)
+		if builder.frozenAverages {
+			normalized = builder.directBatchNormGraph(x, scale, offset, mean, variance)
 		} else {
-			mean, variance = batchMean, batchVariance
+			var batchMean, batchVariance *Node
+			batchMean, batchVariance = builder.batchMeanAndVariance(x)
+			builder.updateMeanAndVariance(ctx, g, batchMean, batchVariance, meanAverageVar, varianceAverageVar, weightVar)
+			if averagesUpdatePhase > 0 {
+				// Use updated mean, variance to normalize.
+				mean, variance = meanAverageVar.ValueGraph(g), varianceAverageVar.ValueGraph(g)
+			} else {
+				mean, variance = batchMean, batchVariance
+			}
+			if builder.useBackendInference {
+				normalized = InternalBatchNormForInference(x, scale, offset, mean, variance, float32(builder.epsilon), featureAxis)
+			} else {
+				normalized = builder.directBatchNormGraph(x, scale, offset, mean, variance)
+			}
 		}
-		normalized = builder.directBatchNormGraph(x, scale, offset, mean, variance)
 
 	} else if builder.trainable && ctx.IsTraining(g) {
 		// Training: take batch's mean and variance and use it to update averages.
@@ -310,6 +330,10 @@ type batchNormUpdater struct {
 // examples have been seen so far -- it's incremented at every step.
 func (builder *Config) updateMeanAndVariance(ctx *context.Context, graph *Graph, batchMean, batchVariance *Node, meanAverageVar, varianceAverageVar, weightVar *context.Variable) {
 	_ = ctx
+	if builder.frozenAverages {
+		// We are not changing the averages.
+		return
+	}
 	momentum := Scalar(batchMean.Graph(), batchMean.DType(), builder.momentum)
 
 	weight := OnePlus(weightVar.ValueGraph(graph))
