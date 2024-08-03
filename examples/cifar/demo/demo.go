@@ -72,7 +72,7 @@ func createDefaultContext() *context.Context {
 		//	$ gomlx_checkpoints --metrics --metrics_labels --metrics_types=accuracy  --metrics_names='E(Tra)/#loss,E(Val)/#loss' --loop=3s "<checkpoint_path>"
 		plotly.ParamPlots: true,
 
-		// If "normalization" is set, it overrides "fnn_normalization" and "cnn_normalization".
+		// "normalization" is overridden by "fnn_normalization" if set.
 		layers.ParamNormalization: "none",
 
 		optimizers.ParamOptimizer:           "adamw",
@@ -89,7 +89,7 @@ func createDefaultContext() *context.Context {
 		fnn.ParamNumHiddenLayers: 8,
 		fnn.ParamNumHiddenNodes:  128,
 		fnn.ParamResidual:        true,
-		fnn.ParamNormalization:   "",   // Set to none for no normalization, otherwise it falls back to layers.ParamNormalization.
+		fnn.ParamNormalization:   "",   // Set to "none" for no normalization, otherwise it falls back to layers.ParamNormalization.
 		fnn.ParamDropoutRate:     -1.0, // Set to 0.0 for no dropout, otherwise it falls back to layers.ParamDropoutRate.
 
 		// KAN network parameters:
