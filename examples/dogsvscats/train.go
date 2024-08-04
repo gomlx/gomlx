@@ -150,7 +150,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string) {
 		numCheckpoints := context.GetParamOr(ctx, "num_checkpoints", 3)
 		checkpoint = must.M1(checkpoints.Build(ctx).
 			DirFromBase(checkpointPath, dataDir).
-			ExcludeParams("train_steps", "plots", "nan_logger", "num_checkpoints", "byol_pretrain", "byol_finetune").
+			ExcludeParams("data_dir", "train_steps", "plots", "nan_logger", "num_checkpoints", "byol_pretrain", "byol_finetune").
 			Keep(numCheckpoints).Done())
 	}
 
@@ -184,6 +184,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string) {
 	backend := backends.New()
 	var trainer *train.Trainer
 	optimizer := optimizers.FromContext(ctx)
+	ctx = ctx.In("model") // Create the model by default under the "/model" scope.
 	if !preTraining {
 		trainer = train.NewTrainer(backend, ctx, modelFn,
 			losses.BinaryCrossentropyLogits,

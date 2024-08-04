@@ -93,6 +93,7 @@ func TrainCifar10Model(ctx *context.Context, dataDir, checkpointPath string, eva
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
+	ctx = ctx.In("model") // Convention scope used for model creation.
 	trainer := train.NewTrainer(backend, ctx, modelFn,
 		losses.SparseCategoricalCrossEntropyLogits,
 		optimizers.FromContext(ctx),
