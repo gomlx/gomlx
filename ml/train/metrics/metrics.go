@@ -299,7 +299,7 @@ func BinaryAccuracyGraph(_ *context.Context, labels, predictions []*Node) *Node 
 	if len(labels) != 1 {
 		Panicf("BinaryAccuracy requires one labels tensor, got (%d) instead", len(labels))
 	}
-	label := labels[0]
+	label := ConvertDType(labels[0], prediction.DType())
 	if !prediction.Shape().Equal(label.Shape()) {
 		Panicf("prediction (%s) and label (%s) have different shapes, can't calculate binary accuracy",
 			prediction.Shape(), label.Shape())
@@ -333,13 +333,16 @@ func NewMovingAverageBinaryAccuracy(name, shortName string, newExampleWeight flo
 // It assumes predictions are logits, that labels are {0, 1} and that predictions and labels have the same size and dtype.
 // The shape may be different (e.g.: `[batch_size, 1]` and `[batch_size]`), they will be reshaped to the
 // logits shape before the accuracy is calculated.
+//
+// labels is converted to predictions dtype, and it's expected to convert to 1.0 (for true) or 0.0 for false.
+// So booleans should work, as an int type that is 0 or 1.
 func BinaryLogitsAccuracyGraph(_ *context.Context, labels, logits []*Node) *Node {
 	logits0 := logits[0]
 	g := logits0.Graph()
 	if len(labels) != 1 {
 		Panicf("BinaryLogitsAccuracyGraph requires one labels tensor, got (%d) instead", len(labels))
 	}
-	labels0 := labels[0]
+	labels0 := ConvertDType(labels[0], logits0.DType())
 	if logits0.DType() != labels0.DType() {
 		Panicf("logits0 (%s) and labels0 (%s) have different dtypes, can't calculate binary accuracy",
 			logits0.DType(), labels0.DType())

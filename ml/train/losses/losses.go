@@ -151,6 +151,8 @@ func MeanAbsoluteError(labels, predictions []*Node) (loss *Node) {
 // for binary classification tasks.
 //
 // labels and predictions must have the same shape.
+// labels is converted to predictions dtype, and it's expected to convert to 1.0 (for true) or 0.0 for false.
+// So booleans should work, as an int type that is 0 or 1.
 //
 // It *does not* reduce-mean the losses, they are returned individually for each element of the batch and need
 // to be ReduceAllMean (usually the mean, but it could be the sum also) before used for training.
@@ -161,7 +163,7 @@ func MeanAbsoluteError(labels, predictions []*Node) (loss *Node) {
 // it assumed to be a mask tensor to be applied to the losses.
 func BinaryCrossentropy(labels, predictions []*Node) *Node {
 	predictions0 := predictions[0]
-	labels0 := labels[0]
+	labels0 := ConvertDType(labels[0], predictions0.DType())
 	if !labels0.Shape().Equal(predictions0.Shape()) {
 		Panicf("labels[0] (%s) and predictions[0] (%s) must have same shape", labels0.Shape(), predictions0.Shape())
 	}
@@ -188,6 +190,9 @@ func BinaryCrossentropy(labels, predictions []*Node) *Node {
 // It *does not* reduce-mean the losses, they are returned individually for each element of the batch and need
 // to be ReduceAllMean (usually the mean, but it could be the sum also) before used for training.
 //
+// labels is converted to predictions dtype, and it's expected to convert to 1.0 (for true) or 0.0 for false.
+// So booleans should work, as an int type that is 0 or 1.
+//
 // See mathematical derivation of the stable solution in
 // https://www.tensorflow.org/api_docs/python/tf/nn/sigmoid_cross_entropy_with_logits
 //
@@ -197,7 +202,7 @@ func BinaryCrossentropy(labels, predictions []*Node) *Node {
 // it assumed to be a mask tensor to be applied to the losses.
 func BinaryCrossentropyLogits(labels, logits []*Node) *Node {
 	logits0 := logits[0]
-	labels0 := labels[0]
+	labels0 := ConvertDType(labels[0], logits0.DType())
 	if logits0.Shape().Size() != labels0.Shape().Size() {
 		Panicf("labels[0] (%s) and logits[0] (%s) have incompatible shapes", labels0.Shape(), logits0.Shape())
 	}
