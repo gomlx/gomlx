@@ -22,6 +22,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/examples/adult"
 	"github.com/gomlx/gomlx/examples/notebook/gonb/margaid"
@@ -124,7 +125,12 @@ func main() {
 	klog.InitFlags(nil)
 	flag.Parse()
 	must.M(commandline.ParseContextSettings(ctx, *settings))
-	mainWithContext(ctx, *flagDataDir, *flagCheckpoint)
+	err := exceptions.TryCatch[error](func() {
+		mainWithContext(ctx, *flagDataDir, *flagCheckpoint)
+	})
+	if err != nil {
+		klog.Fatalf("Failed with error: %+v", err)
+	}
 }
 
 func mainWithContext(ctx *context.Context, dataDir, checkpointPath string) {
