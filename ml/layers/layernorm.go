@@ -135,13 +135,6 @@ func (builder *LayerNormBuilder) LearnedGain(value bool) *LayerNormBuilder {
 	return builder
 }
 
-// LearnedScale is an alias for LearnedGain.
-//
-// Deprecated: the original paper calls this term a gain.
-func (builder *LayerNormBuilder) LearnedScale(value bool) *LayerNormBuilder {
-	return builder.LearnedGain(value)
-}
-
 // ScaleNormalization defines whether the input's scale is normalized by the square root of the
 // variance. The default is true, and this is the original paper specification, but in some cases
 // it works best without it.
