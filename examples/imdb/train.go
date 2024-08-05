@@ -2,6 +2,7 @@ package imdb
 
 import (
 	"fmt"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/examples/notebook/gonb/plotly"
@@ -22,9 +23,8 @@ import (
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/janpfeifer/must"
+	"golang.org/x/exp/maps"
 	"os"
-	"slices"
-	"strings"
 	"time"
 )
 
@@ -37,9 +37,11 @@ var (
 	}
 
 	// ParamsExcludedFromSaving is the list of parameters (see CreateDefaultContext) that shouldn't be saved
-	// along on the models checkpoints.
+	// along on the models checkpoints, and may be overwritten in further training sessions.
 	ParamsExcludedFromSaving = []string{
-		"train_steps", "num_checkpoints",
+		"data_dir", "train_steps", "num_checkpoints", "plots",
+		"imdb_mask_word_task_weight", "imdb_use_unsupervised", "imdb_include_separators",
+		"imdb_content_max_len", "imdb_word_dropout_rate",
 	}
 )
 
@@ -156,7 +158,20 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, evaluateOn
 	if evalBatchSize <= 0 {
 		evalBatchSize = batchSize
 	}
-	trainDS, evalOnTrainDS, evalOnTestDS := CreateDatasets(backend, dataDir, batchSize, evalBatchSize)
+	var trainDS, trainEvalDS, testEvalDS train.Dataset
+	maxLen := context.GetParamOr(ctx, "imdb_content_max_len", 200)
+	if imdbUseUnsupervised {
+		trainDS = NewUnsupervisedDataset("unsupervised-train", maxLen, batchSize, true).Shuffle()
+	} else {
+		trainDS = NewDataset("train", TypeTrain, maxLen, batchSize, true).Shuffle()
+	}
+	trainEvalDS = NewDataset("train-eval", TypeTrain, maxLen, batchSize, false)
+	testEvalDS = NewDataset("test-eval", TypeTest, maxLen, batchSize, false)
+
+	// Parallelize generation of batches.
+	trainDS = data.Parallel(trainDS)
+	trainEvalDS = data.Parallel(trainEvalDS)
+	testEvalDS = data.Parallel(testEvalDS)
 
 	// Read hyperparameters from context that we don't want overwritten by loading fo the context from a checkpoint.
 	numTrainSteps := context.GetParamOr(ctx, "train_steps", 0)
@@ -166,7 +181,12 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, evaluateOn
 	var checkpoint *checkpoints.Handler
 	var globalStep int
 	if checkpointPath != "" {
-		checkpoint = must.M1(checkpoints.Build(ctx).DirFromBase(checkpointPath, dataDir).Keep(3).Done())
+		numCheckpointsToKeep := context.GetParamOr(ctx, "num_checkpoints", 3)
+		checkpoint = must.M1(checkpoints.Build(ctx).
+			DirFromBase(checkpointPath, dataDir).
+			Keep(numCheckpointsToKeep).
+			ExcludeParams(ParamsExcludedFromSaving...).
+			Done())
 		fmt.Printf("Checkpointing model to %q\n", checkpoint.Dir())
 		globalStep = int(optimizers.GetGlobalStep(ctx))
 		if globalStep != 0 {
@@ -179,25 +199,27 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, evaluateOn
 	}
 
 	// Select model graph building function.
-	modelFn := C10PlainModelGraph
-	modelType := context.GetParamOr(ctx, "model", ValidModels[0])
-	if slices.Index(ValidModels, modelType) == -1 {
-		exceptions.Panicf("Parameter \"model\" must take one value from %v, got %q", ValidModels, modelType)
-	}
-	if strings.HasPrefix(modelType, "cnn") {
-		modelFn = C10ConvolutionModelGraph
+	modelFn := ValidModels["bow"] // Defaults to bag-of-words.
+	modelType := context.GetParamOr(ctx, "model", "bow")
+	modelFn, found := ValidModels[modelType]
+	if !found {
+		exceptions.Panicf("Parameter \"model\" must take one value from %v, got %q", maps.Keys(ValidModels), modelType)
 	}
 	fmt.Printf("Model: %s\n", modelType)
 
 	// Metrics we are interested.
-	meanAccuracyMetric := metrics.NewSparseCategoricalAccuracy("Mean Accuracy", "#acc")
-	movingAccuracyMetric := metrics.NewMovingAverageSparseCategoricalAccuracy("Moving Average Accuracy", "~acc", 0.01)
+	meanAccuracyMetric := metrics.NewMeanBinaryLogitsAccuracy("Mean Accuracy", "#acc")
+	movingAccuracyMetric := metrics.NewMovingAverageBinaryLogitsAccuracy("Moving Average Accuracy", "~acc", 0.01)
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
 	ctx = ctx.In("model") // Convention scope used for model creation.
+	var loss train.LossFn
+	if !imdbUseUnsupervised {
+		loss = losses.BinaryCrossentropyLogits
+	}
 	trainer := train.NewTrainer(backend, ctx, modelFn,
-		losses.SparseCategoricalCrossEntropyLogits,
+		loss,
 		optimizers.FromContext(ctx),
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
 		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
@@ -223,9 +245,9 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, evaluateOn
 		_ = plotly.New().
 			WithCheckpoint(checkpoint).
 			Dynamic().
-			WithDatasets(evalOnTrainDS, evalOnTestDS).
+			WithDatasets(trainEvalDS, testEvalDS).
 			ScheduleExponential(loop, 200, 1.2).
-			WithBatchNormalizationAveragesUpdate(evalOnTrainDS)
+			WithBatchNormalizationAveragesUpdate(trainEvalDS)
 	}
 
 	// Loop for given number of steps.
@@ -237,7 +259,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, evaluateOn
 		}
 
 		// Update batch normalization averages, if they are used.
-		if batchnorm.UpdateAverages(trainer, evalOnTrainDS) {
+		if batchnorm.UpdateAverages(trainer, trainEvalDS) {
 			fmt.Println("\tUpdated batch normalization mean/variances averages.")
 			if checkpoint != nil {
 				must.M(checkpoint.Save())
@@ -254,15 +276,22 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, evaluateOn
 		if verbosity >= 1 {
 			fmt.Println()
 		}
-		must.M(commandline.ReportEval(trainer, evalOnTestDS, evalOnTrainDS))
+		must.M(commandline.ReportEval(trainer, trainEvalDS, testEvalDS))
 	}
 }
 
-func CreateDatasets(backend backends.Backend, dataDir string, batchSize, evalBatchSize int) (trainDS, trainEvalDS, validationEvalDS train.Dataset) {
-	baseTrain := NewDataset(backend, "Training", dataDir, C10, DType, Train)
-	baseTest := NewDataset(backend, "Validation", dataDir, C10, DType, Test)
-	trainDS = baseTrain.Copy().BatchSize(batchSize, true).Shuffle().Infinite(true)
-	trainEvalDS = baseTrain.BatchSize(evalBatchSize, false)
-	validationEvalDS = baseTest.BatchSize(evalBatchSize, false)
-	return
+var sampleStyle = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).Padding(1, 4, 1, 4)
+
+// PrintSample of n examples.
+func PrintSample(ctx *context.Context, n int) {
+	maxLen := context.GetParamOr(ctx, "imdb_content_max_len", 200)
+	ds := NewDataset("TypeTest", TypeTest, maxLen, n, true).Shuffle()
+	_, inputs, labels := must.M3(ds.Yield())
+	tensors.ConstFlatData[int8](labels[0], func(labelsData []int8) {
+		for ii := range n {
+			fmt.Println(sampleStyle.Render(
+				fmt.Sprintf("[Sample %d - label %v]\n%s\n", labelsData[ii], InputToString(inputs[0], ii))))
+		}
+	})
+	fmt.Println()
 }

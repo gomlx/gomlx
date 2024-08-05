@@ -27,7 +27,6 @@ import (
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/tensors"
-	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/pkg/errors"
 	"io"
 	"math/rand"
@@ -61,6 +60,7 @@ var (
 	LoadedVocab *Vocab
 
 	// LoadedExamples is materialized after calling Download. It is based on LoadedVocab.
+	// Once loaded it should remain immutable.
 	LoadedExamples []*Example
 
 	// reWords captures what are considered tokens.
@@ -388,14 +388,14 @@ type Dataset struct {
 	DatasetType      DatasetType
 	MaxLen, MaxVocab int
 	BatchSize        int
-	Examples         []*Example
 
 	// muIndices protects the indices, the mutable part of the Dataset, to allow
 	// for concurrent calls to Yield.
-	muIndices                 sync.Mutex
-	Pos                       int
-	Infinite, WithReplacement bool
-	Shuffler                  *rand.Rand
+	muIndices       sync.Mutex
+	ExamplesIndices []int32
+	Pos             int
+	Infinite        bool
+	Shuffler        *rand.Rand
 }
 
 // Assert *Dataset implements train.Dataset
@@ -407,34 +407,36 @@ var _ train.Dataset = &Dataset{}
 // - dsType: dataset of TypeTrain or TypeTest.
 // - maxLen: max length of the content kept per test. Since GoMLX/XLA only works with fixed size tensors, the memory used grows linear with this.
 // - infinite: data loops forever (if shuffler is set, it reshuffles at every end of epoch).
-// - shuffler: if set, it shuffles the data.
-func NewDataset(name string, dsType DatasetType, maxLen, batchSize int, infinite bool, shuffler *rand.Rand) *Dataset {
-	if shuffler == nil {
-		shuffler = rand.New(rand.NewSource(time.Now().UTC().UnixNano()))
-	}
+func NewDataset(name string, dsType DatasetType, maxLen, batchSize int, infinite bool) *Dataset {
 	ds := &Dataset{
 		name:        name,
 		DatasetType: dsType,
 		MaxLen:      maxLen,
 		BatchSize:   batchSize,
 		Infinite:    infinite,
-		Shuffler:    shuffler,
 	}
-	ds.Examples = make([]*Example, 0, 25000)
-	for _, ex := range LoadedExamples {
-		if ex.Set == dsType && ex.Label != 2 {
-			ds.Examples = append(ds.Examples, ex)
+	ds.createExamplesIndices()
+	return ds
+}
+
+func (ds *Dataset) createExamplesIndices() {
+	ds.ExamplesIndices = make([]int32, 0, 25000)
+	for idx, ex := range LoadedExamples {
+		if ex.Set == ds.DatasetType && ex.Label != 2 {
+			ds.ExamplesIndices = append(ds.ExamplesIndices, int32(idx))
 		}
 	}
+}
+
+// Shuffle marks dataset to yield shuffled results.
+func (ds *Dataset) Shuffle() *Dataset {
+	ds.Shuffler = rand.New(rand.NewSource(time.Now().UTC().UnixNano()))
 	ds.Reset()
 	return ds
 }
 
 // NewUnsupervisedDataset with the DatasetType assumed to be TypeTrain.
-func NewUnsupervisedDataset(name string, maxLen, batchSize int, infinite bool, shuffler *rand.Rand) *Dataset {
-	if shuffler == nil {
-		shuffler = rand.New(rand.NewSource(time.Now().UTC().UnixNano()))
-	}
+func NewUnsupervisedDataset(name string, maxLen, batchSize int, infinite bool) *Dataset {
 	set := TypeTrain
 	ds := &Dataset{
 		name:        name,
@@ -442,15 +444,8 @@ func NewUnsupervisedDataset(name string, maxLen, batchSize int, infinite bool, s
 		MaxLen:      maxLen,
 		BatchSize:   batchSize,
 		Infinite:    infinite,
-		Shuffler:    shuffler,
 	}
-	ds.Examples = make([]*Example, 0, 25000)
-	for _, ex := range LoadedExamples {
-		if ex.Set == set && ex.Label == 2 {
-			ds.Examples = append(ds.Examples, ex)
-		}
-	}
-	ds.Reset()
+	ds.createExamplesIndices()
 	return ds
 }
 
@@ -467,35 +462,34 @@ func (ds *Dataset) Name() string { return ds.name }
 func (ds *Dataset) Yield() (spec any, inputs, labels []*tensors.Tensor, err error) {
 	// Lock only while selecting the indices for the batch.
 	ds.muIndices.Lock()
-	if !ds.Infinite && ds.Pos+ds.BatchSize > len(ds.Examples) {
-		ds.muIndices.Unlock()
-		return nil, nil, nil, io.EOF
-	}
-	if ds.Pos+ds.BatchSize > len(ds.Examples) {
-		// Infinite: needs a reshuffle.
-		ds.resetLocked()
-	}
-
-	// Enumerate examples to yield.
-	var examplesIdx []int
-	if ds.Infinite && ds.WithReplacement {
-		examplesIdx = make([]int, ds.BatchSize)
-		for ii := 0; ii < ds.BatchSize; ii++ {
-			examplesIdx[ii] = ds.Shuffler.Intn(len(ds.Examples))
+	if ds.Infinite {
+		// Infinite: we only take batches of the specified size, and drop the last ones if not enough to fit the batch.
+		if ds.Pos+ds.BatchSize > len(ds.ExamplesIndices) {
+			// Infinite: needs a reshuffle.
+			ds.resetLocked()
 		}
 	} else {
-		examplesIdx = xslices.Iota(ds.Pos, ds.BatchSize)
-		ds.Pos += ds.BatchSize
+		// 1 epoch: take the last batch even if there are only one element.
+		if ds.Pos >= len(ds.ExamplesIndices) {
+			ds.muIndices.Unlock()
+			return nil, nil, nil, io.EOF
+		}
 	}
+
+	// Effective batch size may be smaller than requested.
+	batchSize := min(ds.BatchSize, len(ds.ExamplesIndices)-ds.Pos)
+	batchIndices := ds.ExamplesIndices[ds.Pos : ds.Pos+batchSize]
+	ds.Pos += batchSize
 	ds.muIndices.Unlock()
+
 	// From now on ds is immutable, and it can be run concurrently.
 
 	// Build input tensor.
-	input := tensors.FromScalarAndDimensions(TokenId(0), ds.BatchSize, ds.MaxLen)
-	labelsData := make([]int8, ds.BatchSize)
+	input := tensors.FromScalarAndDimensions(TokenId(0), batchSize, ds.MaxLen)
+	labelsData := make([]int8, batchSize)
 	tensors.MutableFlatData[TokenId](input, func(inputData []TokenId) {
-		for batchIdx, datasetIdx := range examplesIdx {
-			ex := ds.Examples[datasetIdx]
+		for batchIdx, exampleIdx := range batchIndices {
+			ex := LoadedExamples[exampleIdx]
 			labelsData[batchIdx] = int8(ex.Label)
 			exInput := inputData[batchIdx*ds.MaxLen:]
 			content := ex.Content
@@ -524,12 +518,14 @@ func (ds *Dataset) Reset() {
 
 // resetLocked implements Reset, when Dataset.muIndices is already locked.
 func (ds *Dataset) resetLocked() {
-	if ds.Infinite && ds.WithReplacement {
+	if ds.Infinite {
 		return
 	}
-	for ii := range ds.Examples {
-		jj := ds.Shuffler.Intn(len(ds.Examples))
-		ds.Examples[ii], ds.Examples[jj] = ds.Examples[jj], ds.Examples[ii]
+	if ds.Shuffler != nil {
+		for ii := range ds.ExamplesIndices {
+			jj := ds.Shuffler.Intn(len(ds.ExamplesIndices))
+			ds.ExamplesIndices[ii], ds.ExamplesIndices[jj] = ds.ExamplesIndices[jj], ds.ExamplesIndices[ii]
+		}
 	}
 	ds.Pos = 0
 }

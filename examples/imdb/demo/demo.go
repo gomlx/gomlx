@@ -21,30 +21,20 @@ import (
 	"flag"
 	"fmt"
 	"github.com/gomlx/exceptions"
-	"github.com/gomlx/gomlx/backends"
+	_ "github.com/gomlx/gomlx/backends/xla"
 	"github.com/gomlx/gomlx/examples/imdb"
-	"github.com/gomlx/gomlx/examples/notebook/gonb/margaid"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/ml/context/checkpoints"
-	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/commandline"
 	"github.com/gomlx/gomlx/ml/train/losses"
-	"github.com/gomlx/gomlx/ml/train/metrics"
-	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/janpfeifer/must"
-	"log"
-	"os"
-	"time"
-
-	_ "github.com/gomlx/gomlx/backends/xla"
+	"k8s.io/klog/v2"
 )
 
 // DType used for the demo.
@@ -55,137 +45,18 @@ var (
 	flagEval       = flag.Bool("eval", true, "Whether to evaluate the model on the validation data in the end.")
 	flagVerbosity  = flag.Int("verbosity", 1, "Level of verbosity, the higher the more verbose.")
 	flagCheckpoint = flag.String("checkpoint", "", "Directory save and load checkpoints from. If left empty, no checkpoints are created.")
-
-	// Extra options.
-
-	// Training hyperparameters:
-	flagWordDropoutRate = flag.Float64("word_dropout", 0, "Dropout rate for whole words of the input")
-
-	// Model hyperparameters:
-	flagMaxAttLen           = flag.Int("max_att_len", 200, "Maximum attention length: input will be split in ranges of this size.")
-	flagNumAttHeads         = flag.Int("att_heads", 2, "Number of attention heads, if --model=transformer.")
-	flagNumAttLayers        = flag.Int("att_layers", 1, "Number of stacked attention layers, if --model=transformer.")
-	flagAttKeyQueryEmbedDim = flag.Int("att_key_dim", 8, "Dimension of the Key/Query attention embedding.")
-	flagNumHiddenLayers     = flag.Int("hidden_layers", 2, "Number of output hidden layers, stacked with residual connection.")
-	flagNumNodes            = flag.Int("num_nodes", 32, "Number of nodes in output hidden layers.")
 )
 
 func main() {
+	ctx := imdb.CreateDefaultContext()
+	settings := commandline.CreateContextSettingsFlag(ctx, "")
+	klog.InitFlags(nil)
 	flag.Parse()
-	imdb.IncludeSeparators = *flagIncludeSeparators
-	if *flagUseUnsupervised && *flagMaskWordTask <= 0 {
-		log.Fatal("--use_unsupervised is only useful with --mask_word_task=x (x > 0).")
-	}
-
-	// Validate and create --data directory.
-	*flagDataDir = data.ReplaceTildeInDir(*flagDataDir)
-	if !data.FileExists(*flagDataDir) {
-		must.M(os.MkdirAll(*flagDataDir, 0777))
-	}
+	must.M(commandline.ParseContextSettings(ctx, *settings))
+	imdb.TrainModel(ctx, *flagDataDir, *flagCheckpoint, *flagEval, *flagVerbosity)
 
 	must.M(imdb.Download(*flagDataDir))
 	TrainModel()
-}
-
-func Sample() {
-	ds := imdb.NewDataset("TypeTest", imdb.TypeTest, *flagMaxLen, 3, true, nil)
-	_, inputs, labels := must.M3(ds.Yield())
-	tensors.ConstFlatData[int8](labels[0], func(labelsData []int8) {
-		for ii := 0; ii < 3; ii++ {
-			fmt.Printf("\n%v : %s\n", labelsData[ii], imdb.InputToString(inputs[0], ii))
-		}
-	})
-	fmt.Println()
-}
-
-func TrainModel() {
-	// Backend handles creation of ML computation graphs, accelerator resources, etc.
-	backend := backends.New()
-
-	// Datasets.
-	var trainDS, trainEvalDS, testEvalDS train.Dataset
-	if *flagUseUnsupervised {
-		trainDS = imdb.NewUnsupervisedDataset("unsupervised-train", *flagMaxLen, *flagBatchSize, true, nil)
-	} else {
-		trainDS = imdb.NewDataset("train", imdb.TypeTrain, *flagMaxLen, *flagBatchSize, true, nil)
-	}
-	trainEvalDS = imdb.NewDataset("train-eval", imdb.TypeTrain, *flagMaxLen, *flagBatchSize, false, nil)
-	testEvalDS = imdb.NewDataset("test-eval", imdb.TypeTest, *flagMaxLen, *flagBatchSize, false, nil)
-
-	// Parallelize generation of batches.
-	trainDS = data.Parallel(trainDS)
-	trainEvalDS = data.Parallel(trainEvalDS)
-	testEvalDS = data.Parallel(testEvalDS)
-
-	// Metrics we are interested.
-	meanAccuracyMetric := metrics.NewMeanBinaryLogitsAccuracy("Mean Accuracy", "#acc")
-	movingAccuracyMetric := metrics.NewMovingAverageBinaryLogitsAccuracy("Moving Average Accuracy", "~acc", 0.01)
-
-	// Context holds the variables and hyperparameters for the model.
-	ctx := context.New()
-	ctx.SetParam(optimizers.ParamLearningRate, *flagLearningRate)
-	ctx.SetParam(layers.ParamL2Regularization, *flagL2Regularization)
-	if *flagEval {
-		ctx = ctx.Checked(false)
-	}
-
-	// Checkpoints saving.
-	var checkpoint *checkpoints.Handler
-	if *flagCheckpoint != "" {
-		var err error
-		checkpoint, err = checkpoints.Build(ctx).DirFromBase(*flagCheckpoint, *flagDataDir).Keep(*flagCheckpointKeep).Done()
-		must.M(err)
-	}
-
-	// Create a train.Trainer: this object will orchestrate running the model, feeding
-	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
-	loss := losses.BinaryCrossentropyLogits
-	if *flagUseUnsupervised {
-		loss = nil
-	}
-	trainer := train.NewTrainer(
-		backend, ctx, modelGraph, loss,
-		optimizers.MustOptimizerByName(ctx, *flagOptimizer),
-		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
-		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
-
-	// Use standard training loop.
-	if *flagTrain {
-		// --train: train model
-		loop := train.NewLoop(trainer)
-		if *flagUseProgressBar {
-			commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
-		}
-
-		// Attach a checkpoint: checkpoint every 1 minute of training.
-		if checkpoint != nil {
-			period := time.Minute * 1
-			train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
-				func(loop *train.Loop, metrics []*tensors.Tensor) error {
-					fmt.Printf("\n[saving checkpoint@%d] [median train step (ms): %d]\n", loop.LoopStep, loop.MedianTrainStepDuration().Milliseconds())
-					return checkpoint.Save()
-				})
-		}
-
-		// Attach a margaid plots: plot points at exponential steps.
-		// The points generated are saved along the checkpoint directory (if one is given).
-		if *flagPlots {
-			_ = margaid.NewDefault(loop, checkpoint.Dir(), 100, 1.1, trainEvalDS, testEvalDS)
-		}
-
-		// Loop for given number of steps.
-		_, err := loop.RunSteps(trainDS, *flagNumSteps)
-		must.M(err)
-		fmt.Printf("\t[Step %d] median train step: %d microseconds\n",
-			loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
-	}
-
-	if *flagEval {
-		// --eval: print an evaluation on train and test datasets.
-		fmt.Println()
-		err := commandline.ReportEval(trainer, trainEvalDS, testEvalDS)
-		must.M(err)
-	}
 }
 
 // EmbedTokensGraph creates embeddings for tokens and returns them along with the mask of used tokens --
