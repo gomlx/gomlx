@@ -282,9 +282,8 @@ func (c *Config) Done() *Node {
 		} else {
 			// DotGeneral:
 			xContractingAxes := []int{-1}
-			xBatchAxes := x.Shape().Dimensions[:x.Rank()-1]
+			var xBatchAxes, weightsBatchAxes []int // Since weights has no batch axes, we take no matching batch axes.
 			weightsContractingAxes := []int{0}
-			var weightsBatchAxes []int
 			x = DotGeneral(x, xContractingAxes, xBatchAxes, weights, weightsContractingAxes, weightsBatchAxes)
 		}
 
