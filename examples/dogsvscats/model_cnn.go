@@ -43,7 +43,7 @@ func CnnEmbeddings(ctx *context.Context, images *Node) *Node {
 		if convIdx > 0 {
 			logits = normalizeImage(ctx, logits)
 		}
-		for repeat := 0; repeat < 2; repeat++ {
+		for repeat := range 2 {
 			ctx := ctx.Inf("repeat_%02d", repeat)
 			residual := logits
 			logits = layers.Convolution(ctx, logits).Filters(filterSize).KernelSize(3).PadSame().Done()
