@@ -518,9 +518,6 @@ func (ds *Dataset) Reset() {
 
 // resetLocked implements Reset, when Dataset.muIndices is already locked.
 func (ds *Dataset) resetLocked() {
-	if ds.Infinite {
-		return
-	}
 	if ds.Shuffler != nil {
 		for ii := range ds.ExamplesIndices {
 			jj := ds.Shuffler.Intn(len(ds.ExamplesIndices))

@@ -13,7 +13,6 @@ import (
 	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/ml/layers/fnn"
-	"github.com/gomlx/gomlx/ml/layers/kan"
 	"github.com/gomlx/gomlx/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/commandline"
@@ -31,9 +30,9 @@ import (
 var (
 	// ValidModels is the list of model types supported.
 	ValidModels = map[string]train.ModelFn{
-		"bow":         nil,
-		"cnn":         nil,
-		"transformer": nil,
+		"bow":         BagOfWordsModelGraph,
+		"cnn":         Conv1DModelGraph,
+		"transformer": TransformerModelGraph,
 	}
 
 	// ParamsExcludedFromSaving is the list of parameters (see CreateDefaultContext) that shouldn't be saved
@@ -65,13 +64,13 @@ func CreateDefaultContext() *context.Context {
 		"eval_batch_size": 200,
 
 		// Imdb dataset parameters:
-		"imdb_mask_word_task_weight": 0.0,   // Include "masked word" self-supervised task with this given weight.
-		"imdb_use_unsupervised":      false, // Use unsupervised dataset to pretrain with mask word task -- requires further fine-tuning later.
-		"imdb_include_separators":    false, // If true include the word separator symbols in the tokens.
-		"imdb_content_max_len":       200,   // Maximum number of tokens to take from observation, per example.
-		"imdb_max_vocab":             20000, // Top most frequent words to consider, the rest is considered unknown.
-		"imdb_token_embedding_size":  32,    // Size of token embedding table. There are ~140K unique tokens.
-		"imdb_word_dropout_rate":     0.0,   // Special kind of dropout, used by all model types.
+		"imdb_mask_word_task_weight": 0.0,    // Include "masked word" self-supervised task with this given weight.
+		"imdb_use_unsupervised":      false,  // Use unsupervised dataset to pretrain with mask word task -- requires further fine-tuning later.
+		"imdb_include_separators":    false,  // If true include the word separator symbols in the tokens.
+		"imdb_content_max_len":       200,    // Maximum number of tokens to take from observation, per example.
+		"imdb_max_vocab":             20_000, // Top most frequent words to consider, the rest is considered unknown.
+		"imdb_token_embedding_size":  32,     // Size of token embedding table. There are ~140K unique tokens.
+		"imdb_word_dropout_rate":     0.0,    // Special kind of dropout, used by all model types.
 
 		// "plots" trigger generating intermediary eval data for plotting, and if running in GoNB, to actually
 		// draw the plot with Plotly.
@@ -99,29 +98,20 @@ func CreateDefaultContext() *context.Context {
 		fnn.ParamNumHiddenLayers: 2,
 		fnn.ParamNumHiddenNodes:  32,
 		fnn.ParamResidual:        true,
-		fnn.ParamNormalization:   "",   // Set to "none" for no normalization, otherwise it falls back to layers.ParamNormalization.
-		fnn.ParamDropoutRate:     -1.0, // Set to 0.0 for no dropout, otherwise it falls back to layers.ParamDropoutRate.
-
-		// KAN network parameters:
-		kan.ParamNumControlPoints:   10, // Number of control points
-		kan.ParamNumHiddenNodes:     32,
-		kan.ParamNumHiddenLayers:    2,
-		kan.ParamBSplineDegree:      2,
-		kan.ParamBSplineMagnitudeL1: 1e-5,
-		kan.ParamBSplineMagnitudeL2: 0.0,
-		kan.ParamDiscrete:           false,
-		kan.ParamDiscreteSoftness:   0.1,
+		fnn.ParamNormalization:   "",  // Set to "none" for no normalization. If "" it falls back to layers.ParamNormalization.
+		fnn.ParamDropoutRate:     0.3, // Set to 0.0 for no dropout. If < 0 it falls back to layers.ParamDropoutRate.
 
 		// CNN
-		"cnn_num_layers":      5.0,
-		"cnn_dropout_rate":    -1.0,
-		"cnn_embeddings_size": 128,
+		"cnn_num_layers":    5.0,
+		"cnn_dropout_rate":  0.5, // Set to 0.0 for no dropout. If < 0 it falls back to layers.ParamDropoutRate.
+		"cnn_normalization": "",  // Set to "none" for no normalization. If "" it falls back to layers.ParamNormalization.
 
 		// Transformers
-		"transformer_max_att_len":    200, // Maximum attention length: input will be split in ranges of this size.
-		"transformer_num_att_heads":  2,   // umber of attention heads,/ if --model=transformer.
-		"transformer_num_att_layers": 1,   // Number of stacked attention layers, if --model=transformer.
-		"transformer_att_key_dim":    8,   // Dimension of the Key/Query attention embedding.
+		"transformer_max_att_len":    200,  // Maximum attention length: input will be split in ranges of this size.
+		"transformer_num_att_heads":  2,    // umber of attention heads,/ if --model=transformer.
+		"transformer_num_att_layers": 1,    // Number of stacked attention layers, if --model=transformer.
+		"transformer_att_key_size":   8,    // Dimension of the Key/Query attention embedding.
+		"transformer_dropout_rate":   -1.0, // Set to 0.0 for no dropout. If < 0 it falls back to layers.ParamDropoutRate.
 	})
 	return ctx
 }
@@ -173,13 +163,8 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, evaluateOn
 	trainEvalDS = data.Parallel(trainEvalDS)
 	testEvalDS = data.Parallel(testEvalDS)
 
-	// Read hyperparameters from context that we don't want overwritten by loading fo the context from a checkpoint.
-	numTrainSteps := context.GetParamOr(ctx, "train_steps", 0)
-	usePlots := context.GetParamOr(ctx, plotly.ParamPlots, false)
-
 	// Checkpoints saving.
 	var checkpoint *checkpoints.Handler
-	var globalStep int
 	if checkpointPath != "" {
 		numCheckpointsToKeep := context.GetParamOr(ctx, "num_checkpoints", 3)
 		checkpoint = must.M1(checkpoints.Build(ctx).
@@ -187,19 +172,13 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, evaluateOn
 			Keep(numCheckpointsToKeep).
 			ExcludeParams(ParamsExcludedFromSaving...).
 			Done())
-		fmt.Printf("Checkpointing model to %q\n", checkpoint.Dir())
-		globalStep = int(optimizers.GetGlobalStep(ctx))
-		if globalStep != 0 {
-			fmt.Printf("Restarting training from global_step=%d\n", globalStep)
-			ctx = ctx.Reuse()
-		}
+		fmt.Printf("Checkpoint: %q\n", checkpoint.Dir())
 	}
 	if verbosity >= 2 {
 		fmt.Println(commandline.SprintContextSettings(ctx))
 	}
 
 	// Select model graph building function.
-	modelFn := ValidModels["bow"] // Defaults to bag-of-words.
 	modelType := context.GetParamOr(ctx, "model", "bow")
 	modelFn, found := ValidModels[modelType]
 	if !found {
@@ -241,7 +220,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, evaluateOn
 
 	// Attach Plotly plots: plot points at exponential steps.
 	// The points generated are saved along the checkpoint directory (if one is given).
-	if usePlots {
+	if context.GetParamOr(ctx, plotly.ParamPlots, false) {
 		_ = plotly.New().
 			WithCheckpoint(checkpoint).
 			Dynamic().
@@ -251,6 +230,11 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, evaluateOn
 	}
 
 	// Loop for given number of steps.
+	numTrainSteps := context.GetParamOr(ctx, "train_steps", 0)
+	globalStep := int(optimizers.GetGlobalStep(ctx))
+	if globalStep > 0 {
+		trainer.SetContext(ctx.Reuse())
+	}
 	if globalStep < numTrainSteps {
 		_ = must.M1(loop.RunSteps(trainDS, numTrainSteps-globalStep))
 		if verbosity >= 1 {
