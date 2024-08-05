@@ -21,8 +21,10 @@ import (
 	"flag"
 	"fmt"
 	"github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/examples/imdb"
 	"github.com/gomlx/gomlx/examples/notebook/gonb/margaid"
+	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/ml/data"
@@ -35,65 +37,37 @@ import (
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/janpfeifer/must"
 	"log"
 	"os"
 	"time"
+
+	_ "github.com/gomlx/gomlx/backends/xla"
 )
 
 // DType used for the demo.
 const DType = dtypes.Float32
 
-func AssertNoError(err error) {
-	if err != nil {
-		log.Fatalf("Failed: %+v", err)
-	}
-}
-
 var (
-	flagEval    = flag.Bool("eval", true, "Evaluate model at the end.")
-	flagTrain   = flag.Bool("train", true, "Train model. Set to false to evaluate only.")
-	flagDataDir = flag.String("data", "~/tmp/imdb", "Directory to cache downloaded and generated dataset files.")
+	flagDataDir    = flag.String("data", "~/tmp/imdb", "Directory to cache downloaded and generated dataset files.")
+	flagEval       = flag.Bool("eval", true, "Whether to evaluate the model on the validation data in the end.")
+	flagVerbosity  = flag.Int("verbosity", 1, "Level of verbosity, the higher the more verbose.")
+	flagCheckpoint = flag.String("checkpoint", "", "Directory save and load checkpoints from. If left empty, no checkpoints are created.")
 
 	// Extra options.
-	flagMaskWordTask    = flag.Float64("masked_word_task", 0.0, "Include \"masked word\" self-supervised task with given weight.")
-	flagUseUnsupervised = flag.Bool("use_unsupervised", false, "Use unsupervised dataset: it's only used to pretrain --masked_word_task. The model trained needs to be further fine-tuned with normal training data later.")
-
-	// Checkpointing model.
-	flagCheckpoint     = flag.String("checkpoint", "", "Directory save and load checkpoints from. If left empty, no checkpoints are created.")
-	flagCheckpointKeep = flag.Int("checkpoint_keep", 10, "Number of checkpoints to keep, if --checkpoint is set.")
-
-	// ML Backend creation:
-	flagNumThreads  = flag.Int("num_threads", -1, "Number of threads. Leave as -1 to use as many as there are cores.")
-	flagNumReplicas = flag.Int("num_replicas", 1, "Number of replicas.")
-	flagPlatform    = flag.String("platform", "", "PluginDescription to use, if empty uses the default one.")
 
 	// Training hyperparameters:
-	flagModel            = flag.String("model", "transformer", "Model type: bow or transformer.")
-	flagOptimizer        = flag.String("optimizer", "adam", "Optimizer, options: adam or sgd.")
-	flagNumSteps         = flag.Int("steps", 5000, "Number of gradient descent steps to perform")
-	flagBatchSize        = flag.Int("batch", 32, "Batch size for training")
-	flagLearningRate     = flag.Float64("learning_rate", 0.0001, "Initial learning rate.")
-	flagL2Regularization = flag.Float64("l2_reg", 0, "L2 regularization on kernels. It doesn't interact well with --batch_norm or with --optimizer=adam.")
-	flagNormalization    = flag.String("norm", "layer", "Type of normalization to use. Valid values are \"none\", \"batch\", \"layer\".")
-	flagDropoutRate      = flag.Float64("dropout", 0.15, "Dropout rate")
-	flagWordDropoutRate  = flag.Float64("word_dropout", 0, "Dropout rate for whole words of the input")
+	flagWordDropoutRate = flag.Float64("word_dropout", 0, "Dropout rate for whole words of the input")
 
 	// Model hyperparameters:
-	flagMaxLen              = flag.Int("max_len", 200, "Maximum number of tokens to take from observation.")
-	flagMaxVocab            = flag.Int("max_vocab", 20000, "Top most frequent words to consider, the rest is considered unknown.")
-	flagTokenEmbeddingSize  = flag.Int("token_embed", 32, "Size of token embedding table. There are ~140K unique tokens")
-	flagIncludeSeparators   = flag.Bool("include_separators", false, "If true include the word separator symbols in the tokens.")
 	flagMaxAttLen           = flag.Int("max_att_len", 200, "Maximum attention length: input will be split in ranges of this size.")
 	flagNumAttHeads         = flag.Int("att_heads", 2, "Number of attention heads, if --model=transformer.")
 	flagNumAttLayers        = flag.Int("att_layers", 1, "Number of stacked attention layers, if --model=transformer.")
 	flagAttKeyQueryEmbedDim = flag.Int("att_key_dim", 8, "Dimension of the Key/Query attention embedding.")
 	flagNumHiddenLayers     = flag.Int("hidden_layers", 2, "Number of output hidden layers, stacked with residual connection.")
 	flagNumNodes            = flag.Int("num_nodes", 32, "Number of nodes in output hidden layers.")
-
-	// UI
-	flagUseProgressBar = flag.Bool("bar", true, "If to display a progress bar during training")
-	flagPlots          = flag.Bool("plots", true, "Plots during training: perform periodic evaluations, "+
-		"save results if --checkpoint is set and draw plots, if in a Jupyter notebook.")
 )
 
 func main() {
@@ -106,39 +80,37 @@ func main() {
 	// Validate and create --data directory.
 	*flagDataDir = data.ReplaceTildeInDir(*flagDataDir)
 	if !data.FileExists(*flagDataDir) {
-		AssertNoError(os.MkdirAll(*flagDataDir, 0777))
+		must.M(os.MkdirAll(*flagDataDir, 0777))
 	}
 
-	AssertNoError(imdb.Download(*flagDataDir))
-	trainModel()
+	must.M(imdb.Download(*flagDataDir))
+	TrainModel()
 }
 
 func Sample() {
-	ds := imdb.NewDataset("Test", imdb.Test, *flagMaxLen, 3, DType, true, nil)
-	_, inputs, labels, err := ds.Yield()
-	AssertNoError(err)
-	labelsRef := labels[0].Local().AcquireData()
-	defer labelsRef.Release()
-	labelsData := shapes.CastAsDType(labelsRef.Flat(), dtypes.Int64).([]int)
-	for ii := 0; ii < 3; ii++ {
-		fmt.Printf("\n%v : %s\n", labelsData[ii], imdb.InputToString(inputs[0], ii))
-	}
+	ds := imdb.NewDataset("TypeTest", imdb.TypeTest, *flagMaxLen, 3, true, nil)
+	_, inputs, labels := must.M3(ds.Yield())
+	tensors.ConstFlatData[int8](labels[0], func(labelsData []int8) {
+		for ii := 0; ii < 3; ii++ {
+			fmt.Printf("\n%v : %s\n", labelsData[ii], imdb.InputToString(inputs[0], ii))
+		}
+	})
 	fmt.Println()
 }
 
-func trainModel() {
+func TrainModel() {
 	// Backend handles creation of ML computation graphs, accelerator resources, etc.
-	manager := BuildManager().NumThreads(*flagNumThreads).NumReplicas(*flagNumReplicas).Platform(*flagPlatform).Done()
+	backend := backends.New()
 
 	// Datasets.
 	var trainDS, trainEvalDS, testEvalDS train.Dataset
 	if *flagUseUnsupervised {
-		trainDS = imdb.NewUnsupervisedDataset("unsupervised-train", *flagMaxLen, *flagBatchSize, DType, true, nil)
+		trainDS = imdb.NewUnsupervisedDataset("unsupervised-train", *flagMaxLen, *flagBatchSize, true, nil)
 	} else {
-		trainDS = imdb.NewDataset("train", imdb.Train, *flagMaxLen, *flagBatchSize, DType, true, nil)
+		trainDS = imdb.NewDataset("train", imdb.TypeTrain, *flagMaxLen, *flagBatchSize, true, nil)
 	}
-	trainEvalDS = imdb.NewDataset("train-eval", imdb.Train, *flagMaxLen, *flagBatchSize, DType, false, nil)
-	testEvalDS = imdb.NewDataset("test-eval", imdb.Test, *flagMaxLen, *flagBatchSize, DType, false, nil)
+	trainEvalDS = imdb.NewDataset("train-eval", imdb.TypeTrain, *flagMaxLen, *flagBatchSize, false, nil)
+	testEvalDS = imdb.NewDataset("test-eval", imdb.TypeTest, *flagMaxLen, *flagBatchSize, false, nil)
 
 	// Parallelize generation of batches.
 	trainDS = data.Parallel(trainDS)
@@ -162,7 +134,7 @@ func trainModel() {
 	if *flagCheckpoint != "" {
 		var err error
 		checkpoint, err = checkpoints.Build(ctx).DirFromBase(*flagCheckpoint, *flagDataDir).Keep(*flagCheckpointKeep).Done()
-		AssertNoError(err)
+		must.M(err)
 	}
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
@@ -172,7 +144,7 @@ func trainModel() {
 		loss = nil
 	}
 	trainer := train.NewTrainer(
-		manager, ctx, modelGraph, loss,
+		backend, ctx, modelGraph, loss,
 		optimizers.MustOptimizerByName(ctx, *flagOptimizer),
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
 		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
@@ -203,7 +175,7 @@ func trainModel() {
 
 		// Loop for given number of steps.
 		_, err := loop.RunSteps(trainDS, *flagNumSteps)
-		AssertNoError(err)
+		must.M(err)
 		fmt.Printf("\t[Step %d] median train step: %d microseconds\n",
 			loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
 	}
@@ -212,7 +184,7 @@ func trainModel() {
 		// --eval: print an evaluation on train and test datasets.
 		fmt.Println()
 		err := commandline.ReportEval(trainer, trainEvalDS, testEvalDS)
-		AssertNoError(err)
+		must.M(err)
 	}
 }
 
@@ -538,7 +510,7 @@ func Normalize(ctx *context.Context, x *Node) *Node {
 		if x.Rank() == 3 {
 			// Normalize sequence.
 			return layers.LayerNormalization(ctx, x, -2, -1).
-				LearnedOffset(true).LearnedScale(true).ScaleNormalization(true).Done()
+				LearnedOffset(true).LearnedGain(true).ScaleNormalization(true).Done()
 		} else {
 			// Normalize features only.
 			return layers.LayerNormalization(ctx, x, -1).Done()

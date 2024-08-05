@@ -1,1 +1,268 @@
 package imdb
+
+import (
+	"fmt"
+	"github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/examples/notebook/gonb/plotly"
+	"github.com/gomlx/gomlx/ml/context"
+	"github.com/gomlx/gomlx/ml/context/checkpoints"
+	"github.com/gomlx/gomlx/ml/data"
+	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/layers/activations"
+	"github.com/gomlx/gomlx/ml/layers/batchnorm"
+	"github.com/gomlx/gomlx/ml/layers/fnn"
+	"github.com/gomlx/gomlx/ml/layers/kan"
+	"github.com/gomlx/gomlx/ml/layers/regularizers"
+	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/ml/train/commandline"
+	"github.com/gomlx/gomlx/ml/train/losses"
+	"github.com/gomlx/gomlx/ml/train/metrics"
+	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/janpfeifer/must"
+	"os"
+	"slices"
+	"strings"
+	"time"
+)
+
+var (
+	// ValidModels is the list of model types supported.
+	ValidModels = map[string]train.ModelFn{
+		"bow":         nil,
+		"cnn":         nil,
+		"transformer": nil,
+	}
+
+	// ParamsExcludedFromSaving is the list of parameters (see CreateDefaultContext) that shouldn't be saved
+	// along on the models checkpoints.
+	ParamsExcludedFromSaving = []string{
+		"train_steps", "num_checkpoints",
+	}
+)
+
+// DType used in the mode.
+var DType = dtypes.Float32
+
+// CreateDefaultContext sets the context with default hyperparameters to use with TrainModel.
+func CreateDefaultContext() *context.Context {
+	ctx := context.New()
+	ctx.RngStateReset()
+	ctx.SetParams(map[string]any{
+		// Model type to use
+		"model":           "bow", // One of the listed in ValidModels: the user can also inject (in ValidModels) new custom models.
+		"train_steps":     5000,
+		"num_checkpoints": 3,
+
+		// batch_size for training.
+		"batch_size": 32,
+
+		// eval_batch_size can be larger than training, it's more efficient.
+		"eval_batch_size": 200,
+
+		// Imdb dataset parameters:
+		"imdb_mask_word_task_weight": 0.0,   // Include "masked word" self-supervised task with this given weight.
+		"imdb_use_unsupervised":      false, // Use unsupervised dataset to pretrain with mask word task -- requires further fine-tuning later.
+		"imdb_include_separators":    false, // If true include the word separator symbols in the tokens.
+		"imdb_content_max_len":       200,   // Maximum number of tokens to take from observation, per example.
+		"imdb_max_vocab":             20000, // Top most frequent words to consider, the rest is considered unknown.
+		"imdb_token_embedding_size":  32,    // Size of token embedding table. There are ~140K unique tokens.
+		"imdb_word_dropout_rate":     0.0,   // Special kind of dropout, used by all model types.
+
+		// "plots" trigger generating intermediary eval data for plotting, and if running in GoNB, to actually
+		// draw the plot with Plotly.
+		//
+		// From the command-line, an easy way to monitor the metrics being generated during the training of a model
+		// is using the gomlx_checkpoints tool:
+		//
+		//	$ gomlx_checkpoints --metrics --metrics_labels --metrics_types=accuracy  --metrics_names='E(Tra)/#loss,E(Val)/#loss' --loop=3s "<checkpoint_path>"
+		plotly.ParamPlots: true,
+
+		// "normalization" is overridden by "fnn_normalization" and "cnn_normalization", if they are set.
+		layers.ParamNormalization: "batch",
+
+		optimizers.ParamOptimizer:           "adamw",
+		optimizers.ParamLearningRate:        1e-4,
+		optimizers.ParamAdamEpsilon:         1e-7,
+		optimizers.ParamAdamDType:           "",
+		optimizers.ParamCosineScheduleSteps: 0,
+		activations.ParamActivation:         "",
+		layers.ParamDropoutRate:             0.1,
+		regularizers.ParamL2:                0.0,
+		regularizers.ParamL1:                0.0,
+
+		// FNN network parameters:
+		fnn.ParamNumHiddenLayers: 2,
+		fnn.ParamNumHiddenNodes:  32,
+		fnn.ParamResidual:        true,
+		fnn.ParamNormalization:   "",   // Set to "none" for no normalization, otherwise it falls back to layers.ParamNormalization.
+		fnn.ParamDropoutRate:     -1.0, // Set to 0.0 for no dropout, otherwise it falls back to layers.ParamDropoutRate.
+
+		// KAN network parameters:
+		kan.ParamNumControlPoints:   10, // Number of control points
+		kan.ParamNumHiddenNodes:     32,
+		kan.ParamNumHiddenLayers:    2,
+		kan.ParamBSplineDegree:      2,
+		kan.ParamBSplineMagnitudeL1: 1e-5,
+		kan.ParamBSplineMagnitudeL2: 0.0,
+		kan.ParamDiscrete:           false,
+		kan.ParamDiscreteSoftness:   0.1,
+
+		// CNN
+		"cnn_num_layers":      5.0,
+		"cnn_dropout_rate":    -1.0,
+		"cnn_embeddings_size": 128,
+
+		// Transformers
+		"transformer_max_att_len":    200, // Maximum attention length: input will be split in ranges of this size.
+		"transformer_num_att_heads":  2,   // umber of attention heads,/ if --model=transformer.
+		"transformer_num_att_layers": 1,   // Number of stacked attention layers, if --model=transformer.
+		"transformer_att_key_dim":    8,   // Dimension of the Key/Query attention embedding.
+	})
+	return ctx
+}
+
+// TrainModel with hyperparameters given in ctx.
+func TrainModel(ctx *context.Context, dataDir, checkpointPath string, evaluateOnEnd bool, verbosity int) {
+	// Data directory: datasets and top-level directory holding checkpoints for different models.
+	dataDir = data.ReplaceTildeInDir(dataDir)
+	if !data.FileExists(dataDir) {
+		must.M(os.MkdirAll(dataDir, 0777))
+	}
+
+	// Imdb data preparation.
+	IncludeSeparators = context.GetParamOr(ctx, "imdb_include_separators", false)
+	must.M(Download(dataDir))
+	imdbUseUnsupervised := context.GetParamOr(ctx, "imdb_use_unsupervised", false)
+	imdbMaskWordTaskWeight := context.GetParamOr(ctx, "imdb_mask_word_task_weight", 0.0)
+	if imdbUseUnsupervised && imdbMaskWordTaskWeight <= 0 {
+		exceptions.Panicf(`Parameter "imdb_use_unsupervised" is only useful together with parameter "imdb_mask_word_task" (=%g) > 0.0`, imdbMaskWordTaskWeight)
+	}
+
+	// Backend handles creation of ML computation graphs, accelerator resources, etc.
+	backend := backends.New()
+	if verbosity >= 1 {
+		fmt.Printf("Backend %q:\t%s\n", backend.Name(), backend.Description())
+	}
+
+	// Create datasets used for training and evaluation.
+	batchSize := context.GetParamOr(ctx, "batch_size", int(0))
+	if batchSize <= 0 {
+		exceptions.Panicf("Batch size must be > 0 (maybe it was not set?): %d", batchSize)
+	}
+	evalBatchSize := context.GetParamOr(ctx, "eval_batch_size", int(0))
+	if evalBatchSize <= 0 {
+		evalBatchSize = batchSize
+	}
+	trainDS, evalOnTrainDS, evalOnTestDS := CreateDatasets(backend, dataDir, batchSize, evalBatchSize)
+
+	// Read hyperparameters from context that we don't want overwritten by loading fo the context from a checkpoint.
+	numTrainSteps := context.GetParamOr(ctx, "train_steps", 0)
+	usePlots := context.GetParamOr(ctx, plotly.ParamPlots, false)
+
+	// Checkpoints saving.
+	var checkpoint *checkpoints.Handler
+	var globalStep int
+	if checkpointPath != "" {
+		checkpoint = must.M1(checkpoints.Build(ctx).DirFromBase(checkpointPath, dataDir).Keep(3).Done())
+		fmt.Printf("Checkpointing model to %q\n", checkpoint.Dir())
+		globalStep = int(optimizers.GetGlobalStep(ctx))
+		if globalStep != 0 {
+			fmt.Printf("Restarting training from global_step=%d\n", globalStep)
+			ctx = ctx.Reuse()
+		}
+	}
+	if verbosity >= 2 {
+		fmt.Println(commandline.SprintContextSettings(ctx))
+	}
+
+	// Select model graph building function.
+	modelFn := C10PlainModelGraph
+	modelType := context.GetParamOr(ctx, "model", ValidModels[0])
+	if slices.Index(ValidModels, modelType) == -1 {
+		exceptions.Panicf("Parameter \"model\" must take one value from %v, got %q", ValidModels, modelType)
+	}
+	if strings.HasPrefix(modelType, "cnn") {
+		modelFn = C10ConvolutionModelGraph
+	}
+	fmt.Printf("Model: %s\n", modelType)
+
+	// Metrics we are interested.
+	meanAccuracyMetric := metrics.NewSparseCategoricalAccuracy("Mean Accuracy", "#acc")
+	movingAccuracyMetric := metrics.NewMovingAverageSparseCategoricalAccuracy("Moving Average Accuracy", "~acc", 0.01)
+
+	// Create a train.Trainer: this object will orchestrate running the model, feeding
+	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
+	ctx = ctx.In("model") // Convention scope used for model creation.
+	trainer := train.NewTrainer(backend, ctx, modelFn,
+		losses.SparseCategoricalCrossEntropyLogits,
+		optimizers.FromContext(ctx),
+		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
+		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
+
+	// Use standard training loop.
+	loop := train.NewLoop(trainer)
+	if verbosity >= 0 {
+		commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
+	}
+
+	// Checkpoint saving: every 3 minutes of training.
+	if checkpoint != nil {
+		period := time.Minute * 3
+		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
+			func(loop *train.Loop, metrics []*tensors.Tensor) error {
+				return checkpoint.Save()
+			})
+	}
+
+	// Attach Plotly plots: plot points at exponential steps.
+	// The points generated are saved along the checkpoint directory (if one is given).
+	if usePlots {
+		_ = plotly.New().
+			WithCheckpoint(checkpoint).
+			Dynamic().
+			WithDatasets(evalOnTrainDS, evalOnTestDS).
+			ScheduleExponential(loop, 200, 1.2).
+			WithBatchNormalizationAveragesUpdate(evalOnTrainDS)
+	}
+
+	// Loop for given number of steps.
+	if globalStep < numTrainSteps {
+		_ = must.M1(loop.RunSteps(trainDS, numTrainSteps-globalStep))
+		if verbosity >= 1 {
+			fmt.Printf("\t[Step %d] median train step: %d microseconds\n",
+				loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
+		}
+
+		// Update batch normalization averages, if they are used.
+		if batchnorm.UpdateAverages(trainer, evalOnTrainDS) {
+			fmt.Println("\tUpdated batch normalization mean/variances averages.")
+			if checkpoint != nil {
+				must.M(checkpoint.Save())
+			}
+		}
+
+	} else {
+		fmt.Printf("\t - target train_steps=%d already reached. To train further, set a number additional "+
+			"to current global step.\n", numTrainSteps)
+	}
+
+	// Finally, print an evaluation on train and test datasets.
+	if evaluateOnEnd {
+		if verbosity >= 1 {
+			fmt.Println()
+		}
+		must.M(commandline.ReportEval(trainer, evalOnTestDS, evalOnTrainDS))
+	}
+}
+
+func CreateDatasets(backend backends.Backend, dataDir string, batchSize, evalBatchSize int) (trainDS, trainEvalDS, validationEvalDS train.Dataset) {
+	baseTrain := NewDataset(backend, "Training", dataDir, C10, DType, Train)
+	baseTest := NewDataset(backend, "Validation", dataDir, C10, DType, Test)
+	trainDS = baseTrain.Copy().BatchSize(batchSize, true).Shuffle().Infinite(true)
+	trainEvalDS = baseTrain.BatchSize(evalBatchSize, false)
+	validationEvalDS = baseTest.BatchSize(evalBatchSize, false)
+	return
+}
