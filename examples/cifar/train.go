@@ -23,11 +23,19 @@ import (
 	"time"
 )
 
-// C10ValidModels is the list of model types supported.
-var C10ValidModels = []string{"fnn", "kan", "cnn"}
+var (
+	// DType used in the mode.
+	DType = dtypes.Float32
 
-// DType used in the mode.
-var DType = dtypes.Float32
+	// C10ValidModels is the list of model types supported.
+	C10ValidModels = []string{"fnn", "kan", "cnn"}
+
+	// ParamsExcludedFromSaving is the list of parameters (see CreateDefaultContext) that shouldn't be saved
+	// along on the models checkpoints, and may be overwritten in further training sessions.
+	ParamsExcludedFromSaving = []string{
+		"data_dir", "train_steps", "num_checkpoints", "plots",
+	}
+)
 
 // TrainCifar10Model with hyperparameters given in ctx.
 func TrainCifar10Model(ctx *context.Context, dataDir, checkpointPath string, evaluateOnEnd bool, verbosity int) {
@@ -56,21 +64,16 @@ func TrainCifar10Model(ctx *context.Context, dataDir, checkpointPath string, eva
 	}
 	trainDS, evalOnTrainDS, evalOnTestDS := CreateDatasets(backend, dataDir, batchSize, evalBatchSize)
 
-	// Read hyperparameters from context that we don't want overwritten by loading fo the context from a checkpoint.
-	numTrainSteps := context.GetParamOr(ctx, "train_steps", 0)
-	usePlots := context.GetParamOr(ctx, plotly.ParamPlots, false)
-
 	// Checkpoints saving.
 	var checkpoint *checkpoints.Handler
-	var globalStep int
 	if checkpointPath != "" {
-		checkpoint = must.M1(checkpoints.Build(ctx).DirFromBase(checkpointPath, dataDir).Keep(3).Done())
+		numCheckpointsToKeep := context.GetParamOr(ctx, "num_checkpoints", 3)
+		checkpoint = must.M1(checkpoints.Build(ctx).
+			DirFromBase(checkpointPath, dataDir).
+			Keep(numCheckpointsToKeep).
+			ExcludeParams(ParamsExcludedFromSaving...).
+			Done())
 		fmt.Printf("Checkpointing model to %q\n", checkpoint.Dir())
-		globalStep = int(optimizers.GetGlobalStep(ctx))
-		if globalStep != 0 {
-			fmt.Printf("Restarting training from global_step=%d\n", globalStep)
-			ctx = ctx.Reuse()
-		}
 	}
 	if verbosity >= 2 {
 		fmt.Println(commandline.SprintContextSettings(ctx))
@@ -117,7 +120,7 @@ func TrainCifar10Model(ctx *context.Context, dataDir, checkpointPath string, eva
 
 	// Attach Plotly plots: plot points at exponential steps.
 	// The points generated are saved along the checkpoint directory (if one is given).
-	if usePlots {
+	if context.GetParamOr(ctx, plotly.ParamPlots, false) {
 		_ = plotly.New().
 			WithCheckpoint(checkpoint).
 			Dynamic().
@@ -127,6 +130,11 @@ func TrainCifar10Model(ctx *context.Context, dataDir, checkpointPath string, eva
 	}
 
 	// Loop for given number of steps.
+	numTrainSteps := context.GetParamOr(ctx, "train_steps", 0)
+	globalStep := int(optimizers.GetGlobalStep(ctx))
+	if globalStep > 0 {
+		trainer.SetContext(ctx.Reuse())
+	}
 	if globalStep < numTrainSteps {
 		_ = must.M1(loop.RunSteps(trainDS, numTrainSteps-globalStep))
 		if verbosity >= 1 {
