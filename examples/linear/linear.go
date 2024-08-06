@@ -14,20 +14,28 @@
  *	limitations under the License.
  */
 
-// Linear generates random synthetic data, based on some linear mode + noise. Then it tries
-// to learn the weights used to generate the data.
+// Linear generates random synthetic data, based on some linear mode + noise.
+// Then it learns the original weights used to generate the data.
 package main
 
 import (
 	"flag"
 	"fmt"
+	"github.com/gomlx/gomlx/backends"
+	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
+	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/commandline"
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/janpfeifer/must"
+
+	_ "github.com/gomlx/gomlx/backends/xla"
 )
 
 const (
@@ -39,8 +47,8 @@ const (
 
 // initCoefficients chooses random coefficients and bias. These are the true values the model will
 // attempt to learn.
-func initCoefficients(manager backends.Backend, numVariables int) (coefficients, bias *tensors.Tensor) {
-	e := NewExec(manager, func(g *Graph) (coefficients, bias *Node) {
+func initCoefficients(backend backends.Backend, numVariables int) (coefficients, bias *tensors.Tensor) {
+	e := NewExec(backend, func(g *Graph) (coefficients, bias *Node) {
 		rngState := Const(g, RngState())
 		rngState, coefficients = RandomNormal(rngState, shapes.Make(dtypes.Float64, numVariables))
 		coefficients = AddScalar(
@@ -100,40 +108,28 @@ var (
 	flagLearningRate = flag.Float64("learning_rate", 0.1, "Initial learning rate.")
 )
 
-// Dataset is a trivial dataset that always returns the whole data.
-type Dataset struct {
-	name           string
-	inputs, labels []*tensors.Tensor
-}
-
-func (ds *Dataset) Name() string { return ds.name }
-
-// Yield implements train.Dataset
-func (ds *Dataset) Yield() (spec any, inputs, labels []*tensors.Tensor, err error) {
-	return nil, ds.inputs, ds.labels, nil
-}
-
-// Reset implements train.Dataset
-func (ds *Dataset) Reset() {}
-
 func main() {
 	flag.Parse()
-	manager := BuildManager().NumThreads(*flagNumThreads).NumReplicas(*flagNumReplicas).Platform(*flagPlatform).Done()
+	backend := backends.New()
 
-	trueCoefficients, trueBias := initCoefficients(manager, *flagNumFeatures)
+	trueCoefficients, trueBias := initCoefficients(backend, *flagNumFeatures)
 	fmt.Printf("Target coefficients: %0.5v\n", trueCoefficients.Value())
 	fmt.Printf("Target bias: %0.5v\n\n", trueBias.Value())
 
-	inputs, labels := buildExamples(manager, trueCoefficients, trueBias, *flagNumExamples, *flagNoise)
+	inputs, labels := buildExamples(backend, trueCoefficients, trueBias, *flagNumExamples, *flagNoise)
 	fmt.Printf("Training data (inputs, labels): (%s, %s)\n\n", inputs.Shape(), labels.Shape())
-	dataset := &Dataset{"training", []*tensors.Tensor{inputs}, []*tensors.Tensor{labels}}
+
+	// Create an in-memory dataset from the tensors.
+	dataset := must.M1(data.InMemoryFromData(backend, "linear dataset", []any{inputs}, []any{labels})).
+		Infinite(true).Shuffle().BatchSize(*flagNumExamples, false)
+	// dataset := &Dataset{"training", []*tensors.Tensor{inputs}, []*tensors.Tensor{labels}}
 
 	// Creates Context with learned weights and bias.
 	ctx := context.New()
 	ctx.SetParam(optimizers.ParamLearningRate, *flagLearningRate)
 
 	// train.Trainer executes a training step.
-	trainer := train.NewTrainer(manager, ctx, modelGraph,
+	trainer := train.NewTrainer(backend, ctx, modelGraph,
 		losses.MeanSquaredError,
 		optimizers.StochasticGradientDescent(),
 		nil, nil) // trainMetrics, evalMetrics
