@@ -82,7 +82,7 @@ func CreateDefaultContext() *context.Context {
 		plotly.ParamPlots: true,
 
 		// "normalization" is overridden by "fnn_normalization" and "cnn_normalization", if they are set.
-		layers.ParamNormalization: "batch",
+		layers.ParamNormalization: "layer",
 
 		optimizers.ParamOptimizer:           "adamw",
 		optimizers.ParamLearningRate:        1e-4,
@@ -264,17 +264,20 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, evaluateOn
 	}
 }
 
-var sampleStyle = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).Padding(1, 4, 1, 4)
+var sampleStyle = lipgloss.NewStyle().
+	Border(lipgloss.NormalBorder()).
+	Padding(1, 4, 1, 4).
+	Width(60)
 
 // PrintSample of n examples.
-func PrintSample(ctx *context.Context, n int) {
-	maxLen := context.GetParamOr(ctx, "imdb_content_max_len", 200)
+func PrintSample(n int) {
+	const maxLen = 200
 	ds := NewDataset("TypeTest", TypeTest, maxLen, n, true).Shuffle()
 	_, inputs, labels := must.M3(ds.Yield())
 	tensors.ConstFlatData[int8](labels[0], func(labelsData []int8) {
 		for ii := range n {
 			fmt.Println(sampleStyle.Render(
-				fmt.Sprintf("[Sample %d - label %v]\n%s\n", labelsData[ii], InputToString(inputs[0], ii))))
+				fmt.Sprintf("[Sample %d - label %v]\n%s\n", ii, labelsData[ii], InputToString(inputs[0], ii))))
 		}
 	})
 	fmt.Println()
