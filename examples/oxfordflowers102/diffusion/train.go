@@ -10,7 +10,6 @@ import (
 	"github.com/gomlx/gomlx/graph/nanlogger"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
-	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/commandline"
@@ -37,20 +36,20 @@ const (
 // and one can observe the model quality evolving.
 //
 // For new models if creates the noise + flowerIds samples used to monitor the model quality evolving.
-func LoadCheckpointToContext(ctx *context.Context, checkpointPath, dataDir string) (checkpoint *checkpoints.Handler, noise, flowerIds *tensors.Tensor) {
+func (c *Config) LoadCheckpointToContext(checkpointPath string) (checkpoint *checkpoints.Handler, noise, flowerIds *tensors.Tensor) {
 	if checkpointPath == "" {
 		return
 	}
-	numCheckpointsToKeep := context.GetParamOr(ctx, "num_checkpoints", 3)
-	checkpoint = must.M1(checkpoints.Build(ctx).
-		DirFromBase(checkpointPath, dataDir).
+	numCheckpointsToKeep := context.GetParamOr(c.ctx, "num_checkpoints", 3)
+	checkpoint = must.M1(checkpoints.Build(c.ctx).
+		DirFromBase(checkpointPath, c.dataDir).
 		Keep(numCheckpointsToKeep).
 		ExcludeParams(ParamsExcludedFromSaving...).
 		Done())
 	fmt.Printf("Checkpoint: %q\n", checkpoint.Dir())
 
 	// Load/generate sampled noise/flowerIds.
-	noisePath, flowerIdsPath := path.Join(checkpointPath, NoiseSamplesFile), path.Join(checkpointPath, FlowerIdsSamplesFile)
+	noisePath, flowerIdsPath := path.Join(checkpoint.Dir(), NoiseSamplesFile), path.Join(checkpoint.Dir(), FlowerIdsSamplesFile)
 	var err error
 	noise, err = tensors.Load(noisePath)
 	if err == nil {
@@ -64,42 +63,36 @@ func LoadCheckpointToContext(ctx *context.Context, checkpointPath, dataDir strin
 	}
 
 	// Create new noise and flower ids -- and save it for future training.
-	numSamples := context.GetParamOr(ctx, "samples_during_training", 64)
-	imageSize := context.GetParamOr(ctx, "image_size", int(64))
-	noise = GenerateNoise(imageSize, numSamples)
-	flowerIds = GenerateFlowerIds(numSamples)
+	numSamples := context.GetParamOr(c.ctx, "samples_during_training", 64)
+	noise = c.GenerateNoise(numSamples)
+	flowerIds = c.GenerateFlowerIds(numSamples)
 	must.M(noise.Save(noisePath))
 	must.M(flowerIds.Save(flowerIdsPath))
 	return
 }
 
+// getDataDir from context.
+func getDataDir(ctx *context.Context) string {
+	return context.GetParamOr(ctx, "data_dir", "./")
+}
+
+// getImageSize from context.
+func getImageSize(ctx *context.Context) int {
+	return context.GetParamOr(ctx, "image_size", 64)
+}
+
 // TrainModel with hyperparameters given in ctx.
 func TrainModel(ctx *context.Context, dataDir, checkpointPath string, evaluateOnEnd bool, verbosity int) {
-	// Data directory: datasets and top-level directory holding checkpoints for different models.
-	dataDir = data.ReplaceTildeInDir(dataDir)
-	if !data.FileExists(dataDir) {
-		must.M(os.MkdirAll(dataDir, 0777))
-	}
 
 	// Backend handles creation of ML computation graphs, accelerator resources, etc.
 	backend := backends.New()
 	if verbosity >= 1 {
 		fmt.Printf("Backend %q:\t%s\n", backend.Name(), backend.Description())
 	}
-
-	// Create datasets used for training and evaluation.
-	imageSize := context.GetParamOr(ctx, "image_size", int(64))
-	batchSize := context.GetParamOr(ctx, "batch_size", int(64))
-	evalBatchSize := context.GetParamOr(ctx, "eval_batch_size", int(128))
-
-	trainDS, validationDS := CreateInMemoryDatasets(imageSize)
-	trainEvalDS := trainDS.Copy()
-	trainDS.Shuffle().Infinite(true).BatchSize(batchSize, true)
-	trainEvalDS.BatchSize(evalBatchSize, false)
-	validationDS.BatchSize(evalBatchSize, false)
+	config := NewConfig(backend, ctx, dataDir)
 
 	// Checkpoints saving.
-	checkpoint, samplesNoise, samplesFlowerIds := LoadCheckpointToContext(ctx, checkpointPath, dataDir)
+	checkpoint, samplesNoise, samplesFlowerIds := config.LoadCheckpointToContext(checkpointPath)
 	if samplesNoise == nil {
 		klog.Exitf("A checkpoint directory name with --checkpoint is required, none given")
 	}
@@ -110,6 +103,13 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, evaluateOn
 		// Reset RNG.
 		ctx.RngStateReset()
 	}
+
+	// Create datasets used for training and evaluation.
+	trainDS, validationDS := config.CreateInMemoryDatasets()
+	trainEvalDS := trainDS.Copy()
+	trainDS.Shuffle().Infinite(true).BatchSize(config.batchSize, true)
+	trainEvalDS.BatchSize(config.evalBatchSize, false)
+	validationDS.BatchSize(config.evalBatchSize, false)
 
 	// Custom loss: model returns scalar loss as the second element of the predictions.
 	customLoss := func(labels, predictions []*Node) *Node { return predictions[1] }
@@ -133,7 +133,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, evaluateOn
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
 	ctx = ctx.In("model") // Convention scope used for model creation.
 	trainer := train.NewTrainer(
-		backend, ctx, TrainingModelGraph, customLoss,
+		backend, ctx, config.BuildTrainingModelGraph(), customLoss,
 		optimizers.FromContext(ctx),
 		[]metrics.Interface{movingImagesLoss}, // trainMetrics
 		[]metrics.Interface{meanImagesLoss})   // evalMetrics
@@ -171,12 +171,12 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, evaluateOn
 			WithBatchNormalizationAveragesUpdate(trainEvalDS)
 	}
 
-	generator := NewImagesGenerator(ctx, samplesNoise, samplesFlowerIds, 20)
+	generator := config.NewImagesGenerator(samplesNoise, samplesFlowerIds, 20)
 	var kid *KidGenerator
 	if context.GetParamOr(ctx, "kid", false) {
 		kidDS := validationDS.Copy()
-		kidDS.Shuffle().BatchSize(evalBatchSize, true)
-		kid = NewKidGenerator(ctx, kidDS, 5)
+		kidDS.Shuffle().BatchSize(config.evalBatchSize, true)
+		kid = config.NewKidGenerator(kidDS, 5)
 	}
 
 	samplesFrequency := context.GetParamOr(ctx, "samples_during_training_frequency", 200)
@@ -260,9 +260,10 @@ func TrainingMonitor(checkpoint *checkpoints.Handler, loop *train.Loop, metrics 
 }
 
 // DisplayTrainingPlots simply display the training plots of a model, without any training.
-func DisplayTrainingPlots(dataDir, checkpointPath string) {
-	ctx := context.New()
-	checkpoint, _, _ := LoadCheckpointToContext(ctx, dataDir, checkpointPath)
+func DisplayTrainingPlots(ctx *context.Context, dataDir, checkpointPath string) {
+	backend := backends.New()
+	config := NewConfig(backend, ctx, dataDir)
+	checkpoint, _, _ := config.LoadCheckpointToContext(checkpointPath)
 	if checkpoint == nil {
 		fmt.Printf("You must set --checkpoint='model_sub_dir'!")
 		return
@@ -272,11 +273,10 @@ func DisplayTrainingPlots(dataDir, checkpointPath string) {
 
 // CompareModelPlots display several model metrics on the same plots.
 func CompareModelPlots(dataDir string, modelNames ...string) {
-	dataDir = data.ReplaceTildeInDir(dataDir)
 	plots := margaid.New(1024, 400).LogScaleX().LogScaleY()
 	for _, modelName := range modelNames {
 		if !path.IsAbs(modelName) {
-			modelName = path.Join(DataDir, modelName)
+			modelName = path.Join(dataDir, modelName)
 		}
 		modelName = path.Join(modelName, stdplots.TrainingPlotFileName)
 		_ = must.M1(plots.PreloadFile(modelName, func(metricName string) string {

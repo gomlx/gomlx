@@ -14,7 +14,6 @@ import (
 	"flag"
 	"fmt"
 	"github.com/gomlx/exceptions"
-	"github.com/gomlx/gomlx/backends"
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/nanlogger"
@@ -34,8 +33,7 @@ import (
 )
 
 var (
-	backend backends.Backend
-	DType   dtypes.DType
+	DType = dtypes.Float32 // TODO: encode this in context["dtype"].
 )
 
 var (
@@ -51,7 +49,6 @@ var nanLogger *nanlogger.NanLogger
 // This is applied to the variance of the noise, and facilitates the NN model to easily map different ranges
 // of the signal/noise ratio.
 func SinusoidalEmbedding(x *Node) *Node {
-	Init()
 	g := x.Graph()
 
 	// Generate geometrically spaced frequencies: only 1/2 of *flagEmbeddingDims because we use half for Sine, half for Cosine.
@@ -254,8 +251,6 @@ func FlowerTypeEmbedding(ctx *context.Context, flowerIds, x *Node) *Node {
 //     and then the image is pooled and reduced by a factor of 2 -- later to be up-sampled again. So at most `log2(size)` values.
 //   - numBlocks (static hyperparameter): number of blocks to use per numChannelsList element.
 func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds *Node) *Node {
-	Init()
-
 	// Parameters from flags.
 	numChannelsList := *flagChannelsList
 	numBlocks := *flagNumBlocks
@@ -374,40 +369,43 @@ var (
 	flagLoss = flag.String("loss", "mae", "Use 'mse' for mean squared error or 'mae' for mean absolute error")
 )
 
-// TrainingModelGraph builds the model for training and evaluation.
-func TrainingModelGraph(ctx *context.Context, _ any, inputs []*Node) []*Node {
-	g := inputs[0].Graph()
+// BuildTrainingModelGraph builds the model for training and evaluation.
+func (c *Config) BuildTrainingModelGraph() train.ModelFn {
+	return func(ctx *context.Context, _ any, inputs []*Node) []*Node {
+		g := inputs[0].Graph()
 
-	// Prepare the input image and noise.
-	images := inputs[0]
-	flowerIds := inputs[2]
-	batchSize := images.Shape().Dimensions[0]
-	images = PreprocessImages(images, true)
-	noises := ctx.RandomNormal(g, images.Shape())
-	nanLogger.Trace(images, "images")
-	nanLogger.Trace(noises, "noises")
+		// Prepare the input image and noise.
+		images := inputs[0]
+		flowerIds := inputs[2]
+		batchSize := images.Shape().Dimensions[0]
 
-	// Sample noise at different schedules.
-	diffusionTimes := ctx.RandomUniform(g, shapes.Make(DType, batchSize, 1, 1, 1))
-	diffusionTimes = Square(diffusionTimes) // Bias towards less noise (smaller diffusion times), since it's most impactful
-	signalRatios, noiseRatios := DiffusionSchedule(diffusionTimes, true)
-	noisyImages := Add(
-		Mul(images, signalRatios),
-		Mul(noises, noiseRatios))
-	noisyImages = StopGradient(noisyImages)
-	predictedImages, predictedNoises := Denoise(ctx, noisyImages, signalRatios, noiseRatios, flowerIds)
+		images = c.PreprocessImages(images, true)
+		noises := ctx.RandomNormal(g, images.Shape())
+		nanLogger.Trace(images, "images")
+		nanLogger.Trace(noises, "noises")
 
-	// Calculate our custom loss: mean absolute error from the noise to the predictedNoise.
-	var lossFn train.LossFn
-	switch *flagLoss {
-	case "mae":
-		lossFn = losses.MeanAbsoluteError
-	case "mse":
-		lossFn = losses.MeanSquaredError
-	default:
-		exceptions.Panicf("Invalid value for --loss=%q. Valid values are \"mae\" or \"mse\"", *flagLoss)
+		// Sample noise at different schedules.
+		diffusionTimes := ctx.RandomUniform(g, shapes.Make(DType, batchSize, 1, 1, 1))
+		diffusionTimes = Square(diffusionTimes) // Bias towards less noise (smaller diffusion times), since it's most impactful
+		signalRatios, noiseRatios := DiffusionSchedule(diffusionTimes, true)
+		noisyImages := Add(
+			Mul(images, signalRatios),
+			Mul(noises, noiseRatios))
+		noisyImages = StopGradient(noisyImages)
+		predictedImages, predictedNoises := Denoise(ctx, noisyImages, signalRatios, noiseRatios, flowerIds)
+
+		// Calculate our custom loss: mean absolute error from the noise to the predictedNoise.
+		var lossFn train.LossFn
+		switch *flagLoss {
+		case "mae":
+			lossFn = losses.MeanAbsoluteError
+		case "mse":
+			lossFn = losses.MeanSquaredError
+		default:
+			exceptions.Panicf("Invalid value for --loss=%q. Valid values are \"mae\" or \"mse\"", *flagLoss)
+		}
+		noisesLoss := lossFn([]*Node{noises}, []*Node{predictedNoises})
+		imagesLoss := lossFn([]*Node{images}, []*Node{predictedImages})
+		return []*Node{c.DenormalizeImages(predictedImages), noisesLoss, imagesLoss}
 	}
-	noisesLoss := lossFn([]*Node{noises}, []*Node{predictedNoises})
-	imagesLoss := lossFn([]*Node{images}, []*Node{predictedImages})
-	return []*Node{DenormalizeImages(predictedImages), noisesLoss, imagesLoss}
 }

@@ -3,8 +3,11 @@ package diffusion
 import (
 	"fmt"
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
+	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/janpfeifer/must"
 	"github.com/stretchr/testify/require"
 	"io"
 	"testing"
@@ -12,12 +15,11 @@ import (
 )
 
 func benchmarkDataset(ds train.Dataset) {
-	Init()
-
+	var batchSize int
 	// Warm up, run 100 ds.Yield().
 	for ii := 0; ii < 10; ii++ {
-		_, inputs, labels, err := ds.Yield()
-		AssertNoError(err)
+		_, inputs, labels := must.M3(ds.Yield())
+		batchSize = inputs[0].Shape().Dimensions[0]
 		finalize(inputs)
 		finalize(labels)
 	}
@@ -30,13 +32,13 @@ func benchmarkDataset(ds train.Dataset) {
 		if err == io.EOF {
 			break
 		}
-		AssertNoError(err)
+		must.M(err)
 		finalize(inputs)
 		finalize(labels)
 		count++
 	}
 	elapsed := time.Since(start)
-	fmt.Printf("\t%d batches of %d examples read in %s\n", count, *flagBatchSize, elapsed)
+	fmt.Printf("\t%d batches of %d examples read in %s\n", count, batchSize, elapsed)
 }
 
 func loopDataset(b *testing.B, ds train.Dataset, n int) {
@@ -54,10 +56,15 @@ func loopDataset(b *testing.B, ds train.Dataset, n int) {
 }
 
 func BenchmarkDatasets(b *testing.B) {
-	Init()
-	ds := flowers.NewDataset(dtypes.Float32, ImageSize)
-	dsBatched := data.Batch(backend, ds, BatchSize, true, true)
-	require.NoError(b, flowers.DownloadAndParse(DataDir))
+	config := getTestConfig()
+	ctx := config.ctx
+	imageSize := getImageSize(ctx)
+	batchSize := context.GetParamOr(ctx, "batch_size", int(64))
+	dataDir := getDataDir(ctx)
+
+	ds := flowers.NewDataset(dtypes.Float32, imageSize)
+	dsBatched := data.Batch(config.backend, ds, batchSize, true, true)
+	require.NoError(b, flowers.DownloadAndParse(dataDir))
 
 	dsParallel := data.Parallel(dsBatched)
 
@@ -70,8 +77,8 @@ func BenchmarkDatasets(b *testing.B) {
 	dsParallel.Reset()
 	b.Run("ParallelDisk", func(b *testing.B) { loopDataset(b, dsParallel, b.N) })
 
-	trainDS, _ := CreateInMemoryDatasets()
-	trainDS.BatchSize(BatchSize, true)
+	trainDS, _ := config.CreateInMemoryDatasets()
+	trainDS.BatchSize(batchSize, true)
 	trainDS.Infinite(true)
 	loopDataset(b, trainDS, 100) // Warm up.
 	trainDS.Reset()
