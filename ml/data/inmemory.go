@@ -678,8 +678,10 @@ func (mds *InMemoryDataset) GobSerialize(encoder *gob.Encoder) (err error) {
 	return
 }
 
-// GobDeserializeInMemory dataset from the decoder. It requires a `graph.Backend` and the deviceNum where the data
+// GobDeserializeInMemory dataset from the decoder. It requires a `graph.Backend` and the deviceNum(s) where the data
 // is going to be stored -- it drops the local storage copy of the values.
+//
+// If deviceNums is nil, it defaults to []DeviceNum{0}, which is safe in most cases.
 //
 // No sampling configuration is recovered, and the InMemoryDataset created is sequential (no random sampling)
 // that reads through only one epoch. The random number generator is also newly initialized (see
