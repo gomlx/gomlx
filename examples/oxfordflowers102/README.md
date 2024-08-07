@@ -15,12 +15,9 @@ More information in the TensorFlow Datasets page:
 
 https://www.tensorflow.org/datasets/catalog/oxford_flowers102
 
-
 This package provides a `train.Dataset` with the images. 
 
-
-Under it you will also find a `diffusion`
-demo model trains a diffusion model, following the Keras example in:
+Under `/difusion` subdirectory you'll find a Diffusion demo model based on the Keras example in:
 
 https://keras.io/examples/generative/ddim/
 

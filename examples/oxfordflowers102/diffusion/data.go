@@ -3,6 +3,8 @@ package diffusion
 import (
 	"encoding/gob"
 	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/janpfeifer/must"
 	"github.com/pkg/errors"
 	"os"
 	"path"
@@ -18,15 +20,6 @@ var (
 	// and intermediary data (like normalization constants).
 	DataDir string // Directory where resources are stored
 
-	// ImageSize used everywhere. Images are square, the same size is used for height and width.
-	ImageSize int
-
-	// BatchSize used for training.
-	BatchSize int
-
-	// EvalBatchSize used for evaluation. The size is only affected by the limitation of the accelerator memory.
-	EvalBatchSize int
-
 	// PartitionSeed used for the dataset splitting into train/validation.
 	PartitionSeed = int64(42) // Some arbitrary number.
 
@@ -35,14 +28,11 @@ var (
 )
 
 // CreateInMemoryDatasets returns a train and a validation InMemoryDataset.
-func CreateInMemoryDatasets() (trainDS, validationDS *data.InMemoryDataset) {
-	Init()
-	var err error
-	trainDS, err = flowers.InMemoryDataset(backend, DataDir, ImageSize, "train", PartitionSeed, ValidationFraction, 1.0)
-	AssertNoError(err)
-
-	validationDS, err = flowers.InMemoryDataset(backend, DataDir, ImageSize, "validation", PartitionSeed, 0.0, ValidationFraction)
-	AssertNoError(err)
+func CreateInMemoryDatasets(imageSize int) (trainDS, validationDS *data.InMemoryDataset) {
+	trainDS = must.M1(
+		flowers.InMemoryDataset(backend, DataDir, imageSize, "train", PartitionSeed, ValidationFraction, 1.0))
+	validationDS = must.M1(
+		flowers.InMemoryDataset(backend, DataDir, imageSize, "validation", PartitionSeed, 0.0, ValidationFraction))
 	return
 }
 
@@ -54,10 +44,11 @@ var (
 	NormalizationInfoFile = "normalization_data.bin"
 )
 
+// NormalizationImageSize is the value used to find the normalization parameters for the images.
+const NormalizationImageSize = 64
+
 // NormalizationValues for the flowers dataset -- only look at the training data.
 func NormalizationValues() (mean, stddev *tensors.Tensor) {
-	Init()
-
 	// Check if values have already been retrieved.
 	if normalizationMean != nil && normalizationStdDev != nil {
 		mean, stddev = normalizationMean, normalizationStdDev
@@ -70,34 +61,31 @@ func NormalizationValues() (mean, stddev *tensors.Tensor) {
 	if err == nil {
 		// Load previously generated values.
 		dec := gob.NewDecoder(f)
-		mean = MustNoError(tensors.GobDeserialize(dec))
-		stddev = MustNoError(tensors.GobDeserialize(dec))
+		mean = must.M1(tensors.GobDeserialize(dec))
+		stddev = must.M1(tensors.GobDeserialize(dec))
 		_ = f.Close()
 		normalizationMean, normalizationStdDev = mean, stddev
 		return
 	}
 	if !os.IsNotExist(err) {
-		err = errors.Wrapf(err, "failed to read images mean/stddev from disk")
-		AssertNoError(err)
+		panic(errors.Wrapf(err, "failed to read images mean/stddev from disk"))
 	}
 
-	trainDS, _ := CreateInMemoryDatasets()
+	trainDS, _ := CreateInMemoryDatasets(NormalizationImageSize)
 	trainDS.BatchSize(128, false)
 	ds := data.MapWithGraphFn(backend, nil, trainDS, func(ctx *context.Context, inputs, labels []*Node) (mappedInputs, mappedLabels []*Node) {
 		images := PreprocessImages(inputs[0], false)
 		return []*Node{images}, labels
 	})
-	normalizationMean, normalizationStdDev, err = data.Normalization(backend, ds, 0, -1) // mean/stddev for each channel (axis=-1) separately.
-	AssertNoError(err)
+	normalizationMean, normalizationStdDev = must.M2(
+		data.Normalization(backend, ds, 0, -1)) // mean/stddev for each channel (axis=-1) separately.
 
 	// Save for future times.
-	f, err = os.Create(fPath)
-	AssertNoError(err)
+	f = must.M1(os.Create(fPath))
 	enc := gob.NewEncoder(f)
-	AssertNoError(mean.Local().GobSerialize(enc))
-	AssertNoError(stddev.Local().GobSerialize(enc))
-	AssertNoError(f.Close())
-
+	must.M(mean.GobSerialize(enc))
+	must.M(stddev.GobSerialize(enc))
+	must.M(f.Close())
 	mean, stddev = normalizationMean, normalizationStdDev
 	return
 }
@@ -105,7 +93,6 @@ func NormalizationValues() (mean, stddev *tensors.Tensor) {
 // PreprocessImages converts the image to the model `DType` and optionally normalizes
 // it according to `NormalizationValues()` calculated on the training dataset.
 func PreprocessImages(images *Node, normalize bool) *Node {
-	Init()
 	g := images.Graph()
 
 	// ReduceAllMax(images).SetLogged("Max(uint8):")

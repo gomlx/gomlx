@@ -43,9 +43,6 @@ var (
 	flagEmbeddingMaxFrequency   = flag.Float64("embed_max_freq", 1000.0, "Embedding max frequency")
 	flagEmbeddingMinFrequency   = flag.Float64("embed_min_freq", 1.0, "Embedding max frequency")
 	flagFlowerTypeEmbeddingSize = flag.Int("flower_type_dim", 0, "If > 0, use embedding of the flower type of the given dimension.")
-
-	flagNanLogger = flag.Bool("nan_debug", false, "If set to true, it will add some traces monitoring for NaN values, "+
-		"and it will report the first location where it happens. It slows down a bit the training.")
 )
 
 var nanLogger *nanlogger.NanLogger

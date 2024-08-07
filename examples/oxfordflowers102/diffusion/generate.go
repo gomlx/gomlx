@@ -13,12 +13,15 @@ import (
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/models/inceptionv3"
 	"github.com/gomlx/gomlx/types/shapes"
-	timage "github.com/gomlx/gomlx/types/tensor/image"
+	"github.com/gomlx/gomlx/types/tensors"
+	timage "github.com/gomlx/gomlx/types/tensors/images"
+	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/janpfeifer/gonb/cache"
 	"github.com/janpfeifer/gonb/common"
 	"github.com/janpfeifer/gonb/gonbui"
 	"github.com/janpfeifer/gonb/gonbui/dom"
 	"github.com/janpfeifer/gonb/gonbui/widgets"
+	"github.com/janpfeifer/must"
 	"image"
 	"io"
 	"math"
@@ -35,7 +38,7 @@ import (
 // This only works in a Jupyter (GoNB kernel) notebook.
 func PlotImagesTensor(imagesT *tensors.Tensor) {
 	if gonbui.IsNotebook {
-		images := MustNoError(timage.ToImage().MaxValue(255.0).Batch(imagesT))
+		images := timage.ToImage().MaxValue(255.0).Batch(imagesT)
 		PlotImages(images)
 	}
 }
@@ -54,8 +57,7 @@ func PlotImages(images []image.Image) {
 func ImagesToHtml(images []image.Image) string {
 	var parts []string
 	for _, img := range images {
-		imgSrc, err := gonbui.EmbedImageAsPNGSrc(img)
-		AssertNoError(err)
+		imgSrc := must.M1(gonbui.EmbedImageAsPNGSrc(img))
 		parts = append(parts, fmt.Sprintf(`<img src="%s">`, imgSrc))
 	}
 	return fmt.Sprintf(
@@ -65,16 +67,11 @@ func ImagesToHtml(images []image.Image) string {
 // PlotModelEvolution plots the saved sampled generated images of a model in the current configured checkpoint.
 //
 // It outputs at most imagesPerSample per checkpoint sampled.
-func PlotModelEvolution(imagesPerSample int, animate bool) {
+func PlotModelEvolution(ctx *context.Context, modelDir string, imagesPerSample int, animate bool) {
 	if !gonbui.IsNotebook {
 		return
 	}
-	Init()
-	modelDir := data.ReplaceTildeInDir(*flagCheckpoint)
-	if !path.IsAbs(modelDir) {
-		modelDir = path.Join(DataDir, modelDir)
-	}
-	entries := MustNoError(os.ReadDir(modelDir))
+	entries := must.M1(os.ReadDir(modelDir))
 	var generatedFiles []string
 	for _, entry := range entries {
 		if entry.IsDir() {
@@ -96,14 +93,15 @@ func PlotModelEvolution(imagesPerSample int, animate bool) {
 	if !animate {
 		// Simply display all images:
 		for _, generatedFile := range generatedFiles {
-			imagesT := MustNoError(tensors.Load(path.Join(modelDir, generatedFile)))
-			images := MustNoError(timage.ToImage().MaxValue(255.0).Batch(imagesT))
+			imagesT := must.M1(tensors.Load(path.Join(modelDir, generatedFile)))
+			images := timage.ToImage().MaxValue(255.0).Batch(imagesT)
 			images = images[:imagesPerSample]
 			PlotImages(images)
 		}
 		return
 	}
 
+	imageSize := context.GetParamOr(ctx, "image_size", 64)
 	params := struct {
 		Id              string
 		Images          [][]string
@@ -114,21 +112,21 @@ func PlotModelEvolution(imagesPerSample int, animate bool) {
 		Id:              fmt.Sprintf("%X", rand.Int63()),
 		Images:          make([][]string, len(generatedFiles)),
 		FrameRateMs:     200,
-		Size:            ImageSize,
-		Width:           imagesPerSample * ImageSize,
+		Size:            imageSize,
+		Width:           imagesPerSample * imageSize,
 		ImagesPerSample: imagesPerSample,
 	}
 	for ii, generatedFile := range generatedFiles {
-		imagesT := MustNoError(tensors.Load(path.Join(modelDir, generatedFile)))
-		images := MustNoError(timage.ToImage().MaxValue(255.0).Batch(imagesT))
+		imagesT := must.M1(tensors.Load(path.Join(modelDir, generatedFile)))
+		images := timage.ToImage().MaxValue(255.0).Batch(imagesT)
 		images = images[:imagesPerSample]
 		params.Images[ii] = xslices.Map(images[:imagesPerSample], func(img image.Image) string {
 			//return fmt.Sprintf("timestep_%d", ii)
-			return MustNoError(gonbui.EmbedImageAsPNGSrc(img))
+			return must.M1(gonbui.EmbedImageAsPNGSrc(img))
 		})
 	}
 
-	var jsTemplate = MustNoError(template.New("PlotModelEvolution").Parse(`
+	var jsTemplate = must.M1(template.New("PlotModelEvolution").Parse(`
 	<canvas id="canvas_{{.Id}}" height="{{.Size}}px" width="{{.Width}}px"></canvas>
 	<script>
 	var canvas_{{.Id}} = document.getElementById("canvas_{{.Id}}"); 
@@ -172,7 +170,7 @@ func PlotModelEvolution(imagesPerSample int, animate bool) {
 	</script>
 `))
 	var buf bytes.Buffer
-	AssertNoError(jsTemplate.Execute(&buf, params))
+	must.M(jsTemplate.Execute(&buf, params))
 	gonbui.DisplayHTML(buf.String())
 }
 
@@ -197,11 +195,12 @@ func DenoiseStepGraph(ctx *context.Context, noisyImages, diffusionTime, nextDiff
 // intermediary results every n results -- it also displays the initial noise and final image.
 //
 // Plotting results only work if in a Jupyter (with GoNB kernel) notebook.
-func DisplayImagesAcrossDiffusionSteps(numImages int, numDiffusionSteps int, displayEveryNSteps int) {
+func DisplayImagesAcrossDiffusionSteps(dataDir, checkpointPath string, numImages int, numDiffusionSteps int, displayEveryNSteps int) {
 	ctx := context.New().Checked(false)
-	_, _, _ = LoadCheckpointToContext(ctx)
+	_, _, _ = LoadCheckpointToContext(ctx, dataDir, checkpointPath)
 	ctx.RngStateReset()
-	noise := GenerateNoise(numImages)
+	imageSize := context.GetParamOr(ctx, "image_size", 64)
+	noise := GenerateNoise(imageSize, numImages)
 	flowerIds := GenerateFlowerIds(numImages)
 
 	generator := NewImagesGenerator(ctx, noise, flowerIds, numDiffusionSteps)
@@ -232,18 +231,16 @@ func SliderDiffusionSteps(cacheKey string, ctx *context.Context, numImages int, 
 		Images    []string
 		Diffusion []float64
 	}
+	imageSize := context.GetParamOr(ctx, "image_size", 64)
 	generateFn := func() *ImagesAndDiffusions {
-		noise := GenerateNoise(numImages)
-		noisesHtml := ImagesToHtml(MustNoError(timage.ToImage().MaxValue(255.0).Batch(noise)))
+		noise := GenerateNoise(imageSize, numImages)
+		noisesHtml := ImagesToHtml(timage.ToImage().MaxValue(255.0).Batch(noise))
 		flowerIds := GenerateFlowerIds(numImages)
 		generator := NewImagesGenerator(ctx, noise, flowerIds, numDiffusionSteps)
 		denoisedImagesT, _, diffusionTimes := generator.GenerateEveryN(1)
 		denoisedImages := make([]string, len(denoisedImagesT))
 		for ii, imgT := range denoisedImagesT {
-			denoisedImages[ii] = ImagesToHtml(
-				MustNoError(
-					timage.ToImage().MaxValue(255.0).Batch(imgT),
-				))
+			denoisedImages[ii] = ImagesToHtml(timage.ToImage().MaxValue(255.0).Batch(imgT))
 		}
 		return &ImagesAndDiffusions{
 			Images:    append([]string{noisesHtml}, denoisedImages...),
@@ -287,11 +284,12 @@ func SliderDiffusionSteps(cacheKey string, ctx *context.Context, numImages int, 
 
 // GenerateImagesOfFlowerType is similar to DisplayImagesAcrossDiffusionSteps, but it limits itself to generating images of only one
 // flower type.
-func GenerateImagesOfFlowerType(numImages int, flowerType int32, numDiffusionSteps int) (predictedImages *tensors.Tensor) {
+func GenerateImagesOfFlowerType(dataDir, checkpointPath string, numImages int, flowerType int32, numDiffusionSteps int) (predictedImages *tensors.Tensor) {
 	ctx := context.New().Checked(false)
-	_, _, _ = LoadCheckpointToContext(ctx)
+	_, _, _ = LoadCheckpointToContext(ctx, dataDir, checkpointPath)
 	ctx.RngStateReset()
-	noise := GenerateNoise(numImages)
+	imageSize := context.GetParamOr(ctx, "image_size", 64)
+	noise := GenerateNoise(imageSize, numImages)
 	flowerIds := tensors.FromValue(xslices.SliceWithValue(numImages, flowerType))
 	generator := NewImagesGenerator(ctx, noise, flowerIds, numDiffusionSteps)
 	return generator.Generate()
@@ -303,19 +301,17 @@ func GenerateImagesOfFlowerType(numImages int, flowerType int32, numDiffusionSte
 // or save generated images in cache for future use.
 func DropdownFlowerTypes(cacheKey string, ctx *context.Context, numImages, numDiffusionSteps int, htmlId string) *common.Latch {
 	numFlowerTypes := flowers.NumLabels
+	imageSize := context.GetParamOr(ctx, "image_size", 64)
 	generateFn := func() []string {
 		htmlImages := make([]string, numFlowerTypes)
-		noise := GenerateNoise(numImages)
+		noise := GenerateNoise(imageSize, numImages)
 		statusId := "flower_types_status_" + gonbui.UniqueId()
 		gonbui.UpdateHtml(statusId, "Generating flowers ...")
 		for flowerType := 0; flowerType < numFlowerTypes; flowerType++ {
 			flowerIds := tensors.FromValue(xslices.SliceWithValue(numImages, flowerType))
 			generator := NewImagesGenerator(ctx, noise, flowerIds, numDiffusionSteps)
 			denoisedImages := generator.Generate()
-			htmlImages[flowerType] = ImagesToHtml(
-				MustNoError(
-					timage.ToImage().MaxValue(255.0).Batch(denoisedImages),
-				))
+			htmlImages[flowerType] = ImagesToHtml(timage.ToImage().MaxValue(255.0).Batch(denoisedImages))
 			gonbui.UpdateHtml(statusId, fmt.Sprintf(
 				"Generating flowers: %q<br/>%s", flowers.Names[flowerType],
 				htmlImages[flowerType]))
@@ -351,15 +347,16 @@ func DropdownFlowerTypes(cacheKey string, ctx *context.Context, numImages, numDi
 }
 
 // GenerateImagesOfAllFlowerTypes takes one random noise, and generate the flower for each of the 102 types.
-func GenerateImagesOfAllFlowerTypes(numDiffusionSteps int) (predictedImages *tensors.Tensor) {
+func GenerateImagesOfAllFlowerTypes(dataDir, checkpointPath string, numDiffusionSteps int) (predictedImages *tensors.Tensor) {
 	numImages := flowers.NumLabels
 	ctx := context.New().Checked(false)
-	_, _, _ = LoadCheckpointToContext(ctx)
+	_, _, _ = LoadCheckpointToContext(ctx, dataDir, checkpointPath)
 	ctx.RngStateReset()
+	imageSize := context.GetParamOr(ctx, "image_size", 64)
 	noise := NewExec(backend, func(g *Graph) *Node {
 		state := Const(g, RngState())
-		_, noise := RandomNormal(state, shapes.Make(DType, 1, ImageSize, ImageSize, 3))
-		noise = BroadcastToDims(noise, numImages, ImageSize, ImageSize, 3)
+		_, noise := RandomNormal(state, shapes.Make(DType, 1, imageSize, imageSize, 3))
+		noise = BroadcastToDims(noise, numImages, imageSize, imageSize, 3)
 		return noise
 	}).Call()[0]
 	flowerIds := tensors.FromValue(xslices.Iota(int32(0), numImages))
@@ -448,10 +445,10 @@ func (g *ImagesGenerator) Generate() (batchedImages *tensors.Tensor) {
 }
 
 // GenerateNoise generates random noise that can be used to generate images.
-func GenerateNoise(numImages int) *tensors.Tensor {
+func GenerateNoise(imageSize, numImages int) *tensors.Tensor {
 	return NewExec(backend, func(g *Graph) *Node {
 		state := Const(g, RngState())
-		_, noise := RandomNormal(state, shapes.Make(DType, numImages, ImageSize, ImageSize, 3))
+		_, noise := RandomNormal(state, shapes.Make(DType, numImages, imageSize, imageSize, 3))
 		return noise
 	}).Call()[0]
 }
@@ -479,13 +476,14 @@ type KidGenerator struct {
 // It uses a different context for the InceptionV3 KID metric, so that it's weights are not included
 // in the generator model.
 func NewKidGenerator(ctx *context.Context, evalDS train.Dataset, numDiffusionStep int) *KidGenerator {
-	Init()
 	ctx = ctx.Checked(false)
-	noise := GenerateNoise(EvalBatchSize)
-	flowerIds := GenerateFlowerIds(EvalBatchSize)
+	evalBatchSize := context.GetParamOr(ctx, "eval_batch_size", int(128))
+	imageSize := context.GetParamOr(ctx, "image_size", 64)
+	noise := GenerateNoise(imageSize, evalBatchSize)
+	flowerIds := GenerateFlowerIds(evalBatchSize)
 
 	i3Path := path.Join(DataDir, "inceptionV3")
-	AssertNoError(inceptionv3.DownloadAndUnpackWeights(i3Path))
+	must.M(inceptionv3.DownloadAndUnpackWeights(i3Path))
 	kg := &KidGenerator{
 		ctxGenerator:   ctx,
 		ctxInceptionV3: context.New().Checked(false),

@@ -4,9 +4,12 @@ import (
 	"encoding/gob"
 	"fmt"
 	"github.com/disintegration/imaging"
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
-	timage "github.com/gomlx/gomlx/types/tensor/image"
+	"github.com/gomlx/gomlx/types/tensors"
+	timage "github.com/gomlx/gomlx/types/tensors/images"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 	"image"
 	"io"
@@ -222,7 +225,7 @@ func (ds *Dataset) Reset() {
 //
 // If the cache is not found, it automatically calls DownloadAndParse to download and untar the original
 // images, if they are not yet downloaded.
-func InMemoryDataset(manager backends.Backend, baseDir string, imageSize int, name string,
+func InMemoryDataset(backend backends.Backend, baseDir string, imageSize int, name string,
 	partitionSeed int64, partitionFrom, partitionTo float64) (
 	inMemoryDataset *data.InMemoryDataset, err error) {
 	var f *os.File
@@ -240,7 +243,7 @@ func InMemoryDataset(manager backends.Backend, baseDir string, imageSize int, na
 		if err == nil {
 			// Reads from cached file.
 			dec := gob.NewDecoder(f)
-			inMemoryDataset, err = data.GobDeserializeInMemory(manager, dec)
+			inMemoryDataset, err = data.GobDeserializeInMemory(backend, nil, dec)
 			_ = f.Close()
 			return
 		}
@@ -267,7 +270,7 @@ func InMemoryDataset(manager backends.Backend, baseDir string, imageSize int, na
 	start := time.Now()
 	fmt.Printf("Creating InMemoryDataset for %q with images cropped and scaled to %dx%d...\n", name, imageSize, imageSize)
 	ds := NewDataset(dtypes.Uint8, imageSize).Partition(partitionSeed, partitionFrom, partitionTo)
-	inMemoryDataset, err = data.InMemory(manager, data.Parallel(ds), false)
+	inMemoryDataset, err = data.InMemory(backend, data.Parallel(ds), false)
 	elapsed := time.Since(start)
 	fmt.Printf("\t- %s to process dataset.\n", elapsed)
 	if err != nil {

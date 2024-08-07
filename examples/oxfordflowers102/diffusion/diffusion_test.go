@@ -74,7 +74,7 @@ func TestImagesGenerator(t *testing.T) {
 	// ctx.RngStateReset() --> to truly randomize each run uncomment this.
 	g := backend.NewGraph().WithName("test")
 	_ = getZeroPredictions(ctx, g, 2) // Batch size won't matter, we only call this to create the model weights.
-	noise := GenerateNoise(numImages)
+	noise := GenerateNoise(imageSize, numImages)
 	flowerIds := GenerateFlowerIds(numImages)
 	generator := NewImagesGenerator(ctx, noise, flowerIds, numDiffusionSteps)
 
