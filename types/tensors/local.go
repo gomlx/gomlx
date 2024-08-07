@@ -340,6 +340,9 @@ func (t *Tensor) Value() any {
 // It returns an error for I/O errors.
 // It panics for invalid tensors.
 func (t *Tensor) GobSerialize(encoder *gob.Encoder) (err error) {
+	if t == nil {
+		panic(errors.New("Tensor is nil"))
+	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
 

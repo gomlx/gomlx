@@ -125,6 +125,9 @@ func (t *Tensor) lockedMaterializeOnDevices(backend backends.Backend, deviceNums
 			"backend instances (current=%q, provided=%q), use separate Tensors for this",
 			t.shape, t.backend.Name(), backend.Description())
 	}
+	if t.backend == nil {
+		exceptions.Panicf("cannote MaterializeOnDevice with a nil backend")
+	}
 
 	if t.local == nil {
 		// Materialize locally from any other device.
