@@ -112,7 +112,9 @@ func ValidateChecksum(path, checkHash string) error {
 
 // ByteCountIEC converts a byte count to string using the appropriate unit (B, Kb, MiB, GiB, ...).
 // It uses the binary prefix system from IEC -- so powers of 1024 (as opposed to powers 1000).
-func ByteCountIEC(count int64) string {
+func ByteCountIEC[T interface {
+	int | int64 | uint64 | uint | uintptr
+}](count T) string {
 	const unit = 1024
 	if count < unit {
 		return fmt.Sprintf("%d B", count)

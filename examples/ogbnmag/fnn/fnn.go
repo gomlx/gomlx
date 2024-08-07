@@ -139,7 +139,7 @@ func Train(backend backends.Backend, ctx *context.Context) error {
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
-	optimizer := optimizers.MustOptimizerByName(ctx, context.GetParamOr(ctx, "optimizer", "adamw"))
+	optimizer := optimizers.ByName(ctx, context.GetParamOr(ctx, "optimizer", "adamw"))
 	trainer := train.NewTrainer(backend, ctx, ModelFn,
 		lossFn,
 		optimizer,
