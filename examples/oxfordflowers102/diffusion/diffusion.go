@@ -33,14 +33,7 @@ import (
 )
 
 var (
-	DType = dtypes.Float32 // TODO: encode this in context["dtype"].
-)
-
-var (
-	flagEmbeddingDims           = flag.Int("embedding_dim", 32, "Size of the sinusoidal embeddings, should be an even number")
-	flagEmbeddingMaxFrequency   = flag.Float64("embed_max_freq", 1000.0, "Embedding max frequency")
-	flagEmbeddingMinFrequency   = flag.Float64("embed_min_freq", 1.0, "Embedding max frequency")
-	flagFlowerTypeEmbeddingSize = flag.Int("flower_type_dim", 0, "If > 0, use embedding of the flower type of the given dimension.")
+	DType = dtypes.Float32 // TODO: encode this in context["DType"].
 )
 
 var nanLogger *nanlogger.NanLogger
@@ -48,13 +41,13 @@ var nanLogger *nanlogger.NanLogger
 // SinusoidalEmbedding provides embeddings of `x` for different frequencies.
 // This is applied to the variance of the noise, and facilitates the NN model to easily map different ranges
 // of the signal/noise ratio.
-func SinusoidalEmbedding(x *Node) *Node {
+func SinusoidalEmbedding(ctx *context.Context, x *Node) *Node {
 	g := x.Graph()
 
-	// Generate geometrically spaced frequencies: only 1/2 of *flagEmbeddingDims because we use half for Sine, half for Cosine.
-	halfEmbed := *flagEmbeddingDims / 2
-	logMinFreq := math.Log(*flagEmbeddingMinFrequency)
-	logMaxFreq := math.Log(*flagEmbeddingMaxFrequency)
+	// Generate geometrically spaced frequencies: only 1/2 of *flagEmbeddingDims because we use half for sine numbers, half for cosine numbers.
+	halfEmbed := context.GetParamOr(ctx, "sinusoidal_embed_size", 32) / 2
+	logMinFreq := math.Log(context.GetParamOr(ctx, "sinusoidal_min_freq", 1.0))
+	logMaxFreq := math.Log(context.GetParamOr(ctx, "sinusoidal_max_freq", 1.0))
 	frequencies := IotaFull(g, shapes.Make(x.DType(), halfEmbed))
 	frequencies = AddScalar(
 		MulScalar(frequencies, (logMaxFreq-logMinFreq)/float64(halfEmbed-1.0)),
@@ -75,15 +68,15 @@ var (
 	flagChannelsList = xslices.Flag("channels_list", []int{32, 64, 96, 128},
 		"Number of channels (features) for each image size (progressively smaller) in U-Net model",
 		strconv.Atoi)
-	flagNumBlocks     = flag.Int("blocks", 2, "Number of blocks per image size in U-Net model")
-	flagActivation    = flag.String("activation", "swish", "One of: \"swish\", \"sigmoid\", \"tanh\" or \"relu\"")
-	flagNormalization = flag.String("norm", "batch", "One of: \"none\", \"batch\" or \"layer\"")
+	flagNumBlocks  = flag.Int("blocks", 2, "Number of blocks per image size in U-Net model")
+	flagActivation = flag.String("activation", "swish", "One of: \"swish\", \"sigmoid\", \"tanh\" or \"relu\"")
 )
 
 // NormalizeLayer behaves according to the `--norm` flag.
 // It works with `x` with rank 4 and rank 3.
 func NormalizeLayer(ctx *context.Context, x *Node) *Node {
-	switch *flagNormalization {
+	norm := context.GetParamOr(ctx, layers.ParamNormalization, "none")
+	switch norm {
 	case "none":
 		// No-op.
 	case "batch":
@@ -104,7 +97,7 @@ func ActivationLayer(x *Node) *Node {
 
 // ResidualBlock on the input with `outputChannels` (axis 3) in the output.
 //
-// The parameter `x` must be of rank 4, shaped `[batchSize, height, width, channels]`.
+// The parameter `x` must be of rank 4, shaped `[BatchSize, height, width, channels]`.
 func ResidualBlock(ctx *context.Context, x *Node, outputChannels int) *Node {
 	x.AssertRank(4)
 	inputChannels := x.Shape().Dimensions[3]
@@ -114,7 +107,7 @@ func ResidualBlock(ctx *context.Context, x *Node, outputChannels int) *Node {
 	}
 	x = NormalizeLayer(ctx, x)
 	x = layers.Convolution(ctx.In("conv-layer-1"), x).Filters(outputChannels).KernelSize(3).PadSame().Done()
-	x = ActivationLayer(x)
+	x = activations.ApplyFromContext(ctx, x)
 	x = layers.Convolution(ctx.In("conv-layer-2"), x).Filters(outputChannels).KernelSize(3).PadSame().Done()
 	x = Add(x, residual)
 	nanLogger.Trace(x)
@@ -175,7 +168,7 @@ func TransformerBlock(ctx *context.Context, x *Node) *Node {
 
 		// Transformers recipe: 2 dense layers after attention.
 		embed = layers.Dense(ctx.In("ffn_1"), embed, true, embedDim)
-		embed = ActivationLayer(embed)
+		embed = activations.ApplyFromContext(ctx, embed)
 		embed = layers.Dense(ctx.In("ffn_2"), embed, true, embedDim)
 		if *flagDropoutRate > 0 {
 			embed = layers.Dropout(ctx.In("dropout_1"), embed, dropoutRate)
@@ -228,11 +221,12 @@ func UpBlock(ctx *context.Context, x *Node, skips []*Node, numBlocks, outputChan
 // FlowerTypeEmbedding will if configured (`--flower_type_dim` flag), concatenate a flower embedding to `x`.
 // If `--flower_type_dim==0` it returns `x` unchanged.
 func FlowerTypeEmbedding(ctx *context.Context, flowerIds, x *Node) *Node {
-	if *flagFlowerTypeEmbeddingSize <= 0 {
+	embedSize := context.GetParamOr(ctx, "flower_type_embed_size", 0)
+	if embedSize <= 0 {
 		return x
 	}
 	flowerIds = ExpandDims(flowerIds, -1, -1, -1) // Expand axis to the match noisyImages rank.
-	flowerTypeEmbed := layers.Embedding(ctx, flowerIds, DType, flowers.NumLabels, *flagFlowerTypeEmbeddingSize)
+	flowerTypeEmbed := layers.Embedding(ctx, flowerIds, DType, flowers.NumLabels, embedSize)
 	broadcastDims := flowerTypeEmbed.Shape().Clone().Dimensions
 	for _, axis := range timage.GetSpatialAxes(x, timage.ChannelsLast) {
 		broadcastDims[axis] = x.Shape().Dimensions[axis]
@@ -264,7 +258,7 @@ func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds
 	concatFeatures := []*Node{x}
 
 	// Get sinusoidal features, always included, and broadcast them to the spatial dimensions.
-	sinEmbed := SinusoidalEmbedding(noiseVariances)
+	sinEmbed := SinusoidalEmbedding(ctx, noiseVariances)
 	nanLogger.Trace(sinEmbed)
 	broadcastDims := sinEmbed.Shape().Clone().Dimensions
 	for _, axis := range timage.GetSpatialAxes(noisyImages, timage.ChannelsLast) {
@@ -352,6 +346,7 @@ func DiffusionSchedule(times *Node, clipStart bool) (signalRatios, noiseRatios *
 // It is given the signal and noise ratios.
 func Denoise(ctx *context.Context, noisyImages, signalRatios, noiseRatios, flowerIds *Node) (
 	predictedImages, predictedNoises *Node) {
+	ctx = ctx.In("denoise")
 
 	// Noise variance: since the noise is expected to have variance 1, the adjusted
 	// variance to the noiseRatio (just a multiplicative factor), the new variance

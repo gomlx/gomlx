@@ -37,8 +37,8 @@ func getTestConfig() *Config {
 
 func TestUNetModelGraph(t *testing.T) {
 	config := getTestConfig()
-	ctx := config.ctx
-	g := NewGraph(config.backend, "test")
+	ctx := config.Context
+	g := NewGraph(config.Backend, "test")
 
 	numExamples := 5
 	noisyImages := Zeros(g, shapes.Make(DType, numExamples, 64, 64, 3))
@@ -53,13 +53,13 @@ func TestUNetModelGraph(t *testing.T) {
 
 // getZeroPredictions calls the model with some placeholder images.
 // This can be used to check the predictions shape and also as a side effect to create
-// the variables in the context `ctx`.
+// the variables in the context `Context`.
 func getZeroPredictions(config *Config, g *Graph, numExamples int) []*Node {
-	images := Zeros(g, shapes.Make(config.dtype, numExamples, config.imageSize, config.imageSize, 3))
+	images := Zeros(g, shapes.Make(config.DType, numExamples, config.ImageSize, config.ImageSize, 3))
 	imageIds := Zeros(g, shapes.Make(dtypes.Int32, numExamples))
 	flowerIds := Zeros(g, shapes.Make(dtypes.Int32, numExamples))
 	modelFn := config.BuildTrainingModelGraph()
-	return modelFn(config.ctx, nil, []*Node{images, imageIds, flowerIds})
+	return modelFn(config.Context, nil, []*Node{images, imageIds, flowerIds})
 }
 
 func TestTrainingModelGraph(t *testing.T) {
@@ -69,13 +69,13 @@ func TestTrainingModelGraph(t *testing.T) {
 	}
 
 	config := getTestConfig()
-	ctx := config.ctx
-	g := NewGraph(config.backend, "test")
+	ctx := config.Context
+	g := NewGraph(config.Backend, "test")
 
 	numExamples := 5
 	predictions := getZeroPredictions(config, g, numExamples)
 	predictedImages, loss := predictions[0], predictions[1]
-	assert.NoError(t, predictedImages.Shape().CheckDims(numExamples, config.imageSize, config.imageSize, 3))
+	assert.NoError(t, predictedImages.Shape().CheckDims(numExamples, config.ImageSize, config.ImageSize, 3))
 	assert.True(t, loss.Shape().IsScalar(), "Loss must be scalar.")
 	assert.Greater(t, ctx.NumParameters(), 0, "No context parameters created!?")
 	fmt.Printf("predictedImages.shape:\t%s\n", predictions[0].Shape())
@@ -94,9 +94,9 @@ func TestImagesGenerator(t *testing.T) {
 	numDiffusionSteps := 3
 
 	config := getTestConfig()
-	g := NewGraph(config.backend, "test")
+	g := NewGraph(config.Backend, "test")
 
-	// ctx.RngStateReset() --> to truly randomize each run uncomment this.
+	// Context.RngStateReset() --> to truly randomize each run uncomment this.
 	_ = getZeroPredictions(config, g, 2) // Batch size won't matter, we only call this to create the model weights.
 	noise := config.GenerateNoise(numImages)
 	flowerIds := config.GenerateFlowerIds(numImages)
@@ -104,7 +104,7 @@ func TestImagesGenerator(t *testing.T) {
 
 	// Just the final images:
 	images := generator.Generate()
-	assert.NoError(t, images.Shape().CheckDims(numImages, config.imageSize, config.imageSize, 3))
+	assert.NoError(t, images.Shape().CheckDims(numImages, config.ImageSize, config.ImageSize, 3))
 
 	// With intermediary images:
 	allImages, diffusionSteps, diffusionTimes := generator.GenerateEveryN(1)
@@ -113,6 +113,6 @@ func TestImagesGenerator(t *testing.T) {
 	assert.InDeltaSlice(t, []float64{0.6666666, .333333333, 0.0}, diffusionTimes, 0.001)
 
 	for _, images = range allImages {
-		assert.NoError(t, images.Shape().CheckDims(numImages, config.imageSize, config.imageSize, 3))
+		assert.NoError(t, images.Shape().CheckDims(numImages, config.ImageSize, config.ImageSize, 3))
 	}
 }

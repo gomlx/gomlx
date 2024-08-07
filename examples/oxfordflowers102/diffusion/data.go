@@ -30,11 +30,11 @@ var (
 // Config holds a configuration for all diffusion image/data operations.
 // See NewConfig.
 type Config struct {
-	backend                             backends.Backend
-	ctx                                 *context.Context // Usually, at the root scope.
-	dataDir                             string
-	dtype                               dtypes.DType
-	imageSize, batchSize, evalBatchSize int
+	Backend                             backends.Backend
+	Context                             *context.Context // Usually, at the root scope.
+	DataDir                             string
+	DType                               dtypes.DType
+	ImageSize, BatchSize, EvalBatchSize int
 }
 
 func NewConfig(backend backends.Backend, ctx *context.Context, dataDir string) *Config {
@@ -43,23 +43,23 @@ func NewConfig(backend backends.Backend, ctx *context.Context, dataDir string) *
 		must.M(os.MkdirAll(dataDir, 0777))
 	}
 	return &Config{
-		backend:       backend,
-		ctx:           ctx,
-		dataDir:       dataDir,
-		imageSize:     context.GetParamOr(ctx, "image_size", 64),
-		batchSize:     context.GetParamOr(ctx, "batch_size", 64),
-		evalBatchSize: context.GetParamOr(ctx, "eval_batch_size", 128),
-		dtype: must.M1(dtypes.DTypeString(
-			context.GetParamOr(ctx, "dtype", "float32"))),
+		Backend:       backend,
+		Context:       ctx,
+		DataDir:       dataDir,
+		ImageSize:     context.GetParamOr(ctx, "image_size", 64),
+		BatchSize:     context.GetParamOr(ctx, "batch_size", 64),
+		EvalBatchSize: context.GetParamOr(ctx, "eval_batch_size", 128),
+		DType: must.M1(dtypes.DTypeString(
+			context.GetParamOr(ctx, "DType", "float32"))),
 	}
 }
 
 // CreateInMemoryDatasets returns a train and a validation InMemoryDataset.
 func (c *Config) CreateInMemoryDatasets() (trainDS, validationDS *data.InMemoryDataset) {
 	trainDS = must.M1(
-		flowers.InMemoryDataset(c.backend, c.dataDir, c.imageSize, "train", PartitionSeed, ValidationFraction, 1.0))
+		flowers.InMemoryDataset(c.Backend, c.DataDir, c.ImageSize, "train", PartitionSeed, ValidationFraction, 1.0))
 	validationDS = must.M1(
-		flowers.InMemoryDataset(c.backend, c.dataDir, c.imageSize, "validation", PartitionSeed, 0.0, ValidationFraction))
+		flowers.InMemoryDataset(c.Backend, c.DataDir, c.ImageSize, "validation", PartitionSeed, 0.0, ValidationFraction))
 	return
 }
 
@@ -77,7 +77,7 @@ func (c *Config) NormalizationValues() (mean, stddev *tensors.Tensor) {
 	}
 
 	// If not try to load from file.
-	fPath := path.Join(c.dataDir, fmt.Sprintf("normalization_data_%dx%d.bin", c.imageSize, c.imageSize))
+	fPath := path.Join(c.DataDir, fmt.Sprintf("normalization_data_%dx%d.bin", c.ImageSize, c.ImageSize))
 	f, err := os.Open(fPath)
 	if err == nil {
 		// Load previously generated values.
@@ -99,12 +99,12 @@ func (c *Config) NormalizationValues() (mean, stddev *tensors.Tensor) {
 
 	trainDS, _ := c.CreateInMemoryDatasets()
 	trainDS.BatchSize(128, false)
-	ds := data.MapWithGraphFn(c.backend, nil, trainDS, func(ctx *context.Context, inputs, labels []*Node) (mappedInputs, mappedLabels []*Node) {
+	ds := data.MapWithGraphFn(c.Backend, nil, trainDS, func(ctx *context.Context, inputs, labels []*Node) (mappedInputs, mappedLabels []*Node) {
 		images := c.PreprocessImages(inputs[0], false)
 		return []*Node{images}, labels
 	})
 	normalizationMean, normalizationStdDev = must.M2(
-		data.Normalization(c.backend, ds, 0, -1)) // mean/stddev for each channel (axis=-1) separately.
+		data.Normalization(c.Backend, ds, 0, -1)) // mean/stddev for each channel (axis=-1) separately.
 	mean, stddev = normalizationMean, normalizationStdDev
 
 	// Save for future times.

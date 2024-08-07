@@ -153,12 +153,12 @@ func PlotModelEvolution(ctx *context.Context, modelDir string, imagesPerSample i
 	}
 	
 	function animate_{{.Id}}() {
-		var ctx = ctx_{{.Id}};
+		var Context = ctx_{{.Id}};
 		var canvas = canvas_{{.Id}};
-		ctx.clearRect(0, 0, canvas.width, canvas.height);
+		Context.clearRect(0, 0, canvas.width, canvas.height);
 		var images = images_{{.Id}}[currentFrame_{{.Id}}];
 		for (var jj = 0; jj < {{.ImagesPerSample}}; jj++) {
-			ctx.drawImage(images[jj], jj*{{.Size}}, 0);
+			Context.drawImage(images[jj], jj*{{.Size}}, 0);
 		}
 		currentFrame_{{.Id}} = (currentFrame_{{.Id}} + 1) % images_{{.Id}}.length;
 		var timeout = frameRate_{{.Id}};
@@ -354,7 +354,7 @@ func GenerateImagesOfAllFlowerTypes(ctx *context.Context, dataDir, checkpointPat
 	numImages := flowers.NumLabels
 	ctx.RngStateReset()
 	imageSize := getImageSize(ctx)
-	noise := NewExec(config.backend, func(g *Graph) *Node {
+	noise := NewExec(config.Backend, func(g *Graph) *Node {
 		state := Const(g, RngState())
 		_, noise := RandomNormal(state, shapes.Make(DType, 1, imageSize, imageSize, 3))
 		noise = BroadcastToDims(noise, numImages, imageSize, imageSize, 3)
@@ -380,7 +380,7 @@ type ImagesGenerator struct {
 // NewImagesGenerator generates flowers given initial `noise` and `flowerIds`, in `numDiffusionSteps`.
 // Typically, 20 diffusion steps will suffice.
 func (c *Config) NewImagesGenerator(noise, flowerIds *tensors.Tensor, numDiffusionSteps int) *ImagesGenerator {
-	ctx := c.ctx.Reuse()
+	ctx := c.Context.Reuse()
 	if numDiffusionSteps <= 0 {
 		exceptions.Panicf("Expected numDiffusionSteps > 0, got %d", numDiffusionSteps)
 	}
@@ -397,8 +397,8 @@ func (c *Config) NewImagesGenerator(noise, flowerIds *tensors.Tensor, numDiffusi
 		flowerIds:         flowerIds,
 		numImages:         numImages,
 		numDiffusionSteps: numDiffusionSteps,
-		diffusionStepExec: context.NewExec(c.backend, ctx, DenoiseStepGraph),
-		denormalizerExec: NewExec(c.backend, func(image *Node) *Node {
+		diffusionStepExec: context.NewExec(c.Backend, ctx, DenoiseStepGraph),
+		denormalizerExec: NewExec(c.Backend, func(image *Node) *Node {
 			return c.DenormalizeImages(image)
 		}),
 	}
@@ -451,9 +451,9 @@ func (g *ImagesGenerator) Generate() (batchedImages *tensors.Tensor) {
 
 // GenerateNoise generates random noise that can be used to generate images.
 func (c *Config) GenerateNoise(numImages int) *tensors.Tensor {
-	return NewExec(c.backend, func(g *Graph) *Node {
+	return NewExec(c.Backend, func(g *Graph) *Node {
 		state := Const(g, RngState())
-		_, noise := RandomNormal(state, shapes.Make(DType, numImages, c.imageSize, c.imageSize, 3))
+		_, noise := RandomNormal(state, shapes.Make(DType, numImages, c.ImageSize, c.ImageSize, 3))
 		return noise
 	}).Call()[0]
 }
@@ -478,13 +478,13 @@ type KidGenerator struct {
 }
 
 // NewKidGenerator allows to generate the Kid metric.
-// The ctx passed is the context for the diffusion model.
+// The Context passed is the context for the diffusion model.
 // It uses a different context for the InceptionV3 KID metric, so that it's weights are not included
 // in the generator model.
 func (c *Config) NewKidGenerator(evalDS train.Dataset, numDiffusionStep int) *KidGenerator {
-	noise := c.GenerateNoise(c.evalBatchSize)
-	flowerIds := c.GenerateFlowerIds(c.evalBatchSize)
-	i3Path := path.Join(c.dataDir, "inceptionV3")
+	noise := c.GenerateNoise(c.EvalBatchSize)
+	flowerIds := c.GenerateFlowerIds(c.EvalBatchSize)
+	i3Path := path.Join(c.DataDir, "inceptionV3")
 	must.M(inceptionv3.DownloadAndUnpackWeights(i3Path))
 	kg := &KidGenerator{
 		config:         c,
@@ -493,7 +493,7 @@ func (c *Config) NewKidGenerator(evalDS train.Dataset, numDiffusionStep int) *Ki
 		generator:      c.NewImagesGenerator(noise, flowerIds, numDiffusionStep),
 		kid:            inceptionv3.KidMetric(i3Path, inceptionv3.MinimumImageSize, 255.0, timage.ChannelsLast),
 	}
-	kg.evalExec = context.NewExec(c.backend, kg.ctxInceptionV3, kg.EvalStepGraph)
+	kg.evalExec = context.NewExec(c.Backend, kg.ctxInceptionV3, kg.EvalStepGraph)
 	return kg
 }
 

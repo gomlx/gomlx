@@ -63,6 +63,12 @@ func CreateDefaultContext() *context.Context {
 		// Debugging: add a NanLogger to help debug where NaNs may appear in the model.
 		"nan_logger": false,
 
+		// Model parameters for the dataset:
+		"flower_type_embed_size": 16,     // If > 0, use embedding of the flower type of the given dimension.
+		"sinusoidal_embed_size":  32,     // Sinusoidal embedding size. It must be an even number.
+		"sinusoidal_max_freq":    1000.0, // Sinusoidal embedding max frequency.
+		"sinusoidal_min_freq":    1.0,    // Sinusoidal embedding min frequency.
+
 		// "plots" trigger generating intermediary eval data for plotting, and if running in GoNB, to actually
 		// draw the plot with Plotly.
 		//
@@ -96,13 +102,6 @@ func CreateDefaultContext() *context.Context {
 		"cnn_num_layers":    5.0,
 		"cnn_dropout_rate":  0.5, // Set to 0.0 for no dropout. If < 0 it falls back to layers.ParamDropoutRate.
 		"cnn_normalization": "",  // Set to "none" for no normalization. If "" it falls back to layers.ParamNormalization.
-
-		// Transformers
-		"transformer_max_att_len":    200,  // Maximum attention length: input will be split in ranges of this size.
-		"transformer_num_att_heads":  2,    // umber of attention heads,/ if --model=transformer.
-		"transformer_num_att_layers": 1,    // Number of stacked attention layers, if --model=transformer.
-		"transformer_att_key_size":   8,    // Dimension of the Key/Query attention embedding.
-		"transformer_dropout_rate":   -1.0, // Set to 0.0 for no dropout. If < 0 it falls back to layers.ParamDropoutRate.
 	})
 	return ctx
 }

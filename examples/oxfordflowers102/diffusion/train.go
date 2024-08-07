@@ -15,6 +15,7 @@ import (
 	"github.com/gomlx/gomlx/ml/train/commandline"
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
@@ -40,9 +41,9 @@ func (c *Config) LoadCheckpointToContext(checkpointPath string) (checkpoint *che
 	if checkpointPath == "" {
 		return
 	}
-	numCheckpointsToKeep := context.GetParamOr(c.ctx, "num_checkpoints", 3)
-	checkpoint = must.M1(checkpoints.Build(c.ctx).
-		DirFromBase(checkpointPath, c.dataDir).
+	numCheckpointsToKeep := context.GetParamOr(c.Context, "num_checkpoints", 3)
+	checkpoint = must.M1(checkpoints.Build(c.Context).
+		DirFromBase(checkpointPath, c.DataDir).
 		Keep(numCheckpointsToKeep).
 		ExcludeParams(ParamsExcludedFromSaving...).
 		Done())
@@ -63,7 +64,7 @@ func (c *Config) LoadCheckpointToContext(checkpointPath string) (checkpoint *che
 	}
 
 	// Create new noise and flower ids -- and save it for future training.
-	numSamples := context.GetParamOr(c.ctx, "samples_during_training", 64)
+	numSamples := context.GetParamOr(c.Context, "samples_during_training", 64)
 	noise = c.GenerateNoise(numSamples)
 	flowerIds = c.GenerateFlowerIds(numSamples)
 	must.M(noise.Save(noisePath))
@@ -81,7 +82,7 @@ func getImageSize(ctx *context.Context) int {
 	return context.GetParamOr(ctx, "image_size", 64)
 }
 
-// TrainModel with hyperparameters given in ctx.
+// TrainModel with hyperparameters given in Context.
 func TrainModel(ctx *context.Context, dataDir, checkpointPath string, evaluateOnEnd bool, verbosity int) {
 
 	// Backend handles creation of ML computation graphs, accelerator resources, etc.
@@ -107,9 +108,9 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, evaluateOn
 	// Create datasets used for training and evaluation.
 	trainDS, validationDS := config.CreateInMemoryDatasets()
 	trainEvalDS := trainDS.Copy()
-	trainDS.Shuffle().Infinite(true).BatchSize(config.batchSize, true)
-	trainEvalDS.BatchSize(config.evalBatchSize, false)
-	validationDS.BatchSize(config.evalBatchSize, false)
+	trainDS.Shuffle().Infinite(true).BatchSize(config.BatchSize, true)
+	trainEvalDS.BatchSize(config.EvalBatchSize, false)
+	validationDS.BatchSize(config.EvalBatchSize, false)
 
 	// Custom loss: model returns scalar loss as the second element of the predictions.
 	customLoss := func(labels, predictions []*Node) *Node { return predictions[1] }
@@ -131,7 +132,6 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, evaluateOn
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
-	ctx = ctx.In("model") // Convention scope used for model creation.
 	trainer := train.NewTrainer(
 		backend, ctx, config.BuildTrainingModelGraph(), customLoss,
 		optimizers.FromContext(ctx),
@@ -175,16 +175,18 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, evaluateOn
 	var kid *KidGenerator
 	if context.GetParamOr(ctx, "kid", false) {
 		kidDS := validationDS.Copy()
-		kidDS.Shuffle().BatchSize(config.evalBatchSize, true)
+		kidDS.Shuffle().BatchSize(config.EvalBatchSize, true)
 		kid = config.NewKidGenerator(kidDS, 5)
 	}
 
 	samplesFrequency := context.GetParamOr(ctx, "samples_during_training_frequency", 200)
 	samplesFrequencyGrowth := context.GetParamOr(ctx, "samples_during_training_frequency_growth", 1.2)
-	train.ExponentialCallback(loop, samplesFrequency, samplesFrequencyGrowth, true,
-		"Monitor", 0, func(loop *train.Loop, metrics []*tensors.Tensor) error {
-			return TrainingMonitor(checkpoint, loop, metrics, plotter, plotter.EvalDatasets, generator, kid)
-		})
+	if plotter != nil {
+		train.ExponentialCallback(loop, samplesFrequency, samplesFrequencyGrowth, true,
+			"Monitor", 0, func(loop *train.Loop, metrics []*tensors.Tensor) error {
+				return TrainingMonitor(checkpoint, loop, metrics, plotter, plotter.EvalDatasets, generator, kid)
+			})
+	}
 
 	// Loop for given number of steps.
 	numTrainSteps := context.GetParamOr(ctx, "train_steps", 0)
@@ -243,10 +245,11 @@ func TrainingMonitor(checkpoint *checkpoints.Handler, loop *train.Loop, metrics 
 		//fmt.Printf("\nKID=%f\n", kidValue.Value())
 		plotter.AddPoint(
 			stdplots.Point{
-				MetricName: "KID",
+				MetricName: "Kernel Inception Distance",
+				Short:      "KID",
 				MetricType: "KID",
 				Step:       float64(loop.LoopStep),
-				Value:      tensors.ToScalar[float64](kidValue),
+				Value:      shapes.ConvertTo[float64](kidValue.Value()),
 			})
 		plotter.DynamicSampleDone(false)
 	}
