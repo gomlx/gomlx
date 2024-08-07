@@ -6,6 +6,7 @@ import (
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/janpfeifer/must"
@@ -30,11 +31,17 @@ var (
 // Config holds a configuration for all diffusion image/data operations.
 // See NewConfig.
 type Config struct {
-	Backend                             backends.Backend
-	Context                             *context.Context // Usually, at the root scope.
-	DataDir                             string
+	Backend backends.Backend
+	Context *context.Context // Usually, at the root scope.
+
+	// DataDir is where the data is downloaded, and models are saved.
+	DataDir string
+
 	DType                               dtypes.DType
 	ImageSize, BatchSize, EvalBatchSize int
+
+	// Checkpoint if one has been attached. See Config.AttachCheckpoint.
+	Checkpoint *checkpoints.Handler
 }
 
 func NewConfig(backend backends.Backend, ctx *context.Context, dataDir string) *Config {
