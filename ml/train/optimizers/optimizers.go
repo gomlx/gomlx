@@ -23,9 +23,8 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
-	"log"
+	"golang.org/x/exp/maps"
 )
 
 // Interface implemented by optimizer implementations.
@@ -84,32 +83,34 @@ const (
 // See [ParamOptimizer]. The default is "adamw".
 func FromContext(ctx *context.Context) Interface {
 	optName := context.GetParamOr(ctx, ParamOptimizer, "adamw")
-	return MustOptimizerByName(ctx, optName)
+	return ByName(ctx, optName)
 }
 
-// MustOptimizerByName returns an optimizer given the name, or log.Fatal if one does not exist. It uses
-// KnownOptimizers -- in case one wants to better handle invalid values.
+// ByName returns an optimizer given the name, or panics if one does not exist.
+// It uses  KnownOptimizers -- in case one wants to better handle invalid values.
 //
 // Some optimizers (e.g.: Adam) uses optional hyperparameters set in the context for configuration.
+//
+// See also FromContext.
 //
 // Example usage:
 //
 // ```
-// var flagOptimizer = flag.String("optimizer", "adamw", fmt.Sprintf("Optimizer, options: %q", types.SortedKeys(optimizers.KnownOptimizers)))
+// var flagOptimizer = flag.String("optimizer", "adamw", fmt.Sprintf("Optimizer, options: %q", maps.Keys(optimizers.KnownOptimizers)))
 //
 // ...
 //
 //	trainer := train.NewTrainer(manager, ctx, ModelGraph,
 //	   losses.SomeLoss,
-//	   optimizers.MustOptimizerByName(ctx, *flagOptimizer),
+//	   optimizers.ByName(ctx, *flagOptimizer),
 //	   []metrics.Interface{someMetric},    // trainMetrics
 //	   []metrics.Interface{otherMetric})   // evalMetrics
 //
 // ```
-func MustOptimizerByName(ctx *context.Context, optName string) Interface {
+func ByName(ctx *context.Context, optName string) Interface {
 	optBuilder, found := KnownOptimizers[optName]
 	if !found {
-		log.Fatalf("Unknown optimizer %q, valid values are %v.", optName, xslices.Keys(KnownOptimizers))
+		Panicf("Unknown optimizer %q, valid values are %v.", optName, maps.Keys(KnownOptimizers))
 	}
 	return optBuilder(ctx)
 }

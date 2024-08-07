@@ -41,6 +41,9 @@ const (
 	// This was created for the case of training with `float16`, which is not enough resolution for Adam calculations.
 	// Valid values: "" (empty), "float32", "float64".
 	ParamAdamDType = "adam_dtype"
+
+	// ParamAdamWeightDecay defaults to 0.0. See AdamConfig.WeightDecay.
+	ParamAdamWeightDecay = "adam_weight_decay"
 )
 
 // Adam optimization is a stochastic gradient descent method that is based on adaptive estimation of first-order and
@@ -91,6 +94,7 @@ func (c *AdamConfig) FromContext(ctx *context.Context) *AdamConfig {
 		}
 		c.DType(dtype)
 	}
+	c.WeightDecay(context.GetParamOr(ctx, ParamAdamWeightDecay, 0.0))
 	return c
 }
 
@@ -145,6 +149,9 @@ func (c *AdamConfig) Adamax() *AdamConfig {
 
 // WeightDecay configure optimizer to work as AdamW, with the given static weight decay.
 // This is because L2 regularization doesn't work well with Adam.
+//
+// Defaults to the value given in the AdamWeightDecay hyperparameter.
+//
 // TODO: (1) Allow certain variables to be excluded from weight decay (e.g: biases); (2) Allow dynamically calculated weight decay.
 func (c *AdamConfig) WeightDecay(weightDecay float64) *AdamConfig {
 	c.weightDecay = weightDecay
