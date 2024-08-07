@@ -63,6 +63,12 @@ func CreateDefaultContext() *context.Context {
 		// Debugging: add a NanLogger to help debug where NaNs may appear in the model.
 		"nan_logger": false,
 
+		// Diffusion model:
+		"diffusion_num_blocks":       2,                      // Number of blocks per image size in the U-Net model.
+		"diffusion_channels_list":    []int{32, 64, 96, 128}, // Number of channels (features) for each image size (progressively smaller) in U-Net model.
+		"diffusion_min_signal_ratio": 0.02,                   // Minimum of the signal to noise ratio when training.
+		"diffusion_max_signal_ratio": 0.95,                   // Maximum of the signal to noise ratio when training.
+
 		// Model parameters for the dataset:
 		"flower_type_embed_size": 16,     // If > 0, use embedding of the flower type of the given dimension.
 		"sinusoidal_embed_size":  32,     // Sinusoidal embedding size. It must be an even number.

@@ -180,12 +180,12 @@ func DenoiseStepGraph(ctx *context.Context, noisyImages, diffusionTime, nextDiff
 	predictedImages, nextNoisyImages *Node) {
 	numImages := noisyImages.Shape().Dimensions[0]
 	diffusionTimes := BroadcastToDims(ConvertDType(diffusionTime, DType), numImages, 1, 1, 1)
-	signalRatios, noiseRatios := DiffusionSchedule(diffusionTimes, false)
+	signalRatios, noiseRatios := DiffusionSchedule(ctx, diffusionTimes, false)
 	var predictedNoises *Node
 	predictedImages, predictedNoises = Denoise(ctx, noisyImages, signalRatios, noiseRatios, flowerIds)
 
 	nextDiffusionTimes := BroadcastToDims(ConvertDType(nextDiffusionTime, DType), numImages, 1, 1, 1)
-	nextSignalRatios, nextNoiseRatios := DiffusionSchedule(nextDiffusionTimes, false)
+	nextSignalRatios, nextNoiseRatios := DiffusionSchedule(ctx, nextDiffusionTimes, false)
 	nextNoisyImages = Add(
 		Mul(predictedImages, nextSignalRatios),
 		Mul(predictedNoises, nextNoiseRatios))
@@ -196,16 +196,16 @@ func DenoiseStepGraph(ctx *context.Context, noisyImages, diffusionTime, nextDiff
 // intermediary results every n results -- it also displays the initial noise and final image.
 //
 // Plotting results only work if in a Jupyter (with GoNB kernel) notebook.
-func DisplayImagesAcrossDiffusionSteps(ctx *context.Context, dataDir, checkpointPath string, numImages int, numDiffusionSteps int, displayEveryNSteps int) {
-	backend := backends.New()
-	ctx = ctx.Checked(false)
-	config := NewConfig(backend, ctx, dataDir)
-	_, _, _ = config.LoadCheckpointToContext(checkpointPath)
+func (c *Config) DisplayImagesAcrossDiffusionSteps(numImages int, numDiffusionSteps int, displayEveryNSteps int) {
+	if c.Checkpoint == nil {
+		exceptions.Panicf("DisplayImagesAcrossDiffusionSteps requires a model loaded from a checkpoint, see Config.AttachCheckpoint.")
+	}
+	ctx := c.Context.Checked(false)
 	ctx.RngStateReset()
-	noise := config.GenerateNoise(numImages)
-	flowerIds := config.GenerateFlowerIds(numImages)
+	noise := c.GenerateNoise(numImages)
+	flowerIds := c.GenerateFlowerIds(numImages)
 
-	generator := config.NewImagesGenerator(noise, flowerIds, numDiffusionSteps)
+	generator := c.NewImagesGenerator(noise, flowerIds, numDiffusionSteps)
 	denoisedImages, diffusionSteps, diffusionTimes := generator.GenerateEveryN(displayEveryNSteps)
 
 	fmt.Printf("DisplayImagesAcrossDiffusionSteps(%d images, %d steps): noise.shape=%s\n", numImages, numDiffusionSteps, noise.Shape())
@@ -288,7 +288,7 @@ func (c *Config) SliderDiffusionSteps(cacheKey string, ctx *context.Context, num
 func GenerateImagesOfFlowerType(ctx *context.Context, dataDir, checkpointPath string, numImages int, flowerType int32, numDiffusionSteps int) (predictedImages *tensors.Tensor) {
 	backend := backends.New()
 	config := NewConfig(backend, ctx, dataDir)
-	_, _, _ = config.LoadCheckpointToContext(checkpointPath)
+	_, _, _ = config.AttachCheckpoint(checkpointPath)
 	ctx.RngStateReset()
 	noise := config.GenerateNoise(numImages)
 	flowerIds := tensors.FromValue(xslices.SliceWithValue(numImages, flowerType))
@@ -350,7 +350,7 @@ func (c *Config) DropdownFlowerTypes(cacheKey string, numImages, numDiffusionSte
 func GenerateImagesOfAllFlowerTypes(ctx *context.Context, dataDir, checkpointPath string, numDiffusionSteps int) (predictedImages *tensors.Tensor) {
 	backend := backends.New()
 	config := NewConfig(backend, ctx, dataDir)
-	_, _, _ = config.LoadCheckpointToContext(checkpointPath)
+	_, _, _ = config.AttachCheckpoint(checkpointPath)
 	numImages := flowers.NumLabels
 	ctx.RngStateReset()
 	imageSize := getImageSize(ctx)

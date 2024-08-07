@@ -68,8 +68,6 @@ var (
 	flagChannelsList = xslices.Flag("channels_list", []int{32, 64, 96, 128},
 		"Number of channels (features) for each image size (progressively smaller) in U-Net model",
 		strconv.Atoi)
-	flagNumBlocks  = flag.Int("blocks", 2, "Number of blocks per image size in U-Net model")
-	flagActivation = flag.String("activation", "swish", "One of: \"swish\", \"sigmoid\", \"tanh\" or \"relu\"")
 )
 
 // NormalizeLayer behaves according to the `--norm` flag.
@@ -84,13 +82,6 @@ func NormalizeLayer(ctx *context.Context, x *Node) *Node {
 	case "layer":
 		x = layers.LayerNormalization(ctx, x, -1).Done()
 	}
-	nanLogger.Trace(x)
-	return x
-}
-
-// ActivationLayer can be configured.
-func ActivationLayer(x *Node) *Node {
-	x = activations.Apply(activations.FromName(*flagActivation), x)
 	nanLogger.Trace(x)
 	return x
 }
@@ -241,13 +232,17 @@ func FlowerTypeEmbedding(ctx *context.Context, flowerIds, x *Node) *Node {
 // Parameters:
 //   - noisyImages: image shaped `[batch_size, size, size, channels=3]`.
 //   - noiseVariance: One value per example in the batch, shaped `[batch_size, 1, 1, 1]`.
-//   - numChannelsList (static hyperparameter): number of channels to use in the model. For each value `numBlocks` are applied
-//     and then the image is pooled and reduced by a factor of 2 -- later to be up-sampled again. So at most `log2(size)` values.
-//   - numBlocks (static hyperparameter): number of blocks to use per numChannelsList element.
+//
+// Hyperparameters set in ctx:
+//
+//   - "diffusion_channels_list" (static hyperparameter): number of channels (embedding size) to use in the model.
+//     For each value `diffusion_num_blocks` are applied and then the image is pooled and reduced by a factor of 2 --
+//     later to be up-sampled again. So at most `log2(size)` values.
+//   - "diffusion_num_blocks" (static hyperparameter): number of blocks to use per numChannelsList element.
 func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds *Node) *Node {
 	// Parameters from flags.
-	numChannelsList := *flagChannelsList
-	numBlocks := *flagNumBlocks
+	numChannelsList := context.GetParamOr(ctx, "diffusion_channels_list", []int{32, 64, 96, 128})
+	numBlocks := context.GetParamOr(ctx, "diffusion_num_blocks", 2)
 
 	nanLogger.Trace(noisyImages)
 	nanLogger.Trace(noiseVariances)
@@ -312,11 +307,6 @@ func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds
 	return x
 }
 
-var (
-	flagMinSignalRatio = flag.Float64("min_signal_ratio", 0.02, "minimum of the signal to noise ratio when training.")
-	flagMaxSignalRatio = flag.Float64("max_signal_ratio", 0.95, "maximum of the signal to noise ratio when training.")
-)
-
 // DiffusionSchedule calculates a ratio of noise and image that needs to be mixed,
 // given the diffusion time `~ [0.0, 1.0]`.
 // Diffusion time 0 means minimum diffusion -- the signal ratio will be set to -max_signal_ratio, default to 0.95 -- and
@@ -326,14 +316,14 @@ var (
 // Typically, the shape of `time` and the returned ratios will be `[batch_size, 1, 1, 1]`.
 //
 // If `clipStart` is set to false, the signal ratio is not clipped, and it can go all the way to 1.0.
-func DiffusionSchedule(times *Node, clipStart bool) (signalRatios, noiseRatios *Node) {
+func DiffusionSchedule(ctx *context.Context, times *Node, clipStart bool) (signalRatios, noiseRatios *Node) {
 	// diffusion times -> angles
 	startAngle := 0.0
 	if clipStart {
-		startAngle = math.Acos(*flagMaxSignalRatio)
+		startAngle = math.Acos(context.GetParamOr(ctx, "diffusion_max_signal_ratio", 0.95))
 	}
 
-	endAngle := math.Acos(*flagMinSignalRatio)
+	endAngle := math.Acos(context.GetParamOr(ctx, "diffusion_min_signal_ratio", 0.02))
 	diffusionAngles := AddScalar(MulScalar(times, endAngle-startAngle), startAngle)
 
 	// sin^2(x) + cos^2(x) = 1
@@ -382,7 +372,7 @@ func (c *Config) BuildTrainingModelGraph() train.ModelFn {
 		// Sample noise at different schedules.
 		diffusionTimes := ctx.RandomUniform(g, shapes.Make(DType, batchSize, 1, 1, 1))
 		diffusionTimes = Square(diffusionTimes) // Bias towards less noise (smaller diffusion times), since it's most impactful
-		signalRatios, noiseRatios := DiffusionSchedule(diffusionTimes, true)
+		signalRatios, noiseRatios := DiffusionSchedule(ctx, diffusionTimes, true)
 		noisyImages := Add(
 			Mul(images, signalRatios),
 			Mul(noises, noiseRatios))

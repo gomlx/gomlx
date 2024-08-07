@@ -30,14 +30,16 @@ const (
 	GeneratedSamplesPrefix = "generated_samples_"
 )
 
-// LoadCheckpointToContext and attaches to it, so that it gets saved.
+// AttachCheckpoint loading previous values and using it to save.
 //
 // It also loads the noise (+flowerIds) samples for this model.
 // The idea is that at each evaluation checkpoint we generate the images for these fixed noise samples,
 // and one can observe the model quality evolving.
 //
 // For new models if creates the noise + flowerIds samples used to monitor the model quality evolving.
-func (c *Config) LoadCheckpointToContext(checkpointPath string) (checkpoint *checkpoints.Handler, noise, flowerIds *tensors.Tensor) {
+//
+// The returned handler is also set into Config.Checkpoint.
+func (c *Config) AttachCheckpoint(checkpointPath string) (checkpoint *checkpoints.Handler, noise, flowerIds *tensors.Tensor) {
 	if checkpointPath == "" {
 		return
 	}
@@ -93,7 +95,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, evaluateOn
 	config := NewConfig(backend, ctx, dataDir)
 
 	// Checkpoints saving.
-	checkpoint, samplesNoise, samplesFlowerIds := config.LoadCheckpointToContext(checkpointPath)
+	checkpoint, samplesNoise, samplesFlowerIds := config.AttachCheckpoint(checkpointPath)
 	if samplesNoise == nil {
 		klog.Exitf("A checkpoint directory name with --checkpoint is required, none given")
 	}
@@ -266,7 +268,7 @@ func TrainingMonitor(checkpoint *checkpoints.Handler, loop *train.Loop, metrics 
 func DisplayTrainingPlots(ctx *context.Context, dataDir, checkpointPath string) {
 	backend := backends.New()
 	config := NewConfig(backend, ctx, dataDir)
-	checkpoint, _, _ := config.LoadCheckpointToContext(checkpointPath)
+	checkpoint, _, _ := config.AttachCheckpoint(checkpointPath)
 	if checkpoint == nil {
 		fmt.Printf("You must set --checkpoint='model_sub_dir'!")
 		return
