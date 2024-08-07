@@ -22,6 +22,9 @@ import (
 // Note, one can also provide a scope for the parameters: "layer_1/l2_regularization=0.1"
 // will work, as long as a default "l2_regularization" is defined in `ctx`.
 //
+// For integer types, "_" is removed: it allows one to enter large numbers using it as a separator, like
+// in Go. E.g.: 1_000_000 = 1000000.
+//
 // See example in CreateContextSettingsFlag, which will create a flag for the settings.
 //
 // Example usage:
@@ -71,12 +74,27 @@ func ParseContextSettings(ctx *context.Context, settings string) error {
 		var err error
 		switch v := value.(type) {
 		case int:
+			valueStr = strings.Replace(valueStr, "_", "", -1)
 			err = json.Unmarshal([]byte(valueStr), &v)
 			value = v
 		case int32:
+			valueStr = strings.Replace(valueStr, "_", "", -1)
 			err = json.Unmarshal([]byte(valueStr), &v)
 			value = v
 		case int64:
+			valueStr = strings.Replace(valueStr, "_", "", -1)
+			err = json.Unmarshal([]byte(valueStr), &v)
+			value = v
+		case uint:
+			valueStr = strings.Replace(valueStr, "_", "", -1)
+			err = json.Unmarshal([]byte(valueStr), &v)
+			value = v
+		case uint32:
+			valueStr = strings.Replace(valueStr, "_", "", -1)
+			err = json.Unmarshal([]byte(valueStr), &v)
+			value = v
+		case uint64:
+			valueStr = strings.Replace(valueStr, "_", "", -1)
 			err = json.Unmarshal([]byte(valueStr), &v)
 			value = v
 		case float64:
