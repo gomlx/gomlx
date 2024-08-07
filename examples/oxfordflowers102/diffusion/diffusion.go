@@ -240,6 +240,8 @@ func FlowerTypeEmbedding(ctx *context.Context, flowerIds, x *Node) *Node {
 //     later to be up-sampled again. So at most `log2(size)` values.
 //   - "diffusion_num_blocks" (static hyperparameter): number of blocks to use per numChannelsList element.
 func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds *Node) *Node {
+	ctx = ctx.In("u-net")
+
 	// Parameters from flags.
 	numChannelsList := context.GetParamOr(ctx, "diffusion_channels_list", []int{32, 64, 96, 128})
 	numBlocks := context.GetParamOr(ctx, "diffusion_num_blocks", 2)
@@ -336,7 +338,6 @@ func DiffusionSchedule(ctx *context.Context, times *Node, clipStart bool) (signa
 // It is given the signal and noise ratios.
 func Denoise(ctx *context.Context, noisyImages, signalRatios, noiseRatios, flowerIds *Node) (
 	predictedImages, predictedNoises *Node) {
-	ctx = ctx.In("denoise")
 
 	// Noise variance: since the noise is expected to have variance 1, the adjusted
 	// variance to the noiseRatio (just a multiplicative factor), the new variance
