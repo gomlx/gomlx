@@ -188,7 +188,7 @@ func (m *meanMetric) UpdateGraph(ctx *context.Context, labels, predictions []*No
 
 	// Create scope in context for metrics state, and mark it as unchecked -- model variables
 	// may be set for reuse, but metrics variables are not.
-	ctx = ctx.Checked(false).In(m.ScopeName())
+	ctx = ctx.Checked(false).In("metrics").In(m.ScopeName())
 	dtype := result.DType()
 	zero := shapes.CastAsDType(0, dtype)
 	totalVar := ctx.VariableWithValue("total", zero).SetTrainable(false)
@@ -215,7 +215,7 @@ func (m *meanMetric) UpdateGraph(ctx *context.Context, labels, predictions []*No
 }
 
 func (m *meanMetric) Reset(ctx *context.Context) {
-	ctx = ctx.Reuse().In(m.ScopeName())
+	ctx = ctx.Reuse().In("metrics").In(m.ScopeName())
 	totalVar := ctx.InspectVariable(ctx.Scope(), "total")
 	if totalVar == nil {
 		// Assume this was called before the graph was first built, so there is nothing to reset yet.
@@ -268,7 +268,7 @@ func (m *movingAverageMetric) UpdateGraph(ctx *context.Context, labels, predicti
 
 	// Create scope in context for metrics state, and mark it as unchecked -- model variables
 	// may be set for reuse, but metrics variables are not.
-	ctx = ctx.Checked(false).In(m.ScopeName())
+	ctx = ctx.Checked(false).In("metrics").In(m.ScopeName())
 	dtype := result.DType()
 	zero := shapes.CastAsDType(0, dtype)
 
