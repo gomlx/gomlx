@@ -34,7 +34,7 @@ func CreateDefaultContext() *context.Context {
 		"model":                "bow", // One of the listed in ValidModels: the user can also inject (in ValidModels) new custom models.
 		"train_steps":          5000,
 		"num_checkpoints":      5,
-		"checkpoint_frequency": "3m", // How often to save checkpoints. Default to 10 minutes. See time.ParseDuration.
+		"checkpoint_frequency": "3m", // How often to save checkpoints. Default to 3 minutes. See time.ParseDuration.
 
 		// batch_size for training.
 		"batch_size": 64,
