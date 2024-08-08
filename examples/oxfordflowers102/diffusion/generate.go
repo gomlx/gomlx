@@ -68,10 +68,14 @@ func ImagesToHtml(images []image.Image) string {
 // PlotModelEvolution plots the saved sampled generated images of a model in the current configured checkpoint.
 //
 // It outputs at most imagesPerSample per checkpoint sampled.
-func PlotModelEvolution(ctx *context.Context, modelDir string, imagesPerSample int, animate bool) {
+func (c *Config) PlotModelEvolution(imagesPerSample int, animate bool) {
+	if c.Checkpoint == nil {
+		exceptions.Panicf("PlotModelEvolution requires a model loaded from a checkpoint, see Config.AttachCheckpoint.")
+	}
 	if !gonbui.IsNotebook {
 		return
 	}
+	modelDir := c.Checkpoint.Dir()
 	entries := must.M1(os.ReadDir(modelDir))
 	var generatedFiles []string
 	for _, entry := range entries {
@@ -102,7 +106,6 @@ func PlotModelEvolution(ctx *context.Context, modelDir string, imagesPerSample i
 		return
 	}
 
-	imageSize := getImageSize(ctx)
 	params := struct {
 		Id              string
 		Images          [][]string
@@ -113,8 +116,8 @@ func PlotModelEvolution(ctx *context.Context, modelDir string, imagesPerSample i
 		Id:              fmt.Sprintf("%X", rand.Int63()),
 		Images:          make([][]string, len(generatedFiles)),
 		FrameRateMs:     200,
-		Size:            imageSize,
-		Width:           imagesPerSample * imageSize,
+		Size:            c.ImageSize,
+		Width:           imagesPerSample * c.ImageSize,
 		ImagesPerSample: imagesPerSample,
 	}
 	for ii, generatedFile := range generatedFiles {

@@ -85,15 +85,15 @@ func CreateDefaultContext() *context.Context {
 		plotly.ParamPlots: true,
 
 		// "normalization" is overridden by "fnn_normalization" and "cnn_normalization", if they are set.
-		layers.ParamNormalization: "layer",
+		layers.ParamNormalization: "none",
 
-		optimizers.ParamOptimizer:           "adamw",
-		optimizers.ParamLearningRate:        1e-4,
+		optimizers.ParamOptimizer:           "adam",
+		optimizers.ParamLearningRate:        1e-3,
 		optimizers.ParamAdamEpsilon:         1e-7,
 		optimizers.ParamAdamDType:           "",
 		optimizers.ParamCosineScheduleSteps: 0,
-		activations.ParamActivation:         "",
-		layers.ParamDropoutRate:             0.1,
+		activations.ParamActivation:         "swish",
+		layers.ParamDropoutRate:             0.15,
 		regularizers.ParamL2:                0.0,
 		regularizers.ParamL1:                0.0,
 

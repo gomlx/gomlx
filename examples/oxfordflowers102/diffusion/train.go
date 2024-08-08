@@ -43,7 +43,7 @@ func (c *Config) AttachCheckpoint(checkpointPath string) (checkpoint *checkpoint
 	if checkpointPath == "" {
 		return
 	}
-	numCheckpointsToKeep := context.GetParamOr(c.Context, "num_checkpoints", 3)
+	numCheckpointsToKeep := context.GetParamOr(c.Context, "num_checkpoints", 5)
 	checkpoint = must.M1(checkpoints.Build(c.Context).
 		DirFromBase(checkpointPath, c.DataDir).
 		Keep(numCheckpointsToKeep).
@@ -155,7 +155,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, evaluateOn
 	// Checkpoint saving: every 3 minutes of training.
 	if checkpoint != nil {
 		period := must.M1(
-			time.ParseDuration(context.GetParamOr(ctx, "checkpoint_frequency", "10m")))
+			time.ParseDuration(context.GetParamOr(ctx, "checkpoint_frequency", "3m")))
 		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
 			func(loop *train.Loop, metrics []*tensors.Tensor) error {
 				return checkpoint.Save()

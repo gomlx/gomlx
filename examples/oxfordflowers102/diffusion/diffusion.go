@@ -80,7 +80,11 @@ func NormalizeLayer(ctx *context.Context, x *Node) *Node {
 	case "batch":
 		x = batchnorm.New(ctx, x, -1).Center(false).Scale(false).Done()
 	case "layer":
-		x = layers.LayerNormalization(ctx, x, -1).Done()
+		if x.Rank() <= 3 {
+			x = layers.LayerNormalization(ctx, x, -1).Done()
+		} else {
+			x = layers.LayerNormalization(ctx, x, 1, 2).Done()
+		}
 	}
 	nanLogger.Trace(x)
 	return x
@@ -270,22 +274,33 @@ func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds
 	// Downward: keep pooling image to a smaller size.
 	// Keep the `skips` features as we move "downward," so they can be "skip" connected later as we move upward.
 	skips := make([]*Node, 0, numBlocks*len(numChannelsList))
-	for ii, numChannels := range numChannelsList {
-		nanLogger.PushScope(fmt.Sprintf("DownBlock-%d", ii))
-		name := fmt.Sprintf("DownBlock-%d", ii+1)
+	layerNum := 0
+	for _, numChannels := range numChannelsList {
+		scopeName := fmt.Sprintf("%03d-DownBlock", layerNum)
+		layerNum++
+		nanLogger.PushScope(scopeName)
+		blockCtx := ctx.In(scopeName)
 		// Use flower types as an extra embedding.
-		x = FlowerTypeEmbedding(ctx.In(fmt.Sprintf("DownBlock-%d-flowerIds", ii)), flowerIds, x)
-		x, skips = DownBlock(ctx.In(name), x, skips, numBlocks, numChannels)
+		x = FlowerTypeEmbedding(blockCtx.In("flowerIds"), flowerIds, x)
+		x, skips = DownBlock(blockCtx, x, skips, numBlocks, numChannels)
 		nanLogger.PopScope()
 	}
 
 	// Intermediary fixed size blocks.
-	x = TransformerBlock(ctx.In("transformer_block"), x)
+	if *flagNumAttLayers > 0 {
+		// Optional transformer layer.
+		scopeName := fmt.Sprintf("%03d-TransformerBlock", layerNum)
+		layerNum++
+		nanLogger.PushScope(scopeName)
+		x = TransformerBlock(ctx.In(scopeName), x)
+		nanLogger.PopScope()
+	}
 	lastNumChannels := xslices.Last(numChannelsList)
 	for ii := 0; ii < numBlocks; ii++ {
-		nanLogger.PushScope(fmt.Sprintf("IntermediaryBlock-%d", ii))
-		name := fmt.Sprintf("IntermediaryResidual-%d", ii+1)
-		x = ResidualBlock(ctx.In(name), x, lastNumChannels)
+		scopeName := fmt.Sprintf("%03d-IntermediaryBlock", layerNum)
+		layerNum++
+		nanLogger.PushScope(scopeName)
+		x = ResidualBlock(ctx.In(scopeName), x, lastNumChannels)
 		nanLogger.PopScope()
 	}
 
@@ -293,10 +308,11 @@ func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds
 
 	// Upward: up-sample image back to original size, one block at a time.
 	for ii := range numChannelsList {
-		nanLogger.PushScope(fmt.Sprintf("UpBlock-%d", ii))
-		name := fmt.Sprintf("UpBlock-%d", ii+1)
+		scopeName := fmt.Sprintf("%03d-DownBlock", layerNum)
+		layerNum++
+		nanLogger.PushScope(scopeName)
 		numChannels := numChannelsList[len(numChannelsList)-(ii+1)]
-		x, skips = UpBlock(ctx.In(name), x, skips, numBlocks, numChannels)
+		x, skips = UpBlock(ctx.In(scopeName), x, skips, numBlocks, numChannels)
 		nanLogger.PopScope()
 	}
 	if len(skips) != 0 {
