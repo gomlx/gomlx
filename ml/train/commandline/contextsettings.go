@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/gomlx/gomlx/ml/context"
+	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/pkg/errors"
 	"strings"
 )
@@ -108,6 +109,29 @@ func ParseContextSettings(ctx *context.Context, settings string) error {
 			value = v
 		case string:
 			value = valueStr
+		case []string:
+			value = strings.Split(valueStr, ",")
+		case []int:
+			parts := strings.Split(valueStr, ",")
+			value = xslices.Map(parts, func(str string) int {
+				var asInt int
+				str = strings.Replace(str, "_", "", -1)
+				newErr := json.Unmarshal([]byte(str), &asInt)
+				if newErr != nil {
+					err = newErr
+				}
+				return asInt
+			})
+		case []float64:
+			parts := strings.Split(valueStr, ",")
+			value = xslices.Map(parts, func(str string) float64 {
+				var asNum float64
+				newErr := json.Unmarshal([]byte(str), &asNum)
+				if newErr != nil {
+					err = newErr
+				}
+				return asNum
+			})
 		default:
 			err = fmt.Errorf("don't know how to parse type %T for setting parameter %q",
 				value, setting)
