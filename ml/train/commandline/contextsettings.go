@@ -133,7 +133,7 @@ func ParseContextSettings(ctx *context.Context, settings string) error {
 				return asNum
 			})
 		default:
-			err = fmt.Errorf("don't know how to parse type %T for setting parameter %q",
+			err = fmt.Errorf("don't know how to parse type %T for setting parameter %q -- it's easy to write a parser to a new type, ask in github if you need something standard",
 				value, setting)
 		}
 		if err != nil {
