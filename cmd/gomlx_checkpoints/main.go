@@ -26,7 +26,7 @@ import (
 )
 
 var (
-	flagScope = flag.String("scope", "/model", "The scope of the checkpoint to inspect. "+
+	flagScope = flag.String("scope", "/", "The scope of the checkpoint to inspect. "+
 		"Typically, a model will have several different support variables, that may not matter -- optimizers for instance. "+
 		"This flag tells which scope are considered for the various reports.")
 
