@@ -124,16 +124,16 @@ func main() {
 	settings := commandline.CreateContextSettingsFlag(ctx, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	must.M(commandline.ParseContextSettings(ctx, *settings))
+	paramsSet := must.M1(commandline.ParseContextSettings(ctx, *settings))
 	err := exceptions.TryCatch[error](func() {
-		mainWithContext(ctx, *flagDataDir, *flagCheckpoint)
+		mainWithContext(ctx, *flagDataDir, *flagCheckpoint, paramsSet)
 	})
 	if err != nil {
 		klog.Fatalf("Failed with error: %+v", err)
 	}
 }
 
-func mainWithContext(ctx *context.Context, dataDir, checkpointPath string) {
+func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, paramsSet []string) {
 	backend := backends.New()
 	dataDir = data.ReplaceTildeInDir(dataDir)
 	if *flagVerbosity >= 1 {
@@ -148,7 +148,7 @@ func mainWithContext(ctx *context.Context, dataDir, checkpointPath string) {
 		checkpoint = must.M1(checkpoints.Build(ctx).
 			DirFromBase(checkpointPath, dataDir).
 			Keep(numCheckpointsToKeep).
-			ExcludeParams("train_steps", "plots", "num_checkpoints").
+			ExcludeParams(append(paramsSet, "train_steps", "plots", "num_checkpoints")...).
 			Done())
 	}
 
@@ -253,6 +253,7 @@ func ModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	_ = spec // Not used, since the dataset is always the same.
 	g := inputs[0].Graph()
 	dtype := inputs[1].DType() // From continuous features.
+	ctx = ctx.In("model")
 
 	// Use Cosine schedule of the learning rate, if hyperparameter is set to a value > 0.
 	optimizers.CosineAnnealingSchedule(ctx, g, dtype).FromContext().Done()
