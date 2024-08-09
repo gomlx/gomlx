@@ -144,7 +144,13 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 	meanImagesLoss := metrics.NewMeanMetric(
 		"Images Loss", "img_loss", "img_loss", imgMetricFn, pprintLossFn)
 	movingImagesLoss := metrics.NewExponentialMovingAverageMetric(
-		"Moving Images Loss", "~img_loss", "img_loss", imgMetricFn, pprintLossFn, 0.01)
+		"Moving Images Loss", "~img_loss", "img_loss", imgMetricFn, pprintLossFn, 0.05)
+
+	movingNoiseLoss := metrics.NewExponentialMovingAverageMetric(
+		"Moving (faster) Noise Loss", "~fast_loss", "loss",
+		func(ctx *context.Context, labels, predictions []*Node) *Node {
+			return predictions[1]
+		}, pprintLossFn, 0.05)
 
 	useNanLogger := context.GetParamOr(ctx, "nan_logger", false)
 	if useNanLogger {
@@ -156,8 +162,8 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 	trainer := train.NewTrainer(
 		backend, ctx, config.BuildTrainingModelGraph(), customLoss,
 		optimizers.FromContext(ctx),
-		[]metrics.Interface{movingImagesLoss}, // trainMetrics
-		[]metrics.Interface{meanImagesLoss})   // evalMetrics
+		[]metrics.Interface{movingImagesLoss, movingNoiseLoss}, // trainMetrics
+		[]metrics.Interface{meanImagesLoss})                    // evalMetrics
 	if nanLogger != nil {
 		trainer.OnExecCreation(func(exec *context.Exec, _ train.GraphType) {
 			nanLogger.AttachToExec(exec)
