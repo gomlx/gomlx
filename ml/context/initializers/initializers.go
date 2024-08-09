@@ -131,19 +131,6 @@ func RandomUniformFn(initialSeed int64, min, max float64) VariableInitializer {
 	}
 }
 
-// XavierFn returns an initializer that generates random normal values with a uniform distribution with a range
-// defined by +/- sqrt(6 / (fanIn+fanOut)). See description in https://paperswithcode.com/method/xavier-initialization
-//
-// The parameter `initialSeed` is used to initialize the random number generator -- only the first time it is
-// used for a graph, later it continues to pool from the same rng state shared by all initializers.
-// If it is set to 0 (NoSeed), a random seed is instead generated (from the nanosecond clock).
-//
-// Non-float and non-complex variables are initialized with zero instead.
-func XavierFn(initialSeed, fanIn, fanOut int) VariableInitializer {
-	limit := math.Sqrt(6.0 / float64(fanIn+fanOut))
-	return RandomUniformFn(0, -limit, limit)
-}
-
 // GlorotUniformFn return a Glorot uniform initializer, also called Xavier uniform initializer.
 //
 // It can be set to a context with `ctx.WithInitializer(GlorotUniformFn(initialSeed))`,
@@ -162,10 +149,16 @@ func XavierFn(initialSeed, fanIn, fanOut int) VariableInitializer {
 // used for a graph.
 // If it is set to 0 (NoSeed), a random seed is instead generated (from the nanosecond clock).
 //
+// It initializes biases (anything with rank <= 1) to zeros.
+//
 // Non-float and non-complex variables are initialized with zero instead.
 func GlorotUniformFn(initialSeed int64) VariableInitializer {
 	return func(g *Graph, shape shapes.Shape) *Node {
 		if !shape.DType.IsFloat() && !shape.DType.IsComplex() {
+			return Zeros(g, shape)
+		}
+		if shape.Rank() <= 1 {
+			// Zero-bias.
 			return Zeros(g, shape)
 		}
 		fanIn, fanOut := computeFanInFanOut(shape)
@@ -191,18 +184,92 @@ func computeFanInFanOut(shape shapes.Shape) (fanIn, fanOut int) {
 		fanIn = 1
 		fanOut = fanIn
 	case 1: // 1D shape, like a bias term in a dense layer.
-		fanIn = shape.Dimensions[0]
+		fanIn = 0
 		fanOut = fanIn
-	case 2: // 2D shape, weights of a a dense layer.
+	case 2: // 2D shape, weights of a dense layer.
 		fanIn = shape.Dimensions[0]
 		fanOut = shape.Dimensions[1]
 	default: // Assuming convolution kernels (2D, 3D, or more):
 		receptiveFieldSize := 1
-		for dim := range shape.Dimensions[:rank-2] {
+		for _, dim := range shape.Dimensions[:rank-2] {
 			receptiveFieldSize *= dim
 		}
 		fanIn = shape.Dimensions[rank-2] * receptiveFieldSize
 		fanOut = shape.Dimensions[rank-1] * receptiveFieldSize
 	}
 	return
+}
+
+// XavierUniformFn returns an initializer that generates random values with an uniform distribution with a range
+// defined by +/- sqrt(6 / (fanIn+fanOut)). See description in https://paperswithcode.com/method/xavier-initialization
+//
+// The parameter `initialSeed` is used to initialize the random number generator -- only the first time it is
+// used for a graph, later it continues to pool from the same rng state shared by all initializers.
+// If it is set to 0 (NoSeed), a random seed is instead generated (from the nanosecond clock).
+//
+// It initializes biases (anything with rank <= 1) to zeros.
+//
+// Non-float and non-complex variables are initialized with zero instead.
+func XavierUniformFn(initialSeed int64) VariableInitializer {
+	return func(g *Graph, shape shapes.Shape) *Node {
+		if !shape.DType.IsFloat() && !shape.DType.IsComplex() {
+			return Zeros(g, shape)
+		}
+		if shape.Rank() <= 1 {
+			// Zero-bias.
+			return Zeros(g, shape)
+		}
+		fanIn, fanOut := computeFanInFanOut(shape)
+		scale := max(1.0, float64(fanIn+fanOut))
+		limit := math.Sqrt(6.0 / scale)
+		return RandomUniformFn(initialSeed, -limit, limit)(g, shape)
+	}
+}
+
+// XavierNormalFn returns an initializer that generates random values with a normal distribution with mean in 0
+// and stddev of sqrt(2 / (fanIn+fanOut)). See description in https://paperswithcode.com/method/xavier-initialization
+//
+// The parameter `initialSeed` is used to initialize the random number generator -- only the first time it is
+// used for a graph, later it continues to pool from the same rng state shared by all initializers.
+// If it is set to 0 (NoSeed), a random seed is instead generated (from the nanosecond clock).
+//
+// It initializes biases (anything with rank <= 1) to zeros.
+//
+// Non-float and non-complex variables are initialized with zero instead.
+func XavierNormalFn(initialSeed int64) VariableInitializer {
+	return func(g *Graph, shape shapes.Shape) *Node {
+		if !shape.DType.IsFloat() && !shape.DType.IsComplex() {
+			return Zeros(g, shape)
+		}
+		if shape.Rank() <= 1 {
+			// Zero-bias.
+			return Zeros(g, shape)
+		}
+		fanIn, fanOut := computeFanInFanOut(shape)
+		scale := max(1.0, float64(fanIn+fanOut))
+		stddev := math.Sqrt(2.0 / scale)
+		return RandomNormalFn(initialSeed, stddev)(g, shape)
+	}
+}
+
+// HeFn returns the initializer that tries to preserve the variance of 1, calculated for the Relu activation functions.
+//
+// It initializes biases (anything with rank <= 1) to zeros.
+//
+// [1] https://medium.com/@tylernisonoff/weight-initialization-for-cnns-a-deep-dive-into-he-initialization-50b03f37f53d
+// [2] https://arxiv.org/pdf/1502.01852
+func HeFn(initialSeed int64) VariableInitializer {
+	return func(g *Graph, shape shapes.Shape) *Node {
+		if !shape.DType.IsFloat() && !shape.DType.IsComplex() {
+			return Zeros(g, shape)
+		}
+		if shape.Rank() <= 1 {
+			// Zero-bias.
+			return Zeros(g, shape)
+		}
+		fanIn, _ := computeFanInFanOut(shape)
+		scale := max(1.0, float64(fanIn))
+		stddev := math.Sqrt(2.0 / scale)
+		return RandomNormalFn(initialSeed, stddev)(g, shape)
+	}
 }

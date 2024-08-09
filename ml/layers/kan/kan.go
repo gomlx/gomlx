@@ -245,7 +245,7 @@ func (c *Config) bsplineLayer(ctx *context.Context, x *Node, numOutputNodes int)
 		}
 		weightsSplines = weightsSplinesVar.ValueGraph(g)
 		if c.bsplineResidual {
-			weightsResidualVar := ctx.WithInitializer(initializers.XavierFn(0, numInputNodes, numOutputNodes)).
+			weightsResidualVar := ctx.WithInitializer(initializers.XavierUniformFn(0)).
 				VariableWithShape("w_residual", shapes.Make(dtype, 1, numOutputNodes, numInputNodes))
 			weightsResidual = weightsResidualVar.ValueGraph(g)
 			if c.bsplineMagnitudeRegularizer != nil {
@@ -279,7 +279,7 @@ func (c *Config) bsplineLayer(ctx *context.Context, x *Node, numOutputNodes int)
 		output = Add(output, residual)
 	}
 
-	// ReduceSum the inputs to get the outputs: notice this requires Xavier initialization (initializer.XavierFn)
+	// ReduceSum the inputs to get the outputs: notice this requires Xavier initialization (initializer.XavierUniformFn)
 	// whose magnitude is Sqrt(6/(fanIn+fanOut)) not to grow exponentially with the number of layers.
 	output = ReduceSum(output, -1)
 	output.AssertDims(batchSize, numOutputNodes) // Shape=[batch, outputs]
