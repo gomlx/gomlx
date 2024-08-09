@@ -117,19 +117,16 @@ func ResidualBlock(ctx *context.Context, x, contextFeatures *Node, outputChannel
 	x = NormalizeLayer(ctx.Inf("%03d-norm", layerNum), x)
 	layerNum++
 	x = concatContextFeatures(x, contextFeatures)
-	x = layers.Convolution(ctx.Inf("%03d_conv", layerNum).WithInitializer(initializers.Zero), x).
-		Filters(outputChannels).KernelSize(3).PadSame().Done()
+	convCtx := ctx.Inf("%03d_conv", layerNum).WithInitializer(initializers.XavierNormalFn(0))
+	x = layers.Convolution(convCtx, x).Filters(outputChannels).KernelSize(3).PadSame().Done()
 	layerNum++
 	x = activations.ApplyFromContext(ctx, x)
-	//x = concatContextFeatures(x, contextFeatures)
-	//x = layers.Convolution(ctx.Inf("%03d_conv", layerNum).WithInitializer(initializers.Zero), x).
-	//	Filters(outputChannels).KernelSize(3).PadSame().Done()
 	x = Add(x, residual)
 	nanLogger.Trace(x)
 	return x
 }
 
-// DownBlock applies `numBlocks` residual blocks followed by an average pooling of size 2, halfing the spatial size.
+// DownBlock applies `numBlocks` residual blocks followed by an average pooling of size 2, halving the spatial size.
 // It pushes the values between each residual blocks to the `skips` stack, to build the skip connections later.
 //
 // It returns the transformed `x` and `skips` with newly stacked skip connections.
@@ -180,7 +177,7 @@ func shapeToStr(shape shapes.HasShape) string {
 //     later to be up-sampled again. So at most `log2(size)` values.
 //   - "diffusion_num_residual_blocks" (static hyperparameter): number of blocks to use per numChannelsList element.
 func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds *Node) *Node {
-	ctx = ctx.In("u-net")
+	ctx = ctx.In("u-net").WithInitializer(initializers.GlorotUniformFn(0))
 	layerNum := 0
 	batchSize := noisyImages.Shape().Dimensions[0]
 	imgSize := noisyImages.Shape().Dimensions[1]
@@ -207,7 +204,9 @@ func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds
 	if flowerEmbedSize > 0 {
 		scopeName := fmt.Sprintf("%03d-FlowerEmbeddings", layerNum)
 		layerNum++
-		flowerTypeEmbed := layers.Embedding(ctx.In(scopeName), flowerIds, DType, flowers.NumLabels, flowerEmbedSize)
+		flowerTypeEmbed := layers.Embedding(
+			ctx.In(scopeName).WithInitializer(initializers.RandomNormalFn(0, 1.0/float64(flowerEmbedSize))),
+			flowerIds, DType, flowers.NumLabels, flowerEmbedSize)
 		contextFeatures = Concatenate([]*Node{contextFeatures, flowerTypeEmbed}, -1)
 	}
 
@@ -217,9 +216,7 @@ func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds
 		scopeName := fmt.Sprintf("%03d-StartingChannels_%s", layerNum, shapeToStr(x))
 		layerNum++
 		x = concatContextFeatures(x, contextFeatures)
-		//x = layers.Convolution(ctx.In(scopeName).WithInitializer(initializers.Zero), x).
-		//	Filters(numChannelsList[0]).KernelSize(1).PadSame().Done()
-		x = layers.Dense(ctx.In(scopeName).WithInitializer(initializers.Zero), x, true, numChannelsList[0])
+		x = layers.Dense(ctx.In(scopeName), x, true, numChannelsList[0])
 	}
 	if !context.GetParamOr(ctx, "diffusion_context_features", false) {
 		// If contextFeatures disabled across model, set it to nil.
@@ -273,13 +270,13 @@ func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds
 	// Output initialized to 0, which is the mean of the target.
 	scopeName := fmt.Sprintf("%03d-Readout_%s", layerNum, shapeToStr(x))
 	layerNum++
-	ctxReadOut := ctx.In(scopeName).WithInitializer(initializers.Zero)
-	x = layers.DenseWithBias(ctxReadOut, x, imageChannels)
+	x = layers.DenseWithBias(ctx.In(scopeName), x, imageChannels)
 	return x
 }
 
 // DiffusionSchedule calculates a ratio of noise and image that needs to be mixed,
 // given the diffusion time `~ [0.0, 1.0]`.
+//
 // Diffusion time 0 means minimum diffusion -- the signal ratio will be set to -max_signal_ratio, default to 0.95 -- and
 // diffusion time 1.0 means almost all noise -- the signal ratio will be set to -min_signal_ratio, default to 0.02.
 // The returned ratio has the sum of their square total 1.
@@ -287,6 +284,9 @@ func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds
 // Typically, the shape of `time` and the returned ratios will be `[batch_size, 1, 1, 1]`.
 //
 // If `clipStart` is set to false, the signal ratio is not clipped, and it can go all the way to 1.0.
+//
+// The ratios observe the element-wise constraint: signalRatios^2 + noiseRatios^2 = 1.
+// This preserves the variance of the combined (image*signalRatio+noise*noiseRatio) to 1.
 func DiffusionSchedule(ctx *context.Context, times *Node, clipStart bool) (signalRatios, noiseRatios *Node) {
 	// diffusion times -> angles
 	startAngle := 0.0
@@ -297,7 +297,8 @@ func DiffusionSchedule(ctx *context.Context, times *Node, clipStart bool) (signa
 	endAngle := math.Acos(context.GetParamOr(ctx, "diffusion_min_signal_ratio", 0.02))
 	diffusionAngles := AddScalar(MulScalar(times, endAngle-startAngle), startAngle)
 
-	// sin^2(x) + cos^2(x) = 1
+	// The ratios typically used is Sqrt(alpha) and Sqrt(1-alpha), because it has the nice property of preserving
+	// the variance (of 1) during the process.
 	signalRatios = Cos(diffusionAngles)
 	noiseRatios = Sin(diffusionAngles)
 	return
