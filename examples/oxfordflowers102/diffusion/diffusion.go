@@ -81,7 +81,7 @@ func NormalizeLayer(ctx *context.Context, x *Node) *Node {
 	case "batch":
 		x = batchnorm.New(ctx, x, -1).Center(false).Scale(false).Done()
 	case "layer":
-		if x.Rank() <= 3 {
+		if true || x.Rank() <= 3 {
 			x = layers.LayerNormalization(ctx, x, -1).Done()
 		} else {
 			x = layers.LayerNormalization(ctx, x, 1, 2).Done()
@@ -223,7 +223,7 @@ func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds
 		//	Filters(numChannelsList[0]).KernelSize(1).PadSame().Done()
 		x = layers.Dense(ctx.In(scopeName).WithInitializer(initializers.Zero), x, true, numChannelsList[0])
 	}
-	if !context.GetParamOr(ctx, "diffusion_contex_features", false) {
+	if !context.GetParamOr(ctx, "diffusion_context_features", false) {
 		// If contextFeatures disabled across model, set it to nil.
 		contextFeatures = nil
 	}
@@ -322,10 +322,6 @@ func Denoise(ctx *context.Context, noisyImages, signalRatios, noiseRatios, flowe
 	return
 }
 
-var (
-	flagLoss = flag.String("loss", "mae", "Use 'mse' for mean squared error or 'mae' for mean absolute error")
-)
-
 // BuildTrainingModelGraph builds the model for training and evaluation.
 func (c *Config) BuildTrainingModelGraph() train.ModelFn {
 	return func(ctx *context.Context, _ any, inputs []*Node) []*Node {
@@ -353,16 +349,26 @@ func (c *Config) BuildTrainingModelGraph() train.ModelFn {
 
 		// Calculate our custom loss: mean absolute error from the noise to the predictedNoise.
 		var lossFn train.LossFn
-		switch context.GetParamOr(ctx, "diffusion_loss", "mae") {
+		lossName := context.GetParamOr(ctx, "diffusion_loss", "mae")
+		switch lossName {
 		case "mae":
 			lossFn = losses.MeanAbsoluteError
 		case "mse":
 			lossFn = losses.MeanSquaredError
+		case "huber":
+			lossFn = losses.MakeHuberLoss(context.GetParamOr(ctx, "huber_delta", 0.2))
 		default:
-			exceptions.Panicf("Invalid value for --loss=%q. Valid values are \"mae\" or \"mse\"", *flagLoss)
+			exceptions.Panicf("Invalid value for --loss=%q. Valid values are \"mae\", \"mse\" or \"huber\"", lossName)
 		}
 		noisesLoss := lossFn([]*Node{noises}, []*Node{predictedNoises})
+		if !noisesLoss.IsScalar() {
+			noisesLoss = ReduceAllMean(noisesLoss)
+		}
 		imagesLoss := lossFn([]*Node{images}, []*Node{predictedImages})
+		if !imagesLoss.IsScalar() {
+			imagesLoss = ReduceAllMean(imagesLoss)
+		}
+
 		return []*Node{c.DenormalizeImages(predictedImages), noisesLoss, imagesLoss}
 	}
 }

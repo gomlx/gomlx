@@ -107,6 +107,8 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, evaluateOn
 		// Reset RNG.
 		ctx.RngStateReset()
 	}
+	fmt.Printf("\tLoss: %s\n", context.GetParamOr(ctx, "diffusion_loss", "mae"))
+	fmt.Printf("\tLearning rate: %f\n", context.GetParamOr(ctx, optimizers.ParamLearningRate, 0.0))
 
 	// Create datasets used for training and evaluation.
 	trainDS, validationDS := config.CreateInMemoryDatasets()

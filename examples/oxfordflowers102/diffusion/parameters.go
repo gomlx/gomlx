@@ -19,6 +19,7 @@ var (
 
 		// These parameters one may want to change in between training sessions of the same model:
 		"diffusion_min_signal_ratio", "diffusion_max_signal_ratio",
+		layers.ParamDropoutRate,
 
 		// Notice that "samples_during_training" is saved, since it can't change after a model started training.
 		"samples_during_training_frequency", "samples_during_training_frequency_growth",
@@ -66,7 +67,8 @@ func CreateDefaultContext() *context.Context {
 		"nan_logger": false,
 
 		// Diffusion model:
-		"diffusion_loss":                "mae",                  // "mse" (Mean-Squared-Error) or "mae" (Mean-Absolute-Error).
+		"diffusion_loss":                "mae",                  // "mse" (Mean-Squared-Error), "mae" (Mean-Absolute-Error) or "huber".
+		"huber_delta":                   0.2,                    // If "huber" loss is selected, this is the delta, after which the loss becomes linear.
 		"diffusion_context_features":    false,                  // Enable context features concatenated at every convolution.
 		"diffusion_num_residual_blocks": 2,                      // Number of residual blocks per image size in the U-Net model.
 		"diffusion_channels_list":       []int{32, 64, 96, 128}, // Number of channels (features) for each image size (progressively smaller) in U-Net model.
