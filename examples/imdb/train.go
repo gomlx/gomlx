@@ -35,12 +35,10 @@ var (
 		"transformer": TransformerModelGraph,
 	}
 
-	// ParamsExcludedFromSaving is the list of parameters (see CreateDefaultContext) that shouldn't be saved
+	// ParamsExcludedFromLoading is the list of parameters (see CreateDefaultContext) that shouldn't be saved
 	// along on the models checkpoints, and may be overwritten in further training sessions.
-	ParamsExcludedFromSaving = []string{
+	ParamsExcludedFromLoading = []string{
 		"data_dir", "train_steps", "num_checkpoints", "plots",
-		"imdb_mask_word_task_weight", "imdb_use_unsupervised", "imdb_include_separators",
-		"imdb_content_max_len", "imdb_word_dropout_rate",
 	}
 )
 
@@ -117,7 +115,7 @@ func CreateDefaultContext() *context.Context {
 }
 
 // TrainModel with hyperparameters given in ctx.
-func TrainModel(ctx *context.Context, dataDir, checkpointPath string, evaluateOnEnd bool, verbosity int) {
+func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet []string, evaluateOnEnd bool, verbosity int) {
 	// Data directory: datasets and top-level directory holding checkpoints for different models.
 	dataDir = data.ReplaceTildeInDir(dataDir)
 	if !data.FileExists(dataDir) {
@@ -170,7 +168,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, evaluateOn
 		checkpoint = must.M1(checkpoints.Build(ctx).
 			DirFromBase(checkpointPath, dataDir).
 			Keep(numCheckpointsToKeep).
-			ExcludeParams(ParamsExcludedFromSaving...).
+			ExcludeParams(append(paramsSet, ParamsExcludedFromLoading...)...).
 			Done())
 		fmt.Printf("Checkpoint: %q\n", checkpoint.Dir())
 	}
