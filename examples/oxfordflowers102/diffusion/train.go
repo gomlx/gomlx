@@ -47,7 +47,7 @@ func (c *Config) AttachCheckpoint(checkpointPath string) (checkpoint *checkpoint
 	checkpoint = must.M1(checkpoints.Build(c.Context).
 		DirFromBase(checkpointPath, c.DataDir).
 		Keep(numCheckpointsToKeep).
-		ExcludeParams(ParamsExcludedFromSaving...).
+		ExcludeParams(append(c.ParamsSet, ParamsExcludedFromLoading...)...).
 		Done())
 	c.Checkpoint = checkpoint // Save in config.
 	fmt.Printf("Checkpoint: %q\n", checkpoint.Dir())
@@ -86,14 +86,14 @@ func getImageSize(ctx *context.Context) int {
 }
 
 // TrainModel with hyperparameters given in Context.
-func TrainModel(ctx *context.Context, dataDir, checkpointPath string, evaluateOnEnd bool, verbosity int) {
-
+// paramsSet enumerate the context parameters that were set and should override values loaded from a checkpoint.
+func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet []string, evaluateOnEnd bool, verbosity int) {
 	// Backend handles creation of ML computation graphs, accelerator resources, etc.
 	backend := backends.New()
 	if verbosity >= 1 {
 		fmt.Printf("Backend %q:\t%s\n", backend.Name(), backend.Description())
 	}
-	config := NewConfig(backend, ctx, dataDir)
+	config := NewConfig(backend, ctx, dataDir, paramsSet)
 
 	// Checkpoints saving.
 	checkpoint, samplesNoise, samplesFlowerIds := config.AttachCheckpoint(checkpointPath)
@@ -106,6 +106,20 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, evaluateOn
 	if context.GetParamOr(ctx, "rng_reset", true) {
 		// Reset RNG.
 		ctx.RngStateReset()
+	}
+	if verbosity >= 1 {
+		for _, paramsPath := range paramsSet {
+			scope, name := context.SplitScope(paramsPath)
+			if scope == "" {
+				if value, found := ctx.GetParam(name); found {
+					fmt.Printf("\t%s=%v\n", name, value)
+				}
+			} else {
+				if value, found := ctx.InAbsPath(scope).GetParam(name); found {
+					fmt.Printf("\tscope=%q %s=%v\n", scope, name, value)
+				}
+			}
+		}
 	}
 	fmt.Printf("\tLoss: %s\n", context.GetParamOr(ctx, "diffusion_loss", "mae"))
 	fmt.Printf("\tLearning rate: %f\n", context.GetParamOr(ctx, optimizers.ParamLearningRate, 0.0))
@@ -268,9 +282,11 @@ func TrainingMonitor(checkpoint *checkpoints.Handler, loop *train.Loop, metrics 
 }
 
 // DisplayTrainingPlots simply display the training plots of a model, without any training.
-func DisplayTrainingPlots(ctx *context.Context, dataDir, checkpointPath string) {
+//
+// paramsSet are hyperparameters overridden, that it should not load from the checkpoint (see commandline.ParseContextSettings).
+func DisplayTrainingPlots(ctx *context.Context, dataDir, checkpointPath string, paramsSet []string) {
 	backend := backends.New()
-	config := NewConfig(backend, ctx, dataDir)
+	config := NewConfig(backend, ctx, dataDir, paramsSet)
 	checkpoint, _, _ := config.AttachCheckpoint(checkpointPath)
 	if checkpoint == nil {
 		fmt.Printf("You must set --checkpoint='model_sub_dir'!")

@@ -37,6 +37,9 @@ type Config struct {
 	// DataDir is where the data is downloaded, and models are saved.
 	DataDir string
 
+	// ParamsSet are hyperparameters overridden, that it should not load from the checkpoint (see commandline.ParseContextSettings).
+	ParamsSet []string
+
 	DType                               dtypes.DType
 	ImageSize, BatchSize, EvalBatchSize int
 
@@ -44,7 +47,10 @@ type Config struct {
 	Checkpoint *checkpoints.Handler
 }
 
-func NewConfig(backend backends.Backend, ctx *context.Context, dataDir string) *Config {
+// NewConfig creates a configuration for most of the diffusion methods.
+//
+// paramsSet are hyperparameters overridden, that it should not load from the checkpoint (see commandline.ParseContextSettings).
+func NewConfig(backend backends.Backend, ctx *context.Context, dataDir string, paramsSet []string) *Config {
 	dataDir = data.ReplaceTildeInDir(dataDir)
 	if !data.FileExists(dataDir) {
 		must.M(os.MkdirAll(dataDir, 0777))
@@ -58,6 +64,7 @@ func NewConfig(backend backends.Backend, ctx *context.Context, dataDir string) *
 		EvalBatchSize: context.GetParamOr(ctx, "eval_batch_size", 128),
 		DType: must.M1(dtypes.DTypeString(
 			context.GetParamOr(ctx, "DType", "float32"))),
+		ParamsSet: paramsSet,
 	}
 }
 

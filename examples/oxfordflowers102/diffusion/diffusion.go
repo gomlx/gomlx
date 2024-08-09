@@ -81,11 +81,9 @@ func NormalizeLayer(ctx *context.Context, x *Node) *Node {
 	case "batch":
 		x = batchnorm.New(ctx, x, -1).Center(false).Scale(false).Done()
 	case "layer":
-		if true || x.Rank() <= 3 {
-			x = layers.LayerNormalization(ctx, x, -1).Done()
-		} else {
-			x = layers.LayerNormalization(ctx, x, 1, 2).Done()
-		}
+		x = layers.LayerNormalization(ctx, x, -1).Done()
+		// Optionally, normalize over the spatial dimensions instead:
+		// x = layers.LayerNormalization(ctx, x, 1, 2).Done()
 	}
 	nanLogger.Trace(x)
 	return x

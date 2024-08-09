@@ -10,19 +10,12 @@ import (
 )
 
 var (
-	// ParamsExcludedFromSaving is the list of parameters (see CreateDefaultContext) that shouldn't be saved
-	// along on the models checkpoints, and may be overwritten in further training sessions.
-	ParamsExcludedFromSaving = []string{
+	// ParamsExcludedFromLoading is the list of parameters (see CreateDefaultContext) that shouldn't be loaded
+	// from models checkpoints.
+	//
+	// These are appended to the list of settings given in the command line in the flag -set.
+	ParamsExcludedFromLoading = []string{
 		"data_dir", "train_steps", "plots",
-		"num_checkpoints", "checkpoint_frequency",
-		"kid", "rng_reset",
-
-		// These parameters one may want to change in between training sessions of the same model:
-		"diffusion_min_signal_ratio", "diffusion_max_signal_ratio",
-		layers.ParamDropoutRate,
-
-		// Notice that "samples_during_training" is saved, since it can't change after a model started training.
-		"samples_during_training_frequency", "samples_during_training_frequency_growth",
 	}
 )
 

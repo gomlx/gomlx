@@ -23,9 +23,9 @@ func main() {
 	settings := commandline.CreateContextSettingsFlag(ctx, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	must.M(commandline.ParseContextSettings(ctx, *settings))
+	paramsSet := must.M1(commandline.ParseContextSettings(ctx, *settings))
 	err := exceptions.TryCatch[error](func() {
-		diffusion.TrainModel(ctx, *flagDataDir, *flagCheckpoint, *flagEval, *flagVerbosity)
+		diffusion.TrainModel(ctx, *flagDataDir, *flagCheckpoint, paramsSet, *flagEval, *flagVerbosity)
 	})
 	if err != nil {
 		klog.Fatalf("Failed with error: %+v", err)

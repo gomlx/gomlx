@@ -288,9 +288,11 @@ func (c *Config) SliderDiffusionSteps(cacheKey string, ctx *context.Context, num
 
 // GenerateImagesOfFlowerType is similar to DisplayImagesAcrossDiffusionSteps, but it limits itself to generating images of only one
 // flower type.
-func GenerateImagesOfFlowerType(ctx *context.Context, dataDir, checkpointPath string, numImages int, flowerType int32, numDiffusionSteps int) (predictedImages *tensors.Tensor) {
+//
+// paramsSet are hyperparameters overridden, that it should not load from the checkpoint (see commandline.ParseContextSettings).
+func GenerateImagesOfFlowerType(ctx *context.Context, dataDir, checkpointPath string, paramsSet []string, numImages int, flowerType int32, numDiffusionSteps int) (predictedImages *tensors.Tensor) {
 	backend := backends.New()
-	config := NewConfig(backend, ctx, dataDir)
+	config := NewConfig(backend, ctx, dataDir, paramsSet)
 	_, _, _ = config.AttachCheckpoint(checkpointPath)
 	ctx.RngStateReset()
 	noise := config.GenerateNoise(numImages)
@@ -350,9 +352,11 @@ func (c *Config) DropdownFlowerTypes(cacheKey string, numImages, numDiffusionSte
 }
 
 // GenerateImagesOfAllFlowerTypes takes one random noise, and generate the flower for each of the 102 types.
-func GenerateImagesOfAllFlowerTypes(ctx *context.Context, dataDir, checkpointPath string, numDiffusionSteps int) (predictedImages *tensors.Tensor) {
+//
+// paramsSet are hyperparameters overridden, that it should not load from the checkpoint (see commandline.ParseContextSettings).
+func GenerateImagesOfAllFlowerTypes(ctx *context.Context, dataDir, checkpointPath string, paramsSet []string, numDiffusionSteps int) (predictedImages *tensors.Tensor) {
 	backend := backends.New()
-	config := NewConfig(backend, ctx, dataDir)
+	config := NewConfig(backend, ctx, dataDir, paramsSet)
 	_, _, _ = config.AttachCheckpoint(checkpointPath)
 	numImages := flowers.NumLabels
 	ctx.RngStateReset()

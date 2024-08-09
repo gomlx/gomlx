@@ -30,9 +30,9 @@ func init() {
 
 func getTestConfig() *Config {
 	ctx := CreateDefaultContext()
-	must.M(commandline.ParseContextSettings(ctx, *ctxSettings))
+	paramsSet := must.M1(commandline.ParseContextSettings(ctx, *ctxSettings))
 	backend := graphtest.BuildTestBackend()
-	return NewConfig(backend, ctx, *flagDataDir)
+	return NewConfig(backend, ctx, *flagDataDir, paramsSet)
 }
 
 func TestUNetModelGraph(t *testing.T) {
