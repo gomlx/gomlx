@@ -103,7 +103,7 @@ type Config struct {
 	keep      int
 
 	includeParams   bool              // whether to includeParams in loading/saving.
-	paramsToExclude types.Set[string] // specific parameter names to exclude from loading/saving.
+	paramsToExclude types.Set[string] // specific parameter names to exclude from loading.
 
 	backend  backends.Backend // used when taking the mean.
 	takeMean int
@@ -223,10 +223,11 @@ func (c *Config) ExcludeAllParams() *Config {
 }
 
 // ExcludeParams configures Handler to exclude certain Context parameters (values usually
-// read/written by Context.GetParam and context.SetParam) from being read and saved.
+// read/written by Context.GetParam and context.SetParam) from being read.
 // It can be called multiple times, each call adds new parameters to be excluded.
 //
-// paramsToExclude should be the name of the parameter, and the exclusion applies to all scopes.
+// For values in paramsToExclude that don't include a preceding scope (separated by "/"), the exclusion applies to all scopes.
+// Otherwise, it applies only to the specific scope. See context.JoinScope to merge scope and name.
 //
 // By default, no parameters are excluded.
 //
@@ -688,13 +689,14 @@ func (h *Handler) Save() error {
 	// Copy over Params.
 	if h.config.includeParams {
 		h.serialized.Params = nil
-		h.ctx.EnumerateParams(func(scope, key string, value any) {
-			if h.config.paramsToExclude.Has(key) {
+		h.ctx.EnumerateParams(func(scope, name string, value any) {
+			// Check for un-scoped and scoped exclusions:
+			if h.config.paramsToExclude.Has(name) || h.config.paramsToExclude.Has(context.JoinScope(scope, name)) {
 				return
 			}
 			h.serialized.Params = append(h.serialized.Params,
 				serializedParam{
-					Scope: scope, Key: key, Value: value, ValueType: fmt.Sprintf("%T", value)})
+					Scope: scope, Key: name, Value: value, ValueType: fmt.Sprintf("%T", value)})
 		})
 	}
 
