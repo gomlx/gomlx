@@ -39,7 +39,7 @@ import (
 //		fmt.Println(commandline.SprintContextSettings(ctx))
 //		...
 //	}
-func ParseContextSettings(ctx *context.Context, settings string) error {
+func ParseContextSettings(ctx *context.Context, settings string) (paramsSet []string, err error) {
 	settingsList := strings.Split(settings, ";")
 	for _, setting := range settingsList {
 		if setting == "" {
@@ -47,32 +47,32 @@ func ParseContextSettings(ctx *context.Context, settings string) error {
 		}
 		parts := strings.Split(setting, "=")
 		if len(parts) != 2 {
-			return errors.Errorf("can't parse settings %q: each setting requires the format \"<param>=<value>\", got %q",
+			err = errors.Errorf("can't parse settings %q: each setting requires the format \"<param>=<value>\", got %q",
 				settings, setting)
+			return
 		}
 		paramPath, valueStr := parts[0], parts[1]
-		paramPathParts := strings.Split(paramPath, context.ScopeSeparator)
-		key := paramPathParts[len(paramPathParts)-1]
-		value, found := ctx.GetParam(key)
+		paramScope, paramName := context.SplitScope(paramPath)
+		if strings.Index(paramName, context.ScopeSeparator) != -1 {
+			err = errors.Errorf("can't set parameter %q  because some scope is set, but it is not absolue (it does not start with %q)",
+				paramPath, context.ScopeSeparator)
+			return
+		}
+		value, found := ctx.GetParam(paramName)
 		if !found {
-			return errors.Errorf("can't set parameter %q because the param %q is not known in the root context",
-				paramPath, key)
+			err = errors.Errorf("can't set parameter %q (scope=%q)  because the param %q is not known in the root context",
+				paramPath, paramScope, paramName)
+			return
 		}
 
 		// Set the new parameter in the selected scope.
 		ctxInScope := ctx
-		if len(paramPathParts) > 1 {
-			for _, part := range paramPathParts[:len(paramPathParts)-1] {
-				if part == "" {
-					continue
-				}
-				ctxInScope = ctxInScope.In(part)
-			}
+		if paramScope != "" {
+			ctxInScope = ctxInScope.InAbsPath(paramScope)
 		}
 
 		// Parse value accordingly.
 		// Is there a better way of doing this using reflection ?
-		var err error
 		switch v := value.(type) {
 		case int:
 			valueStr = strings.Replace(valueStr, "_", "", -1)
@@ -137,11 +137,13 @@ func ParseContextSettings(ctx *context.Context, settings string) error {
 				value, setting)
 		}
 		if err != nil {
-			return errors.Wrapf(err, "failed to parse value %q for parameter %q (default value is %#v)", valueStr, paramPath, value)
+			err = errors.Wrapf(err, "failed to parse value %q for parameter %q (default value is %#v)", valueStr, paramPath, value)
+			return
 		}
-		ctxInScope.SetParam(key, value)
+		ctxInScope.SetParam(paramName, value)
+		paramsSet = append(paramsSet, paramPath)
 	}
-	return nil
+	return
 }
 
 // CreateContextSettingsFlag create a string flag with the given flagName (if empty it will be named
