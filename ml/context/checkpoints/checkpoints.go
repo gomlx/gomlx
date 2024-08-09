@@ -690,10 +690,6 @@ func (h *Handler) Save() error {
 	if h.config.includeParams {
 		h.serialized.Params = nil
 		h.ctx.EnumerateParams(func(scope, name string, value any) {
-			// Check for un-scoped and scoped exclusions:
-			if h.config.paramsToExclude.Has(name) || h.config.paramsToExclude.Has(context.JoinScope(scope, name)) {
-				return
-			}
 			h.serialized.Params = append(h.serialized.Params,
 				serializedParam{
 					Scope: scope, Key: name, Value: value, ValueType: fmt.Sprintf("%T", value)})
@@ -838,7 +834,8 @@ func (h *Handler) attachTo(ctx *context.Context) {
 	// Sets ctx.Params with values read, if any.
 	if h.config.includeParams {
 		for _, p := range h.serialized.Params {
-			if h.config.paramsToExclude.Has(p.Key) {
+			// Check for un-scoped and scoped exclusions:
+			if h.config.paramsToExclude.Has(p.Key) || h.config.paramsToExclude.Has(context.JoinScope(p.Scope, p.Key)) {
 				continue
 			}
 			tmpCtx := ctx.InAbsPath(p.Scope)
