@@ -10,6 +10,7 @@ import (
 	"github.com/gomlx/gomlx/graph/nanlogger"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
+	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/commandline"
@@ -44,10 +45,11 @@ func (c *Config) AttachCheckpoint(checkpointPath string) (checkpoint *checkpoint
 		return
 	}
 	numCheckpointsToKeep := context.GetParamOr(c.Context, "num_checkpoints", 5)
+	excludeParams := append(c.ParamsSet, ParamsExcludedFromLoading...)
 	checkpoint = must.M1(checkpoints.Build(c.Context).
 		DirFromBase(checkpointPath, c.DataDir).
 		Keep(numCheckpointsToKeep).
-		ExcludeParams(append(c.ParamsSet, ParamsExcludedFromLoading...)...).
+		ExcludeParams(excludeParams...).
 		Done())
 	c.Checkpoint = checkpoint // Save in config.
 	fmt.Printf("Checkpoint: %q\n", checkpoint.Dir())
@@ -297,13 +299,15 @@ func DisplayTrainingPlots(ctx *context.Context, dataDir, checkpointPath string, 
 
 // CompareModelPlots display several model metrics on the same plots.
 func CompareModelPlots(dataDir string, modelNames ...string) {
+	dataDir = data.ReplaceTildeInDir(dataDir)
 	plots := margaid.New(1024, 400).LogScaleX().LogScaleY()
 	for _, modelName := range modelNames {
-		if !path.IsAbs(modelName) {
-			modelName = path.Join(dataDir, modelName)
+		modelPath := modelName
+		if !path.IsAbs(modelPath) {
+			modelPath = path.Join(dataDir, modelPath)
 		}
-		modelName = path.Join(modelName, stdplots.TrainingPlotFileName)
-		_ = must.M1(plots.PreloadFile(modelName, func(metricName string) string {
+		modelPath = path.Join(modelPath, stdplots.TrainingPlotFileName)
+		_ = must.M1(plots.PreloadFile(modelPath, func(metricName string) string {
 			return fmt.Sprintf("[%s] %s", modelName, metricName)
 		}))
 	}

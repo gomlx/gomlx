@@ -29,6 +29,8 @@ import (
 	"math/rand"
 	"os"
 	"path"
+	"regexp"
+	"strconv"
 	"strings"
 	"text/template"
 )
@@ -65,6 +67,8 @@ func ImagesToHtml(images []image.Image) string {
 		"<div style=\"overflow-x: auto\">\n\t%s</div>\n", strings.Join(parts, "\n\t"))
 }
 
+var generateSamplesRegex = regexp.MustCompile(`generated_samples_(\d+).tensor`)
+
 // PlotModelEvolution plots the saved sampled generated images of a model in the current configured checkpoint.
 //
 // It outputs at most imagesPerSample per checkpoint sampled.
@@ -78,15 +82,18 @@ func (c *Config) PlotModelEvolution(imagesPerSample int, animate bool) {
 	modelDir := c.Checkpoint.Dir()
 	entries := must.M1(os.ReadDir(modelDir))
 	var generatedFiles []string
+	var generateGlobalSteps []int
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
 		}
 		fileName := entry.Name()
-		if !strings.HasPrefix(fileName, GeneratedSamplesPrefix) || !strings.HasSuffix(fileName, ".tensor") {
+		nameMatches := generateSamplesRegex.FindStringSubmatch(fileName)
+		if len(nameMatches) != 2 || nameMatches[0] != fileName {
 			continue
 		}
 		generatedFiles = append(generatedFiles, fileName)
+		generateGlobalSteps = append(generateGlobalSteps, must.M1(strconv.Atoi(nameMatches[1])))
 	}
 
 	if len(generatedFiles) == 0 {
@@ -94,13 +101,14 @@ func (c *Config) PlotModelEvolution(imagesPerSample int, animate bool) {
 		return
 	}
 
-	gonbui.DisplayHTML(fmt.Sprintf("<b>Generated samples in <pre>%s</pre>.</b>", modelDir))
+	gonbui.DisplayMarkdown(fmt.Sprintf("**Generated samples in `%s`:**", modelDir))
 	if !animate {
 		// Simply display all images:
-		for _, generatedFile := range generatedFiles {
+		for ii, generatedFile := range generatedFiles {
 			imagesT := must.M1(tensors.Load(path.Join(modelDir, generatedFile)))
 			images := timage.ToImage().MaxValue(255.0).Batch(imagesT)
 			images = images[:imagesPerSample]
+			gonbui.DisplayMarkdown(fmt.Sprintf("- global_step %d:\n", generateGlobalSteps[ii]))
 			PlotImages(images)
 		}
 		return
@@ -354,21 +362,19 @@ func (c *Config) DropdownFlowerTypes(cacheKey string, numImages, numDiffusionSte
 // GenerateImagesOfAllFlowerTypes takes one random noise, and generate the flower for each of the 102 types.
 //
 // paramsSet are hyperparameters overridden, that it should not load from the checkpoint (see commandline.ParseContextSettings).
-func GenerateImagesOfAllFlowerTypes(ctx *context.Context, dataDir, checkpointPath string, paramsSet []string, numDiffusionSteps int) (predictedImages *tensors.Tensor) {
-	backend := backends.New()
-	config := NewConfig(backend, ctx, dataDir, paramsSet)
-	_, _, _ = config.AttachCheckpoint(checkpointPath)
+func (c *Config) GenerateImagesOfAllFlowerTypes(numDiffusionSteps int) (predictedImages *tensors.Tensor) {
+	ctx := c.Context
 	numImages := flowers.NumLabels
 	ctx.RngStateReset()
 	imageSize := getImageSize(ctx)
-	noise := NewExec(config.Backend, func(g *Graph) *Node {
+	noise := NewExec(c.Backend, func(g *Graph) *Node {
 		state := Const(g, RngState())
 		_, noise := RandomNormal(state, shapes.Make(DType, 1, imageSize, imageSize, 3))
 		noise = BroadcastToDims(noise, numImages, imageSize, imageSize, 3)
 		return noise
 	}).Call()[0]
 	flowerIds := tensors.FromValue(xslices.Iota(int32(0), numImages))
-	generator := config.NewImagesGenerator(noise, flowerIds, numDiffusionSteps)
+	generator := c.NewImagesGenerator(noise, flowerIds, numDiffusionSteps)
 	return generator.Generate()
 }
 
