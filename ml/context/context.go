@@ -195,6 +195,38 @@ func (ctx *Context) copy() *Context {
 	return ctx2
 }
 
+// JoinScope and name into a single string.
+// If scope is empty, name is returned.
+// See also SplitScope.
+func JoinScope(scope, name string) string {
+	if strings.HasSuffix(scope, ScopeSeparator) {
+		return scope + name
+	}
+	if scope == "" {
+		return name
+	}
+	return fmt.Sprintf("%s%s%s", scope, ScopeSeparator, name)
+}
+
+// SplitScope splits the scope from the name for a combined string, typically created by JoinScope.
+// If there is no scope configured, scope is set to "".
+func SplitScope(scopeAndName string) (scope, name string) {
+	if !strings.HasPrefix(scopeAndName, ScopeSeparator) {
+		// No scope in scopeAndName.
+		scope = ""
+		name = scopeAndName
+		return
+	}
+	separationIdx := strings.LastIndex(scopeAndName, ScopeSeparator)
+	name = scopeAndName[separationIdx+1:]
+	if separationIdx == 0 {
+		scope = RootScope
+	} else {
+		scope = scopeAndName[:separationIdx]
+	}
+	return
+}
+
 // Scope returns the full scope path.
 //
 // Notice that Scope is part of the "reference" component of a Context.

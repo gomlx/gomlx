@@ -240,3 +240,22 @@ func TestContext_SetLoader(t *testing.T) {
 		t.Errorf("Got x,y = (%f, %d), wanted (2.0, 3)", gotV0, gotV1)
 	}
 }
+
+func TestJoinAndSplitScope(t *testing.T) {
+	assert.Equal(t, "a", JoinScope("", "a"))
+	assert.Equal(t, "/a", JoinScope("/", "a"))
+	assert.Equal(t, "/b/a", JoinScope("/b", "a"))
+	assert.Equal(t, "/b/a", JoinScope("/b/", "a"))
+	assert.Equal(t, "/c/b/a", JoinScope("/c/b/", "a"))
+
+	testSplit := func(scopeAndName, wantScope, wantName string) {
+		gotScope, gotName := SplitScope(scopeAndName)
+		assert.Equal(t, []string{wantScope, wantName}, []string{gotScope, gotName})
+	}
+	testSplit("a", "", "a")
+	testSplit("/a", "/", "a")
+	testSplit("/b/a", "/b", "a")
+	testSplit("/c/b/a", "/c/b", "a")
+	testSplit("/c/b/", "/c/b", "")
+	testSplit("a/b", "", "a/b") // Notice that something that doesn't start with "/" doesn't have a scope.
+}
