@@ -186,7 +186,7 @@ func LearningRateVar(ctx *context.Context, dtype dtypes.DType, defaultValue floa
 
 // LearningRateVarWithValue creates (or reuses) variable for learning rate with the given value.
 func LearningRateVarWithValue(ctx *context.Context, dtype dtypes.DType, value float64) *context.Variable {
-	ctx = ctx.Checked(false).In("optimizers")
+	ctx = ctx.Checked(false).In(Scope)
 	return ctx.VariableWithValue(ParamLearningRate, shapes.CastAsDType(value, dtype)).SetTrainable(false)
 }
 
