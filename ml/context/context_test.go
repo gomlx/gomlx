@@ -148,35 +148,62 @@ func TestEnumerateVariables(t *testing.T) {
 }
 
 func TestDeleteVariable(t *testing.T) {
-	ctx := New()
+	loader := &ConstantLoader{
+		Values: map[string]*tensors.Tensor{
+			"/a/x":   tensors.FromValue(float32(2)),
+			"/y":     tensors.FromValue(int64(3)),
+			"/b/c/z": tensors.FromValue([][]float32{{7}}),
+			"/b/c/w": tensors.FromValue(int64(11)),
+		},
+	}
+	ctx := New().Checked(false)
+	ctx.SetLoader(loader)
 	ctx0 := ctx.In("a")
 	_ = ctx0.VariableWithShape("x", shapes.Make(dtypes.Float32))
 	ctx1 := ctx.In("b")
 	_ = ctx1.VariableWithShape("y", shapes.Make(dtypes.Float64, 2))
 	ctx2 := ctx1.In("c")
-	_ = ctx2.VariableWithShape("z", shapes.Make(dtypes.Float32, 3, 1))
+	_ = ctx2.VariableWithShape("z", shapes.Make(dtypes.Float32, 1, 1))
 
 	backend := graphtest.BuildTestBackend()
 	ctx.InitializeVariables(backend)
 
-	assert.False(t, ctx.DeleteVariable("/foo", "x"))
-	assert.True(t, ctx.DeleteVariable("/b", "y"))
+	assert.Equal(t, 3, ctx.NumVariables())
+	ctx.DeleteVariable("/foo", "x")
+	assert.Equal(t, 3, ctx.NumVariables())
+	assert.Len(t, loader.Values, 4)
+
+	ctx.DeleteVariable("/b", "y")
 	assert.Equal(t, 2, ctx.NumVariables())
+	assert.Len(t, loader.Values, 4)
 	assert.NotNil(t, ctx.InspectVariable("/b/c", "z")) // Check "z" hasn't been deleted.
-	assert.True(t, ctx.DeleteVariable("/b/c", "z"))
+
+	ctx.DeleteVariable("/b/c", "z")
 	assert.Equal(t, 1, ctx.NumVariables())
-	assert.True(t, ctx.DeleteVariable("/a", "x"))
+	assert.Len(t, loader.Values, 3)
+
+	ctx.DeleteVariable("/a", "x")
 	assert.Equal(t, 0, ctx.NumVariables())
+	assert.Len(t, loader.Values, 2)
 }
 
 func TestDeleteVariablesInScope(t *testing.T) {
-	ctx := New()
+	ctx := New().Checked(false)
+	loader := &ConstantLoader{
+		Values: map[string]*tensors.Tensor{
+			"/a/x":   tensors.FromValue(float32(2)),
+			"/y":     tensors.FromValue(int64(3)),
+			"/b/c/z": tensors.FromValue([][]float32{{7}}),
+			"/b/c/w": tensors.FromValue(int64(11)),
+		},
+	}
+	ctx.SetLoader(loader)
 	ctx0 := ctx.In("a")
 	_ = ctx0.VariableWithShape("x", shapes.Make(dtypes.Float32))
 	ctx1 := ctx.In("b")
 	_ = ctx1.VariableWithShape("y", shapes.Make(dtypes.Float64, 2))
 	ctx2 := ctx1.In("c")
-	_ = ctx2.VariableWithShape("z", shapes.Make(dtypes.Float32, 3, 1))
+	_ = ctx2.VariableWithShape("z", shapes.Make(dtypes.Float32, 1, 1))
 
 	backend := graphtest.BuildTestBackend()
 	ctx.InitializeVariables(backend)
@@ -185,6 +212,7 @@ func TestDeleteVariablesInScope(t *testing.T) {
 	ctx1.DeleteVariablesInScope()
 	assert.Equal(t, 1, ctx.NumVariables())
 	assert.NotNil(t, ctx.InspectVariable("/a", "x")) // Check "x" hasn't been deleted.
+	assert.Len(t, loader.Values, 3)                  // Only "/b/c/z" must have been deleted -- but notice that /b/c/w is not affected.
 
 	// Check that deleting an empty scope is a no-op.
 	ctx.In("foo").DeleteVariablesInScope()
@@ -198,7 +226,7 @@ func TestDeleteVariablesInScope(t *testing.T) {
 
 // ConstantLoader implements a hard-coded loader of values.
 type ConstantLoader struct {
-	Values map[string]map[string]*tensors.Tensor
+	Values map[string]*tensors.Tensor
 }
 
 // LoadVariable implements Loader.
@@ -206,22 +234,21 @@ func (l *ConstantLoader) LoadVariable(_ *Context, scope, name string) (value *te
 	if l.Values == nil {
 		return
 	}
-	nameToValue, found := l.Values[scope]
-	if !found {
-		return
-	}
-	value, found = nameToValue[name]
+	value, found = l.Values[JoinScope(scope, name)]
 	return
+}
+
+func (l *ConstantLoader) DeleteVariable(_ *Context, scope, name string) {
+	delete(l.Values, JoinScope(scope, name))
 }
 
 func TestContext_SetLoader(t *testing.T) {
 	ctx := New()
 	ctx.SetLoader(&ConstantLoader{
-		Values: map[string]map[string]*tensors.Tensor{
-			"/": {
-				"x": tensors.FromValue(float32(2)),
-				"y": tensors.FromValue(int64(3)),
-			},
+		Values: map[string]*tensors.Tensor{
+			"/x": tensors.FromValue(float32(2)),
+			"/y": tensors.FromValue(int64(3)),
+			"/z": tensors.FromValue(int64(7)),
 		},
 	})
 	ctx = ctx.Reuse()

@@ -156,6 +156,12 @@ type Loader interface {
 	// It is called at most once for each variable: if a values is loaded owner is transferred and the Loader
 	// can "forget" about that variable, it's assumed to be transferred to the context.
 	LoadVariable(ctx *Context, scope, name string) (value *tensors.Tensor, found bool)
+
+	// DeleteVariable is called whenever Context.DeleteVariable is called. The deletion should cascade to the
+	// loader, otherwise the variable will reappear after deletion.
+	//
+	// If the variable doesn't exist in the loader, it should be a no-op.
+	DeleteVariable(ctx *Context, scope, name string)
 }
 
 // New returns an empty context, associated with a freshly created data.
@@ -663,17 +669,22 @@ func (ctx *Context) setVariableInScope(name string, v *Variable) {
 }
 
 // DeleteVariable if it exists.
-// Returns whether the variable existed before being deleted.
 //
 // This should not be called from a graph building function or from within EnumerateVariables: the results are undefined if you do.
-func (ctx *Context) DeleteVariable(scope, name string) bool {
+func (ctx *Context) DeleteVariable(scope, name string) {
+	// Even if variable doesn't exist in context yet, we need to remove it from the loader,
+	// since it may only exist there at first.
+	loader := ctx.data.loader
+	if loader != nil {
+		loader.DeleteVariable(ctx, scope, name)
+	}
 	scopeVars, ok := ctx.data.variablesMap[scope]
 	if !ok {
-		return false
+		return
 	}
 	v := scopeVars[name]
 	if v == nil {
-		return false
+		return
 	}
 	v.value = nil
 	v.graphToNodes = nil
@@ -684,7 +695,7 @@ func (ctx *Context) DeleteVariable(scope, name string) bool {
 	ctx.data.variables = slices.DeleteFunc(ctx.data.variables, func(vCandidate *Variable) bool {
 		return vCandidate == v
 	})
-	return true
+	return
 }
 
 // DeleteVariablesInScope deletes all variables under the current scope (ctx.Scope()).
@@ -697,8 +708,13 @@ func (ctx *Context) DeleteVariablesInScope() {
 	if baseScope == RootScope {
 		baseScopeWithSeparator = baseScope
 	}
+	loader := ctx.data.loader
 	for _, v := range ctx.data.variables {
 		if v.Scope() == baseScope || strings.HasPrefix(v.Scope(), baseScopeWithSeparator) {
+			if loader != nil {
+				loader.DeleteVariable(ctx, v.Scope(), v.Name())
+			}
+
 			// Remove reference to variable.
 			scopeVars, ok := ctx.data.variablesMap[v.Scope()]
 			if !ok {
@@ -708,7 +724,6 @@ func (ctx *Context) DeleteVariablesInScope() {
 			if len(scopeVars) == 0 {
 				delete(ctx.data.variablesMap, v.Scope())
 			}
-			continue
 		} else {
 			// Preserve variable.
 			variables = append(variables, v)
