@@ -62,7 +62,7 @@ func CreateDefaultContext() *context.Context {
 		// Diffusion model:
 		"diffusion_loss":                "mae",                  // "mse" (Mean-Squared-Error), "mae" (Mean-Absolute-Error) or "huber".
 		"huber_delta":                   0.2,                    // If "huber" loss is selected, this is the delta, after which the loss becomes linear.
-		"diffusion_context_features":    false,                  // Enable context features concatenated at every convolution.
+		"diffusion_context_features":    false,                  // Enable context features concatenated at every convolution -- they are always included at the start of the model.
 		"diffusion_num_residual_blocks": 2,                      // Number of residual blocks per image size in the U-Net model.
 		"diffusion_channels_list":       []int{32, 64, 96, 128}, // Number of channels (features) for each image size (progressively smaller) in U-Net model.
 		"diffusion_min_signal_ratio":    0.02,                   // Minimum of the signal-to-noise ratio when training. Must be > 0.
@@ -84,7 +84,7 @@ func CreateDefaultContext() *context.Context {
 		optimizers.ParamAdamWeightDecay:     1e-4,
 		optimizers.ParamCosineScheduleSteps: 0,
 		activations.ParamActivation:         "swish",
-		layers.ParamDropoutRate:             0.15,
+		layers.ParamDropoutRate:             0.0,
 		regularizers.ParamL2:                0.0,
 		regularizers.ParamL1:                0.0,
 
