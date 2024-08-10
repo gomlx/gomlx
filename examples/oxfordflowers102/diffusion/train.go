@@ -194,7 +194,6 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 			WithCheckpoint(checkpoint).
 			Dynamic().
 			WithDatasets(trainEvalDS, validationDS).
-			ScheduleExponential(loop, 200, 1.2).
 			WithBatchNormalizationAveragesUpdate(trainEvalDS)
 	}
 
@@ -262,6 +261,7 @@ func TrainingMonitor(checkpoint *checkpoints.Handler, loop *train.Loop, metrics 
 		return nil
 	}
 	must.M(checkpoint.Save())
+	must.M(checkpoint.Backup()) // Save backup, so these checkpoint doesn't get automatically collected.
 
 	// Update plotter with metrics.
 	must.M(stdplots.AddTrainAndEvalMetrics(plotter, loop, metrics, evalDatasets, evalDatasets[0]))
