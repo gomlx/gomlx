@@ -480,11 +480,21 @@ func (h *Handler) newCheckpointBaseName(globalStep int64) string {
 
 const (
 	baseNamePrefix = "checkpoint-"
-	jsonNameSuffix = ".json"
-	varDataSuffix  = ".bin"
+
+	// JsonNameSuffix for the JSON files returned by Handler.ListCheckpoints.
+	JsonNameSuffix = ".json"
+
+	// VarDataSuffix for the data files (holding the tensor values) returned by Handler.ListCheckpoints.
+	VarDataSuffix = ".bin"
+
+	// BackupDir is the name of the (sub-)directory under the model checkpoints directory that holds
+	// the backups. See Handler.Backup.
+	BackupDir = "backup"
 )
 
-// ListCheckpoints returns the base file name of the checkpoints in the directory in time order (older first).
+// ListCheckpoints returns the base file paths of the checkpoints in the directory in time order (older first).
+//
+// The actual paths are these base file paths suffixed with JsonNameSuffix and VarDataSuffix.
 func (h *Handler) ListCheckpoints() (checkpoints []string, err error) {
 	entries, err := os.ReadDir(h.config.dir)
 	if err != nil {
@@ -495,10 +505,10 @@ func (h *Handler) ListCheckpoints() (checkpoints []string, err error) {
 			continue
 		}
 		fileName := entry.Name()
-		if !strings.HasPrefix(fileName, baseNamePrefix) || !strings.HasSuffix(fileName, jsonNameSuffix) {
+		if !strings.HasPrefix(fileName, baseNamePrefix) || !strings.HasSuffix(fileName, JsonNameSuffix) {
 			continue
 		}
-		baseName := fileName[:len(fileName)-len(jsonNameSuffix)]
+		baseName := fileName[:len(fileName)-len(JsonNameSuffix)]
 		checkpoints = append(checkpoints, baseName)
 	}
 	sort.Strings(checkpoints)
@@ -554,12 +564,12 @@ func (h *Handler) loadCheckpoint(baseName string, merge bool, mergeWeight float6
 	}
 
 	// Open files for reading.
-	varFileName := filepath.Join(h.config.dir, baseName+varDataSuffix)
+	varFileName := filepath.Join(h.config.dir, baseName+VarDataSuffix)
 	varFile, err := os.Open(varFileName)
 	if err != nil {
 		return errors.Wrapf(err, "%s: failed to open checkpoint data file %s", h, varFileName)
 	}
-	jsonFileName := filepath.Join(h.config.dir, baseName+jsonNameSuffix)
+	jsonFileName := filepath.Join(h.config.dir, baseName+JsonNameSuffix)
 	jsonFile, err := os.Open(jsonFileName)
 	if err != nil {
 		return errors.Wrapf(err, "%s: failed to open checkpoint metadata file %s", h, jsonFileName)
@@ -699,12 +709,12 @@ func (h *Handler) Save() error {
 	// Create files.
 	baseName := h.newCheckpointBaseName(globalStep)
 	h.checkpointsCount += 1 // Bump unique number.
-	varFileName := filepath.Join(h.config.dir, baseName+varDataSuffix)
+	varFileName := filepath.Join(h.config.dir, baseName+VarDataSuffix)
 	varFile, err := os.Create(varFileName)
 	if err != nil {
 		return errors.Wrapf(err, "%s: failed to create checkpoint data file %s", h, varFileName)
 	}
-	jsonFileName := filepath.Join(h.config.dir, baseName+jsonNameSuffix)
+	jsonFileName := filepath.Join(h.config.dir, baseName+JsonNameSuffix)
 	var jsonFile *os.File
 	jsonFile, err = os.Create(jsonFileName)
 	if err != nil {
@@ -782,6 +792,38 @@ func (h *Handler) Save() error {
 	return h.keepNCheckpoints()
 }
 
+// Backup links (or copies) the latest checkpoint to a separate sub-directory under the model directory called
+// "backup" (constant in checkpoints.BackupDir).
+//
+// This way the backed up checkpoint doesn't get automatically deleted as the model training progresses.
+//
+// Useful, for instance, to back up the checkpoints used to collect the plot points. But can be used for any other
+// reason.
+func (h *Handler) Backup() error {
+	baseNames, err := h.ListCheckpoints()
+	if err != nil {
+		return errors.WithMessagef(err, "failed Backup() finding currenct checkpoints")
+	}
+	if len(baseNames) == 0 {
+		// If there are n
+		return errors.Errorf("there are no saved checkpoints in %q: maybe call Save() before Backup() ?", h.Dir())
+	}
+	baseName := xslices.Last(baseNames)
+	varFilePath := filepath.Join(h.config.dir, baseName+VarDataSuffix)
+	jsonFilePath := filepath.Join(h.config.dir, baseName+JsonNameSuffix)
+	backupDir := path.Join(h.Dir(), BackupDir)
+	err = os.MkdirAll(backupDir, DirPermMode)
+	if err != nil {
+		return errors.Wrapf(err, "trying to create dir %q", backupDir)
+	}
+	for _, srcFilePath := range []string{varFilePath, jsonFilePath} {
+		newPath := path.Join(backupDir, path.Base(srcFilePath))
+		err := os.Link(srcFilePath, newPath)
+		return errors.Wrapf(err, "failed to link %q to %q", srcFilePath, newPath)
+	}
+	return nil
+}
+
 // OnStepFn implements `train.OnStepFn`, and make it convenient to attach to a training loop.
 // It simply calls save.
 func (h *Handler) OnStepFn(_ *train.Loop, _ []*tensors.Tensor) error {
@@ -805,8 +847,8 @@ func (h *Handler) keepNCheckpoints() error {
 	// Remove the excess checkpoints, starting from the earlier ones.
 	list = list[:len(list)-h.config.keep]
 	for _, baseName := range list {
-		varFileName := filepath.Join(h.config.dir, baseName+varDataSuffix)
-		jsonFileName := filepath.Join(h.config.dir, baseName+jsonNameSuffix)
+		varFileName := filepath.Join(h.config.dir, baseName+VarDataSuffix)
+		jsonFileName := filepath.Join(h.config.dir, baseName+JsonNameSuffix)
 		for _, fileName := range []string{varFileName, jsonFileName} {
 			err = os.Remove(fileName)
 			if err != nil && !os.IsNotExist(err) {
