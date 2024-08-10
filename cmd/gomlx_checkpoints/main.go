@@ -44,9 +44,10 @@ var (
 	flagMetricsLabels = flag.Bool("metrics_labels", false,
 		fmt.Sprintf("Lists the metrics labels (short names) with their full description from file %q", plots.TrainingPlotFileName))
 
-	flagMetricsNames = flag.String("metrics_names", "", "Comma-separate list of metric names to include in metrics report.")
-	flagMetricsTypes = flag.String("metrics_types", "", "Comma-separate list of metric types to include in metrics report. ")
+	flagMetricsNames = flag.String("metrics_names", "", "Comma-separate list of metric names to include in metrics Reports.")
+	flagMetricsTypes = flag.String("metrics_types", "", "Comma-separate list of metric types to include in metrics Reports. ")
 
+	flagBackup     = flag.Bool("backup", false, "Set to true to make a backup of the most recent checkpoint, under the 'backup' subdirectory.")
 	flagDeleteVars = flag.String("delete_vars", "", "Delete variables under the given scope(s). Useful for instance to remove training temporary data.")
 
 	flagLoop = flag.Duration("loop", 0, "Sets looping with the given period. "+
@@ -79,6 +80,10 @@ func main() {
 		os.Exit(1)
 	}
 
+	if *flagBackup {
+		Backup(args[0])
+	}
+
 	if *flagDeleteVars != "" {
 		DeleteVars(args[0], strings.Split(*flagDeleteVars, ",")...)
 	}
@@ -86,12 +91,12 @@ func main() {
 	if *flagLoop > 0 {
 		for {
 			ClearScreen()
-			report(args[0])
+			Reports(args[0])
 			fmt.Println(italicStyle.Render(fmt.Sprintf("(... refreshing every %s ...)", *flagLoop)))
 			time.Sleep(*flagLoop)
 		}
 	}
-	report(args[0])
+	Reports(args[0])
 }
 
 func ClearScreen() {
@@ -140,7 +145,7 @@ func newPlainTable(withHeader bool, alignments ...lipgloss.Position) *lgtable.Ta
 		})
 }
 
-func report(checkpointPath string) {
+func Reports(checkpointPath string) {
 	ctx := context.New()
 	if *flagSummary || *flagParams || *flagVars {
 		_ = must.M1(checkpoints.Build(ctx).
@@ -363,8 +368,9 @@ func DeleteVars(checkpointPath string, scopes ...string) {
 		if scope == "" {
 			continue
 		}
+		scopePrefix := scope + context.ScopeSeparator
 		ctx.EnumerateVariables(func(v *context.Variable) {
-			if strings.HasPrefix(v.Scope(), scope) {
+			if v.Scope() == scope || strings.HasPrefix(v.Scope(), scopePrefix) {
 				varsToDelete = append(varsToDelete, v)
 			}
 		})
@@ -377,4 +383,13 @@ func DeleteVars(checkpointPath string, scopes ...string) {
 		ctx.DeleteVariable(v.Scope(), v.Name())
 	}
 	must.M(checkpoint.Save())
+	fmt.Printf("%d deleted vars under scopes %v, new checkpoint saved.\n", len(varsToDelete), scopes)
+}
+
+func Backup(checkpointPath string) {
+	ctx := context.New()
+	checkpoint := must.M1(checkpoints.Build(ctx).
+		Dir(checkpointPath).Keep(-1).Immediate().Done())
+	must.M(checkpoint.Backup())
+	fmt.Printf("Backup of latest checkpoint successful, see %q.\n", path.Join(checkpoint.Dir(), checkpoints.BackupDir))
 }
