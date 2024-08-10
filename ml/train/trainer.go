@@ -166,6 +166,10 @@ func NewTrainer(backend backends.Backend, ctx *context.Context,
 		batchNormStepExecMap:      make(map[any]*context.Exec),
 	}
 
+	// Delete variables that should forcefully be reinitialized every time the model is retrained.
+	optScope := ctx.In(optimizers.Scope).Scope()
+	ctx.DeleteVariable(optScope, optimizers.ParamLearningRate)
+
 	// Create a context executor for TrainStep. Automatically include batch loss and moving average loss metrics.
 	numMetrics := len(trainMetrics) + 3
 	lossAndMetrics := make([]metrics.Interface, 0, numMetrics)
