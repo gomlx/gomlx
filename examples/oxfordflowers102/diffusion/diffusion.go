@@ -111,16 +111,21 @@ func ResidualBlock(ctx *context.Context, x, contextFeatures *Node, outputChannel
 	residual := x
 	layerNum := 0
 	if inputChannels != outputChannels {
-		residual = layers.Dense(ctx.Inf("%03d_projection", layerNum), x, true, outputChannels)
+		residual = layers.Dense(ctx.Inf("%03d_residual_projection", layerNum), x, true, outputChannels)
 		layerNum++
 	}
+	residual = activations.ApplyFromContext(ctx, residual)
+
 	x = NormalizeLayer(ctx.Inf("%03d-norm", layerNum), x)
 	layerNum++
 	x = concatContextFeatures(x, contextFeatures)
-	convCtx := ctx.Inf("%03d_conv", layerNum).WithInitializer(initializers.XavierNormalFn(0))
+	convCtx := ctx.Inf("%03d_conv", layerNum).WithInitializer(initializers.Zero)
 	x = layers.Convolution(convCtx, x).Filters(outputChannels).KernelSize(3).PadSame().Done()
 	layerNum++
 	x = activations.ApplyFromContext(ctx, x)
+	x = layers.Dense(ctx.Inf("%03d_projection", layerNum), x, true, outputChannels)
+	layerNum++
+
 	x = Add(x, residual)
 	nanLogger.Trace(x)
 	return x
@@ -177,7 +182,7 @@ func shapeToStr(shape shapes.HasShape) string {
 //     later to be up-sampled again. So at most `log2(size)` values.
 //   - "diffusion_num_residual_blocks" (static hyperparameter): number of blocks to use per numChannelsList element.
 func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds *Node) *Node {
-	ctx = ctx.In("u-net").WithInitializer(initializers.GlorotUniformFn(0))
+	ctx = ctx.In("u-net").WithInitializer(initializers.XavierNormalFn(0))
 	layerNum := 0
 	batchSize := noisyImages.Shape().Dimensions[0]
 	imgSize := noisyImages.Shape().Dimensions[1]
