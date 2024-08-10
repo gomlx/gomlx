@@ -10,12 +10,15 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	lgtable "github.com/charmbracelet/lipgloss/table"
 	"github.com/dustin/go-humanize"
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/examples/notebook/gonb/plots"
+	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/xslices"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
 	"os"
@@ -23,6 +26,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	_ "github.com/gomlx/gomlx/backends/xla"
 )
 
 var (
@@ -41,6 +46,8 @@ var (
 
 	flagMetricsNames = flag.String("metrics_names", "", "Comma-separate list of metric names to include in metrics report.")
 	flagMetricsTypes = flag.String("metrics_types", "", "Comma-separate list of metric types to include in metrics report. ")
+
+	flagDeleteVars = flag.String("delete_vars", "", "Delete variables under the given scope(s). Useful for instance to remove training temporary data.")
 
 	flagLoop = flag.Duration("loop", 0, "Sets looping with the given period. "+
 		"This is used to monitor the training of a program, usually used in conjunction with --metrics. "+
@@ -70,6 +77,10 @@ func main() {
 	if len(args) > 1 {
 		klog.Errorf("Too many arguments. See 'gomlx_checkpoint -help'.")
 		os.Exit(1)
+	}
+
+	if *flagDeleteVars != "" {
+		DeleteVars(args[0], strings.Split(*flagDeleteVars, ",")...)
 	}
 
 	if *flagLoop > 0 {
@@ -146,7 +157,7 @@ func report(checkpointPath string) {
 		table := newPlainTable(false, lipgloss.Right, lipgloss.Left)
 		table.Row("checkpoint", checkpointPath)
 		table.Row("scope", *flagScope)
-		globalStep := int64(optimizers.GetGlobalStep(ctx))
+		globalStep := optimizers.GetGlobalStep(ctx)
 		table.Row("global_step", humanize.Comma(globalStep))
 
 		var numVars, totalSize int
@@ -173,29 +184,7 @@ func report(checkpointPath string) {
 	}
 
 	if *flagVars {
-		fmt.Println(titleStyle.Render("Variables"))
-		table := newPlainTable(true)
-		table.Row("Scope", "Name", "Shape", "Size", "Bytes")
-		var rows [][]string
-		scopedCtx.EnumerateVariablesInScope(func(v *context.Variable) {
-			shape := v.Shape()
-			rows = append(rows, []string{
-				v.Scope(), v.Name(), shape.String(),
-				humanize.Comma(int64(shape.Size())),
-				humanize.Bytes(uint64(shape.Memory())),
-			})
-		})
-		slices.SortFunc(rows, func(a, b []string) int {
-			cmp := strings.Compare(a[0], b[0])
-			if cmp != 0 {
-				return cmp
-			}
-			return strings.Compare(a[1], b[1])
-		})
-		for _, row := range rows {
-			table.Row(row...)
-		}
-		fmt.Println(table.Render())
+		ListVariables(ctx)
 	}
 
 	if *flagMetrics || *flagMetricsLabels {
@@ -322,4 +311,70 @@ func metrics(checkpointPath string) {
 		}
 		fmt.Println(table.Render())
 	}
+}
+
+// ListVariables list the variables of a model, with their shape and MAV (mean absolute value) and RMS (root mean square) value.
+func ListVariables(ctx *context.Context) {
+	fmt.Println(titleStyle.Render("ListVariables"))
+	mavAndRmsFn := NewExec(backends.New(), func(x *Node) (mav *Node, rms *Node) {
+		x = ConvertDType(x, dtypes.Float64)
+		mav = ReduceAllMean(Abs(x))
+		rms = Sqrt(ReduceAllMean(Square(x)))
+		return
+	}).SetMaxCache(-1)
+	table := newPlainTable(true)
+	table.Row("Scope", "Name", "Shape", "Size", "Bytes", "MAV", "RMS")
+	var rows [][]string
+	ctx.EnumerateVariablesInScope(func(v *context.Variable) {
+		shape := v.Shape()
+		var mav, rms string
+		if shape.DType.IsFloat() {
+			mavAndRms := mavAndRmsFn.Call(v.Value())
+			mav = fmt.Sprintf("%.3g", mavAndRms[0].Value().(float64))
+			rms = fmt.Sprintf("%.3g", mavAndRms[1].Value().(float64))
+		}
+		rows = append(rows, []string{
+			v.Scope(), v.Name(), shape.String(),
+			humanize.Comma(int64(shape.Size())),
+			humanize.Bytes(uint64(shape.Memory())),
+			mav, rms,
+		})
+	})
+	slices.SortFunc(rows, func(a, b []string) int {
+		cmp := strings.Compare(a[0], b[0])
+		if cmp != 0 {
+			return cmp
+		}
+		return strings.Compare(a[1], b[1])
+	})
+	for _, row := range rows {
+		table.Row(row...)
+	}
+	fmt.Println(table.Render())
+}
+
+// DeleteVars on the given scopes.
+func DeleteVars(checkpointPath string, scopes ...string) {
+	ctx := context.New()
+	checkpoint := must.M1(checkpoints.Build(ctx).
+		Dir(checkpointPath).Keep(-1).Immediate().Done())
+	var varsToDelete []*context.Variable
+	for _, scope := range scopes {
+		if scope == "" {
+			continue
+		}
+		ctx.EnumerateVariables(func(v *context.Variable) {
+			if strings.HasPrefix(v.Scope(), scope) {
+				varsToDelete = append(varsToDelete, v)
+			}
+		})
+	}
+	if len(varsToDelete) == 0 {
+		// No changes needed.
+		return
+	}
+	for _, v := range varsToDelete {
+		ctx.DeleteVariable(v.Scope(), v.Name())
+	}
+	must.M(checkpoint.Save())
 }
