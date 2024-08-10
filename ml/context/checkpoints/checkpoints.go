@@ -819,7 +819,9 @@ func (h *Handler) Backup() error {
 	for _, srcFilePath := range []string{varFilePath, jsonFilePath} {
 		newPath := path.Join(backupDir, path.Base(srcFilePath))
 		err := os.Link(srcFilePath, newPath)
-		return errors.Wrapf(err, "failed to link %q to %q", srcFilePath, newPath)
+		if err != nil {
+			return errors.Wrapf(err, "failed to link %q to %q", srcFilePath, newPath)
+		}
 	}
 	return nil
 }
