@@ -17,12 +17,15 @@
 package graph
 
 import (
+	"fmt"
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors/images"
 	"github.com/gomlx/gomlx/types/xslices"
+	"github.com/gomlx/gopjrt/dtypes"
+	"slices"
 )
 
 // This file contains all parts of the {Max|Sum|Prod}Pool implementation.
@@ -43,7 +46,7 @@ type PoolBuilder struct {
 	windowSizes, strides []int
 	paddings             [][2]int
 	padSame              bool
-	isMean               bool // Divide by number of elements later if mean.
+	isMean, isConcat     bool // Divide by number of elements later if mean.
 }
 
 // MaxPool prepares a max pooling on x with the given kernel for arbitrary
@@ -157,6 +160,16 @@ func SumPool(x *Node) *PoolBuilder {
 func MeanPool(x *Node) *PoolBuilder {
 	pool := makePoolBuilder(x, backends.ReduceOpSum)
 	pool.isMean = true
+	return pool
+}
+
+// ConcatPool pool on the spatial dimensions by increasing the channels dimensions, across the windows.
+//
+// The implementation actually uses a convolution with a fixed kernel, but it can be seen as a concatenating
+// pool operation.
+func ConcatPool(x *Node) *PoolBuilder {
+	pool := makePoolBuilder(x, backends.ReduceOpUndefined)
+	pool.isConcat = true
 	return pool
 }
 
@@ -304,6 +317,10 @@ func (pool *PoolBuilder) Done() *Node {
 	}
 	windowDimensions := makeSlice(1, pool.windowSizes)
 
+	if pool.isConcat {
+		return pool.doConcat()
+	}
+
 	// strides default to pooling window sizes.
 	var strides []int
 	if len(pool.strides) > 0 {
@@ -336,6 +353,7 @@ func (pool *PoolBuilder) Done() *Node {
 			paddings[axis] = spatialPaddings[ii]
 		}
 	}
+
 	pooled := checkedReduceWindow(pool.x, pool.reductionType,
 		windowDimensions, strides, nil, nil, paddings)
 
@@ -529,4 +547,55 @@ func dilateConvolveToMatchSumPooling(x, backProp *Node, windowDimensions, stride
 		grad = expanded
 	}
 	return grad
+}
+
+func (pool *PoolBuilder) doConcat() *Node {
+	x := pool.x
+	g := x.Graph()
+	dtype := x.DType()
+	shape := x.Shape()
+	inputChannelsSize := shape.Dimensions[pool.channelsAxis]
+	kernelDims := slices.Clone(pool.windowSizes)
+	outputChannelsSize := 1
+	for _, size := range kernelDims {
+		outputChannelsSize *= size
+	}
+	outputChannelsSize *= inputChannelsSize
+	fmt.Printf("outputChannelsSize=%d\n", outputChannelsSize)
+	kernel := Iota(g, shapes.Make(dtypes.Int32, outputChannelsSize), 0)
+
+	// Kernel order depends on the channels axes position.
+	if pool.channelsAxisConfig == images.ChannelsLast {
+		// Kernel so far shaped [<spatial_dims...>, inputChannelsSize],
+		kernelDims = append(kernelDims, inputChannelsSize)
+	} else {
+		// Kernel so far shaped [inputChannelsSize, <spatial_dims...>],
+		kernelDims = append([]int{inputChannelsSize}, kernelDims...)
+	}
+	kernel = Reshape(kernel, kernelDims...)
+
+	// Add the last axis to kernel of outputChannelsSize, a one-hot encoding:
+	kernel = OneHot(kernel, outputChannelsSize, dtype)
+
+	// strides default to pooling window sizes.
+	strides := pool.strides
+	if len(strides) == 0 {
+		if pool.padSame {
+			// if PadSame(), then the strides default to 1, to preserve the image size.
+			strides = xslices.SliceWithValue(len(pool.windowSizes), 1)
+		} else {
+			// strides default to the window size.
+			strides = slices.Clone(pool.windowSizes)
+		}
+	}
+
+	// Convolve with given kernel.
+	convConfig := Convolve(x, kernel).ChannelsAxis(pool.channelsAxisConfig).StridePerDim(strides...)
+	if pool.paddings != nil {
+		convConfig.PaddingPerDim(pool.paddings)
+	}
+	if pool.padSame {
+		convConfig.PadSame()
+	}
+	return convConfig.Done()
 }

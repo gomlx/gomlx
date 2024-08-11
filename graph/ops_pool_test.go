@@ -19,6 +19,8 @@ package graph_test
 import (
 	"fmt"
 	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/graph/graphtest"
+	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors/images"
 	"github.com/gomlx/gopjrt/dtypes"
 	"testing"
@@ -363,4 +365,47 @@ func TestGradientMeanPool(t *testing.T) {
 			[][][][]float64{{{{0.25}, {0.25}}, {{0.25}, {0.25}}}},
 		})
 
+}
+
+func TestConcatPool(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "ConcatPool 3x3", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = []*Node{IotaFull(g, shapes.Make(dtypes.Float32, 2, 3, 3, 1))}
+		outputs = []*Node{ConcatPool(inputs[0]).Window(3).Done()}
+		return
+	}, []any{
+		[][][][]float32{
+			{{{0, 1, 2, 3, 4, 5, 6, 7, 8}}},
+			{{{9, 10, 11, 12, 13, 14, 15, 16, 17}}},
+		},
+	}, 1e-4)
+
+	graphtest.RunTestGraphFn(t, "ConcatPool 2x2", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = []*Node{IotaFull(g, shapes.Make(dtypes.Float32, 2, 3, 3, 1))}
+		outputs = []*Node{ConcatPool(inputs[0]).Window(2).
+			PaddingPerDim([][2]int{{0, 1}, {0, 1}}).
+			Done()}
+		return
+	}, []any{
+		[][][][]float32{{
+			{{0, 1, 3, 4}, {2, 0, 5, 0}},
+			{{6, 7, 0, 0}, {8, 0, 0, 0}},
+		}, {
+			{{9, 10, 12, 13}, {11, 0, 14, 0}},
+			{{15, 16, 0, 0}, {17, 0, 0, 0}},
+		}},
+	}, 1e-4)
+
+	graphtest.RunTestGraphFn(t, "ConcatPool ChannelsFirst 2x2", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = []*Node{IotaFull(g, shapes.Make(dtypes.Float32, 2, 1, 3, 3))}
+		outputs = []*Node{ConcatPool(inputs[0]).ChannelsAxis(images.ChannelsFirst).Window(2).
+			PaddingPerDim([][2]int{{0, 1}, {0, 1}}).
+			Done()}
+		return
+	}, []any{
+		// (Float32)[2 4 2 2]
+		[][][][]float32{
+			{{{0, 2}, {6, 8}}, {{1, 0}, {7, 0}}, {{3, 5}, {0, 0}}, {{4, 0}, {0, 0}}},
+			{{{9, 11}, {15, 17}}, {{10, 0}, {16, 0}}, {{12, 14}, {0, 0}}, {{13, 0}, {0, 0}}},
+		},
+	}, 1e-4)
 }
