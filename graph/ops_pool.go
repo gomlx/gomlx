@@ -561,7 +561,6 @@ func (pool *PoolBuilder) doConcat() *Node {
 		outputChannelsSize *= size
 	}
 	outputChannelsSize *= inputChannelsSize
-	fmt.Printf("outputChannelsSize=%d\n", outputChannelsSize)
 	kernel := Iota(g, shapes.Make(dtypes.Int32, outputChannelsSize), 0)
 
 	// Kernel order depends on the channels axes position.
