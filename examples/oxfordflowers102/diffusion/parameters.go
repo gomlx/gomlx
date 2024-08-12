@@ -67,6 +67,8 @@ func CreateDefaultContext() *context.Context {
 		"diffusion_channels_list":       []int{32, 64, 96, 128}, // Number of channels (features) for each image size (progressively smaller) in U-Net model.
 		"diffusion_min_signal_ratio":    0.02,                   // Minimum of the signal-to-noise ratio when training. Must be > 0.
 		"diffusion_max_signal_ratio":    0.95,                   // Maximum of the signal-to-noise ratio when training.
+		"diffusion_balanced_dataset":    false,                  // Enable training on a balanced dataset: batch_size=102, one example per flower type.
+		"diffusion_pool":                "mean",                 // Values are: "mean", "max", "sum", "concat"
 
 		// Model parameters for the dataset:
 		"flower_type_embed_size": 16,     // If > 0, use embedding of the flower type of the given dimension.
@@ -78,7 +80,6 @@ func CreateDefaultContext() *context.Context {
 		layers.ParamNormalization: "layer",
 
 		optimizers.ParamOptimizer:           "adam",
-		optimizers.ParamLearningRate:        1e-3,
 		optimizers.ParamAdamEpsilon:         1e-7,
 		optimizers.ParamAdamDType:           "",
 		optimizers.ParamAdamWeightDecay:     1e-4,
@@ -87,6 +88,10 @@ func CreateDefaultContext() *context.Context {
 		layers.ParamDropoutRate:             0.0,
 		regularizers.ParamL2:                0.0,
 		regularizers.ParamL1:                0.0,
+
+		optimizers.ParamLearningRate:                  1e-3,
+		optimizers.ParamCosineScheduleSteps:           0, // Enabled if > 0, it sets the period of the cosine schedule. Typically, the same value as 'train_steps'.
+		optimizers.ParamCosineScheduleMinLearningRate: 1e-5,
 
 		// "plots" trigger generating intermediary eval data for plotting, and if running in GoNB, to actually
 		// draw the plot with Plotly.

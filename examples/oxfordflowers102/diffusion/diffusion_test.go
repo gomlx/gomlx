@@ -41,10 +41,10 @@ func TestUNetModelGraph(t *testing.T) {
 	g := NewGraph(config.Backend, "test")
 
 	numExamples := 5
-	noisyImages := Zeros(g, shapes.Make(DType, numExamples, 64, 64, 3))
+	noisyImages := Zeros(g, shapes.Make(config.DType, numExamples, 64, 64, 3))
 	flowerIds := Zeros(g, shapes.Make(dtypes.Int32, numExamples))
 	fmt.Printf("  noisyImages.shape:\t%s\n", noisyImages.Shape())
-	filtered := UNetModelGraph(ctx, noisyImages, Ones(g, shapes.Make(DType, numExamples, 1, 1, 1)), flowerIds)
+	filtered := UNetModelGraph(ctx, noisyImages, Ones(g, shapes.Make(config.DType, numExamples, 1, 1, 1)), flowerIds)
 	assert.True(t, noisyImages.Shape().Equal(filtered.Shape()), "Filtered images after UNetModelGraph should have the same shape as its input images")
 	fmt.Printf("     filtered.shape:\t%s\n", filtered.Shape())
 	fmt.Printf("U-Net Model #params:\t%d\n", ctx.NumParameters())

@@ -6,6 +6,7 @@ import (
 	"github.com/gomlx/gomlx/examples/notebook/gonb/margaid"
 	"github.com/gomlx/gomlx/examples/notebook/gonb/plotly"
 	stdplots "github.com/gomlx/gomlx/examples/notebook/gonb/plots"
+	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/nanlogger"
 	"github.com/gomlx/gomlx/ml/context"
@@ -127,11 +128,18 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 	fmt.Printf("\tLearning rate: %f\n", context.GetParamOr(ctx, optimizers.ParamLearningRate, 0.0))
 
 	// Create datasets used for training and evaluation.
-	trainDS, validationDS := config.CreateInMemoryDatasets()
-	trainEvalDS := trainDS.Copy()
-	trainDS.Shuffle().Infinite(true).BatchSize(config.BatchSize, true)
+	trainInMemoryDS, validationDS := config.CreateInMemoryDatasets()
+	trainEvalDS := trainInMemoryDS.Copy()
+	trainInMemoryDS.Shuffle().Infinite(true).BatchSize(config.BatchSize, true)
 	trainEvalDS.BatchSize(config.EvalBatchSize, false)
 	validationDS.BatchSize(config.EvalBatchSize, false)
+	var trainDS train.Dataset
+	if context.GetParamOr(ctx, "diffusion_balanced_dataset", false) {
+		balancedTrainDS := must.M1(flowers.NewBalancedDataset(config.Backend, config.DataDir, config.ImageSize))
+		trainDS = balancedTrainDS
+	} else {
+		trainDS = trainInMemoryDS
+	}
 
 	// Custom loss: model returns scalar loss as the second element of the predictions.
 	customLoss := func(labels, predictions []*Node) *Node { return predictions[1] }

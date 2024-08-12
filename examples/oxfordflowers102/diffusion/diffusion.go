@@ -24,17 +24,13 @@ import (
 	"github.com/gomlx/gomlx/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/losses"
+	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/shapes"
 	timage "github.com/gomlx/gomlx/types/tensors/images"
 	"github.com/gomlx/gomlx/types/xslices"
-	"github.com/gomlx/gopjrt/dtypes"
 	"math"
 	"strconv"
 	"strings"
-)
-
-var (
-	DType = dtypes.Float32 // TODO: encode this in context["DType"].
 )
 
 var nanLogger *nanlogger.NanLogger
@@ -122,9 +118,10 @@ func ResidualBlock(ctx *context.Context, x, contextFeatures *Node, outputChannel
 	convCtx := ctx.Inf("%03d_conv", layerNum).WithInitializer(initializers.Zero)
 	x = layers.Convolution(convCtx, x).Filters(outputChannels).KernelSize(3).PadSame().Done()
 	layerNum++
-	x = activations.ApplyFromContext(ctx, x)
-	x = layers.Dense(ctx.Inf("%03d_projection", layerNum), x, true, outputChannels)
-	layerNum++
+
+	//x = activations.ApplyFromContext(ctx, x)
+	//x = layers.Dense(ctx.Inf("%03d_projection", layerNum), x, true, outputChannels)
+	//layerNum++
 
 	x = Add(x, residual)
 	nanLogger.Trace(x)
@@ -140,7 +137,19 @@ func DownBlock(ctx *context.Context, x, contextFeatures *Node, skips []*Node, nu
 		x = ResidualBlock(ctx.Inf("%03d-residual", ii), x, contextFeatures, outputChannels)
 		skips = append(skips, x)
 	}
-	x = MeanPool(x).Window(2).NoPadding().Done()
+	poolType := context.GetParamOr(ctx, "diffusion_pool", "mean")
+	switch poolType {
+	case "mean":
+		x = MeanPool(x).Window(2).NoPadding().Done()
+	case "max":
+		x = MaxPool(x).Window(2).NoPadding().Done()
+	case "sum":
+		x = SumPool(x).Window(2).NoPadding().Done()
+	case "concat":
+		x = ConcatPool(x).Window(2).NoPadding().Done()
+	default:
+		exceptions.Panicf(`invalid "diffusion_pool" setting %q: valid values are mean, max, sum or concat`, poolType)
+	}
 	nanLogger.Trace(x)
 	return x, skips
 }
@@ -182,6 +191,8 @@ func shapeToStr(shape shapes.HasShape) string {
 //     later to be up-sampled again. So at most `log2(size)` values.
 //   - "diffusion_num_residual_blocks" (static hyperparameter): number of blocks to use per numChannelsList element.
 func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds *Node) *Node {
+	dtype := noisyImages.DType()
+
 	ctx = ctx.In("u-net").WithInitializer(initializers.XavierNormalFn(0))
 	layerNum := 0
 	batchSize := noisyImages.Shape().Dimensions[0]
@@ -211,7 +222,7 @@ func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds
 		layerNum++
 		flowerTypeEmbed := layers.Embedding(
 			ctx.In(scopeName).WithInitializer(initializers.RandomNormalFn(0, 1.0/float64(flowerEmbedSize))),
-			flowerIds, DType, flowers.NumLabels, flowerEmbedSize)
+			flowerIds, dtype, flowers.NumLabels, flowerEmbedSize)
 		contextFeatures = Concatenate([]*Node{contextFeatures, flowerTypeEmbed}, -1)
 	}
 
@@ -273,6 +284,7 @@ func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds
 	}
 
 	// Output initialized to 0, which is the mean of the target.
+	x = activations.ApplyFromContext(ctx, x)
 	scopeName := fmt.Sprintf("%03d-Readout_%s", layerNum, shapeToStr(x))
 	layerNum++
 	x = layers.DenseWithBias(ctx.In(scopeName), x, imageChannels)
@@ -328,11 +340,17 @@ func Denoise(ctx *context.Context, noisyImages, signalRatios, noiseRatios, flowe
 
 // BuildTrainingModelGraph builds the model for training and evaluation.
 func (c *Config) BuildTrainingModelGraph() train.ModelFn {
-	return func(ctx *context.Context, _ any, inputs []*Node) []*Node {
+	return func(ctx *context.Context, spec any, inputs []*Node) []*Node {
 		g := inputs[0].Graph()
 
 		// Prepare the input image and noise.
 		images := inputs[0]
+		if _, ok := spec.(*flowers.BalancedDataset); ok {
+			// For BalancedDataset we need to gather the images from the examples.
+			examplesIdx := inputs[1]
+			images = Gather(images, ExpandDims(examplesIdx, -1))
+			fmt.Printf("images: %s\n", images.Shape())
+		}
 		flowerIds := inputs[2]
 		batchSize := images.Shape().Dimensions[0]
 
@@ -341,8 +359,11 @@ func (c *Config) BuildTrainingModelGraph() train.ModelFn {
 		nanLogger.Trace(images, "images")
 		nanLogger.Trace(noises, "noises")
 
+		dtype := images.DType()
+		optimizers.CosineAnnealingSchedule(ctx, g, dtype).FromContext().Done()
+
 		// Sample noise at different schedules.
-		diffusionTimes := ctx.RandomUniform(g, shapes.Make(DType, batchSize, 1, 1, 1))
+		diffusionTimes := ctx.RandomUniform(g, shapes.Make(dtype, batchSize, 1, 1, 1))
 		diffusionTimes = Square(diffusionTimes) // Bias towards less noise (smaller diffusion times), since it's most impactful
 		signalRatios, noiseRatios := DiffusionSchedule(ctx, diffusionTimes, true)
 		noisyImages := Add(
@@ -392,6 +413,7 @@ func TransformerBlock(ctx *context.Context, x *Node) *Node {
 		return x
 	}
 	g := x.Graph()
+	dtype := x.DType()
 	batchDim := x.Shape().Dimensions[0]
 	embedDim := x.Shape().Dimensions[3]
 
@@ -402,13 +424,13 @@ func TransformerBlock(ctx *context.Context, x *Node) *Node {
 
 	var dropoutRate *Node
 	if *flagDropoutRate > 0 {
-		dropoutRate = ConstAsDType(g, DType, *flagDropoutRate)
+		dropoutRate = ConstAsDType(g, dtype, *flagDropoutRate)
 	}
 
 	// Create positional embedding variable: it is 1 in every axis, but for the
 	// sequence dimension -- there will be one embedding per position.
 	// Shape: [1, maxLen, embedDim]
-	posEmbedShape := shapes.Make(DType, 1, spatialDim, *flagAttPosEmbedSize)
+	posEmbedShape := shapes.Make(dtype, 1, spatialDim, *flagAttPosEmbedSize)
 	posEmbedVar := ctx.VariableWithShape("positional", posEmbedShape)
 	posEmbed := posEmbedVar.ValueGraph(g)
 	posEmbed = BroadcastToDims(posEmbed, batchDim, spatialDim, *flagAttPosEmbedSize) // Broadcast positional embeddings to each example in batch.
