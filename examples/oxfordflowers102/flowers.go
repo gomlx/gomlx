@@ -10,6 +10,9 @@ package oxfordflowers102
 
 // This file contains constants of the dataset, including the flowers names.
 
+// NumLabels is 102, hence the name of the dataset being Oxford Flowers 102.
+const NumLabels = 102
+
 var (
 	// AllLabels of the dataset. Converted to 0-based (0 to 101).
 	// Only available after DownloadAndParse is successfully called.
@@ -26,9 +29,6 @@ var (
 	// ImagesDir where images are stored. Only available after DownloadAndParse is
 	// successfully called.
 	ImagesDir string
-
-	// NumLabels is 102, hence the name.
-	NumLabels = 102
 
 	// Names of all the 102 flowers in the dataset.
 	Names = []string{
