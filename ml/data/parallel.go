@@ -61,6 +61,9 @@ type parallelDatasetImpl struct {
 //
 // To avoid leaking goroutines, call ParallelDataset.Cancel when exiting.
 //
+// The order of the yields is not preserved -- the parallelization may yield results in different order, and in some
+// exceptional circumstance may create an order bias (faster results to generate being yield first).
+//
 // Example:
 //
 //	var ds train.Dataset
@@ -79,6 +82,9 @@ func Parallel(ds train.Dataset) *ParallelDataset {
 // and then one has to call Start before actually using the Dataset.
 //
 // To avoid leaking goroutines, call ParallelDataset.Cancel when exiting.
+//
+// The order of the yields is not preserved -- the parallelization may yield results in different order, and in some
+// exceptional circumstance may create an order bias (faster results to generate being yield first).
 //
 // Example:
 //
