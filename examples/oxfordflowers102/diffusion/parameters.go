@@ -62,13 +62,15 @@ func CreateDefaultContext() *context.Context {
 		// Diffusion model:
 		"diffusion_loss":                "mae",                  // "mse" (Mean-Squared-Error), "mae" (Mean-Absolute-Error) or "huber".
 		"huber_delta":                   0.2,                    // If "huber" loss is selected, this is the delta, after which the loss becomes linear.
-		"diffusion_context_features":    false,                  // Enable context features concatenated at every convolution -- they are always included at the start of the model.
+		"diffusion_context_features":    true,                   // Enable context features concatenated at every DownBlock convolution -- they are always included at the start of the model.
 		"diffusion_num_residual_blocks": 2,                      // Number of residual blocks per image size in the U-Net model.
 		"diffusion_channels_list":       []int{32, 64, 96, 128}, // Number of channels (features) for each image size (progressively smaller) in U-Net model.
 		"diffusion_min_signal_ratio":    0.02,                   // Minimum of the signal-to-noise ratio when training. Must be > 0.
 		"diffusion_max_signal_ratio":    0.95,                   // Maximum of the signal-to-noise ratio when training.
 		"diffusion_balanced_dataset":    false,                  // Enable training on a balanced dataset: batch_size=102, one example per flower type.
 		"diffusion_pool":                "mean",                 // Values are: "mean", "max", "sum", "concat"
+		"diffusion_residual_version":    1,                      // Valid values are 1 or 2. See code in function ResidualBlock.
+		"diffusion_ema":                 0.0,                    // Exponential Moving Average of the model weights to use during evaluation. Set to 0 to disable.
 
 		// Model parameters for the dataset:
 		"flower_type_embed_size": 16,     // If > 0, use embedding of the flower type of the given dimension.
@@ -85,7 +87,7 @@ func CreateDefaultContext() *context.Context {
 		optimizers.ParamAdamWeightDecay:     1e-4,
 		optimizers.ParamCosineScheduleSteps: 0,
 		activations.ParamActivation:         "swish",
-		layers.ParamDropoutRate:             0.0,
+		layers.ParamDropoutRate:             0.15,
 		regularizers.ParamL2:                0.0,
 		regularizers.ParamL1:                0.0,
 

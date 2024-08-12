@@ -44,7 +44,7 @@ func SinusoidalEmbedding(ctx *context.Context, x *Node) *Node {
 	// Generate geometrically spaced frequencies: only 1/2 of *flagEmbeddingDims because we use half for sine numbers, half for cosine numbers.
 	halfEmbed := context.GetParamOr(ctx, "sinusoidal_embed_size", 32) / 2
 	logMinFreq := math.Log(context.GetParamOr(ctx, "sinusoidal_min_freq", 1.0))
-	logMaxFreq := math.Log(context.GetParamOr(ctx, "sinusoidal_max_freq", 1.0))
+	logMaxFreq := math.Log(context.GetParamOr(ctx, "sinusoidal_max_freq", 1000.0))
 	frequencies := IotaFull(g, shapes.Make(x.DType(), halfEmbed))
 	frequencies = AddScalar(
 		MulScalar(frequencies, (logMaxFreq-logMinFreq)/float64(halfEmbed-1.0)),
@@ -78,8 +78,6 @@ func NormalizeLayer(ctx *context.Context, x *Node) *Node {
 		x = batchnorm.New(ctx, x, -1).Center(false).Scale(false).Done()
 	case "layer":
 		x = layers.LayerNormalization(ctx, x, -1).Done()
-		// Optionally, normalize over the spatial dimensions instead:
-		// x = layers.LayerNormalization(ctx, x, 1, 2).Done()
 	}
 	nanLogger.Trace(x)
 	return x
@@ -110,18 +108,32 @@ func ResidualBlock(ctx *context.Context, x, contextFeatures *Node, outputChannel
 		residual = layers.Dense(ctx.Inf("%03d_residual_projection", layerNum), x, true, outputChannels)
 		layerNum++
 	}
-	residual = activations.ApplyFromContext(ctx, residual)
-
 	x = NormalizeLayer(ctx.Inf("%03d-norm", layerNum), x)
 	layerNum++
-	x = concatContextFeatures(x, contextFeatures)
-	convCtx := ctx.Inf("%03d_conv", layerNum).WithInitializer(initializers.Zero)
-	x = layers.Convolution(convCtx, x).Filters(outputChannels).KernelSize(3).PadSame().Done()
-	layerNum++
 
-	//x = activations.ApplyFromContext(ctx, x)
-	//x = layers.Dense(ctx.Inf("%03d_projection", layerNum), x, true, outputChannels)
-	//layerNum++
+	version := context.GetParamOr(ctx, "diffusion_residual_version", 1)
+	switch version {
+	case 1: // Version 1: the original.
+		x = concatContextFeatures(x, contextFeatures)
+		convCtx := ctx.Inf("%03d_conv", layerNum) // .WithInitializer(initializers.Zero)
+		x = layers.Convolution(convCtx, x).Filters(outputChannels).KernelSize(3).PadSame().Done()
+		layerNum++
+		x = activations.ApplyFromContext(ctx, x)
+
+		convCtx = ctx.Inf("%03d_conv", layerNum) // .WithInitializer(initializers.Zero)
+		x = layers.Convolution(convCtx, x).Filters(outputChannels).KernelSize(3).PadSame().Done()
+		layerNum++
+
+	case 2: // Version 2: slimmer.
+		residual = activations.ApplyFromContext(ctx, residual)
+		x = concatContextFeatures(x, contextFeatures)
+		convCtx := ctx.Inf("%03d_conv", layerNum).WithInitializer(initializers.Zero)
+		x = layers.Convolution(convCtx, x).Filters(outputChannels).KernelSize(3).PadSame().Done()
+		layerNum++
+
+	default:
+		exceptions.Panicf("ResidualBlock(): invalid \"diffusion_residual_version\" %d: valid values are 1 or 2", version)
+	}
 
 	x = Add(x, residual)
 	nanLogger.Trace(x)
@@ -177,6 +189,8 @@ func shapeToStr(shape shapes.HasShape) string {
 	return strings.Join(parts, ",")
 }
 
+const UNetModelScope = "u-net"
+
 // UNetModelGraph builds the U-Net model.
 //
 // Parameters:
@@ -193,7 +207,7 @@ func shapeToStr(shape shapes.HasShape) string {
 func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds *Node) *Node {
 	dtype := noisyImages.DType()
 
-	ctx = ctx.In("u-net").WithInitializer(initializers.XavierNormalFn(0))
+	ctx = ctx.In(UNetModelScope).WithInitializer(initializers.XavierNormalFn(0))
 	layerNum := 0
 	batchSize := noisyImages.Shape().Dimensions[0]
 	imgSize := noisyImages.Shape().Dimensions[1]
@@ -252,6 +266,9 @@ func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds
 		nanLogger.PopScope()
 	}
 
+	// Disables contextFeatures on the intermediary and UpBlock layers.
+	contextFeatures = nil
+
 	// Intermediary fixed size blocks.
 	if *flagNumAttLayers > 0 {
 		// Optional transformer layer.
@@ -284,10 +301,9 @@ func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds
 	}
 
 	// Output initialized to 0, which is the mean of the target.
-	x = activations.ApplyFromContext(ctx, x)
 	scopeName := fmt.Sprintf("%03d-Readout_%s", layerNum, shapeToStr(x))
 	layerNum++
-	x = layers.DenseWithBias(ctx.In(scopeName), x, imageChannels)
+	x = layers.DenseWithBias(ctx.In(scopeName).WithInitializer(initializers.Zero), x, imageChannels)
 	return x
 }
 
@@ -325,6 +341,16 @@ func DiffusionSchedule(ctx *context.Context, times *Node, clipStart bool) (signa
 // It is given the signal and noise ratios.
 func Denoise(ctx *context.Context, noisyImages, signalRatios, noiseRatios, flowerIds *Node) (
 	predictedImages, predictedNoises *Node) {
+	g := noisyImages.Graph()
+	var modelCtx *context.Context
+	emaCoef := context.GetParamOr(ctx, "diffusion_ema", 0.0)
+	if ctx.IsTraining(g) || emaCoef <= 0 {
+		modelCtx = ctx
+	} else {
+		fmt.Println("Using exponential moving average weights")
+		// Exponential moving average.
+		modelCtx = ctx.In("ema")
+	}
 
 	// Noise variance: since the noise is expected to have variance 1, the adjusted
 	// variance to the noiseRatio (just a multiplicative factor), the new variance
@@ -332,9 +358,32 @@ func Denoise(ctx *context.Context, noisyImages, signalRatios, noiseRatios, flowe
 	noiseVariances := Square(noiseRatios)
 
 	// It's easy to model the noise than the image:
-	predictedNoises = UNetModelGraph(ctx, noisyImages, noiseVariances, flowerIds)
+	predictedNoises = UNetModelGraph(modelCtx, noisyImages, noiseVariances, flowerIds)
 	predictedImages = Sub(noisyImages, Mul(predictedNoises, noiseRatios))
 	predictedImages = Div(predictedImages, signalRatios)
+
+	if ctx.IsTraining(g) && emaCoef > 0 {
+		// Update moving average weights:
+		prefixScope := ctx.Scope()
+		emaCtx := ctx.In("ema").WithInitializer(initializers.Zero).Checked(false)
+		newPrefixScope := emaCtx.Scope()
+		// Enumerate the variables we care about, under the UNet model:
+		ctx.In(UNetModelScope).EnumerateVariablesInScope(func(v *context.Variable) {
+			if !strings.HasPrefix(v.Scope(), prefixScope) {
+				exceptions.Panicf("unxpected variable %q in scope %q", v.Name(), v.Scope())
+			}
+			suffix := v.Scope()[len(prefixScope):]
+			if !strings.HasPrefix(suffix, context.ScopeSeparator) {
+				suffix = context.ScopeSeparator + suffix
+			}
+			newScope := newPrefixScope + suffix
+			emaVar := emaCtx.InAbsPath(newScope).VariableWithShape(v.Name(), v.Shape())
+			emaValue := Add(
+				MulScalar(emaVar.ValueGraph(g), emaCoef),
+				MulScalar(v.ValueGraph(g), 1.0-emaCoef))
+			emaVar.SetValueGraph(emaValue)
+		})
+	}
 	return
 }
 
