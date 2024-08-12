@@ -9,6 +9,7 @@ import (
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/tensors"
 	timage "github.com/gomlx/gomlx/types/tensors/images"
+	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 	"image"
@@ -68,16 +69,11 @@ func (ds *Dataset) Shuffle() *Dataset {
 
 func (ds *Dataset) shuffleLocked() {
 	if ds.shuffle == nil {
-		ds.shuffle = make([]int, NumExamples)
+		ds.shuffle = xslices.Iota(0, NumExamples)
 	}
 	for ii := 0; ii < NumExamples; ii++ {
-		newPos := rand.Intn(ii + 1)
-		if newPos == ii {
-			ds.shuffle[ii] = ii
-		} else {
-			// Swap position with the new example.
-			ds.shuffle[newPos], ds.shuffle[ii] = ii, ds.shuffle[newPos]
-		}
+		swapPos := rand.Intn(NumExamples)
+		ds.shuffle[ii], ds.shuffle[swapPos] = ds.shuffle[swapPos], ds.shuffle[ii]
 	}
 }
 
@@ -155,8 +151,6 @@ func (ds *Dataset) Name() string {
 //
 //   - `inputs`: three values: the image itself and a scalar `int32` with
 //     the index of the example and finally the type of flower (from 0 to `NumLabels-1`=101).
-//     The index of the example can be used, for instance, to split the dataset
-//     (into training/validation/test).
 //   - `labels`: the type of flower (same as `inputs[2]`), an `int32` value from 0 to `NumLabels-1`
 //     with the label.
 func (ds *Dataset) Yield() (spec any, inputs []*tensors.Tensor, labels []*tensors.Tensor, err error) {
