@@ -55,6 +55,9 @@ func NewConfig(backend backends.Backend, ctx *context.Context, dataDir string, p
 	if !data.FileExists(dataDir) {
 		must.M(os.MkdirAll(dataDir, 0777))
 	}
+	dtype := must.M1(dtypes.DTypeString(
+		context.GetParamOr(ctx, "dtype", "float32")))
+	fmt.Printf("DType=%s\n", dtype)
 	return &Config{
 		Backend:       backend,
 		Context:       ctx,
@@ -62,9 +65,8 @@ func NewConfig(backend backends.Backend, ctx *context.Context, dataDir string, p
 		ImageSize:     context.GetParamOr(ctx, "image_size", 64),
 		BatchSize:     context.GetParamOr(ctx, "batch_size", 64),
 		EvalBatchSize: context.GetParamOr(ctx, "eval_batch_size", 128),
-		DType: must.M1(dtypes.DTypeString(
-			context.GetParamOr(ctx, "DType", "float32"))),
-		ParamsSet: paramsSet,
+		DType:         dtype,
+		ParamsSet:     paramsSet,
 	}
 }
 
@@ -141,7 +143,7 @@ func (c *Config) PreprocessImages(images *Node, normalize bool) *Node {
 	g := images.Graph()
 
 	// ReduceAllMax(images).SetLogged("Max(uint8):")
-	images = ConvertDType(images, DType)
+	images = ConvertDType(images, dtypes.Float32)
 	if !normalize {
 		return images
 	}
@@ -155,6 +157,7 @@ func (c *Config) PreprocessImages(images *Node, normalize bool) *Node {
 	images = Div(
 		Sub(images, mean),
 		data.ReplaceZerosByOnes(stddev))
+	images = ConvertDType(images, c.DType)
 	return images
 }
 
@@ -162,6 +165,7 @@ func (c *Config) PreprocessImages(images *Node, normalize bool) *Node {
 // But it keeps it as float, it doesn't convert it back to bytes (== `shapes.S8` or `uint8`)
 func (c *Config) DenormalizeImages(images *Node) *Node {
 	g := images.Graph()
+	images = ConvertDType(images, dtypes.Float32)
 	meanT, stddevT := c.NormalizationValues()
 	mean := Const(g, meanT)
 	stddev := Const(g, stddevT)
