@@ -311,6 +311,7 @@ func (o *adam) getMomentVariables(ctx *context.Context, trainable *context.Varia
 	m2Name := fmt.Sprintf("%s_2nd_moment", originalName)
 	shape := trainable.Shape().Clone()
 	shape.DType = dtype
+	ctx = ctx.Checked(false) // It shouldn't matter if it's the first time or not creating the variable.
 	m1 = ctx.InAbsPath(scopePath).WithInitializer(initializers.Zero).VariableWithShape(m1Name, shape).SetTrainable(false)
 	m2 = ctx.InAbsPath(scopePath).WithInitializer(initializers.Zero).VariableWithShape(m2Name, shape).SetTrainable(false)
 	return
