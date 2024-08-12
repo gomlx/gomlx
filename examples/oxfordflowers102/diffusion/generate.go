@@ -189,13 +189,14 @@ func (c *Config) PlotModelEvolution(imagesPerSample int, animate bool) {
 // DenoiseStepGraph executes one step of separating the noise and images from noisy images.
 func DenoiseStepGraph(ctx *context.Context, noisyImages, diffusionTime, nextDiffusionTime, flowerIds *Node) (
 	predictedImages, nextNoisyImages *Node) {
+	dtype := noisyImages.DType()
 	numImages := noisyImages.Shape().Dimensions[0]
-	diffusionTimes := BroadcastToDims(ConvertDType(diffusionTime, DType), numImages, 1, 1, 1)
+	diffusionTimes := BroadcastToDims(ConvertDType(diffusionTime, dtype), numImages, 1, 1, 1)
 	signalRatios, noiseRatios := DiffusionSchedule(ctx, diffusionTimes, false)
 	var predictedNoises *Node
 	predictedImages, predictedNoises = Denoise(ctx, noisyImages, signalRatios, noiseRatios, flowerIds)
 
-	nextDiffusionTimes := BroadcastToDims(ConvertDType(nextDiffusionTime, DType), numImages, 1, 1, 1)
+	nextDiffusionTimes := BroadcastToDims(ConvertDType(nextDiffusionTime, dtype), numImages, 1, 1, 1)
 	nextSignalRatios, nextNoiseRatios := DiffusionSchedule(ctx, nextDiffusionTimes, false)
 	nextNoisyImages = Add(
 		Mul(predictedImages, nextSignalRatios),
@@ -369,7 +370,7 @@ func (c *Config) GenerateImagesOfAllFlowerTypes(numDiffusionSteps int) (predicte
 	imageSize := getImageSize(ctx)
 	noise := NewExec(c.Backend, func(g *Graph) *Node {
 		state := Const(g, RngState())
-		_, noise := RandomNormal(state, shapes.Make(DType, 1, imageSize, imageSize, 3))
+		_, noise := RandomNormal(state, shapes.Make(c.DType, 1, imageSize, imageSize, 3))
 		noise = BroadcastToDims(noise, numImages, imageSize, imageSize, 3)
 		return noise
 	}).Call()[0]
@@ -466,7 +467,7 @@ func (g *ImagesGenerator) Generate() (batchedImages *tensors.Tensor) {
 func (c *Config) GenerateNoise(numImages int) *tensors.Tensor {
 	return NewExec(c.Backend, func(g *Graph) *Node {
 		state := Const(g, RngState())
-		_, noise := RandomNormal(state, shapes.Make(DType, numImages, c.ImageSize, c.ImageSize, 3))
+		_, noise := RandomNormal(state, shapes.Make(c.DType, numImages, c.ImageSize, c.ImageSize, 3))
 		return noise
 	}).Call()[0]
 }
