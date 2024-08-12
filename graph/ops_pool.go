@@ -17,7 +17,6 @@
 package graph
 
 import (
-	"fmt"
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types"
