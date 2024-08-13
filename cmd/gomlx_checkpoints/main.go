@@ -391,5 +391,6 @@ func Backup(checkpointPath string) {
 	checkpoint := must.M1(checkpoints.Build(ctx).
 		Dir(checkpointPath).Keep(-1).Immediate().Done())
 	must.M(checkpoint.Backup())
-	fmt.Printf("Backup of latest checkpoint successful, see %q.\n", path.Join(checkpoint.Dir(), checkpoints.BackupDir))
+	globalStep := optimizers.GetGlobalStep(ctx)
+	fmt.Printf("Backup of latest checkpoint (global step %d) successful, see %q.\n", globalStep, path.Join(checkpoint.Dir(), checkpoints.BackupDir))
 }
