@@ -398,7 +398,6 @@ func (c *Config) BuildTrainingModelGraph() train.ModelFn {
 			// For BalancedDataset we need to gather the images from the examples.
 			examplesIdx := inputs[1]
 			images = Gather(images, ExpandDims(examplesIdx, -1))
-			fmt.Printf("images: %s\n", images.Shape())
 		}
 		flowerIds := inputs[2]
 		batchSize := images.Shape().Dimensions[0]
