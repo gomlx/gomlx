@@ -320,7 +320,7 @@ func metrics(checkpointPath string) {
 
 // ListVariables list the variables of a model, with their shape and MAV (mean absolute value) and RMS (root mean square) value.
 func ListVariables(ctx *context.Context) {
-	fmt.Println(titleStyle.Render("ListVariables"))
+	fmt.Println(titleStyle.Render(fmt.Sprintf("Variables in scope %q", ctx.Scope())))
 	mavAndRmsFn := NewExec(backends.New(), func(x *Node) (mav *Node, rms *Node) {
 		x = ConvertDType(x, dtypes.Float64)
 		mav = ReduceAllMean(Abs(x))
