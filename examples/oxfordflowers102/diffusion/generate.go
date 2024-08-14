@@ -5,7 +5,6 @@ import (
 	"encoding/gob"
 	"fmt"
 	"github.com/gomlx/exceptions"
-	"github.com/gomlx/gomlx/backends"
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
@@ -299,14 +298,12 @@ func (c *Config) SliderDiffusionSteps(cacheKey string, ctx *context.Context, num
 // flower type.
 //
 // paramsSet are hyperparameters overridden, that it should not load from the checkpoint (see commandline.ParseContextSettings).
-func GenerateImagesOfFlowerType(ctx *context.Context, dataDir, checkpointPath string, paramsSet []string, numImages int, flowerType int32, numDiffusionSteps int) (predictedImages *tensors.Tensor) {
-	backend := backends.New()
-	config := NewConfig(backend, ctx, dataDir, paramsSet)
-	_, _, _ = config.AttachCheckpoint(checkpointPath)
+func (c *Config) GenerateImagesOfFlowerType(numImages int, flowerType int32, numDiffusionSteps int) (predictedImages *tensors.Tensor) {
+	ctx := c.Context
 	ctx.RngStateReset()
-	noise := config.GenerateNoise(numImages)
+	noise := c.GenerateNoise(numImages)
 	flowerIds := tensors.FromValue(xslices.SliceWithValue(numImages, flowerType))
-	generator := config.NewImagesGenerator(noise, flowerIds, numDiffusionSteps)
+	generator := c.NewImagesGenerator(noise, flowerIds, numDiffusionSteps)
 	return generator.Generate()
 }
 
