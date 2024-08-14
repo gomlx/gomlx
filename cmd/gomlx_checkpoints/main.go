@@ -278,7 +278,7 @@ func metrics(checkpointPath string) {
 	}
 
 	if *flagMetrics {
-		fmt.Println(titleStyle.Render("Metrics"))
+		fmt.Println(titleStyle.Render(fmt.Sprintf("Metrics %q", checkpointPath)))
 		table := newPlainTable(true, lipgloss.Right)
 		header := make([]string, 1+len(metricsUsed))
 		header[0] = "Global Step"
