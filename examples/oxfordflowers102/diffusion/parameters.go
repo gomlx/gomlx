@@ -36,7 +36,7 @@ func CreateDefaultContext() *context.Context {
 		// eval_batch_size can be larger than training, it's more efficient.
 		"eval_batch_size": 128,
 
-		// image_size of the images to use: since we'll cache them in the accelerator machine, it "+
+		// image_size of the images to use: since we'll cache them in the accelerator machine, it
 		// is limited by its memory. Largest value (the original image sizes) is 500.
 		"image_size": 64,
 
@@ -50,7 +50,7 @@ func CreateDefaultContext() *context.Context {
 		"samples_during_training_frequency":        200, // Number of steps between regenerating samples. It's actually the period not the frequency.
 		"samples_during_training_frequency_growth": 1.2, // Growth factor for samples_during_training_frequency.
 
-		// kid enables calculating Kernel Inception Distance (KID) on evaluation -- it is quite expensive."
+		// kid enables calculating Kernel Inception Distance (KID) on evaluation -- it is quite expensive.
 		"kid": false,
 
 		// rng_reset enables resetting the random number generator state with a new random value -- useful when continuing training.
@@ -62,7 +62,6 @@ func CreateDefaultContext() *context.Context {
 		// Diffusion model:
 		"diffusion_loss":                "mae",                  // "mse" (Mean-Squared-Error), "mae" (Mean-Absolute-Error) or "huber".
 		"huber_delta":                   0.2,                    // If "huber" loss is selected, this is the delta, after which the loss becomes linear.
-		"diffusion_context_features":    true,                   // Enable context features concatenated at every DownBlock convolution -- they are always included at the start of the model.
 		"diffusion_num_residual_blocks": 2,                      // Number of residual blocks per image size in the U-Net model.
 		"diffusion_channels_list":       []int{32, 64, 96, 128}, // Number of channels (features) for each image size (progressively smaller) in U-Net model.
 		"diffusion_min_signal_ratio":    0.02,                   // Minimum of the signal-to-noise ratio when training. Must be > 0.
