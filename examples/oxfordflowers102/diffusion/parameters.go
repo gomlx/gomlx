@@ -25,13 +25,12 @@ func CreateDefaultContext() *context.Context {
 	ctx.RngStateReset()
 	ctx.SetParams(map[string]any{
 		// Model type to use
-		"model":                "bow", // One of the listed in ValidModels: the user can also inject (in ValidModels) new custom models.
-		"train_steps":          5000,
+		"train_steps":          300_000,
 		"num_checkpoints":      5,
 		"checkpoint_frequency": "3m", // How often to save checkpoints. Default to 3 minutes. See time.ParseDuration.
 
 		// batch_size for training.
-		"batch_size": 64,
+		"batch_size": 32,
 
 		// eval_batch_size can be larger than training, it's more efficient.
 		"eval_batch_size": 128,
@@ -62,13 +61,13 @@ func CreateDefaultContext() *context.Context {
 		// Diffusion model:
 		"diffusion_loss":                "mae",                  // "mse" (Mean-Squared-Error), "mae" (Mean-Absolute-Error) or "huber".
 		"huber_delta":                   0.2,                    // If "huber" loss is selected, this is the delta, after which the loss becomes linear.
-		"diffusion_num_residual_blocks": 2,                      // Number of residual blocks per image size in the U-Net model.
+		"diffusion_num_residual_blocks": 4,                      // Number of residual blocks per image size in the U-Net model.
 		"diffusion_channels_list":       []int{32, 64, 96, 128}, // Number of channels (features) for each image size (progressively smaller) in U-Net model.
 		"diffusion_min_signal_ratio":    0.02,                   // Minimum of the signal-to-noise ratio when training. Must be > 0.
 		"diffusion_max_signal_ratio":    0.95,                   // Maximum of the signal-to-noise ratio when training.
 		"diffusion_balanced_dataset":    false,                  // Enable training on a balanced dataset: batch_size=102, one example per flower type.
 		"diffusion_pool":                "mean",                 // Values are: "mean", "max", "sum", "concat"
-		"diffusion_residual_version":    1,                      // Valid values are 1 or 2. See code in function ResidualBlock.
+		"diffusion_residual_version":    2,                      // Valid values are 1 or 2. See code in function ResidualBlock.
 		"diffusion_ema":                 0.999,                  // Exponential Moving Average of the model weights to use during evaluation. Set to <= 0 to disable.
 
 		// Model parameters for the dataset:
