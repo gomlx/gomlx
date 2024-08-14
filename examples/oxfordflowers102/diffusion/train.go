@@ -135,6 +135,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 	validationDS.BatchSize(config.EvalBatchSize, false)
 	var trainDS train.Dataset
 	if context.GetParamOr(ctx, "diffusion_balanced_dataset", false) {
+		fmt.Println("Using balanced datasets.")
 		balancedTrainDS := must.M1(flowers.NewBalancedDataset(config.Backend, config.DataDir, config.ImageSize))
 		trainDS = balancedTrainDS
 	} else {
@@ -160,6 +161,17 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 			return predictions[1]
 		}, pprintLossFn, 0.05)
 
+	movingMAE := metrics.NewExponentialMovingAverageMetric(
+		"Moving MAE Loss", "~mae", "loss",
+		func(ctx *context.Context, labels, predictions []*Node) *Node {
+			return predictions[3]
+		}, pprintLossFn, 0.05)
+	meanMAE := metrics.NewMeanMetric(
+		"MAE Loss", "#mae", "loss",
+		func(ctx *context.Context, labels, predictions []*Node) *Node {
+			return predictions[3]
+		}, pprintLossFn)
+
 	useNanLogger := context.GetParamOr(ctx, "nan_logger", false)
 	if useNanLogger {
 		nanLogger = nanlogger.New()
@@ -170,8 +182,8 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 	trainer := train.NewTrainer(
 		backend, ctx, config.BuildTrainingModelGraph(), customLoss,
 		optimizers.FromContext(ctx),
-		[]metrics.Interface{movingImagesLoss, movingNoiseLoss}, // trainMetrics
-		[]metrics.Interface{meanImagesLoss})                    // evalMetrics
+		[]metrics.Interface{movingImagesLoss, movingNoiseLoss, movingMAE}, // trainMetrics
+		[]metrics.Interface{meanImagesLoss, meanMAE})                      // evalMetrics
 	if nanLogger != nil {
 		trainer.OnExecCreation(func(exec *context.Exec, _ train.GraphType) {
 			nanLogger.AttachToExec(exec)
