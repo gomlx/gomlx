@@ -1,6 +1,6 @@
 module github.com/gomlx/gomlx
 
-go 1.22
+go 1.23
 
 require (
 	github.com/MetalBlueberry/go-plotly v0.4.0
