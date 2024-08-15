@@ -79,3 +79,28 @@ func TestSliceFlag(t *testing.T) {
 	require.NotNil(t, f2Flag)
 	assert.Equal(t, "2.00,3.00", f2Flag.DefValue)
 }
+
+func TestOperations(t *testing.T) {
+	s := []float32{1.0, -3.0, 2.0}
+	assert.Equal(t, float32(2), Max(s))
+	assert.Equal(t, float32(-3), Min(s))
+
+	SetAt(s, 0, 10)
+	assert.Equal(t, float32(10), s[0])
+	SetLast(s, 100)
+	assert.Equal(t, float32(100), s[2])
+
+	FillSlice(s, -7)
+	assert.Equal(t, []float32{-7, -7, -7}, s)
+	FillAnySlice(s, float32(11))
+	assert.Equal(t, []float32{11, 11, 11}, s)
+
+	md := MultidimensionalSliceWithValue(int64(13), 2, 1, 1)
+	assert.Equal(t, [][][]int64{{{13}}, {{13}}}, md)
+
+	s2d := Slice2DWithValue(int8(67), 2, 1)
+	assert.Equal(t, [][]int8{{67}, {67}}, s2d)
+
+	s3d := Slice3DWithValue(uint8(23), 1, 1, 3)
+	assert.Equal(t, [][][]uint8{{{23, 23, 23}}}, s3d)
+}

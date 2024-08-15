@@ -136,30 +136,6 @@ func Close[T interface{ float32 | float64 }](e0, e1 any) bool {
 	return diff < Epsilon && diff > -Epsilon
 }
 
-// CloseToEpsilon returns a comparison function that can be fed to DeepSliceCmp.
-func CloseToEpsilon[T interface{ float32 | float64 }](epsilon T) func(e0, e1 any) bool {
-	return func(e0, e1 any) bool {
-		e0v, ok := e0.(T)
-		if !ok {
-			fmt.Printf("*** Close[T] given (e0) incompatible type value %v for expected type %T\n", e0, e0v)
-			return false
-		}
-		e1v, ok := e1.(T)
-		if !ok {
-			fmt.Printf("*** Close[T] given (e1) incompatible type value %v for expected type %T\n", e1, e1v)
-			return false
-		}
-		if math.IsNaN(float64(e0v)) && math.IsNaN(float64(e1v)) {
-			return true
-		}
-		diff := e0v - e1v
-		if !(diff < epsilon && diff > -epsilon) {
-			fmt.Printf("\t***Unmatching: %v, %v, diff=%v, epsilon=%v\n", e0, e1, diff, epsilon)
-		}
-		return diff < epsilon && diff > -epsilon
-	}
-}
-
 // EqualAny is a comparison function that tests for exact equality, and can be fed to DeepSliceCmp.
 func EqualAny[T comparable](e0, e1 any) bool {
 	e0v, ok := e0.(T)
@@ -171,30 +147,6 @@ func EqualAny[T comparable](e0, e1 any) bool {
 		return false
 	}
 	return e0v == e1v
-}
-
-// Different is a comparison function that tests that values are different, and can be fed to DeepSliceCmp.
-func Different[T comparable](e0, e1 any) bool {
-	e0v, ok := e0.(T)
-	if !ok {
-		return false
-	}
-	e1v, ok := e1.(T)
-	if !ok {
-		return false
-	}
-	return e0v != e1v
-}
-
-// ReverseSlice returns the reverse of a slice.
-func ReverseSlice[T any](slice []T) {
-	fromStart := 0
-	fromEnd := len(slice) - 1
-	for fromStart < fromEnd {
-		slice[fromStart], slice[fromEnd] = slice[fromEnd], slice[fromStart]
-		fromStart++
-		fromEnd--
-	}
 }
 
 // FillSlice with fill the slice with the given value.
