@@ -918,7 +918,7 @@ func TestWhere(t *testing.T) {
 		[]float32{1, 0, 1},
 	}, -1)
 
-	graphtest.RunTestGraphFn(t, "Where: broadcast from scalar", func(g *Graph) (inputs, outputs []*Node) {
+	graphtest.RunTestGraphFn(t, "Where: broadcast from scalar #1", func(g *Graph) (inputs, outputs []*Node) {
 		inputs = []*Node{
 			Const(g, []bool{true, false, true}),
 			Const(g, float32(1)),
@@ -930,7 +930,7 @@ func TestWhere(t *testing.T) {
 		[]float32{1, 0, 1},
 	}, -1)
 
-	graphtest.RunTestGraphFn(t, "Where: broadcast from scalar", func(g *Graph) (inputs, outputs []*Node) {
+	graphtest.RunTestGraphFn(t, "Where: broadcast from scalar #2", func(g *Graph) (inputs, outputs []*Node) {
 		inputs = []*Node{
 			Const(g, []bool{true, false, true}),
 			Const(g, float32(1)),
@@ -940,5 +940,37 @@ func TestWhere(t *testing.T) {
 		return
 	}, []any{
 		[]float32{1, 0, 1},
+	}, -1)
+
+	graphtest.RunTestGraphFn(t, "Where: broadcast from prefix condition", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = []*Node{
+			Const(g, []bool{true, false, true}),
+			IotaFull(g, shapes.Make(dtypes.Float32, 3, 2)),
+			AddScalar(IotaFull(g, shapes.Make(dtypes.Float32, 3, 2)), 100),
+		}
+		outputs = []*Node{Where(inputs[0], inputs[1], inputs[2])}
+		return
+	}, []any{
+		[][]float32{
+			{0, 1},
+			{102, 103},
+			{4, 5},
+		},
+	}, -1)
+
+	graphtest.RunTestGraphFn(t, "Where: broadcast from prefix condition and scalar", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = []*Node{
+			Const(g, []bool{true, false, true}),
+			IotaFull(g, shapes.Make(dtypes.Float32, 3, 2)),
+			Const(g, float32(100)),
+		}
+		outputs = []*Node{Where(inputs[0], inputs[1], inputs[2])}
+		return
+	}, []any{
+		[][]float32{
+			{0, 1},
+			{100, 100},
+			{4, 5},
+		},
 	}, -1)
 }

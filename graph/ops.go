@@ -436,7 +436,12 @@ func ConvertType(x *Node, dtype dtypes.DType) *Node {
 
 // Where takes element-wise values from onTrue or onFalse depending on the value of condition (expected to be boolean).
 //
-// Usual implicit broadcasting rules don't apply.
+// Usual implicit broadcasting rules don't apply. But it will broadcast in the following cases:
+//
+//  1. If onTrue or onFalse are a scalar, they are broadcast to the other (onFalse or onTrue respectively).
+//  2. If condition is a prefix to the shapes of onTrue/onFalse then condition is expanded to match.
+//     This is useful for masking of embeddings for instance.
+//
 // But it will implicitly broadcast a scalar value for onTrue or onFalse.
 func Where(condition, onTrue, onFalse *Node) *Node {
 	_ = validateBuildingGraphFromInputs(condition)
@@ -444,6 +449,20 @@ func Where(condition, onTrue, onFalse *Node) *Node {
 		exceptions.Panicf("Where(condition, onTrue, onFalse) requires condition to be of dtype Bool, got %s instead",
 			condition.Shape())
 	}
+
+	// Broadcasting of condition when it's a prefix to one of the operands:
+	for _, operand := range []*Node{onTrue, onFalse} {
+		if !operand.IsScalar() && condition.Rank() < operand.Rank() {
+			// If condition's shape is a prefix to onTrue and onFalse, then simply broadcast to their shape.
+			// This allows masks to work for embeddings, which has one extra axis.
+			extraAxes := operand.Rank() - condition.Rank()
+			condition = ExpandDims(condition, xslices.SliceWithValue(extraAxes, -1)...)
+			condition = BroadcastToDims(condition, operand.Shape().Dimensions...)
+			break
+		}
+	}
+
+	// Check validity of resulting shapes.
 	if (!onTrue.IsScalar() && !condition.Shape().EqualDimensions(onTrue.Shape())) ||
 		(!onFalse.IsScalar() && !condition.Shape().EqualDimensions(onFalse.Shape())) {
 		exceptions.Panicf(
@@ -451,14 +470,8 @@ func Where(condition, onTrue, onFalse *Node) *Node {
 				"the same dimensions as condition (%s)",
 			onTrue.Shape(), onFalse.Shape(), condition.Shape())
 	}
-	//if condition.Rank() > onTrue.Rank() || !reflect.DeepEqual(condition.Shape().Dimensions, onTrue.Shape().Dimensions[:condition.Rank()]) {
-	//if condition.Rank() < onTrue.Rank() {
-	//	// If condition's shape is a prefix to onTrue and onFalse, then simply broadcast to their shape.
-	//	// This allows masks to work for embeddings, which has one extra axis.
-	//	extraAxes := onTrue.Rank() - condition.Rank()
-	//	condition = ExpandDims(condition, xslices.SliceWithValue(extraAxes, -1)...)
-	//	condition = BroadcastToDims(condition, onTrue.Shape().Dimensions...)
-	//}
+
+	// Broadcasting of scalar onTrue or onFalse is done by the backend.
 	return backendWhere(condition, onTrue, onFalse)
 }
 
