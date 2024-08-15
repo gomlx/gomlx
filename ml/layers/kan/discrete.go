@@ -186,7 +186,8 @@ func PiecewiseConstantFunction(input, controlPoints, splitPoints *Node) *Node {
 	toTheRight := GreaterOrEqualTotalOrder(expandedInputs,
 		GrowLeft(expandedSplitPoints, -1, 1, math.Inf(-1)))
 	controlPicks := ArgMax(And(toTheLeft, toTheRight), -1, dtypes.Int16)
-	//controlPicks.AssertDims(batchSize, numOutputNodes, numInputNodes)
+	// Makes sure we broadcast on the output dimension, if needed.
+	controlPicks = BroadcastToDims(controlPicks, batchSize, numOutputNodes, numInputNodes)
 	controlPicks = ExpandDims(controlPicks, -1)
 	controlPicks = Concatenate([]*Node{
 		Iota(g, controlPicks.Shape(), 1), // output node index.
@@ -194,8 +195,6 @@ func PiecewiseConstantFunction(input, controlPoints, splitPoints *Node) *Node {
 		controlPicks,
 	}, -1)
 	controlPicks = StopGradient(controlPicks) // No gradient with respect to the picks.
-	// Makes sure we broadcast on the output dimension, if needed.
-	controlPicks = BroadcastToDims(controlPicks, batchSize, numOutputNodes, numInputNodes, 3)
 
 	output := Gather(controlPoints, controlPicks)
 	output.AssertDims(batchSize, numOutputNodes, numInputNodes)
