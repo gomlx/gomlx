@@ -346,12 +346,13 @@ func Denoise(ctx *context.Context, noisyImages, signalRatios, noiseRatios, flowe
 	predictedImages, predictedNoises *Node) {
 	g := noisyImages.Graph()
 	var modelCtx *context.Context
-	emaCoef := context.GetParamOr(ctx, "diffusion_ema", 0.0)
-	if ctx.IsTraining(g) || emaCoef <= 0 {
-		modelCtx = ctx
-	} else {
-		// Exponential moving average.
+
+	useEMA := context.GetParamOr(ctx, "use_ema", false)
+	if useEMA && !ctx.IsTraining(g) {
+		// Use exponential moving average (EMA) for inference.
 		modelCtx = ctx.In("ema")
+	} else {
+		modelCtx = ctx
 	}
 
 	// Noise variance: since the noise is expected to have variance 1, the adjusted
@@ -364,6 +365,7 @@ func Denoise(ctx *context.Context, noisyImages, signalRatios, noiseRatios, flowe
 	predictedImages = Sub(noisyImages, Mul(predictedNoises, noiseRatios))
 	predictedImages = Div(predictedImages, signalRatios)
 
+	emaCoef := context.GetParamOr(ctx, "diffusion_ema", 0.0)
 	if ctx.IsTraining(g) && emaCoef > 0 {
 		// Update moving average weights:
 		prefixScope := ctx.Scope()

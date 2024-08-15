@@ -69,6 +69,7 @@ func CreateDefaultContext() *context.Context {
 		"diffusion_pool":                "mean",                 // Values are: "mean", "max", "sum", "concat"
 		"diffusion_residual_version":    2,                      // Valid values are 1 or 2. See code in function ResidualBlock.
 		"diffusion_ema":                 0.999,                  // Exponential Moving Average of the model weights to use during evaluation. Set to <= 0 to disable.
+		"use_ema":                       false,                  // If set to true, and "ema" (exponential moving average) of the model is maintained, use that for evaluation.
 
 		// Model parameters for the dataset:
 		"flower_type_embed_size": 16,     // If > 0, use embedding of the flower type of the given dimension.

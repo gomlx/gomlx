@@ -53,7 +53,7 @@ func (c *Config) AttachCheckpoint(checkpointPath string) (checkpoint *checkpoint
 		ExcludeParams(excludeParams...).
 		Done())
 	c.Checkpoint = checkpoint // Save in config.
-	fmt.Printf("Checkpoint: %q\n", checkpoint.Dir())
+	fmt.Printf("\tCheckpoint: %q\n", checkpoint.Dir())
 
 	// Load/generate sampled noise/flowerIds.
 	noisePath, flowerIdsPath := path.Join(checkpoint.Dir(), NoiseSamplesFile), path.Join(checkpoint.Dir(), FlowerIdsSamplesFile)

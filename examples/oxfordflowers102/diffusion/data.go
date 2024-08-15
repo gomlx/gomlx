@@ -57,7 +57,6 @@ func NewConfig(backend backends.Backend, ctx *context.Context, dataDir string, p
 	}
 	dtype := must.M1(dtypes.DTypeString(
 		context.GetParamOr(ctx, "dtype", "float32")))
-	fmt.Printf("DType=%s\n", dtype)
 	return &Config{
 		Backend:       backend,
 		Context:       ctx,
