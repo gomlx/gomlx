@@ -21,26 +21,11 @@ func init() {
 	klog.InitFlags(nil)
 }
 
-type errTester[T any] struct {
-	value T
-	err   error
-}
-
 func setupTest(t *testing.T) {
 	backends.DefaultConfig = *flagBackend
 	require.NotPanics(t, func() {
 		backend = backends.New()
 	})
-}
-
-// capture is a shortcut to test that there is no error and return the value.
-func capture[T any](value T, err error) errTester[T] {
-	return errTester[T]{value, err}
-}
-
-func (e errTester[T]) Test(t *testing.T) T {
-	require.NoError(t, e.err)
-	return e.value
 }
 
 func testOnDeviceInputOutputImpl[T dtypes.Number](t *testing.T, backend backends.Backend) {
@@ -63,7 +48,7 @@ func testOnDeviceInputOutputImpl[T dtypes.Number](t *testing.T, backend backends
 	})
 	var outputs []backends.Buffer
 	require.NotPanics(t, func() {
-		outputs = exec.Execute(buffer)
+		outputs = exec.Execute([]backends.Buffer{buffer}, nil)
 	})
 
 	// Convert buffer to tensor.
