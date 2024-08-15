@@ -58,11 +58,3 @@ It has made it relatively easy to track those pesky nans that show up during tra
 ### Adding "Scope" to `Graph` and its `Nodes`
 
 To make it easy to associate a node to a layer for instance. This may come in handy for profiling.
-
-### Capture NaN graph execution mode
-
-Have `Exec` automatically output all node values, and raise an error at the first node value that
-shows up a `NaN` and automatically print the stack-trace of the node.
-
-This would be slower (all nodes need to be materialized), but could be handy to detect where/when
-NaN appear.

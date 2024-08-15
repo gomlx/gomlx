@@ -61,8 +61,18 @@ It includes:
 
 ## Installation
 
-Releases for Linux only, but it's been succesfully compiled in MacOS. 
-It does work well also in WSL (Windows Subsystem for Linux) in Windows or using Docker. 
+**TLDR;**: (1) [Use the Docker](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab); 
+(2) Pre-built only for Linux (works in Windows WSL). Install 
+[**gopjrt** (see installation instructions)](https://github.com/gomlx/gopjrt?#installing). 
+And `sudo apt install sudo apt-get install libunwind8 liblzma5 hdf5-tools`.
+
+**GoMLX** is mostly a normal Go library, but it depends on [**gopjrt**](https://github.com/gomlx/gopjrt), which
+includes C wrappers to XLA (itself C++ code base). 
+Installing **gopjrt** is relatively straight forward, follow
+[the installation instructions](https://github.com/gomlx/gopjrt?#installing).
+
+Releases are for Linux only for now. They do work well with WSL (Windows Subsystem for Linux) in Windows.
+I don't have a Mac, but XLA works for it, so **gopjrt** should compile as well, and **GoMLX** should work.
 
 ### [Pre-built Docker](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab)
 
@@ -87,69 +97,33 @@ More details on the [docker here](docker/jupyterlab/README.md).
 
 ### Linux
 
-The library depends on the following libraries to compile and run:
+**GoMLX** is mostly a normal Go library, but it depends on [**gopjrt**](https://github.com/gomlx/gopjrt), which
+includes C wrappers to XLA (itself C++ code base).
+Installing **gopjrt** is relatively straight forward, follow
+[the installation instructions](https://github.com/gomlx/gopjrt?#installing).
+
+The library also depends on the following libraries to compile and run:
 
 * `libunwind8`: usually available in most Linux systems.
 * `liblzma5`: compression library, also usually available.
-* TC Malloc, usually packaged as `libgoogle-perftools-dev`: fast malloc version, and memory debugging tools.
-  The prebuilt libray shared in the releases `gomlx_xla.tar.gz` also include a build of `libtcmalloc.so`, but
-  leaves it in a separate sub-directory under `/usr/local/lib/gomlx/` to avoid conflict. Feel free to use it
-  if you want (by copying it to `/usr/local/lib` or adding the directory to `$LD_LIBRARY_PATH`).
 * `hdf5-tools`: access to `.h5` file format, used by hold pre-trained weights for some some models. 
 
 Typically, this can be installed with:
 
 ```bash
-sudo apt-get install libunwind8 libgoogle-perftools-dev liblzma5 hdf5-tools
+sudo apt-get install libunwind8 liblzma5 hdf5-tools
 ```
 
-Second you need the pre-compiled GoMLX+XLA C library, included in each release. The library is pretty large,
-~500Mb (with GPU and TPU, it statically links most of what it needs) -- for Just-In-Time (JIT)
-compilation it includes the whole [LLVM compiler](http://llvm.org). 
+#### NVidia GPU Support with CUDA
 
-Latest version in [github.com/gomlx/gomlx/releases/latest/download/gomlx_xla-linux-amd64.tar.gz](https://github.com/gomlx/gomlx/releases/latest/download/gomlx_xla-linux-amd64.tar.gz).
-
-The contents are a `libgomlx_xla.so` file and a few `.h` files
-needed for the compilation of GoMLX. They are separated on two top level directories `/lib` and `/include`, and for
-now the recommended way is to just *untar* them in `/usr/local`, which is usually in the default
-path for inclusion and dynamic library loading. So you can do:
-
-```bash
-cd /usr/local
-tar xzvf .../path/to/gomlx_xla-linux-amd64.tar.gz
-```
-
-This should be enough for most installations. If [CGO](https://pkg.go.dev/cmd/cgo) is not finding the library,
-you may need to configure some environment variables (`LD_LIBRARY_PATH`, `CGO_CPPFLAGS`, `CGO_LDFLAGS`) to include
-the corresponding directories under `/usr/local` (most linux distributions won't need this).
-
-After that, just import it as with any Go library.
-
-More on building the C library, see [docs/building.md](docs/building.md).
-
-#### GPU Support (NVidia)
-
-Typically one needs the same NVidia libraries as TensorFlow/Jax. On a fresh 23.04 Ubuntu install, all it took was 
-having the commercial NVidia drivers installed (not the Nouveau drivers), and additionally installing:
-
-```bash
-apt install nvidia-cudnn
-```
-
-After that, another needed step — some misconfiguration among NVidia's CuDNN library, Ubuntu package maintainer and XLA 
-code, I'm not sure — is to create the following directory and symbolic link:
-
-```bash
-sudo mkdir /usr/lib/nvidia-cuda-toolkit/nvvm
-sudo ln -s /usr/lib/nvidia-cuda-toolkit/libdevice /usr/lib/nvidia-cuda-toolkit/nvvm/
-```
-
-Without this you'll see errors complaining about not finding `libdevice.10.bc`.
+Just install also the "cuda" PJRT plugin for [**gopjrt**](https://github.com/gomlx/gopjrt).
+Follow the [CUDA installation instructions here](https://github.com/gomlx/gopjrt?#installing),
+it borrows the PJRT plugin and NVidia drivers built for JAX.
 
 ### MacOS
 
-See #23: the required C++ library (`libgomlx_xla.so`) is reported to successfully compile in MacOS. 
-It compiles along Google's `libtcmalloc.so`, and one just need to move it to a standard library directory.
+See #23: the required C++ library (`libgomlx_xla.so`) is reported to successfully compile in MacOS.
+After that the C++ library moved to [**gopjrt**](https://github.com/gomlx/gopjrt), but it should work.
 Unfortunately, I don't have a mac to build and include these in the releases.
 
 ## Tutorial
@@ -203,5 +177,4 @@ No governance guidelines have been established yet.
 * [TODO](docs/TODO.md)
 * [Error Handling](docs/error_handling.md)
 * [Building C/XLA Bindings](docs/building.md)
-* [Bare-bones Graph Execution](docs/barebones.md)
 * [Developing](docs/developing.md)
