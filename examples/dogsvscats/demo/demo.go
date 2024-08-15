@@ -51,13 +51,13 @@ func main() {
 	settings := commandline.CreateContextSettingsFlag(ctx, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	must.M(commandline.ParseContextSettings(ctx, *settings))
+	paramsSet := must.M1(commandline.ParseContextSettings(ctx, *settings))
 
 	// --force_original better set by
 	if *flagPreGenerate {
 		preGenerate(ctx, *flagDataDir)
 	} else {
-		dogsvscats.TrainModel(ctx, *flagDataDir, *flagCheckpoint)
+		dogsvscats.TrainModel(ctx, *flagDataDir, *flagCheckpoint, paramsSet)
 	}
 }
 

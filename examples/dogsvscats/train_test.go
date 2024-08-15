@@ -6,6 +6,8 @@ import (
 	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
 	"testing"
+
+	_ "github.com/gomlx/gomlx/backends/xla"
 )
 
 // TestTrain train the default model for 50 steps.
@@ -19,6 +21,6 @@ func TestTrain(t *testing.T) {
 	settings := commandline.CreateContextSettingsFlag(ctx, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	must.M(commandline.ParseContextSettings(ctx, *settings))
-	TrainModel(ctx, *flagDataDir, "")
+	paramsSet := must.M1(commandline.ParseContextSettings(ctx, *settings))
+	TrainModel(ctx, *flagDataDir, "", paramsSet)
 }

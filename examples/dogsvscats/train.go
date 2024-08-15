@@ -138,7 +138,7 @@ func CreateDefaultContext() *context.Context {
 }
 
 // TrainModel based on configuration and flags.
-func TrainModel(ctx *context.Context, dataDir, checkpointPath string) {
+func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet []string) {
 	dataDir = data.ReplaceTildeInDir(dataDir)
 	if !data.FileExists(dataDir) {
 		must.M(os.MkdirAll(dataDir, 0777))
@@ -150,7 +150,8 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string) {
 		numCheckpoints := context.GetParamOr(ctx, "num_checkpoints", 3)
 		checkpoint = must.M1(checkpoints.Build(ctx).
 			DirFromBase(checkpointPath, dataDir).
-			ExcludeParams("data_dir", "train_steps", "plots", "nan_logger", "num_checkpoints", "byol_pretrain", "byol_finetune").
+			ExcludeParams(append(paramsSet,
+				"data_dir", "train_steps", "plots", "nan_logger", "num_checkpoints", "byol_pretrain", "byol_finetune")...).
 			Keep(numCheckpoints).Done())
 	}
 
@@ -168,7 +169,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string) {
 	modelType := context.GetParamOr(ctx, "model", "")
 	modelFn, found := ModelsFns[modelType]
 	if !found {
-		exceptions.Panicf("Unknown model %q: valid values are %q", maps.Keys(ModelsFns))
+		exceptions.Panicf("Unknown model type %q: valid values are %q", modelType, maps.Keys(ModelsFns))
 	}
 	if modelPrep, found := ModelsPrep[modelType]; found {
 		modelPrep(ctx, dataDir, checkpoint)
