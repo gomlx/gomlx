@@ -138,7 +138,7 @@ func CreateDefaultContext() *context.Context {
 }
 
 // TrainModel based on configuration and flags.
-func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet []string) {
+func TrainModel(ctx *context.Context, dataDir, checkpointPath string, runEval bool, paramsSet []string) {
 	dataDir = data.ReplaceTildeInDir(dataDir)
 	if !data.FileExists(dataDir) {
 		must.M(os.MkdirAll(dataDir, 0777))
@@ -256,6 +256,8 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 			"to current global step.\n", numTrainSteps)
 	}
 
+	fmt.Println("Training done.")
+
 	if preTraining {
 		// If pre-training (unsupervised), skip evaluation, and clear optimizer variables and global step.
 		fmt.Println("Pre-training only, no evaluation.")
@@ -266,7 +268,9 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 	}
 
 	// Finally, print an evaluation on train and test datasets.
-	fmt.Println()
-	must.M(commandline.ReportEval(trainer, trainEvalDS, validationEvalDS))
-	fmt.Println()
+	if runEval {
+		fmt.Println()
+		must.M(commandline.ReportEval(trainer, trainEvalDS, validationEvalDS))
+		fmt.Println()
+	}
 }

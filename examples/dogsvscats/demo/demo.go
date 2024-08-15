@@ -57,7 +57,7 @@ func main() {
 	if *flagPreGenerate {
 		preGenerate(ctx, *flagDataDir)
 	} else {
-		dogsvscats.TrainModel(ctx, *flagDataDir, *flagCheckpoint, paramsSet)
+		dogsvscats.TrainModel(ctx, *flagDataDir, *flagCheckpoint, *flagEval, paramsSet)
 	}
 }
 

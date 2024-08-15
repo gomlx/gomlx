@@ -37,6 +37,9 @@ var (
 	}
 )
 
+// Backend is created once and reused if train is called multiple times.
+var Backend backends.Backend
+
 // TrainCifar10Model with hyperparameters given in ctx.
 func TrainCifar10Model(ctx *context.Context, dataDir, checkpointPath string, evaluateOnEnd bool, verbosity int, paramsSet []string) {
 	// Data directory: datasets and top-level directory holding checkpoints for different models.
@@ -48,9 +51,11 @@ func TrainCifar10Model(ctx *context.Context, dataDir, checkpointPath string, eva
 	//must.M(DownloadCifar100(dataDir))
 
 	// Backend handles creation of ML computation graphs, accelerator resources, etc.
-	backend := backends.New()
+	if Backend == nil {
+		Backend = backends.New()
+	}
 	if verbosity >= 1 {
-		fmt.Printf("Backend %q:\t%s\n", backend.Name(), backend.Description())
+		fmt.Printf("Backend %q:\t%s\n", Backend.Name(), Backend.Description())
 	}
 
 	// Create datasets used for training and evaluation.
@@ -62,7 +67,7 @@ func TrainCifar10Model(ctx *context.Context, dataDir, checkpointPath string, eva
 	if evalBatchSize <= 0 {
 		evalBatchSize = batchSize
 	}
-	trainDS, evalOnTrainDS, evalOnTestDS := CreateDatasets(backend, dataDir, batchSize, evalBatchSize)
+	trainDS, evalOnTrainDS, evalOnTestDS := CreateDatasets(Backend, dataDir, batchSize, evalBatchSize)
 
 	// Checkpoints saving.
 	var checkpoint *checkpoints.Handler
@@ -97,7 +102,7 @@ func TrainCifar10Model(ctx *context.Context, dataDir, checkpointPath string, eva
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
 	ctx = ctx.In("model") // Convention scope used for model creation.
-	trainer := train.NewTrainer(backend, ctx, modelFn,
+	trainer := train.NewTrainer(Backend, ctx, modelFn,
 		losses.SparseCategoricalCrossEntropyLogits,
 		optimizers.FromContext(ctx),
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics

@@ -1,13 +1,30 @@
 package main
 
 import (
-	"flag"
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/examples/cifar"
 	"github.com/gomlx/gomlx/ml/train/commandline"
 	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
+	"os"
+	"sync"
 	"testing"
 )
+
+var (
+	flagSettings *string
+	muDemo       sync.Mutex
+)
+
+func init() {
+	klog.InitFlags(nil)
+	ctx := createDefaultContext()
+	flagSettings = commandline.CreateContextSettingsFlag(ctx, "")
+	if _, found := os.LookupEnv(backends.GOMLX_BACKEND); !found {
+		// For testing, we use the CPU backend (and avoid GPU if not explicitly requested).
+		must.M(os.Setenv(backends.GOMLX_BACKEND, "cpu"))
+	}
+}
 
 // TestDemo trains the model for 10 steps, not generating any checkpoints.
 //
@@ -21,11 +38,12 @@ func TestDemo(t *testing.T) {
 		return
 	}
 
+	// Run at most one demo training at a time:
+	muDemo.Lock()
+	defer muDemo.Unlock()
+
 	ctx := createDefaultContext()
 	ctx.SetParam("train_steps", 10) // Only 10 steps.
-	settings := commandline.CreateContextSettingsFlag(ctx, "")
-	klog.InitFlags(nil)
-	flag.Parse()
-	paramsSet := must.M1(commandline.ParseContextSettings(ctx, *settings))
+	paramsSet := must.M1(commandline.ParseContextSettings(ctx, *flagSettings))
 	cifar.TrainCifar10Model(ctx, *flagDataDir, "", true, 1, paramsSet)
 }
