@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/examples/imdb"
 	"github.com/gomlx/gomlx/ml/train/commandline"
@@ -9,8 +8,24 @@ import (
 	"github.com/stretchr/testify/require"
 	"k8s.io/klog/v2"
 	"os"
+	"sync"
 	"testing"
 )
+
+var (
+	flagSettings *string
+	muTrain      sync.Mutex
+)
+
+func init() {
+	ctx := imdb.CreateDefaultContext()
+	flagSettings = commandline.CreateContextSettingsFlag(ctx, "")
+	klog.InitFlags(nil)
+	if _, found := os.LookupEnv(backends.GOMLX_BACKEND); !found {
+		// For testing, we use the CPU backend (and avoid GPU if not explicitly requested).
+		must.M(os.Setenv(backends.GOMLX_BACKEND, "cpu"))
+	}
+}
 
 func TestDemo(t *testing.T) {
 	if testing.Short() {
@@ -18,17 +33,12 @@ func TestDemo(t *testing.T) {
 		return
 	}
 
-	if _, found := os.LookupEnv(backends.GOMLX_BACKEND); !found {
-		// For testing, we use the CPU backend (and avoid GPU if not explicitly requested).
-		require.NoError(t, os.Setenv(backends.GOMLX_BACKEND, "cpu"))
-	}
-
 	ctx := imdb.CreateDefaultContext()
 	ctx.SetParam("train_steps", 10)
-	settings := commandline.CreateContextSettingsFlag(ctx, "")
-	klog.InitFlags(nil)
-	flag.Parse()
-	paramsSet := must.M1(commandline.ParseContextSettings(ctx, *settings))
+	paramsSet := must.M1(commandline.ParseContextSettings(ctx, *flagSettings))
+
+	muTrain.Lock()
+	defer muTrain.Unlock()
 	require.NotPanics(t, func() {
 		imdb.TrainModel(ctx, *flagDataDir, *flagCheckpoint, paramsSet, *flagEval, *flagVerbosity)
 	})
