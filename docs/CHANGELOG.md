@@ -48,6 +48,7 @@
   * Completely removed, all C/C++ dependencies are in `gopjrt` project now.
   * Removed reference to AOT compilation, see #52.
 * Added command-line tool `gomlx_checkpoints` to introspect checkpoints.
+* Added `cmd/run_coverage.sh`.
 
 ## 0.10.0 - 2024/06/12
 

@@ -4,8 +4,10 @@ Below is a list of usual low level implementation tasks:
 
 ## Updating `coverage.out` file
 
-This is not done as a github actions because it would take too long to download the datasets, etc.
-Instead, we do it manually with:
+This is not done as a GitHub actions because it would take too long to download the datasets, etc.
+Instead, we do it manually using the `cmd/run_coverage.sh` simple script. 
+
+It basically does the follwoingwith:
 
 ```shell
 PACKAGE_COVERAGE="./graph/...,./ml/...,./models/...,./types/...,./xla/..."
@@ -13,7 +15,7 @@ go test -v -cover -coverprofile docs/coverage.out -coverpkg "${PACKAGE_COVERAGE}
 go tool cover -func docs/coverage.out -o docs/coverage.out
 ```
 
-Once an updated file is submitted, a GitHub action will update the coverage badge.
+It updates the file `docs/converage.out`. And once submitted, a GitHub action will update the coverage badge.
 
 ## Adding support to a new node type in gomlx that maps to an op in XLA
 
