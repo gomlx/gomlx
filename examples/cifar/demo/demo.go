@@ -107,8 +107,8 @@ func main() {
 	settings := commandline.CreateContextSettingsFlag(ctx, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	must.M(commandline.ParseContextSettings(ctx, *settings))
+	paramsSet := must.M1(commandline.ParseContextSettings(ctx, *settings))
 
 	// Train.
-	cifar.TrainCifar10Model(ctx, *flagDataDir, *flagCheckpoint, *flagEval, *flagVerbosity)
+	cifar.TrainCifar10Model(ctx, *flagDataDir, *flagCheckpoint, *flagEval, *flagVerbosity, paramsSet)
 }

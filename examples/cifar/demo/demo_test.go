@@ -26,6 +26,6 @@ func TestDemo(t *testing.T) {
 	settings := commandline.CreateContextSettingsFlag(ctx, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	must.M(commandline.ParseContextSettings(ctx, *settings))
-	cifar.TrainCifar10Model(ctx, *flagDataDir, "", true, 1)
+	paramsSet := must.M1(commandline.ParseContextSettings(ctx, *settings))
+	cifar.TrainCifar10Model(ctx, *flagDataDir, "", true, 1, paramsSet)
 }

@@ -38,7 +38,7 @@ var (
 )
 
 // TrainCifar10Model with hyperparameters given in ctx.
-func TrainCifar10Model(ctx *context.Context, dataDir, checkpointPath string, evaluateOnEnd bool, verbosity int) {
+func TrainCifar10Model(ctx *context.Context, dataDir, checkpointPath string, evaluateOnEnd bool, verbosity int, paramsSet []string) {
 	// Data directory: datasets and top-level directory holding checkpoints for different models.
 	dataDir = data.ReplaceTildeInDir(dataDir)
 	if !data.FileExists(dataDir) {
@@ -71,7 +71,7 @@ func TrainCifar10Model(ctx *context.Context, dataDir, checkpointPath string, eva
 		checkpoint = must.M1(checkpoints.Build(ctx).
 			DirFromBase(checkpointPath, dataDir).
 			Keep(numCheckpointsToKeep).
-			ExcludeParams(ParamsExcludedFromSaving...).
+			ExcludeParams(append(paramsSet, ParamsExcludedFromSaving...)...).
 			Done())
 		fmt.Printf("Checkpointing model to %q\n", checkpoint.Dir())
 	}
