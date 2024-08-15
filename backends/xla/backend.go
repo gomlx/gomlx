@@ -19,6 +19,8 @@ type Backend struct {
 	plugin     *pjrt.Plugin
 	client     *pjrt.Client
 	pluginName string
+
+	supressLogging bool
 }
 
 // AssertValid will panic if the backend is not valid: if it's nil or has already been finalized.

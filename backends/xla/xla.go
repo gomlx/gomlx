@@ -14,6 +14,7 @@ import (
 	"github.com/gomlx/gopjrt/pjrt"
 	"github.com/pkg/errors"
 	"slices"
+	"strings"
 )
 
 const BackendName = "xla"
@@ -27,6 +28,14 @@ func New(pluginName string) backends.Backend {
 // NewWithOptions creates a XlaBackend with the given client options.
 // It allows more control, not available with the default New constructor.
 func NewWithOptions(pluginName string, options pjrt.NamedValuesMap) *Backend {
+	var pluginOptions []string
+	parts := strings.Split(pluginName, ",")
+	if len(parts) > 1 {
+		// Plugin options (exclude empty).
+		pluginOptions = slices.DeleteFunc(parts[1:], func(s string) bool { return s == "" })
+		pluginName = parts[0]
+	}
+
 	plugins := GetAvailablePlugins()
 	if len(plugins) == 0 {
 		exceptions.Panicf("no plugins found for backend %q -- either use the absolute "+
@@ -55,11 +64,19 @@ func NewWithOptions(pluginName string, options pjrt.NamedValuesMap) *Backend {
 	if err != nil {
 		panic(errors.WithMessagef(err, "backend %q:", BackendName))
 	}
-	return &Backend{
-		plugin:     plugin,
-		client:     client,
-		pluginName: pluginName,
+	backend := &Backend{
+		plugin:         plugin,
+		client:         client,
+		pluginName:     pluginName,
+		supressLogging: pluginName == "cuda" || slices.Index(pluginOptions, "supress_logging") != -1,
 	}
+	return backend
+}
+
+// SupressLogging during compilation of a graph.
+func (backend *Backend) SupressLogging(supressLogging bool) *Backend {
+	backend.supressLogging = supressLogging
+	return backend
 }
 
 // Registers New() as the default constructor for "xla" backend.
