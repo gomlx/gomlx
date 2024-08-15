@@ -22,13 +22,10 @@ import (
 	"github.com/janpfeifer/must"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
-	"path"
 	"time"
 )
 
 var (
-	ParamCheckpointPath = "checkpoint"
-
 	// ParamNumCheckpoints is the number of past checkpoints to keep.
 	// The default is 10.
 	ParamNumCheckpoints = "num_checkpoints"
@@ -44,59 +41,33 @@ var (
 )
 
 // Train GNN model based on configuration in `ctx`.
-func Train(backend backends.Backend, ctx *context.Context, baseDir string, layerWiseEval, report bool) error {
-	baseDir = mldata.ReplaceTildeInDir(baseDir)
+func Train(backend backends.Backend, ctx *context.Context, dataDir, checkpointPath string, layerWiseEval, report bool, paramsSet []string) error {
+	dataDir = mldata.ReplaceTildeInDir(dataDir)
 	ReuseShareableKernels = context.GetParamOr(ctx, ParamReuseKernels, true)
 	IdentitySubSeeds = context.GetParamOr(ctx, ParamIdentitySubSeeds, true)
 
-	trainDS, trainEvalDS, validEvalDS, testEvalDS, err := MakeDatasets(baseDir)
+	trainDS, trainEvalDS, validEvalDS, testEvalDS, err := MakeDatasets(dataDir)
 	_ = testEvalDS
 	if err != nil {
 		return err
 	}
 	UploadOgbnMagVariables(backend, ctx)
 
-	// Context values (both parameters and variables) are reloaded from checkpoint,
-	// any values that we don't want overwritten need to be read before the checkpointing.
-	trainSteps := context.GetParamOr(ctx, "train_steps", 100)
-
 	// Checkpoint: it loads if already exists, and it will save as we train.
-	checkpointPath := context.GetParamOr(ctx, ParamCheckpointPath, "")
-	numCheckpointsToKeep := context.GetParamOr(ctx, ParamNumCheckpoints, 5)
 	var checkpoint *checkpoints.Handler
 	if checkpointPath != "" {
-		checkpointPath = mldata.ReplaceTildeInDir(checkpointPath) // If the path starts with "~", it is replaced.
-		if !path.IsAbs(checkpointPath) {
-			checkpointPath = path.Join(baseDir, checkpointPath)
-		}
+		numCheckpointsToKeep := context.GetParamOr(ctx, ParamNumCheckpoints, 5)
 		var err error
-
-		if numCheckpointsToKeep <= 1 {
-			// Only limit the amount of checkpoints kept if >= 2.
-			numCheckpointsToKeep = -1
-		}
-		if numCheckpointsToKeep > 0 {
-			checkpoint, err = checkpoints.Build(ctx).Dir(checkpointPath).Keep(numCheckpointsToKeep).Done()
-		} else {
-			checkpoint, err = checkpoints.Build(ctx).Dir(checkpointPath).Done()
-		}
-		ExcludeOgbnMagVariablesFromSave(ctx, checkpoint)
-
+		checkpoint, err = checkpoints.Build(ctx).
+			DirFromBase(checkpointPath, dataDir).
+			Keep(numCheckpointsToKeep).
+			ExcludeParams(paramsSet...).
+			Done()
 		if err != nil {
 			return errors.WithMessagef(err, "while setting up checkpoint to %q (keep=%d)",
 				checkpointPath, numCheckpointsToKeep)
 		}
-		globalStep := optimizers.GetGlobalStep(ctx)
-		if globalStep != 0 {
-			fmt.Printf("> restarting training from global_step=%d (training until %d)\n", globalStep, trainSteps)
-			ctx = ctx.Reuse()
-		}
-		if trainSteps <= int(globalStep) {
-			fmt.Printf("> training already reached target train_steps=%d. To train further, set a number additional "+
-				"to current global step. Use Eval to get reading on current performance.\n", trainSteps)
-			return nil
-		}
-		trainSteps -= int(globalStep)
+		ExcludeOgbnMagVariablesFromSave(ctx, checkpoint)
 	}
 
 	// Create trainer and loop.
@@ -105,7 +76,7 @@ func Train(backend backends.Backend, ctx *context.Context, baseDir string, layer
 	commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
 
 	// Attach a checkpoint: checkpoint every 1 minute of training.
-	if checkpoint != nil && numCheckpointsToKeep > 1 {
+	if checkpoint != nil {
 		period := time.Minute * 3
 		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
 			func(loop *train.Loop, metrics []*tensors.Tensor) error {
@@ -123,7 +94,7 @@ func Train(backend backends.Backend, ctx *context.Context, baseDir string, layer
 			ScheduleExponential(loop, 200, 1.2).
 			ScheduleEveryNSteps(loop, stepsPerEpoch)
 		if layerWiseEval {
-			magSampler := must.M1(NewSampler(baseDir))
+			magSampler := must.M1(NewSampler(dataDir))
 			layerWiseStrategy := NewSamplerStrategy(magSampler, 1, nil)
 			plots = plots.WithCustomMetricFn(BuildLayerWiseCustomMetricFn(backend, ctx, layerWiseStrategy))
 		} else {
@@ -132,13 +103,24 @@ func Train(backend backends.Backend, ctx *context.Context, baseDir string, layer
 	}
 
 	// Loop for given number of steps
-	_, err = loop.RunSteps(trainDS, trainSteps)
+	trainSteps := context.GetParamOr(ctx, "train_steps", 100)
+	globalStep := int(optimizers.GetGlobalStep(ctx))
+	if trainSteps <= globalStep {
+		fmt.Printf("> training already reached target train_steps=%d. To train further, set a number additional "+
+			"to current global step. Use Eval to get reading on current performance.\n", trainSteps)
+		return nil
+	}
+	if globalStep != 0 {
+		fmt.Printf("> restarting training from global_step=%d (training until %d)\n", globalStep, trainSteps)
+		ctx = ctx.Reuse()
+	}
+	_, err = loop.RunSteps(trainDS, trainSteps-globalStep)
 	if err != nil {
 		return errors.WithMessage(err, "while running steps")
 	}
 	fmt.Printf("\t[Step %d] median train step: %d microseconds\n",
 		loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
-	if checkpoint != nil && numCheckpointsToKeep <= 1 {
+	if checkpoint != nil {
 		// Save checkpoint at end of training.
 		err = checkpoint.Save()
 		if err != nil {
@@ -150,7 +132,7 @@ func Train(backend backends.Backend, ctx *context.Context, baseDir string, layer
 	// Finally, print an evaluation on train and test datasets.
 	if report {
 		fmt.Println()
-		err = evalWithContext(backend, ctx, baseDir, layerWiseEval, false)
+		err = evalWithContext(backend, ctx, dataDir, layerWiseEval, false)
 		if err != nil {
 			return errors.WithMessage(err, "while reporting eval")
 		}
@@ -176,11 +158,20 @@ func newTrainer(backend backends.Backend, ctx *context.Context) *train.Trainer {
 	return trainer
 }
 
-func Eval(backend backends.Backend, ctx *context.Context, baseDir string, layerWise, skipTrain bool) error {
-	if err := loadCheckpointToContext(backend, ctx, baseDir); err != nil {
-		return err
+func Eval(backend backends.Backend, ctx *context.Context, dataDir, checkpointPath string, layerWise, skipTrain bool) error {
+	_, err := checkpoints.Build(ctx).DirFromBase(checkpointPath, dataDir).Done()
+	if err != nil {
+		return errors.WithMessagef(err, "while loading checkpoint from %q", checkpointPath)
 	}
-	return evalWithContext(backend, ctx, baseDir, layerWise, skipTrain)
+
+	// Model stats:
+	globalStep := optimizers.GetGlobalStep(ctx)
+	fmt.Printf("Model in %q trained for %d steps.\n", checkpointPath, globalStep)
+
+	// Upload OGBN-MAG variables -- and possibly convert them.
+	_ = UploadOgbnMagVariables(backend, ctx)
+
+	return evalWithContext(backend, ctx, dataDir, layerWise, skipTrain)
 }
 
 func evalWithContext(backend backends.Backend, ctx *context.Context, baseDir string, layerWise, skipTrain bool) error {
@@ -228,31 +219,6 @@ func evalLayerWise(backend backends.Backend, ctx *context.Context, baseDir strin
 	fmt.Printf("Copy&paste version: \t%.2f%%,%.2f%%,%.2f%%", 100*trainAcc, 100*validationAcc, 100*testAcc)
 
 	// Evaluation on the various eval datasets.
-	return nil
-}
-
-func loadCheckpointToContext(backend backends.Backend, ctx *context.Context, baseDir string) error {
-	baseDir = mldata.ReplaceTildeInDir(baseDir)
-	checkpointPath := context.GetParamOr(ctx, ParamCheckpointPath, "")
-	if checkpointPath == "" {
-		return errors.Errorf("no checkpoint defined in Context.GetParam(%q), please configure it to the checkpoint directory",
-			ParamCheckpointPath)
-	}
-	checkpointPath = mldata.ReplaceTildeInDir(checkpointPath) // If the path starts with "~", it is replaced.
-	if !path.IsAbs(checkpointPath) {
-		checkpointPath = path.Join(baseDir, checkpointPath)
-	}
-	_, err := checkpoints.Build(ctx).Dir(checkpointPath).Done()
-	if err != nil {
-		return errors.WithMessagef(err, "while loading checkpoint from %q", checkpointPath)
-	}
-
-	// Model stats:
-	globalStep := optimizers.GetGlobalStep(ctx)
-	fmt.Printf("Model in %q trained for %d steps.\n", checkpointPath, globalStep)
-
-	// Upload OGBN-MAG variables -- and possibly convert them.
-	_ = UploadOgbnMagVariables(backend, ctx)
 	return nil
 }
 

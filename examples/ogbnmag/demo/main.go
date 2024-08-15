@@ -14,19 +14,18 @@ import (
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
-	"path"
 	"time"
 
 	_ "github.com/gomlx/gomlx/backends/xla"
 )
 
 var (
-	flagEval             = flag.Bool("eval", false, "Set to true to run evaluation instead of training.")
-	flagSkipReport       = flag.Bool("skip_report", false, "Set to true to skip report of quality after training.")
-	flagSkipTrainEval    = flag.Bool("skip_train_eval", false, "Set to true to skip evaluation on training data, which takes longer.")
-	flagDataDir          = flag.String("data", "~/work/ogbnmag", "Directory to cache downloaded and generated dataset files.")
-	flagCheckpointSubdir = flag.String("checkpoint", "", "Checkpoint subdirectory under --data directory. If empty does not use checkpoints.")
-	flagLayerWise        = flag.Bool("layerwise", true, "Whether to use Layer-Wise inference for evaluation -- default is true.")
+	flagEval          = flag.Bool("eval", false, "Set to true to run evaluation instead of training.")
+	flagSkipReport    = flag.Bool("skip_report", false, "Set to true to skip report of quality after training.")
+	flagSkipTrainEval = flag.Bool("skip_train_eval", false, "Set to true to skip evaluation on training data, which takes longer.")
+	flagDataDir       = flag.String("data", "~/work/ogbnmag", "Directory to cache downloaded and generated dataset files.")
+	flagCheckpoint    = flag.String("checkpoint", "", "Checkpoint subdirectory under --data directory. If empty does not use checkpoints.")
+	flagLayerWise     = flag.Bool("layerwise", true, "Whether to use Layer-Wise inference for evaluation -- default is true.")
 )
 
 const paramWithReplacement = "mag_with_replacement"
@@ -101,22 +100,11 @@ func main() {
 	settings := commandline.CreateContextSettingsFlag(ctx, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	must.M(commandline.ParseContextSettings(ctx, *settings))
+	paramsSet := must.M1(commandline.ParseContextSettings(ctx, *settings))
 
 	// Set checkpoint accordingly.
 	*flagDataDir = mldata.ReplaceTildeInDir(*flagDataDir)
-	checkpointPath := mldata.ReplaceTildeInDir(*flagCheckpointSubdir)
-	if checkpointPath != "" && !path.IsAbs(checkpointPath) {
-		checkpointPath = path.Join(*flagDataDir, checkpointPath)
-	}
-	if checkpointPath != "" {
-		ctx.SetParam("checkpoint", checkpointPath)
-	} else {
-		checkpointPath = context.GetParamOr(ctx, "checkpoint", "")
-	}
-	if checkpointPath != "" {
-		fmt.Printf("Model checkpoints in %s\n", checkpointPath)
-	} else if *flagEval {
+	if *flagCheckpoint == "" && *flagEval {
 		klog.Fatal("To run eval (--eval) you need to specify a checkpoint (--checkpoint).")
 	}
 
@@ -133,14 +121,14 @@ func main() {
 	mag.WithReplacement = context.GetParamOr(ctx, paramWithReplacement, false)
 	var err error
 	if *flagEval {
-		err = mag.Eval(backend, ctx, *flagDataDir, *flagLayerWise, *flagSkipTrainEval)
+		err = mag.Eval(backend, ctx, *flagDataDir, *flagCheckpoint, *flagLayerWise, *flagSkipTrainEval)
 	} else {
 		if mag.WithReplacement {
 			fmt.Println("Training dataset with replacement")
 		}
 
 		// Train.
-		err = mag.Train(backend, ctx, *flagDataDir, *flagLayerWise, !*flagSkipReport)
+		err = mag.Train(backend, ctx, *flagDataDir, *flagCheckpoint, *flagLayerWise, !*flagSkipReport, paramsSet)
 	}
 	if err != nil {
 		fmt.Printf("%+v\n", err)
