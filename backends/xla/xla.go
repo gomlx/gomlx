@@ -64,13 +64,12 @@ func NewWithOptions(pluginName string, options pjrt.NamedValuesMap) *Backend {
 	if err != nil {
 		panic(errors.WithMessagef(err, "backend %q:", BackendName))
 	}
-	backend := &Backend{
+	return &Backend{
 		plugin:         plugin,
 		client:         client,
 		pluginName:     pluginName,
 		supressLogging: pluginName == "cuda" || slices.Index(pluginOptions, "supress_logging") != -1,
 	}
-	return backend
 }
 
 // SupressLogging during compilation of a graph.
