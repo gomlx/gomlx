@@ -76,7 +76,7 @@ func TestNewMeanBinaryAccuracy(t *testing.T) {
 		fmt.Printf("\t%s / %s=%s\n", v.Scope(), v.Name(), v.Value())
 	})
 
-	metricScope := ctx.In(accMetric.ScopeName()).Scope()
+	metricScope := ctx.In(Scope).In(accMetric.ScopeName()).Scope()
 	totalVar := ctx.InspectVariable(metricScope, "total")
 	require.NotNilf(t, totalVar, "Variable \"total\" was not created in %s / total", metricScope)
 	total := totalVar.Value().Value().(float32)

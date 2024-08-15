@@ -65,8 +65,16 @@ type Interface interface {
 }
 
 const (
-	LossMetricType     = "loss"
+	// LossMetricType is the type of loss metrics.
+	// Used to aggregate metrics of the same  type in the same plot.
+	LossMetricType = "loss"
+
+	// AccuracyMetricType is the type of loss metrics.
+	// Used to aggregate metrics of the same  type in the same plot.
 	AccuracyMetricType = "accuracy"
+
+	// Scope used to store metrics helper variables (e.g.: running averages).
+	Scope = "metrics"
 )
 
 // BaseMetricGraph is a graph building function of any metric that can be calculated stateless, without the need for
@@ -188,7 +196,7 @@ func (m *meanMetric) UpdateGraph(ctx *context.Context, labels, predictions []*No
 
 	// Create scope in context for metrics state, and mark it as unchecked -- model variables
 	// may be set for reuse, but metrics variables are not.
-	ctx = ctx.Checked(false).In("metrics").In(m.ScopeName())
+	ctx = ctx.Checked(false).In(Scope).In(m.ScopeName())
 	dtype := result.DType()
 	zero := shapes.CastAsDType(0, dtype)
 	totalVar := ctx.VariableWithValue("total", zero).SetTrainable(false)
@@ -215,7 +223,7 @@ func (m *meanMetric) UpdateGraph(ctx *context.Context, labels, predictions []*No
 }
 
 func (m *meanMetric) Reset(ctx *context.Context) {
-	ctx = ctx.Reuse().In("metrics").In(m.ScopeName())
+	ctx = ctx.Reuse().In(Scope).In(m.ScopeName())
 	totalVar := ctx.InspectVariable(ctx.Scope(), "total")
 	if totalVar == nil {
 		// Assume this was called before the graph was first built, so there is nothing to reset yet.
@@ -268,7 +276,7 @@ func (m *movingAverageMetric) UpdateGraph(ctx *context.Context, labels, predicti
 
 	// Create scope in context for metrics state, and mark it as unchecked -- model variables
 	// may be set for reuse, but metrics variables are not.
-	ctx = ctx.Checked(false).In("metrics").In(m.ScopeName())
+	ctx = ctx.Checked(false).In(Scope).In(m.ScopeName())
 	dtype := result.DType()
 	zero := shapes.CastAsDType(0, dtype)
 
