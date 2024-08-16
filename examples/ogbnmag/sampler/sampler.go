@@ -5,8 +5,8 @@ import (
 	"fmt"
 	humanize "github.com/dustin/go-humanize"
 	. "github.com/gomlx/exceptions"
-	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 	"math"
 	"os"
@@ -120,7 +120,7 @@ func (et *EdgeType) EdgeTargetsForSourceIdx(srcIdx int32) []int32 {
 
 // EdgePairTensor creates new tensors for the source and target indices.
 // It can be used by LayerWise inference.
-func (et *EdgeType) EdgePairTensor() EdgePair[*tensor.Local] {
+func (et *EdgeType) EdgePairTensor() EdgePair[*tensors.Tensor] {
 	sources := make([]int32, et.NumEdges())
 	current := int32(0)
 	for srcIdx, last := range et.Starts {
@@ -129,9 +129,9 @@ func (et *EdgeType) EdgePairTensor() EdgePair[*tensor.Local] {
 		}
 		current = last
 	}
-	return EdgePair[*tensor.Local]{
-		SourceIndices: tensor.FromValue(sources),
-		TargetIndices: tensor.FromValue(et.EdgeTargets),
+	return EdgePair[*tensors.Tensor]{
+		SourceIndices: tensors.FromValue(sources),
+		TargetIndices: tensors.FromValue(et.EdgeTargets),
 	}
 }
 
@@ -171,17 +171,17 @@ func (s *Sampler) AddNodeType(name string, count int) {
 //
 // If `reverse` is true, it reverts the direction of the sampling. Note that
 // `sourceNodeType` and `targetNodeType` are given before reversing the direction of the
-// edges. So if `reverse` is true, the source is interpreted as the target and vice-versa.
+// edges. So if `reverse` is true, the source is interpreted as the target and vice versa.
 // Same as the values of `edges`.
 //
 // The `edges` tensor must have Shape `(Int32)[N, 2]`. It's contents are changed in place
 // -- they are sorted by the source node type (or target if reversed).
 // But the edges information themselves are not lost.
-func (s *Sampler) AddEdgeType(name, sourceNodeType, targetNodeType string, edges tensor.Tensor, reverse bool) {
+func (s *Sampler) AddEdgeType(name, sourceNodeType, targetNodeType string, edges *tensors.Tensor, reverse bool) {
 	if s.Frozen {
 		Panicf("Sampler is frozen, that is, a strategy was already created with NewStrategy() and hence can no longer be modified.")
 	}
-	if edges.Rank() != 2 || edges.DType() != shapes.Int32 ||
+	if edges.Rank() != 2 || edges.DType() != dtypes.Int32 ||
 		edges.Shape().Dimensions[1] != 2 || edges.Shape().Dimensions[0] == 0 {
 		Panicf("invalid edge Shape %s for AddEdgeType(): it must be shaped like (Int32)[N, 2]",
 			edges.Shape())
@@ -195,46 +195,46 @@ func (s *Sampler) AddEdgeType(name, sourceNodeType, targetNodeType string, edges
 		sourceNodeType, targetNodeType = targetNodeType, sourceNodeType
 	}
 
-	// Sort edges according to the source column.
-	edgesRef := edges.Local().AcquireData()
-	defer edgesRef.Release()
-	pairsToSort := pairsToSort{
-		data:       edgesRef.Flat().([]int32),
-		sortColumn: columnSrc,
-	}
-	sort.Sort(&pairsToSort)
+	tensors.MutableFlatData[int32](edges, func(edgesData []int32) {
+		// Sort edges according to the source column.
+		pairsToSort := pairsToSort{
+			data:       edgesData,
+			sortColumn: columnSrc,
+		}
+		sort.Sort(&pairsToSort)
 
-	// Store edge-lists per source in new SamplerEdgeInfo.
-	numEdges := int32(edges.Shape().Dimensions[0])
-	samplerEdges := &EdgeType{
-		Name:           name,
-		SourceNodeType: sourceNodeType,
-		TargetNodeType: targetNodeType,
-		numTargetNodes: int(countTarget),
-		Starts:         make([]int32, countSource),
-		EdgeTargets:    make([]int32, numEdges),
-	}
-	currentSourceIdx := int32(0)
-	for row := 0; row < int(numEdges); row++ {
-		sourceIdx, targetIdx := pairsToSort.data[row<<1+columnSrc], pairsToSort.data[row<<1+columnTgt]
-		if sourceIdx < 0 || sourceIdx >= countSource {
-			Panicf("edge type %q has an edge whose source (node type %q) is %d, but node type %q only has a max of %d elements registered (with AddNodeType())",
-				name, sourceNodeType, sourceIdx, sourceNodeType, countSource)
+		// Store edge-lists per source in new SamplerEdgeInfo.
+		numEdges := int32(edges.Shape().Dimensions[0])
+		samplerEdges := &EdgeType{
+			Name:           name,
+			SourceNodeType: sourceNodeType,
+			TargetNodeType: targetNodeType,
+			numTargetNodes: int(countTarget),
+			Starts:         make([]int32, countSource),
+			EdgeTargets:    make([]int32, numEdges),
 		}
-		if targetIdx < 0 || targetIdx >= countTarget {
-			Panicf("edge type %q has an edge whose target (node type %q) is %d, but node type %q only has a max of %d elements registered (with AddNodeType())",
-				name, targetNodeType, targetIdx, targetNodeType, countTarget)
+		currentSourceIdx := int32(0)
+		for row := 0; row < int(numEdges); row++ {
+			sourceIdx, targetIdx := edgesData[row<<1+columnSrc], pairsToSort.data[row<<1+columnTgt]
+			if sourceIdx < 0 || sourceIdx >= countSource {
+				Panicf("edge type %q has an edge whose source (node type %q) is %d, but node type %q only has a max of %d elements registered (with AddNodeType())",
+					name, sourceNodeType, sourceIdx, sourceNodeType, countSource)
+			}
+			if targetIdx < 0 || targetIdx >= countTarget {
+				Panicf("edge type %q has an edge whose target (node type %q) is %d, but node type %q only has a max of %d elements registered (with AddNodeType())",
+					name, targetNodeType, targetIdx, targetNodeType, countTarget)
+			}
+			samplerEdges.EdgeTargets[row] = targetIdx
+			for currentSourceIdx < sourceIdx {
+				samplerEdges.Starts[currentSourceIdx] = int32(row)
+				currentSourceIdx++
+			}
 		}
-		samplerEdges.EdgeTargets[row] = targetIdx
-		for currentSourceIdx < sourceIdx {
-			samplerEdges.Starts[currentSourceIdx] = int32(row)
-			currentSourceIdx++
+		for ; currentSourceIdx < countSource; currentSourceIdx++ {
+			samplerEdges.Starts[currentSourceIdx] = int32(numEdges)
 		}
-	}
-	for ; currentSourceIdx < countSource; currentSourceIdx++ {
-		samplerEdges.Starts[currentSourceIdx] = int32(numEdges)
-	}
-	s.EdgeTypes[name] = samplerEdges
+		s.EdgeTypes[name] = samplerEdges
+	})
 }
 
 type pairsToSort struct {

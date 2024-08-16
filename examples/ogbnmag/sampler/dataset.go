@@ -3,8 +3,8 @@ package sampler
 import (
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/types/slices"
-	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/types/xslices"
 	"io"
 	"math/rand/v2"
 	"sync"
@@ -135,7 +135,7 @@ func (ds *Dataset) Reset() {
 // Yield implements train.Dataset.
 // The returned spec is a pointer to the Strategy, and can be used to build a map of the names to the sampled
 // tensors.
-func (ds *Dataset) Yield() (spec any, inputs, labels []tensor.Tensor, err error) {
+func (ds *Dataset) Yield() (spec any, inputs, labels []*tensors.Tensor, err error) {
 	ds.muSample.Lock()
 	var unlocked bool
 	defer func() {
@@ -153,10 +153,10 @@ func (ds *Dataset) Yield() (spec any, inputs, labels []tensor.Tensor, err error)
 	if ds.strategy.KeepDegrees {
 		// 2 tensors per node (value and mask), plus one tensor per edge (degree).
 		numEdges := len(ds.strategy.Rules) - len(ds.strategy.Seeds)
-		inputs = make([]tensor.Tensor, 0, 2*len(ds.strategy.Rules)+numEdges)
+		inputs = make([]*tensors.Tensor, 0, 2*len(ds.strategy.Rules)+numEdges)
 	} else {
 		// 2 tensors per node: value and mask.
-		inputs = make([]tensor.Tensor, 0, 2*len(ds.strategy.Rules))
+		inputs = make([]*tensors.Tensor, 0, 2*len(ds.strategy.Rules))
 	}
 	ds.frozen = true
 	if ds.startOfEpoch {
@@ -165,7 +165,7 @@ func (ds *Dataset) Yield() (spec any, inputs, labels []tensor.Tensor, err error)
 
 	// Sample Seeds: requires a lock for the sampling.
 	numSeeds := len(ds.strategy.Seeds)
-	seedsTensors := make([]*tensor.Local, 0, 2*numSeeds)
+	seedsTensors := make([]*tensors.Tensor, 0, 2*numSeeds)
 	for ii, seedsRule := range ds.strategy.Seeds {
 		seeds, mask := ds.sampleSeeds(ii, seedsRule)
 		seedsTensors = append(seedsTensors, seeds, mask)
@@ -184,79 +184,76 @@ func (ds *Dataset) Yield() (spec any, inputs, labels []tensor.Tensor, err error)
 
 // sampleSeeds returns the sampled Seeds and their masks.
 // For sampling Seeds, ds.muSample must be locked.
-func (ds *Dataset) sampleSeeds(seedIdx int, rule *Rule) (seeds, mask *tensor.Local) {
-	seeds = tensor.FromScalarAndDimensions(int32(0), rule.Count)
-	seedsRef := seeds.AcquireData()
-	defer seedsRef.Release()
-	seedsData := seedsRef.Flat().([]int32)
+func (ds *Dataset) sampleSeeds(seedIdx int, rule *Rule) (seeds, mask *tensors.Tensor) {
+	seeds = tensors.FromScalarAndDimensions(int32(0), rule.Count)
+	mask = tensors.FromScalarAndDimensions(false, rule.Count)
 
-	mask = tensor.FromScalarAndDimensions(false, rule.Count)
-	maskRef := mask.AcquireData()
-	defer maskRef.Release()
-	maskData := maskRef.Flat().([]bool)
+	tensors.MutableFlatData[int32](seeds, func(seedsData []int32) {
+		tensors.MutableFlatData[bool](mask, func(maskData []bool) {
+			if ds.withReplacement {
+				for ii := range rule.Count {
+					maskData[ii] = true
+				}
+				if len(rule.NodeSet) > 0 {
+					for ii := range rule.Count {
+						seedsData[ii] = rule.NodeSet[rand.IntN(len(rule.NodeSet))]
+					}
+				} else {
+					for ii := range rule.Count {
+						seedsData[ii] = int32(rand.IntN(int(rule.NumNodes)))
+					}
+				}
+			} else if ds.shuffle {
+				// Sample from shuffles of the candidate seed nodes.
+				shuffle := ds.seedsShuffle[seedIdx]
+				pos := ds.seedsPosition[seedIdx]
+				numToSample := int32(min(len(shuffle)-int(pos), rule.Count))
+				ds.seedsPosition[seedIdx] += numToSample
+				if int(ds.seedsPosition[seedIdx]) >= len(shuffle) {
+					ds.epochFinished()
+				}
+				copy(seedsData, shuffle[pos:pos+numToSample])
+				for ii := range numToSample {
+					maskData[ii] = true
+				}
 
-	if ds.withReplacement {
-		for ii := range rule.Count {
-			maskData[ii] = true
-		}
-		if len(rule.NodeSet) > 0 {
-			for ii := range rule.Count {
-				seedsData[ii] = rule.NodeSet[rand.IntN(len(rule.NodeSet))]
-			}
-		} else {
-			for ii := range rule.Count {
-				seedsData[ii] = int32(rand.IntN(int(rule.NumNodes)))
-			}
-		}
-	} else if ds.shuffle {
-		// Sample from shuffles of the candidate seed nodes.
-		shuffle := ds.seedsShuffle[seedIdx]
-		pos := ds.seedsPosition[seedIdx]
-		numToSample := int32(min(len(shuffle)-int(pos), rule.Count))
-		ds.seedsPosition[seedIdx] += numToSample
-		if int(ds.seedsPosition[seedIdx]) >= len(shuffle) {
-			ds.epochFinished()
-		}
-		copy(seedsData, shuffle[pos:pos+numToSample])
-		for ii := range numToSample {
-			maskData[ii] = true
-		}
+			} else {
+				// Sample without changing the original order.
+				pos := ds.seedsPosition[seedIdx]
+				var numToSample int32
+				if len(rule.NodeSet) > 0 {
+					// Sample for given set.
+					numToSample = int32(min(len(rule.NodeSet)-int(pos), rule.Count))
+					ds.seedsPosition[seedIdx] += numToSample
+					if int(ds.seedsPosition[seedIdx]) >= len(rule.NodeSet) {
+						ds.epochFinished()
+					}
+					for ii := range numToSample {
+						seedsData[ii] = rule.NodeSet[pos+ii]
+						maskData[ii] = true
+					}
 
-	} else {
-		// Sample without changing the original order.
-		pos := ds.seedsPosition[seedIdx]
-		var numToSample int32
-		if len(rule.NodeSet) > 0 {
-			// Sample for given set.
-			numToSample = int32(min(len(rule.NodeSet)-int(pos), rule.Count))
-			ds.seedsPosition[seedIdx] += numToSample
-			if int(ds.seedsPosition[seedIdx]) >= len(rule.NodeSet) {
-				ds.epochFinished()
+				} else {
+					// Sample for all node indices, from 0 to `NumNodes - 1` sequentially.
+					numToSample = min(rule.NumNodes-pos, int32(rule.Count))
+					ds.seedsPosition[seedIdx] += numToSample
+					if ds.seedsPosition[seedIdx] >= rule.NumNodes {
+						ds.epochFinished()
+					}
+					for ii := range numToSample {
+						seedsData[ii] = pos + ii
+						maskData[ii] = true
+					}
+				}
 			}
-			for ii := range numToSample {
-				seedsData[ii] = rule.NodeSet[pos+ii]
-				maskData[ii] = true
-			}
-
-		} else {
-			// Sample for all node indices, from 0 to `NumNodes - 1` sequentially.
-			numToSample = min(rule.NumNodes-pos, int32(rule.Count))
-			ds.seedsPosition[seedIdx] += numToSample
-			if ds.seedsPosition[seedIdx] >= rule.NumNodes {
-				ds.epochFinished()
-			}
-			for ii := range numToSample {
-				seedsData[ii] = pos + ii
-				maskData[ii] = true
-			}
-		}
-	}
+		})
+	})
 	return
 }
 
 // recursivelySampleEdges in the dependency tree of Rules, storing the results that will become the yielded values
 // by the Dataset.
-func recursivelySampleEdges(rule *Rule, nodes, mask *tensor.Local, store []tensor.Tensor) []tensor.Tensor {
+func recursivelySampleEdges(rule *Rule, nodes, mask *tensors.Tensor, store []*tensors.Tensor) []*tensors.Tensor {
 	for _, subRule := range rule.Dependents {
 		subNodes, subMask, degrees := sampleEdges(subRule, nodes, mask)
 		store = append(store, subNodes, subMask)
@@ -268,97 +265,117 @@ func recursivelySampleEdges(rule *Rule, nodes, mask *tensor.Local, store []tenso
 	return store
 }
 
+// accessMutableDataOfTensors is a short-cut to calling ConstFlatData or MutableFlatData on several tensors at once.
+// It will call accessFn with the flatData of all tensors in the same order.
+// The values in mutable defines if it calls Tensor.ConstFlatData or Tensor.MutableFlatData on the corresponding tensor.
+func accessTensorsData(tensorsList []*tensors.Tensor, mutableList []bool, accessFn func(flatData []any)) {
+	if len(tensorsList) != len(mutableList) {
+		Panicf("accessTensorsData got %d tensorsList and %d mutableList, they must be the same", len(tensorsList), len(mutableList))
+	}
+	tensorsIdx := 0
+	var allFlat []any
+	var recursion func(flat any)
+	recursion = func(flat any) {
+		if flat != nil {
+			allFlat = append(allFlat, flat)
+			tensorsIdx++
+		}
+		if tensorsIdx == len(tensorsList) {
+			// End recursion.
+			accessFn(allFlat)
+			return
+		}
+		tensor := tensorsList[tensorsIdx]
+		if mutableList[tensorsIdx] {
+			tensor.MutableFlatData(recursion)
+		} else {
+			tensor.ConstFlatData(recursion)
+		}
+	}
+	recursion(nil)
+}
+
 // sampleEdges based on a edge sampling rule `rule`, and the source nodes from which to sample.
-func sampleEdges(rule *Rule, srcNodes, srcMask *tensor.Local) (nodes, mask, degrees *tensor.Local) {
-	nodes = tensor.FromScalarAndDimensions(int32(0), rule.Shape.Dimensions...)
-	mask = tensor.FromScalarAndDimensions(false, rule.Shape.Dimensions...)
+func sampleEdges(rule *Rule, srcNodes, srcMask *tensors.Tensor) (nodes, mask, degrees *tensors.Tensor) {
+	nodes = tensors.FromScalarAndDimensions(int32(0), rule.Shape.Dimensions...)
+	mask = tensors.FromScalarAndDimensions(false, rule.Shape.Dimensions...)
 
-	nodesRef := nodes.AcquireData()
-	maskRef := mask.AcquireData()
-	srcNodesRef := srcNodes.AcquireData()
-	srcMaskRef := srcMask.AcquireData()
+	tensorsList := []*tensors.Tensor{srcNodes, srcMask, nodes, mask}
+	mutableList := []bool{false, false, true, true}
 
-	var (
-		degreesRef  *tensor.LocalRef
-		degreesData []int32
-	)
 	if rule.Strategy.KeepDegrees {
-		degreesShape := srcNodes.Shape().Copy()
+		degreesShape := srcNodes.Shape().Clone()
 		degreesShape.Dimensions = append(degreesShape.Dimensions, 1)
-		degrees = tensor.FromScalarAndDimensions(int32(0), degreesShape.Dimensions...)
-		degreesRef = degrees.AcquireData()
-		degreesData = degreesRef.Flat().([]int32)
+		degrees = tensors.FromScalarAndDimensions(int32(0), degreesShape.Dimensions...)
+		tensorsList = append(tensorsList, degrees)
+		mutableList = append(mutableList, true)
 	}
 
-	defer func() {
-		nodesRef.Release()
-		maskRef.Release()
-		srcNodesRef.Release()
-		srcMaskRef.Release()
-		if degreesRef != nil {
-			degreesRef.Release()
-		}
-	}()
-
-	tgtNodesData := nodesRef.Flat().([]int32)
-	tgtMaskData := maskRef.Flat().([]bool)
-	srcNodesData := srcNodesRef.Flat().([]int32)
-	srcMaskData := srcMaskRef.Flat().([]bool)
-
-	if rule.IsIdentitySubRule() {
-		// Identity Sub-Rule has the exact same data, just different shapes (the sub-rule has an extra axis of dimension 1).
-		copy(tgtNodesData, srcNodesData)
-		copy(tgtMaskData, srcMaskData)
-		if len(degreesData) != 0 {
-			slices.FillSlice(degreesData, int32(1))
-		}
-		return
-	}
-
-	edgeDef := rule.EdgeType
-	sampledEdges := make([]int32, rule.Count) // reserve space for sampling edges (reused over all iterations).
-
-	// Iterator over source nodes, sampling edges for each.
-	for fromIdx, fromValid := range srcMaskData {
-		// Source node we are sampling from.
-		if !fromValid {
-			continue
-		}
-		srcNode := srcNodesData[fromIdx]
-
-		// Find all edges from the source node.
-		start := int32(0)
-		if srcNode > 0 {
-			start = edgeDef.Starts[srcNode-1]
+	accessTensorsData(tensorsList, mutableList, func(flatData []any) {
+		srcNodesData := flatData[0].([]int32)
+		srcMaskData := flatData[1].([]bool)
+		tgtNodesData := flatData[2].([]int32)
+		tgtMaskData := flatData[3].([]bool)
+		var degreesData []int32
+		if rule.Strategy.KeepDegrees {
+			degreesData = flatData[4].([]int32)
 		}
 
-		end := edgeDef.Starts[srcNode]
-		edges := edgeDef.EdgeTargets[start:end]
-		if len(edges) == 0 {
-			continue // No edges to sample from.
-		}
-		if degreesData != nil {
-			degreesData[fromIdx] = int32(len(edges))
+		if rule.IsIdentitySubRule() {
+			// Identity Sub-Rule has the exact same data, just different shapes (the sub-rule has an extra axis of dimension 1).
+			copy(tgtNodesData, srcNodesData)
+			copy(tgtMaskData, srcMaskData)
+			if len(degreesData) != 0 {
+				xslices.FillSlice(degreesData, int32(1))
+			}
+			return
 		}
 
-		// If we don't have enough edges to sample from, take what we got.
-		baseIdx := fromIdx * rule.Count
-		if len(edges) <= rule.Count {
-			// Take all edges, since we want to sample more than there are available.
-			for ii, tgtNode := range edges {
-				tgtNodesData[baseIdx+ii] = tgtNode
+		edgeDef := rule.EdgeType
+		sampledEdges := make([]int32, rule.Count) // reserve space for sampling edges (reused over all iterations).
+
+		// Iterator over source nodes, sampling edges for each.
+		for fromIdx, fromValid := range srcMaskData {
+			// Source node we are sampling from.
+			if !fromValid {
+				continue
+			}
+			srcNode := srcNodesData[fromIdx]
+
+			// Find all edges from the source node.
+			start := int32(0)
+			if srcNode > 0 {
+				start = edgeDef.Starts[srcNode-1]
+			}
+
+			end := edgeDef.Starts[srcNode]
+			edges := edgeDef.EdgeTargets[start:end]
+			if len(edges) == 0 {
+				continue // No edges to sample from.
+			}
+			if degreesData != nil {
+				degreesData[fromIdx] = int32(len(edges))
+			}
+
+			// If we don't have enough edges to sample from, take what we got.
+			baseIdx := fromIdx * rule.Count
+			if len(edges) <= rule.Count {
+				// Take all edges, since we want to sample more than there are available.
+				for ii, tgtNode := range edges {
+					tgtNodesData[baseIdx+ii] = tgtNode
+					tgtMaskData[baseIdx+ii] = true
+				}
+				continue
+			}
+
+			// Otherwise sample randomly without replacement from edges.
+			randKOfN(sampledEdges, len(edges))
+			for ii, edgeIdx := range sampledEdges {
+				tgtNodesData[baseIdx+ii] = edges[edgeIdx]
 				tgtMaskData[baseIdx+ii] = true
 			}
-			continue
 		}
-
-		// Otherwise sample randomly without replacement from edges.
-		randKOfN(sampledEdges, len(edges))
-		for ii, edgeIdx := range sampledEdges {
-			tgtNodesData[baseIdx+ii] = edges[edgeIdx]
-			tgtMaskData[baseIdx+ii] = true
-		}
-	}
+	})
 	return
 }
 
@@ -431,9 +448,9 @@ func (ds *Dataset) startEpoch() {
 		ds.seedsShuffle = make([][]int32, len(ds.seedsPosition))
 		for ii, rule := range strategy.Seeds {
 			if rule.NodeSet != nil {
-				ds.seedsShuffle[ii] = slices.Copy(rule.NodeSet)
+				ds.seedsShuffle[ii] = xslices.Copy(rule.NodeSet)
 			} else {
-				ds.seedsShuffle[ii] = slices.Iota[int32](int32(0), int(rule.NumNodes))
+				ds.seedsShuffle[ii] = xslices.Iota[int32](int32(0), int(rule.NumNodes))
 			}
 		}
 	}

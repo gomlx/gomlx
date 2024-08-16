@@ -4,8 +4,9 @@ import (
 	"fmt"
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
-	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/types/xslices"
+	"github.com/gomlx/gopjrt/dtypes"
 	"strings"
 )
 
@@ -88,7 +89,7 @@ func (strategy *Strategy) Nodes(name, nodeTypeName string, count int) *Rule {
 		NodeTypeName: nodeTypeName,
 		NumNodes:     numNodes,
 		Count:        count,
-		Shape:        shapes.Make(shapes.Int32, count),
+		Shape:        shapes.Make(dtypes.Int32, count),
 	}
 	r = r.WithKernelScopeName("gnn:" + name)
 	strategy.Rules[name] = r
@@ -123,7 +124,7 @@ func (strategy *Strategy) NodesFromSet(name, nodeTypeName string, count int, nod
 		NodeTypeName: nodeTypeName,
 		NumNodes:     numNodes,
 		Count:        count,
-		Shape:        shapes.Make(shapes.Int32, count),
+		Shape:        shapes.Make(dtypes.Int32, count),
 		NodeSet:      nodeSet,
 	}
 	r = r.WithKernelScopeName("gnn:" + name)
@@ -180,7 +181,7 @@ func recursivelyMapStateInputsToSubRules[T any](inputs []T, rule *Rule, mapNodes
 			inputs = inputs[1:]
 		}
 		if len(subRule.Dependents) > 0 {
-			inputs = recursivelyMapStateInputsToSubRules(inputs, subRule, mapNodes)
+			inputs = recursivelyMapStateInputsToSubRules[T](inputs, subRule, mapNodes)
 		}
 	}
 	return inputs
@@ -206,7 +207,7 @@ func recursivelyMapEdgeInputsToSubRules[T any](inputs []T, rule *Rule, edges map
 		edges[subRule.Name] = EdgePair[T]{SourceIndices: inputs[0], TargetIndices: inputs[1]}
 		inputs = inputs[2:]
 		if len(subRule.Dependents) > 0 {
-			inputs = recursivelyMapEdgeInputsToSubRules(inputs, subRule, edges)
+			inputs = recursivelyMapEdgeInputsToSubRules[T](inputs, subRule, edges)
 		}
 	}
 	return inputs
@@ -219,8 +220,8 @@ func recursivelyMapEdgeInputsToSubRules[T any](inputs []T, rule *Rule, edges map
 //
 // Notice the direction of sampling is reverse to the direction of message passing in the GNN, so usually these
 // need to be reversed first.
-func (strategy *Strategy) ExtractSamplingEdgeIndices() (edges map[string]EdgePair[*tensor.Local]) {
-	edges = make(map[string]EdgePair[*tensor.Local])
+func (strategy *Strategy) ExtractSamplingEdgeIndices() (edges map[string]EdgePair[*tensors.Tensor]) {
+	edges = make(map[string]EdgePair[*tensors.Tensor])
 	for _, rule := range strategy.Rules {
 		et := rule.EdgeType
 		if rule.SourceRule == nil {
@@ -229,9 +230,9 @@ func (strategy *Strategy) ExtractSamplingEdgeIndices() (edges map[string]EdgePai
 		}
 		if et == nil {
 			// Identity type of edge: straight forward 1:1 mapping.
-			indices := slices.Iota[int32](0, int(rule.NumNodes))
-			pair := EdgePair[*tensor.Local]{
-				SourceIndices: tensor.FromValue(indices),
+			indices := xslices.Iota[int32](0, int(rule.NumNodes))
+			pair := EdgePair[*tensors.Tensor]{
+				SourceIndices: tensors.FromValue(indices),
 			}
 			pair.TargetIndices = pair.SourceIndices
 			edges[rule.Name] = pair

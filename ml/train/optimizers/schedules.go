@@ -17,10 +17,10 @@
 package optimizers
 
 import (
+	. "github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
-	. "github.com/gomlx/gomlx/types/exceptions"
-	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gopjrt/dtypes"
 	"math"
 )
 
@@ -49,7 +49,7 @@ var (
 type CosineScheduleOptions struct {
 	graph                         *Graph
 	ctx                           *context.Context
-	dtype                         shapes.DType
+	dtype                         dtypes.DType
 	learningRate, minLearningRate float64
 	periodNumSteps                int
 }
@@ -68,7 +68,7 @@ type CosineScheduleOptions struct {
 //	func modelGraph(cxt *context.Context, inputs []*Node) *Node {
 //		...
 //		g := inputs[0].Graph()
-//		optimizers.CosineAnnealingSchedule(ctx, g, shapes.Float32).PeriodInSteps(*flagNumSteps).Done()
+//		optimizers.CosineAnnealingSchedule(ctx, g, dtypes.Float32).PeriodInSteps(*flagNumSteps).Done()
 //	}
 //
 // Or more simply, just pass the hyperparameters in the context (see [ParamCosineScheduleSteps]):
@@ -76,9 +76,9 @@ type CosineScheduleOptions struct {
 //	func modelGraph(cxt *context.Context, inputs []*Node) *Node {
 //		...
 //		g := inputs[0].Graph()
-//		optimizers.CosineAnnealingSchedule(ctx, g, shapes.Float32).FromContext().Done()
+//		optimizers.CosineAnnealingSchedule(ctx, g, dtypes.Float32).FromContext().Done()
 //	}
-func CosineAnnealingSchedule(ctx *context.Context, graph *Graph, dtype shapes.DType) *CosineScheduleOptions {
+func CosineAnnealingSchedule(ctx *context.Context, graph *Graph, dtype dtypes.DType) *CosineScheduleOptions {
 	return &CosineScheduleOptions{
 		ctx:   ctx,
 		graph: graph,

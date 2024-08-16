@@ -1,9 +1,55 @@
 # GoMLX changelog
 
-## Next
+## 0.11.0 BREAKING CHANGE: Multi-Backend support; Added XLA/PJRT support (with gopjrt); meaningful speed ups; No more C code (all goes through gopjrt) 
 
+* MAJOR REFACTORING. Many breaking compatibility changes -- it would be a major release number change, if it were > v1 already.
+* New package `backends`: no GoMLX can support different backends -- but for now only xla is implemented.
+  * Sub-package `xla` implements the XLA/PJRT version, based on [`github.com/gomlx/gopjrt`](github.com/gomlx/gopjrt) project.
+* Package `tensors':
+  * `tensor` -> `tensors`, more inline with other package names, and allow one to use `tensor` as a variable name.
+  * Now there is only one `Tensor` type (not an interface), that manages local and on-device storage.
+  * Local storage using Go
+  * On-device storage now using generic `backends.Backend` api.
+  * Improved testing using xla, greatly simplified.
+* Package `graph`:
+  * Added support for donated tensors for execution.
+  * Added Nodes to introspect nodes of the graph -- e.g.: investigate the largest nodes if one is running out of memory.
+  * Updated `OneHot` to use `Where`.
+  * Added `GrowLeft`, `GrowRigth`, `Infinity`, `LogSoftmax`, `MaskedLogSoftmax`
+  * `BroadcastToDims` and `BroadcastToShape` will automatically expand x to match.
+  * `AdjustAxisToOperandRank` made public.
+* Package `layers`:
+  * Added sub-package `fnn` for a simplified Feedforward Neural Networks implementation.
+  * Added sub-package `kan` for Kolmogorov–Arnold Networks, and Discrete-KAN.
+    * Included bspline GoMLX implementation.
+  * Added sub-package `regularizers` with automatic regularizer configuration. Layers `Dense`, `DenseWithBias` and `kan` use it by default.
+  * Added sub-package `activations` -- just a refactor of the code already in layers.
+  * Added sub-package `batchnorm`: refactored out batch normalization code. 
+    * Added `batchnorm.AveragesUpdate` to update the average of the means and variances used for normalization.
+      Also connected it to evaluation in plots libraries.
+* Package `initializers`:
+  * Added `XavierFn` initializer.
+* Package `losses`:
+  * Fixed `CategoricalCrossEntropyLogits` and `SparseCategoricalCrossEntropyLogits`.
+  * Added `MakeHuberLoss`
+* Package `metrics`:
+  * Fixed 
+* Package `exceptions` moved to a separate repository in [`github.com/gomlx/exceptions`](github.com/gomlx/exceptions).
+* Package `slices` renamed to `xslices`, not to mix up with the new standard pacakge `slices`.
+* Package `tensors/image` renamed `tensors/images`.
+  * Added all numeric dtypes support; Added conversion tests to all types.
+  * Added support to `dtypes.Float16`.
+* Package `context`
+  * Renamed `context.NewContext` to `context.New`.
+  * Added `Variable.Reset`: reset a variable, to be reinitialialized.
+* Package `checkpoints`: added `ExcludeParams` and `ExcludeAllParams`.
+* Package `plots`
+  * Added `Point.Short` for short-name of metrics in saved metrics.
 * C/C++ code:
+  * Completely removed, all C/C++ dependencies are in `gopjrt` project now.
   * Removed reference to AOT compilation, see #52.
+* Added command-line tool `gomlx_checkpoints` to introspect checkpoints.
+* Added `cmd/run_coverage.sh`.
 
 ## 0.10.0 - 2024/06/12
 

@@ -83,7 +83,9 @@ func ParseImages(dirPath string) error {
 		}
 		AllImages = append(AllImages, entry.Name())
 	}
-	sort.Strings(AllImages) // Assume order of labels match sorted image names.
+	sort.Strings(AllImages)
+	// We assume order of labels match sorted image names.
+	// But just in case we check that the image numbers are increasing and not missing and in order.
 	return nil
 }
 

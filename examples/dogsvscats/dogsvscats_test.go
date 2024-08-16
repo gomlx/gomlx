@@ -34,9 +34,9 @@ var (
 	flagBatchSize    = flag.Int("batch", DefaultConfig.BatchSize, "Batch size for training")
 )
 
-func buildConfig() *Configuration {
+func buildConfig() *PreprocessingConfiguration {
 	*flagDataDir = data.ReplaceTildeInDir(*flagDataDir)
-	config := &Configuration{}
+	config := &PreprocessingConfiguration{}
 	*config = *DefaultConfig
 	config.DataDir = *flagDataDir
 	config.AngleStdDev = *flagAngleStdDev
@@ -46,7 +46,7 @@ func buildConfig() *Configuration {
 	return config
 }
 
-func filesDownloaded(config *Configuration) bool {
+func filesDownloaded(config *PreprocessingConfiguration) bool {
 	if !data.FileExists(config.DataDir) {
 		return false
 	}

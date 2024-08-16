@@ -8,11 +8,12 @@ import (
 	lgtable "github.com/charmbracelet/lipgloss/table"
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/ml/data"
+	"github.com/gomlx/gomlx/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/ml/train"
 	types "github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/shapes"
-	xslices "github.com/gomlx/gomlx/types/slices"
-	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/pkg/errors"
 	"golang.org/x/exp/maps"
 	"io"
@@ -32,6 +33,9 @@ const TrainingPlotFileName = "training_plot_points.json"
 type Point struct {
 	// MetricName of this point.
 	MetricName string
+
+	// Short name
+	Short string
 
 	// MetricType typically will be "loss", "accuracy".
 	// It's used in plotting to aggregate similar metric types in the same plot.
@@ -66,7 +70,20 @@ type CustomMetricFn func(plotter Plotter, step float64) error
 //
 // Notice it evaluate on the datasets sequentially -- presumably the training could go in parallel if there is
 // enough accelerator processing / memory. But this doesn't assume that.
-func AddTrainAndEvalMetrics(plotter Plotter, loop *train.Loop, trainMetrics []tensor.Tensor, evalDatasets []train.Dataset) error {
+//
+// If batchNormAveragesDS is given, and the model uses batch normalization, it will first go over this dataset and
+// update the averages of the mean and variance accordingly.
+func AddTrainAndEvalMetrics(plotter Plotter, loop *train.Loop, trainMetrics []*tensors.Tensor,
+	evalDatasets []train.Dataset, batchNormAveragesDS train.Dataset) error {
+	if batchNormAveragesDS != nil {
+		err := exceptions.TryCatch[error](func() {
+			batchnorm.UpdateAverages(loop.Trainer, batchNormAveragesDS)
+		})
+		if err != nil {
+			return errors.WithMessagef(err, "Updating batch normalization averages before evaluation: ")
+		}
+	}
+
 	// Training metrics are pre-generated and given.
 	step := float64(loop.LoopStep)
 	var incomplete bool
@@ -81,12 +98,17 @@ func AddTrainAndEvalMetrics(plotter Plotter, loop *train.Loop, trainMetrics []te
 			incomplete = true
 			continue
 		}
-		plotter.AddPoint(Point{MetricName: "Train: " + desc.Name(), MetricType: desc.MetricType(), Step: step, Value: metric})
+		plotter.AddPoint(Point{
+			MetricName: "Train: " + desc.Name(),
+			Short:      fmt.Sprintf("T/%s", desc.ShortName()),
+			MetricType: desc.MetricType(),
+			Step:       step,
+			Value:      metric})
 	}
 
 	// Eval metrics, if given
 	for _, ds := range evalDatasets {
-		var evalMetrics []tensor.Tensor
+		var evalMetrics []*tensors.Tensor
 		if err := exceptions.TryCatch[error](func() { evalMetrics = loop.Trainer.Eval(ds) }); err != nil {
 			return err
 		}
@@ -97,7 +119,12 @@ func AddTrainAndEvalMetrics(plotter Plotter, loop *train.Loop, trainMetrics []te
 				continue
 			}
 			metricType := desc.MetricType()
-			plotter.AddPoint(Point{MetricName: fmt.Sprintf("Eval on %s: %s", ds.Name(), desc.Name()), MetricType: metricType, Step: step, Value: metric})
+			plotter.AddPoint(Point{
+				MetricName: fmt.Sprintf("Eval on %s: %s", ds.Name(), desc.Name()),
+				Short:      fmt.Sprintf("E(%3s)/%s", ds.Name()[:3], desc.ShortName()),
+				MetricType: metricType,
+				Step:       step,
+				Value:      metric})
 		}
 	}
 

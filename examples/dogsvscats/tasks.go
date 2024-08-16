@@ -18,10 +18,11 @@ package dogsvscats
 
 import (
 	"fmt"
+	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/models/inceptionv3"
-	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gopjrt/dtypes"
 	"log"
 	"math/rand"
 	"os"
@@ -45,13 +46,13 @@ const (
 	PreGeneratedValidationFileName = "validation_eval_data.bin"
 )
 
-// Configuration of the many pre-designed tasks.
-type Configuration struct {
+// PreprocessingConfiguration holds various parameters on how to transform the input images.
+type PreprocessingConfiguration struct {
 	// DataDir, where downloaded and generated data is stored.
 	DataDir string
 
 	// DType of the images when converted to Tensor.
-	DType shapes.DType
+	DType dtypes.DType
 
 	// BatchSize for training and evaluation batches.
 	BatchSize, EvalBatchSize int
@@ -95,8 +96,8 @@ type Configuration struct {
 }
 
 var (
-	DefaultConfig = &Configuration{
-		DType:           shapes.Float32,
+	DefaultConfig = &PreprocessingConfiguration{
+		DType:           dtypes.Float32,
 		BatchSize:       16,
 		EvalBatchSize:   100, // Faster evaluation with larger batches.
 		ModelImageSize:  inceptionv3.MinimumImageSize,
@@ -111,11 +112,36 @@ var (
 
 )
 
+// NewPreprocessingConfigurationFromContext create a preprocessing configuration based on hyperparameters
+// set in the context.
+//
+// Notice some configuration parameters depends on the model type ("model" hyperparameter): "inception" has a
+// specific size, "byol" model requires image pairs.
+func NewPreprocessingConfigurationFromContext(ctx *context.Context, dataDir string) *PreprocessingConfiguration {
+	dataDir = data.ReplaceTildeInDir(dataDir)
+	modelType := context.GetParamOr(ctx, "model", "")
+	config := &PreprocessingConfiguration{}
+	*config = *DefaultConfig
+	config.DataDir = dataDir
+	config.BatchSize = context.GetParamOr(ctx, "batch_size", 0)
+	config.EvalBatchSize = context.GetParamOr(ctx, "eval_batch_size", 0)
+	config.AngleStdDev = context.GetParamOr(ctx, "augmentation_angle_stddev", 0.0)
+	config.FlipRandomly = context.GetParamOr(ctx, "augmentation_random_flips", false)
+	if modelType == "inception" {
+		config.ModelImageSize = inceptionv3.MinimumImageSize
+	}
+	config.ForceOriginal = context.GetParamOr(ctx, "augmentation_force_original", false)
+	config.UseParallelism = true
+	config.BufferSize = 100
+	config.YieldImagePairs = modelType == "byol"
+	return config
+}
+
 // PreGenerate create datasets that reads the original images, but then saves the scaled down and augmented for
 // training images in binary format, for faster consumption later.
 //
 // It will only run if files don't already exist.
-func PreGenerate(config *Configuration, numEpochsForTraining int, force bool) {
+func PreGenerate(config *PreprocessingConfiguration, numEpochsForTraining int, force bool) {
 	// Notice we need an even sized batch-size, to have equal number of dogs and cats.
 	batchSize := 2
 
@@ -178,7 +204,7 @@ func PreGenerate(config *Configuration, numEpochsForTraining int, force bool) {
 // CreateDatasets used for training and evaluation. If the pre-generated files with augmented/scaled images
 // exist use that, otherwise dynamically generate the images -- typically much slower than training, hence
 // makes the training much, much slower.
-func CreateDatasets(config *Configuration) (trainDS, trainEvalDS, validationEvalDS train.Dataset) {
+func CreateDatasets(config *PreprocessingConfiguration) (trainDS, trainEvalDS, validationEvalDS train.Dataset) {
 	shuffle := rand.New(rand.NewSource(time.Now().UTC().UnixNano()))
 	usePretrained := !config.ForceOriginal && config.NumSamples == -1
 	trainPath := path.Join(config.DataDir, PreGeneratedTrainFileName)

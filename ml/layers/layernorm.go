@@ -20,8 +20,9 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"
+	"github.com/gomlx/gomlx/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
+	"github.com/gomlx/gomlx/types/xslices"
 )
 
 // LayerNormBuilder is a helper to build a layer normalization computation. Create it with LayerNormalization,
@@ -34,6 +35,7 @@ type LayerNormBuilder struct {
 	epsilon            float64
 	center, gain       bool
 	scaleNormalization bool
+	regularizer        regularizers.Regularizer
 }
 
 var (
@@ -75,8 +77,8 @@ var (
 // normalizingAxes are the axes over which to normalize: mean and variance are calculated over these
 // axes and the values are then normalized. E.g: if your input is `[batch_size, features]` you should
 // use `normalizingAxes=[1]` (same as -1) to normalize over the `features` axis; if your input is an image
-// of shape `[batch_size, height, width, channels]` one common approach is to normalize over the image, so
-// `normalizingAxes=[1 2]`, but not over the channels (or batch).
+// of shape [batch_size, height, width, channels] one common approach is to normalize over the image, so
+// `normalizingAxes=[1 2]`, but not over the channels.
 //
 // Notice the difference between BatchNormalization, that normalizes over the batch dimension, as opposed
 // to the feature dimensions.
@@ -95,7 +97,7 @@ var (
 //
 // FutureWork: support padding by not normalizing parts that weren't touched ...
 func LayerNormalization(ctx *context.Context, x *Node, normalizingAxes ...int) *LayerNormBuilder {
-	return &LayerNormBuilder{
+	builder := &LayerNormBuilder{
 		ctx:                ctx.In("layer_normalization"),
 		x:                  x,
 		normalizingAxes:    normalizingAxes,
@@ -104,6 +106,20 @@ func LayerNormalization(ctx *context.Context, x *Node, normalizingAxes ...int) *
 		gain:               context.GetParamOr(ctx, ParamLayerNormLearnedGain, true),
 		scaleNormalization: context.GetParamOr(ctx, ParamLayerNormRescale, true),
 	}
+
+	// Create default regularizer.
+	if l2 := context.GetParamOr(ctx, ParamLayerNormL2Regularization, 0.0); l2 > 0 {
+		builder.regularizer = regularizers.Combine(builder.regularizer, regularizers.L2(l2))
+	}
+
+	// Convert negative axes to their actual value.
+	for ii := range builder.normalizingAxes {
+		builder.normalizingAxes[ii] = AdjustAxisToOperandRank(x, builder.normalizingAxes[ii])
+	}
+
+	// Add default regularizer.
+
+	return builder
 }
 
 // Epsilon is a small float added to variance to avoid dividing by zero.
@@ -135,13 +151,6 @@ func (builder *LayerNormBuilder) LearnedGain(value bool) *LayerNormBuilder {
 	return builder
 }
 
-// LearnedScale is an alias for LearnedGain.
-//
-// Deprecated: the original paper calls this term a gain.
-func (builder *LayerNormBuilder) LearnedScale(value bool) *LayerNormBuilder {
-	return builder.LearnedGain(value)
-}
-
 // ScaleNormalization defines whether the input's scale is normalized by the square root of the
 // variance. The default is true, and this is the original paper specification, but in some cases
 // it works best without it.
@@ -164,17 +173,12 @@ func (builder *LayerNormBuilder) Done() *Node {
 	mask := builder.mask
 	g := x.Graph()
 
-	// Convert negative axes to their actual value.
-	for ii := range builder.normalizingAxes {
-		builder.normalizingAxes[ii] = AdjustAxis(x, builder.normalizingAxes[ii])
-	}
-
 	// LearnedGain and offset to be applied to the normalized value.
 	var gain, offset *Node
-	normShape := shapes.Make(x.DType(), slices.Map(builder.normalizingAxes, func(axis int) int {
+	normShape := shapes.Make(x.DType(), xslices.Map(builder.normalizingAxes, func(axis int) int {
 		return x.Shape().Dimensions[axis]
 	})...)
-	broadcastNormShape := x.Shape().Copy() // the shape `normShape` will need to be reshaped to be combined with `x`.
+	broadcastNormShape := x.Shape().Clone() // the shape `normShape` will need to be reshaped to be combined with `x`.
 	for ii := range broadcastNormShape.Dimensions {
 		broadcastNormShape.Dimensions[ii] = 1
 	}
@@ -184,6 +188,9 @@ func (builder *LayerNormBuilder) Done() *Node {
 	var gainVar *context.Variable
 	if builder.gain {
 		gainVar = ctx.WithInitializer(initializers.One).VariableWithShape("gain", normShape).SetTrainable(true)
+		if builder.regularizer != nil {
+			builder.regularizer(ctx, g, gainVar) // Apply regularizer.
+		}
 		gain = Reshape(gainVar.ValueGraph(g), broadcastNormShape.Dimensions...)
 	} else {
 		gain = Ones(g, broadcastNormShape)
@@ -193,13 +200,6 @@ func (builder *LayerNormBuilder) Done() *Node {
 		offset = Reshape(offsetVar.ValueGraph(g), broadcastNormShape.Dimensions...)
 	} else {
 		offset = Zeros(g, broadcastNormShape)
-	}
-
-	// Add regularization to gain.
-	if gainVar != nil {
-		if l2 := context.GetParamOr(ctx, ParamLayerNormL2Regularization, 0.0); l2 > 0 {
-			AddL2RegularizationStatic(ctx, l2, gainVar.ValueGraph(g))
-		}
 	}
 
 	// Calculate mean and variance over normalizingAxes and normalize.

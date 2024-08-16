@@ -36,22 +36,15 @@ Split by functionality, the most "desirable" TODOs are:
 * Distributed training: at least synchronous mirrored strategy (data parallelism but no model parallelism yet) 
   * Multi-device (GPU) set up.
   * Multi-tenancy (multiple hosts) set up.
-* Docker:
-  * (**Done in v0.0.2**) Dockerfile and a docker with Jupyter, GoNB and GoMLX.
-  * Dockerfile for a devel version, with everything needed to compile the C++ bindings.
-* Jupyter(-lab) Notebook/Colab integration: -- now implemented in GoNB. Missing features for GoMLX support:
-  * Easy, automatic save/cache values of Tensors, so programs can be coded progressively without needing
-    to re-run things, simply by recovering previous results.
-  * Remote XLA server?: allow version that talks (through shared memory) with a remove XLA server. A bit
-    slower (potentially lots slower depending on how much is communicated) but with close to zero
-    start-up time, perfect for development.
-* More supported data types (`DType`): missing the 16bit float types.
 
 ## Lower level
 * Add support for multiple devices (e.g: multiple GPUs). In principle, it's already there (DeviceNum is supported)
   but it hasn't been tested. But `train.Trainer` and `context.Exec` will need special casing.
   * Implement a DistributedTrainer that will automatically distribute across multiple devices. Data 
     parallelism at first, not model parallelism yet.
+* New backends:
+  * WebAssembly compatible backend (WebGL?), so models can be run (and even trained) in a browser.
+  * A faster/lighter CPU backend: maybe ggml?
 
 ## API Improvements
 

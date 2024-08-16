@@ -1,34 +1,29 @@
 package diffusion
 
 import (
-	"flag"
 	"fmt"
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/examples/notebook/gonb/margaid"
+	"github.com/gomlx/gomlx/examples/notebook/gonb/plotly"
 	stdplots "github.com/gomlx/gomlx/examples/notebook/gonb/plots"
+	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
 	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/graph/nanlogger"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/ml/data"
-	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/commandline"
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
-	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
 	"os"
 	"path"
-	"strings"
 	"time"
-)
-
-var (
-	flagCheckpoint         = flag.String("checkpoint", "", "Directory save and load checkpoints from. If left empty, no checkpoints are created.")
-	flagCheckpointKeep     = flag.Int("checkpoint_keep", 20, "Number of checkpoints to keep, if --checkpoint is set.")
-	flagCheckpointPeriod   = flag.Int("checkpoint_period", 60, "Period of time, in seconds, between checkpoints are saved.")
-	flagCheckpointTakeMean = flag.Int("checkpoint_mean", 1, "If != 1, take the mean of the latest checkpoints. This is disabled (set to 1) if training.")
 )
 
 const (
@@ -37,290 +32,308 @@ const (
 	GeneratedSamplesPrefix = "generated_samples_"
 )
 
-// LoadCheckpointToContext and attaches to it, so that it gets saved.
+// AttachCheckpoint loading previous values and using it to save.
 //
 // It also loads the noise (+flowerIds) samples for this model.
 // The idea is that at each evaluation checkpoint we generate the images for these fixed noise samples,
 // and one can observe the model quality evolving.
 //
-// For new models -- whose directory didn't previously exist, it does 2 things:
+// For new models if creates the noise + flowerIds samples used to monitor the model quality evolving.
 //
-//   - It creates the noise + flowerIds samples used to monitor the model quality evolving.
-//   - It creates the file `args.txt` with a copy of the arguments used to create the model.
-//     Later, if the same model is used, it checks that the arguments match (with some exceptions),
-//     and warns about mismatches.
-func LoadCheckpointToContext(ctx *context.Context) (checkpoint *checkpoints.Handler, noise, flowerIds tensor.Tensor) {
-	Init()
-	if *flagCheckpoint == "" {
+// The returned handler is also set into Config.Checkpoint.
+func (c *Config) AttachCheckpoint(checkpointPath string) (checkpoint *checkpoints.Handler, noise, flowerIds *tensors.Tensor) {
+	if checkpointPath == "" {
 		return
 	}
-
-	checkpointPath := data.ReplaceTildeInDir(*flagCheckpoint)
-	if !path.IsAbs(checkpointPath) {
-		checkpointPath = path.Join(DataDir, checkpointPath)
-	}
-	var err error
-	checkpoint, err = checkpoints.Build(ctx).Dir(checkpointPath).
-		Keep(*flagCheckpointKeep).TakeMean(*flagCheckpointTakeMean).
-		Done()
-	AssertNoError(err)
-
-	// Check if args file exists, if not create it.
-	argsPath := path.Join(checkpoint.Dir(), "args.txt")
-	argsBytes, err := os.ReadFile(argsPath)
-	if err != nil && os.IsNotExist(err) {
-		// Doesn't exist yet, so let's create it.
-		AssertNoError(os.WriteFile(argsPath, []byte(strings.Join(os.Args[1:], "\n")), 0664))
-	} else if err == nil {
-		// Read original args, print out diff:
-		originalArgs := types.MakeSet[string]()
-		originalArgs.Insert(strings.Split(string(argsBytes), "\n")...)
-		currentArgs := types.MakeSet[string]()
-		currentArgs.Insert(os.Args[1:]...)
-		for arg := range originalArgs.Sub(currentArgs) {
-			if !isArgIrrelevant(arg) {
-				fmt.Printf("* Warning: missing argument %q used when model was originally created.\n", arg)
-			}
-		}
-		for arg := range currentArgs.Sub(originalArgs) {
-			if !isArgIrrelevant(arg) {
-				fmt.Printf("* Warning: argument %q not used when model was originally created.\n", arg)
-			}
-		}
-	} else {
-		AssertNoError(err)
-	}
+	numCheckpointsToKeep := context.GetParamOr(c.Context, "num_checkpoints", 5)
+	excludeParams := append(c.ParamsSet, ParamsExcludedFromLoading...)
+	checkpoint = must.M1(checkpoints.Build(c.Context).
+		DirFromBase(checkpointPath, c.DataDir).
+		Keep(numCheckpointsToKeep).
+		ExcludeParams(excludeParams...).
+		Done())
+	c.Checkpoint = checkpoint // Save in config.
+	fmt.Printf("\tCheckpoint: %q\n", checkpoint.Dir())
 
 	// Load/generate sampled noise/flowerIds.
-	noisePath, flowerIdsPath := path.Join(checkpointPath, NoiseSamplesFile), path.Join(checkpointPath, FlowerIdsSamplesFile)
-	noise, err = tensor.Load(noisePath)
+	noisePath, flowerIdsPath := path.Join(checkpoint.Dir(), NoiseSamplesFile), path.Join(checkpoint.Dir(), FlowerIdsSamplesFile)
+	var err error
+	noise, err = tensors.Load(noisePath)
 	if err == nil {
-		flowerIds, err = tensor.Load(flowerIdsPath)
+		flowerIds, err = tensors.Load(flowerIdsPath)
 		if err == nil {
 			return
 		}
 	}
 	if !os.IsNotExist(err) {
-		AssertNoError(err)
+		must.M(err)
 	}
 
 	// Create new noise and flower ids -- and save it for future training.
-	noise = GenerateNoise(*flagTrainGeneratedSamples)
-	flowerIds = GenerateFlowerIds(*flagTrainGeneratedSamples)
-	AssertNoError(noise.Local().Save(noisePath))
-	AssertNoError(flowerIds.Local().Save(flowerIdsPath))
+	numSamples := context.GetParamOr(c.Context, "samples_during_training", 64)
+	noise = c.GenerateNoise(numSamples)
+	flowerIds = c.GenerateFlowerIds(numSamples)
+	must.M(noise.Save(noisePath))
+	must.M(flowerIds.Save(flowerIdsPath))
 	return
 }
 
-var irrelevantArgs = types.Set[string]{"": {}, "--plots": {}}
-
-func isArgIrrelevant(arg string) bool {
-	if irrelevantArgs.Has(arg) {
-		return true
-	}
-	for _, prefix := range []string{"-steps", "--steps", "--batch", "--eval_batch", "--checkpoint_mean", "--platform"} {
-		if strings.HasPrefix(arg, prefix) {
-			return true
-		}
-	}
-	return false
+// getDataDir from context.
+func getDataDir(ctx *context.Context) string {
+	return context.GetParamOr(ctx, "data_dir", "./")
 }
 
-var (
-	flagNumSteps = flag.Int("steps", 2000, "Number of gradient descent steps to perform in total "+
-		"-- this includes the steps already trained, if restarting training a model.")
-	flagPlots = flag.Bool("plots", true, "Plots during training: perform periodic evaluations, "+
-		"save results if --checkpoint is set and draw plots, if in a Jupyter notebook.")
-	flagKid = flag.Bool("kid", true, "If true, calculate Kernel Inception Distance (KID) on evaluation "+
-		"-- it is quite expensive.")
+// getImageSize from context.
+func getImageSize(ctx *context.Context) int {
+	return context.GetParamOr(ctx, "image_size", 64)
+}
 
-	// Training hyperparameters:
-	flagLearningRate     = flag.Float64("learning_rate", 0.001, "Initial learning rate.")
-	flagL2Regularization = flag.Float64("l2_reg", 0, "L2 regularization on kernels. It doesn't interact well with --batch_norm.")
-	flagReport           = flag.Bool("report", true, "If true generate evaluation report at end of training.")
-	flagRngReset         = flag.Bool("rng_reset", true, "If true will reset the random number generator state with a new random value -- useful when continuing training.")
-
-	// Sample generate images to monitor progress on;
-	flagTrainMonitorStartFrequency  = flag.Int("monitor_start", 100, "Training step to monitor, exponentially increasing.")
-	flagTrainMonitorFrequencyFactor = flag.Float64("monitor_factor", 1.2, "Training step to monitor, exponentially increasing.")
-	flagTrainGeneratedSamples       = flag.Int("train_samples", 64, "Number of images to monitor progress on training.")
-)
-
-func TrainModel() {
-	Init()
-	*flagCheckpointTakeMean = 1 // Disable mean of checkpoints if training.
-	trainDS, validationDS := CreateInMemoryDatasets()
-	trainEvalDS := trainDS.Copy()
-
-	trainDS.Shuffle().Infinite(true).BatchSize(BatchSize, true)
-	trainEvalDS.BatchSize(EvalBatchSize, false)
-	validationDS.BatchSize(EvalBatchSize, false)
-
-	// Context holds the variables and hyperparameters for the model.
-	ctx := context.NewContext(manager)
-	ctx.SetParam(optimizers.ParamLearningRate, *flagLearningRate)
-	ctx.SetParam(layers.ParamL2Regularization, *flagL2Regularization)
+// TrainModel with hyperparameters given in Context.
+// paramsSet enumerate the context parameters that were set and should override values loaded from a checkpoint.
+func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet []string, evaluateOnEnd bool, verbosity int) {
+	// Backend handles creation of ML computation graphs, accelerator resources, etc.
+	backend := backends.New()
+	if verbosity >= 1 {
+		fmt.Printf("Backend %q:\t%s\n", backend.Name(), backend.Description())
+	}
+	config := NewConfig(backend, ctx, dataDir, paramsSet)
 
 	// Checkpoints saving.
-	checkpoint, noise, flowerIds := LoadCheckpointToContext(ctx)
-	if noise == nil {
+	checkpoint, samplesNoise, samplesFlowerIds := config.AttachCheckpoint(checkpointPath)
+	if samplesNoise == nil {
 		klog.Exitf("A checkpoint directory name with --checkpoint is required, none given")
 	}
-	if *flagRngReset {
+	if verbosity >= 2 {
+		fmt.Println(commandline.SprintContextSettings(ctx))
+	}
+	if context.GetParamOr(ctx, "rng_reset", true) {
+		// Reset RNG.
 		ctx.RngStateReset()
 	}
-	globalStep := int(optimizers.GetGlobalStep(ctx))
-	if globalStep != 0 {
-		fmt.Printf("Restarting training from global_step=%d\n", globalStep)
+	if verbosity >= 1 {
+		for _, paramsPath := range paramsSet {
+			scope, name := context.SplitScope(paramsPath)
+			if scope == "" {
+				if value, found := ctx.GetParam(name); found {
+					fmt.Printf("\t%s=%v\n", name, value)
+				}
+			} else {
+				if value, found := ctx.InAbsPath(scope).GetParam(name); found {
+					fmt.Printf("\tscope=%q %s=%v\n", scope, name, value)
+				}
+			}
+		}
 	}
-	if globalStep >= *flagNumSteps {
-		klog.Exitf("Current global step %d >= target --steps=%d, exiting.", globalStep, *flagNumSteps)
+
+	// Create datasets used for training and evaluation.
+	trainInMemoryDS, validationDS := config.CreateInMemoryDatasets()
+	trainEvalDS := trainInMemoryDS.Copy()
+	trainInMemoryDS.Shuffle().Infinite(true).BatchSize(config.BatchSize, true)
+	trainEvalDS.BatchSize(config.EvalBatchSize, false)
+	validationDS.BatchSize(config.EvalBatchSize, false)
+	var trainDS train.Dataset
+	if context.GetParamOr(ctx, "diffusion_balanced_dataset", false) {
+		fmt.Println("Using balanced datasets.")
+		balancedTrainDS := must.M1(flowers.NewBalancedDataset(config.Backend, config.DataDir, config.ImageSize))
+		trainDS = balancedTrainDS
+	} else {
+		trainDS = trainInMemoryDS
 	}
 
 	// Custom loss: model returns scalar loss as the second element of the predictions.
 	customLoss := func(labels, predictions []*Node) *Node { return predictions[1] }
-
 	imgMetricFn := func(ctx *context.Context, labels, predictions []*Node) *Node {
 		return predictions[2]
 	}
-	pprintLossFn := func(t tensor.Tensor) string {
+	pprintLossFn := func(t *tensors.Tensor) string {
 		return fmt.Sprintf("%.3f", t.Value())
 	}
 	meanImagesLoss := metrics.NewMeanMetric(
 		"Images Loss", "img_loss", "img_loss", imgMetricFn, pprintLossFn)
 	movingImagesLoss := metrics.NewExponentialMovingAverageMetric(
-		"Moving Images Loss", "~img_loss", "img_loss", imgMetricFn, pprintLossFn, 0.01)
+		"Moving Images Loss", "~img_loss", "img_loss", imgMetricFn, pprintLossFn, 0.05)
+
+	movingNoiseLoss := metrics.NewExponentialMovingAverageMetric(
+		"Moving (faster) Noise Loss", "~fast_loss", "loss",
+		func(ctx *context.Context, labels, predictions []*Node) *Node {
+			return predictions[1]
+		}, pprintLossFn, 0.05)
+
+	movingMAE := metrics.NewExponentialMovingAverageMetric(
+		"Moving MAE Loss", "~mae", "loss",
+		func(ctx *context.Context, labels, predictions []*Node) *Node {
+			return predictions[3]
+		}, pprintLossFn, 0.05)
+	meanMAE := metrics.NewMeanMetric(
+		"MAE Loss", "#mae", "loss",
+		func(ctx *context.Context, labels, predictions []*Node) *Node {
+			return predictions[3]
+		}, pprintLossFn)
+
+	useNanLogger := context.GetParamOr(ctx, "nan_logger", false)
+	if useNanLogger {
+		nanLogger = nanlogger.New()
+	}
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
 	trainer := train.NewTrainer(
-		manager, ctx, TrainingModelGraph, customLoss,
-		optimizers.Adam().WeightDecay(1e-4).Done(),
-		[]metrics.Interface{movingImagesLoss}, // trainMetrics
-		[]metrics.Interface{meanImagesLoss})   // evalMetrics
-	if *flagNanLogger {
+		backend, ctx, config.BuildTrainingModelGraph(), customLoss,
+		optimizers.FromContext(ctx),
+		[]metrics.Interface{movingImagesLoss, movingNoiseLoss, movingMAE}, // trainMetrics
+		[]metrics.Interface{meanImagesLoss, meanMAE})                      // evalMetrics
+	if nanLogger != nil {
 		trainer.OnExecCreation(func(exec *context.Exec, _ train.GraphType) {
 			nanLogger.AttachToExec(exec)
 		})
 	}
+
 	// Use standard training loop.
 	loop := train.NewLoop(trainer)
-	commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
+	if verbosity >= 0 {
+		commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
+	}
 
-	// Attach a checkpoint.
+	// Checkpoint saving: every 3 minutes of training.
 	if checkpoint != nil {
-		period := time.Second * time.Duration(*flagCheckpointPeriod)
+		period := must.M1(
+			time.ParseDuration(context.GetParamOr(ctx, "checkpoint_frequency", "3m")))
 		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
-			func(loop *train.Loop, metrics []tensor.Tensor) error {
-				fmt.Printf("\n[saving checkpoint@%d] [median train step (ms): %d]\n", loop.LoopStep, loop.MedianTrainStepDuration().Milliseconds())
+			func(loop *train.Loop, metrics []*tensors.Tensor) error {
 				return checkpoint.Save()
 			})
 	}
 
-	// Monitoring training: plotter, generator of images, kid evaluator.
-	var plotter *margaid.Plots
-	if *flagPlots {
-		// No need to store the returned `plot.Plots` object, it attaches itself to the loop, and will
-		// generate plot points and update the plot until the `loop` ends.
-		plotter = margaid.New(1024, 400, trainEvalDS, validationDS).LogScaleX().LogScaleY()
-		if checkpoint != nil {
-			_, err := plotter.WithFile(path.Join(checkpoint.Dir(), "training_plot_points.json"))
-			AssertNoError(err)
-		}
-		plotter.DynamicUpdates()
+	// Attach Plotly plots: plot points at exponential steps.
+	// The points generated are saved along the checkpoint directory (if one is given).
+	var plotter *plotly.PlotConfig
+	if context.GetParamOr(ctx, plotly.ParamPlots, false) {
+		plotter = plotly.New().
+			WithCheckpoint(checkpoint).
+			Dynamic().
+			WithDatasets(trainEvalDS, validationDS).
+			WithBatchNormalizationAveragesUpdate(trainEvalDS)
 	}
 
-	generator := NewImagesGenerator(ctx, noise, flowerIds, 20)
-
+	generator := config.NewImagesGenerator(samplesNoise, samplesFlowerIds, 20)
 	var kid *KidGenerator
-	if *flagKid {
+	if context.GetParamOr(ctx, "kid", false) {
 		kidDS := validationDS.Copy()
-		kidDS.Shuffle().BatchSize(EvalBatchSize, true)
-		kid = NewKidGenerator(ctx, kidDS, 5)
+		kidDS.Shuffle().BatchSize(config.EvalBatchSize, true)
+		kid = config.NewKidGenerator(kidDS, 5)
 	}
 
-	train.ExponentialCallback(loop, *flagTrainMonitorStartFrequency, *flagTrainMonitorFrequencyFactor, true,
-		"Monitor", 0, func(loop *train.Loop, metrics []tensor.Tensor) error {
-			return TrainingMonitor(checkpoint, loop, metrics, plotter, plotter.EvalDatasets, generator, kid)
-		})
+	samplesFrequency := context.GetParamOr(ctx, "samples_during_training_frequency", 200)
+	samplesFrequencyGrowth := context.GetParamOr(ctx, "samples_during_training_frequency_growth", 1.2)
+	if plotter != nil {
+		train.ExponentialCallback(loop, samplesFrequency, samplesFrequencyGrowth, true,
+			"Monitor", 0, func(loop *train.Loop, metrics []*tensors.Tensor) error {
+				return TrainingMonitor(checkpoint, loop, metrics, plotter, plotter.EvalDatasets, generator, kid)
+			})
+	}
 
 	// Loop for given number of steps.
-	_, err := loop.RunSteps(trainDS, *flagNumSteps-globalStep)
-	if err != nil {
-		fmt.Printf("\nFailed: %v\n\n", err)
-		return
+	numTrainSteps := context.GetParamOr(ctx, "train_steps", 0)
+	globalStep := int(optimizers.GetGlobalStep(ctx))
+	if globalStep > 0 {
+		trainer.SetContext(ctx.Reuse())
 	}
-	// AssertNoError(err)
-	fmt.Printf("\tMedian train step duration: %d ms\n\t(not counting evaluations)\n",
-		loop.MedianTrainStepDuration().Milliseconds())
+	if globalStep < numTrainSteps {
+		_ = must.M1(loop.RunSteps(trainDS, numTrainSteps-globalStep))
+		if verbosity >= 1 {
+			fmt.Printf("\t[Step %d] median train step: %d microseconds\n",
+				loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
+		}
+
+		// Update batch normalization averages, if they are used.
+		if batchnorm.UpdateAverages(trainer, trainEvalDS) {
+			fmt.Println("\tUpdated batch normalization mean/variances averages.")
+			if checkpoint != nil {
+				must.M(checkpoint.Save())
+			}
+		}
+
+	} else {
+		fmt.Printf("\t - target train_steps=%d already reached. To train further, set a number additional "+
+			"to current global step.\n", numTrainSteps)
+	}
 
 	// Finally, print an evaluation on train and test datasets.
-	if *flagReport {
-		fmt.Println()
-		err = commandline.ReportEval(trainer, trainEvalDS, validationDS)
-		AssertNoError(err)
-		fmt.Println()
+	if evaluateOnEnd {
+		if verbosity >= 1 {
+			fmt.Println()
+		}
+		must.M(commandline.ReportEval(trainer, trainEvalDS, validationDS))
 	}
 }
 
 // TrainingMonitor is periodically called during training, and is used to report metrics and generate sample images at
 // the current training step.
-func TrainingMonitor(checkpoint *checkpoints.Handler, loop *train.Loop, metrics []tensor.Tensor,
+func TrainingMonitor(checkpoint *checkpoints.Handler, loop *train.Loop, metrics []*tensors.Tensor,
 	plotter stdplots.Plotter, evalDatasets []train.Dataset, generator *ImagesGenerator, kid *KidGenerator) error {
+	//fmt.Printf("\n[... evaluating@%d ...] [median train step (ms): %d]\n", loop.LoopStep, loop.MedianTrainStepDuration().Milliseconds())
 
-	fmt.Printf("\n[... evaluating@%d ...] [median train step (ms): %d]\n", loop.LoopStep, loop.MedianTrainStepDuration().Milliseconds())
 	// Save checkpoint, just in case.
 	if checkpoint == nil {
 		// Only works if there is a model directory.
 		return nil
 	}
-	AssertNoError(checkpoint.Save())
+	must.M(checkpoint.Save())
+	must.M(checkpoint.Backup()) // Save backup, so these checkpoint doesn't get automatically collected.
 
 	// Update plotter with metrics.
-	AssertNoError(stdplots.AddTrainAndEvalMetrics(plotter, loop, metrics, evalDatasets))
+	must.M(stdplots.AddTrainAndEvalMetrics(plotter, loop, metrics, evalDatasets, evalDatasets[0]))
 
 	// Kid generator
 	if kid != nil {
 		kidValue := kid.Eval()
 		//fmt.Printf("\nKID=%f\n", kidValue.Value())
-		plotter.AddPoint(stdplots.Point{MetricName: "KID", MetricType: "KID", Step: float64(loop.LoopStep), Value: shapes.ConvertTo[float64](kidValue.Value())})
+		plotter.AddPoint(
+			stdplots.Point{
+				MetricName: "Kernel Inception Distance",
+				Short:      "KID",
+				MetricType: "KID",
+				Step:       float64(loop.LoopStep),
+				Value:      shapes.ConvertTo[float64](kidValue.Value()),
+			})
+		plotter.DynamicSampleDone(false)
 	}
-	plotter.DynamicSampleDone(false)
 
 	// Generate intermediary images.
-	images := generator.Generate()
+	sampledImages := generator.Generate()
 	imagesPath := fmt.Sprintf("%s%07d.tensor", GeneratedSamplesPrefix, loop.LoopStep)
 	imagesPath = path.Join(checkpoint.Dir(), imagesPath)
-	AssertNoError(images.Local().Save(imagesPath))
+	must.M(sampledImages.Save(imagesPath))
 	return nil
 }
 
 // DisplayTrainingPlots simply display the training plots of a model, without any training.
-func DisplayTrainingPlots() {
-	Init()
-	ctx := context.NewContext(manager)
-	checkpoint, _, _ := LoadCheckpointToContext(ctx)
+//
+// paramsSet are hyperparameters overridden, that it should not load from the checkpoint (see commandline.ParseContextSettings).
+func DisplayTrainingPlots(ctx *context.Context, dataDir, checkpointPath string, paramsSet []string) {
+	backend := backends.New()
+	config := NewConfig(backend, ctx, dataDir, paramsSet)
+	checkpoint, _, _ := config.AttachCheckpoint(checkpointPath)
 	if checkpoint == nil {
 		fmt.Printf("You must set --checkpoint='model_sub_dir'!")
 		return
 	}
-
-	plotter := margaid.New(1024, 400).LogScaleX().LogScaleY()
-	_, err := plotter.WithFile(path.Join(checkpoint.Dir(), "training_plot_points.json"))
-	AssertNoError(err)
-	plotter.Plot()
+	must.M(plotly.New().WithCheckpoint(checkpoint).Plot())
 }
 
 // CompareModelPlots display several model metrics on the same plots.
-func CompareModelPlots(modelNames ...string) {
-	Init()
+func CompareModelPlots(dataDir string, modelNames ...string) {
+	dataDir = data.ReplaceTildeInDir(dataDir)
 	plots := margaid.New(1024, 400).LogScaleX().LogScaleY()
 	for _, modelName := range modelNames {
-		modelPath := path.Join(DataDir, modelName, "training_plot_points.json")
-		_, err := plots.PreloadFile(modelPath, func(metricName string) string {
+		modelPath := modelName
+		if !path.IsAbs(modelPath) {
+			modelPath = path.Join(dataDir, modelPath)
+		}
+		modelPath = path.Join(modelPath, stdplots.TrainingPlotFileName)
+		_ = must.M1(plots.PreloadFile(modelPath, func(metricName string) string {
 			return fmt.Sprintf("[%s] %s", modelName, metricName)
-		})
-		AssertNoError(err)
+		}))
 	}
 	plots.Plot()
 }

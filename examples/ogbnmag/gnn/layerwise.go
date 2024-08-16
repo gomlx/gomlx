@@ -6,7 +6,7 @@ import (
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/types/slices"
+	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/pkg/errors"
 )
 
@@ -110,7 +110,7 @@ func (lw *LayerWiseConfig) recursivelyApplyGraphConvolution(
 	// Makes sure there is a state for the current dependent.
 	state, found := graphStates[rule.Name]
 	if !found {
-		Panicf("state for rule %q not given in `graphStates`, states given for rules: %q", rule.Name, slices.Keys(graphStates))
+		Panicf("state for rule %q not given in `graphStates`, states given for rules: %q", rule.Name, xslices.Keys(graphStates))
 	}
 
 	updateInputs := make([]*Node, 0, len(rule.Dependents)+1)
@@ -123,7 +123,7 @@ func (lw *LayerWiseConfig) recursivelyApplyGraphConvolution(
 	for _, dependent := range rule.Dependents {
 		dependentEdges, found := edges[dependent.Name]
 		if !found {
-			Panicf("edges for rule %q not given in `edges`, edges given for rules: %q", dependent.Name, slices.Keys(edges))
+			Panicf("edges for rule %q not given in `edges`, edges given for rules: %q", dependent.Name, xslices.Keys(edges))
 		}
 
 		if lw.dependentsUpdateFirst {

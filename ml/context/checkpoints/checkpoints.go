@@ -30,7 +30,7 @@
 // ```
 //
 //	…
-//	ctx := context.NewContext(manager)
+//	ctx := context.New()
 //	ctx.SetParam(optimizers.ParamLearningRate, *flagLearningRate)
 //
 //	var checkpoint *checkpoints.Handler
@@ -60,17 +60,20 @@ package checkpoints
 import (
 	"encoding/json"
 	"fmt"
+	. "github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types"
-	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
-	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/types/xslices"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
+	"k8s.io/klog/v2"
 	"os"
 	"path"
 	"path/filepath"
@@ -95,12 +98,17 @@ type Config struct {
 
 	err error
 
-	dir             string
-	includeParams   bool
-	immediate       bool
-	keep            int
-	takeMean        int
-	excludeFromSave types.Set[*context.Variable]
+	dir       string
+	immediate bool
+	keep      int
+
+	includeParams   bool              // whether to includeParams in loading/saving.
+	paramsToExclude types.Set[string] // specific parameter names to exclude from loading.
+
+	backend  backends.Backend // used when taking the mean.
+	takeMean int
+
+	varsToExclude types.Set[*context.Variable]
 }
 
 // Build a configuration for building a checkpoints.Handler. After configuring the
@@ -111,7 +119,8 @@ func Build(ctx *context.Context) *Config {
 		includeParams:   true,
 		keep:            1,
 		takeMean:        1,
-		excludeFromSave: types.MakeSet[*context.Variable](),
+		paramsToExclude: types.MakeSet[string](),
+		varsToExclude:   types.MakeSet[*context.Variable](),
 	}
 	return c
 }
@@ -201,23 +210,42 @@ func (c *Config) TempDir(dir, pattern string) *Config {
 	return c
 }
 
-// ExcludeParams configures Handler to exclude the Context parameters (values usually
-// read/written by Context.GetParam and context.SetParam).
+// ExcludeAllParams configures Handler to exclude Context parameters (values usually
+// read/written by Context.GetParam and context.SetParam) from being read.
 //
 // By default, Params are loaded and set into Context the moment Handler is created
 // (when Done() is called), overriding values already present in the Context.
-func (c *Config) ExcludeParams() *Config {
+//
+// See also ExcludeParams to exclude specific params from being read.
+func (c *Config) ExcludeAllParams() *Config {
 	c.includeParams = false
 	return c
 }
 
-// ExcludeVarsFromSaving enumerate variables to be excluded from saving.
+// ExcludeParams configures Handler to exclude certain Context parameters (values usually
+// read/written by Context.GetParam and context.SetParam) from being read.
+// It can be called multiple times, each call adds new parameters to be excluded.
+//
+// For values in paramsToExclude that don't include a preceding scope (separated by "/"), the exclusion applies to all scopes.
+// Otherwise, it applies only to the specific scope. See context.JoinScope to merge scope and name.
+//
+// By default, no parameters are excluded.
+//
+// See also ExcludeAllParams to exclude all params from being read.
+func (c *Config) ExcludeParams(paramsToExclude ...string) *Config {
+	for _, name := range paramsToExclude {
+		c.paramsToExclude.Insert(name)
+	}
+	return c
+}
+
+// ExcludeVars enumerate variables to be excluded from saving.
 // The function can be called multiple times, adding variables to be excluded from saving.
 //
 // It can also be called after the [Handler] object is built as new variables are created.
-func (c *Config) ExcludeVarsFromSaving(vars ...*context.Variable) *Config {
+func (c *Config) ExcludeVars(vars ...*context.Variable) *Config {
 	for _, v := range vars {
-		c.excludeFromSave.Insert(v)
+		c.varsToExclude.Insert(v)
 	}
 	return c
 }
@@ -237,10 +265,25 @@ func (c *Config) Keep(n int) *Config {
 //
 // The default is 1, so only load the most recent checkpoint.
 //
+// If n != 1, it requires a backend that will be used to calculate the mean.
+// If n == 1, the backend argument is ignored and can be nil.
+//
 // Notice the mean is taken one tensor at a time, so at any time there is only one copy
 // of the model weights in memory, plus the tensor being merged.
-func (c *Config) TakeMean(n int) *Config {
+//
+// If a mean is calculated, the values of the variables will be stored on-device. This can be good -- if their values
+// are going to be used on-device anyway -- or bad -- if they are not needed on-device, and it's using the limited
+// on-device space. Consider *tensors.Tensor.MaterializeLocal and *tensors.Tensor.InvalidateOnDevice to have them
+// moved locally if so desired.
+func (c *Config) TakeMean(n int, backend backends.Backend) *Config {
+	if c.err != nil {
+		return c
+	}
 	c.takeMean = n
+	c.backend = backend
+	if n != 1 && backend == nil {
+		c.err = errors.Errorf("TakeMean(n=%d, backend=nil) requires a valid backend for n != 1, it is the backend used to calculate the mean", n)
+	}
 	return c
 }
 
@@ -304,7 +347,7 @@ func (c *Config) MustDone() *Handler {
 // Config.Done().
 //
 // Loading data into Handler happens at its creation time: it loads from the latest checkpoint.
-// (Hyper-)Parameters are immediately loaded into the context then (if not Config.ExcludeParams)
+// (Hyper-)Parameters are immediately loaded into the context then (if not Config.ExcludeAllParams)
 // but the loaded variable values are only "consumed" (used) one at a time, as the variables are
 // created during the graph building (e.g: when building the model).
 //
@@ -329,7 +372,7 @@ type Handler struct {
 	prevContextLoader context.Loader
 
 	serialized     *serializedData
-	variableValues map[string]tensor.Tensor
+	variableValues map[string]*tensors.Tensor
 	mergeExec      *graph.Exec
 
 	checkpointsCount int
@@ -339,7 +382,7 @@ type Handler struct {
 type serializedData struct {
 	Params []serializedParam
 
-	// Variables maps context.Variable.ParameterName() to its position in storage.
+	// Variables maps context.Variable.GetParameterName() to its position in storage.
 	Variables []serializedVar
 }
 
@@ -352,7 +395,7 @@ type serializedVar struct {
 	Dimensions []int
 
 	// DType of the shape.
-	DType shapes.DType
+	DType dtypes.DType
 
 	// Pos, Length in bytes in the file.
 	Pos, Length int
@@ -398,17 +441,17 @@ func (p *serializedParam) jsonDecodeTypeConvert() {
 	case []any:
 		switch p.ValueType {
 		case "[]int":
-			p.Value = slices.Map(value, func(fAny any) int {
+			p.Value = xslices.Map(value, func(fAny any) int {
 				f, _ := fAny.(float64) // Json decoder converts any numbers to float64.
 				return int(f)
 			})
 		case "[]float64":
-			p.Value = slices.Map(value, func(fAny any) float64 {
+			p.Value = xslices.Map(value, func(fAny any) float64 {
 				f, _ := fAny.(float64) // Json decoder converts any numbers to float64.
 				return f
 			})
 		case "[]string":
-			p.Value = slices.Map(value, func(sAny any) string {
+			p.Value = xslices.Map(value, func(sAny any) string {
 				s, _ := sAny.(string) // Json decoder converts any numbers to float64.
 				return s
 			})
@@ -437,11 +480,21 @@ func (h *Handler) newCheckpointBaseName(globalStep int64) string {
 
 const (
 	baseNamePrefix = "checkpoint-"
-	jsonNameSuffix = ".json"
-	varDataSuffix  = ".bin"
+
+	// JsonNameSuffix for the JSON files returned by Handler.ListCheckpoints.
+	JsonNameSuffix = ".json"
+
+	// VarDataSuffix for the data files (holding the tensor values) returned by Handler.ListCheckpoints.
+	VarDataSuffix = ".bin"
+
+	// BackupDir is the name of the (sub-)directory under the model checkpoints directory that holds
+	// the backups. See Handler.Backup.
+	BackupDir = "backup"
 )
 
-// ListCheckpoints returns the base file name of the checkpoints in the directory in time order (older first).
+// ListCheckpoints returns the base file paths of the checkpoints in the directory in time order (older first).
+//
+// The actual paths are these base file paths suffixed with JsonNameSuffix and VarDataSuffix.
 func (h *Handler) ListCheckpoints() (checkpoints []string, err error) {
 	entries, err := os.ReadDir(h.config.dir)
 	if err != nil {
@@ -452,10 +505,10 @@ func (h *Handler) ListCheckpoints() (checkpoints []string, err error) {
 			continue
 		}
 		fileName := entry.Name()
-		if !strings.HasPrefix(fileName, baseNamePrefix) || !strings.HasSuffix(fileName, jsonNameSuffix) {
+		if !strings.HasPrefix(fileName, baseNamePrefix) || !strings.HasSuffix(fileName, JsonNameSuffix) {
 			continue
 		}
-		baseName := fileName[:len(fileName)-len(jsonNameSuffix)]
+		baseName := fileName[:len(fileName)-len(JsonNameSuffix)]
 		checkpoints = append(checkpoints, baseName)
 	}
 	sort.Strings(checkpoints)
@@ -468,7 +521,7 @@ func (h *Handler) HasCheckpoints() (bool, error) {
 	return len(list) > 0, err
 }
 
-var checkpointCountRexex = regexp.MustCompile(`^checkpoint-n(\d+)-`)
+var checkpointCountRegex = regexp.MustCompile(`^checkpoint-n(\d+)-`)
 
 // maxCheckPointCountFromCheckpoints returns the largest `checkpointCount` in the saved
 // checkpoints -- so the next checkpoint saved uses this count+1.
@@ -477,7 +530,7 @@ var checkpointCountRexex = regexp.MustCompile(`^checkpoint-n(\d+)-`)
 func maxCheckPointCountFromCheckpoints(checkpoints []string) int {
 	maxId := -1
 	for _, name := range checkpoints {
-		matches := checkpointCountRexex.FindAllStringSubmatch(name, 1)
+		matches := checkpointCountRegex.FindAllStringSubmatch(name, 1)
 		if len(matches) != 1 || len(matches[0]) != 2 {
 			continue
 		}
@@ -503,18 +556,20 @@ func maxCheckPointCountFromCheckpoints(checkpoints []string) int {
 // If `merge` is set to true, only trainable weights are merged into the current values, using
 // `mergeWeight` for the current weight. For merging one must set up `h.mergeExec` as well.
 func (h *Handler) loadCheckpoint(baseName string, merge bool, mergeWeight float64) error {
-	fmt.Printf("loading: %q\n", baseName)
+	if klog.V(1).Enabled() {
+		klog.Infof("loading: %q\n", baseName)
+	}
 	if h.ctx != nil {
 		return errors.Errorf("%s tried to loadCheckpoint(%q) after being attached to a Context, this is not allowed", h, baseName)
 	}
 
 	// Open files for reading.
-	varFileName := filepath.Join(h.config.dir, baseName+varDataSuffix)
+	varFileName := filepath.Join(h.config.dir, baseName+VarDataSuffix)
 	varFile, err := os.Open(varFileName)
 	if err != nil {
 		return errors.Wrapf(err, "%s: failed to open checkpoint data file %s", h, varFileName)
 	}
-	jsonFileName := filepath.Join(h.config.dir, baseName+jsonNameSuffix)
+	jsonFileName := filepath.Join(h.config.dir, baseName+JsonNameSuffix)
 	jsonFile, err := os.Open(jsonFileName)
 	if err != nil {
 		return errors.Wrapf(err, "%s: failed to open checkpoint metadata file %s", h, jsonFileName)
@@ -541,50 +596,45 @@ func (h *Handler) loadCheckpoint(baseName string, merge bool, mergeWeight float6
 	if !merge {
 		// We are loading all the variables, as opposed to merging them.
 		h.serialized = serialized
-		h.variableValues = make(map[string]tensor.Tensor, len(h.serialized.Variables))
+		h.variableValues = make(map[string]*tensors.Tensor, len(h.serialized.Variables))
 	}
 
 	// Load variable values.
 	for _, varInfo := range serialized.Variables {
-		localT := tensor.FromShape(shapes.Make(varInfo.DType, varInfo.Dimensions...))
-		dataRef := localT.AcquireData()
-		rawBytes := dataRef.Bytes()
-		var n int
-		n, err = varFile.Read(rawBytes)
-		dataRef.Release()
-
+		tensor := tensors.FromShape(shapes.Make(varInfo.DType, varInfo.Dimensions...))
+		var n, memoryLen int
+		tensor.MutableBytes(func(data []byte) {
+			memoryLen = len(data)
+			n, err = varFile.Read(data)
+		})
 		if err != nil {
 			return errors.Wrapf(err, "%s: failed to read variable contents of checkpoint data file %s at position %d", h, varFileName, varInfo.Pos)
 		}
-		if n != len(rawBytes) {
+		if n != memoryLen {
 			return errors.Errorf("%s: failed to read variable contents of checkpoint data file %s "+
-				"at position %d -- read %d bytes, wanted %d bytes", h, varFileName, varInfo.Pos, n, len(rawBytes))
+				"at position %d -- read %d bytes, wanted %d bytes", h, varFileName, varInfo.Pos, n, memoryLen)
 		}
 
 		if !merge {
 			// Load the value.
-			h.variableValues[varInfo.ParameterName] = localT
+			h.variableValues[varInfo.ParameterName] = tensor
 		} else {
-			// Make sure we have enough variations of mergeExec for each variable, if they
-			// are of different shape.
-			h.mergeExec.SetMaxCache(len(h.variableValues))
-
 			// Merge value:
 			current, found := h.variableValues[varInfo.ParameterName]
 			if !found || !varInfo.DType.IsFloat() {
 				// Variable not found in last checkpoint or not merge-able, just ignore it.
 				continue
 			}
-			var results []tensor.Tensor
+			var results []*tensors.Tensor
 			err := TryCatch[error](func() {
-				results = h.mergeExec.Call(current, localT, shapes.CastAsDType(mergeWeight, varInfo.DType))
+				results = h.mergeExec.Call(current, tensor, shapes.CastAsDType(mergeWeight, varInfo.DType))
 			})
 			if err != nil {
 				panic(errors.WithMessagef(err, "when taking the mean of variable %q", varInfo.ParameterName))
 			}
 			current.FinalizeAll()
 			h.variableValues[varInfo.ParameterName] = results[0]
-			localT.FinalizeAll()
+			tensor.FinalizeAll()
 		}
 	}
 	return nil
@@ -598,18 +648,18 @@ func (h *Handler) loadCheckpoint(baseName string, merge bool, mergeWeight float6
 // of the model weights in memory, plus the tensor being merged.
 func (h *Handler) takeMean(baseNames []string) error {
 	// First load the last checkpoint.
-	err := h.loadCheckpoint(slices.Last(baseNames), false, 0)
+	err := h.loadCheckpoint(xslices.Last(baseNames), false, 0)
 	if err != nil {
 		return err
 	}
 
 	// Create merger graph executor.
-	manager := graph.BuildManager().Platform("CPU").Done()
-	h.mergeExec = graph.NewExec(manager, func(a, b, bWeight *graph.Node) *graph.Node {
+	h.mergeExec = graph.NewExec(h.config.backend, func(a, b, bWeight *graph.Node) *graph.Node {
 		return graph.Add(
 			graph.Mul(a, graph.OneMinus(bWeight)),
 			graph.Mul(b, bWeight))
 	})
+	h.mergeExec.SetMaxCache(-1) // No max number of graphs, since each variable may be of different shape.
 
 	// Then merge all other weights -- the order doesn't matter.
 	for ii, baseName := range baseNames[:len(baseNames)-1] {
@@ -623,16 +673,6 @@ func (h *Handler) takeMean(baseNames []string) error {
 	// Free merge executor.
 	h.mergeExec.Finalize()
 	h.mergeExec = nil
-
-	// Move all variables to a local tensor.
-	for key, t := range h.variableValues {
-		deviceT := t.CurrentDevice()
-		if deviceT != nil {
-			// Tensor is on device: convert to local, and free the device version.
-			h.variableValues[key] = deviceT.Local()
-			deviceT.Finalize()
-		}
-	}
 	return nil
 }
 
@@ -642,7 +682,13 @@ func (h *Handler) takeMean(baseNames []string) error {
 // to load the variables only for a part of the model, update that part and save again with everything.
 //
 // Params is (de-) serialized with package json.
+//
+// If the handler is nil, this is a no-op: so it's safe to simply be called, even if the user hasn't configured a
+// checkpoint.
 func (h *Handler) Save() error {
+	if h == nil {
+		return nil
+	}
 	if h.ctx == nil {
 		return errors.Errorf("%s not attached to a context.Context yet.", h)
 	}
@@ -653,22 +699,22 @@ func (h *Handler) Save() error {
 	// Copy over Params.
 	if h.config.includeParams {
 		h.serialized.Params = nil
-		h.ctx.EnumerateParams(func(scope, key string, value any) {
+		h.ctx.EnumerateParams(func(scope, name string, value any) {
 			h.serialized.Params = append(h.serialized.Params,
 				serializedParam{
-					Scope: scope, Key: key, Value: value, ValueType: fmt.Sprintf("%T", value)})
+					Scope: scope, Key: name, Value: value, ValueType: fmt.Sprintf("%T", value)})
 		})
 	}
 
 	// Create files.
 	baseName := h.newCheckpointBaseName(globalStep)
 	h.checkpointsCount += 1 // Bump unique number.
-	varFileName := filepath.Join(h.config.dir, baseName+varDataSuffix)
+	varFileName := filepath.Join(h.config.dir, baseName+VarDataSuffix)
 	varFile, err := os.Create(varFileName)
 	if err != nil {
 		return errors.Wrapf(err, "%s: failed to create checkpoint data file %s", h, varFileName)
 	}
-	jsonFileName := filepath.Join(h.config.dir, baseName+jsonNameSuffix)
+	jsonFileName := filepath.Join(h.config.dir, baseName+JsonNameSuffix)
 	var jsonFile *os.File
 	jsonFile, err = os.Create(jsonFileName)
 	if err != nil {
@@ -679,44 +725,48 @@ func (h *Handler) Save() error {
 	h.serialized.Variables = make([]serializedVar, 0, h.ctx.NumVariables()+len(h.variableValues))
 	pos := 0
 	// * Closure to save the contents of a variable.
-	saveVar := func(name string, value *tensor.Local) error {
-		shape := value.Shape()
-		dataRef := value.AcquireData()
-		defer dataRef.Release()
-		rawData := dataRef.Bytes()
-		n, err := varFile.Write(rawData)
+	saveVar := func(name string, tensor *tensors.Tensor) error {
+		shape := tensor.Shape()
+		var err error
+		var n, memoryLen int
+		tensor.ConstBytes(func(rawData []byte) {
+			memoryLen = len(rawData)
+			n, err = varFile.Write(rawData)
+		})
 		if err != nil {
-			return errors.Wrapf(err, "%s: failed to write variable %s", h, name)
+			err = errors.Wrapf(err, "%s: failed to write variable %s", h, name)
 		}
-		if n != len(rawData) {
-			return errors.Errorf("%s: failed to write variable %s -- %d bytes requested, %d bytes written", h, name, len(rawData), n)
+		if n != memoryLen {
+			return errors.Errorf("%s: failed to write variable %s -- %d bytes requested, %d bytes written", h, name, memoryLen, n)
 		}
 		h.serialized.Variables = append(h.serialized.Variables, serializedVar{
 			ParameterName: name,
 			Dimensions:    shape.Dimensions,
 			DType:         shape.DType,
 			Pos:           pos,
-			Length:        len(rawData),
+			Length:        memoryLen,
 		})
-		pos += len(rawData)
+		pos += memoryLen
 		return nil
 	}
+
 	// * Loop over variables in context.
 	h.ctx.EnumerateVariables(func(v *context.Variable) {
 		if err != nil {
 			return
 		}
-		if h.config.excludeFromSave.Has(v) {
+		if h.config.varsToExclude.Has(v) {
 			return
 		}
-		err = saveVar(v.ParameterName(), v.Value().Local())
+		err = saveVar(v.ParameterName(), v.Value())
 	})
+
 	// * Loop over current loaded variables.
-	for name, value := range h.variableValues {
+	for name, tensor := range h.variableValues {
 		if err != nil {
 			break
 		}
-		err = saveVar(name, value.Local())
+		err = saveVar(name, tensor)
 	}
 	if err != nil {
 		return err
@@ -742,9 +792,43 @@ func (h *Handler) Save() error {
 	return h.keepNCheckpoints()
 }
 
+// Backup links (or copies) the latest checkpoint to a separate sub-directory under the model directory called
+// "backup" (constant in checkpoints.BackupDir).
+//
+// This way the backed up checkpoint doesn't get automatically deleted as the model training progresses.
+//
+// Useful, for instance, to back up the checkpoints used to collect the plot points. But can be used for any other
+// reason.
+func (h *Handler) Backup() error {
+	baseNames, err := h.ListCheckpoints()
+	if err != nil {
+		return errors.WithMessagef(err, "failed Backup() finding currenct checkpoints")
+	}
+	if len(baseNames) == 0 {
+		// If there are n
+		return errors.Errorf("there are no saved checkpoints in %q: maybe call Save() before Backup() ?", h.Dir())
+	}
+	baseName := xslices.Last(baseNames)
+	varFilePath := filepath.Join(h.config.dir, baseName+VarDataSuffix)
+	jsonFilePath := filepath.Join(h.config.dir, baseName+JsonNameSuffix)
+	backupDir := path.Join(h.Dir(), BackupDir)
+	err = os.MkdirAll(backupDir, DirPermMode)
+	if err != nil {
+		return errors.Wrapf(err, "trying to create dir %q", backupDir)
+	}
+	for _, srcFilePath := range []string{varFilePath, jsonFilePath} {
+		newPath := path.Join(backupDir, path.Base(srcFilePath))
+		err := os.Link(srcFilePath, newPath)
+		if err != nil {
+			return errors.Wrapf(err, "failed to link %q to %q", srcFilePath, newPath)
+		}
+	}
+	return nil
+}
+
 // OnStepFn implements `train.OnStepFn`, and make it convenient to attach to a training loop.
 // It simply calls save.
-func (h *Handler) OnStepFn(_ *train.Loop, _ []tensor.Tensor) error {
+func (h *Handler) OnStepFn(_ *train.Loop, _ []*tensors.Tensor) error {
 	return h.Save()
 }
 
@@ -765,8 +849,8 @@ func (h *Handler) keepNCheckpoints() error {
 	// Remove the excess checkpoints, starting from the earlier ones.
 	list = list[:len(list)-h.config.keep]
 	for _, baseName := range list {
-		varFileName := filepath.Join(h.config.dir, baseName+varDataSuffix)
-		jsonFileName := filepath.Join(h.config.dir, baseName+jsonNameSuffix)
+		varFileName := filepath.Join(h.config.dir, baseName+VarDataSuffix)
+		jsonFileName := filepath.Join(h.config.dir, baseName+JsonNameSuffix)
 		for _, fileName := range []string{varFileName, jsonFileName} {
 			err = os.Remove(fileName)
 			if err != nil && !os.IsNotExist(err) {
@@ -779,7 +863,7 @@ func (h *Handler) keepNCheckpoints() error {
 
 // attachTo attaches Handler to a context.Context. The first thing it does if there is a checkpoint
 // loaded is to set the Context's Params from the loaded values (except if the Handler was configured
-// with ExcludeParams).
+// with ExcludeAllParams).
 //
 // attachTo can only be called once. It will fail, and set the given context to an error state if
 // requested to attach more than once.
@@ -794,6 +878,10 @@ func (h *Handler) attachTo(ctx *context.Context) {
 	// Sets ctx.Params with values read, if any.
 	if h.config.includeParams {
 		for _, p := range h.serialized.Params {
+			// Check for un-scoped and scoped exclusions:
+			if h.config.paramsToExclude.Has(p.Key) || h.config.paramsToExclude.Has(context.JoinScope(p.Scope, p.Key)) {
+				continue
+			}
 			tmpCtx := ctx.InAbsPath(p.Scope)
 			tmpCtx.SetParam(p.Key, p.Value)
 		}
@@ -814,7 +902,7 @@ func (h *Handler) Dir() string {
 // LoadVariable implements context.Loader.
 // This is called by context.Context when the variable is used for the first time.
 // The user may want to use this function to inspect loaded values for testing.
-func (h *Handler) LoadVariable(ctx *context.Context, scope, name string) (value tensor.Tensor, found bool) {
+func (h *Handler) LoadVariable(ctx *context.Context, scope, name string) (value *tensors.Tensor, found bool) {
 	// Priority is based on the installation order. That means we attempt first the previously configured loaders.
 	if h.prevContextLoader != nil {
 		value, found = h.prevContextLoader.LoadVariable(ctx, scope, name)
@@ -836,11 +924,22 @@ func (h *Handler) LoadVariable(ctx *context.Context, scope, name string) (value 
 	return
 }
 
+// DeleteVariable implements context.Loader.
+// It is called whenever Context.DeleteVariable is called. The deletion should cascade to the
+// loader, otherwise the variable will reappear after deletion.
+func (h *Handler) DeleteVariable(ctx *context.Context, scope, name string) {
+	if h.prevContextLoader != nil {
+		h.prevContextLoader.DeleteVariable(ctx, scope, name)
+	}
+	varParamName := context.VariableParameterNameFromScopeAndName(scope, name)
+	delete(h.variableValues, varParamName)
+}
+
 // LoadedVariables for inspection. These are the values loaded -- but not necessarily immediately available in
 // context, since they are actually used only when a model asks for the variable.
 //
 // The Handler owns the returned map, don't change it -- the behavior is undefined if you do.
-func (h *Handler) LoadedVariables() map[string]tensor.Tensor {
+func (h *Handler) LoadedVariables() map[string]*tensors.Tensor {
 	return h.variableValues
 }
 
@@ -848,6 +947,6 @@ func (h *Handler) LoadedVariables() map[string]tensor.Tensor {
 // The function can be called multiple times, adding variables to be excluded from saving.
 func (h *Handler) ExcludeVarsFromSaving(vars ...*context.Variable) {
 	for _, v := range vars {
-		h.config.excludeFromSave.Insert(v)
+		h.config.varsToExclude.Insert(v)
 	}
 }

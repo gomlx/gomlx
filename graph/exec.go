@@ -18,14 +18,16 @@ package graph
 
 import (
 	"fmt"
-	. "github.com/gomlx/gomlx/types/exceptions"
+	. "github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
-	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 	"reflect"
 	"runtime"
+	"slices"
 	"sync"
 	"time"
 )
@@ -69,13 +71,13 @@ type ExecGraphFn interface {
 }
 
 // SideParamsFn is the functions that sets side parameters during execution
-// for Graphs that defines those. Typically, this is used to set the variables.
-type SideParamsFn func(graph *Graph, params []*tensor.Device)
+// for Graphs that defines those. Typically, this is used to set the variables of a model.
+type SideParamsFn func(graph *Graph, inputBuffers []backends.Buffer, donate []bool)
 
 // LoggerFn is the function used to log nodes marked for logging. It is called
 // after the Call method, with the list of messages and corresponding values
 // of the evaluated nodes.
-type LoggerFn func(graph *Graph, messages []string, values []tensor.Tensor, nodes []NodeId)
+type LoggerFn func(graph *Graph, messages []string, values []*tensors.Tensor, nodes []NodeId)
 
 // Exec creates and executes computation graphs as needed
 // based on the inputs shapes.
@@ -83,54 +85,50 @@ type LoggerFn func(graph *Graph, messages []string, values []tensor.Tensor, node
 // It simplifies the process of executing a graph building
 // function with real values. For example, assume you wrote:
 //
-//	def LengthGraph(x *Node) *Node {
-//	  return Sqrt(ReduceAllSum(Mul(x, x)))
+//	def L2Norm(x *Node) *Node {
+//		return Sqrt(ReduceAllSum(Mul(x, x)))
 //	}
 //
-// To actually use it with real values, one need to build
-// the graph to a specific shape of x, and then execute it,
-// which is not straight forward -- JIT compilation makes things
+// To use it with actual values (tensors.Tensor's), one needs to build
+// the computation graph for the specific shape of x, and then execute it.
+// While this is straight forward, it's lots of boilerplate code -- JIT compilation makes things
 // faster, but it imposes some bureaucracy.
 //
 // With Exec one can do:
 //
-//	var Length = NewExec(LengthGraph)
-//	x0 := []float32{4}
-//	fmt.Printf("Length(%v) = %v\n", x0, Length.Call(x0)[0].Value())
-//	x1 := []float64{1, 2, 3}
-//	fmt.Printf("Length(%v) = %v\n", x1, Length.Call(x1)[0].Value())
+//	var l2NormExec = NewExec(L2Norm)
+//	x0 := []float32{2}
+//	fmt.Printf("L2Norm(%v) = %v\n", x0, l2NormExec.Call(x0)[0].Value())
+//	x1 := []float64{4, 3}
+//	fmt.Printf("L2Norm(%v) = %v\n", x1, l2NormExec.Call(x1)[0].Value())
 //
 // Notice that both calls to Length.Call will need to create different
 // graphs (for different shapes of the input), but they will be cached,
 // and if the same shapes are used in Call again, the cached compiled graph
 // is reused.
 //
-// Also Call outputs a slice with all the outputs, even when there is only
+// Also, Call outputs a slice with all the outputs, even when there is only
 // one output.
 //
 // If there are no inputs (for instance for some initialization function), then
-// one needs to take a *Graph as the first parameter of graphFn. Example:
+// one needs to take a *Graph as the first parameter of the graph function (graphFn).
+// Example:
 //
-//	```
 //	iotaMatrixExec := NewExec(func (g *Graph) *Node {
 //		return IotaFull(g, types.Make(types.Float32, 3, 3))
 //	})
-//	fmt.Printf("IotaFull(3x3 matrix, float32)=%v\n", iotaMatrixExec.Call()[0].Value().([][]float32))
-//	```
+//	fmt.Printf("IotaFull(3x3 matrix, float32)=%v\n", iotaMatrixExec.Call()[0].Value())
 //
 // The need to build different graphs for different shapes can be expensive
-// when sizes of the inputs varies a lot. The usual solution is to use shapes
-// with size in a power scale (for instance powers of 2) and masking of tensors
+// when the shapes of the inputs varies a lot. The usual solution is to use shapes
+// with dimensions in a power scale (for instance powers of 2) and masking of tensors
 // for unused slices. For safety concerns there are a maximum number of different
 // instantiations of the graph. It can be set or disabled with SetMaxCache.
 //
-// Errors are returned inside the returned tensors.
-//
-// There is concurrency safety with the cache, but XLA concurrency is
-// not documented. TODO: figure it out.
+// Errors are returned as panic. See Panicf.
 type Exec struct {
-	manager   *Manager
-	deviceNum int
+	backend   backends.Backend
+	deviceNum backends.DeviceNum
 
 	graphFn                     any
 	numInputs, numOutputs       int
@@ -148,12 +146,12 @@ type Exec struct {
 
 	// Protects cache structure.
 	cacheMu sync.Mutex
-	cache   []*execCacheEntry
+	cache   []*execGraphCacheEntry
 }
 
-// execCacheEntry: no hashing, just a simple list. This is faster
+// execGraphCacheEntry: no hashing, just a simple list. This is faster
 // for smaller tables. TODO: add a hashtable for cases with large caches.
-type execCacheEntry struct {
+type execGraphCacheEntry struct {
 	argsShapes     []shapes.Shape
 	graph          *Graph
 	numOutputs     int      // Number of flattened outputs for this graph, including logged nodes.
@@ -161,22 +159,25 @@ type execCacheEntry struct {
 	loggedNodeIds  []NodeId
 }
 
-const DefaultExecMaxCacheSize = 32
+// DefaultExecMaxCacheSize is the value used to initialize new Exec objects.
+var DefaultExecMaxCacheSize = 32
 
 // NewExecAny constructs an Exec object that uses the given graphFn to build
 // computation graphs.
+//
 // `graphFn` can take only *Node parameters as input and returns one or more *Node.
 // Except if there are no inputs, in which case graphFn needs to take a *Graph as the first parameter.
 //
-// If any input or output parameter of graphFn is not a *Node (or *Graph is there are no inputs),
-// or if there are no inputs or outputs, it panics with a corresponding error message.
-func NewExecAny(manager *Manager, graphFn any) *Exec {
+// It will panic if the inputs are invalid.
+//
+// See also the generics NewExec, which checks for valid graphFn in compile time.
+func NewExecAny(backend backends.Backend, graphFn any) *Exec {
 	graphFnT := reflect.TypeOf(graphFn)
 	funcName := runtime.FuncForPC(reflect.ValueOf(graphFn).Pointer()).Name()
 	exec := &Exec{
-		manager:   manager,
+		backend:   backend,
 		name:      fmt.Sprintf("Exec:%s", funcName),
-		deviceNum: manager.DefaultDeviceNum(),
+		deviceNum: 0,
 
 		graphFn:      graphFn,
 		numInputs:    graphFnT.NumIn(),
@@ -236,19 +237,29 @@ func NewExecAny(manager *Manager, graphFn any) *Exec {
 }
 
 // NewExec constructs an Exec object that uses the given graphFn to build
-// computation graphs. graphFn should take *Node as input and return a *Node.
+// computation graphs.
+//
+// graphFn should take *Node as input and return a *Node -- except if there are no (Node) inputs,
+// in which case it should take a single *Graph input.
+//
 // It's a wrapper for NewExecAny, but uses generics to type check that
 // graphFn is valid.
-func NewExec[F ExecGraphFn](manager *Manager, graphFn F) *Exec {
-	return NewExecAny(manager, graphFn)
+func NewExec[F ExecGraphFn](backend backends.Backend, graphFn F) *Exec {
+	return NewExecAny(backend, graphFn)
 }
 
 // InDevice sets the device num to be used by graphs constructed by Exec.
 // This should be called before any invocations of Call().
 // It returns a reference to itself so calls can be cascaded.
-func (e *Exec) InDevice(deviceNum int) *Exec {
+func (e *Exec) InDevice(deviceNum backends.DeviceNum) *Exec {
 	e.deviceNum = deviceNum
 	return e
+}
+
+// DeviceNum returns the device being used by this Exec.
+// It defaults to 0 and can be changed with Exec.InDevice.
+func (e *Exec) DeviceNum() backends.DeviceNum {
+	return e.deviceNum
 }
 
 // SetName sets the name of Exec, used to provide the name to graphs created.
@@ -274,26 +285,26 @@ func (e *Exec) SetMaxCache(maxCacheSize int) *Exec {
 	return e
 }
 
-// SetSideParamsHook makes Exec call the given function everytime
-// before executing a graph with the list of parameters.
+// SetSideParamsHook configures a function to be called just before executing a graph, so it can set extra parameters.
 //
-// Side parameters are parameters created by the graphFn itself,
-// and are not passed to it as input parameters. These could
-// be variables in a model, or some global values. Exec
-// has no knowledge of them, hence cannot set their values,
-// and this serves as a hook to set them up just before
-// the graph is executed.
+// Exec takes care of creating parameters (with graph.Parameter) for every value passed to Call before
+// calling the graph building function (the graph building function is executed only the first time, after the
+// graph is compiled it is re-used for future executions).
 //
-// The function is called anyway, even if there are no
-// side parameters to be set, so it can be used as a hook
-// just before graph execution.
+// But a graph building functions may want to create extra parameters itself (with graph.Parameter), which we call
+// "side parameters".
 //
-// SideParamsFn is a function that takes as input a slice
-// of Device tensors that will be passed as input to graph
-// execution. The first elements of the slice are the
-// input parameters to graphFn function (given during
-// the construction of Exec), and they will be filled
-// already with the correct values.
+// The values to feed these "side parameters" are not passed to Exec.Call, but instead set with a SideParamsFn, which
+// is configured here.
+//
+// Mostly, this is for internal use end users will not likely need this. The context.Exec object uses this to pass
+// the variable values as side inputs to the graph.
+//
+// SideParamsFn is called after the graph is already built, just before the execution.
+// It is passed with a slice of the backend.Buffer to be fed to the graph execution.
+// The side parameters in this slice will be left nil, and it's expected that SideParamsFn will set
+// them to the appropriate input. It also includes the boolean map of the inputs to donate, which SideParamsFn
+// can set accordingly (for the side parameters).
 func (e *Exec) SetSideParamsHook(fn SideParamsFn) *Exec {
 	e.setSideParams = fn
 	return e
@@ -318,26 +329,9 @@ func (e *Exec) GetNodeLogger() LoggerFn {
 // It returns the outputs in a slice, even if there is only one output.
 //
 // Errors (with full stack-traces) are raised with `panic`.
-func (e *Exec) Call(args ...any) []tensor.Tensor {
+func (e *Exec) Call(args ...any) []*tensors.Tensor {
 	results, _ := e.CallWithGraph(args...)
 	return results
-}
-
-// unwrapListOfTensors will convert something like []any{[]tensor.Tensor{t1, t2, ...}} to []any{t1, t2,...}
-func convertToListOfTensors(args []any) []any {
-	if len(args) != 1 {
-		return args
-	}
-	switch v := args[0].(type) {
-	case []tensor.Tensor:
-		return slices.Map(v, func(x tensor.Tensor) any { return x })
-	case []*tensor.Local:
-		return slices.Map(v, func(x *tensor.Local) any { return x })
-	case []*tensor.Device:
-		return slices.Map(v, func(x *tensor.Device) any { return x })
-	}
-	// Otherwise, process as usual.
-	return args
 }
 
 // CallWithGraph is similar to Call, but it also returns the computation graph used
@@ -349,20 +343,36 @@ func convertToListOfTensors(args []any) []any {
 // to execute the computation.
 //
 // Errors (with full stack-traces) are raised with `panic`.
-func (e *Exec) CallWithGraph(args ...any) (results []tensor.Tensor, g *Graph) {
+func (e *Exec) CallWithGraph(args ...any) (results []*tensors.Tensor, g *Graph) {
 	return e.compileAndExecute(true, args...)
+}
+
+// unwrapListOfTensors will convert something like []any{[]*tensors.Tensor{t1, t2, ...}} to []any{t1, t2,...}
+func unwrapListOfTensors(args []any) []any {
+	if len(args) != 1 {
+		return args
+	}
+	switch v := args[0].(type) {
+	case []*tensors.Tensor:
+		return xslices.Map(v, func(x *tensors.Tensor) any { return x })
+	}
+	// Otherwise, process as usual.
+	return args
 }
 
 // PreCompile will build the computation graph and compile it, but not yet execute.
 // Useful when one wants to measure the time separately, from graph compilation and its execution.
+//
+// Notice, this will include the time to convert args to tensors. If you want to isolate that time,
+// pre-convert args to tensors first.
 func (e *Exec) PreCompile(args ...any) {
 	_, _ = e.compileAndExecute(false, args...)
 	return
 }
 
 // compileAndExecute compiles graph for arguments and optionally executes it.
-func (e *Exec) compileAndExecute(execute bool, args ...any) (results []tensor.Tensor, g *Graph) {
-	args = convertToListOfTensors(args)
+func (e *Exec) compileAndExecute(execute bool, args ...any) (results []*tensors.Tensor, g *Graph) {
+	args = unwrapListOfTensors(args)
 	if !e.inputAsSlice && len(args) != e.numInputs {
 		Panicf(
 			"# of arguments to call (#args=%d) don't match # arguments to the graph function (#args=%d) for %q",
@@ -370,46 +380,52 @@ func (e *Exec) compileAndExecute(execute bool, args ...any) (results []tensor.Te
 	}
 
 	// Convert args to tensors.
-	argsShapes := make([]shapes.Shape, 0, len(args))
-	tensors := make([]*tensor.Device, 0, len(args)) // There may be more parameters, set with Exec.setSideParams later.
-	for ii := range args {
-		var deviceT *tensor.Device
-		err := TryCatch[error](func() { deviceT = anyToDeviceTensor(e.manager, e.deviceNum, args[ii]) })
+	argsAsBuffer := make([]backends.Buffer, len(args)) // There may be more parameters, set with Exec.setSideParams later.
+	argsShapes := make([]shapes.Shape, len(args))      // There may be more parameters, set with Exec.setSideParams later.
+	argsDonate := make([]bool, len(args))
+	for ii, arg := range args {
+		err := TryCatch[error](func() {
+			argsAsBuffer[ii], argsShapes[ii], argsDonate[ii] = anyToBuffer(e.backend, e.deviceNum, arg)
+		})
 		if err != nil {
-			fmt.Printf("Original error: %+v\n", err)
 			panic(errors.WithMessagef(err, "Failed to convert argument #%d of %d to device(%d) -- type %T: %v",
 				ii, len(args), e.deviceNum, args[ii], args[ii]))
 		}
-		tensors = append(tensors, deviceT)
-		argsShapes = append(argsShapes, deviceT.Shape())
 	}
 
 	// Get or build the graph.
-	entry := e.findCacheEntry(argsShapes)
+	entry := e.findOrCreateGraph(argsShapes)
 	if entry == nil {
 		Panicf(
 			"maximum cache size of %d reached for %q, cannot create another g -- "+
 				"a new computation g needs to be created+compiled for each different shape of "+
 				"the input, consider using padding, or if this is not a concern change "+
-				"the cache size with exec.SetMaxCache()", e.maxCacheSize, e.Name())
+				"the cache size with executable.SetMaxCache()", e.maxCacheSize, e.Name())
+		panic(nil) // Disable lint error.
 	}
 	g = entry.graph
 
-	// Set extra input parameters created by the graph.
-	if g.NumParameters() > len(args) {
-		tmp := make([]*tensor.Device, g.NumParameters())
-		copy(tmp, tensors)
-		tensors = tmp
+	// Now that the graph is created, we know the exact number of parameters: if the graph building function created
+	// new graph.Parameter, we may need to include those in our argsAsBuffer and argsDonate accordingly.
+	if g.NumParameters() > len(argsAsBuffer) {
+		numNew := g.NumParameters() - len(argsAsBuffer)
+		argsAsBuffer = slices.Grow(argsAsBuffer, numNew)
+		argsAsBuffer = argsAsBuffer[:g.NumParameters()]
+		argsDonate = slices.Grow(argsDonate, numNew)
+		argsDonate = argsDonate[:g.NumParameters()]
 	}
+
+	// The new parameters (if any) created are still nil, and need to be set. This is done by a "SideParamsFn",
+	// configured by Exec.SetSideParamsHooks.
 	if e.setSideParams != nil {
-		e.setSideParams(g, tensors)
+		e.setSideParams(g, argsAsBuffer, argsDonate)
 	}
-	if g.NumParameters() > len(args) {
-		for ii, t := range tensors {
-			if t == nil {
-				Panicf("parameter %d (%q) is nil or invalid, maybe a variable value not set as a "+
-					"parameter, cannot execute g", ii, g.ParameterByIndex(ii).ParameterName())
-			}
+
+	// Check all parameters were set.
+	for ii, t := range argsAsBuffer {
+		if t == nil {
+			Panicf("parameter %d (%q) is nil or invalid, maybe a variable value not set as a "+
+				"parameter, cannot execute g", ii, g.GetParameterByHandle(ParameterHandle(ii)).GetParameterName())
 		}
 	}
 
@@ -417,23 +433,12 @@ func (e *Exec) compileAndExecute(execute bool, args ...any) (results []tensor.Te
 	if !execute {
 		return
 	}
-	var outputT *tensor.Device
-	outputT = g.RunWithTensors(tensors)
-	if entry.numOutputs == 1 {
-		results = []tensor.Tensor{outputT}
-	} else if entry.numOutputs > 1 {
-		outputsDevice := outputT.SplitTuple()
-		results = make([]tensor.Tensor, len(outputsDevice))
-		for ii := range outputsDevice {
-			results[ii] = outputsDevice[ii]
-		}
-		outputT.Finalize()
-	}
+	results = g.RunWithBuffers(argsAsBuffer, argsDonate)
 
 	// Call logger on logged nodes, even if no node is marked for logging (it serves as a hook).
 	numGraphFnOutputs := entry.numOutputs - len(entry.loggedMessages)
 	if e.loggerFn != nil {
-		var loggerResults []tensor.Tensor
+		var loggerResults []*tensors.Tensor
 		if len(entry.loggedMessages) > 0 {
 			loggerResults = results[numGraphFnOutputs:]
 		}
@@ -449,11 +454,11 @@ func (e *Exec) compileAndExecute(execute bool, args ...any) (results []tensor.Te
 // shapes. It creates and stores a cache entry for it and returns it.
 // Returns nil if the cache size is >= MaxCacheSize.
 // Should be called with cacheMu locked.
-func (e *Exec) createAndCacheGraph(argsShapes []shapes.Shape) (entry *execCacheEntry) {
-	if len(e.cache) >= e.maxCacheSize {
+func (e *Exec) createAndCacheGraph(argsShapes []shapes.Shape) (entry *execGraphCacheEntry) {
+	if e.maxCacheSize > 0 && len(e.cache) >= e.maxCacheSize {
 		return nil
 	}
-	entry = &execCacheEntry{graph: e.manager.NewGraph(fmt.Sprintf("%s#%d", e.name, len(e.cache)))}
+	entry = &execGraphCacheEntry{graph: NewGraph(e.backend, fmt.Sprintf("%s#%d", e.name, len(e.cache)))}
 	g := entry.graph
 	var argsV []reflect.Value
 	var args []*Node
@@ -466,7 +471,7 @@ func (e *Exec) createAndCacheGraph(argsShapes []shapes.Shape) (entry *execCacheE
 		argsV = make([]reflect.Value, 0, len(argsShapes))
 	}
 	for ii, shape := range argsShapes {
-		arg := g.Parameter(fmt.Sprintf("arg#%d", ii), shape)
+		arg := Parameter(g, fmt.Sprintf("arg#%d", ii), shape)
 		if e.inputAsSlice {
 			args = append(args, arg)
 		} else {
@@ -520,9 +525,9 @@ func (e *Exec) createAndCacheGraph(argsShapes []shapes.Shape) (entry *execCacheE
 	return entry
 }
 
-// findCacheEntry returns the graph for the given arguments shapes, or nil
+// findOrCreateGraph returns the graph for the given arguments shapes: either from cache or by creating a new one.
 // if no cache entry exists.
-func (e *Exec) findCacheEntry(argsShapes []shapes.Shape) *execCacheEntry {
+func (e *Exec) findOrCreateGraph(argsShapes []shapes.Shape) *execGraphCacheEntry {
 	e.cacheMu.Lock()
 	defer e.cacheMu.Unlock()
 
@@ -532,7 +537,7 @@ LoopCache:
 			continue
 		}
 		for ii, shape := range argsShapes {
-			if !shape.Eq(entry.argsShapes[ii]) {
+			if !shape.Equal(entry.argsShapes[ii]) {
 				continue LoopCache
 			}
 		}
@@ -543,7 +548,7 @@ LoopCache:
 	return e.createAndCacheGraph(argsShapes)
 }
 
-// Finalize clears the cache, finalizing the graphs. The Exec object shouldn't be
+// Finalize clears the cache, finalizing the compiled graphs. The Exec object shouldn't be
 // used after that.
 func (e *Exec) Finalize() {
 	e.cacheMu.Lock()
@@ -558,7 +563,7 @@ func (e *Exec) Finalize() {
 
 // DefaultNodeLogger for nodes marked to be logged. It prints the message and
 // the node value for each logged node.
-func DefaultNodeLogger(g *Graph, messages []string, values []tensor.Tensor, nodes []NodeId) {
+func DefaultNodeLogger(g *Graph, messages []string, values []*tensors.Tensor, nodes []NodeId) {
 	if len(messages) == 0 {
 		return
 	}

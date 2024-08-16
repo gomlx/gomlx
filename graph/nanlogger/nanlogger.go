@@ -37,7 +37,7 @@
 //		…
 //	}
 //
-//	func ModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {) {
+//	func ModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 //		…
 //		for ii := 0; ii < numBlocks; ii++ {
 //			x = ResidualBlock(ctx.In(name), x, lastNumChannels)
@@ -53,8 +53,8 @@ import (
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
-	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 	"math"
@@ -123,6 +123,9 @@ func (l *NanLogger) AttachToExec(exec ExecWithLogger) {
 //
 // A nil NanLogger is valid, and it will simply be a no-op.
 func (l *NanLogger) AttachToTrainer(trainer *train.Trainer) {
+	if l == nil {
+		return
+	}
 	trainer.OnExecCreation(func(exec *context.Exec, _ train.GraphType) {
 		l.AttachToExec(exec)
 	})
@@ -151,7 +154,7 @@ func (l *NanLogger) Trace(node *graph.Node, scope ...string) {
 		StackTrace: errors.Errorf("Stack-trace"),
 	}
 	if len(scope) == 0 {
-		trace.Scope = slices.Copy(l.currentScope)
+		trace.Scope = xslices.Copy(l.currentScope)
 	} else {
 		trace.Scope = make([]string, 0, len(l.currentScope)+len(scope))
 		trace.Scope = append(trace.Scope, l.currentScope...)
@@ -190,15 +193,15 @@ func (l *NanLogger) PopScope() {
 		klog.Warningf("NanLogger.PopScope() called on an already empty scope stack!?")
 		return
 	}
-	_, l.currentScope = slices.Pop(l.currentScope)
+	_, l.currentScope = xslices.Pop(l.currentScope)
 }
 
 // loggerFn implements graph.LoggerFn, it's the hook that listens to nodes for which we want to
 // monitor for NaNs.
-func (l *NanLogger) loggerFn(g *graph.Graph, messages []string, values []tensor.Tensor, nodes []graph.NodeId) {
+func (l *NanLogger) loggerFn(g *graph.Graph, messages []string, values []*tensors.Tensor, nodes []graph.NodeId) {
 	// Filtered logged values/messages: the ones not handled by NanLogger:
 	filteredMessages := make([]string, 0, len(messages))
-	filteredValues := make([]tensor.Tensor, 0, len(values))
+	filteredValues := make([]*tensors.Tensor, 0, len(values))
 	filteredNodes := make([]graph.NodeId, 0, len(nodes))
 
 	firstNan := graph.InvalidNodeId

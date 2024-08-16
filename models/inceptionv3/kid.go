@@ -1,11 +1,11 @@
 package inceptionv3
 
 import (
+	. "github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/train/metrics"
-	. "github.com/gomlx/gomlx/types/exceptions"
-	timage "github.com/gomlx/gomlx/types/tensor/image"
+	"github.com/gomlx/gomlx/types/tensors/images"
 )
 
 // KidMetric returns a metric that takes a generated image and a label image and returns a
@@ -30,11 +30,11 @@ import (
 //   - `maxImageValue`: Maximum value the images can take at any channel -- If set to 0
 //     it doesn't rescale the pixel values, and the images are expected to have values between -1.0 and 1.0.
 //     Passed to `PreprocessImage` function.
-//   - `channelsConfig`: informs what is the channels axis, commonly set to `timage.ChannelsLast`.
+//   - `channelsConfig`: informs what is the channels axis, commonly set to `images.ChannelsLast`.
 //     Passed to `PreprocessImage` function.
 //
-// Note: `timage` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
-func KidMetric(dataDir string, kidImageSize int, maxImageValue float64, channelsConfig timage.ChannelsAxisConfig) metrics.Interface {
+// Note: `images` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
+func KidMetric(dataDir string, kidImageSize int, maxImageValue float64, channelsConfig images.ChannelsAxisConfig) metrics.Interface {
 	builder := NewKidBuilder(dataDir, kidImageSize, maxImageValue, channelsConfig)
 	return metrics.NewMeanMetric("Kernel Inception Distance", "KID", "KID", builder.BuildGraph, nil)
 }
@@ -46,7 +46,7 @@ type KidBuilder struct {
 	dataDir        string
 	kidImageSize   int
 	maxValue       float64
-	channelsConfig timage.ChannelsAxisConfig
+	channelsConfig images.ChannelsAxisConfig
 }
 
 // NewKidBuilder configures a KidBuilder.
@@ -64,11 +64,11 @@ type KidBuilder struct {
 //   - `maxImageValue`: Maximum value the images can take at any channel -- If set to 0
 //     it doesn't rescale the pixel values, and the images are expected to have values between -1.0 and 1.0.
 //     Passed to `PreprocessImage` function.
-//   - `channelsConfig`: informs what is the channels axis, commonly set to `timage.ChannelsLast`.
+//   - `channelsConfig`: informs what is the channels axis, commonly set to `images.ChannelsLast`.
 //     Passed to `PreprocessImage` function.
 //
-// Note: `timage` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
-func NewKidBuilder(dataDir string, kidImageSize int, maxImageValue float64, channelsConfig timage.ChannelsAxisConfig) *KidBuilder {
+// Note: `images` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
+func NewKidBuilder(dataDir string, kidImageSize int, maxImageValue float64, channelsConfig images.ChannelsAxisConfig) *KidBuilder {
 	return &KidBuilder{
 		dataDir:        dataDir,
 		kidImageSize:   kidImageSize,
@@ -94,15 +94,15 @@ func (builder *KidBuilder) BuildGraph(ctx *context.Context, labels, predictions 
 			"valid values are between 75 and 299", builder.kidImageSize)
 	}
 
-	images := [2]*Node{labels[0], predictions[0]}
-	imagesShape := images[0].Shape()
-	if !imagesShape.Eq(images[1].Shape()) {
+	imagesPair := [2]*Node{labels[0], predictions[0]}
+	imagesShape := imagesPair[0].Shape()
+	if !imagesShape.Equal(imagesPair[1].Shape()) {
 		Panicf("Labels (%s) and predictions (%s) have different shapes",
-			images[0].Shape(), images[1].Shape())
+			imagesPair[0].Shape(), imagesPair[1].Shape())
 	}
 
 	// Checks whether we need to resize images.
-	spatialAxis := timage.GetSpatialAxes(imagesShape, builder.channelsConfig)
+	spatialAxis := images.GetSpatialAxes(imagesShape, builder.channelsConfig)
 	var needsResizing bool
 	for _, axis := range spatialAxis {
 		if imagesShape.Dimensions[axis] != builder.kidImageSize {
@@ -112,25 +112,25 @@ func (builder *KidBuilder) BuildGraph(ctx *context.Context, labels, predictions 
 	}
 	if needsResizing {
 		// Resize to kidImageSize x kidImageSize:
-		newSizes := images[0].Shape().Copy().Dimensions
+		newSizes := imagesPair[0].Shape().Clone().Dimensions
 		for _, axis := range spatialAxis {
 			newSizes[axis] = builder.kidImageSize
 		}
-		for imgIdx := range images {
-			images[imgIdx] = Interpolate(images[imgIdx], newSizes...).Done()
+		for imgIdx := range imagesPair {
+			imagesPair[imgIdx] = Interpolate(imagesPair[imgIdx], newSizes...).Done()
 		}
 	}
 
 	// Standard preprocessing of the image for Inception V3.
-	for imgIdx := range images {
-		images[imgIdx] = PreprocessImage(images[imgIdx], builder.maxValue, builder.channelsConfig)
+	for imgIdx := range imagesPair {
+		imagesPair[imgIdx] = PreprocessImage(imagesPair[imgIdx], builder.maxValue, builder.channelsConfig)
 	}
 
 	// Apply InceptionV3 model to each image.
 	ctx = ctx.In("kid_metric").Checked(false)
 	var features [2]*Node
-	for imgIdx := range images {
-		features[imgIdx] = BuildGraph(ctx, images[imgIdx]).
+	for imgIdx := range imagesPair {
+		features[imgIdx] = BuildGraph(ctx, imagesPair[imgIdx]).
 			SetPooling(MeanPooling).ClassificationTop(false).PreTrained(builder.dataDir).
 			ChannelsAxis(builder.channelsConfig).Trainable(false).Done()
 	}

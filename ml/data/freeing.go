@@ -2,7 +2,7 @@ package data
 
 import (
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/pkg/errors"
 	"io"
 )
@@ -11,7 +11,7 @@ import (
 type freeingDataset struct {
 	name                   string
 	ds                     train.Dataset
-	prevInputs, prevLabels []tensor.Tensor
+	prevInputs, prevLabels []*tensors.Tensor
 }
 
 // Freeing implements a sequential dataset (it should not to be parallelized) that immediately releases the yielded
@@ -48,7 +48,7 @@ func (ds *freeingDataset) freePreviousYield() {
 func (ds *freeingDataset) Name() string { return ds.name }
 
 // Yield implements train.Dataset.
-func (ds *freeingDataset) Yield() (spec any, inputs []tensor.Tensor, labels []tensor.Tensor, err error) {
+func (ds *freeingDataset) Yield() (spec any, inputs []*tensors.Tensor, labels []*tensors.Tensor, err error) {
 	ds.freePreviousYield()
 	spec, inputs, labels, err = ds.ds.Yield()
 	ds.prevInputs = inputs

@@ -18,11 +18,11 @@ package context
 
 import (
 	"fmt"
+	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context/initializers"
-	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/gomlx/gomlx/types/tensors"
 	"strings"
 )
 
@@ -49,7 +49,7 @@ type Variable struct {
 
 	shape       shapes.Shape
 	initializer VariableInitializer // Set if variable is not yet initialized.
-	value       tensor.Tensor       // Value of the variable.
+	value       *tensors.Tensor     // Value of the variable.
 
 	// graphToNodes maps graph ids in which this variable was used to its parameter Node and
 	// its last value Node.
@@ -90,6 +90,14 @@ func (v *Variable) AssertValid() {
 	}
 }
 
+// Reset sets the variable value to nil while preserving the shape, and marks the context that it needs initialization.
+//
+// This will force to be variable to be reinitialized the next time a graph using the variable is executed.
+func (v *Variable) Reset() {
+	v.ctx.data.needsInitialization = true
+	v.value = nil
+}
+
 // Scope where the variable was created.
 func (v *Variable) Scope() string {
 	v.AssertValid()
@@ -114,7 +122,7 @@ func (v *Variable) ParameterName() string {
 	return VariableParameterNameFromScopeAndName(v.Scope(), v.Name())
 }
 
-// VariableScopeAndNameFromParameterName extracts the scope and name from a variable's [ParameterName].
+// VariableScopeAndNameFromParameterName extracts the scope and name from a variable's [GetParameterName].
 // It will return empty strings for an invalid parameter name.
 func VariableScopeAndNameFromParameterName(parameterName string) (scope, name string) {
 	if !strings.HasPrefix(parameterName, VariableParameterPrefix) {
@@ -148,7 +156,7 @@ func VariableParameterNameFromScopeAndName(scope, name string) string {
 // by a previous call to Value to become invalid. The recommendation
 // is not to use this is a concurrent set up -- or to create proper
 // locking mechanisms.
-func (v *Variable) Value() tensor.Tensor {
+func (v *Variable) Value() *tensors.Tensor {
 	v.AssertValid()
 	return v.value
 }
@@ -156,7 +164,7 @@ func (v *Variable) Value() tensor.Tensor {
 // SetValue updates the tensor holding the variable value.
 // NOTE: Because often variables are large, the previous value is immediately freed (as opposed to
 // wait for garbage collection). If the previous value is used somewhere else, use SetValuePreservingOld.
-func (v *Variable) SetValue(value tensor.Tensor) {
+func (v *Variable) SetValue(value *tensors.Tensor) {
 	if v.value != nil {
 		v.value.FinalizeAll()
 	}
@@ -165,7 +173,7 @@ func (v *Variable) SetValue(value tensor.Tensor) {
 
 // SetValuePreservingOld updates the tensor holding the variable value, and dont' free old value. If previous
 // value is not used, use SetValue instead that will free it immediately.
-func (v *Variable) SetValuePreservingOld(value tensor.Tensor) {
+func (v *Variable) SetValuePreservingOld(value *tensors.Tensor) {
 	v.value = value
 	v.shape = value.Shape()
 }
@@ -237,14 +245,14 @@ func (v *Variable) ParamNode(g *Graph) *Node {
 	nodes, found := v.graphToNodes[g.GraphId()]
 	if !found {
 		paramName := v.ParameterName()
-		paramNode := g.Parameter(paramName, v.shape)
+		paramNode := graph.Parameter(g, paramName, v.shape)
 		nodes = &variableNodes{valueNode: paramNode, paramNode: paramNode}
 		v.graphToNodes[g.GraphId()] = nodes
 	}
 	return nodes.paramNode
 }
 
-// SetTrainable sets the variable trainable status. Returns itself, so calls can be cascated.
+// SetTrainable sets the variable trainable status. Returns itself, so calls can be cascaded.
 func (v *Variable) SetTrainable(trainable bool) *Variable {
 	v.AssertValid()
 	v.Trainable = trainable

@@ -3,40 +3,47 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/gomlx/gomlx/backends"
 	mag "github.com/gomlx/gomlx/examples/ogbnmag"
 	"github.com/gomlx/gomlx/examples/ogbnmag/gnn"
-	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	mldata "github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/ml/train/commandline"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
-	"path"
 	"time"
+
+	_ "github.com/gomlx/gomlx/backends/xla"
 )
 
 var (
-	flagEval             = flag.Bool("eval", false, "Set to true to run evaluation instead of training.")
-	flagSkipReport       = flag.Bool("skip_report", false, "Set to true to skip report of quality after training.")
-	flagSkipTrainEval    = flag.Bool("skip_train_eval", false, "Set to true to skip evaluation on training data, which takes longer.")
-	flagDataDir          = flag.String("data", "~/work/ogbnmag", "Directory to cache downloaded and generated dataset files.")
-	flagCheckpointSubdir = flag.String("checkpoint", "", "Checkpoint subdirectory under --data directory. If empty does not use checkpoints.")
-	flagLayerWise        = flag.Bool("layerwise", true, "Whether to use Layer-Wise inference for evaluation -- default is true.")
+	flagEval          = flag.Bool("eval", false, "Set to true to run evaluation instead of training.")
+	flagSkipReport    = flag.Bool("skip_report", false, "Set to true to skip report of quality after training.")
+	flagSkipTrainEval = flag.Bool("skip_train_eval", false, "Set to true to skip evaluation on training data, which takes longer.")
+	flagDataDir       = flag.String("data", "~/work/ogbnmag", "Directory to cache downloaded and generated dataset files.")
+	flagCheckpoint    = flag.String("checkpoint", "", "Checkpoint subdirectory under --data directory. If empty does not use checkpoints.")
+	flagLayerWise     = flag.Bool("layerwise", true, "Whether to use Layer-Wise inference for evaluation -- default is true.")
 )
 
 const paramWithReplacement = "mag_with_replacement"
 
-func createDefaultContext(manager *Manager) *context.Context {
-	ctx := context.NewContext(manager)
+func createDefaultContext() *context.Context {
+	ctx := context.New()
 	ctx.RngStateReset()
 	ctx.SetParams(map[string]any{
 		"checkpoint":         "",
 		"num_checkpoints":    3,
 		"train_steps":        0,
+		"batch_size":         128,
 		"plots":              true,
 		paramWithReplacement: false,
+
+		// KAN network parameters:
+		"kan":                    false, // Enable kan
+		"kan_bspline_num_points": 20,    // Number of control points
 
 		optimizers.ParamOptimizer:           "adam",
 		optimizers.ParamLearningRate:        0.001,
@@ -47,7 +54,7 @@ func createDefaultContext(manager *Manager) *context.Context {
 
 		layers.ParamL2Regularization: 1e-5,
 		layers.ParamDropoutRate:      0.2,
-		layers.ParamActivation:       "swish",
+		activations.ParamActivation:  "swish",
 
 		gnn.ParamEdgeDropoutRate:       0.0,
 		gnn.ParamNumGraphUpdates:       6, // gnn_num_messages
@@ -86,31 +93,22 @@ func SetTrainSteps(ctx *context.Context) {
 
 func main() {
 	// Init GoMLX manager and default context.
-	manager := NewManager()
-	ctx := createDefaultContext(manager)
+	backend := backends.New()
+	ctx := createDefaultContext()
 
 	// Flags with context settings.
 	settings := commandline.CreateContextSettingsFlag(ctx, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	must.M(commandline.ParseContextSettings(ctx, *settings))
+	paramsSet := must.M1(commandline.ParseContextSettings(ctx, *settings))
 
 	// Set checkpoint accordingly.
 	*flagDataDir = mldata.ReplaceTildeInDir(*flagDataDir)
-	checkpointPath := mldata.ReplaceTildeInDir(*flagCheckpointSubdir)
-	if checkpointPath != "" && !path.IsAbs(checkpointPath) {
-		checkpointPath = path.Join(*flagDataDir, checkpointPath)
-	}
-	if checkpointPath != "" {
-		ctx.SetParam("checkpoint", checkpointPath)
-	} else {
-		checkpointPath = context.GetParamOr(ctx, "checkpoint", "")
-	}
-	if checkpointPath != "" {
-		fmt.Printf("Model checkpoints in %s\n", checkpointPath)
-	} else if *flagEval {
+	if *flagCheckpoint == "" && *flagEval {
 		klog.Fatal("To run eval (--eval) you need to specify a checkpoint (--checkpoint).")
 	}
+
+	mag.BatchSize = context.GetParamOr(ctx, "batch_size", 128)
 
 	// Load data from OGBN-MAG.
 	fmt.Printf("Loading data ... ")
@@ -119,18 +117,18 @@ func main() {
 	fmt.Printf("elapsed: %s\n", time.Since(start))
 	SetTrainSteps(ctx) // Can only be set after mag data is loaded.
 
-	// Run train / eval.
+	// RunWithMap train / eval.
 	mag.WithReplacement = context.GetParamOr(ctx, paramWithReplacement, false)
 	var err error
 	if *flagEval {
-		err = mag.Eval(ctx, *flagDataDir, *flagLayerWise, *flagSkipTrainEval)
+		err = mag.Eval(backend, ctx, *flagDataDir, *flagCheckpoint, *flagLayerWise, *flagSkipTrainEval)
 	} else {
 		if mag.WithReplacement {
 			fmt.Println("Training dataset with replacement")
 		}
 
 		// Train.
-		err = mag.Train(ctx, *flagDataDir, *flagLayerWise, !*flagSkipReport)
+		err = mag.Train(backend, ctx, *flagDataDir, *flagCheckpoint, *flagLayerWise, !*flagSkipReport, paramsSet)
 	}
 	if err != nil {
 		fmt.Printf("%+v\n", err)

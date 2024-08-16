@@ -18,11 +18,12 @@ package optimizers
 
 import (
 	"fmt"
+	. "github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"
-	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gopjrt/dtypes"
 )
 
 const (
@@ -40,6 +41,9 @@ const (
 	// This was created for the case of training with `float16`, which is not enough resolution for Adam calculations.
 	// Valid values: "" (empty), "float32", "float64".
 	ParamAdamDType = "adam_dtype"
+
+	// ParamAdamWeightDecay defaults to 0.0. See AdamConfig.WeightDecay.
+	ParamAdamWeightDecay = "adam_weight_decay"
 )
 
 // Adam optimization is a stochastic gradient descent method that is based on adaptive estimation of first-order and
@@ -61,7 +65,7 @@ func Adam() *AdamConfig {
 		beta2:        0.999,
 		epsilon:      1e-7,
 		amsGrad:      false,
-		dtype:        shapes.InvalidDType,
+		dtype:        dtypes.InvalidDType,
 	}
 }
 
@@ -69,7 +73,7 @@ func Adam() *AdamConfig {
 // call Done to create an Adam based optimizer.Interface.
 type AdamConfig struct {
 	scopeName    string
-	dtype        shapes.DType // If invalid, use the loss type instead.
+	dtype        dtypes.DType // If invalid, use the loss type instead.
 	learningRate float64
 	beta1, beta2 float64
 	epsilon      float64
@@ -84,12 +88,13 @@ func (c *AdamConfig) FromContext(ctx *context.Context) *AdamConfig {
 	c.Epsilon(context.GetParamOr(ctx, ParamAdamEpsilon, c.epsilon))
 	dtypeStr := context.GetParamOr(ctx, ParamAdamDType, "")
 	if dtypeStr != "" {
-		dtype, err := shapes.DTypeString(dtypeStr)
+		dtype, err := dtypes.DTypeString(dtypeStr)
 		if err != nil || !dtype.IsFloat() {
 			Panicf("Invalid hyperparameter value %s=%q", ParamAdamDType, dtypeStr)
 		}
 		c.DType(dtype)
 	}
+	c.WeightDecay(context.GetParamOr(ctx, ParamAdamWeightDecay, 0.0))
 	return c
 }
 
@@ -109,7 +114,7 @@ func (c *AdamConfig) Scope(name string) *AdamConfig {
 // If set to `shapes.InvalidDType` it will use the dtype of the `loss` used to optimize.
 //
 // This can also be set from context using [ParamAdamDType]("adam_dtype") hyperparameter.
-func (c *AdamConfig) DType(dtype shapes.DType) *AdamConfig {
+func (c *AdamConfig) DType(dtype dtypes.DType) *AdamConfig {
 	c.dtype = dtype
 	return c
 }
@@ -144,6 +149,9 @@ func (c *AdamConfig) Adamax() *AdamConfig {
 
 // WeightDecay configure optimizer to work as AdamW, with the given static weight decay.
 // This is because L2 regularization doesn't work well with Adam.
+//
+// Defaults to the value given in the AdamWeightDecay hyperparameter.
+//
 // TODO: (1) Allow certain variables to be excluded from weight decay (e.g: biases); (2) Allow dynamically calculated weight decay.
 func (c *AdamConfig) WeightDecay(weightDecay float64) *AdamConfig {
 	c.weightDecay = weightDecay
@@ -179,7 +187,7 @@ func (o *adam) UpdateGraph(ctx *context.Context, g *Graph, loss *Node) {
 		return
 	}
 	dtype := o.config.dtype
-	if dtype == shapes.InvalidDType {
+	if dtype == dtypes.InvalidDType {
 		dtype = loss.DType()
 	}
 
@@ -226,7 +234,7 @@ func (o *adam) UpdateGraph(ctx *context.Context, g *Graph, loss *Node) {
 
 // applyAdamGraph calculates variable and its 1st and 2nd order moments updates.
 // If `Adamax` is set, we use instead moment2 to store the L-infinity (the max) of the gradient.
-func (o *adam) applyAdamGraph(ctx *context.Context, g *Graph, v *context.Variable, dtype shapes.DType, grad *Node,
+func (o *adam) applyAdamGraph(ctx *context.Context, g *Graph, v *context.Variable, dtype dtypes.DType, grad *Node,
 	learningRate, beta1, debiasTermBeta1, beta2, debiasTermBeta2, epsilon *Node) {
 	m1Var, m2Var := o.getMomentVariables(ctx, v, dtype)
 	moment1, moment2 := m1Var.ValueGraph(g), m2Var.ValueGraph(g)
@@ -234,7 +242,7 @@ func (o *adam) applyAdamGraph(ctx *context.Context, g *Graph, v *context.Variabl
 	// Adam runs on a fixed dtype -- defaults to the dtype of the loss, but it can be configured.
 	// We convert the grad to the dtype used by Adam for its computation.
 	if grad.DType() != dtype {
-		grad = ConvertType(grad, dtype)
+		grad = ConvertDType(grad, dtype)
 	}
 
 	// Do gradient step with momentum.
@@ -265,7 +273,7 @@ func (o *adam) applyAdamGraph(ctx *context.Context, g *Graph, v *context.Variabl
 
 	value := v.ValueGraph(g)
 	if value.DType() != dtype {
-		value = ConvertType(value, dtype)
+		value = ConvertDType(value, dtype)
 	}
 	stepDirection := Mul(learningRate, debiasedMoment1)
 	stepDirection = Div(stepDirection, denominator)
@@ -285,7 +293,7 @@ func (o *adam) applyAdamGraph(ctx *context.Context, g *Graph, v *context.Variabl
 	updated := Sub(value, stepDirection)
 	if v.Shape().DType != dtype {
 		// Convert back to the variable type.
-		updated = ConvertType(updated, v.Shape().DType)
+		updated = ConvertDType(updated, v.Shape().DType)
 	}
 	v.SetValueGraph(updated)
 	return
@@ -295,14 +303,15 @@ func (o *adam) applyAdamGraph(ctx *context.Context, g *Graph, v *context.Variabl
 //
 // If g is not nil, it creates the moments variables if they don't exist. Otherwise, it just tries to
 // fetch the presumably existing variables.
-func (o *adam) getMomentVariables(ctx *context.Context, trainable *context.Variable, dtype shapes.DType) (m1, m2 *context.Variable) {
+func (o *adam) getMomentVariables(ctx *context.Context, trainable *context.Variable, dtype dtypes.DType) (m1, m2 *context.Variable) {
 	originalScope := trainable.Scope()
 	originalName := trainable.Name()
 	scopePath := fmt.Sprintf("%s%s%s", context.ScopeSeparator, o.config.scopeName, originalScope)
 	m1Name := fmt.Sprintf("%s_1st_moment", originalName)
 	m2Name := fmt.Sprintf("%s_2nd_moment", originalName)
-	shape := trainable.Shape().Copy()
+	shape := trainable.Shape().Clone()
 	shape.DType = dtype
+	ctx = ctx.Checked(false) // It shouldn't matter if it's the first time or not creating the variable.
 	m1 = ctx.InAbsPath(scopePath).WithInitializer(initializers.Zero).VariableWithShape(m1Name, shape).SetTrainable(false)
 	m2 = ctx.InAbsPath(scopePath).WithInitializer(initializers.Zero).VariableWithShape(m2Name, shape).SetTrainable(false)
 	return

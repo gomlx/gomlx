@@ -19,12 +19,13 @@ package metrics
 
 import (
 	"fmt"
+	. "github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/train/losses"
-	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/x448/float16"
@@ -56,7 +57,7 @@ type Interface interface {
 	UpdateGraph(ctx *context.Context, labels, predictions []*Node) (metric *Node)
 
 	// PrettyPrint is used to pretty-print a metric value, usually in a short form.
-	PrettyPrint(value tensor.Tensor) string
+	PrettyPrint(value *tensors.Tensor) string
 
 	// Reset metrics internal counters, when starting a new evaluation.
 	// Notice this may be called before UpdateGraph, the metric should handle this without errors.
@@ -64,8 +65,16 @@ type Interface interface {
 }
 
 const (
-	LossMetricType     = "loss"
+	// LossMetricType is the type of loss metrics.
+	// Used to aggregate metrics of the same  type in the same plot.
+	LossMetricType = "loss"
+
+	// AccuracyMetricType is the type of loss metrics.
+	// Used to aggregate metrics of the same  type in the same plot.
 	AccuracyMetricType = "accuracy"
+
+	// Scope used to store metrics helper variables (e.g.: running averages).
+	Scope = "metrics"
 )
 
 // BaseMetricGraph is a graph building function of any metric that can be calculated stateless, without the need for
@@ -73,7 +82,7 @@ const (
 type BaseMetricGraph func(ctx *context.Context, labels, predictions []*Node) *Node
 
 // PrettyPrintFn is a function to convert a metric value to a string.
-type PrettyPrintFn func(value tensor.Tensor) string
+type PrettyPrintFn func(value *tensors.Tensor) string
 
 // baseMetric implements a stateless metric.Interface.
 type baseMetric struct {
@@ -109,13 +118,13 @@ func (m *baseMetric) UpdateGraph(ctx *context.Context, labels, predictions []*No
 	return result
 }
 
-func (m *baseMetric) PrettyPrint(value tensor.Tensor) string {
+func (m *baseMetric) PrettyPrint(value *tensors.Tensor) string {
 	if m.pPrintFn == nil {
 		dtype := value.DType()
 		isScalar := value.Shape().IsScalar()
 		v := value.Value()
 		if dtype.IsFloat() && isScalar {
-			if dtype == shapes.F16 {
+			if dtype == dtypes.Float16 {
 				v = v.(float16.Float16).Float32()
 			}
 			return fmt.Sprintf("%.3f", v)
@@ -165,8 +174,8 @@ func BatchSize(data *Node) *Node {
 
 // upPrecision promotes the precision of `x` if it is float16, to float32.
 func upPrecision(x *Node) *Node {
-	if x.DType() == shapes.Float16 {
-		x = ConvertType(x, shapes.Float32)
+	if x.DType() == dtypes.Float16 {
+		x = ConvertDType(x, dtypes.Float32)
 	}
 	return x
 }
@@ -187,7 +196,7 @@ func (m *meanMetric) UpdateGraph(ctx *context.Context, labels, predictions []*No
 
 	// Create scope in context for metrics state, and mark it as unchecked -- model variables
 	// may be set for reuse, but metrics variables are not.
-	ctx = ctx.Checked(false).In(m.ScopeName())
+	ctx = ctx.Checked(false).In(Scope).In(m.ScopeName())
 	dtype := result.DType()
 	zero := shapes.CastAsDType(0, dtype)
 	totalVar := ctx.VariableWithValue("total", zero).SetTrainable(false)
@@ -214,16 +223,16 @@ func (m *meanMetric) UpdateGraph(ctx *context.Context, labels, predictions []*No
 }
 
 func (m *meanMetric) Reset(ctx *context.Context) {
-	ctx = ctx.Reuse().In(m.ScopeName())
+	ctx = ctx.Reuse().In(Scope).In(m.ScopeName())
 	totalVar := ctx.InspectVariable(ctx.Scope(), "total")
 	if totalVar == nil {
 		// Assume this was called before the graph was first built, so there is nothing to reset yet.
 		return
 	}
-	totalVar.SetValue(tensor.FromAnyValue(shapes.CastAsDType(0, totalVar.Value().DType())))
+	totalVar.SetValue(tensors.FromAnyValue(shapes.CastAsDType(0, totalVar.Value().DType())))
 	weightVar := ctx.InspectVariable(ctx.Scope(), "weight")
 	if weightVar != nil {
-		weightVar.SetValue(tensor.FromAnyValue(shapes.CastAsDType(0, weightVar.Value().DType())))
+		weightVar.SetValue(tensors.FromAnyValue(shapes.CastAsDType(0, weightVar.Value().DType())))
 	} else {
 		Panicf("can't find variable \"weight\" in scope %q", ctx.Scope())
 	}
@@ -267,7 +276,7 @@ func (m *movingAverageMetric) UpdateGraph(ctx *context.Context, labels, predicti
 
 	// Create scope in context for metrics state, and mark it as unchecked -- model variables
 	// may be set for reuse, but metrics variables are not.
-	ctx = ctx.Checked(false).In(m.ScopeName())
+	ctx = ctx.Checked(false).In(Scope).In(m.ScopeName())
 	dtype := result.DType()
 	zero := shapes.CastAsDType(0, dtype)
 
@@ -298,8 +307,8 @@ func BinaryAccuracyGraph(_ *context.Context, labels, predictions []*Node) *Node 
 	if len(labels) != 1 {
 		Panicf("BinaryAccuracy requires one labels tensor, got (%d) instead", len(labels))
 	}
-	label := labels[0]
-	if !prediction.Shape().Eq(label.Shape()) {
+	label := ConvertDType(labels[0], prediction.DType())
+	if !prediction.Shape().Equal(label.Shape()) {
 		Panicf("prediction (%s) and label (%s) have different shapes, can't calculate binary accuracy",
 			prediction.Shape(), label.Shape())
 	}
@@ -312,7 +321,7 @@ func BinaryAccuracyGraph(_ *context.Context, labels, predictions []*Node) *Node 
 	return Div(ReduceAllSum(correctExamples), countExamples)
 }
 
-func accuracyPPrint(value tensor.Tensor) string {
+func accuracyPPrint(value *tensors.Tensor) string {
 	return fmt.Sprintf("%.2f%%", shapes.ConvertTo[float64](value.Value())*100.0)
 }
 
@@ -332,13 +341,16 @@ func NewMovingAverageBinaryAccuracy(name, shortName string, newExampleWeight flo
 // It assumes predictions are logits, that labels are {0, 1} and that predictions and labels have the same size and dtype.
 // The shape may be different (e.g.: `[batch_size, 1]` and `[batch_size]`), they will be reshaped to the
 // logits shape before the accuracy is calculated.
+//
+// labels is converted to predictions dtype, and it's expected to convert to 1.0 (for true) or 0.0 for false.
+// So booleans should work, as an int type that is 0 or 1.
 func BinaryLogitsAccuracyGraph(_ *context.Context, labels, logits []*Node) *Node {
 	logits0 := logits[0]
 	g := logits0.Graph()
 	if len(labels) != 1 {
 		Panicf("BinaryLogitsAccuracyGraph requires one labels tensor, got (%d) instead", len(labels))
 	}
-	labels0 := labels[0]
+	labels0 := ConvertDType(labels[0], logits0.DType())
 	if logits0.DType() != labels0.DType() {
 		Panicf("logits0 (%s) and labels0 (%s) have different dtypes, can't calculate binary accuracy",
 			logits0.DType(), labels0.DType())
@@ -348,7 +360,7 @@ func BinaryLogitsAccuracyGraph(_ *context.Context, labels, logits []*Node) *Node
 		Panicf("logits0 (%s) and labels0 (%s) have different shapes (different total sizes), can't calculate binary accuracy",
 			logits0.Shape(), labels0.Shape())
 	}
-	if !logits0.Shape().Eq(labels0.Shape()) {
+	if !logits0.Shape().Equal(labels0.Shape()) {
 		// They are the same size, so we assume the labels0 can simply be re-shaped.
 		// Not strictly true, depending on how they are organized, but generally yes, and
 		// this is very convenient functionality.
@@ -385,9 +397,11 @@ func SparseCategoricalAccuracyGraph(_ *context.Context, labels, logits []*Node) 
 	g := logits0.Graph()
 	labels0 := labels[0]
 	labelsShape := labels0.Shape()
+	labelsDType := labels0.DType()
 	labelsRank := labelsShape.Rank()
 	logitsShape := logits0.Shape()
 	logitsRank := logitsShape.Rank()
+	logitsDType := logits0.DType()
 	if !labelsShape.DType.IsInt() {
 		Panicf("labels0 indices dtype (%s), it must be integer", labelsShape.DType)
 	}
@@ -399,28 +413,12 @@ func SparseCategoricalAccuracyGraph(_ *context.Context, labels, logits []*Node) 
 	}
 
 	// Weights and masks: checks whether either are defined.
-	weightsShape := shapes.Make(logits0.DType(), logits0.Shape().Dimensions[:logits0.Rank()-1]...)
+	weightsShape := shapes.Make(logitsDType, logits0.Shape().Dimensions[:logits0.Rank()-1]...)
 	weights, mask := losses.CheckLabelsForWeightsAndMask(weightsShape, labels)
-	// TODO: implement with argmax
+	modelChoices := ArgMax(logits0, -1, labelsDType)
+	correctExamples := ConvertDType(Equal(modelChoices, Squeeze(labels0, -1)), logitsDType) // correctExamples -> 0/1 per example.
 
-	// Convert logits0 such that only those with the maximum value become 1, the rest 0.
-	logitsMax := ReduceAndKeep(logits0, ReduceMax, -1)
-	logitsMaxIndicator := PositiveIndicator(Sub(logits0, logitsMax)) // Notice 0s become 1s.
-
-	// Now the problem is that ties will have more than one indicator, we eliminate those by subtracting
-	// the sum. Any row with a sum != 1, will become zero.
-	logitsSum := ReduceAndKeep(logitsMaxIndicator, ReduceMax, -1)
-	logitsMaxIndicator = PositiveIndicator(Sub(logitsMaxIndicator, logitsSum))
-
-	// Convert labels0 to one hot encoding.
-	// Remove last dimension, it will be re-added by OneHot
-	reducedLabels := Reshape(labels0, labels0.Shape().Dimensions[:labelsRank-1]...)
-	labelsValues := OneHot(reducedLabels, logitsShape.Dimensions[logitsRank-1], logitsShape.DType)
-
-	// correctExamples will be those where labelsValues and logitsMaxIndicator are 1.
-	// We reduce the last axis, because only one column can be correct (==1), and any column correct means the
-	// whole example is correct.
-	correctExamples := ReduceSum(Mul(logitsMaxIndicator, labelsValues), -1)
+	// Apply mask.
 	if mask != nil {
 		correctExamples = Where(mask, correctExamples, ZerosLike(correctExamples))
 	}
@@ -431,17 +429,14 @@ func SparseCategoricalAccuracyGraph(_ *context.Context, labels, logits []*Node) 
 	var totalWeight *Node
 	if weights == nil && mask == nil {
 		// Simple count of examples.
-		totalWeight = Scalar(g, correctExamples.DType(), float64(correctExamples.Shape().Size()))
+		totalWeight = Scalar(g, logitsDType, float64(correctExamples.Shape().Size()))
+	} else if weights == nil {
+		// Count of # of elements in the mask set to true.
+		totalWeight = ReduceAllSum(ConvertDType(mask, logitsDType))
 	} else {
-		if weights != nil {
-			totalWeight = weights
-		} else {
-			totalWeight = OnesLike(correctExamples)
-		}
-		if mask != nil {
-			totalWeight = Where(mask, totalWeight, ZerosLike(totalWeight))
-		}
-		totalWeight = ReduceAllSum(totalWeight)
+		// Since if mask != nil the corresponding weights will be set to zero, we just need to sum the
+		// remaining weights.
+		totalWeight = ReduceAllSum(weights)
 	}
 	return Div(ReduceAllSum(correctExamples), totalWeight)
 }

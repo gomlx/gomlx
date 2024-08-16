@@ -6,7 +6,7 @@ import (
 	lgtable "github.com/charmbracelet/lipgloss/table"
 	"github.com/gomlx/gomlx/examples/notebook"
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/muesli/termenv"
 	"github.com/schollz/progressbar/v3"
 	"os"
@@ -73,7 +73,7 @@ func (pBar *progressBar) onStart(loop *train.Loop, _ train.Dataset) error {
 	return nil
 }
 
-func (pBar *progressBar) onStep(loop *train.Loop, metrics []tensor.Tensor) error {
+func (pBar *progressBar) onStep(loop *train.Loop, metrics []*tensors.Tensor) error {
 	// Check whether it is finished.
 	if pBar.bar.IsFinished() {
 		return nil
@@ -99,7 +99,7 @@ func (pBar *progressBar) onStep(loop *train.Loop, metrics []tensor.Tensor) error
 		_ = pBar.bar.Add(amount) // Triggers print, see [pBar.Write] method.
 
 	} else {
-		// For command line instead we create and enqueue an udpate to be asynchronously printed.
+		// For command line instead we create and enqueue an update to be asynchronously printed.
 		update := progressBarUpdate{
 			amount:  amount,
 			metrics: make([]string, 0, len(trainMetrics)+1),
@@ -117,7 +117,7 @@ func (pBar *progressBar) onStep(loop *train.Loop, metrics []tensor.Tensor) error
 	return nil
 }
 
-func (pBar *progressBar) onEnd(loop *train.Loop, metrics []tensor.Tensor) error {
+func (pBar *progressBar) onEnd(_ *train.Loop, _ []*tensors.Tensor) error {
 	if pBar.updates != nil {
 		close(pBar.updates)
 	}
@@ -205,7 +205,7 @@ func AttachProgressBar(loop *train.Loop) {
 		}()
 	}
 	loop.OnStart(ProgressBarName, 0, pBar.onStart)
-	// Run at least 1000 during loop or at least every 3 seconds.
+	// RunWithMap at least 1000 during loop or at least every 3 seconds.
 	train.NTimesDuringLoop(loop, 1000, ProgressBarName, 0, pBar.onStep)
 	train.PeriodicCallback(loop, 3*time.Second, false, ProgressBarName, 0, pBar.onStep)
 	loop.OnEnd(ProgressBarName, 0, pBar.onEnd)

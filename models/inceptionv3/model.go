@@ -32,7 +32,7 @@ Transfer learning model example:
 	func ModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 		_ = spec // Not needed.
 		image := inputs[0]
-		channelsConfig := timage.ChannelsLast
+		channelsConfig := images.ChannelsLast
 		image = inceptionv3.PreprocessImage(image, channelsConfig)
 		image = inceptionv3.ScaleImageValuesTorch(image)
 
@@ -40,12 +40,11 @@ Transfer learning model example:
 		if *flagInceptionPreTrained {
 			preTrainedPath = *flagDataDir
 		}
-		logits := inceptionv3.BuildGraph(ctx, image).PreTrained(preTrainedPath).
-			SetPooling(inceptionv3.MaxPooling).Trainable(*flagInceptionFineTuning).Done()
-		if !*flagInceptionFineTuning {
-			logits = StopGradient(logits) // We don't want to train the inception model.
-		}
-		logits = FnnOnTop(ctx, logits)
+		logits := inceptionv3.BuildGraph(ctx, image).
+			PreTrained(preTrainedPath).
+			SetPooling(inceptionv3.MaxPooling).
+			Trainable(*flagInceptionFineTuning).Done()
+		logits = fnn.New(ctx, logits, 1).Done()
 		return []*Node{logits}
 	}
 
@@ -62,14 +61,16 @@ package inceptionv3
 
 import (
 	"fmt"
+	. "github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"
-	. "github.com/gomlx/gomlx/types/exceptions"
-	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
-	timage "github.com/gomlx/gomlx/types/tensor/image"
+	"github.com/gomlx/gomlx/ml/layers/activations"
+	"github.com/gomlx/gomlx/ml/layers/batchnorm"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/types/tensors/images"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 	"path"
 	"strings"
@@ -114,7 +115,7 @@ const BuildScope = "InceptionV3"
 //     the images must be of size 299x299 (defined as a constant `ClassificationImageSize`).
 //     Otherwise the minimum image size is 75x75.
 //
-// The original model has weights in `shapes.F32`. (TODO: If the image has
+// The original model has weights in `dtypes.Float32`. (TODO: If the image has
 // a different `DType`, it will try to convert the weights and work the model
 // fully on the image's `DType`. This hasn't been extensively tested, so no
 // guarantees of quality.)
@@ -129,7 +130,7 @@ func BuildGraph(ctx *context.Context, image *Node) *Config {
 		batchNormEpsilon: 0.001,
 		batchNormScale:   false,
 	}
-	cfg.ChannelsAxis(timage.ChannelsLast)
+	cfg.ChannelsAxis(images.ChannelsLast)
 	return cfg
 }
 
@@ -143,7 +144,7 @@ type Config struct {
 	image   *Node
 	baseDir string
 
-	channelsAxisConfig timage.ChannelsAxisConfig
+	channelsAxisConfig images.ChannelsAxisConfig
 	channelsAxis       int
 	spatialAxes        []int
 	trainable          bool
@@ -161,6 +162,8 @@ type Config struct {
 // downloaded with DownloadAndUnpackWeights -- use the same value used there.
 //
 // The default is not to use the pre-trained weights, which will build an untrained InceptionV3 graph.
+//
+// An empty value ("") indicates not to use any pre-trained weights (the default).
 //
 // It returns the modified Config object, so calls can be cascaded.
 func (cfg *Config) PreTrained(baseDir string) *Config {
@@ -184,15 +187,15 @@ func (cfg *Config) Trainable(trainable bool) *Config {
 }
 
 // ChannelsAxis configures the axis for the channels (aka. "depth" or "features") dimension.
-// The default is `timage.ChannelsLast`, meaning the "channels" dimension comes last.
+// The default is `images.ChannelsLast`, meaning the "channels" dimension comes last.
 //
-// Note: `timage` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
+// Note: `images` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
 //
 // It returns the modified Config object, so calls can be cascaded.
-func (cfg *Config) ChannelsAxis(channelsAxisConfig timage.ChannelsAxisConfig) *Config {
+func (cfg *Config) ChannelsAxis(channelsAxisConfig images.ChannelsAxisConfig) *Config {
 	cfg.channelsAxisConfig = channelsAxisConfig
-	cfg.channelsAxis = timage.GetChannelsAxis(cfg.image, channelsAxisConfig)
-	cfg.spatialAxes = timage.GetSpatialAxes(cfg.image, channelsAxisConfig)
+	cfg.channelsAxis = images.GetChannelsAxis(cfg.image, channelsAxisConfig)
+	cfg.spatialAxes = images.GetSpatialAxes(cfg.image, channelsAxisConfig)
 	return cfg
 }
 
@@ -260,7 +263,7 @@ func (cfg *Config) Done() (output *Node) {
 	if x.Rank() != 4 {
 		Panicf("inceptionv3.BuildGraph(): input image tensor must be of rank 3: e.g.: [batch_size, ..., channels], got shape %s instead", x.Shape())
 	}
-	if x.DType() != shapes.F32 {
+	if x.DType() != dtypes.Float32 {
 		Panicf("inceptionv3.BuildGraph(): only Float32 supported at this time, got dtype %s instead", x.DType())
 	}
 	if x.Shape().Dimensions[cfg.channelsAxis] != 3 {
@@ -270,7 +273,7 @@ func (cfg *Config) Done() (output *Node) {
 		if cfg.baseDir == "" {
 			Panicf("inceptionv3.BuildGraph(): classification top is only available is using pre-trained weights, see PreTrained method")
 		}
-		spatialAxes := timage.GetSpatialAxes(x, cfg.channelsAxisConfig)
+		spatialAxes := images.GetSpatialAxes(x, cfg.channelsAxisConfig)
 		for _, spatialAxis := range spatialAxes {
 			if x.Shape().Dimensions[spatialAxis] != 299 {
 				Panicf("inceptionv3.BuildGraph(): image dimensions must be 299x299 if using classification top,  got shape %s instead", x.Shape())
@@ -487,11 +490,13 @@ func (cfg *Config) conv2DWithBatchNorm(ctx *context.Context, x *Node, kernelFilt
 
 	// Batch Normalization:
 	ctxWithWeights = cfg.readNextBatchNormalization(ctx, g) // Create a new context scope and read weights from `.h5` file.
-	x = layers.BatchNormalization(ctxWithWeights, x, cfg.channelsAxis).CurrentScope().
-		Scale(cfg.batchNormScale).Epsilon(cfg.batchNormEpsilon).Trainable(cfg.trainable).Done()
+	x = batchnorm.New(ctxWithWeights, x, cfg.channelsAxis).CurrentScope().
+		Scale(cfg.batchNormScale).Epsilon(cfg.batchNormEpsilon).Trainable(cfg.trainable).
+		FrozenAverages(cfg.baseDir != ""). // If we are loading the weights, we don't want the averages to move.
+		Done()
 
-	// Activation:
-	x = layers.Relu(x)
+	// Apply:
+	x = activations.Relu(x)
 
 	output = x
 	return
@@ -512,7 +517,7 @@ func (cfg *Config) loadTensorToVariable(ctx *context.Context, graph *Graph, tens
 		return
 	}
 	tensorPath := path.Join(cfg.baseDir, UnpackedWeightsName, tensorFileName)
-	local, err := tensor.Load(tensorPath)
+	local, err := tensors.Load(tensorPath)
 	if err != nil {
 		panic(errors.WithMessagef(err, "inceptionv3.ModelGraph(): failed to read weights from %q", tensorPath))
 	}
@@ -558,7 +563,7 @@ func (cfg *Config) readPredictionsWeights(ctx *context.Context, graph *Graph) (c
 // readNextBatchNormalization enters a new scope and initializes it with the pre-trained weights for the next
 // batch normalization layer.
 //
-// It returns the modified scope to use for `layers.BatchNormalization`.
+// It returns the modified scope to use for `batchnorm.New`.
 func (cfg *Config) readNextBatchNormalization(ctx *context.Context, graph *Graph) (ctxInScope *context.Context) {
 	ctxInScope = ctx
 

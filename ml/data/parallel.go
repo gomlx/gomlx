@@ -2,7 +2,7 @@ package data
 
 import (
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/pkg/errors"
 	"io"
 	"k8s.io/klog/v2"
@@ -37,8 +37,8 @@ type ParallelDataset struct {
 
 type yieldUnit struct {
 	spec   any
-	inputs []tensor.Tensor
-	labels []tensor.Tensor
+	inputs []*tensors.Tensor
+	labels []*tensors.Tensor
 }
 
 // parallelDatasetImpl separates the implementation of ParallelDataset. It's important
@@ -61,6 +61,9 @@ type parallelDatasetImpl struct {
 //
 // To avoid leaking goroutines, call ParallelDataset.Cancel when exiting.
 //
+// The order of the yields is not preserved -- the parallelization may yield results in different order, and in some
+// exceptional circumstance may create an order bias (faster results to generate being yield first).
+//
 // Example:
 //
 //	var ds train.Dataset
@@ -79,6 +82,9 @@ func Parallel(ds train.Dataset) *ParallelDataset {
 // and then one has to call Start before actually using the Dataset.
 //
 // To avoid leaking goroutines, call ParallelDataset.Cancel when exiting.
+//
+// The order of the yields is not preserved -- the parallelization may yield results in different order, and in some
+// exceptional circumstance may create an order bias (faster results to generate being yield first).
 //
 // Example:
 //
@@ -276,7 +282,7 @@ drainDataset: //
 }
 
 // Yield implements train.Dataset.
-func (pd *ParallelDataset) Yield() (spec any, inputs []tensor.Tensor, labels []tensor.Tensor, err error) {
+func (pd *ParallelDataset) Yield() (spec any, inputs []*tensors.Tensor, labels []*tensors.Tensor, err error) {
 	impl := pd.impl
 	if impl == nil {
 		err = errors.Errorf("ParallelDataset.Yield was called before it was started with ParallelDataset.Start")

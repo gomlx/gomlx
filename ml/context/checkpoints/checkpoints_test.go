@@ -25,38 +25,42 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
-	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"os"
 	"testing"
+
+	_ "github.com/gomlx/gomlx/backends/xla"
 )
 
 func TestCheckpoints(t *testing.T) {
-	manager := graphtest.BuildTestManager()
+	backend := graphtest.BuildTestBackend()
 
 	// Graph function to test: it simply creates, increments and returns the global step.
 	testGraphFn := func(ctx *context.Context, g *Graph) *Node {
-		return optimizers.IncrementGlobalStepGraph(ctx, g, shapes.Float64)
+		return optimizers.IncrementGlobalStepGraph(ctx, g, dtypes.Float64)
 	}
 	var dir string
 	{
 		// Build model, checkpoint a few times.
-		ctx := context.NewContext(manager)
+		ctx := context.New()
 		ctx.SetParam("learning_rate", 0.01)
-		ctx.SetParam(layers.ParamL2Regularization, 0.001)
-		ctx.In("layer_1").SetParam(layers.ParamL2Regularization, 0.004)
-		checkpoint := Build(ctx).TempDir("", "test_checkpoints_").Keep(3).MustDone()
+		ctx.SetParam(regularizers.ParamL2, 0.001)
+		ctx.SetParam(regularizers.ParamL1, 1.0e7)
+		ctx.In("layer_1").SetParam(regularizers.ParamL2, 0.004)
+		checkpoint := Build(ctx).TempDir("", "test_checkpoints_").
+			Keep(3).MustDone()
 		assert.Equal(t, 0, checkpoint.checkpointsCount)
 		dir = checkpoint.Dir()
 		fmt.Printf("Checkpoint directory: %s\n", dir)
-		e := context.NewExec(manager, ctx, testGraphFn)
+		e := context.NewExec(backend, ctx, testGraphFn)
 		for ii := 0; ii < 10; ii++ {
 			results := e.Call()
-			globalStep := results[0].Local().Value().(float64)
+			globalStep := tensors.ToScalar[float64](results[0])
 			assert.Equal(t, float64(ii)+1, globalStep, "LoopStep")
 			assert.NoError(t, checkpoint.Save(), "Saving checkpoint")
 		}
@@ -72,26 +76,28 @@ func TestCheckpoints(t *testing.T) {
 	// Test loading of values
 	{
 		// Build model, checkpoint a few times.
-		ctx := context.NewContext(manager)
-		ctx.SetParam("learning_rate", 5.0) // Value should be overwritten when loading.
-		checkpoint := Build(ctx).Dir(dir).Keep(3).MustDone()
+		ctx := context.New()
+		ctx.SetParam("learning_rate", 5.0)       // Value should be overwritten when loading.
+		ctx.SetParam(regularizers.ParamL1, 17.0) // Value should NOT be overwritten when loading.
+		checkpoint := Build(ctx).Dir(dir).Keep(3).ExcludeParams(regularizers.ParamL1).MustDone()
 
 		lr, found := ctx.GetParam("learning_rate")
 		assert.True(t, found, "learning_rate should be set")
 		assert.Equal(t, 0.01, lr.(float64), "Params[learning_rate]")
+		assert.Equal(t, 17.0, context.GetParamOr(ctx, regularizers.ParamL1, 0.0))
 
 		var l2 any
-		l2, found = ctx.GetParam(layers.ParamL2Regularization)
-		assert.Truef(t, found, "%s should have been set", layers.ParamL2Regularization)
-		assert.Equal(t, 0.001, l2.(float64), "(Scope=%s) Params[%s]", ctx.Scope(), layers.ParamL2Regularization)
-		l2, found = ctx.In("layer_1").GetParam(layers.ParamL2Regularization)
-		assert.Truef(t, found, "%s should have been set", layers.ParamL2Regularization)
-		assert.Equal(t, 0.004, l2.(float64), "Params[%s]", layers.ParamL2Regularization)
+		l2, found = ctx.GetParam(regularizers.ParamL2)
+		assert.Truef(t, found, "%s should have been set", regularizers.ParamL2)
+		assert.Equal(t, 0.001, l2.(float64), "(Scope=%s) Params[%s]", ctx.Scope(), regularizers.ParamL2)
+		l2, found = ctx.In("layer_1").GetParam(regularizers.ParamL2)
+		assert.Truef(t, found, "%s should have been set", regularizers.ParamL2)
+		assert.Equal(t, 0.004, l2.(float64), "Params[%s]", regularizers.ParamL2)
 
 		// Re-execute testGraphFn: it should load global step at 10, increment and return it at 11.
-		e := context.NewExec(manager, ctx, testGraphFn)
+		e := context.NewExec(backend, ctx, testGraphFn)
 		results := e.Call()
-		globalStep := results[0].Local().Value().(float64)
+		globalStep := tensors.ToScalar[float64](results[0])
 		assert.Equal(t, 11.0, globalStep, "Re-loaded global step")
 		assert.NoError(t, checkpoint.Save(), "Saving checkpoint")
 
@@ -110,27 +116,27 @@ func TestCheckpoints(t *testing.T) {
 }
 
 func TestMergedCheckpoints(t *testing.T) {
-	manager := graphtest.BuildTestManager()
+	backend := graphtest.BuildTestBackend()
 	var dir string
 	{
-		ctx := context.NewContext(manager).Checked(false)
+		ctx := context.New().Checked(false)
 		checkpoint := Build(ctx).TempDir("", "test_checkpoints_").Keep(2).MustDone()
 		dir = checkpoint.Dir()
 		globalStepV := optimizers.GetGlobalStepVar(ctx)
-		globalStepV.SetValue(tensor.FromValue(1))
+		globalStepV.SetValue(tensors.FromValue(1))
 		xV := ctx.VariableWithValue("x", []float64{1.0, 1.0, 1.0})
 		yV := ctx.VariableWithValue("y", [][]float32{{4.0}, {4.0}})
 		require.NoError(t, checkpoint.Save())
 
-		globalStepV.SetValue(tensor.FromValue(10))
-		xV.SetValue(tensor.FromValue([]float64{3.0, 3.0, 3.0}))
-		yV.SetValue(tensor.FromValue([][]float32{{6.0}, {6.0}}))
+		globalStepV.SetValue(tensors.FromValue(10))
+		xV.SetValue(tensors.FromValue([]float64{3.0, 3.0, 3.0}))
+		yV.SetValue(tensors.FromValue([][]float32{{6.0}, {6.0}}))
 		require.NoError(t, checkpoint.Save())
 	}
 	{
 		// Check that the values were averaged:
-		ctx := context.NewContext(manager).Checked(false)
-		_ = Build(ctx).Dir(dir).Keep(2).TakeMean(-1).MustDone()
+		ctx := context.New().Checked(false)
+		_ = Build(ctx).Dir(dir).Keep(2).TakeMean(-1, backend).MustDone()
 		globalStep := optimizers.GetGlobalStep(ctx)
 		assert.Equal(t, int64(10), globalStep, "GlobalStep")
 		xV := ctx.VariableWithValue("x", []float64{1.0, 1.0, 1.0})
@@ -148,8 +154,6 @@ func TestMergedCheckpoints(t *testing.T) {
 }
 
 func TestParams(t *testing.T) {
-	manager := graphtest.BuildTestManager()
-
 	var (
 		dir                            string
 		xFloat64, xFloat32, xInt, xStr = 0.01, float32(7.1), 11, "bar"
@@ -159,7 +163,7 @@ func TestParams(t *testing.T) {
 
 	{
 		// Build model, checkpoint a few times.
-		ctx := context.NewContext(manager)
+		ctx := context.New()
 		ctx.SetParam("xFloat64", xFloat64)
 		ctx.SetParam("xFloat32", xFloat32)
 		ctx.SetParam("xInt", xInt)
@@ -176,7 +180,7 @@ func TestParams(t *testing.T) {
 	// Test loading of values
 	{
 		// Build model, checkpoint a few times.
-		ctx := context.NewContext(manager)
+		ctx := context.New()
 		_ = Build(ctx).Dir(dir).Keep(3).MustDone()
 
 		got, found := ctx.GetParam("xFloat64")

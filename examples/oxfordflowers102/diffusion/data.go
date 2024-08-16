@@ -2,8 +2,14 @@ package diffusion
 
 import (
 	"encoding/gob"
+	"fmt"
+	"github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/gomlx/gomlx/ml/context/checkpoints"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/janpfeifer/must"
 	"github.com/pkg/errors"
 	"os"
 	"path"
@@ -15,19 +21,6 @@ import (
 )
 
 var (
-	// DataDir is the directory where data is saved. This includes training data, saved models (checkpoints)
-	// and intermediary data (like normalization constants).
-	DataDir string // Directory where resources are stored
-
-	// ImageSize used everywhere. Images are square, the same size is used for height and width.
-	ImageSize int
-
-	// BatchSize used for training.
-	BatchSize int
-
-	// EvalBatchSize used for evaluation. The size is only affected by the limitation of the accelerator memory.
-	EvalBatchSize int
-
 	// PartitionSeed used for the dataset splitting into train/validation.
 	PartitionSeed = int64(42) // Some arbitrary number.
 
@@ -35,30 +28,63 @@ var (
 	ValidationFraction = 0.2 // 20% of data.
 )
 
-// CreateInMemoryDatasets returns a train and a validation InMemoryDataset.
-func CreateInMemoryDatasets() (trainDS, validationDS *data.InMemoryDataset) {
-	Init()
-	var err error
-	trainDS, err = flowers.InMemoryDataset(manager, DataDir, ImageSize, "train", PartitionSeed, ValidationFraction, 1.0)
-	AssertNoError(err)
+// Config holds a configuration for all diffusion image/data operations.
+// See NewConfig.
+type Config struct {
+	Backend backends.Backend
+	Context *context.Context // Usually, at the root scope.
 
-	validationDS, err = flowers.InMemoryDataset(manager, DataDir, ImageSize, "validation", PartitionSeed, 0.0, ValidationFraction)
-	AssertNoError(err)
+	// DataDir is where the data is downloaded, and models are saved.
+	DataDir string
+
+	// ParamsSet are hyperparameters overridden, that it should not load from the checkpoint (see commandline.ParseContextSettings).
+	ParamsSet []string
+
+	DType                               dtypes.DType
+	ImageSize, BatchSize, EvalBatchSize int
+
+	// Checkpoint if one has been attached. See Config.AttachCheckpoint.
+	Checkpoint *checkpoints.Handler
+}
+
+// NewConfig creates a configuration for most of the diffusion methods.
+//
+// paramsSet are hyperparameters overridden, that it should not load from the checkpoint (see commandline.ParseContextSettings).
+func NewConfig(backend backends.Backend, ctx *context.Context, dataDir string, paramsSet []string) *Config {
+	dataDir = data.ReplaceTildeInDir(dataDir)
+	if !data.FileExists(dataDir) {
+		must.M(os.MkdirAll(dataDir, 0777))
+	}
+	dtype := must.M1(dtypes.DTypeString(
+		context.GetParamOr(ctx, "dtype", "float32")))
+	return &Config{
+		Backend:       backend,
+		Context:       ctx,
+		DataDir:       dataDir,
+		ImageSize:     context.GetParamOr(ctx, "image_size", 64),
+		BatchSize:     context.GetParamOr(ctx, "batch_size", 64),
+		EvalBatchSize: context.GetParamOr(ctx, "eval_batch_size", 128),
+		DType:         dtype,
+		ParamsSet:     paramsSet,
+	}
+}
+
+// CreateInMemoryDatasets returns a train and a validation InMemoryDataset.
+func (c *Config) CreateInMemoryDatasets() (trainDS, validationDS *data.InMemoryDataset) {
+	trainDS = must.M1(
+		flowers.InMemoryDataset(c.Backend, c.DataDir, c.ImageSize, "train", PartitionSeed, ValidationFraction, 1.0))
+	validationDS = must.M1(
+		flowers.InMemoryDataset(c.Backend, c.DataDir, c.ImageSize, "validation", PartitionSeed, 0.0, ValidationFraction))
 	return
 }
 
 var (
 	// Cached results for NormalizationValues.
-	normalizationMean, normalizationStdDev tensor.Tensor
-
-	// NormalizationInfoFile where NormalizationValues results are saved (and loaded from).
-	NormalizationInfoFile = "normalization_data.bin"
+	normalizationMean, normalizationStdDev *tensors.Tensor
 )
 
 // NormalizationValues for the flowers dataset -- only look at the training data.
-func NormalizationValues() (mean, stddev tensor.Tensor) {
-	Init()
-
+func (c *Config) NormalizationValues() (mean, stddev *tensors.Tensor) {
 	// Check if values have already been retrieved.
 	if normalizationMean != nil && normalizationStdDev != nil {
 		mean, stddev = normalizationMean, normalizationStdDev
@@ -66,72 +92,80 @@ func NormalizationValues() (mean, stddev tensor.Tensor) {
 	}
 
 	// If not try to load from file.
-	fPath := path.Join(DataDir, NormalizationInfoFile)
+	fPath := path.Join(c.DataDir, fmt.Sprintf("normalization_data_%dx%d.bin", c.ImageSize, c.ImageSize))
 	f, err := os.Open(fPath)
 	if err == nil {
 		// Load previously generated values.
-		dec := gob.NewDecoder(f)
-		mean = MustNoError(tensor.GobDeserialize(dec))
-		stddev = MustNoError(tensor.GobDeserialize(dec))
-		_ = f.Close()
+		err = exceptions.TryCatch[error](func() {
+			dec := gob.NewDecoder(f)
+			mean = must.M1(tensors.GobDeserialize(dec))
+			stddev = must.M1(tensors.GobDeserialize(dec))
+			must.M(f.Close())
+		})
+		if err != nil {
+			panic(errors.WithMessagef(err, "While loading  NormalizationValues to %q", fPath))
+		}
 		normalizationMean, normalizationStdDev = mean, stddev
 		return
 	}
 	if !os.IsNotExist(err) {
-		err = errors.Wrapf(err, "failed to read images mean/stddev from disk")
-		AssertNoError(err)
+		panic(errors.Wrapf(err, "failed to read images mean/stddev from disk"))
 	}
 
-	trainDS, _ := CreateInMemoryDatasets()
+	trainDS, _ := c.CreateInMemoryDatasets()
 	trainDS.BatchSize(128, false)
-	ds := data.MapWithGraphFn(manager, nil, trainDS, func(ctx *context.Context, inputs, labels []*Node) (mappedInputs, mappedLabels []*Node) {
-		images := PreprocessImages(inputs[0], false)
+	ds := data.MapWithGraphFn(c.Backend, nil, trainDS, func(ctx *context.Context, inputs, labels []*Node) (mappedInputs, mappedLabels []*Node) {
+		images := c.PreprocessImages(inputs[0], false)
 		return []*Node{images}, labels
 	})
-	normalizationMean, normalizationStdDev, err = data.Normalization(manager, ds, 0, -1) // mean/stddev for each channel (axis=-1) separately.
-	AssertNoError(err)
+	normalizationMean, normalizationStdDev = must.M2(
+		data.Normalization(c.Backend, ds, 0, -1)) // mean/stddev for each channel (axis=-1) separately.
+	mean, stddev = normalizationMean, normalizationStdDev
 
 	// Save for future times.
-	f, err = os.Create(fPath)
-	AssertNoError(err)
-	enc := gob.NewEncoder(f)
-	AssertNoError(mean.Local().GobSerialize(enc))
-	AssertNoError(stddev.Local().GobSerialize(enc))
-	AssertNoError(f.Close())
-
-	mean, stddev = normalizationMean, normalizationStdDev
+	err = exceptions.TryCatch[error](func() {
+		f = must.M1(os.Create(fPath))
+		enc := gob.NewEncoder(f)
+		must.M(mean.GobSerialize(enc))
+		must.M(stddev.GobSerialize(enc))
+		must.M(f.Close())
+	})
+	if err != nil {
+		panic(errors.WithMessagef(err, "While saving NormalizationValues to %q", fPath))
+	}
 	return
 }
 
 // PreprocessImages converts the image to the model `DType` and optionally normalizes
 // it according to `NormalizationValues()` calculated on the training dataset.
-func PreprocessImages(images *Node, normalize bool) *Node {
-	Init()
+func (c *Config) PreprocessImages(images *Node, normalize bool) *Node {
 	g := images.Graph()
 
 	// ReduceAllMax(images).SetLogged("Max(uint8):")
-	images = ConvertType(images, DType)
+	images = ConvertDType(images, dtypes.Float32)
 	if !normalize {
 		return images
 	}
 
 	// Here we get the concrete value (tensors) of the mean and variance, and we convert to constants
 	// to be used in the graph.
-	meanT, stddevT := NormalizationValues()
+	meanT, stddevT := c.NormalizationValues()
 	mean := Const(g, meanT)
 	stddev := Const(g, stddevT)
 
 	images = Div(
 		Sub(images, mean),
 		data.ReplaceZerosByOnes(stddev))
+	images = ConvertDType(images, c.DType)
 	return images
 }
 
 // DenormalizeImages revert images back to the 0 - 255 range.
 // But it keeps it as float, it doesn't convert it back to bytes (== `shapes.S8` or `uint8`)
-func DenormalizeImages(images *Node) *Node {
+func (c *Config) DenormalizeImages(images *Node) *Node {
 	g := images.Graph()
-	meanT, stddevT := NormalizationValues()
+	images = ConvertDType(images, dtypes.Float32)
+	meanT, stddevT := c.NormalizationValues()
 	mean := Const(g, meanT)
 	stddev := Const(g, stddevT)
 
@@ -140,10 +174,9 @@ func DenormalizeImages(images *Node) *Node {
 		mean)
 	images = ClipScalar(images, 0.0, 255.0)
 	return images
-
 }
 
-func finalize(tensors []tensor.Tensor) {
+func finalize(tensors []*tensors.Tensor) {
 	for _, t := range tensors {
 		t.FinalizeAll()
 	}

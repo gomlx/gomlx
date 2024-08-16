@@ -19,12 +19,12 @@
 package optimizers
 
 import (
+	. "github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
-	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
-	"log"
+	"github.com/gomlx/gopjrt/dtypes"
+	"golang.org/x/exp/maps"
 )
 
 // Interface implemented by optimizer implementations.
@@ -83,32 +83,34 @@ const (
 // See [ParamOptimizer]. The default is "adamw".
 func FromContext(ctx *context.Context) Interface {
 	optName := context.GetParamOr(ctx, ParamOptimizer, "adamw")
-	return MustOptimizerByName(ctx, optName)
+	return ByName(ctx, optName)
 }
 
-// MustOptimizerByName returns an optimizer given the name, or log.Fatal if one does not exist. It uses
-// KnownOptimizers -- in case one wants to better handle invalid values.
+// ByName returns an optimizer given the name, or panics if one does not exist.
+// It uses  KnownOptimizers -- in case one wants to better handle invalid values.
 //
 // Some optimizers (e.g.: Adam) uses optional hyperparameters set in the context for configuration.
+//
+// See also FromContext.
 //
 // Example usage:
 //
 // ```
-// var flagOptimizer = flag.String("optimizer", "adamw", fmt.Sprintf("Optimizer, options: %q", types.SortedKeys(optimizers.KnownOptimizers)))
+// var flagOptimizer = flag.String("optimizer", "adamw", fmt.Sprintf("Optimizer, options: %q", maps.Keys(optimizers.KnownOptimizers)))
 //
 // ...
 //
 //	trainer := train.NewTrainer(manager, ctx, ModelGraph,
 //	   losses.SomeLoss,
-//	   optimizers.MustOptimizerByName(ctx, *flagOptimizer),
+//	   optimizers.ByName(ctx, *flagOptimizer),
 //	   []metrics.Interface{someMetric},    // trainMetrics
 //	   []metrics.Interface{otherMetric})   // evalMetrics
 //
 // ```
-func MustOptimizerByName(ctx *context.Context, optName string) Interface {
+func ByName(ctx *context.Context, optName string) Interface {
 	optBuilder, found := KnownOptimizers[optName]
 	if !found {
-		log.Fatalf("Unknown optimizer %q, valid values are %v.", optName, slices.Keys(KnownOptimizers))
+		Panicf("Unknown optimizer %q, valid values are %v.", optName, maps.Keys(KnownOptimizers))
 	}
 	return optBuilder(ctx)
 }
@@ -143,15 +145,15 @@ func DeleteGlobalStep(ctx *context.Context) {
 //
 // Typically, this is called by the optimizers UpdateGraph method.
 //
-// GlobalStep is always stored as shapes.Int64, but it is converted to the given DType
+// GlobalStep is always stored as dtypes.Int64, but it is converted to the given DType
 // before being returned.
-func IncrementGlobalStepGraph(ctx *context.Context, g *Graph, dtype shapes.DType) *Node {
+func IncrementGlobalStepGraph(ctx *context.Context, g *Graph, dtype dtypes.DType) *Node {
 	globalStepVar := GetGlobalStepVar(ctx)
 	globalStep := globalStepVar.ValueGraph(g)
 	globalStep = Add(globalStep, OnesLike(globalStep))
 	globalStepVar.SetValueGraph(globalStep)
-	if dtype != shapes.I64 {
-		globalStep = ConvertType(globalStep, dtype)
+	if dtype != dtypes.Int64 {
+		globalStep = ConvertDType(globalStep, dtype)
 	}
 	return globalStep
 }
@@ -177,14 +179,14 @@ var (
 //
 // If variable doesn't exist yet, it will be created using the parameter ParamLearningRate, if it
 // is set, or the provided defaultValue (must be a scalar convertible to dtype) if not.
-func LearningRateVar(ctx *context.Context, dtype shapes.DType, defaultValue float64) *context.Variable {
+func LearningRateVar(ctx *context.Context, dtype dtypes.DType, defaultValue float64) *context.Variable {
 	lrValue := context.GetParamOr(ctx, ParamLearningRate, defaultValue)
 	return LearningRateVarWithValue(ctx, dtype, lrValue)
 }
 
 // LearningRateVarWithValue creates (or reuses) variable for learning rate with the given value.
-func LearningRateVarWithValue(ctx *context.Context, dtype shapes.DType, value float64) *context.Variable {
-	ctx = ctx.Checked(false).In("optimizers")
+func LearningRateVarWithValue(ctx *context.Context, dtype dtypes.DType, value float64) *context.Variable {
+	ctx = ctx.Checked(false).In(Scope)
 	return ctx.VariableWithValue(ParamLearningRate, shapes.CastAsDType(value, dtype)).SetTrainable(false)
 }
 
@@ -230,7 +232,7 @@ func (sgd *sgd) UpdateGraph(ctx *context.Context, g *Graph, loss *Node) {
 // Clear all optimizer variables.
 // There are none for SGD, so this is a non-op.
 // It implements optimizers.Interface.
-func (sgd *sgd) Clear(ctx *context.Context) {}
+func (sgd *sgd) Clear(_ *context.Context) {}
 
 // addGradientsToVariablesGraph takes the output of Context.BuildTrainableVariablesGradientsGraph,
 // multiply by (-learningRate) and add to the current value of the variablesMap.
@@ -256,7 +258,7 @@ func addGradientsToVariablesGraph(ctx *context.Context, loss, learningRate, glob
 			// as the loss), so we need to cast it.
 			// Two common reasons: variables can have different resolution (to save space); variables could be
 			// complex.
-			lrCast = ConvertType(learningRate, grads[ii].DType())
+			lrCast = ConvertDType(learningRate, grads[ii].DType())
 		}
 		scaledGradient := Mul(grads[ii], lrCast)
 		scaledGradient = ClipStepByValue(ctx, scaledGradient)

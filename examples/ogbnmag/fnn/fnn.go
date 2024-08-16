@@ -3,21 +3,24 @@ package fnn
 
 import (
 	"fmt"
-	"github.com/gomlx/gomlx/examples/notebook/gonb/margaid"
+	"github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/examples/notebook/gonb/plotly"
 	mag "github.com/gomlx/gomlx/examples/ogbnmag"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	mldata "github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/layers/activations"
+	"github.com/gomlx/gomlx/ml/layers/kan"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/commandline"
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
-	"github.com/gomlx/gomlx/types/exceptions"
-	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 	"time"
@@ -35,7 +38,7 @@ func FnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 		return magVar.ValueGraph(g)
 	}
 	log1pMagVar := func(name string) *Node {
-		return Log1p(ConvertType(getMagVar(name), shapes.Float32))
+		return Log1p(ConvertDType(getMagVar(name), dtypes.Float32))
 	}
 
 	// Gather and concatenate all features from the seeds (indices of papers).
@@ -50,17 +53,23 @@ func FnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	// Build FNN.
 	numLayers := context.GetParamOr(ctx, "hidden_layers", 2)
 	numNodes := context.GetParamOr(ctx, "num_nodes", 128)
-	for layerNum := range numLayers {
-		layerName := fmt.Sprintf("layer-%d", layerNum)
-		logits = layers.DenseWithBias(ctx.In(layerName), logits, numNodes)
-		logits = layers.LeakyRelu(logits)
-		dropoutRate := context.GetParamOr(ctx, "dropout_rate", 0.0)
-		if dropoutRate > 0 {
-			dropoutRateNode := Scalar(g, shapes.Float32, dropoutRate)
-			logits = layers.Dropout(ctx, logits, dropoutRateNode)
+	useKan := context.GetParamOr(ctx, "kan", false)
+	if useKan {
+		logits = kan.New(ctx, logits, mag.NumLabels).NumHiddenLayers(numLayers, numNodes).Done()
+	} else {
+		// Normal FNN
+		for layerNum := range numLayers {
+			layerName := fmt.Sprintf("layer-%d", layerNum)
+			logits = layers.DenseWithBias(ctx.In(layerName), logits, numNodes)
+			logits = activations.LeakyRelu(logits)
+			dropoutRate := context.GetParamOr(ctx, "dropout_rate", 0.0)
+			if dropoutRate > 0 {
+				dropoutRateNode := Scalar(g, dtypes.Float32, dropoutRate)
+				logits = layers.Dropout(ctx, logits, dropoutRateNode)
+			}
 		}
+		logits = layers.DenseWithBias(ctx.In("readout"), logits, mag.NumLabels)
 	}
-	logits = layers.DenseWithBias(ctx.In("readout"), logits, mag.NumLabels)
 
 	return []*Node{logits} // Return only the logits.
 }
@@ -68,10 +77,9 @@ func FnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 var ModelFn = FnnModelGraph
 
 // Train FNN model based on configuration in `ctx`.
-func Train(ctx *context.Context) error {
-	manager := ctx.Manager()
-	trainDS, validDS, testDS, err := mag.PapersSeedDatasets(manager)
-	mag.UploadOgbnMagVariables(ctx)
+func Train(backend backends.Backend, ctx *context.Context) error {
+	trainDS, validDS, testDS, err := mag.PapersSeedDatasets(backend)
+	mag.UploadOgbnMagVariables(backend, ctx)
 	//ctx.EnumerateVariables(func(v *context.Variable) {
 	//	fmt.Printf("%s :: %s:\t%s\n", v.Scope(), v.Name(), v.Value().Shape())
 	//})
@@ -90,10 +98,14 @@ func Train(ctx *context.Context) error {
 	validDS = validDS.BatchSize(evalBatchSize, false).Infinite(false)
 	testDS = testDS.BatchSize(evalBatchSize, false).Infinite(false)
 
+	// Get trainSteps before a checkpoint is loaded -- in which case it will be overwritten.
+	trainSteps := context.GetParamOr(ctx, "train_steps", 100)
+
 	// Checkpoint: it loads if already exists, and it will save as we train.
 	checkpointPath := context.GetParamOr(ctx, "checkpoint", "")
 	numCheckpointsToKeep := context.GetParamOr(ctx, "num_checkpoints", 10)
 	var checkpoint *checkpoints.Handler
+	var globalStep int64
 	if checkpointPath != "" {
 		checkpointPath = mldata.ReplaceTildeInDir(checkpointPath) // If the path starts with "~", it is replaced.
 		var err error
@@ -102,7 +114,7 @@ func Train(ctx *context.Context) error {
 			numCheckpointsToKeep = -1
 		}
 		if numCheckpointsToKeep > 0 {
-			checkpoint, err = checkpoints.Build(ctx).Dir(checkpointPath).Keep(numCheckpointsToKeep).TakeMean(3).Done()
+			checkpoint, err = checkpoints.Build(ctx).Dir(checkpointPath).Keep(numCheckpointsToKeep).TakeMean(3, backend).Done()
 		} else {
 			checkpoint, err = checkpoints.Build(ctx).Dir(checkpointPath).Done()
 		}
@@ -110,10 +122,12 @@ func Train(ctx *context.Context) error {
 			return errors.WithMessagef(err, "while setting up checkpoint to %q (keep=%d)",
 				checkpointPath, numCheckpointsToKeep)
 		}
-		globalStep := optimizers.GetGlobalStep(ctx)
+		globalStep = optimizers.GetGlobalStep(ctx)
 		if globalStep != 0 {
 			fmt.Printf("> restarting training from global_step=%d\n", globalStep)
+			ctx = ctx.Reuse()
 		}
+		ctx.SetParam("train_steps", trainSteps)
 	}
 
 	// Loss: multi-class classification problem.
@@ -125,8 +139,8 @@ func Train(ctx *context.Context) error {
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
-	optimizer := optimizers.MustOptimizerByName(ctx, context.GetParamOr(ctx, "optimizer", "adamw"))
-	trainer := train.NewTrainer(manager, ctx, ModelFn,
+	optimizer := optimizers.ByName(ctx, context.GetParamOr(ctx, "optimizer", "adamw"))
+	trainer := train.NewTrainer(backend, ctx, ModelFn,
 		lossFn,
 		optimizer,
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
@@ -140,7 +154,7 @@ func Train(ctx *context.Context) error {
 	if checkpoint != nil && numCheckpointsToKeep > 1 {
 		period := time.Minute * 1
 		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
-			func(loop *train.Loop, metrics []tensor.Tensor) error {
+			func(loop *train.Loop, metrics []*tensors.Tensor) error {
 				return checkpoint.Save()
 			})
 	}
@@ -149,23 +163,28 @@ func Train(ctx *context.Context) error {
 	// The points generated are saved along the checkpoint directory (if one is given).
 	usePlots := context.GetParamOr(ctx, "plots", false)
 	if usePlots {
-		_ = margaid.NewDefault(loop, checkpoint.Dir(), 100, 1.1, validDS, testDS, trainEvalDS).
-			WithEvalLossType("eval-loss")
+		_ = plotly.New().
+			WithCheckpoint(checkpoint).
+			Dynamic().
+			WithDatasets(validDS, testDS, trainEvalDS).
+			ScheduleExponential(loop, 200, 1.2).
+			WithBatchNormalizationAveragesUpdate(trainEvalDS)
 	}
 
 	// Loop for given number of steps
-	trainSteps := context.GetParamOr(ctx, "train_steps", 100)
-	_, err = loop.RunSteps(trainDS, trainSteps)
-	if err != nil {
-		return errors.WithMessage(err, "while running steps")
-	}
-	fmt.Printf("\t[Step %d] median train step: %d microseconds\n",
-		loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
-	if checkpoint != nil && numCheckpointsToKeep <= 1 {
-		// Save checkpoint at end of training.
-		err = checkpoint.Save()
+	if int(globalStep) < trainSteps {
+		_, err = loop.RunSteps(trainDS, trainSteps-int(globalStep))
 		if err != nil {
-			klog.Errorf("Failed to save final checkpoint in %q: %+v", checkpointPath, err)
+			return errors.WithMessage(err, "while running steps")
+		}
+		fmt.Printf("\t[Step %d] median train step: %d microseconds\n",
+			loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
+		if checkpoint != nil && numCheckpointsToKeep <= 1 {
+			// Save checkpoint at end of training.
+			err = checkpoint.Save()
+			if err != nil {
+				klog.Errorf("Failed to save final checkpoint in %q: %+v", checkpointPath, err)
+			}
 		}
 	}
 

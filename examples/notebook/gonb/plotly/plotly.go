@@ -7,18 +7,21 @@
 // The advantage of `plotly` over `margaid` plots is that it uses Javascript to make the plot interactive (it displays
 // information on mouse hover).
 //
-// The disadvantage is that saving doesn't work, because of the javascript nature.
+// The disadvantage is that saving of the notebook doesn't include the Javascript -- but exporting to HTML does.
+//
+// See New to get started and an example.
 package plotly
 
 import (
 	"fmt"
 	grob "github.com/MetalBlueberry/go-plotly/graph_objects"
 	"github.com/gomlx/gomlx/examples/notebook/gonb/plots"
+	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types"
-	"github.com/gomlx/gomlx/types/slices"
-	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/janpfeifer/gonb/gonbui"
 	"github.com/janpfeifer/gonb/gonbui/dom"
 	gonbplotly "github.com/janpfeifer/gonb/gonbui/plotly"
@@ -27,6 +30,13 @@ import (
 	"math"
 	"os"
 	"path"
+)
+
+var (
+	// ParamPlots is the context parameter to trigger generating of plot points and
+	// displaying them.
+	// A boolean value that defaults to false.
+	ParamPlots = "plots"
 )
 
 // PlotConfig hold the configuration object that will generate the plot. Create it with [New].
@@ -47,6 +57,9 @@ type PlotConfig struct {
 	// EvalDatasets registered to be used during evaluation when dynamically capturing points during training.
 	EvalDatasets []train.Dataset
 
+	// batchNormAveragesDS is used to update the batch normalization averages, if configured.
+	batchNormAveragesDS train.Dataset
+
 	// gonbId of the `<div>` tag where to generate dynamic plots.
 	gonbId string
 
@@ -66,6 +79,20 @@ type PlotConfig struct {
 }
 
 // New creates a new PlotConfig, that can be used to generate plots.
+//
+// This is used when configuring the train.Loop, and a typical use example, triggered by a "plots" parameter,
+// might look like:
+//
+//	usePlots := context.GetParamOr(ctx, plotly.ParamPlots, false)
+//	...
+//	if usePlots {
+//		_ = plotly.New().
+//			WithCheckpoint(checkpoint).
+//			Dynamic().
+//			WithDatasets(evalOnTrainDS, evalOnTestDS).
+//			ScheduleExponential(loop, 200, 1.2).
+//			WithBatchNormalizationAveragesUpdate(evalOnTrainDS)
+//	}
 func New() *PlotConfig {
 	return &PlotConfig{
 		metricsTypesToFig: make(map[string]int),
@@ -75,6 +102,19 @@ func New() *PlotConfig {
 // WithDatasets configures the datasets to evaluate at each collecting step (see `Schedule*` methods).
 func (pc *PlotConfig) WithDatasets(datasets ...train.Dataset) *PlotConfig {
 	pc.EvalDatasets = datasets
+	return pc
+}
+
+// WithBatchNormalizationAveragesUpdate configures a dataset to use to update the averages (of mean and variance)
+// for batch normalization.
+//
+// The oneEpochDS dataset (typically, the same as a training data evaluation dataset) should be a 1-epoch training
+// data dataset, and it can use evaluation batch sizes.
+// If oneEpochDS is nil, it disabled the updating of the averages.
+//
+// If the model is not using batch normalization this is a no-op and nothing is executed.
+func (pc *PlotConfig) WithBatchNormalizationAveragesUpdate(oneEpochDS train.Dataset) *PlotConfig {
+	pc.batchNormAveragesDS = oneEpochDS
 	return pc
 }
 
@@ -137,7 +177,7 @@ func (pc *PlotConfig) WithCustomMetricFn(fn plots.CustomMetricFn) *PlotConfig {
 	return pc
 }
 
-func (pc *PlotConfig) addMetrics(loop *train.Loop, metrics []tensor.Tensor) error {
+func (pc *PlotConfig) addMetrics(loop *train.Loop, metrics []*tensors.Tensor) error {
 	// Only add metrics once per step: multiple calls here can happen if plotting was scheduled more than
 	// one way with functions `Schedule*`.
 	if pc.lastStepCollected >= loop.LoopStep {
@@ -153,7 +193,7 @@ func (pc *PlotConfig) addMetrics(loop *train.Loop, metrics []tensor.Tensor) erro
 		}
 	}
 
-	return plots.AddTrainAndEvalMetrics(pc, loop, metrics, pc.EvalDatasets)
+	return plots.AddTrainAndEvalMetrics(pc, loop, metrics, pc.EvalDatasets, pc.batchNormAveragesDS)
 }
 
 // attachOnEnd registers a final call to DynamicPlot when training finishes. After that no more dynamic plots
@@ -163,7 +203,7 @@ func (pc *PlotConfig) attachOnEnd(loop *train.Loop) {
 		return
 	}
 	pc.scheduledFinalPlot = true
-	loop.OnEnd("plotly.DynamicPlot", 120, func(_ *train.Loop, _ []tensor.Tensor) error {
+	loop.OnEnd("plotly.DynamicPlot", 120, func(_ *train.Loop, _ []*tensors.Tensor) error {
 		// Final plot: only called once to the transient plots
 		if pc.gonbId != "" && !pc.finalPlot {
 			// Erase intermediary transient plots.
@@ -175,14 +215,20 @@ func (pc *PlotConfig) attachOnEnd(loop *train.Loop) {
 	})
 }
 
-// WithCheckpoint uses the `checkpointDir` both to load data points and to save any new data points.
+// WithCheckpoint uses the checkpoint both to load data points and to save any new data points.
 // Usually, used with [PlotConfig.Dynamic].
+// If checkpoint is nil, it's a no-op.
 //
 // New data-points are saved asynchronously -- not to slow down training, with the downside of
 // potentially having I/O issues reported asynchronously.
 //
 // It returns itself to allow cascading configuration method calls.
-func (pc *PlotConfig) WithCheckpoint(checkpointDir string) *PlotConfig {
+func (pc *PlotConfig) WithCheckpoint(checkpoint *checkpoints.Handler) *PlotConfig {
+	if checkpoint == nil {
+		return pc
+	}
+	checkpointDir := checkpoint.Dir()
+
 	// Ignore errors while loading: maybe nothing was written yet.
 	_ = pc.LoadCheckpointData(checkpointDir)
 	checkpointDir = data.ReplaceTildeInDir(checkpointDir)
@@ -340,7 +386,7 @@ func (pc *PlotConfig) Plot() error {
 	if !gonbui.IsNotebook {
 		return nil
 	}
-	for _, metricType := range slices.SortedKeys(pc.metricsTypesToFig) {
+	for _, metricType := range xslices.SortedKeys(pc.metricsTypesToFig) {
 		figIdx := pc.metricsTypesToFig[metricType]
 		gonbui.DisplayHtmlf("<p><b>Metric: %s</b></p>\n", metricType)
 		err := gonbplotly.DisplayFig(pc.figs[figIdx])
@@ -380,7 +426,7 @@ func (pc *PlotConfig) DynamicPlot(final bool) {
 	elementId := gonbui.UniqueId()
 	gonbui.UpdateHtml(pc.gonbId, fmt.Sprintf("<div id=%q></div>", elementId))
 
-	for _, metricType := range slices.SortedKeys(pc.metricsTypesToFig) {
+	for _, metricType := range xslices.SortedKeys(pc.metricsTypesToFig) {
 		figIdx := pc.metricsTypesToFig[metricType]
 		dom.Append(elementId, fmt.Sprintf("<p><b>Metric: %s</b></p>\n", metricType))
 		err := gonbplotly.AppendFig(elementId, pc.figs[figIdx])

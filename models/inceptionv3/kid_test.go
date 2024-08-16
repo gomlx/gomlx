@@ -1,17 +1,20 @@
 package inceptionv3
 
 import (
+	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
-	timage "github.com/gomlx/gomlx/types/tensor/image"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/types/tensors/images"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
 	"image"
 	"os"
 	"sync"
 	"testing"
+
+	_ "github.com/gomlx/gomlx/backends/xla"
 )
 
 func loadImage(filePath string) (img image.Image, err error) {
@@ -32,11 +35,11 @@ var (
 
 // noisyImages add noise to the batch of images. The noise is simply an increasing
 // value from -127.5 in the top left to 127.5 in the bottom right. It's deterministic.
-func noisyImages(t *testing.T, manager *Manager, batch tensor.Tensor) tensor.Tensor {
+func noisyImages(t *testing.T, manager backends.Backend, batch *tensors.Tensor) *tensors.Tensor {
 	noisyImagesExecOnce.Do(func() {
 		noisyImagesExec = NewExec(manager, func(batch *Node) *Node {
 			g := batch.Graph()
-			oneImage := batch.Shape().Copy()
+			oneImage := batch.Shape().Clone()
 			oneImage.Dimensions[0] = 1
 			noise := IotaFull(g, oneImage)
 			scale := 255.0 / float64(noise.Shape().Size())
@@ -51,7 +54,7 @@ func noisyImages(t *testing.T, manager *Manager, batch tensor.Tensor) tensor.Ten
 
 func TestKidMetric(t *testing.T) {
 	require.NoError(t, DownloadAndUnpackWeights(*flagDataDir))
-	manager := graphtest.BuildTestManager()
+	manager := graphtest.BuildTestBackend()
 
 	ImagePaths := []string{
 		"gomlx_gopher_299.png",
@@ -66,14 +69,14 @@ func TestKidMetric(t *testing.T) {
 		Images[ii], err = loadImage(p)
 		require.NoError(t, err)
 	}
-	imagesBatch := timage.ToTensor(shapes.F32).MaxValue(255.0).Batch(Images)
+	imagesBatch := images.ToTensor(dtypes.Float32).MaxValue(255.0).Batch(Images)
 	noisyBatch := noisyImages(t, manager, imagesBatch)
 
-	kidBuilder := NewKidBuilder(*flagDataDir, 75, 255.0, timage.ChannelsLast)
-	ctx := context.NewContext(manager)
-	kidExec := context.NewExec(manager, ctx, func(ctx *context.Context, images []*Node) *Node {
-		return kidBuilder.BuildGraph(ctx, []*Node{images[0]}, []*Node{images[1]})
+	kidBuilder := NewKidBuilder(*flagDataDir, 75, 255.0, images.ChannelsLast)
+	ctx := context.New()
+	kidExec := context.NewExec(manager, ctx, func(ctx *context.Context, imagesPair []*Node) *Node {
+		return kidBuilder.BuildGraph(ctx, []*Node{imagesPair[0]}, []*Node{imagesPair[1]})
 	})
-	kid := kidExec.Call(imagesBatch, noisyBatch)[0].Local().Value().(float32)
+	kid := kidExec.Call(imagesBatch, noisyBatch)[0].Value().(float32)
 	require.InDelta(t, -1.5861, kid, 0.001, "KID value different from expected for batch.")
 }

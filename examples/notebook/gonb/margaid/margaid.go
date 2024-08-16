@@ -44,8 +44,8 @@ import (
 	mg "github.com/erkkah/margaid"
 	stdplots "github.com/gomlx/gomlx/examples/notebook/gonb/plots"
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/types/slices"
-	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/janpfeifer/gonb/gonbui"
 	"github.com/pkg/errors"
 	"io"
@@ -76,6 +76,9 @@ type Plots struct {
 
 	// EvalDatasets will be evaluated with `train.Trainer.Eval()` and its metrics collected.
 	EvalDatasets []train.Dataset
+
+	// batchNormAveragesDS is used to update the batch normalization averages, if configured.
+	batchNormAveragesDS train.Dataset
 
 	// Plot per metric name.
 	PerMetricType map[string]*Plot
@@ -145,9 +148,9 @@ func NewDefault(loop *train.Loop, dir string, startStep int, stepFactor float64,
 	// Notice that plot points will be generated even if not running in a notebook -- just no plot will be displayed.
 	// Register plot points at exponential steps.
 	train.ExponentialCallback(loop, startStep, stepFactor, true,
-		"margaid.Plot", 0, func(loop *train.Loop, metrics []tensor.Tensor) error {
+		"margaid.Plot", 0, func(loop *train.Loop, metrics []*tensors.Tensor) error {
 			// Update plots with metrics.
-			return stdplots.AddTrainAndEvalMetrics(plots, loop, metrics, plots.EvalDatasets)
+			return stdplots.AddTrainAndEvalMetrics(plots, loop, metrics, plots.EvalDatasets, plots.batchNormAveragesDS)
 		})
 	plots.attachOnEnd(loop)
 	return plots
@@ -171,9 +174,9 @@ type Plot struct {
 // an evaluation at given points.
 func (ps *Plots) PlotEveryNSteps(loop *train.Loop, n int) {
 	train.EveryNSteps(loop, n, "margaid.Plot", 0,
-		func(loop *train.Loop, metrics []tensor.Tensor) error {
+		func(loop *train.Loop, metrics []*tensors.Tensor) error {
 			// Update plots with metrics.
-			return stdplots.AddTrainAndEvalMetrics(ps, loop, metrics, ps.EvalDatasets)
+			return stdplots.AddTrainAndEvalMetrics(ps, loop, metrics, ps.EvalDatasets, ps.batchNormAveragesDS)
 		})
 	ps.attachOnEnd(loop)
 }
@@ -194,6 +197,19 @@ func (ps *Plots) WithFile(filePath string) (*Plots, error) {
 	}
 	ps.fileWriter, ps.errFileWriter = stdplots.CreatePointsWriter(filePath)
 	return ps, nil
+}
+
+// WithBatchNormalizationAveragesUpdate configures a dataset to use to update the averages (of mean and variance)
+// for batch normalization.
+//
+// The oneEpochDS dataset (typically, the same as a training data evaluation dataset) should be a 1-epoch training
+// data dataset, and it can use evaluation batch sizes.
+// If oneEpochDS is nil, it disabled the updating of the averages.
+//
+// If the model is not using batch normalization this is a no-op and nothing is executed.
+func (ps *Plots) WithBatchNormalizationAveragesUpdate(oneEpochDS train.Dataset) *Plots {
+	ps.batchNormAveragesDS = oneEpochDS
+	return ps
 }
 
 // PreloadFile uses the filePath both to load data points.
@@ -307,7 +323,7 @@ func (ps *Plots) WithEvalLossType(evalLossMetricType string) *Plots {
 
 // attachOnEnd of the loop to draw the final plot -- and clear the transient area if using dynamic plots.
 func (ps *Plots) attachOnEnd(loop *train.Loop) {
-	loop.OnEnd("margaid plots", 120, func(_ *train.Loop, _ []tensor.Tensor) error {
+	loop.OnEnd("margaid plots", 120, func(_ *train.Loop, _ []*tensors.Tensor) error {
 		// Final plot.
 		if ps.gonbID != "" {
 			// Erase intermediary transient plots.
@@ -325,8 +341,8 @@ func (ps *Plots) attachOnEnd(loop *train.Loop) {
 // It automatically calls Plots.Plot at the end of the loop (`loop.OnEnd()`).
 func (ps *Plots) Attach(loop *train.Loop, numPoints int) {
 	train.NTimesDuringLoop(loop, numPoints, "margaid plots", 0,
-		func(loop *train.Loop, metrics []tensor.Tensor) error {
-			return stdplots.AddTrainAndEvalMetrics(ps, loop, metrics, ps.EvalDatasets)
+		func(loop *train.Loop, metrics []*tensors.Tensor) error {
+			return stdplots.AddTrainAndEvalMetrics(ps, loop, metrics, ps.EvalDatasets, ps.batchNormAveragesDS)
 		})
 	ps.attachOnEnd(loop)
 }
@@ -408,7 +424,7 @@ func (ps *Plots) Plot() {
 	if !gonbui.IsNotebook {
 		return
 	}
-	for _, key := range slices.SortedKeys(ps.PerMetricType) {
+	for _, key := range xslices.SortedKeys(ps.PerMetricType) {
 		gonbui.DisplayHTML(ps.PerMetricType[key].PlotToHTML(ps.Width, ps.Height))
 	}
 }
@@ -417,7 +433,7 @@ func (ps *Plots) Plot() {
 // (one per metric type), which can be displayed in some different way.
 func (ps *Plots) PlotToHTML() string {
 	parts := make([]string, 0, len(ps.PerMetricType))
-	for _, key := range slices.SortedKeys(ps.PerMetricType) {
+	for _, key := range xslices.SortedKeys(ps.PerMetricType) {
 		parts = append(parts, ps.PerMetricType[key].PlotToHTML(ps.Width, ps.Height))
 	}
 	return strings.Join(parts, "\n")
@@ -453,7 +469,7 @@ func (p *Plot) PlotToHTML(width, height int) string {
 		return ""
 	}
 	allSeries := make([]*mg.Series, 0, len(p.PerName))
-	for _, key := range slices.SortedKeys(p.PerName) {
+	for _, key := range xslices.SortedKeys(p.PerName) {
 		allSeries = append(allSeries, p.PerName[key])
 	}
 	diagram := mg.New(width, height,
@@ -475,7 +491,7 @@ func (p *Plot) PlotToHTML(width, height int) string {
 	if p.MetricType != "" {
 		diagram.Title(fmt.Sprintf("%s metrics", p.MetricType))
 	}
-	if len(p.PerName) > 1 || slices.SortedKeys(p.PerName)[0] != "" {
+	if len(p.PerName) > 1 || xslices.SortedKeys(p.PerName)[0] != "" {
 		diagram.Legend(mg.BottomLeft)
 	}
 	buf := bytes.NewBuffer(nil)

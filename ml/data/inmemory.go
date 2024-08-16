@@ -19,12 +19,13 @@ package data
 import (
 	"encoding/gob"
 	"fmt"
+	. "github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/train"
-	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
-	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/pkg/errors"
 	"golang.org/x/exp/constraints"
 	"io"
@@ -35,7 +36,7 @@ import (
 )
 
 // InMemoryDataset represents a Dataset that has been completely read into the memory of the device
-// it was created with -- the platform of the associated `graph.Manager`.
+// it was created with -- the platform of the associated `graph.Backend`.
 //
 // It supports batching, shuffling (with and without replacement) and can be duplicated (only one copy
 // of the underlying data is used).
@@ -43,7 +44,7 @@ import (
 // Finally, it supports serialization and deserialization, to accelerate loading of the data -- in case
 // generating the original dataset is expensive (e.g: image transformations).
 type InMemoryDataset struct {
-	manager *Manager
+	backend backends.Backend
 
 	// name of the original dataset used to populate the InMemoryDataset.
 	name string
@@ -52,7 +53,7 @@ type InMemoryDataset struct {
 	spec any
 
 	// inputsAndLabelsData contains the full dataset for each of the inputs and labels.
-	inputsAndLabelsData []tensor.Tensor
+	inputsAndLabelsData []*tensors.Tensor
 
 	// numInputsTensors indicate how many in inputsAndLabelsData are inputs, the remainder are labels.
 	numInputsTensors int
@@ -89,15 +90,19 @@ type InMemoryDataset struct {
 
 	// randomNumberGenerator used when random sampling, allows for deterministic random datasets.
 	randomNumberGenerator *rand.Rand
+
+	// takeN is the maximum number of examples to take, before forcing an end of epoch.
+	// If <= 0, take as many as available (or continuously if InMemoryDataset.infinite=true)
+	takeN int
 }
 
 // InMemory creates dataset that reads the whole contents of `ds` into memory.
 //
-// It uses GoMLX to batch the tensors themselves, so it takes a graph.Manager as its first
-// parameter. Flat will be cached in the platform (device) the Manager was configured with.
+// It uses GoMLX to batch the tensors themselves, so it takes a graph.Backend as its first
+// parameter. Flat will be cached in the platform (device) the Backend was configured with.
 //
 // Args:
-//   - `manager`: will be used to create the graph that does the caching and the ca actually does the batching.
+//   - `backend`: will be used to create the graph that does the caching and the ca actually does the batching.
 //   - `ds`: dataset to be cached. It is read in full once, concatenating the results in the cache.
 //   - `dsIsBatched`: whether the input `ds` is batched, and it's leading (first) axis is a batch size. If true,
 //     count of examples is adjusted accordingly. Notice if true, the batch size must be the same for all elements
@@ -105,11 +110,11 @@ type InMemoryDataset struct {
 //
 // Returns a `InMemoryDataset`, that is initially not shuffled and not batched. You can configure how you want to
 // use it with the other configuration methods.
-func InMemory(manager *Manager, ds train.Dataset, dsIsBatched bool) (mds *InMemoryDataset, err error) {
+func InMemory(backend backends.Backend, ds train.Dataset, dsIsBatched bool) (mds *InMemoryDataset, err error) {
 	mds = &InMemoryDataset{
-		manager:               manager,
+		backend:               backend,
 		randomNumberGenerator: rand.New(rand.NewSource(time.Now().UnixNano())),
-		gatherExec:            NewExec(manager, gatherFromDataTensorsGraph),
+		gatherExec:            NewExec(backend, gatherFromDataTensorsGraph),
 		name:                  ds.Name(),
 	}
 	err = mds.readDataset(ds, dsIsBatched)
@@ -128,16 +133,16 @@ func InMemory(manager *Manager, ds train.Dataset, dsIsBatched bool) (mds *InMemo
 //
 // Example: A dataset with one input tensor and one label tensor. Each with two examples.
 //
-//	mds, err := InMemoryFromData(manager, "test",
+//	mds, err := InMemoryFromData(backend, "test",
 //		[]any{[][]float32{{1, 2}, {3, 4}}},
 //		[]any{[][]float32{{3}, {7}}})
-func InMemoryFromData(manager *Manager, name string, inputs []any, labels []any) (mds *InMemoryDataset, err error) {
+func InMemoryFromData(backend backends.Backend, name string, inputs []any, labels []any) (mds *InMemoryDataset, err error) {
 	mds = &InMemoryDataset{
-		manager:               manager,
+		backend:               backend,
 		randomNumberGenerator: rand.New(rand.NewSource(time.Now().UnixNano())),
-		gatherExec:            NewExec(manager, gatherFromDataTensorsGraph),
+		gatherExec:            NewExec(backend, gatherFromDataTensorsGraph),
 		name:                  name,
-		inputsAndLabelsData:   make([]tensor.Tensor, 0, len(inputs)+len(labels)),
+		inputsAndLabelsData:   make([]*tensors.Tensor, 0, len(inputs)+len(labels)),
 		numInputsTensors:      len(inputs),
 	}
 
@@ -149,8 +154,8 @@ func InMemoryFromData(manager *Manager, name string, inputs []any, labels []any)
 		return fmt.Sprintf("parsing labels[%d]", ii-mds.numInputsTensors)
 	}
 	for ii, value := range append(inputs, labels...) {
-		var valueT tensor.Tensor
-		err = TryCatch[error](func() { valueT = tensor.FromAnyValue(value) })
+		var valueT *tensors.Tensor
+		err = TryCatch[error](func() { valueT = tensors.FromAnyValue(value) })
 		if err != nil {
 			err = errors.WithMessage(err, errMsgFn(ii))
 			return
@@ -194,7 +199,7 @@ func isEqualButBatchDimension(s1, s2 shapes.Shape) bool {
 // readDataset and generate concatenated tensors with all the data.
 func (mds *InMemoryDataset) readDataset(ds train.Dataset, dsIsBatched bool) (err error) {
 	// allData: for each element in `(inputs, labels)`, a slice with all the tensors returned by ds.Yield.
-	var allData [][]tensor.Tensor
+	var allData [][]*tensors.Tensor
 	var inputsAndLabelsShapes []shapes.Shape
 	var numLabelsTensors int
 	mds.numExamples = 0
@@ -227,7 +232,7 @@ func (mds *InMemoryDataset) readDataset(ds train.Dataset, dsIsBatched bool) (err
 				inputsAndLabelsShapes = append(inputsAndLabelsShapes, t.Shape())
 			}
 			// Initialize allData.
-			allData = make([][]tensor.Tensor, len(inputsAndLabels))
+			allData = make([][]*tensors.Tensor, len(inputsAndLabels))
 
 		} else {
 			// Check that the inputs/labels are consistent with previous.
@@ -242,7 +247,7 @@ func (mds *InMemoryDataset) readDataset(ds train.Dataset, dsIsBatched bool) (err
 				if dsIsBatched {
 					validShapes = isEqualButBatchDimension(inputsAndLabelsShapes[ii], t.Shape())
 				} else {
-					validShapes = inputsAndLabelsShapes[ii].Eq(t.Shape())
+					validShapes = inputsAndLabelsShapes[ii].Equal(t.Shape())
 				}
 				if !validShapes {
 					err = errors.Errorf("shape of %s incompatible: other examples shape was %s, for example #%d got shape %s",
@@ -297,27 +302,27 @@ func (mds *InMemoryDataset) readDataset(ds train.Dataset, dsIsBatched bool) (err
 		// Batch dimension is by convention the very first.
 		return Concatenate(parts, 0)
 	}
-	concatenateExec := NewExec(mds.manager, concatenateFn)
+	concatenateExec := NewExec(mds.backend, concatenateFn)
 	// Configure a large cache, since there can be quite a few cycles times the number of elements.
 	concatenateExec.SetMaxCache(512)
 
 	// Concatenate each element of inputsAndLabels across all examples: this is done by consecutively
-	// concatenating at most `MaxElementsToConcat` elements at a time (XLA doesn't handle well very large
+	// concatenating at most `MaxElementsToConcat` elements at a time -- XLA doesn't handle well very large
 	// computation graphs.
 	const MaxExamplesToConcat = 16
-	mds.inputsAndLabelsData = make([]tensor.Tensor, 0, len(allData))
-	convertToAny := func(t tensor.Tensor) any { return t }
+	mds.inputsAndLabelsData = make([]*tensors.Tensor, 0, len(allData))
+	convertToAny := func(t *tensors.Tensor) any { return t }
 	for concatenationLoopCount := 0; len(allData[0]) > 1; concatenationLoopCount++ {
-		newAllData := make([][]tensor.Tensor, len(allData))
+		newAllData := make([][]*tensors.Tensor, len(allData))
 		for inputsAndLabelsIdx, allExamples := range allData {
 			numConcatenations := (len(allExamples) + MaxExamplesToConcat - 1) / MaxExamplesToConcat
-			newAllExamples := make([]tensor.Tensor, numConcatenations)
+			newAllExamples := make([]*tensors.Tensor, numConcatenations)
 			for jj := 0; jj < numConcatenations; jj++ {
 				// Take MaxExamplesToConcat examples at a time.
 				start := jj * MaxExamplesToConcat
 				end := minN(start+MaxExamplesToConcat, len(allExamples))
 				examplesSlice := allExamples[start:end]
-				examplesAsAny := slices.Map[tensor.Tensor, any](examplesSlice, convertToAny)
+				examplesAsAny := xslices.Map[*tensors.Tensor, any](examplesSlice, convertToAny)
 				err = TryCatch[error](func() { newAllExamples[jj] = concatenateExec.Call(examplesAsAny...)[0] })
 				if err != nil {
 					err = errors.WithMessagef(err, "while concatenating %s examples into large tensor", getElementDesc(inputsAndLabelsIdx))
@@ -349,8 +354,8 @@ func (mds *InMemoryDataset) readDataset(ds train.Dataset, dsIsBatched bool) (err
 }
 
 // Memory returns an approximation of the memory being used.
-func (mds *InMemoryDataset) Memory() int64 {
-	var mem int64
+func (mds *InMemoryDataset) Memory() uintptr {
+	var mem uintptr
 	for _, t := range mds.inputsAndLabelsData {
 		mem += t.Shape().Memory()
 	}
@@ -367,13 +372,14 @@ func (mds *InMemoryDataset) NumExamples() int {
 // The copy comes configured by default with sequential reading (not random sampling), non-looping, and reset.
 func (mds *InMemoryDataset) Copy() *InMemoryDataset {
 	return &InMemoryDataset{
-		manager:               mds.manager,
+		backend:               mds.backend,
 		name:                  mds.name,
 		spec:                  mds.spec,
 		inputsAndLabelsData:   mds.inputsAndLabelsData,
 		numInputsTensors:      mds.numInputsTensors,
 		numExamples:           mds.numExamples,
 		gatherExec:            mds.gatherExec,
+		takeN:                 mds.takeN,
 		randomNumberGenerator: rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }
@@ -430,6 +436,9 @@ func (mds *InMemoryDataset) indicesNextYield() (indices []int) {
 	if mds.next >= mds.numExamples {
 		mds.next = -1
 	}
+	if mds.takeN > 0 && mds.next >= mds.takeN*n {
+		mds.next = -1
+	}
 	return
 }
 
@@ -449,13 +458,13 @@ func gatherFromDataTensorsGraph(indicesAndData []*Node) (gathered []*Node) {
 // Yield implements `train.Dataset`.
 //
 // Returns next batch's inputs and labels or single example if BatchSize is set to 0.
-func (mds *InMemoryDataset) Yield() (spec any, inputs []tensor.Tensor, labels []tensor.Tensor, err error) {
+func (mds *InMemoryDataset) Yield() (spec any, inputs []*tensors.Tensor, labels []*tensors.Tensor, err error) {
 	if len(mds.inputsAndLabelsData) == 0 {
 		err = errors.Errorf("InMemoryDataset is empty, maybe it has been finalized?")
 		return
 	}
 	for _, data := range mds.inputsAndLabelsData {
-		if data.IsFinalized() {
+		if !data.Ok() {
 			err = errors.Errorf("InMemoryDataset data has been been finalized?")
 			return
 		}
@@ -479,14 +488,14 @@ func (mds *InMemoryDataset) Yield() (spec any, inputs []tensor.Tensor, labels []
 	}
 
 	// Gather the elements (inputs and labels) all in one call, given the indices.
-	inputsAndLabels := make([]tensor.Tensor, len(mds.inputsAndLabelsData))
+	inputsAndLabels := make([]*tensors.Tensor, len(mds.inputsAndLabelsData))
 	indicesAndData := make([]any, 0, len(mds.inputsAndLabelsData)+1)
 	if mds.batchSize == 0 {
 		// Index should be a scalar.
 		indicesAndData = append(indicesAndData, indices[0])
 	} else {
 		// Indices are shaped [batch_size, 1].
-		indicesT := tensor.FromFlatDataAndDimensions(indices, len(indices), 1)
+		indicesT := tensors.FromFlatDataAndDimensions(indices, len(indices), 1)
 		indicesAndData = append(indicesAndData, indicesT)
 	}
 	for _, data := range mds.inputsAndLabelsData {
@@ -606,6 +615,19 @@ func (mds *InMemoryDataset) Infinite(infinite bool) *InMemoryDataset {
 	return mds
 }
 
+// TakeN configures dataset to only take N examples before returning io.EOF.
+// If set to 0 or -1, it takes as many as there is data.
+// If configured, it automatically disables InMemoryDataset.Infinite
+func (mds *InMemoryDataset) TakeN(n int) *InMemoryDataset {
+	if n > 0 {
+		mds.Infinite(false)
+	}
+	mds.muSampling.Lock()
+	defer mds.muSampling.Unlock()
+	mds.takeN = n
+	return mds
+}
+
 // FinalizeAll will immediately free all the underlying data (and not wait for the garbage collector).
 // This invalidates not only this InMemoryDataset, but also all other copies that use the same data (created
 // with Copy).
@@ -621,7 +643,7 @@ func (mds *InMemoryDataset) FinalizeAll() {
 
 // GobSerialize in-memory content to the encoder.
 //
-// Only the underlying data is serialized. The graph.Manager or the sampling configuration is not serialized.
+// Only the underlying data is serialized. The graph.Backend or the sampling configuration is not serialized.
 // The contents of the `spec` (see WithSpec) is also not serialized.
 func (mds *InMemoryDataset) GobSerialize(encoder *gob.Encoder) (err error) {
 	enc := func(data any) {
@@ -643,24 +665,31 @@ func (mds *InMemoryDataset) GobSerialize(encoder *gob.Encoder) (err error) {
 	}
 
 	for _, data := range mds.inputsAndLabelsData {
-		// TODO: check if Local tensor already existed before, in which case
-		//       don't Finalize it after use.
-		local := data.Local()
-		err = local.GobSerialize(encoder)
+		hasLocal := data.IsLocal()
+		err = data.GobSerialize(encoder)
 		if err != nil {
 			return err
 		}
-		local.Finalize() // Free local copy, no longer needed.
+		if !hasLocal && data.IsLocal() {
+			// Free the local storage copy of the tensor created, to avoid using too much space.
+			data.FinalizeLocal()
+		}
 	}
 	return
 }
 
-// GobDeserializeInMemory dataset from the decoder. It requires a `graph.Manager` to properly be recreated.
+// GobDeserializeInMemory dataset from the decoder. It requires a `graph.Backend` and the deviceNum(s) where the data
+// is going to be stored -- it drops the local storage copy of the values.
+//
+// If deviceNums is nil, it defaults to []DeviceNum{0}, which is safe in most cases.
 //
 // No sampling configuration is recovered, and the InMemoryDataset created is sequential (no random sampling)
 // that reads through only one epoch. The random number generator is also newly initialized (see
 // InMemoryDataset.WithRand).
-func GobDeserializeInMemory(manager *Manager, decoder *gob.Decoder) (mds *InMemoryDataset, err error) {
+func GobDeserializeInMemory(backend backends.Backend, deviceNums []backends.DeviceNum, decoder *gob.Decoder) (mds *InMemoryDataset, err error) {
+	if len(deviceNums) == 0 {
+		deviceNums = []backends.DeviceNum{0}
+	}
 	dec := func(data any) {
 		if err != nil {
 			return
@@ -671,9 +700,9 @@ func GobDeserializeInMemory(manager *Manager, decoder *gob.Decoder) (mds *InMemo
 		}
 	}
 	mds = &InMemoryDataset{
-		manager:               manager,
+		backend:               backend,
 		randomNumberGenerator: rand.New(rand.NewSource(time.Now().UnixNano())),
-		gatherExec:            NewExec(manager, gatherFromDataTensorsGraph),
+		gatherExec:            NewExec(backend, gatherFromDataTensorsGraph),
 	}
 
 	var numInputsAndLabels int32
@@ -684,17 +713,17 @@ func GobDeserializeInMemory(manager *Manager, decoder *gob.Decoder) (mds *InMemo
 	if err != nil {
 		return
 	}
-	mds.inputsAndLabelsData = make([]tensor.Tensor, 0, numInputsAndLabels)
+	mds.inputsAndLabelsData = make([]*tensors.Tensor, 0, numInputsAndLabels)
 
-	var local *tensor.Local
+	var tensor *tensors.Tensor
 	for ii := 0; ii < int(numInputsAndLabels); ii++ {
-		local, err = tensor.GobDeserialize(decoder)
+		tensor, err = tensors.GobDeserialize(decoder)
 		if err != nil {
 			return
 		}
-		onDevice := local.Device(manager, manager.DefaultDeviceNum())
-		mds.inputsAndLabelsData = append(mds.inputsAndLabelsData, onDevice)
-		local.Finalize() // Release the local copy that is no longer needed.
+		tensor.MaterializeOnDevices(backend, deviceNums...)
+		tensor.FinalizeLocal()
+		mds.inputsAndLabelsData = append(mds.inputsAndLabelsData, tensor)
 	}
 	return
 }

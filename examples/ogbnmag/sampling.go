@@ -6,7 +6,7 @@ import (
 	mldata "github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/gomlx/gomlx/types/tensors"
 	"os"
 	"path"
 )
@@ -83,14 +83,14 @@ func NewSampler(baseDir string) (*sampler.Sampler, error) {
 // . [seedIdsCandidates] is the seed of seed nodes to sample from, typically [ogbnmag.TrainSplit], [ogbnmag.ValidSplit] or [ogbnmag.TestSplit]. If empty it will sample from all possible papers.
 //
 // It returns a [sampler.Strategy] for OGBN-MAG.
-func NewSamplerStrategy(magSampler *sampler.Sampler, batchSize int, seedIdsCandidates tensor.Tensor) (strategy *sampler.Strategy) {
+func NewSamplerStrategy(magSampler *sampler.Sampler, batchSize int, seedIdsCandidates *tensors.Tensor) (strategy *sampler.Strategy) {
 	strategy = magSampler.NewStrategy()
 	strategy.KeepDegrees = KeepDegrees
 	var seeds *sampler.Rule
 	if seedIdsCandidates == nil {
 		seeds = strategy.Nodes("seeds", "papers", batchSize)
 	} else {
-		seedIdsData := seedIdsCandidates.Local().FlatCopy().([]int32)
+		seedIdsData := tensors.CopyFlatData[int32](seedIdsCandidates)
 		seeds = strategy.NodesFromSet("seeds", "papers", batchSize, seedIdsData)
 	}
 	citations := seeds.FromEdges("citations", "cites", 8)
@@ -105,6 +105,8 @@ func NewSamplerStrategy(magSampler *sampler.Sampler, batchSize int, seedIdsCandi
 		seedsBase = seeds
 	}
 
+	const defaultSamplingCount = 8
+
 	// Authors
 	const authorsCount = 8
 	seedsAuthors := seedsBase.FromEdges("seedsAuthors", "writtenBy", authorsCount)
@@ -114,15 +116,15 @@ func NewSamplerStrategy(magSampler *sampler.Sampler, batchSize int, seedIdsCandi
 	}
 
 	// Other papers by authors.
-	papersByAuthors := seedsAuthors.FromEdges("papersByAuthors", "writes", 8)
-	papersByCitationAuthors := citationsAuthors.FromEdges("papersByCitationAuthors", "writes", 8)
+	papersByAuthors := seedsAuthors.FromEdges("papersByAuthors", "writes", defaultSamplingCount)
+	papersByCitationAuthors := citationsAuthors.FromEdges("papersByCitationAuthors", "writes", defaultSamplingCount)
 	if ReuseShareableKernels {
 		papersByCitationAuthors.WithKernelScopeName(papersByAuthors.ConvKernelScopeName)
 	}
 
 	// Affiliations
-	authorsInstitutions := seedsAuthors.FromEdges("authorsInstitutions", "affiliatedWith", 8)
-	citationAuthorsInstitutions := citationsAuthors.FromEdges("citationAuthorsInstitutions", "affiliatedWith", 8)
+	authorsInstitutions := seedsAuthors.FromEdges("authorsInstitutions", "affiliatedWith", defaultSamplingCount)
+	citationAuthorsInstitutions := citationsAuthors.FromEdges("citationAuthorsInstitutions", "affiliatedWith", defaultSamplingCount)
 	if ReuseShareableKernels {
 		citationAuthorsInstitutions.WithKernelScopeName(authorsInstitutions.ConvKernelScopeName)
 	}
@@ -143,25 +145,20 @@ func NewSamplerStrategy(magSampler *sampler.Sampler, batchSize int, seedIdsCandi
 
 // ExtractLabelsFromInput create the labels from the input seed indices.
 // It returns the same inputs and the extracted labels (with mask).
-func ExtractLabelsFromInput(inputs, labels []tensor.Tensor) ([]tensor.Tensor, []tensor.Tensor) {
-	seedsRef := inputs[0].Local().AcquireData()
-	defer seedsRef.Release()
-	seedsData := seedsRef.Flat().([]int32)
+func ExtractLabelsFromInput(inputs, labels []*tensors.Tensor) ([]*tensors.Tensor, []*tensors.Tensor) {
+	seeds := inputs[0]
 	seedsMask := inputs[1]
-
-	seedsLabels := tensor.FromShape(shapes.Make(inputs[0].DType(), inputs[0].Shape().Size(), 1))
-	labelsRef := seedsLabels.AcquireData()
-	defer labelsRef.Release()
-	labelsData := labelsRef.Flat().([]int32)
-
-	papersLabelsRef := PapersLabels.Local().AcquireData()
-	defer papersLabelsRef.Release()
-	papersLabelData := papersLabelsRef.Flat().([]int32)
-
-	for ii, paperIdx := range seedsData {
-		labelsData[ii] = papersLabelData[paperIdx]
-	}
-	return inputs, []tensor.Tensor{seedsLabels, seedsMask}
+	seedsLabels := tensors.FromShape(shapes.Make(seeds.DType(), seeds.Shape().Size(), 1))
+	tensors.ConstFlatData[int32](seeds, func(seedsData []int32) {
+		tensors.ConstFlatData[int32](PapersLabels, func(papersLabelsData []int32) {
+			tensors.MutableFlatData[int32](seedsLabels, func(labelsData []int32) {
+				for ii, paperIdx := range seedsData {
+					labelsData[ii] = papersLabelsData[paperIdx]
+				}
+			})
+		})
+	})
+	return inputs, []*tensors.Tensor{seedsLabels, seedsMask}
 }
 
 // WithReplacement indicates whether the training dataset is created with replacement.

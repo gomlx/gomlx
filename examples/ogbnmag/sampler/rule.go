@@ -107,7 +107,7 @@ func (r *Rule) FromEdges(name, edgeTypeName string, count int) *Rule {
 		Panicf("edge type %q connects %q to %q: but you are using it on sampling rule %q, which is of node type %q",
 			edgeTypeName, edgeDef.SourceNodeType, edgeDef.TargetNodeType, r.Name, r.NodeTypeName)
 	}
-	newShape := r.Shape.Copy()
+	newShape := r.Shape.Clone()
 	newShape.Dimensions = append(newShape.Dimensions, count)
 	numNodes, found := strategy.Sampler.NodeTypesToCount[edgeDef.TargetNodeType]
 	if !found {
@@ -141,7 +141,7 @@ func (r *Rule) IdentitySubRule(name string) *Rule {
 	if prevRule, found := strategy.Rules[name]; found {
 		Panicf("rule named %q already exists: %s", name, prevRule)
 	}
-	newShape := r.Shape.Copy()
+	newShape := r.Shape.Clone()
 	newShape.Dimensions = append(newShape.Dimensions, 1)
 	newRule := &Rule{
 		Sampler:      r.Sampler,

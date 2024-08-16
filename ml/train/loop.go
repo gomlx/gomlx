@@ -17,15 +17,14 @@
 package train
 
 import (
+	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
-	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
-	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/pkg/errors"
-	xslices "golang.org/x/exp/slices"
 	"io"
 	"math"
+	"slices"
 	"sort"
 	"time"
 )
@@ -38,10 +37,10 @@ type Priority int
 type OnStartFn func(loop *Loop, ds Dataset) error
 
 // OnStepFn is the type of OnStep hooks.
-type OnStepFn func(loop *Loop, metrics []tensor.Tensor) error
+type OnStepFn func(loop *Loop, metrics []*tensors.Tensor) error
 
 // OnEndFn is the type of OnEnd hooks.
-type OnEndFn func(loop *Loop, metrics []tensor.Tensor) error
+type OnEndFn func(loop *Loop, metrics []*tensors.Tensor) error
 
 // Loop will run a training loop, invoking Trainer.TrainStep every step,
 // and calling the appropriate hooks.
@@ -121,7 +120,7 @@ func (loop *Loop) start(ds Dataset) (err error) {
 
 // step of loop, called by all looping methods.
 // It calls the appropriate hooks.
-func (loop *Loop) step(spec any, inputs, labels []tensor.Tensor) (metrics []tensor.Tensor, err error) {
+func (loop *Loop) step(spec any, inputs, labels []*tensors.Tensor) (metrics []*tensors.Tensor, err error) {
 	startTime := time.Now()
 	defer func() {
 		elapsed := time.Since(startTime)
@@ -162,7 +161,7 @@ func (loop *Loop) step(spec any, inputs, labels []tensor.Tensor) (metrics []tens
 
 // end of loop, called by all looping methods.
 // It calls the appropriate hooks.
-func (loop *Loop) end(metrics []tensor.Tensor) (err error) {
+func (loop *Loop) end(metrics []*tensors.Tensor) (err error) {
 	loop.onEnd.Enumerate(func(hook *hookWithName[OnEndFn]) {
 		if err != nil {
 			// After the first error stop.
@@ -179,7 +178,7 @@ func (loop *Loop) end(metrics []tensor.Tensor) (err error) {
 // RunSteps runs those many steps. StartStep and EndStep are adjusted to the current
 // LoopStep, so it can be called multiple times, and it will simply pick up
 // where it left of last time.
-func (loop *Loop) RunSteps(ds Dataset, steps int) (metrics []tensor.Tensor, err error) {
+func (loop *Loop) RunSteps(ds Dataset, steps int) (metrics []*tensors.Tensor, err error) {
 	if steps == 0 {
 		return nil, nil
 	}
@@ -223,7 +222,7 @@ func (loop *Loop) RunSteps(ds Dataset, steps int) (metrics []tensor.Tensor, err 
 // be adjusted to expectation after the first epoch, when one knows how many steps there are
 // going to be.
 // Dataset.Reset is called after each epoch (including the last).
-func (loop *Loop) RunEpochs(ds Dataset, epochs int) (metrics []tensor.Tensor, err error) {
+func (loop *Loop) RunEpochs(ds Dataset, epochs int) (metrics []*tensors.Tensor, err error) {
 	if err = loop.Trainer.ResetTrainMetrics(); err != nil {
 		return
 	}
@@ -276,8 +275,8 @@ func (loop *Loop) MedianTrainStepDuration() time.Duration {
 		return time.Millisecond
 	}
 
-	times := slices.Copy(loop.TrainStepDurations)
-	xslices.Sort(times)
+	times := slices.Clone(loop.TrainStepDurations)
+	slices.Sort(times)
 	return times[len(times)/2]
 }
 

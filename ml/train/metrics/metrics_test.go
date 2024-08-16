@@ -24,6 +24,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"testing"
+
+	_ "github.com/gomlx/gomlx/backends/xla"
 )
 
 // takeFirstFn wraps the given `metricFn` with a function that takes a single node for labels and predictions as
@@ -42,8 +44,8 @@ func takeLabelsMaskWeightPredictionsFn(metricFn func(ctx *context.Context, label
 }
 
 func TestBinaryAccuracyGraph(t *testing.T) {
-	manager := graphtest.BuildTestManager()
-	ctx := context.NewContext(manager)
+	manager := graphtest.BuildTestBackend()
+	ctx := context.New()
 	accuracyExec := context.NewExec(manager, ctx, takeFirstFn(BinaryAccuracyGraph))
 	labels, probs := []float32{0, 1, 0, 1, 0, 1}, []float32{0.1, 0.1, 0.5, 0.5, 0.8, 0.8}
 	results := accuracyExec.Call(labels, probs)
@@ -54,8 +56,8 @@ func TestBinaryAccuracyGraph(t *testing.T) {
 }
 
 func TestNewMeanBinaryAccuracy(t *testing.T) {
-	manager := graphtest.BuildTestManager()
-	ctx := context.NewContext(manager).Checked(false)
+	manager := graphtest.BuildTestBackend()
+	ctx := context.New().Checked(false)
 	accMetric := NewMeanBinaryAccuracy("accuracy", "acc")
 	accExec := context.NewExec(manager, ctx, func(ctx *context.Context, labels, predictions *Node) *Node {
 		return accMetric.UpdateGraph(ctx, []*Node{labels}, []*Node{predictions})
@@ -71,18 +73,18 @@ func TestNewMeanBinaryAccuracy(t *testing.T) {
 	// List and check variables.
 	fmt.Println("Variables:")
 	ctx.EnumerateVariables(func(v *context.Variable) {
-		fmt.Printf("\t%s / %s=%s\n", v.Scope(), v.Name(), v.Value().Local())
+		fmt.Printf("\t%s / %s=%s\n", v.Scope(), v.Name(), v.Value())
 	})
 
-	metricScope := ctx.In(accMetric.ScopeName()).Scope()
+	metricScope := ctx.In(Scope).In(accMetric.ScopeName()).Scope()
 	totalVar := ctx.InspectVariable(metricScope, "total")
 	require.NotNilf(t, totalVar, "Variable \"total\" was not created in %s / total", metricScope)
-	total := totalVar.Value().Local().Value().(float32)
+	total := totalVar.Value().Value().(float32)
 	assert.Equal(t, float32(2), total, "MeanBinaryAccuracy total value")
 
 	weightVar := ctx.InspectVariable(metricScope, "weight")
 	require.NotNilf(t, weightVar, "Variable \"weight\" was not created in %s / total", metricScope)
-	weight := weightVar.Value().Local().Value().(float32)
+	weight := weightVar.Value().Value().(float32)
 	assert.Equal(t, float32(6), weight, "MeanBinaryAccuracy weight value")
 
 	// Second batch:
@@ -94,15 +96,15 @@ func TestNewMeanBinaryAccuracy(t *testing.T) {
 
 	// Zeros the state.
 	accMetric.Reset(ctx)
-	total = totalVar.Value().Local().Value().(float32)
-	weight = weightVar.Value().Local().Value().(float32)
+	total = totalVar.Value().Value().(float32)
+	weight = weightVar.Value().Value().(float32)
 	assert.Zero(t, total, "Expected total variable to be 0 after Reset()")
 	assert.Zero(t, weight, "Expected weight variable to be 0 after Reset()")
 }
 
 func TestBinaryLogitsAccuracyGraph(t *testing.T) {
-	manager := graphtest.BuildTestManager()
-	ctx := context.NewContext(manager)
+	manager := graphtest.BuildTestBackend()
+	ctx := context.New()
 	accuracyExec := context.NewExec(manager, ctx, takeFirstFn(BinaryLogitsAccuracyGraph))
 	labels, logits := []float32{0, 1, 0, 1, 0, 1}, []float32{-0.1, -0.1, 0, 0, 0.2, 10.0}
 	results := accuracyExec.Call(labels, logits)
@@ -111,8 +113,8 @@ func TestBinaryLogitsAccuracyGraph(t *testing.T) {
 }
 
 func TestSparseCategoricalAccuracyGraph(t *testing.T) {
-	manager := graphtest.BuildTestManager()
-	ctx := context.NewContext(manager)
+	manager := graphtest.BuildTestBackend()
+	ctx := context.New()
 	{
 		accuracyExec := context.NewExec(manager, ctx, takeFirstFn(SparseCategoricalAccuracyGraph))
 		labels, logits := [][]int{{0}, {1}, {2}}, [][]float32{

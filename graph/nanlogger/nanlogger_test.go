@@ -23,10 +23,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"math"
 	"testing"
+
+	_ "github.com/gomlx/gomlx/backends/xla"
 )
 
 func TestNanLogger(t *testing.T) {
-	manager := graphtest.BuildTestManager()
+	backend := graphtest.BuildTestBackend()
 
 	var numHandlerCalls, numNan, numInf int
 	var lastHandledScope []string
@@ -44,7 +46,7 @@ func TestNanLogger(t *testing.T) {
 	// Create a NanLogger and a trivial executor that will trigger NaN and Inf.
 	l := New()
 	l.SetHandler(handler)
-	e := NewExec(manager, func(values *Node) *Node {
+	e := NewExec(backend, func(values *Node) *Node {
 		l.PushScope("scope1")
 		v1 := Sqrt(values)
 		l.Trace(v1)

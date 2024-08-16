@@ -23,8 +23,8 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/types/slices"
-	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
@@ -38,9 +38,7 @@ type TestContextGraphFn func(ctx *context.Context, g *Graph) (inputs, outputs []
 // delta is the margin of value on the difference of output and want values that are acceptable.
 // Values of delta <= 0 means only exact equality is accepted.
 func RunTestGraphFn(t *testing.T, testName string, graphFn TestContextGraphFn, want []any, delta float64) {
-	manager := graphtest.BuildTestManager()
-	ctx := context.NewContext(manager)
-
+	ctx := context.New()
 	var numInputs, numOutputs int
 	wrapperFn := func(ctx *context.Context, g *Graph) []*Node {
 		i, o := graphFn(ctx, g)
@@ -48,16 +46,18 @@ func RunTestGraphFn(t *testing.T, testName string, graphFn TestContextGraphFn, w
 		all := append(i, o...)
 		return all
 	}
-	exec := context.NewExec(manager, ctx, wrapperFn)
-	var inputsAndOutputs []tensor.Tensor
+
+	backend := graphtest.BuildTestBackend()
+	exec := context.NewExec(backend, ctx, wrapperFn)
+	var inputsAndOutputs []*tensors.Tensor
 	require.NotPanicsf(t, func() { inputsAndOutputs = exec.Call() },
-		"%s: failed to run graph with %+v", testName)
+		"%s: failed to run graph", testName)
 	inputs := inputsAndOutputs[:numInputs]
 	outputs := inputsAndOutputs[numInputs:]
 
 	fmt.Printf("\n%s:\n", testName)
 	for ii, input := range inputs {
-		fmt.Printf("\tInput %d: %s\n", ii, input.Local().GoStr())
+		fmt.Printf("\tInput %d: %s\n", ii, input.GoStr())
 	}
 	if numInputs > 0 {
 		fmt.Printf("\t======\n")
@@ -67,17 +67,17 @@ func RunTestGraphFn(t *testing.T, testName string, graphFn TestContextGraphFn, w
 		if v.Shape().Size() > 16 {
 			fmt.Printf("%s\n", v.Shape())
 		} else {
-			fmt.Printf("%s\n", v.Value().Local().GoStr())
+			fmt.Printf("%s\n", v.Value().GoStr())
 		}
 	})
 	fmt.Printf("\t======\n")
 	for ii, output := range outputs {
-		fmt.Printf("\tOutput %d: %s\n", ii, output.Local().GoStr())
+		fmt.Printf("\tOutput %d: %s\n", ii, output.GoStr())
 	}
 	require.Equalf(t, len(want), numOutputs, "%s: number of wanted results different from number of outputs", testName)
 
 	for ii, output := range outputs {
-		require.Truef(t, slices.SlicesInDelta(output.Value(), want[ii], delta), "%s: output #%d doesn't match wanted value %v",
+		require.Truef(t, xslices.SlicesInDelta(output.Value(), want[ii], delta), "%s: output #%d doesn't match wanted value %v",
 			testName, ii, want[ii])
 	}
 }

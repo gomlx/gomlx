@@ -21,10 +21,24 @@
 package losses
 
 import (
+	. "github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
-	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gopjrt/dtypes"
 )
+
+// LossFn is the interface used bye train.Trainer to train models.
+//
+// It takes as inputs the labels and predictions:
+//   - labels comes from the dataset.
+//   - predictions comes from the model.
+//   - the returned loss will be graph.ReduceAllMean by train.Trainer to a scalar, before being used for gradient descent.
+//     That means that the loss function is free to return a loss per example or an already reduced scalar loss.
+//
+// Most of the predefined losses in package `gomlx/ml/train/losses` assume labels and predictions are
+// both of length one. For multi-head models, it's very easy to write a small custom LossFn that splits
+// the slice and send each label/prediction pair to a predefined loss.
+type LossFn func(labels, predictions []*Node) (loss *Node)
 
 const (
 	Epsilon16 = 1e-4
@@ -32,14 +46,14 @@ const (
 	Epsilon64 = 1e-8
 )
 
-func epsilonForDType(g *Graph, dtype shapes.DType) *Node {
+func epsilonForDType(g *Graph, dtype dtypes.DType) *Node {
 	var epsilon float64
 	switch dtype {
-	case shapes.Float64:
+	case dtypes.Float64:
 		epsilon = Epsilon64
-	case shapes.Float32:
+	case dtypes.Float32:
 		epsilon = Epsilon32
-	case shapes.Float16:
+	case dtypes.Float16:
 		epsilon = Epsilon16
 	default:
 		Panicf("Unknown epsilon value for dtype %s", dtype)
@@ -51,14 +65,14 @@ func epsilonForDType(g *Graph, dtype shapes.DType) *Node {
 //
 // labels and predictions must have the same shape.
 //
-// If there is an extra `labels` `*Node` with the shape of the `labels[0]` (usually simply `[bath_size]`),
+// If there is an extra element in the input labels with the shape of the labels[0] (usually simply `[bath_size]`),
 // it is assumed to be weights tensor to be applied to the losses.
-// If there is an extra `labels` `*Node` with booleans and the same dimensions as `labels[0]` (usually simply `batch_size`),
-// it assumed to be a mask tensor to be applied to the losses.
+// If there is an extra element in the input labels  with booleans and the same dimensions as `labels[0]` (usually
+// simply `batch_size`), it assumed to be a mask tensor to be applied to the losses.
 func MeanSquaredError(labels, predictions []*Node) (loss *Node) {
 	predictions0 := predictions[0]
 	labels0 := labels[0]
-	if !labels0.Shape().Eq(predictions0.Shape()) {
+	if !labels0.Shape().Equal(predictions0.Shape()) {
 		Panicf("labels[0] (%s) and predictions[0] (%s) must have same shape", labels0.Shape(), predictions0.Shape())
 	}
 	weights, mask := CheckLabelsForWeightsAndMask(labels0.Shape(), labels)
@@ -81,20 +95,25 @@ func MeanSquaredError(labels, predictions []*Node) (loss *Node) {
 // `weightsShape` is the expected shape for weights (if present) and the dimensions for a mask (if present), although
 // a mask is assumed to be of dtype `Bool`.
 //
+// If weights and masks are present, weights are converted to zero for masked out values (where mask is false).
+//
 // If there is an extra `labels` `*Node` with the shape of `weightsShape`, it is assumed to be weights.
 // If there is an extra `labels` `*Node` with booleans with the same dimension as `weightsShape`, it is assumed to be a mask.
 func CheckLabelsForWeightsAndMask(weightsShape shapes.Shape, labels []*Node) (weights, mask *Node) {
-	maskShape := shapes.Make(shapes.Bool, weightsShape.Dimensions...)
+	maskShape := shapes.Make(dtypes.Bool, weightsShape.Dimensions...)
 	// We skip labels[0] because that contains the actual labels.
 	for ii, extra := range labels[1:] {
-		if weights == nil && extra.Shape().Eq(weightsShape) {
+		if weights == nil && extra.Shape().Equal(weightsShape) {
 			weights = extra
-		} else if mask == nil && extra.Shape().Eq(maskShape) {
+		} else if mask == nil && extra.Shape().Equal(maskShape) {
 			mask = extra
 		} else {
 			Panicf("labels ([]*Node) provided by the dataset to the loss function has extra tensors whose use is unknown: labels[%d].shape=%s "+
 				"-- label weights shape would be %s, labels mask shape would be %s", ii+1, extra.Shape(), weightsShape, maskShape)
 		}
+	}
+	if weights != nil && mask != nil {
+		weights = Where(mask, weights, ZerosLike(weights))
 	}
 	return
 }
@@ -111,7 +130,7 @@ func CheckLabelsForWeightsAndMask(weightsShape shapes.Shape, labels []*Node) (we
 func MeanAbsoluteError(labels, predictions []*Node) (loss *Node) {
 	predictions0 := predictions[0]
 	labels0 := labels[0]
-	if !labels0.Shape().Eq(predictions0.Shape()) {
+	if !labels0.Shape().Equal(predictions0.Shape()) {
 		Panicf("labels[0] (%s) and predictions[0] (%s) must have same shape", labels0.Shape(), predictions0.Shape())
 	}
 
@@ -132,6 +151,8 @@ func MeanAbsoluteError(labels, predictions []*Node) (loss *Node) {
 // for binary classification tasks.
 //
 // labels and predictions must have the same shape.
+// labels is converted to predictions dtype, and it's expected to convert to 1.0 (for true) or 0.0 for false.
+// So booleans should work, as an int type that is 0 or 1.
 //
 // It *does not* reduce-mean the losses, they are returned individually for each element of the batch and need
 // to be ReduceAllMean (usually the mean, but it could be the sum also) before used for training.
@@ -142,8 +163,8 @@ func MeanAbsoluteError(labels, predictions []*Node) (loss *Node) {
 // it assumed to be a mask tensor to be applied to the losses.
 func BinaryCrossentropy(labels, predictions []*Node) *Node {
 	predictions0 := predictions[0]
-	labels0 := labels[0]
-	if !labels0.Shape().Eq(predictions0.Shape()) {
+	labels0 := ConvertDType(labels[0], predictions0.DType())
+	if !labels0.Shape().Equal(predictions0.Shape()) {
 		Panicf("labels[0] (%s) and predictions[0] (%s) must have same shape", labels0.Shape(), predictions0.Shape())
 	}
 	losses := Neg(Add(
@@ -169,6 +190,9 @@ func BinaryCrossentropy(labels, predictions []*Node) *Node {
 // It *does not* reduce-mean the losses, they are returned individually for each element of the batch and need
 // to be ReduceAllMean (usually the mean, but it could be the sum also) before used for training.
 //
+// labels is converted to predictions dtype, and it's expected to convert to 1.0 (for true) or 0.0 for false.
+// So booleans should work, as an int type that is 0 or 1.
+//
 // See mathematical derivation of the stable solution in
 // https://www.tensorflow.org/api_docs/python/tf/nn/sigmoid_cross_entropy_with_logits
 //
@@ -178,7 +202,7 @@ func BinaryCrossentropy(labels, predictions []*Node) *Node {
 // it assumed to be a mask tensor to be applied to the losses.
 func BinaryCrossentropyLogits(labels, logits []*Node) *Node {
 	logits0 := logits[0]
-	labels0 := labels[0]
+	labels0 := ConvertDType(labels[0], logits0.DType())
 	if logits0.Shape().Size() != labels0.Shape().Size() {
 		Panicf("labels[0] (%s) and logits[0] (%s) have incompatible shapes", labels0.Shape(), logits0.Shape())
 	}
@@ -255,20 +279,34 @@ func CategoricalCrossEntropyLogits(labels, logits []*Node) *Node {
 	return categoricalCrossEntropyLogitsImpl(labels0, logits0, weights, mask)
 }
 
-// categoricalCrossEntropyLogitsImpl implements CategoricalCrossEntropyLogits taking as input the
-// nodes only (as opposed to slices).
+// categoricalCrossEntropyLogitsImpl implements CategoricalCrossEntropyLogits.
 func categoricalCrossEntropyLogitsImpl(labels, logits, weights, mask *Node) *Node {
+	g := logits.Graph()
+	dtype := logits.DType()
 	shape := labels.Shape()
-	if !shape.Eq(logits.Shape()) {
+	if !shape.Equal(logits.Shape()) {
 		Panicf("labels(%s) and logits(%s) must different shapes", shape, logits.Shape())
 	}
-	predictions := Softmax(logits)
-	return categoricalCrossEntropyImpl(labels, predictions, weights, mask)
+	var expandedMask *Node
+	if mask != nil {
+		expandedMask = BroadcastToShape(ExpandDims(mask, -1), logits.Shape())
+		logits = Where(expandedMask, logits, ScalarZero(g, dtype))
+	}
+	logPredictions := LogSoftmax(logits)
+	losses := ReduceSum(Neg(Mul(labels, logPredictions)), -1)
+	// Losses will usually be shaped `[batch_size]` now.
+	if weights != nil {
+		losses = Mul(losses, weights)
+	}
+	if mask != nil {
+		losses = Where(mask, losses, ZerosLike(losses))
+	}
+	return losses
 }
 
 // CategoricalCrossEntropy returns the cross-entropy loss of the predictions, given the labels.
 // The labels are provided in "dense" format, they should have the exact same shape as predictions, and be set 1 for
-// the true (labeled) category, and 0 for the others -- or any other distribution that sum to 1.
+// the true (labeled) category, and 0 for the others (one-hot encoding) -- or any other distribution that sums to 1.
 // predictions should hold probabilities that must sum to 1.0.
 //
 // It *does not* reduce-mean the losses, they are returned individually for each element of the batch and need
@@ -289,11 +327,11 @@ func categoricalCrossEntropyImpl(labels, predictions, weights, mask *Node) *Node
 	g := predictions.Graph()
 	shape := labels.Shape()
 	dtype := labels.DType()
-	if !shape.Eq(predictions.Shape()) {
+	if !shape.Equal(predictions.Shape()) {
 		Panicf("labels(%s) and predictions(%s) must different shapes", shape, predictions.Shape())
 	}
 	epsilon := epsilonForDType(g, dtype)
-	predictions = Clip(predictions, epsilon, Sub(ScalarOne(g, dtype), epsilon))
+	predictions = Clip(predictions, epsilon, OneMinus(epsilon))
 	losses := ReduceSum(Neg(Mul(labels, Log(predictions))), -1)
 	// Losses will usually be shaped `[batch_size]` now, ready to apply weights multiplication and/or a mask.
 	if weights != nil {
@@ -303,4 +341,62 @@ func categoricalCrossEntropyImpl(labels, predictions, weights, mask *Node) *Node
 		losses = Where(mask, losses, ZerosLike(losses))
 	}
 	return losses
+}
+
+var (
+	// ParamHuberLossDelta is the name of the hyperparameter that defines the Huber loss delta.
+	// See HuberLossBuilder.
+	// It defaults to 1.0
+	ParamHuberLossDelta = "huber_loss_delta"
+)
+
+// MakeHuberLoss returns a Huber loss function: it's similar to an L2 (MeanSquaredLoss) close to the target,
+// and it becomes L1 (linear) away from the target.
+//
+// The delta parameter configures the range where the loss behaves as L2: if the prediction is further than
+// delta it becomes linear. It also defines the slope. A good default value is 1.0.
+//
+// For the returned loss function:
+//   - If there is an extra element in the input labels with the shape of the labels[0] (usually simply `[bath_size]`),
+//     it is assumed to be weights tensor to be applied to the losses.
+//   - If there is an extra element in the input labels  with booleans and the same dimensions as `labels[0]` (usually
+//     simply `batch_size`), it assumed to be a mask tensor to be applied to the losses.
+//   - The loss is returned per element, and not automatically reduced. train.Trainer will by default take the
+//     mean of it.
+//
+// See https://en.wikipedia.org/wiki/Huber_loss
+func MakeHuberLoss(delta float64) LossFn {
+	if delta <= 0.0 {
+		Panicf("MakeHuberLoss requires delta > 0 (1.0 being a good default), delta=%f given", delta)
+	}
+	return func(labels, predictions []*Node) (loss *Node) {
+		predictions0 := predictions[0]
+		g := predictions0.Graph()
+		dtype := predictions0.DType()
+		labels0 := labels[0]
+		if !labels0.Shape().Equal(predictions0.Shape()) {
+			Panicf("labels[0] (%s) and predictions[0] (%s) must have same shape", labels0.Shape(), predictions0.Shape())
+		}
+		weights, mask := CheckLabelsForWeightsAndMask(labels0.Shape(), labels)
+
+		// Calculate Huber loss.
+		deltaConst := Scalar(g, dtype, delta)
+		absErrors := Abs(Sub(labels0, predictions0))
+		quadratic := Min(absErrors, deltaConst)
+		// Same as max(absErrors - deltaConst, 0) but avoids potentially doubling gradient. (From Jax implementation)
+		linear := Sub(absErrors, quadratic)
+		loss = Add(
+			MulScalar(Square(quadratic), 0.5),
+			Mul(deltaConst, linear),
+		)
+
+		// Apply weights and mask.
+		if weights != nil {
+			loss = Mul(loss, weights)
+		}
+		if mask != nil {
+			loss = Where(mask, loss, ZerosLike(loss))
+		}
+		return loss
+	}
 }

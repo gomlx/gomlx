@@ -22,16 +22,17 @@ import (
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
-	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"testing"
+
+	_ "github.com/gomlx/gomlx/backends/xla"
 )
 
 func TestContextVariables(t *testing.T) {
-	manager := graphtest.BuildTestManager()
-	ctx := NewContext(manager)
+	ctx := New()
 	ctx2 := ctx.In("a")
 
 	if ctx.Scope() != ScopeSeparator {
@@ -44,39 +45,40 @@ func TestContextVariables(t *testing.T) {
 
 	// Same variable name, but different scopes.
 	ctx3 := ctx.In("b")
-	v0 := ctx2.VariableWithShape("x", shapes.Make(shapes.Float32))
-	_ = ctx3.VariableWithShape("x", shapes.Make(shapes.Float64))
+	v0 := ctx2.VariableWithShape("x", shapes.Make(dtypes.Float32))
+	_ = ctx3.VariableWithShape("x", shapes.Make(dtypes.Float64))
 
 	// Try to reuse, without the context being set for that:
-	require.Panicsf(t, func() { v0 = ctx2.VariableWithShape("x", shapes.Make(shapes.Float32)) },
+	require.Panicsf(t, func() { v0 = ctx2.VariableWithShape("x", shapes.Make(dtypes.Float32)) },
 		"Allowed re-creating variable without context set to reuse. v0=%+v", v0)
 
 	// Create another variable, different name.
-	require.NotPanics(t, func() { v0 = ctx2.VariableWithShape("y", shapes.Make(shapes.Int64)) })
+	require.NotPanics(t, func() { v0 = ctx2.VariableWithShape("y", shapes.Make(dtypes.Int64)) })
 
 	// Try to reuse:
 	ctx2 = ctx2.Reuse()
-	v0 = ctx2.VariableWithShape("x", shapes.Make(shapes.Float32))
+	v0 = ctx2.VariableWithShape("x", shapes.Make(dtypes.Float32))
 
 	// Try to reuse with a different shape:
-	require.Panicsf(t, func() { v0 = ctx2.VariableWithShape("x", shapes.Make(shapes.Float32, 1, 1)) },
+	require.Panicsf(t, func() { v0 = ctx2.VariableWithShape("x", shapes.Make(dtypes.Float32, 1, 1)) },
 		"Allowed re-using variable %q in scope %q with a different shape context set to reuse.", v0.Name(), v0.Scope())
 }
 
 func TestContextVariablesInitialization(t *testing.T) {
-	manager := graphtest.BuildTestManager()
-	ctx := NewContext(manager)
+	ctx := New()
 	ctx0 := ctx.In("a").WithInitializer(initializers.RandomUniformFn(42, 1.5, 2.5))
-	v0 := ctx0.VariableWithShape("x", shapes.Make(shapes.Float32))
+	v0 := ctx0.VariableWithShape("x", shapes.Make(dtypes.Float32))
 	ctx1 := ctx.In("b").WithInitializer(initializers.RandomNormalFn(42, 1.0))
-	v1 := ctx1.VariableWithShape("y", shapes.Make(shapes.Float64, 2))
+	v1 := ctx1.VariableWithShape("y", shapes.Make(dtypes.Float64, 2))
 	ctx2 := ctx1.In("c").WithInitializer(initializers.Zero)
-	v2 := ctx2.VariableWithShape("z", shapes.Make(shapes.Int64, 3, 1))
-	ctx.InitializeVariables()
+	v2 := ctx2.VariableWithShape("z", shapes.Make(dtypes.Int64, 3, 1))
 
-	fmt.Printf("\tv0=%v\n", v0.Value().Local())
-	fmt.Printf("\tv1=%v\n", v1.Value().Local())
-	fmt.Printf("\tv2=%v\n", v2.Value().Local())
+	backend := graphtest.BuildTestBackend()
+	ctx.InitializeVariables(backend)
+
+	fmt.Printf("\tv0=%v\n", v0)
+	fmt.Printf("\tv1=%v\n", v1)
+	fmt.Printf("\tv2=%v\n", v2)
 	t0 := v0.Value().Value().(float32)
 	if t0 < 1.5 || t0 > 2.5 {
 		t.Errorf("Expected RandomUniformFn initialization > 1.5, < 2.5, instead got %f", t0)
@@ -86,14 +88,11 @@ func TestContextVariablesInitialization(t *testing.T) {
 		t.Errorf("Expected RandomNormalFn initialization to be random, got %v intead", t1)
 	}
 	t2 := v2.Value().Value().([][]int64)
-	if !slices.DeepSliceCmp([][]int64{{0}, {0}, {0}}, t2, slices.Equal[int64]) {
-		t.Errorf("Expected Zeros initialization to yield zeros, got %v instead", t2)
-	}
+	require.Equalf(t, [][]int64{{0}, {0}, {0}}, t2, "Expected Zeros initialization to yield zeros, got %v instead", t2)
 }
 
 func TestParams(t *testing.T) {
-	manager := graphtest.BuildTestManager()
-	ctx := NewContext(manager)
+	ctx := New()
 	ctx.SetParam("x", 7.0)
 	got, found := ctx.GetParam("x")
 	assert.True(t, found)
@@ -117,15 +116,16 @@ func TestParams(t *testing.T) {
 }
 
 func TestEnumerateVariables(t *testing.T) {
-	manager := graphtest.BuildTestManager()
-	ctx := NewContext(manager)
+	ctx := New()
 	ctx0 := ctx.In("a")
-	_ = ctx0.VariableWithShape("x", shapes.Make(shapes.Float32))
+	_ = ctx0.VariableWithShape("x", shapes.Make(dtypes.Float32))
 	ctx1 := ctx.In("b")
-	_ = ctx1.VariableWithShape("y", shapes.Make(shapes.Float64, 2))
+	_ = ctx1.VariableWithShape("y", shapes.Make(dtypes.Float64, 2))
 	ctx2 := ctx1.In("c")
-	_ = ctx2.VariableWithShape("z", shapes.Make(shapes.Float32, 3, 1))
-	ctx.InitializeVariables()
+	_ = ctx2.VariableWithShape("z", shapes.Make(dtypes.Float32, 3, 1))
+
+	backend := graphtest.BuildTestBackend()
+	ctx.InitializeVariables(backend)
 
 	// Checks EnumerateVariables lists all variables:
 	got := types.MakeSet[string]()
@@ -148,41 +148,71 @@ func TestEnumerateVariables(t *testing.T) {
 }
 
 func TestDeleteVariable(t *testing.T) {
-	manager := graphtest.BuildTestManager()
-	ctx := NewContext(manager)
+	loader := &ConstantLoader{
+		Values: map[string]*tensors.Tensor{
+			"/a/x":   tensors.FromValue(float32(2)),
+			"/y":     tensors.FromValue(int64(3)),
+			"/b/c/z": tensors.FromValue([][]float32{{7}}),
+			"/b/c/w": tensors.FromValue(int64(11)),
+		},
+	}
+	ctx := New().Checked(false)
+	ctx.SetLoader(loader)
 	ctx0 := ctx.In("a")
-	_ = ctx0.VariableWithShape("x", shapes.Make(shapes.Float32))
+	_ = ctx0.VariableWithShape("x", shapes.Make(dtypes.Float32))
 	ctx1 := ctx.In("b")
-	_ = ctx1.VariableWithShape("y", shapes.Make(shapes.Float64, 2))
+	_ = ctx1.VariableWithShape("y", shapes.Make(dtypes.Float64, 2))
 	ctx2 := ctx1.In("c")
-	_ = ctx2.VariableWithShape("z", shapes.Make(shapes.Float32, 3, 1))
-	ctx.InitializeVariables()
+	_ = ctx2.VariableWithShape("z", shapes.Make(dtypes.Float32, 1, 1))
 
-	assert.False(t, ctx.DeleteVariable("/foo", "x"))
-	assert.True(t, ctx.DeleteVariable("/b", "y"))
+	backend := graphtest.BuildTestBackend()
+	ctx.InitializeVariables(backend)
+
+	assert.Equal(t, 3, ctx.NumVariables())
+	ctx.DeleteVariable("/foo", "x")
+	assert.Equal(t, 3, ctx.NumVariables())
+	assert.Len(t, loader.Values, 4)
+
+	ctx.DeleteVariable("/b", "y")
 	assert.Equal(t, 2, ctx.NumVariables())
+	assert.Len(t, loader.Values, 4)
 	assert.NotNil(t, ctx.InspectVariable("/b/c", "z")) // Check "z" hasn't been deleted.
-	assert.True(t, ctx.DeleteVariable("/b/c", "z"))
+
+	ctx.DeleteVariable("/b/c", "z")
 	assert.Equal(t, 1, ctx.NumVariables())
-	assert.True(t, ctx.DeleteVariable("/a", "x"))
+	assert.Len(t, loader.Values, 3)
+
+	ctx.DeleteVariable("/a", "x")
 	assert.Equal(t, 0, ctx.NumVariables())
+	assert.Len(t, loader.Values, 2)
 }
 
 func TestDeleteVariablesInScope(t *testing.T) {
-	manager := graphtest.BuildTestManager()
-	ctx := NewContext(manager)
+	ctx := New().Checked(false)
+	loader := &ConstantLoader{
+		Values: map[string]*tensors.Tensor{
+			"/a/x":   tensors.FromValue(float32(2)),
+			"/y":     tensors.FromValue(int64(3)),
+			"/b/c/z": tensors.FromValue([][]float32{{7}}),
+			"/b/c/w": tensors.FromValue(int64(11)),
+		},
+	}
+	ctx.SetLoader(loader)
 	ctx0 := ctx.In("a")
-	_ = ctx0.VariableWithShape("x", shapes.Make(shapes.Float32))
+	_ = ctx0.VariableWithShape("x", shapes.Make(dtypes.Float32))
 	ctx1 := ctx.In("b")
-	_ = ctx1.VariableWithShape("y", shapes.Make(shapes.Float64, 2))
+	_ = ctx1.VariableWithShape("y", shapes.Make(dtypes.Float64, 2))
 	ctx2 := ctx1.In("c")
-	_ = ctx2.VariableWithShape("z", shapes.Make(shapes.Float32, 3, 1))
-	ctx.InitializeVariables()
+	_ = ctx2.VariableWithShape("z", shapes.Make(dtypes.Float32, 1, 1))
+
+	backend := graphtest.BuildTestBackend()
+	ctx.InitializeVariables(backend)
 
 	// Remove all under scope "/b"
 	ctx1.DeleteVariablesInScope()
 	assert.Equal(t, 1, ctx.NumVariables())
 	assert.NotNil(t, ctx.InspectVariable("/a", "x")) // Check "x" hasn't been deleted.
+	assert.Len(t, loader.Values, 3)                  // Only "/b/c/z" must have been deleted -- but notice that /b/c/w is not affected.
 
 	// Check that deleting an empty scope is a no-op.
 	ctx.In("foo").DeleteVariablesInScope()
@@ -194,45 +224,65 @@ func TestDeleteVariablesInScope(t *testing.T) {
 	assert.Equal(t, 0, ctx.NumVariables())
 }
 
+// ConstantLoader implements a hard-coded loader of values.
 type ConstantLoader struct {
-	Values map[string]map[string]tensor.Tensor
+	Values map[string]*tensors.Tensor
 }
 
 // LoadVariable implements Loader.
-func (l *ConstantLoader) LoadVariable(ctx *Context, scope, name string) (value tensor.Tensor, found bool) {
+func (l *ConstantLoader) LoadVariable(_ *Context, scope, name string) (value *tensors.Tensor, found bool) {
 	if l.Values == nil {
 		return
 	}
-	nameToValue, found := l.Values[scope]
-	if !found {
-		return
-	}
-	value, found = nameToValue[name]
+	value, found = l.Values[JoinScope(scope, name)]
 	return
 }
 
+func (l *ConstantLoader) DeleteVariable(_ *Context, scope, name string) {
+	delete(l.Values, JoinScope(scope, name))
+}
+
 func TestContext_SetLoader(t *testing.T) {
-	manager := graphtest.BuildTestManager()
-	ctx := NewContext(manager)
+	ctx := New()
 	ctx.SetLoader(&ConstantLoader{
-		Values: map[string]map[string]tensor.Tensor{
-			"/": {
-				"x": tensor.FromValue(float32(2)),
-				"y": tensor.FromValue(int(3)),
-			},
+		Values: map[string]*tensors.Tensor{
+			"/x": tensors.FromValue(float32(2)),
+			"/y": tensors.FromValue(int64(3)),
+			"/z": tensors.FromValue(int64(7)),
 		},
 	})
 	ctx = ctx.Reuse()
-	e := NewExec(manager, ctx, func(ctx *Context, g *Graph) (*Node, *Node) {
-		v0 := ctx.WithInitializer(initializers.Zero).VariableWithShape("x", shapes.Make(shapes.Float32))
+
+	backend := graphtest.BuildTestBackend()
+	e := NewExec(backend, ctx, func(ctx *Context, g *Graph) (*Node, *Node) {
+		v0 := ctx.WithInitializer(initializers.Zero).VariableWithShape("x", shapes.Make(dtypes.Float32))
 		v1 := ctx.VariableWithValue("y", 1)
 		return v0.ValueGraph(g), v1.ValueGraph(g)
 	})
-	var results []tensor.Tensor
+	var results []*tensors.Tensor
 	require.NotPanics(t, func() { results = e.Call() }, "Failed to run context.Exec")
-	gotV0 := results[0].Value().(float32)
-	gotV1 := results[1].Value().(int64)
+	gotV0 := tensors.ToScalar[float32](results[0])
+	gotV1 := tensors.ToScalar[int64](results[1])
 	if gotV0 != 2 || gotV1 != 3 {
 		t.Errorf("Got x,y = (%f, %d), wanted (2.0, 3)", gotV0, gotV1)
 	}
+}
+
+func TestJoinAndSplitScope(t *testing.T) {
+	assert.Equal(t, "a", JoinScope("", "a"))
+	assert.Equal(t, "/a", JoinScope("/", "a"))
+	assert.Equal(t, "/b/a", JoinScope("/b", "a"))
+	assert.Equal(t, "/b/a", JoinScope("/b/", "a"))
+	assert.Equal(t, "/c/b/a", JoinScope("/c/b/", "a"))
+
+	testSplit := func(scopeAndName, wantScope, wantName string) {
+		gotScope, gotName := SplitScope(scopeAndName)
+		assert.Equal(t, []string{wantScope, wantName}, []string{gotScope, gotName})
+	}
+	testSplit("a", "", "a")
+	testSplit("/a", "/", "a")
+	testSplit("/b/a", "/b", "a")
+	testSplit("/c/b/a", "/c/b", "a")
+	testSplit("/c/b/", "/c/b", "")
+	testSplit("a/b", "", "a/b") // Notice that something that doesn't start with "/" doesn't have a scope.
 }

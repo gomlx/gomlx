@@ -17,9 +17,11 @@
 package layers
 
 import (
+	. "github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/types/slices"
+	"github.com/gomlx/gomlx/ml/layers/batchnorm"
+	"github.com/gomlx/gomlx/types/xslices"
 	"log"
 )
 
@@ -36,15 +38,31 @@ var (
 	// normalization variables across more than one application.
 	KnownNormalizers = map[string]func(ctx *context.Context, input *Node) *Node{
 		"batch": func(ctx *context.Context, input *Node) *Node {
-			return BatchNormalization(ctx, input, -1).Done()
+			return batchnorm.New(ctx, input, -1).Done()
 		},
-		"norm": func(ctx *context.Context, input *Node) *Node {
+		"layer": func(ctx *context.Context, input *Node) *Node {
 			return LayerNormalization(ctx, input, -1).Done()
 		},
 		"none": func(ctx *context.Context, input *Node) *Node {
 			return input
 		},
 	}
+
+	// ParamNormalization context hyperparameter defines the type of normalization to use
+	// between layers of a neural network.
+	//
+	// It is used if the model calls NormalizeFromContext or MaskedNormalizeFromContext on the embeddings in
+	// between layers.
+	// This is usually applied after a residual sum (but model choices varies).
+	//
+	// Valid values are "layer" for [LayerNormalization], "batch" for [batchnorm.New] or "none"".
+	//
+	// Notice that this won't work for special shapes setups.
+	// [New] will normalize on the batch axis (assumed to be axis-0), and
+	// [LayerNormalization] will normalize across the layer values, assumed to be the last.
+	//
+	// The default is `layer`.
+	ParamNormalization = "normalization"
 )
 
 // MustNormalizeByName applies the requested normalization using default parameters. If
@@ -56,7 +74,9 @@ var (
 // It's a simple wrapper around KnownNormalizers, if one wants to handle errors, just
 // check for its values. For valid values see KnownNormalizers.
 //
-// Typical use:
+// Some layer libraries will use this by default for you, taking the value from the context -- e.g: fnn.New.
+//
+// But if not, one example use:
 //
 // ```
 // var flagNormalization = flag.String("norm", "none",
@@ -76,7 +96,40 @@ var (
 func MustNormalizeByName(ctx *context.Context, normalization string, input *Node) *Node {
 	normFn, found := KnownNormalizers[normalization]
 	if !found {
-		log.Fatalf("Unsupported normalization %q given, valid values are %v", normalization, slices.SortedKeys(KnownNormalizers))
+		log.Fatalf("Unsupported normalization %q given, valid values are %v", normalization, xslices.SortedKeys(KnownNormalizers))
 	}
 	return normFn(ctx, input)
+}
+
+// NormalizeFromContext applies a normalization (or none) according to the hyperparameter
+// ParamNormalization configured in the context.
+//
+// This is not recommended for images, since one may want to normalize over specific axes.
+func NormalizeFromContext(ctx *context.Context, input *Node) *Node {
+	return MaskedNormalizeFromContext(ctx, input, nil)
+}
+
+// MaskedNormalizeFromContext applies a normalization (or none) according to the hyperparameter
+// ParamNormalization configured in the context.
+// The `mask` is actually optional, and can be set to nil if not using a mask.
+//
+// This is not recommended for images, since one may want to normalize over specific axes.
+func MaskedNormalizeFromContext(ctx *context.Context, input, mask *Node) *Node {
+	normType := context.GetParamOr(ctx, ParamNormalization, "layer")
+	switch normType {
+	case "none", "":
+		return input
+	case "layer":
+		return LayerNormalization(ctx, input, -1).Mask(mask).Done()
+	case "batch":
+		if mask != nil {
+			Panicf("'batch' normalization set in context parameter %q does not support usage of mask yet, please open a feature request",
+				ParamNormalization)
+		}
+		return batchnorm.New(ctx, input, -1).Done()
+	default:
+		Panicf("invalid normalization type %q given in context parameter %q -- valid values are 'none', 'layer' or 'batch'",
+			normType, ParamNormalization)
+	}
+	return input
 }

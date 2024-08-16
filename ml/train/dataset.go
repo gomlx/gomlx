@@ -16,9 +16,9 @@
 
 package train
 
-import "github.com/gomlx/gomlx/types/tensor"
+import "github.com/gomlx/gomlx/types/tensors"
 
-// Dataset for a train.Trainer provides the data, one batch at a time. Flat consists of a slice of tensor.Tensor
+// Dataset for a train.Trainer provides the data, one batch at a time. Flat consists of a slice of *tensors.Tensor
 // for `inputs` and for `labels`.
 //
 // Dataset has to also provide a Dataset.Name() and a dataset `spec`, which usually is the same for
@@ -64,7 +64,7 @@ type Dataset interface {
 	// normally, as it indicates end of data for finite datasets -- maybe the end of the epoch.
 	//
 	// Any other errors should interrupt the training/evaluation and be returned to the user.
-	Yield() (spec any, inputs []tensor.Tensor, labels []tensor.Tensor, err error)
+	Yield() (spec any, inputs []*tensors.Tensor, labels []*tensors.Tensor, err error)
 
 	// Reset restarts the dataset from the beginning. Can be called after io.EOF is reached,
 	// for instance when running another evaluation on a test dataset.

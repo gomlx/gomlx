@@ -28,8 +28,8 @@ import (
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
-	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"io"
@@ -39,10 +39,10 @@ import (
 )
 
 func TestMultiHeadAttentionGraph(t *testing.T) {
-	manager := graphtest.BuildTestManager()
+	backend := graphtest.BuildTestBackend()
 	{
-		ctx := context.NewContext(manager)
-		g := manager.NewGraph("test")
+		ctx := context.New()
+		g := NewGraph(backend, "test")
 		batchSize := 3
 		key := IotaFull(g, shapes.Make(F32, batchSize, 4, 5, 3))
 		query := IotaFull(g, shapes.Make(F32, batchSize, 7, 1, 2))
@@ -77,7 +77,7 @@ func TestMultiHeadAttentionGraph(t *testing.T) {
 				{{{1, 0, 0}}, {{0, 1, 0}}, {{0, 0, 1}}},
 				{{{1, 0, 0}}, {{0, 1, 0}}, {{0, 0, 1}}},
 			},
-		}, slices.Epsilon)
+		}, xslices.Epsilon)
 }
 
 // buildSyntheticAttentionModelFn builds a model graph building function that does a regression on the elements
@@ -100,7 +100,7 @@ func buildSyntheticAttentionModelFn(debug bool) (modelGraphFn func(ctx *context.
 		positionalVar := noisyCtx.In("positional").VariableWithShape("embeddings", shapes.Make(dtype, sequenceSize, positionalEmbeddingSize))
 		positionalEmbedding := positionalVar.ValueGraph(g)
 		positionalEmbedding = ExpandDims(positionalEmbedding, 0) // Prefixing with batch dimension.
-		dims := positionalEmbedding.Shape().Copy().Dimensions
+		dims := positionalEmbedding.Shape().Clone().Dimensions
 		dims[0] = batchSize
 		positionalEmbedding = BroadcastToDims(positionalEmbedding, dims...)
 		logits := Concatenate([]*Node{input, positionalEmbedding}, -1) // Shape=[batch, sequence, 1+positionalEmbeddingSize]
@@ -139,7 +139,7 @@ func (ds *attentionTestDataset) Reset() {
 	ds.count = 0
 }
 
-func (ds *attentionTestDataset) Yield() (spec any, inputs []tensor.Tensor, labels []tensor.Tensor, err error) {
+func (ds *attentionTestDataset) Yield() (spec any, inputs []*tensors.Tensor, labels []*tensors.Tensor, err error) {
 	if !ds.infinite && ds.count+ds.batchSize > ds.maxCount {
 		return nil, nil, nil, io.EOF
 	}
@@ -158,8 +158,8 @@ func (ds *attentionTestDataset) Yield() (spec any, inputs []tensor.Tensor, label
 			}
 		}
 	}
-	inputs = []tensor.Tensor{tensor.FromValue(batch)}
-	labels = []tensor.Tensor{tensor.FromValue(batchLabel)}
+	inputs = []*tensors.Tensor{tensors.FromValue(batch)}
+	labels = []*tensors.Tensor{tensors.FromValue(batchLabel)}
 	//fmt.Printf("inputs: %v\n", batch)
 	//fmt.Printf("labels: %v\n", labels)
 	return
@@ -178,14 +178,14 @@ func TestMultiHeadAttentionTraining(t *testing.T) {
 		infinite:     true,
 	}
 
-	// Manager handles creation of ML computation graphs, accelerator resources, etc.
-	manager := graphtest.BuildTestManager()
+	// Backend handles creation of ML computation graphs, accelerator resources, etc.
+	backend := graphtest.BuildTestBackend()
 
 	// Context and optimizer used for training.
-	ctx := context.NewContext(manager)
+	ctx := context.New()
 	opt := optimizers.Adam().LearningRate(0.001).Done()
 
-	trainer := train.NewTrainer(manager, ctx, buildSyntheticAttentionModelFn(false),
+	trainer := train.NewTrainer(backend, ctx, buildSyntheticAttentionModelFn(false),
 		losses.MeanSquaredError,
 		opt,
 		nil, // trainMetrics
@@ -198,7 +198,7 @@ func TestMultiHeadAttentionTraining(t *testing.T) {
 	require.NoErrorf(t, err, "Failed training: %+v", err)
 	fmt.Printf("Metrics:\n")
 	for ii, m := range metrics {
-		fmt.Printf("\t%s: %s\n", trainer.TrainMetrics()[ii].Name(), m.Local().GoStr())
+		fmt.Printf("\t%s: %s\n", trainer.TrainMetrics()[ii].Name(), m)
 	}
 
 	{
@@ -206,13 +206,13 @@ func TestMultiHeadAttentionTraining(t *testing.T) {
 		evalDS := &attentionTestDataset{}
 		*evalDS = *trainDS
 		evalDS.batchSize = 1
-		var results []tensor.Tensor
+		var results []*tensors.Tensor
 
 		modelFn := buildSyntheticAttentionModelFn(false)
 		inferenceFn := func(ctx *context.Context, inputs []*Node) *Node {
 			return modelFn(ctx, nil, inputs)[0]
 		}
-		inferenceExec := context.NewExec(manager, ctx.Reuse(), inferenceFn)
+		inferenceExec := context.NewExec(backend, ctx.Reuse(), inferenceFn)
 		for ii := 0; ii < 3; ii++ {
 			_, inputs, labels, err := evalDS.Yield()
 			require.NoErrorf(t, err, "Failed datasets: %+v", err)

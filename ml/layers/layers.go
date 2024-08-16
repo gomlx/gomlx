@@ -23,30 +23,30 @@ package layers
 
 import (
 	"fmt"
+	. "github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
+	"github.com/gomlx/gomlx/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/ml/train"
-	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gopjrt/dtypes"
 	"golang.org/x/exp/constraints"
 )
 
 const (
 	// ParamL2Regularization context hyperparameter defines the L2 regularization of kernels.
 	// Each layer may decide independently to implement it or not.
-	// Dense, DenseWithBias and Convolution kernels look at this hyperparameter.
+	//
+	// This is an alias to regularizers.ParamL2
+	// Dense, DenseWithBias, FNN, kan and Convolution kernels look at this hyperparameter.
 	// The value should be a float64.
 	// The default is `0.0`.
+	//
+	// Deprecated: use regularizers.ParamL2
 	ParamL2Regularization = "l2_regularization"
 
-	// L2RegularizationKey is an alias for ParamL2Regularization.
-	//
-	// Deprecated: all context parameters constants are prefixed now with "Param", to make it easy
-	// to find them.
-	L2RegularizationKey = ParamL2Regularization
-
 	// ParamDropoutRate context hyperparameter defines the amount of dropout applied when DropoutFromContext is used.
-	// Should be a value from `0.0` to `1.0`, where 0 means no dropout, and 1 would dropout everything.
+	// Should be a value from `0.0` to `1.0`, where 0 means no dropout, and 1 would drop everything out.
 	//
 	// It is only applied if `Context.IsTraining() == true`, that is, during evaluation/inference it is
 	// ignored.
@@ -55,22 +55,30 @@ const (
 	ParamDropoutRate = "dropout_rate"
 )
 
-// DenseWithBias adds a dense linear layer, a learnable linear transformation plus a bias term.
+// DenseWithBias adds a single dense linear layer, a learnable linear transformation plus a bias term.
 //
 // It the input has shape `[<batch dimensions...>, featureDimension]`, the output will have
 // shape `[<batch dimensions...>, <outputDimensions...>]`.
+//
+// See also FNN for a more configurable (including hidden layers) version.
 func DenseWithBias(ctx *context.Context, input *Node, outputDimensions ...int) *Node {
 	return Dense(ctx, input, true, outputDimensions...)
 }
 
-// Dense adds a dense linear layer, a learnable linear transformation. Optionally it
-// can include a bias term.
+// Dense adds a single dense linear layer, a learnable linear transformation.
+// Optionally, it can include a bias term.
+//
+// It automatically adds regularization to the weights (not to biases) configured in hyperparameters -- see regularizers.FromContext.
 //
 // It the input has shape `[<batch dimensions...>, featureDimension]`, the output will have
 // shape `[<batch dimensions...>, <outputDimensions...>]`.
+//
+// See also FNN for a more configurable (including hidden layers) version.
 func Dense(ctx *context.Context, input *Node, useBias bool, outputDimensions ...int) *Node {
 	g := input.Graph()
 	ctx = ctx.In("dense")
+	regularizer := regularizers.FromContext(ctx)
+
 	inputShape := input.Shape()
 	inputRank := inputShape.Rank()
 	if inputRank == 0 {
@@ -86,6 +94,10 @@ func Dense(ctx *context.Context, input *Node, useBias bool, outputDimensions ...
 	weightsDims[0] = inputLastDimension
 	copy(weightsDims[1:], outputDimensions)
 	weightsVar := ctx.VariableWithShape("weights", shapes.Make(inputShape.DType, weightsDims...))
+	if regularizer != nil {
+		// Only for the weights, not for the bias.
+		regularizer(ctx, g, weightsVar)
+	}
 	weights := weightsVar.ValueGraph(g)
 	var output *Node
 	if inputRank <= 2 && len(outputDimensions) == 1 {
@@ -111,27 +123,17 @@ func Dense(ctx *context.Context, input *Node, useBias bool, outputDimensions ...
 		output = Einsum(equationPrefix, input, weights)
 	}
 
-	// Add bias.
+	// Add bias: it takes no regularizer by default.
 	if useBias {
 		biasVar := ctx.VariableWithShape("biases", shapes.Make(inputShape.DType, outputDimensions...))
 		bias := biasVar.ValueGraph(g)
-		expandedBiasShape := output.Shape().Copy()
+		expandedBiasShape := output.Shape().Clone()
 		for ii := range expandedBiasShape.Dimensions[:output.Rank()-len(outputDimensions)] {
 			expandedBiasShape.Dimensions[ii] = 1
 		}
 		expandedBias := ReshapeWithShape(bias, expandedBiasShape)
 		output = Add(output, expandedBias)
 	}
-
-	// Add regularization -- notice not for the bias term.
-	if l2any, found := ctx.GetParam(ParamL2Regularization); found {
-		l2 := l2any.(float64)
-		if l2 > 0 {
-			l2Node := Const(g, shapes.CastAsDType(l2, inputShape.DType))
-			AddL2Regularization(ctx, l2Node, weights)
-		}
-	}
-
 	return output
 }
 
@@ -145,7 +147,7 @@ func Dense(ctx *context.Context, input *Node, useBias bool, outputDimensions ...
 //
 // The output has rank one larger than the input, with the last dimension the same as
 // the embedding dimension.
-func Embedding(ctx *context.Context, input *Node, dtype shapes.DType, vocabSize, dimension int) *Node {
+func Embedding(ctx *context.Context, input *Node, dtype dtypes.DType, vocabSize, dimension int) *Node {
 	inputShape := input.Shape()
 	if !inputShape.DType.IsInt() {
 		Panicf("can only use Embedding on integer inputs, passed %s instead", input.Shape())
@@ -255,11 +257,12 @@ func PieceWiseLinearCalibration(ctx *context.Context, input, keypoints *Node, ou
 
 	// left and right weights are shifted by one from one another. And we need to add the weights
 	// on the edge keypoints.
-	leftEdge := ExpandDims(SliceXLA(keypoints, []int{0}, []int{1}), 0)
+	//leftEdge := ExpandDims(SliceLists(keypoints, []int{0}, []int{1}), 0)
+	leftEdge := ExpandDims(Slice(keypoints, AxisRangeFromStart(1)), 0)
 	leftEdge = PositiveIndicator(Sub(leftEdge, input2D))
 	leftWeights = Concatenate([]*Node{leftEdge, leftWeights}, -1)
 
-	rightEdge := ExpandDims(SliceXLA(keypoints, []int{numKeypoints - 1}, []int{numKeypoints}), 0)
+	rightEdge := ExpandDims(Slice(keypoints, AxisRangeToEnd(-1)), 0)
 	rightEdge = PositiveIndicator(Sub(input2D, rightEdge))
 	rightWeights = Concatenate([]*Node{rightWeights, rightEdge}, -1)
 
@@ -314,8 +317,9 @@ func PieceWiseLinearCalibrationCascaded(ctx *context.Context, input, keypoints *
 	}
 
 	// Calculate lengths of each linear piece: all in shape [1, numKeypoints-1]
-	kpStarts := ExpandDims(SliceXLA(keypoints, []int{0}, []int{numKeypoints - 1}), 0)
-	kpEnds := ExpandDims(SliceXLA(keypoints, []int{1}, []int{numKeypoints}), 0)
+	kpStarts := ExpandDims(Slice(keypoints, AxisRangeFromStart(-1)), 0)
+	//kpStarts := ExpandDims(SliceLists(keypoints, []int{0}, []int{numKeypoints - 1}), 0)
+	kpEnds := ExpandDims(Slice(keypoints, AxisRangeToEnd(1)), 0)
 	lengths := Sub(kpEnds, kpStarts)
 
 	// weights so far applies to outputKeypoints[1:]: it is shaped [numInputs, numKeypoints-1]
@@ -346,7 +350,7 @@ func DropoutStatic(ctx *context.Context, input *Node, dropoutRate float64) *Node
 		return input
 	}
 	g := input.Graph()
-	return Dropout(ctx, input, Scalar(g, shapes.F32, dropoutRate))
+	return Dropout(ctx, input, Scalar(g, dtypes.Float32, dropoutRate))
 }
 
 // DropoutNormalize randomly replace the input with zeros if ctx.IsTraining() is true. Otherwise,
@@ -366,7 +370,7 @@ func DropoutNormalize(ctx *context.Context, input *Node, dropoutRate *Node, norm
 	result := Where(LessOrEqual(rnd, broadcastRate), ZerosLike(input), input)
 	if normalize {
 		// Normalize input values, so mean value remains constant.
-		keepRate := ConvertType(OneMinus(dropoutRate), input.DType())
+		keepRate := ConvertDType(OneMinus(dropoutRate), input.DType())
 		result = Div(result, keepRate)
 	}
 	return result
@@ -375,7 +379,7 @@ func DropoutNormalize(ctx *context.Context, input *Node, dropoutRate *Node, norm
 // DropoutFromContext applies a dropout configured in the context parameters keyed by [ParamDropoutRate].
 //
 // If it is 0.0 this is a no-op.
-// If `Context.IsTraining() == false` this is a also a no-op, so it doesn't impact evaluation or inference.
+// If `Context.IsTraining() == false` this is also a no-op, so it doesn't impact evaluation or inference.
 func DropoutFromContext(ctx *context.Context, x *Node) *Node {
 	dropoutRate := context.GetParamOr(ctx, ParamDropoutRate, 0.0)
 	if dropoutRate > 0 {
@@ -388,6 +392,8 @@ func DropoutFromContext(ctx *context.Context, x *Node) *Node {
 }
 
 // AddL2RegularizationStatic is like AddL2Regularization, but takes the `amount` as a static Go float64 value.
+//
+// Deprecated: use package regularizers instead.
 func AddL2RegularizationStatic(ctx *context.Context, amount float64, values ...*Node) {
 	if len(values) == 0 {
 		Panicf("no values given to AddL2RegularizationAsFloat")
@@ -400,6 +406,8 @@ func AddL2RegularizationStatic(ctx *context.Context, amount float64, values ...*
 // AddL2Regularization calculates the L2 of the given values (typically variable nodes returned
 // by context.Variable.ValueGraph()), scale by the given amount (typically a constant) and then
 // train.AddLoss the resulting value, having the effect of regularizing the weights (variables).
+//
+// Deprecated: use package regularizers instead.
 func AddL2Regularization(ctx *context.Context, amount *Node, values ...*Node) {
 	if len(values) == 0 {
 		Panicf("no values given to AddL2Regularization")

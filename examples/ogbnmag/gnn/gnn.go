@@ -10,8 +10,11 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/layers/activations"
+	"github.com/gomlx/gomlx/ml/layers/kan"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
+	"github.com/gomlx/gomlx/types/xslices"
+	"github.com/gomlx/gopjrt/dtypes"
 	"strings"
 )
 
@@ -88,7 +91,7 @@ var (
 //
 //	func MyGnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 //		g := inputs[0].Graph()
-//		optimizers.CosineAnnealingSchedule(ctx, g, shapes.F32)
+//		optimizers.CosineAnnealingSchedule(ctx, g, dtypes.Float32)
 //		ctx = ctx.WithInitializer(initializers.GlorotUniformFn(initializers.NoSeed))
 //		strategy := spec.(*sampler.Strategy)
 //		graphStates := MyFeaturePreprocessing(ctx, strategy, inputs)
@@ -166,7 +169,7 @@ func recursivelyApplyGraphConvolution(ctx *context.Context, rule *sampler.Rule,
 	// Makes sure there is a state for the current dependent.
 	state, found := graphStates[rule.Name]
 	if !found {
-		Panicf("state for sampling rule %q not given in `graphStates`, states given: %v", rule.Name, slices.Keys(graphStates))
+		Panicf("state for sampling rule %q not given in `graphStates`, states given: %v", rule.Name, xslices.Keys(graphStates))
 	}
 
 	// Leaf nodes are not updated.
@@ -219,7 +222,7 @@ func recursivelyApplyGraphConvolution(ctx *context.Context, rule *sampler.Rule,
 		}
 		dependentState, found := graphStates[dependent.Name]
 		if !found {
-			Panicf("state for sampling rule %q not given in `graphStates`, states given: %v", dependent.Name, slices.Keys(graphStates))
+			Panicf("state for sampling rule %q not given in `graphStates`, states given: %v", dependent.Name, xslices.Keys(graphStates))
 		}
 		dependentDegreePair := graphStates[sampler.NameForNodeDependentDegree(rule.Name, dependent.Name)]
 		var dependentDegree *Node
@@ -260,8 +263,15 @@ func sampledConvolveEdgeSet(ctx *context.Context, value, mask, degree *Node) *No
 // look like: `[batch_size, ..., num_edges, source_node_state_dim]`.
 func edgeMessageGraph(ctx *context.Context, gatheredStates, gatheredMask *Node) (messages, mask *Node) {
 	messageDim := context.GetParamOr(ctx, ParamMessageDim, 128)
-	messages = layers.DenseWithBias(ctx, gatheredStates, messageDim)
-	messages = layers.ActivationFromContext(ctx, messages)
+
+	useKan := context.GetParamOr(ctx, "kan", false)
+	if useKan {
+		messages = kan.New(ctx, gatheredStates, messageDim).NumHiddenLayers(0, 0).Done()
+	} else {
+		// Normal FNN
+		messages = layers.DenseWithBias(ctx, gatheredStates, messageDim)
+		messages = activations.ApplyFromContext(ctx, messages)
+	}
 
 	mask = gatheredMask
 	if mask != nil {
@@ -299,7 +309,7 @@ func poolMessagesWithFixedShape(ctx *context.Context, value, mask, degree *Node)
 			} else {
 				// Sum pondered by degree, that is, `mean(value)*degree`.
 				pooled = MaskedReduceMean(value, mask, reduceAxis)
-				pooled = Mul(pooled, ConvertType(degree, pooled.DType()))
+				pooled = Mul(pooled, ConvertDType(degree, pooled.DType()))
 			}
 			if poolType == "logsum" {
 				pooled = MirroredLog1p(pooled)
@@ -343,7 +353,7 @@ func poolMessagesWithAdjacency(ctx *context.Context, source, edgesSource, edgesT
 	if source.Rank() != 2 {
 		Panicf("poolMessagesWithAdjacency(): source is expected to be shaped `[num_nodes, emb_size]`, instead got %s", source.Shape())
 	}
-	if (edgesSource.Rank() != 1 && edgesSource.Rank() != 2) || !edgesSource.Shape().Eq(edgesTarget.Shape()) ||
+	if (edgesSource.Rank() != 1 && edgesSource.Rank() != 2) || !edgesSource.Shape().Equal(edgesTarget.Shape()) ||
 		(edgesSource.Rank() == 2 && edgesSource.Shape().Dimensions[1] != 1) {
 		Panicf("poolMessagesWithAdjacency(): edgesSource and edgesTarget must have the same shape: either [num_edges] or [num_edges, 1] and be of "+
 			"some integer dtype, instead got edgesSource.shape=%s edgesTarget.shape=%s", edgesSource.Shape(), edgesTarget.Shape())
@@ -356,7 +366,7 @@ func poolMessagesWithAdjacency(ctx *context.Context, source, edgesSource, edgesT
 	dtypePool := dtype
 	if dtype.IsFloat16() {
 		// Up-precision to 32 bits for pooling.
-		dtypePool = shapes.Float32
+		dtypePool = dtypes.Float32
 	}
 	embSize := source.Shape().Dimensions[1]
 	numEdges := edgesSource.Shape().Dimensions[0]
@@ -375,7 +385,7 @@ func poolMessagesWithAdjacency(ctx *context.Context, source, edgesSource, edgesT
 			// node, a source value may appear more than once. Shaped `[num_edges, emb_size]`.
 			values := Gather(source, edgesSource)
 			if dtypePool != dtype {
-				values = ConvertType(values, dtypePool)
+				values = ConvertDType(values, dtypePool)
 			}
 			pooled = Scatter(edgesTarget, values, shapes.Make(dtypePool, targetSize, embSize))
 
@@ -389,7 +399,7 @@ func poolMessagesWithAdjacency(ctx *context.Context, source, edgesSource, edgesT
 			}
 			if poolType != "mean" && degree != nil {
 				// Weight mean pooled value by `degree`.
-				pooled = Mul(pooled, ConvertType(degree, dtypePool))
+				pooled = Mul(pooled, ConvertDType(degree, dtypePool))
 			}
 			if poolType == "logsum" {
 				pooled = MirroredLog1p(pooled)
@@ -406,7 +416,7 @@ func poolMessagesWithAdjacency(ctx *context.Context, source, edgesSource, edgesT
 	}
 	all := Concatenate(parts, -1)
 	if dtype != dtypePool {
-		all = ConvertType(all, dtype)
+		all = ConvertDType(all, dtype)
 	}
 	return all
 }
@@ -414,6 +424,10 @@ func poolMessagesWithAdjacency(ctx *context.Context, source, edgesSource, edgesT
 // updateState of a node set, given the `input` (should be a concatenation of previous
 // state and all pooled messages) and its `mask`.
 func updateState(ctx *context.Context, prevState, input, mask *Node) *Node {
+	useKan := context.GetParamOr(ctx, "kan", false)
+	if useKan {
+		return kanUpdateState(ctx, prevState, input, mask)
+	}
 	updateType := context.GetParamOr(ctx, ParamUpdateStateType, "residual")
 	if updateType != "residual" && updateType != "none" {
 		Panicf("invalid GNN update type %q (given by parameter %q) -- valid values are 'residual' and 'none'",
@@ -428,15 +442,22 @@ func updateState(ctx *context.Context, prevState, input, mask *Node) *Node {
 	for ii := range numHiddenLayers {
 		ctxHiddenLayer := ctx.In(fmt.Sprintf("hidden_%d", ii))
 		state = layers.DenseWithBias(ctxHiddenLayer, state, stateDim)
-		state = layers.ActivationFromContext(ctx.In(fmt.Sprintf("hidden_%d", ii)), state)
+		state = activations.ApplyFromContext(ctx.In(fmt.Sprintf("hidden_%d", ii)), state)
 	}
 	state = layers.DenseWithBias(ctx, state, stateDim)
-	state = layers.ActivationFromContext(ctx, state)
+	state = activations.ApplyFromContext(ctx, state)
 	state = layers.DropoutFromContext(ctx, state)
 
-	if updateType == "residual" && prevState.Shape().Eq(state.Shape()) {
+	if updateType == "residual" && prevState.Shape().Equal(state.Shape()) {
 		state = Add(state, prevState)
 	}
 	state = layers.MaskedNormalizeFromContext(ctx.In("normalization"), state, mask)
 	return state
+}
+
+// kanUpdateState is a version of updateState using KAN networks.
+func kanUpdateState(ctx *context.Context, prevState, input, mask *Node) *Node {
+	stateDim := context.GetParamOr(ctx, ParamStateDim, 128)
+	numHiddenLayers := context.GetParamOr(ctx, ParamUpdateNumHiddenLayers, 0)
+	return kan.New(ctx.In("kan_update_state"), input, stateDim).NumHiddenLayers(numHiddenLayers, stateDim).Done()
 }

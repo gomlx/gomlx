@@ -20,11 +20,13 @@ package cifar
 
 import (
 	"fmt"
+	. "github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/data"
-	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 	"image"
 	"io"
@@ -96,24 +98,23 @@ var (
 const C10ExamplesPerFile = 10000
 const imageSizeBytes = Height * Width * Depth
 
-func convertBytesToTensor[T shapes.GoFloat](image []byte, imagesT *tensor.Local, exampleNum int) error {
+func convertBytesToTensor[T dtypes.GoFloat](image []byte, imagesT *tensors.Tensor, exampleNum int) error {
 	var t T
-	if shapes.DTypeForType(reflect.TypeOf(t)) != imagesT.DType() {
+	if dtypes.FromGoType(reflect.TypeOf(t)) != imagesT.DType() {
 		return errors.Errorf("trying to convert to dtype %s from go type %t", imagesT.DType(), any(t))
 	}
-	ref := imagesT.AcquireData()
-	defer ref.Release()
-	tensorData := ref.Flat().([]T)
-	tensorPos := exampleNum * imageSizeBytes
-	for h := 0; h < Height; h++ {
-		for w := 0; w < Width; w++ {
-			for d := 0; d < Depth; d++ {
-				value := T(image[d*(Height*Width)+h*(Width)+w]) / T(255)
-				tensorData[tensorPos] = value
-				tensorPos++
+	tensors.MutableFlatData[T](imagesT, func(tensorData []T) {
+		tensorPos := exampleNum * imageSizeBytes
+		for h := 0; h < Height; h++ {
+			for w := 0; w < Width; w++ {
+				for d := 0; d < Depth; d++ {
+					value := T(image[d*(Height*Width)+h*(Width)+w]) / T(255)
+					tensorData[tensorPos] = value
+					tensorPos++
+				}
 			}
 		}
-	}
+	})
 	return nil
 }
 
@@ -122,52 +123,50 @@ func convertBytesToTensor[T shapes.GoFloat](image []byte, imagesT *tensor.Local,
 // [NumExamples=60000, 1] of Int64.
 // The first 50k examples are for training, and the last 10k for testing.
 // Only Float32 and Float64 dtypes are supported for now.
-func LoadCifar10(manager *Manager, baseDir string, dtype shapes.DType) (partitioned PartitionedImagesAndLabels) {
+func LoadCifar10(manager backends.Backend, baseDir string, dtype dtypes.DType) (partitioned PartitionedImagesAndLabels) {
 	baseDir = data.ReplaceTildeInDir(baseDir)
 
 	// Allocate the tensor.
-	images := tensor.FromShape(shapes.Make(dtype, NumExamples, Height, Width, Depth))
-	labels := tensor.FromShape(shapes.Make(shapes.I64, NumExamples, 1))
-	labelsRef := labels.AcquireData()
-	defer labelsRef.Release()
-	labelsData := labelsRef.Flat().([]int64)
-
-	var labelImageBytes [imageSizeBytes + 1]byte
-	for fileIdx := 0; fileIdx < 6; fileIdx++ {
-		dataFile := path.Join(baseDir, C10SubDir, fmt.Sprintf("data_batch_%d.bin", fileIdx+1))
-		if fileIdx == 5 {
-			dataFile = path.Join(baseDir, C10SubDir, "test_batch.bin")
-		}
-		f, err := os.Open(dataFile)
-		if err != nil {
-			panic(errors.Wrapf(err, "opening data file %q", dataFile))
-		}
-		fileStart := fileIdx * C10ExamplesPerFile
-		for inFileIdx := 0; inFileIdx < C10ExamplesPerFile; inFileIdx++ {
-			exampleIdx := fileStart + inFileIdx
-			bytesRead, err := f.Read(labelImageBytes[:])
+	images := tensors.FromShape(shapes.Make(dtype, NumExamples, Height, Width, Depth))
+	labels := tensors.FromShape(shapes.Make(dtypes.Int64, NumExamples, 1))
+	tensors.MutableFlatData[int64](labels, func(labelsData []int64) {
+		var labelImageBytes [imageSizeBytes + 1]byte
+		for fileIdx := 0; fileIdx < 6; fileIdx++ {
+			dataFile := path.Join(baseDir, C10SubDir, fmt.Sprintf("data_batch_%d.bin", fileIdx+1))
+			if fileIdx == 5 {
+				dataFile = path.Join(baseDir, C10SubDir, "test_batch.bin")
+			}
+			f, err := os.Open(dataFile)
 			if err != nil {
-				panic(errors.Wrapf(err, "reading example %d (out of %d) from %q",
-					inFileIdx, C10ExamplesPerFile, dataFile))
+				panic(errors.Wrapf(err, "opening data file %q", dataFile))
 			}
-			if bytesRead != len(labelImageBytes) {
-				panic(errors.Errorf("read only %d bytes reading example %d (out of %d) from %q, wanted %d bytes",
-					bytesRead, inFileIdx, C10ExamplesPerFile, dataFile, len(labelImageBytes)))
+			fileStart := fileIdx * C10ExamplesPerFile
+			for inFileIdx := 0; inFileIdx < C10ExamplesPerFile; inFileIdx++ {
+				exampleIdx := fileStart + inFileIdx
+				bytesRead, err := f.Read(labelImageBytes[:])
+				if err != nil {
+					panic(errors.Wrapf(err, "reading example %d (out of %d) from %q",
+						inFileIdx, C10ExamplesPerFile, dataFile))
+				}
+				if bytesRead != len(labelImageBytes) {
+					Panicf("read only %d bytes reading example %d (out of %d) from %q, wanted %d bytes",
+						bytesRead, inFileIdx, C10ExamplesPerFile, dataFile, len(labelImageBytes))
+				}
+				switch dtype {
+				case dtypes.Float64:
+					err = convertBytesToTensor[float64](labelImageBytes[1:], images, exampleIdx)
+				case dtypes.Float32:
+					err = convertBytesToTensor[float32](labelImageBytes[1:], images, exampleIdx)
+				default:
+					panic(errors.Errorf("DType %s not supported", dtype))
+				}
+				if err != nil {
+					panic(errors.WithMessagef(err, "failed converting bytes to tensor of %s", dtype))
+				}
+				labelsData[exampleIdx] = int64(labelImageBytes[0])
 			}
-			switch dtype {
-			case shapes.Float64:
-				err = convertBytesToTensor[float64](labelImageBytes[1:], images, exampleIdx)
-			case shapes.Float32:
-				err = convertBytesToTensor[float32](labelImageBytes[1:], images, exampleIdx)
-			default:
-				panic(errors.Errorf("DType %s not supported", dtype))
-			}
-			if err != nil {
-				panic(errors.WithMessagef(err, "failed converting bytes to tensor of %s", dtype))
-			}
-			labelsData[exampleIdx] = int64(labelImageBytes[0])
 		}
-	}
+	})
 	return partitionImagesAndLabels(manager, images, labels)
 }
 
@@ -176,78 +175,76 @@ func LoadCifar10(manager *Manager, baseDir string, dtype shapes.DType) (partitio
 // [NumExamples=60000, 1] of Int64.
 // The first 50k examples are for training, and the last 10k for testing.
 // Only Float32 and Float64 dtypes are supported for now.
-func LoadCifar100(manager *Manager, baseDir string, dtype shapes.DType) (partitioned PartitionedImagesAndLabels) {
+func LoadCifar100(manager backends.Backend, baseDir string, dtype dtypes.DType) (partitioned PartitionedImagesAndLabels) {
 	baseDir = data.ReplaceTildeInDir(baseDir)
 
 	// Allocate the tensor.
-	images := tensor.FromShape(shapes.Make(dtype, NumExamples, Height, Width, Depth))
-	labels := tensor.FromShape(shapes.Make(shapes.I64, NumExamples, 1))
-	labelsRef := labels.AcquireData()
-	defer labelsRef.Release()
-	labelsData := labelsRef.Flat().([]int64)
-
-	var labelImageBytes [imageSizeBytes + 2]byte
-	dataFiles := []string{"train.bin", "test.bin"}
-	exampleIdx := 0
-	for _, fileName := range dataFiles {
-		dataFile := path.Join(baseDir, C100SubDir, fileName)
-		f, err := os.Open(dataFile)
-		if err != nil {
-			panic(errors.Wrapf(err, "opening data file %q", dataFile))
-		}
-		for inFileIdx := 0; true; inFileIdx++ {
-			bytesRead, err := f.Read(labelImageBytes[:])
-			if bytesRead == 0 && err == io.EOF {
-				break
-			}
+	images := tensors.FromShape(shapes.Make(dtype, NumExamples, Height, Width, Depth))
+	labels := tensors.FromShape(shapes.Make(dtypes.Int64, NumExamples, 1))
+	tensors.MutableFlatData[int64](labels, func(labelsData []int64) {
+		var labelImageBytes [imageSizeBytes + 2]byte
+		dataFiles := []string{"train.bin", "test.bin"}
+		exampleIdx := 0
+		for _, fileName := range dataFiles {
+			dataFile := path.Join(baseDir, C100SubDir, fileName)
+			f, err := os.Open(dataFile)
 			if err != nil {
-				panic(errors.WithMessagef(err, "reading example %d from %q", inFileIdx, dataFile))
+				panic(errors.Wrapf(err, "opening data file %q", dataFile))
 			}
-			if bytesRead != len(labelImageBytes) {
-				panic(errors.Errorf("read only %d bytes reading example %d from %q, wanted %d bytes",
-					bytesRead, inFileIdx, dataFile, len(labelImageBytes)))
+			for inFileIdx := 0; true; inFileIdx++ {
+				bytesRead, err := f.Read(labelImageBytes[:])
+				if bytesRead == 0 && err == io.EOF {
+					break
+				}
+				if err != nil {
+					panic(errors.WithMessagef(err, "reading example %d from %q", inFileIdx, dataFile))
+				}
+				if bytesRead != len(labelImageBytes) {
+					panic(errors.Errorf("read only %d bytes reading example %d from %q, wanted %d bytes",
+						bytesRead, inFileIdx, dataFile, len(labelImageBytes)))
+				}
+				switch dtype {
+				case dtypes.Float64:
+					err = convertBytesToTensor[float64](labelImageBytes[2:], images, exampleIdx)
+				case dtypes.Float32:
+					err = convertBytesToTensor[float32](labelImageBytes[2:], images, exampleIdx)
+				default:
+					Panicf("DType %s not supported", dtype)
+				}
+				if err != nil {
+					panic(errors.Wrapf(err, "failed converting bytes to tensor of %s", dtype))
+				}
+				labelsData[exampleIdx] = int64(labelImageBytes[1]) // Take the fine-label (and discard the coarse-label).
+				exampleIdx++
 			}
-			switch dtype {
-			case shapes.Float64:
-				err = convertBytesToTensor[float64](labelImageBytes[2:], images, exampleIdx)
-			case shapes.Float32:
-				err = convertBytesToTensor[float32](labelImageBytes[2:], images, exampleIdx)
-			default:
-				Panicf("DType %s not supported", dtype)
-			}
-			if err != nil {
-				panic(errors.Wrapf(err, "failed converting bytes to tensor of %s", dtype))
-			}
-			labelsData[exampleIdx] = int64(labelImageBytes[1]) // Take the fine-label (and discard the coarse-label).
-			exampleIdx++
 		}
-	}
+	})
 	return partitionImagesAndLabels(manager, images, labels)
 }
 
-func ConvertToGoImage(images *tensor.Local, exampleNum int) *image.NRGBA {
+func ConvertToGoImage(images *tensors.Tensor, exampleNum int) *image.NRGBA {
 	img := image.NewNRGBA(image.Rect(0, 0, Width, Height))
-	ref := images.AcquireData()
-	defer ref.Release()
-	tensorData := reflect.ValueOf(ref.Flat())
-	tensorPos := exampleNum * imageSizeBytes
-	floatT := reflect.TypeOf(float64(0))
-	for h := 0; h < Height; h++ {
-		for w := 0; w < Width; w++ {
-			for d := 0; d < Depth; d++ {
-				v := tensorData.Index(tensorPos)
-				f := v.Convert(floatT).Interface().(float64)
-				tensorPos++
-				img.Pix[h*img.Stride+w*4+d] = uint8(f * 255)
+	images.ConstFlatData(func(flatAny any) {
+		tensorData := reflect.ValueOf(flatAny)
+		tensorPos := exampleNum * imageSizeBytes
+		floatT := reflect.TypeOf(float64(0))
+		for h := 0; h < Height; h++ {
+			for w := 0; w < Width; w++ {
+				for d := 0; d < Depth; d++ {
+					v := tensorData.Index(tensorPos)
+					f := v.Convert(floatT).Interface().(float64)
+					tensorPos++
+					img.Pix[h*img.Stride+w*4+d] = uint8(f * 255)
+				}
+				img.Pix[h*img.Stride+w*4+3] = uint8(255) // Alpha channel.
 			}
-			img.Pix[h*img.Stride+w*4+3] = uint8(255) // Alpha channel.
 		}
-	}
+	})
 	return img
 }
 
 // partitionImagesAndLabels into train and test partitions.
-func partitionImagesAndLabels(manager *Manager, images, labels tensor.Tensor) (partitioned PartitionedImagesAndLabels) {
+func partitionImagesAndLabels(manager backends.Backend, images, labels *tensors.Tensor) (partitioned PartitionedImagesAndLabels) {
 	exec := NewExec(manager, func(images, labels *Node) []*Node {
 		imagesTrain := Slice(images, AxisRange(0, NumTrainExamples))
 		labelsTrain := Slice(labels, AxisRange(0, NumTrainExamples))
@@ -280,7 +277,7 @@ const (
 )
 
 type ImagesAndLabels struct {
-	images, labels tensor.Tensor
+	images, labels *tensors.Tensor
 }
 
 // PartitionedImagesAndLabels holds for each partition (Train, Test), one set of Images and Labels.
@@ -288,13 +285,13 @@ type PartitionedImagesAndLabels [2]ImagesAndLabels
 
 var (
 	// Cache of loaded data: one per DataSource, per DType, per Partition(Train/Test).
-	imagesAndLabelsCache [2]map[shapes.DType]PartitionedImagesAndLabels
+	imagesAndLabelsCache [2]map[dtypes.DType]PartitionedImagesAndLabels
 )
 
 func ResetCache() {
-	imagesAndLabelsCache = [2]map[shapes.DType]PartitionedImagesAndLabels{
-		make(map[shapes.DType]PartitionedImagesAndLabels), // Cifar10
-		make(map[shapes.DType]PartitionedImagesAndLabels), // Cifar100
+	imagesAndLabelsCache = [2]map[dtypes.DType]PartitionedImagesAndLabels{
+		make(map[dtypes.DType]PartitionedImagesAndLabels), // Cifar10
+		make(map[dtypes.DType]PartitionedImagesAndLabels), // Cifar100
 	}
 }
 
@@ -308,7 +305,7 @@ func init() {
 // It automatically downloads the data from the web, and then loads the data into memory if it hasn't been
 // loaded yet.
 // It caches the result, so multiple Datasets can be created without any extra costs in time/memory.
-func NewDataset(manager *Manager, name, baseDir string, source DataSource, dtype shapes.DType, partition Partition) *data.InMemoryDataset {
+func NewDataset(manager backends.Backend, name, baseDir string, source DataSource, dtype dtypes.DType, partition Partition) *data.InMemoryDataset {
 	if source > C100 {
 		Panicf("Invalid source value %d, only C10 or C100 accepted", source)
 	}
@@ -317,7 +314,7 @@ func NewDataset(manager *Manager, name, baseDir string, source DataSource, dtype
 		// How do download & load data: one per DataSource.
 		downloadFunctions := [2]func(baseDir string) error{
 			DownloadCifar10, DownloadCifar100}
-		loadFunctions := [2]func(manager *Manager, baseDir string, dType shapes.DType) PartitionedImagesAndLabels{
+		loadFunctions := [2]func(manager backends.Backend, baseDir string, dType dtypes.DType) PartitionedImagesAndLabels{
 			LoadCifar10, LoadCifar100}
 
 		err := downloadFunctions[source](baseDir)

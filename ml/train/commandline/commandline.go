@@ -19,8 +19,8 @@ package commandline
 
 import (
 	"fmt"
+	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/ml/train"
-	. "github.com/gomlx/gomlx/types/exceptions"
 )
 
 // ReportEval reports on the command line the results of evaluating the datasets using trainer.Eval.

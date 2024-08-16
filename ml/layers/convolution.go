@@ -17,12 +17,13 @@
 package layers
 
 import (
+	. "github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
-	. "github.com/gomlx/gomlx/types/exceptions"
+	"github.com/gomlx/gomlx/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
-	timage "github.com/gomlx/gomlx/types/tensor/image"
+	"github.com/gomlx/gomlx/types/tensors/images"
+	"github.com/gomlx/gomlx/types/xslices"
 )
 
 // This file contains all parts of the layers.Convolve implementation.
@@ -34,7 +35,7 @@ type ConvBuilder struct {
 	graph              *Graph
 	x                  *Node
 	numSpatialDims     int
-	channelsAxisConfig timage.ChannelsAxisConfig
+	channelsAxisConfig images.ChannelsAxisConfig
 	filters            int
 	kernelSize         []int
 	bias               bool
@@ -42,9 +43,10 @@ type ConvBuilder struct {
 	padSame            bool
 	dilations          []int
 	newScope           bool
+	regularizer        regularizers.Regularizer
 }
 
-// Convolution prepares a convolution on x with the given kernel for arbitrary
+// Convolution prepares one convolution on x with the given kernel for arbitrary
 // number of spatial dimensions (1D, 2D, 3D, etc.).
 //
 // It is very flexible and to ease setting its parameters it returns a ConvBuilder object for configuration. Once it is
@@ -55,22 +57,23 @@ type ConvBuilder struct {
 // if they are not set.
 //
 // The shape of x should be `[batch, <spatial_dimensions...>, input_channels]` if
-// configured with `ConvBuilder.ChannelsAxis(timage.ChannelsLast)`, the default. If one
-// sets `ConvBuilder.ChannelsAxis(timage.ChannelsFirst)`, the shape should be
+// configured with `ConvBuilder.ChannelsAxis(images.ChannelsLast)`, the default. If one
+// sets `ConvBuilder.ChannelsAxis(images.ChannelsFirst)`, the shape should be
 // `[batch, input_channels, <spatial_dimensions...>]` instead.
 func Convolution(ctx *context.Context, x *Node) *ConvBuilder {
 	conv := &ConvBuilder{
-		ctx:      ctx,
-		graph:    x.Graph(),
-		x:        x,
-		newScope: true,
+		ctx:         ctx,
+		graph:       x.Graph(),
+		x:           x,
+		newScope:    true,
+		regularizer: regularizers.FromContext(ctx),
 	}
 	conv.numSpatialDims = x.Rank() - 2
 	if conv.numSpatialDims < 0 {
 		Panicf("Input x must have rank >= 3, shaped by default as [batch, <spatial_dimensions...>, channels], "+
 			"but x rank is %d", x.Rank())
 	}
-	return conv.ChannelsAxis(timage.ChannelsLast).NoPadding().UseBias(true).Strides(1)
+	return conv.ChannelsAxis(images.ChannelsLast).NoPadding().UseBias(true).Strides(1)
 }
 
 // Filters sets the number of filters -- specifies the number of output channels. There is no default
@@ -88,7 +91,7 @@ func (conv *ConvBuilder) Filters(filters int) *ConvBuilder {
 //
 // You can also use KernelSizePerDim to set the kernel size per dimension (axis) individually.
 func (conv *ConvBuilder) KernelSize(size int) *ConvBuilder {
-	perDim := slices.SliceWithValue(conv.numSpatialDims, size)
+	perDim := xslices.SliceWithValue(conv.numSpatialDims, size)
 	return conv.KernelSizePerDim(perDim...)
 }
 
@@ -113,12 +116,12 @@ func (conv *ConvBuilder) UseBias(useBias bool) *ConvBuilder {
 }
 
 // ChannelsAxis configures the axis for the channels (aka. "depth" or "features") dimension. The default is
-// `timage.ChannelsLast`, meaning the "channels" dimension comes last.
+// `images.ChannelsLast`, meaning the "channels" dimension comes last.
 //
-// Note: `timage` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
+// Note: `images` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
 //
 // It returns the modified Config object, so calls can be cascaded.
-func (conv *ConvBuilder) ChannelsAxis(channelsAxisConfig timage.ChannelsAxisConfig) *ConvBuilder {
+func (conv *ConvBuilder) ChannelsAxis(channelsAxisConfig images.ChannelsAxisConfig) *ConvBuilder {
 	conv.channelsAxisConfig = channelsAxisConfig
 	return conv
 }
@@ -150,7 +153,7 @@ func (conv *ConvBuilder) NoPadding() *ConvBuilder {
 //
 // One cannot use strides and dilation at the same time.
 func (conv *ConvBuilder) Strides(strides int) *ConvBuilder {
-	perDim := slices.SliceWithValue(conv.numSpatialDims, strides)
+	perDim := xslices.SliceWithValue(conv.numSpatialDims, strides)
 	return conv.StridePerDim(perDim...)
 }
 
@@ -164,7 +167,7 @@ func (conv *ConvBuilder) Strides(strides int) *ConvBuilder {
 // One cannot use strides and dilation at the same time.
 func (conv *ConvBuilder) StridePerDim(strides ...int) *ConvBuilder {
 	if len(strides) != conv.numSpatialDims {
-		Panicf("received %d strides in StridePerDim, but x has %d spatial dimensions",
+		Panicf("received %d strides in StridePerAxis, but x has %d spatial dimensions",
 			len(strides), conv.numSpatialDims)
 		return conv
 	}
@@ -182,7 +185,7 @@ func (conv *ConvBuilder) StridePerDim(strides ...int) *ConvBuilder {
 //
 // One cannot use strides and dilation at the same time.
 func (conv *ConvBuilder) Dilations(dilation int) *ConvBuilder {
-	dilationsPerDim := slices.SliceWithValue(conv.numSpatialDims, dilation)
+	dilationsPerDim := xslices.SliceWithValue(conv.numSpatialDims, dilation)
 	return conv.DilationPerDim(dilationsPerDim...)
 }
 
@@ -211,6 +214,17 @@ func (conv *ConvBuilder) DilationPerDim(dilations ...int) *ConvBuilder {
 // By default, Convolution will create a sub-scope named "conv".
 func (conv *ConvBuilder) CurrentScope() *ConvBuilder {
 	conv.newScope = false
+	return conv
+}
+
+// Regularizer to be applied to the learned weights (but not the biases).
+// Default is none.
+//
+// To use more than one type of Regularizer, use regularizers.Combine, and set the returned combined regularizer here.
+//
+// The default is regularizers.FromContext, which is configured by regularizers.ParamL1 and regularizers.ParamL2.
+func (conv *ConvBuilder) Regularizer(regularizer regularizers.Regularizer) *ConvBuilder {
+	conv.regularizer = regularizer
 	return conv
 }
 
@@ -257,9 +271,9 @@ func (conv *ConvBuilder) Done() *Node {
 	dtype := xShape.DType
 	kernelShape := shapes.Make(dtype)
 	kernelShape.Dimensions = make([]int, 0, conv.numSpatialDims+2)
-	channelsAxis := timage.GetChannelsAxis(xShape, conv.channelsAxisConfig)
+	channelsAxis := images.GetChannelsAxis(xShape, conv.channelsAxisConfig)
 	inputChannels := xShape.Dimensions[channelsAxis]
-	if conv.channelsAxisConfig == timage.ChannelsFirst {
+	if conv.channelsAxisConfig == images.ChannelsFirst {
 		kernelShape.Dimensions = append(kernelShape.Dimensions, inputChannels)
 		kernelShape.Dimensions = append(kernelShape.Dimensions, conv.kernelSize...)
 		kernelShape.Dimensions = append(kernelShape.Dimensions, conv.filters)
@@ -269,6 +283,9 @@ func (conv *ConvBuilder) Done() *Node {
 		kernelShape.Dimensions = append(kernelShape.Dimensions, conv.filters)
 	}
 	kernelVar := ctxInScope.VariableWithShape("weights", kernelShape)
+	if conv.regularizer != nil {
+		conv.regularizer(ctxInScope, conv.graph, kernelVar)
+	}
 	kernel := kernelVar.ValueGraph(conv.graph)
 	convOpts := Convolve(conv.x, kernel).StridePerDim(conv.strides...).ChannelsAxis(conv.channelsAxisConfig)
 	if len(conv.dilations) > 0 {
@@ -285,8 +302,8 @@ func (conv *ConvBuilder) Done() *Node {
 	if conv.bias {
 		biasVar := ctxInScope.VariableWithShape("biases", shapes.Make(dtype, conv.filters))
 		bias := biasVar.ValueGraph(conv.graph)
-		expandedDims := slices.SliceWithValue(output.Rank(), 1)
-		outputChannelsAxis := timage.GetChannelsAxis(output, conv.channelsAxisConfig)
+		expandedDims := xslices.SliceWithValue(output.Rank(), 1)
+		outputChannelsAxis := images.GetChannelsAxis(output, conv.channelsAxisConfig)
 		expandedDims[outputChannelsAxis] = conv.filters
 		bias = Reshape(bias, expandedDims...)
 		output = Add(output, bias)

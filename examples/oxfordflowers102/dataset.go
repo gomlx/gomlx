@@ -4,12 +4,13 @@ import (
 	"encoding/gob"
 	"fmt"
 	"github.com/disintegration/imaging"
-	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
-	timage "github.com/gomlx/gomlx/types/tensor/image"
+	"github.com/gomlx/gomlx/types/tensors"
+	timage "github.com/gomlx/gomlx/types/tensors/images"
+	"github.com/gomlx/gomlx/types/xslices"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 	"image"
 	"io"
@@ -43,7 +44,7 @@ type Dataset struct {
 // cut from the middle.
 //
 // It doesn't support batch, but you can use GoMLX's `data.Batch` for that.
-func NewDataset(dtype shapes.DType, imageSize int) *Dataset {
+func NewDataset(dtype dtypes.DType, imageSize int) *Dataset {
 	return &Dataset{
 		name:      "Oxford Flowers 102",
 		imageSize: imageSize,
@@ -68,16 +69,11 @@ func (ds *Dataset) Shuffle() *Dataset {
 
 func (ds *Dataset) shuffleLocked() {
 	if ds.shuffle == nil {
-		ds.shuffle = make([]int, NumExamples)
+		ds.shuffle = xslices.Iota(0, NumExamples)
 	}
 	for ii := 0; ii < NumExamples; ii++ {
-		newPos := rand.Intn(ii + 1)
-		if newPos == ii {
-			ds.shuffle[ii] = ii
-		} else {
-			// Swap position with the new example.
-			ds.shuffle[newPos], ds.shuffle[ii] = ii, ds.shuffle[newPos]
-		}
+		swapPos := rand.Intn(NumExamples)
+		ds.shuffle[ii], ds.shuffle[swapPos] = ds.shuffle[swapPos], ds.shuffle[ii]
 	}
 }
 
@@ -91,9 +87,9 @@ func (ds *Dataset) shuffleLocked() {
 // Example:
 //
 //	seed := int64(42)
-//	dsTrain := oxfordflowers102.NewDataset(shapes.F32, 75).Partition(seed, 0, 0.8)   // 80%
-//	dsValid := oxfordflowers102.NewDataset(shapes.F32, 75).Partition(seed, 0.8, 0.9) // 10%
-//	dsTest := oxfordflowers102.NewDataset(shapes.F32, 75).Partition(seed, 0.9, 1.0)  // 10%
+//	dsTrain := oxfordflowers102.NewDataset(dtypes.Float32, 75).Partition(seed, 0, 0.8)   // 80%
+//	dsValid := oxfordflowers102.NewDataset(dtypes.Float32, 75).Partition(seed, 0.8, 0.9) // 10%
+//	dsTest := oxfordflowers102.NewDataset(dtypes.Float32, 75).Partition(seed, 0.9, 1.0)  // 10%
 func (ds *Dataset) Partition(seed int64, from, to float64) *Dataset {
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
@@ -155,11 +151,9 @@ func (ds *Dataset) Name() string {
 //
 //   - `inputs`: three values: the image itself and a scalar `int32` with
 //     the index of the example and finally the type of flower (from 0 to `NumLabels-1`=101).
-//     The index of the example can be used, for instance, to split the dataset
-//     (into training/validation/test).
 //   - `labels`: the type of flower (same as `inputs[2]`), an `int32` value from 0 to `NumLabels-1`
 //     with the label.
-func (ds *Dataset) Yield() (spec any, inputs []tensor.Tensor, labels []tensor.Tensor, err error) {
+func (ds *Dataset) Yield() (spec any, inputs []*tensors.Tensor, labels []*tensors.Tensor, err error) {
 	spec = ds
 	index := ds.nextIndex()
 	if index == -1 {
@@ -198,8 +192,8 @@ func (ds *Dataset) Yield() (spec any, inputs []tensor.Tensor, labels []tensor.Te
 		img = imaging.Crop(img, image.Rect(0, start, ds.imageSize, start+ds.imageSize))
 	}
 
-	inputs = []tensor.Tensor{ds.toTensor.Single(img), tensor.FromValue(index), tensor.FromValue(label)}
-	labels = []tensor.Tensor{tensor.FromValue(label)}
+	inputs = []*tensors.Tensor{ds.toTensor.Single(img), tensors.FromValue(index), tensors.FromValue(label)}
+	labels = []*tensors.Tensor{tensors.FromValue(label)}
 	return
 }
 
@@ -225,7 +219,7 @@ func (ds *Dataset) Reset() {
 //
 // If the cache is not found, it automatically calls DownloadAndParse to download and untar the original
 // images, if they are not yet downloaded.
-func InMemoryDataset(manager *Manager, baseDir string, imageSize int, name string,
+func InMemoryDataset(backend backends.Backend, baseDir string, imageSize int, name string,
 	partitionSeed int64, partitionFrom, partitionTo float64) (
 	inMemoryDataset *data.InMemoryDataset, err error) {
 	var f *os.File
@@ -243,7 +237,7 @@ func InMemoryDataset(manager *Manager, baseDir string, imageSize int, name strin
 		if err == nil {
 			// Reads from cached file.
 			dec := gob.NewDecoder(f)
-			inMemoryDataset, err = data.GobDeserializeInMemory(manager, dec)
+			inMemoryDataset, err = data.GobDeserializeInMemory(backend, nil, dec)
 			_ = f.Close()
 			return
 		}
@@ -269,8 +263,8 @@ func InMemoryDataset(manager *Manager, baseDir string, imageSize int, name strin
 	// Create InMemoryDataset.
 	start := time.Now()
 	fmt.Printf("Creating InMemoryDataset for %q with images cropped and scaled to %dx%d...\n", name, imageSize, imageSize)
-	ds := NewDataset(shapes.Uint8, imageSize).Partition(partitionSeed, partitionFrom, partitionTo)
-	inMemoryDataset, err = data.InMemory(manager, data.Parallel(ds), false)
+	ds := NewDataset(dtypes.Uint8, imageSize).Partition(partitionSeed, partitionFrom, partitionTo)
+	inMemoryDataset, err = data.InMemory(backend, data.Parallel(ds), false)
 	elapsed := time.Since(start)
 	fmt.Printf("\t- %s to process dataset.\n", elapsed)
 	if err != nil {

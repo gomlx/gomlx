@@ -21,180 +21,94 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
 	"math"
 	"testing"
 )
 
 func TestGradientAdd(t *testing.T) {
-	manager := buildTestManager()
-	g := manager.NewGraph("TestDense")
-	c1 := Const(g, []float32{1, 2})
-	c2 := Const(g, []float32{10})
-	output := ReduceAllSum(Add(c1, c2))
-	gradients := Gradient(output, c1, c2)
-	g.Compile(output, Tuple(gradients...))
-	results := g.Run(nil)
-	resultsSplit := results.SplitTuple()
+	backend := graphtest.BuildTestBackend()
+	g := NewGraph(backend, "TestDense")
+	{
+		c1 := Const(g, []float32{1, 2})
+		c2 := Const(g, []float32{10})
+		output := ReduceAllSum(Add(c1, c2))
+		gradients := Gradient(output, c1, c2)
+		outputs := []*Node{output}
+		outputs = append(outputs, gradients...)
+		g.Compile(outputs...)
+	}
+	outputs := g.Run()
 
 	{
-		got := resultsSplit[0].Local().Value()
+		got := outputs[0]
 		fmt.Printf("output=%v\n", got)
 		want := float32(23)
-		if !slices.DeepSliceCmp(got, want, slices.Equal[float32]) {
-			t.Fatalf("Want %v, Got %v", want, got)
-		}
+		require.Equalf(t, want, got.Value(), "%s: wanted %v, got %v", t.Name(), want, got)
 	}
 
-	gradientsSplit := resultsSplit[1].SplitTuple()
-
 	{
-		got := gradientsSplit[0].Local().Value()
+		got := outputs[1]
 		fmt.Printf("\tgrad output/A=%v\n", got)
 		want := []float32{1, 1}
-		if !slices.DeepSliceCmp(got, want, slices.Equal[float32]) {
-			t.Fatalf("Want %v, Got %v", want, got)
-		}
+		require.Equalf(t, want, got.Value(), "%s: wanted %v, got %v", t.Name(), want, got)
 	}
 
 	{
-		got := gradientsSplit[1].Local().Value()
+		got := outputs[2]
 		fmt.Printf("\tgrad output/B=%v\n", got)
 		want := []float32{2}
-		if !slices.DeepSliceCmp(got, want, slices.Equal[float32]) {
-			t.Fatalf("Want %v, Got %v", want, got)
-		}
+		require.Equalf(t, want, got.Value(), "%s: wanted %v, got %v", t.Name(), want, got)
 	}
 }
 
 func TestGradientDot(t *testing.T) {
-	manager := buildTestManager()
-
-	// vector x vector case: simple dot product.
-	{
-		g := manager.NewGraph("TestDense")
+	graphtest.RunTestGraphFn(t, "GradientDot: dot(vector, vector)", func(g *Graph) (inputs, outputs []*Node) {
 		v1 := Mul(Ones(g, MakeShape(F32, 4)), Const(g, float32(2)))
 		v2 := Mul(Ones(g, MakeShape(F32, 4)), Const(g, float32(3)))
-		fmt.Printf("\tv1=2s, %s\n", v1)
-		fmt.Printf("\tv2=3s, %s\n", v2)
 		output := Dot(v1, v2)
 		gradients := Gradient(output, v1, v2)
-		g.Compile(output, Tuple(gradients...))
-		results := g.Run(nil)
-		resultsSplit := results.SplitTuple()
-		{
-			got := resultsSplit[0].Local()
-			fmt.Printf("\toutput=%s\n", got)
-			want := float32(24)
-			if !slices.DeepSliceCmp(got.Value(), want, slices.Equal[float32]) {
-				t.Fatalf("Want %v, Got %v", want, got.Value())
-			}
-		}
-		gradientsSplit := resultsSplit[1].SplitTuple()
-		{
-			got := gradientsSplit[0].Local()
-			fmt.Printf("\tgrad output/v1=%v\n", got)
-			want := []float32{3, 3, 3, 3}
-			if !slices.DeepSliceCmp(got.Value(), want, slices.Equal[float32]) {
-				t.Fatalf("Want %v, Got %v", want, got)
-			}
-		}
+		inputs = []*Node{v1, v2}
+		outputs = append([]*Node{output}, gradients...)
+		return
+	}, []any{
+		float32(24),           // dot product output
+		[]float32{3, 3, 3, 3}, // gradient with respect to v1
+		[]float32{2, 2, 2, 2}, // gradient with respect to v2
+	}, Epsilon)
 
-		{
-			got := gradientsSplit[1].Local()
-			fmt.Printf("\tgrad output/v2=%v\n", got)
-			want := []float32{2, 2, 2, 2}
-			if !slices.DeepSliceCmp(got.Value(), want, slices.Equal[float32]) {
-				t.Fatalf("Want %v, Got %v", want, got)
-			}
-		}
-	}
-
-	// matrix x vector case: simple dot product.
-	{
-		g := manager.NewGraph("TestDense")
+	graphtest.RunTestGraphFn(t, "GradientDot: dot(matrix, vector)", func(g *Graph) (inputs, outputs []*Node) {
 		v1 := Add(Iota(g, MakeShape(F32, 2, 4), 0), Const(g, float32(2)))
 		v2 := Mul(Ones(g, MakeShape(F32, 4)), Const(g, float32(3)))
 		output := Dot(v1, v2)
 		sum := ReduceAllSum(output)
 		gradients := Gradient(sum, v1, v2)
-		g.Compile(sum, output, v1, v2, Tuple(gradients...))
-		results := g.Run(nil).SplitTuple()
-		fmt.Println()
-		fmt.Printf("\tv1=%v\n", results[2].Local())     // {{2, 2, 2, 2}, {3, 3, 3, 3}}
-		fmt.Printf("\tv2=%v\n", results[3].Local())     // {3, 3, 3, 3}
-		fmt.Printf("\toutput=%v\n", results[1].Local()) // {24, 36}
-		fmt.Printf("\tsum=%v\n", results[0].Local())    // 60
-		{
-			got := results[0].Local()
-			want := float32(60)
-			if !slices.DeepSliceCmp(got.Value(), want, slices.Equal[float32]) {
-				t.Errorf("Want %v, Got %v", want, got.Value())
-			}
-		}
-		gradientsSplit := results[4].SplitTuple()
-		{
-			got := gradientsSplit[0].Local()
-			fmt.Printf("\tgrad output/v1=%v\n", got)
-			want := [][]float32{{3, 3, 3, 3}, {3, 3, 3, 3}}
-			if !slices.DeepSliceCmp(got.Value(), want, slices.Equal[float32]) {
-				t.Errorf("Want %v, Got %v", want, got)
-			}
-		}
+		inputs = []*Node{v1, v2}
+		outputs = append([]*Node{output}, gradients...)
+		return
+	}, []any{
+		[]float32{24, 36},                       // dot product output
+		[][]float32{{3, 3, 3, 3}, {3, 3, 3, 3}}, // gradient with respect to v1
+		[]float32{5, 5, 5, 5},                   // gradient with respect to v2
+	}, Epsilon)
 
-		{
-			got := gradientsSplit[1].Local()
-			fmt.Printf("\tgrad output/v2=%v\n", got)
-			want := []float32{5, 5, 5, 5}
-			if !slices.DeepSliceCmp(got.Value(), want, slices.Equal[float32]) {
-				t.Errorf("Want %v, Got %v", want, got)
-			}
-		}
-	}
-
-	// matrix x matrix case: simple dot product.
-	{
-		g := manager.NewGraph("TestDense")
+	graphtest.RunTestGraphFn(t, "GradientDot: dot(matrix, matrix)", func(g *Graph) (inputs, outputs []*Node) {
 		v1 := Add(Iota(g, MakeShape(F32, 2, 4), 0), Const(g, float32(2)))
 		v2 := Add(Iota(g, MakeShape(F32, 4, 1), 0), Const(g, float32(1)))
 		output := Dot(v1, v2)
+		require.NoError(t, output.Shape().CheckDims(2, 1))
 		sum := ReduceAllSum(output)
 		gradients := Gradient(sum, v1, v2)
-		g.Compile(sum, output, v1, v2, Tuple(gradients...))
-		results := g.Run(nil).SplitTuple()
-		fmt.Println()
-		fmt.Printf("\tv1=%v\n", results[2].Local())     // {{2, 2, 2, 2}, {3, 3, 3, 3}}
-		fmt.Printf("\tv2=%v\n", results[3].Local())     // {{1}, {2}, {3}, {4}}
-		fmt.Printf("\toutput=%v\n", results[1].Local()) // {20, 30}
-		fmt.Printf("\tsum=%v\n", results[0].Local())    // 50
-		{
-			got := results[0].Local()
-			want := float32(50)
-			if !slices.DeepSliceCmp(got.Value(), want, slices.Equal[float32]) {
-				t.Errorf("Want %v, Got %v", want, got.Value())
-			}
-		}
-		gradientsSplit := results[4].SplitTuple()
-		{
-			got := gradientsSplit[0].Local()
-			fmt.Printf("\tgrad output/v1=%v\n", got)
-			want := [][]float32{{1, 2, 3, 4}, {1, 2, 3, 4}}
-			if !slices.DeepSliceCmp(got.Value(), want, slices.Equal[float32]) {
-				t.Errorf("Want %v, Got %v", want, got)
-			}
-		}
-
-		{
-			got := gradientsSplit[1].Local()
-			fmt.Printf("\tgrad output/v2=%v\n", got)
-			want := [][]float32{{5}, {5}, {5}, {5}}
-			if !slices.DeepSliceCmp(got.Value(), want, slices.Equal[float32]) {
-				t.Errorf("Want %v, Got %v", want, got)
-			}
-		}
-	}
-
+		inputs = []*Node{v1, v2}
+		outputs = append([]*Node{output}, gradients...)
+		return
+	}, []any{
+		[][]float32{{20}, {30}},                 // dot product output
+		[][]float32{{1, 2, 3, 4}, {1, 2, 3, 4}}, // gradient with respect to v1
+		[][]float32{{5}, {5}, {5}, {5}},         // gradient with respect to v2
+	}, Epsilon)
 }
 
 func TestGradientSlice(t *testing.T) {
@@ -218,97 +132,53 @@ func TestGradientSlice(t *testing.T) {
 			[][]int64{{0, 1, 1}, {0, 1, 1}},
 			[][]int64{{1, 1, 1}, {0, 0, 0}},
 			[][]int64{{0, 0, 0}, {1, 0, 1}},
-		}, slices.Epsilon)
+		}, Epsilon)
 }
 
 func TestGradientGather(t *testing.T) {
-	manager := buildTestManager()
-	{ // Trivial scalar gather.
-		fmt.Println("\tGather(): trivial scalar gather.")
-		g := manager.NewGraph("")
-		// numbers=(Float64)[5 3]: [[0 1 2] [3 4 5] [6 7 8] [9 10 11] [12 13 14]]
-		numbers := IotaFull(g, MakeShape(F64, 5, 3))
-		gather := Gather(numbers, ScalarOne(g, shapes.I64))
-		gradients := Gradient(ReduceAllSum(gather), numbers)
-		g.Compile(gather, gradients[0])
-		results := g.Run(nil).SplitTuple()
-		{
-			got := results[0].Local()
-			fmt.Printf("\t\tGather=%s\n", got.GoStr())
-			want := []float64{3, 4, 5}
-			if !slices.DeepSliceCmp(got.Value(), want, slices.Equal[float64]) {
-				t.Errorf("Gather: want %v, got %v", want, got)
-			}
-		}
-		{
-			got := results[1].Local()
-			fmt.Printf("\t\tGradient=%v\n", got.GoStr())
-			want := [][]float64{{0, 0, 0}, {1, 1, 1}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}}
-			if !slices.DeepSliceCmp(got.Value(), want, slices.Equal[float64]) {
-				t.Errorf("Gather: want %v, got %v", want, got)
-			}
-		}
-	}
+	graphtest.RunTestGraphFn(t, "Gradient Gather",
+		func(g *Graph) (inputs, outputs []*Node) {
+			numbers := IotaFull(g, MakeShape(F64, 5, 3))
+			gather := Gather(numbers, ScalarOne(g, dtypes.Int64))
+			gradients := Gradient(ReduceAllSum(gather), numbers)
+			inputs = []*Node{numbers}
+			outputs = []*Node{gather, gradients[0]}
+			return
+		}, []any{
+			[]float64{3, 4, 5},
+			[][]float64{{0, 0, 0}, {1, 1, 1}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+		}, Epsilon)
 
-	{ // Simple leading indices dimension.
-		fmt.Println("\tGather(): simple leading indices dimension.")
-		g := manager.NewGraph("")
-		// numbers=(Float64)[5 3]: [[0 1 2] [3 4 5] [6 7 8] [9 10 11] [12 13 14]]
-		numbers := IotaFull(g, MakeShape(F64, 5, 3))
-		// Multiply numbers, so we can see that adjoint gradients are properly passed.
-		numbersMul := Mul(numbers, Add(IotaFull(g, MakeShape(F64, 5, 1)), Const(g, 1.0)))
-		indices := Const(g, [][]int{{2}, {0}})
-		gather := Gather(numbersMul, indices)
-		gradients := Gradient(ReduceAllSum(gather), numbers)
-		g.Compile(gather, gradients[0])
-		results := g.Run(nil).SplitTuple()
-		{
-			got := results[0].Local()
-			fmt.Printf("\t\tGather=%v\n", got.GoStr())
-			want := [][]float64{{6 * 3, 7 * 3, 8 * 3}, {0, 1, 2}}
-			if !slices.DeepSliceCmp(got.Value(), want, slices.Equal[float64]) {
-				t.Errorf("Gather: want %v, got %v", want, got)
-			}
-		}
-		{
-			got := results[1].Local()
-			fmt.Printf("\t\tGradient=%v\n", got.GoStr())
+	graphtest.RunTestGraphFn(t, "Gradient Gather: simple leading indices dimension",
+		func(g *Graph) (inputs, outputs []*Node) {
+			numbers := IotaFull(g, MakeShape(F64, 5, 3))
+			numbersMul := Mul(numbers, Add(IotaFull(g, MakeShape(F64, 5, 1)), Const(g, 1.0)))
+			indices := Const(g, [][]int{{2}, {0}})
+			gather := Gather(numbersMul, indices)
+			gradients := Gradient(ReduceAllSum(gather), numbers)
+			inputs = []*Node{numbers}
+			outputs = []*Node{gather, gradients[0]}
+			return
+		}, []any{
+			[][]float64{{6 * 3, 7 * 3, 8 * 3}, {0, 1, 2}},
 			// Indices are {{2}, {0}}, where the {2} is multiplied by 3, and {0} is multiplied by 1:
-			want := [][]float64{{1, 1, 1}, {0, 0, 0}, {3, 3, 3}, {0, 0, 0}, {0, 0, 0}}
-			if !slices.DeepSliceCmp(got.Value(), want, slices.Equal[float64]) {
-				t.Errorf("Gather: want %v, got %v", want, got)
-			}
-		}
-	}
+			[][]float64{{1, 1, 1}, {0, 0, 0}, {3, 3, 3}, {0, 0, 0}, {0, 0, 0}},
+		}, Epsilon)
 
-	{ // With 2D leading indices dimension.
-		fmt.Println("\tGather(): with 2D leading indices dimension.")
-		g := manager.NewGraph("")
-		// numbers=(Float64)[5 3]: [[0 1 2] [3 4 5] [6 7 8] [9 10 11] [12 13 14]]
-		numbers := IotaFull(g, MakeShape(F64, 5, 3))
-		indices := Const(g, [][][]int{{{2}, {0}}, {{2}, {1}}})
-		gather := Gather(numbers, indices)
-		gradients := Gradient(ReduceAllSum(gather), numbers)
-		g.Compile(gather, gradients[0])
-		results := g.Run(nil).SplitTuple()
-		{
-			got := results[0].Local()
-			fmt.Printf("\t\tGather=%v\n", got.GoStr())
-			want := [][][]float64{{{6, 7, 8}, {0, 1, 2}}, {{6, 7, 8}, {3, 4, 5}}}
-			if !slices.DeepSliceCmp(got.Value(), want, slices.Equal[float64]) {
-				t.Errorf("Gather: want %v, got %v", want, got)
-			}
-		}
-		{
-			got := results[1].Local()
-			fmt.Printf("\t\tGradient=%v\n", got.GoStr())
+	graphtest.RunTestGraphFn(t, "Gradient Gather: with 2D leading indices dimension.",
+		func(g *Graph) (inputs, outputs []*Node) {
+			numbers := IotaFull(g, MakeShape(F64, 5, 3))
+			indices := Const(g, [][][]int{{{2}, {0}}, {{2}, {1}}})
+			gather := Gather(numbers, indices)
+			gradients := Gradient(ReduceAllSum(gather), numbers)
+			inputs = []*Node{numbers}
+			outputs = []*Node{gather, gradients[0]}
+			return
+		}, []any{
+			[][][]float64{{{6, 7, 8}, {0, 1, 2}}, {{6, 7, 8}, {3, 4, 5}}},
 			// Indices gathered from {0}, {1} and 2x{2}:
-			want := [][]float64{{1, 1, 1}, {1, 1, 1}, {2, 2, 2}, {0, 0, 0}, {0, 0, 0}}
-			if !slices.DeepSliceCmp(got.Value(), want, slices.Equal[float64]) {
-				t.Errorf("Gather: want %v, got %v", want, got)
-			}
-		}
-	}
+			[][]float64{{1, 1, 1}, {1, 1, 1}, {2, 2, 2}, {0, 0, 0}, {0, 0, 0}},
+		}, Epsilon)
 }
 
 // gradTestFunc takes a graph and returns the output being tested, along the nodes that
@@ -318,31 +188,27 @@ type gradTestFunc func(g *Graph) (output *Node, nodesForGrad []*Node)
 // testGradients run testFn to build a graph, calculates the gradients of the ReduceAllSum(output) with respect
 // to the nodesForGrad, and check that it gets close to the corresponding values in wantForGrad.
 //
-// It will print out the inputs and outputs to help debugging.
+// It will print out the inputNodes and outputs to help debugging.
 func testGradients(t *testing.T, name string, testFn gradTestFunc, wantForGrad []any) {
-	manager := buildTestManager()
+	backend := graphtest.BuildTestBackend()
 	fmt.Printf("%s:\n", name)
 	// Create a function that can be used by computation.Exec.
 	fn := func(g *Graph) []*Node {
 		output, nodesForGrad := testFn(g)
 		grads := Gradient(ReduceAllSum(output), nodesForGrad...)
-		all := make([]*Node, len(grads)+1)
-		all[0] = output
-		copy(all[1:], grads)
-		return all
+		return append([]*Node{output}, grads...)
 	}
-	exec := NewExec(manager, fn)
+	exec := NewExec(backend, fn)
 	results := exec.Call()
-	fmt.Printf("\toutput=%v\n", results[0].Local().GoStr())
+	fmt.Printf("\toutput=%v\n", results[0].GoStr())
 	gradients := results[1:]
 	for ii, output := range gradients {
-		fmt.Printf("\tGradient #%d: %s\n", ii, output.Local().GoStr())
+		fmt.Printf("\tGradient #%d: %s\n", ii, output.GoStr())
 	}
 	require.Equalf(t, len(wantForGrad), len(gradients), "%s: number of wanted results different from number of gradients", name)
-	const delta = 1e-4
 	for ii, output := range gradients {
-		require.Truef(t, slices.SlicesInDelta(output.Value(), wantForGrad[ii], delta), "%s: gradient #%d doesn't match wanted value %#v",
-			name, ii, wantForGrad[ii])
+		require.Truef(t, tensors.FromAnyValue(wantForGrad[ii]).InDelta(output, Epsilon),
+			"%s: gradient #%d doesn't match wanted value\n\t%v", name, ii, wantForGrad[ii])
 	}
 }
 
@@ -350,38 +216,35 @@ func testGradients(t *testing.T, name string, testFn gradTestFunc, wantForGrad [
 // ReduceAllSum(output) with respect to the nodesForGrad, and check that it gets the
 // exact corresponding values in wantForGrad.
 //
-// It will print out the inputs and outputs to help debugging.
+// It will print out the inputNodes and outputs to help debugging.
 func testGradientsExact(t *testing.T, name string, testFn gradTestFunc, wantForGrad []any) {
-	manager := buildTestManager()
+	backend := graphtest.BuildTestBackend()
 	fmt.Printf("%s:\n", name)
 	// Create a function that can be used by computation.Exec.
 	fn := func(g *Graph) []*Node {
 		output, nodesForGrad := testFn(g)
 		grads := Gradient(ReduceAllSum(output), nodesForGrad...)
-		all := make([]*Node, len(grads)+1)
-		all[0] = output
-		copy(all[1:], grads)
-		return all
+		return append([]*Node{output}, grads...)
 	}
-	exec := NewExec(manager, fn)
+	exec := NewExec(backend, fn)
 	results := exec.Call()
-	fmt.Printf("\toutput=%v\n", results[0].Local().GoStr())
+	fmt.Printf("\tgradient=%v\n", results[0].GoStr())
 	gradients := results[1:]
-	for ii, output := range gradients {
-		fmt.Printf("\tGradient #%d: %s\n", ii, output.Local().GoStr())
+	for ii, gradient := range gradients {
+		fmt.Printf("\tGradient #%d: %s\n", ii, gradient.GoStr())
 	}
 	require.Equalf(t, len(wantForGrad), len(gradients), "%s: number of wanted results different from number of gradients", name)
-	for ii, output := range gradients {
-		require.Equalf(t, output.Value(), wantForGrad[ii], "%s: gradient #%d doesn't match wanted value %#v",
+	for ii, gradient := range gradients {
+		require.Equalf(t, gradient.Value(), wantForGrad[ii], "%s: gradient #%d doesn't match wanted value %#v",
 			name, ii, wantForGrad[ii])
 	}
 }
 
-func TestGradientConvertType(t *testing.T) {
+func TestGradientConvertDType(t *testing.T) {
 	testGradients(t, "gradient_of_ConvertType",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			inputs := Const(g, []float32{1e6, 1e-6, 0, -1e-8, -1e6})
-			values := ConvertType(inputs, shapes.Float64)
+			values := ConvertDType(inputs, dtypes.Float64)
 			output = Mul(Const(g, []float64{2, 1, 3, -4, 5}), values)
 			return output, []*Node{inputs}
 		}, []any{[]float32{2, 1, 3, -4, 5}},
@@ -389,7 +252,7 @@ func TestGradientConvertType(t *testing.T) {
 	testGradients(t, "gradient_of_ConvertType",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			inputs := Const(g, []float32{1e6, 1e-6, 0, -1e-8, -1e6})
-			values := ConvertType(inputs, shapes.Complex64)
+			values := ConvertDType(inputs, dtypes.Complex64)
 			scaled := Mul(Const(g, []complex64{2, 1, 3, -4, 5}), values)
 			output = ReduceAllSum(Add(Real(scaled), Imag(scaled)))
 			return output, []*Node{values, inputs}
@@ -415,7 +278,7 @@ func TestGradientAbs(t *testing.T) {
 			in1 := Const(g, []complex128{1 + 1i, 3 - 4i, -4 + 3i, -1 - 1i})
 			out0 := ReduceAllSum(Abs(in0))
 			out1 := ReduceAllSum(Abs(in1))
-			output = Add(ConvertType(out0, shapes.Float64), out1)
+			output = Add(ConvertDType(out0, dtypes.Float64), out1)
 			return output, []*Node{in0, in1}
 		}, []any{
 			[]complex64{0.70710677 + 0.70710677i, 0.6 - 0.8i, -0.8 + 0.6i, -0.70710677 - 0.70710677i},
@@ -479,34 +342,60 @@ func TestGradientReduceMax(t *testing.T) {
 }
 
 func TestGradientBatchNorm(t *testing.T) {
-	testGradients(t, "BatchNorm",
+	testGradients(t, "BatchNorm - offset dependent",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
-			input := Iota(g, MakeShape(shapes.Float32, 11, 3), 0) // Values from 0.0 to 6.0 on batch axis.
-			input = Div(input, Const(g, float32(10)))
+			input := Iota(g, MakeShape(dtypes.Float32, 11, 3), 0)
+			input = Div(input, Const(g, float32(10))) // Values from 0.0 to 1.0 (step 0.1) on batch axis.
 			scale := Const(g, []float32{1.0, 2.0, 3.0})
 			offset := Const(g, []float32{1.0, 10.0, 100.0})
 			var mean, variance *Node
-			output, mean, variance = BatchNormTrainingXLA(input, scale, offset, 1e-7, -1)
+			output, mean, variance = InternalBatchNormForTraining(input, scale, offset, 1e-7, -1)
 			mean.SetLogged("mean")
 			variance.SetLogged("variance")
 			nodesForGrad = []*Node{input, scale, offset}
 			return
 		}, []any{
+			// Notice the gradient of the output with respect to the inputs is ~0 because we sum everything, and if
+			// one input change a bit, all outputs are changed to preserve the mean, and in the end the sum remains
+			// the same.
 			[][]float32{
-				{-1.7135108e-07, -3.4270215e-07, -5.140532e-07},
-				{-1.3708086e-07, -2.7416172e-07, -4.1124258e-07},
-				{-1.02810645e-07, -2.0562129e-07, -3.0843194e-07},
-				{-6.854043e-08, -1.3708086e-07, -2.0562129e-07},
-				{-3.4270215e-08, -6.854043e-08, -1.0281065e-07},
-				{-5.10666e-15, -1.021332e-14, -1.531998e-14},
-				{3.4270215e-08, 6.854043e-08, 1.0281065e-07},
-				{6.8540416e-08, 1.3708083e-07, 2.0562126e-07},
-				{1.02810645e-07, 2.0562129e-07, 3.0843194e-07},
-				{1.3708086e-07, 2.7416172e-07, 4.112426e-07},
-				{1.7135108e-07, 3.4270215e-07, 5.140532e-07}},
-			[]float32{-3.769727e-07, -3.769727e-07, -3.769727e-07},
+				{0, 0, 0},
+				{0, 0, 0},
+				{0, 0, 0},
+				{0, 0, 0},
+				{0, 0, 0},
+				{0, 0, 0},
+				{0, 0, 0},
+				{0, 0, 0},
+				{0, 0, 0},
+				{0, 0, 0},
+				{0, 0, 0},
+			},
+			[]float32{0, 0, 0},
 			[]float32{11, 11, 11},
 		})
+
+	graphtest.RunTestGraphFn(t, "BatchNorm gradient - operand dependent", func(g *Graph) (inputs, outputs []*Node) {
+		input := Iota(g, MakeShape(dtypes.Float32, 11, 3), 0)
+		input = Div(input, Const(g, float32(10))) // Values from 0.0 to 1.0 (step 0.1) on batch axis.
+		inputs = []*Node{input}
+		scale := Const(g, []float32{1.0, 2.0, 3.0})
+		offset := Const(g, []float32{1.0, 10.0, 100.0})
+		output, mean, variance := InternalBatchNormForTraining(input, scale, offset, 1e-7, -1)
+		output.SetLogged("\tbatch normalized output")
+		mean.SetLogged("\tmean")
+		variance.SetLogged("\tvariance")
+		scaleContributions := Pow(Scalar(g, input.DType(), 10.0), Iota(g, output.Shape(), -1))
+		scaleContributions.SetLogged("\tcontributions")
+		loss := ReduceSum(Mul(output, scaleContributions))
+		loss.SetLogged("\tloss")
+		outputs = Gradient(loss, input, scale, offset)
+		return
+	}, []any{
+		[][]float32{{0, 1.3708086e-06, 1.6449703e-05}, {0, 1.0966469e-06, 1.3159763e-05}, {0, 8.2248516e-07, 9.869822e-06}, {0, 5.483234e-07, 6.579881e-06}, {0, 2.741617e-07, 3.2899404e-06}, {0, 0, 0}, {0, -2.7416178e-07, -3.2899416e-06}, {0, -5.483234e-07, -6.579881e-06}, {0, -8.2248516e-07, -9.869822e-06}, {0, -1.0966469e-06, -1.31597635e-05}, {0, -1.3708086e-06, -1.6449703e-05}},
+		[]float32{0, 1.5078908e-06, 1.2063127e-05},
+		[]float32{11, 110, 1100},
+	}, 1e-05)
 }
 
 func TestStopGradient(t *testing.T) {
@@ -526,7 +415,7 @@ func TestStopGradient(t *testing.T) {
 func TestGradientGatherSlices(t *testing.T) {
 	testGradients(t, "gradient_gather_slices",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
-			input := IotaFull(g, shapes.Make(shapes.F32, 3, 2, 4))
+			input := IotaFull(g, shapes.Make(dtypes.Float32, 3, 2, 4))
 			start := Const(g, [][]int32{{0, 1}, {1, 2}})
 			sizes := []int{1, 2} // Take a sub-matrix
 			output = GatherSlices(input, []int{1, 2}, start, sizes)
@@ -542,7 +431,7 @@ func TestGradientGatherSlices(t *testing.T) {
 // TestGradientBroadcastInDim test the underlying XLA's broadcastInDim operator, since
 // it powers BroadcastToShape, BroadcastToDims and ExpandAndBroadcast operators.
 func TestGradientBroadcastInDim(t *testing.T) {
-	testGradients(t, "broadcastInDim: scalar to shape",
+	testGradients(t, "broadcastInDim: scalar to outputShapes",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			input := Const(g, float32(1))
 			output = BroadcastToDims(input, 2, 2)
@@ -611,11 +500,11 @@ func TestGradientRealImagAndConj(t *testing.T) {
 func TestGradientComplex(t *testing.T) {
 	testGradients(t, "gradient_of_Real",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
-			real := Const(g, []float32{1.0, 3.0})
-			imag := Const(g, []float32{-1.0, 4.0})
-			values := Complex(real, imag)
+			realPart := Const(g, []float32{1.0, 3.0})
+			imagPart := Const(g, []float32{-1.0, 4.0})
+			values := Complex(realPart, imagPart)
 			output = Abs(Mul(Const(g, []complex64{complex64(math.Sqrt2), 5}), values))
-			return output, []*Node{real, imag}
+			return output, []*Node{realPart, imagPart}
 		}, []any{
 			[]float32{1.0, 3},
 			[]float32{-1.0, 4},
@@ -626,10 +515,10 @@ func TestGradientComplex(t *testing.T) {
 func TestIdentityWithCustomGradient(t *testing.T) {
 	testGradients(t, "IdentityWithCustomGradient",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
-			input := IotaFull(g, shapes.Make(shapes.F32, 5))
+			input := IotaFull(g, shapes.Make(dtypes.Float32, 5))
 			output = IdentityWithCustomGradient(input, func(x, v *Node) *Node {
 				factor := AddScalar(Neg(x), 5)
-				fmt.Printf("> custom gradient: x.shape=%s, v.shape=%s\n", x.Shape(), v.Shape())
+				fmt.Printf("> custom gradient: x.outputShapes=%s, v.outputShapes=%s\n", x.Shape(), v.Shape())
 				return Mul(v, factor)
 			})
 			output = MulScalar(output, 2)

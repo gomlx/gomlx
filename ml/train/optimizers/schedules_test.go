@@ -19,26 +19,29 @@ package optimizers
 import (
 	"fmt"
 	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"math"
 	"testing"
+
+	_ "github.com/gomlx/gomlx/backends/xla"
 )
 
 func TestCosineAnnealingSchedule(t *testing.T) {
-	manager := BuildManager().Platform("Host").Done()
+	backend := graphtest.BuildTestBackend()
 	periodInSteps := 100
-	ctx := context.NewContext(manager).Checked(false)
-	cosineExec := context.NewExec(manager, ctx, func(ctx *context.Context, graph *Graph) *Node {
+	ctx := context.New().Checked(false)
+	cosineExec := context.NewExec(backend, ctx, func(ctx *context.Context, graph *Graph) *Node {
 		ctx.SetTraining(graph, true)
-		CosineAnnealingSchedule(ctx, graph, shapes.Float32).
+		CosineAnnealingSchedule(ctx, graph, dtypes.Float32).
 			PeriodInSteps(periodInSteps).
 			LearningRate(1.0).
 			MinLearningRate(0.001).
 			Done()
-		return LearningRateVar(ctx, shapes.F32, 0.001).ValueGraph(graph)
+		return LearningRateVar(ctx, dtypes.Float32, 0.001).ValueGraph(graph)
 	})
 
 	for ii := 0; ii < 2*periodInSteps; ii++ {
@@ -65,14 +68,14 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 		fmt.Printf("Step %d: %f\n", ii, wantLR)
 	}
 
-	cosineExec = context.NewExec(manager, ctx, func(ctx *context.Context, graph *Graph) *Node {
+	cosineExec = context.NewExec(backend, ctx, func(ctx *context.Context, graph *Graph) *Node {
 		ctx.SetTraining(graph, false)
-		CosineAnnealingSchedule(ctx, graph, shapes.Float32).
+		CosineAnnealingSchedule(ctx, graph, dtypes.Float32).
 			PeriodInSteps(50).
 			LearningRate(1.0).
 			MinLearningRate(0.001).
 			Done()
-		return LearningRateVar(ctx, shapes.F32, 0.001).ValueGraph(graph)
+		return LearningRateVar(ctx, dtypes.Float32, 0.001).ValueGraph(graph)
 	})
 	require.NotPanics(t, func() { _ = cosineExec.Call() }, "cosineExec.Call failed to execute graph when ctx.IsTraining() == false")
 }

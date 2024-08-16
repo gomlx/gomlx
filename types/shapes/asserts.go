@@ -18,6 +18,7 @@ package shapes
 
 import (
 	"fmt"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 )
 
@@ -42,7 +43,7 @@ func (s Shape) CheckDims(dimensions ...int) error {
 	}
 	for ii, wantDim := range dimensions {
 		if wantDim != -1 && s.Dimensions[ii] != wantDim {
-			return errors.Errorf("shape (%s) axis %d has dimension %d, wanted %d", s, ii, s.Dimensions[ii], wantDim)
+			return errors.Errorf("shape (%s) axis %d has dimension %d, wanted %d (shape wanted=%v)", s, ii, s.Dimensions[ii], wantDim, dimensions)
 		}
 	}
 	return nil
@@ -52,7 +53,7 @@ func (s Shape) CheckDims(dimensions ...int) error {
 // dimensions means it can take any value and is not checked.
 //
 // It returns an error if the dtype or rank is different or if any of the dimensions don't match.
-func (s Shape) Check(dtype DType, dimensions ...int) error {
+func (s Shape) Check(dtype dtypes.DType, dimensions ...int) error {
 	if dtype != s.DType {
 		return errors.Errorf("shape (%s) has incompatible dtype %s (wanted %s)", s, s.DType, dtype)
 	}
@@ -76,7 +77,7 @@ func (s Shape) AssertDims(dimensions ...int) {
 // dimensions means it can take any value and is not checked.
 //
 // It panics if it doesn't match.
-func (s Shape) Assert(dtype DType, dimensions ...int) {
+func (s Shape) Assert(dtype dtypes.DType, dimensions ...int) {
 	err := s.Check(dtype, dimensions...)
 	if err != nil {
 		panic(fmt.Sprintf("shapes.Assert(%s, %v): %+v", dtype, dimensions, err))
@@ -101,8 +102,12 @@ func AssertDims(shaped HasShape, dimensions ...int) {
 	shaped.Shape().AssertDims(dimensions...)
 }
 
-func AssertShape(dtype DType, dimensions ...int) {
-
+// Assert checks that the shape has the given dtype, dimensions and rank. A value of -1 in
+// dimensions means it can take any value and is not checked.
+//
+// It panics if it doesn't match.
+func Assert(shaped HasShape, dtype dtypes.DType, dimensions ...int) {
+	shaped.Shape().Assert(dtype, dimensions...)
 }
 
 // CheckRank checks that the shape has the given rank.

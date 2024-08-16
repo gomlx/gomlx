@@ -23,7 +23,7 @@ import (
 )
 
 func TestScopedParams(t *testing.T) {
-	p := NewScopedParams()
+	p := newScopedParams()
 
 	//	Scope: "/": { "x":10, "y": 20, "z": 40 }
 	//	Scope: "/a": { "y": 30 }
@@ -34,29 +34,29 @@ func TestScopedParams(t *testing.T) {
 	p.Set("/a", "y", 30)
 	p.Set("/a/b", "x", 100)
 
-	// ScopedParams.Get("/a/b", "x") -> 100
+	// scopedParams.Get("/a/b", "x") -> 100
 	value, found := p.Get("/a/b", "x")
 	assert.True(t, found, "/a/b:x should be set")
-	assert.Equal(t, 100, value.(int), "ScopedParams.Get(\"/a/b\", \"x\") -> 100")
+	assert.Equal(t, 100, value.(int), "scopedParams.Get(\"/a/b\", \"x\") -> 100")
 
-	//	ScopedParams.Get("/a/b", "y") -> 30
+	//	scopedParams.Get("/a/b", "y") -> 30
 	value, found = p.Get("/a/b", "y")
 	assert.True(t, found, "/a:y should be set and found")
-	assert.Equal(t, 30, value.(int), "ScopedParams.Get(\"/a/b\", \"y\") -> 30")
+	assert.Equal(t, 30, value.(int), "scopedParams.Get(\"/a/b\", \"y\") -> 30")
 
-	//	ScopedParams.Get("/a/b", "z") -> 40
+	//	scopedParams.Get("/a/b", "z") -> 40
 	value, found = p.Get("/a/b", "z")
 	assert.True(t, found, "/:z should be set and found")
-	assert.Equal(t, 40, value.(int), "ScopedParams.Get(\"/a/b\", \"z\") -> 40")
+	assert.Equal(t, 40, value.(int), "scopedParams.Get(\"/a/b\", \"z\") -> 40")
 
-	//	ScopedParams.Get("/a/b", "w") -> Not found.
+	//	scopedParams.Get("/a/b", "w") -> Not found.
 	value, found = p.Get("/a/b", "w")
 	assert.False(t, found, "/a/b:w should not be set and not found")
 
-	//	ScopedParams.Get("/d/e/f", "z") -> 40
+	//	scopedParams.Get("/d/e/f", "z") -> 40
 	value, found = p.Get("/d/e/f", "z")
 	assert.True(t, found, "/:z should be set and found")
-	assert.Equal(t, 40, value.(int), "ScopedParams.Get(\"/d/e/f\", \"z\") -> 40")
+	assert.Equal(t, 40, value.(int), "scopedParams.Get(\"/d/e/f\", \"z\") -> 40")
 
 	want := []struct {
 		scope string

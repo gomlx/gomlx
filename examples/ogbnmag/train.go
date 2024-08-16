@@ -5,6 +5,7 @@ package ogbnmag
 import (
 	"fmt"
 	. "github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/examples/notebook/gonb/margaid"
 	"github.com/gomlx/gomlx/examples/notebook/gonb/plotly"
 	. "github.com/gomlx/gomlx/graph"
@@ -16,18 +17,15 @@ import (
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
-	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/janpfeifer/must"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
-	"path"
 	"time"
 )
 
 var (
-	ParamCheckpointPath = "checkpoint"
-
 	// ParamNumCheckpoints is the number of past checkpoints to keep.
 	// The default is 10.
 	ParamNumCheckpoints = "num_checkpoints"
@@ -43,70 +41,45 @@ var (
 )
 
 // Train GNN model based on configuration in `ctx`.
-func Train(ctx *context.Context, baseDir string, layerWiseEval, report bool) error {
-	baseDir = mldata.ReplaceTildeInDir(baseDir)
+func Train(backend backends.Backend, ctx *context.Context, dataDir, checkpointPath string, layerWiseEval, report bool, paramsSet []string) error {
+	dataDir = mldata.ReplaceTildeInDir(dataDir)
 	ReuseShareableKernels = context.GetParamOr(ctx, ParamReuseKernels, true)
 	IdentitySubSeeds = context.GetParamOr(ctx, ParamIdentitySubSeeds, true)
 
-	trainDS, trainEvalDS, validEvalDS, testEvalDS, err := MakeDatasets(baseDir)
+	trainDS, trainEvalDS, validEvalDS, testEvalDS, err := MakeDatasets(dataDir)
 	_ = testEvalDS
 	if err != nil {
 		return err
 	}
-	UploadOgbnMagVariables(ctx)
-
-	// Context values (both parameters and variables) are reloaded from checkpoint,
-	// any values that we don't want overwritten need to be read before the checkpointing.
-	trainSteps := context.GetParamOr(ctx, "train_steps", 100)
+	UploadOgbnMagVariables(backend, ctx)
 
 	// Checkpoint: it loads if already exists, and it will save as we train.
-	checkpointPath := context.GetParamOr(ctx, ParamCheckpointPath, "")
-	numCheckpointsToKeep := context.GetParamOr(ctx, ParamNumCheckpoints, 5)
 	var checkpoint *checkpoints.Handler
 	if checkpointPath != "" {
-		checkpointPath = mldata.ReplaceTildeInDir(checkpointPath) // If the path starts with "~", it is replaced.
-		if !path.IsAbs(checkpointPath) {
-			checkpointPath = path.Join(baseDir, checkpointPath)
-		}
+		numCheckpointsToKeep := context.GetParamOr(ctx, ParamNumCheckpoints, 5)
 		var err error
-
-		if numCheckpointsToKeep <= 1 {
-			// Only limit the amount of checkpoints kept if >= 2.
-			numCheckpointsToKeep = -1
-		}
-		if numCheckpointsToKeep > 0 {
-			checkpoint, err = checkpoints.Build(ctx).Dir(checkpointPath).Keep(numCheckpointsToKeep).Done()
-		} else {
-			checkpoint, err = checkpoints.Build(ctx).Dir(checkpointPath).Done()
-		}
-		ExcludeOgbnMagVariablesFromSave(ctx, checkpoint)
-
+		checkpoint, err = checkpoints.Build(ctx).
+			DirFromBase(checkpointPath, dataDir).
+			Keep(numCheckpointsToKeep).
+			ExcludeParams(paramsSet...).
+			Done()
 		if err != nil {
 			return errors.WithMessagef(err, "while setting up checkpoint to %q (keep=%d)",
 				checkpointPath, numCheckpointsToKeep)
 		}
-		globalStep := optimizers.GetGlobalStep(ctx)
-		if globalStep != 0 {
-			fmt.Printf("> restarting training from global_step=%d (training until %d)\n", globalStep, trainSteps)
-		}
-		if trainSteps <= int(globalStep) {
-			fmt.Printf("> training already reached target train_steps=%d. To train further, set a number additional "+
-				"to current global step. Use Eval to get reading on current performance.\n", trainSteps)
-			return nil
-		}
-		trainSteps -= int(globalStep)
+		ExcludeOgbnMagVariablesFromSave(ctx, checkpoint)
 	}
 
 	// Create trainer and loop.
-	trainer := newTrainer(ctx)
+	trainer := newTrainer(backend, ctx)
 	loop := train.NewLoop(trainer)
 	commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
 
 	// Attach a checkpoint: checkpoint every 1 minute of training.
-	if checkpoint != nil && numCheckpointsToKeep > 1 {
+	if checkpoint != nil {
 		period := time.Minute * 3
 		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
-			func(loop *train.Loop, metrics []tensor.Tensor) error {
+			func(loop *train.Loop, metrics []*tensors.Tensor) error {
 				return checkpoint.Save()
 			})
 	}
@@ -117,29 +90,37 @@ func Train(ctx *context.Context, baseDir string, layerWiseEval, report bool) err
 	usePlots := context.GetParamOr(ctx, margaid.ParamPlots, false)
 	if usePlots {
 		stepsPerEpoch := TrainSplit.Shape().Size()/BatchSize + 1
-		plots = plotly.New().Dynamic().
+		plots = plotly.New().WithCheckpoint(checkpoint).Dynamic().
 			ScheduleExponential(loop, 200, 1.2).
 			ScheduleEveryNSteps(loop, stepsPerEpoch)
 		if layerWiseEval {
-			magSampler := must.M1(NewSampler(baseDir))
+			magSampler := must.M1(NewSampler(dataDir))
 			layerWiseStrategy := NewSamplerStrategy(magSampler, 1, nil)
-			plots = plots.WithCustomMetricFn(BuildLayerWiseCustomMetricFn(ctx, layerWiseStrategy))
+			plots = plots.WithCustomMetricFn(BuildLayerWiseCustomMetricFn(backend, ctx, layerWiseStrategy))
 		} else {
 			plots = plots.WithDatasets(trainEvalDS, validEvalDS)
-		}
-		if checkpoint != nil {
-			plots = plots.WithCheckpoint(checkpoint.Dir())
 		}
 	}
 
 	// Loop for given number of steps
-	_, err = loop.RunSteps(trainDS, trainSteps)
+	trainSteps := context.GetParamOr(ctx, "train_steps", 100)
+	globalStep := int(optimizers.GetGlobalStep(ctx))
+	if trainSteps <= globalStep {
+		fmt.Printf("> training already reached target train_steps=%d. To train further, set a number additional "+
+			"to current global step. Use Eval to get reading on current performance.\n", trainSteps)
+		return nil
+	}
+	if globalStep != 0 {
+		fmt.Printf("> restarting training from global_step=%d (training until %d)\n", globalStep, trainSteps)
+		ctx = ctx.Reuse()
+	}
+	_, err = loop.RunSteps(trainDS, trainSteps-globalStep)
 	if err != nil {
 		return errors.WithMessage(err, "while running steps")
 	}
 	fmt.Printf("\t[Step %d] median train step: %d microseconds\n",
 		loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
-	if checkpoint != nil && numCheckpointsToKeep <= 1 {
+	if checkpoint != nil {
 		// Save checkpoint at end of training.
 		err = checkpoint.Save()
 		if err != nil {
@@ -151,7 +132,7 @@ func Train(ctx *context.Context, baseDir string, layerWiseEval, report bool) err
 	// Finally, print an evaluation on train and test datasets.
 	if report {
 		fmt.Println()
-		err = evalWithContext(ctx, baseDir, layerWiseEval, false)
+		err = evalWithContext(backend, ctx, dataDir, layerWiseEval, false)
 		if err != nil {
 			return errors.WithMessage(err, "while reporting eval")
 		}
@@ -159,7 +140,7 @@ func Train(ctx *context.Context, baseDir string, layerWiseEval, report bool) err
 	return nil
 }
 
-func newTrainer(ctx *context.Context) *train.Trainer {
+func newTrainer(backend backends.Backend, ctx *context.Context) *train.Trainer {
 	// Loss: multi-class classification problem.
 	lossFn := losses.SparseCategoricalCrossEntropyLogits
 
@@ -169,7 +150,7 @@ func newTrainer(ctx *context.Context) *train.Trainer {
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
-	trainer := train.NewTrainer(ctx.Manager(), ctx, MagModelGraph,
+	trainer := train.NewTrainer(backend, ctx, MagModelGraph,
 		lossFn,
 		optimizers.FromContext(ctx), // Based on `ctx.GetParam("optimizer")`.
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
@@ -177,31 +158,40 @@ func newTrainer(ctx *context.Context) *train.Trainer {
 	return trainer
 }
 
-func Eval(ctx *context.Context, baseDir string, layerWise, skipTrain bool) error {
-	if err := loadCheckpointToContext(ctx, baseDir); err != nil {
-		return err
+func Eval(backend backends.Backend, ctx *context.Context, dataDir, checkpointPath string, layerWise, skipTrain bool) error {
+	_, err := checkpoints.Build(ctx).DirFromBase(checkpointPath, dataDir).Done()
+	if err != nil {
+		return errors.WithMessagef(err, "while loading checkpoint from %q", checkpointPath)
 	}
-	return evalWithContext(ctx, baseDir, layerWise, skipTrain)
+
+	// Model stats:
+	globalStep := optimizers.GetGlobalStep(ctx)
+	fmt.Printf("Model in %q trained for %d steps.\n", checkpointPath, globalStep)
+
+	// Upload OGBN-MAG variables -- and possibly convert them.
+	_ = UploadOgbnMagVariables(backend, ctx)
+
+	return evalWithContext(backend, ctx, dataDir, layerWise, skipTrain)
 }
 
-func evalWithContext(ctx *context.Context, baseDir string, layerWise, skipTrain bool) error {
+func evalWithContext(backend backends.Backend, ctx *context.Context, baseDir string, layerWise, skipTrain bool) error {
 	if layerWise {
-		return evalLayerWise(ctx, baseDir)
+		return evalLayerWise(backend, ctx, baseDir)
 	}
 
 	// Evaluate on various datasets.
 	_, trainEvalDS, validEvalDS, testEvalDS := must.M4(MakeDatasets(baseDir))
 	if skipTrain {
-		return evalSampled(ctx, validEvalDS, testEvalDS)
+		return evalSampled(backend, ctx, validEvalDS, testEvalDS)
 	} else {
-		return evalSampled(ctx, trainEvalDS, validEvalDS, testEvalDS)
+		return evalSampled(backend, ctx, trainEvalDS, validEvalDS, testEvalDS)
 	}
 }
 
 // evalSampled evaluates GNN model based on configuration in `ctx` using sampled sub-graphs.
-func evalSampled(ctx *context.Context, datasets ...train.Dataset) error {
+func evalSampled(backend backends.Backend, ctx *context.Context, datasets ...train.Dataset) error {
 	// Evaluation on the various eval datasets.
-	trainer := newTrainer(ctx)
+	trainer := newTrainer(backend, ctx)
 	for _, ds := range datasets {
 		start := time.Now()
 		err := commandline.ReportEval(trainer, ds)
@@ -215,14 +205,14 @@ func evalSampled(ctx *context.Context, datasets ...train.Dataset) error {
 }
 
 // evalLayerWise evaluates GNN model based on configuration in `ctx` using layer-wise inference.
-func evalLayerWise(ctx *context.Context, baseDir string) error {
+func evalLayerWise(backend backends.Backend, ctx *context.Context, baseDir string) error {
 	// Create the OGBN-MAG strategy, used by the layer-wise inference: batch-size is irrelevant.
 	magSampler, err := NewSampler(baseDir)
 	if err != nil {
 		return err
 	}
 	magStrategy := NewSamplerStrategy(magSampler, 1, nil)
-	trainAcc, validationAcc, testAcc := LayerWiseEvaluation(ctx, magStrategy)
+	trainAcc, validationAcc, testAcc := LayerWiseEvaluation(backend, ctx, magStrategy)
 	fmt.Printf("Train Accuracy:     \t%.2f%%\n", 100*trainAcc)
 	fmt.Printf("Validation Accuracy:\t%.2f%%\n", 100*validationAcc)
 	fmt.Printf("Test Accuracy:      \t%.2f%%\n", 100*testAcc)
@@ -232,56 +222,31 @@ func evalLayerWise(ctx *context.Context, baseDir string) error {
 	return nil
 }
 
-func loadCheckpointToContext(ctx *context.Context, baseDir string) error {
-	baseDir = mldata.ReplaceTildeInDir(baseDir)
-	checkpointPath := context.GetParamOr(ctx, ParamCheckpointPath, "")
-	if checkpointPath == "" {
-		return errors.Errorf("no checkpoint defined in Context.GetParam(%q), please configure it to the checkpoint directory",
-			ParamCheckpointPath)
-	}
-	checkpointPath = mldata.ReplaceTildeInDir(checkpointPath) // If the path starts with "~", it is replaced.
-	if !path.IsAbs(checkpointPath) {
-		checkpointPath = path.Join(baseDir, checkpointPath)
-	}
-	_, err := checkpoints.Build(ctx).Dir(checkpointPath).Done()
-	if err != nil {
-		return errors.WithMessagef(err, "while loading checkpoint from %q", checkpointPath)
-	}
-
-	// Model stats:
-	globalStep := optimizers.GetGlobalStep(ctx)
-	fmt.Printf("Model in %q trained for %d steps.\n", checkpointPath, globalStep)
-
-	// Upload OGBN-MAG variables -- and possibly convert them.
-	_ = UploadOgbnMagVariables(ctx)
-	return nil
-}
-
 // getDType returns the dtype selected in the context hyperparameters.
-func getDType(ctx *context.Context) shapes.DType {
+func getDType(ctx *context.Context) dtypes.DType {
 	dtypeStr := context.GetParamOr(ctx, ParamDType, "float32")
 	switch dtypeStr {
 	case "float32":
-		return shapes.F32
+		return dtypes.Float32
 	case "float16":
-		return shapes.F16
+		return dtypes.Float16
 	case "float64":
-		return shapes.F64
+		return dtypes.Float64
 	default:
 		Panicf("Invalid DType %q given to parameters %q", dtypeStr, ParamDType)
 	}
-	return shapes.InvalidDType
+	return dtypes.InvalidDType
 }
 
 // convertPaperEmbeddings converts the "PapersEmbeddings" variable to the selected dtype, if needed.
 //
 // One should be careful not to save the converted values -- ideally, the values are saved in the original Float32.
-func convertPapersEmbeddings(ctx *context.Context) {
+func convertPapersEmbeddings(backend backends.Backend, ctx *context.Context) {
 	dtype := getDType(ctx)
 	dtypeEmbed := dtype
-	if dtype == shapes.Float16 {
+	if dtype == dtypes.Float16 {
 		// See comment on model.go, in function FeaturePreprocessing.
-		dtypeEmbed = shapes.Float32
+		dtypeEmbed = dtypes.Float32
 	}
 
 	papersVar := ctx.InspectVariable(OgbnMagVariablesScope, "PapersEmbeddings")
@@ -294,8 +259,8 @@ func convertPapersEmbeddings(ctx *context.Context) {
 		return
 	}
 
-	e := context.NewExec(ctx.Manager(), ctx, func(ctx *context.Context, g *Graph) *Node {
-		return ConvertType(papersVar.ValueGraph(g), dtype)
+	e := context.NewExec(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
+		return ConvertDType(papersVar.ValueGraph(g), dtype)
 	})
 	converted := e.Call()[0]
 	papersVar.SetValuePreservingOld(converted) // We don't want to destroy the unconverted values, in case we need it again (it happens in tests).

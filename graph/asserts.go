@@ -17,6 +17,7 @@
 package graph
 
 import (
+	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/pkg/errors"
 )
@@ -35,12 +36,15 @@ import (
 //
 // Example:
 //
-//	batch_size := inputs[0].Shape().Dimensions[0]
+//	batch_size := inputNodes[0].Shape().Dimensions[0]
 //	…
 //	layer := Concatenate(allEmbeddings, -1)
 //	layer.AssertDims(batchSize, -1) // 2D tensor, with batch size as the leading dimension.
 func (n *Node) AssertDims(dimensions ...int) {
 	n.AssertValid()
+	if n.NumOutputs() != 1 {
+		exceptions.Panicf("node has %d outputs, cannot AssertDims", n.NumOutputs())
+	}
 	err := shapes.CheckDims(n, dimensions...)
 	if err != nil {
 		panic(errors.WithMessagef(err, "AssertDims(%v)", dimensions))

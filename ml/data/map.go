@@ -1,12 +1,13 @@
 package data
 
 import (
+	"github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/types/exceptions"
-	"github.com/gomlx/gomlx/types/slices"
-	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/pkg/errors"
 )
 
@@ -16,7 +17,7 @@ type MapGraphFn func(ctx *context.Context, inputs, labels []*Node) (mappedInputs
 // mapGraphFnDataset implements a `train.Dataset` that maps a graph building function to a wrapped dataset.
 // See [MapWithGraphFn] on how to use it.
 type mapGraphFnDataset struct {
-	manager                          *Manager
+	backend                          backends.Backend
 	ctx                              *context.Context
 	ds                               train.Dataset
 	mapGraphFn                       MapGraphFn
@@ -27,20 +28,20 @@ type mapGraphFnDataset struct {
 
 // MapWithGraphFn returns a `train.Dataset` with the result of applying (mapping) the batches yielded by the provided
 // `dataset` by the graph function `graphFn`.
-// The function is executed by the `manager` given.
+// The function is executed by the `backend` given.
 // If `ctx` is nil, a new one is created.
 //
 // The graph building function `graphFn` can return a different number of `inputs` or `labels` than what it was given,
 // but these numbers should never change -- always return the same number of inputs and labels.
-func MapWithGraphFn(manager *Manager, ctx *context.Context, dataset train.Dataset, graphFn MapGraphFn) train.Dataset {
+func MapWithGraphFn(backend backends.Backend, ctx *context.Context, dataset train.Dataset, graphFn MapGraphFn) train.Dataset {
 	mapDS := &mapGraphFnDataset{
-		manager:    manager,
+		backend:    backend,
 		ctx:        ctx,
 		ds:         dataset,
 		mapGraphFn: graphFn,
 	}
 	if mapDS.ctx == nil {
-		mapDS.ctx = context.NewContext(manager)
+		mapDS.ctx = context.New()
 	}
 	return mapDS
 }
@@ -57,7 +58,7 @@ func (mapDS *mapGraphFnDataset) Name() string {
 }
 
 // Yield implements train.Dataset.
-func (mapDS *mapGraphFnDataset) Yield() (spec any, inputs []tensor.Tensor, labels []tensor.Tensor, err error) {
+func (mapDS *mapGraphFnDataset) Yield() (spec any, inputs []*tensors.Tensor, labels []*tensors.Tensor, err error) {
 	spec, inputs, labels, err = mapDS.ds.Yield()
 	if err != nil {
 		return
@@ -67,7 +68,7 @@ func (mapDS *mapGraphFnDataset) Yield() (spec any, inputs []tensor.Tensor, label
 		// Build execution of MapGraphFn
 		mapDS.numInputs = len(inputs)
 		mapDS.numLabels = len(labels)
-		mapDS.mapGraphFnExec = context.NewExec(mapDS.manager, mapDS.ctx,
+		mapDS.mapGraphFnExec = context.NewExec(mapDS.backend, mapDS.ctx,
 			func(ctx *context.Context, inputsAndLabels []*Node) []*Node {
 				var inputs, labels []*Node
 				if mapDS.numInputs > 0 {
@@ -87,7 +88,7 @@ func (mapDS *mapGraphFnDataset) Yield() (spec any, inputs []tensor.Tensor, label
 	err = exceptions.TryCatch[error](func() {
 		inputsAndLabels = mapDS.mapGraphFnExec.Call(
 			// We have to map inputsAndLabels to an `[]any` slice.
-			slices.Map(inputsAndLabels, func(e tensor.Tensor) any { return e })...)
+			xslices.Map(inputsAndLabels, func(e *tensors.Tensor) any { return e })...)
 	})
 	if err != nil {
 		err = errors.WithMessagef(err, "while executing MapGraphFn provided for data.MapWithGraphFn()")
@@ -104,7 +105,7 @@ func (mapDS *mapGraphFnDataset) Yield() (spec any, inputs []tensor.Tensor, label
 }
 
 // MapExampleFn if normal Go function that applies a transformation to the inputs/labels of a dataset.
-type MapExampleFn func(inputs, labels []tensor.Tensor) (mappedInputs, mappedLabels []tensor.Tensor)
+type MapExampleFn func(inputs, labels []*tensors.Tensor) (mappedInputs, mappedLabels []*tensors.Tensor)
 
 // mapDataset implements a `train.Dataset` that maps a function executed on the host to a wrapped dataset.
 type mapDataset struct {
@@ -129,7 +130,7 @@ func Map(ds train.Dataset, mapFn MapExampleFn) train.Dataset {
 func (ds *mapDataset) Name() string { return ds.ds.Name() }
 
 // Yield implements train.Dataset.
-func (ds *mapDataset) Yield() (spec any, inputs []tensor.Tensor, labels []tensor.Tensor, err error) {
+func (ds *mapDataset) Yield() (spec any, inputs []*tensors.Tensor, labels []*tensors.Tensor, err error) {
 	spec, inputs, labels, err = ds.ds.Yield()
 	if err != nil {
 		return

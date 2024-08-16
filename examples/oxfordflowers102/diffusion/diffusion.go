@@ -13,35 +13,24 @@ package diffusion
 import (
 	"flag"
 	"fmt"
+	"github.com/gomlx/exceptions"
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/nanlogger"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/layers/activations"
+	"github.com/gomlx/gomlx/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/losses"
-	"github.com/gomlx/gomlx/types/exceptions"
+	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
-	timage "github.com/gomlx/gomlx/types/tensor/image"
+	timage "github.com/gomlx/gomlx/types/tensors/images"
+	"github.com/gomlx/gomlx/types/xslices"
 	"math"
 	"strconv"
-)
-
-var (
-	manager *Manager
-	DType   shapes.DType
-)
-
-var (
-	flagEmbeddingDims           = flag.Int("embedding_dim", 32, "Size of the sinusoidal embeddings, should be an even number")
-	flagEmbeddingMaxFrequency   = flag.Float64("embed_max_freq", 1000.0, "Embedding max frequency")
-	flagEmbeddingMinFrequency   = flag.Float64("embed_min_freq", 1.0, "Embedding max frequency")
-	flagFlowerTypeEmbeddingSize = flag.Int("flower_type_dim", 0, "If > 0, use embedding of the flower type of the given dimension.")
-
-	flagNanLogger = flag.Bool("nan_debug", false, "If set to true, it will add some traces monitoring for NaN values, "+
-		"and it will report the first location where it happens. It slows down a bit the training.")
+	"strings"
 )
 
 var nanLogger *nanlogger.NanLogger
@@ -49,14 +38,13 @@ var nanLogger *nanlogger.NanLogger
 // SinusoidalEmbedding provides embeddings of `x` for different frequencies.
 // This is applied to the variance of the noise, and facilitates the NN model to easily map different ranges
 // of the signal/noise ratio.
-func SinusoidalEmbedding(x *Node) *Node {
-	Init()
+func SinusoidalEmbedding(ctx *context.Context, x *Node) *Node {
 	g := x.Graph()
 
-	// Generate geometrically spaced frequencies: only 1/2 of *flagEmbeddingDims because we use half for Sine, half for Cosine.
-	halfEmbed := *flagEmbeddingDims / 2
-	logMinFreq := math.Log(*flagEmbeddingMinFrequency)
-	logMaxFreq := math.Log(*flagEmbeddingMaxFrequency)
+	// Generate geometrically spaced frequencies: only 1/2 of *flagEmbeddingDims because we use half for sine numbers, half for cosine numbers.
+	halfEmbed := context.GetParamOr(ctx, "sinusoidal_embed_size", 32) / 2
+	logMinFreq := math.Log(context.GetParamOr(ctx, "sinusoidal_min_freq", 1.0))
+	logMaxFreq := math.Log(context.GetParamOr(ctx, "sinusoidal_max_freq", 1000.0))
 	frequencies := IotaFull(g, shapes.Make(x.DType(), halfEmbed))
 	frequencies = AddScalar(
 		MulScalar(frequencies, (logMaxFreq-logMinFreq)/float64(halfEmbed-1.0)),
@@ -74,53 +62,401 @@ func SinusoidalEmbedding(x *Node) *Node {
 }
 
 var (
-	flagChannelsList = slices.Flag("channels_list", []int{32, 64, 96, 128},
+	flagChannelsList = xslices.Flag("channels_list", []int{32, 64, 96, 128},
 		"Number of channels (features) for each image size (progressively smaller) in U-Net model",
 		strconv.Atoi)
-	flagNumBlocks     = flag.Int("blocks", 2, "Number of blocks per image size in U-Net model")
-	flagActivation    = flag.String("activation", "swish", "One of: \"swish\", \"sigmoid\", \"tanh\" or \"relu\"")
-	flagNormalization = flag.String("norm", "batch", "One of: \"none\", \"batch\" or \"layer\"")
 )
 
 // NormalizeLayer behaves according to the `--norm` flag.
 // It works with `x` with rank 4 and rank 3.
 func NormalizeLayer(ctx *context.Context, x *Node) *Node {
-	switch *flagNormalization {
+	norm := context.GetParamOr(ctx, layers.ParamNormalization, "none")
+	switch norm {
 	case "none":
 		// No-op.
 	case "batch":
-		x = layers.BatchNormalization(ctx, x, -1).Center(false).Scale(false).Done()
+		x = batchnorm.New(ctx, x, -1).Center(false).Scale(false).Done()
 	case "layer":
-		x = layers.LayerNormalization(ctx, x, -1).Done()
+		//x = layers.LayerNormalization(ctx, x, -1).Done()
+		x = layers.LayerNormalization(ctx, x, 1, 2).Done()
 	}
 	nanLogger.Trace(x)
 	return x
 }
 
-// ActivationLayer can be configured.
-func ActivationLayer(x *Node) *Node {
-	x = layers.Activation(*flagActivation, x)
-	nanLogger.Trace(x)
-	return x
+// concatContextFeatures to x, by broadcasting contextFeature to x spatial dimensions.
+func concatContextFeatures(x, contextFeatures *Node) *Node {
+	if contextFeatures == nil {
+		return x
+	}
+	broadcastDims := contextFeatures.Shape().Clone().Dimensions
+	for _, axis := range timage.GetSpatialAxes(x, timage.ChannelsLast) {
+		broadcastDims[axis] = x.Shape().Dimensions[axis]
+	}
+	contextFeatures = BroadcastToDims(contextFeatures, broadcastDims...)
+	return Concatenate([]*Node{x, contextFeatures}, -1)
 }
 
 // ResidualBlock on the input with `outputChannels` (axis 3) in the output.
 //
-// The parameter `x` must be of rank 4, shaped `[batchSize, height, width, channels]`.
+// The parameter `x` must be of rank 4, shaped `[BatchSize, height, width, channels]`.
 func ResidualBlock(ctx *context.Context, x *Node, outputChannels int) *Node {
 	x.AssertRank(4)
 	inputChannels := x.Shape().Dimensions[3]
 	residual := x
-	if inputChannels != outputChannels {
-		residual = layers.DenseWithBias(ctx.In("residual_channels"), x, outputChannels)
+	layerNum := 0
+	nextCtx := func(name string) (scopedCtx *context.Context) {
+		scopedCtx = ctx.Inf("%03d-%s", layerNum, name)
+		layerNum++
+		return
 	}
-	x = NormalizeLayer(ctx, x)
-	x = layers.Convolution(ctx.In("conv-layer-1"), x).Filters(outputChannels).KernelSize(3).PadSame().Done()
-	x = ActivationLayer(x)
-	x = layers.Convolution(ctx.In("conv-layer-2"), x).Filters(outputChannels).KernelSize(3).PadSame().Done()
+
+	if inputChannels != outputChannels {
+		residual = layers.Dense(nextCtx("residual_projection"), x, true, outputChannels)
+	}
+	x = NormalizeLayer(nextCtx("norm"), x)
+
+	version := context.GetParamOr(ctx, "diffusion_residual_version", 1)
+	switch version {
+	case 1: // Version 1: the original.
+		x = layers.Convolution(nextCtx("conv"), x).Filters(outputChannels).KernelSize(3).PadSame().Done()
+		x = activations.ApplyFromContext(ctx, x)
+		x = layers.Convolution(nextCtx("conv"), x).Filters(outputChannels).KernelSize(3).PadSame().Done()
+
+	case 2: // Version 2: slimmer.
+		residual = activations.ApplyFromContext(ctx, residual)
+		convCtx := nextCtx("conv").WithInitializer(initializers.Zero)
+		x = layers.Convolution(convCtx, x).Filters(outputChannels).KernelSize(3).PadSame().Done()
+
+	default:
+		exceptions.Panicf("ResidualBlock(): invalid \"diffusion_residual_version\" %d: valid values are 1 or 2", version)
+	}
+
 	x = Add(x, residual)
 	nanLogger.Trace(x)
 	return x
+}
+
+// DownBlock applies `numBlocks` residual blocks followed by an average pooling of size 2, halving the spatial size.
+// It pushes the values between each residual blocks to the `skips` stack, to build the skip connections later.
+//
+// It returns the transformed `x` and `skips` with newly stacked skip connections.
+func DownBlock(ctx *context.Context, x *Node, skips []*Node, numBlocks, outputChannels int) (*Node, []*Node) {
+	for ii := 0; ii < numBlocks; ii++ {
+		x = ResidualBlock(ctx.Inf("%03d-residual", ii), x, outputChannels)
+		skips = append(skips, x)
+	}
+	poolType := context.GetParamOr(ctx, "diffusion_pool", "mean")
+	switch poolType {
+	case "mean":
+		x = MeanPool(x).Window(2).NoPadding().Done()
+	case "max":
+		x = MaxPool(x).Window(2).NoPadding().Done()
+	case "sum":
+		x = SumPool(x).Window(2).NoPadding().Done()
+	case "concat":
+		x = ConcatPool(x).Window(2).NoPadding().Done()
+	default:
+		exceptions.Panicf(`invalid "diffusion_pool" setting %q: valid values are mean, max, sum or concat`, poolType)
+	}
+	nanLogger.Trace(x)
+	return x, skips
+}
+
+func UpSampleImages(images *Node) *Node {
+	shape := images.Shape()
+	batchSize := shape.Dimensions[0]
+	height, width := shape.Dimensions[1], shape.Dimensions[2]
+	numChannels := shape.Dimensions[3]
+	upSampled := Concatenate([]*Node{images, images}, 3)
+	upSampled = Reshape(upSampled, batchSize, height, 2*width, numChannels)
+	upSampled = Concatenate([]*Node{upSampled, upSampled}, 2)
+	upSampled = Reshape(upSampled, batchSize, 2*height, 2*width, numChannels)
+	return upSampled
+}
+
+// UpBlock is the counter-part to DownBlock. It performs up-scaling convolutions and connects skip-connections popped
+// from `skips`.
+//
+// It returns `x` and `skips` after popping the consumed skip connections.
+func UpBlock(ctx *context.Context, x *Node, skips []*Node, numBlocks, outputChannels int) (*Node, []*Node) {
+	//x = Interpolate(x, timage.GetUpSampledSizes(x, timage.ChannelsLast, 2)...).Nearest().Done()
+	x = UpSampleImages(x)
+	for ii := 0; ii < numBlocks; ii++ {
+		var skip *Node
+		skip, skips = xslices.Pop(skips)
+		x = Concatenate([]*Node{x, skip}, -1)
+		x = ResidualBlock(ctx.Inf("%03d-residual", ii), x, outputChannels)
+	}
+	nanLogger.Trace(x)
+	return x, skips
+}
+
+func shapeToStr(shape shapes.HasShape) string {
+	parts := make([]string, 1, shape.Shape().Rank())
+	parts[0] = "BatchSize"
+	parts = append(parts, xslices.Map(shape.Shape().Dimensions[1:], strconv.Itoa)...)
+	return strings.Join(parts, ",")
+}
+
+const UNetModelScope = "u-net"
+
+const IsV1Test = true
+
+// UNetModelGraph builds the U-Net model.
+//
+// Parameters:
+//   - noisyImages: image shaped `[batch_size, size, size, channels=3]`.
+//   - noiseVariance: One value [0.0-1.0] per example in the batch, shaped `[batch_size, 1, 1, 1]`.
+//   - flowerIds: One int32 value between [0, 102] (flower class) per example in the batch, shaped `[batch_size]`.
+//
+// Hyperparameters set in ctx:
+//
+//   - "diffusion_channels_list" (static hyperparameter): number of channels (embedding size) to use in the model.
+//     For each value `diffusion_num_residual_blocks` are applied and then the image is pooled and reduced by a factor of 2 --
+//     later to be up-sampled again. So at most `log2(size)` values.
+//   - "diffusion_num_residual_blocks" (static hyperparameter): number of blocks to use per numChannelsList element.
+func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds *Node) *Node {
+	dtype := noisyImages.DType()
+
+	ctx = ctx.In(UNetModelScope).WithInitializer(initializers.XavierNormalFn(0))
+
+	// nextCtx return a new context prefixed with a counter, to give a nice ordering to the variables.
+	layerNum := 0
+	nextCtx := func(format string, args ...any) (scopedCtx *context.Context) {
+		scopedCtx = ctx.Inf("%03d-"+format, append([]any{layerNum}, args...)...)
+		layerNum++
+		return
+	}
+
+	batchSize := noisyImages.Shape().Dimensions[0]
+	imgSize := noisyImages.Shape().Dimensions[1]
+	imageChannels := noisyImages.Shape().Dimensions[3] // Always 3, but if some day we want to predict the alpha, this may be 4.
+	noisyImages.AssertDims(batchSize, imgSize, imgSize, imageChannels)
+	noiseVariances.AssertDims(batchSize, 1, 1, 1)
+	flowerIds.AssertDims(batchSize)
+
+	// Parameters from flags.
+	numChannelsList := context.GetParamOr(ctx, "diffusion_channels_list", []int{32, 64, 96, 128})
+	numBlocks := context.GetParamOr(ctx, "diffusion_num_residual_blocks", 2)
+
+	nanLogger.Trace(noisyImages)
+	nanLogger.Trace(noiseVariances)
+
+	// Get variance sinusoidal representation, always included, and broadcast them to the spatial dimensions.
+	sinEmbed := SinusoidalEmbedding(ctx, noiseVariances)
+	nanLogger.Trace(sinEmbed)
+	contextFeatures := sinEmbed
+
+	// Get flower embeddings.
+	flowerIds = ExpandDims(flowerIds, -1, -1, -1) // Expand axis to the match noisyImages rank.
+	flowerEmbedSize := context.GetParamOr(ctx, "flower_type_embed_size", 16)
+	if flowerEmbedSize > 0 {
+		flowerTypeEmbed := layers.Embedding(
+			nextCtx("FlowerEmbeddings").WithInitializer(initializers.RandomNormalFn(0, 1.0/float64(flowerEmbedSize))),
+			flowerIds, dtype, flowers.NumLabels, flowerEmbedSize)
+		contextFeatures = Concatenate([]*Node{contextFeatures, flowerTypeEmbed}, -1)
+	}
+
+	// Adjust imageChannels to initial num channels.
+	x := noisyImages
+	x = layers.Dense(nextCtx("StartingChannelsProjection"), x, true, numChannelsList[0])
+
+	// Downward: keep pooling image to a smaller size.
+	// Keep the `skips` features as we move "downward," so they can be "skip" connected later as we move upward.
+	skips := make([]*Node, 0, numBlocks*len(numChannelsList))
+	for ii, numChannels := range numChannelsList {
+		blockCtx := nextCtx("DownBlock_%d", ii)
+		nanLogger.PushScope(blockCtx.Scope())
+		// Apply context features: noise rate as a sinusoidal embedding and flower types embeddings.
+		x = concatContextFeatures(x, contextFeatures)
+		x, skips = DownBlock(blockCtx, x, skips, numBlocks, numChannels)
+		nanLogger.PopScope()
+	}
+
+	// Intermediary fixed size blocks.
+	/* Transformer layer: requires some udpates
+	if *flagNumAttLayers > 0 {
+		// Optional transformer layer.
+		scopeName := fmt.Sprintf("%03d-TransformerBlock", layerNum)
+		layerNum++
+		nanLogger.PushScope(scopeName)
+		x = TransformerBlock(ctx.In(scopeName), x)
+		nanLogger.PopScope()
+	}
+	*/
+	lastNumChannels := xslices.Last(numChannelsList)
+	for ii := 0; ii < numBlocks; ii++ {
+		blockCtx := nextCtx("IntermediaryBlock_%d", ii)
+		nanLogger.PushScope(blockCtx.Scope())
+		x = ResidualBlock(blockCtx, x, lastNumChannels)
+		nanLogger.PopScope()
+	}
+
+	// Upward: up-sample image back to original size, one block at a time.
+	for ii := range numChannelsList {
+		blockCtx := nextCtx("UpBlock_%d", ii)
+		nanLogger.PushScope(blockCtx.Scope())
+		numChannels := numChannelsList[len(numChannelsList)-(ii+1)]
+		x, skips = UpBlock(blockCtx, x, skips, numBlocks, numChannels)
+		nanLogger.PopScope()
+	}
+	if len(skips) != 0 {
+		exceptions.Panicf("Ended with %d skips not accounted for!?", len(skips))
+	}
+
+	// Output initialized to 0, which is the mean of the target.
+	x = layers.DenseWithBias(nextCtx("Readout").WithInitializer(initializers.Zero), x, imageChannels)
+	return x
+}
+
+// DiffusionSchedule calculates a ratio of noise and image that needs to be mixed,
+// given the diffusion time `~ [0.0, 1.0]`.
+//
+// Diffusion time 0 means minimum diffusion -- the signal ratio will be set to -max_signal_ratio, default to 0.95 -- and
+// diffusion time 1.0 means almost all noise -- the signal ratio will be set to -min_signal_ratio, default to 0.02.
+// The returned ratio has the sum of their square total 1.
+//
+// Typically, the shape of `time` and the returned ratios will be `[batch_size, 1, 1, 1]`.
+//
+// If `clipStart` is set to false, the signal ratio is not clipped, and it can go all the way to 1.0.
+//
+// The ratios observe the element-wise constraint: signalRatios^2 + noiseRatios^2 = 1.
+// This preserves the variance of the combined (image*signalRatio+noise*noiseRatio) to 1.
+func DiffusionSchedule(ctx *context.Context, times *Node, clipStart bool) (signalRatios, noiseRatios *Node) {
+	// diffusion times -> angles
+	startAngle := 0.0
+	if clipStart {
+		startAngle = math.Acos(context.GetParamOr(ctx, "diffusion_max_signal_ratio", 0.95))
+	}
+
+	endAngle := math.Acos(context.GetParamOr(ctx, "diffusion_min_signal_ratio", 0.02))
+	diffusionAngles := AddScalar(MulScalar(times, endAngle-startAngle), startAngle)
+
+	// The ratios typically used is Sqrt(alpha) and Sqrt(1-alpha), because it has the nice property of preserving
+	// the variance (of 1) during the process.
+	signalRatios = Cos(diffusionAngles)
+	noiseRatios = Sin(diffusionAngles)
+	return
+}
+
+// Denoise tries to separate the noise from the image.
+// It is given the signal and noise ratios.
+func Denoise(ctx *context.Context, noisyImages, signalRatios, noiseRatios, flowerIds *Node) (
+	predictedImages, predictedNoises *Node) {
+	g := noisyImages.Graph()
+	var modelCtx *context.Context
+
+	useEMA := context.GetParamOr(ctx, "use_ema", false)
+	if useEMA && !ctx.IsTraining(g) {
+		// Use exponential moving average (EMA) for inference.
+		modelCtx = ctx.In("ema")
+	} else {
+		modelCtx = ctx
+	}
+
+	// Noise variance: since the noise is expected to have variance 1, the adjusted
+	// variance to the noiseRatio (just a multiplicative factor), the new variance
+	// is:
+	noiseVariances := Square(noiseRatios)
+
+	// It's easy to model the noise than the image:
+	predictedNoises = UNetModelGraph(modelCtx, noisyImages, noiseVariances, flowerIds)
+	predictedImages = Sub(noisyImages, Mul(predictedNoises, noiseRatios))
+	predictedImages = Div(predictedImages, signalRatios)
+
+	emaCoef := context.GetParamOr(ctx, "diffusion_ema", 0.0)
+	if ctx.IsTraining(g) && emaCoef > 0 {
+		// Update moving average weights:
+		prefixScope := ctx.Scope()
+		emaCtx := ctx.In("ema").WithInitializer(initializers.Zero).Checked(false)
+		newPrefixScope := emaCtx.Scope()
+		// Enumerate the variables we care about, under the UNet model:
+		ctx.In(UNetModelScope).EnumerateVariablesInScope(func(v *context.Variable) {
+			if !strings.HasPrefix(v.Scope(), prefixScope) {
+				exceptions.Panicf("unxpected variable %q in scope %q", v.Name(), v.Scope())
+			}
+			suffix := v.Scope()[len(prefixScope):]
+			if !strings.HasPrefix(suffix, context.ScopeSeparator) {
+				suffix = context.ScopeSeparator + suffix
+			}
+			newScope := newPrefixScope + suffix
+			emaVar := emaCtx.InAbsPath(newScope).VariableWithShape(v.Name(), v.Shape())
+			emaValue := Add(
+				MulScalar(emaVar.ValueGraph(g), emaCoef),
+				MulScalar(v.ValueGraph(g), 1.0-emaCoef))
+			emaVar.SetValueGraph(emaValue)
+		})
+	}
+	return
+}
+
+// BuildTrainingModelGraph builds the model for training and evaluation.
+func (c *Config) BuildTrainingModelGraph() train.ModelFn {
+	return func(ctx *context.Context, spec any, inputs []*Node) []*Node {
+		g := inputs[0].Graph()
+
+		// Prepare the input image and noise.
+		images := inputs[0]
+		if _, ok := spec.(*flowers.BalancedDataset); ok {
+			// For BalancedDataset we need to gather the images from the examples.
+			examplesIdx := inputs[1]
+			images = Gather(images, ExpandDims(examplesIdx, -1))
+		}
+		flowerIds := inputs[2]
+		batchSize := images.Shape().Dimensions[0]
+
+		images = c.PreprocessImages(images, true)
+		noises := ctx.RandomNormal(g, images.Shape())
+		nanLogger.Trace(images, "images")
+		nanLogger.Trace(noises, "noises")
+
+		dtype := images.DType()
+		optimizers.CosineAnnealingSchedule(ctx, g, dtype).FromContext().Done()
+
+		// Sample noise at different schedules.
+		diffusionTimes := ctx.RandomUniform(g, shapes.Make(dtype, batchSize, 1, 1, 1))
+		diffusionTimes = Square(diffusionTimes) // Bias towards less noise (smaller diffusion times), since it's most impactful
+		signalRatios, noiseRatios := DiffusionSchedule(ctx, diffusionTimes, true)
+		noisyImages := Add(
+			Mul(images, signalRatios),
+			Mul(noises, noiseRatios))
+		noisyImages = StopGradient(noisyImages)
+		predictedImages, predictedNoises := Denoise(ctx, noisyImages, signalRatios, noiseRatios, flowerIds)
+
+		// Calculate our custom loss: mean absolute error from the noise to the predictedNoise.
+		var lossFn train.LossFn
+		lossName := context.GetParamOr(ctx, "diffusion_loss", "mae")
+		switch lossName {
+		case "mae":
+			lossFn = losses.MeanAbsoluteError
+		case "mse":
+			lossFn = losses.MeanSquaredError
+		case "huber":
+			lossFn = losses.MakeHuberLoss(context.GetParamOr(ctx, "huber_delta", 0.2))
+		case "exp":
+			lossFn = func(labels []*Node, predictions []*Node) (loss *Node) {
+				loss = Exp(Abs(Sub(labels[0], predictions[0])))
+				return
+			}
+		default:
+			exceptions.Panicf("Invalid value for --loss=%q. Valid values are \"mae\", \"mse\" or \"huber\"", lossName)
+		}
+		noisesLoss := lossFn([]*Node{noises}, []*Node{predictedNoises})
+		if !noisesLoss.IsScalar() {
+			noisesLoss = ReduceAllMean(noisesLoss)
+		}
+		imagesLoss := losses.MeanAbsoluteError([]*Node{images}, []*Node{predictedImages})
+		if !imagesLoss.IsScalar() {
+			imagesLoss = ReduceAllMean(imagesLoss)
+		}
+		noiseMAE := noisesLoss
+		if lossName != "mae" {
+			noiseMAE = losses.MeanAbsoluteError([]*Node{noises}, []*Node{predictedNoises})
+		}
+
+		return []*Node{c.DenormalizeImages(predictedImages), noisesLoss, imagesLoss, noiseMAE}
+	}
 }
 
 var (
@@ -138,6 +474,7 @@ func TransformerBlock(ctx *context.Context, x *Node) *Node {
 		return x
 	}
 	g := x.Graph()
+	dtype := x.DType()
 	batchDim := x.Shape().Dimensions[0]
 	embedDim := x.Shape().Dimensions[3]
 
@@ -148,13 +485,13 @@ func TransformerBlock(ctx *context.Context, x *Node) *Node {
 
 	var dropoutRate *Node
 	if *flagDropoutRate > 0 {
-		dropoutRate = ConstAsDType(g, DType, *flagDropoutRate)
+		dropoutRate = ConstAsDType(g, dtype, *flagDropoutRate)
 	}
 
 	// Create positional embedding variable: it is 1 in every axis, but for the
 	// sequence dimension -- there will be one embedding per position.
 	// Shape: [1, maxLen, embedDim]
-	posEmbedShape := shapes.Make(DType, 1, spatialDim, *flagAttPosEmbedSize)
+	posEmbedShape := shapes.Make(dtype, 1, spatialDim, *flagAttPosEmbedSize)
 	posEmbedVar := ctx.VariableWithShape("positional", posEmbedShape)
 	posEmbed := posEmbedVar.ValueGraph(g)
 	posEmbed = BroadcastToDims(posEmbed, batchDim, spatialDim, *flagAttPosEmbedSize) // Broadcast positional embeddings to each example in batch.
@@ -177,7 +514,7 @@ func TransformerBlock(ctx *context.Context, x *Node) *Node {
 
 		// Transformers recipe: 2 dense layers after attention.
 		embed = layers.Dense(ctx.In("ffn_1"), embed, true, embedDim)
-		embed = ActivationLayer(embed)
+		embed = activations.ApplyFromContext(ctx, embed)
 		embed = layers.Dense(ctx.In("ffn_2"), embed, true, embedDim)
 		if *flagDropoutRate > 0 {
 			embed = layers.Dropout(ctx.In("dropout_1"), embed, dropoutRate)
@@ -193,220 +530,4 @@ func TransformerBlock(ctx *context.Context, x *Node) *Node {
 	}
 	x = Reshape(embed, batchDim, x.Shape().Dimensions[1], x.Shape().Dimensions[2], -1)
 	return x
-}
-
-// DownBlock applies `numBlocks` residual blocks followed by an average pooling of size 2, halfing the spatial size.
-// It pushes the values between each residual blocks to the `skips` stack, to build the skip connections later.
-//
-// It returns the transformed `x` and `skips` with newly stacked skip connections.
-func DownBlock(ctx *context.Context, x *Node, skips []*Node, numBlocks, outputChannels int) (*Node, []*Node) {
-	for ii := 0; ii < numBlocks; ii++ {
-		name := fmt.Sprintf("down-residual-%d", ii+1)
-		x = ResidualBlock(ctx.In(name), x, outputChannels)
-		skips = append(skips, x)
-	}
-	x = MeanPool(x).Window(2).NoPadding().Done()
-	nanLogger.Trace(x)
-	return x, skips
-}
-
-// UpBlock is the counter-part to DownBlock. It performs up-scaling convolutions and connects skip-connections popped
-// from `skips`.
-//
-// It returns `x` and `skips` after popping the consumed skip connections.
-func UpBlock(ctx *context.Context, x *Node, skips []*Node, numBlocks, outputChannels int) (*Node, []*Node) {
-	x = Interpolate(x, timage.GetUpSampledSizes(x, timage.ChannelsLast, 2)...).Nearest().Done()
-	for ii := 0; ii < numBlocks; ii++ {
-		name := fmt.Sprintf("up-residual-%d", ii+1)
-		var skip *Node
-		skip, skips = slices.Pop(skips)
-		x = Concatenate([]*Node{x, skip}, -1)
-		x = ResidualBlock(ctx.In(name), x, outputChannels)
-	}
-	nanLogger.Trace(x)
-	return x, skips
-}
-
-// FlowerTypeEmbedding will if configured (`--flower_type_dim` flag), concatenate a flower embedding to `x`.
-// If `--flower_type_dim==0` it returns `x` unchanged.
-func FlowerTypeEmbedding(ctx *context.Context, flowerIds, x *Node) *Node {
-	if *flagFlowerTypeEmbeddingSize <= 0 {
-		return x
-	}
-	flowerIds = ExpandDims(flowerIds, -1, -1, -1) // Expand axis to the match noisyImages rank.
-	flowerTypeEmbed := layers.Embedding(ctx, flowerIds, DType, flowers.NumLabels, *flagFlowerTypeEmbeddingSize)
-	broadcastDims := flowerTypeEmbed.Shape().Copy().Dimensions
-	for _, axis := range timage.GetSpatialAxes(x, timage.ChannelsLast) {
-		broadcastDims[axis] = x.Shape().Dimensions[axis]
-	}
-	flowerTypeEmbed = BroadcastToDims(flowerTypeEmbed, broadcastDims...)
-	x = Concatenate([]*Node{x, flowerTypeEmbed}, -1)
-	return x
-}
-
-// UNetModelGraph builds the U-Net model.
-//
-// Parameters:
-//   - noisyImages: image shaped `[batch_size, size, size, channels=3]`.
-//   - noiseVariance: One value per example in the batch, shaped `[batch_size, 1, 1, 1]`.
-//   - numChannelsList (static hyperparameter): number of channels to use in the model. For each value `numBlocks` are applied
-//     and then the image is pooled and reduced by a factor of 2 -- later to be up-sampled again. So at most `log2(size)` values.
-//   - numBlocks (static hyperparameter): number of blocks to use per numChannelsList element.
-func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds *Node) *Node {
-	Init()
-
-	// Parameters from flags.
-	numChannelsList := *flagChannelsList
-	numBlocks := *flagNumBlocks
-
-	nanLogger.Trace(noisyImages)
-	nanLogger.Trace(noiseVariances)
-
-	// Adjust imageChannels to initial num channels.
-	imageChannels := slices.Last(noisyImages.Shape().Dimensions)
-	x := layers.DenseWithBias(ctx.In("starting_channels"), noisyImages, numChannelsList[0])
-	concatFeatures := []*Node{x}
-
-	// Get sinusoidal features, always included, and broadcast them to the spatial dimensions.
-	sinEmbed := SinusoidalEmbedding(noiseVariances)
-	nanLogger.Trace(sinEmbed)
-	broadcastDims := sinEmbed.Shape().Copy().Dimensions
-	for _, axis := range timage.GetSpatialAxes(noisyImages, timage.ChannelsLast) {
-		broadcastDims[axis] = noisyImages.Shape().Dimensions[axis]
-	}
-	sinEmbed = BroadcastToDims(sinEmbed, broadcastDims...)
-	concatFeatures = append(concatFeatures, sinEmbed)
-
-	// Concatenate channels with extra features.
-	x = Concatenate(concatFeatures, -1)
-
-	// Downward: keep pooling image to a smaller size.
-	// Keep the `skips` features as we move "downward," so they can be "skip" connected later as we move upward.
-	skips := make([]*Node, 0, numBlocks*len(numChannelsList))
-	for ii, numChannels := range numChannelsList {
-		nanLogger.PushScope(fmt.Sprintf("DownBlock-%d", ii))
-		name := fmt.Sprintf("DownBlock-%d", ii+1)
-		// Use flower types as an extra embedding.
-		x = FlowerTypeEmbedding(ctx.In(fmt.Sprintf("DownBlock-%d-flowerIds", ii)), flowerIds, x)
-		x, skips = DownBlock(ctx.In(name), x, skips, numBlocks, numChannels)
-		nanLogger.PopScope()
-	}
-
-	// Intermediary fixed size blocks.
-	x = TransformerBlock(ctx.In("transformer_block"), x)
-	lastNumChannels := slices.Last(numChannelsList)
-	for ii := 0; ii < numBlocks; ii++ {
-		nanLogger.PushScope(fmt.Sprintf("IntermediaryBlock-%d", ii))
-		name := fmt.Sprintf("IntermediaryResidual-%d", ii+1)
-		x = ResidualBlock(ctx.In(name), x, lastNumChannels)
-		nanLogger.PopScope()
-	}
-
-	//fmt.Printf("Intermediary (smallest) shape: %s\n", x.Shape())
-
-	// Upward: up-sample image back to original size, one block at a time.
-	for ii := range numChannelsList {
-		nanLogger.PushScope(fmt.Sprintf("UpBlock-%d", ii))
-		name := fmt.Sprintf("UpBlock-%d", ii+1)
-		numChannels := numChannelsList[len(numChannelsList)-(ii+1)]
-		x, skips = UpBlock(ctx.In(name), x, skips, numBlocks, numChannels)
-		nanLogger.PopScope()
-	}
-	if len(skips) != 0 {
-		exceptions.Panicf("Ended with %d skips not accounted for!?", len(skips))
-	}
-
-	// Output initialized to 0, which is the mean of the target.
-	ctxReadOut := ctx.In("Readout").WithInitializer(initializers.Zero)
-	x = layers.DenseWithBias(ctxReadOut, x, imageChannels)
-	return x
-}
-
-var (
-	flagMinSignalRatio = flag.Float64("min_signal_ratio", 0.02, "minimum of the signal to noise ratio when training.")
-	flagMaxSignalRatio = flag.Float64("max_signal_ratio", 0.95, "maximum of the signal to noise ratio when training.")
-)
-
-// DiffusionSchedule calculates a ratio of noise and image that needs to be mixed,
-// given the diffusion time `~ [0.0, 1.0]`.
-// Diffusion time 0 means minimum diffusion -- the signal ratio will be set to -max_signal_ratio, default to 0.95 -- and
-// diffusion time 1.0 means almost all noise -- the signal ratio will be set to -min_signal_ratio, default to 0.02.
-// The returned ratio has the sum of their square total 1.
-//
-// Typically, the shape of `time` and the returned ratios will be `[batch_size, 1, 1, 1]`.
-//
-// If `clipStart` is set to false, the signal ratio is not clipped, and it can go all the way to 1.0.
-func DiffusionSchedule(times *Node, clipStart bool) (signalRatios, noiseRatios *Node) {
-	// diffusion times -> angles
-	startAngle := 0.0
-	if clipStart {
-		startAngle = math.Acos(*flagMaxSignalRatio)
-	}
-
-	endAngle := math.Acos(*flagMinSignalRatio)
-	diffusionAngles := AddScalar(MulScalar(times, endAngle-startAngle), startAngle)
-
-	// sin^2(x) + cos^2(x) = 1
-	signalRatios = Cos(diffusionAngles)
-	noiseRatios = Sin(diffusionAngles)
-	return
-}
-
-// Denoise tries to separate the noise from the image.
-// It is given the signal and noise ratios.
-func Denoise(ctx *context.Context, noisyImages, signalRatios, noiseRatios, flowerIds *Node) (
-	predictedImages, predictedNoises *Node) {
-
-	// Noise variance: since the noise is expected to have variance 1, the adjusted
-	// variance to the noiseRatio (just a multiplicative factor), the new variance
-	// is:
-	noiseVariances := Square(noiseRatios)
-
-	// It's easy to model the noise than the image:
-	predictedNoises = UNetModelGraph(ctx, noisyImages, noiseVariances, flowerIds)
-	predictedImages = Sub(noisyImages, Mul(predictedNoises, noiseRatios))
-	predictedImages = Div(predictedImages, signalRatios)
-	return
-}
-
-var (
-	flagLoss = flag.String("loss", "mae", "Use 'mse' for mean squared error or 'mae' for mean absolute error")
-)
-
-// TrainingModelGraph builds the model for training and evaluation.
-func TrainingModelGraph(ctx *context.Context, _ any, inputs []*Node) []*Node {
-	g := inputs[0].Graph()
-
-	// Prepare the input image and noise.
-	images := inputs[0]
-	flowerIds := inputs[2]
-	batchSize := images.Shape().Dimensions[0]
-	images = PreprocessImages(images, true)
-	noises := ctx.RandomNormal(g, images.Shape())
-	nanLogger.Trace(images, "images")
-	nanLogger.Trace(noises, "noises")
-
-	// Sample noise at different schedules.
-	diffusionTimes := ctx.RandomUniform(g, shapes.Make(DType, batchSize, 1, 1, 1))
-	diffusionTimes = Square(diffusionTimes) // Bias towards less noise (smaller diffusion times), since it's most impactful
-	signalRatios, noiseRatios := DiffusionSchedule(diffusionTimes, true)
-	noisyImages := Add(
-		Mul(images, signalRatios),
-		Mul(noises, noiseRatios))
-	noisyImages = StopGradient(noisyImages)
-	predictedImages, predictedNoises := Denoise(ctx, noisyImages, signalRatios, noiseRatios, flowerIds)
-
-	// Calculate our custom loss: mean absolute error from the noise to the predictedNoise.
-	var lossFn train.LossFn
-	switch *flagLoss {
-	case "mae":
-		lossFn = losses.MeanAbsoluteError
-	case "mse":
-		lossFn = losses.MeanSquaredError
-	default:
-		exceptions.Panicf("Invalid value for --loss=%q. Valid values are \"mae\" or \"mse\"", *flagLoss)
-	}
-	noisesLoss := lossFn([]*Node{noises}, []*Node{predictedNoises})
-	imagesLoss := lossFn([]*Node{images}, []*Node{predictedImages})
-	return []*Node{DenormalizeImages(predictedImages), noisesLoss, imagesLoss}
 }

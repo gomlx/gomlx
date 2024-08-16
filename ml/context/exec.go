@@ -18,9 +18,10 @@ package context
 
 import (
 	"fmt"
+	. "github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/graph"
-	. "github.com/gomlx/gomlx/types/exceptions"
-	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/pkg/errors"
 	"log"
 	"reflect"
@@ -93,8 +94,8 @@ type ExecGraphFn interface {
 //
 // And then with Exec one can do:
 //
-//	 ctx := context.NewContext(manager)
-//		var logitsFn = context.NewExec(manager, ctx, LogitsGraph)
+//	 ctx := context.New(backend)
+//		var logitsFn = context.NewExec(backend, ctx, LogitsGraph)
 //		batch := [][]float32{ {1, 2, 3}, {4, 5, 6} } // 2 examples with 3 features (shape=[2,3])
 //		fmt.Printf("Logits(%v) = %v\n", batch, logitsFn.Call(batch)[0].Value())
 //
@@ -114,8 +115,8 @@ type ExecGraphFn interface {
 //
 // ```
 //
-//	 ctx := context.NewContext(manager)
-//	 counter := context.NewExec(manager, ctx, func(ctx *context.Context, g *Graph) *Node {
+//	 ctx := context.New(backend)
+//	 counter := context.NewExec(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
 //		  dtype := types.Int64
 //		  counterVar := ctx.WithInitializer(initializers.Zeros).VariableWithShape("counter", types.MakeShape(dtype))
 //		  counterNode := counterVar.ValueGraph(graph)
@@ -146,7 +147,7 @@ type ExecGraphFn interface {
 // There is concurrency safety with the cache of Graphs, but XLA concurrency is
 // not documented. TODO: figure it out.
 type Exec struct {
-	manager *graph.Manager
+	backend backends.Backend
 	context *Context
 	exec    *graph.Exec
 
@@ -178,12 +179,12 @@ type Exec struct {
 //
 // If any input or output parameter of ctxGraphFn is not a *Node (except the *Context and optionally
 // a *Graph), or if there are no inputs or outputs, it returns an error.
-func NewExecAny(manager *Manager, ctx *Context, ctxGraphFn any) (*Exec, error) {
+func NewExecAny(backend backends.Backend, ctx *Context, ctxGraphFn any) (*Exec, error) {
 	if ctx == nil {
-		ctx = NewContext(manager)
+		ctx = New()
 	}
 	e := &Exec{
-		manager:     manager,
+		backend:     backend,
 		context:     ctx,
 		ctxGraphFn:  ctxGraphFn,
 		changedVars: make(map[graph.GraphId][]*Variable),
@@ -242,7 +243,7 @@ func NewExecAny(manager *Manager, ctx *Context, ctxGraphFn any) (*Exec, error) {
 	}
 
 	e.buildGraphFn()
-	e.exec = graph.NewExecAny(manager, e.graphFn)
+	e.exec = graph.NewExecAny(backend, e.graphFn)
 	funcName := runtime.FuncForPC(reflect.ValueOf(ctxGraphFn).Pointer()).Name()
 	e.exec.SetName(fmt.Sprintf("Context.Exec:%s", funcName))
 	e.exec.SetSideParamsHook(e.setSideParams)
@@ -352,12 +353,41 @@ func (e *Exec) Finalize() {
 
 // setSideParams is used by computation.Exec.SetSideParamsHook to set up
 // the variable values as parameters just before graph execution.
-func (e *Exec) setSideParams(graph *Graph, tensors []*tensor.Device) {
+//
+// It fills the graph parameter values for every variable used in the given graph.
+// It keeps a cache of the variables' mapping for faster access.
+//
+// It's assumed len(inputBuffers) = len(donate) = g.NumParameters()
+//
+// `Exec*` methods are used by those implementing an executor (context.Exec) or related tests, not normally
+// needed by end users.
+func (e *Exec) setSideParams(g *Graph, inputBuffers []backends.Buffer, donate []bool) {
 	// Initialize variables if needed.
-	if e.context.NeedsInitialization() {
-		e.context.InitializeVariables()
+	ctx := e.context
+	if ctx.NeedsInitialization() {
+		ctx.InitializeVariables(e.backend)
 	}
-	e.context.execPopulateGraphParamsSlice(graph, tensors)
+
+	graphId := g.GraphId()
+	ctx.EnumerateVariables(func(v *Variable) {
+		nodes, found := v.graphToNodes[graphId]
+		if !found {
+			return
+		}
+		if nodes == nil || nodes.paramNode == nil || nodes.paramNode.Type() != graph.NodeTypeParameter {
+			Panicf("invalid paramNode for variable %q", v.ParameterName())
+		}
+		handle := nodes.paramNode.GetParameterHandle()
+
+		if v.ChangedInGraph(g) {
+			// We donate the buffer, since we are getting a new one on the output.
+			inputBuffers[handle] = v.Value().DonateBuffer(e.backend, e.exec.DeviceNum())
+			donate[handle] = true
+		} else {
+			inputBuffers[handle] = v.Value().Buffer(e.backend, e.exec.DeviceNum())
+			donate[handle] = false
+		}
+	})
 }
 
 // SetNodeLogger with the function to be called for the nodes
@@ -385,8 +415,8 @@ func (e *Exec) GetNodeLogger() graph.LoggerFn {
 //
 // This is a generic wrapper around NewExecAny that check that types are
 // correct (but doesn't support all possible types of ctxGraphFn).
-func NewExec[F ExecGraphFn](manager *Manager, ctx *Context, ctxGraphFn F) *Exec {
-	e, err := NewExecAny(manager, ctx, ctxGraphFn)
+func NewExec[F ExecGraphFn](backend backends.Backend, ctx *Context, ctxGraphFn F) *Exec {
+	e, err := NewExecAny(backend, ctx, ctxGraphFn)
 	if err != nil {
 		log.Fatalf("Failed to create Exec object: %+v", err)
 	}
@@ -396,7 +426,7 @@ func NewExec[F ExecGraphFn](manager *Manager, ctx *Context, ctxGraphFn F) *Exec 
 // InDevice sets the device num to be used by graphs constructed by Exec.
 // This should be called before any invocations of Call().
 // It returns a reference to itself so calls can be cascaded.
-func (e *Exec) InDevice(deviceNum int) *Exec {
+func (e *Exec) InDevice(deviceNum backends.DeviceNum) *Exec {
 	e.exec.InDevice(deviceNum)
 	return e
 }
@@ -454,7 +484,7 @@ func (e *Exec) SetContext(context *Context) *Exec {
 // It returns the outputs in a slice, even if there is only one output.
 //
 // It panics with an informative error if something goes wrong.
-func (e *Exec) Call(args ...any) []tensor.Tensor {
+func (e *Exec) Call(args ...any) []*tensors.Tensor {
 	outputs, _ := e.CallWithGraph(args...)
 	return outputs
 }
@@ -468,7 +498,7 @@ func (e *Exec) Call(args ...any) []tensor.Tensor {
 // to execute the computation.
 //
 // It panics with an informative error if something goes wrong.
-func (e *Exec) CallWithGraph(args ...any) (outputs []tensor.Tensor, g *Graph) {
+func (e *Exec) CallWithGraph(args ...any) (outputs []*tensors.Tensor, g *Graph) {
 	outputs, g = e.exec.CallWithGraph(args...)
 	if len(outputs) == 0 {
 		Panicf("No outputs from ModelFn function for %q", e.Name())
@@ -480,7 +510,7 @@ func (e *Exec) CallWithGraph(args ...any) (outputs []tensor.Tensor, g *Graph) {
 	e.muChangedVars.Unlock()
 	//fmt.Printf("%d outputs, %d variables\n", len(outputs), len(changedVars))
 	for ii, v := range changedVars {
-		//fmt.Printf("\t%s: %d\n", v.ParameterName(), ii)
+		//fmt.Printf("\t%s: %d\n", v.GetParameterName(), ii)
 		v.SetValue(outputs[ii])
 	}
 	outputs = outputs[len(changedVars):]

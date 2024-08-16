@@ -5,12 +5,12 @@ import (
 	"flag"
 	"fmt"
 	"github.com/gomlx/gomlx/ml/context"
+	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/pkg/errors"
 	"strings"
 )
 
-// ParseContextSettings from for example a flag definition.
-//
+// ParseContextSettings from settings -- typically the contents of a flag set by the user.
 // The settings are a list separated by ";": e.g.: "param1=value1;param2=value2;...".
 //
 // All the parameters "param1", "param2", etc. must be already set with default values
@@ -23,8 +23,23 @@ import (
 // Note, one can also provide a scope for the parameters: "layer_1/l2_regularization=0.1"
 // will work, as long as a default "l2_regularization" is defined in `ctx`.
 //
-// See example in [CreateContextSettingsFlag], which will create a flag for the settings.
-func ParseContextSettings(ctx *context.Context, settings string) error {
+// For integer types, "_" is removed: it allows one to enter large numbers using it as a separator, like
+// in Go. E.g.: 1_000_000 = 1000000.
+//
+// See example in CreateContextSettingsFlag, which will create a flag for the settings.
+//
+// Example usage:
+//
+//	func main() {
+//		ctx := createDefaultContext()
+//		settings := commandline.CreateContextSettingsFlag(ctx, "")
+//		flag.Parse()
+//		err := commandline.ParseContextSettings(ctx, *settings)
+//		if err != nil { panic(err) }
+//		fmt.Println(commandline.SprintContextSettings(ctx))
+//		...
+//	}
+func ParseContextSettings(ctx *context.Context, settings string) (paramsSet []string, err error) {
 	settingsList := strings.Split(settings, ";")
 	for _, setting := range settingsList {
 		if setting == "" {
@@ -32,40 +47,55 @@ func ParseContextSettings(ctx *context.Context, settings string) error {
 		}
 		parts := strings.Split(setting, "=")
 		if len(parts) != 2 {
-			return errors.Errorf("can't parse settings %q: each setting requires the format \"<param>=<value>\", got %q",
+			err = errors.Errorf("can't parse settings %q: each setting requires the format \"<param>=<value>\", got %q",
 				settings, setting)
+			return
 		}
 		paramPath, valueStr := parts[0], parts[1]
-		paramPathParts := strings.Split(paramPath, context.ScopeSeparator)
-		key := paramPathParts[len(paramPathParts)-1]
-		value, found := ctx.GetParam(key)
+		paramScope, paramName := context.SplitScope(paramPath)
+		if strings.Index(paramName, context.ScopeSeparator) != -1 {
+			err = errors.Errorf("can't set parameter %q  because some scope is set, but it is not absolue (it does not start with %q)",
+				paramPath, context.ScopeSeparator)
+			return
+		}
+		value, found := ctx.GetParam(paramName)
 		if !found {
-			return errors.Errorf("can't set parameter %q because the param %q is not known in the root context",
-				paramPath, key)
+			err = errors.Errorf("can't set parameter %q (scope=%q)  because the param %q is not known in the root context",
+				paramPath, paramScope, paramName)
+			return
 		}
 
 		// Set the new parameter in the selected scope.
 		ctxInScope := ctx
-		if len(paramPathParts) > 1 {
-			for _, part := range paramPathParts[:len(paramPathParts)-1] {
-				if part == "" {
-					continue
-				}
-				ctxInScope = ctxInScope.In(part)
-			}
+		if paramScope != "" {
+			ctxInScope = ctxInScope.InAbsPath(paramScope)
 		}
 
 		// Parse value accordingly.
 		// Is there a better way of doing this using reflection ?
-		var err error
 		switch v := value.(type) {
 		case int:
+			valueStr = strings.Replace(valueStr, "_", "", -1)
 			err = json.Unmarshal([]byte(valueStr), &v)
 			value = v
 		case int32:
+			valueStr = strings.Replace(valueStr, "_", "", -1)
 			err = json.Unmarshal([]byte(valueStr), &v)
 			value = v
 		case int64:
+			valueStr = strings.Replace(valueStr, "_", "", -1)
+			err = json.Unmarshal([]byte(valueStr), &v)
+			value = v
+		case uint:
+			valueStr = strings.Replace(valueStr, "_", "", -1)
+			err = json.Unmarshal([]byte(valueStr), &v)
+			value = v
+		case uint32:
+			valueStr = strings.Replace(valueStr, "_", "", -1)
+			err = json.Unmarshal([]byte(valueStr), &v)
+			value = v
+		case uint64:
+			valueStr = strings.Replace(valueStr, "_", "", -1)
 			err = json.Unmarshal([]byte(valueStr), &v)
 			value = v
 		case float64:
@@ -79,36 +109,62 @@ func ParseContextSettings(ctx *context.Context, settings string) error {
 			value = v
 		case string:
 			value = valueStr
+		case []string:
+			value = strings.Split(valueStr, ",")
+		case []int:
+			parts := strings.Split(valueStr, ",")
+			value = xslices.Map(parts, func(str string) int {
+				var asInt int
+				str = strings.Replace(str, "_", "", -1)
+				newErr := json.Unmarshal([]byte(str), &asInt)
+				if newErr != nil {
+					err = newErr
+				}
+				return asInt
+			})
+		case []float64:
+			parts := strings.Split(valueStr, ",")
+			value = xslices.Map(parts, func(str string) float64 {
+				var asNum float64
+				newErr := json.Unmarshal([]byte(str), &asNum)
+				if newErr != nil {
+					err = newErr
+				}
+				return asNum
+			})
 		default:
-			err = fmt.Errorf("don't know how to parse type %T for setting parameter %q",
+			err = fmt.Errorf("don't know how to parse type %T for setting parameter %q -- it's easy to write a parser to a new type, ask in github if you need something standard",
 				value, setting)
 		}
 		if err != nil {
-			return errors.Wrapf(err, "failed to parse value %q for parameter %q (default value is %#v)", valueStr, paramPath, value)
+			err = errors.Wrapf(err, "failed to parse value %q for parameter %q (default value is %#v)", valueStr, paramPath, value)
+			return
 		}
-		ctxInScope.SetParam(key, value)
+		ctxInScope.SetParam(paramName, value)
+		paramsSet = append(paramsSet, paramPath)
 	}
-	return nil
+	return
 }
 
-// CreateContextSettingsFlag create a string flag with the given name (if empty it will be named
+// CreateContextSettingsFlag create a string flag with the given flagName (if empty it will be named
 // "set") and with a description of the current defined parameters in the context `ctx`.
 //
 // The flag should be created before the call to `flags.Parse()`.
 //
-// Example:
+// Example usage:
 //
 //	func main() {
 //		ctx := createDefaultContext()
-//		settings := CreateContextSettingsFlag(ctx, "")
-//		flags.Parse()
-//		err := ParseContextSettings(ctx, *settings)
-//		if err != nil {...}
+//		settings := commandline.CreateContextSettingsFlag(ctx, "")
+//		flag.Parse()
+//		err := commandline.ParseContextSettings(ctx, *settings)
+//		if err != nil { panic(err) }
+//		fmt.Println(commandline.SprintContextSettings(ctx))
 //		...
 //	}
-func CreateContextSettingsFlag(ctx *context.Context, name string) *string {
-	if name == "" {
-		name = "set"
+func CreateContextSettingsFlag(ctx *context.Context, flagName string) *string {
+	if flagName == "" {
+		flagName = "set"
 	}
 	var parts []string
 	parts = append(parts, fmt.Sprintf(
@@ -125,6 +181,20 @@ func CreateContextSettingsFlag(ctx *context.Context, name string) *string {
 	})
 	usage := strings.Join(parts, "\n")
 	var settings string
-	flag.StringVar(&settings, name, "", usage)
+	flag.StringVar(&settings, flagName, "", usage)
 	return &settings
+}
+
+// SprintContextSettings pretty-print values for the current hyperparameters settings into a string.
+func SprintContextSettings(ctx *context.Context) string {
+	var parts []string
+	parts = append(parts, "Context hyperparameters:")
+	ctx.EnumerateParams(func(scope, key string, value any) {
+		if scope == context.RootScope {
+			parts = append(parts, fmt.Sprintf("%q: (%T) %v", key, value, value))
+		} else {
+			parts = append(parts, fmt.Sprintf("%q / %q: (%T) %q", scope, key, value, value))
+		}
+	})
+	return strings.Join(parts, "\n\t")
 }

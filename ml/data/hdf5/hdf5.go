@@ -12,7 +12,8 @@ import (
 	"fmt"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 	"github.com/schollz/progressbar/v3"
 	_ "github.com/schollz/progressbar/v3"
@@ -34,7 +35,7 @@ type Hdf5Contents map[string]*Hdf5Dataset
 // dataset "DATATYPE" and "DATASPACE" fields are converted to the equivalent GoMLX `shapes.Shape`.
 type Hdf5Dataset struct {
 	FilePath, GroupPath, RawHeader string
-	DType                          shapes.DType
+	DType                          dtypes.DType
 	Shape                          shapes.Shape
 }
 
@@ -102,7 +103,7 @@ datasetHeaders:
 			continue
 		}
 		ds.DType = DtypeForH5T(matches[1])
-		if ds.DType == shapes.InvalidDType {
+		if ds.DType == dtypes.InvalidDType {
 			continue datasetHeaders
 		}
 
@@ -149,18 +150,18 @@ var (
 
 // DtypeForH5T returns the DType corresponding to known HDF5 types. If not know/supported, returns
 // invalid dtype.
-func DtypeForH5T(h5type string) (dtype shapes.DType) {
+func DtypeForH5T(h5type string) (dtype dtypes.DType) {
 	switch h5type {
 	case "H5T_IEEE_F32LE", "H5T_IEEE_F32BE":
-		return shapes.F32
+		return dtypes.Float32
 	case "H5T_IEEE_F64LE", "H5T_IEEE_F64BE":
-		return shapes.F64
+		return dtypes.Float64
 	case "H5T_STD_I32LE", "H5T_STD_I32BE":
-		return shapes.I32
+		return dtypes.Int32
 	case "H5T_STD_I64LE", "H5T_STD_I64BE":
-		return shapes.I64
+		return dtypes.Int64
 	}
-	return shapes.InvalidDType
+	return dtypes.InvalidDType
 }
 
 // execH5Dump executes `h5dump`, and handles errors.
@@ -223,8 +224,8 @@ func (ds *Hdf5Dataset) Load() (rawContent []byte, err error) {
 	return
 }
 
-// ToTensor reads the HDF5 dataset into GoMLX's `tensor.Local`.
-func (ds *Hdf5Dataset) ToTensor() (local *tensor.Local, err error) {
+// ToTensor reads the HDF5 dataset into GoMLX's tensors.Tensor.
+func (ds *Hdf5Dataset) ToTensor() (tensor *tensors.Tensor, err error) {
 	if !ds.Shape.Ok() {
 		err = errors.Errorf("no shape information from HDF5 dataset, can't convert to tenosr")
 		return
@@ -233,17 +234,16 @@ func (ds *Hdf5Dataset) ToTensor() (local *tensor.Local, err error) {
 	if err != nil {
 		return
 	}
-	local = tensor.FromShape(ds.Shape)
-	localRef := local.AcquireData()
-	defer localRef.Release()
-	localData := localRef.Bytes()
-	if len(loadedData) != len(localData) {
-		err = errors.Errorf("for shape %s: loaded %d bytes, but tensor uses %d bytes -- not sure how to load it!?",
-			ds.Shape, len(loadedData), len(localData))
-		local = nil
-		return
-	}
-	copy(localData, loadedData)
+	tensor = tensors.FromShape(ds.Shape)
+	tensor.MutableBytes(func(localData []byte) {
+		if len(loadedData) != len(localData) {
+			err = errors.Errorf("for shape %s: loaded %d bytes, but tensor uses %d bytes -- not sure how to load it!?",
+				ds.Shape, len(loadedData), len(localData))
+			tensor = nil
+			return
+		}
+		copy(localData, loadedData)
+	})
 	return
 }
 
@@ -344,14 +344,14 @@ func (c *UnpackToTensorsConfig) Done() (err error) {
 	// ProgressBar: collect total size.
 	var bar *progressbar.ProgressBar
 	if c.showProgressBar {
-		var totalSize int64
+		var totalSize uintptr
 		for _, ds := range h5 {
 			if !ds.Shape.Ok() {
 				continue
 			}
 			totalSize += ds.Shape.Memory()
 		}
-		bar = progressbar.DefaultBytesSilent(totalSize, "")
+		bar = progressbar.DefaultBytesSilent(int64(totalSize), "")
 	}
 
 	// Prepare clean up in case of error.
@@ -395,7 +395,7 @@ func (c *UnpackToTensorsConfig) Done() (err error) {
 		}
 
 		if bar != nil {
-			_ = bar.Add64(ds.Shape.Memory())
+			_ = bar.Add64(int64(ds.Shape.Memory()))
 			fmt.Printf("\r%s", bar.String())
 		}
 	}

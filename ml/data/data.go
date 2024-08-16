@@ -24,7 +24,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/pkg/errors"
 	"github.com/schollz/progressbar/v3"
 	"io"
@@ -112,7 +112,9 @@ func ValidateChecksum(path, checkHash string) error {
 
 // ByteCountIEC converts a byte count to string using the appropriate unit (B, Kb, MiB, GiB, ...).
 // It uses the binary prefix system from IEC -- so powers of 1024 (as opposed to powers 1000).
-func ByteCountIEC(count int64) string {
+func ByteCountIEC[T interface {
+	int | int64 | uint64 | uint | uintptr
+}](count T) string {
 	const unit = 1024
 	if count < unit {
 		return fmt.Sprintf("%d B", count)
@@ -391,7 +393,7 @@ func (ds *takeDataset) Reset() {
 }
 
 // Yield implements train.Dataset.
-func (ds *takeDataset) Yield() (spec any, inputs []tensor.Tensor, labels []tensor.Tensor, err error) {
+func (ds *takeDataset) Yield() (spec any, inputs []*tensors.Tensor, labels []*tensors.Tensor, err error) {
 	if ds.count >= ds.take {
 		err = io.EOF
 		return

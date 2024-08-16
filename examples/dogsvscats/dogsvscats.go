@@ -23,8 +23,9 @@ import (
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
-	timage "github.com/gomlx/gomlx/types/tensor/image"
+	"github.com/gomlx/gomlx/types/tensors"
+	timage "github.com/gomlx/gomlx/types/tensors/images"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 	"github.com/schollz/progressbar/v3"
 	"hash/crc32"
@@ -200,7 +201,7 @@ type Dataset struct {
 	angleStdDev   float64
 	flipRandomly  bool
 	rng           *rand.Rand
-	dtype         shapes.DType
+	dtype         dtypes.DType
 	toTensor      *timage.ToTensorConfig
 
 	// Dataset sampling strategy.
@@ -245,7 +246,7 @@ var (
 //     to false not to include any augmentation.
 func NewDataset(name, baseDir string, batchSize int, infinite bool, shuffle *rand.Rand,
 	numFolds int, folds []int, foldsSeed int32,
-	width, height int, angleStdDev float64, flipRandomly bool, dtype shapes.DType) *Dataset {
+	width, height int, angleStdDev float64, flipRandomly bool, dtype dtypes.DType) *Dataset {
 	ds := &Dataset{
 		name:         name,
 		BaseDir:      baseDir,
@@ -444,7 +445,7 @@ var muT sync.Mutex
 //   - spec: not used, left as nil.
 //   - inputs: two tensors, the first is the images batch (shaped `[batch_size, height, width, depth==4]`) and
 //     the second holds the indices of the images as int (I64), shaped `[batch_size]`.
-func (ds *Dataset) Yield() (spec any, inputs, labels []tensor.Tensor, err error) {
+func (ds *Dataset) Yield() (spec any, inputs, labels []*tensors.Tensor, err error) {
 	muT.Lock()
 	defer muT.Unlock()
 
@@ -459,16 +460,16 @@ func (ds *Dataset) Yield() (spec any, inputs, labels []tensor.Tensor, err error)
 	if ds.yieldPairs {
 		numExamples := len(indices)
 		firstHalf, secondHalf := ds.toTensor.Batch(images[:numExamples]), ds.toTensor.Batch(images[numExamples:])
-		inputs = []tensor.Tensor{
+		inputs = []*tensors.Tensor{
 			firstHalf,
-			tensor.FromValue(indices),
+			tensors.FromValue(indices),
 			secondHalf,
 		}
 	} else {
 		// No paired image.
-		inputs = []tensor.Tensor{ds.toTensor.Batch(images), tensor.FromValue(indices)}
+		inputs = []*tensors.Tensor{ds.toTensor.Batch(images), tensors.FromValue(indices)}
 	}
-	labels = []tensor.Tensor{tensor.FromAnyValue(shapes.CastAsDType(labelsAsTypes, ds.dtype))}
+	labels = []*tensors.Tensor{tensors.FromAnyValue(shapes.CastAsDType(labelsAsTypes, ds.dtype))}
 	return
 }
 
@@ -692,7 +693,7 @@ func (ds *Dataset) Save(numEpochs int, verbose bool, writers ...io.Writer) error
 type PreGeneratedDataset struct {
 	name                       string
 	filePath, pairFilePath     string
-	dtype                      shapes.DType
+	dtype                      dtypes.DType
 	batchSize                  int
 	width, height              int
 	openedFile, openedPairFile *os.File
@@ -708,7 +709,7 @@ type PreGeneratedDataset struct {
 var _ train.Dataset = &PreGeneratedDataset{}
 
 // NewPreGeneratedDataset creates a PreGeneratedDataset that yields dogsvscats images and labels.
-func NewPreGeneratedDataset(name, filePath string, batchSize int, infinite bool, width, height int, dtype shapes.DType) *PreGeneratedDataset {
+func NewPreGeneratedDataset(name, filePath string, batchSize int, infinite bool, width, height int, dtype dtypes.DType) *PreGeneratedDataset {
 	pds := &PreGeneratedDataset{
 		name:      name,
 		filePath:  filePath,
@@ -759,7 +760,7 @@ func (pds *PreGeneratedDataset) entrySize() int {
 }
 
 // Yield implements train.Dataset.
-func (pds *PreGeneratedDataset) Yield() (spec any, inputs, labels []tensor.Tensor, err error) {
+func (pds *PreGeneratedDataset) Yield() (spec any, inputs, labels []*tensors.Tensor, err error) {
 	retries := 0
 
 	// Check if maxSteps is reached.
@@ -806,15 +807,15 @@ func (pds *PreGeneratedDataset) Yield() (spec any, inputs, labels []tensor.Tenso
 		for ii := 0; ii < pds.batchSize; ii++ {
 			pds.labelsAsTypes[ii] = DorOrCat(pds.buffer[ii*entrySize])
 		}
-		labels = []tensor.Tensor{tensor.FromAnyValue(shapes.CastAsDType(pds.labelsAsTypes, pds.dtype))}
-		var t, pairT *tensor.Local
+		labels = []*tensors.Tensor{tensors.FromAnyValue(shapes.CastAsDType(pds.labelsAsTypes, pds.dtype))}
+		var t, pairT *tensors.Tensor
 		switch pds.dtype {
-		case shapes.Float32:
+		case dtypes.Float32:
 			t = BytesToTensor[float32](pds.buffer, pds.batchSize, pds.width, pds.height)
 			if pds.yieldPairs {
 				pairT = BytesToTensor[float32](pds.pairBuffer, pds.batchSize, pds.width, pds.height)
 			}
-		case shapes.Float64:
+		case dtypes.Float64:
 			t = BytesToTensor[float64](pds.buffer, pds.batchSize, pds.width, pds.height)
 			if pds.yieldPairs {
 				pairT = BytesToTensor[float64](pds.pairBuffer, pds.batchSize, pds.width, pds.height)
@@ -824,9 +825,9 @@ func (pds *PreGeneratedDataset) Yield() (spec any, inputs, labels []tensor.Tenso
 			return nil, nil, nil, pds.err
 		}
 		if pds.yieldPairs {
-			inputs = []tensor.Tensor{t, pairT}
+			inputs = []*tensors.Tensor{t, pairT}
 		} else {
-			inputs = []tensor.Tensor{t}
+			inputs = []*tensors.Tensor{t}
 		}
 		break
 	}
@@ -858,31 +859,32 @@ func (pds *PreGeneratedDataset) Reset() {
 
 // BytesToTensor converts a batch of saved images as bytes to a tensor.Local with 4 channels: R,G,B and A. It assumes
 // all images have the exact same size. There should be one byte with the label before each image.
-func BytesToTensor[T shapes.NumberNotComplex](buffer []byte, numImages, width, height int) (t *tensor.Local) {
+func BytesToTensor[T interface {
+	float32 | float64 | int | int16 | int32 | int64 | uint16 | uint32 | uint64
+}](
+	buffer []byte, numImages, width, height int) (t *tensors.Tensor) {
 	var zero T
-	t = tensor.FromShape(shapes.Make(shapes.DTypeForType(reflect.TypeOf(zero)), numImages, height, width, 4))
-	ref := t.AcquireData()
-	defer ref.Release()
-	tensorData := tensor.FlatFromRef[T](ref)
-	dataPos := 0
-	bufferPos := 0
-
-	convertToDType := func(val byte) T {
-		return T(val) / T(0xFF)
-	}
-
-	for imgIdx := 0; imgIdx < numImages; imgIdx++ {
-		bufferPos += 1 // Skip the label.
-		for y := 0; y < height; y++ {
-			for x := 0; x < width; x++ {
-				// Channel varies through RGBA (4)
-				for channel := 0; channel < 4; channel++ {
-					tensorData[dataPos] = convertToDType(buffer[bufferPos])
-					dataPos++
-					bufferPos++
+	t = tensors.FromShape(shapes.Make(dtypes.FromGoType(reflect.TypeOf(zero)), numImages, height, width, 4))
+	t.MutableFlatData(func(flatAny any) {
+		tensorData := flatAny.([]T)
+		dataPos := 0
+		bufferPos := 0
+		convertToDType := func(val byte) T {
+			return T(val) / T(0xFF)
+		}
+		for imgIdx := 0; imgIdx < numImages; imgIdx++ {
+			bufferPos += 1 // Skip the label.
+			for y := 0; y < height; y++ {
+				for x := 0; x < width; x++ {
+					// Channel varies through RGBA (4)
+					for channel := 0; channel < 4; channel++ {
+						tensorData[dataPos] = convertToDType(buffer[bufferPos])
+						dataPos++
+						bufferPos++
+					}
 				}
 			}
 		}
-	}
+	})
 	return
 }

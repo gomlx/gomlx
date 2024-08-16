@@ -5,23 +5,24 @@ package ogbnmag
 import (
 	"fmt"
 	. "github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/examples/notebook/gonb/plots"
 	"github.com/gomlx/gomlx/examples/ogbnmag/gnn"
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"
-	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensor"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gopjrt/dtypes"
 	"k8s.io/klog/v2"
 	"time"
 )
 
 // LayerWiseEvaluation returns the train, validation and test accuracy of the model, using layer-wise inference.
-func LayerWiseEvaluation(ctx *context.Context, strategy *sampler.Strategy) (train, validation, test float64) {
-	var predictionsT tensor.Tensor
-	exec := context.NewExec(ctx.Manager(), ctx.Reuse(), BuildLayerWiseInferenceModel(strategy, true))
+func LayerWiseEvaluation(backend backends.Backend, ctx *context.Context, strategy *sampler.Strategy) (train, validation, test float64) {
+	var predictionsT *tensors.Tensor
+	exec := context.NewExec(backend, ctx.Reuse(), BuildLayerWiseInferenceModel(strategy, true))
 
 	if klog.V(1).Enabled() {
 		// Report timings.
@@ -39,15 +40,15 @@ func LayerWiseEvaluation(ctx *context.Context, strategy *sampler.Strategy) (trai
 		predictionsT = exec.Call()[0]
 	}
 
-	predictions := predictionsT.Local().Value().([]int16)
-	labels := PapersLabels.Local().FlatCopy().([]int32)
+	predictions := predictionsT.Value().([]int16)
+	labels := tensors.CopyFlatData[int32](PapersLabels)
 	return layerWiseCalculateAccuracies(predictions, labels)
 }
 
 func layerWiseCalculateAccuracies(predictions []int16, labels []int32) (train, validation, test float64) {
 	splitVars := []*float64{&train, &validation, &test}
-	for splitIdx, splitT := range []tensor.Tensor{TrainSplit, ValidSplit, TestSplit} {
-		split := splitT.Local().FlatCopy().([]int32)
+	for splitIdx, splitT := range []*tensors.Tensor{TrainSplit, ValidSplit, TestSplit} {
+		split := tensors.CopyFlatData[int32](splitT)
 		numCorrect := 0
 		for _, paperIdx := range split {
 			if int(predictions[paperIdx]) == int(labels[paperIdx]) {
@@ -59,12 +60,12 @@ func layerWiseCalculateAccuracies(predictions []int16, labels []int32) (train, v
 	return
 }
 
-func BuildLayerWiseCustomMetricFn(ctx *context.Context, strategy *sampler.Strategy) plots.CustomMetricFn {
-	exec := context.NewExec(ctx.Manager(), ctx.Reuse(), BuildLayerWiseInferenceModel(strategy, true))
+func BuildLayerWiseCustomMetricFn(backend backends.Backend, ctx *context.Context, strategy *sampler.Strategy) plots.CustomMetricFn {
+	exec := context.NewExec(backend, ctx.Reuse(), BuildLayerWiseInferenceModel(strategy, true))
 	ctx = ctx.Reuse()
-	labels := PapersLabels.Local().FlatCopy().([]int32)
+	labels := tensors.CopyFlatData[int32](PapersLabels)
 	return func(plotter plots.Plotter, step float64) error {
-		predictions := exec.Call()[0].Local().Value().([]int16)
+		predictions := exec.Call()[0].Value().([]int16)
 		train, validation, test := layerWiseCalculateAccuracies(predictions, labels)
 		accuracies := []float64{train, validation, test}
 		names := []string{"Train", "Validation", "Test"}
@@ -112,9 +113,9 @@ func BuildLayerWiseInferenceModel(strategy *sampler.Strategy, predictions bool) 
 		}
 		lw.NodePrediction(ctx, graphStates, edges) // Last layer outputs the logits for the `NumLabels` classes.
 		readoutState := graphStates[strategy.Seeds[0].Name]
-		readoutState = layers.DenseWithBias(ctx.In("logits"), readoutState, NumLabels)
+		readoutState = logitsGraph(ctx, readoutState)
 		if predictions {
-			return ArgMax(readoutState, -1, shapes.Int16)
+			return ArgMax(readoutState, -1, dtypes.Int16)
 		}
 		return readoutState
 	}
@@ -123,7 +124,7 @@ func BuildLayerWiseInferenceModel(strategy *sampler.Strategy, predictions bool) 
 // createInputsWithAllStates with masks and degrees are set to nil and append to the [inputs] slice.
 func createInputsWithAllStates(g *Graph, strategy *sampler.Strategy, inputs []*Node) []*Node {
 	for _, seedsRule := range strategy.Seeds {
-		inputs = append(inputs, IotaFull(g, shapes.Make(shapes.I32, int(seedsRule.NumNodes))))
+		inputs = append(inputs, IotaFull(g, shapes.Make(dtypes.Int32, int(seedsRule.NumNodes))))
 		inputs = append(inputs, nil) // mask is nil
 		inputs = recursivelyCreateInputsWithAllStates(g, seedsRule, inputs)
 	}
@@ -135,7 +136,7 @@ func recursivelyCreateInputsWithAllStates(g *Graph, rule *sampler.Rule, inputs [
 		if subRule.NumNodes == 0 {
 			Panicf("Rule %q has 0 nodes configured.", subRule.Name)
 		}
-		inputs = append(inputs, IotaFull(g, shapes.Make(shapes.I32, int(subRule.NumNodes))))
+		inputs = append(inputs, IotaFull(g, shapes.Make(dtypes.Int32, int(subRule.NumNodes))))
 		inputs = append(inputs, nil) // mask is nil
 		if subRule.Strategy.KeepDegrees {
 			inputs = append(inputs, nil) // degree is nil
@@ -175,7 +176,7 @@ func recursivelyCreateEdgesInputs(g *Graph, rule *sampler.Rule, edges map[string
 		)
 		if subRule.EdgeType == nil {
 			// Identity rule: edges are 1-to-1 mapping.
-			indices := IotaFull(g, shapes.Make(shapes.I32, int(subRule.NumNodes), 1))
+			indices := IotaFull(g, shapes.Make(dtypes.Int32, int(subRule.NumNodes), 1))
 			inputs = append(inputs, indices, indices)
 		} else {
 			// Normal edge.

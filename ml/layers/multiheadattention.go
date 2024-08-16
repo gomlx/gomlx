@@ -18,11 +18,11 @@ package layers
 
 import (
 	"fmt"
+	. "github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
-	. "github.com/gomlx/gomlx/types/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/slices"
+	"github.com/gomlx/gomlx/types/xslices"
 	"math"
 	"reflect"
 )
@@ -158,7 +158,7 @@ func (b *MultiHeadAttentionBuilder) SetOutputDim(outputDim int) *MultiHeadAttent
 // for every head.
 //
 // Either use SetKeyMask and SetQueryMask separately or use SetKeyQueryMatrixMask, but
-// not both. Opionally one can also UseCausalMask, which is combined (logical-and) to
+// not both. Optionally, one can also UseCausalMask, which is combined (logical-and) to
 // any given mask.
 func (b *MultiHeadAttentionBuilder) SetKeyMask(keyMask *Node) *MultiHeadAttentionBuilder {
 	if b.queryKeyMatrixMask != nil {
@@ -183,7 +183,7 @@ func (b *MultiHeadAttentionBuilder) SetKeyMask(keyMask *Node) *MultiHeadAttentio
 //
 // Either use SetKeyMask and SetQueryMask separately or use SetKeyQueryMatrixMask, but
 // not both.
-// Opionally, one can also UseCausalMask, which is combined (logical-and) to any given mask.
+// Optionally, one can also UseCausalMask, which is combined (logical-and) to any given mask.
 func (b *MultiHeadAttentionBuilder) SetQueryMask(queryMask *Node) *MultiHeadAttentionBuilder {
 	if b.queryKeyMatrixMask != nil {
 		Panicf("a mask can be set either with SetKeyMask and SetQueryMask separately or with SetKeyQueryMatrixMask, but not both")
@@ -212,19 +212,19 @@ func (b *MultiHeadAttentionBuilder) SetQueryKeyMatrixMask(queryKeyMatrixMask *No
 	if b.keyMask != nil || b.queryMask != nil {
 		Panicf("a mask can be set either with SetKeyMask and SetQueryMask separately or with SetKeyQueryMatrixMask, but not both")
 	}
-	if queryKeyMatrixMask.Shape().Eq(b.attentionShape) {
+	if queryKeyMatrixMask.Shape().Equal(b.attentionShape) {
 		// Simplest case: queryKeyMatrixMask provided with attentionShape.
 		b.queryKeyMatrixMask = queryKeyMatrixMask
 		return b
 	}
 
 	// shapeWithoutHeads = '[batch, <query_elements>, <key_elements>]` (without numHeads).
-	shapeWithoutHeads := b.attentionShape.Copy()
+	shapeWithoutHeads := b.attentionShape.Clone()
 	for ii := 1 + b.innerQueryAxes; ii < b.attentionShape.Rank()-1; ii++ {
 		shapeWithoutHeads.Dimensions[ii] = shapeWithoutHeads.Dimensions[ii+1]
 	}
 	shapeWithoutHeads.Dimensions = shapeWithoutHeads.Dimensions[0 : b.attentionShape.Rank()-1]
-	if !queryKeyMatrixMask.Shape().Eq(shapeWithoutHeads) {
+	if !queryKeyMatrixMask.Shape().Equal(shapeWithoutHeads) {
 		Panicf("invalid shape for queryKeyMatrixMask %s: expected either %s (with per-head mask) or %s",
 			queryKeyMatrixMask.Shape(), b.attentionShape, shapeWithoutHeads)
 	}
@@ -330,7 +330,7 @@ func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, att
 	mask := b.buildMask()
 	// Attention coefficients: Softmax over all the inner key axes (the last dimensions of attentionLogits)
 	// Shape: [batch, <query_elements>, num_heads, <key_elements>]
-	softmaxAxes := slices.Iota(attentionLogits.Rank()-numKeyAxes, numKeyAxes)
+	softmaxAxes := xslices.Iota(attentionLogits.Rank()-numKeyAxes, numKeyAxes)
 	if mask == nil {
 		attentionCoefficients = Softmax(attentionLogits, softmaxAxes...)
 	} else {
@@ -420,24 +420,24 @@ func (b *MultiHeadAttentionBuilder) buildMaskFromSplitMasks() (mask *Node) {
 	trueNode := Const(b.g, true)
 	var keyMask *Node
 	if b.keyMask == nil {
-		// keyMask nil, create a skeleton (to be broadcasted) keyMask filled with `true`.
-		keyMask = Reshape(trueNode, slices.SliceWithValue(b.attentionShape.Rank(), 1)...)
+		// keyMask nil, create a skeleton (to be broadcast) keyMask filled with `true`.
+		keyMask = Reshape(trueNode, xslices.SliceWithValue(b.attentionShape.Rank(), 1)...)
 		keyMask = BroadcastToDims(keyMask, b.attentionShape.Dimensions...)
 	} else {
 		// Expand dims after the batch axis.
 		// attentionShape=`[batch, <query_elements>, num_heads, <key_elements>]`
 		// b.keyMask.shape=`[batch, <key_elements>]`
-		keyMask = ExpandDims(b.keyMask, slices.SliceWithValue(b.attentionShape.Rank()-b.keyMask.Rank(), 1)...)
+		keyMask = ExpandDims(b.keyMask, xslices.SliceWithValue(b.attentionShape.Rank()-b.keyMask.Rank(), 1)...)
 		keyMask = BroadcastToDims(keyMask, b.attentionShape.Dimensions...)
 	}
 	var queryMask *Node
 	if b.queryMask == nil {
-		// queryMask nil, create a skeleton (to be broadcasted) queryMask filled with `true`.
-		queryMask = Reshape(trueNode, slices.SliceWithValue(b.attentionShape.Rank(), 1)...)
+		// queryMask nil, create a skeleton (to be broadcast) queryMask filled with `true`.
+		queryMask = Reshape(trueNode, xslices.SliceWithValue(b.attentionShape.Rank(), 1)...)
 		queryMask = BroadcastToDims(queryMask, b.attentionShape.Dimensions...)
 	} else {
 		// Expand dims at the end.
-		queryMask = ExpandDims(b.queryMask, slices.SliceWithValue(b.attentionShape.Rank()-b.queryMask.Rank(), -1)...)
+		queryMask = ExpandDims(b.queryMask, xslices.SliceWithValue(b.attentionShape.Rank()-b.queryMask.Rank(), -1)...)
 		queryMask = BroadcastToDims(queryMask, b.attentionShape.Dimensions...)
 	}
 	return And(queryMask, keyMask)
@@ -448,7 +448,7 @@ func (b *MultiHeadAttentionBuilder) buildCausalMask() (mask *Node) {
 	keyShape := b.key.Shape()
 	dim := keyShape.Dimensions[1] // Same as queryShape.Dimensions[1].
 
-	// mask is [<query_elemens>, <key_elemens>]
+	// mask is [<query_elements>, <key_elements>]
 	mask = LowerTriangular(b.g, dim)
 
 	// Broadcast mask to target shape of `[batch, <query_elements>, numHeads, <key_elements>]`
