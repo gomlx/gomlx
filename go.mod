@@ -3,26 +3,27 @@ module github.com/gomlx/gomlx
 go 1.23
 
 require (
-	github.com/MetalBlueberry/go-plotly v0.4.0
+	github.com/MetalBlueberry/go-plotly v0.5.0
 	github.com/charmbracelet/lipgloss v0.10.0
 	github.com/daniellowtw/matlab v0.0.0-20190528220746-1ed1d96a6637
 	github.com/disintegration/imaging v1.6.2
 	github.com/dustin/go-humanize v1.0.1
 	github.com/erkkah/margaid v0.3.0
 	github.com/go-gota/gota v0.12.0
+	github.com/gomlx/bsplines v0.2.0
 	github.com/gomlx/exceptions v0.0.3
-	github.com/gomlx/gopjrt v0.1.2
+	github.com/gomlx/gopjrt v0.2.2
 	github.com/google/uuid v1.6.0
-	github.com/janpfeifer/gonb v0.10.1
+	github.com/janpfeifer/gonb v0.10.2
 	github.com/janpfeifer/must v0.0.2
 	github.com/muesli/termenv v0.15.2
 	github.com/pkg/errors v0.9.1
 	github.com/schollz/progressbar/v3 v3.14.2
 	github.com/stretchr/testify v1.9.0
 	github.com/x448/float16 v0.8.4
-	golang.org/x/exp v0.0.0-20240604190554-fc45aab8b7f8
+	golang.org/x/exp v0.0.0-20240808152545-0cdaa3abc0fa
 	gonum.org/v1/plot v0.14.0
-	k8s.io/klog/v2 v2.120.1
+	k8s.io/klog/v2 v2.130.1
 )
 
 require (
@@ -38,6 +39,7 @@ require (
 	github.com/gofrs/uuid v4.4.0+incompatible // indirect
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/kr/pretty v0.1.0 // indirect
+	github.com/kr/text v0.2.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.15 // indirect
