@@ -168,5 +168,4 @@ No governance guidelines have been established yet.
 * [CHANGELOG](docs/CHANGELOG.md)
 * [TODO](docs/TODO.md)
 * [Error Handling](docs/error_handling.md)
-* [Building C/XLA Bindings](docs/building.md)
 * [Developing](docs/developing.md)
