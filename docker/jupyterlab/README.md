@@ -26,34 +26,10 @@ should split on 2 dockers)
 
 ### Building the Docker
 
-You need a copy of the binary pre-build GoMLX C library.
-You can download it from the latest release (in 
-`https://github.com/gomlx/gomlx/releases/download/${GOMLX_VERSION}/gomlx_xla-linux-amd64.tar.gz`)
-or if you build it yourself (see `docs/building.md`), the built file is usually in ``./c/bazel-bin/gomlx_xla.tar.gz`.
-Copy or download the file and rename to `gomlx_xla.tar.gz`, in the repository root directory -- or 
-set the path to the file by adding `--build-arg GOMLX_XLA_TAR_GZ=<path_to_file>` to the Docker build
-command below.
-
-Due to a couple of issues with NVidia drivers and Docker runtime selection during build, we need a bit of trickery:
-
-1. I have no idea why, but using CUDA/CuDNN with XLA the very first time is very slow.  
-   It takes a couple of minutes to run.
-   So we run a trivial model once upfront, so the docker is ready to run faster.
-1. Unfortunately `docker build` more recently cannot run with access to GPUs (it doesn't use Nvidia runtime by default).
-   See issue here:
-  * https://forums.developer.nvidia.com/t/nvidia-driver-is-not-available-on-latest-docker/246265/2
-  * https://stackoverflow.com/questions/59691207/docker-build-with-nvidia-runtime/61737404#61737404
-
-So what we do is, after the image is built, immediately run a test train and commit the changed container to the 
-image. We have to then also add a change to set update `CMD`, otherwise it will rewrite the `CMD` with our test script.
-
+Note: the Dockerfile is configured to pull GoMLX (and gopjrt) from GitHub, so it won't use the contents on the current directory. 
 
 ```bash
-docker build -t janpfeifer/gomlx_jupyterlab:latest -f docker/jupyterlab/Dockerfile . \
-  && docker run --gpus all -it janpfeifer/gomlx_jupyterlab:latest bash -c 'cd Projects/gomlx/examples/linear ; go run . --platform=CUDA' \
-  && docker commit --message "Warm up CUDA driver." \
-      --change='CMD ["jupyter-lab", "--no-browser", "--ip=0.0.0.0"]' \
-      $(docker container ls --latest --quiet) janpfeifer/gomlx_jupyterlab:latest
+docker build -t janpfeifer/gomlx_jupyterlab:latest -f docker/jupyterlab/Dockerfile . 
 ```
 
 Finally, to push the image, set the variable `version` to the desired version and do:
