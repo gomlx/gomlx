@@ -208,6 +208,7 @@ func TestDataset(t *testing.T) {
 			spec, inputs, labels, err := parallelDS.Yield()
 			_ = checkInputsFn(t, spec, inputs, labels, err)
 		}
+		parallelDS.Done()
 	}
 }
 

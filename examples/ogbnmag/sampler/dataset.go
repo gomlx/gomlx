@@ -295,7 +295,7 @@ func accessTensorsData(tensorsList []*tensors.Tensor, mutableList []bool, access
 	recursion(nil)
 }
 
-// sampleEdges based on a edge sampling rule `rule`, and the source nodes from which to sample.
+// sampleEdges based on an edge sampling rule `rule`, and the source nodes from which to sample.
 func sampleEdges(rule *Rule, srcNodes, srcMask *tensors.Tensor) (nodes, mask, degrees *tensors.Tensor) {
 	nodes = tensors.FromScalarAndDimensions(int32(0), rule.Shape.Dimensions...)
 	mask = tensors.FromScalarAndDimensions(false, rule.Shape.Dimensions...)

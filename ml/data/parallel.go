@@ -3,6 +3,7 @@ package data
 import (
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/janpfeifer/gonb/common"
 	"github.com/pkg/errors"
 	"io"
 	"k8s.io/klog/v2"
@@ -52,6 +53,7 @@ type parallelDatasetImpl struct {
 
 	buffer                                chan yieldUnit
 	epochFinished, stopEpoch, stopDataset chan struct{}
+	done                                  *common.Latch
 }
 
 // Parallel parallelizes yield calls of any tread-safe train.Dataset.
@@ -162,6 +164,7 @@ func (pd *ParallelDataset) Start() *ParallelDataset {
 		buffer:      make(chan yieldUnit, pd.extraBufferSize),
 		stopDataset: make(chan struct{}),
 		config:      *pd, // Copy.
+		done:        common.NewLatch(),
 	}
 	pd.impl = impl
 	// If the ParallelDataset is garbage collected, stop all parallel goroutines.
@@ -233,6 +236,7 @@ func (impl *parallelDatasetImpl) startGoRoutines() {
 		defer impl.muErr.Unlock()
 		select {
 		case <-impl.stopDataset:
+			impl.done.Trigger()
 			return
 		default:
 			//
@@ -246,11 +250,21 @@ func (pd *ParallelDataset) Name() string {
 	return pd.name
 }
 
+// Done stops all the parallel dataset and wait them to finish.
+func (pd *ParallelDataset) Done() {
+	if pd.impl != nil {
+		impl := pd.impl
+		close(impl.stopDataset)
+		pd.impl = nil
+		impl.done.Wait()
+	}
+}
+
 // Reset implements train.Dataset.
 func (pd *ParallelDataset) Reset() {
 	impl := pd.impl
 	if impl == nil {
-		log.Printf("ParallelDataset.Reset was called before it was started with ParallelDataset.Start")
+		klog.Warningf("ParallelDataset.Reset was called before it was started with ParallelDataset.Start or after ParallelDataset.Done")
 		return
 	}
 
@@ -285,7 +299,7 @@ drainDataset: //
 func (pd *ParallelDataset) Yield() (spec any, inputs []*tensors.Tensor, labels []*tensors.Tensor, err error) {
 	impl := pd.impl
 	if impl == nil {
-		err = errors.Errorf("ParallelDataset.Yield was called before it was started with ParallelDataset.Start")
+		err = errors.Errorf("ParallelDataset.Yield was called before it was started with ParallelDataset.Start or after it was stopped with ParallelDataset.Done")
 		return
 	}
 	var unit yieldUnit
