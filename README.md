@@ -61,10 +61,10 @@ It includes:
 
 ## Installation
 
-**TLDR;**: (1) [Use the Docker](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab); 
-(2) Pre-built only for Linux (works in Windows WSL). Install 
-[**gopjrt** (see installation instructions)](https://github.com/gomlx/gopjrt?#installing). 
-And `sudo apt install sudo apt-get install libunwind8 liblzma5 hdf5-tools`.
+**TLDR;**: Two options: (1) [Use the Docker](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab); 
+(2) Pre-built only for Linux (works in Windows WSL): install 
+[**gopjrt** (see installation instructions)](https://github.com/gomlx/gopjrt?#installing) and 
+`sudo apt install install hdf5-tools`.
 
 **GoMLX** is mostly a normal Go library, but it depends on [**gopjrt**](https://github.com/gomlx/gopjrt), which
 includes C wrappers to XLA (itself C++ code base). 
@@ -72,7 +72,8 @@ Installing **gopjrt** is relatively straight forward, follow
 [the installation instructions](https://github.com/gomlx/gopjrt?#installing).
 
 Releases are for Linux only for now. They do work well with WSL (Windows Subsystem for Linux) in Windows.
-I don't have a Mac, but XLA works for it, so **gopjrt** should compile as well, and **GoMLX** should work.
+I don't have a Mac, but XLA works for Mac/DarwinOS (on arm64), so **gopjrt** should compile as well, 
+and **GoMLX** should work.
 
 ### [Pre-built Docker](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab)
 
@@ -102,23 +103,14 @@ includes C wrappers to XLA (itself C++ code base).
 Installing **gopjrt** is relatively straight forward, follow
 [the installation instructions](https://github.com/gomlx/gopjrt?#installing).
 
-The library also depends on the following libraries to compile and run:
+Importing models from Keras (like the `inceptionv3` package) also requires `hdf5-tools` installed:
+`sudo apt install hdf5-tools`.
 
-* `libunwind8`: usually available in most Linux systems.
-* `liblzma5`: compression library, also usually available.
-* `hdf5-tools`: access to `.h5` file format, used by hold pre-trained weights for some some models. 
-
-Typically, this can be installed with:
-
-```bash
-sudo apt-get install libunwind8 liblzma5 hdf5-tools
-```
-
-#### NVidia GPU Support with CUDA
+#### Nvidia GPU Support with CUDA
 
 Just install also the "cuda" PJRT plugin for [**gopjrt**](https://github.com/gomlx/gopjrt).
 Follow the [CUDA installation instructions here](https://github.com/gomlx/gopjrt?#installing),
-it borrows the PJRT plugin and NVidia drivers built for JAX.
+it borrows the PJRT plugin and Nvidia drivers built for JAX.
 
 ### MacOS
 
