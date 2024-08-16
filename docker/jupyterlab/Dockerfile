@@ -15,7 +15,7 @@ USER root
 RUN apt-get update --yes \
     && apt-get upgrade --yes \
     && apt-get install --yes --no-install-recommends \
-      pciutils sudo wget vim micro unzip hdf5-tools libc6-dev curl gcc git
+      sudo wget vim micro unzip hdf5-tools libc6-dev curl gcc git
 
 # Create NB_USER (jovyan) and its home directory.
 ARG NB_USER="jupyter"
@@ -62,7 +62,9 @@ RUN go install github.com/janpfeifer/gonb@latest \
     && go install golang.org/x/tools/gopls@latest \
     && gonb --install --alsologtostderr
 
+
 # Clone and install gopjrt.
+ARG GOPJRT_VERSION="v0.2.3"
 USER ${NB_USER}
 WORKDIR ${HOME}
 RUN <<EOF
@@ -74,9 +76,7 @@ EOF
 # Install gopjrt libraries.
 USER root
 WORKDIR ${HOME}/Projects/gopjrt
-RUN <<EOF
-./cmd/install.sh && ./cmd/install_cuda.sh
-EOF
+RUN ./cmd/install.sh && ./cmd/install_cuda.sh
 
 # Test gopjrt
 USER ${NB_USER}
