@@ -84,7 +84,7 @@ WORKDIR ${HOME}/Projects/gopjrt
 RUN go test ./...
 
 # Clone and test GoMLX
-env GOMLX_REPOSITORY_BRANCH="pjrt"
+arg GOMLX_REPOSITORY_BRANCH="main"
 USER ${NB_USER}
 WORKDIR ${HOME}/Projects
 RUN <<EOF
