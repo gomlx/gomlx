@@ -21,6 +21,7 @@
 * Package `layers`:
   * Added sub-package `fnn` for a simplified Feedforward Neural Networks implementation.
   * Added sub-package `kan` for Kolmogorov–Arnold Networks, and Discrete-KAN.
+    * Included bspline GoMLX implementation.
   * Added sub-package `regularizers` with automatic regularizer configuration. Layers `Dense`, `DenseWithBias` and `kan` use it by default.
   * Added sub-package `activations` -- just a refactor of the code already in layers.
   * Added sub-package `batchnorm`: refactored out batch normalization code. 

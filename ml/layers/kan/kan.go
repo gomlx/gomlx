@@ -12,12 +12,12 @@ package kan
 import (
 	"fmt"
 	"github.com/gomlx/bsplines"
-	xbsplines "github.com/gomlx/bsplines/gomlx"
 	"github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/ml/layers/activations"
+	xbsplines "github.com/gomlx/gomlx/ml/layers/bsplines"
 	"github.com/gomlx/gomlx/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/types/shapes"
 	"k8s.io/klog/v2"
