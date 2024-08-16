@@ -1,20 +1,9 @@
 FROM --platform=linux/amd64 ubuntu:noble
-
-#nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04
-
 LABEL maintainer="pfeifer@gmail.com"
-
-ARG GO_VERSION="1.23"
-ARG GOPJRT_VERSION="v0.2.1"
 
 #######################################################################################################
 # User, home directory and basics.
 #######################################################################################################
-
-ARG NB_USER="jupyter"
-ARG NB_UID=1000
-ARG NB_GID=100
-
 # Fix: https://github.com/hadolint/hadolint/wiki/DL4006
 # Fix: https://github.com/koalaman/shellcheck/wiki/SC3014
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -25,9 +14,13 @@ USER root
 # C compiler is included because some of the Go dependencies require C.
 RUN apt-get update --yes \
     && apt-get upgrade --yes \
-    && apt-get install --yes --no-install-recommends wget vim micro unzip hdf5-tools libc6-dev curl gcc git
+    && apt-get install --yes --no-install-recommends \
+      pciutils sudo wget vim micro unzip hdf5-tools libc6-dev curl gcc git
 
 # Create NB_USER (jovyan) and its home directory.
+ARG NB_USER="jupyter"
+ARG NB_UID=1001
+ARG NB_GID=100
 RUN useradd --create-home --uid ${NB_UID} --gid ${NB_GID} --shell /bin/bash ${NB_USER}
 ENV HOME /home/${NB_USER}
 
@@ -35,22 +28,30 @@ ENV HOME /home/${NB_USER}
 # Jupyter Lab
 #######################################################################################################
 USER root
-RUN apt install --yes --no-install-recommends python3 python3-pip
+RUN apt install --yes --no-install-recommends python3 python3-venv
 ENV PATH=${PATH}:${HOME}/.local/bin
 
 USER ${NB_USER}
 WORKDIR ${HOME}
-RUN pip3 install jupyterlab
-
+RUN <<EOF
+set -e
+mkdir -p .venv/jupyter
+python3 -m venv .venv/jupyter
+source .venv/jupyter/bin/activate
+pip install jupyterlab
+EOF
 
 #######################################################################################################
 # Go, GoNB, gopjrt and GoMLX Libraries and Code
 #######################################################################################################
+ARG GO_VERSION="1.23.0"
+ENV LD_LIBRARY_PATH /usr/local/lib:${LD_LIBRARY_PATH}
 
 # Download Go in users home directory.
 USER ${NB_USER}
 ENV GOPATH /home/${NB_USER}/go-data
 ENV PATH ${HOME}/go/bin:${GOPATH}/bin:${PATH}
+
 WORKDIR ${HOME}
 RUN wget --quiet --output-document=- "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" | tar -xz \
     && go version
@@ -61,30 +62,43 @@ RUN go install github.com/janpfeifer/gonb@latest \
     && go install golang.org/x/tools/gopls@latest \
     && gonb --install --alsologtostderr
 
-# Install gopjrt
-
-
-
-# Copy the GoMLX source code, which includes the examples, that can be interesting to
-# look at. Also make a copy of the tutorial at the root directory for quick access.
-USER ${NB_UID}
-COPY --link --chown=${NB_UID}:${NB_GID} . "${HOME}/Projects/gomlx"
-COPY --link --chown=${NB_UID}:${NB_GID} "./examples/tutorial/tutorial.ipynb" "${HOME}/"
-COPY --link --chown=${NB_UID}:${NB_GID} "./examples/tutorial/*.jpg" "${HOME}/"
-
-ENV LD_LIBRARY_PATH /usr/local/lib:${LD_LIBRARY_PATH}
-
+# Clone and install gopjrt.
 USER ${NB_USER}
-ENV PATH ${HOME}/go/bin:${PATH}
 WORKDIR ${HOME}
+RUN <<EOF
+mkdir Projects
+cd Projects
+git clone https://github.com/gomlx/gopjrt.git
+EOF
+
+# Install gopjrt libraries.
+USER root
+WORKDIR ${HOME}/Projects/gopjrt
+RUN <<EOF
+./cmd/install.sh && ./cmd/install_cuda.sh
+EOF
+
+# Test gopjrt
+USER ${NB_USER}
+WORKDIR ${HOME}/Projects/gopjrt
+RUN go test ./...
+
+# Clone and test GoMLX
+env GOMLX_REPOSITORY_BRANCH="pjrt"
+USER ${NB_USER}
+WORKDIR ${HOME}/Projects
+RUN <<EOF
+git clone -b ${GOMLX_REPOSITORY_BRANCH} https://github.com/gomlx/gomlx.git
+ln "./gomlx/examples/tutorial/tutorial.ipynb" "${HOME}/"
+ln "./gomlx/examples/tutorial/"*.jpg "${HOME}/"
+cd gomlx
+go test ./types/... ./graph/... ./ml/... ./backends/...
+go build ./examples/... ./models/...
+EOF
 
 #######################################################################################################
 # Tests: run at the end, so docker build cache is not busted.
 #######################################################################################################
-
-# Run basic tests -- only on "Host" since GPU in docker build is not working.
-WORKDIR "${HOME}/Projects/gomlx"
-RUN go test ./xla/... ./types/... ./graph/... ./ml/...
 
 # I have no idea why, but using CUDA/CuDNN with XLA the very first time is very slow. It takes a couple of minutes
 # to run. So we run a trivial model once upfront.
@@ -94,7 +108,7 @@ RUN go test ./xla/... ./types/... ./graph/... ./ml/...
 # https://stackoverflow.com/questions/59691207/docker-build-with-nvidia-runtime/61737404#61737404
 #
 # So for now, the alternative if to run this after building the image, and then we commit the container.
-RUN go run ./examples/linear
+#RUN go run ./examples/linear
 
 #######################################################################################################
 # Finishing touches.
@@ -108,5 +122,5 @@ RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 USER ${NB_USER}
 WORKDIR ${HOME}
 EXPOSE 8888/tcp
-CMD ["jupyter-lab", "--no-browser", "--ip=0.0.0.0"]
+CMD ["bash", "-c", "source .venv/jupyter/bin/activate ; jupyter-lab --no-browser --ip=0.0.0.0"]
 ENTRYPOINT []
