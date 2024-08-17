@@ -17,7 +17,7 @@ top of [OpenXLA/PJRT](https://github.com/openxla/xla), which itself uses LLVM to
 It's the same engine that powers Google's [Jax](https://github.com/google/jax) and 
 [TensorFlow](https://tensorflow.org/), and it has the same speed in many cases.
 
-## Quick Start: see our [tutorial](examples/tutorial/tutorial.ipynb), or a [guided example for Kaggle Dogs Vs Cats](examples/dogsvscats/dogsvscats.ipynb).
+## Quick Start: see our [tutorial](https://gomlx.github.io/gomlx/notebooks/tutorial.html), or a [guided example for Kaggle Dogs Vs Cats](https://gomlx.github.io/gomlx/notebooks/dogsvscats.html).
 
 <div>
 <p>It was developed to be full-featured ML platform for Go, and to easily experiment with ML ideas -- see Long-Term Goals below.</p>
@@ -42,8 +42,14 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
 
 It includes:
 
-* Examples: Synthetic linear model; Adult/Census model; Cifar-10 demo; Dogs & Cats classifier demo; IMDB Movie Review 
-  demo; Diffusion model for Oxford Flowers 102 dataset (generates random flowers); GNN model for [OGBN-MAG](https://ogb.stanford.edu/docs/nodeprop/#ogbn-mag).
+* Examples: 
+  * [Synthetic linear model](https://github.com/gomlx/gomlx/blob/main/examples/linear/linear.go); 
+  * [Adult/Census model](https://gomlx.github.io/gomlx/notebooks/uci-adult.html); 
+  * [Cifar-10 demo](https://gomlx.github.io/gomlx/notebooks/cifar.html); 
+  * [Dogs & Cats classifier demo](https://gomlx.github.io/gomlx/notebooks/dogsvscats.html); 
+  * [IMDB Movie Review demo](https://gomlx.github.io/gomlx/notebooks/imdb.html); 
+  * [Diffusion model for Oxford Flowers 102 dataset (generates random flowers)](examples/oxfordflowers102/OxfordFlowers102_Diffusion.ipynb);
+  * [GNN model for OGBN-MAG (experimental)](examples/ogbnmag/ogbn-mag.ipynb).
 * Pre-Trained models to use: InceptionV3 (image model) -- more to come.
 * Docker with integrated JupyterLab and GoNB (a Go kernel)
 * Just-In-Time (JIT) compilation using [OpenXLA](https://github.com/openxla/xla)] for CPUs and GPUs -- hopefully soon TPUs.
