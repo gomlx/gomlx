@@ -13,7 +13,7 @@ GoMLX is a fast and easy-to-use set of Machine Learning and generic math librari
 It can be seen as a TensorFlow/Jax/PyTorch for Go.
 
 It uses just-in-time compilation to CPU and GPU (hopefully soon TPUs also) and is built on
-top of [OpenXLA](https://github.com/openxla/xla), which itself uses LLVM to JIT-compile code.
+top of [OpenXLA/PJRT](https://github.com/openxla/xla), which itself uses LLVM to JIT-compile code.
 It's the same engine that powers Google's [Jax](https://github.com/google/jax) and 
 [TensorFlow](https://tensorflow.org/), and it has the same speed in many cases.
 

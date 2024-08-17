@@ -22,7 +22,7 @@ import (
 var flagDataDir = flag.String("data", "/tmp/gomlx_inceptionv3", "Directory where to save and load model data.")
 
 func TestBuildGraph(t *testing.T) {
-	if !testing.Short() {
+	if testing.Short() {
 		fmt.Println("- github.com/gomlx/gomlx/models/inceptionv3: TestBuildGraph disabled for go test --short because it requires downloading a large file with weights.")
 		return
 	}

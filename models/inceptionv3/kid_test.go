@@ -1,6 +1,7 @@
 package inceptionv3
 
 import (
+	"fmt"
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
@@ -53,6 +54,10 @@ func noisyImages(t *testing.T, manager backends.Backend, batch *tensors.Tensor) 
 }
 
 func TestKidMetric(t *testing.T) {
+	if testing.Short() {
+		fmt.Println("- github.com/gomlx/gomlx/models/inceptionv3: TestKidMetrics disabled for go test --short because it requires downloading a large file with weights.")
+		return
+	}
 	require.NoError(t, DownloadAndUnpackWeights(*flagDataDir))
 	manager := graphtest.BuildTestBackend()
 
