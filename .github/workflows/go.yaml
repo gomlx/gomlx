@@ -56,6 +56,9 @@ jobs:
 
     - name: PreTest
       run: |
+        echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}"
+        echo "/usr/local/lib:"
+        ls -l /usr/local/lib
         go test ./graph -test.v
 
     - name: Test
