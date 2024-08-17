@@ -131,7 +131,7 @@ See the [tutorial here](examples/tutorial/tutorial.ipynb). It covers a bit of ev
 After that look at the demos in the [examples/](https://github.com/gomlx/gomlx/tree/main/examples) directory.
 
 The library itself is well documented (pls open issues if something is missing), and the code is
-not too hard to read (except the bindings to C/XLA, which are tricky). 
+not too hard to read. 
 Godoc available in [pkg.go.dev](https://pkg.go.dev/github.com/gomlx/gomlx).
 
 Finally, feel free to ask questions: time allowing (when not in work) I'm always happy to help -- I created [groups.google.com/g/gomlx-discuss](https://groups.google.com/g/gomlx-discuss), or use [GitHub discussions page](https://github.com/gomlx/gomlx/discussions).
