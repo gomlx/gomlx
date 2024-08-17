@@ -50,15 +50,11 @@ jobs:
         curl -s "https://raw.githubusercontent.com/gomlx/gopjrt/main/cmd/install.sh" \
           > /tmp/gopjrt_install.sh
         chmod a+x /tmp/gopjrt_install.sh
-        echo "Installing gopjrt:"
-        /tmp/gopjrt_install.sh
-        export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/usr/local/lib
+        echo "Installing gopjrt to /usr/:"
+        INSTALL_DIR=/usr /tmp/gopjrt_install.sh
 
     - name: PreTest
       run: |
-        echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}"
-        echo "/usr/local/lib:"
-        ls -l /usr/local/lib
         go test ./graph -test.v
 
     - name: Test
