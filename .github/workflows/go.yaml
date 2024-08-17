@@ -37,32 +37,26 @@ jobs:
       shell: bash
       run: |
         sudo apt-get install -y --no-install-recommends \
-          "wget" "gcc" "libunwind8" "libunwind-dev" "liblzma5" "libgoogle-perftools-dev" "hdf5-tools"
+          "wget" "gcc" "libunwind8" "libunwind-dev" "liblzma5" "hdf5-tools"
 
     - name: Install Go
       uses: actions/setup-go@v5
       with:
-        go-version: "1.22.x"
+        go-version: "1.23.x"
 
-    - name: Install GoMLX shared libraries
+    - name: Install gopjrt shared libraries
       shell: bash
       run: |
-        curl -s "https://api.github.com/repos/gomlx/gomlx/releases/latest" \
-          | grep "gomlx_xla-linux-amd64.tar.gz" | grep "download_url" \
-          | sed 's/.*"\(https.*\)"/\1/' \
-          > /tmp/gomlx_latest_release_url.txt
-        cat /tmp/gomlx_latest_release_url.txt
-        wget --quiet --output-document=- $(cat /tmp/gomlx_latest_release_url.txt) \
-          | (mkdir release ; cd release ; sudo tar -xvz)
-        echo "Untar-ed files:"
-        find release/
-        sudo cp release/lib/libgomlx_xla.so /usr/lib/x86_64-linux-gnu
-        export LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu
-        sudo cp -r release/include/gomlx /usr/include
+        curl -s "https://raw.githubusercontent.com/gomlx/gopjrt/main/cmd/install.sh" \
+          > /tmp/gopjrt_install.sh
+        chmod a+x /tmp/gopjrt_install.sh
+        echo "Installing gopjrt:"
+        /tmp/gopjrt_install.sh
+        export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/usr/local/lib
 
     - name: PreTest
       run: |
-        go test ./xla -test.v
+        go test ./graph -test.v
 
     - name: Test
       run: |
