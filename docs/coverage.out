@@ -375,7 +375,7 @@ github.com/gomlx/gomlx/graph/ops.go:780:					MaskedReduceAllMean				0.0%
 github.com/gomlx/gomlx/graph/ops.go:789:					ReduceMultiply					0.0%
 github.com/gomlx/gomlx/graph/ops.go:796:					ReduceAllMultiply				0.0%
 github.com/gomlx/gomlx/graph/ops.go:805:					ReduceMax					100.0%
-github.com/gomlx/gomlx/graph/ops.go:812:					ReduceAllMax					0.0%
+github.com/gomlx/gomlx/graph/ops.go:812:					ReduceAllMax					100.0%
 github.com/gomlx/gomlx/graph/ops.go:822:					MaskedReduceMax					85.7%
 github.com/gomlx/gomlx/graph/ops.go:837:					MaskedReduceAllMax				0.0%
 github.com/gomlx/gomlx/graph/ops.go:846:					ReduceMin					0.0%
@@ -1052,11 +1052,11 @@ github.com/gomlx/gomlx/models/inceptionv3/model.go:195:				ChannelsAxis					100.
 github.com/gomlx/gomlx/models/inceptionv3/model.go:213:				ClassificationTop				100.0%
 github.com/gomlx/gomlx/models/inceptionv3/model.go:234:				BatchNormScale					0.0%
 github.com/gomlx/gomlx/models/inceptionv3/model.go:248:				SetPooling					100.0%
-github.com/gomlx/gomlx/models/inceptionv3/model.go:254:				Done						88.1%
+github.com/gomlx/gomlx/models/inceptionv3/model.go:254:				Done						93.3%
 github.com/gomlx/gomlx/models/inceptionv3/model.go:473:				conv2DWithBatchNorm				100.0%
 github.com/gomlx/gomlx/models/inceptionv3/model.go:509:				loadTensorToVariable				77.8%
 github.com/gomlx/gomlx/models/inceptionv3/model.go:531:				readNextConv2D					100.0%
-github.com/gomlx/gomlx/models/inceptionv3/model.go:554:				readPredictionsWeights				0.0%
+github.com/gomlx/gomlx/models/inceptionv3/model.go:554:				readPredictionsWeights				100.0%
 github.com/gomlx/gomlx/models/inceptionv3/model.go:567:				readNextBatchNormalization			100.0%
 github.com/gomlx/gomlx/models/inceptionv3/pooling_string.go:7:			_						0.0%
 github.com/gomlx/gomlx/models/inceptionv3/pooling_string.go:20:			String						0.0%
@@ -1211,4 +1211,4 @@ github.com/gomlx/gomlx/types/xslices/xslices.go:395:				recursiveDeepSliceCmp			
 github.com/gomlx/gomlx/types/xslices/xslices.go:419:				Flag						100.0%
 github.com/gomlx/gomlx/types/xslices/xslices.go:435:				String						90.0%
 github.com/gomlx/gomlx/types/xslices/xslices.go:452:				Set						72.7%
-total:										(statements)					73.0%
+total:										(statements)					73.2%
