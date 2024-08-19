@@ -1,5 +1,4 @@
-# GoMLX, an Accelerated ML and Math Framework (PyTorch/Jax/Tensorflow-like for Go)
-
+# **_GoMLX_**, an Accelerated ML and Math Framework
 
 [![GoDev](https://img.shields.io/badge/go.dev-reference-007d9c?logo=go&logoColor=white)](https://pkg.go.dev/github.com/gomlx/gomlx?tab=doc)
 [![GitHub](https://img.shields.io/github/license/gomlx/gomlx)](https://github.com/Kwynto/gosession/blob/master/LICENSE)
@@ -7,17 +6,19 @@
 [![TestStatus](https://github.com/gomlx/gomlx/actions/workflows/go.yaml/badge.svg)](https://github.com/gomlx/gomlx/actions/workflows/go.yaml)
 ![Coverage](https://img.shields.io/badge/Coverage-73.2%25-yellow)
 
+
+## 📖 About **_GoMLX_**
 <img align="right" src="docs/gomlx_gopher.jpg" alt="GoMLX Gopher" width="220px"/>
 
-GoMLX is a fast and easy-to-use set of Machine Learning and generic math libraries and tools. 
-It can be seen as a TensorFlow/Jax/PyTorch for Go.
+**GoMLX** is a fast and easy-to-use set of Machine Learning and generic math libraries and tools. 
+It can be seen as a **PyTorch/Jax/TensorFlow for Go**.
 
 It uses just-in-time compilation to CPU and GPU (hopefully soon TPUs also) and is built on
 top of [OpenXLA/PJRT](https://github.com/openxla/xla), which itself uses LLVM to JIT-compile code.
 It's the same engine that powers Google's [Jax](https://github.com/google/jax) and 
 [TensorFlow](https://tensorflow.org/), and it has the same speed in many cases.
 
-## Quick Start: see our [tutorial](https://gomlx.github.io/gomlx/notebooks/tutorial.html), or a [guided example for Kaggle Dogs Vs Cats](https://gomlx.github.io/gomlx/notebooks/dogsvscats.html).
+## 🎓 Quick Start: see our [tutorial](https://gomlx.github.io/gomlx/notebooks/tutorial.html), or a [guided example for Kaggle Dogs Vs Cats](https://gomlx.github.io/gomlx/notebooks/dogsvscats.html).
 
 <div>
 <p>It was developed to be full-featured ML platform for Go, and to easily experiment with ML ideas -- see Long-Term Goals below.</p>
@@ -34,7 +35,7 @@ and error messages are useful and try to make it easy to solve issues.
 
 **GoMLX is still under development, and should be considered experimental.**
 
-## Overview
+## 🗺️ Overview
 
 **GoMLX** has many important components of an ML framework in place, 
 from the bottom to the top of the stack. But it is still only a slice of what a major ML library/framework should provide 
@@ -51,13 +52,14 @@ It includes:
   * [Diffusion model for Oxford Flowers 102 dataset (generates random flowers)](examples/oxfordflowers102/OxfordFlowers102_Diffusion.ipynb);
   * [GNN model for OGBN-MAG (experimental)](examples/ogbnmag/ogbn-mag.ipynb).
 * Pre-Trained models to use: InceptionV3 (image model) -- more to come.
-* Docker with integrated JupyterLab and GoNB (a Go kernel)
-* Just-In-Time (JIT) compilation using [OpenXLA](https://github.com/openxla/xla)] for CPUs and GPUs -- hopefully soon TPUs.
+* Docker with integrated JupyterLab and [GoNB](https://github.com/janpfeifer/gonb) (a Go kernel for Jupyter notebooks)
+* Just-In-Time (JIT) compilation using [OpenXLA](https://github.com/openxla/xla) for CPUs and GPUs -- hopefully soon TPUs.
 * Autograd: automatic differentiation -- only gradients for now, no jacobian.
 * Context: automatic variable management for ML models.
-* ML layers library with some of the most popular machine learning "layers": dense (simple FFN layer),  
-  activation functions, Layer Normalization, Batch Normalization, Convolutions, Pooling, Dropout, Multi-Head-Attention
-  (for transformer layers), PiecewiseLinear (for calibration and normalization).
+* ML layers library with some of the most popular machine learning "layers": FFN layers,  
+  activation functions, layer and batch normalization, convolutions, pooling, dropout, Multi-Head-Attention
+  (for transformer layers), KAN (with B-Splines), PiecewiseLinear (for calibration and normalization), regularizations, 
+  FFT (reverse/differentiable), etc. 
 * Training library, with some pretty-printing. Including plots for Jupyter notebook, using [GoNB, a Go Kernel](https://github.com/janpfeifer/gonb).
   * Also, various debugging tools: collecting values for particular nodes for plotting, simply logging  the value
     of nodes during training, stack-trace of the code where nodes are created (TODO: automatic printing stack-trace
@@ -65,7 +67,13 @@ It includes:
 * SGD and Adam (AdamW and Adamax) optimizers.
 * Various losses and metrics.
 
-## Installation
+## 👥 Support
+
+* [Q&A and discussions](https://github.com/gomlx/gomlx/discussions/categories/q-a)
+* [Issues](https://github.com/gomlx/gomlx/issues)
+* Random brainstorming on projects: just start a Q&A and I'm happy to meet in discord somewhere or VC.
+
+## 🛠️ + ⚙️ Installation
 
 **TLDR;**: Two options: (1) [Use the Docker](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab); 
 (2) Pre-built only for Linux (works in Windows WSL): install 
@@ -124,7 +132,7 @@ See #23: the required C++ library (`libgomlx_xla.so`) is reported to successfull
 After that the C++ library moved to [**gopjrt**](https://github.com/gomlx/gopjrt), but it should work.
 Unfortunately, I don't have a mac to build and include these in the releases.
 
-## Tutorial
+## 🧭 Tutorial
 
 See the [tutorial here](examples/tutorial/tutorial.ipynb). It covers a bit of everything. 
 
@@ -136,7 +144,7 @@ Godoc available in [pkg.go.dev](https://pkg.go.dev/github.com/gomlx/gomlx).
 
 Finally, feel free to ask questions: time allowing (when not in work) I'm always happy to help -- I created [groups.google.com/g/gomlx-discuss](https://groups.google.com/g/gomlx-discuss), or use [GitHub discussions page](https://github.com/gomlx/gomlx/discussions).
 
-## Long-term Goals
+## 🎯 Long-term Goals
 
 1. Building and training models in Go -- as opposed to Python (or some other language) -- with focus on:
    - Being simple to read and reason about, leading the user to a correct and transparent mental
@@ -160,7 +168,7 @@ Finally, feel free to ask questions: time allowing (when not in work) I'm always
    - Compile models to binary as in C-libraries and/or WebAssembly, to be linked and consumed (inference) anywhere
      (any language).
 
-## Collaborating
+## 🤝 Collaborating
 
 The project is looking forward contributions for anyone interested. Many parts are not yet set 
 in stone, so there is plenty of space for improvements and re-designs for those interested
@@ -169,9 +177,17 @@ for inspiration.
 
 No governance guidelines have been established yet.
 
-## Advanced Topics
+## 🚀 Advanced Topics
 
 * [CHANGELOG](docs/CHANGELOG.md)
 * [TODO](docs/TODO.md)
 * [Error Handling](docs/error_handling.md)
 * [Developing](docs/developing.md)
+
+## ⚖️ License 
+
+> Copyright 2024 Jan Pfeifer
+
+**GoMLX** is distributed under the terms of the [Apache License Version 2.0](https://github.com/gomlx/gomlx/blob/main/LICENSE).
+Unless it is explicitly stated otherwise, any contribution intentionally submitted for inclusion in this project shall be licensed under [Apache License Version 2.0](https://github.com/gomlx/gomlx/blob/main/LICENSE)
+without any additional terms or conditions.
