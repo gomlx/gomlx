@@ -44,13 +44,13 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
 It includes:
 
 * Examples: 
-  * [Synthetic linear model](https://github.com/gomlx/gomlx/blob/main/examples/linear/linear.go); 
   * [Adult/Census model](https://gomlx.github.io/gomlx/notebooks/uci-adult.html); 
   * [Cifar-10 demo](https://gomlx.github.io/gomlx/notebooks/cifar.html); 
   * [Dogs & Cats classifier demo](https://gomlx.github.io/gomlx/notebooks/dogsvscats.html); 
   * [IMDB Movie Review demo](https://gomlx.github.io/gomlx/notebooks/imdb.html); 
   * [Diffusion model for Oxford Flowers 102 dataset (generates random flowers)](examples/oxfordflowers102/OxfordFlowers102_Diffusion.ipynb);
   * [GNN model for OGBN-MAG (experimental)](examples/ogbnmag/ogbn-mag.ipynb).
+  * Last, a trivial [synthetic linear model](https://github.com/gomlx/gomlx/blob/main/examples/linear/linear.go), for those curious to see a barebones simple model.
 * Pre-Trained models to use: InceptionV3 (image model) -- more to come.
 * Docker with integrated JupyterLab and [GoNB](https://github.com/janpfeifer/gonb) (a Go kernel for Jupyter notebooks)
 * Just-In-Time (JIT) compilation using [OpenXLA](https://github.com/openxla/xla) for CPUs and GPUs -- hopefully soon TPUs.
