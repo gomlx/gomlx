@@ -77,19 +77,21 @@ It includes:
 
 **TLDR;**: Two options: (1) [Use the Docker](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab); 
 (2) Pre-built only for Linux (works in Windows WSL): install 
-[**gopjrt** (see installation instructions)](https://github.com/gomlx/gopjrt?#installing) and 
-`sudo apt install install hdf5-tools`.
+[**gopjrt** (see installation instructions)](https://github.com/gomlx/gopjrt?#installing) 
+(optional: [Nvidia's cuda support](https://github.com/gomlx/gopjrt?#installing)) 
+and `sudo apt install install hdf5-tools`.
 
 **GoMLX** is mostly a normal Go library, but it depends on [**gopjrt**](https://github.com/gomlx/gopjrt), which
 includes C wrappers to XLA (itself C++ code base). 
 Installing **gopjrt** is relatively straight forward, follow
-[the installation instructions](https://github.com/gomlx/gopjrt?#installing).
+[the installation instructions](https://github.com/gomlx/gopjrt?#installing) 
+(notice the optional Nvidia CUDA support, if you are interested).
 
 Releases are for Linux only for now. They do work well with WSL (Windows Subsystem for Linux) in Windows.
-I don't have a Mac, but XLA works for Mac/DarwinOS (on arm64), so **gopjrt** should compile as well, 
-and **GoMLX** should work.
+I don't have a Mac, but XLA works for Mac/DarwinOS (on arm64), so **gopjrt** should compile as well and
+**GoMLX** should work (contributions are welcome :smiley:).
 
-### [Pre-built Docker](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab)
+### 🐳  [Pre-built Docker](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab)
 
 The easiest to start playing with it, it's just [pulling the docker image](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab)
 that includes **GoMLX** + [JupyterLab](https://jupyterlab.readthedocs.io/) + [GoNB](https://github.com/janpfeifer/gonb) (a Go kernel for Jupyter) and 
@@ -109,28 +111,6 @@ It will display a URL starting with `127.0.0.1:8888` in the terminal (it will in
 You can open and interact with the tutorial from there, it is included in the docker under the directory `Projects/gomlx/examples/tutorial`.
 
 More details on the [docker here](docker/jupyterlab/README.md).
-
-### Linux
-
-**GoMLX** is mostly a normal Go library, but it depends on [**gopjrt**](https://github.com/gomlx/gopjrt), which
-includes C wrappers to XLA (itself C++ code base).
-Installing **gopjrt** is relatively straight forward, follow
-[the installation instructions](https://github.com/gomlx/gopjrt?#installing).
-
-Importing models from Keras (like the `inceptionv3` package) also requires `hdf5-tools` installed:
-`sudo apt install hdf5-tools`.
-
-#### Nvidia GPU Support with CUDA
-
-Just install also the "cuda" PJRT plugin for [**gopjrt**](https://github.com/gomlx/gopjrt).
-Follow the [CUDA installation instructions here](https://github.com/gomlx/gopjrt?#installing),
-it borrows the PJRT plugin and Nvidia drivers built for JAX.
-
-### MacOS
-
-See #23: the required C++ library (`libgomlx_xla.so`) is reported to successfully compile in MacOS.
-After that the C++ library moved to [**gopjrt**](https://github.com/gomlx/gopjrt), but it should work.
-Unfortunately, I don't have a mac to build and include these in the releases.
 
 ## 🧭 Tutorial
 
