@@ -364,7 +364,7 @@ func (c *Config) GenerateImagesOfAllFlowerTypes(numDiffusionSteps int) (predicte
 	ctx := c.Context
 	numImages := flowers.NumLabels
 	ctx.RngStateReset()
-	imageSize := getImageSize(ctx)
+	imageSize := c.ImageSize
 	noise := NewExec(c.Backend, func(g *Graph) *Node {
 		state := Const(g, RngState())
 		_, noise := RandomNormal(state, shapes.Make(c.DType, 1, imageSize, imageSize, 3))

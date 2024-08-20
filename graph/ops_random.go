@@ -77,7 +77,7 @@ func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Nod
 		values = MulScalar(values, 1.0/(float64(1<<32)))
 		values = MinScalar(values, float64(math.Nextafter32(1.0, 0.0)))
 		values = StopGradient(values)
-	case dtypes.Float16:
+	case dtypes.Float16, dtypes.BFloat16:
 		shapeF32 := shape.Clone()
 		shapeF32.DType = dtypes.Float32
 		newRngState, values = RandomUniform(rngState, shapeF32)

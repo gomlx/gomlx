@@ -17,6 +17,7 @@
 package shapes
 
 import (
+	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"reflect"
 	"unsafe"
 
@@ -47,6 +48,8 @@ func ConvertTo[T NumberNotComplex](value any) T {
 	case float32:
 		return T(v)
 	case float16.Float16:
+		return T(v.Float32())
+	case bfloat16.BFloat16:
 		return T(v.Float32())
 	case int:
 		return T(v)
@@ -103,6 +106,8 @@ func UnsafeSliceForDType(dtype DType, unsafePtr unsafe.Pointer, len int) any {
 
 	case Float16:
 		return unsafe.Slice((*float16.Float16)(unsafePtr), len)
+	case BFloat16:
+		return unsafe.Slice((*bfloat16.BFloat16)(unsafePtr), len)
 	case Float32:
 		return unsafe.Slice((*float32)(unsafePtr), len)
 	case Float64:
@@ -120,9 +125,10 @@ func UnsafeSliceForDType(dtype DType, unsafePtr unsafe.Pointer, len int) any {
 
 // Pre-generate constant reflect.TypeOf for convenience.
 var (
-	float32Type = reflect.TypeOf(float32(0))
-	float64Type = reflect.TypeOf(float64(0))
-	float16Type = reflect.TypeOf(float16.Float16(0))
+	float32Type  = reflect.TypeOf(float32(0))
+	float64Type  = reflect.TypeOf(float64(0))
+	float16Type  = reflect.TypeOf(float16.Float16(0))
+	bfloat16Type = reflect.TypeOf(bfloat16.BFloat16(0))
 )
 
 // CastAsDType casts a numeric value to the corresponding for the DType.
@@ -150,6 +156,10 @@ func CastAsDType(value any, dtype DType) any {
 		if dtype == Float16 {
 			v32 := valueOf.Convert(float32Type).Interface().(float32)
 			return float16.Fromfloat32(v32)
+		}
+		if dtype == BFloat16 {
+			v32 := valueOf.Convert(float32Type).Interface().(float32)
+			return bfloat16.FromFloat32(v32)
 		}
 		// TODO: if adding support for non-native Go types (e.g: B16), we need
 		//       to write our own conversion here.

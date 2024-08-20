@@ -463,6 +463,12 @@ func (t *Tensor) GoStr() string {
 	return fmt.Sprintf("%s: %s", t.shape, xslices.SliceToGoStr(value))
 }
 
+// FromScalar creates a local tensor with the given scalar.
+// The `DType` is inferred from the value.
+func FromScalar[T dtypes.Supported](value T) (t *Tensor) {
+	return FromScalarAndDimensions(value)
+}
+
 // FromScalarAndDimensions creates a local tensor with the given dimensions, filled with the
 // given scalar value replicated everywhere.
 // The `DType` is inferred from the value.

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/x448/float16"
@@ -17,7 +18,8 @@ func TestGetUpSampledSizes(t *testing.T) {
 	assert.Equal(t, []int{2, 3, 12, 15}, GetUpSampledSizes(s, ChannelsFirst, 3))
 }
 
-func testTensorToFromImageImpl[T dtypes.NumberNotComplex | float16.Float16](t *testing.T, img *image.NRGBA) {
+func testTensorToFromImageImpl[T dtypes.NumberNotComplex | float16.Float16 | bfloat16.BFloat16](
+	t *testing.T, img *image.NRGBA) {
 	dtype := dtypes.FromGenericsType[T]()
 	tensor := ToTensor(dtype).WithAlpha().Single(img)
 	fmt.Printf("\ttensor.shape=%s\n", tensor.Shape())
@@ -56,4 +58,5 @@ func TestTensorToFromImage(t *testing.T) {
 	testTensorToFromImageImpl[uint64](t, img)
 
 	testTensorToFromImageImpl[float16.Float16](t, img)
+	testTensorToFromImageImpl[bfloat16.BFloat16](t, img)
 }

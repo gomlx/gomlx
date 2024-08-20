@@ -3,7 +3,6 @@ package diffusion
 import (
 	"fmt"
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
-	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gopjrt/dtypes"
@@ -57,14 +56,9 @@ func loopDataset(b *testing.B, ds train.Dataset, n int) {
 
 func BenchmarkDatasets(b *testing.B) {
 	config := getTestConfig()
-	ctx := config.Context
-	imageSize := getImageSize(ctx)
-	batchSize := context.GetParamOr(ctx, "batch_size", int(64))
-	dataDir := getDataDir(ctx)
-
-	ds := flowers.NewDataset(dtypes.Float32, imageSize)
-	dsBatched := data.Batch(config.Backend, ds, batchSize, true, true)
-	require.NoError(b, flowers.DownloadAndParse(dataDir))
+	ds := flowers.NewDataset(dtypes.Float32, config.ImageSize)
+	dsBatched := data.Batch(config.Backend, ds, config.BatchSize, true, true)
+	require.NoError(b, flowers.DownloadAndParse(config.DataDir))
 
 	dsParallel := data.Parallel(dsBatched)
 
@@ -78,7 +72,7 @@ func BenchmarkDatasets(b *testing.B) {
 	b.Run("ParallelDisk", func(b *testing.B) { loopDataset(b, dsParallel, b.N) })
 
 	trainDS, _ := config.CreateInMemoryDatasets()
-	trainDS.BatchSize(batchSize, true)
+	trainDS.BatchSize(config.BatchSize, true)
 	trainDS.Infinite(true)
 	loopDataset(b, trainDS, 100) // Warm up.
 	trainDS.Reset()

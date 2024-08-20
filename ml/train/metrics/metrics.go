@@ -26,6 +26,7 @@ import (
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/x448/float16"
@@ -126,6 +127,8 @@ func (m *baseMetric) PrettyPrint(value *tensors.Tensor) string {
 		if dtype.IsFloat() && isScalar {
 			if dtype == dtypes.Float16 {
 				v = v.(float16.Float16).Float32()
+			} else if dtype == dtypes.BFloat16 {
+				v = v.(bfloat16.BFloat16).Float32()
 			}
 			return fmt.Sprintf("%.3f", v)
 		}
@@ -174,7 +177,7 @@ func BatchSize(data *Node) *Node {
 
 // upPrecision promotes the precision of `x` if it is float16, to float32.
 func upPrecision(x *Node) *Node {
-	if x.DType() == dtypes.Float16 {
+	if x.DType() == dtypes.Float16 || x.DType() == dtypes.BFloat16 {
 		x = ConvertDType(x, dtypes.Float32)
 	}
 	return x
@@ -191,7 +194,7 @@ func (m *meanMetric) UpdateGraph(ctx *context.Context, labels, predictions []*No
 		Panicf("metric %q should return a scalar, instead got shape %s", m.Name(), result.Shape())
 	}
 
-	// Up the precision for float16, often not enough.
+	// Up the precision for float16/bfloat16, often not enough.
 	result = upPrecision(result)
 
 	// Create scope in context for metrics state, and mark it as unchecked -- model variables

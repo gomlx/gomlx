@@ -6,19 +6,27 @@ import (
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/x448/float16"
+
 	"testing"
 )
 
 func testRandomUniform[T interface {
-	float32 | float64 | float16.Float16 | complex64 | complex128
+	float32 | float64 | float16.Float16 | bfloat16.BFloat16 | complex64 | complex128
 }](t *testing.T) {
 	dtype := dtypes.FromGenericsType[T]()
 	graphtest.RunTestGraphFn(t, fmt.Sprintf("TestRandomUniform(%s)", dtype),
 		func(g *Graph) (inputs []*Node, outputs []*Node) {
 			state := Const(g, RngStateFromSeed(42))
 			shape := shapes.Make(dtype, 100, 5000) // 500k / 1 million numbers (for complex numbers).
-			_, r := RandomUniform(state, shape)
+			var r, sample *Node
+			state, r = RandomUniform(state, shape)
+			state, sample = RandomUniform(state, shapes.Make(dtype, 10))
+			inputs = append(inputs, sample)
+			sample = ConvertDType(sample, dtypes.Float32)
+			inputs = append(inputs, sample)
+			inputs = append(inputs, Scalar(g, r.DType(), 0.1))
 			shapeSize := float64(shape.Size())
 			if dtype.IsComplex() {
 				// Split and concatenate real and imaginary part: they are sampled independently.
@@ -48,6 +56,7 @@ func TestRandomUniform(t *testing.T) {
 	testRandomUniform[float32](t)
 	testRandomUniform[float64](t)
 	testRandomUniform[float16.Float16](t)
+	testRandomUniform[bfloat16.BFloat16](t)
 	testRandomUniform[complex64](t)
 	testRandomUniform[complex128](t)
 }

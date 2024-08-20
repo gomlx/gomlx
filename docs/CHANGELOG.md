@@ -1,5 +1,10 @@
 # GoMLX changelog
 
+## Next
+
+* Added support for `dtypes.BFloat16`.
+* Added `tensors.FromScalar`
+
 ## 0.11.0 BREAKING CHANGE: Multi-Backend support; Added XLA/PJRT support (with gopjrt); meaningful speed ups; No more C code (all goes through gopjrt) 
 
 * MAJOR REFACTORING. Many breaking compatibility changes -- it would be a major release number change, if it were > v1 already.
