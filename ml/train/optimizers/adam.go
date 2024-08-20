@@ -38,7 +38,8 @@ const (
 
 	// ParamAdamDType can be used to specify the dtype to be used by Adam's temporary variables and computations.
 	// The default or if set to empty is to use the same dtype as the value of the loss provided.
-	// This was created for the case of training with `float16`, which is not enough resolution for Adam calculations.
+	// This was created for the case of training with `float16` or `bfloat16`, which is not enough resolution
+	// for Adam calculations.
 	// Valid values: "" (empty), "float32", "float64".
 	ParamAdamDType = "adam_dtype"
 

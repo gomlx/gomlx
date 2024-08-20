@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/x448/float16"
@@ -327,6 +328,26 @@ func testSaveLoadFloat16(t *testing.T) {
 	})
 }
 
+func testSaveLoadBFloat16(t *testing.T) {
+	values := make([]bfloat16.BFloat16, 6)
+	for ii, v := range []float32{0, 1, 2, 3, 4, 11} {
+		values[ii] = bfloat16.FromFloat32(v)
+	}
+	var tensor *Tensor
+	require.NotPanics(t, func() { tensor = FromFlatDataAndDimensions(values, 3, 2) })
+	dtype := tensor.DType()
+
+	// Save and re-load the tensor:
+	loadedTensor := testSaveLoadStumpImpl(t, tensor)
+
+	// Check loadedTensor contents.
+	require.NoErrorf(t, loadedTensor.Shape().Check(dtype, 3, 2), "Loaded tensor for dtype %s got shape %s", dtype, loadedTensor.Shape())
+	loadedTensor.ConstFlatData(func(flatAny any) {
+		flat := flatAny.([]bfloat16.BFloat16)
+		require.Equal(t, values, flat)
+	})
+}
+
 func TestSaveLoad(t *testing.T) {
 	testSaveLoadGenericsImpl[int8](t)
 	testSaveLoadGenericsImpl[int16](t)
@@ -346,6 +367,7 @@ func TestSaveLoad(t *testing.T) {
 
 	testSaveLoadBool(t)
 	testSaveLoadFloat16(t)
+	testSaveLoadBFloat16(t)
 }
 
 func TestClone(t *testing.T) {

@@ -8,6 +8,7 @@ import (
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/x448/float16"
 	"image"
 	"k8s.io/klog/v2"
@@ -178,6 +179,8 @@ func toTensorImpl(tt *ToTensorConfig, images []image.Image, batch bool) (t *tens
 		t = toTensorGenericsImpl[uint64](tt, images, batch)
 	case dtypes.Float16:
 		t = toTensorGenericsImpl[float16.Float16](tt, images, batch)
+	case dtypes.BFloat16:
+		t = toTensorGenericsImpl[bfloat16.BFloat16](tt, images, batch)
 	default:
 		log.Printf("image.ToTensor does not support dtype %s", tt.dtype)
 		t = nil
@@ -185,7 +188,8 @@ func toTensorImpl(tt *ToTensorConfig, images []image.Image, batch bool) (t *tens
 	return
 }
 
-func toTensorGenericsImpl[T dtypes.NumberNotComplex | float16.Float16](tt *ToTensorConfig, images []image.Image, batch bool) (t *tensors.Tensor) {
+func toTensorGenericsImpl[T dtypes.NumberNotComplex | float16.Float16 | bfloat16.BFloat16](
+	tt *ToTensorConfig, images []image.Image, batch bool) (t *tensors.Tensor) {
 	if len(images) > 1 && !batch {
 		Panicf("image.ToTensor in none-batch mode, but more than one image (%d) requested for conversion", len(images))
 	}
@@ -203,6 +207,11 @@ func toTensorGenericsImpl[T dtypes.NumberNotComplex | float16.Float16](tt *ToTen
 		convertToDType = func(val uint32) T {
 			// color.RGBA() returns 16 bits values packaged in uint32.
 			return T(float16.Fromfloat32(float32(val) * float32(tt.maxValue) / float32(0xFFFF)))
+		}
+	} else if dtype == dtypes.BFloat16 {
+		convertToDType = func(val uint32) T {
+			// color.RGBA() returns 16 bits values packaged in uint32.
+			return T(bfloat16.FromFloat32(float32(val) * float32(tt.maxValue) / float32(0xFFFF)))
 		}
 	} else {
 		convertToDType = func(val uint32) T {
@@ -349,6 +358,8 @@ func toImageImpl(ti *ToImageConfig, imagesTensor *tensors.Tensor) (images []imag
 		images = toImageGenericsImpl[uint64](imagesTensor, numImages, height, width, channels, maxValue)
 	case dtypes.Float16:
 		images = toImageGenericsImpl[float16.Float16](imagesTensor, numImages, height, width, channels, maxValue)
+	case dtypes.BFloat16:
+		images = toImageGenericsImpl[bfloat16.BFloat16](imagesTensor, numImages, height, width, channels, maxValue)
 	default:
 		Panicf("images.ToImage cannot convert tensor of unsupported dtype %s to Image", dtype)
 		return
@@ -356,10 +367,12 @@ func toImageImpl(ti *ToImageConfig, imagesTensor *tensors.Tensor) (images []imag
 	return
 }
 
-func toImageGenericsImpl[T dtypes.NumberNotComplex | float16.Float16](imagesTensor *tensors.Tensor, numImages, height, width, channels int, maxValue float64) (images []image.Image) {
+func toImageGenericsImpl[T dtypes.NumberNotComplex | float16.Float16 | bfloat16.BFloat16](
+	imagesTensor *tensors.Tensor, numImages, height, width, channels int, maxValue float64) (images []image.Image) {
 	images = make([]image.Image, 0, numImages)
 	tensorPos := 0
 	isFloat16 := imagesTensor.DType() == dtypes.Float16
+	isBFloat16 := imagesTensor.DType() == dtypes.BFloat16
 	imagesTensor.ConstFlatData(func(flatAny any) {
 		tensorData := flatAny.([]T)
 		for imageIdx := 0; imageIdx < numImages; imageIdx++ {
@@ -370,6 +383,8 @@ func toImageGenericsImpl[T dtypes.NumberNotComplex | float16.Float16](imagesTens
 						var v float64
 						if isFloat16 {
 							v = float64(float16.Float16(tensorData[tensorPos]).Float32())
+						} else if isBFloat16 {
+							v = float64(bfloat16.BFloat16(tensorData[tensorPos]).Float32())
 						} else {
 							v = float64(tensorData[tensorPos])
 						}
