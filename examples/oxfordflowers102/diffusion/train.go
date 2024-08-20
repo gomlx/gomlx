@@ -78,16 +78,6 @@ func (c *Config) AttachCheckpoint(checkpointPath string) (checkpoint *checkpoint
 	return
 }
 
-// getDataDir from context.
-func getDataDir(ctx *context.Context) string {
-	return context.GetParamOr(ctx, "data_dir", "./")
-}
-
-// getImageSize from context.
-func getImageSize(ctx *context.Context) int {
-	return context.GetParamOr(ctx, "image_size", 64)
-}
-
 // TrainModel with hyperparameters given in Context.
 // paramsSet enumerate the context parameters that were set and should override values loaded from a checkpoint.
 func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet []string, evaluateOnEnd bool, verbosity int) {
