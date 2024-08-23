@@ -5,7 +5,7 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/gopjrt/protos"
+	"github.com/gomlx/gopjrt/protos/xla_data"
 	"github.com/gomlx/gopjrt/xlabuilder"
 	"github.com/pkg/errors"
 	"reflect"
@@ -93,7 +93,10 @@ func (b *Builder) Constant(flat any, dims ...int) backends.Op {
 	if dtype == dtypes.InvalidDType {
 		exceptions.Panicf("Constant expects a slice of valid DTypes, got %T instead", flat)
 	}
-	literal := xlabuilder.NewArrayLiteralFromAny(flat, dims...)
+	literal, err := xlabuilder.NewArrayLiteralFromAny(flat, dims...)
+	if err != nil {
+		panic(errors.WithMessagef(err, "backend %q builder %q: Constant(%T, dims=%v)", b.backend.Name(), b.name, flat, dims))
+	}
 	op, err := xlabuilder.Constant(b.builder, literal)
 	if err != nil {
 		panic(errors.WithMessagef(err, "backend %q builder %q: Constant(%T, dims=%v)", b.backend.Name(), b.name, flat, dims))
@@ -230,16 +233,16 @@ func convertPadAxis(pad backends.PadAxis) (xlaPad xlabuilder.PadAxis) {
 	return
 }
 
-func convertFFTType(fftType backends.FFTType) protos.FftType {
+func convertFFTType(fftType backends.FFTType) xla_data.FftType {
 	switch fftType {
 	case backends.FFTForward:
-		return protos.FftType_FFT
+		return xla_data.FftType_FFT
 	case backends.FFTInverse:
-		return protos.FftType_IFFT
+		return xla_data.FftType_IFFT
 	case backends.FFTForwardReal:
-		return protos.FftType_RFFT
+		return xla_data.FftType_RFFT
 	case backends.FFTInverseReal:
-		return protos.FftType_IRFFT
+		return xla_data.FftType_IRFFT
 	default:
 		exceptions.Panicf("fft type %s is not supported", fftType)
 		panic(nil) // To quiet IDE warning.
