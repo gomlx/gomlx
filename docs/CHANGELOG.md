@@ -4,6 +4,7 @@
 
 * Added support for `dtypes.BFloat16`.
 * Added `tensors.FromScalar`
+* Updated to gopjrt v0.3.0
 
 ## 0.11.0 BREAKING CHANGE: Multi-Backend support; Added XLA/PJRT support (with gopjrt); meaningful speed ups; No more C code (all goes through gopjrt) 
 

@@ -12,7 +12,7 @@ require (
 	github.com/go-gota/gota v0.12.0
 	github.com/gomlx/bsplines v0.2.0
 	github.com/gomlx/exceptions v0.0.3
-	github.com/gomlx/gopjrt v0.2.4
+	github.com/gomlx/gopjrt v0.3.0
 	github.com/google/uuid v1.6.0
 	github.com/janpfeifer/gonb v0.10.2
 	github.com/janpfeifer/must v0.0.2
@@ -21,7 +21,7 @@ require (
 	github.com/schollz/progressbar/v3 v3.14.6
 	github.com/stretchr/testify v1.9.0
 	github.com/x448/float16 v0.8.4
-	golang.org/x/exp v0.0.0-20240808152545-0cdaa3abc0fa
+	golang.org/x/exp v0.0.0-20240823005443-9b4947da3948
 	gonum.org/v1/plot v0.14.0
 	k8s.io/klog/v2 v2.130.1
 )
