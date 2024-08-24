@@ -671,3 +671,18 @@ func growImpl(x *Node, axis int, dir ShiftDirection, n int, fillValue float64) *
 	}
 	return x
 }
+
+// CumSum returns the cumulative sum along the given axis.
+//
+// Example:
+//
+//	CumSum([[1, 2, 3], [4, 5, 6]], -1) = [[1, 3, 6], [4, 9, 15]]
+//	CumSum([[1, 2, 3], [4, 5, 6]], 0) = [[1, 2, 3], [5, 7, 9]]
+func CumSum(x *Node, axis int) *Node {
+	adjustedAxis := AdjustAxisToOperandRank(x, axis)
+	windowSizes := xslices.SliceWithValue(x.Rank(), 1)
+	windowSizes[adjustedAxis] = x.Shape().Dimensions[adjustedAxis]
+	paddings := make([][2]int, x.Rank())
+	paddings[adjustedAxis][0] = windowSizes[adjustedAxis] - 1 // On the cumsum axis, pad to length-1.
+	return SumPool(x).FullShape().WindowPerAxis(windowSizes...).PaddingPerDim(paddings).Strides(1).Done()
+}

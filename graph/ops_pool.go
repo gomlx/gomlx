@@ -40,6 +40,7 @@ type PoolBuilder struct {
 	reductionType        ReduceOpType
 	numSpatialDims       int
 	channelsAxisConfig   images.ChannelsAxisConfig
+	isFullShape          bool
 	spatialAxes          []int // Indices of spatial axes.
 	channelsAxis         int
 	windowSizes, strides []int
@@ -162,7 +163,10 @@ func MeanPool(x *Node) *PoolBuilder {
 	return pool
 }
 
-// ConcatPool pool on the spatial dimensions by increasing the channels dimensions, across the windows.
+// ConcatPool pool on the spatial dimensions by increasing the channels dimensions, across the window.
+//
+// Example: x.shape=[batch_size, height, width, 3] and Window(3): the output depth will be 9x3=27,
+// with the concatenation of the channels of all the pixels around.
 //
 // The implementation actually uses a convolution with a fixed kernel, but it can be seen as a concatenating
 // pool operation.
@@ -179,11 +183,6 @@ func makePoolBuilder(x *Node, reductionType ReduceOpType) *PoolBuilder {
 		x:             x,
 		reductionType: reductionType,
 	}
-	pool.numSpatialDims = x.Rank() - 2
-	if pool.numSpatialDims <= 0 {
-		Panicf("Input x must have rank >= 3, shaped by default as [batch, <spatial_dimensions...>, channels] (alternatively channels come first), "+
-			"but x rank is %d", x.Rank())
-	}
 	return pool.ChannelsAxis(images.ChannelsLast).NoPadding()
 }
 
@@ -192,11 +191,28 @@ func makePoolBuilder(x *Node, reductionType ReduceOpType) *PoolBuilder {
 //
 // Note: `images` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
 //
+// If you don't want to exclude the batch size and channels from the pooling, use FullShape instead.
+//
 // It returns the modified Config object, so calls can be cascaded.
 func (pool *PoolBuilder) ChannelsAxis(channelsAxisConfig images.ChannelsAxisConfig) *PoolBuilder {
 	pool.channelsAxisConfig = channelsAxisConfig
 	pool.channelsAxis = images.GetChannelsAxis(pool.x, channelsAxisConfig)
 	pool.spatialAxes = images.GetSpatialAxes(pool.x, channelsAxisConfig)
+	pool.numSpatialDims = pool.x.Rank() - 2
+	pool.isFullShape = false
+	return pool
+}
+
+// FullShape configures the pooling operation to consider all its axes as part of the pooling, with no special
+// considerations for the batch or channel axes.
+//
+// See ChannelsAxis to handle batch and channels specially.
+//
+// The default is configured with ChannelsAxis(images.ChannelsLast).
+func (pool *PoolBuilder) FullShape() *PoolBuilder {
+	pool.numSpatialDims = pool.x.Rank()
+	pool.isFullShape = true
+	pool.spatialAxes = xslices.Iota(0, pool.x.Rank())
 	return pool
 }
 
@@ -297,12 +313,21 @@ func (pool *PoolBuilder) PaddingPerDim(paddings [][2]int) *PoolBuilder {
 // Node.
 func (pool *PoolBuilder) Done() *Node {
 	rank := pool.x.Rank()
+	if pool.numSpatialDims <= 0 {
+		Panicf("Input x must have rank >= 3, shaped by default as [batch, <spatial_dimensions...>, channels] "+
+			"but x rank is %d -- alternatively configure the spatial dimensions with ChannelsAxis or FullShape", rank)
+	}
 
 	// Closure to create slice with value for every axis, using a default value
 	// and the corresponding spatial values.
-	makeSlice := func(defaultValue int, valuesForSpatialDims []int) []int {
+	makeSlice := func(name string, defaultValue int, valuesForSpatialDims []int) []int {
 		s := xslices.SliceWithValue(rank, defaultValue)
 		if len(valuesForSpatialDims) > 0 {
+			if len(valuesForSpatialDims) != pool.numSpatialDims {
+				Panicf("%s requires %d values (one per spatial dimension), but %d were given -- configure spatial "+
+					"dimensions with FullShape or ChannelsAxis, and configure them before calling Window, Padding or Strides",
+					name, pool.numSpatialDims, len(valuesForSpatialDims))
+			}
 			for ii, axis := range pool.spatialAxes {
 				s[axis] = valuesForSpatialDims[ii]
 			}
@@ -314,7 +339,7 @@ func (pool *PoolBuilder) Done() *Node {
 	if len(pool.windowSizes) == 0 {
 		Panicf("window sizes required but not configured -- use .Window() or .WindowPerAxis()")
 	}
-	windowDimensions := makeSlice(1, pool.windowSizes)
+	windowDimensions := makeSlice("Window", 1, pool.windowSizes)
 
 	if pool.isConcat {
 		return pool.doConcat()
@@ -323,14 +348,14 @@ func (pool *PoolBuilder) Done() *Node {
 	// strides default to pooling window sizes.
 	var strides []int
 	if len(pool.strides) > 0 {
-		strides = makeSlice(1, pool.strides)
+		strides = makeSlice("Stride", 1, pool.strides)
 	} else {
 		if pool.padSame {
 			// if PadSame(), then the strides default to 1, to preserve the image size.
-			strides = makeSlice(1, nil)
+			strides = makeSlice("Stride", 1, nil)
 		} else {
 			// strides default to the window size.
-			strides = makeSlice(1, pool.windowSizes)
+			strides = makeSlice("Stride", 1, pool.windowSizes)
 		}
 	}
 
@@ -348,6 +373,11 @@ func (pool *PoolBuilder) Done() *Node {
 	var paddings [][2]int
 	if len(spatialPaddings) > 0 {
 		paddings = make([][2]int, rank)
+		if len(spatialPaddings) != pool.numSpatialDims {
+			Panicf("Paddings require %d values (one per spatial dimension), but %d were given -- configure spatial "+
+				"dimensions with FullShape or ChannelsAxis, and configure them before calling Window, Padding or Strides",
+				pool.numSpatialDims, len(spatialPaddings))
+		}
 		for ii, axis := range pool.spatialAxes {
 			paddings[axis] = spatialPaddings[ii]
 		}
