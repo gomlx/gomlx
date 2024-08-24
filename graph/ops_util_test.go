@@ -394,3 +394,26 @@ func TestMaskedLogSoftmax(t *testing.T) {
 				{-1.8619947, -0.8619948, math.Inf(-1), -0.8619948}},
 		}, xslices.Epsilon)
 }
+
+func TestCumSum(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "TestSoftmax()",
+		func(g *Graph) (inputs, outputs []*Node) {
+			inputs = []*Node{
+				OnePlus(IotaFull(g, shapes.Make(dtypes.Int32, 2, 3))),
+			}
+			outputs = []*Node{
+				CumSum(inputs[0], -1),
+				CumSum(inputs[0], 0),
+			}
+			return
+		}, []any{
+			[][]int32{
+				{1, 3, 6},
+				{4, 9, 15},
+			},
+			[][]int32{
+				{1, 2, 3},
+				{5, 7, 9},
+			},
+		}, xslices.Epsilon)
+}
