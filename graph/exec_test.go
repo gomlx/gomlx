@@ -110,6 +110,9 @@ func TestExec(t *testing.T) {
 		require.Equalf(t, wantAdd, add, "%q(%v:%v, %v:%v) got (%v, %v), but wanted (%v, %v)", addAndSub.Name(), reflect.TypeOf(a), a, reflect.TypeOf(b), b, add, sub, wantAdd, wantSub)
 		require.Equalf(t, wantSub, sub, "%q(%v:%v, %v:%v) got (%v, %v), but wanted (%v, %v)", addAndSub.Name(), reflect.TypeOf(a), a, reflect.TypeOf(b), b, add, sub, wantAdd, wantSub)
 	}
+
+	iotaMatrix := ExecOnce(backend, func(g *Graph) *Node { return IotaFull(g, shapes.Make(dtypes.Int8, 2, 2)) })
+	require.Equal(t, [][]int8{{0, 1}, {2, 3}}, iotaMatrix.Value())
 }
 
 func TestDonate(t *testing.T) {

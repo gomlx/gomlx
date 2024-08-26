@@ -384,11 +384,20 @@ type donateBuffer struct {
 	shape  shapes.Shape
 }
 
-// DonateTensorBuffer can be used by Graph.Run or Graph.RunWithMap and with mark the Tensor to donate it's on-device
-// buffer to the execution. It requires the backend and the deviceNum (defaults to 0) of the device buffer to donate.
+// DonateTensorBuffer can be used by Graph.Run, Graph.RunWithMap or as input to Exec.Call, and it marks the Tensor to
+// donate its on-device buffer to the execution.
 //
-// What it means is that if the tensor is to be used again for another execution, it will need to transfer its
-// value from local again.
+// This allows the accelerator (GPU) to reuse the space of the donated buffer, which saves space if the original
+// value is no longer used.
+// Useful in particular is updating some state in a loop.
+//
+// Example:
+//
+//	myState := myExec.Call(DonateTensorBuffer(myState, backend))[0]
+//
+// It requires the backend and the deviceNum (defaults to 0) of the device buffer to donate.
+//
+// Notice that after this, t's value in the device becomes invalid.
 func DonateTensorBuffer(t *tensors.Tensor, backend backends.Backend, deviceNum ...backends.DeviceNum) any {
 	d := &donateBuffer{shape: t.Shape()}
 	d.buffer = t.DonateBuffer(backend, deviceNum...) // DonateBuffer may destroy the tensor, if there is no local storage.
@@ -402,6 +411,11 @@ func DonateTensorBuffer(t *tensors.Tensor, backend backends.Backend, deviceNum .
 // 1. A tensors.Tensor.
 // 2. Any multi-dimensional slice (e.g.: [][]float32 for a 2D float32 value) that is dynamically converted to a temporary tensor.
 // 3. The output of DonateTensorBuffer, which then donates the device buffer being used by a tensor -- if there are any.
+//
+// This is a very "bare bones" way to running the Graph. Typically, one would use the Exec object instead (which
+// dynamically generates a new Graph for inputs of different shapes when needed).
+//
+// To donate the inputs buffers (if they are no longer used, e.g. when updating a state), consider using DonateTensorBuffer.
 func (g *Graph) Run(inputs ...any) (outputs []*tensors.Tensor) {
 	g.AssertCompiled()
 	deviceNum := backends.DeviceNum(0) // Hard-coded for now.
@@ -422,6 +436,11 @@ func (g *Graph) Run(inputs ...any) (outputs []*tensors.Tensor) {
 //
 // The params can use Go values, Local tensors or Device tensors. Go values and Local tensors will be transferred to
 // Device tensors (located in the Backend's accelerator memory) before the graph is executed.
+//
+// This is a very "bare bones" way to running the Graph. Typically, one would use the Exec object instead (which
+// dynamically generates a new Graph for inputs of different shapes when needed).
+//
+// To donate the inputs buffers (if they are no longer used, e.g. when updating a state), consider using DonateTensorBuffer.
 func (g *Graph) RunWithMap(inputs ParamsMap) (outputs []*tensors.Tensor) {
 	g.AssertCompiled()
 	deviceNum := backends.DeviceNum(0) // Hard-coded for now.
