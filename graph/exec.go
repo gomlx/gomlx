@@ -70,6 +70,19 @@ type ExecGraphFn interface {
 		func(*Node, *Node, *Node, *Node, *Node, *Node) []*Node
 }
 
+// ExecGraphFnOneOutput are ExecGraphFn functions that return only one result.
+// See ExecOnce.
+type ExecGraphFnOneOutput interface {
+	func(*Graph) *Node |
+		func([]*Node) *Node |
+		func(*Node) *Node |
+		func(*Node, *Node) *Node |
+		func(*Node, *Node, *Node) *Node |
+		func(*Node, *Node, *Node, *Node) *Node |
+		func(*Node, *Node, *Node, *Node, *Node) *Node |
+		func(*Node, *Node, *Node, *Node, *Node, *Node) *Node
+}
+
 // SideParamsFn is the functions that sets side parameters during execution
 // for Graphs that defines those. Typically, this is used to set the variables of a model.
 type SideParamsFn func(graph *Graph, inputBuffers []backends.Buffer, donate []bool)
@@ -85,7 +98,7 @@ type LoggerFn func(graph *Graph, messages []string, values []*tensors.Tensor, no
 // It simplifies the process of executing a graph building
 // function with real values. For example, assume you wrote:
 //
-//	def L2Norm(x *Node) *Node {
+//	func L2Norm(x *Node) *Node {
 //		return Sqrt(ReduceAllSum(Mul(x, x)))
 //	}
 //
@@ -96,7 +109,7 @@ type LoggerFn func(graph *Graph, messages []string, values []*tensors.Tensor, no
 //
 // With Exec one can do:
 //
-//	var l2NormExec = NewExec(L2Norm)
+//	var l2NormExec = NewExec(backends.New(), L2Norm)
 //	x0 := []float32{2}
 //	fmt.Printf("L2Norm(%v) = %v\n", x0, l2NormExec.Call(x0)[0].Value())
 //	x1 := []float64{4, 3}
@@ -114,10 +127,14 @@ type LoggerFn func(graph *Graph, messages []string, values []*tensors.Tensor, no
 // one needs to take a *Graph as the first parameter of the graph function (graphFn).
 // Example:
 //
-//	iotaMatrixExec := NewExec(func (g *Graph) *Node {
-//		return IotaFull(g, types.Make(types.Float32, 3, 3))
+//	iotaMatrixExec := NewExec(backend, func (g *Graph) *Node {
+//		return IotaFull(g, shapes.Make(dtype.Float32, 3, 3))
 //	})
 //	fmt.Printf("IotaFull(3x3 matrix, float32)=%v\n", iotaMatrixExec.Call()[0].Value())
+//
+// It also provides a short-form version, that will execute and free the compiled program:
+//
+//	iotaMatrix := ExecOnce(backend, func (g *Graph) *Node { return IotaFull(g, shapes.Make(dtype.Float32, 3, 3)) })
 //
 // The need to build different graphs for different shapes can be expensive
 // when the shapes of the inputs varies a lot. The usual solution is to use shapes
@@ -248,6 +265,26 @@ func NewExec[F ExecGraphFn](backend backends.Backend, graphFn F) *Exec {
 	return NewExecAny(backend, graphFn)
 }
 
+// ExecOnce builds the graph and executes it with the given arguments, and returns the one output.
+//
+// It's short for a call to NewExec, Exec.Call and Exec.Finalize for functions that return only one output.
+//
+// See ExecOnceN if you have multiple outputs.
+func ExecOnce[F ExecGraphFnOneOutput](backend backends.Backend, graphFn F, args ...any) *tensors.Tensor {
+	return ExecOnceN(backend, graphFn, args...)[0]
+}
+
+// ExecOnceN builds the graph and executes it with the given arguments, and returns various output.
+//
+// It's short for a call to NewExec, Exec.Call and Exec.Finalize.
+//
+// See ExecOnce for a more convenient version if you have only one output.
+func ExecOnceN[F ExecGraphFnOneOutput](backend backends.Backend, graphFn F, args ...any) []*tensors.Tensor {
+	e := NewExec(backend, graphFn)
+	defer e.Finalize()
+	return e.Call(args...)
+}
+
 // InDevice sets the device num to be used by graphs constructed by Exec.
 // This should be called before any invocations of Call().
 // It returns a reference to itself so calls can be cascaded.
@@ -287,6 +324,9 @@ func (e *Exec) SetMaxCache(maxCacheSize int) *Exec {
 
 // SetSideParamsHook configures a function to be called just before executing a graph, so it can set extra parameters.
 //
+// Mostly, this is for internal use and end-users will not likely need this. The context.Exec object uses this to pass
+// the variable values as side inputs to the graph.
+//
 // Exec takes care of creating parameters (with graph.Parameter) for every value passed to Call before
 // calling the graph building function (the graph building function is executed only the first time, after the
 // graph is compiled it is re-used for future executions).
@@ -297,13 +337,12 @@ func (e *Exec) SetMaxCache(maxCacheSize int) *Exec {
 // The values to feed these "side parameters" are not passed to Exec.Call, but instead set with a SideParamsFn, which
 // is configured here.
 //
-// Mostly, this is for internal use end users will not likely need this. The context.Exec object uses this to pass
-// the variable values as side inputs to the graph.
-//
 // SideParamsFn is called after the graph is already built, just before the execution.
 // It is passed with a slice of the backend.Buffer to be fed to the graph execution.
 // The side parameters in this slice will be left nil, and it's expected that SideParamsFn will set
-// them to the appropriate input. It also includes the boolean map of the inputs to donate, which SideParamsFn
+// them to the appropriate input.
+//
+// It also includes the boolean map of the inputs to donate, which SideParamsFn
 // can set accordingly (for the side parameters).
 func (e *Exec) SetSideParamsHook(fn SideParamsFn) *Exec {
 	e.setSideParams = fn
