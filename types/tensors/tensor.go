@@ -24,15 +24,24 @@
 //
 // There are various ways to construct a Tensor from local data:
 //
-//   - `FromShape(shape shapes.Shape)`: creates a tensor with the given shape, and uninitialized values.
-//   - `FromScalarAndDimensions[T shapes.Supported](value T, dimensions ...int)`: creates a Tensor with the
+//   - FromShape(shape shapes.Shape): creates a tensor with the given shape, and zero values.
+//
+//   - FromScalarAndDimensions[T shapes.Supported](value T, dimensions ...int): creates a Tensor with the
 //     given dimensions, filled with the scalar value given. `T` must be one of the supported types.
-//   - `FromFlatDataAndDimensions[T shapes.Supported](data []T, dimensions ...int)`: creates a Tensor with the
+//
+//   - FromFlatDataAndDimensions[T shapes.Supported](data []T, dimensions ...int): creates a Tensor with the
 //     given dimensions, and set the flattened values with the given data. `T` must be one of the supported types.
-//   - `FromValue[S MultiDimensionSlice](value S)`: Generic conversion, works with the scalar supported `DType`s
+//     Example:
+//
+//     t := FromFlatDataAndDimensions([]int8{1, 2, 3, 4}, 2, 2}) // Tensor with [[1,2], [3,4]]
+//
+//   - FromValue[S MultiDimensionSlice](value S): Generic conversion, works with the scalar supported `DType`s
 //     as well as with any arbitrary multidimensional slice of them. Slices of rank > 1 must be regular, that is
-//     all the sub-slices must have the same shape. E.g.: `FromValue([][]float{{1,2}, {3, 5}, {7, 11}})`
-//   - `FromAnyValue(value any)`: same as `FromValue` but non-generic, it takes an anonymous type `any`. The exception
+//     all the sub-slices must have the same shape. Example:
+//
+//     t := FromValue([][]float{{1,2}, {3, 5}, {7, 11}})`
+//
+//   - FromAnyValue(value any): same as FromValue but non-generic, it takes an anonymous type `any`. The exception
 //     is if `value` is already a tensor, then it is a no-op and it returns the tensor itself.
 //
 // Behind the scenes Tensor is a container that keeps in sync different materialization's of value:
