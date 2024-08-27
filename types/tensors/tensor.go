@@ -162,7 +162,11 @@ func (t *Tensor) FinalizeAll() {
 	// Get the list of local and device tensors to finalize.
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	t.lockedFinalizeAll()
+}
 
+// lockedFinalizeAll is FinalizeAll but must be called with the tensor already locked.
+func (t *Tensor) lockedFinalizeAll() {
 	if t == nil {
 		t.mu.Unlock()
 		return

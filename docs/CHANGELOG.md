@@ -8,6 +8,9 @@
 * Package `graph`:
   * Added `ExecOnce` and `ExecOnceN` 
   * Added `CumSum`
+* Package `tensors`:
+  * Fixed race condition `Tensor.DonateBuffer`.
+  * Fixed unnecessary copying of tensor data in `Tensor.MaterializeOnDevices`
 * Small fixes to documentation.
 
 ## 0.11.0 BREAKING CHANGE: Multi-Backend support; Added XLA/PJRT support (with gopjrt); meaningful speed ups; No more C code (all goes through gopjrt) 

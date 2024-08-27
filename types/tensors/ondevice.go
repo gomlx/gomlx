@@ -72,7 +72,7 @@ func (t *Tensor) DonateBuffer(backend backends.Backend, deviceNum ...backends.De
 	buf := t.onDevices[deviceNum[0]].buffer
 	delete(t.onDevices, deviceNum[0])
 	if t.local == nil && len(t.onDevices) == 0 {
-		t.FinalizeAll()
+		t.lockedFinalizeAll()
 	}
 	return buf
 }
@@ -129,13 +129,6 @@ func (t *Tensor) lockedMaterializeOnDevices(backend backends.Backend, deviceNums
 		exceptions.Panicf("cannote MaterializeOnDevice with a nil backend")
 	}
 
-	if t.local == nil {
-		// Materialize locally from any other device.
-		t.lockedMaterializeLocal()
-		if t.local == nil {
-			exceptions.Panicf("Tensor(shape=%s).MaterilizeOnDevices: cannot materialize a local copy first to then transfer to devices!?", t.shape)
-		}
-	}
 	if len(deviceNums) == 0 {
 		deviceNums = defaultDeviceNums
 	}
@@ -145,6 +138,16 @@ func (t *Tensor) lockedMaterializeOnDevices(backend backends.Backend, deviceNums
 			// Nothing to do.
 			continue
 		}
+
+		// For now we only materialize from local:
+		if t.local == nil {
+			// Materialize locally from any other device.
+			t.lockedMaterializeLocal()
+			if t.local == nil {
+				exceptions.Panicf("Tensor(shape=%s).MaterilizeOnDevices: cannot materialize a local copy first to then transfer to devices!?", t.shape)
+			}
+		}
+
 		buffer := t.backend.BufferFromFlatData(deviceNum, t.local.flat, t.shape)
 		d = &onDevice{
 			t:         t,

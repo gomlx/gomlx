@@ -481,7 +481,16 @@ func (g *Graph) RunWithBuffers(inputs []backends.Buffer, donate []bool) (outputs
 	if len(donate) != numParams {
 		exceptions.Panicf("graph %q takes %d donate values for the input parameters, but %d were given to RunWithBuffers()", g.name, numParams, len(donate))
 	}
-	results := g.executable.Execute(inputs, donate)
+	var start time.Time
+	var results []backends.Buffer
+	if klog.V(1).Enabled() {
+		start = time.Now()
+		results = g.executable.Execute(inputs, donate)
+		elapsed := time.Since(start)
+		klog.V(1).Infof("Graph.RunWithBuffers: %s elapsed", elapsed)
+	} else {
+		results = g.executable.Execute(inputs, donate)
+	}
 	for ii, wasDonated := range donate {
 		if wasDonated {
 			g.backend.BufferFinalize(inputs[ii])
