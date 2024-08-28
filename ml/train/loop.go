@@ -193,6 +193,8 @@ func (loop *Loop) end(metrics []*tensors.Tensor) (err error) {
 // RunSteps runs those many steps. StartStep and EndStep are adjusted to the current
 // LoopStep, so it can be called multiple times, and it will simply pick up
 // where it left of last time.
+//
+// Note: inputs and labels yielded by the dataset are immediately finalized (freed) after use in each step.
 func (loop *Loop) RunSteps(ds Dataset, steps int) (metrics []*tensors.Tensor, err error) {
 	if steps == 0 {
 		return nil, nil
@@ -247,6 +249,8 @@ func (loop *Loop) RunSteps(ds Dataset, steps int) (metrics []*tensors.Tensor, er
 // be adjusted to expectation after the first epoch, when one knows how many steps there are
 // going to be.
 // Dataset.Reset is called after each epoch (including the last).
+//
+// Note: inputs and labels yielded by the dataset are immediately finalized (freed) after use in each step.
 func (loop *Loop) RunEpochs(ds Dataset, epochs int) (metrics []*tensors.Tensor, err error) {
 	if err = loop.Trainer.ResetTrainMetrics(); err != nil {
 		return

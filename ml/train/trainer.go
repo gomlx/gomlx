@@ -489,6 +489,8 @@ func (r *Trainer) resetEvalMetrics() {
 // Eval returns the computation of loss and metrics over the given dataset. The dataset
 // has to be finite (yield io.EOF at the end). The function will reset the dataset
 // at the start.
+//
+// Note: inputs and labels yielded by the dataset are immediately finalized (freed) after use.
 func (r *Trainer) Eval(ds Dataset) (lossAndMetrics []*tensors.Tensor) {
 	ds.Reset()
 	r.resetEvalMetrics()

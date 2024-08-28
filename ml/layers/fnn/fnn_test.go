@@ -24,7 +24,6 @@ import (
 
 type fnnTestDataset struct {
 	batchSize int
-	tensor    *tensors.Tensor
 }
 
 func (ds *fnnTestDataset) Name() string {
@@ -34,11 +33,8 @@ func (ds *fnnTestDataset) Name() string {
 func (ds *fnnTestDataset) Reset() {}
 
 func (ds *fnnTestDataset) Yield() (spec any, inputs []*tensors.Tensor, labels []*tensors.Tensor, err error) {
-	if ds.tensor == nil {
-		ds.tensor = tensors.FromShape(shapes.Make(dtypes.Float64, ds.batchSize, 2))
-	}
 	spec = ds
-	inputs = []*tensors.Tensor{ds.tensor}
+	inputs = []*tensors.Tensor{tensors.FromShape(shapes.Make(dtypes.Float64, ds.batchSize, 2))}
 	return
 }
 
