@@ -38,6 +38,8 @@ const (
 	NodeTypeDiv
 	NodeTypeDot
 	NodeTypeDotGeneral
+	NodeTypeDynamicSlice
+	NodeTypeDynamicUpdateSlice
 	NodeTypeEqual
 	NodeTypeEqualTotalOrder
 	NodeTypeExp
@@ -71,8 +73,10 @@ const (
 	NodeTypeParameter
 	NodeTypePow
 	NodeTypeReal
+	NodeTypeReduceAnd
 	NodeTypeReduceMax
 	NodeTypeReduceMin
+	NodeTypeReduceOr
 	NodeTypeReduceProduct
 	NodeTypeReduceSum
 	NodeTypeReduceWindow
@@ -982,6 +986,100 @@ func backendDotGeneral(lhs *Node, lhsContractingAxes []int, lhsBatchAxes []int, 
 	}
 	inputNodes := []*Node{lhs, rhs}
 	result := g.builder.DotGeneral(lhs.outputOps[0], inputs.lhsContractingAxes, inputs.lhsBatchAxes, rhs.outputOps[0], inputs.rhsContractingAxes, inputs.rhsBatchAxes)
+	node = &Node{
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsDynamicSlice holds the inputs used for the call to backends.DynamicSlice.
+type nodeInputsDynamicSlice struct {
+	operand      *Node
+	startIndices []Op
+	sliceDims    []int
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsDynamicSlice) Type() NodeType {
+	return NodeTypeDynamicSlice
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsDynamicSlice) String() string {
+	return fmt.Sprintf("%s(operand=[#%d], startIndices=%v, sliceDims=%v)",
+		ni.Type(),
+		ni.operand.Id(),
+		ni.startIndices,
+		ni.sliceDims,
+	)
+}
+
+// DynamicSlice extracts a sub-array from the input array at dynamic start_indices.
+// The size of the slice in each axis is passed in sliceDims, which specify the slice
+// intervals for each axis: [start, start + size).
+// The shape of startIndices must be rank == 1, with dimension size equal to the rank of operand.
+// See description in https://openxla.org/xla/operation_semantics#dynamicslice
+func DynamicSlice(operand *Node, startIndices []Op, sliceDims []int) (node *Node) {
+	g := validateBuildingGraphFromInputs(operand)
+	inputs := &nodeInputsDynamicSlice{
+		operand:      operand,
+		startIndices: startIndices,
+		sliceDims:    sliceDims,
+	}
+	inputNodes := []*Node{operand}
+	result := g.builder.DynamicSlice(operand.outputOps[0], inputs.startIndices, inputs.sliceDims)
+	node = &Node{
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsDynamicUpdateSlice holds the inputs used for the call to backends.DynamicUpdateSlice.
+type nodeInputsDynamicUpdateSlice struct {
+	operand      *Node
+	update       *Node
+	startIndices []Op
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsDynamicUpdateSlice) Type() NodeType {
+	return NodeTypeDynamicUpdateSlice
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsDynamicUpdateSlice) String() string {
+	return fmt.Sprintf("%s(operand=[#%d], update=[#%d], startIndices=%v)",
+		ni.Type(),
+		ni.operand.Id(),
+		ni.update.Id(),
+		ni.startIndices,
+	)
+}
+
+// DynamicUpdateSlice generates a result which is the value of the input array operand, with a slice update overwritten
+// at startIndices.
+// The shape of update determines the shape of the sub-array of the result which is updated.
+// The shape of startIndices must be rank == 1, with dimension size equal to the rank of operand.
+// See description in https://openxla.org/xla/operation_semantics#dynamicupdateslice
+func DynamicUpdateSlice(operand *Node, update *Node, startIndices []Op) (node *Node) {
+	g := validateBuildingGraphFromInputs(operand, update)
+	inputs := &nodeInputsDynamicUpdateSlice{
+		operand:      operand,
+		update:       update,
+		startIndices: startIndices,
+	}
+	inputNodes := []*Node{operand, update}
+	result := g.builder.DynamicUpdateSlice(operand.outputOps[0], update.outputOps[0], inputs.startIndices)
 	node = &Node{
 		outputOps:    []backends.Op{result},
 		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
@@ -2309,6 +2407,46 @@ func Real(x *Node) (node *Node) {
 	return
 }
 
+// nodeInputsReduceAnd holds the inputs used for the call to backends.ReduceAnd.
+type nodeInputsReduceAnd struct {
+	x    *Node
+	axes []int
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsReduceAnd) Type() NodeType {
+	return NodeTypeReduceAnd
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsReduceAnd) String() string {
+	return fmt.Sprintf("%s(x=[#%d], axes=%v)",
+		ni.Type(),
+		ni.x.Id(),
+		ni.axes,
+	)
+}
+
+// backendReduceAnd is a Graph wrapper for the backend.Builder.ReduceAnd method.
+func backendReduceAnd(x *Node, axes ...int) (node *Node) {
+	g := validateBuildingGraphFromInputs(x)
+	inputs := &nodeInputsReduceAnd{
+		x:    x,
+		axes: slices.Clone(axes),
+	}
+	inputNodes := []*Node{x}
+	result := g.builder.ReduceAnd(x.outputOps[0], inputs.axes...)
+	node = &Node{
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
 // nodeInputsReduceMax holds the inputs used for the call to backends.ReduceMax.
 type nodeInputsReduceMax struct {
 	x    *Node
@@ -2378,6 +2516,46 @@ func backendReduceMin(x *Node, axes ...int) (node *Node) {
 	}
 	inputNodes := []*Node{x}
 	result := g.builder.ReduceMin(x.outputOps[0], inputs.axes...)
+	node = &Node{
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsReduceOr holds the inputs used for the call to backends.ReduceOr.
+type nodeInputsReduceOr struct {
+	x    *Node
+	axes []int
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsReduceOr) Type() NodeType {
+	return NodeTypeReduceOr
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsReduceOr) String() string {
+	return fmt.Sprintf("%s(x=[#%d], axes=%v)",
+		ni.Type(),
+		ni.x.Id(),
+		ni.axes,
+	)
+}
+
+// backendReduceOr is a Graph wrapper for the backend.Builder.ReduceOr method.
+func backendReduceOr(x *Node, axes ...int) (node *Node) {
+	g := validateBuildingGraphFromInputs(x)
+	inputs := &nodeInputsReduceOr{
+		x:    x,
+		axes: slices.Clone(axes),
+	}
+	inputNodes := []*Node{x}
+	result := g.builder.ReduceOr(x.outputOps[0], inputs.axes...)
 	node = &Node{
 		outputOps:    []backends.Op{result},
 		outputShapes: []shapes.Shape{g.builder.OpShape(result)},

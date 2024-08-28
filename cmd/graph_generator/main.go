@@ -29,7 +29,7 @@ var (
 		"ArgMinMax", "Broadcast", "BroadcastInDim",
 		"BatchNormForInference", "BatchNormForTraining", "BatchNormGradient",
 		"Concatenate", "ConvertDType", "ConvGeneralDilated", "DotGeneral", "FFT", "Gather", "Iota",
-		"ReduceMax", "ReduceMin", "ReduceProduct", "ReduceSum", "ReduceWindow",
+		"ReduceAnd", "ReduceMax", "ReduceMin", "ReduceOr", "ReduceProduct", "ReduceSum", "ReduceWindow",
 		"Reshape", "Reverse", "RngBitGenerator",
 		"ScatterAdd", "SelectAndScatterSum", "SelectAndScatterMax", "SelectAndScatterMin",
 		"Sign", "Slice",
