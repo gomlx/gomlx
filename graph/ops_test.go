@@ -571,6 +571,27 @@ func TestReduceMaskedMax(t *testing.T) {
 		}, []any{[]float32{0, 4, 8, 11}}, xslices.Epsilon)
 }
 
+func TestLogicalAllAndAny(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "TestLogicalAllAndAny", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = []*Node{
+			Const(g, [][]bool{
+				{false, false, false},
+				{false, true, false},
+				{true, false, true},
+				{true, true, true},
+			}),
+		}
+		outputs = []*Node{
+			LogicalAll(inputs[0], -1),
+			LogicalAny(inputs[0], -1),
+		}
+		return
+	}, []any{
+		[]bool{false, false, false, true},
+		[]bool{false, true, true, true},
+	}, 0)
+}
+
 func TestReshape(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 	{
