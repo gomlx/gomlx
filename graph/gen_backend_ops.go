@@ -790,8 +790,8 @@ func (ni *nodeInputsConvertDType) String() string {
 	)
 }
 
-// ConvertDType of x to dtype.
-func ConvertDType(x *Node, dtype dtypes.DType) (node *Node) {
+// backendConvertDType is a Graph wrapper for the backend.Builder.ConvertDType method.
+func backendConvertDType(x *Node, dtype dtypes.DType) (node *Node) {
 	g := validateBuildingGraphFromInputs(x)
 	inputs := &nodeInputsConvertDType{
 		x:     x,

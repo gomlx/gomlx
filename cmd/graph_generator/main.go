@@ -28,7 +28,7 @@ var (
 	methodsNotExported = types.SetWith(
 		"ArgMinMax", "Broadcast", "BroadcastInDim",
 		"BatchNormForInference", "BatchNormForTraining", "BatchNormGradient",
-		"Concatenate", "ConvGeneralDilated", "DotGeneral", "FFT", "Gather", "Iota",
+		"Concatenate", "ConvertDType", "ConvGeneralDilated", "DotGeneral", "FFT", "Gather", "Iota",
 		"ReduceMax", "ReduceMin", "ReduceProduct", "ReduceSum", "ReduceWindow",
 		"Reshape", "Reverse", "RngBitGenerator",
 		"ScatterAdd", "SelectAndScatterSum", "SelectAndScatterMax", "SelectAndScatterMin",

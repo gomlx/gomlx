@@ -1171,6 +1171,15 @@ func Reverse(x *Node, axes ...int) *Node {
 	return backendReverse(x, adjustedAxes...)
 }
 
+// ConvertDType of x to dtype.
+// If x is already of the given dtype, it's a no-op.
+func ConvertDType(x *Node, dtype dtypes.DType) (node *Node) {
+	if x.DType() == dtype {
+		return x
+	}
+	return backendConvertDType(x, dtype)
+}
+
 // Transpose returns x with the axes axisA and axisB transposed.
 func Transpose(x *Node, axisA, axisB int) *Node {
 	_ = validateBuildingGraphFromInputs(x)
