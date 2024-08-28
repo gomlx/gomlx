@@ -390,6 +390,8 @@ var VJPRegistration = map[NodeType]VJP{
 	NodeTypeTranspose:          vjpForSingle(transposeVJP),
 	NodeTypeBroadcastInDim:     vjpForSingle(broadcastInDimVJP),
 	NodeTypeFFT:                vjpForSingle(fftVJP),
+	NodeTypeDynamicSlice:       vjpForSingle(dynamicSliceVJP),
+	NodeTypeDynamicUpdateSlice: vjpForSingle(dynamicUpdateSliceVJP),
 }
 
 // nilVJP returns no gradient, for functions without any inputNodes.
@@ -877,4 +879,29 @@ func broadcastInDimVJP(node, v *Node, _ shapes.Shape) []*Node {
 		gradWrtX = Reshape(gradWrtX, x.Shape().Dimensions...)
 	}
 	return []*Node{gradWrtX}
+}
+
+// dynamicSliceVJP generates the "vector dot jacobian" w.r.t. the input of DynamicSlice.
+func dynamicSliceVJP(node, v *Node, _ shapes.Shape) []*Node {
+	params := node.inputs.(*nodeInputsDynamicSlice)
+	vjpOperand := ZerosLike(params.operand)
+	vjpOperand = DynamicUpdateSlice(vjpOperand, v, params.startIndices)
+
+	vjps := make([]*Node, len(node.inputNodes))
+	vjps[0] = vjpOperand // No gradients wrt. the startIndices, only wrt. the operand.
+	return vjps
+}
+
+// dynamicUpdateSliceVJP generates the "vector dot jacobian" w.r.t. the input of DynamicUpdateSlice.
+func dynamicUpdateSliceVJP(node, v *Node, _ shapes.Shape) []*Node {
+	params := node.inputs.(*nodeInputsDynamicUpdateSlice)
+	vjpOperand := v
+	vjpOperand = DynamicUpdateSlice(vjpOperand, ZerosLike(params.update), params.startIndices)
+	vjpUpdate := DynamicSlice(v, params.startIndices, params.update.Shape().Dimensions)
+
+	vjps := make([]*Node, len(node.inputNodes))
+	// No gradients wrt. the startIndices, only wrt. the operand and the update.
+	vjps[0] = vjpOperand
+	vjps[1] = vjpUpdate
+	return vjps
 }

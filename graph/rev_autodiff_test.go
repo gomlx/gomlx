@@ -528,3 +528,39 @@ func TestIdentityWithCustomGradient(t *testing.T) {
 		},
 	)
 }
+
+func TestDynamicSliceGradient(t *testing.T) {
+	testGradients(t, "DynamicSlice Gradient",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			input := IotaFull(g, shapes.Make(dtypes.Float32, 3, 2))
+			startIndices := []*Node{Const(g, int32(0)), Const(g, int32(1))}
+			output = DynamicSlice(input, startIndices, []int{2, 1})
+			output = MulScalar(output, 7)
+			return output, []*Node{input}
+		}, []any{
+			[][]float32{
+				{0, 7},
+				{0, 7},
+				{0, 0},
+			},
+		})
+}
+
+func TestDynamicUpdateSliceGradient(t *testing.T) {
+	testGradients(t, "DynamicUpdateSlice Gradient",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			input := IotaFull(g, shapes.Make(dtypes.Float32, 3, 2))
+			update := MulScalar(Ones(g, shapes.Make(dtypes.Float32, 2, 1)), 100)
+			startIndices := []*Node{Const(g, int32(0)), Const(g, int32(1))}
+			output = DynamicUpdateSlice(input, update, startIndices)
+			output = MulScalar(output, 11)
+			return output, []*Node{input, update}
+		}, []any{
+			[][]float32{
+				{11, 0},
+				{11, 0},
+				{11, 11},
+			},
+			[][]float32{{11}, {11}},
+		})
+}
