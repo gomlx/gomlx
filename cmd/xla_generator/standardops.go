@@ -125,13 +125,15 @@ func GenerateStandardOpsImplementation(extractor *parsexlabuilder.NodeTextExtrac
 				pi.Type = "backends.Op"
 			} else if pi.Type == "...*Op" {
 				pi.Type = "...backends.Op"
+			} else if pi.Type == "[]*Op" {
+				pi.Type = "[]backends.Op"
 			} else if pi.Type == "Shape" {
 				pi.Type = "shapes.Shape"
 			} else if pi.Type == "ConvolveAxesConfig" {
 				pi.Type = "backends.ConvolveAxesConfig"
 			} else if pi.Type == "...PadAxis" {
 				pi.Type = "...backends.PadAxis"
-			} else if pi.Type == "protos.FftType" {
+			} else if pi.Type == "xla_data.FftType" {
 				pi.Type = "backends.FFTType"
 			}
 			fi.Parameters = append(fi.Parameters, pi)
@@ -151,6 +153,11 @@ func GenerateStandardOpsImplementation(extractor *parsexlabuilder.NodeTextExtrac
 				for ii, name := range names {
 					fi.ValuesSpec = append(fi.ValuesSpec, execTemplate(convertOpListTemplate, name))
 					names[ii] = "xla_" + name + "..."
+				}
+			} else if pi.Type == "[]backends.Op" {
+				for ii, name := range names {
+					fi.ValuesSpec = append(fi.ValuesSpec, execTemplate(convertOpListTemplate, name))
+					names[ii] = "xla_" + name
 				}
 			} else if pi.Type == "backends.ConvolveAxesConfig" {
 				for ii, name := range names {
@@ -187,6 +194,7 @@ func GenerateStandardOpsImplementation(extractor *parsexlabuilder.NodeTextExtrac
 	must.M(standardOpsTemplate.Execute(f, standardOps))
 	cmd := exec.Command("gofmt", "-w", fileName)
 	fmt.Printf("\t%s\n", cmd)
+	cmd.Stderr = os.Stderr
 	must.M(cmd.Run())
 	fmt.Printf("\tGenerated %q based on github.com/gomlx/gopjrt/xlabuilder\n", fileName)
 }

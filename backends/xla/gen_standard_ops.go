@@ -282,6 +282,37 @@ func (b *Builder) DotGeneral(lhs backends.Op, lhsContractingAxes, lhsBatchAxes [
 	return xla_result
 }
 
+// DynamicSlice extracts a sub-array from the input array at dynamic start_indices.
+// The size of the slice in each axis is passed in sliceDims, which specify the slice
+// intervals for each axis: [start, start + size).
+// The shape of startIndices must be rank == 1, with dimension size equal to the rank of operand.
+// See description in https://openxla.org/xla/operation_semantics#dynamicslice
+func (b *Builder) DynamicSlice(operand backends.Op, startIndices []backends.Op, sliceDims []int) backends.Op {
+	xla_operand := b.verifyAndCastOp(operand, "operand")
+	xla_startIndices := xslices.Map(startIndices, func(op backends.Op) *xlabuilder.Op { return b.verifyAndCastOp(op, "startIndices") })
+	xla_result, err := xlabuilder.DynamicSlice(xla_operand, xla_startIndices, sliceDims)
+	if err != nil {
+		panic(errors.WithMessagef(err, "Backend %q: failed DynamicSlice", BackendName))
+	}
+	return xla_result
+}
+
+// DynamicUpdateSlice generates a result which is the value of the input array operand, with a slice update overwritten
+// at startIndices.
+// The shape of update determines the shape of the sub-array of the result which is updated.
+// The shape of startIndices must be rank == 1, with dimension size equal to the rank of operand.
+// See description in https://openxla.org/xla/operation_semantics#dynamicupdateslice
+func (b *Builder) DynamicUpdateSlice(operand, update backends.Op, startIndices []backends.Op) backends.Op {
+	xla_operand := b.verifyAndCastOp(operand, "operand")
+	xla_update := b.verifyAndCastOp(update, "update")
+	xla_startIndices := xslices.Map(startIndices, func(op backends.Op) *xlabuilder.Op { return b.verifyAndCastOp(op, "startIndices") })
+	xla_result, err := xlabuilder.DynamicUpdateSlice(xla_operand, xla_update, xla_startIndices)
+	if err != nil {
+		panic(errors.WithMessagef(err, "Backend %q: failed DynamicUpdateSlice", BackendName))
+	}
+	return xla_result
+}
+
 // Equal performs element-wise equality check, returns boolean results with the same dimensions as input.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) Equal(x0, x1 backends.Op) backends.Op {
@@ -679,6 +710,18 @@ func (b *Builder) Real(x backends.Op) backends.Op {
 	return xla_result
 }
 
+// ReduceAnd is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the logical-and of the reduced axes.
+// It only works for booleans.
+// If no axes are given, it reduces the full array.
+func (b *Builder) ReduceAnd(x backends.Op, axes ...int) backends.Op {
+	xla_x := b.verifyAndCastOp(x, "x")
+	xla_result, err := xlabuilder.ReduceAnd(xla_x, axes...)
+	if err != nil {
+		panic(errors.WithMessagef(err, "Backend %q: failed ReduceAnd", BackendName))
+	}
+	return xla_result
+}
+
 // ReduceMax is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the max value.
 // If no axes are given, it reduces the full array.
 func (b *Builder) ReduceMax(x backends.Op, axes ...int) backends.Op {
@@ -697,6 +740,18 @@ func (b *Builder) ReduceMin(x backends.Op, axes ...int) backends.Op {
 	xla_result, err := xlabuilder.ReduceMin(xla_x, axes...)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed ReduceMin", BackendName))
+	}
+	return xla_result
+}
+
+// ReduceOr is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the logical-or of the reduced axes.
+// It only works for booleans.
+// If no axes are given, it reduces the full array.
+func (b *Builder) ReduceOr(x backends.Op, axes ...int) backends.Op {
+	xla_x := b.verifyAndCastOp(x, "x")
+	xla_result, err := xlabuilder.ReduceOr(xla_x, axes...)
+	if err != nil {
+		panic(errors.WithMessagef(err, "Backend %q: failed ReduceOr", BackendName))
 	}
 	return xla_result
 }
