@@ -880,6 +880,30 @@ func MaskedReduceAllMin(x, mask *Node) *Node {
 	return MaskedReduceMin(x, mask)
 }
 
+// LogicalAll returns true if all values of x (converted to boolean) evaluate to true.
+// It's a "ReduceAnd" equivalent.
+//
+// If reduceAxes is empty, it will reduce over all dimensions.
+func LogicalAll(x *Node, reduceAxes ...int) *Node {
+	_ = validateBuildingGraphFromInputs(x)
+	x = ConvertDType(x, dtypes.Bool) // No-op if already bool.
+	x = StopGradient(x)              // No gradients defined to LogicalAll.
+	axes := adjustAxesToRankAndSort(x.Rank(), reduceAxes, "x")
+	return backendReduceAnd(x, axes...)
+}
+
+// LogicalAny returns true if all values of x (converted to boolean) evaluate to true.
+// It's a "ReduceOr" equivalent.
+//
+// If reduceAxes is empty, it will reduce over all dimensions.
+func LogicalAny(x *Node, reduceAxes ...int) *Node {
+	_ = validateBuildingGraphFromInputs(x)
+	x = ConvertDType(x, dtypes.Bool) // No-op if already bool.
+	x = StopGradient(x)              // No gradients defined to LogicalAny.
+	axes := adjustAxesToRankAndSort(x.Rank(), reduceAxes, "x")
+	return backendReduceOr(x, axes...)
+}
+
 // SliceAxisSpec specifies the range and stride of an axis to include in a Slice.
 //
 // The recommendation is to use AxisRange or AxisElem (defined below) to create it.
@@ -1169,6 +1193,15 @@ func Reverse(x *Node, axes ...int) *Node {
 		}
 	}
 	return backendReverse(x, adjustedAxes...)
+}
+
+// ConvertDType of x to dtype.
+// If x is already of the given dtype, it's a no-op.
+func ConvertDType(x *Node, dtype dtypes.DType) (node *Node) {
+	if x.DType() == dtype {
+		return x
+	}
+	return backendConvertDType(x, dtype)
 }
 
 // Transpose returns x with the axes axisA and axisB transposed.

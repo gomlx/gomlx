@@ -81,9 +81,11 @@ func GenerateStandardOpsInterface(extractor *parsexlabuilder.NodeTextExtractor, 
 				pi.Type = "Op"
 			} else if pi.Type == "...*Op" {
 				pi.Type = "...Op"
+			} else if pi.Type == "[]*Op" {
+				pi.Type = "[]Op"
 			} else if pi.Type == "Shape" {
 				pi.Type = "shapes.Shape"
-			} else if pi.Type == "protos.FftType" {
+			} else if pi.Type == "xla_data.FftType" {
 				pi.Type = "FFTType"
 			}
 			params = append(params, pi)

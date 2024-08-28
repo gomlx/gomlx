@@ -130,6 +130,20 @@ type StandardOps interface {
 	// It provides the basic means of implementing Einsum.
 	DotGeneral(lhs Op, lhsContractingAxes, lhsBatchAxes []int, rhs Op, rhsContractingAxes, rhsBatchAxes []int) Op
 
+	// DynamicSlice extracts a sub-array from the input array at dynamic start_indices.
+	// The size of the slice in each axis is passed in sliceDims, which specify the slice
+	// intervals for each axis: [start, start + size).
+	// The shape of startIndices must be rank == 1, with dimension size equal to the rank of operand.
+	// See description in https://openxla.org/xla/operation_semantics#dynamicslice
+	DynamicSlice(operand Op, startIndices []Op, sliceDims []int) Op
+
+	// DynamicUpdateSlice generates a result which is the value of the input array operand, with a slice update overwritten
+	// at startIndices.
+	// The shape of update determines the shape of the sub-array of the result which is updated.
+	// The shape of startIndices must be rank == 1, with dimension size equal to the rank of operand.
+	// See description in https://openxla.org/xla/operation_semantics#dynamicupdateslice
+	DynamicUpdateSlice(operand, update Op, startIndices []Op) Op
+
 	// Equal performs element-wise equality check, returns boolean results with the same dimensions as input.
 	// The op is created on the same XlaBuilder as used for x0 and x1.
 	Equal(x0, x1 Op) Op
@@ -286,6 +300,11 @@ type StandardOps interface {
 	// Real return the real part of a complex number. It returns x if the x is a float number.
 	Real(x Op) Op
 
+	// ReduceAnd is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the logical-and of the reduced axes.
+	// It only works for booleans.
+	// If no axes are given, it reduces the full array.
+	ReduceAnd(x Op, axes ...int) Op
+
 	// ReduceMax is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the max value.
 	// If no axes are given, it reduces the full array.
 	ReduceMax(x Op, axes ...int) Op
@@ -293,6 +312,11 @@ type StandardOps interface {
 	// ReduceMin is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the min value.
 	// If no axes are given, it reduces the full array.
 	ReduceMin(x Op, axes ...int) Op
+
+	// ReduceOr is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the logical-or of the reduced axes.
+	// It only works for booleans.
+	// If no axes are given, it reduces the full array.
+	ReduceOr(x Op, axes ...int) Op
 
 	// ReduceProduct is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the product of the reduced axes.
 	// If no axes are given, it reduces the full array.

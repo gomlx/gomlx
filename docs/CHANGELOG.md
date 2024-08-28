@@ -1,6 +1,6 @@
 # GoMLX changelog
 
-## Next
+## 0.11.1 - 2024/08/28
 
 * Added support for `dtypes.BFloat16`.
 * Added `tensors.FromScalar`
@@ -8,6 +8,11 @@
 * Package `graph`:
   * Added `ExecOnce` and `ExecOnceN` 
   * Added `CumSum`
+  * `ConvertDType` to the same dtype is now a no-op.
+  * Added `LogicalAll` and `LogicalAny`
+  * Added `DynamicSlice` and `DynamicUpdateSlice`
+* Package `backend`:
+  * Added `DynamicUpdateSlice`, `DynamicSlice`, `ReduceAnd` and `ReduceOr`.
 * Package `tensors`:
   * Fixed race condition `Tensor.DonateBuffer`.
   * Fixed unnecessary copying of tensor data in `Tensor.MaterializeOnDevices`

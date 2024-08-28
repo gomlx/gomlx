@@ -81,7 +81,7 @@ var (
 		// Vanilla
 		func(ctx *context.Context, input *Node) *Node {
 			return New(ctx, input, 1).
-				NumHiddenLayers(1, 64).
+				NumHiddenLayers(1, 128).
 				Activation(activations.TypeRelu).
 				Done()
 		},
