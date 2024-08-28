@@ -1,6 +1,10 @@
 # GoMLX changelog
 
-## 0.11.1 - 2024/08/28
+## Next
+
+* Immediately free accelerator (GPU) memory, where possible -- as opposed to waiting for the garbage collector.
+
+## v0.11.2 (was v0.11.1) - 2024/08/28
 
 * Added support for `dtypes.BFloat16`.
 * Added `tensors.FromScalar`

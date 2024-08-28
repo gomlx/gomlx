@@ -506,10 +506,24 @@ func (r *Trainer) Eval(ds Dataset) (lossAndMetrics []*tensors.Tensor) {
 		for _, t := range lossAndMetrics {
 			t.FinalizeAll()
 		}
+
 		lossAndMetrics = r.EvalStep(spec, inputs, labels)
+
+		// Free inputs and labels after usage.
+		for _, input := range inputs {
+			input.FinalizeAll()
+		}
+		for _, label := range labels {
+			label.FinalizeAll()
+		}
 	}
 	if count == 0 {
 		Panicf("evaluation dataset yielded no batches, no data to evaluate")
+	}
+	// Free lossAndMetrics on device, it will be consumed presumably only locally.
+	for _, metric := range lossAndMetrics {
+		metric.MaterializeLocal()
+		metric.InvalidateOnDevice()
 	}
 	return lossAndMetrics
 }

@@ -64,7 +64,7 @@ RUN go install github.com/janpfeifer/gonb@latest \
 
 
 # Clone and install gopjrt.
-ARG GOPJRT_VERSION="v0.2.3"
+ARG GOPJRT_VERSION="v0.3.2"
 USER ${NB_USER}
 WORKDIR ${HOME}
 RUN <<EOF

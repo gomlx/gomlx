@@ -382,6 +382,7 @@ func (e *Exec) setSideParams(g *Graph, inputBuffers []backends.Buffer, donate []
 		if v.ChangedInGraph(g) {
 			// We donate the buffer, since we are getting a new one on the output.
 			inputBuffers[handle] = v.Value().DonateBuffer(e.backend, e.exec.DeviceNum())
+			v.Value().FinalizeAll()
 			donate[handle] = true
 		} else {
 			inputBuffers[handle] = v.Value().Buffer(e.backend, e.exec.DeviceNum())
@@ -510,10 +511,15 @@ func (e *Exec) CallWithGraph(args ...any) (outputs []*tensors.Tensor, g *Graph) 
 	e.muChangedVars.Unlock()
 	//fmt.Printf("%d outputs, %d variables\n", len(outputs), len(changedVars))
 	for ii, v := range changedVars {
-		//fmt.Printf("\t%s: %d\n", v.GetParameterName(), ii)
+		//fmt.Printf("\t%s: %d\n", v.ParameterName(), ii)
+		old := v.Value()
+		if old != nil {
+			old.FinalizeAll()
+		}
 		v.SetValue(outputs[ii])
 	}
 	outputs = outputs[len(changedVars):]
+
 	return
 }
 

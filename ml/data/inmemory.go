@@ -490,12 +490,14 @@ func (mds *InMemoryDataset) Yield() (spec any, inputs []*tensors.Tensor, labels 
 	// Gather the elements (inputs and labels) all in one call, given the indices.
 	inputsAndLabels := make([]*tensors.Tensor, len(mds.inputsAndLabelsData))
 	indicesAndData := make([]any, 0, len(mds.inputsAndLabelsData)+1)
+	var indicesT *tensors.Tensor
 	if mds.batchSize == 0 {
 		// Index should be a scalar.
 		indicesAndData = append(indicesAndData, indices[0])
 	} else {
 		// Indices are shaped [batch_size, 1].
-		indicesT := tensors.FromFlatDataAndDimensions(indices, len(indices), 1)
+		indicesT = tensors.FromFlatDataAndDimensions(indices, len(indices), 1)
+		defer indicesT.FinalizeAll() // Free immediately after use.
 		indicesAndData = append(indicesAndData, indicesT)
 	}
 	for _, data := range mds.inputsAndLabelsData {

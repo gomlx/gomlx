@@ -474,6 +474,14 @@ func (e *Exec) compileAndExecute(execute bool, args ...any) (results []*tensors.
 	}
 	results = g.RunWithBuffers(argsAsBuffer, argsDonate)
 
+	// Free donated buffers immediately: little impact in their data, since it has been donated already,
+	// but just to clean up things.
+	for ii, donated := range argsDonate {
+		if donated {
+			e.backend.BufferFinalize(argsAsBuffer[ii])
+		}
+	}
+
 	// Call logger on logged nodes, even if no node is marked for logging (it serves as a hook).
 	numGraphFnOutputs := entry.numOutputs - len(entry.loggedMessages)
 	if e.loggerFn != nil {

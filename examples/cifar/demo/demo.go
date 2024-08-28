@@ -97,6 +97,9 @@ func createDefaultContext() *context.Context {
 		kan.ParamBSplineMagnitudeL2: 0.0,
 		kan.ParamDiscrete:           false,
 		kan.ParamDiscreteSoftness:   0.1,
+
+		// CNN model
+		cifar.ParamCNNNormalization: "batch",
 	})
 	return ctx
 }

@@ -95,6 +95,10 @@ func (v *Variable) AssertValid() {
 // This will force to be variable to be reinitialized the next time a graph using the variable is executed.
 func (v *Variable) Reset() {
 	v.ctx.data.needsInitialization = true
+	if v.value != nil {
+		// Don't wait for the GC to free the memory from the accelerator.
+		v.value.FinalizeAll()
+	}
 	v.value = nil
 }
 

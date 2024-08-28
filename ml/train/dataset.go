@@ -38,6 +38,9 @@ type Dataset interface {
 	// In the simplest case `inputs` and `labels` should always have the same number of elements and the
 	// same shape (including `dtype`).
 	//
+	// The `inputs` and `labels` ownership is transferred to the caller (usually a training or evaluation
+	// function). It's expected that they will be finalized (Tensor.FinalizeAll) immediately after use.
+	//
 	// If the `inputs` or `labels` change shapes during training or evaluation, it will trigger the creation
 	// of a new computation graph and new JIT (just-in-time) compilation. There is a finite-sized cache,
 	// and this can become inefficient -- it may spend more time JIT compiling than executing code. Consider

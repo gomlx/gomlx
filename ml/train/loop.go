@@ -132,6 +132,21 @@ func (loop *Loop) step(spec any, inputs, labels []*tensors.Tensor) (metrics []*t
 		return nil, err
 	}
 
+	// Free inputs and labels:
+	for _, input := range inputs {
+		input.FinalizeAll()
+	}
+	for _, label := range labels {
+		label.FinalizeAll()
+	}
+
+	// Free metrics on-device usage: on-device memory being more at premium,
+	// we want to immediately free things that are no longer used there.
+	for _, m := range metrics {
+		m.MaterializeLocal()
+		m.InvalidateOnDevice()
+	}
+
 	// Call "OnStep" hooks.
 	loop.onStep.Enumerate(func(hook *hookWithName[OnStepFn]) {
 		if err != nil {
@@ -203,10 +218,20 @@ func (loop *Loop) RunSteps(ds Dataset, steps int) (metrics []*tensors.Tensor, er
 			}
 			return nil, errors.WithMessagef(err, "Loop.RunSteps(%d): failed reading from Dataset", steps)
 		}
+
+		// Immediately free any space being used.
+		for _, metric := range metrics {
+			metric.FinalizeAll()
+		}
 		metrics, err = loop.step(spec, inputs, labels)
 		if err != nil {
 			return nil, errors.WithMessagef(err, "Loop.RunSteps(%d): failed TrainStep(LoopStep=%d)", steps, loop.LoopStep)
 		}
+	}
+	for _, metric := range metrics {
+		// Transfer results locally and immediately free on-device storage.
+		metric.MaterializeLocal()
+		metric.InvalidateOnDevice()
 	}
 	err = loop.end(metrics)
 	if err != nil {
