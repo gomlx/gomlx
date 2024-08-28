@@ -1,6 +1,6 @@
 # GoMLX changelog
 
-## Next
+## 0.11.1 - 2024/08/28
 
 * Added support for `dtypes.BFloat16`.
 * Added `tensors.FromScalar`
