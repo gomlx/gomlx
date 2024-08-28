@@ -123,11 +123,11 @@ func (ni *nodeInputsAbs) String() string {
 
 // Abs returns the Op that represents the output of the corresponding operation.
 func Abs(x *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x)
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsAbs{
 		x: x,
 	}
-	inputNodes := []*Node{x}
 	result := g.builder.Abs(x.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -164,12 +164,12 @@ func (ni *nodeInputsAdd) String() string {
 // Standard broadcasting rules apply (see documentation).
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func Add(x0 *Node, x1 *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x0, x1)
+	inputNodes := []*Node{x0, x1}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsAdd{
 		x0: x0,
 		x1: x1,
 	}
-	inputNodes := []*Node{x0, x1}
 	result := g.builder.Add(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -205,12 +205,12 @@ func (ni *nodeInputsAnd) String() string {
 // And returns the element-wise logic "and" operator.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func And(x0 *Node, x1 *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x0, x1)
+	inputNodes := []*Node{x0, x1}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsAnd{
 		x0: x0,
 		x1: x1,
 	}
-	inputNodes := []*Node{x0, x1}
 	result := g.builder.And(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -250,14 +250,14 @@ func (ni *nodeInputsArgMinMax) String() string {
 
 // backendArgMinMax is a Graph wrapper for the backend.Builder.ArgMinMax method.
 func backendArgMinMax(x *Node, axis int, outputDType dtypes.DType, isMin bool) (node *Node) {
-	g := validateBuildingGraphFromInputs(x)
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsArgMinMax{
 		x:           x,
 		axis:        axis,
 		outputDType: outputDType,
 		isMin:       isMin,
 	}
-	inputNodes := []*Node{x}
 	result := g.builder.ArgMinMax(x.outputOps[0], inputs.axis, inputs.outputDType, inputs.isMin)
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -302,7 +302,8 @@ func (ni *nodeInputsBatchNormForInference) String() string {
 
 // backendBatchNormForInference is a Graph wrapper for the backend.Builder.BatchNormForInference method.
 func backendBatchNormForInference(operand *Node, scale *Node, offset *Node, mean *Node, variance *Node, epsilon float32, axis int) (node *Node) {
-	g := validateBuildingGraphFromInputs(operand, scale, offset, mean, variance)
+	inputNodes := []*Node{operand, scale, offset, mean, variance}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsBatchNormForInference{
 		operand:  operand,
 		scale:    scale,
@@ -312,7 +313,6 @@ func backendBatchNormForInference(operand *Node, scale *Node, offset *Node, mean
 		epsilon:  epsilon,
 		axis:     axis,
 	}
-	inputNodes := []*Node{operand, scale, offset, mean, variance}
 	result := g.builder.BatchNormForInference(operand.outputOps[0], scale.outputOps[0], offset.outputOps[0], mean.outputOps[0], variance.outputOps[0], inputs.epsilon, inputs.axis)
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -353,7 +353,8 @@ func (ni *nodeInputsBatchNormForTraining) String() string {
 
 // backendBatchNormForTraining is a Graph wrapper for the backend.Builder.BatchNormForTraining method.
 func backendBatchNormForTraining(operand *Node, scale *Node, offset *Node, epsilon float32, axis int) (normalized, batchMean, batchVariance *Node) {
-	g := validateBuildingGraphFromInputs(operand, scale, offset)
+	inputNodes := []*Node{operand, scale, offset}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsBatchNormForTraining{
 		operand: operand,
 		scale:   scale,
@@ -361,7 +362,6 @@ func backendBatchNormForTraining(operand *Node, scale *Node, offset *Node, epsil
 		epsilon: epsilon,
 		axis:    axis,
 	}
-	inputNodes := []*Node{operand, scale, offset}
 	v0, v1, v2 := g.builder.BatchNormForTraining(operand.outputOps[0], scale.outputOps[0], offset.outputOps[0], inputs.epsilon, inputs.axis)
 	node := &Node{
 		outputOps:    []backends.Op{v0, v1, v2},
@@ -408,7 +408,8 @@ func (ni *nodeInputsBatchNormGradient) String() string {
 
 // backendBatchNormGradient is a Graph wrapper for the backend.Builder.BatchNormGradient method.
 func backendBatchNormGradient(operand *Node, scale *Node, mean *Node, variance *Node, gradOutput *Node, epsilon float32, axis int) (gradOperand, gradScale, gradOffset *Node) {
-	g := validateBuildingGraphFromInputs(operand, scale, mean, variance, gradOutput)
+	inputNodes := []*Node{operand, scale, mean, variance, gradOutput}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsBatchNormGradient{
 		operand:    operand,
 		scale:      scale,
@@ -418,7 +419,6 @@ func backendBatchNormGradient(operand *Node, scale *Node, mean *Node, variance *
 		epsilon:    epsilon,
 		axis:       axis,
 	}
-	inputNodes := []*Node{operand, scale, mean, variance, gradOutput}
 	v0, v1, v2 := g.builder.BatchNormGradient(operand.outputOps[0], scale.outputOps[0], mean.outputOps[0], variance.outputOps[0], gradOutput.outputOps[0], inputs.epsilon, inputs.axis)
 	node := &Node{
 		outputOps:    []backends.Op{v0, v1, v2},
@@ -455,12 +455,12 @@ func (ni *nodeInputsBroadcast) String() string {
 
 // backendBroadcast is a Graph wrapper for the backend.Builder.Broadcast method.
 func backendBroadcast(x *Node, prefixDims ...int) (node *Node) {
-	g := validateBuildingGraphFromInputs(x)
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsBroadcast{
 		x:          x,
 		prefixDims: slices.Clone(prefixDims),
 	}
-	inputNodes := []*Node{x}
 	result := g.builder.Broadcast(x.outputOps[0], inputs.prefixDims...)
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -497,13 +497,13 @@ func (ni *nodeInputsBroadcastInDim) String() string {
 
 // backendBroadcastInDim is a Graph wrapper for the backend.Builder.BroadcastInDim method.
 func backendBroadcastInDim(x *Node, outputShape shapes.Shape, broadcastAxes []int) (node *Node) {
-	g := validateBuildingGraphFromInputs(x)
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsBroadcastInDim{
 		x:             x,
 		outputShape:   outputShape,
 		broadcastAxes: broadcastAxes,
 	}
-	inputNodes := []*Node{x}
 	result := g.builder.BroadcastInDim(x.outputOps[0], inputs.outputShape, inputs.broadcastAxes)
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -536,11 +536,11 @@ func (ni *nodeInputsCeil) String() string {
 
 // Ceil returns the Op that represents the output of the corresponding operation.
 func Ceil(x *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x)
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsCeil{
 		x: x,
 	}
-	inputNodes := []*Node{x}
 	result := g.builder.Ceil(x.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -573,11 +573,11 @@ func (ni *nodeInputsClz) String() string {
 
 // Clz returns element-wise the "count leading zeros" bits of input node x -- for integer values.
 func Clz(x *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x)
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsClz{
 		x: x,
 	}
-	inputNodes := []*Node{x}
 	result := g.builder.Clz(x.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -618,12 +618,12 @@ func (ni *nodeInputsComplex) String() string {
 // the value is broadcast to every other value.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func Complex(x0 *Node, x1 *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x0, x1)
+	inputNodes := []*Node{x0, x1}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsComplex{
 		x0: x0,
 		x1: x1,
 	}
-	inputNodes := []*Node{x0, x1}
 	result := g.builder.Complex(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -658,12 +658,13 @@ func (ni *nodeInputsConcatenate) String() string {
 
 // backendConcatenate is a Graph wrapper for the backend.Builder.Concatenate method.
 func backendConcatenate(axis int, operands ...*Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(operands...)
+	inputNodes := []*Node{}
+	inputNodes = append(inputNodes, operands...)
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsConcatenate{
 		axis:     axis,
 		operands: slices.Clone(operands),
 	}
-	inputNodes := operands
 	result := g.builder.Concatenate(inputs.axis, xslices.Map(operands, func(node *Node) backends.Op { return node.outputOps[0] })...)
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -696,11 +697,11 @@ func (ni *nodeInputsConj) String() string {
 
 // Conj returns the conjugate of a complex number. E.g: Conj(1+3i) = 1-3i
 func Conj(x *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x)
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsConj{
 		x: x,
 	}
-	inputNodes := []*Node{x}
 	result := g.builder.Conj(x.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -749,7 +750,8 @@ func (ni *nodeInputsConvGeneralDilated) String() string {
 
 // backendConvGeneralDilated is a Graph wrapper for the backend.Builder.ConvGeneralDilated method.
 func backendConvGeneralDilated(operand *Node, filter *Node, axes backends.ConvolveAxesConfig, strides []int, paddings [][2]int, inputDilation []int, filterDilation []int, filterGroupCount int, batchGroupCount int) (node *Node) {
-	g := validateBuildingGraphFromInputs(operand, filter)
+	inputNodes := []*Node{operand, filter}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsConvGeneralDilated{
 		operand:          operand,
 		filter:           filter,
@@ -761,7 +763,6 @@ func backendConvGeneralDilated(operand *Node, filter *Node, axes backends.Convol
 		filterGroupCount: filterGroupCount,
 		batchGroupCount:  batchGroupCount,
 	}
-	inputNodes := []*Node{operand, filter}
 	result := g.builder.ConvGeneralDilated(operand.outputOps[0], filter.outputOps[0], inputs.axes, inputs.strides, inputs.paddings, inputs.inputDilation, inputs.filterDilation, inputs.filterGroupCount, inputs.batchGroupCount)
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -796,12 +797,12 @@ func (ni *nodeInputsConvertDType) String() string {
 
 // backendConvertDType is a Graph wrapper for the backend.Builder.ConvertDType method.
 func backendConvertDType(x *Node, dtype dtypes.DType) (node *Node) {
-	g := validateBuildingGraphFromInputs(x)
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsConvertDType{
 		x:     x,
 		dtype: dtype,
 	}
-	inputNodes := []*Node{x}
 	result := g.builder.ConvertDType(x.outputOps[0], inputs.dtype)
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -834,11 +835,11 @@ func (ni *nodeInputsCos) String() string {
 
 // Cos returns the Op that represents the output of the corresponding operation.
 func Cos(x *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x)
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsCos{
 		x: x,
 	}
-	inputNodes := []*Node{x}
 	result := g.builder.Cos(x.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -875,12 +876,12 @@ func (ni *nodeInputsDiv) String() string {
 // Standard broadcasting rules apply (see documentation).
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func Div(x0 *Node, x1 *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x0, x1)
+	inputNodes := []*Node{x0, x1}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsDiv{
 		x0: x0,
 		x1: x1,
 	}
-	inputNodes := []*Node{x0, x1}
 	result := g.builder.Div(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -927,12 +928,12 @@ func (ni *nodeInputsDot) String() string {
 // matrix/matrix multiplications.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func Dot(x0 *Node, x1 *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x0, x1)
+	inputNodes := []*Node{x0, x1}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsDot{
 		x0: x0,
 		x1: x1,
 	}
-	inputNodes := []*Node{x0, x1}
 	result := g.builder.Dot(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -975,7 +976,8 @@ func (ni *nodeInputsDotGeneral) String() string {
 
 // backendDotGeneral is a Graph wrapper for the backend.Builder.DotGeneral method.
 func backendDotGeneral(lhs *Node, lhsContractingAxes []int, lhsBatchAxes []int, rhs *Node, rhsContractingAxes []int, rhsBatchAxes []int) (node *Node) {
-	g := validateBuildingGraphFromInputs(lhs, rhs)
+	inputNodes := []*Node{lhs, rhs}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsDotGeneral{
 		lhs:                lhs,
 		lhsContractingAxes: lhsContractingAxes,
@@ -984,7 +986,6 @@ func backendDotGeneral(lhs *Node, lhsContractingAxes []int, lhsBatchAxes []int, 
 		rhsContractingAxes: rhsContractingAxes,
 		rhsBatchAxes:       rhsBatchAxes,
 	}
-	inputNodes := []*Node{lhs, rhs}
 	result := g.builder.DotGeneral(lhs.outputOps[0], inputs.lhsContractingAxes, inputs.lhsBatchAxes, rhs.outputOps[0], inputs.rhsContractingAxes, inputs.rhsBatchAxes)
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -1025,13 +1026,14 @@ func (ni *nodeInputsDynamicSlice) String() string {
 // The shape of startIndices must be rank == 1, with dimension size equal to the rank of operand.
 // See description in https://openxla.org/xla/operation_semantics#dynamicslice
 func DynamicSlice(operand *Node, startIndices []*Node, sliceDims []int) (node *Node) {
-	g := validateBuildingGraphFromInputs(startIndices...)
+	inputNodes := []*Node{operand}
+	inputNodes = append(inputNodes, startIndices...)
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsDynamicSlice{
 		operand:      operand,
 		startIndices: slices.Clone(startIndices),
 		sliceDims:    sliceDims,
 	}
-	inputNodes := startIndices
 	result := g.builder.DynamicSlice(operand.outputOps[0], xslices.Map(startIndices, func(node *Node) backends.Op { return node.outputOps[0] }), inputs.sliceDims)
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -1072,13 +1074,14 @@ func (ni *nodeInputsDynamicUpdateSlice) String() string {
 // The shape of startIndices must be rank == 1, with dimension size equal to the rank of operand.
 // See description in https://openxla.org/xla/operation_semantics#dynamicupdateslice
 func DynamicUpdateSlice(operand *Node, update *Node, startIndices []*Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(startIndices...)
+	inputNodes := []*Node{operand, update}
+	inputNodes = append(inputNodes, startIndices...)
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsDynamicUpdateSlice{
 		operand:      operand,
 		update:       update,
 		startIndices: slices.Clone(startIndices),
 	}
-	inputNodes := startIndices
 	result := g.builder.DynamicUpdateSlice(operand.outputOps[0], update.outputOps[0], xslices.Map(startIndices, func(node *Node) backends.Op { return node.outputOps[0] }))
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -1114,12 +1117,12 @@ func (ni *nodeInputsEqual) String() string {
 // Equal performs element-wise equality check, returns boolean results with the same dimensions as input.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func Equal(x0 *Node, x1 *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x0, x1)
+	inputNodes := []*Node{x0, x1}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsEqual{
 		x0: x0,
 		x1: x1,
 	}
-	inputNodes := []*Node{x0, x1}
 	result := g.builder.Equal(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -1158,12 +1161,12 @@ func (ni *nodeInputsEqualTotalOrder) String() string {
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func EqualTotalOrder(x0 *Node, x1 *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x0, x1)
+	inputNodes := []*Node{x0, x1}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsEqualTotalOrder{
 		x0: x0,
 		x1: x1,
 	}
-	inputNodes := []*Node{x0, x1}
 	result := g.builder.EqualTotalOrder(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -1197,11 +1200,11 @@ func (ni *nodeInputsExp) String() string {
 
 // Exp returns the Op that represents the output of the corresponding operation.
 func Exp(x *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x)
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsExp{
 		x: x,
 	}
-	inputNodes := []*Node{x}
 	result := g.builder.Exp(x.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -1234,11 +1237,11 @@ func (ni *nodeInputsExpm1) String() string {
 
 // Expm1 returns the Op that represents the output of the corresponding operation.
 func Expm1(x *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x)
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsExpm1{
 		x: x,
 	}
-	inputNodes := []*Node{x}
 	result := g.builder.Expm1(x.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -1275,13 +1278,13 @@ func (ni *nodeInputsFFT) String() string {
 
 // backendFFT is a Graph wrapper for the backend.Builder.FFT method.
 func backendFFT(operand *Node, fftType backends.FFTType, fftLength []int) (node *Node) {
-	g := validateBuildingGraphFromInputs(operand)
+	inputNodes := []*Node{operand}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsFFT{
 		operand:   operand,
 		fftType:   fftType,
 		fftLength: fftLength,
 	}
-	inputNodes := []*Node{operand}
 	result := g.builder.FFT(operand.outputOps[0], inputs.fftType, inputs.fftLength)
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -1314,11 +1317,11 @@ func (ni *nodeInputsFloor) String() string {
 
 // Floor returns the Op that represents the output of the corresponding operation.
 func Floor(x *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x)
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsFloor{
 		x: x,
 	}
-	inputNodes := []*Node{x}
 	result := g.builder.Floor(x.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -1365,7 +1368,8 @@ func (ni *nodeInputsGather) String() string {
 
 // backendGather is a Graph wrapper for the backend.Builder.Gather method.
 func backendGather(operand *Node, startIndices *Node, indexVectorAxis int, offsetAxes []int, collapsedSliceAxes []int, startIndexMap []int, sliceSizes []int, indicesAreSorted bool) (node *Node) {
-	g := validateBuildingGraphFromInputs(operand, startIndices)
+	inputNodes := []*Node{operand, startIndices}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsGather{
 		operand:            operand,
 		startIndices:       startIndices,
@@ -1376,7 +1380,6 @@ func backendGather(operand *Node, startIndices *Node, indexVectorAxis int, offse
 		sliceSizes:         sliceSizes,
 		indicesAreSorted:   indicesAreSorted,
 	}
-	inputNodes := []*Node{operand, startIndices}
 	result := g.builder.Gather(operand.outputOps[0], startIndices.outputOps[0], inputs.indexVectorAxis, inputs.offsetAxes, inputs.collapsedSliceAxes, inputs.startIndexMap, inputs.sliceSizes, inputs.indicesAreSorted)
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -1412,12 +1415,12 @@ func (ni *nodeInputsGreaterOrEqual) String() string {
 // GreaterOrEqual performs element-wise comparison, returns boolean results with the same dimensions as input.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func GreaterOrEqual(x0 *Node, x1 *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x0, x1)
+	inputNodes := []*Node{x0, x1}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsGreaterOrEqual{
 		x0: x0,
 		x1: x1,
 	}
-	inputNodes := []*Node{x0, x1}
 	result := g.builder.GreaterOrEqual(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -1456,12 +1459,12 @@ func (ni *nodeInputsGreaterOrEqualTotalOrder) String() string {
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func GreaterOrEqualTotalOrder(x0 *Node, x1 *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x0, x1)
+	inputNodes := []*Node{x0, x1}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsGreaterOrEqualTotalOrder{
 		x0: x0,
 		x1: x1,
 	}
-	inputNodes := []*Node{x0, x1}
 	result := g.builder.GreaterOrEqualTotalOrder(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -1498,12 +1501,12 @@ func (ni *nodeInputsGreaterThan) String() string {
 // GreaterThan performs element-wise comparison, returns boolean results with the same dimensions as input.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func GreaterThan(x0 *Node, x1 *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x0, x1)
+	inputNodes := []*Node{x0, x1}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsGreaterThan{
 		x0: x0,
 		x1: x1,
 	}
-	inputNodes := []*Node{x0, x1}
 	result := g.builder.GreaterThan(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -1542,12 +1545,12 @@ func (ni *nodeInputsGreaterThanTotalOrder) String() string {
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func GreaterThanTotalOrder(x0 *Node, x1 *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x0, x1)
+	inputNodes := []*Node{x0, x1}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsGreaterThanTotalOrder{
 		x0: x0,
 		x1: x1,
 	}
-	inputNodes := []*Node{x0, x1}
 	result := g.builder.GreaterThanTotalOrder(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -1582,11 +1585,11 @@ func (ni *nodeInputsIdentity) String() string {
 // Identity returns an Op whose output is the same as its input.
 // It's a no-op that can serve as a place-holder.
 func Identity(x *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x)
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsIdentity{
 		x: x,
 	}
-	inputNodes := []*Node{x}
 	result := g.builder.Identity(x.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -1619,11 +1622,11 @@ func (ni *nodeInputsImag) String() string {
 
 // Imag returns the imaginary part of a complex number. It returns 0 if the x is a float number.
 func Imag(x *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x)
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsImag{
 		x: x,
 	}
-	inputNodes := []*Node{x}
 	result := g.builder.Imag(x.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -1697,12 +1700,12 @@ func (ni *nodeInputsLessOrEqual) String() string {
 // LessOrEqual performs element-wise comparison, returns boolean results with the same dimensions as input.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func LessOrEqual(x0 *Node, x1 *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x0, x1)
+	inputNodes := []*Node{x0, x1}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsLessOrEqual{
 		x0: x0,
 		x1: x1,
 	}
-	inputNodes := []*Node{x0, x1}
 	result := g.builder.LessOrEqual(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -1741,12 +1744,12 @@ func (ni *nodeInputsLessOrEqualTotalOrder) String() string {
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func LessOrEqualTotalOrder(x0 *Node, x1 *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x0, x1)
+	inputNodes := []*Node{x0, x1}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsLessOrEqualTotalOrder{
 		x0: x0,
 		x1: x1,
 	}
-	inputNodes := []*Node{x0, x1}
 	result := g.builder.LessOrEqualTotalOrder(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -1783,12 +1786,12 @@ func (ni *nodeInputsLessThan) String() string {
 // LessThan performs element-wise comparison, returns boolean results with the same dimensions as input.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func LessThan(x0 *Node, x1 *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x0, x1)
+	inputNodes := []*Node{x0, x1}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsLessThan{
 		x0: x0,
 		x1: x1,
 	}
-	inputNodes := []*Node{x0, x1}
 	result := g.builder.LessThan(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -1827,12 +1830,12 @@ func (ni *nodeInputsLessThanTotalOrder) String() string {
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func LessThanTotalOrder(x0 *Node, x1 *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x0, x1)
+	inputNodes := []*Node{x0, x1}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsLessThanTotalOrder{
 		x0: x0,
 		x1: x1,
 	}
-	inputNodes := []*Node{x0, x1}
 	result := g.builder.LessThanTotalOrder(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -1866,11 +1869,11 @@ func (ni *nodeInputsLog) String() string {
 
 // Log returns the Op that represents the output of the corresponding operation.
 func Log(x *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x)
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsLog{
 		x: x,
 	}
-	inputNodes := []*Node{x}
 	result := g.builder.Log(x.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -1903,11 +1906,11 @@ func (ni *nodeInputsLog1p) String() string {
 
 // Log1p returns the expression log(x+1).
 func Log1p(x *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x)
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsLog1p{
 		x: x,
 	}
-	inputNodes := []*Node{x}
 	result := g.builder.Log1p(x.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -1940,11 +1943,11 @@ func (ni *nodeInputsLogicalNot) String() string {
 
 // LogicalNot returns the Op that represents the output of the corresponding operation.
 func LogicalNot(x *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x)
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsLogicalNot{
 		x: x,
 	}
-	inputNodes := []*Node{x}
 	result := g.builder.LogicalNot(x.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -1978,11 +1981,11 @@ func (ni *nodeInputsLogistic) String() string {
 
 // Logistic returns the element-wise expression 1/(1+exp(-x)). Also known as the Sigmoid function.
 func Logistic(x *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x)
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsLogistic{
 		x: x,
 	}
-	inputNodes := []*Node{x}
 	result := g.builder.Logistic(x.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -2018,12 +2021,12 @@ func (ni *nodeInputsMax) String() string {
 // Max returns the element-wise highest value among the two.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func Max(x0 *Node, x1 *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x0, x1)
+	inputNodes := []*Node{x0, x1}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsMax{
 		x0: x0,
 		x1: x1,
 	}
-	inputNodes := []*Node{x0, x1}
 	result := g.builder.Max(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -2059,12 +2062,12 @@ func (ni *nodeInputsMin) String() string {
 // Min returns the element-wise smallest value among the two.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func Min(x0 *Node, x1 *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x0, x1)
+	inputNodes := []*Node{x0, x1}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsMin{
 		x0: x0,
 		x1: x1,
 	}
-	inputNodes := []*Node{x0, x1}
 	result := g.builder.Min(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -2101,12 +2104,12 @@ func (ni *nodeInputsMul) String() string {
 // Standard broadcasting rules apply (see documentation).
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func Mul(x0 *Node, x1 *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x0, x1)
+	inputNodes := []*Node{x0, x1}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsMul{
 		x0: x0,
 		x1: x1,
 	}
-	inputNodes := []*Node{x0, x1}
 	result := g.builder.Mul(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -2139,11 +2142,11 @@ func (ni *nodeInputsNeg) String() string {
 
 // Neg returns the Op that represents the output of the corresponding operation.
 func Neg(x *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x)
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsNeg{
 		x: x,
 	}
-	inputNodes := []*Node{x}
 	result := g.builder.Neg(x.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -2179,12 +2182,12 @@ func (ni *nodeInputsNotEqual) String() string {
 // NotEqual performs element-wise inequality check, returns boolean results with the same dimensions as input.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func NotEqual(x0 *Node, x1 *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x0, x1)
+	inputNodes := []*Node{x0, x1}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsNotEqual{
 		x0: x0,
 		x1: x1,
 	}
-	inputNodes := []*Node{x0, x1}
 	result := g.builder.NotEqual(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -2223,12 +2226,12 @@ func (ni *nodeInputsNotEqualTotalOrder) String() string {
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func NotEqualTotalOrder(x0 *Node, x1 *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x0, x1)
+	inputNodes := []*Node{x0, x1}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsNotEqualTotalOrder{
 		x0: x0,
 		x1: x1,
 	}
-	inputNodes := []*Node{x0, x1}
 	result := g.builder.NotEqualTotalOrder(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -2265,12 +2268,12 @@ func (ni *nodeInputsOr) String() string {
 // Or returns the element-wise logic "and" operator.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func Or(x0 *Node, x1 *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x0, x1)
+	inputNodes := []*Node{x0, x1}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsOr{
 		x0: x0,
 		x1: x1,
 	}
-	inputNodes := []*Node{x0, x1}
 	result := g.builder.Or(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -2310,13 +2313,13 @@ func (ni *nodeInputsPad) String() string {
 // There must be at most `operand.Rank()` axesConfig values. Missing PadAxis are assumed to be zeros,
 // that is, no padding for those axes.
 func Pad(x *Node, fillValue *Node, axesConfig ...backends.PadAxis) (node *Node) {
-	g := validateBuildingGraphFromInputs(x, fillValue)
+	inputNodes := []*Node{x, fillValue}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsPad{
 		x:          x,
 		fillValue:  fillValue,
 		axesConfig: slices.Clone(axesConfig),
 	}
-	inputNodes := []*Node{x, fillValue}
 	result := g.builder.Pad(x.outputOps[0], fillValue.outputOps[0], inputs.axesConfig...)
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -2352,12 +2355,12 @@ func (ni *nodeInputsPow) String() string {
 // Pow returns the Op that represents the output of the corresponding operation.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func Pow(x0 *Node, x1 *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x0, x1)
+	inputNodes := []*Node{x0, x1}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsPow{
 		x0: x0,
 		x1: x1,
 	}
-	inputNodes := []*Node{x0, x1}
 	result := g.builder.Pow(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -2390,11 +2393,11 @@ func (ni *nodeInputsReal) String() string {
 
 // Real return the real part of a complex number. It returns x if the x is a float number.
 func Real(x *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x)
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsReal{
 		x: x,
 	}
-	inputNodes := []*Node{x}
 	result := g.builder.Real(x.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -2429,12 +2432,12 @@ func (ni *nodeInputsReduceAnd) String() string {
 
 // backendReduceAnd is a Graph wrapper for the backend.Builder.ReduceAnd method.
 func backendReduceAnd(x *Node, axes ...int) (node *Node) {
-	g := validateBuildingGraphFromInputs(x)
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsReduceAnd{
 		x:    x,
 		axes: slices.Clone(axes),
 	}
-	inputNodes := []*Node{x}
 	result := g.builder.ReduceAnd(x.outputOps[0], inputs.axes...)
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -2469,12 +2472,12 @@ func (ni *nodeInputsReduceMax) String() string {
 
 // backendReduceMax is a Graph wrapper for the backend.Builder.ReduceMax method.
 func backendReduceMax(x *Node, axes ...int) (node *Node) {
-	g := validateBuildingGraphFromInputs(x)
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsReduceMax{
 		x:    x,
 		axes: slices.Clone(axes),
 	}
-	inputNodes := []*Node{x}
 	result := g.builder.ReduceMax(x.outputOps[0], inputs.axes...)
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -2509,12 +2512,12 @@ func (ni *nodeInputsReduceMin) String() string {
 
 // backendReduceMin is a Graph wrapper for the backend.Builder.ReduceMin method.
 func backendReduceMin(x *Node, axes ...int) (node *Node) {
-	g := validateBuildingGraphFromInputs(x)
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsReduceMin{
 		x:    x,
 		axes: slices.Clone(axes),
 	}
-	inputNodes := []*Node{x}
 	result := g.builder.ReduceMin(x.outputOps[0], inputs.axes...)
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -2549,12 +2552,12 @@ func (ni *nodeInputsReduceOr) String() string {
 
 // backendReduceOr is a Graph wrapper for the backend.Builder.ReduceOr method.
 func backendReduceOr(x *Node, axes ...int) (node *Node) {
-	g := validateBuildingGraphFromInputs(x)
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsReduceOr{
 		x:    x,
 		axes: slices.Clone(axes),
 	}
-	inputNodes := []*Node{x}
 	result := g.builder.ReduceOr(x.outputOps[0], inputs.axes...)
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -2589,12 +2592,12 @@ func (ni *nodeInputsReduceProduct) String() string {
 
 // backendReduceProduct is a Graph wrapper for the backend.Builder.ReduceProduct method.
 func backendReduceProduct(x *Node, axes ...int) (node *Node) {
-	g := validateBuildingGraphFromInputs(x)
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsReduceProduct{
 		x:    x,
 		axes: slices.Clone(axes),
 	}
-	inputNodes := []*Node{x}
 	result := g.builder.ReduceProduct(x.outputOps[0], inputs.axes...)
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -2629,12 +2632,12 @@ func (ni *nodeInputsReduceSum) String() string {
 
 // backendReduceSum is a Graph wrapper for the backend.Builder.ReduceSum method.
 func backendReduceSum(x *Node, axes ...int) (node *Node) {
-	g := validateBuildingGraphFromInputs(x)
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsReduceSum{
 		x:    x,
 		axes: slices.Clone(axes),
 	}
-	inputNodes := []*Node{x}
 	result := g.builder.ReduceSum(x.outputOps[0], inputs.axes...)
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -2679,7 +2682,8 @@ func (ni *nodeInputsReduceWindow) String() string {
 
 // backendReduceWindow is a Graph wrapper for the backend.Builder.ReduceWindow method.
 func backendReduceWindow(x *Node, reductionType ReduceOpType, windowDimensions []int, strides []int, baseDilations []int, windowDilations []int, paddings [][2]int) (node *Node) {
-	g := validateBuildingGraphFromInputs(x)
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsReduceWindow{
 		x:                x,
 		reductionType:    reductionType,
@@ -2689,7 +2693,6 @@ func backendReduceWindow(x *Node, reductionType ReduceOpType, windowDimensions [
 		windowDilations:  windowDilations,
 		paddings:         paddings,
 	}
-	inputNodes := []*Node{x}
 	result := g.builder.ReduceWindow(x.outputOps[0], inputs.reductionType, inputs.windowDimensions, inputs.strides, inputs.baseDilations, inputs.windowDilations, inputs.paddings)
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -2726,12 +2729,12 @@ func (ni *nodeInputsRem) String() string {
 // Notice despite the name XLA implements Mod not IEEE754 Remainder operation.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func Rem(x0 *Node, x1 *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x0, x1)
+	inputNodes := []*Node{x0, x1}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsRem{
 		x0: x0,
 		x1: x1,
 	}
-	inputNodes := []*Node{x0, x1}
 	result := g.builder.Rem(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -2766,12 +2769,12 @@ func (ni *nodeInputsReshape) String() string {
 
 // backendReshape is a Graph wrapper for the backend.Builder.Reshape method.
 func backendReshape(x *Node, dimensions ...int) (node *Node) {
-	g := validateBuildingGraphFromInputs(x)
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsReshape{
 		x:          x,
 		dimensions: slices.Clone(dimensions),
 	}
-	inputNodes := []*Node{x}
 	result := g.builder.Reshape(x.outputOps[0], inputs.dimensions...)
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -2806,12 +2809,12 @@ func (ni *nodeInputsReverse) String() string {
 
 // backendReverse is a Graph wrapper for the backend.Builder.Reverse method.
 func backendReverse(x *Node, axes ...int) (node *Node) {
-	g := validateBuildingGraphFromInputs(x)
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsReverse{
 		x:    x,
 		axes: slices.Clone(axes),
 	}
-	inputNodes := []*Node{x}
 	result := g.builder.Reverse(x.outputOps[0], inputs.axes...)
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -2846,12 +2849,12 @@ func (ni *nodeInputsRngBitGenerator) String() string {
 
 // backendRngBitGenerator is a Graph wrapper for the backend.Builder.RngBitGenerator method.
 func backendRngBitGenerator(state *Node, shape shapes.Shape) (newState, values *Node) {
-	g := validateBuildingGraphFromInputs(state)
+	inputNodes := []*Node{state}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsRngBitGenerator{
 		state: state,
 		shape: shape,
 	}
-	inputNodes := []*Node{state}
 	v0, v1 := g.builder.RngBitGenerator(state.outputOps[0], inputs.shape)
 	node := &Node{
 		outputOps:    []backends.Op{v0, v1},
@@ -2886,11 +2889,11 @@ func (ni *nodeInputsRound) String() string {
 
 // Round returns the Op that represents the output of the corresponding operation.
 func Round(x *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x)
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsRound{
 		x: x,
 	}
-	inputNodes := []*Node{x}
 	result := g.builder.Round(x.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -2923,11 +2926,11 @@ func (ni *nodeInputsRsqrt) String() string {
 
 // Rsqrt returns the element-wise reciprocal of square root operation 1/sqrt(x).
 func Rsqrt(x *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x)
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsRsqrt{
 		x: x,
 	}
-	inputNodes := []*Node{x}
 	result := g.builder.Rsqrt(x.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -2976,7 +2979,8 @@ func (ni *nodeInputsScatterAdd) String() string {
 
 // backendScatterAdd is a Graph wrapper for the backend.Builder.ScatterAdd method.
 func backendScatterAdd(operand *Node, scatterIndices *Node, updates *Node, indexVectorAxis int, updateWindowAxes []int, insertedWindowAxes []int, scatterAxesToOperandAxes []int, indicesAreSorted bool, uniqueIndices bool) (node *Node) {
-	g := validateBuildingGraphFromInputs(operand, scatterIndices, updates)
+	inputNodes := []*Node{operand, scatterIndices, updates}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsScatterAdd{
 		operand:                  operand,
 		scatterIndices:           scatterIndices,
@@ -2988,7 +2992,6 @@ func backendScatterAdd(operand *Node, scatterIndices *Node, updates *Node, index
 		indicesAreSorted:         indicesAreSorted,
 		uniqueIndices:            uniqueIndices,
 	}
-	inputNodes := []*Node{operand, scatterIndices, updates}
 	result := g.builder.ScatterAdd(operand.outputOps[0], scatterIndices.outputOps[0], updates.outputOps[0], inputs.indexVectorAxis, inputs.updateWindowAxes, inputs.insertedWindowAxes, inputs.scatterAxesToOperandAxes, inputs.indicesAreSorted, inputs.uniqueIndices)
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -3037,7 +3040,8 @@ func (ni *nodeInputsScatterMax) String() string {
 
 // ScatterMax scatter values from updates pointed by scatterIndices to operand, by taking the Max.
 func ScatterMax(operand *Node, scatterIndices *Node, updates *Node, indexVectorAxis int, updateWindowAxes []int, insertedWindowAxes []int, scatterAxesToOperandAxes []int, indicesAreSorted bool, uniqueIndices bool) (node *Node) {
-	g := validateBuildingGraphFromInputs(operand, scatterIndices, updates)
+	inputNodes := []*Node{operand, scatterIndices, updates}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsScatterMax{
 		operand:                  operand,
 		scatterIndices:           scatterIndices,
@@ -3049,7 +3053,6 @@ func ScatterMax(operand *Node, scatterIndices *Node, updates *Node, indexVectorA
 		indicesAreSorted:         indicesAreSorted,
 		uniqueIndices:            uniqueIndices,
 	}
-	inputNodes := []*Node{operand, scatterIndices, updates}
 	result := g.builder.ScatterMax(operand.outputOps[0], scatterIndices.outputOps[0], updates.outputOps[0], inputs.indexVectorAxis, inputs.updateWindowAxes, inputs.insertedWindowAxes, inputs.scatterAxesToOperandAxes, inputs.indicesAreSorted, inputs.uniqueIndices)
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -3098,7 +3101,8 @@ func (ni *nodeInputsScatterMin) String() string {
 
 // ScatterMin scatter values from updates pointed by scatterIndices to operand, by taking the Min.
 func ScatterMin(operand *Node, scatterIndices *Node, updates *Node, indexVectorAxis int, updateWindowAxes []int, insertedWindowAxes []int, scatterAxesToOperandAxes []int, indicesAreSorted bool, uniqueIndices bool) (node *Node) {
-	g := validateBuildingGraphFromInputs(operand, scatterIndices, updates)
+	inputNodes := []*Node{operand, scatterIndices, updates}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsScatterMin{
 		operand:                  operand,
 		scatterIndices:           scatterIndices,
@@ -3110,7 +3114,6 @@ func ScatterMin(operand *Node, scatterIndices *Node, updates *Node, indexVectorA
 		indicesAreSorted:         indicesAreSorted,
 		uniqueIndices:            uniqueIndices,
 	}
-	inputNodes := []*Node{operand, scatterIndices, updates}
 	result := g.builder.ScatterMin(operand.outputOps[0], scatterIndices.outputOps[0], updates.outputOps[0], inputs.indexVectorAxis, inputs.updateWindowAxes, inputs.insertedWindowAxes, inputs.scatterAxesToOperandAxes, inputs.indicesAreSorted, inputs.uniqueIndices)
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -3151,7 +3154,8 @@ func (ni *nodeInputsSelectAndScatterMax) String() string {
 
 // backendSelectAndScatterMax is a Graph wrapper for the backend.Builder.SelectAndScatterMax method.
 func backendSelectAndScatterMax(operand *Node, source *Node, windowDimensions []int, windowStrides []int, paddings [][2]int) (node *Node) {
-	g := validateBuildingGraphFromInputs(operand, source)
+	inputNodes := []*Node{operand, source}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsSelectAndScatterMax{
 		operand:          operand,
 		source:           source,
@@ -3159,7 +3163,6 @@ func backendSelectAndScatterMax(operand *Node, source *Node, windowDimensions []
 		windowStrides:    windowStrides,
 		paddings:         paddings,
 	}
-	inputNodes := []*Node{operand, source}
 	result := g.builder.SelectAndScatterMax(operand.outputOps[0], source.outputOps[0], inputs.windowDimensions, inputs.windowStrides, inputs.paddings)
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -3200,7 +3203,8 @@ func (ni *nodeInputsSelectAndScatterMin) String() string {
 
 // backendSelectAndScatterMin is a Graph wrapper for the backend.Builder.SelectAndScatterMin method.
 func backendSelectAndScatterMin(operand *Node, source *Node, windowDimensions []int, windowStrides []int, paddings [][2]int) (node *Node) {
-	g := validateBuildingGraphFromInputs(operand, source)
+	inputNodes := []*Node{operand, source}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsSelectAndScatterMin{
 		operand:          operand,
 		source:           source,
@@ -3208,7 +3212,6 @@ func backendSelectAndScatterMin(operand *Node, source *Node, windowDimensions []
 		windowStrides:    windowStrides,
 		paddings:         paddings,
 	}
-	inputNodes := []*Node{operand, source}
 	result := g.builder.SelectAndScatterMin(operand.outputOps[0], source.outputOps[0], inputs.windowDimensions, inputs.windowStrides, inputs.paddings)
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -3249,7 +3252,8 @@ func (ni *nodeInputsSelectAndScatterSum) String() string {
 
 // backendSelectAndScatterSum is a Graph wrapper for the backend.Builder.SelectAndScatterSum method.
 func backendSelectAndScatterSum(operand *Node, source *Node, windowDimensions []int, windowStrides []int, paddings [][2]int) (node *Node) {
-	g := validateBuildingGraphFromInputs(operand, source)
+	inputNodes := []*Node{operand, source}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsSelectAndScatterSum{
 		operand:          operand,
 		source:           source,
@@ -3257,7 +3261,6 @@ func backendSelectAndScatterSum(operand *Node, source *Node, windowDimensions []
 		windowStrides:    windowStrides,
 		paddings:         paddings,
 	}
-	inputNodes := []*Node{operand, source}
 	result := g.builder.SelectAndScatterSum(operand.outputOps[0], source.outputOps[0], inputs.windowDimensions, inputs.windowStrides, inputs.paddings)
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -3290,11 +3293,11 @@ func (ni *nodeInputsSign) String() string {
 
 // backendSign is a Graph wrapper for the backend.Builder.Sign method.
 func backendSign(x *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x)
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsSign{
 		x: x,
 	}
-	inputNodes := []*Node{x}
 	result := g.builder.Sign(x.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -3327,11 +3330,11 @@ func (ni *nodeInputsSin) String() string {
 
 // Sin returns the Op that represents the output of the corresponding operation.
 func Sin(x *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x)
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsSin{
 		x: x,
 	}
-	inputNodes := []*Node{x}
 	result := g.builder.Sin(x.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -3370,14 +3373,14 @@ func (ni *nodeInputsSlice) String() string {
 
 // backendSlice is a Graph wrapper for the backend.Builder.Slice method.
 func backendSlice(x *Node, starts []int, limits []int, strides []int) (node *Node) {
-	g := validateBuildingGraphFromInputs(x)
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsSlice{
 		x:       x,
 		starts:  starts,
 		limits:  limits,
 		strides: strides,
 	}
-	inputNodes := []*Node{x}
 	result := g.builder.Slice(x.outputOps[0], inputs.starts, inputs.limits, inputs.strides)
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -3410,11 +3413,11 @@ func (ni *nodeInputsSqrt) String() string {
 
 // Sqrt returns the Op that represents the output of the corresponding operation.
 func Sqrt(x *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x)
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsSqrt{
 		x: x,
 	}
-	inputNodes := []*Node{x}
 	result := g.builder.Sqrt(x.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -3451,12 +3454,12 @@ func (ni *nodeInputsSub) String() string {
 // Standard broadcasting rules apply (see documentation).
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func Sub(x0 *Node, x1 *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x0, x1)
+	inputNodes := []*Node{x0, x1}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsSub{
 		x0: x0,
 		x1: x1,
 	}
-	inputNodes := []*Node{x0, x1}
 	result := g.builder.Sub(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -3489,11 +3492,11 @@ func (ni *nodeInputsTanh) String() string {
 
 // Tanh returns the Op that represents the output of the corresponding operation.
 func Tanh(x *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x)
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsTanh{
 		x: x,
 	}
-	inputNodes := []*Node{x}
 	result := g.builder.Tanh(x.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -3528,12 +3531,12 @@ func (ni *nodeInputsTranspose) String() string {
 
 // backendTranspose is a Graph wrapper for the backend.Builder.Transpose method.
 func backendTranspose(x *Node, permutations ...int) (node *Node) {
-	g := validateBuildingGraphFromInputs(x)
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsTranspose{
 		x:            x,
 		permutations: slices.Clone(permutations),
 	}
-	inputNodes := []*Node{x}
 	result := g.builder.Transpose(x.outputOps[0], inputs.permutations...)
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -3570,13 +3573,13 @@ func (ni *nodeInputsWhere) String() string {
 
 // backendWhere is a Graph wrapper for the backend.Builder.Where method.
 func backendWhere(condition *Node, onTrue *Node, onFalse *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(condition, onTrue, onFalse)
+	inputNodes := []*Node{condition, onTrue, onFalse}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsWhere{
 		condition: condition,
 		onTrue:    onTrue,
 		onFalse:   onFalse,
 	}
-	inputNodes := []*Node{condition, onTrue, onFalse}
 	result := g.builder.Where(condition.outputOps[0], onTrue.outputOps[0], onFalse.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
@@ -3612,12 +3615,12 @@ func (ni *nodeInputsXor) String() string {
 // Xor returns the element-wise logic "and" operator.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func Xor(x0 *Node, x1 *Node) (node *Node) {
-	g := validateBuildingGraphFromInputs(x0, x1)
+	inputNodes := []*Node{x0, x1}
+	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsXor{
 		x0: x0,
 		x1: x1,
 	}
-	inputNodes := []*Node{x0, x1}
 	result := g.builder.Xor(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},

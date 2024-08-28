@@ -79,7 +79,7 @@ func buildMethodInfo() (methods []*MethodInfo) {
 				case "...Op":
 					pi.BackendType = "...backends.Op"
 					pi.GraphType = "...*Node"
-					mi.OpInputsList = paramName
+					mi.OpInputSlices = append(mi.OpInputSlices, paramName)
 					pi.NodeInputType = "[]*Node"
 					pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", paramName)
 					pi.ConvertStatement = fmt.Sprintf("xslices.Map(%s, func(node *Node) backends.Op { return node.outputOps[0] })...", paramName)
@@ -90,7 +90,7 @@ func buildMethodInfo() (methods []*MethodInfo) {
 				case "[]Op":
 					pi.BackendType = "[]backends.Op"
 					pi.GraphType = "[]*Node"
-					mi.OpInputsList = paramName
+					mi.OpInputSlices = append(mi.OpInputSlices, paramName)
 					pi.NodeInputType = "[]*Node"
 					pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", paramName)
 					pi.ConvertStatement = fmt.Sprintf("xslices.Map(%s, func(node *Node) backends.Op { return node.outputOps[0] })", paramName)
@@ -142,7 +142,7 @@ func buildMethodInfo() (methods []*MethodInfo) {
 					pi.FormatValue = "ni." + pi.Name
 				}
 			}
-			mi.HasGraph = mi.OpInputsList == "" && len(mi.OpInputs) == 0
+			mi.HasGraph = len(mi.OpInputSlices) == 0 && len(mi.OpInputs) == 0
 
 		}
 		for _, field := range funcInfo.Type.Results.List {
@@ -162,7 +162,7 @@ type MethodInfo struct {
 	BackendName, GraphName string
 	HasGraph               bool
 	OpInputs               []string
-	OpInputsList           string
+	OpInputSlices          []string
 	Inputs                 []*ParameterInfo
 	Exported, Excluded     bool
 	Comments               []string
@@ -238,14 +238,13 @@ Outputs: */}}{{if not .HasMultipleOutputs}}node *Node{{/*
 
 Body: */}}{
 {{if .HasGraph}}	g.AssertBuilding()
-{{else}}{{if ne .OpInputsList ""}}	g := validateBuildingGraphFromInputs({{.OpInputsList}}...)
-{{else}}	g := validateBuildingGraphFromInputs({{range .OpInputs}}{{.}}, {{end}})
-{{end}}{{end}}	inputs := &nodeInputs{{.BackendName}}{
+{{else}}	inputNodes := []*Node{ {{range .OpInputs}}{{.}}, {{end}} }
+{{range .OpInputSlices}}	inputNodes = append(inputNodes, {{.}}...)
+{{end}}	g := validateBuildingGraphFromInputs(inputNodes...)
+{{end}}	inputs := &nodeInputs{{.BackendName}}{
 {{range .Inputs}}		{{.Name}}: {{.CopyStatement}},		
 {{end}}	}
-{{if not .HasGraph}}	{{if eq .OpInputsList ""}}inputNodes := []*Node{ {{range .OpInputs}}{{.}}, {{end}} } 
-{{else}}	inputNodes := {{.OpInputsList}}
-{{end}}{{end}}{{/*
+{{/*
 
 Convert result(s) to node(s):
 
