@@ -9,6 +9,8 @@
   * Added `ExecOnce` and `ExecOnceN` 
   * Added `CumSum`
   * `ConvertDType` to the same dtype is now a no-op.
+  * Added `LogicalAll` and `LogicalAny`
+  * Added `DynamicSlice` and `DynamicUpdateSlice`
 * Package `backend`:
   * Added `DynamicUpdateSlice`, `DynamicSlice`, `ReduceAnd` and `ReduceOr`.
 * Package `tensors`:

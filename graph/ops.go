@@ -887,6 +887,7 @@ func MaskedReduceAllMin(x, mask *Node) *Node {
 func LogicalAll(x *Node, reduceAxes ...int) *Node {
 	_ = validateBuildingGraphFromInputs(x)
 	x = ConvertDType(x, dtypes.Bool) // No-op if already bool.
+	x = StopGradient(x)              // No gradients defined to LogicalAll.
 	axes := adjustAxesToRankAndSort(x.Rank(), reduceAxes, "x")
 	return backendReduceAnd(x, axes...)
 }
@@ -898,6 +899,7 @@ func LogicalAll(x *Node, reduceAxes ...int) *Node {
 func LogicalAny(x *Node, reduceAxes ...int) *Node {
 	_ = validateBuildingGraphFromInputs(x)
 	x = ConvertDType(x, dtypes.Bool) // No-op if already bool.
+	x = StopGradient(x)              // No gradients defined to LogicalAny.
 	axes := adjustAxesToRankAndSort(x.Rank(), reduceAxes, "x")
 	return backendReduceOr(x, axes...)
 }
