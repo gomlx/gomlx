@@ -1000,7 +1000,7 @@ func backendDotGeneral(lhs *Node, lhsContractingAxes []int, lhsBatchAxes []int, 
 // nodeInputsDynamicSlice holds the inputs used for the call to backends.DynamicSlice.
 type nodeInputsDynamicSlice struct {
 	operand      *Node
-	startIndices []Op
+	startIndices []*Node
 	sliceDims    []int
 }
 
@@ -1011,10 +1011,10 @@ func (ni *nodeInputsDynamicSlice) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsDynamicSlice) String() string {
-	return fmt.Sprintf("%s(operand=[#%d], startIndices=%v, sliceDims=%v)",
+	return fmt.Sprintf("%s(operand=[#%d], startIndices=[#%s], sliceDims=%v)",
 		ni.Type(),
 		ni.operand.Id(),
-		ni.startIndices,
+		strings.Join(xslices.Map(ni.startIndices, func(node *Node) string { return fmt.Sprintf("#%d", node.Id()) }), ", "),
 		ni.sliceDims,
 	)
 }
@@ -1024,15 +1024,15 @@ func (ni *nodeInputsDynamicSlice) String() string {
 // intervals for each axis: [start, start + size).
 // The shape of startIndices must be rank == 1, with dimension size equal to the rank of operand.
 // See description in https://openxla.org/xla/operation_semantics#dynamicslice
-func DynamicSlice(operand *Node, startIndices []Op, sliceDims []int) (node *Node) {
-	g := validateBuildingGraphFromInputs(operand)
+func DynamicSlice(operand *Node, startIndices []*Node, sliceDims []int) (node *Node) {
+	g := validateBuildingGraphFromInputs(startIndices...)
 	inputs := &nodeInputsDynamicSlice{
 		operand:      operand,
-		startIndices: startIndices,
+		startIndices: slices.Clone(startIndices),
 		sliceDims:    sliceDims,
 	}
-	inputNodes := []*Node{operand}
-	result := g.builder.DynamicSlice(operand.outputOps[0], inputs.startIndices, inputs.sliceDims)
+	inputNodes := startIndices
+	result := g.builder.DynamicSlice(operand.outputOps[0], xslices.Map(startIndices, func(node *Node) backends.Op { return node.outputOps[0] }), inputs.sliceDims)
 	node = &Node{
 		outputOps:    []backends.Op{result},
 		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
@@ -1048,7 +1048,7 @@ func DynamicSlice(operand *Node, startIndices []Op, sliceDims []int) (node *Node
 type nodeInputsDynamicUpdateSlice struct {
 	operand      *Node
 	update       *Node
-	startIndices []Op
+	startIndices []*Node
 }
 
 // Type implements the interface NodeInputs.
@@ -1058,11 +1058,11 @@ func (ni *nodeInputsDynamicUpdateSlice) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsDynamicUpdateSlice) String() string {
-	return fmt.Sprintf("%s(operand=[#%d], update=[#%d], startIndices=%v)",
+	return fmt.Sprintf("%s(operand=[#%d], update=[#%d], startIndices=[#%s])",
 		ni.Type(),
 		ni.operand.Id(),
 		ni.update.Id(),
-		ni.startIndices,
+		strings.Join(xslices.Map(ni.startIndices, func(node *Node) string { return fmt.Sprintf("#%d", node.Id()) }), ", "),
 	)
 }
 
@@ -1071,15 +1071,15 @@ func (ni *nodeInputsDynamicUpdateSlice) String() string {
 // The shape of update determines the shape of the sub-array of the result which is updated.
 // The shape of startIndices must be rank == 1, with dimension size equal to the rank of operand.
 // See description in https://openxla.org/xla/operation_semantics#dynamicupdateslice
-func DynamicUpdateSlice(operand *Node, update *Node, startIndices []Op) (node *Node) {
-	g := validateBuildingGraphFromInputs(operand, update)
+func DynamicUpdateSlice(operand *Node, update *Node, startIndices []*Node) (node *Node) {
+	g := validateBuildingGraphFromInputs(startIndices...)
 	inputs := &nodeInputsDynamicUpdateSlice{
 		operand:      operand,
 		update:       update,
-		startIndices: startIndices,
+		startIndices: slices.Clone(startIndices),
 	}
-	inputNodes := []*Node{operand, update}
-	result := g.builder.DynamicUpdateSlice(operand.outputOps[0], update.outputOps[0], inputs.startIndices)
+	inputNodes := startIndices
+	result := g.builder.DynamicUpdateSlice(operand.outputOps[0], update.outputOps[0], xslices.Map(startIndices, func(node *Node) backends.Op { return node.outputOps[0] }))
 	node = &Node{
 		outputOps:    []backends.Op{result},
 		outputShapes: []shapes.Shape{g.builder.OpShape(result)},

@@ -995,3 +995,64 @@ func TestWhere(t *testing.T) {
 		},
 	}, -1)
 }
+
+func TestDynamicSlice(t *testing.T) {
+	// All indices for the slice given in one tensor.
+	graphtest.RunTestGraphFn(t, "DynamicSlice: all indices in one tensor", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = []*Node{
+			IotaFull(g, shapes.Make(dtypes.Float32, 3, 2)),
+			Const(g, []int32{0, 1}),
+		}
+		outputs = []*Node{
+			DynamicSlice(inputs[0], inputs[1:], []int{2, 1}),
+		}
+		return
+	}, []any{
+		[][]float32{{1}, {3}},
+	}, -1)
+
+	// Each index to startIndices given on a separate tensor.
+	graphtest.RunTestGraphFn(t, "DynamicSlice: indices in separate tensors", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = []*Node{
+			IotaFull(g, shapes.Make(dtypes.Float32, 3, 2)),
+			Const(g, int32(0)),
+			Const(g, int32(1)),
+		}
+		outputs = []*Node{
+			DynamicSlice(inputs[0], inputs[1:], []int{2, 1}),
+		}
+		return
+	}, []any{
+		[][]float32{{1}, {3}},
+	}, -1)
+}
+
+func TestDynamicUpdateSlice(t *testing.T) {
+	// This injects [][]float32{{100}, {100}} at position {0, 1} of the input.
+	graphtest.RunTestGraphFn(t, "DynamicUpdateSlice: all indices in one tensor", func(g *Graph) (inputs, outputs []*Node) {
+		operand := IotaFull(g, shapes.Make(dtypes.Float32, 3, 2))
+		updates := MulScalar(Ones(g, shapes.Make(dtypes.Float32, 2, 1)), 100)
+		startIndices := Const(g, []int32{0, 1})
+		inputs = []*Node{operand, updates, startIndices}
+		outputs = []*Node{
+			DynamicUpdateSlice(operand, updates, []*Node{startIndices}),
+		}
+		return
+	}, []any{
+		[][]float32{{0, 100}, {2, 100}, {4, 5}},
+	}, -1)
+
+	graphtest.RunTestGraphFn(t, "DynamicUpdateSlice: all indices in one tensor", func(g *Graph) (inputs, outputs []*Node) {
+		operand := IotaFull(g, shapes.Make(dtypes.Float32, 3, 2))
+		updates := MulScalar(Ones(g, shapes.Make(dtypes.Float32, 2, 1)), 100)
+		startIndices := []*Node{Const(g, int32(0)), Const(g, int32(1))}
+		inputs = []*Node{operand, updates}
+		inputs = append(inputs, startIndices...)
+		outputs = []*Node{
+			DynamicUpdateSlice(operand, updates, startIndices),
+		}
+		return
+	}, []any{
+		[][]float32{{0, 100}, {2, 100}, {4, 5}},
+	}, -1)
+}

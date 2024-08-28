@@ -87,6 +87,17 @@ func buildMethodInfo() (methods []*MethodInfo) {
 					pi.FormatValue = fmt.Sprintf(
 						`strings.Join(xslices.Map(ni.%s, func (node *Node) string { return fmt.Sprintf("#%%d", node.Id()) }), ", ")`,
 						paramName)
+				case "[]Op":
+					pi.BackendType = "[]backends.Op"
+					pi.GraphType = "[]*Node"
+					mi.OpInputsList = paramName
+					pi.NodeInputType = "[]*Node"
+					pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", paramName)
+					pi.ConvertStatement = fmt.Sprintf("xslices.Map(%s, func(node *Node) backends.Op { return node.outputOps[0] })", paramName)
+					pi.Format = "[#%s]"
+					pi.FormatValue = fmt.Sprintf(
+						`strings.Join(xslices.Map(ni.%s, func (node *Node) string { return fmt.Sprintf("#%%d", node.Id()) }), ", ")`,
+						paramName)
 				case "ConvolveAxesConfig":
 					pi.BackendType = "backends." + pi.BackendType
 					pi.CopyStatement = fmt.Sprintf("%s.Clone()", paramName)
