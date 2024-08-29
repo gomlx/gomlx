@@ -1,8 +1,9 @@
 # GoMLX changelog
 
-## Next
+## v0.11.3
 
 * Immediately free accelerator (GPU) memory, where possible -- as opposed to waiting for the garbage collector.
+  * This impacts the train.Loop and train.Trainer: they both immediately finalize the inputs and labels after use.
 
 ## v0.11.2 (was v0.11.1) - 2024/08/28
 
