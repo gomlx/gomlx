@@ -95,6 +95,10 @@ func (v *Variable) AssertValid() {
 // This will force to be variable to be reinitialized the next time a graph using the variable is executed.
 func (v *Variable) Reset() {
 	v.ctx.data.needsInitialization = true
+	if v.value != nil {
+		// Don't wait for the GC to free the memory from the accelerator.
+		v.value.FinalizeAll()
+	}
 	v.value = nil
 }
 
@@ -114,6 +118,11 @@ func (v *Variable) Shape() shapes.Shape {
 
 // VariableParameterPrefix is used to prefix Graph parameter names for variablesMap.
 const VariableParameterPrefix = "var:"
+
+// ScopeAndName is a quick pretty-print way to refer to a variable.
+func (v *Variable) ScopeAndName() string {
+	return JoinScope(v.Scope(), v.Name())
+}
 
 // ParameterName used when creating a parameter node in a Graph to access the variable, or as a key when saving.
 // It is a unique name for the variable that includes the scope and the variable name, and is reversible.

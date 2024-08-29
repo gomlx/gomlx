@@ -1,6 +1,14 @@
 # GoMLX changelog
 
-## 0.11.1 - 2024/08/28
+## v0.11.3 - 2023/08/29
+
+* Immediately free accelerator (GPU) memory, where possible -- as opposed to waiting for the garbage collector.
+  * This impacts the train.Loop and train.Trainer: they both immediately finalize the inputs and labels after use.
+* Fixed nil point exception, where initializer was not properly set if value of a variable was loaded from a checkpoint.
+  * This impacted when restarting training with batch normalization.
+* Fixes to the notebooks: some small things were broken on the v0.11.0 transition; large speed-up with v0.11.1 fixes.
+
+## v0.11.2 (was v0.11.1) - 2024/08/28
 
 * Added support for `dtypes.BFloat16`.
 * Added `tensors.FromScalar`

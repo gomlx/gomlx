@@ -23,7 +23,6 @@ import (
 
 type kanTestDataset struct {
 	batchSize int
-	tensor    *tensors.Tensor
 }
 
 func (ds *kanTestDataset) Name() string {
@@ -33,11 +32,8 @@ func (ds *kanTestDataset) Name() string {
 func (ds *kanTestDataset) Reset() {}
 
 func (ds *kanTestDataset) Yield() (spec any, inputs []*tensors.Tensor, labels []*tensors.Tensor, err error) {
-	if ds.tensor == nil {
-		ds.tensor = tensors.FromShape(shapes.Make(dtypes.Float64, ds.batchSize, 2))
-	}
 	spec = ds
-	inputs = []*tensors.Tensor{ds.tensor}
+	inputs = []*tensors.Tensor{tensors.FromShape(shapes.Make(dtypes.Float64, ds.batchSize, 2))}
 	return
 }
 

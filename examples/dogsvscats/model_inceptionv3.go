@@ -28,8 +28,9 @@ func InceptionV3ModelPrep(ctx *context.Context, dataDir string, checkpoint *chec
 // - no scaling (from 0.0 to 1.0): 62.5% accuracy
 // - with Keras scale (from -1.0 to 1.0): 61.8% accuracy
 func InceptionV3ModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
-	_ = spec            // Not needed.
-	images := inputs[0] // Images scaled from 0.0 to 1.0
+	ctx = ctx.In("model") // Create the model by default under the "/model" scope.
+	_ = spec              // Not needed.
+	images := inputs[0]   // Images scaled from 0.0 to 1.0
 	channelsConfig := timage.ChannelsLast
 	images = inceptionv3.PreprocessImage(images, 1.0, channelsConfig) // Adjust image to format used by Inception.
 	dataDir := context.GetParamOr(ctx, "data_dir", ".")

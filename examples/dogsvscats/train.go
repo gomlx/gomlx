@@ -171,6 +171,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, runEval bo
 	if !found {
 		exceptions.Panicf("Unknown model type %q: valid values are %q", modelType, maps.Keys(ModelsFns))
 	}
+	fmt.Printf("Model: %q\n", modelType)
 	if modelPrep, found := ModelsPrep[modelType]; found {
 		modelPrep(ctx, dataDir, checkpoint)
 	}
@@ -185,7 +186,6 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, runEval bo
 	backend := backends.New()
 	var trainer *train.Trainer
 	optimizer := optimizers.FromContext(ctx)
-	ctx = ctx.In("model") // Create the model by default under the "/model" scope.
 	if !preTraining {
 		trainer = train.NewTrainer(backend, ctx, modelFn,
 			losses.BinaryCrossentropyLogits,
@@ -255,8 +255,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, runEval bo
 		fmt.Printf("\t - target train_steps=%d already reached. To train further, set a number additional "+
 			"to current global step.\n", numTrainSteps)
 	}
-
-	fmt.Println("Training done.")
+	fmt.Printf("Training done (global_step=%d).\n", optimizers.GetGlobalStep(ctx))
 
 	if preTraining {
 		// If pre-training (unsupervised), skip evaluation, and clear optimizer variables and global step.

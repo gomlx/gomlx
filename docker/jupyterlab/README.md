@@ -6,13 +6,13 @@ will store your Go notebook files -- and run:
 
 ```bash
 docker pull janpfeifer/gomlx_jupyterlab:latest
-docker run -it --rm -p 8888:8888 -v "${PWD}":/home/jupyter/work janpfeifer/gomlx_jupyterlab:latest
+docker run -it --rm -p 8888:8888 -v "${PWD}":/home/jupyter/host janpfeifer/gomlx_jupyterlab:latest
 ```
 
 If you have GPU(s) and want to make them accessible, use instead:
 
 ```bash
-docker run -it --gpus all --rm -p 8888:8888 -v "${PWD}":/home/jupyter/work janpfeifer/gomlx_jupyterlab:latest
+docker run -it --gpus all --rm -p 8888:8888 -v "${PWD}":/home/jupyter/host janpfeifer/gomlx_jupyterlab:latest
 ```
 
 The command will output the `localhost:8888` link you can use -- it will include the secret token to connect to Jupyter.
@@ -25,6 +25,8 @@ drivers to support GPU if they are available (at the cost of being a larger dock
 should split on 2 dockers)
 
 ### Building the Docker
+
+The `Dockerfile` has 2 hardcoded versions that needs updating at each release: `GO_VERSION` and `GOPJRT_VERSION`.
 
 Note: the Dockerfile is configured to pull GoMLX (and gopjrt) from GitHub, so it won't use the contents on the current directory. 
 

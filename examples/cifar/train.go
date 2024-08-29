@@ -149,7 +149,9 @@ func TrainCifar10Model(ctx *context.Context, dataDir, checkpointPath string, eva
 
 		// Update batch normalization averages, if they are used.
 		if batchnorm.UpdateAverages(trainer, evalOnTrainDS) {
-			fmt.Println("\tUpdated batch normalization mean/variances averages.")
+			if verbosity >= 1 {
+				fmt.Println("\tUpdated batch normalization mean/variances averages.")
+			}
 			if checkpoint != nil {
 				must.M(checkpoint.Save())
 			}

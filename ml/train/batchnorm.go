@@ -39,6 +39,14 @@ func (r *Trainer) BatchNormalizationAveragesUpdate(ds Dataset) {
 			}
 			count++
 			r.batchNormAveragesStep(phase, spec, inputs, labels)
+
+			// Free inputs and labels after usage.
+			for _, input := range inputs {
+				input.FinalizeAll()
+			}
+			for _, label := range labels {
+				label.FinalizeAll()
+			}
 		}
 		if count == 0 {
 			Panicf("BatchNormalizationAveragesUpdate: dataset yielded no batches, no data to calculate running mean/average")

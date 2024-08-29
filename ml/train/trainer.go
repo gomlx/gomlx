@@ -489,6 +489,8 @@ func (r *Trainer) resetEvalMetrics() {
 // Eval returns the computation of loss and metrics over the given dataset. The dataset
 // has to be finite (yield io.EOF at the end). The function will reset the dataset
 // at the start.
+//
+// Note: inputs and labels yielded by the dataset are immediately finalized (freed) after use.
 func (r *Trainer) Eval(ds Dataset) (lossAndMetrics []*tensors.Tensor) {
 	ds.Reset()
 	r.resetEvalMetrics()
@@ -506,10 +508,24 @@ func (r *Trainer) Eval(ds Dataset) (lossAndMetrics []*tensors.Tensor) {
 		for _, t := range lossAndMetrics {
 			t.FinalizeAll()
 		}
+
 		lossAndMetrics = r.EvalStep(spec, inputs, labels)
+
+		// Free inputs and labels after usage.
+		for _, input := range inputs {
+			input.FinalizeAll()
+		}
+		for _, label := range labels {
+			label.FinalizeAll()
+		}
 	}
 	if count == 0 {
 		Panicf("evaluation dataset yielded no batches, no data to evaluate")
+	}
+	// Free lossAndMetrics on device, it will be consumed presumably only locally.
+	for _, metric := range lossAndMetrics {
+		metric.MaterializeLocal()
+		metric.InvalidateOnDevice()
 	}
 	return lossAndMetrics
 }

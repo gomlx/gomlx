@@ -25,6 +25,7 @@ package main
 
 import (
 	"flag"
+	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/examples/dogsvscats"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/data"
@@ -54,10 +55,15 @@ func main() {
 	paramsSet := must.M1(commandline.ParseContextSettings(ctx, *settings))
 
 	// --force_original better set by
-	if *flagPreGenerate {
-		preGenerate(ctx, *flagDataDir)
-	} else {
-		dogsvscats.TrainModel(ctx, *flagDataDir, *flagCheckpoint, *flagEval, paramsSet)
+	err := exceptions.TryCatch[error](func() {
+		if *flagPreGenerate {
+			preGenerate(ctx, *flagDataDir)
+		} else {
+			dogsvscats.TrainModel(ctx, *flagDataDir, *flagCheckpoint, *flagEval, paramsSet)
+		}
+	})
+	if err != nil {
+		klog.Errorf("Error:\n%+v", err)
 	}
 }
 

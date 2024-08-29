@@ -123,12 +123,17 @@ func convertBytesToTensor[T dtypes.GoFloat](image []byte, imagesT *tensors.Tenso
 // [NumExamples=60000, 1] of Int64.
 // The first 50k examples are for training, and the last 10k for testing.
 // Only Float32 and Float64 dtypes are supported for now.
-func LoadCifar10(manager backends.Backend, baseDir string, dtype dtypes.DType) (partitioned PartitionedImagesAndLabels) {
+func LoadCifar10(backend backends.Backend, baseDir string, dtype dtypes.DType) (partitioned PartitionedImagesAndLabels) {
 	baseDir = data.ReplaceTildeInDir(baseDir)
 
 	// Allocate the tensor.
 	images := tensors.FromShape(shapes.Make(dtype, NumExamples, Height, Width, Depth))
 	labels := tensors.FromShape(shapes.Make(dtypes.Int64, NumExamples, 1))
+	defer func() {
+		// Free images and labels resources in accelerator (GPU) immediately (don't wait for GC).
+		images.FinalizeAll()
+		labels.FinalizeAll()
+	}()
 	tensors.MutableFlatData[int64](labels, func(labelsData []int64) {
 		var labelImageBytes [imageSizeBytes + 1]byte
 		for fileIdx := 0; fileIdx < 6; fileIdx++ {
@@ -167,7 +172,7 @@ func LoadCifar10(manager backends.Backend, baseDir string, dtype dtypes.DType) (
 			}
 		}
 	})
-	return partitionImagesAndLabels(manager, images, labels)
+	return partitionImagesAndLabels(backend, images, labels)
 }
 
 // LoadCifar100 into 2 tensors of the given DType: images with given dtype and shaped
@@ -175,7 +180,7 @@ func LoadCifar10(manager backends.Backend, baseDir string, dtype dtypes.DType) (
 // [NumExamples=60000, 1] of Int64.
 // The first 50k examples are for training, and the last 10k for testing.
 // Only Float32 and Float64 dtypes are supported for now.
-func LoadCifar100(manager backends.Backend, baseDir string, dtype dtypes.DType) (partitioned PartitionedImagesAndLabels) {
+func LoadCifar100(backend backends.Backend, baseDir string, dtype dtypes.DType) (partitioned PartitionedImagesAndLabels) {
 	baseDir = data.ReplaceTildeInDir(baseDir)
 
 	// Allocate the tensor.
@@ -219,7 +224,7 @@ func LoadCifar100(manager backends.Backend, baseDir string, dtype dtypes.DType) 
 			}
 		}
 	})
-	return partitionImagesAndLabels(manager, images, labels)
+	return partitionImagesAndLabels(backend, images, labels)
 }
 
 func ConvertToGoImage(images *tensors.Tensor, exampleNum int) *image.NRGBA {
@@ -244,8 +249,8 @@ func ConvertToGoImage(images *tensors.Tensor, exampleNum int) *image.NRGBA {
 }
 
 // partitionImagesAndLabels into train and test partitions.
-func partitionImagesAndLabels(manager backends.Backend, images, labels *tensors.Tensor) (partitioned PartitionedImagesAndLabels) {
-	exec := NewExec(manager, func(images, labels *Node) []*Node {
+func partitionImagesAndLabels(backend backends.Backend, images, labels *tensors.Tensor) (partitioned PartitionedImagesAndLabels) {
+	exec := NewExec(backend, func(images, labels *Node) []*Node {
 		imagesTrain := Slice(images, AxisRange(0, NumTrainExamples))
 		labelsTrain := Slice(labels, AxisRange(0, NumTrainExamples))
 		imagesTest := Slice(images, AxisRange(NumTrainExamples))
@@ -305,7 +310,7 @@ func init() {
 // It automatically downloads the data from the web, and then loads the data into memory if it hasn't been
 // loaded yet.
 // It caches the result, so multiple Datasets can be created without any extra costs in time/memory.
-func NewDataset(manager backends.Backend, name, baseDir string, source DataSource, dtype dtypes.DType, partition Partition) *data.InMemoryDataset {
+func NewDataset(backend backends.Backend, name, baseDir string, source DataSource, dtype dtypes.DType, partition Partition) *data.InMemoryDataset {
 	if source > C100 {
 		Panicf("Invalid source value %d, only C10 or C100 accepted", source)
 	}
@@ -314,18 +319,18 @@ func NewDataset(manager backends.Backend, name, baseDir string, source DataSourc
 		// How do download & load data: one per DataSource.
 		downloadFunctions := [2]func(baseDir string) error{
 			DownloadCifar10, DownloadCifar100}
-		loadFunctions := [2]func(manager backends.Backend, baseDir string, dType dtypes.DType) PartitionedImagesAndLabels{
+		loadFunctions := [2]func(backend backends.Backend, baseDir string, dType dtypes.DType) PartitionedImagesAndLabels{
 			LoadCifar10, LoadCifar100}
 
 		err := downloadFunctions[source](baseDir)
 		if err != nil {
 			panic(errors.WithMessagef(err, "Creating a new Dataset"))
 		}
-		partitioned = loadFunctions[source](manager, baseDir, dtype)
+		partitioned = loadFunctions[source](backend, baseDir, dtype)
 		imagesAndLabelsCache[source][dtype] = partitioned
 	}
 	imagesAndLabels := partitioned[partition]
-	ds, err := data.InMemoryFromData(manager, name, []any{imagesAndLabels.images}, []any{imagesAndLabels.labels})
+	ds, err := data.InMemoryFromData(backend, name, []any{imagesAndLabels.images}, []any{imagesAndLabels.labels})
 	if err != nil {
 		panic(err)
 	}

@@ -1,6 +1,7 @@
 package cifar
 
 import (
+	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/layers"
@@ -30,6 +31,29 @@ func C10PlainModelGraph(ctx *context.Context, spec any, inputs []*graph.Node) []
 	return []*graph.Node{logits}
 }
 
+const ParamCNNNormalization = "cnn_normalization"
+
+func normalizeCNN(ctx *context.Context, logits *graph.Node) *graph.Node {
+	normalizationType := context.GetParamOr(ctx, ParamCNNNormalization, "none")
+	switch normalizationType {
+	case "layer":
+		if logits.Rank() == 2 {
+			return layers.LayerNormalization(ctx, logits, -1).Done()
+		} else if logits.Rank() == 4 {
+			return layers.LayerNormalization(ctx, logits, 2, 3).Done()
+		} else {
+			return logits
+		}
+	case "batch":
+		return batchnorm.New(ctx, logits, -1).Done()
+	case "none", "":
+		return logits
+	default:
+		exceptions.Panicf("invalid normalization type %q -- set it with parameter %q", normalizationType, ParamCNNNormalization)
+		panic(nil)
+	}
+}
+
 // C10ConvolutionModelGraph implements train.ModelFn and returns the logit Node, given the input image.
 // It's a straight forward CNN (Convolution Neural Network) model.
 //
@@ -54,10 +78,10 @@ func C10ConvolutionModelGraph(ctx *context.Context, spec any, inputs []*graph.No
 	logits = layers.Convolution(nextCtx("conv"), logits).Filters(32).KernelSize(3).PadSame().Done()
 	logits.AssertDims(batchSize, 32, 32, 32)
 	logits = activations.Relu(logits)
-	logits = batchnorm.New(nextCtx("batchnorm"), logits, -1).Done()
+	logits = normalizeCNN(nextCtx("norm"), logits)
 	logits = layers.Convolution(nextCtx("conv"), logits).Filters(32).KernelSize(3).PadSame().Done()
 	logits = activations.Relu(logits)
-	logits = batchnorm.New(nextCtx("batchnorm"), logits, -1).Done()
+	logits = normalizeCNN(nextCtx("norm"), logits)
 	logits = graph.MaxPool(logits).Window(2).Done()
 	logits = layers.DropoutNormalize(nextCtx("dropout"), logits, graph.Scalar(g, dtype, 0.3), true)
 	logits.AssertDims(batchSize, 16, 16, 32)
@@ -65,11 +89,11 @@ func C10ConvolutionModelGraph(ctx *context.Context, spec any, inputs []*graph.No
 	logits = layers.Convolution(nextCtx("conv"), logits).Filters(64).KernelSize(3).PadSame().Done()
 	logits.AssertDims(batchSize, 16, 16, 64)
 	logits = activations.Relu(logits)
-	logits = batchnorm.New(nextCtx("batchnorm"), logits, -1).Done()
+	logits = normalizeCNN(nextCtx("norm"), logits)
 	logits = layers.Convolution(nextCtx("conv"), logits).Filters(64).KernelSize(3).PadSame().Done()
 	logits.AssertDims(batchSize, 16, 16, 64)
 	logits = activations.Relu(logits)
-	logits = batchnorm.New(nextCtx("batchnorm"), logits, -1).Done()
+	logits = normalizeCNN(nextCtx("norm"), logits)
 	logits = graph.MaxPool(logits).Window(2).Done()
 	logits = layers.DropoutNormalize(nextCtx("dropout"), logits, graph.Scalar(g, dtype, 0.5), true)
 	logits.AssertDims(batchSize, 8, 8, 64)
@@ -77,11 +101,11 @@ func C10ConvolutionModelGraph(ctx *context.Context, spec any, inputs []*graph.No
 	logits = layers.Convolution(nextCtx("conv"), logits).Filters(128).KernelSize(3).PadSame().Done()
 	logits.AssertDims(batchSize, 8, 8, 128)
 	logits = activations.Relu(logits)
-	logits = batchnorm.New(nextCtx("batchnorm"), logits, -1).Done()
+	logits = normalizeCNN(nextCtx("norm"), logits)
 	logits = layers.Convolution(nextCtx("conv"), logits).Filters(128).KernelSize(3).PadSame().Done()
 	logits.AssertDims(batchSize, 8, 8, 128)
 	logits = activations.Relu(logits)
-	logits = batchnorm.New(nextCtx("batchnorm"), logits, -1).Done()
+	logits = normalizeCNN(nextCtx("norm"), logits)
 	logits = graph.MaxPool(logits).Window(2).Done()
 	logits = layers.DropoutNormalize(nextCtx("dropout"), logits, graph.Scalar(g, dtype, 0.5), true)
 	logits.AssertDims(batchSize, 4, 4, 128)
@@ -90,7 +114,7 @@ func C10ConvolutionModelGraph(ctx *context.Context, spec any, inputs []*graph.No
 	logits = graph.Reshape(logits, batchSize, -1)
 	logits = layers.Dense(nextCtx("dense"), logits, true, 128)
 	logits = activations.Relu(logits)
-	logits = batchnorm.New(nextCtx("batchnorm"), logits, -1).Done()
+	logits = normalizeCNN(nextCtx("norm"), logits)
 	logits = layers.DropoutNormalize(nextCtx("dropout"), logits, graph.Scalar(g, dtype, 0.5), true)
 	numClasses := len(C10Labels)
 	logits = layers.Dense(nextCtx("dense"), logits, true, numClasses)

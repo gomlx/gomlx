@@ -247,10 +247,17 @@ func CreateDatasets(config *PreprocessingConfiguration) (trainDS, trainEvalDS, v
 			config.NumFolds, config.TrainFolds, config.FoldsSeed,
 			config.ModelImageSize, config.ModelImageSize, 0, false, config.DType)
 
-		// Read tensors in parallel:
-		if config.UseParallelism {
+	}
+
+	// Read tensors in parallel:
+	if config.UseParallelism {
+		if trainDS != nil {
 			trainDS = data.CustomParallel(trainDS).Buffer(config.BufferSize).Start()
+		}
+		if trainEvalDS != nil {
 			trainEvalDS = data.CustomParallel(trainEvalDS).Buffer(config.BufferSize).Start()
+		}
+		if validationEvalDS != nil {
 			validationEvalDS = data.CustomParallel(validationEvalDS).Buffer(config.BufferSize).Start()
 		}
 	}
