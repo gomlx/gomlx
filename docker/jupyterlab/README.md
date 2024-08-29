@@ -6,13 +6,13 @@ will store your Go notebook files -- and run:
 
 ```bash
 docker pull janpfeifer/gomlx_jupyterlab:latest
-docker run -it --rm -p 8888:8888 -v "${PWD}":/home/jupyter/work janpfeifer/gomlx_jupyterlab:latest
+docker run -it --rm -p 8888:8888 -v "${PWD}":/home/jupyter/host janpfeifer/gomlx_jupyterlab:latest
 ```
 
 If you have GPU(s) and want to make them accessible, use instead:
 
 ```bash
-docker run -it --gpus all --rm -p 8888:8888 -v "${PWD}":/home/jupyter/work janpfeifer/gomlx_jupyterlab:latest
+docker run -it --gpus all --rm -p 8888:8888 -v "${PWD}":/home/jupyter/host janpfeifer/gomlx_jupyterlab:latest
 ```
 
 The command will output the `localhost:8888` link you can use -- it will include the secret token to connect to Jupyter.
