@@ -564,6 +564,10 @@ func (ctx *Context) InitializeVariables(backend backends.Backend) {
 	g := graph.NewGraph(backend, "InitializeVariables")
 	valuesNodes := make([]*Node, 0, len(variablesToInitialize))
 	for _, variable := range variablesToInitialize {
+		if variable.initializer == nil {
+			Panicf("failed to initialize variable %q: initializer was not configured (maybe it was read from"+
+				" disk and an initialzier was not set)", variable.ScopeAndName())
+		}
 		valuesNodes = append(valuesNodes, variable.initializer(g, variable.shape))
 	}
 
@@ -760,6 +764,8 @@ func (ctx *Context) VariableWithShape(name string, shape shapes.Shape) *Variable
 			Panicf("requested to reuse variable %q in scope %q, but with different shape from original: previous shape=%s, requested shape=%s",
 				name, ctx.scope, v.shape, shape)
 		}
+		// We want to update/register the initializer, even if the value is already set (maybe read from a checkpoint).
+		v.initializer = ctx.initializer
 		return v
 	}
 
