@@ -4,6 +4,8 @@
 
 * Immediately free accelerator (GPU) memory, where possible -- as opposed to waiting for the garbage collector.
   * This impacts the train.Loop and train.Trainer: they both immediately finalize the inputs and labels after use.
+* Fixed nil point exception, where initializer was not properly set if value of a variable was loaded from a checkpoint.
+  * This impacted when restarting training with batch normalization.
 
 ## v0.11.2 (was v0.11.1) - 2024/08/28
 
