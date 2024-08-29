@@ -51,6 +51,7 @@ ENV LD_LIBRARY_PATH /usr/local/lib:${LD_LIBRARY_PATH}
 USER ${NB_USER}
 ENV GOPATH /home/${NB_USER}/go-data
 ENV PATH ${HOME}/go/bin:${GOPATH}/bin:${PATH}
+RUN mkdir ${HOME}/work
 
 WORKDIR ${HOME}
 RUN wget --quiet --output-document=- "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" | tar -xz \
