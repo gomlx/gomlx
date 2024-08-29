@@ -56,14 +56,14 @@ const (
 	DownloadChecksum = "b7974bd00a84a99921f36ee4403f089853777b5ae8d151c76a86e64900334af9"
 )
 
-type DorOrCat int8
+type DogOrCat int8
 
 const (
-	Dog DorOrCat = iota
+	Dog DogOrCat = iota
 	Cat
 )
 
-func (t DorOrCat) String() string {
+func (t DogOrCat) String() string {
 	switch t {
 	case Dog:
 		return "Dog"
@@ -295,7 +295,7 @@ func (ds *Dataset) checkFolds() error {
 }
 
 // inFold checks whether the image index imgIdx is in the Dataset fold selection and if it's not in the bad list.
-func (ds *Dataset) inFold(imgType DorOrCat, imgIdx int) bool {
+func (ds *Dataset) inFold(imgType DogOrCat, imgIdx int) bool {
 	if BadImages[imgType][imgIdx] {
 		// We selected a bad image.
 		return false
@@ -366,7 +366,7 @@ func (ds *Dataset) yieldIndices() (dogsAndCats [2][]int, err error) {
 						ds.counters[imgType] = ds.counters[imgType] + 1
 					}
 				}
-				if !ds.inFold(DorOrCat(imgType), imgIdx) {
+				if !ds.inFold(DogOrCat(imgType), imgIdx) {
 					continue
 				}
 				dogsAndCats[imgType] = append(dogsAndCats[imgType], imgIdx)
@@ -383,7 +383,7 @@ func (ds *Dataset) yieldIndices() (dogsAndCats [2][]int, err error) {
 //
 // If WithImagePairs is set to true, it will return double the number of images: the second half is a repeat
 // of the first, just with a different augmentation.
-func (ds *Dataset) YieldImages() (images []image.Image, labels []DorOrCat, indices []int, err error) {
+func (ds *Dataset) YieldImages() (images []image.Image, labels []DogOrCat, indices []int, err error) {
 	// It uses Dataset.yieldIndices to select which images to return. This function then
 	// reads / scales / augment the images.
 	//fmt.Printf("YieldImages: yieldPairs=%v\n", ds.yieldPairs)
@@ -397,14 +397,14 @@ func (ds *Dataset) YieldImages() (images []image.Image, labels []DorOrCat, indic
 	} else {
 		images = make([]image.Image, numExamples)
 	}
-	labels = make([]DorOrCat, 0, numExamples)
+	labels = make([]DogOrCat, 0, numExamples)
 	indices = make([]int, 0, numExamples)
 	count := 0
 	for ii, imgSet := range dogsAndCats {
 		subDir := ImgSubDirs[ii]
 		for _, imgIdx := range imgSet {
 			indices = append(indices, imgIdx)
-			labels = append(labels, DorOrCat(ii))
+			labels = append(labels, DogOrCat(ii))
 			imgPath := path.Join(ds.BaseDir, LocalZipDir, subDir, fmt.Sprintf("%d.jpg", imgIdx))
 			var originalImg image.Image
 			originalImg, err = GetImageFromFilePath(imgPath)
@@ -451,7 +451,7 @@ func (ds *Dataset) Yield() (spec any, inputs, labels []*tensors.Tensor, err erro
 
 	spec = ds // spec is a pointer to the Dataset.
 	var images []image.Image
-	var labelsAsTypes []DorOrCat
+	var labelsAsTypes []DogOrCat
 	var indices []int
 	images, labelsAsTypes, indices, err = ds.YieldImages()
 	if err != nil {
@@ -504,7 +504,7 @@ func (ds *Dataset) Reset() {
 
 		for imgType := 0; imgType < 2; imgType++ {
 			for imgIdx := 0; imgIdx < MaxCount; imgIdx++ {
-				if !ds.inFold(DorOrCat(imgType), imgIdx) {
+				if !ds.inFold(DogOrCat(imgType), imgIdx) {
 					continue
 				}
 				ds.selection[imgType] = append(ds.selection[imgType], imgIdx)
@@ -611,7 +611,7 @@ func (ds *Dataset) Save(numEpochs int, verbose bool, writers ...io.Writer) error
 				defer wg.Done()
 				var err error
 				var images []image.Image
-				var labels []DorOrCat
+				var labels []DogOrCat
 			loopImageWrite:
 				for {
 					images, labels, _, err = ds.YieldImages()
@@ -701,7 +701,7 @@ type PreGeneratedDataset struct {
 	yieldPairs                 bool
 	err                        error
 	buffer, pairBuffer         []byte
-	labelsAsTypes              []DorOrCat
+	labelsAsTypes              []DogOrCat
 	steps, maxSteps            int
 }
 
@@ -722,7 +722,7 @@ func NewPreGeneratedDataset(name, filePath string, batchSize int, infinite bool,
 
 	batchBytes := pds.batchSize * pds.entrySize()
 	pds.buffer = make([]byte, batchBytes)
-	pds.labelsAsTypes = make([]DorOrCat, pds.batchSize)
+	pds.labelsAsTypes = make([]DogOrCat, pds.batchSize)
 	pds.Reset() // Sets pds.openedFile with the opened filePath.
 	return pds
 }
@@ -805,7 +805,7 @@ func (pds *PreGeneratedDataset) Yield() (spec any, inputs, labels []*tensors.Ten
 
 		entrySize := pds.entrySize()
 		for ii := 0; ii < pds.batchSize; ii++ {
-			pds.labelsAsTypes[ii] = DorOrCat(pds.buffer[ii*entrySize])
+			pds.labelsAsTypes[ii] = DogOrCat(pds.buffer[ii*entrySize])
 		}
 		labels = []*tensors.Tensor{tensors.FromAnyValue(shapes.CastAsDType(pds.labelsAsTypes, pds.dtype))}
 		var t, pairT *tensors.Tensor

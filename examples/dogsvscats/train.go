@@ -186,7 +186,6 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, runEval bo
 	backend := backends.New()
 	var trainer *train.Trainer
 	optimizer := optimizers.FromContext(ctx)
-	ctx = ctx.In("model") // Create the model by default under the "/model" scope.
 	if !preTraining {
 		trainer = train.NewTrainer(backend, ctx, modelFn,
 			losses.BinaryCrossentropyLogits,

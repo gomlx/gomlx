@@ -16,6 +16,7 @@ import (
 // It returns the logit, not the predictions, which works with most losses.
 // inputs: only one tensor, with shape `[batch_size, width, height, depth]`.
 func CnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
+	ctx = ctx.In("model") // Create the model by default under the "/model" scope.
 	embeddings := CnnEmbeddings(ctx, inputs[0])
 	logit := fnn.New(ctx.In("readout"), embeddings, 1).NumHiddenLayers(0, 0).Done()
 	return []*Node{logit}
