@@ -17,6 +17,7 @@ import (
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types"
+	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/janpfeifer/must"
@@ -162,8 +163,11 @@ func Reports(checkpointPath string) {
 		table := newPlainTable(false, lipgloss.Right, lipgloss.Left)
 		table.Row("checkpoint", checkpointPath)
 		table.Row("scope", *flagScope)
-		globalStep := optimizers.GetGlobalStep(ctx)
-		table.Row("global_step", humanize.Comma(globalStep))
+		globalStepVar := ctx.InspectVariableInScope(optimizers.GlobalStepVariableName)
+		if globalStepVar != nil {
+			globalStep := tensors.ToScalar[int64](globalStepVar.Value())
+			table.Row(fmt.Sprintf("global_step(%s)", ctx.Scope()), humanize.Comma(globalStep))
+		}
 
 		var numVars, totalSize int
 		var totalMemory uintptr
