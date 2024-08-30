@@ -1,5 +1,9 @@
 # GoMLX changelog
 
+## Next
+
+* Added `Shape.Dim(axis)` as a shortcut, where `axis` can use negative values.
+
 ## v0.11.3 - 2023/08/29
 
 * Immediately free accelerator (GPU) memory, where possible -- as opposed to waiting for the garbage collector.
