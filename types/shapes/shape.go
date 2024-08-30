@@ -124,6 +124,20 @@ func (s Shape) Rank() int { return len(s.Dimensions) }
 // IsScalar returns whether the shape represents a scalar, that is there are no dimensions (rank==0).
 func (s Shape) IsScalar() bool { return s.Ok() && s.Rank() == 0 }
 
+// Dim returns the dimension of the given axis. axis can take negative numbers, in which
+// case it counts as starting from the end -- so axis=-1 refers to the last axis.
+// Like with a slice indexing, it panics for an out-of-bound axis.
+func (s Shape) Dim(axis int) int {
+	adjustedAxis := axis
+	if adjustedAxis < 0 {
+		adjustedAxis += s.Rank()
+	}
+	if adjustedAxis < 0 || adjustedAxis > s.Rank() {
+		exceptions.Panicf("Shape.Dim(%d) out-of-bounds for rank %d (shape=%s)", axis, s.Rank(), s)
+	}
+	return s.Dimensions[adjustedAxis]
+}
+
 // Shape returns a shallow copy of itself. It implements the HasShape interface.
 func (s Shape) Shape() Shape { return s }
 
