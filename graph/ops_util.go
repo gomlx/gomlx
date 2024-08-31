@@ -52,7 +52,7 @@ func ScalarOne(g *Graph, dtype dtypes.DType) *Node {
 
 // MulScalar converts scalar to a constant with x's DType and returns `x * scalar`
 // with proper broadcasting.
-func MulScalar(x *Node, scalar float64) *Node {
+func MulScalar[N dtypes.NumberNotComplex](x *Node, scalar N) *Node {
 	g := x.Graph()
 	return Mul(x, Scalar(g, x.DType(), scalar))
 }
@@ -61,7 +61,7 @@ func MulScalar(x *Node, scalar float64) *Node {
 // with proper broadcasting.
 //
 // For float DType's, DivScalar instead uses MulScalar(x, 1/scalar).
-func DivScalar(x *Node, scalar float64) *Node {
+func DivScalar[N dtypes.NumberNotComplex](x *Node, scalar N) *Node {
 	g := x.Graph()
 	if scalar == 0 {
 		Panicf("division by zero in DivScalar")
@@ -75,7 +75,7 @@ func DivScalar(x *Node, scalar float64) *Node {
 
 // PowScalar converts scalar to a constant with x's DType and returns `Pow(x, scalar)` (or `x ** scalar`)
 // with proper broadcasting.
-func PowScalar(x *Node, scalar float64) *Node {
+func PowScalar[N dtypes.NumberNotComplex](x *Node, scalar N) *Node {
 	g := x.Graph()
 	return Pow(x, Scalar(g, x.DType(), scalar))
 }
@@ -87,26 +87,26 @@ func Square(x *Node) *Node {
 
 // AddScalar converts scalar to a constant with x's DType and returns `x + scalar`
 // with proper broadcasting.
-func AddScalar(x *Node, scalar float64) *Node {
+func AddScalar[N dtypes.NumberNotComplex](x *Node, scalar N) *Node {
 	g := x.Graph()
 	return Add(x, Scalar(g, x.DType(), scalar))
 }
 
 // ModScalar converts scalar to a constant with x's DType and returns `x % scalar`
 // with proper broadcasting.
-func ModScalar(x *Node, scalar float64) *Node {
+func ModScalar[N dtypes.NumberNotComplex](x *Node, scalar N) *Node {
 	g := x.Graph()
 	return Mod(x, Scalar(g, x.DType(), scalar))
 }
 
 // MaxScalar converts scalar to a constant with x's DType and returns element-wise `Max(x, scalar)`.
-func MaxScalar(x *Node, scalar float64) *Node {
+func MaxScalar[N dtypes.NumberNotComplex](x *Node, scalar N) *Node {
 	g := x.Graph()
 	return Max(x, Scalar(g, x.DType(), scalar))
 }
 
 // MinScalar converts scalar to a constant with x's DType and returns element-wise `Min(x, scalar)`.
-func MinScalar(x *Node, scalar float64) *Node {
+func MinScalar[N dtypes.NumberNotComplex](x *Node, scalar N) *Node {
 	g := x.Graph()
 	return Min(x, Scalar(g, x.DType(), scalar))
 }
@@ -485,6 +485,91 @@ func DiagonalWithValue(scalar *Node, dim int) *Node {
 	g := scalar.Graph()
 	matrix := BroadcastPrefix(scalar, dim, dim)
 	return Where(Diagonal(g, dim), matrix, ZerosLike(matrix))
+}
+
+// ShapedLowerTriangular returns a triangular boolean matrix (rows x column) (not necessarily rows == columns), where
+// the lower triangular are set to true (including diagonal), and the upper triangular is set to zero.
+//
+// The k value shifts the triangular up or down: k < 0 sets true values below the diagonal. Conversely, k > 0
+// extends the true values above the diagonal.
+//
+// Examples:
+//
+//	ShapedLowerTriangular(g, 3, 3, k=0) => [][]bool{{true, false, false}, {true, true, false}, {true, true, true}}
+//	ShapedLowerTriangular(g, 3, 3, k=-1) => [][]bool{{false, false, false}, {true, false, false}, {true, true, false}}
+//	ShapedLowerTriangular(g, 2, 3, k=1) => [][]bool{{true, true, false}, {true, true, true}}
+func ShapedLowerTriangular(g *Graph, rows, column, k int) *Node {
+	rowNums := Iota(g, shapes.Make(dtypes.Int32, rows, column), 0)
+	rowNums = AddScalar(rowNums, k)
+	columnNums := Iota(g, shapes.Make(dtypes.Int32, rows, column), 1)
+	return LessOrEqual(columnNums, rowNums)
+}
+
+// TakeLowerTriangular takes the lower triangular of the last 2 dimensions of x (x.Rank() must be >= 2), and set the
+// other values to 0. The returned shape is the same as x.
+//
+// The k value shifts the triangular up or down: k < 0 takes values further below the diagonal.
+// Conversely, k > 0 extends the true values above the diagonal.
+//
+// It uses ShapedLowerTriangular to calculate the mask.
+//
+// Examples:
+//
+//	input = AddScalar(IotaFull(g, shapes.Make(dtypes.Float64, 2, 2)), 1)
+//	TakeLowerTriangular(input, 0) => [][]float64{{1, 0}, {3, 4}}
+//
+//	input = AddScalar(IotaFull(g, shapes.Make(dtypes.Float32, 1, 2, 3, 4)), 1)
+//	TakeLowerTriangular(input, 0)
+//	// -> [][][][]float32{{{{1, 0, 0, 0}, {5, 6, 0, 0}, {9, 10, 11, 0}}, {{13, 0, 0, 0}, {17, 18, 0, 0}, {21, 22, 23, 0}}}}
+//
+//	TakeLowerTriangular(input, -1)
+//	// -> [][][][]float32{{{{0, 0, 0, 0}, {5, 0, 0, 0}, {9, 10, 0, 0}}, {{0, 0, 0, 0}, {17, 0, 0, 0}, {21, 22, 0, 0}}}}
+//
+//	TakeLowerTriangular(input, 1)
+//	// -> [][][][]float32{{{{1, 2, 0, 0}, {5, 6, 7, 0}, {9, 10, 11, 12}}, {{13, 14, 0, 0}, {17, 18, 19, 0}, {21, 22, 23, 24}}}}
+func TakeLowerTriangular(x *Node, k int) *Node {
+	g := validateBuildingGraphFromInputs(x)
+	if x.Rank() < 2 {
+		Panicf("TakeLowerTriangular(x=%s) requires x to have rank at least 2", x.Shape())
+	}
+	lowerTriangularMask := ShapedLowerTriangular(g, x.Shape().Dim(-2), x.Shape().Dim(-1), k)
+	lowerTriangularMask = ExpandLeftToRank(lowerTriangularMask, x.Rank())
+	lowerTriangularMask = BroadcastToShape(lowerTriangularMask, x.Shape())
+	return Where(lowerTriangularMask, x, ScalarZero(g, x.DType()))
+}
+
+// TakeUpperTriangular takes the upper triangular of the last 2 dimensions of x (x.Rank() must be >= 2), and set the
+// other values to 0. The returned shape is the same as x.
+//
+// The k value shifts the triangular up or down: k < 0 takes values further below the diagonal.
+// Conversely, k > 0 extends the true values above the diagonal.
+//
+// It uses ShapedLowerTriangular to calculate the mask.
+//
+// Examples:
+//
+//	input = AddScalar(IotaFull(g, shapes.Make(dtypes.Float64, 2, 2)), 1)
+//	TakeUpperTriangular(input, 0) => [][]float64{{1, 2}, {0, 4}}
+//
+//	input = AddScalar(IotaFull(g, shapes.Make(dtypes.Float32, 1, 2, 3, 4)), 1)
+//	TakeUpperTriangular(input, 0)
+//	// -> [][][][]float32{{{{1, 2, 3, 4}, {0, 6, 7, 8}, {0, 0, 11, 12}}, {{13, 14, 15, 16}, {0, 18, 19, 20}, {0, 0, 23, 24}}}}
+//
+//	TakeUpperTriangular(input, -1)
+//	// -> [][][][]float32{{{{1, 2, 3, 4}, {5, 6, 7, 8}, {0, 10, 11, 12}}, {{13, 14, 15, 16}, {17, 18, 19, 20}, {0, 22, 23, 24}}}}
+//
+//	TakeUpperTriangular(input, 1)
+//	// -> [][][][]float32{{{{0, 2, 3, 4}, {0, 0, 7, 8}, {0, 0, 0, 12}}, {{0, 14, 15, 16}, {0, 0, 19, 20}, {0, 0, 0, 24}}}}
+func TakeUpperTriangular(x *Node, k int) *Node {
+	g := validateBuildingGraphFromInputs(x)
+	if x.Rank() < 2 {
+		Panicf("TakeLowerTriangular(x=%s) requires x to have rank at least 2", x.Shape())
+	}
+	upperTriangularMask := ShapedLowerTriangular(g, x.Shape().Dim(-2), x.Shape().Dim(-1), k-1)
+	upperTriangularMask = LogicalNot(upperTriangularMask)
+	upperTriangularMask = ExpandLeftToRank(upperTriangularMask, x.Rank())
+	upperTriangularMask = BroadcastToShape(upperTriangularMask, x.Shape())
+	return Where(upperTriangularMask, x, ScalarZero(g, x.DType()))
 }
 
 // ShiftLeft the last axis of [x] by [n] positions ([n] is a static value) and fill the new value

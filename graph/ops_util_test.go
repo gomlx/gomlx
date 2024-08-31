@@ -436,3 +436,63 @@ func TestCumSum(t *testing.T) {
 			},
 		}, xslices.Epsilon)
 }
+
+func TestShapedLowerTriangular(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "ShapedLowerTriangular",
+		func(g *Graph) (inputs, outputs []*Node) {
+			outputs = []*Node{
+				ShapedLowerTriangular(g, 3, 3, 0),
+				ShapedLowerTriangular(g, 3, 3, -1),
+				ShapedLowerTriangular(g, 2, 3, 1),
+			}
+			return
+		}, []any{
+			[][]bool{{true, false, false}, {true, true, false}, {true, true, true}},
+			[][]bool{{false, false, false}, {true, false, false}, {true, true, false}},
+			[][]bool{{true, true, false}, {true, true, true}},
+		}, -1)
+}
+
+func TestTakeLowerTriangular(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "ShapedLowerTriangular",
+		func(g *Graph) (inputs, outputs []*Node) {
+			inputs = []*Node{
+				AddScalar(IotaFull(g, shapes.Make(dtypes.Float64, 2, 2)), 1),
+				AddScalar(IotaFull(g, shapes.Make(dtypes.Float32, 1, 2, 3, 4)), 1),
+			}
+			outputs = []*Node{
+				TakeLowerTriangular(inputs[0], 0),
+				TakeLowerTriangular(inputs[1], 0),
+				TakeLowerTriangular(inputs[1], -1),
+				TakeLowerTriangular(inputs[1], 1),
+			}
+			return
+		}, []any{
+			[][]float64{{1, 0}, {3, 4}},
+			[][][][]float32{{{{1, 0, 0, 0}, {5, 6, 0, 0}, {9, 10, 11, 0}}, {{13, 0, 0, 0}, {17, 18, 0, 0}, {21, 22, 23, 0}}}},
+			[][][][]float32{{{{0, 0, 0, 0}, {5, 0, 0, 0}, {9, 10, 0, 0}}, {{0, 0, 0, 0}, {17, 0, 0, 0}, {21, 22, 0, 0}}}},
+			[][][][]float32{{{{1, 2, 0, 0}, {5, 6, 7, 0}, {9, 10, 11, 12}}, {{13, 14, 0, 0}, {17, 18, 19, 0}, {21, 22, 23, 24}}}},
+		}, -1)
+}
+
+func TestTakeUpperTriangular(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "ShapedLowerTriangular",
+		func(g *Graph) (inputs, outputs []*Node) {
+			inputs = []*Node{
+				AddScalar(IotaFull(g, shapes.Make(dtypes.Float64, 2, 2)), 1),
+				AddScalar(IotaFull(g, shapes.Make(dtypes.Float32, 1, 2, 3, 4)), 1),
+			}
+			outputs = []*Node{
+				TakeUpperTriangular(inputs[0], 0),
+				TakeUpperTriangular(inputs[1], 0),
+				TakeUpperTriangular(inputs[1], -1),
+				TakeUpperTriangular(inputs[1], 1),
+			}
+			return
+		}, []any{
+			[][]float64{{1, 2}, {0, 4}},
+			[][][][]float32{{{{1, 2, 3, 4}, {0, 6, 7, 8}, {0, 0, 11, 12}}, {{13, 14, 15, 16}, {0, 18, 19, 20}, {0, 0, 23, 24}}}},
+			[][][][]float32{{{{1, 2, 3, 4}, {5, 6, 7, 8}, {0, 10, 11, 12}}, {{13, 14, 15, 16}, {17, 18, 19, 20}, {0, 22, 23, 24}}}},
+			[][][][]float32{{{{0, 2, 3, 4}, {0, 0, 7, 8}, {0, 0, 0, 12}}, {{0, 14, 15, 16}, {0, 0, 19, 20}, {0, 0, 0, 24}}}},
+		}, -1)
+}

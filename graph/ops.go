@@ -466,7 +466,7 @@ func Where(condition, onTrue, onFalse *Node) *Node {
 	if (!onTrue.IsScalar() && !condition.Shape().EqualDimensions(onTrue.Shape())) ||
 		(!onFalse.IsScalar() && !condition.Shape().EqualDimensions(onFalse.Shape())) {
 		exceptions.Panicf(
-			"Where(condition, onTrue, onFalse) requires onTrue(%s)/onFalse(%s) to either be a scalar or has "+
+			"Where(condition, onTrue, onFalse) requires onTrue(%s)/onFalse(%s) to either be a scalar to have "+
 				"the same dimensions as condition (%s)",
 			onTrue.Shape(), onFalse.Shape(), condition.Shape())
 	}
