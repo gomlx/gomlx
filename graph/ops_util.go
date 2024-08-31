@@ -26,8 +26,12 @@ import (
 // This file contains derived practical calculations that often used.
 
 // Scalar returns a constant scalar with the given value.
-func Scalar(g *Graph, dtype dtypes.DType, value float64) *Node {
-	return g.getScalarConst(dtype, value)
+//
+// The value is first converted to float64 to serve as index to a cache and later converted to the requested dtype.
+// This may lose bits of precision to very large integers.
+// If you are worried with any of these conversions, use Const instead.
+func Scalar[N dtypes.NumberNotComplex](g *Graph, dtype dtypes.DType, value N) *Node {
+	return g.getScalarConst(dtype, float64(value))
 }
 
 // FillScalar creates a Node with a value with the given shape, filled with the given value.
