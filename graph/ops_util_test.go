@@ -10,6 +10,25 @@ import (
 	"testing"
 )
 
+func TestScalar(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "EinsumMatrixMul",
+		func(g *Graph) (inputs, outputs []*Node) {
+			inputs = []*Node{
+				Scalar(g, dtypes.Float32, uint8(3)),
+				Scalar(g, dtypes.Float64, int16(-2)),
+				Scalar(g, dtypes.Int64, float32(7)),
+				Scalar(g, dtypes.Uint8, float64(3)),
+			}
+			outputs = inputs
+			return
+		}, []any{
+			float32(3),
+			float64(-2),
+			int64(7),
+			uint8(3),
+		}, -1)
+}
+
 func TestEinsum(t *testing.T) {
 	graphtest.RunTestGraphFn(t, "EinsumMatrixMul",
 		func(g *Graph) (inputs, outputs []*Node) {
