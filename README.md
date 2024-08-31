@@ -62,8 +62,7 @@ It includes:
   FFT (reverse/differentiable), etc. 
 * Training library, with some pretty-printing. Including plots for Jupyter notebook, using [GoNB, a Go Kernel](https://github.com/janpfeifer/gonb).
   * Also, various debugging tools: collecting values for particular nodes for plotting, simply logging  the value
-    of nodes during training, stack-trace of the code where nodes are created (TODO: automatic printing stack-trace
-    when a first NaN appears during training).
+    of nodes during training, stack-trace of the code where nodes are created.
 * SGD and Adam (AdamW and Adamax) optimizers.
 * Various losses and metrics.
 

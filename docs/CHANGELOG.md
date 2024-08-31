@@ -3,7 +3,10 @@
 ## Next
 
 * Added `Shape.Dim(axis)` as a shortcut, where `axis` can use negative values.
-* `graph.Scalar()` is now generic, and takes as input any non-complex number type, for improved convenience.
+* Package `graph`:
+  * `Scalar()`, `AddScalar()`, `MulScalar()`, `DivScalar()`, ... are now generic, and take as input any non-complex
+    number type, for improved convenience.
+  * Added `ShapedLowerTriangular()`, `TakeLowerTriangular()` and `TakeUpperTriangular()`
 
 ## v0.11.3 - 2023/08/29
 
