@@ -56,3 +56,16 @@ func TestSelu(t *testing.T) {
 			[]float32{0., -1.1113307, 2.101402, -1.6705687, 4.202804, -1.7462534, 6.304206},
 		}, xslices.Epsilon)
 }
+
+func TestGelu(t *testing.T) {
+	// Values generated using jax.nn.Gelu(approximate=true).
+	graphtest.RunTestGraphFn(t, "Gelu (approximate versions)",
+		func(g *Graph) (inputs, outputs []*Node) {
+			x := Const(g, []float32{0, -1, 2, -3, 4, -5, 6})
+			inputs = []*Node{x}
+			outputs = []*Node{Gelu(x)}
+			return
+		}, []any{
+			[]float32{0, -0.15880796, 1.9545977, -0.0036373436, 4, 0, 6},
+		}, 0.01)
+}
