@@ -7,6 +7,7 @@
   * `Scalar()`, `AddScalar()`, `MulScalar()`, `DivScalar()`, ... are now generic, and take as input any non-complex
     number type, for improved convenience.
   * Added `ShapedLowerTriangular()`, `TakeLowerTriangular()` and `TakeUpperTriangular()`
+* Added `activations.Gelu` activation (the approximate version, the exact coming soon).
 
 ## v0.11.3 - 2023/08/29
 

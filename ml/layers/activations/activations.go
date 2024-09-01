@@ -9,6 +9,7 @@ import (
 	. "github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
+	"math"
 )
 
 const (
@@ -31,13 +32,15 @@ const (
 	TypeSigmoid
 	TypeLeakyRelu
 	TypeSelu
-
 	TypeSwish
 
 	// TypeSilu is an alias to TypeSwish
 	TypeSilu
 
 	TypeTanh
+
+	TypeGelu
+	TypeGeluExact
 )
 
 //go:generate enumer -type=Type -trimprefix=Type -transform=snake -values -text -json -yaml activations.go
@@ -71,6 +74,10 @@ func Apply(activation Type, x *Node) *Node {
 		return Swish(x)
 	case TypeSelu:
 		return Selu(x)
+	case TypeGelu:
+		return Gelu(x)
+	case TypeGeluExact:
+		return GeluExact(x)
 	default:
 		Panicf("Apply got invalid activation value %q: options are %v", activation, TypeValues())
 	}
@@ -148,4 +155,40 @@ func Selu(x *Node) *Node {
 		MulScalar(MinusOne(Exp(x)), SeluAlpha),
 	)
 	return MulScalar(x, SeluScale)
+}
+
+// Gelu is a close approximation to the original Gelu function.
+//
+// It is defined as Gelu(x) = x * 0.5 * (1 + Tanh(Sqrt(2/Pi) * (x+0.044715*x^3))).
+//
+// See also the GeluExact activation, if you want to use the exact (but slower) version.
+//
+// The GELU activation function was introduced in "Gaussian Error Linear Units
+// (GELUs)" [Hendrycks et al. 2016](https://arxiv.org/abs/1606.08415).
+//
+// TODO: integrate new version of Gopjrt with support for the required Erf function.
+func Gelu(x *Node) *Node {
+	cdfApprox := Add(x, MulScalar(PowScalar(x, 3), 0.044715))
+	sqrt2ByPi := math.Sqrt(2.0 / math.Pi)
+	cdfApprox = Tanh(MulScalar(cdfApprox, sqrt2ByPi))
+	cdfApprox = MulScalar(OnePlus(cdfApprox), 0.5)
+	return Mul(x, cdfApprox)
+}
+
+// GeluExact activation function, the original Gelu function.
+// **This uses the approximation for now, see to-do below.**
+//
+// It is defined as Gelu(x) = x * 0.5 * (1 + Erf(x / √2)).
+//
+// The GELU activation function was introduced in "Gaussian Error Linear Units
+// (GELUs)" [Hendrycks et al. 2016](https://arxiv.org/abs/1606.08415).
+//
+// TODO: integrate new version of Gopjrt with support for the required Erf function.
+func GeluExact(x *Node) *Node {
+	// Φ(x) = 0.5 * (1 + Erf(x / √2))
+	/*
+		cdf := MulScalar(AddScalar(Erf(DivScalar(x, math.Sqrt2)), 1), 0.5)
+		return Mul(x, cdf)
+	*/
+	return Gelu(x)
 }
