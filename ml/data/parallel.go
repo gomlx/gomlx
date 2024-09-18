@@ -3,7 +3,7 @@ package data
 import (
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/tensors"
-	"github.com/janpfeifer/gonb/common"
+	"github.com/gomlx/gomlx/types/xsync"
 	"github.com/pkg/errors"
 	"io"
 	"k8s.io/klog/v2"
@@ -53,7 +53,7 @@ type parallelDatasetImpl struct {
 
 	buffer                                chan yieldUnit
 	epochFinished, stopEpoch, stopDataset chan struct{}
-	done                                  *common.Latch
+	done                                  *xsync.Latch
 }
 
 // Parallel parallelizes yield calls of any tread-safe train.Dataset.
@@ -164,7 +164,7 @@ func (pd *ParallelDataset) Start() *ParallelDataset {
 		buffer:      make(chan yieldUnit, pd.extraBufferSize),
 		stopDataset: make(chan struct{}),
 		config:      *pd, // Copy.
-		done:        common.NewLatch(),
+		done:        xsync.NewLatch(),
 	}
 	pd.impl = impl
 	// If the ParallelDataset is garbage collected, stop all parallel goroutines.
