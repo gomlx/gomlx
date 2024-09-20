@@ -1,11 +1,33 @@
-// Package huggingface 🤗 provides functionality do download HuggingFace (HF) models and convert them from
-// their binary LFS format.
+// Package huggingface 🤗 provides functionality do download HuggingFace (HF) models and extract tensors
+// stored in the ".safetensors" format.
 //
-// It uses github.com/nlpodyssey/safetensors to convert the tensors.
-// See their BSD-2 Clause License in https://github.com/nlpodyssey/safetensors/blob/main/LICENSE for binary
-// distribution.
+// Example: Download (only the first time) and enumerate all the tensors from Google's Gemma v2 model:
 //
-// Example usage:
+//	import (
+//		"github.com/janpfeifer/must"
+//		hfd "github.com/gomlx/gomlx/ml/data"
+//		hfd "github.com/gomlx/gomlx/ml/data/huggingface"
+//	)
+//
+//	var (
+//		hfModelId = "google/gemma-2-2b-it"
+//		hfToken = "..."  // Create a read-only token for you in HuggingFace site.
+//		flagDataDir = flag.String("data", "~/work/gemma", "Directory to cache downloaded and generated dataset files.")
+//	)
+//
+//	func HuggingFaceDir() string {
+//		dataDir := data.ReplaceTildeInDir(*flagDataDir)
+//		return path.Join(dataDir, "huggingface")
+//	}
+//
+//	func main() {
+//		flag.Parse()
+//		hfm := must.M1(hfd.New(hfModelId, hfToken, HuggingFaceDir()))
+//		for e, err := range hfm.EnumerateTensors() {
+//			must.M(err)
+//			fmt.Printf("\t%s -> %s\n", e.Name, e.Tensor.Shape())
+//		}
+//	}
 package huggingface
 
 import (
@@ -16,7 +38,6 @@ import (
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/data/downloader"
 	"github.com/gomlx/gomlx/types"
-	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/types/xsync"
 	"github.com/pkg/errors"
 	"iter"
@@ -45,7 +66,9 @@ type Model struct {
 	// Set to 1 to make downloads sequential.
 	MaxParallelDownload int
 
-	// Max
+	// Info downloaded from model.
+	// It is only available after DownloadInfo is called.
+	Info *Info
 }
 
 // New creates a reference to a HuggingFace model given its id.
@@ -110,26 +133,86 @@ type SafeTensorsInfo struct {
 	Parameters map[string]int
 }
 
+// DownloadInfo structure about the model -- or read it from disk if it is cached locally already.
+// It sets Model.Info with the downloaded information if successful.
+func (hfm *Model) DownloadInfo() error {
+	if hfm.Info != nil {
+		return nil
+	}
+	infoFilePath := path.Join(hfm.BaseDir, InfoFile)
+	if !data.FileExists(infoFilePath) {
+		// Download Model's info file from network.
+		_, err := data.Download(hfm.infoURL(), infoFilePath, true)
+		if err != nil {
+			return errors.WithMessagef(err, "failed to download info for model from %q", hfm.infoURL())
+		}
+	}
+
+	// Read _info_.json from disk.
+	infoJson, err := os.ReadFile(infoFilePath)
+	if err != nil {
+		return errors.Wrapf(err, "failed to read info for model from disk in %q -- remove the file if you want to have it re-downloaded",
+			infoFilePath)
+	}
+
+	decoder := json.NewDecoder(bytes.NewReader(infoJson))
+	if err = decoder.Decode(&hfm.Info); err != nil {
+		return errors.Wrapf(err, "failed to parse info for model in %q (downloaded from %q)",
+			infoFilePath, hfm.infoURL())
+	}
+	return nil
+}
+
+// FileNameAndPath to a files for a model.
+// Name is stored in the info "Siblings" field, and Path is the path in the local storage.
+type FileNameAndPath struct {
+	Name, Path string
+}
+
+// EnumerateFileNames loads the model info and lists the file names stored for the model.
+// It doesn't download the files, only lists their relative name, and their local storage path.
+//
+// See Model.Download to actually download the files.
+func (hfm *Model) EnumerateFileNames() iter.Seq2[FileNameAndPath, error] {
+	// Download info and files.
+	err := hfm.DownloadInfo()
+	if err != nil {
+		// Error downloading: yield error only.
+		return func(yield func(FileNameAndPath, error) bool) {
+			yield(FileNameAndPath{}, err)
+			return
+		}
+	}
+	return func(yield func(FileNameAndPath, error) bool) {
+		for _, si := range hfm.Info.Siblings {
+			fileName := si.Name
+			if path.IsAbs(fileName) || strings.Index(fileName, "..") != -1 {
+				yield(FileNameAndPath{}, errors.Errorf("model %q contains illegal file name %q -- it cannot be an absolute path, nor contain \"..\"",
+					hfm.ID, fileName))
+				return
+			}
+			filePath := path.Join(hfm.BaseDir, fileName)
+			if !yield(FileNameAndPath{Name: fileName, Path: filePath}, nil) {
+				return
+			}
+		}
+		return
+	}
+}
+
 // Download first download the info about the model, with the list of files associated with the model, and then all
 // the model files.
 //
 // It then downloads any files not available locally yet -- files are downloaded to a ".downloading" suffix, and moved
 // to the final destination once they finished to download.
 func (hfm *Model) Download() error {
-	info, err := hfm.DownloadInfo()
-	if err != nil {
-		return err
-	}
-	requireDownload := types.MakeSet[string](len(info.Siblings))
-	for _, si := range info.Siblings {
-		fileName := si.Name
-		if path.IsAbs(fileName) || strings.Index(fileName, "..") != -1 {
-			return errors.Errorf("model %q contains illegal file name %q -- it cannot be an absolute path, nor contain \"..\"",
-				hfm.ID, fileName)
+	requireDownload := types.MakeSet[string](10)
+	for f, err := range hfm.EnumerateFileNames() {
+		if err != nil {
+			return err
 		}
-		filePath := path.Join(hfm.BaseDir, fileName)
-		if !data.FileExists(filePath) {
-			requireDownload.Insert(fileName)
+		if !data.FileExists(f.Path) {
+			requireDownload.Insert(f.Name)
 		}
 	}
 
@@ -207,44 +290,55 @@ func (hfm *Model) Download() error {
 		downloadingMu.Unlock()
 	}
 	wg.Wait()
-	fmt.Println()
+	if len(requireDownload) > 0 {
+		fmt.Println()
+	}
 	if firstError != nil {
 		return firstError
 	}
 	return nil
 }
 
-// DownloadInfo structure about the model -- or read it from disk if it is cached locally already.
-func (hfm *Model) DownloadInfo() (*Info, error) {
-	infoFilePath := path.Join(hfm.BaseDir, InfoFile)
-	if !data.FileExists(infoFilePath) {
-		// Download Model's info file from network.
-		_, err := data.Download(hfm.infoURL(), infoFilePath, true)
-		if err != nil {
-			return nil, errors.WithMessagef(err, "failed to download info for model from %q", hfm.infoURL())
+// EnumerateTensors returns an iterator over all the tensors stored in ".safetensors" files,
+// already converted to GoMLX *tensors.Tensor, with their associated names.
+//
+// It calls Download first, to make sure the files are already there.
+func (hfm *Model) EnumerateTensors() iter.Seq2[*NamedTensor, error] {
+	// Download info and files.
+	err := hfm.Download()
+	if err != nil {
+		// Error downloading: yield error only.
+		return func(yield func(*NamedTensor, error) bool) {
+			yield(nil, err)
+			return
 		}
 	}
 
-	// Read _info_.json from disk.
-	infoJson, err := os.ReadFile(infoFilePath)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to read info for model from disk in %q -- remove the file if you want to have it re-downloaded",
-			infoFilePath)
-	}
-
-	decoder := json.NewDecoder(bytes.NewReader(infoJson))
-	var info Info
-	if err = decoder.Decode(&info); err != nil {
-		return nil, errors.Wrapf(err, "failed to parse info for model in %q (downloaded from %q)",
-			infoFilePath, hfm.infoURL())
-	}
-	return &info, nil
-}
-
-// ConvertedSafeTensors returns an iterator over all the tensors stored in ".safetensors" files,
-// already converted to GoMLX *tensors.Tensor.
-func (hfm *Model) ConvertedSafeTensors() iter.Seq2[string, *tensors.Tensor] {
-	return func(yield func(string, *tensors.Tensor) bool) {
+	return func(yield func(*NamedTensor, error) bool) {
+		for fInfo, err := range hfm.EnumerateFileNames() {
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+			if path.Ext(fInfo.Name) != ".safetensors" {
+				continue
+			}
+			f, err := os.Open(fInfo.Path)
+			if err != nil {
+				err = errors.Wrapf(err, "failed to open %q", fInfo.Path)
+				yield(nil, err)
+				return
+			}
+			for tInfo, err := range scanSafetensorsFile(f) {
+				if err != nil {
+					yield(nil, err)
+					return
+				}
+				if !yield(tInfo, nil) {
+					return
+				}
+			}
+		}
 	}
 }
 

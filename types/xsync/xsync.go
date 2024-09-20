@@ -125,6 +125,9 @@ func SendNoBlock[T any](c chan T, value T) (status int) {
 }
 
 // Semaphore that allows dynamic resizing.
+//
+// It uses a sync.Cond, to allow dynamic resizing, so it will be slower than a pure channel version
+// of a semaphore, with a fixed capacity. This shouldn't matter for more coarse resource control.
 type Semaphore struct {
 	cond              sync.Cond
 	capacity, current int // Tracks capacity and current usage.

@@ -3,7 +3,7 @@
 ## Next
 
 * Added package `ml/data/downloader` for parallel downloads, with support for authentication tokens.
-* Added package `ml/data/huggingface` to download HuggingFace models.
+* Added package `ml/data/huggingface` to download and load HuggingFace models into tensors.
 * Removed dependency to gonb/common. Added package `types/xsync` with the required synchronization constructs.
 * Added `Shape.Dim(axis)` as a shortcut, where `axis` can use negative values.
 * Package `graph`:
