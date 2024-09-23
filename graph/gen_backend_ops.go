@@ -42,6 +42,7 @@ const (
 	NodeTypeDynamicUpdateSlice
 	NodeTypeEqual
 	NodeTypeEqualTotalOrder
+	NodeTypeErf
 	NodeTypeExp
 	NodeTypeExpm1
 	NodeTypeFFT
@@ -1175,6 +1176,43 @@ func EqualTotalOrder(x0 *Node, x1 *Node) (node *Node) {
 		inputs:       inputs,
 		inputNodes:   inputNodes,
 		stopGradient: true,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsErf holds the inputs used for the call to backends.Erf.
+type nodeInputsErf struct {
+	x *Node
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsErf) Type() NodeType {
+	return NodeTypeErf
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsErf) String() string {
+	return fmt.Sprintf("%s(x=[#%d])",
+		ni.Type(),
+		ni.x.Id(),
+	)
+}
+
+// Erf returns the "error function", defined as erf(x) = 2/Pi * \int_{0}^{x}{e^{-t^2}dt}.
+func Erf(x *Node) (node *Node) {
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsErf{
+		x: x,
+	}
+	result := g.builder.Erf(x.outputOps[0])
+	node = &Node{
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return

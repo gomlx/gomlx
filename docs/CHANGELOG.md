@@ -2,12 +2,17 @@
 
 ## Next
 
+* Updated dependency to gopjrt v0.4.0
+* Added package `ml/data/downloader` for parallel downloads, with support for authentication tokens.
+* Added package `ml/data/huggingface` to download and load HuggingFace models into tensors.
+* Removed dependency to gonb/common. Added package `types/xsync` with the required synchronization constructs.
 * Added `Shape.Dim(axis)` as a shortcut, where `axis` can use negative values.
 * Package `graph`:
   * `Scalar()`, `AddScalar()`, `MulScalar()`, `DivScalar()`, ... are now generic, and take as input any non-complex
     number type, for improved convenience.
   * Added `ShapedLowerTriangular()`, `TakeLowerTriangular()` and `TakeUpperTriangular()`
-* Added `activations.Gelu` activation (the approximate version, the exact coming soon).
+* Added `activations.Gelu` and `activations.GeluExact`
+* Added `Erf`, the "error function", used when integrating the normal distribution.
 
 ## v0.11.3 - 2023/08/29
 

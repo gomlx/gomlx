@@ -564,3 +564,16 @@ func TestDynamicUpdateSliceGradient(t *testing.T) {
 			[][]float32{{11}, {11}},
 		})
 }
+
+func TestGradientErf(t *testing.T) {
+	testGradients(t, "TestGradientErf",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			inputs := Const(g, []float64{0, -1, 2, -3, 4, -5, 6})
+			output = Erf(inputs)
+			return output, []*Node{inputs}
+		}, []any{
+			[]float64{1.1283792, 0.41510755, 0.020666987, 1.3925305e-04,
+				1.2698236e-07, 1.5670867e-11, 2.6173016e-16},
+		},
+	)
+}

@@ -8,11 +8,11 @@ import (
 	"strings"
 )
 
-const _TypeName = "nonerelusigmoidleaky_reluseluswishsilutanh"
+const _TypeName = "nonerelusigmoidleaky_reluseluswishsilutanhgelugelu_approx"
 
-var _TypeIndex = [...]uint8{0, 4, 8, 15, 25, 29, 34, 38, 42}
+var _TypeIndex = [...]uint8{0, 4, 8, 15, 25, 29, 34, 38, 42, 46, 57}
 
-const _TypeLowerName = "nonerelusigmoidleaky_reluseluswishsilutanh"
+const _TypeLowerName = "nonerelusigmoidleaky_reluseluswishsilutanhgelugelu_approx"
 
 func (i Type) String() string {
 	if i < 0 || i >= Type(len(_TypeIndex)-1) {
@@ -37,9 +37,11 @@ func _TypeNoOp() {
 	_ = x[TypeSwish-(5)]
 	_ = x[TypeSilu-(6)]
 	_ = x[TypeTanh-(7)]
+	_ = x[TypeGelu-(8)]
+	_ = x[TypeGeluApprox-(9)]
 }
 
-var _TypeValues = []Type{TypeNone, TypeRelu, TypeSigmoid, TypeLeakyRelu, TypeSelu, TypeSwish, TypeSilu, TypeTanh}
+var _TypeValues = []Type{TypeNone, TypeRelu, TypeSigmoid, TypeLeakyRelu, TypeSelu, TypeSwish, TypeSilu, TypeTanh, TypeGelu, TypeGeluApprox}
 
 var _TypeNameToValueMap = map[string]Type{
 	_TypeName[0:4]:        TypeNone,
@@ -58,6 +60,10 @@ var _TypeNameToValueMap = map[string]Type{
 	_TypeLowerName[34:38]: TypeSilu,
 	_TypeName[38:42]:      TypeTanh,
 	_TypeLowerName[38:42]: TypeTanh,
+	_TypeName[42:46]:      TypeGelu,
+	_TypeLowerName[42:46]: TypeGelu,
+	_TypeName[46:57]:      TypeGeluApprox,
+	_TypeLowerName[46:57]: TypeGeluApprox,
 }
 
 var _TypeNames = []string{
@@ -69,6 +75,8 @@ var _TypeNames = []string{
 	_TypeName[29:34],
 	_TypeName[34:38],
 	_TypeName[38:42],
+	_TypeName[42:46],
+	_TypeName[46:57],
 }
 
 // TypeString retrieves an enum value from the enum constants string name.

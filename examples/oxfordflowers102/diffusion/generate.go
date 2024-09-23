@@ -16,8 +16,8 @@ import (
 	"github.com/gomlx/gomlx/types/tensors"
 	timage "github.com/gomlx/gomlx/types/tensors/images"
 	"github.com/gomlx/gomlx/types/xslices"
+	"github.com/gomlx/gomlx/types/xsync"
 	"github.com/janpfeifer/gonb/cache"
-	"github.com/janpfeifer/gonb/common"
 	"github.com/janpfeifer/gonb/gonbui"
 	"github.com/janpfeifer/gonb/gonbui/dom"
 	"github.com/janpfeifer/gonb/gonbui/widgets"
@@ -238,7 +238,7 @@ func (c *Config) DisplayImagesAcrossDiffusionSteps(numImages int, numDiffusionSt
 //
 // If `cacheKey` empty, cache is by-passed. Otherwise, try to load images from cache first if available,
 // or save generated images in cache for future use.
-func (c *Config) SliderDiffusionSteps(cacheKey string, ctx *context.Context, numImages int, numDiffusionSteps int, htmlId string) *common.Latch {
+func (c *Config) SliderDiffusionSteps(cacheKey string, ctx *context.Context, numImages int, numDiffusionSteps int, htmlId string) *xsync.Latch {
 	// Generate images.
 	type ImagesAndDiffusions struct {
 		Images    []string
@@ -277,7 +277,7 @@ func (c *Config) SliderDiffusionSteps(cacheKey string, ctx *context.Context, num
 	sliderChan := slider.Listen().LatestOnly()
 	sliderChan.C <- 0
 
-	done := common.NewLatch()
+	done := xsync.NewLatch()
 	go func() {
 		for {
 			select {
@@ -311,7 +311,7 @@ func (c *Config) GenerateImagesOfFlowerType(numImages int, flowerType int32, num
 //
 // If `cacheKey` empty, cache is by-passed. Otherwise, try to load images from cache first if available,
 // or save generated images in cache for future use.
-func (c *Config) DropdownFlowerTypes(cacheKey string, numImages, numDiffusionSteps int, htmlId string) *common.Latch {
+func (c *Config) DropdownFlowerTypes(cacheKey string, numImages, numDiffusionSteps int, htmlId string) *xsync.Latch {
 	numFlowerTypes := flowers.NumLabels
 	generateFn := func() []string {
 		htmlImages := make([]string, numFlowerTypes)
@@ -342,7 +342,7 @@ func (c *Config) DropdownFlowerTypes(cacheKey string, numImages, numDiffusionSte
 	selChan := dropDown.Listen().LatestOnly()
 	selChan.C <- 0
 
-	done := common.NewLatch()
+	done := xsync.NewLatch()
 	go func() {
 		for {
 			select {
