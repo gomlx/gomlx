@@ -11,8 +11,8 @@
   * `Scalar()`, `AddScalar()`, `MulScalar()`, `DivScalar()`, ... are now generic, and take as input any non-complex
     number type, for improved convenience.
   * Added `ShapedLowerTriangular()`, `TakeLowerTriangular()` and `TakeUpperTriangular()`
-* Added `activations.Gelu` and `activations.GeluExact`
-* Added `Erf`, the "error function", used when integrating the normal distribution.
+* Added `activations.Gelu` and `activations.GeluApproximate`
+* Added `Erf`, the "error function", used when integrating the normal distribution, and its gradient.
 
 ## v0.11.3 - 2024/08/29
 
