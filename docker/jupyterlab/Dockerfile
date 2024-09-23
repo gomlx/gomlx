@@ -1,4 +1,4 @@
-FROM --platform=linux/amd64 ubuntu:noble
+FROM --platform=linux/amd64 ubuntu:noble AS gomlx_jupyterlab_base
 LABEL maintainer="pfeifer@gmail.com"
 
 #######################################################################################################
@@ -42,7 +42,7 @@ pip install jupyterlab
 EOF
 
 #######################################################################################################
-# Go, GoNB, gopjrt and GoMLX Libraries and Code
+# Go, GoNB and gopjrt
 #######################################################################################################
 ARG GO_VERSION="1.23.1"
 ENV LD_LIBRARY_PATH /usr/local/lib:${LD_LIBRARY_PATH}
@@ -83,6 +83,14 @@ RUN ./cmd/install.sh && ./cmd/install_cuda.sh
 USER ${NB_USER}
 WORKDIR ${HOME}/Projects/gopjrt
 RUN go test ./...
+
+
+#######################################################################################################
+# Install GOMLX libraries and code
+#
+# As a separate docker target so it can be easily cache busted.
+#######################################################################################################
+FROM gomlx_jupyterlab_base AS gomlx_jupyterlab
 
 # Clone and test GoMLX
 arg GOMLX_REPOSITORY_BRANCH="main"
