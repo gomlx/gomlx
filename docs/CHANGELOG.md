@@ -1,6 +1,6 @@
 # GoMLX changelog
 
-## Next
+## v0.12.0 - 2024/09/23
 
 * Updated dependency to gopjrt v0.4.0
 * Added package `ml/data/downloader` for parallel downloads, with support for authentication tokens.
@@ -14,7 +14,7 @@
 * Added `activations.Gelu` and `activations.GeluExact`
 * Added `Erf`, the "error function", used when integrating the normal distribution.
 
-## v0.11.3 - 2023/08/29
+## v0.11.3 - 2024/08/29
 
 * Immediately free accelerator (GPU) memory, where possible -- as opposed to waiting for the garbage collector.
   * This impacts the train.Loop and train.Trainer: they both immediately finalize the inputs and labels after use.
