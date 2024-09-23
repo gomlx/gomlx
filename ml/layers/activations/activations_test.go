@@ -58,14 +58,25 @@ func TestSelu(t *testing.T) {
 }
 
 func TestGelu(t *testing.T) {
-	// Values generated using jax.nn.Gelu(approximate=true).
-	graphtest.RunTestGraphFn(t, "Gelu (approximate versions)",
+	// Values generated using jax.nn.Gelu(approximate=False) on GPU (on cpus it varies a bit).
+	graphtest.RunTestGraphFn(t, "Gelu (Exact)",
 		func(g *Graph) (inputs, outputs []*Node) {
 			x := Const(g, []float32{0, -1, 2, -3, 4, -5, 6})
 			inputs = []*Node{x}
 			outputs = []*Node{Gelu(x)}
 			return
 		}, []any{
-			[]float32{0, -0.15880796, 1.9545977, -0.0036373436, 4, 0, 6},
+			[]float32{0, -0.15865526, 1.9544997, -4.0496886e-03, 3.9998736, -1.3411045e-06, 6},
+		}, 1e-5)
+
+	// Values generated using jax.nn.Gelu(approximate=True) on GPU (on cpus it varies a bit).
+	graphtest.RunTestGraphFn(t, "GeluApproximate",
+		func(g *Graph) (inputs, outputs []*Node) {
+			x := Const(g, []float32{0, -1, 2, -3, 4, -5, 6})
+			inputs = []*Node{x}
+			outputs = []*Node{GeluApproximate(x)}
+			return
+		}, []any{
+			[]float32{0, -0.15880796, 1.9545977, -3.6375225e-03, 3.9999294, 0, 6},
 		}, 0.01)
 }

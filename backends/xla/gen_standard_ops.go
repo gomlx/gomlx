@@ -339,6 +339,16 @@ func (b *Builder) EqualTotalOrder(x0, x1 backends.Op) backends.Op {
 	return xla_result
 }
 
+// Erf returns the "error function", defined as erf(x) = 2/Pi * \int_{0}^{x}{e^{-t^2}dt}.
+func (b *Builder) Erf(x backends.Op) backends.Op {
+	xla_x := b.verifyAndCastOp(x, "x")
+	xla_result, err := xlabuilder.Erf(xla_x)
+	if err != nil {
+		panic(errors.WithMessagef(err, "Backend %q: failed Erf", BackendName))
+	}
+	return xla_result
+}
+
 // Exp returns the Op that represents the output of the corresponding operation.
 func (b *Builder) Exp(x backends.Op) backends.Op {
 	xla_x := b.verifyAndCastOp(x, "x")

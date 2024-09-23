@@ -21,6 +21,7 @@ import (
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/pkg/errors"
+	"math"
 )
 
 // This file implements reverse-mode automatic differentiation, using AccumulatedVJP (Vector Jacobian Product).
@@ -337,8 +338,8 @@ type VJP func(node *Node, vjpOutputs []*Node, outputShape shapes.Shape) []*Node
 // SingleOutputVJP for VJP of ops that have a single output (most of them).
 type SingleOutputVJP func(node, v *Node, outputShape shapes.Shape) []*Node
 
-// vjpForSingle is simple converter from SingleOutputVJP to generic VJP.
-func vjpForSingle(vjpFn SingleOutputVJP) VJP {
+// vjpForSingleOutput is simple converter from SingleOutputVJP to generic VJP.
+func vjpForSingleOutput(vjpFn SingleOutputVJP) VJP {
 	return func(node *Node, vjpOutputs []*Node, outputShape shapes.Shape) []*Node {
 		return vjpFn(node, vjpOutputs[0], outputShape)
 	}
@@ -350,48 +351,49 @@ func vjpForSingle(vjpFn SingleOutputVJP) VJP {
 // Notice xla.GetTupleElementNode is specialized inside the main reverse autodiff code, and is not
 // in the table here.
 var VJPRegistration = map[NodeType]VJP{
-	NodeTypeInvalid:              vjpForSingle(noOpVJP),
-	NodeTypeConstant:             vjpForSingle(nilVJP),
-	NodeTypeParameter:            vjpForSingle(nilVJP),
-	NodeTypeConvertDType:         vjpForSingle(convertDTypeVJP),
-	NodeTypeWhere:                vjpForSingle(whereVJP),
-	NodeTypeNeg:                  vjpForSingle(negVJP),
-	NodeTypeAbs:                  vjpForSingle(absVJP),
-	NodeTypeExp:                  vjpForSingle(expVJP),
-	NodeTypeLog:                  vjpForSingle(logVJP),
-	NodeTypeLog1p:                vjpForSingle(log1pVJP),
-	NodeTypeTanh:                 vjpForSingle(tanhVJP),
-	NodeTypeAdd:                  vjpForSingle(addVJP),
-	NodeTypeSub:                  vjpForSingle(subVJP),
-	NodeTypeMul:                  vjpForSingle(mulVJP),
-	NodeTypeDiv:                  vjpForSingle(divVJP),
-	NodeTypeSqrt:                 vjpForSingle(sqrtVJP),
+	NodeTypeInvalid:              vjpForSingleOutput(noOpVJP),
+	NodeTypeConstant:             vjpForSingleOutput(nilVJP),
+	NodeTypeParameter:            vjpForSingleOutput(nilVJP),
+	NodeTypeConvertDType:         vjpForSingleOutput(convertDTypeVJP),
+	NodeTypeWhere:                vjpForSingleOutput(whereVJP),
+	NodeTypeNeg:                  vjpForSingleOutput(negVJP),
+	NodeTypeAbs:                  vjpForSingleOutput(absVJP),
+	NodeTypeExp:                  vjpForSingleOutput(expVJP),
+	NodeTypeLog:                  vjpForSingleOutput(logVJP),
+	NodeTypeLog1p:                vjpForSingleOutput(log1pVJP),
+	NodeTypeTanh:                 vjpForSingleOutput(tanhVJP),
+	NodeTypeAdd:                  vjpForSingleOutput(addVJP),
+	NodeTypeSub:                  vjpForSingleOutput(subVJP),
+	NodeTypeMul:                  vjpForSingleOutput(mulVJP),
+	NodeTypeDiv:                  vjpForSingleOutput(divVJP),
+	NodeTypeSqrt:                 vjpForSingleOutput(sqrtVJP),
+	NodeTypeErf:                  vjpForSingleOutput(erfVJP),
 	NodeTypeBatchNormForTraining: batchNormForTrainingVJP,
 
 	// Complex numbers.
-	NodeTypeReal:    vjpForSingle(realVJP),
-	NodeTypeImag:    vjpForSingle(imagVJP),
-	NodeTypeConj:    vjpForSingle(conjVJP),
-	NodeTypeComplex: vjpForSingle(complexVJP),
+	NodeTypeReal:    vjpForSingleOutput(realVJP),
+	NodeTypeImag:    vjpForSingleOutput(imagVJP),
+	NodeTypeConj:    vjpForSingleOutput(conjVJP),
+	NodeTypeComplex: vjpForSingleOutput(complexVJP),
 
-	NodeTypeMax:                vjpForSingle(minMaxVJP),
-	NodeTypeMin:                vjpForSingle(minMaxVJP),
-	NodeTypeReshape:            vjpForSingle(reshapeVJP),
-	NodeTypeReduceSum:          vjpForSingle(reduceSumVJP),
-	NodeTypeReduceMax:          vjpForSingle(reduceMaxVJP),
-	NodeTypeLogistic:           vjpForSingle(logisticVJP),
-	NodeTypeDot:                vjpForSingle(dotVJP),
-	NodeTypeDotGeneral:         vjpForSingle(dotGeneralVJP),
-	NodeTypeSlice:              vjpForSingle(sliceVJP),
-	NodeTypeGather:             vjpForSingle(gatherVJP),
-	NodeTypeConcatenate:        vjpForSingle(concatenateVJP),
-	NodeTypeConvGeneralDilated: vjpForSingle(convGeneralDilatedVJP),
-	NodeTypeReduceWindow:       vjpForSingle(reduceWindowVJP),
-	NodeTypeTranspose:          vjpForSingle(transposeVJP),
-	NodeTypeBroadcastInDim:     vjpForSingle(broadcastInDimVJP),
-	NodeTypeFFT:                vjpForSingle(fftVJP),
-	NodeTypeDynamicSlice:       vjpForSingle(dynamicSliceVJP),
-	NodeTypeDynamicUpdateSlice: vjpForSingle(dynamicUpdateSliceVJP),
+	NodeTypeMax:                vjpForSingleOutput(minMaxVJP),
+	NodeTypeMin:                vjpForSingleOutput(minMaxVJP),
+	NodeTypeReshape:            vjpForSingleOutput(reshapeVJP),
+	NodeTypeReduceSum:          vjpForSingleOutput(reduceSumVJP),
+	NodeTypeReduceMax:          vjpForSingleOutput(reduceMaxVJP),
+	NodeTypeLogistic:           vjpForSingleOutput(logisticVJP),
+	NodeTypeDot:                vjpForSingleOutput(dotVJP),
+	NodeTypeDotGeneral:         vjpForSingleOutput(dotGeneralVJP),
+	NodeTypeSlice:              vjpForSingleOutput(sliceVJP),
+	NodeTypeGather:             vjpForSingleOutput(gatherVJP),
+	NodeTypeConcatenate:        vjpForSingleOutput(concatenateVJP),
+	NodeTypeConvGeneralDilated: vjpForSingleOutput(convGeneralDilatedVJP),
+	NodeTypeReduceWindow:       vjpForSingleOutput(reduceWindowVJP),
+	NodeTypeTranspose:          vjpForSingleOutput(transposeVJP),
+	NodeTypeBroadcastInDim:     vjpForSingleOutput(broadcastInDimVJP),
+	NodeTypeFFT:                vjpForSingleOutput(fftVJP),
+	NodeTypeDynamicSlice:       vjpForSingleOutput(dynamicSliceVJP),
+	NodeTypeDynamicUpdateSlice: vjpForSingleOutput(dynamicUpdateSliceVJP),
 }
 
 // nilVJP returns no gradient, for functions without any inputNodes.
@@ -500,6 +502,14 @@ func log1pVJP(node, v *Node, _ shapes.Shape) []*Node {
 func tanhVJP(node, v *Node, _ shapes.Shape) []*Node {
 	tanhX := node // node holds the output of tanh(x)
 	return []*Node{Mul(v, OneMinus(Square(tanhX)))}
+}
+
+func erfVJP(node, v *Node, _ shapes.Shape) []*Node {
+	x := node.inputNodes[0]
+	// d/dx(erf(x)) = 2⋅e^(-x²)/√π
+	c := 2.0 / math.Sqrt(math.Pi)
+	dErf := MulScalar(Exp(Neg(Square(x))), c)
+	return []*Node{Mul(v, dErf)}
 }
 
 func sqrtVJP(node, v *Node, _ shapes.Shape) []*Node {

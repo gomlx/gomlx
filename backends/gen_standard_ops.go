@@ -154,6 +154,9 @@ type StandardOps interface {
 	// The op is created on the same XlaBuilder as used for x0 and x1.
 	EqualTotalOrder(x0, x1 Op) Op
 
+	// Erf returns the "error function", defined as erf(x) = 2/Pi * \int_{0}^{x}{e^{-t^2}dt}.
+	Erf(x Op) Op
+
 	// Exp returns the Op that represents the output of the corresponding operation.
 	Exp(x Op) Op
 
