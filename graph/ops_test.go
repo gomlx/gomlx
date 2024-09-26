@@ -81,6 +81,13 @@ func TestConstant(t *testing.T) {
 			t.Errorf("ConstTensor has invalid outputShapes: %s", shape)
 		}
 	}
+	{
+		g := NewGraph(backend, "")
+		t1 := tensors.FromValue([][]float32{{1.2, 1.3}, {2.4, 2.5}, {2.6, 2.7}})
+		n1 := ConstCachedTensor(g, t1)
+		n2 := ConstCachedTensor(g, t1)
+		require.Equal(t, n1, n2)
+	}
 }
 
 func compileRunAndTakeFirst(t *testing.T, g *Graph) *tensors.Tensor {

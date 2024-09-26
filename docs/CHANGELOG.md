@@ -1,5 +1,11 @@
 # GoMLX changelog
 
+## Next
+
+* Added learnable rational functions (ml/layers/rational): can be used for activations or as univariate learnable
+  functions for KAN.
+* Added `graph.ConstCachedTensor` to allow caching of constant tensors. 
+
 ## v0.12.0 - 2024/09/23
 
 * Updated dependency to gopjrt v0.4.0
