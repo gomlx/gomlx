@@ -284,6 +284,8 @@ func HeFn(initialSeed int64) VariableInitializer {
 //
 // The baseValue can have a different dtype, in which case it is converted (using graph.ConvertDType) to the
 // requested variable dtype.
+//
+// It also works with a scalar baseValue, which translates to constant value initializer.
 func BroadcastTensorToShape(baseValue *tensors.Tensor) VariableInitializer {
 	return func(g *Graph, shape shapes.Shape) *Node {
 		v := ConstCachedTensor(g, baseValue)
