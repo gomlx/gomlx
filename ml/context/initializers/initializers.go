@@ -22,8 +22,10 @@ import (
 	. "github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
 	"math"
+	"slices"
 	"sync"
 )
 
@@ -271,5 +273,30 @@ func HeFn(initialSeed int64) VariableInitializer {
 		scale := max(1.0, float64(fanIn))
 		stddev := math.Sqrt(2.0 / scale)
 		return RandomNormalFn(initialSeed, stddev)(g, shape)
+	}
+}
+
+// BroadcastTensorToShape is an initializer that takes a constant tensor as baseValue and during initialization
+// it broadcast it to the requested variable shape.
+//
+// The broadcasting happens only on the prefix dimensions (using graph.BroadcastPrefix), so the shape of the
+// baseValue tensor mush match the last dimensions of the variables shape.
+//
+// The baseValue can have a different dtype, in which case it is converted (using graph.ConvertDType) to the
+// requested variable dtype.
+func BroadcastTensorToShape(baseValue *tensors.Tensor) VariableInitializer {
+	return func(g *Graph, shape shapes.Shape) *Node {
+		v := ConstCachedTensor(g, baseValue)
+		v = ConvertDType(v, shape.DType)
+		if v.Shape().Equal(shape) {
+			return v
+		}
+		if shape.Rank() <= v.Rank() || !slices.Equal(v.Shape().Dimensions, shape.Dimensions[shape.Rank()-v.Rank():]) {
+			Panicf("invalid BroadcastTensorToShape: variable being initialized has shape %s (rank %d), but base "+
+				"tensor has shape %s (rank %d), which is not a suffix of the requested variable shape",
+				shape, shape.Rank(), baseValue.Shape(), baseValue.Rank())
+		}
+		v = BroadcastPrefix(v, shape.Dimensions[:shape.Rank()-v.Rank()]...)
+		return v
 	}
 }
