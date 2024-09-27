@@ -7,6 +7,8 @@
 * Added `graph.ConstCachedTensor` to allow caching of constant tensors
 * Added `initializers.BroadcastTensorToShape`: to allow variables to be initialized with a base value that is broadcast
   to each variable shape requested.
+* Added `context.ExecOnce` and `context.ExecOnceN`.
+* Added rational notebook to generate initial values with approximations to arbitrary univariate functions.
 
 ## v0.12.0 - 2024/09/23
 

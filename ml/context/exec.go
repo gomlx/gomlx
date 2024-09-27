@@ -41,6 +41,7 @@ type ExecGraphFn interface {
 		func(*Context, *Node, *Node, *Node, *Node) |
 		func(*Context, *Node, *Node, *Node, *Node, *Node) |
 		func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) |
+
 		func(*Context, *Graph) *Node |
 		func(*Context, []*Node) *Node |
 		func(*Context, *Node) *Node |
@@ -49,6 +50,7 @@ type ExecGraphFn interface {
 		func(*Context, *Node, *Node, *Node, *Node) *Node |
 		func(*Context, *Node, *Node, *Node, *Node, *Node) *Node |
 		func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) *Node |
+
 		func(*Context, *Graph) (*Node, *Node) |
 		func(*Context, []*Node) (*Node, *Node) |
 		func(*Context, *Node) (*Node, *Node) |
@@ -57,6 +59,7 @@ type ExecGraphFn interface {
 		func(*Context, *Node, *Node, *Node, *Node) (*Node, *Node) |
 		func(*Context, *Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
 		func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
+
 		func(*Context, *Graph) (*Node, *Node, *Node) |
 		func(*Context, []*Node) (*Node, *Node, *Node) |
 		func(*Context, *Node) (*Node, *Node, *Node) |
@@ -65,6 +68,7 @@ type ExecGraphFn interface {
 		func(*Context, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
 		func(*Context, *Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
 		func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
+
 		func(*Context, *Graph) []*Node |
 		func(*Context, []*Node) []*Node |
 		func(*Context, *Node) []*Node |
@@ -73,6 +77,18 @@ type ExecGraphFn interface {
 		func(*Context, *Node, *Node, *Node, *Node) []*Node |
 		func(*Context, *Node, *Node, *Node, *Node, *Node) []*Node |
 		func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) []*Node
+}
+
+// ExecGraphFnOneOutput is a type parameter for accepted function types for NewExec constructor.
+type ExecGraphFnOneOutput interface {
+	func(*Context, *Graph) *Node |
+		func(*Context, []*Node) *Node |
+		func(*Context, *Node) *Node |
+		func(*Context, *Node, *Node) *Node |
+		func(*Context, *Node, *Node, *Node) *Node |
+		func(*Context, *Node, *Node, *Node, *Node) *Node |
+		func(*Context, *Node, *Node, *Node, *Node, *Node) *Node |
+		func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) *Node
 }
 
 // Exec creates and executes computation graphs that take as input a
@@ -422,6 +438,26 @@ func NewExec[F ExecGraphFn](backend backends.Backend, ctx *Context, ctxGraphFn F
 		log.Fatalf("Failed to create Exec object: %+v", err)
 	}
 	return e
+}
+
+// ExecOnceN builds the graph and executes it with the given arguments, and returns various output.
+//
+// It's short for a call to NewExec, Exec.Call and Exec.Finalize.
+//
+// See ExecOnce for a more convenient version if you have only one output.
+func ExecOnceN[F ExecGraphFn](backend backends.Backend, ctx *Context, ctxGraphFn F, args ...any) []*tensors.Tensor {
+	e := NewExec(backend, ctx, ctxGraphFn)
+	defer e.Finalize()
+	return e.Call(args...)
+}
+
+// ExecOnce builds the graph and executes it with the given arguments, and returns the one output.
+//
+// It's short for a call to NewExec, Exec.Call and Exec.Finalize for functions that return only one output.
+//
+// See ExecOnceN if you have multiple outputs.
+func ExecOnce[F ExecGraphFnOneOutput](backend backends.Backend, ctx *Context, ctxGraphFn F) *tensors.Tensor {
+	return ExecOnceN(backend, ctx, ctxGraphFn)[0]
 }
 
 // InDevice sets the device num to be used by graphs constructed by Exec.
