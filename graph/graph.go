@@ -125,6 +125,10 @@ type Graph struct {
 
 	// scalars maintains a cache of scalar values already created in the current Graph for re-use.
 	scalars scalarCache
+
+	// tensorConstants maintains a cache of tensors that have been converted to a constant node in the graph,
+	// to avoid creating duplicate nodes.
+	tensorConstants tensorConstCache
 }
 
 // GraphId is globally unique.
@@ -154,6 +158,7 @@ func NewGraph(backend backends.Backend, name string) *Graph {
 		name:                  name,
 		parameterNameToHandle: make(map[string]ParameterHandle),
 		scalars:               make(scalarCache),
+		tensorConstants:       make(tensorConstCache),
 	}
 	graphCount += 1
 	return g
@@ -597,3 +602,9 @@ func (g *Graph) getScalarConst(dtype dtypes.DType, value float64) (output *Node)
 	dtypeMap[value] = output
 	return
 }
+
+// tensorConstCache provides a cache of tensors used (converted to constants) in Graph, so they can be reused if needed.
+//
+// Notice this has the disadvantage of holding a reference to the tensor, while the Graph is alive, so it won't be
+// GC'ed until the graph is destroyed.
+type tensorConstCache map[*tensors.Tensor]*Node

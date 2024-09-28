@@ -141,20 +141,22 @@ func (ni *nodeInputsConstant) String() string {
 	}
 }
 
-// ConstTensor returns a newly created constant node for the tensor x.
+// ConstTensor returns a newly created constant node for the tensor t.
 //
-// The value of x is copied into the graph. It's recommended that for very large tensors,
+// The value of t is copied into the graph. It's recommended that for very large tensors,
 // even if constants, that they are passed as side inputNodes (or variables, see context package) instead.
-func ConstTensor(g *Graph, x *tensors.Tensor) (node *Node) {
+//
+// See also ConstCachedTensor if you think you'll use the same tensor multiple times in the same graph.
+func ConstTensor(g *Graph, t *tensors.Tensor) (node *Node) {
 	g.AssertBuilding()
 	nodeInputs := &nodeInputsConstant{
-		shape: x.Shape(),
+		shape: t.Shape(),
 	}
-	if x.Size() < MinConstValueSizeToKeep {
-		nodeInputs.tensor = x.LocalClone()
+	if t.Size() < MinConstValueSizeToKeep {
+		nodeInputs.tensor = t.LocalClone()
 	}
 	var result backends.Op
-	x.ConstFlatData(func(flat any) {
+	t.ConstFlatData(func(flat any) {
 		result = g.builder.Constant(flat, nodeInputs.shape.Dimensions...)
 	})
 	node = &Node{
@@ -165,6 +167,29 @@ func ConstTensor(g *Graph, x *tensors.Tensor) (node *Node) {
 	}
 	g.registerNode(node)
 	return
+}
+
+// ConstCachedTensor returns a constant node for the tensor t.
+// If it's the first time the tensor is used in this graph, a new node is created.
+// Otherwise, a previously created node is reused.
+//
+// The caching of the tensor has the side effect of keeping the tensor alive (and its memory resources) util
+// the Graph itself is garbage collected. If this is a concern, use ConstTensor instead.
+//
+// TODO:this can be made default (ConstTensor) once weak references land into Go and the issue of keeping the
+// tensor alive is resolved.
+// See discussion in https://github.com/golang/go/issues/67552 and cache with
+// weak references example in
+// https://github.com/golang/go/issues/67552#issuecomment-2200755798
+func ConstCachedTensor(g *Graph, t *tensors.Tensor) *Node {
+	g.AssertBuilding()
+	node, found := g.tensorConstants[t]
+	if found {
+		return node
+	}
+	node = ConstTensor(g, t)
+	g.tensorConstants[t] = node
+	return node
 }
 
 // Const creates constant nodes in the Graph. It can take a tensor as well as

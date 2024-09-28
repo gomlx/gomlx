@@ -1,5 +1,17 @@
 # GoMLX changelog
 
+## Next
+
+* Added learnable rational functions (ml/layers/rational): can be used for activations or as univariate learnable
+  functions for KAN.
+* Added `graph.ConstCachedTensor` to allow caching of constant tensors
+* Added `initializers.BroadcastTensorToShape`: to allow variables to be initialized with a base value that is broadcast
+  to each variable shape requested.
+* Added `context.ExecOnce` and `context.ExecOnceN`.
+* Added rational notebook to generate initial values with approximations to arbitrary univariate functions.
+* Added `data.NewConstantDataset` with a dummy dataset that can be used when training a model that generates
+  its own input and labels.
+
 ## v0.12.0 - 2024/09/23
 
 * Updated dependency to gopjrt v0.4.0
