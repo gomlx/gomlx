@@ -73,7 +73,7 @@ func New(ctx *context.Context, x *Node) *Config {
 		WithInputGroups(0).
 		WithMultipleOutputs(1).
 		WithDegrees(5, 4).
-		Version("A").
+		Version("B").
 		Approximate(IdentityApproximation).
 		WithNoise(0.1)
 }
