@@ -26,6 +26,7 @@ import (
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
+	"math"
 )
 
 // Config holds the configuration for a learnable rational function.
@@ -249,7 +250,8 @@ func (c *Config) Done() *Node {
 				wInitializerVariance = 1.0
 			}
 		}
-		w = ctx.WithInitializer(initializers.RandomNormalFn(0, wInitializerVariance)).
+		wInitializerStddev := math.Sqrt(wInitializerVariance)
+		w = ctx.WithInitializer(initializers.RandomNormalFn(0, wInitializerStddev)).
 			VariableWithShape("w", shapes.Make(dtype, c.numInputGroups, c.numOutputsPerInput)).ValueGraph(g)
 	}
 
