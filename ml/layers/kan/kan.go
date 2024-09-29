@@ -104,7 +104,7 @@ func New(ctx *context.Context, input *Node, numOutputNodes int) *Config {
 		useDiscrete:                  context.GetParamOr(ctx, ParamDiscrete, false),
 		discreteControlPoints:        context.GetParamOr(ctx, ParamNumControlPoints, 20),
 		discreteSoftness:             context.GetParamOr(ctx, ParamDiscreteSoftness, 0.1),
-		discreteSplitPointsTrainable: true,
+		discreteSplitPointsTrainable: context.GetParamOr(ctx, ParamDiscreteSplitPointsTrainable, true),
 	}
 
 	var magRegs []regularizers.Regularizer

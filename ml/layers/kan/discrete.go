@@ -7,10 +7,10 @@ import (
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
 	"k8s.io/klog/v2"
 	"math"
-	"reflect"
 )
 
 // Discrete-KAN is a variation of KAN that uses a piecewise-constant function (PCF for short) as
@@ -69,6 +69,13 @@ func (c *Config) DiscreteSoftness(softness float64) *Config {
 	return c
 }
 
+// DiscreteSplitsTrainable defines whether the split points are trainable.
+// Default is true.
+func (c *Config) DiscreteSplitsTrainable(trainable bool) *Config {
+	c.discreteSplitPointsTrainable = trainable
+	return c
+}
+
 // Layer implements one KAN bsplineLayer. x is expected to be rank-2.
 func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int) *Node {
 	g := x.Graph()
@@ -78,9 +85,9 @@ func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int
 	batchSize := x.Shape().Dimensions[0]
 
 	if klog.V(2).Enabled() {
-		klog.Infof("kan discreteLayer (%s): (%d+2) x %d x %d = %d weights\n",
+		klog.Infof("kan discreteLayer (%s): (%d+2) x %d x %d = %d weights, splits_trainable=%v\n",
 			ctx.Scope(), c.discreteControlPoints, numInputNodes, numOutputNodes,
-			(c.discreteControlPoints)*numInputNodes*numOutputNodes)
+			(c.discreteControlPoints)*numInputNodes*numOutputNodes, c.discreteSplitPointsTrainable)
 	}
 
 	// Apply piecewise-constant function (PCF)
@@ -91,34 +98,28 @@ func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int
 	}
 	controlPoints := controlPointsVar.ValueGraph(g)
 
-	// splitPoints: start from values distributed between -1 and 2, and let them be trained.
+	// splitPoints: start from values distributed between -1 and 1, and let them be trained.
 	var splitPoints *Node
+	keys := make([]float64, c.discreteControlPoints-1)
+	if c.discreteControlPoints > 2 {
+		// Initialize split points uniformly from -1.0 to 1.0
+		for ii := range keys {
+			keys[ii] = 2.0*float64(ii)/float64(c.discreteControlPoints-2) - 1.0
+		}
+	}
+	keysT := tensors.FromValue(keys)
 	if c.discreteSplitPointsTrainable {
 		// Trainable split points:
-		keys := make([]float64, c.discreteControlPoints-1)
-		if c.discreteControlPoints > 2 {
-			for ii := range keys {
-				keys[ii] = 2.0*float64(ii)/float64(c.discreteControlPoints-2) - 1.0
-			}
-		}
-		goDType := dtype.GoType()
-		keysDType := reflect.MakeSlice(reflect.SliceOf(goDType), len(keys), len(keys))
-		for ii, v := range keys {
-			keysDType.Index(ii).Set(reflect.ValueOf(v).Convert(goDType))
-		}
-		splitPointsVar := ctx.VariableWithValue("split_points", keysDType.Interface())
+		splitPointsVar := ctx.WithInitializer(func(graph *Graph, shape shapes.Shape) *Node {
+			baseValues := ConstCachedTensor(graph, keysT)
+			return ConvertDType(baseValues, shape.DType)
+		}).
+			VariableWithShape("split_points", shapes.Make(dtype, keysT.Shape().Dimensions...))
 		splitPoints = splitPointsVar.ValueGraph(g)
 
 	} else {
 		// Fixed split points.
-		splitPoints = Iota(g, shapes.Make(dtype, 1, 1, c.discreteControlPoints-1), -1)
-		if c.discreteControlPoints > 2 {
-			splitPoints = DivScalar(splitPoints, float64(c.discreteControlPoints-2))
-		} else {
-			// For 2 control points, splitPoints is 0.5
-			splitPoints = AddScalar(splitPoints, 0.5)
-		}
-		splitPoints = AddScalar(MulScalar(splitPoints, 2), -1)
+		splitPoints = ConstCachedTensor(g, keysT)
 	}
 
 	var output *Node
