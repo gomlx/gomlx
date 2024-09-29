@@ -120,6 +120,7 @@ func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int
 	} else {
 		// Fixed split points.
 		splitPoints = ConstCachedTensor(g, keysT)
+		splitPoints = ConvertDType(splitPoints, dtype)
 	}
 
 	var output *Node
