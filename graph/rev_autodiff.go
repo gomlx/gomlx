@@ -17,11 +17,13 @@
 package graph
 
 import (
+	"fmt"
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/pkg/errors"
 	"math"
+	"os"
 )
 
 // This file implements reverse-mode automatic differentiation, using AccumulatedVJP (Vector Jacobian Product).
@@ -211,6 +213,9 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 			//fmt.Printf("\t\tSetting vjp for %s: %s\n", input, vjp)
 			combinedShape := combineOutputShape(outputShape, input.Shape())
 			if !vjp.Shape().Equal(combinedShape) {
+				if node.Trace() != nil {
+					_, _ = fmt.Fprintf(os.Stderr, "Trace for node in error: %s\n%+v\n\n", node, node.Trace())
+				}
 				Panicf("invalid Gradient calculation for node %q: invalid shape (or DType) for calculated AccumulatedVJP for "+
 					"input #%d (out of %d): input shape=%s, calculated AccumulatedVJP shape=%s (wanted %s)"+
 					" -- this probably indicates a bug in the code, please report the issue.",
@@ -559,10 +564,12 @@ func subVJP(node, v *Node, _ shapes.Shape) []*Node {
 func whereVJP(node, v *Node, _ shapes.Shape) []*Node {
 	condition := node.inputNodes[0]
 	zeros := ZerosLike(v)
+	ifTrueVJP := Where(condition, v, zeros)
+	ifFalseVJP := Where(condition, zeros, v)
 	return []*Node{
 		nil, // No gradient wrt condition.
-		Where(condition, v, zeros),
-		Where(condition, zeros, v),
+		vjpForDefaultBroadcast(node, node.inputNodes[1], ifTrueVJP),
+		vjpForDefaultBroadcast(node, node.inputNodes[2], ifFalseVJP),
 	}
 }
 

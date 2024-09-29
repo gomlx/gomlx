@@ -577,3 +577,87 @@ func TestGradientErf(t *testing.T) {
 		},
 	)
 }
+
+func TestGradientWhere(t *testing.T) {
+	testGradients(t, "Where gradient: no broadcast",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			cond := Const(g, []bool{true, false, true})
+			ifTrue := Const(g, []float32{1, 1, 1})
+			ifFalse := Const(g, []float32{0, 0, 0})
+			output = Where(cond, ifTrue, ifFalse)
+			output = Dot(OnePlus(IotaFull(g, output.Shape())), output)
+			return output, []*Node{ifTrue, ifFalse}
+		}, []any{
+			[]float32{1, 0, 3},
+			[]float32{0, 2, 0},
+		},
+	)
+
+	testGradients(t, "Where gradient: broadcast from scalar #1",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			cond := Const(g, []bool{true, false, true})
+			ifTrue := Const(g, float32(1))
+			ifFalse := Const(g, []float32{0, 0, 0})
+			output = Where(cond, ifTrue, ifFalse)
+			output = Dot(OnePlus(IotaFull(g, output.Shape())), output)
+			return output, []*Node{ifTrue, ifFalse}
+		}, []any{
+			float32(1 + 3),
+			[]float32{0, 2, 0},
+		},
+	)
+
+	testGradients(t, "Where gradient: broadcast from scalar #2",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			cond := Const(g, []bool{true, false, true})
+			ifTrue := Const(g, float32(1))
+			ifFalse := Const(g, float32(0))
+			output = Where(cond, ifTrue, ifFalse)
+			output = Dot(OnePlus(IotaFull(g, output.Shape())), output)
+			return output, []*Node{ifTrue, ifFalse}
+		}, []any{
+			float32(1 + 3),
+			float32(2),
+		},
+	)
+
+	testGradients(t, "Where gradient: broadcast from prefix condition",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			cond := Const(g, []bool{true, false, true})
+			ifTrue := IotaFull(g, shapes.Make(dtypes.Float32, 3, 2))
+			ifFalse := AddScalar(IotaFull(g, shapes.Make(dtypes.Float32, 3, 2)), 100)
+			output = Where(cond, ifTrue, ifFalse)
+			output = ReduceAllSum(Mul(OnePlus(IotaFull(g, output.Shape())), output))
+			return output, []*Node{ifTrue, ifFalse}
+		}, []any{
+			[][]float32{
+				{1, 2},
+				{0, 0},
+				{5, 6},
+			},
+			[][]float32{
+				{0, 0},
+				{3, 4},
+				{0, 0},
+			},
+		},
+	)
+
+	testGradients(t, "Where gradient: broadcast from prefix and scalar",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			cond := Const(g, []bool{true, false, true})
+			ifTrue := IotaFull(g, shapes.Make(dtypes.Float32, 3, 2))
+			ifFalse := Const(g, float32(100))
+			output = Where(cond, ifTrue, ifFalse)
+			output = ReduceAllSum(Mul(OnePlus(IotaFull(g, output.Shape())), output))
+			return output, []*Node{ifTrue, ifFalse}
+		}, []any{
+			[][]float32{
+				{1, 2},
+				{0, 0},
+				{5, 6},
+			},
+			float32(7),
+		},
+	)
+}
