@@ -41,6 +41,9 @@ const (
 	// Default is 20.
 	ParamNumControlPoints = "kan_num_points"
 
+	// ParamResidual defines whether to use residual connection between the layers. Default to true.
+	ParamResidual = "kan_residual"
+
 	// ParamBSplineDegree is the hyperparameter that defines the default value for the bspline degree used in
 	// the univariate KAN functions.
 	// Default is 2.
@@ -66,9 +69,10 @@ type Config struct {
 	numHiddenLayers, numHiddenNodes int
 	activation                      activations.Type
 	regularizer                     regularizers.Regularizer
+	useResidual                     bool
 
 	bsplineNumControlPoints, bsplineDegree int
-	bsplineMagnitudeTerms, bsplineResidual bool
+	bsplineMagnitudeTerms                  bool
 	bsplineMagnitudeRegularizer            regularizers.Regularizer
 
 	useDiscrete                  bool
@@ -98,7 +102,7 @@ func New(ctx *context.Context, input *Node, numOutputNodes int) *Config {
 
 		bsplineNumControlPoints: context.GetParamOr(ctx, ParamNumControlPoints, 20),
 		bsplineDegree:           context.GetParamOr(ctx, ParamBSplineDegree, 2),
-		bsplineResidual:         true,
+		useResidual:             context.GetParamOr(ctx, ParamResidual, true),
 		bsplineMagnitudeTerms:   true,
 
 		useDiscrete:                  context.GetParamOr(ctx, ParamDiscrete, false),
@@ -194,18 +198,20 @@ func (c *Config) Done() *Node {
 	}
 
 	// Apply hidden layers.
+	//residual := x
 	for ii := range c.numHiddenLayers {
-		layerCtx := ctx.In(fmt.Sprintf("kan_hidden_%d", ii))
 		if c.useDiscrete {
+			layerCtx := ctx.In(fmt.Sprintf("discrete_kan_hidden_%d", ii))
 			x = c.discreteLayer(layerCtx, x, c.numHiddenNodes)
 		} else {
+			layerCtx := ctx.In(fmt.Sprintf("kan_hidden_%d", ii))
 			x = c.bsplineLayer(layerCtx, x, c.numHiddenNodes)
 		}
 	}
 
 	// Apply last bsplineLayer.
 	if c.useDiscrete {
-		x = c.discreteLayer(ctx.In("kan_output_layer"), x, c.numOutputNodes)
+		x = c.discreteLayer(ctx.In("discrete_kan_output_layer"), x, c.numOutputNodes)
 	} else {
 		x = c.bsplineLayer(ctx.In("kan_output_layer"), x, c.numOutputNodes)
 	}
@@ -244,7 +250,7 @@ func (c *Config) bsplineLayer(ctx *context.Context, x *Node, numOutputNodes int)
 			c.bsplineMagnitudeRegularizer(ctx, g, weightsSplinesVar)
 		}
 		weightsSplines = weightsSplinesVar.ValueGraph(g)
-		if c.bsplineResidual {
+		if c.useResidual {
 			weightsResidualVar := ctx.WithInitializer(initializers.XavierUniformFn(0)).
 				VariableWithShape("w_residual", shapes.Make(dtype, 1, numOutputNodes, numInputNodes))
 			weightsResidual = weightsResidualVar.ValueGraph(g)
@@ -269,7 +275,7 @@ func (c *Config) bsplineLayer(ctx *context.Context, x *Node, numOutputNodes int)
 	if c.bsplineMagnitudeTerms {
 		output = Mul(output, weightsSplines)
 	}
-	if c.bsplineResidual {
+	if c.useResidual {
 		residual = activations.Apply(c.activation, residual)
 		residual = ExpandDims(residual, 1)
 		residual.AssertDims(batchSize, 1, numInputNodes)

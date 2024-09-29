@@ -5,7 +5,6 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"
-	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
@@ -91,7 +90,25 @@ func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int
 	}
 
 	// Apply piecewise-constant function (PCF)
-	controlPointsVar := ctx.WithInitializer(initializers.RandomNormalFn(0, 0.01)).
+	//controlPointsInitializer := initializers.RandomNormalFn(0, 0.1)
+	controlPointsInitializer := func(graph *Graph, shape shapes.Shape) *Node {
+		// Values initialized from -1.0 to 1.0 linearly.
+		v := Iota(graph, shape, -1)
+		v = MulScalar(v, 2.0/float64(shape.Dim(-1)-1))
+		v = AddScalar(v, -1.0)
+		// Apply a random constant.
+		var slope *Node
+		slopeShape := shape.Clone()
+		slopeShape.Dimensions[slopeShape.Rank()-1] = 1 // Same multiplier for all control points:
+		initializers.UseRngState(graph, 0, func(rngState *Node) (newRngState *Node) {
+			newRngState, slope = RandomNormal(rngState, shape)
+			return newRngState
+		})
+		slope = MulScalar(slope, 0.1)
+		v = Mul(v, slope)
+		return v
+	}
+	controlPointsVar := ctx.WithInitializer(controlPointsInitializer).
 		VariableWithShape("discrete_control_points", shapes.Make(dtype, numOutputNodes, numInputNodes, c.discreteControlPoints))
 	if c.regularizer != nil {
 		c.regularizer(ctx, g, controlPointsVar)
@@ -132,16 +149,15 @@ func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int
 	}
 	output.AssertDims(batchSize, numOutputNodes, numInputNodes) // Shape=[batch, outputs, inputs]
 
-	residual = activations.Apply(c.activation, residual)
-	residual = ExpandDims(residual, 1)
-	residual.AssertDims(batchSize, 1, numInputNodes)
-	output = Add(output, residual)
-
 	// ReduceMean the inputs to get the outputs: we use the mean (and not sum) because if the number of inputs is large
 	// with ReduceSum we would get large numbers (and gradients) that are harder for the gradient descent to learn.
 	// In particular for multiple hidden-layers: there is a geometric growth of the values per number of layers.
 	output = ReduceMean(output, -1)
 	output.AssertDims(batchSize, numOutputNodes) // Shape=[batch, outputs]
+
+	if c.useResidual && numInputNodes == numOutputNodes {
+		output = Add(output, residual)
+	}
 	return output
 }
 
@@ -154,7 +170,7 @@ func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int
 //     but if the first or the second axes are set to 1, they are broadcast accordingly.
 //
 // The output will be shaped [batchSize, numOutputPoints, numInputNodes].
-// Presumably, the caller will graph.ReduceSum on the last axis (after residual value is added) for a shape [batchSize, numOutputPoints].
+// Presumably, the caller will graph.ReduceMean (or ReduceSum) on the last axis (after residual value is added) for a shape [batchSize, numOutputPoints].
 func PiecewiseConstantFunction(input, controlPoints, splitPoints *Node) *Node {
 	g := input.Graph()
 
@@ -223,7 +239,7 @@ func PiecewiseConstantFunction(input, controlPoints, splitPoints *Node) *Node {
 // no longer changed (only the control points).
 //
 // The output will be shaped [batchSize, numOutputPoints, numInputNodes].
-// Presumably, the caller will graph.ReduceSum on the last axis (after residual value is added) for a shape [batchSize, numOutputPoints].
+// Presumably, the caller will graph.ReduceMean (or ReduceSum) on the last axis (after residual value is added) for a shape [batchSize, numOutputPoints].
 func PiecewiseConstantFunctionWithInputPerturbation(input, controlPoints, splitPoints, softness *Node) *Node {
 	// Expand missing dimensions for scalar evaluation.
 	inputRank := input.Rank()
