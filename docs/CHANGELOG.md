@@ -4,7 +4,9 @@
 
 * Added learnable rational functions (ml/layers/rational): can be used for activations or as univariate learnable
   functions for KAN.
-* Added `graph.ConstCachedTensor` to allow caching of constant tensors
+* Package `graph`:
+  * Added `ConstCachedTensor` to allow caching of constant tensors.
+  * Fixed gradient of `Where` when operands are broadcast.
 * Added `initializers.BroadcastTensorToShape`: to allow variables to be initialized with a base value that is broadcast
   to each variable shape requested.
 * Added `context.ExecOnce` and `context.ExecOnceN`.
