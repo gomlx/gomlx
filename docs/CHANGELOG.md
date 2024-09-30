@@ -2,6 +2,11 @@
 
 ## Next
 
+* Package `initializers`
+  * All random initializers (`RandomUniformFn`, `RandomUniformFn`, `RandomNormalFn`, `GlorotUniformFn`, `XavierUniformFn`)
+    changed to take the context as a parameter, instead of `initialSeed`. 
+  * The `initialSeed` is instead read from the hyperparameter `initializers.ParamInitialSeed` ("initializers_seed")
+    and default to `initializers.NoSeed`, which means the seed is randomly started.
 * Added learnable rational functions (ml/layers/rational): can be used for activations or as univariate learnable
   functions for KAN.
 * Package `graph`:

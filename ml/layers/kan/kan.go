@@ -251,7 +251,7 @@ func (c *Config) bsplineLayer(ctx *context.Context, x *Node, numOutputNodes int)
 		}
 		weightsSplines = weightsSplinesVar.ValueGraph(g)
 		if c.useResidual {
-			weightsResidualVar := ctx.WithInitializer(initializers.XavierUniformFn(0)).
+			weightsResidualVar := ctx.WithInitializer(initializers.XavierUniformFn(ctx)).
 				VariableWithShape("w_residual", shapes.Make(dtype, 1, numOutputNodes, numInputNodes))
 			weightsResidual = weightsResidualVar.ValueGraph(g)
 			if c.bsplineMagnitudeRegularizer != nil {
@@ -262,7 +262,7 @@ func (c *Config) bsplineLayer(ctx *context.Context, x *Node, numOutputNodes int)
 
 	// Apply B-spline:
 	b := bsplines.NewRegular(c.bsplineDegree, c.bsplineNumControlPoints).WithExtrapolation(bsplines.ExtrapolateLinear)
-	controlPointsVar := ctx.WithInitializer(initializers.RandomNormalFn(0, 0.01)).
+	controlPointsVar := ctx.WithInitializer(initializers.RandomNormalFn(ctx, 0.01)).
 		VariableWithShape("bspline_control_points", shapes.Make(dtype, numInputNodes, numOutputNodes, c.bsplineNumControlPoints))
 	if c.regularizer != nil {
 		c.regularizer(ctx, g, controlPointsVar)

@@ -251,7 +251,7 @@ func (c *Config) Done() *Node {
 			}
 		}
 		wInitializerStddev := math.Sqrt(wInitializerVariance)
-		w = ctx.WithInitializer(initializers.RandomNormalFn(0, wInitializerStddev)).
+		w = ctx.WithInitializer(initializers.RandomNormalFn(ctx, wInitializerStddev)).
 			VariableWithShape("w", shapes.Make(dtype, c.numInputGroups, c.numOutputsPerInput)).ValueGraph(g)
 	}
 

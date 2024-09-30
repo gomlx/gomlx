@@ -14,11 +14,12 @@
  *	limitations under the License.
  */
 
-package context
+package context_test
 
 import (
 	"fmt"
 	"github.com/gomlx/gomlx/graph/graphtest"
+	. "github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/shapes"
@@ -66,9 +67,10 @@ func TestContextVariables(t *testing.T) {
 
 func TestContextVariablesInitialization(t *testing.T) {
 	ctx := New()
-	ctx0 := ctx.In("a").WithInitializer(initializers.RandomUniformFn(42, 1.5, 2.5))
+	ctx.SetParam(initializers.ParamInitialSeed, int64(42))
+	ctx0 := ctx.In("a").WithInitializer(initializers.RandomUniformFn(ctx, 1.5, 2.5))
 	v0 := ctx0.VariableWithShape("x", shapes.Make(dtypes.Float32))
-	ctx1 := ctx.In("b").WithInitializer(initializers.RandomNormalFn(42, 1.0))
+	ctx1 := ctx.In("b").WithInitializer(initializers.RandomNormalFn(ctx, 1.0))
 	v1 := ctx1.VariableWithShape("y", shapes.Make(dtypes.Float64, 2))
 	ctx2 := ctx1.In("c").WithInitializer(initializers.Zero)
 	v2 := ctx2.VariableWithShape("z", shapes.Make(dtypes.Int64, 3, 1))

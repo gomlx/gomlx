@@ -23,7 +23,6 @@ import (
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/pkg/errors"
@@ -175,7 +174,7 @@ func New() *Context {
 			variablesMap: make(map[string]scopedVariableMap),
 		},
 	}
-	ctx.initializer = initializers.RandomUniformFn(initializers.NoSeed, -0.05, 0.05)
+	ctx.initializer = DefaultInitializer
 	return ctx
 }
 
