@@ -40,6 +40,10 @@ var (
 	// and by how much.
 	ParamDiscreteSoftness = "kan_discrete_softness"
 
+	// ParamDiscreteNumControlPoints is the number of points to use (and learn) in the piecewise-constant function
+	// for DiscreteKAN. Default is 6.
+	ParamDiscreteNumControlPoints = "kan_discrete_num_points"
+
 	// ParamDiscreteSplitPointsTrainable indicates whether the split points are trainable and can move around.
 	// Default is true.
 	ParamDiscreteSplitPointsTrainable = "kan_discrete_splits_trainable"
@@ -47,11 +51,15 @@ var (
 
 // Discrete configures the KAN to use a "piecewise-constant" functions (as opposed to splines) to model \phi(x),
 // the univariate function used in the pape, and set the number of control points to use for the function.
-//
-// The numControlPoints must be greater or equal to 2, and it defaults to 20 and can also be set by using the
-// hyperparameter ParamNumControlPoints ("kan_num_points").
-func (c *Config) Discrete(numControlPoints int) *Config {
+func (c *Config) Discrete() *Config {
 	c.useDiscrete = true
+	return c
+}
+
+// DiscreteNumPoints sets the number of control points to use for the piecewise constant function.
+// numControlPoints must be greater or equal to 2, and it defaults to 6 and can also be set by using the
+// hyperparameter ParamDiscreteNumControlPoints ("kan_discrete_num_points").
+func (c *Config) DiscreteNumPoints(numControlPoints int) *Config {
 	c.discreteControlPoints = numControlPoints
 	if c.discreteControlPoints < 2 {
 		exceptions.Panicf("kan: discrete version requires at least 2 control points, %d given", c.discreteControlPoints)

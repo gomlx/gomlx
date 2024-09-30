@@ -106,7 +106,7 @@ func New(ctx *context.Context, input *Node, numOutputNodes int) *Config {
 		bsplineMagnitudeTerms:   true,
 
 		useDiscrete:                  context.GetParamOr(ctx, ParamDiscrete, false),
-		discreteControlPoints:        context.GetParamOr(ctx, ParamNumControlPoints, 20),
+		discreteControlPoints:        context.GetParamOr(ctx, ParamDiscreteNumControlPoints, 6),
 		discreteSoftness:             context.GetParamOr(ctx, ParamDiscreteSoftness, 0.1),
 		discreteSplitPointsTrainable: context.GetParamOr(ctx, ParamDiscreteSplitPointsTrainable, true),
 	}
