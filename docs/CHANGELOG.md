@@ -1,6 +1,6 @@
 # GoMLX changelog
 
-## Next
+## v0.13.0 - Next
 
 * Package `initializers`
   * All random initializers (`RandomUniformFn`, `RandomUniformFn`, `RandomNormalFn`, `GlorotUniformFn`, `XavierUniformFn`)
