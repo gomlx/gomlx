@@ -96,11 +96,17 @@ func TestContextVariablesInitialization(t *testing.T) {
 func TestParams(t *testing.T) {
 	ctx := New()
 	ctx.SetParam("x", 7.0)
+	ctx.SetParam("nil", nil)
 	got, found := ctx.GetParam("x")
 	assert.True(t, found)
 	assert.Equal(t, 7.0, got)
 	assert.Equal(t, 7.0, GetParamOr(ctx, "x", 0.0))
 	assert.Equal(t, 0.0, GetParamOr(ctx, "foo", 0.0))
+
+	// If set to nil, GetParamOr will return the default.
+	assert.Equal(t, float32(11), GetParamOr(ctx, "nil", float32(11)))
+	assert.Equal(t, "blah", GetParamOr(ctx, "nil", "blah"))
+
 	// Wrong type should panic.
 	assert.Panics(t, func() { _ = GetParamOr(ctx, "x", "string value") })
 

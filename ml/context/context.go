@@ -374,7 +374,7 @@ func (ctx *Context) GetParam(key string) (value any, found bool) {
 
 // GetParamOr either returns the value for the given param key in the context `ctx`,
 // searching successively from the current scope back to the root scope ("/"), or if the
-// key is not found, returns the given default value.
+// key is not found or the key is set to nil, it returns the given default value.
 //
 // It tries to cast the value to the given type. If it fails, it tries to convert the
 // value to the given type (so an `int` will be converted to a `float64` transparently).
@@ -383,7 +383,7 @@ func (ctx *Context) GetParam(key string) (value any, found bool) {
 // It's a convenience method around `ctx.GetParam`.
 func GetParamOr[T any](ctx *Context, key string, defaultValue T) T {
 	valueAny, found := ctx.GetParam(key)
-	if !found {
+	if !found || valueAny == nil {
 		return defaultValue
 	}
 	value, ok := valueAny.(T)
@@ -459,7 +459,7 @@ func (ctx *Context) GetGraphParam(g *Graph, key string) (value any, found bool) 
 
 // GetGraphParamOr either returns the value for the given param key for the given graph,
 // searching successively from the current scope back to the root scope ("/"), or if the
-// key is not found, returns the given default value.
+// key is not found, or the value is set to nil, it returns the given default value.
 //
 // It tries to cast the value to the given type. If it fails, it tries to convert the
 // value to the given type (so an `int` will be converted to a `float64` transparently).
@@ -478,7 +478,7 @@ func GetGraphParamOr[T any](ctx *Context, g *Graph, key string, defaultValue T) 
 	//
 	// It's a typed wrapper to Context.GetGraphParam()
 	valueAny, found := ctx.GetGraphParam(g, key)
-	if !found {
+	if !found || valueAny == nil {
 		return defaultValue
 	}
 	value, ok := valueAny.(T)

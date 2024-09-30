@@ -9,13 +9,15 @@
     and default to `initializers.NoSeed`, which means the seed is randomly started.
 * Added learnable rational functions (ml/layers/rational): can be used for activations or as univariate learnable
   functions for KAN.
+  * Added rational notebook to generate initial values with approximations to arbitrary univariate functions.
 * Package `graph`:
   * Added `ConstCachedTensor` to allow caching of constant tensors.
   * Fixed gradient of `Where` when operands are broadcast.
 * Added `initializers.BroadcastTensorToShape`: to allow variables to be initialized with a base value that is broadcast
   to each variable shape requested.
-* Added `context.ExecOnce` and `context.ExecOnceN`.
-* Added rational notebook to generate initial values with approximations to arbitrary univariate functions.
+* Package `context`:
+  * Added `context.ExecOnce` and `context.ExecOnceN`.
+  * `context.GetParamOr` now returns the default value for a hyperparameter, if it is set to nil. 
 * Added `data.NewConstantDataset` with a dummy dataset that can be used when training a model that generates
   its own input and labels.
 
