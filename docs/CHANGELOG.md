@@ -15,13 +15,18 @@
   * Fixed gradient of `Where` when operands are broadcast.
   * Added `ConsecutiveDifference`.
   * Added `SliceAxis`.
-* Added `initializers.BroadcastTensorToShape`: to allow variables to be initialized with a base value that is broadcast
-  to each variable shape requested.
 * Package `context`:
   * Added `context.ExecOnce` and `context.ExecOnceN`.
   * `context.GetParamOr` now returns the default value for a hyperparameter, if it is set to nil. 
+* Added `initializers.BroadcastTensorToShape`: to allow variables to be initialized with a base value that is broadcast
+  to each variable shape requested.
+* Added `optimizers.MonotonicProjection` to project values (usually variables) to a monotonically increasing values, with a margin.
 * Added `data.NewConstantDataset` with a dummy dataset that can be used when training a model that generates
   its own input and labels.
+* Package `kan`, on Discrete-KAN:
+  * Added separate (per input) split points.
+  * Added support for hyperparameter configured split points.
+  * Added monotonic projection of split points.
 
 ## v0.12.0 - 2024/09/23
 

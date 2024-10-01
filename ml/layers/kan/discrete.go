@@ -5,6 +5,8 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"
+	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
@@ -47,6 +49,12 @@ var (
 	// ParamDiscreteSplitPointsTrainable indicates whether the split points are trainable and can move around.
 	// Default is true.
 	ParamDiscreteSplitPointsTrainable = "kan_discrete_splits_trainable"
+
+	// ParamDiscreteSplitsMargin is the minimum distance between consecutive split points.
+	// Only applies if the split points are trainable, in which case they are always projected to
+	// monotonicity with this minimum margin -- it can be set to 0.0, in which case split points can merge.
+	// Default is 0.01.
+	ParamDiscreteSplitsMargin = "kan_discrete_splits_margin"
 )
 
 // Discrete configures the KAN to use a "piecewise-constant" functions (as opposed to splines) to model \phi(x),
@@ -98,7 +106,7 @@ func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int
 	}
 
 	// Apply piecewise-constant function (PCF)
-	//controlPointsInitializer := initializers.RandomNormalFn(0, 0.1)
+	initialSeed := context.GetParamOr(ctx, initializers.ParamInitialSeed, initializers.NoSeed)
 	controlPointsInitializer := func(graph *Graph, shape shapes.Shape) *Node {
 		// Values initialized from -1.0 to 1.0 linearly.
 		v := Iota(graph, shape, -1)
@@ -108,7 +116,7 @@ func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int
 		var slope *Node
 		slopeShape := shape.Clone()
 		slopeShape.Dimensions[slopeShape.Rank()-1] = 1 // Same multiplier for all control points:
-		initializers.UseRngState(graph, 0, func(rngState *Node) (newRngState *Node) {
+		initializers.UseRngState(graph, initialSeed, func(rngState *Node) (newRngState *Node) {
 			newRngState, slope = RandomNormal(rngState, shape)
 			return newRngState
 		})
@@ -135,12 +143,18 @@ func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int
 	keysT := tensors.FromValue(keys)
 	if c.discreteSplitPointsTrainable {
 		// Trainable split points:
-		splitPointsVar := ctx.WithInitializer(func(graph *Graph, shape shapes.Shape) *Node {
-			baseValues := ConstCachedTensor(graph, keysT)
-			return ConvertDType(baseValues, shape.DType)
-		}).
-			VariableWithShape("split_points", shapes.Make(dtype, keysT.Shape().Dimensions...))
+		splitPointsVar := ctx.WithInitializer(initializers.BroadcastTensorToShape(keysT)).
+			VariableWithShape("split_points", shapes.Make(dtype, 1, numInputNodes, c.discreteControlPoints-1))
 		splitPoints = splitPointsVar.ValueGraph(g)
+
+		// At the end of each training step, project splitPoints back to monotonically increasing values, so they
+		// don't overlap.
+		train.AddPerStepUpdateGraphFn(ctx.In("split_points_projection"), g, func(ctx *context.Context, g *Graph) {
+			splitPoints := splitPointsVar.ValueGraph(g)
+			margin := Scalar(g, splitPoints.DType(), context.GetParamOr(ctx, ParamDiscreteSplitsMargin, 0.01))
+			splitPoints = optimizers.MonotonicProjection(splitPoints, margin, -1)
+			splitPointsVar.SetValueGraph(splitPoints)
+		})
 
 	} else {
 		// Fixed split points.
@@ -149,8 +163,10 @@ func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int
 	}
 
 	var output *Node
-	if c.discreteSoftness <= 0 {
-		output = PiecewiseConstantFunction(x, controlPoints, splitPoints)
+	if c.discreteSoftness <= 0 || !ctx.IsTraining(g) {
+		//output = PiecewiseConstantFunction(x, controlPoints, splitPoints)
+		// The version with perturbation is faster than the original PCF !?
+		output = PiecewiseConstantFunctionWithInputPerturbation(x, controlPoints, splitPoints, ScalarZero(g, dtype))
 	} else {
 		softnessConst := Scalar(g, dtype, c.discreteSoftness)
 		output = PiecewiseConstantFunctionWithInputPerturbation(x, controlPoints, splitPoints, softnessConst)
