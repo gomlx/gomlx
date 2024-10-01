@@ -49,6 +49,12 @@ const (
 	// Default is 2.
 	ParamBSplineDegree = "kan_bspline_degree"
 
+	// ParamConstantRegularizationL1 adds a regularization of the difference among the different control points, pushing
+	// the learned function to be a constant. Works for both B-Splines KAN (the original) and Discrete-KAN.
+	//
+	// Default 0.0
+	ParamConstantRegularizationL1 = "kan_const_l1_reg"
+
 	// ParamBSplineMagnitudeL2 is the hyperparameter that defines the default L2 regularization amount for the bspline
 	// learned magnitude parameters.
 	// Default is 0.
@@ -109,6 +115,11 @@ func New(ctx *context.Context, input *Node, numOutputNodes int) *Config {
 		discreteControlPoints:        context.GetParamOr(ctx, ParamDiscreteNumControlPoints, 6),
 		discreteSoftness:             context.GetParamOr(ctx, ParamDiscreteSoftness, 0.1),
 		discreteSplitPointsTrainable: context.GetParamOr(ctx, ParamDiscreteSplitPointsTrainable, true),
+	}
+
+	constL1amount := context.GetParamOr(ctx, ParamConstantRegularizationL1, 0.0)
+	if constL1amount > 0 {
+		c.regularizer = regularizers.Combine(c.regularizer, regularizers.ConstantL1(constL1amount))
 	}
 
 	var magRegs []regularizers.Regularizer

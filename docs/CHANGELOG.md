@@ -21,12 +21,14 @@
 * Added `initializers.BroadcastTensorToShape`: to allow variables to be initialized with a base value that is broadcast
   to each variable shape requested.
 * Added `optimizers.MonotonicProjection` to project values (usually variables) to a monotonically increasing values, with a margin.
+* Added `regularizers.ConstantL1`
 * Added `data.NewConstantDataset` with a dummy dataset that can be used when training a model that generates
   its own input and labels.
 * Package `kan`, on Discrete-KAN:
   * Added separate (per input) split points.
   * Added support for hyperparameter configured split points.
   * Added monotonic projection of split points.
+  * Added ConstantL1 regularizer for control points.
 
 ## v0.12.0 - 2024/09/23
 
