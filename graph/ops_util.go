@@ -19,6 +19,7 @@ package graph
 import (
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 )
@@ -774,4 +775,41 @@ func CumSum(x *Node, axis int) *Node {
 	paddings := make([][2]int, x.Rank())
 	paddings[adjustedAxis][0] = windowSizes[adjustedAxis] - 1 // On the cumsum axis, pad to length-1.
 	return SumPool(x).FullShape().WindowPerAxis(windowSizes...).PaddingPerDim(paddings).Strides(1).Done()
+}
+
+var consecutiveDifferenceKernel = tensors.FromValue([]int32{-1, 1})
+
+// ConsecutiveDifference is the inverse of CumSum: it outputs the difference from each number to be previous on
+// the selected axis.
+//
+// It returns a value with the same shape, and the very first value is preserved (as if x were padded with a 0 to
+// the left on the given axis). This way ConsecutiveDifference(CumSum(x)) == x.
+//
+// Examples:
+//
+//	ConsecutiveDifference([1, 2, 4, 8], 0) = [1, 1, 2, 4]
+//	ConsecutiveDifference([[1, 3, 6], [4, 9, 15]], -1) = [[1, 2, 3], [4, 5, 6]]
+//	ConsecutiveDifference([[1, 2, 3], [5, 7, 9]], 0) = [[1, 2, 3], [4, 5, 6]]
+func ConsecutiveDifference(x *Node, axis int) *Node {
+	g := x.Graph()
+	dtype := x.DType()
+	n := x.Rank() // Spatial dimensions.
+	adjustedAxis := AdjustAxisToOperandRank(x, axis)
+
+	expandedX := ExpandDims(x, 0, -1) // Add a batch axis at the start, and depth (channels) axis at the end.
+	paddings := make([][2]int, n)
+	paddings[adjustedAxis][0] = 1 // On the difference axis, pad 1.
+	kernel := ConstCachedTensor(g, consecutiveDifferenceKernel)
+	kernel = ConvertDType(kernel, dtype)
+	kernelDims := xslices.SliceWithValue(n+2, 1)
+	kernelDims[adjustedAxis] = 2
+	kernel = Reshape(kernel, kernelDims...)
+
+	output := Convolve(expandedX, kernel).
+		PaddingPerDim(paddings).
+		Strides(1).
+		Done()
+	// Remove added batch and depth axes.
+	output = Reshape(output, x.Shape().Dimensions...)
+	return output
 }
