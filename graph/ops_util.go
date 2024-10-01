@@ -795,19 +795,24 @@ var consecutiveDifferenceKernel = tensors.FromValue([]int32{-1, 1})
 //	ConsecutiveDifference([[1, 3, 6], [4, 9, 15]], -1, true) = [[1, 2, 3], [4, 5, 6]]
 //	ConsecutiveDifference([[1, 2, 3], [5, 7, 9]], 0, true) = [[1, 2, 3], [4, 5, 6]]
 func ConsecutiveDifference(x *Node, axis int, preserveShape bool) *Node {
-	diff := Sub(
-		SliceAxis(x, axis, AxisRangeToEnd(1)),
-		SliceAxis(x, axis, AxisRangeFromStart(-1)))
-	if preserveShape {
-		diff = Concatenate([]*Node{SliceAxis(x, axis, AxisElem(0)), diff}, axis)
-	}
-	return diff
-}
+	adjustedAxis := AdjustAxisToOperandRank(x, axis)
+	if true {
+		diff := Sub(
+			SliceAxis(x, adjustedAxis, AxisRangeToEnd(1)),
+			SliceAxis(x, adjustedAxis, AxisRangeFromStart(-1)))
+		if preserveShape {
+			diff = Concatenate([]*Node{SliceAxis(x, adjustedAxis, AxisElem(0)), diff}, axis)
+		}
+		return diff
+	} else {
+		/*
+		     Version with convolution is returning the wrong Gradient. See test in regularizers.ConstantL1:
 
-/*
-  Version with convolution is returning the wrong Gradient. See test in regularizers.ConstantL1:
-
-	TODO: Investigate:
+		   	TODO: Investigate
+		*/
+		g := x.Graph()
+		n := x.Rank()
+		dtype := x.DType()
 		expandedX := ExpandDims(x, 0, -1) // Add a batch axis at the start, and depth (channels) axis at the end.
 		var paddings [][2]int
 		if preserveShape {
@@ -834,4 +839,4 @@ func ConsecutiveDifference(x *Node, axis int, preserveShape bool) *Node {
 		}
 		return output
 	}
-*/
+}
