@@ -795,34 +795,43 @@ var consecutiveDifferenceKernel = tensors.FromValue([]int32{-1, 1})
 //	ConsecutiveDifference([[1, 3, 6], [4, 9, 15]], -1, true) = [[1, 2, 3], [4, 5, 6]]
 //	ConsecutiveDifference([[1, 2, 3], [5, 7, 9]], 0, true) = [[1, 2, 3], [4, 5, 6]]
 func ConsecutiveDifference(x *Node, axis int, preserveShape bool) *Node {
-	g := x.Graph()
-	dtype := x.DType()
-	n := x.Rank() // Spatial dimensions.
-	adjustedAxis := AdjustAxisToOperandRank(x, axis)
-
-	expandedX := ExpandDims(x, 0, -1) // Add a batch axis at the start, and depth (channels) axis at the end.
-	var paddings [][2]int
+	diff := Sub(
+		SliceAxis(x, axis, AxisRangeToEnd(1)),
+		SliceAxis(x, axis, AxisRangeFromStart(-1)))
 	if preserveShape {
-		paddings = make([][2]int, n)
-		paddings[adjustedAxis][0] = 1 // On the difference axis, pad 1.
+		diff = Concatenate([]*Node{SliceAxis(x, axis, AxisElem(0)), diff}, axis)
 	}
-	kernel := ConstCachedTensor(g, consecutiveDifferenceKernel)
-	kernel = ConvertDType(kernel, dtype)
-	kernelDims := xslices.SliceWithValue(n+2, 1)
-	kernelDims[adjustedAxis] = 2
-	kernel = Reshape(kernel, kernelDims...)
-
-	output := Convolve(expandedX, kernel).
-		NoPadding().             // Default padding.
-		PaddingPerDim(paddings). // Only has an effect if paddings != nil.
-		Strides(1).
-		Done()
-	// Remove added batch and depth axes.
-	if preserveShape {
-		output = Reshape(output, x.Shape().Dimensions...)
-	} else {
-		// Remove batch and depth dimensions.
-		output = Squeeze(output, 0, -1)
-	}
-	return output
+	return diff
 }
+
+/*
+  Version with convolution is returning the wrong Gradient. See test in regularizers.ConstantL1:
+
+	TODO: Investigate:
+		expandedX := ExpandDims(x, 0, -1) // Add a batch axis at the start, and depth (channels) axis at the end.
+		var paddings [][2]int
+		if preserveShape {
+			paddings = make([][2]int, n)
+			paddings[adjustedAxis][0] = 1 // On the difference axis, pad 1.
+		}
+		kernel := ConstCachedTensor(g, consecutiveDifferenceKernel)
+		kernel = ConvertDType(kernel, dtype)
+		kernelDims := xslices.SliceWithValue(n+2, 1)
+		kernelDims[adjustedAxis] = 2
+		kernel = Reshape(kernel, kernelDims...)
+
+		output := Convolve(expandedX, kernel).
+			NoPadding().             // Default padding.
+			PaddingPerDim(paddings). // Only has an effect if paddings != nil.
+			Strides(1).
+			Done()
+		// Remove added batch and depth axes.
+		if preserveShape {
+			output = Reshape(output, x.Shape().Dimensions...)
+		} else {
+			// Remove batch and depth dimensions.
+			output = Squeeze(output, 0, -1)
+		}
+		return output
+	}
+*/
