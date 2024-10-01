@@ -273,3 +273,40 @@ func addGradientsToVariablesGraph(ctx *context.Context, loss, learningRate, glob
 	}
 	return
 }
+
+// MonotonicProjection transforms the input into a monotonic sequence on the given axis that respects the
+// minimum margin between consecutive points.
+//
+// Here we call "viable" solution, one that respects the given margin between consecutive points. And the goal
+// is to find the viable solution that is L2-closest to the original input -- we don't achieve that, but some
+// approximate that is hopefully good enough for most algorithms.
+//
+// This is not a trivial problem, as adjustments to one point may break the monotonicity of the next, and so on.
+// A close to optimal approximate solution can be achieved using lagrange multipliers (and Dykstra alternate
+// projections), see implementation in TensorFlow Lattice:
+// https://github.com/tensorflow/lattice/blob/master/tensorflow_lattice/python/pwl_calibration_lib.py#L472
+//
+// Unfortunately, GoMLX doesn't support "while" loops in the computation graph yet, so instead we make
+// a coarse but simple projection to the viable space using a simple algorithm -- see code.
+//
+// The usual way to use this is inside a call to train.AddPerStepUpdateGraphFn, making the projection happen after
+// the gradient step.
+func MonotonicProjection(input *Node, margin *Node, axis int) *Node {
+	adjustedAxis := AdjustAxisToOperandRank(input, axis)
+
+	diff := ConsecutiveDifference(input, adjustedAxis, false)
+	// For a fixed number of times try to prevent everything to be pushed if possible.
+	for _ = range 3 {
+		adjustedDiff := Max(diff, margin) // Pushes everything to the right, whenever monotonicity is broken.
+		adjustment := Sub(diff, adjustedDiff)
+		fixedAdjustment := ShiftWithScalar(adjustment, adjustedAxis, ShiftDirRight, 1, 0.0)
+		diff = Add(adjustedDiff, fixedAdjustment)
+	}
+
+	// Reconstruct value.
+	leftMostInput := SliceAxis(input, adjustedAxis, AxisElem(0))
+	rightMostDiff := SliceAxis(diff, adjustedAxis, AxisElem(-1))
+	leftMostInput = DivScalar(Add(leftMostInput, rightMostDiff), 2)
+	diff = Concatenate([]*Node{leftMostInput, diff}, adjustedAxis)
+	return CumSum(diff, adjustedAxis)
+}

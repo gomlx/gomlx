@@ -324,7 +324,7 @@ func (r *Trainer) trainStepGraph(spec any, ctx *context.Context, inputs, labels 
 			return
 		}
 		if fn, ok := value.(ContextGraphFn); ok {
-			fn(ctx, g)
+			fn(ctx.InAbsPath(scope), g)
 		}
 	})
 
@@ -582,8 +582,8 @@ func GetLosses(ctx *context.Context, g *graph.Graph) (loss *graph.Node) {
 // ContextGraphFn is a generic graph building function.
 type ContextGraphFn func(ctx *context.Context, g *graph.Graph)
 
-// AddPerStepUpdateGraphFn registers the given function to be executed at every training step, after optimizer
-// updates the variables with the gradient.
+// AddPerStepUpdateGraphFn registers the given function fn to be executed at every training step, after optimizer
+// updates the variables with the gradient. fn is called with the context set to the same scope it was registered with.
 //
 // This allows one for instance to implement variable constraints.
 //
