@@ -1129,6 +1129,25 @@ func Slice(x *Node, axesSpec ...SliceAxisSpec) *Node {
 	return backendSlice(x, starts, limits, strides)
 }
 
+// SliceAxis is similar to Slice, but take a slice of one axis only, and preserve all others.
+//
+// Example:
+//
+//	x.Shape() == [5, 4, 3]
+//	SliceAxis(x, 1, AxisElem(1)) -> shape [5, 1 (sliced axis), 3]
+func SliceAxis(x *Node, axis int, axisSpec SliceAxisSpec) *Node {
+	specs := make([]SliceAxisSpec, x.Rank())
+	adjustedAxis := AdjustAxisToOperandRank(x, axis)
+	for ii := range specs {
+		if ii == adjustedAxis {
+			specs[ii] = axisSpec
+		} else {
+			specs[ii] = AxisRange()
+		}
+	}
+	return Slice(x, specs...)
+}
+
 // Concatenate results on the given axis. A negative axis will be counted from
 // the end -- so `axis==-1` means the last axis.
 //

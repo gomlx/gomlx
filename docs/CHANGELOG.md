@@ -14,6 +14,7 @@
   * Added `ConstCachedTensor` to allow caching of constant tensors.
   * Fixed gradient of `Where` when operands are broadcast.
   * Added `ConsecutiveDifference`.
+  * Added `SliceAxis`.
 * Added `initializers.BroadcastTensorToShape`: to allow variables to be initialized with a base value that is broadcast
   to each variable shape requested.
 * Package `context`:
