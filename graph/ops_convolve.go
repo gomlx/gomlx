@@ -196,8 +196,13 @@ func (conv *ConvolutionBuilder) NoPadding() *ConvolutionBuilder {
 // PaddingPerDim specifies the paddings at the start and at the end to use per spatial dimension,
 // that means one pair ([2]int) per spatial dimension.
 //
+// If a nil value for paddings is given, this have no effect.
+//
 // The default is no padding. See also NoPadding and PadSame.
 func (conv *ConvolutionBuilder) PaddingPerDim(paddings [][2]int) *ConvolutionBuilder {
+	if paddings == nil {
+		return conv
+	}
 	if len(paddings) != conv.numSpatialDims {
 		Panicf("received %d paddings in PaddingPerDim, but x has %d spatial dimensions",
 			len(paddings), conv.numSpatialDims)

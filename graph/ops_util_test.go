@@ -445,9 +445,10 @@ func TestConsecutiveDifference(t *testing.T) {
 				AddScalar(Square(IotaFull(g, shapes.Make(dtypes.Float32, 5))), -2),
 			}
 			outputs = []*Node{
-				ConsecutiveDifference(inputs[0], -1),
-				ConsecutiveDifference(inputs[0], 0),
-				ConsecutiveDifference(inputs[1], 0),
+				ConsecutiveDifference(inputs[0], -1, true),
+				ConsecutiveDifference(inputs[0], 0, true),
+				ConsecutiveDifference(inputs[1], 0, true),
+				ConsecutiveDifference(inputs[1], 0, false),
 			}
 			return
 		}, []any{
@@ -460,6 +461,7 @@ func TestConsecutiveDifference(t *testing.T) {
 				{3, 3, 3},
 			},
 			[]float32{-2, 1, 3, 5, 7},
+			[]float32{1, 3, 5, 7},
 		}, xslices.Epsilon)
 }
 

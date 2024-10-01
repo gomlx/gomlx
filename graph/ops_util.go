@@ -782,23 +782,30 @@ var consecutiveDifferenceKernel = tensors.FromValue([]int32{-1, 1})
 // ConsecutiveDifference is the inverse of CumSum: it outputs the difference from each number to be previous on
 // the selected axis.
 //
-// It returns a value with the same shape, and the very first value is preserved (as if x were padded with a 0 to
-// the left on the given axis). This way ConsecutiveDifference(CumSum(x)) == x.
+// If preserveShape is true, the first element is preserved, and the shape is preserved, in which case we have
+// ConsecutiveDifference(CumSum(x)) == x.
+//
+// If preserveShape is false, just the differences are returned, and the resulting shape has the selected axis
+// shrunk by 1.
 //
 // Examples:
 //
-//	ConsecutiveDifference([1, 2, 4, 8], 0) = [1, 1, 2, 4]
-//	ConsecutiveDifference([[1, 3, 6], [4, 9, 15]], -1) = [[1, 2, 3], [4, 5, 6]]
-//	ConsecutiveDifference([[1, 2, 3], [5, 7, 9]], 0) = [[1, 2, 3], [4, 5, 6]]
-func ConsecutiveDifference(x *Node, axis int) *Node {
+//	ConsecutiveDifference([2, 4, 8], 0, true) = [2, 2, 4]
+//	ConsecutiveDifference([2, 4, 8], 0, false) = [2, 4]
+//	ConsecutiveDifference([[1, 3, 6], [4, 9, 15]], -1, true) = [[1, 2, 3], [4, 5, 6]]
+//	ConsecutiveDifference([[1, 2, 3], [5, 7, 9]], 0, true) = [[1, 2, 3], [4, 5, 6]]
+func ConsecutiveDifference(x *Node, axis int, preserveShape bool) *Node {
 	g := x.Graph()
 	dtype := x.DType()
 	n := x.Rank() // Spatial dimensions.
 	adjustedAxis := AdjustAxisToOperandRank(x, axis)
 
 	expandedX := ExpandDims(x, 0, -1) // Add a batch axis at the start, and depth (channels) axis at the end.
-	paddings := make([][2]int, n)
-	paddings[adjustedAxis][0] = 1 // On the difference axis, pad 1.
+	var paddings [][2]int
+	if preserveShape {
+		paddings = make([][2]int, n)
+		paddings[adjustedAxis][0] = 1 // On the difference axis, pad 1.
+	}
 	kernel := ConstCachedTensor(g, consecutiveDifferenceKernel)
 	kernel = ConvertDType(kernel, dtype)
 	kernelDims := xslices.SliceWithValue(n+2, 1)
@@ -806,10 +813,16 @@ func ConsecutiveDifference(x *Node, axis int) *Node {
 	kernel = Reshape(kernel, kernelDims...)
 
 	output := Convolve(expandedX, kernel).
-		PaddingPerDim(paddings).
+		NoPadding().             // Default padding.
+		PaddingPerDim(paddings). // Only has an effect if paddings != nil.
 		Strides(1).
 		Done()
 	// Remove added batch and depth axes.
-	output = Reshape(output, x.Shape().Dimensions...)
+	if preserveShape {
+		output = Reshape(output, x.Shape().Dimensions...)
+	} else {
+		// Remove batch and depth dimensions.
+		output = Squeeze(output, 0, -1)
+	}
 	return output
 }

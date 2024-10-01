@@ -13,6 +13,7 @@
 * Package `graph`:
   * Added `ConstCachedTensor` to allow caching of constant tensors.
   * Fixed gradient of `Where` when operands are broadcast.
+  * Added `ConsecutiveDifference`.
 * Added `initializers.BroadcastTensorToShape`: to allow variables to be initialized with a base value that is broadcast
   to each variable shape requested.
 * Package `context`:
@@ -34,6 +35,7 @@
   * Added `ShapedLowerTriangular()`, `TakeLowerTriangular()` and `TakeUpperTriangular()`
 * Added `activations.Gelu` and `activations.GeluApproximate`
 * Added `Erf`, the "error function", used when integrating the normal distribution, and its gradient.
+* Better Discrete-KAN support: configurable by hyperparameters.
 
 ## v0.11.3 - 2024/08/29
 
