@@ -27,7 +27,7 @@ It strives to be **simple to read and reason about**, leading the user to a corr
 of what is going on (no surprises) -- aligned with Go philosophy.
 At the cost of more typing (more verbose) at times.
 
-It is also incredibly flexible, and easy to extend and try non-conventional things: use it to experiment with new optimizer ideas, complex regularizers, funky multi-tasking, etc.
+It is also incredibly flexible, and easy to extend and try non-conventional ideas: use it to experiment with new optimizer ideas, complex regularizers, funky multi-tasking, etc.
 
 Documentation is kept up-to-date (if it is not well documented, it is as if the code is not there)
 and error messages are useful and try to make it easy to solve issues.
