@@ -1,6 +1,6 @@
 // Package kan implements a generic Kolmogorov–Arnold Networks, as described in https://arxiv.org/pdf/2404.19756
 //
-// Start with New(ctx, x, numOutputNodes). Configure further as desired. When finished, call Done, and it will
+// Start with New(ctx, x, numOutputNodes). Configure further as desired. When finished, call Config.Done, and it will
 // return KAN(x), per configuration.
 //
 // It is highly customizable, but the default ties to follow the description on section "2.2 KAN architecture" of
@@ -20,6 +20,7 @@ import (
 	xbsplines "github.com/gomlx/gomlx/ml/layers/bsplines"
 	"github.com/gomlx/gomlx/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/xslices"
 	"k8s.io/klog/v2"
 	"slices"
 )
@@ -40,6 +41,12 @@ const (
 	//
 	// Default is 20.
 	ParamNumControlPoints = "kan_num_points"
+
+	// ParamMean instructs KAN to use mean instead of the sum of the various individual univariate functions.
+	// See https://arxiv.org/abs/2407.20667.
+	//
+	// Default is true.
+	ParamMean = "kan_mean"
 
 	// ParamResidual defines whether to use residual connection between the layers. Default to true.
 	ParamResidual = "kan_residual"
@@ -75,7 +82,7 @@ type Config struct {
 	numHiddenLayers, numHiddenNodes int
 	activation                      activations.Type
 	regularizer                     regularizers.Regularizer
-	useResidual                     bool
+	useResidual, useMean            bool
 
 	bsplineNumControlPoints, bsplineDegree int
 	bsplineMagnitudeTerms                  bool
@@ -85,6 +92,7 @@ type Config struct {
 	discretePerturbation         PerturbationType
 	discreteControlPoints        int
 	discreteSoftness             float64
+	discreteSoftnessSchedule     SoftnessScheduleType
 	discreteSplitPointsTrainable bool
 }
 
@@ -106,10 +114,11 @@ func New(ctx *context.Context, input *Node, numOutputNodes int) *Config {
 		numHiddenNodes:  context.GetParamOr(ctx, ParamNumHiddenNodes, 10),
 		activation:      activations.FromName(context.GetParamOr(ctx, activations.ParamActivation, "silu")),
 		regularizer:     regularizers.FromContext(ctx),
+		useResidual:     context.GetParamOr(ctx, ParamResidual, true),
+		useMean:         context.GetParamOr(ctx, ParamMean, true),
 
 		bsplineNumControlPoints: context.GetParamOr(ctx, ParamNumControlPoints, 20),
 		bsplineDegree:           context.GetParamOr(ctx, ParamBSplineDegree, 2),
-		useResidual:             context.GetParamOr(ctx, ParamResidual, true),
 		bsplineMagnitudeTerms:   true,
 
 		useDiscrete:                  context.GetParamOr(ctx, ParamDiscrete, false),
@@ -127,6 +136,16 @@ func New(ctx *context.Context, input *Node, numOutputNodes int) *Config {
 	default:
 		exceptions.Panicf("Invalid Discrete-KAN perturbation given by context[%q]: %q -- valid values are "+
 			"\"triangular\", \"normal\"", ParamDiscretePerturbation, perturbationStr)
+	}
+
+	softnessScheduleStr := context.GetParamOr(ctx, ParamDiscreteSoftnessSchedule, SoftnessScheduleNone.String())
+	var err error
+	c.discreteSoftnessSchedule, err = SoftnessScheduleTypeString(softnessScheduleStr)
+	if err != nil {
+		values := xslices.Iota(SoftnessScheduleNone, int(SoftnessScheduleLast))
+		valuesStr := xslices.Map(values, func(v SoftnessScheduleType) string { return v.String() })
+		exceptions.Panicf("Invalid Discrete-KAN hyperparameter %q: %q -- valid values are %q",
+			ParamDiscreteSoftnessSchedule, softnessScheduleStr, valuesStr)
 	}
 
 	constL1amount := context.GetParamOr(ctx, ParamConstantRegularizationL1, 0.0)
@@ -308,9 +327,14 @@ func (c *Config) bsplineLayer(ctx *context.Context, x *Node, numOutputNodes int)
 		output = Add(output, residual)
 	}
 
-	// ReduceSum the inputs to get the outputs: notice this requires Xavier initialization (initializer.XavierUniformFn)
-	// whose magnitude is Sqrt(6/(fanIn+fanOut)) not to grow exponentially with the number of layers.
-	output = ReduceSum(output, -1)
+	// Reduce the inputs to get the outputs:
+	if c.useMean {
+		output = ReduceMean(output, -1)
+	} else {
+		// ReduceSum requires Xavier initialization (initializer.XavierUniformFn)
+		// whose magnitude is Sqrt(6/(fanIn+fanOut)) not to grow exponentially with the number of layers.
+		output = ReduceSum(output, -1)
+	}
 	output.AssertDims(batchSize, numOutputNodes) // Shape=[batch, outputs]
 	return output
 }

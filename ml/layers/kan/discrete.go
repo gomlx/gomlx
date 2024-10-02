@@ -56,6 +56,11 @@ var (
 	// The default value is 0.1.
 	ParamDiscreteSoftness = "kan_discrete_softness"
 
+	// ParamDiscreteSoftnessSchedule allows one to have a dynamic softness schedule during training.
+	//
+	// Current valid values are "none", "cosine", "linear", "exponential". Default is "none".
+	ParamDiscreteSoftnessSchedule = "kan_discrete_softness_schedule"
+
 	// ParamDiscreteNumControlPoints is the number of points to use (and learn) in the piecewise-constant function
 	// for DiscreteKAN. Default is 6.
 	ParamDiscreteNumControlPoints = "kan_discrete_num_points"
@@ -73,6 +78,26 @@ var (
 
 // Discrete configures the KAN to use a "piecewise-constant" functions (as opposed to splines) to model \phi(x),
 // the univariate function used in the pape, and set the number of control points to use for the function.
+//
+// Discrete-KAN is a variation of KAN that uses a piecewise-constant function (PCF for short) as
+// its univariate function family -- as opposed to the original spline functions.
+//
+// These PCFs (piecewise-constant functions) have "split points", where the function change values,
+// and "control points" which are the outputs of the function between the corresponding split points.
+// For N split points, there are N+1 split points.
+// The first and last regions extend to -/+ infinity, so it extrapolates as a constant.
+//
+// The goal is to train models that for inference require no multiplications, only additions and a max(x, 0) for
+// the relu activations, and can be executed efficiently in any cheap hardware -- not requiring specialized
+// accelerators.
+//
+// in order to make the split points of the PCFs trainable, and regularize, during training we can
+// "soften" the PCFs, by implicitly converting the input of a PCF (let's call it x) to a probability distribution
+// (aka. "input perturbation"). Then integrate over the distribution over x to calculate the result of the
+// softened PCF. See details for this in [1].
+//
+// [1] Learning Representations for Axis-Aligned Decision Forests through Input Perturbation -
+// Sebastian Bruch, Jan Pfeifer, Mathieu Guillame-Bert - https://arxiv.org/pdf/2007.14761
 func (c *Config) Discrete() *Config {
 	c.useDiscrete = true
 	return c
@@ -95,6 +120,37 @@ func (c *Config) DiscreteNumPoints(numControlPoints int) *Config {
 // The default is 0.1, and it can be set with the hyperparameter ParamDiscreteSoftness ("kan_discrete_softness").
 func (c *Config) DiscreteSoftness(softness float64) *Config {
 	c.discreteSoftness = softness
+	return c
+}
+
+// SoftnessScheduleType describes the type of schedule of the softness for Discrete-KAN.
+type SoftnessScheduleType int
+
+const (
+	// SoftnessScheduleNone indicates no schedule, that is a constant softness during training.
+	SoftnessScheduleNone SoftnessScheduleType = iota
+
+	// SoftnessScheduleCosine uses softness*(Cos(π.progress)+1.0)/2.0 + epsilon).
+	SoftnessScheduleCosine
+
+	// SoftnessScheduleLinear uses softness*((1.0-progress) + epsilon).
+	SoftnessScheduleLinear
+
+	// SoftnessScheduleExponential uses softness*e^(-lambda*progress), where lambda = log(100), so it is 1/100 of the
+	// original softness at the end of the training.
+	SoftnessScheduleExponential
+
+	// SoftnessScheduleLast indicates the last valid enum value -> keep this last.
+	SoftnessScheduleLast
+)
+
+//go:generate enumer -type=SoftnessScheduleType -trimprefix=SoftnessSchedule -transform=snake -values -text -json -yaml discrete.go
+
+// DiscreteSoftnessScheduleType configures the type of schedule of the softness for Discrete-KAN.
+//
+// It defaults to SoftnessScheduleNone (0)
+func (c *Config) DiscreteSoftnessScheduleType(schedule SoftnessScheduleType) *Config {
+	c.discreteSoftnessSchedule = schedule
 	return c
 }
 
@@ -156,7 +212,8 @@ func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int
 	}
 	keysT := tensors.FromValue(keys)
 	if c.discreteSplitPointsTrainable {
-		// Trainable split points:
+		// Trainable split points: one per input.
+		// * We could also make it learn one per output ... at the cost of more parameters.
 		splitPointsVar := ctx.WithInitializer(initializers.BroadcastTensorToShape(keysT)).
 			VariableWithShape("split_points", shapes.Make(dtype, 1, numInputNodes, c.discreteControlPoints-1))
 		splitPoints = splitPointsVar.ValueGraph(g)
@@ -182,21 +239,66 @@ func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int
 		// The version with perturbation is faster than the original PCF !?
 		//output = PiecewiseConstantFunctionWithInputPerturbation(x, controlPoints, splitPoints, PerturbationTriangular, ScalarZero(g, dtype))
 	} else {
-		softnessConst := Scalar(g, dtype, c.discreteSoftness)
-		output = PiecewiseConstantFunctionWithInputPerturbation(x, controlPoints, splitPoints, c.discretePerturbation, softnessConst)
+		softness := c.scheduledSoftness(ctx, Scalar(g, dtype, c.discreteSoftness))
+		output = PiecewiseConstantFunctionWithInputPerturbation(x, controlPoints, splitPoints, c.discretePerturbation, softness)
 	}
 	output.AssertDims(batchSize, numOutputNodes, numInputNodes) // Shape=[batch, outputs, inputs]
 
-	// ReduceMean the inputs to get the outputs: we use the mean (and not sum) because if the number of inputs is large
+	// Reduce the inputs to get the outputs: we prefer the mean (and not sum) because if the number of inputs is large
 	// with ReduceSum we would get large numbers (and gradients) that are harder for the gradient descent to learn.
 	// In particular for multiple hidden-layers: there is a geometric growth of the values per number of layers.
-	output = ReduceMean(output, -1)
+	if c.useMean {
+		output = ReduceMean(output, -1)
+	} else {
+		output = ReduceSum(output, -1)
+	}
 	output.AssertDims(batchSize, numOutputNodes) // Shape=[batch, outputs]
 
 	if c.useResidual && numInputNodes == numOutputNodes {
 		output = Add(output, residual)
 	}
 	return output
+}
+
+// scheduledSoftness adjust the base softness according to the configured schedule.
+func (c *Config) scheduledSoftness(ctx *context.Context, base *Node) *Node {
+	if c.discreteSoftnessSchedule == SoftnessScheduleNone {
+		return base
+	}
+
+	g := base.Graph()
+	dtype := base.DType()
+	rootCtx := ctx.InAbsPath(context.RootScope)
+
+	// Calculate scheduleTime: from 0.0 to 1.0 depending on training progress.
+	globalStep := ConvertDType(optimizers.GetGlobalStepVar(rootCtx).ValueGraph(g), dtypes.Float32)
+	lastStep := ConvertDType(train.GetTrainLastStepVar(rootCtx).ValueGraph(g), dtypes.Float32)
+	// scheduleTime will be at most 1.0, if for some reason globalStep >
+	scheduleTime := MinScalar(Div(globalStep, MaxScalar(lastStep, 1.0)), 1.0)
+	zero := ZerosLike(lastStep)
+	scheduleTime = Where(LessThan(lastStep, zero), zero, scheduleTime)
+	const epsilon = 1e-5
+
+	switch c.discreteSoftnessSchedule {
+	case SoftnessScheduleLinear:
+		schedule := AddScalar(OneMinus(scheduleTime), epsilon)
+		return Mul(base, ConvertDType(schedule, dtype))
+
+	case SoftnessScheduleExponential:
+		var lambda = math.Log(100) // That means at the end of the scheduleTime (==1) the schedule will be 1/100 of the original value.
+		schedule := Exp(MulScalar(Neg(scheduleTime), lambda))
+		return Mul(base, ConvertDType(schedule, dtype))
+
+	case SoftnessScheduleCosine:
+		// cosineSchedule = Cos(π.scheduleTime)+1.0)/2.0 + epsilon
+		cosineSchedule := Cos(MulScalar(scheduleTime, math.Pi))
+		cosineSchedule = DivScalar(OnePlus(cosineSchedule), 2.0)
+		cosineSchedule = AddScalar(cosineSchedule, epsilon)
+		return Mul(base, ConvertDType(cosineSchedule, dtype))
+	default:
+		exceptions.Panicf("invalid Discrete-KAN softness schedule: %s", c.discreteSoftnessSchedule)
+	}
+	return nil
 }
 
 // PiecewiseConstantFunction (PCF) generates a PCF output for a cross of numInputNodes x numOutputNodes, defined

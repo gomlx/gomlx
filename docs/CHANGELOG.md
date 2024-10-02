@@ -31,6 +31,8 @@
   * Added support for hyperparameter configured split points.
   * Added monotonic projection of split points.
   * Added ConstantL1 regularizer for control points.
+  * Added various types of schedules for smoothness: cosine, linear, exponential.
+  * Added normal distribution based perturbation
 * Fixed OGBN-MAG GNN tests and demo.
 
 ## v0.12.0 - 2024/09/23
