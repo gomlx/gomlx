@@ -157,7 +157,6 @@ func setMinimalTestParams(ctx *context.Context) {
 
 		ParamEdgeDropoutRate:       0.0,
 		ParamNumGraphUpdates:       1, // gnn_num_messages
-		ParamReadoutHiddenLayers:   0,
 		ParamPoolingType:           "sum",
 		ParamUpdateStateType:       "residual",
 		ParamUsePathToRootStates:   false,
@@ -177,7 +176,6 @@ func setCommonTestParams(ctx *context.Context) {
 
 		ParamEdgeDropoutRate:       0.0,
 		ParamNumGraphUpdates:       3, // gnn_num_messages
-		ParamReadoutHiddenLayers:   1,
 		ParamPoolingType:           "mean|logsum",
 		ParamUpdateStateType:       "residual",
 		ParamUsePathToRootStates:   false,

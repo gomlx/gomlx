@@ -9,6 +9,7 @@ import (
 	"github.com/gomlx/gomlx/examples/notebook/gonb/margaid"
 	"github.com/gomlx/gomlx/examples/notebook/gonb/plotly"
 	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/graph/nanlogger"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	mldata "github.com/gomlx/gomlx/ml/data"
@@ -114,6 +115,7 @@ func Train(backend backends.Backend, ctx *context.Context, dataDir, checkpointPa
 		fmt.Printf("> restarting training from global_step=%d (training until %d)\n", globalStep, trainSteps)
 		ctx = ctx.Reuse()
 	}
+	fmt.Println("Compiling graph... (once it's done, training immediately starts)")
 	_, err = loop.RunSteps(trainDS, trainSteps-globalStep)
 	if err != nil {
 		return errors.WithMessage(err, "while running steps")
@@ -140,6 +142,8 @@ func Train(backend backends.Backend, ctx *context.Context, dataDir, checkpointPa
 	return nil
 }
 
+var NanLogger *nanlogger.NanLogger
+
 func newTrainer(backend backends.Backend, ctx *context.Context) *train.Trainer {
 	// Loss: multi-class classification problem.
 	lossFn := losses.SparseCategoricalCrossEntropyLogits
@@ -150,11 +154,13 @@ func newTrainer(backend backends.Backend, ctx *context.Context) *train.Trainer {
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
+	//NanLogger = nanlogger.New()
 	trainer := train.NewTrainer(backend, ctx, MagModelGraph,
 		lossFn,
 		optimizers.FromContext(ctx), // Based on `ctx.GetParam("optimizer")`.
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
 		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
+	NanLogger.AttachToTrainer(trainer)
 	return trainer
 }
 
@@ -230,6 +236,8 @@ func getDType(ctx *context.Context) dtypes.DType {
 		return dtypes.Float32
 	case "float16":
 		return dtypes.Float16
+	case "bfloat16":
+		return dtypes.BFloat16
 	case "float64":
 		return dtypes.Float64
 	default:
@@ -244,7 +252,7 @@ func getDType(ctx *context.Context) dtypes.DType {
 func convertPapersEmbeddings(backend backends.Backend, ctx *context.Context) {
 	dtype := getDType(ctx)
 	dtypeEmbed := dtype
-	if dtype == dtypes.Float16 {
+	if dtype == dtypes.Float16 || dtype == dtypes.BFloat16 {
 		// See comment on model.go, in function FeaturePreprocessing.
 		dtypeEmbed = dtypes.Float32
 	}

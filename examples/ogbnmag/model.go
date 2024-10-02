@@ -1,6 +1,7 @@
 package ogbnmag
 
 import (
+	"fmt"
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/examples/ogbnmag/gnn"
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
@@ -8,7 +9,6 @@ import (
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/ml/layers"
-	"github.com/gomlx/gomlx/ml/layers/kan"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gopjrt/dtypes"
 	"k8s.io/klog/v2"
@@ -37,13 +37,14 @@ func getMagVar(ctx *context.Context, g *Graph, name string) *Node {
 
 // logitsGraph converts the readout state of the seed nodes to its logits.
 func logitsGraph(ctx *context.Context, readout *Node) *Node {
-	useKan := context.GetParamOr(ctx, "kan", false)
-	if useKan {
-		readout = kan.New(ctx.In("logits_kan"), readout, NumLabels).NumHiddenLayers(0, 0).Done()
-	} else {
-		// Normal FNN
-		readout = layers.DenseWithBias(ctx.In("logits"), readout, NumLabels)
-	}
+	//useKan := context.GetParamOr(ctx, "kan", false)
+	//if useKan {
+	//	readout = kan.New(ctx.In("logits_kan"), readout, NumLabels).NumHiddenLayers(0, 0).Done()
+	//} else {
+	//	// Normal FNN
+	//	readout = layers.DenseWithBias(ctx.In("logits"), readout, NumLabels)
+	//}
+	readout = layers.DenseWithBias(ctx.In("logits"), readout, NumLabels)
 	return readout
 }
 
@@ -54,7 +55,7 @@ func logitsGraph(ctx *context.Context, readout *Node) *Node {
 // * Predictions for all seeds shaped `Float32[BatchSize, mag.NumLabels]` (or `Float16` or `Float64`).
 // * Mask of the seeds, provided by the sampler, shaped `Bool[BatchSize]`.
 func MagModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
-	ctx = ctx.WithInitializer(initializers.GlorotUniformFn(initializers.NoSeed))
+	ctx = ctx.WithInitializer(initializers.GlorotUniformFn(ctx))
 	dtype := getDType(ctx) // Default is Float32
 	g := inputs[0].Graph()
 	if klog.V(3).Enabled() {
@@ -78,6 +79,11 @@ func MagModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 
 	strategy := spec.(*sampler.Strategy)
 	graphStates, _ := FeaturePreprocessing(ctx, strategy, inputs)
+
+	if NanLogger != nil {
+		fmt.Println("*** Using NanLogger ***")
+	}
+	gnn.NanLogger = NanLogger
 	gnn.NodePrediction(ctx, strategy, graphStates)
 
 	// Last layer outputs the logits for the `NumLabels` classes.
@@ -117,7 +123,7 @@ func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inpu
 	graphInputs, remainingInputs = sampler.MapInputsToStates[*Node](strategy, inputs)
 	dtype := getDType(ctx)
 	dtypeEmbed := dtype
-	if dtype == dtypes.Float16 {
+	if dtype == dtypes.Float16 || dtype == dtypes.BFloat16 {
 		// If we don't do this for Float16, on a 2080ti GPU, the training becomes 3 times slower. Gemini mentioned
 		// that the RTX 30 series is better at "scattering" (used on the auto-differentiation of the "gathers" here),
 		// and may be worth a try then. But for now, leave it as Float32. Notice this is only an issue on non-sorted
@@ -129,7 +135,7 @@ func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inpu
 	// the cases of unknown (zero) embeddings.
 	// They shouldn't be initialized with GlorotUniform, but instead with small random uniform values.
 	ctxEmbed := ctx.In("embeddings").Checked(false).
-		WithInitializer(initializers.RandomUniformFn(initializers.NoSeed, -0.05, 0.05))
+		WithInitializer(initializers.RandomUniformFn(ctx, -0.05, 0.05))
 	embedDropoutRate := context.GetParamOr(ctx, ParamEmbedDropoutRate, 0.0)
 
 	// Preprocess papers to its features --> these are in a frozen embedding table in the context as a frozen variable.

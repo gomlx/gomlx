@@ -1,7 +1,6 @@
 package gnn
 
 import (
-	"fmt"
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
 	. "github.com/gomlx/gomlx/graph"
@@ -84,13 +83,10 @@ func (lw *LayerWiseConfig) NodePrediction(ctx *context.Context, graphStates map[
 			lw.recursivelyApplyGraphConvolution(ctxForGraphUpdateRound(ctx, round), rule, graphStates, edges)
 		}
 	}
-	numHiddenLayers := context.GetParamOr(ctx, ParamReadoutHiddenLayers, 0)
+	ctxReadout := ctx.In("readout")
 	for _, rule := range lw.strategy.Seeds {
 		seedState := graphStates[rule.Name]
-		for ii := range numHiddenLayers {
-			ctxReadout := ctx.In(rule.ConvKernelScopeName).In(fmt.Sprintf("readout_hidden_%d", ii))
-			seedState = updateState(ctxReadout, seedState, seedState, nil)
-		}
+		seedState = updateState(ctxReadout.In(rule.ConvKernelScopeName), seedState, seedState, nil)
 		graphStates[rule.Name] = seedState
 	}
 }

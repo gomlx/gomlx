@@ -8,10 +8,12 @@ import (
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
 	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/graph/nanlogger"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/ml/layers/kan"
+	"github.com/gomlx/gomlx/ml/layers/rational"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
@@ -23,11 +25,6 @@ var (
 	// send in the GNN tree of nodes.
 	// The default is 2.
 	ParamNumGraphUpdates = "gnn_num_messages"
-
-	// ParamReadoutHiddenLayers context parameter that defines the number or hidden layers
-	// connected to the readout of a GNN model.
-	// Default to 0.
-	ParamReadoutHiddenLayers = "gnn_readout_hidden_layers"
 
 	// ParamMessageDim context hyperparameter defines the dimension of the messages calculated per node.
 	// The default is 128.
@@ -72,6 +69,9 @@ var (
 	ParamGraphUpdateType = "gnn_graph_update_type"
 )
 
+// NanLogger is used if not nil.
+var NanLogger *nanlogger.NanLogger
+
 // NodePrediction performs graph convolutions from leaf nodes to the seeds (the roots of the trees), this
 // is called a "graph update".
 //
@@ -113,13 +113,10 @@ func NodePrediction(ctx *context.Context, strategy *sampler.Strategy, graphState
 			Panicf("invalid value for %q: valid values are \"tree\" or \"simultaneous\"", ParamGraphUpdateType)
 		}
 	}
-	numHiddenLayers := context.GetParamOr(ctx, ParamReadoutHiddenLayers, 0)
+	ctxReadout := ctx.In("readout")
 	for _, rule := range strategy.Seeds {
 		seedState := graphStates[rule.Name]
-		for ii := range numHiddenLayers {
-			ctxReadout := ctx.In(rule.ConvKernelScopeName).In(fmt.Sprintf("readout_hidden_%d", ii))
-			seedState.Value = updateState(ctxReadout, seedState.Value, seedState.Value, seedState.Mask)
-		}
+		seedState.Value = updateState(ctxReadout.In(rule.ConvKernelScopeName), seedState.Value, seedState.Value, seedState.Mask)
 	}
 }
 
@@ -266,11 +263,16 @@ func edgeMessageGraph(ctx *context.Context, gatheredStates, gatheredMask *Node) 
 
 	useKan := context.GetParamOr(ctx, "kan", false)
 	if useKan {
+		// KAN
 		messages = kan.New(ctx, gatheredStates, messageDim).NumHiddenLayers(0, 0).Done()
+
 	} else {
 		// Normal FNN
 		messages = layers.DenseWithBias(ctx, gatheredStates, messageDim)
 		messages = activations.ApplyFromContext(ctx, messages)
+	}
+	if NanLogger != nil {
+		NanLogger.Trace(messages, fmt.Sprintf("(KAN)edgeMessageGraph(%s)", ctx.Scope()))
 	}
 
 	mask = gatheredMask
@@ -424,10 +426,15 @@ func poolMessagesWithAdjacency(ctx *context.Context, source, edgesSource, edgesT
 // updateState of a node set, given the `input` (should be a concatenation of previous
 // state and all pooled messages) and its `mask`.
 func updateState(ctx *context.Context, prevState, input, mask *Node) *Node {
-	useKan := context.GetParamOr(ctx, "kan", false)
-	if useKan {
+	useKAN := context.GetParamOr(ctx, "kan", false)
+	if useKAN {
 		return kanUpdateState(ctx, prevState, input, mask)
 	}
+	useGRKAN := context.GetParamOr(ctx, "grkan", false)
+	if useGRKAN {
+		return grkanUpdateState(ctx, prevState, input, mask)
+	}
+
 	updateType := context.GetParamOr(ctx, ParamUpdateStateType, "residual")
 	if updateType != "residual" && updateType != "none" {
 		Panicf("invalid GNN update type %q (given by parameter %q) -- valid values are 'residual' and 'none'",
@@ -447,11 +454,13 @@ func updateState(ctx *context.Context, prevState, input, mask *Node) *Node {
 	state = layers.DenseWithBias(ctx, state, stateDim)
 	state = activations.ApplyFromContext(ctx, state)
 	state = layers.DropoutFromContext(ctx, state)
-
 	if updateType == "residual" && prevState.Shape().Equal(state.Shape()) {
 		state = Add(state, prevState)
 	}
 	state = layers.MaskedNormalizeFromContext(ctx.In("normalization"), state, mask)
+	if NanLogger != nil {
+		NanLogger.Trace(state, fmt.Sprintf("UpdateState(%s)", ctx.Scope()))
+	}
 	return state
 }
 
@@ -459,5 +468,41 @@ func updateState(ctx *context.Context, prevState, input, mask *Node) *Node {
 func kanUpdateState(ctx *context.Context, prevState, input, mask *Node) *Node {
 	stateDim := context.GetParamOr(ctx, ParamStateDim, 128)
 	numHiddenLayers := context.GetParamOr(ctx, ParamUpdateNumHiddenLayers, 0)
-	return kan.New(ctx.In("kan_update_state"), input, stateDim).NumHiddenLayers(numHiddenLayers, stateDim).Done()
+	state := kan.New(ctx.In("kan_update_state"), input, stateDim).NumHiddenLayers(numHiddenLayers, stateDim).Done()
+	state = layers.DropoutFromContext(ctx, state)
+	//state = layers.MaskedNormalizeFromContext(ctx.In("normalization"), state, mask)
+
+	updateType := context.GetParamOr(ctx, ParamUpdateStateType, "residual")
+	if updateType == "residual" && prevState.Shape().Equal(state.Shape()) {
+		state = Add(state, prevState)
+	}
+	if NanLogger != nil {
+		NanLogger.Trace(state, fmt.Sprintf("(KAN)UpdateState(%s)", ctx.Scope()))
+	}
+	return state
+}
+
+// grkanUpdateState is a version of updateState using GRKAN networks.
+func grkanUpdateState(ctx *context.Context, prevState, input, mask *Node) *Node {
+	grkanNumInputGroups := context.GetParamOr(ctx, "grkan_num_input_groups", 0)
+	stateDim := context.GetParamOr(ctx, ParamStateDim, 128)
+	numLayers := 1 + context.GetParamOr(ctx, ParamUpdateNumHiddenLayers, 0)
+	state := input
+	for _ = range numLayers {
+		state = rational.New(ctx, state).
+			Approximate("identity").
+			WithMultiplier(true).
+			WithInputGroups(grkanNumInputGroups).
+			WithMultipleOutputs(stateDim).
+			Done()
+		state = ReduceSum(state, -2) // Reduce sum over the input embeddings.
+	}
+	state = layers.DropoutFromContext(ctx, state)
+	//state = layers.MaskedNormalizeFromContext(ctx.In("normalization"), state, mask)
+
+	updateType := context.GetParamOr(ctx, ParamUpdateStateType, "residual")
+	if updateType == "residual" && prevState.Shape().Equal(state.Shape()) {
+		state = Add(state, prevState)
+	}
+	return state
 }

@@ -10,6 +10,8 @@ import (
 	mldata "github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activations"
+	"github.com/gomlx/gomlx/ml/layers/kan"
+	"github.com/gomlx/gomlx/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/ml/train/commandline"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/janpfeifer/must"
@@ -42,23 +44,36 @@ func createDefaultContext() *context.Context {
 		paramWithReplacement: false,
 
 		// KAN network parameters:
-		"kan":                    false, // Enable kan
-		"kan_bspline_num_points": 20,    // Number of control points
+		// They are used only for readout layers -- they have worked very poorly for deeper networks.
+		// Also, one should decrease the learning rate to use them.
+		"kan":                                 false, // Enable kan
+		kan.ParamNumControlPoints:             6,     // Number of control points for B-Spline (default) KAN.
+		kan.ParamDiscrete:                     false,
+		kan.ParamDiscretePerturbation:         "triangular",
+		kan.ParamDiscreteNumControlPoints:     20,
+		kan.ParamDiscreteSplitPointsTrainable: true, // Discrete-KAN trainable split-points.
+		kan.ParamDiscreteSoftness:             0.1,  // Discrete-KAN softness
+		kan.ParamDiscreteSoftnessSchedule:     kan.SoftnessScheduleNone.String(),
+		kan.ParamResidual:                     true,
+		kan.ParamConstantRegularizationL1:     0.0,
+
+		// Experimental GR-KAN version, using KAN with rational functions as univariate learnable functions.
+		"grkan":                  false, // Enable GR-Kan
+		"grkan_num_input_groups": 4,     // Number of input groups, set to 0 to disable.
 
 		optimizers.ParamOptimizer:           "adam",
 		optimizers.ParamLearningRate:        0.001,
 		optimizers.ParamCosineScheduleSteps: 0,
 		optimizers.ParamClipStepByValue:     0.0,
 		optimizers.ParamAdamEpsilon:         1e-7,
-		optimizers.ParamAdamDType:           "",
+		optimizers.ParamAdamDType:           "float32",
 
-		layers.ParamL2Regularization: 1e-5,
-		layers.ParamDropoutRate:      0.2,
-		activations.ParamActivation:  "swish",
+		regularizers.ParamL2:        1e-5,
+		layers.ParamDropoutRate:     0.2,
+		activations.ParamActivation: "swish",
 
 		gnn.ParamEdgeDropoutRate:       0.0,
 		gnn.ParamNumGraphUpdates:       6, // gnn_num_messages
-		gnn.ParamReadoutHiddenLayers:   2,
 		gnn.ParamPoolingType:           "mean|logsum",
 		gnn.ParamUpdateStateType:       "residual",
 		gnn.ParamUsePathToRootStates:   false,
@@ -74,6 +89,7 @@ func createDefaultContext() *context.Context {
 		mag.ParamIdentitySubSeeds:     true,
 		mag.ParamDType:                "float32",
 	})
+	ctx.In("readout").SetParam(gnn.ParamUpdateNumHiddenLayers, 2)
 	return ctx
 }
 
