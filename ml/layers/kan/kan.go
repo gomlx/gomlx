@@ -82,6 +82,7 @@ type Config struct {
 	bsplineMagnitudeRegularizer            regularizers.Regularizer
 
 	useDiscrete                  bool
+	discretePerturbation         PerturbationType
 	discreteControlPoints        int
 	discreteSoftness             float64
 	discreteSplitPointsTrainable bool
@@ -115,6 +116,17 @@ func New(ctx *context.Context, input *Node, numOutputNodes int) *Config {
 		discreteControlPoints:        context.GetParamOr(ctx, ParamDiscreteNumControlPoints, 6),
 		discreteSoftness:             context.GetParamOr(ctx, ParamDiscreteSoftness, 0.1),
 		discreteSplitPointsTrainable: context.GetParamOr(ctx, ParamDiscreteSplitPointsTrainable, true),
+	}
+
+	perturbationStr := context.GetParamOr(ctx, ParamDiscretePerturbation, "triangular")
+	switch perturbationStr {
+	case "", "triangular":
+		c.discretePerturbation = PerturbationTriangular
+	case "normal":
+		c.discretePerturbation = PerturbationNormal
+	default:
+		exceptions.Panicf("Invalid Discrete-KAN perturbation given by context[%q]: %q -- valid values are "+
+			"\"triangular\", \"normal\"", ParamDiscretePerturbation, perturbationStr)
 	}
 
 	constL1amount := context.GetParamOr(ctx, ParamConstantRegularizationL1, 0.0)

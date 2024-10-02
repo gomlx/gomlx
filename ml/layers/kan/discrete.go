@@ -38,8 +38,22 @@ var (
 	// ParamDiscrete indicates whether to use Discrete-KAN as the univariate function to learn.
 	ParamDiscrete = "kan_discrete"
 
-	// ParamDiscreteSoftness indicates whether to soften the PCF (piecewise constant functions) during training,
+	// ParamDiscretePerturbation selects the type of input perturbation used to make the Discrete-KAN differentiable
+	// during training.
+	//
+	// It can take 2 values: "triangular", "normal". The default is "triangular".
+	ParamDiscretePerturbation = "kan_discrete_perturbation"
+
+	// ParamDiscreteSoftness indicates how much to soften the PCF (piecewise constant functions) during training,
 	// and by how much.
+	//
+	// For triangular perturbation, this is a factor that multiplied by the distance from the first and last
+	// split points, defines the base of the triangle.
+	//
+	// For normal perturbation, this is multiplied by the distance from the first and last split points to
+	// define the standard deviation.
+	//
+	// The default value is 0.1.
 	ParamDiscreteSoftness = "kan_discrete_softness"
 
 	// ParamDiscreteNumControlPoints is the number of points to use (and learn) in the piecewise-constant function
@@ -164,12 +178,12 @@ func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int
 
 	var output *Node
 	if c.discreteSoftness <= 0 || !ctx.IsTraining(g) {
-		//output = PiecewiseConstantFunction(x, controlPoints, splitPoints)
+		output = PiecewiseConstantFunction(x, controlPoints, splitPoints)
 		// The version with perturbation is faster than the original PCF !?
-		output = PiecewiseConstantFunctionWithInputPerturbation(x, controlPoints, splitPoints, ScalarZero(g, dtype))
+		//output = PiecewiseConstantFunctionWithInputPerturbation(x, controlPoints, splitPoints, PerturbationTriangular, ScalarZero(g, dtype))
 	} else {
 		softnessConst := Scalar(g, dtype, c.discreteSoftness)
-		output = PiecewiseConstantFunctionWithInputPerturbation(x, controlPoints, splitPoints, softnessConst)
+		output = PiecewiseConstantFunctionWithInputPerturbation(x, controlPoints, splitPoints, c.discretePerturbation, softnessConst)
 	}
 	output.AssertDims(batchSize, numOutputNodes, numInputNodes) // Shape=[batch, outputs, inputs]
 
@@ -248,13 +262,23 @@ func PiecewiseConstantFunction(input, controlPoints, splitPoints *Node) *Node {
 	return output
 }
 
+// PerturbationType used by PiecewiseConstantFunctionWithInputPerturbation
+type PerturbationType int
+
+const (
+	PerturbationTriangular PerturbationType = iota
+	PerturbationNormal
+)
+
+//go:generate enumer -type=PerturbationType -trimprefix=Perturbation -transform=snake -values -text -json -yaml discrete.go
+
 // PiecewiseConstantFunctionWithInputPerturbation works similarly to PiecewiseConstantFunction, but
 // adds a "perturbation" of the inputs by a triangular distribution of the value, controlled by smoothness.
 //
 // The shapes and inputs are the same as PiecewiseConstantFunction, with the added smoothness parameter
 // that should be a scalar with suggested values from 0 to 1.0.
 //
-// The smoothness softens the function by perturbing the input using a triangular distribution,
+// The smoothness softens the function by perturbing the input using a triangular (or normal) distribution,
 // whose base is given by softness * 2 * (splitPoint[-1] - splitPoint[0]).
 // If softness is 0, the function is back to being piece-wise constant.
 //
@@ -264,7 +288,7 @@ func PiecewiseConstantFunction(input, controlPoints, splitPoints *Node) *Node {
 //
 // The output will be shaped [batchSize, numOutputPoints, numInputNodes].
 // Presumably, the caller will graph.ReduceMean (or ReduceSum) on the last axis (after residual value is added) for a shape [batchSize, numOutputPoints].
-func PiecewiseConstantFunctionWithInputPerturbation(input, controlPoints, splitPoints, softness *Node) *Node {
+func PiecewiseConstantFunctionWithInputPerturbation(input, controlPoints, splitPoints *Node, perturbation PerturbationType, softness *Node) *Node {
 	// Expand missing dimensions for scalar evaluation.
 	inputRank := input.Rank()
 	if inputRank == 0 {
@@ -290,18 +314,25 @@ func PiecewiseConstantFunctionWithInputPerturbation(input, controlPoints, splitP
 		softness.AssertScalar()
 	}
 
-	// Calculate the half-base of the triangle distribution base.
-	triangleHalfBase := Sub(
+	// Calculate the distribution base
+	distributionBase := Sub(
 		Slice(splitPoints, AxisRange(), AxisRange(), AxisElem(numControlPoints-2)),
 		Slice(splitPoints, AxisRange(), AxisRange(), AxisElem(0)),
 	)
-	triangleHalfBase = Mul(triangleHalfBase, softness)
 
 	// Calculate cumulative distribution function for all split nodes.
 	expandedInputs := ExpandDims(input, -2, -1)       // Shape [batchSize, numInputNodes, 1, 1]
 	expandedSplitPoints := ExpandDims(splitPoints, 0) // Shape [1, numOutputNodes, numInputNodes, NumControlPoints-1]
-	cdfs := triangleDistributionCDF(Sub(expandedSplitPoints, expandedInputs), ExpandDims(triangleHalfBase, 0))
-	//cdfs.SetLogged("cdfs")
+	cdfsPoints := Sub(expandedSplitPoints, expandedInputs)
+	var cdfs *Node
+	switch perturbation {
+	case PerturbationTriangular:
+		triangleHalfBase := Mul(distributionBase, softness)
+		cdfs = triangleDistributionCDF(cdfsPoints, ExpandDims(triangleHalfBase, 0))
+	case PerturbationNormal:
+		stddev := Mul(distributionBase, softness)
+		cdfs = NormalDistributionCDF(cdfsPoints, ExpandDims(stddev, 0))
+	}
 
 	// The sum of the integral parts is control points multiplied by the difference between the split points (left
 	// and right)
@@ -343,4 +374,13 @@ func triangleDistributionCDF(x, halfBase *Node) *Node {
 			Where(LessThan(x, halfBase), rightSide, OnesLike(x)),
 		),
 	)
+}
+
+// NormalDistributionCDF calculates the CDF for a normal distribution centered in zero and with the given
+// standard deviation.
+func NormalDistributionCDF(x, stddev *Node) *Node {
+	x = Div(x, stddev)
+	cdf := Erf(MulScalar(x, 1.0/math.Sqrt(2)))
+	cdf = DivScalar(OnePlus(cdf), 2)
+	return cdf
 }
