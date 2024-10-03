@@ -52,6 +52,7 @@ func createDefaultContext() *context.Context {
 		kan.ParamDiscretePerturbation:         "triangular",
 		kan.ParamDiscreteNumControlPoints:     20,
 		kan.ParamDiscreteSplitPointsTrainable: true, // Discrete-KAN trainable split-points.
+		kan.ParamDiscreteSplitsMargin:         0.01, // Discrete-KAN trainable split-points margin.
 		kan.ParamDiscreteSoftness:             0.1,  // Discrete-KAN softness
 		kan.ParamDiscreteSoftnessSchedule:     kan.SoftnessScheduleNone.String(),
 		kan.ParamResidual:                     true,
@@ -67,6 +68,7 @@ func createDefaultContext() *context.Context {
 		optimizers.ParamClipStepByValue:     0.0,
 		optimizers.ParamAdamEpsilon:         1e-7,
 		optimizers.ParamAdamDType:           "float32",
+		optimizers.ParamClipNaN:             false,
 
 		regularizers.ParamL2:        1e-5,
 		layers.ParamDropoutRate:     0.2,
