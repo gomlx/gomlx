@@ -55,6 +55,7 @@ const (
 	NodeTypeIdentity
 	NodeTypeImag
 	NodeTypeIota
+	NodeTypeIsFinite
 	NodeTypeLessOrEqual
 	NodeTypeLessOrEqualTotalOrder
 	NodeTypeLessThan
@@ -72,6 +73,7 @@ const (
 	NodeTypeOr
 	NodeTypePad
 	NodeTypeParameter
+	NodeTypePopulationCount
 	NodeTypePow
 	NodeTypeReal
 	NodeTypeReduceAnd
@@ -1715,6 +1717,45 @@ func backendIota(g *Graph, shape shapes.Shape, iotaAxis int) (node *Node) {
 	return
 }
 
+// nodeInputsIsFinite holds the inputs used for the call to backends.IsFinite.
+type nodeInputsIsFinite struct {
+	x *Node
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsIsFinite) Type() NodeType {
+	return NodeTypeIsFinite
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsIsFinite) String() string {
+	return fmt.Sprintf("%s(x=[#%d])",
+		ni.Type(),
+		ni.x.Id(),
+	)
+}
+
+// IsFinite tests whether each element of operand is finite, i.e., is not positive or negative infinity, and is not NaN.
+// It returns an array of boolean values with the same shape as the input, where each element is true if and only if
+// the corresponding input element is finite.
+func IsFinite(x *Node) (node *Node) {
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsIsFinite{
+		x: x,
+	}
+	result := g.builder.IsFinite(x.outputOps[0])
+	node = &Node{
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
 // nodeInputsLessOrEqual holds the inputs used for the call to backends.LessOrEqual.
 type nodeInputsLessOrEqual struct {
 	x0 *Node
@@ -2359,6 +2400,43 @@ func Pad(x *Node, fillValue *Node, axesConfig ...backends.PadAxis) (node *Node) 
 		axesConfig: slices.Clone(axesConfig),
 	}
 	result := g.builder.Pad(x.outputOps[0], fillValue.outputOps[0], inputs.axesConfig...)
+	node = &Node{
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsPopulationCount holds the inputs used for the call to backends.PopulationCount.
+type nodeInputsPopulationCount struct {
+	x *Node
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsPopulationCount) Type() NodeType {
+	return NodeTypePopulationCount
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsPopulationCount) String() string {
+	return fmt.Sprintf("%s(x=[#%d])",
+		ni.Type(),
+		ni.x.Id(),
+	)
+}
+
+// PopulationCount computes the number of bits set in each element of operand.
+func PopulationCount(x *Node) (node *Node) {
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsPopulationCount{
+		x: x,
+	}
+	result := g.builder.PopulationCount(x.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
 		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
