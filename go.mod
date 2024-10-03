@@ -18,7 +18,7 @@ require (
 	github.com/janpfeifer/must v0.0.2
 	github.com/muesli/termenv v0.15.2
 	github.com/pkg/errors v0.9.1
-	github.com/schollz/progressbar/v3 v3.14.6
+	github.com/schollz/progressbar/v3 v3.16.0
 	github.com/stretchr/testify v1.9.0
 	github.com/x448/float16 v0.8.4
 	golang.org/x/exp v0.0.0-20240823005443-9b4947da3948
@@ -49,8 +49,8 @@ require (
 	github.com/rivo/uniseg v0.4.7 // indirect
 	golang.org/x/image v0.19.0 // indirect
 	golang.org/x/net v0.28.0 // indirect
-	golang.org/x/sys v0.24.0 // indirect
-	golang.org/x/term v0.23.0 // indirect
+	golang.org/x/sys v0.25.0 // indirect
+	golang.org/x/term v0.24.0 // indirect
 	golang.org/x/text v0.17.0 // indirect
 	gonum.org/v1/gonum v0.15.0 // indirect
 	google.golang.org/protobuf v1.34.2 // indirect
