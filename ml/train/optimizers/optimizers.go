@@ -19,6 +19,7 @@
 package optimizers
 
 import (
+	"fmt"
 	. "github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
@@ -68,6 +69,27 @@ var (
 	// ParamOptimizer is the context parameter with the name of the optimizer.
 	// The default value is "adamw", and the valid values are "sgd", "adam", "adamw" and "adamax".
 	ParamOptimizer = "optimizer"
+
+	// ParamLearningRate is the context parameter name for the default value of learning rate.
+	// It is used by most (all?) optimizers.
+	ParamLearningRate = "learning_rate"
+
+	// LearningRateKey is an alias to ParamLearningRate
+	//
+	// Deprecated: use ParamLearningRate instead.
+	LearningRateKey = ParamLearningRate
+
+	// ParamClipStepByValue is a clip scalar value for each individual value of the gradient step, after
+	// being scaled by the learning rate and optimizer.
+	// The step applied will be `ClipScalar(step, -clip_step_by_value, +clip_step_by_value)`.
+	// Defaults to no clipping, and values are expected to be float64.
+	ParamClipStepByValue = "clip_step_by_value"
+
+	// ParamClipNaN will drop any updates to variables that will lead to NaN.
+	// This is a double-edged option: it keeps training running, but probably will replace NaN by bad training.
+	//
+	// Default  is false.
+	ParamClipNaN = "clip_nan"
 )
 
 const (
@@ -158,23 +180,6 @@ func IncrementGlobalStepGraph(ctx *context.Context, g *Graph, dtype dtypes.DType
 	return globalStep
 }
 
-var (
-	// ParamLearningRate is the context parameter name for the default value of learning rate.
-	// It is used by most (all?) optimizers.
-	ParamLearningRate = "learning_rate"
-
-	// LearningRateKey is an alias to ParamLearningRate
-	//
-	// Deprecated: use ParamLearningRate instead.
-	LearningRateKey = ParamLearningRate
-
-	// ParamClipStepByValue is a clip scalar value for each individual value of the gradient step, after
-	// being scaled by the learning rate and optimizer.
-	// The step applied will be `ClipScalar(step, -clip_step_by_value, +clip_step_by_value)`.
-	// Defaults to no clipping, and values are expected to be float64.
-	ParamClipStepByValue = "clip_step_by_value"
-)
-
 // LearningRateVar returns the learning rate variable -- a scalar value of the given dtype.
 //
 // If variable doesn't exist yet, it will be created using the parameter ParamLearningRate, if it
@@ -197,6 +202,15 @@ func ClipStepByValue(ctx *context.Context, step *Node) *Node {
 		return step
 	}
 	return ClipScalar(step, -clipByValue, clipByValue)
+}
+
+// ClipNaNsInUpdates will replace original values into updates, where updates have NaN (or +/-Inf) values,
+// if the ParamClipNaN is set to true.
+func ClipNaNsInUpdates(ctx *context.Context, original, updates *Node) *Node {
+	if !context.GetParamOr(ctx, ParamClipNaN, false) {
+		return updates
+	}
+	return Where(IsFinite(updates), updates, original)
 }
 
 // sgd is an empty struct that implements Interface for SGD.
@@ -236,6 +250,8 @@ func (sgd *sgd) Clear(_ *context.Context) {}
 
 // addGradientsToVariablesGraph takes the output of Context.BuildTrainableVariablesGradientsGraph,
 // multiply by (-learningRate) and add to the current value of the variablesMap.
+//
+// It replaces NaNs with zero.
 func addGradientsToVariablesGraph(ctx *context.Context, loss, learningRate, globalStep *Node) {
 	g := loss.Graph()
 	if !learningRate.Shape().IsScalar() {
@@ -247,6 +263,7 @@ func addGradientsToVariablesGraph(ctx *context.Context, loss, learningRate, glob
 	}
 	numTrainable := len(grads)
 	ii := 0
+	fmt.Println("addGradientsToVariablesGraph")
 	ctx.EnumerateVariables(func(v *context.Variable) {
 		if !v.Trainable || !v.InUseByGraph(g) {
 			// Not interested in this variable.
@@ -262,7 +279,9 @@ func addGradientsToVariablesGraph(ctx *context.Context, loss, learningRate, glob
 		}
 		scaledGradient := Mul(grads[ii], lrCast)
 		scaledGradient = ClipStepByValue(ctx, scaledGradient)
-		updatedValue := Sub(v.ValueGraph(g), scaledGradient)
+		vNode := v.ValueGraph(g)
+		updatedValue := Sub(vNode, scaledGradient)
+		updatedValue = ClipNaNsInUpdates(ctx, vNode, updatedValue)
 		v.SetValueGraph(updatedValue)
 		ii++
 	})
