@@ -1065,3 +1065,28 @@ func TestDynamicUpdateSlice(t *testing.T) {
 		[][]float32{{0, 100}, {2, 100}, {4, 5}},
 	}, -1)
 }
+
+func TestBitCount(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "BitCount", func(g *Graph) (inputs, outputs []*Node) {
+		operand := IotaFull(g, shapes.Make(dtypes.Int32, 8))
+		inputs = []*Node{operand}
+		outputs = []*Node{
+			BitCount(operand),
+		}
+		return
+	}, []any{
+		[]int32{0, 1, 1, 2, 1, 2, 2, 3}, // Number of bits set.
+	}, 0)
+}
+
+func TestIsFinite(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "IsFinite", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = []*Node{
+			Const(g, []float64{0.0, math.NaN(), -1, math.Inf(-1), 1, math.Inf(1)}),
+		}
+		outputs = []*Node{IsFinite(inputs[0])}
+		return
+	}, []any{
+		[]bool{true, false, true, false, true, false}, // Number of bits set.
+	}, 0)
+}

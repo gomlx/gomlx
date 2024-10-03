@@ -91,6 +91,9 @@ type Builder interface {
 	// Internal Covariate Shift" (Sergey Ioffe, Christian Szegedy), https://arxiv.org/abs/1502.03167.
 	BatchNormGradient(operand, scale, mean, variance, gradOutput Op, epsilon float32, axis int) (gradOperand, gradScale, gradOffset Op)
 
+	// BitCount returns the number of bits that are set to one.
+	BitCount(operand Op) Op
+
 	// StandardOps include automatically generated list of operations for the Builder.
 	StandardOps
 }

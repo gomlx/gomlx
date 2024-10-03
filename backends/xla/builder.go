@@ -248,3 +248,13 @@ func convertFFTType(fftType backends.FFTType) xla_data.FftType {
 		panic(nil) // To quiet IDE warning.
 	}
 }
+
+// BitCount returns the number of bits that are set to one.
+func (b *Builder) BitCount(x backends.Op) backends.Op {
+	xlaX := b.verifyAndCastOp(x, "x")
+	xlaResult, err := xlabuilder.PopulationCount(xlaX)
+	if err != nil {
+		panic(errors.WithMessagef(err, "Backend %q: failed BitCount", BackendName))
+	}
+	return xlaResult
+}

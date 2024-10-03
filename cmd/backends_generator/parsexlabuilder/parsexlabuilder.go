@@ -119,9 +119,9 @@ func ReadOpsInfo() []OpInfo {
 // Notice ast.Package is deprecated, but the go/types package it suggests as a replacement doesn't seem to do the same thing.
 func Parse() (*NodeTextExtractor, *ast.Package) {
 	xlaBuilderPath := path.Join(GetGopjrt(), "xlabuilder")
-	fset := token.NewFileSet()
-	pkgs := must.M1(parser.ParseDir(fset, xlaBuilderPath, nil, parser.ParseComments|parser.AllErrors))
-	extractor := NewNodeTextExtractor(fset)
+	fSet := token.NewFileSet()
+	pkgs := must.M1(parser.ParseDir(fSet, xlaBuilderPath, nil, parser.ParseComments|parser.AllErrors))
+	extractor := NewNodeTextExtractor(fSet)
 	return extractor, pkgs["xlabuilder"]
 }
 
@@ -179,7 +179,7 @@ func (e *NodeTextExtractor) Get(node ast.Node) string {
 	return string(fileContent[pos.Offset:endOffset])
 }
 
-var FunctionsBlackList = types.SetWith("Parameter", "ScalarZero", "ScalarOne")
+var FunctionsBlackList = types.SetWith("Parameter", "ScalarZero", "ScalarOne", "PopulationCount")
 
 // EnumerateStandardOpsFunctions calls callback for every "standard" op declaring function of the xlaBuilder package AST,
 // that can be automatically converted to a backends.Backend API, and implemented in the xla.Backend.
@@ -202,7 +202,7 @@ func EnumerateStandardOpsFunctions(extractor *NodeTextExtractor, xlaBuilderPkg *
 			return
 		}
 
-		// Skip functions that take a sub-computation as a paramter.
+		// Skip functions that take a sub-computation as a parameter.
 		for _, param := range funcDecl.Type.Params.List {
 			typeName := extractor.Get(param.Type)
 			if typeName == "*XlaComputation" || typeName == "*Literal" {
@@ -211,7 +211,7 @@ func EnumerateStandardOpsFunctions(extractor *NodeTextExtractor, xlaBuilderPkg *
 			}
 		}
 
-		// Skip tuple-functions.
+		// Skip tuple-functions and black-listed functions.
 		if strings.Index(funcDecl.Name.Name, "Tuple") != -1 || FunctionsBlackList.Has(funcDecl.Name.Name) {
 			return
 		}

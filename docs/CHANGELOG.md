@@ -13,8 +13,7 @@
 * Package `graph`:
   * Added `ConstCachedTensor` to allow caching of constant tensors.
   * Fixed gradient of `Where` when operands are broadcast.
-  * Added `ConsecutiveDifference`.
-  * Added `SliceAxis`.
+  * Added `ConsecutiveDifference`, `SliceAxis`, `BitsCount`, `IsFinite`.
 * Package `context`:
   * Added `context.ExecOnce` and `context.ExecOnceN`.
   * `context.GetParamOr` now returns the default value for a hyperparameter, if it is set to nil. 

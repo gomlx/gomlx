@@ -24,6 +24,7 @@ const (
 	NodeTypeBatchNormForInference
 	NodeTypeBatchNormForTraining
 	NodeTypeBatchNormGradient
+	NodeTypeBitCount
 	NodeTypeBroadcast
 	NodeTypeBroadcastInDim
 	NodeTypeCeil
@@ -73,7 +74,6 @@ const (
 	NodeTypeOr
 	NodeTypePad
 	NodeTypeParameter
-	NodeTypePopulationCount
 	NodeTypePow
 	NodeTypeReal
 	NodeTypeReduceAnd
@@ -433,6 +433,43 @@ func backendBatchNormGradient(operand *Node, scale *Node, mean *Node, variance *
 	g.registerNode(node)
 	splitNodes := splitNode(node)
 	gradOperand, gradScale, gradOffset = splitNodes[0], splitNodes[1], splitNodes[2]
+	return
+}
+
+// nodeInputsBitCount holds the inputs used for the call to backends.BitCount.
+type nodeInputsBitCount struct {
+	operand *Node
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsBitCount) Type() NodeType {
+	return NodeTypeBitCount
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsBitCount) String() string {
+	return fmt.Sprintf("%s(operand=[#%d])",
+		ni.Type(),
+		ni.operand.Id(),
+	)
+}
+
+// BitCount returns the number of bits that are set to one.
+func BitCount(operand *Node) (node *Node) {
+	inputNodes := []*Node{operand}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsBitCount{
+		operand: operand,
+	}
+	result := g.builder.BitCount(operand.outputOps[0])
+	node = &Node{
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
 	return
 }
 
@@ -2400,43 +2437,6 @@ func Pad(x *Node, fillValue *Node, axesConfig ...backends.PadAxis) (node *Node) 
 		axesConfig: slices.Clone(axesConfig),
 	}
 	result := g.builder.Pad(x.outputOps[0], fillValue.outputOps[0], inputs.axesConfig...)
-	node = &Node{
-		outputOps:    []backends.Op{result},
-		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
-		graph:        g,
-		inputs:       inputs,
-		inputNodes:   inputNodes,
-	}
-	g.registerNode(node)
-	return
-}
-
-// nodeInputsPopulationCount holds the inputs used for the call to backends.PopulationCount.
-type nodeInputsPopulationCount struct {
-	x *Node
-}
-
-// Type implements the interface NodeInputs.
-func (ni *nodeInputsPopulationCount) Type() NodeType {
-	return NodeTypePopulationCount
-}
-
-// String implements the interface NodeInputs.
-func (ni *nodeInputsPopulationCount) String() string {
-	return fmt.Sprintf("%s(x=[#%d])",
-		ni.Type(),
-		ni.x.Id(),
-	)
-}
-
-// PopulationCount computes the number of bits set in each element of operand.
-func PopulationCount(x *Node) (node *Node) {
-	inputNodes := []*Node{x}
-	g := validateBuildingGraphFromInputs(inputNodes...)
-	inputs := &nodeInputsPopulationCount{
-		x: x,
-	}
-	result := g.builder.PopulationCount(x.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
 		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
