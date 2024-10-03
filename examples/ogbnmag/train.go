@@ -117,19 +117,17 @@ func Train(backend backends.Backend, ctx *context.Context, dataDir, checkpointPa
 	}
 	fmt.Println("Compiling graph... (once it's done, training immediately starts)")
 	_, err = loop.RunSteps(trainDS, trainSteps-globalStep)
+	// Save checkpoint at end of training (even if training failed)
+	err2 := checkpoint.Save()
+	if err2 != nil {
+		klog.Errorf("Failed to save final checkpoint in %q: %+v", checkpointPath, err2)
+	}
+	fmt.Printf("\t[Step %d] median train step: %s\n", loop.LoopStep, loop.MedianTrainStepDuration())
+
+	// Check whether training failed.
 	if err != nil {
 		return errors.WithMessage(err, "while running steps")
 	}
-	fmt.Printf("\t[Step %d] median train step: %d microseconds\n",
-		loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
-	if checkpoint != nil {
-		// Save checkpoint at end of training.
-		err = checkpoint.Save()
-		if err != nil {
-			klog.Errorf("Failed to save final checkpoint in %q: %+v", checkpointPath, err)
-		}
-	}
-	fmt.Printf("Median training step duration: %s\n", loop.MedianTrainStepDuration())
 
 	// Finally, print an evaluation on train and test datasets.
 	if report {
@@ -157,9 +155,9 @@ func newTrainer(backend backends.Backend, ctx *context.Context) *train.Trainer {
 	//NanLogger = nanlogger.New()
 	trainer := train.NewTrainer(backend, ctx, MagModelGraph,
 		lossFn,
-		optimizers.FromContext(ctx), // Based on `ctx.GetParam("optimizer")`.
+		optimizers.FromContext(ctx),               // Based on `ctx.GetParam("optimizer")`.
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
-		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
+		[]metrics.Interface{meanAccuracyMetric}) // evalMetrics
 	NanLogger.AttachToTrainer(trainer)
 	return trainer
 }
