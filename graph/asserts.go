@@ -43,7 +43,7 @@ import (
 func (n *Node) AssertDims(dimensions ...int) {
 	n.AssertValid()
 	if n.NumOutputs() != 1 {
-		exceptions.Panicf("node has %d outputs, cannot AssertDims", n.NumOutputs())
+		exceptions.Panicf("node has %d outputs, cannot AssertDims(%v)", n.NumOutputs(), dimensions)
 	}
 	err := shapes.CheckDims(n, dimensions...)
 	if err != nil {
