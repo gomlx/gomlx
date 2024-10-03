@@ -312,20 +312,52 @@ func addGradientsToVariablesGraph(ctx *context.Context, loss, learningRate, glob
 // the gradient step.
 func MonotonicProjection(input *Node, margin *Node, axis int) *Node {
 	adjustedAxis := AdjustAxisToOperandRank(input, axis)
-
-	diff := ConsecutiveDifference(input, adjustedAxis, false)
-	// For a fixed number of times try to prevent everything to be pushed if possible.
-	for _ = range 3 {
-		adjustedDiff := Max(diff, margin) // Pushes everything to the right, whenever monotonicity is broken.
-		adjustment := Sub(diff, adjustedDiff)
-		fixedAdjustment := ShiftWithScalar(adjustment, adjustedAxis, ShiftDirRight, 1, 0.0)
-		diff = Add(adjustedDiff, fixedAdjustment)
+	axisDim := input.Shape().Dim(axis)
+	if axisDim < 2 {
+		Panicf("MonotonicProjection of input shaped %s at axis %d is not valid: it requires axis to have dimension >= 2",
+			input.Shape(), axis)
 	}
 
-	// Reconstruct value.
+	const numIter = 3
+	// Fix to the right: increasing values.
+	diffRight := ConsecutiveDifference(input, adjustedAxis, false)
+	// For a fixed number of times try to prevent everything to be pushed if possible.
+	if axisDim > 2 {
+		for _ = range numIter {
+			adjustedDiff := Max(diffRight, margin) // Pushes everything to the right, whenever monotonicity is broken.
+			adjustment := Sub(diffRight, adjustedDiff)
+			fixedAdjustment := ShiftWithScalar(adjustment, adjustedAxis, ShiftDirRight, 1, 0.0)
+			diffRight = Add(adjustedDiff, fixedAdjustment)
+		}
+	}
+	diffRight = Max(diffRight, margin) // Make sure its valid, if numIter wasn't enough.
 	leftMostInput := SliceAxis(input, adjustedAxis, AxisElem(0))
-	rightMostDiff := SliceAxis(diff, adjustedAxis, AxisElem(-1))
-	leftMostInput = DivScalar(Add(leftMostInput, rightMostDiff), 2)
-	diff = Concatenate([]*Node{leftMostInput, diff}, adjustedAxis)
-	return CumSum(diff, adjustedAxis)
+	diffRight = Concatenate([]*Node{leftMostInput, diffRight}, adjustedAxis)
+	fixRight := CumSum(diffRight, adjustedAxis)
+
+	// Fix to the left: increasing values.
+	diffLeft := ConsecutiveDifference(input, adjustedAxis, false)
+	initialTotalDiff := ReduceAndKeep(diffLeft, ReduceSum, adjustedAxis)
+
+	// For a fixed number of times try to prevent everything to be pushed if possible.
+	if axisDim > 2 {
+		for _ = range numIter {
+			adjustedDiff := Max(diffLeft, margin) // Pushes everything to the left, whenever monotonicity is broken.
+			adjustment := Sub(diffLeft, adjustedDiff)
+			fixedAdjustment := ShiftWithScalar(adjustment, adjustedAxis, ShiftDirLeft, 1, 0.0)
+			diffLeft = Add(adjustedDiff, fixedAdjustment)
+		}
+	}
+	diffLeft = Max(diffLeft, margin) // Make sure its valid, if numIter wasn't enough.
+	finalTotalDiff := ReduceAndKeep(diffLeft, ReduceSum, adjustedAxis)
+
+	leftMostInput = SliceAxis(input, adjustedAxis, AxisElem(0))
+	leftMostInput = Sub(leftMostInput,
+		Sub(finalTotalDiff, initialTotalDiff))
+
+	diffLeft = Concatenate([]*Node{leftMostInput, diffLeft}, adjustedAxis)
+	fixLeft := CumSum(diffLeft, adjustedAxis)
+
+	// Reconstruct value.
+	return DivScalar(Add(fixRight, fixLeft), 2)
 }
