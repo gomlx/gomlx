@@ -128,11 +128,11 @@ func (lw *LayerWiseConfig) recursivelyApplyGraphConvolution(
 		dependentState := graphStates[dependent.Name]
 		convolveCtx := ctx.In(dependent.ConvKernelScopeName).In("conv")
 		if dependentState != nil {
-			updateInputs = append(updateInputs,
-				// Notice that we are sending messages on the reverse order of the sampling.
-				// E.g.: If paper->"HasTopic"->topic, the sampling direction is "paper is source, topic is target".
-				// When evaluating the GNN we want the message to go from topic (source) to paper (target).
-				lw.convolveEdgeSet(convolveCtx, dependent.Name, dependentState, dependentEdges.TargetIndices, dependentEdges.SourceIndices, int(rule.NumNodes)))
+			// Notice that we are sending messages on the reverse order of the sampling.
+			// E.g.: If paper->"HasTopic"->topic, the sampling direction is "paper is source, topic is target".
+			// When evaluating the GNN we want the message to go from topic (source) to paper (target).
+			update := lw.convolveEdgeSet(convolveCtx, dependent.Name, dependentState, dependentEdges.TargetIndices, dependentEdges.SourceIndices, int(rule.NumNodes))
+			updateInputs = append(updateInputs, update)
 		}
 		if !lw.dependentsUpdateFirst {
 			lw.recursivelyApplyGraphConvolution(ctx, dependent, graphStates, edges)
