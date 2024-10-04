@@ -226,7 +226,7 @@ func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int
 		return v
 	}
 	controlPointsVar := ctx.WithInitializer(controlPointsInitializer).
-		VariableWithShape("discrete_control_points", shapes.Make(dtype, numOutputNodes, numInputNodes, c.discreteControlPoints))
+		VariableWithShape("kan_discrete_control_points", shapes.Make(dtype, numOutputNodes, numInputNodes, c.discreteControlPoints))
 	if c.regularizer != nil {
 		c.regularizer(ctx, g, controlPointsVar)
 	}
@@ -254,7 +254,7 @@ func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int
 		// Trainable split points: one per input.
 		// * We could also make it learn one per output ... at the cost of more parameters.
 		splitPointsVar := ctx.WithInitializer(initializers.BroadcastTensorToShape(keysT)).
-			VariableWithShape("split_points", shapes.Make(dtype, 1, numInputNodes, c.discreteControlPoints-1))
+			VariableWithShape("kan_discrete_split_points", shapes.Make(dtype, 1, numInputNodes, c.discreteControlPoints-1))
 		if c.discreteSplitPointsFrozen {
 			splitPointsVar.Trainable = c.discreteSplitPointsFrozen
 		}
@@ -262,7 +262,7 @@ func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int
 
 		// At the end of each training step, project splitPoints back to monotonically increasing values, so they
 		// don't overlap.
-		train.AddPerStepUpdateGraphFn(ctx.In("split_points_projection"), g, func(ctx *context.Context, g *Graph) {
+		train.AddPerStepUpdateGraphFn(ctx.In("kan_discrete_split_points_projection"), g, func(ctx *context.Context, g *Graph) {
 			splitPoints := splitPointsVar.ValueGraph(g)
 			margin := Scalar(g, splitPoints.DType(), context.GetParamOr(ctx, ParamDiscreteSplitsMargin, 0.01))
 			splitPoints = optimizers.MonotonicProjection(splitPoints, margin, -1)
