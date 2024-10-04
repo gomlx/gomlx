@@ -18,7 +18,7 @@ require (
 	github.com/janpfeifer/must v0.0.2
 	github.com/muesli/termenv v0.15.2
 	github.com/pkg/errors v0.9.1
-	github.com/schollz/progressbar/v3 v3.16.0
+	github.com/schollz/progressbar/v3 v3.16.1
 	github.com/stretchr/testify v1.9.0
 	github.com/x448/float16 v0.8.4
 	golang.org/x/exp v0.0.0-20240823005443-9b4947da3948

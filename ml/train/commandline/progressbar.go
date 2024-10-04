@@ -61,13 +61,7 @@ func (pBar *progressBar) onStart(loop *train.Loop, _ train.Dataset) error {
 		progressbar.OptionEnableColorCodes(true),
 		progressbar.OptionShowIts(),
 		progressbar.OptionSetItsString("steps"),
-		progressbar.OptionSetTheme(progressbar.Theme{
-			Saucer:        "[green]\uEE04[reset]", // 
-			SaucerHead:    "[green]\uEE04[reset]", // 
-			SaucerPadding: "[green]\uEE01[reset]", // 
-			BarStart:      "[green]\uEE03[reset]", // 
-			BarEnd:        "[green]\uEE02[reset]", // 
-		}),
+		progressbar.OptionSetTheme(progressbar.ThemeUnicode),
 		progressbar.OptionSetWriter(pBar), // Required to work with Jupyter notebook.
 	)
 	return nil

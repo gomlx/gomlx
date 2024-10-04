@@ -588,13 +588,8 @@ func (ds *Dataset) Save(numEpochs int, verbose bool, writers ...io.Writer) error
 			progressbar.OptionEnableColorCodes(true),
 			progressbar.OptionShowIts(),
 			progressbar.OptionSetItsString("images"),
-			progressbar.OptionSetTheme(progressbar.Theme{
-				Saucer:        "[green]=[reset]",
-				SaucerHead:    "[green]>[reset]",
-				SaucerPadding: ".",
-				BarStart:      "[",
-				BarEnd:        "]",
-			}))
+			progressbar.OptionSetTheme(progressbar.ThemeUnicode),
+		)
 	}
 
 	var err error

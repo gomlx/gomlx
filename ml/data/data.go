@@ -148,13 +148,7 @@ func newCopyBytesBar(w io.Writer, contentLength int64) *copyBytesBar {
 		progressbar.OptionSetDescription(fmt.Sprintf("%s", ByteCountIEC(contentLength))),
 		progressbar.OptionUseANSICodes(true),
 		progressbar.OptionEnableColorCodes(true),
-		progressbar.OptionSetTheme(progressbar.Theme{
-			Saucer:        "[green]=[reset]",
-			SaucerHead:    "[green]>[reset]",
-			SaucerPadding: ".",
-			BarStart:      "[",
-			BarEnd:        "]",
-		}),
+		progressbar.OptionSetTheme(progressbar.ThemeUnicode),
 	)
 	return bar
 }
