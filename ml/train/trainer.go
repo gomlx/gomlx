@@ -400,6 +400,21 @@ func (r *Trainer) callGraphFn(
 	return
 }
 
+// ResetComputationGraphs can be used during training in between steps to force the recreation of the computation graphs.
+//
+// This is used if, for instance, the training has schedules where hyperparameters change (some variables are frozen)
+// the computation graph needs to be updated accordingly.
+//
+// see Loop.OnStep to schedule
+func (r *Trainer) ResetComputationGraphs() {
+	for _, execMap := range []map[any]*context.Exec{r.trainStepExecMap, r.evalStepExecMap, r.batchNormStepExecMap} {
+		for _, e := range execMap {
+			e.Finalize()
+		}
+		clear(execMap)
+	}
+}
+
 // metricsUpdatesGraph creates the graph for a set of metrics.
 func (r *Trainer) metricsUpdatesGraph(ctx *context.Context, labels, predictions []*graph.Node,
 	metricsObjects []metrics.Interface) (metrics []*graph.Node) {

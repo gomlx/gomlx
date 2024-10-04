@@ -19,6 +19,8 @@
   * `context.GetParamOr` now returns the default value for a hyperparameter, if it is set to nil. 
 * Package `train`:
   * Added `GetTrainLastStepVar` with information about last step of training: used for setting up various schedules.
+  * Added `ResetComputationGraphs` to allow the trainer to recreate computation graphs, if hyperparameters change in the middle
+    of training -- for training with very different schedules, for instance with freezing variables.
 * Added `initializers.BroadcastTensorToShape`: to allow variables to be initialized with a base value that is broadcast
   to each variable shape requested.
 * Package `optimizers`
