@@ -94,6 +94,7 @@ type Config struct {
 	discreteSoftness                                        float64
 	discreteSoftnessSchedule                                SoftnessScheduleType
 	discreteSplitPointsTrainable, discreteSplitPointsFrozen bool
+	discreteRangeMin, discreteRangeMax                      float64
 }
 
 // New returns the configuration for a KAN bsplineLayer(s) to be applied to the input x.
@@ -127,6 +128,7 @@ func New(ctx *context.Context, input *Node, numOutputNodes int) *Config {
 		discreteSplitPointsTrainable: context.GetParamOr(ctx, ParamDiscreteSplitPointsTrainable, false),
 		discreteSplitPointsFrozen:    context.GetParamOr(ctx, ParamDiscreteSplitPointsFrozen, false),
 	}
+	c = c.DiscreteRange(-1, 1)
 
 	perturbationStr := context.GetParamOr(ctx, ParamDiscretePerturbation, "triangular")
 	switch perturbationStr {

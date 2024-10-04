@@ -192,6 +192,20 @@ func (c *Config) DiscreteSplitsFrozen(frozen bool) *Config {
 	return c
 }
 
+// DiscreteRange defines how to initialize the split-points: they are uniformly taken from the given
+// range, with the first split point at rangeMin, and the last split point at rangeMax.
+// It requires rangeMax > rangeMin.
+//
+// The default range is [-1, 1.0]
+func (c *Config) DiscreteRange(rangeMin, rangeMax float64) *Config {
+	if rangeMin >= rangeMax {
+		exceptions.Panicf("invalid range [%g, %g] given to DiscreteRange: it must observe rangeMax > rangeMin",
+			rangeMin, rangeMax)
+	}
+	c.discreteRangeMin, c.discreteRangeMax = rangeMin, rangeMax
+	return c
+}
+
 // Layer implements one KAN bsplineLayer. x is expected to be rank-2.
 func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int) *Node {
 	g := x.Graph()
@@ -236,9 +250,11 @@ func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int
 	var splitPoints *Node
 	keys := make([]float64, c.discreteControlPoints-1)
 	if c.discreteControlPoints > 2 {
-		// Initialize split points uniformly from -1.0 to 1.0
+		// Initialize split points uniformly from rangeMin (-1.0) to rangeMax (1.0)
+		rangeMin, rangeMax := c.discreteRangeMin, c.discreteRangeMax
+		rangeLen := rangeMax - rangeMin
 		for ii := range keys {
-			keys[ii] = 2.0*float64(ii)/float64(c.discreteControlPoints-2) - 1.0
+			keys[ii] = rangeLen*float64(ii)/float64(c.discreteControlPoints-2) + rangeMin
 		}
 	}
 	keysT := tensors.FromValue(keys)
