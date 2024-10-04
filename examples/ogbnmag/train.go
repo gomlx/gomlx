@@ -6,6 +6,7 @@ import (
 	"fmt"
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/examples/notebook"
 	"github.com/gomlx/gomlx/examples/notebook/gonb/margaid"
 	"github.com/gomlx/gomlx/examples/notebook/gonb/plotly"
 	. "github.com/gomlx/gomlx/graph"
@@ -13,6 +14,7 @@ import (
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	mldata "github.com/gomlx/gomlx/ml/data"
+	"github.com/gomlx/gomlx/ml/layers/kan"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/commandline"
 	"github.com/gomlx/gomlx/ml/train/losses"
@@ -23,6 +25,8 @@ import (
 	"github.com/janpfeifer/must"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
+	"slices"
+	"strings"
 	"time"
 )
 
@@ -40,6 +44,73 @@ var (
 	// ParamDType controls the dtype to be used: either "float32" or "float16".
 	ParamDType = "mag_dtype"
 )
+
+// progressBarSpacing prints enough line breaks that whatever is printed in the output is not overwritten
+// by the progressbar. This should be used if something is printed in the middle of the training.
+func progressBarSpacing() {
+	lineBreaks := 9
+	if notebook.IsPresent() {
+		lineBreaks = 1
+	}
+	fmt.Printf("%s", strings.Repeat("\n", lineBreaks))
+}
+
+// InitTrainingSchedule initializes custom scheduled training.
+// It's enabled with the hyperparameter "scheduled_training".
+func InitTrainingSchedule(ctx *context.Context) {
+	// Start with split points frozen.
+	ctx.SetParam(kan.ParamDiscreteSplitPointsFrozen, true)
+}
+
+// TrainingSchedule is used to control hyperparameters during training.
+// The parameters fromStep and toStep are the starting and final global_steps of training.
+// It's enabled with the hyperparameter "scheduled_training".
+func TrainingSchedule(ctx *context.Context, fromStep, toStep int) train.OnStepFn {
+	percentageToStep := func(pct int) int {
+		return pct * (fromStep + toStep) / 100
+	}
+	splitPointsStart, splitPointsEnd := percentageToStep(10), percentageToStep(20)
+
+	return func(loop *train.Loop, _ []*tensors.Tensor) error {
+		if loop.LoopStep == splitPointsStart {
+			time.Sleep(100 * time.Millisecond)
+			fmt.Printf("\nResetting training computation graphs @ step=%d.\n", loop.LoopStep)
+			loop.Trainer.ResetComputationGraphs()
+
+			fmt.Println("\tTrain split_points, smoothness_schedule=none")
+			ctx.SetParam(kan.ParamDiscreteSplitPointsFrozen, false)
+			ctx.SetParam(kan.ParamDiscreteSoftnessSchedule, "none")
+			ctx.EnumerateVariables(func(v *context.Variable) {
+				if v.Name() == "kan_discrete_split_points" {
+					v.Trainable = true
+				} else if slices.Index([]string{"kan_discrete_control_points", "embeddings", "weights", "biases"}, v.Name()) != -1 {
+					v.Trainable = true
+				} else if v.Trainable {
+					fmt.Printf("\t\t%q trainable\n", v.ScopeAndName())
+				}
+			})
+			progressBarSpacing()
+
+		} else if loop.LoopStep == splitPointsEnd {
+			time.Sleep(100 * time.Millisecond)
+			fmt.Printf("\nResetting training computation graphs @ step=%d.\n", loop.LoopStep)
+			loop.Trainer.ResetComputationGraphs()
+
+			fmt.Println("\tTrain control_points, freeze split_points, , smoothness_schedule=exponential")
+			ctx.SetParam(kan.ParamDiscreteSoftnessSchedule, "exponential")
+			ctx.EnumerateVariables(func(v *context.Variable) {
+				if v.Name() == "kan_discrete_split_points" {
+					v.Trainable = false
+				} else if slices.Index([]string{"kan_discrete_control_points", "embeddings", "weights", "biases"}, v.Name()) != -1 {
+					v.Trainable = true
+				}
+			})
+			progressBarSpacing()
+
+		}
+		return nil
+	}
+}
 
 // Train GNN model based on configuration in `ctx`.
 func Train(backend backends.Backend, ctx *context.Context, dataDir, checkpointPath string, layerWiseEval, report bool, paramsSet []string) error {
@@ -115,6 +186,14 @@ func Train(backend backends.Backend, ctx *context.Context, dataDir, checkpointPa
 		fmt.Printf("> restarting training from global_step=%d (training until %d)\n", globalStep, trainSteps)
 		ctx = ctx.Reuse()
 	}
+
+	// Set up scheduled training.
+	if context.GetParamOr(ctx, "scheduled_training", false) {
+		InitTrainingSchedule(ctx)
+		loop.OnStep("TrainingSchedule", 0, TrainingSchedule(ctx, globalStep, trainSteps)) // register custom TrainingSchedule
+	}
+
+	// Run training loop.
 	fmt.Println("Compiling graph... (once it's done, training immediately starts)")
 	_, err = loop.RunSteps(trainDS, trainSteps-globalStep)
 	// Save checkpoint at end of training (even if training failed)
@@ -155,9 +234,9 @@ func newTrainer(backend backends.Backend, ctx *context.Context) *train.Trainer {
 	//NanLogger = nanlogger.New()
 	trainer := train.NewTrainer(backend, ctx, MagModelGraph,
 		lossFn,
-		optimizers.FromContext(ctx),               // Based on `ctx.GetParam("optimizer")`.
+		optimizers.FromContext(ctx), // Based on `ctx.GetParam("optimizer")`.
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
-		[]metrics.Interface{meanAccuracyMetric}) // evalMetrics
+		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
 	NanLogger.AttachToTrainer(trainer)
 	return trainer
 }

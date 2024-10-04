@@ -42,6 +42,7 @@ func createDefaultContext() *context.Context {
 		"batch_size":         128,
 		"plots":              true,
 		paramWithReplacement: false,
+		"scheduled_training": false,
 
 		// KAN network parameters:
 		// They are used only for readout layers -- they have worked very poorly for deeper networks.
@@ -49,13 +50,13 @@ func createDefaultContext() *context.Context {
 		"kan":                                 false, // Enable kan
 		kan.ParamNumControlPoints:             6,     // Number of control points for B-Spline (default) KAN.
 		kan.ParamDiscrete:                     false,
-		kan.ParamDiscretePerturbation:         "triangular",
-		kan.ParamDiscreteNumControlPoints:     20,
+		kan.ParamDiscretePerturbation:         "normal",
+		kan.ParamDiscreteNumControlPoints:     10,
 		kan.ParamDiscreteSplitPointsTrainable: false, // Discrete-KAN trainable split-points.
 		kan.ParamDiscreteSplitPointsFrozen:    false, // Discrete-KAN trainable split-points should be frozen.
-		kan.ParamDiscreteSplitsMargin:         0.01,  // Discrete-KAN trainable split-points margin.
-		kan.ParamDiscreteSoftness:             0.1,   // Discrete-KAN softness
-		kan.ParamDiscreteSoftnessSchedule:     kan.SoftnessScheduleNone.String(),
+		kan.ParamDiscreteSplitsMargin:         0.1,   // Discrete-KAN trainable split-points margin.
+		kan.ParamDiscreteSoftness:             0.03,  // Discrete-KAN softness
+		kan.ParamDiscreteSoftnessSchedule:     kan.SoftnessScheduleExponential.String(),
 		kan.ParamResidual:                     true,
 		kan.ParamConstantRegularizationL1:     0.0,
 
