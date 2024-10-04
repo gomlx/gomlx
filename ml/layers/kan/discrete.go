@@ -255,7 +255,9 @@ func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int
 		// * We could also make it learn one per output ... at the cost of more parameters.
 		splitPointsVar := ctx.WithInitializer(initializers.BroadcastTensorToShape(keysT)).
 			VariableWithShape("split_points", shapes.Make(dtype, 1, numInputNodes, c.discreteControlPoints-1))
-		splitPointsVar.Trainable = !c.discreteSplitPointsFrozen
+		if c.discreteSplitPointsFrozen {
+			splitPointsVar.Trainable = c.discreteSplitPointsFrozen
+		}
 		splitPoints = splitPointsVar.ValueGraph(g)
 
 		// At the end of each training step, project splitPoints back to monotonically increasing values, so they
