@@ -241,22 +241,15 @@ func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int
 			keys[ii] = 2.0*float64(ii)/float64(c.discreteControlPoints-2) - 1.0
 		}
 	}
+	keysT := tensors.FromValue(keys)
 	if c.discreteSplitPointsTrainable {
-		// splitLambda affects how fast/slow splits are learned compared to other weights -- they translate
-		// to a multiplier to the learning rate to the weights.
-		const splitLambda = 1.0
-
-		for ii := range keys {
-			keys[ii] /= splitLambda
-		}
-		keysT := tensors.FromValue(keys)
 
 		// Trainable split points: one per input.
 		// * We could also make it learn one per output ... at the cost of more parameters.
 		splitPointsVar := ctx.WithInitializer(initializers.BroadcastTensorToShape(keysT)).
 			VariableWithShape("kan_discrete_split_points", shapes.Make(dtype, 1, numInputNodes, c.discreteControlPoints-1))
 		if c.discreteSplitPointsFrozen {
-			splitPointsVar.Trainable = c.discreteSplitPointsFrozen
+			splitPointsVar.Trainable = false
 		}
 		splitPoints = splitPointsVar.ValueGraph(g)
 
@@ -269,11 +262,8 @@ func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int
 			splitPointsVar.SetValueGraph(splitPoints)
 		})
 
-		splitPoints = MulScalar(splitPoints, splitLambda)
-
 	} else {
 		// Fixed split points.
-		keysT := tensors.FromValue(keys)
 		splitPoints = ConstCachedTensor(g, keysT)
 		splitPoints = ConvertDType(splitPoints, dtype)
 	}
