@@ -65,9 +65,22 @@ var (
 	// for DiscreteKAN. Default is 6.
 	ParamDiscreteNumControlPoints = "kan_discrete_num_points"
 
-	// ParamDiscreteSplitPointsTrainable indicates whether the split points are trainable and can move around.
-	// Default is true.
+	// ParamDiscreteSplitPointsTrainable is a boolean that indicates whether the split points are trainable and can move around.
+	//
+	// Notice that this is unstable (NaN) for small values of softness -- or at the later stages or training if
+	// using a softness schedule -- because the gradients go to infinity close to the split points.
+	// The recommend way of using it is training in multiple stages, with a fixed softness and trainable splits
+	// first, and later freezing the split points (see ParamDiscreteSplitPointsFrozen).
+	//
+	// Default is false.
 	ParamDiscreteSplitPointsTrainable = "kan_discrete_splits_trainable"
+
+	// ParamDiscreteSplitPointsFrozen is a boolean that indicates whether the trained split-points should be frozen.
+	//
+	// This only has an effect if the split points are set to trainable (see ParamDiscreteSplitPointsTrainable).
+	// This is useful if after training the split points, one is going to use a softness schedule, and the
+	// softness is going to get very small (which leads to NaNs in the split points).
+	ParamDiscreteSplitPointsFrozen = "kan_discrete_splits_frozen"
 
 	// ParamDiscreteSplitsMargin is the minimum distance between consecutive split points.
 	// Only applies if the split points are trainable, in which case they are always projected to
@@ -155,9 +168,27 @@ func (c *Config) DiscreteSoftnessScheduleType(schedule SoftnessScheduleType) *Co
 }
 
 // DiscreteSplitsTrainable defines whether the split points are trainable.
-// Default is true.
+//
+// Notice that this is unstable (NaN) for small values of softness -- or at the later stages or training if
+// using a softness schedule -- because the gradients go to infinity close to the split points.
+// The recommend way of using it is training in multiple stages, with a fixed softness and trainable splits
+// first, and later freezing the split points (see ParamDiscreteSplitPointsFrozen).
+//
+// Default is false, and can be set with the context hyperparameter ParamDiscreteSplitPointsTrainable.
 func (c *Config) DiscreteSplitsTrainable(trainable bool) *Config {
 	c.discreteSplitPointsTrainable = trainable
+	return c
+}
+
+// DiscreteSplitsFrozen is a boolean that indicates whether the trained split-points should be frozen.
+//
+// This only has an effect if the split points are set to trainable (see ParamDiscreteSplitPointsTrainable).
+// This is useful if after training the split points, one is going to use a softness schedule, and the
+// softness is going to get very small (which leads to NaNs in the split points).
+//
+// Default is false and can be set with the context hyperparameter ParamDiscreteSplitPointsFrozen.
+func (c *Config) DiscreteSplitsFrozen(frozen bool) *Config {
+	c.discreteSplitPointsFrozen = frozen
 	return c
 }
 
@@ -210,12 +241,21 @@ func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int
 			keys[ii] = 2.0*float64(ii)/float64(c.discreteControlPoints-2) - 1.0
 		}
 	}
-	keysT := tensors.FromValue(keys)
 	if c.discreteSplitPointsTrainable {
+		// splitLambda affects how fast/slow splits are learned compared to other weights -- they translate
+		// to a multiplier to the learning rate to the weights.
+		const splitLambda = 1.0
+
+		for ii := range keys {
+			keys[ii] /= splitLambda
+		}
+		keysT := tensors.FromValue(keys)
+
 		// Trainable split points: one per input.
 		// * We could also make it learn one per output ... at the cost of more parameters.
 		splitPointsVar := ctx.WithInitializer(initializers.BroadcastTensorToShape(keysT)).
 			VariableWithShape("split_points", shapes.Make(dtype, 1, numInputNodes, c.discreteControlPoints-1))
+		splitPointsVar.Trainable = !c.discreteSplitPointsFrozen
 		splitPoints = splitPointsVar.ValueGraph(g)
 
 		// At the end of each training step, project splitPoints back to monotonically increasing values, so they
@@ -227,8 +267,11 @@ func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int
 			splitPointsVar.SetValueGraph(splitPoints)
 		})
 
+		splitPoints = MulScalar(splitPoints, splitLambda)
+
 	} else {
 		// Fixed split points.
+		keysT := tensors.FromValue(keys)
 		splitPoints = ConstCachedTensor(g, keysT)
 		splitPoints = ConvertDType(splitPoints, dtype)
 	}

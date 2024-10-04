@@ -88,12 +88,12 @@ type Config struct {
 	bsplineMagnitudeTerms                  bool
 	bsplineMagnitudeRegularizer            regularizers.Regularizer
 
-	useDiscrete                  bool
-	discretePerturbation         PerturbationType
-	discreteControlPoints        int
-	discreteSoftness             float64
-	discreteSoftnessSchedule     SoftnessScheduleType
-	discreteSplitPointsTrainable bool
+	useDiscrete                                             bool
+	discretePerturbation                                    PerturbationType
+	discreteControlPoints                                   int
+	discreteSoftness                                        float64
+	discreteSoftnessSchedule                                SoftnessScheduleType
+	discreteSplitPointsTrainable, discreteSplitPointsFrozen bool
 }
 
 // New returns the configuration for a KAN bsplineLayer(s) to be applied to the input x.
@@ -124,7 +124,8 @@ func New(ctx *context.Context, input *Node, numOutputNodes int) *Config {
 		useDiscrete:                  context.GetParamOr(ctx, ParamDiscrete, false),
 		discreteControlPoints:        context.GetParamOr(ctx, ParamDiscreteNumControlPoints, 6),
 		discreteSoftness:             context.GetParamOr(ctx, ParamDiscreteSoftness, 0.1),
-		discreteSplitPointsTrainable: context.GetParamOr(ctx, ParamDiscreteSplitPointsTrainable, true),
+		discreteSplitPointsTrainable: context.GetParamOr(ctx, ParamDiscreteSplitPointsTrainable, false),
+		discreteSplitPointsFrozen:    context.GetParamOr(ctx, ParamDiscreteSplitPointsFrozen, false),
 	}
 
 	perturbationStr := context.GetParamOr(ctx, ParamDiscretePerturbation, "triangular")
