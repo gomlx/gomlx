@@ -52,6 +52,7 @@ func createDefaultContext() *context.Context {
 		kan.ParamDiscrete:                     false,
 		kan.ParamDiscretePerturbation:         "normal",
 		kan.ParamDiscreteNumControlPoints:     10,
+		kan.ParamInputGroupSize:               1,
 		kan.ParamDiscreteSplitPointsTrainable: false, // Discrete-KAN trainable split-points.
 		kan.ParamDiscreteSplitPointsFrozen:    false, // Discrete-KAN trainable split-points should be frozen.
 		kan.ParamDiscreteSplitsMargin:         0.1,   // Discrete-KAN trainable split-points margin.
