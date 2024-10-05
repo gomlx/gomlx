@@ -10,6 +10,7 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/nanlogger"
 	"github.com/gomlx/gomlx/ml/context"
+	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/ml/layers/kan"
@@ -17,6 +18,7 @@ import (
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
+	"slices"
 	"strings"
 )
 
@@ -264,7 +266,7 @@ func edgeMessageGraph(ctx *context.Context, gatheredStates, gatheredMask *Node) 
 	useKan := context.GetParamOr(ctx, "kan", false)
 	if useKan {
 		// KAN
-		messages = kan.New(ctx, gatheredStates, messageDim).NumHiddenLayers(0, 0).Done()
+		messages = kan.New(ctx, gatheredStates, messageDim).NumHiddenLayers(0, messageDim).Done()
 
 	} else {
 		// Normal FNN
@@ -414,7 +416,7 @@ func poolMessagesWithAdjacency(ctx *context.Context, source, edgesSource, edgesT
 		parts = append(parts, pooled)
 	}
 	if len(parts) == 1 {
-		return parts[0]
+		return ConvertDType(parts[0], dtype)
 	}
 	all := Concatenate(parts, -1)
 	if dtype != dtypePool {
@@ -423,10 +425,29 @@ func poolMessagesWithAdjacency(ctx *context.Context, source, edgesSource, edgesT
 	return all
 }
 
+var layersWithPaperEmbeddingsInput = []string{
+	//"/readout/gnn:seeds",
+	//"/graph_update_0/gnn:seedsAuthors/update",
+
+	//"/graph_update_0/gnn:papersByAuthors/update",
+	//"/graph_update_0/gnn:seedsBase/update",
+
+	// These layers, if converted to KAN, incurs in costs.
+	"/graph_update_0/gnn:seeds/update",
+}
+
+func hasPaperEmbeddingsInput(scope string) bool {
+	return slices.Index(layersWithPaperEmbeddingsInput, scope) != -1
+}
+
 // updateState of a node set, given the `input` (should be a concatenation of previous
 // state and all pooled messages) and its `mask`.
 func updateState(ctx *context.Context, prevState, input, mask *Node) *Node {
 	useKAN := context.GetParamOr(ctx, "kan", false)
+	//if hasPaperEmbeddingsInput(ctx.Scope()) {
+	//	useKAN = false
+	//	fmt.Printf("\tDisabled KAN for %s\n", ctx.Scope())
+	//}
 	if useKAN {
 		return kanUpdateState(ctx, prevState, input, mask)
 	}
@@ -468,7 +489,47 @@ func updateState(ctx *context.Context, prevState, input, mask *Node) *Node {
 func kanUpdateState(ctx *context.Context, prevState, input, mask *Node) *Node {
 	stateDim := context.GetParamOr(ctx, ParamStateDim, 128)
 	numHiddenLayers := context.GetParamOr(ctx, ParamUpdateNumHiddenLayers, 0)
-	state := kan.New(ctx.In("kan_update_state"), input, stateDim).NumHiddenLayers(numHiddenLayers, stateDim).Done()
+	if hasPaperEmbeddingsInput(ctx.Scope()) {
+		fmt.Printf("\t> special KAN for %q\n", ctx.Scope())
+		g := input.Graph()
+		inputDim := input.Shape().Dim(-1)
+		a := ctx.In("adjust").WithInitializer(initializers.One).
+			VariableWithShape("a", shapes.Make(input.DType(), inputDim)).ValueGraph(g)
+		b := ctx.In("adjust").WithInitializer(initializers.Zero).
+			VariableWithShape("b", shapes.Make(input.DType(), inputDim)).ValueGraph(g)
+		a = ExpandLeftToRank(a, input.Rank())
+		b = ExpandLeftToRank(b, input.Rank())
+		input = Add(Mul(input, a), b)
+
+		/*
+			input = kan.New(ctx.In("adjust"), input, input.Shape().Dim(-1)).
+				//DiscreteInputRange(-1.6, 1.6).
+				DiscreteInitialSplitPoints(tensors.FromValue([]float32{
+					-1.439246,
+					//-0.352688,
+					-0.273454,
+					//-0.217877,
+					-0.172744,
+					//-0.134441,
+					-0.101113,
+					//-0.071418,
+					-0.044232,
+					//-0.018693,
+					0.005911,
+					//0.03016,
+					0.054653,
+					//0.080034,
+					0.107104,
+					//0.137099,
+					0.172041,
+					//0.215929,
+					0.278253,
+					//-1.313336,
+				})).Done()
+		*/
+	}
+	kanLayer := kan.New(ctx.In("kan_update_state"), input, stateDim).NumHiddenLayers(numHiddenLayers, stateDim)
+	state := kanLayer.Done()
 	state = layers.DropoutFromContext(ctx, state)
 	//state = layers.MaskedNormalizeFromContext(ctx.In("normalization"), state, mask)
 
