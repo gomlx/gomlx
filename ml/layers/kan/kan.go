@@ -20,6 +20,7 @@ import (
 	xbsplines "github.com/gomlx/gomlx/ml/layers/bsplines"
 	"github.com/gomlx/gomlx/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/types/xslices"
 	"k8s.io/klog/v2"
 	"slices"
@@ -50,6 +51,19 @@ const (
 
 	// ParamResidual defines whether to use residual connection between the layers. Default to true.
 	ParamResidual = "kan_residual"
+
+	// ParamInputGroupSize defines the size of groups in this inputs should be split. Inputs on the same
+	// group share weights. Setting this to 2 will effectively divide the number of parameters by 2,
+	// but force some inputs to use the same weights.
+	//
+	// The last dimension of the input must be divisible by this number.
+	//
+	// Only implemented by Discrete-KAN for now.
+	//
+	// Default is 0, which means no grouping.
+	ParamInputGroupSize = "kan_input_group_size"
+
+	//------------------------------ b-spline specific parameters ---------------------------------------//
 
 	// ParamBSplineDegree is the hyperparameter that defines the default value for the bspline degree used in
 	// the univariate KAN functions.
@@ -83,6 +97,7 @@ type Config struct {
 	activation                      activations.Type
 	regularizer                     regularizers.Regularizer
 	useResidual, useMean            bool
+	inputGroupSize                  int
 
 	bsplineNumControlPoints, bsplineDegree int
 	bsplineMagnitudeTerms                  bool
@@ -95,6 +110,7 @@ type Config struct {
 	discreteSoftnessSchedule                                SoftnessScheduleType
 	discreteSplitPointsTrainable, discreteSplitPointsFrozen bool
 	discreteRangeMin, discreteRangeMax                      float64
+	discreteSplitPointInitialValue                          *tensors.Tensor
 }
 
 // New returns the configuration for a KAN bsplineLayer(s) to be applied to the input x.
@@ -128,7 +144,7 @@ func New(ctx *context.Context, input *Node, numOutputNodes int) *Config {
 		discreteSplitPointsTrainable: context.GetParamOr(ctx, ParamDiscreteSplitPointsTrainable, false),
 		discreteSplitPointsFrozen:    context.GetParamOr(ctx, ParamDiscreteSplitPointsFrozen, false),
 	}
-	c = c.DiscreteRange(-1, 1)
+	c = c.DiscreteInputRange(-1, 1)
 
 	perturbationStr := context.GetParamOr(ctx, ParamDiscretePerturbation, "triangular")
 	switch perturbationStr {
@@ -211,6 +227,30 @@ func (c *Config) Regularizer(regularizer regularizers.Regularizer) *Config {
 	return c
 }
 
+// UseMean instead of sum when reducing the outputs.
+//
+// The original paper uses sum, but mean is more stable in many scenarios.
+//
+// The default is true. It can be configured with the ParamMean hyperparameter.
+func (c *Config) UseMean(useMean bool) *Config {
+	c.useMean = useMean
+	return c
+}
+
+// InputGroupSize defines the size of groups in this inputs should be split. Inputs on the same
+// group share weights. Setting this to 2 will effectively divide the number of parameters by 2,
+// but force some inputs to use the same weights.
+//
+// The last dimension of the input must be divisible by this number.
+//
+// Only implemented by Discrete-KAN for now.
+//
+// The default is 0, which means no grouping. It can be configured with the ParamInputGroupSize hyperparameter.
+func (c *Config) InputGroupSize(inputGroupSize int) *Config {
+	c.inputGroupSize = inputGroupSize
+	return c
+}
+
 // BSpline configures the KAN to use b-splines to model \phi(x), the univariate function described in the KAN the paper.
 // It also sets the number of control points to use to model the function.
 //
@@ -237,13 +277,21 @@ func (c *Config) Done() *Node {
 
 	// Reshape to rank-2: [batch, features]
 	numInputNodes := c.input.Shape().Dimensions[c.input.Rank()-1]
+	if c.inputGroupSize > 1 {
+		if numInputNodes%c.inputGroupSize != 0 {
+			exceptions.Panicf("KAN configured with input group size %d, but input (shape %s) last dimension %d is not divisible by %d",
+				c.inputGroupSize, c.input.Shape(), numInputNodes, c.inputGroupSize)
+		}
+	}
+
+	// Normalize x to rank-2.
 	x := c.input
 	if x.Rank() != 2 {
 		x = Reshape(x, -1, numInputNodes)
 	}
 
 	// Apply hidden layers.
-	//residual := x
+	// Notice residual connections, regularization, dropout, are related layers are applied within the layers themselves.
 	for ii := range c.numHiddenLayers {
 		if c.useDiscrete {
 			layerCtx := ctx.In(fmt.Sprintf("discrete_kan_hidden_%d", ii))
@@ -254,7 +302,7 @@ func (c *Config) Done() *Node {
 		}
 	}
 
-	// Apply last bsplineLayer.
+	// Apply last layer.
 	if c.useDiscrete {
 		x = c.discreteLayer(ctx.In("discrete_kan_output_layer"), x, c.numOutputNodes)
 	} else {
@@ -278,6 +326,9 @@ func (c *Config) bsplineLayer(ctx *context.Context, x *Node, numOutputNodes int)
 	residual := x
 	numInputNodes := x.Shape().Dimensions[x.Rank()-1]
 	batchSize := x.Shape().Dimensions[0]
+	if c.inputGroupSize > 1 {
+		exceptions.Panicf("B-Spline KAN does not support input groups (kan_input_group_size > 1) yet -- kan_input_group_size set to %d.", c.inputGroupSize)
+	}
 
 	if klog.V(2).Enabled() {
 		klog.Infof("kan bsplineLayer (%s): (%d+2) x %d x %d = %d weights\n",
