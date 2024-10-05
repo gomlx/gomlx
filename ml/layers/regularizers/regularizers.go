@@ -157,7 +157,8 @@ func ConstantL1(amount float64) Regularizer {
 		for _, wVar := range weights {
 			w := wVar.ValueGraph(g)
 			diff := ConsecutiveDifference(w, -1, false)
-			l1 := MulScalar(ReduceAllSum(Abs(diff)), amount)
+			diff = MulScalar(diff, amount)
+			l1 := ReduceAllSum(Abs(diff))
 			if loss == nil {
 				loss = l1
 			} else {
