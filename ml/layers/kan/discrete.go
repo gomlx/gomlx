@@ -62,10 +62,6 @@ var (
 	// Current valid values are "none", "cosine", "linear", "exponential". Default is "none".
 	ParamDiscreteSoftnessSchedule = "kan_discrete_softness_schedule"
 
-	// ParamDiscreteNumControlPoints is the number of points to use (and learn) in the piecewise-constant function
-	// for DiscreteKAN. Default is 6.
-	ParamDiscreteNumControlPoints = "kan_discrete_num_points"
-
 	// ParamDiscreteSplitPointsTrainable is a boolean that indicates whether the split points are trainable and can move around.
 	//
 	// Notice that this is unstable (NaN) for small values of softness -- or at the later stages or training if
@@ -103,7 +99,6 @@ type discreteConfig struct {
 
 // initDiscrete initializes the default values for Discrete-KANs based on context.
 func (c *Config) initDiscrete(ctx *context.Context) {
-	c.discrete.controlPoints = context.GetParamOr(ctx, ParamDiscreteNumControlPoints, 6)
 	c.discrete.softness = context.GetParamOr(ctx, ParamDiscreteSoftness, 0.1)
 	c.discrete.splitPointsTrainable = context.GetParamOr(ctx, ParamDiscreteSplitPointsTrainable, false)
 	c.discrete.splitPointsFrozen = context.GetParamOr(ctx, ParamDiscreteSplitPointsFrozen, false)
@@ -138,6 +133,7 @@ func (c *Config) initDiscrete(ctx *context.Context) {
 // Discrete-KAN is a variation of KAN that uses a piecewise-constant function (PCF for short) as
 // its univariate function family -- as opposed to the original spline functions.
 //
+// The number of control points used can be set up with Config.Para
 // These PCFs (piecewise-constant functions) have "split points", where the function change values,
 // and "control points" which are the outputs of the function between the corresponding split points.
 // For N split points, there are N+1 split points.
@@ -158,17 +154,6 @@ func (c *Config) initDiscrete(ctx *context.Context) {
 // Sebastian Bruch, Jan Pfeifer, Mathieu Guillame-Bert - https://arxiv.org/pdf/2007.14761
 func (c *Config) Discrete() *Config {
 	c.useDiscrete = true
-	return c
-}
-
-// DiscreteNumPoints sets the number of control points to use for the piecewise constant function.
-// numControlPoints must be greater or equal to 2, and it defaults to 6 and can also be set by using the
-// hyperparameter ParamDiscreteNumControlPoints ("kan_discrete_num_points").
-func (c *Config) DiscreteNumPoints(numControlPoints int) *Config {
-	c.discrete.controlPoints = numControlPoints
-	if c.discrete.controlPoints < 2 {
-		exceptions.Panicf("kan: discrete version requires at least 2 control points, %d given", c.discrete.controlPoints)
-	}
 	return c
 }
 
@@ -265,7 +250,7 @@ func (c *Config) DiscreteInitialSplitPoints(initialValues *tensors.Tensor) *Conf
 		exceptions.Panicf("Split points for Discrete-KAN must be rank-1, got %s instead", initialValues.Shape())
 	}
 	c.discrete.splitPointInitialValue = initialValues
-	c.DiscreteNumPoints(initialValues.Shape().Dim(0) + 1)
+	c.NumControlPoints(initialValues.Shape().Dim(0) + 1)
 	return c
 }
 
@@ -288,8 +273,8 @@ func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int
 
 	if klog.V(2).Enabled() {
 		klog.Infof("kan discreteLayer (%s): (%d+2) x %d x %d = %d weights, splits_trainable=%v\n",
-			ctx.Scope(), c.discrete.controlPoints, numInputNodes, numOutputNodes,
-			(c.discrete.controlPoints)*numInputNodes*numOutputNodes, c.discrete.splitPointsTrainable)
+			ctx.Scope(), c.numControlPoints, numInputNodes, numOutputNodes,
+			(c.numControlPoints)*numInputNodes*numOutputNodes, c.discrete.splitPointsTrainable)
 	}
 
 	// Create control points for piecewise-constant function (PCF)
@@ -312,7 +297,7 @@ func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int
 		return v
 	}
 	controlPointsVar := ctx.WithInitializer(controlPointsInitializer).
-		VariableWithShape("kan_discrete_control_points", shapes.Make(dtype, numOutputNodes, numInputGroups, c.discrete.controlPoints))
+		VariableWithShape("kan_discrete_control_points", shapes.Make(dtype, numOutputNodes, numInputGroups, c.numControlPoints))
 	if c.regularizer != nil {
 		c.regularizer(ctx, g, controlPointsVar)
 	}
@@ -322,13 +307,13 @@ func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int
 	var splitPoints *Node
 	initialSplitPointsT := c.discrete.splitPointInitialValue
 	if initialSplitPointsT == nil {
-		keys := make([]float64, c.discrete.controlPoints-1)
-		if c.discrete.controlPoints > 2 {
+		keys := make([]float64, c.numControlPoints-1)
+		if c.numControlPoints > 2 {
 			// Initialize split points uniformly from rangeMin (-1.0) to rangeMax (1.0)
 			rangeMin, rangeMax := c.discrete.rangeMin, c.discrete.rangeMax
 			rangeLen := rangeMax - rangeMin
 			for ii := range keys {
-				keys[ii] = rangeLen*float64(ii)/float64(c.discrete.controlPoints-2) + rangeMin
+				keys[ii] = rangeLen*float64(ii)/float64(c.numControlPoints-2) + rangeMin
 			}
 		}
 		initialSplitPointsT = tensors.FromValue(keys)
@@ -338,7 +323,7 @@ func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int
 		// Trainable split points: one per input.
 		// * We could also make it learn one per output ... at the cost of more parameters.
 		splitPointsVar := ctx.WithInitializer(initializers.BroadcastTensorToShape(initialSplitPointsT)).
-			VariableWithShape("kan_discrete_split_points", shapes.Make(dtype, 1, numInputGroups, c.discrete.controlPoints-1))
+			VariableWithShape("kan_discrete_split_points", shapes.Make(dtype, 1, numInputGroups, c.numControlPoints-1))
 		if c.discrete.splitPointsFrozen {
 			splitPointsVar.Trainable = false
 		}

@@ -55,7 +55,11 @@ func kanGraphModel(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	x0 := ctx.RandomUniform(g, shapes.Make(dtype, batchSize, 1))
 	x1 := ctx.RandomUniform(g, shapes.Make(dtype, batchSize, 1))
 	labels := targetF(x0, x1)
-	output := kan.New(ctx, Concatenate([]*Node{x0, x1}, -1), 1).NumHiddenLayers(1, 2).BSpline(30).Done()
+	output := kan.New(ctx, Concatenate([]*Node{x0, x1}, -1), 1).
+		NumHiddenLayers(1, 2).
+		NumControlPoints(30).
+		BSpline().
+		Done()
 	return []*Node{output, labels}
 }
 
@@ -105,7 +109,11 @@ func kanLargeGraphModel(ctx *context.Context, spec any, inputs []*Node) []*Node 
 	x0 := ctx.RandomUniform(g, shapes.Make(dtype, batchSize, 1))
 	x1 := ctx.RandomUniform(g, shapes.Make(dtype, batchSize, 1))
 	labels := targetF(x0, x1)
-	output := kan.New(ctx, Concatenate([]*Node{x0, x1}, -1), 1).NumHiddenLayers(1, 4).BSpline(30).Done()
+	output := kan.New(ctx, Concatenate([]*Node{x0, x1}, -1), 1).
+		BSpline().
+		NumHiddenLayers(1, 4).
+		NumControlPoints(30).
+		Done()
 	return []*Node{output, labels}
 }
 

@@ -3,24 +3,25 @@
 // Start with New(ctx, x, numOutputNodes). Configure further as desired. When finished, call Config.Done, and it will
 // return KAN(x), per configuration.
 //
-// It is highly customizable, but the default ties to follow the description on section "2.2 KAN architecture" of
-// the paper.
+// The original KAN paper used B-Spline functions as the univariate functions. This package implements the
+// B-Spline and the following alternatives: Discrete-KAN (aka. piecewise-constant functions or "staircase functions"),
+// GR-KAN (using rational functions, in the form w.P(x)/Q(x) where P(x) and Q(x) are learnable polynomial functions).
+//
+// It is highly customizable, each class of univariate function has several hyperparameters.
 //
 // TODO: Implement "the good" variants from https://github.com/mintisan/awesome-kan
 package kan
 
+// This file holds the "generic" KAN implementation. Each specific univariate function type defintes its own
+// "layer" function as well as hyperparameters.
+
 import (
 	"fmt"
-	"github.com/gomlx/bsplines"
 	"github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/ml/layers/activations"
-	xbsplines "github.com/gomlx/gomlx/ml/layers/bsplines"
 	"github.com/gomlx/gomlx/ml/layers/regularizers"
-	"github.com/gomlx/gomlx/types/shapes"
-	"k8s.io/klog/v2"
 	"slices"
 )
 
@@ -34,9 +35,9 @@ const (
 	ParamNumHiddenNodes = "kan_num_hidden_nodes"
 
 	// ParamNumControlPoints is the hyperparameter that defines the default number of control points
-	// for the bsplines used in the univariate KAN functions.
+	// for the KAN versions that use that.
 	//
-	// If used Discrete-KAN it also defines the number of control points.
+	// It works for both B-Splines KAN (the original) and Discrete-KAN.
 	//
 	// Default is 20.
 	ParamNumControlPoints = "kan_num_points"
@@ -61,28 +62,13 @@ const (
 	// Default is 0, which means no grouping.
 	ParamInputGroupSize = "kan_input_group_size"
 
-	//------------------------------ b-spline specific parameters ---------------------------------------//
-
-	// ParamBSplineDegree is the hyperparameter that defines the default value for the bspline degree used in
-	// the univariate KAN functions.
-	// Default is 2.
-	ParamBSplineDegree = "kan_bspline_degree"
-
 	// ParamConstantRegularizationL1 adds a regularization of the difference among the different control points, pushing
-	// the learned function to be a constant. Works for both B-Splines KAN (the original) and Discrete-KAN.
+	// the learned function to be a constant.
+	//
+	// It works for both B-Splines KAN (the original) and Discrete-KAN.
 	//
 	// Default 0.0
 	ParamConstantRegularizationL1 = "kan_const_l1_reg"
-
-	// ParamBSplineMagnitudeL2 is the hyperparameter that defines the default L2 regularization amount for the bspline
-	// learned magnitude parameters.
-	// Default is 0.
-	ParamBSplineMagnitudeL2 = "kan_bspline_magnitude_l2"
-
-	// ParamBSplineMagnitudeL1 is the hyperparameter that defines the default L1 regularization amount for the bspline
-	// learned magnitude parameters.
-	// Default is 0.
-	ParamBSplineMagnitudeL1 = "kan_bspline_magnitude_l1"
 )
 
 // Config is created with New and can be configured with its methods, or simply setting the corresponding
@@ -96,10 +82,10 @@ type Config struct {
 	regularizer                     regularizers.Regularizer
 	useResidual, useMean            bool
 	inputGroupSize                  int
+	numControlPoints                int
 
-	bsplineNumControlPoints, bsplineDegree int
-	bsplineMagnitudeTerms                  bool
-	bsplineMagnitudeRegularizer            regularizers.Regularizer
+	// BSpline (standard) KAN
+	bspline bsplineConfig
 
 	// Discrete-KAN
 	useDiscrete bool
@@ -121,24 +107,21 @@ type Config struct {
 // axes (we'll call them "batch axes").
 func New(ctx *context.Context, input *Node, numOutputNodes int) *Config {
 	c := &Config{
-		ctx:             ctx,
-		input:           input,
-		numOutputNodes:  numOutputNodes,
-		numHiddenLayers: context.GetParamOr(ctx, ParamNumHiddenLayers, 0),
-		numHiddenNodes:  context.GetParamOr(ctx, ParamNumHiddenNodes, 10),
-		activation:      activations.FromName(context.GetParamOr(ctx, activations.ParamActivation, "silu")),
-		regularizer:     regularizers.FromContext(ctx),
-		useResidual:     context.GetParamOr(ctx, ParamResidual, true),
-		useMean:         context.GetParamOr(ctx, ParamMean, true),
-		inputGroupSize:  context.GetParamOr(ctx, ParamInputGroupSize, int(0)),
-
-		bsplineNumControlPoints: context.GetParamOr(ctx, ParamNumControlPoints, 20),
-		bsplineDegree:           context.GetParamOr(ctx, ParamBSplineDegree, 2),
-		bsplineMagnitudeTerms:   true,
-
-		useDiscrete: context.GetParamOr(ctx, ParamDiscrete, false),
-		useRational: context.GetParamOr(ctx, ParamRational, false),
+		ctx:              ctx,
+		input:            input,
+		numOutputNodes:   numOutputNodes,
+		numHiddenLayers:  context.GetParamOr(ctx, ParamNumHiddenLayers, 0),
+		numHiddenNodes:   context.GetParamOr(ctx, ParamNumHiddenNodes, 10),
+		activation:       activations.FromName(context.GetParamOr(ctx, activations.ParamActivation, "none")),
+		regularizer:      regularizers.FromContext(ctx),
+		useResidual:      context.GetParamOr(ctx, ParamResidual, true),
+		useMean:          context.GetParamOr(ctx, ParamMean, true),
+		inputGroupSize:   context.GetParamOr(ctx, ParamInputGroupSize, int(0)),
+		numControlPoints: context.GetParamOr(ctx, ParamNumControlPoints, 20),
+		useDiscrete:      context.GetParamOr(ctx, ParamDiscrete, false),
+		useRational:      context.GetParamOr(ctx, ParamRational, false),
 	}
+	c.initBSpline(ctx)
 	c.initDiscrete(ctx)
 	c.initRational(ctx)
 
@@ -146,17 +129,6 @@ func New(ctx *context.Context, input *Node, numOutputNodes int) *Config {
 	if constL1amount > 0 {
 		c.regularizer = regularizers.Combine(c.regularizer, regularizers.ConstantL1(constL1amount))
 	}
-
-	var magRegs []regularizers.Regularizer
-	magL2 := context.GetParamOr(ctx, ParamBSplineMagnitudeL2, 0.0)
-	if magL2 > 0 {
-		magRegs = append(magRegs, regularizers.L2(magL2))
-	}
-	magL1 := context.GetParamOr(ctx, ParamBSplineMagnitudeL1, 0.0)
-	if magL1 > 0 {
-		magRegs = append(magRegs, regularizers.L1(magL1))
-	}
-	c.bsplineMagnitudeRegularizer = regularizers.Combine(magRegs...)
 
 	if input.Rank() < 2 {
 		exceptions.Panicf("kan: input must be rank at least 2, got input.shape=%s", input.Shape())
@@ -182,8 +154,10 @@ func (c *Config) NumHiddenLayers(numLayers, numHiddenNodes int) *Config {
 
 // Activation sets the activation for the KAN, which is applied after the sum.
 //
-// Following the paper, it defaults to "silu" (== "swish"), but it will be overridden if the hyperparameter
+// Following the paper, it defaults to "none", but it will be overridden if the hyperparameter
 // layers.ParamActivation (="activation") is set in the context.
+//
+// Most KAN functions are already non-linear, and don't require activation.
 func (c *Config) Activation(activation activations.Type) *Config {
 	c.activation = activation
 	return c
@@ -218,7 +192,7 @@ func (c *Config) UseMean(useMean bool) *Config {
 //
 // The last dimension of the input must be divisible by this number.
 //
-// Only implemented by Discrete-KAN for now.
+// Only implemented by Discrete-KAN and GR-KAN for now.
 //
 // The default is 0, which means no grouping. It can be configured with the ParamInputGroupSize hyperparameter.
 func (c *Config) InputGroupSize(inputGroupSize int) *Config {
@@ -226,23 +200,12 @@ func (c *Config) InputGroupSize(inputGroupSize int) *Config {
 	return c
 }
 
-// BSpline configures the KAN to use b-splines to model \phi(x), the univariate function described in the KAN the paper.
-// It also sets the number of control points to use to model the function.
+// NumControlPoints is used by BSpline (standard) KAN and Discrete-KAN to define the number of points
+// used to control the univariate functions.
 //
-// The numControlPoints must be greater or equal to 3, and it defaults to 20 and can also be set by using the
-// hyperparameter ParamNumControlPoints ("kan_num_points").
-func (c *Config) BSpline(numControlPoints int) *Config {
-	c.useDiscrete = false
-	c.bsplineNumControlPoints = numControlPoints
-	return c
-}
-
-// WithBSplineMagnitudeRegularizer to be applied to the magnitude weights for BSpline.
-// Default is none, but can be changed with hyperparameters ParamBSplineMagnitudeL2 and ParamBSplineMagnitudeL1.
-//
-// For BSpline models it applies the regularizer to the control-points.
-func (c *Config) WithBSplineMagnitudeRegularizer(regularizer regularizers.Regularizer) *Config {
-	c.bsplineMagnitudeRegularizer = regularizer
+// The default is 10, and it can be configured with the ParamNumControlPoints hyperparameter.
+func (c *Config) NumControlPoints(numControlPoints int) *Config {
+	c.numControlPoints = numControlPoints
 	return c
 }
 
@@ -297,78 +260,4 @@ func (c *Config) Done() *Node {
 		x = Reshape(x, outputShape...)
 	}
 	return x
-}
-
-// bsplineLayer implements one KAN bsplineLayer. x is expected to be rank-2.
-func (c *Config) bsplineLayer(ctx *context.Context, x *Node, numOutputNodes int) *Node {
-	g := x.Graph()
-	dtype := x.DType()
-	residual := x
-	numInputNodes := x.Shape().Dimensions[x.Rank()-1]
-	batchSize := x.Shape().Dimensions[0]
-	if c.inputGroupSize > 1 {
-		exceptions.Panicf("B-Spline KAN does not support input groups (kan_input_group_size > 1) yet -- kan_input_group_size set to %d.", c.inputGroupSize)
-	}
-
-	if klog.V(2).Enabled() {
-		klog.Infof("kan bsplineLayer (%s): (%d+2) x %d x %d = %d weights\n",
-			ctx.Scope(), c.bsplineNumControlPoints, numInputNodes, numOutputNodes,
-			(c.bsplineNumControlPoints+2)*numInputNodes*numOutputNodes)
-	}
-
-	// Magnitude terms w_b (residual) and w_s (spline) from the paper.
-	// Notice we dropped the initializations suggested by the paper because the seemed much worse in all my experiments.
-	var weightsSplines, weightsResidual *Node
-	if c.bsplineMagnitudeTerms {
-		weightsSplinesVar := ctx.WithInitializer(initializers.One).
-			VariableWithShape("w_splines", shapes.Make(dtype, 1, numOutputNodes, numInputNodes))
-		if c.bsplineMagnitudeRegularizer != nil {
-			c.bsplineMagnitudeRegularizer(ctx, g, weightsSplinesVar)
-		}
-		weightsSplines = weightsSplinesVar.ValueGraph(g)
-		if c.useResidual {
-			weightsResidualVar := ctx.WithInitializer(initializers.XavierUniformFn(ctx)).
-				VariableWithShape("w_residual", shapes.Make(dtype, 1, numOutputNodes, numInputNodes))
-			weightsResidual = weightsResidualVar.ValueGraph(g)
-			if c.bsplineMagnitudeRegularizer != nil {
-				c.bsplineMagnitudeRegularizer(ctx, g, weightsResidualVar)
-			}
-		}
-	}
-
-	// Apply B-spline:
-	b := bsplines.NewRegular(c.bsplineDegree, c.bsplineNumControlPoints).WithExtrapolation(bsplines.ExtrapolateLinear)
-	controlPointsVar := ctx.WithInitializer(initializers.RandomNormalFn(ctx, 0.01)).
-		VariableWithShape("bspline_control_points", shapes.Make(dtype, numInputNodes, numOutputNodes, c.bsplineNumControlPoints))
-	if c.regularizer != nil {
-		c.regularizer(ctx, g, controlPointsVar)
-	}
-	controlPoints := controlPointsVar.ValueGraph(g)
-	output := xbsplines.Evaluate(b, x, controlPoints)
-	output.AssertDims(batchSize, numOutputNodes, numInputNodes) // Shape=[batch, outputs, inputs]
-
-	// Per section "2.2 Kan Architecture"
-	if c.bsplineMagnitudeTerms {
-		output = Mul(output, weightsSplines)
-	}
-	if c.useResidual {
-		residual = activations.Apply(c.activation, residual)
-		residual = ExpandDims(residual, 1)
-		residual.AssertDims(batchSize, 1, numInputNodes)
-		if c.bsplineMagnitudeTerms {
-			residual = Mul(residual, weightsResidual)
-		}
-		output = Add(output, residual)
-	}
-
-	// Reduce the inputs to get the outputs:
-	if c.useMean {
-		output = ReduceMean(output, -1)
-	} else {
-		// ReduceSum requires Xavier initialization (initializer.XavierUniformFn)
-		// whose magnitude is Sqrt(6/(fanIn+fanOut)) not to grow exponentially with the number of layers.
-		output = ReduceSum(output, -1)
-	}
-	output.AssertDims(batchSize, numOutputNodes) // Shape=[batch, outputs]
-	return output
 }
