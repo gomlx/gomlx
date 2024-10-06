@@ -47,25 +47,29 @@ func createDefaultContext() *context.Context {
 		// KAN network parameters:
 		// They are used only for readout layers -- they have worked very poorly for deeper networks.
 		// Also, one should decrease the learning rate to use them.
-		"kan":                                 false, // Enable kan
-		kan.ParamNumControlPoints:             6,     // Number of control points for B-Spline (default) KAN.
+		"kan":                             false, // Enable kan
+		kan.ParamNumControlPoints:         10,    // Number of control points for KAN.
+		kan.ParamInputGroupSize:           1,
+		kan.ParamResidual:                 true,
+		kan.ParamConstantRegularizationL1: 0.0,
+
+		// Discrete-KAN exclusive parameters.
 		kan.ParamDiscrete:                     false,
 		kan.ParamDiscretePerturbation:         "normal",
-		kan.ParamDiscreteNumControlPoints:     10,
-		kan.ParamInputGroupSize:               1,
 		kan.ParamDiscreteSplitPointsTrainable: false, // Discrete-KAN trainable split-points.
 		kan.ParamDiscreteSplitPointsFrozen:    false, // Discrete-KAN trainable split-points should be frozen.
 		kan.ParamDiscreteSplitsMargin:         0.1,   // Discrete-KAN trainable split-points margin.
 		kan.ParamDiscreteSoftness:             0.03,  // Discrete-KAN softness
 		kan.ParamDiscreteSoftnessSchedule:     kan.SoftnessScheduleExponential.String(),
-		kan.ParamResidual:                     true,
-		kan.ParamConstantRegularizationL1:     0.0,
 
-		// Experimental GR-KAN version, using KAN with rational functions as univariate learnable functions.
-		"grkan":                  false, // Enable GR-Kan
-		"grkan_num_input_groups": 4,     // Number of input groups, set to 0 to disable.
+		// GR-KAN (rational functions KAN) exclusive parameters.
+		kan.ParamRational:                     false, // Enable GR-Kan
+		kan.ParamRationalNumeratorDegree:      5,
+		kan.ParamRationalDenominatorDegree:    4,
+		kan.ParamRationalInitialApproximation: "identity",
 
-		optimizers.ParamOptimizer:           "adam",
+		// Optimizer parameters.
+		optimizers.ParamOptimizer:           "adamw",
 		optimizers.ParamLearningRate:        0.001,
 		optimizers.ParamCosineScheduleSteps: 0,
 		optimizers.ParamClipStepByValue:     0.0,
@@ -92,7 +96,7 @@ func createDefaultContext() *context.Context {
 		mag.ParamSplitEmbedTablesSize: 1,
 		mag.ParamReuseKernels:         true,
 		mag.ParamIdentitySubSeeds:     true,
-		mag.ParamDType:                "float32",
+		mag.ParamDType:                "float16",
 	})
 	ctx.In("readout").SetParam(gnn.ParamUpdateNumHiddenLayers, 2)
 	return ctx

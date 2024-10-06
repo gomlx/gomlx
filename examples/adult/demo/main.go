@@ -102,7 +102,6 @@ func createDefaultContext() *context.Context {
 		kan.ParamDiscreteSoftness:             0.1,
 		kan.ParamDiscreteSoftnessSchedule:     kan.SoftnessScheduleNone.String(),
 		kan.ParamDiscreteSplitPointsTrainable: true,
-		kan.ParamDiscreteNumControlPoints:     20,
 		kan.ParamResidual:                     true,
 	})
 	return ctx

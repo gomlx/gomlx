@@ -14,7 +14,6 @@ import (
 	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/ml/layers/fnn"
 	"github.com/gomlx/gomlx/ml/layers/kan"
-	"github.com/gomlx/gomlx/ml/layers/rational"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
@@ -451,11 +450,6 @@ func updateState(ctx *context.Context, prevState, input, mask *Node) *Node {
 	if useKAN {
 		return kanUpdateState(ctx, prevState, input, mask)
 	}
-	useGRKAN := context.GetParamOr(ctx, "grkan", false)
-	if useGRKAN {
-		return grkanUpdateState(ctx, prevState, input, mask)
-	}
-
 	updateType := context.GetParamOr(ctx, ParamUpdateStateType, "residual")
 	if updateType != "residual" && updateType != "none" {
 		Panicf("invalid GNN update type %q (given by parameter %q) -- valid values are 'residual' and 'none'",
@@ -541,31 +535,6 @@ func kanUpdateState(ctx *context.Context, prevState, input, mask *Node) *Node {
 	}
 	if NanLogger != nil {
 		NanLogger.Trace(state, fmt.Sprintf("(KAN)UpdateState(%s)", ctx.Scope()))
-	}
-	return state
-}
-
-// grkanUpdateState is a version of updateState using GRKAN networks.
-func grkanUpdateState(ctx *context.Context, prevState, input, mask *Node) *Node {
-	grkanNumInputGroups := context.GetParamOr(ctx, "grkan_num_input_groups", 0)
-	stateDim := context.GetParamOr(ctx, ParamStateDim, 128)
-	numLayers := 1 + context.GetParamOr(ctx, ParamUpdateNumHiddenLayers, 0)
-	state := input
-	for _ = range numLayers {
-		state = rational.New(ctx, state).
-			Approximate("identity").
-			WithMultiplier(true).
-			WithInputGroups(grkanNumInputGroups).
-			WithMultipleOutputs(stateDim).
-			Done()
-		state = ReduceSum(state, -2) // Reduce sum over the input embeddings.
-	}
-	state = layers.DropoutFromContext(ctx, state)
-	//state = layers.MaskedNormalizeFromContext(ctx.In("normalization"), state, mask)
-
-	updateType := context.GetParamOr(ctx, ParamUpdateStateType, "residual")
-	if updateType == "residual" && prevState.Shape().Equal(state.Shape()) {
-		state = Add(state, prevState)
 	}
 	return state
 }
