@@ -27,11 +27,11 @@ var (
 
 	// ParamRationalInitialApproximation configures how to initialize the values of the rational functions.
 	// Valid values are "identity", "swish", "relu". See rational if the approximation is not given for the
-	// given degrees combination.
+	// given the degrees combination.
 	ParamRationalInitialApproximation = "kan_rational_approximate"
 )
 
-// rationalConfig holds the configuration for GR-KANs
+// rationalConfig holds the configuration exclusive for GR-KANs
 type rationalConfig struct {
 	numDegree, denDegree          int
 	initialApproximation, version string

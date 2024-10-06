@@ -20,8 +20,6 @@ import (
 	xbsplines "github.com/gomlx/gomlx/ml/layers/bsplines"
 	"github.com/gomlx/gomlx/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensors"
-	"github.com/gomlx/gomlx/types/xslices"
 	"k8s.io/klog/v2"
 	"slices"
 )
@@ -103,15 +101,11 @@ type Config struct {
 	bsplineMagnitudeTerms                  bool
 	bsplineMagnitudeRegularizer            regularizers.Regularizer
 
-	useDiscrete                                             bool
-	discretePerturbation                                    PerturbationType
-	discreteControlPoints                                   int
-	discreteSoftness                                        float64
-	discreteSoftnessSchedule                                SoftnessScheduleType
-	discreteSplitPointsTrainable, discreteSplitPointsFrozen bool
-	discreteRangeMin, discreteRangeMax                      float64
-	discreteSplitPointInitialValue                          *tensors.Tensor
+	// Discrete-KAN
+	useDiscrete bool
+	discrete    discreteConfig
 
+	// GR-KAN (Rational functions)
 	useRational bool
 	rational    rationalConfig
 }
@@ -142,35 +136,11 @@ func New(ctx *context.Context, input *Node, numOutputNodes int) *Config {
 		bsplineDegree:           context.GetParamOr(ctx, ParamBSplineDegree, 2),
 		bsplineMagnitudeTerms:   true,
 
-		useDiscrete:                  context.GetParamOr(ctx, ParamDiscrete, false),
-		discreteControlPoints:        context.GetParamOr(ctx, ParamDiscreteNumControlPoints, 6),
-		discreteSoftness:             context.GetParamOr(ctx, ParamDiscreteSoftness, 0.1),
-		discreteSplitPointsTrainable: context.GetParamOr(ctx, ParamDiscreteSplitPointsTrainable, false),
-		discreteSplitPointsFrozen:    context.GetParamOr(ctx, ParamDiscreteSplitPointsFrozen, false),
+		useDiscrete: context.GetParamOr(ctx, ParamDiscrete, false),
+		useRational: context.GetParamOr(ctx, ParamRational, false),
 	}
-	c = c.DiscreteInputRange(-1, 1)
+	c.initDiscrete(ctx)
 	c.initRational(ctx)
-
-	perturbationStr := context.GetParamOr(ctx, ParamDiscretePerturbation, "triangular")
-	switch perturbationStr {
-	case "", "triangular":
-		c.discretePerturbation = PerturbationTriangular
-	case "normal":
-		c.discretePerturbation = PerturbationNormal
-	default:
-		exceptions.Panicf("Invalid Discrete-KAN perturbation given by context[%q]: %q -- valid values are "+
-			"\"triangular\", \"normal\"", ParamDiscretePerturbation, perturbationStr)
-	}
-
-	softnessScheduleStr := context.GetParamOr(ctx, ParamDiscreteSoftnessSchedule, SoftnessScheduleNone.String())
-	var err error
-	c.discreteSoftnessSchedule, err = SoftnessScheduleTypeString(softnessScheduleStr)
-	if err != nil {
-		values := xslices.Iota(SoftnessScheduleNone, int(SoftnessScheduleLast))
-		valuesStr := xslices.Map(values, func(v SoftnessScheduleType) string { return v.String() })
-		exceptions.Panicf("Invalid Discrete-KAN hyperparameter %q: %q -- valid values are %q",
-			ParamDiscreteSoftnessSchedule, softnessScheduleStr, valuesStr)
-	}
 
 	constL1amount := context.GetParamOr(ctx, ParamConstantRegularizationL1, 0.0)
 	if constL1amount > 0 {

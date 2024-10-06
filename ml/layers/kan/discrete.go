@@ -9,6 +9,7 @@ import (
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	"k8s.io/klog/v2"
 	"math"
@@ -89,6 +90,48 @@ var (
 	ParamDiscreteSplitsMargin = "kan_discrete_splits_margin"
 )
 
+// discreteConfig holds the configuration exclusive for Discrete-KANs.
+type discreteConfig struct {
+	perturbation                            PerturbationType
+	controlPoints                           int
+	softness                                float64
+	softnessSchedule                        SoftnessScheduleType
+	splitPointsTrainable, splitPointsFrozen bool
+	rangeMin, rangeMax                      float64
+	splitPointInitialValue                  *tensors.Tensor
+}
+
+// initDiscrete initializes the default values for Discrete-KANs based on context.
+func (c *Config) initDiscrete(ctx *context.Context) {
+	c.discrete.controlPoints = context.GetParamOr(ctx, ParamDiscreteNumControlPoints, 6)
+	c.discrete.softness = context.GetParamOr(ctx, ParamDiscreteSoftness, 0.1)
+	c.discrete.splitPointsTrainable = context.GetParamOr(ctx, ParamDiscreteSplitPointsTrainable, false)
+	c.discrete.splitPointsFrozen = context.GetParamOr(ctx, ParamDiscreteSplitPointsFrozen, false)
+	c.DiscreteInputRange(-1, 1)
+
+	perturbationStr := context.GetParamOr(ctx, ParamDiscretePerturbation, "triangular")
+	switch perturbationStr {
+	case "", "triangular":
+		c.discrete.perturbation = PerturbationTriangular
+	case "normal":
+		c.discrete.perturbation = PerturbationNormal
+	default:
+		exceptions.Panicf("Invalid Discrete-KAN perturbation given by context[%q]: %q -- valid values are "+
+			"\"triangular\", \"normal\"", ParamDiscretePerturbation, perturbationStr)
+	}
+
+	softnessScheduleStr := context.GetParamOr(ctx, ParamDiscreteSoftnessSchedule, SoftnessScheduleNone.String())
+	var err error
+	c.discrete.softnessSchedule, err = SoftnessScheduleTypeString(softnessScheduleStr)
+	if err != nil {
+		values := xslices.Iota(SoftnessScheduleNone, int(SoftnessScheduleLast))
+		valuesStr := xslices.Map(values, func(v SoftnessScheduleType) string { return v.String() })
+		exceptions.Panicf("Invalid Discrete-KAN hyperparameter %q: %q -- valid values are %q",
+			ParamDiscreteSoftnessSchedule, softnessScheduleStr, valuesStr)
+	}
+
+}
+
 // Discrete configures the KAN to use a "piecewise-constant" functions (as opposed to splines) to model \phi(x),
 // the univariate function used in the pape, and set the number of control points to use for the function.
 //
@@ -122,9 +165,9 @@ func (c *Config) Discrete() *Config {
 // numControlPoints must be greater or equal to 2, and it defaults to 6 and can also be set by using the
 // hyperparameter ParamDiscreteNumControlPoints ("kan_discrete_num_points").
 func (c *Config) DiscreteNumPoints(numControlPoints int) *Config {
-	c.discreteControlPoints = numControlPoints
-	if c.discreteControlPoints < 2 {
-		exceptions.Panicf("kan: discrete version requires at least 2 control points, %d given", c.discreteControlPoints)
+	c.discrete.controlPoints = numControlPoints
+	if c.discrete.controlPoints < 2 {
+		exceptions.Panicf("kan: discrete version requires at least 2 control points, %d given", c.discrete.controlPoints)
 	}
 	return c
 }
@@ -134,7 +177,7 @@ func (c *Config) DiscreteNumPoints(numControlPoints int) *Config {
 //
 // The default is 0.1, and it can be set with the hyperparameter ParamDiscreteSoftness ("kan_discrete_softness").
 func (c *Config) DiscreteSoftness(softness float64) *Config {
-	c.discreteSoftness = softness
+	c.discrete.softness = softness
 	return c
 }
 
@@ -165,7 +208,7 @@ const (
 //
 // It defaults to SoftnessScheduleNone (0)
 func (c *Config) DiscreteSoftnessScheduleType(schedule SoftnessScheduleType) *Config {
-	c.discreteSoftnessSchedule = schedule
+	c.discrete.softnessSchedule = schedule
 	return c
 }
 
@@ -178,7 +221,7 @@ func (c *Config) DiscreteSoftnessScheduleType(schedule SoftnessScheduleType) *Co
 //
 // Default is false, and can be set with the context hyperparameter ParamDiscreteSplitPointsTrainable.
 func (c *Config) DiscreteSplitsTrainable(trainable bool) *Config {
-	c.discreteSplitPointsTrainable = trainable
+	c.discrete.splitPointsTrainable = trainable
 	return c
 }
 
@@ -190,7 +233,7 @@ func (c *Config) DiscreteSplitsTrainable(trainable bool) *Config {
 //
 // Default is false and can be set with the context hyperparameter ParamDiscreteSplitPointsFrozen.
 func (c *Config) DiscreteSplitsFrozen(frozen bool) *Config {
-	c.discreteSplitPointsFrozen = frozen
+	c.discrete.splitPointsFrozen = frozen
 	return c
 }
 
@@ -206,7 +249,7 @@ func (c *Config) DiscreteInputRange(rangeMin, rangeMax float64) *Config {
 		exceptions.Panicf("invalid range [%g, %g] given to DiscreteInputRange: it must observe rangeMax > rangeMin",
 			rangeMin, rangeMax)
 	}
-	c.discreteRangeMin, c.discreteRangeMax = rangeMin, rangeMax
+	c.discrete.rangeMin, c.discrete.rangeMax = rangeMin, rangeMax
 	return c
 }
 
@@ -221,7 +264,7 @@ func (c *Config) DiscreteInitialSplitPoints(initialValues *tensors.Tensor) *Conf
 	if initialValues.Rank() != 1 {
 		exceptions.Panicf("Split points for Discrete-KAN must be rank-1, got %s instead", initialValues.Shape())
 	}
-	c.discreteSplitPointInitialValue = initialValues
+	c.discrete.splitPointInitialValue = initialValues
 	c.DiscreteNumPoints(initialValues.Shape().Dim(0) + 1)
 	return c
 }
@@ -245,8 +288,8 @@ func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int
 
 	if klog.V(2).Enabled() {
 		klog.Infof("kan discreteLayer (%s): (%d+2) x %d x %d = %d weights, splits_trainable=%v\n",
-			ctx.Scope(), c.discreteControlPoints, numInputNodes, numOutputNodes,
-			(c.discreteControlPoints)*numInputNodes*numOutputNodes, c.discreteSplitPointsTrainable)
+			ctx.Scope(), c.discrete.controlPoints, numInputNodes, numOutputNodes,
+			(c.discrete.controlPoints)*numInputNodes*numOutputNodes, c.discrete.splitPointsTrainable)
 	}
 
 	// Create control points for piecewise-constant function (PCF)
@@ -269,7 +312,7 @@ func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int
 		return v
 	}
 	controlPointsVar := ctx.WithInitializer(controlPointsInitializer).
-		VariableWithShape("kan_discrete_control_points", shapes.Make(dtype, numOutputNodes, numInputGroups, c.discreteControlPoints))
+		VariableWithShape("kan_discrete_control_points", shapes.Make(dtype, numOutputNodes, numInputGroups, c.discrete.controlPoints))
 	if c.regularizer != nil {
 		c.regularizer(ctx, g, controlPointsVar)
 	}
@@ -277,26 +320,26 @@ func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int
 
 	// splitPoints: start from values distributed between -1 and 1, and let them be trained.
 	var splitPoints *Node
-	initialSplitPointsT := c.discreteSplitPointInitialValue
+	initialSplitPointsT := c.discrete.splitPointInitialValue
 	if initialSplitPointsT == nil {
-		keys := make([]float64, c.discreteControlPoints-1)
-		if c.discreteControlPoints > 2 {
+		keys := make([]float64, c.discrete.controlPoints-1)
+		if c.discrete.controlPoints > 2 {
 			// Initialize split points uniformly from rangeMin (-1.0) to rangeMax (1.0)
-			rangeMin, rangeMax := c.discreteRangeMin, c.discreteRangeMax
+			rangeMin, rangeMax := c.discrete.rangeMin, c.discrete.rangeMax
 			rangeLen := rangeMax - rangeMin
 			for ii := range keys {
-				keys[ii] = rangeLen*float64(ii)/float64(c.discreteControlPoints-2) + rangeMin
+				keys[ii] = rangeLen*float64(ii)/float64(c.discrete.controlPoints-2) + rangeMin
 			}
 		}
 		initialSplitPointsT = tensors.FromValue(keys)
 	}
-	if c.discreteSplitPointsTrainable {
+	if c.discrete.splitPointsTrainable {
 
 		// Trainable split points: one per input.
 		// * We could also make it learn one per output ... at the cost of more parameters.
 		splitPointsVar := ctx.WithInitializer(initializers.BroadcastTensorToShape(initialSplitPointsT)).
-			VariableWithShape("kan_discrete_split_points", shapes.Make(dtype, 1, numInputGroups, c.discreteControlPoints-1))
-		if c.discreteSplitPointsFrozen {
+			VariableWithShape("kan_discrete_split_points", shapes.Make(dtype, 1, numInputGroups, c.discrete.controlPoints-1))
+		if c.discrete.splitPointsFrozen {
 			splitPointsVar.Trainable = false
 		}
 		splitPoints = splitPointsVar.ValueGraph(g)
@@ -317,11 +360,11 @@ func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int
 	}
 
 	var output *Node
-	if c.discreteSoftness <= 0 || !ctx.IsTraining(g) {
+	if c.discrete.softness <= 0 || !ctx.IsTraining(g) {
 		output = PiecewiseConstantFunction(x, controlPoints, splitPoints)
 	} else {
-		softness := c.scheduledSoftness(ctx, Scalar(g, dtype, c.discreteSoftness))
-		output = PiecewiseConstantFunctionWithInputPerturbation(x, controlPoints, splitPoints, c.discretePerturbation, softness)
+		softness := c.scheduledSoftness(ctx, Scalar(g, dtype, c.discrete.softness))
+		output = PiecewiseConstantFunctionWithInputPerturbation(x, controlPoints, splitPoints, c.discrete.perturbation, softness)
 	}
 	output.AssertDims(batchSize, numOutputNodes, numInputNodes) // Shape=[batch, outputs, inputs]
 
@@ -343,7 +386,7 @@ func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int
 
 // scheduledSoftness adjust the base softness according to the configured schedule.
 func (c *Config) scheduledSoftness(ctx *context.Context, base *Node) *Node {
-	if c.discreteSoftnessSchedule == SoftnessScheduleNone {
+	if c.discrete.softnessSchedule == SoftnessScheduleNone {
 		return base
 	}
 
@@ -360,7 +403,7 @@ func (c *Config) scheduledSoftness(ctx *context.Context, base *Node) *Node {
 	scheduleTime = Where(LessThan(lastStep, zero), zero, scheduleTime)
 	const epsilon = 1e-5
 
-	switch c.discreteSoftnessSchedule {
+	switch c.discrete.softnessSchedule {
 	case SoftnessScheduleLinear:
 		schedule := AddScalar(OneMinus(scheduleTime), epsilon)
 		return Mul(base, ConvertDType(schedule, dtype))
@@ -377,7 +420,7 @@ func (c *Config) scheduledSoftness(ctx *context.Context, base *Node) *Node {
 		cosineSchedule = AddScalar(cosineSchedule, epsilon)
 		return Mul(base, ConvertDType(cosineSchedule, dtype))
 	default:
-		exceptions.Panicf("invalid Discrete-KAN softness schedule: %s", c.discreteSoftnessSchedule)
+		exceptions.Panicf("invalid Discrete-KAN softness schedule: %s", c.discrete.softnessSchedule)
 	}
 	return nil
 }
