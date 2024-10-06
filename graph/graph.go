@@ -283,7 +283,7 @@ func (g *Graph) AssertConfiguring() {
 func (g *Graph) AssertBuilding() {
 	g.AssertValid()
 	if g.executable != nil {
-		exceptions.Panicf("Graph %q has already been compiled, one cannot further build computions with it", g.name)
+		exceptions.Panicf("Graph %q has already been compiled, one cannot further build computations with it", g.name)
 	}
 	_ = g.build()
 }

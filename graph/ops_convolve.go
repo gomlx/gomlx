@@ -196,8 +196,13 @@ func (conv *ConvolutionBuilder) NoPadding() *ConvolutionBuilder {
 // PaddingPerDim specifies the paddings at the start and at the end to use per spatial dimension,
 // that means one pair ([2]int) per spatial dimension.
 //
+// If a nil value for paddings is given, this have no effect.
+//
 // The default is no padding. See also NoPadding and PadSame.
 func (conv *ConvolutionBuilder) PaddingPerDim(paddings [][2]int) *ConvolutionBuilder {
+	if paddings == nil {
+		return conv
+	}
 	if len(paddings) != conv.numSpatialDims {
 		Panicf("received %d paddings in PaddingPerDim, but x has %d spatial dimensions",
 			len(paddings), conv.numSpatialDims)
@@ -260,7 +265,7 @@ func (conv *ConvolutionBuilder) InputDilationPerDim(dilations ...int) *Convoluti
 	return conv
 }
 
-// Done indicates that the convolve operation is finished being configured and
+// Done indicates that the convolve operation is finished being configured, and
 // it updates the computation graph with convolution, and returns the resulting
 // Node.
 func (conv *ConvolutionBuilder) Done() *Node {
@@ -305,7 +310,7 @@ func (conv *ConvolutionBuilder) Done() *Node {
 			conv.strides, conv.filterDilation)
 	}
 
-	return checkedConvGeneralDilated(conv.x, conv.kernel,
+	return ConvGeneralDilated(conv.x, conv.kernel,
 		conv.axes, conv.strides,
 		paddings, conv.inputDilation, conv.filterDilation,
 		conv.filterGroupCount, conv.batchGroupCount)
@@ -316,7 +321,7 @@ func (conv *ConvolutionBuilder) Done() *Node {
 // Input and output has batch and channel axes. Kernel has inputChannel and outputChannel axes.
 type ConvolveAxesConfig = backends.ConvolveAxesConfig
 
-// checkedConvGeneralDilated is a generic Convolution operation. See Convolve for the simpler version.
+// ConvGeneralDilated is a generic Convolution operation. See Convolve for the simpler version.
 // featureAxisAfter defines whether the features (aka. channels or depth) axis comes after the
 // spatial dimension. Example: a 2D input can be one of the two:
 //
@@ -327,16 +332,16 @@ type ConvolveAxesConfig = backends.ConvolveAxesConfig
 // (XLA documentation is really poor here, much is guess-work).
 // Also useful is https://arxiv.org/pdf/1603.07285v1.pdf.
 // Not exported for now, hopefully Convolve will suffice.
-func checkedConvGeneralDilated(input, filter *Node, axes ConvolveAxesConfig,
+func ConvGeneralDilated(input, kernel *Node, axes ConvolveAxesConfig,
 	strides []int, paddings [][2]int, inputDilation, filterDilation []int,
 	filterGroupCount, batchGroupCount int) *Node {
-	_ = validateBuildingGraphFromInputs(input, filter)
+	_ = validateBuildingGraphFromInputs(input, kernel)
 	numSpatialDims := input.Rank() - 2
 	if len(axes.InputSpatial) != numSpatialDims || len(axes.OutputSpatial) != numSpatialDims || len(axes.KernelSpatial) != numSpatialDims {
-		Panicf("checkedConvGeneralDilated: input has %d spatial dimensions, but axes configuration has %d, %d, %d spatial axes configured "+
+		Panicf("ConvGeneralDilated: input has %d spatial dimensions, but axes configuration has %d, %d, %d spatial axes configured "+
 			"for input/kernel/output", numSpatialDims, len(axes.InputSpatial), len(axes.KernelSpatial), len(axes.OutputSpatial))
 	}
-	return backendConvGeneralDilated(input, filter, axes, strides, paddings, inputDilation, filterDilation, filterGroupCount, batchGroupCount)
+	return backendConvGeneralDilated(input, kernel, axes, strides, paddings, inputDilation, filterDilation, filterGroupCount, batchGroupCount)
 }
 
 func convGeneralDilatedVJP(node, v *Node, _ shapes.Shape) []*Node {

@@ -145,3 +145,26 @@ func FromContext(ctx *context.Context) Regularizer {
 	}
 	return Combine(regs...)
 }
+
+// ConstantL1 returns an L1 regularizer applied to the ConsecutiveDifference of the last axis of the weights.
+// This has the effect of pushing each value towards its neighbours, that is, a constant function.
+//
+// This is useful for control points in piecewise-linear, piecewise-constant or b-spline functions, when one wants to make
+// points that are not trained much to move towards the mean of its neighbours.
+func ConstantL1(amount float64) Regularizer {
+	return func(ctx *context.Context, g *Graph, weights ...*context.Variable) {
+		var loss *Node
+		for _, wVar := range weights {
+			w := wVar.ValueGraph(g)
+			diff := ConsecutiveDifference(w, -1, false)
+			diff = MulScalar(diff, amount)
+			l1 := ReduceAllSum(Abs(diff))
+			if loss == nil {
+				loss = l1
+			} else {
+				loss = Add(l1, loss)
+			}
+		}
+		train.AddLoss(ctx, loss)
+	}
+}

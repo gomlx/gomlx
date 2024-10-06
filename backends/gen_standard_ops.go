@@ -229,6 +229,11 @@ type StandardOps interface {
 	// returns [[0 0][1 1]].
 	Iota(shape shapes.Shape, iotaAxis int) Op
 
+	// IsFinite tests whether each element of operand is finite, i.e., is not positive or negative infinity, and is not NaN.
+	// It returns an array of boolean values with the same shape as the input, where each element is true if and only if
+	// the corresponding input element is finite.
+	IsFinite(x Op) Op
+
 	// LessOrEqual performs element-wise comparison, returns boolean results with the same dimensions as input.
 	// The op is created on the same XlaBuilder as used for x0 and x1.
 	LessOrEqual(x0, x1 Op) Op

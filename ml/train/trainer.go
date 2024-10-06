@@ -324,7 +324,7 @@ func (r *Trainer) trainStepGraph(spec any, ctx *context.Context, inputs, labels 
 			return
 		}
 		if fn, ok := value.(ContextGraphFn); ok {
-			fn(ctx, g)
+			fn(ctx.InAbsPath(scope), g)
 		}
 	})
 
@@ -398,6 +398,21 @@ func (r *Trainer) callGraphFn(
 		Panicf("no metrics calculate metric in step")
 	}
 	return
+}
+
+// ResetComputationGraphs can be used during training in between steps to force the recreation of the computation graphs.
+//
+// This is used if, for instance, the training has schedules where hyperparameters change (some variables are frozen)
+// the computation graph needs to be updated accordingly.
+//
+// see Loop.OnStep to schedule
+func (r *Trainer) ResetComputationGraphs() {
+	for _, execMap := range []map[any]*context.Exec{r.trainStepExecMap, r.evalStepExecMap, r.batchNormStepExecMap} {
+		for _, e := range execMap {
+			e.Finalize()
+		}
+		clear(execMap)
+	}
 }
 
 // metricsUpdatesGraph creates the graph for a set of metrics.
@@ -582,8 +597,8 @@ func GetLosses(ctx *context.Context, g *graph.Graph) (loss *graph.Node) {
 // ContextGraphFn is a generic graph building function.
 type ContextGraphFn func(ctx *context.Context, g *graph.Graph)
 
-// AddPerStepUpdateGraphFn registers the given function to be executed at every training step, after optimizer
-// updates the variables with the gradient.
+// AddPerStepUpdateGraphFn registers the given function fn to be executed at every training step, after optimizer
+// updates the variables with the gradient. fn is called with the context set to the same scope it was registered with.
 //
 // This allows one for instance to implement variable constraints.
 //

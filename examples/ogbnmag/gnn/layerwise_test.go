@@ -157,7 +157,6 @@ func setMinimalTestParams(ctx *context.Context) {
 
 		ParamEdgeDropoutRate:       0.0,
 		ParamNumGraphUpdates:       1, // gnn_num_messages
-		ParamReadoutHiddenLayers:   0,
 		ParamPoolingType:           "sum",
 		ParamUpdateStateType:       "residual",
 		ParamUsePathToRootStates:   false,
@@ -177,7 +176,6 @@ func setCommonTestParams(ctx *context.Context) {
 
 		ParamEdgeDropoutRate:       0.0,
 		ParamNumGraphUpdates:       3, // gnn_num_messages
-		ParamReadoutHiddenLayers:   1,
 		ParamPoolingType:           "mean|logsum",
 		ParamUpdateStateType:       "residual",
 		ParamUsePathToRootStates:   false,
@@ -199,27 +197,34 @@ func TestLayerWiseInferenceMinimal(t *testing.T) {
 	setMinimalTestParams(ctx)
 	// Set weights to fixed values, that makes it easier to interpret:
 	{
-		ctx := ctx.InAbsPath("/graph_update_0/gnn:authors/conv/message/dense")
+		ctx := ctx.InAbsPath("/model/graph_update_0/gnn:authors/conv/message/dense")
 		_ = ctx.VariableWithValue("weights", tensors.FromValue([][]float32{{1.0}}))
 		_ = ctx.VariableWithValue("biases", tensors.FromValue([]float32{0.0}))
 	}
 	{
-		ctx := ctx.InAbsPath("/graph_update_0/gnn:seeds/update/dense")
+		ctx := ctx.InAbsPath("/model/graph_update_0/gnn:seeds/update/dense")
 		_ = ctx.VariableWithValue("weights", tensors.FromValue([][]float32{{1000.0}, {1.0}}))
+		_ = ctx.VariableWithValue("biases", tensors.FromValue([]float32{0.0}))
+	}
+	{
+		ctx := ctx.InAbsPath("/model/readout/gnn:seeds/dense")
+		_ = ctx.VariableWithValue("weights", tensors.FromValue([][]float32{{1.0}}))
 		_ = ctx.VariableWithValue("biases", tensors.FromValue([]float32{0.0}))
 	}
 
 	// Normal GNN executor.
 	execGnn := context.NewExec(manager, ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
 		graphStates := createDenseTestStateGraphWithMask(strategy, g, dtypes.Float32, withCitation)
-		NodePrediction(ctx, strategy, graphStates)
+		NodePrediction(ctx.In("model"), strategy, graphStates)
 		return graphStates["seeds"].Value
 	})
 
 	// For each paper: paperIdx (residual connection) + 1000*paperIdx + 0.025*paperIdx + (0+1+2+3+4)/1000
 	logits := execGnn.Call()[0]
 	fmt.Printf("\tGNN seeds states: %s\n", logits)
-	want := [][]float32{{0.010}, {1001.035}, {2002.060}, {3003.085}, {4004.110}, {5005.135}, {6006.160}, {7007.185}, {8008.210}, {9009.235}}
+	//want := [][]float32{{0.010}, {1001.035}, {2002.060}, {3003.085}, {4004.110}, {5005.135}, {6006.160}, {7007.185}, {8008.210}, {9009.235}}
+	want := [][]float32{[]float32{0.02}, []float32{2002.07}, []float32{4004.12}, []float32{6006.17}, []float32{8008.22}, []float32{10010.27},
+		[]float32{12012.32}, []float32{14014.37}, []float32{16016.42}, []float32{18018.47}}
 	require.Equal(t, want, logits.Value())
 
 	// Uncomment to list variables used in model.
@@ -234,7 +239,7 @@ func TestLayerWiseInferenceMinimal(t *testing.T) {
 	require.NoError(t, err)
 	execLayerWise := context.NewExec(manager, ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
 		graphStates, edges := createDenseTestStateGraphLayerWise(strategy, g, dtypes.Float32, withCitation)
-		lw.NodePrediction(ctx, graphStates, edges)
+		lw.NodePrediction(ctx.In("model"), graphStates, edges)
 		return graphStates["seeds"]
 	})
 	logits = execLayerWise.Call()[0]

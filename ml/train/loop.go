@@ -18,6 +18,7 @@ package train
 
 import (
 	. "github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
@@ -101,6 +102,25 @@ func NewLoop(trainer *Trainer) *Loop {
 	}
 }
 
+// TrainLastStepVarName is the name of the variable that holds the number of the target last GlobalStep.
+// This variable is set by the Loop trainer, and may be -1 if the last train step is not known yet (for instance
+// if using RunEpochs).
+//
+// It is stored in the TrainerAbsoluteScope.
+const TrainLastStepVarName = "train_last_global_step"
+
+// GetTrainLastStepVar returns the variable that holds the number of the target last GlobalStep.
+// This variable is set by the Loop trainer, and may be -1 if the last train step is not known yet (for instance
+// if using RunEpochs).
+//
+// It is stored in the TrainerAbsoluteScope.
+func GetTrainLastStepVar(ctx *context.Context) *context.Variable {
+	ctxTrainer := ctx.InAbsPath(TrainerAbsoluteScope)
+	return ctxTrainer.Checked(false).
+		VariableWithValue(TrainLastStepVarName, int64(-1)).
+		SetTrainable(false)
+}
+
 // start of loop, called by all looping methods.
 //
 // It calls the appropriate hooks.
@@ -174,6 +194,13 @@ func (loop *Loop) step(spec any, inputs, labels []*tensors.Tensor) (metrics []*t
 	return
 }
 
+// setLastStep, both the field in Loop but also the corresponding variable in the context.
+func (loop *Loop) setLastStep(lastStep int) {
+	loop.EndStep = lastStep
+	endStepVar := GetTrainLastStepVar(loop.Trainer.Context())
+	endStepVar.SetValue(tensors.FromScalar(int64(loop.EndStep)))
+}
+
 // end of loop, called by all looping methods.
 // It calls the appropriate hooks.
 func (loop *Loop) end(metrics []*tensors.Tensor) (err error) {
@@ -203,7 +230,7 @@ func (loop *Loop) RunSteps(ds Dataset, steps int) (metrics []*tensors.Tensor, er
 		return
 	}
 	loop.StartStep = loop.LoopStep
-	loop.EndStep = loop.LoopStep + steps
+	loop.setLastStep(loop.LoopStep + steps)
 	err = loop.start(ds)
 	if err != nil {
 		return nil, err
@@ -256,8 +283,9 @@ func (loop *Loop) RunEpochs(ds Dataset, epochs int) (metrics []*tensors.Tensor, 
 		return
 	}
 	loop.StartStep = loop.LoopStep
-	loop.EndStep = -1
+	loop.setLastStep(-1)
 	loop.Epoch = 0
+
 	err = loop.start(ds)
 	if err != nil {
 		return nil, err
@@ -271,8 +299,8 @@ func (loop *Loop) RunEpochs(ds Dataset, epochs int) (metrics []*tensors.Tensor, 
 			spec, inputs, labels, err := ds.Yield()
 			if err != nil {
 				if err == io.EOF {
-					// End of epoch: estimate new EndStep and reset.
-					loop.EndStep = loop.LoopStep + yieldsPerEpoch*(epochs-loop.Epoch-1)
+					// End of epoch: estimate new last step (loop.EndStep) and reset.
+					loop.setLastStep(loop.LoopStep + yieldsPerEpoch*(epochs-loop.Epoch-1))
 					break
 				}
 				return nil, errors.WithMessagef(err, "Loop.RunEpochs(epoch %d of %d): failed reading from Dataset", loop.Epoch, epochs)

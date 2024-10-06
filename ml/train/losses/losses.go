@@ -281,8 +281,6 @@ func CategoricalCrossEntropyLogits(labels, logits []*Node) *Node {
 
 // categoricalCrossEntropyLogitsImpl implements CategoricalCrossEntropyLogits.
 func categoricalCrossEntropyLogitsImpl(labels, logits, weights, mask *Node) *Node {
-	g := logits.Graph()
-	dtype := logits.DType()
 	shape := labels.Shape()
 	if !shape.Equal(logits.Shape()) {
 		Panicf("labels(%s) and logits(%s) must different shapes", shape, logits.Shape())
@@ -290,7 +288,7 @@ func categoricalCrossEntropyLogitsImpl(labels, logits, weights, mask *Node) *Nod
 	var expandedMask *Node
 	if mask != nil {
 		expandedMask = BroadcastToShape(ExpandDims(mask, -1), logits.Shape())
-		logits = Where(expandedMask, logits, ScalarZero(g, dtype))
+		logits = Where(expandedMask, logits, ZerosLike(logits))
 	}
 	logPredictions := LogSoftmax(logits)
 	losses := ReduceSum(Neg(Mul(labels, logPredictions)), -1)

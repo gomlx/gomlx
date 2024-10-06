@@ -504,6 +504,18 @@ func (b *Builder) Iota(shape shapes.Shape, iotaAxis int) backends.Op {
 	return xla_result
 }
 
+// IsFinite tests whether each element of operand is finite, i.e., is not positive or negative infinity, and is not NaN.
+// It returns an array of boolean values with the same shape as the input, where each element is true if and only if
+// the corresponding input element is finite.
+func (b *Builder) IsFinite(x backends.Op) backends.Op {
+	xla_x := b.verifyAndCastOp(x, "x")
+	xla_result, err := xlabuilder.IsFinite(xla_x)
+	if err != nil {
+		panic(errors.WithMessagef(err, "Backend %q: failed IsFinite", BackendName))
+	}
+	return xla_result
+}
+
 // LessOrEqual performs element-wise comparison, returns boolean results with the same dimensions as input.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) LessOrEqual(x0, x1 backends.Op) backends.Op {

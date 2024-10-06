@@ -1,7 +1,6 @@
 package gnn
 
 import (
-	"fmt"
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
 	. "github.com/gomlx/gomlx/graph"
@@ -84,13 +83,10 @@ func (lw *LayerWiseConfig) NodePrediction(ctx *context.Context, graphStates map[
 			lw.recursivelyApplyGraphConvolution(ctxForGraphUpdateRound(ctx, round), rule, graphStates, edges)
 		}
 	}
-	numHiddenLayers := context.GetParamOr(ctx, ParamReadoutHiddenLayers, 0)
+	ctxReadout := ctx.In("readout")
 	for _, rule := range lw.strategy.Seeds {
 		seedState := graphStates[rule.Name]
-		for ii := range numHiddenLayers {
-			ctxReadout := ctx.In(rule.ConvKernelScopeName).In(fmt.Sprintf("readout_hidden_%d", ii))
-			seedState = updateState(ctxReadout, seedState, seedState, nil)
-		}
+		seedState = updateState(ctxReadout.In(rule.ConvKernelScopeName), seedState, seedState, nil)
 		graphStates[rule.Name] = seedState
 	}
 }
@@ -132,11 +128,11 @@ func (lw *LayerWiseConfig) recursivelyApplyGraphConvolution(
 		dependentState := graphStates[dependent.Name]
 		convolveCtx := ctx.In(dependent.ConvKernelScopeName).In("conv")
 		if dependentState != nil {
-			updateInputs = append(updateInputs,
-				// Notice that we are sending messages on the reverse order of the sampling.
-				// E.g.: If paper->"HasTopic"->topic, the sampling direction is "paper is source, topic is target".
-				// When evaluating the GNN we want the message to go from topic (source) to paper (target).
-				lw.convolveEdgeSet(convolveCtx, dependent.Name, dependentState, dependentEdges.TargetIndices, dependentEdges.SourceIndices, int(rule.NumNodes)))
+			// Notice that we are sending messages on the reverse order of the sampling.
+			// E.g.: If paper->"HasTopic"->topic, the sampling direction is "paper is source, topic is target".
+			// When evaluating the GNN we want the message to go from topic (source) to paper (target).
+			update := lw.convolveEdgeSet(convolveCtx, dependent.Name, dependentState, dependentEdges.TargetIndices, dependentEdges.SourceIndices, int(rule.NumNodes))
+			updateInputs = append(updateInputs, update)
 		}
 		if !lw.dependentsUpdateFirst {
 			lw.recursivelyApplyGraphConvolution(ctx, dependent, graphStates, edges)

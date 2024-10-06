@@ -19,6 +19,7 @@
 package optimizers
 
 import (
+	"fmt"
 	. "github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
@@ -68,6 +69,27 @@ var (
 	// ParamOptimizer is the context parameter with the name of the optimizer.
 	// The default value is "adamw", and the valid values are "sgd", "adam", "adamw" and "adamax".
 	ParamOptimizer = "optimizer"
+
+	// ParamLearningRate is the context parameter name for the default value of learning rate.
+	// It is used by most (all?) optimizers.
+	ParamLearningRate = "learning_rate"
+
+	// LearningRateKey is an alias to ParamLearningRate
+	//
+	// Deprecated: use ParamLearningRate instead.
+	LearningRateKey = ParamLearningRate
+
+	// ParamClipStepByValue is a clip scalar value for each individual value of the gradient step, after
+	// being scaled by the learning rate and optimizer.
+	// The step applied will be `ClipScalar(step, -clip_step_by_value, +clip_step_by_value)`.
+	// Defaults to no clipping, and values are expected to be float64.
+	ParamClipStepByValue = "clip_step_by_value"
+
+	// ParamClipNaN will drop any updates to variables that will lead to NaN.
+	// This is a double-edged option: it keeps training running, but probably will replace NaN by bad training.
+	//
+	// Default  is false.
+	ParamClipNaN = "clip_nan"
 )
 
 const (
@@ -158,23 +180,6 @@ func IncrementGlobalStepGraph(ctx *context.Context, g *Graph, dtype dtypes.DType
 	return globalStep
 }
 
-var (
-	// ParamLearningRate is the context parameter name for the default value of learning rate.
-	// It is used by most (all?) optimizers.
-	ParamLearningRate = "learning_rate"
-
-	// LearningRateKey is an alias to ParamLearningRate
-	//
-	// Deprecated: use ParamLearningRate instead.
-	LearningRateKey = ParamLearningRate
-
-	// ParamClipStepByValue is a clip scalar value for each individual value of the gradient step, after
-	// being scaled by the learning rate and optimizer.
-	// The step applied will be `ClipScalar(step, -clip_step_by_value, +clip_step_by_value)`.
-	// Defaults to no clipping, and values are expected to be float64.
-	ParamClipStepByValue = "clip_step_by_value"
-)
-
 // LearningRateVar returns the learning rate variable -- a scalar value of the given dtype.
 //
 // If variable doesn't exist yet, it will be created using the parameter ParamLearningRate, if it
@@ -197,6 +202,15 @@ func ClipStepByValue(ctx *context.Context, step *Node) *Node {
 		return step
 	}
 	return ClipScalar(step, -clipByValue, clipByValue)
+}
+
+// ClipNaNsInUpdates will replace original values into updates, where updates have NaN (or +/-Inf) values,
+// if the ParamClipNaN is set to true.
+func ClipNaNsInUpdates(ctx *context.Context, original, updates *Node) *Node {
+	if !context.GetParamOr(ctx, ParamClipNaN, false) {
+		return updates
+	}
+	return Where(IsFinite(updates), updates, original)
 }
 
 // sgd is an empty struct that implements Interface for SGD.
@@ -236,6 +250,8 @@ func (sgd *sgd) Clear(_ *context.Context) {}
 
 // addGradientsToVariablesGraph takes the output of Context.BuildTrainableVariablesGradientsGraph,
 // multiply by (-learningRate) and add to the current value of the variablesMap.
+//
+// It replaces NaNs with zero.
 func addGradientsToVariablesGraph(ctx *context.Context, loss, learningRate, globalStep *Node) {
 	g := loss.Graph()
 	if !learningRate.Shape().IsScalar() {
@@ -247,6 +263,7 @@ func addGradientsToVariablesGraph(ctx *context.Context, loss, learningRate, glob
 	}
 	numTrainable := len(grads)
 	ii := 0
+	fmt.Println("addGradientsToVariablesGraph")
 	ctx.EnumerateVariables(func(v *context.Variable) {
 		if !v.Trainable || !v.InUseByGraph(g) {
 			// Not interested in this variable.
@@ -262,7 +279,9 @@ func addGradientsToVariablesGraph(ctx *context.Context, loss, learningRate, glob
 		}
 		scaledGradient := Mul(grads[ii], lrCast)
 		scaledGradient = ClipStepByValue(ctx, scaledGradient)
-		updatedValue := Sub(v.ValueGraph(g), scaledGradient)
+		vNode := v.ValueGraph(g)
+		updatedValue := Sub(vNode, scaledGradient)
+		updatedValue = ClipNaNsInUpdates(ctx, vNode, updatedValue)
 		v.SetValueGraph(updatedValue)
 		ii++
 	})
@@ -272,4 +291,73 @@ func addGradientsToVariablesGraph(ctx *context.Context, loss, learningRate, glob
 			"changed in between?", numTrainable, ii)
 	}
 	return
+}
+
+// MonotonicProjection transforms the input into a monotonic sequence on the given axis that respects the
+// minimum margin between consecutive points.
+//
+// Here we call "viable" solution, one that respects the given margin between consecutive points. And the goal
+// is to find the viable solution that is L2-closest to the original input -- we don't achieve that, but some
+// approximate that is hopefully good enough for most algorithms.
+//
+// This is not a trivial problem, as adjustments to one point may break the monotonicity of the next, and so on.
+// A close to optimal approximate solution can be achieved using lagrange multipliers (and Dykstra alternate
+// projections), see implementation in TensorFlow Lattice:
+// https://github.com/tensorflow/lattice/blob/master/tensorflow_lattice/python/pwl_calibration_lib.py#L472
+//
+// Unfortunately, GoMLX doesn't support "while" loops in the computation graph yet, so instead we make
+// a coarse but simple projection to the viable space using a simple algorithm -- see code.
+//
+// The usual way to use this is inside a call to train.AddPerStepUpdateGraphFn, making the projection happen after
+// the gradient step.
+func MonotonicProjection(input *Node, margin *Node, axis int) *Node {
+	adjustedAxis := AdjustAxisToOperandRank(input, axis)
+	axisDim := input.Shape().Dim(axis)
+	if axisDim < 2 {
+		Panicf("MonotonicProjection of input shaped %s at axis %d is not valid: it requires axis to have dimension >= 2",
+			input.Shape(), axis)
+	}
+
+	const numIter = 3
+	// Fix to the right: increasing values.
+	diffRight := ConsecutiveDifference(input, adjustedAxis, false)
+	// For a fixed number of times try to prevent everything to be pushed if possible.
+	if axisDim > 2 {
+		for _ = range numIter {
+			adjustedDiff := Max(diffRight, margin) // Pushes everything to the right, whenever monotonicity is broken.
+			adjustment := Sub(diffRight, adjustedDiff)
+			fixedAdjustment := ShiftWithScalar(adjustment, adjustedAxis, ShiftDirRight, 1, 0.0)
+			diffRight = Add(adjustedDiff, fixedAdjustment)
+		}
+	}
+	diffRight = Max(diffRight, margin) // Make sure its valid, if numIter wasn't enough.
+	leftMostInput := SliceAxis(input, adjustedAxis, AxisElem(0))
+	diffRight = Concatenate([]*Node{leftMostInput, diffRight}, adjustedAxis)
+	fixRight := CumSum(diffRight, adjustedAxis)
+
+	// Fix to the left: increasing values.
+	diffLeft := ConsecutiveDifference(input, adjustedAxis, false)
+	initialTotalDiff := ReduceAndKeep(diffLeft, ReduceSum, adjustedAxis)
+
+	// For a fixed number of times try to prevent everything to be pushed if possible.
+	if axisDim > 2 {
+		for _ = range numIter {
+			adjustedDiff := Max(diffLeft, margin) // Pushes everything to the left, whenever monotonicity is broken.
+			adjustment := Sub(diffLeft, adjustedDiff)
+			fixedAdjustment := ShiftWithScalar(adjustment, adjustedAxis, ShiftDirLeft, 1, 0.0)
+			diffLeft = Add(adjustedDiff, fixedAdjustment)
+		}
+	}
+	diffLeft = Max(diffLeft, margin) // Make sure its valid, if numIter wasn't enough.
+	finalTotalDiff := ReduceAndKeep(diffLeft, ReduceSum, adjustedAxis)
+
+	leftMostInput = SliceAxis(input, adjustedAxis, AxisElem(0))
+	leftMostInput = Sub(leftMostInput,
+		Sub(finalTotalDiff, initialTotalDiff))
+
+	diffLeft = Concatenate([]*Node{leftMostInput, diffLeft}, adjustedAxis)
+	fixLeft := CumSum(diffLeft, adjustedAxis)
+
+	// Reconstruct value.
+	return DivScalar(Add(fixRight, fixLeft), 2)
 }

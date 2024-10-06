@@ -219,7 +219,7 @@ const IsV1Test = true
 func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds *Node) *Node {
 	dtype := noisyImages.DType()
 
-	ctx = ctx.In(UNetModelScope).WithInitializer(initializers.XavierNormalFn(0))
+	ctx = ctx.In(UNetModelScope).WithInitializer(initializers.XavierNormalFn(ctx))
 
 	// nextCtx return a new context prefixed with a counter, to give a nice ordering to the variables.
 	layerNum := 0
@@ -253,7 +253,7 @@ func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds
 	flowerEmbedSize := context.GetParamOr(ctx, "flower_type_embed_size", 16)
 	if flowerEmbedSize > 0 {
 		flowerTypeEmbed := layers.Embedding(
-			nextCtx("FlowerEmbeddings").WithInitializer(initializers.RandomNormalFn(0, 1.0/float64(flowerEmbedSize))),
+			nextCtx("FlowerEmbeddings").WithInitializer(initializers.RandomNormalFn(ctx, 1.0/float64(flowerEmbedSize))),
 			flowerIds, dtype, flowers.NumLabels, flowerEmbedSize)
 		contextFeatures = Concatenate([]*Node{contextFeatures, flowerTypeEmbed}, -1)
 	}

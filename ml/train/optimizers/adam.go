@@ -292,6 +292,7 @@ func (o *adam) applyAdamGraph(ctx *context.Context, g *Graph, v *context.Variabl
 
 	// Update variable.
 	updated := Sub(value, stepDirection)
+	updated = ClipNaNsInUpdates(ctx, value, updated) // If selected, clip NaN updates.
 	if v.Shape().DType != dtype {
 		// Convert back to the variable type.
 		updated = ConvertDType(updated, v.Shape().DType)

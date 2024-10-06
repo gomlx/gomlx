@@ -66,6 +66,10 @@ type Config struct {
 // By default, it is configured to create one learnable function per input feature (the last dimension of x).
 // So if x has shape [batch_size=64, feature_dim=32], it will create 32 functions initialized the same, but which will
 // learn separately. See Config.WithInputGroups and Config.NumOutputs for other options.
+//
+// New returns a Config object that can be further configured. Once finished, call Config.Done and it will
+// return the result of "rational(x)" with the same as x.Shape(), except if configured with a Config.WithMultipleOutputs,
+// in which case there is an extra output axis with dimension equal to the number of the outputs.
 func New(ctx *context.Context, x *Node) *Config {
 	if x.IsScalar() {
 		x = Reshape(x, 1)
@@ -205,7 +209,7 @@ func (c *Config) WithInitialValues(numeratorInit, denominatorInit *tensors.Tenso
 // Done creates and applies the learnable rational function configured, returning the result of Rational(x).
 //
 // The returned shape is the same as x.Shape(), except if configured with a Config.WithMultipleOutputs, in which
-// case
+// case there is an extra output axis with dimension equal to the number of the outputs.
 func (c *Config) Done() *Node {
 	if c.numeratorDegree <= 0 || c.denominatorDegree <= 0 {
 		exceptions.Panicf("rational functions requires degrees >= 1, got numerator/denominator degrees = %d/%d",
@@ -218,44 +222,52 @@ func (c *Config) Done() *Node {
 	dtype := c.input.DType()
 	x := c.input
 
-	// Aggregate input into groups that share the same kernel (learnable rational function)
+	// Make x shaped [batchSize, inputDim]
 	if x.IsScalar() {
-		x = Reshape(x, 1)
+		x = Reshape(x, 1, 1)
 	}
-	featuresDim := x.Shape().Dim(-1)
-	if c.numInputGroups != featuresDim {
-		if c.numInputGroups <= 0 || featuresDim%c.numInputGroups != 0 || c.numInputGroups > featuresDim {
-			exceptions.Panicf("rational input is shaped %s (features dimension=%d): it cannot be organized in %d input groups -- it must be a divisor.",
-				c.input.Shape(), featuresDim, c.numInputGroups)
-		}
-		newDims := make([]int, x.Rank()+1)
-		copy(newDims, x.Shape().Dimensions)
-		newDims[x.Rank()] = c.numInputGroups
-		newDims[x.Rank()-1] = featuresDim / c.numInputGroups
-		x = Reshape(x, newDims...)
+	inputDim := x.Shape().Dim(-1)
+	if x.Rank() != 2 {
+		x = Reshape(x, -1, inputDim)
 	}
+	batchSize := x.Shape().Dim(0)
+
+	// Aggregate input into groups that share the same kernel (learnable rational function)
+	// x will be shaped [batchSize, numInputGroups, inputGroupSize]
+	numInputGroups := c.numInputGroups
+	if numInputGroups <= 0 {
+		// default to no input groups.
+		numInputGroups = inputDim
+	}
+	if c.numInputGroups <= 0 || inputDim%c.numInputGroups != 0 || c.numInputGroups > inputDim {
+		exceptions.Panicf("rational input is shaped %s (features dimension=%d): it cannot be organized in %d input groups -- it must be a divisor.",
+			c.input.Shape(), inputDim, c.numInputGroups)
+	}
+	inputGroupSize := inputDim / numInputGroups
+	x = Reshape(x, batchSize, numInputGroups, inputGroupSize)
 
 	// Fetch initialization values from cache, if one is provided.
 	numeratorInit, denominatorInit, gain := c.getInitTensorsAndGain()
 
 	// Scalar multiplier w shaped [numInputGroups, numOutputsPerInput].
+	outputDim := c.numOutputsPerInput
 	var w *Node
 	if c.useMultiplier {
 		wInitializerVariance := c.wInitializerVariance
 		if wInitializerVariance <= 0 {
 			if gain >= 0 {
-				wInitializerVariance = gain / float64(featuresDim)
+				wInitializerVariance = gain / float64(inputDim)
 			} else {
 				// Default variance for unknown approximations:
 				wInitializerVariance = 1.0
 			}
 		}
 		wInitializerStddev := math.Sqrt(wInitializerVariance)
-		w = ctx.WithInitializer(initializers.RandomNormalFn(0, wInitializerStddev)).
-			VariableWithShape("w", shapes.Make(dtype, c.numInputGroups, c.numOutputsPerInput)).ValueGraph(g)
+		w = ctx.WithInitializer(initializers.RandomNormalFn(ctx, wInitializerStddev)).
+			VariableWithShape("w", shapes.Make(dtype, outputDim, numInputGroups)).ValueGraph(g)
 	}
 
-	// Numerator/Denominator coefficients shaped [numInputGroups, numOutputsPerInput, <degree>].
+	// Numerator/Denominator coefficients shaped [outputDim, numInputGroups, <degree>].
 	if c.numeratorInit != nil {
 		numeratorInit = c.numeratorInit
 	}
@@ -269,11 +281,13 @@ func (c *Config) Done() *Node {
 			c.initApproximation, c.version, c.numeratorDegree, c.denominatorDegree)
 	}
 	numeratorCoeffs := ctx.WithInitializer(initializers.BroadcastTensorToShape(numeratorInit)).
-		VariableWithShape("numeratorCoeffs", shapes.Make(dtype, c.numInputGroups, c.numOutputsPerInput, c.numeratorDegree+1)).
+		VariableWithShape("numeratorCoeffs", shapes.Make(dtype, outputDim, numInputGroups, c.numeratorDegree+1)).
 		ValueGraph(g)
 	denominatorCoeffs := ctx.WithInitializer(initializers.BroadcastTensorToShape(denominatorInit)).
-		VariableWithShape("denominatorCoeffs", shapes.Make(dtype, c.numInputGroups, c.numOutputsPerInput, c.denominatorDegree)).
+		VariableWithShape("denominatorCoeffs", shapes.Make(dtype, outputDim, numInputGroups, c.denominatorDegree)).
 		ValueGraph(g)
+
+	// Version "D" adds noise to coefficients.
 	if c.version == "D" && ctx.IsTraining(g) {
 		// In version "D", if training, apply noise to the coefficients.
 		for _, vRef := range []**Node{&numeratorCoeffs, &denominatorCoeffs} {
@@ -284,9 +298,6 @@ func (c *Config) Done() *Node {
 			*vRef = Mul(*vRef, noise)
 		}
 	}
-
-	// Reshape x to a normalized shape simplify handling of dimensions: shape [<aggregated_batch>, numInputGroups].
-	x = Reshape(x, -1, c.numInputGroups)
 
 	// Creating powers of x:
 	maxDegree := max(c.numeratorDegree, c.denominatorDegree)
@@ -307,11 +318,12 @@ func (c *Config) Done() *Node {
 	//   (noise only applied if training).
 	//
 	// Einsum axes:
-	//   B -> aggregated batch size of the input
-	//   I -> numInputGroups
+	//   B -> batchSize
 	//   O -> numOutputsPerInput
+	//   I -> numInputGroups
+	//   G -> inputGroupSize
 	//   N -> # numerator coefficients == #numPowersOfX
-	Px := Einsum("BIN,ION->BIO", numPowersOfX, numeratorCoeffs)
+	Px := Einsum("BIGN,OIN->BOIG", numPowersOfX, numeratorCoeffs)
 
 	// Denominator: depends on the version:
 	// - "A": Q(x) = (1 + |b_0 * x| + | b_1 * x^2| + ... +  | b_m * x^{m+1}|)
@@ -321,30 +333,33 @@ func (c *Config) Done() *Node {
 	//
 	// Einsum axes:
 	//   B -> aggregated batch size of the input
-	//   I -> numInputGroups
 	//   O -> numOutputsPerInput
-	//   N -> # numerator coefficients == #numPowersOfX
+	//   I -> numInputGroups
+	//   G -> inputGroupSize
+	//   N -> # numerator coefficients == #denPowersOfX
 	var Qx *Node
 	switch c.version {
 	case "A":
-		Qx = Einsum("BIN,ION->BION", denPowersOfX, denominatorCoeffs)
+		Qx = Einsum("BIGN,OIN->BOIGN", denPowersOfX, denominatorCoeffs)
 		Qx = ReduceSum(Abs(Qx), -1)
 		Qx = OnePlus(Qx)
 	case "B", "D":
-		Qx = Einsum("BIN,ION->BIO", denPowersOfX, denominatorCoeffs)
+		Qx = Einsum("BIGN,OIN->BOIG", denPowersOfX, denominatorCoeffs)
 		Qx = OnePlus(Abs(Qx))
 	case "C":
-		Qx = Einsum("BIN,ION->BIO", denPowersOfX, denominatorCoeffs)
+		Qx = Einsum("BIGN,OIN->BOIG", denPowersOfX, denominatorCoeffs)
 		Qx = AddScalar(Abs(Qx), 0.1)
 	default:
 		exceptions.Panicf("rational functions: unknown version %s", c.version)
 	}
 
+	// Output: w.P(x)/Q(x), shaped [batchSize, outputDim, numInputGroups, inputGroupSize]
 	output := Div(Px, Qx)
 	if w != nil {
 		// Multiply by learnable scalar.
-		output = Einsum("BIO,IO->BIO", output, w)
+		output = Einsum("BOIG,OI->BOIG", output, w)
 	}
+	output.AssertDims(batchSize, outputDim, numInputGroups, inputGroupSize)
 
 	// Regroup input groups and squeeze output, if numOutputsPerInput == 1.
 	if c.numOutputsPerInput == 1 {
@@ -352,7 +367,8 @@ func (c *Config) Done() *Node {
 	} else {
 		newDims := make([]int, c.input.Rank()+1)
 		copy(newDims, c.input.Shape().Dimensions)
-		newDims[c.input.Rank()] = c.numOutputsPerInput
+		newDims[c.input.Rank()-1] = outputDim
+		newDims[c.input.Rank()] = inputDim // Presumably, the caller will want to reduce over the inputDim.
 		output = Reshape(output, newDims...)
 	}
 	return output

@@ -1,16 +1,46 @@
 # GoMLX changelog
 
-## Next
+## v0.13.0 - Next
 
+* Package `initializers`
+  * All random initializers (`RandomUniformFn`, `RandomUniformFn`, `RandomNormalFn`, `GlorotUniformFn`, `XavierUniformFn`)
+    changed to take the context as a parameter, instead of `initialSeed`. 
+  * The `initialSeed` is instead read from the hyperparameter `initializers.ParamInitialSeed` ("initializers_seed")
+    and default to `initializers.NoSeed` (0), which means the seed is randomly started.
 * Added learnable rational functions (ml/layers/rational): can be used for activations or as univariate learnable
   functions for KAN.
-* Added `graph.ConstCachedTensor` to allow caching of constant tensors
+  * Added rational notebook to generate initial values with approximations to arbitrary univariate functions.
+* Package `graph`:
+  * Added `ConstCachedTensor` to allow caching of constant tensors.
+  * Fixed gradient of `Where` when operands are broadcast.
+  * Added `ConsecutiveDifference`, `SliceAxis`, `BitsCount`, `IsFinite`.
+* Package `context`:
+  * Added `context.ExecOnce` and `context.ExecOnceN`.
+  * `context.GetParamOr` now returns the default value for a hyperparameter, if it is set to nil. 
+* Package `train`:
+  * Added `GetTrainLastStepVar` with information about last step of training: used for setting up various schedules.
+  * Added `ResetComputationGraphs` to allow the trainer to recreate computation graphs, if hyperparameters change in the middle
+    of training -- for training with very different schedules, for instance with freezing variables.
 * Added `initializers.BroadcastTensorToShape`: to allow variables to be initialized with a base value that is broadcast
   to each variable shape requested.
-* Added `context.ExecOnce` and `context.ExecOnceN`.
-* Added rational notebook to generate initial values with approximations to arbitrary univariate functions.
+* Package `optimizers`
+  * Added `MonotonicProjection` to project values (usually variables) to a monotonically increasing values, with a margin.
+  * Added `ParamClipNaN` to prevent NaNs going into gradient updates.
+* Added `regularizers.ConstantL1`
 * Added `data.NewConstantDataset` with a dummy dataset that can be used when training a model that generates
   its own input and labels.
+* Package `kan`:
+  * Discrete-KAN:
+    * Added separate (per input) split points.
+    * Added support for hyperparameter configured split points.
+    * Added monotonic projection of split points.
+    * Added ConstantL1 regularizer for control points.
+    * Added various types of schedules for smoothness: cosine, linear, exponential.
+    * Added normal distribution based perturbation.
+    * Added input grouping.
+  * Added GR-KAN (Rational Functions)
+  * Added PWL-KAN (Piecewise-Linear) with `kan.New().PiecewiseLinear()`.
+* Fixed OGBN-MAG GNN tests and demo.
 
 ## v0.12.0 - 2024/09/23
 
@@ -25,6 +55,7 @@
   * Added `ShapedLowerTriangular()`, `TakeLowerTriangular()` and `TakeUpperTriangular()`
 * Added `activations.Gelu` and `activations.GeluApproximate`
 * Added `Erf`, the "error function", used when integrating the normal distribution, and its gradient.
+* Better Discrete-KAN support: configurable by hyperparameters.
 
 ## v0.11.3 - 2024/08/29
 

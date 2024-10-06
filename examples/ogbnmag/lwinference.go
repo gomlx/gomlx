@@ -91,7 +91,8 @@ func BuildLayerWiseCustomMetricFn(backend backends.Backend, ctx *context.Context
 // or the readout layer shaped `Float32[NumSeedNodes, mag.NumLabels]` (or Float16) if `predictions == false`.
 func BuildLayerWiseInferenceModel(strategy *sampler.Strategy, predictions bool) func(ctx *context.Context, g *Graph) *Node {
 	return func(ctx *context.Context, g *Graph) *Node {
-		ctx = ctx.WithInitializer(initializers.GlorotUniformFn(initializers.NoSeed))
+		ctx = ctx.WithInitializer(initializers.GlorotUniformFn(ctx))
+		ctx = ctx.In("model")
 
 		// Create inputs with all elements. Similar to the code in [sampler.Dataset.Yield].
 		inputs := make([]*Node, 0, 5*len(strategy.Rules))

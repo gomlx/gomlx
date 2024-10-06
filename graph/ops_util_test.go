@@ -415,7 +415,7 @@ func TestMaskedLogSoftmax(t *testing.T) {
 }
 
 func TestCumSum(t *testing.T) {
-	graphtest.RunTestGraphFn(t, "TestSoftmax()",
+	graphtest.RunTestGraphFn(t, "TestCumSum()",
 		func(g *Graph) (inputs, outputs []*Node) {
 			inputs = []*Node{
 				OnePlus(IotaFull(g, shapes.Make(dtypes.Int32, 2, 3))),
@@ -434,6 +434,34 @@ func TestCumSum(t *testing.T) {
 				{1, 2, 3},
 				{5, 7, 9},
 			},
+		}, xslices.Epsilon)
+}
+
+func TestConsecutiveDifference(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "TestConsecutiveDifference()",
+		func(g *Graph) (inputs, outputs []*Node) {
+			inputs = []*Node{
+				OnePlus(IotaFull(g, shapes.Make(dtypes.Int32, 2, 3))),
+				AddScalar(Square(IotaFull(g, shapes.Make(dtypes.Float32, 5))), -2),
+			}
+			outputs = []*Node{
+				ConsecutiveDifference(inputs[0], -1, true),
+				ConsecutiveDifference(inputs[0], 0, true),
+				ConsecutiveDifference(inputs[1], 0, true),
+				ConsecutiveDifference(inputs[1], 0, false),
+			}
+			return
+		}, []any{
+			[][]int32{
+				{1, 1, 1},
+				{4, 1, 1},
+			},
+			[][]int32{
+				{1, 2, 3},
+				{3, 3, 3},
+			},
+			[]float32{-2, 1, 3, 5, 7},
+			[]float32{1, 3, 5, 7},
 		}, xslices.Epsilon)
 }
 

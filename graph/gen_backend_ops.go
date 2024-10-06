@@ -24,6 +24,7 @@ const (
 	NodeTypeBatchNormForInference
 	NodeTypeBatchNormForTraining
 	NodeTypeBatchNormGradient
+	NodeTypeBitCount
 	NodeTypeBroadcast
 	NodeTypeBroadcastInDim
 	NodeTypeCeil
@@ -55,6 +56,7 @@ const (
 	NodeTypeIdentity
 	NodeTypeImag
 	NodeTypeIota
+	NodeTypeIsFinite
 	NodeTypeLessOrEqual
 	NodeTypeLessOrEqualTotalOrder
 	NodeTypeLessThan
@@ -431,6 +433,43 @@ func backendBatchNormGradient(operand *Node, scale *Node, mean *Node, variance *
 	g.registerNode(node)
 	splitNodes := splitNode(node)
 	gradOperand, gradScale, gradOffset = splitNodes[0], splitNodes[1], splitNodes[2]
+	return
+}
+
+// nodeInputsBitCount holds the inputs used for the call to backends.BitCount.
+type nodeInputsBitCount struct {
+	operand *Node
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsBitCount) Type() NodeType {
+	return NodeTypeBitCount
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsBitCount) String() string {
+	return fmt.Sprintf("%s(operand=[#%d])",
+		ni.Type(),
+		ni.operand.Id(),
+	)
+}
+
+// BitCount returns the number of bits that are set to one.
+func BitCount(operand *Node) (node *Node) {
+	inputNodes := []*Node{operand}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsBitCount{
+		operand: operand,
+	}
+	result := g.builder.BitCount(operand.outputOps[0])
+	node = &Node{
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
 	return
 }
 
@@ -1710,6 +1749,45 @@ func backendIota(g *Graph, shape shapes.Shape, iotaAxis int) (node *Node) {
 		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
 		graph:        g,
 		inputs:       inputs,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsIsFinite holds the inputs used for the call to backends.IsFinite.
+type nodeInputsIsFinite struct {
+	x *Node
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsIsFinite) Type() NodeType {
+	return NodeTypeIsFinite
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsIsFinite) String() string {
+	return fmt.Sprintf("%s(x=[#%d])",
+		ni.Type(),
+		ni.x.Id(),
+	)
+}
+
+// IsFinite tests whether each element of operand is finite, i.e., is not positive or negative infinity, and is not NaN.
+// It returns an array of boolean values with the same shape as the input, where each element is true if and only if
+// the corresponding input element is finite.
+func IsFinite(x *Node) (node *Node) {
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsIsFinite{
+		x: x,
+	}
+	result := g.builder.IsFinite(x.outputOps[0])
+	node = &Node{
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return

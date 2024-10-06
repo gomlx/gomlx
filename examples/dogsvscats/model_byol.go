@@ -50,7 +50,7 @@ func ByolCnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	// Create two models: same structure, different initializations, and if `--byol_use_pairs` is set,
 	// different augmentations of the same image.
 	onlineCtx := ctx.In("online")
-	targetCtx := ctx.In("target").WithInitializer(initializers.RandomNormalFn(0, 1.0))
+	targetCtx := ctx.In("target").WithInitializer(initializers.RandomNormalFn(ctx, 1.0))
 
 	// No dropout for the "target" model.
 	targetCtx.SetParam("cnn_dropout_rate", 0.0)

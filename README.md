@@ -60,7 +60,8 @@ It includes:
 * Context: automatic variable management for ML models.
 * ML layers library with some of the most popular machine learning "layers": FFN layers,  
   activation functions, layer and batch normalization, convolutions, pooling, dropout, Multi-Head-Attention
-  (for transformer layers), KAN (with B-Splines), PiecewiseLinear (for calibration and normalization), various regularizations, 
+  (for transformer layers), KAN (B-Splines, [GR-KAN/KAT networks](https://arxiv.org/abs/2409.10594), Discrete-KAN, PiecewiseLinear KAN),
+  PiecewiseLinear (for calibration and normalization), various regularizations,
   FFT (reverse/differentiable), learnable rational functions (both for activations and [GR-KAN/KAT networks](https://arxiv.org/abs/2409.10594)) etc. 
 * Training library, with some pretty-printing. Including plots for Jupyter notebook, using [GoNB, a Go Kernel](https://github.com/janpfeifer/gonb).
   * Also, various debugging tools: collecting values for particular nodes for plotting, simply logging  the value

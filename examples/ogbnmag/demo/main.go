@@ -10,6 +10,8 @@ import (
 	mldata "github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activations"
+	"github.com/gomlx/gomlx/ml/layers/kan"
+	"github.com/gomlx/gomlx/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/ml/train/commandline"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/janpfeifer/must"
@@ -40,25 +42,52 @@ func createDefaultContext() *context.Context {
 		"batch_size":         128,
 		"plots":              true,
 		paramWithReplacement: false,
+		"scheduled_training": false,
 
 		// KAN network parameters:
-		"kan":                    false, // Enable kan
-		"kan_bspline_num_points": 20,    // Number of control points
+		// They are used only for readout layers -- they have worked very poorly for deeper networks.
+		// Also, one should decrease the learning rate to use them.
+		"kan":                             false, // Enable kan
+		kan.ParamNumControlPoints:         10,    // Number of control points for KAN.
+		kan.ParamInputGroupSize:           1,
+		kan.ParamResidual:                 true,
+		kan.ParamConstantRegularizationL1: 0.0,
 
-		optimizers.ParamOptimizer:           "adam",
+		// Discrete-KAN exclusive parameters.
+		kan.ParamDiscrete:                     false,
+		kan.ParamDiscretePerturbation:         "normal",
+		kan.ParamDiscreteSplitPointsTrainable: false, // Discrete-KAN trainable split-points.
+		kan.ParamDiscreteSplitPointsFrozen:    false, // Discrete-KAN trainable split-points should be frozen.
+		kan.ParamDiscreteSplitsMargin:         0.1,   // Discrete-KAN trainable split-points margin.
+		kan.ParamDiscreteSoftness:             0.03,  // Discrete-KAN softness
+		kan.ParamDiscreteSoftnessSchedule:     kan.SoftnessScheduleExponential.String(),
+
+		// GR-KAN (rational functions KAN) exclusive parameters.
+		kan.ParamRational:                     false, // Enable GR-Kan
+		kan.ParamRationalNumeratorDegree:      5,
+		kan.ParamRationalDenominatorDegree:    4,
+		kan.ParamRationalInitialApproximation: "identity",
+
+		// PWL-KAN (Piecewise-Linear KAN) exclusive parameters.
+		kan.ParamPiecewiseLinear:         false,
+		kan.ParamPWLExtrapolate:          false,
+		kan.ParamPWLSplitPointsTrainable: false,
+
+		// Optimizer parameters.
+		optimizers.ParamOptimizer:           "adamw",
 		optimizers.ParamLearningRate:        0.001,
 		optimizers.ParamCosineScheduleSteps: 0,
 		optimizers.ParamClipStepByValue:     0.0,
 		optimizers.ParamAdamEpsilon:         1e-7,
-		optimizers.ParamAdamDType:           "",
+		optimizers.ParamAdamDType:           "float32",
+		optimizers.ParamClipNaN:             false,
 
-		layers.ParamL2Regularization: 1e-5,
-		layers.ParamDropoutRate:      0.2,
-		activations.ParamActivation:  "swish",
+		regularizers.ParamL2:        1e-5,
+		layers.ParamDropoutRate:     0.2,
+		activations.ParamActivation: "swish",
 
 		gnn.ParamEdgeDropoutRate:       0.0,
 		gnn.ParamNumGraphUpdates:       6, // gnn_num_messages
-		gnn.ParamReadoutHiddenLayers:   2,
 		gnn.ParamPoolingType:           "mean|logsum",
 		gnn.ParamUpdateStateType:       "residual",
 		gnn.ParamUsePathToRootStates:   false,
@@ -67,6 +96,7 @@ func createDefaultContext() *context.Context {
 		gnn.ParamMessageDim:            32, // 128 or 256 will work better, but takes way more time
 		gnn.ParamStateDim:              32, // 128 or 256 will work better, but takes way more time
 		gnn.ParamUseRootAsContext:      false,
+		gnn.ParamNoKanForLayers:        "",
 
 		mag.ParamEmbedDropoutRate:     0.0,
 		mag.ParamSplitEmbedTablesSize: 1,
@@ -74,6 +104,7 @@ func createDefaultContext() *context.Context {
 		mag.ParamIdentitySubSeeds:     true,
 		mag.ParamDType:                "float32",
 	})
+	ctx.In("readout").SetParam(gnn.ParamUpdateNumHiddenLayers, 2)
 	return ctx
 }
 

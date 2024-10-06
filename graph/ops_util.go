@@ -19,6 +19,7 @@ package graph
 import (
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 )
@@ -774,4 +775,68 @@ func CumSum(x *Node, axis int) *Node {
 	paddings := make([][2]int, x.Rank())
 	paddings[adjustedAxis][0] = windowSizes[adjustedAxis] - 1 // On the cumsum axis, pad to length-1.
 	return SumPool(x).FullShape().WindowPerAxis(windowSizes...).PaddingPerDim(paddings).Strides(1).Done()
+}
+
+var consecutiveDifferenceKernel = tensors.FromValue([]int32{-1, 1})
+
+// ConsecutiveDifference is the inverse of CumSum: it outputs the difference from each number to be previous on
+// the selected axis.
+//
+// If preserveShape is true, the first element is preserved, and the shape is preserved, in which case we have
+// ConsecutiveDifference(CumSum(x)) == x.
+//
+// If preserveShape is false, just the differences are returned, and the resulting shape has the selected axis
+// shrunk by 1.
+//
+// Examples:
+//
+//	ConsecutiveDifference([2, 4, 8], 0, true) = [2, 2, 4]
+//	ConsecutiveDifference([2, 4, 8], 0, false) = [2, 4]
+//	ConsecutiveDifference([[1, 3, 6], [4, 9, 15]], -1, true) = [[1, 2, 3], [4, 5, 6]]
+//	ConsecutiveDifference([[1, 2, 3], [5, 7, 9]], 0, true) = [[1, 2, 3], [4, 5, 6]]
+func ConsecutiveDifference(x *Node, axis int, preserveShape bool) *Node {
+	adjustedAxis := AdjustAxisToOperandRank(x, axis)
+	if true {
+		diff := Sub(
+			SliceAxis(x, adjustedAxis, AxisRangeToEnd(1)),
+			SliceAxis(x, adjustedAxis, AxisRangeFromStart(-1)))
+		if preserveShape {
+			diff = Concatenate([]*Node{SliceAxis(x, adjustedAxis, AxisElem(0)), diff}, axis)
+		}
+		return diff
+	} else {
+		/*
+		     Version with convolution is returning the wrong Gradient. See test in regularizers.ConstantL1:
+
+		   	TODO: Investigate
+		*/
+		g := x.Graph()
+		n := x.Rank()
+		dtype := x.DType()
+		expandedX := ExpandDims(x, 0, -1) // Add a batch axis at the start, and depth (channels) axis at the end.
+		var paddings [][2]int
+		if preserveShape {
+			paddings = make([][2]int, n)
+			paddings[adjustedAxis][0] = 1 // On the difference axis, pad 1.
+		}
+		kernel := ConstCachedTensor(g, consecutiveDifferenceKernel)
+		kernel = ConvertDType(kernel, dtype)
+		kernelDims := xslices.SliceWithValue(n+2, 1)
+		kernelDims[adjustedAxis] = 2
+		kernel = Reshape(kernel, kernelDims...)
+
+		output := Convolve(expandedX, kernel).
+			NoPadding().             // Default padding.
+			PaddingPerDim(paddings). // Only has an effect if paddings != nil.
+			Strides(1).
+			Done()
+		// Remove added batch and depth axes.
+		if preserveShape {
+			output = Reshape(output, x.Shape().Dimensions...)
+		} else {
+			// Remove batch and depth dimensions.
+			output = Squeeze(output, 0, -1)
+		}
+		return output
+	}
 }

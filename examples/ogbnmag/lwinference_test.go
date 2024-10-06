@@ -86,7 +86,6 @@ func configureLayerWiseTestContext(ctx *context.Context) {
 
 		gnn.ParamEdgeDropoutRate:       0.0,
 		gnn.ParamNumGraphUpdates:       6, // gnn_num_messages
-		gnn.ParamReadoutHiddenLayers:   2,
 		gnn.ParamPoolingType:           "mean|logsum",
 		gnn.ParamUpdateStateType:       "residual",
 		gnn.ParamUsePathToRootStates:   false,
