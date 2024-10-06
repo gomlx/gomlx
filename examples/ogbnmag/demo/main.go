@@ -68,6 +68,11 @@ func createDefaultContext() *context.Context {
 		kan.ParamRationalDenominatorDegree:    4,
 		kan.ParamRationalInitialApproximation: "identity",
 
+		// PWL-KAN (Piecewise-Linear KAN) exclusive parameters.
+		kan.ParamPiecewiseLinear:         false,
+		kan.ParamPWLExtrapolate:          false,
+		kan.ParamPWLSplitPointsTrainable: false,
+
 		// Optimizer parameters.
 		optimizers.ParamOptimizer:           "adamw",
 		optimizers.ParamLearningRate:        0.001,
