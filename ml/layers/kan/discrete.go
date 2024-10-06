@@ -89,7 +89,6 @@ var (
 // discreteConfig holds the configuration exclusive for Discrete-KANs.
 type discreteConfig struct {
 	perturbation                            PerturbationType
-	controlPoints                           int
 	softness                                float64
 	softnessSchedule                        SoftnessScheduleType
 	splitPointsTrainable, splitPointsFrozen bool
@@ -254,7 +253,7 @@ func (c *Config) DiscreteInitialSplitPoints(initialValues *tensors.Tensor) *Conf
 	return c
 }
 
-// Layer implements one Discrete-KAN. x is expected to be shaped [batchSize, numInputNodes].
+// Layer implements one Discrete-KAN layer. x is expected to be shaped [batchSize, numInputNodes].
 func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int) *Node {
 	g := x.Graph()
 	dtype := x.DType()
@@ -272,9 +271,9 @@ func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int
 	}
 
 	if klog.V(2).Enabled() {
-		klog.Infof("kan discreteLayer (%s): (%d+2) x %d x %d = %d weights, splits_trainable=%v\n",
-			ctx.Scope(), c.numControlPoints, numInputNodes, numOutputNodes,
-			(c.numControlPoints)*numInputNodes*numOutputNodes, c.discrete.splitPointsTrainable)
+		klog.Infof("kan discreteLayer (%s): ~ %d x %d x %d = %d weights, splits_trainable=%v\n",
+			ctx.Scope(), c.numControlPoints, numInputGroups, numOutputNodes,
+			c.numControlPoints*numInputGroups*numOutputNodes, c.discrete.splitPointsTrainable)
 	}
 
 	// Create control points for piecewise-constant function (PCF)
@@ -289,7 +288,7 @@ func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int
 		slopeShape := shape.Clone()
 		slopeShape.Dimensions[slopeShape.Rank()-1] = 1 // Same multiplier for all control points, so it's linear.
 		initializers.UseRngState(graph, initialSeed, func(rngState *Node) (newRngState *Node) {
-			newRngState, slope = RandomNormal(rngState, shape)
+			newRngState, slope = RandomNormal(rngState, slopeShape)
 			return newRngState
 		})
 		slope = MulScalar(slope, 0.1)

@@ -94,6 +94,10 @@ type Config struct {
 	// GR-KAN (Rational functions)
 	useRational bool
 	rational    rationalConfig
+
+	// PWL-KAN (Piecewise-Linear KAN)
+	usePWL bool
+	pwl    pwlConfig
 }
 
 // New returns the configuration for a KAN bsplineLayer(s) to be applied to the input x.
@@ -120,10 +124,12 @@ func New(ctx *context.Context, input *Node, numOutputNodes int) *Config {
 		numControlPoints: context.GetParamOr(ctx, ParamNumControlPoints, 20),
 		useDiscrete:      context.GetParamOr(ctx, ParamDiscrete, false),
 		useRational:      context.GetParamOr(ctx, ParamRational, false),
+		usePWL:           context.GetParamOr(ctx, ParamPiecewiseLinear, false),
 	}
 	c.initBSpline(ctx)
 	c.initDiscrete(ctx)
 	c.initRational(ctx)
+	c.initPiecewiseLinear(ctx)
 
 	constL1amount := context.GetParamOr(ctx, ParamConstantRegularizationL1, 0.0)
 	if constL1amount > 0 {
@@ -186,6 +192,19 @@ func (c *Config) UseMean(useMean bool) *Config {
 	return c
 }
 
+// UseResidual sets the flag to determine the use of residuals and returns the updated configuration object.
+//
+// Residual connections are used to reduce the number of parameters, and to improve the performance of the model.
+//
+// The residual connections are implemented by adding a residual connection to the output of the previous layer,
+// and then adding the residual to the output of the current layer.
+//
+// The default is true. It can be configured with the ParamResidual hyperparameter.
+func (c *Config) UseResidual(useResidual bool) *Config {
+	c.useResidual = useResidual
+	return c
+}
+
 // InputGroupSize defines the size of groups in this inputs should be split. Inputs on the same
 // group share weights. Setting this to 2 will effectively divide the number of parameters by 2,
 // but force some inputs to use the same weights.
@@ -235,10 +254,13 @@ func (c *Config) Done() *Node {
 			layerCtx := ctx.In(fmt.Sprintf("discrete_kan_hidden_%d", ii))
 			x = c.discreteLayer(layerCtx, x, c.numHiddenNodes)
 		} else if c.useRational {
-			layerCtx := ctx.In(fmt.Sprintf("grkan_hidden_%d", ii))
+			layerCtx := ctx.In(fmt.Sprintf("gr_kan_hidden_%d", ii))
 			x = c.rationalLayer(layerCtx, x, c.numHiddenNodes)
+		} else if c.usePWL {
+			layerCtx := ctx.In(fmt.Sprintf("pwl_kan_hidden_%d", ii))
+			x = c.pwlLayer(layerCtx, x, c.numHiddenNodes)
 		} else {
-			layerCtx := ctx.In(fmt.Sprintf("kan_hidden_%d", ii))
+			layerCtx := ctx.In(fmt.Sprintf("bspline_kan_hidden_%d", ii))
 			x = c.bsplineLayer(layerCtx, x, c.numHiddenNodes)
 		}
 	}
@@ -247,9 +269,11 @@ func (c *Config) Done() *Node {
 	if c.useDiscrete {
 		x = c.discreteLayer(ctx.In("discrete_kan_output_layer"), x, c.numOutputNodes)
 	} else if c.useRational {
-		x = c.rationalLayer(ctx.In("grkan_output_layer"), x, c.numOutputNodes)
+		x = c.rationalLayer(ctx.In("gr_kan_output_layer"), x, c.numOutputNodes)
+	} else if c.usePWL {
+		x = c.pwlLayer(ctx.In("pwl_kan_output_layer"), x, c.numOutputNodes)
 	} else {
-		x = c.bsplineLayer(ctx.In("kan_output_layer"), x, c.numOutputNodes)
+		x = c.bsplineLayer(ctx.In("bspline_kan_output_layer"), x, c.numOutputNodes)
 	}
 
 	// Reshape back the batch axes.

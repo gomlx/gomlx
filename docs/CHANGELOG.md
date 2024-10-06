@@ -29,15 +29,17 @@
 * Added `regularizers.ConstantL1`
 * Added `data.NewConstantDataset` with a dummy dataset that can be used when training a model that generates
   its own input and labels.
-* Package `kan`, on Discrete-KAN:
-  * Added separate (per input) split points.
-  * Added support for hyperparameter configured split points.
-  * Added monotonic projection of split points.
-  * Added ConstantL1 regularizer for control points.
-  * Added various types of schedules for smoothness: cosine, linear, exponential.
-  * Added normal distribution based perturbation.
-  * Added input grouping.
-* Added GR-KAN with `kan.New().Rational()`.
+* Package `kan`:
+  * Discrete-KAN:
+    * Added separate (per input) split points.
+    * Added support for hyperparameter configured split points.
+    * Added monotonic projection of split points.
+    * Added ConstantL1 regularizer for control points.
+    * Added various types of schedules for smoothness: cosine, linear, exponential.
+    * Added normal distribution based perturbation.
+    * Added input grouping.
+  * Added GR-KAN (Rational Functions)
+  * Added PWL-KAN (Piecewise-Linear) with `kan.New().PiecewiseLinear()`.
 * Fixed OGBN-MAG GNN tests and demo.
 
 ## v0.12.0 - 2024/09/23
