@@ -59,13 +59,13 @@ func (c *Config) Rational() *Config {
 
 // Layer implements one GR-KAN layer. x is expected to be shaped [batchSize, numInputNodes].
 func (c *Config) rationalLayer(ctx *context.Context, x *Node, numOutputNodes int) *Node {
+	residual := x
 	batchSize := x.Shape().Dimensions[0]
 	numInputNodes := x.Shape().Dimensions[x.Rank()-1]
 	numInputGroups := numInputNodes
 	if c.inputGroupSize > 1 {
 		numInputGroups = numInputNodes / c.inputGroupSize
 	}
-
 	output := rational.New(ctx, x).
 		Version(c.rational.version).
 		Approximate(c.rational.initialApproximation).
@@ -74,6 +74,18 @@ func (c *Config) rationalLayer(ctx *context.Context, x *Node, numOutputNodes int
 		WithInputGroups(numInputGroups).
 		WithMultipleOutputs(numOutputNodes).
 		Done()
-	output.AssertDims(batchSize, numInputNodes, numOutputNodes)
-	return Transpose(output, -1, -2)
+	output.AssertDims(batchSize, numOutputNodes, numInputNodes)
+
+	// Reduce the inputs to get the outputs:
+	if c.useMean {
+		output = ReduceMean(output, -1)
+	} else {
+		output = ReduceSum(output, -1)
+	}
+	output.AssertDims(batchSize, numOutputNodes) // Shape=[batch, outputs]
+
+	if c.useResidual && numInputNodes == numOutputNodes {
+		output = Add(output, residual)
+	}
+	return output
 }
