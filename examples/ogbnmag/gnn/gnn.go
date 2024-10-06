@@ -10,9 +10,9 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/nanlogger"
 	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activations"
+	"github.com/gomlx/gomlx/ml/layers/fnn"
 	"github.com/gomlx/gomlx/ml/layers/kan"
 	"github.com/gomlx/gomlx/ml/layers/rational"
 	"github.com/gomlx/gomlx/types/shapes"
@@ -426,14 +426,14 @@ func poolMessagesWithAdjacency(ctx *context.Context, source, edgesSource, edgesT
 }
 
 var layersWithPaperEmbeddingsInput = []string{
-	//"/readout/gnn:seeds",
-	//"/graph_update_0/gnn:seedsAuthors/update",
+	//"/model/readout/gnn:seeds",
+	//"/model/graph_update_0/gnn:seedsAuthors/update",
 
-	//"/graph_update_0/gnn:papersByAuthors/update",
-	//"/graph_update_0/gnn:seedsBase/update",
+	//"/model/graph_update_0/gnn:papersByAuthors/update",
+	//"/model/graph_update_0/gnn:seedsBase/update",
 
-	// These layers, if converted to KAN, incurs in costs.
-	"/graph_update_0/gnn:seeds/update",
+	// These layers, if converted to KAN, incur in accuracy penalties.
+	"/model/graph_update_0/gnn:seeds/update",
 }
 
 func hasPaperEmbeddingsInput(scope string) bool {
@@ -489,17 +489,19 @@ func updateState(ctx *context.Context, prevState, input, mask *Node) *Node {
 func kanUpdateState(ctx *context.Context, prevState, input, mask *Node) *Node {
 	stateDim := context.GetParamOr(ctx, ParamStateDim, 128)
 	numHiddenLayers := context.GetParamOr(ctx, ParamUpdateNumHiddenLayers, 0)
-	if hasPaperEmbeddingsInput(ctx.Scope()) {
+	if false && hasPaperEmbeddingsInput(ctx.Scope()) {
 		fmt.Printf("\t> special KAN for %q\n", ctx.Scope())
-		g := input.Graph()
 		inputDim := input.Shape().Dim(-1)
-		a := ctx.In("adjust").WithInitializer(initializers.One).
-			VariableWithShape("a", shapes.Make(input.DType(), inputDim)).ValueGraph(g)
-		b := ctx.In("adjust").WithInitializer(initializers.Zero).
-			VariableWithShape("b", shapes.Make(input.DType(), inputDim)).ValueGraph(g)
-		a = ExpandLeftToRank(a, input.Rank())
-		b = ExpandLeftToRank(b, input.Rank())
-		input = Add(Mul(input, a), b)
+		return fnn.New(ctx, input, inputDim).NumHiddenLayers(1, inputDim).Done()
+		//g := input.Graph()
+		//inputDim := input.Shape().Dim(-1)
+		//a := ctx.In("adjust").WithInitializer(initializers.One).
+		//	VariableWithShape("a", shapes.Make(input.DType(), inputDim)).ValueGraph(g)
+		//b := ctx.In("adjust").WithInitializer(initializers.Zero).
+		//	VariableWithShape("b", shapes.Make(input.DType(), inputDim)).ValueGraph(g)
+		//a = ExpandLeftToRank(a, input.Rank())
+		//b = ExpandLeftToRank(b, input.Rank())
+		//input = Add(Mul(input, a), b)
 
 		/*
 			input = kan.New(ctx.In("adjust"), input, input.Shape().Dim(-1)).

@@ -75,20 +75,20 @@ func MagModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 
 	// We disable checking for re-use of scopes because we deliberately reuse
 	// kernels in our GNN.
-	ctx = ctx.Checked(false)
+	ctxModel := ctx.In("model").Checked(false)
 
 	strategy := spec.(*sampler.Strategy)
-	graphStates, _ := FeaturePreprocessing(ctx, strategy, inputs)
+	graphStates, _ := FeaturePreprocessing(ctxModel, strategy, inputs)
 
 	if NanLogger != nil {
 		fmt.Println("*** Using NanLogger ***")
 	}
 	gnn.NanLogger = NanLogger
-	gnn.NodePrediction(ctx, strategy, graphStates)
+	gnn.NodePrediction(ctxModel, strategy, graphStates)
 
 	// Last layer outputs the logits for the `NumLabels` classes.
 	readoutState := graphStates[strategy.Seeds[0].Name]
-	readoutState.Value = logitsGraph(ctx, readoutState.Value)
+	readoutState.Value = logitsGraph(ctxModel, readoutState.Value)
 
 	if klog.V(2).Enabled() {
 		// Log the largest non-parameter node.

@@ -197,12 +197,12 @@ func TestLayerWiseInferenceMinimal(t *testing.T) {
 	setMinimalTestParams(ctx)
 	// Set weights to fixed values, that makes it easier to interpret:
 	{
-		ctx := ctx.InAbsPath("/graph_update_0/gnn:authors/conv/message/dense")
+		ctx := ctx.InAbsPath("/model/graph_update_0/gnn:authors/conv/message/dense")
 		_ = ctx.VariableWithValue("weights", tensors.FromValue([][]float32{{1.0}}))
 		_ = ctx.VariableWithValue("biases", tensors.FromValue([]float32{0.0}))
 	}
 	{
-		ctx := ctx.InAbsPath("/graph_update_0/gnn:seeds/update/dense")
+		ctx := ctx.InAbsPath("/model/graph_update_0/gnn:seeds/update/dense")
 		_ = ctx.VariableWithValue("weights", tensors.FromValue([][]float32{{1000.0}, {1.0}}))
 		_ = ctx.VariableWithValue("biases", tensors.FromValue([]float32{0.0}))
 	}
