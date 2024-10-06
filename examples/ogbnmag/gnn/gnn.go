@@ -68,6 +68,9 @@ var (
 	// influence of the leaf nodes to reach to the root nodes.
 	// The default is `tree`.
 	ParamGraphUpdateType = "gnn_graph_update_type"
+
+	// ParamNoKanForLayers is a list of layers (comma separated) for which it should not use KAN layers.
+	ParamNoKanForLayers = "gnn_no_kan"
 )
 
 // NanLogger is used if not nil.
@@ -439,14 +442,22 @@ func hasPaperEmbeddingsInput(scope string) bool {
 	return slices.Index(layersWithPaperEmbeddingsInput, scope) != -1
 }
 
+func noKANForScope(ctx *context.Context) bool {
+	skip := context.GetParamOr(ctx, ParamNoKanForLayers, "")
+	if skip == "" {
+		return false
+	}
+	noKANScopes := strings.Split(skip, ",")
+	return slices.Index(noKANScopes, ctx.Scope()) >= 0
+}
+
 // updateState of a node set, given the `input` (should be a concatenation of previous
 // state and all pooled messages) and its `mask`.
 func updateState(ctx *context.Context, prevState, input, mask *Node) *Node {
 	useKAN := context.GetParamOr(ctx, "kan", false)
-	//if hasPaperEmbeddingsInput(ctx.Scope()) {
-	//	useKAN = false
-	//	fmt.Printf("\tDisabled KAN for %s\n", ctx.Scope())
-	//}
+	if useKAN && noKANForScope(ctx) {
+		useKAN = false
+	}
 	if useKAN {
 		return kanUpdateState(ctx, prevState, input, mask)
 	}

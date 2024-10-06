@@ -91,6 +91,7 @@ func createDefaultContext() *context.Context {
 		gnn.ParamMessageDim:            32, // 128 or 256 will work better, but takes way more time
 		gnn.ParamStateDim:              32, // 128 or 256 will work better, but takes way more time
 		gnn.ParamUseRootAsContext:      false,
+		gnn.ParamNoKanForLayers:        "",
 
 		mag.ParamEmbedDropoutRate:     0.0,
 		mag.ParamSplitEmbedTablesSize: 1,
