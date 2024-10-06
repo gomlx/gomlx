@@ -49,7 +49,7 @@ func TestConfig_Approximate(t *testing.T) {
 				WithDegrees(5, 4).
 				WithMultiplier(true).
 				Done()
-			y = ReduceSum(y, -2)
+			y = ReduceSum(y, -1)
 			yMean := ReduceAllMean(y)
 			variance := DivScalar(ReduceAllSum(Square(Sub(y, yMean))), float64(batchSize*numOutputs-1))
 			inputs = []*Node{}
