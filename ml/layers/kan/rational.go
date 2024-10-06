@@ -24,6 +24,11 @@ var (
 
 	// ParamRationalDenominatorDegree configures the default value for the numerator degree for GR-KAN.
 	ParamRationalDenominatorDegree = "kan_rational_den"
+
+	// ParamRationalInitialApproximation configures how to initialize the values of the rational functions.
+	// Valid values are "identity", "swish", "relu". See rational if the approximation is not given for the
+	// given degrees combination.
+	ParamRationalInitialApproximation = "kan_rational_approximate"
 )
 
 // rationalConfig holds the configuration for GR-KANs
@@ -38,7 +43,7 @@ type rationalConfig struct {
 func (c *Config) initRational(ctx *context.Context) {
 	c.rational.numDegree = context.GetParamOr(ctx, ParamRationalNumeratorDegree, 5)
 	c.rational.denDegree = context.GetParamOr(ctx, ParamRationalDenominatorDegree, 4)
-	c.rational.initialApproximation = rational.IdentityApproximation
+	c.rational.initialApproximation = context.GetParamOr(ctx, ParamRationalInitialApproximation, rational.IdentityApproximation)
 	c.rational.version = "B"
 	c.rational.withMultiplier = true
 	c.rational.multiplierInitialVariance = 1.0
