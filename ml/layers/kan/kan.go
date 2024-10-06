@@ -111,6 +111,9 @@ type Config struct {
 	discreteSplitPointsTrainable, discreteSplitPointsFrozen bool
 	discreteRangeMin, discreteRangeMax                      float64
 	discreteSplitPointInitialValue                          *tensors.Tensor
+
+	useRational bool
+	rational    rationalConfig
 }
 
 // New returns the configuration for a KAN bsplineLayer(s) to be applied to the input x.
@@ -146,6 +149,7 @@ func New(ctx *context.Context, input *Node, numOutputNodes int) *Config {
 		discreteSplitPointsFrozen:    context.GetParamOr(ctx, ParamDiscreteSplitPointsFrozen, false),
 	}
 	c = c.DiscreteInputRange(-1, 1)
+	c.initRational(ctx)
 
 	perturbationStr := context.GetParamOr(ctx, ParamDiscretePerturbation, "triangular")
 	switch perturbationStr {
@@ -297,6 +301,9 @@ func (c *Config) Done() *Node {
 		if c.useDiscrete {
 			layerCtx := ctx.In(fmt.Sprintf("discrete_kan_hidden_%d", ii))
 			x = c.discreteLayer(layerCtx, x, c.numHiddenNodes)
+		} else if c.useRational {
+			layerCtx := ctx.In(fmt.Sprintf("grkan_hidden_%d", ii))
+			x = c.rationalLayer(layerCtx, x, c.numHiddenNodes)
 		} else {
 			layerCtx := ctx.In(fmt.Sprintf("kan_hidden_%d", ii))
 			x = c.bsplineLayer(layerCtx, x, c.numHiddenNodes)
@@ -306,6 +313,8 @@ func (c *Config) Done() *Node {
 	// Apply last layer.
 	if c.useDiscrete {
 		x = c.discreteLayer(ctx.In("discrete_kan_output_layer"), x, c.numOutputNodes)
+	} else if c.useRational {
+		x = c.rationalLayer(ctx.In("grkan_output_layer"), x, c.numOutputNodes)
 	} else {
 		x = c.bsplineLayer(ctx.In("kan_output_layer"), x, c.numOutputNodes)
 	}

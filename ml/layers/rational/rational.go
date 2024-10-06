@@ -66,6 +66,10 @@ type Config struct {
 // By default, it is configured to create one learnable function per input feature (the last dimension of x).
 // So if x has shape [batch_size=64, feature_dim=32], it will create 32 functions initialized the same, but which will
 // learn separately. See Config.WithInputGroups and Config.NumOutputs for other options.
+//
+// New returns a Config object that can be further configured. Once finished, call Config.Done and it will
+// return the result of "rational(x)" with the same as x.Shape(), except if configured with a Config.WithMultipleOutputs,
+// in which case there is an extra output axis with dimension equal to the number of the outputs.
 func New(ctx *context.Context, x *Node) *Config {
 	if x.IsScalar() {
 		x = Reshape(x, 1)
@@ -205,7 +209,7 @@ func (c *Config) WithInitialValues(numeratorInit, denominatorInit *tensors.Tenso
 // Done creates and applies the learnable rational function configured, returning the result of Rational(x).
 //
 // The returned shape is the same as x.Shape(), except if configured with a Config.WithMultipleOutputs, in which
-// case
+// case there is an extra output axis with dimension equal to the number of the outputs.
 func (c *Config) Done() *Node {
 	if c.numeratorDegree <= 0 || c.denominatorDegree <= 0 {
 		exceptions.Panicf("rational functions requires degrees >= 1, got numerator/denominator degrees = %d/%d",

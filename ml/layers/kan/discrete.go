@@ -226,7 +226,7 @@ func (c *Config) DiscreteInitialSplitPoints(initialValues *tensors.Tensor) *Conf
 	return c
 }
 
-// Layer implements one KAN bsplineLayer. x is expected to be rank-2.
+// Layer implements one Discrete-KAN. x is expected to be shaped [batchSize, numInputNodes].
 func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int) *Node {
 	g := x.Graph()
 	dtype := x.DType()

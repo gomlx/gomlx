@@ -37,6 +37,7 @@
   * Added various types of schedules for smoothness: cosine, linear, exponential.
   * Added normal distribution based perturbation.
   * Added input grouping.
+* Added GR-KAN with `kan.New().Rational()`.
 * Fixed OGBN-MAG GNN tests and demo.
 
 ## v0.12.0 - 2024/09/23
