@@ -70,7 +70,7 @@ func lossGraphFn(labels []*Node, predictions []*Node) (loss *Node) {
 	return
 }
 
-func TestKAN(t *testing.T) {
+func TestBSplineKAN(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping testing in short mode")
 		return
@@ -117,7 +117,7 @@ func kanLargeGraphModel(ctx *context.Context, spec any, inputs []*Node) []*Node 
 	return []*Node{output, labels}
 }
 
-func TestKANRegularized(t *testing.T) {
+func TestBSplineKANRegularized(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping testing in short mode")
 		return
@@ -150,7 +150,10 @@ func TestKANRegularized(t *testing.T) {
 	// (if we remove the L1 regularization the test fails).
 	var numZeros int
 	fmt.Println("\nVariables:")
-	for _, scope := range []string{"/kan_hidden_0", "/kan_output_layer"} {
+	//ctx.EnumerateVariables(func(v *context.Variable) {
+	//	fmt.Printf("\t%s -> %v\n", v.ScopeAndName(), v.Value())
+	//})
+	for _, scope := range []string{"/bspline_kan_hidden_0", "/bspline_kan_output_layer"} {
 		for _, vName := range []string{"w_splines", "w_residual"} {
 			v := ctx.InspectVariable(scope, vName)
 			require.NotNilf(t, v, "failed to inspect variable scope=%q, name=%q", scope, vName)
@@ -165,6 +168,6 @@ func TestKANRegularized(t *testing.T) {
 			})
 		}
 	}
-	fmt.Printf("\nNumbe of zeros in the magnitudes of the KAN network: %d\n", numZeros)
+	fmt.Printf("\nNumber of zeros in the magnitudes of the KAN network: %d\n", numZeros)
 	require.GreaterOrEqual(t, numZeros, 12, "We expected at least 12 zeros on the magnitudes of the KAN model, with L1 regularizer, we got only %d though", numZeros)
 }
