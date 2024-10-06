@@ -6,7 +6,7 @@
   * All random initializers (`RandomUniformFn`, `RandomUniformFn`, `RandomNormalFn`, `GlorotUniformFn`, `XavierUniformFn`)
     changed to take the context as a parameter, instead of `initialSeed`. 
   * The `initialSeed` is instead read from the hyperparameter `initializers.ParamInitialSeed` ("initializers_seed")
-    and default to `initializers.NoSeed`, which means the seed is randomly started.
+    and default to `initializers.NoSeed` (0), which means the seed is randomly started.
 * Added learnable rational functions (ml/layers/rational): can be used for activations or as univariate learnable
   functions for KAN.
   * Added rational notebook to generate initial values with approximations to arbitrary univariate functions.
@@ -35,7 +35,8 @@
   * Added monotonic projection of split points.
   * Added ConstantL1 regularizer for control points.
   * Added various types of schedules for smoothness: cosine, linear, exponential.
-  * Added normal distribution based perturbation
+  * Added normal distribution based perturbation.
+  * Added input grouping.
 * Fixed OGBN-MAG GNN tests and demo.
 
 ## v0.12.0 - 2024/09/23

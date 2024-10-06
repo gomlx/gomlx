@@ -133,6 +133,7 @@ func New(ctx *context.Context, input *Node, numOutputNodes int) *Config {
 		regularizer:     regularizers.FromContext(ctx),
 		useResidual:     context.GetParamOr(ctx, ParamResidual, true),
 		useMean:         context.GetParamOr(ctx, ParamMean, true),
+		inputGroupSize:  context.GetParamOr(ctx, ParamInputGroupSize, int(0)),
 
 		bsplineNumControlPoints: context.GetParamOr(ctx, ParamNumControlPoints, 20),
 		bsplineDegree:           context.GetParamOr(ctx, ParamBSplineDegree, 2),
