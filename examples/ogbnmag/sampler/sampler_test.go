@@ -238,7 +238,7 @@ func TestSamplingRandomness(t *testing.T) {
 	}
 
 	// Sample
-	numSamples := 1000
+	numSamples := 10000
 	dsNames := []string{"without_replacement", "with_replacement"}
 	for dsIdx, ds := range []train.Dataset{
 		strategy.NewDataset("infinite").Infinite().Shuffle(),
@@ -276,9 +276,9 @@ func TestSamplingRandomness(t *testing.T) {
 		fmt.Printf("ds=%s, papersCounts=%v\n", dsNames[dsIdx], papersCounts)
 		assert.Equalf(t, numSamples, papersCounts[1]+papersCounts[2], "while testing dataset %q", dsNames[dsIdx])
 		if dsIdx == 0 {
-			assert.Lessf(t, diff(papersCounts[1], papersCounts[2]), 2, "while testing dataset %q", dsNames[dsIdx])
+			require.Lessf(t, diff(papersCounts[1], papersCounts[2]) /* 2% */, 10, "while testing dataset %q", dsNames[dsIdx])
 		} else {
-			assert.Lessf(t, diff(papersCounts[1], papersCounts[2]), 100, "while testing dataset %q", dsNames[dsIdx])
+			require.Lessf(t, diff(papersCounts[1], papersCounts[2]) /* 10% */, 500, "while testing dataset %q", dsNames[dsIdx])
 		}
 		fmt.Printf("authorsPerPapersCounts=%v\n", authorsPerPapersCounts)
 		for _, paper := range []int{1, 2} {
@@ -286,7 +286,7 @@ func TestSamplingRandomness(t *testing.T) {
 			for author := paper + 1; author < (paper+1)*2; author++ {
 				// author loop starts one after the first author for the paper, so we can compare
 				// the count of the author with the previous one. They should be similar.
-				assert.Lessf(t, diff(authorsCounts[author], authorsCounts[author-1]), 50, "while testing dataset %q", dsNames[dsIdx])
+				require.Lessf(t, diff(authorsCounts[author], authorsCounts[author-1]), 200, "while testing dataset %q", dsNames[dsIdx])
 			}
 		}
 	}
