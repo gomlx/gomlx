@@ -60,3 +60,27 @@ func TestConfig_Approximate(t *testing.T) {
 			1.0,
 		}, 1.0)
 }
+
+func TestMultipleOutputs(t *testing.T) {
+	ctxtest.RunTestGraphFn(t, "Identity: multiple outputs, numInputGroups=2",
+		func(ctx *context.Context, g *Graph) (inputs, outputs []*Node) {
+			batchSize := 3
+			x := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, 6))
+			y := New(ctx, x).
+				Approximate("identity").
+				Version("B").
+				WithInputGroups(2).
+				WithMultipleOutputs(2).
+				Done()
+			inputs = []*Node{x}
+			outputs = []*Node{y}
+			return
+		}, []any{
+			// Output: shape [batchSize, outputDim=2, inputDim=6]
+			[][][]float32{
+				{{0, 1, 2, 3, 4, 5}, {0, 1, 2, 3, 4, 5}},
+				{{6, 7, 8, 9, 10, 11}, {6, 7, 8, 9, 10, 11}},
+				{{12, 13, 14, 15, 16, 17}, {12, 13, 14, 15, 16, 17}},
+			},
+		}, 0.01)
+}
