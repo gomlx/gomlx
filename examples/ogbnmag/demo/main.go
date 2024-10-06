@@ -102,7 +102,7 @@ func createDefaultContext() *context.Context {
 		mag.ParamSplitEmbedTablesSize: 1,
 		mag.ParamReuseKernels:         true,
 		mag.ParamIdentitySubSeeds:     true,
-		mag.ParamDType:                "float16",
+		mag.ParamDType:                "float32",
 	})
 	ctx.In("readout").SetParam(gnn.ParamUpdateNumHiddenLayers, 2)
 	return ctx

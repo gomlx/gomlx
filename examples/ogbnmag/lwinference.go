@@ -92,6 +92,7 @@ func BuildLayerWiseCustomMetricFn(backend backends.Backend, ctx *context.Context
 func BuildLayerWiseInferenceModel(strategy *sampler.Strategy, predictions bool) func(ctx *context.Context, g *Graph) *Node {
 	return func(ctx *context.Context, g *Graph) *Node {
 		ctx = ctx.WithInitializer(initializers.GlorotUniformFn(ctx))
+		ctx = ctx.In("model")
 
 		// Create inputs with all elements. Similar to the code in [sampler.Dataset.Yield].
 		inputs := make([]*Node, 0, 5*len(strategy.Rules))
