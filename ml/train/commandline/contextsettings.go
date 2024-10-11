@@ -9,6 +9,7 @@ import (
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/pkg/errors"
 	"os"
+	"slices"
 	"strings"
 )
 
@@ -229,12 +230,35 @@ func CreateContextSettingsFlag(ctx *context.Context, flagName string) *string {
 // SprintContextSettings pretty-print values for the current hyperparameters settings into a string.
 func SprintContextSettings(ctx *context.Context) string {
 	var parts []string
-	parts = append(parts, "Context hyperparameters:")
 	ctx.EnumerateParams(func(scope, key string, value any) {
 		if scope == context.RootScope {
 			scope = ""
 		}
-		parts = append(parts, fmt.Sprintf("\"%s/%s\": (%T) %v", scope, key, value, value))
+		parts = append(parts, fmt.Sprintf("\t\"%s/%s\": (%T) %v", scope, key, value, value))
 	})
-	return strings.Join(parts, "\n\t")
+	return strings.Join(parts, "\n")
+}
+
+func SprintModifiedContextSettings(ctx *context.Context, paramsSet []string) string {
+	var parts []string
+	paramsSet = slices.Clone(paramsSet)
+	slices.Sort(paramsSet)
+	var lastParamPath string
+	for _, paramPath := range paramsSet {
+		// Remove duplicates.
+		if paramPath == lastParamPath {
+			continue
+		}
+		lastParamPath = paramPath
+		paramScope, paramName := context.SplitScope(paramPath)
+		if paramScope == "" {
+			paramScope = context.RootScope
+		}
+		value, found := ctx.InAbsPath(paramScope).GetParam(paramName)
+		if !found {
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("\t%q: (%T) %v", paramPath, value, value))
+	}
+	return strings.Join(parts, "\n")
 }
