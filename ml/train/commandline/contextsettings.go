@@ -180,7 +180,7 @@ func parseContextSetting(ctx *context.Context, setting string, paramsSet []strin
 		return
 	}
 	ctxInScope.SetParam(paramName, value)
-	paramsSet = append(paramsSet, paramPath)
+	newParamsSet = append(newParamsSet, paramPath)
 	return
 }
 
