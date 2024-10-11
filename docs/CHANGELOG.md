@@ -1,6 +1,10 @@
 # GoMLX changelog
 
-## v0.13.0 - Next
+## Next
+
+* `commandline.ParseContextSettings` now allows parsing settings from a text file. Also fixed `commandline.SprintContextSettings`.
+
+## v0.13.0 - 2024/10/07
 
 * Package `initializers`
   * All random initializers (`RandomUniformFn`, `RandomUniformFn`, `RandomNormalFn`, `GlorotUniformFn`, `XavierUniformFn`)

@@ -211,7 +211,7 @@ func CreateContextSettingsFlag(ctx *context.Context, flagName string) *string {
 			`Scoped settings are allowed, by using %q to separated scopes. `+
 			`It can also be given an entry like: "file:settings_file.txt", in `+
 			`which case the file will be read and the settings will be parsed, `+
-			`with new-lines working as ";" to separate scopes. `+
+			`with new-lines working as ";" to separate settings and lines starting with "#" are considered comments. `+
 			`Current available parameters that can be set:`,
 		context.ScopeSeparator))
 	ctx.EnumerateParams(func(scope, key string, value any) {
