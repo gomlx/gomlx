@@ -14,6 +14,7 @@ import (
 	"github.com/gomlx/gomlx/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/ml/train/commandline"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/ml/train/optimizers/cosineschedule"
 	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
 	"os"
@@ -76,14 +77,14 @@ func createDefaultContext() *context.Context {
 		kan.ParamPWLSplitPointsTrainable: false,
 
 		// Optimizer parameters.
-		optimizers.ParamOptimizer:                     "adamw",
-		optimizers.ParamLearningRate:                  0.001,
-		optimizers.ParamCosineScheduleSteps:           -1, // If set to -1, does automatic setting of CosineScheduleSteps to train_steps.
-		optimizers.ParamCosineScheduleMinLearningRate: 0.0,
-		optimizers.ParamClipStepByValue:               0.0,
-		optimizers.ParamAdamEpsilon:                   1e-7,
-		optimizers.ParamAdamDType:                     "float32",
-		optimizers.ParamClipNaN:                       false,
+		optimizers.ParamOptimizer:           "adamw",
+		optimizers.ParamLearningRate:        0.001,
+		cosineschedule.ParamPeriodSteps:     -1, // If set to -1, does automatic setting of CosineScheduleSteps to train_steps.
+		cosineschedule.ParamMinLearningRate: 0.0,
+		optimizers.ParamClipStepByValue:     0.0,
+		optimizers.ParamAdamEpsilon:         1e-7,
+		optimizers.ParamAdamDType:           "float32",
+		optimizers.ParamClipNaN:             false,
 
 		regularizers.ParamL2:        1e-5,
 		layers.ParamDropoutRate:     0.2,
@@ -119,10 +120,10 @@ func SetTrainSteps(ctx *context.Context) {
 		numTrainSteps = numEpochs * stepsPerEpoch
 		ctx.SetParam("train_steps", numTrainSteps)
 	}
-	cosineScheduleSteps := context.GetParamOr(ctx, optimizers.ParamCosineScheduleSteps, 0)
-	if cosineScheduleSteps < 0 {
-		ctx.SetParam(optimizers.ParamCosineScheduleSteps, numTrainSteps/(-cosineScheduleSteps))
-	}
+	//cosineScheduleSteps := context.GetParamOr(ctx, cosineschedule.ParamPeriodSteps, 0)
+	//if cosineScheduleSteps < 0 {
+	//	ctx.SetParam(cosineschedule.ParamPeriodSteps, numTrainSteps/(-cosineScheduleSteps))
+	//}
 }
 
 func main() {
@@ -145,8 +146,8 @@ func main() {
 	paramsSet := must.M1(commandline.ParseContextSettings(ctx, *settings))
 	fmt.Printf("Parameters that were set: %q\n", paramsSet)
 	if *flagVerbose {
-		fmt.Println("Hyperparameters:")
-		fmt.Println(commandline.SprintContextSettings(ctx))
+		fmt.Println("Hyperparameters set:")
+		fmt.Println(commandline.SprintModifiedContextSettings(ctx, paramsSet))
 	}
 	mag.BatchSize = context.GetParamOr(ctx, "batch_size", 128)
 

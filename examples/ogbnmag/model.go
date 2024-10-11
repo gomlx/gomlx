@@ -10,6 +10,7 @@ import (
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/ml/train/optimizers/cosineschedule"
 	"github.com/gomlx/gopjrt/dtypes"
 	"k8s.io/klog/v2"
 )
@@ -71,7 +72,7 @@ func MagModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 			Panicf("Cannot parse hyperparameter %s=%q: %v", optimizers.ParamAdamDType, adamDType, err)
 		}
 	}
-	optimizers.CosineAnnealingSchedule(ctx, g, lrDType).FromContext().Done()
+	cosineschedule.New(ctx, g, lrDType).FromContext().Done()
 
 	// We disable checking for re-use of scopes because we deliberately reuse
 	// kernels in our GNN.

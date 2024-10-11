@@ -31,6 +31,7 @@ import (
 	"github.com/gomlx/gomlx/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/ml/train/commandline"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/ml/train/optimizers/cosineschedule"
 	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
 )
@@ -71,15 +72,15 @@ func createDefaultContext() *context.Context {
 		// "normalization" is overridden by "fnn_normalization" if set.
 		layers.ParamNormalization: "none",
 
-		optimizers.ParamOptimizer:           "adamw",
-		optimizers.ParamLearningRate:        1e-4,
-		optimizers.ParamAdamEpsilon:         1e-7,
-		optimizers.ParamAdamDType:           "",
-		optimizers.ParamCosineScheduleSteps: 0,
-		activations.ParamActivation:         "swish",
-		layers.ParamDropoutRate:             0.0,
-		regularizers.ParamL2:                1e-5,
-		regularizers.ParamL1:                1e-5,
+		optimizers.ParamOptimizer:       "adamw",
+		optimizers.ParamLearningRate:    1e-4,
+		optimizers.ParamAdamEpsilon:     1e-7,
+		optimizers.ParamAdamDType:       "",
+		cosineschedule.ParamPeriodSteps: 0,
+		activations.ParamActivation:     "swish",
+		layers.ParamDropoutRate:         0.0,
+		regularizers.ParamL2:            1e-5,
+		regularizers.ParamL1:            1e-5,
 
 		// FNN network parameters:
 		fnn.ParamNumHiddenLayers: 8,

@@ -14,13 +14,14 @@
  *	limitations under the License.
  */
 
-package optimizers
+package cosineschedule
 
 import (
 	"fmt"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
+	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -36,29 +37,29 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 	ctx := context.New().Checked(false)
 	cosineExec := context.NewExec(backend, ctx, func(ctx *context.Context, graph *Graph) *Node {
 		ctx.SetTraining(graph, true)
-		CosineAnnealingSchedule(ctx, graph, dtypes.Float32).
+		New(ctx, graph, dtypes.Float32).
 			PeriodInSteps(periodInSteps).
 			LearningRate(1.0).
 			MinLearningRate(0.001).
 			Done()
-		return LearningRateVar(ctx, dtypes.Float32, 0.001).ValueGraph(graph)
+		return optimizers.LearningRateVar(ctx, dtypes.Float32, 0.001).ValueGraph(graph)
 	})
 
 	for ii := 0; ii < 2*periodInSteps; ii++ {
 		require.NotPanicsf(t, func() { _ = cosineExec.Call() }, "cosineExec.Call failed to execute graph for ii=%d", ii)
 
 		// Checks correct step number.
-		stepVar := ctx.InspectVariable(fmt.Sprintf("/%s/%s", Scope, CosineScheduleScope), GlobalStepVariableName)
+		stepVar := ctx.InspectVariable(fmt.Sprintf("/%s/%s", optimizers.Scope, Scope), optimizers.GlobalStepVariableName)
 		if stepVar == nil {
-			t.Fatalf("Learning rate variable not created in scope %q, name %q", "/optimizers/cosine", GlobalStepVariableName)
+			t.Fatalf("Learning rate variable not created in scope %q, name %q", "/optimizers/cosine", optimizers.GlobalStepVariableName)
 		}
 		step := stepVar.Value().Value().(int64)
 		assert.Equal(t, int64(ii+1), step)
 
 		// Check learning rate is following cosine formulation.
-		lrVar := ctx.InspectVariable("/optimizers", ParamLearningRate)
+		lrVar := ctx.InspectVariable("/optimizers", optimizers.ParamLearningRate)
 		if lrVar == nil {
-			t.Fatalf("Learning rate variable not created in scope %q, name %q", "/optimiziers", ParamLearningRate)
+			t.Fatalf("Learning rate variable not created in scope %q, name %q", "/optimiziers", optimizers.ParamLearningRate)
 		}
 		lr := lrVar.Value().Value().(float32)
 		cycle := float64(ii) / float64(periodInSteps)
@@ -70,12 +71,12 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 
 	cosineExec = context.NewExec(backend, ctx, func(ctx *context.Context, graph *Graph) *Node {
 		ctx.SetTraining(graph, false)
-		CosineAnnealingSchedule(ctx, graph, dtypes.Float32).
+		New(ctx, graph, dtypes.Float32).
 			PeriodInSteps(50).
 			LearningRate(1.0).
 			MinLearningRate(0.001).
 			Done()
-		return LearningRateVar(ctx, dtypes.Float32, 0.001).ValueGraph(graph)
+		return optimizers.LearningRateVar(ctx, dtypes.Float32, 0.001).ValueGraph(graph)
 	})
 	require.NotPanics(t, func() { _ = cosineExec.Call() }, "cosineExec.Call failed to execute graph when ctx.IsTraining() == false")
 }
