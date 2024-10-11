@@ -5,8 +5,10 @@ import (
 	"flag"
 	"fmt"
 	"github.com/gomlx/gomlx/ml/context"
+	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/pkg/errors"
+	"os"
 	"strings"
 )
 
@@ -42,107 +44,143 @@ import (
 func ParseContextSettings(ctx *context.Context, settings string) (paramsSet []string, err error) {
 	settingsList := strings.Split(settings, ";")
 	for _, setting := range settingsList {
-		if setting == "" {
-			continue
-		}
-		parts := strings.Split(setting, "=")
-		if len(parts) != 2 {
-			err = errors.Errorf("can't parse settings %q: each setting requires the format \"<param>=<value>\", got %q",
-				settings, setting)
-			return
-		}
-		paramPath, valueStr := parts[0], parts[1]
-		paramScope, paramName := context.SplitScope(paramPath)
-		if strings.Index(paramName, context.ScopeSeparator) != -1 {
-			err = errors.Errorf("can't set parameter %q  because some scope is set, but it is not absolue (it does not start with %q)",
-				paramPath, context.ScopeSeparator)
-			return
-		}
-		value, found := ctx.GetParam(paramName)
-		if !found {
-			err = errors.Errorf("can't set parameter %q (scope=%q)  because the param %q is not known in the root context",
-				paramPath, paramScope, paramName)
-			return
-		}
-
-		// Set the new parameter in the selected scope.
-		ctxInScope := ctx
-		if paramScope != "" {
-			ctxInScope = ctxInScope.InAbsPath(paramScope)
-		}
-
-		// Parse value accordingly.
-		// Is there a better way of doing this using reflection ?
-		switch v := value.(type) {
-		case int:
-			valueStr = strings.Replace(valueStr, "_", "", -1)
-			err = json.Unmarshal([]byte(valueStr), &v)
-			value = v
-		case int32:
-			valueStr = strings.Replace(valueStr, "_", "", -1)
-			err = json.Unmarshal([]byte(valueStr), &v)
-			value = v
-		case int64:
-			valueStr = strings.Replace(valueStr, "_", "", -1)
-			err = json.Unmarshal([]byte(valueStr), &v)
-			value = v
-		case uint:
-			valueStr = strings.Replace(valueStr, "_", "", -1)
-			err = json.Unmarshal([]byte(valueStr), &v)
-			value = v
-		case uint32:
-			valueStr = strings.Replace(valueStr, "_", "", -1)
-			err = json.Unmarshal([]byte(valueStr), &v)
-			value = v
-		case uint64:
-			valueStr = strings.Replace(valueStr, "_", "", -1)
-			err = json.Unmarshal([]byte(valueStr), &v)
-			value = v
-		case float64:
-			err = json.Unmarshal([]byte(valueStr), &v)
-			value = v
-		case float32:
-			err = json.Unmarshal([]byte(valueStr), &v)
-			value = v
-		case bool:
-			err = json.Unmarshal([]byte(valueStr), &v)
-			value = v
-		case string:
-			value = valueStr
-		case []string:
-			value = strings.Split(valueStr, ",")
-		case []int:
-			parts := strings.Split(valueStr, ",")
-			value = xslices.Map(parts, func(str string) int {
-				var asInt int
-				str = strings.Replace(str, "_", "", -1)
-				newErr := json.Unmarshal([]byte(str), &asInt)
-				if newErr != nil {
-					err = newErr
-				}
-				return asInt
-			})
-		case []float64:
-			parts := strings.Split(valueStr, ",")
-			value = xslices.Map(parts, func(str string) float64 {
-				var asNum float64
-				newErr := json.Unmarshal([]byte(str), &asNum)
-				if newErr != nil {
-					err = newErr
-				}
-				return asNum
-			})
-		default:
-			err = fmt.Errorf("don't know how to parse type %T for setting parameter %q -- it's easy to write a parser to a new type, ask in github if you need something standard",
-				value, setting)
-		}
+		paramsSet, err = parseContextSetting(ctx, setting, paramsSet)
 		if err != nil {
-			err = errors.Wrapf(err, "failed to parse value %q for parameter %q (default value is %#v)", valueStr, paramPath, value)
 			return
 		}
-		ctxInScope.SetParam(paramName, value)
-		paramsSet = append(paramsSet, paramPath)
 	}
+	return
+}
+
+func parseContextSetting(ctx *context.Context, setting string, paramsSet []string) (newParamsSet []string, err error) {
+	newParamsSet = paramsSet
+	if setting == "" {
+		return
+	}
+	if strings.HasPrefix(setting, "file:") {
+		// Read parameters from a file.
+		filePath := strings.TrimPrefix(setting, "file:")
+		filePath = data.ReplaceTildeInDir(filePath)
+		var contents []byte
+		contents, err = os.ReadFile(filePath)
+		if err != nil {
+			err = errors.Wrapf(err, "failed to read settings from file %q", filePath)
+			return
+		}
+		lines := strings.Split(string(contents), "\n")
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			settings := strings.Split(line, ";")
+			for _, setting := range settings {
+				newParamsSet, err = parseContextSetting(ctx, setting, newParamsSet)
+				if err != nil {
+					return
+				}
+			}
+		}
+		return
+	}
+
+	parts := strings.Split(setting, "=")
+	if len(parts) != 2 {
+		err = errors.Errorf("can't parse settings %q: each setting requires the format \"<param>=<value>\", got %q",
+			setting, setting)
+		return
+	}
+	paramPath, valueStr := parts[0], parts[1]
+	paramScope, paramName := context.SplitScope(paramPath)
+	if strings.Index(paramName, context.ScopeSeparator) != -1 {
+		err = errors.Errorf("can't set parameter %q  because some scope is set, but it is not absolue (it does not start with %q)",
+			paramPath, context.ScopeSeparator)
+		return
+	}
+	value, found := ctx.GetParam(paramName)
+	if !found {
+		err = errors.Errorf("can't set parameter %q (scope=%q)  because the param %q is not known in the root context",
+			paramPath, paramScope, paramName)
+		return
+	}
+
+	// Set the new parameter in the selected scope.
+	ctxInScope := ctx
+	if paramScope != "" {
+		ctxInScope = ctxInScope.InAbsPath(paramScope)
+	}
+
+	// Parse value accordingly.
+	// Is there a better way of doing this using reflection ?
+	switch v := value.(type) {
+	case int:
+		valueStr = strings.Replace(valueStr, "_", "", -1)
+		err = json.Unmarshal([]byte(valueStr), &v)
+		value = v
+	case int32:
+		valueStr = strings.Replace(valueStr, "_", "", -1)
+		err = json.Unmarshal([]byte(valueStr), &v)
+		value = v
+	case int64:
+		valueStr = strings.Replace(valueStr, "_", "", -1)
+		err = json.Unmarshal([]byte(valueStr), &v)
+		value = v
+	case uint:
+		valueStr = strings.Replace(valueStr, "_", "", -1)
+		err = json.Unmarshal([]byte(valueStr), &v)
+		value = v
+	case uint32:
+		valueStr = strings.Replace(valueStr, "_", "", -1)
+		err = json.Unmarshal([]byte(valueStr), &v)
+		value = v
+	case uint64:
+		valueStr = strings.Replace(valueStr, "_", "", -1)
+		err = json.Unmarshal([]byte(valueStr), &v)
+		value = v
+	case float64:
+		err = json.Unmarshal([]byte(valueStr), &v)
+		value = v
+	case float32:
+		err = json.Unmarshal([]byte(valueStr), &v)
+		value = v
+	case bool:
+		err = json.Unmarshal([]byte(valueStr), &v)
+		value = v
+	case string:
+		value = valueStr
+	case []string:
+		value = strings.Split(valueStr, ",")
+	case []int:
+		parts := strings.Split(valueStr, ",")
+		value = xslices.Map(parts, func(str string) int {
+			var asInt int
+			str = strings.Replace(str, "_", "", -1)
+			newErr := json.Unmarshal([]byte(str), &asInt)
+			if newErr != nil {
+				err = newErr
+			}
+			return asInt
+		})
+	case []float64:
+		parts := strings.Split(valueStr, ",")
+		value = xslices.Map(parts, func(str string) float64 {
+			var asNum float64
+			newErr := json.Unmarshal([]byte(str), &asNum)
+			if newErr != nil {
+				err = newErr
+			}
+			return asNum
+		})
+	default:
+		err = fmt.Errorf("don't know how to parse type %T for setting parameter %q -- it's easy to write a parser to a new type, ask in github if you need something standard",
+			value, setting)
+	}
+	if err != nil {
+		err = errors.Wrapf(err, "failed to parse value %q for parameter %q (default value is %#v)", valueStr, paramPath, value)
+		return
+	}
+	ctxInScope.SetParam(paramName, value)
+	paramsSet = append(paramsSet, paramPath)
 	return
 }
 
@@ -171,6 +209,9 @@ func CreateContextSettingsFlag(ctx *context.Context, flagName string) *string {
 		`Set context parameters defining the model. `+
 			`It should be a list of elements "param=value" separated by ";". `+
 			`Scoped settings are allowed, by using %q to separated scopes. `+
+			`It can also be given an entry like: "file:settings_file.txt", in `+
+			`which case the file will be read and the settings will be parsed, `+
+			`with new-lines working as ";" to separate scopes. `+
 			`Current available parameters that can be set:`,
 		context.ScopeSeparator))
 	ctx.EnumerateParams(func(scope, key string, value any) {
@@ -191,10 +232,9 @@ func SprintContextSettings(ctx *context.Context) string {
 	parts = append(parts, "Context hyperparameters:")
 	ctx.EnumerateParams(func(scope, key string, value any) {
 		if scope == context.RootScope {
-			parts = append(parts, fmt.Sprintf("%q: (%T) %v", key, value, value))
-		} else {
-			parts = append(parts, fmt.Sprintf("%q / %q: (%T) %q", scope, key, value, value))
+			scope = ""
 		}
+		parts = append(parts, fmt.Sprintf("\"%s/%s\": (%T) %v", scope, key, value, value))
 	})
 	return strings.Join(parts, "\n\t")
 }

@@ -16,12 +16,14 @@ import (
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
+	"os"
 	"time"
 
 	_ "github.com/gomlx/gomlx/backends/xla"
 )
 
 var (
+	flagVerbose       = flag.Bool("verbose", false, "Set to true to print more information.")
 	flagEval          = flag.Bool("eval", false, "Set to true to run evaluation instead of training.")
 	flagSkipReport    = flag.Bool("skip_report", false, "Set to true to skip report of quality after training.")
 	flagSkipTrainEval = flag.Bool("skip_train_eval", false, "Set to true to skip evaluation on training data, which takes longer.")
@@ -131,15 +133,25 @@ func main() {
 	settings := commandline.CreateContextSettingsFlag(ctx, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	paramsSet := must.M1(commandline.ParseContextSettings(ctx, *settings))
 
-	// Set checkpoint accordingly.
+	// Change current directory to data directory.
 	*flagDataDir = mldata.ReplaceTildeInDir(*flagDataDir)
+	if err := os.Chdir(*flagDataDir); err != nil {
+		klog.Fatalf("Failed to change to current directory to %q: %v", *flagDataDir, err)
+	}
+
+	// Parse hyperparameter settings.
+	paramsSet := must.M1(commandline.ParseContextSettings(ctx, *settings))
+	if *flagVerbose {
+		fmt.Println("Hyperparameters:")
+		fmt.Println(commandline.SprintContextSettings(ctx))
+	}
+	mag.BatchSize = context.GetParamOr(ctx, "batch_size", 128)
+
+	//Early sanity checks.
 	if *flagCheckpoint == "" && *flagEval {
 		klog.Fatal("To run eval (--eval) you need to specify a checkpoint (--checkpoint).")
 	}
-
-	mag.BatchSize = context.GetParamOr(ctx, "batch_size", 128)
 
 	// Load data from OGBN-MAG.
 	fmt.Printf("Loading data ... ")
