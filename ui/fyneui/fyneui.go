@@ -1,34 +1,42 @@
-// Package fyneui implements a simple GUI app that displays how training progresses, as well
-// as extra visualization for:
+// Package fyneui implements a simple GUI app that displays how training progresses.
+//
+// It is EXPERIMENTAL, an incomplete.
+//
+// It aims at providing custom visualization for:
 //
 // - Training progress
 // - Hyperparameters
 // - Variables
+// - Logged tensors (see Node.SetLogged method)
 // - Final metrics
 //
 // How to use this:
 //
-// 1. Write the following main function:
+// 1. Write the following main function (*)
 //
 //	func main() {
 //		fyneui.RunMain(mainContinue)
 //	}
 //
 //	func mainContinue() {
-//		// usual main() code.
+//		flag.Parse()
+//		// usual main() code...
 //	}
 //
 // 2. After creating the `loop` object, do:
 //
-//	fyne.AttachGUI(loop)
+//	fyne.AttachGUI(loop, "My Project Name")
 //
 // Or, if you don't want both a command-line and a GUI app, but dynamically decide based on the availability
 // of a window system:
 //
-//	fyne.AttachGUIOrProgressBar(loop)
+//	fyne.AttachGUIOrProgressBar(loop, "My Project Name")
+//
+// (*) Fyne requires one to hijack the main goroutine (and associated thread) to interact with the windowing system.
 package fyneui
 
 import (
+	stderrors "errors"
 	"fmt"
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -49,7 +57,7 @@ import (
 )
 
 var (
-	// App holds the current Fyne App singleton, created when the first NewWindow is called.
+	// App holds the current Fyne App singleton, created when the first newWindow is called.
 	//
 	// It is here for someone who may want to customize the app. But otherwise consider using AttachGUI or AttachGUIOrProgressBar.
 	App fyne.App
@@ -140,7 +148,7 @@ func RunMain(main func()) {
 // WaitForWindows waits for all GUI windows to be closed by the user.
 //
 // Usually RunMain will automatically call this function at the end of the program.
-// But it's available if the user want to have some sync point.
+// But it's available if the user want to have a sync point after which all windows are closed.
 func WaitForWindows() {
 	condNumWindowsOpen.L.Lock()
 	defer condNumWindowsOpen.L.Unlock()
@@ -149,25 +157,34 @@ func WaitForWindows() {
 	}
 }
 
-// Window holds the Fyne window with the progress bar for a training loop. It can be created with NewWindow().
+// window holds the Fyne window with the progress bar for a training loop. It can be created with newWindow().
 //
-// The library assumes there can be multiple Window objects live at at any time.
-//
-// It is here for someone who may want to customize the app. But otherwise consider using AttachGUI or AttachGUIOrProgressBar.
-type Window struct {
+// The library assumes there can be multiple window objects live at at any time.
+type window struct {
 	Name string
 	Loop *train.Loop
 
+	// Fyne GUI components.
 	Win                     fyne.Window
+	bottomBar               *fyne.Container
 	ProgressBar             *widget.ProgressBar
 	CancelButton            *widget.Button
 	NumStepsText, SpeedText *widget.Label
-	TrainingTable           *fyne.Container
+	TrainingForm            *widget.Form
 
-	firstUpdate                bool
-	LastUpdate                 time.Time
-	UpdateFrequency            time.Duration
-	numSteps, lastStepReported int
+	// Training parameters.
+	startTime       time.Time
+	UpdateFrequency time.Duration
+	numTrainSteps   int
+
+	// ProgressBar data.
+	pollUpdatesDone   *xsync.Latch
+	lastUpdateTime    time.Time
+	lastUpdateStep    int
+	lastUpdateMetrics []string
+	muLastUpdate      sync.Mutex
+	isFirstUpdate     bool
+	speed             float64 // In steps/seconds.
 
 	speedFromTime time.Time
 	speedFromStep int
@@ -175,18 +192,21 @@ type Window struct {
 	cancelled bool
 }
 
-// NewWindow creates and returns a new Window
+// newWindow creates and returns a new window
 //
 // It is here for someone who may want to customize the app. But otherwise consider using AttachGUI or AttachGUIOrProgressBar.
-func NewWindow(name string, loop *train.Loop) *Window {
+func newWindow(name string, loop *train.Loop) *window {
 	muNumWindowsOpened.Lock()
 	defer muNumWindowsOpened.Unlock()
 
-	win := &Window{
-		Name:            name,
-		Loop:            loop,
-		UpdateFrequency: time.Second / 5,
-		firstUpdate:     true,
+	win := &window{
+		Name: name,
+		Loop: loop,
+
+		startTime:       time.Now(),
+		UpdateFrequency: time.Second / 2,
+		isFirstUpdate:   true,
+		pollUpdatesDone: xsync.NewLatch(),
 
 		ProgressBar:  widget.NewProgressBar(),
 		NumStepsText: widget.NewLabel("Training"),
@@ -198,24 +218,32 @@ func NewWindow(name string, loop *train.Loop) *Window {
 	})
 
 	// bottomBar with progressBar.
-	bottomBar := container.NewBorder(nil, nil, nil, win.SpeedText, win.ProgressBar)
+	infinitePBar := widget.NewProgressBarInfinite()
+	win.bottomBar = container.NewBorder(nil, nil, nil, win.SpeedText, infinitePBar)
 
-	// TrainingTable.
+	// TrainingForm.
 	win.NumStepsText.Alignment = fyne.TextAlignCenter
 	win.NumStepsText.TextStyle = fyne.TextStyle{Bold: true}
 	win.NumStepsText.Importance = widget.HighImportance
-	win.TrainingTable = container.NewHBox()
+	win.newTrainingForm()
 
 	// Action button(s).
 	buttonStrip := container.NewHBox(layout.NewSpacer(), win.CancelButton)
 
 	// Top part with training metrics.
-	mainVBox := container.NewVBox(win.NumStepsText, win.TrainingTable, bottomBar, buttonStrip)
+	mainLayout := container.NewBorder(
+		win.NumStepsText,
+		container.NewVBox(win.bottomBar, buttonStrip),
+		nil, nil,
+		win.TrainingForm)
 
 	w := App.NewWindow(win.Name)
-	w.SetContent(mainVBox)
+	w.SetContent(mainLayout)
 	w.Resize(fyne.NewSize(480, 20))
 	w.Show()
+	infinitePBar.Start()
+	infinitePBar.Refresh()
+	fmt.Printf("inititeBar.running=%v\n", infinitePBar.Running())
 	win.Win = w
 	numWindowsOpened++
 	return win
@@ -224,7 +252,8 @@ func NewWindow(name string, loop *train.Loop) *Window {
 // Close closes the window, and if the last window is closed, it will wake up all goroutines waiting on WaitForWindows().
 //
 // This is called when the user clicks on "Done" button.
-func (win *Window) Close() {
+func (win *window) Close() {
+	win.pollUpdatesDone.Trigger()
 	condNumWindowsOpen.L.Lock()
 	win.Win.Close()
 	numWindowsOpened--
@@ -234,81 +263,62 @@ func (win *Window) Close() {
 	condNumWindowsOpen.L.Unlock()
 }
 
-// Update updates the progress bar's value
-func (win *Window) Update(value float64) {
-	win.ProgressBar.SetValue(value)
-}
-
 // OnStart is called when the training loop starts.
 // It is called before the first OnStep() call.
-func (win *Window) OnStart(loop *train.Loop, _ train.Dataset) error {
+func (win *window) OnStart(loop *train.Loop, _ train.Dataset) error {
 	if win.cancelled {
 		return errors.New("Training cancelled by user request")
 	}
-	win.lastStepReported = loop.LoopStep
 	if loop.EndStep < 0 {
-		win.numSteps = 1000 // Guess for now.
+		win.numTrainSteps = -1 // Guess for now.
+		win.NumStepsText.SetText("Training (?? steps)")
 	} else {
-		win.numSteps = loop.EndStep - loop.StartStep
+		win.numTrainSteps = loop.EndStep - loop.StartStep
+		win.NumStepsText.SetText(fmt.Sprintf("Training (%d steps)", win.numTrainSteps))
 	}
-	win.NumStepsText.SetText(fmt.Sprintf("Training (%d steps)", win.numSteps))
+	win.speedFromStep = loop.StartStep
+	go win.updatesPolling() // Start polling for updates.
+
 	return nil
 }
 
 // OnStep is called every time the training loop moves forward.
 // It will also check if the training was cancelled by the user. If so, it returns an error.
-func (win *Window) OnStep(loop *train.Loop, metrics []*tensors.Tensor) error {
+func (win *window) OnStep(loop *train.Loop, metrics []*tensors.Tensor) error {
 	if win.cancelled {
-		return errors.New("Training cancelled by user request")
+		return stderrors.New("training cancelled by user request")
 	}
-
-	// Throttle updates.
-	if time.Since(win.LastUpdate) < win.UpdateFrequency {
-		return nil
-	}
-	win.LastUpdate = time.Now()
-
-	// Check how much it moved forward.
-	amount := loop.LoopStep + 1 - win.lastStepReported // +1 because the current LoopStep is finished.
-	if amount <= 0 {
-		return nil
-	}
-	win.Update(float64(loop.LoopStep) / float64(win.numSteps))
-
-	// First update is special.
-	if win.firstUpdate {
-		win.SpeedText.SetText("(? steps/s)")
-		win.firstUpdate = false
-		win.speedFromTime = time.Now()
-		win.speedFromStep = loop.LoopStep
-		return nil
-	}
-
-	// Get a new speed metric if either 100 steps or more than 10 seconds have passed.
-	elapsed := time.Since(win.speedFromTime)
-	speedAmount := loop.LoopStep - win.speedFromStep
-	if elapsed > time.Second*10 || speedAmount >= 100 {
-		speed := float64(speedAmount) / elapsed.Seconds()
-		if speed > 1 {
-			win.SpeedText.SetText(fmt.Sprintf("%.1f steps/s", speed))
-		} else {
-			win.SpeedText.SetText(fmt.Sprintf("%.1f steps/min", speed*60))
-		}
-		win.speedFromTime = time.Now()
-		win.speedFromStep = loop.LoopStep
-	}
+	win.refreshLastUpdate(loop, metrics, false)
 	return nil
+}
+
+func (win *window) refreshLastUpdate(loop *train.Loop, metrics []*tensors.Tensor, force bool) {
+
+	win.muLastUpdate.Lock()
+	defer win.muLastUpdate.Unlock()
+	if !force && time.Since(win.lastUpdateTime) < win.UpdateFrequency {
+		return
+	}
+	if len(win.lastUpdateMetrics) != len(metrics) {
+		win.lastUpdateMetrics = make([]string, len(metrics))
+	}
+	win.lastUpdateStep = loop.LoopStep
+	win.lastUpdateTime = time.Now()
+	for metricIdx, t := range metrics {
+		win.lastUpdateMetrics[metricIdx] = loop.Trainer.TrainMetrics()[metricIdx].PrettyPrint(t)
+	}
 }
 
 // OnEnd is called when the training loop ends.
 //
 // It will close the window, and if the last window is closed, it will wake up all goroutines waiting on WaitForWindows().
-func (win *Window) OnEnd(_ *train.Loop, metrics []*tensors.Tensor) error {
+func (win *window) OnEnd(loop *train.Loop, metrics []*tensors.Tensor) error {
 	if win.cancelled {
 		return errors.New("Training cancelled by user request")
 	}
-	win.Update(1.0)
-	win.LastUpdate = time.Now()
+	win.ProgressBar.SetValue(1.0)
+	win.refreshLastUpdate(loop, metrics, true)
+	win.pollUpdatesDone.Trigger()
 	win.CancelButton.SetText("Done")
 	win.Win.Show()
 	return nil
@@ -324,7 +334,7 @@ func (win *Window) OnEnd(_ *train.Loop, metrics []*tensors.Tensor) error {
 //
 // It is a no-op if the GUI was already created.
 func AttachGUI(loop *train.Loop, name string) {
-	win := NewWindow(name, loop)
+	win := newWindow(name, loop)
 	loop.OnStart(name, 100, win.OnStart)
 	loop.OnStep(name, 100, win.OnStep)
 	loop.OnEnd(name, 100, win.OnEnd)
