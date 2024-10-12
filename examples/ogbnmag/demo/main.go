@@ -15,6 +15,7 @@ import (
 	"github.com/gomlx/gomlx/ml/train/commandline"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/ml/train/optimizers/cosineschedule"
+	"github.com/gomlx/gomlx/ui/fyneui"
 	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
 	"os"
@@ -127,6 +128,10 @@ func SetTrainSteps(ctx *context.Context) {
 }
 
 func main() {
+	fyneui.RunMain(mainContinue)
+}
+
+func mainContinue() {
 	// Init GoMLX manager and default context.
 	backend := backends.New()
 	ctx := createDefaultContext()
@@ -144,7 +149,6 @@ func main() {
 
 	// Parse hyperparameter settings.
 	paramsSet := must.M1(commandline.ParseContextSettings(ctx, *settings))
-	fmt.Printf("Parameters that were set: %q\n", paramsSet)
 	if *flagVerbose {
 		fmt.Println("Hyperparameters set:")
 		fmt.Println(commandline.SprintModifiedContextSettings(ctx, paramsSet))

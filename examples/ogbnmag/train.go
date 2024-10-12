@@ -21,6 +21,7 @@ import (
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/ui/fyneui"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/janpfeifer/must"
 	"github.com/pkg/errors"
@@ -145,7 +146,7 @@ func Train(backend backends.Backend, ctx *context.Context, dataDir, checkpointPa
 	// Create trainer and loop.
 	trainer := newTrainer(backend, ctx)
 	loop := train.NewLoop(trainer)
-	commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
+	fyneui.AttachGUIOrProgressBar(loop, "ogbnmag-train")
 
 	// Attach a checkpoint: checkpoint every 1 minute of training.
 	if checkpoint != nil {
