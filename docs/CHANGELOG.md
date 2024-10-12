@@ -4,7 +4,7 @@
 
 * New directory `ui` with various front-ends for displaying training progress, plots, etc.
   * **BREAKING CHANGE**: Refactored all UI tools under `ui` directory. It only requires changing the import, the APIs are not changed.
-  * New package `fyneui`, a window based training UI built using Fyne.io.
+  * New package `fyneui`, a window based training UI built using Fyne.io (EXPERIMENTAL)
 * Package `commandline`:
   * `ParseContextSettings` now allows parsing settings from a text file. 
   *  Fixed `SprintContextSettings` for scoped hyperparameters.
