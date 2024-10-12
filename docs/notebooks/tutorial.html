@@ -8363,7 +8363,7 @@ layers), etc.</p>
 graph, given a model graph building function and an optimizer. This graph can be executed in sequence to train a model.
 The package also provides <code>train.Loop</code> that simply loop over a <code>train.Dataset</code> interface, reading data and feeding
 it to <code>Trainer.TrainStep</code> or <code>Trainer.EvalStep</code>, along with executing configurable hooks on the training loop. One
-such hooks is provided by <code>gomlx/train/commandline.AttachProgressBar(loop)</code>, it pretty prints the progress during
+such hooks is provided by <code>gomlx/ui/commandline.AttachProgressBar(loop)</code>, it pretty prints the progress during
 training on the command line.</p>
 <p>There are also a collection of <strong>optimizers</strong>, <strong>initializers</strong>, <strong>loss functions</strong>, <strong>metrics</strong>, etc.
 For any functionality there is always an example under the <a href="../../../tree/main/examples/">examples/</a> subdirectory.</p>
@@ -8703,7 +8703,7 @@ or plotting of a graph.</p>
 <div class="cm-editor cm-s-jupyter">
 <div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="p">(</span>
     <span class="s2">"os"</span>
-    <span class="s2">"github.com/gomlx/gomlx/ml/train/commandline"</span>
+    <span class="s2">"github.com/gomlx/gomlx/ui/commandline"</span>
     <span class="s2">"github.com/gomlx/gomlx/ml/layers/regularizers"</span>
     <span class="s2">"github.com/janpfeifer/must"</span>
 <span class="p">)</span>
@@ -8823,7 +8823,7 @@ the only metrics are the default ones, the batch and mean of the loss -- the mea
 <div class="jp-InputPrompt jp-InputArea-prompt">In [18]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="s2">"github.com/gomlx/gomlx/examples/notebook/gonb/plotly"</span>
+<div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="s2">"github.com/gomlx/gomlx/ui/gonb/plotly"</span>
 
 <span class="n">func</span> <span class="n">AttachToLoop</span><span class="p">(</span><span class="n">loop</span> <span class="o">*</span><span class="n">train</span><span class="o">.</span><span class="n">Loop</span><span class="p">)</span> <span class="p">{</span>
     <span class="n">commandline</span><span class="o">.</span><span class="n">AttachProgressBar</span><span class="p">(</span><span class="n">loop</span><span class="p">)</span> <span class="o">//</span> <span class="n">Attaches</span> <span class="n">a</span> <span class="n">progress</span> <span class="n">bar</span> <span class="n">to</span> <span class="n">the</span> <span class="n">loop</span><span class="o">.</span> 
@@ -8955,7 +8955,7 @@ Learned: coefficients=[[8.2] [2.43] [3.99]], bias=[2.07]
 <blockquote>
 <p><strong>Note</strong>:</p>
 <ul>
-<li>The <code>gomlx/examples/notebook/gonb/plotly</code> package will automatically plot all the metrics registered in the trainer. When it attaches itself to
+<li>The <code>gomlx/ui/gonb/plotly</code> package will automatically plot all the metrics registered in the trainer. When it attaches itself to
 <code>loop</code> it collects the metric values (and run evaluation on any requested datasets), and at the end of it, plot it.</li>
 <li>Optionally, with <code>Plots.Dynamic()</code> it also plots intermediary results, displaying the progress of the training as it happens.</li>
 <li>Previously, we added a little L2 regularization as a hyperparameter. The <code>layers.DenseWithBias</code> layer picks up on that hyperparameter, and adds that bit of L2 regularization. GoMLX tracks the loss with/without regularization separately, and one can see the difference in the two lines.</li>

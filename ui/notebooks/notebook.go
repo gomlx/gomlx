@@ -14,13 +14,17 @@
  *	limitations under the License.
  */
 
-// Package notebook allows one to check if running within a notebook.
-package notebook
+// Package notebooks allows one to check if running within a notebook.
+// It supports GoNB [1] and bash_kernel [2].
+//
+// [1] GoNB: https://github.com/janpfeifer/gonb
+// [2] bash_kernel: https://github.com/takluyver/bash_kernel
+package notebooks
 
 import "os"
 
-// IsPresent returns whether running inside a Jupyter notebook.
-func IsPresent() bool {
+// IsNotebook returns whether running inside a Jupyter notebook.
+func IsNotebook() bool {
 	return IsBashKernel() || IsGoNB()
 }
 

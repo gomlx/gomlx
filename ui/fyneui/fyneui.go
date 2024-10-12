@@ -37,9 +37,9 @@ import (
 	"fyne.io/fyne/v2/widget"
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/ml/train/commandline"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/types/xsync"
+	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 	"os"
@@ -132,7 +132,7 @@ func RunMain(main func()) {
 	}
 
 	if exception != nil {
-		klog.Fatal("Panic:\n%+v", exception)
+		klog.Fatalf("Panic:\n%+v", exception)
 		os.Exit(1)
 	}
 }

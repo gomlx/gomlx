@@ -6,9 +6,6 @@ import (
 	"fmt"
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/examples/notebook"
-	"github.com/gomlx/gomlx/examples/notebook/gonb/margaid"
-	"github.com/gomlx/gomlx/examples/notebook/gonb/plotly"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/nanlogger"
 	"github.com/gomlx/gomlx/ml/context"
@@ -16,12 +13,15 @@ import (
 	mldata "github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers/kan"
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/ml/train/commandline"
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/fyneui"
+	"github.com/gomlx/gomlx/ui/gonb/margaid"
+	"github.com/gomlx/gomlx/ui/gonb/plotly"
+	"github.com/gomlx/gomlx/ui/notebooks"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/janpfeifer/must"
 	"github.com/pkg/errors"
@@ -50,7 +50,7 @@ var (
 // by the progressbar. This should be used if something is printed in the middle of the training.
 func progressBarSpacing() {
 	lineBreaks := 9
-	if notebook.IsPresent() {
+	if notebooks.IsNotebook() || fyneui.HasWindows() {
 		lineBreaks = 1
 	}
 	fmt.Printf("%s", strings.Repeat("\n", lineBreaks))

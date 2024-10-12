@@ -1,13 +1,13 @@
 package diffusion
 
 import (
-	"github.com/gomlx/gomlx/examples/notebook/gonb/plotly"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/ml/train/optimizers/cosineschedule"
+	"github.com/gomlx/gomlx/ui/gonb/plotly"
 )
 
 var (

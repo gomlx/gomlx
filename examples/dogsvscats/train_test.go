@@ -3,7 +3,7 @@ package dogsvscats
 import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/ml/layers"
-	"github.com/gomlx/gomlx/ml/train/commandline"
+	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
 	"os"

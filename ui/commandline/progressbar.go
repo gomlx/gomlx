@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"github.com/charmbracelet/lipgloss"
 	lgtable "github.com/charmbracelet/lipgloss/table"
-	"github.com/gomlx/gomlx/examples/notebook"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/ui/notebooks"
 	"github.com/muesli/termenv"
 	"github.com/schollz/progressbar/v3"
 	"os"
@@ -141,7 +141,7 @@ const maxUpdateFrequency = time.Millisecond * 200
 // The associated data will be attached to the train.Loop, so nothing is returned.
 func AttachProgressBar(loop *train.Loop) {
 	pBar := &progressBar{
-		inNotebook: notebook.IsPresent(),
+		inNotebook: notebooks.IsNotebook(),
 	}
 	if !pBar.inNotebook {
 		pBar.isFirstOutput = true
