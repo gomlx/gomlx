@@ -22,15 +22,16 @@ import (
 	"flag"
 	_ "github.com/gomlx/gomlx/backends/xla"
 	"github.com/gomlx/gomlx/examples/cifar"
-	"github.com/gomlx/gomlx/examples/notebook/gonb/plotly"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/ml/layers/fnn"
 	"github.com/gomlx/gomlx/ml/layers/kan"
 	"github.com/gomlx/gomlx/ml/layers/regularizers"
-	"github.com/gomlx/gomlx/ml/train/commandline"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/ml/train/optimizers/cosineschedule"
+	"github.com/gomlx/gomlx/ui/commandline"
+	"github.com/gomlx/gomlx/ui/gonb/plotly"
 	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
 )
@@ -71,15 +72,15 @@ func createDefaultContext() *context.Context {
 		// "normalization" is overridden by "fnn_normalization" if set.
 		layers.ParamNormalization: "none",
 
-		optimizers.ParamOptimizer:           "adamw",
-		optimizers.ParamLearningRate:        1e-4,
-		optimizers.ParamAdamEpsilon:         1e-7,
-		optimizers.ParamAdamDType:           "",
-		optimizers.ParamCosineScheduleSteps: 0,
-		activations.ParamActivation:         "swish",
-		layers.ParamDropoutRate:             0.0,
-		regularizers.ParamL2:                1e-5,
-		regularizers.ParamL1:                1e-5,
+		optimizers.ParamOptimizer:       "adamw",
+		optimizers.ParamLearningRate:    1e-4,
+		optimizers.ParamAdamEpsilon:     1e-7,
+		optimizers.ParamAdamDType:       "",
+		cosineschedule.ParamPeriodSteps: 0,
+		activations.ParamActivation:     "swish",
+		layers.ParamDropoutRate:         0.0,
+		regularizers.ParamL2:            1e-5,
+		regularizers.ParamL1:            1e-5,
 
 		// FNN network parameters:
 		fnn.ParamNumHiddenLayers: 8,

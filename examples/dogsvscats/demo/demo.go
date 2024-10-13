@@ -29,7 +29,7 @@ import (
 	"github.com/gomlx/gomlx/examples/dogsvscats"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/data"
-	"github.com/gomlx/gomlx/ml/train/commandline"
+	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
 	"os"

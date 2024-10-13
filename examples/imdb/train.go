@@ -5,7 +5,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/examples/notebook/gonb/plotly"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/ml/data"
@@ -15,11 +14,13 @@ import (
 	"github.com/gomlx/gomlx/ml/layers/fnn"
 	"github.com/gomlx/gomlx/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/ml/train/commandline"
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/ml/train/optimizers/cosineschedule"
 	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/ui/commandline"
+	"github.com/gomlx/gomlx/ui/gonb/plotly"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/janpfeifer/must"
 	"golang.org/x/exp/maps"
@@ -82,15 +83,15 @@ func CreateDefaultContext() *context.Context {
 		// "normalization" is overridden by "fnn_normalization" and "cnn_normalization", if they are set.
 		layers.ParamNormalization: "layer",
 
-		optimizers.ParamOptimizer:           "adamw",
-		optimizers.ParamLearningRate:        1e-4,
-		optimizers.ParamAdamEpsilon:         1e-7,
-		optimizers.ParamAdamDType:           "",
-		optimizers.ParamCosineScheduleSteps: 0,
-		activations.ParamActivation:         "",
-		layers.ParamDropoutRate:             0.1,
-		regularizers.ParamL2:                0.0,
-		regularizers.ParamL1:                0.0,
+		optimizers.ParamOptimizer:       "adamw",
+		optimizers.ParamLearningRate:    1e-4,
+		optimizers.ParamAdamEpsilon:     1e-7,
+		optimizers.ParamAdamDType:       "",
+		cosineschedule.ParamPeriodSteps: 0,
+		activations.ParamActivation:     "",
+		layers.ParamDropoutRate:         0.1,
+		regularizers.ParamL2:            0.0,
+		regularizers.ParamL1:            0.0,
 
 		// FNN network parameters:
 		fnn.ParamNumHiddenLayers: 2,

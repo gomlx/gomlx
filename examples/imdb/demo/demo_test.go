@@ -3,7 +3,7 @@ package main
 import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/examples/imdb"
-	"github.com/gomlx/gomlx/ml/train/commandline"
+	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/janpfeifer/must"
 	"github.com/stretchr/testify/require"
 	"k8s.io/klog/v2"

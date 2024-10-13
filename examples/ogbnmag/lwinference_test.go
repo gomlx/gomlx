@@ -13,6 +13,7 @@ import (
 	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/ml/train/optimizers/cosineschedule"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/schollz/progressbar/v3"
@@ -73,12 +74,12 @@ func configureLayerWiseTestContext(ctx *context.Context) {
 		"train_steps":     0,
 		"plots":           true,
 
-		optimizers.ParamOptimizer:           "adam",
-		optimizers.ParamLearningRate:        0.001,
-		optimizers.ParamCosineScheduleSteps: 0,
-		optimizers.ParamClipStepByValue:     0.0,
-		optimizers.ParamAdamEpsilon:         1e-7,
-		optimizers.ParamAdamDType:           "",
+		optimizers.ParamOptimizer:       "adam",
+		optimizers.ParamLearningRate:    0.001,
+		cosineschedule.ParamPeriodSteps: 0,
+		optimizers.ParamClipStepByValue: 0.0,
+		optimizers.ParamAdamEpsilon:     1e-7,
+		optimizers.ParamAdamDType:       "",
 
 		layers.ParamL2Regularization: 1e-5,
 		layers.ParamDropoutRate:      0.2,

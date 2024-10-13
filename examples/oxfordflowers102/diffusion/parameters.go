@@ -1,12 +1,13 @@
 package diffusion
 
 import (
-	"github.com/gomlx/gomlx/examples/notebook/gonb/plotly"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/ml/train/optimizers/cosineschedule"
+	"github.com/gomlx/gomlx/ui/gonb/plotly"
 )
 
 var (
@@ -80,19 +81,19 @@ func CreateDefaultContext() *context.Context {
 		// "normalization" is overridden by "fnn_normalization" and "cnn_normalization", if they are set.
 		layers.ParamNormalization: "layer",
 
-		optimizers.ParamOptimizer:           "adam",
-		optimizers.ParamAdamEpsilon:         1e-7,
-		optimizers.ParamAdamDType:           "",
-		optimizers.ParamAdamWeightDecay:     1e-4,
-		optimizers.ParamCosineScheduleSteps: 0,
-		activations.ParamActivation:         "swish",
-		layers.ParamDropoutRate:             0.15,
-		regularizers.ParamL2:                0.0,
-		regularizers.ParamL1:                0.0,
+		optimizers.ParamOptimizer:       "adam",
+		optimizers.ParamAdamEpsilon:     1e-7,
+		optimizers.ParamAdamDType:       "",
+		optimizers.ParamAdamWeightDecay: 1e-4,
+		cosineschedule.ParamPeriodSteps: 0,
+		activations.ParamActivation:     "swish",
+		layers.ParamDropoutRate:         0.15,
+		regularizers.ParamL2:            0.0,
+		regularizers.ParamL1:            0.0,
 
-		optimizers.ParamLearningRate:                  1e-3,
-		optimizers.ParamCosineScheduleSteps:           0, // Enabled if > 0, it sets the period of the cosine schedule. Typically, the same value as 'train_steps'.
-		optimizers.ParamCosineScheduleMinLearningRate: 1e-5,
+		optimizers.ParamLearningRate:        1e-3,
+		cosineschedule.ParamPeriodSteps:     0, // Enabled if > 0, it sets the period of the cosine schedule. Typically, the same value as 'train_steps'.
+		cosineschedule.ParamMinLearningRate: 1e-5,
 
 		// "plots" trigger generating intermediary eval data for plotting, and if running in GoNB, to actually
 		// draw the plot with Plotly.

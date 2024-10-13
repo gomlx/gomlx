@@ -19,7 +19,7 @@ package chartjs
 import (
 	"encoding/hex"
 	"fmt"
-	"github.com/gomlx/gomlx/examples/notebook/bashkernel"
+	"github.com/gomlx/gomlx/ui/bashkernel"
 	"github.com/pkg/errors"
 	"math/rand"
 	"strings"

@@ -22,7 +22,7 @@ import (
 	"github.com/gomlx/exceptions"
 	_ "github.com/gomlx/gomlx/backends/xla"
 	"github.com/gomlx/gomlx/examples/imdb"
-	"github.com/gomlx/gomlx/ml/train/commandline"
+	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"

@@ -25,8 +25,6 @@ import (
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/examples/adult"
-	"github.com/gomlx/gomlx/examples/notebook/gonb/margaid"
-	"github.com/gomlx/gomlx/examples/notebook/gonb/plotly"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
@@ -38,11 +36,14 @@ import (
 	"github.com/gomlx/gomlx/ml/layers/kan"
 	"github.com/gomlx/gomlx/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/ml/train/commandline"
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/ml/train/optimizers/cosineschedule"
 	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/ui/commandline"
+	"github.com/gomlx/gomlx/ui/gonb/margaid"
+	"github.com/gomlx/gomlx/ui/gonb/plotly"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
@@ -73,15 +74,15 @@ func createDefaultContext() *context.Context {
 		//	$ gomlx_checkpoints --metrics --metrics_labels --metrics_types=accuracy  --metrics_names='E(bat)/#loss,E(tes)/#loss' --loop=3s fnn
 		"plots": true,
 
-		optimizers.ParamOptimizer:           "adam",
-		optimizers.ParamLearningRate:        0.001,
-		optimizers.ParamAdamEpsilon:         1e-7,
-		optimizers.ParamAdamDType:           "",
-		optimizers.ParamCosineScheduleSteps: 0,
-		activations.ParamActivation:         "sigmoid",
-		layers.ParamDropoutRate:             0.0,
-		regularizers.ParamL2:                1e-5,
-		regularizers.ParamL1:                1e-5,
+		optimizers.ParamOptimizer:       "adam",
+		optimizers.ParamLearningRate:    0.001,
+		optimizers.ParamAdamEpsilon:     1e-7,
+		optimizers.ParamAdamDType:       "",
+		cosineschedule.ParamPeriodSteps: 0,
+		activations.ParamActivation:     "sigmoid",
+		layers.ParamDropoutRate:         0.0,
+		regularizers.ParamL2:            1e-5,
+		regularizers.ParamL1:            1e-5,
 
 		// FNN network parameters:
 		fnn.ParamNumHiddenLayers: 1,
@@ -260,7 +261,7 @@ func ModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	ctx = ctx.In("model")
 
 	// Use Cosine schedule of the learning rate, if hyperparameter is set to a value > 0.
-	optimizers.CosineAnnealingSchedule(ctx, g, dtype).FromContext().Done()
+	cosineschedule.New(ctx, g, dtype).FromContext().Done()
 
 	categorical, continuous := inputs[0], inputs[1]
 	batchSize := categorical.Shape().Dimensions[0]

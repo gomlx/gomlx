@@ -12,16 +12,20 @@ import (
 	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/ml/layers/kan"
 	"github.com/gomlx/gomlx/ml/layers/regularizers"
-	"github.com/gomlx/gomlx/ml/train/commandline"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/ml/train/optimizers/cosineschedule"
+	"github.com/gomlx/gomlx/ui/commandline"
+	"github.com/gomlx/gomlx/ui/fyneui"
 	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
+	"os"
 	"time"
 
 	_ "github.com/gomlx/gomlx/backends/xla"
 )
 
 var (
+	flagVerbose       = flag.Bool("verbose", false, "Set to true to print more information.")
 	flagEval          = flag.Bool("eval", false, "Set to true to run evaluation instead of training.")
 	flagSkipReport    = flag.Bool("skip_report", false, "Set to true to skip report of quality after training.")
 	flagSkipTrainEval = flag.Bool("skip_train_eval", false, "Set to true to skip evaluation on training data, which takes longer.")
@@ -76,7 +80,8 @@ func createDefaultContext() *context.Context {
 		// Optimizer parameters.
 		optimizers.ParamOptimizer:           "adamw",
 		optimizers.ParamLearningRate:        0.001,
-		optimizers.ParamCosineScheduleSteps: 0,
+		cosineschedule.ParamPeriodSteps:     -1, // If set to -1, does automatic setting of CosineScheduleSteps to train_steps.
+		cosineschedule.ParamMinLearningRate: 0.0,
 		optimizers.ParamClipStepByValue:     0.0,
 		optimizers.ParamAdamEpsilon:         1e-7,
 		optimizers.ParamAdamDType:           "float32",
@@ -116,13 +121,17 @@ func SetTrainSteps(ctx *context.Context) {
 		numTrainSteps = numEpochs * stepsPerEpoch
 		ctx.SetParam("train_steps", numTrainSteps)
 	}
-	cosineScheduleSteps := context.GetParamOr(ctx, optimizers.ParamCosineScheduleSteps, 0)
-	if cosineScheduleSteps == 0 {
-		ctx.SetParam(optimizers.ParamCosineScheduleSteps, numTrainSteps)
-	}
+	//cosineScheduleSteps := context.GetParamOr(ctx, cosineschedule.ParamPeriodSteps, 0)
+	//if cosineScheduleSteps < 0 {
+	//	ctx.SetParam(cosineschedule.ParamPeriodSteps, numTrainSteps/(-cosineScheduleSteps))
+	//}
 }
 
 func main() {
+	fyneui.RunMain(mainContinue)
+}
+
+func mainContinue() {
 	// Init GoMLX manager and default context.
 	backend := backends.New()
 	ctx := createDefaultContext()
@@ -131,15 +140,25 @@ func main() {
 	settings := commandline.CreateContextSettingsFlag(ctx, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	paramsSet := must.M1(commandline.ParseContextSettings(ctx, *settings))
 
-	// Set checkpoint accordingly.
+	// Change current directory to data directory.
 	*flagDataDir = mldata.ReplaceTildeInDir(*flagDataDir)
+	if err := os.Chdir(*flagDataDir); err != nil {
+		klog.Fatalf("Failed to change to current directory to %q: %v", *flagDataDir, err)
+	}
+
+	// Parse hyperparameter settings.
+	paramsSet := must.M1(commandline.ParseContextSettings(ctx, *settings))
+	if *flagVerbose {
+		fmt.Println("Hyperparameters set:")
+		fmt.Println(commandline.SprintModifiedContextSettings(ctx, paramsSet))
+	}
+	mag.BatchSize = context.GetParamOr(ctx, "batch_size", 128)
+
+	//Early sanity checks.
 	if *flagCheckpoint == "" && *flagEval {
 		klog.Fatal("To run eval (--eval) you need to specify a checkpoint (--checkpoint).")
 	}
-
-	mag.BatchSize = context.GetParamOr(ctx, "batch_size", 128)
 
 	// Load data from OGBN-MAG.
 	fmt.Printf("Loading data ... ")

@@ -24,7 +24,7 @@ import (
 	"github.com/gomlx/gomlx/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/losses"
-	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/ml/train/optimizers/cosineschedule"
 	"github.com/gomlx/gomlx/types/shapes"
 	timage "github.com/gomlx/gomlx/types/tensors/images"
 	"github.com/gomlx/gomlx/types/xslices"
@@ -412,7 +412,7 @@ func (c *Config) BuildTrainingModelGraph() train.ModelFn {
 		nanLogger.Trace(noises, "noises")
 
 		dtype := images.DType()
-		optimizers.CosineAnnealingSchedule(ctx, g, dtype).FromContext().Done()
+		cosineschedule.New(ctx, g, dtype).FromContext().Done()
 
 		// Sample noise at different schedules.
 		diffusionTimes := ctx.RandomUniform(g, shapes.Make(dtype, batchSize, 1, 1, 1))

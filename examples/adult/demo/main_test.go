@@ -3,7 +3,7 @@ package main
 import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/examples/cifar"
-	"github.com/gomlx/gomlx/ml/train/commandline"
+	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/janpfeifer/must"
 	"os"
 	"sync"

@@ -1,6 +1,19 @@
 # GoMLX changelog
 
-## v0.13.0 - Next
+## Next
+
+* New directory `ui` with various front-ends for displaying training progress, plots, etc.
+  * **BREAKING CHANGE**: Refactored all UI tools under `ui` directory. It only requires changing the import, the APIs are not changed.
+  * New package `fyneui`, a window based training UI built using Fyne.io (EXPERIMENTAL)
+* Package `commandline`:
+  * `ParseContextSettings` now allows parsing settings from a text file. 
+  *  Fixed `SprintContextSettings` for scoped hyperparameters.
+  *  Added `SprintModifiedContextSettings` to enumerate only hyperparameters set on the command line.
+* New package `cosineschedule`, refactored from `optimizers` package.
+  * Added handling negative values for the hyperparameter `cosine_schedule_steps`: they set the period of the cosine schedule
+    as fractions of the total number of steps being trained.
+
+## v0.13.0 - 2024/10/07
 
 * Package `initializers`
   * All random initializers (`RandomUniformFn`, `RandomUniformFn`, `RandomNormalFn`, `GlorotUniformFn`, `XavierUniformFn`)

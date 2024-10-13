@@ -175,7 +175,7 @@ func (loop *Loop) step(spec any, inputs, labels []*tensors.Tensor) (metrics []*t
 		}
 		err = hook.fn(loop, metrics)
 		if err != nil {
-			err = errors.WithMessagef(err, "OnStep(hook %q)", hook.name)
+			err = errors.WithMessagef(err, "train.Loop.OnStep(hook %q)", hook.name)
 		}
 	})
 	if err != nil {
