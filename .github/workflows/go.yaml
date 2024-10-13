@@ -59,9 +59,10 @@ jobs:
         go test ./graph
 
     - name: Test
+      # Exclude tests that have large dependencies (X11):
       run: |
         export LD_LIBRARY_PATH=/usr/local/lib
-        go test -short ./...
+        go test -short $(go list ./... | grep -v fyneio | grep -v ogbnmag/demo)
 
     - name: Go Coverage Badge
       uses: tj-actions/coverage-badge-go@v2
