@@ -292,8 +292,8 @@ func (win *window) OnStep(loop *train.Loop, metrics []*tensors.Tensor) error {
 	return nil
 }
 
+// refreshLastUpdate updates "lastUpdate" fields so they can be displayed asynchronously.
 func (win *window) refreshLastUpdate(loop *train.Loop, metrics []*tensors.Tensor, force bool) {
-
 	win.muLastUpdate.Lock()
 	defer win.muLastUpdate.Unlock()
 	if !force && time.Since(win.lastUpdateTime) < win.UpdateFrequency {
