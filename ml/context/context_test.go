@@ -155,6 +155,43 @@ func TestEnumerateVariables(t *testing.T) {
 	assert.True(t, got.Has("y") && got.Has("z"))
 }
 
+func TestIterVariables(t *testing.T) {
+	ctx := New()
+	ctx0 := ctx.In("a")
+	_ = ctx0.VariableWithShape("x", shapes.Make(dtypes.Float32))
+	ctx1 := ctx.In("b")
+	_ = ctx1.VariableWithShape("y", shapes.Make(dtypes.Float64, 2))
+	ctx2 := ctx1.In("c")
+	_ = ctx2.VariableWithShape("z", shapes.Make(dtypes.Float32, 3, 1))
+
+	backend := graphtest.BuildTestBackend()
+	ctx.InitializeVariables(backend)
+
+	// Checks IterVariables lists all variables:
+	got := types.MakeSet[string]()
+	for v := range ctx.IterVariables() {
+		got.Insert(v.Name())
+	}
+	assert.Equal(t, 3, len(got))
+	assert.True(t, got.Has("x") && got.Has("y") && got.Has("z"))
+
+	// Checks IterVariables lists all variables, even if starting from a different scope:
+	got = types.MakeSet[string]()
+	for v := range ctx.IterVariables() {
+		got.Insert(v.Name())
+	}
+	assert.Equal(t, 3, len(got))
+	assert.True(t, got.Has("x") && got.Has("y") && got.Has("z"))
+
+	// Checks IterVariablesInScope:
+	got = types.MakeSet[string]()
+	for v := range ctx1.IterVariablesInScope() {
+		got.Insert(v.Name())
+	}
+	assert.Equal(t, 2, len(got))
+	assert.True(t, got.Has("y") && got.Has("z"))
+}
+
 func TestDeleteVariable(t *testing.T) {
 	loader := &ConstantLoader{
 		Values: map[string]*tensors.Tensor{
