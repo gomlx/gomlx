@@ -79,7 +79,11 @@ func (c *Config) rationalLayer(ctx *context.Context, x *Node, numOutputNodes int
 		WithInputGroups(numInputGroups).
 		WithMultipleOutputs(numOutputNodes).
 		Done()
-	output.AssertDims(batchSize, numOutputNodes, numInputNodes)
+	if numOutputNodes > 1 {
+		output.AssertDims(batchSize, numOutputNodes, numInputNodes)
+	} else {
+		output.AssertDims(batchSize, numInputNodes)
+	}
 
 	// Reduce the inputs to get the outputs:
 	if c.useMean {
@@ -87,7 +91,11 @@ func (c *Config) rationalLayer(ctx *context.Context, x *Node, numOutputNodes int
 	} else {
 		output = ReduceSum(output, -1)
 	}
-	output.AssertDims(batchSize, numOutputNodes) // Shape=[batch, outputs]
+	if numOutputNodes > 1 {
+		output.AssertDims(batchSize, numOutputNodes) // Shape=[batch, outputs]
+	} else {
+		output = Reshape(output, batchSize, 1)
+	}
 
 	if c.useResidual && numInputNodes == numOutputNodes {
 		output = Add(output, residual)
