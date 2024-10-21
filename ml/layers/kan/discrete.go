@@ -62,6 +62,11 @@ var (
 	// Current valid values are "none", "cosine", "linear", "exponential". Default is "none".
 	ParamDiscreteSoftnessSchedule = "kan_discrete_softness_schedule"
 
+	// ParamDiscreteSoftnessScheduleMin sets the minimum softness for the softness schedule.
+	//
+	// Default is 1e-5
+	ParamDiscreteSoftnessScheduleMin = "kan_discrete_min_softness"
+
 	// ParamDiscreteSplitPointsTrainable is a boolean that indicates whether the split points are trainable and can move around.
 	//
 	// Notice that this is unstable (NaN) for small values of softness -- or at the later stages or training if
@@ -91,6 +96,7 @@ type discreteConfig struct {
 	perturbation                            PerturbationType
 	softness                                float64
 	softnessSchedule                        SoftnessScheduleType
+	minSoftness                             float64
 	splitPointsTrainable, splitPointsFrozen bool
 	rangeMin, rangeMax                      float64
 	splitPointInitialValue                  *tensors.Tensor
@@ -99,6 +105,7 @@ type discreteConfig struct {
 // initDiscrete initializes the default values for Discrete-KANs based on context.
 func (c *Config) initDiscrete(ctx *context.Context) {
 	c.discrete.softness = context.GetParamOr(ctx, ParamDiscreteSoftness, 0.1)
+	c.discrete.minSoftness = context.GetParamOr(ctx, ParamDiscreteSoftnessScheduleMin, 1e-5)
 	c.discrete.splitPointsTrainable = context.GetParamOr(ctx, ParamDiscreteSplitPointsTrainable, false)
 	c.discrete.splitPointsFrozen = context.GetParamOr(ctx, ParamDiscreteSplitPointsFrozen, false)
 	c.DiscreteInputRange(-1, 1)
@@ -385,17 +392,19 @@ func (c *Config) scheduledSoftness(ctx *context.Context, base *Node) *Node {
 	scheduleTime := MinScalar(Div(globalStep, MaxScalar(lastStep, 1.0)), 1.0)
 	zero := ZerosLike(lastStep)
 	scheduleTime = Where(LessThan(lastStep, zero), zero, scheduleTime)
-	const epsilon = 1e-5
+	epsilon := c.discrete.minSoftness
 
 	switch c.discrete.softnessSchedule {
 	case SoftnessScheduleLinear:
-		schedule := AddScalar(OneMinus(scheduleTime), epsilon)
-		return Mul(base, ConvertDType(schedule, dtype))
+		schedule := Mul(base, OneMinus(scheduleTime))
+		schedule = ConvertDType(schedule, dtype)
+		schedule = MaxScalar(schedule, epsilon)
+		return schedule
 
 	case SoftnessScheduleExponential:
 		var lambda = math.Log(100) // That means at the end of the scheduleTime (==1) the schedule will be 1/100 of the original value.
 		schedule := Exp(MulScalar(Neg(scheduleTime), lambda))
-		return Mul(base, ConvertDType(schedule, dtype))
+		return MaxScalar(Mul(base, ConvertDType(schedule, dtype)), epsilon)
 
 	case SoftnessScheduleCosine:
 		// cosineSchedule = Cos(π.scheduleTime)+1.0)/2.0 + epsilon
