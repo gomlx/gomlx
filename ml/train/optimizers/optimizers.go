@@ -137,11 +137,11 @@ func ByName(ctx *context.Context, optName string) Interface {
 	return optBuilder(ctx)
 }
 
-// GetGlobalStepVar returns the global step counter.
+// GetGlobalStepVar returns the global step counter, a dtypes.Int64 variable.
 // It creates it (initialized with 0) if not already there.
 // This can be used in graph building or directly.
 func GetGlobalStepVar(ctx *context.Context) *context.Variable {
-	return ctx.Checked(false).VariableWithValue(GlobalStepVariableName, 0).SetTrainable(false)
+	return ctx.Checked(false).VariableWithValue(GlobalStepVariableName, int64(0)).SetTrainable(false)
 }
 
 // GetGlobalStep returns the current global step value.
