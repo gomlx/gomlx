@@ -7532,9 +7532,9 @@ a.anchor-link {
 <li>[3] <a href="https://arxiv.org/abs/2007.14761">Learning Representations for Axis-Aligned Decision Forests through Input Perturbation (arxiv)</a> -
 <em>Sebastian Bruch, Jan Pfeifer, Mathieu Guillame-Bert</em>, 2021</li>
 </ul>
-<h2 id="Motivation">Motivation<a class="anchor-link" href="#Motivation">¶</a></h2><p>PCFs, once trained, <strong>requires no multiplications for inference</strong>. To calculate a <strong>PCF</strong> one only needs to to find a value in a table and reduce-sum those values -- which can be done using <em>ints</em> (no floating point calculations needed). The idea being that <strong>inference can be done efficiently in much simpler/cheaper hardware</strong>.</p>
-<p>This could be used, for instance, for distillation of more expensive models, like AI/LLMs, stable diffusion-like models (by adapting Discrete-KANs to convolutions), etc.</p>
-<p>The trade-off of computation for memory-access -- since these look-up tables will likely require high memory bandwidth for large models -- is not yet studied.</p>
+<h2 id="Motivation">Motivation<a class="anchor-link" href="#Motivation">¶</a></h2><p>PCFs, once trained, <strong>requires no multiplications for inference</strong>. To calculate a <strong>PCF</strong> one only needs to to find a value in a table and reduce-sum those values -- which can be done using <em>ints</em> (no floating point calculations needed).</p>
+<p>This would replace multiplications by small table lookups.</p>
+<p>Probably not a winning trade-off in modern CPUs, but, still interesting question.</p>
 </div>
 </div>
 </div>
