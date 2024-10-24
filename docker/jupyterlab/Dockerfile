@@ -15,7 +15,7 @@ USER root
 RUN apt-get update --yes \
     && apt-get upgrade --yes \
     && apt-get install --yes --no-install-recommends \
-      sudo wget vim micro unzip hdf5-tools libc6-dev curl gcc git
+      sudo wget vim micro unzip hdf5-tools libc6-dev curl gcc g++ git
 
 # Create NB_USER (jovyan) and its home directory.
 ARG NB_USER="jupyter"
@@ -77,7 +77,7 @@ EOF
 # Install gopjrt libraries.
 USER root
 WORKDIR ${HOME}/Projects/gopjrt
-RUN ./cmd/install.sh && ./cmd/install_cuda.sh
+RUN ./cmd/install_linux.sh && ./cmd/install_cuda.sh
 
 # Test gopjrt
 USER ${NB_USER}

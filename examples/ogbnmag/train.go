@@ -18,13 +18,13 @@ import (
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/ui/commandline"
-	"github.com/gomlx/gomlx/ui/fyneui"
 	"github.com/gomlx/gomlx/ui/gonb/margaid"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
 	"github.com/gomlx/gomlx/ui/notebooks"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/janpfeifer/must"
 	"github.com/pkg/errors"
+	"github.com/schollz/progressbar/v3"
 	"k8s.io/klog/v2"
 	"slices"
 	"strings"
@@ -50,7 +50,7 @@ var (
 // by the progressbar. This should be used if something is printed in the middle of the training.
 func progressBarSpacing() {
 	lineBreaks := 9
-	if notebooks.IsNotebook() || fyneui.HasWindows() {
+	if notebooks.IsNotebook() {
 		lineBreaks = 1
 	}
 	fmt.Printf("%s", strings.Repeat("\n", lineBreaks))
@@ -146,7 +146,8 @@ func Train(backend backends.Backend, ctx *context.Context, dataDir, checkpointPa
 	// Create trainer and loop.
 	trainer := newTrainer(backend, ctx)
 	loop := train.NewLoop(trainer)
-	fyneui.AttachGUIOrProgressBar(loop, "ogbnmag-train")
+	commandline.ProgressbarStyle = progressbar.ThemeUnicode
+	commandline.AttachProgressBar(loop)
 
 	// Attach a checkpoint: checkpoint every 1 minute of training.
 	if checkpoint != nil {
