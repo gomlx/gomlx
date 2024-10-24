@@ -510,6 +510,7 @@ func (r *Trainer) Eval(ds Dataset) (lossAndMetrics []*tensors.Tensor) {
 	ds.Reset()
 	r.resetEvalMetrics()
 	count := 0
+	finalizeInputs := finalizeYieldedTensors(ds)
 	for {
 		spec, inputs, labels, err := ds.Yield()
 		if err == io.EOF {
@@ -527,11 +528,13 @@ func (r *Trainer) Eval(ds Dataset) (lossAndMetrics []*tensors.Tensor) {
 		lossAndMetrics = r.EvalStep(spec, inputs, labels)
 
 		// Free inputs and labels after usage.
-		for _, input := range inputs {
-			input.FinalizeAll()
-		}
-		for _, label := range labels {
-			label.FinalizeAll()
+		if finalizeInputs {
+			for _, input := range inputs {
+				input.FinalizeAll()
+			}
+			for _, label := range labels {
+				label.FinalizeAll()
+			}
 		}
 	}
 	if count == 0 {

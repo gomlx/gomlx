@@ -24,9 +24,13 @@ import "github.com/gomlx/gomlx/types/tensors"
 // Dataset has to also provide a Dataset.Name() and a dataset `spec`, which usually is the same for
 // the whole dataset, but can vary per batch, if the Dataset is yielding different types of data.
 //
-// For a static Dataset that always provides the exact same data, the `spec` can simply be nil.
+// For a static Dataset that always provides the exact same data type, the `spec` can simply be nil.
 //
 // Notice one batch (the unit of data) is a slice of tensors for inputs and one tensor for labels.
+//
+// The Dataset interface allows for extensions/customizations by defining extra optional interfaces that
+// a Dataset optionally can implement.
+// See DatasetCustomOwnership.
 type Dataset interface {
 	// Name identifies the dataset. Used for debugging, pretty-printing and plots.
 	Name() string
@@ -40,6 +44,7 @@ type Dataset interface {
 	//
 	// The `inputs` and `labels` ownership is transferred to the caller (usually a training or evaluation
 	// function). It's expected that they will be finalized (Tensor.FinalizeAll) immediately after use.
+	// If you don't want that behavior, consider implementing FinalizeYieldsAfterUse() bool, and return false.
 	//
 	// If the `inputs` or `labels` change shapes during training or evaluation, it will trigger the creation
 	// of a new computation graph and new JIT (just-in-time) compilation. There is a finite-sized cache,
@@ -72,4 +77,13 @@ type Dataset interface {
 	// Reset restarts the dataset from the beginning. Can be called after io.EOF is reached,
 	// for instance when running another evaluation on a test dataset.
 	Reset()
+}
+
+// DatasetCustomOwnership allows a dataset to specify whether the ownership of the yielded tensors are transferred
+// to the caller (the training loop). The training loops can finalize the yielded values after use.
+// It defaults to yes.
+type DatasetCustomOwnership interface {
+	// IsOwnershipTransferred specifies whether caller owns the yielded transfers -- and can finalize (free) them after use.
+	// It defaults to true.
+	IsOwnershipTransferred() bool
 }

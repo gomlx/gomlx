@@ -27,6 +27,7 @@ import (
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/pkg/errors"
 	"golang.org/x/exp/slices"
+	"iter"
 	"reflect"
 	"strings"
 )
@@ -797,10 +798,16 @@ func valueToTensor(value any) *tensors.Tensor {
 	return tensors.FromAnyValue(value)
 }
 
-// VariableWithValue creates a variable that is initialized with the given value in the current scope.
-// By default, variables are marked as trainable. The value given must be concrete, that is a tensor
-// or a normal Go value, that can be converted to a tensor -- a graph *Node does not work here, this
-// is assumed to be a constant.
+// VariableWithValue creates or returns a variable that is initialized with the given value in the current scope.
+// If the variable already exists, its value is not overwritten.
+//
+// By default, variables are marked as trainable.
+//
+// The value given must be concrete, that is a tensor
+// or a normal Go value, that can be converted to a tensor.
+//
+// A graph *Node does not work here, this is assumed to be a concrete tensor value.
+// See VariableWithValueGraph instead, to create a variable with a graph *Node.
 //
 // If a Loader is configured (see SetLoader), and the value is available to load, it will override
 // the value given here -- e.g.: the value could be actually loaded from the last checkpoint.
@@ -812,7 +819,7 @@ func valueToTensor(value any) *tensors.Tensor {
 //
 // - Context.Unique() and variable already exists (or was loaded);
 // - Context.Reuse() and variable didn't exist (or was not loaded);
-func (ctx *Context) VariableWithValue(name string, value any) *Variable {
+func (ctx *Context) VariableWithValue(name string, defaultValue any) *Variable {
 	v := ctx.InspectVariable(ctx.scope, name)
 
 	// Check against reuse of variables.
@@ -824,15 +831,15 @@ func (ctx *Context) VariableWithValue(name string, value any) *Variable {
 	}
 
 	var valueT *tensors.Tensor
-	err := TryCatch[error](func() { valueT = valueToTensor(value) })
+	err := TryCatch[error](func() { valueT = valueToTensor(defaultValue) })
 	if err != nil {
-		panic(errors.WithMessagef(err, "failed to parse value %v for variable %q in scope %q", value, name, ctx.scope))
+		panic(errors.WithMessagef(err, "failed to parse defaultValue %v for variable %q in scope %q", defaultValue, name, ctx.scope))
 	}
 
 	if v != nil {
 		// Pre-existing variable to reuse: check that the requested and previous shapes are the same.
 		if !valueT.Shape().Equal(v.shape) {
-			Panicf("requested to reuse variable %q in scope %q, but with value with different shape from original: previous shape=%s, requested value shape=%s",
+			Panicf("requested to reuse variable %q in scope %q, but with defaultValue with different shape from original: previous shape=%s, requested defaultValue shape=%s",
 				name, ctx.scope, v.shape, valueT.Shape())
 		}
 		return v
@@ -849,6 +856,33 @@ func (ctx *Context) VariableWithValue(name string, value any) *Variable {
 		graphToNodes: make(map[graph.GraphId]*variableNodes),
 	}
 	ctx.setVariableInScope(name, v)
+	return v
+}
+
+// VariableWithValueGraph creates a variable in the current scope and sets it with graph computed *Node.
+//
+// By default, variables are marked as trainable.
+//
+// The value given must be a graph *Node, meaning it is computed in the graph.
+// If you want to create a value with a default concrete (tensors.Tensor) value, use VariableWithValue instead.
+//
+// This is equivalent to calling VariableWithShape followed by Variable.SetValueGraph.
+// If the variable already exists, its value will be overwritten.
+//
+// Notice that variables' information is stored in the "data" component of Context objects, and is shared
+// among all connected context references.
+//
+// If Context is set with Context.Checked(true), this may panic if:
+//
+// - Context.Unique() and variable already exists (or was loaded);
+// - Context.Reuse() and variable didn't exist (or was not loaded);
+func (ctx *Context) VariableWithValueGraph(name string, value *Node) *Variable {
+	// Create a zero-initialized context.
+	zeroCtx := ctx.WithInitializer(func(g *Graph, shape shapes.Shape) *Node {
+		return graph.Zeros(g, shape)
+	})
+	v := zeroCtx.VariableWithShape(name, value.Shape())
+	v.SetValueGraph(value)
 	return v
 }
 
@@ -870,6 +904,28 @@ func (ctx *Context) EnumerateVariables(fn func(v *Variable)) {
 	}
 }
 
+// IterVariables returns an iterator that yields each variable in the context.
+// The order of iteration is deterministic.
+//
+// Notice that variables' information is stored in the "data" component of Context objects, and is shared
+// among all connected context references.
+//
+// Example:
+//
+//	fmt.Println("\nVariables:")
+//	for v := range ctx.IterateVariables() {
+//		fmt.Printf("\t%s::%s: shape=%s\n", v.Scope(), v.Name(), v.Shape())
+//	}
+func (ctx *Context) IterVariables() iter.Seq[*Variable] {
+	return func(yield func(*Variable) bool) {
+		for _, v := range ctx.data.variables {
+			if !yield(v) {
+				return
+			}
+		}
+	}
+}
+
 // EnumerateVariablesInScope is similar to EnumerateVariables, but enumerate only those under the current
 // context scope.
 func (ctx *Context) EnumerateVariablesInScope(fn func(v *Variable)) {
@@ -881,6 +937,25 @@ func (ctx *Context) EnumerateVariablesInScope(fn func(v *Variable)) {
 	for _, v := range ctx.data.variables {
 		if v.Scope() == baseScope || strings.HasPrefix(v.Scope(), baseScopeWithSeparator) {
 			fn(v)
+		}
+	}
+}
+
+// IterVariablesInScope is similar to IterVariables, but enumerate only those under the current
+// context scope.
+func (ctx *Context) IterVariablesInScope() iter.Seq[*Variable] {
+	baseScope := ctx.Scope()
+	return func(yield func(*Variable) bool) {
+		baseScopeWithSeparator := baseScope + ScopeSeparator
+		if baseScope == RootScope {
+			baseScopeWithSeparator = baseScope
+		}
+		for _, v := range ctx.data.variables {
+			if v.Scope() == baseScope || strings.HasPrefix(v.Scope(), baseScopeWithSeparator) {
+				if !yield(v) {
+					return
+				}
+			}
 		}
 	}
 }

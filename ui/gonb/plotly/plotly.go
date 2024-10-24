@@ -424,7 +424,7 @@ func (pc *PlotConfig) DynamicPlot(final bool) {
 	// Plot transient version.
 	//gonbui.UpdateHtml(pc.gonbId, pc.PlotToHTML())
 	elementId := gonbui.UniqueId()
-	gonbui.UpdateHtml(pc.gonbId, fmt.Sprintf("<div id=%q></div>", elementId))
+	gonbui.UpdateHTML(pc.gonbId, fmt.Sprintf("<div id=%q></div>", elementId))
 
 	for _, metricType := range xslices.SortedKeys(pc.metricsTypesToFig) {
 		figIdx := pc.metricsTypesToFig[metricType]

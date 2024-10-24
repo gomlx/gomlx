@@ -46,6 +46,7 @@ import (
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/janpfeifer/must"
+	"github.com/schollz/progressbar/v3"
 	"k8s.io/klog/v2"
 	"time"
 
@@ -190,6 +191,7 @@ func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, param
 
 	// Use standard training loop.
 	loop := train.NewLoop(trainer)
+	commandline.ProgressbarStyle = progressbar.ThemeUnicode
 	commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
 
 	// Attach a checkpoint saver.

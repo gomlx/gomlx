@@ -1,7 +1,10 @@
 # GoMLX changelog
 
-## Next
+## v0.14.0 - 2024/10/24
 
+* Package `context`
+  * New `VariableWithValueGraph` to create/get a variable with value set to the graph value (Node).
+  * New `IterVariables` and `IterVariablesInScope` that use the new go 1.23 iterators.
 * New directory `ui` with various front-ends for displaying training progress, plots, etc.
   * **BREAKING CHANGE**: Refactored all UI tools under `ui` directory. It only requires changing the import, the APIs are not changed.
   * New package `fyneui`, a window based training UI built using Fyne.io (EXPERIMENTAL)
@@ -12,6 +15,11 @@
 * New package `cosineschedule`, refactored from `optimizers` package.
   * Added handling negative values for the hyperparameter `cosine_schedule_steps`: they set the period of the cosine schedule
     as fractions of the total number of steps being trained.
+* Package `train`:
+  * Extensions to `Dataset` interface through additional interfaces.
+  * Added optional `IsOnwershipTransfer() bool` that allows a Dataset to specify it should maintain ownership of the 
+    yielded tensors.
+* Updated `gopjrt` v0.4.4 with the static XlaBuilder library, and experimental support for Apple/Metal.
 
 ## v0.13.0 - 2024/10/07
 
