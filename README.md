@@ -18,7 +18,16 @@ top of [OpenXLA/PJRT](https://github.com/openxla/xla), which itself uses LLVM to
 It's the same engine that powers Google's [Jax](https://github.com/google/jax) and 
 [TensorFlow](https://tensorflow.org/), and it has the same speed in many cases.
 
-## 🎓 Quick Start: see our [tutorial](https://gomlx.github.io/gomlx/notebooks/tutorial.html), or a [guided example for Kaggle Dogs Vs Cats](https://gomlx.github.io/gomlx/notebooks/dogsvscats.html).
+[!Note]🎓 Quick Start</large>:
+* See our [tutorial](https://gomlx.github.io/gomlx/notebooks/tutorial.html)
+* A [guided example for Kaggle Dogs Vs Cats](https://gomlx.github.io/gomlx/notebooks/dogsvscats.html).
+* [Installation here](https://github.com/gomlx/gomlx?tab=readme-ov-file#%EF%B8%8F--%EF%B8%8F-installation).
+
+[!Note]
+**NEW: Apple/Metal EXPERIMENTAL** support. It doesn't support every data type, nor all the operations, but many
+things work. I don't have an easily available Mac, but if you have any issues pls let me know. The XLA/PJRT driver
+(same as the one used by Jax) is [maintained by Apple here](https://developer.apple.com/metal/jax/).
+ 
 
 <div>
 <p>It was developed to be full-featured ML platform for Go, and to easily experiment with ML ideas -- see Long-Term Goals below.</p>
@@ -75,13 +84,13 @@ It includes:
 * [Issues](https://github.com/gomlx/gomlx/issues)
 * Random brainstorming on projects: just start a Q&A and I'm happy to meet in discord somewhere or VC.
 
-## 🛠️ + ⚙️ Installation
+## <a id="installation"></a>🛠️ + ⚙️ Installation
 
 **TLDR;**: Two options: (1) [Use the Docker](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab); 
-(2) Pre-built only for Linux (works in Windows WSL): install 
+(2) Pre-built for Linux (works in Windows WSL) or an experimental version for Apple/Metal: install 
 [**gopjrt** (see installation instructions)](https://github.com/gomlx/gopjrt?#installing) 
 (optional: [Nvidia's cuda support](https://github.com/gomlx/gopjrt?#installing)) 
-and `sudo apt install install hdf5-tools`.
+and depending on what data formats you use, `sudo apt install hdf5-tools`.
 
 **GoMLX** is mostly a normal Go library, but it depends on [**gopjrt**](https://github.com/gomlx/gopjrt), which
 includes C wrappers to XLA (itself C++ code base). 
@@ -89,9 +98,8 @@ Installing **gopjrt** is relatively straight forward, follow
 [the installation instructions](https://github.com/gomlx/gopjrt?#installing) 
 (notice the optional Nvidia CUDA support, if you are interested).
 
-Releases are for Linux only for now. They do work well with WSL (Windows Subsystem for Linux) in Windows.
-I don't have a Mac, but XLA works for Mac/DarwinOS (on arm64), so **gopjrt** should compile as well and
-**GoMLX** should work (contributions are welcome :smiley:).
+Releases are for Linux/amd64 and experimental Mac only for now. 
+They do work well with WSL (Windows Subsystem for Linux) in Windows.
 
 ### 🐳  [Pre-built Docker](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab)
 
@@ -144,9 +152,8 @@ Finally, feel free to ask questions: time allowing (when not in work) I'm always
      parallelism) in particular to support for large language models and similarly large model training.
 3. To be a robust and reliable platform for production. Some sub-goals:
    - Support modern accelerator hardware like TPUs and GPUs.
-   - Save models to industry tools like [TensorFlow Serving](https://www.tensorflow.org/tfx/guide/serving).
-   - Import pre-trained models from
-     [Hugging Face Hub](https://huggingface.co/models) and [TensorFlow Hub](https://www.tensorflow.org/hub) where possible.
+   - Multiple backends, e.g:  llamacpp, WebNN (with Wasm), pure Go version, etc.
+   - Import pre-trained models from [Hugging Face Hub](https://huggingface.co/models) -- maybe using ONNX -- and allow fine-tuning.
    - Compile models to binary as in C-libraries and/or WebAssembly, to be linked and consumed (inference) anywhere
      (any language).
 

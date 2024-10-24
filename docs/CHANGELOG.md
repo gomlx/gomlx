@@ -1,6 +1,6 @@
 # GoMLX changelog
 
-## Next
+## v0.14.0 - 2024/10/24
 
 * Package `context`
   * New `VariableWithValueGraph` to create/get a variable with value set to the graph value (Node).
@@ -15,7 +15,7 @@
 * New package `cosineschedule`, refactored from `optimizers` package.
   * Added handling negative values for the hyperparameter `cosine_schedule_steps`: they set the period of the cosine schedule
     as fractions of the total number of steps being trained.
-
+* Updated `gopjrt` v0.4.4 with the static XlaBuilder library, and experimental support for Apple/Metal.
 
 ## v0.13.0 - 2024/10/07
 
