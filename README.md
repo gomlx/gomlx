@@ -19,10 +19,10 @@ It's the same engine that powers Google's [Jax](https://github.com/google/jax) a
 [TensorFlow](https://tensorflow.org/), and it has the same speed in many cases.
 
 > [!Tip]
-> <span style="font-size: 3em;">🎓 Quick Start:</span>
+> 🎓 Quick Start:
 > * See our [tutorial](https://gomlx.github.io/gomlx/notebooks/tutorial.html)
 > * A [guided example for Kaggle Dogs Vs Cats](https://gomlx.github.io/gomlx/notebooks/dogsvscats.html).
-> * [Installation here](https://github.com/gomlx/gomlx?tab=readme-ov-file#%EF%B8%8F--%EF%B8%8F-installation).
+> * [Installation here](#installation).
 
 > [!Note]
 > **NEW: Apple/Metal EXPERIMENTAL** support. It doesn't support every data type, nor all the operations, but many
