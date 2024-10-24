@@ -225,13 +225,30 @@ func (loop *Loop) end(metrics []*tensors.Tensor) (err error) {
 }
 
 // finalizeYieldedTensors checks whether for this datasets the yielded tensors should be finalized.
-func (loop *Loop) finalizeYieldedTensors(ds Dataset) bool {
+func finalizeYieldedTensors(ds Dataset) bool {
 	dsOwnership, ok := ds.(DatasetCustomOwnership)
 	if !ok {
 		// Default is true, if not otherwise configured.
 		return true
 	}
 	return dsOwnership.IsOwnershipTransferred()
+}
+
+func checkYield(inputs, labels []*tensors.Tensor) error {
+	// Check inputs and labels are valid.
+	for _, slice := range [][]*tensors.Tensor{inputs, labels} {
+		for _, t := range slice {
+			if t.DType() == dtypes.InvalidDType {
+				return errors.New(
+					"dataset yielded an invalid tensor -- likely it has already been finalized (freed). " +
+						"The training loop by default immediately frees the yielded tensor after use, so it doesn't " +
+						"wait for the garbage collector. If the dataset is trying to reuse tensors, they will become " +
+						"invalid and cause this error. If that is the case, consider implementing the method " +
+						"FinalizeYieldsAfterUse() in your dataset, and return false.")
+			}
+		}
+	}
+	return nil
 }
 
 // RunSteps runs those many steps. StartStep and EndStep are adjusted to the current
@@ -246,7 +263,7 @@ func (loop *Loop) RunSteps(ds Dataset, steps int) (metrics []*tensors.Tensor, er
 	if err = loop.Trainer.ResetTrainMetrics(); err != nil {
 		return
 	}
-	loop.finalizeYieldedTrainTensors = loop.finalizeYieldedTensors(ds)
+	loop.finalizeYieldedTrainTensors = finalizeYieldedTensors(ds)
 	loop.StartStep = loop.LoopStep
 	loop.setLastStep(loop.LoopStep + steps)
 	err = loop.start(ds)
@@ -267,17 +284,9 @@ func (loop *Loop) RunSteps(ds Dataset, steps int) (metrics []*tensors.Tensor, er
 		}
 
 		// Check inputs and labels are valid.
-		for _, slice := range [][]*tensors.Tensor{inputs, labels} {
-			for _, t := range slice {
-				if t.DType() == dtypes.InvalidDType {
-					return nil, errors.New(
-						"dataset yielded an invalid tensor -- likely it has already been finalized (freed). " +
-							"The training loop by default immediately frees the yielded tensor after use, so it doesn't " +
-							"wait for the garbage collector. If the dataset is trying to reuse tensors, they will become " +
-							"invalid and cause this error. If that is the case, consider implementing the method " +
-							"FinalizeYieldsAfterUse() in your dataset, and return false.")
-				}
-			}
+		err = checkYield(inputs, labels)
+		if err != nil {
+			return nil, err
 		}
 
 		// Immediately free any space being used.
@@ -314,6 +323,7 @@ func (loop *Loop) RunEpochs(ds Dataset, epochs int) (metrics []*tensors.Tensor, 
 	if err = loop.Trainer.ResetTrainMetrics(); err != nil {
 		return
 	}
+	loop.finalizeYieldedTrainTensors = finalizeYieldedTensors(ds)
 	loop.StartStep = loop.LoopStep
 	loop.setLastStep(-1)
 	loop.Epoch = 0
@@ -337,8 +347,19 @@ func (loop *Loop) RunEpochs(ds Dataset, epochs int) (metrics []*tensors.Tensor, 
 				}
 				return nil, errors.WithMessagef(err, "Loop.RunEpochs(epoch %d of %d): failed reading from Dataset", loop.Epoch, epochs)
 			}
+
+			// Check inputs and labels are valid.
+			err = checkYield(inputs, labels)
+			if err != nil {
+				return nil, err
+			}
+
 			yieldsPerEpoch++
 
+			// Immediately free any space being used.
+			for _, metric := range metrics {
+				metric.FinalizeAll()
+			}
 			metrics, err = loop.step(spec, inputs, labels)
 			if err != nil {
 				return nil, errors.WithMessagef(err, "Loop.RunEpochs(%d): failed reading from Dataset (LoopStep=%d)", epochs, loop.LoopStep)
