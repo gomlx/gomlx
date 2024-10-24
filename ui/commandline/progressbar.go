@@ -33,6 +33,10 @@ type progressBar struct {
 	asyncUpdatesDone sync.WaitGroup
 }
 
+// ProgressbarStyle to use. Defaults to ASCII version.
+// Consider progressbar.ThemeUnicode for a prettier version. But it requires some of the graphical symbols to be supported.
+var ProgressbarStyle = progressbar.ThemeASCII
+
 // Write implements io.Writer, and appends the current suffix with metrics to each
 // line. It is meant to be used as the default writer for the enclosed progressbar.ProgressBar.
 // This ensures that the progress bar and its suffix are written in the same write operation,
@@ -61,7 +65,7 @@ func (pBar *progressBar) onStart(loop *train.Loop, _ train.Dataset) error {
 		progressbar.OptionEnableColorCodes(true),
 		progressbar.OptionShowIts(),
 		progressbar.OptionSetItsString("steps"),
-		progressbar.OptionSetTheme(progressbar.ThemeUnicode),
+		progressbar.OptionSetTheme(ProgressbarStyle),
 		progressbar.OptionSetWriter(pBar), // Required to work with Jupyter notebook.
 	)
 	return nil
