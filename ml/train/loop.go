@@ -22,6 +22,7 @@ import (
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 	"io"
 	"math"
@@ -88,6 +89,10 @@ type Loop struct {
 	onStart *priorityHooks[*hookWithName[OnStartFn]]
 	onStep  *priorityHooks[*hookWithName[OnStepFn]]
 	onEnd   *priorityHooks[*hookWithName[OnEndFn]]
+
+	// finalizeYieldedTrainTensors indicates whether the training datasets yielded tensors should be finalized.
+	// True by default.
+	finalizeYieldedTrainTensors bool
 }
 
 // NewLoop creates a new training loop trainer.
@@ -153,11 +158,13 @@ func (loop *Loop) step(spec any, inputs, labels []*tensors.Tensor) (metrics []*t
 	}
 
 	// Free inputs and labels:
-	for _, input := range inputs {
-		input.FinalizeAll()
-	}
-	for _, label := range labels {
-		label.FinalizeAll()
+	if loop.finalizeYieldedTrainTensors {
+		for _, input := range inputs {
+			input.FinalizeAll()
+		}
+		for _, label := range labels {
+			label.FinalizeAll()
+		}
 	}
 
 	// Free metrics on-device usage: on-device memory being more at premium,
@@ -217,6 +224,16 @@ func (loop *Loop) end(metrics []*tensors.Tensor) (err error) {
 	return
 }
 
+// finalizeYieldedTensors checks whether for this datasets the yielded tensors should be finalized.
+func (loop *Loop) finalizeYieldedTensors(ds Dataset) bool {
+	dsOwnership, ok := ds.(DatasetCustomOwnership)
+	if !ok {
+		// Default is true, if not otherwise configured.
+		return true
+	}
+	return dsOwnership.IsOwnershipTransferred()
+}
+
 // RunSteps runs those many steps. StartStep and EndStep are adjusted to the current
 // LoopStep, so it can be called multiple times, and it will simply pick up
 // where it left of last time.
@@ -229,6 +246,7 @@ func (loop *Loop) RunSteps(ds Dataset, steps int) (metrics []*tensors.Tensor, er
 	if err = loop.Trainer.ResetTrainMetrics(); err != nil {
 		return
 	}
+	loop.finalizeYieldedTrainTensors = loop.finalizeYieldedTensors(ds)
 	loop.StartStep = loop.LoopStep
 	loop.setLastStep(loop.LoopStep + steps)
 	err = loop.start(ds)
@@ -246,6 +264,20 @@ func (loop *Loop) RunSteps(ds Dataset, steps int) (metrics []*tensors.Tensor, er
 					loop.LoopStep-loop.StartStep, steps)
 			}
 			return nil, errors.WithMessagef(err, "Loop.RunSteps(%d): failed reading from Dataset", steps)
+		}
+
+		// Check inputs and labels are valid.
+		for _, slice := range [][]*tensors.Tensor{inputs, labels} {
+			for _, t := range slice {
+				if t.DType() == dtypes.InvalidDType {
+					return nil, errors.New(
+						"dataset yielded an invalid tensor -- likely it has already been finalized (freed). " +
+							"The training loop by default immediately frees the yielded tensor after use, so it doesn't " +
+							"wait for the garbage collector. If the dataset is trying to reuse tensors, they will become " +
+							"invalid and cause this error. If that is the case, consider implementing the method " +
+							"FinalizeYieldsAfterUse() in your dataset, and return false.")
+				}
+			}
 		}
 
 		// Immediately free any space being used.

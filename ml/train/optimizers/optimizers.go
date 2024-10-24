@@ -19,7 +19,6 @@
 package optimizers
 
 import (
-	"fmt"
 	. "github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
@@ -263,7 +262,6 @@ func addGradientsToVariablesGraph(ctx *context.Context, loss, learningRate, glob
 	}
 	numTrainable := len(grads)
 	ii := 0
-	fmt.Println("addGradientsToVariablesGraph")
 	ctx.EnumerateVariables(func(v *context.Variable) {
 		if !v.Trainable || !v.InUseByGraph(g) {
 			// Not interested in this variable.
