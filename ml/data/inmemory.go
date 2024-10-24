@@ -173,10 +173,6 @@ func InMemoryFromData(backend backends.Backend, name string, inputs []any, label
 		}
 		mds.inputsAndLabelsData = append(mds.inputsAndLabelsData, valueT)
 	}
-
-	if err != nil {
-		return
-	}
 	return
 }
 
