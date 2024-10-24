@@ -18,11 +18,11 @@ top of [OpenXLA/PJRT](https://github.com/openxla/xla), which itself uses LLVM to
 It's the same engine that powers Google's [Jax](https://github.com/google/jax) and 
 [TensorFlow](https://tensorflow.org/), and it has the same speed in many cases.
 
-> [!Note]🎓 Quick Start</large>:
+> [!Tip]
+> <large>🎓 Quick Start</large>:
 > * See our [tutorial](https://gomlx.github.io/gomlx/notebooks/tutorial.html)
 > * A [guided example for Kaggle Dogs Vs Cats](https://gomlx.github.io/gomlx/notebooks/dogsvscats.html).
 > * [Installation here](https://github.com/gomlx/gomlx?tab=readme-ov-file#%EF%B8%8F--%EF%B8%8F-installation).
-
 
 > [!Note]
 > **NEW: Apple/Metal EXPERIMENTAL** support. It doesn't support every data type, nor all the operations, but many
