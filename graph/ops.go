@@ -1607,3 +1607,33 @@ func InternalBatchNormGradient(operand *Node, scale *Node, mean *Node, variance 
 	axis = adjustAxisToRank(axis, operand.Rank())
 	return backendBatchNormGradient(operand, scale, mean, variance, gradOutput, epsilon, axis)
 }
+
+// MatMul is similar to Dot but extends to allow for more batch dimensions in lhs operand.
+// It behaves like numpy.matmul.
+func MatMul(lhs, rhs *Node) *Node {
+	_ = validateBuildingGraphFromInputs(lhs, rhs)
+	if lhs.Rank() == 0 || rhs.Rank() == 0 {
+		exceptions.Panicf("MatMul expects two tensors with rank > 0, got ranks %d and %d", lhs.Rank(), rhs.Rank())
+	}
+
+	// Not handling yet cases where lhs or rhs are of higher rank than 2.
+	if rhs.Rank() > 2 {
+		exceptions.Panicf("MatMul(lhs,rhs) with rhs (right-hand-side operand) rank > 2 not implemented, rhs.rank=%d", rhs.Rank())
+	}
+
+	// Reshape before Dot for lhs.rank>2
+	var prefixDims []int
+	if lhs.Rank() > 2 {
+		prefixDims = slices.Clone(lhs.Shape().Dimensions[:lhs.Rank()-1])
+		lhs = Reshape(lhs, -1, lhs.Shape().Dim(-1))
+	}
+	result := Dot(lhs, rhs)
+	if prefixDims != nil {
+		if result.Rank() == 1 {
+			result = Reshape(result, prefixDims...)
+		} else {
+			result = Reshape(result, append(prefixDims, -1)...)
+		}
+	}
+	return result
+}

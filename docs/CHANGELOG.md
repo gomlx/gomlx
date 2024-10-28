@@ -1,5 +1,10 @@
 # GoMLX changelog
 
+# Next
+
+* Package `graph`:
+  * Added `MatMul`, with semantics similar to `numpy.matmul`
+
 ## v0.14.0 - 2024/10/24
 
 * Package `context`

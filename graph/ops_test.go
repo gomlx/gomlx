@@ -1090,3 +1090,40 @@ func TestIsFinite(t *testing.T) {
 		[]bool{true, false, true, false, true, false}, // Number of bits set.
 	}, 0)
 }
+
+func TestMatMul(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "MatMul 1:", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = []*Node{
+			IotaFull(g, shapes.Make(dtypes.Float32, 3, 2, 5)),
+			Transpose(
+				Const(g, [][]float32{{100, 10, 1, 0.1, 0.01}, {1000, 100, 10, 1, 0.1}}),
+				0, 1),
+		}
+		outputs = []*Node{MatMul(inputs[0], inputs[1])}
+		return
+	}, []any{
+		// Shape: [3, 2, 2]
+		[][][]float32{
+			{{12.34, 123.4}, {567.89, 5678.9}},
+			{{1123.4401, 11234.4}, {1678.99, 16789.9}},
+			{{2234.54, 22345.4}, {2790.09, 27900.9}},
+		},
+	}, 0)
+
+	graphtest.RunTestGraphFn(t, "MatMul 2:", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = []*Node{
+			IotaFull(g, shapes.Make(dtypes.Float32, 3, 2, 5)),
+			Const(g, []float32{100, 10, 1, 0.1, 0.01}),
+		}
+		outputs = []*Node{
+			MatMul(inputs[0], inputs[1]),
+			MatMul(inputs[0], ExpandDims(inputs[1], -1)),
+		}
+		return
+	}, []any{
+		// Shape: [3, 2]
+		[][]float32{{12.34, 567.89}, {1123.4401, 1678.99}, {2234.54, 2790.09}},
+		// Shape: [3, 2, 1]
+		[][][]float32{{{12.34}, {567.89}}, {{1123.4401}, {1678.99}}, {{2234.54}, {2790.09}}},
+	}, 0)
+}
