@@ -4,6 +4,8 @@
 
 * Package `graph`:
   * Added `MatMul`, with semantics similar to `numpy.matmul`
+* Package `context`:
+  * Fixed `ExecOnce`: it was missing the variadic args for the computation graph.
 
 ## v0.14.0 - 2024/10/24
 
