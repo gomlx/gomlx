@@ -63,7 +63,7 @@ func Gather(params, indices *Node) *Node {
 
 	// If indices is a scalar, simply convert it to shapes `[1]`.
 	if indices.IsScalar() {
-		indices = ExpandDims(indices, 0)
+		indices = InsertAxes(indices, 0)
 	}
 
 	// Check ranks are compatible.
@@ -145,7 +145,7 @@ func GatherSlices(input *Node, slicedAxes []int, start *Node, sizes []int) (gath
 			start.Shape())
 	}
 	if start.Shape().IsScalar() {
-		start = ExpandDims(start, 0)
+		start = InsertAxes(start, 0)
 	}
 
 	// Check ranks are compatible.
@@ -349,7 +349,7 @@ func ScatterAdd(operand, indices, updates *Node, sorted, unique bool) *Node {
 			operand.Shape(), indices.Shape(), updates.Shape())
 	}
 	if indices.Shape().IsScalar() {
-		indices = ExpandDims(indices, 0)
+		indices = InsertAxes(indices, 0)
 	}
 
 	// Check shapes compatibility.

@@ -1117,7 +1117,7 @@ func TestMatMul(t *testing.T) {
 		}
 		outputs = []*Node{
 			MatMul(inputs[0], inputs[1]),
-			MatMul(inputs[0], ExpandDims(inputs[1], -1)),
+			MatMul(inputs[0], InsertAxes(inputs[1], -1)),
 		}
 		return
 	}, []any{

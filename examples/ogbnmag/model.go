@@ -144,7 +144,7 @@ func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inpu
 	for name, rule := range strategy.Rules {
 		if rule.NodeTypeName == "papers" {
 			// Gather values from frozen paperEmbeddings. Mask remains unchanged.
-			graphInputs[name].Value = Gather(papersEmbeddings, ExpandDims(graphInputs[name].Value, -1))
+			graphInputs[name].Value = Gather(papersEmbeddings, InsertAxes(graphInputs[name].Value, -1))
 			if dtype != dtypeEmbed {
 				graphInputs[name].Value = ConvertDType(graphInputs[name].Value, dtype)
 			}

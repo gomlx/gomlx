@@ -249,7 +249,7 @@ func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds
 	contextFeatures := sinEmbed
 
 	// Get flower embeddings.
-	flowerIds = ExpandDims(flowerIds, -1, -1, -1) // Expand axis to the match noisyImages rank.
+	flowerIds = InsertAxes(flowerIds, -1, -1, -1) // Expand axis to the match noisyImages rank.
 	flowerEmbedSize := context.GetParamOr(ctx, "flower_type_embed_size", 16)
 	if flowerEmbedSize > 0 {
 		flowerTypeEmbed := layers.Embedding(
@@ -401,7 +401,7 @@ func (c *Config) BuildTrainingModelGraph() train.ModelFn {
 		if _, ok := spec.(*flowers.BalancedDataset); ok {
 			// For BalancedDataset we need to gather the images from the examples.
 			examplesIdx := inputs[1]
-			images = Gather(images, ExpandDims(examplesIdx, -1))
+			images = Gather(images, InsertAxes(examplesIdx, -1))
 		}
 		flowerIds := inputs[2]
 		batchSize := images.Shape().Dimensions[0]

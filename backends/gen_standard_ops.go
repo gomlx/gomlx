@@ -73,7 +73,7 @@ type StandardOps interface {
 
 	// Concatenate results on the given axis.
 	// All axes that are not being concatenated must match dimensions.
-	// It doesn't work with scalars -- use ExpandDims.
+	// It doesn't work with scalars -- consider using ExpandAxes.
 	// If there is only one operand, it is returned and this is a no-op.
 	Concatenate(axis int, operands ...Op) Op
 

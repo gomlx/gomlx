@@ -440,17 +440,17 @@ func PiecewiseConstantFunction(input, controlPoints, splitPoints *Node) *Node {
 	} else if inputRank == 1 {
 		input = Reshape(input, -1, 1) // batchSize=?, numInputNodes=1
 	} else if inputRank == 2 {
-		input = ExpandDims(input, -1) // Reshape it to [batchSize, numInputGroups, inputGroupSize].
+		input = InsertAxes(input, -1) // Reshape it to [batchSize, numInputGroups, inputGroupSize].
 	} else if inputRank != 3 {
 		exceptions.Panicf("invalid input shape %s for PiecewiseConstantFunction, expected rank <= 3", input.Shape())
 	}
 
 	// Check that control points and split points are compatible.
 	if controlPoints.Rank() == 1 {
-		controlPoints = ExpandDims(controlPoints, 0, 0)
+		controlPoints = InsertAxes(controlPoints, 0, 0)
 	}
 	if splitPoints.Rank() == 1 {
-		splitPoints = ExpandDims(splitPoints, 0, 0)
+		splitPoints = InsertAxes(splitPoints, 0, 0)
 	}
 	numControlPoints := controlPoints.Shape().Dimensions[2]
 	if splitPoints.Shape().Dim(-1) != numControlPoints-1 {
@@ -468,8 +468,8 @@ func PiecewiseConstantFunction(input, controlPoints, splitPoints *Node) *Node {
 	// Standard PCF, no softening.
 	// Expand shapes to [batchSize, numOutputs, numInputGroups, inputGroupSize, numPoints], each can be set to one
 	// if not present in the expanded tensors.
-	expandedInputs := ExpandDims(input, 1, -1)            // Add output dimension and num points axes.
-	expandedSplitPoints := ExpandDims(splitPoints, 0, -2) // Add batch and inputGroupSize axes.
+	expandedInputs := InsertAxes(input, 1, -1)            // Add output dimension and num points axes.
+	expandedSplitPoints := InsertAxes(splitPoints, 0, -2) // Add batch and inputGroupSize axes.
 
 	// Find the control point to use, by comparing the inputs and split points.
 	toTheLeft := LessThanTotalOrder(expandedInputs,
@@ -481,7 +481,7 @@ func PiecewiseConstantFunction(input, controlPoints, splitPoints *Node) *Node {
 
 	// Makes sure we broadcast on the output dimension, if needed.
 	controlPicks = BroadcastToDims(controlPicks, batchSize, numOutputNodes, numInputGroups, inputGroupSize)
-	controlPicks = ExpandDims(controlPicks, -1)
+	controlPicks = InsertAxes(controlPicks, -1)
 	controlPicks = Concatenate([]*Node{
 		Iota(g, controlPicks.Shape(), 1), // output node index.
 		Iota(g, controlPicks.Shape(), 2), // input group index.
@@ -541,17 +541,17 @@ func PiecewiseConstantFunctionWithInputPerturbation(input, controlPoints, splitP
 	} else if inputRank == 1 {
 		input = Reshape(input, -1, 1) // batchSize=?, numInputNodes=1
 	} else if inputRank == 2 {
-		input = ExpandDims(input, -1) // Reshape it to [batchSize, numInputGroups, inputGroupSize].
+		input = InsertAxes(input, -1) // Reshape it to [batchSize, numInputGroups, inputGroupSize].
 	} else if inputRank != 3 {
 		exceptions.Panicf("invalid input shape %s for PiecewiseConstantFunction, expected rank <= 3", input.Shape())
 	}
 
 	// Check that control points and split points are compatible.
 	if controlPoints.Rank() == 1 {
-		controlPoints = ExpandDims(controlPoints, 0, 0)
+		controlPoints = InsertAxes(controlPoints, 0, 0)
 	}
 	if splitPoints.Rank() == 1 {
-		splitPoints = ExpandDims(splitPoints, 0, 0)
+		splitPoints = InsertAxes(splitPoints, 0, 0)
 	}
 	numControlPoints := controlPoints.Shape().Dimensions[2]
 	if splitPoints.Shape().Dim(-1) != numControlPoints-1 {
@@ -574,8 +574,8 @@ func PiecewiseConstantFunctionWithInputPerturbation(input, controlPoints, splitP
 
 	// Expand shapes to [batchSize, numOutputs, numInputGroups, inputGroupSize, numPoints], each can be set to one
 	// if not present in the expanded tensors.
-	expandedInputs := ExpandDims(input, 1, -1)            // Add output dimension and num points axes.
-	expandedSplitPoints := ExpandDims(splitPoints, 0, -2) // Add batch and inputGroupSize axes.
+	expandedInputs := InsertAxes(input, 1, -1)            // Add output dimension and num points axes.
+	expandedSplitPoints := InsertAxes(splitPoints, 0, -2) // Add batch and inputGroupSize axes.
 
 	// Calculate cumulative distribution function for all split nodes.
 	cdfsPoints := Sub(expandedSplitPoints, expandedInputs)
@@ -583,11 +583,11 @@ func PiecewiseConstantFunctionWithInputPerturbation(input, controlPoints, splitP
 	switch perturbation {
 	case PerturbationTriangular:
 		triangleHalfBase := Mul(distributionBase, softness)
-		triangleHalfBase = ExpandDims(triangleHalfBase, 0, -2) // [batchSize=1, numOutputs, numInputGroups, inputGroupSize=1, numPoints]
+		triangleHalfBase = InsertAxes(triangleHalfBase, 0, -2) // [batchSize=1, numOutputs, numInputGroups, inputGroupSize=1, numPoints]
 		cdfs = triangleDistributionCDF(cdfsPoints, triangleHalfBase)
 	case PerturbationNormal:
 		stddev := Mul(distributionBase, softness)
-		stddev = ExpandDims(stddev, 0, -2) // [batchSize=1, numOutputs, numInputGroups, inputGroupSize=1, numPoints]
+		stddev = InsertAxes(stddev, 0, -2) // [batchSize=1, numOutputs, numInputGroups, inputGroupSize=1, numPoints]
 		cdfs = NormalDistributionCDF(cdfsPoints, stddev)
 	}
 
@@ -595,7 +595,7 @@ func PiecewiseConstantFunctionWithInputPerturbation(input, controlPoints, splitP
 	// and right)
 	leftCDF := GrowLeft(cdfs, -1, 1, 0)                       // Prepend the CDF for -inf to the left == 0
 	rightCDF := GrowRight(cdfs, -1, 1, 1)                     // Append the CDF for +inf to the right == 1
-	expandedControlPoints := ExpandDims(controlPoints, 0, -2) // Shape [1 (batch), numOutputNodes, numInputGroups, 1(inputGroup), NumControlPoints]
+	expandedControlPoints := InsertAxes(controlPoints, 0, -2) // Shape [1 (batch), numOutputNodes, numInputGroups, 1(inputGroup), NumControlPoints]
 	weights := Sub(rightCDF, leftCDF)
 	//weights.SetLogged("weights")
 	termsOfSum := Mul(weights, expandedControlPoints)

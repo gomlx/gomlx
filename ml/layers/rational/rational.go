@@ -301,7 +301,7 @@ func (c *Config) Done() *Node {
 
 	// Creating powers of x:
 	maxDegree := max(c.numeratorDegree, c.denominatorDegree)
-	expandedX := ExpandDims(x, -1)
+	expandedX := InsertAxes(x, -1)
 	powersOfX := []*Node{OnesLike(expandedX), expandedX}
 	powerOfX := expandedX
 	for _ = range maxDegree - 1 {

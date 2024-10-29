@@ -288,7 +288,7 @@ func (mds *InMemoryDataset) readDataset(ds train.Dataset, dsIsBatched bool) (err
 		if !alreadyBatched {
 			newParts := make([]*Node, 0, len(parts))
 			for _, input := range parts {
-				newParts = append(newParts, ExpandDims(input, 0))
+				newParts = append(newParts, InsertAxes(input, 0))
 			}
 			parts = newParts
 		}

@@ -188,13 +188,13 @@ func recursivelyApplyGraphConvolution(ctx *context.Context, rule *sampler.Rule,
 			// We need to expand, so it will be properly broadcast.
 			// Noted the new axis is in between the "BatchSize" and following axes, and the last embedding
 			// dimensions, which remains unchanged.
-			subPathToRootStates = append(subPathToRootStates, ExpandDims(contextState, -2))
+			subPathToRootStates = append(subPathToRootStates, InsertAxes(contextState, -2))
 		}
 		if state.Value != nil {
 			// If useRootAsContext, only takes the root state as context.
 			if len(subPathToRootStates) == 0 || !useRootAsContext {
 				// If the state of the current rule is not latent, include it as well.
-				newContextState := ExpandDims(state.Value, -2)
+				newContextState := InsertAxes(state.Value, -2)
 				subPathToRootStates = append(subPathToRootStates, newContextState)
 			}
 		}
@@ -377,8 +377,8 @@ func poolMessagesWithAdjacency(ctx *context.Context, source, edgesSource, edgesT
 	embSize := source.Shape().Dimensions[1]
 	numEdges := edgesSource.Shape().Dimensions[0]
 	if edgesSource.Rank() == 1 {
-		edgesSource = ExpandDims(edgesSource, -1)
-		edgesTarget = ExpandDims(edgesTarget, -1)
+		edgesSource = InsertAxes(edgesSource, -1)
+		edgesTarget = InsertAxes(edgesTarget, -1)
 	}
 
 	poolTypesList := strings.Split(poolTypes, "|")

@@ -155,7 +155,7 @@ func Embedding(ctx *context.Context, input *Node, dtype dtypes.DType, vocabSize,
 	if inputShape.IsScalar() || inputShape.Dimensions[inputShape.Rank()-1] != 1 {
 		// Add a last dimension of size 1, since we are pointing to a table that needs
 		// and index of size 1.
-		input = ExpandDims(input, -1)
+		input = InsertAxes(input, -1)
 	}
 	embeddingTable := ctx.VariableWithShape("embeddings", shapes.Make(dtype, vocabSize, dimension))
 	return Gather(embeddingTable.ValueGraph(input.Graph()), input)
@@ -236,8 +236,8 @@ func PieceWiseLinearCalibration(ctx *context.Context, input, keypoints *Node, ou
 	_ = outputKeypointsNode
 
 	// Calculate lengths of each linear piece: all in shape [1, numKeypoints-1]
-	kpStarts := ExpandDims(Slice(keypoints, AxisRange(0, numKeypoints-1)), 0)
-	kpEnds := ExpandDims(Slice(keypoints, AxisRange(1, numKeypoints)), 0)
+	kpStarts := InsertAxes(Slice(keypoints, AxisRange(0, numKeypoints-1)), 0)
+	kpEnds := InsertAxes(Slice(keypoints, AxisRange(1, numKeypoints)), 0)
 	lengths := Sub(kpEnds, kpStarts)
 
 	//
@@ -257,19 +257,19 @@ func PieceWiseLinearCalibration(ctx *context.Context, input, keypoints *Node, ou
 
 	// left and right weights are shifted by one from one another. And we need to add the weights
 	// on the edge keypoints.
-	//leftEdge := ExpandDims(SliceLists(keypoints, []int{0}, []int{1}), 0)
-	leftEdge := ExpandDims(Slice(keypoints, AxisRangeFromStart(1)), 0)
+	//leftEdge := InsertAxes(SliceLists(keypoints, []int{0}, []int{1}), 0)
+	leftEdge := InsertAxes(Slice(keypoints, AxisRangeFromStart(1)), 0)
 	leftEdge = PositiveIndicator(Sub(leftEdge, input2D))
 	leftWeights = Concatenate([]*Node{leftEdge, leftWeights}, -1)
 
-	rightEdge := ExpandDims(Slice(keypoints, AxisRangeToEnd(-1)), 0)
+	rightEdge := InsertAxes(Slice(keypoints, AxisRangeToEnd(-1)), 0)
 	rightEdge = PositiveIndicator(Sub(input2D, rightEdge))
 	rightWeights = Concatenate([]*Node{rightWeights, rightEdge}, -1)
 
 	weights := Add(leftWeights, rightWeights)
 
 	// The calibrated value is the weighted sum of the output keypoints.
-	calibrated := ReduceSum(Mul(weights, ExpandDims(outputKeypointsNode, 0)), 1)
+	calibrated := ReduceSum(Mul(weights, InsertAxes(outputKeypointsNode, 0)), 1)
 	return ReshapeWithShape(calibrated, inputShape)
 }
 
@@ -317,9 +317,9 @@ func PieceWiseLinearCalibrationCascaded(ctx *context.Context, input, keypoints *
 	}
 
 	// Calculate lengths of each linear piece: all in shape [1, numKeypoints-1]
-	kpStarts := ExpandDims(Slice(keypoints, AxisRangeFromStart(-1)), 0)
-	//kpStarts := ExpandDims(SliceLists(keypoints, []int{0}, []int{numKeypoints - 1}), 0)
-	kpEnds := ExpandDims(Slice(keypoints, AxisRangeToEnd(1)), 0)
+	kpStarts := InsertAxes(Slice(keypoints, AxisRangeFromStart(-1)), 0)
+	//kpStarts := InsertAxes(SliceLists(keypoints, []int{0}, []int{numKeypoints - 1}), 0)
+	kpEnds := InsertAxes(Slice(keypoints, AxisRangeToEnd(1)), 0)
 	lengths := Sub(kpEnds, kpStarts)
 
 	// weights so far applies to outputKeypoints[1:]: it is shaped [numInputs, numKeypoints-1]
@@ -332,7 +332,7 @@ func PieceWiseLinearCalibrationCascaded(ctx *context.Context, input, keypoints *
 		weights}, -1) // Now weights has shape [numInputs, numKeypoints]
 
 	// The calibrated value is the weighted sum of the output keypoints.
-	calibrated := ReduceSum(Mul(weights, ExpandDims(outputKeypointsNode, 0)), 1)
+	calibrated := ReduceSum(Mul(weights, InsertAxes(outputKeypointsNode, 0)), 1)
 	return ReshapeWithShape(calibrated, inputShape)
 }
 

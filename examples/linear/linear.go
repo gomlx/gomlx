@@ -71,7 +71,7 @@ func buildExamples(manager backends.Backend, coef, bias *tensors.Tensor, numExam
 		// Random inputs (observations).
 		rngState := Const(g, RngState())
 		rngState, inputs = RandomNormal(rngState, shapes.Make(dtypes.Float64, numExamples, numFeatures))
-		coef = ExpandDims(coef, 0)
+		coef = InsertAxes(coef, 0)
 
 		// Calculate perfect labels.
 		labels = ReduceAndKeep(Mul(inputs, coef), ReduceSum, -1)

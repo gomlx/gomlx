@@ -287,7 +287,7 @@ func categoricalCrossEntropyLogitsImpl(labels, logits, weights, mask *Node) *Nod
 	}
 	var expandedMask *Node
 	if mask != nil {
-		expandedMask = BroadcastToShape(ExpandDims(mask, -1), logits.Shape())
+		expandedMask = BroadcastToShape(InsertAxes(mask, -1), logits.Shape())
 		logits = Where(expandedMask, logits, ZerosLike(logits))
 	}
 	logPredictions := LogSoftmax(logits)

@@ -186,10 +186,10 @@ func BenchmarkScatter(b *testing.B) {
 				g := values.Graph()
 				dtype := values.DType()
 				zeros := Zeros(g, shapes.Make(dtype, NumEntries, EmbeddingSize))
-				indices = ExpandDims(indices, -1)
+				indices = InsertAxes(indices, -1)
 				parts := make([]*Node, ConsecutiveScatters)
 				for ii := range parts {
-					parts[ii] = ExpandDims(ScatterAdd(zeros, AddScalar(indices, float64(ii)), values, sorted, unique), -1)
+					parts[ii] = InsertAxes(ScatterAdd(zeros, AddScalar(indices, float64(ii)), values, sorted, unique), -1)
 				}
 				x := ReduceSum(Concatenate(parts, -1), -1)
 				return Add(state, x)

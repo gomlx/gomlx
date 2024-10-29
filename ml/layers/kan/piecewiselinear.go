@@ -206,8 +206,8 @@ func (c *Config) pwlLayer(ctx *context.Context, x *Node, numOutputNodes int) *No
 	}
 
 	// Calculate PiecewiseLinear function
-	expandedX := ExpandDims(x, -1 /* numControlPoints */)
-	expandedSplitPoints := ExpandDims(splitPoints, 0 /*batch*/, -2 /* inputGroupSize */)
+	expandedX := InsertAxes(x, -1 /* numControlPoints */)
+	expandedSplitPoints := InsertAxes(splitPoints, 0 /*batch*/, -2 /* inputGroupSize */)
 	relativeX := Sub(expandedX, expandedSplitPoints)
 	zero := ScalarZero(g, dtype)
 	if c.pwl.linearExtrapolation {
@@ -233,7 +233,7 @@ func (c *Config) pwlLayer(ctx *context.Context, x *Node, numOutputNodes int) *No
 	// G -> inputGroupSize
 	// N -> numControlPoints
 	output := Einsum("BIGN,OIN->BOIG", relativeX, controlPoints)
-	expandedBias := ExpandDims(bias, 0, -1) // Expand to include batch (B) and input group axes (G).
+	expandedBias := InsertAxes(bias, 0, -1) // Expand to include batch (B) and input group axes (G).
 	output = Add(output, expandedBias)
 
 	output.AssertDims(batchSize, numOutputNodes, numInputGroups, inputGroupSize)

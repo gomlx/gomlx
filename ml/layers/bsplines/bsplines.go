@@ -50,7 +50,7 @@ func Evaluate(b *bsplines.BSpline, inputs, controlPoints *Node) *Node {
 			inputs.DType(), controlPoints.DType())
 	}
 	if controlPoints.Rank() == 1 {
-		controlPoints = ExpandDims(controlPoints, 0, 0)
+		controlPoints = InsertAxes(controlPoints, 0, 0)
 	}
 	if controlPoints.Rank() != 3 {
 		exceptions.Panicf("bsplines.gomlx.Evaluate() requires control points to have rank 3, shape [numInputs, numOutputs, numControlPoints], instead got shape %s",
@@ -83,7 +83,7 @@ func Evaluate(b *bsplines.BSpline, inputs, controlPoints *Node) *Node {
 	// Create knots constant.
 	knots := ConstAsDType(inputs.Graph(), inputs.DType(), b.ExpandedKnots())
 	numKnots := knots.Shape().Dimensions[0]
-	knots = ExpandDims(knots, 0) // shape [1, numKnots]
+	knots = InsertAxes(knots, 0) // shape [1, numKnots]
 
 	out := (&evalData{
 		bspline:          b,

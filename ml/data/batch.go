@@ -257,7 +257,7 @@ func (ds *batchedDataset) batchTensorsGraph(inputs []*Node) *Node {
 	if ds.createLeadingAxis {
 		newInputs := make([]*Node, 0, len(inputs))
 		for _, input := range inputs {
-			newInputs = append(newInputs, ExpandDims(input, 0))
+			newInputs = append(newInputs, InsertAxes(input, 0))
 		}
 		inputs = newInputs
 	}

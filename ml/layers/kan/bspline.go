@@ -129,7 +129,7 @@ func (c *Config) bsplineLayer(ctx *context.Context, x *Node, numOutputNodes int)
 	}
 	if c.useResidual {
 		residual = activations.Apply(c.activation, residual)
-		residual = ExpandDims(residual, 1)
+		residual = InsertAxes(residual, 1)
 		residual.AssertDims(batchSize, 1, numInputNodes)
 		if c.bspline.MagnitudeTerms {
 			residual = Mul(residual, weightsResidual)
