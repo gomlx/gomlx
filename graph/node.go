@@ -82,14 +82,6 @@ type NodeInputs interface {
 	String() string
 }
 
-// Type identify the operation performed by the node.
-func (n *Node) Type() NodeType {
-	if n == nil || n.inputs == nil {
-		return NodeTypeInvalid
-	}
-	return n.inputs.Type()
-}
-
 // Graph that holds this Node.
 func (n *Node) Graph() *Graph {
 	if n == nil {
