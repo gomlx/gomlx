@@ -1,6 +1,9 @@
 package graph
 
-import "github.com/gomlx/gomlx/types/tensors"
+import (
+	"github.com/gomlx/gomlx/types"
+	"github.com/gomlx/gomlx/types/tensors"
+)
 
 // This file defines methods that allow for introspection of the graph.
 //
@@ -25,4 +28,21 @@ func (n *Node) ConstantValue() *tensors.Tensor {
 	}
 	params := n.inputs.(*nodeInputsConstant)
 	return params.tensor
+}
+
+// IsConstantExpression returns whether the Node is a Constant or an expression that depends only on constant values.
+// It traverses all the node dependencies and checks that all leaf nodes are constants.
+func (n *Node) IsConstantExpression() bool {
+	return isConstantTraverseSubGraph(n, types.MakeSet[*Node]())
+}
+
+func isConstantTraverseSubGraph(node *Node, visited types.Set[*Node]) bool {
+	if visited.Has(node) {
+		return true
+	}
+	isConstant := node.Type() != NodeTypeParameter
+	for _, input := range node.Inputs() {
+		isConstant = isConstant && isConstantTraverseSubGraph(input, visited)
+	}
+	return isConstant
 }

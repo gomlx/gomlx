@@ -9,6 +9,7 @@
     and the new `ExpandAxes` match the more common semantics of `expand_dims`. Added proper documentation.
     **BREAKING CHANGE**: easy to convert, but breaking anyway: it requires attention.
     We defined a deprecated 'ExpandedDims' that maps to `InsertAxes`, but it will be removed on the next release.
+  * Graph/Node introspection: added `node.ConstantValue`, `node.IsConstantExpression`.
 * Package `context`:
   * Fixed `ExecOnce`: it was missing the variadic args for the computation graph.
 
