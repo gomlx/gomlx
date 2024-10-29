@@ -27,22 +27,22 @@ import (
 // Gather values in params from the pointers in indices.
 // The outputs are slices of `params` selected by `indices`, stitched together.
 //
-// Let's assume params has shapes `[i_0, ..., i_M, s_0, ..., s_o]`, where:
+// Let's assume params has shapes `[i_1, ..., i_N, s_1, ..., s_S]`, where:
 //
-//   - `i_0, ..., i_N` are the N "indexed dimensions", that is, the dimensions indexed by `indices`.
-//   - `s_0, ..., s_S` are the S dimensions of the slices that are going to be "gathered" (copied over).
+//   - `i_1, ..., i_N` are the N "indexed axes", that is, the axes that are indexed by `indices`.
+//   - `s_1, ..., s_S` are the S dimensions of the slices that are going to be "gathered" (copied over).
 //
-// And let's assume indices has shapes `[o_0,...,o_O, N]`, where:
+// And let's assume indices has shapes `[o_1,...,o_O, N]`, where:
 //
-//   - `o_0, ..., o_O` are enumerations of the slices from `params` to gather.
-//     E.g.: let's say O=1, and o_0=3, that means there will be 3 slices to gather.
+//   - `o_1, ..., o_O` are "batch dimensions" of the slices from `params` to gather, that will be included in the output.
+//     E.g.: let's say O=1, and o_1=3, that means there will be 3 slices to gather.
 //   - Last dimension `N`: this is the number of indices in `params` to point to. `N` is the number of
-//     dimensions indexed `i_0, ..., i_N` in `params` above.
+//     dimensions indexed `i_1, ..., i_N` in `params` above.
 //
-// The output will have shapes `[o_0,...,o_O, s_0, ... s_S]`, where:
+// The output will have shapes `[o_1,...,o_O, s_1, ... s_S]`, where:
 //
-//   - `o_0, ..., o_O` come from indices, and are enumerations of the slices from params to gather.
-//   - `s_0, ..., s_S` are the slice sizes copied from params.
+//   - `o_1, ..., o_O` come from indices, and are enumerations of the slices from params to gather.
+//   - `s_1, ..., s_S` are the slice sizes copied from params.
 //
 // For example:
 //
@@ -50,8 +50,8 @@ import (
 //	indices := [][]int{{1}, {0}}
 //	Gather(params, indices) would return {{3, 4, 5}, {0, 1, 2}}
 //
-// In the case above params shapes is interpreted as `[i_0=3, s_0=3]`, and indices' shapes is
-// `[o_0=2, N=1]`. The output shapes is `[o_0=2, s_0=3]`.
+// In the case above params shapes is interpreted as `[i_1=3, s_1=3]`, and indices' shapes is
+// `[o_1=2, N=1]`. The output shapes is `[o_1=2, s_1=3]`.
 func Gather(params, indices *Node) *Node {
 	_ = validateBuildingGraphFromInputs(params, indices)
 	if params.IsScalar() {
