@@ -627,16 +627,15 @@ func ExpandAxes(x *Node, newAxes ...int) *Node {
 	// Adjust new axes and check they are unique.
 	adjustedNewAxes := make([]int, len(newAxes))
 	copy(adjustedNewAxes, newAxes)
-	newAxes = adjustedNewAxes
 	for ii, axis := range newAxes {
 		if axis < 0 {
-			newAxes[ii] = toRank + axis
+			adjustedNewAxes[ii] = toRank + axis
 		}
 	}
-	slices.Sort(newAxes)
-	for ii := range newAxes {
-		if ii > 0 && newAxes[ii] == newAxes[ii-1] {
-			exceptions.Panicf("ExpandedAxes(x, newAxes=%v...) got repeated new axis %d which doesn't make sense -- likely an error", newAxes[ii])
+	slices.Sort(adjustedNewAxes)
+	for ii := range adjustedNewAxes {
+		if ii > 0 && adjustedNewAxes[ii] == adjustedNewAxes[ii-1] {
+			exceptions.Panicf("ExpandedAxes(x, newAxes=%v...) got repeated new axis %d which doesn't make sense -- likely an error", newAxes, adjustedNewAxes[ii])
 		}
 	}
 
@@ -644,7 +643,7 @@ func ExpandAxes(x *Node, newAxes ...int) *Node {
 	toShape := shapes.Shape{DType: x.DType(), Dimensions: make([]int, toRank)}
 	iiOriginal, iiNewAxes := 0, 0
 	for axis := range toShape.Dimensions {
-		if iiNewAxes < len(newAxes) && newAxes[iiNewAxes] == axis {
+		if iiNewAxes < len(adjustedNewAxes) && adjustedNewAxes[iiNewAxes] == axis {
 			toShape.Dimensions[axis] = 1
 			iiNewAxes += 1
 		} else {

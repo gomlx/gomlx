@@ -865,6 +865,25 @@ func TestInternalBatchNormForTraining(t *testing.T) {
 		}, 1e-4)
 }
 
+func TestExpandAxes(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "ExpandAxes and InsertAxes",
+		func(g *Graph) (inputs, outputs []*Node) {
+			inputs = []*Node{
+				Zeros(g, shapes.Make(dtypes.Int64, 2)),
+			}
+			outputs = []*Node{
+				ExpandAxes(inputs[0], 0, 1, 3),  // -> shape [1, 1, 2, 1]
+				ExpandAxes(inputs[0], 0, 1, -1), // -> same, shape [1, 1, 2, 1]
+				InsertAxes(inputs[0], 0, 0, -1), // -> same, shape [1, 1, 2, 1]
+			}
+			return
+		}, []any{
+			[][][][]int64{{{{0}, {0}}}},
+			[][][][]int64{{{{0}, {0}}}},
+			[][][][]int64{{{{0}, {0}}}},
+		}, -1)
+}
+
 func TestSqueeze(t *testing.T) {
 	graphtest.RunTestGraphFn(t, "Squeeze()",
 		func(g *Graph) (inputs, outputs []*Node) {
