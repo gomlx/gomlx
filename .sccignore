@@ -1,0 +1,7 @@
+docs/notebooks
+LICENSE
+.gitignore
+.ipynb_checkpoints
+.dockerignore
+.idea
+checkpoint*.json
