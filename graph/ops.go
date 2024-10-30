@@ -1667,32 +1667,46 @@ func InternalBatchNormGradient(operand *Node, scale *Node, mean *Node, variance 
 	return backendBatchNormGradient(operand, scale, mean, variance, gradOutput, epsilon, axis)
 }
 
-// MatMul is similar to Dot but extends to allow for more batch dimensions in lhs operand.
-// It behaves like numpy.matmul.
+// MatMul is the `numpy.matmul` equivalent, for those used to that.
+//
+// It is similar to Dot but extends to allow for more batch dimensions in lhs or rhs operand, and
+// does broadcasting (of all but the last 2 axes) according to the numpy broadcasting rules.
+//
+// It's popular hence it is here, but full of edge cases, consider using DotGeneral instead.
 func MatMul(lhs, rhs *Node) *Node {
 	_ = validateBuildingGraphFromInputs(lhs, rhs)
 	if lhs.Rank() == 0 || rhs.Rank() == 0 {
 		exceptions.Panicf("MatMul expects two tensors with rank > 0, got ranks %d and %d", lhs.Rank(), rhs.Rank())
 	}
-
-	// Not handling yet cases where lhs or rhs are of higher rank than 2.
-	if rhs.Rank() > 2 {
-		exceptions.Panicf("MatMul(lhs,rhs) with rhs (right-hand-side operand) rank > 2 not implemented, rhs.rank=%d", rhs.Rank())
+	if lhs.Rank() <= 2 && rhs.Rank() <= 2 {
+		return Dot(lhs, rhs)
 	}
 
-	// Reshape before Dot for lhs.rank>2
-	var prefixDims []int
-	if lhs.Rank() > 2 {
-		prefixDims = slices.Clone(lhs.Shape().Dimensions[:lhs.Rank()-1])
-		lhs = Reshape(lhs, -1, lhs.Shape().Dim(-1))
+	// Special case when one of operands is a vector.
+	if lhs.Rank() == 1 {
+		return DotGeneral(lhs, []int{0}, nil, rhs, []int{rhs.Rank() - 2}, nil)
 	}
-	result := Dot(lhs, rhs)
-	if prefixDims != nil {
-		if result.Rank() == 1 {
-			result = Reshape(result, prefixDims...)
-		} else {
-			result = Reshape(result, append(prefixDims, -1)...)
+	if rhs.Rank() == 1 {
+		return DotGeneral(lhs, []int{lhs.Rank() - 1}, nil, rhs, []int{0}, nil)
+	}
+
+	// NumPY broadcasting rule in case they are of different ranks:
+	if lhs.Rank() < rhs.Rank() {
+		lhs = ExpandLeftToRank(lhs, rhs.Rank())
+	} else if rhs.Rank() < lhs.Rank() {
+		rhs = ExpandLeftToRank(rhs, lhs.Rank())
+	}
+	lhsBroadcastDims := slices.Clone(lhs.Shape().Dimensions)
+	rhsBroadcastDims := slices.Clone(rhs.Shape().Dimensions)
+	for axis := range lhs.Rank() - 2 {
+		if lhsBroadcastDims[axis] == 1 {
+			lhsBroadcastDims[axis] = rhs.Shape().Dimensions[axis]
+		} else if rhsBroadcastDims[axis] == 1 {
+			rhsBroadcastDims[axis] = lhs.Shape().Dimensions[axis]
 		}
 	}
-	return result
+	lhs = BroadcastToDims(lhs, lhsBroadcastDims...)
+	rhs = BroadcastToDims(rhs, rhsBroadcastDims...)
+	batchAxes := xslices.Iota(0, lhs.Rank()-2)
+	return DotGeneral(lhs, []int{lhs.Rank() - 1}, batchAxes, rhs, []int{rhs.Rank() - 2}, batchAxes)
 }

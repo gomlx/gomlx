@@ -1145,4 +1145,27 @@ func TestMatMul(t *testing.T) {
 		// Shape: [3, 2, 1]
 		[][][]float32{{{12.34}, {567.89}}, {{1123.4401}, {1678.99}}, {{2234.54}, {2790.09}}},
 	}, 0)
+
+	// Test shapes of edge cases:
+	backend := graphtest.BuildTestBackend()
+	{
+		// Check broadcasting.
+		g := NewGraph(backend, "matmul_test")
+		lhs := IotaFull(g, shapes.Make(dtypes.F32, 2, 1, 7, 32))
+		rhs := IotaFull(g, shapes.Make(dtypes.F32, 1, 12, 32, 7))
+		got := MatMul(lhs, rhs)
+		require.NoError(t, got.Shape().CheckDims(2, 12, 7, 7))
+		got = MatMul(rhs, lhs)
+		require.NoError(t, got.Shape().CheckDims(2, 12, 32, 32))
+	}
+	{
+		// Check automatic rank expansion.
+		g := NewGraph(backend, "matmul_test")
+		lhs := IotaFull(g, shapes.Make(dtypes.F32, 2, 1, 7, 32))
+		rhs := IotaFull(g, shapes.Make(dtypes.F32, 12, 32, 7))
+		got := MatMul(lhs, rhs) // rhs Expands the 2, and lhs broadcasts the 32.
+		require.NoError(t, got.Shape().CheckDims(2, 12, 7, 7))
+		got = MatMul(rhs, lhs)
+		require.NoError(t, got.Shape().CheckDims(2, 12, 32, 32))
+	}
 }
