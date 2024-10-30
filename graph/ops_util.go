@@ -275,17 +275,15 @@ func MaskedReduceAndKeep(x, mask *Node, reduceFn func(x, mask *Node, reduceAxes 
 var ReduceAndKeepMasked = MaskedReduceAndKeep
 
 // Softmax computes softmax activations. It's the equivalent to
-// ```
 //
-//	Exp(logits) / InsertAxes(ReduceSum(Exp(logits), -1), -1)
-//
-// ```
+//	Exp(logits) / ReduceAndKeep(Exp(logits), ReduceSum, axes...)
 //
 // But implemented in a numerical stable way.
 //
 // The list axes defines which axes is it supposed to run the softmax over
-// (the axes that will be summed over). If no axes are given, it is assumed to
-// be [-1], meaning, the last axes.
+// (the axes that will be summed over).
+//
+// If no axes are given, it is assumed to be [-1], meaning, the last axes.
 func Softmax(logits *Node, axes ...int) *Node {
 	_ = validateBuildingGraphFromInputs(logits)
 	if !logits.DType().IsFloat() {
