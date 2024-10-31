@@ -18,6 +18,8 @@ func (t *Tensor) Summary(precision int) string {
 	// Print value with appropriate formatting:
 	wValue := func(v reflect.Value) {
 		switch v.Kind() {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			w("%d", v.Int())
 		case reflect.Complex64, reflect.Complex128:
 			c := v.Complex()
 			w("(%.*f+%.*fi)", precision, real(c), precision, imag(c))
@@ -84,7 +86,10 @@ func (t *Tensor) Summary(precision int) string {
 
 			w("{")
 			if indent == -1 {
-				w("\n ")
+				if numRows > 1 {
+					// Break the line before outputting data if we are using more than one row.
+					w("\n ")
+				}
 				indent = 1
 			}
 			indentStr := strings.Repeat(" ", indent)
