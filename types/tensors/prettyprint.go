@@ -38,6 +38,13 @@ func (t *Tensor) Summary(precision int) string {
 			w("[%d]", dim)
 		}
 		w("%s", values.Type().Elem())
+		if len(dims) == 0 {
+			// Scalar value.
+			w("(")
+			wValue(values.Index(0))
+			w(")")
+			return
+		}
 
 		// Recursive function to print elements
 		var printElements func(int, int, []int)
