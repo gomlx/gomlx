@@ -142,7 +142,7 @@ type ExecGraphFnOneOutput interface {
 //		})
 //	 fmt.Printf("%s\n", counter.Call()[0])  // == 1
 //	 fmt.Printf("%s\n", counter.Call()[0])  // == 2
-//	 fmt.Printf("%s\n", ctx.InspectVariable(ctx.Scope(), "counter").Value())  // == 2
+//	 fmt.Printf("%s\n", ctx.GetVariableByScopeAndName(ctx.Scope(), "counter").Value())  // == 2
 //
 // ```
 //

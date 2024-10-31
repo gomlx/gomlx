@@ -94,8 +94,8 @@ func TestDense(t *testing.T) {
 
 	// Generate the gradients with respect to everything (inputs and variables).
 	gradients := Gradient(sum,
-		inputNode, ctx.InspectVariable("/dense", "weights").ValueGraph(g),
-		ctx.InspectVariable("/dense", "biases").ValueGraph(g))
+		inputNode, ctx.GetVariableByScopeAndName("/dense", "weights").ValueGraph(g),
+		ctx.GetVariableByScopeAndName("/dense", "biases").ValueGraph(g))
 	outputs := append([]*Node{sum, output}, gradients...)
 	g.Compile(outputs...)
 

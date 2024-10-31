@@ -28,7 +28,7 @@ var (
 
 // getMagVar retrieves the static (not-learnable) OGBN-MAG variables -- e.g: the frozen papers embedding table.
 func getMagVar(ctx *context.Context, g *Graph, name string) *Node {
-	magVar := ctx.InspectVariable(OgbnMagVariablesScope, name)
+	magVar := ctx.GetVariableByScopeAndName(OgbnMagVariablesScope, name)
 	if magVar == nil {
 		Panicf("Missing OGBN-MAG dataset variables (%q), pls call UploadOgbnMagVariables() on context first.", name)
 		panic(nil) // Quiet linter.

@@ -145,7 +145,7 @@ func main() {
 
 	// Print learned coefficients and bias -- from the weights in the dense layer.
 	fmt.Println()
-	coefVar, biasVar := ctx.InspectVariable("/dense", "weights"), ctx.InspectVariable("/dense", "biases")
+	coefVar, biasVar := ctx.GetVariableByScopeAndName("/dense", "weights"), ctx.GetVariableByScopeAndName("/dense", "biases")
 	learnedCoef, learnedBias := coefVar.Value(), biasVar.Value()
 	fmt.Printf("Learned coefficients: %0.5v\n", learnedCoef.Value())
 	fmt.Printf("Learned bias: %0.5v\n", learnedBias.Value())

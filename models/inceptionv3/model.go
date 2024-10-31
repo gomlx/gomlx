@@ -512,7 +512,7 @@ func (cfg *Config) loadTensorToVariable(ctx *context.Context, graph *Graph, tens
 		return
 	}
 
-	if ctx.InspectVariable(ctx.Scope(), variableName) != nil {
+	if ctx.GetVariableByScopeAndName(ctx.Scope(), variableName) != nil {
 		// Assume it's already correctly loaded.
 		return
 	}

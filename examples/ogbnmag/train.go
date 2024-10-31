@@ -336,7 +336,7 @@ func convertPapersEmbeddings(backend backends.Backend, ctx *context.Context) {
 		dtypeEmbed = dtypes.Float32
 	}
 
-	papersVar := ctx.InspectVariable(OgbnMagVariablesScope, "PapersEmbeddings")
+	papersVar := ctx.GetVariableByScopeAndName(OgbnMagVariablesScope, "PapersEmbeddings")
 	if papersVar == nil || papersVar.Value() == nil {
 		Panicf("Cannot convert papers embeddings if variable \"PapersEmbeddings\" is not set yet")
 		panic(nil) // Clear lint warning.

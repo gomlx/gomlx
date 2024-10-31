@@ -107,13 +107,13 @@ func Normalization(backend backends.Backend, ds train.Dataset, inputsIndex int, 
 	var results []*tensors.Tensor
 	err = exceptions.TryCatch[error](func() {
 		results = context.NewExec(backend, ctx, func(ctx *context.Context, g *Graph) []*Node {
-			countVar := ctx.InspectVariable(ctx.Scope(), "count")
+			countVar := ctx.GetVariableByScopeAndName(ctx.Scope(), "count")
 			count := countVar.ValueGraph(g)
 
-			sumVar := ctx.InspectVariable(ctx.Scope(), "sum")
+			sumVar := ctx.GetVariableByScopeAndName(ctx.Scope(), "sum")
 			sum := sumVar.ValueGraph(g)
 
-			sumSquareVar := ctx.InspectVariable(ctx.Scope(), "sum^2")
+			sumSquareVar := ctx.GetVariableByScopeAndName(ctx.Scope(), "sum^2")
 			sumSquare := sumSquareVar.ValueGraph(g)
 
 			count = ConvertDType(count, sum.DType())

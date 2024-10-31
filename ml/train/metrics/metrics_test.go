@@ -77,12 +77,12 @@ func TestNewMeanBinaryAccuracy(t *testing.T) {
 	})
 
 	metricScope := ctx.In(Scope).In(accMetric.ScopeName()).Scope()
-	totalVar := ctx.InspectVariable(metricScope, "total")
+	totalVar := ctx.GetVariableByScopeAndName(metricScope, "total")
 	require.NotNilf(t, totalVar, "Variable \"total\" was not created in %s / total", metricScope)
 	total := totalVar.Value().Value().(float32)
 	assert.Equal(t, float32(2), total, "MeanBinaryAccuracy total value")
 
-	weightVar := ctx.InspectVariable(metricScope, "weight")
+	weightVar := ctx.GetVariableByScopeAndName(metricScope, "weight")
 	require.NotNilf(t, weightVar, "Variable \"weight\" was not created in %s / total", metricScope)
 	weight := weightVar.Value().Value().(float32)
 	assert.Equal(t, float32(6), weight, "MeanBinaryAccuracy weight value")

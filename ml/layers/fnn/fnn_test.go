@@ -178,7 +178,7 @@ func TestFNNRegularized(t *testing.T) {
 	*/
 	for _, scope := range []string{"/fnn_hidden_layer_0", "/fnn_hidden_layer_1", "/fnn_output_layer"} {
 		vName := "weights"
-		v := ctx.InspectVariable(scope, vName)
+		v := ctx.GetVariableByScopeAndName(scope, vName)
 		require.NotNilf(t, v, "failed to inspect variable scope=%q, name=%q", scope, vName)
 		tensor := v.Value()
 		fmt.Printf("\t%s : %s -> %v\n", v.Scope(), v.Name(), tensor)

@@ -12,6 +12,9 @@
   * Graph/Node introspection: added `node.ConstantValue`, `node.IsConstantExpression`.
 * Package `context`:
   * Fixed `ExecOnce`: it was missing the variadic args for the computation graph.
+  * `InspectVariableInScope` and `InspectVariable` renamed to `GetVariable` and `GetVariableByScopeAndName`
+    respectively. Alias to the older names left for compatibility (and marked as deprecated), but they
+    will be removed in future versions.
 
 ## v0.14.0 - 2024/10/24
 
