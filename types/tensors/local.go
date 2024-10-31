@@ -431,36 +431,9 @@ func Load(filePath string) (t *Tensor, err error) {
 // MaxSizeForString is the largest Local tensor that is actually returned by String() is requested.
 var MaxSizeForString = 500
 
-// String converts to string, if not too large.
+// String converts to string, if not too large. It uses t.Summary(precision=4)
 func (t *Tensor) String() string {
-	return t.StringN(MaxSizeForString)
-}
-
-// StringN converts to string, displaying at most n elements.
-// TODO: nice pretty-print version, even for large tensors.
-func (t *Tensor) StringN(n int) string {
-	t.AssertValid()
-	if t.shape.Size() <= n {
-		return fmt.Sprintf("%s: %v", t.shape, t.Value())
-	}
-	var str string
-	t.ConstFlatData(func(flat any) {
-		flatV := reflect.ValueOf(flat)
-		flatV = flatV.Slice(0, n)
-		str = fmt.Sprintf("%s: (... too large, %d values ..., first %d values: %v)",
-			t.shape, t.shape.Size(), n, flatV.Interface())
-	})
-	return str
-}
-
-// GoStr converts to string, using a Go-syntax representation that can be copied&pasted back to code.
-func (t *Tensor) GoStr() string {
-	t.AssertValid()
-	value := t.Value()
-	if t.IsScalar() {
-		return fmt.Sprintf("%s(%v)", t.shape.DType.GoStr(), value)
-	}
-	return fmt.Sprintf("%s: %s", t.shape, xslices.SliceToGoStr(value))
+	return t.Summary(4)
 }
 
 // FromScalar creates a local tensor with the given scalar.
