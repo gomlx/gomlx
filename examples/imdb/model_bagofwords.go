@@ -43,7 +43,7 @@ func EmbedTokensGraph(ctx *context.Context, tokens *Node) (embed, mask *Node) {
 		shape := embed.Shape().Dimensions[:len(embed.Shape().Dimensions)-1]
 		dropoutMask := Ones(g, shapes.Make(DType, shape...))
 		dropoutMask = layers.Dropout(ctx, dropoutMask, ConstAsDType(g, DType, wordDropoutRate))
-		dropoutMask = ExpandDims(dropoutMask, -1)
+		dropoutMask = InsertAxes(dropoutMask, -1)
 		embed = Mul(embed, dropoutMask)
 	}
 	return

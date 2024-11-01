@@ -163,10 +163,10 @@ func MaskedWordTaskGraph(ctx *context.Context, tokens, embed, mask *Node,
 	//choice.SetLogged("1. choice")
 
 	// Find indices to gather the word token and later the word embedding.
-	expandedChoice := ExpandDims(choice, -1)
+	expandedChoice := InsertAxes(choice, -1)
 	batchIndices := Iota(g, shapes.Make(dtypes.Int64, batchSize, 1), 0)
 	indices := Concatenate([]*Node{batchIndices, expandedChoice}, -1) // shape=[batchSize, 2]
-	wordToken := ExpandDims(Gather(tokens, indices), -1)              // [batchSize, 1]
+	wordToken := InsertAxes(Gather(tokens, indices), -1)              // [batchSize, 1]
 
 	// wordMask: shape=[batch_size, seq_size]
 	broadcastChoice := BroadcastToDims(expandedChoice, mask.Shape().Dimensions...)

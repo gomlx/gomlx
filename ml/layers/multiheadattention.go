@@ -230,7 +230,7 @@ func (b *MultiHeadAttentionBuilder) SetQueryKeyMatrixMask(queryKeyMatrixMask *No
 	}
 
 	// Broadcast numHeads axes.
-	queryKeyMatrixMask = ExpandDims(queryKeyMatrixMask, 1+b.innerQueryAxes)
+	queryKeyMatrixMask = InsertAxes(queryKeyMatrixMask, 1+b.innerQueryAxes)
 	queryKeyMatrixMask = BroadcastToDims(queryKeyMatrixMask, b.attentionShape.Dimensions...)
 	return b
 }
@@ -427,7 +427,7 @@ func (b *MultiHeadAttentionBuilder) buildMaskFromSplitMasks() (mask *Node) {
 		// Expand dims after the batch axis.
 		// attentionShape=`[batch, <query_elements>, num_heads, <key_elements>]`
 		// b.keyMask.shape=`[batch, <key_elements>]`
-		keyMask = ExpandDims(b.keyMask, xslices.SliceWithValue(b.attentionShape.Rank()-b.keyMask.Rank(), 1)...)
+		keyMask = InsertAxes(b.keyMask, xslices.SliceWithValue(b.attentionShape.Rank()-b.keyMask.Rank(), 1)...)
 		keyMask = BroadcastToDims(keyMask, b.attentionShape.Dimensions...)
 	}
 	var queryMask *Node
@@ -437,7 +437,7 @@ func (b *MultiHeadAttentionBuilder) buildMaskFromSplitMasks() (mask *Node) {
 		queryMask = BroadcastToDims(queryMask, b.attentionShape.Dimensions...)
 	} else {
 		// Expand dims at the end.
-		queryMask = ExpandDims(b.queryMask, xslices.SliceWithValue(b.attentionShape.Rank()-b.queryMask.Rank(), -1)...)
+		queryMask = InsertAxes(b.queryMask, xslices.SliceWithValue(b.attentionShape.Rank()-b.queryMask.Rank(), -1)...)
 		queryMask = BroadcastToDims(queryMask, b.attentionShape.Dimensions...)
 	}
 	return And(queryMask, keyMask)
@@ -452,7 +452,7 @@ func (b *MultiHeadAttentionBuilder) buildCausalMask() (mask *Node) {
 	mask = LowerTriangular(b.g, dim)
 
 	// Broadcast mask to target shape of `[batch, <query_elements>, numHeads, <key_elements>]`
-	mask = ExpandDims(mask, 0, 1)                                // Add batch and numHeads axes.
+	mask = InsertAxes(mask, 0, 1)                                // Add batch and numHeads axes.
 	mask = BroadcastToDims(mask, b.attentionShape.Dimensions...) // Broadcast to target dimensions.
 	return
 }

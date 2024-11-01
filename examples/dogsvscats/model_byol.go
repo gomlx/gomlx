@@ -115,7 +115,7 @@ func moveTargetModel(onlineCtx, targetCtx *context.Context, g *Graph, movingAver
 	targetCtx.EnumerateVariablesInScope(func(targetVar *context.Variable) {
 		// Get corresponding variable in "online" model.
 		onlineVarScope := onlineScope + targetVar.Scope()[len(targetScope):]
-		onlineVar := onlineCtx.InspectVariable(onlineVarScope, targetVar.Name())
+		onlineVar := onlineCtx.GetVariableByScopeAndName(onlineVarScope, targetVar.Name())
 		if onlineVar == nil {
 			exceptions.Panicf("BYOL target model variable %q::%q has no corresponding variable %q::%q in online model",
 				targetVar.Scope(), targetVar.Name(), onlineVarScope, targetVar.Name())

@@ -225,7 +225,7 @@ func OneHot(indices *Node, depth int, dtype dtypes.DType) *Node {
 
 	// Add an expanded dimension at the end, which will contain the one-hot representation.
 	// The new last axis will be broadcast to the same dimension as positionIndices
-	indices = ExpandDims(indices, -1)
+	indices = InsertAxes(indices, -1)
 
 	positionIndicesShape := indices.Shape().Clone()
 	for ii := range indices.Rank() - 1 {
@@ -275,17 +275,15 @@ func MaskedReduceAndKeep(x, mask *Node, reduceFn func(x, mask *Node, reduceAxes 
 var ReduceAndKeepMasked = MaskedReduceAndKeep
 
 // Softmax computes softmax activations. It's the equivalent to
-// ```
 //
-//	Exp(logits) / ExpandDims(ReduceSum(Exp(logits), -1), -1)
-//
-// ```
+//	Exp(logits) / ReduceAndKeep(Exp(logits), ReduceSum, axes...)
 //
 // But implemented in a numerical stable way.
 //
 // The list axes defines which axes is it supposed to run the softmax over
-// (the axes that will be summed over). If no axes are given, it is assumed to
-// be [-1], meaning, the last axes.
+// (the axes that will be summed over).
+//
+// If no axes are given, it is assumed to be [-1], meaning, the last axes.
 func Softmax(logits *Node, axes ...int) *Node {
 	_ = validateBuildingGraphFromInputs(logits)
 	if !logits.DType().IsFloat() {
@@ -304,7 +302,7 @@ func Softmax(logits *Node, axes ...int) *Node {
 // MaskedSoftmax computes softmax activations. It's the equivalent to
 // ```
 //
-//	Exp(logits) / ExpandDims(ReduceSum(Exp(logits), -1), -1)
+//	Exp(logits) / InsertAxes(ReduceSum(Exp(logits), -1), -1)
 //
 // ```
 //
@@ -813,7 +811,7 @@ func ConsecutiveDifference(x *Node, axis int, preserveShape bool) *Node {
 		g := x.Graph()
 		n := x.Rank()
 		dtype := x.DType()
-		expandedX := ExpandDims(x, 0, -1) // Add a batch axis at the start, and depth (channels) axis at the end.
+		expandedX := InsertAxes(x, 0, -1) // Add a batch axis at the start, and depth (channels) axis at the end.
 		var paddings [][2]int
 		if preserveShape {
 			paddings = make([][2]int, n)

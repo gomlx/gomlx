@@ -43,7 +43,7 @@ func TestEvaluateSimple(t *testing.T) {
 	exec := NewExec(backend, func(x, controlPoints *Node) *Node {
 		values := Evaluate(b,
 			x,
-			ExpandDims(controlPoints, 1))
+			InsertAxes(controlPoints, 1))
 		fmt.Printf("output.shape=%s\n", values.Shape())
 		return Reshape(values, -1, 2)
 	})

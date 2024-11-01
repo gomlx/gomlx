@@ -865,6 +865,25 @@ func TestInternalBatchNormForTraining(t *testing.T) {
 		}, 1e-4)
 }
 
+func TestExpandAxes(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "ExpandAxes and InsertAxes",
+		func(g *Graph) (inputs, outputs []*Node) {
+			inputs = []*Node{
+				Zeros(g, shapes.Make(dtypes.Int64, 2)),
+			}
+			outputs = []*Node{
+				ExpandAxes(inputs[0], 0, 1, 3),  // -> shape [1, 1, 2, 1]
+				ExpandAxes(inputs[0], 0, 1, -1), // -> same, shape [1, 1, 2, 1]
+				InsertAxes(inputs[0], 0, 0, -1), // -> same, shape [1, 1, 2, 1]
+			}
+			return
+		}, []any{
+			[][][][]int64{{{{0}, {0}}}},
+			[][][][]int64{{{{0}, {0}}}},
+			[][][][]int64{{{{0}, {0}}}},
+		}, -1)
+}
+
 func TestSqueeze(t *testing.T) {
 	graphtest.RunTestGraphFn(t, "Squeeze()",
 		func(g *Graph) (inputs, outputs []*Node) {
@@ -1089,4 +1108,64 @@ func TestIsFinite(t *testing.T) {
 	}, []any{
 		[]bool{true, false, true, false, true, false}, // Number of bits set.
 	}, 0)
+}
+
+func TestMatMul(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "MatMul 1:", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = []*Node{
+			IotaFull(g, shapes.Make(dtypes.Float32, 3, 2, 5)),
+			Transpose(
+				Const(g, [][]float32{{100, 10, 1, 0.1, 0.01}, {1000, 100, 10, 1, 0.1}}),
+				0, 1),
+		}
+		outputs = []*Node{MatMul(inputs[0], inputs[1])}
+		return
+	}, []any{
+		// Shape: [3, 2, 2]
+		[][][]float32{
+			{{12.34, 123.4}, {567.89, 5678.9}},
+			{{1123.4401, 11234.4}, {1678.99, 16789.9}},
+			{{2234.54, 22345.4}, {2790.09, 27900.9}},
+		},
+	}, 0)
+
+	graphtest.RunTestGraphFn(t, "MatMul 2:", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = []*Node{
+			IotaFull(g, shapes.Make(dtypes.Float32, 3, 2, 5)),
+			Const(g, []float32{100, 10, 1, 0.1, 0.01}),
+		}
+		outputs = []*Node{
+			MatMul(inputs[0], inputs[1]),
+			MatMul(inputs[0], InsertAxes(inputs[1], -1)),
+		}
+		return
+	}, []any{
+		// Shape: [3, 2]
+		[][]float32{{12.34, 567.89}, {1123.4401, 1678.99}, {2234.54, 2790.09}},
+		// Shape: [3, 2, 1]
+		[][][]float32{{{12.34}, {567.89}}, {{1123.4401}, {1678.99}}, {{2234.54}, {2790.09}}},
+	}, 0)
+
+	// Test shapes of edge cases:
+	backend := graphtest.BuildTestBackend()
+	{
+		// Check broadcasting.
+		g := NewGraph(backend, "matmul_test")
+		lhs := IotaFull(g, shapes.Make(dtypes.F32, 2, 1, 7, 32))
+		rhs := IotaFull(g, shapes.Make(dtypes.F32, 1, 12, 32, 7))
+		got := MatMul(lhs, rhs)
+		require.NoError(t, got.Shape().CheckDims(2, 12, 7, 7))
+		got = MatMul(rhs, lhs)
+		require.NoError(t, got.Shape().CheckDims(2, 12, 32, 32))
+	}
+	{
+		// Check automatic rank expansion.
+		g := NewGraph(backend, "matmul_test")
+		lhs := IotaFull(g, shapes.Make(dtypes.F32, 2, 1, 7, 32))
+		rhs := IotaFull(g, shapes.Make(dtypes.F32, 12, 32, 7))
+		got := MatMul(lhs, rhs) // rhs Expands the 2, and lhs broadcasts the 32.
+		require.NoError(t, got.Shape().CheckDims(2, 12, 7, 7))
+		got = MatMul(rhs, lhs)
+		require.NoError(t, got.Shape().CheckDims(2, 12, 32, 32))
+	}
 }

@@ -142,7 +142,7 @@ type ExecGraphFnOneOutput interface {
 //		})
 //	 fmt.Printf("%s\n", counter.Call()[0])  // == 1
 //	 fmt.Printf("%s\n", counter.Call()[0])  // == 2
-//	 fmt.Printf("%s\n", ctx.InspectVariable(ctx.Scope(), "counter").Value())  // == 2
+//	 fmt.Printf("%s\n", ctx.GetVariableByScopeAndName(ctx.Scope(), "counter").Value())  // == 2
 //
 // ```
 //
@@ -456,8 +456,8 @@ func ExecOnceN[F ExecGraphFn](backend backends.Backend, ctx *Context, ctxGraphFn
 // It's short for a call to NewExec, Exec.Call and Exec.Finalize for functions that return only one output.
 //
 // See ExecOnceN if you have multiple outputs.
-func ExecOnce[F ExecGraphFnOneOutput](backend backends.Backend, ctx *Context, ctxGraphFn F) *tensors.Tensor {
-	return ExecOnceN(backend, ctx, ctxGraphFn)[0]
+func ExecOnce[F ExecGraphFnOneOutput](backend backends.Backend, ctx *Context, ctxGraphFn F, args ...any) *tensors.Tensor {
+	return ExecOnceN(backend, ctx, ctxGraphFn, args...)[0]
 }
 
 // InDevice sets the device num to be used by graphs constructed by Exec.

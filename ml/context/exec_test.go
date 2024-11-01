@@ -115,5 +115,5 @@ func TestExecWithVariableUpdates(t *testing.T) {
 	if got != 2 {
 		t.Fatalf("Wanted second counter value to be 2, got %d instead", got)
 	}
-	fmt.Printf("%s\n", ctx.InspectVariable(ctx.Scope(), "counter").Value()) // 2
+	fmt.Printf("%s\n", ctx.GetVariableByScopeAndName(ctx.Scope(), "counter").Value()) // 2
 }

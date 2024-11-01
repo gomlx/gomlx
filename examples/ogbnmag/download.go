@@ -446,7 +446,7 @@ func UploadOgbnMagVariables(backend backends.Backend, ctx *context.Context) *con
 func ExcludeOgbnMagVariablesFromSave(ctx *context.Context, checkpoint *checkpoints.Handler) {
 	ctxMag := ctx.InAbsPath(OgbnMagVariablesScope)
 	for name := range OgbnMagVariablesRef {
-		v := ctxMag.InspectVariableInScope(name)
+		v := ctxMag.GetVariable(name)
 		if v == nil {
 			Panicf("OGBN-MAG variable %q not found in context!?", name)
 		}

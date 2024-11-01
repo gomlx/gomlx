@@ -31,7 +31,7 @@ func FnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	seeds := inputs[0]
 	g := seeds.Graph()
 	getMagVar := func(name string) *Node {
-		magVar := ctx.InspectVariable(mag.OgbnMagVariablesScope, name)
+		magVar := ctx.GetVariableByScopeAndName(mag.OgbnMagVariablesScope, name)
 		if magVar == nil {
 			exceptions.Panicf("Missing OGBN-MAG dataset variables (%q), pls call UploadOgbnMagVariables() on context first.", name)
 		}

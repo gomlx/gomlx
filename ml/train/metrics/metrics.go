@@ -227,13 +227,13 @@ func (m *meanMetric) UpdateGraph(ctx *context.Context, labels, predictions []*No
 
 func (m *meanMetric) Reset(ctx *context.Context) {
 	ctx = ctx.Reuse().In(Scope).In(m.ScopeName())
-	totalVar := ctx.InspectVariable(ctx.Scope(), "total")
+	totalVar := ctx.GetVariableByScopeAndName(ctx.Scope(), "total")
 	if totalVar == nil {
 		// Assume this was called before the graph was first built, so there is nothing to reset yet.
 		return
 	}
 	totalVar.SetValue(tensors.FromAnyValue(shapes.CastAsDType(0, totalVar.Value().DType())))
-	weightVar := ctx.InspectVariable(ctx.Scope(), "weight")
+	weightVar := ctx.GetVariableByScopeAndName(ctx.Scope(), "weight")
 	if weightVar != nil {
 		weightVar.SetValue(tensors.FromAnyValue(shapes.CastAsDType(0, weightVar.Value().DType())))
 	} else {

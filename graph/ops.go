@@ -360,7 +360,7 @@ func BroadcastPrefix(x *Node, dims ...int) *Node {
 	return backendBroadcast(x, dims...)
 }
 
-// ExpandAndBroadcast combines ExpandDims and Broadcast of `x`, broadcasting it to the shape
+// ExpandAndBroadcast combines InsertAxes and Broadcast of `x`, broadcasting it to the shape
 // given in newDimensions. Only new expanded axes or axes with dimension 1 can be broadcast
 // to new dimensions.
 //
@@ -481,7 +481,7 @@ func Where(condition, onTrue, onFalse *Node) *Node {
 			// If condition's shape is a prefix to onTrue and onFalse, then simply broadcast to their shape.
 			// This allows masks to work for embeddings, which has one extra axis.
 			extraAxes := operand.Rank() - condition.Rank()
-			condition = ExpandDims(condition, xslices.SliceWithValue(extraAxes, -1)...)
+			condition = InsertAxes(condition, xslices.SliceWithValue(extraAxes, -1)...)
 			condition = BroadcastToDims(condition, operand.Shape().Dimensions...)
 			break
 		}
@@ -552,43 +552,102 @@ func ReshapeWithShape(x *Node, shape shapes.Shape) *Node {
 	return backendReshape(x, shape.Dimensions...)
 }
 
-// ExpandDims expands x creating new axes just before the axes given. If axes[ii] < 0, then they
-// are counted from the end — -1 represents a new axis after the end of the original shape.
+// InsertAxes expands x creating new axes just before the axes given -- beforeAxes points to positions on the original
+// tensor x, and they can be repeated, in case one wants to insert more than one new axis in the given position.
+//
+// If beforeAxes[ii] < 0, then they are counted from the end — -1 represents a new axis after the end of the original shape.
+//
 // The new axes will be of dimension 1 (so the total size of and contents of the tensor remains the same),
 // and the rank is increased by `len(axes)`.
 //
-// Maybe it should be called ExpandAxes ... but to follow Tensorflow nomenclature.
-func ExpandDims(x *Node, axes ...int) *Node {
+// See also ExpandAxes, where the new axes are given as positions in the target shape.
+func InsertAxes(x *Node, beforeAxes ...int) *Node {
 	_ = validateBuildingGraphFromInputs(x)
-	if len(axes) == 0 {
+	if len(beforeAxes) == 0 {
 		// Trivial case, noop.
 		return x
 	}
 
 	// Ranks.
 	fromRank := x.Rank()
-	toRank := fromRank + len(axes)
+	toRank := fromRank + len(beforeAxes)
 
 	// Copy dimensions, so we don't change the callers' values, and replace negatives.
-	newAxes := make([]int, len(axes))
-	copy(newAxes, axes)
-	axes = newAxes
-	for ii, axis := range axes {
+	newAxes := make([]int, len(beforeAxes))
+	copy(newAxes, beforeAxes)
+	beforeAxes = newAxes
+	for ii, axis := range beforeAxes {
 		if axis < 0 {
-			axes[ii] = fromRank + 1 + axis
+			beforeAxes[ii] = fromRank + 1 + axis
 		}
 	}
-	slices.Sort(axes)
+	slices.Sort(beforeAxes)
 
 	// Create new target shape.
 	toShape := shapes.Shape{DType: x.DType(), Dimensions: make([]int, toRank)}
 	iiOriginal, iiNewAxes := 0, 0
 	for ii := range toShape.Dimensions {
-		if iiNewAxes < len(axes) && axes[iiNewAxes] <= iiOriginal || iiOriginal == fromRank {
+		if iiNewAxes < len(beforeAxes) && beforeAxes[iiNewAxes] <= iiOriginal || iiOriginal == fromRank {
 			toShape.Dimensions[ii] = 1
 			iiNewAxes += 1
 		} else {
 			toShape.Dimensions[ii] = x.Shape().Dimensions[iiOriginal]
+			iiOriginal += 1
+		}
+	}
+	return ReshapeWithShape(x, toShape)
+}
+
+// ExpandDims is an alias to InsertAxes.
+//
+// Deprecated: this will be removed at the next release! Notice this has a different semantics than the more common numpy.expand_dims (which is matched by ExpandAxes). Please use InsertAxes or ExpandAxes instead.
+func ExpandDims(x *Node, beforeAxes ...int) *Node {
+	return InsertAxes(x, beforeAxes...)
+}
+
+// ExpandAxes expands x creating new axes at the positions given by newAxes -- the positions are given at the target shape.
+//
+// The list newAxes represent the positions in the returned shape.
+// If newAxes[ii] < 0, then they are counted from the end of the new shape — -1 represents the last axis in the new shape.
+//
+// There should be no repeated values in newAxes -- since they represent the positions in the returned shape, it wouldn't make sense.
+//
+// See also InsertAxes, where the new axes are given as positions in the target shape.
+func ExpandAxes(x *Node, newAxes ...int) *Node {
+	_ = validateBuildingGraphFromInputs(x)
+	if len(newAxes) == 0 {
+		// Trivial case, noop.
+		return x
+	}
+
+	// Ranks.
+	fromRank := x.Rank()
+	toRank := fromRank + len(newAxes)
+
+	// Adjust new axes and check they are unique.
+	adjustedNewAxes := make([]int, len(newAxes))
+	copy(adjustedNewAxes, newAxes)
+	for ii, axis := range newAxes {
+		if axis < 0 {
+			adjustedNewAxes[ii] = toRank + axis
+		}
+	}
+	slices.Sort(adjustedNewAxes)
+	for ii := range adjustedNewAxes {
+		if ii > 0 && adjustedNewAxes[ii] == adjustedNewAxes[ii-1] {
+			exceptions.Panicf("ExpandedAxes(x, newAxes=%v...) got repeated new axis %d which doesn't make sense -- likely an error", newAxes, adjustedNewAxes[ii])
+		}
+	}
+
+	// Create new target shape.
+	toShape := shapes.Shape{DType: x.DType(), Dimensions: make([]int, toRank)}
+	iiOriginal, iiNewAxes := 0, 0
+	for axis := range toShape.Dimensions {
+		if iiNewAxes < len(adjustedNewAxes) && adjustedNewAxes[iiNewAxes] == axis {
+			toShape.Dimensions[axis] = 1
+			iiNewAxes += 1
+		} else {
+			toShape.Dimensions[axis] = x.Shape().Dimensions[iiOriginal]
 			iiOriginal += 1
 		}
 	}
@@ -1160,7 +1219,7 @@ func Concatenate(operands []*Node, axis int) *Node {
 	rank := operands[0].Rank()
 	if rank == 0 {
 		// Scalars will be converted to [1] before concatenating.
-		operands = xslices.Map(operands, func(x *Node) *Node { return ExpandDims(x, 0) })
+		operands = xslices.Map(operands, func(x *Node) *Node { return InsertAxes(x, 0) })
 		rank = 1
 	}
 	if len(operands) == 1 {
@@ -1606,4 +1665,48 @@ func InternalBatchNormGradient(operand *Node, scale *Node, mean *Node, variance 
 	}
 	axis = adjustAxisToRank(axis, operand.Rank())
 	return backendBatchNormGradient(operand, scale, mean, variance, gradOutput, epsilon, axis)
+}
+
+// MatMul is the `numpy.matmul` equivalent, for those used to that.
+//
+// It is similar to Dot but extends to allow for more batch dimensions in lhs or rhs operand, and
+// does broadcasting (of all but the last 2 axes) according to the numpy broadcasting rules.
+//
+// It's popular hence it is here, but full of edge cases, consider using DotGeneral instead.
+func MatMul(lhs, rhs *Node) *Node {
+	_ = validateBuildingGraphFromInputs(lhs, rhs)
+	if lhs.Rank() == 0 || rhs.Rank() == 0 {
+		exceptions.Panicf("MatMul expects two tensors with rank > 0, got ranks %d and %d", lhs.Rank(), rhs.Rank())
+	}
+	if lhs.Rank() <= 2 && rhs.Rank() <= 2 {
+		return Dot(lhs, rhs)
+	}
+
+	// Special case when one of operands is a vector.
+	if lhs.Rank() == 1 {
+		return DotGeneral(lhs, []int{0}, nil, rhs, []int{rhs.Rank() - 2}, nil)
+	}
+	if rhs.Rank() == 1 {
+		return DotGeneral(lhs, []int{lhs.Rank() - 1}, nil, rhs, []int{0}, nil)
+	}
+
+	// NumPY broadcasting rule in case they are of different ranks:
+	if lhs.Rank() < rhs.Rank() {
+		lhs = ExpandLeftToRank(lhs, rhs.Rank())
+	} else if rhs.Rank() < lhs.Rank() {
+		rhs = ExpandLeftToRank(rhs, lhs.Rank())
+	}
+	lhsBroadcastDims := slices.Clone(lhs.Shape().Dimensions)
+	rhsBroadcastDims := slices.Clone(rhs.Shape().Dimensions)
+	for axis := range lhs.Rank() - 2 {
+		if lhsBroadcastDims[axis] == 1 {
+			lhsBroadcastDims[axis] = rhs.Shape().Dimensions[axis]
+		} else if rhsBroadcastDims[axis] == 1 {
+			rhsBroadcastDims[axis] = lhs.Shape().Dimensions[axis]
+		}
+	}
+	lhs = BroadcastToDims(lhs, lhsBroadcastDims...)
+	rhs = BroadcastToDims(rhs, rhsBroadcastDims...)
+	batchAxes := xslices.Iota(0, lhs.Rank()-2)
+	return DotGeneral(lhs, []int{lhs.Rank() - 1}, batchAxes, rhs, []int{rhs.Rank() - 2}, batchAxes)
 }

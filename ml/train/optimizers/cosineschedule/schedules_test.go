@@ -49,7 +49,7 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 		require.NotPanicsf(t, func() { _ = cosineExec.Call() }, "cosineExec.Call failed to execute graph for ii=%d", ii)
 
 		// Checks correct step number.
-		stepVar := ctx.InspectVariable(fmt.Sprintf("/%s/%s", optimizers.Scope, Scope), optimizers.GlobalStepVariableName)
+		stepVar := ctx.GetVariableByScopeAndName(fmt.Sprintf("/%s/%s", optimizers.Scope, Scope), optimizers.GlobalStepVariableName)
 		if stepVar == nil {
 			t.Fatalf("Learning rate variable not created in scope %q, name %q", "/optimizers/cosine", optimizers.GlobalStepVariableName)
 		}
@@ -57,7 +57,7 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 		assert.Equal(t, int64(ii+1), step)
 
 		// Check learning rate is following cosine formulation.
-		lrVar := ctx.InspectVariable("/optimizers", optimizers.ParamLearningRate)
+		lrVar := ctx.GetVariableByScopeAndName("/optimizers", optimizers.ParamLearningRate)
 		if lrVar == nil {
 			t.Fatalf("Learning rate variable not created in scope %q, name %q", "/optimiziers", optimizers.ParamLearningRate)
 		}

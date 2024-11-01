@@ -78,7 +78,7 @@ func dotGeneralVJP(node, v *Node, _ shapes.Shape) []*Node {
 		//   thisVJP shapes will be [batch_dims..., lhs_cross_dims..., rhs_cross_dims..., 1 x (numContractionAxes)].
 		thisVJP := v
 		if numContractionAxes > 0 {
-			thisVJP = ExpandDims(thisVJP, xslices.SliceWithValue(numContractionAxes, -1)...)
+			thisVJP = InsertAxes(thisVJP, xslices.SliceWithValue(numContractionAxes, -1)...)
 		}
 
 		// * Project other operand with contracted dimensions.
@@ -111,7 +111,7 @@ func dotGeneralVJP(node, v *Node, _ shapes.Shape) []*Node {
 				if !thisCrossesFirst {
 					pos += len(otherCrossAxes)
 				}
-				otherProjected = ExpandDims(otherProjected, xslices.SliceWithValue(len(thisCrossAxes), pos)...)
+				otherProjected = InsertAxes(otherProjected, xslices.SliceWithValue(len(thisCrossAxes), pos)...)
 			}
 		}
 

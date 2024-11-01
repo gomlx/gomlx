@@ -704,10 +704,10 @@ func dotVJP(node, v *Node, _ shapes.Shape) []*Node {
 
 	// Case 2: matrix[i, j] x vector[j] -> vector[i]
 	if node.inputNodes[0].Rank() == 2 && node.inputNodes[1].Rank() == 1 {
-		v = ExpandDims(v, -1)
+		v = InsertAxes(v, -1)
 		v = BroadcastToShape(v, node.inputNodes[0].Shape())
 		return []*Node{
-			Mul(v, ExpandDims(node.inputNodes[1], 0)),
+			Mul(v, InsertAxes(node.inputNodes[1], 0)),
 			ReduceSum(Mul(v, node.inputNodes[0]), 0),
 		}
 	}
@@ -717,11 +717,11 @@ func dotVJP(node, v *Node, _ shapes.Shape) []*Node {
 		Panicf("Dot node with combination of ranks not accepted: %s, %s", node.inputNodes[0].Shape(), node.inputNodes[1].Shape())
 	}
 	dimI, dimJ, dimK := node.Shape().Dimensions[0], node.inputNodes[0].Shape().Dimensions[1], node.Shape().Dimensions[1]
-	v = ExpandDims(v, 1) // Shape [i, 1, k]
+	v = InsertAxes(v, 1) // Shape [i, 1, k]
 	v = BroadcastToShape(v, shapes.Make(node.Shape().DType, dimI, dimJ, dimK))
 	return []*Node{
-		ReduceSum(Mul(v, ExpandDims(node.inputNodes[1], 0)), 2),
-		ReduceSum(Mul(v, ExpandDims(node.inputNodes[0], -1)), 0),
+		ReduceSum(Mul(v, InsertAxes(node.inputNodes[1], 0)), 2),
+		ReduceSum(Mul(v, InsertAxes(node.inputNodes[0], -1)), 0),
 	}
 }
 

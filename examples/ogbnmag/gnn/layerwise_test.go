@@ -113,7 +113,7 @@ func createDenseTestStateGraphWithMask(strategy *samplerPkg.Strategy, g *Graph, 
 	if withCitation {
 		edges := strategy.ExtractSamplingEdgeIndices()
 		indices := Const(g, edges["citations"].TargetIndices)
-		indices = ExpandDims(indices, -1)
+		indices = InsertAxes(indices, -1)
 		citations := Gather(graphStates["seeds"].Value, indices)
 		citations = Reshape(citations, lwNumPapers, lwFactor, 1)
 		graphStates["citations"] = &samplerPkg.ValueMask[*Node]{
@@ -121,8 +121,8 @@ func createDenseTestStateGraphWithMask(strategy *samplerPkg.Strategy, g *Graph, 
 			Mask:  Ones(g, shapes.Make(dtypes.Bool, lwNumPapers, lwFactor)),
 		}
 		graphStates["seedsBase"] = &samplerPkg.ValueMask[*Node]{
-			Value: ExpandDims(graphStates["seeds"].Value, -2), // [lwNumPapers, 1, embedding_dim]
-			Mask:  ExpandDims(graphStates["seeds"].Mask, -1),  // [lwNumPapers, 1]
+			Value: InsertAxes(graphStates["seeds"].Value, -2), // [lwNumPapers, 1, embedding_dim]
+			Mask:  InsertAxes(graphStates["seeds"].Mask, -1),  // [lwNumPapers, 1]
 		}
 	}
 	return graphStates

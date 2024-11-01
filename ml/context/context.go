@@ -601,7 +601,13 @@ func (ctx *Context) ExecSetVariablesInParams(params graph.ParamsMap, g *Graph) {
 	})
 }
 
-// InspectVariable returns the variable with the given name for inspection. It returns nil if a variable with the given
+// InspectVariable is an alias to GetVariableByScopeAndName.
+// Deprecated: use GetVariableByScopeAndName, this will be removed in future releases.
+func (ctx *Context) InspectVariable(scope, name string) *Variable {
+	return ctx.GetVariableByScopeAndName(scope, name)
+}
+
+// GetVariableByScopeAndName returns the variable with the given name for inspection. It returns nil if a variable with the given
 // name hasn't been created.
 //
 // It is not affected by [Context.Reuse] checks.
@@ -612,7 +618,7 @@ func (ctx *Context) ExecSetVariablesInParams(params graph.ParamsMap, g *Graph) {
 // among all connected context references.
 //
 // The root scope is "/" (RootScope).
-func (ctx *Context) InspectVariable(scope, name string) *Variable {
+func (ctx *Context) GetVariableByScopeAndName(scope, name string) *Variable {
 	scopeVars, ok := ctx.data.variablesMap[scope]
 	if ok {
 		v, found := scopeVars[name]
@@ -643,14 +649,24 @@ func (ctx *Context) InspectVariable(scope, name string) *Variable {
 	return v
 }
 
-// InspectVariableInScope works like InspectVariable, but looks for the variable in the current scope.
+// GetVariable returns the variable in the current context scope.
+//
+// It is not affected by [Context.Reuse] checks.
+//
+// This will trigger the loading of the variable if a loader (like `checkpoint.Checkpoint`) is attached.
+func (ctx *Context) GetVariable(name string) *Variable {
+	return ctx.GetVariableByScopeAndName(ctx.Scope(), name)
+}
+
+// InspectVariableInScope is an alias to GetVariable.
+// Deprecated: use GetVariable instead. This alias will be removed in future releases.
 func (ctx *Context) InspectVariableInScope(name string) *Variable {
-	return ctx.InspectVariable(ctx.Scope(), name)
+	return ctx.GetVariableByScopeAndName(ctx.Scope(), name)
 }
 
 // InspectVariableIfLoaded returns the variable if it exists already, but it won't attempt to load it.
 //
-// It is similar to [InspectVariable] but won't attempt to load the variable if it's not yet loaded.
+// It is similar to [GetVariableByScopeAndName] but won't attempt to load the variable if it's not yet loaded.
 //
 // Not normally needed, but may be handy for testing. See also [checkpoints.Config.Immediate].
 func (ctx *Context) InspectVariableIfLoaded(scope, name string) *Variable {
@@ -751,7 +767,7 @@ func (ctx *Context) DeleteVariablesInScope() {
 // - Context.Unique() and variable already exists (or was loaded);
 // - Context.Reuse() and variable didn't exist (or was not loaded);
 func (ctx *Context) VariableWithShape(name string, shape shapes.Shape) *Variable {
-	v := ctx.InspectVariable(ctx.scope, name)
+	v := ctx.GetVariableByScopeAndName(ctx.scope, name)
 	if v == nil && ctx.checked && ctx.reuse {
 		Panicf("requested variable %q in scope %q with Context.Reuse set, but variable does not exist", name, ctx.scope)
 	}
@@ -820,7 +836,7 @@ func valueToTensor(value any) *tensors.Tensor {
 // - Context.Unique() and variable already exists (or was loaded);
 // - Context.Reuse() and variable didn't exist (or was not loaded);
 func (ctx *Context) VariableWithValue(name string, defaultValue any) *Variable {
-	v := ctx.InspectVariable(ctx.scope, name)
+	v := ctx.GetVariableByScopeAndName(ctx.scope, name)
 
 	// Check against reuse of variables.
 	if ctx.checked && ctx.reuse && v == nil {

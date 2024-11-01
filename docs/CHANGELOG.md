@@ -1,5 +1,23 @@
 # GoMLX changelog
 
+# Next:
+
+* Package `graph`:
+  * Added `MatMul`, with semantics similar to `numpy.matmul`
+  * Renamed `ExpandDims` to `InsertAxes` and added `ExpandAxes`: the old `ExpandDims` had a slightly different
+    semantics than the usual (numpy) `expand_dims` that I hadn't realized. The name change reflect that difference,
+    and the new `ExpandAxes` match the more common semantics of `expand_dims`. Added proper documentation.
+    **BREAKING CHANGE**: easy to convert, but breaking anyway: it requires attention.
+    We defined a deprecated 'ExpandedDims' that maps to `InsertAxes`, but it will be removed on the next release.
+  * Graph/Node introspection: added `node.ConstantValue`, `node.IsConstantExpression`.
+* Package `context`:
+  * Fixed `ExecOnce`: it was missing the variadic args for the computation graph.
+  * `InspectVariableInScope` and `InspectVariable` renamed to `GetVariable` and `GetVariableByScopeAndName`
+    respectively. Alias to the older names left for compatibility (and marked as deprecated), but they
+    will be removed in future versions.
+* Package `tensors`:
+  * Added `Tensor.Summary(precision int)` to pretty-print a summary of the values of a tensor, numpy-like.
+
 ## v0.14.0 - 2024/10/24
 
 * Package `context`

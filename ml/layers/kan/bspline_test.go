@@ -155,7 +155,7 @@ func TestBSplineKANRegularized(t *testing.T) {
 	//})
 	for _, scope := range []string{"/bspline_kan_hidden_0", "/bspline_kan_output_layer"} {
 		for _, vName := range []string{"w_splines", "w_residual"} {
-			v := ctx.InspectVariable(scope, vName)
+			v := ctx.GetVariableByScopeAndName(scope, vName)
 			require.NotNilf(t, v, "failed to inspect variable scope=%q, name=%q", scope, vName)
 			tensor := v.Value()
 			fmt.Printf("\t%s : %s -> %v\n", v.Scope(), v.Name(), tensor)

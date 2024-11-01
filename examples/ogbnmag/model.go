@@ -28,7 +28,7 @@ var (
 
 // getMagVar retrieves the static (not-learnable) OGBN-MAG variables -- e.g: the frozen papers embedding table.
 func getMagVar(ctx *context.Context, g *Graph, name string) *Node {
-	magVar := ctx.InspectVariable(OgbnMagVariablesScope, name)
+	magVar := ctx.GetVariableByScopeAndName(OgbnMagVariablesScope, name)
 	if magVar == nil {
 		Panicf("Missing OGBN-MAG dataset variables (%q), pls call UploadOgbnMagVariables() on context first.", name)
 		panic(nil) // Quiet linter.
@@ -144,7 +144,7 @@ func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inpu
 	for name, rule := range strategy.Rules {
 		if rule.NodeTypeName == "papers" {
 			// Gather values from frozen paperEmbeddings. Mask remains unchanged.
-			graphInputs[name].Value = Gather(papersEmbeddings, ExpandDims(graphInputs[name].Value, -1))
+			graphInputs[name].Value = Gather(papersEmbeddings, InsertAxes(graphInputs[name].Value, -1))
 			if dtype != dtypeEmbed {
 				graphInputs[name].Value = ConvertDType(graphInputs[name].Value, dtype)
 			}

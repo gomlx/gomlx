@@ -11,7 +11,7 @@ const (
 )
 
 func (ctx *Context) getRngStateVar() *Variable {
-	rngStateVar := ctx.InspectVariable(RootScope, RngStateVariableName)
+	rngStateVar := ctx.GetVariableByScopeAndName(RootScope, RngStateVariableName)
 	if rngStateVar == nil {
 		randomState := graph.RngState()
 		rngStateVar = ctx.InAbsPath(RootScope).Checked(false).

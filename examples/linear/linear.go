@@ -71,7 +71,7 @@ func buildExamples(manager backends.Backend, coef, bias *tensors.Tensor, numExam
 		// Random inputs (observations).
 		rngState := Const(g, RngState())
 		rngState, inputs = RandomNormal(rngState, shapes.Make(dtypes.Float64, numExamples, numFeatures))
-		coef = ExpandDims(coef, 0)
+		coef = InsertAxes(coef, 0)
 
 		// Calculate perfect labels.
 		labels = ReduceAndKeep(Mul(inputs, coef), ReduceSum, -1)
@@ -145,7 +145,7 @@ func main() {
 
 	// Print learned coefficients and bias -- from the weights in the dense layer.
 	fmt.Println()
-	coefVar, biasVar := ctx.InspectVariable("/dense", "weights"), ctx.InspectVariable("/dense", "biases")
+	coefVar, biasVar := ctx.GetVariableByScopeAndName("/dense", "weights"), ctx.GetVariableByScopeAndName("/dense", "biases")
 	learnedCoef, learnedBias := coefVar.Value(), biasVar.Value()
 	fmt.Printf("Learned coefficients: %0.5v\n", learnedCoef.Value())
 	fmt.Printf("Learned bias: %0.5v\n", learnedBias.Value())

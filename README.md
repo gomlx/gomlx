@@ -20,15 +20,9 @@ It's the same engine that powers Google's [Jax](https://github.com/google/jax) a
 
 > [!Tip]
 > 🎓 Quick Start:
-> * See our [tutorial](https://gomlx.github.io/gomlx/notebooks/tutorial.html)
+> * See our [**tutorial**](https://gomlx.github.io/gomlx/notebooks/tutorial.html)
 > * A [guided example for Kaggle Dogs Vs Cats](https://gomlx.github.io/gomlx/notebooks/dogsvscats.html).
 > * [Installation here](#installation).
-
-> [!Note]
-> **NEW: Apple/Metal EXPERIMENTAL** support. It doesn't support every data type, nor all the operations, but many
-> things work. I don't have an easily available Mac, but if you have any issues pls let me know. The XLA/PJRT driver
-> (same as the one used by Jax) is [maintained by Apple here](https://developer.apple.com/metal/jax/).
- 
 
 <div>
 <p>It was developed to be full-featured ML platform for Go, and to easily experiment with ML ideas -- see Long-Term Goals below.</p>
@@ -92,6 +86,12 @@ It includes:
 [**gopjrt** (see installation instructions)](https://github.com/gomlx/gopjrt?#installing) 
 (optional: [Nvidia's cuda support](https://github.com/gomlx/gopjrt?#installing)) 
 and depending on what data formats you use, `sudo apt install hdf5-tools`.
+
+
+> [!Note]
+> **NEW: Apple/Metal (arm64 only) VERY EXPERIMENTAL** support. It doesn't support every data type, nor all the operations, but many
+> things work. I don't have an easily available Mac, but if you have any issues pls let me know. The XLA/PJRT driver
+> (same as the one used by Jax) is [maintained by Apple here](https://developer.apple.com/metal/jax/).
 
 **GoMLX** is mostly a normal Go library, but it depends on [**gopjrt**](https://github.com/gomlx/gopjrt), which
 includes C wrappers to XLA (itself C++ code base). 
