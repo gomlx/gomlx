@@ -1,6 +1,6 @@
 # GoMLX changelog
 
-# Next:
+# v0.15.0 - 2024/11/01 Some API clean up; Added support for ONNX model conversion.
 
 * Package `graph`:
   * Added `MatMul`, with semantics similar to `numpy.matmul`
