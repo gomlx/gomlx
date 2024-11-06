@@ -84,8 +84,20 @@ It includes:
 **TLDR;**: Two options: (1) [Use the Docker](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab); 
 (2) Pre-built for Linux (works in Windows WSL) or an experimental version for Apple/Metal: install 
 [**gopjrt** (see installation instructions)](https://github.com/gomlx/gopjrt?#installing) 
-(optional: [Nvidia's cuda support](https://github.com/gomlx/gopjrt?#installing)) 
-and depending on what data formats you use, `sudo apt install hdf5-tools`.
+(optional: [Nvidia's cuda support](https://github.com/gomlx/gopjrt?#installing)) or simply use the command(s) below. 
+Depending on what data formats you use, you may want to install `hdf5-tools` programs (`sudo apt install hdf5-tools`).
+
+For Linux (amd64), to install the XLA/PJRT engine (**goprjt**), run the following ([see source](https://github.com/gomlx/gopjrt/blob/main/cmd/install_linux_amd64.sh)):
+
+```bash
+curl -sSf https://raw.githubusercontent.com/gomlx/gopjrt/main/cmd/install_linux_amd64.sh | bash
+```
+
+In addition, for Linux+CUDA (NVidia GPU) support, run the following ([see source](https://github.com/gomlx/gopjrt/blob/main/cmd/install_cuda.sh))
+
+```bash
+curl -sSf https://raw.githubusercontent.com/gomlx/gopjrt/main/cmd/install_cuda.sh | bash
+```
 
 
 > [!Note]
