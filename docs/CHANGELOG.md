@@ -1,5 +1,9 @@
 # GoMLX changelog
 
+# Next
+
+* Updated dependency to **gopjrt** 0.4.5
+
 # v0.15.0 - 2024/11/01 Some API clean up; Added support for ONNX model conversion.
 
 * Package `graph`:
