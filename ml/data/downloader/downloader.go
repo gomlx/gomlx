@@ -22,8 +22,8 @@ type ProgressCallback func(downloadedBytes, totalBytes int64, finished bool, err
 
 // Manager handles downloads, reporting back progress and errors.
 type Manager struct {
-	semaphore *xsync.Semaphore
-	authToken string
+	semaphore            *xsync.Semaphore
+	authToken, userAgent string
 }
 
 // New creates a Manager that download files in parallel -- by default mostly 20 in parallel.
@@ -43,6 +43,12 @@ func (m *Manager) MaxParallel(n int) *Manager {
 // It is passed in the header "Authorization" and prefixed with "Bearer ".
 func (m *Manager) WithAuthToken(authToken string) *Manager {
 	m.authToken = authToken
+	return m
+}
+
+// WithUserAgent sets the user agent to user.
+func (m *Manager) WithUserAgent(userAgent string) *Manager {
+	m.userAgent = userAgent
 	return m
 }
 
@@ -91,6 +97,9 @@ func (m *Manager) Download(url string, filePath string, callback ProgressCallbac
 		}
 		if m.authToken != "" {
 			req.Header.Set("Authorization", "Bearer "+m.authToken)
+		}
+		if m.userAgent != "" {
+			req.Header.Set("user-agent", m.userAgent)
 		}
 		var resp *http.Response
 		resp, err = client.Do(req)
