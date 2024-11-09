@@ -1,10 +1,12 @@
 # GoMLX changelog
 
-# Next
+# 0.15.1 - 2024/11/09 Updated downloader, in support for "github.com/gomlx/go-huggingface"
 
 * Updated dependency to **gopjrt** 0.4.5
 * Package `downloader`:
   * Added support for user-agent.
+  * Added `FetchHeader` method.
+  * Made `Download` now synchronous and simplified API.
 
 # v0.15.0 - 2024/11/01 Some API clean up; Added support for ONNX model conversion.
 
