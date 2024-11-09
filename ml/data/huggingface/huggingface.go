@@ -32,13 +32,13 @@ package huggingface
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/dustin/go-humanize"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/data/downloader"
 	"github.com/gomlx/gomlx/types"
-	"github.com/gomlx/gomlx/types/xsync"
 	"github.com/pkg/errors"
 	"iter"
 	"os"
@@ -218,76 +218,76 @@ func (hfm *Model) Download() error {
 
 	mgr := downloader.New().WithAuthToken(hfm.AuthToken)
 	type DownloadInfo struct {
-		cancel *xsync.Latch
-		bytes  int64
+		bytes int64
 	}
 	downloading := make(map[string]*DownloadInfo, len(requireDownload))
 	var downloadingMu sync.Mutex
 	var wg sync.WaitGroup
-	var allFilesBytes uint64
-	numDownloadedFiles := 0
+	var allFilesDownloadedBytes uint64
+	var numDownloadedFiles int
 	var firstError error
 	busyLoop := `-\|/`
 	busyLoopPos := 0
 	lastPrintTime := time.Now()
+	ctx, cancelFn := context.WithCancel(context.Background())
+	defer cancelFn()
+	ratePrintFn := func() {
+		if firstError == nil {
+			fmt.Printf("\rDownloaded %d/%d files %c %s downloaded    ",
+				numDownloadedFiles, len(requireDownload), busyLoop[busyLoopPos], humanize.Bytes(allFilesDownloadedBytes))
+		} else {
+			fmt.Printf("\rDownloaded %d/%d files, %s downloaded: error - %v     ",
+				numDownloadedFiles, len(requireDownload), humanize.Bytes(allFilesDownloadedBytes),
+				firstError)
+		}
+		busyLoopPos = (busyLoopPos + 1) % len(busyLoop)
+		lastPrintTime = time.Now()
+	}
 
 	for fileName := range requireDownload {
 		wg.Add(1)
 		filePath := path.Join(hfm.BaseDir, fileName)
 		downloadingMu.Lock()
-		canceller := mgr.Download(hfm.urlForFile(fileName), filePath+".downloading", func(downloadedBytes, totalBytes int64, finished bool, err error) {
-			// Execute at every report of download.
+		go func() {
+			defer wg.Done()
+			err := mgr.Download(ctx, hfm.urlForFile(fileName), filePath+".downloading", func(downloadedBytes, totalBytes int64) {
+				// Execute at every report of download.
+				downloadingMu.Lock()
+				defer downloadingMu.Unlock()
+				downloadInfo := downloading[fileName]
+				if downloadInfo == nil {
+					downloadInfo = &DownloadInfo{downloadedBytes}
+					downloading[fileName] = downloadInfo
+				}
+				newBytes := downloadedBytes - downloadInfo.bytes
+				allFilesDownloadedBytes += uint64(newBytes)
+				downloadInfo.bytes = downloadedBytes
+				if time.Since(lastPrintTime) > time.Second {
+					ratePrintFn()
+				}
+			})
+
+			// Download done (or failed), report back.
 			downloadingMu.Lock()
 			defer downloadingMu.Unlock()
-
-			if err == nil {
-				downloadInfo := downloading[fileName]
-				if downloadInfo != nil {
-					newBytes := downloadedBytes - downloadInfo.bytes
-					allFilesBytes += uint64(newBytes)
-					downloadInfo.bytes = downloadedBytes
-				}
-			}
 			if err != nil {
 				if firstError == nil {
 					firstError = err
 				}
-				for _, di := range downloading {
-					di.cancel.Trigger()
-				}
-			}
-			if finished {
-				delete(downloading, fileName)
-				numDownloadedFiles++
-			}
-			ratePrint := finished || time.Since(lastPrintTime) > time.Second
-			if ratePrint {
-				if firstError == nil {
-					fmt.Printf("\rDownloaded %d/%d files %c %s downloaded    ",
-						numDownloadedFiles, len(requireDownload), busyLoop[busyLoopPos], humanize.Bytes(allFilesBytes))
-				} else {
-					fmt.Printf("\rDownloaded %d/%d files: error - %v     ", numDownloadedFiles, len(requireDownload), firstError)
-				}
-				busyLoopPos = (busyLoopPos + 1) % len(busyLoop)
-				lastPrintTime = time.Now()
-			}
-			if finished {
-				if err == nil {
-					err = os.Rename(filePath+".downloading", filePath)
-					if err != nil {
-						if firstError == nil {
-							firstError = errors.Wrapf(err, "failed to rename file %q", filePath)
-							for _, di := range downloading {
-								di.cancel.Trigger()
-							}
-						}
+				cancelFn()
+			} else {
+				err = os.Rename(filePath+".downloading", filePath)
+				if err != nil {
+					if firstError == nil {
+						firstError = errors.Wrapf(err, "failed to rename file %q", filePath)
+						cancelFn()
 					}
 				}
-				wg.Done()
 			}
-		})
-		downloading[fileName] = &DownloadInfo{canceller, 0}
-		downloadingMu.Unlock()
+			delete(downloading, fileName)
+			numDownloadedFiles++
+			ratePrintFn()
+		}()
 	}
 	wg.Wait()
 	if len(requireDownload) > 0 {
