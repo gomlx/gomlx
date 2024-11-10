@@ -21,6 +21,10 @@ var (
 //
 // Notice it returns a concrete tensor value that can be used to set a variable or
 // constant to be used in a graph.
+//
+// Typical use case would be to use like:
+//
+//	rngState := Const(g, RngStateFromSeed(42))
 func RngStateFromSeed(seed int64) *tensors.Tensor {
 	rngSrc := rand.NewSource(seed)
 	rng := rand.New(rngSrc)
@@ -39,6 +43,10 @@ func RngStateFromSeed(seed int64) *tensors.Tensor {
 //
 // Notice it returns a concrete tensor value that can be used to set a variable or
 // constant to be used in a graph.
+//
+// Typical use case would be to use like:
+//
+//	rngState := Const(g, RngState())
 func RngState() *tensors.Tensor {
 	return RngStateFromSeed(time.Now().UTC().UnixNano())
 }
@@ -46,7 +54,15 @@ func RngState() *tensors.Tensor {
 // RngStateSplit splits the current state into 2 different states that can be used
 // separately and will lead to different random numbers.
 func RngStateSplit(rngState *Node) (newRngState1, newRngState2 *Node) {
+	validateRngState(rngState)
 	return backendRngBitGenerator(rngState, rngState.Shape())
+}
+
+func validateRngState(rngState *Node) {
+	if !rngState.Shape().Equal(RngStateShape) {
+		Panicf("rngState is of the wrong shape (see graph.RngStateShape) -- pls create it with " +
+			"something like `Const(g, graph.RngState())` or `Const(g, graph.RngStateFromSeed())`")
+	}
 }
 
 // RandomUniform generates random uniform values from 0.0 to 1.0 (half-open `[0.0, 1.0)`, so 1.0 is never returned)
@@ -58,10 +74,7 @@ func RngStateSplit(rngState *Node) (newRngState1, newRngState2 *Node) {
 //
 // It uses and updates the random number generator (RNG) state in `rngState`.
 func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Node) {
-	if !rngState.Shape().Equal(RngStateShape) {
-		Panicf("rngState is of the wrong shape (see graph.RngStateShape) -- pls create it with " +
-			"something like `Const(g, graph.RngState())` or `Const(g, graph.RngStateFromSeed)`")
-	}
+	validateRngState(rngState)
 
 	switch shape.DType {
 	case dtypes.Float64:
@@ -126,6 +139,8 @@ func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Nod
 //
 // See [RngStateFromSeed] or [RngState] to generate a random state tensor (that can be fed to the computation graph).
 func RandomNormal(rngState *Node, shape shapes.Shape) (newRngState, values *Node) {
+	validateRngState(rngState)
+
 	g := rngState.Graph()
 	var u1, u2 *Node
 	newRngState, u1 = RandomUniform(rngState, shape)
