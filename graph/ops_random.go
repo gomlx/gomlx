@@ -58,6 +58,11 @@ func RngStateSplit(rngState *Node) (newRngState1, newRngState2 *Node) {
 //
 // It uses and updates the random number generator (RNG) state in `rngState`.
 func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Node) {
+	if !rngState.Shape().Equal(RngStateShape) {
+		Panicf("rngState is of the wrong shape (see graph.RngStateShape) -- pls create it with " +
+			"something like `Const(g, graph.RngState())` or `Const(g, graph.RngStateFromSeed)`")
+	}
+
 	switch shape.DType {
 	case dtypes.Float64:
 		bitsShape := shape.Clone()
