@@ -24,6 +24,8 @@ type Manager struct {
 }
 
 // New creates a Manager that download files in parallel -- by default mostly 20 in parallel.
+//
+// Deprecated: this is being moved to https://github.com/gomlx/go-huggingface.
 func New() *Manager {
 	return &Manager{semaphore: xsync.NewSemaphore(20)}
 }

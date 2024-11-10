@@ -81,6 +81,8 @@ type Model struct {
 //
 // The baseDir is suffixed with the model's id (after converting "/" to "_").
 // So the same baseDir can be used to hold different models.
+//
+// Deprecated: this is being moved to https://github.com/gomlx/go-huggingface.
 func New(id string, authToken, baseDir string) (*Model, error) {
 	baseDir = data.ReplaceTildeInDir(baseDir)
 	if !path.IsAbs(baseDir) {
