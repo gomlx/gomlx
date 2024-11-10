@@ -94,3 +94,61 @@ func TestRandomNormal(t *testing.T) {
 	testRandomNormal[float64](t)
 	testRandomNormal[float16.Float16](t)
 }
+
+func testRandomIntN[T interface {
+	uint8 | uint16 | uint32 | uint64 | int8 | int16 | int32 | int64
+}](t *testing.T, useStatic bool) {
+	dtype := dtypes.FromGenericsType[T]()
+	graphtest.RunTestGraphFn(t, fmt.Sprintf("TestRandomIntN(%s, useStatic=%v)", dtype, useStatic),
+		func(g *Graph) (inputs []*Node, outputs []*Node) {
+			state := Const(g, RngState())           // RngStateFromSeed(42))
+			shape := shapes.Make(dtype, 100, 10000) // 1 million numbers.
+			var r *Node
+			if useStatic {
+				state, r = RandomIntN(state, T(13), shape)
+			} else {
+				// Notice that the dtype of N shouldn't really matter, as long as it is an integer.
+				state, r = RandomIntN(state, Const(g, int32(13)), shape)
+			}
+			var maxRatio, minRatio, totalCount *Node
+			for ii := range 13 {
+				includeSet := And(
+					GreaterOrEqual(r, Scalar(g, r.DType(), ii)),
+					LessThan(r, Scalar(g, r.DType(), ii+1)))
+				count := ConvertDType(includeSet, dtypes.Float32)
+				count = ReduceAllSum(count)
+				count = DivScalar(count, shape.Size())
+				if maxRatio == nil {
+					maxRatio = count
+					minRatio = count
+					totalCount = count
+				} else {
+					maxRatio = Max(maxRatio, count)
+					minRatio = Min(minRatio, count)
+					totalCount = Add(totalCount, count)
+				}
+			}
+			numInvalid := GreaterOrEqual(r, Scalar(g, r.DType(), 13))
+			numInvalid = ReduceAllSum(ConvertDType(numInvalid, dtypes.Float32))
+			outputs = []*Node{totalCount, minRatio, maxRatio, numInvalid}
+			return
+		}, []any{
+			float32(1),
+			float32(1) / 13,
+			float32(1) / 13,
+			float32(0.0),
+		}, 0.001)
+}
+
+func TestRandomIntN(t *testing.T) {
+	for _, useStatic := range []bool{false, true} {
+		testRandomIntN[uint8](t, useStatic)
+		testRandomIntN[uint16](t, useStatic)
+		testRandomIntN[uint32](t, useStatic)
+		testRandomIntN[uint64](t, useStatic)
+		testRandomIntN[int8](t, useStatic)
+		testRandomIntN[int16](t, useStatic)
+		testRandomIntN[int32](t, useStatic)
+		testRandomIntN[int64](t, useStatic)
+	}
+}

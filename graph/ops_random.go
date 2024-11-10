@@ -5,8 +5,10 @@ import (
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
+	"golang.org/x/exp/constraints"
 	"math"
 	"math/rand"
+	"reflect"
 	"time"
 )
 
@@ -73,8 +75,20 @@ func validateRngState(rngState *Node) {
 // For complex numbers, both the real and the imaginary part are independently sampled from `[0.0, 1.0)`.
 //
 // It uses and updates the random number generator (RNG) state in `rngState`.
+// See RngStateFromSeed or RngState to generate a random state tensor (that can be fed to the computation graph).
+//
+// Alternatively, if you don't want to worry about carrying around the rngState, use the context.Context.RandomUniform
+// version, which stores the rngState as a variable.
+//
+// Example:
+//
+//	rngState := Const(g, RngStateFromSeed(42))
+//	rngState, values := RandomUniform(rngState, shapes.Make(dtypes.Float32, 3, 2))
 func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Node) {
 	validateRngState(rngState)
+	if !shape.DType.IsFloat() && !shape.DType.IsComplex() {
+		Panicf("RandomUniform only work with float or complex numbers, got shape %s instead -- see RandomIntN for integers", shape)
+	}
 
 	switch shape.DType {
 	case dtypes.Float64:
@@ -127,19 +141,26 @@ func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Nod
 // If you need a different mean and standard deviation, just do something like the example below, where `mean`
 // and `stddev` are the desired mean and standard deviation:
 //
-//	rngState, numbers = RandomNormal(rngState, myShape)
-//	numbers = AddScalar(MulScalar(numbers, stddev), mean)
+//	rngState := Const(g, RngStateFromSeed(42))
+//	rngState, values := RandomNormal(rngState, shapes.Make(dtypes.Float32, 3, 2))
+//	numbers = AddScalar(MulScalar(values, stddev), mean)
 //
-// It uses the Box-Muller algorithm (see https://en.wikipedia.org/wiki/Box%E2%80%93Muller_transform), which
-// has some numeric limitations, but works well for most purposes.
+// It uses the Box-Muller algorithm (see https://en.wikipedia.org/wiki/Box%E2%80%93Muller_transform).
+// It has some numeric limitations, but works well for most purposes.
 //
-// It will signal an error if the dtype is not float -- see RandomIntN for random integers.
+// It will signal an error if the dtype is not float.
+// See also RandomIntN for random integers.
 //
 // It uses and updates the random number generator (RNG) state in `rngState`.
-//
 // See [RngStateFromSeed] or [RngState] to generate a random state tensor (that can be fed to the computation graph).
+//
+// Alternatively, if you don't want to worry about carrying around the rngState, use the context.Context.RandomNormal
+// version, which stores the rngState as a variable.
 func RandomNormal(rngState *Node, shape shapes.Shape) (newRngState, values *Node) {
 	validateRngState(rngState)
+	if !shape.DType.IsFloat() {
+		Panicf("RandomNormal only work with float or complex numbers, got shape %s instead -- see RandomIntN for integers", shape)
+	}
 
 	g := rngState.Graph()
 	var u1, u2 *Node
@@ -151,4 +172,44 @@ func RandomNormal(rngState *Node, shape shapes.Shape) (newRngState, values *Node
 		Sqrt(MulScalar(Log(u1), -2)),
 		Cos(MulScalar(u2, 2*math.Pi)))
 	return
+}
+
+// RandomIntN generates random numbers uniformly from 0 to N-1. It only works for integer types, see RandomUniform for
+// float or complex data types. N can be given as a Node, or a static scalar integer value.
+//
+// Example:
+//
+//	rngState := Const(g, RngStateFromSeed(42))
+//	rngState, D10 := RandomIntN(rngState, 10, shapes.Make(dtypes.Int32))
+//
+// It uses and updates the random number generator (RNG) state in `rngState`.
+// See [RngStateFromSeed] or [RngState] to generate a random state tensor (that can be fed to the computation graph).
+//
+// Alternatively, if you don't want to worry about carrying around the rngState, use the context.Context.RandomIntN
+// version, which stores the rngState as a variable.
+func RandomIntN[IntT interface{ *Node | constraints.Integer }](
+	rngState *Node, N IntT, shape shapes.Shape) (newRngState, values *Node) {
+	validateRngState(rngState)
+	if !shape.DType.IsInt() {
+		Panicf("RandomIntN only work with integer types, got shape %s instead -- see RandomUniform or RandomNormal for float/complex values", shape)
+	}
+
+	g := rngState.Graph()
+	var randomBits *Node
+	randomBitsShape := shape.Clone()
+	randomBitsShape.DType = dtypes.U64
+	newRngState, randomBits = backendRngBitGenerator(rngState, randomBitsShape)
+	var ratio, maxValue *Node
+	switch n := any(N).(type) {
+	case *Node:
+		ratio = Div(Const(g, uint64(math.MaxUint64)), ConvertDType(n, dtypes.U64))
+		maxValue = ConvertDType(AddScalar(n, -1), shape.DType)
+	default:
+		nUint64 := reflect.ValueOf(n).Convert(reflect.TypeOf(uint64(0))).Interface().(uint64)
+		ratio = Scalar(g, dtypes.U64, uint64(math.MaxUint64)/nUint64)
+		maxValue = Scalar(g, shape.DType, nUint64-1)
+	}
+	samples := ConvertDType(Div(randomBits, ratio), shape.DType)
+	samples = Min(samples, maxValue) // There is an unlikely random chance of getting a value that will be equal to N.
+	return newRngState, samples
 }
