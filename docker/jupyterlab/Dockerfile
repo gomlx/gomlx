@@ -77,7 +77,7 @@ EOF
 # Install gopjrt libraries.
 USER root
 WORKDIR ${HOME}/Projects/gopjrt
-RUN ./cmd/install_linux.sh && ./cmd/install_cuda.sh
+RUN ./cmd/install_linux_amd64.sh && ./cmd/install_cuda.sh
 
 # Test gopjrt
 USER ${NB_USER}

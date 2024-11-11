@@ -1,5 +1,10 @@
 # GoMLX changelog
 
+# Next
+
+* Fixed printing of `uint` tensors.
+* Fixed Dockerfile.
+
 # 0.15.1 - 2024/11/11 Updated downloader, in support for 
 
 * Updated dependency to **gopjrt** 0.4.5

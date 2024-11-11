@@ -268,6 +268,8 @@ github.com/janpfeifer/gonb v0.10.2 h1:jqRUKGvkgerjjE0m5CECMzTQiEjcYK3e09/7U3IPut
 github.com/janpfeifer/gonb v0.10.2/go.mod h1:GsmVT/ONuQTtFoDSNQ5IAWPywv/ZoXMkqwdJC4btvQA=
 github.com/janpfeifer/must v0.0.2 h1:9e61R0lD/Rs5ZRMUEOss0885JMmEI4KK6thsPfmlgEQ=
 github.com/janpfeifer/must v0.0.2/go.mod h1:S6c5Yg/YSMR43cJw4zhIq7HFMci90a7kPY9XA4c8UIs=
+github.com/janpfeifer/must v0.2.0 h1:yWy1CE5gtk1i2ICBvqAcMMXrCMqil9CJPkc7x81fRdQ=
+github.com/janpfeifer/must v0.2.0/go.mod h1:S6c5Yg/YSMR43cJw4zhIq7HFMci90a7kPY9XA4c8UIs=
 github.com/jeandeaual/go-locale v0.0.0-20240223122105-ce5225dcaa49 h1:Po+wkNdMmN+Zj1tDsJQy7mJlPlwGNQd9JZoPjObagf8=
 github.com/jeandeaual/go-locale v0.0.0-20240223122105-ce5225dcaa49/go.mod h1:YiutDnxPRLk5DLUFj6Rw4pRBBURZY07GFr54NdV9mQg=
 github.com/json-iterator/go v1.1.11/go.mod h1:KdQUCv79m/52Kvf8AW2vK1V8akMuk1QjK/uOdHXbAo4=

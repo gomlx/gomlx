@@ -16,7 +16,7 @@ require (
 	github.com/gomlx/gopjrt v0.4.5
 	github.com/google/uuid v1.6.0
 	github.com/janpfeifer/gonb v0.10.2
-	github.com/janpfeifer/must v0.0.2
+	github.com/janpfeifer/must v0.2.0
 	github.com/muesli/termenv v0.15.2
 	github.com/pkg/errors v0.9.1
 	github.com/schollz/progressbar/v3 v3.16.1
