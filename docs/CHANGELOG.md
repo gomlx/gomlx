@@ -1,8 +1,11 @@
 # GoMLX changelog
 
-# Next
+# 0.15.1 - 2024/11/11 Updated downloader, in support for 
 
 * Updated dependency to **gopjrt** 0.4.5
+* Moving package `huggingface` and `downloader` to "github.com/gomlx/go-huggingface": marked as deprecated.
+* Added checks and better error report for misuse of rngState in random functions.
+* Added graph.RandomIntN and context.Context.RandomIntN.
 
 # v0.15.0 - 2024/11/01 Some API clean up; Added support for ONNX model conversion.
 

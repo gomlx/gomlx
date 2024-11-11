@@ -2,6 +2,7 @@
 package downloader
 
 import (
+	"context"
 	"fmt"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/types/xsync"
@@ -13,20 +14,18 @@ import (
 )
 
 // ProgressCallback is called as download progresses.
-//
-// Args:
 //   - totalBytes may be set to 0 if total size is not yet known.
-//   - finished is set to true when download is finished. Indicates task is finished.
-//   - err if there was an error, in which case the transfer was cancelled. In this case finished is also set to true.
-type ProgressCallback func(downloadedBytes, totalBytes int64, finished bool, err error)
+type ProgressCallback func(downloadedBytes, totalBytes int64)
 
 // Manager handles downloads, reporting back progress and errors.
 type Manager struct {
-	semaphore *xsync.Semaphore
-	authToken string
+	semaphore            *xsync.Semaphore
+	authToken, userAgent string
 }
 
 // New creates a Manager that download files in parallel -- by default mostly 20 in parallel.
+//
+// Deprecated: this is being moved to https://github.com/gomlx/go-huggingface.
 func New() *Manager {
 	return &Manager{semaphore: xsync.NewSemaphore(20)}
 }
@@ -46,113 +45,164 @@ func (m *Manager) WithAuthToken(authToken string) *Manager {
 	return m
 }
 
+// WithUserAgent sets the user agent to user.
+func (m *Manager) WithUserAgent(userAgent string) *Manager {
+	m.userAgent = userAgent
+	return m
+}
+
 var CancellationError = errors.New("download cancelled")
 
-// Download enqueues the given url to be downloaded to the given filePath.
-// Progress is reported back by the given callback.
+// setRequestHeader with configured fields.
+func (m *Manager) setRequestHeader(req *http.Request) {
+	if m.authToken != "" {
+		req.Header.Set("Authorization", "Bearer "+m.authToken)
+	}
+	if m.userAgent != "" {
+		req.Header.Set("user-agent", m.userAgent)
+	}
+}
+
+// Download downloads the given url to be downloaded to the given filePath.
+// This may lock if it reached the maximum number of parallel downloads.
+// Consider calling this on its own go-routine.
 //
-// The returned latch can be used to cancel the download, in which case callback will be called with a CancellationError.
-func (m *Manager) Download(url string, filePath string, callback ProgressCallback) *xsync.Latch {
-	canceller := xsync.NewLatch()
-	go func() {
-		m.semaphore.Acquire()
-		defer m.semaphore.Release()
+// Progress of download is reported back to the given callback, if not nil.
+//
+// The context ctx can be used to interrupt the downloading.
+func (m *Manager) Download(ctx context.Context, url string, filePath string, callback ProgressCallback) error {
+	m.semaphore.Acquire()
+	defer m.semaphore.Release()
 
-		filePath = data.ReplaceTildeInDir(filePath)
-		err := os.MkdirAll(path.Dir(filePath), 0777)
-		if err != nil && !os.IsExist(err) {
-			err = errors.Wrapf(err, "Failed to create the directory for the path: %q", path.Dir(filePath))
-			return
-		}
-		var file *os.File
-		file, err = os.Create(filePath)
-		if err != nil {
-			err = errors.Wrapf(err, "failed creating file %q", filePath)
-			callback(0, 0, true, err)
-			return
-		}
-		defer func() {
-			if file != nil {
-				_ = file.Close()
-			}
-		}()
+	client := &http.Client{
+		CheckRedirect: func(r *http.Request, via []*http.Request) error {
+			r.URL.Opaque = r.URL.Path
+			return nil
+		},
+	}
 
-		client := http.Client{
-			CheckRedirect: func(r *http.Request, via []*http.Request) error {
-				r.URL.Opaque = r.URL.Path
-				return nil
-			},
+	filePath = data.ReplaceTildeInDir(filePath)
+	err := os.MkdirAll(path.Dir(filePath), 0777)
+	if err != nil && !os.IsExist(err) {
+		return errors.Wrapf(err, "Failed to create the directory for the path: %q", path.Dir(filePath))
+	}
+	var file *os.File
+	file, err = os.Create(filePath)
+	if err != nil {
+		return errors.Wrapf(err, "failed creating file %q", filePath)
+	}
+	defer func() {
+		if file != nil {
+			_ = file.Close()
 		}
-		req, err := http.NewRequest("GET", url, nil)
-		if err != nil {
-			err = errors.Wrapf(err, "failed creating request for %q", url)
-			callback(0, 0, true, err)
-			return
-		}
-		if m.authToken != "" {
-			req.Header.Set("Authorization", "Bearer "+m.authToken)
-		}
-		var resp *http.Response
-		resp, err = client.Do(req)
-		if err != nil {
-			err = errors.Wrapf(err, "failed downloading %q", url)
-			callback(0, 0, true, err)
-			return
-		}
-		// _ = resp.Header.Write(os.Stdout)
-		if resp.StatusCode != http.StatusOK {
-			callback(0, 0, true, fmt.Errorf("bad status code %d: %q", resp.StatusCode,
-				resp.Header.Get("X-Error-Message")))
-			return
-		}
-
-		contentLength := resp.ContentLength
-		callback(0, contentLength, false, nil)
-		const maxBufferSize = 1 * 1024 * 1024
-		var buf [maxBufferSize]byte
-		downloadedBytes := int64(0)
-		for {
-			if canceller.Test() {
-				callback(downloadedBytes, contentLength, true, CancellationError)
-			}
-			n, err := resp.Body.Read(buf[:])
-			if err != nil && err != io.EOF {
-				err = errors.Wrapf(err, "failed downloading %q", url)
-				callback(downloadedBytes, contentLength, true, err)
-				return
-			}
-			if err == io.EOF {
-				break
-			}
-			wn, err := file.Write(buf[:n])
-			if err != nil && err != io.EOF {
-				err = errors.Wrapf(err, "failed writing %q to %q", url, filePath)
-				callback(downloadedBytes, contentLength, true, err)
-				return
-			}
-			if wn != n {
-				err = errors.Errorf("failed writing %q to %q: not enough bytes written (wanted %d, wrote only %d)",
-					url, filePath, n, wn)
-				callback(downloadedBytes, contentLength, true, err)
-				return
-			}
-			downloadedBytes += int64(n)
-			callback(downloadedBytes, contentLength, false, nil)
-		}
-		err = file.Close()
-		file = nil
-		if err != nil {
-			err = errors.Wrapf(err, "failed closing file %q", filePath)
-			callback(downloadedBytes, contentLength, true, err)
-			return
-		}
-		err = resp.Body.Close()
-		if err != nil {
-			err = errors.Wrapf(err, "failed closing connection to %q", url)
-			callback(downloadedBytes, contentLength, true, err)
-			return
-		}
-		callback(downloadedBytes, contentLength, true, nil)
 	}()
-	return canceller
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return errors.Wrapf(err, "failed creating request for %q", url)
+	}
+	m.setRequestHeader(req)
+	var resp *http.Response
+	resp, err = client.Do(req)
+	if err != nil {
+		return errors.Wrapf(err, "failed downloading %q", url)
+	}
+	// _ = resp.Header.Write(os.Stdout)
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("bad status code %d: %q", resp.StatusCode, resp.Header.Get("X-Error-Message"))
+	}
+
+	contentLength := resp.ContentLength
+	if callback != nil {
+		callback(0, contentLength)
+	}
+	const maxBufferSize = 1 * 1024 * 1024
+	var buf [maxBufferSize]byte
+	downloadedBytes := int64(0)
+	for {
+		if ctx.Err() != nil {
+			return CancellationError
+		}
+		n, err := resp.Body.Read(buf[:])
+		if err != nil && err != io.EOF {
+			if ctx.Err() != nil {
+				return CancellationError
+			}
+			return errors.Wrapf(err, "failed downloading %q", url)
+		}
+		if err == io.EOF {
+			break
+		}
+		wn, err := file.Write(buf[:n])
+		if err != nil && err != io.EOF {
+			return errors.Wrapf(err, "failed writing %q to %q", url, filePath)
+		}
+		if wn != n {
+			return errors.Wrapf(io.ErrShortWrite, "failed writing %q to %q: not enough bytes written (wanted %d, wrote only %d)",
+				url, filePath, n, wn)
+		}
+		downloadedBytes += int64(n)
+		if callback != nil {
+			callback(downloadedBytes, contentLength)
+		}
+	}
+	err = file.Close()
+	file = nil
+	if err != nil {
+		return errors.Wrapf(err, "failed closing file %q", filePath)
+	}
+	if err = resp.Body.Close(); err != nil {
+		return errors.Wrapf(err, "failed closing connection to %q", url)
+	}
+	return nil
+}
+
+// FetchHeader fetches the header of a URL (using HTTP method "HEAD").
+//
+// Notice it may lock on the maximum number of parallel requests, so consider calling this on a separate goroutine.
+//
+// The context ctx can be used to interrupt the downloading.
+func (m *Manager) FetchHeader(ctx context.Context, url string) (header http.Header, contentLength int64, err error) {
+	m.semaphore.Acquire()
+	defer m.semaphore.Release()
+
+	client := &http.Client{
+		CheckRedirect: func(r *http.Request, via []*http.Request) error {
+			r.URL.Opaque = r.URL.Path
+			return nil
+		},
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, url, nil)
+	if err != nil {
+		err = errors.Wrapf(err, "failed creating request for %q", url)
+		return
+	}
+	m.setRequestHeader(req)
+	req.Header.Set("Accept-Encoding", "identity")
+
+	// Make the request and download the tokenizer.
+	resp, err := client.Do(req)
+	if err != nil {
+		err = errors.Wrap(err, "failed request for metadata: ")
+		return
+	}
+
+	// TODO: handle redirects.
+	defer func() { _ = resp.Body.Close() }()
+	_, err = io.ReadAll(resp.Body)
+	if err != nil {
+		err = errors.Wrapf(err, "failed reading response (%d) for metadata: ", resp.StatusCode)
+		return
+	}
+
+	// Check status code.
+	if resp.StatusCode != 200 {
+		err = errors.Errorf("request for metadata from %q failed with the following message: %q",
+			url, resp.Status)
+		return
+	}
+	header = resp.Header
+	contentLength = resp.ContentLength
+	err = nil
+	return
 }
