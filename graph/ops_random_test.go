@@ -8,6 +8,7 @@ import (
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/x448/float16"
+	"math"
 
 	"testing"
 )
@@ -33,10 +34,16 @@ func testRandomUniform[T interface {
 				shapeSize *= 2
 				r = Concatenate([]*Node{Real(r), Imag(r)}, -1)
 			}
-			counts := make([]*Node, 10)
+			counts := make([]*Node, 12)
 			for ii := range counts {
-				from := 0.1 * float64(ii)
+				from := 0.1*float64(ii) - 0.1
+				if ii == 0 {
+					from = math.Inf(-1)
+				}
 				to := from + 0.1
+				if ii == 11 {
+					to = math.Inf(1)
+				}
 				includeSet := And(
 					GreaterOrEqual(r, Scalar(g, r.DType(), from)),
 					LessThan(r, Scalar(g, r.DType(), to)))
@@ -48,7 +55,7 @@ func testRandomUniform[T interface {
 			outputs = []*Node{Concatenate(counts, 0)}
 			return
 		}, []any{
-			[]float32{0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1},
+			[]float32{0.0, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.0},
 		}, 0.1)
 }
 

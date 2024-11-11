@@ -102,11 +102,12 @@ func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Nod
 		values = StopGradient(values)
 	case dtypes.Float32:
 		bitsShape := shape.Clone()
-		bitsShape.DType = dtypes.Uint32
+		bitsShape.DType = dtypes.Int32 // Originally used UInt32, but since Apple/Metal PJRT doesn't support it, we can as well use Int32.
 		var randomBits *Node
 		newRngState, randomBits = backendRngBitGenerator(rngState, bitsShape)
 		values = ConvertDType(randomBits, dtypes.Float32)
 		values = MulScalar(values, 1.0/(float64(1<<32)))
+		values = Abs(values)
 		values = MinScalar(values, float64(math.Nextafter32(1.0, 0.0)))
 		values = StopGradient(values)
 	case dtypes.Float16, dtypes.BFloat16:
