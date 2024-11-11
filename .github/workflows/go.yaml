@@ -47,7 +47,7 @@ jobs:
     - name: Install gopjrt shared libraries
       shell: bash
       run: |
-        curl -s "https://raw.githubusercontent.com/gomlx/gopjrt/main/cmd/install_linux.sh" \
+        curl -s "https://raw.githubusercontent.com/gomlx/gopjrt/main/cmd/install_linux_amd64.sh" \
           > /tmp/gopjrt_install.sh
         chmod a+x /tmp/gopjrt_install.sh
         echo "Installing gopjrt:"
