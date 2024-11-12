@@ -97,7 +97,6 @@ func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Nod
 		bitsShape.DType = dtypes.Uint64
 		var randomBits *Node
 		newRngState, randomBits = backendRngBitGenerator(rngState, bitsShape)
-		fmt.Printf("randomBits.shape=%s\n", randomBits.Shape())
 		values = ConvertDType(randomBits, dtypes.Float64)
 		values = MulScalar(values, math.Pow(2.0, -64))
 		values = MinScalar(values, math.Nextafter(1.0, 0.0))
