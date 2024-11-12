@@ -1,7 +1,6 @@
 package graph
 
 import (
-	"fmt"
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
@@ -106,7 +105,6 @@ func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Nod
 		bitsShape.DType = dtypes.Uint32 // XLA will only generate `uint` for random bits.
 		var randomBits *Node
 		newRngState, randomBits = backendRngBitGenerator(rngState, bitsShape)
-		fmt.Printf("randomBits.shape=%s\n", randomBits.Shape())
 		values = ConvertDType(randomBits, dtypes.Float32)
 		values = MulScalar(values, 1.0/(float64(1<<32)))
 		values = Abs(values)
