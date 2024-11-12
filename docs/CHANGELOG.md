@@ -4,6 +4,8 @@
 
 * Fixed printing of `uint` tensors.
 * Fixed Dockerfile.
+* Added inference example for Cifar models.
+* Added `checkpoints.Load()`: just like `checkpoints.Build`, but it complains if a checkpoint doesn't exist.
 
 # 0.15.1 - 2024/11/11 Updated downloader, in support for 
 
