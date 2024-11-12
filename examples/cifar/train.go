@@ -17,9 +17,9 @@ import (
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/janpfeifer/must"
+	"github.com/pkg/errors"
 	"os"
 	"slices"
-	"strings"
 	"time"
 )
 
@@ -85,15 +85,10 @@ func TrainCifar10Model(ctx *context.Context, dataDir, checkpointPath string, eva
 	}
 
 	// Select model graph building function.
-	modelFn := C10PlainModelGraph
-	modelType := context.GetParamOr(ctx, "model", C10ValidModels[0])
-	if slices.Index(C10ValidModels, modelType) == -1 {
-		exceptions.Panicf("Parameter \"model\" must take one value from %v, got %q", C10ValidModels, modelType)
+	modelFn, err := SelectModelFn(ctx)
+	if err != nil {
+		panic(err)
 	}
-	if strings.HasPrefix(modelType, "cnn") {
-		modelFn = C10ConvolutionModelGraph
-	}
-	fmt.Printf("Model: %s\n", modelType)
 
 	// Metrics we are interested.
 	meanAccuracyMetric := metrics.NewSparseCategoricalAccuracy("Mean Accuracy", "#acc")
@@ -169,6 +164,19 @@ func TrainCifar10Model(ctx *context.Context, dataDir, checkpointPath string, eva
 		}
 		must.M(commandline.ReportEval(trainer, evalOnTestDS, evalOnTrainDS))
 	}
+}
+
+// SelectModelFn based on hyperparameter "model" in Context.
+func SelectModelFn(ctx *context.Context) (modelFn train.ModelFn, err error) {
+	modelFn = C10PlainModelGraph // Handles all models except CNN.
+	modelType := context.GetParamOr(ctx, "model", C10ValidModels[0])
+	if slices.Index(C10ValidModels, modelType) == -1 {
+		return nil, errors.Errorf("Parameter \"model\" must take one value from %v, got %q", C10ValidModels, modelType)
+	}
+	if modelType == "cnn" {
+		modelFn = C10ConvolutionModelGraph
+	}
+	return modelFn, nil
 }
 
 func CreateDatasets(backend backends.Backend, dataDir string, batchSize, evalBatchSize int) (trainDS, trainEvalDS, validationEvalDS train.Dataset) {
