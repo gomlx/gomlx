@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"fmt"
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
@@ -96,15 +97,17 @@ func RandomUniform(rngState *Node, shape shapes.Shape) (newRngState, values *Nod
 		bitsShape.DType = dtypes.Uint64
 		var randomBits *Node
 		newRngState, randomBits = backendRngBitGenerator(rngState, bitsShape)
+		fmt.Printf("randomBits.shape=%s\n", randomBits.Shape())
 		values = ConvertDType(randomBits, dtypes.Float64)
 		values = MulScalar(values, math.Pow(2.0, -64))
 		values = MinScalar(values, math.Nextafter(1.0, 0.0))
 		values = StopGradient(values)
 	case dtypes.Float32:
 		bitsShape := shape.Clone()
-		bitsShape.DType = dtypes.Int32 // Originally used UInt32, but since Apple/Metal PJRT doesn't support it, we can as well use Int32.
+		bitsShape.DType = dtypes.Uint32 // XLA will only generate `uint` for random bits.
 		var randomBits *Node
 		newRngState, randomBits = backendRngBitGenerator(rngState, bitsShape)
+		fmt.Printf("randomBits.shape=%s\n", randomBits.Shape())
 		values = ConvertDType(randomBits, dtypes.Float32)
 		values = MulScalar(values, 1.0/(float64(1<<32)))
 		values = Abs(values)

@@ -4,7 +4,6 @@
 
 * Fixed printing of `uint` tensors.
 * Fixed Dockerfile.
-* Change RandomUniform for float32 to use RandomBitGenerators of in32 (as opposed to uint32) so it may work in Apple/Metal PJRT.
 
 # 0.15.1 - 2024/11/11 Updated downloader, in support for 
 
