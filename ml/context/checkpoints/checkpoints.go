@@ -101,6 +101,7 @@ type Config struct {
 	dir       string
 	immediate bool
 	keep      int
+	mustLoad  bool
 
 	includeParams   bool              // whether to includeParams in loading/saving.
 	paramsToExclude types.Set[string] // specific parameter names to exclude from loading.
@@ -113,6 +114,9 @@ type Config struct {
 
 // Build a configuration for building a checkpoints.Handler. After configuring the
 // Config object returned, call `Done` to get the configured checkpoints.Handler.
+//
+// The new checkpoints.Handler will load a checkpoint to the context (see Dir or DirFromBase) if it exists,
+// otherwise it creates a new directory and can simply be used to save checkpoints.
 func Build(ctx *context.Context) *Config {
 	c := &Config{
 		ctx:             ctx,
@@ -122,6 +126,17 @@ func Build(ctx *context.Context) *Config {
 		paramsToExclude: types.MakeSet[string](),
 		varsToExclude:   types.MakeSet[*context.Variable](),
 	}
+	return c
+}
+
+// Load creates configuration to load a checkpoint.
+// It's identical to Build, except it will fail if the checkpoint does not already exist.
+//
+// Use Dir or DirWithBase to configure location of checkpoint.
+// Once configured, call Config.Done to actually load it.
+func Load(ctx *context.Context) *Config {
+	c := Build(ctx)
+	c.mustLoad = true
 	return c
 }
 
@@ -142,11 +157,15 @@ func (c *Config) Dir(dir string) *Config {
 		return c
 	}
 	if err == nil && !fi.IsDir() {
-		c.setError(errors.Errorf("directory name %q exists but it's a normal file, not a directory", dir))
+		c.setError(errors.Errorf("checkpiont directory %q exists but it's a normal file, not a directory", dir))
 		return c
 	}
 	if err == nil {
 		// Directory exists, all fine.
+		return c
+	}
+	if c.mustLoad {
+		c.setError(errors.Wrapf(err, "checkpoint directory %q does not exist or cannot be accessed", dir))
 		return c
 	}
 
@@ -301,10 +320,13 @@ func (c *Config) Done() (*Handler, error) {
 		Variables: nil,
 	}}
 	checkpoints, err := handler.ListCheckpoints()
-	handler.checkpointsCount = maxCheckPointCountFromCheckpoints(checkpoints) + 1
 	if err != nil {
 		return nil, err
 	}
+	if len(checkpoints) == 0 && c.mustLoad {
+		return nil, errors.Errorf("no checkpoints found in %q", c.dir)
+	}
+	handler.checkpointsCount = maxCheckPointCountFromCheckpoints(checkpoints) + 1
 	if len(checkpoints) > 0 {
 		takeMean := c.takeMean
 		if takeMean < 0 || takeMean > len(checkpoints) {

@@ -14,7 +14,6 @@ import (
 // C10PlainModelGraph implements train.ModelFn, and returns the logit Node, given the input image.
 // It's a basic FNN (Feedforward Neural Network), so no convolutions. It is meant only as an example.
 func C10PlainModelGraph(ctx *context.Context, spec any, inputs []*graph.Node) []*graph.Node {
-	ctx = ctx.In("model")
 	batchedImages := inputs[0]
 	batchSize := batchedImages.Shape().Dimensions[0]
 	logits := graph.Reshape(batchedImages, batchSize, -1)
@@ -61,7 +60,6 @@ func normalizeCNN(ctx *context.Context, logits *graph.Node) *graph.Node {
 // https://www.kaggle.com/code/ektasharma/simple-cifar10-cnn-keras-code-with-88-accuracy
 // (Thanks @ektasharma)
 func C10ConvolutionModelGraph(ctx *context.Context, spec any, inputs []*graph.Node) []*graph.Node {
-	ctx = ctx.In("model")
 	batchedImages := inputs[0]
 	g := batchedImages.Graph()
 	dtype := batchedImages.DType()

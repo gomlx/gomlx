@@ -90,14 +90,24 @@ func createDefaultContext() *context.Context {
 		fnn.ParamDropoutRate:     -1.0, // Set to 0.0 for no dropout, otherwise it falls back to layers.ParamDropoutRate.
 
 		// KAN network parameters:
-		kan.ParamNumControlPoints:   10, // Number of control points
-		kan.ParamNumHiddenNodes:     64,
-		kan.ParamNumHiddenLayers:    4,
+		kan.ParamRational:        false, // "kan_rational" (see GR-KAN) uses rational functions.
+		kan.ParamPiecewiseLinear: false, // "kan_pwl" uses piecewise linear functions.
+		kan.ParamDiscrete:        false, // "kan_discrete" uses discrete (piecewise-constant) functions: tricky to train.
+
+		kan.ParamResidual:         true,
+		kan.ParamNumControlPoints: 10, // Number of control points
+		kan.ParamNumHiddenNodes:   64,
+		kan.ParamNumHiddenLayers:  4,
+
 		kan.ParamBSplineDegree:      2,
 		kan.ParamBSplineMagnitudeL1: 1e-5,
 		kan.ParamBSplineMagnitudeL2: 0.0,
-		kan.ParamDiscrete:           false,
-		kan.ParamDiscreteSoftness:   0.1,
+
+		// Discrete-KAN
+		kan.ParamDiscreteSoftness: 0.1,
+
+		// KAN-PWL
+		kan.ParamPWLSplitPointsTrainable: true, // Split points trainable.
 
 		// CNN model
 		cifar.ParamCNNNormalization: "batch",
