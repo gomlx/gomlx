@@ -147,6 +147,18 @@ Godoc available in [pkg.go.dev](https://pkg.go.dev/github.com/gomlx/gomlx).
 
 Finally, feel free to ask questions: time allowing (when not in work) I'm always happy to help -- I created [groups.google.com/g/gomlx-discuss](https://groups.google.com/g/gomlx-discuss), or use [GitHub discussions page](https://github.com/gomlx/gomlx/discussions).
 
+### Inference
+
+Inference or serving a model is done currently by using the Go code used to create the model along with the checkpoint
+with the trained weights and hyperparameters used to train the model. In other words, it uses the same tools used
+for training.
+
+For a simple example of how to do this and export a model inference as a library, see 
+[`.../examples/cifar/classifer`](https://github.com/gomlx/gomlx/blob/main/examples/cifar/classifier/classifier.go), 
+and its use in the last cells of the [Cifar-10 demo](https://gomlx.github.io/gomlx/notebooks/cifar.html).
+
+In the future we plan to also export models to ONNX or StableHLO and one could use tools that serve those.
+
 ## 🎯 Long-term Goals
 
 1. Building and training models in Go -- as opposed to Python (or some other language) -- with focus on:

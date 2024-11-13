@@ -1,6 +1,6 @@
 # GoMLX changelog
 
-# Next
+# v0.15.2 - 2024/11/13 
 
 * Fixed printing of `uint` tensors.
 * Fixed Dockerfile.
@@ -16,7 +16,7 @@
   - Knots from -1.0 to 1.0.
 * PiecewiseLinear-KAN: better initialization (constant variance across layers)
 
-# 0.15.1 - 2024/11/11 Updated downloader, in support for 
+# v0.15.1 - 2024/11/11 Updated downloader, in support for 
 
 * Updated dependency to **gopjrt** 0.4.5
 * Moving package `huggingface` and `downloader` to "github.com/gomlx/go-huggingface": marked as deprecated.
