@@ -10,7 +10,7 @@
   * Fixed KAN model issue.
 * Added `checkpoints.Load()`: just like `checkpoints.Build`, but it complains if a checkpoint doesn't exist.
 * Package `graph`: Added `ReduceVariance` and an alias `Variance`. Fixed `ReduceAndKeep` if no axes are given.
-* BSpline (Standard):
+* BSpline(Standard)-KAN:
   - Better initialization -- constant variance across layers.
   - Extrapolate constant.
   - Knots from -1.0 to 1.0.
