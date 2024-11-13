@@ -11,6 +11,7 @@ import (
 	"github.com/gomlx/gomlx/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/types/shapes"
 	"k8s.io/klog/v2"
+	"math"
 )
 
 // This file implements the B-Spline based KAN model, the original one described in https://arxiv.org/pdf/2404.19756.
@@ -112,9 +113,29 @@ func (c *Config) bsplineLayer(ctx *context.Context, x *Node, numOutputNodes int)
 		}
 	}
 
-	// Apply B-spline:
-	b := bsplines.NewRegular(c.bspline.Degree, c.numControlPoints).WithExtrapolation(bsplines.ExtrapolateLinear)
-	controlPointsVar := ctx.WithInitializer(initializers.RandomNormalFn(ctx, 0.01)).
+	// Apply B-spline on regular knots from -1.0 to 1.0
+	numKnots := c.numControlPoints - c.bspline.Degree + 1
+	knots := make([]float64, numKnots)
+	for ii := range knots {
+		knots[ii] = 2*float64(ii)/float64(numKnots-1) - 1.0
+	}
+	b := bsplines.New(c.bspline.Degree, knots).WithExtrapolation(bsplines.ExtrapolateConstant)
+
+	// Create control points for B-Spline: initialize with a random normal values with values that have
+	// demonstrated empirically to preserve variance.
+	// It's a function of the number of inputs, and also the type of extrapolation, which we hard-code to constant.
+	var stdDev float64
+	if c.useMean {
+		// f(x) = Sum_{inputNodes}{X}/numInputNodes
+		// Var(f(x)) = Var(x)/numInputNodes
+		// We want Var(f(x)) = 1, so we make Var(x)=numInputNodes.
+		// Stddev(f(x)) = Sqrt(Var(f(x)))
+		stdDev = math.Sqrt(float64(numInputNodes))
+	} else {
+		// Using ReduceSum.
+		stdDev = 1.0 / math.Sqrt(float64(numInputNodes))
+	}
+	controlPointsVar := ctx.WithInitializer(initializers.RandomNormalFn(ctx, stdDev)).
 		VariableWithShape("bspline_control_points", shapes.Make(dtype, numInputNodes, numOutputNodes, c.numControlPoints))
 	if c.regularizer != nil {
 		c.regularizer(ctx, g, controlPointsVar)
@@ -146,5 +167,9 @@ func (c *Config) bsplineLayer(ctx *context.Context, x *Node, numOutputNodes int)
 		output = ReduceSum(output, -1)
 	}
 	output.AssertDims(batchSize, numOutputNodes) // Shape=[batch, outputs]
+
+	// Log variance at each layer: useful to find initialization that keeps variance under control.
+	//ReduceMean(ReduceVariance(output, -1)).SetLoggedf("(%s) Mean variance of the examples", ctx.Scope())
+	//ReduceMean(Abs(output)).SetLoggedf("(%s) Mean absolute outputs", ctx.Scope())
 	return output
 }
