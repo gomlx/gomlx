@@ -861,7 +861,7 @@ func TestInternalBatchNormForTraining(t *testing.T) {
 				{11.5, 103, 1004.5},
 			},
 			[]float32{3, 3, 3}, // Mean = (0+1+2+3+4+5+6) / 7 = 3
-			[]float32{4, 4, 4}, // Variance = (9+4+1+0+1+4+9) / 7 = 4
+			[]float32{4, 4, 4}, // ReduceVariance = (9+4+1+0+1+4+9) / 7 = 4
 		}, 1e-4)
 }
 
