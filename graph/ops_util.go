@@ -17,7 +17,6 @@
 package graph
 
 import (
-	"fmt"
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
@@ -857,7 +856,6 @@ func ReduceVariance(x *Node, axes ...int) *Node {
 	mean := ReduceAndKeep(x, ReduceMean, axes...)
 	diff2 := Square(Sub(x, mean))
 	variance := ReduceMean(diff2, axes...)
-	fmt.Printf("variance(x=%s, axes=%v) -> %v\n", x.Shape(), axes, variance.Shape())
 	return variance
 }
 
