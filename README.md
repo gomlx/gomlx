@@ -48,7 +48,8 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
 It includes:
 
 * Examples: 
-  * [Adult/Census model](https://gomlx.github.io/gomlx/notebooks/uci-adult.html); 
+  * [Adult/Census model](https://gomlx.github.io/gomlx/notebooks/uci-adult.html);
+  * [How KANs learn ?](https://gomlx.github.io/gomlx/notebooks/kan_shapes.html); 
   * [Cifar-10 demo](https://gomlx.github.io/gomlx/notebooks/cifar.html); 
   * [Dogs & Cats classifier demo](https://gomlx.github.io/gomlx/notebooks/dogsvscats.html); 
   * [IMDB Movie Review demo](https://gomlx.github.io/gomlx/notebooks/imdb.html); 
