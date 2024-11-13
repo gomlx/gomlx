@@ -21,6 +21,9 @@ func C10PlainModelGraph(ctx *context.Context, spec any, inputs []*graph.Node) []
 	modelType := context.GetParamOr(ctx, "model", C10ValidModels[0])
 	if modelType == "kan" {
 		// Configuration of the KAN layer(s) use the context hyperparameters.
+		// Re-scale logits to be from -1.0 to 1.0.
+		logits = graph.AddScalar(graph.MulScalar(logits, 2), -1)
+		//graph.ReduceMean(graph.ReduceVariance(logits, -1)).SetLogged("Mean input variance of the examples")
 		logits = kan.New(ctx, logits, numClasses).Done()
 	} else {
 		// Configuration of the FNN layer(s) use the context hyperparameters.

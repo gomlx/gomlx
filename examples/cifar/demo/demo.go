@@ -79,8 +79,8 @@ func createDefaultContext() *context.Context {
 		cosineschedule.ParamPeriodSteps: 0,
 		activations.ParamActivation:     "swish",
 		layers.ParamDropoutRate:         0.0,
-		regularizers.ParamL2:            1e-5,
-		regularizers.ParamL1:            1e-5,
+		regularizers.ParamL2:            0.0, // 1e-5,
+		regularizers.ParamL1:            0.0, // 1e-5,
 
 		// FNN network parameters:
 		fnn.ParamNumHiddenLayers: 8,
@@ -95,6 +95,7 @@ func createDefaultContext() *context.Context {
 		kan.ParamDiscrete:        false, // "kan_discrete" uses discrete (piecewise-constant) functions: tricky to train.
 
 		kan.ParamResidual:         true,
+		kan.ParamMean:             true,
 		kan.ParamNumControlPoints: 10, // Number of control points
 		kan.ParamNumHiddenNodes:   64,
 		kan.ParamNumHiddenLayers:  4,

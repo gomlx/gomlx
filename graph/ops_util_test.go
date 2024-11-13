@@ -507,8 +507,8 @@ func TestTakeUpperTriangular(t *testing.T) {
 	graphtest.RunTestGraphFn(t, "ShapedLowerTriangular",
 		func(g *Graph) (inputs, outputs []*Node) {
 			inputs = []*Node{
-				AddScalar(IotaFull(g, shapes.Make(dtypes.Float64, 2, 2)), 1),
-				AddScalar(IotaFull(g, shapes.Make(dtypes.Float32, 1, 2, 3, 4)), 1),
+				OnePlus(IotaFull(g, shapes.Make(dtypes.Float64, 2, 2))),
+				OnePlus(IotaFull(g, shapes.Make(dtypes.Float32, 1, 2, 3, 4))),
 			}
 			outputs = []*Node{
 				TakeUpperTriangular(inputs[0], 0),
@@ -523,4 +523,32 @@ func TestTakeUpperTriangular(t *testing.T) {
 			[][][][]float32{{{{1, 2, 3, 4}, {5, 6, 7, 8}, {0, 10, 11, 12}}, {{13, 14, 15, 16}, {17, 18, 19, 20}, {0, 22, 23, 24}}}},
 			[][][][]float32{{{{0, 2, 3, 4}, {0, 0, 7, 8}, {0, 0, 0, 12}}, {{0, 14, 15, 16}, {0, 0, 19, 20}, {0, 0, 0, 24}}}},
 		}, -1)
+}
+
+func TestReduceVariance(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "ReduceVariance",
+		func(g *Graph) (inputs, outputs []*Node) {
+			inputs = []*Node{Const(g, []float32{3.0, 7.0})}
+			outputs = []*Node{ReduceVariance(inputs[0])}
+			return
+		}, []any{
+			float32(4.0),
+		}, 0.001)
+
+	graphtest.RunTestGraphFn(t, "ReduceVariance",
+		func(g *Graph) (inputs, outputs []*Node) {
+			rngState := Const(g, RngStateFromSeed(42))
+			_, values := RandomNormal(rngState, shapes.Make(dtypes.Float32, 4, 100_000))
+			multiplier := OnePlus(Iota(g, shapes.Make(dtypes.Float32, 4, 1), 0))
+			shift := AddScalar(Iota(g, shapes.Make(dtypes.Float32, 4, 1), 0), -2)
+			values2 := Add(Mul(values, multiplier), shift)
+			outputs = []*Node{
+				ReduceVariance(values),
+				ReduceVariance(values2, -1),
+			}
+			return
+		}, []any{
+			float32(1.0),
+			[]float32{1.0, 4.0, 9.0, 16.0}, // Var(c*X) = c^2*Var(X).
+		}, 0.1)
 }

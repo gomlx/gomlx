@@ -237,16 +237,26 @@ func OneHot(indices *Node, depth int, dtype dtypes.DType) *Node {
 }
 
 // ReduceAndKeep applies the given reduction function but regenerate the reduced dimensions with size 1.
+// If len(reduceAxes) is 0 (no axes given) it's assumed it is being reduced on all axes.
 func ReduceAndKeep(x *Node, reduceFn func(x *Node, reduceAxes ...int) *Node, reduceAxes ...int) *Node {
 	_ = validateBuildingGraphFromInputs(x)
 	rank := x.Rank()
 	reduceAxes = adjustAxesToRankAndSort(rank, reduceAxes, "x")
 	reduced := reduceFn(x, reduceAxes...)
 	shapeWithRecoveredDims := x.Shape().Clone()
-	for ii := 0; ii < rank && len(reduceAxes) > 0; ii++ {
-		if ii == reduceAxes[0] {
-			shapeWithRecoveredDims.Dimensions[ii] = 1
-			reduceAxes = reduceAxes[1:]
+	if len(reduceAxes) == 0 {
+		// Reduce all axes, so all dimensions are set to 1.
+		for axis := range shapeWithRecoveredDims.Dimensions {
+			shapeWithRecoveredDims.Dimensions[axis] = 1
+		}
+
+	} else {
+		// Reduced axes dimensions are set to 1
+		for ii := 0; ii < rank && len(reduceAxes) > 0; ii++ {
+			if ii == reduceAxes[0] {
+				shapeWithRecoveredDims.Dimensions[ii] = 1
+				reduceAxes = reduceAxes[1:]
+			}
 		}
 	}
 	return Reshape(reduced, shapeWithRecoveredDims.Dimensions...)
@@ -837,4 +847,23 @@ func ConsecutiveDifference(x *Node, axis int, preserveShape bool) *Node {
 		}
 		return output
 	}
+}
+
+// ReduceVariance calculates the variance across the given axes.
+//
+// If no axes is given, it assumes it should reduce all axes and returns a scalar.
+func ReduceVariance(x *Node, axes ...int) *Node {
+	mean := ReduceAndKeep(x, ReduceMean, axes...)
+	diff2 := Square(Sub(x, mean))
+	variance := ReduceMean(diff2, axes...)
+	return variance
+}
+
+// Variance calculates the variance across the given axes. It's just an alias to ReduceVariance.
+//
+// It's a form of reduction function, and the returned rank will be x.Rank() - len(axes).
+//
+// If no axes is given, it assumes it should reduce all axes and returns a scalar.
+func Variance(x *Node, axes ...int) *Node {
+	return ReduceVariance(x, axes...)
 }

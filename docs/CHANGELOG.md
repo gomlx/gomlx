@@ -1,13 +1,22 @@
 # GoMLX changelog
 
-# Next
+# v0.15.2 - 2024/11/13 
 
 * Fixed printing of `uint` tensors.
 * Fixed Dockerfile.
-* Added inference example for Cifar models.
+* Example CIFAR -- changes will break previous checkpoints:
+  * Added inference example for Cifar models.
+  * Fixed model scope issue.
+  * Fixed KAN model issue.
 * Added `checkpoints.Load()`: just like `checkpoints.Build`, but it complains if a checkpoint doesn't exist.
+* Package `graph`: Added `ReduceVariance` and an alias `Variance`. Fixed `ReduceAndKeep` if no axes are given.
+* BSpline (Standard):
+  - Better initialization -- constant variance across layers.
+  - Extrapolate constant.
+  - Knots from -1.0 to 1.0.
+* PiecewiseLinear-KAN: better initialization (constant variance across layers)
 
-# 0.15.1 - 2024/11/11 Updated downloader, in support for 
+# v0.15.1 - 2024/11/11 Updated downloader, in support for 
 
 * Updated dependency to **gopjrt** 0.4.5
 * Moving package `huggingface` and `downloader` to "github.com/gomlx/go-huggingface": marked as deprecated.
