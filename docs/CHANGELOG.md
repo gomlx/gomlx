@@ -4,7 +4,7 @@
 
 * Fixed printing of `uint` tensors.
 * Fixed Dockerfile.
-* Example CIFAR -- changes will break previuos checkpoints:
+* Example CIFAR -- changes will break previous checkpoints:
   * Added inference example for Cifar models.
   * Fixed model scope issue.
   * Fixed KAN model issue.
