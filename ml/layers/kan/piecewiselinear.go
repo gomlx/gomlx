@@ -11,6 +11,7 @@ import (
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
 	"k8s.io/klog/v2"
+	"math"
 )
 
 // PWL-KAN (Piecewise Linear KAN) uses learnable piecewise-linear functions as univariate functions.
@@ -133,26 +134,21 @@ func (c *Config) pwlLayer(ctx *context.Context, x *Node, numOutputNodes int) *No
 			2*c.numControlPoints*numInputGroups*numOutputNodes, c.pwl.splitPointsTrainable)
 	}
 
-	// Create control points for piecewise-constant function (PCF)
-	initialSeed := context.GetParamOr(ctx, initializers.ParamInitialSeed, initializers.NoSeed)
-	controlPointsInitializer := func(graph *Graph, shape shapes.Shape) *Node {
-		// Values initialized with a fixed slope sampled from N(0, 1).
-		indices := Iota(graph, shapes.Make(dtypes.Int32, shape.Dimensions...), -1)
-		isFirstInput := Equal(indices, ScalarZero(graph, dtypes.Int32))
-
-		// Apply a random constant.
-		var slope *Node
-		slopeShape := shape.Clone()
-		slopeShape.Dimensions[shape.Rank()-1] = 1
-		initializers.UseRngState(graph, initialSeed, func(rngState *Node) (newRngState *Node) {
-			newRngState, slope = RandomNormal(rngState, slopeShape)
-			return newRngState
-		})
-
-		// Return the random slope as the first value, and zero elsewhere.
-		return Where(isFirstInput, BroadcastToShape(slope, shape), Zeros(graph, shape))
+	// Create control points for piecewise-constant function (PCF): default initialization to a random normal
+	// of a stdDev, such that we keep the variance stable across layers. It depends on whether we ReduceSum
+	// or ReduceMean the nodes.
+	var stdDev float64
+	if c.useMean {
+		// f(x) = Sum_{inputNodes}{X}/numInputNodes
+		// Var(f(x)) = Var(x)/numInputNodes
+		// We wnat Var(f(x)) = 1, so we make Var(x)=numInputNodes.
+		// Stddev(f(x)) = Sqrt(Var(f(x)))
+		stdDev = math.Sqrt(math.Sqrt(float64(numInputNodes)))
+	} else {
+		// Using ReduceSum.
+		stdDev = 1.0 / math.Sqrt(float64(numInputNodes))
 	}
-	controlPointsVar := ctx.WithInitializer(controlPointsInitializer).
+	controlPointsVar := ctx.WithInitializer(initializers.RandomNormalFn(ctx, stdDev)).
 		VariableWithShape("kan_pwl_control_points", shapes.Make(dtype, numOutputNodes, numInputGroups, c.numControlPoints))
 	if c.regularizer != nil {
 		c.regularizer(ctx, g, controlPointsVar)
@@ -250,5 +246,7 @@ func (c *Config) pwlLayer(ctx *context.Context, x *Node, numOutputNodes int) *No
 	if c.useResidual && numInputNodes == numOutputNodes {
 		output = Add(output, residual)
 	}
+
+	//ReduceMean(ReduceVariance(output, -1)).SetLoggedf("(%s) Mean variance of the examples", ctx.Scope())
 	return output
 }
