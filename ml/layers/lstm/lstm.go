@@ -59,7 +59,7 @@ func New(ctx *context.Context, x *Node, hiddenDim int) *LSTM {
 	return &LSTM{
 		ctx:         ctx,
 		x:           x,
-		direction:   Forward,
+		direction:   DirForward,
 		batchSize:   x.Shape().Dim(0),
 		featuresDim: x.Shape().Dim(2),
 		hiddenDim:   hiddenDim,
@@ -88,7 +88,7 @@ func NewWithWeights(ctx *context.Context, x *Node, inputsW, recurrentW, biases, 
 	l.biasesW = biases
 	l.peepholeW = peepholeW
 	if inputsW.Shape().Dim(0) == 2 {
-		l.direction = BiDirectional
+		l.direction = DirBiDirectional
 	}
 	inputsW.AssertDims(l.NumDirections(), 4, l.hiddenDim, l.featuresDim)
 	recurrentW.AssertDims(l.NumDirections(), 4, l.hiddenDim, l.hiddenDim)
@@ -105,14 +105,14 @@ func NewWithWeights(ctx *context.Context, x *Node, inputsW, recurrentW, biases, 
 type DirectionType int
 
 const (
-	Forward DirectionType = iota
-	Backward
-	BiDirectional
+	DirForward DirectionType = iota
+	DirReverse
+	DirBiDirectional
 )
 
-//go:generate enumer -type=DirectionType -transform=snake -values -text -json -yaml lstm.go
+//go:generate enumer -trimprefix Dir -type=DirectionType -transform=snake -values -text -json -yaml lstm.go
 
-// Direction configures in which direction to run the LSTM: Forward, Backward or both.
+// Direction configures in which direction to run the LSTM: DirForward, DirReverse or both.
 func (l *LSTM) Direction(dir DirectionType) *LSTM {
 	l.direction = dir
 	return l
@@ -153,7 +153,7 @@ func (l *LSTM) InitialStates(initialHiddenState, initialCellState *Node) *LSTM {
 // NumDirections based on the direction information selected.
 // See LSTM.Direction to configure the direction.
 func (l *LSTM) NumDirections() int {
-	if l.direction == BiDirectional {
+	if l.direction == DirBiDirectional {
 		return 2
 	}
 	return 1
@@ -233,8 +233,8 @@ func (l *LSTM) Done() (allHiddenStates, lastHiddenState, lastCellState *Node) {
 		// Loop over directions.
 		for dirIdx := range numDirections {
 			seqPos := seqIdx
-			if dirIdx == 1 || l.direction == Backward {
-				// Backward:
+			if dirIdx == 1 || l.direction == DirReverse {
+				// DirReverse:
 				seqPos = sequenceLength - 1 - seqIdx
 			}
 
