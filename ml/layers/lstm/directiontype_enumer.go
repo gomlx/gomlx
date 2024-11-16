@@ -8,11 +8,11 @@ import (
 	"strings"
 )
 
-const _DirectionTypeName = "forwardreversebi_directional"
+const _DirectionTypeName = "forwardreversebidirectional"
 
-var _DirectionTypeIndex = [...]uint8{0, 7, 14, 28}
+var _DirectionTypeIndex = [...]uint8{0, 7, 14, 27}
 
-const _DirectionTypeLowerName = "forwardreversebi_directional"
+const _DirectionTypeLowerName = "forwardreversebidirectional"
 
 func (i DirectionType) String() string {
 	if i < 0 || i >= DirectionType(len(_DirectionTypeIndex)-1) {
@@ -31,24 +31,24 @@ func _DirectionTypeNoOp() {
 	var x [1]struct{}
 	_ = x[DirForward-(0)]
 	_ = x[DirReverse-(1)]
-	_ = x[DirBiDirectional-(2)]
+	_ = x[DirBidirectional-(2)]
 }
 
-var _DirectionTypeValues = []DirectionType{DirForward, DirReverse, DirBiDirectional}
+var _DirectionTypeValues = []DirectionType{DirForward, DirReverse, DirBidirectional}
 
 var _DirectionTypeNameToValueMap = map[string]DirectionType{
 	_DirectionTypeName[0:7]:        DirForward,
 	_DirectionTypeLowerName[0:7]:   DirForward,
 	_DirectionTypeName[7:14]:       DirReverse,
 	_DirectionTypeLowerName[7:14]:  DirReverse,
-	_DirectionTypeName[14:28]:      DirBiDirectional,
-	_DirectionTypeLowerName[14:28]: DirBiDirectional,
+	_DirectionTypeName[14:27]:      DirBidirectional,
+	_DirectionTypeLowerName[14:27]: DirBidirectional,
 }
 
 var _DirectionTypeNames = []string{
 	_DirectionTypeName[0:7],
 	_DirectionTypeName[7:14],
-	_DirectionTypeName[14:28],
+	_DirectionTypeName[14:27],
 }
 
 // DirectionTypeString retrieves an enum value from the enum constants string name.

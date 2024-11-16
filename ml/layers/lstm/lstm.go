@@ -34,7 +34,7 @@ type LSTM struct {
 	xLengths                             *Node
 	initialHiddenState, initialCellState *Node
 	direction                            DirectionType
-	batchSize, featuresDim, hiddenDim    int
+	batchSize, featuresSize, hiddenSize  int
 	usePeephole                          bool
 
 	// Model weights: see NewWithWeights for specification.
@@ -50,19 +50,19 @@ type LSTM struct {
 type ActivationFn func(x *Node) *Node
 
 // New creates a new LSTM layer to be configured and then applied to x.
-// x should be shaped [batchSize, sequenceLength, featuresDim].
+// x should be shaped [batchSize, sequenceSize, featuresSize].
 //
 // See LSTM.Ragged if x is not densely used: a more compact version to padding or masking.
 //
 // Once finished configuring, call LSTM.Done and it will return the final state of the LSTM.
-func New(ctx *context.Context, x *Node, hiddenDim int) *LSTM {
+func New(ctx *context.Context, x *Node, hiddenSize int) *LSTM {
 	return &LSTM{
-		ctx:         ctx,
-		x:           x,
-		direction:   DirForward,
-		batchSize:   x.Shape().Dim(0),
-		featuresDim: x.Shape().Dim(2),
-		hiddenDim:   hiddenDim,
+		ctx:          ctx,
+		x:            x,
+		direction:    DirForward,
+		batchSize:    x.Shape().Dim(0),
+		featuresSize: x.Shape().Dim(2),
+		hiddenSize:   hiddenSize,
 		activations: [2][3]ActivationFn{
 			{Sigmoid, Tanh, Tanh},
 			{Sigmoid, Tanh, Tanh},
@@ -74,28 +74,28 @@ func New(ctx *context.Context, x *Node, hiddenDim int) *LSTM {
 // on-the-fly.
 //
 // Args:
-//   - x: shaped [batchSize, sequenceLength, featuresDim]
-//   - inputsW: shaped [numDirections, 4, hiddenDim, featuresDim]
-//   - recurrentW: shaped [numDirections, 4, hiddenDim, hiddenDim]
-//   - biases: for both gates and cell updates, shaped [numDirections, 8, hiddenDim].
-//   - peepholeW: optional (can be nil), shaped [numDirections, 3, hiddenDim].
+//   - x: shaped [batchSize, sequenceSize, featuresSize]
+//   - inputsW: shaped [numDirections, 4, hiddenSize, featuresSize]
+//   - recurrentW: shaped [numDirections, 4, hiddenSize, hiddenSize]
+//   - biases: for both gates and cell updates, shaped [numDirections, 8, hiddenSize].
+//   - peepholeW: optional (can be nil), shaped [numDirections, 3, hiddenSize].
 //
 // See details in [3]
-func NewWithWeights(ctx *context.Context, x *Node, inputsW, recurrentW, biases, peepholeW *Node) *LSTM {
-	l := New(ctx, x, inputsW.Shape().Dim(2))
+func NewWithWeights(x *Node, inputsW, recurrentW, biases, peepholeW *Node) *LSTM {
+	l := New(nil, x, inputsW.Shape().Dim(2))
 	l.inputsW = inputsW
 	l.recurrentW = recurrentW
 	l.biasesW = biases
 	l.peepholeW = peepholeW
 	if inputsW.Shape().Dim(0) == 2 {
-		l.direction = DirBiDirectional
+		l.direction = DirBidirectional
 	}
-	inputsW.AssertDims(l.NumDirections(), 4, l.hiddenDim, l.featuresDim)
-	recurrentW.AssertDims(l.NumDirections(), 4, l.hiddenDim, l.hiddenDim)
-	biases.AssertDims(l.NumDirections(), 8, l.hiddenDim)
+	inputsW.AssertDims(l.NumDirections(), 4, l.hiddenSize, l.featuresSize)
+	recurrentW.AssertDims(l.NumDirections(), 4, l.hiddenSize, l.hiddenSize)
+	biases.AssertDims(l.NumDirections(), 8, l.hiddenSize)
 	if peepholeW != nil {
 		l.usePeephole = true
-		peepholeW.AssertDims(l.NumDirections(), 3, l.hiddenDim)
+		peepholeW.AssertDims(l.NumDirections(), 3, l.hiddenSize)
 	}
 
 	return l
@@ -107,7 +107,7 @@ type DirectionType int
 const (
 	DirForward DirectionType = iota
 	DirReverse
-	DirBiDirectional
+	DirBidirectional
 )
 
 //go:generate enumer -trimprefix Dir -type=DirectionType -transform=snake -values -text -json -yaml lstm.go
@@ -123,8 +123,8 @@ func (l *LSTM) Direction(dir DirectionType) *LSTM {
 // It is a more compact version of padding.
 //
 // The default is to assume all sequences are dense -- used to the end.
-func (l *LSTM) Ragged(sequenceLengths *Node) *LSTM {
-	l.xLengths = sequenceLengths
+func (l *LSTM) Ragged(sequencesLengths *Node) *LSTM {
+	l.xLengths = sequencesLengths
 	return l
 }
 
@@ -140,7 +140,7 @@ func (l *LSTM) UsePeephole(usePeephole bool) *LSTM {
 // InitialStates configures the LSTM initial hidden state and cell state (h_0 and c_0 in the literature).
 // If not set it defaults to 0.
 //
-// Both must be shaped [numDirections, batchSize, hiddenDim].
+// Both must be shaped [numDirections, batchSize, hiddenSize].
 //
 // This is useful if concatenating the output of the LSTM to another instance of the (same?) LSTM.
 // That is, you can feed here the output values from LSTM.Done of a previous call.
@@ -153,7 +153,7 @@ func (l *LSTM) InitialStates(initialHiddenState, initialCellState *Node) *LSTM {
 // NumDirections based on the direction information selected.
 // See LSTM.Direction to configure the direction.
 func (l *LSTM) NumDirections() int {
-	if l.direction == DirBiDirectional {
+	if l.direction == DirBidirectional {
 		return 2
 	}
 	return 1
@@ -161,7 +161,7 @@ func (l *LSTM) NumDirections() int {
 
 // Done should be called once the LSTM is configured.
 // It will apply the LSTM layer to the sequence in X.
-// - allHiddenStates: [sequenceLength, numDirections, batchSize, hiddenSize]
+// - allHiddenStates: [sequenceSize, numDirections, batchSize, hiddenSize]
 // - lastHiddenState and lastCellState: [numDirections, batchSize, hiddenSize]
 func (l *LSTM) Done() (allHiddenStates, lastHiddenState, lastCellState *Node) {
 	// "Mis en place": everything we need in local variables.
@@ -171,9 +171,9 @@ func (l *LSTM) Done() (allHiddenStates, lastHiddenState, lastCellState *Node) {
 	dtype := x.DType()
 	numDirections := l.NumDirections()
 	batchSize := l.batchSize
-	sequenceLength := x.Shape().Dim(1)
-	featuresDim := l.featuresDim
-	hiddenDim := l.hiddenDim
+	sequenceSize := x.Shape().Dim(1)
+	featuresSize := l.featuresSize
+	hiddenSize := l.hiddenSize
 	xLengths := l.xLengths
 	inputsW := l.inputsW
 	recurrentW := l.recurrentW
@@ -182,42 +182,42 @@ func (l *LSTM) Done() (allHiddenStates, lastHiddenState, lastCellState *Node) {
 
 	// If model weights were not given, create them here.
 	if inputsW == nil {
-		//   - inputsW: shaped [numDirections, 4, hiddenDim, featuresDim]
-		//   - recurrentW: shaped [numDirections, 4, hiddenDim, hiddenDim]
-		//   - biases: for both gates and cell updates, shaped [numDirections, 8, hiddenDim].
-		//   - peepholeW: optional (can be nil), shaped [numDirections, 3, hiddenDim].
-		inputsW = ctx.VariableWithShape("inputsW", shapes.Make(dtype, numDirections, 4, hiddenDim, featuresDim)).ValueGraph(g)
-		recurrentW = ctx.VariableWithShape("recurrentW", shapes.Make(dtype, numDirections, 4, hiddenDim, hiddenDim)).ValueGraph(g)
-		biasesW = ctx.VariableWithShape("biasesW", shapes.Make(dtype, numDirections, 8, hiddenDim)).ValueGraph(g)
+		//   - inputsW: shaped [numDirections, 4, hiddenSize, featuresSize]
+		//   - recurrentW: shaped [numDirections, 4, hiddenSize, hiddenSize]
+		//   - biases: for both gates and cell updates, shaped [numDirections, 8, hiddenSize].
+		//   - peepholeW: optional (can be nil), shaped [numDirections, 3, hiddenSize].
+		inputsW = ctx.VariableWithShape("inputsW", shapes.Make(dtype, numDirections, 4, hiddenSize, featuresSize)).ValueGraph(g)
+		recurrentW = ctx.VariableWithShape("recurrentW", shapes.Make(dtype, numDirections, 4, hiddenSize, hiddenSize)).ValueGraph(g)
+		biasesW = ctx.VariableWithShape("biasesW", shapes.Make(dtype, numDirections, 8, hiddenSize)).ValueGraph(g)
 		if l.usePeephole {
-			peepholeW = ctx.VariableWithShape("peepholeW", shapes.Make(dtype, numDirections, 3, hiddenDim)).ValueGraph(g)
+			peepholeW = ctx.VariableWithShape("peepholeW", shapes.Make(dtype, numDirections, 3, hiddenSize)).ValueGraph(g)
 		}
 	}
 
 	// Calculate all linear projections of x.
-	// b->batchSize, s->sequenceLength, f->featureDim, d->numDirections, n=4, h->hiddenDim.
+	// b->batchSize, s->sequenceSize, f->featuresSize, d->numDirections, n=4, h->hiddenSize.
 	projX := Einsum("bsf,dnhf->dnbsh", x, inputsW)
 	{
 		biasX := Slice(biasesW, AxisRange(), AxisRangeFromStart(4)) // 4 first biases.
-		biasX = ExpandAxes(biasX, 0)                                // Create a batchSize axis.
+		biasX = ExpandAxes(biasX, 2, 3)                             // Create batchSize and seqLen axes.
 		projX = Add(projX, biasX)
 	}
 
 	// Starting states: h_{i-1} and c_{i-1} so to say.
-	prevHidden, prevCell := make([]*Node, 2), make([]*Node, 2) // One for each direction.
+	prevHidden, prevCell := make([]*Node, numDirections), make([]*Node, numDirections) // One for each direction.
 	for dirIdx := range numDirections {
 		if l.initialHiddenState == nil {
-			prevHidden[dirIdx] = Zeros(g, shapes.Make(dtype, batchSize, hiddenDim))
+			prevHidden[dirIdx] = Zeros(g, shapes.Make(dtype, batchSize, hiddenSize))
 		} else {
 			// Notice we can't check it earlier, in LSTM.InitialStates, because the user could change the
 			// number of directions after setting the LSTM.InitialStates.
-			l.initialHiddenState.AssertDims(numDirections, batchSize, hiddenDim)
+			l.initialHiddenState.AssertDims(numDirections, batchSize, hiddenSize)
 			prevHidden[dirIdx] = Squeeze(Slice(l.initialHiddenState, AxisElem(dirIdx)), 0)
 		}
 		if l.initialCellState == nil {
-			prevCell[dirIdx] = Zeros(g, shapes.Make(dtype, batchSize, hiddenDim))
+			prevCell[dirIdx] = Zeros(g, shapes.Make(dtype, batchSize, hiddenSize))
 		} else {
-			l.initialCellState.AssertDims(numDirections, batchSize, hiddenDim)
+			l.initialCellState.AssertDims(numDirections, batchSize, hiddenSize)
 			prevCell[dirIdx] = Squeeze(Slice(l.initialCellState, AxisElem(dirIdx)), 0)
 		}
 	}
@@ -225,46 +225,46 @@ func (l *LSTM) Done() (allHiddenStates, lastHiddenState, lastCellState *Node) {
 	// Collect hidden states of each step, to be returned later.
 	seqHiddenStates := make([][]*Node, numDirections)
 	for ii := range numDirections {
-		seqHiddenStates[ii] = make([]*Node, sequenceLength)
+		seqHiddenStates[ii] = make([]*Node, sequenceSize)
 	}
 
 	// Loop over each position of the sequence.
-	for seqIdx := range sequenceLength {
+	for seqIdx := range sequenceSize {
 		// Loop over directions.
 		for dirIdx := range numDirections {
 			seqPos := seqIdx
 			if dirIdx == 1 || l.direction == DirReverse {
 				// DirReverse:
-				seqPos = sequenceLength - 1 - seqIdx
+				seqPos = sequenceSize - 1 - seqIdx
 			}
 
-			// Recurrent projection. recurrentW: [numDirections, 4, hiddenDim (j), hiddenDim(h)]
+			// Recurrent projection. recurrentW: [numDirections, 4, hiddenSize (j), hiddenSize(h)]
 			dirRecurrentW := Squeeze(Slice(recurrentW, AxisElem(dirIdx)), 0)
-			projState := Einsum("bh,njh->nbj", prevHidden[dirIdx], dirRecurrentW) // [4, batchSize, hiddenDim]
+			projState := Einsum("bh,njh->nbj", prevHidden[dirIdx], dirRecurrentW) // [4, batchSize, hiddenSize]
 			{
 				biasState := Slice(biasesW, AxisElem(dirIdx), AxisRangeToEnd(4)) // 4 last biases.
-				biasState = Reshape(biasState, 4, 1, hiddenDim)                  // Remove direction axis, and add a batchSize axis.
+				biasState = Reshape(biasState, 4, 1, hiddenSize)                 // Remove direction axis, and add a batchSize axis.
 				projState = Add(projState, biasState)
 			}
 
 			// See [3] for details on the inner values of the LSTM cell:
 			// elemIdx: 0 input; 1 output; 2 forget; 3 cell, where 3 (cell) doesn't take peephole.
 			sliceFn := func(elemIdx int) *Node {
-				proj := Slice(projX, AxisElem(dirIdx), AxisElem(elemIdx), AxisRange() /*batch*/, AxisElem(seqIdx))
-				proj = Reshape(proj, batchSize, hiddenDim)
+				proj := Slice(projX, AxisElem(dirIdx), AxisElem(elemIdx), AxisRange() /*batch*/, AxisElem(seqPos))
+				proj = Reshape(proj, batchSize, hiddenSize)
 				recurrentProj := Squeeze(Slice(projState, AxisElem(elemIdx)), 0)
 				proj = Add(proj, recurrentProj)
 				if l.usePeephole && elemIdx <= 2 {
-					// peepholeW: [numDirections, 3, hiddenDim].
+					// peepholeW: [numDirections, 3, hiddenSize].
 					peepValue := Slice(peepholeW, AxisElem(dirIdx), AxisElem(elemIdx))
-					peepValue = Reshape(peepValue, 1, hiddenDim) // Leave a batch-dimension to broadcast.
+					peepValue = Reshape(peepValue, 1, hiddenSize) // Leave a batch-dimension to broadcast.
 					proj = Add(proj, peepValue)
 				}
 				return proj
 			}
 
 			// Calculate new states (hidden and cell) for this direction.
-			iT := l.activations[dirIdx][0](sliceFn(0)) // Shape [batchSize, hiddenDim]
+			iT := l.activations[dirIdx][0](sliceFn(0)) // Shape [batchSize, hiddenSize]
 			oT := l.activations[dirIdx][0](sliceFn(1))
 			fT := l.activations[dirIdx][0](sliceFn(2))
 			cT := l.activations[dirIdx][1](sliceFn(3))
@@ -298,7 +298,7 @@ func (l *LSTM) Done() (allHiddenStates, lastHiddenState, lastCellState *Node) {
 	} else {
 		// Only one direction to stack.
 		allHiddenStates = Stack(seqHiddenStates[0], 0)
-		allHiddenStates = Reshape(allHiddenStates, sequenceLength, 1, batchSize, hiddenDim)
+		allHiddenStates = Reshape(allHiddenStates, sequenceSize, 1, batchSize, hiddenSize)
 	}
 	return
 }
