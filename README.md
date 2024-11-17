@@ -102,9 +102,7 @@ curl -sSf https://raw.githubusercontent.com/gomlx/gopjrt/main/cmd/install_cuda.s
 
 
 > [!Note]
-> **NEW: Apple/Metal (arm64 only) VERY EXPERIMENTAL** support. It doesn't support every data type, nor all the operations, but many
-> things work. I don't have an easily available Mac, but if you have any issues pls let me know. The XLA/PJRT driver
-> (same as the one used by Jax) is [maintained by Apple here](https://developer.apple.com/metal/jax/).
+> *🚧🛠️ Mac (Darwin) support currently broken 🛠🚧️*: follow discussion in [XLA's issue #19152](https://github.com/openxla/xla/issues/19152) (and on XLA's discord channels).
 
 **GoMLX** is mostly a normal Go library, but it depends on [**gopjrt**](https://github.com/gomlx/gopjrt), which
 includes C wrappers to XLA (itself C++ code base). 
