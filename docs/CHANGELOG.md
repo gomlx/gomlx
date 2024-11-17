@@ -1,6 +1,6 @@
 # GoMLX changelog
 
-# v0.15.2 - 
+# v0.15.2 - 2024/11/17
 
 * Fixed printing of `uint` tensors.
 * Fixed Dockerfile.
@@ -18,6 +18,7 @@
   - Knots from -1.0 to 1.0.
 * PiecewiseLinear-KAN: better initialization (constant variance across layers)
 * Added `layers/lstm` to create LSTM layers (experimental), in use by ONNX conversion to GoMLX.
+* Updated dependencies; gopjrt v0.4.7.
 
 # v0.15.1 - 2024/11/11 Updated downloader, in support for 
 
