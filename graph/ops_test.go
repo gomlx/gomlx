@@ -750,6 +750,26 @@ func TestConcatenate(t *testing.T) {
 	}
 }
 
+func TestStack(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "Stack",
+		func(g *Graph) (inputs, outputs []*Node) {
+			inputs = []*Node{
+				Zeros(g, shapes.Make(dtypes.Int32, 3)),
+				Ones(g, shapes.Make(dtypes.Int32, 3)),
+			}
+			outputs = []*Node{
+				Stack(inputs, 0),
+				Stack(inputs, 1),
+				Stack(inputs, -1),
+			}
+			return
+		}, []any{
+			[][]int32{{0, 0, 0}, {1, 1, 1}},
+			[][]int32{{0, 1}, {0, 1}, {0, 1}},
+			[][]int32{{0, 1}, {0, 1}, {0, 1}},
+		}, -1)
+}
+
 func TestPositiveIndicator(t *testing.T) {
 	testFuncOneInput(t, "PositiveIndicator",
 		func(g *Graph) (input, output *Node) {

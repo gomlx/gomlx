@@ -1252,6 +1252,17 @@ func Concatenate(operands []*Node, axis int) *Node {
 	return backendConcatenate(adjustedAxis, operands...)
 }
 
+// Stack puts together many values (*Node) with the exact same shape by creating a new axis and concatenating them.
+//
+// Axis is relative to returning shape.
+//
+// The returned value increased the rank by 1: output.Rank() = 1+operands[i].Rank()
+func Stack(operands []*Node, axis int) *Node {
+	_ = validateBuildingGraphFromInputs(operands...)
+	operands = xslices.Map(operands, func(x *Node) *Node { return ExpandAxes(x, axis) })
+	return Concatenate(operands, axis)
+}
+
 // concatenateVJP implements a VJP function for the ConcatenateNode operation.
 func concatenateVJP(node, v *Node, _ shapes.Shape) []*Node {
 	vjps := make([]*Node, 0, len(node.inputNodes))

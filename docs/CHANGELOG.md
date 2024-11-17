@@ -1,6 +1,6 @@
 # GoMLX changelog
 
-# v0.15.2 - 2024/11/13 
+# v0.15.2 - 
 
 * Fixed printing of `uint` tensors.
 * Fixed Dockerfile.
@@ -9,12 +9,15 @@
   * Fixed model scope issue.
   * Fixed KAN model issue.
 * Added `checkpoints.Load()`: just like `checkpoints.Build`, but it complains if a checkpoint doesn't exist.
-* Package `graph`: Added `ReduceVariance` and an alias `Variance`. Fixed `ReduceAndKeep` if no axes are given.
+* Package `graph`: 
+  * Added `ReduceVariance` and an alias `Variance`. Fixed `ReduceAndKeep` if no axes are given.
+  * Added `Stack`: similar to `Concatenate` but it creates a new axis.
 * BSpline(Standard)-KAN:
   - Better initialization -- constant variance across layers.
   - Extrapolate constant.
   - Knots from -1.0 to 1.0.
 * PiecewiseLinear-KAN: better initialization (constant variance across layers)
+* Added `layers/lstm` to create LSTM layers (experimental), in use by ONNX conversion to GoMLX.
 
 # v0.15.1 - 2024/11/11 Updated downloader, in support for 
 
