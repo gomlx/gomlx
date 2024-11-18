@@ -54,10 +54,11 @@ It includes:
   * [Dogs & Cats classifier demo](https://gomlx.github.io/gomlx/notebooks/dogsvscats.html); 
   * [IMDB Movie Review demo](https://gomlx.github.io/gomlx/notebooks/imdb.html); 
   * [Diffusion model for Oxford Flowers 102 dataset (generates random flowers)](examples/oxfordflowers102/OxfordFlowers102_Diffusion.ipynb);
-  * **(🚀New) LLM/GenAI**: See [GoMLX/Gemma](https://github.com/gomlx/gemma), a **GoMLX** implementation of 
+  * [GoMLX/Gemma](https://github.com/gomlx/gemma), a **GoMLX** implementation of 
     [Google DeepMind's Gemma v2 model](https://github.com/google-deepmind/gemma) ([blog post](https://ai.google.dev/gemma))
   * [GNN model for OGBN-MAG (experimental)](examples/ogbnmag/ogbn-mag.ipynb).
   * Last, a trivial [synthetic linear model](https://github.com/gomlx/gomlx/blob/main/examples/linear/linear.go), for those curious to see a barebones simple model.
+* **(🚀New, Experimental)** Converting ONNX models to GoMLX with [onnx-gomlx](https://github.com/gomlx/onnx-gomlx): both as an alternative for `onnxruntime` (leveraging XLA), but also to further fine-tune models.
 * Pre-Trained models to use: InceptionV3 (image model) -- more to come.
 * Docker with integrated JupyterLab and [GoNB](https://github.com/janpfeifer/gonb) (a Go kernel for Jupyter notebooks)
 * Just-In-Time (JIT) compilation using [OpenXLA](https://github.com/openxla/xla) for CPUs and GPUs -- hopefully soon TPUs.
