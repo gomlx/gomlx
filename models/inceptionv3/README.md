@@ -9,5 +9,5 @@ Reference:
 
 Based on Keras implementation:
 
-- Source: [github.com/keras-team/keras/keras/applications/inception_v3.py])https://github.com/keras-team/keras/blob/v2.12.0/keras/applications/inception_v3.py)
+- Source: [github.com/keras-team/keras/keras/applications/inception_v3.py](https://github.com/keras-team/keras/blob/v2.12.0/keras/applications/inception_v3.py)
 - Documentation: https://keras.io/api/applications/inceptionv3/
