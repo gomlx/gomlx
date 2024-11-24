@@ -1,5 +1,10 @@
 # GoMLX changelog
 
+# Next
+
+* Added pre-linking of CPU PJRT packages, both statically and dynamically.
+* Re-enabling Mac version: currently only statically linked.
+
 # v0.15.2 - 2024/11/17
 
 * Fixed printing of `uint` tensors.
