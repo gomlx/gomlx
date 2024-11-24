@@ -19,6 +19,9 @@
 //   - Pre-link the CPU PJRT plugin dynamically: build with the build tag `pjrt_cpu_dynamic` (e.g.: `go test --tags pjrt_cpu_dynamic ...`),
 //     or import `github.com/gomlx/gomlx/backends/xla/cpu/dynamic`. Not much difference from linking the PJRT plugin
 //     after the program starts, as default.
+//
+// Darwin (MacOS): currently dynamic linking XLA/PJRT is not working, so it links the CPU PJRT plugin by default,
+// no need to manually link `github.com/gomlx/gomlx/backends/xla/cpu/static`.
 package xla
 
 //go:generate go run ../../cmd/xla_generator
