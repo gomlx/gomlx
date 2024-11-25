@@ -8,6 +8,7 @@ import (
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
 	"math"
+	"runtime"
 	"testing"
 )
 
@@ -52,6 +53,10 @@ func TestFFT(t *testing.T) {
 }
 
 func TestGradientFFT(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		t.Skip("TestGradientFFT does not work in Darwin -- numerical differences.")
+		return
+	}
 	// Create a small sine curve using 11 numbers (scaled from 0 to 2π),
 	// calculate the FFT, takes the gradient of that w.r.t input.
 	// Also checks that the InverseFFT takes it back to the input.

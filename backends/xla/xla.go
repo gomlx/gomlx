@@ -1,7 +1,27 @@
 // Package xla implements the XLA/PJRT (https://openxla.org/) based backend for GoMLX.
 //
-// Simply import it with import _ "github.com/gomlx/gomlx/backends/xla" to make it available in your program.
+// Simply import it with:
+//
+//	import _ "github.com/gomlx/gomlx/backends/xla"
+//
+// To make it available in your program.
 // It will register itself as an available backend during initialization.
+//
+// By default, XLA/PJRT backend loads requested plugins after the program starts and specifies the desired
+// plugin name (default to "cpu") using `dlopen`. Now there are cases that one may simply want to pre-link
+// a plugin with the program. There are two options here (at most one can be selected):
+//
+//   - Pre-link the CPU PJRT plugin statically: this will generate a bigger binary (+ ~200Mb, so slower to build),
+//     but allows one to build a static binary that can be deployed without extra dependencies (except the standard C and C++ libraries,
+//     usually available in most machines).
+//     To enable, build using the tag `pjrt_cpu_static` (e.g.: `go build --tags pjrt_cpu_static ...`),
+//     or import `github.com/gomlx/gomlx/backends/xla/cpu/static`. Both methods have the same effect.
+//   - Pre-link the CPU PJRT plugin dynamically: build with the build tag `pjrt_cpu_dynamic` (e.g.: `go test --tags pjrt_cpu_dynamic ...`),
+//     or import `github.com/gomlx/gomlx/backends/xla/cpu/dynamic`. Not much difference from linking the PJRT plugin
+//     after the program starts, as default.
+//
+// Darwin (MacOS): currently dynamic linking XLA/PJRT is not working, so it links the CPU PJRT plugin by default,
+// no need to manually link `github.com/gomlx/gomlx/backends/xla/cpu/static`.
 package xla
 
 //go:generate go run ../../cmd/xla_generator

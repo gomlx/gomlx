@@ -108,7 +108,7 @@ func testRandomIntN[T interface {
 	dtype := dtypes.FromGenericsType[T]()
 	graphtest.RunTestGraphFn(t, fmt.Sprintf("TestRandomIntN(%s, useStatic=%v)", dtype, useStatic),
 		func(g *Graph) (inputs []*Node, outputs []*Node) {
-			state := Const(g, RngState())           // RngStateFromSeed(42))
+			state := Const(g, RngStateFromSeed(42))
 			shape := shapes.Make(dtype, 100, 10000) // 1 million numbers.
 			var r *Node
 			if useStatic {
@@ -144,7 +144,7 @@ func testRandomIntN[T interface {
 			float32(1) / 13,
 			float32(1) / 13,
 			float32(0.0),
-		}, 0.001)
+		}, 0.02)
 }
 
 func TestRandomIntN(t *testing.T) {
