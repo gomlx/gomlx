@@ -46,9 +46,9 @@ and error messages are useful and try to make it easy to solve issues.
 from the bottom to the top of the stack. But it is still only a slice of what a major ML library/framework should provide 
 (like TensorFlow, Jax or PyTorch).
 
-It includes:
 
-* Examples: 
+**Examples:**
+
   * [Adult/Census model](https://gomlx.github.io/gomlx/notebooks/uci-adult.html);
   * [How KANs learn ?](https://gomlx.github.io/gomlx/notebooks/kan_shapes.html); 
   * [Cifar-10 demo](https://gomlx.github.io/gomlx/notebooks/cifar.html); 
@@ -59,9 +59,17 @@ It includes:
     [Google DeepMind's Gemma v2 model](https://github.com/google-deepmind/gemma) ([blog post](https://ai.google.dev/gemma))
   * [GNN model for OGBN-MAG (experimental)](examples/ogbnmag/ogbn-mag.ipynb).
   * Last, a trivial [synthetic linear model](https://github.com/gomlx/gomlx/blob/main/examples/linear/linear.go), for those curious to see a barebones simple model.
-* **(🚀New, Experimental)** Converting ONNX models to GoMLX with [onnx-gomlx](https://github.com/gomlx/onnx-gomlx): both as an alternative for `onnxruntime` (leveraging XLA), but also to further fine-tune models. See also [go-huggingface](https://github.com/gomlx/go-huggingface) to easily download ONNX models from HuggingFace.
+
+> **🚀 NEW 🚀**: 
+>    - Converting ONNX models to GoMLX with [onnx-gomlx](https://github.com/gomlx/onnx-gomlx): both as an alternative for `onnxruntime` (leveraging XLA), but also to further fine-tune models. See also [go-huggingface](https://github.com/gomlx/go-huggingface) to easily download ONNX models from HuggingFace.
+>    - Support static linking of PJRT: slower to build the Go program, but deploying it doesn't require installing a PJRT plugin in the machine you are deploying it. 
+>      Use `go build --tags=pjrt_cpu_static` or include `import _ "github.com/gomlx/gomlx/backends/xla/cpu/static"`. 
+>    - Experimental 🚧🛠 support for MacOS (both Arm64 and the older x86_64) for CPU: only with static linking so far.
+
+**Highlights:**
+
 * Pre-Trained models to use: InceptionV3 (image model) -- more to come.
-* Docker with integrated JupyterLab and [GoNB](https://github.com/janpfeifer/gonb) (a Go kernel for Jupyter notebooks)
+* [Docker "gomlx_jupyterlab"](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab) with integrated JupyterLab and [GoNB](https://github.com/janpfeifer/gonb) (a Go kernel for Jupyter notebooks)
 * Just-In-Time (JIT) compilation using [OpenXLA](https://github.com/openxla/xla) for CPUs and GPUs -- hopefully soon TPUs.
 * Autograd: automatic differentiation -- only gradients for now, no jacobian.
 * Context: automatic variable management for ML models.
@@ -84,36 +92,39 @@ It includes:
 
 ## <a id="installation"></a>🛠️ + ⚙️ Installation
 
-**TLDR;**: Two options: (1) [Use the Docker](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab); 
-(2) Pre-built for Linux (works in Windows WSL) or an experimental version for Apple/Metal: install 
-[**gopjrt** (see installation instructions)](https://github.com/gomlx/gopjrt?#installing) 
-(optional: [Nvidia's cuda support](https://github.com/gomlx/gopjrt?#installing)) or simply use the command(s) below. 
-Depending on what data formats you use, you may want to install `hdf5-tools` programs (`sudo apt install hdf5-tools`).
+**TLDR;**: Two simple options:
 
-For Linux (amd64), to install the XLA/PJRT engine (**goprjt**), run the following ([see source](https://github.com/gomlx/gopjrt/blob/main/cmd/install_linux_amd64.sh)):
+(1) [Use the Docker](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab);
+
+(2) Use pre-built binaries (C/C++ libraries) for Linux or MacOS (Darwin). See commands below, or more more details see  
+[**gopjrt** installation instructions](https://github.com/gomlx/gopjrt?#installing).
+ 
+
+### **Linux/amd64**, run ([see source](https://github.com/gomlx/gopjrt/blob/main/cmd/install_linux_amd64.sh)):
 
 ```bash
 curl -sSf https://raw.githubusercontent.com/gomlx/gopjrt/main/cmd/install_linux_amd64.sh | bash
 ```
 
-In addition, for Linux+CUDA (NVidia GPU) support, run the following ([see source](https://github.com/gomlx/gopjrt/blob/main/cmd/install_cuda.sh))
+In addition, for **Linux+CUDA (NVidia GPU)** support, run ([see source](https://github.com/gomlx/gopjrt/blob/main/cmd/install_cuda.sh)):
 
 ```bash
 curl -sSf https://raw.githubusercontent.com/gomlx/gopjrt/main/cmd/install_cuda.sh | bash
 ```
 
+Depending on what data formats you use, you may want to install `hdf5-tools` programs (`sudo apt install hdf5-tools` in Linux).
+
+### **Darwin/arm64 and Darwin/amd64**
 
 > [!Note]
-> *🚧🛠️ Mac (Darwin) support currently broken 🛠🚧️*: follow discussion in [XLA's issue #19152](https://github.com/openxla/xla/issues/19152) (and on XLA's discord channels).
+> Currently, Darwin (MacOS) 🚧🛠 it only works with statically linked PJR CPU plugin 🛠🚧️ so that is the default (see issue in [XLA's issue #19152](https://github.com/openxla/xla/issues/19152) and on XLA's discord channels).
+**Experimental**.
 
-**GoMLX** is mostly a normal Go library, but it depends on [**gopjrt**](https://github.com/gomlx/gopjrt), which
-includes C wrappers to XLA (itself C++ code base). 
-Installing **gopjrt** is relatively straight forward, follow
-[the installation instructions](https://github.com/gomlx/gopjrt?#installing) 
-(notice the optional Nvidia CUDA support, if you are interested).
+For **Arm64 (M1, M2, ... CPUs)**, run ([see source](https://github.com/gomlx/gopjrt/blob/main/cmd/install_darwin_arm64.sh))
 
-Releases are for Linux/amd64 and experimental Mac only for now. 
-They do work well with WSL (Windows Subsystem for Linux) in Windows.
+```bash
+curl -sSf https://raw.githubusercontent.com/gomlx/gopjrt/main/cmd/install_darwin_arm64.sh | bash
+```
 
 ### 🐳  [Pre-built Docker](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab)
 
@@ -178,8 +189,8 @@ In the future we plan to also export models to ONNX or StableHLO and one could u
      parallelism) in particular to support for large language models and similarly large model training.
 3. To be a robust and reliable platform for production. Some sub-goals:
    - Support modern accelerator hardware like TPUs and GPUs.
-   - Multiple backends, e.g:  llamacpp, WebNN (with Wasm), pure Go version, etc.
-   - Import pre-trained models from [Hugging Face Hub](https://huggingface.co/models) -- maybe using ONNX -- and allow fine-tuning.
+   - Multiple backends beyond XLA, e.g:  llamacpp, WebNN (with Wasm), pure Go version, etc.
+   - Import pre-trained models from [Hugging Face Hub](https://huggingface.co/models) and allow fine-tuning -- ONNX versions already working for many models in [onnx-gomlx](https://github.com/gomlx/onnx-gomlx).  
    - Compile models to binary as in C-libraries and/or WebAssembly, to be linked and consumed (inference) anywhere
      (any language).
 
