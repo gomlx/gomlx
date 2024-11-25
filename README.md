@@ -13,7 +13,7 @@
 **GoMLX** is a fast and easy-to-use set of Machine Learning and generic math libraries and tools. 
 It can be seen as a **PyTorch/Jax/TensorFlow for Go**.
 
-It uses just-in-time compilation to CPU and GPU (hopefully soon TPUs also) and is built on
+It uses just-in-time compilation to CPU and GPU (and TPUs also). It is built on
 top of [OpenXLA/PJRT](https://github.com/openxla/xla), which itself uses LLVM to JIT-compile code.
 It's the same engine that powers Google's [Jax](https://github.com/google/jax) and 
 [TensorFlow](https://tensorflow.org/), and it has the same speed in many cases.
@@ -21,6 +21,7 @@ It's the same engine that powers Google's [Jax](https://github.com/google/jax) a
 > [!Tip]
 > 🎓 Quick Start:
 > * See our [**tutorial**](https://gomlx.github.io/gomlx/notebooks/tutorial.html)
+> * See _Eli Bendersky_'s blog post ["GoMLX: ML in Go without Python"](https://eli.thegreenplace.net/2024/gomlx-ml-in-go-without-python/)
 > * A [guided example for Kaggle Dogs Vs Cats](https://gomlx.github.io/gomlx/notebooks/dogsvscats.html).
 > * [Installation here](#installation).
 
