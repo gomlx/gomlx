@@ -1,6 +1,6 @@
 # GoMLX changelog
 
-# Next
+# v0.15.3 - 2024/11/25
 
 * Added pre-linking of CPU PJRT packages, both statically and dynamically.
 * Re-enabling Mac version: currently only statically linked.
