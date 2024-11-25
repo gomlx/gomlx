@@ -44,7 +44,7 @@ EOF
 #######################################################################################################
 # Go, GoNB and gopjrt
 #######################################################################################################
-ARG GO_VERSION="1.23.1"
+ARG GO_VERSION="1.23.3"
 ENV LD_LIBRARY_PATH /usr/local/lib:${LD_LIBRARY_PATH}
 
 # Download Go in users home directory.
@@ -65,7 +65,6 @@ RUN go install github.com/janpfeifer/gonb@latest \
 
 
 # Clone and install gopjrt.
-ARG GOPJRT_VERSION="v0.4.7"
 USER ${NB_USER}
 WORKDIR ${HOME}
 RUN <<EOF
