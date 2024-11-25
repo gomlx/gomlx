@@ -122,11 +122,11 @@ github.com/gomlx/gomlx/backends/xla/gen_standard_ops.go:997:			Tanh						80.0%
 github.com/gomlx/gomlx/backends/xla/gen_standard_ops.go:1009:			Transpose					80.0%
 github.com/gomlx/gomlx/backends/xla/gen_standard_ops.go:1019:			Where						85.7%
 github.com/gomlx/gomlx/backends/xla/gen_standard_ops.go:1032:			Xor						83.3%
-github.com/gomlx/gomlx/backends/xla/xla.go:24:					New						100.0%
-github.com/gomlx/gomlx/backends/xla/xla.go:30:					NewWithOptions					62.5%
-github.com/gomlx/gomlx/backends/xla/xla.go:76:					SupressLogging					0.0%
-github.com/gomlx/gomlx/backends/xla/xla.go:82:					init						100.0%
-github.com/gomlx/gomlx/backends/xla/xla.go:104:					GetAvailablePlugins				100.0%
+github.com/gomlx/gomlx/backends/xla/xla.go:44:					New						100.0%
+github.com/gomlx/gomlx/backends/xla/xla.go:50:					NewWithOptions					62.5%
+github.com/gomlx/gomlx/backends/xla/xla.go:96:					SupressLogging					0.0%
+github.com/gomlx/gomlx/backends/xla/xla.go:102:					init						100.0%
+github.com/gomlx/gomlx/backends/xla/xla.go:124:					GetAvailablePlugins				100.0%
 github.com/gomlx/gomlx/graph/asserts.go:43:					AssertDims					83.3%
 github.com/gomlx/gomlx/graph/asserts.go:63:					AssertRank					100.0%
 github.com/gomlx/gomlx/graph/asserts.go:76:					AssertScalar					100.0%
