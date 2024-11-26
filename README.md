@@ -126,6 +126,12 @@ For **Arm64 (M1, M2, ... CPUs)**, run ([see source](https://github.com/gomlx/gop
 curl -sSf https://raw.githubusercontent.com/gomlx/gopjrt/main/cmd/install_darwin_arm64.sh | bash
 ```
 
+For **Amd64 (i86_64)**, run ([see source](https://github.com/gomlx/gopjrt/blob/main/cmd/install_darwin_amd64.sh))
+
+```bash
+curl -sSf https://raw.githubusercontent.com/gomlx/gopjrt/main/cmd/install_darwin_amd64.sh | bash
+```
+
 ### 🐳  [Pre-built Docker](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab)
 
 The easiest to start playing with it, it's just [pulling the docker image](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab)
