@@ -1,5 +1,9 @@
 # GoMLX changelog
 
+# Next
+
+* XLA backend now accepts the absolute path to the PJRT plugin (`GOMLX_BACKEND="xla:<pjrt_path>"`)
+
 # v0.15.3 - 2024/11/25
 
 * Added pre-linking of CPU PJRT packages, both statically and dynamically.

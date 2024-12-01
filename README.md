@@ -205,6 +205,16 @@ In the future we plan to also export models to ONNX or StableHLO and one could u
    - Compile models to binary as in C-libraries and/or WebAssembly, to be linked and consumed (inference) anywhere
      (any language).
 
+## FAQ
+
+- **What are the environment variables are used by GoMLX ?** 
+  - `GOMLX_BACKEND`: defines the backend engine to use (if using `backend.New()`). The value is formated as "<backend_name>:<backend_config>".
+    Examples for XLA, the default engine: `GOMLX_BACKEND="xla:cpu"` (for CPU), `GOMLX_BACKEND="xla:gpu"` (for CUDA) or
+    `GOMLX=BACKEND="xla:/path/to/my/pjrt_plugin.so"` for some custom PJRT plugin.
+  - `PJRT_PLUGIN_LIBRARY_PATH`: the underlying XLA backend uses this variable as an extra directory to search for plugin locations.
+    It searches for the systems library paths (`$LD_LIBRARY_PATH`, `/etc/ld.so.conf`), the default `/usr/local/lib/gomlx/pjrt` and
+    `$PJRT_PLUGIN_LIBRARY_PATH` if set.
+
 ## 🤝 Collaborating
 
 The project is looking forward contributions for anyone interested. Many parts are not yet set 
