@@ -33,6 +33,7 @@ import (
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/pjrt"
 	"github.com/pkg/errors"
+	"path"
 	"slices"
 	"strings"
 )
@@ -56,16 +57,19 @@ func NewWithOptions(pluginName string, options pjrt.NamedValuesMap) *Backend {
 		pluginName = parts[0]
 	}
 
-	plugins := GetAvailablePlugins()
-	if len(plugins) == 0 {
-		exceptions.Panicf("no plugins found for backend %q -- either use the absolute "+
-			"path to the pluginName as the configuration or set PJRT_PLUGIN_LIBRARY_PATH to the path where to search for "+
-			"PJRT plugins", BackendName)
-	}
-	if pluginName == "" {
-		pluginName = plugins[0]
-	} else if slices.Index(plugins, pluginName) == -1 {
-		exceptions.Panicf("Plugin %q for backend %q not found: available plugins found %q", pluginName, BackendName, plugins)
+	if !path.IsAbs(pluginName) {
+		// Verify the pluginName is available.
+		plugins := GetAvailablePlugins()
+		if len(plugins) == 0 {
+			exceptions.Panicf("no plugins found for backend %q -- either use the absolute "+
+				"path to the pluginName as the configuration or set PJRT_PLUGIN_LIBRARY_PATH to the path where to search for "+
+				"PJRT plugins", BackendName)
+		}
+		if pluginName == "" {
+			pluginName = plugins[0]
+		} else if slices.Index(plugins, pluginName) == -1 {
+			exceptions.Panicf("Plugin %q for backend %q not found: available plugins found %q", pluginName, BackendName, plugins)
+		}
 	}
 
 	plugin, err := pjrt.GetPlugin(pluginName)
