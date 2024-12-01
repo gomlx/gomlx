@@ -15,7 +15,7 @@ It can be seen as a **PyTorch/Jax/TensorFlow for Go**.
 
 It can be used to train, fine-tune, modify and combine machine learning models. It provides all
 the tools to make that work easy: from a complete set of differentiable operators, all the way to UI
-tools to plot metrics while training in a notebooy.
+tools to plot metrics while training in a notebook.
 
 It's main backend engine based on [OpenXLA/PJRT](https://github.com/openxla/xla) uses just-in-time
 compilation to CPU and GPU (optionally TPUs also). 
