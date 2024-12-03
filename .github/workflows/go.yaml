@@ -62,12 +62,14 @@ jobs:
         go test -short $(go list ./... | grep -v "ui/fyneui" | grep -v "examples/ogbnmag")
 
     - name: Go Coverage Badge
+      if: github.ref == 'refs/heads/main'
       uses: tj-actions/coverage-badge-go@v2
       with:
         green: 80
         filename: docs/coverage.out
 
     - name: Commit README.md changes
+      if: github.ref == 'refs/heads/main'
       run: |
         if git diff --quiet -- 'README.md' ; then
           echo "README.md not modified."
@@ -79,6 +81,7 @@ jobs:
         fi
 
     - name: Push Changes
+      if: github.ref == 'refs/heads/main'
       uses: ad-m/github-push-action@master
       with:
         github_token: ${{ github.token }}

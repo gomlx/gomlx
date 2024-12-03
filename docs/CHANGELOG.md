@@ -3,6 +3,8 @@
 # Next
 
 * XLA backend now accepts the absolute path to the PJRT plugin (`GOMLX_BACKEND="xla:<pjrt_path>"`)
+* Updated GitHub action (`go.yaml`) to only change the README.md with the result of the change, if pushing to the
+  `main` branch.
 
 # v0.15.3 - 2024/11/25
 
