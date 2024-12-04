@@ -190,6 +190,14 @@ type gradTestFunc func(g *Graph) (output *Node, nodesForGrad []*Node)
 //
 // It will print out the inputNodes and outputs to help debugging.
 func testGradients(t *testing.T, name string, testFn gradTestFunc, wantForGrad []any) {
+	testGradientsInDelta(t, name, testFn, wantForGrad, Epsilon)
+}
+
+// testGradientsInDelta run testFn to build a graph, calculates the gradients of the ReduceAllSum(output) with respect
+// to the nodesForGrad, and check that it gets the corresponding values in wantForGrad, withing a delta-margin (at every element).
+//
+// It will print out the inputNodes and outputs to help debugging.
+func testGradientsInDelta(t *testing.T, name string, testFn gradTestFunc, wantForGrad []any, delta float64) {
 	backend := graphtest.BuildTestBackend()
 	fmt.Printf("%s:\n", name)
 	// Create a function that can be used by computation.Exec.
@@ -207,8 +215,8 @@ func testGradients(t *testing.T, name string, testFn gradTestFunc, wantForGrad [
 	}
 	require.Equalf(t, len(wantForGrad), len(gradients), "%s: number of wanted results different from number of gradients", name)
 	for ii, output := range gradients {
-		require.Truef(t, tensors.FromAnyValue(wantForGrad[ii]).InDelta(output, Epsilon),
-			"%s: gradient #%d doesn't match wanted value\n\t%v", name, ii, wantForGrad[ii])
+		require.Truef(t, tensors.FromAnyValue(wantForGrad[ii]).InDelta(output, delta),
+			"%s: gradient #%d doesn't match wanted value (withing %g delta/margin)\n\t%v", name, ii, delta, wantForGrad[ii])
 	}
 }
 
@@ -316,6 +324,24 @@ func TestGradientExp(t *testing.T) {
 			output = Mul(Const(g, []float64{2, 1, 3, 4, 5}), Exp(inputs))
 			return output, []*Node{inputs}
 		}, []any{[]float64{2 * math.Exp(6), math.Exp(1), 3, 4 * math.Exp(-2), 5 * math.Exp(-3)}},
+	)
+}
+
+func TestGradientPow(t *testing.T) {
+	a := []float64{3, 1, 0.5}
+	b := []float64{3, 1, -2}
+	testGradientsInDelta(t, "gradient_of_pow",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			aNode, bNode := Const(g, a), Const(g, b)
+			aNode = BroadcastToDims(Reshape(aNode, 1, 3), 3, 3)
+			bNode = BroadcastToDims(Reshape(bNode, 3, 1), 3, 3)
+			output = Pow(aNode, bNode)
+			return output, []*Node{aNode, bNode}
+		}, []any{
+			[][]float64{{27, 3, 0.75}, {1, 1, 1}, {-0.0741, -2, -16}},
+			[][]float64{{29.663, 0, -0.0866}, {3.296, 0, -0.347}, {0.122, 0, -2.77}},
+		},
+		0.01,
 	)
 }
 

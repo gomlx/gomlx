@@ -371,6 +371,7 @@ var VJPRegistration = map[NodeType]VJP{
 	NodeTypeSub:                  vjpForSingleOutput(subVJP),
 	NodeTypeMul:                  vjpForSingleOutput(mulVJP),
 	NodeTypeDiv:                  vjpForSingleOutput(divVJP),
+	NodeTypePow:                  vjpForSingleOutput(powVJP),
 	NodeTypeSqrt:                 vjpForSingleOutput(sqrtVJP),
 	NodeTypeErf:                  vjpForSingleOutput(erfVJP),
 	NodeTypeBatchNormForTraining: batchNormForTrainingVJP,
@@ -608,6 +609,32 @@ func divVJP(node, v *Node, _ shapes.Shape) []*Node {
 	inputsVJPs[1] = vjpForDefaultBroadcast(node, node.inputNodes[1],
 		Neg(Mul(v, Div(a, Mul(b, b))))) // -v*a/b^2
 	return inputsVJPs
+}
+
+// VJP formulation for Pow (without consideration to broadcasting):
+// F(a,b) = pow(a,b) = a^b ->  v*dF/da = v*b*a^(b-1) ; v*dF/db = v*log(a)*a^b
+//
+// Notice this will break (NaN) if "a" is negative.
+// TODO: handle the negative case for complex numbers, if one wants that.
+func powVJP(node, v *Node, _ shapes.Shape) []*Node {
+	broadcastInputs := make([]*Node, 2)
+	for ii := 0; ii < 2; ii++ {
+		broadcastInputs[ii] = node.inputNodes[ii]
+		if !broadcastInputs[ii].Shape().Equal(node.Shape()) {
+			broadcastInputs[ii] = BroadcastToShape(broadcastInputs[ii], node.Shape())
+		}
+	}
+	a, b := broadcastInputs[0], broadcastInputs[1]
+	powAB := node
+	// v*dF/da = v*b*a^(b-1)
+	dA := Mul(v, Mul(b, Pow(a, AddScalar(b, -1))))
+	// v*dF/db = v*log(a)*a^b
+	dB := Mul(v, Mul(Log(a), powAB))
+
+	return []*Node{
+		vjpForDefaultBroadcast(node, node.inputNodes[0], dA),
+		vjpForDefaultBroadcast(node, node.inputNodes[1], dB),
+	}
 }
 
 func minMaxVJP(node, v *Node, _ shapes.Shape) []*Node {
