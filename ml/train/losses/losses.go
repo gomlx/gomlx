@@ -21,8 +21,12 @@
 package losses
 
 import (
+	"fmt"
+
 	. "github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/graph"
 	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 )
@@ -397,4 +401,33 @@ func MakeHuberLoss(delta float64) LossFn {
 		}
 		return loss
 	}
+}
+
+// CosineSimilarityLoss computes the cosine similarity loss between two predictions.
+//
+// It assumes two predictions are provided which should be tensors of rank 2 with the same dimensions (N, D).
+// It also assumes there is one label tensor with rank 2 with dimensions (N, 1) that contains the target cosine similarity.
+// The loss will then calculate the residuals between the cosine similarity of the two prediction tensors row-wise
+// and the target cosine similarity, and return the mean of the squared residuals.
+func CosineSimilarityLoss(labels, predictions []*context.Node) *context.Node {
+	predictionsLeft := predictions[0]
+	predictionsRight := predictions[1]
+	scores := labels[0]
+
+	if predictionsLeft.Shape().Rank() != 2 {
+		panic(fmt.Errorf("expected rank 2, got %d", predictionsLeft.Shape().Rank()))
+	}
+	if predictionsRight.Shape().Rank() != 2 {
+		panic(fmt.Errorf("expected rank 2, got %d", predictionsLeft.Shape().Rank()))
+	}
+	if scores.Shape().Rank() != 2 {
+		panic(fmt.Errorf("expected rank 2, got %d", predictionsLeft.Shape().Rank()))
+	}
+	dotProduct := graph.ReduceAndKeep(graph.Mul(predictionsLeft, predictionsRight), graph.ReduceSum, 1)
+	normLeft := graph.L2Norm(predictionsLeft, 1)
+	normRight := graph.L2Norm(predictionsRight, 1)
+	similarity := graph.Div(dotProduct, graph.Mul(normLeft, normRight))
+	residuals := graph.L2NormSquare(graph.Sub(scores, similarity), 1)
+	loss := graph.ReduceAllMean(residuals)
+	return loss
 }

@@ -4,12 +4,13 @@ package graph
 
 import (
 	"fmt"
+	"slices"
+	"strings"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
-	"slices"
-	"strings"
 )
 
 type NodeType int
@@ -912,7 +913,7 @@ func (ni *nodeInputsDiv) String() string {
 	)
 }
 
-// Div returns the element-wise subtraction of the two values.
+// Div returns the element-wise division of the two values.
 // Standard broadcasting rules apply (see documentation).
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func Div(x0 *Node, x1 *Node) (node *Node) {
