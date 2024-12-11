@@ -101,10 +101,10 @@ var testShapes = []shapes.Shape{
 // Results on cpu:
 //
 //	cpu: 12th Gen Intel(R) Core(TM) i9-12900K
-//	BenchmarkHostToDevice/(Float32)[1_1]-24                   474925              3090 ns/op
-//	BenchmarkHostToDevice/(Float32)[10_10]-24                 351164              3299 ns/op
-//	BenchmarkHostToDevice/(Float32)[100_100]-24               280496              4270 ns/op
-//	BenchmarkHostToDevice/(Float32)[1000_1000]-24               8754            135083 ns/op
+//	BenchmarkHostToDevice/(Float32)[1_1]-24                   720470              1629 ns/op
+//	BenchmarkHostToDevice/(Float32)[10_10]-24                 720577              1770 ns/op
+//	BenchmarkHostToDevice/(Float32)[100_100]-24               464420              2532 ns/op
+//	BenchmarkHostToDevice/(Float32)[1000_1000]-24               8936            133507 ns/op
 func BenchmarkHostToDevice(b *testing.B) {
 	setupTest(nil)
 
