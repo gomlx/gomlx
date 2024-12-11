@@ -21,8 +21,10 @@ type DataInterface interface {
 	// BufferDeviceNum returns the deviceNum for the buffer.
 	BufferDeviceNum(buffer Buffer) DeviceNum
 
-	// BufferToFlatData transfers the flat values of buffer to the Go flat array. The slice flat must have
-	// the exact number of elements required to store the Buffer shape. See BufferShape, and shapes.Shape.Size.
+	// BufferToFlatData transfers the flat values of buffer to the Go flat array.
+	// The slice flat must have the exact number of elements required to store the Buffer shape.
+	//
+	// See also FlatDataToBuffer, BufferShape, and shapes.Shape.Size.
 	BufferToFlatData(buffer Buffer, flat any)
 
 	// BufferFromFlatData transfers data from Go given as a flat slice (of the type corresponding to the shape DType)

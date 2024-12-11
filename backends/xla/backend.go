@@ -116,8 +116,10 @@ func (backend *Backend) BufferDeviceNum(buffer backends.Buffer) backends.DeviceN
 	return backends.DeviceNum(num)
 }
 
-// BufferToFlatData transfers the flat values of buffer to the Go flat array. The slice flat must have
-// the exact number of elements required to store the Buffer shape. See BufferShape, and shapes.Shape.Size.
+// BufferToFlatData transfers the flat values of buffer to the Go flat array.
+// The slice flat must have the exact number of elements required to store the Buffer shape.
+//
+// See also FlatDataToBuffer, BufferShape, and shapes.Shape.Size.
 func (backend *Backend) BufferToFlatData(buffer backends.Buffer, flat any) {
 	backend.AssertValid()
 	shape := backend.BufferShape(buffer)
