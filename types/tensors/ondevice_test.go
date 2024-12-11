@@ -9,6 +9,7 @@ import (
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
 	"k8s.io/klog/v2"
+	"sync"
 	"testing"
 )
 
@@ -22,10 +23,17 @@ func init() {
 }
 
 func setupTest(t *testing.T) {
-	backends.DefaultConfig = *flagBackend
-	require.NotPanics(t, func() {
-		backend = backends.New()
-	})
+	// setupTest is also called from benchmarks, make sure it only executes once though.
+	sync.OnceFunc(func() {
+		backends.DefaultConfig = *flagBackend
+		if t != nil {
+			require.NotPanics(t, func() {
+				backend = backends.New()
+			})
+		} else {
+			backend = backends.New()
+		}
+	})()
 }
 
 func testOnDeviceInputOutputImpl[T dtypes.Number](t *testing.T, backend backends.Backend) {
@@ -79,4 +87,140 @@ func TestOnDeviceInputOutput(t *testing.T) {
 
 	testOnDeviceInputOutputImpl[complex64](t, backend)
 	testOnDeviceInputOutputImpl[complex128](t, backend)
+}
+
+var testShapes = []shapes.Shape{
+	shapes.Make(dtypes.Float32, 1, 1),
+	shapes.Make(dtypes.Float32, 10, 10),
+	shapes.Make(dtypes.Float32, 100, 100),
+	shapes.Make(dtypes.Float32, 1000, 1000),
+}
+
+func BenchmarkHostToDevice(b *testing.B) {
+	setupTest(nil)
+
+	// Pre-allocate tensors.
+	numShapes := len(testShapes)
+	inputTensors := make([]*Tensor, numShapes)
+	for shapeIdx, s := range testShapes {
+		inputTensors[shapeIdx] = FromShape(s)
+		MutableFlatData[float32](inputTensors[shapeIdx], func(flat []float32) {
+			for ii := range flat {
+				flat[ii] = 0 // float32(ii)
+			}
+		})
+	}
+
+	// Run test for a shape
+	benchShape := func(v float32, shapeIdx int) {
+		// Set input to value of v.
+		x := inputTensors[shapeIdx]
+		x.MaterializeOnDevices(backend)
+		x.InvalidateOnDevice()
+	}
+
+	// Warmup for each shape.
+	for shapeIdx := range testShapes {
+		for i := range 10 {
+			benchShape(float32(i), shapeIdx)
+		}
+	}
+
+	// Reset timer and start actual benchmark
+	b.ResetTimer()
+
+	// Test each shape.
+	for shapeIdx, s := range testShapes {
+		b.Run(s.String(), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				benchShape(float32(i), shapeIdx)
+			}
+		})
+	}
+}
+
+func BenchmarkCopyFromLocal(b *testing.B) {
+	setupTest(nil)
+
+	// Pre-allocate tensors.
+	numShapes := len(testShapes)
+	inputTensors := make([]*Tensor, numShapes)
+	outputTensors := make([]*Tensor, numShapes)
+	for shapeIdx, s := range testShapes {
+		inputTensors[shapeIdx] = FromShape(s)
+		MutableFlatData[float32](inputTensors[shapeIdx], func(flat []float32) {
+			for ii := range flat {
+				flat[ii] = float32(ii)
+			}
+		})
+		outputTensors[shapeIdx] = FromShape(s)
+	}
+
+	// Run test for a shape
+	benchShape := func(v float32, shapeIdx int) {
+		outputTensors[shapeIdx].CopyFrom(inputTensors[shapeIdx])
+	}
+
+	// Warmup for each shape.
+	for shapeIdx := range testShapes {
+		for i := range 10 {
+			benchShape(float32(i), shapeIdx)
+		}
+	}
+
+	// Reset timer and start actual benchmark
+	b.ResetTimer()
+
+	// Test each shape.
+	for shapeIdx, s := range testShapes {
+		b.Run(s.String(), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				benchShape(float32(i), shapeIdx)
+			}
+		})
+	}
+}
+
+func BenchmarkCopyFromDevice(b *testing.B) {
+	setupTest(nil)
+
+	// Pre-allocate tensors.
+	numShapes := len(testShapes)
+	inputTensors := make([]*Tensor, numShapes)
+	outputTensors := make([]*Tensor, numShapes)
+	for shapeIdx, s := range testShapes {
+		inputTensors[shapeIdx] = FromShape(s)
+		MutableFlatData[float32](inputTensors[shapeIdx], func(flat []float32) {
+			for ii := range flat {
+				flat[ii] = float32(ii)
+			}
+		})
+		inputTensors[shapeIdx].MaterializeOnDevices(backend)
+		inputTensors[shapeIdx].FinalizeLocal()
+		outputTensors[shapeIdx] = FromShape(s)
+	}
+
+	// Run test for a shape
+	benchShape := func(v float32, shapeIdx int) {
+		outputTensors[shapeIdx].CopyFrom(inputTensors[shapeIdx])
+	}
+
+	// Warmup for each shape.
+	for shapeIdx := range testShapes {
+		for i := range 10 {
+			benchShape(float32(i), shapeIdx)
+		}
+	}
+
+	// Reset timer and start actual benchmark
+	b.ResetTimer()
+
+	// Test each shape.
+	for shapeIdx, s := range testShapes {
+		b.Run(s.String(), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				benchShape(float32(i), shapeIdx)
+			}
+		})
+	}
 }
