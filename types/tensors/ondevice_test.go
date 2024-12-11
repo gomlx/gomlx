@@ -96,6 +96,15 @@ var testShapes = []shapes.Shape{
 	shapes.Make(dtypes.Float32, 1000, 1000),
 }
 
+// BenchmarkHostToDevice benchmarks for various sizes of transfer from host to device.
+//
+// Results on cpu:
+//
+//	cpu: 12th Gen Intel(R) Core(TM) i9-12900K
+//	BenchmarkHostToDevice/(Float32)[1_1]-24                   474925              3090 ns/op
+//	BenchmarkHostToDevice/(Float32)[10_10]-24                 351164              3299 ns/op
+//	BenchmarkHostToDevice/(Float32)[100_100]-24               280496              4270 ns/op
+//	BenchmarkHostToDevice/(Float32)[1000_1000]-24               8754            135083 ns/op
 func BenchmarkHostToDevice(b *testing.B) {
 	setupTest(nil)
 
@@ -139,6 +148,14 @@ func BenchmarkHostToDevice(b *testing.B) {
 	}
 }
 
+// Benchmark of local copy of tensors of various sizes.
+//
+// Results on cpu:
+//
+//	BenchmarkCopyFromLocal/(Float32)[1_1]-24                29717851                37.48 ns/op
+//	BenchmarkCopyFromLocal/(Float32)[10_10]-24              29925506                39.23 ns/op
+//	BenchmarkCopyFromLocal/(Float32)[100_100]-24             1992057               613.4 ns/op
+//	BenchmarkCopyFromLocal/(Float32)[1000_1000]-24             10000            114128 ns/op
 func BenchmarkCopyFromLocal(b *testing.B) {
 	setupTest(nil)
 
@@ -181,6 +198,14 @@ func BenchmarkCopyFromLocal(b *testing.B) {
 	}
 }
 
+// BenchmarkCopyFromDevice benchmarks the time to transfer from device to local.
+//
+// Results on CPU:
+//
+//	BenchmarkCopyFromDevice/(Float32)[1_1]-24                 391078              2948 ns/op
+//	BenchmarkCopyFromDevice/(Float32)[10_10]-24               413571              2882 ns/op
+//	BenchmarkCopyFromDevice/(Float32)[100_100]-24             217750              5967 ns/op
+//	BenchmarkCopyFromDevice/(Float32)[1000_1000]-24             8544            132102 ns/op
 func BenchmarkCopyFromDevice(b *testing.B) {
 	setupTest(nil)
 
