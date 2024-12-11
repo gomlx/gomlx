@@ -57,6 +57,8 @@ func (t *Tensor) Buffer(backend backends.Backend, deviceNum ...backends.DeviceNu
 //
 // It triggers the transfer from local to the device, if the tensor is not already store on device.
 //
+// It doesn't finalize(release) the local tensor value.
+//
 // The deviceNum is optional. But only one can be given. The default value is 0.
 func (t *Tensor) DonateBuffer(backend backends.Backend, deviceNum ...backends.DeviceNum) backends.Buffer {
 	t.mu.Lock()
@@ -139,7 +141,7 @@ func (t *Tensor) lockedMaterializeOnDevices(backend backends.Backend, deviceNums
 			continue
 		}
 
-		// For now we only materialize from local:
+		// For now, we only materialize from local:
 		if t.local == nil {
 			// Materialize locally from any other device.
 			t.lockedMaterializeLocal()
@@ -175,9 +177,6 @@ func (t *Tensor) InvalidateOnDevice() {
 }
 
 // lockedInvalidateOnDevice destroys all on-device copies of the Tensor.
-//
-// This is automatically called when the Tensor is mutated (e.g.: Tensor.MutableFlatData) or when the on-device value
-// is donated to the execution of a graph.
 //
 // If there is no local copy of the Tensor, this will invalidate the tensor.
 //
@@ -232,6 +231,50 @@ func (t *Tensor) lockedMaterializeLocal() {
 		flat: flatV.Interface(),
 	}
 	t.backend.BufferToFlatData(d.buffer, t.local.flat)
+}
+
+// CopyFrom will copy the contents from tFrom. t and tFrom must have the same shape.
+//
+// This is efficient if tFrom is on-device only, in which case the device values are materialized
+// locally into t, the receiving tensor.
+func (t *Tensor) CopyFrom(tFrom *Tensor) {
+	if !t.Shape().Equal(tFrom.Shape()) {
+		exceptions.Panicf("Tensor.CopyFrom() among different shaped tensors: receiver has shape %s, and tFrom has shape %s",
+			t.Shape(), tFrom.Shape())
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	// Make sure t has a receiving local data.
+	if !t.IsLocal() {
+		t.lockedMaterializeLocal()
+		t.lockedInvalidateOnDevice()
+	}
+
+	// Lock tFrom.
+	tFrom.mu.Lock()
+	defer tFrom.mu.Unlock()
+
+	if tFrom.IsLocal() {
+		// Simple local copy
+		reflect.Copy(reflect.ValueOf(t.local.flat), reflect.ValueOf(tFrom.local.flat))
+		return
+	}
+
+	// Materialize tFrom onDevice to tFrom.
+	// Get on-device version: try default (deviceNum==0) first.
+	deviceNum := backends.DeviceNum(0)
+	d, found := tFrom.onDevices[deviceNum]
+	if !found {
+		for deviceNum, d = range tFrom.onDevices {
+			break
+		}
+	}
+	if d.IsFinalized() {
+		exceptions.Panicf("Tensor(shape=%s).CopyFrom(tFrom) failed because tFrom on-device tensor (deviceNum=%d) is invalid",
+			t.shape, deviceNum)
+	}
+	tFrom.backend.BufferToFlatData(d.buffer, t.local.flat)
 }
 
 // IsOnDevice checks whether the Tensor has an on-device copy on the given deviceNum.

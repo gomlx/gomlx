@@ -179,8 +179,8 @@ func (t *Tensor) MutableFlatData(accessFn func(flat any)) {
 	defer t.mu.Unlock()
 	t.AssertValid()
 	t.lockedMaterializeLocal()
-	t.lockedInvalidateOnDevice()
 	accessFn(t.local.flat)
+	t.lockedInvalidateOnDevice()
 }
 
 // MutableBytes gives mutable access to the local storage of the values for the tensor.
