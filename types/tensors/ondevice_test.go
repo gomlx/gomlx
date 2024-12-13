@@ -101,10 +101,10 @@ var testShapes = []shapes.Shape{
 // Results on cpu:
 //
 //	cpu: 12th Gen Intel(R) Core(TM) i9-12900K
-//	BenchmarkHostToDevice/(Float32)[1_1]-24                   720470              1629 ns/op
-//	BenchmarkHostToDevice/(Float32)[10_10]-24                 720577              1770 ns/op
-//	BenchmarkHostToDevice/(Float32)[100_100]-24               464420              2532 ns/op
-//	BenchmarkHostToDevice/(Float32)[1000_1000]-24               8936            133507 ns/op
+//	BenchmarkHostToDevice/(Float32)[1_1]-24                   827562              1486 ns/op
+//	BenchmarkHostToDevice/(Float32)[10_10]-24                 761961              1519 ns/op
+//	BenchmarkHostToDevice/(Float32)[100_100]-24               444972              2317 ns/op
+//	BenchmarkHostToDevice/(Float32)[1000_1000]-24               9177            133306 ns/op
 func BenchmarkHostToDevice(b *testing.B) {
 	setupTest(nil)
 
@@ -202,10 +202,10 @@ func BenchmarkCopyFromLocal(b *testing.B) {
 //
 // Results on CPU:
 //
-//	BenchmarkCopyFromDevice/(Float32)[1_1]-24                 391078              2948 ns/op
-//	BenchmarkCopyFromDevice/(Float32)[10_10]-24               413571              2882 ns/op
-//	BenchmarkCopyFromDevice/(Float32)[100_100]-24             217750              5967 ns/op
-//	BenchmarkCopyFromDevice/(Float32)[1000_1000]-24             8544            132102 ns/op
+//	BenchmarkCopyFromDevice/(Float32)[1_1]-24                 465709              2498 ns/op
+//	BenchmarkCopyFromDevice/(Float32)[10_10]-24               479907              2538 ns/op
+//	BenchmarkCopyFromDevice/(Float32)[100_100]-24             198081              6144 ns/op
+//	BenchmarkCopyFromDevice/(Float32)[1000_1000]-24             8956            133465 ns/op
 func BenchmarkCopyFromDevice(b *testing.B) {
 	setupTest(nil)
 
