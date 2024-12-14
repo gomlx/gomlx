@@ -230,12 +230,25 @@ func (t *Tensor) MutableBytes(accessFn func(data []byte)) {
 func MutableFlatData[T dtypes.Supported](t *Tensor, accessFn func(flat []T)) {
 	if t.shape.DType != dtypes.FromGenericsType[T]() {
 		var v T
-		exceptions.Panicf("ConstFlatData[%T] is incompatible with Tensor's dtype %s",
+		exceptions.Panicf("MutableFlatData[%T] is incompatible with Tensor's dtype %s",
 			v, t.shape.DType)
 	}
 	t.MutableFlatData(func(anyFlat any) {
 		flat := anyFlat.([]T)
 		accessFn(flat)
+	})
+}
+
+// AssignFlatData will copy over the values in fromFlat to the storage used by toTensor.
+// If the dtypes are not compatible or if the size is wrong, it will panic.
+func AssignFlatData[T dtypes.Supported](toTensor *Tensor, fromFlat []T) {
+	MutableFlatData[T](toTensor, func(toFlat []T) {
+		if len(toFlat) != len(fromFlat) {
+			var v T
+			exceptions.Panicf("AssignFlatData[%T] is trying to store %d values into shape %s, which requires %d values",
+				v, len(fromFlat), toTensor.Shape(), toTensor.Shape().Size())
+		}
+		copy(toFlat, fromFlat)
 	})
 }
 

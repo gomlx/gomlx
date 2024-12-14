@@ -398,3 +398,18 @@ func TestBytes(t *testing.T) {
 	})
 	require.Equal(t, [][]int32{{13, 1}, {3, 5}, {7, 17}}, tensor.Value())
 }
+
+func TestAssign(t *testing.T) {
+	tensor := FromShape(shapes.Make(dtypes.Float64, 2, 3))
+
+	// Wrong dtype:
+	require.Panics(t, func() { AssignFlatData(tensor, []float32{0, 1, 2, 3, 4, 5}) })
+
+	// Wrong flat size:
+	require.Panics(t, func() { AssignFlatData(tensor, []float64{0, 1, 2, 3, 4, 5, 6}) })
+
+	// Check assignment happened:
+	values := []float64{0, 1, 2, 3, 4, 5}
+	AssignFlatData(tensor, values)
+	require.Equal(t, values, CopyFlatData[float64](tensor))
+}

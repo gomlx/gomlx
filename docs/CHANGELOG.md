@@ -6,6 +6,11 @@
 * Updated GitHub action (`go.yaml`) to only change the README.md with the result of the change, if pushing to the
   `main` branch.
 * Added `Pow()` gradient.
+* Package `tensors`:
+  * Added `Tensor` transfer to/from device benchmarks.
+  * Added `Tensor.CopyFrom()` to transfer from one tensor (potentially on device) directly to another
+    tensor -- handy for pre-allocated tensors.
+  * Added the convenience `Tensor.AssignFromFlat[T](toTensor, fromFlat)`
 
 # v0.15.3 - 2024/11/25
 
