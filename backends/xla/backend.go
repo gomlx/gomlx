@@ -14,13 +14,19 @@ import (
 	"unsafe"
 )
 
+func panicf(format string, args ...any) {
+	err := errors.Errorf(format, args...)
+	panic(err)
+}
+
 // Backend implements the XLA/PJRT backends.Backend for GoMLX.
 type Backend struct {
 	plugin     *pjrt.Plugin
 	client     *pjrt.Client
 	pluginName string
 
-	supressLogging bool
+	supressLogging   bool
+	hasSharedBuffers bool
 }
 
 // AssertValid will panic if the backend is not valid: if it's nil or has already been finalized.
@@ -169,4 +175,28 @@ func (backend *Backend) BufferFromFlatData(deviceNum backends.DeviceNum, flat an
 		panic(errors.WithMessagef(err, "backend %q: BuffferFromFlatData", BackendName))
 	}
 	return buffer
+}
+
+// HasSharedBuffers returns whether this PJRT plugin supports "shared buffers".
+// In PJRT that means supporting pjrt.Client.CreateViewOfDeviceBuffer.
+func (backend *Backend) HasSharedBuffers() bool {
+	return backend.hasSharedBuffers
+}
+
+// NewSharedBuffer implements backends.Backend interface.
+//
+// For XLA this means allocating the aligned memory and calling pjrt.Client.CreateViewOfDeviceBuffer
+// to create a buffer that shares the memory.
+func (backend *Backend) NewSharedBuffer(deviceNum backends.DeviceNum, shape shapes.Shape) (buffer backends.Buffer, flat any) {
+	devices := backend.client.AddressableDevices()
+	if deviceNum < 0 || int(deviceNum) >= len(devices) {
+		panicf("deviceNum=%d not available for backend, only %d devices are available", deviceNum, len(devices))
+	}
+	device := devices[deviceNum]
+	var err error
+	buffer, flat, err = backend.client.NewSharedBuffer(shape.DType, shape.Dimensions, device)
+	if err != nil {
+		panic(err)
+	}
+	return
 }

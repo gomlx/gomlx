@@ -11,6 +11,9 @@
   * Added `Tensor.CopyFrom()` to transfer from one tensor (potentially on device) directly to another
     tensor -- handy for pre-allocated tensors.
   * Added the convenience `Tensor.AssignFromFlat[T](toTensor, fromFlat)`
+  * Added "shared" tensors: `Tensor.IsShared()` to check if using it. This saves one copy when using a tensor
+    as input, when it is changed by the host in-between executions of a graph.
+* Updated dependency to gopjrt v0.5.0.
 
 # v0.15.3 - 2024/11/25
 

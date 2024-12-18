@@ -54,13 +54,24 @@ func testOnDeviceInputOutputImpl[T dtypes.Number](t *testing.T, backend backends
 	require.NotPanics(t, func() {
 		buffer = tensor.Buffer(backend)
 	})
+	if backend.HasSharedBuffers() {
+		// Input tensor must have become shared during conversion to "on-device".
+		// Check that the shared buffer got loaded with the right values:
+		require.True(t, tensor.IsShared())
+		ConstFlatData[T](tensor, func(flat []T) {
+			require.Equal(t, []T{0, 1, 2, 3, 4, 11}, flat)
+		})
+	}
+
 	var outputs []backends.Buffer
 	require.NotPanics(t, func() {
 		outputs = exec.Execute([]backends.Buffer{buffer}, nil)
 	})
 
-	// Convert buffer to tensor.
+	// Convert buffer to tensor: the converted tensor should not be shared, since buffer comes from the output
+	// of a backend execution.
 	outputTensor := FromBuffer(backend, outputs[0])
+	require.False(t, outputTensor.isShared)
 	fmt.Printf("\tf(x) = x^2, f(%s) = %s\n", tensor.GoStr(), outputTensor.GoStr())
 	require.NoErrorf(t, outputTensor.Shape().Check(dtype, 3, 2), "Output tensor for dtype %s got shape %s", dtype, outputTensor.Shape())
 	want := []T{0, 1, 4, 9, 16, 121}

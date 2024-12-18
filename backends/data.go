@@ -30,4 +30,23 @@ type DataInterface interface {
 	// BufferFromFlatData transfers data from Go given as a flat slice (of the type corresponding to the shape DType)
 	// to the deviceNum, and returns the corresponding Buffer.
 	BufferFromFlatData(deviceNum DeviceNum, flat any, shape shapes.Shape) Buffer
+
+	// HasSharedBuffers returns whether the backend supports "shared buffers": these are buffers
+	// that can be used directly by the engine and has a local address that can be read or mutated
+	// directly by the client.
+	HasSharedBuffers() bool
+
+	// NewSharedBuffer returns a "shared buffer" that can be both used as input for execution of
+	// computations and directly read or mutated by the clients.
+	//
+	// It panics if the backend doesn't support shared buffers -- see HasSharedBuffer.
+	//
+	// The shared buffer should not be mutated while it is used by an execution.
+	// Also the shared buffer cannot be "donated" during execution.
+	//
+	// When done, to release the memory, call BufferFinalized on the returned buffer.
+	//
+	// It returns a handle to the buffer and a slice of the corresponding data type pointing
+	// to the shared data.
+	NewSharedBuffer(deviceNum DeviceNum, shape shapes.Shape) (buffer Buffer, flat any)
 }
