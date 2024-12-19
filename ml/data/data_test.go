@@ -174,7 +174,7 @@ func TestInMemoryDataset(t *testing.T) {
 
 	// Read one element at a time: repeat 4 times, the last two are randomized.
 	for repeat := 0; repeat < 4; repeat++ {
-		fmt.Printf("\tRepeat %d:\n", repeat)
+		//fmt.Printf("\tRepeat %d:\n", repeat)
 		count := 0
 		if repeat == 2 {
 			mds.RandomWithReplacement()
@@ -243,9 +243,12 @@ func TestInMemoryDataset(t *testing.T) {
 	require.Equal(t, []int64{-50}, label)
 
 	// Serialize and deserialize, check that we recover it.
+	require.NoError(t, err)
 	buf := &bytes.Buffer{}
 	enc := gob.NewEncoder(buf)
 	require.NoError(t, mds.GobSerialize(enc))
+
+	// Deserialization:
 	dec := gob.NewDecoder(buf)
 	mds, err = GobDeserializeInMemory(backend, nil, dec)
 	require.NoError(t, err)

@@ -200,3 +200,17 @@ func (backend *Backend) NewSharedBuffer(deviceNum backends.DeviceNum, shape shap
 	}
 	return
 }
+
+// BufferData implements backends.Backend interface.
+//
+// For XLA this means allocating the aligned memory and calling pjrt.Client.CreateViewOfDeviceBuffer
+// to create a buffer that shares the memory.
+func (backend *Backend) BufferData(buffer backends.Buffer) (flat any) {
+	buf := buffer.(*pjrt.Buffer)
+	var err error
+	flat, err = buf.Data()
+	if err != nil {
+		panic(errors.WithMessagef(err, "failed to access buffer data directly, maybe not supported by backend?"))
+	}
+	return
+}

@@ -110,16 +110,19 @@ func (d *onDevice) Finalize() {
 // Generally the user doesn't need to call this function, it's called by the libraries executing GoMLX computations
 // automatically when needed.
 //
+// If share is true, and if the backend allows for shared buffer, this will create a shared buffer,
+// which is more economic, but cannot be donated for execution.
+//
 // - If an updated copy of the Tensor is already on the device(s), this is a no-op.
 // - If the Tensor has already been used with a different client, this panics: one cannot mix clients on the same Tensor.
 // - If no deviceNum is given, 0 is assumed, the default device for the client.
 //
 // TODO: For now this only transfers from local storage to on-device. Implement cross-device copy in gopjrt.
-func (t *Tensor) MaterializeOnDevices(backend backends.Backend, deviceNums ...backends.DeviceNum) {
+func (t *Tensor) MaterializeOnDevices(backend backends.Backend, share bool, deviceNums ...backends.DeviceNum) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.AssertValid()
-	t.lockedMaterializeOnDevices(backend, true, deviceNums...)
+	t.lockedMaterializeOnDevices(backend, share, deviceNums...)
 }
 
 // defaultDeviceNums is used whenever `deviceNums` is not provided.

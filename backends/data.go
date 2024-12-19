@@ -42,11 +42,19 @@ type DataInterface interface {
 	// It panics if the backend doesn't support shared buffers -- see HasSharedBuffer.
 	//
 	// The shared buffer should not be mutated while it is used by an execution.
-	// Also the shared buffer cannot be "donated" during execution.
+	// Also, the shared buffer cannot be "donated" during execution.
 	//
 	// When done, to release the memory, call BufferFinalized on the returned buffer.
 	//
 	// It returns a handle to the buffer and a slice of the corresponding data type pointing
 	// to the shared data.
 	NewSharedBuffer(deviceNum DeviceNum, shape shapes.Shape) (buffer Buffer, flat any)
+
+	// BufferData returns a slice pointing to the buffer storage memory directly.
+	//
+	// This only works if HasSharedBuffer is true, that is, if the backend engine runs on CPU, or
+	// shares CPU memory.
+	//
+	// The returned slice becomes invalid after the buffer is destroyed.
+	BufferData(buffer Buffer) (flat any)
 }

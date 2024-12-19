@@ -13,7 +13,10 @@
   * Added the convenience `Tensor.AssignFromFlat[T](toTensor, fromFlat)`
   * Added "shared" tensors: `Tensor.IsShared()` to check if using it. This saves one copy when using a tensor
     as input, when it is changed by the host in-between executions of a graph.
+  * `Tensor.ConstFlatData` now avoids a copy, if `Backend.BufferData` is available.
 * Updated dependency to gopjrt v0.5.0.
+* Package `backends` and `backends/xla`:
+  * Added `Backend.HasSharedBuffer`, `Backend.NewSharedBuffer` and `Backend.BufferData`.
 
 # v0.15.3 - 2024/11/25
 

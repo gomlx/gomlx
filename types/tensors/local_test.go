@@ -219,7 +219,7 @@ func TestValueOf(t *testing.T) {
 	testValueOf[complex128](t)
 }
 
-func TestSerialize(t *testing.T) {
+func TestSerialization(t *testing.T) {
 	{
 		values := [][]float64{{2}, {3}, {5}, {7}, {11}}
 		var tensor *Tensor
@@ -241,13 +241,53 @@ func TestSerialize(t *testing.T) {
 		require.NotPanics(t, func() { tensor = FromValue(values) })
 		buf := &bytes.Buffer{}
 		enc := gob.NewEncoder(buf)
-		fmt.Printf("\t%#v serialized to %d bytes\n", values, buf.Len())
-		require.NoError(t, tensor.GobSerialize(enc))
-		var err error
+
+		// Serialized repeats times:
+		repeats := 10
+		for _ = range repeats {
+			require.NoError(t, tensor.GobSerialize(enc))
+		}
+		fmt.Printf("\t%#v serialized %d times to %d bytes\n", values, repeats, buf.Len())
+
+		// Deserialize repeats times:
 		dec := gob.NewDecoder(buf)
-		tensor, err = GobDeserialize(dec)
-		require.NoError(t, err)
-		require.Equal(t, values, tensor.Value().([][]complex128))
+		for _ = range repeats {
+			var err error
+			tensor, err = GobDeserialize(dec)
+			require.NoError(t, err)
+			require.Equal(t, values, tensor.Value().([][]complex128))
+			tensor.FinalizeAll()
+		}
+	}
+
+	// Test reading directly to device.
+	setupTest(t)
+	if backend == nil {
+		panic("Backend not set!?")
+	}
+	{
+		values := [][]int64{{2}, {3}, {5}, {7}, {11}}
+		var tensor *Tensor
+		require.NotPanics(t, func() { tensor = FromValue(values) })
+		buf := &bytes.Buffer{}
+		enc := gob.NewEncoder(buf)
+
+		// Serialized repeats times:
+		repeats := 10
+		for _ = range repeats {
+			require.NoError(t, tensor.GobSerialize(enc))
+		}
+		fmt.Printf("\t%#v serialized %d times to %d bytes\n", values, repeats, buf.Len())
+
+		// Deserialize repeats times:
+		dec := gob.NewDecoder(buf)
+		for _ = range repeats {
+			var err error
+			tensor, err = GobDeserializeToDevice(dec, backend)
+			require.NoError(t, err)
+			require.Equal(t, values, tensor.Value().([][]int64))
+			tensor.FinalizeAll()
+		}
 	}
 }
 

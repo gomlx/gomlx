@@ -15,12 +15,13 @@ import (
 
 var flagBackend = flag.String("backend", "xla:cpu", "backend to use, this is overwritten by GOMLX_BACKEND if it is set")
 
-// backend is set up by setupTest.
-var backend backends.Backend
-
 func init() {
 	klog.InitFlags(nil)
 }
+
+var (
+	backend backends.Backend
+)
 
 func setupTest(t *testing.T) {
 	// setupTest is also called from benchmarks, make sure it only executes once though.
@@ -135,7 +136,7 @@ func BenchmarkHostToDevice(b *testing.B) {
 	benchShape := func(v float32, shapeIdx int) {
 		// Set input to value of v.
 		x := inputTensors[shapeIdx]
-		x.MaterializeOnDevices(backend)
+		x.MaterializeOnDevices(backend, false)
 		x.InvalidateOnDevice()
 	}
 
@@ -231,7 +232,7 @@ func BenchmarkCopyFromDevice(b *testing.B) {
 				flat[ii] = float32(ii)
 			}
 		})
-		inputTensors[shapeIdx].MaterializeOnDevices(backend)
+		inputTensors[shapeIdx].MaterializeOnDevices(backend, false) // Don't use shared buffers for benchmark
 		inputTensors[shapeIdx].FinalizeLocal()
 		outputTensors[shapeIdx] = FromShape(s)
 	}
