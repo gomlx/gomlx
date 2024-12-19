@@ -4,5 +4,5 @@
 # You should run this from the root of the repository.
 
 PACKAGE_COVERAGE="./graph/...,./ml/...,./models/...,./types/...,./backends/..."
-go test -v -cover -coverprofile docs/coverage.out -coverpkg "${PACKAGE_COVERAGE}" ./...
+go test -cover -coverprofile docs/coverage.out -coverpkg "${PACKAGE_COVERAGE}" ./... -test.count=1
 go tool cover -func docs/coverage.out -o docs/coverage.out

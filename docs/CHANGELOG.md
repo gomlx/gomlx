@@ -1,11 +1,22 @@
 # GoMLX changelog
 
-# Next
+# v0.16.0 - 🎄 2024/12/19 🎄 Benchmarks, Speed improvements with gopjrt v0.5.0, Shared buffers.
 
 * XLA backend now accepts the absolute path to the PJRT plugin (`GOMLX_BACKEND="xla:<pjrt_path>"`)
 * Updated GitHub action (`go.yaml`) to only change the README.md with the result of the change, if pushing to the
   `main` branch.
 * Added `Pow()` gradient.
+* Package `tensors`:
+  * Added `Tensor` transfer to/from device benchmarks.
+  * Added `Tensor.CopyFrom()` to transfer from one tensor (potentially on device) directly to another
+    tensor -- handy for pre-allocated tensors.
+  * Added the convenience `Tensor.AssignFromFlat[T](toTensor, fromFlat)`
+  * Added "shared" tensors: `Tensor.IsShared()` to check if using it. This saves one copy when using a tensor
+    as input, when it is changed by the host in-between executions of a graph.
+  * `Tensor.ConstFlatData` now avoids a copy, if `Backend.BufferData` is available.
+* Updated dependency to gopjrt v0.5.0, with support for shared buffers.
+* Package `backends` and `backends/xla`:
+  * Added `Backend.HasSharedBuffer`, `Backend.NewSharedBuffer` and `Backend.BufferData`.
 
 # v0.15.3 - 2024/11/25
 

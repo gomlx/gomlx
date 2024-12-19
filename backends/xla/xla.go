@@ -22,6 +22,14 @@
 //
 // Darwin (MacOS): currently dynamic linking XLA/PJRT is not working, so it links the CPU PJRT plugin by default,
 // no need to manually link `github.com/gomlx/gomlx/backends/xla/cpu/static`.
+//
+// # Shared Buffers Support:
+//
+// XLA/PJRT for CPU allows the "device buffer" (where device=CPU) to be addressed directly, which
+// saves the copy from "host/local tensor" to the "on-device tensor" when executing a computation.
+// This is enabled by default if the plugin is called "cpu". To force advertising support for this
+// for other PJRTs provide the "shared_buffers" option, e.g.: GOMLX_BACKEND="xla:my_pjrt,shared_buffers".
+// Or to force disabling the support, provide the "noshared_buffers" option.
 package xla
 
 //go:generate go run ../../cmd/xla_generator
@@ -33,6 +41,7 @@ import (
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/pjrt"
 	"github.com/pkg/errors"
+	"k8s.io/klog/v2"
 	"path"
 	"slices"
 	"strings"
@@ -88,12 +97,26 @@ func NewWithOptions(pluginName string, options pjrt.NamedValuesMap) *Backend {
 	if err != nil {
 		panic(errors.WithMessagef(err, "backend %q:", BackendName))
 	}
-	return &Backend{
+	backend := &Backend{
 		plugin:         plugin,
 		client:         client,
 		pluginName:     pluginName,
 		supressLogging: pluginName == "cuda" || slices.Index(pluginOptions, "supress_logging") != -1,
 	}
+
+	// Support "shared buffers":
+	backend.hasSharedBuffers = pluginName == "cpu"
+	if idx := slices.Index(pluginOptions, "shared_buffers"); idx != -1 {
+		backend.hasSharedBuffers = true
+		pluginOptions = slices.Delete(pluginOptions, idx, idx+1)
+	} else if idx := slices.Index(pluginOptions, "noshared_buffers"); idx != -1 {
+		backend.hasSharedBuffers = false
+		pluginOptions = slices.Delete(pluginOptions, idx, idx+1)
+	}
+	if len(pluginOptions) != 0 {
+		klog.Errorf("backend %q: unknown plugin options %q", BackendName, pluginOptions)
+	}
+	return backend
 }
 
 // SupressLogging during compilation of a graph.

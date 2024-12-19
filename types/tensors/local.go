@@ -4,6 +4,7 @@ import (
 	"encoding/gob"
 	"fmt"
 	"github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
@@ -104,6 +105,20 @@ func (t *Tensor) ConstFlatData(accessFn func(flat any)) {
 // lockedConstFlatData implements Tensor.ConstFlatData.
 func (t *Tensor) lockedConstFlatData(accessFn func(flat any)) {
 	t.AssertValid()
+	if t.isShared {
+		// Access directly the share data.
+		accessFn(t.sharedFlat)
+		return
+	}
+	if t.local == nil && t.backend.HasSharedBuffers() {
+		// If local is nil, that means there is a on-device tensor instead,
+		// we take a view (the data) of the first one.
+		for _, tOnDevice := range t.onDevices {
+			accessFn(t.backend.BufferData(tOnDevice.buffer))
+			break
+		}
+		return
+	}
 	t.lockedMaterializeLocal()
 	accessFn(t.local.flat)
 }
@@ -115,7 +130,7 @@ func (t *Tensor) lockedConstFlatData(accessFn func(flat any)) {
 // It is the "generics" version of Tensor.ConstFlatData(),
 //
 // This provides accessFn with the actual Tensor data (not a copy), and it's owned by the Tensor, but it should not be
-// changed -- the contents of the corresponding "on device" tensors would go out-of-sync.
+// changed -- the contents of the corresponding "on device" tensors could go out-of-sync.
 // See Tensor.MutableFlatData to access a mutable version of the flat data.
 //
 // See Tensor.Size for the number of elements, and Tensor.LayoutStrides to calculate the offset of individual
@@ -138,7 +153,7 @@ func ConstFlatData[T dtypes.Supported](t *Tensor, accessFn func(flat []T)) {
 // Even scalar values have a bytes data representation of one element.
 // It locks the Tensor until accessFn returns.
 //
-// This provides accessFn with the actual Tensor data (not a copy), and it's owned by the Tensor, but it should not be
+// This provides accessFn with the actual Tensor data (not a copy), and it's owned by the Tensor, and it should not be
 // changed -- the contents of the corresponding "on device" tensors would go out-of-sync.
 // See Tensor.MutableBytes to access a mutable version of the data as bytes.
 //
@@ -154,19 +169,18 @@ func (t *Tensor) ConstBytes(accessFn func(data []byte)) {
 	})
 }
 
-// MutableFlatData invalidates and frees any copy of the data on device, calls accessFn with the local flattened data
-// as a slice of the Go type corresponding to the DType type.
-// The contents of the slice itself can be changed until accessFn returns. During this time the Tensor is locked.
+// MutableFlatData calls accessFn with a flat slice pointing to the Tensor data. The type of the slice is corresponds
+// to the DType of the tensor. The contents of the slice itself can be changed until accessFn returns.
+// During this time the Tensor is locked.
+//
+// If the data is not shared with the backend (usually, only available for CPU), it invalidates and frees any copy
+// of the data on device (e.g: GPU). It also triggers a synchronous transfer from device to local, if the tensor is
+// only on device and not shared.
 //
 // Even scalar values have a flattened data representation of one element.
 //
-// the flattened data as a slice of the Go type corresponding to the DType type.
-//
-// It triggers a synchronous transfer from device to local, if the tensor is only on device, and it invalidates
-// the device storage, since it's assumed they will be out-of-date.
-//
 // This returns the actual Tensor data (not a copy), and the slice is owned by the Tensor -- but it's contents can
-// be changed.
+// be changed while inside accessFn.
 //
 // See Tensor.ConstFlatData to access a mutable version of the flat data.
 //
@@ -178,19 +192,23 @@ func (t *Tensor) MutableFlatData(accessFn func(flat any)) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.AssertValid()
+	if t.isShared {
+		accessFn(t.sharedFlat)
+		return
+	}
 	t.lockedMaterializeLocal()
-	t.lockedInvalidateOnDevice()
 	accessFn(t.local.flat)
+	t.lockedInvalidateOnDevice()
 }
 
 // MutableBytes gives mutable access to the local storage of the values for the tensor.
 // It's similar to MutableFlatData, but provide a bytes view to the same data.
 //
-// It triggers a synchronous transfer from device to local, if the tensor is only on device, and it invalidates
-// the device storage, since it's assumed they will be out-of-date.
+// If tensor is not shared, it triggers a synchronous transfer from device to local, if the tensor is only on device,
+// and it invalidates the device storage, since it's assumed they will be out-of-date.
 //
 // This returns the actual Tensor data (not a copy), and the bytes slice is owned by the Tensor -- but it's contents can
-// be changed.
+// be changed while inside accessFn.
 //
 // See Tensor.ConstBytes for constant access to the data as bytes -- that doesn't invalidate the device storage.
 func (t *Tensor) MutableBytes(accessFn func(data []byte)) {
@@ -204,38 +222,38 @@ func (t *Tensor) MutableBytes(accessFn func(data []byte)) {
 	})
 }
 
-// MutableFlatData invalidates and frees any copy of the data on device, calls accessFn with the local flattened data
-// as a slice of the Go type corresponding to the DType type.
-// The contents of the slice itself can be changed until accessFn returns. During this time the Tensor is locked.
+// MutableFlatData calls accessFn with a flat slice pointing to the Tensor data. The type of the slice is corresponds
+// to the DType of the tensor. The contents of the slice itself can be changed until accessFn returns.
+// During this time the Tensor is locked.
 //
-// It is the "generics" version of Tensor.MutableFlatData(),
+// It is the "generics" version of Tensor.MutableFlatData(), see its description for more details.
 //
-// Even scalar values have a flattened data representation of one element.
-//
-// the flattened data as a slice of the Go type corresponding to the DType type.
-//
-// It triggers a synchronous transfer from device to local, if the tensor is only on device.
-//
-// This returns the actual Tensor data (not a copy), and it's owned by the Tensor, and should not be changed --
-// the contents of the corresponding "on device" tensors would go out-of-sync.
-//
-// See Tensor.MutableFlatData to access a mutable version of the flat data.
-//
-// See Tensor.Size for the number of elements, and Tensor.LayoutStrides to calculate the offset of individual positions,
-// given the indices at each axis.
-//
-// It is only valid while `ref` hasn't been released.
+// This returns the actual Tensor data (not a copy), and the data owned by the Tensor, and should only be changed
+// inside accessFn.
 //
 // It panics if the tensor is in an invalid state (if it was finalized), or if it is a tuple.
 func MutableFlatData[T dtypes.Supported](t *Tensor, accessFn func(flat []T)) {
 	if t.shape.DType != dtypes.FromGenericsType[T]() {
 		var v T
-		exceptions.Panicf("ConstFlatData[%T] is incompatible with Tensor's dtype %s",
+		exceptions.Panicf("MutableFlatData[%T] is incompatible with Tensor's dtype %s",
 			v, t.shape.DType)
 	}
 	t.MutableFlatData(func(anyFlat any) {
 		flat := anyFlat.([]T)
 		accessFn(flat)
+	})
+}
+
+// AssignFlatData will copy over the values in fromFlat to the storage used by toTensor.
+// If the dtypes are not compatible or if the size is wrong, it will panic.
+func AssignFlatData[T dtypes.Supported](toTensor *Tensor, fromFlat []T) {
+	MutableFlatData[T](toTensor, func(toFlat []T) {
+		if len(toFlat) != len(fromFlat) {
+			var v T
+			exceptions.Panicf("AssignFlatData[%T] is trying to store %d values into shape %s, which requires %d values",
+				v, len(fromFlat), toTensor.Shape(), toTensor.Shape().Size())
+		}
+		copy(toFlat, fromFlat)
 	})
 }
 
@@ -274,11 +292,11 @@ func CopyFlatData[T dtypes.Supported](t *Tensor) []T {
 	return flatCopy
 }
 
-// Generated by `cmd/constraints_generator`:
-
 // MultiDimensionSlice lists the Go types a Tensor can be converted to/from. There are no recursions in
 // generics' constraint definitions, so we enumerate up to 7 levels of slices. Feel free to add
 // more if needed, the implementation will work with any arbitrary number.
+//
+// Generated by `github.com/gomlx/gomlx/cmd/constraints_generator`.
 type MultiDimensionSlice interface {
 	bool | float32 | float64 | int | int32 | int64 | uint8 | uint32 | uint64 | complex64 | complex128 |
 		[]bool | []float32 | []float64 | []int | []int32 | []int64 | []uint8 | []uint32 | []uint64 | []complex64 | []complex128 |
@@ -360,7 +378,10 @@ func (t *Tensor) GobSerialize(encoder *gob.Encoder) (err error) {
 	return
 }
 
-// GobDeserialize a Tensor from the reader. Returns new tensor.Local or an error.
+// GobDeserialize a Tensor from the reader.
+//
+// If the tensor is only going to be directly consumed by the execution of a graph (a ML model),
+// use GoDeserializeOnDevice instead, it works faster for some backends.
 func GobDeserialize(decoder *gob.Decoder) (t *Tensor, err error) {
 	shape, err := shapes.GobDeserialize(decoder)
 	if err != nil {
@@ -378,6 +399,84 @@ func GobDeserialize(decoder *gob.Decoder) (t *Tensor, err error) {
 	t.local = &local{
 		t:    t,
 		flat: flatPtrV.Elem().Interface(),
+	}
+	return
+}
+
+// GobDeserializeToDevice deserialize a Tensor from the reader directly to on-device memory.
+// If the tensor is expected to be consumed by graph execution, this may worked faster by
+// avoiding an unnecessary copy.
+//
+// deviceNums is optional, and for now at most one deviceNum is supported.
+//
+// Returns new Tensor (with shared or onDevice storage or an error).
+func GobDeserializeToDevice(decoder *gob.Decoder, backend backends.Backend, deviceNums ...backends.DeviceNum) (t *Tensor, err error) {
+	if len(deviceNums) > 1 {
+		return nil, errors.Errorf("only one device per Tensor is supported for now, %d given", len(deviceNums))
+	}
+	if !backend.HasSharedBuffers() {
+		// Load locally, and then materialize on-device.
+		t, err = GobDeserialize(decoder)
+		if err != nil {
+			return
+		}
+		err = exceptions.TryCatch[error](func() {
+			t.MaterializeOnDevices(backend, false, deviceNums...)
+			t.FinalizeLocal()
+		})
+		if err != nil {
+			exceptions.Try(func() { t.FinalizeAll() })
+			t = nil
+			return
+		}
+		return
+	}
+
+	// Deserialize shape first.
+	shape, err := shapes.GobDeserialize(decoder)
+	if err != nil {
+		err = errors.Wrapf(err, "failed to deserialize Tensor shape data")
+		return
+	}
+
+	// Find deviceNum
+	deviceNum := defaultDeviceNums[0]
+	if len(deviceNums) > 0 {
+		deviceNum = deviceNums[0]
+	}
+
+	// Create a shared buffer.
+	var buffer backends.Buffer
+	var flatAny any
+	err = exceptions.TryCatch[error](func() {
+		buffer, flatAny = backend.NewSharedBuffer(deviceNum, shape)
+	})
+	if err != nil {
+		return
+	}
+
+	// Deserialize tensor contents.
+	flatV := reflect.ValueOf(flatAny)
+	// Since flatV.Addr() doesn't work,  we create a pointer to a new Slice and assign flatAny to it.
+	flatPtrV := reflect.New(flatV.Type())
+	flatPtrV.Elem().Set(flatV)
+	err = decoder.Decode(flatPtrV.Interface())
+	if err != nil {
+		err = errors.Wrapf(err, "failed to deserialize Tensor data")
+		// Destroy buffer since it's not going to be used.
+		exceptions.Try(func() { backend.BufferFinalize(buffer) })
+		return
+	}
+
+	// Build tensor with deserialized buffer.
+	t = newTensor(shape)
+	t.isShared = true
+	t.sharedFlat = flatAny
+	t.backend = backend
+	t.onDevices[deviceNum] = &onDevice{
+		t:         t,
+		buffer:    buffer,
+		deviceNum: deviceNum,
 	}
 	return
 }
@@ -717,15 +816,21 @@ func (t *Tensor) InDelta(otherTensor *Tensor, delta float64) bool {
 }
 
 // IsLocal returns true if there is a local storage copy of the tensor.
+// If tensor is shared (see Tensor.IsShared), it also returns true.
 //
 // See MaterializeLocal to trigger a transfer/copy to the local storage.
 func (t *Tensor) IsLocal() bool {
 	t.AssertValid()
+	if t.isShared {
+		return true
+	}
 	return t.local != nil && !t.local.IsFinalized()
 }
 
 // FinalizeLocal immediately frees the local storage copy of the tensor. If there are no on-device copies of the tensor,
 // it becomes invalid.
+//
+// If the storage is shared (see Tensor.IsShared), this is a no-op.
 func (t *Tensor) FinalizeLocal() {
 	t.AssertValid()
 	t.mu.Lock()

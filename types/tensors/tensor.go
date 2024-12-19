@@ -20,7 +20,7 @@
 // by their shape (a data type and its axes dimensions) and their actual content. As a special case, a Tensor can
 // also be a tuple of multiple tensors.
 //
-// The main use of tensors are to be used as input and output of GoMLX computation graph.
+// The main use of tensors are to be used as input and output of GoMLX computation graphs.
 //
 // There are various ways to construct a Tensor from local data:
 //
@@ -44,15 +44,19 @@
 //   - FromAnyValue(value any): same as FromValue but non-generic, it takes an anonymous type `any`. The exception
 //     is if `value` is already a tensor, then it is a no-op and it returns the tensor itself.
 //
-// Behind the scenes Tensor is a container that keeps in sync different materialization's of value:
+// Behind the scenes (as much as possible Tensor tries to hide all the details), Tensor is a container that keeps in
+// sync different materialization's of value:
 //
 //   - `local`: a copy of the values stored in CPU, as a Go flat array of the underlying dtype.
 //   - `onDevices`: a copy of the values stored in the accelerator device(s) (CPU, GPU, TPU, etc.),
 //     a wrapper for a "XLA's PJRT buffer" managed by the lower levels (see github.com/gomlx/gopjrt).
 //     There can be multiple `Device` backing of a tensor, if there are multiple devices (like a multi-GPU set up).
+//   - And "on-device" Tensor can also be "shared", if the backend allows it, in which case the local
+//     and "on-device" share the same memory allocation.
 //
 // The Tensor container is lazy in nature: it won't transfer data from local storage to "on device" until needed.
-// And if one is updated, the others are immediately invalidated.
+// And if/when it can, it will make it "shared" (generally, when running on CPUs).
+// If not "shared", when one (local or on-device) is updated, the others are immediately invalidated.
 //
 // Transferring tensors to/from local/device areas has a cost, and should be avoided. For example,
 // while training weights of an ML model, one generally does not need to transfer those weights to local -- just at
@@ -73,8 +77,11 @@ import (
 // by their shape, a data type (dtypes.DType) and its axes' dimensions, and their actual content stored as a flat (1D)
 // array of values.
 //
-// It is a container for "local" (host CPU) and "on-device" backing of the tensor. A local backed tensor is stored
-// as flat slice of the underlying DType.
+// The main use of tensors are to be used as input and output of GoMLX computation graphs.
+//
+// It is a container for "local" (host CPU) and "on-device" backing of the tensor -- they can be the same ("shared") in
+// some cases.
+// It is always stored as flat slice of the underlying DType.
 //
 // Tensor manages caching of Local and Device copies. There is a transferring cost that one needs to be aware when
 // using it for large data -- LLM models can have 100s of GB in size... There is a cache
@@ -92,6 +99,14 @@ type Tensor struct {
 
 	// onDevices maps deviceNum -> on device buffer.
 	onDevices map[backends.DeviceNum]*onDevice
+
+	// isShared indicates that the tensor used a shared buffer: it is held "on-device" and the "local" is just
+	// a pointer to the "on-device" one.
+	//
+	// This is allocated, freed and mutated in ondevice.go, by the corresponding onDevice structure that owns
+	// the shared buffer.
+	isShared   bool
+	sharedFlat any // Flat slice, []dtype of the shared memory area.
 
 	// backend to use for on-device tensors.
 	backend backends.Backend
@@ -134,6 +149,19 @@ func (t *Tensor) Memory() uintptr { return t.shape.Memory() }
 func (t *Tensor) Ok() bool {
 	return t != nil && t.shape.Ok() &&
 		(!t.local.IsFinalized() || len(t.onDevices) > 0)
+}
+
+// IsShared returns whether the underlying tensor storage is shared with the backend engine.
+//
+// In most cases, an end-user doesn't need to use this.
+//
+// If true, one shouldn't access it (ConstFlatData or MutableFlatData) during the execution of
+// a computation graph that uses it.
+//
+// The Tensor implementation will try to use shared tensors where possible, since they save an
+// extra copy.
+func (t *Tensor) IsShared() bool {
+	return t.isShared
 }
 
 // AssertValid panics if local is nil, or if its shape is invalid.

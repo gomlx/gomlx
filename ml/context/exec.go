@@ -34,61 +34,61 @@ import (
 // ExecGraphFn is a type parameter for accepted function types for NewExec constructor.
 type ExecGraphFn interface {
 	func(*Context, *Graph) |
-		func(*Context, []*Node) |
-		func(*Context, *Node) |
-		func(*Context, *Node, *Node) |
-		func(*Context, *Node, *Node, *Node) |
-		func(*Context, *Node, *Node, *Node, *Node) |
-		func(*Context, *Node, *Node, *Node, *Node, *Node) |
-		func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) |
+	func(*Context, []*Node) |
+	func(*Context, *Node) |
+	func(*Context, *Node, *Node) |
+	func(*Context, *Node, *Node, *Node) |
+	func(*Context, *Node, *Node, *Node, *Node) |
+	func(*Context, *Node, *Node, *Node, *Node, *Node) |
+	func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) |
 
-		func(*Context, *Graph) *Node |
-		func(*Context, []*Node) *Node |
-		func(*Context, *Node) *Node |
-		func(*Context, *Node, *Node) *Node |
-		func(*Context, *Node, *Node, *Node) *Node |
-		func(*Context, *Node, *Node, *Node, *Node) *Node |
-		func(*Context, *Node, *Node, *Node, *Node, *Node) *Node |
-		func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) *Node |
+	func(*Context, *Graph) *Node |
+	func(*Context, []*Node) *Node |
+	func(*Context, *Node) *Node |
+	func(*Context, *Node, *Node) *Node |
+	func(*Context, *Node, *Node, *Node) *Node |
+	func(*Context, *Node, *Node, *Node, *Node) *Node |
+	func(*Context, *Node, *Node, *Node, *Node, *Node) *Node |
+	func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) *Node |
 
-		func(*Context, *Graph) (*Node, *Node) |
-		func(*Context, []*Node) (*Node, *Node) |
-		func(*Context, *Node) (*Node, *Node) |
-		func(*Context, *Node, *Node) (*Node, *Node) |
-		func(*Context, *Node, *Node, *Node) (*Node, *Node) |
-		func(*Context, *Node, *Node, *Node, *Node) (*Node, *Node) |
-		func(*Context, *Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
-		func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
+	func(*Context, *Graph) (*Node, *Node) |
+	func(*Context, []*Node) (*Node, *Node) |
+	func(*Context, *Node) (*Node, *Node) |
+	func(*Context, *Node, *Node) (*Node, *Node) |
+	func(*Context, *Node, *Node, *Node) (*Node, *Node) |
+	func(*Context, *Node, *Node, *Node, *Node) (*Node, *Node) |
+	func(*Context, *Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
+	func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
 
-		func(*Context, *Graph) (*Node, *Node, *Node) |
-		func(*Context, []*Node) (*Node, *Node, *Node) |
-		func(*Context, *Node) (*Node, *Node, *Node) |
-		func(*Context, *Node, *Node) (*Node, *Node, *Node) |
-		func(*Context, *Node, *Node, *Node) (*Node, *Node, *Node) |
-		func(*Context, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
-		func(*Context, *Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
-		func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
+	func(*Context, *Graph) (*Node, *Node, *Node) |
+	func(*Context, []*Node) (*Node, *Node, *Node) |
+	func(*Context, *Node) (*Node, *Node, *Node) |
+	func(*Context, *Node, *Node) (*Node, *Node, *Node) |
+	func(*Context, *Node, *Node, *Node) (*Node, *Node, *Node) |
+	func(*Context, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
+	func(*Context, *Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
+	func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
 
-		func(*Context, *Graph) []*Node |
-		func(*Context, []*Node) []*Node |
-		func(*Context, *Node) []*Node |
-		func(*Context, *Node, *Node) []*Node |
-		func(*Context, *Node, *Node, *Node) []*Node |
-		func(*Context, *Node, *Node, *Node, *Node) []*Node |
-		func(*Context, *Node, *Node, *Node, *Node, *Node) []*Node |
-		func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) []*Node
+	func(*Context, *Graph) []*Node |
+	func(*Context, []*Node) []*Node |
+	func(*Context, *Node) []*Node |
+	func(*Context, *Node, *Node) []*Node |
+	func(*Context, *Node, *Node, *Node) []*Node |
+	func(*Context, *Node, *Node, *Node, *Node) []*Node |
+	func(*Context, *Node, *Node, *Node, *Node, *Node) []*Node |
+	func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) []*Node
 }
 
 // ExecGraphFnOneOutput is a type parameter for accepted function types for NewExec constructor.
 type ExecGraphFnOneOutput interface {
 	func(*Context, *Graph) *Node |
-		func(*Context, []*Node) *Node |
-		func(*Context, *Node) *Node |
-		func(*Context, *Node, *Node) *Node |
-		func(*Context, *Node, *Node, *Node) *Node |
-		func(*Context, *Node, *Node, *Node, *Node) *Node |
-		func(*Context, *Node, *Node, *Node, *Node, *Node) *Node |
-		func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) *Node
+	func(*Context, []*Node) *Node |
+	func(*Context, *Node) *Node |
+	func(*Context, *Node, *Node) *Node |
+	func(*Context, *Node, *Node, *Node) *Node |
+	func(*Context, *Node, *Node, *Node, *Node) *Node |
+	func(*Context, *Node, *Node, *Node, *Node, *Node) *Node |
+	func(*Context, *Node, *Node, *Node, *Node, *Node, *Node) *Node
 }
 
 // Exec creates and executes computation graphs that take as input a
@@ -361,8 +361,10 @@ func (e *Exec) buildGraphFn() {
 	}).Interface()
 }
 
-// Finalize clears the cache, finalizing the graphs. The Exec object shouldn't be
-// used after that.
+// Finalize clears the cache, finalizing and releasing the memory for all compiled graphs.
+// The Exec object shouldn't be used after that.
+// Specially if you are compiling the graph to many different shapes, try to manually finalize,
+// and not wait for the GC -- particularly important, if you are running this in benchmarks.
 func (e *Exec) Finalize() {
 	e.exec.Finalize()
 }
@@ -555,7 +557,6 @@ func (e *Exec) CallWithGraph(args ...any) (outputs []*tensors.Tensor, g *Graph) 
 		v.SetValue(outputs[ii])
 	}
 	outputs = outputs[len(changedVars):]
-
 	return
 }
 

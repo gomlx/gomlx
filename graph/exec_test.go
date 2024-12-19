@@ -130,7 +130,9 @@ func TestDonate(t *testing.T) {
 	require.True(t, input.Ok()) // input should still be valid.
 	require.True(t, input.IsOnDevice(0))
 
-	// Donate input:
+	// Donate input: make sure input is not shared.
+	input = tensors.FromValue(5.0)
+	input.MaterializeOnDevices(backend, false)
 	output = g.Run(DonateTensorBuffer(input, backend, 0))[0]
 	require.Equal(t, 6.0, output.Value())
 	require.True(t, input.Ok()) // input should still be valid.

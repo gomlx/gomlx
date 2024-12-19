@@ -714,13 +714,11 @@ func GobDeserializeInMemory(backend backends.Backend, deviceNums []backends.Devi
 	mds.inputsAndLabelsData = make([]*tensors.Tensor, 0, numInputsAndLabels)
 
 	var tensor *tensors.Tensor
-	for ii := 0; ii < int(numInputsAndLabels); ii++ {
-		tensor, err = tensors.GobDeserialize(decoder)
+	for _ = range numInputsAndLabels {
+		tensor, err = tensors.GobDeserializeToDevice(decoder, backend, deviceNums...)
 		if err != nil {
 			return
 		}
-		tensor.MaterializeOnDevices(backend, deviceNums...)
-		tensor.FinalizeLocal()
 		mds.inputsAndLabelsData = append(mds.inputsAndLabelsData, tensor)
 	}
 	return
