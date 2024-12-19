@@ -1,6 +1,6 @@
 # GoMLX changelog
 
-# v0.16.0 - 🎄 2024/12/19 🎄
+# v0.16.0 - 🎄 2024/12/19 🎄 Benchmarks, Speed improvements with gopjrt v0.5.0, Shared buffers.
 
 * XLA backend now accepts the absolute path to the PJRT plugin (`GOMLX_BACKEND="xla:<pjrt_path>"`)
 * Updated GitHub action (`go.yaml`) to only change the README.md with the result of the change, if pushing to the
