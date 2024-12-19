@@ -35,7 +35,6 @@ package xla
 //go:generate go run ../../cmd/xla_generator
 
 import (
-	"fmt"
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types"
@@ -114,7 +113,6 @@ func NewWithOptions(pluginName string, options pjrt.NamedValuesMap) *Backend {
 		backend.hasSharedBuffers = false
 		pluginOptions = slices.Delete(pluginOptions, idx, idx+1)
 	}
-	fmt.Printf("%s: hasSharedBuffers=%v\n", BackendName, backend.hasSharedBuffers)
 	if len(pluginOptions) != 0 {
 		klog.Errorf("backend %q: unknown plugin options %q", BackendName, pluginOptions)
 	}
