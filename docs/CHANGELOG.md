@@ -1,5 +1,8 @@
 # GoMLX changelog
 
+# v0.16.1 - 🎄 2024/12/19 🎄 MatMul fixes
+* MatMul fixed for some edge shape configuration and greatly accelerated in some cases.
+
 # v0.16.0 - 🎄 2024/12/19 🎄 Benchmarks, Speed improvements with gopjrt v0.5.0, Shared buffers.
 
 * XLA backend now accepts the absolute path to the PJRT plugin (`GOMLX_BACKEND="xla:<pjrt_path>"`)
