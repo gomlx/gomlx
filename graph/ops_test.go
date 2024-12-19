@@ -1168,24 +1168,28 @@ func TestMatMul(t *testing.T) {
 
 	// Test shapes of edge cases:
 	backend := graphtest.BuildTestBackend()
-	{
-		// Check broadcasting.
-		g := NewGraph(backend, "matmul_test")
-		lhs := IotaFull(g, shapes.Make(dtypes.F32, 2, 1, 7, 32))
-		rhs := IotaFull(g, shapes.Make(dtypes.F32, 1, 12, 32, 7))
-		got := MatMul(lhs, rhs)
-		require.NoError(t, got.Shape().CheckDims(2, 12, 7, 7))
-		got = MatMul(rhs, lhs)
-		require.NoError(t, got.Shape().CheckDims(2, 12, 32, 32))
+	g := NewGraph(backend, "matmul_test")
+	testShapes := [][3][]int{
+		// Format: {<lhs shape>, <rhs shape>, <expected output shape>} :
+		{{3}, {3, 5}, {5}},
+		{{3, 5}, {5}, {3}},
+		{{3, 5}, {5, 4}, {3, 4}},
+
+		// Notice that the complex ordering of the axes in numpy's MatMul
+		{{3, 5}, {7, 5, 4}, {7, 3, 4}},
+		{{7, 3, 5}, {4, 7, 5, 4}, {4, 7, 3, 4}},
+
+		// Broadcasting:
+		{{1, 3, 5}, {7, 5, 4}, {7, 3, 4}},
+		{{8, 3, 5}, {1, 5, 4}, {8, 3, 4}},
+		{{1, 2, 6, 5}, {1, 3, 1, 5, 4}, {1, 3, 2, 6, 4}},
 	}
-	{
-		// Check automatic rank expansion.
-		g := NewGraph(backend, "matmul_test")
-		lhs := IotaFull(g, shapes.Make(dtypes.F32, 2, 1, 7, 32))
-		rhs := IotaFull(g, shapes.Make(dtypes.F32, 12, 32, 7))
-		got := MatMul(lhs, rhs) // rhs Expands the 2, and lhs broadcasts the 32.
-		require.NoError(t, got.Shape().CheckDims(2, 12, 7, 7))
-		got = MatMul(rhs, lhs)
-		require.NoError(t, got.Shape().CheckDims(2, 12, 32, 32))
+	fmt.Println("Shape checking:")
+	for _, dims := range testShapes {
+		fmt.Printf("\tMatMul(%v, %v) -> %v\n", dims[0], dims[1], dims[2])
+		lhs := Ones(g, shapes.Make(dtypes.F32, dims[0]...))
+		rhs := Ones(g, shapes.Make(dtypes.F32, dims[1]...))
+		got := MatMul(lhs, rhs)
+		require.NoError(t, got.Shape().CheckDims(dims[2]...))
 	}
 }

@@ -1701,23 +1701,112 @@ func MatMul(lhs, rhs *Node) *Node {
 		return DotGeneral(lhs, []int{lhs.Rank() - 1}, nil, rhs, []int{0}, nil)
 	}
 
-	// NumPY broadcasting rule in case they are of different ranks:
-	if lhs.Rank() < rhs.Rank() {
-		lhs = ExpandLeftToRank(lhs, rhs.Rank())
-	} else if rhs.Rank() < lhs.Rank() {
-		rhs = ExpandLeftToRank(rhs, lhs.Rank())
+	// Trivial and most common case: right-hand-side is simply a linear transformation (matrix) on the last axis of lhs.
+	if rhs.Rank() == 2 {
+		return DotGeneral(lhs, []int{lhs.Rank() - 1}, nil, rhs, []int{rhs.Rank() - 2}, nil)
 	}
-	lhsBroadcastDims := slices.Clone(lhs.Shape().Dimensions)
-	rhsBroadcastDims := slices.Clone(rhs.Shape().Dimensions)
-	for axis := range lhs.Rank() - 2 {
-		if lhsBroadcastDims[axis] == 1 {
-			lhsBroadcastDims[axis] = rhs.Shape().Dimensions[axis]
-		} else if rhsBroadcastDims[axis] == 1 {
-			rhsBroadcastDims[axis] = lhs.Shape().Dimensions[axis]
+
+	// Generic version, that will include broadcasting: we will use Einsum (and not DotGeneral) because it will do
+	// the final transposing of the axes, where needed.
+	//
+	// . All axes before the last 2 are "batch":
+	// . If one of the axes is not present, it should be effectively broadcast on the other:
+	// . Batch axes appear first, then axis lhs[rank-2] and then rhs[rank-1].
+	const lhsIdx, rhsIdx = 0, 1
+	rhsRemap := make(map[int]int)              // Maps a rhs axis to match a lhs axis.
+	rhsRemap[rhs.Rank()-2] = lhs.Rank() - 1    // The contracting axes.
+	var lhsSqueezedAxes, rhsSqueezedAxes []int // Axes with dimension 1 that will be broadcast, they are squeezed away.
+	letterForAxis := func(side int, axis int) string {
+		var offset int
+		if side == lhsIdx {
+			if slices.Index(lhsSqueezedAxes, axis) >= 0 {
+				// Axis has been dropped.
+				return ""
+			}
+		} else {
+			if slices.Index(rhsSqueezedAxes, axis) >= 0 {
+				// Axis has been dropped.
+				return ""
+			}
+			if lhsAxis, found := rhsRemap[axis]; found {
+				// Use the lhs axis letter for the rhsAxis: either they are contracting or they are a batch dimension.
+				axis = lhsAxis
+				offset = 0
+			} else {
+				offset = lhs.Rank()
+			}
+		}
+		return string('a' + rune(offset+axis))
+	}
+	var outputAxesLetters string
+
+	var lhsBatchAxes, rhsBatchAxes []int
+	minRank := min(rhs.Rank(), lhs.Rank())
+	for axis := lhs.Rank() - minRank; axis < lhs.Rank()-2; axis++ {
+		lhsBatchAxes = append(lhsBatchAxes, axis)
+	}
+	for axis := rhs.Rank() - minRank; axis < rhs.Rank()-2; axis++ {
+		rhsBatchAxes = append(rhsBatchAxes, axis)
+	}
+
+	// First axes of the output are the "batch" axes not present in the other side.
+	// Only one of the two for-loop belows will run.
+	for axis := range lhs.Rank() - minRank {
+		outputAxesLetters += letterForAxis(lhsIdx, axis)
+	}
+	for axis := range rhs.Rank() - minRank {
+		outputAxesLetters += letterForAxis(rhsIdx, axis)
+	}
+
+	// Process common batch axes:
+	for idx := range len(lhsBatchAxes) {
+		leftAxis := lhsBatchAxes[idx]
+		rightAxis := rhsBatchAxes[idx]
+		leftAxisDim := lhs.Shape().Dimensions[leftAxis]
+		rightAxisDim := rhs.Shape().Dimensions[rightAxis]
+		if leftAxisDim == rightAxisDim {
+			// Same batch axis on both sides:
+			rhsRemap[rightAxis] = leftAxis
+			outputAxesLetters += letterForAxis(lhsIdx, leftAxis)
+			continue
+		}
+		if leftAxisDim != 1 && rightAxisDim != 1 {
+			exceptions.Panicf("MatMul cannot match batch dimensions of lhs (left-hand-side) axis #%d (dim=%d) "+
+				" and rhs (right-hand-side) axis #%d (dim=%d), for lhs.shape=%s and rhs.shape=%s",
+				leftAxis, leftAxisDim, rightAxis, rightAxisDim, lhs.Shape(), rhs.Shape())
+		}
+		if leftAxisDim == 1 {
+			lhsSqueezedAxes = append(lhsSqueezedAxes, leftAxis)
+			outputAxesLetters += letterForAxis(rhsIdx, rightAxis)
+		} else { // rightAxisDim == 1
+			rhsSqueezedAxes = append(rhsSqueezedAxes, rightAxis)
+			outputAxesLetters += letterForAxis(lhsIdx, leftAxis)
 		}
 	}
-	lhs = BroadcastToDims(lhs, lhsBroadcastDims...)
-	rhs = BroadcastToDims(rhs, rhsBroadcastDims...)
-	batchAxes := xslices.Iota(0, lhs.Rank()-2)
-	return DotGeneral(lhs, []int{lhs.Rank() - 1}, batchAxes, rhs, []int{rhs.Rank() - 2}, batchAxes)
+
+	// Final output axes
+	outputAxesLetters += letterForAxis(lhsIdx, lhs.Rank()-2)
+	outputAxesLetters += letterForAxis(rhsIdx, rhs.Rank()-1)
+
+	// List lhs and rhs axes as letters:
+	var lhsLetters, rhsLetters string
+	for axis := range lhs.Rank() {
+		lhsLetters += letterForAxis(lhsIdx, axis)
+	}
+	for axis := range rhs.Rank() {
+		rhsLetters += letterForAxis(rhsIdx, axis)
+	}
+
+	// Squeeze unused 1-dimensional axes:
+	lhsSqueezed := lhs
+	if len(lhsSqueezedAxes) > 0 {
+		lhsSqueezed = Squeeze(lhs, lhsSqueezedAxes...)
+	}
+	rhsSqueezed := rhs
+	if len(rhsSqueezedAxes) > 0 {
+		rhsSqueezed = Squeeze(rhs, rhsSqueezedAxes...)
+	}
+
+	equation := fmt.Sprintf("%s,%s->%s", lhsLetters, rhsLetters, outputAxesLetters)
+	return Einsum(equation, lhsSqueezed, rhsSqueezed)
 }
