@@ -60,6 +60,7 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
   * [Dogs & Cats classifier demo](https://gomlx.github.io/gomlx/notebooks/dogsvscats.html); 
   * [IMDB Movie Review demo](https://gomlx.github.io/gomlx/notebooks/imdb.html); 
   * [Diffusion model for Oxford Flowers 102 dataset (generates random flowers)](examples/oxfordflowers102/OxfordFlowers102_Diffusion.ipynb);
+    * 🎉**NEW**🎉 [Flow Matching Study Notebook](https://github.com/gomlx/gomlx/blob/main/examples/FlowMatching/flow_matching.ipynb) based on Meta's ["Flow Matching Guide and Code"](https://ai.meta.com/research/publications/flow-matching-guide-and-code/).
   * [GoMLX/Gemma](https://github.com/gomlx/gemma), a **GoMLX** implementation of 
     [Google DeepMind's Gemma v2 model](https://github.com/google-deepmind/gemma) ([blog post](https://ai.google.dev/gemma))
   * [GNN model for OGBN-MAG (experimental)](examples/ogbnmag/ogbn-mag.ipynb).
