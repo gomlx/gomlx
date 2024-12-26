@@ -341,7 +341,7 @@ func DisplayImagesAcrossTime(cfg *diffusion.Config, numImages int, numSteps int,
 	fmt.Printf("\tModel #params:\t%d\n", ctx.NumParameters())
 	fmt.Printf("\t Model memory:\t%s\n", data.ByteCountIEC(ctx.Memory()))
 	for ii, generatedImage := range generatedImages {
-		gonbui.DisplayHTMLF("<p>%.2f%% Denoised</p>", generationTimes[ii]*100.0)
+		gonbui.DisplayHTMLF("<p>%.2f%% Transformed</p>", generationTimes[ii]*100.0)
 		PlotImagesTensor(generatedImage)
 	}
 }
@@ -352,7 +352,7 @@ func DisplayImagesAcrossTime(cfg *diffusion.Config, numImages int, numSteps int,
 //
 // If `cacheKey` empty, cache is by-passed. Otherwise, try to load images from cache first if available,
 // or save generated images in cache for future use.
-func SliderDiffusionSteps(cfg *diffusion.Config, cacheKey string, ctx *context.Context, numImages int, numDiffusionSteps int, htmlId string) *xsync.Latch {
+func SliderDiffusionSteps(cfg *diffusion.Config, cacheKey string, numImages int, numDiffusionSteps int, htmlId string) *xsync.Latch {
 	// Generate images.
 	type ImagesAndDiffusions struct {
 		Images    []string
@@ -380,9 +380,9 @@ func SliderDiffusionSteps(cfg *diffusion.Config, cacheKey string, ctx *context.C
 	imagesAndDiffusions = cache.Cache[*ImagesAndDiffusions](cacheKey, generateFn)
 
 	// Create HTML content and containers.
-	denoiseHtmlId := "denoise_" + gonbui.UniqueId()
+	denoiseHtmlId := "fm_transform_" + gonbui.UniqueId()
 	dom.Append(
-		htmlId, fmt.Sprintf(`Denoising to flowers: &nbsp;<span id="%s" style="font-family: monospace; font-style: italic; font-size: small; border: 1px solid; border-style: inset; padding-right:5px;"> </span><br/>`, denoiseHtmlId))
+		htmlId, fmt.Sprintf(`Tranforming Noise to Flowers: &nbsp;<span id="%s" style="font-family: monospace; font-style: italic; font-size: small; border: 1px solid; border-style: inset; padding-right:5px;"> </span><br/>`, denoiseHtmlId))
 	slider := widgets.Slider(0, numDiffusionSteps, 0).AppendTo(htmlId).Done()
 	plotId := "plot_" + gonbui.UniqueId()
 	dom.Append(htmlId, fmt.Sprintf(`<div id="%s"></div>`, plotId))
@@ -397,7 +397,7 @@ func SliderDiffusionSteps(cfg *diffusion.Config, cacheKey string, ctx *context.C
 			select {
 			case value := <-sliderChan.C:
 				dom.SetInnerHtml(denoiseHtmlId, fmt.Sprintf(
-					"%8.1f%%", 100.0*(1.0-imagesAndDiffusions.Diffusion[value])))
+					"%8.1f%%", 100.0*(imagesAndDiffusions.Diffusion[value])))
 				dom.SetInnerHtml(plotId, imagesAndDiffusions.Images[value])
 			case <-done.WaitChan():
 				sliderChan.Close()
@@ -446,7 +446,7 @@ func DropdownFlowerTypes(cfg *diffusion.Config, cacheKey string, numImages, numD
 	}
 	htmlImages := cache.Cache(cacheKey, generateFn)
 
-	dom.Append(htmlId, "<b>Denoise Conditioned On Flower Type:</b><br/>")
+	dom.Append(htmlId, "<b>Generation Conditioned On Flower Type:</b><br/>")
 	dom.Append(htmlId, "Flower Type: ")
 	dropDown := widgets.Select(flowers.Names).AppendTo(htmlId).Done()
 	plotId := "plot_" + gonbui.UniqueId()
