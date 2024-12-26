@@ -214,7 +214,7 @@ func BuildTrainingModelGraph(config *diffusion.Config) train.ModelFn {
 
 		// Sample noise at different schedules.
 		t := ctx.RandomUniform(g, shapes.Make(dtype, batchSize, 1, 1, 1))
-		//t = Square(t) // Bias towards more noise (smaller times t), since it's most impactful
+		t = Sqrt(t) // Bias towards the end (larger times t), since it's more detailed shifts.
 		noisyImages := Add(
 			Mul(images, t),
 			Mul(noises, OneMinus(t)))

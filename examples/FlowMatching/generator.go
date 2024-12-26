@@ -340,9 +340,6 @@ func DisplayImagesAcrossTime(cfg *diffusion.Config, numImages int, numSteps int,
 	fmt.Printf("DisplayImagesAcrossDiffusionSteps(%d images, %d steps): noise.shape=%s\n", numImages, numSteps, noise.Shape())
 	fmt.Printf("\tModel #params:\t%d\n", ctx.NumParameters())
 	fmt.Printf("\t Model memory:\t%s\n", data.ByteCountIEC(ctx.Memory()))
-	gonbui.DisplayHtml("<p><b>Noise</b></p>")
-	PlotImagesTensor(noise)
-
 	for ii, generatedImage := range generatedImages {
 		gonbui.DisplayHTMLF("<p>%.2f%% Denoised</p>", generationTimes[ii]*100.0)
 		PlotImagesTensor(generatedImage)
