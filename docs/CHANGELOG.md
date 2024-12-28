@@ -3,6 +3,7 @@
 # Next
 
 * Added "Flow Matching" examples/demo.
+* Added `layers.DropBlock`, a type of dropout for images.
 
 # v0.16.1 - 🎄 2024/12/19 🎄 MatMul fixes
 * MatMul fixed for some edge shape configuration and greatly accelerated in some cases.
