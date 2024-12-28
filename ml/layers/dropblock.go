@@ -21,11 +21,11 @@ type DropBlockConfig struct {
 }
 
 var (
-	// ParamProbability is the hyperparameter that sets the default DropBlock dropout probability. Default is float64(0.0).
-	ParamProbability = "dropblock_probability"
+	// ParamDropBlockProbability is the hyperparameter that sets the default DropBlock dropout probability. Default is float64(0.0).
+	ParamDropBlockProbability = "dropblock_prob"
 
-	// ParamBlockSize is the hyperparameter that set the default DropBlock block size. Default is int(3).
-	ParamBlockSize = "dropblock_size"
+	// ParamDropBlockSize is the hyperparameter that set the default DropBlock block size. Default is int(3).
+	ParamDropBlockSize = "dropblock_size"
 )
 
 // DropBlock implements a block dropout, as described in [1].
@@ -38,7 +38,7 @@ var (
 //     [batchSize, <...spatial axes...>, channelsAxis]. Use ChannelsAxis or FullShape to configure that.
 //
 // The dropout probability and the block sizes are read by default from the context hyperparameters
-// (see ParamProbability and ParamBlockSize). But they can be optionally configured as well.
+// (see ParamDropBlockProbability and ParamDropBlockSize). But they can be optionally configured as well.
 //
 // It returns a configuration object, that can be further configured.
 // Call Done when finished configuring and it will return the regularized value.
@@ -49,9 +49,9 @@ func DropBlock(ctx *context.Context, x *Node) *DropBlockConfig {
 		ctx: ctx,
 		x:   x,
 	}
-	prob := context.GetParamOr(ctx, ParamProbability, 0.0)
+	prob := context.GetParamOr(ctx, ParamDropBlockProbability, 0.0)
 	cfg.WithDropoutProbability(prob)
-	blockSize := context.GetParamOr(ctx, ParamBlockSize, 3)
+	blockSize := context.GetParamOr(ctx, ParamDropBlockSize, 3)
 	cfg.WithBlockSize(blockSize)
 	return cfg
 }
@@ -86,7 +86,7 @@ func (cfg *DropBlockConfig) FullShape() *DropBlockConfig {
 // It is the expectation of ratio of "pixels" (or voxels if 3d) that will be dropped out in blocks
 // from the image (if 2D).
 //
-// By default, it reads ParamProbability hyperparameter from ctx.
+// By default, it reads ParamDropBlockProbability hyperparameter from ctx.
 func (cfg *DropBlockConfig) WithDropoutProbability(prob float64) *DropBlockConfig {
 	if prob <= 0 {
 		cfg.dropoutProbability = nil
@@ -101,7 +101,7 @@ func (cfg *DropBlockConfig) WithDropoutProbability(prob float64) *DropBlockConfi
 // It is the expectation of ratio of "pixels" (or voxels if 3d) that will be dropped out in blocks
 // from the image (if 2D).
 //
-// By default, it reads ParamProbability hyperparameter from ctx and use that as a constant.
+// By default, it reads ParamDropBlockProbability hyperparameter from ctx and use that as a constant.
 func (cfg *DropBlockConfig) WithDropoutProbabilityNode(prob *Node) *DropBlockConfig {
 	if !prob.IsScalar() || prob.DType() != dtypes.Float32 {
 		exceptions.Panicf("DropBlockConfig.WithDropoutProbabilityNode requires prob to be a scalar of type dtypes.Float32, got %s",

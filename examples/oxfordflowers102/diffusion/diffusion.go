@@ -26,7 +26,7 @@ import (
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/optimizers/cosineschedule"
 	"github.com/gomlx/gomlx/types/shapes"
-	timage "github.com/gomlx/gomlx/types/tensors/images"
+	timages "github.com/gomlx/gomlx/types/tensors/images"
 	"github.com/gomlx/gomlx/types/xslices"
 	"math"
 	"strconv"
@@ -90,7 +90,7 @@ func concatContextFeatures(x, contextFeatures *Node) *Node {
 		return x
 	}
 	broadcastDims := contextFeatures.Shape().Clone().Dimensions
-	for _, axis := range timage.GetSpatialAxes(x, timage.ChannelsLast) {
+	for _, axis := range timages.GetSpatialAxes(x, timages.ChannelsLast) {
 		broadcastDims[axis] = x.Shape().Dimensions[axis]
 	}
 	contextFeatures = BroadcastToDims(contextFeatures, broadcastDims...)
@@ -120,13 +120,16 @@ func ResidualBlock(ctx *context.Context, x *Node, outputChannels int) *Node {
 	switch version {
 	case 1: // Version 1: the original.
 		x = layers.Convolution(nextCtx("conv"), x).Filters(outputChannels).KernelSize(3).PadSame().Done()
+		x = layers.DropBlock(ctx, x).ChannelsAxis(timages.ChannelsLast).Done()
 		x = activations.ApplyFromContext(ctx, x)
 		x = layers.Convolution(nextCtx("conv"), x).Filters(outputChannels).KernelSize(3).PadSame().Done()
+		x = layers.DropBlock(ctx, x).ChannelsAxis(timages.ChannelsLast).Done()
 
 	case 2: // Version 2: slimmer.
 		residual = activations.ApplyFromContext(ctx, residual)
 		convCtx := nextCtx("conv").WithInitializer(initializers.Zero)
 		x = layers.Convolution(convCtx, x).Filters(outputChannels).KernelSize(3).PadSame().Done()
+		x = layers.DropBlock(ctx, x).ChannelsAxis(timages.ChannelsLast).Done()
 
 	default:
 		exceptions.Panicf("ResidualBlock(): invalid \"diffusion_residual_version\" %d: valid values are 1 or 2", version)
@@ -180,7 +183,7 @@ func UpSampleImages(images *Node) *Node {
 //
 // It returns `x` and `skips` after popping the consumed skip connections.
 func UpBlock(ctx *context.Context, x *Node, skips []*Node, numBlocks, outputChannels int) (*Node, []*Node) {
-	//x = Interpolate(x, timage.GetUpSampledSizes(x, timage.ChannelsLast, 2)...).Nearest().Done()
+	//x = Interpolate(x, timages.GetUpSampledSizes(x, timages.ChannelsLast, 2)...).Nearest().Done()
 	x = UpSampleImages(x)
 	for ii := 0; ii < numBlocks; ii++ {
 		var skip *Node
@@ -275,7 +278,7 @@ func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds
 	}
 
 	// Intermediary fixed size blocks.
-	/* Transformer layer: requires some udpates
+	/* Transformer layer: requires some updates.
 	if *flagNumAttLayers > 0 {
 		// Optional transformer layer.
 		scopeName := fmt.Sprintf("%03d-TransformerBlock", layerNum)
@@ -285,6 +288,9 @@ func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds
 		nanLogger.PopScope()
 	}
 	*/
+
+	fmt.Printf("Intermediate shape: %s\n", x.Shape())
+	
 	lastNumChannels := xslices.Last(numChannelsList)
 	for ii := 0; ii < numBlocks; ii++ {
 		blockCtx := nextCtx("IntermediaryBlock_%d", ii)

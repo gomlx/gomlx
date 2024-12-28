@@ -71,15 +71,17 @@ func CreateDefaultContext() *context.Context {
 		// "normalization" is overridden by "fnn_normalization" and "cnn_normalization", if they are set.
 		layers.ParamNormalization: "layer",
 
-		optimizers.ParamOptimizer:       "adam",
-		optimizers.ParamAdamEpsilon:     1e-7,
-		optimizers.ParamAdamDType:       "",
-		optimizers.ParamAdamWeightDecay: 1e-4,
-		cosineschedule.ParamPeriodSteps: 0,
-		activations.ParamActivation:     "swish",
-		layers.ParamDropoutRate:         0.15,
-		regularizers.ParamL2:            0.0,
-		regularizers.ParamL1:            0.0,
+		optimizers.ParamOptimizer:        "adam",
+		optimizers.ParamAdamEpsilon:      1e-7,
+		optimizers.ParamAdamDType:        "",
+		optimizers.ParamAdamWeightDecay:  1e-4,
+		cosineschedule.ParamPeriodSteps:  0,
+		activations.ParamActivation:      "swish",
+		layers.ParamDropoutRate:          0.15,
+		layers.ParamDropBlockProbability: 0.0,
+		layers.ParamDropBlockSize:        3,
+		regularizers.ParamL2:             0.0,
+		regularizers.ParamL1:             0.0,
 
 		optimizers.ParamLearningRate:        1e-3,
 		cosineschedule.ParamPeriodSteps:     0, // Enabled if > 0, it sets the period of the cosine schedule. Typically, the same value as 'train_steps'.
