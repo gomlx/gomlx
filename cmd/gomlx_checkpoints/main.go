@@ -125,7 +125,7 @@ func newPlainTable(withHeader bool, alignments ...lipgloss.Position) *lgtable.Ta
 		Border(lipgloss.NormalBorder()).
 		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("99"))).
 		StyleFunc(func(row, col int) (s lipgloss.Style) {
-			if withHeader && row == 1 {
+			if row < 0 {
 				s = headerRowStyle
 				return
 			}
@@ -187,7 +187,7 @@ func Reports(checkpointPath string) {
 	if *flagParams {
 		fmt.Println(titleStyle.Render("Hyperparameters"))
 		table := newPlainTable(true)
-		table.Row("Scope", "Name", "Type", "Value")
+		table.Headers("Scope", "Name", "Type", "Value")
 		ctx.EnumerateParams(func(scope, key string, value any) {
 			table.Row(scope, key, fmt.Sprintf("%T", value), fmt.Sprintf("%v", value))
 		})
@@ -266,7 +266,7 @@ func metrics(checkpointPath string) {
 	if *flagMetricsLabels {
 		fmt.Println(titleStyle.Render("Metrics Labels"))
 		table := newPlainTable(true, lipgloss.Center, lipgloss.Left)
-		table.Row("Short", "MetricName")
+		table.Headers("Short", "MetricName")
 		rows := make([][]string, len(metricsOrder))
 		for short, idx := range metricsOrder {
 			name, found := shortToName[short]
@@ -291,7 +291,7 @@ func metrics(checkpointPath string) {
 		for name, idx := range metricsOrder {
 			header[idx] = name
 		}
-		table.Row(header...)
+		table.Headers(header...)
 
 		currentStep := int64(-1)
 		var currentRow []string
@@ -335,7 +335,7 @@ func ListVariables(ctx *context.Context) {
 		return
 	}).SetMaxCache(-1)
 	table := newPlainTable(true)
-	table.Row("Scope", "Name", "Shape", "Size", "Bytes", "MAV", "RMS", "MaxAV")
+	table.Headers("Scope", "Name", "Shape", "Size", "Bytes", "MAV", "RMS", "MaxAV")
 	var rows [][]string
 	ctx.EnumerateVariablesInScope(func(v *context.Variable) {
 		shape := v.Shape()
