@@ -299,9 +299,9 @@ func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds
 		// Optional transformer layer.
 		scopeName := fmt.Sprintf("%03d-TransformerBlock", layerNum)
 		layerNum++
-		nanLogger.PushScope(scopeName)
+		NanLogger.PushScope(scopeName)
 		x = TransformerBlock(ctx.In(scopeName), x)
-		nanLogger.PopScope()
+		NanLogger.PopScope()
 	}
 	*/
 

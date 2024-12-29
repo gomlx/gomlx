@@ -19,6 +19,7 @@ import (
 	"github.com/gomlx/gomlx/ui/gonb/margaid"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
 	stdplots "github.com/gomlx/gomlx/ui/plots"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
 	"os"
@@ -57,6 +58,8 @@ func (c *Config) AttachCheckpoint(checkpointPath string) (checkpoint *checkpoint
 	c.Checkpoint = checkpoint // Save in config.
 
 	// In case the loaded checkpoint has different values, we need to update the config accordingly.
+	c.DType = must.M1(dtypes.DTypeString(
+		context.GetParamOr(c.Context, "dtype", "float32")))
 	c.ImageSize = context.GetParamOr(c.Context, "image_size", 64)
 	c.BatchSize = context.GetParamOr(c.Context, "batch_size", 64)
 	c.EvalBatchSize = context.GetParamOr(c.Context, "eval_batch_size", 128)

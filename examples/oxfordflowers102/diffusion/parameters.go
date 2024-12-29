@@ -16,7 +16,7 @@ var (
 	//
 	// These are appended to the list of settings given in the command line in the flag -set.
 	ParamsExcludedFromLoading = []string{
-		"data_dir", "train_steps", "plots",
+		"data_dir", "train_steps", "plots", "nan_logger",
 	}
 )
 
