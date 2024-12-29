@@ -6,6 +6,8 @@
 * Added `layers.DropBlock`, a type of dropout for images.
 * Added `layers.DropPath`, a type of dropout used in Residual connections, to drop full paths.
 * Added `Context.RandomBenoulli` to sample from a Bernoulli (binary) distribution.
+* Correctly pretty-print Float16 and BFloat16 tensors.
+* Fixed nanlogger for Float16 and BFloat16; Also, it first prints other logged tensors, before failing with a NaN.
 
 # v0.16.1 - 🎄 2024/12/19 🎄 MatMul fixes
 * MatMul fixed for some edge shape configuration and greatly accelerated in some cases.
