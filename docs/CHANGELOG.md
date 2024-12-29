@@ -8,6 +8,7 @@
 * Added `Context.RandomBenoulli` to sample from a Bernoulli (binary) distribution.
 * Correctly pretty-print Float16 and BFloat16 tensors.
 * Fixed nanlogger for Float16 and BFloat16; Also, it first prints other logged tensors, before failing with a NaN.
+* Several fixes and small improvements to command-line tool `gomlx_checkpoint`.
 
 # v0.16.1 - 🎄 2024/12/19 🎄 MatMul fixes
 * MatMul fixed for some edge shape configuration and greatly accelerated in some cases.
