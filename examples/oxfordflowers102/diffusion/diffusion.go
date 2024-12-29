@@ -28,6 +28,7 @@ import (
 	"github.com/gomlx/gomlx/types/shapes"
 	timages "github.com/gomlx/gomlx/types/tensors/images"
 	"github.com/gomlx/gomlx/types/xslices"
+	"github.com/gomlx/gopjrt/dtypes"
 	"math"
 	"strconv"
 	"strings"
@@ -133,6 +134,20 @@ func ResidualBlock(ctx *context.Context, x *Node, outputChannels int) *Node {
 
 	default:
 		exceptions.Panicf("ResidualBlock(): invalid \"diffusion_residual_version\" %d: valid values are 1 or 2", version)
+	}
+
+	// Implement "drop path", if configured.
+	g := x.Graph()
+	dropPathRate := context.GetParamOr(ctx, "droppath_prob", 0.0)
+	if ctx.IsTraining(g) && dropPathRate >= 0 {
+		maskShape := shapes.Make(dtypes.Float32, x.Shape().Dimensions...)
+		for ii := 1; ii < maskShape.Rank(); ii++ {
+			maskShape.Dimensions[ii] = 1
+		}
+		mask := ctx.RandomUniform(g, maskShape)
+		mask = GreaterOrEqual(mask, Scalar(g, dtypes.Float32, dropPathRate))
+		mask = ConvertDType(mask, x.DType())
+		x = Mul(x, mask)
 	}
 
 	x = Add(x, residual)
@@ -279,6 +294,7 @@ func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds
 
 	// Intermediary fixed size blocks.
 	/* Transformer layer: requires some updates.
+	fmt.Printf("Intermediate shape: %s\n", x.Shape())
 	if *flagNumAttLayers > 0 {
 		// Optional transformer layer.
 		scopeName := fmt.Sprintf("%03d-TransformerBlock", layerNum)
@@ -289,8 +305,6 @@ func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds
 	}
 	*/
 
-	fmt.Printf("Intermediate shape: %s\n", x.Shape())
-	
 	lastNumChannels := xslices.Last(numChannelsList)
 	for ii := 0; ii < numBlocks; ii++ {
 		blockCtx := nextCtx("IntermediaryBlock_%d", ii)

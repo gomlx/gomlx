@@ -80,6 +80,7 @@ func CreateDefaultContext() *context.Context {
 		layers.ParamDropoutRate:          0.15,
 		layers.ParamDropBlockProbability: 0.0,
 		layers.ParamDropBlockSize:        3,
+		"droppath_prob":                  0.0,
 		regularizers.ParamL2:             0.0,
 		regularizers.ParamL1:             0.0,
 
