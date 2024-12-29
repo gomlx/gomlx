@@ -55,7 +55,6 @@ func (c *Config) AttachCheckpoint(checkpointPath string) (checkpoint *checkpoint
 		ExcludeParams(excludeParams...).
 		Done())
 	c.Checkpoint = checkpoint // Save in config.
-	fmt.Printf("\tCheckpoint: %q\n", checkpoint.Dir())
 
 	// In case the loaded checkpoint has different values, we need to update the config accordingly.
 	c.ImageSize = context.GetParamOr(c.Context, "image_size", 64)
@@ -178,7 +177,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 		backend, ctx, config.BuildTrainingModelGraph(), customLoss,
 		optimizers.FromContext(ctx),
 		[]metrics.Interface{movingImagesLoss, movingNoiseLoss, movingMAE}, // trainMetrics
-		[]metrics.Interface{meanImagesLoss, meanMAE}) // evalMetrics
+		[]metrics.Interface{meanImagesLoss, meanMAE})                      // evalMetrics
 	if nanLogger != nil {
 		trainer.OnExecCreation(func(exec *context.Exec, _ train.GraphType) {
 			nanLogger.AttachToExec(exec)
