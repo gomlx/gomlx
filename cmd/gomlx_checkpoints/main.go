@@ -50,6 +50,7 @@ var (
 
 	flagBackup     = flag.Bool("backup", false, "Set to true to make a backup of the most recent checkpoint, under the 'backup' subdirectory.")
 	flagDeleteVars = flag.String("delete_vars", "", "Delete variables under the given scope(s). Useful for instance to remove training temporary data.")
+	flagGlossary   = flag.Bool("glossary", true, "Whether to list glossary of abbreviation on the bottom of tables.")
 
 	flagLoop = flag.Duration("loop", 0, "Sets looping with the given period. "+
 		"This is used to monitor the training of a program, usually used in conjunction with --metrics. "+
@@ -106,16 +107,17 @@ func ClearScreen() {
 
 var (
 	headerRowStyle = lipgloss.NewStyle().Reverse(true).
-			Padding(0, 2, 0, 2).Align(lipgloss.Center)
+		Padding(0, 2, 0, 2).Align(lipgloss.Center)
 
 	oddRowStyle = lipgloss.NewStyle().Faint(false).
-			PaddingLeft(1).PaddingRight(1)
+		PaddingLeft(1).PaddingRight(1)
 	evenRowStyle = lipgloss.NewStyle().Faint(true).
-			PaddingLeft(1).PaddingRight(1)
+		PaddingLeft(1).PaddingRight(1)
 
-	titleStyle = lipgloss.NewStyle().Bold(true).Padding(1, 4, 1, 4)
-
-	italicStyle = lipgloss.NewStyle().PaddingTop(1).Italic(true).Faint(true)
+	titleStyle    = lipgloss.NewStyle().Bold(true).Padding(1, 4, 1, 4)
+	italicStyle   = lipgloss.NewStyle().Italic(true).Faint(true)
+	emphasisStyle = lipgloss.NewStyle().Bold(true).Faint(false)
+	sectionStyle  = lipgloss.NewStyle().Underline(true).Faint(false)
 )
 
 func newPlainTable(withHeader bool, alignments ...lipgloss.Position) *lgtable.Table {
@@ -193,7 +195,7 @@ func Reports(checkpointPath string) {
 	}
 
 	if *flagVars {
-		ListVariables(ctx)
+		ListVariables(scopedCtx)
 	}
 
 	if *flagMetrics || *flagMetricsLabels {
@@ -322,31 +324,33 @@ func metrics(checkpointPath string) {
 	}
 }
 
-// ListVariables list the variables of a model, with their shape and MAV (mean absolute value) and RMS (root mean square) value.
+// ListVariables list the variables of a model, with their shape and MAV (max absolute value), RMS (root mean square) and MaxAV (max absolute value) values.
 func ListVariables(ctx *context.Context) {
 	fmt.Println(titleStyle.Render(fmt.Sprintf("Variables in scope %q", ctx.Scope())))
-	mavAndRmsFn := NewExec(backends.New(), func(x *Node) (mav *Node, rms *Node) {
+	metricsFn := NewExec(backends.New(), func(x *Node) (mav, rms, maxAV *Node) {
 		x = ConvertDType(x, dtypes.Float64)
 		mav = ReduceAllMean(Abs(x))
 		rms = Sqrt(ReduceAllMean(Square(x)))
+		maxAV = ReduceAllMax(Abs(x))
 		return
 	}).SetMaxCache(-1)
 	table := newPlainTable(true)
-	table.Row("Scope", "Name", "Shape", "Size", "Bytes", "MAV", "RMS")
+	table.Row("Scope", "Name", "Shape", "Size", "Bytes", "MAV", "RMS", "MaxAV")
 	var rows [][]string
 	ctx.EnumerateVariablesInScope(func(v *context.Variable) {
 		shape := v.Shape()
-		var mav, rms string
+		var mav, rms, maxAV string
 		if shape.DType.IsFloat() {
-			mavAndRms := mavAndRmsFn.Call(v.Value())
-			mav = fmt.Sprintf("%.3g", mavAndRms[0].Value().(float64))
-			rms = fmt.Sprintf("%.3g", mavAndRms[1].Value().(float64))
+			metrics := metricsFn.Call(v.Value())
+			mav = fmt.Sprintf("%.3g", metrics[0].Value().(float64))
+			rms = fmt.Sprintf("%.3g", metrics[1].Value().(float64))
+			maxAV = fmt.Sprintf("%.3g", metrics[2].Value().(float64))
 		}
 		rows = append(rows, []string{
 			v.Scope(), v.Name(), shape.String(),
 			humanize.Comma(int64(shape.Size())),
 			humanize.Bytes(uint64(shape.Memory())),
-			mav, rms,
+			mav, rms, maxAV,
 		})
 	})
 	slices.SortFunc(rows, func(a, b []string) int {
@@ -360,6 +364,12 @@ func ListVariables(ctx *context.Context) {
 		table.Row(row...)
 	}
 	fmt.Println(table.Render())
+	if *flagGlossary {
+		fmt.Printf("  %s:\n", sectionStyle.Render("Glossary"))
+		fmt.Printf("   ◦ %s:\t%s\n", emphasisStyle.Render("MAV"), italicStyle.Render("Mean Absolute Value"))
+		fmt.Printf("   ◦ %s:\t%s\n", emphasisStyle.Render("RMS"), italicStyle.Render("Root Mean Square"))
+		fmt.Printf("   ◦ %s:\t%s\n", emphasisStyle.Render("MaxAV"), italicStyle.Render("Max Absolute Value"))
+	}
 }
 
 // DeleteVars on the given scopes.
