@@ -160,14 +160,6 @@ func (cfg *DropBlockConfig) Done() *Node {
 			len(blockSizes), len(spatialAxes), x.Shape())
 	}
 
-	// maskShape has the same shape as X, except for channels where it is one -- it will be broadcase
-	// to all channels of a "pixel" (or "voxel" if 3D, or cell is 1D).
-	maskShape := x.Shape().Clone()
-	maskShape.DType = dtypes.Float32
-	if channelsAxis >= 0 {
-		maskShape.Dimensions[channelsAxis] = 1
-	}
-
 	// gamma is the probability calculated so that the dropout probability +/- approximates
 	// the expectation of ratio of pixels that will be dropped.
 	pixelsPerBlock := 1
@@ -176,9 +168,14 @@ func (cfg *DropBlockConfig) Done() *Node {
 	}
 	gamma := DivScalar(cfg.dropoutProbability, float64(pixelsPerBlock))
 
-	// calculate mask before expanding it to blocks.
-	// true -> pixel continues; false -> pixel dropped out.
-	mask := GreaterThan(ctx.RandomUniform(g, maskShape), gamma) // Boolean
+	// maskShape has the same shape as X, except for channels where it is one -- it will be broadcast
+	// to all channels of a "pixel" (or "voxel" if 3D, or cell is 1D).
+	maskShape := x.Shape().Clone()
+	maskShape.DType = dtypes.Bool
+	if channelsAxis >= 0 {
+		maskShape.Dimensions[channelsAxis] = 1
+	}
+	mask := ctx.RandomBernoulli(OneMinus(gamma), maskShape)
 
 	// Expand masked pixels to blocks -- except if block size is 1, then it behaves like a dropout.
 	if pixelsPerBlock > 1 {
@@ -190,6 +187,7 @@ func (cfg *DropBlockConfig) Done() *Node {
 		}
 	}
 
+	// For boolean values of x, just do a logical "And" with the mask:
 	if x.DType() == dtypes.Bool {
 		// If input is a bool map (as mask itself):
 		return And(x, mask)
