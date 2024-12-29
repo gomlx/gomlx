@@ -213,7 +213,6 @@ func (l *NanLogger) loggerFn(g *graph.Graph, messages []string, values []*tensor
 			filteredNodes = append(filteredNodes, nodes[ii])
 			continue
 		}
-		//fmt.Printf("Trace for %v\n", values[ii].Value())
 		v := shapes.ConvertTo[float64](values[ii].Value())
 		if math.IsNaN(v) || math.IsInf(v, 0) {
 			nodeId := nodes[ii]
@@ -224,6 +223,13 @@ func (l *NanLogger) loggerFn(g *graph.Graph, messages []string, values []*tensor
 		}
 	}
 
+	// Report other values first, since they may help debug.
+	if l.prevLoggerFn != nil && len(filteredMessages) > 0 {
+		// Call previous logger on remaining messages.
+		l.prevLoggerFn(g, filteredMessages, filteredValues, filteredNodes)
+	}
+
+	// Report about firstNan:
 	if firstNan != graph.InvalidNodeId {
 		// Report first NaN.
 		gId := g.GraphId()
@@ -238,11 +244,6 @@ func (l *NanLogger) loggerFn(g *graph.Graph, messages []string, values []*tensor
 		if !found {
 			klog.Warningf("NanLogger received trace for node that was not marked as traced: did you attach the wrong NanLogger to the executor?")
 		}
-	}
-
-	if l.prevLoggerFn != nil && len(filteredMessages) > 0 {
-		// Call previous logger on remaining messages.
-		l.prevLoggerFn(g, filteredMessages, filteredValues, filteredNodes)
 	}
 	return
 }
