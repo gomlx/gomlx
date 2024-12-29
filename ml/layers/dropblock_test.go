@@ -45,3 +45,23 @@ func TestDropBlock(t *testing.T) {
 		}
 	}
 }
+
+func TestDropPath(t *testing.T) {
+	backend := graphtest.BuildTestBackend()
+	ctx := context.New()
+	ctx.RngStateFromSeed(42) // Always the same result.
+	gotT := context.ExecOnce(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
+		ctx.SetTraining(g, true)
+		ones := Ones(g, shapes.Make(dtypes.Float32, 10_000, 10, 10))
+		masked := DropPath(ctx, ones, Const(g, 0.07))
+		require.NoError(t, masked.Shape().CheckDims(10_000, 10, 10))
+
+		// Makes sure masks happens on all axes but the batch axis.
+		reduced := ReduceSum(masked, 1, 2)
+		maskedExamples := ConvertDType(GreaterThan(reduced, ScalarZero(g, reduced.DType())), dtypes.Float32)
+		return ReduceAllMean(maskedExamples) // Ratio of examples that were not masked (not zero).
+	})
+	got := gotT.Value().(float32)
+	fmt.Printf("DropPath with drop probability of 7%%: %.2f%% examples survived\n", 100.0*got)
+	require.InDelta(t, float32(0.93), gotT.Value(), 0.01)
+}

@@ -391,6 +391,28 @@ func DropoutFromContext(ctx *context.Context, x *Node) *Node {
 	return x
 }
 
+// DropPath drops with a certain probability whole examples (paths). It assumes x is shaped [batchSize, ...],
+// and each batchSize example is independently either fully "dropped" (set to zero) or not.
+//
+// This is commonly applied on residual models, with updates like `x = Add(residual, x)`, which can
+// be replaced with `x = Add(residual, DropPath(x, dropProbability))`.
+// Another usage example is dropping whole positional embedding.
+//
+// If it is not training or dropProbability is nil, it is a no-op.
+//
+// See also DropPathFromContext.
+func DropPath(ctx *context.Context, x, dropProbability *Node) *Node {
+	g := x.Graph()
+	if !ctx.IsTraining(g) || dropProbability == nil {
+		return x
+	}
+	maskShape := x.Shape().Clone()
+	for ii := 1; ii < maskShape.Rank(); ii++ {
+		maskShape.Dimensions[ii] = 1
+	}
+	return Mul(x, ctx.RandomBernoulli(OneMinus(dropProbability), maskShape))
+}
+
 // AddL2RegularizationStatic is like AddL2Regularization, but takes the `amount` as a static Go float64 value.
 //
 // Deprecated: use package regularizers instead.

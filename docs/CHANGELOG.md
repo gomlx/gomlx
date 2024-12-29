@@ -4,6 +4,7 @@
 
 * Added "Flow Matching" examples/demo.
 * Added `layers.DropBlock`, a type of dropout for images.
+* Added `layers.DropPath`, a type of dropout used in Residual connections, to drop full paths.
 * Added `Context.RandomBenoulli` to sample from a Bernoulli (binary) distribution.
 
 # v0.16.1 - 🎄 2024/12/19 🎄 MatMul fixes
