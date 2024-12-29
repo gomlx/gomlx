@@ -4,6 +4,7 @@
 
 * Added "Flow Matching" examples/demo.
 * Added `layers.DropBlock`, a type of dropout for images.
+* Added `Context.RandomBenoulli` to sample from a Bernoulli (binary) distribution.
 
 # v0.16.1 - 🎄 2024/12/19 🎄 MatMul fixes
 * MatMul fixed for some edge shape configuration and greatly accelerated in some cases.
