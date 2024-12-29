@@ -144,9 +144,8 @@ func (l *NanLogger) Trace(node *graph.Node, scope ...string) {
 	}
 	node.AssertValid()
 
-	// We actually only need to check the sum of all values: any NaN/Inf will trigger the sum to
-	// be NaN/Inf.
-	node = graph.ReduceAllSum(node)
+	// We check the sum of the max and min of the values: any NaN/Inf will trigger the sum to be NaN/Inf.
+	node = graph.Add(graph.ReduceAllMax(node), graph.ReduceAllMin(node))
 	node.SetLogged(UniqueMessageId)
 
 	// Create trace:
