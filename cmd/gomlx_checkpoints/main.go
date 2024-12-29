@@ -36,6 +36,7 @@ var (
 		"Typically, a model will have several different support variables, that may not matter -- optimizers for instance. "+
 		"This flag tells which scope are considered for the various reports.")
 
+	flagAll     = flag.Bool("all", false, "Display all information. The same as -summary -params -vars -metrics -metrics_labels.")
 	flagSummary = flag.Bool("summary", false, "Display a summary of the model sizes (for variables"+
 		" under --scope and the global step.")
 	flagParams  = flag.Bool("params", false, "Lists the hyperparameters.")
@@ -88,6 +89,14 @@ func main() {
 
 	if *flagDeleteVars != "" {
 		DeleteVars(args[0], strings.Split(*flagDeleteVars, ",")...)
+	}
+
+	if *flagAll {
+		*flagSummary = true
+		*flagParams = true
+		*flagVars = true
+		*flagMetrics = true
+		*flagMetricsLabels = true
 	}
 
 	if *flagLoop > 0 {
@@ -264,64 +273,74 @@ func metrics(checkpointPath string) {
 	}
 
 	if *flagMetricsLabels {
-		fmt.Println(titleStyle.Render("Metrics Labels"))
-		table := newPlainTable(true, lipgloss.Center, lipgloss.Left)
-		table.Headers("Short", "MetricName")
-		rows := make([][]string, len(metricsOrder))
-		for short, idx := range metricsOrder {
-			name, found := shortToName[short]
-			if !found {
-				// metric manually selected by name:
-				name = short
-				short = nameToShort[name]
-			}
-			rows[idx-1] = []string{short, name}
-		}
-		for _, row := range rows {
-			table.Row(row...)
-		}
-		fmt.Println(table.Render())
+		ReportMetricsLabels(shortToName, nameToShort, metricsOrder)
 	}
 
 	if *flagMetrics {
-		fmt.Println(titleStyle.Render(fmt.Sprintf("Metrics %q", checkpointPath)))
-		table := newPlainTable(true, lipgloss.Right)
-		header := make([]string, 1+len(metricsUsed))
-		header[0] = "Global Step"
-		for name, idx := range metricsOrder {
-			header[idx] = name
-		}
-		table.Headers(header...)
-
-		currentStep := int64(-1)
-		var currentRow []string
-		for _, point := range points {
-			step := int64(point.Step)
-			if step != currentStep {
-				if currentStep != -1 {
-					table.Row(currentRow...)
-				}
-				currentStep = step
-				currentRow = make([]string, 1+len(metricsUsed))
-				currentRow[0] = humanize.Comma(step)
-			}
-			idx, found := metricsOrder[point.Short]
-			if found {
-				var value string
-				switch point.MetricType {
-				case "accuracy":
-					value = fmt.Sprintf("%.2f%%", 100.0*point.Value)
-				default:
-					value = fmt.Sprintf("%.3f", point.Value)
-				}
-				currentRow[idx] = value
-			}
-		}
-		if currentStep != -1 {
-			table.Row(currentRow...)
-		}
-		fmt.Println(table.Render())
+		ReportMetrics(checkpointPath, metricsUsed, metricsOrder, points)
 	}
+}
+
+// ReportMetricsLabels list all metrics short and long names.
+func ReportMetricsLabels(shortToName map[string]string, nameToShort map[string]string, metricsOrder map[string]int) {
+	fmt.Println(titleStyle.Render("Metrics Labels"))
+	table := newPlainTable(true, lipgloss.Center, lipgloss.Left)
+	table.Headers("Short", "MetricName")
+	rows := make([][]string, len(metricsOrder))
+	for short, idx := range metricsOrder {
+		name, found := shortToName[short]
+		if !found {
+			// metric manually selected by name:
+			name = short
+			short = nameToShort[name]
+		}
+		rows[idx-1] = []string{short, name}
+	}
+	for _, row := range rows {
+		table.Row(row...)
+	}
+	fmt.Println(table.Render())
+}
+
+// ReportMetrics of the model.
+func ReportMetrics(checkpointPath string, metricsUsed types.Set[string], metricsOrder map[string]int, points []plots.Point) {
+	fmt.Println(titleStyle.Render(fmt.Sprintf("Metrics %q", checkpointPath)))
+	table := newPlainTable(true, lipgloss.Right)
+	header := make([]string, 1+len(metricsUsed))
+	header[0] = "Global Step"
+	for name, idx := range metricsOrder {
+		header[idx] = name
+	}
+	table.Headers(header...)
+
+	currentStep := int64(-1)
+	var currentRow []string
+	for _, point := range points {
+		step := int64(point.Step)
+		if step != currentStep {
+			if currentStep != -1 {
+				table.Row(currentRow...)
+			}
+			currentStep = step
+			currentRow = make([]string, 1+len(metricsUsed))
+			currentRow[0] = humanize.Comma(step)
+		}
+		idx, found := metricsOrder[point.Short]
+		if found {
+			var value string
+			switch point.MetricType {
+			case "accuracy":
+				value = fmt.Sprintf("%.2f%%", 100.0*point.Value)
+			default:
+				value = fmt.Sprintf("%.3f", point.Value)
+			}
+			currentRow[idx] = value
+		}
+	}
+	if currentStep != -1 {
+		table.Row(currentRow...)
+	}
+	fmt.Println(table.Render())
 }
 
 // ListVariables list the variables of a model, with their shape and MAV (max absolute value), RMS (root mean square) and MaxAV (max absolute value) values.
