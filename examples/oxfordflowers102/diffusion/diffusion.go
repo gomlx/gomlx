@@ -28,7 +28,6 @@ import (
 	"github.com/gomlx/gomlx/types/shapes"
 	timages "github.com/gomlx/gomlx/types/tensors/images"
 	"github.com/gomlx/gomlx/types/xslices"
-	"github.com/gomlx/gopjrt/dtypes"
 	"math"
 	"strconv"
 	"strings"
@@ -101,7 +100,7 @@ func concatContextFeatures(x, contextFeatures *Node) *Node {
 // ResidualBlock on the input with `outputChannels` (axis 3) in the output.
 //
 // The parameter `x` must be of rank 4, shaped `[BatchSize, height, width, channels]`.
-func ResidualBlock(ctx *context.Context, x *Node, outputChannels int) *Node {
+func ResidualBlock(ctx *context.Context, nanLogger *nanlogger.NanLogger, x *Node, outputChannels int) *Node {
 	x.AssertRank(4)
 	inputChannels := x.Shape().Dimensions[3]
 	residual := x
@@ -114,8 +113,12 @@ func ResidualBlock(ctx *context.Context, x *Node, outputChannels int) *Node {
 
 	if inputChannels != outputChannels {
 		residual = layers.Dense(nextCtx("residual_projection"), x, true, outputChannels)
+		residual = NormalizeLayer(nextCtx("residual_normalization"), residual)
 	}
+	nanLogger.Trace(residual, "residual")
+
 	x = NormalizeLayer(nextCtx("norm"), x)
+	nanLogger.Trace(x, "x = NormalizeLayer(nextCtx(\"norm\"), x)")
 
 	version := context.GetParamOr(ctx, "diffusion_residual_version", 1)
 	switch version {
@@ -125,33 +128,23 @@ func ResidualBlock(ctx *context.Context, x *Node, outputChannels int) *Node {
 		x = activations.ApplyFromContext(ctx, x)
 		x = layers.Convolution(nextCtx("conv"), x).Filters(outputChannels).KernelSize(3).PadSame().Done()
 		x = layers.DropBlock(ctx, x).ChannelsAxis(timages.ChannelsLast).Done()
+		nanLogger.Trace(x, "x (Version 1)")
 
 	case 2: // Version 2: slimmer.
 		residual = activations.ApplyFromContext(ctx, residual)
 		convCtx := nextCtx("conv").WithInitializer(initializers.Zero)
 		x = layers.Convolution(convCtx, x).Filters(outputChannels).KernelSize(3).PadSame().Done()
 		x = layers.DropBlock(ctx, x).ChannelsAxis(timages.ChannelsLast).Done()
+		nanLogger.Trace(x, "x (Version 2)")
 
 	default:
 		exceptions.Panicf("ResidualBlock(): invalid \"diffusion_residual_version\" %d: valid values are 1 or 2", version)
 	}
 
-	// Implement "drop path", if configured.
-	g := x.Graph()
-	dropPathRate := context.GetParamOr(ctx, "droppath_prob", 0.0)
-	if ctx.IsTraining(g) && dropPathRate >= 0 {
-		maskShape := shapes.Make(dtypes.Float32, x.Shape().Dimensions...)
-		for ii := 1; ii < maskShape.Rank(); ii++ {
-			maskShape.Dimensions[ii] = 1
-		}
-		mask := ctx.RandomUniform(g, maskShape)
-		mask = GreaterOrEqual(mask, Scalar(g, dtypes.Float32, dropPathRate))
-		mask = ConvertDType(mask, x.DType())
-		x = Mul(x, mask)
-	}
-
+	x = layers.DropPathFromContext(ctx, x)
+	nanLogger.Trace(x, "x = layers.DropPathFromContext(ctx, x)")
 	x = Add(x, residual)
-	nanLogger.Trace(x)
+	nanLogger.Trace(x, "x = Add(x, residual)")
 	return x
 }
 
@@ -159,9 +152,9 @@ func ResidualBlock(ctx *context.Context, x *Node, outputChannels int) *Node {
 // It pushes the values between each residual blocks to the `skips` stack, to build the skip connections later.
 //
 // It returns the transformed `x` and `skips` with newly stacked skip connections.
-func DownBlock(ctx *context.Context, x *Node, skips []*Node, numBlocks, outputChannels int) (*Node, []*Node) {
+func DownBlock(ctx *context.Context, nanLoggger *nanlogger.NanLogger, x *Node, skips []*Node, numBlocks, outputChannels int) (*Node, []*Node) {
 	for ii := 0; ii < numBlocks; ii++ {
-		x = ResidualBlock(ctx.Inf("%03d-residual", ii), x, outputChannels)
+		x = ResidualBlock(ctx.Inf("%03d-residual", ii), nanLogger, x, outputChannels)
 		skips = append(skips, x)
 	}
 	poolType := context.GetParamOr(ctx, "diffusion_pool", "mean")
@@ -197,16 +190,23 @@ func UpSampleImages(images *Node) *Node {
 // from `skips`.
 //
 // It returns `x` and `skips` after popping the consumed skip connections.
-func UpBlock(ctx *context.Context, x *Node, skips []*Node, numBlocks, outputChannels int) (*Node, []*Node) {
+func UpBlock(ctx *context.Context, nanLogger *nanlogger.NanLogger, x *Node, skips []*Node, numBlocks, outputChannels int) (*Node, []*Node) {
+	nanLogger.PushScope("UpBlock")
+	defer nanLogger.PopScope()
+
 	//x = Interpolate(x, timages.GetUpSampledSizes(x, timages.ChannelsLast, 2)...).Nearest().Done()
 	x = UpSampleImages(x)
+	nanLogger.Trace(x, "UpSampleImage")
 	for ii := 0; ii < numBlocks; ii++ {
+		scopedCtx := ctx.Inf("%03d-residual", ii)
+		nanLogger.PushScope(scopedCtx.Scope())
 		var skip *Node
 		skip, skips = xslices.Pop(skips)
 		x = Concatenate([]*Node{x, skip}, -1)
-		x = ResidualBlock(ctx.Inf("%03d-residual", ii), x, outputChannels)
+		x = ResidualBlock(scopedCtx, nanLogger, x, outputChannels)
+		nanLogger.Trace(x)
+		nanLogger.PopScope()
 	}
-	nanLogger.Trace(x)
 	return x, skips
 }
 
@@ -234,9 +234,8 @@ const IsV1Test = true
 //     For each value `diffusion_num_residual_blocks` are applied and then the image is pooled and reduced by a factor of 2 --
 //     later to be up-sampled again. So at most `log2(size)` values.
 //   - "diffusion_num_residual_blocks" (static hyperparameter): number of blocks to use per numChannelsList element.
-func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds *Node) *Node {
+func UNetModelGraph(ctx *context.Context, nanLogger *nanlogger.NanLogger, noisyImages, noiseVariances, flowerIds *Node) *Node {
 	dtype := noisyImages.DType()
-
 	ctx = ctx.In(UNetModelScope).WithInitializer(initializers.XavierNormalFn(ctx))
 
 	// nextCtx return a new context prefixed with a counter, to give a nice ordering to the variables.
@@ -254,6 +253,9 @@ func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds
 	noiseVariances.AssertDims(batchSize, 1, 1, 1)
 	flowerIds.AssertDims(batchSize)
 
+	nanLogger.Trace(noisyImages, "UNetModelGraph:noisyImages")
+	nanLogger.Trace(noiseVariances, "UNetModelGraph:noiseVariances")
+
 	// Parameters from flags.
 	numChannelsList := context.GetParamOr(ctx, "diffusion_channels_list", []int{32, 64, 96, 128})
 	numBlocks := context.GetParamOr(ctx, "diffusion_num_residual_blocks", 2)
@@ -265,6 +267,7 @@ func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds
 	sinEmbed := SinusoidalEmbedding(ctx, noiseVariances)
 	nanLogger.Trace(sinEmbed)
 	contextFeatures := sinEmbed
+	nanLogger.Trace(sinEmbed, "UNetModelGraph:sinEmbed")
 
 	// Get flower embeddings.
 	flowerIds = InsertAxes(flowerIds, -1, -1, -1) // Expand axis to the match noisyImages rank.
@@ -273,12 +276,14 @@ func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds
 		flowerTypeEmbed := layers.Embedding(
 			nextCtx("FlowerEmbeddings").WithInitializer(initializers.RandomNormalFn(ctx, 1.0/float64(flowerEmbedSize))),
 			flowerIds, dtype, flowers.NumLabels, flowerEmbedSize)
+		nanLogger.Trace(flowerTypeEmbed, "UNetModelGraph:flowerTypeEmbed")
 		contextFeatures = Concatenate([]*Node{contextFeatures, flowerTypeEmbed}, -1)
 	}
 
 	// Adjust imageChannels to initial num channels.
 	x := noisyImages
 	x = layers.Dense(nextCtx("StartingChannelsProjection"), x, true, numChannelsList[0])
+	nanLogger.Trace(x, "UNetModelGraph:x")
 
 	// Downward: keep pooling image to a smaller size.
 	// Keep the `skips` features as we move "downward," so they can be "skip" connected later as we move upward.
@@ -288,7 +293,8 @@ func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds
 		nanLogger.PushScope(blockCtx.Scope())
 		// Apply context features: noise rate as a sinusoidal embedding and flower types embeddings.
 		x = concatContextFeatures(x, contextFeatures)
-		x, skips = DownBlock(blockCtx, x, skips, numBlocks, numChannels)
+		x, skips = DownBlock(blockCtx, nanLogger, x, skips, numBlocks, numChannels)
+		nanLogger.Trace(x, "UNetModelGraph:x")
 		nanLogger.PopScope()
 	}
 
@@ -306,10 +312,11 @@ func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds
 	*/
 
 	lastNumChannels := xslices.Last(numChannelsList)
-	for ii := 0; ii < numBlocks; ii++ {
-		blockCtx := nextCtx("IntermediaryBlock_%d", ii)
+	for ii := range numBlocks {
+		blockCtx := nextCtx("IntermediaryBlock-%02d", ii)
 		nanLogger.PushScope(blockCtx.Scope())
-		x = ResidualBlock(blockCtx, x, lastNumChannels)
+		x = ResidualBlock(blockCtx, nanLogger, x, lastNumChannels)
+		nanLogger.Trace(x, "x")
 		nanLogger.PopScope()
 	}
 
@@ -318,7 +325,8 @@ func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds
 		blockCtx := nextCtx("UpBlock_%d", ii)
 		nanLogger.PushScope(blockCtx.Scope())
 		numChannels := numChannelsList[len(numChannelsList)-(ii+1)]
-		x, skips = UpBlock(blockCtx, x, skips, numBlocks, numChannels)
+		x, skips = UpBlock(blockCtx, nanLogger, x, skips, numBlocks, numChannels)
+		nanLogger.Trace(x, "UNetModelGraph:x")
 		nanLogger.PopScope()
 	}
 	if len(skips) != 0 {
@@ -327,6 +335,9 @@ func UNetModelGraph(ctx *context.Context, noisyImages, noiseVariances, flowerIds
 
 	// Output initialized to 0, which is the mean of the target.
 	x = layers.DenseWithBias(nextCtx("Readout").WithInitializer(initializers.Zero), x, imageChannels)
+
+	//x = MirroredLog1p(x)
+	nanLogger.Trace(x, "UNetModelGraph:x")
 	return x
 }
 
@@ -381,7 +392,7 @@ func Denoise(ctx *context.Context, noisyImages, signalRatios, noiseRatios, flowe
 	noiseVariances := Square(noiseRatios)
 
 	// It's easy to model the noise than the image:
-	predictedNoises = UNetModelGraph(modelCtx, noisyImages, noiseVariances, flowerIds)
+	predictedNoises = UNetModelGraph(modelCtx, nil, noisyImages, noiseVariances, flowerIds)
 	predictedImages = Sub(noisyImages, Mul(predictedNoises, noiseRatios))
 	predictedImages = Div(predictedImages, signalRatios)
 

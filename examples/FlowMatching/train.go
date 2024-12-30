@@ -154,14 +154,13 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 	if globalStep < numTrainSteps {
 		fmt.Println("Starting training stage:")
 		_, err := loop.RunSteps(trainDS, numTrainSteps-globalStep)
-		globalStep = int(optimizers.GetGlobalStep(ctx))
 		if verbosity >= 1 {
 			fmt.Printf("\t[Step %d] median train step: %d microseconds\n",
 				loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
 		}
 		if err != nil {
-			if globalStep > 1 {
-				klog.Infof("Debug checkpoint save before crashing at globalStep %d", globalStep)
+			if loop.LoopStep > loop.StartStep {
+				klog.Infof("Debug checkpoint save before crashing at loop step %d", loop.LoopStep)
 				errSave := checkpoint.Save()
 				if errSave != nil {
 					klog.Errorf("Error while saving checkpoint before crashing: %+v", errSave)
@@ -242,7 +241,7 @@ func BuildTrainingModelGraph(config *diffusion.Config) train.ModelFn {
 
 		// Target and predicted velocity (aka. u(X,t)).
 		targetVelocity := Sub(images, noises)
-		predictedVelocity := diffusion.UNetModelGraph(ctx, noisyImages, t, flowerIds)
+		predictedVelocity := diffusion.UNetModelGraph(ctx, config.NanLogger, noisyImages, t, flowerIds)
 		config.NanLogger.Trace(predictedVelocity, "predictedVelocity")
 
 		// Calculate our custom loss: mean absolute error from the noise to the predictedNoise.
@@ -265,8 +264,8 @@ func BuildTrainingModelGraph(config *diffusion.Config) train.ModelFn {
 		}
 
 		// Large reduce operations lead to overflow for low-precision dtypes. We up-convert in those cases, before calculating the loss.
-		ReduceAllMax(Abs(targetVelocity)).SetLogged("targetVelocity.Max(Abs(x))")
-		ReduceAllMax(Abs(predictedVelocity)).SetLogged("predictedVelocity.Max(Abs(x))")
+		//ReduceAllMax(Abs(targetVelocity)).SetLogged("targetVelocity.Max(Abs(x))")
+		//ReduceAllMax(Abs(predictedVelocity)).SetLogged("predictedVelocity.Max(Abs(x))")
 		if dtype == dtypes.Float16 || dtype == dtypes.BFloat16 {
 			targetVelocity = ConvertDType(targetVelocity, dtypes.Float32)
 			predictedVelocity = ConvertDType(predictedVelocity, dtypes.Float32)
@@ -276,7 +275,7 @@ func BuildTrainingModelGraph(config *diffusion.Config) train.ModelFn {
 		if !loss.IsScalar() {
 			loss = ReduceAllMean(loss)
 		}
-		loss.SetLogged("loss")
+		//loss.SetLogged("loss")
 		return []*Node{predictedVelocity, loss}
 	}
 }

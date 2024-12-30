@@ -75,12 +75,12 @@ func MidPointODEStep(ctx *context.Context, noisyImages, flowerIds, startTime, en
 	startTime = normalizeTimeFn(startTime)
 	endTime = normalizeTimeFn(endTime)
 
-	velocity0 := diffusion.UNetModelGraph(ctx, noisyImages, startTime, flowerIds)
+	velocity0 := diffusion.UNetModelGraph(ctx, nil, noisyImages, startTime, flowerIds)
 	// slope0 := u(ctx, xyT, tStart)
 	ΔT := Sub(endTime, startTime)
 	halfΔT := DivScalar(ΔT, 2)
 	midPoint := Add(noisyImages, Mul(velocity0, halfΔT))
-	velocity1 := diffusion.UNetModelGraph(ctx, midPoint, Add(startTime, halfΔT), flowerIds)
+	velocity1 := diffusion.UNetModelGraph(ctx, nil, midPoint, Add(startTime, halfΔT), flowerIds)
 	return Add(noisyImages, Mul(velocity1, ΔT))
 }
 
