@@ -203,8 +203,21 @@ func ClipStepByValue(ctx *context.Context, step *Node) *Node {
 	return ClipScalar(step, -clipByValue, clipByValue)
 }
 
+// ClipNaNsInGradients will replace the gradient tensor by zeros if there are any NaNs or +/-Inf values.
+// It is only enabled if ParamClipNaN is set to true.
+//
+// See also ClipNaNsInUpdates.
+func ClipNaNsInGradients(ctx *context.Context, gradients *Node) *Node {
+	if !context.GetParamOr(ctx, ParamClipNaN, false) {
+		return gradients
+	}
+	return Where(LogicalAll(IsFinite(gradients)), gradients, ZerosLike(gradients))
+}
+
 // ClipNaNsInUpdates will replace original values into updates, where updates have NaN (or +/-Inf) values,
 // if the ParamClipNaN is set to true.
+//
+// See also ClipNaNsInGradients.
 func ClipNaNsInUpdates(ctx *context.Context, original, updates *Node) *Node {
 	if !context.GetParamOr(ctx, ParamClipNaN, false) {
 		return updates
