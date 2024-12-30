@@ -25,10 +25,10 @@ func (t *Tensor) Summary(precision int) string {
 	// Print value with appropriate formatting:
 	wValue := func(v reflect.Value) {
 		if v.Type() == typeFloat16 {
-			w("%.*f", precision, v.Interface().(float16.Float16).Float32())
+			w("%.*g", precision, v.Interface().(float16.Float16).Float32())
 			return
 		} else if v.Type() == typeBFloat16 {
-			w("%.*f", precision, v.Interface().(bfloat16.BFloat16).Float32())
+			w("%.*g", precision, v.Interface().(bfloat16.BFloat16).Float32())
 			return
 		}
 		switch v.Kind() {
@@ -38,9 +38,9 @@ func (t *Tensor) Summary(precision int) string {
 			w("%d", v.Uint())
 		case reflect.Complex64, reflect.Complex128:
 			c := v.Complex()
-			w("(%.*f+%.*fi)", precision, real(c), precision, imag(c))
+			w("(%.*g+%.*gi)", precision, real(c), precision, imag(c))
 		default:
-			w("%.*f", precision, v.Interface())
+			w("%.*g", precision, v.Interface())
 		}
 	}
 
