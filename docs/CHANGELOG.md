@@ -15,8 +15,6 @@
 * `layers.LayerNormalization`: 
   * up-scale precision by default if input is a Float16 or BFloat16. Low-precision
     lead to NaNs when reducing values for normalization. Added also a hyperparameter to configure normalization DType.
-  * StopGradient on normalization terms (mean and variance), so they are not considered for the learning -- greatly
-    improved things for Float16.
 
 # v0.16.1 - 🎄 2024/12/19 🎄 MatMul fixes
 * MatMul fixed for some edge shape configuration and greatly accelerated in some cases.
