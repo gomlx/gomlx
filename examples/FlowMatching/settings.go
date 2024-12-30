@@ -76,6 +76,7 @@ func CreateDefaultContext() *context.Context {
 		optimizers.ParamAdamDType:        "float32",
 		optimizers.ParamAdamWeightDecay:  1e-4,
 		optimizers.ParamClipStepByValue:  0.0,
+		optimizers.ParamClipNaN:          false,
 		cosineschedule.ParamPeriodSteps:  0,
 		activations.ParamActivation:      "swish",
 		layers.ParamDropoutRate:          0.15,
