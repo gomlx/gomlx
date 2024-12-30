@@ -153,10 +153,21 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 	}
 	if globalStep < numTrainSteps {
 		fmt.Println("Starting training stage:")
-		_ = must.M1(loop.RunSteps(trainDS, numTrainSteps-globalStep))
+		_, err := loop.RunSteps(trainDS, numTrainSteps-globalStep)
+		globalStep = int(optimizers.GetGlobalStep(ctx))
 		if verbosity >= 1 {
 			fmt.Printf("\t[Step %d] median train step: %d microseconds\n",
 				loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
+		}
+		if err != nil {
+			if globalStep > 1 {
+				klog.Infof("Debug checkpoint save before crashing at globalStep %d", globalStep)
+				errSave := checkpoint.Save()
+				if errSave != nil {
+					klog.Errorf("Error while saving checkpoint before crashing: %+v", errSave)
+				}
+			}
+			klog.Fatalf("Error during training: %+v", err)
 		}
 
 		// Update batch normalization averages, if they are used.
@@ -216,7 +227,7 @@ func BuildTrainingModelGraph(config *diffusion.Config) train.ModelFn {
 		// Sample noise at different schedules.
 		t := ctx.RandomUniform(g, shapes.Make(dtype, batchSize, 1, 1, 1))
 		if ctx.IsTraining(g) {
-			// During training we bias towards the end (larger times t), since it's more detailed shifts.
+			// During training, we bias towards the end (larger times t), since it's more detailed shifts.
 			t = Sqrt(t)
 		} else {
 			// During evaluation, we only look for t >= 0.5: for smaller values probably it is going to
@@ -254,15 +265,19 @@ func BuildTrainingModelGraph(config *diffusion.Config) train.ModelFn {
 		}
 
 		// Large reduce operations lead to overflow for low-precision dtypes. We up-convert in those cases, before calculating the loss.
+		ReduceAllMax(Abs(targetVelocity)).SetLogged("targetVelocity.Max(Abs(x))")
+		ReduceAllMax(Abs(predictedVelocity)).SetLogged("predictedVelocity.Max(Abs(x))")
 		if dtype == dtypes.Float16 || dtype == dtypes.BFloat16 {
 			targetVelocity = ConvertDType(targetVelocity, dtypes.Float32)
 			predictedVelocity = ConvertDType(predictedVelocity, dtypes.Float32)
 		}
-		noisesLoss := lossFn([]*Node{targetVelocity}, []*Node{predictedVelocity})
-		if !noisesLoss.IsScalar() {
-			noisesLoss = ReduceAllMean(noisesLoss)
+
+		loss := lossFn([]*Node{targetVelocity}, []*Node{predictedVelocity})
+		if !loss.IsScalar() {
+			loss = ReduceAllMean(loss)
 		}
-		return []*Node{predictedVelocity, noisesLoss}
+		loss.SetLogged("loss")
+		return []*Node{predictedVelocity, loss}
 	}
 }
 
