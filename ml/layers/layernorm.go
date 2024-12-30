@@ -238,6 +238,7 @@ func (builder *LayerNormBuilder) Done() *Node {
 	} else {
 		mean = MaskedReduceAndKeep(convertedX, mask, MaskedReduceMean, builder.normalizingAxes...)
 	}
+	mean = StopGradient(mean)
 	normalized := Sub(convertedX, mean)
 	if mask != nil {
 		normalized = Where(mask, normalized, ZerosLike(normalized))
@@ -249,6 +250,7 @@ func (builder *LayerNormBuilder) Done() *Node {
 		} else {
 			variance = MaskedReduceAndKeep(Square(normalized), mask, MaskedReduceMean, builder.normalizingAxes...)
 		}
+		variance = StopGradient(variance)
 		epsilon := ConstAs(convertedX, builder.epsilon)
 		normalized = Div(normalized, Sqrt(Add(variance, epsilon)))
 	}
