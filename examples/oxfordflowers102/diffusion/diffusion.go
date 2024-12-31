@@ -113,7 +113,7 @@ func ResidualBlock(ctx *context.Context, nanLogger *nanlogger.NanLogger, x *Node
 
 	if inputChannels != outputChannels {
 		residual = layers.Dense(nextCtx("residual_projection"), x, true, outputChannels)
-		residual = NormalizeLayer(nextCtx("residual_normalization"), residual)
+		//residual = NormalizeLayer(nextCtx("residual_normalization"), residual)
 	}
 	nanLogger.Trace(residual, "residual")
 
@@ -335,9 +335,8 @@ func UNetModelGraph(ctx *context.Context, nanLogger *nanlogger.NanLogger, noisyI
 
 	// Output initialized to 0, which is the mean of the target.
 	x = layers.DenseWithBias(nextCtx("Readout").WithInitializer(initializers.Zero), x, imageChannels)
-
-	//x = MirroredLog1p(x)
 	nanLogger.Trace(x, "UNetModelGraph:x")
+
 	return x
 }
 
