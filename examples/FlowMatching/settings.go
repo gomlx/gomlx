@@ -52,15 +52,21 @@ func CreateDefaultContext() *context.Context {
 		// Flow Matching settings:
 
 		// Re-using diffusion model:
-		"diffusion_loss":                "mae",                  // "mse" (Mean-Squared-Error), "mae" (Mean-Absolute-Error) or "huber".
-		"huber_delta":                   0.2,                    // If "huber" loss is selected, this is the delta, after which the loss becomes linear.
-		"diffusion_num_residual_blocks": 4,                      // Number of residual blocks per image size in the U-Net model.
+		"diffusion_loss":             "mae", // "mse" (Mean-Squared-Error), "mae" (Mean-Absolute-Error) or "huber".
+		"huber_delta":                0.2,   // If "huber" loss is selected, this is the delta, after which the loss becomes linear.
+		"diffusion_balanced_dataset": false, // Enable training on a balanced dataset: batch_size=102, one example per flower type.
+		"diffusion_ema":              0.999, // Exponential Moving Average of the model weights to use during evaluation. Set to <= 0 to disable.
+		"use_ema":                    false, // If set to true, and "ema" (exponential moving average) of the model is maintained, use that for evaluation.
+
+		// U-Net model parameters:
 		"diffusion_channels_list":       []int{32, 64, 96, 128}, // Number of channels (features) for each image size (progressively smaller) in U-Net model.
-		"diffusion_balanced_dataset":    false,                  // Enable training on a balanced dataset: batch_size=102, one example per flower type.
+		"diffusion_num_residual_blocks": 4,                      // Number of residual blocks per image size in the U-Net model.
 		"diffusion_pool":                "mean",                 // Values are: "mean", "max", "sum", "concat"
 		"diffusion_residual_version":    2,                      // Valid values are 1 or 2. See code in function ResidualBlock.
-		"diffusion_ema":                 0.999,                  // Exponential Moving Average of the model weights to use during evaluation. Set to <= 0 to disable.
-		"use_ema":                       false,                  // If set to true, and "ema" (exponential moving average) of the model is maintained, use that for evaluation.
+		"unet_attn_layers":              0,                      // If > 0 it uses an attention layer (similar to ViT) in the inner (smallest spatial size) part of the model.
+		"unet_attn_heads":               4,                      // If using attention (unet_attn_layers>0), how many heads.
+		"unet_attn_key_dim":             16,                     // Key/Query embedding size for attention.
+		"unet_attn_pos_dim":             16,                     // Position embedding size for the patches.
 
 		// Model parameters for the dataset:
 		"flower_type_embed_size": 16,     // If > 0, use embedding of the flower type of the given dimension.

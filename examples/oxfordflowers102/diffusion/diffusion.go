@@ -298,26 +298,25 @@ func UNetModelGraph(ctx *context.Context, nanLogger *nanlogger.NanLogger, noisyI
 		nanLogger.PopScope()
 	}
 
-	// Intermediary fixed size blocks.
-	/* Transformer layer: requires some updates.
-	fmt.Printf("Intermediate shape: %s\n", x.Shape())
-	if *flagNumAttLayers > 0 {
-		// Optional transformer layer.
-		scopeName := fmt.Sprintf("%03d-TransformerBlock", layerNum)
-		layerNum++
-		NanLogger.PushScope(scopeName)
-		x = TransformerBlock(ctx.In(scopeName), x)
-		NanLogger.PopScope()
-	}
-	*/
-
-	lastNumChannels := xslices.Last(numChannelsList)
-	for ii := range numBlocks {
-		blockCtx := nextCtx("IntermediaryBlock-%02d", ii)
+	// Innermost part of the model: smallest spatial shape, but usually the largest embedding size.
+	//fmt.Printf("Inner shape: %s\n", x.Shape())
+	numAttentionLayers := context.GetParamOr(ctx, "unet_attn_layers", 0)
+	if numAttentionLayers > 0 {
+		blockCtx := nextCtx("Attention")
 		nanLogger.PushScope(blockCtx.Scope())
-		x = ResidualBlock(blockCtx, nanLogger, x, lastNumChannels)
-		nanLogger.Trace(x, "x")
+		x = TransformerBlock(blockCtx, nanLogger, x)
 		nanLogger.PopScope()
+
+	} else {
+		// Normal residual block for inner image:
+		lastNumChannels := xslices.Last(numChannelsList)
+		for ii := range numBlocks {
+			blockCtx := nextCtx("IntermediaryBlock-%02d", ii)
+			nanLogger.PushScope(blockCtx.Scope())
+			x = ResidualBlock(blockCtx, nanLogger, x, lastNumChannels)
+			nanLogger.Trace(x, "x")
+			nanLogger.PopScope()
+		}
 	}
 
 	// Upward: up-sample image back to original size, one block at a time.
@@ -490,73 +489,60 @@ func (c *Config) BuildTrainingModelGraph() train.ModelFn {
 }
 
 var (
-	flagDropoutRate         = flag.Float64("dropout", 0.15, "Dropout rate")
-	flagNumAttHeads         = flag.Int("att_heads", 4, "Number of attention heads, if --att_layers > 0.")
-	flagNumAttLayers        = flag.Int("att_layers", 0, "Number of stacked attention layers. Set to 0 to disable.")
-	flagAttPosEmbedSize     = flag.Int("att_pos_embed", 8, "Size of learned embedding.")
-	flagAttKeyQueryEmbedDim = flag.Int("att_key_dim", 8, "Dimension of the Key/Query attention embedding.")
+	flagDropoutRate = flag.Float64("dropout", 0.15, "Dropout rate")
 )
 
 // TransformerBlock takes embed shaped `[batchDim, spatialDim, embedDim]`, where the spatial dimension is
 // the combined dimensions of the image.
-func TransformerBlock(ctx *context.Context, x *Node) *Node {
-	if *flagNumAttLayers == 0 {
-		return x
-	}
+func TransformerBlock(ctx *context.Context, nanLogger *nanlogger.NanLogger, x *Node) *Node {
 	g := x.Graph()
 	dtype := x.DType()
 	batchDim := x.Shape().Dimensions[0]
 	embedDim := x.Shape().Dimensions[3]
+
+	numLayers := context.GetParamOr(ctx, "unet_attn_layers", 0)
+	numHeads := context.GetParamOr(ctx, "unet_attn_heads", 4)
+	keyQueryDim := context.GetParamOr(ctx, "unet_attn_key_dim", 16)
+	posEmbedDim := context.GetParamOr(ctx, "unet_attn_pos_dim", 16)
 
 	// Collapse spatial dimensions of the image.
 	embed := Reshape(x, batchDim, -1, embedDim)
 	shape := embed.Shape()
 	spatialDim := shape.Dimensions[1]
 
-	var dropoutRate *Node
-	if *flagDropoutRate > 0 {
-		dropoutRate = ConstAsDType(g, dtype, *flagDropoutRate)
-	}
-
 	// Create positional embedding variable: it is 1 in every axis, but for the
 	// sequence dimension -- there will be one embedding per position.
 	// Shape: [1, maxLen, embedDim]
-	posEmbedShape := shapes.Make(dtype, 1, spatialDim, *flagAttPosEmbedSize)
+	posEmbedShape := shapes.Make(dtype, 1, spatialDim, posEmbedDim)
 	posEmbedVar := ctx.VariableWithShape("positional", posEmbedShape)
 	posEmbed := posEmbedVar.ValueGraph(g)
-	posEmbed = BroadcastToDims(posEmbed, batchDim, spatialDim, *flagAttPosEmbedSize) // Broadcast positional embeddings to each example in batch.
+	posEmbed = BroadcastToDims(posEmbed, batchDim, spatialDim, posEmbedDim) // Broadcast batch axis so we can concatenate it later.
 
 	// Add the requested number of attention layers.
-	for ii := 0; ii < *flagNumAttLayers; ii++ {
+	for ii := 0; ii < numLayers; ii++ {
 		// Each layer in its own scope.
-		ctx := ctx.In(fmt.Sprintf("AttLayer_%d", ii))
+		scopedCtx := ctx.In(fmt.Sprintf("AttLayer_%d", ii))
 		residual := embed
 		embed = Concatenate([]*Node{embed, posEmbed}, -1)
-		embed = layers.MultiHeadAttention(ctx, embed, embed, embed, *flagNumAttHeads, *flagAttKeyQueryEmbedDim).
+		embed = layers.MultiHeadAttention(scopedCtx, embed, embed, embed, numHeads, keyQueryDim).
 			SetOutputDim(embedDim).
 			SetValueHeadDim(embedDim).Done()
 		nanLogger.Trace(embed)
-		if *flagDropoutRate > 0 {
-			embed = layers.Dropout(ctx.In("dropout_1"), embed, dropoutRate)
-		}
-		embed = NormalizeLayer(ctx.In("normalization_1"), embed)
+		embed = layers.DropoutFromContext(scopedCtx, embed)
+		embed = NormalizeLayer(scopedCtx.In("normalization_1"), embed)
 		attentionOutput := embed
 
 		// Transformers recipe: 2 dense layers after attention.
-		embed = layers.Dense(ctx.In("ffn_1"), embed, true, embedDim)
-		embed = activations.ApplyFromContext(ctx, embed)
-		embed = layers.Dense(ctx.In("ffn_2"), embed, true, embedDim)
-		if *flagDropoutRate > 0 {
-			embed = layers.Dropout(ctx.In("dropout_1"), embed, dropoutRate)
-		}
+		embed = layers.Dense(scopedCtx.In("ffn_1"), embed, true, embedDim)
+		embed = activations.ApplyFromContext(scopedCtx, embed)
+		embed = layers.Dense(scopedCtx.In("ffn_2"), embed, true, embedDim)
+		embed = layers.DropoutFromContext(scopedCtx, embed)
 		embed = Add(embed, attentionOutput)
-		embed = NormalizeLayer(ctx.In("normalization_2"), embed)
+		embed = NormalizeLayer(scopedCtx.In("normalization_2"), embed)
 
 		// Residual connection: not part of the usual transformer layer ...
-		if ii > 0 {
-			embed = Add(residual, embed)
-			nanLogger.Trace(embed)
-		}
+		embed = Add(residual, embed)
+		nanLogger.Trace(embed, "embed = Add(residual, embed)")
 	}
 	x = Reshape(embed, batchDim, x.Shape().Dimensions[1], x.Shape().Dimensions[2], -1)
 	return x
