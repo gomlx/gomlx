@@ -23,6 +23,7 @@ package losses
 import (
 	. "github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 )
@@ -341,13 +342,6 @@ func categoricalCrossEntropyImpl(labels, predictions, weights, mask *Node) *Node
 	return losses
 }
 
-var (
-	// ParamHuberLossDelta is the name of the hyperparameter that defines the Huber loss delta.
-	// See HuberLossBuilder.
-	// It defaults to 1.0
-	ParamHuberLossDelta = "huber_loss_delta"
-)
-
 // MakeHuberLoss returns a Huber loss function: it's similar to an L2 (MeanSquaredLoss) close to the target,
 // and it becomes L1 (linear) away from the target.
 //
@@ -397,4 +391,123 @@ func MakeHuberLoss(delta float64) LossFn {
 		}
 		return loss
 	}
+}
+
+var (
+	// ParamHuberLossDelta is the name of the hyperparameter that defines the Huber loss delta.
+	// See HuberLossBuilder.
+	// It defaults to 1.0
+	ParamHuberLossDelta = "huber_loss_delta"
+)
+
+// MakeHuberLossFromContext calls MakeHuberLoss using the delta configured by the hyperparameter
+// ParamHuberLossDelta in the context.
+func MakeHuberLossFromContext(ctx *context.Context) LossFn {
+	delta := context.GetParamOr(ctx, ParamHuberLossDelta, 1.0)
+	return MakeHuberLoss(delta)
+}
+
+// MakeAdaptivePowerLoss creates an adaptive power loss function.
+//
+//   - When the labels and predictions are close, it tends to |labels-predictions|^powerNear.
+//   - When the labels and predictions are far, it tends to |labels-predictions|^powerFar.
+//   - If labels-predictions == middleDelta, it's exactly mid-point loss between powerNear and powerFar,
+//     and the loss is |labels-predictions|^(powerFar+powerNear)/2.
+//   - sharpness defines how sharp ("sudden") is the transition.
+//
+// E.g.: setting powerNear to 2, powerFar to 1, this will behave similarly to a HuberLoss.
+func MakeAdaptivePowerLoss(powerNear, powerFar, middleDelta, sharpness float64) LossFn {
+	return func(labels, predictions []*Node) (loss *Node) {
+		predictions0 := predictions[0]
+		g := predictions0.Graph()
+		dtype := predictions0.DType()
+		labels0 := labels[0]
+		if !labels0.Shape().Equal(predictions0.Shape()) {
+			Panicf("labels[0] (%s) and predictions[0] (%s) must have same shape", labels0.Shape(), predictions0.Shape())
+		}
+		weights, mask := CheckLabelsForWeightsAndMask(labels0.Shape(), labels)
+
+		// Calculate AdaptivePowerLoss
+		delta := Abs(Sub(labels0, predictions0))
+		if powerNear == powerFar {
+			// Easy case, where they are the same.
+			loss = Pow(delta, Scalar(g, dtype, powerNear))
+
+		} else {
+			// Find power to use for delta.
+			normalizedDelta := DivScalar(delta, middleDelta)
+			lnDelta := Log(Max(normalizedDelta, epsilonForDType(g, dtype)))
+			powerDiffOverSharpness := (powerNear - powerFar) / sharpness
+			scaledLnDelta := MulScalar(lnDelta, powerDiffOverSharpness)
+
+			// version1 is stable (not infinite) for positive scaledLnDelta.
+			version1 := AddScalar(
+				MulScalar(
+					Inverse(OnePlus(Exp(Neg(scaledLnDelta)))),
+					powerFar-powerNear),
+				powerNear)
+			// version2 is stable (not infinite) for negative scaledLnDelta)
+			version2 := AddScalar(
+				MulScalar(
+					Inverse(OnePlus(Exp(scaledLnDelta))),
+					powerNear-powerFar),
+				powerFar)
+			power := Where(GreaterThan(scaledLnDelta, ScalarZero(g, dtype)),
+				version1, version2)
+
+			// NaNs would filter out through the Where if we allow, so we treat the calculated power as a constant
+			// for the purpose of the loss.
+			power = StopGradient(power)
+
+			// Now we know the power (exponent) to use:
+			loss = Pow(delta, power)
+		}
+
+		// Apply weights and mask.
+		if weights != nil {
+			loss = Mul(loss, weights)
+		}
+		if mask != nil {
+			loss = Where(mask, loss, ZerosLike(loss))
+		}
+		return loss
+	}
+}
+
+var (
+	// ParamAdaptivePowerLossNear is the name of the hyperparameter that defines the AdaptivePowerLoss.
+	// It defaults to 2.0
+	//
+	// See MakeAdaptivePowerLoss and MakeAdaptivePowerLossFromContext.
+	ParamAdaptivePowerLossNear = "adaptive_loss_near"
+
+	// ParamAdaptivePowerLossFar is the name of one of the hyperparameter that defines the AdaptivePowerLoss
+	// It defaults to 1.0
+	//
+	// See MakeAdaptivePowerLoss and MakeAdaptivePowerLossFromContext.
+	ParamAdaptivePowerLossFar = "adaptive_loss_far"
+
+	// ParamAdaptivePowerLossMiddleDelta is the name of one of the hyperparameter that defines the AdaptivePowerLoss.
+	// It defaults to 1.0
+	//
+	// See MakeAdaptivePowerLoss and MakeAdaptivePowerLossFromContext.
+	ParamAdaptivePowerLossMiddleDelta = "adaptive_loss_middle"
+
+	// ParamAdaptivePowerLossSharpness is the name of one of the hyperparameter that defines the AdaptivePowerLoss.
+	// It defaults to 1.0
+	//
+	// See MakeAdaptivePowerLoss and MakeAdaptivePowerLossFromContext.
+	ParamAdaptivePowerLossSharpness = "adaptive_loss_sharpness"
+)
+
+// MakeAdaptivePowerLossFromContext calls MakeAdaptivePowerLoss using the delta configured by the hyperparameters
+// in the context.
+//
+// See ParamAdaptivePowerLossNear, ParamAdaptivePowerLossFar, ParamAdaptivePowerLoss
+func MakeAdaptivePowerLossFromContext(ctx *context.Context) LossFn {
+	powerNear := context.GetParamOr(ctx, ParamAdaptivePowerLossNear, 2.0)
+	powerFar := context.GetParamOr(ctx, ParamAdaptivePowerLossFar, 1.0)
+	middleDelta := context.GetParamOr(ctx, ParamAdaptivePowerLossMiddleDelta, 1.0)
+	sharpness := context.GetParamOr(ctx, ParamAdaptivePowerLossSharpness, 1.0)
+	return MakeAdaptivePowerLoss(powerNear, powerFar, middleDelta, sharpness)
 }
