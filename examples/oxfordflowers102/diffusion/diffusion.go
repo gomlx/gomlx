@@ -462,7 +462,9 @@ func (c *Config) BuildTrainingModelGraph() train.ModelFn {
 		case "mse":
 			lossFn = losses.MeanSquaredError
 		case "huber":
-			lossFn = losses.MakeHuberLoss(context.GetParamOr(ctx, "huber_delta", 0.2))
+			lossFn = losses.MakeHuberLossFromContext(ctx)
+		case "apl": // Adaptive Power Loss
+			lossFn = losses.MakeAdaptivePowerLossFromContext(ctx)
 		case "exp":
 			lossFn = func(labels []*Node, predictions []*Node) (loss *Node) {
 				loss = Exp(Abs(Sub(labels[0], predictions[0])))

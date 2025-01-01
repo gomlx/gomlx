@@ -5,6 +5,7 @@ import (
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/ml/layers/regularizers"
+	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/ml/train/optimizers/cosineschedule"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
@@ -51,9 +52,15 @@ func CreateDefaultContext() *context.Context {
 
 		// Flow Matching settings:
 
+		// Loss
+		"diffusion_loss":                         "mae", // "mse" (Mean-Squared-Error), "mae" (Mean-Absolute-Error) or "huber".
+		losses.ParamHuberLossDelta:               0.2,   // If "huber" loss is selected, this is the delta, after which the loss becomes linear.
+		losses.ParamAdaptivePowerLossNear:        2.0,
+		losses.ParamAdaptivePowerLossFar:         1.0,
+		losses.ParamAdaptivePowerLossMiddleDelta: 0.2,
+		losses.ParamAdaptivePowerLossSharpness:   1.0,
+
 		// Re-using diffusion model:
-		"diffusion_loss":             "mae", // "mse" (Mean-Squared-Error), "mae" (Mean-Absolute-Error) or "huber".
-		"huber_delta":                0.2,   // If "huber" loss is selected, this is the delta, after which the loss becomes linear.
 		"diffusion_balanced_dataset": false, // Enable training on a balanced dataset: batch_size=102, one example per flower type.
 		"diffusion_ema":              0.999, // Exponential Moving Average of the model weights to use during evaluation. Set to <= 0 to disable.
 		"use_ema":                    false, // If set to true, and "ema" (exponential moving average) of the model is maintained, use that for evaluation.
