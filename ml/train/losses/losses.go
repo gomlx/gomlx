@@ -26,6 +26,8 @@ import (
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/pkg/errors"
+	"strings"
 )
 
 // LossFn is the interface used bye train.Trainer to train models.
@@ -60,6 +62,75 @@ func epsilonForDType(g *Graph, dtype dtypes.DType) *Node {
 		Panicf("Unknown epsilon value for dtype %s", dtype)
 	}
 	return Const(g, shapes.CastAsDType(epsilon, dtype))
+}
+
+var (
+	// ParamLoss defines the loss to use (the value of the hyperparameter is a string),
+	// when using LossFromContext.
+	//
+	// See enumeration Type for accepted loss types.
+	//
+	// Some losses may have extra parameters, also read from the context hyperparameters -- e.g.:
+	// MakeHuberLossFromContext and MakeAdaptivePowerLossFromContext.
+	ParamLoss = "loss"
+)
+
+// Type of loss, an enumeration of losses supported by
+type Type int
+
+//go:generate enumer -type=Type -trimprefix=Type -transform=snake -values -text -json -yaml losses.go
+
+const (
+	// TypeMAE represent the MeanAbsoluteError loss.
+	TypeMAE Type = iota
+
+	// TypeMSE represents the MeanSquaredError loss.
+	TypeMSE
+
+	// TypeHuber represents the Huber loss, see MakeHuberLoss.
+	TypeHuber
+
+	// TypeAPL represents the Adaptive-Power-Loss, see MakeAdaptivePowerLoss.
+	TypeAPL
+
+	// TypeBinCross represents BinaryCrossentropy.
+	TypeBinCross
+
+	// TypeBinCrossLogits represents BinaryCrossentropyLogits.
+	TypeBinCrossLogits
+)
+
+// LossFromContext takes the value from the ParamLoss hyperparameter as a string and
+// returns or creates the corresponding loss. It defaults to "mae".
+//
+// Useful for projects where more than one loss matches the problem underlying optimization goal.
+//
+// It returns an error if the configured loss is unknown.
+func LossFromContext(ctx *context.Context) (LossFn, error) {
+	lossName := context.GetParamOr(ctx, ParamLoss, "mae")
+	lossType, err := TypeString(lossName)
+	if err != nil {
+		err = errors.Wrapf(err, "invalid value for hyperparameter %q, known losses are: \"%s\"",
+			ParamLoss, strings.Join(TypeStrings(), "\", \""))
+		return nil, err
+	}
+	switch lossType {
+	case TypeMAE:
+		return MeanAbsoluteError, nil
+	case TypeMSE:
+		return MeanSquaredError, nil
+	case TypeAPL:
+		return MakeAdaptivePowerLossFromContext(ctx), nil
+	case TypeHuber:
+		return MakeHuberLossFromContext(ctx), nil
+	case TypeBinCross:
+		return BinaryCrossentropy, nil
+	case TypeBinCrossLogits:
+		return BinaryCrossentropyLogits, nil
+	default:
+		return nil, errors.Errorf("Unknown loss type %q set for hyperparameter %q, known losses are \"%s\"",
+			lossType, ParamLoss, strings.Join(TypeStrings(), "\", \""))
+	}
 }
 
 // MeanSquaredError returns the mean squared error between labels and predictions.

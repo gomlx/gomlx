@@ -5,6 +5,7 @@ import (
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/ml/layers/regularizers"
+	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/ml/train/optimizers/cosineschedule"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
@@ -60,7 +61,6 @@ func CreateDefaultContext() *context.Context {
 		"nan_logger": false,
 
 		// Diffusion model:
-		"diffusion_loss":                "mae",                  // "mse" (Mean-Squared-Error), "mae" (Mean-Absolute-Error) or "huber".
 		"huber_delta":                   0.2,                    // If "huber" loss is selected, this is the delta, after which the loss becomes linear.
 		"diffusion_num_residual_blocks": 4,                      // Number of residual blocks per image size in the U-Net model.
 		"diffusion_channels_list":       []int{32, 64, 96, 128}, // Number of channels (features) for each image size (progressively smaller) in U-Net model.
@@ -81,6 +81,9 @@ func CreateDefaultContext() *context.Context {
 		// "normalization" is overridden by "fnn_normalization" and "cnn_normalization", if they are set.
 		layers.ParamNormalization: "layer",
 
+		// "diffusion_loss" is deprecated, use "loss" (losses.ParamLoss) instead.
+		"diffusion_loss":                "mse", // "mse" (Mean-Squared-Error), "mae" (Mean-Absolute-Error), "huber" or "apl" (Adaptive-Power-Loss).
+		losses.ParamLoss:                "",    // Falls-back to hyperparameter diffusion_loss (for backward compatibility).
 		optimizers.ParamOptimizer:       "adam",
 		optimizers.ParamAdamEpsilon:     1e-7,
 		optimizers.ParamAdamDType:       "",

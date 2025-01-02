@@ -16,7 +16,10 @@
   * up-scale precision by default if input is a Float16 or BFloat16. Low-precision
     lead to NaNs when reducing values for normalization. Added also a hyperparameter to configure normalization DType.
 * Package `losses`: 
-  * Added experimental `AdaptivePowerLoss`.
+  * Added `ParamLoss`: hyperparameter to define the loss, and many constant values.
+  * Added `LossFromContext`, using `ParamLoss` hyperparameter. 
+  * Added `MakeHuberLossFromContext`
+  * Added experimental `MakeAdaptivePowerLoss` and `MakeAdaptivePowerLossFromContext`
 
 # v0.16.1 - 🎄 2024/12/19 🎄 MatMul fixes
 * MatMul fixed for some edge shape configuration and greatly accelerated in some cases.
