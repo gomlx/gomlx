@@ -2,7 +2,6 @@ package fm
 
 import (
 	"fmt"
-	"github.com/gomlx/exceptions"
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
 	"github.com/gomlx/gomlx/examples/oxfordflowers102/diffusion"
 	. "github.com/gomlx/gomlx/graph"
@@ -210,6 +209,9 @@ func BuildTrainingModelGraph(config *diffusion.Config) train.ModelFn {
 		batchSize := images.Shape().Dimensions[0]
 		dtype := config.DType
 
+		// Augment images, if not training.
+		images = diffusion.AugmentImages(ctx, images)
+
 		// Convert to the corresponding image size.
 		config.NanLogger.Trace(images, "RawImages")
 		images = config.PreprocessImages(images, true)
@@ -244,30 +246,15 @@ func BuildTrainingModelGraph(config *diffusion.Config) train.ModelFn {
 		predictedVelocity := diffusion.UNetModelGraph(ctx, config.NanLogger, noisyImages, t, flowerIds)
 		config.NanLogger.Trace(predictedVelocity, "predictedVelocity")
 
-		// Calculate our custom loss: mean absolute error from the noise to the predictedNoise.
-		var lossFn train.LossFn
-		lossName := context.GetParamOr(ctx, "diffusion_loss", "mae")
-		switch lossName {
-		case "mae":
-			lossFn = losses.MeanAbsoluteError
-		case "mse":
-			lossFn = losses.MeanSquaredError
-		case "huber":
-			lossFn = losses.MakeHuberLossFromContext(ctx)
-		case "apl":
-			lossFn = losses.MakeAdaptivePowerLossFromContext(ctx)
-		case "exp":
-			lossFn = func(labels []*Node, predictions []*Node) (loss *Node) {
-				loss = Exp(Abs(Sub(labels[0], predictions[0])))
-				return
-			}
-		default:
-			exceptions.Panicf("Invalid value for --loss=%q. Valid values are \"mae\", \"mse\" or \"huber\"", lossName)
-		}
+		// Calculate our loss inside the model: use losses.ParamLoss to define the loss, and if not set,
+		// back-off to "diffusion_loss" hyperparam (for backward compatibility).
+		// Defaults to "mae" (mean-absolute-error).
+		lossName := context.GetParamOr(ctx, losses.ParamLoss,
+			context.GetParamOr(ctx, "diffusion_loss", "mse"))
+		ctx.SetParam("loss", lossName) // Needed for old models that used "diffusion_loss".
+		lossFn := must.M1(losses.LossFromContext(ctx))
 
 		// Large reduce operations lead to overflow for low-precision dtypes. We up-convert in those cases, before calculating the loss.
-		//ReduceAllMax(Abs(targetVelocity)).SetLogged("targetVelocity.Max(Abs(x))")
-		//ReduceAllMax(Abs(predictedVelocity)).SetLogged("predictedVelocity.Max(Abs(x))")
 		if dtype == dtypes.Float16 || dtype == dtypes.BFloat16 {
 			targetVelocity = ConvertDType(targetVelocity, dtypes.Float32)
 			predictedVelocity = ConvertDType(predictedVelocity, dtypes.Float32)
@@ -277,7 +264,6 @@ func BuildTrainingModelGraph(config *diffusion.Config) train.ModelFn {
 		if !loss.IsScalar() {
 			loss = ReduceAllMean(loss)
 		}
-		//loss.SetLogged("loss")
 		return []*Node{predictedVelocity, loss}
 	}
 }

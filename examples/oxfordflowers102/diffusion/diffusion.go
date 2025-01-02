@@ -28,6 +28,7 @@ import (
 	"github.com/gomlx/gomlx/types/shapes"
 	timages "github.com/gomlx/gomlx/types/tensors/images"
 	"github.com/gomlx/gomlx/types/xslices"
+	"github.com/janpfeifer/must"
 	"math"
 	"strconv"
 	"strings"
@@ -427,14 +428,14 @@ func (c *Config) BuildTrainingModelGraph() train.ModelFn {
 
 		// Prepare the input image and noise.
 		images := inputs[0]
+		batchSize := images.Shape().Dimensions[0]
 		if _, ok := spec.(*flowers.BalancedDataset); ok {
 			// For BalancedDataset we need to gather the images from the examples.
 			examplesIdx := inputs[1]
 			images = Gather(images, InsertAxes(examplesIdx, -1))
 		}
 		flowerIds := inputs[2]
-		batchSize := images.Shape().Dimensions[0]
-
+		images = AugmentImages(ctx, images) // Augment images, if not training.
 		images = c.PreprocessImages(images, true)
 		noises := ctx.RandomNormal(g, images.Shape())
 		nanLogger.Trace(images, "images")
@@ -453,26 +454,13 @@ func (c *Config) BuildTrainingModelGraph() train.ModelFn {
 		noisyImages = StopGradient(noisyImages)
 		predictedImages, predictedNoises := Denoise(ctx, noisyImages, signalRatios, noiseRatios, flowerIds)
 
-		// Calculate our custom loss: mean absolute error from the noise to the predictedNoise.
-		var lossFn train.LossFn
-		lossName := context.GetParamOr(ctx, "diffusion_loss", "mae")
-		switch lossName {
-		case "mae":
-			lossFn = losses.MeanAbsoluteError
-		case "mse":
-			lossFn = losses.MeanSquaredError
-		case "huber":
-			lossFn = losses.MakeHuberLossFromContext(ctx)
-		case "apl": // Adaptive Power Loss
-			lossFn = losses.MakeAdaptivePowerLossFromContext(ctx)
-		case "exp":
-			lossFn = func(labels []*Node, predictions []*Node) (loss *Node) {
-				loss = Exp(Abs(Sub(labels[0], predictions[0])))
-				return
-			}
-		default:
-			exceptions.Panicf("Invalid value for --loss=%q. Valid values are \"mae\", \"mse\" or \"huber\"", lossName)
-		}
+		// Calculate our loss inside the model: use losses.ParamLoss to define the loss, and if not set,
+		// back-off to "diffusion_loss" hyperparam (for backward compatibility).
+		// Defaults to "mae" (mean-absolute-error).
+		lossName := context.GetParamOr(ctx, losses.ParamLoss,
+			context.GetParamOr(ctx, "diffusion_loss", "mse"))
+		ctx.SetParam("loss", lossName) // Needed for old models that used "diffusion_loss".
+		lossFn := must.M1(losses.LossFromContext(ctx))
 		noisesLoss := lossFn([]*Node{noises}, []*Node{predictedNoises})
 		if !noisesLoss.IsScalar() {
 			noisesLoss = ReduceAllMean(noisesLoss)
