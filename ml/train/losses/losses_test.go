@@ -18,10 +18,11 @@ package losses
 
 import (
 	"fmt"
+	"testing"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/stretchr/testify/require"
-	"testing"
 
 	_ "github.com/gomlx/gomlx/backends/xla"
 )
@@ -182,4 +183,36 @@ func TestHuberLoss(t *testing.T) {
 			1, -1, // L1 region: gradient is constant +/- 1 (while absolute error is +/- 2).
 		}})
 
+}
+
+func TestPairwiseDistance(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "PairwiseDistance",
+		func(g *Graph) (inputs, outputs []*Node) {
+			inputs = []*Node{
+				Const(g, [][]float32{{1, 1, 1}, {0, 1, 0}, {1, 0, 0}}),
+			}
+			outputs = []*Node{
+				pairwiseDistance(inputs[0], false),
+				pairwiseDistance(inputs[0], true),
+			}
+			return
+		}, []any{
+			[][]float32{{0., 1.4142135, 1.4142135}, {1.4142135, 0., 1.4142135}, {1.4142135, 1.4142135, 0.}},
+			[][]float32{{0, 2, 2}, {2, 0, 2}, {2, 2, 0}},
+		}, -1)
+}
+
+func TestAngularDistance(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "AngularDistance",
+		func(g *Graph) (inputs, outputs []*Node) {
+			inputs = []*Node{
+				Const(g, [][]float32{{1, 1, 1}, {0, 1, 0}, {1, 0, 0}}),
+			}
+			outputs = []*Node{
+				angularDistance(inputs[0]),
+			}
+			return
+		}, []any{
+			[][]float32{{5.9604645e-08, 0.42264974, 0.42264974}, {0.42264974, 0., 1.}, {0.42264974, 1, 0}},
+		}, -1)
 }

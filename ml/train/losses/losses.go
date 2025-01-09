@@ -398,3 +398,65 @@ func MakeHuberLoss(delta float64) LossFn {
 		return loss
 	}
 }
+
+// Computes the pairwise distance matrix with numerical stability.
+
+//     output[i, j] = || embeddings[i, :] - embeddings[j, :] ||_2
+
+//     Args:
+//       embeddings: 2-D Tensor of size `[number of data, embeddings dimension]`.
+//       squared: Boolean, whether or not to square the pairwise distances.
+
+// Returns:
+//
+//	pairwise distance: 2-D Tensor of size `[number of data, number of data]`.
+func pairwiseDistance(embeddings *Node, squared bool) *Node {
+	// Distances ||a - b||^2 = ||a||^2  - 2 <a, b> + ||b||^2
+	pairwiseDistancesSquared := Add(
+		Add(
+			L2NormSquare(embeddings, 1),
+			L2NormSquare(Transpose(embeddings, 0, 1), 0),
+		),
+		MulScalar(MatMul(embeddings, Transpose(embeddings, 0, 1)), -2.0),
+	)
+	// Deal with numerical inaccuracies. Set small negatives to zero.
+	pairwiseDistancesSquaredZeros := Max(pairwiseDistancesSquared, ZerosLike(pairwiseDistancesSquared))
+	// Optionally take the sqrt.
+	pairwiseDistances := pairwiseDistancesSquaredZeros
+	if !squared {
+		// Get the mask where the zero distances are at.
+		zeros := ZerosLike(pairwiseDistancesSquaredZeros)
+		errorMask := LessOrEqual(pairwiseDistancesSquaredZeros, zeros)
+		epsilon := epsilonForDType(pairwiseDistancesSquaredZeros.Graph(), pairwiseDistancesSquaredZeros.DType())
+		pairwiseDistancesSqrt := Sqrt(Where(errorMask, epsilon, pairwiseDistancesSquaredZeros))
+		//  Undo conditionally adding epsilon
+		pairwiseDistances = Where(errorMask, zeros, pairwiseDistancesSqrt)
+	}
+
+	//  Explicitly set diagonals to zero.
+	return Where(
+		Diagonal(pairwiseDistances.Graph(), pairwiseDistances.Shape().Dim(0)),
+		ZerosLike(pairwiseDistances),
+		pairwiseDistances,
+	)
+}
+
+// Computes the angular distance matrix.
+
+//     output[i, j] = 1 - cosine_similarity(feature[i, :], feature[j, :])
+
+//     Args:
+//       feature: 2-D Tensor of size `[number of data, feature dimension]`.
+
+// Returns:
+//
+//	angular_distances: 2-D Tensor of size `[number of data, number of data]`.
+func angularDistance(embeddings *Node) *Node {
+	// normalize input
+	embeddingsN := L2Normalize(embeddings, 1)
+	// create adjacent matrix of cosine similarity
+	angularDistances := Add(OnesLike(embeddingsN), MulScalar(MatMul(embeddingsN, Transpose(embeddingsN, 0, 1)), -1.0))
+	// ensure all distances > 1e-16
+	angularDistancesZeros := MaxScalar(angularDistances, 0.0)
+	return angularDistancesZeros
+}
