@@ -2,6 +2,9 @@ package graph
 
 import (
 	"fmt"
+	"slices"
+	"strings"
+
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types"
@@ -10,8 +13,6 @@ import (
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
-	"slices"
-	"strings"
 )
 
 // PadAxis defines the amount of padding preceding one axis (Start), at the end of axis (End)
@@ -371,7 +372,7 @@ func BroadcastPrefix(x *Node, dims ...int) *Node {
 //
 //		  x = Const(g, []int32{10, 20})
 //	   ExpandAndBroadcast(x, []int{2, 2}, []int{0})  // -> [][]int32{{10, 20}, {10, 20}}
-//	   ExpandAndBroadcast(x, []int{2, 2}, []int{0})  // -> [][]int32{{10, 10}, {20, 20}}
+//	   ExpandAndBroadcast(x, []int{2, 2}, []int{1})  // -> [][]int32{{10, 10}, {20, 20}}
 func ExpandAndBroadcast(x *Node, newDimensions []int, expandedAxes []int) (output *Node) {
 	_ = validateBuildingGraphFromInputs(x)
 	if x.Rank()+len(expandedAxes) != len(newDimensions) {

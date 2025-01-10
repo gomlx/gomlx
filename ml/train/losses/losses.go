@@ -520,8 +520,154 @@ func angularDistance(embeddings *Node) *Node {
 	// normalize input
 	embeddingsN := L2Normalize(embeddings, 1)
 	// create adjacent matrix of cosine similarity
-	angularDistances := Add(OnesLike(embeddingsN), MulScalar(MatMul(embeddingsN, Transpose(embeddingsN, 0, 1)), -1.0))
+	angularDistances := OneMinus(MatMul(embeddingsN, Transpose(embeddingsN, 0, 1)))
 	// ensure all distances > 1e-16
 	angularDistancesZeros := MaxScalar(angularDistances, 0.0)
 	return angularDistancesZeros
+}
+
+// Computes the axis wise maximum over chosen elements.
+
+//     Args:
+//       data: 2-D float `Tensor` of shape `[n, m]`.
+//       mask: 2-D Boolean `Tensor` of shape `[n, m]`.
+//       dim: The dimension over which to compute the maximum.
+
+// Returns:
+//
+//	masked_maximums: N-D `Tensor`.
+//	  The maximized dimension is of size 1 after the operation.
+func maskedMaximum(x, mask *Node, dim int) *Node {
+	axisMinimums := ReduceAndKeep(x, ReduceMin, dim)
+	return Add(
+		ReduceAndKeep(
+			Mul(
+				Sub(x, axisMinimums),
+				ConvertDType(mask, x.DType())),
+			ReduceMax,
+			dim),
+		axisMinimums)
+}
+
+//  Computes the axis wise minimum over chosen elements.
+
+//     Args:
+//       data: 2-D float `Tensor` of shape `[n, m]`.
+//       mask: 2-D Boolean `Tensor` of shape `[n, m]`.
+//       dim: The dimension over which to compute the minimum.
+
+// Returns:
+//
+//	masked_minimums: N-D `Tensor`.
+//	  The minimized dimension is of size 1 after the operation.
+func maskedMinimum(x, mask *Node, dim int) *Node {
+	axisMaximums := ReduceAndKeep(x, ReduceMax, dim)
+	return Add(
+		ReduceAndKeep(
+			Mul(
+				Sub(x, axisMaximums),
+				ConvertDType(mask, x.DType())),
+			ReduceMin,
+			dim,
+		),
+		axisMaximums)
+}
+
+// Computes the triplet loss with semi-hard negative mining
+//
+//		labels: 1-D integer `Tensor` with shape `[batch_size]` of multiclass integer labels.
+//		predictions: 2-D float `Tensor` of embedding vectors. Embeddings should be l2 normalized.
+//	    margin: Float, margin term in the loss definition.
+//	    distance_metric: `str` that determines distance metric.
+//	        Valid strings are "L2" for l2-norm distance,
+//	        "squared-L2" for squared l2-norm distance,
+//	        and "angular" for cosine similarity.
+func TripletSemiHardLoss(labels, predictions []*Node, margin float64, distance string) *Node {
+	predictions0 := predictions[0]
+	labels0 := labels[0]
+	if labels0.Shape().Rank() != predictions0.Shape().Rank() {
+		Panicf("labels[0] (%s) and predictions[0] (%s) must have the same rank", labels0.Shape(), predictions0.Shape())
+	}
+	weights, mask := CheckLabelsForWeightsAndMask(labels0.Shape(), labels)
+
+	// Build pairwise square distance matrix
+	var pairwiseDist *Node
+	switch distance {
+	case "L2":
+		pairwiseDist = pairwiseDistance(predictions0, false)
+	case "squared-L2":
+		pairwiseDist = pairwiseDistance(predictions0, true)
+	case "angular":
+		angularDistance(predictions0)
+	default:
+		Panicf("distance %s don't exist or not implemented yet", distance)
+	}
+
+	// Build pairwise binary adjacency matrix.
+	adjacency := Equal(labels0, Transpose(labels0, 0, 1))
+	// Invert so we can select negatives only.
+	adjacencyNot := LogicalNot(adjacency)
+
+	batchSize := labels0.Shape().Size()
+
+	// Compute the mask.
+	pairwiseDistRepeated := Reshape(
+		BroadcastToDims(
+			ExpandAxes(pairwiseDist, 0),
+			batchSize, batchSize, batchSize),
+		batchSize*batchSize, batchSize)
+	pairwiseDistMask := And(
+		Reshape(
+			BroadcastToDims(
+				ExpandAxes(adjacencyNot, 0),
+				batchSize, batchSize, batchSize),
+			batchSize*batchSize, batchSize),
+		GreaterThan(
+			pairwiseDistRepeated,
+			Reshape(Transpose(pairwiseDist, 0, 1), -1, 1),
+		),
+	)
+	pairwiseDistMaskFinal := Transpose(
+		Reshape(
+			GreaterThan(
+				ReduceAndKeep(pairwiseDistMask, ReduceSum, 1),
+				Zeros(pairwiseDistMask.Graph(), shapes.Make(pairwiseDistMask.DType(), batchSize*batchSize, 1))),
+			batchSize, batchSize),
+		0, 1)
+
+	// negatives_outside: smallest D_an where D_an > D_ap.
+	negativesOutside := Transpose(
+		Reshape(
+			maskedMinimum(pairwiseDistRepeated, pairwiseDistMask, 1),
+			batchSize, batchSize),
+		0, 1)
+
+	// negatives_inside: largest D_an.
+	negativesInside := BroadcastToDims(
+		maskedMaximum(pairwiseDist, adjacencyNot, 1),
+		batchSize, batchSize)
+
+	semiHardNegatives := Where(pairwiseDistMaskFinal, negativesOutside, negativesInside)
+
+	lossMat := AddScalar(Sub(pairwiseDist, semiHardNegatives), margin)
+
+	maskPositives := Sub(
+		ConvertDType(adjacency, dtypes.F32),
+		ConvertDType(Diagonal(adjacency.Graph(), batchSize), dtypes.F32))
+
+	//   In lifted-struct, the authors multiply 0.5 for upper triangular
+	//    in semihard, they take all positive pairs except the diagonal.
+	numPositives := ReduceAllSum(maskPositives)
+
+	// tripletLoss
+	loss := Div(ReduceAllSum(MaxScalar(Mul(lossMat, maskPositives), 0.0)), numPositives)
+
+	if weights != nil {
+		loss = Mul(loss, weights)
+	}
+	if mask != nil {
+		loss = Where(mask, loss, ZerosLike(loss))
+	}
+
+	return loss
 }

@@ -97,7 +97,7 @@ type StandardOps interface {
 	// Cos returns the Op that represents the output of the corresponding operation.
 	Cos(x Op) Op
 
-	// Div returns the element-wise subtraction of the two values.
+	// Div returns the element-wise division of the two values.
 	// Standard broadcasting rules apply (see documentation).
 	// The op is created on the same XlaBuilder as used for x0 and x1.
 	Div(x0, x1 Op) Op
