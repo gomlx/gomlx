@@ -4,8 +4,15 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/gomlx/gomlx/types/xslices"
+	"github.com/gomlx/gopjrt/dtypes/bfloat16"
+	"github.com/x448/float16"
 	"reflect"
 	"strings"
+)
+
+var (
+	typeFloat16  = reflect.TypeOf(float16.Float16(0))
+	typeBFloat16 = reflect.TypeOf(bfloat16.BFloat16(0))
 )
 
 // Summary returns a multi-line summary of the contents of the Tensor.
@@ -17,6 +24,13 @@ func (t *Tensor) Summary(precision int) string {
 
 	// Print value with appropriate formatting:
 	wValue := func(v reflect.Value) {
+		if v.Type() == typeFloat16 {
+			w("%.*g", precision, v.Interface().(float16.Float16).Float32())
+			return
+		} else if v.Type() == typeBFloat16 {
+			w("%.*g", precision, v.Interface().(bfloat16.BFloat16).Float32())
+			return
+		}
 		switch v.Kind() {
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 			w("%d", v.Int())
@@ -24,9 +38,9 @@ func (t *Tensor) Summary(precision int) string {
 			w("%d", v.Uint())
 		case reflect.Complex64, reflect.Complex128:
 			c := v.Complex()
-			w("(%.*f+%.*fi)", precision, real(c), precision, imag(c))
+			w("(%.*g+%.*gi)", precision, real(c), precision, imag(c))
 		default:
-			w("%.*f", precision, v.Interface())
+			w("%.*g", precision, v.Interface())
 		}
 	}
 

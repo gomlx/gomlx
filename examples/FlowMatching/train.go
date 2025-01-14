@@ -2,11 +2,9 @@ package fm
 
 import (
 	"fmt"
-	"github.com/gomlx/exceptions"
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
 	"github.com/gomlx/gomlx/examples/oxfordflowers102/diffusion"
 	. "github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/graph/nanlogger"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/ml/layers/batchnorm"
@@ -20,13 +18,12 @@ import (
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
 	stdplots "github.com/gomlx/gomlx/ui/plots"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
 	"path"
 	"time"
 )
-
-var nanLogger *nanlogger.NanLogger
 
 // TrainModel with given config -- it includes the context with hyperparameters.
 func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd bool, verbosity int) {
@@ -85,10 +82,6 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 
 	// Custom loss: model returns scalar loss as the second element of the predictions.
 	customLoss := func(labels, predictions []*Node) *Node { return predictions[1] }
-	useNanLogger := context.GetParamOr(ctx, "nan_logger", false)
-	if useNanLogger {
-		nanLogger = nanlogger.New()
-	}
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
@@ -97,9 +90,9 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 		optimizers.FromContext(ctx),
 		[]metrics.Interface{}, // trainMetrics
 		[]metrics.Interface{}) // evalMetrics
-	if nanLogger != nil {
+	if config.NanLogger != nil {
 		trainer.OnExecCreation(func(exec *context.Exec, _ train.GraphType) {
-			nanLogger.AttachToExec(exec)
+			config.NanLogger.AttachToExec(exec)
 		})
 	}
 
@@ -158,10 +151,21 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 		trainer.SetContext(ctx.Reuse())
 	}
 	if globalStep < numTrainSteps {
-		_ = must.M1(loop.RunSteps(trainDS, numTrainSteps-globalStep))
+		fmt.Println("Starting training stage:")
+		_, err := loop.RunSteps(trainDS, numTrainSteps-globalStep)
 		if verbosity >= 1 {
 			fmt.Printf("\t[Step %d] median train step: %d microseconds\n",
 				loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
+		}
+		if err != nil {
+			if loop.LoopStep > loop.StartStep {
+				klog.Infof("Debug checkpoint save before crashing at loop step %d", loop.LoopStep)
+				errSave := checkpoint.Save()
+				if errSave != nil {
+					klog.Errorf("Error while saving checkpoint before crashing: %+v", errSave)
+				}
+			}
+			klog.Fatalf("Error during training: %+v", err)
 		}
 
 		// Update batch normalization averages, if they are used.
@@ -203,50 +207,64 @@ func BuildTrainingModelGraph(config *diffusion.Config) train.ModelFn {
 		}
 		flowerIds := inputs[2]
 		batchSize := images.Shape().Dimensions[0]
+		dtype := config.DType
 
+		// Augment images, if not training.
+		images = diffusion.AugmentImages(ctx, images)
+
+		// Convert to the corresponding image size.
+		config.NanLogger.Trace(images, "RawImages")
 		images = config.PreprocessImages(images, true)
-		noises := ctx.RandomNormal(g, images.Shape())
-		nanLogger.Trace(images, "images")
-		nanLogger.Trace(noises, "noises")
+		config.NanLogger.Trace(images, "NormalizedImages")
+		images = ConvertDType(images, dtype)
 
-		dtype := images.DType()
+		// Gaussian noise to be transposed to the images.
+		noises := ctx.RandomNormal(g, images.Shape())
+		config.NanLogger.Trace(noises, "noises")
+
+		// Cosine schedule, if enabled.
 		cosineschedule.New(ctx, g, dtype).FromContext().Done()
 
 		// Sample noise at different schedules.
 		t := ctx.RandomUniform(g, shapes.Make(dtype, batchSize, 1, 1, 1))
-		t = Sqrt(t) // Bias towards the end (larger times t), since it's more detailed shifts.
+		if ctx.IsTraining(g) {
+			// During training, we bias towards the end (larger times t), since it's more detailed shifts.
+			t = Sqrt(t)
+		} else {
+			// During evaluation, we only look for t >= 0.5: for smaller values probably it is going to
+			// be pretty random, and the loss gets washed away.
+			t = DivScalar(OnePlus(t), 2)
+		}
 		noisyImages := Add(
 			Mul(images, t),
 			Mul(noises, OneMinus(t)))
+		config.NanLogger.Trace(noisyImages, "noisyImages (A)")
 		noisyImages = StopGradient(noisyImages)
 
 		// Target and predicted velocity (aka. u(X,t)).
 		targetVelocity := Sub(images, noises)
-		predictedVelocity := diffusion.UNetModelGraph(ctx, noisyImages, t, flowerIds)
+		predictedVelocity := diffusion.UNetModelGraph(ctx, config.NanLogger, noisyImages, t, flowerIds)
+		config.NanLogger.Trace(predictedVelocity, "predictedVelocity")
 
-		// Calculate our custom loss: mean absolute error from the noise to the predictedNoise.
-		var lossFn train.LossFn
-		lossName := context.GetParamOr(ctx, "diffusion_loss", "mae")
-		switch lossName {
-		case "mae":
-			lossFn = losses.MeanAbsoluteError
-		case "mse":
-			lossFn = losses.MeanSquaredError
-		case "huber":
-			lossFn = losses.MakeHuberLoss(context.GetParamOr(ctx, "huber_delta", 0.2))
-		case "exp":
-			lossFn = func(labels []*Node, predictions []*Node) (loss *Node) {
-				loss = Exp(Abs(Sub(labels[0], predictions[0])))
-				return
-			}
-		default:
-			exceptions.Panicf("Invalid value for --loss=%q. Valid values are \"mae\", \"mse\" or \"huber\"", lossName)
+		// Calculate our loss inside the model: use losses.ParamLoss to define the loss, and if not set,
+		// back-off to "diffusion_loss" hyperparam (for backward compatibility).
+		// Defaults to "mae" (mean-absolute-error).
+		lossName := context.GetParamOr(ctx, losses.ParamLoss,
+			context.GetParamOr(ctx, "diffusion_loss", "mse"))
+		ctx.SetParam("loss", lossName) // Needed for old models that used "diffusion_loss".
+		lossFn := must.M1(losses.LossFromContext(ctx))
+
+		// Large reduce operations lead to overflow for low-precision dtypes. We up-convert in those cases, before calculating the loss.
+		if dtype == dtypes.Float16 || dtype == dtypes.BFloat16 {
+			targetVelocity = ConvertDType(targetVelocity, dtypes.Float32)
+			predictedVelocity = ConvertDType(predictedVelocity, dtypes.Float32)
 		}
-		noisesLoss := lossFn([]*Node{targetVelocity}, []*Node{predictedVelocity})
-		if !noisesLoss.IsScalar() {
-			noisesLoss = ReduceAllMean(noisesLoss)
+
+		loss := lossFn([]*Node{targetVelocity}, []*Node{predictedVelocity})
+		if !loss.IsScalar() {
+			loss = ReduceAllMean(loss)
 		}
-		return []*Node{predictedVelocity, noisesLoss}
+		return []*Node{predictedVelocity, loss}
 	}
 }
 

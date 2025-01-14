@@ -75,12 +75,12 @@ func MidPointODEStep(ctx *context.Context, noisyImages, flowerIds, startTime, en
 	startTime = normalizeTimeFn(startTime)
 	endTime = normalizeTimeFn(endTime)
 
-	velocity0 := diffusion.UNetModelGraph(ctx, noisyImages, startTime, flowerIds)
+	velocity0 := diffusion.UNetModelGraph(ctx, nil, noisyImages, startTime, flowerIds)
 	// slope0 := u(ctx, xyT, tStart)
 	ΔT := Sub(endTime, startTime)
 	halfΔT := DivScalar(ΔT, 2)
 	midPoint := Add(noisyImages, Mul(velocity0, halfΔT))
-	velocity1 := diffusion.UNetModelGraph(ctx, midPoint, Add(startTime, halfΔT), flowerIds)
+	velocity1 := diffusion.UNetModelGraph(ctx, nil, midPoint, Add(startTime, halfΔT), flowerIds)
 	return Add(noisyImages, Mul(velocity1, ΔT))
 }
 
@@ -203,8 +203,14 @@ var generateSamplesRegex = regexp.MustCompile(`generated_samples_(\d+).tensor`)
 
 // PlotModelEvolution plots the saved sampled generated images of a model in the current configured checkpoint.
 //
+// If animate is true it will do an animation from first to last image, staying a few seconds on the last image.
+//
+// If one globaStepLimits is given, it will take the latest image whose global step <= than the one given.
+//
+// If two globalStepLimits are given, they are considered a range (start, end) of global step limits.
+//
 // It outputs at most imagesPerSample per checkpoint sampled.
-func PlotModelEvolution(cfg *diffusion.Config, imagesPerSample int, animate bool) {
+func PlotModelEvolution(cfg *diffusion.Config, imagesPerSample int, animate bool, globalStepLimits ...int) {
 	if cfg.Checkpoint == nil {
 		exceptions.Panicf("PlotModelEvolution requires a model loaded from a checkpoint, see Config.AttachCheckpoint.")
 	}
@@ -213,6 +219,15 @@ func PlotModelEvolution(cfg *diffusion.Config, imagesPerSample int, animate bool
 	}
 	modelDir := cfg.Checkpoint.Dir()
 	entries := must.M1(os.ReadDir(modelDir))
+	startGlobalStep, endGlobalStep := -1, -1
+	if len(globalStepLimits) == 1 {
+		endGlobalStep = globalStepLimits[0]
+	} else if len(globalStepLimits) == 2 {
+		startGlobalStep = globalStepLimits[0]
+		endGlobalStep = globalStepLimits[1]
+	} else if len(globalStepLimits) > 2 {
+		exceptions.Panicf("PlotModelEvolution: expected 0, 1 or 2 global step limits, got %d", len(globalStepLimits))
+	}
 	var generatedFiles []string
 	var generateGlobalSteps []int
 	for _, entry := range entries {
@@ -224,8 +239,28 @@ func PlotModelEvolution(cfg *diffusion.Config, imagesPerSample int, animate bool
 		if len(nameMatches) != 2 || nameMatches[0] != fileName {
 			continue
 		}
+		globalStep := must.M1(strconv.Atoi(nameMatches[1]))
+		if startGlobalStep > 0 && globalStep < startGlobalStep {
+			continue
+		}
+		if endGlobalStep > 0 {
+			if globalStep > endGlobalStep {
+				continue
+			}
+			if startGlobalStep < 0 {
+				// We just want to keep the latest file that is earlier than endGlobalStep
+				if len(generatedFiles) == 1 {
+					if globalStep > generateGlobalSteps[0] {
+						generatedFiles[0] = fileName
+						generateGlobalSteps[0] = globalStep
+					}
+					continue
+				}
+			}
+
+		}
 		generatedFiles = append(generatedFiles, fileName)
-		generateGlobalSteps = append(generateGlobalSteps, must.M1(strconv.Atoi(nameMatches[1])))
+		generateGlobalSteps = append(generateGlobalSteps, globalStep)
 	}
 
 	if len(generatedFiles) == 0 {

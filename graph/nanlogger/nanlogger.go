@@ -80,11 +80,16 @@ type NanLogger struct {
 	currentScope []string
 }
 
+// stackTracer is implemented by the github.com/pkg/errors package.
+type stackTracer interface {
+	StackTrace() errors.StackTrace
+}
+
 // Trace information of a node that is set to monitor.
 // This is what printed out when a `NaN` is found, or passed to a handler function, if one is set.
 type Trace struct {
 	// StackTrace of where the monitored node was created, stored as an error that can be printed.
-	StackTrace error
+	StackTrace errors.StackTrace
 
 	// Scope saved when monitor node was created.
 	Scope []string
@@ -144,14 +149,16 @@ func (l *NanLogger) Trace(node *graph.Node, scope ...string) {
 	}
 	node.AssertValid()
 
-	// We actually only need to check the sum of all values: any NaN/Inf will trigger the sum to
-	// be NaN/Inf.
-	node = graph.ReduceAllSum(node)
+	// We check the sum of the max and min of the values: any NaN/Inf will trigger the sum to be NaN/Inf.
+	node = graph.Add(graph.ReduceAllMax(node), graph.ReduceAllMin(node))
 	node.SetLogged(UniqueMessageId)
 
-	// Create trace:
+	// Create trace, stripping this function from it:
+	tracer := errors.Errorf("Stack-trace").(stackTracer)
+	stackTrace := tracer.StackTrace()
+	stackTrace = stackTrace[1:]
 	trace := &Trace{
-		StackTrace: errors.Errorf("Stack-trace"),
+		StackTrace: stackTrace,
 	}
 	if len(scope) == 0 {
 		trace.Scope = xslices.Copy(l.currentScope)
@@ -214,7 +221,6 @@ func (l *NanLogger) loggerFn(g *graph.Graph, messages []string, values []*tensor
 			filteredNodes = append(filteredNodes, nodes[ii])
 			continue
 		}
-		//fmt.Printf("Trace for %v\n", values[ii].Value())
 		v := shapes.ConvertTo[float64](values[ii].Value())
 		if math.IsNaN(v) || math.IsInf(v, 0) {
 			nodeId := nodes[ii]
@@ -225,6 +231,13 @@ func (l *NanLogger) loggerFn(g *graph.Graph, messages []string, values []*tensor
 		}
 	}
 
+	// Report other values first, since they may help debug.
+	if l.prevLoggerFn != nil && len(filteredMessages) > 0 {
+		// Call previous logger on remaining messages.
+		l.prevLoggerFn(g, filteredMessages, filteredValues, filteredNodes)
+	}
+
+	// Report about firstNan:
 	if firstNan != graph.InvalidNodeId {
 		// Report first NaN.
 		gId := g.GraphId()
@@ -239,11 +252,6 @@ func (l *NanLogger) loggerFn(g *graph.Graph, messages []string, values []*tensor
 		if !found {
 			klog.Warningf("NanLogger received trace for node that was not marked as traced: did you attach the wrong NanLogger to the executor?")
 		}
-	}
-
-	if l.prevLoggerFn != nil && len(filteredMessages) > 0 {
-		// Call previous logger on remaining messages.
-		l.prevLoggerFn(g, filteredMessages, filteredValues, filteredNodes)
 	}
 	return
 }
@@ -260,13 +268,12 @@ func (l *NanLogger) SetHandler(handler HandlerFn) {
 	l.handler = handler
 }
 
-// DefaultHandler when a `NaN` or `Inf` is observed: it prints all out all the information
-// and exits.
+// DefaultHandler when a `NaN` or `Inf` is observed: it prints all out all the information about the `NaN` trace.
 func DefaultHandler(nanType float64, info *Trace) {
 	var scopeTxt string
 	if len(info.Scope) > 0 {
 		scopeTxt = fmt.Sprintf("Scope:\n\t%s\n", strings.Join(info.Scope, "\n\t"))
 	}
-	klog.Exitf("NaNLogger observed a %f during execution of graph:\n%sStack-trace of node:\n%+v\n",
+	klog.Errorf("NaNLogger observed a %f during execution of graph:\n%sStack-trace of node:\n%+v\n",
 		nanType, scopeTxt, info.StackTrace)
 }

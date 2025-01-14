@@ -186,8 +186,8 @@ func makePoolBuilder(x *Node, reductionType ReduceOpType) *PoolBuilder {
 	return pool.ChannelsAxis(images.ChannelsLast).NoPadding()
 }
 
-// ChannelsAxis configures the axis for the channels (aka. "depth" or "features") dimension. The default is
-// `images.ChannelsLast`, meaning the "channels" dimension comes last.
+// ChannelsAxis configures the axis for the channels (aka. "depth" or "features") dimension.
+// The default is `images.ChannelsLast`, meaning the "channels" dimension comes last.
 //
 // Note: `images` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
 //

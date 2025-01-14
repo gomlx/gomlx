@@ -53,6 +53,13 @@ const (
 	//
 	// The default is `0.0`, which means no dropout.
 	ParamDropoutRate = "dropout_rate"
+
+	// ParamDropPathProbability provides the probability of DropPathFromContext to drop paths.
+	//
+	// This is only applied if the model actually calls DropPathFromContext.
+	//
+	// Default is `0.0`, which means never do any DropPath.
+	ParamDropPathProbability = "droppath_prob"
 )
 
 // DenseWithBias adds a single dense linear layer, a learnable linear transformation plus a bias term.
@@ -387,6 +394,44 @@ func DropoutFromContext(ctx *context.Context, x *Node) *Node {
 		g := x.Graph()
 		normalize := x.DType().IsFloat()
 		x = DropoutNormalize(ctx, x, Scalar(g, x.DType(), dropoutRate), normalize)
+	}
+	return x
+}
+
+// DropPath drops with a certain probability whole examples (paths). It assumes x is shaped [batchSize, ...],
+// and each batchSize example is independently either fully "dropped" (set to zero) or not.
+//
+// This is commonly applied on residual models, with updates like `x = Add(residual, x)`, which can
+// be replaced with `x = Add(residual, DropPath(x, dropProbability))`.
+// Another usage example is dropping whole positional embedding.
+//
+// If it is not training or dropProbability is nil, it is a no-op.
+//
+// See also DropPathFromContext.
+func DropPath(ctx *context.Context, x, dropProbability *Node) *Node {
+	g := x.Graph()
+	if !ctx.IsTraining(g) || dropProbability == nil {
+		return x
+	}
+	maskShape := x.Shape().Clone()
+	for ii := 1; ii < maskShape.Rank(); ii++ {
+		maskShape.Dimensions[ii] = 1
+	}
+	return Mul(x, ctx.RandomBernoulli(OneMinus(dropProbability), maskShape))
+}
+
+// DropPathFromContext will execute DropPath if the hyperparameter ParamDropPathProb is set to a value > 0.
+// If ParamDropPathProb is not set or if not training, this is a no-op.
+func DropPathFromContext(ctx *context.Context, x *Node) *Node {
+	g := x.Graph()
+	if !ctx.IsTraining(g) {
+		return x
+	}
+	dropPathProb := context.GetParamOr(ctx, ParamDropPathProbability, 0.0)
+	if dropPathProb > 0 {
+		// We apply edge dropout to the mask.
+		g := x.Graph()
+		x = DropPath(ctx, x, Scalar(g, x.DType(), dropPathProb))
 	}
 	return x
 }
