@@ -687,3 +687,53 @@ func TestGradientWhere(t *testing.T) {
 		},
 	)
 }
+
+func TestGradientMaskedReducedMax(t *testing.T) {
+	testGradients(t, "MaskedReduceMax",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			values := Const(g, []float64{3.0, 7.0, 5.0}) // 7.0 should be masked.
+			mask := Const(g, []bool{true, false, true})
+			output = MaskedReduceMax(values, mask)
+			return output, []*Node{values}
+		}, []any{
+			[]float64{0, 0, 1},
+		},
+	)
+
+	// Check it is robust to NaNs.
+	testGradients(t, "MaskedReduceMax with NaNs",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			values := Const(g, []float64{3.0, math.Inf(1), 5.0, math.NaN()}) // 7.0 should be masked.
+			mask := Const(g, []bool{true, false, true, false})
+			output = MaskedReduceMax(values, mask)
+			return output, []*Node{values}
+		}, []any{
+			[]float64{0, 0, 1, 0},
+		},
+	)
+}
+
+func TestGradientMaskedReducedSum(t *testing.T) {
+	testGradients(t, "MaskedReduceSum",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			values := Const(g, []float64{3.0, 7.0, 5.0}) // 7.0 should be masked.
+			mask := Const(g, []bool{true, false, true})
+			output = MaskedReduceSum(values, mask)
+			return output, []*Node{values}
+		}, []any{
+			[]float64{1, 0, 1},
+		},
+	)
+
+	// Check it is robust to NaNs.
+	testGradients(t, "MaskedReduceSum with NaNs",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			values := Const(g, []float64{3.0, math.Inf(1), 5.0, math.NaN()}) // 7.0 should be masked.
+			mask := Const(g, []bool{true, false, true, false})
+			output = MaskedReduceSum(values, mask)
+			return output, []*Node{values}
+		}, []any{
+			[]float64{1, 0, 1, 0},
+		},
+	)
+}

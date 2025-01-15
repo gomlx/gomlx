@@ -6,6 +6,7 @@ import (
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/graph/nanlogger"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
@@ -25,7 +26,7 @@ var (
 	PartitionSeed = int64(42) // Some arbitrary number.
 
 	// ValidationFraction where the rest is used for training. There is no test set.
-	ValidationFraction = 0.2 // 20% of data.
+	ValidationFraction = 0.1 // 10% of data.
 )
 
 // Config holds a configuration for all diffusion image/data operations.
@@ -45,6 +46,9 @@ type Config struct {
 
 	// Checkpoint if one has been attached. See Config.AttachCheckpoint.
 	Checkpoint *checkpoints.Handler
+
+	// NanLogger is enabled by setting the hyperparameter "nan_logger=true".
+	NanLogger *nanlogger.NanLogger
 }
 
 // NewConfig creates a configuration for most of the diffusion methods.
@@ -57,7 +61,7 @@ func NewConfig(backend backends.Backend, ctx *context.Context, dataDir string, p
 	}
 	dtype := must.M1(dtypes.DTypeString(
 		context.GetParamOr(ctx, "dtype", "float32")))
-	return &Config{
+	cfg := &Config{
 		Backend:       backend,
 		Context:       ctx,
 		DataDir:       dataDir,
@@ -67,6 +71,11 @@ func NewConfig(backend backends.Backend, ctx *context.Context, dataDir string, p
 		DType:         dtype,
 		ParamsSet:     paramsSet,
 	}
+	useNanLogger := context.GetParamOr(ctx, "nan_logger", false)
+	if useNanLogger {
+		cfg.NanLogger = nanlogger.New()
+	}
+	return cfg
 }
 
 // CreateInMemoryDatasets returns a train and a validation InMemoryDataset.
@@ -143,7 +152,9 @@ func (c *Config) PreprocessImages(images *Node, normalize bool) *Node {
 
 	// ReduceAllMax(images).SetLogged("Max(uint8):")
 	images = ConvertDType(images, dtypes.Float32)
+	c.NanLogger.Trace(images, "PreprocessImages:input")
 	if !normalize {
+
 		return images
 	}
 
@@ -157,6 +168,7 @@ func (c *Config) PreprocessImages(images *Node, normalize bool) *Node {
 		Sub(images, mean),
 		data.ReplaceZerosByOnes(stddev))
 	images = ConvertDType(images, c.DType)
+	c.NanLogger.Trace(images, "PreprocessImages:"+c.DType.String())
 	return images
 }
 

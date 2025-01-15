@@ -19,6 +19,7 @@ import (
 	"github.com/gomlx/gomlx/ui/gonb/margaid"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
 	stdplots "github.com/gomlx/gomlx/ui/plots"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
 	"os"
@@ -46,14 +47,22 @@ func (c *Config) AttachCheckpoint(checkpointPath string) (checkpoint *checkpoint
 		return
 	}
 	numCheckpointsToKeep := context.GetParamOr(c.Context, "num_checkpoints", 5)
-	excludeParams := append(c.ParamsSet, ParamsExcludedFromLoading...)
+	excludeParams := make([]string, 0, len(c.ParamsSet)+len(ParamsExcludedFromLoading))
+	excludeParams = append(excludeParams, c.ParamsSet...)
+	excludeParams = append(excludeParams, ParamsExcludedFromLoading...)
 	checkpoint = must.M1(checkpoints.Build(c.Context).
 		DirFromBase(checkpointPath, c.DataDir).
 		Keep(numCheckpointsToKeep).
 		ExcludeParams(excludeParams...).
 		Done())
 	c.Checkpoint = checkpoint // Save in config.
-	fmt.Printf("\tCheckpoint: %q\n", checkpoint.Dir())
+
+	// In case the loaded checkpoint has different values, we need to update the config accordingly.
+	c.DType = must.M1(dtypes.DTypeString(
+		context.GetParamOr(c.Context, "dtype", "float32")))
+	c.ImageSize = context.GetParamOr(c.Context, "image_size", 64)
+	c.BatchSize = context.GetParamOr(c.Context, "batch_size", 64)
+	c.EvalBatchSize = context.GetParamOr(c.Context, "eval_batch_size", 128)
 
 	// Load/generate sampled noise/flowerIds.
 	noisePath, flowerIdsPath := path.Join(checkpoint.Dir(), NoiseSamplesFile), path.Join(checkpoint.Dir(), FlowerIdsSamplesFile)

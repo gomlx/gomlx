@@ -23,6 +23,8 @@ import (
 	"github.com/gomlx/gomlx/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/xslices"
+	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/pkg/errors"
 )
 
 // LayerNormBuilder is a helper to build a layer normalization computation. Create it with LayerNormalization,
@@ -36,6 +38,7 @@ type LayerNormBuilder struct {
 	center, gain       bool
 	scaleNormalization bool
 	regularizer        regularizers.Regularizer
+	normalizationDType dtypes.DType
 }
 
 var (
@@ -65,6 +68,18 @@ var (
 	// to apply to the learned gain, if one is defined.
 	// The default is 0.0.
 	ParamLayerNormL2Regularization = "layer_norm_l2_regularization"
+
+	// ParamLayerNormNormalizationDType is the dtype to use when doing the normalization.
+	//
+	// Low precision dtypes (Float16, BFloat16) usually lead to NaN when doing ReduceSum/ReduceMean,
+	// which layer normalization does.
+	//
+	// If this value is different than the dtype of the input, the normalization will convert the values
+	// to this dtype first.
+	//
+	// The default value (and empty string) means to use Float32 if the input dtype is 16 bits only, otherwise
+	// use the same dtype as the input.
+	ParamLayerNormNormalizationDType = "layer_norm_dtype"
 )
 
 // LayerNormalization performs a layer normalization on the input. It includes a scaling and offset factor,
@@ -105,6 +120,7 @@ func LayerNormalization(ctx *context.Context, x *Node, normalizingAxes ...int) *
 		center:             context.GetParamOr(ctx, ParamLayerNormCenter, true),
 		gain:               context.GetParamOr(ctx, ParamLayerNormLearnedGain, true),
 		scaleNormalization: context.GetParamOr(ctx, ParamLayerNormRescale, true),
+		normalizationDType: x.DType(),
 	}
 
 	// Create default regularizer.
@@ -117,8 +133,19 @@ func LayerNormalization(ctx *context.Context, x *Node, normalizingAxes ...int) *
 		builder.normalizingAxes[ii] = AdjustAxisToOperandRank(x, builder.normalizingAxes[ii])
 	}
 
-	// Add default regularizer.
-
+	// Add default dtype for normalization.
+	normDTypeStr := context.GetParamOr(ctx, ParamLayerNormNormalizationDType, "")
+	if normDTypeStr == "" {
+		if x.DType() == dtypes.Float16 || x.DType() == dtypes.BFloat16 {
+			builder.normalizationDType = dtypes.Float32
+		}
+	} else {
+		var err error
+		builder.normalizationDType, err = dtypes.DTypeString(normDTypeStr)
+		if err != nil {
+			panic(errors.WithMessagef(err, "Invalid dtype configured for hyperparameter %q", ParamLayerNormNormalizationDType))
+		}
+	}
 	return builder
 }
 
@@ -202,14 +229,16 @@ func (builder *LayerNormBuilder) Done() *Node {
 		offset = Zeros(g, broadcastNormShape)
 	}
 
-	// Calculate mean and variance over normalizingAxes and normalize.
+	// Calculate mean and variance over normalizingAxes and normalize using configured normalizationDType
+	// Notice: ConvertDType is a no-op if the dtype is not changed.
 	var mean *Node
+	convertedX := ConvertDType(x, builder.normalizationDType)
 	if mask == nil {
-		mean = ReduceAndKeep(x, ReduceMean, builder.normalizingAxes...)
+		mean = ReduceAndKeep(convertedX, ReduceMean, builder.normalizingAxes...)
 	} else {
-		mean = MaskedReduceAndKeep(x, mask, MaskedReduceMean, builder.normalizingAxes...)
+		mean = MaskedReduceAndKeep(convertedX, mask, MaskedReduceMean, builder.normalizingAxes...)
 	}
-	normalized := Sub(x, mean)
+	normalized := Sub(convertedX, mean)
 	if mask != nil {
 		normalized = Where(mask, normalized, ZerosLike(normalized))
 	}
@@ -220,9 +249,11 @@ func (builder *LayerNormBuilder) Done() *Node {
 		} else {
 			variance = MaskedReduceAndKeep(Square(normalized), mask, MaskedReduceMean, builder.normalizingAxes...)
 		}
-		epsilon := ConstAs(x, builder.epsilon)
+		epsilon := ConstAs(convertedX, builder.epsilon)
 		normalized = Div(normalized, Sqrt(Add(variance, epsilon)))
 	}
+	normalized = ConvertDType(normalized, x.DType()) // Convert back to the input's DType.
+
 	// Adjust if using learned offset/gain factors.
 	if builder.gain {
 		normalized = Mul(normalized, gain)

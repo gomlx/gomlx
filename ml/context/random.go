@@ -88,6 +88,21 @@ func (ctx *Context) RandomUniform(g *graph.Graph, shape shapes.Shape) (values *N
 	return
 }
 
+// RandomBernoulli generates 0s and 1s in the given shape (or True/False if shape dtype is Bool),
+// with probability of 1s being prob.
+//
+// It uses a random number generation with precision equal to prob.DType().
+//
+// See Bernoulli Distribution article: https://en.wikipedia.org/wiki/Bernoulli_distribution
+func (ctx *Context) RandomBernoulli(prob *Node, shape shapes.Shape) *Node {
+	g := prob.Graph()
+	maskShape := shape.Clone()
+	maskShape.DType = prob.DType()
+	mask := ctx.RandomUniform(g, maskShape)
+	mask = graph.LessThan(mask, prob)
+	return graph.ConvertDType(mask, shape.DType)
+}
+
 // RandomIntN generates random numbers uniformly from 0 to N-1. It only works for integer types, see RandomUniform for
 // float or complex data types. N can be given as a Node, or a static scalar integer value.
 //

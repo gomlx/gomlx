@@ -21,7 +21,6 @@ import (
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"math"
 	"testing"
 
 	_ "github.com/gomlx/gomlx/backends/xla"
@@ -30,16 +29,10 @@ import (
 func TestNanLogger(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 
-	var numHandlerCalls, numNan, numInf int
+	var numHandlerCalls int
 	var lastHandledScope []string
-	handler := func(nanType float64, info *Trace) {
+	handler := func(info *Trace) {
 		numHandlerCalls++
-		if math.IsNaN(nanType) {
-			numNan++
-		}
-		if math.IsInf(nanType, 0) {
-			numInf++
-		}
 		lastHandledScope = info.Scope
 	}
 
@@ -66,23 +59,17 @@ func TestNanLogger(t *testing.T) {
 	// Check that NaN is observed, with the correct scope.
 	require.NotPanics(t, func() { e.Call([]float32{-1.0, 1.0}) })
 	require.Equal(t, 1, numHandlerCalls)
-	require.Equal(t, 1, numNan)
-	require.Equal(t, 0, numInf)
 	require.Equal(t, []string{"scope1"}, lastHandledScope)
 
 	// Check now that Inf is observed, with the correct scope.
 	// Notice we are also using float32, so it should just work.
 	require.NotPanics(t, func() { e.Call([]float32{0.0, 1.0}) })
 	require.Equal(t, 2, numHandlerCalls)
-	require.Equal(t, 1, numNan)
-	require.Equal(t, 1, numInf)
 	require.Equal(t, []string{"base", "scope2"}, lastHandledScope)
 
 	// Check that the NaN happens before the Inf, and should be the one
 	// reported.
 	require.NotPanics(t, func() { e.Call([]float32{0.0, -1.0}) })
 	require.Equal(t, 3, numHandlerCalls)
-	require.Equal(t, 2, numNan)
-	require.Equal(t, 1, numInf)
 	require.Equal(t, []string{"scope1"}, lastHandledScope)
 }

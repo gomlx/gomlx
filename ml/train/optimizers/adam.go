@@ -245,6 +245,7 @@ func (o *adam) applyAdamGraph(ctx *context.Context, g *Graph, v *context.Variabl
 	if grad.DType() != dtype {
 		grad = ConvertDType(grad, dtype)
 	}
+	grad = ClipNaNsInGradients(ctx, grad)
 
 	// Do gradient step with momentum.
 	moment1 = Add(

@@ -36,6 +36,7 @@ var (
 		"Typically, a model will have several different support variables, that may not matter -- optimizers for instance. "+
 		"This flag tells which scope are considered for the various reports.")
 
+	flagAll     = flag.Bool("all", false, "Display all information. The same as -summary -params -vars -metrics -metrics_labels.")
 	flagSummary = flag.Bool("summary", false, "Display a summary of the model sizes (for variables"+
 		" under --scope and the global step.")
 	flagParams  = flag.Bool("params", false, "Lists the hyperparameters.")
@@ -50,6 +51,7 @@ var (
 
 	flagBackup     = flag.Bool("backup", false, "Set to true to make a backup of the most recent checkpoint, under the 'backup' subdirectory.")
 	flagDeleteVars = flag.String("delete_vars", "", "Delete variables under the given scope(s). Useful for instance to remove training temporary data.")
+	flagGlossary   = flag.Bool("glossary", true, "Whether to list glossary of abbreviation on the bottom of tables.")
 
 	flagLoop = flag.Duration("loop", 0, "Sets looping with the given period. "+
 		"This is used to monitor the training of a program, usually used in conjunction with --metrics. "+
@@ -89,6 +91,14 @@ func main() {
 		DeleteVars(args[0], strings.Split(*flagDeleteVars, ",")...)
 	}
 
+	if *flagAll {
+		*flagSummary = true
+		*flagParams = true
+		*flagVars = true
+		*flagMetrics = true
+		*flagMetricsLabels = true
+	}
+
 	if *flagLoop > 0 {
 		for {
 			ClearScreen()
@@ -106,16 +116,17 @@ func ClearScreen() {
 
 var (
 	headerRowStyle = lipgloss.NewStyle().Reverse(true).
-			Padding(0, 2, 0, 2).Align(lipgloss.Center)
+		Padding(0, 2, 0, 2).Align(lipgloss.Center)
 
 	oddRowStyle = lipgloss.NewStyle().Faint(false).
-			PaddingLeft(1).PaddingRight(1)
+		PaddingLeft(1).PaddingRight(1)
 	evenRowStyle = lipgloss.NewStyle().Faint(true).
-			PaddingLeft(1).PaddingRight(1)
+		PaddingLeft(1).PaddingRight(1)
 
-	titleStyle = lipgloss.NewStyle().Bold(true).Padding(1, 4, 1, 4)
-
-	italicStyle = lipgloss.NewStyle().PaddingTop(1).Italic(true).Faint(true)
+	titleStyle    = lipgloss.NewStyle().Bold(true).Padding(1, 4, 1, 4)
+	italicStyle   = lipgloss.NewStyle().Italic(true).Faint(true)
+	emphasisStyle = lipgloss.NewStyle().Bold(true).Faint(false)
+	sectionStyle  = lipgloss.NewStyle().Underline(true).Faint(false)
 )
 
 func newPlainTable(withHeader bool, alignments ...lipgloss.Position) *lgtable.Table {
@@ -123,7 +134,7 @@ func newPlainTable(withHeader bool, alignments ...lipgloss.Position) *lgtable.Ta
 		Border(lipgloss.NormalBorder()).
 		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("99"))).
 		StyleFunc(func(row, col int) (s lipgloss.Style) {
-			if withHeader && row == 1 {
+			if row < 0 {
 				s = headerRowStyle
 				return
 			}
@@ -185,7 +196,7 @@ func Reports(checkpointPath string) {
 	if *flagParams {
 		fmt.Println(titleStyle.Render("Hyperparameters"))
 		table := newPlainTable(true)
-		table.Row("Scope", "Name", "Type", "Value")
+		table.Headers("Scope", "Name", "Type", "Value")
 		ctx.EnumerateParams(func(scope, key string, value any) {
 			table.Row(scope, key, fmt.Sprintf("%T", value), fmt.Sprintf("%v", value))
 		})
@@ -193,7 +204,7 @@ func Reports(checkpointPath string) {
 	}
 
 	if *flagVars {
-		ListVariables(ctx)
+		ListVariables(scopedCtx)
 	}
 
 	if *flagMetrics || *flagMetricsLabels {
@@ -262,91 +273,103 @@ func metrics(checkpointPath string) {
 	}
 
 	if *flagMetricsLabels {
-		fmt.Println(titleStyle.Render("Metrics Labels"))
-		table := newPlainTable(true, lipgloss.Center, lipgloss.Left)
-		table.Row("Short", "MetricName")
-		rows := make([][]string, len(metricsOrder))
-		for short, idx := range metricsOrder {
-			name, found := shortToName[short]
-			if !found {
-				// metric manually selected by name:
-				name = short
-				short = nameToShort[name]
-			}
-			rows[idx-1] = []string{short, name}
-		}
-		for _, row := range rows {
-			table.Row(row...)
-		}
-		fmt.Println(table.Render())
+		ReportMetricsLabels(shortToName, nameToShort, metricsOrder)
 	}
 
 	if *flagMetrics {
-		fmt.Println(titleStyle.Render(fmt.Sprintf("Metrics %q", checkpointPath)))
-		table := newPlainTable(true, lipgloss.Right)
-		header := make([]string, 1+len(metricsUsed))
-		header[0] = "Global Step"
-		for name, idx := range metricsOrder {
-			header[idx] = name
-		}
-		table.Row(header...)
-
-		currentStep := int64(-1)
-		var currentRow []string
-		for _, point := range points {
-			step := int64(point.Step)
-			if step != currentStep {
-				if currentStep != -1 {
-					table.Row(currentRow...)
-				}
-				currentStep = step
-				currentRow = make([]string, 1+len(metricsUsed))
-				currentRow[0] = humanize.Comma(step)
-			}
-			idx, found := metricsOrder[point.Short]
-			if found {
-				var value string
-				switch point.MetricType {
-				case "accuracy":
-					value = fmt.Sprintf("%.2f%%", 100.0*point.Value)
-				default:
-					value = fmt.Sprintf("%.3f", point.Value)
-				}
-				currentRow[idx] = value
-			}
-		}
-		if currentStep != -1 {
-			table.Row(currentRow...)
-		}
-		fmt.Println(table.Render())
+		ReportMetrics(checkpointPath, metricsUsed, metricsOrder, points)
 	}
 }
 
-// ListVariables list the variables of a model, with their shape and MAV (mean absolute value) and RMS (root mean square) value.
+// ReportMetricsLabels list all metrics short and long names.
+func ReportMetricsLabels(shortToName map[string]string, nameToShort map[string]string, metricsOrder map[string]int) {
+	fmt.Println(titleStyle.Render("Metrics Labels"))
+	table := newPlainTable(true, lipgloss.Center, lipgloss.Left)
+	table.Headers("Short", "MetricName")
+	rows := make([][]string, len(metricsOrder))
+	for short, idx := range metricsOrder {
+		name, found := shortToName[short]
+		if !found {
+			// metric manually selected by name:
+			name = short
+			short = nameToShort[name]
+		}
+		rows[idx-1] = []string{short, name}
+	}
+	for _, row := range rows {
+		table.Row(row...)
+	}
+	fmt.Println(table.Render())
+}
+
+// ReportMetrics of the model.
+func ReportMetrics(checkpointPath string, metricsUsed types.Set[string], metricsOrder map[string]int, points []plots.Point) {
+	fmt.Println(titleStyle.Render(fmt.Sprintf("Metrics %q", checkpointPath)))
+	table := newPlainTable(true, lipgloss.Right)
+	header := make([]string, 1+len(metricsUsed))
+	header[0] = "Global Step"
+	for name, idx := range metricsOrder {
+		header[idx] = name
+	}
+	table.Headers(header...)
+
+	currentStep := int64(-1)
+	var currentRow []string
+	for _, point := range points {
+		step := int64(point.Step)
+		if step != currentStep {
+			if currentStep != -1 {
+				table.Row(currentRow...)
+			}
+			currentStep = step
+			currentRow = make([]string, 1+len(metricsUsed))
+			currentRow[0] = humanize.Comma(step)
+		}
+		idx, found := metricsOrder[point.Short]
+		if found {
+			var value string
+			switch point.MetricType {
+			case "accuracy":
+				value = fmt.Sprintf("%.2f%%", 100.0*point.Value)
+			default:
+				value = fmt.Sprintf("%.3f", point.Value)
+			}
+			currentRow[idx] = value
+		}
+	}
+	if currentStep != -1 {
+		table.Row(currentRow...)
+	}
+	fmt.Println(table.Render())
+}
+
+// ListVariables list the variables of a model, with their shape and MAV (max absolute value), RMS (root mean square) and MaxAV (max absolute value) values.
 func ListVariables(ctx *context.Context) {
 	fmt.Println(titleStyle.Render(fmt.Sprintf("Variables in scope %q", ctx.Scope())))
-	mavAndRmsFn := NewExec(backends.New(), func(x *Node) (mav *Node, rms *Node) {
+	metricsFn := NewExec(backends.New(), func(x *Node) (mav, rms, maxAV *Node) {
 		x = ConvertDType(x, dtypes.Float64)
 		mav = ReduceAllMean(Abs(x))
 		rms = Sqrt(ReduceAllMean(Square(x)))
+		maxAV = ReduceAllMax(Abs(x))
 		return
 	}).SetMaxCache(-1)
 	table := newPlainTable(true)
-	table.Row("Scope", "Name", "Shape", "Size", "Bytes", "MAV", "RMS")
+	table.Headers("Scope", "Name", "Shape", "Size", "Bytes", "MAV", "RMS", "MaxAV")
 	var rows [][]string
 	ctx.EnumerateVariablesInScope(func(v *context.Variable) {
 		shape := v.Shape()
-		var mav, rms string
+		var mav, rms, maxAV string
 		if shape.DType.IsFloat() {
-			mavAndRms := mavAndRmsFn.Call(v.Value())
-			mav = fmt.Sprintf("%.3g", mavAndRms[0].Value().(float64))
-			rms = fmt.Sprintf("%.3g", mavAndRms[1].Value().(float64))
+			metrics := metricsFn.Call(v.Value())
+			mav = fmt.Sprintf("%.3g", metrics[0].Value().(float64))
+			rms = fmt.Sprintf("%.3g", metrics[1].Value().(float64))
+			maxAV = fmt.Sprintf("%.3g", metrics[2].Value().(float64))
 		}
 		rows = append(rows, []string{
 			v.Scope(), v.Name(), shape.String(),
 			humanize.Comma(int64(shape.Size())),
 			humanize.Bytes(uint64(shape.Memory())),
-			mav, rms,
+			mav, rms, maxAV,
 		})
 	})
 	slices.SortFunc(rows, func(a, b []string) int {
@@ -360,6 +383,12 @@ func ListVariables(ctx *context.Context) {
 		table.Row(row...)
 	}
 	fmt.Println(table.Render())
+	if *flagGlossary {
+		fmt.Printf("  %s:\n", sectionStyle.Render("Glossary"))
+		fmt.Printf("   ◦ %s:\t%s\n", emphasisStyle.Render("MAV"), italicStyle.Render("Mean Absolute Value"))
+		fmt.Printf("   ◦ %s:\t%s\n", emphasisStyle.Render("RMS"), italicStyle.Render("Root Mean Square"))
+		fmt.Printf("   ◦ %s:\t%s\n", emphasisStyle.Render("MaxAV"), italicStyle.Render("Max Absolute Value"))
+	}
 }
 
 // DeleteVars on the given scopes.
