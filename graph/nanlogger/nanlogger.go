@@ -52,12 +52,10 @@ import (
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
-	"math"
 	"strings"
 )
 
@@ -148,10 +146,16 @@ func (l *NanLogger) Trace(node *graph.Node, scope ...string) {
 		return
 	}
 	node.AssertValid()
+	node.SetLoggedf("Traced: %v", node)
 
-	// We check the sum of the max and min of the values: any NaN/Inf will trigger the sum to be NaN/Inf.
-	node = graph.Add(graph.ReduceAllMax(node), graph.ReduceAllMin(node))
-	node.SetLogged(UniqueMessageId)
+	// Check whether any of the values are finite.
+	var tracedNode *graph.Node
+	if node.Rank() == 0 {
+		tracedNode = graph.IsFinite(node)
+	} else {
+		tracedNode = graph.LogicalAll(graph.IsFinite(node))
+	}
+	tracedNode.SetLogged(UniqueMessageId)
 
 	// Create trace, stripping this function from it:
 	tracer := errors.Errorf("Stack-trace").(stackTracer)
@@ -168,13 +172,13 @@ func (l *NanLogger) Trace(node *graph.Node, scope ...string) {
 		trace.Scope = append(trace.Scope, scope...)
 	}
 
-	gId := node.Graph().GraphId()
+	gId := tracedNode.Graph().GraphId()
 	graphMap, found := l.traces[gId]
 	if !found {
 		graphMap = make(map[graph.NodeId]*Trace)
 		l.traces[gId] = graphMap
 	}
-	graphMap[node.Id()] = trace
+	graphMap[tracedNode.Id()] = trace
 }
 
 // PushScope to current scope stack.
@@ -210,9 +214,7 @@ func (l *NanLogger) loggerFn(g *graph.Graph, messages []string, values []*tensor
 	filteredMessages := make([]string, 0, len(messages))
 	filteredValues := make([]*tensors.Tensor, 0, len(values))
 	filteredNodes := make([]graph.NodeId, 0, len(nodes))
-
 	firstNan := graph.InvalidNodeId
-	var firstNanValue float64
 	for ii, msg := range messages {
 		if msg != UniqueMessageId {
 			// Not managed by NanLogger.
@@ -221,12 +223,11 @@ func (l *NanLogger) loggerFn(g *graph.Graph, messages []string, values []*tensor
 			filteredNodes = append(filteredNodes, nodes[ii])
 			continue
 		}
-		v := shapes.ConvertTo[float64](values[ii].Value())
-		if math.IsNaN(v) || math.IsInf(v, 0) {
+		isAllFinite := tensors.ToScalar[bool](values[ii])
+		if !isAllFinite {
 			nodeId := nodes[ii]
 			if firstNan == graph.InvalidNodeId || nodeId < firstNan {
 				firstNan = nodeId
-				firstNanValue = v
 			}
 		}
 	}
@@ -242,22 +243,23 @@ func (l *NanLogger) loggerFn(g *graph.Graph, messages []string, values []*tensor
 		// Report first NaN.
 		gId := g.GraphId()
 		graphMap, found := l.traces[gId]
-		if found {
+		if !found {
+			klog.Warningf("NanLogger received trace for unknown Graph %d!?", gId)
+		} else {
 			var trace *Trace
 			trace, found = graphMap[firstNan]
 			if found {
-				l.handler(firstNanValue, trace)
+				l.handler(trace)
+			} else {
+				klog.Warningf("NanLogger received trace for node that was not marked as traced: did you attach the wrong NanLogger to the executor?")
 			}
-		}
-		if !found {
-			klog.Warningf("NanLogger received trace for node that was not marked as traced: did you attach the wrong NanLogger to the executor?")
 		}
 	}
 	return
 }
 
 // HandlerFn is the type of function to handle NaN traces.
-type HandlerFn func(nanType float64, info *Trace)
+type HandlerFn func(info *Trace)
 
 // SetHandler sets the function called when a `NaN` is observed.
 // The default is DefaultHandler that prints out all information on the node and exits.
@@ -269,11 +271,11 @@ func (l *NanLogger) SetHandler(handler HandlerFn) {
 }
 
 // DefaultHandler when a `NaN` or `Inf` is observed: it prints all out all the information about the `NaN` trace.
-func DefaultHandler(nanType float64, info *Trace) {
+func DefaultHandler(info *Trace) {
 	var scopeTxt string
 	if len(info.Scope) > 0 {
 		scopeTxt = fmt.Sprintf("Scope:\n\t%s\n", strings.Join(info.Scope, "\n\t"))
 	}
-	klog.Errorf("NaNLogger observed a %f during execution of graph:\n%sStack-trace of node:\n%+v\n",
-		nanType, scopeTxt, info.StackTrace)
+	klog.Errorf("NaNLogger observed NaN or Inf values during execution of graph:\n%sStack-trace of node:\n%+v\n",
+		scopeTxt, info.StackTrace)
 }

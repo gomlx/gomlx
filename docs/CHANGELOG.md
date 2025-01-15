@@ -12,6 +12,7 @@
 * `nanlogger`:
   * Store only the stack-trace, and trim the stack into the nanlogger package.
   * Does not exit, simply report the NanLogger. User can define a handler, if they want the training to exit.
+  * Use `IsFinite` to check for NaN and Infs: but we loose the type of NaN that happened.  
 * `layers.LayerNormalization`: 
   * up-scale precision by default if input is a Float16 or BFloat16. Low-precision
     lead to NaNs when reducing values for normalization. Added also a hyperparameter to configure normalization DType.
