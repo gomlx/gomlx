@@ -562,7 +562,25 @@ func TestReduceMean(t *testing.T) {
 		}, -1)
 }
 
-func TestReduceMaskedMax(t *testing.T) {
+func TestReduceMax(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "ReduceMax()",
+		func(g *Graph) (inputs, outputs []*Node) {
+			x := Const(g, []float64{1, 5, 3, math.Inf(-1)})
+			output := ReduceMax(x)
+			inputs = []*Node{x}
+			outputs = []*Node{output}
+			return
+		}, []any{5.0}, xslices.Epsilon)
+
+	backend := graphtest.BuildTestBackend()
+	gotT := ExecOnce(backend, func(g *Graph) *Node {
+		return ReduceMax(Const(g, []float64{1, 5, math.NaN()}))
+	})
+	got := tensors.ToScalar[float64](gotT)
+	require.Truef(t, math.IsNaN(got), "ReduceMax of NaN values should be NaN.")
+}
+
+func TestMaskedReduceMax(t *testing.T) {
 	graphtest.RunTestGraphFn(t, "MaskedReduceMax()",
 		func(g *Graph) (inputs, outputs []*Node) {
 			x := IotaFull(g, MakeShape(dtypes.Float32, 4, 3))
