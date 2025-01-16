@@ -579,21 +579,25 @@ func TestReduceMax(t *testing.T) {
 	// It works if input is passed as a constant:
 	{
 		gotT := ExecOnce(backend, func(g *Graph) *Node {
-			return ReduceMax(Sqrt(Const(g, []float64{-1, 1})))
+			return ReduceMax(Const(g, []float64{math.NaN(), 1}))
 		})
 		got := tensors.ToScalar[float64](gotT)
-		require.Truef(t, math.IsNaN(float64(got)), "ReduceMax of NaN values should be NaN, got %v", got)
+		require.Truef(t, math.IsNaN(float64(got)), "ReduceMax({NaN, 1}) of NaN values should be NaN, got %v", got)
 	}
 
 	// But it doesn't if tensor to reduce is passed as a parameter.
-	// TODO: PJRT for CPU is bugged here, and it fails in this example (it works for CUDA). So commented out for now.
-	//{
-	//	gotT := ExecOnce(backend, func(x *Node) *Node {
-	//		return ReduceMax(x)
-	//	}, []float64{1, 5, math.NaN()})
-	//	got := tensors.ToScalar[float64](gotT)
-	//	require.Truef(t, math.IsNaN(got), "ReduceMax of NaN values should be NaN.")
-	//}
+	{
+		gotT := ExecOnce(backend, func(x *Node) *Node {
+			return ReduceMax(x)
+		}, []float64{math.NaN(), 1})
+		got := tensors.ToScalar[float64](gotT)
+		// TODO: PJRT for CPU is bugged here, and it fails in this example (it works for CUDA). So commented out for now.
+		// See https://github.com/openxla/xla/issues/21461
+		//	require.Truef(t, math.IsNaN(got), "ReduceMax of NaN values should be NaN.")
+		if !math.IsNaN(got) {
+			fmt.Printf("ReduceMax({NaN, 1}): should be NaN, got %v -- see issue in https://github.com/openxla/xla/issues/21461\n", got)
+		}
+	}
 }
 
 func TestMaskedReduceMax(t *testing.T) {
