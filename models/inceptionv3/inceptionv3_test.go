@@ -47,7 +47,22 @@ func TestBuildGraph(t *testing.T) {
 	inceptionV3Exec := context.NewExec(backend, ctx, func(ctx *context.Context, img *Node) *Node {
 		img = InsertAxes(img, 0) // Add batch dimension
 		img = PreprocessImage(img, 255.0, images.ChannelsLast)
-		return BuildGraph(ctx, img).PreTrained(*flagDataDir).ClassificationTop(true).Done()
+		output := BuildGraph(ctx, img).
+			PreTrained(*flagDataDir).
+			ClassificationTop(true).
+			WithAliases(true).
+			Done()
+		// checks that node aliases were created.
+		g := output.Graph()
+		fmt.Printf("\tAliased nodes in the graph:\n")
+		for _, node := range g.IterAliasedNodes() {
+			fmt.Printf("\t\t%s\n", node)
+		}
+		require.True(t, g.GetNodeByAlias("/inceptionV3/logits") == output)
+		require.True(t, g.GetNodeByAlias("/inceptionV3/conv_000/output") != nil)
+		// ...
+		require.True(t, g.GetNodeByAlias("/inceptionV3/conv_093/output") != nil)
+		return output
 	})
 	predictionT := inceptionV3Exec.Call(imgT)[0]
 	prediction := predictionT.Value().([][]float32)[0] // The last [0] takes the first element of the batch of 1.
