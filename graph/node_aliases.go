@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/gomlx/exceptions"
 	"iter"
+	"slices"
 	"strings"
 )
 
@@ -94,17 +95,19 @@ func (g *Graph) GetNodeByAlias(alias string) *Node {
 }
 
 // IterAliasedNodes provides an iterator over all aliased nodes. It yields pairs (alias, node).
+// The aliases are sorted before iteration.
 func (g *Graph) IterAliasedNodes() iter.Seq2[string, *Node] {
-	items := make([]struct {
+	type Item struct {
 		Alias string
 		Node  *Node
-	}, 0, len(g.aliasToNode))
-	for alias, node := range g.aliasToNode {
-		items = append(items, struct {
-			Alias string
-			Node  *Node
-		}{Alias: alias, Node: node})
 	}
+	items := make([]Item, 0, len(g.aliasToNode))
+	for alias, node := range g.aliasToNode {
+		items = append(items, Item{alias, node})
+	}
+	slices.SortFunc(items, func(a, b Item) int {
+		return strings.Compare(a.Alias, b.Alias)
+	})
 	return func(yield func(string, *Node) bool) {
 		for _, pair := range items {
 			next := yield(pair.Alias, pair.Node)
