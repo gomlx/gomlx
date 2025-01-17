@@ -26,7 +26,9 @@
   * More unit tests.
   * Aliases nodes: allow setting aliases to nodes, and to retrieve them by those aliases. Useful for layers
     or models to export intermediary nodes by their aliases. They are prefixed by scope. New methods are:
-    `Node.SetAlias`, `Graph.GetNodeByAlias`, `Graph.PushAliasScope`, `Graph.PopAliasScope` and `Graph.IterAliasedNodes`.
+    `Node.WithAlias`, `Node.GetAlias`, `Graph.GetNodeByAlias`, `Graph.PushAliasScope`, `Graph.PopAliasScope` 
+    and `Graph.IterAliasedNodes`.
+  * Added optional aliases nodes for `inceptionv3` model.
 
 # v0.16.1 - 🎄 2024/12/19 🎄 MatMul fixes
 * MatMul fixed for some edge shape configuration and greatly accelerated in some cases.

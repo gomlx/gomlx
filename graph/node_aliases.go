@@ -51,6 +51,12 @@ func (n *Node) WithAlias(alias string) *Node {
 	return n
 }
 
+// GetAlias returns the alias (with the absolute path) of the current node, if one was registered
+// with Node.WithAlias, otherwise returns "".
+func (n *Node) GetAlias() string {
+	return n.alias
+}
+
 // AliasScopeSeparator is the string used to join the individual alias scope parts as well as
 // the alias itself. So if the scope is currently ["a", "b"] and an alias "output" is created,
 // it will be renamed "/a/b/output".
