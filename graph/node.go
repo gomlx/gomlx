@@ -55,6 +55,9 @@ type Node struct {
 	// inputs need to be
 	inputs NodeInputs
 
+	// alias is a name by which the Node be referred in the Graph.
+	alias string
+
 	// logMessage is set if node is marked for logging.
 	logMessage string
 
@@ -199,10 +202,13 @@ func (n *Node) String() (str string) {
 	if n.graph == nil || !n.graph.IsValid() {
 		return "Node(invalid graph)"
 	}
+	if n.alias != "" {
+		str = fmt.Sprintf("[%q] ", n.alias)
+	}
 	if n.Type() == NodeTypeInvalid {
-		str = "Invalid(?)"
+		str += "Invalid(?)"
 	} else {
-		str = n.inputs.String()
+		str += n.inputs.String()
 	}
 
 	parts := []string{str}

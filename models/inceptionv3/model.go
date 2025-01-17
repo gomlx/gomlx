@@ -155,6 +155,8 @@ type Config struct {
 	batchNormScale   bool
 
 	conv2dCount, batchNormCount int
+
+	useAliases bool
 }
 
 // PreTrained configures the graph to load the pre-trained weights.
@@ -250,6 +252,22 @@ func (cfg *Config) SetPooling(pooling Pooling) *Config {
 	return cfg
 }
 
+// WithAliases will create aliases to the output of each layer.
+//
+// This facilitates capturing and manipulating those outputs for any purpose, for instance
+// to do "style transferring" (https://arxiv.org/abs/1508.06576), where a losses are attached to various layers.
+//
+// See more about graph nodes aliasing in Node.WithAlias, Graph.PushAliasScope, Graph.PopAliasScope and
+// Graph.IterAliasedNodes.
+//
+// Notice that if you call the model more than once -- on different inputs -- you will need to change the
+// current scope with Graph.PushAliasScope before using the Inception model, so it doesn't create
+// duplicate aliases.
+func (cfg *Config) WithAliases(useAliases bool) *Config {
+	cfg.useAliases = useAliases
+	return cfg
+}
+
 // Done builds the graph based on the configuration set.
 func (cfg *Config) Done() (output *Node) {
 	ctx := cfg.ctx
@@ -279,6 +297,12 @@ func (cfg *Config) Done() (output *Node) {
 				Panicf("inceptionv3.BuildGraph(): image dimensions must be 299x299 if using classification top,  got shape %s instead", x.Shape())
 			}
 		}
+	}
+
+	// Node aliases scope.
+	if cfg.useAliases {
+		g.PushAliasScope("inceptionV3")
+		defer g.PopAliasScope()
 	}
 
 	// Build model:
@@ -435,6 +459,9 @@ func (cfg *Config) Done() (output *Node) {
 		x = ReduceMean(x, cfg.spatialAxes...) // Global mean pooling across spatial dimensions, shape=[batch_size, 2048].
 		ctxWithWeights := cfg.readPredictionsWeights(ctx, g)
 		x = layers.DenseWithBias(ctxWithWeights, x, 1000)
+		if cfg.useAliases {
+			x = x.WithAlias("logits")
+		}
 
 	} else {
 		// Embeddings
@@ -473,6 +500,10 @@ func (cfg *Config) Done() (output *Node) {
 func (cfg *Config) conv2DWithBatchNorm(ctx *context.Context, x *Node, kernelFilters, kernelHeight, kernelWidth int,
 	strides []int, padding bool) (output *Node) {
 	g := x.Graph()
+	if cfg.useAliases {
+		g.PushAliasScope(fmt.Sprintf("conv_%03d", cfg.conv2dCount))
+		defer g.PopAliasScope()
+	}
 
 	// 2D Convolution:
 	ctxWithWeights := cfg.readNextConv2D(ctx, g) // Create a new context scope and read weights from `.h5` file.
@@ -499,6 +530,9 @@ func (cfg *Config) conv2DWithBatchNorm(ctx *context.Context, x *Node, kernelFilt
 	x = activations.Relu(x)
 
 	output = x
+	if cfg.useAliases {
+		output = output.WithAlias("output")
+	}
 	return
 }
 
