@@ -129,6 +129,12 @@ type Graph struct {
 	// tensorConstants maintains a cache of tensors that have been converted to a constant node in the graph,
 	// to avoid creating duplicate nodes.
 	tensorConstants tensorConstCache
+
+	// aliasToNode allows retrieval or nodes by their aliases.
+	aliasToNode map[string]*Node
+
+	// aliasScope is the current scope for aliases
+	aliasScope []string
 }
 
 // GraphId is globally unique.
@@ -136,6 +142,12 @@ var (
 	muGraphCount sync.Mutex
 	graphCount   GraphId
 )
+
+// tensorConstCache provides a cache of tensors used (converted to constants) in Graph, so they can be reused if needed.
+//
+// Notice this has the disadvantage of holding a reference to the tensor, while the Graph is alive, so it won't be
+// GC-ed until the graph is destroyed.
+type tensorConstCache map[*tensors.Tensor]*Node
 
 // NewGraph constructs an empty Graph.
 //
@@ -159,6 +171,7 @@ func NewGraph(backend backends.Backend, name string) *Graph {
 		parameterNameToHandle: make(map[string]ParameterHandle),
 		scalars:               make(scalarCache),
 		tensorConstants:       make(tensorConstCache),
+		aliasToNode:           make(map[string]*Node),
 	}
 	graphCount += 1
 	return g
@@ -602,9 +615,3 @@ func (g *Graph) getScalarConst(dtype dtypes.DType, value float64) (output *Node)
 	dtypeMap[value] = output
 	return
 }
-
-// tensorConstCache provides a cache of tensors used (converted to constants) in Graph, so they can be reused if needed.
-//
-// Notice this has the disadvantage of holding a reference to the tensor, while the Graph is alive, so it won't be
-// GC'ed until the graph is destroyed.
-type tensorConstCache map[*tensors.Tensor]*Node

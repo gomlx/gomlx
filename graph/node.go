@@ -55,6 +55,9 @@ type Node struct {
 	// inputs need to be
 	inputs NodeInputs
 
+	// alias is a name by which the Node be referred in the Graph.
+	alias string
+
 	// logMessage is set if node is marked for logging.
 	logMessage string
 

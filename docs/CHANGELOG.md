@@ -3,24 +3,30 @@
 # Next
 
 * Added "Flow Matching" examples/demo.
-* Added `layers.DropBlock`, a type of dropout for images.
-* Added `layers.DropPath` and `layers.DropPathFromContext`, a type of dropout used in Residual connections, to drop full paths.
+* Package `layers`:
+  * Added `layers.DropBlock`, a type of dropout for images.
+  * Added `layers.DropPath` and `layers.DropPathFromContext`, a type of dropout used in Residual connections, to drop full paths.
+  * `layers.LayerNormalization`:
+    * up-scale precision by default if input is a Float16 or BFloat16. Low-precision
+      lead to NaNs when reducing values for normalization. Added also a hyperparameter to configure normalization DType.
 * Added `Context.RandomBenoulli` to sample from a Bernoulli (binary) distribution.
 * Correctly pretty-print Float16 and BFloat16 tensors.
-* Fixed nanlogger for Float16 and BFloat16; Also, it first prints other logged tensors, before failing with a NaN.
 * Several fixes and small improvements to command-line tool `gomlx_checkpoint`.
-* `nanlogger`:
+* Package `nanlogger`:
   * Store only the stack-trace, and trim the stack into the nanlogger package.
   * Does not exit, simply report the NanLogger. User can define a handler, if they want the training to exit.
   * Use `IsFinite` to check for NaN and Infs: but we loose the type of NaN that happened.  
-* `layers.LayerNormalization`: 
-  * up-scale precision by default if input is a Float16 or BFloat16. Low-precision
-    lead to NaNs when reducing values for normalization. Added also a hyperparameter to configure normalization DType.
+  * Fixed nanlogger for Float16 and BFloat16; Also, it first prints other logged tensors, before failing with a NaN.
 * Package `losses`: 
   * Added `ParamLoss`: hyperparameter to define the loss, and many constant values.
   * Added `LossFromContext`, using `ParamLoss` hyperparameter. 
   * Added `MakeHuberLossFromContext`
   * Added experimental `MakeAdaptivePowerLoss` and `MakeAdaptivePowerLossFromContext`
+* Package `graph`:
+  * More unit tests.
+  * Aliases nodes: allow setting aliases to nodes, and to retrieve them by those aliases. Useful for layers
+    or models to export intermediary nodes by their aliases. They are prefixed by scope. New methods are:
+    `Node.SetAlias`, `Graph.GetNodeByAlias`, `Graph.PushAliasScope`, `Graph.PopAliasScope` and `Graph.IterAliasedNodes`.
 
 # v0.16.1 - 🎄 2024/12/19 🎄 MatMul fixes
 * MatMul fixed for some edge shape configuration and greatly accelerated in some cases.
