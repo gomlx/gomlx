@@ -523,6 +523,7 @@ func (cfg *Config) conv2DWithBatchNorm(ctx *context.Context, x *Node, kernelFilt
 	ctxWithWeights = cfg.readNextBatchNormalization(ctx, g) // Create a new context scope and read weights from `.h5` file.
 	x = batchnorm.New(ctxWithWeights, x, cfg.channelsAxis).CurrentScope().
 		Scale(cfg.batchNormScale).Epsilon(cfg.batchNormEpsilon).Trainable(cfg.trainable).
+		UseBackendInference(false).
 		FrozenAverages(cfg.baseDir != ""). // If we are loading the weights, we don't want the averages to move.
 		Done()
 
