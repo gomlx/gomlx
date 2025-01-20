@@ -188,36 +188,36 @@ func TestHuberLoss(t *testing.T) {
 		}})
 }
 
-// func TestAdaptivePowerLoss(t *testing.T) {
-// 	graphtest.RunTestGraphFn(t, "MakeAdaptivePowerLoss", func(g *Graph) (inputs, outputs []*Node) {
-// 		predictions := Const(g, []float32{0.0, 0.1, -0.1, 10.0, -1000.0})
-// 		predictions = OnePlus(predictions) // Shifted from 0.
-// 		labels := OnesLike(predictions)
-// 		inputs = []*Node{predictions}
-// 		lossFn := MakeAdaptivePowerLoss(3.0, 1, 10.0, 1.0)
-// 		outputs = []*Node{lossFn([]*Node{labels}, []*Node{predictions})}
-// 		return
-// 	}, []any{
-// 		[]float32{
-// 			0,                                // Zero when predictions==labels
-// 			0.1 * 0.1 * 0.1, 0.1 * 0.1 * 0.1, // "Near": use powerNear == 3. Also, checks it is symmetric.
-// 			10 * 10,    // Half-way, it should be ~10^((powerNear+powerFar)/2), so 10^2
-// 			1001.38275, // Far, it should be ~1000^1
-// 		},
-// 	}, 1e-3)
+func TestAdaptivePowerLoss(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "MakeAdaptivePowerLoss", func(g *Graph) (inputs, outputs []*Node) {
+		predictions := Const(g, []float32{0.0, 0.1, -0.1, 10.0, -1000.0})
+		predictions = OnePlus(predictions) // Shifted from 0.
+		labels := OnesLike(predictions)
+		inputs = []*Node{predictions}
+		lossFn := MakeAdaptivePowerLoss(3.0, 1, 10.0, 1.0)
+		outputs = []*Node{lossFn([]*Node{labels}, []*Node{predictions})}
+		return
+	}, []any{
+		[]float32{
+			0,                                // Zero when predictions==labels
+			0.1 * 0.1 * 0.1, 0.1 * 0.1 * 0.1, // "Near": use powerNear == 3. Also, checks it is symmetric.
+			10 * 10,    // Half-way, it should be ~10^((powerNear+powerFar)/2), so 10^2
+			1001.38275, // Far, it should be ~1000^1
+		},
+	}, 1e-3)
 
-// 	testGradientsInDelta[float64](t, "MakeAdaptiveLoss: Gradient",
-// 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
-// 			predictions := Const(g, []float32{0.0, 0.1, -0.1, 10.0, -1000.0})
-// 			predictions = OnePlus(predictions) // Shifted from 0.
-// 			labels := OnesLike(predictions)
-// 			lossFn := MakeAdaptivePowerLoss(3.0, 1, 10.0, 1.0)
-// 			output = ReduceAllSum(lossFn([]*Node{labels}, []*Node{predictions}))
-// 			return output, []*Node{predictions}
-// 		}, [][]float64{{
-// 			0.0,                 // Exactly 0, gradient is zero.
-// 			3 * 0.01, 3 * -0.01, // L3 region: d(x^3)/dx = 3x^2 ->
-// 			2 * 10, // L2 region: gradient
-// 			-1,     // L1 region: gradient is constant +/- 1 (while absolute error is +/- 2).
-// 		}}, 1e-2)
-// }
+	testGradientsInDelta[float64](t, "MakeAdaptiveLoss: Gradient",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			predictions := Const(g, []float32{0.0, 0.1, -0.1, 10.0, -1000.0})
+			predictions = OnePlus(predictions) // Shifted from 0.
+			labels := OnesLike(predictions)
+			lossFn := MakeAdaptivePowerLoss(3.0, 1, 10.0, 1.0)
+			output = ReduceAllSum(lossFn([]*Node{labels}, []*Node{predictions}))
+			return output, []*Node{predictions}
+		}, [][]float64{{
+			0.0,                 // Exactly 0, gradient is zero.
+			3 * 0.01, 3 * -0.01, // L3 region: d(x^3)/dx = 3x^2 ->
+			2 * 10, // L2 region: gradient
+			-1,     // L1 region: gradient is constant +/- 1 (while absolute error is +/- 2).
+		}}, 1e-2)
+}

@@ -132,7 +132,7 @@ func LossFromContext(ctx *context.Context) (LossFn, error) {
 		return nil, errors.Errorf("Unknown loss type %q set for hyperparameter %q, known losses are \"%s\"",
 			lossType, ParamLoss, strings.Join(TypeStrings(), "\", \""))
 	}
-	return nil,nil
+	return nil, nil
 }
 
 // MeanSquaredError returns the mean squared error between labels and predictions.
