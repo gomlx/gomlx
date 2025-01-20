@@ -1,5 +1,6 @@
 # GoLand IDE
 .idea
+.vscode
 
 # Python tests
 venv

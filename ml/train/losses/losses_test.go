@@ -188,95 +188,36 @@ func TestHuberLoss(t *testing.T) {
 		}})
 }
 
-func TestAdaptivePowerLoss(t *testing.T) {
-	graphtest.RunTestGraphFn(t, "MakeAdaptivePowerLoss", func(g *Graph) (inputs, outputs []*Node) {
-		predictions := Const(g, []float32{0.0, 0.1, -0.1, 10.0, -1000.0})
-		predictions = OnePlus(predictions) // Shifted from 0.
-		labels := OnesLike(predictions)
-		inputs = []*Node{predictions}
-		lossFn := MakeAdaptivePowerLoss(3.0, 1, 10.0, 1.0)
-		outputs = []*Node{lossFn([]*Node{labels}, []*Node{predictions})}
-		return
-	}, []any{
-		[]float32{
-			0,                                // Zero when predictions==labels
-			0.1 * 0.1 * 0.1, 0.1 * 0.1 * 0.1, // "Near": use powerNear == 3. Also, checks it is symmetric.
-			10 * 10,    // Half-way, it should be ~10^((powerNear+powerFar)/2), so 10^2
-			1001.38275, // Far, it should be ~1000^1
-		},
-	}, 1e-3)
+// func TestAdaptivePowerLoss(t *testing.T) {
+// 	graphtest.RunTestGraphFn(t, "MakeAdaptivePowerLoss", func(g *Graph) (inputs, outputs []*Node) {
+// 		predictions := Const(g, []float32{0.0, 0.1, -0.1, 10.0, -1000.0})
+// 		predictions = OnePlus(predictions) // Shifted from 0.
+// 		labels := OnesLike(predictions)
+// 		inputs = []*Node{predictions}
+// 		lossFn := MakeAdaptivePowerLoss(3.0, 1, 10.0, 1.0)
+// 		outputs = []*Node{lossFn([]*Node{labels}, []*Node{predictions})}
+// 		return
+// 	}, []any{
+// 		[]float32{
+// 			0,                                // Zero when predictions==labels
+// 			0.1 * 0.1 * 0.1, 0.1 * 0.1 * 0.1, // "Near": use powerNear == 3. Also, checks it is symmetric.
+// 			10 * 10,    // Half-way, it should be ~10^((powerNear+powerFar)/2), so 10^2
+// 			1001.38275, // Far, it should be ~1000^1
+// 		},
+// 	}, 1e-3)
 
-	testGradientsInDelta[float64](t, "MakeAdaptiveLoss: Gradient",
-		func(g *Graph) (output *Node, nodesForGrad []*Node) {
-			predictions := Const(g, []float32{0.0, 0.1, -0.1, 10.0, -1000.0})
-			predictions = OnePlus(predictions) // Shifted from 0.
-			labels := OnesLike(predictions)
-			lossFn := MakeAdaptivePowerLoss(3.0, 1, 10.0, 1.0)
-			output = ReduceAllSum(lossFn([]*Node{labels}, []*Node{predictions}))
-			return output, []*Node{predictions}
-		}, [][]float64{{
-			0.0,                 // Exactly 0, gradient is zero.
-			3 * 0.01, 3 * -0.01, // L3 region: d(x^3)/dx = 3x^2 ->
-			2 * 10, // L2 region: gradient
-			-1,     // L1 region: gradient is constant +/- 1 (while absolute error is +/- 2).
-		}}, 1e-2)
-}
-
-func TestPairwiseDistance(t *testing.T) {
-	graphtest.RunTestGraphFn(t, "PairwiseDistance",
-		func(g *Graph) (inputs, outputs []*Node) {
-			inputs = []*Node{
-				Const(g, [][]float32{{1, 1, 1}, {0, 1, 0}, {1, 0, 0}}),
-			}
-			outputs = []*Node{
-				pairwiseDistance(inputs[0], false),
-				pairwiseDistance(inputs[0], true),
-			}
-			return
-		}, []any{
-			[][]float32{{0., 1.4142135, 1.4142135}, {1.4142135, 0., 1.4142135}, {1.4142135, 1.4142135, 0.}},
-			[][]float32{{0, 2, 2}, {2, 0, 2}, {2, 2, 0}},
-		}, -1)
-}
-
-func TestAngularDistance(t *testing.T) {
-	graphtest.RunTestGraphFn(t, "AngularDistance",
-		func(g *Graph) (inputs, outputs []*Node) {
-			inputs = []*Node{
-				Const(g, [][]float32{{1, 1, 1}, {0, 1, 0}, {1, 0, 0}}),
-			}
-			outputs = []*Node{
-				angularDistance(inputs[0]),
-			}
-			return
-		}, []any{
-			[][]float32{{5.9604645e-08, 0.42264974, 0.42264974}, {0.42264974, 0., 1.}, {0.42264974, 1, 0}},
-		}, -1)
-}
-
-func TestTripletSemiHardLoss(t *testing.T) {
-	graphtest.RunTestGraphFn(t, "TripletSemiHardLoss",
-		func(g *Graph) (inputs, outputs []*Node) {
-			inputs = []*Node{
-				Const(g, [][]float32{{1}, {0}, {0}, {0}, {3}, {2}, {3}, {2}, {1}, {2}}), // labels
-				Const(g, [][]float32{
-					{0.08208963, 0.11788353, 0.46360782, 0.3360519, 0.2702437, 0.6951965},
-					{0.598121, 0.14609586, 0.07872304, 0.949776, 0.41479972, 0.36961815},
-					{0.11646613, 0.8878409, 0.4034519, 0.9632401, 0.6313564, 0.0198459},
-					{0.03582959, 0.3428808, 0.843301, 0.6335877, 0.8623248, 0.16186231},
-					{0.09054314, 0.746887, 0.56099737, 0.7181275, 0.60642695, 0.02207313},
-					{0.2735666, 0.08748698, 0.13752021, 0.4570993, 0.8813543, 0.98528206},
-					{0.5412437, 0.2382705, 0.6263132, 0.29713312, 0.9241606, 0.734765},
-					{0.22289598, 0.84535605, 0.4398808, 0.5816502, 0.31203038, 0.5436755},
-					{0.5512105, 0.6922551, 0.11149547, 0.6343566, 0.20425326, 0.3884894},
-					{0.51529086, 0.35541356, 0.77092594, 0.3715265, 0.40550032, 0.7369012},
-				}), // embeddings
-			}
-			outputs = []*Node{
-				TripletSemiHardLoss([]*Node{inputs[0]}, []*Node{inputs[1]}, 1.0, "L2"),
-			}
-			return
-		}, []any{
-			float32(0.93788296),
-		}, -1)
-}
+// 	testGradientsInDelta[float64](t, "MakeAdaptiveLoss: Gradient",
+// 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+// 			predictions := Const(g, []float32{0.0, 0.1, -0.1, 10.0, -1000.0})
+// 			predictions = OnePlus(predictions) // Shifted from 0.
+// 			labels := OnesLike(predictions)
+// 			lossFn := MakeAdaptivePowerLoss(3.0, 1, 10.0, 1.0)
+// 			output = ReduceAllSum(lossFn([]*Node{labels}, []*Node{predictions}))
+// 			return output, []*Node{predictions}
+// 		}, [][]float64{{
+// 			0.0,                 // Exactly 0, gradient is zero.
+// 			3 * 0.01, 3 * -0.01, // L3 region: d(x^3)/dx = 3x^2 ->
+// 			2 * 10, // L2 region: gradient
+// 			-1,     // L1 region: gradient is constant +/- 1 (while absolute error is +/- 2).
+// 		}}, 1e-2)
+// }

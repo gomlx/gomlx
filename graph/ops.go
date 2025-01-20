@@ -977,7 +977,7 @@ func LogicalAll(x *Node, reduceAxes ...int) *Node {
 	return backendReduceAnd(x, axes...)
 }
 
-// LogicalAny returns true if all values of x (converted to boolean) evaluate to true.
+// LogicalAny returns true if any values of x (converted to boolean) evaluate to true.
 // It's a "ReduceOr" equivalent.
 //
 // If reduceAxes is empty, it will reduce over all dimensions.

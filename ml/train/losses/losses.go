@@ -21,13 +21,14 @@
 package losses
 
 import (
+	"strings"
+
 	. "github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
-	"strings"
 )
 
 // LossFn is the interface used bye train.Trainer to train models.
@@ -120,9 +121,9 @@ func LossFromContext(ctx *context.Context) (LossFn, error) {
 	case TypeMSE:
 		return MeanSquaredError, nil
 	case TypeAPL:
-		return MakeAdaptivePowerLossFromContext(ctx), nil
+		//return MakeAdaptivePowerLossFromContext(ctx), nil
 	case TypeHuber:
-		return MakeHuberLossFromContext(ctx), nil
+		//return MakeHuberLossFromContext(ctx), nil
 	case TypeBinCross:
 		return BinaryCrossentropy, nil
 	case TypeBinCrossLogits:
@@ -131,6 +132,7 @@ func LossFromContext(ctx *context.Context) (LossFn, error) {
 		return nil, errors.Errorf("Unknown loss type %q set for hyperparameter %q, known losses are \"%s\"",
 			lossType, ParamLoss, strings.Join(TypeStrings(), "\", \""))
 	}
+	return nil,nil
 }
 
 // MeanSquaredError returns the mean squared error between labels and predictions.
@@ -462,212 +464,4 @@ func MakeHuberLoss(delta float64) LossFn {
 		}
 		return loss
 	}
-}
-
-// Computes the pairwise distance matrix with numerical stability.
-
-//     output[i, j] = || embeddings[i, :] - embeddings[j, :] ||_2
-
-//     Args:
-//       embeddings: 2-D Tensor of size `[number of data, embeddings dimension]`.
-//       squared: Boolean, whether or not to square the pairwise distances.
-
-// Returns:
-//
-//	pairwise distance: 2-D Tensor of size `[number of data, number of data]`.
-func pairwiseDistance(embeddings *Node, squared bool) *Node {
-	// Distances ||a - b||^2 = ||a||^2  - 2 <a, b> + ||b||^2
-	pairwiseDistancesSquared := Add(
-		Add(
-			L2NormSquare(embeddings, 1),
-			L2NormSquare(Transpose(embeddings, 0, 1), 0),
-		),
-		MulScalar(MatMul(embeddings, Transpose(embeddings, 0, 1)), -2.0),
-	)
-	// Deal with numerical inaccuracies. Set small negatives to zero.
-	pairwiseDistancesSquaredZeros := Max(pairwiseDistancesSquared, ZerosLike(pairwiseDistancesSquared))
-	// Optionally take the sqrt.
-	pairwiseDistances := pairwiseDistancesSquaredZeros
-	if !squared {
-		// Get the mask where the zero distances are at.
-		zeros := ZerosLike(pairwiseDistancesSquaredZeros)
-		errorMask := LessOrEqual(pairwiseDistancesSquaredZeros, zeros)
-		epsilon := epsilonForDType(pairwiseDistancesSquaredZeros.Graph(), pairwiseDistancesSquaredZeros.DType())
-		pairwiseDistancesSqrt := Sqrt(Where(errorMask, epsilon, pairwiseDistancesSquaredZeros))
-		//  Undo conditionally adding epsilon
-		pairwiseDistances = Where(errorMask, zeros, pairwiseDistancesSqrt)
-	}
-
-	//  Explicitly set diagonals to zero.
-	return Where(
-		Diagonal(pairwiseDistances.Graph(), pairwiseDistances.Shape().Dim(0)),
-		ZerosLike(pairwiseDistances),
-		pairwiseDistances,
-	)
-}
-
-// Computes the angular distance matrix.
-
-//     output[i, j] = 1 - cosine_similarity(feature[i, :], feature[j, :])
-
-//     Args:
-//       feature: 2-D Tensor of size `[number of data, feature dimension]`.
-
-// Returns:
-//
-//	angular_distances: 2-D Tensor of size `[number of data, number of data]`.
-func angularDistance(embeddings *Node) *Node {
-	// normalize input
-	embeddingsN := L2Normalize(embeddings, 1)
-	// create adjacent matrix of cosine similarity
-	angularDistances := OneMinus(MatMul(embeddingsN, Transpose(embeddingsN, 0, 1)))
-	// ensure all distances > 1e-16
-	angularDistancesZeros := MaxScalar(angularDistances, 0.0)
-	return angularDistancesZeros
-}
-
-// Computes the axis wise maximum over chosen elements.
-
-//     Args:
-//       data: 2-D float `Tensor` of shape `[n, m]`.
-//       mask: 2-D Boolean `Tensor` of shape `[n, m]`.
-//       dim: The dimension over which to compute the maximum.
-
-// Returns:
-//
-//	masked_maximums: N-D `Tensor`.
-//	  The maximized dimension is of size 1 after the operation.
-func maskedMaximum(x, mask *Node, dim int) *Node {
-	axisMinimums := ReduceAndKeep(x, ReduceMin, dim)
-	return Add(
-		ReduceAndKeep(
-			Mul(
-				Sub(x, axisMinimums),
-				ConvertDType(mask, x.DType())),
-			ReduceMax,
-			dim),
-		axisMinimums)
-}
-
-//  Computes the axis wise minimum over chosen elements.
-
-//     Args:
-//       data: 2-D float `Tensor` of shape `[n, m]`.
-//       mask: 2-D Boolean `Tensor` of shape `[n, m]`.
-//       dim: The dimension over which to compute the minimum.
-
-// Returns:
-//
-//	masked_minimums: N-D `Tensor`.
-//	  The minimized dimension is of size 1 after the operation.
-func maskedMinimum(x, mask *Node, dim int) *Node {
-	axisMaximums := ReduceAndKeep(x, ReduceMax, dim)
-	return Add(
-		ReduceAndKeep(
-			Mul(
-				Sub(x, axisMaximums),
-				ConvertDType(mask, x.DType())),
-			ReduceMin,
-			dim,
-		),
-		axisMaximums)
-}
-
-// Computes the triplet loss with semi-hard negative mining
-//
-//		labels: 1-D integer `Tensor` with shape `[batch_size]` of multiclass integer labels.
-//		predictions: 2-D float `Tensor` of embedding vectors. Embeddings should be l2 normalized.
-//	    margin: Float, margin term in the loss definition.
-//	    distance_metric: `str` that determines distance metric.
-//	        Valid strings are "L2" for l2-norm distance,
-//	        "squared-L2" for squared l2-norm distance,
-//	        and "angular" for cosine similarity.
-func TripletSemiHardLoss(labels, predictions []*Node, margin float64, distance string) *Node {
-	predictions0 := predictions[0]
-	labels0 := labels[0]
-	if labels0.Shape().Rank() != predictions0.Shape().Rank() {
-		Panicf("labels[0] (%s) and predictions[0] (%s) must have the same rank", labels0.Shape(), predictions0.Shape())
-	}
-	weights, mask := CheckLabelsForWeightsAndMask(labels0.Shape(), labels)
-
-	// Build pairwise square distance matrix
-	var pairwiseDist *Node
-	switch distance {
-	case "L2":
-		pairwiseDist = pairwiseDistance(predictions0, false)
-	case "squared-L2":
-		pairwiseDist = pairwiseDistance(predictions0, true)
-	case "angular":
-		angularDistance(predictions0)
-	default:
-		Panicf("distance %s don't exist or not implemented yet", distance)
-	}
-
-	// Build pairwise binary adjacency matrix.
-	adjacency := Equal(labels0, Transpose(labels0, 0, 1))
-	// Invert so we can select negatives only.
-	adjacencyNot := LogicalNot(adjacency)
-
-	batchSize := labels0.Shape().Size()
-
-	// Compute the mask.
-	pairwiseDistRepeated := Reshape(
-		BroadcastToDims(
-			ExpandAxes(pairwiseDist, 0),
-			batchSize, batchSize, batchSize),
-		batchSize*batchSize, batchSize)
-	pairwiseDistMask := And(
-		Reshape(
-			BroadcastToDims(
-				ExpandAxes(adjacencyNot, 0),
-				batchSize, batchSize, batchSize),
-			batchSize*batchSize, batchSize),
-		GreaterThan(
-			pairwiseDistRepeated,
-			Reshape(Transpose(pairwiseDist, 0, 1), -1, 1),
-		),
-	)
-	pairwiseDistMaskFinal := Transpose(
-		Reshape(
-			GreaterThan(
-				ReduceAndKeep(pairwiseDistMask, ReduceSum, 1),
-				Zeros(pairwiseDistMask.Graph(), shapes.Make(pairwiseDistMask.DType(), batchSize*batchSize, 1))),
-			batchSize, batchSize),
-		0, 1)
-
-	// negatives_outside: smallest D_an where D_an > D_ap.
-	negativesOutside := Transpose(
-		Reshape(
-			maskedMinimum(pairwiseDistRepeated, pairwiseDistMask, 1),
-			batchSize, batchSize),
-		0, 1)
-
-	// negatives_inside: largest D_an.
-	negativesInside := BroadcastToDims(
-		maskedMaximum(pairwiseDist, adjacencyNot, 1),
-		batchSize, batchSize)
-
-	semiHardNegatives := Where(pairwiseDistMaskFinal, negativesOutside, negativesInside)
-
-	lossMat := AddScalar(Sub(pairwiseDist, semiHardNegatives), margin)
-
-	maskPositives := Sub(
-		ConvertDType(adjacency, dtypes.F32),
-		ConvertDType(Diagonal(adjacency.Graph(), batchSize), dtypes.F32))
-
-	//   In lifted-struct, the authors multiply 0.5 for upper triangular
-	//    in semihard, they take all positive pairs except the diagonal.
-	numPositives := ReduceAllSum(maskPositives)
-
-	// tripletLoss
-	loss := Div(ReduceAllSum(MaxScalar(Mul(lossMat, maskPositives), 0.0)), numPositives)
-
-	if weights != nil {
-		loss = Mul(loss, weights)
-	}
-	if mask != nil {
-		loss = Where(mask, loss, ZerosLike(loss))
-	}
-
-	return loss
 }

@@ -54,7 +54,7 @@ func CreateDefaultContext() *context.Context {
 
 		// Loss
 		"diffusion_loss":                         "mse", // "mse" (Mean-Squared-Error), "mae" (Mean-Absolute-Error) or "huber".
-		losses.ParamHuberLossDelta:               0.2,   // If "huber" loss is selected, this is the delta, after which the loss becomes linear.
+		losses.ParamLoss:               0.2,   // If "huber" loss is selected, this is the delta, after which the loss becomes linear.
 		losses.ParamAdaptivePowerLossNear:        2.0,
 		losses.ParamAdaptivePowerLossFar:         1.0,
 		losses.ParamAdaptivePowerLossMiddleDelta: 0.2,
