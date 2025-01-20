@@ -2,6 +2,9 @@ package graph
 
 import (
 	"fmt"
+	"slices"
+	"strings"
+
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types"
@@ -10,8 +13,6 @@ import (
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
-	"slices"
-	"strings"
 )
 
 // PadAxis defines the amount of padding preceding one axis (Start), at the end of axis (End)
@@ -976,7 +977,7 @@ func LogicalAll(x *Node, reduceAxes ...int) *Node {
 	return backendReduceAnd(x, axes...)
 }
 
-// LogicalAny returns true if all values of x (converted to boolean) evaluate to true.
+// LogicalAny returns true if any values of x (converted to boolean) evaluate to true.
 // It's a "ReduceOr" equivalent.
 //
 // If reduceAxes is empty, it will reduce over all dimensions.
