@@ -552,3 +552,21 @@ func TestReduceVariance(t *testing.T) {
 			[]float32{1.0, 4.0, 9.0, 16.0}, // Var(c*X) = c^2*Var(X).
 		}, 0.1)
 }
+
+func TestReduceSkewness(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "ReduceSkewness",
+		func(g *Graph) (inputs, outputs []*Node) {
+			inputs = []*Node{
+				Const(g, []float32{1, 2, 3, 4, 5}),
+				Const(g, []float32{2, 8, 0, 4, 1, 9, 9, 0}),
+			}
+			outputs = []*Node{
+				ReduceSkewness(inputs[0]),
+				ReduceSkewness(inputs[1]),
+			}
+			return
+		}, []any{
+			float32(0.0),
+			float32(0.2650554122698573),
+		}, 0.001)
+}

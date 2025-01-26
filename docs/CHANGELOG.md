@@ -29,6 +29,7 @@
     `Node.WithAlias`, `Node.GetAlias`, `Graph.GetNodeByAlias`, `Graph.PushAliasScope`, `Graph.PopAliasScope` 
     and `Graph.IterAliasedNodes`.
   * Added optional aliases nodes for `inceptionv3` model.
+  * Added `ReduceSkewness` and the alias `Skewness`.
 
 # v0.16.1 - 🎄 2024/12/19 🎄 MatMul fixes
 * MatMul fixed for some edge shape configuration and greatly accelerated in some cases.
