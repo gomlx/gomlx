@@ -838,7 +838,7 @@ func ConsecutiveDifference(x *Node, axis int, preserveShape bool) *Node {
 		kernel = Reshape(kernel, kernelDims...)
 
 		output := Convolve(expandedX, kernel).
-			NoPadding().             // Default padding.
+			NoPadding(). // Default padding.
 			PaddingPerDim(paddings). // Only has an effect if paddings != nil.
 			Strides(1).
 			Done()
@@ -870,4 +870,26 @@ func ReduceVariance(x *Node, axes ...int) *Node {
 // If no axes is given, it assumes it should reduce all axes and returns a scalar.
 func Variance(x *Node, axes ...int) *Node {
 	return ReduceVariance(x, axes...)
+}
+
+// ReduceSkewness calculates the skewness (the 3rd standardized moment of a distribution) across the given axes.
+//
+// If no axes is given, it assumes it should reduce all axes and returns a scalar.
+func ReduceSkewness(x *Node, axes ...int) *Node {
+	mean := ReduceAndKeep(x, ReduceMean, axes...)
+	diff := Sub(x, mean)
+	stdDev := Sqrt(ReduceAndKeep(x, ReduceVariance, axes...))
+	normalizedX := Div(diff, stdDev)
+	xCube := Mul(Mul(normalizedX, normalizedX), normalizedX)
+	return ReduceMean(xCube, axes...)
+}
+
+// Skewness calculates the skewness (the 3rd standardized moment of a distribution) across the given axes.
+// It's just an alias to ReduceSkewness.
+//
+// It's a form of reduction function, and the returned rank will be x.Rank() - len(axes).
+//
+// If no axes is given, it assumes it should reduce all axes and returns a scalar.
+func Skewness(x *Node, axes ...int) *Node {
+	return ReduceSkewness(x, axes...)
 }
