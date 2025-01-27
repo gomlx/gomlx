@@ -2,6 +2,9 @@ package graph
 
 import (
 	"fmt"
+	"slices"
+	"strings"
+
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types"
@@ -10,8 +13,6 @@ import (
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
-	"slices"
-	"strings"
 )
 
 // PadAxis defines the amount of padding preceding one axis (Start), at the end of axis (End)
@@ -922,7 +923,7 @@ func MaskedReduceAllMax(x, mask *Node) *Node {
 	return MaskedReduceMax(x, mask)
 }
 
-// ReduceMin reduces by taking the max over the elements of the selected axes.
+// ReduceMin reduces by taking the min over the elements of the selected axes.
 // If reduceAxes is nil, reduce over all dimensions to a scalar.
 //
 // The reduced axes of `x` are removed in the output -- so the rank is reduced.
@@ -933,12 +934,12 @@ func ReduceMin(x *Node, reduceAxes ...int) *Node {
 	return backendReduceMin(x, axes...)
 }
 
-// ReduceAllMin reduces all dimensions to a scalar by taking the max.
+// ReduceAllMin reduces all dimensions to a scalar by taking the min.
 func ReduceAllMin(x *Node) *Node {
 	return ReduceMin(x)
 }
 
-// MaskedReduceMin reduces by taking the max of `x` elements over the selected axes.
+// MaskedReduceMin reduces by taking the min of `x` elements over the selected axes.
 // If reduceAxes is nil, reduce over all dimensions to a scalar.
 //
 // It ignores values for which the corresponding mask is false.
@@ -949,13 +950,13 @@ func MaskedReduceMin(x, mask *Node, reduceAxes ...int) *Node {
 		return ReduceMin(x, reduceAxes...)
 	}
 	g := x.Graph()
-	lowest := lowestForDType(g, x.DType())
-	broadcastLowest := BroadcastToDims(lowest, x.Shape().Dimensions...)
-	maskedX := Where(mask, x, broadcastLowest)
+	lowest := highestForDType(g, x.DType())
+	broadcastHighest := BroadcastToDims(lowest, x.Shape().Dimensions...)
+	maskedX := Where(mask, x, broadcastHighest)
 	return ReduceMin(maskedX, reduceAxes...)
 }
 
-// MaskedReduceAllMin reduces all dimensions to a scalar by taking the max.
+// MaskedReduceAllMin reduces all dimensions to a scalar by taking the min.
 //
 // It ignores values for which the corresponding mask is false.
 // The shapes of `mask and x must be the same.
@@ -976,7 +977,7 @@ func LogicalAll(x *Node, reduceAxes ...int) *Node {
 	return backendReduceAnd(x, axes...)
 }
 
-// LogicalAny returns true if all values of x (converted to boolean) evaluate to true.
+// LogicalAny returns true if any values of x (converted to boolean) evaluate to true.
 // It's a "ReduceOr" equivalent.
 //
 // If reduceAxes is empty, it will reduce over all dimensions.

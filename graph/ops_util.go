@@ -116,6 +116,10 @@ func lowestForDType(g *Graph, dtype dtypes.DType) *Node {
 	return Const(g, dtype.LowestValue())
 }
 
+func highestForDType(g *Graph, dtype dtypes.DType) *Node {
+	return Const(g, dtype.HighestValue())
+}
+
 // OnesLike returns a tensor with the same shape of x, filled with 1's.
 func OnesLike(x *Node) *Node {
 	g := validateBuildingGraphFromInputs(x)
