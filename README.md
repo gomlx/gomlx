@@ -67,15 +67,15 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
   * [GNN model for OGBN-MAG (experimental)](examples/ogbnmag/ogbn-mag.ipynb).
   * Last, a trivial [synthetic linear model](https://github.com/gomlx/gomlx/blob/main/examples/linear/linear.go), for those curious to see a barebones simple model.
 
-> **🚀 NEW 🚀**: 
->    - Converting ONNX models to GoMLX with [onnx-gomlx](https://github.com/gomlx/onnx-gomlx): both as an alternative for `onnxruntime` (leveraging XLA), but also to further fine-tune models. See also [go-huggingface](https://github.com/gomlx/go-huggingface) to easily download ONNX model files from HuggingFace.
->    - Support static linking of PJRT: slower to build the Go program, but deploying it doesn't require installing a PJRT plugin in the machine you are deploying it. 
->      Use `go build --tags=pjrt_cpu_static` or include `import _ "github.com/gomlx/gomlx/backends/xla/cpu/static"`. 
->    - Experimental 🚧🛠 support for MacOS (both Arm64 and the older x86_64) for CPU: only with static linking so far.
 
 **Highlights:**
 
-* Pre-Trained models to use: InceptionV3 (image model) -- more to come.
+> **🚀 NEW 🚀**:
+> - 🎉Neural Style Transfer 10 years Celebration🎉: [see a demo written using GoMLX](https://github.com/janpfeifer/styletransfer/blob/main/demo.ipynb) of the [original paper](https://arxiv.org/abs/1508.06576).
+> - [Triplet Losses](https://github.com/gomlx/gomlx/blob/main/ml/train/losses/triplet.go): various negative sampling strategies as well as various distance metrics.
+
+* Converting ONNX models to GoMLX with [onnx-gomlx](https://github.com/gomlx/onnx-gomlx): both as an alternative for `onnxruntime` (leveraging XLA),
+  but also to further fine-tune models. See also [go-huggingface](https://github.com/gomlx/go-huggingface) to easily download ONNX model files from HuggingFace.
 * [Docker "gomlx_jupyterlab"](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab) with integrated JupyterLab and [GoNB](https://github.com/janpfeifer/gonb) (a Go kernel for Jupyter notebooks)
 * Just-In-Time (JIT) compilation using [OpenXLA](https://github.com/openxla/xla) for CPUs and GPUs -- hopefully soon TPUs.
 * Autograd: automatic differentiation -- only gradients for now, no jacobian.
@@ -90,6 +90,10 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
     of nodes during training, stack-trace of the code where nodes are created.
 * SGD and Adam (AdamW and Adamax) optimizers.
 * Various losses and metrics.
+* Pre-Trained models to use: InceptionV3 (image model), many more from HuggingFace using [onnx-gomlx](https://github.com/gomlx/onnx-gomlx).
+  See also [go-huggingface](https://github.com/gomlx/go-huggingface) to easily download ONNX model files from HuggingFace. 
+* Support static linking of PJRT: slower to build the Go program, but deploying it doesn't require installing a PJRT plugin in the machine you are deploying it.
+  Use `go build --tags=pjrt_cpu_static` or include `import _ "github.com/gomlx/gomlx/backends/xla/cpu/static"`.
 
 ## 👥 Support
 
@@ -103,8 +107,8 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
 
 (1) [Use the Docker](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab);
 
-(2) Use pre-built binaries (C/C++ libraries) for Linux or MacOS (Darwin). See commands below, or more more details see  
-[**gopjrt** installation instructions](https://github.com/gomlx/gopjrt?#installing).
+(2) Use pre-built binaries (C/C++ libraries) for Linux or MacOS (Darwin, outdated :disappointed:, see warning below). 
+    See commands below, or more more details see [**gopjrt** installation instructions](https://github.com/gomlx/gopjrt?#installing).
  
 
 ### **Linux/amd64**, run ([see source](https://github.com/gomlx/gopjrt/blob/main/cmd/install_linux_amd64.sh)):
@@ -122,6 +126,13 @@ curl -sSf https://raw.githubusercontent.com/gomlx/gopjrt/main/cmd/install_cuda.s
 Depending on what data formats you use, you may want to install `hdf5-tools` programs (`sudo apt install hdf5-tools` in Linux).
 
 ### **Darwin/arm64 and Darwin/amd64**
+
+> [!WARNING]
+> 🚧🛠 The Darwin pre-built binary versions is at least 2 versions behind the current one -- I don't have easily available
+> mac box to update it. So it should be considered broken!! 🚧🛠
+>
+> If you use Mac and are familiar with building Go and C/C++ programs, a contribution where would be very welcome! :smiley:
+> Both for [GoMLX](https://github.com/gomlx/gomlx) and [Gopjrt](https://github.com/gomlx/gopjrt).
 
 > [!Note]
 > Currently, Darwin (MacOS) 🚧🛠 it only works with statically linked PJR CPU plugin 🛠🚧️ so that is the default (see issue in [XLA's issue #19152](https://github.com/openxla/xla/issues/19152) and on XLA's discord channels).

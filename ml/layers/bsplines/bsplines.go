@@ -141,7 +141,7 @@ func (e *evalData) Eval() *Node {
 func (e *evalData) basisFunction(degree int) *Node {
 	if degree == 0 {
 		// flatInputs >= knots[i] && flatInputs < knots[i+1]
-		cond := And(
+		cond := LogicalAnd(
 			GreaterOrEqual(e.flatInputs, e.knots),
 			ShiftLeft(LessThan(e.flatInputs, e.knots), 1, 0.0))
 		p0 := ConvertDType(cond, e.dtype) // true -> 1.0, false -> 0.0
@@ -196,7 +196,7 @@ func (e *evalData) Extrapolate() (where, value *Node) {
 	}
 	expandedInputs := broadcastInputs(e.inputs)
 	tooLow := LessThan(expandedInputs, kFirst)
-	where = Or(
+	where = LogicalOr(
 		tooLow,
 		GreaterOrEqual(expandedInputs, kLast))
 

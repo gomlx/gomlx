@@ -408,7 +408,7 @@ func (b *MultiHeadAttentionBuilder) buildMask() (mask *Node) {
 		if mask == nil {
 			mask = causalMask
 		} else {
-			mask = And(mask, causalMask)
+			mask = LogicalAnd(mask, causalMask)
 		}
 	}
 	return
@@ -440,7 +440,7 @@ func (b *MultiHeadAttentionBuilder) buildMaskFromSplitMasks() (mask *Node) {
 		queryMask = InsertAxes(b.queryMask, xslices.SliceWithValue(b.attentionShape.Rank()-b.queryMask.Rank(), -1)...)
 		queryMask = BroadcastToDims(queryMask, b.attentionShape.Dimensions...)
 	}
-	return And(queryMask, keyMask)
+	return LogicalAnd(queryMask, keyMask)
 }
 
 // buildCausalMask creates a mask where queries can only attend to keys with "smaller index" than itself.

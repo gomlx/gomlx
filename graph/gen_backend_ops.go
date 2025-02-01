@@ -19,12 +19,15 @@ const (
 	NodeTypeSplitNode
 	NodeTypeAbs
 	NodeTypeAdd
-	NodeTypeAnd
 	NodeTypeArgMinMax
 	NodeTypeBatchNormForInference
 	NodeTypeBatchNormForTraining
 	NodeTypeBatchNormGradient
 	NodeTypeBitCount
+	NodeTypeBitwiseAnd
+	NodeTypeBitwiseNot
+	NodeTypeBitwiseOr
+	NodeTypeBitwiseXor
 	NodeTypeBroadcast
 	NodeTypeBroadcastInDim
 	NodeTypeCeil
@@ -63,7 +66,10 @@ const (
 	NodeTypeLessThanTotalOrder
 	NodeTypeLog
 	NodeTypeLog1p
+	NodeTypeLogicalAnd
 	NodeTypeLogicalNot
+	NodeTypeLogicalOr
+	NodeTypeLogicalXor
 	NodeTypeLogistic
 	NodeTypeMax
 	NodeTypeMin
@@ -71,15 +77,18 @@ const (
 	NodeTypeNeg
 	NodeTypeNotEqual
 	NodeTypeNotEqualTotalOrder
-	NodeTypeOr
 	NodeTypePad
 	NodeTypeParameter
 	NodeTypePow
 	NodeTypeReal
-	NodeTypeReduceAnd
+	NodeTypeReduceBitwiseAnd
+	NodeTypeReduceBitwiseOr
+	NodeTypeReduceBitwiseXor
+	NodeTypeReduceLogicalAnd
+	NodeTypeReduceLogicalOr
+	NodeTypeReduceLogicalXor
 	NodeTypeReduceMax
 	NodeTypeReduceMin
-	NodeTypeReduceOr
 	NodeTypeReduceProduct
 	NodeTypeReduceSum
 	NodeTypeReduceWindow
@@ -95,6 +104,9 @@ const (
 	NodeTypeSelectAndScatterMax
 	NodeTypeSelectAndScatterMin
 	NodeTypeSelectAndScatterSum
+	NodeTypeShiftLeft
+	NodeTypeShiftRightArithmetic
+	NodeTypeShiftRightLogical
 	NodeTypeSign
 	NodeTypeSin
 	NodeTypeSlice
@@ -103,7 +115,6 @@ const (
 	NodeTypeTanh
 	NodeTypeTranspose
 	NodeTypeWhere
-	NodeTypeXor
 )
 
 // nodeInputsAbs holds the inputs used for the call to backends.Abs.
@@ -180,48 +191,6 @@ func Add(x0 *Node, x1 *Node) (node *Node) {
 		graph:        g,
 		inputs:       inputs,
 		inputNodes:   inputNodes,
-	}
-	g.registerNode(node)
-	return
-}
-
-// nodeInputsAnd holds the inputs used for the call to backends.And.
-type nodeInputsAnd struct {
-	x0 *Node
-	x1 *Node
-}
-
-// Type implements the interface NodeInputs.
-func (ni *nodeInputsAnd) Type() NodeType {
-	return NodeTypeAnd
-}
-
-// String implements the interface NodeInputs.
-func (ni *nodeInputsAnd) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
-		ni.Type(),
-		ni.x0.Id(),
-		ni.x1.Id(),
-	)
-}
-
-// And returns the element-wise logic "and" operator.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func And(x0 *Node, x1 *Node) (node *Node) {
-	inputNodes := []*Node{x0, x1}
-	g := validateBuildingGraphFromInputs(inputNodes...)
-	inputs := &nodeInputsAnd{
-		x0: x0,
-		x1: x1,
-	}
-	result := g.builder.And(x0.outputOps[0], x1.outputOps[0])
-	node = &Node{
-		outputOps:    []backends.Op{result},
-		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
-		graph:        g,
-		inputs:       inputs,
-		inputNodes:   inputNodes,
-		stopGradient: true,
 	}
 	g.registerNode(node)
 	return
@@ -462,6 +431,166 @@ func BitCount(operand *Node) (node *Node) {
 		operand: operand,
 	}
 	result := g.builder.BitCount(operand.outputOps[0])
+	node = &Node{
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsBitwiseAnd holds the inputs used for the call to backends.BitwiseAnd.
+type nodeInputsBitwiseAnd struct {
+	x0 *Node
+	x1 *Node
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsBitwiseAnd) Type() NodeType {
+	return NodeTypeBitwiseAnd
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsBitwiseAnd) String() string {
+	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
+		ni.Type(),
+		ni.x0.Id(),
+		ni.x1.Id(),
+	)
+}
+
+// BitwiseAnd returns the element-wise bitwise AND operation.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func BitwiseAnd(x0 *Node, x1 *Node) (node *Node) {
+	inputNodes := []*Node{x0, x1}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsBitwiseAnd{
+		x0: x0,
+		x1: x1,
+	}
+	result := g.builder.BitwiseAnd(x0.outputOps[0], x1.outputOps[0])
+	node = &Node{
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsBitwiseNot holds the inputs used for the call to backends.BitwiseNot.
+type nodeInputsBitwiseNot struct {
+	x *Node
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsBitwiseNot) Type() NodeType {
+	return NodeTypeBitwiseNot
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsBitwiseNot) String() string {
+	return fmt.Sprintf("%s(x=[#%d])",
+		ni.Type(),
+		ni.x.Id(),
+	)
+}
+
+// BitwiseNot returns the element-wise bitwise AND operation.
+func BitwiseNot(x *Node) (node *Node) {
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsBitwiseNot{
+		x: x,
+	}
+	result := g.builder.BitwiseNot(x.outputOps[0])
+	node = &Node{
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsBitwiseOr holds the inputs used for the call to backends.BitwiseOr.
+type nodeInputsBitwiseOr struct {
+	x0 *Node
+	x1 *Node
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsBitwiseOr) Type() NodeType {
+	return NodeTypeBitwiseOr
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsBitwiseOr) String() string {
+	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
+		ni.Type(),
+		ni.x0.Id(),
+		ni.x1.Id(),
+	)
+}
+
+// BitwiseOr returns the element-wise bitwise OR operation.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func BitwiseOr(x0 *Node, x1 *Node) (node *Node) {
+	inputNodes := []*Node{x0, x1}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsBitwiseOr{
+		x0: x0,
+		x1: x1,
+	}
+	result := g.builder.BitwiseOr(x0.outputOps[0], x1.outputOps[0])
+	node = &Node{
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsBitwiseXor holds the inputs used for the call to backends.BitwiseXor.
+type nodeInputsBitwiseXor struct {
+	x0 *Node
+	x1 *Node
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsBitwiseXor) Type() NodeType {
+	return NodeTypeBitwiseXor
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsBitwiseXor) String() string {
+	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
+		ni.Type(),
+		ni.x0.Id(),
+		ni.x1.Id(),
+	)
+}
+
+// BitwiseXor returns the element-wise bitwise XOR operator.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func BitwiseXor(x0 *Node, x1 *Node) (node *Node) {
+	inputNodes := []*Node{x0, x1}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsBitwiseXor{
+		x0: x0,
+		x1: x1,
+	}
+	result := g.builder.BitwiseXor(x0.outputOps[0], x1.outputOps[0])
 	node = &Node{
 		outputOps:    []backends.Op{result},
 		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
@@ -912,7 +1041,7 @@ func (ni *nodeInputsDiv) String() string {
 	)
 }
 
-// Div returns the element-wise subtraction of the two values.
+// Div returns the element-wise division of the two values.
 // Standard broadcasting rules apply (see documentation).
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func Div(x0 *Node, x1 *Node) (node *Node) {
@@ -2039,6 +2168,47 @@ func Log1p(x *Node) (node *Node) {
 	return
 }
 
+// nodeInputsLogicalAnd holds the inputs used for the call to backends.LogicalAnd.
+type nodeInputsLogicalAnd struct {
+	x0 *Node
+	x1 *Node
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsLogicalAnd) Type() NodeType {
+	return NodeTypeLogicalAnd
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsLogicalAnd) String() string {
+	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
+		ni.Type(),
+		ni.x0.Id(),
+		ni.x1.Id(),
+	)
+}
+
+// LogicalAnd returns the element-wise logical AND operation.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func LogicalAnd(x0 *Node, x1 *Node) (node *Node) {
+	inputNodes := []*Node{x0, x1}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsLogicalAnd{
+		x0: x0,
+		x1: x1,
+	}
+	result := g.builder.LogicalAnd(x0.outputOps[0], x1.outputOps[0])
+	node = &Node{
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
 // nodeInputsLogicalNot holds the inputs used for the call to backends.LogicalNot.
 type nodeInputsLogicalNot struct {
 	x *Node
@@ -2072,6 +2242,88 @@ func LogicalNot(x *Node) (node *Node) {
 		inputs:       inputs,
 		inputNodes:   inputNodes,
 		stopGradient: true,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsLogicalOr holds the inputs used for the call to backends.LogicalOr.
+type nodeInputsLogicalOr struct {
+	x0 *Node
+	x1 *Node
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsLogicalOr) Type() NodeType {
+	return NodeTypeLogicalOr
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsLogicalOr) String() string {
+	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
+		ni.Type(),
+		ni.x0.Id(),
+		ni.x1.Id(),
+	)
+}
+
+// LogicalOr returns the element-wise logical OR operation.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func LogicalOr(x0 *Node, x1 *Node) (node *Node) {
+	inputNodes := []*Node{x0, x1}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsLogicalOr{
+		x0: x0,
+		x1: x1,
+	}
+	result := g.builder.LogicalOr(x0.outputOps[0], x1.outputOps[0])
+	node = &Node{
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsLogicalXor holds the inputs used for the call to backends.LogicalXor.
+type nodeInputsLogicalXor struct {
+	x0 *Node
+	x1 *Node
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsLogicalXor) Type() NodeType {
+	return NodeTypeLogicalXor
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsLogicalXor) String() string {
+	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
+		ni.Type(),
+		ni.x0.Id(),
+		ni.x1.Id(),
+	)
+}
+
+// LogicalXor returns the element-wise logical XOR operator.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func LogicalXor(x0 *Node, x1 *Node) (node *Node) {
+	inputNodes := []*Node{x0, x1}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsLogicalXor{
+		x0: x0,
+		x1: x1,
+	}
+	result := g.builder.LogicalXor(x0.outputOps[0], x1.outputOps[0])
+	node = &Node{
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
 	return
@@ -2361,48 +2613,6 @@ func NotEqualTotalOrder(x0 *Node, x1 *Node) (node *Node) {
 	return
 }
 
-// nodeInputsOr holds the inputs used for the call to backends.Or.
-type nodeInputsOr struct {
-	x0 *Node
-	x1 *Node
-}
-
-// Type implements the interface NodeInputs.
-func (ni *nodeInputsOr) Type() NodeType {
-	return NodeTypeOr
-}
-
-// String implements the interface NodeInputs.
-func (ni *nodeInputsOr) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
-		ni.Type(),
-		ni.x0.Id(),
-		ni.x1.Id(),
-	)
-}
-
-// Or returns the element-wise logic "and" operator.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func Or(x0 *Node, x1 *Node) (node *Node) {
-	inputNodes := []*Node{x0, x1}
-	g := validateBuildingGraphFromInputs(inputNodes...)
-	inputs := &nodeInputsOr{
-		x0: x0,
-		x1: x1,
-	}
-	result := g.builder.Or(x0.outputOps[0], x1.outputOps[0])
-	node = &Node{
-		outputOps:    []backends.Op{result},
-		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
-		graph:        g,
-		inputs:       inputs,
-		inputNodes:   inputNodes,
-		stopGradient: true,
-	}
-	g.registerNode(node)
-	return
-}
-
 // nodeInputsPad holds the inputs used for the call to backends.Pad.
 type nodeInputsPad struct {
 	x          *Node
@@ -2526,19 +2736,19 @@ func Real(x *Node) (node *Node) {
 	return
 }
 
-// nodeInputsReduceAnd holds the inputs used for the call to backends.ReduceAnd.
-type nodeInputsReduceAnd struct {
+// nodeInputsReduceBitwiseAnd holds the inputs used for the call to backends.ReduceBitwiseAnd.
+type nodeInputsReduceBitwiseAnd struct {
 	x    *Node
 	axes []int
 }
 
 // Type implements the interface NodeInputs.
-func (ni *nodeInputsReduceAnd) Type() NodeType {
-	return NodeTypeReduceAnd
+func (ni *nodeInputsReduceBitwiseAnd) Type() NodeType {
+	return NodeTypeReduceBitwiseAnd
 }
 
 // String implements the interface NodeInputs.
-func (ni *nodeInputsReduceAnd) String() string {
+func (ni *nodeInputsReduceBitwiseAnd) String() string {
 	return fmt.Sprintf("%s(x=[#%d], axes=%v)",
 		ni.Type(),
 		ni.x.Id(),
@@ -2546,15 +2756,215 @@ func (ni *nodeInputsReduceAnd) String() string {
 	)
 }
 
-// backendReduceAnd is a Graph wrapper for the backend.Builder.ReduceAnd method.
-func backendReduceAnd(x *Node, axes ...int) (node *Node) {
+// backendReduceBitwiseAnd is a Graph wrapper for the backend.Builder.ReduceBitwiseAnd method.
+func backendReduceBitwiseAnd(x *Node, axes ...int) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
-	inputs := &nodeInputsReduceAnd{
+	inputs := &nodeInputsReduceBitwiseAnd{
 		x:    x,
 		axes: slices.Clone(axes),
 	}
-	result := g.builder.ReduceAnd(x.outputOps[0], inputs.axes...)
+	result := g.builder.ReduceBitwiseAnd(x.outputOps[0], inputs.axes...)
+	node = &Node{
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsReduceBitwiseOr holds the inputs used for the call to backends.ReduceBitwiseOr.
+type nodeInputsReduceBitwiseOr struct {
+	x    *Node
+	axes []int
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsReduceBitwiseOr) Type() NodeType {
+	return NodeTypeReduceBitwiseOr
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsReduceBitwiseOr) String() string {
+	return fmt.Sprintf("%s(x=[#%d], axes=%v)",
+		ni.Type(),
+		ni.x.Id(),
+		ni.axes,
+	)
+}
+
+// backendReduceBitwiseOr is a Graph wrapper for the backend.Builder.ReduceBitwiseOr method.
+func backendReduceBitwiseOr(x *Node, axes ...int) (node *Node) {
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsReduceBitwiseOr{
+		x:    x,
+		axes: slices.Clone(axes),
+	}
+	result := g.builder.ReduceBitwiseOr(x.outputOps[0], inputs.axes...)
+	node = &Node{
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsReduceBitwiseXor holds the inputs used for the call to backends.ReduceBitwiseXor.
+type nodeInputsReduceBitwiseXor struct {
+	x    *Node
+	axes []int
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsReduceBitwiseXor) Type() NodeType {
+	return NodeTypeReduceBitwiseXor
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsReduceBitwiseXor) String() string {
+	return fmt.Sprintf("%s(x=[#%d], axes=%v)",
+		ni.Type(),
+		ni.x.Id(),
+		ni.axes,
+	)
+}
+
+// backendReduceBitwiseXor is a Graph wrapper for the backend.Builder.ReduceBitwiseXor method.
+func backendReduceBitwiseXor(x *Node, axes ...int) (node *Node) {
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsReduceBitwiseXor{
+		x:    x,
+		axes: slices.Clone(axes),
+	}
+	result := g.builder.ReduceBitwiseXor(x.outputOps[0], inputs.axes...)
+	node = &Node{
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsReduceLogicalAnd holds the inputs used for the call to backends.ReduceLogicalAnd.
+type nodeInputsReduceLogicalAnd struct {
+	x    *Node
+	axes []int
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsReduceLogicalAnd) Type() NodeType {
+	return NodeTypeReduceLogicalAnd
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsReduceLogicalAnd) String() string {
+	return fmt.Sprintf("%s(x=[#%d], axes=%v)",
+		ni.Type(),
+		ni.x.Id(),
+		ni.axes,
+	)
+}
+
+// backendReduceLogicalAnd is a Graph wrapper for the backend.Builder.ReduceLogicalAnd method.
+func backendReduceLogicalAnd(x *Node, axes ...int) (node *Node) {
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsReduceLogicalAnd{
+		x:    x,
+		axes: slices.Clone(axes),
+	}
+	result := g.builder.ReduceLogicalAnd(x.outputOps[0], inputs.axes...)
+	node = &Node{
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsReduceLogicalOr holds the inputs used for the call to backends.ReduceLogicalOr.
+type nodeInputsReduceLogicalOr struct {
+	x    *Node
+	axes []int
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsReduceLogicalOr) Type() NodeType {
+	return NodeTypeReduceLogicalOr
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsReduceLogicalOr) String() string {
+	return fmt.Sprintf("%s(x=[#%d], axes=%v)",
+		ni.Type(),
+		ni.x.Id(),
+		ni.axes,
+	)
+}
+
+// backendReduceLogicalOr is a Graph wrapper for the backend.Builder.ReduceLogicalOr method.
+func backendReduceLogicalOr(x *Node, axes ...int) (node *Node) {
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsReduceLogicalOr{
+		x:    x,
+		axes: slices.Clone(axes),
+	}
+	result := g.builder.ReduceLogicalOr(x.outputOps[0], inputs.axes...)
+	node = &Node{
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsReduceLogicalXor holds the inputs used for the call to backends.ReduceLogicalXor.
+type nodeInputsReduceLogicalXor struct {
+	x    *Node
+	axes []int
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsReduceLogicalXor) Type() NodeType {
+	return NodeTypeReduceLogicalXor
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsReduceLogicalXor) String() string {
+	return fmt.Sprintf("%s(x=[#%d], axes=%v)",
+		ni.Type(),
+		ni.x.Id(),
+		ni.axes,
+	)
+}
+
+// backendReduceLogicalXor is a Graph wrapper for the backend.Builder.ReduceLogicalXor method.
+func backendReduceLogicalXor(x *Node, axes ...int) (node *Node) {
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsReduceLogicalXor{
+		x:    x,
+		axes: slices.Clone(axes),
+	}
+	result := g.builder.ReduceLogicalXor(x.outputOps[0], inputs.axes...)
 	node = &Node{
 		outputOps:    []backends.Op{result},
 		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
@@ -2635,46 +3045,6 @@ func backendReduceMin(x *Node, axes ...int) (node *Node) {
 		axes: slices.Clone(axes),
 	}
 	result := g.builder.ReduceMin(x.outputOps[0], inputs.axes...)
-	node = &Node{
-		outputOps:    []backends.Op{result},
-		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
-		graph:        g,
-		inputs:       inputs,
-		inputNodes:   inputNodes,
-	}
-	g.registerNode(node)
-	return
-}
-
-// nodeInputsReduceOr holds the inputs used for the call to backends.ReduceOr.
-type nodeInputsReduceOr struct {
-	x    *Node
-	axes []int
-}
-
-// Type implements the interface NodeInputs.
-func (ni *nodeInputsReduceOr) Type() NodeType {
-	return NodeTypeReduceOr
-}
-
-// String implements the interface NodeInputs.
-func (ni *nodeInputsReduceOr) String() string {
-	return fmt.Sprintf("%s(x=[#%d], axes=%v)",
-		ni.Type(),
-		ni.x.Id(),
-		ni.axes,
-	)
-}
-
-// backendReduceOr is a Graph wrapper for the backend.Builder.ReduceOr method.
-func backendReduceOr(x *Node, axes ...int) (node *Node) {
-	inputNodes := []*Node{x}
-	g := validateBuildingGraphFromInputs(inputNodes...)
-	inputs := &nodeInputsReduceOr{
-		x:    x,
-		axes: slices.Clone(axes),
-	}
-	result := g.builder.ReduceOr(x.outputOps[0], inputs.axes...)
 	node = &Node{
 		outputOps:    []backends.Op{result},
 		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
@@ -3389,6 +3759,126 @@ func backendSelectAndScatterSum(operand *Node, source *Node, windowDimensions []
 	return
 }
 
+// nodeInputsShiftLeft holds the inputs used for the call to backends.ShiftLeft.
+type nodeInputsShiftLeft struct {
+	x0 *Node
+	x1 *Node
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsShiftLeft) Type() NodeType {
+	return NodeTypeShiftLeft
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsShiftLeft) String() string {
+	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
+		ni.Type(),
+		ni.x0.Id(),
+		ni.x1.Id(),
+	)
+}
+
+// backendShiftLeft is a Graph wrapper for the backend.Builder.ShiftLeft method.
+func backendShiftLeft(x0 *Node, x1 *Node) (node *Node) {
+	inputNodes := []*Node{x0, x1}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsShiftLeft{
+		x0: x0,
+		x1: x1,
+	}
+	result := g.builder.ShiftLeft(x0.outputOps[0], x1.outputOps[0])
+	node = &Node{
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsShiftRightArithmetic holds the inputs used for the call to backends.ShiftRightArithmetic.
+type nodeInputsShiftRightArithmetic struct {
+	x0 *Node
+	x1 *Node
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsShiftRightArithmetic) Type() NodeType {
+	return NodeTypeShiftRightArithmetic
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsShiftRightArithmetic) String() string {
+	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
+		ni.Type(),
+		ni.x0.Id(),
+		ni.x1.Id(),
+	)
+}
+
+// backendShiftRightArithmetic is a Graph wrapper for the backend.Builder.ShiftRightArithmetic method.
+func backendShiftRightArithmetic(x0 *Node, x1 *Node) (node *Node) {
+	inputNodes := []*Node{x0, x1}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsShiftRightArithmetic{
+		x0: x0,
+		x1: x1,
+	}
+	result := g.builder.ShiftRightArithmetic(x0.outputOps[0], x1.outputOps[0])
+	node = &Node{
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsShiftRightLogical holds the inputs used for the call to backends.ShiftRightLogical.
+type nodeInputsShiftRightLogical struct {
+	x0 *Node
+	x1 *Node
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsShiftRightLogical) Type() NodeType {
+	return NodeTypeShiftRightLogical
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsShiftRightLogical) String() string {
+	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
+		ni.Type(),
+		ni.x0.Id(),
+		ni.x1.Id(),
+	)
+}
+
+// backendShiftRightLogical is a Graph wrapper for the backend.Builder.ShiftRightLogical method.
+func backendShiftRightLogical(x0 *Node, x1 *Node) (node *Node) {
+	inputNodes := []*Node{x0, x1}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsShiftRightLogical{
+		x0: x0,
+		x1: x1,
+	}
+	result := g.builder.ShiftRightLogical(x0.outputOps[0], x1.outputOps[0])
+	node = &Node{
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
 // nodeInputsSign holds the inputs used for the call to backends.Sign.
 type nodeInputsSign struct {
 	x *Node
@@ -3703,48 +4193,6 @@ func backendWhere(condition *Node, onTrue *Node, onFalse *Node) (node *Node) {
 		graph:        g,
 		inputs:       inputs,
 		inputNodes:   inputNodes,
-	}
-	g.registerNode(node)
-	return
-}
-
-// nodeInputsXor holds the inputs used for the call to backends.Xor.
-type nodeInputsXor struct {
-	x0 *Node
-	x1 *Node
-}
-
-// Type implements the interface NodeInputs.
-func (ni *nodeInputsXor) Type() NodeType {
-	return NodeTypeXor
-}
-
-// String implements the interface NodeInputs.
-func (ni *nodeInputsXor) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
-		ni.Type(),
-		ni.x0.Id(),
-		ni.x1.Id(),
-	)
-}
-
-// Xor returns the element-wise logic "and" operator.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func Xor(x0 *Node, x1 *Node) (node *Node) {
-	inputNodes := []*Node{x0, x1}
-	g := validateBuildingGraphFromInputs(inputNodes...)
-	inputs := &nodeInputsXor{
-		x0: x0,
-		x1: x1,
-	}
-	result := g.builder.Xor(x0.outputOps[0], x1.outputOps[0])
-	node = &Node{
-		outputOps:    []backends.Op{result},
-		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
-		graph:        g,
-		inputs:       inputs,
-		inputNodes:   inputNodes,
-		stopGradient: true,
 	}
 	g.registerNode(node)
 	return
