@@ -98,24 +98,18 @@ func ReduceBitwiseXor(x *Node, reduceAxes ...int) *Node {
 }
 
 // And is an alias for LogicalAnd.
-//
-// Deprecated: please use LogicalAnd.
 func And(lhs, rhs *Node) *Node {
 	return LogicalAnd(lhs, rhs)
 }
 
 // Or is an alias for LogicalOr.
-//
-// Deprecated: please use LogicalOr.
 func Or(lhs, rhs *Node) *Node {
 	return LogicalOr(lhs, rhs)
 }
 
-// Xor is an alias for LogicalXor.
-//
-// Deprecated: please use LogicalXor.
-func Xor(lhs, rhs *Node) *Node {
-	return LogicalXor(lhs, rhs)
+// Not is an alias for LogicalNot.
+func Not(x *Node) *Node {
+	return LogicalNot(x)
 }
 
 // BitwiseShiftLeft n bits of integer values.
