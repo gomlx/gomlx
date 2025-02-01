@@ -131,7 +131,7 @@ Depending on what data formats you use, you may want to install `hdf5-tools` pro
 > 🚧🛠 The Darwin pre-built binary versions is at least 2 versions behind the current one -- I don't have easily available
 > mac box to update it. So it should be considered broken!! 🚧🛠
 >
-> If you use Mac and are familiar with building Go and C/C++ programs, a contribution where would be very welcome! :smiley:
+> If you use Mac and are familiar with building Go and C/C++ programs, a contribution here would be most welcome! :smiley:
 > Both for [GoMLX](https://github.com/gomlx/gomlx) and [Gopjrt](https://github.com/gomlx/gopjrt).
 
 > [!Note]
