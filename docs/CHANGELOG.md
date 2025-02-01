@@ -1,7 +1,9 @@
 # GoMLX changelog
 
-# Next
+# v0.17.0: bitwise ops, triplet losses, new layers, fixes, and more.
 
+* Backend API change: separating Logical and Bitwise versions of various ops derived from And, Or, Xor and Not.
+* Updated dependency to gopjrt v0.6.0.
 * Added "Flow Matching" examples/demo.
 * Package `layers`:
   * Added `layers.DropBlock`, a type of dropout for images.
@@ -22,6 +24,7 @@
   * Added `LossFromContext`, using `ParamLoss` hyperparameter. 
   * Added `MakeHuberLossFromContext`
   * Added experimental `MakeAdaptivePowerLoss` and `MakeAdaptivePowerLossFromContext`
+  * Added TripletLoss: various negative sampling strategies and distance metrics.
 * Package `graph`:
   * More unit tests.
   * Aliases nodes: allow setting aliases to nodes, and to retrieve them by those aliases. Useful for layers
@@ -30,6 +33,10 @@
     and `Graph.IterAliasedNodes`.
   * Added optional aliases nodes for `inceptionv3` model.
   * Added `ReduceSkewness` and the alias `Skewness`.
+  * Added bitwise ops:
+    * `BitwiseShiftLeft`, `BitwiseShiftRightLogical`, `BitwiseShiftRightArithmetic`, `BitwiseAnd`, `BitwiseOr`,
+      `BitwiseXor`, `BitwiseNot`.
+  * Kept an alias from `And`, `Or` and `Not` to the `LogicalAnd`, `LogicalOr`, `LogicalXor` and `LogicalNot`.
 
 # v0.16.1 - 🎄 2024/12/19 🎄 MatMul fixes
 * MatMul fixed for some edge shape configuration and greatly accelerated in some cases.
