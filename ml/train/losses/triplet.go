@@ -194,7 +194,7 @@ func TripletLoss(labels, predictions []*Node,
 	indicesNotEqual := LogicalNot(DiagonalWithValue(Const(g, true), batchSize))
 	labelsEqual := Squeeze(Equal(InsertAxes(labels0, 0), InsertAxes(labels0, 1)))
 	negativeMask := LogicalNot(labelsEqual)
-	positiveMask := And(indicesNotEqual, labelsEqual)
+	positiveMask := LogicalAnd(indicesNotEqual, labelsEqual)
 
 	positiveMask.AssertDims(batchSize, batchSize)
 	negativeMask.AssertDims(batchSize, batchSize)
@@ -213,7 +213,7 @@ func TripletLoss(labels, predictions []*Node,
 		// Whenever we have three indices i,j,k∈[1,B],
 		// if examples i and j have the same label but are distinct,
 		// and example k has a different label, we say that (i,j,k) is a valid triplet
-		validTriplets = And(InsertAxes(positiveMask, 2), InsertAxes(negativeMask, 1))
+		validTriplets = LogicalAnd(InsertAxes(positiveMask, 2), InsertAxes(negativeMask, 1))
 
 		positiveDistances.AssertDims(batchSize, batchSize, 1)
 		negativeDistances.AssertDims(batchSize, 1, batchSize)
@@ -229,7 +229,7 @@ func TripletLoss(labels, predictions []*Node,
 		// Whenever we have three indices i,j,k∈[1,B],
 		// if examples i and j have the same label but are distinct,
 		// and example k has a different label, we say that (i,j,k) is a valid triplet
-		validTriplets = And(LogicalAny(positiveMask, 1), LogicalAny(negativeMask, 1))
+		validTriplets = LogicalAnd(LogicalAny(positiveMask, 1), LogicalAny(negativeMask, 1))
 
 		positiveDistances.AssertDims(batchSize, 1)
 		negativeDistances.AssertDims(batchSize, 1)
@@ -259,7 +259,7 @@ func TripletLoss(labels, predictions []*Node,
 		// Whenever we have three indices i,j,k∈[1,B],
 		// if examples i and j have the same label but are distinct,
 		// and example k has a different label, we say that (i,j,k) is a valid triplet
-		validTriplets = And(LogicalAny(positiveMask, 1), LogicalAny(negativeMask, 1))
+		validTriplets = LogicalAnd(LogicalAny(positiveMask, 1), LogicalAny(negativeMask, 1))
 
 		positiveDistances.AssertDims(batchSize, 1)
 		negativeDistances.AssertDims(batchSize, 1)

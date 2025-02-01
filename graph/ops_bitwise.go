@@ -117,3 +117,56 @@ func Or(lhs, rhs *Node) *Node {
 func Xor(lhs, rhs *Node) *Node {
 	return LogicalXor(lhs, rhs)
 }
+
+// BitwiseShiftLeft n bits of integer values.
+// It implicitly preserves the sign bit, if there is no overflow. So BitwiseShiftLeft(-1, 1) = -2.
+func BitwiseShiftLeft(x, n *Node) *Node {
+	_ = validateBuildingGraphFromInputs(x, n)
+	if n.DType() != x.DType() {
+		n = ConvertDType(n, x.DType())
+	}
+	return backendShiftLeft(x, n)
+}
+
+// BitwiseShiftLeftScalar is an alias to BitwiseShiftLeft, but takes n as a scalar.
+func BitwiseShiftLeftScalar[T dtypes.NumberNotComplex](x *Node, n T) *Node {
+	g := validateBuildingGraphFromInputs(x)
+	nNode := Scalar(g, x.DType(), n)
+	return BitwiseShiftLeft(x, nNode)
+}
+
+// BitwiseShiftRightArithmetic n bits of integer values, preserving the sign bit. So ShiftRight(-2, 1) = -1.
+// See also BitwiseShiftRightLogical for a version the ignores the sign bit.
+func BitwiseShiftRightArithmetic(x, n *Node) *Node {
+	_ = validateBuildingGraphFromInputs(x, n)
+	if n.DType() != x.DType() {
+		n = ConvertDType(n, x.DType())
+	}
+	return backendShiftRightArithmetic(x, n)
+}
+
+// BitwiseShiftRightArithmeticScalar is an alias to BitwiseShiftRightArithmetic, but takes n as a scalar.
+// It shifts n bits of integer values, preserving the sign bit. So ShiftRight(-2, 1) = -1.
+func BitwiseShiftRightArithmeticScalar[T dtypes.NumberNotComplex](x *Node, n T) *Node {
+	g := validateBuildingGraphFromInputs(x)
+	nNode := Scalar(g, x.DType(), n)
+	return BitwiseShiftRightArithmetic(x, nNode)
+}
+
+// BitwiseShiftRightLogical n bits of integer values, ignoring the sign bit.
+// See also BitwiseShiftRightArithmetic for a version that preserves the sign bit.
+func BitwiseShiftRightLogical(x, n *Node) *Node {
+	_ = validateBuildingGraphFromInputs(x, n)
+	if n.DType() != x.DType() {
+		n = ConvertDType(n, x.DType())
+	}
+	return backendShiftRightLogical(x, n)
+}
+
+// BitwiseShiftRightLogicalScalar is an alias to BitwiseShiftRightLogical, but takes n as a scalar.
+// It shifts right n bits of integer values, ignoring the sign bit.
+func BitwiseShiftRightLogicalScalar[T dtypes.NumberNotComplex](x *Node, n T) *Node {
+	g := validateBuildingGraphFromInputs(x)
+	nNode := Scalar(g, x.DType(), n)
+	return BitwiseShiftRightLogical(x, nNode)
+}

@@ -190,7 +190,7 @@ func (cfg *DropBlockConfig) Done() *Node {
 	// For boolean values of x, just do a logical "And" with the mask:
 	if x.DType() == dtypes.Bool {
 		// If input is a bool map (as mask itself):
-		return And(x, mask)
+		return LogicalAnd(x, mask)
 	}
 
 	// Apply mask by converting mask to 1/0 and multiply.
