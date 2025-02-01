@@ -457,9 +457,11 @@ func (c *Config) BuildTrainingModelGraph() train.ModelFn {
 		// Calculate our loss inside the model: use losses.ParamLoss to define the loss, and if not set,
 		// back-off to "diffusion_loss" hyperparam (for backward compatibility).
 		// Defaults to "mae" (mean-absolute-error).
-		lossName := context.GetParamOr(ctx, losses.ParamLoss,
-			context.GetParamOr(ctx, "diffusion_loss", "mse"))
-		ctx.SetParam("loss", lossName) // Needed for old models that used "diffusion_loss".
+		lossName := context.GetParamOr(ctx, losses.ParamLoss, "")
+		if lossName == "" {
+			lossName = context.GetParamOr(ctx, "diffusion_loss", "mse")
+		}
+		ctx.SetParam(losses.ParamLoss, lossName) // Needed for old models that used "diffusion_loss".
 		lossFn := must.M1(losses.LossFromContext(ctx))
 		noisesLoss := lossFn([]*Node{noises}, []*Node{predictedNoises})
 		if !noisesLoss.IsScalar() {

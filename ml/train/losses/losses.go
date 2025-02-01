@@ -111,8 +111,8 @@ func LossFromContext(ctx *context.Context) (LossFn, error) {
 	lossName := context.GetParamOr(ctx, ParamLoss, "mae")
 	lossType, err := TypeString(lossName)
 	if err != nil {
-		err = errors.Wrapf(err, "invalid value for hyperparameter %q, known losses are: \"%s\"",
-			ParamLoss, strings.Join(TypeStrings(), "\", \""))
+		err = errors.Wrapf(err, "invalid value %q for hyperparameter %q, known losses are: \"%s\"",
+			lossName, ParamLoss, strings.Join(TypeStrings(), "\", \""))
 		return nil, err
 	}
 	switch lossType {
