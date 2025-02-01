@@ -1,0 +1,119 @@
+package graph
+
+import "github.com/gomlx/gopjrt/dtypes"
+
+// ReduceLogicalAnd returns true if all values of x evaluate to true
+// across the given axes.
+// No gradients are defined.
+//
+// If reduceAxes is empty, it will reduce over all dimensions.
+func ReduceLogicalAnd(x *Node, reduceAxes ...int) *Node {
+	_ = validateBuildingGraphFromInputs(x)
+	x = StopGradient(x) // No gradients defined to LogicalAll.
+	axes := adjustAxesToRankAndSort(x.Rank(), reduceAxes, "x")
+	return backendReduceLogicalAnd(x, axes...)
+}
+
+// ReduceLogicalOr returns true if any values of x evaluate to true
+// across the given axes.
+// No gradients are defined.
+//
+// If reduceAxes is empty, it will reduce over all dimensions.
+func ReduceLogicalOr(x *Node, reduceAxes ...int) *Node {
+	_ = validateBuildingGraphFromInputs(x)
+	x = StopGradient(x) // No gradients defined to LogicalAll.
+	axes := adjustAxesToRankAndSort(x.Rank(), reduceAxes, "x")
+	return backendReduceLogicalOr(x, axes...)
+}
+
+// ReduceLogicalXor returns the xor of the values across the given axes.
+// No gradients are defined.
+//
+// If reduceAxes is empty, it will reduce over all dimensions.
+func ReduceLogicalXor(x *Node, reduceAxes ...int) *Node {
+	_ = validateBuildingGraphFromInputs(x)
+	x = StopGradient(x) // No gradients defined to LogicalAll.
+	axes := adjustAxesToRankAndSort(x.Rank(), reduceAxes, "x")
+	return backendReduceLogicalXor(x, axes...)
+}
+
+// LogicalAll returns true if all values of x (converted to boolean) evaluate to true.
+// It's a "ReduceLogicalAnd" equivalent.
+//
+// If reduceAxes is empty, it will reduce over all dimensions.
+func LogicalAll(x *Node, reduceAxes ...int) *Node {
+	_ = validateBuildingGraphFromInputs(x)
+	x = ConvertDType(x, dtypes.Bool) // No-op if already bool.
+	x = StopGradient(x)              // No gradients defined to LogicalAll.
+	axes := adjustAxesToRankAndSort(x.Rank(), reduceAxes, "x")
+	return backendReduceLogicalAnd(x, axes...)
+}
+
+// LogicalAny returns true if any values of x (converted to boolean) evaluate to true.
+// It's a "ReduceLogicalOr" equivalent.
+//
+// If reduceAxes is empty, it will reduce over all dimensions.
+func LogicalAny(x *Node, reduceAxes ...int) *Node {
+	_ = validateBuildingGraphFromInputs(x)
+	x = ConvertDType(x, dtypes.Bool) // No-op if already bool.
+	x = StopGradient(x)              // No gradients defined to LogicalAny.
+	axes := adjustAxesToRankAndSort(x.Rank(), reduceAxes, "x")
+	return backendReduceLogicalOr(x, axes...)
+}
+
+// ReduceBitwiseAnd returns the bitwise AND of the values across the given axes.
+// Only defined for integer values.
+// No gradients are defined.
+//
+// If reduceAxes is empty, it will reduce over all dimensions.
+func ReduceBitwiseAnd(x *Node, reduceAxes ...int) *Node {
+	_ = validateBuildingGraphFromInputs(x)
+	x = StopGradient(x) // No gradients defined to BitwiseAll.
+	axes := adjustAxesToRankAndSort(x.Rank(), reduceAxes, "x")
+	return backendReduceBitwiseAnd(x, axes...)
+}
+
+// ReduceBitwiseOr returns the bitwise OR of the values across the given axes.
+// Only defined for integer values.
+// No gradients are defined.
+//
+// If reduceAxes is empty, it will reduce over all dimensions.
+func ReduceBitwiseOr(x *Node, reduceAxes ...int) *Node {
+	_ = validateBuildingGraphFromInputs(x)
+	x = StopGradient(x) // No gradients defined to BitwiseAll.
+	axes := adjustAxesToRankAndSort(x.Rank(), reduceAxes, "x")
+	return backendReduceBitwiseOr(x, axes...)
+}
+
+// ReduceBitwiseXor returns the bitwise XOR of the values across the given axes.
+// Only defined for integer values.
+// No gradients are defined.
+//
+// If reduceAxes is empty, it will reduce over all dimensions.
+func ReduceBitwiseXor(x *Node, reduceAxes ...int) *Node {
+	_ = validateBuildingGraphFromInputs(x)
+	x = StopGradient(x) // No gradients defined to BitwiseAll.
+	axes := adjustAxesToRankAndSort(x.Rank(), reduceAxes, "x")
+	return backendReduceBitwiseXor(x, axes...)
+}
+
+// And is an alias for LogicalAnd.
+//
+// Deprecated: please use LogicalAnd.
+func And(lhs, rhs *Node) *Node {
+	return LogicalAnd(lhs, rhs)
+}
+
+// Or is an alias for LogicalOr.
+//
+// Deprecated: please use LogicalOr.
+func Or(lhs, rhs *Node) *Node {
+	return LogicalOr(lhs, rhs)
+}
+
+// Xor is an alias for LogicalXor.
+//
+// Deprecated: please use LogicalXor.
+func Xor(lhs, rhs *Node) *Node {
+	return LogicalXor(lhs, rhs)
+}
