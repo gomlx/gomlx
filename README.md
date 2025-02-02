@@ -221,7 +221,7 @@ In the future we plan to also export models to ONNX or StableHLO and one could u
 ## FAQ
 
 - **What are the environment variables are used by GoMLX ?** 
-  - `GOMLX_BACKEND`: defines the backend engine to use (if using `backend.New()`). The value is formated as "<backend_name>:<backend_config>".
+  - `GOMLX_BACKEND`: defines the backend engine to use (if using `backend.New()`). The value is formatted as "<backend_name>:<backend_config>".
     Examples for XLA, the default engine: `GOMLX_BACKEND="xla:cpu"` (for CPU), `GOMLX_BACKEND="xla:cuda"` (for Nvidia CUDA) or
     `GOMLX=BACKEND="xla:/path/to/my/pjrt_plugin.so"` for some custom PJRT plugin.
   - `PJRT_PLUGIN_LIBRARY_PATH`: the underlying XLA backend uses this variable as an extra directory to search for plugin locations.
