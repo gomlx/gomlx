@@ -34,6 +34,7 @@ import (
 
 var (
 	flagTrain    = flag.Bool("train", false, "Flag to run a train")
+	flagLoss     = flag.String("loss", "softmax", "Loss function")
 	flagDownload = flag.Bool("download", false, "Flag to download the data")
 	flagDataDir  = flag.String("data", "~/tmp/mnist", "Directory to cache downloaded dataset.")
 )
@@ -51,7 +52,7 @@ func main() {
 			klog.Infof("Data downloaded in %s", *flagDataDir)
 		}
 		if *flagTrain {
-			mnist.TrainModel(ctx, *flagDataDir, paramsSet)
+			mnist.TrainModel(ctx, *flagDataDir, paramsSet, *flagLoss)
 			klog.Infof("model trained in %s", *flagDataDir)
 		}
 		if !*flagDownload && !*flagTrain {
