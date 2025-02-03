@@ -5,11 +5,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gopjrt/dtypes"
 )
 
 func TestDataset(t *testing.T) {
-	dataDir := "/home/rener/tmp/mnist"
+	dataDir := "~/tmp/mnist"
+	dataDir = data.ReplaceTildeInDir(dataDir)
 	if err := Download(dataDir); err != nil {
 		t.Errorf("Download: %v", err)
 		return
