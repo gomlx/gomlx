@@ -41,8 +41,18 @@ import (
 	"github.com/janpfeifer/must"
 )
 
+type ContextFn func(ctx *context.Context) *context.Context
+
+var Models = map[string]struct {
+	ctx   ContextFn
+	model train.ModelFn
+}{
+	"softmax": {CreateSoftMaxModelContext, SoftMaxModelGraph},
+	"cnn":     {CreateCnnModelContext, CnnModelGraph},
+}
+
 var Losses = map[string]losses.LossFn{
-	"softmax": losses.CategoricalCrossEntropy,
+	"cross-entropy": losses.CategoricalCrossEntropy,
 
 	"triplet": func(labels, predictions []*Node) (loss *Node) {
 		return losses.TripletLoss(labels, predictions, losses.TripletMiningStrategyAll, 1.0, losses.PairwiseDistanceMetricL2)
@@ -53,7 +63,7 @@ var Losses = map[string]losses.LossFn{
 	"triplet softmax with cosine distance": func(labels, predictions []*Node) (loss *Node) {
 		return losses.TripletLoss(labels, predictions, losses.TripletMiningStrategyAll, -1.0, losses.PairwiseDistanceMetricCosine)
 	},
-	"hard triple softmaxt": func(labels, predictions []*Node) (loss *Node) {
+	"hard triple softmax": func(labels, predictions []*Node) (loss *Node) {
 		return losses.TripletLoss(labels, predictions, losses.TripletMiningStrategyHard, -1.0, losses.PairwiseDistanceMetricL2)
 	},
 	"semi-hard triplet softmax": func(labels, predictions []*Node) (loss *Node) {
@@ -64,9 +74,47 @@ var Losses = map[string]losses.LossFn{
 	},
 }
 
-// CreateDefaultContext sets the context with default hyperparameters to use with TrainModel.
-func CreateDefaultContext() *context.Context {
-	ctx := context.New()
+// CreateCnnModelContext sets the context with default hyperparameters to use with TrainModel.
+func CreateSoftMaxModelContext(ctx *context.Context) *context.Context {
+	ctx.RngStateReset()
+	ctx.SetParams(map[string]any{
+		// Model type to use
+		"model":           "softmax",
+		"num_checkpoints": 3,
+		"train_steps":     1680,
+
+		// loss
+		"loss": "cross-entropy",
+
+		// batch_size for training.
+		"batch_size": 600,
+
+		// eval_batch_size can be larger than training, it's more efficient.
+		"eval_batch_size": 1000,
+
+		// Debug parameters.
+		"nan_logger": false, // Trigger nan error as soon as it happens -- expensive, but helps debugging.
+
+		// "plots" trigger generating intermediary eval data for plotting, and if running in GoNB, to actually
+		// draw the plot with Plotly.
+		//
+		// From the command-line, an easy way to monitor the metrics being generated during the training of a model
+		// is using the gomlx_checkpoints tool:
+		//
+		//	$ gomlx_checkpoints --metrics --metrics_labels --metrics_types=accuracy  --metrics_names='E(Tra)/#loss,E(Val)/#loss' --loop=3s "<checkpoint_path>"
+		plotly.ParamPlots: false,
+
+		optimizers.ParamOptimizer:       "sgd",
+		optimizers.ParamLearningRate:    1e-4,
+		cosineschedule.ParamPeriodSteps: 0,
+		regularizers.ParamL2:            0.0,
+		regularizers.ParamL1:            0.0,
+	})
+	return ctx
+}
+
+// CreateCnnModelContext sets the context with default hyperparameters to use with TrainModel.
+func CreateCnnModelContext(ctx *context.Context) *context.Context {
 	ctx.RngStateReset()
 	ctx.SetParams(map[string]any{
 		// Model type to use
@@ -75,7 +123,7 @@ func CreateDefaultContext() *context.Context {
 		"train_steps":     1680,
 
 		// loss
-		"loss": "softmax",
+		"loss": "cross-entropy",
 
 		// batch_size for training.
 		"batch_size": 600,
@@ -138,16 +186,23 @@ func NewDatasetsConfigurationFromContext(ctx *context.Context, dataDir string) *
 }
 
 // TrainModel based on configuration and flags.
-func TrainModel(ctx *context.Context, dataDir string, paramsSet []string, loss string) {
+func TrainModel(ctx *context.Context, dataDir string, model, loss string) {
 	dataDir = data.ReplaceTildeInDir(dataDir)
 	if !data.FileExists(dataDir) {
 		must.M(os.MkdirAll(dataDir, 0777))
 	}
 
+	modelFn, ok := Models[model]
+	if !ok {
+		fmt.Printf("can't find model %s, using softmax", model)
+		modelFn = Models["softmax"]
+	}
+	ctx = modelFn.ctx(ctx)
+
 	lossFn, ok := Losses[loss]
 	if !ok {
-		fmt.Printf("can't find loss %s, using softmax", loss)
-		lossFn = Losses["softmax"]
+		fmt.Printf("can't find loss %s, using cross-entropy", loss)
+		lossFn = Losses["cross-entropy"]
 	}
 
 	must.M(Download(dataDir))
@@ -165,7 +220,8 @@ func TrainModel(ctx *context.Context, dataDir string, paramsSet []string, loss s
 	var trainer *train.Trainer
 	optimizer := optimizers.FromContext(ctx)
 
-	trainer = train.NewTrainer(backend, ctx, CnnModelGraph,
+	trainer = train.NewTrainer(backend, ctx,
+		modelFn.model,
 		lossFn,
 		optimizer,
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics

@@ -25,7 +25,7 @@ import (
 
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/examples/mnist"
-	"github.com/gomlx/gomlx/ui/commandline"
+	"github.com/gomlx/gomlx/ml/context"
 	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
 
@@ -33,26 +33,27 @@ import (
 )
 
 var (
-	flagTrain    = flag.Bool("train", false, "Flag to run a train")
-	flagLoss     = flag.String("loss", "softmax", "Loss function")
-	flagDownload = flag.Bool("download", false, "Flag to download the data")
+	flagTrain    = flag.Bool("train", true, "Flag to train")
+	flagDownload = flag.Bool("download", false, "Flag to download")
+	flagModel    = flag.String("model", "softmax", "Model function")
+	flagLoss     = flag.String("loss", "cross-entropy", "Loss function")
 	flagDataDir  = flag.String("data", "~/tmp/mnist", "Directory to cache downloaded dataset.")
 )
 
 func main() {
-	ctx := mnist.CreateDefaultContext()
-	settings := commandline.CreateContextSettingsFlag(ctx, "")
+
 	klog.InitFlags(nil)
 	flag.Parse()
-	paramsSet := must.M1(commandline.ParseContextSettings(ctx, *settings))
 
+	ctx := context.New()
 	err := exceptions.TryCatch[error](func() {
+
 		if *flagDownload {
 			must.M(mnist.Download(*flagDataDir))
 			klog.Infof("Data downloaded in %s", *flagDataDir)
 		}
 		if *flagTrain {
-			mnist.TrainModel(ctx, *flagDataDir, paramsSet, *flagLoss)
+			mnist.TrainModel(ctx, *flagDataDir, *flagModel, *flagLoss)
 			klog.Infof("model trained in %s", *flagDataDir)
 		}
 		if !*flagDownload && !*flagTrain {

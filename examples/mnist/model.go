@@ -15,6 +15,17 @@ import (
 // CnnModelGraph builds the CNN model for our demo.
 // It returns the logit, not the predictions, which works with most losses.
 // inputs: only one tensor, with shape `[batch_size, width, height, depth]`.
+func SoftMaxModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
+	ctx = ctx.In("model") // Create the model by default under the "/model" scope.
+	batchSize := inputs[0].Shape().Dimensions[0]
+	embeddings := Reshape(inputs[0], batchSize, -1)
+	logit := Softmax(layers.DenseWithBias(ctx, embeddings, 1))
+	return []*Node{Squeeze(logit)}
+}
+
+// CnnModelGraph builds the CNN model for our demo.
+// It returns the logit, not the predictions, which works with most losses.
+// inputs: only one tensor, with shape `[batch_size, width, height, depth]`.
 func CnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	ctx = ctx.In("model") // Create the model by default under the "/model" scope.
 	embeddings := CnnEmbeddings(ctx, inputs[0])
@@ -36,32 +47,27 @@ func CnnEmbeddings(ctx *context.Context, images *Node) *Node {
 		dropoutNode = Scalar(images.Graph(), images.DType(), dropoutRate)
 	}
 
-	filterSize := 16
+	filterSize := 32
 	logits := images
-	imgSize := logits.Shape().Dimensions[1]
 	for convIdx := range numConvolutions {
 		ctx := ctx.Inf("%03d_conv", convIdx)
 		if convIdx > 0 {
 			logits = normalizeImage(ctx, logits)
 		}
-		for repeat := range 2 {
-			ctx := ctx.Inf("repeat_%02d", repeat)
-			residual := logits
-			logits = layers.Convolution(ctx, logits).Filters(filterSize).KernelSize(3).PadSame().Done()
-			logits = activations.ApplyFromContext(ctx, logits)
-			if dropoutNode != nil {
-				logits = layers.Dropout(ctx, logits, dropoutNode)
-			}
-			if residual.Shape().Equal(logits.Shape()) {
-				logits = Add(logits, residual)
-			}
+		residual := logits
+		logits = layers.Convolution(ctx, logits).Filters(filterSize * (1 + convIdx)).KernelSize(3).PadSame().Done()
+		logits = activations.ApplyFromContext(ctx, logits)
+		if dropoutNode != nil {
+			logits = layers.Dropout(ctx, logits, dropoutNode)
 		}
-		if imgSize > 16 {
-			// Reduce image size by 2 each time.
-			logits = MaxPool(logits).Window(2).Done()
-			imgSize = logits.Shape().Dimensions[1]
+		if residual.Shape().Equal(logits.Shape()) {
+			logits = Add(logits, residual)
 		}
-		logits.AssertDims(batchSize, imgSize, imgSize, filterSize)
+
+		// Reduce image size by 2 each time.
+		logits = MaxPool(logits).Window(2).Done()
+		imgSize := logits.Shape().Dimensions[1]
+		logits.AssertDims(batchSize, imgSize, imgSize, filterSize*(1+convIdx))
 	}
 
 	// Flatten the resulting image, and treat the convolved values as tabular.
