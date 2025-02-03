@@ -376,6 +376,16 @@ var VJPRegistration = map[NodeType]VJP{
 	NodeTypeErf:                  vjpForSingleOutput(erfVJP),
 	NodeTypeBatchNormForTraining: batchNormForTrainingVJP,
 
+	// Bitwise/integer operations: we define a zero gradient to their inputs.
+	NodeTypeLogicalAnd: vjpForSingleOutput(zeroVJP),
+	NodeTypeLogicalOr:  vjpForSingleOutput(zeroVJP),
+	NodeTypeLogicalXor: vjpForSingleOutput(zeroVJP),
+	NodeTypeLogicalNot: vjpForSingleOutput(zeroVJP),
+	NodeTypeBitwiseAnd: vjpForSingleOutput(zeroVJP),
+	NodeTypeBitwiseOr:  vjpForSingleOutput(zeroVJP),
+	NodeTypeBitwiseXor: vjpForSingleOutput(zeroVJP),
+	NodeTypeBitwiseNot: vjpForSingleOutput(zeroVJP),
+
 	// Complex numbers.
 	NodeTypeReal:    vjpForSingleOutput(realVJP),
 	NodeTypeImag:    vjpForSingleOutput(imagVJP),
@@ -410,6 +420,12 @@ func nilVJP(_, _ *Node, _ shapes.Shape) []*Node {
 // noOpVJP works for anything that has not impact on the gradient, like a No-Op.
 func noOpVJP(node, v *Node, _ shapes.Shape) []*Node {
 	return []*Node{v}
+}
+
+// zeroVJP can be used for ops that don't back-propagate any gradient -- like logical operations.
+// It's equivalent to doing a StopGradient on the operation.
+func zeroVJP(node, v *Node, outputShape shapes.Shape) []*Node {
+	return make([]*Node, len(node.inputNodes))
 }
 
 // vjpForDefaultBroadcast returns the VJP of the default broadcasting on operations like Add, Mul, Sub, etc.

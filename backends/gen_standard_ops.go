@@ -16,10 +16,6 @@ type StandardOps interface {
 	// The op is created on the same XlaBuilder as used for x0 and x1.
 	Add(x0, x1 Op) Op
 
-	// And returns the element-wise logic "and" operator.
-	// The op is created on the same XlaBuilder as used for x0 and x1.
-	And(x0, x1 Op) Op
-
 	// ArgMinMax calculates the "argmin" or "argmax" across an axis of the given input array x.
 	// outputDType defines the output of the argmin/argmax, it doesn't need to be the same as the input.
 	// It's a form of reduction on the given axis, and that axis goes away. So the rank of the result is one less than
@@ -28,6 +24,21 @@ type StandardOps interface {
 	// 	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=1, isMin=true) -> {1, 0}  // (it chooses the 0 and the -3)
 	// 	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=0, isMin=false) -> {0, 1, 0} // (it choose the 2, 4 and 7)
 	ArgMinMax(x Op, axis int, outputDType dtypes.DType, isMin bool) Op
+
+	// BitwiseAnd returns the element-wise bitwise AND operation.
+	// The op is created on the same XlaBuilder as used for x0 and x1.
+	BitwiseAnd(x0, x1 Op) Op
+
+	// BitwiseNot returns the element-wise bitwise AND operation.
+	BitwiseNot(x Op) Op
+
+	// BitwiseOr returns the element-wise bitwise OR operation.
+	// The op is created on the same XlaBuilder as used for x0 and x1.
+	BitwiseOr(x0, x1 Op) Op
+
+	// BitwiseXor returns the element-wise bitwise XOR operator.
+	// The op is created on the same XlaBuilder as used for x0 and x1.
+	BitwiseXor(x0, x1 Op) Op
 
 	// Broadcast prefixes dimensions to an array by duplicating the data in the array.
 	// See BroadcastInDim for a broadcast in between the axes.
@@ -73,7 +84,7 @@ type StandardOps interface {
 
 	// Concatenate results on the given axis.
 	// All axes that are not being concatenated must match dimensions.
-	// It doesn't work with scalars -- consider using ExpandAxes.
+	// It doesn't work with scalars -- use ExpandDims.
 	// If there is only one operand, it is returned and this is a no-op.
 	Concatenate(axis int, operands ...Op) Op
 
@@ -97,7 +108,7 @@ type StandardOps interface {
 	// Cos returns the Op that represents the output of the corresponding operation.
 	Cos(x Op) Op
 
-	// Div returns the element-wise subtraction of the two values.
+	// Div returns the element-wise division of the two values.
 	// Standard broadcasting rules apply (see documentation).
 	// The op is created on the same XlaBuilder as used for x0 and x1.
 	Div(x0, x1 Op) Op
@@ -260,8 +271,20 @@ type StandardOps interface {
 	// Log1p returns the expression log(x+1).
 	Log1p(x Op) Op
 
+	// LogicalAnd returns the element-wise logical AND operation.
+	// The op is created on the same XlaBuilder as used for x0 and x1.
+	LogicalAnd(x0, x1 Op) Op
+
 	// LogicalNot returns the Op that represents the output of the corresponding operation.
 	LogicalNot(x Op) Op
+
+	// LogicalOr returns the element-wise logical OR operation.
+	// The op is created on the same XlaBuilder as used for x0 and x1.
+	LogicalOr(x0, x1 Op) Op
+
+	// LogicalXor returns the element-wise logical XOR operator.
+	// The op is created on the same XlaBuilder as used for x0 and x1.
+	LogicalXor(x0, x1 Op) Op
 
 	// Logistic returns the element-wise expression 1/(1+exp(-x)). Also known as the Sigmoid function.
 	Logistic(x Op) Op
@@ -292,10 +315,6 @@ type StandardOps interface {
 	// The op is created on the same XlaBuilder as used for x0 and x1.
 	NotEqualTotalOrder(x0, x1 Op) Op
 
-	// Or returns the element-wise logic "and" operator.
-	// The op is created on the same XlaBuilder as used for x0 and x1.
-	Or(x0, x1 Op) Op
-
 	// Pad injects padding on the start, end or interior (in between each element) of the given operand.
 	// There must be at most `operand.Rank()` axesConfig values. Missing PadAxis are assumed to be zeros,
 	// that is, no padding for those axes.
@@ -308,10 +327,29 @@ type StandardOps interface {
 	// Real return the real part of a complex number. It returns x if the x is a float number.
 	Real(x Op) Op
 
-	// ReduceAnd is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the logical-and of the reduced axes.
-	// It only works for booleans.
+	// ReduceBitwiseAnd is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the bitwise/logical And of the reduced axes.
 	// If no axes are given, it reduces the full array.
-	ReduceAnd(x Op, axes ...int) Op
+	ReduceBitwiseAnd(x Op, axes ...int) Op
+
+	// ReduceBitwiseOr is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the bitwise/logical Or of the reduced axes.
+	// If no axes are given, it reduces the full array.
+	ReduceBitwiseOr(x Op, axes ...int) Op
+
+	// ReduceBitwiseXor is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the bitwise/logical Xor of the reduced axes.
+	// If no axes are given, it reduces the full array.
+	ReduceBitwiseXor(x Op, axes ...int) Op
+
+	// ReduceLogicalAnd is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the bitwise/logical And of the reduced axes.
+	// If no axes are given, it reduces the full array.
+	ReduceLogicalAnd(x Op, axes ...int) Op
+
+	// ReduceLogicalOr is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the bitwise/logical Or of the reduced axes.
+	// If no axes are given, it reduces the full array.
+	ReduceLogicalOr(x Op, axes ...int) Op
+
+	// ReduceLogicalXor is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the bitwise/logical Xor of the reduced axes.
+	// If no axes are given, it reduces the full array.
+	ReduceLogicalXor(x Op, axes ...int) Op
 
 	// ReduceMax is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the max value.
 	// If no axes are given, it reduces the full array.
@@ -320,11 +358,6 @@ type StandardOps interface {
 	// ReduceMin is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the min value.
 	// If no axes are given, it reduces the full array.
 	ReduceMin(x Op, axes ...int) Op
-
-	// ReduceOr is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the logical-or of the reduced axes.
-	// It only works for booleans.
-	// If no axes are given, it reduces the full array.
-	ReduceOr(x Op, axes ...int) Op
 
 	// ReduceProduct is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the product of the reduced axes.
 	// If no axes are given, it reduces the full array.
@@ -379,6 +412,18 @@ type StandardOps interface {
 	// See details in https://openxla.org/xla/operation_semantics#selectandscatter
 	SelectAndScatterSum(operand, source Op, windowDimensions, windowStrides []int, paddings [][2]int) Op
 
+	// ShiftLeft n bits. It implicitly preserves the sign bit, if there is no overflow. So ShiftLeft(-1, 1) = -2.
+	// The op is created on the same XlaBuilder as used for x0 and x1.
+	ShiftLeft(x0, x1 Op) Op
+
+	// ShiftRightArithmetic shifts right by n bits, preserving the sign bit. So ShiftRight(-2, 1) = -1.
+	// The op is created on the same XlaBuilder as used for x0 and x1.
+	ShiftRightArithmetic(x0, x1 Op) Op
+
+	// ShiftRightLogical shifts right by n bits, destroying the sign bit.
+	// The op is created on the same XlaBuilder as used for x0 and x1.
+	ShiftRightLogical(x0, x1 Op) Op
+
 	// Sign returns element-wise +1, +/-0 or -1 depending on the sign of x. It returns NaN if the input is NaN.
 	Sign(x Op) Op
 
@@ -413,8 +458,4 @@ type StandardOps interface {
 
 	// Where takes element-wise values from onTrue or onFalse depending on the value of condition (expected to be boolean).
 	Where(condition, onTrue, onFalse Op) Op
-
-	// Xor returns the element-wise logic "and" operator.
-	// The op is created on the same XlaBuilder as used for x0 and x1.
-	Xor(x0, x1 Op) Op
 }

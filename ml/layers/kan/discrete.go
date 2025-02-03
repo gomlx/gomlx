@@ -476,7 +476,7 @@ func PiecewiseConstantFunction(input, controlPoints, splitPoints *Node) *Node {
 		GrowRight(expandedSplitPoints, -1, 1, math.Inf(1)))
 	toTheRight := GreaterOrEqualTotalOrder(expandedInputs,
 		GrowLeft(expandedSplitPoints, -1, 1, math.Inf(-1)))
-	controlPicks := ArgMax(And(toTheLeft, toTheRight), -1, dtypes.Int16)
+	controlPicks := ArgMax(LogicalAnd(toTheLeft, toTheRight), -1, dtypes.Int16)
 	controlPicks.AssertDims(batchSize, -1 /* numOutputNodes */, numInputGroups, inputGroupSize)
 
 	// Makes sure we broadcast on the output dimension, if needed.

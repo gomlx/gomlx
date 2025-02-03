@@ -222,9 +222,10 @@ func TestConvertDType(t *testing.T) {
 	}, []any{wantF32, wantF64}, -1)
 }
 
-type TwoArgsTestCase[T dtypes.Number] struct {
+type TwoArgsTestCase[T dtypes.Supported] struct {
 	fnGraph  func(x, y *Node) *Node
 	fnScalar func(x, y T) T
+	name     string
 }
 
 func TestTwoArgsOps(t *testing.T) {
@@ -232,27 +233,15 @@ func TestTwoArgsOps(t *testing.T) {
 
 	{
 		casesFloat32 := []TwoArgsTestCase[float32]{
-			{Mul, func(x, y float32) float32 { return x * y }},
-			{Sub, func(x, y float32) float32 { return x - y }},
-			{Div, func(x, y float32) float32 { return x / y }},
-			{Mod, func(x, y float32) float32 { return float32(math.Mod(float64(x), float64(y))) }},
-			{Min, func(x, y float32) float32 {
-				if x < y {
-					return x
-				} else {
-					return y
-				}
-			}},
-			{Max, func(x, y float32) float32 {
-				if x > y {
-					return x
-				} else {
-					return y
-				}
-			}},
+			{Mul, func(x, y float32) float32 { return x * y }, "Mul"},
+			{Sub, func(x, y float32) float32 { return x - y }, "Sub"},
+			{Div, func(x, y float32) float32 { return x / y }, "Div"},
+			{Mod, func(x, y float32) float32 { return float32(math.Mod(float64(x), float64(y))) }, "Mod"},
+			{Min, func(x, y float32) float32 { return min(x, y) }, "Min"},
+			{Max, func(x, y float32) float32 { return max(x, y) }, "Max"},
 			{Pow, func(x, y float32) float32 {
 				return float32(math.Pow(float64(x), float64(y)))
-			}},
+			}, "Pow"},
 		}
 		xSlices := [][]float32{{11, 12}, {13, 14}}
 		yValue := float32(3)
@@ -283,14 +272,14 @@ func TestTwoArgsOps(t *testing.T) {
 
 	{
 		casesInt := []TwoArgsTestCase[int64]{
-			{And, func(x, y int64) int64 { return x & y }},
-			{Or, func(x, y int64) int64 { return x | y }},
-			{Xor, func(x, y int64) int64 { return x ^ y }},
+			{BitwiseAnd, func(x, y int64) int64 { return x & y }, "BitwiseAnd"},
+			{BitwiseOr, func(x, y int64) int64 { return x | y }, "BitwiseOr"},
+			{BitwiseXor, func(x, y int64) int64 { return x ^ y }, "BitwiseXor"},
 		}
 		xSlices := [][]int64{{11, 12}, {13, 14}}
 		yValue := int64(3)
 		for _, test := range casesInt {
-			g := NewGraph(backend, "TwoArgs: logical functions [2, 2] Graph")
+			g := NewGraph(backend, "TwoArgs: bitwise functions [2, 2] Graph")
 			x := Const(g, xSlices)
 			y := Const(g, yValue)
 			n := test.fnGraph(x, y)
@@ -313,9 +302,27 @@ func TestTwoArgsOps(t *testing.T) {
 			}
 		}
 	}
+
+	{
+		casesBool := []TwoArgsTestCase[bool]{
+			{LogicalAnd, func(x, y bool) bool { return x && y }, "LogicalAnd"},
+			{LogicalOr, func(x, y bool) bool { return x || y }, "LogicalOr"},
+			{LogicalXor, func(x, y bool) bool { return x != y }, "LogicalXor"},
+		}
+		for _, boolCase := range casesBool {
+			exec := NewExec(backend, boolCase.fnGraph)
+			for _, x := range []bool{true, false} {
+				for _, y := range []bool{true, false} {
+					got := tensors.ToScalar[bool](exec.Call(x, y)[0])
+					want := boolCase.fnScalar(x, y)
+					require.Equal(t, want, got, "%s(%v,%v)=%v, wanted %v", boolCase.name, x, y, got, want)
+				}
+			}
+		}
+	}
 }
 
-type OneArgTestCase[T dtypes.Number] struct {
+type OneArgTestCase[T dtypes.Supported] struct {
 	fnGraph    func(x *Node) *Node
 	goFnScalar func(x T) T
 }
@@ -381,6 +388,22 @@ func TestOneArgOps(t *testing.T) {
 		[]float32{1.0, 0.0, -2.0},
 		[]float32{0.0, -1.0, 2.0},
 		[]complex64{1.0, 0.0 + 1.0i, -2.0 - 2.0i},
+	}, -1)
+
+	// Test Not ops
+	graphtest.RunTestGraphFn(t, "LogicalNot", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = []*Node{Const(g, []bool{false, true})}
+		outputs = []*Node{LogicalNot(inputs[0])}
+		return
+	}, []any{
+		[]bool{true, false},
+	}, -1)
+	graphtest.RunTestGraphFn(t, "BitwiseNot", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = []*Node{Const(g, []uint8{12, 255, 243, 0})}
+		outputs = []*Node{BitwiseNot(inputs[0])}
+		return
+	}, []any{
+		[]uint8{243, 0, 12, 255},
 	}, -1)
 }
 

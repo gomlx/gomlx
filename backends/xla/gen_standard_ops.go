@@ -34,18 +34,6 @@ func (b *Builder) Add(x0, x1 backends.Op) backends.Op {
 	return xla_result
 }
 
-// And returns the element-wise logic "and" operator.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func (b *Builder) And(x0, x1 backends.Op) backends.Op {
-	xla_x0 := b.verifyAndCastOp(x0, "x0")
-	xla_x1 := b.verifyAndCastOp(x1, "x1")
-	xla_result, err := xlabuilder.And(xla_x0, xla_x1)
-	if err != nil {
-		panic(errors.WithMessagef(err, "Backend %q: failed And", BackendName))
-	}
-	return xla_result
-}
-
 // ArgMinMax calculates the "argmin" or "argmax" across an axis of the given input array x.
 // outputDType defines the output of the argmin/argmax, it doesn't need to be the same as the input.
 // It's a form of reduction on the given axis, and that axis goes away. So the rank of the result is one less than
@@ -76,6 +64,52 @@ func (b *Builder) BatchNormForInference(operand, scale, offset, mean, variance b
 	xla_result, err := xlabuilder.BatchNormForInference(xla_operand, xla_scale, xla_offset, xla_mean, xla_variance, epsilon, axis)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed BatchNormForInference", BackendName))
+	}
+	return xla_result
+}
+
+// BitwiseAnd returns the element-wise bitwise AND operation.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func (b *Builder) BitwiseAnd(x0, x1 backends.Op) backends.Op {
+	xla_x0 := b.verifyAndCastOp(x0, "x0")
+	xla_x1 := b.verifyAndCastOp(x1, "x1")
+	xla_result, err := xlabuilder.BitwiseAnd(xla_x0, xla_x1)
+	if err != nil {
+		panic(errors.WithMessagef(err, "Backend %q: failed BitwiseAnd", BackendName))
+	}
+	return xla_result
+}
+
+// BitwiseNot returns the element-wise bitwise AND operation.
+func (b *Builder) BitwiseNot(x backends.Op) backends.Op {
+	xla_x := b.verifyAndCastOp(x, "x")
+	xla_result, err := xlabuilder.BitwiseNot(xla_x)
+	if err != nil {
+		panic(errors.WithMessagef(err, "Backend %q: failed BitwiseNot", BackendName))
+	}
+	return xla_result
+}
+
+// BitwiseOr returns the element-wise bitwise OR operation.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func (b *Builder) BitwiseOr(x0, x1 backends.Op) backends.Op {
+	xla_x0 := b.verifyAndCastOp(x0, "x0")
+	xla_x1 := b.verifyAndCastOp(x1, "x1")
+	xla_result, err := xlabuilder.BitwiseOr(xla_x0, xla_x1)
+	if err != nil {
+		panic(errors.WithMessagef(err, "Backend %q: failed BitwiseOr", BackendName))
+	}
+	return xla_result
+}
+
+// BitwiseXor returns the element-wise bitwise XOR operator.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func (b *Builder) BitwiseXor(x0, x1 backends.Op) backends.Op {
+	xla_x0 := b.verifyAndCastOp(x0, "x0")
+	xla_x1 := b.verifyAndCastOp(x1, "x1")
+	xla_result, err := xlabuilder.BitwiseXor(xla_x0, xla_x1)
+	if err != nil {
+		panic(errors.WithMessagef(err, "Backend %q: failed BitwiseXor", BackendName))
 	}
 	return xla_result
 }
@@ -224,7 +258,7 @@ func (b *Builder) Cos(x backends.Op) backends.Op {
 	return xla_result
 }
 
-// Div returns the element-wise subtraction of the two values.
+// Div returns the element-wise division of the two values.
 // Standard broadcasting rules apply (see documentation).
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) Div(x0, x1 backends.Op) backends.Op {
@@ -588,12 +622,48 @@ func (b *Builder) Log1p(x backends.Op) backends.Op {
 	return xla_result
 }
 
+// LogicalAnd returns the element-wise logical AND operation.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func (b *Builder) LogicalAnd(x0, x1 backends.Op) backends.Op {
+	xla_x0 := b.verifyAndCastOp(x0, "x0")
+	xla_x1 := b.verifyAndCastOp(x1, "x1")
+	xla_result, err := xlabuilder.LogicalAnd(xla_x0, xla_x1)
+	if err != nil {
+		panic(errors.WithMessagef(err, "Backend %q: failed LogicalAnd", BackendName))
+	}
+	return xla_result
+}
+
 // LogicalNot returns the Op that represents the output of the corresponding operation.
 func (b *Builder) LogicalNot(x backends.Op) backends.Op {
 	xla_x := b.verifyAndCastOp(x, "x")
 	xla_result, err := xlabuilder.LogicalNot(xla_x)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed LogicalNot", BackendName))
+	}
+	return xla_result
+}
+
+// LogicalOr returns the element-wise logical OR operation.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func (b *Builder) LogicalOr(x0, x1 backends.Op) backends.Op {
+	xla_x0 := b.verifyAndCastOp(x0, "x0")
+	xla_x1 := b.verifyAndCastOp(x1, "x1")
+	xla_result, err := xlabuilder.LogicalOr(xla_x0, xla_x1)
+	if err != nil {
+		panic(errors.WithMessagef(err, "Backend %q: failed LogicalOr", BackendName))
+	}
+	return xla_result
+}
+
+// LogicalXor returns the element-wise logical XOR operator.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func (b *Builder) LogicalXor(x0, x1 backends.Op) backends.Op {
+	xla_x0 := b.verifyAndCastOp(x0, "x0")
+	xla_x1 := b.verifyAndCastOp(x1, "x1")
+	xla_result, err := xlabuilder.LogicalXor(xla_x0, xla_x1)
+	if err != nil {
+		panic(errors.WithMessagef(err, "Backend %q: failed LogicalXor", BackendName))
 	}
 	return xla_result
 }
@@ -681,18 +751,6 @@ func (b *Builder) NotEqualTotalOrder(x0, x1 backends.Op) backends.Op {
 	return xla_result
 }
 
-// Or returns the element-wise logic "and" operator.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func (b *Builder) Or(x0, x1 backends.Op) backends.Op {
-	xla_x0 := b.verifyAndCastOp(x0, "x0")
-	xla_x1 := b.verifyAndCastOp(x1, "x1")
-	xla_result, err := xlabuilder.Or(xla_x0, xla_x1)
-	if err != nil {
-		panic(errors.WithMessagef(err, "Backend %q: failed Or", BackendName))
-	}
-	return xla_result
-}
-
 // Pad injects padding on the start, end or interior (in between each element) of the given operand.
 // There must be at most `operand.Rank()` axesConfig values. Missing PadAxis are assumed to be zeros,
 // that is, no padding for those axes.
@@ -732,14 +790,68 @@ func (b *Builder) Real(x backends.Op) backends.Op {
 	return xla_result
 }
 
-// ReduceAnd is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the logical-and of the reduced axes.
-// It only works for booleans.
+// ReduceBitwiseAnd is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the bitwise/logical And of the reduced axes.
 // If no axes are given, it reduces the full array.
-func (b *Builder) ReduceAnd(x backends.Op, axes ...int) backends.Op {
+func (b *Builder) ReduceBitwiseAnd(x backends.Op, axes ...int) backends.Op {
 	xla_x := b.verifyAndCastOp(x, "x")
-	xla_result, err := xlabuilder.ReduceAnd(xla_x, axes...)
+	xla_result, err := xlabuilder.ReduceBitwiseAnd(xla_x, axes...)
 	if err != nil {
-		panic(errors.WithMessagef(err, "Backend %q: failed ReduceAnd", BackendName))
+		panic(errors.WithMessagef(err, "Backend %q: failed ReduceBitwiseAnd", BackendName))
+	}
+	return xla_result
+}
+
+// ReduceBitwiseOr is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the bitwise/logical Or of the reduced axes.
+// If no axes are given, it reduces the full array.
+func (b *Builder) ReduceBitwiseOr(x backends.Op, axes ...int) backends.Op {
+	xla_x := b.verifyAndCastOp(x, "x")
+	xla_result, err := xlabuilder.ReduceBitwiseOr(xla_x, axes...)
+	if err != nil {
+		panic(errors.WithMessagef(err, "Backend %q: failed ReduceBitwiseOr", BackendName))
+	}
+	return xla_result
+}
+
+// ReduceBitwiseXor is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the bitwise/logical Xor of the reduced axes.
+// If no axes are given, it reduces the full array.
+func (b *Builder) ReduceBitwiseXor(x backends.Op, axes ...int) backends.Op {
+	xla_x := b.verifyAndCastOp(x, "x")
+	xla_result, err := xlabuilder.ReduceBitwiseXor(xla_x, axes...)
+	if err != nil {
+		panic(errors.WithMessagef(err, "Backend %q: failed ReduceBitwiseXor", BackendName))
+	}
+	return xla_result
+}
+
+// ReduceLogicalAnd is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the bitwise/logical And of the reduced axes.
+// If no axes are given, it reduces the full array.
+func (b *Builder) ReduceLogicalAnd(x backends.Op, axes ...int) backends.Op {
+	xla_x := b.verifyAndCastOp(x, "x")
+	xla_result, err := xlabuilder.ReduceLogicalAnd(xla_x, axes...)
+	if err != nil {
+		panic(errors.WithMessagef(err, "Backend %q: failed ReduceLogicalAnd", BackendName))
+	}
+	return xla_result
+}
+
+// ReduceLogicalOr is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the bitwise/logical Or of the reduced axes.
+// If no axes are given, it reduces the full array.
+func (b *Builder) ReduceLogicalOr(x backends.Op, axes ...int) backends.Op {
+	xla_x := b.verifyAndCastOp(x, "x")
+	xla_result, err := xlabuilder.ReduceLogicalOr(xla_x, axes...)
+	if err != nil {
+		panic(errors.WithMessagef(err, "Backend %q: failed ReduceLogicalOr", BackendName))
+	}
+	return xla_result
+}
+
+// ReduceLogicalXor is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the bitwise/logical Xor of the reduced axes.
+// If no axes are given, it reduces the full array.
+func (b *Builder) ReduceLogicalXor(x backends.Op, axes ...int) backends.Op {
+	xla_x := b.verifyAndCastOp(x, "x")
+	xla_result, err := xlabuilder.ReduceLogicalXor(xla_x, axes...)
+	if err != nil {
+		panic(errors.WithMessagef(err, "Backend %q: failed ReduceLogicalXor", BackendName))
 	}
 	return xla_result
 }
@@ -762,18 +874,6 @@ func (b *Builder) ReduceMin(x backends.Op, axes ...int) backends.Op {
 	xla_result, err := xlabuilder.ReduceMin(xla_x, axes...)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed ReduceMin", BackendName))
-	}
-	return xla_result
-}
-
-// ReduceOr is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the logical-or of the reduced axes.
-// It only works for booleans.
-// If no axes are given, it reduces the full array.
-func (b *Builder) ReduceOr(x backends.Op, axes ...int) backends.Op {
-	xla_x := b.verifyAndCastOp(x, "x")
-	xla_result, err := xlabuilder.ReduceOr(xla_x, axes...)
-	if err != nil {
-		panic(errors.WithMessagef(err, "Backend %q: failed ReduceOr", BackendName))
 	}
 	return xla_result
 }
@@ -932,6 +1032,42 @@ func (b *Builder) SelectAndScatterSum(operand, source backends.Op, windowDimensi
 	return xla_result
 }
 
+// ShiftLeft n bits. It implicitly preserves the sign bit, if there is no overflow. So ShiftLeft(-1, 1) = -2.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func (b *Builder) ShiftLeft(x0, x1 backends.Op) backends.Op {
+	xla_x0 := b.verifyAndCastOp(x0, "x0")
+	xla_x1 := b.verifyAndCastOp(x1, "x1")
+	xla_result, err := xlabuilder.ShiftLeft(xla_x0, xla_x1)
+	if err != nil {
+		panic(errors.WithMessagef(err, "Backend %q: failed ShiftLeft", BackendName))
+	}
+	return xla_result
+}
+
+// ShiftRightArithmetic shifts right by n bits, preserving the sign bit. So ShiftRight(-2, 1) = -1.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func (b *Builder) ShiftRightArithmetic(x0, x1 backends.Op) backends.Op {
+	xla_x0 := b.verifyAndCastOp(x0, "x0")
+	xla_x1 := b.verifyAndCastOp(x1, "x1")
+	xla_result, err := xlabuilder.ShiftRightArithmetic(xla_x0, xla_x1)
+	if err != nil {
+		panic(errors.WithMessagef(err, "Backend %q: failed ShiftRightArithmetic", BackendName))
+	}
+	return xla_result
+}
+
+// ShiftRightLogical shifts right by n bits, destroying the sign bit.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func (b *Builder) ShiftRightLogical(x0, x1 backends.Op) backends.Op {
+	xla_x0 := b.verifyAndCastOp(x0, "x0")
+	xla_x1 := b.verifyAndCastOp(x1, "x1")
+	xla_result, err := xlabuilder.ShiftRightLogical(xla_x0, xla_x1)
+	if err != nil {
+		panic(errors.WithMessagef(err, "Backend %q: failed ShiftRightLogical", BackendName))
+	}
+	return xla_result
+}
+
 // Sign returns element-wise +1, +/-0 or -1 depending on the sign of x. It returns NaN if the input is NaN.
 func (b *Builder) Sign(x backends.Op) backends.Op {
 	xla_x := b.verifyAndCastOp(x, "x")
@@ -1023,18 +1159,6 @@ func (b *Builder) Where(condition, onTrue, onFalse backends.Op) backends.Op {
 	xla_result, err := xlabuilder.Where(xla_condition, xla_onTrue, xla_onFalse)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed Where", BackendName))
-	}
-	return xla_result
-}
-
-// Xor returns the element-wise logic "and" operator.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func (b *Builder) Xor(x0, x1 backends.Op) backends.Op {
-	xla_x0 := b.verifyAndCastOp(x0, "x0")
-	xla_x1 := b.verifyAndCastOp(x1, "x1")
-	xla_result, err := xlabuilder.Xor(xla_x0, xla_x1)
-	if err != nil {
-		panic(errors.WithMessagef(err, "Backend %q: failed Xor", BackendName))
 	}
 	return xla_result
 }

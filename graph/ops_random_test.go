@@ -44,7 +44,7 @@ func testRandomUniform[T interface {
 				if ii == 11 {
 					to = math.Inf(1)
 				}
-				includeSet := And(
+				includeSet := LogicalAnd(
 					GreaterOrEqual(r, Scalar(g, r.DType(), from)),
 					LessThan(r, Scalar(g, r.DType(), to)))
 				count := ConvertDType(includeSet, dtypes.Float32)
@@ -119,7 +119,7 @@ func testRandomIntN[T interface {
 			}
 			var maxRatio, minRatio, totalCount *Node
 			for ii := range 13 {
-				includeSet := And(
+				includeSet := LogicalAnd(
 					GreaterOrEqual(r, Scalar(g, r.DType(), ii)),
 					LessThan(r, Scalar(g, r.DType(), ii+1)))
 				count := ConvertDType(includeSet, dtypes.Float32)

@@ -18,8 +18,11 @@ const (
 	standardOpsInterfaceFile = "gen_standard_ops.go"
 )
 
-// methodsToExclude from generating the API, they are maintained manually.
-var methodsToExclude = types.SetWith("BatchNormForInference", "BatchNormForTraining", "BatchNormGradient")
+// methodsToExclude from generating the API, they are maintained manually,
+// or simply excluded (deprecated methods).
+var methodsToExclude = types.SetWith(
+	"BatchNormForInference", "BatchNormForTraining", "BatchNormGradient",
+	"And", "Or", "Xor", "Not", "ReduceAnd", "ReduceOr", "ReduceXor")
 
 var (
 	standardOpsTemplate = template.Must(template.New(standardOpsInterfaceFile).Parse(`

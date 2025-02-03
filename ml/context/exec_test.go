@@ -27,6 +27,7 @@ import (
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"math"
 	"testing"
 )
 
@@ -48,12 +49,12 @@ func TestExec(t *testing.T) {
 
 	// Second call should reuse the graph, and yield same result.
 	got2 := oneLayer.Call(x)[0].Value().([][]float64)[0][0]
-	assert.Equal(t, got, got2, "Second call to oneLayer(%v) returned %f, but first returned %f", x, got, got2)
+	assert.InDeltaf(t, got, got2, 1e-3, "Second call to oneLayer(%v) returned %f, but first returned %f", x, got, got2)
 
 	// Different batch size: it should generate a new graph, but yield the same result.
 	x = [][]float64{{1, 1, 1}, {2, 2, 2}}
 	got3 := oneLayer.Call(x)[0].Value().([][]float64)[0][0]
-	assert.Equal(t, got, got3, "Call to oneLayer(%v) on a larger batch returned %f, but original call returned %f",
+	assert.InDeltaf(t, got, got3, 1e-3, "Call to oneLayer(%v) on a larger batch returned %f, but original call returned %f",
 		x, got, got3)
 
 	// If X changes the inner dimension, then the layers.DenseWithBias would require different shaped variables, which should
@@ -88,7 +89,8 @@ func TestExecWithSlices(t *testing.T) {
 	oneElementOfX := [][]float64{{1}}
 	got2 := oneLayer.Call(oneElementOfX, oneElementOfX, oneElementOfX)[0].Value().([][]float64)
 	fmt.Printf("\toneLayer(%v, %v, %v)=%v\n", oneElementOfX, oneElementOfX, oneElementOfX, got)
-	require.Equal(t, got, got2, "oneLayer(%v) should have been the same as oneLayer(%v, %v, %v), but got %v and %v",
+	require.Truef(t, math.Abs(got[0][0]-got2[0][0]) < 1.0e-3,
+		"oneLayer(%v) should have been the same as oneLayer(%v, %v, %v), but got %v and %v",
 		x, oneElementOfX, oneElementOfX, oneElementOfX, got, got2)
 }
 

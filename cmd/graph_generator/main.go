@@ -29,10 +29,17 @@ var (
 		"ArgMinMax", "Broadcast", "BroadcastInDim",
 		"BatchNormForInference", "BatchNormForTraining", "BatchNormGradient",
 		"Concatenate", "ConvertDType", "ConvGeneralDilated", "DotGeneral", "FFT", "Gather", "Iota",
-		"ReduceAnd", "ReduceMax", "ReduceMin", "ReduceOr", "ReduceProduct", "ReduceSum", "ReduceWindow",
+		"ReduceMax", "ReduceMin", "ReduceProduct", "ReduceSum", "ReduceWindow",
+
+		// Reduce of logical/bitwise operators:
+		"ReduceLogicalAnd", "ReduceLogicalOr", "ReduceLogicalXor",
+		"ReduceBitwiseAnd", "ReduceBitwiseOr", "ReduceBitwiseXor",
+
 		"Reshape", "Reverse", "RngBitGenerator",
 		"ScatterAdd", "SelectAndScatterSum", "SelectAndScatterMax", "SelectAndScatterMin",
-		"Sign", "Slice",
+		"Sign",
+		"ShiftLeft", "ShiftRightArithmetic", "ShiftRightLogical",
+		"Slice",
 		"Transpose", "Where")
 
 	// methodsToExclude from writing, but the corresponding will be written and maintained manually.

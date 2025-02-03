@@ -26,9 +26,11 @@ should split on 2 dockers)
 
 ### Building the Docker
 
-The `Dockerfile` has 2 hardcoded versions that needs updating at each release: `GO_VERSION` and `GOPJRT_VERSION`.
+The `Dockerfile` has one hardcoded version that needs updating at each release: `GO_VERSION`.
 
-Note: the Dockerfile is configured to pull GoMLX (and gopjrt) from GitHub, so it won't use the contents on the current directory. 
+> [!Note]
+> The Dockerfile is configured to pull GoMLX and gopjrt from GitHub, so it won't use the contents on the 
+current directory. 
 
 ```bash
 docker build -t janpfeifer/gomlx_jupyterlab:latest -f docker/jupyterlab/Dockerfile . 
