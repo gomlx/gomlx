@@ -1,5 +1,5 @@
 /*
- *	Copyright 2023 Rener Castro
+ *	Copyright 2025 Rener Castro
  *
  *	Licensed under the Apache License, Version 2.0 (the "License");
  *	you may not use this file except in compliance with the License.
@@ -35,7 +35,7 @@ import (
 var (
 	flagTrain    = flag.Bool("train", true, "Flag to train")
 	flagDownload = flag.Bool("download", false, "Flag to download")
-	flagModel    = flag.String("model", "softmax", "Model function")
+	flagModel    = flag.String("model", "logistic", "Model function")
 	flagLoss     = flag.String("loss", "cross-entropy", "Loss function")
 	flagDataDir  = flag.String("data", "~/tmp/mnist", "Directory to cache downloaded dataset.")
 )

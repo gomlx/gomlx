@@ -1,3 +1,19 @@
+/*
+ *	Copyright 2025 Rener Castro
+ *
+ *	Licensed under the Apache License, Version 2.0 (the "License");
+ *	you may not use this file except in compliance with the License.
+ *	You may obtain a copy of the License at
+ *
+ *	http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *	Unless required by applicable law or agreed to in writing, software
+ *	distributed under the License is distributed on an "AS IS" BASIS,
+ *	WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *	See the License for the specific language governing permissions and
+ *	limitations under the License.
+ */
+
 package mnist
 
 // This file implements the baseline CNN model, including the FNN layers on top.
@@ -9,34 +25,42 @@ import (
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/ml/layers/batchnorm"
-	"github.com/gomlx/gomlx/ml/layers/fnn"
 )
 
-// CnnModelGraph builds the CNN model for our demo.
-// It returns the logit, not the predictions, which works with most losses.
+// LinearModelGraph builds a simple  model logistic model
+// It returns the logit, not the predictions, which works with most losses with shape `[batch_size, num_classes]`.
 // inputs: only one tensor, with shape `[batch_size, width, height, depth]`.
-func SoftMaxModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
+func LinearModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	ctx = ctx.In("model") // Create the model by default under the "/model" scope.
+	numClasses := context.GetParamOr(ctx, "num_classes", 10)
 	batchSize := inputs[0].Shape().Dimensions[0]
 	embeddings := Reshape(inputs[0], batchSize, -1)
-	logit := Softmax(layers.DenseWithBias(ctx, embeddings, 1))
-	return []*Node{Squeeze(logit)}
+	logits := layers.DenseWithBias(ctx, embeddings, numClasses)
+	return []*Node{logits}
 }
 
 // CnnModelGraph builds the CNN model for our demo.
-// It returns the logit, not the predictions, which works with most losses.
+// It returns the logit, not the predictions, which works with most losses with shape `[batch_size, num_classes]`.
 // inputs: only one tensor, with shape `[batch_size, width, height, depth]`.
 func CnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 	ctx = ctx.In("model") // Create the model by default under the "/model" scope.
+	numClasses := context.GetParamOr(ctx, "num_classes", 10)
 	embeddings := CnnEmbeddings(ctx, inputs[0])
-	logit := fnn.New(ctx.In("readout"), embeddings, 1).NumHiddenLayers(0, 0).Done()
-	return []*Node{Squeeze(logit)}
+	logits := layers.Dense(ctx, embeddings, true, numClasses)
+	return []*Node{logits}
 }
 
 func CnnEmbeddings(ctx *context.Context, images *Node) *Node {
 	batchSize := images.Shape().Dimensions[0]
-	numConvolutions := context.GetParamOr(ctx, "cnn_num_layers", 5)
+	g := images.Graph()
+	dtype := images.DType()
 
+	layerIdx := 0
+	nextCtx := func(name string) *context.Context {
+		newCtx := ctx.Inf("%03d_%s", layerIdx, name)
+		layerIdx++
+		return newCtx
+	}
 	// Dropout.
 	dropoutRate := context.GetParamOr(ctx, "cnn_dropout_rate", -1.0)
 	if dropoutRate < 0 {
@@ -44,51 +68,46 @@ func CnnEmbeddings(ctx *context.Context, images *Node) *Node {
 	}
 	var dropoutNode *Node
 	if dropoutRate > 0.0 {
-		dropoutNode = Scalar(images.Graph(), images.DType(), dropoutRate)
+		dropoutNode = Scalar(g, dtype, dropoutRate)
 	}
 
-	filterSize := 32
-	logits := images
-	for convIdx := range numConvolutions {
-		ctx := ctx.Inf("%03d_conv", convIdx)
-		if convIdx > 0 {
-			logits = normalizeImage(ctx, logits)
-		}
-		residual := logits
-		logits = layers.Convolution(ctx, logits).Filters(filterSize * (1 + convIdx)).KernelSize(3).PadSame().Done()
-		logits = activations.ApplyFromContext(ctx, logits)
-		if dropoutNode != nil {
-			logits = layers.Dropout(ctx, logits, dropoutNode)
-		}
-		if residual.Shape().Equal(logits.Shape()) {
-			logits = Add(logits, residual)
-		}
+	images = layers.Convolution(nextCtx("conv"), images).Filters(32).KernelSize(3).PadSame().Done()
+	images.AssertDims(batchSize, 28, 28, 32)
+	images = activations.Relu(images)
+	images = normalizeCNN(nextCtx("norm"), images)
+	images = MaxPool(images).Window(2).Done()
+	images.AssertDims(batchSize, 14, 14, 32)
 
-		// Reduce image size by 2 each time.
-		logits = MaxPool(logits).Window(2).Done()
-		imgSize := logits.Shape().Dimensions[1]
-		logits.AssertDims(batchSize, imgSize, imgSize, filterSize*(1+convIdx))
-	}
+	images = layers.Convolution(nextCtx("conv"), images).Filters(64).KernelSize(3).PadSame().Done()
+	images.AssertDims(batchSize, 14, 14, 64)
+	images = activations.Relu(images)
+	images = normalizeCNN(nextCtx("norm"), images)
+	images = MaxPool(images).Window(2).Done()
+	images = layers.DropoutNormalize(nextCtx("dropout"), images, dropoutNode, true)
+	images.AssertDims(batchSize, 7, 7, 64)
 
-	// Flatten the resulting image, and treat the convolved values as tabular.
-	logits = Reshape(logits, batchSize, -1)
-	return fnn.New(ctx.Inf("%03d_fnn", numConvolutions), logits, context.GetParamOr(ctx, "cnn_embeddings_size", 128)).Done()
+	// Flatten images
+	images = Reshape(images, batchSize, -1)
+	return images
 }
 
-func normalizeImage(ctx *context.Context, x *Node) *Node {
-	x.AssertRank(4) // [batch_size, width, height, depth]
-	norm := context.GetParamOr(ctx, "cnn_normalization", "")
-	if norm == "" {
-		norm = context.GetParamOr(ctx, layers.ParamNormalization, "")
-	}
-	switch norm {
+func normalizeCNN(ctx *context.Context, logits *Node) *Node {
+	normalizationType := context.GetParamOr(ctx, "cnn_normalization", "none")
+	switch normalizationType {
 	case "layer":
-		return layers.LayerNormalization(ctx, x, 1, 2).ScaleNormalization(false).Done()
+		if logits.Rank() == 2 {
+			return layers.LayerNormalization(ctx, logits, -1).Done()
+		} else if logits.Rank() == 4 {
+			return layers.LayerNormalization(ctx, logits, 2, 3).Done()
+		} else {
+			return logits
+		}
 	case "batch":
-		return batchnorm.New(ctx, x, -1).Done()
+		return batchnorm.New(ctx, logits, -1).Done()
 	case "none", "":
-		return x
+		return logits
+	default:
+		exceptions.Panicf("invalid normalization type %q -- set it with parameter %q", normalizationType, "cnn_normalization")
+		return nil
 	}
-	exceptions.Panicf("invalid normalization selected %q -- valid values are batch, layer, none", norm)
-	return nil
 }

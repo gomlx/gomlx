@@ -1,12 +1,29 @@
+/*
+ *	Copyright 2025 Rener Castro
+ *
+ *	Licensed under the Apache License, Version 2.0 (the "License");
+ *	you may not use this file except in compliance with the License.
+ *	You may obtain a copy of the License at
+ *
+ *	http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *	Unless required by applicable law or agreed to in writing, software
+ *	distributed under the License is distributed on an "AS IS" BASIS,
+ *	WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *	See the License for the specific language governing permissions and
+ *	limitations under the License.
+ */
+
 package mnist
 
 import (
-	"math/rand"
 	"testing"
-	"time"
 
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gopjrt/dtypes"
+
+	_ "github.com/gomlx/gomlx/backends/xla"
 )
 
 func TestDataset(t *testing.T) {
@@ -17,30 +34,25 @@ func TestDataset(t *testing.T) {
 		return
 	}
 
-	batchSize := 1000
-	shuffle := rand.New(rand.NewSource(time.Now().UTC().UnixNano()))
+	modes := []string{"train", "test"}
+	backend := backends.New()
 
-	trainDS, err := NewDataset("MNIST train", dataDir, "train", batchSize, shuffle, dtypes.Float32)
-	if err != nil {
-		t.Errorf("NewDataset: %v", err)
-		return
-	}
-	testDS, err := NewDataset("MNIST test", dataDir, "test", batchSize, shuffle, dtypes.Float32)
-	if err != nil {
-		t.Errorf("NewDataset: %v", err)
-		return
-	}
-	for _, ds := range []*Dataset{trainDS, testDS} {
+	for _, m := range modes {
+		ds, err := NewDataset(backend, "MNIST "+m, dataDir, m, dtypes.Float32)
+		if err != nil {
+			t.Errorf("NewDataset: %v", err)
+			return
+		}
 		_, images, labels, err := ds.Yield()
 		if err != nil {
 			t.Errorf("Download: %v", err)
 			return
 		}
-		images[0].AssertValid()
-		images[0].Shape().AssertDims(batchSize, ds.width, ds.height, 3)
-
-		labels[0].AssertValid()
-		labels[0].Shape().AssertDims(batchSize)
+		images[0].Shape().AssertDims(width, height, 3)
+		labels[0].Shape().AssertDims(numClasses)
+		if ds.NumExamples() != mnistSamples[m] {
+			t.Fatalf("size different ds.NumExamples(%d) != mnistSamples(%d) ", ds.NumExamples(), mnistSamples[m])
+			return
+		}
 	}
-
 }

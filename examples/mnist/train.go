@@ -1,5 +1,5 @@
 /*
- *	Copyright 2023 Rener Castro
+ *	Copyright 2025 Rener Castro
  *
  *	Licensed under the Apache License, Version 2.0 (the "License");
  *	you may not use this file except in compliance with the License.
@@ -24,11 +24,11 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/nanlogger"
 	"github.com/gomlx/gomlx/ml/context"
+	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/ml/layers/batchnorm"
-	"github.com/gomlx/gomlx/ml/layers/fnn"
 	"github.com/gomlx/gomlx/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/losses"
@@ -41,18 +41,20 @@ import (
 	"github.com/janpfeifer/must"
 )
 
+var excludeParams = []string{"data_dir", "train_steps", "num_checkpoints", "plots"}
+
 type ContextFn func(ctx *context.Context) *context.Context
 
 var Models = map[string]struct {
 	ctx   ContextFn
 	model train.ModelFn
 }{
-	"softmax": {CreateSoftMaxModelContext, SoftMaxModelGraph},
-	"cnn":     {CreateCnnModelContext, CnnModelGraph},
+	"logistic": {CreateSoftMaxModelContext, LinearModelGraph},
+	"cnn":      {CreateCnnModelContext, CnnModelGraph},
 }
 
 var Losses = map[string]losses.LossFn{
-	"cross-entropy": losses.CategoricalCrossEntropy,
+	"cross-entropy": losses.BinaryCrossentropyLogits,
 
 	"triplet": func(labels, predictions []*Node) (loss *Node) {
 		return losses.TripletLoss(labels, predictions, losses.TripletMiningStrategyAll, 1.0, losses.PairwiseDistanceMetricL2)
@@ -79,9 +81,10 @@ func CreateSoftMaxModelContext(ctx *context.Context) *context.Context {
 	ctx.RngStateReset()
 	ctx.SetParams(map[string]any{
 		// Model type to use
-		"model":           "softmax",
+		"model":           "logistic",
+		"num_classes":     10,
 		"num_checkpoints": 3,
-		"train_steps":     1680,
+		"train_steps":     20000,
 
 		// loss
 		"loss": "cross-entropy",
@@ -119,8 +122,9 @@ func CreateCnnModelContext(ctx *context.Context) *context.Context {
 	ctx.SetParams(map[string]any{
 		// Model type to use
 		"model":           "cnn",
+		"num_classes":     10,
 		"num_checkpoints": 3,
-		"train_steps":     1680,
+		"train_steps":     20000,
 
 		// loss
 		"loss": "cross-entropy",
@@ -152,20 +156,13 @@ func CreateCnnModelContext(ctx *context.Context) *context.Context {
 		optimizers.ParamAdamDType:       "",
 		cosineschedule.ParamPeriodSteps: 0,
 		activations.ParamActivation:     "relu",
-		layers.ParamDropoutRate:         0.25,
+		layers.ParamDropoutRate:         0.5,
 		regularizers.ParamL2:            0.0,
 		regularizers.ParamL1:            0.0,
 
-		// FNN network parameters:
-		fnn.ParamNumHiddenLayers: 3,
-		fnn.ParamNumHiddenNodes:  128,
-		fnn.ParamResidual:        true,
-		fnn.ParamNormalization:   "", // Set to "none" for no normalization, otherwise it falls back to layers.ParamNormalization.
-		// fnn.ParamDropoutRate:     0.0, // Set to 0.0 for no dropout, otherwise it falls back to layers.ParamDropoutRate.
-
 		// CNN
 		"cnn_num_layers":      2.0,
-		"cnn_dropout_rate":    0.25,
+		"cnn_dropout_rate":    0.5,
 		"cnn_embeddings_size": 128,
 	})
 	return ctx
@@ -194,10 +191,11 @@ func TrainModel(ctx *context.Context, dataDir string, model, loss string) {
 
 	modelFn, ok := Models[model]
 	if !ok {
-		fmt.Printf("can't find model %s, using softmax", model)
-		modelFn = Models["softmax"]
+		fmt.Printf("can't find model %s, using logistic", model)
+		modelFn = Models["logistic"]
 	}
 	ctx = modelFn.ctx(ctx)
+	backend := backends.New()
 
 	lossFn, ok := Losses[loss]
 	if !ok {
@@ -208,7 +206,7 @@ func TrainModel(ctx *context.Context, dataDir string, model, loss string) {
 	must.M(Download(dataDir))
 
 	dsConfig := NewDatasetsConfigurationFromContext(ctx, dataDir)
-	trainDS, trainEvalDS, validationEvalDS := CreateDatasets(dsConfig)
+	trainDS, trainEvalDS, validationEvalDS := CreateDatasets(backend, dsConfig)
 
 	// Metrics we are interested.
 	meanAccuracyMetric := metrics.NewMeanBinaryLogitsAccuracy("Mean Accuracy", "#acc")
@@ -216,7 +214,6 @@ func TrainModel(ctx *context.Context, dataDir string, model, loss string) {
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
-	backend := backends.New()
 	var trainer *train.Trainer
 	optimizer := optimizers.FromContext(ctx)
 
@@ -236,15 +233,28 @@ func TrainModel(ctx *context.Context, dataDir string, model, loss string) {
 	loop := train.NewLoop(trainer)
 	commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
 
+	// Checkpoints saving.
+	var checkpoint *checkpoints.Handler
+	if dataDir != "" {
+		numCheckpointsToKeep := context.GetParamOr(ctx, "num_checkpoints", 3)
+		checkpoint = must.M1(checkpoints.Build(ctx).
+			DirFromBase(dataDir, dataDir).
+			Keep(numCheckpointsToKeep).
+			ExcludeParams(excludeParams...).
+			Done())
+		fmt.Printf("Checkpointing model to %q\n", checkpoint.Dir())
+	}
+
 	// Attach Plotly plots: plot points at exponential steps.
 	// The points generated are saved along the checkpoint directory (if one is given).
-	// if context.GetParamOr(ctx, plotly.ParamPlots, false) {
-	// 	_ = plotly.New().
-	// 		Dynamic().
-	// 		WithDatasets(trainEvalDS, validationEvalDS).
-	// 		ScheduleExponential(loop, 200, 1.2).
-	// 		WithBatchNormalizationAveragesUpdate(trainEvalDS)
-	// }
+	if context.GetParamOr(ctx, plotly.ParamPlots, false) {
+		_ = plotly.New().
+			WithCheckpoint(checkpoint).
+			Dynamic().
+			WithDatasets(trainEvalDS, validationEvalDS).
+			ScheduleExponential(loop, 200, 1.2).
+			WithBatchNormalizationAveragesUpdate(trainEvalDS)
+	}
 
 	// Loop for given number of steps.
 	numTrainSteps := context.GetParamOr(ctx, "train_steps", 0)
@@ -253,17 +263,21 @@ func TrainModel(ctx *context.Context, dataDir string, model, loss string) {
 		trainer.SetContext(ctx.Reuse())
 	}
 	if globalStep < numTrainSteps {
-		_ = must.M1(loop.RunSteps(trainDS, int(numTrainSteps-globalStep)))
-		fmt.Printf("\t[Step %d] median train step: %d microseconds\n", loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
+		_ = must.M1(loop.RunSteps(trainDS, numTrainSteps-globalStep))
+		fmt.Printf("\t[Step %d] median train step: %d microseconds\n",
+			loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
+
+		// Update batch normalization averages, if they are used.
 		if batchnorm.UpdateAverages(trainer, trainEvalDS) {
 			fmt.Println("\tUpdated batch normalization mean/variances averages.")
+			if checkpoint != nil {
+				must.M(checkpoint.Save())
+			}
 		}
 	} else {
 		fmt.Printf("\t - target train_steps=%d already reached. To train further, set a number additional "+
 			"to current global step.\n", numTrainSteps)
 	}
-	fmt.Printf("Training done (global_step=%d).\n", optimizers.GetGlobalStep(ctx))
-
 	// Finally, print an evaluation on train and test datasets.
 	fmt.Println()
 	must.M(commandline.ReportEval(trainer, trainEvalDS, validationEvalDS))
