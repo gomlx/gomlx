@@ -26,4 +26,13 @@ func TestSet(t *testing.T) {
 	s3 := s.Sub(s2)
 	assert.Len(t, s3, 1)
 	assert.True(t, s3.Has(3))
+
+	delete(s, 7)
+	assert.Len(t, s, 1)
+	assert.True(t, s.Has(3))
+	assert.False(t, s.Has(7))
+	assert.True(t, s.Equal(s3))
+	assert.False(t, s.Equal(s2))
+	s4 := SetWith(-3)
+	assert.False(t, s.Equal(s4))
 }

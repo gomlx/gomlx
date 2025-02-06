@@ -48,3 +48,16 @@ func (s Set[T]) Sub(s2 Set[T]) Set[T] {
 	}
 	return sub
 }
+
+// Equal returns whether s and s2 have the exact same elements.
+func (s Set[T]) Equal(s2 Set[T]) bool {
+	if len(s) != len(s2) {
+		return false
+	}
+	for k := range s {
+		if !s2.Has(k) {
+			return false
+		}
+	}
+	return true
+}
