@@ -356,7 +356,7 @@ func CategoricalCrossEntropyLogits(labels, logits []*Node) *Node {
 func categoricalCrossEntropyLogitsImpl(labels, logits, weights, mask *Node) *Node {
 	shape := labels.Shape()
 	if !shape.Equal(logits.Shape()) {
-		Panicf("labels(%s) and logits(%s) must different shapes", shape, logits.Shape())
+		Panicf("labels(%s) and logits(%s) must have the same shapes", shape, logits.Shape())
 	}
 	var expandedMask *Node
 	if mask != nil {
