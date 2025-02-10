@@ -76,7 +76,7 @@ var Losses = map[string]losses.LossFn{
 	},
 }
 
-// CreateCnnModelContext sets the context with default hyperparameters to use with TrainModel.
+// CreateLinearModelContext sets the context with default hyperparameters to use with TrainModel.
 func CreateLinearModelContext(ctx *context.Context) *context.Context {
 	ctx.RngStateReset()
 	ctx.SetParams(map[string]any{
