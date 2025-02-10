@@ -36,6 +36,7 @@ func TestDataset(t *testing.T) {
 
 	modes := []string{"train", "test"}
 	backend := backends.New()
+	batchSIze := 100
 
 	for _, m := range modes {
 		ds, err := NewDataset(backend, "MNIST "+m, dataDir, m, dtypes.Float32)
@@ -43,13 +44,14 @@ func TestDataset(t *testing.T) {
 			t.Errorf("NewDataset: %v", err)
 			return
 		}
+		ds.BatchSize(batchSIze, false)
 		_, images, labels, err := ds.Yield()
 		if err != nil {
 			t.Errorf("Download: %v", err)
 			return
 		}
-		images[0].Shape().AssertDims(Width, Height, 3)
-		labels[0].Shape().AssertDims(NumClasses)
+		images[0].Shape().AssertDims(batchSIze, Width, Height, 3)
+		labels[0].Shape().AssertDims(batchSIze, 1)
 		if ds.NumExamples() != mnistSamples[m] {
 			t.Fatalf("size different ds.NumExamples(%d) != mnistSamples(%d) ", ds.NumExamples(), mnistSamples[m])
 			return
