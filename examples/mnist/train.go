@@ -49,12 +49,12 @@ var Models = map[string]struct {
 	ctx   ContextFn
 	model train.ModelFn
 }{
-	"logistic": {CreateSoftMaxModelContext, LinearModelGraph},
-	"cnn":      {CreateCnnModelContext, CnnModelGraph},
+	"linear": {CreateLinearModelContext, LinearModelGraph},
+	"cnn":    {CreateCnnModelContext, CnnModelGraph},
 }
 
 var Losses = map[string]losses.LossFn{
-	"cross-entropy": losses.BinaryCrossentropyLogits,
+	"cross-entropy": losses.SparseCategoricalCrossEntropyLogits,
 
 	"triplet": func(labels, predictions []*Node) (loss *Node) {
 		return losses.TripletLoss(labels, predictions, losses.TripletMiningStrategyAll, 1.0, losses.PairwiseDistanceMetricL2)
@@ -77,12 +77,11 @@ var Losses = map[string]losses.LossFn{
 }
 
 // CreateCnnModelContext sets the context with default hyperparameters to use with TrainModel.
-func CreateSoftMaxModelContext(ctx *context.Context) *context.Context {
+func CreateLinearModelContext(ctx *context.Context) *context.Context {
 	ctx.RngStateReset()
 	ctx.SetParams(map[string]any{
 		// Model type to use
-		"model":           "logistic",
-		"num_classes":     10,
+		"model":           "linear",
 		"num_checkpoints": 3,
 		"train_steps":     20000,
 
@@ -122,7 +121,6 @@ func CreateCnnModelContext(ctx *context.Context) *context.Context {
 	ctx.SetParams(map[string]any{
 		// Model type to use
 		"model":           "cnn",
-		"num_classes":     10,
 		"num_checkpoints": 3,
 		"train_steps":     20000,
 
@@ -183,7 +181,7 @@ func NewDatasetsConfigurationFromContext(ctx *context.Context, dataDir string) *
 }
 
 // TrainModel based on configuration and flags.
-func TrainModel(ctx *context.Context, dataDir string, model, loss string) {
+func TrainModel(ctx *context.Context, dataDir string, model, loss string, paramsSet []string) {
 	dataDir = data.ReplaceTildeInDir(dataDir)
 	if !data.FileExists(dataDir) {
 		must.M(os.MkdirAll(dataDir, 0777))
@@ -209,8 +207,8 @@ func TrainModel(ctx *context.Context, dataDir string, model, loss string) {
 	trainDS, trainEvalDS, validationEvalDS := CreateDatasets(backend, dsConfig)
 
 	// Metrics we are interested.
-	meanAccuracyMetric := metrics.NewMeanBinaryLogitsAccuracy("Mean Accuracy", "#acc")
-	movingAccuracyMetric := metrics.NewMovingAverageBinaryLogitsAccuracy("Moving Average Accuracy", "~acc", 0.01)
+	meanAccuracyMetric := metrics.NewSparseCategoricalAccuracy("Mean Accuracy", "#acc")
+	movingAccuracyMetric := metrics.NewMovingAverageSparseCategoricalAccuracy("Moving Average Accuracy", "~acc", 0.01)
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
@@ -240,7 +238,7 @@ func TrainModel(ctx *context.Context, dataDir string, model, loss string) {
 		checkpoint = must.M1(checkpoints.Build(ctx).
 			DirFromBase(dataDir, dataDir).
 			Keep(numCheckpointsToKeep).
-			ExcludeParams(excludeParams...).
+			ExcludeParams(append(paramsSet, excludeParams...)...).
 			Done())
 		fmt.Printf("Checkpointing model to %q\n", checkpoint.Dir())
 	}

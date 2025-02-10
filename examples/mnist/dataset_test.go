@@ -48,8 +48,8 @@ func TestDataset(t *testing.T) {
 			t.Errorf("Download: %v", err)
 			return
 		}
-		images[0].Shape().AssertDims(width, height, 3)
-		labels[0].Shape().AssertDims(numClasses)
+		images[0].Shape().AssertDims(Width, Height, 3)
+		labels[0].Shape().AssertDims(NumClasses)
 		if ds.NumExamples() != mnistSamples[m] {
 			t.Fatalf("size different ds.NumExamples(%d) != mnistSamples(%d) ", ds.NumExamples(), mnistSamples[m])
 			return

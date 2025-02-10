@@ -28,58 +28,53 @@ import (
 	"net/url"
 	"os"
 	"path"
-	"slices"
-
-	"golang.org/x/exp/constraints"
 
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
-	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 
 	timage "github.com/gomlx/gomlx/types/tensors/images"
 )
 
 const (
-	downloadURL         = "https://storage.googleapis.com/cvdf-datasets/mnist"
-	trainImagesFilename = "train-images-idx3-ubyte.gz"
-	trainLabelsFilename = "train-labels-idx1-ubyte.gz"
-	testImagesFilename  = "t10k-images-idx3-ubyte.gz"
-	testLabelsFilename  = "t10k-labels-idx1-ubyte.gz"
-	width               = 28
-	height              = 28
-	numClasses          = 10
-	trainExamples       = 60000
-	testExamples        = 10000
+	DownloadURL         = "https://storage.googleapis.com/cvdf-datasets/mnist"
+	TrainImagesFilename = "train-images-idx3-ubyte.gz"
+	TrainLabelsFilename = "train-labels-idx1-ubyte.gz"
+	TestImagesFilename  = "t10k-images-idx3-ubyte.gz"
+	TestLabelsFilename  = "t10k-labels-idx1-ubyte.gz"
+	Width               = 28
+	Height              = 28
+	NumClasses          = 10
+	TrainExamples       = 60000
+	TestExamples        = 10000
 
-	imageMagic = 0x00000803
-	labelMagic = 0x00000801
+	ImageMagic = 0x00000803
+	LabelMagic = 0x00000801
 )
 
 type fileType int
 
 const (
-	imageFileType fileType = iota
-	labelFileType
+	ImageFileType fileType = iota
+	LabelFileType
 )
 
 var mnistFiles = map[string][2]string{
-	"train": {trainImagesFilename, trainLabelsFilename},
-	"test":  {testImagesFilename, testLabelsFilename},
+	"train": {TrainImagesFilename, TrainLabelsFilename},
+	"test":  {TestImagesFilename, TestLabelsFilename},
 }
 
 var mnistSamples = map[string]int{
-	"train": trainExamples,
-	"test":  testExamples,
+	"train": TrainExamples,
+	"test":  TestExamples,
 }
 
 // Image represents a MNIST image. It is a array a bytes representing the color.
 // 0 is black (the background) and 255 is white (the digit color).
-type Image [width * height]byte
+type Image [Width * Height]byte
 
 // Label is the digit label from 0 to 9.
 type Label = int8
@@ -105,26 +100,26 @@ func (img Image) ColorModel() color.Model {
 func (img Image) Bounds() image.Rectangle {
 	return image.Rectangle{
 		Min: image.Point{0, 0},
-		Max: image.Point{width, height},
+		Max: image.Point{Width, Height},
 	}
 }
 
 // At implements the image.Image interface.
 func (img Image) At(x, y int) color.Color {
-	return color.Gray{Y: img[y*width+x]}
+	return color.Gray{Y: img[y*Width+x]}
 }
 
 // Set modifies the pixel at (x,y).
 func (img *Image) Set(x, y int, v byte) {
-	img[y*width+x] = v
+	img[y*Width+x] = v
 }
 
 // Download MNIST Dataset to baseDir, unzips it
 func Download(baseDir string) error {
 	baseDir = data.ReplaceTildeInDir(baseDir)
-	files := []string{trainImagesFilename, trainLabelsFilename, testImagesFilename, testLabelsFilename}
+	files := []string{TrainImagesFilename, TrainLabelsFilename, TestImagesFilename, TestLabelsFilename}
 	for _, file := range files {
-		downloadURLFile, _ := url.JoinPath(downloadURL, file)
+		downloadURLFile, _ := url.JoinPath(DownloadURL, file)
 		filePath := path.Join(baseDir, file)
 		if err := data.DownloadIfMissing(downloadURLFile, filePath, ""); err != nil {
 			return fmt.Errorf("data.DownloadAndUnzipIfMissing: %w", err)
@@ -147,8 +142,8 @@ var (
 //   - baseDir:
 //   - mode: choose between 'train' and 'test'
 func NewDataset(backend backends.Backend, name, baseDir, mode string, dtype dtypes.DType) (ds *data.InMemoryDataset, err error) {
-	imagesFile := mnistFiles[mode][imageFileType]
-	labelsFile := mnistFiles[mode][labelFileType]
+	imagesFile := mnistFiles[mode][ImageFileType]
+	labelsFile := mnistFiles[mode][LabelFileType]
 
 	images, err := loadImageFile(path.Join(baseDir, imagesFile))
 	if err != nil {
@@ -163,7 +158,7 @@ func NewDataset(backend backends.Backend, name, baseDir, mode string, dtype dtyp
 		backend,
 		name,
 		[]any{timage.ToTensor(dtype).Batch(images)},
-		[]any{tensors.FromAnyValue(shapes.CastAsDType(oneHot(labels, numClasses), dtype))},
+		[]any{tensors.FromFlatDataAndDimensions(labels, len(labels), 1)},
 	)
 }
 
@@ -188,8 +183,8 @@ func loadImageFile(filename string) ([]image.Image, error) {
 		return nil, err
 	}
 
-	if header.Magic != imageMagic ||
-		header.Width != width ||
+	if header.Magic != ImageMagic ||
+		header.Width != Width ||
 		header.Height != header.Height {
 		return nil, fmt.Errorf("mnist: invalid format")
 	}
@@ -227,7 +222,7 @@ func loadLabelFile(filename string) ([]Label, error) {
 		return nil, err
 	}
 
-	if header.Magic != labelMagic {
+	if header.Magic != LabelMagic {
 		return nil, err
 	}
 
@@ -268,7 +263,7 @@ func CreateDatasets(backend backends.Backend, config *DatasetsConfiguration) (tr
 	if err != nil {
 		exceptions.Panicf("NewDataset: %v", err)
 	}
-	baseTest, err := NewDataset(backend, "testl", config.DataDir, "test", config.Dtype)
+	baseTest, err := NewDataset(backend, "test", config.DataDir, "test", config.Dtype)
 	if err != nil {
 		exceptions.Panicf("NewDataset: %v", err)
 	}
@@ -278,27 +273,4 @@ func CreateDatasets(backend backends.Backend, config *DatasetsConfiguration) (tr
 	validationEvalDS = baseTest.BatchSize(config.EvalBatchSize, false)
 
 	return
-}
-
-func Select[T any, I constraints.Integer](items []T, idx []I) []T {
-	selItems := []T{}
-	nItems := len(items)
-	for _, i := range idx {
-		if i < I(nItems) {
-			selItems = append(selItems, items[i])
-		}
-	}
-	return selItems
-}
-
-func oneHot[I constraints.Integer](items []I, n int) (oh [][]I) {
-	iota := xslices.Iota(I(0), n)
-	for _, item := range items {
-		if id := slices.Index(iota, item); id >= 0 {
-			array := make([]I, n)
-			array[id] = 1
-			oh = append(oh, array)
-		}
-	}
-	return oh
 }
