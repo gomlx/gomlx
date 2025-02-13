@@ -116,7 +116,7 @@ func (conv *SeparableConvBuilder) DilationPerDim(dilations ...int) *SeparableCon
 }
 
 func (conv *SeparableConvBuilder) Done() *Node {
-	ctxInScope := conv.ctx
+	// ctxInScope := conv.ctx
 	if conv.newScope {
 		ctxInScope = ctxInScope.In("separable_conv")
 	}
