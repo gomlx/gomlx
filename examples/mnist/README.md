@@ -2,9 +2,20 @@
 
 MNIST is a simple computer vision dataset that consists of images of handwritten digits.
 
+Some examples:
+
 ![MNIST digits sample](https://github.com/user-attachments/assets/996c11e0-47f9-4b21-8e23-3867b8942e64)
 
-It also includes labels for each image, telling us which digit it is. For example, the labels for the above images are 5, 0, 4, and 1.
+It also includes labels for each image, which we use to train our example models.
+
+## The `mnist` library
+
+This package includes the following functionality:
+
+  - Download the dataset from [storage.googleapis.com/cvdf-datasets/mnist](https://storage.googleapis.com/cvdf-datasets/mnist),
+  - Create a `Dataset` object to iterate over it, use for training and evaluation.
+  - A linear and a CNN model demo.
+  - A command-line demo (in the `demo` sub-directory).
 
 ## Reference
 
