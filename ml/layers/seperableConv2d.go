@@ -1,6 +1,8 @@
 package layers
 
 import (
+	"fmt"
+
 	. "github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
@@ -125,6 +127,9 @@ func (conv *SeparableConvBuilder) Done() *Node {
 	xShape := conv.x.Shape()
 	dtype := xShape.DType
 	inputChannels := xShape.Dimensions[images.GetChannelsAxis(xShape, conv.channelsAxisConfig)]
+
+	fmt.Printf("Input Shape: %v\n", xShape.Dimensions)
+	fmt.Printf("Kernel Size: %v, Filters: %d, Input Channels: %d\n", conv.kernelSize, conv.filters, inputChannels)
 
 	depthwiseKernelShape := shapes.Make(dtype, append(conv.kernelSize, inputChannels, 1)...) // Depthwise kernel
 	depthwiseKernelVar := ctxInScope.VariableWithShape("depthwise_weights", depthwiseKernelShape)
