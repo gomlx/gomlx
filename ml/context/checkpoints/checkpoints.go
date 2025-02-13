@@ -345,9 +345,27 @@ func (c *Config) Done() (*Handler, error) {
 	handler.attachTo(c.ctx)
 	if c.immediate {
 		ctxToSet := c.ctx.Checked(false)
-		for paramName, t := range handler.LoadedVariables() {
+		for paramName, value := range handler.variableValues {
 			scope, name := context.VariableScopeAndNameFromParameterName(paramName)
-			ctxToSet.InAbsPath(scope).VariableWithValue(name, t)
+			v := ctxToSet.GetVariableByScopeAndName(scope, name)
+			if v != nil {
+				v.SetValue(value)
+			} else {
+				ctxToSet.InAbsPath(scope).VariableWithValue(name, value)
+			}
+		}
+		// Empty remaining variableValues.
+		handler.variableValues = make(map[string]*tensors.Tensor)
+	} else {
+		// Force overwriting variables already present in the context: e.g: global_step.
+		ctxToSet := c.ctx.Checked(false)
+		for v := range ctxToSet.IterVariables() {
+			value, found := handler.LoadedVariables()[v.ParameterName()]
+			if !found {
+				continue
+			}
+			v.SetValue(value)
+			delete(handler.variableValues, v.ParameterName())
 		}
 	}
 	return handler, nil
@@ -743,7 +761,8 @@ func (h *Handler) Save() error {
 		return errors.Wrapf(err, "%s: failed to create checkpoint metadata file %s", h, jsonFileName)
 	}
 
-	// Copy over and set variables: both from Context and previously loaded ones.
+	// Copy over and set variables: both from Context and previously loaded ones, that haven't yet
+	// been loaded into context.
 	h.serialized.Variables = make([]serializedVar, 0, h.ctx.NumVariables()+len(h.variableValues))
 	pos := 0
 	// * Closure to save the contents of a variable.

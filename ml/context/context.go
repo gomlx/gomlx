@@ -835,6 +835,8 @@ func valueToTensor(value any) *tensors.Tensor {
 //
 // - Context.Unique() and variable already exists (or was loaded);
 // - Context.Reuse() and variable didn't exist (or was not loaded);
+//
+// See Variable.SetValue if you want to overwrite the value of an existing variable.
 func (ctx *Context) VariableWithValue(name string, defaultValue any) *Variable {
 	v := ctx.GetVariableByScopeAndName(ctx.scope, name)
 
@@ -925,6 +927,8 @@ func (ctx *Context) EnumerateVariables(fn func(v *Variable)) {
 //
 // Notice that variables' information is stored in the "data" component of Context objects, and is shared
 // among all connected context references.
+//
+// Variables not yet materialized, for instance with checkpoints with lazy loading, are not listed here.
 //
 // Example:
 //

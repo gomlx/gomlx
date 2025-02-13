@@ -116,12 +116,12 @@ func ClearScreen() {
 
 var (
 	headerRowStyle = lipgloss.NewStyle().Reverse(true).
-		Padding(0, 2, 0, 2).Align(lipgloss.Center)
+			Padding(0, 2, 0, 2).Align(lipgloss.Center)
 
 	oddRowStyle = lipgloss.NewStyle().Faint(false).
-		PaddingLeft(1).PaddingRight(1)
+			PaddingLeft(1).PaddingRight(1)
 	evenRowStyle = lipgloss.NewStyle().Faint(true).
-		PaddingLeft(1).PaddingRight(1)
+			PaddingLeft(1).PaddingRight(1)
 
 	titleStyle    = lipgloss.NewStyle().Bold(true).Padding(1, 4, 1, 4)
 	italicStyle   = lipgloss.NewStyle().Italic(true).Faint(true)
@@ -354,12 +354,14 @@ func ListVariables(ctx *context.Context) {
 		return
 	}).SetMaxCache(-1)
 	table := newPlainTable(true)
-	table.Headers("Scope", "Name", "Shape", "Size", "Bytes", "MAV", "RMS", "MaxAV")
+	table.Headers("Scope", "Name", "Shape", "Size", "Bytes", "Scalar/MAV", "RMS", "MaxAV")
 	var rows [][]string
 	ctx.EnumerateVariablesInScope(func(v *context.Variable) {
 		shape := v.Shape()
 		var mav, rms, maxAV string
-		if shape.DType.IsFloat() {
+		if shape.Size() == 1 {
+			mav = fmt.Sprintf("%.4v", v.Value().Value())
+		} else if shape.DType.IsFloat() {
 			metrics := metricsFn.Call(v.Value())
 			mav = fmt.Sprintf("%.3g", metrics[0].Value().(float64))
 			rms = fmt.Sprintf("%.3g", metrics[1].Value().(float64))
