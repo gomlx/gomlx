@@ -2,7 +2,7 @@
 
 MNIST is a simple computer vision dataset that consists of images of handwritten digits.
 
-<img src="https://en.wikipedia.org/wiki/MNIST_database#/media/File:MNIST_dataset_example.png" alt="MNIST digits sample"/>
+![MNIST digits sample](https://github.com/user-attachments/assets/996c11e0-47f9-4b21-8e23-3867b8942e64)
 
 It also includes labels for each image, telling us which digit it is. For example, the labels for the above images are 5, 0, 4, and 1.
 
