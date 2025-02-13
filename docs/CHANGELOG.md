@@ -1,5 +1,13 @@
 # GoMLX changelog
 
+# Next:
+
+* Added MNIST example (thanks to @TuSKan).
+* `gomlx_checkpoints` now displays the value of scalar variables.
+* Package `checkpoints`:
+  * Loading a checkpoint overwrites the values of variables already present in the context.
+  * Fixes when saving, in particular if using `Immediate()` loading.
+
 # v0.17.0: bitwise ops, triplet losses, new layers, fixes, and more.
 
 * Backend API change: separating Logical and Bitwise versions of various ops derived from And, Or, Xor and Not.
