@@ -131,7 +131,8 @@ func (conv *SeparableConvBuilder) Done() *Node {
 	fmt.Printf("Input Shape: %v\n", xShape.Dimensions)
 	fmt.Printf("Kernel Size: %v, Filters: %d, Input Channels: %d\n", conv.kernelSize, conv.filters, inputChannels)
 
-	depthwiseKernelShape := shapes.Make(dtype, append(conv.kernelSize, inputChannels, 1)...) // Depthwise kernel
+	// Depthwise convolution kernel shape: [kernelHeight, kernelWidth, inputChannels, 1]
+	depthwiseKernelShape := shapes.Make(dtype, append(conv.kernelSize, inputChannels, 1)...)
 	depthwiseKernelVar := ctxInScope.VariableWithShape("depthwise_weights", depthwiseKernelShape)
 	depthwiseKernel := depthwiseKernelVar.ValueGraph(conv.graph)
 
@@ -146,7 +147,8 @@ func (conv *SeparableConvBuilder) Done() *Node {
 	}
 	depthwiseOutput := convOpts.Done()
 
-	pointwiseKernelShape := shapes.Make(dtype, 1, 1, inputChannels, conv.filters) // Adapting for any input channels
+	// Pointwise convolution kernel shape: [1, 1, inputChannels, filters]
+	pointwiseKernelShape := shapes.Make(dtype, 1, 1, inputChannels, conv.filters)
 	pointwiseKernelVar := ctxInScope.VariableWithShape("pointwise_weights", pointwiseKernelShape)
 	pointwiseKernel := pointwiseKernelVar.ValueGraph(conv.graph)
 
