@@ -354,12 +354,14 @@ func ListVariables(ctx *context.Context) {
 		return
 	}).SetMaxCache(-1)
 	table := newPlainTable(true)
-	table.Headers("Scope", "Name", "Shape", "Size", "Bytes", "MAV", "RMS", "MaxAV")
+	table.Headers("Scope", "Name", "Shape", "Size", "Bytes", "Scalar/MAV", "RMS", "MaxAV")
 	var rows [][]string
 	ctx.EnumerateVariablesInScope(func(v *context.Variable) {
 		shape := v.Shape()
 		var mav, rms, maxAV string
-		if shape.DType.IsFloat() {
+		if shape.Size() == 1 {
+			mav = fmt.Sprintf("%.4v", v.Value().Value())
+		} else if shape.DType.IsFloat() {
 			metrics := metricsFn.Call(v.Value())
 			mav = fmt.Sprintf("%.3g", metrics[0].Value().(float64))
 			rms = fmt.Sprintf("%.3g", metrics[1].Value().(float64))
