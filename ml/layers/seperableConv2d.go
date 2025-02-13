@@ -128,10 +128,6 @@ func (conv *SeparableConvBuilder) Done() *Node {
 	dtype := xShape.DType
 	inputChannels := xShape.Dimensions[images.GetChannelsAxis(xShape, conv.channelsAxisConfig)]
 
-	if inputChannels != 1 && inputChannels != 3 {
-		Panicf("Input must have 1 (grayscale) or 3 (RGB) channels, but has %d", inputChannels)
-	}
-
 	fmt.Printf("Input Shape: %v\n", xShape.Dimensions)
 	fmt.Printf("Kernel Size: %v, Filters: %d, Input Channels: %d\n", conv.kernelSize, conv.filters, inputChannels)
 
@@ -150,7 +146,7 @@ func (conv *SeparableConvBuilder) Done() *Node {
 	}
 	depthwiseOutput := convOpts.Done()
 
-	pointwiseKernelShape := shapes.Make(dtype, 1, 1, inputChannels, conv.filters) // Adapting for grayscale/RGB
+	pointwiseKernelShape := shapes.Make(dtype, 1, 1, inputChannels, conv.filters) // Adapting for any input channels
 	pointwiseKernelVar := ctxInScope.VariableWithShape("pointwise_weights", pointwiseKernelShape)
 	pointwiseKernel := pointwiseKernelVar.ValueGraph(conv.graph)
 
