@@ -30,7 +30,7 @@ type SeparableConvBuilder struct {
 }
 
 // SeparableConvolution initializes the builder.
-func SeparableConvolution(ctx *context.Context, x *Node) *SeparableConvBuilder {
+/* func SeparableConvolution(ctx *context.Context, x *Node) *SeparableConvBuilder {
 	conv := &SeparableConvBuilder{
 		ctx:         ctx,
 		graph:       x.Graph(),
@@ -43,7 +43,7 @@ func SeparableConvolution(ctx *context.Context, x *Node) *SeparableConvBuilder {
 		Panicf("Input x must have rank >= 3, but rank is %d", x.Rank())
 	}
 	return conv.ChannelsAxis(images.ChannelsLast).NoPadding().UseBias(true).Strides(1)
-}
+} */
 
 func (conv *SeparableConvBuilder) Filters(filters int) *SeparableConvBuilder {
 	conv.filters = filters
@@ -116,7 +116,7 @@ func (conv *SeparableConvBuilder) DilationPerDim(dilations ...int) *SeparableCon
 }
 
 func (conv *SeparableConvBuilder) Done() *Node {
-	// ctxInScope := conv.ctx
+	ctxInScope := conv.ctx
 	if conv.newScope {
 		ctxInScope = ctxInScope.In("separable_conv")
 	}
