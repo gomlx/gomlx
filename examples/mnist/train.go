@@ -18,7 +18,12 @@ package mnist
 
 import (
 	"fmt"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/pkg/errors"
+	"maps"
 	"os"
+	"slices"
+	"time"
 
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/graph"
@@ -45,12 +50,9 @@ var excludeParams = []string{"data_dir", "train_steps", "num_checkpoints", "plot
 
 type ContextFn func(ctx *context.Context) *context.Context
 
-var Models = map[string]struct {
-	ctx   ContextFn
-	model train.ModelFn
-}{
-	"linear": {CreateLinearModelContext, LinearModelGraph},
-	"cnn":    {CreateCnnModelContext, CnnModelGraph},
+var Models = map[string]train.ModelFn{
+	"linear": LinearModelGraph,
+	"cnn":    CnnModelGraph,
 }
 
 var Losses = map[string]losses.LossFn{
@@ -76,17 +78,14 @@ var Losses = map[string]losses.LossFn{
 	},
 }
 
-// CreateLinearModelContext sets the context with default hyperparameters to use with TrainModel.
-func CreateLinearModelContext(ctx *context.Context) *context.Context {
+func CreateDefaultContext() *context.Context {
+	ctx := context.New()
 	ctx.RngStateReset()
 	ctx.SetParams(map[string]any{
 		// Model type to use
 		"model":           "linear",
 		"num_checkpoints": 3,
-		"train_steps":     20000,
-
-		// loss
-		"loss": "cross-entropy",
+		"train_steps":     4000,
 
 		// batch_size for training.
 		"batch_size": 600,
@@ -105,48 +104,6 @@ func CreateLinearModelContext(ctx *context.Context) *context.Context {
 		//
 		//	$ gomlx_checkpoints --metrics --metrics_labels --metrics_types=accuracy  --metrics_names='E(Tra)/#loss,E(Val)/#loss' --loop=3s "<checkpoint_path>"
 		plotly.ParamPlots: false,
-
-		optimizers.ParamOptimizer:       "sgd",
-		optimizers.ParamLearningRate:    1e-4,
-		cosineschedule.ParamPeriodSteps: 0,
-		regularizers.ParamL2:            0.0,
-		regularizers.ParamL1:            0.0,
-	})
-	return ctx
-}
-
-// CreateCnnModelContext sets the context with default hyperparameters to use with TrainModel.
-func CreateCnnModelContext(ctx *context.Context) *context.Context {
-	ctx.RngStateReset()
-	ctx.SetParams(map[string]any{
-		// Model type to use
-		"model":           "cnn",
-		"num_checkpoints": 3,
-		"train_steps":     20000,
-
-		// loss
-		"loss": "cross-entropy",
-
-		// batch_size for training.
-		"batch_size": 600,
-
-		// eval_batch_size can be larger than training, it's more efficient.
-		"eval_batch_size": 1000,
-
-		// Debug parameters.
-		"nan_logger": false, // Trigger nan error as soon as it happens -- expensive, but helps debugging.
-
-		// "plots" trigger generating intermediary eval data for plotting, and if running in GoNB, to actually
-		// draw the plot with Plotly.
-		//
-		// From the command-line, an easy way to monitor the metrics being generated during the training of a model
-		// is using the gomlx_checkpoints tool:
-		//
-		//	$ gomlx_checkpoints --metrics --metrics_labels --metrics_types=accuracy  --metrics_names='E(Tra)/#loss,E(Val)/#loss' --loop=3s "<checkpoint_path>"
-		plotly.ParamPlots: false,
-
-		// "normalization" is overridden by "fnn_normalization" and "cnn_normalization", if they are set.
-		layers.ParamNormalization: "none",
 
 		optimizers.ParamOptimizer:       "adamw",
 		optimizers.ParamLearningRate:    1e-4,
@@ -159,9 +116,8 @@ func CreateCnnModelContext(ctx *context.Context) *context.Context {
 		regularizers.ParamL1:            0.0,
 
 		// CNN
-		"cnn_num_layers":      2.0,
-		"cnn_dropout_rate":    0.5,
-		"cnn_embeddings_size": 128,
+		"cnn_dropout_rate":  0.5,
+		"cnn_normalization": "layer", // "layer" or "batch".
 	})
 	return ctx
 }
@@ -181,18 +137,17 @@ func NewDatasetsConfigurationFromContext(ctx *context.Context, dataDir string) *
 }
 
 // TrainModel based on configuration and flags.
-func TrainModel(ctx *context.Context, dataDir string, model, loss string, paramsSet []string) {
+func TrainModel(ctx *context.Context, dataDir, checkpointPath string, modelType, loss string, paramsSet []string) error {
 	dataDir = data.ReplaceTildeInDir(dataDir)
 	if !data.FileExists(dataDir) {
 		must.M(os.MkdirAll(dataDir, 0777))
 	}
 
-	modelFn, ok := Models[model]
+	modelFn, ok := Models[modelType]
 	if !ok {
-		fmt.Printf("can't find model %s, using logistic", model)
-		modelFn = Models["logistic"]
+		return errors.Errorf("Can't find modelType %q, available models: %q\n", modelType, slices.Collect(maps.Keys(Models)))
 	}
-	ctx = modelFn.ctx(ctx)
+	fmt.Printf("Training %s model:\n", modelType)
 	backend := backends.New()
 
 	lossFn, ok := Losses[loss]
@@ -201,7 +156,10 @@ func TrainModel(ctx *context.Context, dataDir string, model, loss string, params
 		lossFn = Losses["cross-entropy"]
 	}
 
-	must.M(Download(dataDir))
+	err := Download(dataDir)
+	if err != nil {
+		return err
+	}
 
 	dsConfig := NewDatasetsConfigurationFromContext(ctx, dataDir)
 	trainDS, trainEvalDS, validationEvalDS := CreateDatasets(backend, dsConfig)
@@ -210,13 +168,12 @@ func TrainModel(ctx *context.Context, dataDir string, model, loss string, params
 	meanAccuracyMetric := metrics.NewSparseCategoricalAccuracy("Mean Accuracy", "#acc")
 	movingAccuracyMetric := metrics.NewMovingAverageSparseCategoricalAccuracy("Moving Average Accuracy", "~acc", 0.01)
 
-	// Create a train.Trainer: this object will orchestrate running the model, feeding
+	// Create a train.Trainer: this object will orchestrate running the modelType, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
 	var trainer *train.Trainer
 	optimizer := optimizers.FromContext(ctx)
-
 	trainer = train.NewTrainer(backend, ctx,
-		modelFn.model,
+		modelFn,
 		lossFn,
 		optimizer,
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
@@ -233,14 +190,24 @@ func TrainModel(ctx *context.Context, dataDir string, model, loss string, params
 
 	// Checkpoints saving.
 	var checkpoint *checkpoints.Handler
-	if dataDir != "" {
+	if checkpointPath != "" {
 		numCheckpointsToKeep := context.GetParamOr(ctx, "num_checkpoints", 3)
-		checkpoint = must.M1(checkpoints.Build(ctx).
-			DirFromBase(dataDir, dataDir).
+		checkpoint, err = checkpoints.Build(ctx).
+			DirFromBase(checkpointPath, dataDir).
 			Keep(numCheckpointsToKeep).
 			ExcludeParams(append(paramsSet, excludeParams...)...).
-			Done())
-		fmt.Printf("Checkpointing model to %q\n", checkpoint.Dir())
+			Done()
+		if err != nil {
+			return errors.WithMessagef(err, "failed to create/load checkpoint %s, from data directory %s",
+				checkpointPath, dataDir)
+		}
+		fmt.Printf("\t- checkpoint in %s\n", checkpoint.Dir())
+		period := time.Minute * 1
+		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
+			func(loop *train.Loop, metrics []*tensors.Tensor) error {
+				fmt.Printf("\n\t- saving checkpoint@%d\n", loop.LoopStep)
+				return checkpoint.Save()
+			})
 	}
 
 	// Attach Plotly plots: plot points at exponential steps.
@@ -258,11 +225,15 @@ func TrainModel(ctx *context.Context, dataDir string, model, loss string, params
 	numTrainSteps := context.GetParamOr(ctx, "train_steps", 0)
 	globalStep := int(optimizers.GetGlobalStep(ctx))
 	if globalStep > 0 {
+		fmt.Printf("\t- restarting from global step %d\n", globalStep)
 		trainer.SetContext(ctx.Reuse())
 	}
 	if globalStep < numTrainSteps {
-		_ = must.M1(loop.RunSteps(trainDS, numTrainSteps-globalStep))
-		fmt.Printf("\t[Step %d] median train step: %d microseconds\n",
+		_, err = loop.RunSteps(trainDS, numTrainSteps-globalStep)
+		if err != nil {
+			return errors.WithMessagef(err, "failed to train model %d steps", numTrainSteps-globalStep)
+		}
+		fmt.Printf("\t- trained to step %d, median train step: %d microseconds\n",
 			loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
 
 		// Update batch normalization averages, if they are used.
@@ -278,6 +249,9 @@ func TrainModel(ctx *context.Context, dataDir string, model, loss string, params
 	}
 	// Finally, print an evaluation on train and test datasets.
 	fmt.Println()
-	must.M(commandline.ReportEval(trainer, trainEvalDS, validationEvalDS))
+	if err = commandline.ReportEval(trainer, trainEvalDS, validationEvalDS); err != nil {
+		return errors.WithMessage(err, "while generating report with evaluation of trained modelType")
+	}
 	fmt.Println()
+	return nil
 }

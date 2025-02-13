@@ -23,9 +23,7 @@ package main
 import (
 	"flag"
 
-	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/examples/mnist"
-	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
@@ -34,35 +32,28 @@ import (
 )
 
 var (
-	flagTrain    = flag.Bool("train", true, "Flag to train")
-	flagDownload = flag.Bool("download", false, "Flag to download")
-	flagModel    = flag.String("model", "linear", "Model function")
-	flagLoss     = flag.String("loss", "cross-entropy", "Loss function")
-	flagDataDir  = flag.String("data", "~/tmp/mnist", "Directory to cache downloaded dataset.")
+	flagTrain      = flag.Bool("train", true, "Flag to train")
+	flagDownload   = flag.Bool("download", false, "Flag to download")
+	flagModel      = flag.String("model", "linear", "Model function")
+	flagLoss       = flag.String("loss", "cross-entropy", "Loss function")
+	flagDataDir    = flag.String("data", "~/tmp/mnist", "Directory to cache downloaded dataset.")
+	flagCheckpoint = flag.String("checkpoint", "", "Checkpoint directory from/to where to load/save the trained model. Path is relative to --data.")
 )
 
 func main() {
-	ctx := context.New()
+	ctx := mnist.CreateDefaultContext()
 	settings := commandline.CreateContextSettingsFlag(ctx, "")
 	klog.InitFlags(nil)
 	flag.Parse()
 	paramsSet := must.M1(commandline.ParseContextSettings(ctx, *settings))
-
-	err := exceptions.TryCatch[error](func() {
-
-		if *flagDownload {
-			must.M(mnist.Download(*flagDataDir))
-			klog.Infof("Data downloaded in %s", *flagDataDir)
-		}
-		if *flagTrain {
-			mnist.TrainModel(ctx, *flagDataDir, *flagModel, *flagLoss, paramsSet)
-			klog.Infof("model trained in %s", *flagDataDir)
-		}
-		if !*flagDownload && !*flagTrain {
-			klog.Info("exit: usage -download and/or -train, optional -data")
-		}
-	})
-	if err != nil {
-		klog.Errorf("Error:\n%+v", err)
+	if *flagDownload {
+		must.M(mnist.Download(*flagDataDir))
+		klog.Infof("Data downloaded in %s", *flagDataDir)
+	}
+	if *flagTrain {
+		must.M(mnist.TrainModel(ctx, *flagDataDir, *flagCheckpoint, *flagModel, *flagLoss, paramsSet))
+	}
+	if !*flagDownload && !*flagTrain {
+		klog.Info("exit: usage -download and/or -train, optional -data")
 	}
 }
