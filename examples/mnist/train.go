@@ -18,12 +18,13 @@ package mnist
 
 import (
 	"fmt"
-	"github.com/gomlx/gomlx/types/tensors"
-	"github.com/pkg/errors"
 	"maps"
 	"os"
 	"slices"
 	"time"
+
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/pkg/errors"
 
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/graph"
@@ -84,6 +85,7 @@ func CreateDefaultContext() *context.Context {
 	ctx.SetParams(map[string]any{
 		// Model type to use
 		"model":           "linear",
+		"loss":            "cross-entropy",
 		"num_checkpoints": 3,
 		"train_steps":     4000,
 
@@ -137,12 +139,13 @@ func NewDatasetsConfigurationFromContext(ctx *context.Context, dataDir string) *
 }
 
 // TrainModel based on configuration and flags.
-func TrainModel(ctx *context.Context, dataDir, checkpointPath string, modelType, loss string, paramsSet []string) error {
+func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet []string) error {
 	dataDir = data.ReplaceTildeInDir(dataDir)
 	if !data.FileExists(dataDir) {
 		must.M(os.MkdirAll(dataDir, 0777))
 	}
 
+	modelType := context.GetParamOr(ctx, "model", "")
 	modelFn, ok := Models[modelType]
 	if !ok {
 		return errors.Errorf("Can't find modelType %q, available models: %q\n", modelType, slices.Collect(maps.Keys(Models)))
@@ -150,6 +153,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, modelType,
 	fmt.Printf("Training %s model:\n", modelType)
 	backend := backends.New()
 
+	loss := context.GetParamOr(ctx, "loss", "")
 	lossFn, ok := Losses[loss]
 	if !ok {
 		fmt.Printf("can't find loss %s, using cross-entropy", loss)
@@ -217,7 +221,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, modelType,
 			WithCheckpoint(checkpoint).
 			Dynamic().
 			WithDatasets(trainEvalDS, validationEvalDS).
-			ScheduleExponential(loop, 200, 1.2).
+			ScheduleExponential(loop, 10, 1.2).
 			WithBatchNormalizationAveragesUpdate(trainEvalDS)
 	}
 

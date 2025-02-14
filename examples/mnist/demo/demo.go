@@ -34,8 +34,6 @@ import (
 var (
 	flagTrain      = flag.Bool("train", true, "Flag to train")
 	flagDownload   = flag.Bool("download", false, "Flag to download")
-	flagModel      = flag.String("model", "linear", "Model function")
-	flagLoss       = flag.String("loss", "cross-entropy", "Loss function")
 	flagDataDir    = flag.String("data", "~/tmp/mnist", "Directory to cache downloaded dataset.")
 	flagCheckpoint = flag.String("checkpoint", "", "Checkpoint directory from/to where to load/save the trained model. Path is relative to --data.")
 )
@@ -51,7 +49,7 @@ func main() {
 		klog.Infof("Data downloaded in %s", *flagDataDir)
 	}
 	if *flagTrain {
-		must.M(mnist.TrainModel(ctx, *flagDataDir, *flagCheckpoint, *flagModel, *flagLoss, paramsSet))
+		must.M(mnist.TrainModel(ctx, *flagDataDir, *flagCheckpoint, paramsSet))
 	}
 	if !*flagDownload && !*flagTrain {
 		klog.Info("exit: usage -download and/or -train, optional -data")
