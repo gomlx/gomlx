@@ -132,7 +132,7 @@ func (conv *SeparableConvBuilder) Done() *Node {
 	fmt.Printf("Kernel Size: %v, Filters: %d, Input Channels: %d\n", conv.kernelSize, conv.filters, inputChannels)
 
 	// Depthwise Convolution
-	depthwiseKernelShape := shapes.Make(dtype, append(conv.kernelSize, 1, inputChannels)...) // Depthwise kernel
+	depthwiseKernelShape := shapes.Make(dtype, append(conv.kernelSize, 1, inputChannels)...) // Depthwise kernel after swapping
 	depthwiseKernelVar := ctxInScope.VariableWithShape("depthwise_weights", depthwiseKernelShape)
 	depthwiseKernel := depthwiseKernelVar.ValueGraph(conv.graph)
 
