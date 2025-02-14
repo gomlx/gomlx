@@ -132,29 +132,31 @@ func (conv *SeparableConvBuilder) Done() *Node {
 	fmt.Printf("Kernel Size: %v, Filters: %d, Input Channels: %d\n", conv.kernelSize, conv.filters, inputChannels)
 
 	// Depthwise Convolution
-	depthwiseKernelShape := shapes.Make(dtype, append(conv.kernelSize, 1, inputChannels)...) // Depthwise kernel after swapping
+	depthwiseKernelShape := shapes.Make(dtype, append(conv.kernelSize, inputChannels, inputChannels)...) // Shape: [3, 3, 3, 3]
+	fmt.Printf("Depthwise Kernel Shape: %v\n", depthwiseKernelShape.Dimensions)
 	depthwiseKernelVar := ctxInScope.VariableWithShape("depthwise_weights", depthwiseKernelShape)
 	depthwiseKernel := depthwiseKernelVar.ValueGraph(conv.graph)
 
-	convOpts := Convolve(conv.x, depthwiseKernel).StridePerDim(conv.strides...).ChannelsAxis(conv.channelsAxisConfig)
-	if len(conv.dilations) > 0 {
-		convOpts.DilationPerDim(conv.dilations...)
-	}
-	if conv.padSame {
-		convOpts.PadSame()
-	} else {
-		convOpts.NoPadding()
-	}
+	// Configure depthwise convolution.
+	convOpts := Convolve(conv.x, depthwiseKernel).
+		ChannelsAxis(conv.channelsAxisConfig).
+		StridePerDim(conv.strides...).
+		DilationPerDim(conv.dilations...).
+		PadSame()
+
 	depthwiseOutput := convOpts.Done()
+	fmt.Printf("Depthwise Output Shape: %v\n", depthwiseOutput.Shape().Dimensions)
 
-	// Fix: Build Pointwise Kernel Shape as a Slice First
-	pointwiseKernelShapeSlice := append(xslices.SliceWithValue(conv.numSpatialDims, 1), inputChannels, conv.filters)
-	pointwiseKernelShape := shapes.Make(dtype, pointwiseKernelShapeSlice...) // Corrected
-
+	// Pointwise Convolution
+	pointwiseKernelShape := shapes.Make(dtype, 1, 1, inputChannels, conv.filters) // Shape: [1, 1, 3, 32]
+	fmt.Printf("Pointwise Kernel Shape: %v\n", pointwiseKernelShape.Dimensions)
 	pointwiseKernelVar := ctxInScope.VariableWithShape("pointwise_weights", pointwiseKernelShape)
 	pointwiseKernel := pointwiseKernelVar.ValueGraph(conv.graph)
 
-	output := Convolve(depthwiseOutput, pointwiseKernel).ChannelsAxis(conv.channelsAxisConfig).Done()
+	output := Convolve(depthwiseOutput, pointwiseKernel).
+		ChannelsAxis(conv.channelsAxisConfig).
+		Done()
+	fmt.Printf("Pointwise Output Shape: %v\n", output.Shape().Dimensions)
 
 	// Bias Addition
 	if conv.bias {
