@@ -93,7 +93,7 @@ func CreateDefaultContext() *context.Context {
 		// Triplet
 		losses.ParamTripletLossPairwiseDistanceMetric: "L2",
 		losses.ParamTripletLossMiningStrategy:         "Hard",
-		losses.ParamTripletLossMargin:                 "0.5",
+		losses.ParamTripletLossMargin:                 0.5,
 	})
 	return ctx
 }
