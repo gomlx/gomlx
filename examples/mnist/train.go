@@ -18,16 +18,13 @@ package mnist
 
 import (
 	"fmt"
-	"maps"
 	"os"
-	"slices"
 	"time"
 
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/pkg/errors"
 
 	"github.com/gomlx/gomlx/backends"
-	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/nanlogger"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
@@ -51,41 +48,13 @@ var excludeParams = []string{"data_dir", "train_steps", "num_checkpoints", "plot
 
 type ContextFn func(ctx *context.Context) *context.Context
 
-var Models = map[string]train.ModelFn{
-	"linear": LinearModelGraph,
-	"cnn":    CnnModelGraph,
-}
-
-var Losses = map[string]losses.LossFn{
-	"cross-entropy": losses.SparseCategoricalCrossEntropyLogits,
-
-	"triplet": func(labels, predictions []*Node) (loss *Node) {
-		return losses.TripletLoss(labels, predictions, losses.TripletMiningStrategyAll, 1.0, losses.PairwiseDistanceMetricL2)
-	},
-	"triplet softmax": func(labels, predictions []*Node) (loss *Node) {
-		return losses.TripletLoss(labels, predictions, losses.TripletMiningStrategyAll, -1.0, losses.PairwiseDistanceMetricL2)
-	},
-	"triplet softmax with cosine distance": func(labels, predictions []*Node) (loss *Node) {
-		return losses.TripletLoss(labels, predictions, losses.TripletMiningStrategyAll, -1.0, losses.PairwiseDistanceMetricCosine)
-	},
-	"hard triple softmax": func(labels, predictions []*Node) (loss *Node) {
-		return losses.TripletLoss(labels, predictions, losses.TripletMiningStrategyHard, -1.0, losses.PairwiseDistanceMetricL2)
-	},
-	"semi-hard triplet softmax": func(labels, predictions []*Node) (loss *Node) {
-		return losses.TripletLoss(labels, predictions, losses.TripletMiningStrategySemiHard, -1.0, losses.PairwiseDistanceMetricL2)
-	},
-	"semi-hard triplet softmax with cosine distance": func(labels, predictions []*Node) (loss *Node) {
-		return losses.TripletLoss(labels, predictions, losses.TripletMiningStrategySemiHard, -1.0, losses.PairwiseDistanceMetricCosine)
-	},
-}
-
 func CreateDefaultContext() *context.Context {
 	ctx := context.New()
 	ctx.RngStateReset()
 	ctx.SetParams(map[string]any{
 		// Model type to use
 		"model":           "linear",
-		"loss":            "cross-entropy",
+		"loss":            "sparse_cross_logits",
 		"num_checkpoints": 3,
 		"train_steps":     4000,
 
@@ -120,6 +89,11 @@ func CreateDefaultContext() *context.Context {
 		// CNN
 		"cnn_dropout_rate":  0.5,
 		"cnn_normalization": "layer", // "layer" or "batch".
+
+		// Triplet
+		losses.ParamTripletLossPairwiseDistanceMetric: "L2",
+		losses.ParamTripletLossMiningStrategy:         "Hard",
+		losses.ParamTripletLossMargin:                 "0.5",
 	})
 	return ctx
 }
@@ -146,22 +120,26 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 	}
 
 	modelType := context.GetParamOr(ctx, "model", "")
-	modelFn, ok := Models[modelType]
-	if !ok {
-		return errors.Errorf("Can't find modelType %q, available models: %q\n", modelType, slices.Collect(maps.Keys(Models)))
+	var modelFn train.ModelFn
+	switch modelType {
+	case "linear":
+		modelFn = LinearModelGraph
+	case "cnn":
+		modelFn = CnnModelGraph
+
+	default:
+		return errors.Errorf("Can't find model %q, available models: %q\n", modelType, []string{"linear", "cnn"})
 	}
+
 	fmt.Printf("Training %s model:\n", modelType)
 	backend := backends.New()
 
-	loss := context.GetParamOr(ctx, "loss", "")
-	lossFn, ok := Losses[loss]
-	if !ok {
-		fmt.Printf("can't find loss %s, using cross-entropy", loss)
-		lossFn = Losses["cross-entropy"]
+	lossFn, err := losses.LossFromContext(ctx)
+	if err != nil {
+		return err
 	}
 
-	err := Download(dataDir)
-	if err != nil {
+	if err := Download(dataDir); err != nil {
 		return err
 	}
 
@@ -254,7 +232,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 	// Finally, print an evaluation on train and test datasets.
 	fmt.Println()
 	if err = commandline.ReportEval(trainer, trainEvalDS, validationEvalDS); err != nil {
-		return errors.WithMessage(err, "while generating report with evaluation of trained modelType")
+		return errors.WithMessagef(err, "while generating report with evaluation of trained %s", modelType)
 	}
 	fmt.Println()
 	return nil

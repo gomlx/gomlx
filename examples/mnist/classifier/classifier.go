@@ -1,4 +1,4 @@
-// Package classifier is a Cifar-10 classifier.
+// Package classifier is a MNIST classifier.
 // It loads a pre-trained model and offers a Classify method that will classify any image,
 // by first resizing it to the model's input size.
 //
@@ -16,6 +16,7 @@ import (
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
+	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/types/tensors/images"
 	"github.com/gomlx/gopjrt/dtypes"
@@ -54,9 +55,15 @@ func New(checkpointDir string) (*Classifier, error) {
 	c.ctx = c.ctx.Reuse() // Mark it to reuse variables: it will be an error to create a new variable -- for extra sanity checking.
 
 	modelType := context.GetParamOr(c.ctx, "model", "")
-	modelFn, ok := mnist.Models[modelType]
-	if !ok {
-		return nil, errors.WithMessagef(err, "cannot build model from checkpoint %q, invalid model type %s", checkpointDir, modelType)
+	var modelFn train.ModelFn
+	switch modelType {
+	case "linear":
+		modelFn = mnist.LinearModelGraph
+	case "cnn":
+		modelFn = mnist.CnnModelGraph
+
+	default:
+		return nil, errors.Errorf("Can't find model %q, available models: %q\n", modelType, []string{"linear", "cnn"})
 	}
 
 	// Create model executor.

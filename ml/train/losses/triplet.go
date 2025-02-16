@@ -272,7 +272,7 @@ func TripletLoss(labels, predictions []*Node,
 		loss = AddScalar(loss, margin)
 		loss = MaxScalar(loss, 0.0)
 	} else {
-		loss = Log1P(Exp(loss))
+		loss = Softplus(loss)
 	}
 
 	// Apply weights and mask.

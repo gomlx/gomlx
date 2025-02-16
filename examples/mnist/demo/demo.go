@@ -31,6 +31,8 @@ import (
 	_ "github.com/gomlx/gomlx/backends/xla"
 )
 
+// Example usage:  go run demo.go -train -checkpoint=cnn -set="model=cnn;loss=triplet;triplet_loss_mining_strategy=hard;triplet_loss_margin=0.1" 
+
 var (
 	flagTrain      = flag.Bool("train", true, "Flag to train")
 	flagDownload   = flag.Bool("download", false, "Flag to download")

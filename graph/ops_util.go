@@ -190,6 +190,14 @@ func PositiveIndicator(x *Node) *Node {
 	return Sign(Add(Sign(x), one))
 }
 
+// NegativeIndicator returns 1 where x <= 0, 0 otherwise. See also StrictlyNegativeIndicatorIndicator.
+// E.g: NegativeIndicator({1.0, 0.0001, 0, -0.2, -3.0}) -> [0, 0, 1, 1, 1], with the same shape/dtype as x.
+func NegativeIndicator(x *Node) *Node {
+	g := validateBuildingGraphFromInputs(x)
+	one := ScalarOne(g, x.DType())
+	return Sign(Sub(Sign(x), one))
+}
+
 // MirroredLog1p is similar to Log1p, but it is mirrored to negative numbers.
 // It return Log(Abs(x)+1)*Sign(x).
 func MirroredLog1p(x *Node) *Node {
@@ -202,6 +210,14 @@ func StrictlyPositiveIndicator(x *Node) *Node {
 	g := validateBuildingGraphFromInputs(x)
 	one := ScalarOne(g, x.DType())
 	return Add(Sign(Sub(Sign(x), one)), one)
+}
+
+// StrictlyNegativeIndicator returns 1 where x < 0, 0 otherwise.
+// E.g: StrictlyNegativeIndicator({1.0, 0.0001, 0, -0.2, -3.0}) -> [0, 0, 0, 1, 1], with the same shape/dtype as x.
+func StrictlyNegativeIndicator(x *Node) *Node {
+	g := validateBuildingGraphFromInputs(x)
+	one := ScalarOne(g, x.DType())
+	return Sub(Sign(Add(Sign(x), one)), one)
 }
 
 // Clip is a shortcut to `Min(max, Max(x, min))`, which returns the values of x clipped between
@@ -407,6 +423,29 @@ func MaskedLogSoftmax(logits, mask *Node, axes ...int) *Node {
 	shiftedLogits := Sub(logits, normalizingMax)
 	shiftedLogSumExp := Log(MaskedReduceAndKeep(Exp(shiftedLogits), mask, MaskedReduceSum, adjustedAxes...))
 	return Where(mask, Sub(shiftedLogits, shiftedLogSumExp), Infinity(g, dtype, -1))
+}
+
+// Softplus activation function  $[\log\(1+\exp(x))$
+// Equivalent of Log1P(Exp(x))
+// But implemented in a numerical stable way.
+func Softplus(x *Node) *Node {
+	return LogAddExp(x, ZerosLike(x))
+}
+
+// LogAddExp Logarithm of the sum of exponentiations of the inputs.
+// Calculates log(exp(x1) + exp(x2)). This function is useful in statistics where the calculated probabilities of events may
+// be so small as to exceed the range of normal floating point numbers. In such cases the logarithm of the calculated probability is stored.
+// This function allows adding probabilities stored in such a fashion.
+func LogAddExp(x, y *Node) *Node {
+	xShape := x.Shape()
+	yShape := y.Shape()
+	xShape.Assert(yShape.DType, yShape.Dimensions...)
+
+	max := Max(x, y)
+	delta := Sub(x, y)
+	return Where(IsFinite(delta),
+		Add(max, Log1p(Exp(Neg(Abs(delta))))),
+		Add(x, y))
 }
 
 // L1Norm returns the L1 norm (same as Manhattan length) of the last axis of x.
@@ -838,7 +877,7 @@ func ConsecutiveDifference(x *Node, axis int, preserveShape bool) *Node {
 		kernel = Reshape(kernel, kernelDims...)
 
 		output := Convolve(expandedX, kernel).
-			NoPadding(). // Default padding.
+			NoPadding().             // Default padding.
 			PaddingPerDim(paddings). // Only has an effect if paddings != nil.
 			Strides(1).
 			Done()
