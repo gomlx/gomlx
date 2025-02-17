@@ -7,6 +7,10 @@
 * Package `checkpoints`:
   * Loading a checkpoint overwrites the values of variables already present in the context.
   * Fixes when saving, in particular if using `Immediate()` loading.
+* Package `graph`:
+  * Fixed when using axes != -1 for `L1Norm`.
+  * Added `IsZero` shortcut.
+  * Fixed `L2Normalize` to handle 0s without NaN, both in the forward evaluation, and in the gradient. 
 
 # v0.17.0: bitwise ops, triplet losses, new layers, fixes, and more.
 

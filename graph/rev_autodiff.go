@@ -210,7 +210,7 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 				// Skip this vjp, input is assumed to be static (or gradient stopped for some other reason)
 				continue
 			}
-			//fmt.Printf("\t\tSetting vjp for %s: %s\n", input, vjp)
+			//vjp.SetLoggedf("\tVJP for %s / input #%d VJP --> to be backprop to %s", node, ii, input)
 			combinedShape := combineOutputShape(outputShape, input.Shape())
 			if !vjp.Shape().Equal(combinedShape) {
 				if node.Trace() != nil {

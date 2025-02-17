@@ -29,6 +29,23 @@ func TestScalar(t *testing.T) {
 		}, -1)
 }
 
+func TestIsZero(t *testing.T) {
+	graphtest.RunTestGraphFn(t, t.Name(),
+		func(g *Graph) (inputs, outputs []*Node) {
+			inputs = []*Node{
+				Const(g, []uint8{3, 5, 0, 2}),
+				Const(g, []float32{-2.2, 1e-10, 3.1, 0, -1e-10}),
+				Const(g, []complex64{1e-10, 0, -1e-10i}),
+			}
+			outputs = xslices.Map(inputs, func(x *Node) *Node { return IsZero(x) })
+			return
+		}, []any{
+			[]bool{false, false, true, false},
+			[]bool{false, false, false, true, false},
+			[]bool{false, true, false},
+		}, -1)
+}
+
 func TestEinsum(t *testing.T) {
 	graphtest.RunTestGraphFn(t, "EinsumMatrixMul",
 		func(g *Graph) (inputs, outputs []*Node) {
@@ -569,4 +586,23 @@ func TestReduceSkewness(t *testing.T) {
 			float32(0.0),
 			float32(0.2650554122698573),
 		}, 0.001)
+}
+
+func TestL2Normalize(t *testing.T) {
+	graphtest.RunTestGraphFn(t, t.Name(),
+		func(g *Graph) (inputs, outputs []*Node) {
+			inputs = []*Node{
+				Const(g, [][]float32{{3, 4}, {0, 0}}),
+			}
+			normalized := L2Normalize(inputs[0], -1)
+			grad := Gradient(ReduceAllSum(normalized), inputs[0])[0]
+			outputs = []*Node{
+				normalized,
+				grad,
+			}
+			return
+		}, []any{
+			[][]float32{{0.6, 0.8}, {0, 0}},
+			[][]float32{{0.032, -0.024}, {1, 1}},
+		}, 1e-3)
 }

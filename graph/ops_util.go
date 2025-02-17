@@ -46,6 +46,12 @@ func ScalarZero(g *Graph, dtype dtypes.DType) *Node {
 	return Scalar(g, dtype, 0)
 }
 
+// IsZero returns a Bool tensor that is true where x is zero, and false otherwise.
+// A shortcut to Equal(x, ScalarZero(x.Graph(), x.DType())).
+func IsZero(x *Node) *Node {
+	return Equal(x, ScalarZero(x.Graph(), x.DType()))
+}
+
 // ScalarOne returns a scalar constant 1 for the given DType.
 func ScalarOne(g *Graph, dtype dtypes.DType) *Node {
 	return Scalar(g, dtype, 1)
@@ -418,7 +424,7 @@ func L1Norm(x *Node, reduceAxes ...int) *Node {
 	if len(reduceAxes) == 0 {
 		return ReduceAllSum(Abs(x))
 	}
-	return ReduceAndKeep(Abs(x), ReduceSum, -1)
+	return ReduceAndKeep(Abs(x), ReduceSum, reduceAxes...)
 }
 
 // L2NormSquare returns the L2 norm square (same as square of the Euclidean length) over the given axes
@@ -444,13 +450,23 @@ func L2Norm(x *Node, reduceAxes ...int) *Node {
 
 // L2Normalize returns `x/L2Norm(x)` on the given reduce axes, making the last axis a unit-length vector.
 //
-// It will return `inf` for values of x that are zero-length.
+// It will return `inf` for values of x that are near zero-length.
+//
+// For elements that have L2Norm zero, it returns 0 and 1s for the gradients, so no NaNs are generated.
+//
 // See L2NormalizeWithEpsilon for a version that adds an epsilon to the denominator to avoid that.
 func L2Normalize(x *Node, reduceAxis int, moreReduceAxes ...int) *Node {
 	reduceAxes := make([]int, 1, 1+len(moreReduceAxes))
 	reduceAxes[0] = reduceAxis
 	reduceAxes = append(reduceAxes, moreReduceAxes...)
-	return Div(x, L2Norm(x, reduceAxes...))
+
+	// Denominator needs to replace fully zero slices (on the reduceAxes) by 1s, before the `Sqrt`,
+	// to avoid NaNs in the gradient.
+	denominator := L2NormSquare(x, reduceAxes...)
+	one := ScalarOne(x.Graph(), x.DType())
+	denominator = Where(IsZero(denominator), one, denominator)
+	denominator = Sqrt(denominator)
+	return Div(x, denominator)
 }
 
 // L2NormalizeWithEpsilon returns `x/(L2Norm(x)+epsilon)` on the last axis, making the last axis a unit-length vector.
