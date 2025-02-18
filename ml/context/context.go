@@ -19,7 +19,12 @@
 package context
 
 import (
+	"encoding"
 	"fmt"
+	"iter"
+	"reflect"
+	"strings"
+
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/graph"
@@ -27,9 +32,6 @@ import (
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/pkg/errors"
 	"golang.org/x/exp/slices"
-	"iter"
-	"reflect"
-	"strings"
 )
 
 // Context organizes information shared in a model (or anything else). A model can
@@ -392,10 +394,17 @@ func GetParamOr[T any](ctx *Context, key string, defaultValue T) T {
 		return value
 	}
 
-	// Try converting, for instance, a float32 could be converted to float64.
+	// Try T.TextUnmarshaler(valueAny)
 	v := reflect.ValueOf(valueAny)
 	typeOfT := reflect.TypeOf(defaultValue)
-	if !v.CanConvert(typeOfT) {
+	valueT := reflect.New(typeOfT)
+	if valueT.Type().Implements(textUnmarshalerType) && v.Kind() == reflect.String {
+		if err := valueT.Interface().(encoding.TextUnmarshaler).UnmarshalText([]byte(v.String())); err != nil {
+			Panicf("can't UnmarshalText %s to %s", v.String(), typeOfT.String())
+		}
+		return valueT.Elem().Interface().(T)
+	// Try converting, for instance, a float32 could be converted to float64.
+	} else if !v.CanConvert(typeOfT) {
 		Panicf("GetParamOr[%T](ctx, %q, %v): ctx(scope=%q)[%q]=(%T) %#v, and cannot be converted to %T -- "+
 			"Notice that when reloading a context from a checkpoint involves decoding them from Json, and "+
 			"the original type of the param may have been decoded incorrectly causing this error. "+
@@ -408,6 +417,8 @@ func GetParamOr[T any](ctx *Context, key string, defaultValue T) T {
 	}
 	return v.Convert(typeOfT).Interface().(T)
 }
+
+var textUnmarshalerType = reflect.TypeOf((*encoding.TextUnmarshaler)(nil)).Elem()
 
 // SetParam sets the given param in the current scope. It will be visible (by GetParam)
 // within this scope and descendant scopes (but not by other scopes).

@@ -31,12 +31,12 @@ import (
 	_ "github.com/gomlx/gomlx/backends/xla"
 )
 
+// Example usage:  go run demo.go -train -checkpoint=cnn_triplet_hard_01 -set="model=cnn;loss=triplet;triplet_loss_mining_strategy=hard;triplet_loss_margin=0.1"
+
 var (
 	flagTrain      = flag.Bool("train", true, "Flag to train")
 	flagDownload   = flag.Bool("download", false, "Flag to download")
-	flagModel      = flag.String("model", "linear", "Model function")
-	flagLoss       = flag.String("loss", "cross-entropy", "Loss function")
-	flagDataDir    = flag.String("data", "~/tmp/mnist", "Directory to cache downloaded dataset.")
+	flagDataDir    = flag.String("data", "~/work/mnist", "Directory to cache downloaded dataset.")
 	flagCheckpoint = flag.String("checkpoint", "", "Checkpoint directory from/to where to load/save the trained model. Path is relative to --data.")
 )
 
@@ -51,7 +51,7 @@ func main() {
 		klog.Infof("Data downloaded in %s", *flagDataDir)
 	}
 	if *flagTrain {
-		must.M(mnist.TrainModel(ctx, *flagDataDir, *flagCheckpoint, *flagModel, *flagLoss, paramsSet))
+		must.M(mnist.TrainModel(ctx, *flagDataDir, *flagCheckpoint, paramsSet))
 	}
 	if !*flagDownload && !*flagTrain {
 		klog.Info("exit: usage -download and/or -train, optional -data")

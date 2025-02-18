@@ -23,6 +23,7 @@ package layers
 
 import (
 	"fmt"
+
 	. "github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
@@ -250,8 +251,8 @@ func PieceWiseLinearCalibration(ctx *context.Context, input, keypoints *Node, ou
 	//
 	zero := ScalarZero(g, dtype)
 	one := ScalarOne(g, dtype)
-	trimLeft := PositiveIndicator(Sub(input2D, kpStarts))
-	trimRight := StrictlyPositiveIndicator(Sub(kpEnds, input2D))
+	trimLeft := NonNegativeIndicator(Sub(input2D, kpStarts))
+	trimRight := PositiveIndicator(Sub(kpEnds, input2D))
 	trimRegions := Mul(trimLeft, trimRight)
 
 	// Calculate "left" weights on each keypoint: left weight is the weight
@@ -266,11 +267,11 @@ func PieceWiseLinearCalibration(ctx *context.Context, input, keypoints *Node, ou
 	// on the edge keypoints.
 	//leftEdge := InsertAxes(SliceLists(keypoints, []int{0}, []int{1}), 0)
 	leftEdge := InsertAxes(Slice(keypoints, AxisRangeFromStart(1)), 0)
-	leftEdge = PositiveIndicator(Sub(leftEdge, input2D))
+	leftEdge = NonNegativeIndicator(Sub(leftEdge, input2D))
 	leftWeights = Concatenate([]*Node{leftEdge, leftWeights}, -1)
 
 	rightEdge := InsertAxes(Slice(keypoints, AxisRangeToEnd(-1)), 0)
-	rightEdge = PositiveIndicator(Sub(input2D, rightEdge))
+	rightEdge = NonNegativeIndicator(Sub(input2D, rightEdge))
 	rightWeights = Concatenate([]*Node{rightWeights, rightEdge}, -1)
 
 	weights := Add(leftWeights, rightWeights)
