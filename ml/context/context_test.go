@@ -18,6 +18,8 @@ package context_test
 
 import (
 	"fmt"
+	"testing"
+
 	"github.com/gomlx/gomlx/graph/graphtest"
 	. "github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"
@@ -27,7 +29,6 @@ import (
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"testing"
 
 	_ "github.com/gomlx/gomlx/backends/xla"
 )
@@ -87,10 +88,30 @@ func TestContextVariablesInitialization(t *testing.T) {
 	}
 	t1 := v1.Value().Value().([]float64)
 	if t1[0] == 0 || t1[1] == 0 {
-		t.Errorf("Expected RandomNormalFn initialization to be random, got %v intead", t1)
+		t.Errorf("Expected RandomNormalFn initialization to be random, got %v instead", t1)
 	}
 	t2 := v2.Value().Value().([][]int64)
 	require.Equalf(t, [][]int64{{0}, {0}, {0}}, t2, "Expected Zeros initialization to yield zeros, got %v instead", t2)
+}
+
+// Iota type parameter using Enumer
+type ParamType uint
+
+const (
+	ParamTypeA ParamType = iota
+	ParamTypeB
+)
+
+func (i *ParamType) UnmarshalText(text []byte) error {
+	switch string(text) {
+	case "a", "type A", "type a":
+		*i = ParamTypeA
+	case "b", "type B", "type b":
+		*i = ParamTypeB
+	default:
+		return fmt.Errorf(" type %s don't exist", string(text))
+	}
+	return nil
 }
 
 func TestParams(t *testing.T) {
@@ -109,6 +130,14 @@ func TestParams(t *testing.T) {
 
 	// Wrong type should panic.
 	assert.Panics(t, func() { _ = GetParamOr(ctx, "x", "string value") })
+
+	// String type parameter
+	ctx.SetParam("a", "type A")
+	assert.Equal(t, "type A", GetParamOr(ctx, "a", "type A"))
+
+	// Iota type parameter using Enumer
+	ctx.SetParam("param_type", ParamTypeA)
+	assert.Equal(t, ParamTypeA, GetParamOr(ctx, "param_type", ParamTypeA))
 
 	// Check correct search to root node.
 	ctx.SetParam("y", 11.0)

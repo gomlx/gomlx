@@ -18,6 +18,10 @@ package graph_test
 
 import (
 	"fmt"
+	"math"
+	"reflect"
+	"testing"
+
 	"github.com/gomlx/gomlx/backends"
 	_ "github.com/gomlx/gomlx/backends/xla" // Make sure xla backend is linked.
 	. "github.com/gomlx/gomlx/graph"
@@ -28,9 +32,6 @@ import (
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"math"
-	"reflect"
-	"testing"
 )
 
 var (
@@ -831,22 +832,40 @@ func TestStack(t *testing.T) {
 		}, -1)
 }
 
+func TestNonNegativeIndicator(t *testing.T) {
+	testFuncOneInput(t, "NonNegativeIndicator",
+		func(g *Graph) (input, output *Node) {
+			input = Const(g, []float64{1.0, 0.0001, 0, -0.2, -3.0})
+			output = NonNegativeIndicator(input)
+			return
+		}, []float64{1, 1, 1, 0, 0})
+}
+
 func TestPositiveIndicator(t *testing.T) {
 	testFuncOneInput(t, "PositiveIndicator",
 		func(g *Graph) (input, output *Node) {
 			input = Const(g, []float64{1.0, 0.0001, 0, -0.2, -3.0})
 			output = PositiveIndicator(input)
 			return
-		}, []float64{1, 1, 1, 0, 0})
+		}, []float64{1, 1, 0, 0, 0})
 }
 
-func TestStrictlyPositiveIndicator(t *testing.T) {
-	testFuncOneInput(t, "StrictlyPositiveIndicator",
+func TestNonPositiveIndicator(t *testing.T) {
+	testFuncOneInput(t, "NonPositiveIndicator",
 		func(g *Graph) (input, output *Node) {
 			input = Const(g, []float64{1.0, 0.0001, 0, -0.2, -3.0})
-			output = StrictlyPositiveIndicator(input)
+			output = NonPositiveIndicator(input)
 			return
-		}, []float64{1, 1, 0, 0, 0})
+		}, []float64{0, 0, 1, 1, 1})
+}
+
+func TestNegativeIndicator(t *testing.T) {
+	testFuncOneInput(t, "NegativeIndicator",
+		func(g *Graph) (input, output *Node) {
+			input = Const(g, []float64{1.0, 0.0001, 0, -0.2, -3.0})
+			output = NegativeIndicator(input)
+			return
+		}, []float64{0, 0, 0, 1, 1})
 }
 
 func TestReduceAndKeep(t *testing.T) {

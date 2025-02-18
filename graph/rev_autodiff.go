@@ -18,12 +18,13 @@ package graph
 
 import (
 	"fmt"
+	"math"
+	"os"
+
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/pkg/errors"
-	"math"
-	"os"
 )
 
 // This file implements reverse-mode automatic differentiation, using AccumulatedVJP (Vector Jacobian Product).
@@ -397,6 +398,7 @@ var VJPRegistration = map[NodeType]VJP{
 	NodeTypeReshape:            vjpForSingleOutput(reshapeVJP),
 	NodeTypeReduceSum:          vjpForSingleOutput(reduceSumVJP),
 	NodeTypeReduceMax:          vjpForSingleOutput(reduceMaxVJP),
+	NodeTypeReduceMin:          vjpForSingleOutput(reduceMinVJP),
 	NodeTypeLogistic:           vjpForSingleOutput(logisticVJP),
 	NodeTypeDot:                vjpForSingleOutput(dotVJP),
 	NodeTypeDotGeneral:         vjpForSingleOutput(dotGeneralVJP),
@@ -655,9 +657,9 @@ func powVJP(node, v *Node, _ shapes.Shape) []*Node {
 
 func minMaxVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// We push the adjoint gradient to one side or the other, depending on which is the max.
-	// Notice because PositiveIndicator(0) == 1, the gradient of Max(x, y) w.r.t. x, where x == y will be 1.0
+	// Notice because NonNegativeIndicator(0) == 1, the gradient of Max(x, y) w.r.t. x, where x == y will be 1.0
 	// (as opposed to 0).
-	side0Indicator := PositiveIndicator(Sub(node.inputNodes[0], node.inputNodes[1]))
+	side0Indicator := NonNegativeIndicator(Sub(node.inputNodes[0], node.inputNodes[1]))
 	side1Indicator := OneMinus(side0Indicator)
 	if node.Type() == NodeTypeMin {
 		// If min, swap directions.
@@ -710,7 +712,7 @@ func reduceMaxVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// Expand the node output (with max) to match the input. And then creates
 	// an indicator to which positions are at the max values.
 	maxAtOriginalRank := ReshapeWithShape(node, newShape)
-	maxIndicatorAtInput := PositiveIndicator(Sub(x, maxAtOriginalRank))
+	maxIndicatorAtInput := NonNegativeIndicator(Sub(x, maxAtOriginalRank))
 
 	// Expand rank of v to match the input, by re-creating
 	// the reduced dimensions with size 1 and then broadcasting.
@@ -719,6 +721,36 @@ func reduceMaxVJP(node, v *Node, _ shapes.Shape) []*Node {
 
 	// vjp is only propagated to the elements at the max value.
 	vjp := Mul(expandedV, maxIndicatorAtInput)
+	return []*Node{vjp}
+}
+
+func reduceMinVJP(node, v *Node, _ shapes.Shape) []*Node {
+	// Reconstruct exactly the reduced dimensions, and build a newShape
+	// (same shape as if we had done ReduceAndKeep(input[0]))
+	params := node.inputs.(*nodeInputsReduceMin)
+	x := params.x
+	reducedDims := params.axes
+	if len(reducedDims) == 0 {
+		// Reduced all dims, reconstruct those.
+		reducedDims = xslices.Iota(0, x.Rank())
+	}
+	newShape := x.Shape().Clone()
+	for _, dim := range reducedDims {
+		newShape.Dimensions[dim] = 1
+	}
+
+	// Expand the node output (with min) to match the input. And then creates
+	// an indicator to which positions are at the min values.
+	minAtOriginalRank := ReshapeWithShape(node, newShape)
+	minIndicatorAtInput := NonPositiveIndicator(Sub(x, minAtOriginalRank))
+
+	// Expand rank of v to match the input, by re-creating
+	// the reduced dimensions with size 1 and then broadcasting.
+	expandedV := ReshapeWithShape(v, newShape)
+	expandedV = BroadcastToShape(expandedV, x.Shape())
+
+	// vjp is only propagated to the elements at the min value.
+	vjp := Mul(expandedV, minIndicatorAtInput)
 	return []*Node{vjp}
 }
 

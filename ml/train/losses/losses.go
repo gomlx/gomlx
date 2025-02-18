@@ -99,6 +99,18 @@ const (
 
 	// TypeBinCrossLogits represents BinaryCrossentropyLogits.
 	TypeBinCrossLogits
+
+	// TypeSparseCross represents CategoricalCrossEntropy.
+	TypeCategoricalCross
+
+	// TypeBinCrossLogits represents CategoricalCrossEntropyLogits.
+	TypeCategoricalCrossLogits
+
+	// TypeSparseCrossLogits represents SparseCategoricalCrossEntropyLogits
+	TypeSparseCrossLogits
+
+	// TypeTriplet
+	TypeTriplet
 )
 
 // LossFromContext takes the value from the ParamLoss hyperparameter as a string and
@@ -128,6 +140,14 @@ func LossFromContext(ctx *context.Context) (LossFn, error) {
 		return BinaryCrossentropy, nil
 	case TypeBinCrossLogits:
 		return BinaryCrossentropyLogits, nil
+	case TypeCategoricalCross:
+		return CategoricalCrossEntropy, nil
+	case TypeCategoricalCrossLogits:
+		return CategoricalCrossEntropyLogits, nil
+	case TypeSparseCrossLogits:
+		return SparseCategoricalCrossEntropyLogits, nil
+	case TypeTriplet:
+		return MakeTripletLossFromContext(ctx), nil
 	default:
 		return nil, errors.Errorf("Unknown loss type %q set for hyperparameter %q, known losses are \"%s\"",
 			lossType, ParamLoss, strings.Join(TypeStrings(), "\", \""))

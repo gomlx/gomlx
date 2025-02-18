@@ -47,6 +47,7 @@ const (
 	TestLabelsFilename  = "t10k-labels-idx1-ubyte.gz"
 	Width               = 28
 	Height              = 28
+	Depth               = 3
 	NumClasses          = 10
 	TrainExamples       = 60000
 	TestExamples        = 10000
