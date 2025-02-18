@@ -156,6 +156,7 @@ func GetAvailablePlugins() []string {
 
 	availablePluginsMap := pjrt.AvailablePlugins()
 	pluginNames := types.SetWith(xslices.Keys(availablePluginsMap)...)
+	klog.V(1).Infof("Available plugins: %v\n", pluginNames)
 	availablePluginsList = make([]string, 0, len(pluginNames))
 
 	// Add DefaultPlugins first.
