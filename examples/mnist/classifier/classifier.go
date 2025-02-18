@@ -1,4 +1,4 @@
-// Package classifier is a MNIST classifier.
+// Package classifier is a MNIST-based digit classifier.
 // It loads a pre-trained model and offers a Classify method that will classify any image,
 // by first resizing it to the model's input size.
 //

@@ -44,6 +44,8 @@ import (
 	"github.com/janpfeifer/must"
 )
 
+var ModelList = []string{"linear", "cnn"}
+
 var excludeParams = []string{"data_dir", "train_steps", "num_checkpoints", "plots"}
 
 type ContextFn func(ctx *context.Context) *context.Context
@@ -128,7 +130,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 		modelFn = CnnModelGraph
 
 	default:
-		return errors.Errorf("Can't find model %q, available models: %q\n", modelType, []string{"linear", "cnn"})
+		return errors.Errorf("Can't find model %q, available models: %q\n", modelType, ModelList)
 	}
 
 	fmt.Printf("Training %s model:\n", modelType)

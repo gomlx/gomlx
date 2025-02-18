@@ -182,42 +182,42 @@ func SignPlusOrMinus(x *Node) *Node {
 	return Sign(Add(Sign(x), half))
 }
 
-// PositiveIndicator returns 1 where x >= 0, 0 otherwise. See also StrictlyPositiveIndicator.
-// E.g: PositiveIndicator({1.0, 0.0001, 0, -0.2, -3.0}) -> [1, 1, 1, 0, 0], with the same shape/dtype as x.
-func PositiveIndicator(x *Node) *Node {
+// NonNegativeIndicator  returns 1 where x >= 0, 0 otherwise. See also PositiveIndicator.
+// E.g: NonNegativeIndicator ({1.0, 0.0001, 0, -0.2, -3.0}) -> [1, 1, 1, 0, 0], with the same shape/dtype as x.
+func NonNegativeIndicator(x *Node) *Node {
 	g := validateBuildingGraphFromInputs(x)
 	one := ScalarOne(g, x.DType())
 	return Sign(Add(Sign(x), one))
 }
 
-// NegativeIndicator returns 1 where x <= 0, 0 otherwise. See also StrictlyNegativeIndicatorIndicator.
-// E.g: NegativeIndicator({1.0, 0.0001, 0, -0.2, -3.0}) -> [0, 0, 1, 1, 1], with the same shape/dtype as x.
+// NonPositiveIndicator  returns 1 where x <= 0, 0 otherwise. See also NegativeIndicator.
+// E.g: NonPositiveIndicator ({1.0, 0.0001, 0, -0.2, -3.0}) -> [0, 0, 1, 1, 1], with the same shape/dtype as x.
+func NonPositiveIndicator(x *Node) *Node {
+	g := validateBuildingGraphFromInputs(x)
+	one := ScalarOne(g, x.DType())
+	return Sign(Sub(one, Sign(x)))
+}
+
+// PositiveIndicator returns 1 where x > 0, 0 otherwise.
+// E.g: PositiveIndicator({1.0, 0.0001, 0, -0.2, -3.0}) -> [1, 1, 0, 0, 0], with the same shape/dtype as x.
+func PositiveIndicator(x *Node) *Node {
+	g := validateBuildingGraphFromInputs(x)
+	one := ScalarOne(g, x.DType())
+	return Add(Sign(Sub(Sign(x), one)), one)
+}
+
+// NegativeIndicator returns 1 where x < 0, 0 otherwise.
+// E.g: NegativeIndicator({1.0, 0.0001, 0, -0.2, -3.0}) -> [0, 0, 0, 1, 1], with the same shape/dtype as x.
 func NegativeIndicator(x *Node) *Node {
 	g := validateBuildingGraphFromInputs(x)
 	one := ScalarOne(g, x.DType())
-	return Sign(Sub(Sign(x), one))
+	return Sub(one, Sign(Add(Sign(x), one)))
 }
 
 // MirroredLog1p is similar to Log1p, but it is mirrored to negative numbers.
 // It return Log(Abs(x)+1)*Sign(x).
 func MirroredLog1p(x *Node) *Node {
 	return Mul(Log1p(Abs(x)), Sign(x))
-}
-
-// StrictlyPositiveIndicator returns 1 where x > 0, 0 otherwise.
-// E.g: StrictlyPositiveIndicator({1.0, 0.0001, 0, -0.2, -3.0}) -> [1, 1, 0, 0, 0], with the same shape/dtype as x.
-func StrictlyPositiveIndicator(x *Node) *Node {
-	g := validateBuildingGraphFromInputs(x)
-	one := ScalarOne(g, x.DType())
-	return Add(Sign(Sub(Sign(x), one)), one)
-}
-
-// StrictlyNegativeIndicator returns 1 where x < 0, 0 otherwise.
-// E.g: StrictlyNegativeIndicator({1.0, 0.0001, 0, -0.2, -3.0}) -> [0, 0, 0, 1, 1], with the same shape/dtype as x.
-func StrictlyNegativeIndicator(x *Node) *Node {
-	g := validateBuildingGraphFromInputs(x)
-	one := ScalarOne(g, x.DType())
-	return Sub(Sign(Add(Sign(x), one)), one)
 }
 
 // Clip is a shortcut to `Min(max, Max(x, min))`, which returns the values of x clipped between
@@ -441,10 +441,15 @@ func LogAddExp(x, y *Node) *Node {
 	yShape := y.Shape()
 	xShape.Assert(yShape.DType, yShape.Dimensions...)
 
+	g := x.Graph()
+	dtype := x.DType()
+
 	max := Max(x, y)
 	delta := Sub(x, y)
-	return Where(IsFinite(delta),
-		Add(max, Log1p(Exp(Neg(Abs(delta))))),
+	deltaFiniteMask := IsFinite(delta)
+	safeDelta := Where(deltaFiniteMask, delta, ScalarZero(g, dtype))
+	return Where(deltaFiniteMask,
+		Add(max, Log1p(Exp(Neg(Abs(safeDelta))))),
 		Add(x, y))
 }
 

@@ -19,6 +19,7 @@ package metrics
 
 import (
 	"fmt"
+
 	. "github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
@@ -319,7 +320,7 @@ func BinaryAccuracyGraph(_ *context.Context, labels, predictions []*Node) *Node 
 	// Accuracy is true if diff < 0.5. Notice this will take predictions of 0.5 to be false independent of label
 	// (assuming labels are 1 or 0).
 	dtype := prediction.DType()
-	correctExamples := OneMinus(PositiveIndicator(Sub(diff, Const(g, shapes.CastAsDType(0.5, dtype)))))
+	correctExamples := OneMinus(NonNegativeIndicator(Sub(diff, Const(g, shapes.CastAsDType(0.5, dtype)))))
 	countExamples := Const(g, shapes.CastAsDType(correctExamples.Shape().Size(), correctExamples.DType()))
 	return Div(ReduceAllSum(correctExamples), countExamples)
 }
@@ -371,8 +372,8 @@ func BinaryLogitsAccuracyGraph(_ *context.Context, labels, logits []*Node) *Node
 	}
 
 	dtype := logits0.DType()
-	labels0 = Sub(labels0, Const(g, shapes.CastAsDType(0.5, dtype)))    // Labels: -0.5 for false, +0.5 for true.
-	correctExamples := StrictlyPositiveIndicator(Mul(logits0, labels0)) // 0s are considered a miss.
+	labels0 = Sub(labels0, Const(g, shapes.CastAsDType(0.5, dtype))) // Labels: -0.5 for false, +0.5 for true.
+	correctExamples := PositiveIndicator(Mul(logits0, labels0))      // 0s are considered a miss.
 	countExamples := Const(g, shapes.CastAsDType(correctExamples.Shape().Size(), correctExamples.DType()))
 	mean := Div(ReduceAllSum(correctExamples), countExamples)
 	return mean

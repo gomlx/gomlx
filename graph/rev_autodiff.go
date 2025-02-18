@@ -657,9 +657,9 @@ func powVJP(node, v *Node, _ shapes.Shape) []*Node {
 
 func minMaxVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// We push the adjoint gradient to one side or the other, depending on which is the max.
-	// Notice because PositiveIndicator(0) == 1, the gradient of Max(x, y) w.r.t. x, where x == y will be 1.0
+	// Notice because NonNegativeIndicator(0) == 1, the gradient of Max(x, y) w.r.t. x, where x == y will be 1.0
 	// (as opposed to 0).
-	side0Indicator := PositiveIndicator(Sub(node.inputNodes[0], node.inputNodes[1]))
+	side0Indicator := NonNegativeIndicator(Sub(node.inputNodes[0], node.inputNodes[1]))
 	side1Indicator := OneMinus(side0Indicator)
 	if node.Type() == NodeTypeMin {
 		// If min, swap directions.
@@ -712,7 +712,7 @@ func reduceMaxVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// Expand the node output (with max) to match the input. And then creates
 	// an indicator to which positions are at the max values.
 	maxAtOriginalRank := ReshapeWithShape(node, newShape)
-	maxIndicatorAtInput := PositiveIndicator(Sub(x, maxAtOriginalRank))
+	maxIndicatorAtInput := NonNegativeIndicator(Sub(x, maxAtOriginalRank))
 
 	// Expand rank of v to match the input, by re-creating
 	// the reduced dimensions with size 1 and then broadcasting.
@@ -742,7 +742,7 @@ func reduceMinVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// Expand the node output (with min) to match the input. And then creates
 	// an indicator to which positions are at the min values.
 	minAtOriginalRank := ReshapeWithShape(node, newShape)
-	minIndicatorAtInput := NegativeIndicator(Sub(x, minAtOriginalRank))
+	minIndicatorAtInput := NonPositiveIndicator(Sub(x, minAtOriginalRank))
 
 	// Expand rank of v to match the input, by re-creating
 	// the reduced dimensions with size 1 and then broadcasting.
