@@ -17,6 +17,8 @@
 package graph
 
 import (
+	"log"
+
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
@@ -76,6 +78,7 @@ func Convolve(x, kernel *Node) *ConvolutionBuilder {
 		batchGroupCount:  1,
 	}
 	conv.numSpatialDims = x.Rank() - 2
+	log.Println("conv.numSpatialDims", conv.numSpatialDims)
 	if conv.numSpatialDims < 0 {
 		Panicf("Input x must have rank >= 3, shaped by default as [batch, <spatial_dimensions...>, channels], "+
 			"but x rank is %d", x.Rank())
@@ -166,6 +169,7 @@ func (conv *ConvolutionBuilder) Strides(strides int) *ConvolutionBuilder {
 // One cannot use strides and dilation at the same time.
 func (conv *ConvolutionBuilder) StridePerDim(strides ...int) *ConvolutionBuilder {
 	if len(strides) != conv.numSpatialDims {
+		log.Println("\nStrides:", strides, "\nLen of strides:", len(strides), "\nConvolutionBuilder:", conv.numSpatialDims)
 		Panicf("received %d strides in StridePerAxis, but x has %d spatial dimensions",
 			len(strides), conv.numSpatialDims)
 	}
