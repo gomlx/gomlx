@@ -1,13 +1,14 @@
 package graph_test
 
 import (
+	"math"
+	"testing"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
-	"math"
-	"testing"
 )
 
 func TestScalar(t *testing.T) {
@@ -605,4 +606,13 @@ func TestL2Normalize(t *testing.T) {
 			[][]float32{{0.6, 0.8}, {0, 0}},
 			[][]float32{{0.032, -0.024}, {1, 1}},
 		}, 1e-3)
+}
+
+func TestCosineSimilarity(t *testing.T) {
+	testGradients(t, "CosineSimilarity", func(g *Graph) (output *Node, nodesForGrad []*Node) {
+		x := Const(g, [][]float32{{0, 0, 0}})
+		y := Const(g, [][]float32{{10, 20, 30}})
+		output = CosineSimilarity(x, y, -1)
+		return output, []*Node{x}
+	}, []any{[][]float32{{0, 0, 0}}})
 }
