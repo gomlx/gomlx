@@ -13,6 +13,7 @@
   * Fixed `L2Normalize` to handle 0s without NaN, both in the forward evaluation, and in the gradient.
   * Renamed indicator functions to `PositiveIndicator`, `NonNegativeIndicator`, `NegativeIndicator` and `NonPositiveIndicator`.
   * Added backprop for `ReduceMin` that was missing (thx @TuSKan)
+  * Added `CosineSimilarity`, numerically safe for 0 vectors.
 * Package `context`:
   * Added support for string derived types for `context.GetParamsOr[T]`.
 

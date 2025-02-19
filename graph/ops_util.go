@@ -898,7 +898,7 @@ func ConsecutiveDifference(x *Node, axis int, preserveShape bool) *Node {
 		kernel = Reshape(kernel, kernelDims...)
 
 		output := Convolve(expandedX, kernel).
-			NoPadding().             // Default padding.
+			NoPadding(). // Default padding.
 			PaddingPerDim(paddings). // Only has an effect if paddings != nil.
 			Strides(1).
 			Done()
@@ -955,7 +955,9 @@ func Skewness(x *Node, axes ...int) *Node {
 }
 
 // CosineSimilarity calculates the cosine similarity between the lhs and rhs nodes along the given axis.
-// Note that passing -1 as axis will calculate the cosine similarity for the last dimension.
+// A typical value for axis is -1, it calculates the cosine similarity for the last dimension.
+//
+// The output will have the same rank, but the axis is contracted to 1, and will hold the similarity.
 func CosineSimilarity(lhs *Node, rhs *Node, axis int) *Node {
 	g := lhs.Graph()
 	dtype := lhs.DType()
@@ -975,8 +977,19 @@ func CosineSimilarity(lhs *Node, rhs *Node, axis int) *Node {
 	lhs = Where(lhsMask, one, lhs)
 	rhs = Where(rhsMask, one, rhs)
 
-	dotProduct := InsertAxes(EinsumAxes(lhs, rhs, [][2]int{{axis, axis}}, nil))
-
+	// Set up contracting axis and the remaining batch axes.
+	adjustedAxis := adjustAxisToRank(axis, lhs.Rank())
+	contractingAxes := [][2]int{{adjustedAxis, adjustedAxis}}
+	batchAxes := make([][2]int, 0, lhs.Rank()-1)
+	for batchAxis := range lhs.Rank() {
+		if batchAxis == adjustedAxis {
+			// This is the contracting axis.
+			continue
+		}
+		batchAxes = append(batchAxes, [2]int{batchAxis, batchAxis})
+	}
+	dotProduct := EinsumAxes(lhs, rhs, contractingAxes, batchAxes)
+	dotProduct = ExpandAxes(dotProduct, adjustedAxis) // Recover the contracted axis, with dimension 1.
 	normalisationDenominator := Mul(L2Norm(lhs, axis), L2Norm(rhs, axis))
 	similarity := Div(dotProduct, normalisationDenominator)
 
