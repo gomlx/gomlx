@@ -953,3 +953,35 @@ func ReduceSkewness(x *Node, axes ...int) *Node {
 func Skewness(x *Node, axes ...int) *Node {
 	return ReduceSkewness(x, axes...)
 }
+
+// CosineSimilarity calculates the cosine similarity between the lhs and rhs nodes along the given axis.
+// Note that passing -1 as axis will calculate the cosine similarity for the last dimension.
+func CosineSimilarity(lhs *Node, rhs *Node, axis int) *Node {
+	g := lhs.Graph()
+	dtype := lhs.DType()
+
+	// Mask for rows that are fully zero, for which cosine similary is not normally defined.
+	lhsAxisZeroMask := ReduceAndKeep(IsZero(lhs), ReduceLogicalAnd, axis)
+	rhsAxisZeroMask := ReduceAndKeep(IsZero(rhs), ReduceLogicalAnd, axis)
+
+	// Recover original shape, by broadcasting the mask where we just reduced.
+	lhsMask := BroadcastToShape(ConvertDType(lhsAxisZeroMask, dtypes.Bool), lhs.Shape())
+	rhsMask := BroadcastToShape(ConvertDType(rhsAxisZeroMask, dtypes.Bool), rhs.Shape())
+
+	// Replace rows with all zeroes (lhsMask/rhsMask) with 1.
+	// Any positive numerical safe number would work, since the final computation for
+	// those rows won't be used, as long as they are not NaNs.
+	one := ScalarOne(g, dtype)
+	lhs = Where(lhsMask, one, lhs)
+	rhs = Where(rhsMask, one, rhs)
+
+	dotProduct := InsertAxes(EinsumAxes(lhs, rhs, [][2]int{{axis, axis}}, nil))
+
+	normalisationDenominator := Mul(L2Norm(lhs, axis), L2Norm(rhs, axis))
+	similarity := Div(dotProduct, normalisationDenominator)
+
+	// Arbitrarily set the similarity of the zero-rows (lhsMask or rhsMask) to zero.
+	zero := ScalarZero(g, dtype)
+	similarity = Where(LogicalOr(lhsAxisZeroMask, rhsAxisZeroMask), zero, similarity)
+	return similarity
+}
