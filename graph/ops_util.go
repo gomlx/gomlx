@@ -17,7 +17,6 @@
 package graph
 
 import (
-	"fmt"
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
@@ -957,6 +956,8 @@ func Skewness(x *Node, axes ...int) *Node {
 
 // CosineSimilarity calculates the cosine similarity between the lhs and rhs nodes along the given axis.
 // A typical value for axis is -1, it calculates the cosine similarity for the last dimension.
+//
+// The output will have the same rank, but the axis is contracted to 1, and will hold the similarity.
 func CosineSimilarity(lhs *Node, rhs *Node, axis int) *Node {
 	g := lhs.Graph()
 	dtype := lhs.DType()
@@ -989,11 +990,8 @@ func CosineSimilarity(lhs *Node, rhs *Node, axis int) *Node {
 	}
 	dotProduct := EinsumAxes(lhs, rhs, contractingAxes, batchAxes)
 	dotProduct = ExpandAxes(dotProduct, adjustedAxis) // Recover the contracted axis, with dimension 1.
-	fmt.Printf("dotProduct: %v\n", dotProduct.Shape())
-
 	normalisationDenominator := Mul(L2Norm(lhs, axis), L2Norm(rhs, axis))
 	similarity := Div(dotProduct, normalisationDenominator)
-	fmt.Printf("similiarity: %v\n", dotProduct.Shape())
 
 	// Arbitrarily set the similarity of the zero-rows (lhsMask or rhsMask) to zero.
 	zero := ScalarZero(g, dtype)
