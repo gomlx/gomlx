@@ -154,6 +154,35 @@ func LossFromContext(ctx *context.Context) (LossFn, error) {
 	}
 }
 
+// CheckExtraLabelsForWeightsAndMask takes the remainder slice of labels tensor (so without the actual labels values),
+// and separates a mask (bool) and weights (float), which can be provided in any order.
+//
+// `weightsShape` is the expected shape for weights (if present) and the dimensions for a mask (if present), although
+// a mask is assumed to be of dtype `Bool`.
+//
+// If weights and masks are present, weights are converted to zero for masked out values (where mask is false).
+//
+// It raises an exception (panic) if there are more or unknown shaped labels.
+//
+// This function are used by loss implementations to help handle mask and weights.
+func CheckExtraLabelsForWeightsAndMask(weightsShape shapes.Shape, labels []*Node) (weights, mask *Node) {
+	maskShape := shapes.Make(dtypes.Bool, weightsShape.Dimensions...)
+	for ii, extra := range labels {
+		if mask == nil && extra.Shape().Equal(maskShape) {
+			mask = extra
+		} else if weights == nil && extra.Shape().Equal(weightsShape) {
+			weights = extra
+		} else {
+			Panicf("extra labels ([]*Node) provided by the dataset to the loss function has extra tensors whose use is unknown: labels[%d].shape=%s "+
+				"-- label weights shape would be %s, labels mask shape would be %s", ii+1, extra.Shape(), weightsShape, maskShape)
+		}
+	}
+	if weights != nil && mask != nil {
+		weights = Where(mask, weights, ZerosLike(weights))
+	}
+	return
+}
+
 // MeanSquaredError returns the mean squared error between labels and predictions.
 //
 // labels and predictions must have the same shape.
@@ -162,8 +191,7 @@ func LossFromContext(ctx *context.Context) (LossFn, error) {
 //
 //   - mask: a boolean mask of shape [batchSize] set to true for values to be used, and false for those to be ignored.
 //     Typically used for padding. The returned mean loss takes in consideration the mask.
-//   - weights: a float value of shape [batchSize] with the relative weights to be applied to each example. Weights
-//     are automatically normalized to sum to one (preserving their ratio), preserving their ratio.
+//   - weights: a float value of shape [batchSize] with the relative weights to be applied to each example.
 func MeanSquaredError(labels, predictions []*Node) (loss *Node) {
 	predictions0 := predictions[0]
 	labels0 := labels[0]
@@ -189,52 +217,6 @@ func MeanSquaredError(labels, predictions []*Node) (loss *Node) {
 	return loss
 }
 
-// CheckExtraLabelsForWeightsAndMask takes the remainder slice of labels tensor (so without the actual labels values),
-// and separates a mask (bool) and weights (float), which can be provided in any order.
-//
-// `weightsShape` is the expected shape for weights (if present) and the dimensions for a mask (if present), although
-// a mask is assumed to be of dtype `Bool`.
-//
-// If weights and masks are present, weights are converted to zero for masked out values (where mask is false).
-//
-// It raises an exception (panic) if there are more or unknown shaped labels.
-//
-// The weights, if given, are normalized such that the sum is (non-masked) bathSize, preserving the ratio. This way the mean will be 1.
-func CheckExtraLabelsForWeightsAndMask(weightsShape shapes.Shape, labels []*Node) (weights, mask *Node) {
-	maskShape := shapes.Make(dtypes.Bool, weightsShape.Dimensions...)
-	for ii, extra := range labels {
-		if mask == nil && extra.Shape().Equal(maskShape) {
-			mask = extra
-		} else if weights == nil && extra.Shape().Equal(weightsShape) {
-			weights = extra
-		} else {
-			Panicf("extra labels ([]*Node) provided by the dataset to the loss function has extra tensors whose use is unknown: labels[%d].shape=%s "+
-				"-- label weights shape would be %s, labels mask shape would be %s", ii+1, extra.Shape(), weightsShape, maskShape)
-		}
-	}
-	if weights == nil {
-		return
-	}
-
-	// Normalize weights.
-	g := weights.Graph()
-	dtype := weights.DType()
-	var batchSize *Node
-	if mask != nil {
-		// Weights set to 0 where mask is disabled.
-		weights = Where(mask, weights, ZerosLike(weights))
-		batchSize = ReduceAllSum(ConvertDType(mask, dtype))
-	} else {
-		batchSize = Scalar(g, dtype, weights.Shape().Dim(0))
-	}
-	weights = MaxScalar(weights, 0)
-	weightsTotal := ReduceAllSum(weights)
-	weightsTotal = Where(IsZero(weightsTotal), ScalarOne(g, dtype), weightsTotal) // Safety: don't allow infinity.
-	weightsRatio := Div(batchSize, weightsTotal)
-	weights = Mul(weights, weightsRatio)
-	return
-}
-
 // MeanAbsoluteError returns the mean absolute error between labels and predictions.
 // It uses only the first element of each. labels and predictions must have the same shape.
 //
@@ -242,8 +224,7 @@ func CheckExtraLabelsForWeightsAndMask(weightsShape shapes.Shape, labels []*Node
 //
 //   - mask: a boolean mask of shape [batchSize] set to true for values to be used, and false for those to be ignored.
 //     Typically used for padding. The returned mean loss takes in consideration the mask.
-//   - weights: a float value of shape [batchSize] with the relative weights to be applied to each example. Weights
-//     are automatically normalized to sum to one (preserving their ratio), preserving their ratio.
+//   - weights: a float value of shape [batchSize] with the relative weights to be applied to each example.
 func MeanAbsoluteError(labels, predictions []*Node) (loss *Node) {
 	predictions0 := predictions[0]
 	labels0 := labels[0]
@@ -280,8 +261,7 @@ func MeanAbsoluteError(labels, predictions []*Node) (loss *Node) {
 //
 //   - mask: a boolean mask of shape [batchSize] set to true for values to be used, and false for those to be ignored.
 //     Typically used for padding. The returned mean loss takes in consideration the mask.
-//   - weights: a float value of shape [batchSize] with the relative weights to be applied to each example. Weights
-//     are automatically normalized to sum to one (preserving their ratio), preserving their ratio.
+//   - weights: a float value of shape [batchSize] with the relative weights to be applied to each example.
 func BinaryCrossentropy(labels, predictions []*Node) *Node {
 	predictions0 := predictions[0]
 	labels0 := ConvertDType(labels[0], predictions0.DType())
@@ -324,8 +304,7 @@ func BinaryCrossentropy(labels, predictions []*Node) *Node {
 //
 //   - mask: a boolean mask of shape [batchSize] set to true for values to be used, and false for those to be ignored.
 //     Typically used for padding. The returned mean loss takes in consideration the mask.
-//   - weights: a float value of shape [batchSize] with the relative weights to be applied to each example. Weights
-//     are automatically normalized to sum to one (preserving their ratio), preserving their ratio.
+//   - weights: a float value of shape [batchSize] with the relative weights to be applied to each example.
 func BinaryCrossentropyLogits(labels, logits []*Node) *Node {
 	logits0 := logits[0]
 	labels0 := ConvertDType(labels[0], logits0.DType())
@@ -364,8 +343,7 @@ func BinaryCrossentropyLogits(labels, logits []*Node) *Node {
 //
 //   - mask: a boolean mask of shape [batchSize] set to true for values to be used, and false for those to be ignored.
 //     Typically used for padding. The returned mean loss takes in consideration the mask.
-//   - weights: a float value of shape [batchSize] with the relative weights to be applied to each example. Weights
-//     are automatically normalized to sum to one (preserving their ratio), preserving their ratio.
+//   - weights: a float value of shape [batchSize] with the relative weights to be applied to each example.
 func SparseCategoricalCrossEntropyLogits(labels, logits []*Node) *Node {
 	logits0 := logits[0]
 	labels0 := labels[0]
@@ -400,8 +378,7 @@ func SparseCategoricalCrossEntropyLogits(labels, logits []*Node) *Node {
 //
 //   - mask: a boolean mask of shape [batchSize] set to true for values to be used, and false for those to be ignored.
 //     Typically used for padding. The returned mean loss takes in consideration the mask.
-//   - weights: a float value of shape [batchSize] with the relative weights to be applied to each example. Weights
-//     are automatically normalized to sum to one (preserving their ratio), preserving their ratio.
+//   - weights: a float value of shape [batchSize] with the relative weights to be applied to each example.
 //
 // TODO: implement faster version with logits, see https://github.com/tensorflow/tensorflow/blob/359c3cdfc5fabac82b3c70b3b6de2b0a8c16874f/tensorflow/python/ops/nn_ops.py#L4051
 func CategoricalCrossEntropyLogits(labels, logits []*Node) *Node {
@@ -453,8 +430,7 @@ func categoricalCrossEntropyLogitsImpl(labels, logits *Node, extras []*Node) *No
 //
 //   - mask: a boolean mask of shape [batchSize] set to true for values to be used, and false for those to be ignored.
 //     Typically used for padding. The returned mean loss takes in consideration the mask.
-//   - weights: a float value of shape [batchSize] with the relative weights to be applied to each example. Weights
-//     are automatically normalized to sum to one (preserving their ratio), preserving their ratio.
+//   - weights: a float value of shape [batchSize] with the relative weights to be applied to each example.
 func CategoricalCrossEntropy(labels, predictions []*Node) *Node {
 	labels0 := labels[0]
 	predictions0 := predictions[0]

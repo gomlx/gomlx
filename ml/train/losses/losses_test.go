@@ -99,16 +99,15 @@ func TestCheckExtraLabelsForWeightsAndMask(t *testing.T) {
 
 		return
 	}, []any{
-		[]float32{2, 0, 1, 0},                         // After being normalized.
-		[]bool{true, false, true, true},               // Mask
-		[]float32{2, 0, 1, 0},                         // After being normalized.
-		[]bool{true, false, true, true},               // Mask
-		[]float32{1.1428572, 2.2857144, 0.5714286, 0}, // After being normalized.
+		[]float32{6, 0, 3, 0},
+		[]bool{true, false, true, true},
+		[]float32{6, 0, 3, 0},
+		[]bool{true, false, true, true},
+		[]float32{6, 12, 3, 0},
 	}, -1)
 }
 
 func TestMeanSquaredError(t *testing.T) {
-	normalization := float32(2) / (5 + 1)
 	graphtest.RunTestGraphFn(t, t.Name(),
 		func(g *Graph) (inputs, outputs []*Node) {
 			labels := Const(g, []float32{1.0, 2.0, 7.0})
@@ -119,12 +118,11 @@ func TestMeanSquaredError(t *testing.T) {
 			outputs = []*Node{MeanSquaredError([]*Node{labels, mask, weights}, []*Node{predictions})}
 			return
 		}, []any{
-			(5*normalization*1 + 1*normalization*4.0) / 2,
+			float32(5*1+1*4.0) / 2,
 		}, -1)
 }
 
 func TestMeanAbsoluteError(t *testing.T) {
-	normalization := float32(2) / (5 + 1)
 	graphtest.RunTestGraphFn(t, t.Name(),
 		func(g *Graph) (inputs, outputs []*Node) {
 			labels := Const(g, []float32{1.0, 2.0, 7.0})
@@ -135,7 +133,7 @@ func TestMeanAbsoluteError(t *testing.T) {
 			outputs = []*Node{MeanAbsoluteError([]*Node{labels, mask, weights}, []*Node{predictions})}
 			return
 		}, []any{
-			(5*normalization*1 + 1*normalization*2.0) / 2,
+			float32(5*1+1*2.0) / 2,
 		}, 1e-4)
 }
 
@@ -215,7 +213,7 @@ func TestCategoricalCrossEntropy(t *testing.T) {
 			predictions := Const(g, [][]float32{{0.05, 0.95, 0}, {0.1, 0.8, 0.1}, {0, 0, 0}})
 			output = CategoricalCrossEntropy([]*Node{labels, weights, mask}, []*Node{predictions})
 			return predictions, output
-		}, (float32(0.05129)*1/2+float32(2.30259)*3/2)/2, true)
+		}, (float32(0.05129)*1+float32(2.30259)*3)/2, true)
 
 	testSomeFunc[float32](t, "SparseCategoricalCrossEntropyLogits",
 		func(g *Graph) (input, output *Node) {
@@ -239,7 +237,7 @@ func TestHuberLoss(t *testing.T) {
 		outputs = []*Node{lossFn(labels, predictions)}
 		return
 	}, []any{
-		[]float32{0.005, 0.005, 1.5, 1.5},
+		float32(0.005+0.005+1.5+1.5) / 4,
 	}, 1e-4)
 
 	testGradients[float64](t, "MakeHuberLoss: Gradient",
@@ -247,15 +245,16 @@ func TestHuberLoss(t *testing.T) {
 			predictions := Const(g, []float64{1.1, 0.9, 3.0, -1.0})
 			labels := Const(g, []float64{1, 1, 1, 1})
 			lossFn := MakeHuberLoss(1.0)
-			output = ReduceAllSum(lossFn([]*Node{labels}, []*Node{predictions}))
+			output = lossFn([]*Node{labels}, []*Node{predictions})
 			return output, []*Node{predictions}
 		}, [][]float64{{
-			0.1, -0.1, // L2 region: gradient is the absolute error +/- 0.1
-			1, -1, // L1 region: gradient is constant +/- 1 (while absolute error is +/- 2).
+			0.1 / 4, -0.1 / 4, // L2 region: gradient is the absolute error +/- 0.1
+			float64(1) / 4, float64(-1) / 4, // L1 region: gradient is constant +/- 1 (while absolute error is +/- 2).
 		}})
 }
 
 func TestAdaptivePowerLoss(t *testing.T) {
+	const numElements = 5
 	graphtest.RunTestGraphFn(t, "MakeAdaptivePowerLoss", func(g *Graph) (inputs, outputs []*Node) {
 		predictions := Const(g, []float32{0.0, 0.1, -0.1, 10.0, -1000.0})
 		predictions = OnePlus(predictions) // Shifted from 0.
@@ -265,12 +264,11 @@ func TestAdaptivePowerLoss(t *testing.T) {
 		outputs = []*Node{lossFn([]*Node{labels}, []*Node{predictions})}
 		return
 	}, []any{
-		[]float32{
-			0,                                // Zero when predictions==labels
-			0.1 * 0.1 * 0.1, 0.1 * 0.1 * 0.1, // "Near": use powerNear == 3. Also, checks it is symmetric.
-			10 * 10,    // Half-way, it should be ~10^((powerNear+powerFar)/2), so 10^2
-			1001.38275, // Far, it should be ~1000^1
-		},
+		float32(
+			0+ // Zero when predictions==labels
+				(0.1*0.1*0.1)+(0.1*0.1*0.1)+ // "Near": use powerNear == 3. Also, checks it is symmetric.
+				10*10+ // Half-way, it should be ~10^((powerNear+powerFar)/2), so 10^2
+				1001.38275) / numElements, // Far, it should be ~1000^1; Then take the mean (divide by numElements).
 	}, 1e-3)
 
 	testGradientsInDelta[float64](t, "MakeAdaptiveLoss: Gradient",
@@ -279,12 +277,12 @@ func TestAdaptivePowerLoss(t *testing.T) {
 			predictions = OnePlus(predictions) // Shifted from 0.
 			labels := OnesLike(predictions)
 			lossFn := MakeAdaptivePowerLoss(3.0, 1, 10.0, 1.0)
-			output = ReduceAllSum(lossFn([]*Node{labels}, []*Node{predictions}))
+			output = lossFn([]*Node{labels}, []*Node{predictions})
 			return output, []*Node{predictions}
 		}, [][]float64{{
-			0.0,                 // Exactly 0, gradient is zero.
-			3 * 0.01, 3 * -0.01, // L3 region: d(x^3)/dx = 3x^2 ->
-			2 * 10, // L2 region: gradient
-			-1,     // L1 region: gradient is constant +/- 1 (while absolute error is +/- 2).
+			0.0 / numElements,                                 // Exactly 0, gradient is zero.
+			3.0 * 0.01 / numElements, 3 * -0.01 / numElements, // L3 region: d(x^3)/dx = 3x^2 ->
+			2.0 * 10 / numElements, // L2 region: gradient
+			-1.0 / numElements,     // L1 region: gradient is constant +/- 1 (while absolute error is +/- 2).
 		}}, 1e-2)
 }

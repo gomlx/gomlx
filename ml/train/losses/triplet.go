@@ -178,7 +178,7 @@ func TripletLoss(labels, predictions []*Node,
 
 	predictions0 := predictions[0]
 	labels0 := labels[0]
-	weights, mask := CheckLabelsForWeightsAndMask(labels0.Shape(), labels)
+	weights, mask := CheckExtraLabelsForWeightsAndMask(labels0.Shape(), labels[1:])
 
 	g := predictions0.Graph()
 	batchSize := predictions0.Shape().Dim(0)
