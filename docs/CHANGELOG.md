@@ -16,6 +16,12 @@
   * Added `CosineSimilarity`, numerically safe for 0 vectors.
 * Package `context`:
   * Added support for string derived types for `context.GetParamsOr[T]`.
+* Package losses:
+  * Triplet losses now work with context.
+  * `CheckExtraLabelsForWeightsAndMask` now (1) accepts weights and mask in any order; (2) normalize weights such that the sum is (non-masked) bathSize, 
+    preserving the ratio. This way the mean will be 1.
+  * Losses with masks and weights fixed to properly normalize the weights for the non-masked out examples.
+    Also, now using MaskedReduceMean if there is a mask.
 
 # v0.17.0: bitwise ops, triplet losses, new layers, fixes, and more.
 

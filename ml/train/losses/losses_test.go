@@ -77,49 +77,116 @@ func testSomeFunc[T interface{ float32 | float64 }](t *testing.T, name string, f
 	}
 }
 
+func TestCheckExtraLabelsForWeightsAndMask(t *testing.T) {
+	graphtest.RunTestGraphFn(t, t.Name(), func(g *Graph) (inputs, outputs []*Node) {
+		inputs = []*Node{
+			Const(g, []float32{6.0, 12.0, 3.0, 0.0}),  // Weights
+			Const(g, []bool{true, false, true, true}), // Mask
+		}
+		weights, mask := CheckExtraLabelsForWeightsAndMask(inputs[0].Shape(), inputs)
+		// Check that order doesn't matter.
+		weights2, mask2 := CheckExtraLabelsForWeightsAndMask(inputs[0].Shape(), []*Node{inputs[1], inputs[0]})
+		weights3, mask3 := CheckExtraLabelsForWeightsAndMask(inputs[0].Shape(), []*Node{inputs[0]})
+		if mask3 != nil {
+			fmt.Printf("%s: mask not passed so it should have returned nil", t.Name())
+			t.Fail()
+		}
+		outputs = []*Node{
+			weights, mask,
+			weights2, mask2,
+			weights3,
+		}
+
+		return
+	}, []any{
+		[]float32{2, 0, 1, 0},                         // After being normalized.
+		[]bool{true, false, true, true},               // Mask
+		[]float32{2, 0, 1, 0},                         // After being normalized.
+		[]bool{true, false, true, true},               // Mask
+		[]float32{1.1428572, 2.2857144, 0.5714286, 0}, // After being normalized.
+	}, -1)
+}
+
 func TestMeanSquaredError(t *testing.T) {
-	testSomeFunc[float32](t, "MeanSquaredErrorWithWeightsAndMask",
-		func(g *Graph) (input, output *Node) {
+	normalization := float32(2) / (5 + 1)
+	graphtest.RunTestGraphFn(t, t.Name(),
+		func(g *Graph) (inputs, outputs []*Node) {
 			labels := Const(g, []float32{1.0, 2.0, 7.0})
 			mask := Const(g, []bool{true, true, false})
 			weights := Const(g, []float32{5.0, 1.0, 3.2})
 			predictions := Const(g, []float32{2.0, 4.0, 0})
-			output = MeanSquaredError([]*Node{labels, mask, weights}, []*Node{predictions})
-			return predictions, output
-		}, float32(5.0*1.0+1.0*4.0)/3, true)
+			inputs = []*Node{predictions, labels, weights, mask}
+			outputs = []*Node{MeanSquaredError([]*Node{labels, mask, weights}, []*Node{predictions})}
+			return
+		}, []any{
+			(5*normalization*1 + 1*normalization*4.0) / 2,
+		}, -1)
 }
 
 func TestMeanAbsoluteError(t *testing.T) {
-	testSomeFunc[float32](t, "MeanAbsoluteErrorWithWeightsAndMask",
-		func(g *Graph) (input, output *Node) {
+	normalization := float32(2) / (5 + 1)
+	graphtest.RunTestGraphFn(t, t.Name(),
+		func(g *Graph) (inputs, outputs []*Node) {
 			labels := Const(g, []float32{1.0, 2.0, 7.0})
 			mask := Const(g, []bool{true, true, false})
 			weights := Const(g, []float32{5.0, 1.0, 3.2})
-			predictions := Const(g, []float32{0.0, 4.0, 0})
-			output = MeanAbsoluteError([]*Node{labels, mask, weights}, []*Node{predictions})
-			return predictions, output
-		}, float32(5.0*1.0+1.0*2.0)/3, true)
+			predictions := Const(g, []float32{2.0, 4.0, 0})
+			inputs = []*Node{predictions, labels, weights, mask}
+			outputs = []*Node{MeanAbsoluteError([]*Node{labels, mask, weights}, []*Node{predictions})}
+			return
+		}, []any{
+			(5*normalization*1 + 1*normalization*2.0) / 2,
+		}, 1e-4)
 }
 
 func TestGradientBinaryCrossentropy(t *testing.T) {
+	const count = 6
 	testGradients[float64](t, "Gradient BinaryCrossentropy",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			logits := Const(g, []float64{5, 1e-6, 0, 0, -1e-6, -5})
 			predictions := Sigmoid(logits)
 			labels := Const(g, []float64{1, 0, 1, 0, 0, 1})
-			output = ReduceAllSum(BinaryCrossentropy([]*Node{labels}, []*Node{predictions}))
+			output = BinaryCrossentropy([]*Node{labels}, []*Node{predictions})
 			return output, []*Node{logits}
-		}, [][]float64{{-0.00669, 0.5, -0.5, 0.5, 0.5, -0.9933}})
+		}, [][]float64{{-0.00669 / count, 0.5 / count, -0.5 / count, 0.5 / count, 0.5 / count, -0.9933 / count}})
+
+	// Now we add one extra example at the end, that is masked out.
+	// The gradient should remain the same (since the masked out element shouldn't count), and
+	// the last element doesn't have any gradient (0).
+	testGradients[float64](t, "Gradient BinaryCrossentropy with Mask",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			logits := Const(g, []float64{5, 1e-6, 0, 0, -1e-6, -5, 0})
+			mask := Const(g, []bool{true, true, true, true, true, true, false})
+			predictions := Sigmoid(logits)
+			labels := Const(g, []float64{1, 0, 1, 0, 0, 1, 0})
+			output = BinaryCrossentropy([]*Node{labels, mask}, []*Node{predictions})
+			return output, []*Node{logits}
+		}, [][]float64{{-0.00669 / count, 0.5 / count, -0.5 / count, 0.5 / count, 0.5 / count, -0.9933 / count, 0}})
+
 }
 
 func TestGradientBinaryCrossentropyLogits(t *testing.T) {
+	const count = 6
 	testGradients[float64](t, "Gradient BinaryCrossentropyLogits",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			logits := Const(g, []float64{5, 1e-6, 0, 0, -1e-6, -5})
 			labels := Const(g, []float64{1, 0, 1, 0, 0, 1})
 			output = ReduceAllSum(BinaryCrossentropyLogits([]*Node{labels}, []*Node{logits}))
 			return output, []*Node{logits}
-		}, [][]float64{{-0.00669285, 0.50000025, -0.5, 0.5, 0.49999975, -0.99330715}})
+		}, [][]float64{{-0.00669285 / count, 0.50000025 / count, -0.5 / count, 0.5 / count, 0.5 / count, -0.99330715 / count}})
+
+	// Now we add one extra example at the end, that is masked out.
+	// The gradient should remain the same (since the masked out element shouldn't count), and
+	// the last element doesn't have any gradient (0).
+	testGradients[float64](t, "Gradient BinaryCrossentropyLogits With Mask",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			logits := Const(g, []float64{5, 1e-6, 0, 0, -1e-6, -5, 13})
+			mask := Const(g, []bool{true, true, true, true, true, true, false})
+			labels := Const(g, []float64{1, 0, 1, 0, 0, 1, 1})
+			output = ReduceAllSum(BinaryCrossentropyLogits([]*Node{labels, mask}, []*Node{logits}))
+			return output, []*Node{logits}
+		}, [][]float64{{-0.00669285 / count, 0.50000025 / count, -0.5 / count, 0.5 / count, 0.5 / count, -0.99330715 / count, 0}})
+
 }
 
 func TestCategoricalCrossEntropy(t *testing.T) {
@@ -129,7 +196,7 @@ func TestCategoricalCrossEntropy(t *testing.T) {
 			predictions := Const(g, [][]float32{{0.05, 0.95, 0}, {0.1, 0.8, 0.1}})
 			output = CategoricalCrossEntropy([]*Node{labels}, []*Node{predictions})
 			return predictions, output
-		}, []float32{0.05129, 2.3026}, true)
+		}, float32((0.05129+2.3026)/2), true)
 
 	testSomeFunc[float32](t, "CategoricalCrossEntropyWithMask",
 		func(g *Graph) (input, output *Node) {
@@ -138,17 +205,17 @@ func TestCategoricalCrossEntropy(t *testing.T) {
 			predictions := Const(g, [][]float32{{0.05, 0.95, 0}, {0.1, 0.8, 0.1}, {0, 0, 0}})
 			output = CategoricalCrossEntropy([]*Node{labels, mask}, []*Node{predictions})
 			return predictions, output
-		}, []float32{0.05129, 2.3026, 0}, true)
+		}, float32((0.05129+2.3026)/2), true)
 
 	testSomeFunc[float32](t, "CategoricalCrossEntropyWithMaskAndWeights",
 		func(g *Graph) (input, output *Node) {
 			labels := Const(g, [][]float32{{0, 1, 0}, {0, 0, 1}, {0, 0, 0}})
 			mask := Const(g, []bool{true, true, false})
-			weights := Const(g, []float32{1.0, 2.0, 0.0})
+			weights := Const(g, []float32{1.0, 3.0, 0.0})
 			predictions := Const(g, [][]float32{{0.05, 0.95, 0}, {0.1, 0.8, 0.1}, {0, 0, 0}})
 			output = CategoricalCrossEntropy([]*Node{labels, weights, mask}, []*Node{predictions})
 			return predictions, output
-		}, []float32{0.05129, 4.6052, 0}, true)
+		}, (float32(0.05129)*1/2+float32(2.30259)*3/2)/2, true)
 
 	testSomeFunc[float32](t, "SparseCategoricalCrossEntropyLogits",
 		func(g *Graph) (input, output *Node) {
@@ -157,7 +224,7 @@ func TestCategoricalCrossEntropy(t *testing.T) {
 			predictions := Const(g, [][]float32{{0, 10.0, 0}, {10.0, 0, 0}, {0, 0, 0}})
 			output = SparseCategoricalCrossEntropyLogits([]*Node{labels, mask}, []*Node{predictions})
 			return predictions, output
-		}, []float32{0, 10.0, 0}, true)
+		}, float32(0+10)/2, true)
 }
 
 func TestHuberLoss(t *testing.T) {

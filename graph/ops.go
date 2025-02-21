@@ -853,10 +853,12 @@ func MaskedReduceMean(x, mask *Node, reduceAxes ...int) *Node {
 	ones := OnesLike(x)
 	maskedX := Where(mask, x, zeros)
 	sum := ReduceSum(maskedX, reduceAxes...)
+	sum.SetLogged("sum")
 	denominator := Where(mask, ones, zeros)
 	denominator = ReduceSum(denominator, reduceAxes...)
 	denominator = Max(denominator, OnesLike(denominator))
 	denominator.stopGradient = true
+	denominator.SetLogged("denominator")
 	return Div(sum, denominator)
 }
 
