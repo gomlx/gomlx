@@ -319,21 +319,13 @@ func (r *Trainer) trainStepGraph(spec any, ctx *context.Context, inputs, labels 
 	r.optimizer.UpdateGraph(ctx, g, loss)
 
 	// Execute registered ContextGraphFn hooks for current graph.
-	ctx.EnumerateGraphParams(g, func(scope string, key string, value any) {
-		if key != TrainerPerStepUpdateGraphFnParamKey {
-			return
-		}
-		if fn, ok := value.(ContextGraphFn); ok {
-			fn(ctx.InAbsPath(scope), g)
-		}
-	})
+	ExecPerStepUpdateGraphFn(ctx, g)
 
+	// Metrics updates. They include: batch loss, exponential moving average of the batch loss.
 	if len(predictions) == 0 {
 		// We create a zero prediction (same dtype as loss), because the metrics require something.
 		predictions = []*graph.Node{graph.ScalarZero(g, loss.DType())}
 	}
-
-	// Generate all metrics, which includes: batch loss, exponential moving average of the batch loss.
 	metrics = r.metricsUpdatesGraph(ctx, labels, predictions, r.trainMetrics)
 	return
 }
@@ -612,6 +604,28 @@ type ContextGraphFn func(ctx *context.Context, g *graph.Graph)
 // Any changes made to the model weights won't be reflected on the loss returned by the training step.
 // Nor most of the metrics: the metrics are updated after this hook, but they typically use the predictions that
 // were also generated earlier in the training.
+//
+// If you are writing a custom "TrainStep" function, you need to call ExecPerStepUpdateGraphFn after
+// Optimizer.Update (or your custom updates). The Trainer does that for you already.
 func AddPerStepUpdateGraphFn(ctx *context.Context, g *graph.Graph, fn ContextGraphFn) {
 	ctx.SetGraphParam(g, TrainerPerStepUpdateGraphFnParamKey, fn)
+}
+
+// ExecPerStepUpdateGraphFn executes all registered "per-step update functions" registered with
+// AddPerStepUpdateGraphFn.
+//
+// This should be called by the "TrainStep" function of a trainer, just after calling the
+// Optimizer.Update method.
+// If you are using the Trainer, it already does that for you. But if you are writing you own train step
+// function, you may want to call this.
+func ExecPerStepUpdateGraphFn(ctx *context.Context, g *graph.Graph) {
+	ctx.EnumerateGraphParams(g, func(scope string, key string, value any) {
+		if key != TrainerPerStepUpdateGraphFnParamKey {
+			return
+		}
+		if fn, ok := value.(ContextGraphFn); ok {
+			fn(ctx.InAbsPath(scope), g)
+		}
+	})
+
 }
