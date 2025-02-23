@@ -14,9 +14,11 @@
   * Renamed indicator functions to `PositiveIndicator`, `NonNegativeIndicator`, `NegativeIndicator` and `NonPositiveIndicator`.
   * Added backprop for `ReduceMin` that was missing (thx @TuSKan)
   * Added `CosineSimilarity`, numerically safe for 0 vectors.
-* Package `context`:
+* Package `ml/context`:
   * Added support for string derived types for `context.GetParamsOr[T]`.
-* Package losses:
+* Package `ml/train`:
+  * Created `ExecPerStepUpdateGraphFn` for those creating custom "TrainStep" functions.
+* Package `ml/train/losses`:
   * Triplet losses now work with context.
   * `CheckExtraLabelsForWeightsAndMask` now (1) accepts weights and mask in any order; (2) normalize weights such that the sum is (non-masked) bathSize, 
     preserving the ratio. This way the mean will be 1.

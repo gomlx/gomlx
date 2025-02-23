@@ -115,8 +115,15 @@ type Config struct {
 // Build a configuration for building a checkpoints.Handler. After configuring the
 // Config object returned, call `Done` to get the configured checkpoints.Handler.
 //
-// The new checkpoints.Handler will load a checkpoint to the context (see Dir or DirFromBase) if it exists,
+// The new checkpoints.Handler will load ("lazy" by default) a checkpoint to the context (see Dir or DirFromBase) if it exists,
 // otherwise it creates a new directory and can simply be used to save checkpoints.
+//
+// When a checkpoint is "lazy loaded", its variables are not listed by default (if one uses Context.EnumerateVariables
+// or Context.IterVariables). But if they are directly accessed, they are on-the-fly loaded. This is convenient
+// when loading only part of the variables for inference (if one doesn't care about the training/optimizer variables),
+// or for transfer learning part of a model. It also works to continue training a model loaded from a checkpoint.
+// But if you need to variables to be loaded immediately, use Config.Immediate() -- an inspecting tool, like
+// gomlx_checkpoints, will want to do that.
 func Build(ctx *context.Context) *Config {
 	c := &Config{
 		ctx:             ctx,
@@ -342,7 +349,6 @@ func (c *Config) Done() (*Handler, error) {
 			return nil, err
 		}
 	}
-	handler.attachTo(c.ctx)
 	if c.immediate {
 		ctxToSet := c.ctx.Checked(false)
 		for paramName, value := range handler.variableValues {
@@ -368,6 +374,7 @@ func (c *Config) Done() (*Handler, error) {
 			delete(handler.variableValues, v.ParameterName())
 		}
 	}
+	handler.attachTo(c.ctx)
 	return handler, nil
 }
 

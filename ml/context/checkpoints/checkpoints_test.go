@@ -73,7 +73,7 @@ func TestCheckpoints(t *testing.T) {
 		assert.Equal(t, 9, maxCheckPointCountFromCheckpoints(list))
 	}
 
-	// Test loading of values
+	// Test loading of variables and parameters.
 	{
 		// Build model, checkpoint a few times.
 		ctx := context.New()
@@ -94,6 +94,16 @@ func TestCheckpoints(t *testing.T) {
 		assert.Truef(t, found, "%s should have been set", regularizers.ParamL2)
 		assert.Equal(t, 0.004, l2.(float64), "Params[%s]", regularizers.ParamL2)
 
+		// If we are lazy loading, no variable should be listed.
+		for v := range ctx.IterVariables() {
+			fmt.Printf("\tvariable %q -> %s\n", v.ScopeAndName(), v.Shape())
+			t.Fail()
+		}
+
+		// Check that the variable (global_step) is listed, if we look for it.
+		v := ctx.GetVariable(optimizers.GlobalStepVariableName)
+		require.NoError(t, v.Shape().Check(dtypes.Int64))
+
 		// Re-execute testGraphFn: it should load global step at 10, increment and return it at 11.
 		e := context.NewExec(backend, ctx, testGraphFn)
 		results := e.Call()
@@ -105,6 +115,28 @@ func TestCheckpoints(t *testing.T) {
 		list, err := checkpoint.ListCheckpoints()
 		assert.NoError(t, err)
 		assert.Len(t, list, 3, "Number of remaining checkpoints")
+	}
+
+	// Test that immediate form also loads the variables correctly.
+	{
+		ctx := context.New()
+		_ = Build(ctx).Dir(dir).Keep(3).ExcludeParams(regularizers.ParamL1).Immediate().MustDone()
+
+		// Check that the only variable ("global_step") is present.
+		count := 0
+		for v := range ctx.IterVariables() {
+			//fmt.Printf("\tvariable %q -> %s\n", v.ScopeAndName(), v.Shape())
+			require.NoError(t, v.Shape().Check(dtypes.Int64))
+			count++
+		}
+		require.Equal(t, 1, count, "Number of variables should have been one: global_step")
+
+		v := ctx.GetVariable(optimizers.GlobalStepVariableName)
+		require.NoError(t, v.Shape().Check(dtypes.Int64))
+		e := context.NewExec(backend, ctx, testGraphFn)
+		results := e.Call()
+		globalStep := tensors.ToScalar[float64](results[0])
+		assert.Equal(t, 12.0, globalStep, "Re-loaded global step")
 	}
 
 	// Remove test directory.

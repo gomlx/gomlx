@@ -86,7 +86,9 @@ type variableNodes struct {
 
 // Name of the variable within the scope.
 func (v *Variable) Name() string {
-	v.AssertValid()
+	if v == nil {
+		return "<nil>"
+	}
 	return v.name
 }
 
@@ -96,6 +98,14 @@ func (v *Variable) String() string {
 		return "INVALID (NIL) VARIABLE"
 	}
 	return fmt.Sprintf("%s/%s", v.Scope(), v.Name())
+}
+
+// IsValid returns whether the variable is holding a valid value.
+func (v *Variable) IsValid() bool {
+	if v == nil {
+		return false
+	}
+	return v.shape.Ok()
 }
 
 // AssertValid panics if the variable is in an invalid state: if it's nil or it's shape is not yet set.
@@ -122,7 +132,9 @@ func (v *Variable) Reset() {
 
 // Scope where the variable was created.
 func (v *Variable) Scope() string {
-	v.AssertValid()
+	if v == nil {
+		return "<nil>"
+	}
 	return v.scope
 }
 

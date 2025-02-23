@@ -357,10 +357,14 @@ func ListVariables(ctx *context.Context) {
 	table.Headers("Scope", "Name", "Shape", "Size", "Bytes", "Scalar/MAV", "RMS", "MaxAV")
 	var rows [][]string
 	ctx.EnumerateVariablesInScope(func(v *context.Variable) {
+		if !v.IsValid() {
+			rows = append(rows, []string{v.Scope(), v.Name(), "<invalid>", "", "", "", "", ""})
+			return
+		}
 		shape := v.Shape()
 		var mav, rms, maxAV string
 		if shape.Size() == 1 {
-			mav = fmt.Sprintf("%.4v", v.Value().Value())
+			mav = fmt.Sprintf("%8v", v.Value().Value())
 		} else if shape.DType.IsFloat() {
 			metrics := metricsFn.Call(v.Value())
 			mav = fmt.Sprintf("%.3g", metrics[0].Value().(float64))
@@ -387,9 +391,9 @@ func ListVariables(ctx *context.Context) {
 	fmt.Println(table.Render())
 	if *flagGlossary {
 		fmt.Printf("  %s:\n", sectionStyle.Render("Glossary"))
-		fmt.Printf("   ◦ %s:\t%s\n", emphasisStyle.Render("MAV"), italicStyle.Render("Mean Absolute Value"))
-		fmt.Printf("   ◦ %s:\t%s\n", emphasisStyle.Render("RMS"), italicStyle.Render("Root Mean Square"))
-		fmt.Printf("   ◦ %s:\t%s\n", emphasisStyle.Render("MaxAV"), italicStyle.Render("Max Absolute Value"))
+		fmt.Printf("   ◦ %s: %s\n", emphasisStyle.Render("Scalar/MAV"), italicStyle.Render("If variable is a scalar then the value itself, else the Mean Absolute Value"))
+		fmt.Printf("   ◦ %s: %s\n", emphasisStyle.Render("RMS"), italicStyle.Render("Root Mean Square"))
+		fmt.Printf("   ◦ %s: %s\n", emphasisStyle.Render("MaxAV"), italicStyle.Render("Max Absolute Value"))
 	}
 }
 
