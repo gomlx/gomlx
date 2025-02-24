@@ -44,7 +44,6 @@ type SeparableConvBuilder struct {
 	dilations          []int
 	newScope           bool
 	regularizer        regularizers.Regularizer
-	filterGroupCount   int // Number of groups for depthwise convolution
 }
 
 // SeparableConvolution prepares a separable convolution layer on x.
@@ -64,17 +63,6 @@ func SeparableConvolution(ctx *context.Context, x *Node) *SeparableConvBuilder {
 	return conv.ChannelsAxis(images.ChannelsLast).NoPadding().UseBias(true).Strides(1)
 }
 
-<<<<<<< HEAD:ml/layers/separableConv2d.go
-func (conv *SeparableConvBuilder) FilterGroupCount(groupCount int) *SeparableConvBuilder {
-	conv.filterGroupCount = groupCount
-	return conv
-}
-
-func (conv *SeparableConvBuilder) Filters(filters int) *SeparableConvBuilder {
-	conv.filters = filters
-	if filters <= 0 {
-		Panicf("number of filters must be > 0, set to %d", filters)
-=======
 // DepthMultiplier sets the depth multiplier for depthwise convolution.
 func (sep *SeparableConvBuilder) DepthMultiplier(multiplier int) *SeparableConvBuilder {
 	sep.depthMultiplier = multiplier
@@ -97,22 +85,15 @@ func (sep *SeparableConvBuilder) KernelSize(size int) *SeparableConvBuilder {
 func (sep *SeparableConvBuilder) KernelSizePerDim(sizes ...int) *SeparableConvBuilder {
 	if len(sizes) != sep.numSpatialDims {
 		Panicf("expected %d kernel sizes, got %d", sep.numSpatialDims, len(sizes))
->>>>>>> origin/main:ml/layers/seperableConv2d.go
 	}
 	sep.kernelSize = sizes
 	return sep
 }
-<<<<<<< HEAD:ml/layers/separableConv2d.go
-func (conv *SeparableConvBuilder) KernelSize(size int) *SeparableConvBuilder {
-	perDim := xslices.SliceWithValue(conv.numSpatialDims, size)
-	return conv.KernelSizePerDim(perDim...)
-=======
 
 // UseBias enables/disables the bias term.
 func (sep *SeparableConvBuilder) UseBias(useBias bool) *SeparableConvBuilder {
 	sep.bias = useBias
 	return sep
->>>>>>> origin/main:ml/layers/seperableConv2d.go
 }
 
 // ChannelsAxis sets the channels' position.
@@ -193,53 +174,6 @@ func (sep *SeparableConvBuilder) Done() *Node {
 	channelsAxis := images.GetChannelsAxis(xShape, sep.channelsAxisConfig)
 	inputChannels := xShape.Dimensions[channelsAxis]
 
-<<<<<<< HEAD:ml/layers/separableConv2d.go
-	fmt.Printf("Input Shape: %v\n", xShape.Dimensions)
-	fmt.Printf("Kernel Size: %v, Filters: %d, Input Channels: %d\n", conv.kernelSize, conv.filters, inputChannels)
-
-	// Depthwise Convolution
-	depthwiseKernelShape := shapes.Make(dtype, append(conv.kernelSize, inputChannels, 1)...)
-	fmt.Printf("Fixed Depthwise Kernel Shape: %v\n", depthwiseKernelShape.Dimensions)
-	depthwiseKernelVar := ctxInScope.VariableWithShape("depthwise_weights", depthwiseKernelShape)
-	depthwiseKernel := depthwiseKernelVar.ValueGraph(conv.graph)
-
-	// Depthwise convolution with inputChannels groups
-	depthwiseOpts := Convolve(conv.x, depthwiseKernel).
-		ChannelsAxis(conv.channelsAxisConfig).
-		StridePerDim(conv.strides...).
-		DilationPerDim(conv.dilations...).
-		FilterGroupCount(inputChannels) // Critical group setting
-
-	if conv.padSame {
-		depthwiseOpts = depthwiseOpts.PadSame()
-	} else {
-		depthwiseOpts = depthwiseOpts.NoPadding()
-	}
-	depthwiseOutput := depthwiseOpts.Done()
-	fmt.Printf("Depthwise Output Shape: %v\n", depthwiseOutput.Shape().Dimensions)
-
-	// Pointwise Convolution
-	pointwiseKernelShape := shapes.Make(dtype, 1, 1, inputChannels, conv.filters) // Shape: [1, 1, 3, 32]
-	fmt.Printf("Pointwise Kernel Shape: %v\n", pointwiseKernelShape.Dimensions)
-	pointwiseKernelVar := ctxInScope.VariableWithShape("pointwise_weights", pointwiseKernelShape)
-	pointwiseKernel := pointwiseKernelVar.ValueGraph(conv.graph)
-
-	output := Convolve(depthwiseOutput, pointwiseKernel).
-		ChannelsAxis(conv.channelsAxisConfig).
-		FilterGroupCount(1). // Explicit group reset
-		Done()
-	fmt.Printf("Pointwise Output Shape: %v\n", output.Shape().Dimensions)
-
-	// Bias Addition
-	if conv.bias {
-		biasVar := ctxInScope.VariableWithShape("biases", shapes.Make(dtype, conv.filters))
-		bias := biasVar.ValueGraph(conv.graph)
-		expandedDims := xslices.SliceWithValue(output.Rank(), 1)
-		outputChannelsAxis := images.GetChannelsAxis(output, conv.channelsAxisConfig)
-		expandedDims[outputChannelsAxis] = conv.filters
-		bias = Reshape(bias, expandedDims...)
-		output = Add(output, bias)
-=======
 	// Depthwise convolution kernel
 	depthwiseKernelShape := shapes.Make(dtype)
 	if sep.channelsAxisConfig == images.ChannelsFirst {
@@ -248,7 +182,6 @@ func (sep *SeparableConvBuilder) Done() *Node {
 	} else {
 		depthwiseKernelShape.Dimensions = append(sep.kernelSize, inputChannels)
 		depthwiseKernelShape.Dimensions = append(depthwiseKernelShape.Dimensions, sep.depthMultiplier)
->>>>>>> origin/main:ml/layers/seperableConv2d.go
 	}
 
 	depthwiseKernelVar := ctxInScope.VariableWithShape("depthwise_weights", depthwiseKernelShape)
