@@ -27,6 +27,7 @@ type SeparableConvBuilder struct {
 	dilations          []int
 	newScope           bool
 	regularizer        regularizers.Regularizer
+	filterGroupCount   int // Number of groups for depthwise convolution
 }
 
 // SeparableConvolution initializes the builder.
@@ -45,6 +46,11 @@ func SeparableConvolution(ctx *context.Context, x *Node) *SeparableConvBuilder {
 	return conv.ChannelsAxis(images.ChannelsLast).NoPadding().UseBias(true).Strides(1)
 }
 
+func (conv *SeparableConvBuilder) FilterGroupCount(groupCount int) *SeparableConvBuilder {
+	conv.filterGroupCount = groupCount
+	return conv
+}
+
 func (conv *SeparableConvBuilder) Filters(filters int) *SeparableConvBuilder {
 	conv.filters = filters
 	if filters <= 0 {
@@ -52,7 +58,6 @@ func (conv *SeparableConvBuilder) Filters(filters int) *SeparableConvBuilder {
 	}
 	return conv
 }
-
 func (conv *SeparableConvBuilder) KernelSize(size int) *SeparableConvBuilder {
 	perDim := xslices.SliceWithValue(conv.numSpatialDims, size)
 	return conv.KernelSizePerDim(perDim...)
@@ -132,19 +137,24 @@ func (conv *SeparableConvBuilder) Done() *Node {
 	fmt.Printf("Kernel Size: %v, Filters: %d, Input Channels: %d\n", conv.kernelSize, conv.filters, inputChannels)
 
 	// Depthwise Convolution
-	depthwiseKernelShape := shapes.Make(dtype, append(conv.kernelSize, inputChannels, inputChannels)...) // Shape: [3, 3, 3, 3]
-	fmt.Printf("Depthwise Kernel Shape: %v\n", depthwiseKernelShape.Dimensions)
+	depthwiseKernelShape := shapes.Make(dtype, append(conv.kernelSize, inputChannels, 1)...)
+	fmt.Printf("Fixed Depthwise Kernel Shape: %v\n", depthwiseKernelShape.Dimensions)
 	depthwiseKernelVar := ctxInScope.VariableWithShape("depthwise_weights", depthwiseKernelShape)
 	depthwiseKernel := depthwiseKernelVar.ValueGraph(conv.graph)
 
-	// Configure depthwise convolution.
-	convOpts := Convolve(conv.x, depthwiseKernel).
+	// Depthwise convolution with inputChannels groups
+	depthwiseOpts := Convolve(conv.x, depthwiseKernel).
 		ChannelsAxis(conv.channelsAxisConfig).
 		StridePerDim(conv.strides...).
 		DilationPerDim(conv.dilations...).
-		PadSame()
+		FilterGroupCount(inputChannels) // Critical group setting
 
-	depthwiseOutput := convOpts.Done()
+	if conv.padSame {
+		depthwiseOpts = depthwiseOpts.PadSame()
+	} else {
+		depthwiseOpts = depthwiseOpts.NoPadding()
+	}
+	depthwiseOutput := depthwiseOpts.Done()
 	fmt.Printf("Depthwise Output Shape: %v\n", depthwiseOutput.Shape().Dimensions)
 
 	// Pointwise Convolution
@@ -155,6 +165,7 @@ func (conv *SeparableConvBuilder) Done() *Node {
 
 	output := Convolve(depthwiseOutput, pointwiseKernel).
 		ChannelsAxis(conv.channelsAxisConfig).
+		FilterGroupCount(1). // Explicit group reset
 		Done()
 	fmt.Printf("Pointwise Output Shape: %v\n", output.Shape().Dimensions)
 
