@@ -21,11 +21,9 @@ func panicf(format string, args ...any) {
 
 // Backend implements the XLA/PJRT backends.Backend for GoMLX.
 type Backend struct {
-	plugin     *pjrt.Plugin
-	client     *pjrt.Client
-	pluginName string
-
-	supressLogging   bool
+	plugin           *pjrt.Plugin
+	client           *pjrt.Client
+	pluginName       string
 	hasSharedBuffers bool
 }
 

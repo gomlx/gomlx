@@ -24,6 +24,8 @@
     preserving the ratio. This way the mean will be 1.
   * Losses with masks and weights fixed so weights/mask can be given in any order.
     Also, now using MaskedReduceMean if there is a mask, and all losses return a scalar.
+* Package `xla`:
+  * Removed suppression of logging: new PJRTs are not outputting random debug messages anymore.
 
 # v0.17.0: bitwise ops, triplet losses, new layers, fixes, and more.
 

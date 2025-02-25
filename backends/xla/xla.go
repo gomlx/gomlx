@@ -86,22 +86,15 @@ func NewWithOptions(pluginName string, options pjrt.NamedValuesMap) *Backend {
 		panic(errors.WithMessagef(err, "backend %q:", BackendName))
 	}
 	var client *pjrt.Client
-	if pluginName == "cpu" {
-		// Hack to disable spurious logging at the start.
-		pjrt.SuppressAbseilLoggingHack(func() {
-			client, err = plugin.NewClient(options)
-		})
-	} else {
-		client, err = plugin.NewClient(options)
-	}
+	client, err = plugin.NewClient(options)
 	if err != nil {
-		panic(errors.WithMessagef(err, "backend %q:", BackendName))
+		panic(errors.WithMessagef(err, "while creating plugin %s for backend %q", pluginName, BackendName))
 	}
+	klog.V(1).Infof("created new plugin %q for backend %q", pluginName, BackendName)
 	backend := &Backend{
-		plugin:         plugin,
-		client:         client,
-		pluginName:     pluginName,
-		supressLogging: pluginName == "cuda" || slices.Index(pluginOptions, "supress_logging") != -1,
+		plugin:     plugin,
+		client:     client,
+		pluginName: pluginName,
 	}
 
 	// Support "shared buffers":
@@ -116,12 +109,6 @@ func NewWithOptions(pluginName string, options pjrt.NamedValuesMap) *Backend {
 	if len(pluginOptions) != 0 {
 		klog.Errorf("backend %q: unknown plugin options %q", BackendName, pluginOptions)
 	}
-	return backend
-}
-
-// SupressLogging during compilation of a graph.
-func (backend *Backend) SupressLogging(supressLogging bool) *Backend {
-	backend.supressLogging = supressLogging
 	return backend
 }
 

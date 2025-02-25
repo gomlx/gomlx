@@ -45,14 +45,7 @@ func (b *Builder) Compile(outputs ...backends.Op) backends.Executable {
 	if err != nil {
 		panic(errors.WithMessagef(err, "backend %q: failed to build HLO from computation %q", BackendName, b.name))
 	}
-	var exec *pjrt.LoadedExecutable
-	if b.backend.supressLogging {
-		pjrt.SuppressAbseilLoggingHack(func() {
-			exec, err = b.backend.client.Compile().WithComputation(comp).Done()
-		})
-	} else {
-		exec, err = b.backend.client.Compile().WithComputation(comp).Done()
-	}
+	exec, err := b.backend.client.Compile().WithComputation(comp).Done()
 	if err != nil {
 		panic(errors.WithMessagef(err, "backend %q: failed to compile computation %q", BackendName, b.name))
 	}
