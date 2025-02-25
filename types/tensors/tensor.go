@@ -208,4 +208,5 @@ func (t *Tensor) lockedFinalizeAll() {
 	}
 	t.onDevices = nil
 	t.shape = shapes.Invalid()
+	t.isShared = false
 }
