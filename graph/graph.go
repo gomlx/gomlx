@@ -409,6 +409,9 @@ type donateBuffer struct {
 // value is no longer used.
 // Useful in particular is updating some state in a loop.
 //
+// This doesn't work if the tensor shares the buffer with
+// the device (usually CPU plugins). You can check that with IsShared().
+//
 // Example:
 //
 //	myState := myExec.Call(DonateTensorBuffer(myState, backend))[0]
@@ -417,6 +420,9 @@ type donateBuffer struct {
 //
 // Notice that after this, t's value in the device becomes invalid.
 func DonateTensorBuffer(t *tensors.Tensor, backend backends.Backend, deviceNum ...backends.DeviceNum) any {
+	//if t.IsShared() {
+	//	exceptions.Panicf("DonateTensorBuffer can only be used for non-shared tensors, for tensor shaped %s", t.Shape())
+	//}
 	d := &donateBuffer{shape: t.Shape()}
 	d.buffer = t.DonateBuffer(backend, deviceNum...) // DonateBuffer may destroy the tensor, if there is no local storage.
 	return d

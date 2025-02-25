@@ -7,6 +7,8 @@
 * Package `checkpoints`:
   * Loading a checkpoint overwrites the values of variables already present in the context.
   * Fixes when saving, in particular if using `Immediate()` loading.
+* Package `tensors`:
+  * Allow shared tensors to be donated.
 * Package `graph`:
   * Fixed when using axes != -1 for `L1Norm`.
   * Added `IsZero` shortcut.

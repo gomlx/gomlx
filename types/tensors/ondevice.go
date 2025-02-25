@@ -52,7 +52,8 @@ func (t *Tensor) Buffer(backend backends.Backend, deviceNum ...backends.DeviceNu
 }
 
 // DonateBuffer returns the backend buffer for the tensor, and transfers the ownership of the buffer to the caller.
-// This may invalidate the tensor, if there is no other on-device storage or local storage.
+// This may invalidate the tensor, if there is no other on-device storage or local storage -- in particular this
+// is true if using "shared buffers" (generally true for CPU based plugins).
 //
 // Mostly used internally -- by graph.Graph.Run and graph.Exec when the value in the buffer is no longer needed
 // after execution.
@@ -68,9 +69,6 @@ func (t *Tensor) DonateBuffer(backend backends.Backend, deviceNum ...backends.De
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.AssertValid()
-	if t.isShared {
-		exceptions.Panicf("Tensor.DonateBuffer: cannot donate a shared tensor (tensor.Shaped=%s)", t.Shape())
-	}
 	if len(deviceNum) > 1 {
 		exceptions.Panicf("Tensor.Buffer takes at most one deviceNum, %v given", deviceNum)
 	}
@@ -111,7 +109,7 @@ func (d *onDevice) Finalize() {
 // automatically when needed.
 //
 // If share is true, and if the backend allows for shared buffer, this will create a shared buffer,
-// which is more economic, but cannot be donated for execution.
+// which is more economic.
 //
 // - If an updated copy of the Tensor is already on the device(s), this is a no-op.
 // - If the Tensor has already been used with a different client, this panics: one cannot mix clients on the same Tensor.
