@@ -25,6 +25,17 @@ type StandardOps interface {
 	// 	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=0, isMin=false) -> {0, 1, 0} // (it choose the 2, 4 and 7)
 	ArgMinMax(x Op, axis int, outputDType dtypes.DType, isMin bool) Op
 
+	// Bitcast performs an elementwise bit-cast operation from a dtype to another dtype.
+	// The bitcast doesn't "convert" anything, it just reinterprets the bits from x.DType() to the targetDType.
+	// If x.DType() and targetDType use the same number of bytes (targetDType.Size() = x.DType().Size()),
+	// the dimensions are not changed, simply the dtype is changed.
+	// If targetDType.Size() > x.DType().Size(), it requires that x last axis to have a dimension of targetDType.Size() / x.DType().Size(),
+	// and the returned shape will trim the last axis.
+	// If targetDType.Size() < x.DType().Size(), the returned shape will have an extra axis in the end, with dimension of
+	// x.DType().Size() / targetDType.Size().
+	// E.g: Bitcast([1]uint32{0xdeadbeef}, dtypes.UInt16) -> [1][2]uint16{{0xdead, 0xbeef}}
+	Bitcast(x Op, targetDType dtypes.DType) Op
+
 	// BitwiseAnd returns the element-wise bitwise AND operation.
 	// The op is created on the same XlaBuilder as used for x0 and x1.
 	BitwiseAnd(x0, x1 Op) Op
