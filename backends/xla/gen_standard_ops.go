@@ -68,6 +68,24 @@ func (b *Builder) BatchNormForInference(operand, scale, offset, mean, variance b
 	return xla_result
 }
 
+// Bitcast performs an elementwise bit-cast operation from a dtype to another dtype.
+// The bitcast doesn't "convert" anything, it just reinterprets the bits from x.DType() to the targetDType.
+// If x.DType() and targetDType use the same number of bytes (targetDType.Size() = x.DType().Size()),
+// the dimensions are not changed, simply the dtype is changed.
+// If targetDType.Size() > x.DType().Size(), it requires that x last axis to have a dimension of targetDType.Size() / x.DType().Size(),
+// and the returned shape will trim the last axis.
+// If targetDType.Size() < x.DType().Size(), the returned shape will have an extra axis in the end, with dimension of
+// x.DType().Size() / targetDType.Size().
+// E.g: Bitcast([1]uint32{0xdeadbeef}, dtypes.UInt16) -> [1][2]uint16{{0xdead, 0xbeef}}
+func (b *Builder) Bitcast(x backends.Op, targetDType dtypes.DType) backends.Op {
+	xla_x := b.verifyAndCastOp(x, "x")
+	xla_result, err := xlabuilder.Bitcast(xla_x, targetDType)
+	if err != nil {
+		panic(errors.WithMessagef(err, "Backend %q: failed Bitcast", BackendName))
+	}
+	return xla_result
+}
+
 // BitwiseAnd returns the element-wise bitwise AND operation.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) BitwiseAnd(x0, x1 backends.Op) backends.Op {

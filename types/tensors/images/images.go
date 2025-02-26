@@ -20,7 +20,13 @@ import (
 // coming last (last axis) or first (first axis after batch axis).
 type ChannelsAxisConfig uint8
 
-//go:generate stringer -type=ChannelsAxisConfig
+// Enumer can be installed with:
+//
+//	go install github.com/dmarkham/enumer@latest
+//
+// With go 1.24 we will add this to go tools support.
+
+//go:generate enumer -type=ChannelsAxisConfig
 
 const (
 	ChannelsFirst ChannelsAxisConfig = iota

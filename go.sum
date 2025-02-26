@@ -201,6 +201,10 @@ github.com/gomlx/exceptions v0.0.3 h1:HKnTgEjj4jlmhr8zVFkTP9qmV1ey7ypYYosQ8GzXWu
 github.com/gomlx/exceptions v0.0.3/go.mod h1:uHL0TQwJ0xaV2/snJOJV6hSE4yRmhhfymuYgNredGxU=
 github.com/gomlx/gopjrt v0.6.0 h1:HCYANwD0LKwVVnyymLyzH9beZtKsrR5ITh0jT5Cuy+I=
 github.com/gomlx/gopjrt v0.6.0/go.mod h1:HJn0wemLuFPxHr7P7zvuiloLR2OsLv60HV/4obxTXVc=
+github.com/gomlx/gopjrt v0.6.1 h1:oco/D2WvVT+NsJ0LaRCnZUTDEZJIk6QcdInKsxfrdiA=
+github.com/gomlx/gopjrt v0.6.1/go.mod h1:HJn0wemLuFPxHr7P7zvuiloLR2OsLv60HV/4obxTXVc=
+github.com/gomlx/gopjrt v0.6.2 h1:MvZPqRB3cVHnUCyr2oXoamoPS5BBag8KWl7VzR9DS1c=
+github.com/gomlx/gopjrt v0.6.2/go.mod h1:HJn0wemLuFPxHr7P7zvuiloLR2OsLv60HV/4obxTXVc=
 github.com/google/btree v0.0.0-20180813153112-4030bb1f1f0c/go.mod h1:lNA+9X1NB3Zf8V7Ke586lFgjr2dZNuvo3lPJSGZ5JPQ=
 github.com/google/btree v1.0.0/go.mod h1:lNA+9X1NB3Zf8V7Ke586lFgjr2dZNuvo3lPJSGZ5JPQ=
 github.com/google/go-cmp v0.2.0/go.mod h1:oXzfMopK8JAjlY9xF4vHSVASa0yLyX7SntLO5aqRK0M=
