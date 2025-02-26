@@ -16,6 +16,7 @@
   * Renamed indicator functions to `PositiveIndicator`, `NonNegativeIndicator`, `NegativeIndicator` and `NonPositiveIndicator`.
   * Added backprop for `ReduceMin` that was missing (thx @TuSKan)
   * Added `CosineSimilarity`, numerically safe for 0 vectors.
+  * Added `BitcastConvert`.
 * Package `ml/context`:
   * Added support for string derived types for `context.GetParamsOr[T]`.
 * Package `ml/train`:
@@ -28,6 +29,7 @@
     Also, now using MaskedReduceMean if there is a mask, and all losses return a scalar.
 * Package `xla`:
   * Removed suppression of logging: new PJRTs are not outputting random debug messages anymore.
+* Updated dependency to `gopjrt` v0.6.1.
 
 # v0.17.0: bitwise ops, triplet losses, new layers, fixes, and more.
 

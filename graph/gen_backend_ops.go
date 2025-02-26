@@ -24,6 +24,7 @@ const (
 	NodeTypeBatchNormForTraining
 	NodeTypeBatchNormGradient
 	NodeTypeBitCount
+	NodeTypeBitcast
 	NodeTypeBitwiseAnd
 	NodeTypeBitwiseNot
 	NodeTypeBitwiseOr
@@ -431,6 +432,54 @@ func BitCount(operand *Node) (node *Node) {
 		operand: operand,
 	}
 	result := g.builder.BitCount(operand.outputOps[0])
+	node = &Node{
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsBitcast holds the inputs used for the call to backends.Bitcast.
+type nodeInputsBitcast struct {
+	x           *Node
+	targetDType dtypes.DType
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsBitcast) Type() NodeType {
+	return NodeTypeBitcast
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsBitcast) String() string {
+	return fmt.Sprintf("%s(x=[#%d], targetDType=%v)",
+		ni.Type(),
+		ni.x.Id(),
+		ni.targetDType,
+	)
+}
+
+// Bitcast performs an elementwise bit-cast operation from a dtype to another dtype.
+// The bitcast doesn't "convert" anything, it just reinterprets the bits from x.DType() to the targetDType.
+// If x.DType() and targetDType use the same number of bytes (targetDType.Size() = x.DType().Size()),
+// the dimensions are not changed, simply the dtype is changed.
+// If targetDType.Size() > x.DType().Size(), it requires that x last axis to have a dimension of targetDType.Size() / x.DType().Size(),
+// and the returned shape will trim the last axis.
+// If targetDType.Size() < x.DType().Size(), the returned shape will have an extra axis in the end, with dimension of
+// x.DType().Size() / targetDType.Size().
+// E.g: Bitcast([1]uint32{0xdeadbeef}, dtypes.UInt16) -> [1][2]uint16{{0xdead, 0xbeef}}
+func Bitcast(x *Node, targetDType dtypes.DType) (node *Node) {
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsBitcast{
+		x:           x,
+		targetDType: targetDType,
+	}
+	result := g.builder.Bitcast(x.outputOps[0], inputs.targetDType)
 	node = &Node{
 		outputOps:    []backends.Op{result},
 		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
