@@ -1,6 +1,6 @@
 # GoMLX changelog
 
-# Next:
+# v0.17.1: 2025/02/26 CosineSimilarity, Bitcast and many fixes and improvements.
 
 * Added MNIST example (thanks to @TuSKan).
 * `gomlx_checkpoints` now displays the value of scalar variables.
@@ -30,6 +30,7 @@
 * Package `xla`:
   * Removed suppression of logging: new PJRTs are not outputting random debug messages anymore.
 * Updated dependency to `gopjrt` v0.6.1.
+* Replaced `stringer` by `enumer` everywhere.
 
 # v0.17.0: bitwise ops, triplet losses, new layers, fixes, and more.
 
