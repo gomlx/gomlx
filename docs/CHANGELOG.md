@@ -29,7 +29,7 @@
     Also, now using MaskedReduceMean if there is a mask, and all losses return a scalar.
 * Package `xla`:
   * Removed suppression of logging: new PJRTs are not outputting random debug messages anymore.
-* Updated dependency to `gopjrt` v0.6.1.
+* Updated dependency to `gopjrt` v0.6.2.
 * Replaced `stringer` by `enumer` everywhere.
 
 # v0.17.0: bitwise ops, triplet losses, new layers, fixes, and more.
