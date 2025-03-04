@@ -47,21 +47,21 @@ type ConvolutionBuilder struct {
 // number of spatial dimensions (1D, 2D, 3D, etc.).
 //
 // It returns a ConvolutionBuilder object that can be further configured. Once the
-// configuration is finished, call `ConvolutionBuilder.Done` and it will return
+// configuration is finished, call ConvolutionBuilder.Done and it will return
 // the convolved x. Browse through ConvolutionBuilder to see its capabilities
 // and defaults.
 //
-// The shapes of x should be `[batch, <spatial_dimensions...>, input_channels]` if
-// configured with `ConvolutionBuilder.ChannelsAxis(timage.ChannelsLast)`, the default.
-// If one sets `ConvolutionBuilder.ChannelsAxis(timage.ChannelsFirst)`, the shapes should be
-// `[batch, input_channels, <spatial_dimensions...>]` instead.
+// The shape of x should be [batch, <spatial_dimensions...>, input_channels] if
+// configured with ConvolutionBuilder.ChannelsAxis(timage.ChannelsLast), the default.
+// If one sets ConvolutionBuilder.ChannelsAxis(timage.ChannelsFirst), then the shape should be
+// [batch, input_channels, <spatial_dimensions...>] instead.
 //
-// Note: `timage` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
+// Note: package timage refers to package github.com/gomlx/gomlx/types/tensor/image.
 //
-// The shapes of kernel should be `[<spatial_dimensions...>, input_channels, output_channels]` if
-// configured with `ConvolutionBuilder.ChannelsAxis(timage.ChannelsLast)`, the default. If one
-// sets `ConvolutionBuilder.ChannelsAxis(timage.ChannelsFirst)`, the shapes should be
-// `[input_channels, <spatial_dimensions...>, output_channels]` instead.
+// The shape of kernel should be [<spatial_dimensions...>, input_channels, output_channels] if
+// configured with ConvolutionBuilder.ChannelsAxis(timage.ChannelsLast), the default. If one
+// sets ConvolutionBuilder.ChannelsAxis(timage.ChannelsFirst), the shape should be
+// [input_channels, <spatial_dimensions...>, output_channels] instead.
 //
 // Notice x and kernel must have the same rank.
 //
@@ -332,6 +332,9 @@ type ConvolveAxesConfig = backends.ConvolveAxesConfig
 // (XLA documentation is really poor here, much is guess-work).
 // Also useful is https://arxiv.org/pdf/1603.07285v1.pdf.
 // Not exported for now, hopefully Convolve will suffice.
+//
+// filterGroupCount and batchGroupCount are not supported yet for backpropagation. Please create an
+// issue if you come to need that.
 func ConvGeneralDilated(input, kernel *Node, axes ConvolveAxesConfig,
 	strides []int, paddings [][2]int, inputDilation, filterDilation []int,
 	filterGroupCount, batchGroupCount int) *Node {
@@ -355,7 +358,12 @@ func convGeneralDilatedVJP(node, v *Node, _ shapes.Shape) []*Node {
 			"usually it's only used to calculate the gradient of a convolution, so " +
 			"this may occur when trying to do the gradient of a gradient.")
 	}
-
+	if params.filterGroupCount != 1 {
+		Panicf("gradient of ConvGeneralDialated using filterGroupCount != 1 is not yet implemented, got filterGroupCount=%d", params.filterGroupCount)
+	}
+	if params.batchGroupCount != 1 {
+		Panicf("gradient of ConvGeneralDialated using batchGroupCount != 1 is not yet implemented, got batchGroupCount=%d", params.batchGroupCount)
+	}
 	//fmt.Printf("\tx.shapes=%s\n", x.Shape())
 	//fmt.Printf("\tkernel.shapes=%s\n", kernel.Shape())
 	//fmt.Printf("\tnode.shapes=%s\n", node.Shape())
