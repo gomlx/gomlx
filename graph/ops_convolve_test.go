@@ -240,3 +240,25 @@ func TestGradientConvolve(t *testing.T) {
 			tensors.FromScalarAndDimensions(0.0, 2, 2, 3, 6).Value(),
 		})
 }
+
+func TestConvolveForwardPass(t *testing.T) {
+	testFuncOneInput(t, "Convolve identity kernel",
+		func(g *Graph) (input, output *Node) {
+			input = Ones(g, MakeShape(dtypes.Float32, 1, 1, 3, 3))
+
+			kernel := Const(g, [][][][]float32{
+				{{
+					{1.0, 0.0, 0.0},
+					{0.0, 1.0, 0.0},
+					{0.0, 0.0, 1.0},
+				}},
+			})
+
+			// Build convolution with valid padding
+			output = Convolve(input, kernel).
+				ChannelsAxis(images.ChannelsFirst).
+				NoPadding().
+				Done()
+			return
+		}, [][][][]float32{{{{1.0}, {1.0}, {1.0}}, {{1.0}, {1.0}, {1.0}}, {{1.0}, {1.0}, {1.0}}}})
+}

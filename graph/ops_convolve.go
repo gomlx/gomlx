@@ -233,6 +233,8 @@ func ConvGeneralDilated(input, kernel *Node, axes ConvolveAxesConfig,
 }
 
 func convGeneralDilatedVJP(node, v *Node, _ shapes.Shape) []*Node {
+	// TODO: backward propagation is not working in this function
+
 	// Recover parameters from serialized node.
 	x := node.inputNodes[0]
 	kernel := node.inputNodes[1]
