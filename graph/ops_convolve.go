@@ -24,8 +24,13 @@ type ConvolutionBuilder struct {
 	axes               ConvolveAxesConfig
 }
 
-func (conv *ConvolutionBuilder) FilterGroupCount(groupCount int) *ConvolutionBuilder {
+func (conv *ConvolutionBuilder) FeatureGroupCount(groupCount int) *ConvolutionBuilder {
 	conv.filterGroupCount = groupCount
+	return conv
+}
+
+func (conv *ConvolutionBuilder) BatchGroupCount(groupCount int) *ConvolutionBuilder {
+	conv.batchGroupCount = groupCount
 	return conv
 }
 
