@@ -47,21 +47,21 @@ type ConvolutionBuilder struct {
 // number of spatial dimensions (1D, 2D, 3D, etc.).
 //
 // It returns a ConvolutionBuilder object that can be further configured. Once the
-// configuration is finished, call ConvolutionBuilder.Done and it will return
+// configuration is finished, call `ConvolutionBuilder.Done` and it will return
 // the convolved x. Browse through ConvolutionBuilder to see its capabilities
 // and defaults.
 //
-// The shape of x should be [batch, <spatial_dimensions...>, input_channels] if
-// configured with ConvolutionBuilder.ChannelsAxis(timage.ChannelsLast), the default.
-// If one sets ConvolutionBuilder.ChannelsAxis(timage.ChannelsFirst), then the shape should be
-// [batch, input_channels, <spatial_dimensions...>] instead.
+// The shapes of x should be `[batch, <spatial_dimensions...>, input_channels]` if
+// configured with `ConvolutionBuilder.ChannelsAxis(timage.ChannelsLast)`, the default.
+// If one sets `ConvolutionBuilder.ChannelsAxis(timage.ChannelsFirst)`, the shapes should be
+// `[batch, input_channels, <spatial_dimensions...>]` instead.
 //
-// Note: package timage refers to package github.com/gomlx/gomlx/types/tensor/image.
+// Note: `timage` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
 //
-// The shape of kernel should be [<spatial_dimensions...>, input_channels, output_channels] if
-// configured with ConvolutionBuilder.ChannelsAxis(timage.ChannelsLast), the default. If one
-// sets ConvolutionBuilder.ChannelsAxis(timage.ChannelsFirst), the shape should be
-// [input_channels, <spatial_dimensions...>, output_channels] instead.
+// The shapes of kernel should be `[<spatial_dimensions...>, input_channels, output_channels]` if
+// configured with `ConvolutionBuilder.ChannelsAxis(timage.ChannelsLast)`, the default. If one
+// sets `ConvolutionBuilder.ChannelsAxis(timage.ChannelsFirst)`, the shapes should be
+// `[input_channels, <spatial_dimensions...>, output_channels]` instead.
 //
 // Notice x and kernel must have the same rank.
 //
@@ -78,7 +78,7 @@ func Convolve(x, kernel *Node) *ConvolutionBuilder {
 
 	conv.numSpatialDims = x.Rank() - 2
 	if conv.numSpatialDims < 0 {
-		Panicf("Input x must have rank >= 3, shaped by default as [batch, , channels], "+
+		Panicf("Input x must have rank >= 3, shaped by default as [batch, <spatial_dimensions...>, channels], "+
 			"but x rank is %d", x.Rank())
 	}
 
@@ -229,10 +229,7 @@ func (conv *ConvolutionBuilder) PadSame() *ConvolutionBuilder {
 // See also PadSame and PaddingPerDim.
 
 func (conv *ConvolutionBuilder) NoPadding() *ConvolutionBuilder {
-	conv.paddings = make([][2]int, conv.numSpatialDims)
-	for i := range conv.paddings {
-		conv.paddings[i] = [2]int{0, 0}
-	}
+	conv.paddings = nil
 	conv.padSame = false
 	return conv
 }
@@ -416,6 +413,8 @@ func convGeneralDilatedVJP(node, v *Node, _ shapes.Shape) []*Node {
 	return []*Node{vjpX, vjpKernel}
 }
 
+// convVJPWrtX creates the Vector-Jacobian (for backpropagation) of the
+// output with respect to (==wrt) the input (x). See also convVJPWrtKernel.
 func convVJPWrtX(node, x, kernel, v *Node, numSpatialDims int, axes ConvolveAxesConfig,
 	strides []int, paddings [][2]int, filterDilation []int) *Node {
 	// Get output and input spatial dimensions.
