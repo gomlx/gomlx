@@ -242,32 +242,6 @@ func TestGradientConvolve(t *testing.T) {
 		})
 }
 
-/* func TestConvolveWithGroupCount(t *testing.T) {
-	testFuncOneInput(t, "Convolve identity kernel with FeatureGroupCount and BatchGroupCount",
-		func(g *Graph) (input, output *Node) {
-			// Create 3x3 input with channels first (batch=1, channels=1)
-			input = Ones(g, MakeShape(dtypes.Float32, 1, 3, 3, 3))
-
-			// Create identity-like 3x3 kernel with proper reshaping
-			kernel := Const(g, [][][][]float32{
-				{{
-					{1.0, 0.0, 0.0},
-					{0.0, 1.0, 0.0},
-					{0.0, 0.0, 1.0},
-				}},
-			})
-
-			// Build convolution with valid padding, feature group count, and batch group count
-			output = Convolve(input, kernel).
-				ChannelsAxis(images.ChannelsFirst).
-				NoPadding().
-				FeatureGroupCount(3).
-				BatchGroupCount(1).
-				Done()
-			return
-		}, [][][][]float32{{{{1.0}, {1.0}, {1.0}}, {{1.0}, {1.0}, {1.0}}, {{1.0}, {1.0}, {1.0}}}})
-} */
-
 func TestConvolveWithGroupCount(t *testing.T) {
 	testFuncOneInput(t, "SUCCESS: Convolution with FeatureGroupCount=2",
 		func(g *Graph) (input, output *Node) {

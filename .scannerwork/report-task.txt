@@ -1,7 +1,0 @@
-organization=guru2308
-projectKey=guru2308_gomlx
-serverUrl=https://sonarcloud.io
-serverVersion=8.0.0.60629
-dashboardUrl=https://sonarcloud.io/dashboard?id=guru2308_gomlx
-ceTaskId=AZWO8P4AUkw7XXItHb9i
-ceTaskUrl=https://sonarcloud.io/api/ce/task?id=AZWO8P4AUkw7XXItHb9i
