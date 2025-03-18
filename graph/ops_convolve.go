@@ -227,7 +227,6 @@ func (conv *ConvolutionBuilder) PadSame() *ConvolutionBuilder {
 // the output shapes will be reduced on the edges. This is the default.
 //
 // See also PadSame and PaddingPerDim.
-
 func (conv *ConvolutionBuilder) NoPadding() *ConvolutionBuilder {
 	conv.paddings = nil
 	conv.padSame = false
