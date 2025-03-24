@@ -248,9 +248,7 @@ func TestConvolveWithGroupCount(t *testing.T) {
 			input = IotaFull(g, MakeShape(dtypes.Float32, 1, 2, 3, 3))
 
 			// Create kernel for grouped convolution (1 input channel per group)
-			kernel := Zeros(g, MakeShape(dtypes.Float32, 1, 3, 3, 2))
-			// Set center values to 1.0
-			kernel = Add(kernel, Const(g, [][][][]float32{{{{0, 0}, {0, 0}, {0, 0}}, {{0, 0}, {1, 1}, {0, 0}}, {{0, 0}, {0, 0}, {0, 0}}}}))
+			kernel := Const(g, [][][][]float32{{{{0, 0}, {0, 0}, {0, 0}}, {{0, 0}, {1, 2}, {0, 0}}, {{0, 0}, {0, 0}, {0, 0}}}})
 
 			output = Convolve(input, kernel).
 				ChannelsAxis(images.ChannelsFirst).
@@ -259,16 +257,14 @@ func TestConvolveWithGroupCount(t *testing.T) {
 				Done()
 			return
 		},
-		[][][][]float32{{{{4.0}}, {{13.0}}}})
+		[][][][]float32{{{{4.0}}, {{26.0}}}})
 
 	testFuncOneInput(t, "SUCCESS: Convolution with BatchGroupCount=2",
 		func(g *Graph) (input, output *Node) {
 			input = IotaFull(g, MakeShape(dtypes.Float32, 2, 1, 3, 3))
 
 			// Create kernel for grouped convolution (1 input channel per group)
-			kernel := Zeros(g, MakeShape(dtypes.Float32, 1, 3, 3, 2))
-			// Set center values to 1.0
-			kernel = Add(kernel, Const(g, [][][][]float32{{{{0, 0}, {0, 0}, {0, 0}}, {{0, 0}, {1, 1}, {0, 0}}, {{0, 0}, {0, 0}, {0, 0}}}}))
+			kernel := Const(g, [][][][]float32{{{{0, 0}, {0, 0}, {0, 0}}, {{0, 0}, {1, 2}, {0, 0}}, {{0, 0}, {0, 0}, {0, 0}}}})
 
 			output = Convolve(input, kernel).
 				ChannelsAxis(images.ChannelsFirst).
@@ -277,5 +273,5 @@ func TestConvolveWithGroupCount(t *testing.T) {
 				Done()
 			return
 		},
-		[][][][]float32{{{{4.0}}, {{13.0}}}})
+		[][][][]float32{{{{4.0}}, {{26.0}}}})
 }
