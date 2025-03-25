@@ -240,3 +240,38 @@ func TestGradientConvolve(t *testing.T) {
 			tensors.FromScalarAndDimensions(0.0, 2, 2, 3, 6).Value(),
 		})
 }
+
+func TestConvolveWithGroupCount(t *testing.T) {
+	testFuncOneInput(t, "SUCCESS: Convolution with FeatureGroupCount=2",
+		func(g *Graph) (input, output *Node) {
+			// Input with 2 channels (matches FeatureGroupCount)
+			input = IotaFull(g, MakeShape(dtypes.Float32, 1, 2, 3, 3))
+
+			// Create kernel for grouped convolution (1 input channel per group)
+			kernel := Const(g, [][][][]float32{{{{0, 0}, {0, 0}, {0, 0}}, {{0, 0}, {1, 2}, {0, 0}}, {{0, 0}, {0, 0}, {0, 0}}}})
+
+			output = Convolve(input, kernel).
+				ChannelsAxis(images.ChannelsFirst).
+				NoPadding().
+				FeatureGroupCount(2).
+				Done()
+			return
+		},
+		[][][][]float32{{{{4.0}}, {{26.0}}}})
+
+	testFuncOneInput(t, "SUCCESS: Convolution with BatchGroupCount=2",
+		func(g *Graph) (input, output *Node) {
+			input = IotaFull(g, MakeShape(dtypes.Float32, 2, 1, 3, 3))
+
+			// Create kernel for grouped convolution (1 input channel per group)
+			kernel := Const(g, [][][][]float32{{{{0, 0}, {0, 0}, {0, 0}}, {{0, 0}, {1, 2}, {0, 0}}, {{0, 0}, {0, 0}, {0, 0}}}})
+
+			output = Convolve(input, kernel).
+				ChannelsAxis(images.ChannelsFirst).
+				NoPadding().
+				BatchGroupCount(2).
+				Done()
+			return
+		},
+		[][][][]float32{{{{4.0}}, {{26.0}}}})
+}

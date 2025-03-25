@@ -67,6 +67,12 @@ type ConvolutionBuilder struct {
 //
 // We follow the Keras convention of calling the "depth" or "feature" or "channels" dimension
 // "channels". Likewise, we use "kernel" instead of "filters" -- but they mean the same.
+//
+// Additional features:
+//   - Group operations: Use ConvolutionBuilder.FeatureGroupCount to split channels
+//     or BatchGroupCount to split batches into independent processing groups.
+//     When using either feature, the kernel shape changes and back-propagation
+//     is not yet supported.
 func Convolve(x, kernel *Node) *ConvolutionBuilder {
 	conv := &ConvolutionBuilder{
 		graph:            validateBuildingGraphFromInputs(x, kernel),
@@ -75,15 +81,18 @@ func Convolve(x, kernel *Node) *ConvolutionBuilder {
 		filterGroupCount: 1,
 		batchGroupCount:  1,
 	}
+
 	conv.numSpatialDims = x.Rank() - 2
 	if conv.numSpatialDims < 0 {
 		Panicf("Input x must have rank >= 3, shaped by default as [batch, <spatial_dimensions...>, channels], "+
 			"but x rank is %d", x.Rank())
 	}
+
 	if kernel.Rank() != x.Rank() {
 		Panicf("Input x (rank %d) must have same rank as the kernel (rank %d) -- x has a batch dimension, "+
 			"and kernel has an output_channels dimension", x.Rank(), kernel.Rank())
 	}
+
 	return conv.ChannelsAxis(timage.ChannelsLast).NoPadding()
 }
 
@@ -170,6 +179,59 @@ func (conv *ConvolutionBuilder) StridePerDim(strides ...int) *ConvolutionBuilder
 			len(strides), conv.numSpatialDims)
 	}
 	conv.strides = strides
+	return conv
+}
+
+// FeatureGroupCount splits input/output channels into independent groups.
+// Equivalent to TensorFlow's "groups" parameter in tf.nn.convNd operations.
+//
+// When FeatureGroupCount != 1, the kernel shape changes: the input channels
+// dimension of the kernel must equal (input_channels / group_count).
+// This effectively creates separate convolution groups where each group
+// processes a subset of input channels and produces a subset of output channels.
+//
+// For depthwise convolution, set groups = input_channels (see tf.nn.depthwise_conv2d).
+// The output shape will have the same spatial dimensions as a regular convolution
+// but with channel dimensions affected by the grouping.
+//
+// Side effects:
+//   - Kernel shape: The kernel's input channel dimension becomes (input_channels / group_count)
+//   - Output shape: The output maintains the same spatial dimensions as regular convolution
+//     but each group independently maps its input channels to output channels
+//   - Performance: Can reduce computation cost by limiting connections between channels
+//   - Memory usage: Reduces the number of parameters in the kernel
+//
+// Note: Back-propagation is not yet implemented for this feature.
+//
+// Reference: https://www.tensorflow.org/api_docs/python/tf/data/Dataset#group_by_window
+func (conv *ConvolutionBuilder) FeatureGroupCount(groupCount int) *ConvolutionBuilder {
+	if groupCount < 1 {
+		Panicf("FeatureGroupCount must be >= 1, got %d", groupCount)
+	}
+
+	conv.filterGroupCount = groupCount
+	return conv
+}
+
+// BatchGroupCount splits batches into independent processing groups.
+// Used for cross-batch interactions like ShuffleNet's channel shuffle.
+//
+// When BatchGroupCount != 1, the kernel shape changes: the batch dimension
+// of the input is divided by the group count, creating separate convolution
+// groups where each group processes a subset of the batch.
+//
+// The output shape will have the same spatial dimensions as a regular convolution
+// but with batch dimension affected by the grouping.
+//
+// Note: Back-propagation is not yet implemented for this feature.
+//
+// Reference: https://www.tensorflow.org/api_docs/python/tf/data/Dataset#batch
+func (conv *ConvolutionBuilder) BatchGroupCount(groupCount int) *ConvolutionBuilder {
+	if groupCount < 1 {
+		Panicf("BatchGroupCount must be >= 1, got %d", groupCount)
+	}
+
+	conv.batchGroupCount = groupCount
 	return conv
 }
 
@@ -310,6 +372,31 @@ func (conv *ConvolutionBuilder) Done() *Node {
 			conv.strides, conv.filterDilation)
 	}
 
+	// Validate feature group count
+	if conv.filterGroupCount > 1 {
+		inputChannels := conv.x.Shape().Dimensions[conv.axes.InputChannel]
+		if inputChannels%conv.filterGroupCount != 0 {
+			Panicf("input channels (%d) not divisible by FeatureGroupCount (%d)",
+				inputChannels, conv.filterGroupCount)
+		}
+
+		// Validate that kernel input channel axis matches the feature group count
+		kernelInputChannels := conv.kernel.Shape().Dimensions[conv.axes.KernelInputChannel]
+		if kernelInputChannels != inputChannels/conv.filterGroupCount {
+			Panicf("kernel input channels (%d) must equal input channels (%d) divided by FeatureGroupCount (%d)",
+				kernelInputChannels, inputChannels, conv.filterGroupCount)
+		}
+	}
+
+	// Validate batch group count
+	if conv.batchGroupCount > 1 {
+		batchSize := conv.x.Shape().Dimensions[conv.axes.InputBatch]
+		if batchSize%conv.batchGroupCount != 0 {
+			Panicf("batch size (%d) not divisible by BatchGroupCount (%d)",
+				batchSize, conv.batchGroupCount)
+		}
+	}
+
 	return ConvGeneralDilated(conv.x, conv.kernel,
 		conv.axes, conv.strides,
 		paddings, conv.inputDilation, conv.filterDilation,
@@ -348,6 +435,8 @@ func ConvGeneralDilated(input, kernel *Node, axes ConvolveAxesConfig,
 }
 
 func convGeneralDilatedVJP(node, v *Node, _ shapes.Shape) []*Node {
+	// TODO: backward propagation is not working in this function
+
 	// Recover parameters from serialized node.
 	x := node.inputNodes[0]
 	kernel := node.inputNodes[1]
@@ -393,6 +482,7 @@ func convVJPWrtX(node, x, kernel, v *Node, numSpatialDims int, axes ConvolveAxes
 
 	// Instead of transposing output/input channels, just swap their indices in the reverseAxes. Effectively this does:
 	//     reverseKernel = Transpose(reverseKernel, axes.KernelOutputChannel, axes.KernelInputChannel)
+
 	reverseAxes := axes
 	reverseAxes.KernelInputChannel, reverseAxes.KernelOutputChannel = axes.KernelOutputChannel, axes.KernelInputChannel
 
