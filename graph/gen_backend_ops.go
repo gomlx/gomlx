@@ -99,9 +99,9 @@ const (
 	NodeTypeRngBitGenerator
 	NodeTypeRound
 	NodeTypeRsqrt
-	NodeTypeScatterAdd
 	NodeTypeScatterMax
 	NodeTypeScatterMin
+	NodeTypeScatterSum
 	NodeTypeSelectAndScatterMax
 	NodeTypeSelectAndScatterMin
 	NodeTypeSelectAndScatterSum
@@ -3478,67 +3478,6 @@ func Rsqrt(x *Node) (node *Node) {
 	return
 }
 
-// nodeInputsScatterAdd holds the inputs used for the call to backends.ScatterSum.
-type nodeInputsScatterAdd struct {
-	operand                  *Node
-	scatterIndices           *Node
-	updates                  *Node
-	indexVectorAxis          int
-	updateWindowAxes         []int
-	insertedWindowAxes       []int
-	scatterAxesToOperandAxes []int
-	indicesAreSorted         bool
-	uniqueIndices            bool
-}
-
-// Type implements the interface NodeInputs.
-func (ni *nodeInputsScatterAdd) Type() NodeType {
-	return NodeTypeScatterAdd
-}
-
-// String implements the interface NodeInputs.
-func (ni *nodeInputsScatterAdd) String() string {
-	return fmt.Sprintf("%s(operand=[#%d], scatterIndices=[#%d], updates=[#%d], indexVectorAxis=%v, updateWindowAxes=%v, insertedWindowAxes=%v, scatterAxesToOperandAxes=%v, indicesAreSorted=%v, uniqueIndices=%v)",
-		ni.Type(),
-		ni.operand.Id(),
-		ni.scatterIndices.Id(),
-		ni.updates.Id(),
-		ni.indexVectorAxis,
-		ni.updateWindowAxes,
-		ni.insertedWindowAxes,
-		ni.scatterAxesToOperandAxes,
-		ni.indicesAreSorted,
-		ni.uniqueIndices,
-	)
-}
-
-// backendScatterAdd is a Graph wrapper for the backend.Builder.ScatterSum method.
-func backendScatterAdd(operand *Node, scatterIndices *Node, updates *Node, indexVectorAxis int, updateWindowAxes []int, insertedWindowAxes []int, scatterAxesToOperandAxes []int, indicesAreSorted bool, uniqueIndices bool) (node *Node) {
-	inputNodes := []*Node{operand, scatterIndices, updates}
-	g := validateBuildingGraphFromInputs(inputNodes...)
-	inputs := &nodeInputsScatterAdd{
-		operand:                  operand,
-		scatterIndices:           scatterIndices,
-		updates:                  updates,
-		indexVectorAxis:          indexVectorAxis,
-		updateWindowAxes:         updateWindowAxes,
-		insertedWindowAxes:       insertedWindowAxes,
-		scatterAxesToOperandAxes: scatterAxesToOperandAxes,
-		indicesAreSorted:         indicesAreSorted,
-		uniqueIndices:            uniqueIndices,
-	}
-	result := g.builder.ScatterAdd(operand.outputOps[0], scatterIndices.outputOps[0], updates.outputOps[0], inputs.indexVectorAxis, inputs.updateWindowAxes, inputs.insertedWindowAxes, inputs.scatterAxesToOperandAxes, inputs.indicesAreSorted, inputs.uniqueIndices)
-	node = &Node{
-		outputOps:    []backends.Op{result},
-		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
-		graph:        g,
-		inputs:       inputs,
-		inputNodes:   inputNodes,
-	}
-	g.registerNode(node)
-	return
-}
-
 // nodeInputsScatterMax holds the inputs used for the call to backends.ScatterMax.
 type nodeInputsScatterMax struct {
 	operand                  *Node
@@ -3650,6 +3589,67 @@ func backendScatterMin(operand *Node, scatterIndices *Node, updates *Node, index
 		uniqueIndices:            uniqueIndices,
 	}
 	result := g.builder.ScatterMin(operand.outputOps[0], scatterIndices.outputOps[0], updates.outputOps[0], inputs.indexVectorAxis, inputs.updateWindowAxes, inputs.insertedWindowAxes, inputs.scatterAxesToOperandAxes, inputs.indicesAreSorted, inputs.uniqueIndices)
+	node = &Node{
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsScatterSum holds the inputs used for the call to backends.ScatterSum.
+type nodeInputsScatterSum struct {
+	operand                  *Node
+	scatterIndices           *Node
+	updates                  *Node
+	indexVectorAxis          int
+	updateWindowAxes         []int
+	insertedWindowAxes       []int
+	scatterAxesToOperandAxes []int
+	indicesAreSorted         bool
+	uniqueIndices            bool
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsScatterSum) Type() NodeType {
+	return NodeTypeScatterSum
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsScatterSum) String() string {
+	return fmt.Sprintf("%s(operand=[#%d], scatterIndices=[#%d], updates=[#%d], indexVectorAxis=%v, updateWindowAxes=%v, insertedWindowAxes=%v, scatterAxesToOperandAxes=%v, indicesAreSorted=%v, uniqueIndices=%v)",
+		ni.Type(),
+		ni.operand.Id(),
+		ni.scatterIndices.Id(),
+		ni.updates.Id(),
+		ni.indexVectorAxis,
+		ni.updateWindowAxes,
+		ni.insertedWindowAxes,
+		ni.scatterAxesToOperandAxes,
+		ni.indicesAreSorted,
+		ni.uniqueIndices,
+	)
+}
+
+// backendScatterSum is a Graph wrapper for the backend.Builder.ScatterSum method.
+func backendScatterSum(operand *Node, scatterIndices *Node, updates *Node, indexVectorAxis int, updateWindowAxes []int, insertedWindowAxes []int, scatterAxesToOperandAxes []int, indicesAreSorted bool, uniqueIndices bool) (node *Node) {
+	inputNodes := []*Node{operand, scatterIndices, updates}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsScatterSum{
+		operand:                  operand,
+		scatterIndices:           scatterIndices,
+		updates:                  updates,
+		indexVectorAxis:          indexVectorAxis,
+		updateWindowAxes:         updateWindowAxes,
+		insertedWindowAxes:       insertedWindowAxes,
+		scatterAxesToOperandAxes: scatterAxesToOperandAxes,
+		indicesAreSorted:         indicesAreSorted,
+		uniqueIndices:            uniqueIndices,
+	}
+	result := g.builder.ScatterSum(operand.outputOps[0], scatterIndices.outputOps[0], updates.outputOps[0], inputs.indexVectorAxis, inputs.updateWindowAxes, inputs.insertedWindowAxes, inputs.scatterAxesToOperandAxes, inputs.indicesAreSorted, inputs.uniqueIndices)
 	node = &Node{
 		outputOps:    []backends.Op{result},
 		outputShapes: []shapes.Shape{g.builder.OpShape(result)},

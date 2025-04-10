@@ -896,7 +896,7 @@ func gatherVJP(node, v *Node, _ shapes.Shape) []*Node {
 	scatterDimsToOperandDims := params.startIndexMap // Same map used in GatherSlice.
 	// We don't make any assumptions on uniqueness or sortedness of the indices. Likely the slices will overlap.
 	return []*Node{
-		backendScatterAdd(operand, startIndices, updates, params.indexVectorAxis, updateWindowsDims, insertedWindowDims, scatterDimsToOperandDims,
+		backendScatterSum(operand, startIndices, updates, params.indexVectorAxis, updateWindowsDims, insertedWindowDims, scatterDimsToOperandDims,
 			params.indicesAreSorted, false),
 		nil, // No gradients for indices.
 	}
