@@ -975,18 +975,6 @@ func (b *Builder) Rsqrt(x backends.Op) backends.Op {
 	return xla_result
 }
 
-// ScatterAdd values from updates pointed by scatterIndices to operand.
-func (b *Builder) ScatterAdd(operand, scatterIndices, updates backends.Op, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) backends.Op {
-	xla_operand := b.verifyAndCastOp(operand, "operand")
-	xla_scatterIndices := b.verifyAndCastOp(scatterIndices, "scatterIndices")
-	xla_updates := b.verifyAndCastOp(updates, "updates")
-	xla_result, err := xlabuilder.ScatterAdd(xla_operand, xla_scatterIndices, xla_updates, indexVectorAxis, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes, indicesAreSorted, uniqueIndices)
-	if err != nil {
-		panic(errors.WithMessagef(err, "Backend %q: failed ScatterAdd", BackendName))
-	}
-	return xla_result
-}
-
 // ScatterMax scatter values from updates pointed by scatterIndices to operand, by taking the Max.
 func (b *Builder) ScatterMax(operand, scatterIndices, updates backends.Op, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) backends.Op {
 	xla_operand := b.verifyAndCastOp(operand, "operand")
@@ -1007,6 +995,18 @@ func (b *Builder) ScatterMin(operand, scatterIndices, updates backends.Op, index
 	xla_result, err := xlabuilder.ScatterMin(xla_operand, xla_scatterIndices, xla_updates, indexVectorAxis, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes, indicesAreSorted, uniqueIndices)
 	if err != nil {
 		panic(errors.WithMessagef(err, "Backend %q: failed ScatterMin", BackendName))
+	}
+	return xla_result
+}
+
+// ScatterSum values from updates pointed by scatterIndices to operand.
+func (b *Builder) ScatterSum(operand, scatterIndices, updates backends.Op, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) backends.Op {
+	xla_operand := b.verifyAndCastOp(operand, "operand")
+	xla_scatterIndices := b.verifyAndCastOp(scatterIndices, "scatterIndices")
+	xla_updates := b.verifyAndCastOp(updates, "updates")
+	xla_result, err := xlabuilder.ScatterSum(xla_operand, xla_scatterIndices, xla_updates, indexVectorAxis, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes, indicesAreSorted, uniqueIndices)
+	if err != nil {
+		panic(errors.WithMessagef(err, "Backend %q: failed ScatterSum", BackendName))
 	}
 	return xla_result
 }

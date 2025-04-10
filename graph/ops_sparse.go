@@ -324,18 +324,58 @@ func IndicesForShape(g *Graph, shape shapes.Shape) *Node {
 func Scatter(indices, updates *Node, shape shapes.Shape) *Node {
 	g := validateBuildingGraphFromInputs(indices, updates)
 	zeros := Zeros(g, shape)
-	return ScatterAdd(zeros, indices, updates, false, false)
+	return ScatterSum(zeros, indices, updates, false, false)
 }
 
-// ScatterAdd adds up the slices in updates into the given operand tensor, at the locations pointed by indices.
+// ScatterSum adds up the slices in updates into the given operand tensor, at the locations pointed by indices.
 // It does the opposite of Gather.
 //
 // Args:
 // - [sorted]: the indices must be in order. In some cases it is faster, but if indices are not in order results may be unstable.
 // - [unique]: the indices must be unique. In some cases it is faster, but if indices are not unique results may be unstable.
-func ScatterAdd(operand, indices, updates *Node, sorted, unique bool) *Node {
+func ScatterSum(operand, indices, updates *Node, sorted, unique bool) *Node {
 	_ = validateBuildingGraphFromInputs(operand, indices, updates)
+	return genericScatter(operand, indices, updates, sorted, unique, backendScatterSum)
+}
 
+// ScatterAdd is a deprecated alias to ScatterSum.
+//
+// Deprecated: Please use ScatterSum instead.
+func ScatterAdd(operand, indices, updates *Node, sorted, unique bool) *Node {
+	return ScatterSum(operand, indices, updates, sorted, unique)
+}
+
+// ScatterMax updates the max value of operand, from the values in updates pointed by indices.
+//
+// The operand provides the initial values for the operation, and typically will be initialized
+// with -inf. See Infinity and BroadcastToDims to create an arbitrarily shaped node filled with
+// infinity.
+//
+// Args:
+// - [sorted]: the indices must be in order. In some cases it is faster, but if indices are not in order results may be unstable.
+// - [unique]: the indices must be unique. In some cases it is faster, but if indices are not unique results may be unstable.
+func ScatterMax(operand, indices, updates *Node, sorted, unique bool) *Node {
+	_ = validateBuildingGraphFromInputs(operand, indices, updates)
+	return genericScatter(operand, indices, updates, sorted, unique, backendScatterMax)
+}
+
+// ScatterMin updates the min value of operand, from the values in updates pointed by indices.
+//
+// The operand provides the initial values for the operation, and typically will be initialized
+// with +inf. See Infinity and BroadcastToDims to create an arbitrarily shaped node filled with
+// infinity.
+//
+// Args:
+// - [sorted]: the indices must be in order. In some cases it is faster, but if indices are not in order results may be unstable.
+// - [unique]: the indices must be unique. In some cases it is faster, but if indices are not unique results may be unstable.
+func ScatterMin(operand, indices, updates *Node, sorted, unique bool) *Node {
+	_ = validateBuildingGraphFromInputs(operand, indices, updates)
+	return genericScatter(operand, indices, updates, sorted, unique, backendScatterMin)
+}
+
+type scatterFn func(operand *Node, scatterIndices *Node, updates *Node, indexVectorAxis int, updateWindowAxes []int, insertedWindowAxes []int, scatterAxesToOperandAxes []int, indicesAreSorted bool, uniqueIndices bool) (node *Node)
+
+func genericScatter(operand, indices, updates *Node, sorted, unique bool, fn scatterFn) *Node {
 	if !indices.DType().IsInt() {
 		Panicf("scatter operations require integer indices, instead got shapes %s", indices.Shape())
 	}
@@ -345,7 +385,7 @@ func ScatterAdd(operand, indices, updates *Node, sorted, unique bool) *Node {
 			operand.Shape(), updates.Shape())
 	}
 	if indices.Shape().IsTuple() || operand.Shape().IsTuple() || updates.Shape().IsTuple() {
-		Panicf("tuples are not supported in ScatterAdd, operand.Shape()=%s, indices.Shape()=%s, updates.Shape()=%s",
+		Panicf("tuples are not supported in ScatterSum, operand.Shape()=%s, indices.Shape()=%s, updates.Shape()=%s",
 			operand.Shape(), indices.Shape(), updates.Shape())
 	}
 	if indices.Shape().IsScalar() {
@@ -370,18 +410,18 @@ func ScatterAdd(operand, indices, updates *Node, sorted, unique bool) *Node {
 	}
 
 	// Set scatterXLA parameters:
-	updateWindowsDims := make([]int, 0, slicesRank)
+	updateWindowsAxes := make([]int, 0, slicesRank)
 	for ii := updatesRank - slicesRank; ii < updatesRank; ii++ {
-		updateWindowsDims = append(updateWindowsDims, ii)
+		updateWindowsAxes = append(updateWindowsAxes, ii)
 	}
-	insertedWindowDims := make([]int, 0, indexedRank)
+	insertedWindowsAxes := make([]int, 0, indexedRank)
 	for ii := 0; ii < indexedRank; ii++ {
-		insertedWindowDims = append(insertedWindowDims, ii)
+		insertedWindowsAxes = append(insertedWindowsAxes, ii)
 	}
-	scatterDimsToOperandDims := make([]int, 0, 10)
+	scatterAxesToOperandAxes := make([]int, 0, 10)
 	for ii := 0; ii < indexedRank; ii++ {
-		scatterDimsToOperandDims = append(scatterDimsToOperandDims, ii)
+		scatterAxesToOperandAxes = append(scatterAxesToOperandAxes, ii)
 	}
-	return backendScatterAdd(operand, indices, updates, indicesRank-1, updateWindowsDims, insertedWindowDims, scatterDimsToOperandDims,
+	return fn(operand, indices, updates, indicesRank-1, updateWindowsAxes, insertedWindowsAxes, scatterAxesToOperandAxes,
 		sorted, unique)
 }

@@ -867,7 +867,7 @@ func gatherVJP(node, v *Node, _ shapes.Shape) []*Node {
 	}
 	if isSimpleGather {
 		return []*Node{
-			ScatterAdd(Zeros(node.graph, inputShape), indices, v, params.indicesAreSorted, false),
+			ScatterSum(Zeros(node.graph, inputShape), indices, v, params.indicesAreSorted, false),
 			nil, // No gradients for indices.
 		}
 	}

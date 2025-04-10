@@ -399,14 +399,14 @@ type StandardOps interface {
 	// Rsqrt returns the element-wise reciprocal of square root operation 1/sqrt(x).
 	Rsqrt(x Op) Op
 
-	// ScatterAdd values from updates pointed by scatterIndices to operand.
-	ScatterAdd(operand, scatterIndices, updates Op, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) Op
-
 	// ScatterMax scatter values from updates pointed by scatterIndices to operand, by taking the Max.
 	ScatterMax(operand, scatterIndices, updates Op, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) Op
 
 	// ScatterMin scatter values from updates pointed by scatterIndices to operand, by taking the Min.
 	ScatterMin(operand, scatterIndices, updates Op, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) Op
+
+	// ScatterSum values from updates pointed by scatterIndices to operand.
+	ScatterSum(operand, scatterIndices, updates Op, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) Op
 
 	// SelectAndScatterMax runs windows (similar to ReduceWindow) over the operand, selects values to updates the output (like ScatterAdd)
 	// It selects the values in the window such that it works as reverse for a PoolMax operation.

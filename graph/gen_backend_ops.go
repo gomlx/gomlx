@@ -3478,7 +3478,7 @@ func Rsqrt(x *Node) (node *Node) {
 	return
 }
 
-// nodeInputsScatterAdd holds the inputs used for the call to backends.ScatterAdd.
+// nodeInputsScatterAdd holds the inputs used for the call to backends.ScatterSum.
 type nodeInputsScatterAdd struct {
 	operand                  *Node
 	scatterIndices           *Node
@@ -3512,7 +3512,7 @@ func (ni *nodeInputsScatterAdd) String() string {
 	)
 }
 
-// backendScatterAdd is a Graph wrapper for the backend.Builder.ScatterAdd method.
+// backendScatterAdd is a Graph wrapper for the backend.Builder.ScatterSum method.
 func backendScatterAdd(operand *Node, scatterIndices *Node, updates *Node, indexVectorAxis int, updateWindowAxes []int, insertedWindowAxes []int, scatterAxesToOperandAxes []int, indicesAreSorted bool, uniqueIndices bool) (node *Node) {
 	inputNodes := []*Node{operand, scatterIndices, updates}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -3573,8 +3573,8 @@ func (ni *nodeInputsScatterMax) String() string {
 	)
 }
 
-// ScatterMax scatter values from updates pointed by scatterIndices to operand, by taking the Max.
-func ScatterMax(operand *Node, scatterIndices *Node, updates *Node, indexVectorAxis int, updateWindowAxes []int, insertedWindowAxes []int, scatterAxesToOperandAxes []int, indicesAreSorted bool, uniqueIndices bool) (node *Node) {
+// backendScatterMax is a Graph wrapper for the backend.Builder.ScatterMax method.
+func backendScatterMax(operand *Node, scatterIndices *Node, updates *Node, indexVectorAxis int, updateWindowAxes []int, insertedWindowAxes []int, scatterAxesToOperandAxes []int, indicesAreSorted bool, uniqueIndices bool) (node *Node) {
 	inputNodes := []*Node{operand, scatterIndices, updates}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsScatterMax{
@@ -3634,8 +3634,8 @@ func (ni *nodeInputsScatterMin) String() string {
 	)
 }
 
-// ScatterMin scatter values from updates pointed by scatterIndices to operand, by taking the Min.
-func ScatterMin(operand *Node, scatterIndices *Node, updates *Node, indexVectorAxis int, updateWindowAxes []int, insertedWindowAxes []int, scatterAxesToOperandAxes []int, indicesAreSorted bool, uniqueIndices bool) (node *Node) {
+// backendScatterMin is a Graph wrapper for the backend.Builder.ScatterMin method.
+func backendScatterMin(operand *Node, scatterIndices *Node, updates *Node, indexVectorAxis int, updateWindowAxes []int, insertedWindowAxes []int, scatterAxesToOperandAxes []int, indicesAreSorted bool, uniqueIndices bool) (node *Node) {
 	inputNodes := []*Node{operand, scatterIndices, updates}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsScatterMin{

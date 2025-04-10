@@ -22,7 +22,7 @@ const (
 // or simply excluded (deprecated methods).
 var methodsToExclude = types.SetWith(
 	"BatchNormForInference", "BatchNormForTraining", "BatchNormGradient",
-	"And", "Or", "Xor", "Not", "ReduceAnd", "ReduceOr", "ReduceXor")
+	"And", "Or", "Xor", "Not", "ReduceAnd", "ReduceOr", "ReduceXor", "ScatterAdd")
 
 var (
 	standardOpsTemplate = template.Must(template.New(standardOpsInterfaceFile).Parse(`

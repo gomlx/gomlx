@@ -36,7 +36,9 @@ var (
 		"ReduceBitwiseAnd", "ReduceBitwiseOr", "ReduceBitwiseXor",
 
 		"Reshape", "Reverse", "RngBitGenerator",
-		"ScatterAdd", "SelectAndScatterSum", "SelectAndScatterMax", "SelectAndScatterMin",
+		"ScatterSum", "ScatterMax", "ScatterMin",
+		"ScatterAdd", // Deprecated
+		"SelectAndScatterSum", "SelectAndScatterMax", "SelectAndScatterMin",
 		"Sign",
 		"ShiftLeft", "ShiftRightArithmetic", "ShiftRightLogical",
 		"Slice",

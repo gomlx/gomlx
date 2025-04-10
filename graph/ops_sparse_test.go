@@ -25,6 +25,7 @@ import (
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/rand"
+	"math"
 	"slices"
 	"testing"
 )
@@ -147,13 +148,13 @@ func TestScatter(t *testing.T) {
 	}
 
 	{ // Simple leading indices dimension.
-		fmt.Println("\tScatterAdd(): leading indices dimension, and deeper slice dimension.")
-		g := NewGraph(backend, "ScatterAdd(): leading indices dimension, and deeper slice dimension.")
+		fmt.Println("\tScatterSum(): leading indices dimension, and deeper slice dimension.")
+		g := NewGraph(backend, "ScatterSum(): leading indices dimension, and deeper slice dimension.")
 		// numbers=(Float64)[5 3, 1]: [[[0] [1] [2]] [[3] [4] [5]]]
 		numbers := IotaFull(g, MakeShape(F64, 2, 3, 1))
 		indices := Const(g, [][]int{{2}, {0}})
 		operand := Ones(g, MakeShape(F64, 3, 3, 1))
-		scatter := ScatterAdd(operand, indices, numbers, false, true)
+		scatter := ScatterSum(operand, indices, numbers, false, true)
 		g.Compile(scatter)
 		got := g.Run()[0]
 		fmt.Printf("\t\tscatter=%v\n", got)
@@ -189,7 +190,7 @@ func BenchmarkScatter(b *testing.B) {
 				indices = ExpandAxes(indices, -1)
 				parts := make([]*Node, ConsecutiveScatters)
 				for ii := range parts {
-					parts[ii] = ExpandAxes(ScatterAdd(zeros, AddScalar(indices, float64(ii)), values, sorted, unique), -1)
+					parts[ii] = ExpandAxes(ScatterSum(zeros, AddScalar(indices, float64(ii)), values, sorted, unique), -1)
 				}
 				x := ReduceSum(Concatenate(parts, -1), -1)
 				return Add(state, x)
@@ -215,4 +216,54 @@ func BenchmarkScatter(b *testing.B) {
 			}
 		}
 	}
+}
+
+func TestScatterAdd(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "ScatterSum",
+		func(g *Graph) (inputs, outputs []*Node) {
+			initialValues := Zeros(g, shapes.Make(F32, 5))
+			flat := Const(g, []float32{1, 3, 5, 7, 11, 13})
+			indices := ExpandAxes(Const(g, []int32{0, 0, 0, 1, 1, 3}), -1)
+			inputs = []*Node{flat, indices}
+			outputs = []*Node{ScatterSum(initialValues, indices, flat, true, false)}
+			return
+		},
+		[]any{
+			[]float32{1 + 3 + 5, 7 + 11, 0, 13, 0},
+		},
+		0)
+}
+
+func TestScatterMax(t *testing.T) {
+	negInf := float32(math.Inf(-1))
+	graphtest.RunTestGraphFn(t, "ScatterMax",
+		func(g *Graph) (inputs, outputs []*Node) {
+			initialValues := BroadcastToDims(Infinity(g, dtypes.F32, -1), 5)
+			flat := Const(g, []float32{1, 3, 5, 7, 11, 13})
+			indices := ExpandAxes(Const(g, []int32{0, 0, 0, 1, 1, 3}), -1)
+			inputs = []*Node{flat, indices}
+			outputs = []*Node{ScatterMax(initialValues, indices, flat, true, false)}
+			return
+		},
+		[]any{
+			[]float32{5, 11, negInf, 13, negInf},
+		},
+		0)
+}
+
+func TestScatterMin(t *testing.T) {
+	posInf := float32(math.Inf(1))
+	graphtest.RunTestGraphFn(t, "ScatterMin",
+		func(g *Graph) (inputs, outputs []*Node) {
+			initialValues := BroadcastToDims(Infinity(g, dtypes.F32, 1), 5)
+			flat := Const(g, []float32{1, 3, 5, 7, 11, 13})
+			indices := ExpandAxes(Const(g, []int32{0, 0, 0, 1, 1, 3}), -1)
+			inputs = []*Node{flat, indices}
+			outputs = []*Node{ScatterMin(initialValues, indices, flat, true, false)}
+			return
+		},
+		[]any{
+			[]float32{1, 7, posInf, 13, posInf},
+		},
+		0)
 }
