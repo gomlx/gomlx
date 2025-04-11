@@ -1,5 +1,15 @@
 # GoMLX changelog
 
+# v0.18.0: Ragged2D; XLA update; Fixed Scatter functions; Fixed memory leaks.
+
+* XLA Backend: 
+  * Updated dependency to newest Gopjrt 0.6.3: small memory leak fixes
+  * Updated CPU PJRT and XlaBuilder
+  * Fixed Scatter* functions.
+* Package `graph`:
+  * Fixed `ScatterSum` (renamed from the now deprecated `ScatterAdd`), `ScatterMax` and `ScatterMin`. No gradients for `ScatterMax` and `ScatterMin` yet.
+  * Added `Ragged2D` with some utilities, in particular `Ragged2D.Softmax`.
+
 # v0.17.1: 2025/02/26 CosineSimilarity, Bitcast and many fixes and improvements.
 
 * Added MNIST example (thanks to @TuSKan).
