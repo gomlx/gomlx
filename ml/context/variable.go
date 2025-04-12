@@ -68,8 +68,10 @@ func (v *Variable) CloneToContext(toCtx *Context) *Variable {
 		scope:        v.scope,
 		shape:        v.shape,
 		Trainable:    v.Trainable,
-		value:        v.value.Clone(),
 		graphToNodes: make(map[graph.GraphId]*variableNodes),
+	}
+	if v.value != nil {
+		newV.value = v.value.Clone()
 	}
 	toCtx.InAbsPath(v.scope).setVariableInScope(v.name, newV)
 	return newV

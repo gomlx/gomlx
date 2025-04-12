@@ -6,6 +6,8 @@
   * Removed spurious logging.
 * Package `tensors`:
   * Added `Tensor.Clone` and `Tensor.OnDeviceClone`.
+* Package `context`:
+  * Added `Variable.CloneToContext`
 
 # v0.18.0: Ragged2D; XLA update; Fixed Scatter functions; Fixed memory leaks.
 
