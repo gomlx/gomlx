@@ -55,6 +55,26 @@ type Variable struct {
 	graphToNodes map[graph.GraphId]*variableNodes
 }
 
+// CloneToContext Variable.
+//
+// Value, name, scope, trainable state and initializer are cloned.
+// But the new clone starts with no graph node mapping -- so it's assumed it's not in use by any Graph.
+//
+// The variable is then inserted into the given context.
+func (v *Variable) CloneToContext(toCtx *Context) *Variable {
+	newV := &Variable{
+		ctx:          toCtx,
+		name:         v.name,
+		scope:        v.scope,
+		shape:        v.shape,
+		Trainable:    v.Trainable,
+		value:        v.value.Clone(),
+		graphToNodes: make(map[graph.GraphId]*variableNodes),
+	}
+	toCtx.InAbsPath(v.scope).setVariableInScope(v.name, newV)
+	return newV
+}
+
 // VariableInitializer builds a valueNode that returns a value to initialize a variable of the given
 // shape. It is defined in the Context.
 type VariableInitializer = func(g *graph.Graph, shape shapes.Shape) *Node
