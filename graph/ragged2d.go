@@ -109,14 +109,10 @@ func (r Ragged2D) Softmax() Ragged2D {
 	}
 	normalizingMax := StopGradient(r.ReduceMaxCols())
 	normalizingMax = Gather(normalizingMax, r.RowIDs)
-	normalizingMax.SetLogged("normalizingMax")
 	normalizedLogits := Sub(r.Flat, normalizingMax)
-	normalizedLogits.SetLogged("normalizedLogits")
 	numerators := Exp(normalizedLogits)
-	numerators.SetLogged("numerators")
 	denominators := MakeRagged2D(r.Dim0, numerators, r.RowIDs).ReduceSumCols()
 	denominators = Gather(denominators, r.RowIDs)
-	//denominators.SetLogged("denominators")
 	results := Div(numerators, denominators)
 	return MakeRagged2D(r.Dim0, results, r.RowIDs)
 }
