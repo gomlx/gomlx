@@ -9,6 +9,7 @@ import (
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
 	"k8s.io/klog/v2"
+	"runtime"
 	"sync"
 	"testing"
 )
@@ -259,5 +260,41 @@ func BenchmarkCopyFromDevice(b *testing.B) {
 				benchShape(float32(i), shapeIdx)
 			}
 		})
+	}
+}
+
+func TestClones(t *testing.T) {
+	setupTest(t)
+	refValues := []int32{1, 3, 5, 7, 11}
+	for cloneType := range 3 {
+		for fromLocation := range 2 {
+			originalTensor := FromValue(refValues)
+			if fromLocation == 1 {
+				// originalTensor is on device.
+				originalTensor.MaterializeOnDevices(backend, false)
+				originalTensor.FinalizeLocal()
+			}
+
+			// Create clone.
+			var cloneTensor *Tensor
+			switch cloneType {
+			case 0:
+				cloneTensor = originalTensor.Clone()
+			case 1:
+				cloneTensor = originalTensor.LocalClone()
+			case 2:
+				cloneTensor = originalTensor.OnDeviceClone(backend)
+			}
+
+			// Finalize original tensor, and make sure it is garbage collected.
+			originalTensor.FinalizeAll()
+			for _ = range 3 {
+				runtime.GC()
+			}
+
+			// Check that the cloned tensor has the shape and values we started with.
+			cloneTensor.Shape().AssertDims(5)
+			require.Equal(t, refValues, CopyFlatData[int32](cloneTensor))
+		}
 	}
 }

@@ -1,5 +1,12 @@
 # GoMLX changelog
 
+# Next
+
+* Package `graph`:
+  * Removed spurious logging.
+* Package `tensors`:
+  * Added `Tensor.Clone` and `Tensor.OnDeviceClone`.
+
 # v0.18.0: Ragged2D; XLA update; Fixed Scatter functions; Fixed memory leaks.
 
 * XLA Backend: 
