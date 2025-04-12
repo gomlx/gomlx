@@ -23,7 +23,7 @@ func TestVariable_CloneToContext(t *testing.T) {
 	fmt.Printf("Cloned variable %q: %s\n", v1x.ScopeAndName(), v1x.Value())
 	v1y := v0y.CloneToContext(ctx1)
 	require.Nil(t, v1y.Value())
-	fmt.Printf("Cloned variable %q: %s\n", v1y.ScopeAndName(), v1x.Value())
+	fmt.Printf("Cloned variable %q: %s\n", v1y.ScopeAndName(), v1y.Value())
 
 	// Check the new variable has the right name, scope and was properly inserted in to the new context.
 	if v1x.ScopeAndName() != "/a/b/x" {

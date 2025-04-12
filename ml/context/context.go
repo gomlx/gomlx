@@ -181,10 +181,29 @@ func New() *Context {
 	return ctx
 }
 
-// NewContext is an alias to New, it returns an empty Context.
-// Deprecated: use New instead.
-func NewContext() *Context {
-	return New()
+// Clone does a (mostly) deep copy of the context, with new variable values, and a clone of the parameters.
+// Both the context "pointer" (current scope) and the underlying data are cloned, with the following
+// exceptions:
+//
+//   - The default initializer is simply copied.
+//   - Graph params and variables are not cloned: the new context is assumed not to be associated to any
+//     graph.
+//   - Loader (typically a checkpoint saver/loader) is not cloned, but it can be manually
+//     copied over by with newCtx.SetLoader(ctx.Loader()).
+//   - The context state is copied over: needing initialization of variables, if to be checked
+//     for new/reuse of variables, etc.
+func (ctx *Context) Clone() *Context {
+	newCtx := New()
+	newCtx.scope = ctx.scope
+	newCtx.reuse = ctx.reuse
+	newCtx.checked = ctx.checked
+	newCtx.initializer = ctx.initializer
+	newCtx.data.needsInitialization = ctx.data.needsInitialization
+	newCtx.data.params = ctx.data.params.Clone()
+	for v := range ctx.IterVariables() {
+		_ = v.CloneToContext(newCtx)
+	}
+	return newCtx
 }
 
 const (
@@ -403,7 +422,7 @@ func GetParamOr[T any](ctx *Context, key string, defaultValue T) T {
 			Panicf("can't UnmarshalText %s to %s", v.String(), typeOfT.String())
 		}
 		return valueT.Elem().Interface().(T)
-	// Try converting, for instance, a float32 could be converted to float64.
+		// Try converting, for instance, a float32 could be converted to float64.
 	} else if !v.CanConvert(typeOfT) {
 		Panicf("GetParamOr[%T](ctx, %q, %v): ctx(scope=%q)[%q]=(%T) %#v, and cannot be converted to %T -- "+
 			"Notice that when reloading a context from a checkpoint involves decoding them from Json, and "+

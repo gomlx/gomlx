@@ -57,6 +57,18 @@ func newScopedParams() *scopedParams {
 	}
 }
 
+// Clone returns a deep copy of the scopedParams.
+func (p *scopedParams) Clone() *scopedParams {
+	newScopedParams := newScopedParams()
+	for scope, dataMap := range p.scopeToMap {
+		newScopedParams.scopeToMap[scope] = make(map[string]any)
+		for key, value := range dataMap {
+			newScopedParams.scopeToMap[scope][key] = value
+		}
+	}
+	return newScopedParams
+}
+
 // Set sets the value for the given key, in the given scope.
 func (p *scopedParams) Set(scope, key string, value any) {
 	dataMap, found := p.scopeToMap[scope]

@@ -7,7 +7,9 @@
 * Package `tensors`:
   * Added `Tensor.Clone` and `Tensor.OnDeviceClone`.
 * Package `context`:
+  * Removed deprecated `NewContext` 
   * Added `Variable.CloneToContext`
+  * Added `Context.Clone`
 
 # v0.18.0: Ragged2D; XLA update; Fixed Scatter functions; Fixed memory leaks.
 
