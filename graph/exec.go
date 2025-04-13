@@ -280,7 +280,7 @@ func ExecOnce[F ExecGraphFnOneOutput](backend backends.Backend, graphFn F, args 
 // It's short for a call to NewExec, Exec.Call and Exec.Finalize.
 //
 // See ExecOnce for a more convenient version if you have only one output.
-func ExecOnceN[F ExecGraphFnOneOutput](backend backends.Backend, graphFn F, args ...any) []*tensors.Tensor {
+func ExecOnceN[F ExecGraphFn](backend backends.Backend, graphFn F, args ...any) []*tensors.Tensor {
 	e := NewExec(backend, graphFn)
 	defer e.Finalize()
 	return e.Call(args...)

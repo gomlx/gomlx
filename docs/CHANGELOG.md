@@ -6,6 +6,8 @@
   * Updated dependency: fix to Scatter flags.
 * Package `graph`:
   * Removed spurious logging.
+  * Added gradient for ScatterSum, ScatterMax, ScatterMin. Only for simple shapes for now.
+  * Fixed ExecOnceN to return many outputs.
 * Package `tensors`:
   * Added `Tensor.Clone` and `Tensor.OnDeviceClone`.
 * Package `context`:

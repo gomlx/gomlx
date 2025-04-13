@@ -425,3 +425,33 @@ func genericScatter(operand, indices, updates *Node, sorted, unique bool, fn sca
 	return fn(operand, indices, updates, indicesRank-1, updateWindowsAxes, insertedWindowsAxes, scatterAxesToOperandAxes,
 		sorted, unique)
 }
+
+// scatterSumVJP generates the adjoint gradient term for a ScatterSum node.
+// Note: this may not work for the more general scatter form.
+func scatterSumVJP(node, v *Node, _ shapes.Shape) []*Node {
+	params := node.inputs.(*nodeInputsScatterSum)
+	operand, scatterIndices, updates := params.operand, params.scatterIndices, params.updates
+	_ = updates
+	_ = scatterIndices
+	_ = operand
+	operandVJP := v // Since it's a sum of the initial values, the VJP is the identity of the gradient coming in.
+	updatesVJP := Gather(v, scatterIndices)
+	return []*Node{ /*operand*/ operandVJP /*indices*/, nil /*initialValue*/, updatesVJP}
+}
+
+// scatterMaxOrMinVJP generates the adjoint gradient term for a ScatterMax or ScatterMin node.
+// Note: this may not work for the more general scatter form.
+func scatterMaxOrMinVJP(node, v *Node, _ shapes.Shape) []*Node {
+	operand, scatterIndices, updates := node.inputNodes[0], node.inputNodes[1], node.inputNodes[2]
+
+	// For the operand, we propagate v only if the operand value was chosen as max value.
+	operandMask := Equal(node, operand)
+	operandVJP := Where(operandMask, v, ZerosLike(v))
+
+	// For the updates, we pick them only if they were chosen as max value.
+	maxForUpdates := Gather(node, scatterIndices)
+	updatesMask := Equal(maxForUpdates, updates)
+	updatesVJP := Gather(v, scatterIndices)
+	updatesVJP = Where(updatesMask, updatesVJP, ZerosLike(updatesVJP))
+	return []*Node{ /*operand*/ operandVJP /*indices*/, nil /*initialValue*/, updatesVJP}
+}
