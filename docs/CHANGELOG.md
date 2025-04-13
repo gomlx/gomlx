@@ -1,5 +1,24 @@
 # GoMLX changelog
 
+# v0.18.1: 2025/04/13 Many fixes, XLA update, Tensor clone.
+
+* XLA Backend:
+  * Updated gopjrt dependency: fix to Scatter flags.
+* Package `graph`:
+  * Removed spurious logging.
+  * Added gradient for ScatterSum, ScatterMax, ScatterMin. Only for simple shapes for now.
+  * Fixed ExecOnceN to return many outputs.
+* Package `tensors`:
+  * Added `Tensor.Clone` and `Tensor.OnDeviceClone`.
+* Package `context`:
+  * Removed deprecated `NewContext` 
+  * Added `Variable.CloneToContext`
+  * Added `Context.Clone`
+  * Variable graphToNodeId is now a `xsync.SyncMap`, solving issues for concurrency of multiple graphs being
+    created/executed at the same time for the same Context.Exec object (with different shapes).
+  * Added `Variable.Finalize` and `Context.Finalize`.
+* Updated all dependencies and re-tested.
+
 # v0.18.0: Ragged2D; XLA update; Fixed Scatter functions; Fixed memory leaks.
 
 * XLA Backend: 
