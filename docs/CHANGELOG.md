@@ -3,7 +3,7 @@
 # Next
 
 * XLA Backend:
-  * Updated dependency: fix to Scatter flags.
+  * Updated gopjrt dependency: fix to Scatter flags.
 * Package `graph`:
   * Removed spurious logging.
   * Added gradient for ScatterSum, ScatterMax, ScatterMin. Only for simple shapes for now.
@@ -16,6 +16,8 @@
   * Added `Context.Clone`
   * Variable graphToNodeId is now a `xsync.SyncMap`, solving issues for concurrency of multiple graphs being
     created/executed at the same time for the same Context.Exec object (with different shapes).
+  * Added `Variable.Finalize` and `Context.Finalize`.
+* Updated all dependencies and re-tested.
 
 # v0.18.0: Ragged2D; XLA update; Fixed Scatter functions; Fixed memory leaks.
 

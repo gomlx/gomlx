@@ -1116,3 +1116,17 @@ func (ctx *Context) IsTraining(g *Graph) bool {
 func (ctx *Context) SetTraining(g *Graph, value bool) {
 	ctx.SetGraphParam(g, GraphParamIsTraining, value)
 }
+
+// Finalize releases all variables and finalizes its values.
+// Make sure to only call this is you are no longer using the context in any executor.
+//
+// After calling this the context is left in an unusable state.
+func (ctx *Context) Finalize() {
+	for v := range ctx.IterVariables() {
+		v.Finalize()
+	}
+	ctx.data.variables = nil
+	ctx.data.variablesMap = nil
+	ctx.data.needsInitialization = true
+	ctx.data.loader = nil
+}

@@ -319,3 +319,16 @@ func (v *Variable) SetTrainable(trainable bool) *Variable {
 	v.Trainable = trainable
 	return v
 }
+
+// Finalize variable and associate value.
+// Variable is left in an unsuable state, only do this if you are sure this variable is no longer in use.
+//
+// Usually, one calls Context.Finalize, which in turns finalizes all variables.
+func (v *Variable) Finalize() {
+	if v.value != nil {
+		v.value.FinalizeAll()
+		v.value = nil
+	}
+	v.shape = shapes.Invalid()
+	v.graphToNodes.Clear()
+}
