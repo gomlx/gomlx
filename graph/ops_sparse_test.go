@@ -218,7 +218,7 @@ func BenchmarkScatter(b *testing.B) {
 	}
 }
 
-func TestScatterAdd(t *testing.T) {
+func TestScatterSum(t *testing.T) {
 	graphtest.RunTestGraphFn(t, "ScatterSum",
 		func(g *Graph) (inputs, outputs []*Node) {
 			initialValues := Zeros(g, shapes.Make(F32, 5))
@@ -232,6 +232,37 @@ func TestScatterAdd(t *testing.T) {
 			[]float32{1 + 3 + 5, 7 + 11, 0, 13, 0},
 		},
 		0)
+}
+
+func TestScatterSumGradient(t *testing.T) {
+	backend := graphtest.BuildTestBackend()
+	operand := []float32{0, 0, 0, 0, -1}
+	updates := []float32{1, 3, 5, 7, 11, 13}
+	indices := []int32{0, 0, 0, 1, 1, 3}
+	outputs := ExecOnceN(backend, func(inputs []*Node) []*Node {
+		operand, indices, updates := inputs[0], inputs[1], inputs[2]
+		indices = ExpandAxes(indices, -1)
+		g := operand.Graph()
+		scattered := ScatterSum(operand, indices, updates, true, false)
+		mask := Const(g, []bool{true, false, false, true, true})
+		loss := MaskedReduceSum(scattered, mask)
+		//return []*Node{scattered, loss}
+		return append(Gradient(loss, operand, updates), scattered, loss)
+	}, operand, indices, updates)
+
+	fmt.Printf("gradOperand=%s\n", outputs[0].GoStr())
+	gradOperand := outputs[0].Value().([]float32)
+	fmt.Printf("gradFlat=%v\n", outputs[1].GoStr())
+	gradFlat := outputs[1].Value().([]float32)
+	fmt.Printf("scattered=%s\n", outputs[2].GoStr())
+	scattered := outputs[2].Value().([]float32)
+	fmt.Printf("loss=%s\n", outputs[3].GoStr())
+	loss := outputs[3].Value().(float32)
+
+	require.Equal(t, []float32{1 + 3 + 5, 7 + 11, 0, 13, -1}, scattered)
+	require.Equal(t, float32(9+13-1), loss)
+	require.Equal(t, []float32{1, 1, 1, 0, 0, 1}, gradFlat)
+	require.Equal(t, []float32{1, 0, 0, 1, 1}, gradOperand)
 }
 
 func TestScatterMax(t *testing.T) {
@@ -251,6 +282,38 @@ func TestScatterMax(t *testing.T) {
 		0)
 }
 
+func TestScatterMaxGradient(t *testing.T) {
+	backend := graphtest.BuildTestBackend()
+	negInf := float32(math.Inf(-1))
+	operand := []float32{negInf, negInf, negInf, negInf, -1}
+	updates := []float32{1, 3, 5, 7, 11, 13}
+	indices := []int32{0, 0, 0, 1, 1, 3}
+	outputs := ExecOnceN(backend, func(inputs []*Node) []*Node {
+		operand, indices, updates := inputs[0], inputs[1], inputs[2]
+		indices = ExpandAxes(indices, -1)
+		g := operand.Graph()
+		scattered := ScatterMax(operand, indices, updates, true, false)
+		mask := Const(g, []bool{true, false, false, true, true})
+		loss := MaskedReduceSum(scattered, mask)
+		//return []*Node{scattered, loss}
+		return append(Gradient(loss, operand, updates), scattered, loss)
+	}, operand, indices, updates)
+
+	fmt.Printf("gradOperand=%s\n", outputs[0].GoStr())
+	gradOperand := outputs[0].Value().([]float32)
+	fmt.Printf("gradFlat=%v\n", outputs[1].GoStr())
+	gradFlat := outputs[1].Value().([]float32)
+	fmt.Printf("scattered=%s\n", outputs[2].GoStr())
+	scattered := outputs[2].Value().([]float32)
+	fmt.Printf("loss=%s\n", outputs[3].GoStr())
+	loss := outputs[3].Value().(float32)
+
+	require.Equal(t, []float32{5, 11, negInf, 13, -1}, scattered)
+	require.Equal(t, float32(5+13-1), loss)
+	require.Equal(t, []float32{0, 0, 1, 0, 0, 1}, gradFlat)
+	require.Equal(t, []float32{0, 0, 0, 0, 1}, gradOperand)
+}
+
 func TestScatterMin(t *testing.T) {
 	posInf := float32(math.Inf(1))
 	graphtest.RunTestGraphFn(t, "ScatterMin",
@@ -266,4 +329,36 @@ func TestScatterMin(t *testing.T) {
 			[]float32{1, 7, posInf, 13, posInf},
 		},
 		0)
+}
+
+func TestScatterMinGradient(t *testing.T) {
+	backend := graphtest.BuildTestBackend()
+	posInf := float32(math.Inf(1))
+	operand := []float32{posInf, posInf, posInf, posInf, 100}
+	updates := []float32{1, 3, 5, 7, 11, 13}
+	indices := []int32{0, 0, 0, 1, 1, 3}
+	outputs := ExecOnceN(backend, func(inputs []*Node) []*Node {
+		operand, indices, updates := inputs[0], inputs[1], inputs[2]
+		indices = ExpandAxes(indices, -1)
+		g := operand.Graph()
+		scattered := ScatterMin(operand, indices, updates, true, false)
+		mask := Const(g, []bool{true, false, false, true, true})
+		loss := MaskedReduceSum(scattered, mask)
+		//return []*Node{scattered, loss}
+		return append(Gradient(loss, operand, updates), scattered, loss)
+	}, operand, indices, updates)
+
+	fmt.Printf("gradOperand=%s\n", outputs[0].GoStr())
+	gradOperand := outputs[0].Value().([]float32)
+	fmt.Printf("gradFlat=%v\n", outputs[1].GoStr())
+	gradFlat := outputs[1].Value().([]float32)
+	fmt.Printf("scattered=%s\n", outputs[2].GoStr())
+	scattered := outputs[2].Value().([]float32)
+	fmt.Printf("loss=%s\n", outputs[3].GoStr())
+	loss := outputs[3].Value().(float32)
+
+	require.Equal(t, []float32{1, 7, posInf, 13, 100}, scattered)
+	require.Equal(t, float32(1+13+100), loss)
+	require.Equal(t, []float32{1, 0, 0, 0, 0, 1}, gradFlat)
+	require.Equal(t, []float32{0, 0, 0, 0, 1}, gradOperand)
 }

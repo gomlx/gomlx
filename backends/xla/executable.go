@@ -45,6 +45,17 @@ func (b *Builder) Compile(outputs ...backends.Op) backends.Executable {
 	if err != nil {
 		panic(errors.WithMessagef(err, "backend %q: failed to build HLO from computation %q", BackendName, b.name))
 	}
+	if klog.V(2).Enabled() {
+		if comp.HasStableHLO() {
+			stableHLO, err := comp.TextStableHLO()
+			if err != nil {
+				panic(errors.WithMessagef(err, "backend %q: failed to print out StableHLO from computation %q", BackendName, b.name))
+			}
+			klog.Infof("StableHLO program:\n%s\n", stableHLO)
+		} else {
+			klog.Infof("HLO program:\n%s\n", comp.TextHLO())
+		}
+	}
 	exec, err := b.backend.client.Compile().WithComputation(comp).Done()
 	if err != nil {
 		panic(errors.WithMessagef(err, "backend %q: failed to compile computation %q", BackendName, b.name))
