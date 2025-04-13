@@ -667,13 +667,12 @@ func (ctx *Context) GetVariableByScopeAndName(scope, name string) *Variable {
 		return nil
 	}
 	v := &Variable{
-		ctx:          ctx,
-		name:         name,
-		scope:        scope,
-		shape:        value.Shape(),
-		value:        value,
-		Trainable:    true,
-		graphToNodes: make(map[graph.GraphId]*variableNodes),
+		ctx:       ctx,
+		name:      name,
+		scope:     scope,
+		shape:     value.Shape(),
+		value:     value,
+		Trainable: true,
 	}
 	ctx.InAbsPath(scope).setVariableInScope(name, v)
 	return v
@@ -737,7 +736,7 @@ func (ctx *Context) DeleteVariable(scope, name string) {
 		return
 	}
 	v.value = nil
-	v.graphToNodes = nil
+	v.graphToNodes.Map.Clear()
 	delete(scopeVars, name)
 	if len(scopeVars) == 0 {
 		delete(ctx.data.variablesMap, scope)
@@ -817,12 +816,11 @@ func (ctx *Context) VariableWithShape(name string, shape shapes.Shape) *Variable
 
 	// New variable: check, create and register it in Context and return.
 	v = &Variable{
-		ctx:          ctx,
-		name:         name,
-		scope:        ctx.Scope(),
-		shape:        shape,
-		Trainable:    true,
-		graphToNodes: make(map[graph.GraphId]*variableNodes),
+		ctx:       ctx,
+		name:      name,
+		scope:     ctx.Scope(),
+		shape:     shape,
+		Trainable: true,
 	}
 	ctx.setVariableInScope(name, v)
 
@@ -895,13 +893,12 @@ func (ctx *Context) VariableWithValue(name string, defaultValue any) *Variable {
 
 	// New variable: check, create and register it in Context and return.
 	v = &Variable{
-		ctx:          ctx,
-		name:         name,
-		scope:        ctx.Scope(),
-		shape:        valueT.Shape(),
-		value:        valueT,
-		Trainable:    true, // By default variables are trainable.
-		graphToNodes: make(map[graph.GraphId]*variableNodes),
+		ctx:       ctx,
+		name:      name,
+		scope:     ctx.Scope(),
+		shape:     valueT.Shape(),
+		value:     valueT,
+		Trainable: true, // By default variables are trainable.
 	}
 	ctx.setVariableInScope(name, v)
 	return v
@@ -1069,7 +1066,7 @@ func (ctx *Context) SetLoader(loader Loader) {
 func (ctx *Context) ExecPopulateGraphParamsMap(g *Graph, params graph.ParamsMap) {
 	graphId := g.GraphId()
 	ctx.EnumerateVariables(func(v *Variable) {
-		nodes, found := v.graphToNodes[graphId]
+		nodes, found := v.graphToNodes.Load(graphId)
 		if !found {
 			return
 		}

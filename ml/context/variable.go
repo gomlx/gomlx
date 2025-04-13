@@ -22,6 +22,7 @@ import (
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/types/xsync"
 	"strings"
 )
 
@@ -52,7 +53,7 @@ type Variable struct {
 
 	// graphToNodes maps graph ids in which this variable was used to its parameter Node and
 	// its last value Node.
-	graphToNodes map[graph.GraphId]*variableNodes
+	graphToNodes xsync.SyncMap[graph.GraphId, *variableNodes]
 }
 
 // CloneToContext Variable.
@@ -63,12 +64,11 @@ type Variable struct {
 // The variable is then inserted into the given context.
 func (v *Variable) CloneToContext(toCtx *Context) *Variable {
 	newV := &Variable{
-		ctx:          toCtx,
-		name:         v.name,
-		scope:        v.scope,
-		shape:        v.shape,
-		Trainable:    v.Trainable,
-		graphToNodes: make(map[graph.GraphId]*variableNodes),
+		ctx:       toCtx,
+		name:      v.name,
+		scope:     v.scope,
+		shape:     v.shape,
+		Trainable: v.Trainable,
 	}
 	if v.value != nil {
 		newV.value = v.value.Clone()
@@ -242,14 +242,14 @@ func (v *Variable) SetValuePreservingOld(value *tensors.Tensor) {
 // InUseByGraph returns whether the variable is currently in use by the given graph.
 func (v *Variable) InUseByGraph(g *Graph) bool {
 	v.AssertValid()
-	_, found := v.graphToNodes[g.GraphId()]
+	_, found := v.graphToNodes.Load(g.GraphId())
 	return found
 }
 
 // ChangedInGraph returns whether the variable is in use and was changed in the computation graph g.
 func (v *Variable) ChangedInGraph(g *Graph) bool {
 	v.AssertValid()
-	nodes, found := v.graphToNodes[g.GraphId()]
+	nodes, found := v.graphToNodes.Load(g.GraphId())
 	if !found {
 		return false
 	}
@@ -260,7 +260,7 @@ func (v *Variable) ChangedInGraph(g *Graph) bool {
 // for the graph (for instance when applying a gradient descent) by [SetValueGraph].
 func (v *Variable) ValueGraph(g *Graph) *Node {
 	v.AssertValid()
-	nodes, found := v.graphToNodes[g.GraphId()]
+	nodes, found := v.graphToNodes.Load(g.GraphId())
 	if !found {
 		// Use a newly created parameter node as the initial graph value Node.
 		return v.ParamNode(g)
@@ -282,11 +282,11 @@ func (v *Variable) SetValueGraph(value *Node) {
 	v.AssertValid()
 	g := value.Graph()
 	g.AssertValid()
-	nodes, found := v.graphToNodes[g.GraphId()]
+	nodes, found := v.graphToNodes.Load(g.GraphId())
 	if !found {
 		// Creates a parameter node, as this includes the variable as in use for the graph.
 		_ = v.ParamNode(g)
-		nodes = v.graphToNodes[g.GraphId()]
+		nodes, _ = v.graphToNodes.Load(g.GraphId())
 	}
 	nodes.valueNode = value
 }
@@ -303,12 +303,12 @@ func (v *Variable) SetValueGraph(value *Node) {
 func (v *Variable) ParamNode(g *Graph) *Node {
 	v.AssertValid()
 	g.AssertValid()
-	nodes, found := v.graphToNodes[g.GraphId()]
+	nodes, found := v.graphToNodes.Load(g.GraphId())
 	if !found {
 		paramName := v.ParameterName()
 		paramNode := graph.Parameter(g, paramName, v.shape)
 		nodes = &variableNodes{valueNode: paramNode, paramNode: paramNode}
-		v.graphToNodes[g.GraphId()] = nodes
+		v.graphToNodes.Store(g.GraphId(), nodes)
 	}
 	return nodes.paramNode
 }

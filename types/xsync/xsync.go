@@ -194,3 +194,61 @@ func (s *Semaphore) Resize(newCapacity int) {
 	s.capacity = newCapacity
 	s.cond.Broadcast()
 }
+
+// SyncMap is a trivial wrapper to sync.Map that casts the key and value types accordingly.
+//
+// As sync.Map, it can be created ready to go, but should not be copied once it is used.
+type SyncMap[K comparable, V any] struct {
+	Map sync.Map
+}
+
+// Load returns the value stored in the map for a key, or nil if no value is present.
+// The ok result indicates whether value was found in the map.
+func (m *SyncMap[K, V]) Load(key K) (value V, ok bool) {
+	v, ok := m.Map.Load(key)
+	if !ok {
+		return value, false
+	}
+	return v.(V), true
+}
+
+// Store sets the value for a key.
+func (m *SyncMap[K, V]) Store(key K, value V) {
+	m.Map.Store(key, value)
+}
+
+// LoadOrStore returns the existing value for the key if present.
+// Otherwise, it stores and returns the given value.
+// The loaded result is true if the value was loaded, false if stored.
+func (m *SyncMap[K, V]) LoadOrStore(key K, value V) (actual V, loaded bool) {
+	v, loaded := m.Map.LoadOrStore(key, value)
+	return v.(V), loaded
+}
+
+// Delete deletes the value for a key.
+func (m *SyncMap[K, V]) Delete(key K) {
+	m.Map.Delete(key)
+}
+
+// LoadAndDelete deletes the value for a key, returning the previous value if any.
+// The loaded result reports whether the key was present.
+func (m *SyncMap[K, V]) LoadAndDelete(key K) (value V, loaded bool) {
+	v, loaded := m.Map.LoadAndDelete(key)
+	if !loaded {
+		return value, false
+	}
+	return v.(V), true
+}
+
+// Range calls f sequentially for each key and value present in the map.
+// If f returns false, range stops the iteration.
+func (m *SyncMap[K, V]) Range(f func(key K, value V) bool) {
+	m.Map.Range(func(key, value any) bool {
+		return f(key.(K), value.(V))
+	})
+}
+
+// Clear removes all key-value pairs from the map.
+func (m *SyncMap[K, V]) Clear() {
+	m.Map.Clear()
+}

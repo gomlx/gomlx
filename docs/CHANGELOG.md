@@ -14,6 +14,8 @@
   * Removed deprecated `NewContext` 
   * Added `Variable.CloneToContext`
   * Added `Context.Clone`
+  * Variable graphToNodeId is now a `xsync.SyncMap`, solving issues for concurrency of multiple graphs being
+    created/executed at the same time for the same Context.Exec object (with different shapes).
 
 # v0.18.0: Ragged2D; XLA update; Fixed Scatter functions; Fixed memory leaks.
 
