@@ -2,6 +2,8 @@
 
 # Next
 
+* XLA Backend:
+  * Updated dependency: fix to Scatter flags.
 * Package `graph`:
   * Removed spurious logging.
 * Package `tensors`:

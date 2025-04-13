@@ -37,7 +37,7 @@ type Ragged2D struct {
 
 // MakeRagged2D creates a new Ragged2D using rowIDs.
 //
-// The rowIDs must be sorted, meaning the flat values must come in row,col order, otherwise
+// The rowIDs _must be sorted_, meaning the flat values must come in row,col order, otherwise
 // many of the operations will display undefined behaviour.
 //
 // Example:
