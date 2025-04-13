@@ -18,6 +18,7 @@ package context_test
 
 import (
 	"fmt"
+	"runtime"
 	"testing"
 
 	"github.com/gomlx/gomlx/graph/graphtest"
@@ -359,4 +360,38 @@ func TestJoinAndSplitScope(t *testing.T) {
 	testSplit("/c/b/a", "/c/b", "a")
 	testSplit("/c/b/", "/c/b", "")
 	testSplit("a/b", "", "a/b") // Notice that something that doesn't start with "/" doesn't have a scope.
+}
+
+func TestContext_Clone(t *testing.T) {
+	value := []float32{3, 5, 7, 11, 13}
+	ctx0 := New()
+	ctx0.SetParam("initial_seed", int64(42))
+	v0x := ctx0.In("a").In("b").VariableWithValue("x", value)
+	// Uninitialized variable:
+	v0y := ctx0.In("a").In("b").VariableWithShape("y", shapes.Make(dtypes.Int8, 2, 3, 4))
+
+	ctx1 := ctx0.In("a").In("b").Reuse().Clone()
+	require.True(t, ctx1.IsChecked())
+	require.True(t, ctx1.IsReuse())
+	require.Equal(t, "/a/b", ctx1.Scope())
+
+	require.Equal(t, 2, ctx1.NumVariables())
+	v1x := ctx1.GetVariableByScopeAndName("/a/b", "x")
+	require.NotNil(t, v1x)
+	fmt.Printf("Cloned variable %q: %s\n", v1x.ScopeAndName(), v1x.Value())
+	v1y := ctx1.GetVariable("y")
+	require.NotNil(t, v1y)
+	fmt.Printf("Cloned variable %q: %s\n", v1y.ScopeAndName(), v1y.Value())
+	require.Nil(t, v1y.Value())
+	require.True(t, v1y.Shape().Equal(v0y.Shape()))
+
+	// Check the new variable value is independent of the old one.
+	ctx0 = nil
+	v0x.Value().FinalizeAll()
+	for _ = range 5 {
+		runtime.GC()
+	}
+	require.Equal(t, value, tensors.CopyFlatData[float32](v1x.Value()))
+	// GetParam should back-search to the "initial_seed" at the root scope, and find it.
+	require.Equal(t, int64(42), GetParamOr(ctx1, "initial_seed", int64(0)))
 }

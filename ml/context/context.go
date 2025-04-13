@@ -181,10 +181,29 @@ func New() *Context {
 	return ctx
 }
 
-// NewContext is an alias to New, it returns an empty Context.
-// Deprecated: use New instead.
-func NewContext() *Context {
-	return New()
+// Clone does a (mostly) deep copy of the context, with new variable values, and a clone of the parameters.
+// Both the context "pointer" (current scope) and the underlying data are cloned, with the following
+// exceptions:
+//
+//   - The default initializer is simply copied.
+//   - Graph params and variables are not cloned: the new context is assumed not to be associated to any
+//     graph.
+//   - Loader (typically a checkpoint saver/loader) is not cloned, but it can be manually
+//     copied over by with newCtx.SetLoader(ctx.Loader()).
+//   - The context state is copied over: needing initialization of variables, if to be checked
+//     for new/reuse of variables, etc.
+func (ctx *Context) Clone() *Context {
+	newCtx := New()
+	newCtx.scope = ctx.scope
+	newCtx.reuse = ctx.reuse
+	newCtx.checked = ctx.checked
+	newCtx.initializer = ctx.initializer
+	newCtx.data.needsInitialization = ctx.data.needsInitialization
+	newCtx.data.params = ctx.data.params.Clone()
+	for v := range ctx.IterVariables() {
+		_ = v.CloneToContext(newCtx)
+	}
+	return newCtx
 }
 
 const (
@@ -403,7 +422,7 @@ func GetParamOr[T any](ctx *Context, key string, defaultValue T) T {
 			Panicf("can't UnmarshalText %s to %s", v.String(), typeOfT.String())
 		}
 		return valueT.Elem().Interface().(T)
-	// Try converting, for instance, a float32 could be converted to float64.
+		// Try converting, for instance, a float32 could be converted to float64.
 	} else if !v.CanConvert(typeOfT) {
 		Panicf("GetParamOr[%T](ctx, %q, %v): ctx(scope=%q)[%q]=(%T) %#v, and cannot be converted to %T -- "+
 			"Notice that when reloading a context from a checkpoint involves decoding them from Json, and "+
@@ -648,13 +667,12 @@ func (ctx *Context) GetVariableByScopeAndName(scope, name string) *Variable {
 		return nil
 	}
 	v := &Variable{
-		ctx:          ctx,
-		name:         name,
-		scope:        scope,
-		shape:        value.Shape(),
-		value:        value,
-		Trainable:    true,
-		graphToNodes: make(map[graph.GraphId]*variableNodes),
+		ctx:       ctx,
+		name:      name,
+		scope:     scope,
+		shape:     value.Shape(),
+		value:     value,
+		Trainable: true,
 	}
 	ctx.InAbsPath(scope).setVariableInScope(name, v)
 	return v
@@ -718,7 +736,7 @@ func (ctx *Context) DeleteVariable(scope, name string) {
 		return
 	}
 	v.value = nil
-	v.graphToNodes = nil
+	v.graphToNodes.Map.Clear()
 	delete(scopeVars, name)
 	if len(scopeVars) == 0 {
 		delete(ctx.data.variablesMap, scope)
@@ -798,12 +816,11 @@ func (ctx *Context) VariableWithShape(name string, shape shapes.Shape) *Variable
 
 	// New variable: check, create and register it in Context and return.
 	v = &Variable{
-		ctx:          ctx,
-		name:         name,
-		scope:        ctx.Scope(),
-		shape:        shape,
-		Trainable:    true,
-		graphToNodes: make(map[graph.GraphId]*variableNodes),
+		ctx:       ctx,
+		name:      name,
+		scope:     ctx.Scope(),
+		shape:     shape,
+		Trainable: true,
 	}
 	ctx.setVariableInScope(name, v)
 
@@ -876,13 +893,12 @@ func (ctx *Context) VariableWithValue(name string, defaultValue any) *Variable {
 
 	// New variable: check, create and register it in Context and return.
 	v = &Variable{
-		ctx:          ctx,
-		name:         name,
-		scope:        ctx.Scope(),
-		shape:        valueT.Shape(),
-		value:        valueT,
-		Trainable:    true, // By default variables are trainable.
-		graphToNodes: make(map[graph.GraphId]*variableNodes),
+		ctx:       ctx,
+		name:      name,
+		scope:     ctx.Scope(),
+		shape:     valueT.Shape(),
+		value:     valueT,
+		Trainable: true, // By default variables are trainable.
 	}
 	ctx.setVariableInScope(name, v)
 	return v
@@ -1050,7 +1066,7 @@ func (ctx *Context) SetLoader(loader Loader) {
 func (ctx *Context) ExecPopulateGraphParamsMap(g *Graph, params graph.ParamsMap) {
 	graphId := g.GraphId()
 	ctx.EnumerateVariables(func(v *Variable) {
-		nodes, found := v.graphToNodes[graphId]
+		nodes, found := v.graphToNodes.Load(graphId)
 		if !found {
 			return
 		}
@@ -1099,4 +1115,18 @@ func (ctx *Context) IsTraining(g *Graph) bool {
 // won't affect other connected context references.
 func (ctx *Context) SetTraining(g *Graph, value bool) {
 	ctx.SetGraphParam(g, GraphParamIsTraining, value)
+}
+
+// Finalize releases all variables and finalizes its values.
+// Make sure to only call this is you are no longer using the context in any executor.
+//
+// After calling this the context is left in an unusable state.
+func (ctx *Context) Finalize() {
+	for v := range ctx.IterVariables() {
+		v.Finalize()
+	}
+	ctx.data.variables = nil
+	ctx.data.variablesMap = nil
+	ctx.data.needsInitialization = true
+	ctx.data.loader = nil
 }

@@ -41,6 +41,7 @@ func BuildTestBackend() backends.Backend {
 	backends.DefaultConfig = "xla:cpu"
 	backendOnce.Do(func() {
 		cachedBackend = backends.New()
+		fmt.Printf("Backend: %s\n", cachedBackend.Description())
 	})
 	return cachedBackend
 }

@@ -28,6 +28,7 @@ import (
 	"reflect"
 	"runtime"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 )
@@ -279,7 +280,7 @@ func ExecOnce[F ExecGraphFnOneOutput](backend backends.Backend, graphFn F, args 
 // It's short for a call to NewExec, Exec.Call and Exec.Finalize.
 //
 // See ExecOnce for a more convenient version if you have only one output.
-func ExecOnceN[F ExecGraphFnOneOutput](backend backends.Backend, graphFn F, args ...any) []*tensors.Tensor {
+func ExecOnceN[F ExecGraphFn](backend backends.Backend, graphFn F, args ...any) []*tensors.Tensor {
 	e := NewExec(backend, graphFn)
 	defer e.Finalize()
 	return e.Call(args...)
@@ -610,12 +611,20 @@ func (e *Exec) Finalize() {
 
 // DefaultNodeLogger for nodes marked to be logged. It prints the message and
 // the node value for each logged node.
+//
+// It accepts special prefixes on message name that affects the printing:
+//
+//   - #full : prints full tensor value (as opposed to abbreviated).
 func DefaultNodeLogger(g *Graph, messages []string, values []*tensors.Tensor, nodes []NodeId) {
 	if len(messages) == 0 {
 		return
 	}
 	fmt.Printf("DefaultNodeLogger(Graph %q):\n", g.Name())
 	for ii, msg := range messages {
+		if strings.HasPrefix(msg, "#full ") {
+			fmt.Printf("\t(Node #%d) %s: %s\n", nodes[ii], msg[6:], values[ii].GoStr())
+			continue
+		}
 		fmt.Printf("\t(Node #%d) %s: %s\n", nodes[ii], msg, values[ii])
 	}
 }
