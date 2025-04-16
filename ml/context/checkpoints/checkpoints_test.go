@@ -32,6 +32,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"os"
+	"path"
 	"testing"
 
 	_ "github.com/gomlx/gomlx/backends/xla"
@@ -137,6 +138,39 @@ func TestCheckpoints(t *testing.T) {
 		results := e.Call()
 		globalStep := tensors.ToScalar[float64](results[0])
 		assert.Equal(t, 12.0, globalStep, "Re-loaded global step")
+	}
+
+	// Test that one can embed the checkpoints.
+	var (
+		jsonBlob, binBlob []byte
+	)
+	{
+		// Read the whole checkpoint to a variable -- similar to embedding it.
+		ctx := context.New()
+		handler := Build(ctx).Dir(dir).Keep(3).ExcludeParams(regularizers.ParamL1).Immediate().MustDone()
+		checkpoints, err := handler.ListCheckpoints()
+		require.NoError(t, err)
+		lastCheckpoint := checkpoints[len(checkpoints)-1]
+		jsonBlob, err = os.ReadFile(path.Join(dir, lastCheckpoint+JsonNameSuffix))
+		require.NoError(t, err)
+		binBlob, err = os.ReadFile(path.Join(dir, lastCheckpoint+BinDataSuffix))
+	}
+	{
+		// Check that reading from the variable works.
+		ctx := context.New()
+		_, err := Build(ctx).FromEmbed(string(jsonBlob), binBlob).Immediate().Done()
+		require.NoError(t, err)
+
+		// Check that the only variable ("global_step") is present.
+		count := 0
+		for v := range ctx.IterVariables() {
+			fmt.Printf("\tFromEmbed: variable %q: %s -> %s\n", v.ScopeAndName(), v.Shape(), v.Value())
+			require.NoError(t, v.Shape().Check(dtypes.Int64))
+			require.Equal(t, "/global_step", v.ScopeAndName(), "Variable name")
+			require.Equal(t, int64(11), tensors.ToScalar[int64](v.Value()), "Variable value")
+			count++
+		}
+		require.Equal(t, 1, count, "Number of variables should have been one: global_step")
 	}
 
 	// Remove test directory.

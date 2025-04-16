@@ -14,7 +14,8 @@
  *	limitations under the License.
  */
 
-// Package checkpoints implements checkpoint management: saving and loading of checkpoints.
+// Package checkpoints implements checkpoint management: saving and loading of checkpoints to file,
+// or loading a checkpoint from an embedded checkpoint.
 //
 // The main object is the Handler, that should be created by calling Build, followed by the
 // various options setting and finally calling Config.Done.
@@ -26,8 +27,6 @@
 // Example: After creating the Context, it checks if a checkpoint directory was set (`*flagCheckpoint`)
 // and if yes, creates a checkpoints.Handler to save checkpoints every 100 steps, keeping the last
 // `*flagCheckpointKeep` steps.
-//
-// ```
 //
 //	…
 //	ctx := context.New()
@@ -49,7 +48,20 @@
 //	}
 //	…
 //
-// ```
+// Example 2: To load a checkpoint from an embedded checkpoint, something usually used to distribute a model for
+// inference:
+//
+//	//go:embed "my_model/checkpoint.json"
+//	var myModelJson string
+//
+//	//go:embed "my_model/checkpoint.bin"
+//	var myModelBin []byte
+//
+//	...
+//	_ = checkpoints.Build(ctx).
+//		FromEmbed(myModelJson, myModelBin).
+//		Immediate().
+//		Done()
 //
 // TODO:
 //  1. Compress checkpoints.
@@ -58,6 +70,7 @@
 package checkpoints
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	. "github.com/gomlx/exceptions"
@@ -73,6 +86,7 @@ import (
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
+	"io"
 	"k8s.io/klog/v2"
 	"os"
 	"path"
@@ -98,7 +112,10 @@ type Config struct {
 
 	err error
 
-	dir       string
+	// One of the two are set: dir or jsonReader+binReader.
+	dir                   string
+	jsonReader, binReader io.Reader
+
 	immediate bool
 	keep      int
 	mustLoad  bool
@@ -115,8 +132,9 @@ type Config struct {
 // Build a configuration for building a checkpoints.Handler. After configuring the
 // Config object returned, call `Done` to get the configured checkpoints.Handler.
 //
-// The new checkpoints.Handler will load ("lazy" by default) a checkpoint to the context (see Dir or DirFromBase) if it exists,
-// otherwise it creates a new directory and can simply be used to save checkpoints.
+// The new checkpoints.Handler will load ("lazy" by default) a checkpoint to the context
+// (see Config.Dir, Config.DirFromBase or Config.FromEmbed to specify where to load/save)
+// if it exists, otherwise it creates a new directory and can simply be used to save checkpoints.
 //
 // When a checkpoint is "lazy loaded", its variables are not listed by default (if one uses Context.EnumerateVariables
 // or Context.IterVariables). But if they are directly accessed, they are on-the-fly loaded. This is convenient
@@ -124,6 +142,8 @@ type Config struct {
 // or for transfer learning part of a model. It also works to continue training a model loaded from a checkpoint.
 // But if you need to variables to be loaded immediately, use Config.Immediate() -- an inspecting tool, like
 // gomlx_checkpoints, will want to do that.
+//
+// See Config.Dir, Config.DirFromBase or Config.FromEmbed to specify where to load/save.
 func Build(ctx *context.Context) *Config {
 	c := &Config{
 		ctx:             ctx,
@@ -195,6 +215,29 @@ func (c *Config) DirFromBase(dir, baseDir string) *Config {
 		dir = path.Join(baseDir, dir)
 	}
 	return c.Dir(dir)
+}
+
+// FromEmbed allows one to load a checkpoint from an embedded checkpoint (using the go:embed tag).
+//
+// You must set only one of Dir(or DirFromBase) or FromEmbed, but not both.
+//
+// Notice that after Done() is called, it releases the references to the passed json and binary blobs,
+// potentially freeing the resources.
+//
+// Example:
+//
+//	//go:embed "my_model/checkpoint.json"
+//	var myModelJson []byte
+//
+//	//go:embed "my_model/checkpoint.bin"
+//	var myModelBin []byte
+//
+//	...
+//	_ = checkpoints.Build(ctx).FromEmbed(myModelJson, myModelBin).Done()
+func (c *Config) FromEmbed(json string, binary []byte) *Config {
+	c.jsonReader = bytes.NewBufferString(json)
+	c.binReader = bytes.NewBuffer(binary)
+	return c
 }
 
 // Immediate forces immediate load of all variables, as opposed to dynamically load
@@ -319,36 +362,53 @@ func (c *Config) Done() (*Handler, error) {
 	if c.err != nil {
 		return nil, c.err
 	}
-	if c.dir == "" {
-		return nil, errors.Errorf("directory for checkpoints not configured or empty")
+	if c.dir == "" && c.jsonReader == nil {
+		return nil, errors.Errorf("directory for checkpoints not configured or empty, and no embedded model configured")
+	}
+	if c.dir != "" && c.jsonReader != nil {
+		return nil, errors.Errorf("cannot use both Dir/DirFromBase and FromEmbed at the same time, choose one.")
 	}
 	handler := &Handler{config: c, serialized: &serializedData{
 		Params:    nil,
 		Variables: nil,
 	}}
-	checkpoints, err := handler.ListCheckpoints()
-	if err != nil {
-		return nil, err
-	}
-	if len(checkpoints) == 0 && c.mustLoad {
-		return nil, errors.Errorf("no checkpoints found in %q", c.dir)
-	}
-	handler.checkpointsCount = maxCheckPointCountFromCheckpoints(checkpoints) + 1
-	if len(checkpoints) > 0 {
-		takeMean := c.takeMean
-		if takeMean < 0 || takeMean > len(checkpoints) {
-			takeMean = len(checkpoints)
-		}
-		if c.takeMean == 1 {
-			// Just load most recent checkpoint.
-			err = handler.loadCheckpoint(checkpoints[len(checkpoints)-1], false, 0)
-		} else {
-			err = handler.takeMean(checkpoints[len(checkpoints)-takeMean:])
-		}
+
+	if c.dir != "" {
+		// Load (if checkpoints exist) from a directory.
+		checkpoints, err := handler.ListCheckpoints()
 		if err != nil {
 			return nil, err
 		}
+		if len(checkpoints) == 0 && c.mustLoad {
+			return nil, errors.Errorf("no checkpoints found in %q", c.dir)
+		}
+		handler.checkpointsCount = maxCheckPointCountFromCheckpoints(checkpoints) + 1
+		if len(checkpoints) > 0 {
+			takeMean := c.takeMean
+			if takeMean < 0 || takeMean > len(checkpoints) {
+				takeMean = len(checkpoints)
+			}
+			if c.takeMean == 1 {
+				// Just load most recent checkpoint.
+				err = handler.loadCheckpointFromFile(checkpoints[len(checkpoints)-1], false, 0)
+			} else {
+				err = handler.takeMean(checkpoints[len(checkpoints)-takeMean:])
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	} else {
+		// Load from an embedded checkpoint.
+		err := handler.loadCheckpoint(c.jsonReader, c.binReader, false, 0)
+		if err != nil {
+			return nil, errors.WithMessagef(err, "failed to load checkpoint from embedded checkpoint (json+bin blobs) given")
+		}
+		// Don't keep links to the data, since it's no longer used -- and potentially releasing the memory.
+		handler.config.jsonReader = nil
+		handler.config.binReader = nil
 	}
+
 	if c.immediate {
 		ctxToSet := c.ctx.Checked(false)
 		for paramName, value := range handler.variableValues {
@@ -531,8 +591,8 @@ const (
 	// JsonNameSuffix for the JSON files returned by Handler.ListCheckpoints.
 	JsonNameSuffix = ".json"
 
-	// VarDataSuffix for the data files (holding the tensor values) returned by Handler.ListCheckpoints.
-	VarDataSuffix = ".bin"
+	// BinDataSuffix for the data files (holding the tensor values) returned by Handler.ListCheckpoints.
+	BinDataSuffix = ".bin"
 
 	// BackupDir is the name of the (sub-)directory under the model checkpoints directory that holds
 	// the backups. See Handler.Backup.
@@ -541,7 +601,7 @@ const (
 
 // ListCheckpoints returns the base file paths of the checkpoints in the directory in time order (older first).
 //
-// The actual paths are these base file paths suffixed with JsonNameSuffix and VarDataSuffix.
+// The actual paths are these base file paths suffixed with JsonNameSuffix and BinDataSuffix.
 func (h *Handler) ListCheckpoints() (checkpoints []string, err error) {
 	entries, err := os.ReadDir(h.config.dir)
 	if err != nil {
@@ -592,7 +652,7 @@ func maxCheckPointCountFromCheckpoints(checkpoints []string) int {
 	return maxId
 }
 
-// loadCheckpoint loads a specific checkpoint file. This needs to happen before attachTo,
+// loadCheckpointFromFile loads a specific checkpoint file. This needs to happen before attachTo,
 // since otherwise it may not have any effect.
 //
 // Usually this does not need to be called: when the Handler is created (when calling `Build()....Done()`)
@@ -602,34 +662,48 @@ func maxCheckPointCountFromCheckpoints(checkpoints []string) int {
 // If `merge` is set to false, loading a different checkpoint discards the previous checkpoint read.
 // If `merge` is set to true, only trainable weights are merged into the current values, using
 // `mergeWeight` for the current weight. For merging one must set up `h.mergeExec` as well.
-func (h *Handler) loadCheckpoint(baseName string, merge bool, mergeWeight float64) error {
+func (h *Handler) loadCheckpointFromFile(baseName string, merge bool, mergeWeight float64) error {
 	if klog.V(1).Enabled() {
 		klog.Infof("loading: %q\n", baseName)
 	}
 	if h.ctx != nil {
-		return errors.Errorf("%s tried to loadCheckpoint(%q) after being attached to a Context, this is not allowed", h, baseName)
+		return errors.Errorf("%s tried to loadCheckpointFromFile(%q) after being attached to a Context, this is not allowed", h, baseName)
 	}
 
 	// Open files for reading.
-	varFileName := filepath.Join(h.config.dir, baseName+VarDataSuffix)
-	varFile, err := os.Open(varFileName)
+	binFileName := filepath.Join(h.config.dir, baseName+BinDataSuffix)
+	binFile, err := os.Open(binFileName)
 	if err != nil {
-		return errors.Wrapf(err, "%s: failed to open checkpoint data file %s", h, varFileName)
+		return errors.Wrapf(err, "%s: failed to open checkpoint data file %s", h, binFileName)
 	}
+	defer func() { _ = binFile.Close() }()
+
 	jsonFileName := filepath.Join(h.config.dir, baseName+JsonNameSuffix)
 	jsonFile, err := os.Open(jsonFileName)
 	if err != nil {
 		return errors.Wrapf(err, "%s: failed to open checkpoint metadata file %s", h, jsonFileName)
 	}
+	defer func() { _ = jsonFile.Close() }()
 
-	// Read metadata.
-	dec := json.NewDecoder(jsonFile)
-	var serialized *serializedData
-	if err = dec.Decode(&serialized); err != nil {
-		return errors.Wrapf(err, "%s: failed to decode contents of checkpoint metadata file %s", h, jsonFileName)
+	err = h.loadCheckpoint(jsonFile, binFile, merge, mergeWeight)
+	if err != nil {
+		err = errors.WithMessagef(err, "failed loading checkpoint from %s{%s,%s}", baseName, JsonNameSuffix, BinDataSuffix)
+		return err
 	}
-	if err = jsonFile.Close(); err != nil {
-		return errors.Wrapf(err, "%s: failed to close checkpoint metadata file %s", h, jsonFileName)
+	return nil
+}
+
+// loadCheckpoint from a jsonReader (io.Reader) for configuration, and a binReader with the actual data for the variables.
+//
+// If `merge` is set to false, loading a different checkpoint discards the previous checkpoint read.
+// If `merge` is set to true, only trainable weights are merged into the current values, using
+// `mergeWeight` for the current weight. For merging one must set up `h.mergeExec` as well.
+func (h *Handler) loadCheckpoint(jsonReader, binReader io.Reader, merge bool, mergeWeight float64) error {
+	// Read metadata.
+	dec := json.NewDecoder(jsonReader)
+	var serialized *serializedData
+	if err := dec.Decode(&serialized); err != nil {
+		return errors.Wrapf(err, "%s: failed to decode contents of checkpoint", h)
 	}
 	if h.config.includeParams {
 		for ii := range serialized.Params {
@@ -646,20 +720,28 @@ func (h *Handler) loadCheckpoint(baseName string, merge bool, mergeWeight float6
 		h.variableValues = make(map[string]*tensors.Tensor, len(h.serialized.Variables))
 	}
 
-	// Load variable values.
+	// Load variable values: we assume they are stored in order.
+	var memoryPos int
 	for _, varInfo := range serialized.Variables {
 		tensor := tensors.FromShape(shapes.Make(varInfo.DType, varInfo.Dimensions...))
+		if varInfo.Pos != memoryPos {
+			return errors.Errorf("variable %s (%s) position at %d is out-of-order, expected it to be in %d -- "+
+				"if you need to handle checkpoints with variables out-of-order, please open a feature request, it is doable",
+				varInfo.ParameterName, tensor.Shape(), varInfo.Pos+1, memoryPos)
+		}
+		memoryPos += varInfo.Length
 		var n, memoryLen int
+		var err error
 		tensor.MutableBytes(func(data []byte) {
 			memoryLen = len(data)
-			n, err = varFile.Read(data)
+			n, err = binReader.Read(data)
 		})
 		if err != nil {
-			return errors.Wrapf(err, "%s: failed to read variable contents of checkpoint data file %s at position %d", h, varFileName, varInfo.Pos)
+			return errors.Wrapf(err, "%s: failed to read variable contents of checkpoint binary file at position %d", h, varInfo.Pos)
 		}
 		if n != memoryLen {
-			return errors.Errorf("%s: failed to read variable contents of checkpoint data file %s "+
-				"at position %d -- read %d bytes, wanted %d bytes", h, varFileName, varInfo.Pos, n, memoryLen)
+			return errors.Errorf("%s: failed to read variable contents of checkpoint binary file "+
+				"at position %d -- read %d bytes, wanted %d bytes", h, varInfo.Pos, n, memoryLen)
 		}
 
 		if !merge {
@@ -695,7 +777,7 @@ func (h *Handler) loadCheckpoint(baseName string, merge bool, mergeWeight float6
 // of the model weights in memory, plus the tensor being merged.
 func (h *Handler) takeMean(baseNames []string) error {
 	// First load the last checkpoint.
-	err := h.loadCheckpoint(xslices.Last(baseNames), false, 0)
+	err := h.loadCheckpointFromFile(xslices.Last(baseNames), false, 0)
 	if err != nil {
 		return err
 	}
@@ -711,7 +793,7 @@ func (h *Handler) takeMean(baseNames []string) error {
 	// Then merge all other weights -- the order doesn't matter.
 	for ii, baseName := range baseNames[:len(baseNames)-1] {
 		mergeWeight := 1.0 / (float64(ii) + 2.0)
-		err = h.loadCheckpoint(baseName, true, mergeWeight)
+		err = h.loadCheckpointFromFile(baseName, true, mergeWeight)
 		if err != nil {
 			return err
 		}
@@ -756,7 +838,7 @@ func (h *Handler) Save() error {
 	// Create files.
 	baseName := h.newCheckpointBaseName(globalStep)
 	h.checkpointsCount += 1 // Bump unique number.
-	varFileName := filepath.Join(h.config.dir, baseName+VarDataSuffix)
+	varFileName := filepath.Join(h.config.dir, baseName+BinDataSuffix)
 	varFile, err := os.Create(varFileName)
 	if err != nil {
 		return errors.Wrapf(err, "%s: failed to create checkpoint data file %s", h, varFileName)
@@ -857,7 +939,7 @@ func (h *Handler) Backup() error {
 		return errors.Errorf("there are no saved checkpoints in %q: maybe call Save() before Backup() ?", h.Dir())
 	}
 	baseName := xslices.Last(baseNames)
-	varFilePath := filepath.Join(h.config.dir, baseName+VarDataSuffix)
+	varFilePath := filepath.Join(h.config.dir, baseName+BinDataSuffix)
 	jsonFilePath := filepath.Join(h.config.dir, baseName+JsonNameSuffix)
 	backupDir := path.Join(h.Dir(), BackupDir)
 	err = os.MkdirAll(backupDir, DirPermMode)
@@ -897,7 +979,7 @@ func (h *Handler) keepNCheckpoints() error {
 	// Remove the excess checkpoints, starting from the earlier ones.
 	list = list[:len(list)-h.config.keep]
 	for _, baseName := range list {
-		varFileName := filepath.Join(h.config.dir, baseName+VarDataSuffix)
+		varFileName := filepath.Join(h.config.dir, baseName+BinDataSuffix)
 		jsonFileName := filepath.Join(h.config.dir, baseName+JsonNameSuffix)
 		for _, fileName := range []string{varFileName, jsonFileName} {
 			err = os.Remove(fileName)

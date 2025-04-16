@@ -1,5 +1,10 @@
 # GoMLX changelog
 
+# Next:
+
+* Package `checkpoints`
+  * Added `Config.FromEmbed` that allows loading a checkpoint from an embedded variable.
+
 # v0.18.1: 2025/04/13 Many fixes, XLA update, Tensor clone.
 
 * XLA Backend:
