@@ -32,7 +32,7 @@
 // Or to force disabling the support, provide the "noshared_buffers" option.
 package xla
 
-//go:generate go run ../../cmd/xla_generator
+//go:generate go run ../../internal/cmd/xla_generator
 
 import (
 	"github.com/gomlx/exceptions"
@@ -92,9 +92,10 @@ func NewWithOptions(pluginName string, options pjrt.NamedValuesMap) *Backend {
 	}
 	klog.V(1).Infof("created new plugin %q for backend %q", pluginName, BackendName)
 	backend := &Backend{
-		plugin:     plugin,
-		client:     client,
-		pluginName: pluginName,
+		plugin:       plugin,
+		client:       client,
+		pluginName:   pluginName,
+		capabilities: CPUCapabilities.Clone(),
 	}
 
 	// Support "shared buffers":

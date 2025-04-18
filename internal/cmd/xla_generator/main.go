@@ -8,7 +8,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/gomlx/gomlx/cmd/backends_generator/parsexlabuilder"
+	"github.com/gomlx/gomlx/internal/cmd/backends_generator/parsexlabuilder"
 )
 
 func main() {
