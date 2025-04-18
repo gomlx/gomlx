@@ -2,8 +2,11 @@
 
 # Next:
 
+* Package `backends/notimplemented`:
+  * Helper to implement new backends.
 * Package `checkpoints`
   * Added `Config.FromEmbed` that allows loading a checkpoint from an embedded variable.
+* Moved code generation tools from `cmd` to `internal/cmd` directory.
 
 # v0.18.1: 2025/04/13 Many fixes, XLA update, Tensor clone.
 
