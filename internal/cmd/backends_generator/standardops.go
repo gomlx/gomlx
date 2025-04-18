@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/gomlx/gomlx/cmd/backends_generator/parsexlabuilder"
+	"github.com/gomlx/gomlx/internal/cmd/backends_generator/parsexlabuilder"
 	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/janpfeifer/must"
@@ -117,5 +117,5 @@ func GenerateStandardOpsInterface(extractor *parsexlabuilder.NodeTextExtractor, 
 	cmd := exec.Command("gofmt", "-w", fileName)
 	fmt.Printf("\t%s\n", cmd)
 	must.M(cmd.Run())
-	fmt.Printf("\tgenerated %q based on github.com/gomlx/gopjrt/xlabuilder\n", fileName)
+	fmt.Printf("\t\tgenerated %q based on github.com/gomlx/gopjrt/xlabuilder\n", fileName)
 }
