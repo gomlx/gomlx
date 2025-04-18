@@ -147,13 +147,7 @@ const (
 	FFTInverseReal
 )
 
-// Enumer can be installed with:
-//
-//	go install github.com/dmarkham/enumer@latest
-//
-// With go 1.24 we will add this to go tools support.
-
-//go:generate enumer -type FFTType -trimprefix=FFT
+//go:generate go tool enumer -type FFTType -trimprefix=FFT builder.go
 
 // ReduceOpType select among the basic types of reduction supported, see XlaBuilder.ReduceComputation.
 type ReduceOpType int
@@ -175,10 +169,4 @@ const (
 	ReduceOpMin
 )
 
-// Enumer can be installed with:
-//
-//	go install github.com/dmarkham/enumer@latest
-//
-// With go 1.24 we will add this to go tools support.
-
-//go:generate enumer -type ReduceOpType -trimprefix=ReduceOp
+//go:generate go tool enumer -type ReduceOpType -trimprefix=ReduceOp builder.go
