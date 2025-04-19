@@ -16,6 +16,10 @@ var NotImplementedException = errors.New("not implemented")
 // Builder implements backends.Builder by throwing "Not implemented" exception for every operation.
 type Builder struct{}
 
+var _ backends.Builder = Builder{}
+
+//go:generate go run ../../internal/cmd/notimplemented_generator
+
 func (b Builder) Name() string {
 	return "Dummy \"not implemented\" backend, please override this method"
 }
