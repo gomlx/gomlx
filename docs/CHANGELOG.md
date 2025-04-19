@@ -2,8 +2,9 @@
 
 # Next:
 
-* Package `backends/notimplemented`:
-  * Helper to implement new backends.
+* Package `backends`:
+  * Added sub-package `notimplemented`: helper to implement new backends.
+  * Added skeleton of `simplego`, a portable, simple albeit very slow backend.
 * Package `checkpoints`
   * Added `Config.FromEmbed` that allows loading a checkpoint from an embedded variable.
 * Moved code generation tools from `cmd` to `internal/cmd` directory.
