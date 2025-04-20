@@ -35,8 +35,9 @@ func (b *Builder) Name() string {
 }
 
 // Compile implements backends.Builder.
-func (b *Builder) Compile() backends.Executable {
+func (b *Builder) Compile(outputs ...backends.Op) backends.Executable {
 	b.compiled = true
+	b.outputs = b.checkOps(outputs)
 	return &Executable{builder: b}
 }
 
