@@ -6,7 +6,6 @@ package simplego
 
 import (
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gopjrt/dtypes"
 )
 
 // Backend implements the backends.Backend interface.
@@ -14,24 +13,6 @@ type Backend struct{}
 
 // Compile-time check that simplego.Backend implements backends.Backend.
 var _ backends.Backend = &Backend{}
-
-// Capabilities of the SimpleGo backends.
-var Capabilities = backends.Capabilities{
-	DTypes: map[dtypes.DType]bool{
-		dtypes.Bool:     true,
-		dtypes.Int8:     true,
-		dtypes.Int16:    true,
-		dtypes.Int32:    true,
-		dtypes.Int64:    true,
-		dtypes.Uint8:    true,
-		dtypes.Uint16:   true,
-		dtypes.Uint32:   true,
-		dtypes.Uint64:   true,
-		dtypes.Float32:  true,
-		dtypes.Float64:  true,
-		dtypes.BFloat16: true,
-	},
-}
 
 // Name returns the short name of the backend. E.g.: "xla" for the Xla/PJRT plugin.
 func (b *Backend) Name() string {
@@ -55,7 +36,7 @@ func (b *Backend) Capabilities() backends.Capabilities {
 
 // Builder creates a new builder used to define a new named computation.
 func (b *Backend) Builder(name string) backends.Builder {
-	return &Builder{}
+	return &Builder{name: name}
 }
 
 // Finalize releases all the associated resources immediately, and makes the backend invalid.
