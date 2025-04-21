@@ -4,7 +4,9 @@ import (
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gopjrt/dtypes"
 	"reflect"
+	"sync"
 )
 
 // Buffer for SimpleGo backend holds a shape and a reference to the flat data.
@@ -18,12 +20,46 @@ type Buffer struct {
 	flat any
 }
 
+type bufferPoolKey struct {
+	dtype  dtypes.DType
+	length int
+}
+
+var (
+	bufferPools sync.Map // map[bufferPoolKey]*sync.Pool
+)
+
+func getBuffer(dtype dtypes.DType, length int) *Buffer {
+	key := bufferPoolKey{dtype: dtype, length: length}
+	poolInterface, _ := bufferPools.LoadOrStore(key, &sync.Pool{
+		New: func() interface{} {
+			return &Buffer{
+				flat: reflect.MakeSlice(reflect.SliceOf(dtype.GoType()), length, length).Interface(),
+			}
+		},
+	})
+	pool := poolInterface.(*sync.Pool)
+	return pool.Get().(*Buffer)
+}
+
+func putBuffer(buffer *Buffer) {
+	if buffer == nil {
+		return
+	}
+	key := bufferPoolKey{
+		dtype:  buffer.shape.DType,
+		length: buffer.shape.Size(),
+	}
+	if pool, ok := bufferPools.Load(key); ok {
+		pool.(*sync.Pool).Put(buffer)
+	}
+}
+
 // NewBuffer creates the buffer with a newly allocated flat space.
 func NewBuffer(shape shapes.Shape) *Buffer {
-	return &Buffer{
-		shape: shape.Clone(),
-		flat:  reflect.MakeSlice(reflect.SliceOf(shape.DType.GoType()), shape.Size(), shape.Size()),
-	}
+	buffer := getBuffer(shape.DType, shape.Size())
+	buffer.shape = shape.Clone()
+	return buffer
 }
 
 // BufferFinalize allows client to inform backend that buffer is no longer needed and associated resources can be
@@ -31,7 +67,7 @@ func NewBuffer(shape shapes.Shape) *Buffer {
 func (b *Backend) BufferFinalize(buffer backends.Buffer) {
 	goBuffer := buffer.(*Buffer)
 	goBuffer.shape = shapes.Invalid()
-	goBuffer.flat = nil
+	putBuffer(goBuffer)
 }
 
 // BufferShape returns the shape for the buffer.
