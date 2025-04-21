@@ -75,6 +75,40 @@ func (e *Executable) Outputs() (outputShapes []shapes.Shape) {
 	return outputShapes
 }
 
+// newExecutable creates an Executable ready to run the graph built with builder.
+func newExecutable(builder *Builder) *Executable {
+	e := &Executable{
+		builder: builder,
+		numUses: make([]int, len(builder.nodes)),
+		executionBuffersPool: sync.Pool{
+			New: func() interface{} {
+				return &executionBuffers{
+					results: make([]*Buffer, len(builder.nodes)),
+					numUsed: make([]int, len(builder.nodes)),
+				}
+			},
+		},
+	}
+
+	// Count uses for each node starting from outputs
+	for _, output := range builder.outputs {
+		countNodeUses(output, e.numUses)
+	}
+
+	return e
+}
+
+// countNodeUses recursively counts how many times a node is used.
+func countNodeUses(node *Node, numUses []int) {
+	numUses[node.builderIdx]++
+	if numUses[node.builderIdx] == 1 {
+		// On the first visit, recursively, traverse inputs of node.
+		for _, input := range node.inputs {
+			countNodeUses(input, numUses)
+		}
+	}
+}
+
 // Execute the executable on the default device (0).
 // The number and shapes of the inputs must match those returned by Inputs.
 //

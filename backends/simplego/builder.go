@@ -39,8 +39,8 @@ func (b *Builder) Name() string {
 // Compile implements backends.Builder.
 func (b *Builder) Compile(outputs ...backends.Op) backends.Executable {
 	b.compiled = true
-	b.outputs = b.checkOps(outputs)
-	return &Executable{builder: b}
+	b.outputs = b.checkOps("Compile", outputs...)
+	return newExecutable(b)
 }
 
 // Finalize immediately release the resources associated with the Builder.
