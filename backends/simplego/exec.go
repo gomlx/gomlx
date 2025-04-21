@@ -13,6 +13,8 @@ import (
 // If any inconsistencies are found, please fix in the Builder, so Executable can be written without need
 // of any duplicate checks.
 type Executable struct {
+	backend *Backend
+
 	// builder must have Builder.compiled set to true, so it is no longer active.
 	builder *Builder
 
@@ -93,6 +95,7 @@ func newExecutable(builder *Builder) *Executable {
 	}
 
 	e := &Executable{
+		backend:           builder.backend,
 		builder:           builder,
 		numNodesToProcess: numNodesToProcess,
 		numUses:           make([]int, numNodesToProcess),

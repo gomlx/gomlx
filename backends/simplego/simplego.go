@@ -6,10 +6,18 @@ package simplego
 
 import (
 	"github.com/gomlx/gomlx/backends"
+	"sync"
 )
 
+// New constructs a new simplego Backend.
+func New() *Backend {
+	return &Backend{}
+}
+
 // Backend implements the backends.Backend interface.
-type Backend struct{}
+type Backend struct {
+	bufferPools sync.Map
+}
 
 // Compile-time check that simplego.Backend implements backends.Backend.
 var _ backends.Backend = &Backend{}
