@@ -8,8 +8,8 @@ import (
 // Capabilities of the SimpleGo backends.
 var Capabilities = backends.Capabilities{
 	Operations: map[backends.OpType]bool{
-		backends.OpTypeOpParameter: true,
-		backends.OpTypeOpConstant:  true,
+		backends.OpTypeParameter: true,
+		backends.OpTypeConstant:  true,
 	},
 	DTypes: map[dtypes.DType]bool{
 		dtypes.Bool:     true,

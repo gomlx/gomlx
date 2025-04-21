@@ -22,11 +22,13 @@ The initial implementation was done simply to work, with zero optimizations, onl
 
 There are tons of space for optimizations, a few obvious items:
 
+* Pre-calculate the temporary memory needed -- it is known in graph compiling time -- and use memory pool for these blocks.
+* Do a proper matrix multiplication.
 * Eliminate common sub-expressions.
+* Pre-calculate constant sub-expressions.
 * Fuse unary ops: it's much faster (for larger data blocks) to loop over the data only once and apply various functions than
   loop over the data many times, each time applying the unary function.
 * Fuse binary/unary ops: perform unary functions while traversing the data for binary functions. Again to save
   memory accesses.
-* Pre-calculate the temporary memory needed -- it is known in graph compiling time -- and use memory pool for these blocks.
-* Do a proper matrix multiplication. 
+* Parallelization: in-operation, and across operations.
 * Use intrinsics on platforms that allow it.

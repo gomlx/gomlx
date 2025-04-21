@@ -16,10 +16,15 @@ type nodeParameter struct {
 // Parameter creates an input parameter for the computation.
 // During execution of the computation this value will need to be fed, in the same order it is created.
 func (b *Builder) Parameter(name string, shape shapes.Shape) backends.Op {
-	if shape.DType == dtypes.InvalidDType {
+	dtype := shape.DType
+	if dtype == dtypes.InvalidDType {
 		exceptions.Panicf("invalid shape %s for Parameter", shape)
 	}
-	n := b.newNode(backends.OpTypeOpParameter, shape)
+	if supported, ok := Capabilities.DTypes[dtype]; !ok || !supported {
+		exceptions.Panicf("Parameter: data type (DType) %s not supported for backend %q, try using "+
+			"a different backend, or open an issue in github.com/gomlx/gomlx", dtype, b.backend)
+	}
+	n := b.newNode(backends.OpTypeParameter, shape)
 	n.data = &nodeParameter{
 		name:     name,
 		inputIdx: len(b.inputs),
@@ -41,16 +46,25 @@ type nodeConstant struct {
 // The value is copied into the graph. It's recommended that for very large tensors,
 // even if constants, that they are passed as side inputNodes (or variables, see context package) instead.
 func (b *Builder) Constant(flat any, dims ...int) backends.Op {
-	_ = b.checkOps()
+	_ = b.checkOps("Constant")
 	dtype, flatLen := checkFlat(flat)
+	if supported, ok := Capabilities.DTypes[dtype]; !ok || !supported {
+		exceptions.Panicf("Constant: data type (DType) %s not supported for backend %q, try using "+
+			"a different backend, or open an issue in github.com/gomlx/gomlx", dtype, b.backend)
+	}
 	shape := shapes.Make(dtype, dims...)
 	if shape.Size() != flatLen {
 		exceptions.Panicf("flat ([%d]%s) and shape size (%d) mismatch for constant value",
 			flatLen, dtype, shape.Size())
 	}
-	n := b.newNode(backends.OpTypeOpConstant, shape)
+	n := b.newNode(backends.OpTypeConstant, shape)
 	n.data = &nodeConstant{
 		flat: flat,
 	}
 	return n
+}
+
+// Neg implements backends.Builder interface.
+func (b *Builder) Neg(operand backends.Op) backends.Op {
+	return b.addUnaryOp(backends.OpTypeNeg, operand)
 }

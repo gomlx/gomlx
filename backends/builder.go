@@ -29,6 +29,8 @@ type Builder interface {
 	Name() string
 
 	// OpShape returns the shape of a computation Op.
+	// Notice this is not an operation, it returns the shape in graph building type.
+	// One can use the shape and create a constant out of it.
 	OpShape(op Op) shapes.Shape
 
 	// Parameter creates an input parameter for the computation.

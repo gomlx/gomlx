@@ -3,11 +3,37 @@ package simplego
 import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
+	"sync"
 )
 
+// Executable holds a frozen Builder. It assumes the graph in Builder is valid and has been properly
+// checked that all the shapes and data types are valid.
+//
+// If any inconsistencies are found, please fix in the Builder, so Executable can be written without need
+// of any duplicate checks.
 type Executable struct {
 	// builder must have Builder.compiled set to true, so it is no longer active.
 	builder *Builder
+
+	// numUses is the number of times each Node is used during the calculation.
+	// It has the same length as builder.Nodes.
+	numUses []int
+
+	// executionBuffersPool allow for re-use of executionBuffers.
+	executionBuffersPool sync.Pool
+}
+
+// executionBuffers holds the intermediate results during the execution of the graph.
+// One is created per execution of Executable.
+type executionBuffers struct {
+	// results hold the calculated computations at each step.
+	// It has the same length as builder.Nodes.
+	results []*Buffer
+
+	// numUsed hold the number of times each node has been used already. Once they match numUses, the results buffer can
+	// be released or re-used.
+	// It has the same length as builder.Nodes.
+	numUsed []int
 }
 
 // Compile time check.

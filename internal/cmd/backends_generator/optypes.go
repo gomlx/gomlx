@@ -28,10 +28,10 @@ package backends
 type OpType int
 
 const (
-	OpTypeOpShape OpType = iota
-	OpTypeOpParameter
-	OpTypeOpConstant
-	OpTypeOpIdentity
+	OpTypeInvalid OpType = iota
+	OpTypeParameter
+	OpTypeConstant
+	OpTypeIdentity
 	OpTypeReduceWindow
 	OpTypeRngBitGenerator
 	OpTypeBatchNormForInference
