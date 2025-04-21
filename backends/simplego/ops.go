@@ -33,12 +33,6 @@ func (b *Builder) Parameter(name string, shape shapes.Shape) backends.Op {
 	return n
 }
 
-// nodeConstant data.
-type nodeConstant struct {
-	// flat holds the flat data for the constant.
-	flat any
-}
-
 // Constant creates a constant in the graph with the given flat values, and the shape defined by dims.
 //
 // flat must be a slice of a basic type supported -- that can be converted to a DType.
@@ -58,8 +52,9 @@ func (b *Builder) Constant(flat any, dims ...int) backends.Op {
 			flatLen, dtype, shape.Size())
 	}
 	n := b.newNode(backends.OpTypeConstant, shape)
-	n.data = &nodeConstant{
-		flat: flat,
+	n.data = &Buffer{
+		shape: shape,
+		flat:  flat,
 	}
 	return n
 }

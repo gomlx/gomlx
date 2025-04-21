@@ -19,6 +19,8 @@ type Builder struct {
 	backend  *Backend
 	compiled bool
 
+	// nodes are only created when their inputs have already been created. So this is a natural DAG (Directed Acyclic Graph)
+	// ordering of the graph. The executor rely on this invariance.
 	nodes []*Node
 
 	// inputs will have nodeParameter as data.
