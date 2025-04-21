@@ -122,3 +122,8 @@ func checkFlat(flat any) (dtypes.DType, int) {
 	flatValue := reflect.ValueOf(flat)
 	return dtype, flatValue.Len()
 }
+
+// addBinaryOp adds a generic binary op
+func (b *Builder) addBinaryOp(lhs, rhs backends.Op) *Node {
+
+}
