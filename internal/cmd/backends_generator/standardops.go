@@ -112,8 +112,9 @@ func GenerateStandardOpsInterface(extractor *parsexlabuilder.NodeTextExtractor, 
 
 	fileName := standardOpsInterfaceFile
 	f := must.M1(os.Create(fileName))
-
 	must.M(standardOpsTemplate.Execute(f, standardOps))
+	must.M(f.Close())
+
 	cmd := exec.Command("gofmt", "-w", fileName)
 	fmt.Printf("\t%s\n", cmd)
 	must.M(cmd.Run())
