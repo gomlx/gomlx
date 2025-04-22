@@ -37,3 +37,11 @@ func TestExecUnary_Sign(t *testing.T) {
 	y2 := exec.Call([]uint32{1, 0, 3})[0]
 	assert.Equal(t, []uint32{1, 0, 1}, y2.Value())
 }
+
+func TestExecUnary_LogicalNot(t *testing.T) {
+	exec := graph.NewExec(backend, func(x *graph.Node) *graph.Node { return graph.LogicalNot(x) })
+	y0 := exec.Call(true)[0]
+	assert.Equal(t, false, y0.Value())
+	y1 := exec.Call([]bool{true, false, true})[0]
+	assert.Equal(t, []bool{false, true, false}, y1.Value())
+}

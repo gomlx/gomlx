@@ -11,6 +11,7 @@ func init() {
 	nodeExecutors[backends.OpTypeNeg] = execNeg
 	nodeExecutors[backends.OpTypeAbs] = execAbs
 	nodeExecutors[backends.OpTypeSign] = execSign
+	nodeExecutors[backends.OpTypeLogicalNot] = execLogicalNot
 }
 
 // unaryOperandAndOutput is a convenience function to get the input and output -- which may be the reuse of the input
@@ -189,4 +190,16 @@ func execSignBF16(inputs, outputs []bfloat16.BFloat16) {
 			outputs[ii] = bfloat16.FromFloat32(0.0)
 		}
 	}
+}
+
+// execLogicalNot executes the unary op LogicalNot.
+func execLogicalNot(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	if input.shape.DType != dtypes.Bool {
+		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
+	}
+	for ii, val := range input.flat.([]bool) {
+		output.flat.([]bool)[ii] = !val
+	}
+	return output
 }
