@@ -7,7 +7,11 @@ import (
 	"testing"
 )
 
-var backend = New("cpu")
+var backend = New("go")
+
+func TestBackendIsSimpleGo(t *testing.T) {
+	assert.NotPanics(t, func() { _ = backend.(*Backend) })
+}
 
 func TestExecUnary_Neg(t *testing.T) {
 	exec := graph.NewExec(backend, func(x *graph.Node) *graph.Node { return graph.Neg(x) })
