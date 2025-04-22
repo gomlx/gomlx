@@ -174,6 +174,7 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) []backends
 	for ii := range e.numNodesToProcess {
 		execBuf.numUsed[ii] = 0
 		execBuf.owned[ii] = false
+		execBuf.results[ii] = nil
 	}
 
 	// Initialize "parameters" results with input buffers.
@@ -198,7 +199,7 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) []backends
 			// Parameters will have its results pre-filled, and
 			continue
 		}
-		if execBuf.numUsed[nodeIdx] == 0 {
+		if e.numUses[nodeIdx] == 0 {
 			// This node is not used by any of the outputs of this executable.
 			// TODO: these nodes can simply be removed in Builder.Compile().
 			continue
@@ -266,7 +267,6 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) []backends
 			// Notice that the final outputs will always have numUses >= 1, and they
 			// will never be completely used by the executor, hence they don't get freed here.
 			e.backend.putBuffer(inputBuffers[ii])
-			inputBuffers[ii].shape = shapes.Invalid()
 			execBuf.results[input.builderIdx] = nil
 		}
 	}
@@ -274,9 +274,13 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) []backends
 	// Return outputs, copying them if not owned by the executor
 	outputs := make([]backends.Buffer, len(e.builder.outputs))
 	for ii, output := range e.builder.outputs {
-		outIdx := output.builderIdx
-		outBuf := execBuf.results[outIdx]
-		if !execBuf.owned[outIdx] {
+		outNodeIdx := output.builderIdx
+		outBuf := execBuf.results[outNodeIdx]
+		if outBuf == nil {
+			exceptions.Panicf("Execute: output #%d (nodeIdx=%d) is not calculated yet (!?) -- "+
+				"this is a bug, it should never have happened", ii, outNodeIdx)
+		}
+		if !execBuf.owned[outNodeIdx] {
 			// Make a copy of the buffer since we don't own it
 			outBuf = e.backend.cloneBuffer(outBuf)
 		}

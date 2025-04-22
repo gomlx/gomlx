@@ -51,6 +51,7 @@ func (b *Backend) putBuffer(buffer *Buffer) {
 	if pool, ok := b.bufferPools.Load(key); ok {
 		pool.(*sync.Pool).Put(buffer)
 	}
+	buffer.shape = shapes.Invalid()
 }
 
 // cloneBuffer using the pool to allocate a new one.
@@ -73,10 +74,9 @@ func (b *Backend) NewBuffer(shape shapes.Shape) *Buffer {
 
 // BufferFinalize allows client to inform backend that buffer is no longer needed and associated resources can be
 // freed immediately.
-func (b *Backend) BufferFinalize(buffer backends.Buffer) {
-	goBuffer := buffer.(*Buffer)
-	goBuffer.shape = shapes.Invalid()
-	b.putBuffer(goBuffer)
+func (b *Backend) BufferFinalize(backendBuffer backends.Buffer) {
+	buffer := backendBuffer.(*Buffer)
+	b.putBuffer(buffer)
 }
 
 // BufferShape returns the shape for the buffer.
