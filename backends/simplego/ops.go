@@ -59,6 +59,8 @@ func (b *Builder) Constant(flat any, dims ...int) backends.Op {
 	return n
 }
 
+// Unary Operations:
+
 // Neg implements backends.Builder interface.
 func (b *Builder) Neg(operand backends.Op) backends.Op {
 	return b.addUnaryOp(backends.OpTypeNeg, operand)
@@ -163,4 +165,10 @@ func (b *Builder) IsFinite(operandOp backends.Op) backends.Op {
 	shape := operand.shape.Clone()
 	shape.DType = dtypes.Bool
 	return b.newNode(opType, shape, operand)
+}
+
+// Binary Operations:
+
+func (b *Builder) Add(lhsOp, rhsOp backends.Op) backends.Op {
+	return b.addBinaryOp(backends.OpTypeAdd, lhsOp, rhsOp)
 }
