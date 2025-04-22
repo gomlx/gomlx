@@ -15,6 +15,7 @@ func init() {
 	nodeExecutors[backends.OpTypeLogicalNot] = execLogicalNot
 	nodeExecutors[backends.OpTypeBitwiseNot] = execBitwiseNot
 	nodeExecutors[backends.OpTypeBitCount] = execBitCount
+	nodeExecutors[backends.OpTypeClz] = execClz
 }
 
 // unaryOperandAndOutput is a convenience function to get the input and output -- which may be the reuse of the input
@@ -286,5 +287,55 @@ func execBitCountGeneric32[T int32 | uint32](inputs, outputs []T) {
 func execBitCountGeneric64[T int64 | uint64](inputs, outputs []T) {
 	for ii, input := range inputs {
 		outputs[ii] = T(bits.OnesCount64(uint64(input)))
+	}
+}
+
+// execClz executes the unary op Clz.
+func execClz(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	switch input.shape.DType {
+	case dtypes.Int8:
+		execClzGeneric8[int8](input.flat.([]int8), output.flat.([]int8))
+	case dtypes.Int16:
+		execClzGeneric16[int16](input.flat.([]int16), output.flat.([]int16))
+	case dtypes.Int32:
+		execClzGeneric32[int32](input.flat.([]int32), output.flat.([]int32))
+	case dtypes.Int64:
+		execClzGeneric64[int64](input.flat.([]int64), output.flat.([]int64))
+	case dtypes.Uint8:
+		execClzGeneric8[uint8](input.flat.([]uint8), output.flat.([]uint8))
+	case dtypes.Uint16:
+		execClzGeneric16[uint16](input.flat.([]uint16), output.flat.([]uint16))
+	case dtypes.Uint32:
+		execClzGeneric32[uint32](input.flat.([]uint32), output.flat.([]uint32))
+	case dtypes.Uint64:
+		execClzGeneric64[uint64](input.flat.([]uint64), output.flat.([]uint64))
+	default:
+		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
+	}
+	return output
+}
+
+func execClzGeneric8[T int8 | uint8](inputs, outputs []T) {
+	for ii, input := range inputs {
+		outputs[ii] = T(bits.LeadingZeros8(uint8(input)))
+	}
+}
+
+func execClzGeneric16[T int16 | uint16](inputs, outputs []T) {
+	for ii, input := range inputs {
+		outputs[ii] = T(bits.LeadingZeros16(uint16(input)))
+	}
+}
+
+func execClzGeneric32[T int32 | uint32](inputs, outputs []T) {
+	for ii, input := range inputs {
+		outputs[ii] = T(bits.LeadingZeros32(uint32(input)))
+	}
+}
+
+func execClzGeneric64[T int64 | uint64](inputs, outputs []T) {
+	for ii, input := range inputs {
+		outputs[ii] = T(bits.LeadingZeros64(uint64(input)))
 	}
 }

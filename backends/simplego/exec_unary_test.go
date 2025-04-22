@@ -82,3 +82,26 @@ func TestExecUnary_BitCount(t *testing.T) {
 	y7 := exec.Call([]uint64{1, 2, 3})[0]
 	assert.Equal(t, []uint64{1, 1, 2}, y7.Value())
 }
+
+func TestExecUnary_Clz(t *testing.T) {
+	exec := graph.NewExec(backend, func(x *graph.Node) *graph.Node { return graph.Clz(x) })
+	y0 := exec.Call(int8(7))[0]
+	assert.Equal(t, int8(5), y0.Value())
+	y1 := exec.Call([]int8{1, 2, 3})[0]
+	assert.Equal(t, []int8{7, 6, 6}, y1.Value())
+
+	y2 := exec.Call(uint16(15))[0]
+	assert.Equal(t, uint16(12), y2.Value())
+	y3 := exec.Call([]uint16{1, 2, 3})[0]
+	assert.Equal(t, []uint16{15, 14, 14}, y3.Value())
+
+	y4 := exec.Call(int32(31))[0]
+	assert.Equal(t, int32(27), y4.Value())
+	y5 := exec.Call([]int32{1, 2, 3})[0]
+	assert.Equal(t, []int32{31, 30, 30}, y5.Value())
+
+	y6 := exec.Call(uint64(63))[0]
+	assert.Equal(t, uint64(58), y6.Value())
+	y7 := exec.Call([]uint64{1, 2, 3})[0]
+	assert.Equal(t, []uint64{63, 62, 62}, y7.Value())
+}
