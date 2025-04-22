@@ -73,3 +73,93 @@ func (b *Builder) Sign(operand backends.Op) backends.Op {
 func (b *Builder) Abs(operand backends.Op) backends.Op {
 	return b.addUnaryOp(backends.OpTypeAbs, operand)
 }
+
+// LogicalNot implements backends.Builder interface.
+func (b *Builder) LogicalNot(operand backends.Op) backends.Op {
+	return b.addUnaryOp(backends.OpTypeLogicalNot, operand)
+}
+
+// BitwiseNot implements backends.Builder interface.
+func (b *Builder) BitwiseNot(operand backends.Op) backends.Op {
+	return b.addUnaryOp(backends.OpTypeBitwiseNot, operand)
+}
+
+// BitCount implements backends.Builder interface.
+func (b *Builder) BitCount(operand backends.Op) backends.Op {
+	return b.addUnaryOp(backends.OpTypeBitCount, operand)
+}
+
+// Clz implements backends.Builder interface.
+func (b *Builder) Clz(operand backends.Op) backends.Op {
+	return b.addUnaryOp(backends.OpTypeClz, operand)
+}
+
+// Exp implements backends.Builder interface.
+func (b *Builder) Exp(operand backends.Op) backends.Op {
+	return b.addUnaryOp(backends.OpTypeExp, operand)
+}
+
+// Log implements backends.Builder interface.
+func (b *Builder) Log(operand backends.Op) backends.Op {
+	return b.addUnaryOp(backends.OpTypeLog, operand)
+}
+
+// Log1p implements backends.Builder interface.
+func (b *Builder) Log1p(operand backends.Op) backends.Op {
+	return b.addUnaryOp(backends.OpTypeLog1p, operand)
+}
+
+// Ceil implements backends.Builder interface.
+func (b *Builder) Ceil(operand backends.Op) backends.Op {
+	return b.addUnaryOp(backends.OpTypeCeil, operand)
+}
+
+// Floor implements backends.Builder interface.
+func (b *Builder) Floor(operand backends.Op) backends.Op {
+	return b.addUnaryOp(backends.OpTypeFloor, operand)
+}
+
+// Round implements backends.Builder interface.
+func (b *Builder) Round(operand backends.Op) backends.Op {
+	return b.addUnaryOp(backends.OpTypeRound, operand)
+}
+
+// Rsqrt implements backends.Builder interface.
+func (b *Builder) Rsqrt(operand backends.Op) backends.Op {
+	return b.addUnaryOp(backends.OpTypeRsqrt, operand)
+}
+
+// Sqrt implements backends.Builder interface.
+func (b *Builder) Sqrt(operand backends.Op) backends.Op {
+	return b.addUnaryOp(backends.OpTypeSqrt, operand)
+}
+
+// Imag implements backends.Builder interface.
+func (b *Builder) Imag(operand backends.Op) backends.Op {
+	return b.addUnaryOp(backends.OpTypeImag, operand)
+}
+
+// Real implements backends.Builder interface.
+func (b *Builder) Real(operand backends.Op) backends.Op {
+	return b.addUnaryOp(backends.OpTypeReal, operand)
+}
+
+// Conj implements backends.Builder interface.
+func (b *Builder) Conj(operand backends.Op) backends.Op {
+	return b.addUnaryOp(backends.OpTypeConj, operand)
+}
+
+// Cos implements backends.Builder interface.
+func (b *Builder) Cos(operand backends.Op) backends.Op {
+	return b.addUnaryOp(backends.OpTypeCos, operand)
+}
+
+// Sin implements backends.Builder interface.
+func (b *Builder) Sin(operand backends.Op) backends.Op {
+	return b.addUnaryOp(backends.OpTypeSin, operand)
+}
+
+// Tanh implements backends.Builder interface.
+func (b *Builder) Tanh(operand backends.Op) backends.Op {
+	return b.addUnaryOp(backends.OpTypeTanh, operand)
+}
