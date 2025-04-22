@@ -5,6 +5,7 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
+	"math"
 	"math/bits"
 )
 
@@ -16,6 +17,18 @@ func init() {
 	nodeExecutors[backends.OpTypeBitwiseNot] = execBitwiseNot
 	nodeExecutors[backends.OpTypeBitCount] = execBitCount
 	nodeExecutors[backends.OpTypeClz] = execClz
+	nodeExecutors[backends.OpTypeExp] = execExp
+	nodeExecutors[backends.OpTypeLog] = execLog
+	nodeExecutors[backends.OpTypeLog1p] = execLog1p
+	nodeExecutors[backends.OpTypeCeil] = execCeil
+	nodeExecutors[backends.OpTypeFloor] = execFloor
+	nodeExecutors[backends.OpTypeRound] = execRound
+	nodeExecutors[backends.OpTypeRsqrt] = execRsqrt
+	nodeExecutors[backends.OpTypeSqrt] = execSqrt
+	nodeExecutors[backends.OpTypeCos] = execCos
+	nodeExecutors[backends.OpTypeSin] = execSin
+	nodeExecutors[backends.OpTypeTanh] = execTanh
+	nodeExecutors[backends.OpTypeIsFinite] = execIsFinite
 }
 
 // unaryOperandAndOutput is a convenience function to get the input and output -- which may be the reuse of the input
@@ -337,5 +350,345 @@ func execClzGeneric32[T int32 | uint32](inputs, outputs []T) {
 func execClzGeneric64[T int64 | uint64](inputs, outputs []T) {
 	for ii, input := range inputs {
 		outputs[ii] = T(bits.LeadingZeros64(uint64(input)))
+	}
+}
+
+// execExp executes the unary op Exp.
+func execExp(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	switch input.shape.DType {
+	case dtypes.Float32:
+		execExpGeneric[float32](input.flat.([]float32), output.flat.([]float32))
+	case dtypes.Float64:
+		execExpGeneric[float64](input.flat.([]float64), output.flat.([]float64))
+	case dtypes.BFloat16:
+		execExpBF16(input.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16))
+	default:
+		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
+	}
+	return output
+}
+
+func execExpGeneric[T float32 | float64](inputs, outputs []T) {
+	for ii, input := range inputs {
+		outputs[ii] = T(math.Exp(float64(input)))
+	}
+}
+
+func execExpBF16(inputs, outputs []bfloat16.BFloat16) {
+	for ii, input := range inputs {
+		outputs[ii] = bfloat16.FromFloat32(float32(math.Exp(float64(input.Float32()))))
+	}
+}
+
+// execLog executes the unary op Log.
+func execLog(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	switch input.shape.DType {
+	case dtypes.Float32:
+		execLogGeneric[float32](input.flat.([]float32), output.flat.([]float32))
+	case dtypes.Float64:
+		execLogGeneric[float64](input.flat.([]float64), output.flat.([]float64))
+	case dtypes.BFloat16:
+		execLogBF16(input.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16))
+	default:
+		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
+	}
+	return output
+}
+
+func execLogGeneric[T float32 | float64](inputs, outputs []T) {
+	for ii, input := range inputs {
+		outputs[ii] = T(math.Log(float64(input)))
+	}
+}
+
+func execLogBF16(inputs, outputs []bfloat16.BFloat16) {
+	for ii, input := range inputs {
+		outputs[ii] = bfloat16.FromFloat32(float32(math.Log(float64(input.Float32()))))
+	}
+}
+
+// execLog1p executes the unary op Log1p.
+func execLog1p(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	switch input.shape.DType {
+	case dtypes.Float32:
+		execLog1pGeneric[float32](input.flat.([]float32), output.flat.([]float32))
+	case dtypes.Float64:
+		execLog1pGeneric[float64](input.flat.([]float64), output.flat.([]float64))
+	case dtypes.BFloat16:
+		execLog1pBF16(input.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16))
+	default:
+		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
+	}
+	return output
+}
+
+func execLog1pGeneric[T float32 | float64](inputs, outputs []T) {
+	for ii, input := range inputs {
+		outputs[ii] = T(math.Log1p(float64(input)))
+	}
+}
+
+func execLog1pBF16(inputs, outputs []bfloat16.BFloat16) {
+	for ii, input := range inputs {
+		outputs[ii] = bfloat16.FromFloat32(float32(math.Log1p(float64(input.Float32()))))
+	}
+}
+
+// execCeil executes the unary op Ceil.
+func execCeil(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	switch input.shape.DType {
+	case dtypes.Float32:
+		execCeilGeneric[float32](input.flat.([]float32), output.flat.([]float32))
+	case dtypes.Float64:
+		execCeilGeneric[float64](input.flat.([]float64), output.flat.([]float64))
+	case dtypes.BFloat16:
+		execCeilBF16(input.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16))
+	default:
+		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
+	}
+	return output
+}
+
+func execCeilGeneric[T float32 | float64](inputs, outputs []T) {
+	for ii, input := range inputs {
+		outputs[ii] = T(math.Ceil(float64(input)))
+	}
+}
+
+func execCeilBF16(inputs, outputs []bfloat16.BFloat16) {
+	for ii, input := range inputs {
+		outputs[ii] = bfloat16.FromFloat32(float32(math.Ceil(float64(input.Float32()))))
+	}
+}
+
+// execFloor executes the unary op Floor.
+func execFloor(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	switch input.shape.DType {
+	case dtypes.Float32:
+		execFloorGeneric[float32](input.flat.([]float32), output.flat.([]float32))
+	case dtypes.Float64:
+		execFloorGeneric[float64](input.flat.([]float64), output.flat.([]float64))
+	case dtypes.BFloat16:
+		execFloorBF16(input.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16))
+	default:
+		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
+	}
+	return output
+}
+
+func execFloorGeneric[T float32 | float64](inputs, outputs []T) {
+	for ii, input := range inputs {
+		outputs[ii] = T(math.Floor(float64(input)))
+	}
+}
+
+func execFloorBF16(inputs, outputs []bfloat16.BFloat16) {
+	for ii, input := range inputs {
+		outputs[ii] = bfloat16.FromFloat32(float32(math.Floor(float64(input.Float32()))))
+	}
+}
+
+// execRound executes the unary op Round.
+func execRound(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	switch input.shape.DType {
+	case dtypes.Float32:
+		execRoundGeneric[float32](input.flat.([]float32), output.flat.([]float32))
+	case dtypes.Float64:
+		execRoundGeneric[float64](input.flat.([]float64), output.flat.([]float64))
+	case dtypes.BFloat16:
+		execRoundBF16(input.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16))
+	default:
+		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
+	}
+	return output
+}
+
+func execRoundGeneric[T float32 | float64](inputs, outputs []T) {
+	for ii, input := range inputs {
+		outputs[ii] = T(math.Round(float64(input)))
+	}
+}
+
+func execRoundBF16(inputs, outputs []bfloat16.BFloat16) {
+	for ii, input := range inputs {
+		outputs[ii] = bfloat16.FromFloat32(float32(math.Round(float64(input.Float32()))))
+	}
+}
+
+// execRsqrt executes the unary op Rsqrt.
+func execRsqrt(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	switch input.shape.DType {
+	case dtypes.Float32:
+		execRsqrtGeneric[float32](input.flat.([]float32), output.flat.([]float32))
+	case dtypes.Float64:
+		execRsqrtGeneric[float64](input.flat.([]float64), output.flat.([]float64))
+	case dtypes.BFloat16:
+		execRsqrtBF16(input.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16))
+	default:
+		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
+	}
+	return output
+}
+
+func execRsqrtGeneric[T float32 | float64](inputs, outputs []T) {
+	for ii, input := range inputs {
+		outputs[ii] = T(1.0 / math.Sqrt(float64(input)))
+	}
+}
+
+func execRsqrtBF16(inputs, outputs []bfloat16.BFloat16) {
+	for ii, input := range inputs {
+		outputs[ii] = bfloat16.FromFloat32(float32(1.0 / math.Sqrt(float64(input.Float32()))))
+	}
+}
+
+// execSqrt executes the unary op Sqrt.
+func execSqrt(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	switch input.shape.DType {
+	case dtypes.Float32:
+		execSqrtGeneric[float32](input.flat.([]float32), output.flat.([]float32))
+	case dtypes.Float64:
+		execSqrtGeneric[float64](input.flat.([]float64), output.flat.([]float64))
+	case dtypes.BFloat16:
+		execSqrtBF16(input.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16))
+	default:
+		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
+	}
+	return output
+}
+
+func execSqrtGeneric[T float32 | float64](inputs, outputs []T) {
+	for ii, input := range inputs {
+		outputs[ii] = T(math.Sqrt(float64(input)))
+	}
+}
+
+func execSqrtBF16(inputs, outputs []bfloat16.BFloat16) {
+	for ii, input := range inputs {
+		outputs[ii] = bfloat16.FromFloat32(float32(math.Sqrt(float64(input.Float32()))))
+	}
+}
+
+// execCos executes the unary op Cos.
+func execCos(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	switch input.shape.DType {
+	case dtypes.Float32:
+		execCosGeneric[float32](input.flat.([]float32), output.flat.([]float32))
+	case dtypes.Float64:
+		execCosGeneric[float64](input.flat.([]float64), output.flat.([]float64))
+	case dtypes.BFloat16:
+		execCosBF16(input.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16))
+	default:
+		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
+	}
+	return output
+}
+
+func execCosGeneric[T float32 | float64](inputs, outputs []T) {
+	for ii, input := range inputs {
+		outputs[ii] = T(math.Cos(float64(input)))
+	}
+}
+
+func execCosBF16(inputs, outputs []bfloat16.BFloat16) {
+	for ii, input := range inputs {
+		outputs[ii] = bfloat16.FromFloat32(float32(math.Cos(float64(input.Float32()))))
+	}
+}
+
+// execSin executes the unary op Sin.
+func execSin(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	switch input.shape.DType {
+	case dtypes.Float32:
+		execSinGeneric[float32](input.flat.([]float32), output.flat.([]float32))
+	case dtypes.Float64:
+		execSinGeneric[float64](input.flat.([]float64), output.flat.([]float64))
+	case dtypes.BFloat16:
+		execSinBF16(input.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16))
+	default:
+		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
+	}
+	return output
+}
+
+func execSinGeneric[T float32 | float64](inputs, outputs []T) {
+	for ii, input := range inputs {
+		outputs[ii] = T(math.Sin(float64(input)))
+	}
+}
+
+func execSinBF16(inputs, outputs []bfloat16.BFloat16) {
+	for ii, input := range inputs {
+		outputs[ii] = bfloat16.FromFloat32(float32(math.Sin(float64(input.Float32()))))
+	}
+}
+
+// execTanh executes the unary op Tanh.
+func execTanh(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	switch input.shape.DType {
+	case dtypes.Float32:
+		execTanhGeneric[float32](input.flat.([]float32), output.flat.([]float32))
+	case dtypes.Float64:
+		execTanhGeneric[float64](input.flat.([]float64), output.flat.([]float64))
+	case dtypes.BFloat16:
+		execTanhBF16(input.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16))
+	default:
+		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
+	}
+	return output
+}
+
+func execTanhGeneric[T float32 | float64](inputs, outputs []T) {
+	for ii, input := range inputs {
+		outputs[ii] = T(math.Tanh(float64(input)))
+	}
+}
+
+func execTanhBF16(inputs, outputs []bfloat16.BFloat16) {
+	for ii, input := range inputs {
+		outputs[ii] = bfloat16.FromFloat32(float32(math.Tanh(float64(input.Float32()))))
+	}
+}
+
+// execIsFinite executes the unary op IsFinite.
+func execIsFinite(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	input := inputs[0]
+	// Output has the same shape as the input, but different dtypes: it is a bool.
+	output := backend.getBuffer(dtypes.Bool, input.shape.Size())
+	output.shape = node.shape
+	switch input.shape.DType {
+	case dtypes.Float32:
+		execIsFiniteGeneric[float32](input.flat.([]float32), output.flat.([]bool))
+	case dtypes.Float64:
+		execIsFiniteGeneric[float64](input.flat.([]float64), output.flat.([]bool))
+	case dtypes.BFloat16:
+		execIsFiniteBF16(input.flat.([]bfloat16.BFloat16), output.flat.([]bool))
+	default:
+		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
+	}
+	return output
+}
+
+func execIsFiniteGeneric[T float32 | float64](inputs []T, outputs []bool) {
+	for ii, input := range inputs {
+		outputs[ii] = !math.IsInf(float64(input), 0) && !math.IsNaN(float64(input))
+	}
+}
+
+func execIsFiniteBF16(inputs []bfloat16.BFloat16, outputs []bool) {
+	for ii, input := range inputs {
+		f := input.Float32()
+		outputs[ii] = !math.IsInf(float64(f), 0) && !math.IsNaN(float64(f))
 	}
 }

@@ -2,8 +2,10 @@ package simplego
 
 import (
 	"github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"math"
 	"testing"
 )
 
@@ -104,4 +106,137 @@ func TestExecUnary_Clz(t *testing.T) {
 	assert.Equal(t, uint64(58), y6.Value())
 	y7 := exec.Call([]uint64{1, 2, 3})[0]
 	assert.Equal(t, []uint64{63, 62, 62}, y7.Value())
+}
+
+func TestExecUnary_Exp(t *testing.T) {
+	exec := graph.NewExec(backend, func(x *graph.Node) *graph.Node { return graph.Exp(x) })
+	y0 := exec.Call(float32(1.0))[0]
+	assert.InDelta(t, float32(2.718281828459045), y0.Value(), 1e-6)
+	y1 := exec.Call(float64(1.0))[0]
+	assert.InDelta(t, 2.718281828459045, y1.Value(), 1e-15)
+	y2 := exec.Call(bfloat16.FromFloat32(1.0))[0]
+	want := bfloat16.FromFloat32(float32(math.E)).Float32()
+	assert.InDelta(t, want, y2.Value().(bfloat16.BFloat16).Float32(), 1e-2)
+}
+
+func TestExecUnary_Log(t *testing.T) {
+	exec := graph.NewExec(backend, func(x *graph.Node) *graph.Node { return graph.Log(x) })
+	y0 := exec.Call(float32(2.718281828459045))[0]
+	assert.InDelta(t, float32(1.0), y0.Value(), 1e-6)
+	y1 := exec.Call(float64(2.718281828459045))[0]
+	assert.InDelta(t, 1.0, y1.Value(), 1e-15)
+	y2 := exec.Call(bfloat16.FromFloat32(2.718281828459045))[0]
+	assert.InDelta(t, float32(1.0), y2.Value().(bfloat16.BFloat16).Float32(), 1e-2)
+}
+
+func TestExecUnary_Log1p(t *testing.T) {
+	exec := graph.NewExec(backend, func(x *graph.Node) *graph.Node { return graph.Log1p(x) })
+	y0 := exec.Call(float32(1.718281828459045))[0]
+	assert.InDelta(t, float32(1.0), y0.Value(), 1e-6)
+	y1 := exec.Call(float64(1.718281828459045))[0]
+	assert.InDelta(t, 1.0, y1.Value(), 1e-15)
+	y2 := exec.Call(bfloat16.FromFloat32(1.718281828459045))[0]
+	assert.InDelta(t, float32(1.0), y2.Value().(bfloat16.BFloat16).Float32(), 1e-2)
+}
+
+func TestExecUnary_Ceil(t *testing.T) {
+	exec := graph.NewExec(backend, func(x *graph.Node) *graph.Node { return graph.Ceil(x) })
+	y0 := exec.Call(float32(1.6))[0]
+	assert.Equal(t, float32(2.0), y0.Value())
+	y1 := exec.Call(float64(1.6))[0]
+	assert.Equal(t, 2.0, y1.Value())
+	y2 := exec.Call(bfloat16.FromFloat32(1.6))[0]
+	assert.Equal(t, bfloat16.FromFloat32(2.0), y2.Value())
+}
+
+func TestExecUnary_Floor(t *testing.T) {
+	exec := graph.NewExec(backend, func(x *graph.Node) *graph.Node { return graph.Floor(x) })
+	y0 := exec.Call(float32(1.6))[0]
+	assert.Equal(t, float32(1.0), y0.Value())
+	y1 := exec.Call(float64(1.6))[0]
+	assert.Equal(t, 1.0, y1.Value())
+	y2 := exec.Call(bfloat16.FromFloat32(1.6))[0]
+	assert.Equal(t, bfloat16.FromFloat32(1.0), y2.Value())
+}
+
+func TestExecUnary_Round(t *testing.T) {
+	exec := graph.NewExec(backend, func(x *graph.Node) *graph.Node { return graph.Round(x) })
+	y0 := exec.Call(float32(1.6))[0]
+	assert.Equal(t, float32(2.0), y0.Value())
+	y1 := exec.Call(float64(1.6))[0]
+	assert.Equal(t, 2.0, y1.Value())
+	y2 := exec.Call(bfloat16.FromFloat32(1.6))[0]
+	assert.Equal(t, bfloat16.FromFloat32(2.0), y2.Value())
+}
+
+func TestExecUnary_Rsqrt(t *testing.T) {
+	exec := graph.NewExec(backend, func(x *graph.Node) *graph.Node { return graph.Rsqrt(x) })
+	y0 := exec.Call(float32(4.0))[0]
+	assert.InDelta(t, float32(0.5), y0.Value(), 1e-6)
+	y1 := exec.Call(float64(4.0))[0]
+	assert.InDelta(t, 0.5, y1.Value(), 1e-15)
+	y2 := exec.Call(bfloat16.FromFloat32(4.0))[0]
+	assert.InDelta(t, float32(0.5), y2.Value().(bfloat16.BFloat16).Float32(), 1e-2)
+}
+
+func TestExecUnary_Sqrt(t *testing.T) {
+	exec := graph.NewExec(backend, func(x *graph.Node) *graph.Node { return graph.Sqrt(x) })
+	y0 := exec.Call(float32(4.0))[0]
+	assert.InDelta(t, float32(2.0), y0.Value(), 1e-6)
+	y1 := exec.Call(float64(4.0))[0]
+	assert.InDelta(t, 2.0, y1.Value(), 1e-15)
+	y2 := exec.Call(bfloat16.FromFloat32(4.0))[0]
+	assert.InDelta(t, float32(2.0), y2.Value().(bfloat16.BFloat16).Float32(), 1e-2)
+}
+
+func TestExecUnary_Cos(t *testing.T) {
+	exec := graph.NewExec(backend, func(x *graph.Node) *graph.Node { return graph.Cos(x) })
+	y0 := exec.Call(float32(0.0))[0]
+	assert.InDelta(t, float32(1.0), y0.Value(), 1e-6)
+	y1 := exec.Call(float64(0.0))[0]
+	assert.InDelta(t, 1.0, y1.Value(), 1e-15)
+	y2 := exec.Call(bfloat16.FromFloat32(0.0))[0]
+	assert.InDelta(t, float32(1.0), y2.Value().(bfloat16.BFloat16).Float32(), 1e-2)
+}
+
+func TestExecUnary_Sin(t *testing.T) {
+	exec := graph.NewExec(backend, func(x *graph.Node) *graph.Node { return graph.Sin(x) })
+	y0 := exec.Call(float32(math.Pi / 2))[0]
+	assert.InDelta(t, float32(1.0), y0.Value(), 1e-6)
+	y1 := exec.Call(float64(math.Pi / 2))[0]
+	assert.InDelta(t, 1.0, y1.Value(), 1e-15)
+	y2 := exec.Call(bfloat16.FromFloat32(float32(math.Pi / 2)))[0]
+	assert.InDelta(t, float32(1.0), y2.Value().(bfloat16.BFloat16).Float32(), 1e-2)
+}
+
+func TestExecUnary_Tanh(t *testing.T) {
+	exec := graph.NewExec(backend, func(x *graph.Node) *graph.Node { return graph.Tanh(x) })
+	y0 := exec.Call(float32(0.0))[0]
+	assert.InDelta(t, float32(0.0), y0.Value(), 1e-6)
+	y1 := exec.Call(float64(0.0))[0]
+	assert.InDelta(t, 0.0, y1.Value(), 1e-15)
+	y2 := exec.Call(bfloat16.FromFloat32(0.0))[0]
+	assert.InDelta(t, float32(0.0), y2.Value().(bfloat16.BFloat16).Float32(), 1e-2)
+}
+
+func TestExecUnary_IsFinite(t *testing.T) {
+	exec := graph.NewExec(backend, func(x *graph.Node) *graph.Node { return graph.IsFinite(x) })
+
+	// Test float32
+	y0 := exec.Call(float32(1.0))[0]
+	assert.Equal(t, true, y0.Value())
+	y1 := exec.Call(float32(math.Inf(1)))[0]
+	assert.Equal(t, false, y1.Value())
+
+	// Test float64
+	y2 := exec.Call(float64(1.0))[0]
+	assert.Equal(t, true, y2.Value())
+	y3 := exec.Call(math.Inf(-1))[0]
+	assert.Equal(t, false, y3.Value())
+
+	// Test bfloat16
+	y4 := exec.Call(bfloat16.FromFloat32(float32(math.NaN())))[0]
+	assert.Equal(t, false, y4.Value())
+	y5 := exec.Call(bfloat16.FromFloat32(1.0))[0]
+	assert.Equal(t, true, y5.Value())
 }

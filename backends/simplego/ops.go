@@ -134,21 +134,6 @@ func (b *Builder) Sqrt(operand backends.Op) backends.Op {
 	return b.addUnaryOp(backends.OpTypeSqrt, operand)
 }
 
-// Imag implements backends.Builder interface.
-func (b *Builder) Imag(operand backends.Op) backends.Op {
-	return b.addUnaryOp(backends.OpTypeImag, operand)
-}
-
-// Real implements backends.Builder interface.
-func (b *Builder) Real(operand backends.Op) backends.Op {
-	return b.addUnaryOp(backends.OpTypeReal, operand)
-}
-
-// Conj implements backends.Builder interface.
-func (b *Builder) Conj(operand backends.Op) backends.Op {
-	return b.addUnaryOp(backends.OpTypeConj, operand)
-}
-
 // Cos implements backends.Builder interface.
 func (b *Builder) Cos(operand backends.Op) backends.Op {
 	return b.addUnaryOp(backends.OpTypeCos, operand)
@@ -162,4 +147,20 @@ func (b *Builder) Sin(operand backends.Op) backends.Op {
 // Tanh implements backends.Builder interface.
 func (b *Builder) Tanh(operand backends.Op) backends.Op {
 	return b.addUnaryOp(backends.OpTypeTanh, operand)
+}
+
+// IsFinite implements backends.Builder interface.
+func (b *Builder) IsFinite(operandOp backends.Op) backends.Op {
+	opType := backends.OpTypeIsFinite
+	inputs := b.checkOps(opType.String(), operandOp)
+	operand := inputs[0]
+	dtype := operand.shape.DType
+	if !dtype.IsFloat() && !dtype.IsComplex() {
+		exceptions.Panicf("the operation IsFinite is only defined for float types (%s), cannot use it", operand.shape.DType)
+	}
+
+	// Output will have the same shape but for the dtype that is bool.
+	shape := operand.shape.Clone()
+	shape.DType = dtypes.Bool
+	return b.newNode(opType, shape, operand)
 }
