@@ -27,31 +27,35 @@ var Capabilities = backends.Capabilities{
 	},
 }
 
-// numericConstrains are used for generics for the Golang pod (plain-old-data) types.
+// podNumericConstrains are used for generics for the Golang pod (plain-old-data) types.
 // BFloat16 is not included because it is a specialized type, not natively supported by Go.
-type numericPODConstraints interface {
+type podNumericConstraints interface {
 	int8 | int16 | int32 | int64 | uint8 | uint16 | uint32 | uint64 | float32 | float64
 }
 
-// signedNumericConstraints are used for generics for the Golang pod (plain-old-data) types.
+// podSignedNumericConstraints are used for generics for the Golang pod (plain-old-data) types.
 // BFloat16 is not included because it is a specialized type, not natively supported by Go.
-type signedNumericPODConstraints interface {
+type podSignedNumericPODConstraints interface {
 	int8 | int16 | int32 | int64 | float32 | float64
 }
 
-// unsignedConstraints are used for generics for the Golang pod (plain-old-data) types.
-// BFloat16 is not included because it is a specialized type, not natively supported by Go.
-type unsignedPODConstraints interface {
+// podIntegerConstraints are used for generics for the Golang pod (plain-old-data) types.
+type podIntegerConstraints interface {
+	int8 | int16 | int32 | int64 | uint8 | uint16 | uint32 | uint64
+}
+
+// podUnsignedConstraints are used for generics for the Golang pod (plain-old-data) types.
+type podUnsignedConstraints interface {
 	uint8 | uint16 | uint32 | uint64
 }
 
-// floatConstrains are used for generics for the Golang pod (plain-old-data) types.
+// podFloatConstrains are used for generics for the Golang pod (plain-old-data) types.
 // BFloat16 is not included because it is a specialized type, not natively supported by Go.
-type floatConstraints interface {
+type podFloatConstraints interface {
 	float32 | float64
 }
 
-// integerPODConstrains are used for generics for the Golang pod (plain-old-data) types.
+// podIntegerConstrains are used for generics for the Golang pod (plain-old-data) types.
 type integerPODConstraints interface {
 	int8 | int16 | int32 | int64 | uint8 | uint16 | uint32 | uint64
 }

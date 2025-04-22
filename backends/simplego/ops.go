@@ -188,3 +188,8 @@ func (b *Builder) Sub(lhsOp, rhsOp backends.Op) backends.Op {
 func (b *Builder) Div(lhsOp, rhsOp backends.Op) backends.Op {
 	return b.addBinaryOp(backends.OpTypeDiv, lhsOp, rhsOp)
 }
+
+// Rem implements backends.Builder interface.
+func (b *Builder) Rem(lhsOp, rhsOp backends.Op) backends.Op {
+	return b.addBinaryOp(backends.OpTypeRem, lhsOp, rhsOp)
+}

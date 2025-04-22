@@ -1,18 +1,12 @@
 package simplego
 
 import (
-	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
 )
 
 // This file implements binary operations.
 // One optimization supported is specially handling the cases where one of the operands is a scalar (or of size 1),
 // in which case it becomes almost a unary operation with a constant value.
-func init() {
-	nodeExecutors[backends.OpTypeAdd] = execAdd
-	nodeExecutors[backends.OpTypeMul] = execMul
-	nodeExecutors[backends.OpTypeSub] = execSub
-}
 
 // binaryOperandsAndOutput is a convenience function to get the inputs and output -- which may be the reuse of the input.
 func binaryOperandsAndOutput(backend *Backend, inputs []*Buffer, inputsOwned []bool, outputShape shapes.Shape) (

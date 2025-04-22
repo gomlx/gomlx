@@ -30,13 +30,20 @@ var (
 package simplego
 
 import (
+	"math"
 	"github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 )
 
-{{range .}}
+func init() { {{range .BinaryOps}}
+	nodeExecutors[backends.OpType{{.Name}}] = exec{{.Name}}{{end}}
+}
+
+{{- range .BinaryOps}}
+{{- $name := .Name }}
 // exec{{.Name}} executes the binary op {{.Name}}.
 func exec{{.Name}}(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
 	lhs, rhs, output, lhsIsScalarOr1, rhsIsScalarOr1 := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
@@ -51,56 +58,68 @@ func exec{{.Name}}(backend *Backend, node *Node, inputs []*Buffer, inputsOwned [
 {{end}}
 
 	switch output.shape.DType {
-	case dtypes.Int8:
-		exec{{.Name}}Generic[int8](lhs.flat.([]int8), rhs.flat.([]int8), output.flat.([]int8),
+{{- range .Versions}}
+{{- $version := .Name }}
+
+{{- if or .Numeric .Integer }}
+{{- range $.IntegerTypes}}
+	case dtypes.{{.DType}}:
+		exec{{$name}}{{$version}}Generic[{{.GoType}}](lhs.flat.([]{{.GoType}}), rhs.flat.([]{{.GoType}}), output.flat.([]{{.GoType}}),
 			lhs.shape, rhs.shape, output.shape)
-	case dtypes.Int16:
-		exec{{.Name}}Generic[int16](lhs.flat.([]int16), rhs.flat.([]int16), output.flat.([]int16),
+{{- end}}
+{{- end}}
+
+{{- if or .Numeric .Float }} 
+{{- range $.FloatTypes}}
+	case dtypes.{{.DType}}:
+		exec{{$name}}{{$version}}Generic[{{.GoType}}](lhs.flat.([]{{.GoType}}), rhs.flat.([]{{.GoType}}), output.flat.([]{{.GoType}}),
 			lhs.shape, rhs.shape, output.shape)
-	case dtypes.Int32:
-		exec{{.Name}}Generic[int32](lhs.flat.([]int32), rhs.flat.([]int32), output.flat.([]int32),
+{{- end}}
+{{- end}}
+
+{{- if or .Numeric .BFloat16 }}
+{{- range $.BFloat16Types}}
+	case dtypes.{{.DType}}:
+		exec{{$name}}{{$version}}BFloat16(lhs.flat.([]{{.GoType}}), rhs.flat.([]{{.GoType}}), output.flat.([]{{.GoType}}),
 			lhs.shape, rhs.shape, output.shape)
-	case dtypes.Int64:
-		exec{{.Name}}Generic[int64](lhs.flat.([]int64), rhs.flat.([]int64), output.flat.([]int64),
-			lhs.shape, rhs.shape, output.shape)
-	case dtypes.Float32:
-		exec{{.Name}}Generic[float32](lhs.flat.([]float32), rhs.flat.([]float32), output.flat.([]float32),
-			lhs.shape, rhs.shape, output.shape)
-	case dtypes.Float64:
-		exec{{.Name}}Generic[float64](lhs.flat.([]float64), rhs.flat.([]float64), output.flat.([]float64),
-			lhs.shape, rhs.shape, output.shape)
-	case dtypes.BFloat16:
-		exec{{.Name}}BF16(lhs.flat.([]bfloat16.BFloat16), rhs.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16),
-			lhs.shape, rhs.shape, output.shape)
+{{- end}}
+{{- end}}
+
+{{- end}}  // range .Versions
 	default:
 		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
 	}
 	return output
 }
 
-func exec{{.Name}}Generic[T {{.GenericConstraints}}](lhs, rhs, output []T,
+{{- $is_commutative := .IsCommutative }}
+{{- range .Versions}}
+{{- $version := .Name }}
+
+{{- if or .Numeric .Integer .Float }}
+func exec{{$name}}{{$version}}Generic[T pod{{$version}}Constraints](lhs, rhs, output []T,
 	lhsShape, rhsShape, outputShape shapes.Shape) {
 	if len(rhs) == 1 {
 		// Case 1: One side (rhs) is a scalar: only iterate over the lhs.
 		c := rhs[0]
 		for ii, input := range lhs {
-			output[ii] = {{ CallOp .FormatOp "input" "c" }}
+			output[ii] = {{ CallOp .Format "input" "c" }}
 		}
 		return
-{{if not .IsCommutative}}
+{{- if not $is_commutative }}
 	} else if len(lhs) == 1 {
 		// Case 1b: One side (lhs) is a scalar: only iterate over the rhs.
 		c := lhs[0]
 		for ii, input := range rhs {
-			output[ii] = {{ CallOp .FormatOp "c" "input" }}
+			output[ii] = {{ CallOp .Format "c" "input" }}
 		}
 		return
-{{end}}
+{{- end}}
 
 	} else if lhsShape.Equal(rhsShape) {
 		// Case 2: Exact same shapes, no broadcasting.
 		for ii, input := range lhs {
-			output[ii] = {{ CallOp .FormatOp "input" "rhs[ii]" }} 
+			output[ii] = {{ CallOp .Format "input" "rhs[ii]" }} 
 		}
 		return
 
@@ -111,39 +130,41 @@ func exec{{.Name}}Generic[T {{.GenericConstraints}}](lhs, rhs, output []T,
 		for outputIdx := range output {
 			lhsIdx := lhsIter.Next()
 			rhsIdx := rhsIter.Next()
-			output[outputIdx] = {{ CallOp .FormatOp "lhs[lhsIdx]" "rhs[rhsIdx]" }}
+			output[outputIdx] = {{ CallOp .Format "lhs[lhsIdx]" "rhs[rhsIdx]" }}
 		}
 	}
 	return
 }
+{{- end}} // if numeric, integer or float.
 
-func exec{{.Name}}BF16(lhs, rhs, output []bfloat16.BFloat16,
+{{- if or .Numeric .BFloat16 }} 
+func exec{{$name}}{{$version}}BFloat16(lhs, rhs, output []bfloat16.BFloat16,
 	lhsShape, rhsShape, outputShape shapes.Shape) {
 	if len(rhs) == 1 {
 		// One side (rhs) is a scalar: only iterate over the lhs.
 		c := rhs[0].Float32()
 		for ii, input := range lhs {
 			a := input.Float32()
-			output[ii] = bfloat16.FromFloat32({{CallOp .FormatOp "a" "c"}})
+			output[ii] = bfloat16.FromFloat32({{CallOp .Format "a" "c"}})
 		}
 		return
-{{if not .IsCommutative}}
+{{- if not $is_commutative }}
 	} else if len(lhs) == 1 {
 		// Case 1b: One side (lhs) is a scalar: only iterate over the rhs.
 		c := lhs[0].Float32()
 		for ii, input := range rhs {
 			a := input.Float32()	
-			output[ii] = bfloat16.FromFloat32({{ CallOp .FormatOp "c" "a" }})
+			output[ii] = bfloat16.FromFloat32({{ CallOp .Format "c" "a" }})
 		}
 		return
-{{end}}
+{{- end}}
 
 	} else if lhsShape.Equal(rhsShape) {
 		// Case 2: Exact same shapes, no broadcasting.
-		for ii, input := range lhs {
-			a := input.Float32()
-			b := rhs[ii].Float32()
-			output[ii] = bfloat16.FromFloat32({{CallOp .FormatOp "a" "b"}})
+		for outputIdx := range output {
+			a := lhs[outputIdx].Float32()
+			b := rhs[outputIdx].Float32()
+			output[outputIdx] = bfloat16.FromFloat32({{CallOp .Format "a" "b"}})
 		}
 		return
 
@@ -156,40 +177,98 @@ func exec{{.Name}}BF16(lhs, rhs, output []bfloat16.BFloat16,
 			rhsIdx := rhsIter.Next()
 			a := lhs[lhsIdx].Float32()
 			b := rhs[rhsIdx].Float32()
-			output[outputIdx] = bfloat16.FromFloat32({{CallOp .FormatOp "a" "b"}})
+			output[outputIdx] = bfloat16.FromFloat32({{CallOp .Format "a" "b"}})
 		}
 	}
 	return
 }
-{{end}}
-`))
+{{- end}}  // if numeric or float.
 
-	execBinaryFuncMap = template.FuncMap{
-		"CallOp": callBinaryOp,
-	}
+{{- end}} // range .Versions
+{{- end}} // range .BinaryOps
+`))
 )
 
-type BinaryOp struct {
-	Name               string
-	FormatOp           string
-	IsCommutative      bool
-	GenericConstraints string
+type DataTypes struct {
+	DType, GoType string
 }
+
+var (
+	IntegerDataTypes = []DataTypes{
+		{"Uint8", "uint8"},
+		{"Uint16", "uint16"},
+		{"Uint32", "uint32"},
+		{"Uint64", "uint64"},
+		{"Int8", "int8"},
+		{"Int16", "int16"},
+		{"Int32", "int32"},
+		{"Int64", "int64"},
+	}
+
+	FloatDataTypes = []DataTypes{
+		{"Float32", "float32"},
+		{"Float64", "float64"},
+	}
+
+	BFloat16DataTypes = []DataTypes{
+		{"BFloat16", "bfloat16.BFloat16"},
+	}
+)
 
 func callBinaryOp(format, s1, s2 string) string {
 	return fmt.Sprintf(format, s1, s2)
 }
 
+var (
+	execBinaryFuncMap = template.FuncMap{
+		"CallOp": callBinaryOp,
+	}
+)
+
+type BinaryOpVersion struct {
+	Name                              string
+	Numeric, Integer, Float, BFloat16 bool
+	Format                            string
+}
+
+type BinaryOp struct {
+	Name          string
+	Versions      []BinaryOpVersion
+	IsCommutative bool
+}
+
+var (
+	binaryOps []BinaryOp = []BinaryOp{
+		{Name: "Add", IsCommutative: true, Versions: []BinaryOpVersion{{Numeric: true, Name: "Numeric", Format: "%s + %s"}}},
+		{Name: "Mul", IsCommutative: true, Versions: []BinaryOpVersion{{Numeric: true, Name: "Numeric", Format: "%s * %s"}}},
+		{Name: "Sub", Versions: []BinaryOpVersion{{Numeric: true, Name: "Numeric", Format: "%s - %s"}}},
+		{Name: "Div", Versions: []BinaryOpVersion{{Numeric: true, Name: "Numeric", Format: "%s / %s"}}},
+		{Name: "Rem", Versions: []BinaryOpVersion{
+			{Integer: true, Name: "Integer", Format: "%s %% %s"},
+			{Float: true, Name: "Float", Format: "T(math.Mod(float64(%s), float64(%s)))"},
+			{BFloat16: true, Name: "Float", Format: "float32(math.Mod(float64(%s), float64(%s)))"},
+		}},
+	}
+)
+
+type ExecBinaryData struct {
+	BinaryOps     []BinaryOp
+	IntegerTypes  []DataTypes
+	FloatTypes    []DataTypes
+	BFloat16Types []DataTypes
+}
+
 func GenerateExecBinary() {
-	binaryOps := []BinaryOp{
-		{"Add", "%s + %s", true, "signedNumericPODConstraints"},
-		{"Mul", "%s * %s", true, "signedNumericPODConstraints"},
-		{"Sub", "%s - %s", false, "signedNumericPODConstraints"},
+	data := ExecBinaryData{
+		BinaryOps:     binaryOps,
+		IntegerTypes:  IntegerDataTypes,
+		FloatTypes:    FloatDataTypes,
+		BFloat16Types: BFloat16DataTypes,
 	}
 
 	fileName := execBinaryFile
 	f := must.M1(os.Create(fileName))
-	must.M(execBinaryTemplate.Execute(f, binaryOps))
+	must.M(execBinaryTemplate.Execute(f, data))
 	must.M(f.Close())
 
 	cmd := exec.Command("gofmt", "-w", fileName)

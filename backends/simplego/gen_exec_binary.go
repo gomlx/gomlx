@@ -4,10 +4,20 @@ package simplego
 
 import (
 	"github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
+	"math"
 )
+
+func init() {
+	nodeExecutors[backends.OpTypeAdd] = execAdd
+	nodeExecutors[backends.OpTypeMul] = execMul
+	nodeExecutors[backends.OpTypeSub] = execSub
+	nodeExecutors[backends.OpTypeDiv] = execDiv
+	nodeExecutors[backends.OpTypeRem] = execRem
+}
 
 // execAdd executes the binary op Add.
 func execAdd(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
@@ -20,34 +30,45 @@ func execAdd(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool)
 	}
 
 	switch output.shape.DType {
+	case dtypes.Uint8:
+		execAddNumericGeneric[uint8](lhs.flat.([]uint8), rhs.flat.([]uint8), output.flat.([]uint8),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Uint16:
+		execAddNumericGeneric[uint16](lhs.flat.([]uint16), rhs.flat.([]uint16), output.flat.([]uint16),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Uint32:
+		execAddNumericGeneric[uint32](lhs.flat.([]uint32), rhs.flat.([]uint32), output.flat.([]uint32),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Uint64:
+		execAddNumericGeneric[uint64](lhs.flat.([]uint64), rhs.flat.([]uint64), output.flat.([]uint64),
+			lhs.shape, rhs.shape, output.shape)
 	case dtypes.Int8:
-		execAddGeneric[int8](lhs.flat.([]int8), rhs.flat.([]int8), output.flat.([]int8),
+		execAddNumericGeneric[int8](lhs.flat.([]int8), rhs.flat.([]int8), output.flat.([]int8),
 			lhs.shape, rhs.shape, output.shape)
 	case dtypes.Int16:
-		execAddGeneric[int16](lhs.flat.([]int16), rhs.flat.([]int16), output.flat.([]int16),
+		execAddNumericGeneric[int16](lhs.flat.([]int16), rhs.flat.([]int16), output.flat.([]int16),
 			lhs.shape, rhs.shape, output.shape)
 	case dtypes.Int32:
-		execAddGeneric[int32](lhs.flat.([]int32), rhs.flat.([]int32), output.flat.([]int32),
+		execAddNumericGeneric[int32](lhs.flat.([]int32), rhs.flat.([]int32), output.flat.([]int32),
 			lhs.shape, rhs.shape, output.shape)
 	case dtypes.Int64:
-		execAddGeneric[int64](lhs.flat.([]int64), rhs.flat.([]int64), output.flat.([]int64),
+		execAddNumericGeneric[int64](lhs.flat.([]int64), rhs.flat.([]int64), output.flat.([]int64),
 			lhs.shape, rhs.shape, output.shape)
 	case dtypes.Float32:
-		execAddGeneric[float32](lhs.flat.([]float32), rhs.flat.([]float32), output.flat.([]float32),
+		execAddNumericGeneric[float32](lhs.flat.([]float32), rhs.flat.([]float32), output.flat.([]float32),
 			lhs.shape, rhs.shape, output.shape)
 	case dtypes.Float64:
-		execAddGeneric[float64](lhs.flat.([]float64), rhs.flat.([]float64), output.flat.([]float64),
+		execAddNumericGeneric[float64](lhs.flat.([]float64), rhs.flat.([]float64), output.flat.([]float64),
 			lhs.shape, rhs.shape, output.shape)
 	case dtypes.BFloat16:
-		execAddBF16(lhs.flat.([]bfloat16.BFloat16), rhs.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16),
-			lhs.shape, rhs.shape, output.shape)
+		execAddNumericBFloat16(lhs.flat.([]bfloat16.BFloat16), rhs.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16),
+			lhs.shape, rhs.shape, output.shape) // range .Versions
 	default:
 		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
 	}
 	return output
 }
-
-func execAddGeneric[T signedNumericPODConstraints](lhs, rhs, output []T,
+func execAddNumericGeneric[T podNumericConstraints](lhs, rhs, output []T,
 	lhsShape, rhsShape, outputShape shapes.Shape) {
 	if len(rhs) == 1 {
 		// Case 1: One side (rhs) is a scalar: only iterate over the lhs.
@@ -75,9 +96,8 @@ func execAddGeneric[T signedNumericPODConstraints](lhs, rhs, output []T,
 		}
 	}
 	return
-}
-
-func execAddBF16(lhs, rhs, output []bfloat16.BFloat16,
+} // if numeric, integer or float.
+func execAddNumericBFloat16(lhs, rhs, output []bfloat16.BFloat16,
 	lhsShape, rhsShape, outputShape shapes.Shape) {
 	if len(rhs) == 1 {
 		// One side (rhs) is a scalar: only iterate over the lhs.
@@ -90,10 +110,10 @@ func execAddBF16(lhs, rhs, output []bfloat16.BFloat16,
 
 	} else if lhsShape.Equal(rhsShape) {
 		// Case 2: Exact same shapes, no broadcasting.
-		for ii, input := range lhs {
-			a := input.Float32()
-			b := rhs[ii].Float32()
-			output[ii] = bfloat16.FromFloat32(a + b)
+		for outputIdx := range output {
+			a := lhs[outputIdx].Float32()
+			b := rhs[outputIdx].Float32()
+			output[outputIdx] = bfloat16.FromFloat32(a + b)
 		}
 		return
 
@@ -110,8 +130,7 @@ func execAddBF16(lhs, rhs, output []bfloat16.BFloat16,
 		}
 	}
 	return
-}
-
+} // if numeric or float. // range .Versions
 // execMul executes the binary op Mul.
 func execMul(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
 	lhs, rhs, output, lhsIsScalarOr1, rhsIsScalarOr1 := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
@@ -123,34 +142,45 @@ func execMul(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool)
 	}
 
 	switch output.shape.DType {
+	case dtypes.Uint8:
+		execMulNumericGeneric[uint8](lhs.flat.([]uint8), rhs.flat.([]uint8), output.flat.([]uint8),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Uint16:
+		execMulNumericGeneric[uint16](lhs.flat.([]uint16), rhs.flat.([]uint16), output.flat.([]uint16),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Uint32:
+		execMulNumericGeneric[uint32](lhs.flat.([]uint32), rhs.flat.([]uint32), output.flat.([]uint32),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Uint64:
+		execMulNumericGeneric[uint64](lhs.flat.([]uint64), rhs.flat.([]uint64), output.flat.([]uint64),
+			lhs.shape, rhs.shape, output.shape)
 	case dtypes.Int8:
-		execMulGeneric[int8](lhs.flat.([]int8), rhs.flat.([]int8), output.flat.([]int8),
+		execMulNumericGeneric[int8](lhs.flat.([]int8), rhs.flat.([]int8), output.flat.([]int8),
 			lhs.shape, rhs.shape, output.shape)
 	case dtypes.Int16:
-		execMulGeneric[int16](lhs.flat.([]int16), rhs.flat.([]int16), output.flat.([]int16),
+		execMulNumericGeneric[int16](lhs.flat.([]int16), rhs.flat.([]int16), output.flat.([]int16),
 			lhs.shape, rhs.shape, output.shape)
 	case dtypes.Int32:
-		execMulGeneric[int32](lhs.flat.([]int32), rhs.flat.([]int32), output.flat.([]int32),
+		execMulNumericGeneric[int32](lhs.flat.([]int32), rhs.flat.([]int32), output.flat.([]int32),
 			lhs.shape, rhs.shape, output.shape)
 	case dtypes.Int64:
-		execMulGeneric[int64](lhs.flat.([]int64), rhs.flat.([]int64), output.flat.([]int64),
+		execMulNumericGeneric[int64](lhs.flat.([]int64), rhs.flat.([]int64), output.flat.([]int64),
 			lhs.shape, rhs.shape, output.shape)
 	case dtypes.Float32:
-		execMulGeneric[float32](lhs.flat.([]float32), rhs.flat.([]float32), output.flat.([]float32),
+		execMulNumericGeneric[float32](lhs.flat.([]float32), rhs.flat.([]float32), output.flat.([]float32),
 			lhs.shape, rhs.shape, output.shape)
 	case dtypes.Float64:
-		execMulGeneric[float64](lhs.flat.([]float64), rhs.flat.([]float64), output.flat.([]float64),
+		execMulNumericGeneric[float64](lhs.flat.([]float64), rhs.flat.([]float64), output.flat.([]float64),
 			lhs.shape, rhs.shape, output.shape)
 	case dtypes.BFloat16:
-		execMulBF16(lhs.flat.([]bfloat16.BFloat16), rhs.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16),
-			lhs.shape, rhs.shape, output.shape)
+		execMulNumericBFloat16(lhs.flat.([]bfloat16.BFloat16), rhs.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16),
+			lhs.shape, rhs.shape, output.shape) // range .Versions
 	default:
 		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
 	}
 	return output
 }
-
-func execMulGeneric[T signedNumericPODConstraints](lhs, rhs, output []T,
+func execMulNumericGeneric[T podNumericConstraints](lhs, rhs, output []T,
 	lhsShape, rhsShape, outputShape shapes.Shape) {
 	if len(rhs) == 1 {
 		// Case 1: One side (rhs) is a scalar: only iterate over the lhs.
@@ -178,9 +208,8 @@ func execMulGeneric[T signedNumericPODConstraints](lhs, rhs, output []T,
 		}
 	}
 	return
-}
-
-func execMulBF16(lhs, rhs, output []bfloat16.BFloat16,
+} // if numeric, integer or float.
+func execMulNumericBFloat16(lhs, rhs, output []bfloat16.BFloat16,
 	lhsShape, rhsShape, outputShape shapes.Shape) {
 	if len(rhs) == 1 {
 		// One side (rhs) is a scalar: only iterate over the lhs.
@@ -193,10 +222,10 @@ func execMulBF16(lhs, rhs, output []bfloat16.BFloat16,
 
 	} else if lhsShape.Equal(rhsShape) {
 		// Case 2: Exact same shapes, no broadcasting.
-		for ii, input := range lhs {
-			a := input.Float32()
-			b := rhs[ii].Float32()
-			output[ii] = bfloat16.FromFloat32(a * b)
+		for outputIdx := range output {
+			a := lhs[outputIdx].Float32()
+			b := rhs[outputIdx].Float32()
+			output[outputIdx] = bfloat16.FromFloat32(a * b)
 		}
 		return
 
@@ -213,8 +242,7 @@ func execMulBF16(lhs, rhs, output []bfloat16.BFloat16,
 		}
 	}
 	return
-}
-
+} // if numeric or float. // range .Versions
 // execSub executes the binary op Sub.
 func execSub(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
 	lhs, rhs, output, lhsIsScalarOr1, rhsIsScalarOr1 := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
@@ -222,34 +250,45 @@ func execSub(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool)
 	_, _ = lhsIsScalarOr1, rhsIsScalarOr1
 
 	switch output.shape.DType {
+	case dtypes.Uint8:
+		execSubNumericGeneric[uint8](lhs.flat.([]uint8), rhs.flat.([]uint8), output.flat.([]uint8),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Uint16:
+		execSubNumericGeneric[uint16](lhs.flat.([]uint16), rhs.flat.([]uint16), output.flat.([]uint16),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Uint32:
+		execSubNumericGeneric[uint32](lhs.flat.([]uint32), rhs.flat.([]uint32), output.flat.([]uint32),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Uint64:
+		execSubNumericGeneric[uint64](lhs.flat.([]uint64), rhs.flat.([]uint64), output.flat.([]uint64),
+			lhs.shape, rhs.shape, output.shape)
 	case dtypes.Int8:
-		execSubGeneric[int8](lhs.flat.([]int8), rhs.flat.([]int8), output.flat.([]int8),
+		execSubNumericGeneric[int8](lhs.flat.([]int8), rhs.flat.([]int8), output.flat.([]int8),
 			lhs.shape, rhs.shape, output.shape)
 	case dtypes.Int16:
-		execSubGeneric[int16](lhs.flat.([]int16), rhs.flat.([]int16), output.flat.([]int16),
+		execSubNumericGeneric[int16](lhs.flat.([]int16), rhs.flat.([]int16), output.flat.([]int16),
 			lhs.shape, rhs.shape, output.shape)
 	case dtypes.Int32:
-		execSubGeneric[int32](lhs.flat.([]int32), rhs.flat.([]int32), output.flat.([]int32),
+		execSubNumericGeneric[int32](lhs.flat.([]int32), rhs.flat.([]int32), output.flat.([]int32),
 			lhs.shape, rhs.shape, output.shape)
 	case dtypes.Int64:
-		execSubGeneric[int64](lhs.flat.([]int64), rhs.flat.([]int64), output.flat.([]int64),
+		execSubNumericGeneric[int64](lhs.flat.([]int64), rhs.flat.([]int64), output.flat.([]int64),
 			lhs.shape, rhs.shape, output.shape)
 	case dtypes.Float32:
-		execSubGeneric[float32](lhs.flat.([]float32), rhs.flat.([]float32), output.flat.([]float32),
+		execSubNumericGeneric[float32](lhs.flat.([]float32), rhs.flat.([]float32), output.flat.([]float32),
 			lhs.shape, rhs.shape, output.shape)
 	case dtypes.Float64:
-		execSubGeneric[float64](lhs.flat.([]float64), rhs.flat.([]float64), output.flat.([]float64),
+		execSubNumericGeneric[float64](lhs.flat.([]float64), rhs.flat.([]float64), output.flat.([]float64),
 			lhs.shape, rhs.shape, output.shape)
 	case dtypes.BFloat16:
-		execSubBF16(lhs.flat.([]bfloat16.BFloat16), rhs.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16),
-			lhs.shape, rhs.shape, output.shape)
+		execSubNumericBFloat16(lhs.flat.([]bfloat16.BFloat16), rhs.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16),
+			lhs.shape, rhs.shape, output.shape) // range .Versions
 	default:
 		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
 	}
 	return output
 }
-
-func execSubGeneric[T signedNumericPODConstraints](lhs, rhs, output []T,
+func execSubNumericGeneric[T podNumericConstraints](lhs, rhs, output []T,
 	lhsShape, rhsShape, outputShape shapes.Shape) {
 	if len(rhs) == 1 {
 		// Case 1: One side (rhs) is a scalar: only iterate over the lhs.
@@ -258,7 +297,6 @@ func execSubGeneric[T signedNumericPODConstraints](lhs, rhs, output []T,
 			output[ii] = input - c
 		}
 		return
-
 	} else if len(lhs) == 1 {
 		// Case 1b: One side (lhs) is a scalar: only iterate over the rhs.
 		c := lhs[0]
@@ -285,9 +323,8 @@ func execSubGeneric[T signedNumericPODConstraints](lhs, rhs, output []T,
 		}
 	}
 	return
-}
-
-func execSubBF16(lhs, rhs, output []bfloat16.BFloat16,
+} // if numeric, integer or float.
+func execSubNumericBFloat16(lhs, rhs, output []bfloat16.BFloat16,
 	lhsShape, rhsShape, outputShape shapes.Shape) {
 	if len(rhs) == 1 {
 		// One side (rhs) is a scalar: only iterate over the lhs.
@@ -297,7 +334,6 @@ func execSubBF16(lhs, rhs, output []bfloat16.BFloat16,
 			output[ii] = bfloat16.FromFloat32(a - c)
 		}
 		return
-
 	} else if len(lhs) == 1 {
 		// Case 1b: One side (lhs) is a scalar: only iterate over the rhs.
 		c := lhs[0].Float32()
@@ -309,10 +345,10 @@ func execSubBF16(lhs, rhs, output []bfloat16.BFloat16,
 
 	} else if lhsShape.Equal(rhsShape) {
 		// Case 2: Exact same shapes, no broadcasting.
-		for ii, input := range lhs {
-			a := input.Float32()
-			b := rhs[ii].Float32()
-			output[ii] = bfloat16.FromFloat32(a - b)
+		for outputIdx := range output {
+			a := lhs[outputIdx].Float32()
+			b := rhs[outputIdx].Float32()
+			output[outputIdx] = bfloat16.FromFloat32(a - b)
 		}
 		return
 
@@ -329,4 +365,286 @@ func execSubBF16(lhs, rhs, output []bfloat16.BFloat16,
 		}
 	}
 	return
+} // if numeric or float. // range .Versions
+// execDiv executes the binary op Div.
+func execDiv(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	lhs, rhs, output, lhsIsScalarOr1, rhsIsScalarOr1 := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
+
+	_, _ = lhsIsScalarOr1, rhsIsScalarOr1
+
+	switch output.shape.DType {
+	case dtypes.Uint8:
+		execDivNumericGeneric[uint8](lhs.flat.([]uint8), rhs.flat.([]uint8), output.flat.([]uint8),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Uint16:
+		execDivNumericGeneric[uint16](lhs.flat.([]uint16), rhs.flat.([]uint16), output.flat.([]uint16),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Uint32:
+		execDivNumericGeneric[uint32](lhs.flat.([]uint32), rhs.flat.([]uint32), output.flat.([]uint32),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Uint64:
+		execDivNumericGeneric[uint64](lhs.flat.([]uint64), rhs.flat.([]uint64), output.flat.([]uint64),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Int8:
+		execDivNumericGeneric[int8](lhs.flat.([]int8), rhs.flat.([]int8), output.flat.([]int8),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Int16:
+		execDivNumericGeneric[int16](lhs.flat.([]int16), rhs.flat.([]int16), output.flat.([]int16),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Int32:
+		execDivNumericGeneric[int32](lhs.flat.([]int32), rhs.flat.([]int32), output.flat.([]int32),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Int64:
+		execDivNumericGeneric[int64](lhs.flat.([]int64), rhs.flat.([]int64), output.flat.([]int64),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Float32:
+		execDivNumericGeneric[float32](lhs.flat.([]float32), rhs.flat.([]float32), output.flat.([]float32),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Float64:
+		execDivNumericGeneric[float64](lhs.flat.([]float64), rhs.flat.([]float64), output.flat.([]float64),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.BFloat16:
+		execDivNumericBFloat16(lhs.flat.([]bfloat16.BFloat16), rhs.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16),
+			lhs.shape, rhs.shape, output.shape) // range .Versions
+	default:
+		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
+	}
+	return output
 }
+func execDivNumericGeneric[T podNumericConstraints](lhs, rhs, output []T,
+	lhsShape, rhsShape, outputShape shapes.Shape) {
+	if len(rhs) == 1 {
+		// Case 1: One side (rhs) is a scalar: only iterate over the lhs.
+		c := rhs[0]
+		for ii, input := range lhs {
+			output[ii] = input / c
+		}
+		return
+	} else if len(lhs) == 1 {
+		// Case 1b: One side (lhs) is a scalar: only iterate over the rhs.
+		c := lhs[0]
+		for ii, input := range rhs {
+			output[ii] = c / input
+		}
+		return
+
+	} else if lhsShape.Equal(rhsShape) {
+		// Case 2: Exact same shapes, no broadcasting.
+		for ii, input := range lhs {
+			output[ii] = input / rhs[ii]
+		}
+		return
+
+	} else {
+		// Case 3: with broadcasting non-scalar tensors:
+		lhsIter := newBroadcastIterator(lhsShape, outputShape)
+		rhsIter := newBroadcastIterator(rhsShape, outputShape)
+		for outputIdx := range output {
+			lhsIdx := lhsIter.Next()
+			rhsIdx := rhsIter.Next()
+			output[outputIdx] = lhs[lhsIdx] / rhs[rhsIdx]
+		}
+	}
+	return
+} // if numeric, integer or float.
+func execDivNumericBFloat16(lhs, rhs, output []bfloat16.BFloat16,
+	lhsShape, rhsShape, outputShape shapes.Shape) {
+	if len(rhs) == 1 {
+		// One side (rhs) is a scalar: only iterate over the lhs.
+		c := rhs[0].Float32()
+		for ii, input := range lhs {
+			a := input.Float32()
+			output[ii] = bfloat16.FromFloat32(a / c)
+		}
+		return
+	} else if len(lhs) == 1 {
+		// Case 1b: One side (lhs) is a scalar: only iterate over the rhs.
+		c := lhs[0].Float32()
+		for ii, input := range rhs {
+			a := input.Float32()
+			output[ii] = bfloat16.FromFloat32(c / a)
+		}
+		return
+
+	} else if lhsShape.Equal(rhsShape) {
+		// Case 2: Exact same shapes, no broadcasting.
+		for outputIdx := range output {
+			a := lhs[outputIdx].Float32()
+			b := rhs[outputIdx].Float32()
+			output[outputIdx] = bfloat16.FromFloat32(a / b)
+		}
+		return
+
+	} else {
+		// Case 3: with broadcasting non-scalar tensors:
+		lhsIter := newBroadcastIterator(lhsShape, outputShape)
+		rhsIter := newBroadcastIterator(rhsShape, outputShape)
+		for outputIdx := range output {
+			lhsIdx := lhsIter.Next()
+			rhsIdx := rhsIter.Next()
+			a := lhs[lhsIdx].Float32()
+			b := rhs[rhsIdx].Float32()
+			output[outputIdx] = bfloat16.FromFloat32(a / b)
+		}
+	}
+	return
+} // if numeric or float. // range .Versions
+// execRem executes the binary op Rem.
+func execRem(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	lhs, rhs, output, lhsIsScalarOr1, rhsIsScalarOr1 := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
+
+	_, _ = lhsIsScalarOr1, rhsIsScalarOr1
+
+	switch output.shape.DType {
+	case dtypes.Uint8:
+		execRemIntegerGeneric[uint8](lhs.flat.([]uint8), rhs.flat.([]uint8), output.flat.([]uint8),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Uint16:
+		execRemIntegerGeneric[uint16](lhs.flat.([]uint16), rhs.flat.([]uint16), output.flat.([]uint16),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Uint32:
+		execRemIntegerGeneric[uint32](lhs.flat.([]uint32), rhs.flat.([]uint32), output.flat.([]uint32),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Uint64:
+		execRemIntegerGeneric[uint64](lhs.flat.([]uint64), rhs.flat.([]uint64), output.flat.([]uint64),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Int8:
+		execRemIntegerGeneric[int8](lhs.flat.([]int8), rhs.flat.([]int8), output.flat.([]int8),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Int16:
+		execRemIntegerGeneric[int16](lhs.flat.([]int16), rhs.flat.([]int16), output.flat.([]int16),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Int32:
+		execRemIntegerGeneric[int32](lhs.flat.([]int32), rhs.flat.([]int32), output.flat.([]int32),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Int64:
+		execRemIntegerGeneric[int64](lhs.flat.([]int64), rhs.flat.([]int64), output.flat.([]int64),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Float32:
+		execRemFloatGeneric[float32](lhs.flat.([]float32), rhs.flat.([]float32), output.flat.([]float32),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Float64:
+		execRemFloatGeneric[float64](lhs.flat.([]float64), rhs.flat.([]float64), output.flat.([]float64),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.BFloat16:
+		execRemFloatBFloat16(lhs.flat.([]bfloat16.BFloat16), rhs.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16),
+			lhs.shape, rhs.shape, output.shape) // range .Versions
+	default:
+		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
+	}
+	return output
+}
+func execRemIntegerGeneric[T podIntegerConstraints](lhs, rhs, output []T,
+	lhsShape, rhsShape, outputShape shapes.Shape) {
+	if len(rhs) == 1 {
+		// Case 1: One side (rhs) is a scalar: only iterate over the lhs.
+		c := rhs[0]
+		for ii, input := range lhs {
+			output[ii] = input % c
+		}
+		return
+	} else if len(lhs) == 1 {
+		// Case 1b: One side (lhs) is a scalar: only iterate over the rhs.
+		c := lhs[0]
+		for ii, input := range rhs {
+			output[ii] = c % input
+		}
+		return
+
+	} else if lhsShape.Equal(rhsShape) {
+		// Case 2: Exact same shapes, no broadcasting.
+		for ii, input := range lhs {
+			output[ii] = input % rhs[ii]
+		}
+		return
+
+	} else {
+		// Case 3: with broadcasting non-scalar tensors:
+		lhsIter := newBroadcastIterator(lhsShape, outputShape)
+		rhsIter := newBroadcastIterator(rhsShape, outputShape)
+		for outputIdx := range output {
+			lhsIdx := lhsIter.Next()
+			rhsIdx := rhsIter.Next()
+			output[outputIdx] = lhs[lhsIdx] % rhs[rhsIdx]
+		}
+	}
+	return
+} // if numeric, integer or float.  // if numeric or float.
+func execRemFloatGeneric[T podFloatConstraints](lhs, rhs, output []T,
+	lhsShape, rhsShape, outputShape shapes.Shape) {
+	if len(rhs) == 1 {
+		// Case 1: One side (rhs) is a scalar: only iterate over the lhs.
+		c := rhs[0]
+		for ii, input := range lhs {
+			output[ii] = T(math.Mod(float64(input), float64(c)))
+		}
+		return
+	} else if len(lhs) == 1 {
+		// Case 1b: One side (lhs) is a scalar: only iterate over the rhs.
+		c := lhs[0]
+		for ii, input := range rhs {
+			output[ii] = T(math.Mod(float64(c), float64(input)))
+		}
+		return
+
+	} else if lhsShape.Equal(rhsShape) {
+		// Case 2: Exact same shapes, no broadcasting.
+		for ii, input := range lhs {
+			output[ii] = T(math.Mod(float64(input), float64(rhs[ii])))
+		}
+		return
+
+	} else {
+		// Case 3: with broadcasting non-scalar tensors:
+		lhsIter := newBroadcastIterator(lhsShape, outputShape)
+		rhsIter := newBroadcastIterator(rhsShape, outputShape)
+		for outputIdx := range output {
+			lhsIdx := lhsIter.Next()
+			rhsIdx := rhsIter.Next()
+			output[outputIdx] = T(math.Mod(float64(lhs[lhsIdx]), float64(rhs[rhsIdx])))
+		}
+	}
+	return
+} // if numeric, integer or float.  // if numeric or float. // if numeric, integer or float.
+func execRemFloatBFloat16(lhs, rhs, output []bfloat16.BFloat16,
+	lhsShape, rhsShape, outputShape shapes.Shape) {
+	if len(rhs) == 1 {
+		// One side (rhs) is a scalar: only iterate over the lhs.
+		c := rhs[0].Float32()
+		for ii, input := range lhs {
+			a := input.Float32()
+			output[ii] = bfloat16.FromFloat32(float32(math.Mod(float64(a), float64(c))))
+		}
+		return
+	} else if len(lhs) == 1 {
+		// Case 1b: One side (lhs) is a scalar: only iterate over the rhs.
+		c := lhs[0].Float32()
+		for ii, input := range rhs {
+			a := input.Float32()
+			output[ii] = bfloat16.FromFloat32(float32(math.Mod(float64(c), float64(a))))
+		}
+		return
+
+	} else if lhsShape.Equal(rhsShape) {
+		// Case 2: Exact same shapes, no broadcasting.
+		for outputIdx := range output {
+			a := lhs[outputIdx].Float32()
+			b := rhs[outputIdx].Float32()
+			output[outputIdx] = bfloat16.FromFloat32(float32(math.Mod(float64(a), float64(b))))
+		}
+		return
+
+	} else {
+		// Case 3: with broadcasting non-scalar tensors:
+		lhsIter := newBroadcastIterator(lhsShape, outputShape)
+		rhsIter := newBroadcastIterator(rhsShape, outputShape)
+		for outputIdx := range output {
+			lhsIdx := lhsIter.Next()
+			rhsIdx := rhsIter.Next()
+			a := lhs[lhsIdx].Float32()
+			b := rhs[rhsIdx].Float32()
+			output[outputIdx] = bfloat16.FromFloat32(float32(math.Mod(float64(a), float64(b))))
+		}
+	}
+	return
+} // if numeric or float. // range .Versions // range .BinaryOps

@@ -63,8 +63,8 @@ func TestExecBinary_Add(t *testing.T) {
 	assert.Equal(t, [][]int32{{-2}, {1}}, y2.Value())
 
 	// Test with same sized shapes:
-	y3 := exec.Call([][]int32{{-1, 2}, {3, 4}}, [][]int32{{6, 3}, {2, 1}})[0]
-	assert.Equal(t, [][]int32{{5, 5}, {5, 5}}, y3.Value())
+	y3 := exec.Call([][]uint64{{1, 2}, {3, 4}}, [][]uint64{{4, 3}, {2, 1}})[0]
+	assert.Equal(t, [][]uint64{{5, 5}, {5, 5}}, y3.Value())
 
 	// Test with broadcasting from both sides.
 	y4 := exec.Call([][]int32{{-1}, {2}, {5}}, [][]int32{{10, 100}})[0]
@@ -115,4 +115,53 @@ func TestExecBinary_Sub(t *testing.T) {
 	// Test with broadcasting from both sides.
 	y4 := exec.Call([][]int32{{-1}, {2}, {5}}, [][]int32{{10, 100}})[0]
 	assert.Equal(t, [][]int32{{-11, -101}, {-8, -98}, {-5, -95}}, y4.Value())
+}
+
+func TestExecBinary_Div(t *testing.T) {
+	exec := graph.NewExec(backend, func(lhs, rhs *graph.Node) *graph.Node { return graph.Div(lhs, rhs) })
+
+	// Test with scalar (or of size 1) values.
+	y0 := exec.Call(bfloat16.FromFloat32(10), bfloat16.FromFloat32(2))[0]
+	assert.Equal(t, bfloat16.FromFloat32(5), y0.Value())
+
+	// Test scalar on right side
+	y1 := exec.Call([]int32{-4, 8}, []int32{2})[0]
+	assert.Equal(t, []int32{-2, 4}, y1.Value())
+
+	// Test scalar on left side
+	y2 := exec.Call(int32(6), []int32{2, 3})[0]
+	assert.Equal(t, []int32{3, 2}, y2.Value())
+
+	// Test with same sized shapes:
+	y3 := exec.Call([][]int32{{-6, 9}, {12, 15}}, [][]int32{{2, 3}, {4, 5}})[0]
+	assert.Equal(t, [][]int32{{-3, 3}, {3, 3}}, y3.Value())
+
+	// Test with broadcasting from both sides.
+	y4 := exec.Call([][]int32{{-10}, {20}, {50}}, [][]int32{{2, 10}})[0]
+	assert.Equal(t, [][]int32{{-5, -1}, {10, 2}, {25, 5}}, y4.Value())
+}
+
+func TestExecBinary_Rem(t *testing.T) {
+	exec := graph.NewExec(backend, func(lhs, rhs *graph.Node) *graph.Node { return graph.Rem(lhs, rhs) })
+
+	// Test with scalar (or of size 1) values.
+	y0 := exec.Call(bfloat16.FromFloat32(7), bfloat16.FromFloat32(4))[0]
+	fmt.Printf("\ty0=%v\n", y0.GoStr())
+	assert.Equal(t, bfloat16.FromFloat32(3), y0.Value())
+
+	// Test scalar on right side
+	y1 := exec.Call([]int32{7, 9}, []int32{4})[0]
+	assert.Equal(t, []int32{3, 1}, y1.Value())
+
+	// Test scalar on left side
+	y2 := exec.Call(int32(7), []int32{4, 3})[0]
+	assert.Equal(t, []int32{3, 1}, y2.Value())
+
+	// Test with same sized shapes:
+	y3 := exec.Call([][]int32{{7, 8}, {9, 10}}, [][]int32{{4, 3}, {2, 3}})[0]
+	assert.Equal(t, [][]int32{{3, 2}, {1, 1}}, y3.Value())
+
+	// Test with broadcasting from both sides.
+	y4 := exec.Call([][]int32{{7}, {8}, {9}}, [][]int32{{4, 3}})[0]
+	assert.Equal(t, [][]int32{{3, 1}, {0, 2}, {1, 0}}, y4.Value())
 }
