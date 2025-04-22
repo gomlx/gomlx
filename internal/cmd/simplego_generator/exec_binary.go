@@ -44,6 +44,7 @@ func init() { {{range .BinaryOps}}
 
 {{- range .BinaryOps}}
 {{- $name := .Name }}
+
 // exec{{.Name}} executes the binary op {{.Name}}.
 func exec{{.Name}}(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
 	lhs, rhs, output, lhsIsScalarOr1, rhsIsScalarOr1 := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
@@ -85,7 +86,16 @@ func exec{{.Name}}(backend *Backend, node *Node, inputs []*Buffer, inputsOwned [
 {{- end}}
 {{- end}}
 
-{{- end}}  // range .Versions
+{{- if .Boolean }}
+	// Boolean:
+{{- range $.BooleanTypes}}
+	case dtypes.{{.DType}}:
+		exec{{$name}}{{$version}}Generic[{{.GoType}}](lhs.flat.([]{{.GoType}}), rhs.flat.([]{{.GoType}}), output.flat.([]{{.GoType}}),
+			lhs.shape, rhs.shape, output.shape)
+{{- end}}
+{{- end}}
+
+{{- end}}
 	default:
 		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
 	}
@@ -96,7 +106,8 @@ func exec{{.Name}}(backend *Backend, node *Node, inputs []*Buffer, inputsOwned [
 {{- range .Versions}}
 {{- $version := .Name }}
 
-{{- if or .Numeric .Integer .Float }}
+{{- if or .Numeric .Integer .Float .Boolean }}
+
 func exec{{$name}}{{$version}}Generic[T pod{{$version}}Constraints](lhs, rhs, output []T,
 	lhsShape, rhsShape, outputShape shapes.Shape) {
 	if len(rhs) == 1 {
@@ -135,9 +146,10 @@ func exec{{$name}}{{$version}}Generic[T pod{{$version}}Constraints](lhs, rhs, ou
 	}
 	return
 }
-{{- end}} // if numeric, integer or float.
+{{- end}}
 
-{{- if or .Numeric .BFloat16 }} 
+{{- if or .Numeric .BFloat16 }}
+
 func exec{{$name}}{{$version}}BFloat16(lhs, rhs, output []bfloat16.BFloat16,
 	lhsShape, rhsShape, outputShape shapes.Shape) {
 	if len(rhs) == 1 {
@@ -182,10 +194,10 @@ func exec{{$name}}{{$version}}BFloat16(lhs, rhs, output []bfloat16.BFloat16,
 	}
 	return
 }
-{{- end}}  // if numeric or float.
+{{- end}}
 
-{{- end}} // range .Versions
-{{- end}} // range .BinaryOps
+{{- end}}
+{{- end}}
 `))
 )
 
@@ -213,6 +225,10 @@ var (
 	BFloat16DataTypes = []DataTypes{
 		{"BFloat16", "bfloat16.BFloat16"},
 	}
+
+	BooleanDataTypes = []DataTypes{
+		{"Bool", "bool"},
+	}
 )
 
 func callBinaryOp(format, s1, s2 string) string {
@@ -226,9 +242,9 @@ var (
 )
 
 type BinaryOpVersion struct {
-	Name                              string
-	Numeric, Integer, Float, BFloat16 bool
-	Format                            string
+	Name                                       string
+	Numeric, Integer, Float, BFloat16, Boolean bool
+	Format                                     string
 }
 
 type BinaryOp struct {
@@ -253,14 +269,36 @@ var (
 			{Float: true, Name: "Float", Format: "T(math.Pow(float64(%s), float64(%s)))"},
 			{BFloat16: true, Name: "Float", Format: "float32(math.Pow(float64(%s), float64(%s)))"},
 		}},
+		{Name: "Max", IsCommutative: true, Versions: []BinaryOpVersion{{Numeric: true, Name: "Numeric", Format: "max(%s, %s)"}}},
+		{Name: "Min", IsCommutative: true, Versions: []BinaryOpVersion{{Numeric: true, Name: "Numeric", Format: "min(%s, %s)"}}},
+		{Name: "BitwiseAnd", Versions: []BinaryOpVersion{
+			{Integer: true, Name: "Integer", Format: "%s & %s"},
+		}},
+		{Name: "BitwiseOr", Versions: []BinaryOpVersion{
+			{Integer: true, Name: "Integer", Format: "%s | %s"},
+		}},
+		{Name: "BitwiseXor", Versions: []BinaryOpVersion{
+			{Integer: true, Name: "Integer", Format: "%s ^ %s"},
+		}},
+		{Name: "LogicalAnd", Versions: []BinaryOpVersion{
+			{Boolean: true, Name: "Boolean", Format: "%s && %s"},
+		}},
+		{Name: "LogicalOr", Versions: []BinaryOpVersion{
+			{Boolean: true, Name: "Boolean", Format: "%s || %s"},
+		}},
+		{Name: "LogicalXor", Versions: []BinaryOpVersion{
+			{Boolean: true, Name: "Boolean", Format: "%s != %s"},
+		}},
 	}
 )
 
 type ExecBinaryData struct {
-	BinaryOps     []BinaryOp
+	BinaryOps []BinaryOp
+
 	IntegerTypes  []DataTypes
 	FloatTypes    []DataTypes
 	BFloat16Types []DataTypes
+	BooleanTypes  []DataTypes
 }
 
 func GenerateExecBinary() {
@@ -269,6 +307,7 @@ func GenerateExecBinary() {
 		IntegerTypes:  IntegerDataTypes,
 		FloatTypes:    FloatDataTypes,
 		BFloat16Types: BFloat16DataTypes,
+		BooleanTypes:  BooleanDataTypes,
 	}
 
 	fileName := execBinaryFile

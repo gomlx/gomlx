@@ -92,21 +92,20 @@ var (
 	// StandardBinaryOperations include all operations that have two operands (usually named lhs (left-hand-side) and
 	// rhs (right-hand-side) and are usually commutative (invariant to order).
 	StandardBinaryOperations = types.SetWith(
+		backends.OpTypeAdd,
+		backends.OpTypeSub,
+		backends.OpTypeMul,
+		backends.OpTypeDiv,
+		backends.OpTypePow,
+		backends.OpTypeRem,
 		backends.OpTypeBitwiseAnd,
 		backends.OpTypeBitwiseOr,
 		backends.OpTypeBitwiseXor,
 		backends.OpTypeLogicalAnd,
 		backends.OpTypeLogicalOr,
 		backends.OpTypeLogicalXor,
-		backends.OpTypeAdd,
-		backends.OpTypeSub,
-		backends.OpTypeMul,
-		backends.OpTypeDiv,
-		backends.OpTypePow,
-		backends.OpTypeComplex,
 		backends.OpTypeMax,
 		backends.OpTypeMin,
-		backends.OpTypeRem,
 	)
 
 	// StandardUnaryOperations include all operations that have a single operand as input and the return shape is the

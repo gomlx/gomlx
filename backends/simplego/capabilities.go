@@ -59,3 +59,8 @@ type podFloatConstraints interface {
 type integerPODConstraints interface {
 	int8 | int16 | int32 | int64 | uint8 | uint16 | uint32 | uint64
 }
+
+// podBooleanConstraints is a simple placeholder for the gen_exec_binary.go generated code.
+type podBooleanConstraints interface {
+	bool
+}

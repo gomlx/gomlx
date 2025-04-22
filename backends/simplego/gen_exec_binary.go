@@ -18,6 +18,14 @@ func init() {
 	nodeExecutors[backends.OpTypeDiv] = execDiv
 	nodeExecutors[backends.OpTypeRem] = execRem
 	nodeExecutors[backends.OpTypePow] = execPow
+	nodeExecutors[backends.OpTypeMax] = execMax
+	nodeExecutors[backends.OpTypeMin] = execMin
+	nodeExecutors[backends.OpTypeBitwiseAnd] = execBitwiseAnd
+	nodeExecutors[backends.OpTypeBitwiseOr] = execBitwiseOr
+	nodeExecutors[backends.OpTypeBitwiseXor] = execBitwiseXor
+	nodeExecutors[backends.OpTypeLogicalAnd] = execLogicalAnd
+	nodeExecutors[backends.OpTypeLogicalOr] = execLogicalOr
+	nodeExecutors[backends.OpTypeLogicalXor] = execLogicalXor
 }
 
 // execAdd executes the binary op Add.
@@ -63,12 +71,13 @@ func execAdd(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool)
 			lhs.shape, rhs.shape, output.shape)
 	case dtypes.BFloat16:
 		execAddNumericBFloat16(lhs.flat.([]bfloat16.BFloat16), rhs.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16),
-			lhs.shape, rhs.shape, output.shape) // range .Versions
+			lhs.shape, rhs.shape, output.shape)
 	default:
 		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
 	}
 	return output
 }
+
 func execAddNumericGeneric[T podNumericConstraints](lhs, rhs, output []T,
 	lhsShape, rhsShape, outputShape shapes.Shape) {
 	if len(rhs) == 1 {
@@ -97,7 +106,8 @@ func execAddNumericGeneric[T podNumericConstraints](lhs, rhs, output []T,
 		}
 	}
 	return
-} // if numeric, integer or float.
+}
+
 func execAddNumericBFloat16(lhs, rhs, output []bfloat16.BFloat16,
 	lhsShape, rhsShape, outputShape shapes.Shape) {
 	if len(rhs) == 1 {
@@ -131,7 +141,8 @@ func execAddNumericBFloat16(lhs, rhs, output []bfloat16.BFloat16,
 		}
 	}
 	return
-} // if numeric or float. // range .Versions
+}
+
 // execMul executes the binary op Mul.
 func execMul(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
 	lhs, rhs, output, lhsIsScalarOr1, rhsIsScalarOr1 := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
@@ -175,12 +186,13 @@ func execMul(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool)
 			lhs.shape, rhs.shape, output.shape)
 	case dtypes.BFloat16:
 		execMulNumericBFloat16(lhs.flat.([]bfloat16.BFloat16), rhs.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16),
-			lhs.shape, rhs.shape, output.shape) // range .Versions
+			lhs.shape, rhs.shape, output.shape)
 	default:
 		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
 	}
 	return output
 }
+
 func execMulNumericGeneric[T podNumericConstraints](lhs, rhs, output []T,
 	lhsShape, rhsShape, outputShape shapes.Shape) {
 	if len(rhs) == 1 {
@@ -209,7 +221,8 @@ func execMulNumericGeneric[T podNumericConstraints](lhs, rhs, output []T,
 		}
 	}
 	return
-} // if numeric, integer or float.
+}
+
 func execMulNumericBFloat16(lhs, rhs, output []bfloat16.BFloat16,
 	lhsShape, rhsShape, outputShape shapes.Shape) {
 	if len(rhs) == 1 {
@@ -243,7 +256,8 @@ func execMulNumericBFloat16(lhs, rhs, output []bfloat16.BFloat16,
 		}
 	}
 	return
-} // if numeric or float. // range .Versions
+}
+
 // execSub executes the binary op Sub.
 func execSub(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
 	lhs, rhs, output, lhsIsScalarOr1, rhsIsScalarOr1 := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
@@ -283,12 +297,13 @@ func execSub(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool)
 			lhs.shape, rhs.shape, output.shape)
 	case dtypes.BFloat16:
 		execSubNumericBFloat16(lhs.flat.([]bfloat16.BFloat16), rhs.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16),
-			lhs.shape, rhs.shape, output.shape) // range .Versions
+			lhs.shape, rhs.shape, output.shape)
 	default:
 		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
 	}
 	return output
 }
+
 func execSubNumericGeneric[T podNumericConstraints](lhs, rhs, output []T,
 	lhsShape, rhsShape, outputShape shapes.Shape) {
 	if len(rhs) == 1 {
@@ -324,7 +339,8 @@ func execSubNumericGeneric[T podNumericConstraints](lhs, rhs, output []T,
 		}
 	}
 	return
-} // if numeric, integer or float.
+}
+
 func execSubNumericBFloat16(lhs, rhs, output []bfloat16.BFloat16,
 	lhsShape, rhsShape, outputShape shapes.Shape) {
 	if len(rhs) == 1 {
@@ -366,7 +382,8 @@ func execSubNumericBFloat16(lhs, rhs, output []bfloat16.BFloat16,
 		}
 	}
 	return
-} // if numeric or float. // range .Versions
+}
+
 // execDiv executes the binary op Div.
 func execDiv(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
 	lhs, rhs, output, lhsIsScalarOr1, rhsIsScalarOr1 := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
@@ -406,12 +423,13 @@ func execDiv(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool)
 			lhs.shape, rhs.shape, output.shape)
 	case dtypes.BFloat16:
 		execDivNumericBFloat16(lhs.flat.([]bfloat16.BFloat16), rhs.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16),
-			lhs.shape, rhs.shape, output.shape) // range .Versions
+			lhs.shape, rhs.shape, output.shape)
 	default:
 		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
 	}
 	return output
 }
+
 func execDivNumericGeneric[T podNumericConstraints](lhs, rhs, output []T,
 	lhsShape, rhsShape, outputShape shapes.Shape) {
 	if len(rhs) == 1 {
@@ -447,7 +465,8 @@ func execDivNumericGeneric[T podNumericConstraints](lhs, rhs, output []T,
 		}
 	}
 	return
-} // if numeric, integer or float.
+}
+
 func execDivNumericBFloat16(lhs, rhs, output []bfloat16.BFloat16,
 	lhsShape, rhsShape, outputShape shapes.Shape) {
 	if len(rhs) == 1 {
@@ -489,7 +508,8 @@ func execDivNumericBFloat16(lhs, rhs, output []bfloat16.BFloat16,
 		}
 	}
 	return
-} // if numeric or float. // range .Versions
+}
+
 // execRem executes the binary op Rem.
 func execRem(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
 	lhs, rhs, output, lhsIsScalarOr1, rhsIsScalarOr1 := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
@@ -529,12 +549,13 @@ func execRem(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool)
 			lhs.shape, rhs.shape, output.shape)
 	case dtypes.BFloat16:
 		execRemFloatBFloat16(lhs.flat.([]bfloat16.BFloat16), rhs.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16),
-			lhs.shape, rhs.shape, output.shape) // range .Versions
+			lhs.shape, rhs.shape, output.shape)
 	default:
 		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
 	}
 	return output
 }
+
 func execRemIntegerGeneric[T podIntegerConstraints](lhs, rhs, output []T,
 	lhsShape, rhsShape, outputShape shapes.Shape) {
 	if len(rhs) == 1 {
@@ -570,7 +591,8 @@ func execRemIntegerGeneric[T podIntegerConstraints](lhs, rhs, output []T,
 		}
 	}
 	return
-} // if numeric, integer or float.  // if numeric or float.
+}
+
 func execRemFloatGeneric[T podFloatConstraints](lhs, rhs, output []T,
 	lhsShape, rhsShape, outputShape shapes.Shape) {
 	if len(rhs) == 1 {
@@ -606,7 +628,8 @@ func execRemFloatGeneric[T podFloatConstraints](lhs, rhs, output []T,
 		}
 	}
 	return
-} // if numeric, integer or float.  // if numeric or float. // if numeric, integer or float.
+}
+
 func execRemFloatBFloat16(lhs, rhs, output []bfloat16.BFloat16,
 	lhsShape, rhsShape, outputShape shapes.Shape) {
 	if len(rhs) == 1 {
@@ -648,7 +671,8 @@ func execRemFloatBFloat16(lhs, rhs, output []bfloat16.BFloat16,
 		}
 	}
 	return
-} // if numeric or float. // range .Versions
+}
+
 // execPow executes the binary op Pow.
 func execPow(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
 	lhs, rhs, output, lhsIsScalarOr1, rhsIsScalarOr1 := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
@@ -688,12 +712,13 @@ func execPow(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool)
 			lhs.shape, rhs.shape, output.shape)
 	case dtypes.BFloat16:
 		execPowFloatBFloat16(lhs.flat.([]bfloat16.BFloat16), rhs.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16),
-			lhs.shape, rhs.shape, output.shape) // range .Versions
+			lhs.shape, rhs.shape, output.shape)
 	default:
 		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
 	}
 	return output
 }
+
 func execPowIntegerGeneric[T podIntegerConstraints](lhs, rhs, output []T,
 	lhsShape, rhsShape, outputShape shapes.Shape) {
 	if len(rhs) == 1 {
@@ -729,7 +754,8 @@ func execPowIntegerGeneric[T podIntegerConstraints](lhs, rhs, output []T,
 		}
 	}
 	return
-} // if numeric, integer or float.  // if numeric or float.
+}
+
 func execPowFloatGeneric[T podFloatConstraints](lhs, rhs, output []T,
 	lhsShape, rhsShape, outputShape shapes.Shape) {
 	if len(rhs) == 1 {
@@ -765,7 +791,8 @@ func execPowFloatGeneric[T podFloatConstraints](lhs, rhs, output []T,
 		}
 	}
 	return
-} // if numeric, integer or float.  // if numeric or float. // if numeric, integer or float.
+}
+
 func execPowFloatBFloat16(lhs, rhs, output []bfloat16.BFloat16,
 	lhsShape, rhsShape, outputShape shapes.Shape) {
 	if len(rhs) == 1 {
@@ -807,4 +834,618 @@ func execPowFloatBFloat16(lhs, rhs, output []bfloat16.BFloat16,
 		}
 	}
 	return
-} // if numeric or float. // range .Versions // range .BinaryOps
+}
+
+// execMax executes the binary op Max.
+func execMax(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	lhs, rhs, output, lhsIsScalarOr1, rhsIsScalarOr1 := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
+
+	// Add is commutative, so if any of the two is scalar, make the rhs the scalar one.
+	if lhsIsScalarOr1 && !rhsIsScalarOr1 {
+		lhs, rhs = rhs, lhs
+		lhsIsScalarOr1, rhsIsScalarOr1 = rhsIsScalarOr1, lhsIsScalarOr1
+	}
+
+	switch output.shape.DType {
+	case dtypes.Uint8:
+		execMaxNumericGeneric[uint8](lhs.flat.([]uint8), rhs.flat.([]uint8), output.flat.([]uint8),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Uint16:
+		execMaxNumericGeneric[uint16](lhs.flat.([]uint16), rhs.flat.([]uint16), output.flat.([]uint16),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Uint32:
+		execMaxNumericGeneric[uint32](lhs.flat.([]uint32), rhs.flat.([]uint32), output.flat.([]uint32),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Uint64:
+		execMaxNumericGeneric[uint64](lhs.flat.([]uint64), rhs.flat.([]uint64), output.flat.([]uint64),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Int8:
+		execMaxNumericGeneric[int8](lhs.flat.([]int8), rhs.flat.([]int8), output.flat.([]int8),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Int16:
+		execMaxNumericGeneric[int16](lhs.flat.([]int16), rhs.flat.([]int16), output.flat.([]int16),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Int32:
+		execMaxNumericGeneric[int32](lhs.flat.([]int32), rhs.flat.([]int32), output.flat.([]int32),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Int64:
+		execMaxNumericGeneric[int64](lhs.flat.([]int64), rhs.flat.([]int64), output.flat.([]int64),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Float32:
+		execMaxNumericGeneric[float32](lhs.flat.([]float32), rhs.flat.([]float32), output.flat.([]float32),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Float64:
+		execMaxNumericGeneric[float64](lhs.flat.([]float64), rhs.flat.([]float64), output.flat.([]float64),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.BFloat16:
+		execMaxNumericBFloat16(lhs.flat.([]bfloat16.BFloat16), rhs.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16),
+			lhs.shape, rhs.shape, output.shape)
+	default:
+		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
+	}
+	return output
+}
+
+func execMaxNumericGeneric[T podNumericConstraints](lhs, rhs, output []T,
+	lhsShape, rhsShape, outputShape shapes.Shape) {
+	if len(rhs) == 1 {
+		// Case 1: One side (rhs) is a scalar: only iterate over the lhs.
+		c := rhs[0]
+		for ii, input := range lhs {
+			output[ii] = max(input, c)
+		}
+		return
+
+	} else if lhsShape.Equal(rhsShape) {
+		// Case 2: Exact same shapes, no broadcasting.
+		for ii, input := range lhs {
+			output[ii] = max(input, rhs[ii])
+		}
+		return
+
+	} else {
+		// Case 3: with broadcasting non-scalar tensors:
+		lhsIter := newBroadcastIterator(lhsShape, outputShape)
+		rhsIter := newBroadcastIterator(rhsShape, outputShape)
+		for outputIdx := range output {
+			lhsIdx := lhsIter.Next()
+			rhsIdx := rhsIter.Next()
+			output[outputIdx] = max(lhs[lhsIdx], rhs[rhsIdx])
+		}
+	}
+	return
+}
+
+func execMaxNumericBFloat16(lhs, rhs, output []bfloat16.BFloat16,
+	lhsShape, rhsShape, outputShape shapes.Shape) {
+	if len(rhs) == 1 {
+		// One side (rhs) is a scalar: only iterate over the lhs.
+		c := rhs[0].Float32()
+		for ii, input := range lhs {
+			a := input.Float32()
+			output[ii] = bfloat16.FromFloat32(max(a, c))
+		}
+		return
+
+	} else if lhsShape.Equal(rhsShape) {
+		// Case 2: Exact same shapes, no broadcasting.
+		for outputIdx := range output {
+			a := lhs[outputIdx].Float32()
+			b := rhs[outputIdx].Float32()
+			output[outputIdx] = bfloat16.FromFloat32(max(a, b))
+		}
+		return
+
+	} else {
+		// Case 3: with broadcasting non-scalar tensors:
+		lhsIter := newBroadcastIterator(lhsShape, outputShape)
+		rhsIter := newBroadcastIterator(rhsShape, outputShape)
+		for outputIdx := range output {
+			lhsIdx := lhsIter.Next()
+			rhsIdx := rhsIter.Next()
+			a := lhs[lhsIdx].Float32()
+			b := rhs[rhsIdx].Float32()
+			output[outputIdx] = bfloat16.FromFloat32(max(a, b))
+		}
+	}
+	return
+}
+
+// execMin executes the binary op Min.
+func execMin(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	lhs, rhs, output, lhsIsScalarOr1, rhsIsScalarOr1 := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
+
+	// Add is commutative, so if any of the two is scalar, make the rhs the scalar one.
+	if lhsIsScalarOr1 && !rhsIsScalarOr1 {
+		lhs, rhs = rhs, lhs
+		lhsIsScalarOr1, rhsIsScalarOr1 = rhsIsScalarOr1, lhsIsScalarOr1
+	}
+
+	switch output.shape.DType {
+	case dtypes.Uint8:
+		execMinNumericGeneric[uint8](lhs.flat.([]uint8), rhs.flat.([]uint8), output.flat.([]uint8),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Uint16:
+		execMinNumericGeneric[uint16](lhs.flat.([]uint16), rhs.flat.([]uint16), output.flat.([]uint16),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Uint32:
+		execMinNumericGeneric[uint32](lhs.flat.([]uint32), rhs.flat.([]uint32), output.flat.([]uint32),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Uint64:
+		execMinNumericGeneric[uint64](lhs.flat.([]uint64), rhs.flat.([]uint64), output.flat.([]uint64),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Int8:
+		execMinNumericGeneric[int8](lhs.flat.([]int8), rhs.flat.([]int8), output.flat.([]int8),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Int16:
+		execMinNumericGeneric[int16](lhs.flat.([]int16), rhs.flat.([]int16), output.flat.([]int16),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Int32:
+		execMinNumericGeneric[int32](lhs.flat.([]int32), rhs.flat.([]int32), output.flat.([]int32),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Int64:
+		execMinNumericGeneric[int64](lhs.flat.([]int64), rhs.flat.([]int64), output.flat.([]int64),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Float32:
+		execMinNumericGeneric[float32](lhs.flat.([]float32), rhs.flat.([]float32), output.flat.([]float32),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Float64:
+		execMinNumericGeneric[float64](lhs.flat.([]float64), rhs.flat.([]float64), output.flat.([]float64),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.BFloat16:
+		execMinNumericBFloat16(lhs.flat.([]bfloat16.BFloat16), rhs.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16),
+			lhs.shape, rhs.shape, output.shape)
+	default:
+		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
+	}
+	return output
+}
+
+func execMinNumericGeneric[T podNumericConstraints](lhs, rhs, output []T,
+	lhsShape, rhsShape, outputShape shapes.Shape) {
+	if len(rhs) == 1 {
+		// Case 1: One side (rhs) is a scalar: only iterate over the lhs.
+		c := rhs[0]
+		for ii, input := range lhs {
+			output[ii] = min(input, c)
+		}
+		return
+
+	} else if lhsShape.Equal(rhsShape) {
+		// Case 2: Exact same shapes, no broadcasting.
+		for ii, input := range lhs {
+			output[ii] = min(input, rhs[ii])
+		}
+		return
+
+	} else {
+		// Case 3: with broadcasting non-scalar tensors:
+		lhsIter := newBroadcastIterator(lhsShape, outputShape)
+		rhsIter := newBroadcastIterator(rhsShape, outputShape)
+		for outputIdx := range output {
+			lhsIdx := lhsIter.Next()
+			rhsIdx := rhsIter.Next()
+			output[outputIdx] = min(lhs[lhsIdx], rhs[rhsIdx])
+		}
+	}
+	return
+}
+
+func execMinNumericBFloat16(lhs, rhs, output []bfloat16.BFloat16,
+	lhsShape, rhsShape, outputShape shapes.Shape) {
+	if len(rhs) == 1 {
+		// One side (rhs) is a scalar: only iterate over the lhs.
+		c := rhs[0].Float32()
+		for ii, input := range lhs {
+			a := input.Float32()
+			output[ii] = bfloat16.FromFloat32(min(a, c))
+		}
+		return
+
+	} else if lhsShape.Equal(rhsShape) {
+		// Case 2: Exact same shapes, no broadcasting.
+		for outputIdx := range output {
+			a := lhs[outputIdx].Float32()
+			b := rhs[outputIdx].Float32()
+			output[outputIdx] = bfloat16.FromFloat32(min(a, b))
+		}
+		return
+
+	} else {
+		// Case 3: with broadcasting non-scalar tensors:
+		lhsIter := newBroadcastIterator(lhsShape, outputShape)
+		rhsIter := newBroadcastIterator(rhsShape, outputShape)
+		for outputIdx := range output {
+			lhsIdx := lhsIter.Next()
+			rhsIdx := rhsIter.Next()
+			a := lhs[lhsIdx].Float32()
+			b := rhs[rhsIdx].Float32()
+			output[outputIdx] = bfloat16.FromFloat32(min(a, b))
+		}
+	}
+	return
+}
+
+// execBitwiseAnd executes the binary op BitwiseAnd.
+func execBitwiseAnd(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	lhs, rhs, output, lhsIsScalarOr1, rhsIsScalarOr1 := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
+
+	_, _ = lhsIsScalarOr1, rhsIsScalarOr1
+
+	switch output.shape.DType {
+	case dtypes.Uint8:
+		execBitwiseAndIntegerGeneric[uint8](lhs.flat.([]uint8), rhs.flat.([]uint8), output.flat.([]uint8),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Uint16:
+		execBitwiseAndIntegerGeneric[uint16](lhs.flat.([]uint16), rhs.flat.([]uint16), output.flat.([]uint16),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Uint32:
+		execBitwiseAndIntegerGeneric[uint32](lhs.flat.([]uint32), rhs.flat.([]uint32), output.flat.([]uint32),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Uint64:
+		execBitwiseAndIntegerGeneric[uint64](lhs.flat.([]uint64), rhs.flat.([]uint64), output.flat.([]uint64),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Int8:
+		execBitwiseAndIntegerGeneric[int8](lhs.flat.([]int8), rhs.flat.([]int8), output.flat.([]int8),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Int16:
+		execBitwiseAndIntegerGeneric[int16](lhs.flat.([]int16), rhs.flat.([]int16), output.flat.([]int16),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Int32:
+		execBitwiseAndIntegerGeneric[int32](lhs.flat.([]int32), rhs.flat.([]int32), output.flat.([]int32),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Int64:
+		execBitwiseAndIntegerGeneric[int64](lhs.flat.([]int64), rhs.flat.([]int64), output.flat.([]int64),
+			lhs.shape, rhs.shape, output.shape)
+	default:
+		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
+	}
+	return output
+}
+
+func execBitwiseAndIntegerGeneric[T podIntegerConstraints](lhs, rhs, output []T,
+	lhsShape, rhsShape, outputShape shapes.Shape) {
+	if len(rhs) == 1 {
+		// Case 1: One side (rhs) is a scalar: only iterate over the lhs.
+		c := rhs[0]
+		for ii, input := range lhs {
+			output[ii] = input & c
+		}
+		return
+	} else if len(lhs) == 1 {
+		// Case 1b: One side (lhs) is a scalar: only iterate over the rhs.
+		c := lhs[0]
+		for ii, input := range rhs {
+			output[ii] = c & input
+		}
+		return
+
+	} else if lhsShape.Equal(rhsShape) {
+		// Case 2: Exact same shapes, no broadcasting.
+		for ii, input := range lhs {
+			output[ii] = input & rhs[ii]
+		}
+		return
+
+	} else {
+		// Case 3: with broadcasting non-scalar tensors:
+		lhsIter := newBroadcastIterator(lhsShape, outputShape)
+		rhsIter := newBroadcastIterator(rhsShape, outputShape)
+		for outputIdx := range output {
+			lhsIdx := lhsIter.Next()
+			rhsIdx := rhsIter.Next()
+			output[outputIdx] = lhs[lhsIdx] & rhs[rhsIdx]
+		}
+	}
+	return
+}
+
+// execBitwiseOr executes the binary op BitwiseOr.
+func execBitwiseOr(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	lhs, rhs, output, lhsIsScalarOr1, rhsIsScalarOr1 := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
+
+	_, _ = lhsIsScalarOr1, rhsIsScalarOr1
+
+	switch output.shape.DType {
+	case dtypes.Uint8:
+		execBitwiseOrIntegerGeneric[uint8](lhs.flat.([]uint8), rhs.flat.([]uint8), output.flat.([]uint8),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Uint16:
+		execBitwiseOrIntegerGeneric[uint16](lhs.flat.([]uint16), rhs.flat.([]uint16), output.flat.([]uint16),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Uint32:
+		execBitwiseOrIntegerGeneric[uint32](lhs.flat.([]uint32), rhs.flat.([]uint32), output.flat.([]uint32),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Uint64:
+		execBitwiseOrIntegerGeneric[uint64](lhs.flat.([]uint64), rhs.flat.([]uint64), output.flat.([]uint64),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Int8:
+		execBitwiseOrIntegerGeneric[int8](lhs.flat.([]int8), rhs.flat.([]int8), output.flat.([]int8),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Int16:
+		execBitwiseOrIntegerGeneric[int16](lhs.flat.([]int16), rhs.flat.([]int16), output.flat.([]int16),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Int32:
+		execBitwiseOrIntegerGeneric[int32](lhs.flat.([]int32), rhs.flat.([]int32), output.flat.([]int32),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Int64:
+		execBitwiseOrIntegerGeneric[int64](lhs.flat.([]int64), rhs.flat.([]int64), output.flat.([]int64),
+			lhs.shape, rhs.shape, output.shape)
+	default:
+		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
+	}
+	return output
+}
+
+func execBitwiseOrIntegerGeneric[T podIntegerConstraints](lhs, rhs, output []T,
+	lhsShape, rhsShape, outputShape shapes.Shape) {
+	if len(rhs) == 1 {
+		// Case 1: One side (rhs) is a scalar: only iterate over the lhs.
+		c := rhs[0]
+		for ii, input := range lhs {
+			output[ii] = input | c
+		}
+		return
+	} else if len(lhs) == 1 {
+		// Case 1b: One side (lhs) is a scalar: only iterate over the rhs.
+		c := lhs[0]
+		for ii, input := range rhs {
+			output[ii] = c | input
+		}
+		return
+
+	} else if lhsShape.Equal(rhsShape) {
+		// Case 2: Exact same shapes, no broadcasting.
+		for ii, input := range lhs {
+			output[ii] = input | rhs[ii]
+		}
+		return
+
+	} else {
+		// Case 3: with broadcasting non-scalar tensors:
+		lhsIter := newBroadcastIterator(lhsShape, outputShape)
+		rhsIter := newBroadcastIterator(rhsShape, outputShape)
+		for outputIdx := range output {
+			lhsIdx := lhsIter.Next()
+			rhsIdx := rhsIter.Next()
+			output[outputIdx] = lhs[lhsIdx] | rhs[rhsIdx]
+		}
+	}
+	return
+}
+
+// execBitwiseXor executes the binary op BitwiseXor.
+func execBitwiseXor(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	lhs, rhs, output, lhsIsScalarOr1, rhsIsScalarOr1 := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
+
+	_, _ = lhsIsScalarOr1, rhsIsScalarOr1
+
+	switch output.shape.DType {
+	case dtypes.Uint8:
+		execBitwiseXorIntegerGeneric[uint8](lhs.flat.([]uint8), rhs.flat.([]uint8), output.flat.([]uint8),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Uint16:
+		execBitwiseXorIntegerGeneric[uint16](lhs.flat.([]uint16), rhs.flat.([]uint16), output.flat.([]uint16),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Uint32:
+		execBitwiseXorIntegerGeneric[uint32](lhs.flat.([]uint32), rhs.flat.([]uint32), output.flat.([]uint32),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Uint64:
+		execBitwiseXorIntegerGeneric[uint64](lhs.flat.([]uint64), rhs.flat.([]uint64), output.flat.([]uint64),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Int8:
+		execBitwiseXorIntegerGeneric[int8](lhs.flat.([]int8), rhs.flat.([]int8), output.flat.([]int8),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Int16:
+		execBitwiseXorIntegerGeneric[int16](lhs.flat.([]int16), rhs.flat.([]int16), output.flat.([]int16),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Int32:
+		execBitwiseXorIntegerGeneric[int32](lhs.flat.([]int32), rhs.flat.([]int32), output.flat.([]int32),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Int64:
+		execBitwiseXorIntegerGeneric[int64](lhs.flat.([]int64), rhs.flat.([]int64), output.flat.([]int64),
+			lhs.shape, rhs.shape, output.shape)
+	default:
+		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
+	}
+	return output
+}
+
+func execBitwiseXorIntegerGeneric[T podIntegerConstraints](lhs, rhs, output []T,
+	lhsShape, rhsShape, outputShape shapes.Shape) {
+	if len(rhs) == 1 {
+		// Case 1: One side (rhs) is a scalar: only iterate over the lhs.
+		c := rhs[0]
+		for ii, input := range lhs {
+			output[ii] = input ^ c
+		}
+		return
+	} else if len(lhs) == 1 {
+		// Case 1b: One side (lhs) is a scalar: only iterate over the rhs.
+		c := lhs[0]
+		for ii, input := range rhs {
+			output[ii] = c ^ input
+		}
+		return
+
+	} else if lhsShape.Equal(rhsShape) {
+		// Case 2: Exact same shapes, no broadcasting.
+		for ii, input := range lhs {
+			output[ii] = input ^ rhs[ii]
+		}
+		return
+
+	} else {
+		// Case 3: with broadcasting non-scalar tensors:
+		lhsIter := newBroadcastIterator(lhsShape, outputShape)
+		rhsIter := newBroadcastIterator(rhsShape, outputShape)
+		for outputIdx := range output {
+			lhsIdx := lhsIter.Next()
+			rhsIdx := rhsIter.Next()
+			output[outputIdx] = lhs[lhsIdx] ^ rhs[rhsIdx]
+		}
+	}
+	return
+}
+
+// execLogicalAnd executes the binary op LogicalAnd.
+func execLogicalAnd(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	lhs, rhs, output, lhsIsScalarOr1, rhsIsScalarOr1 := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
+
+	_, _ = lhsIsScalarOr1, rhsIsScalarOr1
+
+	switch output.shape.DType {
+	// Boolean:
+	case dtypes.Bool:
+		execLogicalAndBooleanGeneric[bool](lhs.flat.([]bool), rhs.flat.([]bool), output.flat.([]bool),
+			lhs.shape, rhs.shape, output.shape)
+	default:
+		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
+	}
+	return output
+}
+
+func execLogicalAndBooleanGeneric[T podBooleanConstraints](lhs, rhs, output []T,
+	lhsShape, rhsShape, outputShape shapes.Shape) {
+	if len(rhs) == 1 {
+		// Case 1: One side (rhs) is a scalar: only iterate over the lhs.
+		c := rhs[0]
+		for ii, input := range lhs {
+			output[ii] = input && c
+		}
+		return
+	} else if len(lhs) == 1 {
+		// Case 1b: One side (lhs) is a scalar: only iterate over the rhs.
+		c := lhs[0]
+		for ii, input := range rhs {
+			output[ii] = c && input
+		}
+		return
+
+	} else if lhsShape.Equal(rhsShape) {
+		// Case 2: Exact same shapes, no broadcasting.
+		for ii, input := range lhs {
+			output[ii] = input && rhs[ii]
+		}
+		return
+
+	} else {
+		// Case 3: with broadcasting non-scalar tensors:
+		lhsIter := newBroadcastIterator(lhsShape, outputShape)
+		rhsIter := newBroadcastIterator(rhsShape, outputShape)
+		for outputIdx := range output {
+			lhsIdx := lhsIter.Next()
+			rhsIdx := rhsIter.Next()
+			output[outputIdx] = lhs[lhsIdx] && rhs[rhsIdx]
+		}
+	}
+	return
+}
+
+// execLogicalOr executes the binary op LogicalOr.
+func execLogicalOr(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	lhs, rhs, output, lhsIsScalarOr1, rhsIsScalarOr1 := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
+
+	_, _ = lhsIsScalarOr1, rhsIsScalarOr1
+
+	switch output.shape.DType {
+	// Boolean:
+	case dtypes.Bool:
+		execLogicalOrBooleanGeneric[bool](lhs.flat.([]bool), rhs.flat.([]bool), output.flat.([]bool),
+			lhs.shape, rhs.shape, output.shape)
+	default:
+		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
+	}
+	return output
+}
+
+func execLogicalOrBooleanGeneric[T podBooleanConstraints](lhs, rhs, output []T,
+	lhsShape, rhsShape, outputShape shapes.Shape) {
+	if len(rhs) == 1 {
+		// Case 1: One side (rhs) is a scalar: only iterate over the lhs.
+		c := rhs[0]
+		for ii, input := range lhs {
+			output[ii] = input || c
+		}
+		return
+	} else if len(lhs) == 1 {
+		// Case 1b: One side (lhs) is a scalar: only iterate over the rhs.
+		c := lhs[0]
+		for ii, input := range rhs {
+			output[ii] = c || input
+		}
+		return
+
+	} else if lhsShape.Equal(rhsShape) {
+		// Case 2: Exact same shapes, no broadcasting.
+		for ii, input := range lhs {
+			output[ii] = input || rhs[ii]
+		}
+		return
+
+	} else {
+		// Case 3: with broadcasting non-scalar tensors:
+		lhsIter := newBroadcastIterator(lhsShape, outputShape)
+		rhsIter := newBroadcastIterator(rhsShape, outputShape)
+		for outputIdx := range output {
+			lhsIdx := lhsIter.Next()
+			rhsIdx := rhsIter.Next()
+			output[outputIdx] = lhs[lhsIdx] || rhs[rhsIdx]
+		}
+	}
+	return
+}
+
+// execLogicalXor executes the binary op LogicalXor.
+func execLogicalXor(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	lhs, rhs, output, lhsIsScalarOr1, rhsIsScalarOr1 := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
+
+	_, _ = lhsIsScalarOr1, rhsIsScalarOr1
+
+	switch output.shape.DType {
+	// Boolean:
+	case dtypes.Bool:
+		execLogicalXorBooleanGeneric[bool](lhs.flat.([]bool), rhs.flat.([]bool), output.flat.([]bool),
+			lhs.shape, rhs.shape, output.shape)
+	default:
+		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
+	}
+	return output
+}
+
+func execLogicalXorBooleanGeneric[T podBooleanConstraints](lhs, rhs, output []T,
+	lhsShape, rhsShape, outputShape shapes.Shape) {
+	if len(rhs) == 1 {
+		// Case 1: One side (rhs) is a scalar: only iterate over the lhs.
+		c := rhs[0]
+		for ii, input := range lhs {
+			output[ii] = input != c
+		}
+		return
+	} else if len(lhs) == 1 {
+		// Case 1b: One side (lhs) is a scalar: only iterate over the rhs.
+		c := lhs[0]
+		for ii, input := range rhs {
+			output[ii] = c != input
+		}
+		return
+
+	} else if lhsShape.Equal(rhsShape) {
+		// Case 2: Exact same shapes, no broadcasting.
+		for ii, input := range lhs {
+			output[ii] = input != rhs[ii]
+		}
+		return
+
+	} else {
+		// Case 3: with broadcasting non-scalar tensors:
+		lhsIter := newBroadcastIterator(lhsShape, outputShape)
+		rhsIter := newBroadcastIterator(rhsShape, outputShape)
+		for outputIdx := range output {
+			lhsIdx := lhsIter.Next()
+			rhsIdx := rhsIter.Next()
+			output[outputIdx] = lhs[lhsIdx] != rhs[rhsIdx]
+		}
+	}
+	return
+}

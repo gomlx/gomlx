@@ -198,3 +198,45 @@ func (b *Builder) Rem(lhsOp, rhsOp backends.Op) backends.Op {
 func (b *Builder) Pow(lhsOp, rhsOp backends.Op) backends.Op {
 	return b.addBinaryOp(backends.OpTypePow, lhsOp, rhsOp)
 }
+
+// BitwiseAnd implements backends.Builder interface.
+func (b *Builder) BitwiseAnd(lhsOp, rhsOp backends.Op) backends.Op {
+	return b.addBinaryOp(backends.OpTypeBitwiseAnd, lhsOp, rhsOp)
+}
+
+// BitwiseOr implements backends.Builder interface.
+func (b *Builder) BitwiseOr(lhsOp, rhsOp backends.Op) backends.Op {
+	return b.addBinaryOp(backends.OpTypeBitwiseOr, lhsOp, rhsOp)
+}
+
+// BitwiseXor implements backends.Builder interface.
+func (b *Builder) BitwiseXor(lhsOp, rhsOp backends.Op) backends.Op {
+	return b.addBinaryOp(backends.OpTypeBitwiseXor, lhsOp, rhsOp)
+}
+
+// LogicalAnd implements backends.Builder interface.
+func (b *Builder) LogicalAnd(lhsOp, rhsOp backends.Op) backends.Op {
+	return b.addBinaryOp(backends.OpTypeLogicalAnd, lhsOp, rhsOp)
+}
+
+// LogicalOr implements backends.Builder interface.
+func (b *Builder) LogicalOr(lhsOp, rhsOp backends.Op) backends.Op {
+	return b.addBinaryOp(backends.OpTypeLogicalOr, lhsOp, rhsOp)
+}
+
+// LogicalXor implements backends.Builder interface.
+func (b *Builder) LogicalXor(lhsOp, rhsOp backends.Op) backends.Op {
+	return b.addBinaryOp(backends.OpTypeLogicalXor, lhsOp, rhsOp)
+}
+
+// Max implements backends.Builder interface.
+func (b *Builder) Max(lhsOp, rhsOp backends.Op) backends.Op {
+	return b.addBinaryOp(backends.OpTypeMax, lhsOp, rhsOp)
+}
+
+// Min implements backends.Builder interface.
+func (b *Builder) Min(lhsOp, rhsOp backends.Op) backends.Op {
+	return b.addBinaryOp(backends.OpTypeMin, lhsOp, rhsOp)
+}
+
+// TODO: add binary comparison functions Equal, GreaterThan GreaterOrEqual, LessThan, etc.
