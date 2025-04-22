@@ -165,3 +165,27 @@ func TestExecBinary_Rem(t *testing.T) {
 	y4 := exec.Call([][]int32{{7}, {8}, {9}}, [][]int32{{4, 3}})[0]
 	assert.Equal(t, [][]int32{{3, 1}, {0, 2}, {1, 0}}, y4.Value())
 }
+
+func TestExecBinary_Pow(t *testing.T) {
+	exec := graph.NewExec(backend, func(lhs, rhs *graph.Node) *graph.Node { return graph.Pow(lhs, rhs) })
+
+	// Test with scalar (or of size 1) values.
+	y0 := exec.Call(bfloat16.FromFloat32(16), bfloat16.FromFloat32(0.5))[0]
+	assert.Equal(t, bfloat16.FromFloat32(4), y0.Value())
+
+	// Test scalar on right side
+	y1 := exec.Call([]int32{2, 3}, []int32{2})[0]
+	assert.Equal(t, []int32{4, 9}, y1.Value())
+
+	// Test scalar on left side
+	y2 := exec.Call(int32(2), []int32{2, 3})[0]
+	assert.Equal(t, []int32{4, 8}, y2.Value())
+
+	// Test with same sized shapes:
+	y3 := exec.Call([][]int32{{2, 3}, {4, 5}}, [][]int32{{2, 2}, {2, 2}})[0]
+	assert.Equal(t, [][]int32{{4, 9}, {16, 25}}, y3.Value())
+
+	// Test with broadcasting from both sides.
+	y4 := exec.Call([][]int32{{2}, {3}, {4}}, [][]int32{{2, 3}})[0]
+	assert.Equal(t, [][]int32{{4, 8}, {9, 27}, {16, 64}}, y4.Value())
+}

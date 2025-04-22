@@ -193,3 +193,8 @@ func (b *Builder) Div(lhsOp, rhsOp backends.Op) backends.Op {
 func (b *Builder) Rem(lhsOp, rhsOp backends.Op) backends.Op {
 	return b.addBinaryOp(backends.OpTypeRem, lhsOp, rhsOp)
 }
+
+// Pow implements backends.Builder interface.
+func (b *Builder) Pow(lhsOp, rhsOp backends.Op) backends.Op {
+	return b.addBinaryOp(backends.OpTypePow, lhsOp, rhsOp)
+}

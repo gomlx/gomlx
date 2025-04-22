@@ -248,6 +248,11 @@ var (
 			{Float: true, Name: "Float", Format: "T(math.Mod(float64(%s), float64(%s)))"},
 			{BFloat16: true, Name: "Float", Format: "float32(math.Mod(float64(%s), float64(%s)))"},
 		}},
+		{Name: "Pow", Versions: []BinaryOpVersion{
+			{Integer: true, Name: "Integer", Format: "execScalarPowIntGeneric(%s, %s)"},
+			{Float: true, Name: "Float", Format: "T(math.Pow(float64(%s), float64(%s)))"},
+			{BFloat16: true, Name: "Float", Format: "float32(math.Pow(float64(%s), float64(%s)))"},
+		}},
 	}
 )
 

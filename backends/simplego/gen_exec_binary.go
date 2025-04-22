@@ -17,6 +17,7 @@ func init() {
 	nodeExecutors[backends.OpTypeSub] = execSub
 	nodeExecutors[backends.OpTypeDiv] = execDiv
 	nodeExecutors[backends.OpTypeRem] = execRem
+	nodeExecutors[backends.OpTypePow] = execPow
 }
 
 // execAdd executes the binary op Add.
@@ -644,6 +645,165 @@ func execRemFloatBFloat16(lhs, rhs, output []bfloat16.BFloat16,
 			a := lhs[lhsIdx].Float32()
 			b := rhs[rhsIdx].Float32()
 			output[outputIdx] = bfloat16.FromFloat32(float32(math.Mod(float64(a), float64(b))))
+		}
+	}
+	return
+} // if numeric or float. // range .Versions
+// execPow executes the binary op Pow.
+func execPow(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	lhs, rhs, output, lhsIsScalarOr1, rhsIsScalarOr1 := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
+
+	_, _ = lhsIsScalarOr1, rhsIsScalarOr1
+
+	switch output.shape.DType {
+	case dtypes.Uint8:
+		execPowIntegerGeneric[uint8](lhs.flat.([]uint8), rhs.flat.([]uint8), output.flat.([]uint8),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Uint16:
+		execPowIntegerGeneric[uint16](lhs.flat.([]uint16), rhs.flat.([]uint16), output.flat.([]uint16),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Uint32:
+		execPowIntegerGeneric[uint32](lhs.flat.([]uint32), rhs.flat.([]uint32), output.flat.([]uint32),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Uint64:
+		execPowIntegerGeneric[uint64](lhs.flat.([]uint64), rhs.flat.([]uint64), output.flat.([]uint64),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Int8:
+		execPowIntegerGeneric[int8](lhs.flat.([]int8), rhs.flat.([]int8), output.flat.([]int8),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Int16:
+		execPowIntegerGeneric[int16](lhs.flat.([]int16), rhs.flat.([]int16), output.flat.([]int16),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Int32:
+		execPowIntegerGeneric[int32](lhs.flat.([]int32), rhs.flat.([]int32), output.flat.([]int32),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Int64:
+		execPowIntegerGeneric[int64](lhs.flat.([]int64), rhs.flat.([]int64), output.flat.([]int64),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Float32:
+		execPowFloatGeneric[float32](lhs.flat.([]float32), rhs.flat.([]float32), output.flat.([]float32),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.Float64:
+		execPowFloatGeneric[float64](lhs.flat.([]float64), rhs.flat.([]float64), output.flat.([]float64),
+			lhs.shape, rhs.shape, output.shape)
+	case dtypes.BFloat16:
+		execPowFloatBFloat16(lhs.flat.([]bfloat16.BFloat16), rhs.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16),
+			lhs.shape, rhs.shape, output.shape) // range .Versions
+	default:
+		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
+	}
+	return output
+}
+func execPowIntegerGeneric[T podIntegerConstraints](lhs, rhs, output []T,
+	lhsShape, rhsShape, outputShape shapes.Shape) {
+	if len(rhs) == 1 {
+		// Case 1: One side (rhs) is a scalar: only iterate over the lhs.
+		c := rhs[0]
+		for ii, input := range lhs {
+			output[ii] = execScalarPowIntGeneric(input, c)
+		}
+		return
+	} else if len(lhs) == 1 {
+		// Case 1b: One side (lhs) is a scalar: only iterate over the rhs.
+		c := lhs[0]
+		for ii, input := range rhs {
+			output[ii] = execScalarPowIntGeneric(c, input)
+		}
+		return
+
+	} else if lhsShape.Equal(rhsShape) {
+		// Case 2: Exact same shapes, no broadcasting.
+		for ii, input := range lhs {
+			output[ii] = execScalarPowIntGeneric(input, rhs[ii])
+		}
+		return
+
+	} else {
+		// Case 3: with broadcasting non-scalar tensors:
+		lhsIter := newBroadcastIterator(lhsShape, outputShape)
+		rhsIter := newBroadcastIterator(rhsShape, outputShape)
+		for outputIdx := range output {
+			lhsIdx := lhsIter.Next()
+			rhsIdx := rhsIter.Next()
+			output[outputIdx] = execScalarPowIntGeneric(lhs[lhsIdx], rhs[rhsIdx])
+		}
+	}
+	return
+} // if numeric, integer or float.  // if numeric or float.
+func execPowFloatGeneric[T podFloatConstraints](lhs, rhs, output []T,
+	lhsShape, rhsShape, outputShape shapes.Shape) {
+	if len(rhs) == 1 {
+		// Case 1: One side (rhs) is a scalar: only iterate over the lhs.
+		c := rhs[0]
+		for ii, input := range lhs {
+			output[ii] = T(math.Pow(float64(input), float64(c)))
+		}
+		return
+	} else if len(lhs) == 1 {
+		// Case 1b: One side (lhs) is a scalar: only iterate over the rhs.
+		c := lhs[0]
+		for ii, input := range rhs {
+			output[ii] = T(math.Pow(float64(c), float64(input)))
+		}
+		return
+
+	} else if lhsShape.Equal(rhsShape) {
+		// Case 2: Exact same shapes, no broadcasting.
+		for ii, input := range lhs {
+			output[ii] = T(math.Pow(float64(input), float64(rhs[ii])))
+		}
+		return
+
+	} else {
+		// Case 3: with broadcasting non-scalar tensors:
+		lhsIter := newBroadcastIterator(lhsShape, outputShape)
+		rhsIter := newBroadcastIterator(rhsShape, outputShape)
+		for outputIdx := range output {
+			lhsIdx := lhsIter.Next()
+			rhsIdx := rhsIter.Next()
+			output[outputIdx] = T(math.Pow(float64(lhs[lhsIdx]), float64(rhs[rhsIdx])))
+		}
+	}
+	return
+} // if numeric, integer or float.  // if numeric or float. // if numeric, integer or float.
+func execPowFloatBFloat16(lhs, rhs, output []bfloat16.BFloat16,
+	lhsShape, rhsShape, outputShape shapes.Shape) {
+	if len(rhs) == 1 {
+		// One side (rhs) is a scalar: only iterate over the lhs.
+		c := rhs[0].Float32()
+		for ii, input := range lhs {
+			a := input.Float32()
+			output[ii] = bfloat16.FromFloat32(float32(math.Pow(float64(a), float64(c))))
+		}
+		return
+	} else if len(lhs) == 1 {
+		// Case 1b: One side (lhs) is a scalar: only iterate over the rhs.
+		c := lhs[0].Float32()
+		for ii, input := range rhs {
+			a := input.Float32()
+			output[ii] = bfloat16.FromFloat32(float32(math.Pow(float64(c), float64(a))))
+		}
+		return
+
+	} else if lhsShape.Equal(rhsShape) {
+		// Case 2: Exact same shapes, no broadcasting.
+		for outputIdx := range output {
+			a := lhs[outputIdx].Float32()
+			b := rhs[outputIdx].Float32()
+			output[outputIdx] = bfloat16.FromFloat32(float32(math.Pow(float64(a), float64(b))))
+		}
+		return
+
+	} else {
+		// Case 3: with broadcasting non-scalar tensors:
+		lhsIter := newBroadcastIterator(lhsShape, outputShape)
+		rhsIter := newBroadcastIterator(rhsShape, outputShape)
+		for outputIdx := range output {
+			lhsIdx := lhsIter.Next()
+			rhsIdx := rhsIter.Next()
+			a := lhs[lhsIdx].Float32()
+			b := rhs[rhsIdx].Float32()
+			output[outputIdx] = bfloat16.FromFloat32(float32(math.Pow(float64(a), float64(b))))
 		}
 	}
 	return
