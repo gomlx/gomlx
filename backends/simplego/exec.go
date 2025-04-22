@@ -133,7 +133,7 @@ func countNodeUses(node *Node, numUses []int) {
 //
 // It is given the buffers for its inputs, and a reserved buffer where to store its output, already
 // with the shape pre-calculated.
-type nodeExecutor func(node *Node, inputs []*Buffer, inputsOwned []bool, output *Buffer)
+type nodeExecutor func(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer
 
 var (
 	// nodeExecutors should be populated during initialization (`init` functions) for the ops implemented.
@@ -246,7 +246,9 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) []backends
 			execBuf.numUsed[inputNodeIdx]++
 			inputsOwned[ii] = execBuf.owned[inputNodeIdx] && execBuf.numUsed[inputNodeIdx] == e.numUses[inputNodeIdx]
 		}
-		nodeExecutor(node, inputBuffers, inputsOwned, outputBuf)
+
+		// Execute op.
+		execBuf.results[nodeIdx] = nodeExecutor(e.backend, node, inputBuffers, inputsOwned)
 
 		// See if corresponding inputs can be freed.
 		for ii, input := range node.inputs {

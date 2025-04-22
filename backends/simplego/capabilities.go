@@ -26,3 +26,9 @@ var Capabilities = backends.Capabilities{
 		dtypes.BFloat16: true,
 	},
 }
+
+// numericConstrains are used for generics for the Golang pod (plain-old-data) types.
+// BFloat16 is not included because it is a specialized type, not natively supported by Go.
+type numericPODConstraints interface {
+	int8 | int16 | int32 | int64 | uint8 | uint16 | uint32 | uint64 | float32 | float64
+}
