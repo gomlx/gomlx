@@ -51,7 +51,7 @@ type floatConstraints interface {
 	float32 | float64
 }
 
-// integerConstrains are used for generics for the Golang pod (plain-old-data) types.
-type integerConstraints interface {
+// integerPODConstrains are used for generics for the Golang pod (plain-old-data) types.
+type integerPODConstraints interface {
 	int8 | int16 | int32 | int64 | uint8 | uint16 | uint32 | uint64
 }

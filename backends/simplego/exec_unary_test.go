@@ -45,3 +45,13 @@ func TestExecUnary_LogicalNot(t *testing.T) {
 	y1 := exec.Call([]bool{true, false, true})[0]
 	assert.Equal(t, []bool{false, true, false}, y1.Value())
 }
+
+func TestExecUnary_BitwiseNot(t *testing.T) {
+	exec := graph.NewExec(backend, func(x *graph.Node) *graph.Node { return graph.BitwiseNot(x) })
+	y0 := exec.Call(int32(7))[0]
+	assert.Equal(t, int32(-8), y0.Value())
+	y1 := exec.Call([]int32{-1, 2, 3})[0]
+	assert.Equal(t, []int32{0, -3, -4}, y1.Value())
+	y2 := exec.Call([]uint32{1, 2, 3})[0]
+	assert.Equal(t, []uint32{^uint32(1), ^uint32(2), ^uint32(3)}, y2.Value())
+}

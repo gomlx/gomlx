@@ -12,6 +12,7 @@ func init() {
 	nodeExecutors[backends.OpTypeAbs] = execAbs
 	nodeExecutors[backends.OpTypeSign] = execSign
 	nodeExecutors[backends.OpTypeLogicalNot] = execLogicalNot
+	nodeExecutors[backends.OpTypeBitwiseNot] = execBitwiseNot
 }
 
 // unaryOperandAndOutput is a convenience function to get the input and output -- which may be the reuse of the input
@@ -202,4 +203,36 @@ func execLogicalNot(backend *Backend, node *Node, inputs []*Buffer, inputsOwned 
 		output.flat.([]bool)[ii] = !val
 	}
 	return output
+}
+
+// execBitwiseNot executes the unary op BitwiseNot.
+func execBitwiseNot(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	switch input.shape.DType {
+	case dtypes.Int8:
+		execBitwiseNotGeneric[int8](input.flat.([]int8), output.flat.([]int8))
+	case dtypes.Int16:
+		execBitwiseNotGeneric[int16](input.flat.([]int16), output.flat.([]int16))
+	case dtypes.Int32:
+		execBitwiseNotGeneric[int32](input.flat.([]int32), output.flat.([]int32))
+	case dtypes.Int64:
+		execBitwiseNotGeneric[int64](input.flat.([]int64), output.flat.([]int64))
+	case dtypes.Uint8:
+		execBitwiseNotGeneric[uint8](input.flat.([]uint8), output.flat.([]uint8))
+	case dtypes.Uint16:
+		execBitwiseNotGeneric[uint16](input.flat.([]uint16), output.flat.([]uint16))
+	case dtypes.Uint32:
+		execBitwiseNotGeneric[uint32](input.flat.([]uint32), output.flat.([]uint32))
+	case dtypes.Uint64:
+		execBitwiseNotGeneric[uint64](input.flat.([]uint64), output.flat.([]uint64))
+	default:
+		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
+	}
+	return output
+}
+
+func execBitwiseNotGeneric[T integerPODConstraints](inputs, outputs []T) {
+	for ii, input := range inputs {
+		outputs[ii] = ^input
+	}
 }
