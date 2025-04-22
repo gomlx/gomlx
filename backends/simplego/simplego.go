@@ -44,7 +44,10 @@ func (b *Backend) Capabilities() backends.Capabilities {
 
 // Builder creates a new builder used to define a new named computation.
 func (b *Backend) Builder(name string) backends.Builder {
-	return &Builder{name: name}
+	return &Builder{
+		backend: b,
+		name:    name,
+	}
 }
 
 // Finalize releases all the associated resources immediately, and makes the backend invalid.

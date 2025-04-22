@@ -22,7 +22,7 @@ func (b *Builder) Parameter(name string, shape shapes.Shape) backends.Op {
 	}
 	if supported, ok := Capabilities.DTypes[dtype]; !ok || !supported {
 		exceptions.Panicf("Parameter: data type (DType) %s not supported for backend %q, try using "+
-			"a different backend, or open an issue in github.com/gomlx/gomlx", dtype, b.backend)
+			"a different backend, or open an issue in github.com/gomlx/gomlx", dtype, b.backend.Name())
 	}
 	n := b.newNode(backends.OpTypeParameter, shape)
 	n.data = &nodeParameter{
@@ -44,7 +44,7 @@ func (b *Builder) Constant(flat any, dims ...int) backends.Op {
 	dtype, flatLen := checkFlat(flat)
 	if supported, ok := Capabilities.DTypes[dtype]; !ok || !supported {
 		exceptions.Panicf("Constant: data type (DType) %s not supported for backend %q, try using "+
-			"a different backend, or open an issue in github.com/gomlx/gomlx", dtype, b.backend)
+			"a different backend, or open an issue in github.com/gomlx/gomlx", dtype, b.backend.Name())
 	}
 	shape := shapes.Make(dtype, dims...)
 	if shape.Size() != flatLen {

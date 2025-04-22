@@ -133,7 +133,7 @@ func countNodeUses(node *Node, numUses []int) {
 //
 // It is given the buffers for its inputs, and a reserved buffer where to store its output, already
 // with the shape pre-calculated.
-type nodeExecutor func(node *Node, inputs []*Buffer, output *Buffer)
+type nodeExecutor func(node *Node, inputs []*Buffer, inputsOwned []bool, output *Buffer)
 
 var (
 	// nodeExecutors should be populated during initialization (`init` functions) for the ops implemented.
@@ -184,6 +184,12 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) []backends
 		execBuf.owned[inputNodeIdx] = donate[ii]
 	}
 
+	// Pre-allocate slices:
+	var (
+		inputBuffersPool [8]*Buffer
+		inputsOwnedPool  [8]bool
+	)
+
 	// The e.buffer.nodes are stored in a natural order for the Graph order, so
 	// we can sequentially execute each one of them, and their node inputs will be
 	// already calculated.
@@ -208,46 +214,60 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) []backends
 		}
 
 		// Reserve a buffer for the node:
-		outputBuf := getBuffer(node.shape.DType, node.shape.Size())
+		outputBuf := e.backend.getBuffer(node.shape.DType, node.shape.Size())
 		outputBuf.shape = node.shape.Clone()
 		execBuf.results[nodeIdx] = outputBuf
 		execBuf.owned[nodeIdx] = true
 
 		// Call node executor:
-		executor := nodeExecutors[node.opType]
-		if executor == nil {
+		nodeExecutor := nodeExecutors[node.opType]
+		if nodeExecutor == nil {
 			exceptions.Panicf("Execute: node executor for op type %s not implemented!?", node.opType)
 		}
-		inputBuffers := make([]*Buffer, len(node.inputs))
+		var (
+			inputBuffers []*Buffer
+			inputsOwned  []bool
+		)
+		if len(node.inputs) > len(inputBuffersPool) {
+			inputBuffers = make([]*Buffer, len(node.inputs))
+			inputsOwned = make([]bool, len(node.inputs))
+		} else {
+			inputBuffers = inputBuffersPool[:len(node.inputs)]
+			inputsOwned = inputsOwnedPool[:len(node.inputs)]
+		}
 		for ii, input := range node.inputs {
-			inputBuffer := execBuf.results[input.builderIdx]
-			if inputBuffer == nil {
+			inputNodeIdx := input.builderIdx
+			inputBuffers[ii] = execBuf.results[inputNodeIdx]
+			if inputBuffers[ii] == nil {
 				exceptions.Panicf("Execute: input #%d of node #%d is not calculated yet (!?) -- "+
 					"this is a bug, it should never have happened", ii, nodeIdx)
 			}
-			inputBuffers[ii] = inputBuffer
+			execBuf.numUsed[inputNodeIdx]++
+			inputsOwned[ii] = execBuf.owned[inputNodeIdx] && execBuf.numUsed[inputNodeIdx] == e.numUses[inputNodeIdx]
 		}
-		executor(node, execBuf.results, outputBuf)
+		nodeExecutor(node, inputBuffers, inputsOwned, outputBuf)
 
 		// See if corresponding inputs can be freed.
 		for ii, input := range node.inputs {
-			inputNodeIdx := input.builderIdx
-			execBuf.numUsed[inputNodeIdx]++
-			if execBuf.numUsed[inputNodeIdx] < e.numUses[inputNodeIdx] {
-				// input node will still be used.
+			if inputBuffers[ii] == nil {
+				// Input was re-used (or consumed) by the nodeExecutor, remove it from results.
+				// This is not strictly necessary, since the input can only be re-used if there are no more
+				// uses of it in the graph, but just in case.
+				execBuf.results[input.builderIdx] = nil
 				continue
 			}
-			if !execBuf.owned[inputNodeIdx] {
-				// we don't own the buffer.
+
+			// If executor doesn't own buffer, we don't need to free it.
+			if !inputsOwned[ii] || inputBuffers[ii] == nil {
 				continue
 			}
+
 			// inputBuffer no longer used, we can return it to the pool.
 			// Notice that the final outputs will always have numUses >= 1, and they
 			// will never be completely used by the executor, hence they don't get freed here.
-			inputBuf := execBuf.results[inputNodeIdx]
-			putBuffer(inputBuf)
-			inputBuf.shape = shapes.Invalid()
-			execBuf.results[inputNodeIdx] = nil
+			e.backend.putBuffer(inputBuffers[ii])
+			inputBuffers[ii].shape = shapes.Invalid()
+			execBuf.results[input.builderIdx] = nil
 		}
 	}
 
@@ -258,10 +278,7 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) []backends
 		outBuf := execBuf.results[outIdx]
 		if !execBuf.owned[outIdx] {
 			// Make a copy of the buffer since we don't own it
-			newBuf := getBuffer(outBuf.shape.DType, outBuf.shape.Size())
-			newBuf.shape = outBuf.shape.Clone()
-			copy(newBuf.flat.([]byte), outBuf.flat.([]byte))
-			outBuf = newBuf
+			outBuf = e.backend.cloneBuffer(outBuf)
 		}
 		outputs[ii] = outBuf
 	}

@@ -25,6 +25,7 @@ type bufferPoolKey struct {
 	length int
 }
 
+// getBuffer from backend pool of buffers.
 func (b *Backend) getBuffer(dtype dtypes.DType, length int) *Buffer {
 	key := bufferPoolKey{dtype: dtype, length: length}
 	poolInterface, _ := b.bufferPools.LoadOrStore(key, &sync.Pool{
@@ -38,6 +39,7 @@ func (b *Backend) getBuffer(dtype dtypes.DType, length int) *Buffer {
 	return pool.Get().(*Buffer)
 }
 
+// putBuffer back into the backend pool of buffers.
 func (b *Backend) putBuffer(buffer *Buffer) {
 	if buffer == nil {
 		return
@@ -49,6 +51,17 @@ func (b *Backend) putBuffer(buffer *Buffer) {
 	if pool, ok := b.bufferPools.Load(key); ok {
 		pool.(*sync.Pool).Put(buffer)
 	}
+}
+
+// cloneBuffer using the pool to allocate a new one.
+func (b *Backend) cloneBuffer(buffer *Buffer) *Buffer {
+	if buffer == nil {
+		return nil
+	}
+	newBuffer := b.getBuffer(buffer.shape.DType, buffer.shape.Size())
+	newBuffer.shape = buffer.shape.Clone()
+	reflect.Copy(reflect.ValueOf(newBuffer.flat), reflect.ValueOf(buffer.flat))
+	return newBuffer
 }
 
 // NewBuffer creates the buffer with a newly allocated flat space.
@@ -115,7 +128,7 @@ func (b *Backend) HasSharedBuffers() bool {
 func (b *Backend) NewSharedBuffer(deviceNum backends.DeviceNum, shape shapes.Shape) (buffer backends.Buffer, flat any) {
 	if deviceNum != 0 {
 		exceptions.Panicf("backend (%s) only supports deviceNum 0, cannot create buffer on deviceNum %d (shape=%s)",
-			b.Name, deviceNum, shape)
+			b.Name(), deviceNum, shape)
 	}
 	goBuffer := b.NewBuffer(shape)
 	return goBuffer, goBuffer.flat

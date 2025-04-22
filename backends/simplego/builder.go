@@ -40,8 +40,8 @@ func (b *Builder) Name() string {
 
 // Compile implements backends.Builder.
 func (b *Builder) Compile(outputs ...backends.Op) backends.Executable {
-	b.compiled = true
 	b.outputs = b.checkOps("Compile", outputs...)
+	b.compiled = true
 	return newExecutable(b)
 }
 
@@ -71,6 +71,7 @@ type Node struct {
 // It's used by the other ops when creating new nodes.
 func (b *Builder) newNode(opType backends.OpType, shape shapes.Shape, inputs ...*Node) *Node {
 	n := &Node{
+		builder:    b,
 		opType:     opType,
 		builderIdx: len(b.nodes),
 		shape:      shape,
@@ -87,7 +88,7 @@ func (b *Builder) checkOps(opType string, ops ...backends.Op) []*Node {
 		exceptions.Panicf("%s: Builder is nil (!?), cannot build a graph", opType)
 	}
 	if b.compiled {
-		exceptions.Panicf("cannot add new op (%s) to Builder %s, it has already been compiled", opType, b.name)
+		exceptions.Panicf("cannot add new op (%s) to Builder %q, it has already been compiled", opType, b.name)
 	}
 	nodes := make([]*Node, len(ops))
 	var ok bool
@@ -97,7 +98,7 @@ func (b *Builder) checkOps(opType string, ops ...backends.Op) []*Node {
 		}
 		nodes[idx], ok = op.(*Node)
 		if !ok {
-			exceptions.Panicf("cannot use input op #%d in backend %q that was created on a different backend for %s", idx, b.backend, opType)
+			exceptions.Panicf("cannot use input op #%d in backend %q that was created on a different backend for %s", idx, b.backend.Name(), opType)
 		}
 		if nodes[idx].builder != b {
 			exceptions.Panicf("%s: input op #%d was created with a different builder (%q), cannot use it with builder %q",
