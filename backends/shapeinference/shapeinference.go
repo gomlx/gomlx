@@ -115,7 +115,6 @@ var (
 		backends.OpTypeLogicalNot,
 		backends.OpTypeBitwiseNot,
 		backends.OpTypeBitCount,
-		backends.OpTypeBitCount,
 		backends.OpTypeClz,
 		backends.OpTypeExp,
 		backends.OpTypeLog,
@@ -132,7 +131,6 @@ var (
 		backends.OpTypeSin,
 		backends.OpTypeTanh,
 		backends.OpTypeAbs,
-		backends.OpTypeIsFinite,
 		backends.OpTypeNeg,
 		backends.OpTypeSign,
 	)
