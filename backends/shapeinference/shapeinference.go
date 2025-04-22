@@ -52,8 +52,14 @@ var (
 		backends.OpTypeDiv,
 		backends.OpTypePow,
 		backends.OpTypeRem,
-		backends.OpTypeNeg,
+
+		// Notice Abs and Sign works for unsigned ints: it's just a trivial implementation.
+		backends.OpTypeAbs,
 		backends.OpTypeSign,
+	)
+
+	SignedNumberOperations = types.SetWith(
+		backends.OpTypeNeg,
 	)
 
 	// FloatOperations operates only on float (and not on complex numbers).
@@ -210,7 +216,10 @@ func UnaryOp(opType backends.OpType, operand shapes.Shape) shapes.Shape {
 	if BitwiseOperations.Has(opType) && !operand.DType.IsInt() {
 		exceptions.Panicf("bitwise UnaryOp %s must have an integer (Int8, UInt8, Int32, ...) data type as input, got %s", opType, operand)
 	}
-
+	if SignedNumberOperations.Has(opType) && (operand.DType.IsUnsigned() ||
+		!(operand.DType.IsInt() || operand.DType.IsFloat() || operand.DType.IsComplex())) {
+		exceptions.Panicf("signed UnaryOp %s must have a signed data type as input, got %s", opType, operand)
+	}
 	if NumberOperations.Has(opType) && !(operand.DType.IsInt() || operand.DType.IsFloat() || operand.DType.IsComplex()) {
 		exceptions.Panicf("numeric UnaryOp %s must have a number (Int32, Float32, Complex64, ...) data type as input, got %s", opType, operand)
 	}
@@ -222,9 +231,6 @@ func UnaryOp(opType backends.OpType, operand shapes.Shape) shapes.Shape {
 	}
 	if ComplexOperations.Has(opType) && !operand.DType.IsComplex() {
 		exceptions.Panicf("complex UnaryOp %s must have a complex (Complex64, Complex128) data type as input, got %s", opType, operand)
-	}
-	if (opType == backends.OpTypeSign || opType == backends.OpTypeNeg) && operand.DType.IsUnsigned() {
-		exceptions.Panicf("signed UnaryOp %s must have a signed data type as input, got %s", opType, operand)
 	}
 	return operand
 }

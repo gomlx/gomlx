@@ -63,3 +63,13 @@ func (b *Builder) Constant(flat any, dims ...int) backends.Op {
 func (b *Builder) Neg(operand backends.Op) backends.Op {
 	return b.addUnaryOp(backends.OpTypeNeg, operand)
 }
+
+// Sign implements backends.Builder interface.
+func (b *Builder) Sign(operand backends.Op) backends.Op {
+	return b.addUnaryOp(backends.OpTypeSign, operand)
+}
+
+// Abs implements backends.Builder interface.
+func (b *Builder) Abs(operand backends.Op) backends.Op {
+	return b.addUnaryOp(backends.OpTypeAbs, operand)
+}

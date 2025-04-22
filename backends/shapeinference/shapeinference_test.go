@@ -64,6 +64,7 @@ func TestUnaryOp(t *testing.T) {
 
 	// Invalid operation type (not unary op).
 	require.Panics(t, func() { UnaryOp(OpTypeAdd, MS(F32)) })
+	require.Panics(t, func() { UnaryOp(OpTypeNeg, MS(U64)) })
 
 	// Valid operations
 	boolShape := MS(Bool, 2, 3)

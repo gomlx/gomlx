@@ -1,0 +1,39 @@
+package simplego
+
+import (
+	"github.com/gomlx/gomlx/graph"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"testing"
+)
+
+var backend = New("cpu")
+
+func TestExecUnary_Neg(t *testing.T) {
+	exec := graph.NewExec(backend, func(x *graph.Node) *graph.Node { return graph.Neg(x) })
+	y0 := exec.Call(float32(7))[0]
+	assert.Equal(t, float32(-7), y0.Value())
+	y1 := exec.Call([]int32{-1, 2})[0]
+	assert.Equal(t, []int32{1, -2}, y1.Value())
+	require.Panics(t, func() { _ = exec.Call([]uint32{1, 2, 3}) })
+}
+
+func TestExecUnary_Abs(t *testing.T) {
+	exec := graph.NewExec(backend, func(x *graph.Node) *graph.Node { return graph.Abs(x) })
+	y0 := exec.Call(float32(-7))[0]
+	assert.Equal(t, float32(7), y0.Value())
+	y1 := exec.Call([]int32{-1, 2})[0]
+	assert.Equal(t, []int32{1, 2}, y1.Value())
+	y2 := exec.Call([]uint32{1, 2, 3})[0]
+	assert.Equal(t, []uint32{1, 2, 3}, y2.Value())
+}
+
+func TestExecUnary_Sign(t *testing.T) {
+	exec := graph.NewExec(backend, func(x *graph.Node) *graph.Node { return graph.Sign(x) })
+	y0 := exec.Call(float32(-7))[0]
+	assert.Equal(t, float32(-1), y0.Value())
+	y1 := exec.Call([]int32{-1, 0, 2})[0]
+	assert.Equal(t, []int32{-1, 0, 1}, y1.Value())
+	y2 := exec.Call([]uint32{1, 0, 3})[0]
+	assert.Equal(t, []uint32{1, 0, 1}, y2.Value())
+}

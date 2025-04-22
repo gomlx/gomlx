@@ -32,3 +32,26 @@ var Capabilities = backends.Capabilities{
 type numericPODConstraints interface {
 	int8 | int16 | int32 | int64 | uint8 | uint16 | uint32 | uint64 | float32 | float64
 }
+
+// signedNumericConstraints are used for generics for the Golang pod (plain-old-data) types.
+// BFloat16 is not included because it is a specialized type, not natively supported by Go.
+type signedNumericPODConstraints interface {
+	int8 | int16 | int32 | int64 | float32 | float64
+}
+
+// unsignedConstraints are used for generics for the Golang pod (plain-old-data) types.
+// BFloat16 is not included because it is a specialized type, not natively supported by Go.
+type unsignedPODConstraints interface {
+	uint8 | uint16 | uint32 | uint64
+}
+
+// floatConstrains are used for generics for the Golang pod (plain-old-data) types.
+// BFloat16 is not included because it is a specialized type, not natively supported by Go.
+type floatConstraints interface {
+	float32 | float64
+}
+
+// integerConstrains are used for generics for the Golang pod (plain-old-data) types.
+type integerConstraints interface {
+	int8 | int16 | int32 | int64 | uint8 | uint16 | uint32 | uint64
+}
