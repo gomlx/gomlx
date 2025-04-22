@@ -1,11 +1,8 @@
 package simplego
 
 import (
-	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 )
 
 // This file implements binary operations.
@@ -13,6 +10,8 @@ import (
 // in which case it becomes almost a unary operation with a constant value.
 func init() {
 	nodeExecutors[backends.OpTypeAdd] = execAdd
+	nodeExecutors[backends.OpTypeMul] = execMul
+	nodeExecutors[backends.OpTypeSub] = execSub
 }
 
 // binaryOperandsAndOutput is a convenience function to get the inputs and output -- which may be the reuse of the input.
@@ -74,104 +73,6 @@ func (bi *broadcastIterator) Next() (flatIdx int) {
 			break
 		}
 		bi.perAxesIdx[axis] = 0
-	}
-	return
-}
-
-// execAdd executes the binary op Add.
-func execAdd(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
-	lhs, rhs, output, lhsIsScalarOr1, rhsIsScalarOr1 := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
-
-	// Add is commutative, so if any of the two is scalar, make the rhs the scalar one.
-	if lhsIsScalarOr1 && !rhsIsScalarOr1 {
-		lhs, rhs = rhs, lhs
-		lhsIsScalarOr1, rhsIsScalarOr1 = rhsIsScalarOr1, lhsIsScalarOr1
-	}
-
-	switch output.shape.DType {
-	case dtypes.Int8:
-		execAddGeneric[int8](lhs.flat.([]int8), rhs.flat.([]int8), output.flat.([]int8),
-			lhs.shape, rhs.shape, output.shape)
-	case dtypes.Int16:
-		execAddGeneric[int16](lhs.flat.([]int16), rhs.flat.([]int16), output.flat.([]int16),
-			lhs.shape, rhs.shape, output.shape)
-	case dtypes.Int32:
-		execAddGeneric[int32](lhs.flat.([]int32), rhs.flat.([]int32), output.flat.([]int32),
-			lhs.shape, rhs.shape, output.shape)
-	case dtypes.Int64:
-		execAddGeneric[int64](lhs.flat.([]int64), rhs.flat.([]int64), output.flat.([]int64),
-			lhs.shape, rhs.shape, output.shape)
-	case dtypes.Float32:
-		execAddGeneric[float32](lhs.flat.([]float32), rhs.flat.([]float32), output.flat.([]float32),
-			lhs.shape, rhs.shape, output.shape)
-	case dtypes.Float64:
-		execAddGeneric[float64](lhs.flat.([]float64), rhs.flat.([]float64), output.flat.([]float64),
-			lhs.shape, rhs.shape, output.shape)
-	case dtypes.BFloat16:
-		execAddBF16(lhs.flat.([]bfloat16.BFloat16), rhs.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16),
-			lhs.shape, rhs.shape, output.shape)
-	default:
-		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
-	}
-	return output
-}
-
-func execAddGeneric[T signedNumericPODConstraints](lhs, rhs, output []T,
-	lhsShape, rhsShape, outputShape shapes.Shape) {
-	if len(rhs) == 1 {
-		// Case 1: One side (rhs) is a scalar: only iterate over the lhs.
-		c := rhs[0]
-		for ii, input := range lhs {
-			output[ii] = input + c
-		}
-		return
-
-	} else if lhsShape.Equal(rhsShape) {
-		// Case 2: Exact same shapes, no broadcasting.
-		for ii, input := range lhs {
-			output[ii] = input + rhs[ii]
-		}
-		return
-
-	} else {
-		// Case 3: with broadcasting non-scalar tensors:
-		lhsIter := newBroadcastIterator(lhsShape, outputShape)
-		rhsIter := newBroadcastIterator(rhsShape, outputShape)
-		for outputIdx := range output {
-			lhsIdx := lhsIter.Next()
-			rhsIdx := rhsIter.Next()
-			output[outputIdx] = lhs[lhsIdx] + rhs[rhsIdx]
-		}
-	}
-	return
-}
-
-func execAddBF16(lhs, rhs, output []bfloat16.BFloat16,
-	lhsShape, rhsShape, outputShape shapes.Shape) {
-	if len(rhs) == 1 {
-		// One side (rhs) is a scalar: only iterate over the lhs.
-		c := rhs[0].Float32()
-		for ii, input := range lhs {
-			output[ii] = bfloat16.FromFloat32(input.Float32() + c)
-		}
-		return
-
-	} else if lhsShape.Equal(rhsShape) {
-		// Case 2: Exact same shapes, no broadcasting.
-		for ii, input := range lhs {
-			output[ii] = bfloat16.FromFloat32(input.Float32() + rhs[ii].Float32())
-		}
-		return
-
-	} else {
-		// Case 3: with broadcasting non-scalar tensors:
-		lhsIter := newBroadcastIterator(lhsShape, outputShape)
-		rhsIter := newBroadcastIterator(rhsShape, outputShape)
-		for outputIdx := range output {
-			lhsIdx := lhsIter.Next()
-			rhsIdx := rhsIter.Next()
-			output[outputIdx] = bfloat16.FromFloat32(lhs[lhsIdx].Float32() + rhs[rhsIdx].Float32())
-		}
 	}
 	return
 }

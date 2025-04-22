@@ -70,3 +70,49 @@ func TestExecBinary_Add(t *testing.T) {
 	y4 := exec.Call([][]int32{{-1}, {2}, {5}}, [][]int32{{10, 100}})[0]
 	assert.Equal(t, [][]int32{{9, 99}, {12, 102}, {15, 105}}, y4.Value())
 }
+
+func TestExecBinary_Mul(t *testing.T) {
+	exec := graph.NewExec(backend, func(lhs, rhs *graph.Node) *graph.Node { return graph.Mul(lhs, rhs) })
+
+	// Test with scalar (or of size 1) values.
+	y0 := exec.Call(bfloat16.FromFloat32(7), bfloat16.FromFloat32(11))[0]
+	assert.Equal(t, bfloat16.FromFloat32(77), y0.Value())
+
+	y1 := exec.Call([]int32{-1, 2}, []int32{2})[0]
+	assert.Equal(t, []int32{-2, 4}, y1.Value())
+
+	y2 := exec.Call([][]int32{{-1}, {2}}, int32(-1))[0]
+	assert.Equal(t, [][]int32{{1}, {-2}}, y2.Value())
+
+	// Test with same sized shapes:
+	y3 := exec.Call([][]int32{{-1, 2}, {3, 4}}, [][]int32{{6, 3}, {2, 1}})[0]
+	assert.Equal(t, [][]int32{{-6, 6}, {6, 4}}, y3.Value())
+
+	// Test with broadcasting from both sides.
+	y4 := exec.Call([][]int32{{-1}, {2}, {5}}, [][]int32{{10, 100}})[0]
+	assert.Equal(t, [][]int32{{-10, -100}, {20, 200}, {50, 500}}, y4.Value())
+}
+
+func TestExecBinary_Sub(t *testing.T) {
+	exec := graph.NewExec(backend, func(lhs, rhs *graph.Node) *graph.Node { return graph.Sub(lhs, rhs) })
+
+	// Test with scalar (or of size 1) values.
+	y0 := exec.Call(bfloat16.FromFloat32(7), bfloat16.FromFloat32(11))[0]
+	assert.Equal(t, bfloat16.FromFloat32(-4), y0.Value())
+
+	// Test scalar on right side
+	y1 := exec.Call([]int32{-1, 2}, []int32{2})[0]
+	assert.Equal(t, []int32{-3, 0}, y1.Value())
+
+	// Test scalar on left side
+	y2 := exec.Call(int32(5), []int32{1, 2})[0]
+	assert.Equal(t, []int32{4, 3}, y2.Value())
+
+	// Test with same sized shapes:
+	y3 := exec.Call([][]int32{{-1, 2}, {3, 4}}, [][]int32{{6, 3}, {2, 1}})[0]
+	assert.Equal(t, [][]int32{{-7, -1}, {1, 3}}, y3.Value())
+
+	// Test with broadcasting from both sides.
+	y4 := exec.Call([][]int32{{-1}, {2}, {5}}, [][]int32{{10, 100}})[0]
+	assert.Equal(t, [][]int32{{-11, -101}, {-8, -98}, {-5, -95}}, y4.Value())
+}

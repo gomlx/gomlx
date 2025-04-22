@@ -169,6 +169,22 @@ func (b *Builder) IsFinite(operandOp backends.Op) backends.Op {
 
 // Binary Operations:
 
+// Add implements backends.Builder interface.
 func (b *Builder) Add(lhsOp, rhsOp backends.Op) backends.Op {
 	return b.addBinaryOp(backends.OpTypeAdd, lhsOp, rhsOp)
+}
+
+// Mul implements backends.Builder interface.
+func (b *Builder) Mul(lhsOp, rhsOp backends.Op) backends.Op {
+	return b.addBinaryOp(backends.OpTypeMul, lhsOp, rhsOp)
+}
+
+// Sub implements backends.Builder interface.
+func (b *Builder) Sub(lhsOp, rhsOp backends.Op) backends.Op {
+	return b.addBinaryOp(backends.OpTypeSub, lhsOp, rhsOp)
+}
+
+// Div implements backends.Builder interface.
+func (b *Builder) Div(lhsOp, rhsOp backends.Op) backends.Op {
+	return b.addBinaryOp(backends.OpTypeDiv, lhsOp, rhsOp)
 }
