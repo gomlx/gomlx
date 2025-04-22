@@ -11,10 +11,9 @@ import (
 // support everything.
 var CPUCapabilities = backends.Capabilities{
 	Operations: map[backends.OpType]bool{
-		backends.OpTypeOpShape:               true,
-		backends.OpTypeOpParameter:           true,
-		backends.OpTypeOpConstant:            true,
-		backends.OpTypeOpIdentity:            true,
+		backends.OpTypeParameter:             true,
+		backends.OpTypeConstant:              true,
+		backends.OpTypeIdentity:              true,
 		backends.OpTypeReduceWindow:          true,
 		backends.OpTypeRngBitGenerator:       true,
 		backends.OpTypeBatchNormForInference: true,

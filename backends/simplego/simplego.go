@@ -9,8 +9,21 @@ import (
 	"sync"
 )
 
-// New constructs a new simplego Backend.
-func New() *Backend {
+// BackendName to be used in GOMLX_BACKEND to specify this backend.
+const BackendName = "go"
+
+// Registers New() as the default constructor for "xla" backend.
+func init() {
+	backends.Register(BackendName, New)
+}
+
+// New constructs a new SimpleGo Backend.
+// There are no configurations, the string is simply ignored.
+func New(_ string) backends.Backend {
+	return newBackend()
+}
+
+func newBackend() *Backend {
 	return &Backend{}
 }
 
