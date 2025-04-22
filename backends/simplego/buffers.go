@@ -76,6 +76,10 @@ func (b *Backend) NewBuffer(shape shapes.Shape) *Buffer {
 // freed immediately.
 func (b *Backend) BufferFinalize(backendBuffer backends.Buffer) {
 	buffer := backendBuffer.(*Buffer)
+	if buffer == nil || buffer.flat == nil || !buffer.shape.Ok() {
+		// buffer is already empty.
+		return
+	}
 	b.putBuffer(buffer)
 }
 

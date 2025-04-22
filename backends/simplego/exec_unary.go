@@ -16,6 +16,7 @@ func unaryOperandAndOutput(backend *Backend, inputs []*Buffer, inputsOwned []boo
 	input = inputs[0]
 	if inputsOwned[0] {
 		output = input
+		inputs[0] = nil // This tells the executor that we took over the buffer.
 		return
 	}
 	output = backend.getBuffer(input.shape.DType, input.shape.Size())

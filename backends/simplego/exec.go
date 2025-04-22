@@ -181,8 +181,17 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) []backends
 	for ii, input := range inputs {
 		inputBuffer := input.(*Buffer)
 		inputNodeIdx := e.builder.inputs[ii].builderIdx
-		execBuf.results[inputNodeIdx] = inputBuffer
 		execBuf.owned[inputNodeIdx] = donate[ii]
+		if donate[ii] {
+			// If donated, we take over its data.
+			execBuf.results[inputNodeIdx] = &Buffer{}
+			*execBuf.results[inputNodeIdx] = *inputBuffer
+			inputBuffer.flat = nil
+			inputBuffer.shape = shapes.Invalid()
+		} else {
+			// Simply re-use the buffer, but mark as not-owned, so we won't mutate it in any way.
+			execBuf.results[inputNodeIdx] = inputBuffer
+		}
 	}
 
 	// Pre-allocate slices:
