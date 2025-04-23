@@ -9,6 +9,7 @@ import (
 
 func init() {
 	nodeExecutors[backends.OpTypeWhere] = execWhere
+	nodeExecutors[backends.OpTypeReshape] = execReshape
 }
 
 // execWhere implements the Where op.
@@ -110,4 +111,20 @@ func execWhereSetOutputWithValue[T supportedTypesConstraints](outputBuf, valueBu
 	for outputIdx := range outputSlice {
 		outputSlice[outputIdx] = c
 	}
+}
+
+// execReshape implements Reshape.
+//
+// Notice the backends.Reshape doesn't support auto-scaling dimensions (set to -1), as graph.Reshape does.
+func execReshape(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	operand := inputs[0]
+	var output *Buffer
+	if inputsOwned[0] {
+		output = operand
+		inputs[0] = nil
+	} else {
+		output = backend.getBuffer(operand.shape.DType, operand.shape.Size())
+	}
+	output.shape = node.shape
+	return output
 }

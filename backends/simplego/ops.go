@@ -68,6 +68,15 @@ func (b *Builder) Where(conditionOp, onTrueOp, onFalseOp backends.Op) backends.O
 	return b.newNode(backends.OpTypeWhere, outputShape, condition, onTrue, onFalse)
 }
 
+// Reshape implements backends.Builder interface.
+//
+// Notice the backends.Reshape doesn't support auto-scaling dimensions (set to -1), as graph.Reshape does.
+func (b *Builder) Reshape(operandOp backends.Op, dims ...int) backends.Op {
+	operand := b.checkOps("Reshape", operandOp)[0]
+	outputShape := shapeinference.ReshapeOp(operand.shape, dims...)
+	return b.newNode(backends.OpTypeReshape, outputShape, operand)
+}
+
 // Unary Operations:
 
 // Neg implements backends.Builder interface.
