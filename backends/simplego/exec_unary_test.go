@@ -119,6 +119,17 @@ func TestExecUnary_Exp(t *testing.T) {
 	assert.InDelta(t, want, y2.Value().(bfloat16.BFloat16).Float32(), 1e-2)
 }
 
+func TestExecUnary_Expm1(t *testing.T) {
+	exec := graph.NewExec(backend, func(x *graph.Node) *graph.Node { return graph.Expm1(x) })
+	y0 := exec.Call(float32(1.0))[0]
+	assert.InDelta(t, float32(1.71828), y0.Value(), 1e-4)
+	y1 := exec.Call(float64(1.0))[0]
+	assert.InDelta(t, 1.71828, y1.Value(), 1e-4)
+	y2 := exec.Call(bfloat16.FromFloat32(1.0))[0]
+	want := bfloat16.FromFloat32(float32(math.E - 1.0)).Float32()
+	assert.InDelta(t, want, y2.Value().(bfloat16.BFloat16).Float32(), 1e-2)
+}
+
 func TestExecUnary_Log(t *testing.T) {
 	exec := graph.NewExec(backend, func(x *graph.Node) *graph.Node { return graph.Log(x) })
 	y0 := exec.Call(float32(2.718281828459045))[0]
@@ -217,6 +228,16 @@ func TestExecUnary_Tanh(t *testing.T) {
 	assert.InDelta(t, 0.0, y1.Value(), 1e-15)
 	y2 := exec.Call(bfloat16.FromFloat32(0.0))[0]
 	assert.InDelta(t, float32(0.0), y2.Value().(bfloat16.BFloat16).Float32(), 1e-2)
+}
+
+func TestExecUnary_Logistic(t *testing.T) {
+	exec := graph.NewExec(backend, func(x *graph.Node) *graph.Node { return graph.Logistic(x) })
+	y0 := exec.Call(float32(0.0))[0]
+	assert.InDelta(t, float32(0.5), y0.Value(), 1e-6)
+	y1 := exec.Call(float64(2.0))[0]
+	assert.InDelta(t, 0.8808, y1.Value(), 1e-4)
+	y2 := exec.Call(bfloat16.FromFloat32(-2.0))[0]
+	assert.InDelta(t, float32(0.1192), y2.Value().(bfloat16.BFloat16).Float32(), 1e-2)
 }
 
 func TestExecUnary_IsFinite(t *testing.T) {

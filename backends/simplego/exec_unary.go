@@ -18,6 +18,7 @@ func init() {
 	nodeExecutors[backends.OpTypeBitCount] = execBitCount
 	nodeExecutors[backends.OpTypeClz] = execClz
 	nodeExecutors[backends.OpTypeExp] = execExp
+	nodeExecutors[backends.OpTypeExpm1] = execExpm1
 	nodeExecutors[backends.OpTypeLog] = execLog
 	nodeExecutors[backends.OpTypeLog1p] = execLog1p
 	nodeExecutors[backends.OpTypeCeil] = execCeil
@@ -29,6 +30,7 @@ func init() {
 	nodeExecutors[backends.OpTypeSin] = execSin
 	nodeExecutors[backends.OpTypeTanh] = execTanh
 	nodeExecutors[backends.OpTypeIsFinite] = execIsFinite
+	nodeExecutors[backends.OpTypeLogistic] = execLogistic
 }
 
 // unaryOperandAndOutput is a convenience function to get the input and output -- which may be the reuse of the input
@@ -381,6 +383,34 @@ func execExpBF16(inputs, outputs []bfloat16.BFloat16) {
 	}
 }
 
+// execExpm1 executes the unary op Expm1.
+func execExpm1(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	switch input.shape.DType {
+	case dtypes.Float32:
+		execExpm1Generic[float32](input.flat.([]float32), output.flat.([]float32))
+	case dtypes.Float64:
+		execExpm1Generic[float64](input.flat.([]float64), output.flat.([]float64))
+	case dtypes.BFloat16:
+		execExpm1BF16(input.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16))
+	default:
+		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
+	}
+	return output
+}
+
+func execExpm1Generic[T float32 | float64](inputs, outputs []T) {
+	for ii, input := range inputs {
+		outputs[ii] = T(math.Expm1(float64(input)))
+	}
+}
+
+func execExpm1BF16(inputs, outputs []bfloat16.BFloat16) {
+	for ii, input := range inputs {
+		outputs[ii] = bfloat16.FromFloat32(float32(math.Expm1(float64(input.Float32()))))
+	}
+}
+
 // execLog executes the unary op Log.
 func execLog(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
 	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
@@ -630,6 +660,47 @@ func execSinGeneric[T float32 | float64](inputs, outputs []T) {
 func execSinBF16(inputs, outputs []bfloat16.BFloat16) {
 	for ii, input := range inputs {
 		outputs[ii] = bfloat16.FromFloat32(float32(math.Sin(float64(input.Float32()))))
+	}
+}
+
+// execLogistic executes the unary op Logistic.
+func execLogistic(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	switch input.shape.DType {
+	case dtypes.Float32:
+		execLogisticGeneric[float32](input.flat.([]float32), output.flat.([]float32))
+	case dtypes.Float64:
+		execLogisticGeneric[float64](input.flat.([]float64), output.flat.([]float64))
+	case dtypes.BFloat16:
+		execLogisticBF16(input.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16))
+	default:
+		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
+	}
+	return output
+}
+
+func execLogisticGeneric[T float32 | float64](inputs, outputs []T) {
+	for ii, input := range inputs {
+		if input >= 0 {
+			outputs[ii] = T(1.0 / (1.0 + math.Exp(-float64(input))))
+		} else {
+			e_x := math.Exp(float64(input))
+			outputs[ii] = T(e_x / (1.0 + e_x))
+		}
+	}
+}
+
+func execLogisticBF16(inputs, outputs []bfloat16.BFloat16) {
+	for ii, input := range inputs {
+		input64 := float64(input.Float32())
+		var output64 float64
+		if input64 >= 0 {
+			output64 = 1.0 / (1.0 + math.Exp(-input64))
+		} else {
+			e_x := math.Exp(input64)
+			output64 = e_x / (1.0 + e_x)
+		}
+		outputs[ii] = bfloat16.FromFloat32(float32(output64))
 	}
 }
 

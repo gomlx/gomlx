@@ -5,11 +5,49 @@ import (
 	"github.com/gomlx/gopjrt/dtypes"
 )
 
-// Capabilities of the SimpleGo backends.
+// Capabilities of the SimpleGo backends: the set of supported operations and data types.
 var Capabilities = backends.Capabilities{
 	Operations: map[backends.OpType]bool{
 		backends.OpTypeParameter: true,
 		backends.OpTypeConstant:  true,
+
+		// Standard unary operations:
+		backends.OpTypeAbs:        true,
+		backends.OpTypeBitCount:   true,
+		backends.OpTypeBitwiseNot: true,
+		backends.OpTypeCeil:       true,
+		backends.OpTypeClz:        true,
+		backends.OpTypeCos:        true,
+		backends.OpTypeExp:        true,
+		backends.OpTypeExpm1:      true,
+		backends.OpTypeFloor:      true,
+		backends.OpTypeLog1p:      true,
+		backends.OpTypeLog:        true,
+		backends.OpTypeLogicalNot: true,
+		backends.OpTypeLogistic:   true,
+		backends.OpTypeNeg:        true,
+		backends.OpTypeRound:      true,
+		backends.OpTypeRsqrt:      true,
+		backends.OpTypeSign:       true,
+		backends.OpTypeSin:        true,
+		backends.OpTypeSqrt:       true,
+		backends.OpTypeTanh:       true,
+
+		// Standard binary operations:
+		backends.OpTypeAdd:        true,
+		backends.OpTypeBitwiseAnd: true,
+		backends.OpTypeBitwiseOr:  true,
+		backends.OpTypeBitwiseXor: true,
+		backends.OpTypeDiv:        true,
+		backends.OpTypeLogicalAnd: true,
+		backends.OpTypeLogicalOr:  true,
+		backends.OpTypeLogicalXor: true,
+		backends.OpTypeMax:        true,
+		backends.OpTypeMin:        true,
+		backends.OpTypeMul:        true,
+		backends.OpTypePow:        true,
+		backends.OpTypeRem:        true,
+		backends.OpTypeSub:        true,
 	},
 	DTypes: map[dtypes.DType]bool{
 		dtypes.Bool:     true,

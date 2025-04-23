@@ -101,6 +101,11 @@ func (b *Builder) Exp(operand backends.Op) backends.Op {
 	return b.addUnaryOp(backends.OpTypeExp, operand)
 }
 
+// Expm1 implements backends.Builder interface. It returns e(x)-1.
+func (b *Builder) Expm1(operand backends.Op) backends.Op {
+	return b.addUnaryOp(backends.OpTypeExpm1, operand)
+}
+
 // Log implements backends.Builder interface.
 func (b *Builder) Log(operand backends.Op) backends.Op {
 	return b.addUnaryOp(backends.OpTypeLog, operand)
@@ -109,6 +114,11 @@ func (b *Builder) Log(operand backends.Op) backends.Op {
 // Log1p implements backends.Builder interface.
 func (b *Builder) Log1p(operand backends.Op) backends.Op {
 	return b.addUnaryOp(backends.OpTypeLog1p, operand)
+}
+
+// Logistic implements backends.Builder interface. Aka as sigmoid. It returns 1/(1+exp(-x)).
+func (b *Builder) Logistic(operand backends.Op) backends.Op {
+	return b.addUnaryOp(backends.OpTypeLogistic, operand)
 }
 
 // Ceil implements backends.Builder interface.

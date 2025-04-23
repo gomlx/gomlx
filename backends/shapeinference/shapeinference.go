@@ -64,6 +64,7 @@ var (
 
 	// FloatOperations operates only on float (and not on complex numbers).
 	FloatOperations = types.SetWith(
+		backends.OpTypeLogistic,
 		backends.OpTypeCos,
 		backends.OpTypeSin,
 		backends.OpTypeTanh,
@@ -72,6 +73,7 @@ var (
 	// FloatOrComplexOperations operates only on float or complex numbers, and won't work on integer or boolean values.
 	FloatOrComplexOperations = types.SetWith(
 		backends.OpTypeExp,
+		backends.OpTypeExpm1,
 		backends.OpTypeLog,
 		backends.OpTypeLog1p,
 		backends.OpTypeCeil,
@@ -116,8 +118,10 @@ var (
 		backends.OpTypeBitCount,
 		backends.OpTypeClz,
 		backends.OpTypeExp,
+		backends.OpTypeExpm1,
 		backends.OpTypeLog,
 		backends.OpTypeLog1p,
+		backends.OpTypeLogistic,
 		backends.OpTypeCeil,
 		backends.OpTypeFloor,
 		backends.OpTypeRound,
