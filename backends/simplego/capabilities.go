@@ -3,6 +3,7 @@ package simplego
 import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 )
 
 // TODO:
@@ -19,6 +20,7 @@ var Capabilities = backends.Capabilities{
 	Operations: map[backends.OpType]bool{
 		backends.OpTypeParameter: true,
 		backends.OpTypeConstant:  true,
+		backends.OpTypeWhere:     true,
 
 		// Standard unary operations:
 		backends.OpTypeAbs:        true,
@@ -80,6 +82,10 @@ var Capabilities = backends.Capabilities{
 		dtypes.Float64:  true,
 		dtypes.BFloat16: true,
 	},
+}
+
+type supportedTypesConstraints interface {
+	bool | int8 | int16 | int32 | int64 | uint8 | uint16 | uint32 | uint64 | float32 | float64 | bfloat16.BFloat16
 }
 
 // podNumericConstrains are used for generics for the Golang pod (plain-old-data) types.

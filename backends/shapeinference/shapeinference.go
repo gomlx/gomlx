@@ -19,6 +19,7 @@ import (
 	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
+	"slices"
 )
 
 var (
@@ -285,4 +286,36 @@ func UnaryOp(opType backends.OpType, operand shapes.Shape) shapes.Shape {
 		exceptions.Panicf("complex UnaryOp %s must have a complex (Complex64, Complex128) data type as input, got %s", opType, operand)
 	}
 	return operand
+}
+
+// WhereOp returns the shape resulting from the Where operation.
+//
+// Shape constraints:
+//  1. onTrue and onFalse must have the exact same shape.
+//  2. condition must either be a scalar or match the shape of onTrue and onFalse, except for the DType that
+//     must be Bool.
+func WhereOp(condition, onTrue, onFalse shapes.Shape) shapes.Shape {
+	if condition.DType != dtypes.Bool {
+		exceptions.Panicf("condition for Where() must be a boolean, got %s instead", condition)
+	}
+	if !onTrue.IsScalar() && !onFalse.IsScalar() && !onTrue.Equal(onFalse) {
+		exceptions.Panicf("onTrue (%s) and onFalse (%s) values for Where() must either be scalar or match each other's shape",
+			onTrue, onFalse)
+	}
+	if !condition.IsScalar() && !(onTrue.IsScalar() && onFalse.IsScalar()) {
+		if slices.Compare(condition.Dimensions, onTrue.Dimensions) != 0 {
+			exceptions.Panicf("condition for Where() must either be a scalar or match the shape (not the DType) of the values (%s), but got %s",
+				onTrue, condition)
+		}
+	}
+
+	output := onTrue
+	if output.IsScalar() {
+		output = onFalse
+		if output.IsScalar() && !condition.IsScalar() {
+			output = condition.Clone()
+			output.DType = onTrue.DType
+		}
+	}
+	return output
 }

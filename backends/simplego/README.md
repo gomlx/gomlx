@@ -8,6 +8,8 @@ installing any associated C/C++/Rust library, or special packages other than Go 
 A second priority is having a very short dependency list: this aimed at being safe, very low
 dependency library.
 
+See `capabilities.go` file to see operations that are implemented.
+
 ## To Do's
 
 This can be split into 2 parts: implement missing ops, and optimizations.
@@ -18,9 +20,9 @@ Too many to list now :) But feel free to add a list of priority ops/dtypes to ad
 
 ### Optimizations
 
-The initial implementation was done simply to work, with zero optimizations, only concerns of portability.
+The initial implementation had almost no optimizations, and was focused on portability and getting it to work.
 
-There are tons of space for optimizations, a few obvious items:
+But there are many relatively "low hanging fruits" for optimization, a few obvious items:
 
 * Pre-calculate the temporary memory needed -- it is known in graph compiling time -- and use memory pool for these blocks.
 * Do a proper matrix multiplication.

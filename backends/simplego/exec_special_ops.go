@@ -1,7 +1,6 @@
 package simplego
 
 import (
-	"fmt"
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gopjrt/dtypes"
@@ -58,8 +57,6 @@ func execWhere(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 	default:
 		exceptions.Panicf("unsupported DType %s for Where() operation", outputShape.DType)
 	}
-
-	fmt.Printf("Output: shape=%s, values=%v\n", output.shape, output.flat)
 	return output
 }
 

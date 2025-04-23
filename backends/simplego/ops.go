@@ -3,6 +3,7 @@ package simplego
 import (
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/backends/shapeinference"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 )
@@ -57,6 +58,14 @@ func (b *Builder) Constant(flat any, dims ...int) backends.Op {
 		flat:  flat,
 	}
 	return n
+}
+
+// Where implements backends.Builder interface.
+func (b *Builder) Where(conditionOp, onTrueOp, onFalseOp backends.Op) backends.Op {
+	inputs := b.checkOps("Where", conditionOp, onTrueOp, onFalseOp)
+	condition, onTrue, onFalse := inputs[0], inputs[1], inputs[2]
+	outputShape := shapeinference.WhereOp(condition.shape, onTrue.shape, onFalse.shape)
+	return b.newNode(backends.OpTypeWhere, outputShape, condition, onTrue, onFalse)
 }
 
 // Unary Operations:

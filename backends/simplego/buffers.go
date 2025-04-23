@@ -54,6 +54,11 @@ func (b *Backend) putBuffer(buffer *Buffer) {
 	buffer.shape = shapes.Invalid()
 }
 
+// copyFlat assumes both flat slices are of the same underlying type.
+func copyFlat(flatDst, flatSrc any) {
+	reflect.Copy(reflect.ValueOf(flatDst), reflect.ValueOf(flatSrc))
+}
+
 // cloneBuffer using the pool to allocate a new one.
 func (b *Backend) cloneBuffer(buffer *Buffer) *Buffer {
 	if buffer == nil {
@@ -61,7 +66,7 @@ func (b *Backend) cloneBuffer(buffer *Buffer) *Buffer {
 	}
 	newBuffer := b.getBuffer(buffer.shape.DType, buffer.shape.Size())
 	newBuffer.shape = buffer.shape.Clone()
-	reflect.Copy(reflect.ValueOf(newBuffer.flat), reflect.ValueOf(buffer.flat))
+	copyFlat(newBuffer.flat, buffer.flat)
 	return newBuffer
 }
 
@@ -99,14 +104,14 @@ func (b *Backend) BufferDeviceNum(buffer backends.Buffer) backends.DeviceNum {
 // See also FlatDataToBuffer, BufferShape, and shapes.Shape.Size.
 func (b *Backend) BufferToFlatData(backendsBuffer backends.Buffer, flat any) {
 	buffer := backendsBuffer.(*Buffer)
-	reflect.Copy(reflect.ValueOf(flat), reflect.ValueOf(buffer.flat))
+	copyFlat(flat, buffer.flat)
 }
 
 // BufferFromFlatData transfers data from Go given as a flat slice (of the type corresponding to the shape DType)
 // to the deviceNum, and returns the corresponding backends.Buffer.
 func (b *Backend) BufferFromFlatData(deviceNum backends.DeviceNum, flat any, shape shapes.Shape) backends.Buffer {
 	buffer := b.NewBuffer(shape)
-	reflect.Copy(reflect.ValueOf(buffer.flat), reflect.ValueOf(flat))
+	copyFlat(buffer.flat, flat)
 	return buffer
 }
 
