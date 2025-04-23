@@ -60,6 +60,12 @@ func (b *Builder) Constant(flat any, dims ...int) backends.Op {
 	return n
 }
 
+// Identity implements backends.Identity interface.
+func (b *Builder) Identity(operandOp backends.Op) backends.Op {
+	operand := b.checkOps("Reshape", operandOp)[0]
+	return b.newNode(backends.OpTypeIdentity, operand.shape, operand)
+}
+
 // Where implements backends.Builder interface.
 func (b *Builder) Where(conditionOp, onTrueOp, onFalseOp backends.Op) backends.Op {
 	inputs := b.checkOps("Where", conditionOp, onTrueOp, onFalseOp)

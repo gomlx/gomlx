@@ -8,8 +8,23 @@ import (
 )
 
 func init() {
+	nodeExecutors[backends.OpTypeIdentity] = execIdentity
 	nodeExecutors[backends.OpTypeWhere] = execWhere
 	nodeExecutors[backends.OpTypeReshape] = execReshape
+}
+
+// execIdentity implements the Identity op.
+func execIdentity(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	operand := inputs[0]
+	if inputsOwned[0] {
+		// Trivial case, just pass the buffer forward.
+		inputs[0] = nil
+		return operand
+	}
+	output := backend.getBuffer(operand.shape.DType, operand.shape.Size())
+	output.shape = operand.shape
+	copyFlat(output.flat, operand.flat)
+	return output
 }
 
 // execWhere implements the Where op.

@@ -9,6 +9,13 @@ import (
 	"testing"
 )
 
+func TestExecSpecialOps_Identity(t *testing.T) {
+	exec := graph.NewExec(backend, func(x *graph.Node) *graph.Node { return graph.Identity(x) })
+	y0 := exec.Call(bfloat16.FromFloat32(7))[0]
+	fmt.Printf("\ty0=%s\n", y0.GoStr())
+	assert.Equal(t, bfloat16.FromFloat32(7), y0.Value())
+}
+
 func TestExecSpecialOps_Where(t *testing.T) {
 	exec := graph.NewExec(backend, func(cond, onTrue, onFalse *graph.Node) *graph.Node { return graph.Where(cond, onTrue, onFalse) })
 
