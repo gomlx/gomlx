@@ -56,6 +56,18 @@ var (
 		// Notice Abs and Sign works for unsigned ints: it's just a trivial implementation.
 		backends.OpTypeAbs,
 		backends.OpTypeSign,
+
+		backends.OpTypeEqual,
+		backends.OpTypeGreaterOrEqual,
+		backends.OpTypeGreaterThan,
+		backends.OpTypeLessOrEqual,
+		backends.OpTypeLessThan,
+
+		backends.OpTypeEqualTotalOrder,
+		backends.OpTypeGreaterOrEqualTotalOrder,
+		backends.OpTypeGreaterThanTotalOrder,
+		backends.OpTypeLessOrEqualTotalOrder,
+		backends.OpTypeLessThanTotalOrder,
 	)
 
 	SignedNumberOperations = types.SetWith(
@@ -108,6 +120,21 @@ var (
 		backends.OpTypeLogicalXor,
 		backends.OpTypeMax,
 		backends.OpTypeMin,
+	)
+
+	// ComparisonOperations include all operations that takes two inputs and returns booleans with the results of
+	// a comparison.
+	ComparisonOperations = types.SetWith(
+		backends.OpTypeEqual,
+		backends.OpTypeEqualTotalOrder,
+		backends.OpTypeGreaterOrEqual,
+		backends.OpTypeGreaterOrEqualTotalOrder,
+		backends.OpTypeGreaterThan,
+		backends.OpTypeGreaterThanTotalOrder,
+		backends.OpTypeLessOrEqual,
+		backends.OpTypeLessOrEqualTotalOrder,
+		backends.OpTypeLessThan,
+		backends.OpTypeLessThanTotalOrder,
 	)
 
 	// StandardUnaryOperations include all operations that have a single operand as input and the return shape is the
@@ -174,6 +201,10 @@ func BinaryOp(opType backends.OpType, lhsShape, rhsShape shapes.Shape) shapes.Sh
 		exceptions.Panicf("complex BinaryOp %s must have a complex (Complex64, Complex128) data type as input, got %s", opType, lhsShape)
 	}
 
+	return binaryOpImpl(opType, lhsShape, rhsShape)
+}
+
+func binaryOpImpl(opType backends.OpType, lhsShape, rhsShape shapes.Shape) shapes.Shape {
 	// Trivial cases: if one of the sides is a scalar, return the other side shape.
 	if lhsShape.IsScalar() {
 		return rhsShape
@@ -197,6 +228,26 @@ func BinaryOp(opType backends.OpType, lhsShape, rhsShape shapes.Shape) shapes.Sh
 		}
 		shape.Dimensions[axis] = max(lhsDim, rhsDim)
 	}
+	return shape
+}
+
+// ComparisonOp returns the broadcast shape with dtype set to Bool, for comparison operations (Equal, LessThan, GreaterOrEqual, etc.)
+func ComparisonOp(opType backends.OpType, lhsShape, rhsShape shapes.Shape) shapes.Shape {
+	if !ComparisonOperations.Has(opType) {
+		exceptions.Panicf("operation %s is not in the ComparisonOperations set, cannot process it with ComparisonOp", opType)
+	}
+	if lhsShape.DType == dtypes.InvalidDType || rhsShape.DType == dtypes.InvalidDType {
+		exceptions.Panicf("invalid shape for %s or %s for ComparisonOp %s", lhsShape, rhsShape, opType)
+	}
+	if lhsShape.DType != rhsShape.DType {
+		exceptions.Panicf("data types (DType) for ComparisonOp %s must match, got %s and %s", opType, lhsShape, rhsShape)
+	}
+	if !NumberOperations.Has(opType) {
+		exceptions.Panicf("operation %s is not in the NumberOperations set, cannot process it with ComparisonOp", opType)
+	}
+
+	shape := binaryOpImpl(opType, lhsShape, rhsShape)
+	shape.DType = dtypes.Bool
 	return shape
 }
 

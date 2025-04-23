@@ -44,45 +44,59 @@ func init() { {{range .BinaryOps}}
 
 {{- range .BinaryOps}}
 {{- $name := .Name }}
+{{- $is_comparison := .IsComparison }}
 
 // exec{{.Name}} executes the binary op {{.Name}}.
 func exec{{.Name}}(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
-	lhs, rhs, output, lhsIsScalarOr1, rhsIsScalarOr1 := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
 
-{{if .IsCommutative}}// Add is commutative, so if any of the two is scalar, make the rhs the scalar one.
+{{- if .IsComparison }}
+	lhs, rhs := inputs[0], inputs[1]
+	lhsIsScalarOr1, rhsIsScalarOr1 := lhs.shape.Size() == 1, rhs.shape.Size() == 1
+	output := backend.getBuffer(node.shape.DType, node.shape.Size())
+	output.shape = node.shape
+{{- else }}
+	lhs, rhs, output, lhsIsScalarOr1, rhsIsScalarOr1 := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
+{{- end }}
+
+{{- if .IsCommutative}}// Add is commutative, so if any of the two is scalar, make the rhs the scalar one.
 	if lhsIsScalarOr1 && !rhsIsScalarOr1 {
 		lhs, rhs = rhs, lhs
 		lhsIsScalarOr1, rhsIsScalarOr1 = rhsIsScalarOr1, lhsIsScalarOr1
 	}
-{{else}}
+{{- else }}
 	_, _ = lhsIsScalarOr1, rhsIsScalarOr1
-{{end}}
+{{- end }}
 
-	switch output.shape.DType {
+	switch lhs.shape.DType {
 {{- range .Versions}}
 {{- $version := .Name }}
 
 {{- if or .Numeric .Integer }}
-{{- range $.IntegerTypes}}
+
+{{- range $.IntegerTypes}}	
+
 	case dtypes.{{.DType}}:
-		exec{{$name}}{{$version}}Generic[{{.GoType}}](lhs.flat.([]{{.GoType}}), rhs.flat.([]{{.GoType}}), output.flat.([]{{.GoType}}),
-			lhs.shape, rhs.shape, output.shape)
+		exec{{$name}}{{$version}}Generic[{{.GoType}}](lhs.flat.([]{{.GoType}}), rhs.flat.([]{{.GoType}}), output.flat.([]
+	{{- if $is_comparison }} bool {{- else }} {{.GoType}} {{- end }} ), lhs.shape, rhs.shape, output.shape)
 {{- end}}
 {{- end}}
 
 {{- if or .Numeric .Float }} 
+
 {{- range $.FloatTypes}}
+
 	case dtypes.{{.DType}}:
-		exec{{$name}}{{$version}}Generic[{{.GoType}}](lhs.flat.([]{{.GoType}}), rhs.flat.([]{{.GoType}}), output.flat.([]{{.GoType}}),
-			lhs.shape, rhs.shape, output.shape)
+		exec{{$name}}{{$version}}Generic[{{.GoType}}](lhs.flat.([]{{.GoType}}), rhs.flat.([]{{.GoType}}), output.flat.([]
+	{{- if $is_comparison }} bool {{- else }} {{.GoType}} {{- end }} ), lhs.shape, rhs.shape, output.shape)
 {{- end}}
 {{- end}}
 
 {{- if or .Numeric .BFloat16 }}
 {{- range $.BFloat16Types}}
+
 	case dtypes.{{.DType}}:
-		exec{{$name}}{{$version}}BFloat16(lhs.flat.([]{{.GoType}}), rhs.flat.([]{{.GoType}}), output.flat.([]{{.GoType}}),
-			lhs.shape, rhs.shape, output.shape)
+		exec{{$name}}{{$version}}BFloat16(lhs.flat.([]{{.GoType}}), rhs.flat.([]{{.GoType}}), output.flat.([]
+	{{- if $is_comparison }} bool {{- else }} {{.GoType}} {{- end }} ), lhs.shape, rhs.shape, output.shape)
 {{- end}}
 {{- end}}
 
@@ -108,7 +122,7 @@ func exec{{.Name}}(backend *Backend, node *Node, inputs []*Buffer, inputsOwned [
 
 {{- if or .Numeric .Integer .Float .Boolean }}
 
-func exec{{$name}}{{$version}}Generic[T pod{{$version}}Constraints](lhs, rhs, output []T,
+func exec{{$name}}{{$version}}Generic[T pod{{$version}}Constraints](lhs, rhs []T, output []{{if $is_comparison}}bool{{else}}T{{end}},
 	lhsShape, rhsShape, outputShape shapes.Shape) {
 	if len(rhs) == 1 {
 		// Case 1: One side (rhs) is a scalar: only iterate over the lhs.
@@ -150,14 +164,18 @@ func exec{{$name}}{{$version}}Generic[T pod{{$version}}Constraints](lhs, rhs, ou
 
 {{- if or .Numeric .BFloat16 }}
 
-func exec{{$name}}{{$version}}BFloat16(lhs, rhs, output []bfloat16.BFloat16,
+func exec{{$name}}{{$version}}BFloat16(lhs, rhs []bfloat16.BFloat16, output []{{if $is_comparison}}bool{{else}}bfloat16.BFloat16{{end}},
 	lhsShape, rhsShape, outputShape shapes.Shape) {
 	if len(rhs) == 1 {
 		// One side (rhs) is a scalar: only iterate over the lhs.
 		c := rhs[0].Float32()
 		for ii, input := range lhs {
 			a := input.Float32()
+		{{- if $is_comparison }}
+			output[ii] = {{CallOp .Format "a" "c"}}
+		{{- else }}
 			output[ii] = bfloat16.FromFloat32({{CallOp .Format "a" "c"}})
+		{{- end }}
 		}
 		return
 {{- if not $is_commutative }}
@@ -166,7 +184,11 @@ func exec{{$name}}{{$version}}BFloat16(lhs, rhs, output []bfloat16.BFloat16,
 		c := lhs[0].Float32()
 		for ii, input := range rhs {
 			a := input.Float32()	
+		{{- if $is_comparison }}
+			output[ii] = {{CallOp .Format "c" "a"}}
+		{{- else }}
 			output[ii] = bfloat16.FromFloat32({{ CallOp .Format "c" "a" }})
+		{{- end }}
 		}
 		return
 {{- end}}
@@ -176,7 +198,11 @@ func exec{{$name}}{{$version}}BFloat16(lhs, rhs, output []bfloat16.BFloat16,
 		for outputIdx := range output {
 			a := lhs[outputIdx].Float32()
 			b := rhs[outputIdx].Float32()
+		{{- if $is_comparison }}
+			output[outputIdx] = {{CallOp .Format "a" "b"}}
+		{{- else }}
 			output[outputIdx] = bfloat16.FromFloat32({{CallOp .Format "a" "b"}})
+		{{- end }}
 		}
 		return
 
@@ -189,7 +215,11 @@ func exec{{$name}}{{$version}}BFloat16(lhs, rhs, output []bfloat16.BFloat16,
 			rhsIdx := rhsIter.Next()
 			a := lhs[lhsIdx].Float32()
 			b := rhs[rhsIdx].Float32()
+		{{- if $is_comparison }}
+			output[outputIdx] = {{CallOp .Format "a" "b"}}
+		{{- else }}
 			output[outputIdx] = bfloat16.FromFloat32({{CallOp .Format "a" "b"}})
+		{{- end }}
 		}
 	}
 	return
@@ -251,6 +281,7 @@ type BinaryOp struct {
 	Name          string
 	Versions      []BinaryOpVersion
 	IsCommutative bool
+	IsComparison  bool
 }
 
 var (
@@ -289,6 +320,12 @@ var (
 		{Name: "LogicalXor", Versions: []BinaryOpVersion{
 			{Boolean: true, Name: "Boolean", Format: "%s != %s"},
 		}},
+
+		{Name: "Equal", IsComparison: true, IsCommutative: true, Versions: []BinaryOpVersion{{Numeric: true, Name: "Numeric", Format: "%s == %s"}}},
+		{Name: "GreaterOrEqual", IsComparison: true, Versions: []BinaryOpVersion{{Numeric: true, Name: "Numeric", Format: "%s >= %s"}}},
+		{Name: "GreaterThan", IsComparison: true, Versions: []BinaryOpVersion{{Numeric: true, Name: "Numeric", Format: "%s > %s"}}},
+		{Name: "LessOrEqual", IsComparison: true, Versions: []BinaryOpVersion{{Numeric: true, Name: "Numeric", Format: "%s <= %s"}}},
+		{Name: "LessThan", IsComparison: true, Versions: []BinaryOpVersion{{Numeric: true, Name: "Numeric", Format: "%s < %s"}}},
 	}
 )
 

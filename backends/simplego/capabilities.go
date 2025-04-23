@@ -5,6 +5,15 @@ import (
 	"github.com/gomlx/gopjrt/dtypes"
 )
 
+// TODO:
+// Identity
+// Where
+// ReduceWindow
+// BroadcastInDims
+// Broadcast
+// DotGeneral
+// ...
+
 // Capabilities of the SimpleGo backends: the set of supported operations and data types.
 var Capabilities = backends.Capabilities{
 	Operations: map[backends.OpType]bool{
@@ -48,7 +57,15 @@ var Capabilities = backends.Capabilities{
 		backends.OpTypePow:        true,
 		backends.OpTypeRem:        true,
 		backends.OpTypeSub:        true,
+
+		// Comparison operators.
+		backends.OpTypeEqual:          true,
+		backends.OpTypeGreaterOrEqual: true,
+		backends.OpTypeGreaterThan:    true,
+		backends.OpTypeLessOrEqual:    true,
+		backends.OpTypeLessThan:       true,
 	},
+
 	DTypes: map[dtypes.DType]bool{
 		dtypes.Bool:     true,
 		dtypes.Int8:     true,

@@ -144,3 +144,11 @@ func (b *Builder) addBinaryOp(opType backends.OpType, lhsOp, rhsOp backends.Op) 
 	shape := shapeinference.BinaryOp(opType, lhs.shape, rhs.shape)
 	return b.newNode(opType, shape, lhs, rhs)
 }
+
+// addComparisonOp adds a generic comparison binary op.
+func (b *Builder) addComparisonOp(opType backends.OpType, lhsOp, rhsOp backends.Op) *Node {
+	inputs := b.checkOps(opType.String(), lhsOp, rhsOp)
+	lhs, rhs := inputs[0], inputs[1]
+	shape := shapeinference.ComparisonOp(opType, lhs.shape, rhs.shape)
+	return b.newNode(opType, shape, lhs, rhs)
+}

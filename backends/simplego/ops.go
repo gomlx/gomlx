@@ -249,4 +249,27 @@ func (b *Builder) Min(lhsOp, rhsOp backends.Op) backends.Op {
 	return b.addBinaryOp(backends.OpTypeMin, lhsOp, rhsOp)
 }
 
-// TODO: add binary comparison functions Equal, GreaterThan GreaterOrEqual, LessThan, etc.
+// Equal implements backends.Builder interface.
+func (b *Builder) Equal(lhsOp, rhsOp backends.Op) backends.Op {
+	return b.addComparisonOp(backends.OpTypeEqual, lhsOp, rhsOp)
+}
+
+// GreaterOrEqual implements backends.Builder interface.
+func (b *Builder) GreaterOrEqual(lhsOp, rhsOp backends.Op) backends.Op {
+	return b.addComparisonOp(backends.OpTypeGreaterOrEqual, lhsOp, rhsOp)
+}
+
+// GreaterThan implements backends.Builder interface.
+func (b *Builder) GreaterThan(lhsOp, rhsOp backends.Op) backends.Op {
+	return b.addComparisonOp(backends.OpTypeGreaterThan, lhsOp, rhsOp)
+}
+
+// LessOrEqual implements backends.Builder interface.
+func (b *Builder) LessOrEqual(lhsOp, rhsOp backends.Op) backends.Op {
+	return b.addComparisonOp(backends.OpTypeLessOrEqual, lhsOp, rhsOp)
+}
+
+// LessThan implements backends.Builder interface.
+func (b *Builder) LessThan(lhsOp, rhsOp backends.Op) backends.Op {
+	return b.addComparisonOp(backends.OpTypeLessThan, lhsOp, rhsOp)
+}

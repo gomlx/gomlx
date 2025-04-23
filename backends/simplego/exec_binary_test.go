@@ -381,3 +381,46 @@ func TestExecBinary_LogicalXor(t *testing.T) {
 	y4 := exec.Call([][]bool{{true}, {false}, {true}}, [][]bool{{true, false}})[0]
 	assert.Equal(t, [][]bool{{false, true}, {true, false}, {false, true}}, y4.Value())
 }
+
+func TestExecBinary_Comparison(t *testing.T) {
+	// Test Equal
+	execEq := graph.NewExec(backend, func(lhs, rhs *graph.Node) *graph.Node { return graph.Equal(lhs, rhs) })
+	y0 := execEq.Call(float32(1.5), float32(1.5))[0]
+	assert.Equal(t, true, y0.Value())
+	y1 := execEq.Call(bfloat16.FromFloat32(2.0), bfloat16.FromFloat32(2.0))[0]
+	assert.Equal(t, true, y1.Value())
+	y2 := execEq.Call([]uint16{1, 2, 3}, uint16(2))[0]
+	assert.Equal(t, []bool{false, true, false}, y2.Value())
+	y3 := execEq.Call([]int32{5}, []int32{5, 6})[0]
+	assert.Equal(t, []bool{true, false}, y3.Value())
+
+	// Test GreaterOrEqual
+	execGe := graph.NewExec(backend, func(lhs, rhs *graph.Node) *graph.Node { return graph.GreaterOrEqual(lhs, rhs) })
+	y4 := execGe.Call(float32(2.5), float32(1.5))[0]
+	assert.Equal(t, true, y4.Value())
+	y5 := execGe.Call(bfloat16.FromFloat32(1.0), bfloat16.FromFloat32(2.0))[0]
+	assert.Equal(t, false, y5.Value())
+	y6 := execGe.Call([]uint16{1, 2, 3}, uint16(2))[0]
+	assert.Equal(t, []bool{false, true, true}, y6.Value())
+
+	// Test GreaterThan
+	execGt := graph.NewExec(backend, func(lhs, rhs *graph.Node) *graph.Node { return graph.GreaterThan(lhs, rhs) })
+	y7 := execGt.Call(float32(2.5), float32(1.5))[0]
+	assert.Equal(t, true, y7.Value())
+	y8 := execGt.Call([]int32{1, 2, 3}, int32(2))[0]
+	assert.Equal(t, []bool{false, false, true}, y8.Value())
+
+	// Test LessOrEqual
+	execLe := graph.NewExec(backend, func(lhs, rhs *graph.Node) *graph.Node { return graph.LessOrEqual(lhs, rhs) })
+	y9 := execLe.Call(bfloat16.FromFloat32(1.0), bfloat16.FromFloat32(2.0))[0]
+	assert.Equal(t, true, y9.Value())
+	y10 := execLe.Call([]uint16{1, 2, 3}, uint16(2))[0]
+	assert.Equal(t, []bool{true, true, false}, y10.Value())
+
+	// Test LessThan
+	execLt := graph.NewExec(backend, func(lhs, rhs *graph.Node) *graph.Node { return graph.LessThan(lhs, rhs) })
+	y11 := execLt.Call(float32(1.5), float32(2.5))[0]
+	assert.Equal(t, true, y11.Value())
+	y12 := execLt.Call([]int32{1, 2, 3}, int32(2))[0]
+	assert.Equal(t, []bool{true, false, false}, y12.Value())
+}
