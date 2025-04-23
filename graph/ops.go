@@ -464,11 +464,10 @@ func ConvertType(x *Node, dtype dtypes.DType) *Node {
 //
 // Usual implicit broadcasting rules don't apply. But it will broadcast in the following cases:
 //
-//  1. If onTrue or onFalse are a scalar, they are broadcast to the other (onFalse or onTrue respectively).
+//  1. If either onTrue or onFalse are a scalar, they are broadcast to the other (onFalse or onTrue respectively).
+//     If both are scalars, they will be broadcast to the shape of condition.
 //  2. If condition is a prefix to the shapes of onTrue/onFalse then condition is expanded to match.
 //     This is useful for masking of embeddings for instance.
-//
-// But it will implicitly broadcast a scalar value for onTrue or onFalse.
 func Where(condition, onTrue, onFalse *Node) *Node {
 	_ = validateBuildingGraphFromInputs(condition)
 	if condition.DType() != dtypes.Bool {
@@ -476,25 +475,39 @@ func Where(condition, onTrue, onFalse *Node) *Node {
 			condition.Shape())
 	}
 
-	// Broadcasting of condition when it's a prefix to one of the operands:
-	for _, operand := range []*Node{onTrue, onFalse} {
-		if !operand.IsScalar() && condition.Rank() < operand.Rank() {
-			// If condition's shape is a prefix to onTrue and onFalse, then simply broadcast to their shape.
-			// This allows masks to work for embeddings, which has one extra axis.
-			extraAxes := operand.Rank() - condition.Rank()
-			condition = InsertAxes(condition, xslices.SliceWithValue(extraAxes, -1)...)
-			condition = BroadcastToDims(condition, operand.Shape().Dimensions...)
-			break
+	// Find output shape:
+	outputShape := onTrue.Shape()
+	if outputShape.IsScalar() {
+		outputShape = onFalse.Shape()
+		if outputShape.IsScalar() {
+			outputShape = condition.Shape()
 		}
 	}
 
-	// Check validity of resulting shapes.
-	if (!onTrue.IsScalar() && !condition.Shape().EqualDimensions(onTrue.Shape())) ||
-		(!onFalse.IsScalar() && !condition.Shape().EqualDimensions(onFalse.Shape())) {
-		exceptions.Panicf(
-			"Where(condition, onTrue, onFalse) requires onTrue(%s)/onFalse(%s) to either be a scalar to have "+
-				"the same dimensions as condition (%s)",
-			onTrue.Shape(), onFalse.Shape(), condition.Shape())
+	// Broadcast onTrue and onFalse to the outputShape if needed.
+	if !onTrue.Shape().IsScalar() && !onFalse.Shape().IsScalar() && !onTrue.Shape().Equal(onFalse.Shape()) {
+		exceptions.Panicf("Where() requires onTrue (%s) and onFalse (%s) to either be the same shape or be a scalar",
+			onTrue.Shape(), onFalse.Shape())
+	}
+
+	// Broadcasting of condition when it's a prefix to one of the operands:
+	if !condition.IsScalar() {
+		if condition.Rank() > outputShape.Rank() {
+			exceptions.Panicf("Where() requires the condition shape (%s) to be a prefix (or equal) to the output shape (%s), onTrue is %s and onFalse is %s",
+				condition.Shape(), outputShape, onTrue.Shape(), onFalse.Shape())
+		}
+		for axis, dim := range condition.Shape().Dimensions {
+			if outputShape.Dimensions[axis] != dim {
+				exceptions.Panicf("Where() requires the condition shape to be a prefix (or equal) to the output shape, but condition is %s and output shape is %s",
+					condition.Shape(), outputShape)
+			}
+		}
+		if condition.Rank() != outputShape.Rank() {
+			// Broadcast condition.
+			extraAxes := outputShape.Rank() - condition.Rank()
+			condition = InsertAxes(condition, xslices.SliceWithValue(extraAxes, -1)...)
+			condition = BroadcastToDims(condition, outputShape.Dimensions...)
+		}
 	}
 
 	// Broadcasting of scalar onTrue or onFalse is done by the backend.
