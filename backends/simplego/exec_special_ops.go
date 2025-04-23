@@ -5,12 +5,17 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
+	"slices"
 )
 
 func init() {
 	nodeExecutors[backends.OpTypeIdentity] = execIdentity
 	nodeExecutors[backends.OpTypeWhere] = execWhere
 	nodeExecutors[backends.OpTypeReshape] = execReshape
+	nodeExecutors[backends.OpTypeReduceMax] = execReduce
+	nodeExecutors[backends.OpTypeReduceMin] = execReduce
+	nodeExecutors[backends.OpTypeReduceSum] = execReduce
+	nodeExecutors[backends.OpTypeReduceProduct] = execReduce
 }
 
 // execIdentity implements the Identity op.
@@ -76,7 +81,7 @@ func execWhere(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 	return output
 }
 
-func execWhereGeneric[T supportedTypesConstraints](conditionBuf, onTrueBuf, onFalseBuf, outputBuf *Buffer) {
+func execWhereGeneric[T SupportedTypesConstraints](conditionBuf, onTrueBuf, onFalseBuf, outputBuf *Buffer) {
 	if conditionBuf.shape.IsScalar() {
 		// Case 1: condition is a scalar, either we take onTrue or onFalse as a whole (with potential broadcast).
 		if conditionBuf.flat.([]bool)[0] {
@@ -110,7 +115,7 @@ func execWhereGeneric[T supportedTypesConstraints](conditionBuf, onTrueBuf, onFa
 	}
 }
 
-func execWhereSetOutputWithValue[T supportedTypesConstraints](outputBuf, valueBuf *Buffer) {
+func execWhereSetOutputWithValue[T SupportedTypesConstraints](outputBuf, valueBuf *Buffer) {
 	if valueBuf == outputBuf {
 		// The output is reusing the value buffer, nothing to do.
 		return
@@ -142,4 +147,173 @@ func execReshape(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []b
 	}
 	output.shape = node.shape
 	return output
+}
+
+func execReduce(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	operand := inputs[0]
+	reduceAxes := node.data.([]int)
+	if len(reduceAxes) == 0 {
+		return execIdentity(backend, node, inputs, inputsOwned)
+	}
+	output := backend.getBuffer(node.shape.DType, node.shape.Size())
+	output.shape = node.shape
+	it := newReduceOutputIterator(operand.shape.Dimensions, reduceAxes)
+	dtype := output.shape.DType
+
+	switch node.opType {
+	case backends.OpTypeReduceMax:
+		dispatchReduceMax.Dispatch(dtype, operand, output, it, dtype)
+	case backends.OpTypeReduceMin:
+		dispatchReduceMin.Dispatch(dtype, operand, output, it, dtype)
+	case backends.OpTypeReduceSum:
+		dispatchReduceSum.Dispatch(dtype, operand, output, it)
+	case backends.OpTypeReduceProduct:
+		dispatchReduceProduct.Dispatch(dtype, operand, output, it)
+	default:
+		exceptions.Panicf("unsupported reduce op %s", node.opType)
+	}
+	return output
+}
+
+type reduceOutputIterator struct {
+	flatIdx int // On the output tensor.
+
+	perAxisIdx    []int // On the operand tensor.
+	dimensions    []int // Of the operand tensor.
+	perAxisStride []int // It is set to 0 for the axes being reduced.
+}
+
+func newReduceOutputIterator(dimensions []int, reduceAxes []int) *reduceOutputIterator {
+	inputRank := len(dimensions)
+	it := &reduceOutputIterator{
+		perAxisIdx: make([]int, inputRank),
+		dimensions: dimensions,
+	}
+	it.perAxisStride = slices.Clone(dimensions)
+	stride := 1
+	for _, reduceAxis := range reduceAxes {
+		it.perAxisStride[reduceAxis] = 0
+	}
+	for axis := inputRank - 1; axis >= 0; axis-- {
+		if it.perAxisStride[axis] == 0 {
+			// Skip reduce axes, and leave stride as 0.
+			continue
+		}
+
+		// Accumulate (product) axes that are not reduced on the stride.
+		newStride := stride * it.perAxisStride[axis]
+		it.perAxisStride[axis] = stride
+		stride = newStride
+	}
+	return it
+}
+
+func (it *reduceOutputIterator) next() int {
+	returnIdx := it.flatIdx
+	// Move pointer.
+	for axis := len(it.perAxisIdx) - 1; axis >= 0; axis-- {
+		it.perAxisIdx[axis]++
+		it.flatIdx += it.perAxisStride[axis]
+		if it.perAxisIdx[axis] < it.dimensions[axis] {
+			break
+		}
+
+		// Return to the start of current axis and move to next axis.
+		it.perAxisIdx[axis] = 0
+		it.flatIdx -= it.perAxisStride[axis] * it.dimensions[axis]
+	}
+	return returnIdx
+}
+
+func execReduceInitializeGeneric[T SupportedTypesConstraints](output *Buffer, initialValue T) {
+	outputFlat := output.flat.([]T)
+	for outputIdx := range outputFlat {
+		outputFlat[outputIdx] = initialValue
+	}
+}
+
+var dispatchReduceMax = NewDTypeDispatcher("ReduceMax")
+
+//go:generate go run ../../internal/cmd/simplego_dispatcher -dispatcher=dispatchReduceMax -generic=execReduceMaxGeneric -int -uint -float
+
+// execReduceMaxGeneric: use dispatchReduceMax to call it.
+func execReduceMaxGeneric[T PODNumericConstraints](params ...any) {
+	operand, output, it, dtype := params[0].(*Buffer), params[1].(*Buffer), params[2].(*reduceOutputIterator), params[3].(dtypes.DType)
+
+	// Initialize with lowest value.
+	initialValue := dtype.LowestValue().(T)
+	outputFlat := output.flat.([]T)
+	for outputIdx := range outputFlat {
+		outputFlat[outputIdx] = initialValue
+	}
+
+	// Reduce from operand.
+	operandFlat := operand.flat.([]T)
+	for _, value := range operandFlat {
+		outputIdx := it.next()
+		outputFlat[outputIdx] = max(outputFlat[outputIdx], value)
+	}
+}
+
+var dispatchReduceMin = NewDTypeDispatcher("ReduceMin")
+
+//go:generate go run ../../internal/cmd/simplego_dispatcher -dispatcher=dispatchReduceMin -generic=execReduceMinGeneric -int -uint -float
+
+func execReduceMinGeneric[T PODNumericConstraints](params ...any) {
+	operand, output, it, dtype := params[0].(*Buffer), params[1].(*Buffer), params[2].(*reduceOutputIterator), params[3].(dtypes.DType)
+
+	// Initialize with highest value.
+	initialValue := dtype.HighestValue().(T)
+	outputFlat := output.flat.([]T)
+	for outputIdx := range outputFlat {
+		outputFlat[outputIdx] = initialValue
+	}
+
+	operandFlat := operand.flat.([]T)
+	for _, value := range operandFlat {
+		outputIdx := it.next()
+		outputFlat[outputIdx] = min(outputFlat[outputIdx], value)
+	}
+}
+
+var dispatchReduceSum = NewDTypeDispatcher("ReduceSum")
+
+//go:generate go run ../../internal/cmd/simplego_dispatcher -dispatcher=dispatchReduceSum -generic=execReduceSumGeneric -int -uint -float
+
+func execReduceSumGeneric[T PODNumericConstraints](params ...any) {
+	operand, output, it := params[0].(*Buffer), params[1].(*Buffer), params[2].(*reduceOutputIterator)
+
+	// Initialize with 0.
+	initialValue := T(0)
+	outputFlat := output.flat.([]T)
+	for outputIdx := range outputFlat {
+		outputFlat[outputIdx] = initialValue
+	}
+
+	operandFlat := operand.flat.([]T)
+	for _, value := range operandFlat {
+		outputIdx := it.next()
+		outputFlat[outputIdx] = outputFlat[outputIdx] + value
+	}
+}
+
+var dispatchReduceProduct = NewDTypeDispatcher("ReduceProduct")
+
+//go:generate go run ../../internal/cmd/simplego_dispatcher -dispatcher=dispatchReduceProduct -generic=execReduceProductGeneric -int -uint -float
+
+func execReduceProductGeneric[T PODNumericConstraints](params ...any) {
+	operand, output, it := params[0].(*Buffer), params[1].(*Buffer), params[2].(*reduceOutputIterator)
+
+	// Initialize with 1.
+	initialValue := T(1)
+	outputFlat := output.flat.([]T)
+	for outputIdx := range outputFlat {
+		outputFlat[outputIdx] = initialValue
+	}
+
+	operandFlat := operand.flat.([]T)
+	for _, value := range operandFlat {
+		outputIdx := it.next()
+		outputFlat[outputIdx] = outputFlat[outputIdx] * value
+	}
 }

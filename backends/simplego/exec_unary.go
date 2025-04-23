@@ -70,7 +70,7 @@ func execNeg(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool)
 	return output
 }
 
-func execNegGeneric[T podSignedNumericPODConstraints](inputs, outputs []T) {
+func execNegGeneric[T PODSignedNumericConstraints](inputs, outputs []T) {
 	for ii, input := range inputs {
 		outputs[ii] = -input
 	}
@@ -114,7 +114,7 @@ func execAbs(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool)
 	return output
 }
 
-func execAbsGeneric[T podSignedNumericPODConstraints](inputs, outputs []T) {
+func execAbsGeneric[T PODSignedNumericConstraints](inputs, outputs []T) {
 	for ii, input := range inputs {
 		if input < 0 {
 			outputs[ii] = -input
@@ -124,7 +124,7 @@ func execAbsGeneric[T podSignedNumericPODConstraints](inputs, outputs []T) {
 	}
 }
 
-func execAbsUnsignedGeneric[T podUnsignedConstraints](input, output *Buffer) {
+func execAbsUnsignedGeneric[T PODUnsignedConstraints](input, output *Buffer) {
 	if input == output {
 		return
 	}
@@ -174,7 +174,7 @@ func execSign(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool
 	return output
 }
 
-func execSignGeneric[T podSignedNumericPODConstraints](inputs, outputs []T) {
+func execSignGeneric[T PODSignedNumericConstraints](inputs, outputs []T) {
 	for ii, input := range inputs {
 		switch {
 		case input < 0:
@@ -187,7 +187,7 @@ func execSignGeneric[T podSignedNumericPODConstraints](inputs, outputs []T) {
 	}
 }
 
-func execSignForUnsignedGeneric[T podUnsignedConstraints](inputs, outputs []T) {
+func execSignForUnsignedGeneric[T PODUnsignedConstraints](inputs, outputs []T) {
 	for ii, input := range inputs {
 		if input > 0 {
 			outputs[ii] = 1
@@ -249,7 +249,7 @@ func execBitwiseNot(backend *Backend, node *Node, inputs []*Buffer, inputsOwned 
 	return output
 }
 
-func execBitwiseNotGeneric[T integerPODConstraints](inputs, outputs []T) {
+func execBitwiseNotGeneric[T PODIntegerConstraints](inputs, outputs []T) {
 	for ii, input := range inputs {
 		outputs[ii] = ^input
 	}

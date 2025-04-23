@@ -72,7 +72,7 @@ func (bi *broadcastIterator) Next() (flatIdx int) {
 }
 
 // execScalarPowIntGeneric is a O(num of bits) for Pow(base, exp) implementation for integers.
-func execScalarPowIntGeneric[T integerPODConstraints](base, exp T) T {
+func execScalarPowIntGeneric[T PODIntegerConstraints](base, exp T) T {
 	result := T(1)
 	for exp > 0 {
 		if exp%2 == 1 {

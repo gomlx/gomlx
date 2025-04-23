@@ -324,11 +324,36 @@ func WhereOp(condition, onTrue, onFalse shapes.Shape) shapes.Shape {
 // that the sizes are the same.
 //
 // Notice the backends.Reshape doesn't support auto-scaling dimensions (set to -1), as graph.Reshape does.
-func ReshapeOp(operand shapes.Shape, dims ...int) shapes.Shape {
+func ReshapeOp(operand shapes.Shape, dims []int) shapes.Shape {
 	output := shapes.Make(operand.DType, dims...)
 	if operand.Size() != output.Size() {
 		exceptions.Panicf("Reshape() cannot reshape %s to dimensions %v, their size don't match",
 			operand, dims)
+	}
+	return output
+}
+
+// ReduceOp works for the ReduceMax, ReduceMin, ReduceSum and ReduceProduct ops.
+func ReduceOp(operand shapes.Shape, axes []int) shapes.Shape {
+	if len(axes) == 0 {
+		return operand
+	}
+	output := shapes.Make(operand.DType)
+	outputRank := operand.Rank() - len(axes)
+	if outputRank > 0 {
+		// Copy over dimensions that will stay.
+		output.Dimensions = make([]int, 0, outputRank)
+		for _, axis := range axes {
+			if axis < 0 || axis >= operand.Rank() {
+				exceptions.Panicf("Reduce operation require each axis to be 0 <= axis < rank, but got invalid axis %d for shape %s", axis, operand)
+			}
+		}
+		axesSet := types.SetWith(axes...)
+		for axis, dim := range operand.Dimensions {
+			if !axesSet.Has(axis) {
+				output.Dimensions = append(output.Dimensions, dim)
+			}
+		}
 	}
 	return output
 }

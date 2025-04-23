@@ -79,8 +79,36 @@ func (b *Builder) Where(conditionOp, onTrueOp, onFalseOp backends.Op) backends.O
 // Notice the backends.Reshape doesn't support auto-scaling dimensions (set to -1), as graph.Reshape does.
 func (b *Builder) Reshape(operandOp backends.Op, dims ...int) backends.Op {
 	operand := b.checkOps("Reshape", operandOp)[0]
-	outputShape := shapeinference.ReshapeOp(operand.shape, dims...)
+	outputShape := shapeinference.ReshapeOp(operand.shape, dims)
 	return b.newNode(backends.OpTypeReshape, outputShape, operand)
+}
+
+// ReduceMax implements backends.Builder interface.
+func (b *Builder) ReduceMax(operandOp backends.Op, axis ...int) backends.Op {
+	return b.reduceImpls(backends.OpTypeReduceMax, operandOp, axis...)
+}
+
+// ReduceMin implements backends.Builder interface.
+func (b *Builder) ReduceMin(operandOp backends.Op, axis ...int) backends.Op {
+	return b.reduceImpls(backends.OpTypeReduceMin, operandOp, axis...)
+}
+
+// ReduceSum implements backends.Builder interface.
+func (b *Builder) ReduceSum(operandOp backends.Op, axis ...int) backends.Op {
+	return b.reduceImpls(backends.OpTypeReduceSum, operandOp, axis...)
+}
+
+// ReduceProduct implements backends.Builder interface.
+func (b *Builder) ReduceProduct(operandOp backends.Op, axis ...int) backends.Op {
+	return b.reduceImpls(backends.OpTypeReduceProduct, operandOp, axis...)
+}
+
+func (b *Builder) reduceImpls(reduceOpType backends.OpType, operandOp backends.Op, axes ...int) backends.Op {
+	operand := b.checkOps("ReduceOp", operandOp)[0]
+	outputShape := shapeinference.ReduceOp(operand.shape, axes)
+	node := b.newNode(reduceOpType, outputShape, operand)
+	node.data = axes
+	return node
 }
 
 // Unary Operations:
