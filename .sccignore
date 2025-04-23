@@ -5,3 +5,5 @@ LICENSE
 .dockerignore
 .idea
 checkpoint*.json
+gen_*
+*_enumer.go
