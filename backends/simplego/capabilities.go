@@ -18,10 +18,14 @@ var Capabilities = backends.Capabilities{
 		backends.OpTypeConstant:      true,
 		backends.OpTypeIdentity:      true,
 		backends.OpTypeWhere:         true,
+		backends.OpTypeReshape:       true,
+		backends.OpTypeTranspose:     true,
 		backends.OpTypeReduceMax:     true,
 		backends.OpTypeReduceMin:     true,
 		backends.OpTypeReduceSum:     true,
 		backends.OpTypeReduceProduct: true,
+		backends.OpTypeDotGeneral:    true,
+		backends.OpTypeDot:           true,
 
 		// Standard unary operations:
 		backends.OpTypeAbs:        true,
