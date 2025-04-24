@@ -1,10 +1,11 @@
 package simplego
 
 import (
-	"fmt"
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"slices"
 )
 
@@ -172,5 +173,41 @@ func execNormalizedDotGeneralGeneric[T PODNumericConstraints](params ...any) {
 		}
 		rhsIdx += rhsBatchStride
 	}
-	fmt.Printf("outputIdx=%d, lhsIdx=%d, rhsIdx=%d\n", outputIdx, lhsIdx, rhsIdx)
+}
+
+// Register the BFloat16 version of DotGeneral.
+func init() { dispatchDotGeneral.Register(dtypes.BFloat16, execNormalizedDotGeneralBFloat16) }
+
+func execNormalizedDotGeneralBFloat16(params ...any) {
+	lhs, rhs, output := params[0].(*Buffer), params[1].(*Buffer), params[2].(*Buffer)
+	lhsFlat := lhs.flat.([]bfloat16.BFloat16)
+	rhsFlat := rhs.flat.([]bfloat16.BFloat16)
+	outputFlat := output.flat.([]bfloat16.BFloat16)
+	var lhsIdx, rhsIdx, outputIdx int
+	batchSize := lhs.shape.Dimensions[0] // same as rhs'.
+	lhsCrossSize := lhs.shape.Dimensions[1]
+	rhsCrossSize := rhs.shape.Dimensions[1]
+	contractingSize := lhs.shape.Dimensions[2] // same as rhs'.
+	rhsBatchStride := contractingSize * rhsCrossSize
+	for _ = range batchSize {
+		for _ = range lhsCrossSize {
+			rhsBatchStartIdx := rhsIdx
+			for _ = range rhsCrossSize {
+				lhsRowStartIdx := lhsIdx
+				// Accumulate result in float32.
+				acc := outputFlat[outputIdx].Float32()
+				for _ = range contractingSize {
+					acc += lhsFlat[lhsIdx].Float32() * rhsFlat[rhsIdx].Float32()
+					lhsIdx++
+					rhsIdx++
+				}
+				outputFlat[outputIdx] = bfloat16.FromFloat32(acc)
+				lhsIdx = lhsRowStartIdx
+				outputIdx++
+			}
+			lhsIdx += contractingSize
+			rhsIdx = rhsBatchStartIdx
+		}
+		rhsIdx += rhsBatchStride
+	}
 }

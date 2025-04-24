@@ -31,7 +31,9 @@ func (d *DTypeDispatcher) Dispatch(dtype dtypes.DType, params ...any) {
 	}
 	fn := d.fnMap[dtype]
 	if fn == nil {
-		exceptions.Panicf("dtype %s not supported by %s", dtype, d.Name)
+		exceptions.Panicf("dtype %s not supported by %s -- "+
+			"if you need it, consider creating an issue to add support in github.com/gomlx/gomlx",
+			dtype, d.Name)
 	}
 	fn(params...)
 }

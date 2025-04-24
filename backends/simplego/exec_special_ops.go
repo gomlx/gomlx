@@ -1,7 +1,6 @@
 package simplego
 
 import (
-	"fmt"
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
@@ -424,14 +423,12 @@ func newTransposeIterator(operand shapes.Shape, permutations []int) *transposeIt
 		stride *= operand.Dimensions[operandAxis]
 		reversePermutations[operandAxis] = outputAxis
 	}
-	fmt.Printf("stridesOnOutput: %v\n", stridesOnOutput)
 
 	// Calculate per operand axis, what is the stride on the output.
 	for operandAxis := range rank {
 		outputAxis := reversePermutations[operandAxis]
 		it.perAxisStrides[operandAxis] = stridesOnOutput[outputAxis]
 	}
-	fmt.Printf("perAxisStrides: %v\n", it.perAxisStrides)
 	return it
 }
 

@@ -7,6 +7,7 @@ import (
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
@@ -69,4 +70,15 @@ func TestDotGeneral_Exec(t *testing.T) {
 			{{8255, 8330, 8405, 8480}},
 		}}
 	assert.Equal(t, want, y0.Value())
+
+	bf16 := bfloat16.FromFloat32
+	y1 := graph.ExecOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
+		return graph.DotGeneral(lhs, []int{1}, []int{}, rhs, []int{0}, []int{})
+	},
+		[][]bfloat16.BFloat16{{bf16(1), bf16(2), bf16(3)}},
+		[][]bfloat16.BFloat16{{bf16(10)}, {bf16(11)}, {bf16(12)}},
+	)
+	fmt.Printf("\ty1=%s\n", y1)
+	assert.NoError(t, y1.Shape().Check(dtypes.BFloat16, 1, 1))
+	assert.Equal(t, float32(10+22+36), tensors.CopyFlatData[bfloat16.BFloat16](y1)[0].Float32())
 }
