@@ -133,3 +133,21 @@ func TestExecSpecialOps_Transpose(t *testing.T) {
 		{{3, 7, 11}, {15, 19, 23}}}
 	require.Equal(t, want, y0.Value())
 }
+
+func TestExecSpecialOps_Iota(t *testing.T) {
+	y0 := graph.ExecOnce(backend, func(g *graph.Graph) *graph.Node {
+		return graph.Iota(g, shapes.Make(dtypes.Int8, 2, 3), 1)
+	})
+	fmt.Printf("\ty0=%s\n", y0.GoStr())
+	assert.NoError(t, y0.Shape().Check(dtypes.Int8, 2, 3))
+	require.Equal(t, [][]int8{{0, 1, 2}, {0, 1, 2}}, y0.Value())
+
+	y1 := graph.ExecOnce(backend, func(g *graph.Graph) *graph.Node {
+		return graph.Iota(g, shapes.Make(dtypes.BFloat16, 2, 3), 0)
+	})
+	fmt.Printf("\ty1=%s\n", y1.GoStr())
+	assert.NoError(t, y1.Shape().Check(dtypes.BFloat16, 2, 3))
+	bf16 := bfloat16.FromFloat32
+	require.Equal(t, [][]bfloat16.BFloat16{{bf16(0), bf16(0), bf16(0)}, {bf16(1), bf16(1), bf16(1)}}, y1.Value())
+
+}

@@ -61,6 +61,22 @@ func (b *Builder) Constant(flat any, dims ...int) backends.Op {
 	return n
 }
 
+// Iota creates a constant of the given shape with increasing numbers (starting from 0)
+// on the given axis. So Iota([2,2], 1) returns [[0 1][0 1]], while Iota([2,2], 0)
+// returns [[0 0][1 1]].
+func (b *Builder) Iota(shape shapes.Shape, iotaAxis int) backends.Op {
+	_ = b.checkOps("Iota")
+	if shape.Rank() == 0 {
+		exceptions.Panicf("Iota: shape must have at least one dimension")
+	}
+	if iotaAxis < 0 || iotaAxis >= shape.Rank() {
+		exceptions.Panicf("Iota: iotaAxis (%d) must be in the range [0,%d)", iotaAxis, shape.Rank()-1)
+	}
+	node := b.newNode(backends.OpTypeIota, shape)
+	node.data = iotaAxis
+	return node
+}
+
 // Identity implements backends.Identity interface.
 func (b *Builder) Identity(operandOp backends.Op) backends.Op {
 	operand := b.checkOps("Reshape", operandOp)[0]

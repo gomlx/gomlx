@@ -18,6 +18,7 @@ func init() {
 	nodeExecutors[backends.OpTypeReduceMin] = execReduce
 	nodeExecutors[backends.OpTypeReduceSum] = execReduce
 	nodeExecutors[backends.OpTypeReduceProduct] = execReduce
+	nodeExecutors[backends.OpTypeIota] = execIota
 }
 
 // IdentityOp ====================================================================================================
@@ -459,5 +460,67 @@ func execTransposeGeneric[T SupportedTypesConstraints](params ...any) {
 	outputFlat := output.flat.([]T)
 	for _, value := range operandFlat {
 		outputFlat[it.next()] = value
+	}
+}
+
+// IotaOp ====================================================================================================
+
+func execIota(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	output := backend.getBuffer(node.shape.DType, node.shape.Size())
+	output.shape = node.shape
+	iotaAxis := node.data.(int)
+	iotaSize := node.shape.Dimensions[iotaAxis]
+	batchSize := 1
+	repeatsSize := 1
+	for axis, dim := range node.shape.Dimensions {
+		if axis > iotaAxis {
+			repeatsSize *= dim
+		} else if axis < iotaAxis {
+			batchSize *= dim
+		}
+	}
+	dispatchIota.Dispatch(node.shape.DType, output, batchSize, iotaSize, repeatsSize)
+	return output
+}
+
+var dispatchIota = NewDTypeDispatcher("Iota")
+
+//go:generate go run ../../internal/cmd/simplego_dispatcher -dispatcher=dispatchIota -generic=execIotaGeneric -int -uint -float
+
+func execIotaGeneric[T PODNumericConstraints](params ...any) {
+	output, batchSize, iotaSize, repeatsSize := params[0].(*Buffer), params[1].(int), params[2].(int), params[3].(int)
+	outputFlat := output.flat.([]T)
+	flatIdx := 0
+	var value T
+	for _ = range batchSize {
+		// Repeat starting from 0 for each "batch dimension".
+		value = T(0)
+		for _ = range iotaSize {
+			for _ = range repeatsSize {
+				outputFlat[flatIdx] = value
+				flatIdx++
+			}
+			value++
+		}
+	}
+}
+
+func init() { dispatchIota.Register(dtypes.BFloat16, execIotaBFloat16) }
+
+func execIotaBFloat16(params ...any) {
+	output, batchSize, iotaSize, repeatsSize := params[0].(*Buffer), params[1].(int), params[2].(int), params[3].(int)
+	outputFlat := output.flat.([]bfloat16.BFloat16)
+	flatIdx := 0
+	var value float32
+	for _ = range batchSize {
+		// Repeat starting from 0 for each "batch dimension".
+		value = 0
+		for _ = range iotaSize {
+			for _ = range repeatsSize {
+				outputFlat[flatIdx] = bfloat16.FromFloat32(value)
+				flatIdx++
+			}
+			value++
+		}
 	}
 }
