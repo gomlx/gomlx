@@ -1,8 +1,10 @@
 package simplego
 
 import (
+	"fmt"
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"slices"
@@ -12,11 +14,14 @@ func init() {
 	nodeExecutors[backends.OpTypeIdentity] = execIdentity
 	nodeExecutors[backends.OpTypeWhere] = execWhere
 	nodeExecutors[backends.OpTypeReshape] = execReshape
+	nodeExecutors[backends.OpTypeTranspose] = execTranspose
 	nodeExecutors[backends.OpTypeReduceMax] = execReduce
 	nodeExecutors[backends.OpTypeReduceMin] = execReduce
 	nodeExecutors[backends.OpTypeReduceSum] = execReduce
 	nodeExecutors[backends.OpTypeReduceProduct] = execReduce
 }
+
+// IdentityOp ====================================================================================================
 
 // execIdentity implements the Identity op.
 func execIdentity(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
@@ -31,6 +36,8 @@ func execIdentity(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []
 	copyFlat(output.flat, operand.flat)
 	return output
 }
+
+// WhereOp ====================================================================================================
 
 // execWhere implements the Where op.
 func execWhere(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
@@ -111,6 +118,8 @@ func execWhereSetOutputWithValue[T SupportedTypesConstraints](outputBuf, valueBu
 	}
 }
 
+// ReshapeOp ====================================================================================================
+
 // execReshape implements Reshape.
 //
 // Notice the backends.Reshape doesn't support auto-scaling dimensions (set to -1), as graph.Reshape does.
@@ -126,6 +135,8 @@ func execReshape(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []b
 	output.shape = node.shape
 	return output
 }
+
+// Reduce{Max,Min,Sum,Product}Op ======================================================================================
 
 func execReduce(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
 	operand := inputs[0]
@@ -201,13 +212,6 @@ func (it *reduceOutputIterator) next() int {
 		it.flatIdx -= it.perAxisStride[axis] * it.dimensions[axis]
 	}
 	return returnIdx
-}
-
-func execReduceInitializeGeneric[T SupportedTypesConstraints](output *Buffer, initialValue T) {
-	outputFlat := output.flat.([]T)
-	for outputIdx := range outputFlat {
-		outputFlat[outputIdx] = initialValue
-	}
 }
 
 var dispatchReduceMax = NewDTypeDispatcher("ReduceMax")
@@ -372,5 +376,91 @@ func execReduceProductBFloat16(params ...any) {
 		outputIdx := it.next()
 		a, b := outputFlat[outputIdx].Float32(), value.Float32()
 		outputFlat[outputIdx] = bfloat16.FromFloat32(a * b)
+	}
+}
+
+// TransposeOp ====================================================================================================
+
+// execTranspose implements Transpose.
+// The output will have: output.Shape.Dimension[ii] = operand.Shape.Dimension[permutations[i]].
+func execTranspose(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	operand := inputs[0]
+	permutations := node.data.([]int)
+
+	// We can't write to the same buffer we read from, because it's not done with swaps.
+	output := backend.getBuffer(operand.shape.DType, operand.shape.Size())
+	output.shape = node.shape
+	it := newTransposeIterator(operand.shape, permutations)
+	dtype := node.shape.DType
+	dispatchTranspose.Dispatch(dtype, operand, output, it)
+	return output
+}
+
+type transposeIterator struct {
+	flatIdx                                int
+	perAxisIdx, perAxisStrides, dimensions []int
+}
+
+// newTransposeIterator creates a dynamic iterator that yields output flat indices
+// for the corresponding flat index on the input operand, assuming the operand flat index is moving
+// incrementally.
+func newTransposeIterator(operand shapes.Shape, permutations []int) *transposeIterator {
+	rank := operand.Rank()
+
+	it := &transposeIterator{
+		perAxisIdx:     make([]int, rank),
+		perAxisStrides: make([]int, rank),
+		dimensions:     operand.Dimensions,
+	}
+
+	// First calculate strides on the output.
+	stridesOnOutput := make([]int, rank)
+	stride := 1
+	reversePermutations := make([]int, rank)
+	for reverseAxis := range rank {
+		outputAxis := rank - reverseAxis - 1
+		stridesOnOutput[outputAxis] = stride
+		operandAxis := permutations[outputAxis]
+		stride *= operand.Dimensions[operandAxis]
+		reversePermutations[operandAxis] = outputAxis
+	}
+	fmt.Printf("stridesOnOutput: %v\n", stridesOnOutput)
+
+	// Calculate per operand axis, what is the stride on the output.
+	for operandAxis := range rank {
+		outputAxis := reversePermutations[operandAxis]
+		it.perAxisStrides[operandAxis] = stridesOnOutput[outputAxis]
+	}
+	fmt.Printf("perAxisStrides: %v\n", it.perAxisStrides)
+	return it
+}
+
+func (it *transposeIterator) next() (nextFlatIdx int) {
+	nextFlatIdx = it.flatIdx
+	rank := len(it.perAxisIdx)
+	for axis := rank - 1; axis >= 0; axis-- {
+		it.perAxisIdx[axis]++
+		it.flatIdx += it.perAxisStrides[axis]
+		if it.perAxisIdx[axis] < it.dimensions[axis] {
+			// We are done.
+			break
+		}
+		// Otherwise, rewind current axis and move to next.
+		it.perAxisIdx[axis] = 0
+		it.flatIdx -= it.perAxisStrides[axis] * it.dimensions[axis]
+	}
+	return
+}
+
+var dispatchTranspose = NewDTypeDispatcher("Transpose")
+
+//go:generate go run ../../internal/cmd/simplego_dispatcher -dispatcher=dispatchTranspose -generic=execTransposeGeneric -int -uint -float -bf16
+
+func execTransposeGeneric[T SupportedTypesConstraints](params ...any) {
+	operand, output, it := params[0].(*Buffer), params[1].(*Buffer), params[2].(*transposeIterator)
+	operandFlat := operand.flat.([]T)
+	outputFlat := output.flat.([]T)
+	for _, value := range operandFlat {
+		outputFlat[it.next()] = value
 	}
 }

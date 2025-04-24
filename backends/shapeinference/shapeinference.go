@@ -333,6 +333,41 @@ func ReshapeOp(operand shapes.Shape, dims []int) shapes.Shape {
 	return output
 }
 
+// TransposeOp all axes of the operand.
+// There must be one value in permutations for each axis in the operand.
+// The output will have: output.Shape.Dimension[ii] = operand.Shape.Dimension[permutations[i]].
+func TransposeOp(operand shapes.Shape, permutations []int) shapes.Shape {
+	rank := operand.Rank()
+	if len(permutations) != rank {
+		exceptions.Panicf("Transpose() requires all axes permutations to be defined, operand has shape %s, but %d permutations were given",
+			operand, len(permutations))
+	}
+	if rank == 0 {
+		return operand
+	}
+
+	// Check permutation axes are within range and unique.
+	axesSet := slices.Clone(permutations)
+	slices.Sort(axesSet)
+	for ii, srcAxis := range axesSet {
+		if srcAxis < 0 || srcAxis >= rank {
+			exceptions.Panicf("invalid permutation axis %d given to Transpose(%s), it must be within the range of its rank",
+				srcAxis, operand)
+		}
+		if ii > 0 && srcAxis == axesSet[ii-1] {
+			exceptions.Panicf("invalid permutations given to Transpose(%s, %v), there cannot be any repeated axis, each must appear exactly once",
+				operand, permutations)
+		}
+	}
+
+	output := operand.Clone()
+	for axis := range output.Dimensions {
+		srcAxis := permutations[axis]
+		output.Dimensions[axis] = operand.Dimensions[srcAxis]
+	}
+	return output
+}
+
 // ReduceOp works for the ReduceMax, ReduceMin, ReduceSum and ReduceProduct ops.
 func ReduceOp(operand shapes.Shape, axes []int) shapes.Shape {
 	if len(axes) == 0 {

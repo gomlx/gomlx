@@ -83,6 +83,17 @@ func (b *Builder) Reshape(operandOp backends.Op, dims ...int) backends.Op {
 	return b.newNode(backends.OpTypeReshape, outputShape, operand)
 }
 
+// Transpose axes of x.
+// There must be one value in permutations for each axis in the operand.
+// The output will have: output.Shape.Dimension[ii] = operand.Shape.Dimension[permutations[i]].
+func (b *Builder) Transpose(operandOp backends.Op, permutations ...int) backends.Op {
+	operand := b.checkOps("Transpose", operandOp)[0]
+	outputShape := shapeinference.TransposeOp(operand.shape, permutations)
+	node := b.newNode(backends.OpTypeTranspose, outputShape, operand)
+	node.data = permutations
+	return node
+}
+
 // ReduceMax implements backends.Builder interface.
 func (b *Builder) ReduceMax(operandOp backends.Op, axis ...int) backends.Op {
 	return b.reduceImpls(backends.OpTypeReduceMax, operandOp, axis...)

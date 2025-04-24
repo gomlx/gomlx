@@ -3,11 +3,13 @@ package simplego
 import (
 	"fmt"
 	"github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"testing"
 )
 
@@ -85,4 +87,41 @@ func TestExecSpecialOps_Reduce(t *testing.T) {
 	}, []bfloat16.BFloat16{bf16(-11), bf16(-17), bf16(-8)})
 	fmt.Printf("\ty4=%s\n", y4.GoStr())
 	assert.Equal(t, bf16(-17), y4.Value())
+}
+
+func TestExecSpecialOps_transposeIterator(t *testing.T) {
+	operand := shapes.Make(dtypes.Int32, 2, 3, 4)
+	permutations := []int{2, 0, 1}
+	it := newTransposeIterator(operand, permutations)
+	transposedFlatIndices := make([]int, 0, operand.Size())
+	for _ = range operand.Size() {
+		transposedFlatIndices = append(transposedFlatIndices, it.next())
+	}
+	fmt.Printf("\ttransposedFlatIndices=%#v\n", transposedFlatIndices)
+	want := []int{
+		// Operand axis 2 (the first being iterated) becomes output axis 0, in row-major order,
+		// this is the largest one, with strides of 6:
+		0, 6, 12, 18,
+		1, 7, 13, 19,
+		2, 8, 14, 20,
+
+		3, 9, 15, 21,
+		4, 10, 16, 22,
+		5, 11, 17, 23}
+	require.Equal(t, want, transposedFlatIndices)
+}
+
+func TestExecSpecialOps_Transpose(t *testing.T) {
+	operand := tensors.FromFlatDataAndDimensions(xslices.Iota(float32(0), 24), 2, 3, 4)
+	y0 := graph.ExecOnce(backend, func(x *graph.Node) *graph.Node {
+		return graph.TransposeAllDims(x, 2, 0, 1)
+	}, operand)
+	fmt.Printf("\ty0=%s\n", y0.GoStr())
+	assert.NoError(t, y0.Shape().Check(dtypes.Float32, 4, 2, 3))
+	want := [][][]float32{
+		{{0, 4, 8}, {12, 16, 20}},
+		{{1, 5, 9}, {13, 17, 21}},
+		{{2, 6, 10}, {14, 18, 22}},
+		{{3, 7, 11}, {15, 19, 23}}}
+	require.Equal(t, want, y0.Value())
 }
