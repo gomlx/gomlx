@@ -50,38 +50,16 @@ func execWhere(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 		output.shape = outputShape
 	}
 
-	switch outputShape.DType {
-	case dtypes.Bool:
-		execWhereGeneric[bool](condition, onTrue, onFalse, output)
-	case dtypes.Int8:
-		execWhereGeneric[int8](condition, onTrue, onFalse, output)
-	case dtypes.Int16:
-		execWhereGeneric[int16](condition, onTrue, onFalse, output)
-	case dtypes.Int32:
-		execWhereGeneric[int32](condition, onTrue, onFalse, output)
-	case dtypes.Int64:
-		execWhereGeneric[int64](condition, onTrue, onFalse, output)
-	case dtypes.Uint8:
-		execWhereGeneric[uint8](condition, onTrue, onFalse, output)
-	case dtypes.Uint16:
-		execWhereGeneric[uint16](condition, onTrue, onFalse, output)
-	case dtypes.Uint32:
-		execWhereGeneric[uint32](condition, onTrue, onFalse, output)
-	case dtypes.Uint64:
-		execWhereGeneric[uint64](condition, onTrue, onFalse, output)
-	case dtypes.Float32:
-		execWhereGeneric[float32](condition, onTrue, onFalse, output)
-	case dtypes.Float64:
-		execWhereGeneric[float64](condition, onTrue, onFalse, output)
-	case dtypes.BFloat16:
-		execWhereGeneric[bfloat16.BFloat16](condition, onTrue, onFalse, output)
-	default:
-		exceptions.Panicf("unsupported DType %s for Where() operation", outputShape.DType)
-	}
+	dispatchWhere.Dispatch(outputShape.DType, condition, onTrue, onFalse, output)
 	return output
 }
 
-func execWhereGeneric[T SupportedTypesConstraints](conditionBuf, onTrueBuf, onFalseBuf, outputBuf *Buffer) {
+var dispatchWhere = NewDTypeDispatcher("Where")
+
+//go:generate go run ../../internal/cmd/simplego_dispatcher -dispatcher=dispatchWhere -generic=execWhereGeneric -int -uint -float -bf16
+
+func execWhereGeneric[T SupportedTypesConstraints](params ...any) {
+	conditionBuf, onTrueBuf, onFalseBuf, outputBuf := params[0].(*Buffer), params[1].(*Buffer), params[2].(*Buffer), params[3].(*Buffer)
 	if conditionBuf.shape.IsScalar() {
 		// Case 1: condition is a scalar, either we take onTrue or onFalse as a whole (with potential broadcast).
 		if conditionBuf.flat.([]bool)[0] {
@@ -240,7 +218,7 @@ var dispatchReduceMax = NewDTypeDispatcher("ReduceMax")
 func execReduceMaxGeneric[T PODNumericConstraints](params ...any) {
 	operand, output, it, dtype := params[0].(*Buffer), params[1].(*Buffer), params[2].(*reduceOutputIterator), params[3].(dtypes.DType)
 
-	// Initialize with lowest value.
+	// Initialize with the lowest value.
 	initialValue := dtype.LowestValue().(T)
 	outputFlat := output.flat.([]T)
 	for outputIdx := range outputFlat {
@@ -255,6 +233,28 @@ func execReduceMaxGeneric[T PODNumericConstraints](params ...any) {
 	}
 }
 
+func init() { dispatchReduceMax.Register(dtypes.BFloat16, execReduceMaxBFloat16) }
+
+// execReduceMaxBFloat16: use dispatchReduceMax to call it.
+func execReduceMaxBFloat16(params ...any) {
+	operand, output, it, dtype := params[0].(*Buffer), params[1].(*Buffer), params[2].(*reduceOutputIterator), params[3].(dtypes.DType)
+
+	// Initialize with the lowest value.
+	initialValue := dtype.LowestValue().(bfloat16.BFloat16)
+	outputFlat := output.flat.([]bfloat16.BFloat16)
+	for outputIdx := range outputFlat {
+		outputFlat[outputIdx] = initialValue
+	}
+
+	// Reduce from operand.
+	operandFlat := operand.flat.([]bfloat16.BFloat16)
+	for _, value := range operandFlat {
+		outputIdx := it.next()
+		a, b := outputFlat[outputIdx].Float32(), value.Float32()
+		outputFlat[outputIdx] = bfloat16.FromFloat32(max(a, b))
+	}
+}
+
 var dispatchReduceMin = NewDTypeDispatcher("ReduceMin")
 
 //go:generate go run ../../internal/cmd/simplego_dispatcher -dispatcher=dispatchReduceMin -generic=execReduceMinGeneric -int -uint -float
@@ -262,7 +262,7 @@ var dispatchReduceMin = NewDTypeDispatcher("ReduceMin")
 func execReduceMinGeneric[T PODNumericConstraints](params ...any) {
 	operand, output, it, dtype := params[0].(*Buffer), params[1].(*Buffer), params[2].(*reduceOutputIterator), params[3].(dtypes.DType)
 
-	// Initialize with highest value.
+	// Initialize with the highest value.
 	initialValue := dtype.HighestValue().(T)
 	outputFlat := output.flat.([]T)
 	for outputIdx := range outputFlat {
@@ -276,13 +276,32 @@ func execReduceMinGeneric[T PODNumericConstraints](params ...any) {
 	}
 }
 
+func init() { dispatchReduceMin.Register(dtypes.BFloat16, execReduceMinBFloat16) }
+
+func execReduceMinBFloat16(params ...any) {
+	operand, output, it, dtype := params[0].(*Buffer), params[1].(*Buffer), params[2].(*reduceOutputIterator), params[3].(dtypes.DType)
+
+	// Initialize with the highest value.
+	initialValue := dtype.HighestValue().(bfloat16.BFloat16)
+	outputFlat := output.flat.([]bfloat16.BFloat16)
+	for outputIdx := range outputFlat {
+		outputFlat[outputIdx] = initialValue
+	}
+
+	operandFlat := operand.flat.([]bfloat16.BFloat16)
+	for _, value := range operandFlat {
+		outputIdx := it.next()
+		a, b := outputFlat[outputIdx].Float32(), value.Float32()
+		outputFlat[outputIdx] = bfloat16.FromFloat32(min(a, b))
+	}
+}
+
 var dispatchReduceSum = NewDTypeDispatcher("ReduceSum")
 
 //go:generate go run ../../internal/cmd/simplego_dispatcher -dispatcher=dispatchReduceSum -generic=execReduceSumGeneric -int -uint -float
 
 func execReduceSumGeneric[T PODNumericConstraints](params ...any) {
 	operand, output, it := params[0].(*Buffer), params[1].(*Buffer), params[2].(*reduceOutputIterator)
-
 	// Initialize with 0.
 	initialValue := T(0)
 	outputFlat := output.flat.([]T)
@@ -294,6 +313,25 @@ func execReduceSumGeneric[T PODNumericConstraints](params ...any) {
 	for _, value := range operandFlat {
 		outputIdx := it.next()
 		outputFlat[outputIdx] = outputFlat[outputIdx] + value
+	}
+}
+
+func init() { dispatchReduceSum.Register(dtypes.BFloat16, execReduceSumBFloat16) }
+
+func execReduceSumBFloat16(params ...any) {
+	operand, output, it := params[0].(*Buffer), params[1].(*Buffer), params[2].(*reduceOutputIterator)
+	// Initialize with 0.
+	initialValue := bfloat16.FromFloat32(0)
+	outputFlat := output.flat.([]bfloat16.BFloat16)
+	for outputIdx := range outputFlat {
+		outputFlat[outputIdx] = initialValue
+	}
+
+	operandFlat := operand.flat.([]bfloat16.BFloat16)
+	for _, value := range operandFlat {
+		outputIdx := it.next()
+		a, b := outputFlat[outputIdx].Float32(), value.Float32()
+		outputFlat[outputIdx] = bfloat16.FromFloat32(a + b)
 	}
 }
 
@@ -315,5 +353,24 @@ func execReduceProductGeneric[T PODNumericConstraints](params ...any) {
 	for _, value := range operandFlat {
 		outputIdx := it.next()
 		outputFlat[outputIdx] = outputFlat[outputIdx] * value
+	}
+}
+
+func init() { dispatchReduceProduct.Register(dtypes.BFloat16, execReduceProductBFloat16) }
+
+func execReduceProductBFloat16(params ...any) {
+	operand, output, it := params[0].(*Buffer), params[1].(*Buffer), params[2].(*reduceOutputIterator)
+	// Initialize with 1.
+	initialValue := bfloat16.FromFloat32(1)
+	outputFlat := output.flat.([]bfloat16.BFloat16)
+	for outputIdx := range outputFlat {
+		outputFlat[outputIdx] = initialValue
+	}
+
+	operandFlat := operand.flat.([]bfloat16.BFloat16)
+	for _, value := range operandFlat {
+		outputIdx := it.next()
+		a, b := outputFlat[outputIdx].Float32(), value.Float32()
+		outputFlat[outputIdx] = bfloat16.FromFloat32(a * b)
 	}
 }

@@ -69,6 +69,7 @@ func main() {
 		)
 	}
 	if *flagBF16 {
+		data.BF16 = true
 		data.DTypes = append(data.DTypes,
 			DTypeInfo{"BFloat16", "bfloat16.BFloat16"},
 		)

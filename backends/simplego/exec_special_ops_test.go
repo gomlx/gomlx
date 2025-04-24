@@ -76,6 +76,13 @@ func TestExecSpecialOps_Reduce(t *testing.T) {
 	y3 := graph.ExecOnce(backend, func(x *graph.Node) *graph.Node {
 		return graph.ReduceMultiply(x, 0)
 	}, []float32{-1e-2, 1e5, -1e-3})
-	fmt.Printf("\ty1=%s\n", y3.GoStr())
+	fmt.Printf("\ty3=%s\n", y3.GoStr())
 	assert.Equal(t, float32(1), y3.Value())
+
+	bf16 := bfloat16.FromFloat32
+	y4 := graph.ExecOnce(backend, func(x *graph.Node) *graph.Node {
+		return graph.ReduceMin(x, 0)
+	}, []bfloat16.BFloat16{bf16(-11), bf16(-17), bf16(-8)})
+	fmt.Printf("\ty4=%s\n", y4.GoStr())
+	assert.Equal(t, bf16(-17), y4.Value())
 }
