@@ -34,7 +34,7 @@ func init() {
 //
 // The actual generic dot multiplication happens during execution though.
 func (b *Builder) DotGeneral(lhsOp backends.Op, lhsContractingAxes, lhsBatchAxes []int, rhsOp backends.Op, rhsContractingAxes, rhsBatchAxes []int) backends.Op {
-	inputs := b.checkOps("Reshape", lhsOp, rhsOp)
+	inputs := b.checkOps(backends.OpTypeDotGeneral.String(), lhsOp, rhsOp)
 	lhs, rhs := inputs[0], inputs[1]
 	dtype := lhs.shape.DType
 	if dtype != rhs.shape.DType {
@@ -210,4 +210,41 @@ func execNormalizedDotGeneralBFloat16(params ...any) {
 		}
 		rhsIdx += rhsBatchStride
 	}
+}
+
+// Dot ------------------------------------------------------------------------------------------------------
+// Dot implements backends.Builder interface.
+//
+// It is implemented using DotGeneral and Reshape.
+//
+// Dot returns the "dot product" operation.
+// The exact semantics of this operation depend on the ranks of the operands:
+// | Input | Output | Semantics |
+// | vector [n] dot vector [n] | scalar | vector dot product |
+// | matrix [m x k] dot vector [k] | vector [m]	matrix-vector multiplication |
+// | matrix [m x k] dot matrix [k x n] | matrix [m x n] | matrix-matrix multiplication |
+// The operation performs sum of products over the second dimension of x0 (or the first if it has rank 1) and
+// the first dimension of x1.
+// These are the "contracted" dimensions.
+// The contracted dimensions of x0 and x1 must be of the same size.
+// In practice, it can be used to perform dot products between vectors, vector/matrix multiplications or
+// matrix/matrix multiplications.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func (b *Builder) Dot(lhsOp, rhsOp backends.Op) backends.Op {
+	inputs := b.checkOps(backends.OpTypeDotGeneral.String(), lhsOp, rhsOp)
+	lhs, rhs := inputs[0], inputs[1]
+	var output *Node
+	if lhs.shape.Rank() == 1 && rhs.shape.Rank() == 1 {
+		// Contracting both vectors.
+		output = b.DotGeneral(lhs, []int{0}, []int{}, rhs, []int{0}, []int{}).(*Node)
+	} else if lhs.shape.Rank() == 2 && rhs.shape.Rank() == 1 {
+		// Contract rhs vector.
+		output = b.DotGeneral(lhs, []int{1}, []int{}, rhs, []int{0}, []int{}).(*Node)
+	} else if lhs.shape.Rank() == 2 && rhs.shape.Rank() == 2 {
+		// Traditional matrix multiplication:
+		output = b.DotGeneral(lhs, []int{1}, []int{}, rhs, []int{0}, []int{}).(*Node)
+	} else {
+		exceptions.Panicf("Dot operands have invalid ranks: lhs=%v, rhs=%v", lhs.shape, rhs.shape)
+	}
+	return output
 }

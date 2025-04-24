@@ -5,6 +5,7 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/shapeinference"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 )
 
@@ -116,7 +117,12 @@ func (b *Builder) ReduceProduct(operandOp backends.Op, axis ...int) backends.Op 
 
 func (b *Builder) reduceImpls(reduceOpType backends.OpType, operandOp backends.Op, axes ...int) backends.Op {
 	operand := b.checkOps("ReduceOp", operandOp)[0]
+	if len(axes) == 0 {
+		// Default if no axes are given, is to reduce all axes.
+		axes = xslices.Iota(0, operand.shape.Rank())
+	}
 	outputShape := shapeinference.ReduceOp(operand.shape, axes)
+	outputShape.DType = operand.shape.DType
 	node := b.newNode(reduceOpType, outputShape, operand)
 	node.data = axes
 	return node

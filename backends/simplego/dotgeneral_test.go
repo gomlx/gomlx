@@ -82,3 +82,21 @@ func TestDotGeneral_Exec(t *testing.T) {
 	assert.NoError(t, y1.Shape().Check(dtypes.BFloat16, 1, 1))
 	assert.Equal(t, float32(10+22+36), tensors.CopyFlatData[bfloat16.BFloat16](y1)[0].Float32())
 }
+
+func TestDotGeneral_Dot(t *testing.T) {
+	exec := graph.NewExec(backend, func(lhs, rhs *graph.Node) *graph.Node {
+		return graph.Dot(lhs, rhs)
+	})
+
+	y0 := exec.Call([]float32{1, 2, 3}, []float32{10, 11, 12})[0]
+	fmt.Printf("\ty0=%s\n", y0.GoStr())
+	assert.Equal(t, float32(10+22+36), y0.Value())
+
+	y1 := exec.Call([][]float32{{1, 2, 3}, {2, 4, 6}}, []float32{10, 11, 12})[0]
+	fmt.Printf("\ty1=%s\n", y1.GoStr())
+	assert.Equal(t, []float32{10 + 22 + 36, 20 + 44 + 72}, y1.Value())
+
+	y2 := exec.Call([][]float32{{1, 2, 3}, {2, 4, 6}}, [][]float32{{10}, {11}, {12}})[0]
+	fmt.Printf("\ty2=%s\n", y2.GoStr())
+	assert.Equal(t, [][]float32{{10 + 22 + 36}, {20 + 44 + 72}}, y2.Value())
+}
