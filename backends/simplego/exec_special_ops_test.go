@@ -87,6 +87,14 @@ func TestExecSpecialOps_Reduce(t *testing.T) {
 	}, []bfloat16.BFloat16{bf16(-11), bf16(-17), bf16(-8)})
 	fmt.Printf("\ty4=%s\n", y4.GoStr())
 	assert.Equal(t, bf16(-17), y4.Value())
+
+	// Test full reduction to scalar if no axes are given.
+	y5 := graph.ExecOnce(backend, func(x *graph.Node) *graph.Node {
+		return graph.ReduceSum(x)
+	},
+		[][]bfloat16.BFloat16{{bf16(-11), bf16(-17)}, {bf16(8), bf16(21)}})
+	fmt.Printf("\ty5=%s\n", y5.GoStr())
+	assert.Equal(t, bf16(1), y5.Value())
 }
 
 func TestExecSpecialOps_transposeIterator(t *testing.T) {
