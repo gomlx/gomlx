@@ -4,6 +4,7 @@ import (
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"slices"
@@ -15,6 +16,7 @@ func init() {
 	nodeExecutors[backends.OpTypeReshape] = execReshape
 	nodeExecutors[backends.OpTypeTranspose] = execTranspose
 	nodeExecutors[backends.OpTypeBroadcast] = execBroadcast
+	nodeExecutors[backends.OpTypeBroadcastInDim] = execBroadcastInDim
 	nodeExecutors[backends.OpTypeReduceMax] = execReduce
 	nodeExecutors[backends.OpTypeReduceMin] = execReduce
 	nodeExecutors[backends.OpTypeReduceSum] = execReduce
@@ -489,6 +491,52 @@ func execBroadcastGeneric[T SupportedTypesConstraints](params ...any) {
 	for _ = range repeats {
 		copy(outputFlat[pos:], operandFlat)
 		pos += len(operandFlat)
+	}
+}
+
+// BroadcastInDimsOp ====================================================================================================
+
+func execBroadcastInDim(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	operand := inputs[0]
+	output := backend.getBuffer(node.shape.DType, node.shape.Size())
+	output.shape = node.shape
+
+	// Special case: if operand is a scalar, we just pass a nil iterator.
+	if operand.shape.Size() == 1 {
+		dispatchBroadcastInDim.Dispatch(output.shape.DType, operand.flat, output.flat, nil)
+		return output
+	}
+
+	// Reshape operand shape: same dimension as the operand on the corresponding axes, 1 elsewhere.
+	// Notice it's the same size, the flat data doesn't change.
+	reshapedOperand := shapes.Make(operand.shape.DType)
+	reshapedOperand.Dimensions = make([]int, output.shape.Rank())
+	xslices.FillSlice(reshapedOperand.Dimensions, 1)
+	broadcastAxes := node.data.([]int)
+	for operandAxis, outputAxis := range broadcastAxes {
+		reshapedOperand.Dimensions[outputAxis] = operand.shape.Dimensions[operandAxis]
+	}
+
+	// Create broadcasting iterator: it requires operand and output shapes to have the same rank.
+	iter := newBroadcastIterator(reshapedOperand, output.shape)
+	dispatchBroadcastInDim.Dispatch(output.shape.DType, operand.flat, output.flat, iter)
+	return output
+}
+
+var dispatchBroadcastInDim = NewDTypeDispatcher("BroadcastInDim")
+
+//go:generate go run ../../internal/cmd/simplego_dispatcher -dispatcher=dispatchBroadcastInDim -generic=execBroadcastInDimGeneric -int -uint -float -bf16
+
+func execBroadcastInDimGeneric[T SupportedTypesConstraints](params ...any) {
+	operandFlat, outputFlat, operandIterAny := params[0].([]T), params[1].([]T), params[2]
+	if operandIterAny == nil {
+		// Special case, where operand is a scalar that is broadcast everywhere.
+		xslices.FillSlice(outputFlat, operandFlat[0])
+		return
+	}
+	operandIter := operandIterAny.(*broadcastIterator)
+	for outputIdx := range outputFlat {
+		outputFlat[outputIdx] = operandFlat[operandIter.Next()]
 	}
 }
 

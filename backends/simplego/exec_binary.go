@@ -28,6 +28,8 @@ func binaryOperandsAndOutput(backend *Backend, inputs []*Buffer, inputsOwned []b
 
 // broadcastIterator allows one to iterate over the flat indices of tensor that is being broadcast
 // (some dimensions will grow)
+//
+// It is used by implicit broadcasting in binaryOps as well as by the the BroadcastInDim.
 type broadcastIterator struct {
 	flatIdx     int
 	perAxesIdx  []int
@@ -36,6 +38,12 @@ type broadcastIterator struct {
 	strides     []int
 }
 
+// newBroadcastIterator returns an iterator that allows one to iterate over the flat indices of tensor that is being broadcast,
+// where some dimensions will grow.
+//
+// Pre-requisite: fromShape.Rank() == toShape.Rank().
+//
+// It is used by implicit broadcasting in binaryOps as well as by the the execBroadcastInDim.
 func newBroadcastIterator(fromShape, toShape shapes.Shape) *broadcastIterator {
 	rank := fromShape.Rank() // == toShape.Rank()
 	bi := &broadcastIterator{

@@ -128,11 +128,6 @@ func (b *Builder) Broadcast(operandOp backends.Op, prefixDims ...int) backends.O
 	return node
 }
 
-type broadcastInDimNode struct {
-	outputShape   shapes.Shape
-	broadcastAxes []int
-}
-
 // BroadcastInDim broadcasts x to an output with the given shape.
 //
 //   - outputShape will be the new shape after x is broadcast.
@@ -155,8 +150,8 @@ type broadcastInDimNode struct {
 func (b *Builder) BroadcastInDim(operandOp backends.Op, outputShape shapes.Shape, broadcastAxes []int) backends.Op {
 	operand := b.checkOps("Transpose", operandOp)[0]
 	shapeinference.BroadcastInDimOp(operand.shape, outputShape, broadcastAxes)
-	node := b.newNode(backends.OpTypeBroadcast, outputShape, operand)
-	node.data = &broadcastInDimNode{outputShape, broadcastAxes}
+	node := b.newNode(backends.OpTypeBroadcastInDim, outputShape, operand)
+	node.data = broadcastAxes
 	return node
 }
 

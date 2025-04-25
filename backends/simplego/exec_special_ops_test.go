@@ -13,6 +13,13 @@ import (
 	"testing"
 )
 
+var (
+	// Shortcuts:
+
+	// bf16 shortcut to create new BFloat16 numbers.
+	bf16 = bfloat16.FromFloat32
+)
+
 func TestExecSpecialOps_Identity(t *testing.T) {
 	exec := graph.NewExec(backend, func(x *graph.Node) *graph.Node { return graph.Identity(x) })
 	y0 := exec.Call(bfloat16.FromFloat32(7))[0]
@@ -81,7 +88,6 @@ func TestExecSpecialOps_Reduce(t *testing.T) {
 	fmt.Printf("\ty3=%s\n", y3.GoStr())
 	assert.Equal(t, float32(1), y3.Value())
 
-	bf16 := bfloat16.FromFloat32
 	y4 := graph.ExecOnce(backend, func(x *graph.Node) *graph.Node {
 		return graph.ReduceMin(x, 0)
 	}, []bfloat16.BFloat16{bf16(-11), bf16(-17), bf16(-8)})
@@ -159,4 +165,21 @@ func TestExecSpecialOps_Broadcast(t *testing.T) {
 	fmt.Printf("\ty0=%s\n", y0.GoStr())
 	assert.NoError(t, y0.Shape().Check(dtypes.Int8, 2, 3, 2))
 	require.Equal(t, [][][]int8{{{1, 3}, {1, 3}, {1, 3}}, {{1, 3}, {1, 3}, {1, 3}}}, y0.Value())
+}
+
+func TestExecSpecialOps_BroadcastInDim(t *testing.T) {
+	y0 := graph.ExecOnce(backend, func(x *graph.Node) *graph.Node {
+		return graph.ExpandAndBroadcast(x, []int{2, 3, 2}, []int{0})
+	}, [][]int8{{1, 3}})
+	fmt.Printf("\ty0=%s\n", y0.GoStr())
+	assert.NoError(t, y0.Shape().Check(dtypes.Int8, 2, 3, 2))
+	assert.Equal(t, [][][]int8{{{1, 3}, {1, 3}, {1, 3}}, {{1, 3}, {1, 3}, {1, 3}}}, y0.Value())
+
+	y1 := graph.ExecOnce(backend, func(x *graph.Node) *graph.Node {
+		return graph.ExpandAndBroadcast(x, []int{2}, []int{0})
+	}, bf16(42))
+	fmt.Printf("\ty1=%s\n", y1.GoStr())
+	assert.NoError(t, y1.Shape().Check(dtypes.BFloat16, 2))
+	assert.Equal(t, []bfloat16.BFloat16{bf16(42), bf16(42)}, y1.Value())
+
 }
