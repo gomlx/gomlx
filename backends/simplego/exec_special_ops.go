@@ -481,9 +481,9 @@ func execBroadcast(backend *Backend, node *Node, inputs []*Buffer, inputsOwned [
 
 var dispatchBroadcast = NewDTypeDispatcher("Broadcast")
 
-//go:generate go run ../../internal/cmd/simplego_dispatcher -dispatcher=dispatchBroadcast -generic=execBroadcastGeneric -int -uint -float
+//go:generate go run ../../internal/cmd/simplego_dispatcher -dispatcher=dispatchBroadcast -generic=execBroadcastGeneric -int -uint -float -bf16
 
-func execBroadcastGeneric[T PODNumericConstraints](params ...any) {
+func execBroadcastGeneric[T SupportedTypesConstraints](params ...any) {
 	operandFlat, outputFlat, repeats := params[0].([]T), params[1].([]T), params[2].(int)
 	pos := 0
 	for _ = range repeats {

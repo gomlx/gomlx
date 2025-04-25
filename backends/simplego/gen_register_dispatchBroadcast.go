@@ -4,6 +4,7 @@ package simplego
 
 import (
 	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 )
 
 func init() {
@@ -17,4 +18,5 @@ func init() {
 	dispatchBroadcast.RegisterIfNotSet(dtypes.Uint64, execBroadcastGeneric[uint64])
 	dispatchBroadcast.RegisterIfNotSet(dtypes.Float32, execBroadcastGeneric[float32])
 	dispatchBroadcast.RegisterIfNotSet(dtypes.Float64, execBroadcastGeneric[float64])
+	dispatchBroadcast.RegisterIfNotSet(dtypes.BFloat16, execBroadcastGeneric[bfloat16.BFloat16])
 }
