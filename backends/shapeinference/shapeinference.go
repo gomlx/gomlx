@@ -368,6 +368,46 @@ func TransposeOp(operand shapes.Shape, permutations []int) shapes.Shape {
 	return output
 }
 
+// BroadcastOp adds the prefixDims to the start of the shape.
+func BroadcastOp(operand shapes.Shape, prefixDims []int) shapes.Shape {
+	if len(prefixDims) == 0 {
+		return operand
+	}
+	output := shapes.Make(operand.DType)
+	output.Dimensions = make([]int, len(prefixDims)+operand.Rank())
+	copy(output.Dimensions, prefixDims)
+	copy(output.Dimensions[len(prefixDims):], operand.Dimensions)
+	return output
+}
+
+// BroadcastInDimOp verifies the arguments are valid. The output shape is already known, so nothing is returned.
+func BroadcastInDimOp(operand, outputShape shapes.Shape, broadcastAxes []int) {
+	if len(broadcastAxes) != operand.Rank() {
+		exceptions.Panicf("there must be exactly one broadcastAxes (%v) per axis in the operand (%s)",
+			broadcastAxes, operand)
+	}
+
+	// Verify that the values of expandedAxis and create a map of the expanded axis.
+	preservedSet := types.MakeSet[int](len(broadcastAxes))
+	for axisInOperand, axisInOutput := range broadcastAxes {
+		if axisInOutput < 0 || axisInOutput >= outputShape.Rank() {
+			exceptions.Panicf("broadcastAxes (%v) defines a value out-of-range (%d-th value -> %d), they must be between 0 and outputShape.Rank()-1=%d",
+				broadcastAxes, axisInOperand, axisInOutput, outputShape.Rank()-1)
+		}
+		if preservedSet.Has(axisInOutput) {
+			exceptions.Panicf("broadcastAxes (%v) repeats axis %d (broadcastAxes[%d]), they must be all unique and between 0 and outputShape.Rank()-1=%d",
+				broadcastAxes, axisInOutput, axisInOperand, outputShape.Rank()-1)
+		}
+		preservedSet.Insert(axisInOutput)
+		if operand.Dimensions[axisInOperand] != 1 && operand.Dimensions[axisInOperand] != outputShape.Dimensions[axisInOutput] {
+			exceptions.Panicf("the values of outputShape (%v) that are being broadcast (listed in broadcastAxes) "+
+				"must match the corresponding value in the operand shape (%s) or be 1 (if broadcasting), "+
+				"but the value of outputShape.Dimensions[%d]=%d does not match the value in operand.Shape().Dimensions[%d]=%d",
+				outputShape, operand, axisInOutput, outputShape.Dimensions[axisInOutput], axisInOperand, operand.Dimensions[axisInOperand])
+		}
+	}
+}
+
 // ReduceOp works for the ReduceMax, ReduceMin, ReduceSum and ReduceProduct ops.
 func ReduceOp(operand shapes.Shape, axes []int) shapes.Shape {
 	if len(axes) == 0 {

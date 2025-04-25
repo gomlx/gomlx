@@ -14,6 +14,7 @@ func init() {
 	nodeExecutors[backends.OpTypeWhere] = execWhere
 	nodeExecutors[backends.OpTypeReshape] = execReshape
 	nodeExecutors[backends.OpTypeTranspose] = execTranspose
+	nodeExecutors[backends.OpTypeBroadcast] = execBroadcast
 	nodeExecutors[backends.OpTypeReduceMax] = execReduce
 	nodeExecutors[backends.OpTypeReduceMin] = execReduce
 	nodeExecutors[backends.OpTypeReduceSum] = execReduce
@@ -460,6 +461,34 @@ func execTransposeGeneric[T SupportedTypesConstraints](params ...any) {
 	outputFlat := output.flat.([]T)
 	for _, value := range operandFlat {
 		outputFlat[it.next()] = value
+	}
+}
+
+// BroadcastOp ====================================================================================================
+
+func execBroadcast(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	operand := inputs[0]
+	output := backend.getBuffer(node.shape.DType, node.shape.Size())
+	output.shape = node.shape
+	prefixDims := node.data.([]int)
+	repeats := 1
+	for _, dim := range prefixDims {
+		repeats *= dim
+	}
+	dispatchBroadcast.Dispatch(node.shape.DType, operand.flat, output.flat, repeats)
+	return output
+}
+
+var dispatchBroadcast = NewDTypeDispatcher("Broadcast")
+
+//go:generate go run ../../internal/cmd/simplego_dispatcher -dispatcher=dispatchBroadcast -generic=execBroadcastGeneric -int -uint -float
+
+func execBroadcastGeneric[T PODNumericConstraints](params ...any) {
+	operandFlat, outputFlat, repeats := params[0].([]T), params[1].([]T), params[2].(int)
+	pos := 0
+	for _ = range repeats {
+		copy(outputFlat[pos:], operandFlat)
+		pos += len(operandFlat)
 	}
 }
 

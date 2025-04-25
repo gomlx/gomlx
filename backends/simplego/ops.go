@@ -111,6 +111,55 @@ func (b *Builder) Transpose(operandOp backends.Op, permutations ...int) backends
 	return node
 }
 
+// Broadcast prefixes dimensions to an array by duplicating the data in the array.
+// See BroadcastInDim for a broadcast in between the axes.
+// The new dimensions dims are inserted on the left, i.e., if
+// prefixDims has values `{a0, ..., aN}` and the operand shape
+// has dimensions {b0, ..., bM} then the shape of the output has
+// dimensions {a0, ..., aN, b0, ..., bM}.
+// The new dimensions id into copies of the operand, i.e.
+//
+//	output[i0, ..., iN, j0, ..., jM] = operand[j0, ..., jM]
+func (b *Builder) Broadcast(operandOp backends.Op, prefixDims ...int) backends.Op {
+	operand := b.checkOps("Transpose", operandOp)[0]
+	outputShape := shapeinference.BroadcastOp(operand.shape, prefixDims)
+	node := b.newNode(backends.OpTypeBroadcast, outputShape, operand)
+	node.data = prefixDims
+	return node
+}
+
+type broadcastInDimNode struct {
+	outputShape   shapes.Shape
+	broadcastAxes []int
+}
+
+// BroadcastInDim broadcasts x to an output with the given shape.
+//
+//   - outputShape will be the new shape after x is broadcast.
+//   - broadcastAxes maps x-axes to the corresponding outputShape axes (len(broadcastAxes) == x.Shape.Rank()),
+//     the i-th axis of x is mapped to the broadcastAxes[i]-th dimension of the output.
+//     broadcastAxes must be also increasing: this operation cannot be used to transpose axes,
+//     it will only broadcast and introduce new axes in-between.
+//     -
+//
+// This also requires that the i-th input axis is either 1 or is the same as the
+// output dimension it's broadcasting into.
+// For example, say operand `x = (s32)[2]{1, 2}`; outputShape = `(s32)[2,2]`:
+//   - Specifying []int{1} as broadcastAxes will generate output
+//     {{1, 2},
+//     {1, 2}}
+//   - On the other hand, specifying []int{0} as broadcastAxes
+//     will generate output
+//     {{1 , 1},
+//     {2 , 2}}
+func (b *Builder) BroadcastInDim(operandOp backends.Op, outputShape shapes.Shape, broadcastAxes []int) backends.Op {
+	operand := b.checkOps("Transpose", operandOp)[0]
+	shapeinference.BroadcastInDimOp(operand.shape, outputShape, broadcastAxes)
+	node := b.newNode(backends.OpTypeBroadcast, outputShape, operand)
+	node.data = &broadcastInDimNode{outputShape, broadcastAxes}
+	return node
+}
+
 // ReduceMax implements backends.Builder interface.
 func (b *Builder) ReduceMax(operandOp backends.Op, axis ...int) backends.Op {
 	return b.reduceImpls(backends.OpTypeReduceMax, operandOp, axis...)

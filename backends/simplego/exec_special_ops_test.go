@@ -151,3 +151,12 @@ func TestExecSpecialOps_Iota(t *testing.T) {
 	require.Equal(t, [][]bfloat16.BFloat16{{bf16(0), bf16(0), bf16(0)}, {bf16(1), bf16(1), bf16(1)}}, y1.Value())
 
 }
+
+func TestExecSpecialOps_Broadcast(t *testing.T) {
+	y0 := graph.ExecOnce(backend, func(x *graph.Node) *graph.Node {
+		return graph.BroadcastPrefix(x, 2, 3)
+	}, []int8{1, 3})
+	fmt.Printf("\ty0=%s\n", y0.GoStr())
+	assert.NoError(t, y0.Shape().Check(dtypes.Int8, 2, 3, 2))
+	require.Equal(t, [][][]int8{{{1, 3}, {1, 3}, {1, 3}}, {{1, 3}, {1, 3}, {1, 3}}}, y0.Value())
+}
