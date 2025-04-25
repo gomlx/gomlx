@@ -404,9 +404,9 @@ func ExpandAndBroadcast(x *Node, newDimensions []int, expandedAxes []int) (outpu
 		for axis, dim := range newDimensions {
 			if !expandedSet.Has(axis) {
 				preservedAxes = append(preservedAxes, axis)
-				if x.Shape().Dimensions[axisInX] != dim {
+				if x.Shape().Dimensions[axisInX] != dim && x.Shape().Dimensions[axisInX] != 1 {
 					exceptions.Panicf("the values of newDimensions (%v) that are not expanded (not in expandedAxes) "+
-						"must match the corresponding value in x shape (%s), "+
+						"must match the corresponding value in x shape (%s) or be 1 (if broadcasting), "+
 						"but the value of newDimensions[%d]=%d does not match the value in x.Shape().Dimensions[%d]=%d",
 						newDimensions, x.Shape(), axis, dim, axisInX, x.Shape().Dimensions[axisInX])
 				}
