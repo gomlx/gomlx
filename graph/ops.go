@@ -361,18 +361,20 @@ func BroadcastPrefix(x *Node, dims ...int) *Node {
 	return backendBroadcast(x, dims...)
 }
 
-// ExpandAndBroadcast combines InsertAxes and Broadcast of `x`, broadcasting it to the shape
-// given in newDimensions. Only new expanded axes or axes with dimension 1 can be broadcast
-// to new dimensions.
+// ExpandAndBroadcast combines ExpandAxes and broadcast of axes of `x`, the returned shape will be newDimensions.
+// Only newly expanded axes can be broadcast.
 //
-// `newDimensions` should have a rank larger than the rank of x, and the new axes in newDimensions
-// should be listed in expandedAxes. In other words: `x.Rank() + len(expandedAxes) == len(newDimensions)`.
+//   - newDimensions should have a rank larger than the rank of x, and the new axes in newDimensions
+//     should be listed in expandedAxes. In other words: `x.Rank() + len(expandedAxes) == len(newDimensions)`.
 //
-// For example:
+//   - expandedAxes refer to the axes in newDimensions that are expanded and going to be broadcast. The reminder
+//     dimensions in newDimensions much match the corresponding in x.
 //
-//		  x = Const(g, []int32{10, 20})
-//	   ExpandAndBroadcast(x, []int{2, 2}, []int{0})  // -> [][]int32{{10, 20}, {10, 20}}
-//	   ExpandAndBroadcast(x, []int{2, 2}, []int{0})  // -> [][]int32{{10, 10}, {20, 20}}
+// Example:
+//
+//	x = Const(g, []int32{10, 20})
+//	ExpandAndBroadcast(x, []int{2, 2}, []int{0})  // -> [][]int32{{10, 20}, {10, 20}}
+//	ExpandAndBroadcast(x, []int{2, 2}, []int{1})  // -> [][]int32{{10, 10}, {20, 20}}
 func ExpandAndBroadcast(x *Node, newDimensions []int, expandedAxes []int) (output *Node) {
 	_ = validateBuildingGraphFromInputs(x)
 	if x.Rank()+len(expandedAxes) != len(newDimensions) {
@@ -381,28 +383,34 @@ func ExpandAndBroadcast(x *Node, newDimensions []int, expandedAxes []int) (outpu
 	}
 
 	// Verify that the values of expandedAxis and create a map of the expanded axis.
-	expandedMap := make([]bool, len(newDimensions))
+	expandedSet := types.MakeSet[int](len(expandedAxes))
 	for ii, axis := range expandedAxes {
-		if axis < 0 {
-			axis = len(newDimensions) + axis
-		}
+		axis = adjustAxisToRank(axis, len(newDimensions))
 		if axis < 0 || axis >= len(newDimensions) {
 			exceptions.Panicf("expandedAxes (%v) defines a value out-of-range (%d-th value -> %d), they must be between 0 and len(newDimensions)=%d",
 				expandedAxes, ii, axis, len(newDimensions))
 		}
-		if expandedMap[axis] {
-			exceptions.Panicf("expandedAxes (%v) repeats an axis (%d-th value -> %d), they must be all unique and between 0 and len(newDimensions)=%d",
-				expandedAxes, ii, axis, len(newDimensions))
+		if expandedSet.Has(axis) {
+			exceptions.Panicf("expandedAxes (%v) repeats axis %d (expandedAxes[%d]), they must be all unique and between 0 and len(newDimensions)=%d",
+				expandedAxes, axis, ii, len(newDimensions))
 		}
-		expandedMap[axis] = true
+		expandedSet.Insert(axis)
 	}
 
 	var preservedAxes []int
 	if !x.Shape().IsScalar() {
 		preservedAxes = make([]int, 0, x.Rank())
-		for axis := 0; axis < len(newDimensions); axis++ {
-			if !expandedMap[axis] {
+		axisInX := 0
+		for axis, dim := range newDimensions {
+			if !expandedSet.Has(axis) {
 				preservedAxes = append(preservedAxes, axis)
+				if x.Shape().Dimensions[axisInX] != dim {
+					exceptions.Panicf("the values of newDimensions (%v) that are not expanded (not in expandedAxes) "+
+						"must match the corresponding value in x shape (%s), "+
+						"but the value of newDimensions[%d]=%d does not match the value in x.Shape().Dimensions[%d]=%d",
+						newDimensions, x.Shape(), axis, dim, axisInX, x.Shape().Dimensions[axisInX])
+				}
+				axisInX++
 			}
 		}
 	}
