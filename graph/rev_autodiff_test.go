@@ -444,7 +444,7 @@ func TestGradientGatherSlices(t *testing.T) {
 			input := IotaFull(g, shapes.Make(dtypes.Float32, 3, 2, 4))
 			start := Const(g, [][]int32{{0, 1}, {1, 2}})
 			sizes := []int{1, 2} // Take a sub-matrix
-			output = GatherSlices(input, []int{1, 2}, start, sizes)
+			output = GatherSlices(input, []int{1, 2}, start, sizes, true)
 			return output, []*Node{input}
 		}, []any{
 			[][][]float32{

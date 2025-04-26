@@ -242,7 +242,7 @@ func (c *InterpolationConfig) Done() (output *Node) {
 
 	// gatheredElements will be shaped [interpolationDims..., spanSizes...]
 	spanStart := Concatenate(spanStarts, -1)
-	gatheredElements := GatherSlices(input, axisToInterpolateList, spanStart, spanSizes)
+	gatheredElements := GatherSlices(input, axisToInterpolateList, spanStart, spanSizes, true)
 
 	// weightsCrosses of all the weights
 	var weightsCrosses *Node

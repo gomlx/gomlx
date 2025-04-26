@@ -127,15 +127,18 @@ func Gather(params, indices *Node) *Node {
 //     batch example, and add the size 1 slice.
 //     This can be done manually today.
 //
+// indicesAreSorted can be set if you know the indices in start are sorted, in some backends this allows
+// for optimizations.
+//
 // Example:
 //
 //		x := IotaFull(g, shapes.Make(dtypes.Float64, 3, 10, 10))  // 300 in total.
 //		start := Const(g, [][]int32{{0, 3}, {1, 2}})  // 2 slices
 //		sizes := []int{1, 3}
-//		slices := GatherSlices(x, []int{1,2}, start, sizes)  // Axis=0 is taken in full.
+//		slices := GatherSlices(x, []int{1,2}, start, sizes, true)  // Axis=0 is taken in full.
 //	    slices.AssertDims(2, 3, 1, 2)  // 2 slices, Axis=0 taken in full (3), and each slice of dimensions (1, 2).
 //		// Result would be [][][][]int32{{{0, 1, 2, 3, 4}}, {{30, 31, 32, 33, 34}}, {{40, 41, 42, 43, 44}}}
-func GatherSlices(input *Node, slicedAxes []int, start *Node, sizes []int) (gathered *Node) {
+func GatherSlices(input *Node, slicedAxes []int, start *Node, sizes []int, indicesAreSorted bool) (gathered *Node) {
 	_ = validateBuildingGraphFromInputs(input, start)
 	if input.Shape().IsScalar() || input.Shape().IsTuple() {
 		Panicf("cannot GatherSlices from scalar or tuple, input shapes is %s", input.Shape())
@@ -215,7 +218,7 @@ func GatherSlices(input *Node, slicedAxes []int, start *Node, sizes []int) (gath
 
 	// Make no assumptions about indices being sorted or unique.
 	// TODO: add version where these can be set.
-	return backendGather(input, start, indexVectorDim, offsetDims, collapsedSliceDims, startIndexMap, sliceSizes, false)
+	return backendGather(input, start, indexVectorDim, offsetDims, collapsedSliceDims, startIndexMap, sliceSizes, indicesAreSorted)
 }
 
 // BackendGather exposes the raw backend Gather operator.

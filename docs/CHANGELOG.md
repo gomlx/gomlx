@@ -7,6 +7,9 @@
   * Added skeleton of `simplego`, a portable, simple albeit very slow backend.
 * Package `checkpoints`
   * Added `Config.FromEmbed` that allows loading a checkpoint from an embedded variable.
+* Package `graph`:
+  * `Gather` and `GatherSlices` now have and extra argument called `indicesAreSorted` that tells whether
+    the start indices are guaranteed to be sorted, which allows some optimizations in some platforms.
 * Moved code generation tools from `cmd` to `internal/cmd` directory.
 
 # v0.18.1: 2025/04/13 Many fixes, XLA update, Tensor clone.
