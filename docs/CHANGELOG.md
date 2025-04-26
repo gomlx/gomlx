@@ -3,8 +3,9 @@
 # Next:
 
 * Package `backends`:
+  * Added `simplego`, a portable, simple albeit very slow backend.
   * Added sub-package `notimplemented`: helper to implement new backends.
-  * Added skeleton of `simplego`, a portable, simple albeit very slow backend.
+  * Added sub-package `shapeinference`: helper to impelment new backends.
 * Package `checkpoints`
   * Added `Config.FromEmbed` that allows loading a checkpoint from an embedded variable.
 * Package `graph`:

@@ -86,8 +86,7 @@ func TestGatherOp(t *testing.T) {
 	collapsedSliceAxes := []int{1, 2, 3}
 	startIndexMap := []int{1, 2, 3}
 	sliceSizes := []int{2, 1, 1, 1}
-	indicesAreSorted := true
-	outputShape := GatherOp(operand, startIndices, startVectorAxis, offsetAxes, collapsedSliceAxes, startIndexMap, sliceSizes, indicesAreSorted)
+	outputShape := GatherOp(operand, startIndices, startVectorAxis, offsetAxes, collapsedSliceAxes, startIndexMap, sliceSizes, true)
 	fmt.Printf("\toutputShape=%s\n", outputShape)
 	require.NoError(t, outputShape.Check(F32, 2, 3, 2))
 }

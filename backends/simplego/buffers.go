@@ -7,6 +7,7 @@ import (
 	"github.com/gomlx/gopjrt/dtypes"
 	"reflect"
 	"sync"
+	"unsafe"
 )
 
 // Buffer for SimpleGo backend holds a shape and a reference to the flat data.
@@ -57,6 +58,21 @@ func (b *Backend) putBuffer(buffer *Buffer) {
 // copyFlat assumes both flat slices are of the same underlying type.
 func copyFlat(flatDst, flatSrc any) {
 	reflect.Copy(reflect.ValueOf(flatDst), reflect.ValueOf(flatSrc))
+}
+
+// mutableBytes returns the slice of the bytes used by the flat given -- it works with any of the supported data types for buffers.
+func (b *Buffer) mutableBytes() []byte {
+	return dispatchMutableBytes.Dispatch(b.shape.DType, b.flat).([]byte)
+}
+
+var dispatchMutableBytes = NewDTypeDispatcher("MutableBytes")
+
+// mutableBytesGeneric is the generic implementation of mutableBytes.
+func mutableBytesGeneric[T SupportedTypesConstraints](params ...any) any {
+	flat := params[0].([]T)
+	bytePointer := (*byte)(unsafe.Pointer(&flat[0]))
+	var t T
+	return unsafe.Slice(bytePointer, len(flat)*int(unsafe.Sizeof(t)))
 }
 
 // cloneBuffer using the pool to allocate a new one.

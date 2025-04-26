@@ -7,11 +7,12 @@ import (
 )
 
 // FuncForDispatcher is type of functions that the DTypeDispatcher can handle.
-type FuncForDispatcher func(params ...any)
+type FuncForDispatcher func(params ...any) any
 
 const MaxDTypes = 32
 
-// DTypeDispatcher will call
+// DTypeDispatcher manages dispatching functions to handle specific DTypes.
+// Often, these functions will be instances of a generic function.
 type DTypeDispatcher struct {
 	Name  string
 	fnMap [MaxDTypes]FuncForDispatcher
@@ -25,7 +26,7 @@ func NewDTypeDispatcher(name string) *DTypeDispatcher {
 }
 
 // Dispatch call the function that matches the dtype.
-func (d *DTypeDispatcher) Dispatch(dtype dtypes.DType, params ...any) {
+func (d *DTypeDispatcher) Dispatch(dtype dtypes.DType, params ...any) any {
 	if dtype >= MaxDTypes {
 		exceptions.Panicf("dtype %s not supported by %s", dtype, d.Name)
 	}
@@ -35,7 +36,7 @@ func (d *DTypeDispatcher) Dispatch(dtype dtypes.DType, params ...any) {
 			"if you need it, consider creating an issue to add support in github.com/gomlx/gomlx",
 			dtype, d.Name)
 	}
-	fn(params...)
+	return fn(params...)
 }
 
 // Register a function to handle a specific dtype.
@@ -56,6 +57,54 @@ func (d *DTypeDispatcher) RegisterIfNotSet(dtype dtypes.DType, fn FuncForDispatc
 		return
 	}
 	d.fnMap[dtype] = fn
+}
+
+// DType2Dispatcher manages dispatching functions to handle specific pair of DTypes.
+// Often, these functions will be instances of a generic function.
+type DType2Dispatcher struct {
+	Name  string
+	fnMap [MaxDTypes][MaxDTypes]FuncForDispatcher
+}
+
+// NewDType2Dispatcher creates a new dispatcher for a class of functions.
+func NewDType2Dispatcher(name string) *DType2Dispatcher {
+	return &DType2Dispatcher{
+		Name: name,
+	}
+}
+
+// Dispatch call the function that matches the dtype.
+func (d *DType2Dispatcher) Dispatch(dtype1, dtype2 dtypes.DType, params ...any) {
+	if dtype1 >= MaxDTypes || dtype2 >= MaxDTypes {
+		exceptions.Panicf("dtypes %s or %s not supported by %s", dtype1, dtype2, d.Name)
+	}
+	fn := d.fnMap[dtype1][dtype2]
+	if fn == nil {
+		exceptions.Panicf("dtype pair (%s, %s) not supported by %s -- "+
+			"if you need it, consider creating an issue to add support in github.com/gomlx/gomlx",
+			dtype1, dtype2, d.Name)
+	}
+	fn(params...)
+}
+
+// Register a function to handle a specific dtype.
+// This overwrites any previous setting for the same dtype.
+func (d *DType2Dispatcher) Register(dtype1, dtype2 dtypes.DType, fn FuncForDispatcher) {
+	if dtype1 >= MaxDTypes || dtype2 >= MaxDTypes {
+		exceptions.Panicf("dtypes %s or %s not supported by %s", dtype1, dtype2, d.Name)
+	}
+	d.fnMap[dtype1][dtype2] = fn
+}
+
+// RegisterIfNotSet a function to handle a specific dtype.
+func (d *DType2Dispatcher) RegisterIfNotSet(dtype1, dtype2 dtypes.DType, fn FuncForDispatcher) {
+	if dtype1 >= MaxDTypes || dtype2 >= MaxDTypes {
+		exceptions.Panicf("dtypes %s or %s not supported by %s", dtype1, dtype2, d.Name)
+	}
+	if d.fnMap[dtype1][dtype2] != nil {
+		return
+	}
+	d.fnMap[dtype1][dtype2] = fn
 }
 
 // SupportedTypesConstraints enumerates the types supported by SimpleGo.

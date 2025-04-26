@@ -20,6 +20,7 @@ type DispatcherInfo struct {
 var (
 	// data lists the dispatchers to include, their generic function and with which set of dtypes to support.
 	data = []DispatcherInfo{
+		{"dispatchMutableBytes", "mutableBytesGeneric", makeDTypes(true, true, true, true, true)},
 		{"dispatchDotGeneral", "execNormalizedDotGeneralGeneric", makeDTypes(true, true, true, false, false)},
 		{"dispatchWhere", "execWhereGeneric", makeDTypes(true, true, true, true, true)},
 		{"dispatchReduceMax", "execReduceMaxGeneric", makeDTypes(true, true, true, false, false)},
@@ -30,6 +31,7 @@ var (
 		{"dispatchBroadcast", "execBroadcastGeneric", makeDTypes(true, true, true, true, true)},
 		{"dispatchBroadcastInDim", "execBroadcastInDimGeneric", makeDTypes(true, true, true, true, true)},
 		{"dispatchIota", "execIotaGeneric", makeDTypes(true, true, true, false, false)},
+		{"dispatchGather", "execGatherGeneric", makeDTypes(true, true, false, false, false)},
 	}
 	fileName = "gen_register_dispatchers.go"
 )

@@ -9,6 +9,20 @@ import (
 
 func init() {
 
+	// dispatchMutableBytes
+	dispatchMutableBytes.RegisterIfNotSet(dtypes.Int8, mutableBytesGeneric[int8])
+	dispatchMutableBytes.RegisterIfNotSet(dtypes.Int16, mutableBytesGeneric[int16])
+	dispatchMutableBytes.RegisterIfNotSet(dtypes.Int32, mutableBytesGeneric[int32])
+	dispatchMutableBytes.RegisterIfNotSet(dtypes.Int64, mutableBytesGeneric[int64])
+	dispatchMutableBytes.RegisterIfNotSet(dtypes.Uint8, mutableBytesGeneric[uint8])
+	dispatchMutableBytes.RegisterIfNotSet(dtypes.Uint16, mutableBytesGeneric[uint16])
+	dispatchMutableBytes.RegisterIfNotSet(dtypes.Uint32, mutableBytesGeneric[uint32])
+	dispatchMutableBytes.RegisterIfNotSet(dtypes.Uint64, mutableBytesGeneric[uint64])
+	dispatchMutableBytes.RegisterIfNotSet(dtypes.Float32, mutableBytesGeneric[float32])
+	dispatchMutableBytes.RegisterIfNotSet(dtypes.Float64, mutableBytesGeneric[float64])
+	dispatchMutableBytes.RegisterIfNotSet(dtypes.BFloat16, mutableBytesGeneric[bfloat16.BFloat16])
+	dispatchMutableBytes.RegisterIfNotSet(dtypes.Bool, mutableBytesGeneric[bool])
+
 	// dispatchDotGeneral
 	dispatchDotGeneral.RegisterIfNotSet(dtypes.Int8, execNormalizedDotGeneralGeneric[int8])
 	dispatchDotGeneral.RegisterIfNotSet(dtypes.Int16, execNormalizedDotGeneralGeneric[int16])
@@ -136,4 +150,14 @@ func init() {
 	dispatchIota.RegisterIfNotSet(dtypes.Uint64, execIotaGeneric[uint64])
 	dispatchIota.RegisterIfNotSet(dtypes.Float32, execIotaGeneric[float32])
 	dispatchIota.RegisterIfNotSet(dtypes.Float64, execIotaGeneric[float64])
+
+	// dispatchGather
+	dispatchGather.RegisterIfNotSet(dtypes.Int8, execGatherGeneric[int8])
+	dispatchGather.RegisterIfNotSet(dtypes.Int16, execGatherGeneric[int16])
+	dispatchGather.RegisterIfNotSet(dtypes.Int32, execGatherGeneric[int32])
+	dispatchGather.RegisterIfNotSet(dtypes.Int64, execGatherGeneric[int64])
+	dispatchGather.RegisterIfNotSet(dtypes.Uint8, execGatherGeneric[uint8])
+	dispatchGather.RegisterIfNotSet(dtypes.Uint16, execGatherGeneric[uint16])
+	dispatchGather.RegisterIfNotSet(dtypes.Uint32, execGatherGeneric[uint32])
+	dispatchGather.RegisterIfNotSet(dtypes.Uint64, execGatherGeneric[uint64])
 }

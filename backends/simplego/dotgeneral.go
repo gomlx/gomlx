@@ -144,7 +144,7 @@ var dispatchDotGeneral = NewDTypeDispatcher("DotGeneral")
 
 // execNormalizedDotGeneralGeneric operands lhs and rhs are normalized to shape
 // [batchSize, crossSize, contractingSize].
-func execNormalizedDotGeneralGeneric[T PODNumericConstraints](params ...any) {
+func execNormalizedDotGeneralGeneric[T PODNumericConstraints](params ...any) any {
 	lhs, rhs, output := params[0].(*Buffer), params[1].(*Buffer), params[2].(*Buffer)
 	lhsFlat := lhs.flat.([]T)
 	rhsFlat := rhs.flat.([]T)
@@ -173,12 +173,13 @@ func execNormalizedDotGeneralGeneric[T PODNumericConstraints](params ...any) {
 		}
 		rhsIdx += rhsBatchStride
 	}
+	return nil
 }
 
 // Register the BFloat16 version of DotGeneral.
 func init() { dispatchDotGeneral.Register(dtypes.BFloat16, execNormalizedDotGeneralBFloat16) }
 
-func execNormalizedDotGeneralBFloat16(params ...any) {
+func execNormalizedDotGeneralBFloat16(params ...any) any {
 	lhs, rhs, output := params[0].(*Buffer), params[1].(*Buffer), params[2].(*Buffer)
 	lhsFlat := lhs.flat.([]bfloat16.BFloat16)
 	rhsFlat := rhs.flat.([]bfloat16.BFloat16)
@@ -210,6 +211,7 @@ func execNormalizedDotGeneralBFloat16(params ...any) {
 		}
 		rhsIdx += rhsBatchStride
 	}
+	return nil
 }
 
 // Dot ------------------------------------------------------------------------------------------------------

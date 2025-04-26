@@ -61,13 +61,13 @@ func execWhere(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 		output.shape = outputShape
 	}
 
-	dispatchWhere.Dispatch(outputShape.DType, condition, onTrue, onFalse, output)
+	_ = dispatchWhere.Dispatch(outputShape.DType, condition, onTrue, onFalse, output)
 	return output
 }
 
 var dispatchWhere = NewDTypeDispatcher("Where")
 
-func execWhereGeneric[T SupportedTypesConstraints](params ...any) {
+func execWhereGeneric[T SupportedTypesConstraints](params ...any) any {
 	conditionBuf, onTrueBuf, onFalseBuf, outputBuf := params[0].(*Buffer), params[1].(*Buffer), params[2].(*Buffer), params[3].(*Buffer)
 	if conditionBuf.shape.IsScalar() {
 		// Case 1: condition is a scalar, either we take onTrue or onFalse as a whole (with potential broadcast).
@@ -76,7 +76,7 @@ func execWhereGeneric[T SupportedTypesConstraints](params ...any) {
 		} else {
 			execWhereSetOutputWithValue[T](outputBuf, onFalseBuf)
 		}
-		return
+		return nil
 	}
 
 	conditionFlat := conditionBuf.flat.([]bool)
@@ -100,6 +100,7 @@ func execWhereGeneric[T SupportedTypesConstraints](params ...any) {
 			outputFlat[outputIdx] = onFalse
 		}
 	}
+	return nil
 }
 
 func execWhereSetOutputWithValue[T SupportedTypesConstraints](outputBuf, valueBuf *Buffer) {
@@ -219,7 +220,7 @@ func (it *reduceOutputIterator) next() int {
 var dispatchReduceMax = NewDTypeDispatcher("ReduceMax")
 
 // execReduceMaxGeneric: use dispatchReduceMax to call it.
-func execReduceMaxGeneric[T PODNumericConstraints](params ...any) {
+func execReduceMaxGeneric[T PODNumericConstraints](params ...any) any {
 	operand, output, it, dtype := params[0].(*Buffer), params[1].(*Buffer), params[2].(*reduceOutputIterator), params[3].(dtypes.DType)
 
 	// Initialize with the lowest value.
@@ -235,12 +236,13 @@ func execReduceMaxGeneric[T PODNumericConstraints](params ...any) {
 		outputIdx := it.next()
 		outputFlat[outputIdx] = max(outputFlat[outputIdx], value)
 	}
+	return nil
 }
 
 func init() { dispatchReduceMax.Register(dtypes.BFloat16, execReduceMaxBFloat16) }
 
 // execReduceMaxBFloat16: use dispatchReduceMax to call it.
-func execReduceMaxBFloat16(params ...any) {
+func execReduceMaxBFloat16(params ...any) any {
 	operand, output, it, dtype := params[0].(*Buffer), params[1].(*Buffer), params[2].(*reduceOutputIterator), params[3].(dtypes.DType)
 
 	// Initialize with the lowest value.
@@ -257,11 +259,12 @@ func execReduceMaxBFloat16(params ...any) {
 		a, b := outputFlat[outputIdx].Float32(), value.Float32()
 		outputFlat[outputIdx] = bfloat16.FromFloat32(max(a, b))
 	}
+	return nil
 }
 
 var dispatchReduceMin = NewDTypeDispatcher("ReduceMin")
 
-func execReduceMinGeneric[T PODNumericConstraints](params ...any) {
+func execReduceMinGeneric[T PODNumericConstraints](params ...any) any {
 	operand, output, it, dtype := params[0].(*Buffer), params[1].(*Buffer), params[2].(*reduceOutputIterator), params[3].(dtypes.DType)
 
 	// Initialize with the highest value.
@@ -276,11 +279,12 @@ func execReduceMinGeneric[T PODNumericConstraints](params ...any) {
 		outputIdx := it.next()
 		outputFlat[outputIdx] = min(outputFlat[outputIdx], value)
 	}
+	return nil
 }
 
 func init() { dispatchReduceMin.Register(dtypes.BFloat16, execReduceMinBFloat16) }
 
-func execReduceMinBFloat16(params ...any) {
+func execReduceMinBFloat16(params ...any) any {
 	operand, output, it, dtype := params[0].(*Buffer), params[1].(*Buffer), params[2].(*reduceOutputIterator), params[3].(dtypes.DType)
 
 	// Initialize with the highest value.
@@ -296,11 +300,12 @@ func execReduceMinBFloat16(params ...any) {
 		a, b := outputFlat[outputIdx].Float32(), value.Float32()
 		outputFlat[outputIdx] = bfloat16.FromFloat32(min(a, b))
 	}
+	return nil
 }
 
 var dispatchReduceSum = NewDTypeDispatcher("ReduceSum")
 
-func execReduceSumGeneric[T PODNumericConstraints](params ...any) {
+func execReduceSumGeneric[T PODNumericConstraints](params ...any) any {
 	operand, output, it := params[0].(*Buffer), params[1].(*Buffer), params[2].(*reduceOutputIterator)
 	// Initialize with 0.
 	initialValue := T(0)
@@ -314,11 +319,12 @@ func execReduceSumGeneric[T PODNumericConstraints](params ...any) {
 		outputIdx := it.next()
 		outputFlat[outputIdx] = outputFlat[outputIdx] + value
 	}
+	return nil
 }
 
 func init() { dispatchReduceSum.Register(dtypes.BFloat16, execReduceSumBFloat16) }
 
-func execReduceSumBFloat16(params ...any) {
+func execReduceSumBFloat16(params ...any) any {
 	operand, output, it := params[0].(*Buffer), params[1].(*Buffer), params[2].(*reduceOutputIterator)
 	// Initialize with 0.
 	initialValue := bfloat16.FromFloat32(0)
@@ -333,11 +339,12 @@ func execReduceSumBFloat16(params ...any) {
 		a, b := outputFlat[outputIdx].Float32(), value.Float32()
 		outputFlat[outputIdx] = bfloat16.FromFloat32(a + b)
 	}
+	return nil
 }
 
 var dispatchReduceProduct = NewDTypeDispatcher("ReduceProduct")
 
-func execReduceProductGeneric[T PODNumericConstraints](params ...any) {
+func execReduceProductGeneric[T PODNumericConstraints](params ...any) any {
 	operand, output, it := params[0].(*Buffer), params[1].(*Buffer), params[2].(*reduceOutputIterator)
 
 	// Initialize with 1.
@@ -352,11 +359,12 @@ func execReduceProductGeneric[T PODNumericConstraints](params ...any) {
 		outputIdx := it.next()
 		outputFlat[outputIdx] = outputFlat[outputIdx] * value
 	}
+	return nil
 }
 
 func init() { dispatchReduceProduct.Register(dtypes.BFloat16, execReduceProductBFloat16) }
 
-func execReduceProductBFloat16(params ...any) {
+func execReduceProductBFloat16(params ...any) any {
 	operand, output, it := params[0].(*Buffer), params[1].(*Buffer), params[2].(*reduceOutputIterator)
 	// Initialize with 1.
 	initialValue := bfloat16.FromFloat32(1)
@@ -371,6 +379,7 @@ func execReduceProductBFloat16(params ...any) {
 		a, b := outputFlat[outputIdx].Float32(), value.Float32()
 		outputFlat[outputIdx] = bfloat16.FromFloat32(a * b)
 	}
+	return nil
 }
 
 // TransposeOp ====================================================================================================
@@ -446,13 +455,14 @@ func (it *transposeIterator) next() (nextFlatIdx int) {
 
 var dispatchTranspose = NewDTypeDispatcher("Transpose")
 
-func execTransposeGeneric[T SupportedTypesConstraints](params ...any) {
+func execTransposeGeneric[T SupportedTypesConstraints](params ...any) any {
 	operand, output, it := params[0].(*Buffer), params[1].(*Buffer), params[2].(*transposeIterator)
 	operandFlat := operand.flat.([]T)
 	outputFlat := output.flat.([]T)
 	for _, value := range operandFlat {
 		outputFlat[it.next()] = value
 	}
+	return nil
 }
 
 // BroadcastOp ====================================================================================================
@@ -472,13 +482,14 @@ func execBroadcast(backend *Backend, node *Node, inputs []*Buffer, inputsOwned [
 
 var dispatchBroadcast = NewDTypeDispatcher("Broadcast")
 
-func execBroadcastGeneric[T SupportedTypesConstraints](params ...any) {
+func execBroadcastGeneric[T SupportedTypesConstraints](params ...any) any {
 	operandFlat, outputFlat, repeats := params[0].([]T), params[1].([]T), params[2].(int)
 	pos := 0
 	for _ = range repeats {
 		copy(outputFlat[pos:], operandFlat)
 		pos += len(operandFlat)
 	}
+	return nil
 }
 
 // BroadcastInDimsOp ====================================================================================================
@@ -512,17 +523,18 @@ func execBroadcastInDim(backend *Backend, node *Node, inputs []*Buffer, inputsOw
 
 var dispatchBroadcastInDim = NewDTypeDispatcher("BroadcastInDim")
 
-func execBroadcastInDimGeneric[T SupportedTypesConstraints](params ...any) {
+func execBroadcastInDimGeneric[T SupportedTypesConstraints](params ...any) any {
 	operandFlat, outputFlat, operandIterAny := params[0].([]T), params[1].([]T), params[2]
 	if operandIterAny == nil {
 		// Special case, where operand is a scalar that is broadcast everywhere.
 		xslices.FillSlice(outputFlat, operandFlat[0])
-		return
+		return nil
 	}
 	operandIter := operandIterAny.(*broadcastIterator)
 	for outputIdx := range outputFlat {
 		outputFlat[outputIdx] = operandFlat[operandIter.Next()]
 	}
+	return nil
 }
 
 // IotaOp ====================================================================================================
@@ -547,7 +559,7 @@ func execIota(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool
 
 var dispatchIota = NewDTypeDispatcher("Iota")
 
-func execIotaGeneric[T PODNumericConstraints](params ...any) {
+func execIotaGeneric[T PODNumericConstraints](params ...any) any {
 	output, batchSize, iotaSize, repeatsSize := params[0].(*Buffer), params[1].(int), params[2].(int), params[3].(int)
 	outputFlat := output.flat.([]T)
 	flatIdx := 0
@@ -563,11 +575,12 @@ func execIotaGeneric[T PODNumericConstraints](params ...any) {
 			value++
 		}
 	}
+	return nil
 }
 
 func init() { dispatchIota.Register(dtypes.BFloat16, execIotaBFloat16) }
 
-func execIotaBFloat16(params ...any) {
+func execIotaBFloat16(params ...any) any {
 	output, batchSize, iotaSize, repeatsSize := params[0].(*Buffer), params[1].(int), params[2].(int), params[3].(int)
 	outputFlat := output.flat.([]bfloat16.BFloat16)
 	flatIdx := 0
@@ -583,6 +596,7 @@ func execIotaBFloat16(params ...any) {
 			value++
 		}
 	}
+	return nil
 }
 
 // GatherOp ====================================================================================================
@@ -592,7 +606,91 @@ func execGather(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bo
 	gatherParams := node.data.(*gatherNode)
 	output := backend.getBuffer(node.shape.DType, node.shape.Size())
 	output.shape = node.shape
-	//TODO
+	startIndicesIt := newGatherStartIndicesIterator(startIndices.shape, gatherParams.indexVectorAxis)
+
+	operandBytes := operand.flat.([]byte)
+	dispatchGather.Dispatch(startIndices.shape.DType,
+		operandBytes, operand.flat, startIndicesIt, output.flat, gatherParams)
 	_, _, _ = operand, startIndices, gatherParams
 	return output
+}
+
+type gatherStartIndicesIterator struct {
+	flatIdx                              int
+	prefixIdx, suffixIdx                 int
+	prefixSize, suffixSize, prefixStride int
+	numIndices, startIndicesStride       int
+}
+
+func newGatherStartIndicesIterator(startIndicesShape shapes.Shape, startVectorIndex int) *gatherStartIndicesIterator {
+	it := &gatherStartIndicesIterator{
+		prefixSize:         1,
+		suffixSize:         1,
+		prefixStride:       1,
+		startIndicesStride: 1,
+	}
+	for axis, dim := range startIndicesShape.Dimensions {
+		if axis < startVectorIndex {
+			it.prefixSize *= dim
+		} else {
+			it.prefixStride *= dim
+			if axis > startVectorIndex {
+				it.suffixSize *= dim
+				it.startIndicesStride *= dim
+			}
+		}
+	}
+	return it
+}
+
+func (it *gatherStartIndicesIterator) Next(startIndicesFlatIndices []int) (hasNext bool) {
+	if it.prefixIdx == it.prefixSize {
+		return false
+	}
+	flatIdx := it.flatIdx
+	for ii := range startIndicesFlatIndices {
+		startIndicesFlatIndices[ii] = flatIdx
+		flatIdx += it.startIndicesStride
+	}
+
+	// Increment suffix index:
+	if it.suffixSize > 1 {
+		it.suffixIdx++
+		it.flatIdx++
+		if it.suffixIdx < it.suffixSize {
+			return true
+		}
+		it.flatIdx -= it.suffixSize
+		it.suffixIdx = 0
+	}
+
+	// Increment prefix index:
+	it.prefixIdx++
+	it.flatIdx += it.prefixStride
+	return true
+}
+
+var dispatchGather = NewDTypeDispatcher("Gather")
+
+// execGatherGeneric is specialized by startIndices DType: they need to be converted to int.
+// The operand and output dtypes are treated as bytes.
+func execGatherGeneric[T PODIntegerConstraints](params ...any) any {
+	startIndicesFlat := params[0].([]T)
+	startIndexMap := params[1].([]T)
+	it := params[2].(*gatherStartIndicesIterator)
+	returnFn := params[2].(*func(operandStartIndices []int) bool)
+
+	indirectStartIndices := make([]int, len(startIndexMap))
+	*returnFn = func(operandStartIndices []int) bool {
+		hasResult := it.Next(indirectStartIndices)
+		if !hasResult {
+			return false
+		}
+		for ii, axis := range startIndexMap {
+			startIndexForAxis := startIndicesFlat[indirectStartIndices[ii]]
+			operandStartIndices[axis] = int(startIndexForAxis)
+		}
+		return true
+	}
+	return nil
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"slices"
 	"testing"
 )
 
@@ -181,5 +182,17 @@ func TestExecSpecialOps_BroadcastInDim(t *testing.T) {
 	fmt.Printf("\ty1=%s\n", y1.GoStr())
 	assert.NoError(t, y1.Shape().Check(dtypes.BFloat16, 2))
 	assert.Equal(t, []bfloat16.BFloat16{bf16(42), bf16(42)}, y1.Value())
+}
 
+func TestExecSpecialOps_gatherStartIndicesIterator(t *testing.T) {
+	startIndicesShape := shapes.Make(dtypes.Int8, 3, 3, 2)
+	it := newGatherStartIndicesIterator(startIndicesShape, 1)
+	var got [][]int
+	indices := make([]int, 3)
+	for it.Next(indices) {
+		got = append(got, slices.Clone(indices))
+	}
+	fmt.Printf("\tgatherStartIndicesIterator got %#v\n", got)
+	want := [][]int{{0, 2, 4}, {1, 3, 5}, {6, 8, 10}, {7, 9, 11}, {12, 14, 16}, {13, 15, 17}}
+	require.Equal(t, want, got)
 }
