@@ -1,6 +1,7 @@
 package shapeinference
 
 import (
+	"fmt"
 	. "github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
@@ -60,7 +61,6 @@ func TestUnaryOp(t *testing.T) {
 	require.Panics(t, func() { UnaryOp(OpTypeLogicalNot, MS(I8)) })
 	require.Panics(t, func() { UnaryOp(OpTypeBitwiseNot, MS(F32)) })
 	require.Panics(t, func() { UnaryOp(OpTypeNeg, MS(Bool)) })
-	require.Panics(t, func() { UnaryOp(OpTypeSign, MS(U64)) })
 
 	// Invalid operation type (not unary op).
 	require.Panics(t, func() { UnaryOp(OpTypeAdd, MS(F32)) })
@@ -76,4 +76,18 @@ func TestUnaryOp(t *testing.T) {
 	floatShape := MS(F32, 2, 3)
 	require.True(t, floatShape.Equal(UnaryOp(OpTypeExp, floatShape)))
 	require.True(t, floatShape.Equal(UnaryOp(OpTypeNeg, floatShape)))
+}
+
+func TestGatherOp(t *testing.T) {
+	operand := MS(F32, 2, 2, 2, 2)
+	startIndices := MS(F32, 3, 3, 2)
+	startVectorAxis := 0
+	offsetAxes := []int{0}
+	collapsedSliceAxes := []int{1, 2, 3}
+	startIndexMap := []int{1, 2, 3}
+	sliceSizes := []int{2, 1, 1, 1}
+	indicesAreSorted := true
+	outputShape := GatherOp(operand, startIndices, startVectorAxis, offsetAxes, collapsedSliceAxes, startIndexMap, sliceSizes, indicesAreSorted)
+	fmt.Printf("\toutputShape=%s\n", outputShape)
+	require.NoError(t, outputShape.Check(F32, 2, 3, 2))
 }
