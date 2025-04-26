@@ -11,6 +11,9 @@ import (
 
 //go:generate go run ../../internal/cmd/simplego_generator
 
+// Registers the various generics function instances.
+//go:generate go run ../../internal/cmd/simplego_dispatcher
+
 // BackendName to be used in GOMLX_BACKEND to specify this backend.
 const BackendName = "go"
 

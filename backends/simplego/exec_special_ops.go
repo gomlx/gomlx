@@ -67,8 +67,6 @@ func execWhere(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 
 var dispatchWhere = NewDTypeDispatcher("Where")
 
-//go:generate go run ../../internal/cmd/simplego_dispatcher -dispatcher=dispatchWhere -generic=execWhereGeneric -int -uint -float -bf16
-
 func execWhereGeneric[T SupportedTypesConstraints](params ...any) {
 	conditionBuf, onTrueBuf, onFalseBuf, outputBuf := params[0].(*Buffer), params[1].(*Buffer), params[2].(*Buffer), params[3].(*Buffer)
 	if conditionBuf.shape.IsScalar() {
@@ -220,8 +218,6 @@ func (it *reduceOutputIterator) next() int {
 
 var dispatchReduceMax = NewDTypeDispatcher("ReduceMax")
 
-//go:generate go run ../../internal/cmd/simplego_dispatcher -dispatcher=dispatchReduceMax -generic=execReduceMaxGeneric -int -uint -float
-
 // execReduceMaxGeneric: use dispatchReduceMax to call it.
 func execReduceMaxGeneric[T PODNumericConstraints](params ...any) {
 	operand, output, it, dtype := params[0].(*Buffer), params[1].(*Buffer), params[2].(*reduceOutputIterator), params[3].(dtypes.DType)
@@ -265,8 +261,6 @@ func execReduceMaxBFloat16(params ...any) {
 
 var dispatchReduceMin = NewDTypeDispatcher("ReduceMin")
 
-//go:generate go run ../../internal/cmd/simplego_dispatcher -dispatcher=dispatchReduceMin -generic=execReduceMinGeneric -int -uint -float
-
 func execReduceMinGeneric[T PODNumericConstraints](params ...any) {
 	operand, output, it, dtype := params[0].(*Buffer), params[1].(*Buffer), params[2].(*reduceOutputIterator), params[3].(dtypes.DType)
 
@@ -306,8 +300,6 @@ func execReduceMinBFloat16(params ...any) {
 
 var dispatchReduceSum = NewDTypeDispatcher("ReduceSum")
 
-//go:generate go run ../../internal/cmd/simplego_dispatcher -dispatcher=dispatchReduceSum -generic=execReduceSumGeneric -int -uint -float
-
 func execReduceSumGeneric[T PODNumericConstraints](params ...any) {
 	operand, output, it := params[0].(*Buffer), params[1].(*Buffer), params[2].(*reduceOutputIterator)
 	// Initialize with 0.
@@ -344,8 +336,6 @@ func execReduceSumBFloat16(params ...any) {
 }
 
 var dispatchReduceProduct = NewDTypeDispatcher("ReduceProduct")
-
-//go:generate go run ../../internal/cmd/simplego_dispatcher -dispatcher=dispatchReduceProduct -generic=execReduceProductGeneric -int -uint -float
 
 func execReduceProductGeneric[T PODNumericConstraints](params ...any) {
 	operand, output, it := params[0].(*Buffer), params[1].(*Buffer), params[2].(*reduceOutputIterator)
@@ -456,8 +446,6 @@ func (it *transposeIterator) next() (nextFlatIdx int) {
 
 var dispatchTranspose = NewDTypeDispatcher("Transpose")
 
-//go:generate go run ../../internal/cmd/simplego_dispatcher -dispatcher=dispatchTranspose -generic=execTransposeGeneric -int -uint -float -bf16
-
 func execTransposeGeneric[T SupportedTypesConstraints](params ...any) {
 	operand, output, it := params[0].(*Buffer), params[1].(*Buffer), params[2].(*transposeIterator)
 	operandFlat := operand.flat.([]T)
@@ -483,8 +471,6 @@ func execBroadcast(backend *Backend, node *Node, inputs []*Buffer, inputsOwned [
 }
 
 var dispatchBroadcast = NewDTypeDispatcher("Broadcast")
-
-//go:generate go run ../../internal/cmd/simplego_dispatcher -dispatcher=dispatchBroadcast -generic=execBroadcastGeneric -int -uint -float -bf16
 
 func execBroadcastGeneric[T SupportedTypesConstraints](params ...any) {
 	operandFlat, outputFlat, repeats := params[0].([]T), params[1].([]T), params[2].(int)
@@ -526,8 +512,6 @@ func execBroadcastInDim(backend *Backend, node *Node, inputs []*Buffer, inputsOw
 
 var dispatchBroadcastInDim = NewDTypeDispatcher("BroadcastInDim")
 
-//go:generate go run ../../internal/cmd/simplego_dispatcher -dispatcher=dispatchBroadcastInDim -generic=execBroadcastInDimGeneric -int -uint -float -bf16
-
 func execBroadcastInDimGeneric[T SupportedTypesConstraints](params ...any) {
 	operandFlat, outputFlat, operandIterAny := params[0].([]T), params[1].([]T), params[2]
 	if operandIterAny == nil {
@@ -562,8 +546,6 @@ func execIota(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool
 }
 
 var dispatchIota = NewDTypeDispatcher("Iota")
-
-//go:generate go run ../../internal/cmd/simplego_dispatcher -dispatcher=dispatchIota -generic=execIotaGeneric -int -uint -float
 
 func execIotaGeneric[T PODNumericConstraints](params ...any) {
 	output, batchSize, iotaSize, repeatsSize := params[0].(*Buffer), params[1].(int), params[2].(int), params[3].(int)
@@ -607,9 +589,10 @@ func execIotaBFloat16(params ...any) {
 
 func execGather(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
 	operand, startIndices := inputs[0], inputs[1]
-	params := node.data.(*gatherNode)
+	gatherParams := node.data.(*gatherNode)
 	output := backend.getBuffer(node.shape.DType, node.shape.Size())
 	output.shape = node.shape
 	//TODO
+	_, _, _ = operand, startIndices, gatherParams
 	return output
 }
