@@ -218,6 +218,18 @@ func GatherSlices(input *Node, slicedAxes []int, start *Node, sizes []int) (gath
 	return backendGather(input, start, indexVectorDim, offsetDims, collapsedSliceDims, startIndexMap, sliceSizes, false)
 }
 
+// BackendGather exposes the raw backend Gather operator.
+//
+// This should be internal and it is exposed only for debugging purposes, please don't rely on it. If it turns out you
+// need some functionality here that is not provided in Gather or GatherSlices, open an issue in GoMLX and we'll figure
+// a betterAPI.
+//
+// See convoluted and circular description in
+// https://openxla.org/xla/operation_semantics#gather
+func BackendGather(operand *Node, startIndices *Node, indexVectorAxis int, offsetAxes []int, collapsedSliceAxes []int, startIndexMap []int, sliceSizes []int, indicesAreSorted bool) (node *Node) {
+	return backendGather(operand, startIndices, indexVectorAxis, offsetAxes, collapsedSliceAxes, startIndexMap, sliceSizes, indicesAreSorted)
+}
+
 // GatherWithBatchDims values in params from pointers in indices.
 // It works exactly the same as tensorflow's gather_nd operation, described in
 // https://www.tensorflow.org/api_docs/python/tf/gather_nd.
