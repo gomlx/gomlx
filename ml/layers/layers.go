@@ -153,9 +153,13 @@ func Dense(ctx *context.Context, input *Node, useBias bool, outputDimensions ...
 // of size one, an extra dimension is added to the end. All values of the input
 // must smaller than vocabSize, otherwise it will fail -- no checking is explicitly made.
 //
+// indicesAreSorted should be set to true only if the input is guaranteed to be sorted (ascending).
+// This allows some optimizations in some backends. The default is false (for compatibility),
+// in future versions this argument will be made obligatory.
+//
 // The output has rank one larger than the input, with the last dimension the same as
 // the embedding dimension.
-func Embedding(ctx *context.Context, input *Node, dtype dtypes.DType, vocabSize, dimension int) *Node {
+func Embedding(ctx *context.Context, input *Node, dtype dtypes.DType, vocabSize, dimension int, indicesAreSorted ...bool) *Node {
 	inputShape := input.Shape()
 	if !inputShape.DType.IsInt() {
 		Panicf("can only use Embedding on integer inputs, passed %s instead", input.Shape())
@@ -166,7 +170,7 @@ func Embedding(ctx *context.Context, input *Node, dtype dtypes.DType, vocabSize,
 		input = InsertAxes(input, -1)
 	}
 	embeddingTable := ctx.VariableWithShape("embeddings", shapes.Make(dtype, vocabSize, dimension))
-	return Gather(embeddingTable.ValueGraph(input.Graph()), input)
+	return Gather(embeddingTable.ValueGraph(input.Graph()), input, indicesAreSorted...)
 }
 
 // AssertQuantilesForPWLCalibrationValid validates that raw values for quantiles are ok to be used for
