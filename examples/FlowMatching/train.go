@@ -203,7 +203,7 @@ func BuildTrainingModelGraph(config *diffusion.Config) train.ModelFn {
 		if _, ok := spec.(*flowers.BalancedDataset); ok {
 			// For BalancedDataset we need to gather the images from the examples.
 			examplesIdx := inputs[1]
-			images = Gather(images, InsertAxes(examplesIdx, -1))
+			images = Gather(images, InsertAxes(examplesIdx, -1), false)
 		}
 		flowerIds := inputs[2]
 		batchSize := images.Shape().Dimensions[0]

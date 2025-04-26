@@ -455,7 +455,7 @@ func ExcludeOgbnMagVariablesFromSave(ctx *context.Context, checkpoint *checkpoin
 }
 
 func getLabelsGraph(indices, allLabels *Node) *Node {
-	return Gather(allLabels, indices)
+	return Gather(allLabels, indices, false)
 }
 
 // PapersSeedDatasets returns the train, validation and test datasets (`data.InMemoryDataset`) with only the papers seed nodes,

@@ -108,11 +108,11 @@ func (r Ragged2D) Softmax() Ragged2D {
 		Panicf("invalid Ragged2D dtype %s, it must be float", r.DType())
 	}
 	normalizingMax := StopGradient(r.ReduceMaxCols())
-	normalizingMax = Gather(normalizingMax, r.RowIDs)
+	normalizingMax = Gather(normalizingMax, r.RowIDs, true)
 	normalizedLogits := Sub(r.Flat, normalizingMax)
 	numerators := Exp(normalizedLogits)
 	denominators := MakeRagged2D(r.Dim0, numerators, r.RowIDs).ReduceSumCols()
-	denominators = Gather(denominators, r.RowIDs)
+	denominators = Gather(denominators, r.RowIDs, true)
 	results := Div(numerators, denominators)
 	return MakeRagged2D(r.Dim0, results, r.RowIDs)
 }

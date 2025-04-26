@@ -44,6 +44,9 @@ import (
 //   - `o_1, ..., o_O` come from indices, and are enumerations of the slices from params to gather.
 //   - `s_1, ..., s_S` are the slice sizes copied from params.
 //
+// indicesAreSorted can be set if you know the indices in start are sorted, in some backends this allows
+// for optimizations. If not set it default to false.
+//
 // For example:
 //
 //	params := [][]float32{{0, 1, 2}, {3, 4, 5}, {6, 7, 8}}
@@ -52,7 +55,7 @@ import (
 //
 // In the case above params shapes is interpreted as `[i_1=3, s_1=3]`, and indices' shapes is
 // `[o_1=2, N=1]`. The output shapes is `[o_1=2, s_1=3]`.
-func Gather(params, indices *Node) *Node {
+func Gather(params, indices *Node, indicesAreSorted ...bool) *Node {
 	_ = validateBuildingGraphFromInputs(params, indices)
 	if params.IsScalar() {
 		Panicf("cannot Gather from scalar or tuple, params shapes is %s", params.Shape())
@@ -64,6 +67,9 @@ func Gather(params, indices *Node) *Node {
 	// If indices is a scalar, simply convert it to shapes `[1]`.
 	if indices.IsScalar() {
 		indices = InsertAxes(indices, 0)
+	}
+	if len(indicesAreSorted) > 1 {
+		Panicf("Gather() optional indicesAreSorted takes only one value, %d were defined", len(indicesAreSorted))
 	}
 
 	// Check ranks are compatible.
@@ -106,7 +112,7 @@ func Gather(params, indices *Node) *Node {
 	// Make no assumptions about indices being sorted or unique.
 	// TODO: add version where these can be set.
 	return backendGather(params, indices, indexVectorDim, offsetDims, collapsedSliceDims, startIndexMap, sliceSizes,
-		false)
+		len(indicesAreSorted) == 1 && indicesAreSorted[0])
 }
 
 // GatherSlices from inputNodes. Each axis listed in slicedAxes have corresponding start position and size for each
@@ -450,7 +456,7 @@ func scatterSumVJP(node, v *Node, _ shapes.Shape) []*Node {
 	_ = scatterIndices
 	_ = operand
 	operandVJP := v // Since it's a sum of the initial values, the VJP is the identity of the gradient coming in.
-	updatesVJP := Gather(v, scatterIndices)
+	updatesVJP := Gather(v, scatterIndices, params.indicesAreSorted)
 	return []*Node{ /*operand*/ operandVJP /*indices*/, nil /*initialValue*/, updatesVJP}
 }
 
@@ -458,13 +464,19 @@ func scatterSumVJP(node, v *Node, _ shapes.Shape) []*Node {
 // Note: this may not work for the more general scatter form.
 func scatterMaxOrMinVJP(node, v *Node, _ shapes.Shape) []*Node {
 	operand, scatterIndices, updates := node.inputNodes[0], node.inputNodes[1], node.inputNodes[2]
+	var indicesAreSorted bool
+	if node.Type() == NodeTypeScatterMax {
+		indicesAreSorted = node.inputs.(*nodeInputsScatterMax).indicesAreSorted
+	} else if node.Type() == NodeTypeScatterMin {
+		indicesAreSorted = node.inputs.(*nodeInputsScatterMin).indicesAreSorted
+	}
 
 	// For the operand, we propagate v only if the operand value was chosen as max value.
 	operandMask := Equal(node, operand)
 	operandVJP := Where(operandMask, v, ZerosLike(v))
 
 	// For the updates, we pick them only if they were chosen as max value.
-	maxForUpdates := Gather(node, scatterIndices)
+	maxForUpdates := Gather(node, scatterIndices, indicesAreSorted)
 	updatesMask := Equal(maxForUpdates, updates)
 	updatesVJP := Gather(v, scatterIndices)
 	updatesVJP = Where(updatesMask, updatesVJP, ZerosLike(updatesVJP))
