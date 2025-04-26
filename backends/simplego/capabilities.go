@@ -14,20 +14,24 @@ import (
 // Capabilities of the SimpleGo backends: the set of supported operations and data types.
 var Capabilities = backends.Capabilities{
 	Operations: map[backends.OpType]bool{
-		backends.OpTypeParameter:      true,
-		backends.OpTypeConstant:       true,
-		backends.OpTypeIdentity:       true,
-		backends.OpTypeWhere:          true,
-		backends.OpTypeReshape:        true,
-		backends.OpTypeTranspose:      true,
+		// Graph inputs (leaf nodes)
+		backends.OpTypeParameter: true,
+		backends.OpTypeConstant:  true,
+
+		// Graph nodes.
 		backends.OpTypeBroadcast:      true,
 		backends.OpTypeBroadcastInDim: true,
+		backends.OpTypeDot:            true,
+		backends.OpTypeDotGeneral:     true,
+		backends.OpTypeGather:         true,
+		backends.OpTypeIdentity:       true,
 		backends.OpTypeReduceMax:      true,
 		backends.OpTypeReduceMin:      true,
-		backends.OpTypeReduceSum:      true,
 		backends.OpTypeReduceProduct:  true,
-		backends.OpTypeDotGeneral:     true,
-		backends.OpTypeDot:            true,
+		backends.OpTypeReduceSum:      true,
+		backends.OpTypeReshape:        true,
+		backends.OpTypeTranspose:      true,
+		backends.OpTypeWhere:          true,
 
 		// Standard unary operations:
 		backends.OpTypeAbs:        true,

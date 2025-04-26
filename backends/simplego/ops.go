@@ -188,6 +188,81 @@ func (b *Builder) reduceImpls(reduceOpType backends.OpType, operandOp backends.O
 	return node
 }
 
+// Gather is a powerful but cumbersome Gather operation offered by XLA.
+// Full details in https://www.tensorflow.org/xla/operation_semantics#gather.
+// (Warning: it's circular and cumbersome)
+//
+// The output of Gather has the same DType of the operand, from where we are pulling the data.
+// It's shape will be composed of 2 parts:
+//
+//   - Batch axes: they come from the axes of startIndices, except the "indexVectorAxis" (usually the last)
+//     that is used as the indices into the operand. (*)
+//   - "Offset axes": these are axes that come from the operand, the sizes given by sliceSizes. Notice
+//     that if sliceSizes for an axis is 1, and that axis feature in the collapsedSliceAxes list, this
+//     axis gets omitted in the output.
+//
+// So in general output.Rank() = startIndices.Rank() - 1 + len(offsetAxes).
+//
+// (*) One exception is if indexVectorAxis == startIndices.Rank(), in which case we assume there is an
+// extra virtual axis in startIndices of size 1, in which case output.Rank() = startIndices.Rank() + len(offsetAxes).
+//
+// Arguments:
+//   - operand: the values from where we are gathering. The output DType will follow the operand one.
+//   - startIndices: are the indices we want to gather. There will be one axis pointed by indexVector axis which
+//     enumerates the indices of the slice to be gathered in the operand array (their values are mapped to the axis
+//     in the operand according to startIndexMap).
+//     All other axes are "batch dimensions" and they will have equivalent axes (same dimensions) in the output.
+//   - indexVectorAxis: which of the axis in startIndices is collected and used as the start index for slices
+//     to be gathered in the operand.
+//     It is typically the last axis of startIndices, so startIndices.Shape.Rank()-1.
+//     There is a special case where indexVectorAxis == startIndices.Rank() in which case we assume there is an
+//     extra virtual axis in startIndices of size 1, in which case output.Rank() = startIndices.Rank() + len(offsetAxes).
+//   - offsetAxes: all axes in the operand will either become an "offset axis" in the output, if their slice size > 1,
+//     of optionally collapsed (or "squeezed") in the output, if their slice size == 1. This argument lists the axes
+//     in the operand that marked to be "offset", so they will exist in the output.
+//     Every axis in the operand must either be in offsetAxes or in collapsedSliceAxes.
+//   - collapsedSliceAxes: for sliceSizes that are 1 in the operand, one may not want to include them in the output.
+//     The operand axes included here are marked to be collapsed (removed) in the output. Notice, the corresponding
+//     value in sliceSizes must be 1.
+//     Every axis in the operand must either be in offsetAxes or in collapsedSliceAxes.
+//   - startIndexMap: this maps which value in startIndices is used for which axis index in the slice to be gathered.
+//     Notice len(startIndexMap) must match the startIndices.Shape().Dimensions[indexVectorAxis].
+//     E.g: if startIndices.shape=(2, 3), indexVectorAxis=1, and operand.rank=4 and startIndexMap=[]int{0, 1, 2},
+//     this mean each row of the startIndices will point to the first 3 axis (0,1 and 2) in operand.
+//     In many cases this is [0, 1, 2, ..., operand.Shape.Rank()-1], that is, each "index vector" fully defines
+//     an element on the operand. In some this is only a prefix of the operand's rank.
+//     For those axis in the operand not explicitly set (so if len(startIndexMap) < operand.Rank()), the corresponding
+//     axis start index is considered to be 0, and one sets the sliceSizes to take the slice one wants (typically the
+//     full slice).
+//   - sliceSizes: once the start index from where to gather is resolved, this defines how much data in each axis
+//     to gather. The "offset" output axes (see above) will have dimensions equal to this number for not axes that
+//     are not collapsed.
+//   - indicesAreSorted: can be set to true if its guaranteed that startIndices are sorted (in ascending order,
+//     after scattering its values according to start_index_map) by the user. This allows for some optimzations
+//     in some platforms.
+func (b *Builder) Gather(operandOp, startIndicesOp backends.Op, indexVectorAxis int, offsetAxes, collapsedSliceAxes, startIndexMap, sliceSizes []int, indicesAreSorted bool) backends.Op {
+	opType := backends.OpTypeGather
+	inputs := b.checkOps(opType.String(), operandOp, startIndicesOp)
+	operand, startIndices := inputs[0], inputs[1]
+	shape := shapeinference.GatherOp(operand.shape, startIndices.shape, indexVectorAxis, offsetAxes, collapsedSliceAxes, startIndexMap, sliceSizes, indicesAreSorted)
+	node := b.newNode(opType, shape, operand, startIndices)
+	node.data = gatherNode{
+		indexVectorAxis,
+		offsetAxes,
+		collapsedSliceAxes,
+		startIndexMap,
+		sliceSizes,
+		indicesAreSorted,
+	}
+	return node
+}
+
+type gatherNode struct {
+	indexVectorAxis                                            int
+	offsetAxes, collapsedSlicesAxes, startIndexMap, sliceSizes []int
+	indicesAreSorted                                           bool
+}
+
 // Unary Operations:
 
 // Neg implements backends.Builder interface.

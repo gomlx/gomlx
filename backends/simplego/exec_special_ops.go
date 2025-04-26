@@ -22,6 +22,7 @@ func init() {
 	nodeExecutors[backends.OpTypeReduceSum] = execReduce
 	nodeExecutors[backends.OpTypeReduceProduct] = execReduce
 	nodeExecutors[backends.OpTypeIota] = execIota
+	nodeExecutors[backends.OpTypeGather] = execGather
 }
 
 // IdentityOp ====================================================================================================
@@ -600,4 +601,15 @@ func execIotaBFloat16(params ...any) {
 			value++
 		}
 	}
+}
+
+// GatherOp ====================================================================================================
+
+func execGather(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	operand, startIndices := inputs[0], inputs[1]
+	params := node.data.(*gatherNode)
+	output := backend.getBuffer(node.shape.DType, node.shape.Size())
+	output.shape = node.shape
+	//TODO
+	return output
 }
