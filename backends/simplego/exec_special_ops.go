@@ -608,10 +608,10 @@ func execGather(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bo
 	output.shape = node.shape
 	startIndicesIt := newGatherStartIndicesIterator(startIndices.shape, gatherParams.indexVectorAxis)
 
-	operandBytes := operand.flat.([]byte)
+	operandBytes := operand.mutableBytes()
+	outputBytes := output.mutableBytes()
 	dispatchGather.Dispatch(startIndices.shape.DType,
-		operandBytes, operand.flat, startIndicesIt, output.flat, gatherParams)
-	_, _, _ = operand, startIndices, gatherParams
+		startIndices, startIndicesIt, operand.shape, operandBytes, output.shape, outputBytes, gatherParams)
 	return output
 }
 
@@ -676,21 +676,28 @@ var dispatchGather = NewDTypeDispatcher("Gather")
 // The operand and output dtypes are treated as bytes.
 func execGatherGeneric[T PODIntegerConstraints](params ...any) any {
 	startIndicesFlat := params[0].([]T)
-	startIndexMap := params[1].([]T)
+	startIndicesIt := params[1].(*gatherStartIndicesIterator)
+	operandShape := params[2].(shapes.Shape)
+	operandBytes := params[3].([]byte)
+	outputShape := params[4].(shapes.Shape)
+	outputBytes := params[5].([]byte)
+	gatherParams := params[6].(*gatherNode)
+
+	startIndexMap := gatherParams.startIndexMap
 	it := params[2].(*gatherStartIndicesIterator)
-	returnFn := params[2].(*func(operandStartIndices []int) bool)
 
 	indirectStartIndices := make([]int, len(startIndexMap))
-	*returnFn = func(operandStartIndices []int) bool {
-		hasResult := it.Next(indirectStartIndices)
-		if !hasResult {
-			return false
-		}
+	operandStartIndices := make([]int, operandShape.Rank())
+	outputIndices := make([]int, outputShape.Rank())
+	for startIndicesIt.Next(indirectStartIndices) {
+		// Find operand indices:
 		for ii, axis := range startIndexMap {
 			startIndexForAxis := startIndicesFlat[indirectStartIndices[ii]]
 			operandStartIndices[axis] = int(startIndexForAxis)
 		}
-		return true
+
+		// Find output indices:
+
 	}
 	return nil
 }
