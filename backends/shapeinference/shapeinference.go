@@ -434,21 +434,13 @@ func ReduceOp(operand shapes.Shape, axes []int) shapes.Shape {
 }
 
 // GatherOp returns the output shape of a Gather operation.
-func GatherOp(operand, startIndices shapes.Shape, indexVectorAxis int, offsetAxes, collapsedSliceAxes,
+func GatherOp(operand, startIndices shapes.Shape, indexVectorAxis int, offsetOutputAxes, collapsedSliceAxes,
 	startIndexMap, sliceSizes []int, indicesAreSorted bool) shapes.Shape {
+	_ = indicesAreSorted // Not used for shape inference.
 	if operand.IsScalar() {
 		exceptions.Panicf("Gather() requires a non-scalar operand, got %s", operand)
 	}
-	setOffsetAxes := types.MakeSet[int]()
-	for _, offsetAxis := range offsetAxes {
-		if offsetAxis < 0 || offsetAxis >= operand.Rank() {
-			exceptions.Panicf("offset axis %d is out of range for operand %s", offsetAxis, operand)
-		}
-		if setOffsetAxes.Has(offsetAxis) {
-			exceptions.Panicf("offset axis %d is defined more than once for operand %s", offsetAxis, operand)
-		}
-		setOffsetAxes.Insert(offsetAxis)
-	}
+
 	setCollapsedAxes := types.MakeSet[int]()
 	for _, collapsedSliceAxis := range collapsedSliceAxes {
 		if collapsedSliceAxis < 0 || collapsedSliceAxis >= operand.Rank() {
@@ -457,15 +449,7 @@ func GatherOp(operand, startIndices shapes.Shape, indexVectorAxis int, offsetAxe
 		if setCollapsedAxes.Has(collapsedSliceAxis) {
 			exceptions.Panicf("collapsed slice axis %d is defined more than once for operand %s", collapsedSliceAxis, operand)
 		}
-		if setOffsetAxes.Has(collapsedSliceAxis) {
-			exceptions.Panicf("collapsed slice axis %d is defined as both offset and collapsed slice axis for operand %s", collapsedSliceAxis, operand)
-		}
 		setCollapsedAxes.Insert(collapsedSliceAxis)
-	}
-	for axis := range operand.Rank() {
-		if !setOffsetAxes.Has(axis) && !setCollapsedAxes.Has(axis) {
-			exceptions.Panicf("operand %s axis %d is neither in collapsedSliceAxes nor in offsetAxes, it must be one of the two", operand, axis)
-		}
 	}
 
 	// Check slice sizes.
@@ -484,6 +468,10 @@ func GatherOp(operand, startIndices shapes.Shape, indexVectorAxis int, offsetAxe
 		if sliceSizes[collapseAxis] != 1 {
 			exceptions.Panicf("collapsed slice axis %d must have sliceSize 1, but got %d", collapseAxis, sliceSizes[collapseAxis])
 		}
+	}
+	if operand.Rank() != len(collapsedSliceAxes)+len(offsetOutputAxes) {
+		exceptions.Panicf("the number of collapsedSliceAxes (%d) + the number of offsetOutputAxes (%d) must be equal to the number of axes in the operand (operand.Rank()=%d)",
+			len(collapsedSliceAxes), len(offsetOutputAxes), operand.Rank())
 	}
 
 	// Check indexVectorAxis: it is ok if it is equal to startIndices.rank, in which case we assume an implicit extra axes of dimension 1.
@@ -509,24 +497,46 @@ func GatherOp(operand, startIndices shapes.Shape, indexVectorAxis int, offsetAxe
 		batchRank++
 	}
 
+	// Build output shape: the order is defined as:
+	//
+	// - Axes in offsetOutputAxes are preset as offset, and their dimension are taken sequentially from non-collapsed operand axes.
+	// - Remaining axes are filled in order from the batch axes, taken from startIndices.
 	output := shapes.Make(operand.DType)
-	output.Dimensions = make([]int, batchRank+len(offsetAxes))
+	output.Dimensions = make([]int, batchRank+len(offsetOutputAxes))
+
+	setOffsetOutputAxes := types.MakeSet[int]()
+	for _, offsetOutputAxis := range offsetOutputAxes {
+		if offsetOutputAxis < 0 || offsetOutputAxis >= output.Rank() {
+			exceptions.Panicf("offset output axis %d is out of range for output of rank %d", offsetOutputAxis, output.Rank())
+		}
+		if setOffsetOutputAxes.Has(offsetOutputAxis) {
+			exceptions.Panicf("offset output axis %d is defined more than once: offsetOutputAxes=%v", offsetOutputAxis, offsetOutputAxes)
+		}
+		setOffsetOutputAxes.Insert(offsetOutputAxis)
+	}
+	offsetDims := make([]int, 0, len(offsetOutputAxes))
+	for axis, sliceSize := range sliceSizes {
+		if setCollapsedAxes.Has(axis) {
+			// This is a collapsed axis, and not used as offset.
+			continue
+		}
+		offsetDims = append(offsetDims, sliceSize)
+	}
+	offsetDimsIdx := 0
+	batchDimsIdx := 0
 	for axis := range output.Dimensions {
-		if axis < indexVectorAxis {
-			// Batch dimension, that comes from startIndices.
-			output.Dimensions[axis] = startIndices.Dimensions[axis]
-			continue
+		if setOffsetOutputAxes.Has(axis) {
+			// Take an offset dimension from sliceSizes:
+			output.Dimensions[axis] = offsetDims[offsetDimsIdx]
+			offsetDimsIdx++
+		} else {
+			// Take a batch dimension:
+			if batchDimsIdx == indexVectorAxis {
+				batchDimsIdx++
+			}
+			output.Dimensions[axis] = startIndices.Dimensions[batchDimsIdx]
+			batchDimsIdx++
 		}
-		if axis >= indexVectorAxis && axis < indexVectorAxis+len(offsetAxes) {
-			// "Offset" dimensions, comes from the operand, but in the output its dimension is defined
-			// by the sliceSizes.
-			offsetIdx := axis - indexVectorAxis
-			operandAxis := offsetAxes[offsetIdx]
-			output.Dimensions[axis] = sliceSizes[operandAxis]
-			continue
-		}
-		startIndicesAxis := axis - len(offsetAxes) + 1 // Skip the indexVectorAxis
-		output.Dimensions[axis] = startIndices.Dimensions[startIndicesAxis]
 	}
 	return output
 }

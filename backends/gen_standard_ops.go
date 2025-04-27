@@ -217,14 +217,17 @@ type StandardOps interface {
 	//     It is typically the last axis of startIndices, so startIndices.Shape.Rank()-1.
 	//     There is a special case where indexVectorAxis == startIndices.Rank() in which case we assume there is an
 	//     extra virtual axis in startIndices of size 1, in which case output.Rank() = startIndices.Rank() + len(offsetAxes).
-	//   - offsetAxes: all axes in the operand will either become an "offset axis" in the output, if their slice size > 1,
-	//     of optionally collapsed (or "squeezed") in the output, if their slice size == 1. This argument lists the axes
-	//     in the operand that marked to be "offset", so they will exist in the output.
-	//     Every axis in the operand must either be in offsetAxes or in collapsedSliceAxes.
+	//   - offsetOutputAxes: axes in the _output_ (not on the operand) that will hold the "offset slices", slices that are not
+	//     collapsed. It points in which position (axis) in the output these slices should show up. Any axis in sliceSizes
+	//     that is > 1 must feature here.
+	//     Notice all axes in the operand will either become an "offset axis" in the output, if their slice size > 1,
+	//     of optionally collapsed (or "squeezed") in the output, if their slice size == 1. We map the axes in the output
+	//     (given in offsetAxes) to the axes in the operand (the axes not present in collapsedSliceAxes) sequentially.
+	//     One must have Rank(operand) == len(collapsedSliceAxes) + len(offsetAxes).
 	//   - collapsedSliceAxes: for sliceSizes that are 1 in the operand, one may not want to include them in the output.
-	//     The operand axes included here are marked to be collapsed (removed) in the output. Notice, the corresponding
+	//     The _operand_ axes included here are marked to be collapsed (removed) in the output. Notice, the corresponding
 	//     value in sliceSizes must be 1.
-	//     Every axis in the operand must either be in offsetAxes or in collapsedSliceAxes.
+	//     One must have Rank(operand) == len(collapsedSliceAxes) + len(offsetOutputAxes).
 	//   - startIndexMap: this maps which value in startIndices is used for which axis index in the slice to be gathered.
 	//     Notice len(startIndexMap) must match the startIndices.Shape().Dimensions[indexVectorAxis].
 	//     E.g: if startIndices.shape=(2, 3), indexVectorAxis=1, and operand.rank=4 and startIndexMap=[]int{0, 1, 2},
@@ -238,9 +241,9 @@ type StandardOps interface {
 	//     to gather. The "offset" output axes (see above) will have dimensions equal to this number for not axes that
 	//     are not collapsed.
 	//   - indicesAreSorted: can be set to true if its guaranteed that startIndices are sorted (in ascending order,
-	//     after scattering its values according to start_index_map) by the user. This allows for some optimzations
+	//     after scattering its values according to start_index_map) by the user. This allows for some optimizations
 	//     in some platforms.
-	Gather(operand, startIndices Op, indexVectorAxis int, offsetAxes, collapsedSliceAxes, startIndexMap, sliceSizes []int, indicesAreSorted bool) Op
+	Gather(operand, startIndices Op, indexVectorAxis int, offsetOutputAxes, collapsedSliceAxes, startIndexMap, sliceSizes []int, indicesAreSorted bool) Op
 
 	// GreaterOrEqual performs element-wise comparison, returns boolean results with the same dimensions as input.
 	// The op is created on the same XlaBuilder as used for x0 and x1.

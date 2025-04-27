@@ -79,14 +79,14 @@ func TestUnaryOp(t *testing.T) {
 }
 
 func TestGatherOp(t *testing.T) {
-	operand := MS(F32, 2, 2, 2, 2)
+	operand := MS(F32, 4, 2, 2, 2)
 	startIndices := MS(F32, 3, 3, 2)
-	startVectorAxis := 0
-	offsetAxes := []int{0}
-	collapsedSliceAxes := []int{1, 2, 3}
+	startVectorAxis := 1
+	offsetAxes := []int{0, 2}
+	collapsedSliceAxes := []int{1, 3}
 	startIndexMap := []int{1, 2, 3}
-	sliceSizes := []int{2, 1, 1, 1}
+	sliceSizes := []int{4, 1, 1, 1}
 	outputShape := GatherOp(operand, startIndices, startVectorAxis, offsetAxes, collapsedSliceAxes, startIndexMap, sliceSizes, true)
 	fmt.Printf("\toutputShape=%s\n", outputShape)
-	require.NoError(t, outputShape.Check(F32, 2, 3, 2))
+	require.NoError(t, outputShape.Check(F32, 4, 3, 1, 2))
 }
