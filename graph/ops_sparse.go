@@ -212,19 +212,19 @@ func GatherSlices(input *Node, slicedAxes []int, start *Node, sizes []int, indic
 		sliceSizes[axis] = size
 	}
 
-	// * offsetDims must point for each input axis that is not collapsed, the output Node. Since we don't collapse any of the
+	// * offsetOutputAxes must have one output axis value for each input axis that is not collapsed. Since we don't collapse any of the
 	//   input dimensions, all the input axes need to be mapped. Notice that this preserves the order of the axis given by
 	//   the input (the order in `slicedAxes` will be ignored).
-	offsetDims := make([]int, 0, numSlicedAxes)
+	offsetOutputAxes := make([]int, 0, numSlicedAxes)
 	var collapsedSliceDims []int // Left empty.
 	for ii := 0; ii < inputRank; ii++ {
 		axis := ii + outputPrefixRank
-		offsetDims = append(offsetDims, axis)
+		offsetOutputAxes = append(offsetOutputAxes, axis)
 	}
 
 	// Make no assumptions about indices being sorted or unique.
 	// TODO: add version where these can be set.
-	return backendGather(input, start, indexVectorDim, offsetDims, collapsedSliceDims, startIndexMap, sliceSizes, indicesAreSorted)
+	return backendGather(input, start, indexVectorDim, offsetOutputAxes, collapsedSliceDims, startIndexMap, sliceSizes, indicesAreSorted)
 }
 
 // BackendGather exposes the raw backend Gather operator.
