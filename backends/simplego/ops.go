@@ -213,6 +213,27 @@ type gatherNode struct {
 	indicesAreSorted                                                 bool
 }
 
+// Concatenate joins a sequence of tensors along the given axis (it must exist already).
+// All input tensors must have the same shape, except potentially in the concatenation dimension.
+// They must also have the same data type (DType).
+// It panics if inputs are invalid (e.g., no inputs, mismatched graphs, shapes, dtypes, or invalid dimension).
+func (b *Builder) Concatenate(axis int, operandOps ...backends.Op) backends.Op {
+	if len(operandOps) == 0 {
+		exceptions.Panicf("Concatenate requires at least one input tensor")
+	}
+	operands := b.checkOps("Concatenate", operandOps...)
+
+	// Extract shapes for shape inference.
+	inputShapes := make([]shapes.Shape, len(operands))
+	for i, opNode := range operands {
+		inputShapes[i] = opNode.shape
+	}
+	outputShape := shapeinference.ConcatenateOp(inputShapes, axis)
+	node := b.newNode(backends.OpTypeConcatenate, outputShape, operands...)
+	node.data = axis
+	return node
+}
+
 // Unary Operations:
 
 // Neg implements backends.Builder interface.

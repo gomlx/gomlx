@@ -116,3 +116,51 @@ func TestGatherOp(t *testing.T) {
 	fmt.Printf("\tTest 3: outputShape=%s\n", output)
 	require.NoError(t, output.Check(F32, 8, 16))
 }
+
+func TestConcatenateOp(t *testing.T) {
+	// Test Case 1: Concatenating vectors along dimension 0
+	input1_1 := MS(F32, 3)
+	input1_2 := MS(F32, 4)
+	expected1 := MS(F32, 7)
+	output1 := ConcatenateOp([]shapes.Shape{input1_1, input1_2}, 0)
+	require.True(t, expected1.Equal(output1), "Test Case 1 Failed: Expected %s, got %s", expected1, output1)
+
+	// Test Case 2: Concatenating matrices along dimension 0
+	input2_1 := MS(I8, 2, 3)
+	input2_2 := MS(I8, 5, 3)
+	expected2 := MS(I8, 7, 3)
+	output2 := ConcatenateOp([]shapes.Shape{input2_1, input2_2}, 0)
+	require.True(t, expected2.Equal(output2), "Test Case 2 Failed: Expected %s, got %s", expected2, output2)
+
+	// Test Case 3: Concatenating matrices along dimension 1
+	input3_1 := MS(I8, 2, 3)
+	input3_2 := MS(I8, 2, 4)
+	expected3 := MS(I8, 2, 7)
+	output3 := ConcatenateOp([]shapes.Shape{input3_1, input3_2}, 1)
+	require.True(t, expected3.Equal(output3), "Test Case 3 Failed: Expected %s, got %s", expected3, output3)
+
+	// Test Case 4: Concatenating 3 tensors along dimension 1
+	input4_1 := MS(F32, 2, 3, 4)
+	input4_2 := MS(F32, 2, 5, 4)
+	input4_3 := MS(F32, 2, 1, 4)
+	expected4 := MS(F32, 2, 9, 4)
+	output4 := ConcatenateOp([]shapes.Shape{input4_1, input4_2, input4_3}, 1)
+	require.True(t, expected4.Equal(output4), "Test Case 4 Failed: Expected %s, got %s", expected4, output4)
+
+	// Error Case 1: Mismatched DTypes
+	require.Panics(t, func() { ConcatenateOp([]shapes.Shape{MS(F32, 2), MS(I8, 3)}, 0) }, "Error Case 1 Failed: Mismatched DTypes")
+
+	// Error Case 2: Mismatched Ranks
+	require.Panics(t, func() { ConcatenateOp([]shapes.Shape{MS(F32, 2, 3), MS(F32, 4)}, 0) }, "Error Case 2 Failed: Mismatched Ranks")
+
+	// Error Case 3: Invalid Dimension
+	require.Panics(t, func() { ConcatenateOp([]shapes.Shape{MS(F32, 2, 3), MS(F32, 2, 3)}, 2) }, "Error Case 3 Failed: Invalid Dimension (too large)")
+	require.Panics(t, func() { ConcatenateOp([]shapes.Shape{MS(F32, 2, 3), MS(F32, 2, 3)}, -1) }, "Error Case 3 Failed: Invalid Dimension (negative)")
+
+	// Error Case 4: Mismatched non-concatenation dimensions
+	require.Panics(t, func() { ConcatenateOp([]shapes.Shape{MS(F32, 2, 3), MS(F32, 2, 4)}, 0) }, "Error Case 4 Failed: Mismatched non-concatenation dimension")
+	require.Panics(t, func() { ConcatenateOp([]shapes.Shape{MS(F32, 2, 3, 4), MS(F32, 2, 5, 5)}, 1) }, "Error Case 4 Failed: Mismatched non-concatenation dimension")
+
+	// Error Case 5: No inputs
+	require.Panics(t, func() { ConcatenateOp([]shapes.Shape{}, 0) }, "Error Case 5 Failed: No inputs")
+}

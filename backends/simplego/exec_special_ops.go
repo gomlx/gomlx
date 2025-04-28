@@ -24,6 +24,7 @@ func init() {
 	nodeExecutors[backends.OpTypeReduceProduct] = execReduce
 	nodeExecutors[backends.OpTypeIota] = execIota
 	nodeExecutors[backends.OpTypeGather] = execGather
+	nodeExecutors[backends.OpTypeConcatenate] = execConcatenate // Register the new executor
 }
 
 // IdentityOp ====================================================================================================
@@ -866,4 +867,71 @@ func (it *gatherIterator) Next(startIndicesFlatIndices []int, outputByteIdx *int
 	it.prefixIdx++
 	it.startIndicesFlatIdx += it.startIndicesPrefixStride
 	return true
+}
+
+// ConcatenateOp ====================================================================================================
+
+// execConcatenate implements the Concatenate op using direct byte copying with offsets and strides.
+func execConcatenate(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	axis := node.data.(int) // Renamed from dimension
+	outputShape := node.shape
+	dtype := outputShape.DType
+	elemSize := dtype.Size()
+	rank := outputShape.Rank()
+
+	// Allocate output buffer.
+	output := backend.getBuffer(dtype, outputShape.Size())
+	output.shape = outputShape
+	outputBytes := output.mutableBytes()
+
+	// Calculate the size of the blocks before and after the concatenation axis.
+	outerBlockSize := 1 // Number of independent blocks to copy
+	for i := 0; i < axis; i++ {
+		outerBlockSize *= outputShape.Dimensions[i]
+	}
+	innerBlockSize := 1 // Size of the innermost contiguous block (in elements)
+	for i := axis + 1; i < rank; i++ {
+		innerBlockSize *= outputShape.Dimensions[i]
+	}
+	innerBlockBytes := innerBlockSize * elemSize
+
+	// Total size in bytes of one full "row" along the concatenation axis in the output.
+	// This is the stride needed to jump from one outer block to the next in the output.
+	outputConcatAxisStrideBytes := outputShape.Dimensions[axis] * innerBlockBytes
+
+	// Current offset in bytes along the concatenation axis *within* an outer block in the output buffer.
+	// This accumulates as we process each input tensor.
+	outputAxisOffsetBytes := 0
+
+	for _, inputBuf := range inputs {
+		inputShape := inputBuf.shape
+		inputDims := inputShape.Dimensions
+		inputBytes := inputBuf.mutableBytes() // Use mutableBytes() for input
+
+		// Size of the concatenation axis for this specific input.
+		inputConcatAxisSize := inputDims[axis]
+
+		// Total size in bytes to copy from this input *per outer block*.
+		inputBlockBytes := inputConcatAxisSize * innerBlockBytes
+
+		// Iterate through all outer dimension blocks.
+		for outerIdx := 0; outerIdx < outerBlockSize; outerIdx++ {
+			// Calculate the starting byte position for the current outer block in the input.
+			// This is simply the outer block index times the size of the block to copy for this input.
+			inputStartOffset := outerIdx * inputBlockBytes
+
+			// Calculate the starting byte position for the current outer block in the output.
+			// This is the outer block index times the total output stride along the concat axis,
+			// plus the accumulated offset from previous inputs along the concat axis.
+			outputStartOffset := outerIdx*outputConcatAxisStrideBytes + outputAxisOffsetBytes
+
+			// Copy the relevant block of bytes for the current outer block.
+			copy(outputBytes[outputStartOffset:outputStartOffset+inputBlockBytes], inputBytes[inputStartOffset:inputStartOffset+inputBlockBytes])
+		}
+
+		// Update the offset for the next input along the concatenation axis.
+		outputAxisOffsetBytes += inputBlockBytes
+	}
+
+	return output
 }

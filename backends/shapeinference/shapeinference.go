@@ -553,3 +553,55 @@ func GatherOp(operand, startIndices shapes.Shape, indexVectorAxis int, offsetOut
 	}
 	return output
 }
+
+// ConcatenateOp calculates the output shape of a Concatenate operation.
+// It takes a slice of input shapes and the dimension along which to concatenate.
+func ConcatenateOp(inputs []shapes.Shape, axis int) shapes.Shape {
+	if len(inputs) == 0 {
+		exceptions.Panicf("ConcatenateOp requires at least one input shape")
+	}
+
+	// Initialize output dimensions with the first shape.
+	firstShape := inputs[0]
+	dtype := firstShape.DType
+	rank := firstShape.Rank()
+	output := firstShape.Clone()
+	if dtype == dtypes.InvalidDType {
+		exceptions.Panicf("invalid shape %s for first input of ConcatenateOp", firstShape)
+	}
+	if len(inputs) == 1 {
+		return firstShape
+	}
+
+	if axis < 0 || axis >= rank {
+		exceptions.Panicf("invalid concatenation axis %d for shapes with rank %d", axis, rank)
+	}
+
+	// Validate further inputs and accumulate the concatenation axis size.
+	for i := 1; i < len(inputs); i++ {
+		currentShape := inputs[i]
+		if currentShape.DType == dtypes.InvalidDType {
+			exceptions.Panicf("invalid shape %s for input #%d of ConcatenateOp", currentShape, i)
+		}
+		if currentShape.DType != dtype {
+			exceptions.Panicf("mismatched DTypes for ConcatenateOp: input #0 has %s, input #%d has %s",
+				dtype, i, currentShape.DType)
+		}
+		if currentShape.Rank() != rank {
+			exceptions.Panicf("mismatched ranks for ConcatenateOp: input #0 has rank %d, input #%d has rank %d",
+				rank, i, currentShape.Rank())
+		}
+
+		for d := 0; d < rank; d++ {
+			if d == axis {
+				output.Dimensions[d] += currentShape.Dimensions[d]
+			} else {
+				if currentShape.Dimensions[d] != output.Dimensions[d] {
+					exceptions.Panicf("mismatched dimensions for ConcatenateOp at axis %d (non-concatenation axis): input #0 has %d, input #%d has %d",
+						d, output.Dimensions[d], i, currentShape.Dimensions[d])
+				}
+			}
+		}
+	}
+	return output
+}
