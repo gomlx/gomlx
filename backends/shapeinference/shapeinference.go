@@ -14,6 +14,7 @@
 package shapeinference
 
 import (
+	"fmt"
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types"
@@ -436,7 +437,19 @@ func ReduceOp(operand shapes.Shape, axes []int) shapes.Shape {
 // GatherOp returns the output shape of a Gather operation.
 func GatherOp(operand, startIndices shapes.Shape, indexVectorAxis int, offsetOutputAxes, collapsedSliceAxes,
 	startIndexMap, sliceSizes []int, indicesAreSorted bool) shapes.Shape {
+	fmt.Printf("GatherOp parameters:\n"+
+		"  operand: %v\n"+
+		"  startIndices: %v\n"+
+		"  indexVectorAxis: %d\n"+
+		"  offsetOutputAxes: %v\n"+
+		"  collapsedSliceAxes: %v\n"+
+		"  startIndexMap: %v\n"+
+		"  sliceSizes: %v\n"+
+		"  indicesAreSorted: %v\n",
+		operand, startIndices, indexVectorAxis, offsetOutputAxes, collapsedSliceAxes,
+		startIndexMap, sliceSizes, indicesAreSorted)
 	_ = indicesAreSorted // Not used for shape inference.
+
 	if operand.IsScalar() {
 		exceptions.Panicf("Gather() requires a non-scalar operand, got %s", operand)
 	}
@@ -493,7 +506,7 @@ func GatherOp(operand, startIndices shapes.Shape, indexVectorAxis int, offsetOut
 	// The number of batch axes is usually the number of startIndices - 1, except if indexVectorAxis==rank,
 	// in which case we assume an extra one in the end.
 	batchRank := startIndices.Rank() - 1
-	if indexVectorAxis == batchRank {
+	if indexVectorAxis == startIndices.Rank() {
 		batchRank++
 	}
 
