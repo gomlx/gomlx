@@ -186,13 +186,36 @@ func TestExecSpecialOps_BroadcastInDim(t *testing.T) {
 
 func TestExecSpecialOps_gatherStartIndicesIterator(t *testing.T) {
 	startIndicesShape := shapes.Make(dtypes.Int8, 3, 3, 2)
-	it := newGatherStartIndicesIterator(startIndicesShape, 1)
-	var got [][]int
+	operandShape := shapes.Make(dtypes.F32, 2, 5, 3, 2)
+	offsetAxes := []int{2}
+	it := newGatherIterator(startIndicesShape, 1, operandShape, offsetAxes)
+	var gotStartIndices [][]int
+	var gotOutputIndices []int
 	indices := make([]int, 3)
-	for it.Next(indices) {
-		got = append(got, slices.Clone(indices))
+	var outputFlatIdx int
+	for it.Next(indices, &outputFlatIdx) {
+		gotStartIndices = append(gotStartIndices, slices.Clone(indices))
+		gotOutputIndices = append(gotOutputIndices, outputFlatIdx)
 	}
-	fmt.Printf("\tgatherStartIndicesIterator got %#v\n", got)
-	want := [][]int{{0, 2, 4}, {1, 3, 5}, {6, 8, 10}, {7, 9, 11}, {12, 14, 16}, {13, 15, 17}}
-	require.Equal(t, want, got)
+	fmt.Printf("\tgatherStartIndicesIterator got startIndices=%#v\n", gotStartIndices)
+	fmt.Printf("\tgatherStartIndicesIterator got outputFlatIndices=%#v\n", gotOutputIndices)
+	wantStartIndirectIndices := [][]int{{0, 2, 4}, {1, 3, 5}, {6, 8, 10}, {7, 9, 11}, {12, 14, 16}, {13, 15, 17}}
+	assert.Equal(t, wantStartIndirectIndices, gotStartIndices)
+	wantOutputFlatIndices := []int{0, 1, 6, 7, 12, 13}
+	assert.Equal(t, wantOutputFlatIndices, gotOutputIndices)
+}
+
+func TestExecSpecialOps_Gather(t *testing.T) {
+	y0 := graph.ExecOnce(backend, func(g *graph.Graph) *graph.Node {
+		operand := graph.IotaFull(g, shapes.Make(dtypes.F32, 2, 2, 2, 2))
+		startIndices := graph.Const(g, [][][]int{{{0, 1}, {0, 1}, {0, 1}}, {{0, 0}, {0, 0}, {1, 1}}, {{0, 0}, {1, 1}, {0, 0}}})
+		fmt.Printf("startIndices.shape=%s\n", startIndices.Shape())
+		startVectorAxis := 1
+		offsetAxes := []int{0}
+		collapsedSliceAxes := []int{1, 2, 3}
+		startIndexMap := []int{1, 2, 3}
+		sliceSizes := []int{2, 1, 1, 1}
+		return graph.BackendGather(operand, startIndices, startVectorAxis, offsetAxes, collapsedSliceAxes, startIndexMap, sliceSizes, false)
+	})
+	fmt.Printf("y0=%s\n", y0.GoStr())
 }

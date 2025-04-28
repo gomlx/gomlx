@@ -208,9 +208,9 @@ func (b *Builder) Gather(operandOp, startIndicesOp backends.Op, indexVectorAxis 
 }
 
 type gatherNode struct {
-	indexVectorAxis                                            int
-	offsetAxes, collapsedSlicesAxes, startIndexMap, sliceSizes []int
-	indicesAreSorted                                           bool
+	indexVectorAxis                                                  int
+	offsetOutputAxes, collapsedSlicesAxes, startIndexMap, sliceSizes []int
+	indicesAreSorted                                                 bool
 }
 
 // Unary Operations:

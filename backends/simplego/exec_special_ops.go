@@ -1,6 +1,7 @@
 package simplego
 
 import (
+	"fmt"
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
@@ -606,67 +607,98 @@ func execGather(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bo
 	gatherParams := node.data.(*gatherNode)
 	output := backend.getBuffer(node.shape.DType, node.shape.Size())
 	output.shape = node.shape
-	startIndicesIt := newGatherStartIndicesIterator(startIndices.shape, gatherParams.indexVectorAxis)
+	startIndicesIt := newGatherIterator(
+		startIndices.shape, gatherParams.indexVectorAxis,
+		operand.shape, gatherParams.offsetAxes)
 
 	operandBytes := operand.mutableBytes()
 	outputBytes := output.mutableBytes()
 	dispatchGather.Dispatch(startIndices.shape.DType,
-		startIndices, startIndicesIt, operand.shape, operandBytes, output.shape, outputBytes, gatherParams)
+		startIndices.flat, startIndicesIt, operand.shape, operandBytes, output.shape, outputBytes, gatherParams)
 	return output
 }
 
-type gatherStartIndicesIterator struct {
-	flatIdx                              int
-	prefixIdx, suffixIdx                 int
-	prefixSize, suffixSize, prefixStride int
-	numIndices, startIndicesStride       int
+// gatherIterator controls iteration 2 set of indices:
+//
+//   - A. startIndices tensor, which points where to get the data from in the operand.
+//   - B. the output tensor, where to store the data
+//
+// The iterators A and B move together, and their counting is split into:
+//
+//  1. "prefix indices": batch axes before the startVectorIndex (for startIndices) or "offset axes" (for output);
+//  2. "suffix indices": batch axes that come after the startVectorIndex (for startIndices) or "offset axes" (for output);
+type gatherIterator struct {
+	prefixIdx, suffixIdx   int
+	prefixSize, suffixSize int
+
+	// startIndices counters.
+	startIndicesFlatIdx      int
+	startIndicesPrefixStride int
+
+	// outputIndices counters.
+	outputFlatIdx      int
+	outputPrefixStride int
 }
 
-func newGatherStartIndicesIterator(startIndicesShape shapes.Shape, startVectorIndex int) *gatherStartIndicesIterator {
-	it := &gatherStartIndicesIterator{
-		prefixSize:         1,
-		suffixSize:         1,
-		prefixStride:       1,
-		startIndicesStride: 1,
+func newGatherIterator(startIndicesShape shapes.Shape, startVectorIndex int, operandShape shapes.Shape, offsetAxes []int) *gatherIterator {
+	it := &gatherIterator{
+		prefixSize: 1,
+		suffixSize: 1,
+
+		startIndicesPrefixStride: 1,
+		outputPrefixStride:       1,
 	}
+
+	// Initialize for startIndices.
 	for axis, dim := range startIndicesShape.Dimensions {
 		if axis < startVectorIndex {
 			it.prefixSize *= dim
 		} else {
-			it.prefixStride *= dim
+			it.startIndicesPrefixStride *= dim
 			if axis > startVectorIndex {
 				it.suffixSize *= dim
-				it.startIndicesStride *= dim
 			}
 		}
+	}
+
+	// Initialize for output.
+	it.outputPrefixStride = it.suffixSize
+	for _, axis := range offsetAxes {
+		dim := operandShape.Dimensions[axis]
+		it.outputPrefixStride *= dim
 	}
 	return it
 }
 
-func (it *gatherStartIndicesIterator) Next(startIndicesFlatIndices []int) (hasNext bool) {
+func (it *gatherIterator) Next(startIndicesFlatIndices []int, outputFlatIdx *int) (hasNext bool) {
 	if it.prefixIdx == it.prefixSize {
 		return false
 	}
-	flatIdx := it.flatIdx
+
+	startIndicesFlatIdx := it.startIndicesFlatIdx
 	for ii := range startIndicesFlatIndices {
-		startIndicesFlatIndices[ii] = flatIdx
-		flatIdx += it.startIndicesStride
+		startIndicesFlatIndices[ii] = startIndicesFlatIdx
+		startIndicesFlatIdx += it.suffixSize
 	}
+	*outputFlatIdx = it.outputFlatIdx
 
 	// Increment suffix index:
 	if it.suffixSize > 1 {
 		it.suffixIdx++
-		it.flatIdx++
+		it.startIndicesFlatIdx++
+		it.outputFlatIdx++
 		if it.suffixIdx < it.suffixSize {
 			return true
 		}
-		it.flatIdx -= it.suffixSize
+		it.startIndicesFlatIdx -= it.suffixSize
+		it.outputFlatIdx -= it.suffixSize
 		it.suffixIdx = 0
 	}
 
 	// Increment prefix index:
 	it.prefixIdx++
-	it.flatIdx += it.prefixStride
+	it.startIndicesFlatIdx += it.startIndicesPrefixStride
+	it.outputFlatIdx += it.outputPrefixStride
 	return true
 }
 
@@ -676,28 +708,84 @@ var dispatchGather = NewDTypeDispatcher("Gather")
 // The operand and output dtypes are treated as bytes.
 func execGatherGeneric[T PODIntegerConstraints](params ...any) any {
 	startIndicesFlat := params[0].([]T)
-	startIndicesIt := params[1].(*gatherStartIndicesIterator)
+	gatherIt := params[1].(*gatherIterator)
 	operandShape := params[2].(shapes.Shape)
 	operandBytes := params[3].([]byte)
 	outputShape := params[4].(shapes.Shape)
 	outputBytes := params[5].([]byte)
 	gatherParams := params[6].(*gatherNode)
-
 	startIndexMap := gatherParams.startIndexMap
-	it := params[2].(*gatherStartIndicesIterator)
 
+	dataSize := operandShape.DType.Size()
+	outputBytesStride := gatherIt.suffixSize * dataSize
+	fmt.Printf("outputBytesStride: %d\n", outputBytesStride)
+
+	// Outer-loop: loop over the start indices to gather from:
 	indirectStartIndices := make([]int, len(startIndexMap))
-	operandStartIndices := make([]int, operandShape.Rank())
-	outputIndices := make([]int, outputShape.Rank())
-	for startIndicesIt.Next(indirectStartIndices) {
+	operandRank := operandShape.Rank()
+	operandStartIndices := make([]int, operandRank)
+	var outputFlatIdx int
+
+	// Inner-loop preparation: loop over the slices to copy given the starting indices.
+	operandByteStrides := make([]int, operandRank)
+	stride := dataSize
+	for reverseAxis := range operandRank {
+		axis := operandShape.Rank() - reverseAxis - 1
+		operandByteStrides[axis] = stride
+		stride *= operandShape.Dimensions[axis]
+	}
+	fmt.Printf("operandByteStrides: %v\n", operandByteStrides)
+	var operandBytesIdx int
+	sliceIndices := make([]int, operandRank)
+	sliceSizes := gatherParams.sliceSizes
+	slicesSize := 1
+	for _, sliceDim := range sliceSizes {
+		slicesSize *= sliceDim
+	}
+
+	_, _, _ = operandBytes, outputBytes, outputShape
+	for gatherIt.Next(indirectStartIndices, &outputFlatIdx) {
 		// Find operand indices:
 		for ii, axis := range startIndexMap {
 			startIndexForAxis := startIndicesFlat[indirectStartIndices[ii]]
 			operandStartIndices[axis] = int(startIndexForAxis)
 		}
+		outputBytesIdx := outputFlatIdx * dataSize
+		fmt.Printf("operandStartIndices=%v\n", operandStartIndices)
+		operandBytesIdx = 0
+		for axis, idx := range operandStartIndices {
+			operandBytesIdx += operandByteStrides[axis] * idx
+		}
+		fmt.Printf("operandBytesIdx: %d\n", operandBytesIdx)
 
-		// Find output indices:
+		// Traverse sliceSizes in the operand copying over result.
+		for ii := range sliceIndices {
+			sliceIndices[ii] = 0
+		}
+		for _ = range slicesSize {
+			// TODO: copy more than one element (dataSize) at a time, when possible.
+			copy(outputBytes[outputBytesIdx:outputBytesIdx+dataSize],
+				operandBytes[operandBytesIdx:operandBytesIdx+dataSize])
+			outputBytesIdx += outputBytesStride
 
+			// Increment index in the operand.
+			for axis := operandRank - 1; axis >= 0; axis-- {
+				if sliceSizes[axis] == 1 {
+					// We don't iterate over sliceSizes of 1.
+					continue
+				}
+				sliceIndices[axis]++
+				operandBytesIdx += operandByteStrides[axis]
+				if sliceIndices[axis] != sliceSizes[axis] {
+					// Finished incrementing.
+					break
+				}
+
+				// Rewind current axis before trying to increment next.
+				sliceIndices[axis] = 0
+				operandBytesIdx -= operandByteStrides[axis] * sliceSizes[axis]
+			}
+		}
 	}
 	return nil
 }
