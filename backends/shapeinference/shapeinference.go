@@ -605,3 +605,67 @@ func ConcatenateOp(inputs []shapes.Shape, axis int) shapes.Shape {
 	}
 	return output
 }
+
+// ScatterOp checks that the parameters are consistent. The output shape returned is the unchanged operand -- the scattered
+// updates are applied to the operand, but its shape is unchanged.
+//
+// The Scatter operations indicesAreSorted and uniqueIndices don't play a role on this.
+func ScatterOp(operand, indices, updates shapes.Shape, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int) shapes.Shape {
+	if operand.DType == dtypes.InvalidDType || indices.DType == dtypes.InvalidDType || updates.DType == dtypes.InvalidDType {
+		exceptions.Panicf("invalid shape for operand (%s), indices (%s) or updates (%s) for ScatterOp", operand, indices, updates)
+	}
+	if operand.DType != updates.DType {
+		exceptions.Panicf("data types (DType) for ScatterOp operand (%s) and updates (%s) must match", operand, updates)
+	}
+	if !indices.DType.IsInt() {
+		exceptions.Panicf("indices DType (%s) must be an integer type", indices)
+	}
+
+	// Check indexVectorAxis and get scatter indices dimensions.
+	if indexVectorAxis < 0 || indexVectorAxis > indices.Rank() {
+		exceptions.Panicf("indexVectorAxis=%d must be in range [0, indices.Rank()=%d]", indexVectorAxis, indices.Rank())
+	}
+
+	// Validate scatter axes mapping.
+	numIndexedAxes := 1
+	if indexVectorAxis < indices.Rank() {
+		numIndexedAxes = indices.Dimensions[indexVectorAxis]
+	}
+	if len(scatterAxesToOperandAxes) != numIndexedAxes {
+		exceptions.Panicf("scatterAxesToOperandAxes length (%d) must match the size of indices's indexVectorAxis dimension (%d)",
+			len(scatterAxesToOperandAxes), indices.Dimensions[indexVectorAxis])
+	}
+	for i, axis := range scatterAxesToOperandAxes {
+		if axis < 0 || axis >= operand.Rank() {
+			exceptions.Panicf("scatterAxesToOperandAxes[%d]=%d must be in range [0, operand.Rank()=%d)", i, axis, operand.Rank())
+		}
+	}
+	for i, axis := range updateWindowAxes {
+		if axis < 0 || axis >= updates.Rank() {
+			exceptions.Panicf("updateWindowAxes[%d]=%d must be in range [0, updates.Rank()=%d)", i, axis, updates.Rank()-1)
+		}
+	}
+
+	// Check that the batch axes of indices match the number of axes in the updates.
+	numBatchAxes := indices.Rank() - 1
+	if indexVectorAxis == indices.Rank() {
+		numBatchAxes++
+	}
+	if len(updateWindowAxes)+numBatchAxes != updates.Rank() {
+		exceptions.Panicf("numBatchAxes (%d) + len(updateWindowAxes) (%d) must match updates.Rank() (%d), so it "+
+			"can fully addressed -- where numBatchAxes=indices.Rank() - 1, or if indexVector == indices.Rank(), numBatchAxes=indices.Rank()",
+			numBatchAxes, len(updateWindowAxes), updates.Rank())
+	}
+
+	// Validate update window dimensions.
+	if len(updateWindowAxes)+len(insertedWindowAxes) != operand.Rank() {
+		exceptions.Panicf("operand.Rank() (%d) must match len(updateWindowAxes)(%d)+len(insertedWindowAxes)(%d), so operand indices can be fully defined",
+			operand.Rank(), len(updateWindowAxes), len(insertedWindowAxes))
+	}
+	for i, axis := range insertedWindowAxes {
+		if axis < 0 || axis >= operand.Rank() {
+			exceptions.Panicf("insertedWindowAxes[%d]=%d must be in range [0, operand.Rank()=%d)", i, axis, operand.Rank())
+		}
+	}
+	return operand
+}
