@@ -79,14 +79,28 @@ func TestUnaryOp(t *testing.T) {
 }
 
 func TestGatherOp(t *testing.T) {
-	operand := MS(F32, 4, 2, 2, 2)
-	startIndices := MS(F32, 3, 3, 2)
+	// Test 1:
+	operand := MS(F32, 4, 3, 2, 2)
+	startIndices := MS(I8, 3, 3, 2)
 	startVectorAxis := 1
-	offsetAxes := []int{0, 2}
-	collapsedSliceAxes := []int{1, 3}
-	startIndexMap := []int{1, 2, 3}
-	sliceSizes := []int{4, 1, 1, 1}
-	outputShape := GatherOp(operand, startIndices, startVectorAxis, offsetAxes, collapsedSliceAxes, startIndexMap, sliceSizes, true)
-	fmt.Printf("\toutputShape=%s\n", outputShape)
-	require.NoError(t, outputShape.Check(F32, 4, 3, 1, 2))
+	offsetOutputAxes := []int{0, 3}
+	collapsedSliceAxes := []int{0, 2}
+	startIndexMap := []int{0, 2, 3}
+	sliceSizes := []int{1, 3, 1, 1}
+	output := GatherOp(operand, startIndices, startVectorAxis,
+		offsetOutputAxes, collapsedSliceAxes, startIndexMap, sliceSizes, false)
+	fmt.Printf("\tTest 1: outputShape=%s\n", output)
+	require.NoError(t, output.Check(F32, 3, 3, 2, 1))
+
+	// Test 2:
+	operand = MS(F32, 3, 4, 5, 6)
+	startIndices = MS(U64, 7, 3, 8)
+	startVectorAxis = 1
+	offsetOutputAxes = []int{1, 2}
+	collapsedSliceAxes = []int{1, 2}
+	startIndexMap = []int{1, 2, 3}
+	sliceSizes = []int{3, 1, 1, 1}
+	output = GatherOp(operand, startIndices, startVectorAxis, offsetOutputAxes, collapsedSliceAxes, startIndexMap, sliceSizes, true)
+	fmt.Printf("\tTest 2: outputShape=%s\n", output)
+	require.NoError(t, output.Check(F32, 7, 3, 1, 8))
 }

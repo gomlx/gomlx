@@ -2,6 +2,7 @@ package simplego
 
 import (
 	"fmt"
+	"github.com/gomlx/gomlx/backends/shapeinference"
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
@@ -109,7 +110,7 @@ func TestExecSpecialOps_transposeIterator(t *testing.T) {
 	permutations := []int{2, 0, 1}
 	it := newTransposeIterator(operand, permutations)
 	transposedFlatIndices := make([]int, 0, operand.Size())
-	for _ = range operand.Size() {
+	for range operand.Size() {
 		transposedFlatIndices = append(transposedFlatIndices, it.next())
 	}
 	fmt.Printf("\ttransposedFlatIndices=%#v\n", transposedFlatIndices)
@@ -184,38 +185,55 @@ func TestExecSpecialOps_BroadcastInDim(t *testing.T) {
 	assert.Equal(t, []bfloat16.BFloat16{bf16(42), bf16(42)}, y1.Value())
 }
 
-func TestExecSpecialOps_gatherStartIndicesIterator(t *testing.T) {
+func TestExecSpecialOps_gatherIterator(t *testing.T) {
+	operandShape := shapes.Make(dtypes.F32, 4, 3, 2, 2)
 	startIndicesShape := shapes.Make(dtypes.Int8, 3, 3, 2)
-	operandShape := shapes.Make(dtypes.F32, 2, 5, 3, 2)
-	offsetAxes := []int{2}
-	it := newGatherIterator(startIndicesShape, 1, operandShape, offsetAxes)
+	startVectorAxis := 1
+	offsetOutputAxes := []int{1, 3}
+	collapsedSliceAxes := []int{0, 2}
+	startIndexMap := []int{0, 2, 3}
+	sliceSizes := []int{1, 3, 1, 1}
+	outputShape := shapeinference.GatherOp(operandShape, startIndicesShape, startVectorAxis,
+		offsetOutputAxes, collapsedSliceAxes, startIndexMap, sliceSizes, false)
+	fmt.Printf("\toutputShape=%s\n", outputShape)
+	require.NoError(t, outputShape.Check(dtypes.F32, 3, 3, 2, 1))
+	it := newGatherIterator(startIndicesShape, startVectorAxis, outputShape, offsetOutputAxes)
 	var gotStartIndices [][]int
 	var gotOutputIndices []int
 	indices := make([]int, 3)
-	var outputFlatIdx int
-	for it.Next(indices, &outputFlatIdx) {
+	var outputBytesIdx int
+	for it.Next(indices, &outputBytesIdx) {
 		gotStartIndices = append(gotStartIndices, slices.Clone(indices))
-		gotOutputIndices = append(gotOutputIndices, outputFlatIdx)
+		gotOutputIndices = append(gotOutputIndices, outputBytesIdx)
 	}
 	fmt.Printf("\tgatherStartIndicesIterator got startIndices=%#v\n", gotStartIndices)
-	fmt.Printf("\tgatherStartIndicesIterator got outputFlatIndices=%#v\n", gotOutputIndices)
+	fmt.Printf("\tgatherStartIndicesIterator got outputBytesIndices=%#v\n", gotOutputIndices)
 	wantStartIndirectIndices := [][]int{{0, 2, 4}, {1, 3, 5}, {6, 8, 10}, {7, 9, 11}, {12, 14, 16}, {13, 15, 17}}
 	assert.Equal(t, wantStartIndirectIndices, gotStartIndices)
+	dataSize := operandShape.DType.Size() // == 4 for Float32
 	wantOutputFlatIndices := []int{0, 1, 6, 7, 12, 13}
+	for ii := range wantOutputFlatIndices {
+		wantOutputFlatIndices[ii] *= dataSize
+	}
 	assert.Equal(t, wantOutputFlatIndices, gotOutputIndices)
 }
 
 func TestExecSpecialOps_Gather(t *testing.T) {
 	y0 := graph.ExecOnce(backend, func(g *graph.Graph) *graph.Node {
-		operand := graph.IotaFull(g, shapes.Make(dtypes.F32, 2, 2, 2, 2))
+		operand := graph.IotaFull(g, shapes.Make(dtypes.F32, 4, 3, 2, 2))
 		startIndices := graph.Const(g, [][][]int{{{0, 1}, {0, 1}, {0, 1}}, {{0, 0}, {0, 0}, {1, 1}}, {{0, 0}, {1, 1}, {0, 0}}})
-		fmt.Printf("startIndices.shape=%s\n", startIndices.Shape())
 		startVectorAxis := 1
-		offsetAxes := []int{0}
-		collapsedSliceAxes := []int{1, 2, 3}
-		startIndexMap := []int{1, 2, 3}
-		sliceSizes := []int{2, 1, 1, 1}
-		return graph.BackendGather(operand, startIndices, startVectorAxis, offsetAxes, collapsedSliceAxes, startIndexMap, sliceSizes, false)
+		fmt.Printf("\tstartIndices.shape=%s, startVectorAxis=%d\n", startIndices.Shape(), startVectorAxis)
+		offsetOutputAxes := []int{1, 3}
+		collapsedSliceAxes := []int{0, 2}
+		startIndexMap := []int{0, 2, 3}
+		sliceSizes := []int{1, 3, 1, 1}
+		return graph.BackendGather(operand, startIndices, startVectorAxis, offsetOutputAxes, collapsedSliceAxes, startIndexMap, sliceSizes, false)
 	})
-	fmt.Printf("y0=%s\n", y0.GoStr())
+	fmt.Printf("\ty0=%s\n", y0.GoStr())
+	want := [][][][]float32{
+		{{{0}, {15}}, {{4}, {19}}, {{8}, {23}}},
+		{{{1}, {1}}, {{5}, {5}}, {{9}, {9}}},
+		{{{2}, {2}}, {{6}, {6}}, {{10}, {10}}}}
+	require.Equal(t, want, y0.Value())
 }
