@@ -17,23 +17,40 @@ type DispatcherInfo struct {
 	DTypes              []DTypeInfo
 }
 
+type MapInfo struct {
+	MapName, Generic string
+	DTypes           []DTypeInfo
+}
+
+type Data struct {
+	Dispatchers []DispatcherInfo
+	Maps        []MapInfo
+}
+
 var (
 	// data lists the dispatchers to include, their generic function and with which set of dtypes to support.
-	data = []DispatcherInfo{
-		{"dispatchMutableBytes", "mutableBytesGeneric", makeDTypes(true, true, true, true, true)},
-		{"dispatchDotGeneral", "execNormalizedDotGeneralGeneric", makeDTypes(true, true, true, false, false)},
-		{"dispatchWhere", "execWhereGeneric", makeDTypes(true, true, true, true, true)},
-		{"dispatchReduceMax", "execReduceMaxGeneric", makeDTypes(true, true, true, false, false)},
-		{"dispatchReduceMin", "execReduceMinGeneric", makeDTypes(true, true, true, false, false)},
-		{"dispatchReduceSum", "execReduceSumGeneric", makeDTypes(true, true, true, false, false)},
-		{"dispatchReduceProduct", "execReduceProductGeneric", makeDTypes(true, true, true, false, false)},
-		{"dispatchTranspose", "execTransposeGeneric", makeDTypes(true, true, true, true, true)},
-		{"dispatchBroadcast", "execBroadcastGeneric", makeDTypes(true, true, true, true, true)},
-		{"dispatchBroadcastInDim", "execBroadcastInDimGeneric", makeDTypes(true, true, true, true, true)},
-		{"dispatchIota", "execIotaGeneric", makeDTypes(true, true, true, false, false)},
-		{"dispatchGather", "execGatherGeneric", makeDTypes(true, true, false, false, false)},
+	data = Data{
+		Dispatchers: []DispatcherInfo{
+			{"dispatchMutableBytes", "mutableBytesGeneric", makeDTypes(true, true, true, true, true)},
+			{"dispatchDotGeneral", "execNormalizedDotGeneralGeneric", makeDTypes(true, true, true, false, false)},
+			{"dispatchReduceMax", "execReduceMaxGeneric", makeDTypes(true, true, true, false, false)},
+			{"dispatchReduceMin", "execReduceMinGeneric", makeDTypes(true, true, true, false, false)},
+			{"dispatchReduceSum", "execReduceSumGeneric", makeDTypes(true, true, true, false, false)},
+			{"dispatchReduceProduct", "execReduceProductGeneric", makeDTypes(true, true, true, false, false)},
+			{"dispatchTranspose", "execTransposeGeneric", makeDTypes(true, true, true, true, true)},
+			{"dispatchBroadcast", "execBroadcastGeneric", makeDTypes(true, true, true, true, true)},
+			{"dispatchBroadcastInDim", "execBroadcastInDimGeneric", makeDTypes(true, true, true, true, true)},
+			{"dispatchIota", "execIotaGeneric", makeDTypes(true, true, true, false, false)},
+			{"dispatchGather", "execGatherGeneric", makeDTypes(true, true, false, false, false)},
+		},
+		Maps: []MapInfo{
+			{"whereDTypeMap", "execWhereGeneric", makeDTypes(true, true, true, true, true)},
+			{"combineMaxDTypeMap", "combineForScatterMaxGeneric", makeDTypes(true, true, true, false, false)},
+			{"combineMinDTypeMap", "combineForScatterMinGeneric", makeDTypes(true, true, true, false, false)},
+			{"combineSumDTypeMap", "combineForScatterSumGeneric", makeDTypes(true, true, true, false, false)},
+		},
 	}
-	fileName = "gen_register_dispatchers.go"
+	fileName = "gen_register_dtypes.go"
 )
 
 func makeDTypes(ints, uints, floats, bfloat16, boolean bool) []DTypeInfo {
@@ -90,15 +107,26 @@ import (
 
 
 func init() { 
-{{- range .}}
+{{- range .Dispatchers}}
 
-	// {{.Dispatcher}}
+	// DTypeDispatcher: {{.Dispatcher}}
 {{- $dispatcher := .Dispatcher }}
 {{- $generic := .Generic }}
 {{- range .DTypes }}
 	{{$dispatcher}}.RegisterIfNotSet(dtypes.{{.DType}}, {{$generic}}[{{.GoType}}])
 {{- end }}
 {{- end }}
+
+{{- range .Maps}}
+
+	// DTypeMap: {{.MapName}}
+{{- $mapName := .MapName }}
+{{- $generic := .Generic }}
+{{- range .DTypes }}
+	{{$mapName}}.RegisterIfNotSet(dtypes.{{.DType}}, {{$generic}}[{{.GoType}}])
+{{- end }}
+{{- end }}
+
 }	
 `))
 

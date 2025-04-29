@@ -9,7 +9,7 @@ import (
 
 func init() {
 
-	// dispatchMutableBytes
+	// DTypeDispatcher: dispatchMutableBytes
 	dispatchMutableBytes.RegisterIfNotSet(dtypes.Int8, mutableBytesGeneric[int8])
 	dispatchMutableBytes.RegisterIfNotSet(dtypes.Int16, mutableBytesGeneric[int16])
 	dispatchMutableBytes.RegisterIfNotSet(dtypes.Int32, mutableBytesGeneric[int32])
@@ -23,7 +23,7 @@ func init() {
 	dispatchMutableBytes.RegisterIfNotSet(dtypes.BFloat16, mutableBytesGeneric[bfloat16.BFloat16])
 	dispatchMutableBytes.RegisterIfNotSet(dtypes.Bool, mutableBytesGeneric[bool])
 
-	// dispatchDotGeneral
+	// DTypeDispatcher: dispatchDotGeneral
 	dispatchDotGeneral.RegisterIfNotSet(dtypes.Int8, execNormalizedDotGeneralGeneric[int8])
 	dispatchDotGeneral.RegisterIfNotSet(dtypes.Int16, execNormalizedDotGeneralGeneric[int16])
 	dispatchDotGeneral.RegisterIfNotSet(dtypes.Int32, execNormalizedDotGeneralGeneric[int32])
@@ -35,21 +35,7 @@ func init() {
 	dispatchDotGeneral.RegisterIfNotSet(dtypes.Float32, execNormalizedDotGeneralGeneric[float32])
 	dispatchDotGeneral.RegisterIfNotSet(dtypes.Float64, execNormalizedDotGeneralGeneric[float64])
 
-	// dispatchWhere
-	dispatchWhere.RegisterIfNotSet(dtypes.Int8, execWhereGeneric[int8])
-	dispatchWhere.RegisterIfNotSet(dtypes.Int16, execWhereGeneric[int16])
-	dispatchWhere.RegisterIfNotSet(dtypes.Int32, execWhereGeneric[int32])
-	dispatchWhere.RegisterIfNotSet(dtypes.Int64, execWhereGeneric[int64])
-	dispatchWhere.RegisterIfNotSet(dtypes.Uint8, execWhereGeneric[uint8])
-	dispatchWhere.RegisterIfNotSet(dtypes.Uint16, execWhereGeneric[uint16])
-	dispatchWhere.RegisterIfNotSet(dtypes.Uint32, execWhereGeneric[uint32])
-	dispatchWhere.RegisterIfNotSet(dtypes.Uint64, execWhereGeneric[uint64])
-	dispatchWhere.RegisterIfNotSet(dtypes.Float32, execWhereGeneric[float32])
-	dispatchWhere.RegisterIfNotSet(dtypes.Float64, execWhereGeneric[float64])
-	dispatchWhere.RegisterIfNotSet(dtypes.BFloat16, execWhereGeneric[bfloat16.BFloat16])
-	dispatchWhere.RegisterIfNotSet(dtypes.Bool, execWhereGeneric[bool])
-
-	// dispatchReduceMax
+	// DTypeDispatcher: dispatchReduceMax
 	dispatchReduceMax.RegisterIfNotSet(dtypes.Int8, execReduceMaxGeneric[int8])
 	dispatchReduceMax.RegisterIfNotSet(dtypes.Int16, execReduceMaxGeneric[int16])
 	dispatchReduceMax.RegisterIfNotSet(dtypes.Int32, execReduceMaxGeneric[int32])
@@ -61,7 +47,7 @@ func init() {
 	dispatchReduceMax.RegisterIfNotSet(dtypes.Float32, execReduceMaxGeneric[float32])
 	dispatchReduceMax.RegisterIfNotSet(dtypes.Float64, execReduceMaxGeneric[float64])
 
-	// dispatchReduceMin
+	// DTypeDispatcher: dispatchReduceMin
 	dispatchReduceMin.RegisterIfNotSet(dtypes.Int8, execReduceMinGeneric[int8])
 	dispatchReduceMin.RegisterIfNotSet(dtypes.Int16, execReduceMinGeneric[int16])
 	dispatchReduceMin.RegisterIfNotSet(dtypes.Int32, execReduceMinGeneric[int32])
@@ -73,7 +59,7 @@ func init() {
 	dispatchReduceMin.RegisterIfNotSet(dtypes.Float32, execReduceMinGeneric[float32])
 	dispatchReduceMin.RegisterIfNotSet(dtypes.Float64, execReduceMinGeneric[float64])
 
-	// dispatchReduceSum
+	// DTypeDispatcher: dispatchReduceSum
 	dispatchReduceSum.RegisterIfNotSet(dtypes.Int8, execReduceSumGeneric[int8])
 	dispatchReduceSum.RegisterIfNotSet(dtypes.Int16, execReduceSumGeneric[int16])
 	dispatchReduceSum.RegisterIfNotSet(dtypes.Int32, execReduceSumGeneric[int32])
@@ -85,7 +71,7 @@ func init() {
 	dispatchReduceSum.RegisterIfNotSet(dtypes.Float32, execReduceSumGeneric[float32])
 	dispatchReduceSum.RegisterIfNotSet(dtypes.Float64, execReduceSumGeneric[float64])
 
-	// dispatchReduceProduct
+	// DTypeDispatcher: dispatchReduceProduct
 	dispatchReduceProduct.RegisterIfNotSet(dtypes.Int8, execReduceProductGeneric[int8])
 	dispatchReduceProduct.RegisterIfNotSet(dtypes.Int16, execReduceProductGeneric[int16])
 	dispatchReduceProduct.RegisterIfNotSet(dtypes.Int32, execReduceProductGeneric[int32])
@@ -97,7 +83,7 @@ func init() {
 	dispatchReduceProduct.RegisterIfNotSet(dtypes.Float32, execReduceProductGeneric[float32])
 	dispatchReduceProduct.RegisterIfNotSet(dtypes.Float64, execReduceProductGeneric[float64])
 
-	// dispatchTranspose
+	// DTypeDispatcher: dispatchTranspose
 	dispatchTranspose.RegisterIfNotSet(dtypes.Int8, execTransposeGeneric[int8])
 	dispatchTranspose.RegisterIfNotSet(dtypes.Int16, execTransposeGeneric[int16])
 	dispatchTranspose.RegisterIfNotSet(dtypes.Int32, execTransposeGeneric[int32])
@@ -111,7 +97,7 @@ func init() {
 	dispatchTranspose.RegisterIfNotSet(dtypes.BFloat16, execTransposeGeneric[bfloat16.BFloat16])
 	dispatchTranspose.RegisterIfNotSet(dtypes.Bool, execTransposeGeneric[bool])
 
-	// dispatchBroadcast
+	// DTypeDispatcher: dispatchBroadcast
 	dispatchBroadcast.RegisterIfNotSet(dtypes.Int8, execBroadcastGeneric[int8])
 	dispatchBroadcast.RegisterIfNotSet(dtypes.Int16, execBroadcastGeneric[int16])
 	dispatchBroadcast.RegisterIfNotSet(dtypes.Int32, execBroadcastGeneric[int32])
@@ -125,7 +111,7 @@ func init() {
 	dispatchBroadcast.RegisterIfNotSet(dtypes.BFloat16, execBroadcastGeneric[bfloat16.BFloat16])
 	dispatchBroadcast.RegisterIfNotSet(dtypes.Bool, execBroadcastGeneric[bool])
 
-	// dispatchBroadcastInDim
+	// DTypeDispatcher: dispatchBroadcastInDim
 	dispatchBroadcastInDim.RegisterIfNotSet(dtypes.Int8, execBroadcastInDimGeneric[int8])
 	dispatchBroadcastInDim.RegisterIfNotSet(dtypes.Int16, execBroadcastInDimGeneric[int16])
 	dispatchBroadcastInDim.RegisterIfNotSet(dtypes.Int32, execBroadcastInDimGeneric[int32])
@@ -139,7 +125,7 @@ func init() {
 	dispatchBroadcastInDim.RegisterIfNotSet(dtypes.BFloat16, execBroadcastInDimGeneric[bfloat16.BFloat16])
 	dispatchBroadcastInDim.RegisterIfNotSet(dtypes.Bool, execBroadcastInDimGeneric[bool])
 
-	// dispatchIota
+	// DTypeDispatcher: dispatchIota
 	dispatchIota.RegisterIfNotSet(dtypes.Int8, execIotaGeneric[int8])
 	dispatchIota.RegisterIfNotSet(dtypes.Int16, execIotaGeneric[int16])
 	dispatchIota.RegisterIfNotSet(dtypes.Int32, execIotaGeneric[int32])
@@ -151,7 +137,7 @@ func init() {
 	dispatchIota.RegisterIfNotSet(dtypes.Float32, execIotaGeneric[float32])
 	dispatchIota.RegisterIfNotSet(dtypes.Float64, execIotaGeneric[float64])
 
-	// dispatchGather
+	// DTypeDispatcher: dispatchGather
 	dispatchGather.RegisterIfNotSet(dtypes.Int8, execGatherGeneric[int8])
 	dispatchGather.RegisterIfNotSet(dtypes.Int16, execGatherGeneric[int16])
 	dispatchGather.RegisterIfNotSet(dtypes.Int32, execGatherGeneric[int32])
@@ -160,4 +146,55 @@ func init() {
 	dispatchGather.RegisterIfNotSet(dtypes.Uint16, execGatherGeneric[uint16])
 	dispatchGather.RegisterIfNotSet(dtypes.Uint32, execGatherGeneric[uint32])
 	dispatchGather.RegisterIfNotSet(dtypes.Uint64, execGatherGeneric[uint64])
+
+	// DTypeMap: whereDTypeMap
+	whereDTypeMap.RegisterIfNotSet(dtypes.Int8, execWhereGeneric[int8])
+	whereDTypeMap.RegisterIfNotSet(dtypes.Int16, execWhereGeneric[int16])
+	whereDTypeMap.RegisterIfNotSet(dtypes.Int32, execWhereGeneric[int32])
+	whereDTypeMap.RegisterIfNotSet(dtypes.Int64, execWhereGeneric[int64])
+	whereDTypeMap.RegisterIfNotSet(dtypes.Uint8, execWhereGeneric[uint8])
+	whereDTypeMap.RegisterIfNotSet(dtypes.Uint16, execWhereGeneric[uint16])
+	whereDTypeMap.RegisterIfNotSet(dtypes.Uint32, execWhereGeneric[uint32])
+	whereDTypeMap.RegisterIfNotSet(dtypes.Uint64, execWhereGeneric[uint64])
+	whereDTypeMap.RegisterIfNotSet(dtypes.Float32, execWhereGeneric[float32])
+	whereDTypeMap.RegisterIfNotSet(dtypes.Float64, execWhereGeneric[float64])
+	whereDTypeMap.RegisterIfNotSet(dtypes.BFloat16, execWhereGeneric[bfloat16.BFloat16])
+	whereDTypeMap.RegisterIfNotSet(dtypes.Bool, execWhereGeneric[bool])
+
+	// DTypeMap: combineMaxDTypeMap
+	combineMaxDTypeMap.RegisterIfNotSet(dtypes.Int8, combineForScatterMaxGeneric[int8])
+	combineMaxDTypeMap.RegisterIfNotSet(dtypes.Int16, combineForScatterMaxGeneric[int16])
+	combineMaxDTypeMap.RegisterIfNotSet(dtypes.Int32, combineForScatterMaxGeneric[int32])
+	combineMaxDTypeMap.RegisterIfNotSet(dtypes.Int64, combineForScatterMaxGeneric[int64])
+	combineMaxDTypeMap.RegisterIfNotSet(dtypes.Uint8, combineForScatterMaxGeneric[uint8])
+	combineMaxDTypeMap.RegisterIfNotSet(dtypes.Uint16, combineForScatterMaxGeneric[uint16])
+	combineMaxDTypeMap.RegisterIfNotSet(dtypes.Uint32, combineForScatterMaxGeneric[uint32])
+	combineMaxDTypeMap.RegisterIfNotSet(dtypes.Uint64, combineForScatterMaxGeneric[uint64])
+	combineMaxDTypeMap.RegisterIfNotSet(dtypes.Float32, combineForScatterMaxGeneric[float32])
+	combineMaxDTypeMap.RegisterIfNotSet(dtypes.Float64, combineForScatterMaxGeneric[float64])
+
+	// DTypeMap: combineMinDTypeMap
+	combineMinDTypeMap.RegisterIfNotSet(dtypes.Int8, combineForScatterMinGeneric[int8])
+	combineMinDTypeMap.RegisterIfNotSet(dtypes.Int16, combineForScatterMinGeneric[int16])
+	combineMinDTypeMap.RegisterIfNotSet(dtypes.Int32, combineForScatterMinGeneric[int32])
+	combineMinDTypeMap.RegisterIfNotSet(dtypes.Int64, combineForScatterMinGeneric[int64])
+	combineMinDTypeMap.RegisterIfNotSet(dtypes.Uint8, combineForScatterMinGeneric[uint8])
+	combineMinDTypeMap.RegisterIfNotSet(dtypes.Uint16, combineForScatterMinGeneric[uint16])
+	combineMinDTypeMap.RegisterIfNotSet(dtypes.Uint32, combineForScatterMinGeneric[uint32])
+	combineMinDTypeMap.RegisterIfNotSet(dtypes.Uint64, combineForScatterMinGeneric[uint64])
+	combineMinDTypeMap.RegisterIfNotSet(dtypes.Float32, combineForScatterMinGeneric[float32])
+	combineMinDTypeMap.RegisterIfNotSet(dtypes.Float64, combineForScatterMinGeneric[float64])
+
+	// DTypeMap: combineSumDTypeMap
+	combineSumDTypeMap.RegisterIfNotSet(dtypes.Int8, combineForScatterSumGeneric[int8])
+	combineSumDTypeMap.RegisterIfNotSet(dtypes.Int16, combineForScatterSumGeneric[int16])
+	combineSumDTypeMap.RegisterIfNotSet(dtypes.Int32, combineForScatterSumGeneric[int32])
+	combineSumDTypeMap.RegisterIfNotSet(dtypes.Int64, combineForScatterSumGeneric[int64])
+	combineSumDTypeMap.RegisterIfNotSet(dtypes.Uint8, combineForScatterSumGeneric[uint8])
+	combineSumDTypeMap.RegisterIfNotSet(dtypes.Uint16, combineForScatterSumGeneric[uint16])
+	combineSumDTypeMap.RegisterIfNotSet(dtypes.Uint32, combineForScatterSumGeneric[uint32])
+	combineSumDTypeMap.RegisterIfNotSet(dtypes.Uint64, combineForScatterSumGeneric[uint64])
+	combineSumDTypeMap.RegisterIfNotSet(dtypes.Float32, combineForScatterSumGeneric[float32])
+	combineSumDTypeMap.RegisterIfNotSet(dtypes.Float64, combineForScatterSumGeneric[float64])
+
 }

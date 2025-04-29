@@ -6,10 +6,61 @@ import (
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 )
 
+const MaxDTypes = 32
+
+// DTypeMap --------------------------------------------------------------------------------------------------
+
+// DTypeMap manages registering of an arbitrary value per dtype.
+type DTypeMap struct {
+	Name string
+	Map  [MaxDTypes]any
+}
+
+// NewDTypeMap creates a new DTypeMap.
+func NewDTypeMap(name string) *DTypeMap {
+	return &DTypeMap{
+		Name: name,
+	}
+}
+
+// Get retrieves the value for the given dtype, or throw an exception if none was registered.
+func (d *DTypeMap) Get(dtype dtypes.DType) any {
+	if dtype >= MaxDTypes {
+		exceptions.Panicf("dtype %s not supported by %s", dtype, d.Name)
+	}
+	value := d.Map[dtype]
+	if value == nil {
+		exceptions.Panicf("dtype %s not supported by %s -- "+
+			"if you need it, consider creating an issue to add support in github.com/gomlx/gomlx",
+			dtype, d.Name)
+	}
+	return value
+}
+
+// Register a value for a dtype.
+// This overwrites any previous setting for the same dtype.
+func (d *DTypeMap) Register(dtype dtypes.DType, value any) {
+	if dtype >= MaxDTypes {
+		exceptions.Panicf("dtype %s not supported by %s", dtype, d.Name)
+	}
+	d.Map[dtype] = value
+}
+
+// RegisterIfNotSet a value for a dtype.
+func (d *DTypeMap) RegisterIfNotSet(dtype dtypes.DType, value any) {
+	if dtype >= MaxDTypes {
+		exceptions.Panicf("dtype %s not supported by %s", dtype, d.Name)
+	}
+	if d.Map[dtype] != nil {
+		return
+	}
+	d.Map[dtype] = value
+}
+
+// DTypeDispatcher --------------------------------------------------------------------------------------------------
+
 // FuncForDispatcher is type of functions that the DTypeDispatcher can handle.
 type FuncForDispatcher func(params ...any) any
-
-const MaxDTypes = 32
 
 // DTypeDispatcher manages dispatching functions to handle specific DTypes.
 // Often, these functions will be instances of a generic function.
@@ -58,6 +109,8 @@ func (d *DTypeDispatcher) RegisterIfNotSet(dtype dtypes.DType, fn FuncForDispatc
 	}
 	d.fnMap[dtype] = fn
 }
+
+// DType2Dispatcher --------------------------------------------------------------------------------------------------
 
 // DType2Dispatcher manages dispatching functions to handle specific pair of DTypes.
 // Often, these functions will be instances of a generic function.
