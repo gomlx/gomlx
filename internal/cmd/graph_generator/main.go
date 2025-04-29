@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/gomlx/gomlx/cmd/graph_generator/parsebackends"
+	"github.com/gomlx/gomlx/internal/cmd/graph_generator/parsebackends"
 	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/janpfeifer/must"
