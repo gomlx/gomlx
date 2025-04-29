@@ -77,7 +77,7 @@ func Register(name string, constructor Constructor) {
 // DefaultConfig is the name of the default backend configuration to use if specified.
 //
 // See NewWithConfig for the format of the configuration string.
-var DefaultConfig string
+var DefaultConfig = "xla"
 
 // ConfigEnvVar is the name of the environment variable with the default backend configuration to use:
 // "GOMLX_BACKEND".
@@ -95,7 +95,7 @@ const GOMLX_BACKEND = ConfigEnvVar
 //
 // The default is:
 //
-// 1. The environment ConfigEnvVar is used as a configuration if defined.
+// 1. The environment  $GOMLX_BACKEND (ConfigEnvVar) is used as a configuration if defined.
 // 2. Next the variable DefaultConfig is used as a configuration if defined.
 // 3. The first registered backend is used with an empty configuration.
 //
@@ -106,9 +106,22 @@ func New() Backend {
 		return NewWithConfig(config)
 	}
 	if DefaultConfig != "" {
-		return NewWithConfig(DefaultConfig)
+		backendName, _ := splitConfig(DefaultConfig)
+		if _, found := registeredConstructors[backendName]; found {
+			return NewWithConfig(DefaultConfig)
+		}
 	}
 	return NewWithConfig("")
+}
+
+func splitConfig(config string) (string, string) {
+	backendName := config
+	var backendConfig string
+	if idx := strings.Index(config, ":"); idx != -1 {
+		backendName = config[:idx]
+		backendConfig = config[idx+1:]
+	}
+	return backendName, backendConfig
 }
 
 // NewWithConfig takes a configuration string formated as
@@ -118,13 +131,13 @@ func New() Backend {
 // "<backend_configuration>" is backend-specific (e.g.: for xla backend, it is the pjrt plugin name).
 func NewWithConfig(config string) Backend {
 	if len(registeredConstructors) == 0 {
-		exceptions.Panicf(`no registered backends for GoMLX -- maybe import the default XLA one with import _ "github.com/gomlx/gomlx/backends/xla"?`)
+		exceptions.Panicf(`no registered backends for GoMLX -- maybe import the default ones (XLA and SimpleGo) with import _ "github.com/gomlx/gomlx/backends/default"?`)
 	}
-	backendName := firstRegistered
-	backendConfig := config
-	if idx := strings.Index(config, ":"); idx != -1 {
-		backendName = config[:idx]
-		backendConfig = config[idx+1:]
+	var backendName, backendConfig string
+	if config == "" {
+		backendName = firstRegistered
+	} else {
+		backendName, backendConfig = splitConfig(config)
 	}
 	constructor, found := registeredConstructors[backendName]
 	if !found {
