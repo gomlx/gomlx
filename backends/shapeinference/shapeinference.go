@@ -14,7 +14,6 @@
 package shapeinference
 
 import (
-	"fmt"
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types"
@@ -438,17 +437,17 @@ func ReduceOp(operand shapes.Shape, axes []int) shapes.Shape {
 // GatherOp returns the output shape of a Gather operation.
 func GatherOp(operand, startIndices shapes.Shape, indexVectorAxis int, offsetOutputAxes, collapsedSliceAxes,
 	startIndexMap, sliceSizes []int, indicesAreSorted bool) shapes.Shape {
-	fmt.Printf("GatherOp parameters:\n"+
-		"  operand: %v\n"+
-		"  startIndices: %v\n"+
-		"  indexVectorAxis: %d\n"+
-		"  offsetOutputAxes: %v\n"+
-		"  collapsedSliceAxes: %v\n"+
-		"  startIndexMap: %v\n"+
-		"  sliceSizes: %v\n"+
-		"  indicesAreSorted: %v\n",
-		operand, startIndices, indexVectorAxis, offsetOutputAxes, collapsedSliceAxes,
-		startIndexMap, sliceSizes, indicesAreSorted)
+	//fmt.Printf("GatherOp parameters:\n"+
+	//	"  operand: %v\n"+
+	//	"  startIndices: %v\n"+
+	//	"  indexVectorAxis: %d\n"+
+	//	"  offsetOutputAxes: %v\n"+
+	//	"  collapsedSliceAxes: %v\n"+
+	//	"  startIndexMap: %v\n"+
+	//	"  sliceSizes: %v\n"+
+	//	"  indicesAreSorted: %v\n",
+	//	operand, startIndices, indexVectorAxis, offsetOutputAxes, collapsedSliceAxes,
+	//	startIndexMap, sliceSizes, indicesAreSorted)
 	_ = indicesAreSorted // Not used for shape inference.
 
 	if operand.IsScalar() {

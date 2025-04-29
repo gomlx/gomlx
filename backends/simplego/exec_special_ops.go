@@ -1,6 +1,8 @@
 package simplego
 
 import (
+	"slices"
+
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types"
@@ -8,7 +10,6 @@ import (
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
-	"slices"
 )
 
 func init() {
@@ -656,11 +657,11 @@ func execGather(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bo
 		offsetOutputAxesIdx := 0
 		collapsedAxes := types.SetWith(gatherParams.collapsedSlicesAxes...)
 		for sliceAxis := range operandRank {
-			mapSliceToOutputAxes[sliceAxis] = gatherParams.offsetOutputAxes[offsetOutputAxesIdx]
 			if collapsedAxes.Has(sliceAxis) {
 				// Collapsed, we only care about the offset axes.
 				continue
 			}
+			mapSliceToOutputAxes[sliceAxis] = gatherParams.offsetOutputAxes[offsetOutputAxesIdx]
 			offsetOutputAxesIdx++
 		}
 		// Now we copy over the strides calculated for the gatherIterator.
