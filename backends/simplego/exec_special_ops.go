@@ -24,7 +24,11 @@ func init() {
 	nodeExecutors[backends.OpTypeReduceProduct] = execReduce
 	nodeExecutors[backends.OpTypeIota] = execIota
 	nodeExecutors[backends.OpTypeGather] = execGather
-	nodeExecutors[backends.OpTypeConcatenate] = execConcatenate // Register the new executor
+	nodeExecutors[backends.OpTypeConcatenate] = execConcatenate
+	nodeExecutors[backends.OpTypeConvertDType] = execConvertDType
+	nodeExecutors[backends.OpTypeScatterMax] = execScatter
+	nodeExecutors[backends.OpTypeScatterMin] = execScatter
+	nodeExecutors[backends.OpTypeScatterSum] = execScatter
 }
 
 // IdentityOp ====================================================================================================
@@ -64,14 +68,14 @@ func execWhere(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 		output.shape = outputShape
 	}
 
-	_ = dispatchWhere.Dispatch(outputShape.DType, condition, onTrue, onFalse, output)
+	fn := whereDTypeMap.Get(outputShape.DType).(func(conditionBuf, onTrueBuf, onFalseBuf, outputBuf *Buffer))
+	fn(condition, onTrue, onFalse, output)
 	return output
 }
 
-var dispatchWhere = NewDTypeDispatcher("Where")
+var whereDTypeMap = NewDTypeMap("Where")
 
-func execWhereGeneric[T SupportedTypesConstraints](params ...any) any {
-	conditionBuf, onTrueBuf, onFalseBuf, outputBuf := params[0].(*Buffer), params[1].(*Buffer), params[2].(*Buffer), params[3].(*Buffer)
+func execWhereGeneric[T SupportedTypesConstraints](conditionBuf, onTrueBuf, onFalseBuf, outputBuf *Buffer) {
 	if conditionBuf.shape.IsScalar() {
 		// Case 1: condition is a scalar, either we take onTrue or onFalse as a whole (with potential broadcast).
 		if conditionBuf.flat.([]bool)[0] {
@@ -79,7 +83,7 @@ func execWhereGeneric[T SupportedTypesConstraints](params ...any) any {
 		} else {
 			execWhereSetOutputWithValue[T](outputBuf, onFalseBuf)
 		}
-		return nil
+		return
 	}
 
 	conditionFlat := conditionBuf.flat.([]bool)
@@ -103,7 +107,6 @@ func execWhereGeneric[T SupportedTypesConstraints](params ...any) any {
 			outputFlat[outputIdx] = onFalse
 		}
 	}
-	return nil
 }
 
 func execWhereSetOutputWithValue[T SupportedTypesConstraints](outputBuf, valueBuf *Buffer) {
@@ -934,4 +937,176 @@ func execConcatenate(backend *Backend, node *Node, inputs []*Buffer, inputsOwned
 	}
 
 	return output
+}
+
+// ConvertDType ====================================================================================================
+
+func execConvertDType(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	operand := inputs[0]
+	output := backend.getBuffer(node.shape.DType, operand.shape.Size())
+	output.shape = node.shape
+	type convertFnT = func(operand, output *Buffer)
+	convertFn := convertDTypePairMap.Get(operand.shape.DType, output.shape.DType).(convertFnT)
+	convertFn(operand, output)
+	return output
+}
+
+var convertDTypePairMap = NewDTypePairMap("ConvertDType")
+
+func execConvertDTypeGeneric[FromT PODNumericConstraints, ToT PODNumericConstraints](operand, output *Buffer) {
+	operandFlat := operand.flat.([]FromT)
+	outputFlat := output.flat.([]ToT)
+	for idx, value := range operandFlat {
+		outputFlat[idx] = ToT(value)
+	}
+}
+
+func execConvertDTypeFromBFloat16[FromT bfloat16.BFloat16, ToT PODNumericConstraints](operand, output *Buffer) {
+	operandFlat := operand.flat.([]bfloat16.BFloat16)
+	outputFlat := output.flat.([]ToT)
+	for idx, value := range operandFlat {
+		outputFlat[idx] = ToT(value.Float32())
+	}
+}
+
+func execConvertDTypeToBFloat16[FromT PODNumericConstraints, ToT bfloat16.BFloat16](operand, output *Buffer) {
+	operandFlat := operand.flat.([]FromT)
+	outputFlat := output.flat.([]bfloat16.BFloat16)
+	for idx, value := range operandFlat {
+		outputFlat[idx] = bfloat16.FromFloat32(float32(value))
+	}
+}
+
+func execConvertDTypeFromBool[FromT bool, ToT PODNumericConstraints](operand, output *Buffer) {
+	operandFlat := operand.flat.([]bool)
+	outputFlat := output.flat.([]ToT)
+	for idx, value := range operandFlat {
+		if value {
+			outputFlat[idx] = ToT(1)
+		} else {
+			outputFlat[idx] = ToT(0)
+		}
+	}
+}
+
+func execConvertDTypeToBool[FromT PODNumericConstraints, ToT bool](operand, output *Buffer) {
+	operandFlat := operand.flat.([]FromT)
+	outputFlat := output.flat.([]bool)
+	for idx, value := range operandFlat {
+		outputFlat[idx] = value != 0
+	}
+}
+
+func init() {
+	// Manually register bool x bfloat16 convertion functions.
+	convertDTypePairMap.Register(dtypes.BFloat16, dtypes.Bool, execConvertDTypeBFloat16ToBool)
+	convertDTypePairMap.Register(dtypes.Bool, dtypes.BFloat16, execConvertDTypeBoolToBFloat16)
+}
+
+func execConvertDTypeBFloat16ToBool(operand, output *Buffer) {
+	operandFlat := operand.flat.([]bfloat16.BFloat16)
+	outputFlat := output.flat.([]bool)
+	for idx, value := range operandFlat {
+		outputFlat[idx] = value.Float32() != 0
+	}
+}
+
+func execConvertDTypeBoolToBFloat16(operand, output *Buffer) {
+	operandFlat := operand.flat.([]bool)
+	outputFlat := output.flat.([]bfloat16.BFloat16)
+	zero, one := bfloat16.FromFloat32(0), bfloat16.FromFloat32(1)
+	for idx, value := range operandFlat {
+		if value {
+			outputFlat[idx] = one
+		} else {
+			outputFlat[idx] = zero
+		}
+	}
+}
+
+// Scatter{Max,Min,Sum}Op ==========================================================================================
+
+// execScatter implements the Scatter operation (Max, Min, Sum variants).
+func execScatter(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	operand, indices, updates := inputs[0], inputs[1], inputs[2]
+	scatterParams, ok := node.data.(*scatterNode)
+	if !ok {
+		exceptions.Panicf("internal error: node.data for Scatter op is not *scatterData, but %T", node.data)
+	}
+
+	// Output starts as a copy of the operand.
+	// We might be able to reuse the operand buffer if it's owned.
+	var output *Buffer
+	if inputsOwned[0] {
+		output = operand
+		inputs[0] = nil // Mark operand as consumed.
+	} else {
+		output = backend.cloneBuffer(operand) // Creates a new buffer with copied data.
+	}
+	output.shape = node.shape // Output shape is same as operand shape.
+
+	// Dispatch to a type-specific scatter loop based on the operation type.
+	indicesDType := indices.shape.DType
+	operandDType := output.shape.DType
+	type scatterFn func(opType backends.OpType, output, indices, updates *Buffer, scatterParams *scatterNode)
+	fn := scatterDTypeMap.Get(indicesDType, operandDType).(scatterFn)
+	fn(node.opType, output, indices, updates, scatterParams)
+	return output
+}
+
+var scatterDTypeMap = NewDTypePairMap("ScatterMax")
+
+// execScatterGeneric assumes the operand is already copied to the output.
+func execScatterGeneric[IndicesT PODIntegerConstraints, OperandT SupportedTypesConstraints](opType backends.OpType, output, indices, updates *Buffer, scatterParams *scatterNode) {
+	// Get combineFn for operand's dtype.
+	dtype := output.shape.DType
+	type combineFnT func(a, b OperandT) OperandT
+	var combineFn combineFnT
+	switch opType {
+	case backends.OpTypeScatterMax:
+		combineFn = combineMaxDTypeMap.Get(dtype).(combineFnT)
+	case backends.OpTypeScatterMin:
+		combineFn = combineMinDTypeMap.Get(dtype).(combineFnT)
+	case backends.OpTypeScatterSum:
+		combineFn = combineSumDTypeMap.Get(dtype).(combineFnT)
+	default:
+		exceptions.Panicf("unsupported scatter op type %q", opType)
+	}
+	_ = combineFn
+
+	outputShape := output.shape
+	indicesShape := indices.shape
+	updatesShape := updates.shape
+	rank := outputShape.Rank()
+	_, _, _ = indicesShape, updatesShape, rank
+}
+
+var (
+	combineMaxDTypeMap = NewDTypeMap("Max(a, b) for ScatterMax")
+	combineMinDTypeMap = NewDTypeMap("Min(a, b) for ScatterMax")
+	combineSumDTypeMap = NewDTypeMap("Sum(a, b) for ScatterMax")
+)
+
+func combineForScatterMaxGeneric[T PODNumericConstraints](a, b T) T {
+	return max(a, b)
+}
+
+func combineForScatterMaxBFloat16(a, b bfloat16.BFloat16) bfloat16.BFloat16 {
+	return bfloat16.FromFloat32(max(a.Float32(), b.Float32()))
+}
+
+func combineForScatterMinGeneric[T PODNumericConstraints](a, b T) T {
+	return min(a, b)
+}
+
+func combineForScatterMinBFloat16(a, b bfloat16.BFloat16) bfloat16.BFloat16 {
+	return bfloat16.FromFloat32(min(a.Float32(), b.Float32()))
+}
+
+func combineForScatterSumGeneric[T PODNumericConstraints](a, b T) T {
+	return max(a, b)
+}
+
+func combineForScatterSumBFloat16(a, b bfloat16.BFloat16) bfloat16.BFloat16 {
+	return bfloat16.FromFloat32(max(a.Float32(), b.Float32()))
 }

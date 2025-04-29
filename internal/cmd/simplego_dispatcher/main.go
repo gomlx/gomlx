@@ -22,9 +22,15 @@ type MapInfo struct {
 	DTypes           []DTypeInfo
 }
 
+type MapPairInfo struct {
+	MapName, Generic string
+	DTypes1, DTypes2 []DTypeInfo
+}
+
 type Data struct {
 	Dispatchers []DispatcherInfo
 	Maps        []MapInfo
+	PairMaps    []MapPairInfo
 }
 
 var (
@@ -48,6 +54,41 @@ var (
 			{"combineMaxDTypeMap", "combineForScatterMaxGeneric", makeDTypes(true, true, true, false, false)},
 			{"combineMinDTypeMap", "combineForScatterMinGeneric", makeDTypes(true, true, true, false, false)},
 			{"combineSumDTypeMap", "combineForScatterSumGeneric", makeDTypes(true, true, true, false, false)},
+		},
+		PairMaps: []MapPairInfo{
+			// Various ConvertDType instantiations.
+			{
+				MapName: "convertDTypePairMap", Generic: "execConvertDTypeGeneric",
+				DTypes1: makeDTypes(true, true, true, false, false),
+				DTypes2: makeDTypes(true, true, true, false, false),
+			},
+			{
+				MapName: "convertDTypePairMap", Generic: "execConvertDTypeToBFloat16",
+				DTypes1: makeDTypes(true, true, true, false, false),
+				DTypes2: makeDTypes(false, false, false, true, false),
+			},
+			{
+				MapName: "convertDTypePairMap", Generic: "execConvertDTypeFromBFloat16",
+				DTypes1: makeDTypes(false, false, false, true, false),
+				DTypes2: makeDTypes(true, true, true, false, false),
+			},
+			{
+				MapName: "convertDTypePairMap", Generic: "execConvertDTypeToBool",
+				DTypes1: makeDTypes(true, true, true, false, false),
+				DTypes2: makeDTypes(false, false, false, false, true),
+			},
+			{
+				MapName: "convertDTypePairMap", Generic: "execConvertDTypeFromBool",
+				DTypes1: makeDTypes(false, false, false, false, true),
+				DTypes2: makeDTypes(true, true, true, false, false),
+			},
+			//{
+			//	MapName: "scatterDTypeMap", Generic: "execScatterGeneric",
+			//	// Indices DTypes:
+			//	DTypes1: makeDTypes(true, true, false, false, false),
+			//	// Operand DTypes:
+			//	DTypes2: makeDTypes(true, true, true, true, false),
+			//},
 		},
 	}
 	fileName = "gen_register_dtypes.go"
@@ -124,6 +165,21 @@ func init() {
 {{- $generic := .Generic }}
 {{- range .DTypes }}
 	{{$mapName}}.RegisterIfNotSet(dtypes.{{.DType}}, {{$generic}}[{{.GoType}}])
+{{- end }}
+{{- end }}
+
+{{- range .PairMaps}}
+
+	// DTypePairMap: {{.MapName}}
+{{- $mapName := .MapName }}
+{{- $generic := .Generic }}
+{{- $dtypes2 := .DTypes2 }}
+{{- range .DTypes1 }}
+{{- $dtype1 := .DType }}
+{{- $goType1 := .GoType }}
+{{- range $dtypes2 }}
+	{{$mapName}}.RegisterIfNotSet(dtypes.{{$dtype1}}, dtypes.{{.DType}}, {{$generic}}[{{$goType1}}, {{.GoType}}])
+{{- end }}
 {{- end }}
 {{- end }}
 

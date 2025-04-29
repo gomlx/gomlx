@@ -110,55 +110,56 @@ func (d *DTypeDispatcher) RegisterIfNotSet(dtype dtypes.DType, fn FuncForDispatc
 	d.fnMap[dtype] = fn
 }
 
-// DType2Dispatcher --------------------------------------------------------------------------------------------------
+// DTypePairMap --------------------------------------------------------------------------------------------------
 
-// DType2Dispatcher manages dispatching functions to handle specific pair of DTypes.
-// Often, these functions will be instances of a generic function.
-type DType2Dispatcher struct {
-	Name  string
-	fnMap [MaxDTypes][MaxDTypes]FuncForDispatcher
+// DTypePairMap manages registering of an arbitrary value per dtype pair.
+type DTypePairMap struct {
+	Name string
+	Map  [MaxDTypes][MaxDTypes]any
 }
 
-// NewDType2Dispatcher creates a new dispatcher for a class of functions.
-func NewDType2Dispatcher(name string) *DType2Dispatcher {
-	return &DType2Dispatcher{
+// NewDTypePairMap creates a new DTypePairMap.
+func NewDTypePairMap(name string) *DTypePairMap {
+	return &DTypePairMap{
 		Name: name,
 	}
 }
 
-// Dispatch call the function that matches the dtype.
-func (d *DType2Dispatcher) Dispatch(dtype1, dtype2 dtypes.DType, params ...any) {
+// Get retrieves the value for the given dtype pair, or throw an exception if none was registered.
+func (d *DTypePairMap) Get(dtype1, dtype2 dtypes.DType) any {
 	if dtype1 >= MaxDTypes || dtype2 >= MaxDTypes {
 		exceptions.Panicf("dtypes %s or %s not supported by %s", dtype1, dtype2, d.Name)
 	}
-	fn := d.fnMap[dtype1][dtype2]
-	if fn == nil {
+	value := d.Map[dtype1][dtype2]
+	if value == nil {
 		exceptions.Panicf("dtype pair (%s, %s) not supported by %s -- "+
 			"if you need it, consider creating an issue to add support in github.com/gomlx/gomlx",
 			dtype1, dtype2, d.Name)
 	}
-	fn(params...)
+	return value
 }
 
-// Register a function to handle a specific dtype.
+// Register a value for a dtype pair.
 // This overwrites any previous setting for the same dtype.
-func (d *DType2Dispatcher) Register(dtype1, dtype2 dtypes.DType, fn FuncForDispatcher) {
+func (d *DTypePairMap) Register(dtype1, dtype2 dtypes.DType, value any) {
 	if dtype1 >= MaxDTypes || dtype2 >= MaxDTypes {
 		exceptions.Panicf("dtypes %s or %s not supported by %s", dtype1, dtype2, d.Name)
 	}
-	d.fnMap[dtype1][dtype2] = fn
+	d.Map[dtype1][dtype2] = value
 }
 
-// RegisterIfNotSet a function to handle a specific dtype.
-func (d *DType2Dispatcher) RegisterIfNotSet(dtype1, dtype2 dtypes.DType, fn FuncForDispatcher) {
+// RegisterIfNotSet a value for a dtype pair.
+func (d *DTypePairMap) RegisterIfNotSet(dtype1, dtype2 dtypes.DType, value any) {
 	if dtype1 >= MaxDTypes || dtype2 >= MaxDTypes {
 		exceptions.Panicf("dtypes %s or %s not supported by %s", dtype1, dtype2, d.Name)
 	}
-	if d.fnMap[dtype1][dtype2] != nil {
+	if d.Map[dtype1][dtype2] != nil {
 		return
 	}
-	d.fnMap[dtype1][dtype2] = fn
+	d.Map[dtype1][dtype2] = value
 }
+
+// Constraints --------------------------------------------------------------------------------------------------------
 
 // SupportedTypesConstraints enumerates the types supported by SimpleGo.
 type SupportedTypesConstraints interface {

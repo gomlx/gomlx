@@ -237,6 +237,7 @@ func TestExecSpecialOps_Gather(t *testing.T) {
 		{{{2}, {2}}, {{6}, {6}}, {{10}, {10}}}}
 	require.Equal(t, want, y0.Value())
 }
+
 func TestExecSpecialOps_Concatenate(t *testing.T) {
 	// Test Case 1: Concatenating vectors (rank 1) along axis 0
 	y1 := graph.ExecOnce(backend, func(g *graph.Graph) *graph.Node {
@@ -293,4 +294,41 @@ func TestExecSpecialOps_Concatenate(t *testing.T) {
 	want5 := [][][]float64{{{1, 2, 5}}, {{3, 4, 6}}} // Shape (2, 1, 3)
 	require.NoError(t, y5.Shape().Check(dtypes.Float64, 2, 1, 3))
 	require.Equal(t, want5, y5.Value())
+}
+
+func TestExecSpecialOps_ConvertDType(t *testing.T) {
+	// Test int32 to float32
+	y0 := graph.ExecOnce(backend, func(x *graph.Node) *graph.Node {
+		return graph.ConvertDType(x, dtypes.Float32)
+	}, int32(42))
+	fmt.Printf("\ty0=%s\n", y0.GoStr())
+	assert.Equal(t, float32(42.0), y0.Value())
+
+	// Test float32 to bfloat16
+	y1 := graph.ExecOnce(backend, func(x *graph.Node) *graph.Node {
+		return graph.ConvertDType(x, dtypes.BFloat16)
+	}, float32(3.14))
+	fmt.Printf("\ty1=%s\n", y1.GoStr())
+	assert.Equal(t, bf16(3.14), y1.Value())
+
+	// Test bfloat16 to int32
+	y2 := graph.ExecOnce(backend, func(x *graph.Node) *graph.Node {
+		return graph.ConvertDType(x, dtypes.Int32)
+	}, bf16(7.8))
+	fmt.Printf("\ty2=%s\n", y2.GoStr())
+	assert.Equal(t, int32(7), y2.Value())
+
+	// Test bool to int32
+	y3 := graph.ExecOnce(backend, func(x *graph.Node) *graph.Node {
+		return graph.ConvertDType(x, dtypes.Int32)
+	}, true)
+	fmt.Printf("\ty3=%s\n", y3.GoStr())
+	assert.Equal(t, int32(1), y3.Value())
+
+	// Test float32 to bool
+	y4 := graph.ExecOnce(backend, func(x *graph.Node) *graph.Node {
+		return graph.ConvertDType(x, dtypes.Bool)
+	}, float32(1.0))
+	fmt.Printf("\ty4=%s\n", y4.GoStr())
+	assert.Equal(t, true, y4.Value())
 }

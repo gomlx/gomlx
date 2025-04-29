@@ -77,13 +77,13 @@ func (b *Builder) Iota(shape shapes.Shape, iotaAxis int) backends.Op {
 	return node
 }
 
-// Identity implements backends.Identity interface.
+// Identity implements the backends.Identity interface.
 func (b *Builder) Identity(operandOp backends.Op) backends.Op {
 	operand := b.checkOps("Reshape", operandOp)[0]
 	return b.newNode(backends.OpTypeIdentity, operand.shape, operand)
 }
 
-// Where implements backends.Builder interface.
+// Where implements the backends.Builder interface.
 func (b *Builder) Where(conditionOp, onTrueOp, onFalseOp backends.Op) backends.Op {
 	inputs := b.checkOps("Where", conditionOp, onTrueOp, onFalseOp)
 	condition, onTrue, onFalse := inputs[0], inputs[1], inputs[2]
@@ -91,7 +91,7 @@ func (b *Builder) Where(conditionOp, onTrueOp, onFalseOp backends.Op) backends.O
 	return b.newNode(backends.OpTypeWhere, outputShape, condition, onTrue, onFalse)
 }
 
-// Reshape implements backends.Builder interface.
+// Reshape implements the backends.Builder interface.
 //
 // Notice the backends.Reshape doesn't support auto-scaling dimensions (set to -1), as graph.Reshape does.
 func (b *Builder) Reshape(operandOp backends.Op, dims ...int) backends.Op {
@@ -155,22 +155,22 @@ func (b *Builder) BroadcastInDim(operandOp backends.Op, outputShape shapes.Shape
 	return node
 }
 
-// ReduceMax implements backends.Builder interface.
+// ReduceMax implements the backends.Builder interface.
 func (b *Builder) ReduceMax(operandOp backends.Op, axis ...int) backends.Op {
 	return b.reduceImpls(backends.OpTypeReduceMax, operandOp, axis...)
 }
 
-// ReduceMin implements backends.Builder interface.
+// ReduceMin implements the backends.Builder interface.
 func (b *Builder) ReduceMin(operandOp backends.Op, axis ...int) backends.Op {
 	return b.reduceImpls(backends.OpTypeReduceMin, operandOp, axis...)
 }
 
-// ReduceSum implements backends.Builder interface.
+// ReduceSum implements the backends.Builder interface.
 func (b *Builder) ReduceSum(operandOp backends.Op, axis ...int) backends.Op {
 	return b.reduceImpls(backends.OpTypeReduceSum, operandOp, axis...)
 }
 
-// ReduceProduct implements backends.Builder interface.
+// ReduceProduct implements the backends.Builder interface.
 func (b *Builder) ReduceProduct(operandOp backends.Op, axis ...int) backends.Op {
 	return b.reduceImpls(backends.OpTypeReduceProduct, operandOp, axis...)
 }
@@ -188,7 +188,7 @@ func (b *Builder) reduceImpls(reduceOpType backends.OpType, operandOp backends.O
 	return node
 }
 
-// Gather implements backends.Builder.
+// Gather implements the backends.Builder.
 // It's a complex operation, fully described in the backends.Builder.Gather documentation.
 func (b *Builder) Gather(operandOp, startIndicesOp backends.Op, indexVectorAxis int, offsetOutputAxes, collapsedSliceAxes, startIndexMap, sliceSizes []int, indicesAreSorted bool) backends.Op {
 	opType := backends.OpTypeGather
@@ -234,109 +234,166 @@ func (b *Builder) Concatenate(axis int, operandOps ...backends.Op) backends.Op {
 	return node
 }
 
+// ConvertDType converts operandOp to the given dtype. It implement the backends.Builder interface.
+func (b *Builder) ConvertDType(operandOp backends.Op, dtype dtypes.DType) backends.Op {
+	operand := b.checkOps("ConvertDType", operandOp)[0]
+	if operand.shape.DType == dtype {
+		// No-op
+		return operand
+	}
+	outputShape := operand.shape.Clone()
+	outputShape.DType = dtype
+	return b.newNode(backends.OpTypeConvertDType, outputShape, operand)
+}
+
+// ScatterMax implements the backends.Builder interface.
+func (b *Builder) ScatterMax(operandOp, scatterIndicesOp, updatesOp backends.Op, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) backends.Op {
+	return b.scatterImpls(
+		backends.OpTypeScatterMax,
+		operandOp, scatterIndicesOp, updatesOp, indexVectorAxis, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes, indicesAreSorted, uniqueIndices)
+}
+
+// ScatterMin implements the backends.Builder interface.
+func (b *Builder) ScatterMin(operandOp, scatterIndicesOp, updatesOp backends.Op, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) backends.Op {
+	return b.scatterImpls(
+		backends.OpTypeScatterMin,
+		operandOp, scatterIndicesOp, updatesOp, indexVectorAxis, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes, indicesAreSorted, uniqueIndices)
+}
+
+// ScatterSum implements the backends.Builder interface.
+func (b *Builder) ScatterSum(operandOp, scatterIndicesOp, updatesOp backends.Op, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) backends.Op {
+	return b.scatterImpls(
+		backends.OpTypeScatterSum,
+		operandOp, scatterIndicesOp, updatesOp, indexVectorAxis, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes, indicesAreSorted, uniqueIndices)
+}
+
+func (b *Builder) scatterImpls(scatterOpType backends.OpType,
+	operandOp, scatterIndicesOp, updatesOp backends.Op, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) backends.Op {
+	inputs := b.checkOps(scatterOpType.String(), operandOp, scatterIndicesOp, updatesOp)
+	operand, indices, updates := inputs[0], inputs[1], inputs[2]
+	// Check that parameters are valid.
+	shapeinference.ScatterOp(operand.shape, indices.shape, updates.shape, indexVectorAxis, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes)
+
+	// The output shape of the scatter is the operand shape.
+	node := b.newNode(scatterOpType, operand.shape, operand, indices, updates)
+	node.data = &scatterNode{
+		updateWindowAxes:         updateWindowAxes,
+		insertedWindowAxes:       insertedWindowAxes,
+		scatterAxesToOperandAxes: scatterAxesToOperandAxes,
+		indexVectorAxis:          indexVectorAxis,
+	}
+	return node
+}
+
+type scatterNode struct {
+	indexVectorAxis                                                int
+	updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int
+	indicesAreSorted, uniqueIndices                                bool
+}
+
 // Unary Operations:
 
-// Neg implements backends.Builder interface.
+// Neg implements the backends.Builder interface.
 func (b *Builder) Neg(operand backends.Op) backends.Op {
 	return b.addUnaryOp(backends.OpTypeNeg, operand)
 }
 
-// Sign implements backends.Builder interface.
+// Sign implements the backends.Builder interface.
 func (b *Builder) Sign(operand backends.Op) backends.Op {
 	return b.addUnaryOp(backends.OpTypeSign, operand)
 }
 
-// Abs implements backends.Builder interface.
+// Abs implements the backends.Builder interface.
 func (b *Builder) Abs(operand backends.Op) backends.Op {
 	return b.addUnaryOp(backends.OpTypeAbs, operand)
 }
 
-// LogicalNot implements backends.Builder interface.
+// LogicalNot implements the backends.Builder interface.
 func (b *Builder) LogicalNot(operand backends.Op) backends.Op {
 	return b.addUnaryOp(backends.OpTypeLogicalNot, operand)
 }
 
-// BitwiseNot implements backends.Builder interface.
+// BitwiseNot implements the backends.Builder interface.
 func (b *Builder) BitwiseNot(operand backends.Op) backends.Op {
 	return b.addUnaryOp(backends.OpTypeBitwiseNot, operand)
 }
 
-// BitCount implements backends.Builder interface.
+// BitCount implements the backends.Builder interface.
 func (b *Builder) BitCount(operand backends.Op) backends.Op {
 	return b.addUnaryOp(backends.OpTypeBitCount, operand)
 }
 
-// Clz implements backends.Builder interface.
+// Clz implements the backends.Builder interface.
 func (b *Builder) Clz(operand backends.Op) backends.Op {
 	return b.addUnaryOp(backends.OpTypeClz, operand)
 }
 
-// Exp implements backends.Builder interface.
+// Exp implements the backends.Builder interface.
 func (b *Builder) Exp(operand backends.Op) backends.Op {
 	return b.addUnaryOp(backends.OpTypeExp, operand)
 }
 
-// Expm1 implements backends.Builder interface. It returns e(x)-1.
+// Expm1 implements the backends.Builder interface. It returns e(x)-1.
 func (b *Builder) Expm1(operand backends.Op) backends.Op {
 	return b.addUnaryOp(backends.OpTypeExpm1, operand)
 }
 
-// Log implements backends.Builder interface.
+// Log implements the backends.Builder interface.
 func (b *Builder) Log(operand backends.Op) backends.Op {
 	return b.addUnaryOp(backends.OpTypeLog, operand)
 }
 
-// Log1p implements backends.Builder interface.
+// Log1p implements the backends.Builder interface.
 func (b *Builder) Log1p(operand backends.Op) backends.Op {
 	return b.addUnaryOp(backends.OpTypeLog1p, operand)
 }
 
-// Logistic implements backends.Builder interface. Aka as sigmoid. It returns 1/(1+exp(-x)).
+// Logistic implements the backends.Builder interface. Aka as sigmoid. It returns 1/(1+exp(-x)).
 func (b *Builder) Logistic(operand backends.Op) backends.Op {
 	return b.addUnaryOp(backends.OpTypeLogistic, operand)
 }
 
-// Ceil implements backends.Builder interface.
+// Ceil implements the backends.Builder interface.
 func (b *Builder) Ceil(operand backends.Op) backends.Op {
 	return b.addUnaryOp(backends.OpTypeCeil, operand)
 }
 
-// Floor implements backends.Builder interface.
+// Floor implements the backends.Builder interface.
 func (b *Builder) Floor(operand backends.Op) backends.Op {
 	return b.addUnaryOp(backends.OpTypeFloor, operand)
 }
 
-// Round implements backends.Builder interface.
+// Round implements the backends.Builder interface.
 func (b *Builder) Round(operand backends.Op) backends.Op {
 	return b.addUnaryOp(backends.OpTypeRound, operand)
 }
 
-// Rsqrt implements backends.Builder interface.
+// Rsqrt implements the backends.Builder interface.
 func (b *Builder) Rsqrt(operand backends.Op) backends.Op {
 	return b.addUnaryOp(backends.OpTypeRsqrt, operand)
 }
 
-// Sqrt implements backends.Builder interface.
+// Sqrt implements the backends.Builder interface.
 func (b *Builder) Sqrt(operand backends.Op) backends.Op {
 	return b.addUnaryOp(backends.OpTypeSqrt, operand)
 }
 
-// Cos implements backends.Builder interface.
+// Cos implements the backends.Builder interface.
 func (b *Builder) Cos(operand backends.Op) backends.Op {
 	return b.addUnaryOp(backends.OpTypeCos, operand)
 }
 
-// Sin implements backends.Builder interface.
+// Sin implements the backends.Builder interface.
 func (b *Builder) Sin(operand backends.Op) backends.Op {
 	return b.addUnaryOp(backends.OpTypeSin, operand)
 }
 
-// Tanh implements backends.Builder interface.
+// Tanh implements the backends.Builder interface.
 func (b *Builder) Tanh(operand backends.Op) backends.Op {
 	return b.addUnaryOp(backends.OpTypeTanh, operand)
 }
 
-// IsFinite implements backends.Builder interface.
+// IsFinite implements the backends.Builder interface.
 func (b *Builder) IsFinite(operandOp backends.Op) backends.Op {
 	opType := backends.OpTypeIsFinite
 	inputs := b.checkOps(opType.String(), operandOp)
@@ -354,97 +411,97 @@ func (b *Builder) IsFinite(operandOp backends.Op) backends.Op {
 
 // Binary Operations:
 
-// Add implements backends.Builder interface.
+// Add implements the backends.Builder interface.
 func (b *Builder) Add(lhsOp, rhsOp backends.Op) backends.Op {
 	return b.addBinaryOp(backends.OpTypeAdd, lhsOp, rhsOp)
 }
 
-// Mul implements backends.Builder interface.
+// Mul implements the backends.Builder interface.
 func (b *Builder) Mul(lhsOp, rhsOp backends.Op) backends.Op {
 	return b.addBinaryOp(backends.OpTypeMul, lhsOp, rhsOp)
 }
 
-// Sub implements backends.Builder interface.
+// Sub implements the backends.Builder interface.
 func (b *Builder) Sub(lhsOp, rhsOp backends.Op) backends.Op {
 	return b.addBinaryOp(backends.OpTypeSub, lhsOp, rhsOp)
 }
 
-// Div implements backends.Builder interface.
+// Div implements the backends.Builder interface.
 func (b *Builder) Div(lhsOp, rhsOp backends.Op) backends.Op {
 	return b.addBinaryOp(backends.OpTypeDiv, lhsOp, rhsOp)
 }
 
-// Rem implements backends.Builder interface.
+// Rem implements the backends.Builder interface.
 func (b *Builder) Rem(lhsOp, rhsOp backends.Op) backends.Op {
 	return b.addBinaryOp(backends.OpTypeRem, lhsOp, rhsOp)
 }
 
-// Pow implements backends.Builder interface.
+// Pow implements the backends.Builder interface.
 func (b *Builder) Pow(lhsOp, rhsOp backends.Op) backends.Op {
 	return b.addBinaryOp(backends.OpTypePow, lhsOp, rhsOp)
 }
 
-// BitwiseAnd implements backends.Builder interface.
+// BitwiseAnd implements the backends.Builder interface.
 func (b *Builder) BitwiseAnd(lhsOp, rhsOp backends.Op) backends.Op {
 	return b.addBinaryOp(backends.OpTypeBitwiseAnd, lhsOp, rhsOp)
 }
 
-// BitwiseOr implements backends.Builder interface.
+// BitwiseOr implements the backends.Builder interface.
 func (b *Builder) BitwiseOr(lhsOp, rhsOp backends.Op) backends.Op {
 	return b.addBinaryOp(backends.OpTypeBitwiseOr, lhsOp, rhsOp)
 }
 
-// BitwiseXor implements backends.Builder interface.
+// BitwiseXor implements the backends.Builder interface.
 func (b *Builder) BitwiseXor(lhsOp, rhsOp backends.Op) backends.Op {
 	return b.addBinaryOp(backends.OpTypeBitwiseXor, lhsOp, rhsOp)
 }
 
-// LogicalAnd implements backends.Builder interface.
+// LogicalAnd implements the backends.Builder interface.
 func (b *Builder) LogicalAnd(lhsOp, rhsOp backends.Op) backends.Op {
 	return b.addBinaryOp(backends.OpTypeLogicalAnd, lhsOp, rhsOp)
 }
 
-// LogicalOr implements backends.Builder interface.
+// LogicalOr implements the backends.Builder interface.
 func (b *Builder) LogicalOr(lhsOp, rhsOp backends.Op) backends.Op {
 	return b.addBinaryOp(backends.OpTypeLogicalOr, lhsOp, rhsOp)
 }
 
-// LogicalXor implements backends.Builder interface.
+// LogicalXor implements the backends.Builder interface.
 func (b *Builder) LogicalXor(lhsOp, rhsOp backends.Op) backends.Op {
 	return b.addBinaryOp(backends.OpTypeLogicalXor, lhsOp, rhsOp)
 }
 
-// Max implements backends.Builder interface.
+// Max implements the backends.Builder interface.
 func (b *Builder) Max(lhsOp, rhsOp backends.Op) backends.Op {
 	return b.addBinaryOp(backends.OpTypeMax, lhsOp, rhsOp)
 }
 
-// Min implements backends.Builder interface.
+// Min implements the backends.Builder interface.
 func (b *Builder) Min(lhsOp, rhsOp backends.Op) backends.Op {
 	return b.addBinaryOp(backends.OpTypeMin, lhsOp, rhsOp)
 }
 
-// Equal implements backends.Builder interface.
+// Equal implements the backends.Builder interface.
 func (b *Builder) Equal(lhsOp, rhsOp backends.Op) backends.Op {
 	return b.addComparisonOp(backends.OpTypeEqual, lhsOp, rhsOp)
 }
 
-// GreaterOrEqual implements backends.Builder interface.
+// GreaterOrEqual implements the backends.Builder interface.
 func (b *Builder) GreaterOrEqual(lhsOp, rhsOp backends.Op) backends.Op {
 	return b.addComparisonOp(backends.OpTypeGreaterOrEqual, lhsOp, rhsOp)
 }
 
-// GreaterThan implements backends.Builder interface.
+// GreaterThan implements the backends.Builder interface.
 func (b *Builder) GreaterThan(lhsOp, rhsOp backends.Op) backends.Op {
 	return b.addComparisonOp(backends.OpTypeGreaterThan, lhsOp, rhsOp)
 }
 
-// LessOrEqual implements backends.Builder interface.
+// LessOrEqual implements the backends.Builder interface.
 func (b *Builder) LessOrEqual(lhsOp, rhsOp backends.Op) backends.Op {
 	return b.addComparisonOp(backends.OpTypeLessOrEqual, lhsOp, rhsOp)
 }
 
-// LessThan implements backends.Builder interface.
+// LessThan implements the backends.Builder interface.
 func (b *Builder) LessThan(lhsOp, rhsOp backends.Op) backends.Op {
 	return b.addComparisonOp(backends.OpTypeLessThan, lhsOp, rhsOp)
 }

@@ -21,6 +21,8 @@ var Capabilities = backends.Capabilities{
 		// Graph nodes.
 		backends.OpTypeBroadcast:      true,
 		backends.OpTypeBroadcastInDim: true,
+		backends.OpTypeConcatenate:    true,
+		backends.OpTypeConvertDType:   true,
 		backends.OpTypeDot:            true,
 		backends.OpTypeDotGeneral:     true,
 		backends.OpTypeGather:         true,
@@ -30,6 +32,9 @@ var Capabilities = backends.Capabilities{
 		backends.OpTypeReduceProduct:  true,
 		backends.OpTypeReduceSum:      true,
 		backends.OpTypeReshape:        true,
+		backends.OpTypeScatterMax:     true,
+		backends.OpTypeScatterMin:     true,
+		backends.OpTypeScatterSum:     true,
 		backends.OpTypeTranspose:      true,
 		backends.OpTypeWhere:          true,
 
