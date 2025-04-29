@@ -8,6 +8,7 @@
   * Added sub-package `notimplemented`: helper to implement new backends.
   * Added sub-package `shapeinference`: helper to implement new backends.
   * Added sub-package `default` which includes the default packages.
+  * Added `List()` function to returned the currently registered (compiled-in) backends.
 * Package `checkpoints`
   * Added `Config.FromEmbed` that allows loading a checkpoint from an embedded variable.
 * Package `graph`:

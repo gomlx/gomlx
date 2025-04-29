@@ -9,9 +9,9 @@
 //
 // It is based on OpenXLA's API for now.
 //
-// A backend that doesn't implement every operation, can simply return a "Not implemented" error for any op, and
+// A backend that doesn't implement every operation can simply return a "Not implemented" error for any op, and
 // it would still work for computations that don't require those operations.
-// The backend/notimplemented package helps bootstrap any new backend implementation, by providing
+// The backend/notimplemented package helps bootstrap any new backend implementation by providing
 // a "Not Implemented" implementation for all methods of the Builder interface.
 //
 // To simplify error handling, all functions are expected to throw (panic) with a stack trace in case of errors.
@@ -20,13 +20,14 @@ package backends
 
 import (
 	"github.com/gomlx/exceptions"
+	"golang.org/x/exp/maps"
 	"os"
 	"strings"
 )
 
 //go:generate go run ../internal/cmd/backends_generator
 
-// DeviceNum represents which device holds a buffer, or should execute a computation.
+// DeviceNum represents which device holds a buffer or should execute a computation.
 // It's up to the backend to interpret it, but it should be between 0 and Backend.NumDevices.
 type DeviceNum int
 
@@ -50,7 +51,7 @@ type Backend interface {
 	// DataInterface is the sub-interface that defines the API to transfer Buffer to/from accelerators for the backend.
 	DataInterface
 
-	// Finalize releases all the associated resources immediately, and makes the backend invalid.
+	// Finalize releases all the associated resources immediately and makes the backend invalid.
 	Finalize()
 }
 
@@ -62,7 +63,7 @@ var (
 	firstRegistered        string
 )
 
-// Register backend with the given name, and a default constructor that takes as input a configuration string that is
+// Register backend with the given name and a default constructor that takes as input a configuration string that is
 // passed along to the backend constructor.
 //
 // To be safe, call Register during initialization of a package.
@@ -81,12 +82,12 @@ var DefaultConfig string
 // ConfigEnvVar is the name of the environment variable with the default backend configuration to use:
 // "GOMLX_BACKEND".
 //
-// The format of configuration is "<backend_name>:<backend_configuration>".
+// The format of the configuration is "<backend_name>:<backend_configuration>".
 // The "<backend_name>" is the name of a registered backend (e.g.: "xla") and
-// "<backend_configuration>" is backend specific (e.g.: for xla backend, it is the pjrt plugin name).
+// "<backend_configuration>" is backend-specific (e.g.: for xla backend, it is the pjrt plugin name).
 const ConfigEnvVar = "GOMLX_BACKEND"
 
-// GOMLX_BACKEND is deprecated, and will be removed in future versions -- it is an alias to ConfigEnvVar
+// GOMLX_BACKEND is deprecated and will be removed in future versions -- it is an alias to ConfigEnvVar
 // Deprecated: use ConfigEnvVar.
 const GOMLX_BACKEND = ConfigEnvVar
 
@@ -98,7 +99,7 @@ const GOMLX_BACKEND = ConfigEnvVar
 // 2. Next the variable DefaultConfig is used as a configuration if defined.
 // 3. The first registered backend is used with an empty configuration.
 //
-// It panics if not backend was registered.
+// It panics if not the backend was registered.
 func New() Backend {
 	config, found := os.LookupEnv(ConfigEnvVar)
 	if found {
@@ -110,11 +111,11 @@ func New() Backend {
 	return NewWithConfig("")
 }
 
-// NewWithConfig takes a configurations string formated as
+// NewWithConfig takes a configuration string formated as
 //
 // The format of config is "<backend_name>:<backend_configuration>".
 // The "<backend_name>" is the name of a registered backend (e.g.: "xla") and
-// "<backend_configuration>" is backend specific (e.g.: for xla backend, it is the pjrt plugin name).
+// "<backend_configuration>" is backend-specific (e.g.: for xla backend, it is the pjrt plugin name).
 func NewWithConfig(config string) Backend {
 	if len(registeredConstructors) == 0 {
 		exceptions.Panicf(`no registered backends for GoMLX -- maybe import the default XLA one with import _ "github.com/gomlx/gomlx/backends/xla"?`)
@@ -127,7 +128,13 @@ func NewWithConfig(config string) Backend {
 	}
 	constructor, found := registeredConstructors[backendName]
 	if !found {
-		exceptions.Panicf("can't find backend %q for configuration %q given", backendName, config)
+		exceptions.Panicf("can't find backend %q for configuration %q given, backends available: \"%s\"",
+			backendName, config, strings.Join(List(), "\", \""))
 	}
 	return constructor(backendConfig)
+}
+
+// List the registered (compiled-in) backends.
+func List() []string {
+	return maps.Keys(registeredConstructors)
 }
