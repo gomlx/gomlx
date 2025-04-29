@@ -1,6 +1,7 @@
 package simplego
 
 import (
+	"fmt"
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types"
@@ -1043,24 +1044,23 @@ func execScatter(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []b
 	} else {
 		output = backend.cloneBuffer(operand) // Creates a new buffer with copied data.
 	}
-	output.shape = node.shape // Output shape is same as operand shape.
+	output.shape = node.shape // Output shape is the same as operand shape.
 
 	// Dispatch to a type-specific scatter loop based on the operation type.
-	indicesDType := indices.shape.DType
-	operandDType := output.shape.DType
-	type scatterFn func(opType backends.OpType, output, indices, updates *Buffer, scatterParams *scatterNode)
-	fn := scatterDTypeMap.Get(indicesDType, operandDType).(scatterFn)
+	dtype := output.shape.DType
+	type scatterFn = func(opType backends.OpType, output, indices, updates *Buffer, scatterParams *scatterNode)
+	fn := scatterDTypeMap.Get(dtype).(scatterFn)
 	fn(node.opType, output, indices, updates, scatterParams)
 	return output
 }
 
-var scatterDTypeMap = NewDTypePairMap("ScatterMax")
+var scatterDTypeMap = NewDTypeMap("ScatterMax")
 
 // execScatterGeneric assumes the operand is already copied to the output.
-func execScatterGeneric[IndicesT PODIntegerConstraints, OperandT SupportedTypesConstraints](opType backends.OpType, output, indices, updates *Buffer, scatterParams *scatterNode) {
+func execScatterGeneric[T SupportedTypesConstraints](opType backends.OpType, output, indices, updates *Buffer, scatterParams *scatterNode) {
 	// Get combineFn for operand's dtype.
 	dtype := output.shape.DType
-	type combineFnT func(a, b OperandT) OperandT
+	type combineFnT = func(a, b T) T
 	var combineFn combineFnT
 	switch opType {
 	case backends.OpTypeScatterMax:
@@ -1079,6 +1079,92 @@ func execScatterGeneric[IndicesT PODIntegerConstraints, OperandT SupportedTypesC
 	updatesShape := updates.shape
 	rank := outputShape.Rank()
 	_, _, _ = indicesShape, updatesShape, rank
+
+	indicesFlat := indices.flat
+	deferenceIndicesFn := dereferenceIntsDTypeMap.Get(indicesShape.DType).(func(flat any, in, out []int))
+	_, _ = indicesFlat, deferenceIndicesFn
+	indicesIt := newSubIndicesIterator(indices.shape, scatterParams.indexVectorAxis)
+
+	// Outer-loop: range over the pointed indices
+	for {
+		fmt.Printf("\tindices[%v=flat(%d)]\n", indicesIt.PerAxisIdx, indicesIt.FlatIdx)
+		// Inner-loop: combine slice (window) of update into output.
+
+		// Next in indices:
+		if !indicesIt.Increment() {
+			break
+		}
+	}
+}
+
+type subIndicesIterator struct {
+	// FlatIdx is the current flat index to the shape.
+	FlatIdx int
+
+	// PerAxisIdx is the current indices in the shape.
+	PerAxisIdx []int
+
+	PerAxisSize   []int
+	PerAxisStride []int
+}
+
+func newSubIndicesIterator(shape shapes.Shape, skipAxes ...int) *subIndicesIterator {
+	rank := shape.Rank()
+	it := &subIndicesIterator{
+		PerAxisIdx:    make([]int, rank),
+		PerAxisSize:   slices.Clone(shape.Dimensions),
+		PerAxisStride: make([]int, rank),
+	}
+	stride := 1
+	for axis := rank - 1; axis >= 0; axis-- {
+		it.PerAxisStride[axis] = stride
+		stride *= shape.Dimensions[axis]
+	}
+	for _, axis := range skipAxes {
+		if axis < rank {
+			// Set size for axis we don't want to iterate over to 1.
+			it.PerAxisSize[axis] = 1
+		}
+	}
+	return it
+}
+
+// Increment indices. It returns true if the new index is still valid, or false if it reached the end.
+func (it *subIndicesIterator) Increment() bool {
+	if it.FlatIdx < 0 {
+		return false
+	}
+	rank := len(it.PerAxisSize)
+	for axis := rank - 1; axis >= 0; axis-- {
+		if it.PerAxisSize[axis] == 1 {
+			continue
+		}
+		it.PerAxisIdx[axis]++
+		it.FlatIdx += it.PerAxisStride[axis]
+		if it.PerAxisIdx[axis] < it.PerAxisSize[axis] {
+			return true
+		}
+
+		// We are going to move to the next axis.
+		if axis == 0 {
+			break
+		}
+		it.PerAxisIdx[axis] = 0
+		it.FlatIdx -= it.PerAxisStride[axis-1] // Rewind FlatIdx to start of the current axis.
+	}
+
+	// Reached end.
+	it.FlatIdx = -1
+	return false
+}
+
+var dereferenceIntsDTypeMap = NewDTypeMap("Scatter Indices")
+
+func dereferenceIntsGeneric[T PODIntegerConstraints](flatAny any, indicesIn, indicesOut []int) {
+	flat := flatAny.([]T)
+	for ii, index := range indicesIn {
+		indicesOut[ii] = int(flat[index])
+	}
 }
 
 var (

@@ -54,6 +54,8 @@ var (
 			{"combineMaxDTypeMap", "combineForScatterMaxGeneric", makeDTypes(true, true, true, false, false)},
 			{"combineMinDTypeMap", "combineForScatterMinGeneric", makeDTypes(true, true, true, false, false)},
 			{"combineSumDTypeMap", "combineForScatterSumGeneric", makeDTypes(true, true, true, false, false)},
+			{"scatterDTypeMap", "execScatterGeneric", makeDTypes(true, true, true, true, false)},
+			{"dereferenceIntsDTypeMap", "dereferenceIntsGeneric", makeDTypes(true, true, false, false, false)},
 		},
 		PairMaps: []MapPairInfo{
 			// Various ConvertDType instantiations.

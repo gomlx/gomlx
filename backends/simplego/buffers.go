@@ -93,7 +93,7 @@ func (b *Backend) NewBuffer(shape shapes.Shape) *Buffer {
 	return buffer
 }
 
-// BufferFinalize allows client to inform backend that buffer is no longer needed and associated resources can be
+// BufferFinalize allows the client to inform backend that buffer is no longer needed and associated resources can be
 // freed immediately.
 func (b *Backend) BufferFinalize(backendBuffer backends.Buffer) {
 	buffer := backendBuffer.(*Buffer)

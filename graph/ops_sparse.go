@@ -482,3 +482,16 @@ func scatterMaxOrMinVJP(node, v *Node, _ shapes.Shape) []*Node {
 	updatesVJP = Where(updatesMask, updatesVJP, ZerosLike(updatesVJP))
 	return []*Node{ /*operand*/ operandVJP /*indices*/, nil /*initialValue*/, updatesVJP}
 }
+
+// BackendScatterMax exposes the raw backend ScatterMax operator.
+//
+// This should be internal and it is exposed only for debugging purposes, please don't rely on it. If it turns out you
+// need some functionality here that is not provided in ScatterMax, open an issue in GoMLX and we'll figure
+// a betterAPI.
+//
+// Description in
+// https://openxla.org/xla/operation_semantics#gather
+func BackendScatterMax(operand, indices, updates *Node, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) *Node {
+	return backendScatterMax(operand, indices, updates, indexVectorAxis, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes,
+		indicesAreSorted, uniqueIndices)
+}

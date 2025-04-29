@@ -197,6 +197,29 @@ func init() {
 	combineSumDTypeMap.RegisterIfNotSet(dtypes.Float32, combineForScatterSumGeneric[float32])
 	combineSumDTypeMap.RegisterIfNotSet(dtypes.Float64, combineForScatterSumGeneric[float64])
 
+	// DTypeMap: scatterDTypeMap
+	scatterDTypeMap.RegisterIfNotSet(dtypes.Int8, execScatterGeneric[int8])
+	scatterDTypeMap.RegisterIfNotSet(dtypes.Int16, execScatterGeneric[int16])
+	scatterDTypeMap.RegisterIfNotSet(dtypes.Int32, execScatterGeneric[int32])
+	scatterDTypeMap.RegisterIfNotSet(dtypes.Int64, execScatterGeneric[int64])
+	scatterDTypeMap.RegisterIfNotSet(dtypes.Uint8, execScatterGeneric[uint8])
+	scatterDTypeMap.RegisterIfNotSet(dtypes.Uint16, execScatterGeneric[uint16])
+	scatterDTypeMap.RegisterIfNotSet(dtypes.Uint32, execScatterGeneric[uint32])
+	scatterDTypeMap.RegisterIfNotSet(dtypes.Uint64, execScatterGeneric[uint64])
+	scatterDTypeMap.RegisterIfNotSet(dtypes.Float32, execScatterGeneric[float32])
+	scatterDTypeMap.RegisterIfNotSet(dtypes.Float64, execScatterGeneric[float64])
+	scatterDTypeMap.RegisterIfNotSet(dtypes.BFloat16, execScatterGeneric[bfloat16.BFloat16])
+
+	// DTypeMap: dereferenceIntsDTypeMap
+	dereferenceIntsDTypeMap.RegisterIfNotSet(dtypes.Int8, dereferenceIntsGeneric[int8])
+	dereferenceIntsDTypeMap.RegisterIfNotSet(dtypes.Int16, dereferenceIntsGeneric[int16])
+	dereferenceIntsDTypeMap.RegisterIfNotSet(dtypes.Int32, dereferenceIntsGeneric[int32])
+	dereferenceIntsDTypeMap.RegisterIfNotSet(dtypes.Int64, dereferenceIntsGeneric[int64])
+	dereferenceIntsDTypeMap.RegisterIfNotSet(dtypes.Uint8, dereferenceIntsGeneric[uint8])
+	dereferenceIntsDTypeMap.RegisterIfNotSet(dtypes.Uint16, dereferenceIntsGeneric[uint16])
+	dereferenceIntsDTypeMap.RegisterIfNotSet(dtypes.Uint32, dereferenceIntsGeneric[uint32])
+	dereferenceIntsDTypeMap.RegisterIfNotSet(dtypes.Uint64, dereferenceIntsGeneric[uint64])
+
 	// DTypePairMap: convertDTypePairMap
 	convertDTypePairMap.RegisterIfNotSet(dtypes.Int8, dtypes.Int8, execConvertDTypeGeneric[int8, int8])
 	convertDTypePairMap.RegisterIfNotSet(dtypes.Int8, dtypes.Int16, execConvertDTypeGeneric[int8, int16])
