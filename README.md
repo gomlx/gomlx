@@ -76,9 +76,9 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
 
 **Highlights:**
 
-> **🚀 NEW 🚀**: Go only backend: very portable, and doesn't require installation of separate C++ libraries. But slower
-> and limited coverage of ops (some 60 ops are already implemented). It is actively being developed, if you are missing 
-> any op, please open an issue in GoMLX github and let us know.
+> **🚀 NEW 🚀**: `SimpleGo`, a new Go only backend: it is very portable and doesn't require installation of separate 
+> C++ libraries. But it is slower and has a limited ops coverage: some 60 ops are already implemented. 
+> It is actively being developed, if you are missing any op, please open an issue in GoMLX GitHub and let us know.
 
 * Converting ONNX models to GoMLX with [onnx-gomlx](https://github.com/gomlx/onnx-gomlx): both as an alternative for `onnxruntime` (leveraging XLA),
   but also to further fine-tune models. See also [go-huggingface](https://github.com/gomlx/go-huggingface) to easily download ONNX model files from HuggingFace.

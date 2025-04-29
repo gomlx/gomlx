@@ -1,6 +1,6 @@
 # GoMLX changelog
 
-# Next:
+# v0.19.0: 2025/04/29 Added SimpleGo, a pure Go backend
 
 * Package `backends`:
   * Added `simplego`, a portable, simple albeit slow backend.
