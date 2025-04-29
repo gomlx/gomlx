@@ -50,7 +50,7 @@ import (
 	"k8s.io/klog/v2"
 	"time"
 
-	_ "github.com/gomlx/gomlx/backends/xla"
+	_ "github.com/gomlx/gomlx/backends/default"
 )
 
 var (
@@ -187,7 +187,7 @@ func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, param
 	trainer := train.NewTrainer(backend, ctx, ModelGraph, losses.BinaryCrossentropyLogits,
 		optimizers.FromContext(ctx),
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
-		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
+		[]metrics.Interface{meanAccuracyMetric}) // evalMetrics
 
 	// Use standard training loop.
 	loop := train.NewLoop(trainer)

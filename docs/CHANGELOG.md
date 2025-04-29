@@ -7,6 +7,7 @@
     * Implemented ~50 most common ops, see `backends/simplego/capabilities`, and most common numeric types (including BFloat16).
   * Added sub-package `notimplemented`: helper to implement new backends.
   * Added sub-package `shapeinference`: helper to implement new backends.
+  * Added sub-package `default` which includes the default packages.
 * Package `checkpoints`
   * Added `Config.FromEmbed` that allows loading a checkpoint from an embedded variable.
 * Package `graph`:
