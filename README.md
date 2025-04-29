@@ -57,7 +57,6 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
 
 **Examples developed using GoMLX:**
 
-  * 🎉Neural Style Transfer 10 years Celebration🎉: [see a demo written using GoMLX](https://github.com/janpfeifer/styletransfer/blob/main/demo.ipynb) of the [original paper](https://arxiv.org/abs/1508.06576). 
   * [Adult/Census model](https://gomlx.github.io/gomlx/notebooks/uci-adult.html);
   * [How KANs learn ?](https://gomlx.github.io/gomlx/notebooks/kan_shapes.html); 
   * [Cifar-10 demo](https://gomlx.github.io/gomlx/notebooks/cifar.html); 
