@@ -22,6 +22,9 @@ compilation to CPU and GPU (optionally TPUs also).
 It's the same engine that powers Google's [Jax](https://github.com/google/jax) and 
 [TensorFlow](https://tensorflow.org/), and it has the same speed in many cases.
 
+It also has an (experimental) backend written in Go, that is more portable (should work in Mac/Windows/Wasm), but
+significantly slower and doesn't implement everything.
+
 > [!Tip]
 > 🎓 Quick Start:
 > * See our [**tutorial**](https://gomlx.github.io/gomlx/notebooks/tutorial.html)
@@ -47,12 +50,12 @@ adding new functionality.
 
 ## 🗺️ Overview
 
-**GoMLX** has many important components of an ML framework in place, 
+**GoMLX** is a full-featured ML framework, supporting various well known ML components  
 from the bottom to the top of the stack. But it is still only a slice of what a major ML library/framework should provide 
 (like TensorFlow, Jax or PyTorch).
 
 
-**Examples:**
+**Examples developed using GoMLX:**
 
   * 🎉Neural Style Transfer 10 years Celebration🎉: [see a demo written using GoMLX](https://github.com/janpfeifer/styletransfer/blob/main/demo.ipynb) of the [original paper](https://arxiv.org/abs/1508.06576). 
   * [Adult/Census model](https://gomlx.github.io/gomlx/notebooks/uci-adult.html);
@@ -67,13 +70,16 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
     [Google DeepMind's Gemma v2 model](https://github.com/google-deepmind/gemma) ([blog post](https://ai.google.dev/gemma))
   * [GNN model for OGBN-MAG (experimental)](examples/ogbnmag/ogbn-mag.ipynb).
   * Last, a trivial [synthetic linear model](https://github.com/gomlx/gomlx/blob/main/examples/linear/linear.go), for those curious to see a barebones simple model.
-
+  * 🎉Neural Style Transfer 10 years Celebration🎉: [see a demo written using GoMLX](https://github.com/janpfeifer/styletransfer/blob/main/demo.ipynb) of the [original paper](https://arxiv.org/abs/1508.06576).
+  * [Triplet Losses](https://github.com/gomlx/gomlx/blob/main/ml/train/losses/triplet.go): various negative sampling strategies as well as various distance metrics.
+  * [AlphaZero AI for the game of Hive](https://github.com/janpfeifer/hiveGo/): it uses a trivial GNN to evaluate
+    positions on the board. It includes a command-line UI to test your skills!
 
 **Highlights:**
 
-> **🚀 NEW 🚀**:
-> - 🎉Neural Style Transfer 10 years Celebration🎉: [see a demo written using GoMLX](https://github.com/janpfeifer/styletransfer/blob/main/demo.ipynb) of the [original paper](https://arxiv.org/abs/1508.06576).
-> - [Triplet Losses](https://github.com/gomlx/gomlx/blob/main/ml/train/losses/triplet.go): various negative sampling strategies as well as various distance metrics.
+> **🚀 NEW 🚀**: Go only backend: very portable, and doesn't require installation of separate C++ libraries. But slower
+> and limited coverage of ops (some 60 ops are already implemented). It is actively being developed, if you are missing 
+> any op, please open an issue in GoMLX github and let us know.
 
 * Converting ONNX models to GoMLX with [onnx-gomlx](https://github.com/gomlx/onnx-gomlx): both as an alternative for `onnxruntime` (leveraging XLA),
   but also to further fine-tune models. See also [go-huggingface](https://github.com/gomlx/go-huggingface) to easily download ONNX model files from HuggingFace.
@@ -103,6 +109,11 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
 * Random brainstorming on projects: just start a Q&A and I'm happy to meet in discord somewhere or VC.
 
 ## <a id="installation"></a>🛠️ + ⚙️ Installation
+
+If you want to use only the `SimpleGo` backend, simply do `import _ "github.com/gomlx/gomlx/backends/simplego"` and 
+you are ready -- it will register itself.
+
+If you want the more advanced/faster XLA backend (only available for Linux at the moment), with support for CUDA, follow below.
 
 **TLDR;**: Two simple options:
 
@@ -228,6 +239,10 @@ In the future we plan to also export models to ONNX or StableHLO and one could u
   - `PJRT_PLUGIN_LIBRARY_PATH`: the underlying XLA backend uses this variable as an extra directory to search for plugin locations.
     It searches for the systems library paths (`$LD_LIBRARY_PATH`, `/etc/ld.so.conf`), the default `/usr/local/lib/gomlx/pjrt` and
     `$PJRT_PLUGIN_LIBRARY_PATH` if set.
+- **What backends to include when using GoMLX ?**
+  - The recommendation is to use `import _ "github.com/gomlx/gomlx/backends/default"` which will import `XLA` and
+    `SimpleGo` backends. If you are working on a platform not supported by *XLA*, or you don't want to install
+    it's C++ library, you can add `-tags=noxla` to the compiler, and it won't include *XLA*.
 
 ## 🤝 Collaborating
 
