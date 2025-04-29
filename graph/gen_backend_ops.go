@@ -1594,7 +1594,7 @@ type nodeInputsGather struct {
 	operand            *Node
 	startIndices       *Node
 	indexVectorAxis    int
-	offsetAxes         []int
+	offsetOutputAxes   []int
 	collapsedSliceAxes []int
 	startIndexMap      []int
 	sliceSizes         []int
@@ -1608,12 +1608,12 @@ func (ni *nodeInputsGather) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsGather) String() string {
-	return fmt.Sprintf("%s(operand=[#%d], startIndices=[#%d], indexVectorAxis=%v, offsetAxes=%v, collapsedSliceAxes=%v, startIndexMap=%v, sliceSizes=%v, indicesAreSorted=%v)",
+	return fmt.Sprintf("%s(operand=[#%d], startIndices=[#%d], indexVectorAxis=%v, offsetOutputAxes=%v, collapsedSliceAxes=%v, startIndexMap=%v, sliceSizes=%v, indicesAreSorted=%v)",
 		ni.Type(),
 		ni.operand.Id(),
 		ni.startIndices.Id(),
 		ni.indexVectorAxis,
-		ni.offsetAxes,
+		ni.offsetOutputAxes,
 		ni.collapsedSliceAxes,
 		ni.startIndexMap,
 		ni.sliceSizes,
@@ -1622,20 +1622,20 @@ func (ni *nodeInputsGather) String() string {
 }
 
 // backendGather is a Graph wrapper for the backend.Builder.Gather method.
-func backendGather(operand *Node, startIndices *Node, indexVectorAxis int, offsetAxes []int, collapsedSliceAxes []int, startIndexMap []int, sliceSizes []int, indicesAreSorted bool) (node *Node) {
+func backendGather(operand *Node, startIndices *Node, indexVectorAxis int, offsetOutputAxes []int, collapsedSliceAxes []int, startIndexMap []int, sliceSizes []int, indicesAreSorted bool) (node *Node) {
 	inputNodes := []*Node{operand, startIndices}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsGather{
 		operand:            operand,
 		startIndices:       startIndices,
 		indexVectorAxis:    indexVectorAxis,
-		offsetAxes:         offsetAxes,
+		offsetOutputAxes:   offsetOutputAxes,
 		collapsedSliceAxes: collapsedSliceAxes,
 		startIndexMap:      startIndexMap,
 		sliceSizes:         sliceSizes,
 		indicesAreSorted:   indicesAreSorted,
 	}
-	result := g.builder.Gather(operand.outputOps[0], startIndices.outputOps[0], inputs.indexVectorAxis, inputs.offsetAxes, inputs.collapsedSliceAxes, inputs.startIndexMap, inputs.sliceSizes, inputs.indicesAreSorted)
+	result := g.builder.Gather(operand.outputOps[0], startIndices.outputOps[0], inputs.indexVectorAxis, inputs.offsetOutputAxes, inputs.collapsedSliceAxes, inputs.startIndexMap, inputs.sliceSizes, inputs.indicesAreSorted)
 	node = &Node{
 		outputOps:    []backends.Op{result},
 		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
