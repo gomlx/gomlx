@@ -125,12 +125,12 @@ func TestScatterOp(t *testing.T) {
 	// Scatter 2 updates of shape [5] into operand [4, 5]
 	// Indices shape [2, 1] indicates 2 indices, each pointing to 1 dimension (axis 0) of operand.
 	operand1 := MS(F32, 4, 5)
-	indices1 := MS(I8, 2, 1)              // 2 indices, each coordinate vector has size 1
-	updates1 := MS(F32, 2, 5)             // 2 updates, each matches the slice shape [5]
-	indexVectorAxis1 := 1                 // Axis 1 of indices holds the coordinate vector
-	updateWindowAxes1 := []int{1}         // Axis 1 of updates is the window shape
-	insertedWindowAxes1 := []int{1}       // Axis 1 of operand is the dimension *not* scattered into by indices
-	scatterAxesToOperandAxes1 := []int{0} // Index coordinate vector component 0 maps to operand axis 0
+	indices1 := MS(I8, 2, 1)  // Batch shape [2]
+	updates1 := MS(F32, 2, 5) // Batch shape [2]
+	indexVectorAxis1 := 1
+	updateWindowAxes1 := []int{1}
+	insertedWindowAxes1 := []int{0}
+	scatterAxesToOperandAxes1 := []int{0} // Index coordinate vector element 0 maps to operand axis 0
 	expected1 := operand1
 	output1 := ScatterOp(operand1, indices1, updates1, indexVectorAxis1, updateWindowAxes1, insertedWindowAxes1, scatterAxesToOperandAxes1)
 	require.True(t, expected1.Equal(output1), "Valid Case 1 Failed: Expected %s, got %s", expected1, output1)
@@ -176,6 +176,17 @@ func TestScatterOp(t *testing.T) {
 	expected4 := operand4
 	output4 := ScatterOp(operand4, indices4, updates4, indexVectorAxis4, updateWindowAxes4, insertedWindowAxes4, scatterAxesToOperandAxes4)
 	require.True(t, expected4.Equal(output4), "Valid Case 4 Failed (No Window): Expected %s, got %s", expected4, output4)
+
+	// Case 5: rearranging the output axes:
+	operand5 := MS(F32, 2, 5, 2)
+	indices5 := MS(I32, 2, 2)
+	updates5 := MS(F32, 5, 2)
+	indexVectorAxis5 := 1
+	updateWindowAxes5 := []int{0}
+	insertedWindowAxes5 := []int{0, 2}
+	scatterAxesToOperandAxes5 := []int{0, 2}
+	output5 := ScatterOp(operand5, indices5, updates5, indexVectorAxis5, updateWindowAxes5, insertedWindowAxes5, scatterAxesToOperandAxes5)
+	require.True(t, operand5.Equal(output5), "Valid Case 5 Failed (No Window): Expected %s, got %s", operand5, output5)
 
 	// --- Error Cases ---
 
@@ -229,4 +240,11 @@ func TestScatterOp(t *testing.T) {
 		// operand1 shape [4, 5], rank 2
 		ScatterOp(operand1, indices1, updates1, indexVectorAxis1, updateWindowAxes1, insertedWindowAxes1, []int{2}) // axis 2 invalid for rank 2 operand
 	}, "Error Case 8 Failed: Invalid axis in scatterAxesToOperandAxes")
+
+	// Error Case 9: Update dimension is larger than the corresponding dimension in the operand:
+	require.Panics(t, func() {
+		// operand1 shape [4, 5], rank 2
+		ScatterOp(operand5, indices5, updates5, indexVectorAxis5, updateWindowAxes5, []int{0, 1}, scatterAxesToOperandAxes5) // axis 2 invalid for rank 2 operand
+	}, "Error Case 9 Failed: Update dimension is larger than the corresponding dimension in the operand")
+
 }

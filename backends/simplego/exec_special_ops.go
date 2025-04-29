@@ -1,7 +1,6 @@
 package simplego
 
 import (
-	"fmt"
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types"
@@ -1075,25 +1074,92 @@ func execScatterGeneric[T SupportedTypesConstraints](opType backends.OpType, out
 	_ = combineFn
 
 	outputShape := output.shape
-	indicesShape := indices.shape
-	updatesShape := updates.shape
-	rank := outputShape.Rank()
-	_, _, _ = indicesShape, updatesShape, rank
-
+	outputFlat := output.flat.([]T)
 	indicesFlat := indices.flat
+	updatesShape := updates.shape
+	updatesFlat := updates.flat.([]T)
+
+	// Initialize gather of the scatter indices.
+	indicesShape := indices.shape
 	deferenceIndicesFn := dereferenceIntsDTypeMap.Get(indicesShape.DType).(func(flat any, in, out []int))
 	_, _ = indicesFlat, deferenceIndicesFn
 	indicesIt := newSubIndicesIterator(indices.shape, scatterParams.indexVectorAxis)
+	indexVectorStride := 1
+	indexVectorSize := 1
+	if scatterParams.indexVectorAxis != indicesShape.Rank() {
+		indexVectorSize = indices.shape.Dimensions[scatterParams.indexVectorAxis]
+		indexVectorStride = indicesIt.PerAxisStride[scatterParams.indexVectorAxis]
+	}
+	indirectScatterIndices := make([]int, indexVectorSize)
+	elemIndices := make([]int, indexVectorSize)
+	//fmt.Printf("\tindexVectorSize=%d, indexVectorStride=%d\n", numBatchAxes, indexVectorStride)
+
+	// Initialize iterator over the updates:
+	updatesIt := newSubIndicesIterator(updatesShape, scatterParams.updateWindowAxes...)
+	numBatchAxes := indicesShape.Rank() - 1
+	if scatterParams.indexVectorAxis == indicesShape.Rank() {
+		numBatchAxes++
+	}
+	updatesBatchAxes := make([]int, 0, numBatchAxes)
+	updatesWindowAxesSet := types.SetWith(scatterParams.updateWindowAxes...)
+	for axis := range updatesShape.Rank() {
+		if !updatesWindowAxesSet.Has(axis) {
+			updatesBatchAxes = append(updatesBatchAxes, axis)
+		}
+	}
+	innerUpdatesIt := newSubIndicesIterator(updatesShape, updatesBatchAxes...)
+
+	// Initialize an inner iterator over the output:
+	innerOutputIt := newSubIndicesIterator(outputShape, scatterParams.insertedWindowAxes...)
 
 	// Outer-loop: range over the pointed indices
 	for {
-		fmt.Printf("\tindices[%v=flat(%d)]\n", indicesIt.PerAxisIdx, indicesIt.FlatIdx)
+		// Find scatter indices -> where the values are going to be combined in the output:
+		flatIndirectIndex := indicesIt.FlatIdx
+		for ii := range indexVectorSize {
+			indirectScatterIndices[ii] = flatIndirectIndex
+			flatIndirectIndex += indexVectorStride
+		}
+		deferenceIndicesFn(indicesFlat, indirectScatterIndices, elemIndices)
+		//fmt.Printf("\tindices%v = indices.flat[%d] = %v\n", indicesIt.PerAxisIdx, indicesIt.FlatIdx, elemIndices)
+
+		// Prepare innerOutputIt to start from the position set indices.
+		for axis := range innerOutputIt.PerAxisIdx {
+			innerOutputIt.PerAxisIdx[axis] = 0
+		}
+		innerOutputIt.FlatIdx = 0
+		for scatterAxis, idx := range elemIndices {
+			outputAxis := scatterParams.scatterAxesToOperandAxes[scatterAxis]
+			innerOutputIt.PerAxisIdx[outputAxis] = idx
+			innerOutputIt.FlatIdx += idx * innerOutputIt.PerAxisStride[outputAxis]
+		}
+
+		// Prepare innerUpdatesIt to start from the indices in the updatesIt.
+		innerUpdatesIt.FlatIdx = updatesIt.FlatIdx
+		for ii, idx := range updatesIt.PerAxisIdx {
+			innerUpdatesIt.PerAxisIdx[ii] = idx
+		}
+
 		// Inner-loop: combine slice (window) of update into output.
+		for {
+			outputIdx := innerOutputIt.FlatIdx
+			updatesIdx := innerUpdatesIt.FlatIdx
+			//fmt.Println("\t\tCombine:")
+			//fmt.Printf("\t\t- updates%v (updatesFlat[%d])=%v\n", innerUpdatesIt.PerAxisIdx, updatesIdx, updatesFlat[updatesIdx])
+			//fmt.Printf("\t\t-  output%v (outputFlat[%d])=%v\n", innerOutputIt.PerAxisIdx, outputIdx, outputFlat[outputIdx])
+			outputFlat[outputIdx] = combineFn(outputFlat[outputIdx], updatesFlat[updatesIdx])
+			//fmt.Printf("\t\t- result=%v\n", outputFlat[outputIdx])
+			if !innerUpdatesIt.Increment() {
+				break
+			}
+			innerOutputIt.Increment()
+		}
 
 		// Next in indices:
 		if !indicesIt.Increment() {
 			break
 		}
+		updatesIt.Increment()
 	}
 }
 
@@ -1169,9 +1235,15 @@ func dereferenceIntsGeneric[T PODIntegerConstraints](flatAny any, indicesIn, ind
 
 var (
 	combineMaxDTypeMap = NewDTypeMap("Max(a, b) for ScatterMax")
-	combineMinDTypeMap = NewDTypeMap("Min(a, b) for ScatterMax")
-	combineSumDTypeMap = NewDTypeMap("Sum(a, b) for ScatterMax")
+	combineMinDTypeMap = NewDTypeMap("Min(a, b) for ScatterMin")
+	combineSumDTypeMap = NewDTypeMap("Sum(a, b) for ScatterSum")
 )
+
+func init() {
+	combineMaxDTypeMap.Register(dtypes.BFloat16, combineForScatterMaxBFloat16)
+	combineMinDTypeMap.Register(dtypes.BFloat16, combineForScatterMinBFloat16)
+	combineSumDTypeMap.Register(dtypes.BFloat16, combineForScatterSumBFloat16)
+}
 
 func combineForScatterMaxGeneric[T PODNumericConstraints](a, b T) T {
 	return max(a, b)
@@ -1190,9 +1262,9 @@ func combineForScatterMinBFloat16(a, b bfloat16.BFloat16) bfloat16.BFloat16 {
 }
 
 func combineForScatterSumGeneric[T PODNumericConstraints](a, b T) T {
-	return max(a, b)
+	return a + b
 }
 
 func combineForScatterSumBFloat16(a, b bfloat16.BFloat16) bfloat16.BFloat16 {
-	return bfloat16.FromFloat32(max(a.Float32(), b.Float32()))
+	return bfloat16.FromFloat32(a.Float32() + b.Float32())
 }

@@ -10,7 +10,7 @@
 //
 // For the remainder ops, it defines one function per OpType.
 //
-// It also define some classes of operations that can be used.
+// It also defines some classes of operations that can be used.
 package shapeinference
 
 import (
@@ -32,7 +32,7 @@ var (
 		backends.OpTypeLogicalNot,
 	)
 
-	// BitwiseOperations operates only on integer (binary) numbers, and won't work on floats or complex numbers.
+	// BitwiseOperations operates only on integer (binary) numbers and won't work on floats or complex numbers.
 	BitwiseOperations = types.SetWith(
 		backends.OpTypeBitwiseAnd,
 		backends.OpTypeBitwiseOr,
@@ -84,7 +84,7 @@ var (
 		backends.OpTypeTanh,
 	)
 
-	// FloatOrComplexOperations operates only on float or complex numbers, and won't work on integer or boolean values.
+	// FloatOrComplexOperations operates only on float or complex numbers and won't work on integer or boolean values.
 	FloatOrComplexOperations = types.SetWith(
 		backends.OpTypeExp,
 		backends.OpTypeExpm1,
@@ -105,7 +105,7 @@ var (
 		backends.OpTypeConj,
 	)
 
-	// StandardBinaryOperations include all operations that have two operands (usually named lhs (left-hand-side) and
+	// StandardBinaryOperations include all operations that have two operands usually named lhs (left-hand-side) and
 	// rhs (right-hand-side) and are usually commutative (invariant to order).
 	StandardBinaryOperations = types.SetWith(
 		backends.OpTypeAdd,
@@ -124,7 +124,7 @@ var (
 		backends.OpTypeMin,
 	)
 
-	// ComparisonOperations include all operations that takes two inputs and returns booleans with the results of
+	// ComparisonOperations include all operations that take two inputs and returns booleans with the results of
 	// a comparison.
 	ComparisonOperations = types.SetWith(
 		backends.OpTypeEqual,
@@ -139,7 +139,7 @@ var (
 		backends.OpTypeLessThanTotalOrder,
 	)
 
-	// StandardUnaryOperations include all operations that have a single operand as input and the return shape is the
+	// StandardUnaryOperations include all operations that have a single operand as input, and the return shape is the
 	// same as the input (so no reductions).
 	StandardUnaryOperations = types.SetWith(
 		backends.OpTypeLogicalNot,
@@ -169,7 +169,7 @@ var (
 )
 
 // BinaryOp returns the expected output shape for ops in the StandardBinaryOperations set -- those include all
-// operations that have two operands (usually named lhs (left-hand-side) and rhs (right-hand-side) and are usually
+// operations that have two operands usually named lhs (left-hand-side) and rhs (right-hand-side), and they are usually
 // commutative (invariant to order).
 //
 // It may throw (panic) an exception if the data type (shape.DType) is invalid for the operation -- e.g.: non-matching
@@ -253,7 +253,7 @@ func ComparisonOp(opType backends.OpType, lhsShape, rhsShape shapes.Shape) shape
 	return shape
 }
 
-// UnaryOp checks the validity of the data type for StandardUnaryOperations set, and throws an exception
+// UnaryOp checks the validity of the data type for StandardUnaryOperations set and throws an exception
 // (panic) in case of mismatch.
 //
 // It returns the same shape as the operand -- there is no broadcast on standard unary operations.
@@ -292,6 +292,7 @@ func UnaryOp(opType backends.OpType, operand shapes.Shape) shapes.Shape {
 // WhereOp returns the shape resulting from the Where operation.
 //
 // Shape constraints:
+//
 //  1. onTrue and onFalse must have the exact same shape.
 //  2. condition must either be a scalar or match the shape of onTrue and onFalse, except for the DType that
 //     must be Bool.
@@ -487,7 +488,7 @@ func GatherOp(operand, startIndices shapes.Shape, indexVectorAxis int, offsetOut
 			len(collapsedSliceAxes), len(offsetOutputAxes), operand.Rank())
 	}
 
-	// Check indexVectorAxis: it is ok if it is equal to startIndices.rank, in which case we assume an implicit extra axes of dimension 1.
+	// Check indexVectorAxis: it is ok if it is equal to startIndices.rank, in which case we assume implicit extra axes of dimension 1.
 	if indexVectorAxis < 0 || indexVectorAxis > operand.Rank() {
 		exceptions.Panicf("indexVectorAxis=%d is out of range for operand %s", indexVectorAxis, operand)
 	}
@@ -512,7 +513,7 @@ func GatherOp(operand, startIndices shapes.Shape, indexVectorAxis int, offsetOut
 
 	// Build output shape: the order is defined as:
 	//
-	// - Axes in offsetOutputAxes are preset as offset, and their dimension are taken sequentially from non-collapsed operand axes.
+	// - Axes in offsetOutputAxes are preset as offset, and their dimensions are taken sequentially from non-collapsed operand axes.
 	// - Remaining axes are filled in order from the batch axes, taken from startIndices.
 	output := shapes.Make(operand.DType)
 	output.Dimensions = make([]int, batchRank+len(offsetOutputAxes))
@@ -530,7 +531,7 @@ func GatherOp(operand, startIndices shapes.Shape, indexVectorAxis int, offsetOut
 	offsetDims := make([]int, 0, len(offsetOutputAxes))
 	for axis, sliceSize := range sliceSizes {
 		if setCollapsedAxes.Has(axis) {
-			// This is a collapsed axis, and not used as offset.
+			// This is a collapsed axis and not used as an offset.
 			continue
 		}
 		offsetDims = append(offsetDims, sliceSize)
@@ -609,7 +610,7 @@ func ConcatenateOp(inputs []shapes.Shape, axis int) shapes.Shape {
 // ScatterOp checks that the parameters are consistent. The output shape returned is the unchanged operand -- the scattered
 // updates are applied to the operand, but its shape is unchanged.
 //
-// The Scatter operations indicesAreSorted and uniqueIndices don't play a role on this.
+// The Scatter operations indicesAreSorted and uniqueIndices don't play a role in this.
 func ScatterOp(operand, indices, updates shapes.Shape, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int) shapes.Shape {
 	if operand.DType == dtypes.InvalidDType || indices.DType == dtypes.InvalidDType || updates.DType == dtypes.InvalidDType {
 		exceptions.Panicf("invalid shape for operand (%s), indices (%s) or updates (%s) for ScatterOp", operand, indices, updates)
@@ -665,6 +666,22 @@ func ScatterOp(operand, indices, updates shapes.Shape, indexVectorAxis int, upda
 	for i, axis := range insertedWindowAxes {
 		if axis < 0 || axis >= operand.Rank() {
 			exceptions.Panicf("insertedWindowAxes[%d]=%d must be in range [0, operand.Rank()=%d)", i, axis, operand.Rank())
+		}
+	}
+
+	// Validate that update dimensions fit into output dimensions.
+	insertedWindowAxesSet := types.SetWith(insertedWindowAxes...)
+	operandUpdatedWindowAxes := make([]int, 0, operand.Rank()-len(insertedWindowAxes))
+	for axis := range operand.Rank() {
+		if !insertedWindowAxesSet.Has(axis) {
+			operandUpdatedWindowAxes = append(operandUpdatedWindowAxes, axis)
+		}
+	}
+	for ii, updatesAxis := range updateWindowAxes {
+		operandAxis := operandUpdatedWindowAxes[ii]
+		if updates.Dimensions[updatesAxis] > operand.Dimensions[operandAxis] {
+			exceptions.Panicf("updates.Dimensions[axis=%d](%d) > operand.Dimensions[axis=%d](%d), updates won't fit into the operand",
+				updatesAxis, updates.Dimensions[updatesAxis], operandAxis, operand.Dimensions[operandAxis])
 		}
 	}
 	return operand

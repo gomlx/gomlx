@@ -485,13 +485,39 @@ func scatterMaxOrMinVJP(node, v *Node, _ shapes.Shape) []*Node {
 
 // BackendScatterMax exposes the raw backend ScatterMax operator.
 //
-// This should be internal and it is exposed only for debugging purposes, please don't rely on it. If it turns out you
-// need some functionality here that is not provided in ScatterMax, open an issue in GoMLX and we'll figure
-// a betterAPI.
+// This should be internal, and it is exposed only for testing and debugging purposes, please don't rely on it.
+// If it turns out you need some functionality here that is not provided in ScatterMax,
+// open an issue in GoMLX and we'll figure a betterAPI.
 //
 // Description in
-// https://openxla.org/xla/operation_semantics#gather
+// https://openxla.org/xla/operation_semantics#scatter
 func BackendScatterMax(operand, indices, updates *Node, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) *Node {
 	return backendScatterMax(operand, indices, updates, indexVectorAxis, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes,
+		indicesAreSorted, uniqueIndices)
+}
+
+// BackendScatterMin exposes the raw backend ScatterMin operator.
+//
+// This should be internal, and it is exposed only for testing and debugging purposes, please don't rely on it.
+// If it turns out you need some functionality here that is not provided in ScatterMin,
+// open an issue in GoMLX and we'll figure a betterAPI.
+//
+// Description in
+// https://openxla.org/xla/operation_semantics#scatter
+func BackendScatterMin(operand, indices, updates *Node, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) *Node {
+	return backendScatterMin(operand, indices, updates, indexVectorAxis, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes,
+		indicesAreSorted, uniqueIndices)
+}
+
+// BackendScatterSum exposes the raw backend ScatterSum operator.
+//
+// This should be internal, and it is exposed only for testing and debugging purposes, please don't rely on it.
+// If it turns out you need some functionality here that is not provided in ScatterSum,
+// open an issue in GoMLX and we'll figure a betterAPI.
+//
+// Description in
+// https://openxla.org/xla/operation_semantics#scatter
+func BackendScatterSum(operand, indices, updates *Node, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) *Node {
+	return backendScatterSum(operand, indices, updates, indexVectorAxis, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes,
 		indicesAreSorted, uniqueIndices)
 }

@@ -18,6 +18,13 @@ import (
 var (
 	// Shortcuts:
 
+	Bool = dtypes.Bool
+	I8   = dtypes.Int8
+	I32  = dtypes.Int32
+	F32  = dtypes.Float32
+	U64  = dtypes.Uint64
+	MS   = shapes.Make
+
 	// bf16 shortcut to create new BFloat16 numbers.
 	bf16 = bfloat16.FromFloat32
 )
@@ -331,4 +338,55 @@ func TestExecSpecialOps_ConvertDType(t *testing.T) {
 	}, float32(1.0))
 	fmt.Printf("\ty4=%s\n", y4.GoStr())
 	assert.Equal(t, true, y4.Value())
+}
+
+func TestExecSpecialOps_Scatter(t *testing.T) {
+	// Case 0: Typical scatter, except updates window is the first axis (usually it's the last)
+	y0 := graph.ExecOnce(backend, func(g *graph.Graph) *graph.Node {
+		operand := graph.Zeros(g, MS(F32, 2, 2, 5))
+		indices := graph.Const(g, [][]uint8{{0, 1}, {1, 0}})
+		// updates: we use an unconventional update window in axis 0, and the batch axis 1.
+		updates := graph.OnePlus(graph.IotaFull(g, MS(F32, 5, 2)))
+
+		indexVectorAxis := 1
+		updateWindowAxes := []int{0}
+		insertedWindowAxes := []int{0, 1}
+		scatterAxesToOperandAxes := []int{0, 1}
+		return graph.BackendScatterMax(operand, indices, updates, indexVectorAxis, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes, true, true)
+	})
+	fmt.Printf("\ty0=%s\n", y0.GoStr())
+	want := [][][]float32{{{0, 0, 0, 0, 0}, {1, 3, 5, 7, 9}}, {{2, 4, 6, 8, 10}, {0, 0, 0, 0, 0}}}
+	assert.Equal(t, want, y0.Value())
+
+	// Case 1: operand axes shuffled; Operand initialized with ones instead.
+	y1 := graph.ExecOnce(backend, func(g *graph.Graph) *graph.Node {
+		operand := graph.Ones(g, MS(F32, 2, 5, 2))
+		indices := graph.Const(g, [][]uint8{{0, 1}, {1, 0}})
+		// updates: we use an unconventional update window in axis 0, and the batch axis 1.
+		updates := graph.OnePlus(graph.IotaFull(g, MS(F32, 5, 2)))
+		indexVectorAxis := 1
+		updateWindowAxes := []int{0}
+		insertedWindowAxes := []int{0, 2}
+		scatterAxesToOperandAxes := []int{0, 2}
+		return graph.BackendScatterSum(operand, indices, updates, indexVectorAxis, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes, true, true)
+	})
+	fmt.Printf("\ty1=%s\n", y1.GoStr())
+	want = [][][]float32{{{1, 2}, {1, 4}, {1, 6}, {1, 8}, {1, 10}}, {{3, 1}, {5, 1}, {7, 1}, {9, 1}, {11, 1}}}
+	assert.Equal(t, want, y1.Value())
+
+	// Case 2: multi-dimension updates.
+	y2 := graph.ExecOnce(backend, func(g *graph.Graph) *graph.Node {
+		operand := graph.Ones(g, MS(dtypes.BFloat16, 2, 3, 2))
+		indices := graph.Const(g, [][]uint8{{0, 1}, {1, 0}})
+		updates := graph.AddScalar(graph.IotaFull(g, MS(dtypes.BFloat16, 2, 2, 2)), -4)
+		indexVectorAxis := 1
+		updateWindowAxes := []int{1, 2}
+		insertedWindowAxes := []int{0}
+		scatterAxesToOperandAxes := []int{0, 1}
+		return graph.BackendScatterMin(operand, indices, updates, indexVectorAxis, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes, true, true)
+	})
+	fmt.Printf("\ty2=%s\n", y2.GoStr())
+	want2 := [][][]bfloat16.BFloat16{{{bf16(1), bf16(1)}, {bf16(-4), bf16(-3)}, {bf16(-2), bf16(-1)}}, {{bf16(0), bf16(1)}, {bf16(1), bf16(1)}, {bf16(1), bf16(1)}}}
+	assert.Equal(t, want2, y2.Value())
+
 }
