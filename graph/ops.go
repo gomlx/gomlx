@@ -361,18 +361,20 @@ func BroadcastPrefix(x *Node, dims ...int) *Node {
 	return backendBroadcast(x, dims...)
 }
 
-// ExpandAndBroadcast combines InsertAxes and Broadcast of `x`, broadcasting it to the shape
-// given in newDimensions. Only new expanded axes or axes with dimension 1 can be broadcast
-// to new dimensions.
+// ExpandAndBroadcast combines ExpandAxes and broadcast of axes of `x`, the returned shape will be newDimensions.
+// Only newly expanded axes can be broadcast.
 //
-// `newDimensions` should have a rank larger than the rank of x, and the new axes in newDimensions
-// should be listed in expandedAxes. In other words: `x.Rank() + len(expandedAxes) == len(newDimensions)`.
+//   - newDimensions should have a rank larger than the rank of x, and the new axes in newDimensions
+//     should be listed in expandedAxes. In other words: `x.Rank() + len(expandedAxes) == len(newDimensions)`.
 //
-// For example:
+//   - expandedAxes refer to the axes in newDimensions that are expanded and going to be broadcast. The reminder
+//     dimensions in newDimensions much match the corresponding in x.
 //
-//		  x = Const(g, []int32{10, 20})
-//	   ExpandAndBroadcast(x, []int{2, 2}, []int{0})  // -> [][]int32{{10, 20}, {10, 20}}
-//	   ExpandAndBroadcast(x, []int{2, 2}, []int{0})  // -> [][]int32{{10, 10}, {20, 20}}
+// Example:
+//
+//	x = Const(g, []int32{10, 20})
+//	ExpandAndBroadcast(x, []int{2, 2}, []int{0})  // -> [][]int32{{10, 20}, {10, 20}}
+//	ExpandAndBroadcast(x, []int{2, 2}, []int{1})  // -> [][]int32{{10, 10}, {20, 20}}
 func ExpandAndBroadcast(x *Node, newDimensions []int, expandedAxes []int) (output *Node) {
 	_ = validateBuildingGraphFromInputs(x)
 	if x.Rank()+len(expandedAxes) != len(newDimensions) {
@@ -381,28 +383,34 @@ func ExpandAndBroadcast(x *Node, newDimensions []int, expandedAxes []int) (outpu
 	}
 
 	// Verify that the values of expandedAxis and create a map of the expanded axis.
-	expandedMap := make([]bool, len(newDimensions))
+	expandedSet := types.MakeSet[int](len(expandedAxes))
 	for ii, axis := range expandedAxes {
-		if axis < 0 {
-			axis = len(newDimensions) + axis
-		}
+		axis = adjustAxisToRank(axis, len(newDimensions))
 		if axis < 0 || axis >= len(newDimensions) {
 			exceptions.Panicf("expandedAxes (%v) defines a value out-of-range (%d-th value -> %d), they must be between 0 and len(newDimensions)=%d",
 				expandedAxes, ii, axis, len(newDimensions))
 		}
-		if expandedMap[axis] {
-			exceptions.Panicf("expandedAxes (%v) repeats an axis (%d-th value -> %d), they must be all unique and between 0 and len(newDimensions)=%d",
-				expandedAxes, ii, axis, len(newDimensions))
+		if expandedSet.Has(axis) {
+			exceptions.Panicf("expandedAxes (%v) repeats axis %d (expandedAxes[%d]), they must be all unique and between 0 and len(newDimensions)=%d",
+				expandedAxes, axis, ii, len(newDimensions))
 		}
-		expandedMap[axis] = true
+		expandedSet.Insert(axis)
 	}
 
 	var preservedAxes []int
 	if !x.Shape().IsScalar() {
 		preservedAxes = make([]int, 0, x.Rank())
-		for axis := 0; axis < len(newDimensions); axis++ {
-			if !expandedMap[axis] {
+		axisInX := 0
+		for axis, dim := range newDimensions {
+			if !expandedSet.Has(axis) {
 				preservedAxes = append(preservedAxes, axis)
+				if x.Shape().Dimensions[axisInX] != dim && x.Shape().Dimensions[axisInX] != 1 {
+					exceptions.Panicf("the values of newDimensions (%v) that are not expanded (not in expandedAxes) "+
+						"must match the corresponding value in x shape (%s) or be 1 (if broadcasting), "+
+						"but the value of newDimensions[%d]=%d does not match the value in x.Shape().Dimensions[%d]=%d",
+						newDimensions, x.Shape(), axis, dim, axisInX, x.Shape().Dimensions[axisInX])
+				}
+				axisInX++
 			}
 		}
 	}
@@ -464,11 +472,10 @@ func ConvertType(x *Node, dtype dtypes.DType) *Node {
 //
 // Usual implicit broadcasting rules don't apply. But it will broadcast in the following cases:
 //
-//  1. If onTrue or onFalse are a scalar, they are broadcast to the other (onFalse or onTrue respectively).
+//  1. If either onTrue or onFalse are a scalar, they are broadcast to the other (onFalse or onTrue respectively).
+//     If both are scalars, they will be broadcast to the shape of condition.
 //  2. If condition is a prefix to the shapes of onTrue/onFalse then condition is expanded to match.
 //     This is useful for masking of embeddings for instance.
-//
-// But it will implicitly broadcast a scalar value for onTrue or onFalse.
 func Where(condition, onTrue, onFalse *Node) *Node {
 	_ = validateBuildingGraphFromInputs(condition)
 	if condition.DType() != dtypes.Bool {
@@ -476,25 +483,39 @@ func Where(condition, onTrue, onFalse *Node) *Node {
 			condition.Shape())
 	}
 
-	// Broadcasting of condition when it's a prefix to one of the operands:
-	for _, operand := range []*Node{onTrue, onFalse} {
-		if !operand.IsScalar() && condition.Rank() < operand.Rank() {
-			// If condition's shape is a prefix to onTrue and onFalse, then simply broadcast to their shape.
-			// This allows masks to work for embeddings, which has one extra axis.
-			extraAxes := operand.Rank() - condition.Rank()
-			condition = InsertAxes(condition, xslices.SliceWithValue(extraAxes, -1)...)
-			condition = BroadcastToDims(condition, operand.Shape().Dimensions...)
-			break
+	// Find output shape:
+	outputShape := onTrue.Shape()
+	if outputShape.IsScalar() {
+		outputShape = onFalse.Shape()
+		if outputShape.IsScalar() {
+			outputShape = condition.Shape()
 		}
 	}
 
-	// Check validity of resulting shapes.
-	if (!onTrue.IsScalar() && !condition.Shape().EqualDimensions(onTrue.Shape())) ||
-		(!onFalse.IsScalar() && !condition.Shape().EqualDimensions(onFalse.Shape())) {
-		exceptions.Panicf(
-			"Where(condition, onTrue, onFalse) requires onTrue(%s)/onFalse(%s) to either be a scalar to have "+
-				"the same dimensions as condition (%s)",
-			onTrue.Shape(), onFalse.Shape(), condition.Shape())
+	// Broadcast onTrue and onFalse to the outputShape if needed.
+	if !onTrue.Shape().IsScalar() && !onFalse.Shape().IsScalar() && !onTrue.Shape().Equal(onFalse.Shape()) {
+		exceptions.Panicf("Where() requires onTrue (%s) and onFalse (%s) to either be the same shape or be a scalar",
+			onTrue.Shape(), onFalse.Shape())
+	}
+
+	// Broadcasting of condition when it's a prefix to one of the operands:
+	if !condition.IsScalar() {
+		if condition.Rank() > outputShape.Rank() {
+			exceptions.Panicf("Where() requires the condition shape (%s) to be a prefix (or equal) to the output shape (%s), onTrue is %s and onFalse is %s",
+				condition.Shape(), outputShape, onTrue.Shape(), onFalse.Shape())
+		}
+		for axis, dim := range condition.Shape().Dimensions {
+			if outputShape.Dimensions[axis] != dim {
+				exceptions.Panicf("Where() requires the condition shape to be a prefix (or equal) to the output shape, but condition is %s and output shape is %s",
+					condition.Shape(), outputShape)
+			}
+		}
+		if condition.Rank() != outputShape.Rank() {
+			// Broadcast condition.
+			extraAxes := outputShape.Rank() - condition.Rank()
+			condition = InsertAxes(condition, xslices.SliceWithValue(extraAxes, -1)...)
+			condition = BroadcastToDims(condition, outputShape.Dimensions...)
+		}
 	}
 
 	// Broadcasting of scalar onTrue or onFalse is done by the backend.

@@ -87,7 +87,7 @@
 //     in the middle of computation — handy to debug the math.
 package graph
 
-//go:generate go run ../cmd/graph_generator
+//go:generate go run ../internal/cmd/graph_generator
 
 import (
 	"fmt"

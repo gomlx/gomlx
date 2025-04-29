@@ -1,0 +1,250 @@
+package shapeinference
+
+import (
+	"fmt"
+	. "github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/stretchr/testify/require"
+	"testing"
+)
+
+// Aliases
+var (
+	Bool = dtypes.Bool
+	I8   = dtypes.Int8
+	I32  = dtypes.Int32
+	F32  = dtypes.Float32
+	U64  = dtypes.Uint64
+
+	MS = shapes.Make
+)
+
+func TestBinaryOp(t *testing.T) {
+	// Invalid data types check.
+	require.Panics(t, func() { BinaryOp(OpTypeLogicalAnd, MS(I8), MS(I8)) })
+	require.Panics(t, func() { BinaryOp(OpTypeMul, MS(Bool, 1), MS(Bool, 1)) })
+	require.Panics(t, func() { BinaryOp(OpTypeMul, MS(Bool, 1), MS(Bool, 1)) })
+	require.Panics(t, func() { BinaryOp(OpTypeBitwiseXor, MS(F32, 1), MS(F32, 1)) })
+
+	// Invalid operation type (not binary op).
+	require.Panics(t, func() { BinaryOp(OpTypeExp, MS(F32), MS(F32)) })
+
+	// The same shape should be ok.
+	intMatrixShape := MS(I8, 3, 3)
+	require.True(t, intMatrixShape.Equal(BinaryOp(OpTypeBitwiseOr, intMatrixShape, intMatrixShape)))
+
+	// Scalar with matrix.
+	scalarShape := MS(F32)
+	matrixShape := MS(F32, 2, 3)
+	expectedShape := MS(F32, 2, 3)
+	require.True(t, scalarShape.Equal(BinaryOp(OpTypeAdd, scalarShape, scalarShape)))
+	require.True(t, expectedShape.Equal(BinaryOp(OpTypeAdd, scalarShape, matrixShape)))
+
+	// Broadcasting on both sides.
+	shape1 := MS(F32, 2, 1, 3)
+	shape2 := MS(F32, 1, 4, 3)
+	expectedBroadcastShape := MS(F32, 2, 4, 3)
+	require.True(t, expectedBroadcastShape.Equal(BinaryOp(OpTypeMul, shape1, shape2)))
+
+	// Matrix with scalar.
+	require.True(t, expectedShape.Equal(BinaryOp(OpTypeAdd, matrixShape, scalarShape)))
+
+	// Invalid broadcasting shapes.
+	invalidShape1 := MS(F32, 2, 3)
+	invalidShape2 := MS(F32, 3, 2)
+	require.Panics(t, func() { BinaryOp(OpTypeAdd, invalidShape1, invalidShape2) })
+}
+
+func TestUnaryOp(t *testing.T) {
+	// Invalid data types check.
+	require.Panics(t, func() { UnaryOp(OpTypeLogicalNot, MS(F32)) })
+	require.Panics(t, func() { UnaryOp(OpTypeLogicalNot, MS(I8)) })
+	require.Panics(t, func() { UnaryOp(OpTypeBitwiseNot, MS(F32)) })
+	require.Panics(t, func() { UnaryOp(OpTypeNeg, MS(Bool)) })
+
+	// Invalid operation type (not unary op).
+	require.Panics(t, func() { UnaryOp(OpTypeAdd, MS(F32)) })
+	require.Panics(t, func() { UnaryOp(OpTypeNeg, MS(U64)) })
+
+	// Valid operations
+	boolShape := MS(Bool, 2, 3)
+	require.True(t, boolShape.Equal(UnaryOp(OpTypeLogicalNot, boolShape)))
+
+	intShape := MS(I8, 3, 3)
+	require.True(t, intShape.Equal(UnaryOp(OpTypeBitwiseNot, intShape)))
+
+	floatShape := MS(F32, 2, 3)
+	require.True(t, floatShape.Equal(UnaryOp(OpTypeExp, floatShape)))
+	require.True(t, floatShape.Equal(UnaryOp(OpTypeNeg, floatShape)))
+}
+
+func TestGatherOp(t *testing.T) {
+	// Test 1:
+	operand := MS(F32, 4, 3, 2, 2)
+	startIndices := MS(I8, 3, 3, 2)
+	indexVectorAxis := 1
+	offsetOutputAxes := []int{0, 3}
+	collapsedSliceAxes := []int{0, 2}
+	startIndexMap := []int{0, 2, 3}
+	sliceSizes := []int{1, 3, 1, 1}
+	output := GatherOp(operand, startIndices, indexVectorAxis,
+		offsetOutputAxes, collapsedSliceAxes, startIndexMap, sliceSizes, false)
+	fmt.Printf("\tTest 1: outputShape=%s\n", output)
+	require.NoError(t, output.Check(F32, 3, 3, 2, 1))
+
+	// Test 2:
+	operand = MS(F32, 3, 4, 5, 6)
+	startIndices = MS(U64, 7, 3, 8)
+	indexVectorAxis = 1
+	offsetOutputAxes = []int{1, 2}
+	collapsedSliceAxes = []int{1, 2}
+	startIndexMap = []int{1, 2, 3}
+	sliceSizes = []int{3, 1, 1, 1}
+	output = GatherOp(operand, startIndices, indexVectorAxis, offsetOutputAxes, collapsedSliceAxes, startIndexMap, sliceSizes, true)
+	fmt.Printf("\tTest 2: outputShape=%s\n", output)
+	require.NoError(t, output.Check(F32, 7, 3, 1, 8))
+
+	// Test 3:
+	operand = MS(F32, 8, 16)
+	startIndices = MS(U64, 8, 1)
+	indexVectorAxis = 1
+	offsetOutputAxes = []int{1}
+	collapsedSliceAxes = []int{0}
+	startIndexMap = []int{0}
+	sliceSizes = []int{1, 16}
+	output = GatherOp(operand, startIndices, indexVectorAxis, offsetOutputAxes, collapsedSliceAxes, startIndexMap, sliceSizes, true)
+	fmt.Printf("\tTest 3: outputShape=%s\n", output)
+	require.NoError(t, output.Check(F32, 8, 16))
+}
+
+func TestScatterOp(t *testing.T) {
+	// --- Valid Cases ---
+
+	// Case 1: Typical scatter (like TF ScatterNd)
+	// Scatter 2 updates of shape [5] into operand [4, 5]
+	// Indices shape [2, 1] indicates 2 indices, each pointing to 1 dimension (axis 0) of operand.
+	operand1 := MS(F32, 4, 5)
+	indices1 := MS(I8, 2, 1)  // Batch shape [2]
+	updates1 := MS(F32, 2, 5) // Batch shape [2]
+	indexVectorAxis1 := 1
+	updateWindowAxes1 := []int{1}
+	insertedWindowAxes1 := []int{0}
+	scatterAxesToOperandAxes1 := []int{0} // Index coordinate vector element 0 maps to operand axis 0
+	expected1 := operand1
+	output1 := ScatterOp(operand1, indices1, updates1, indexVectorAxis1, updateWindowAxes1, insertedWindowAxes1, scatterAxesToOperandAxes1)
+	require.True(t, expected1.Equal(output1), "Valid Case 1 Failed: Expected %s, got %s", expected1, output1)
+
+	// Case 2: Scattering into a higher-rank tensor
+	// Scatter updates of shape [4] into operand[i, j, :], where [i, j] comes from indices.
+	// Operand: [10, 9, 8] (Rank 3)
+	// Indices: [2, 3, 2] (Rank 3) -> 2x3 batch, each index is a pointer to the first 2 axes of the operand
+	// Updates: [2, 3, 8] (Rank 3) -> 2x3 batch, update window shape [8]
+	operand2 := MS(F32, 10, 9, 8)
+	indices2 := MS(I32, 2, 3, 2)             // 6 indices, each is a 2D coordinate
+	updates2 := MS(F32, 2, 3, 8)             // 6 updates, window shape [8] matching operand's last dim
+	indexVectorAxis2 := 2                    // Axis 2 of indices holds the coordinate vector [coord0, coord1]
+	updateWindowAxes2 := []int{2}            // Axis 2 of updates corresponds to the window shape [8]
+	insertedWindowAxes2 := []int{0, 1}       // Axis 0, 1 of operand are the dimensions determined by the indices[i,j,:]
+	scatterAxesToOperandAxes2 := []int{0, 1} // index coord 0 -> operand axis 0, index coord 1 -> operand axis 1
+	expected2 := operand2
+	output2 := ScatterOp(operand2, indices2, updates2, indexVectorAxis2, updateWindowAxes2, insertedWindowAxes2, scatterAxesToOperandAxes2)
+	require.True(t, expected2.Equal(output2), "Valid Case 2 Failed: Expected %s, got %s", expected2, output2)
+
+	// Case 3: Different indexVectorAxis
+	// Same as case 2, but indices are [2, 2, 3] -> indexVectorAxis is 1 and different order of axes in the operand.
+	operand3 := MS(F32, 10, 9, 8)
+	indices3 := MS(I32, 2, 2, 3) // 2x3 batch, index vector size 2, indexVecAxis=1
+	updates3 := MS(F32, 8, 2, 3) // Update axis [8] is "out-of-order", which should be fine.
+	indexVectorAxis3 := 1        // Index vector is now axis 1
+	updateWindowAxes3 := []int{0}
+	insertedWindowAxes3 := []int{1, 2}
+	scatterAxesToOperandAxes3 := []int{1, 2} // indices are used for different axes in the operand this time.
+	expected3 := operand2                    // Still expect operand shape
+	output3 := ScatterOp(operand3, indices3, updates3, indexVectorAxis3, updateWindowAxes3, insertedWindowAxes3, scatterAxesToOperandAxes3)
+	require.True(t, expected3.Equal(output3), "Valid Case 3 Failed (IndexVecAxis=1): Expected %s, got %s", expected3, output3)
+
+	// Case 4: No insertedWindowAxes (scattering full slices)
+	// Scatter updates of shape [9] into operand [10, 9]
+	operand4 := MS(F32, 10, 9)
+	indices4 := MS(I32, 6)                // 6 indices, coord size 1
+	updates4 := MS(F32, 6, 9)             // 6 updates, window shape [] (scalar)
+	indexVectorAxis4 := 1                 // == indices4.Rank() -> trigger extra virtual axes to indices4.
+	updateWindowAxes4 := []int{1}         // No window axes in updates (updates are scalars matching batch dims)
+	insertedWindowAxes4 := []int{0}       // No window axes in operand (index selects full slice - which is scalar here)
+	scatterAxesToOperandAxes4 := []int{0} // Index coord 0 -> operand axis 0
+	expected4 := operand4
+	output4 := ScatterOp(operand4, indices4, updates4, indexVectorAxis4, updateWindowAxes4, insertedWindowAxes4, scatterAxesToOperandAxes4)
+	require.True(t, expected4.Equal(output4), "Valid Case 4 Failed (No Window): Expected %s, got %s", expected4, output4)
+
+	// Case 5: rearranging the output axes:
+	operand5 := MS(F32, 2, 5, 2)
+	indices5 := MS(I32, 2, 2)
+	updates5 := MS(F32, 5, 2)
+	indexVectorAxis5 := 1
+	updateWindowAxes5 := []int{0}
+	insertedWindowAxes5 := []int{0, 2}
+	scatterAxesToOperandAxes5 := []int{0, 2}
+	output5 := ScatterOp(operand5, indices5, updates5, indexVectorAxis5, updateWindowAxes5, insertedWindowAxes5, scatterAxesToOperandAxes5)
+	require.True(t, operand5.Equal(output5), "Valid Case 5 Failed (No Window): Expected %s, got %s", operand5, output5)
+
+	// --- Error Cases ---
+
+	// Error Case 1: Mismatched DType (Operand vs Updates) - unchanged
+	require.Panics(t, func() {
+		ScatterOp(MS(F32, 4, 5), MS(I8, 2, 1), MS(I8, 2, 5), 1, []int{1}, []int{1}, []int{0})
+	}, "Error Case 1 Failed: Mismatched operand/updates DType")
+
+	// Error Case 2: Invalid DType for indices - unchanged
+	require.Panics(t, func() {
+		ScatterOp(MS(F32, 4, 5), MS(F32, 2, 1), MS(F32, 2, 5), 1, []int{1}, []int{1}, []int{0})
+	}, "Error Case 2 Failed: Invalid indices DType")
+
+	// Error Case 3: indexVectorAxis out of bounds
+	require.Panics(t, func() {
+		ScatterOp(operand1, indices1, updates1, 2, updateWindowAxes1, insertedWindowAxes1, scatterAxesToOperandAxes1) // indices1 rank 2, axis 2 invalid
+	}, "Error Case 3 Failed: indexVectorAxis out of bounds")
+	require.Panics(t, func() {
+		ScatterOp(operand1, indices1, updates1, -1, updateWindowAxes1, insertedWindowAxes1, scatterAxesToOperandAxes1) // Negative axis
+	}, "Error Case 3 Failed: negative indexVectorAxis")
+
+	// Error Case 4: len(updateWindowAxes) != len(insertedWindowAxes)
+	require.Panics(t, func() {
+		ScatterOp(operand1, indices1, updates1, indexVectorAxis1, []int{1}, []int{1, 0}, scatterAxesToOperandAxes1) // inserted has len 2, update has len 1
+	}, "Error Case 4 Failed: len(updateWindowAxes) != len(insertedWindowAxes)")
+
+	// Error Case 5: len(scatterAxesToOperandAxes) != size of index vector dimension
+	require.Panics(t, func() {
+		// indices1 shape [2, 1], indexVectorAxis1=1 -> index vector size is 1
+		ScatterOp(operand1, indices1, updates1, indexVectorAxis1, updateWindowAxes1, insertedWindowAxes1, []int{0, 1}) // scatterAxes has len 2, expected 1
+	}, "Error Case 5 Failed: len(scatterAxesToOperandAxes) mismatch")
+	require.Panics(t, func() {
+		// indices2 shape [2, 3, 2], indexVectorAxis2=2 -> index vector size is 2
+		ScatterOp(operand2, indices2, updates2, indexVectorAxis2, updateWindowAxes2, insertedWindowAxes2, []int{0}) // scatterAxes has len 1, expected 2
+	}, "Error Case 5 Failed: len(scatterAxesToOperandAxes) mismatch")
+
+	// Error Case 6: Invalid axis index in updateWindowAxes
+	require.Panics(t, func() {
+		// updates1 shape [2, 5], rank 2
+		ScatterOp(operand1, indices1, updates1, indexVectorAxis1, []int{2}, insertedWindowAxes1, scatterAxesToOperandAxes1) // axis 2 invalid for rank 2 updates
+	}, "Error Case 6 Failed: Invalid axis in updateWindowAxes")
+
+	// Error Case 7: Invalid axis index in insertedWindowAxes
+	require.Panics(t, func() {
+		// operand1 shape [4, 5], rank 2
+		ScatterOp(operand1, indices1, updates1, indexVectorAxis1, updateWindowAxes1, []int{2}, scatterAxesToOperandAxes1) // axis 2 invalid for rank 2 operand
+	}, "Error Case 7 Failed: Invalid axis in insertedWindowAxes")
+
+	// Error Case 8: Invalid axis index in scatterAxesToOperandAxes
+	require.Panics(t, func() {
+		// operand1 shape [4, 5], rank 2
+		ScatterOp(operand1, indices1, updates1, indexVectorAxis1, updateWindowAxes1, insertedWindowAxes1, []int{2}) // axis 2 invalid for rank 2 operand
+	}, "Error Case 8 Failed: Invalid axis in scatterAxesToOperandAxes")
+
+	// Error Case 9: Update dimension is larger than the corresponding dimension in the operand:
+	require.Panics(t, func() {
+		// operand1 shape [4, 5], rank 2
+		ScatterOp(operand5, indices5, updates5, indexVectorAxis5, updateWindowAxes5, []int{0, 1}, scatterAxesToOperandAxes5) // axis 2 invalid for rank 2 operand
+	}, "Error Case 9 Failed: Update dimension is larger than the corresponding dimension in the operand")
+
+}

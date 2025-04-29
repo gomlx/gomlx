@@ -44,6 +44,9 @@ import (
 //   - `o_1, ..., o_O` come from indices, and are enumerations of the slices from params to gather.
 //   - `s_1, ..., s_S` are the slice sizes copied from params.
 //
+// indicesAreSorted can be set if you know the indices in start are sorted, in some backends this allows
+// for optimizations. If not set it default to false.
+//
 // For example:
 //
 //	params := [][]float32{{0, 1, 2}, {3, 4, 5}, {6, 7, 8}}
@@ -52,7 +55,7 @@ import (
 //
 // In the case above params shapes is interpreted as `[i_1=3, s_1=3]`, and indices' shapes is
 // `[o_1=2, N=1]`. The output shapes is `[o_1=2, s_1=3]`.
-func Gather(params, indices *Node) *Node {
+func Gather(params, indices *Node, indicesAreSorted ...bool) *Node {
 	_ = validateBuildingGraphFromInputs(params, indices)
 	if params.IsScalar() {
 		Panicf("cannot Gather from scalar or tuple, params shapes is %s", params.Shape())
@@ -64,6 +67,9 @@ func Gather(params, indices *Node) *Node {
 	// If indices is a scalar, simply convert it to shapes `[1]`.
 	if indices.IsScalar() {
 		indices = InsertAxes(indices, 0)
+	}
+	if len(indicesAreSorted) > 1 {
+		Panicf("Gather() optional indicesAreSorted takes only one value, %d were defined", len(indicesAreSorted))
 	}
 
 	// Check ranks are compatible.
@@ -106,7 +112,7 @@ func Gather(params, indices *Node) *Node {
 	// Make no assumptions about indices being sorted or unique.
 	// TODO: add version where these can be set.
 	return backendGather(params, indices, indexVectorDim, offsetDims, collapsedSliceDims, startIndexMap, sliceSizes,
-		false)
+		len(indicesAreSorted) == 1 && indicesAreSorted[0])
 }
 
 // GatherSlices from inputNodes. Each axis listed in slicedAxes have corresponding start position and size for each
@@ -127,15 +133,18 @@ func Gather(params, indices *Node) *Node {
 //     batch example, and add the size 1 slice.
 //     This can be done manually today.
 //
+// indicesAreSorted can be set if you know the indices in start are sorted, in some backends this allows
+// for optimizations.
+//
 // Example:
 //
 //		x := IotaFull(g, shapes.Make(dtypes.Float64, 3, 10, 10))  // 300 in total.
 //		start := Const(g, [][]int32{{0, 3}, {1, 2}})  // 2 slices
 //		sizes := []int{1, 3}
-//		slices := GatherSlices(x, []int{1,2}, start, sizes)  // Axis=0 is taken in full.
+//		slices := GatherSlices(x, []int{1,2}, start, sizes, true)  // Axis=0 is taken in full.
 //	    slices.AssertDims(2, 3, 1, 2)  // 2 slices, Axis=0 taken in full (3), and each slice of dimensions (1, 2).
 //		// Result would be [][][][]int32{{{0, 1, 2, 3, 4}}, {{30, 31, 32, 33, 34}}, {{40, 41, 42, 43, 44}}}
-func GatherSlices(input *Node, slicedAxes []int, start *Node, sizes []int) (gathered *Node) {
+func GatherSlices(input *Node, slicedAxes []int, start *Node, sizes []int, indicesAreSorted bool) (gathered *Node) {
 	_ = validateBuildingGraphFromInputs(input, start)
 	if input.Shape().IsScalar() || input.Shape().IsTuple() {
 		Panicf("cannot GatherSlices from scalar or tuple, input shapes is %s", input.Shape())
@@ -203,19 +212,31 @@ func GatherSlices(input *Node, slicedAxes []int, start *Node, sizes []int) (gath
 		sliceSizes[axis] = size
 	}
 
-	// * offsetDims must point for each input axis that is not collapsed, the output Node. Since we don't collapse any of the
+	// * offsetOutputAxes must have one output axis value for each input axis that is not collapsed. Since we don't collapse any of the
 	//   input dimensions, all the input axes need to be mapped. Notice that this preserves the order of the axis given by
 	//   the input (the order in `slicedAxes` will be ignored).
-	offsetDims := make([]int, 0, numSlicedAxes)
+	offsetOutputAxes := make([]int, 0, numSlicedAxes)
 	var collapsedSliceDims []int // Left empty.
 	for ii := 0; ii < inputRank; ii++ {
 		axis := ii + outputPrefixRank
-		offsetDims = append(offsetDims, axis)
+		offsetOutputAxes = append(offsetOutputAxes, axis)
 	}
 
 	// Make no assumptions about indices being sorted or unique.
 	// TODO: add version where these can be set.
-	return backendGather(input, start, indexVectorDim, offsetDims, collapsedSliceDims, startIndexMap, sliceSizes, false)
+	return backendGather(input, start, indexVectorDim, offsetOutputAxes, collapsedSliceDims, startIndexMap, sliceSizes, indicesAreSorted)
+}
+
+// BackendGather exposes the raw backend Gather operator.
+//
+// This should be internal and it is exposed only for debugging purposes, please don't rely on it. If it turns out you
+// need some functionality here that is not provided in Gather or GatherSlices, open an issue in GoMLX and we'll figure
+// a betterAPI.
+//
+// See convoluted and circular description in
+// https://openxla.org/xla/operation_semantics#gather
+func BackendGather(operand *Node, startIndices *Node, indexVectorAxis int, offsetAxes []int, collapsedSliceAxes []int, startIndexMap []int, sliceSizes []int, indicesAreSorted bool) (node *Node) {
+	return backendGather(operand, startIndices, indexVectorAxis, offsetAxes, collapsedSliceAxes, startIndexMap, sliceSizes, indicesAreSorted)
 }
 
 // GatherWithBatchDims values in params from pointers in indices.
@@ -435,7 +456,7 @@ func scatterSumVJP(node, v *Node, _ shapes.Shape) []*Node {
 	_ = scatterIndices
 	_ = operand
 	operandVJP := v // Since it's a sum of the initial values, the VJP is the identity of the gradient coming in.
-	updatesVJP := Gather(v, scatterIndices)
+	updatesVJP := Gather(v, scatterIndices, params.indicesAreSorted)
 	return []*Node{ /*operand*/ operandVJP /*indices*/, nil /*initialValue*/, updatesVJP}
 }
 
@@ -443,15 +464,60 @@ func scatterSumVJP(node, v *Node, _ shapes.Shape) []*Node {
 // Note: this may not work for the more general scatter form.
 func scatterMaxOrMinVJP(node, v *Node, _ shapes.Shape) []*Node {
 	operand, scatterIndices, updates := node.inputNodes[0], node.inputNodes[1], node.inputNodes[2]
+	var indicesAreSorted bool
+	if node.Type() == NodeTypeScatterMax {
+		indicesAreSorted = node.inputs.(*nodeInputsScatterMax).indicesAreSorted
+	} else if node.Type() == NodeTypeScatterMin {
+		indicesAreSorted = node.inputs.(*nodeInputsScatterMin).indicesAreSorted
+	}
 
 	// For the operand, we propagate v only if the operand value was chosen as max value.
 	operandMask := Equal(node, operand)
 	operandVJP := Where(operandMask, v, ZerosLike(v))
 
 	// For the updates, we pick them only if they were chosen as max value.
-	maxForUpdates := Gather(node, scatterIndices)
+	maxForUpdates := Gather(node, scatterIndices, indicesAreSorted)
 	updatesMask := Equal(maxForUpdates, updates)
 	updatesVJP := Gather(v, scatterIndices)
 	updatesVJP = Where(updatesMask, updatesVJP, ZerosLike(updatesVJP))
 	return []*Node{ /*operand*/ operandVJP /*indices*/, nil /*initialValue*/, updatesVJP}
+}
+
+// BackendScatterMax exposes the raw backend ScatterMax operator.
+//
+// This should be internal, and it is exposed only for testing and debugging purposes, please don't rely on it.
+// If it turns out you need some functionality here that is not provided in ScatterMax,
+// open an issue in GoMLX and we'll figure a betterAPI.
+//
+// Description in
+// https://openxla.org/xla/operation_semantics#scatter
+func BackendScatterMax(operand, indices, updates *Node, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) *Node {
+	return backendScatterMax(operand, indices, updates, indexVectorAxis, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes,
+		indicesAreSorted, uniqueIndices)
+}
+
+// BackendScatterMin exposes the raw backend ScatterMin operator.
+//
+// This should be internal, and it is exposed only for testing and debugging purposes, please don't rely on it.
+// If it turns out you need some functionality here that is not provided in ScatterMin,
+// open an issue in GoMLX and we'll figure a betterAPI.
+//
+// Description in
+// https://openxla.org/xla/operation_semantics#scatter
+func BackendScatterMin(operand, indices, updates *Node, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) *Node {
+	return backendScatterMin(operand, indices, updates, indexVectorAxis, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes,
+		indicesAreSorted, uniqueIndices)
+}
+
+// BackendScatterSum exposes the raw backend ScatterSum operator.
+//
+// This should be internal, and it is exposed only for testing and debugging purposes, please don't rely on it.
+// If it turns out you need some functionality here that is not provided in ScatterSum,
+// open an issue in GoMLX and we'll figure a betterAPI.
+//
+// Description in
+// https://openxla.org/xla/operation_semantics#scatter
+func BackendScatterSum(operand, indices, updates *Node, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) *Node {
+	return backendScatterSum(operand, indices, updates, indexVectorAxis, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes,
+		indicesAreSorted, uniqueIndices)
 }

@@ -1,4 +1,4 @@
-// xla_generator generates the xla.Backend implementation based on the github.com/gomlx/gopjrt/xlabuilder implementation.
+// backends_generator generates parts of the backends.Builder interface based on the github.com/gomlx/gopjrt/xlabuilder implementation.
 //
 // Although GoMLX can support more than one backend, the XlaBuilder is the reference implementation for now.
 //
@@ -8,13 +8,13 @@ package main
 
 import (
 	"fmt"
-	"github.com/gomlx/gomlx/cmd/backends_generator/parsexlabuilder"
+	"github.com/gomlx/gomlx/internal/cmd/backends_generator/parsexlabuilder"
 )
 
 func main() {
-	fmt.Println("xla_generator:")
+	fmt.Println("notimplemented_generator:")
 	opsInfo := parsexlabuilder.ReadOpsInfo()
 	_ = opsInfo
 	extractor, xlaBuilderAst := parsexlabuilder.Parse()
-	GenerateStandardOpsImplementation(extractor, xlaBuilderAst)
+	GenerateStandardOpsInterface(extractor, xlaBuilderAst)
 }

@@ -276,7 +276,7 @@ func UNetModelGraph(ctx *context.Context, nanLogger *nanlogger.NanLogger, noisyI
 	if flowerEmbedSize > 0 {
 		flowerTypeEmbed := layers.Embedding(
 			nextCtx("FlowerEmbeddings").WithInitializer(initializers.RandomNormalFn(ctx, 1.0/float64(flowerEmbedSize))),
-			flowerIds, dtype, flowers.NumLabels, flowerEmbedSize)
+			flowerIds, dtype, flowers.NumLabels, flowerEmbedSize, false)
 		nanLogger.Trace(flowerTypeEmbed, "UNetModelGraph:flowerTypeEmbed")
 		contextFeatures = Concatenate([]*Node{contextFeatures, flowerTypeEmbed}, -1)
 	}

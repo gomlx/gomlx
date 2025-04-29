@@ -25,6 +25,7 @@ type Backend struct {
 	client           *pjrt.Client
 	pluginName       string
 	hasSharedBuffers bool
+	capabilities     backends.Capabilities
 }
 
 // AssertValid will panic if the backend is not valid: if it's nil or has already been finalized.
@@ -211,4 +212,9 @@ func (backend *Backend) BufferData(buffer backends.Buffer) (flat any) {
 		panic(errors.WithMessagef(err, "failed to access buffer data directly, maybe not supported by backend?"))
 	}
 	return
+}
+
+// Capabilities returns information about what is supported by this backend.
+func (backend *Backend) Capabilities() backends.Capabilities {
+	return backend.capabilities
 }

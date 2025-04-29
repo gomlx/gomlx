@@ -50,7 +50,7 @@ import (
 	"k8s.io/klog/v2"
 	"time"
 
-	_ "github.com/gomlx/gomlx/backends/xla"
+	_ "github.com/gomlx/gomlx/backends/default"
 )
 
 var (
@@ -280,7 +280,7 @@ func ModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 			embedCtx := ctx.In(fmt.Sprintf("categorical_%d_%s", catIdx, adult.Data.VocabulariesFeatures[catIdx]))
 			vocab := adult.Data.Vocabularies[catIdx]
 			vocabSize := len(vocab)
-			embedding := layers.Embedding(embedCtx, split, ModelDType, vocabSize, *flagEmbeddingDim)
+			embedding := layers.Embedding(embedCtx, split, ModelDType, vocabSize, *flagEmbeddingDim, false)
 			embedding.AssertDims(batchSize, *flagEmbeddingDim) // 2-dim tensor, with batch size as the leading dimension.
 			allEmbeddings = append(allEmbeddings, embedding)
 		}

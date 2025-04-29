@@ -29,6 +29,8 @@ type Builder interface {
 	Name() string
 
 	// OpShape returns the shape of a computation Op.
+	// Notice this is not an operation, it returns the shape in graph building type.
+	// One can use the shape and create a constant out of it.
 	OpShape(op Op) shapes.Shape
 
 	// Parameter creates an input parameter for the computation.
@@ -147,13 +149,7 @@ const (
 	FFTInverseReal
 )
 
-// Enumer can be installed with:
-//
-//	go install github.com/dmarkham/enumer@latest
-//
-// With go 1.24 we will add this to go tools support.
-
-//go:generate enumer -type FFTType -trimprefix=FFT
+//go:generate go tool enumer -type FFTType -trimprefix=FFT builder.go
 
 // ReduceOpType select among the basic types of reduction supported, see XlaBuilder.ReduceComputation.
 type ReduceOpType int
@@ -175,10 +171,4 @@ const (
 	ReduceOpMin
 )
 
-// Enumer can be installed with:
-//
-//	go install github.com/dmarkham/enumer@latest
-//
-// With go 1.24 we will add this to go tools support.
-
-//go:generate enumer -type ReduceOpType -trimprefix=ReduceOp
+//go:generate go tool enumer -type ReduceOpType -trimprefix=ReduceOp builder.go

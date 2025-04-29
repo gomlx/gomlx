@@ -159,7 +159,7 @@ func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inpu
 			// Gather values from frozen paperEmbeddings. Mask remains unchanged.
 			indices := DivScalar(graphInputs[name].Value, float64(splitEmbedTables))
 			embedded := layers.Embedding(ctxEmbed.In("institutions"), indices,
-				dtypeEmbed, (NumInstitutions+splitEmbedTables-1)/splitEmbedTables, institutionsEmbedSize)
+				dtypeEmbed, (NumInstitutions+splitEmbedTables-1)/splitEmbedTables, institutionsEmbedSize, false)
 			if graphInputs[name].Mask != nil {
 				embedMask := layers.DropoutStatic(ctx, graphInputs[name].Mask, embedDropoutRate)
 				embedded = Where(embedMask, embedded, ZerosLike(embedded)) // Apply mask.
@@ -178,7 +178,8 @@ func FeaturePreprocessing(ctx *context.Context, strategy *sampler.Strategy, inpu
 			// Gather values from frozen paperEmbeddings. Mask remains unchanged.
 			indices := DivScalar(graphInputs[name].Value, float64(splitEmbedTables))
 			embedded := layers.Embedding(ctxEmbed.In("fields_of_study"),
-				indices, dtypeEmbed, (NumFieldsOfStudy+splitEmbedTables-1)/splitEmbedTables, fieldsOfStudyEmbedSize)
+				indices, dtypeEmbed, (NumFieldsOfStudy+splitEmbedTables-1)/splitEmbedTables,
+				fieldsOfStudyEmbedSize, false)
 
 			if graphInputs[name].Mask != nil {
 				embedMask := layers.DropoutStatic(ctx, graphInputs[name].Mask, embedDropoutRate)

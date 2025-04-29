@@ -35,7 +35,7 @@ func EmbedTokensGraph(ctx *context.Context, tokens *Node) (embed, mask *Node) {
 
 	// Embed tokens: shape=[batchSize, maxLen, embedDim]
 	tokensEmbedSize := context.GetParamOr(ctx, "imdb_token_embedding_size", 32)
-	embed = layers.Embedding(ctx.In("tokens"), tokens, DType, maxVocab, tokensEmbedSize)
+	embed = layers.Embedding(ctx.In("tokens"), tokens, DType, maxVocab, tokensEmbedSize, false)
 	embed = Where(BroadcastToShape(mask, embed.Shape()), embed, ZerosLike(embed))
 
 	wordDropoutRate := context.GetParamOr(ctx, "imdb_word_dropout_rate", 0.0)

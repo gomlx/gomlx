@@ -20,9 +20,9 @@ func init() {
 	klog.InitFlags(nil)
 	ctx := createDefaultContext()
 	flagSettings = commandline.CreateContextSettingsFlag(ctx, "")
-	if _, found := os.LookupEnv(backends.GOMLX_BACKEND); !found {
+	if _, found := os.LookupEnv(backends.ConfigEnvVar); !found {
 		// For testing, we use the CPU backend (and avoid GPU if not explicitly requested).
-		must.M(os.Setenv(backends.GOMLX_BACKEND, "cpu"))
+		must.M(os.Setenv(backends.ConfigEnvVar, "xla:cpu"))
 	}
 }
 

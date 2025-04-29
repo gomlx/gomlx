@@ -50,7 +50,7 @@ func TestGather(t *testing.T) {
 		// numbers=(Float64)[5 3]: [[0 1 2] [3 4 5] [6 7 8] [9 10 11] [12 13 14]]
 		numbers := IotaFull(g, MakeShape(F64, 5, 3))
 		indices := Const(g, 1)
-		gather := Gather(numbers, indices)
+		gather := Gather(numbers, indices, true)
 		g.Compile(gather)
 		got := g.Run()[0]
 		fmt.Printf("\t\tGather=%v\n", got)
@@ -78,7 +78,7 @@ func TestGather(t *testing.T) {
 		// numbers=(Float64)[5 3]: [[0 1 2] [3 4 5] [6 7 8] [9 10 11] [12 13 14]]
 		numbers := IotaFull(g, MakeShape(F64, 5, 3))
 		indices := Const(g, [][][]int{{{2}, {0}}, {{2}, {1}}})
-		gather := Gather(numbers, indices)
+		gather := Gather(numbers, indices, false)
 		g.Compile(gather)
 		got := g.Run()[0]
 		fmt.Printf("\t\tGather=%v\n", got)
@@ -99,7 +99,6 @@ func TestGather(t *testing.T) {
 		want := [][][]float64{{{8, 9}, {10, 11}}, {{0, 1}, {2, 3}}, {{4, 5}, {6, 7}}, {{12, 13}, {14, 15}}}
 		require.Equalf(t, want, got.Value(), "Gather: want %v, got %v", want, got)
 	}
-
 }
 
 func TestGatherSlices(t *testing.T) {
@@ -108,7 +107,7 @@ func TestGatherSlices(t *testing.T) {
 			input = IotaFull(g, shapes.Make(dtypes.Float32, 4, 5))
 			start := Const(g, [][]int32{{0}, {1}, {0}}) // Slice from rows 0, 2 and 0 of each example in the batch.
 			sizes := []int{1}                           // Take only one row per start.
-			output = GatherSlices(input, []int{0}, start, sizes)
+			output = GatherSlices(input, []int{0}, start, sizes, true)
 			return
 		}, [][][]float32{{{0, 1, 2, 3, 4}}, {{5, 6, 7, 8, 9}}, {{0, 1, 2, 3, 4}}})
 
@@ -117,7 +116,8 @@ func TestGatherSlices(t *testing.T) {
 			input = IotaFull(g, shapes.Make(dtypes.Float32, 4, 3))
 			start := Const(g, [][]int32{{0}, {1}}) // Slice from rows 0 and 1.
 			sizes := []int{2}                      // Take two rows per start.
-			output = GatherSlices(input, []int{0}, start, sizes)
+			output = GatherSlices(input, []int{0}, start, sizes, true)
+			return
 			return
 		}, [][][]float32{{{0, 1, 2}, {3, 4, 5}}, {{3, 4, 5}, {6, 7, 8}}})
 
@@ -126,7 +126,7 @@ func TestGatherSlices(t *testing.T) {
 			input = IotaFull(g, shapes.Make(dtypes.Float32, 4, 10))
 			start := Const(g, []int32{1, 1}) // Slice in middle of matrix.
 			sizes := []int{2, 3}             // Take a sub-matrix
-			output = GatherSlices(input, []int{0, 1}, start, sizes)
+			output = GatherSlices(input, []int{0, 1}, start, sizes, true)
 			return
 		}, [][]float32{{11, 12, 13}, {21, 22, 23}})
 }

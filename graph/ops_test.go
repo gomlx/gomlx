@@ -439,7 +439,7 @@ func TestDot(t *testing.T) {
 func TestBroadcast(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 	{
-		g := NewGraph(backend, "")
+		g := NewGraph(backend, "BroadcastToDims")
 		input := Const(g, 7)
 		BroadcastToDims(input, 2, 3) // Last node created in the graph is taken as output by default.
 		got := compileRunAndTakeFirst(t, g)
@@ -448,7 +448,7 @@ func TestBroadcast(t *testing.T) {
 	}
 
 	{
-		g := NewGraph(backend, "")
+		g := NewGraph(backend, "BroadcastPrefix")
 		input := Const(g, []float32{1.1, 1.2})
 		BroadcastPrefix(input, 2, 1) // The last node created in the graph is taken as output by default.
 		got := compileRunAndTakeFirst(t, g)
@@ -469,6 +469,19 @@ func TestBroadcast(t *testing.T) {
 			output = ExpandAndBroadcast(input, []int{2, 2}, []int{1})
 			return
 		}, [][]int32{{10, 10}, {20, 20}})
+
+	// Test broadcasting new axes as well as existing axes with dimension 1.
+	graphtest.RunTestGraphFn(t, "ExpandAndBroadcast() 2", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = []*Node{Const(g, [][]float32{{1, 2}})}
+		outputs = []*Node{ExpandAndBroadcast(inputs[0], []int{3, 2, 2}, []int{0})}
+		return
+	}, []any{
+		[][][]float32{
+			{{1, 2}, {1, 2}},
+			{{1, 2}, {1, 2}},
+			{{1, 2}, {1, 2}},
+		},
+	}, -1)
 
 }
 

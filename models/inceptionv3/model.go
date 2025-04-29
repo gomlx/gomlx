@@ -220,13 +220,7 @@ func (cfg *Config) ClassificationTop(useTop bool) *Config {
 // Pooling to be used at the top of the model
 type Pooling int
 
-// Enumer can be installed with:
-//
-//	go install github.com/dmarkham/enumer@latest
-//
-// With go 1.24 we will add this to go tools support.
-
-//go:generate enumer -type=Pooling
+//go:generate go tool enumer -type=Pooling model.go
 
 const (
 	NoPooling Pooling = iota

@@ -2,8 +2,21 @@
 
 # Next:
 
+* Package `backends`:
+  * Added `simplego`, a portable, simple albeit slow backend.
+    * Implemented ~50 most common ops, see `backends/simplego/capabilities`, and most common numeric types (including BFloat16).
+  * Added sub-package `notimplemented`: helper to implement new backends.
+  * Added sub-package `shapeinference`: helper to implement new backends.
+  * Added sub-package `default` which includes the default packages.
+  * Added `List()` function to returned the currently registered (compiled-in) backends.
 * Package `checkpoints`
   * Added `Config.FromEmbed` that allows loading a checkpoint from an embedded variable.
+* Package `graph`:
+  * `Gather` and `GatherSlices` now have and extra argument called `indicesAreSorted` that tells whether
+    the start indices are guaranteed to be sorted, which allows some optimizations in some platforms.
+  * Exposed `BackendGather`, `BackendScatterMax`, `BackendScatterMin` and `BackendScatterSum` for test and debugging
+    purposes.
+* Moved code generation tools from `cmd` to `internal/cmd` directory.
 
 # v0.18.1: 2025/04/13 Many fixes, XLA update, Tensor clone.
 

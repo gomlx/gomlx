@@ -139,7 +139,7 @@ func TestGradientGather(t *testing.T) {
 	graphtest.RunTestGraphFn(t, "Gradient Gather",
 		func(g *Graph) (inputs, outputs []*Node) {
 			numbers := IotaFull(g, MakeShape(F64, 5, 3))
-			gather := Gather(numbers, ScalarOne(g, dtypes.Int64))
+			gather := Gather(numbers, ScalarOne(g, dtypes.Int64), true)
 			gradients := Gradient(ReduceAllSum(gather), numbers)
 			inputs = []*Node{numbers}
 			outputs = []*Node{gather, gradients[0]}
@@ -154,7 +154,7 @@ func TestGradientGather(t *testing.T) {
 			numbers := IotaFull(g, MakeShape(F64, 5, 3))
 			numbersMul := Mul(numbers, Add(IotaFull(g, MakeShape(F64, 5, 1)), Const(g, 1.0)))
 			indices := Const(g, [][]int{{2}, {0}})
-			gather := Gather(numbersMul, indices)
+			gather := Gather(numbersMul, indices, false)
 			gradients := Gradient(ReduceAllSum(gather), numbers)
 			inputs = []*Node{numbers}
 			outputs = []*Node{gather, gradients[0]}
@@ -169,7 +169,7 @@ func TestGradientGather(t *testing.T) {
 		func(g *Graph) (inputs, outputs []*Node) {
 			numbers := IotaFull(g, MakeShape(F64, 5, 3))
 			indices := Const(g, [][][]int{{{2}, {0}}, {{2}, {1}}})
-			gather := Gather(numbers, indices)
+			gather := Gather(numbers, indices, false)
 			gradients := Gradient(ReduceAllSum(gather), numbers)
 			inputs = []*Node{numbers}
 			outputs = []*Node{gather, gradients[0]}
@@ -444,7 +444,7 @@ func TestGradientGatherSlices(t *testing.T) {
 			input := IotaFull(g, shapes.Make(dtypes.Float32, 3, 2, 4))
 			start := Const(g, [][]int32{{0, 1}, {1, 2}})
 			sizes := []int{1, 2} // Take a sub-matrix
-			output = GatherSlices(input, []int{1, 2}, start, sizes)
+			output = GatherSlices(input, []int{1, 2}, start, sizes, true)
 			return output, []*Node{input}
 		}, []any{
 			[][][]float32{

@@ -3,7 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"github.com/gomlx/gomlx/cmd/backends_generator/parsexlabuilder"
+	"github.com/gomlx/gomlx/internal/cmd/backends_generator/parsexlabuilder"
 	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/janpfeifer/must"
