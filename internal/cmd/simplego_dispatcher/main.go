@@ -56,6 +56,7 @@ var (
 			{"combineSumDTypeMap", "combineForScatterSumGeneric", makeDTypes(true, true, true, false, false)},
 			{"scatterDTypeMap", "execScatterGeneric", makeDTypes(true, true, true, true, false)},
 			{"dereferenceIntsDTypeMap", "dereferenceIntsGeneric", makeDTypes(true, true, false, false, false)},
+			{"sliceDTypeMap", "execSliceGeneric", makeDTypes(true, true, true, true, true)},
 		},
 		PairMaps: []MapPairInfo{
 			// Various ConvertDType instantiations.

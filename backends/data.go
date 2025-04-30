@@ -13,6 +13,8 @@ type Buffer any
 type DataInterface interface {
 	// BufferFinalize allows client to inform backend that buffer is no longer needed and associated resources can be
 	// freed immediately.
+	//
+	// A finalized buffer should never be used again. Preferably, the caller should set its references to it to nil.
 	BufferFinalize(buffer Buffer)
 
 	// BufferShape returns the shape for the buffer.

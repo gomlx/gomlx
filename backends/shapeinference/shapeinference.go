@@ -685,3 +685,54 @@ func ScatterOp(operand, indices, updates shapes.Shape, indexVectorAxis int, upda
 	}
 	return operand
 }
+
+// SliceOp calculates the output shape for a Slice operation.
+// It checks that starts, limits, and strides have the correct length (matching operand rank),
+// and that the slice parameters are valid for the operand's dimensions.
+// Strides must be positive.
+func SliceOp(operand shapes.Shape, starts, limits, strides []int) shapes.Shape {
+	rank := operand.Rank()
+	opName := "SliceOp"
+	if operand.DType == dtypes.InvalidDType {
+		exceptions.Panicf("%s: invalid operand shape %s", opName, operand)
+	}
+	if len(starts) != rank {
+		exceptions.Panicf("%s: len(starts)=%d, but operand rank is %d", opName, len(starts), rank)
+	}
+	if len(limits) != rank {
+		exceptions.Panicf("%s: len(limits)=%d, but operand rank is %d", opName, len(limits), rank)
+	}
+	if len(strides) != rank {
+		exceptions.Panicf("%s: len(strides)=%d, but operand rank is %d", opName, len(strides), rank)
+	}
+
+	outputShape := shapes.Shape{
+		DType:      operand.DType,
+		Dimensions: make([]int, rank),
+	}
+
+	for axis := 0; axis < rank; axis++ {
+		start, limit, stride := starts[axis], limits[axis], strides[axis]
+		dimSize := operand.Dimensions[axis]
+
+		if stride <= 0 {
+			exceptions.Panicf("%s: stride must be positive, but got stride[%d]=%d for operand shape %s",
+				opName, axis, stride, operand)
+		}
+		if start < 0 || start >= dimSize {
+			exceptions.Panicf("%s: start index %d is out of bounds for axis %d with size %d (operand shape %s)",
+				opName, start, axis, dimSize, operand)
+		}
+		// Limit can be equal to dimSize.
+		if limit < start || limit > dimSize {
+			exceptions.Panicf("%s: limit index %d is out of bounds for axis %d (start=%d, size=%d, operand shape %s)",
+				opName, limit, axis, start, dimSize, operand)
+		}
+
+		// The first one is always taken, so we use the ceiling of the division.
+		outputDimSize := (limit - start + (stride - 1)) / stride
+		outputShape.Dimensions[axis] = outputDimSize
+	}
+
+	return outputShape
+}

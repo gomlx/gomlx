@@ -362,7 +362,7 @@ func (r *Trainer) callGraphFn(
 		inputsAndLabels = append(inputsAndLabels, t)
 	}
 
-	// Get executor.
+	// Get the executor for the graphType and input spec.
 	var execsMap map[any]*context.Exec
 	switch graphType {
 	case TrainType:
@@ -381,8 +381,9 @@ func (r *Trainer) callGraphFn(
 		}
 	}
 
-	// Run2 trainStepExecMap and check everything went fine.
+	// Exec.Call(), collect metrics:
 	err := TryCatch[error](func() { metrics = exec.Call(inputsAndLabels...) })
+
 	if err != nil {
 		panic(errors.WithMessage(err, "failed to execute train/eval step"))
 	}

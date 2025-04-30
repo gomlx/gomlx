@@ -610,6 +610,10 @@ func (ctx *Context) InitializeVariables(backend backends.Backend) {
 		panic(errors.WithMessagef(err, "failed to compile/run variable initialization graph"))
 	}
 	for ii, variable := range variablesToInitialize {
+		if !values[ii].Ok() {
+			Panicf("graph execution to initialize variables failed: variable %q (#%d) generated value was invalid -- maybe other variables as well",
+				variable.ScopeAndName(), ii)
+		}
 		variable.value = values[ii]
 	}
 	ctx.data.needsInitialization = false

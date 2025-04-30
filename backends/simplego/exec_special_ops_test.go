@@ -11,7 +11,9 @@ import (
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"math"
 	"slices"
+	"sort"
 	"testing"
 )
 
@@ -388,5 +390,156 @@ func TestExecSpecialOps_Scatter(t *testing.T) {
 	fmt.Printf("\ty2=%s\n", y2.GoStr())
 	want2 := [][][]bfloat16.BFloat16{{{bf16(1), bf16(1)}, {bf16(-4), bf16(-3)}, {bf16(-2), bf16(-1)}}, {{bf16(0), bf16(1)}, {bf16(1), bf16(1)}, {bf16(1), bf16(1)}}}
 	assert.Equal(t, want2, y2.Value())
+}
 
+func rawSlice(operand *graph.Node, starts []int, limits []int, strides []int) *graph.Node {
+	rank := operand.Shape().Rank()
+	axisSpecs := make([]graph.SliceAxisSpec, rank)
+	for axis := range rank {
+		axisSpecs[axis] = graph.SliceAxisSpec{
+			Start:       starts[axis],
+			End:         limits[axis],
+			StrideValue: strides[axis],
+		}
+	}
+	return graph.Slice(operand, axisSpecs...)
+}
+
+func TestExecSpecialOps_Slice(t *testing.T) {
+	// Test Case 1: Simple 1D slice
+	y1 := graph.ExecOnce(backend, func(g *graph.Graph) *graph.Node {
+		operand := graph.Const(g, []int64{0, 1, 2, 3, 4}) // Shape [5]
+		starts := []int{1}
+		limits := []int{4} // Exclusive limit: indices 1, 2, 3
+		strides := []int{1}
+		// graph.Slice uses inclusive limits by default? Let's use SliceWithStride for clarity matching XLA Slice.
+		// Assuming rawSlice maps to the backend op.
+		// If graph.Slice takes end indices (inclusive) or sizes, adjust accordingly.
+		return rawSlice(operand, starts, limits, strides)
+	})
+	fmt.Printf("\ty1=%s\n", y1.GoStr())
+	want1 := []int64{1, 2, 3}
+	require.NoError(t, y1.Shape().Check(dtypes.Int64, 3)) // Default int is int64? Assuming so. Adjust if it's int32.
+	require.Equal(t, want1, y1.Value())
+
+	// Test Case 2: 2D slice with stride > 1
+	y2 := graph.ExecOnce(backend, func(g *graph.Graph) *graph.Node {
+		operand := graph.Const(g, [][]int32{{0, 1, 2}, {3, 4, 5}, {6, 7, 8}}) // Shape [3, 3]
+		starts := []int{0, 0}
+		limits := []int{3, 3} // Exclusive limits for indices 0, 1, 2 in both axes
+		strides := []int{2, 2}
+		// Output shape: ceil((3-0)/2)=2, ceil((3-0)/2)=2 => [2, 2]
+		// Values from indices: [0,0], [0,2], [2,0], [2,2]
+		return rawSlice(operand, starts, limits, strides)
+	})
+	fmt.Printf("\ty2=%s\n", y2.GoStr())
+	want2 := [][]int32{{0, 2}, {6, 8}}
+	require.NoError(t, y2.Shape().Check(dtypes.Int32, 2, 2))
+	require.Equal(t, want2, y2.Value())
+
+	// Test Case 3: Slice resulting in a rank-2 tensor with size 1x1
+	y3 := graph.ExecOnce(backend, func(g *graph.Graph) *graph.Node {
+		operand := graph.Const(g, [][]int64{{0, 1}, {2, 3}}) // Shape [2, 2]
+		starts := []int{1, 1}
+		limits := []int{2, 2} // Exclusive limits for index 1 in both axes
+		strides := []int{1, 1}
+		// Output shape: ceil((2-1)/1)=1, ceil((2-1)/1)=1 => [1, 1]
+		// Value from index: [1, 1]
+		return rawSlice(operand, starts, limits, strides)
+	})
+	fmt.Printf("\ty3=%s\n", y3.GoStr())
+	want3 := [][]int64{{3}}                                  // Assuming int is int64
+	require.NoError(t, y3.Shape().Check(dtypes.Int64, 1, 1)) // Adjust dtype if needed
+	require.Equal(t, want3, y3.Value())
+
+	// Test Case 4: Slice with bfloat16 and stride > 1
+	y4 := graph.ExecOnce(backend, func(g *graph.Graph) *graph.Node {
+		operand := graph.Const(g, []bfloat16.BFloat16{bf16(0), bf16(1), bf16(2), bf16(3)}) // Shape [4]
+		starts := []int{1}
+		limits := []int{4} // Exclusive limit: indices 1, 2, 3
+		strides := []int{2}
+		// Output shape: ceil((4-1)/2)=ceil(1.5)=2 => [2]
+		// Values from indices: 1, 3
+		return rawSlice(operand, starts, limits, strides)
+	})
+	fmt.Printf("\ty4=%s\n", y4.GoStr())
+	want4 := []bfloat16.BFloat16{bf16(1), bf16(3)}
+	require.NoError(t, y4.Shape().Check(dtypes.BFloat16, 2))
+	require.Equal(t, want4, y4.Value())
+}
+
+func computeHistogram(values []float64, numBins int) []int {
+	if len(values) == 0 {
+		return nil
+	}
+	sort.Float64s(values)
+	min, max := values[0], values[len(values)-1]
+	binSize := (max - min) / float64(numBins)
+	histogram := make([]int, numBins)
+	for _, v := range values {
+		bin := int((v - min) / binSize)
+		if bin == numBins {
+			bin--
+		}
+		histogram[bin]++
+	}
+	return histogram
+}
+
+func TestExecSpecialOps_RngBitsGenerator(t *testing.T) {
+	const numSamples = 1000
+	const numBins = 10
+	const tolerance = 0.3 // Allow 30% deviation from the expected frequency
+
+	testCases := []struct {
+		dtype dtypes.DType
+		name  string
+	}{
+		{dtypes.Float32, "float32"},
+		{dtypes.Float64, "float64"},
+		{dtypes.BFloat16, "bfloat16"},
+	}
+
+	state := graph.RngState()
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			shape := shapes.Make(tc.dtype, numSamples)
+			outputs := graph.ExecOnceN(backend, func(state *graph.Node) []*graph.Node {
+				var values *graph.Node
+				state, values = graph.RandomUniform(state, shape)
+				return []*graph.Node{state, values}
+			}, state)
+			state = outputs[0]
+			y := outputs[1]
+
+			// Convert all values to float64 for histogram computation
+			values := make([]float64, numSamples)
+			switch tc.dtype {
+			case dtypes.Float32:
+				for i, v := range y.Value().([]float32) {
+					values[i] = float64(v)
+				}
+			case dtypes.Float64:
+				values = y.Value().([]float64)
+			case dtypes.BFloat16:
+				for i, v := range y.Value().([]bfloat16.BFloat16) {
+					values[i] = float64(v.Float32())
+				}
+			}
+
+			hist := computeHistogram(values, numBins)
+			fmt.Printf("\tshape=%s, hist=%v\n", shape, hist)
+			expectedPerBin := numSamples / numBins
+			maxDeviation := float64(expectedPerBin) * tolerance
+
+			// Check each bin is within tolerance of expected frequency
+			for bin, count := range hist {
+				deviation := math.Abs(float64(count) - float64(expectedPerBin))
+				if deviation > maxDeviation {
+					t.Errorf("Bin %d count %d deviates too much from expected %d (deviation: %.2f > %.2f)",
+						bin, count, expectedPerBin, deviation, maxDeviation)
+				}
+			}
+		})
+	}
 }

@@ -1,17 +1,18 @@
 package main
 
 import (
-	"fmt"
-	"github.com/gomlx/gomlx/internal/cmd/backends_generator/parsexlabuilder"
-	"github.com/gomlx/gomlx/types"
-	"github.com/gomlx/gomlx/types/xslices"
-	"github.com/janpfeifer/must"
 	"go/ast"
 	"os"
 	"os/exec"
 	"slices"
 	"strings"
 	"text/template"
+
+	"fmt"
+	"github.com/gomlx/gomlx/internal/cmd/backends_generator/parsexlabuilder"
+	"github.com/gomlx/gomlx/types"
+	"github.com/gomlx/gomlx/types/xslices"
+	"github.com/janpfeifer/must"
 )
 
 const (
@@ -34,12 +35,13 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/pkg/errors"
 )
 
 {{range .}}
 {{range .Comments}}// {{.}}
 {{end}}func (b Builder) {{.Name}}({{range .Parameters}}{{.Names}} {{.Type}},{{end}}) backends.Op {
-	panic(NotImplementedException)
+	panic(errors.Wrapf(NotImplementedError, "in method {{.Name}}()"))
 }
 {{end}}
 `))

@@ -220,6 +220,20 @@ func init() {
 	dereferenceIntsDTypeMap.RegisterIfNotSet(dtypes.Uint32, dereferenceIntsGeneric[uint32])
 	dereferenceIntsDTypeMap.RegisterIfNotSet(dtypes.Uint64, dereferenceIntsGeneric[uint64])
 
+	// DTypeMap: sliceDTypeMap
+	sliceDTypeMap.RegisterIfNotSet(dtypes.Int8, execSliceGeneric[int8])
+	sliceDTypeMap.RegisterIfNotSet(dtypes.Int16, execSliceGeneric[int16])
+	sliceDTypeMap.RegisterIfNotSet(dtypes.Int32, execSliceGeneric[int32])
+	sliceDTypeMap.RegisterIfNotSet(dtypes.Int64, execSliceGeneric[int64])
+	sliceDTypeMap.RegisterIfNotSet(dtypes.Uint8, execSliceGeneric[uint8])
+	sliceDTypeMap.RegisterIfNotSet(dtypes.Uint16, execSliceGeneric[uint16])
+	sliceDTypeMap.RegisterIfNotSet(dtypes.Uint32, execSliceGeneric[uint32])
+	sliceDTypeMap.RegisterIfNotSet(dtypes.Uint64, execSliceGeneric[uint64])
+	sliceDTypeMap.RegisterIfNotSet(dtypes.Float32, execSliceGeneric[float32])
+	sliceDTypeMap.RegisterIfNotSet(dtypes.Float64, execSliceGeneric[float64])
+	sliceDTypeMap.RegisterIfNotSet(dtypes.BFloat16, execSliceGeneric[bfloat16.BFloat16])
+	sliceDTypeMap.RegisterIfNotSet(dtypes.Bool, execSliceGeneric[bool])
+
 	// DTypePairMap: convertDTypePairMap
 	convertDTypePairMap.RegisterIfNotSet(dtypes.Int8, dtypes.Int8, execConvertDTypeGeneric[int8, int8])
 	convertDTypePairMap.RegisterIfNotSet(dtypes.Int8, dtypes.Int16, execConvertDTypeGeneric[int8, int16])

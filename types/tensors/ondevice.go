@@ -3,7 +3,6 @@ package tensors
 import (
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
-	"maps"
 	"reflect"
 )
 
@@ -201,7 +200,7 @@ func (t *Tensor) InvalidateOnDevice() {
 }
 
 // lockedInvalidateOnDevice destroys all on-device copies of the Tensor.
-// It does nothing if tensor is shared.
+// It does nothing if the tensor is shared.
 //
 // If there is no local copy of the Tensor, this will invalidate the tensor.
 //
@@ -211,12 +210,10 @@ func (t *Tensor) lockedInvalidateOnDevice() {
 		return
 	}
 	t.AssertValid()
-	for _, d := range t.onDevices {
+	for deviceNum, d := range t.onDevices {
 		d.Finalize()
+		delete(t.onDevices, deviceNum)
 	}
-	maps.DeleteFunc(t.onDevices, func(_ backends.DeviceNum, _ *onDevice) bool {
-		return true
-	})
 }
 
 // OnDeviceClone creates a clone of the tensor t that has backend storage.

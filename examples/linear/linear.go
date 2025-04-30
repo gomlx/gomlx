@@ -34,8 +34,9 @@ import (
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/janpfeifer/must"
+	"k8s.io/klog/v2"
 
-	_ "github.com/gomlx/gomlx/backends/xla"
+	_ "github.com/gomlx/gomlx/backends/default"
 )
 
 const (
@@ -63,8 +64,8 @@ func initCoefficients(backend backends.Backend, numVariables int) (coefficients,
 	return
 }
 
-func buildExamples(manager backends.Backend, coef, bias *tensors.Tensor, numExamples int, noise float64) (inputs, labels *tensors.Tensor) {
-	e := NewExec(manager, func(coef, bias *Node) (inputs, labels *Node) {
+func buildExamples(backend backends.Backend, coef, bias *tensors.Tensor, numExamples int, noise float64) (inputs, labels *tensors.Tensor) {
+	e := NewExec(backend, func(coef, bias *Node) (inputs, labels *Node) {
 		g := coef.Graph()
 		numFeatures := coef.Shape().Dimensions[0]
 
@@ -112,6 +113,8 @@ func main() {
 	flag.Parse()
 	backend := backends.New()
 
+	fmt.Printf("Backend: %s, %s\n", backend.Name(), backend.Description())
+
 	trueCoefficients, trueBias := initCoefficients(backend, *flagNumFeatures)
 	fmt.Printf("Target coefficients: %0.5v\n", trueCoefficients.Value())
 	fmt.Printf("Target bias: %0.5v\n\n", trueBias.Value())
@@ -137,10 +140,10 @@ func main() {
 	loop := train.NewLoop(trainer)
 	commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
 
-	// Loop for given number of steps.
+	// Loop for the given number of steps.
 	_, err := loop.RunSteps(dataset, *flagNumSteps)
 	if err != nil {
-		panic(err)
+		klog.Fatalf("Failed with error: %+v", err)
 	}
 
 	// Print learned coefficients and bias -- from the weights in the dense layer.

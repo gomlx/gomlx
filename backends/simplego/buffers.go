@@ -6,6 +6,7 @@ import (
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"reflect"
+	"strings"
 	"sync"
 	"unsafe"
 )
@@ -16,6 +17,7 @@ import (
 // taken from larger blobs of bytes allocated in one Go -- or owned by the buffer.
 type Buffer struct {
 	shape shapes.Shape
+	valid bool
 
 	// flat is always a slice of the underlying data type (shape.DType).
 	flat any
@@ -26,33 +28,41 @@ type bufferPoolKey struct {
 	length int
 }
 
+// getBufferPool for given dtype/length.
+func (b *Backend) getBufferPool(dtype dtypes.DType, length int) *sync.Pool {
+	key := bufferPoolKey{dtype: dtype, length: length}
+	poolInterface, ok := b.bufferPools.Load(key)
+	if !ok {
+		poolInterface, _ = b.bufferPools.LoadOrStore(key, &sync.Pool{
+			New: func() interface{} {
+				return &Buffer{
+					flat:  reflect.MakeSlice(reflect.SliceOf(dtype.GoType()), length, length).Interface(),
+					shape: shapes.Make(dtype, length),
+				}
+			},
+		})
+	}
+	return poolInterface.(*sync.Pool)
+}
+
 // getBuffer from backend pool of buffers.
 func (b *Backend) getBuffer(dtype dtypes.DType, length int) *Buffer {
-	key := bufferPoolKey{dtype: dtype, length: length}
-	poolInterface, _ := b.bufferPools.LoadOrStore(key, &sync.Pool{
-		New: func() interface{} {
-			return &Buffer{
-				flat: reflect.MakeSlice(reflect.SliceOf(dtype.GoType()), length, length).Interface(),
-			}
-		},
-	})
-	pool := poolInterface.(*sync.Pool)
-	return pool.Get().(*Buffer)
+	pool := b.getBufferPool(dtype, length)
+	buf := pool.Get().(*Buffer)
+	buf.valid = true
+	//fmt.Printf("> Buffer.Get(%p) - dtype=%s, len=%d\n", buf, dtype, length)
+	return buf
 }
 
 // putBuffer back into the backend pool of buffers.
+// After this any references to buffer should be dropped.
 func (b *Backend) putBuffer(buffer *Buffer) {
-	if buffer == nil {
+	if buffer == nil || !buffer.shape.Ok() {
 		return
 	}
-	key := bufferPoolKey{
-		dtype:  buffer.shape.DType,
-		length: buffer.shape.Size(),
-	}
-	if pool, ok := b.bufferPools.Load(key); ok {
-		pool.(*sync.Pool).Put(buffer)
-	}
-	buffer.shape = shapes.Invalid()
+	buffer.valid = false
+	pool := b.getBufferPool(buffer.shape.DType, buffer.shape.Size())
+	pool.Put(buffer)
 }
 
 // copyFlat assumes both flat slices are of the same underlying type.
@@ -77,7 +87,23 @@ func mutableBytesGeneric[T SupportedTypesConstraints](params ...any) any {
 
 // cloneBuffer using the pool to allocate a new one.
 func (b *Backend) cloneBuffer(buffer *Buffer) *Buffer {
-	if buffer == nil {
+	if buffer == nil || buffer.flat == nil || !buffer.shape.Ok() || !buffer.valid {
+		// buffer is already empty.
+		var issues []string
+		if buffer != nil {
+			if buffer.flat == nil {
+				issues = append(issues, "buffer.flat was nil")
+			}
+			if !buffer.shape.Ok() {
+				issues = append(issues, "buffer.shape was invalid")
+			}
+			if !buffer.valid {
+				issues = append(issues, "buffer was marked as invalid")
+			}
+		} else {
+			issues = append(issues, "buffer was nil")
+		}
+		exceptions.Panicf("cloneBuffer(%p): %s -- buffer was already finalized!?\n", buffer, strings.Join(issues, ", "))
 		return nil
 	}
 	newBuffer := b.getBuffer(buffer.shape.DType, buffer.shape.Size())
@@ -95,18 +121,38 @@ func (b *Backend) NewBuffer(shape shapes.Shape) *Buffer {
 
 // BufferFinalize allows the client to inform backend that buffer is no longer needed and associated resources can be
 // freed immediately.
+//
+// A finalized buffer should never be used again. Preferably, the caller should set its references to it to nil.
 func (b *Backend) BufferFinalize(backendBuffer backends.Buffer) {
 	buffer := backendBuffer.(*Buffer)
-	if buffer == nil || buffer.flat == nil || !buffer.shape.Ok() {
+	if buffer == nil || buffer.flat == nil || !buffer.shape.Ok() || !buffer.valid {
 		// buffer is already empty.
+		var issues []string
+		if buffer != nil {
+			if buffer.flat == nil {
+				issues = append(issues, "buffer.flat was nil")
+			}
+			if !buffer.shape.Ok() {
+				issues = append(issues, "buffer.shape was invalid")
+			}
+			if !buffer.valid {
+				issues = append(issues, "buffer was marked as invalid")
+			}
+		} else {
+			issues = append(issues, "buffer was nil")
+		}
+		exceptions.Panicf("BufferFinalize(%p): %s -- buffer was already finalized!?\n", buffer, strings.Join(issues, ", "))
 		return
 	}
+	//fmt.Printf("> BufferFinalize(%p): shape=%s\n", buffer, buffer.shape)
+	//fmt.Printf("\tStack trace:\n%s\n", debug.Stack())
 	b.putBuffer(buffer)
 }
 
 // BufferShape returns the shape for the buffer.
 func (b *Backend) BufferShape(buffer backends.Buffer) shapes.Shape {
-	return buffer.(*Buffer).shape
+	buf := buffer.(*Buffer)
+	return buf.shape
 }
 
 // BufferDeviceNum returns the deviceNum for the buffer.
