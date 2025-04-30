@@ -22,7 +22,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/examples/adult"
 	. "github.com/gomlx/gomlx/graph"
@@ -131,15 +130,13 @@ func main() {
 	klog.InitFlags(nil)
 	flag.Parse()
 	paramsSet := must.M1(commandline.ParseContextSettings(ctx, *settings))
-	err := exceptions.TryCatch[error](func() {
-		mainWithContext(ctx, *flagDataDir, *flagCheckpoint, paramsSet)
-	})
+	err := mainWithContext(ctx, *flagDataDir, *flagCheckpoint, paramsSet)
 	if err != nil {
 		klog.Fatalf("Failed with error: %+v", err)
 	}
 }
 
-func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, paramsSet []string) {
+func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, paramsSet []string) error {
 	backend := backends.New()
 	dataDir = data.ReplaceTildeInDir(dataDir)
 	if *flagVerbosity >= 1 {
@@ -223,7 +220,10 @@ func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, param
 			fmt.Printf("\t- restarting training from global_step=%d\n", globalStep)
 			trainer.SetContext(ctx.Reuse())
 		}
-		_ = must.M1(loop.RunSteps(trainDS, trainSteps-globalStep))
+		_, err := loop.RunSteps(trainDS, trainSteps-globalStep)
+		if err != nil {
+			return err
+		}
 		fmt.Printf("\t[Step %d] median train step: %d microseconds\n", loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
 		fmt.Println()
 		// Update batch normalization averages, if they are used.
@@ -248,7 +248,7 @@ func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, param
 	}
 
 	// Finally, print an evaluation on train and test datasets.
-	must.M(commandline.ReportEval(trainer, trainEvalDS, testEvalDS))
+	return commandline.ReportEval(trainer, trainEvalDS, testEvalDS)
 }
 
 // ModelGraph outputs the logits (not the probabilities). The parameter inputs should contain 3 tensors:
