@@ -1,6 +1,7 @@
 package simplego
 
 import (
+	"fmt"
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
@@ -313,24 +314,22 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) []backends
 
 	// Return outputs, copying them if not owned by the executor
 	outputs := make([]backends.Buffer, len(e.builder.outputs))
-	for ii, output := range e.builder.outputs {
-		outNodeIdx := output.builderIdx
+	for ii, outputNode := range e.builder.outputs {
+		outNodeIdx := outputNode.builderIdx
 		outBuf := execBuf.results[outNodeIdx]
 		if outBuf == nil {
 			exceptions.Panicf("Execute: output #%d (%s, nodeIdx=%d) is not calculated yet (!?) -- "+
-				"this is a bug, it should never have happened", ii, output.opType, outNodeIdx)
+				"this is a bug, it should never have happened", ii, outputNode.opType, outNodeIdx)
 			panic(true) // Help lint.
 		}
 		if !outBuf.shape.Ok() {
 			exceptions.Panicf("Execute: output #%d (%s, nodeIdx=%d) returned an invalid shape (!?) -- "+
-				"this is a bug, it should never have happened", ii, output.opType, outNodeIdx)
+				"this is a bug, it should never have happened", ii, outputNode.opType, outNodeIdx)
 		}
 		if !execBuf.owned[outNodeIdx] {
 			// Make a copy of the buffer since we don't own it
+			fmt.Printf("\tcloning output #%d (%s) @ %p\n", ii, outputNode.opType, outBuf)
 			outBuf = e.backend.cloneBuffer(outBuf)
-		} else {
-			// TODO: remove, this shouldn't be needed.
-			outBuf.shape = output.shape.Clone()
 		}
 		outputs[ii] = outBuf
 	}
