@@ -34,6 +34,8 @@ func newBackend() *Backend {
 
 // Backend implements the backends.Backend interface.
 type Backend struct {
+	// bufferPools are a map to pools of buffers that can be reused.
+	// The underlying type is map[bufferPoolKey]*sync.Pool.
 	bufferPools sync.Map
 }
 

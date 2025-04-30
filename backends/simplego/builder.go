@@ -5,6 +5,7 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/notimplemented"
 	"github.com/gomlx/gomlx/backends/shapeinference"
+	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"reflect"
@@ -41,6 +42,10 @@ func (b *Builder) Name() string {
 // Compile implements backends.Builder.
 func (b *Builder) Compile(outputs ...backends.Op) backends.Executable {
 	b.outputs = b.checkOps("Compile", outputs...)
+	nodeSet := types.SetWith(b.outputs...)
+	if len(nodeSet) != len(b.outputs) {
+		exceptions.Panicf("*** Repeated outputs: %d outputs, %d unique outputs", len(b.outputs), len(nodeSet))
+	}
 	for _, node := range b.outputs {
 		if len(node.multiOutputsShapes) != 0 {
 			exceptions.Panicf("%s node %q is internal (with multiple-outputs) and cannot be used for output", b.Name(), node.opType)

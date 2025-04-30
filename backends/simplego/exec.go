@@ -173,14 +173,24 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) []backends
 
 	// Check input shapes
 	for ii, input := range inputs {
+		if input == nil {
+			exceptions.Panicf("Execute: input buffer #%d is nil!?", ii)
+		}
 		inputBuffer, ok := input.(*Buffer)
 		if !ok {
 			exceptions.Panicf("Execute: input buffer #%d is not from SimpleGo backend", ii)
 		}
-		expectedShape := e.builder.inputs[ii].shape
-		if !inputBuffer.shape.Equal(expectedShape) {
-			exceptions.Panicf("Execute: input #%d expected shape %s, got %s",
-				ii, expectedShape, inputBuffer.shape)
+		if !inputBuffer.valid {
+			exceptions.Panicf("Execute: input buffer (%p) #%d is not valid, likely it is being used after being finalized", inputBuffer, ii)
+		}
+		if inputBuffer.flat == nil {
+			exceptions.Panicf("Execute: input buffer #%d flat data is set to nil (!?)", ii)
+		}
+		nodeInput := e.builder.inputs[ii]
+		if !inputBuffer.shape.Equal(nodeInput.shape) {
+			paramName := nodeInput.data.(*nodeParameter).name
+			exceptions.Panicf("Execute: parameter %q (input #%d) for %q: expected shape %s, got %s",
+				paramName, ii, e.builder.name, nodeInput.shape, inputBuffer.shape)
 		}
 	}
 
@@ -196,17 +206,8 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) []backends
 	for ii, input := range inputs {
 		inputBuffer := input.(*Buffer)
 		inputNodeIdx := e.builder.inputs[ii].builderIdx
+		execBuf.results[inputNodeIdx] = inputBuffer
 		execBuf.owned[inputNodeIdx] = donate[ii]
-		if donate[ii] {
-			// If donated, we take over its data.
-			execBuf.results[inputNodeIdx] = &Buffer{}
-			*execBuf.results[inputNodeIdx] = *inputBuffer
-			inputBuffer.flat = nil
-			inputBuffer.shape = shapes.Invalid()
-		} else {
-			// Simply re-use the buffer, but mark as not-owned, so we won't mutate it in any way.
-			execBuf.results[inputNodeIdx] = inputBuffer
-		}
 	}
 
 	// Pre-allocate slices:
@@ -305,8 +306,8 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) []backends
 			// inputBuffer no longer used, we can return it to the pool.
 			// Notice that the final outputs will always have numUses >= 1, and they
 			// will never be completely used by the executor, hence they don't get freed here.
-			e.backend.putBuffer(inputBuffers[ii])
-			execBuf.results[input.builderIdx] = nil
+			//e.backend.putBuffer(inputBuffers[ii])
+			//execBuf.results[input.builderIdx] = nil
 		}
 	}
 
@@ -316,12 +317,20 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) []backends
 		outNodeIdx := output.builderIdx
 		outBuf := execBuf.results[outNodeIdx]
 		if outBuf == nil {
-			exceptions.Panicf("Execute: output #%d (nodeIdx=%d) is not calculated yet (!?) -- "+
-				"this is a bug, it should never have happened", ii, outNodeIdx)
+			exceptions.Panicf("Execute: output #%d (%s, nodeIdx=%d) is not calculated yet (!?) -- "+
+				"this is a bug, it should never have happened", ii, output.opType, outNodeIdx)
+			panic(true) // Help lint.
+		}
+		if !outBuf.shape.Ok() {
+			exceptions.Panicf("Execute: output #%d (%s, nodeIdx=%d) returned an invalid shape (!?) -- "+
+				"this is a bug, it should never have happened", ii, output.opType, outNodeIdx)
 		}
 		if !execBuf.owned[outNodeIdx] {
 			// Make a copy of the buffer since we don't own it
 			outBuf = e.backend.cloneBuffer(outBuf)
+		} else {
+			// TODO: remove, this shouldn't be needed.
+			outBuf.shape = output.shape.Clone()
 		}
 		outputs[ii] = outBuf
 	}

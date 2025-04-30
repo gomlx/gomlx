@@ -58,10 +58,12 @@ func execIdentity(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []
 	_ = node
 	operand := inputs[0]
 	if inputsOwned[0] {
-		// Mark the input (operand) as consumed and return it.
+		// Mark the input (operand) as consumed and return it as the output.
 		inputs[0] = nil
 		return operand
 	}
+
+	// If the input is still in use, we make a copy.
 	output := backend.getBuffer(operand.shape.DType, operand.shape.Size())
 	output.shape = operand.shape
 	copyFlat(output.flat, operand.flat)
@@ -1365,7 +1367,7 @@ func execRngBitGenerator(backend *Backend, node *Node, inputs []*Buffer, inputsO
 
 	// Reserved outputs:
 	rngData := backend.getBuffer(node.multiOutputsShapes[1].DType, node.multiOutputsShapes[1].Size())
-	rngData.shape = node.multiOutputsShapes[1]
+	rngData.shape = node.multiOutputsShapes[1].Clone()
 	rngDataBytes := rngData.mutableBytes()
 
 	// Generate random using rand/v2:
