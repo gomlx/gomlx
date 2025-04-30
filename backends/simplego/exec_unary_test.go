@@ -9,8 +9,15 @@ import (
 	"testing"
 )
 
-var backend = New("go")
+func TestExampleFunction1(t *testing.T) {
+	println("Running TestExampleFunction1")
+	// Your test logic here
+}
 
+func TestExampleFunction2(t *testing.T) {
+	println("Running TestExampleFunction2")
+	// Your test logic here
+}
 func TestBackendIsSimpleGo(t *testing.T) {
 	assert.NotPanics(t, func() { _ = backend.(*Backend) })
 }
