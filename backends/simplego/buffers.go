@@ -61,9 +61,6 @@ func (b *Backend) putBuffer(buffer *Buffer) {
 		return
 	}
 	buffer.valid = false
-	if true {
-		return
-	}
 	pool := b.getBufferPool(buffer.shape.DType, buffer.shape.Size())
 	pool.Put(buffer)
 }
@@ -90,7 +87,23 @@ func mutableBytesGeneric[T SupportedTypesConstraints](params ...any) any {
 
 // cloneBuffer using the pool to allocate a new one.
 func (b *Backend) cloneBuffer(buffer *Buffer) *Buffer {
-	if buffer == nil || buffer.valid == false {
+	if buffer == nil || buffer.flat == nil || !buffer.shape.Ok() || !buffer.valid {
+		// buffer is already empty.
+		var issues []string
+		if buffer != nil {
+			if buffer.flat == nil {
+				issues = append(issues, "buffer.flat was nil")
+			}
+			if !buffer.shape.Ok() {
+				issues = append(issues, "buffer.shape was invalid")
+			}
+			if !buffer.valid {
+				issues = append(issues, "buffer was marked as invalid")
+			}
+		} else {
+			issues = append(issues, "buffer was nil")
+		}
+		exceptions.Panicf("cloneBuffer(%p): %s -- buffer was already finalized!?\n", buffer, strings.Join(issues, ", "))
 		return nil
 	}
 	newBuffer := b.getBuffer(buffer.shape.DType, buffer.shape.Size())
@@ -128,7 +141,7 @@ func (b *Backend) BufferFinalize(backendBuffer backends.Buffer) {
 		} else {
 			issues = append(issues, "buffer was nil")
 		}
-		exceptions.Panicf("> BufferFinalize(%p): %s -- buffer was already finalized!?\n", buffer, strings.Join(issues, ", "))
+		exceptions.Panicf("BufferFinalize(%p): %s -- buffer was already finalized!?\n", buffer, strings.Join(issues, ", "))
 		return
 	}
 	//fmt.Printf("> BufferFinalize(%p): shape=%s\n", buffer, buffer.shape)
