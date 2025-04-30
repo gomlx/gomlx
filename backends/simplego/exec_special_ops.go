@@ -1327,18 +1327,21 @@ func execSliceGeneric[T SupportedTypesConstraints](operand, output *Buffer, para
 		outputFlat[outputFlatIdx] = operandFlat[operandFlatIdx]
 
 		// Iterate to the next operand position.
-		for axis := rank - 1; rank >= 0; rank-- {
+		for axis := rank - 1; axis >= 0; axis-- {
 			if operandPerAxisSize[axis] == 1 {
 				// We don't iterate on this axis.
 				continue
 			}
+
+			// Increment the current axis.
 			operandPerAxisIdx[axis]++
 			operandFlatIdx += operandFlatStrides[axis]
 			if operandPerAxisIdx[axis] < operandPerAxisSize[axis] {
 				// Done for this iteration.
 				break
 			}
-			// Rewind current axis: we will bump the next axis for this iteration.
+
+			// Rewind the current axis: we will bump the next axis for this iteration.
 			operandPerAxisIdx[axis] = 0
 			operandFlatIdx -= operandPerAxisSize[axis] * operandFlatStrides[axis]
 		}

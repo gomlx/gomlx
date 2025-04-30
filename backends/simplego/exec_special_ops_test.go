@@ -437,7 +437,7 @@ func TestExecSpecialOps_Slice(t *testing.T) {
 
 	// Test Case 3: Slice resulting in a rank-2 tensor with size 1x1
 	y3 := graph.ExecOnce(backend, func(g *graph.Graph) *graph.Node {
-		operand := graph.Const(g, [][]int{{0, 1}, {2, 3}}) // Shape [2, 2]
+		operand := graph.Const(g, [][]int64{{0, 1}, {2, 3}}) // Shape [2, 2]
 		starts := []int{1, 1}
 		limits := []int{2, 2} // Exclusive limits for index 1 in both axes
 		strides := []int{1, 1}
@@ -446,7 +446,7 @@ func TestExecSpecialOps_Slice(t *testing.T) {
 		return rawSlice(operand, starts, limits, strides)
 	})
 	fmt.Printf("\ty3=%s\n", y3.GoStr())
-	want3 := [][]int{{3}}                                    // Assuming int is int64
+	want3 := [][]int64{{3}}                                  // Assuming int is int64
 	require.NoError(t, y3.Shape().Check(dtypes.Int64, 1, 1)) // Adjust dtype if needed
 	require.Equal(t, want3, y3.Value())
 
