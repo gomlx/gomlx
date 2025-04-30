@@ -1169,7 +1169,7 @@ func Slice(x *Node, axesSpec ...SliceAxisSpec) *Node {
 	limits := make([]int, rank)
 	strides := make([]int, rank)
 	for ii, dim := range x.Shape().Dimensions {
-		// Start with full range.
+		// Start with the full range.
 		starts[ii] = 0
 		limits[ii] = dim
 		strides[ii] = 1

@@ -248,3 +248,104 @@ func TestScatterOp(t *testing.T) {
 	}, "Error Case 9 Failed: Update dimension is larger than the corresponding dimension in the operand")
 
 }
+
+func TestSliceOp(t *testing.T) {
+	opName := "SliceOp"
+
+	// --- Valid Cases ---
+	// Case 1: Simple 1D slice
+	operand1 := MS(F32, 10)
+	starts1 := []int{2}
+	limits1 := []int{8}
+	strides1 := []int{1}
+	expected1 := MS(F32, 6)
+	output1 := SliceOp(operand1, starts1, limits1, strides1)
+	require.True(t, expected1.Equal(output1), "%s Valid Case 1 Failed: Expected %s, got %s", opName, expected1, output1)
+
+	// Case 2: 2D slice with stride 1
+	operand2 := MS(I32, 5, 6)
+	starts2 := []int{1, 2}
+	limits2 := []int{4, 5}
+	strides2 := []int{1, 1}
+	expected2 := MS(I32, 3, 3)
+	output2 := SliceOp(operand2, starts2, limits2, strides2)
+	require.True(t, expected2.Equal(output2), "%s Valid Case 2 Failed: Expected %s, got %s", opName, expected2, output2)
+
+	// Case 3: 3D slice with different strides
+	operand3 := MS(Bool, 10, 8, 6)
+	starts3 := []int{1, 0, 1}
+	limits3 := []int{10, 8, 6} // End index exclusive
+	strides3 := []int{2, 3, 1}
+	// Dim 0: (10-1)/2 = 4.5 -> 5 elements (indices 1, 3, 5, 7, 9)
+	// Dim 1: (8-0)/3 = 2.66 -> 3 elements (indices 0, 3, 6)
+	// Dim 2: (6-1)/1 = 5 -> 5 elements (indices 1, 2, 3, 4, 5)
+	expected3 := MS(Bool, 5, 3, 5)
+	output3 := SliceOp(operand3, starts3, limits3, strides3)
+	require.True(t, expected3.Equal(output3), "%s Valid Case 3 Failed: Expected %s, got %s", opName, expected3, output3)
+
+	// Case 4: Slice resulting in size 1 dimension
+	operand4 := MS(F32, 10)
+	starts4 := []int{5}
+	limits4 := []int{6}
+	strides4 := []int{1}
+	expected4 := MS(F32, 1)
+	output4 := SliceOp(operand4, starts4, limits4, strides4)
+	require.True(t, expected4.Equal(output4), "%s Valid Case 4 Failed: Expected %s, got %s", opName, expected4, output4)
+
+	// Case 5: Slice taking full dimension with stride > 1
+	operand5 := MS(I8, 7)
+	starts5 := []int{0}
+	limits5 := []int{7}
+	strides5 := []int{2}
+	// Dim 0: (7-0)/2 = 3.5 -> 4 elements (indices 0, 2, 4, 6)
+	expected5 := MS(I8, 4)
+	output5 := SliceOp(operand5, starts5, limits5, strides5)
+	require.True(t, expected5.Equal(output5), "%s Valid Case 5 Failed: Expected %s, got %s", opName, expected5, output5)
+
+	// --- Error Cases ---
+	operand := MS(F32, 10, 5) // Rank 2
+	validStarts := []int{1, 1}
+	validLimits := []int{8, 4}
+	validStrides := []int{1, 1}
+
+	// Error 1: Invalid operand DType
+	require.Panics(t, func() {
+		SliceOp(shapes.Shape{DType: dtypes.InvalidDType, Dimensions: []int{10}}, []int{0}, []int{5}, []int{1})
+	}, "%s Error Case 1 Failed: Invalid operand DType", opName)
+
+	// Error 2: Incorrect length for starts
+	require.Panics(t, func() { SliceOp(operand, []int{1}, validLimits, validStrides) },
+		"%s Error Case 2 Failed: len(starts) != rank", opName)
+
+	// Error 3: Incorrect length for limits
+	require.Panics(t, func() { SliceOp(operand, validStarts, []int{8}, validStrides) },
+		"%s Error Case 3 Failed: len(limits) != rank", opName)
+
+	// Error 4: Incorrect length for strides
+	require.Panics(t, func() { SliceOp(operand, validStarts, validLimits, []int{1}) },
+		"%s Error Case 4 Failed: len(strides) != rank", opName)
+
+	// Error 5: Zero stride
+	require.Panics(t, func() { SliceOp(operand, validStarts, validLimits, []int{1, 0}) },
+		"%s Error Case 5 Failed: Zero stride", opName)
+
+	// Error 6: Negative stride
+	require.Panics(t, func() { SliceOp(operand, validStarts, validLimits, []int{-1, 1}) },
+		"%s Error Case 6 Failed: Negative stride", opName)
+
+	// Error 7: Start index < 0
+	require.Panics(t, func() { SliceOp(operand, []int{-1, 1}, validLimits, validStrides) },
+		"%s Error Case 7 Failed: Start < 0", opName)
+
+	// Error 8: Start index >= dimSize
+	require.Panics(t, func() { SliceOp(operand, []int{10, 1}, validLimits, validStrides) },
+		"%s Error Case 8 Failed: Start >= dimSize", opName)
+
+	// Error 9: Limit index < start index
+	require.Panics(t, func() { SliceOp(operand, validStarts, []int{0, 4}, validStrides) }, // limit[0]=0 < start[0]=1
+		"%s Error Case 9 Failed: Limit < Start", opName)
+
+	// Error 10: Limit index > dimSize
+	require.Panics(t, func() { SliceOp(operand, validStarts, []int{8, 6}, validStrides) }, // limit[1]=6 > dimSize[1]=5
+		"%s Error Case 10 Failed: Limit > dimSize", opName)
+}

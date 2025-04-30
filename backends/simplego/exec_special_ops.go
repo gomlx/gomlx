@@ -30,6 +30,19 @@ func init() {
 	nodeExecutors[backends.OpTypeScatterMax] = execScatter
 	nodeExecutors[backends.OpTypeScatterMin] = execScatter
 	nodeExecutors[backends.OpTypeScatterSum] = execScatter
+	nodeExecutors[backends.OpTypeSlice] = execSlice
+}
+
+// calculateStrides of a tensor assuming row-major order of the flat data.
+func calculateStrides(dims []int) []int {
+	rank := len(dims)
+	stride := 1
+	strides := make([]int, rank)
+	for axis := rank - 1; axis >= 0; axis-- {
+		strides[axis] = stride
+		stride *= dims[axis]
+	}
+	return strides
 }
 
 // IdentityOp ====================================================================================================
@@ -428,8 +441,7 @@ func newTransposeIterator(operand shapes.Shape, permutations []int) *transposeIt
 	stridesOnOutput := make([]int, rank)
 	stride := 1
 	reversePermutations := make([]int, rank)
-	for reverseAxis := range rank {
-		outputAxis := rank - reverseAxis - 1
+	for outputAxis := rank - 1; outputAxis >= 0; outputAxis-- {
 		stridesOnOutput[outputAxis] = stride
 		operandAxis := permutations[outputAxis]
 		stride *= operand.Dimensions[operandAxis]
@@ -1178,15 +1190,10 @@ type subIndicesIterator struct {
 func newSubIndicesIterator(shape shapes.Shape, skipAxes ...int) *subIndicesIterator {
 	rank := shape.Rank()
 	it := &subIndicesIterator{
-		PerAxisIdx:    make([]int, rank),
-		PerAxisSize:   slices.Clone(shape.Dimensions),
-		PerAxisStride: make([]int, rank),
+		PerAxisIdx:  make([]int, rank),
+		PerAxisSize: slices.Clone(shape.Dimensions),
 	}
-	stride := 1
-	for axis := rank - 1; axis >= 0; axis-- {
-		it.PerAxisStride[axis] = stride
-		stride *= shape.Dimensions[axis]
-	}
+	it.PerAxisStride = calculateStrides(shape.Dimensions)
 	for _, axis := range skipAxes {
 		if axis < rank {
 			// Set size for axis we don't want to iterate over to 1.
@@ -1268,4 +1275,72 @@ func combineForScatterSumGeneric[T PODNumericConstraints](a, b T) T {
 
 func combineForScatterSumBFloat16(a, b bfloat16.BFloat16) bfloat16.BFloat16 {
 	return bfloat16.FromFloat32(a.Float32() + b.Float32())
+}
+
+// SliceOp ========================================================================================================
+
+// execSlice is the executor function registered for backends.OpTypeSlice.
+func execSlice(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	operand := inputs[0]
+	sliceParams, ok := node.data.(*sliceNode)
+	if !ok {
+		// Assuming node.data holds the necessary slice parameters.
+		// If Builder.Slice stores data differently, this needs adjustment.
+		exceptions.Panicf("internal error: node.data for Slice op is not *sliceNode, but %T", node.data)
+	}
+
+	output := backend.getBuffer(node.shape.DType, node.shape.Size())
+	output.shape = node.shape
+
+	// Dispatch to the generic implementation based on DType.
+	// Note: `limits` is not used in the generic exec function but passed for potential future use or consistency.
+	fn := sliceDTypeMap.Get(node.shape.DType).(func(operand, output *Buffer, params *sliceNode))
+	fn(operand, output, sliceParams)
+	return output
+}
+
+var sliceDTypeMap = NewDTypeMap("Slice")
+
+// execSliceGeneric implements the actual slice data copying. It is called via sliceDTypeMap.Dispatch.
+// It iterates through the output buffer coordinates, calculates the corresponding coordinate
+// in the operand buffer using starts and strides, and copies the value.
+func execSliceGeneric[T SupportedTypesConstraints](operand, output *Buffer, params *sliceNode) {
+	rank := operand.shape.Rank()
+	outputFlat := output.flat.([]T)
+	operandFlat := operand.flat.([]T)
+
+	// Find operandFlatIdx start value.
+	var operandFlatIdx int
+	operandFlatStrides := calculateStrides(operand.shape.Dimensions)
+	for axis, idx := range params.starts {
+		operandFlatIdx += operandFlatStrides[axis] * idx
+
+		// Scale the flat index strides by the requested strides for this axis.
+		operandFlatStrides[axis] *= params.strides[axis]
+	}
+
+	operandPerAxisIdx := make([]int, rank)
+	operandPerAxisSize := output.shape.Dimensions
+
+	for outputFlatIdx := range outputFlat {
+		// Copy value at current position.
+		outputFlat[outputFlatIdx] = operandFlat[operandFlatIdx]
+
+		// Iterate to the next operand position.
+		for axis := rank - 1; rank >= 0; rank-- {
+			if operandPerAxisSize[axis] == 1 {
+				// We don't iterate on this axis.
+				continue
+			}
+			operandPerAxisIdx[axis]++
+			operandFlatIdx += operandFlatStrides[axis]
+			if operandPerAxisIdx[axis] < operandPerAxisSize[axis] {
+				// Done for this iteration.
+				break
+			}
+			// Rewind current axis: we will bump the next axis for this iteration.
+			operandPerAxisIdx[axis] = 0
+			operandFlatIdx -= operandPerAxisSize[axis] * operandFlatStrides[axis]
+		}
+	}
 }

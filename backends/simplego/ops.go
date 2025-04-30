@@ -285,10 +285,37 @@ func (b *Builder) scatterImpls(scatterOpType backends.OpType,
 	return node
 }
 
+// scatterNode is attached to the Node.data field for ScatterMax, ScatterMin, ScatterSum.
 type scatterNode struct {
 	indexVectorAxis                                                int
 	updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int
 	indicesAreSorted, uniqueIndices                                bool
+}
+
+// Slice extracts a sub-array from the input array.
+// The sub-array is of the same rank as the input and contains the values inside a bounding box within the input array
+// where the dimensions and indices of the bounding box are given as arguments to the slice operation.
+// The strides set the input stride of the slice in each axis and must be >= 1.
+// It is optional, and if missing it is assumed to be 1 for every dimension.
+// Examples:
+//
+//	Slice(x={0, 1, 2, 3, 4}, starts={2}, limits={4}, strides=nil) -> {2, 3}
+//	Slice(x={0, 1, 2, 3, 4}, starts={2}, limits={5}, strides={2}) -> {2, 4}
+func (b *Builder) Slice(operandOp backends.Op, starts, limits, strides []int) backends.Op {
+	operand := b.checkOps("Slice", operandOp)[0]
+	outputShape := shapeinference.SliceOp(operand.shape, starts, limits, strides)
+	node := b.newNode(backends.OpTypeSlice, outputShape, operand)
+	node.data = &sliceNode{
+		starts,
+		limits,
+		strides,
+	}
+	return node
+}
+
+// sliceNode is attached to the Node.data field for Slice.
+type sliceNode struct {
+	starts, limits, strides []int
 }
 
 // Unary Operations:
