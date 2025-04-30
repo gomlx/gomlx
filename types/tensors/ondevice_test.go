@@ -3,15 +3,16 @@ package tensors
 import (
 	"flag"
 	"fmt"
+	"runtime"
+	"sync"
+	"testing"
+
 	"github.com/gomlx/gomlx/backends"
 	_ "github.com/gomlx/gomlx/backends/xla" // Use xla backend.
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
 	"k8s.io/klog/v2"
-	"runtime"
-	"sync"
-	"testing"
 )
 
 var flagBackend = flag.String("backend", "xla:cpu", "backend to use, this is overwritten by GOMLX_BACKEND if it is set")
@@ -288,7 +289,7 @@ func TestClones(t *testing.T) {
 
 			// Finalize original tensor, and make sure it is garbage collected.
 			originalTensor.FinalizeAll()
-			for _ = range 3 {
+			for range 3 {
 				runtime.GC()
 			}
 

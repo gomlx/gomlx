@@ -19,6 +19,12 @@ package data
 import (
 	"encoding/gob"
 	"fmt"
+	"io"
+	"log"
+	"math/rand"
+	"sync"
+	"time"
+
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/graph"
@@ -27,12 +33,6 @@ import (
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/pkg/errors"
-	"golang.org/x/exp/constraints"
-	"io"
-	"log"
-	"math/rand"
-	"sync"
-	"time"
 )
 
 // InMemoryDataset represents a Dataset that has been completely read into the memory of the device
@@ -316,7 +316,7 @@ func (mds *InMemoryDataset) readDataset(ds train.Dataset, dsIsBatched bool) (err
 			for jj := 0; jj < numConcatenations; jj++ {
 				// Take MaxExamplesToConcat examples at a time.
 				start := jj * MaxExamplesToConcat
-				end := minN(start+MaxExamplesToConcat, len(allExamples))
+				end := min(start+MaxExamplesToConcat, len(allExamples))
 				examplesSlice := allExamples[start:end]
 				examplesAsAny := xslices.Map[*tensors.Tensor, any](examplesSlice, convertToAny)
 				err = TryCatch[error](func() { newAllExamples[jj] = concatenateExec.Call(examplesAsAny...)[0] })
@@ -714,7 +714,7 @@ func GobDeserializeInMemory(backend backends.Backend, deviceNums []backends.Devi
 	mds.inputsAndLabelsData = make([]*tensors.Tensor, 0, numInputsAndLabels)
 
 	var tensor *tensors.Tensor
-	for _ = range numInputsAndLabels {
+	for range numInputsAndLabels {
 		tensor, err = tensors.GobDeserializeToDevice(decoder, backend, deviceNums...)
 		if err != nil {
 			return
@@ -722,18 +722,4 @@ func GobDeserializeInMemory(backend backends.Backend, deviceNums []backends.Devi
 		mds.inputsAndLabelsData = append(mds.inputsAndLabelsData, tensor)
 	}
 	return
-}
-
-func maxN[T constraints.Ordered](a, b T) T {
-	if a < b {
-		return b
-	}
-	return a
-}
-
-func minN[T constraints.Ordered](a, b T) T {
-	if b < a {
-		return b
-	}
-	return a
 }

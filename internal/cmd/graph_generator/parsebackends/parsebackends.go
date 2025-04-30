@@ -3,16 +3,17 @@ package parsebackends
 
 import (
 	"fmt"
-	"github.com/gomlx/exceptions"
-	"github.com/gomlx/gomlx/types"
-	"github.com/gomlx/gomlx/types/xslices"
-	"github.com/janpfeifer/must"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
 	"path"
 	"sync"
+
+	"github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/types"
+	"github.com/gomlx/gomlx/types/xslices"
+	"github.com/janpfeifer/must"
 )
 
 // FindRepositoryRoot returns the first directory, from the current, with the file `go.mod`, which is assumed to be repository root.
