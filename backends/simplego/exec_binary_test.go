@@ -2,13 +2,14 @@ package simplego
 
 import (
 	"fmt"
+	"testing"
+
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestExecBinary_broadcastIterator(t *testing.T) {
@@ -22,7 +23,7 @@ func TestExecBinary_broadcastIterator(t *testing.T) {
 	bi2 := newBroadcastIterator(S(1, 3), targetShape)
 	indices1 := make([]int, 0, targetShape.Size())
 	indices2 := make([]int, 0, targetShape.Size())
-	for _ = range targetShape.Size() {
+	for range targetShape.Size() {
 		indices1 = append(indices1, bi1.Next())
 		indices2 = append(indices2, bi2.Next())
 	}
@@ -34,7 +35,7 @@ func TestExecBinary_broadcastIterator(t *testing.T) {
 	targetShape = S(3, 2, 4, 2)
 	b3 := newBroadcastIterator(S(3, 1, 4, 1), targetShape)
 	indices3 := make([]int, 0, targetShape.Size())
-	for _ = range targetShape.Size() {
+	for range targetShape.Size() {
 		indices3 = append(indices3, b3.Next())
 	}
 	fmt.Printf("\tindices3=%v\n", indices3)

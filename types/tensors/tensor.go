@@ -65,12 +65,13 @@
 package tensors
 
 import (
+	"sync"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/pjrt"
 	"github.com/pkg/errors"
-	"sync"
 )
 
 // Tensor represents a multidimensional arrays (from scalar with 0 dimensions, to arbitrarily large dimensions), defined
@@ -196,7 +197,6 @@ func (t *Tensor) FinalizeAll() {
 // lockedFinalizeAll is FinalizeAll but must be called with the tensor already locked.
 func (t *Tensor) lockedFinalizeAll() {
 	if t == nil {
-		t.mu.Unlock()
 		return
 	}
 	if t.local != nil {

@@ -2,6 +2,9 @@ package oxfordflowers102
 
 import (
 	"fmt"
+	"math/rand/v2"
+	"path"
+
 	"github.com/dustin/go-humanize"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/ml/data"
@@ -11,8 +14,6 @@ import (
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 	"github.com/schollz/progressbar/v3"
-	"math/rand/v2"
-	"path"
 )
 
 // BalancedDataset implements a dataset that yields always one image from a different flower category.
