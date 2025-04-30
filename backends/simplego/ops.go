@@ -4,6 +4,7 @@ import (
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/shapeinference"
+	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
@@ -302,9 +303,10 @@ type scatterNode struct {
 //	Slice(x={0, 1, 2, 3, 4}, starts={2}, limits={4}, strides=nil) -> {2, 3}
 //	Slice(x={0, 1, 2, 3, 4}, starts={2}, limits={5}, strides={2}) -> {2, 4}
 func (b *Builder) Slice(operandOp backends.Op, starts, limits, strides []int) backends.Op {
-	operand := b.checkOps("Slice", operandOp)[0]
+	opType := backends.OpTypeSlice
+	operand := b.checkOps(opType.String(), operandOp)[0]
 	outputShape := shapeinference.SliceOp(operand.shape, starts, limits, strides)
-	node := b.newNode(backends.OpTypeSlice, outputShape, operand)
+	node := b.newNode(opType, outputShape, operand)
 	node.data = &sliceNode{
 		starts,
 		limits,
@@ -316,6 +318,27 @@ func (b *Builder) Slice(operandOp backends.Op, starts, limits, strides []int) ba
 // sliceNode is attached to the Node.data field for Slice.
 type sliceNode struct {
 	starts, limits, strides []int
+}
+
+// RngBitGenerator generates the given shape filled with random bits.
+// It takes as input the current random number generator (RNG) state, see RngState or RngStateFromSeed.
+// The algorithm is hard-coded to use Philox algorithm for now.
+//
+// It returns the new state of the RNG and the generated values (with random bits) with the given shape.
+func (b *Builder) RngBitGenerator(stateOp backends.Op, shape shapes.Shape) (newState, values backends.Op) {
+	opType := backends.OpTypeRngBitGenerator
+	state := b.checkOps(opType.String(), stateOp)[0]
+	if !state.shape.Equal(graph.RngStateShape) {
+		exceptions.Panicf("expected random state to be shaped %s, got state.shape=%s instead for RngBitGenerator", graph.RngStateShape, state.shape)
+	}
+	outputShapes := []shapes.Shape{
+		state.shape.Clone(),
+		shape.Clone(),
+	}
+	node := b.newMultiOutputsNode(opType, outputShapes, state)
+	newState = node.multiOutputsNodes[0]
+	values = node.multiOutputsNodes[1]
+	return
 }
 
 // Unary Operations:

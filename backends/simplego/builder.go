@@ -41,6 +41,11 @@ func (b *Builder) Name() string {
 // Compile implements backends.Builder.
 func (b *Builder) Compile(outputs ...backends.Op) backends.Executable {
 	b.outputs = b.checkOps("Compile", outputs...)
+	for _, node := range b.outputs {
+		if len(node.multiOutputsShapes) != 0 {
+			exceptions.Panicf("%s node %q is internal (with multiple-outputs) and cannot be used for output", b.Name(), node.opType)
+		}
+	}
 	b.compiled = true
 	return newExecutable(b)
 }
@@ -63,6 +68,13 @@ type Node struct {
 	shape   shapes.Shape
 	builder *Builder
 
+	// multiOutputsShapes are set for a few specialized nodes.
+	// For most nodes this is set to nil.
+	multiOutputsShapes []shapes.Shape
+	multiOutputsNodes  []*Node
+	isNodeSelectOutput bool
+	selectOutputIdx    int
+
 	// data for the specific node type.
 	data any
 }
@@ -79,6 +91,33 @@ func (b *Builder) newNode(opType backends.OpType, shape shapes.Shape, inputs ...
 	}
 	b.nodes = append(b.nodes, n)
 	return n
+}
+
+// newMultiOutputsNode create the multi-outputs node, and its "select nodes", one per output.
+// The node.multiOutputsNodes will be set with the individual outputs and can be used by the Builder to return
+// to the user.
+func (b *Builder) newMultiOutputsNode(opType backends.OpType, outputShapes []shapes.Shape, inputs ...*Node) (node *Node) {
+	node = b.newNode(opType, shapes.Invalid(), inputs...)
+	node.multiOutputsShapes = outputShapes
+	node.multiOutputsNodes = make([]*Node, len(outputShapes))
+	for idx, shape := range outputShapes {
+		node.multiOutputsNodes[idx] = &Node{
+			builder:            b,
+			opType:             opType,
+			builderIdx:         len(b.nodes),
+			shape:              shape,
+			inputs:             []*Node{node},
+			isNodeSelectOutput: true,
+			selectOutputIdx:    idx,
+		}
+		b.nodes = append(b.nodes, node.multiOutputsNodes[idx])
+	}
+	return node
+}
+
+// IsMultiOutputs returns whether this node yields multiple outputs.
+func (n *Node) IsMultiOutputs() bool {
+	return len(n.multiOutputsShapes) > 0
 }
 
 // checkOps validates that the ops are from SimpleGo and from this builder.

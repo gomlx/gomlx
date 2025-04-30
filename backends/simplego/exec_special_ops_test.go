@@ -11,7 +11,9 @@ import (
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"math"
 	"slices"
+	"sort"
 	"testing"
 )
 
@@ -464,4 +466,80 @@ func TestExecSpecialOps_Slice(t *testing.T) {
 	want4 := []bfloat16.BFloat16{bf16(1), bf16(3)}
 	require.NoError(t, y4.Shape().Check(dtypes.BFloat16, 2))
 	require.Equal(t, want4, y4.Value())
+}
+
+func computeHistogram(values []float64, numBins int) []int {
+	if len(values) == 0 {
+		return nil
+	}
+	sort.Float64s(values)
+	min, max := values[0], values[len(values)-1]
+	binSize := (max - min) / float64(numBins)
+	histogram := make([]int, numBins)
+	for _, v := range values {
+		bin := int((v - min) / binSize)
+		if bin == numBins {
+			bin--
+		}
+		histogram[bin]++
+	}
+	return histogram
+}
+
+func TestExecSpecialOps_RngBitsGenerator(t *testing.T) {
+	const numSamples = 1000
+	const numBins = 10
+	const tolerance = 0.3 // Allow 30% deviation from the expected frequency
+
+	testCases := []struct {
+		dtype dtypes.DType
+		name  string
+	}{
+		{dtypes.Float32, "float32"},
+		{dtypes.Float64, "float64"},
+		{dtypes.BFloat16, "bfloat16"},
+	}
+
+	state := graph.RngState()
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			shape := shapes.Make(tc.dtype, numSamples)
+			outputs := graph.ExecOnceN(backend, func(state *graph.Node) []*graph.Node {
+				var values *graph.Node
+				state, values = graph.RandomUniform(state, shape)
+				return []*graph.Node{state, values}
+			}, state)
+			state = outputs[0]
+			y := outputs[1]
+
+			// Convert all values to float64 for histogram computation
+			values := make([]float64, numSamples)
+			switch tc.dtype {
+			case dtypes.Float32:
+				for i, v := range y.Value().([]float32) {
+					values[i] = float64(v)
+				}
+			case dtypes.Float64:
+				values = y.Value().([]float64)
+			case dtypes.BFloat16:
+				for i, v := range y.Value().([]bfloat16.BFloat16) {
+					values[i] = float64(v.Float32())
+				}
+			}
+
+			hist := computeHistogram(values, numBins)
+			fmt.Printf("\tshape=%s, hist=%v\n", shape, hist)
+			expectedPerBin := numSamples / numBins
+			maxDeviation := float64(expectedPerBin) * tolerance
+
+			// Check each bin is within tolerance of expected frequency
+			for bin, count := range hist {
+				deviation := math.Abs(float64(count) - float64(expectedPerBin))
+				if deviation > maxDeviation {
+					t.Errorf("Bin %d count %d deviates too much from expected %d (deviation: %.2f > %.2f)",
+						bin, count, expectedPerBin, deviation, maxDeviation)
+				}
+			}
+		})
+	}
 }

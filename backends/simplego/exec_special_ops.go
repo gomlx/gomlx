@@ -1,6 +1,9 @@
 package simplego
 
 import (
+	"encoding/binary"
+	"github.com/pkg/errors"
+	"math/rand/v2"
 	"slices"
 
 	"github.com/gomlx/exceptions"
@@ -31,6 +34,9 @@ func init() {
 	nodeExecutors[backends.OpTypeScatterMin] = execScatter
 	nodeExecutors[backends.OpTypeScatterSum] = execScatter
 	nodeExecutors[backends.OpTypeSlice] = execSlice
+
+	// For nodes with multiple outputs:
+	multiOutputsNodeExecutors[backends.OpTypeRngBitGenerator] = execRngBitGenerator
 }
 
 // calculateStrides of a tensor assuming row-major order of the flat data.
@@ -528,7 +534,7 @@ func execBroadcastInDim(backend *Backend, node *Node, inputs []*Buffer, inputsOw
 	}
 
 	// Reshape operand shape: same dimension as the operand on the corresponding axes, 1 elsewhere.
-	// Notice they must have the same size, hence the flat data doesn't change.
+	// Notice they must have the same size; hence the flat data doesn't change.
 	reshapedOperand := shapes.Make(operand.shape.DType)
 	reshapedOperand.Dimensions = make([]int, output.shape.Rank())
 	xslices.FillSlice(reshapedOperand.Dimensions, 1)
@@ -894,6 +900,7 @@ func execConcatenate(backend *Backend, node *Node, inputs []*Buffer, inputsOwned
 	dtype := outputShape.DType
 	elemSize := dtype.Size()
 	rank := outputShape.Rank()
+	_ = inputsOwned // We don't reuse the inputs.
 
 	// Allocate output buffer.
 	output := backend.getBuffer(dtype, outputShape.Size())
@@ -956,6 +963,7 @@ func execConcatenate(backend *Backend, node *Node, inputs []*Buffer, inputsOwned
 
 func execConvertDType(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
 	operand := inputs[0]
+	_ = inputsOwned // We don't reuse the inputs.
 	output := backend.getBuffer(node.shape.DType, operand.shape.Size())
 	output.shape = node.shape
 	type convertFnT = func(operand, output *Buffer)
@@ -1293,7 +1301,7 @@ func execSlice(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 	output.shape = node.shape
 
 	// Dispatch to the generic implementation based on DType.
-	// Note: `limits` is not used in the generic exec function but passed for potential future use or consistency.
+	// Note: limits are not used in the generic exec function but passed for potential future use or consistency.
 	fn := sliceDTypeMap.Get(node.shape.DType).(func(operand, output *Buffer, params *sliceNode))
 	fn(operand, output, sliceParams)
 	return output
@@ -1346,4 +1354,51 @@ func execSliceGeneric[T SupportedTypesConstraints](operand, output *Buffer, para
 			operandFlatIdx -= operandPerAxisSize[axis] * operandFlatStrides[axis]
 		}
 	}
+}
+
+// RngBitGenerator ====================================================================================================
+
+// execRngBitGenerator is the executor function registered for backends.OpTypeRngBitGenerator.
+func execRngBitGenerator(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) []*Buffer {
+	state := inputs[0]
+	stateFlat := state.flat.([]uint64)
+
+	// Reserved outputs:
+	rngData := backend.getBuffer(node.multiOutputsShapes[1].DType, node.multiOutputsShapes[1].Size())
+	rngData.shape = node.multiOutputsShapes[1]
+	rngDataBytes := rngData.mutableBytes()
+
+	// Generate random using rand/v2:
+	rng := rand.NewPCG(stateFlat[0], stateFlat[1]) // Use state and increment as seed
+	var randomBits uint64
+	for idx := range rngDataBytes {
+		if idx%8 == 0 {
+			randomBits = rng.Uint64()
+		}
+		// Take one byte from the randomBits.
+		rngDataBytes[idx] = byte(randomBits & 0xFF)
+		randomBits = randomBits >> 8
+	}
+
+	// Update state output - PCG internal state after generating random bytes
+	if inputsOwned[0] {
+		// We re-use the current state.
+		inputs[0] = nil
+	} else {
+		state = backend.getBuffer(node.multiOutputsShapes[0].DType, node.multiOutputsShapes[0].Size())
+		state.shape = node.multiOutputsShapes[0]
+	}
+	stateFlat = state.flat.([]uint64)
+
+	// See details on Go source code src/math/rand/v2/pcg.go:
+	rngState, err := rng.MarshalBinary()
+	if err != nil {
+		panic(errors.Wrapf(err, "cannot update RngBitGenerator state"))
+	}
+	if len(rngState) != 20 && string(rngState[:4]) != "pcg:" {
+		exceptions.Panicf("format of PCG random number generator changed (we got %d bytes starting with %q, we wanted 20 and starting with the string 'pcg:'), pls open an issue in GoMLX", rngState[:4], len(rngState))
+	}
+	stateFlat[0] = binary.LittleEndian.Uint64(rngState[4 : 4+8])
+	stateFlat[1] = binary.LittleEndian.Uint64(rngState[4+8 : 4+16])
+	return []*Buffer{state, rngData}
 }
