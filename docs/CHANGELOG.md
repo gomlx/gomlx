@@ -1,5 +1,11 @@
 # GoMLX changelog
 
+# Next
+
+* `go mod tidy`
+* Package `simplego`:
+  * "not implemented" error now includes the name of the corresponding method that was not implemented.
+
 # v0.19.0: 2025/04/29 Added SimpleGo, a pure Go backend
 
 * Package `backends`:
