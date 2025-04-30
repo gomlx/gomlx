@@ -162,6 +162,7 @@ func execReshape(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []b
 		inputs[0] = nil
 	} else {
 		output = backend.getBuffer(operand.shape.DType, operand.shape.Size())
+		copyFlat(output.flat, operand.flat)
 	}
 	output.shape = node.shape
 	return output
