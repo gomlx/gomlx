@@ -1,13 +1,13 @@
 # GoMLX changelog
 
-# v0.19.1: 2025/04/30 Fixes,
+# v0.19.1: 2025/04/30 SimpleGo fixes and new ops; New XLA, requires Gopjrt v0.7.0 update.
 
 * `go mod tidy`
 * Package `simplego`:
   * "not implemented" error now includes the name of the corresponding method that was not implemented.
   * Several memory fixes.
   * Added `Slice` and `RngBitsGenerator` ops.
-* Updated to Gopjrt v0.7.0, with more memory fixes.
+* Updated to Gopjrt v0.7.0, with more memory fixes. **Requires an update of the C++ libraries**.
 
 # v0.19.0: 2025/04/29 Added SimpleGo, a pure Go backend
 
