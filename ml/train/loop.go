@@ -291,7 +291,9 @@ func (loop *Loop) RunSteps(ds Dataset, steps int) (metrics []*tensors.Tensor, er
 
 		// Immediately free any space being used.
 		for _, metric := range metrics {
-			metric.FinalizeAll()
+			if metric != nil {
+				metric.FinalizeAll()
+			}
 		}
 		metrics, err = loop.step(spec, inputs, labels)
 		if err != nil {
