@@ -58,6 +58,7 @@ func (b *Builder) Constant(flat any, dims ...int) backends.Op {
 	n.data = &Buffer{
 		shape: shape,
 		flat:  flat,
+		valid: true,
 	}
 	return n
 }
