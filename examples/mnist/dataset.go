@@ -186,7 +186,7 @@ func loadImageFile(filename string) ([]image.Image, error) {
 
 	if header.Magic != ImageMagic ||
 		header.Width != Width ||
-		header.Height != header.Height {
+		header.Height != Height {
 		return nil, fmt.Errorf("mnist: invalid format")
 	}
 
