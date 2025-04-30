@@ -34,8 +34,9 @@ import (
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/janpfeifer/must"
+	"k8s.io/klog/v2"
 
-	_ "github.com/gomlx/gomlx/backends/xla"
+	_ "github.com/gomlx/gomlx/backends/default"
 )
 
 const (
@@ -111,6 +112,7 @@ var (
 func main() {
 	flag.Parse()
 	backend := backends.New()
+	fmt.Printf("Backend: %s, %s\n", backend.Name(), backend.Description())
 
 	trueCoefficients, trueBias := initCoefficients(backend, *flagNumFeatures)
 	fmt.Printf("Target coefficients: %0.5v\n", trueCoefficients.Value())
@@ -140,7 +142,7 @@ func main() {
 	// Loop for given number of steps.
 	_, err := loop.RunSteps(dataset, *flagNumSteps)
 	if err != nil {
-		panic(err)
+		klog.Fatalf("Failed with error: %+v", err)
 	}
 
 	// Print learned coefficients and bias -- from the weights in the dense layer.
