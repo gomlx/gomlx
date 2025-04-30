@@ -64,8 +64,8 @@ func initCoefficients(backend backends.Backend, numVariables int) (coefficients,
 	return
 }
 
-func buildExamples(manager backends.Backend, coef, bias *tensors.Tensor, numExamples int, noise float64) (inputs, labels *tensors.Tensor) {
-	e := NewExec(manager, func(coef, bias *Node) (inputs, labels *Node) {
+func buildExamples(backend backends.Backend, coef, bias *tensors.Tensor, numExamples int, noise float64) (inputs, labels *tensors.Tensor) {
+	e := NewExec(backend, func(coef, bias *Node) (inputs, labels *Node) {
 		g := coef.Graph()
 		numFeatures := coef.Shape().Dimensions[0]
 
@@ -112,6 +112,7 @@ var (
 func main() {
 	flag.Parse()
 	backend := backends.New()
+
 	fmt.Printf("Backend: %s, %s\n", backend.Name(), backend.Description())
 
 	trueCoefficients, trueBias := initCoefficients(backend, *flagNumFeatures)
@@ -139,7 +140,7 @@ func main() {
 	loop := train.NewLoop(trainer)
 	commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
 
-	// Loop for given number of steps.
+	// Loop for the given number of steps.
 	_, err := loop.RunSteps(dataset, *flagNumSteps)
 	if err != nil {
 		klog.Fatalf("Failed with error: %+v", err)
