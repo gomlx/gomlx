@@ -49,7 +49,8 @@
 //
 //   - `local`: a copy of the values stored in CPU, as a Go flat array of the underlying dtype.
 //   - `onDevices`: a copy of the values stored in the accelerator device(s) (CPU, GPU, TPU, etc.),
-//     a wrapper for a "XLA's PJRT buffer" managed by the lower levels (see github.com/gomlx/gopjrt).
+//     a wrapper for whatever the backend uses as buffer managed by the lower levels (see github.com/gomlx/gopjrt 
+//     for the XLA backend).
 //     There can be multiple `Device` backing of a tensor, if there are multiple devices (like a multi-GPU set up).
 //   - And "on-device" Tensor can also be "shared", if the backend allows it, in which case the local
 //     and "on-device" share the same memory allocation.
@@ -70,7 +71,6 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/gopjrt/pjrt"
 	"github.com/pkg/errors"
 )
 
@@ -176,12 +176,6 @@ func (t *Tensor) AssertValid() {
 	if t.local.IsFinalized() && len(t.onDevices) == 0 {
 		panic(errors.New("Tensor has no local or on-device representation"))
 	}
-}
-
-// HasClient accepts anything that can return a xla.Client. That includes xla.Client itself and
-// graph.Backend.
-type HasClient interface {
-	Client() *pjrt.Client
 }
 
 // FinalizeAll immediately frees all associated data and leave Tensor in an invalid state. Shape is cleared also.
