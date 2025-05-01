@@ -687,6 +687,10 @@ func execGather(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bo
 		}
 		// Now we copy over the strides calculated for the gatherIterator.
 		for sliceAxis := range operandRank {
+			if collapsedAxes.Has(sliceAxis) {
+				// Collapsed, we only care about the offset axes.
+				continue
+			}
 			outputAxis := mapSliceToOutputAxes[sliceAxis]
 			sliceOutputBytesStride[sliceAxis] = gatherIt.outputStrides[outputAxis]
 		}
