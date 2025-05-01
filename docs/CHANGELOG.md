@@ -1,7 +1,8 @@
 # GoMLX changelog
 
-# Next
+# v0.19.2: 2025/05/01 More SimpleGo fixes and new ops; Fixed dependency to Goppjrt/pjrt when using SimpleGo.
 
+* GoMLX now runs on Windows natively!
 * Package `simplego`:
   * Fixed `Gather` of scalar values.
   * Fixed `Where` checking of shape.
