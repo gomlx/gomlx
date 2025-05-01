@@ -77,6 +77,7 @@ var (
 
 	// FloatOperations operates only on float (and not on complex numbers).
 	FloatOperations = types.SetWith(
+		backends.OpTypeErf,
 		backends.OpTypeLogistic,
 		backends.OpTypeCos,
 		backends.OpTypeSin,
@@ -145,6 +146,7 @@ var (
 		backends.OpTypeBitwiseNot,
 		backends.OpTypeBitCount,
 		backends.OpTypeClz,
+		backends.OpTypeErf,
 		backends.OpTypeExp,
 		backends.OpTypeExpm1,
 		backends.OpTypeLog,
@@ -303,12 +305,6 @@ func WhereOp(condition, onTrue, onFalse shapes.Shape) shapes.Shape {
 		exceptions.Panicf("onTrue (%s) and onFalse (%s) values for Where() must either be scalar or match each other's shape",
 			onTrue, onFalse)
 	}
-	if !condition.IsScalar() && !(onTrue.IsScalar() && onFalse.IsScalar()) {
-		if slices.Compare(condition.Dimensions, onTrue.Dimensions) != 0 {
-			exceptions.Panicf("condition for Where() must either be a scalar or match the shape (not the DType) of the values (%s), but got %s",
-				onTrue, condition)
-		}
-	}
 
 	output := onTrue
 	if output.IsScalar() {
@@ -318,6 +314,12 @@ func WhereOp(condition, onTrue, onFalse shapes.Shape) shapes.Shape {
 			output.DType = onTrue.DType
 		}
 	}
+
+	if !condition.IsScalar() && slices.Compare(condition.Dimensions, output.Dimensions) != 0 {
+		exceptions.Panicf("condition for Where() must either be a scalar or match the output shape (not the DType), instead got shapes condition=%s, onTrue=%s and onFalse=%s",
+			condition, onTrue, onFalse)
+	}
+
 	return output
 }
 
