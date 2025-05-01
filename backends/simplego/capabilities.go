@@ -47,6 +47,7 @@ var Capabilities = backends.Capabilities{
 		backends.OpTypeCeil:       true,
 		backends.OpTypeClz:        true,
 		backends.OpTypeCos:        true,
+		backends.OpTypeErf:        true,
 		backends.OpTypeExp:        true,
 		backends.OpTypeExpm1:      true,
 		backends.OpTypeFloor:      true,

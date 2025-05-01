@@ -268,3 +268,13 @@ func TestExecUnary_IsFinite(t *testing.T) {
 	y5 := exec.Call(bfloat16.FromFloat32(1.0))[0]
 	assert.Equal(t, true, y5.Value())
 }
+
+func TestExecUnary_Erf(t *testing.T) {
+	exec := graph.NewExec(backend, func(x *graph.Node) *graph.Node { return graph.Erf(x) })
+	y0 := exec.Call(float32(1.0))[0]
+	assert.InDelta(t, float32(0.8427), y0.Value(), 1e-4)
+	y1 := exec.Call(float64(1.0))[0]
+	assert.InDelta(t, 0.8427, y1.Value(), 1e-4)
+	y2 := exec.Call(bfloat16.FromFloat32(1.0))[0]
+	assert.InDelta(t, float32(0.8427), y2.Value().(bfloat16.BFloat16).Float32(), 1e-2)
+}

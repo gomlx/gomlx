@@ -444,6 +444,11 @@ func (b *Builder) Tanh(operand backends.Op) backends.Op {
 	return b.addUnaryOp(backends.OpTypeTanh, operand)
 }
 
+// Tanh implements the backends.Builder interface.
+func (b *Builder) Erf(operand backends.Op) backends.Op {
+	return b.addUnaryOp(backends.OpTypeErf, operand)
+}
+
 // IsFinite implements the backends.Builder interface.
 func (b *Builder) IsFinite(operandOp backends.Op) backends.Op {
 	opType := backends.OpTypeIsFinite

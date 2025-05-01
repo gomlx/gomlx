@@ -1,5 +1,12 @@
 # GoMLX changelog
 
+# Next
+
+* Package `simplego`:
+  * Fixed `Gather` of scalar values.
+  * Fixed `Where` checking of shape.
+  * Added `Erf` op.
+
 # v0.19.1: 2025/04/30 SimpleGo fixes and new ops; New XLA, requires Gopjrt v0.7.0 update.
 
 * `go mod tidy`

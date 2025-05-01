@@ -31,6 +31,7 @@ func init() {
 	nodeExecutors[backends.OpTypeTanh] = execTanh
 	nodeExecutors[backends.OpTypeIsFinite] = execIsFinite
 	nodeExecutors[backends.OpTypeLogistic] = execLogistic
+	nodeExecutors[backends.OpTypeErf] = execErf
 }
 
 // unaryOperandAndOutput is a convenience function to get the input and output -- which may be the reuse of the input
@@ -761,5 +762,33 @@ func execIsFiniteBF16(inputs []bfloat16.BFloat16, outputs []bool) {
 	for ii, input := range inputs {
 		f := input.Float32()
 		outputs[ii] = !math.IsInf(float64(f), 0) && !math.IsNaN(float64(f))
+	}
+}
+
+// execErf executes the unary op Erf.
+func execErf(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
+	switch input.shape.DType {
+	case dtypes.Float32:
+		execErfGeneric[float32](input.flat.([]float32), output.flat.([]float32))
+	case dtypes.Float64:
+		execErfGeneric[float64](input.flat.([]float64), output.flat.([]float64))
+	case dtypes.BFloat16:
+		execErfBF16(input.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16))
+	default:
+		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
+	}
+	return output
+}
+
+func execErfGeneric[T float32 | float64](inputs, outputs []T) {
+	for ii, input := range inputs {
+		outputs[ii] = T(math.Erf(float64(input)))
+	}
+}
+
+func execErfBF16(inputs, outputs []bfloat16.BFloat16) {
+	for ii, input := range inputs {
+		outputs[ii] = bfloat16.FromFloat32(float32(math.Erf(float64(input.Float32()))))
 	}
 }
