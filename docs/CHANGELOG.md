@@ -6,6 +6,8 @@
   * Fixed `Gather` of scalar values.
   * Fixed `Where` checking of shape.
   * Added `Erf` op.
+* Package `types/tensors`:
+  * Removed dependency to `gopjrt/pjrt` -- otherwise we'll always need to install the C/C++ library.
 
 # v0.19.1: 2025/04/30 SimpleGo fixes and new ops; New XLA, requires Gopjrt v0.7.0 update.
 
