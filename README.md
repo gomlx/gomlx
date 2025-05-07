@@ -17,7 +17,7 @@ It can be used to train, fine-tune, modify and combine machine learning models. 
 the tools to make that work easy: from a complete set of differentiable operators, all the way to UI
 tools to plot metrics while training in a notebook.
 
-It runs almost everywhere Go runs, using the new pure Go backend (🚀 NEW 🚀). It runs even in the browser with WASM 
+It runs almost everywhere Go runs, using the a pure Go backend (🚀 NEW 🚀). It runs even in the browser with WASM 
 ([see demo created with GoMLX](https://janpfeifer.github.io/hiveGo/www/hive/)).
 
 It also supports the optimized backend engine based on [OpenXLA/PJRT](https://github.com/openxla/xla) uses just-in-time
