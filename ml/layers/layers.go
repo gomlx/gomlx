@@ -22,6 +22,7 @@
 package layers
 
 import (
+	"cmp"
 	"fmt"
 
 	. "github.com/gomlx/exceptions"
@@ -31,7 +32,6 @@ import (
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
-	"golang.org/x/exp/constraints"
 )
 
 const (
@@ -179,7 +179,7 @@ func Embedding(ctx *context.Context, input *Node, dtype dtypes.DType, vocabSize,
 //   - Monotonicity of data points: quantiles should always be increasing.
 //
 // Errors are reported back with `panic`.
-func AssertQuantilesForPWLCalibrationValid[T constraints.Ordered](values []T) {
+func AssertQuantilesForPWLCalibrationValid[T cmp.Ordered](values []T) {
 	if len(values) < 2 {
 		Panicf("PieceWiseLinearCalibration requires at least 2 quantile values")
 	}

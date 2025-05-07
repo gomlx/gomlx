@@ -1,15 +1,16 @@
 package graph
 
 import (
+	"math"
+	"math/rand"
+	"reflect"
+	"time"
+
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
 	"golang.org/x/exp/constraints"
-	"math"
-	"math/rand"
-	"reflect"
-	"time"
 )
 
 var (

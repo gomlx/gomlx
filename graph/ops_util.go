@@ -898,7 +898,7 @@ func ConsecutiveDifference(x *Node, axis int, preserveShape bool) *Node {
 		kernel = Reshape(kernel, kernelDims...)
 
 		output := Convolve(expandedX, kernel).
-			NoPadding(). // Default padding.
+			NoPadding().             // Default padding.
 			PaddingPerDim(paddings). // Only has an effect if paddings != nil.
 			Strides(1).
 			Done()

@@ -155,12 +155,12 @@ func execNormalizedDotGeneralGeneric[T PODNumericConstraints](params ...any) any
 	rhsCrossSize := rhs.shape.Dimensions[1]
 	contractingSize := lhs.shape.Dimensions[2] // same as rhs'.
 	rhsBatchStride := contractingSize * rhsCrossSize
-	for _ = range batchSize {
-		for _ = range lhsCrossSize {
+	for range batchSize {
+		for range lhsCrossSize {
 			rhsBatchStartIdx := rhsIdx
-			for _ = range rhsCrossSize {
+			for range rhsCrossSize {
 				lhsRowStartIdx := lhsIdx
-				for _ = range contractingSize {
+				for range contractingSize {
 					outputFlat[outputIdx] += lhsFlat[lhsIdx] * rhsFlat[rhsIdx]
 					lhsIdx++
 					rhsIdx++
@@ -190,14 +190,14 @@ func execNormalizedDotGeneralBFloat16(params ...any) any {
 	rhsCrossSize := rhs.shape.Dimensions[1]
 	contractingSize := lhs.shape.Dimensions[2] // same as rhs'.
 	rhsBatchStride := contractingSize * rhsCrossSize
-	for _ = range batchSize {
-		for _ = range lhsCrossSize {
+	for range batchSize {
+		for range lhsCrossSize {
 			rhsBatchStartIdx := rhsIdx
-			for _ = range rhsCrossSize {
+			for range rhsCrossSize {
 				lhsRowStartIdx := lhsIdx
 				// Accumulate result in float32.
 				acc := outputFlat[outputIdx].Float32()
-				for _ = range contractingSize {
+				for range contractingSize {
 					acc += lhsFlat[lhsIdx].Float32() * rhsFlat[rhsIdx].Float32()
 					lhsIdx++
 					rhsIdx++

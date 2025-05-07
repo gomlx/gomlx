@@ -17,6 +17,8 @@
 package graph
 
 import (
+	"slices"
+
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types"
@@ -24,7 +26,6 @@ import (
 	"github.com/gomlx/gomlx/types/tensors/images"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
-	"slices"
 )
 
 // This file contains all parts of the {Max|Sum|Prod}Pool implementation.
@@ -528,7 +529,7 @@ func dilateConvolveToMatchSumPooling(x, backProp *Node, windowDimensions, stride
 		// the original dimension -- some may be padding ... but some padding (not used) may
 		// not be included.
 		conf.Interior = strides[axis] - 1
-		conf.Start = (windowDimensions[axis]) / 2 // Notice that we switch the long/short half from start/end.
+		conf.Start = windowDimensions[axis] / 2 // Notice that we switch the long/short half from start/end.
 		conf.End = (windowDimensions[axis] - 1) / 2
 	}
 	// expanded should have the same spatial dimensions as the original input,
@@ -556,7 +557,7 @@ func dilateConvolveToMatchSumPooling(x, backProp *Node, windowDimensions, stride
 	var requiresAdjustment bool
 	for axis := range padConfig {
 		conf := &padConfig[axis]
-		*conf = PadAxis{0, 0, 0}
+		*conf = PadAxis{}
 
 		amountToAdjust := x.Shape().Dimensions[axis] - expanded.Shape().Dimensions[axis] // May be negative.
 		paddingStart := 0

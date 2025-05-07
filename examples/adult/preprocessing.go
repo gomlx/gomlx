@@ -348,8 +348,6 @@ func PopulateVocabularies(df dataframe.DataFrame) {
 	}
 }
 
-var ()
-
 // PopulateQuantiles with up to numQuantiles for each tloat column.
 func PopulateQuantiles(df dataframe.DataFrame, numQuantiles int) {
 	// Important: loop through AdultFieldNames to have a stable ordering.
