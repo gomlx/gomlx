@@ -223,8 +223,8 @@ func TestLayerWiseInferenceMinimal(t *testing.T) {
 	logits := execGnn.Call()[0]
 	fmt.Printf("\tGNN seeds states: %s\n", logits)
 	//want := [][]float32{{0.010}, {1001.035}, {2002.060}, {3003.085}, {4004.110}, {5005.135}, {6006.160}, {7007.185}, {8008.210}, {9009.235}}
-	want := [][]float32{[]float32{0.02}, []float32{2002.07}, []float32{4004.12}, []float32{6006.17}, []float32{8008.22}, []float32{10010.27},
-		[]float32{12012.32}, []float32{14014.37}, []float32{16016.42}, []float32{18018.47}}
+	want := [][]float32{{0.02}, {2002.07}, {4004.12}, {6006.17}, {8008.22}, {10010.27},
+		{12012.32}, {14014.37}, {16016.42}, {18018.47}}
 	require.Equal(t, want, logits.Value())
 
 	// Uncomment to list variables used in model.

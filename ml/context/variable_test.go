@@ -37,7 +37,7 @@ func TestVariable_CloneToContext(t *testing.T) {
 	// Check the new variable value is independent of the old one.
 	ctx0 = nil
 	v0x.Value().FinalizeAll()
-	for _ = range 5 {
+	for range 5 {
 		runtime.GC()
 	}
 	require.Equal(t, value, tensors.CopyFlatData[float32](v1x.Value()))

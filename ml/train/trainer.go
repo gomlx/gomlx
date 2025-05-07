@@ -24,6 +24,8 @@ package train
 
 import (
 	"fmt"
+	"io"
+
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/graph"
@@ -33,7 +35,6 @@ import (
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/pkg/errors"
-	"io"
 )
 
 const (

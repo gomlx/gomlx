@@ -19,9 +19,9 @@
 package xslices
 
 import (
+	"cmp"
 	"flag"
 	"fmt"
-	"golang.org/x/exp/constraints"
 	"math"
 	"math/cmplx"
 	"reflect"
@@ -29,6 +29,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"golang.org/x/exp/constraints"
 )
 
 // At takes an element at the given `index`, where `index` can be negative, in which case it takes from the end
@@ -231,7 +233,7 @@ func Keys[K comparable, V any](m map[K]V) []K {
 }
 
 // SortedKeys returns the sorted keys of a map in the form of a slice.
-func SortedKeys[K constraints.Ordered, V any](m map[K]V) []K {
+func SortedKeys[K cmp.Ordered, V any](m map[K]V) []K {
 	s := Keys(m)
 	sort.Slice(s, func(i, j int) bool {
 		return s[i] < s[j]
@@ -272,13 +274,13 @@ func recursiveMDSlice[T any](dims []int, data []T, dataPos int) (reflect.Value, 
 
 	// Create first sub-slice, and use its type to create the higher order slice.
 	var subSlice reflect.Value
-	subSlice, dataPos = recursiveMDSlice[T](dims[1:], data, dataPos)
+	subSlice, dataPos = recursiveMDSlice(dims[1:], data, dataPos)
 	slice := reflect.MakeSlice(reflect.SliceOf(subSlice.Type()), dims[0], dims[0])
 	slice.Index(0).Set(subSlice)
 
 	// Now create the other sub-slices:
 	for ii := 1; ii < dims[0]; ii++ {
-		subSlice, dataPos = recursiveMDSlice[T](dims[1:], data, dataPos)
+		subSlice, dataPos = recursiveMDSlice(dims[1:], data, dataPos)
 		slice.Index(ii).Set(subSlice)
 	}
 	return slice, dataPos
@@ -348,7 +350,7 @@ func MapParallel[In, Out any](in []In, fn func(e In) Out) (out []Out) {
 }
 
 // Max scans the slice and returns the maximum value.
-func Max[T constraints.Ordered](slice []T) (max T) {
+func Max[T cmp.Ordered](slice []T) (max T) {
 	if len(slice) == 0 {
 		return
 	}
@@ -362,7 +364,7 @@ func Max[T constraints.Ordered](slice []T) (max T) {
 }
 
 // Min scans the slice and returns the smallest value.
-func Min[T constraints.Ordered](slice []T) (min T) {
+func Min[T cmp.Ordered](slice []T) (min T) {
 	if len(slice) == 0 {
 		return
 	}

@@ -2,6 +2,10 @@ package sampler
 
 import (
 	"fmt"
+	"path"
+	"testing"
+
+	_ "github.com/gomlx/gomlx/backends/xla"
 	mldata "github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/tensors"
@@ -9,10 +13,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/constraints"
-	"path"
-	"testing"
-
-	_ "github.com/gomlx/gomlx/backends/xla"
 )
 
 func createTestSampler(t *testing.T) *Sampler {

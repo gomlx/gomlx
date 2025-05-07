@@ -15,14 +15,14 @@ var flagPlugin = flag.String("plugin", "cpu", "Plugin to use for testing for xla
 
 func TestRepeatedClients(t *testing.T) {
 	fmt.Println("Creating and destroying 10 backend clients: one at a time")
-	for _ = range 10 {
+	for range 10 {
 		backend := New(*flagPlugin)
 		backend.Finalize()
 	}
 
 	fmt.Println("Creating and destroying 10 backend clients: all at once")
 	testBackends := make([]backends.Backend, 0, 10)
-	for _ = range 10 {
+	for range 10 {
 		testBackends = append(testBackends, New(*flagPlugin))
 	}
 	for _, backend := range testBackends {
@@ -36,7 +36,7 @@ func TestRepeatedClients(t *testing.T) {
 		var exec backends.Executable
 		{
 			x := builder.Parameter("x", shapes.Make(dtypes.Float64, 3))
-			for _ = range rand.Intn(10) {
+			for range rand.Intn(10) {
 				x = builder.Add(x, x)
 			}
 			x2 := builder.Mul(x, x)
@@ -48,7 +48,7 @@ func TestRepeatedClients(t *testing.T) {
 			backend.BufferToFlatData(bOuts[0], out0)
 			backend.BufferToFlatData(bOuts[1], out1)
 			fmt.Printf("output=%v, %v\n", out0, out1)
-			for _ = range 10 {
+			for range 10 {
 				runtime.GC()
 			}
 			backend.BufferFinalize(bIn)

@@ -20,6 +20,6 @@ const (
 // The parameter `pooling` has to select at least one strategy. Careful, because the size of the final embedding grow
 // with `O(p^d)`, where `p` is the number of pooling strategies and `d` is the depth of the sampler tree.
 func AggregateFeatures(downloadDir string, sampler sampler.Sampler, pooling []PoolingStrategy) error {
-	
+
 	return nil
 }

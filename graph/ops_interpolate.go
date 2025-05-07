@@ -1,15 +1,16 @@
 package graph
 
 import (
+	"cmp"
+
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
-	"golang.org/x/exp/constraints"
 )
 
 // File with image manipulation tools
 
-func scalarMin[T constraints.Ordered](a, b T) T {
+func scalarMin[T cmp.Ordered](a, b T) T {
 	if b > a {
 		return a
 	}

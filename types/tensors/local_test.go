@@ -244,14 +244,14 @@ func TestSerialization(t *testing.T) {
 
 		// Serialized repeats times:
 		repeats := 10
-		for _ = range repeats {
+		for range repeats {
 			require.NoError(t, tensor.GobSerialize(enc))
 		}
 		fmt.Printf("\t%#v serialized %d times to %d bytes\n", values, repeats, buf.Len())
 
 		// Deserialize repeats times:
 		dec := gob.NewDecoder(buf)
-		for _ = range repeats {
+		for range repeats {
 			var err error
 			tensor, err = GobDeserialize(dec)
 			require.NoError(t, err)
@@ -274,14 +274,14 @@ func TestSerialization(t *testing.T) {
 
 		// Serialized repeats times:
 		repeats := 10
-		for _ = range repeats {
+		for range repeats {
 			require.NoError(t, tensor.GobSerialize(enc))
 		}
 		fmt.Printf("\t%#v serialized %d times to %d bytes\n", values, repeats, buf.Len())
 
 		// Deserialize repeats times:
 		dec := gob.NewDecoder(buf)
-		for _ = range repeats {
+		for range repeats {
 			var err error
 			tensor, err = GobDeserializeToDevice(dec, backend)
 			require.NoError(t, err)

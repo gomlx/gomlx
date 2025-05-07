@@ -304,7 +304,7 @@ func (c *Config) Done() *Node {
 	expandedX := InsertAxes(x, -1)
 	powersOfX := []*Node{OnesLike(expandedX), expandedX}
 	powerOfX := expandedX
-	for _ = range maxDegree - 1 {
+	for range maxDegree - 1 {
 		powerOfX = Mul(powerOfX, expandedX)
 		powersOfX = append(powersOfX, powerOfX)
 	}

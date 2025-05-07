@@ -334,7 +334,7 @@ func MonotonicProjection(input *Node, margin *Node, axis int) *Node {
 	diffRight := ConsecutiveDifference(input, adjustedAxis, false)
 	// For a fixed number of times try to prevent everything to be pushed if possible.
 	if axisDim > 2 {
-		for _ = range numIter {
+		for range numIter {
 			adjustedDiff := Max(diffRight, margin) // Pushes everything to the right, whenever monotonicity is broken.
 			adjustment := Sub(diffRight, adjustedDiff)
 			fixedAdjustment := ShiftWithScalar(adjustment, adjustedAxis, ShiftDirRight, 1, 0.0)
@@ -352,7 +352,7 @@ func MonotonicProjection(input *Node, margin *Node, axis int) *Node {
 
 	// For a fixed number of times try to prevent everything to be pushed if possible.
 	if axisDim > 2 {
-		for _ = range numIter {
+		for range numIter {
 			adjustedDiff := Max(diffLeft, margin) // Pushes everything to the left, whenever monotonicity is broken.
 			adjustment := Sub(diffLeft, adjustedDiff)
 			fixedAdjustment := ShiftWithScalar(adjustment, adjustedAxis, ShiftDirLeft, 1, 0.0)
