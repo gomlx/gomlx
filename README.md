@@ -17,13 +17,14 @@ It can be used to train, fine-tune, modify and combine machine learning models. 
 the tools to make that work easy: from a complete set of differentiable operators, all the way to UI
 tools to plot metrics while training in a notebook.
 
-It's main backend engine based on [OpenXLA/PJRT](https://github.com/openxla/xla) uses just-in-time
+It runs almost everywhere Go runs, using the new pure Go backend (🚀 NEW 🚀). It runs even in the browser with WASM 
+([see demo created with GoMLX](https://janpfeifer.github.io/hiveGo/www/hive/)).
+
+It also supports the optimized backend engine based on [OpenXLA/PJRT](https://github.com/openxla/xla) uses just-in-time
 compilation to CPU and GPU (optionally TPUs also). 
 It's the same engine that powers Google's [Jax](https://github.com/google/jax) and 
-[TensorFlow](https://tensorflow.org/), and it has the same speed in many cases.
-
-It also has an (experimental) backend written in Go, that is more portable (should work in Mac/Windows/Wasm), but
-significantly slower and doesn't implement everything.
+[TensorFlow](https://tensorflow.org/), and it has the same speed in many cases. 
+This only compiles for Linux/amd-64 for now (XLA limitation) 
 
 > [!Tip]
 > 🎓 Quick Start:
@@ -44,9 +45,6 @@ It is also incredibly flexible, and easy to extend and try non-conventional idea
 Documentation is kept up-to-date (if it is not well documented, it is as if the code is not there)
 and error messages are useful (always with a stack-trace) and try to make it easy to solve issues.
 </div>
-
-**GoMLX is still evolving, and should be considered experimental.** There are occasional changes, but mostly it has just been
-adding new functionality.
 
 ## 🗺️ Overview
 
@@ -72,13 +70,16 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
   * 🎉Neural Style Transfer 10 years Celebration🎉: [see a demo written using GoMLX](https://github.com/janpfeifer/styletransfer/blob/main/demo.ipynb) of the [original paper](https://arxiv.org/abs/1508.06576).
   * [Triplet Losses](https://github.com/gomlx/gomlx/blob/main/ml/train/losses/triplet.go): various negative sampling strategies as well as various distance metrics.
   * [AlphaZero AI for the game of Hive](https://github.com/janpfeifer/hiveGo/): it uses a trivial GNN to evaluate
-    positions on the board. It includes a command-line UI to test your skills!
+    positions on the board. It includes a [WASM demo (runs GoMLX in the browser!)](https://janpfeifer.github.io/hiveGo/www/hive/) It includes a command-line UI to test your skills!
 
 **Highlights:**
 
 > **🚀 NEW 🚀**: `SimpleGo`, a new Go only backend: it is very portable and doesn't require installation of separate 
-> C++ libraries. But it is slower and has a limited ops coverage: some 60 ops are already implemented. 
+> C++ libraries. It is slower and has a limited ops coverage: some 60 ops are already implemented. 
 > It is actively being developed, if you are missing any op, please open an issue in GoMLX GitHub and let us know.
+>
+> See [amazing Hive demo running on WASM](https://janpfeifer.github.io/hiveGo/www/hive/): it evaluates game states using **GoMLX** `SimpleGo`
+> compiled to WebAssembly.
 
 * Converting ONNX models to GoMLX with [onnx-gomlx](https://github.com/gomlx/onnx-gomlx): both as an alternative for `onnxruntime` (leveraging XLA),
   but also to further fine-tune models. See also [go-huggingface](https://github.com/gomlx/go-huggingface) to easily download ONNX model files from HuggingFace.
@@ -107,12 +108,12 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
 * [Issues](https://github.com/gomlx/gomlx/issues)
 * Random brainstorming on projects: just start a Q&A and I'm happy to meet in discord somewhere or VC.
 
-## <a id="installation"></a>🛠️ + ⚙️ Installation
+## <a id="installation"></a>🛠️ + ⚙️ Installation (Only needed for the XLA backend)
 
 If you want to use only the `SimpleGo` backend, simply do `import _ "github.com/gomlx/gomlx/backends/simplego"` and 
 you are ready -- it will register itself.
 
-If you want the more advanced/faster XLA backend (only available for Linux at the moment), with support for CUDA, follow below.
+If you want the more advanced/faster **XLA backend** (only available for Linux at the moment), with support for CUDA, follow below.
 
 **TLDR;**: Two simple options:
 
@@ -136,30 +137,11 @@ curl -sSf https://raw.githubusercontent.com/gomlx/gopjrt/main/cmd/install_cuda.s
 
 Depending on what data formats you use, you may want to install `hdf5-tools` programs (`sudo apt install hdf5-tools` in Linux).
 
-### **Darwin/arm64 and Darwin/amd64**
+### Mac and other platforms
 
-> [!WARNING]
-> 🚧🛠 The Darwin pre-built binary versions is at least 2 versions behind the current one -- I don't have easily available
-> mac box to update it. So it should be considered broken!! 🚧🛠
->
-> If you use Mac and are familiar with building Go and C/C++ programs, a contribution here would be most welcome! :smiley:
-> Both for [GoMLX](https://github.com/gomlx/gomlx) and [Gopjrt](https://github.com/gomlx/gopjrt).
+Use the `simplego` backend for now.
 
-> [!Note]
-> Currently, Darwin (MacOS) 🚧🛠 it only works with statically linked PJR CPU plugin 🛠🚧️ so that is the default (see issue in [XLA's issue #19152](https://github.com/openxla/xla/issues/19152) and on XLA's discord channels).
-**Experimental**.
-
-For **Arm64 (M1, M2, ... CPUs)**, run ([see source](https://github.com/gomlx/gopjrt/blob/main/cmd/install_darwin_arm64.sh))
-
-```bash
-curl -sSf https://raw.githubusercontent.com/gomlx/gopjrt/main/cmd/install_darwin_arm64.sh | bash
-```
-
-For **Amd64 (i86_64)**, run ([see source](https://github.com/gomlx/gopjrt/blob/main/cmd/install_darwin_amd64.sh))
-
-```bash
-curl -sSf https://raw.githubusercontent.com/gomlx/gopjrt/main/cmd/install_darwin_amd64.sh | bash
-```
+For XLA unfortunately there are no available versions for Macs.
 
 ### 🐳  [Pre-built Docker](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab)
 
@@ -232,16 +214,22 @@ In the future we plan to also export models to ONNX or StableHLO and one could u
 ## FAQ
 
 - **What are the environment variables are used by GoMLX ?** 
-  - `GOMLX_BACKEND`: defines the backend engine to use (if using `backend.New()`). The value is formatted as "<backend_name>:<backend_config>".
-    Examples for XLA, the default engine: `GOMLX_BACKEND="xla:cpu"` (for CPU), `GOMLX_BACKEND="xla:cuda"` (for Nvidia CUDA) or
-    `GOMLX=BACKEND="xla:/path/to/my/pjrt_plugin.so"` for some custom PJRT plugin.
+  - `GOMLX_BACKEND`: defines the backend engine to use (if using `backends.New()`). The value is formatted as "<backend_name>[:<backend_config>]",
+    with the config part being optional. Examples:
+    - `GOMLX_BACKEND=go`: Use the `SimpleGo` backend, the pure Go implementation that is very portable but slow.
+    - `GOMLX_BACKEND="xla:cpu"`: Use XLA (the faster backend, only runs on Linux now) for CPU
+    - `GOMLX_BACKEND="xla:cuda"`: Use XLA for for Nvidia CUDA
+    - `GOMLX=BACKEND="xla:/path/to/my/pjrt_plugin.so"`: Use XLA with an arbitrary PJRT. PJRT is a plugin system for XLA to support different hardwares. One can install PJRTs build for NVIDIA GPUs (there is an installation script for that), there is also one for ROCm (not tested by the author), for TPU (Google Cloud) and reports of PJRTs being built to even new accelerators (e.g: [TensTorrent XLA](https://github.com/tenstorrent/tt-xla))
   - `PJRT_PLUGIN_LIBRARY_PATH`: the underlying XLA backend uses this variable as an extra directory to search for plugin locations.
     It searches for the systems library paths (`$LD_LIBRARY_PATH`, `/etc/ld.so.conf`), the default `/usr/local/lib/gomlx/pjrt` and
     `$PJRT_PLUGIN_LIBRARY_PATH` if set.
 - **What backends to include when using GoMLX ?**
   - The recommendation is to use `import _ "github.com/gomlx/gomlx/backends/default"` which will import `XLA` and
-    `SimpleGo` backends. If you are working on a platform not supported by *XLA*, or you don't want to install
-    it's C++ library, you can add `-tags=noxla` to the compiler, and it won't include *XLA*.
+    `SimpleGo` backends. If you add `-tags=noxla` to the compiler it won't include *XLA*.
+  - `import _ "github.com/gomlx/gomlx/backends/simplego"` to include only `SimpleGo`.
+    If you are working on a platform not supported by *XLA*, or you don't want to install
+    its C++ library.
+  - `import _ "github.com/gomlx/gomlx/backends/xla"` to import only XLA.
 
 ## 🤝 Collaborating
 
