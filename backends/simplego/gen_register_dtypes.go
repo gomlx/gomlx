@@ -234,6 +234,28 @@ func init() {
 	sliceDTypeMap.RegisterIfNotSet(dtypes.BFloat16, execSliceGeneric[bfloat16.BFloat16])
 	sliceDTypeMap.RegisterIfNotSet(dtypes.Bool, execSliceGeneric[bool])
 
+	// DTypeMap: argMinMaxDTypeMap
+	argMinMaxDTypeMap.RegisterIfNotSet(dtypes.Int8, execArgMinMaxGeneric[int8])
+	argMinMaxDTypeMap.RegisterIfNotSet(dtypes.Int16, execArgMinMaxGeneric[int16])
+	argMinMaxDTypeMap.RegisterIfNotSet(dtypes.Int32, execArgMinMaxGeneric[int32])
+	argMinMaxDTypeMap.RegisterIfNotSet(dtypes.Int64, execArgMinMaxGeneric[int64])
+	argMinMaxDTypeMap.RegisterIfNotSet(dtypes.Uint8, execArgMinMaxGeneric[uint8])
+	argMinMaxDTypeMap.RegisterIfNotSet(dtypes.Uint16, execArgMinMaxGeneric[uint16])
+	argMinMaxDTypeMap.RegisterIfNotSet(dtypes.Uint32, execArgMinMaxGeneric[uint32])
+	argMinMaxDTypeMap.RegisterIfNotSet(dtypes.Uint64, execArgMinMaxGeneric[uint64])
+	argMinMaxDTypeMap.RegisterIfNotSet(dtypes.Float32, execArgMinMaxGeneric[float32])
+	argMinMaxDTypeMap.RegisterIfNotSet(dtypes.Float64, execArgMinMaxGeneric[float64])
+
+	// DTypeMap: argMinMaxCopyIntsDTypeMap
+	argMinMaxCopyIntsDTypeMap.RegisterIfNotSet(dtypes.Int8, buildArgMinMaxCopyIntsFn[int8])
+	argMinMaxCopyIntsDTypeMap.RegisterIfNotSet(dtypes.Int16, buildArgMinMaxCopyIntsFn[int16])
+	argMinMaxCopyIntsDTypeMap.RegisterIfNotSet(dtypes.Int32, buildArgMinMaxCopyIntsFn[int32])
+	argMinMaxCopyIntsDTypeMap.RegisterIfNotSet(dtypes.Int64, buildArgMinMaxCopyIntsFn[int64])
+	argMinMaxCopyIntsDTypeMap.RegisterIfNotSet(dtypes.Uint8, buildArgMinMaxCopyIntsFn[uint8])
+	argMinMaxCopyIntsDTypeMap.RegisterIfNotSet(dtypes.Uint16, buildArgMinMaxCopyIntsFn[uint16])
+	argMinMaxCopyIntsDTypeMap.RegisterIfNotSet(dtypes.Uint32, buildArgMinMaxCopyIntsFn[uint32])
+	argMinMaxCopyIntsDTypeMap.RegisterIfNotSet(dtypes.Uint64, buildArgMinMaxCopyIntsFn[uint64])
+
 	// DTypePairMap: convertDTypePairMap
 	convertDTypePairMap.RegisterIfNotSet(dtypes.Int8, dtypes.Int8, execConvertDTypeGeneric[int8, int8])
 	convertDTypePairMap.RegisterIfNotSet(dtypes.Int8, dtypes.Int16, execConvertDTypeGeneric[int8, int16])

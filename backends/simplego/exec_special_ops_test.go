@@ -543,3 +543,38 @@ func TestExecSpecialOps_RngBitsGenerator(t *testing.T) {
 		})
 	}
 }
+
+func TestExecSpecialOps_ArgMinMaxOp(t *testing.T) {
+	// Test Case 1: Simple 1D argmin
+	y0 := graph.ExecOnce(backend, func(x *graph.Node) *graph.Node {
+		return graph.ArgMin(x, 0)
+	}, []float32{3, 1, 4, 1, 5})
+	fmt.Printf("\ty0=%s\n", y0.GoStr())
+	require.Equal(t, int32(1), y0.Value())
+
+	// Test Case 2: 2D argmax along axis 1 (columns)
+	y1 := graph.ExecOnce(backend, func(x *graph.Node) *graph.Node {
+		return graph.ArgMax(x, 1)
+	}, [][]int32{{1, 2, 3}, {4, 1, 2}, {7, 8, 5}})
+	fmt.Printf("\ty1=%s\n", y1.GoStr())
+	require.Equal(t, []int32{2, 0, 1}, y1.Value())
+
+	// Test Case 3: 2D argmin along axis 0 (rows) with BFloat16
+	y2 := graph.ExecOnce(backend, func(x *graph.Node) *graph.Node {
+		return graph.ArgMin(x, 0)
+	}, [][]bfloat16.BFloat16{
+		{bf16(1), bf16(2)},
+		{bf16(-1), bf16(3)},
+		{bf16(4), bf16(-2)}})
+	fmt.Printf("\ty2=%s\n", y2.GoStr())
+	require.Equal(t, []int32{1, 2}, y2.Value())
+
+	// Test Case 4: 3D argmax with repeated values
+	y3 := graph.ExecOnce(backend, func(x *graph.Node) *graph.Node {
+		return graph.ArgMax(x, 1)
+	}, [][][]float32{
+		{{1, 2}, {1, 0}, {1, -1}},
+		{{4, 3}, {4, 5}, {4, 2}}})
+	fmt.Printf("\ty3=%s\n", y3.GoStr())
+	require.Equal(t, [][]int32{{0, 0}, {0, 1}}, y3.Value())
+}

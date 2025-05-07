@@ -5,7 +5,7 @@
 * Package `simplego`:
   * Fixed `Gather` of scalar values.
   * Fixed `Where` checking of shape.
-  * Added `Erf` op.
+  * New ops: `Erf`, `ArgMinMax`. 
 * Package `types/tensors`:
   * Removed dependency to `gopjrt/pjrt` -- otherwise we'll always need to install the C/C++ library.
 
