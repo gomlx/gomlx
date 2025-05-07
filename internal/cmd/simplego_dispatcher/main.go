@@ -57,6 +57,8 @@ var (
 			{"scatterDTypeMap", "execScatterGeneric", makeDTypes(true, true, true, true, false)},
 			{"dereferenceIntsDTypeMap", "dereferenceIntsGeneric", makeDTypes(true, true, false, false, false)},
 			{"sliceDTypeMap", "execSliceGeneric", makeDTypes(true, true, true, true, true)},
+			{"argMinMaxDTypeMap", "execArgMinMaxGeneric", makeDTypes(true, true, true, false, false)},
+			{"argMinMaxCopyIntsDTypeMap", "buildArgMinMaxCopyIntsFn", makeDTypes(true, true, false, false, false)},
 		},
 		PairMaps: []MapPairInfo{
 			// Various ConvertDType instantiations.

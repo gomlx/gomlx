@@ -135,6 +135,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 
 	fmt.Printf("Training %s model:\n", modelType)
 	backend := backends.New()
+	fmt.Printf("Backend %s: %s\n", backend.Name(), backend.Description())
 
 	lossFn, err := losses.LossFromContext(ctx)
 	if err != nil {
