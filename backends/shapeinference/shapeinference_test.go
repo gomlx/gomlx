@@ -349,3 +349,42 @@ func TestSliceOp(t *testing.T) {
 	require.Panics(t, func() { SliceOp(operand, validStarts, []int{8, 6}, validStrides) }, // limit[1]=6 > dimSize[1]=5
 		"%s Error Case 10 Failed: Limit > dimSize", opName)
 }
+
+func TestArgMinMaxOp(t *testing.T) {
+	// --- Valid Cases ---
+
+	// Case 1: 1D tensor
+	operand1 := MS(F32, 10)
+	expected1 := MS(I32)
+	output1 := ArgMinMaxOp(operand1, 0, I32)
+	require.True(t, expected1.Equal(output1), "Valid Case 1 Failed: Expected %s, got %s", expected1, output1)
+
+	// Case 2: 2D tensor, single axis
+	operand2 := MS(F32, 5, 6)
+	expected2 := MS(I8, 5)
+	output2 := ArgMinMaxOp(operand2, 1, expected2.DType)
+	require.True(t, expected2.Equal(output2), "Valid Case 2 Failed: Expected %s, got %s", expected2, output2)
+
+	// Case 3: 3D tensor, multiple axes
+	operand3 := MS(F32, 4, 5, 6)
+	expected3 := MS(U64, 5, 6)
+	output3 := ArgMinMaxOp(operand3, 0, expected3.DType)
+	require.True(t, expected3.Equal(output3), "Valid Case 3 Failed: Expected %s, got %s", expected3, output3)
+
+	// --- Error Cases ---
+
+	// Error 1: Invalid operand DType
+	require.Panics(t, func() {
+		ArgMinMaxOp(shapes.Make(dtypes.InvalidDType, 10), 0, I32)
+	}, "Error Case 1 Failed: Invalid operand DType")
+
+	// Error 2: Invalid axis (out of bounds)
+	require.Panics(t, func() {
+		ArgMinMaxOp(operand1, 1, I32) // operand1 is rank 1, axis 1 invalid
+	}, "Error Case 2 Failed: Invalid axis (out of bounds)")
+
+	// Error 3: Negative axis
+	require.Panics(t, func() {
+		ArgMinMaxOp(operand2, -1, I32)
+	}, "Error Case 3 Failed: Negative axis")
+}

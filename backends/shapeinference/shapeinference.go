@@ -738,3 +738,24 @@ func SliceOp(operand shapes.Shape, starts, limits, strides []int) shapes.Shape {
 
 	return outputShape
 }
+
+// ArgMinMaxOp calculates the output shape for an ArgMinMax operation.
+// It will be the shape of the operand minus the reduce axis.
+func ArgMinMaxOp(operand shapes.Shape, axis int, outputDType dtypes.DType) shapes.Shape {
+	if !outputDType.IsInt() {
+		exceptions.Panicf("ArgMinMax outputDType must be an integer type, got %s", outputDType)
+	}
+	if !operand.DType.IsFloat() && !operand.DType.IsInt() {
+		exceptions.Panicf("ArgMinMax operand DType must be a floating point or integer type, got %s", operand)
+	}
+	if operand.IsScalar() {
+		exceptions.Panicf("ArgMinMax requires a non-scalar operand, got %s", operand)
+	}
+	if axis < 0 || axis >= operand.Rank() {
+		exceptions.Panicf("ArgMinMax axis %d is out of range for operand %s", axis, operand)
+	}
+	newDims := slices.Clone(operand.Dimensions)
+	newDims = slices.Delete(newDims, axis, axis+1)
+	output := shapes.Make(outputDType, newDims...)
+	return output
+}

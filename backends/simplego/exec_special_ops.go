@@ -34,6 +34,7 @@ func init() {
 	nodeExecutors[backends.OpTypeScatterMin] = execScatter
 	nodeExecutors[backends.OpTypeScatterSum] = execScatter
 	nodeExecutors[backends.OpTypeSlice] = execSlice
+	nodeExecutors[backends.OpTypeArgMinMax] = execArgMinMax
 
 	// For nodes with multiple outputs:
 	multiOutputsNodeExecutors[backends.OpTypeRngBitGenerator] = execRngBitGenerator
@@ -1408,4 +1409,175 @@ func execRngBitGenerator(backend *Backend, node *Node, inputs []*Buffer, inputsO
 	stateFlat[0] = binary.LittleEndian.Uint64(rngState[4 : 4+8])
 	stateFlat[1] = binary.LittleEndian.Uint64(rngState[4+8 : 4+16])
 	return []*Buffer{state, rngData}
+}
+
+// execArgMinMax ====================================================================================================
+
+const MaxArgMinMaxReductionSize = 0x8000_0000
+
+// execArgMinMax is the executor function registered for backends.OpTypeArgMinMax.
+func execArgMinMax(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+	operand := inputs[0]
+	reduceAxis := node.data.(*argMinMaxNode).axis
+	isMin := node.data.(*argMinMaxNode).isMin
+	output := backend.getBuffer(node.shape.DType, node.shape.Size())
+	output.shape = node.shape
+
+	// There are 3 sizes to iterate over: before and after the reduceAxis, and the size (dimension) of the reduce axis itself.
+	operandDims := operand.shape.Dimensions
+	operandRank := len(operandDims)
+	suffixSize := 1
+	for axis := reduceAxis + 1; axis < operandRank; axis++ {
+		suffixSize *= operandDims[axis]
+	}
+	prefixSize := 1
+	for axis := range reduceAxis {
+		prefixSize *= operand.shape.Dimensions[axis]
+	}
+	reduceSize := operandDims[reduceAxis]
+	if reduceSize >= MaxArgMinMaxReductionSize {
+		// If we need larger, change buildArgMinMax to use int64 instead of int32.
+		exceptions.Panicf("ArgMaxMin implementation only supports reduction on dimensions < %d, got operand shaped %s and reduce axis is %d",
+			MaxArgMinMaxReductionSize, operand.shape, reduceAxis)
+	}
+
+	// Instantiate the function to copy over results from ints:
+	buildCopyIntsFn := argMinMaxCopyIntsDTypeMap.Get(output.shape.DType).(func(output *Buffer) func(flatIdx int, values []int32))
+	copyIntsFn := buildCopyIntsFn(output)
+
+	// Dispatch to the generic implementation based on DType.
+	argMinMaxFn := argMinMaxDTypeMap.Get(operand.shape.DType).(func(backend *Backend, operand *Buffer, copyIntsFn func(flatIdx int, values []int32), prefixSize, reduceSize, suffixSize int, isMin bool))
+	argMinMaxFn(backend, operand, copyIntsFn, prefixSize, reduceSize, suffixSize, isMin)
+	return output
+}
+
+var (
+	argMinMaxDTypeMap         = NewDTypeMap("ArgMinMaxRun")
+	argMinMaxCopyIntsDTypeMap = NewDTypeMap("ArgMinMaxCopyInts")
+)
+
+// buildArgMinMaxCopyIntsFn creates a "copyInts" function to copy the given values starting at the flatIdx to
+// the output buffer.
+func buildArgMinMaxCopyIntsFn[T PODIntegerConstraints](output *Buffer) func(flatIdx int, values []int32) {
+	outputFlat := output.flat.([]T)
+	return func(flatIdx int, values []int32) {
+		for _, value := range values {
+			outputFlat[flatIdx] = T(value)
+			flatIdx++
+		}
+	}
+}
+
+func execArgMinMaxGeneric[T PODNumericConstraints](
+	backend *Backend, operand *Buffer, copyIntsFn func(flatIdx int, values []int32), prefixSize, reduceSize, suffixSize int, isMin bool) {
+	operandFlat := operand.flat.([]T)
+
+	// Temporary data to store argMax results, so we can traverse the operand sequentially.
+	currentBestBuffer := backend.getBuffer(operand.shape.DType, suffixSize)
+	currentBest := currentBestBuffer.flat.([]T)
+	currentArgBestBuffer := backend.getBuffer(dtypes.Int32, suffixSize)
+	currentArgBest := currentArgBestBuffer.flat.([]int32)
+
+	outputFlatIdx := 0
+	operandFlatIdx := 0
+	for range prefixSize {
+		// Initialize current best with first element of reduce axis:
+		for suffixIdx := range suffixSize {
+			currentBest[suffixIdx] = operandFlat[operandFlatIdx]
+			currentArgBest[suffixIdx] = 0
+			operandFlatIdx++
+		}
+
+		// Iterate over the rest of the elements of reduce axis:
+		if isMin {
+			// ArgMin
+			for reduceIdx := 1; reduceIdx < reduceSize; reduceIdx++ {
+				for suffixIdx := range suffixSize {
+					operandValue := operandFlat[operandFlatIdx]
+					operandFlatIdx++
+					if operandValue < currentBest[suffixIdx] {
+						currentBest[suffixIdx] = operandValue
+						currentArgBest[suffixIdx] = int32(reduceIdx)
+					}
+				}
+			}
+		} else {
+			// ArgMax
+			for reduceIdx := 1; reduceIdx < reduceSize; reduceIdx++ {
+				for suffixIdx := range suffixSize {
+					operandValue := operandFlat[operandFlatIdx]
+					operandFlatIdx++
+					if operandValue > currentBest[suffixIdx] {
+						currentBest[suffixIdx] = operandValue
+						currentArgBest[suffixIdx] = int32(reduceIdx)
+					}
+				}
+			}
+		}
+
+		// Copy over the result of the whole suffix.
+		copyIntsFn(outputFlatIdx, currentArgBest)
+		outputFlatIdx += suffixSize
+	}
+	backend.putBuffer(currentBestBuffer)
+	backend.putBuffer(currentArgBestBuffer)
+}
+
+func init() {
+	argMinMaxDTypeMap.Register(dtypes.BFloat16, execArgMinMaxGenericBFloat16)
+}
+
+func execArgMinMaxGenericBFloat16(
+	backend *Backend, operand *Buffer, copyIntsFn func(flatIdx int, values []int32), prefixSize, reduceSize, suffixSize int, isMin bool) {
+	operandFlat := operand.flat.([]bfloat16.BFloat16)
+
+	// Temporary data to store argMax results, so we can traverse the operand sequentially.
+	currentBestBuffer := backend.getBuffer(operand.shape.DType, suffixSize)
+	currentBest := currentBestBuffer.flat.([]bfloat16.BFloat16)
+	currentArgBestBuffer := backend.getBuffer(dtypes.Int32, suffixSize)
+	currentArgBest := currentArgBestBuffer.flat.([]int32)
+
+	outputFlatIdx := 0
+	operandFlatIdx := 0
+	for range prefixSize {
+		// Initialize current best with first element of reduce axis:
+		for suffixIdx := range suffixSize {
+			currentBest[suffixIdx] = operandFlat[operandFlatIdx]
+			currentArgBest[suffixIdx] = 0
+			operandFlatIdx++
+		}
+
+		// Iterate over the rest of the elements of reduce axis:
+		if isMin {
+			// ArgMin
+			for reduceIdx := 1; reduceIdx < reduceSize; reduceIdx++ {
+				for suffixIdx := range suffixSize {
+					operandValue := operandFlat[operandFlatIdx].Float32()
+					if operandValue < currentBest[suffixIdx].Float32() {
+						currentBest[suffixIdx] = operandFlat[operandFlatIdx]
+						currentArgBest[suffixIdx] = int32(reduceIdx)
+					}
+					operandFlatIdx++
+				}
+			}
+		} else {
+			// ArgMax
+			for reduceIdx := 1; reduceIdx < reduceSize; reduceIdx++ {
+				for suffixIdx := range suffixSize {
+					operandValue := operandFlat[operandFlatIdx].Float32()
+					if operandValue > currentBest[suffixIdx].Float32() {
+						currentBest[suffixIdx] = operandFlat[operandFlatIdx]
+						currentArgBest[suffixIdx] = int32(reduceIdx)
+					}
+					operandFlatIdx++
+				}
+			}
+		}
+
+		// Copy over the result of the whole suffix.
+		copyIntsFn(outputFlatIdx, currentArgBest)
+		outputFlatIdx += suffixSize
+	}
+	backend.putBuffer(currentBestBuffer)
+	backend.putBuffer(currentArgBestBuffer)
 }

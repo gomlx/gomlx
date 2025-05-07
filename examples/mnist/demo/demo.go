@@ -28,7 +28,7 @@ import (
 	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
 
-	_ "github.com/gomlx/gomlx/backends/xla"
+	_ "github.com/gomlx/gomlx/backends/default"
 )
 
 // Example usage:  go run demo.go -train -checkpoint=cnn_triplet_hard_01 -set="model=cnn;loss=triplet;triplet_loss_mining_strategy=hard;triplet_loss_margin=0.1"

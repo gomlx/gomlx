@@ -18,7 +18,8 @@ var Capabilities = backends.Capabilities{
 		backends.OpTypeParameter: true,
 		backends.OpTypeConstant:  true,
 
-		// Graph nodes.
+		// Other operations:
+		backends.OpTypeArgMinMax:       true,
 		backends.OpTypeBroadcast:       true,
 		backends.OpTypeBroadcastInDim:  true,
 		backends.OpTypeConcatenate:     true,

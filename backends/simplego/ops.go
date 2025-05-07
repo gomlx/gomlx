@@ -342,7 +342,34 @@ func (b *Builder) RngBitGenerator(stateOp backends.Op, shape shapes.Shape) (newS
 	return
 }
 
-// Unary Operations:
+type argMinMaxNode struct {
+	axis  int
+	isMin bool
+}
+
+// ArgMinMax calculates the "argmin" or "argmax" across an axis of the given input array x.
+// outputDType defines the output of the argmin/argmax, it doesn't need to be the same as the input.
+// It's a form of reduction on the given axis, and that axis goes away. So the rank of the result is one less than
+// the rank of x.
+// Examples:
+//
+//	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=1, isMin=true) -> {1, 0}  // (it chooses the 0 and the -3)
+//	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=0, isMin=false) -> {0, 1, 0} // (it choose the 2, 4 and 7)
+func (b *Builder) ArgMinMax(operandOp backends.Op, axis int, outputDType dtypes.DType, isMin bool) backends.Op {
+	opType := backends.OpTypeArgMinMax
+	operand := b.checkOps(opType.String(), operandOp)[0]
+	outputShape := shapeinference.ArgMinMaxOp(operand.shape, axis, outputDType)
+	node := b.newNode(opType, outputShape, operand)
+	node.data = &argMinMaxNode{
+		axis,
+		isMin,
+	}
+	return node
+}
+
+//======================================================================================================================
+// Unary Operations ----------------------------------------------------------------------------------------------------
+//======================================================================================================================
 
 // Neg implements the backends.Builder interface.
 func (b *Builder) Neg(operand backends.Op) backends.Op {
