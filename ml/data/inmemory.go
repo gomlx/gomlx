@@ -313,12 +313,12 @@ func (mds *InMemoryDataset) readDataset(ds train.Dataset, dsIsBatched bool) (err
 		for inputsAndLabelsIdx, allExamples := range allData {
 			numConcatenations := (len(allExamples) + MaxExamplesToConcat - 1) / MaxExamplesToConcat
 			newAllExamples := make([]*tensors.Tensor, numConcatenations)
-			for jj := 0; jj < numConcatenations; jj++ {
+			for jj := range numConcatenations {
 				// Take MaxExamplesToConcat examples at a time.
 				start := jj * MaxExamplesToConcat
 				end := min(start+MaxExamplesToConcat, len(allExamples))
 				examplesSlice := allExamples[start:end]
-				examplesAsAny := xslices.Map[*tensors.Tensor, any](examplesSlice, convertToAny)
+				examplesAsAny := xslices.Map(examplesSlice, convertToAny)
 				err = TryCatch[error](func() { newAllExamples[jj] = concatenateExec.Call(examplesAsAny...)[0] })
 				if err != nil {
 					err = errors.WithMessagef(err, "while concatenating %s examples into large tensor", getElementDesc(inputsAndLabelsIdx))

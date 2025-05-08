@@ -3,16 +3,17 @@ package tensors
 import (
 	"encoding/gob"
 	"fmt"
+	"os"
+	"reflect"
+	"strconv"
+	"unsafe"
+
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
-	"os"
-	"reflect"
-	"strconv"
-	"unsafe"
 )
 
 // local storage for a Tensor.
@@ -71,7 +72,6 @@ func (l *local) Finalize() {
 	}
 	l.flat = nil
 	l.t = nil
-	return
 }
 
 // HasLocal returns whether there is an up-to-date copy of the Tensor on local storage.
@@ -247,7 +247,7 @@ func MutableFlatData[T dtypes.Supported](t *Tensor, accessFn func(flat []T)) {
 // AssignFlatData will copy over the values in fromFlat to the storage used by toTensor.
 // If the dtypes are not compatible or if the size is wrong, it will panic.
 func AssignFlatData[T dtypes.Supported](toTensor *Tensor, fromFlat []T) {
-	MutableFlatData[T](toTensor, func(toFlat []T) {
+	MutableFlatData(toTensor, func(toFlat []T) {
 		if len(toFlat) != len(fromFlat) {
 			var v T
 			exceptions.Panicf("AssignFlatData[%T] is trying to store %d values into shape %s, which requires %d values",
@@ -286,7 +286,7 @@ func ToScalar[T dtypes.Supported](t *Tensor) T {
 // It will panic if the given generic type doesn't match the DType of the tensor.
 func CopyFlatData[T dtypes.Supported](t *Tensor) []T {
 	var flatCopy []T
-	ConstFlatData[T](t, func(flat []T) {
+	ConstFlatData(t, func(flat []T) {
 		flatCopy = xslices.Copy(flat)
 	})
 	return flatCopy
@@ -548,7 +548,7 @@ func FromScalarAndDimensions[T dtypes.Supported](value T, dimensions ...int) (t 
 	dtype := dtypes.FromGenericsType[T]()
 	shape := shapes.Make(dtype, dimensions...)
 	t = FromShape(shape)
-	MutableFlatData[T](t, func(flat []T) {
+	MutableFlatData(t, func(flat []T) {
 		xslices.FillSlice(flat, value)
 	})
 	return
@@ -578,7 +578,7 @@ func FromFlatDataAndDimensions[T dtypes.Supported](data []T, dimensions ...int) 
 			copy(tensorData, dataAsBytes)
 		})
 	default:
-		MutableFlatData[T](t, func(flat []T) {
+		MutableFlatData(t, func(flat []T) {
 			copy(flat, data)
 		})
 	}
@@ -655,7 +655,6 @@ func copySlicesRecursively(data reflect.Value, mdSlice reflect.Value, strides []
 		subData := data.Slice(start, end)
 		copySlicesRecursively(subData, mdSlice.Index(ii), subStrides)
 	}
-	return
 }
 
 // convertDataToSlices takes data as a flat slice, and creates a multidimensional slices with the given dimensions that
