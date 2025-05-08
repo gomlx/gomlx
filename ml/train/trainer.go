@@ -426,11 +426,11 @@ func (r *Trainer) metricsUpdatesGraph(ctx *context.Context, labels, predictions 
 //
 // All arguments usually come from `Dataset.Yield`, see a more detailed description there. In short:
 //
-//   - info: provided by the dataset. Often just nil. Each value will trigger the creation
+//   - spec: provided by the dataset. Often just nil. Each value will trigger the creation
 //     of different computation graphs. Normally static values (for the dataset) used to describe
 //     the inputs. See longer discussion in `train.Dataset`.
 //   - inputs: always a slice, even though it's common to have only one input tensor in the slice.
-//     There must be always at least one input. For each `info` value, the number of inputs and labels
+//     There must be always at least one input. For each `spec` value, the number of inputs and labels
 //     must remain constant. It will return an error otherwise.
 //   - labels: also always a slice, even if commonly with only one tensor.
 //

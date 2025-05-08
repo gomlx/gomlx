@@ -1,13 +1,14 @@
 package train
 
 import (
+	"io"
+	"slices"
+
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/pkg/errors"
-	"io"
-	"slices"
 )
 
 const (
@@ -61,7 +62,7 @@ func (r *Trainer) batchNormAveragesStep(phase int, spec any, inputs, labels []*t
 	for _, t := range lossAndMetrics {
 		t.FinalizeAll()
 	}
-	return
+
 }
 
 // batchNormsAverageStepGraph builds the graph to eval one step, in training mode, so variables are allowed to be updates.

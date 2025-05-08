@@ -61,7 +61,7 @@ func testOnDeviceInputOutputImpl[T dtypes.Number](t *testing.T, backend backends
 		// Input tensor must have become shared during conversion to "on-device".
 		// Check that the shared buffer got loaded with the right values:
 		require.True(t, tensor.IsShared())
-		ConstFlatData[T](tensor, func(flat []T) {
+		ConstFlatData(tensor, func(flat []T) {
 			require.Equal(t, []T{0, 1, 2, 3, 4, 11}, flat)
 		})
 	}
@@ -127,7 +127,7 @@ func BenchmarkHostToDevice(b *testing.B) {
 	inputTensors := make([]*Tensor, numShapes)
 	for shapeIdx, s := range testShapes {
 		inputTensors[shapeIdx] = FromShape(s)
-		MutableFlatData[float32](inputTensors[shapeIdx], func(flat []float32) {
+		MutableFlatData(inputTensors[shapeIdx], func(flat []float32) {
 			for ii := range flat {
 				flat[ii] = 0 // float32(ii)
 			}
@@ -135,7 +135,7 @@ func BenchmarkHostToDevice(b *testing.B) {
 	}
 
 	// Run test for a shape
-	benchShape := func(v float32, shapeIdx int) {
+	benchShape := func(_ float32, shapeIdx int) {
 		// Set input to value of v.
 		x := inputTensors[shapeIdx]
 		x.MaterializeOnDevices(backend, false)
@@ -179,7 +179,7 @@ func BenchmarkCopyFromLocal(b *testing.B) {
 	outputTensors := make([]*Tensor, numShapes)
 	for shapeIdx, s := range testShapes {
 		inputTensors[shapeIdx] = FromShape(s)
-		MutableFlatData[float32](inputTensors[shapeIdx], func(flat []float32) {
+		MutableFlatData(inputTensors[shapeIdx], func(flat []float32) {
 			for ii := range flat {
 				flat[ii] = float32(ii)
 			}
@@ -188,7 +188,7 @@ func BenchmarkCopyFromLocal(b *testing.B) {
 	}
 
 	// Run test for a shape
-	benchShape := func(v float32, shapeIdx int) {
+	benchShape := func(_ float32, shapeIdx int) {
 		outputTensors[shapeIdx].CopyFrom(inputTensors[shapeIdx])
 	}
 
@@ -229,7 +229,7 @@ func BenchmarkCopyFromDevice(b *testing.B) {
 	outputTensors := make([]*Tensor, numShapes)
 	for shapeIdx, s := range testShapes {
 		inputTensors[shapeIdx] = FromShape(s)
-		MutableFlatData[float32](inputTensors[shapeIdx], func(flat []float32) {
+		MutableFlatData(inputTensors[shapeIdx], func(flat []float32) {
 			for ii := range flat {
 				flat[ii] = float32(ii)
 			}
@@ -240,7 +240,7 @@ func BenchmarkCopyFromDevice(b *testing.B) {
 	}
 
 	// Run test for a shape
-	benchShape := func(v float32, shapeIdx int) {
+	benchShape := func(_ float32, shapeIdx int) {
 		outputTensors[shapeIdx].CopyFrom(inputTensors[shapeIdx])
 	}
 
