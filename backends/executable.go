@@ -9,7 +9,7 @@ type Executable interface {
 	// Finalize immediately frees resources associated to the executable.
 	Finalize()
 
-	// Inputs returns the list of parameters names and shapes, in order created by the Builder.Parameter calls.
+	// Inputs returns the parameters' names and shapes, in order created by the Builder.Parameter calls.
 	Inputs() (names []string, inputShapes []shapes.Shape)
 
 	// Outputs returns the computation's output shapes, in the order given to the Builder.Compile call.

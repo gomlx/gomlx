@@ -11,11 +11,11 @@ type Buffer any
 
 // DataInterface is the Backend's subinterface that defines the API to transfer Buffer to/from accelerators for the backend.
 type DataInterface interface {
-	// BufferFinalize allows client to inform backend that buffer is no longer needed and associated resources can be
-	// freed immediately.
+	// BufferFinalize allows the client to inform backend that buffer is no longer needed and associated resources can be
+	// freed immediately -- as opposed to waiting for a GC.
 	//
 	// A finalized buffer should never be used again. Preferably, the caller should set its references to it to nil.
-	BufferFinalize(buffer Buffer)
+	BufferFinalize(buffer Buffer) error
 
 	// BufferShape returns the shape for the buffer.
 	BufferShape(buffer Buffer) (shapes.Shape, error)

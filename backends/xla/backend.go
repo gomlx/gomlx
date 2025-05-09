@@ -14,11 +14,6 @@ import (
 	"unsafe"
 )
 
-func panicf(format string, args ...any) {
-	err := errors.Errorf(format, args...)
-	panic(err)
-}
-
 // Backend implements the XLA/PJRT backends.Backend for GoMLX.
 type Backend struct {
 	plugin           *pjrt.Plugin
@@ -28,14 +23,21 @@ type Backend struct {
 	capabilities     backends.Capabilities
 }
 
-// AssertValid will panic if the backend is not valid: if it's nil or has already been finalized.
-func (backend *Backend) AssertValid() {
+// Compile-time check:
+var (
+	_ backends.DataInterface = (*Backend)(nil)
+	_ backends.Backend       = (*Backend)(nil)
+)
+
+// CheckValid returns an error if the backend is not valid: if it's nil or has already been finalized.
+func (backend *Backend) CheckValid() error {
 	if backend == nil {
-		exceptions.Panicf("%q backend is nil", BackendName)
+		return errors.Errorf("%q backend is nil", BackendName)
 	}
 	if backend.plugin == nil {
-		exceptions.Panicf("%q backend's plugin is nil, has it already been finalized?", BackendName)
+		errors.Errorf("%q backend's plugin is nil, has it already been finalized?", BackendName)
 	}
+	return nil
 }
 
 // Name returns the short name of the backend. E.g.: "xla" for the Xla/PJRT plugin.
@@ -43,15 +45,24 @@ func (backend *Backend) Name() string {
 	return BackendName
 }
 
+// String returns Name().
+func (backend *Backend) String() string {
+	return backend.Name()
+}
+
 // Description is a longer description of the Backend that can be used to pretty-print.
 func (backend *Backend) Description() string {
-	backend.AssertValid()
+	if backend.CheckValid() != nil {
+		return fmt.Sprintf("%s: in an invalid state!", BackendName)
+	}
 	return fmt.Sprintf("%s:%s - %s", BackendName, backend.pluginName, backend.plugin)
 }
 
 // NumDevices return the number of devices available for this Backend.
 func (backend *Backend) NumDevices() backends.DeviceNum {
-	backend.AssertValid()
+	if backend.CheckValid() != nil {
+		return 0
+	}
 	return backends.DeviceNum(len(backend.client.AddressableDevices()))
 }
 
@@ -80,62 +91,74 @@ func castToPJRT(buffer backends.Buffer) *pjrt.Buffer {
 	return pb
 }
 
-// BufferFinalize allows client to inform backend that buffer is no longer needed and associated resources can be
-// freed immediately.
-func (backend *Backend) BufferFinalize(buffer backends.Buffer) {
-	backend.AssertValid()
+// BufferFinalize implements backends.DataInterface.
+func (backend *Backend) BufferFinalize(buffer backends.Buffer) error {
+	if err := backend.CheckValid(); err != nil {
+		return errors.WithMessagef(err, "backend %q is invalid", BackendName)
+	}
 	buf := castToPJRT(buffer)
 	err := buf.Destroy()
 	if err != nil {
-		panic(errors.WithMessagef(err, "backend %q: BufferFinalize", BackendName))
+		return errors.WithMessagef(err, "backend %q: BufferFinalize", BackendName)
 	}
+	return nil
 }
 
 // BufferShape returns the shape for the buffer.
-func (backend *Backend) BufferShape(buffer backends.Buffer) shapes.Shape {
-	backend.AssertValid()
+func (backend *Backend) BufferShape(buffer backends.Buffer) (shapes.Shape, error) {
+	var noShape shapes.Shape
+	if err := backend.CheckValid(); err != nil {
+		return noShape, err
+	}
 	pBuffer := castToPJRT(buffer)
 	dtype, err := pBuffer.DType()
 	if err != nil {
-		panic(errors.WithMessagef(err, "backend %q", BackendName))
+		return noShape, errors.WithMessagef(err, "backend %q", BackendName)
 	}
 	dims, err := pBuffer.Dimensions()
 	if err != nil {
-		panic(errors.WithMessagef(err, "backend %q", BackendName))
+		return noShape, errors.WithMessagef(err, "backend %q", BackendName)
 	}
-	return shapes.Make(dtype, dims...)
+	return shapes.Make(dtype, dims...), nil
 }
 
 // BufferDeviceNum returns the deviceNum for the buffer.
-func (backend *Backend) BufferDeviceNum(buffer backends.Buffer) backends.DeviceNum {
-	backend.AssertValid()
+func (backend *Backend) BufferDeviceNum(buffer backends.Buffer) (backends.DeviceNum, error) {
+	if err := backend.CheckValid(); err != nil {
+		return 0, err
+	}
 	pBuffer := castToPJRT(buffer)
 	device, err := pBuffer.Device()
 	if err != nil {
-		panic(errors.WithMessagef(err, "backend %q", BackendName))
+		return 0, errors.WithMessagef(err, "backend %q", BackendName)
 	}
 	num := pBuffer.Client().NumForDevice(device)
 	if num == -1 {
-		exceptions.Panicf("backend %q: pjrt buffer stored on an unknown device!?", BackendName)
+		return 0, errors.Errorf("backend %q: pjrt buffer stored on an unknown device!?", BackendName)
 	}
-	return backends.DeviceNum(num)
+	return backends.DeviceNum(num), nil
 }
 
 // BufferToFlatData transfers the flat values of buffer to the Go flat array.
 // The slice flat must have the exact number of elements required to store the Buffer shape.
 //
 // See also FlatDataToBuffer, BufferShape, and shapes.Shape.Size.
-func (backend *Backend) BufferToFlatData(buffer backends.Buffer, flat any) {
-	backend.AssertValid()
-	shape := backend.BufferShape(buffer)
+func (backend *Backend) BufferToFlatData(buffer backends.Buffer, flat any) error {
+	if err := backend.CheckValid(); err != nil {
+		return err
+	}
+	shape, err := backend.BufferShape(buffer)
+	if err != nil {
+		return err
+	}
 
 	flatV := reflect.ValueOf(flat)
 	if flatV.Kind() != reflect.Slice {
-		exceptions.Panicf("backend %q: BufferToFlatData, but flat is not a slice, instead it is %T", BackendName, flat)
+		return errors.Errorf("backend %q: BufferToFlatData, but flat is not a slice, instead it is %T", BackendName, flat)
 	}
 	flatDType := dtypes.FromGoType(flatV.Type().Elem())
 	if flatDType != shape.DType {
-		exceptions.Panicf("backend %q: BufferToFlatData with buffer of shape %s, but flat with incompatible dtype, it is %T", BackendName, shape, flat)
+		return errors.Errorf("backend %q: BufferToFlatData with buffer of shape %s, but flat with incompatible dtype, it is %T", BackendName, shape, flat)
 	}
 
 	pBuffer := castToPJRT(buffer)
@@ -148,22 +171,23 @@ func (backend *Backend) BufferToFlatData(buffer backends.Buffer, flat any) {
 	pinner.Pin(flatValuesPtr)
 	defer pinner.Unpin()
 	dst := unsafe.Slice((*byte)(flatValuesPtr), sizeBytes)
-	err := pBuffer.ToHost(dst)
+	err = pBuffer.ToHost(dst)
 	if err != nil {
-		panic(errors.WithMessagef(err, "backend %q: BuffferToFlatData", BackendName))
+		return errors.WithMessagef(err, "backend %q: BuffferToFlatData", BackendName)
 	}
+	return nil
 }
 
 // BufferFromFlatData transfers data from Go given as a flat slice (of the type corresponding to the shape DType)
 // to the deviceNum, and returns the corresponding Buffer.
-func (backend *Backend) BufferFromFlatData(deviceNum backends.DeviceNum, flat any, shape shapes.Shape) backends.Buffer {
+func (backend *Backend) BufferFromFlatData(deviceNum backends.DeviceNum, flat any, shape shapes.Shape) (backends.Buffer, error) {
 	flatV := reflect.ValueOf(flat)
 	if flatV.Kind() != reflect.Slice {
-		exceptions.Panicf("backend %q: BuffferFromFlatData, but flat is not a slice, instead it is %T", BackendName, flat)
+		return nil, errors.Errorf("backend %q: BuffferFromFlatData, but flat is not a slice, instead it is %T", BackendName, flat)
 	}
 	flatDType := dtypes.FromGoType(flatV.Type().Elem())
 	if flatDType != shape.DType {
-		exceptions.Panicf("backend %q: BuffferFromFlatData with shape %s, but flat with incompatible dtype, it is %T", BackendName, shape, flat)
+		return nil, errors.Errorf("backend %q: BuffferFromFlatData with shape %s, but flat with incompatible dtype, it is %T", BackendName, shape, flat)
 	}
 
 	buffer, err := backend.client.BufferFromHost().
@@ -171,9 +195,9 @@ func (backend *Backend) BufferFromFlatData(deviceNum backends.DeviceNum, flat an
 		ToDeviceNum(int(deviceNum)).
 		Done()
 	if err != nil {
-		panic(errors.WithMessagef(err, "backend %q: BuffferFromFlatData", BackendName))
+		return nil, errors.WithMessagef(err, "backend %q: BuffferFromFlatData", BackendName)
 	}
-	return buffer
+	return buffer, nil
 }
 
 // HasSharedBuffers returns whether this PJRT plugin supports "shared buffers".
@@ -186,16 +210,19 @@ func (backend *Backend) HasSharedBuffers() bool {
 //
 // For XLA this means allocating the aligned memory and calling pjrt.Client.CreateViewOfDeviceBuffer
 // to create a buffer that shares the memory.
-func (backend *Backend) NewSharedBuffer(deviceNum backends.DeviceNum, shape shapes.Shape) (buffer backends.Buffer, flat any) {
+func (backend *Backend) NewSharedBuffer(deviceNum backends.DeviceNum, shape shapes.Shape) (buffer backends.Buffer, flat any, err error) {
+	if err = backend.CheckValid(); err != nil {
+		return
+	}
 	devices := backend.client.AddressableDevices()
 	if deviceNum < 0 || int(deviceNum) >= len(devices) {
-		panicf("deviceNum=%d not available for backend, only %d devices are available", deviceNum, len(devices))
+		err = errors.Errorf("deviceNum=%d not available for backend, only %d devices are available", deviceNum, len(devices))
+		return
 	}
 	device := devices[deviceNum]
-	var err error
 	buffer, flat, err = backend.client.NewSharedBuffer(shape.DType, shape.Dimensions, device)
 	if err != nil {
-		panic(err)
+		err = errors.WithMessagef(err, "backend %q NewSharedBuffer", BackendName)
 	}
 	return
 }
@@ -204,12 +231,11 @@ func (backend *Backend) NewSharedBuffer(deviceNum backends.DeviceNum, shape shap
 //
 // For XLA this means allocating the aligned memory and calling pjrt.Client.CreateViewOfDeviceBuffer
 // to create a buffer that shares the memory.
-func (backend *Backend) BufferData(buffer backends.Buffer) (flat any) {
+func (backend *Backend) BufferData(buffer backends.Buffer) (flat any, err error) {
 	buf := buffer.(*pjrt.Buffer)
-	var err error
 	flat, err = buf.Data()
 	if err != nil {
-		panic(errors.WithMessagef(err, "failed to access buffer data directly, maybe not supported by backend?"))
+		return nil, errors.WithMessagef(err, "failed to access buffer data directly, maybe not supported by backend?")
 	}
 	return
 }
