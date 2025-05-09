@@ -10,15 +10,15 @@ import (
 )
 
 // Abs returns the Op that represents the output of the corresponding operation.
-func (b Builder) Abs(x backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Abs()"))
+func (b Builder) Abs(x backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Abs()")
 }
 
 // Add returns the element-wise sum of the two values.
 // Standard broadcasting rules apply (see documentation).
 // The op is created on the same XlaBuilder as used for x0 and x1.
-func (b Builder) Add(x0, x1 backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Add()"))
+func (b Builder) Add(x0, x1 backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Add()")
 }
 
 // ArgMinMax calculates the "argmin" or "argmax" across an axis of the given input array x.
@@ -29,8 +29,8 @@ func (b Builder) Add(x0, x1 backends.Op) backends.Op {
 //
 //	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=1, isMin=true) -> {1, 0}  // (it chooses the 0 and the -3)
 //	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=0, isMin=false) -> {0, 1, 0} // (it choose the 2, 4 and 7)
-func (b Builder) ArgMinMax(x backends.Op, axis int, outputDType dtypes.DType, isMin bool) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method ArgMinMax()"))
+func (b Builder) ArgMinMax(x backends.Op, axis int, outputDType dtypes.DType, isMin bool) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method ArgMinMax()")
 }
 
 // Bitcast performs an elementwise bit-cast operation from a dtype to another dtype.
@@ -42,31 +42,31 @@ func (b Builder) ArgMinMax(x backends.Op, axis int, outputDType dtypes.DType, is
 // If targetDType.Size() < x.DType().Size(), the returned shape will have an extra axis in the end, with dimension of
 // x.DType().Size() / targetDType.Size().
 // E.g: Bitcast([1]uint32{0xdeadbeef}, dtypes.UInt16) -> [1][2]uint16{{0xdead, 0xbeef}}
-func (b Builder) Bitcast(x backends.Op, targetDType dtypes.DType) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Bitcast()"))
+func (b Builder) Bitcast(x backends.Op, targetDType dtypes.DType) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Bitcast()")
 }
 
 // BitwiseAnd returns the element-wise bitwise AND operation.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-func (b Builder) BitwiseAnd(x0, x1 backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method BitwiseAnd()"))
+func (b Builder) BitwiseAnd(x0, x1 backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method BitwiseAnd()")
 }
 
 // BitwiseNot returns the element-wise bitwise AND operation.
-func (b Builder) BitwiseNot(x backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method BitwiseNot()"))
+func (b Builder) BitwiseNot(x backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method BitwiseNot()")
 }
 
 // BitwiseOr returns the element-wise bitwise OR operation.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-func (b Builder) BitwiseOr(x0, x1 backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method BitwiseOr()"))
+func (b Builder) BitwiseOr(x0, x1 backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method BitwiseOr()")
 }
 
 // BitwiseXor returns the element-wise bitwise XOR operator.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-func (b Builder) BitwiseXor(x0, x1 backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method BitwiseXor()"))
+func (b Builder) BitwiseXor(x0, x1 backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method BitwiseXor()")
 }
 
 // Broadcast prefixes dimensions to an array by duplicating the data in the array.
@@ -78,8 +78,8 @@ func (b Builder) BitwiseXor(x0, x1 backends.Op) backends.Op {
 // The new dimensions id into copies of the operand, i.e.
 //
 //	output[i0, ..., iN, j0, ..., jM] = operand[j0, ..., jM]
-func (b Builder) Broadcast(x backends.Op, prefixDims ...int) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Broadcast()"))
+func (b Builder) Broadcast(x backends.Op, prefixDims ...int) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Broadcast()")
 }
 
 // BroadcastInDim broadcasts x to an output with the given shape.
@@ -97,18 +97,18 @@ func (b Builder) Broadcast(x backends.Op, prefixDims ...int) backends.Op {
 //     will generate output
 //     {{1 , 1},
 //     {2 , 2}}
-func (b Builder) BroadcastInDim(x backends.Op, outputShape shapes.Shape, broadcastAxes []int) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method BroadcastInDim()"))
+func (b Builder) BroadcastInDim(x backends.Op, outputShape shapes.Shape, broadcastAxes []int) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method BroadcastInDim()")
 }
 
 // Ceil returns the Op that represents the output of the corresponding operation.
-func (b Builder) Ceil(x backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Ceil()"))
+func (b Builder) Ceil(x backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Ceil()")
 }
 
 // Clz returns element-wise the "count leading zeros" bits of input node x -- for integer values.
-func (b Builder) Clz(x backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Clz()"))
+func (b Builder) Clz(x backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Clz()")
 }
 
 // Complex returns the complex number taking x0 as the real part and x1 as the imaginary part.
@@ -118,21 +118,21 @@ func (b Builder) Clz(x backends.Op) backends.Op {
 // The shapes of `real` or `imaginary` must be the same, or one must be a scalar, in which case
 // the value is broadcast to every other value.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-func (b Builder) Complex(x0, x1 backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Complex()"))
+func (b Builder) Complex(x0, x1 backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Complex()")
 }
 
 // Concatenate results on the given axis.
 // All axes that are not being concatenated must match dimensions.
 // It doesn't work with scalars -- use ExpandDims.
 // If there is only one operand, it is returned and this is a no-op.
-func (b Builder) Concatenate(axis int, operands ...backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Concatenate()"))
+func (b Builder) Concatenate(axis int, operands ...backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Concatenate()")
 }
 
 // Conj returns the conjugate of a complex number. E.g: Conj(1+3i) = 1-3i
-func (b Builder) Conj(x backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Conj()"))
+func (b Builder) Conj(x backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Conj()")
 }
 
 // ConvGeneralDilated is a generic Convolution operation offered by XLA.
@@ -145,25 +145,25 @@ func (b Builder) Conj(x backends.Op) backends.Op {
 // There operand and filter are called lhs and rhs.
 // (XLA documentation is unfortunately poor, much is guess-work).
 // Also useful, https://arxiv.org/pdf/1603.07285v1.pdf.
-func (b Builder) ConvGeneralDilated(operand, filter backends.Op, axes backends.ConvolveAxesConfig, strides []int, paddings [][2]int, inputDilation, filterDilation []int, filterGroupCount, batchGroupCount int) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method ConvGeneralDilated()"))
+func (b Builder) ConvGeneralDilated(operand, filter backends.Op, axes backends.ConvolveAxesConfig, strides []int, paddings [][2]int, inputDilation, filterDilation []int, filterGroupCount, batchGroupCount int) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method ConvGeneralDilated()")
 }
 
 // ConvertDType of x to dtype.
-func (b Builder) ConvertDType(x backends.Op, dtype dtypes.DType) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method ConvertDType()"))
+func (b Builder) ConvertDType(x backends.Op, dtype dtypes.DType) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method ConvertDType()")
 }
 
 // Cos returns the Op that represents the output of the corresponding operation.
-func (b Builder) Cos(x backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Cos()"))
+func (b Builder) Cos(x backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Cos()")
 }
 
 // Div returns the element-wise division of the two values.
 // Standard broadcasting rules apply (see documentation).
 // The op is created on the same XlaBuilder as used for x0 and x1.
-func (b Builder) Div(x0, x1 backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Div()"))
+func (b Builder) Div(x0, x1 backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Div()")
 }
 
 // Dot returns the "dot product" operation.
@@ -179,8 +179,8 @@ func (b Builder) Div(x0, x1 backends.Op) backends.Op {
 // In practice, it can be used to perform dot products between vectors, vector/matrix multiplications or
 // matrix/matrix multiplications.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-func (b Builder) Dot(x0, x1 backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Dot()"))
+func (b Builder) Dot(x0, x1 backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Dot()")
 }
 
 // DotGeneral takes as input lhs (left-hand-side) and rhs (right-hand-side) specifications
@@ -195,8 +195,8 @@ func (b Builder) Dot(x0, x1 backends.Op) backends.Op {
 // It follows that the resulting dimension number starts with the batch dimension, then the 'lhs'
 // non-contracting/non-batch dimension, and finally the 'rhs' non-contracting/non-batch dimension.
 // It provides the basic means of implementing Einsum.
-func (b Builder) DotGeneral(lhs backends.Op, lhsContractingAxes, lhsBatchAxes []int, rhs backends.Op, rhsContractingAxes, rhsBatchAxes []int) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method DotGeneral()"))
+func (b Builder) DotGeneral(lhs backends.Op, lhsContractingAxes, lhsBatchAxes []int, rhs backends.Op, rhsContractingAxes, rhsBatchAxes []int) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method DotGeneral()")
 }
 
 // DynamicSlice extracts a sub-array from the input array at dynamic start_indices.
@@ -204,8 +204,8 @@ func (b Builder) DotGeneral(lhs backends.Op, lhsContractingAxes, lhsBatchAxes []
 // intervals for each axis: [start, start + size).
 // The shape of startIndices must be rank == 1, with dimension size equal to the rank of operand.
 // See description in https://openxla.org/xla/operation_semantics#dynamicslice
-func (b Builder) DynamicSlice(operand backends.Op, startIndices []backends.Op, sliceDims []int) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method DynamicSlice()"))
+func (b Builder) DynamicSlice(operand backends.Op, startIndices []backends.Op, sliceDims []int) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method DynamicSlice()")
 }
 
 // DynamicUpdateSlice generates a result which is the value of the input array operand, with a slice update overwritten
@@ -213,49 +213,49 @@ func (b Builder) DynamicSlice(operand backends.Op, startIndices []backends.Op, s
 // The shape of update determines the shape of the sub-array of the result which is updated.
 // The shape of startIndices must be rank == 1, with dimension size equal to the rank of operand.
 // See description in https://openxla.org/xla/operation_semantics#dynamicupdateslice
-func (b Builder) DynamicUpdateSlice(operand, update backends.Op, startIndices []backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method DynamicUpdateSlice()"))
+func (b Builder) DynamicUpdateSlice(operand, update backends.Op, startIndices []backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method DynamicUpdateSlice()")
 }
 
 // Equal performs element-wise equality check, returns boolean results with the same dimensions as input.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-func (b Builder) Equal(x0, x1 backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Equal()"))
+func (b Builder) Equal(x0, x1 backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Equal()")
 }
 
 // EqualTotalOrder returns the element-wise operation.
 // Standard broadcasting rules apply (see documentation).
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-func (b Builder) EqualTotalOrder(x0, x1 backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method EqualTotalOrder()"))
+func (b Builder) EqualTotalOrder(x0, x1 backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method EqualTotalOrder()")
 }
 
 // Erf returns the "error function", defined as erf(x) = 2/Pi * \int_{0}^{x}{e^{-t^2}dt}.
-func (b Builder) Erf(x backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Erf()"))
+func (b Builder) Erf(x backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Erf()")
 }
 
 // Exp returns the Op that represents the output of the corresponding operation.
-func (b Builder) Exp(x backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Exp()"))
+func (b Builder) Exp(x backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Exp()")
 }
 
 // Expm1 returns the Op that represents the output of the corresponding operation.
-func (b Builder) Expm1(x backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Expm1()"))
+func (b Builder) Expm1(x backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Expm1()")
 }
 
 // FFT calls the XLA FFT operation, which implements {Forward, Inverse} x {Complex, Real} versions.
 // See documentation in https://www.tensorflow.org/xla/operation_semantics.
 // Underlying, CPU FFT is backed by Eigen's TensorFFT and GPU FFT uses cuFFT.
-func (b Builder) FFT(operand backends.Op, fftType backends.FFTType, fftLength []int) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method FFT()"))
+func (b Builder) FFT(operand backends.Op, fftType backends.FFTType, fftLength []int) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method FFT()")
 }
 
 // Floor returns the Op that represents the output of the corresponding operation.
-func (b Builder) Floor(x backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Floor()"))
+func (b Builder) Floor(x backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Floor()")
 }
 
 // Gather is a powerful but cumbersome Gather operation offered by XLA.
@@ -309,332 +309,332 @@ func (b Builder) Floor(x backends.Op) backends.Op {
 //   - indicesAreSorted: can be set to true if its guaranteed that startIndices are sorted (in ascending order,
 //     after scattering its values according to start_index_map) by the user. This allows for some optimizations
 //     in some platforms.
-func (b Builder) Gather(operand, startIndices backends.Op, indexVectorAxis int, offsetOutputAxes, collapsedSliceAxes, startIndexMap, sliceSizes []int, indicesAreSorted bool) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Gather()"))
+func (b Builder) Gather(operand, startIndices backends.Op, indexVectorAxis int, offsetOutputAxes, collapsedSliceAxes, startIndexMap, sliceSizes []int, indicesAreSorted bool) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Gather()")
 }
 
 // GreaterOrEqual performs element-wise comparison, returns boolean results with the same dimensions as input.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-func (b Builder) GreaterOrEqual(x0, x1 backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method GreaterOrEqual()"))
+func (b Builder) GreaterOrEqual(x0, x1 backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method GreaterOrEqual()")
 }
 
 // GreaterOrEqualTotalOrder returns the element-wise operation.
 // Standard broadcasting rules apply (see documentation).
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-func (b Builder) GreaterOrEqualTotalOrder(x0, x1 backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method GreaterOrEqualTotalOrder()"))
+func (b Builder) GreaterOrEqualTotalOrder(x0, x1 backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method GreaterOrEqualTotalOrder()")
 }
 
 // GreaterThan performs element-wise comparison, returns boolean results with the same dimensions as input.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-func (b Builder) GreaterThan(x0, x1 backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method GreaterThan()"))
+func (b Builder) GreaterThan(x0, x1 backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method GreaterThan()")
 }
 
 // GreaterThanTotalOrder returns the element-wise operation.
 // Standard broadcasting rules apply (see documentation).
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-func (b Builder) GreaterThanTotalOrder(x0, x1 backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method GreaterThanTotalOrder()"))
+func (b Builder) GreaterThanTotalOrder(x0, x1 backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method GreaterThanTotalOrder()")
 }
 
 // Imag returns the imaginary part of a complex number. It returns 0 if the x is a float number.
-func (b Builder) Imag(x backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Imag()"))
+func (b Builder) Imag(x backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Imag()")
 }
 
 // Iota creates a constant of the given shape with increasing numbers (starting from 0)
 // on the given axis. So Iota([2,2], 1) returns [[0 1][0 1]], while Iota([2,2], 0)
 // returns [[0 0][1 1]].
-func (b Builder) Iota(shape shapes.Shape, iotaAxis int) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Iota()"))
+func (b Builder) Iota(shape shapes.Shape, iotaAxis int) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Iota()")
 }
 
 // IsFinite tests whether each element of operand is finite, i.e., is not positive or negative infinity, and is not NaN.
 // It returns an array of boolean values with the same shape as the input, where each element is true if and only if
 // the corresponding input element is finite.
-func (b Builder) IsFinite(x backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method IsFinite()"))
+func (b Builder) IsFinite(x backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method IsFinite()")
 }
 
 // LessOrEqual performs element-wise comparison, returns boolean results with the same dimensions as input.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-func (b Builder) LessOrEqual(x0, x1 backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method LessOrEqual()"))
+func (b Builder) LessOrEqual(x0, x1 backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method LessOrEqual()")
 }
 
 // LessOrEqualTotalOrder returns the element-wise operation.
 // Standard broadcasting rules apply (see documentation).
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-func (b Builder) LessOrEqualTotalOrder(x0, x1 backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method LessOrEqualTotalOrder()"))
+func (b Builder) LessOrEqualTotalOrder(x0, x1 backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method LessOrEqualTotalOrder()")
 }
 
 // LessThan performs element-wise comparison, returns boolean results with the same dimensions as input.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-func (b Builder) LessThan(x0, x1 backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method LessThan()"))
+func (b Builder) LessThan(x0, x1 backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method LessThan()")
 }
 
 // LessThanTotalOrder returns the element-wise operation.
 // Standard broadcasting rules apply (see documentation).
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-func (b Builder) LessThanTotalOrder(x0, x1 backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method LessThanTotalOrder()"))
+func (b Builder) LessThanTotalOrder(x0, x1 backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method LessThanTotalOrder()")
 }
 
 // Log returns the Op that represents the output of the corresponding operation.
-func (b Builder) Log(x backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Log()"))
+func (b Builder) Log(x backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Log()")
 }
 
 // Log1p returns the expression log(x+1).
-func (b Builder) Log1p(x backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Log1p()"))
+func (b Builder) Log1p(x backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Log1p()")
 }
 
 // LogicalAnd returns the element-wise logical AND operation.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-func (b Builder) LogicalAnd(x0, x1 backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method LogicalAnd()"))
+func (b Builder) LogicalAnd(x0, x1 backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method LogicalAnd()")
 }
 
 // LogicalNot returns the Op that represents the output of the corresponding operation.
-func (b Builder) LogicalNot(x backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method LogicalNot()"))
+func (b Builder) LogicalNot(x backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method LogicalNot()")
 }
 
 // LogicalOr returns the element-wise logical OR operation.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-func (b Builder) LogicalOr(x0, x1 backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method LogicalOr()"))
+func (b Builder) LogicalOr(x0, x1 backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method LogicalOr()")
 }
 
 // LogicalXor returns the element-wise logical XOR operator.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-func (b Builder) LogicalXor(x0, x1 backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method LogicalXor()"))
+func (b Builder) LogicalXor(x0, x1 backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method LogicalXor()")
 }
 
 // Logistic returns the element-wise expression 1/(1+exp(-x)). Also known as the Sigmoid function.
-func (b Builder) Logistic(x backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Logistic()"))
+func (b Builder) Logistic(x backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Logistic()")
 }
 
 // Max returns the element-wise highest value among the two.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-func (b Builder) Max(x0, x1 backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Max()"))
+func (b Builder) Max(x0, x1 backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Max()")
 }
 
 // Min returns the element-wise smallest value among the two.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-func (b Builder) Min(x0, x1 backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Min()"))
+func (b Builder) Min(x0, x1 backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Min()")
 }
 
 // Mul returns the element-wise multiplication of the two values.
 // Standard broadcasting rules apply (see documentation).
 // The op is created on the same XlaBuilder as used for x0 and x1.
-func (b Builder) Mul(x0, x1 backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Mul()"))
+func (b Builder) Mul(x0, x1 backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Mul()")
 }
 
 // Neg returns the Op that represents the output of the corresponding operation.
-func (b Builder) Neg(x backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Neg()"))
+func (b Builder) Neg(x backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Neg()")
 }
 
 // NotEqual performs element-wise inequality check, returns boolean results with the same dimensions as input.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-func (b Builder) NotEqual(x0, x1 backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method NotEqual()"))
+func (b Builder) NotEqual(x0, x1 backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method NotEqual()")
 }
 
 // NotEqualTotalOrder returns the element-wise operation.
 // Standard broadcasting rules apply (see documentation).
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-func (b Builder) NotEqualTotalOrder(x0, x1 backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method NotEqualTotalOrder()"))
+func (b Builder) NotEqualTotalOrder(x0, x1 backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method NotEqualTotalOrder()")
 }
 
 // Pad injects padding on the start, end or interior (in between each element) of the given operand.
 // There must be at most `operand.Rank()` axesConfig values. Missing PadAxis are assumed to be zeros,
 // that is, no padding for those axes.
-func (b Builder) Pad(x, fillValue backends.Op, axesConfig ...backends.PadAxis) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Pad()"))
+func (b Builder) Pad(x, fillValue backends.Op, axesConfig ...backends.PadAxis) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Pad()")
 }
 
 // Pow returns the Op that represents the output of the corresponding operation.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-func (b Builder) Pow(x0, x1 backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Pow()"))
+func (b Builder) Pow(x0, x1 backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Pow()")
 }
 
 // Real return the real part of a complex number. It returns x if the x is a float number.
-func (b Builder) Real(x backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Real()"))
+func (b Builder) Real(x backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Real()")
 }
 
 // ReduceBitwiseAnd is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the bitwise/logical And of the reduced axes.
 // If no axes are given, it reduces the full array.
-func (b Builder) ReduceBitwiseAnd(x backends.Op, axes ...int) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method ReduceBitwiseAnd()"))
+func (b Builder) ReduceBitwiseAnd(x backends.Op, axes ...int) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method ReduceBitwiseAnd()")
 }
 
 // ReduceBitwiseOr is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the bitwise/logical Or of the reduced axes.
 // If no axes are given, it reduces the full array.
-func (b Builder) ReduceBitwiseOr(x backends.Op, axes ...int) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method ReduceBitwiseOr()"))
+func (b Builder) ReduceBitwiseOr(x backends.Op, axes ...int) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method ReduceBitwiseOr()")
 }
 
 // ReduceBitwiseXor is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the bitwise/logical Xor of the reduced axes.
 // If no axes are given, it reduces the full array.
-func (b Builder) ReduceBitwiseXor(x backends.Op, axes ...int) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method ReduceBitwiseXor()"))
+func (b Builder) ReduceBitwiseXor(x backends.Op, axes ...int) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method ReduceBitwiseXor()")
 }
 
 // ReduceLogicalAnd is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the bitwise/logical And of the reduced axes.
 // If no axes are given, it reduces the full array.
-func (b Builder) ReduceLogicalAnd(x backends.Op, axes ...int) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method ReduceLogicalAnd()"))
+func (b Builder) ReduceLogicalAnd(x backends.Op, axes ...int) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method ReduceLogicalAnd()")
 }
 
 // ReduceLogicalOr is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the bitwise/logical Or of the reduced axes.
 // If no axes are given, it reduces the full array.
-func (b Builder) ReduceLogicalOr(x backends.Op, axes ...int) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method ReduceLogicalOr()"))
+func (b Builder) ReduceLogicalOr(x backends.Op, axes ...int) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method ReduceLogicalOr()")
 }
 
 // ReduceLogicalXor is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the bitwise/logical Xor of the reduced axes.
 // If no axes are given, it reduces the full array.
-func (b Builder) ReduceLogicalXor(x backends.Op, axes ...int) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method ReduceLogicalXor()"))
+func (b Builder) ReduceLogicalXor(x backends.Op, axes ...int) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method ReduceLogicalXor()")
 }
 
 // ReduceMax is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the max value.
 // If no axes are given, it reduces the full array.
-func (b Builder) ReduceMax(x backends.Op, axes ...int) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method ReduceMax()"))
+func (b Builder) ReduceMax(x backends.Op, axes ...int) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method ReduceMax()")
 }
 
 // ReduceMin is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the min value.
 // If no axes are given, it reduces the full array.
-func (b Builder) ReduceMin(x backends.Op, axes ...int) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method ReduceMin()"))
+func (b Builder) ReduceMin(x backends.Op, axes ...int) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method ReduceMin()")
 }
 
 // ReduceProduct is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the product of the reduced axes.
 // If no axes are given, it reduces the full array.
-func (b Builder) ReduceProduct(x backends.Op, axes ...int) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method ReduceProduct()"))
+func (b Builder) ReduceProduct(x backends.Op, axes ...int) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method ReduceProduct()")
 }
 
 // ReduceSum is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the sum of the reduced axes.
 // If no axes are given, it reduces the full array.
-func (b Builder) ReduceSum(x backends.Op, axes ...int) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method ReduceSum()"))
+func (b Builder) ReduceSum(x backends.Op, axes ...int) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method ReduceSum()")
 }
 
 // Rem returns the remainder operation, also known as modulo (or Mod for short).
 // Notice despite the name XLA implements Mod not IEEE754 Remainder operation.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-func (b Builder) Rem(x0, x1 backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Rem()"))
+func (b Builder) Rem(x0, x1 backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Rem()")
 }
 
 // Reshape reshapes x to the new dimensions.
 // Total size cannot change, it's just a "reinterpretation" of the same flat data.
 // The dtype remains the same, see ConvertDType to actually convert the values.
-func (b Builder) Reshape(x backends.Op, dimensions ...int) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Reshape()"))
+func (b Builder) Reshape(x backends.Op, dimensions ...int) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Reshape()")
 }
 
 // Reverse returns x with the values for the given dimensions reversed, that is,
 // the value indexed at `i` will be swapped with the value at indexed `(dimension_size - 1 - i)`.
 // The shape remains the same.
-func (b Builder) Reverse(x backends.Op, axes ...int) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Reverse()"))
+func (b Builder) Reverse(x backends.Op, axes ...int) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Reverse()")
 }
 
 // Round returns the Op that represents the output of the corresponding operation.
-func (b Builder) Round(x backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Round()"))
+func (b Builder) Round(x backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Round()")
 }
 
 // Rsqrt returns the element-wise reciprocal of square root operation 1/sqrt(x).
-func (b Builder) Rsqrt(x backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Rsqrt()"))
+func (b Builder) Rsqrt(x backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Rsqrt()")
 }
 
 // ScatterMax scatter values from updates pointed by scatterIndices to operand, by taking the Max.
-func (b Builder) ScatterMax(operand, scatterIndices, updates backends.Op, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method ScatterMax()"))
+func (b Builder) ScatterMax(operand, scatterIndices, updates backends.Op, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method ScatterMax()")
 }
 
 // ScatterMin scatter values from updates pointed by scatterIndices to operand, by taking the Min.
-func (b Builder) ScatterMin(operand, scatterIndices, updates backends.Op, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method ScatterMin()"))
+func (b Builder) ScatterMin(operand, scatterIndices, updates backends.Op, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method ScatterMin()")
 }
 
 // ScatterSum values from updates pointed by scatterIndices to operand.
-func (b Builder) ScatterSum(operand, scatterIndices, updates backends.Op, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method ScatterSum()"))
+func (b Builder) ScatterSum(operand, scatterIndices, updates backends.Op, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method ScatterSum()")
 }
 
 // SelectAndScatterMax runs windows (similar to ReduceWindow) over the operand, selects values to updates the output (like ScatterAdd)
 // It selects the values in the window such that it works as reverse for a PoolMax operation.
 // See details in https://openxla.org/xla/operation_semantics#selectandscatter
-func (b Builder) SelectAndScatterMax(operand, source backends.Op, windowDimensions, windowStrides []int, paddings [][2]int) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method SelectAndScatterMax()"))
+func (b Builder) SelectAndScatterMax(operand, source backends.Op, windowDimensions, windowStrides []int, paddings [][2]int) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method SelectAndScatterMax()")
 }
 
 // SelectAndScatterMin runs windows (similar to ReduceWindow) over the operand, selects values to updates the output (like ScatterAdd)
 // It selects the values in the window such that it works as reverse for a PoolMin operation.
 // See details in https://openxla.org/xla/operation_semantics#selectandscatter
-func (b Builder) SelectAndScatterMin(operand, source backends.Op, windowDimensions, windowStrides []int, paddings [][2]int) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method SelectAndScatterMin()"))
+func (b Builder) SelectAndScatterMin(operand, source backends.Op, windowDimensions, windowStrides []int, paddings [][2]int) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method SelectAndScatterMin()")
 }
 
 // SelectAndScatterSum runs windows (similar to ReduceWindow) over the operand, selects values to updates the output (like ScatterAdd)
 // It selects the values in the window such that it works as reverse for a PoolSum operation.
 // See details in https://openxla.org/xla/operation_semantics#selectandscatter
-func (b Builder) SelectAndScatterSum(operand, source backends.Op, windowDimensions, windowStrides []int, paddings [][2]int) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method SelectAndScatterSum()"))
+func (b Builder) SelectAndScatterSum(operand, source backends.Op, windowDimensions, windowStrides []int, paddings [][2]int) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method SelectAndScatterSum()")
 }
 
 // ShiftLeft n bits. It implicitly preserves the sign bit, if there is no overflow. So ShiftLeft(-1, 1) = -2.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-func (b Builder) ShiftLeft(x0, x1 backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method ShiftLeft()"))
+func (b Builder) ShiftLeft(x0, x1 backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method ShiftLeft()")
 }
 
 // ShiftRightArithmetic shifts right by n bits, preserving the sign bit. So ShiftRight(-2, 1) = -1.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-func (b Builder) ShiftRightArithmetic(x0, x1 backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method ShiftRightArithmetic()"))
+func (b Builder) ShiftRightArithmetic(x0, x1 backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method ShiftRightArithmetic()")
 }
 
 // ShiftRightLogical shifts right by n bits, destroying the sign bit.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-func (b Builder) ShiftRightLogical(x0, x1 backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method ShiftRightLogical()"))
+func (b Builder) ShiftRightLogical(x0, x1 backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method ShiftRightLogical()")
 }
 
 // Sign returns element-wise +1, +/-0 or -1 depending on the sign of x. It returns NaN if the input is NaN.
-func (b Builder) Sign(x backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Sign()"))
+func (b Builder) Sign(x backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Sign()")
 }
 
 // Sin returns the Op that represents the output of the corresponding operation.
-func (b Builder) Sin(x backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Sin()"))
+func (b Builder) Sin(x backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Sin()")
 }
 
 // Slice extracts a sub-array from the input array.
@@ -646,35 +646,35 @@ func (b Builder) Sin(x backends.Op) backends.Op {
 //
 //	Slice(x={0, 1, 2, 3, 4}, starts={2}, limits={4}, strides=nil) -> {2, 3}
 //	Slice(x={0, 1, 2, 3, 4}, starts={2}, limits={5}, strides={2}) -> {2, 4}
-func (b Builder) Slice(x backends.Op, starts, limits, strides []int) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Slice()"))
+func (b Builder) Slice(x backends.Op, starts, limits, strides []int) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Slice()")
 }
 
 // Sqrt returns the Op that represents the output of the corresponding operation.
-func (b Builder) Sqrt(x backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Sqrt()"))
+func (b Builder) Sqrt(x backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Sqrt()")
 }
 
 // Sub returns the element-wise subtraction of the two values.
 // Standard broadcasting rules apply (see documentation).
 // The op is created on the same XlaBuilder as used for x0 and x1.
-func (b Builder) Sub(x0, x1 backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Sub()"))
+func (b Builder) Sub(x0, x1 backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Sub()")
 }
 
 // Tanh returns the Op that represents the output of the corresponding operation.
-func (b Builder) Tanh(x backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Tanh()"))
+func (b Builder) Tanh(x backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Tanh()")
 }
 
 // Transpose axes of x.
 // There should be one value in permutations for each axis in x.
 // The output will have: output.Shape.Dimension[ii] = x.Shape.Dimension[permutations[i]].
-func (b Builder) Transpose(x backends.Op, permutations ...int) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Transpose()"))
+func (b Builder) Transpose(x backends.Op, permutations ...int) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Transpose()")
 }
 
 // Where takes element-wise values from onTrue or onFalse depending on the value of condition (expected to be boolean).
-func (b Builder) Where(condition, onTrue, onFalse backends.Op) backends.Op {
-	panic(errors.Wrapf(NotImplementedError, "in method Where()"))
+func (b Builder) Where(condition, onTrue, onFalse backends.Op) (backends.Op, error) {
+	return nil, errors.Wrapf(NotImplementedError, "in method Where()")
 }

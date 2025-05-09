@@ -38,50 +38,50 @@ import (
 // ExecGraphFn is a type parameter for accepted function types for NewExec constructor.
 type ExecGraphFn interface {
 	func(*Graph) *Node |
-	func([]*Node) *Node |
-	func(*Node) *Node |
-	func(*Node, *Node) *Node |
-	func(*Node, *Node, *Node) *Node |
-	func(*Node, *Node, *Node, *Node) *Node |
-	func(*Node, *Node, *Node, *Node, *Node) *Node |
-	func(*Node, *Node, *Node, *Node, *Node, *Node) *Node |
-	func(*Graph) (*Node, *Node) |
-	func([]*Node) (*Node, *Node) |
-	func(*Node) (*Node, *Node) |
-	func(*Node, *Node) (*Node, *Node) |
-	func(*Node, *Node, *Node) (*Node, *Node) |
-	func(*Node, *Node, *Node, *Node) (*Node, *Node) |
-	func(*Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
-	func(*Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
-	func(*Graph) (*Node, *Node, *Node) |
-	func([]*Node) (*Node, *Node, *Node) |
-	func(*Node) (*Node, *Node, *Node) |
-	func(*Node, *Node) (*Node, *Node, *Node) |
-	func(*Node, *Node, *Node) (*Node, *Node, *Node) |
-	func(*Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
-	func(*Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
-	func(*Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
-	func(*Graph) []*Node |
-	func([]*Node) []*Node |
-	func(*Node) []*Node |
-	func(*Node, *Node) []*Node |
-	func(*Node, *Node, *Node) []*Node |
-	func(*Node, *Node, *Node, *Node) []*Node |
-	func(*Node, *Node, *Node, *Node, *Node) []*Node |
-	func(*Node, *Node, *Node, *Node, *Node, *Node) []*Node
+		func([]*Node) *Node |
+		func(*Node) *Node |
+		func(*Node, *Node) *Node |
+		func(*Node, *Node, *Node) *Node |
+		func(*Node, *Node, *Node, *Node) *Node |
+		func(*Node, *Node, *Node, *Node, *Node) *Node |
+		func(*Node, *Node, *Node, *Node, *Node, *Node) *Node |
+		func(*Graph) (*Node, *Node) |
+		func([]*Node) (*Node, *Node) |
+		func(*Node) (*Node, *Node) |
+		func(*Node, *Node) (*Node, *Node) |
+		func(*Node, *Node, *Node) (*Node, *Node) |
+		func(*Node, *Node, *Node, *Node) (*Node, *Node) |
+		func(*Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
+		func(*Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
+		func(*Graph) (*Node, *Node, *Node) |
+		func([]*Node) (*Node, *Node, *Node) |
+		func(*Node) (*Node, *Node, *Node) |
+		func(*Node, *Node) (*Node, *Node, *Node) |
+		func(*Node, *Node, *Node) (*Node, *Node, *Node) |
+		func(*Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
+		func(*Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
+		func(*Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
+		func(*Graph) []*Node |
+		func([]*Node) []*Node |
+		func(*Node) []*Node |
+		func(*Node, *Node) []*Node |
+		func(*Node, *Node, *Node) []*Node |
+		func(*Node, *Node, *Node, *Node) []*Node |
+		func(*Node, *Node, *Node, *Node, *Node) []*Node |
+		func(*Node, *Node, *Node, *Node, *Node, *Node) []*Node
 }
 
 // ExecGraphFnOneOutput are ExecGraphFn functions that return only one result.
 // See ExecOnce.
 type ExecGraphFnOneOutput interface {
 	func(*Graph) *Node |
-	func([]*Node) *Node |
-	func(*Node) *Node |
-	func(*Node, *Node) *Node |
-	func(*Node, *Node, *Node) *Node |
-	func(*Node, *Node, *Node, *Node) *Node |
-	func(*Node, *Node, *Node, *Node, *Node) *Node |
-	func(*Node, *Node, *Node, *Node, *Node, *Node) *Node
+		func([]*Node) *Node |
+		func(*Node) *Node |
+		func(*Node, *Node) *Node |
+		func(*Node, *Node, *Node) *Node |
+		func(*Node, *Node, *Node, *Node) *Node |
+		func(*Node, *Node, *Node, *Node, *Node) *Node |
+		func(*Node, *Node, *Node, *Node, *Node, *Node) *Node
 }
 
 // SideParamsFn is the functions that sets side parameters during execution
