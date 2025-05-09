@@ -38,50 +38,50 @@ import (
 // ExecGraphFn is a type parameter for accepted function types for NewExec constructor.
 type ExecGraphFn interface {
 	func(*Graph) *Node |
-		func([]*Node) *Node |
-		func(*Node) *Node |
-		func(*Node, *Node) *Node |
-		func(*Node, *Node, *Node) *Node |
-		func(*Node, *Node, *Node, *Node) *Node |
-		func(*Node, *Node, *Node, *Node, *Node) *Node |
-		func(*Node, *Node, *Node, *Node, *Node, *Node) *Node |
-		func(*Graph) (*Node, *Node) |
-		func([]*Node) (*Node, *Node) |
-		func(*Node) (*Node, *Node) |
-		func(*Node, *Node) (*Node, *Node) |
-		func(*Node, *Node, *Node) (*Node, *Node) |
-		func(*Node, *Node, *Node, *Node) (*Node, *Node) |
-		func(*Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
-		func(*Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
-		func(*Graph) (*Node, *Node, *Node) |
-		func([]*Node) (*Node, *Node, *Node) |
-		func(*Node) (*Node, *Node, *Node) |
-		func(*Node, *Node) (*Node, *Node, *Node) |
-		func(*Node, *Node, *Node) (*Node, *Node, *Node) |
-		func(*Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
-		func(*Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
-		func(*Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
-		func(*Graph) []*Node |
-		func([]*Node) []*Node |
-		func(*Node) []*Node |
-		func(*Node, *Node) []*Node |
-		func(*Node, *Node, *Node) []*Node |
-		func(*Node, *Node, *Node, *Node) []*Node |
-		func(*Node, *Node, *Node, *Node, *Node) []*Node |
-		func(*Node, *Node, *Node, *Node, *Node, *Node) []*Node
+	func([]*Node) *Node |
+	func(*Node) *Node |
+	func(*Node, *Node) *Node |
+	func(*Node, *Node, *Node) *Node |
+	func(*Node, *Node, *Node, *Node) *Node |
+	func(*Node, *Node, *Node, *Node, *Node) *Node |
+	func(*Node, *Node, *Node, *Node, *Node, *Node) *Node |
+	func(*Graph) (*Node, *Node) |
+	func([]*Node) (*Node, *Node) |
+	func(*Node) (*Node, *Node) |
+	func(*Node, *Node) (*Node, *Node) |
+	func(*Node, *Node, *Node) (*Node, *Node) |
+	func(*Node, *Node, *Node, *Node) (*Node, *Node) |
+	func(*Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
+	func(*Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node) |
+	func(*Graph) (*Node, *Node, *Node) |
+	func([]*Node) (*Node, *Node, *Node) |
+	func(*Node) (*Node, *Node, *Node) |
+	func(*Node, *Node) (*Node, *Node, *Node) |
+	func(*Node, *Node, *Node) (*Node, *Node, *Node) |
+	func(*Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
+	func(*Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
+	func(*Node, *Node, *Node, *Node, *Node, *Node) (*Node, *Node, *Node) |
+	func(*Graph) []*Node |
+	func([]*Node) []*Node |
+	func(*Node) []*Node |
+	func(*Node, *Node) []*Node |
+	func(*Node, *Node, *Node) []*Node |
+	func(*Node, *Node, *Node, *Node) []*Node |
+	func(*Node, *Node, *Node, *Node, *Node) []*Node |
+	func(*Node, *Node, *Node, *Node, *Node, *Node) []*Node
 }
 
 // ExecGraphFnOneOutput are ExecGraphFn functions that return only one result.
 // See ExecOnce.
 type ExecGraphFnOneOutput interface {
 	func(*Graph) *Node |
-		func([]*Node) *Node |
-		func(*Node) *Node |
-		func(*Node, *Node) *Node |
-		func(*Node, *Node, *Node) *Node |
-		func(*Node, *Node, *Node, *Node) *Node |
-		func(*Node, *Node, *Node, *Node, *Node) *Node |
-		func(*Node, *Node, *Node, *Node, *Node, *Node) *Node
+	func([]*Node) *Node |
+	func(*Node) *Node |
+	func(*Node, *Node) *Node |
+	func(*Node, *Node, *Node) *Node |
+	func(*Node, *Node, *Node, *Node) *Node |
+	func(*Node, *Node, *Node, *Node, *Node) *Node |
+	func(*Node, *Node, *Node, *Node, *Node, *Node) *Node
 }
 
 // SideParamsFn is the functions that sets side parameters during execution
@@ -266,6 +266,20 @@ func NewExec[F ExecGraphFn](backend backends.Backend, graphFn F) *Exec {
 	return NewExecAny(backend, graphFn)
 }
 
+// NewExecOrError creates an Exec object or returns an error if it fails.
+//
+// It is like NewExec, but it doesn't panic.
+func NewExecOrError[F ExecGraphFn](backend backends.Backend, graphFn F) (*Exec, error) {
+	var e *Exec
+	err := TryCatch[error](func() {
+		e = NewExecAny(backend, graphFn)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return e, nil
+}
+
 // ExecOnce builds the graph and executes it with the given arguments, and returns the one output.
 //
 // It's short for a call to NewExec, Exec.Call and Exec.Finalize for functions that return only one output.
@@ -372,6 +386,23 @@ func (e *Exec) GetNodeLogger() LoggerFn {
 func (e *Exec) Call(args ...any) []*tensors.Tensor {
 	results, _ := e.CallWithGraph(args...)
 	return results
+}
+
+// CallOrError parses the arguments into tensors (if they are not yet) and executes
+// the graph corresponding to the shapes of the arguments.
+// If a graph does not yet exist, one is created, compiled and cached for the shapes.
+//
+// It returns the outputs in a slice, even if there is only one output.
+//
+// Errors (with full stack-traces) are returned.
+func (e *Exec) CallOrError(args ...any) (results []*tensors.Tensor, err error) {
+	err = TryCatch[error](func() {
+		results, _ = e.CallWithGraph(args...)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return results, nil
 }
 
 // CallWithGraph is similar to Call, but it also returns the computation graph used
