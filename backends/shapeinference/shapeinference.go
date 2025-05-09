@@ -12,7 +12,6 @@
 package shapeinference
 
 import (
-	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/shapes"
@@ -44,7 +43,7 @@ var (
 		backends.OpTypeClz,
 	)
 
-	// NumberOperations can take any type of number as input: integer, float or complex.
+	// NumberOperations can take any type of number as input: integers, floats, or complex numbers.
 	NumberOperations = types.SetWith(
 		backends.OpTypeAdd,
 		backends.OpTypeSub,
@@ -172,7 +171,7 @@ var (
 // operations that have two operands usually named lhs (left-hand-side) and rhs (right-hand-side), and they are usually
 // commutative (invariant to order).
 //
-// It may throw (panic) an exception if the data type (shape.DType) is invalid for the operation -- e.g.: non-matching
+// It returns an error if the data type (shape.DType) is invalid for the operation -- e.g.: non-matching
 // dtypes, or LogicalAnd not having booleans (dtype.Bool) as input.
 func BinaryOp(opType backends.OpType, lhsShape, rhsShape shapes.Shape) (output shapes.Shape, err error) {
 	if !StandardBinaryOperations.Has(opType) {
@@ -268,7 +267,7 @@ func ComparisonOp(opType backends.OpType, lhsShape, rhsShape shapes.Shape) (outp
 }
 
 // UnaryOp checks the validity of the data type for StandardUnaryOperations and returns either an error or
-// the output shape, which it the same as the operand.
+// the output shape, which is the same as the operand.
 func UnaryOp(opType backends.OpType, operand shapes.Shape) (output shapes.Shape, err error) {
 	if !StandardUnaryOperations.Has(opType) {
 		err = errors.Errorf("operation %s is not in the StandardUnaryOperations set, cannot process it with UnaryOp", opType)
@@ -313,10 +312,10 @@ func UnaryOp(opType backends.OpType, operand shapes.Shape) (output shapes.Shape,
 
 // WhereOp returns the shape resulting from the Where operation.
 //
-// Shape constraints:
+// Shape constraints for the operation:
 //
-//  1. onTrue and onFalse must have the exact same shape.
-//  2. condition must either be a scalar or match the shape of onTrue and onFalse, except for the DType that
+//  1. The onTrue and onFalse must have the exact same shape, or one can be a scalar.
+//  2. The condition must either be a scalar or match the shape of onTrue or onFalse, except for the DType that
 //     must be Bool.
 func WhereOp(condition, onTrue, onFalse shapes.Shape) (output shapes.Shape, err error) {
 	if condition.DType != dtypes.Bool {
@@ -451,18 +450,18 @@ func BroadcastInDimOp(operand, outputShape shapes.Shape, broadcastAxes []int) er
 }
 
 // ReduceOp works for the ReduceMax, ReduceMin, ReduceSum and ReduceProduct ops.
-func ReduceOp(operand shapes.Shape, axes []int) shapes.Shape {
+func ReduceOp(operand shapes.Shape, axes []int) (output shapes.Shape, err error) {
 	if len(axes) == 0 {
-		return operand
+		return operand, nil
 	}
-	output := shapes.Make(operand.DType)
+	output = shapes.Make(operand.DType)
 	outputRank := operand.Rank() - len(axes)
 	if outputRank > 0 {
 		// Copy over dimensions that will stay.
 		output.Dimensions = make([]int, 0, outputRank)
 		for _, axis := range axes {
 			if axis < 0 || axis >= operand.Rank() {
-				exceptions.Panicf("Reduce operation require each axis to be 0 <= axis < rank, but got invalid axis %d for shape %s", axis, operand)
+				return shapes.Invalid(), errors.Errorf("Reduce operation require each axis to be 0 <= axis < rank, but got invalid axis %d for shape %s", axis, operand)
 			}
 		}
 		axesSet := types.SetWith(axes...)
@@ -472,12 +471,12 @@ func ReduceOp(operand shapes.Shape, axes []int) shapes.Shape {
 			}
 		}
 	}
-	return output
+	return
 }
 
 // GatherOp returns the output shape of a Gather operation.
 func GatherOp(operand, startIndices shapes.Shape, indexVectorAxis int, offsetOutputAxes, collapsedSliceAxes,
-	startIndexMap, sliceSizes []int, indicesAreSorted bool) shapes.Shape {
+	startIndexMap, sliceSizes []int, indicesAreSorted bool) (output shapes.Shape, err error) {
 	//fmt.Printf("GatherOp parameters:\n"+
 	//	"  operand: %v\n"+
 	//	"  startIndices: %v\n"+
@@ -492,55 +491,55 @@ func GatherOp(operand, startIndices shapes.Shape, indexVectorAxis int, offsetOut
 	_ = indicesAreSorted // Not used for shape inference.
 
 	if operand.IsScalar() {
-		exceptions.Panicf("Gather() requires a non-scalar operand, got %s", operand)
+		return output, errors.Errorf("Gather() requires a non-scalar operand, got %s", operand)
 	}
 
 	setCollapsedAxes := types.MakeSet[int]()
 	for _, collapsedSliceAxis := range collapsedSliceAxes {
 		if collapsedSliceAxis < 0 || collapsedSliceAxis >= operand.Rank() {
-			exceptions.Panicf("collapsed slice axis %d is out of range for operand %s", collapsedSliceAxis, operand)
+			return output, errors.Errorf("collapsed slice axis %d is out of range for operand %s", collapsedSliceAxis, operand)
 		}
 		if setCollapsedAxes.Has(collapsedSliceAxis) {
-			exceptions.Panicf("collapsed slice axis %d is defined more than once for operand %s", collapsedSliceAxis, operand)
+			return output, errors.Errorf("collapsed slice axis %d is defined more than once for operand %s", collapsedSliceAxis, operand)
 		}
 		setCollapsedAxes.Insert(collapsedSliceAxis)
 	}
 
 	// Check slice sizes.
 	if len(sliceSizes) != operand.Rank() {
-		exceptions.Panicf("sliceSizes must have one value per operand axes, so it length (%d) must match operand rank (%d)", len(sliceSizes), operand.Rank())
+		return output, errors.Errorf("sliceSizes must have one value per operand axes, so it length (%d) must match operand rank (%d)", len(sliceSizes), operand.Rank())
 	}
 	for axis, sliceSize := range sliceSizes {
 		if sliceSize < 0 {
-			exceptions.Panicf("sliceSize %d for axis %d is negative, it must be non-negative", sliceSize, axis)
+			return output, errors.Errorf("sliceSize %d for axis %d is negative, it must be non-negative", sliceSize, axis)
 		}
 		if operand.Dimensions[axis] < sliceSize {
-			exceptions.Panicf("sliceSize %d for axis %d is larger than the corresponding operand dimension %d", sliceSize, axis, operand.Dimensions[axis])
+			return output, errors.Errorf("sliceSize %d for axis %d is larger than the corresponding operand dimension %d", sliceSize, axis, operand.Dimensions[axis])
 		}
 	}
 	for collapseAxis := range setCollapsedAxes {
 		if sliceSizes[collapseAxis] != 1 {
-			exceptions.Panicf("collapsed slice axis %d must have sliceSize 1, but got %d", collapseAxis, sliceSizes[collapseAxis])
+			return output, errors.Errorf("collapsed slice axis %d must have sliceSize 1, but got %d", collapseAxis, sliceSizes[collapseAxis])
 		}
 	}
 	if operand.Rank() != len(collapsedSliceAxes)+len(offsetOutputAxes) {
-		exceptions.Panicf("the number of collapsedSliceAxes (%d) + the number of offsetOutputAxes (%d) must be equal to the number of axes in the operand (operand.Rank()=%d)",
+		return output, errors.Errorf("the number of collapsedSliceAxes (%d) + the number of offsetOutputAxes (%d) must be equal to the number of axes in the operand (operand.Rank()=%d)",
 			len(collapsedSliceAxes), len(offsetOutputAxes), operand.Rank())
 	}
 
 	// Check indexVectorAxis: it is ok if it is equal to startIndices.rank, in which case we assume implicit extra axes of dimension 1.
 	if indexVectorAxis < 0 || indexVectorAxis > operand.Rank() {
-		exceptions.Panicf("indexVectorAxis=%d is out of range for operand %s", indexVectorAxis, operand)
+		return output, errors.Errorf("indexVectorAxis=%d is out of range for operand %s", indexVectorAxis, operand)
 	}
 
 	// Check startIndexMap is set for the dimensions of indexVectorAxis in startIndices.
 	if len(startIndexMap) != startIndices.Dimensions[indexVectorAxis] {
-		exceptions.Panicf("startIndexMap must have one value per dimension of indexVectorAxis, so it length (%d) must match startIndices.Dimensions[%d] (%d)",
+		return output, errors.Errorf("startIndexMap must have one value per dimension of indexVectorAxis, so it length (%d) must match startIndices.Dimensions[%d] (%d)",
 			len(startIndexMap), indexVectorAxis, startIndices.Dimensions[indexVectorAxis])
 	}
 	for idx, operandAxis := range startIndexMap {
 		if operandAxis < 0 || operandAxis >= operand.Rank() {
-			exceptions.Panicf("startIndexMap[%d]=%d is out of range for operand %s", idx, operandAxis, operand)
+			return output, errors.Errorf("startIndexMap[%d]=%d is out of range for operand %s", idx, operandAxis, operand)
 		}
 	}
 
@@ -555,16 +554,16 @@ func GatherOp(operand, startIndices shapes.Shape, indexVectorAxis int, offsetOut
 	//
 	// - Axes in offsetOutputAxes are preset as offset, and their dimensions are taken sequentially from non-collapsed operand axes.
 	// - Remaining axes are filled in order from the batch axes, taken from startIndices.
-	output := shapes.Make(operand.DType)
+	output = shapes.Make(operand.DType)
 	output.Dimensions = make([]int, batchRank+len(offsetOutputAxes))
 
 	setOffsetOutputAxes := types.MakeSet[int]()
 	for _, offsetOutputAxis := range offsetOutputAxes {
 		if offsetOutputAxis < 0 || offsetOutputAxis >= output.Rank() {
-			exceptions.Panicf("offset output axis %d is out of range for output of rank %d", offsetOutputAxis, output.Rank())
+			return shapes.Invalid(), errors.Errorf("offset output axis %d is out of range for output of rank %d", offsetOutputAxis, output.Rank())
 		}
 		if setOffsetOutputAxes.Has(offsetOutputAxis) {
-			exceptions.Panicf("offset output axis %d is defined more than once: offsetOutputAxes=%v", offsetOutputAxis, offsetOutputAxes)
+			return shapes.Invalid(), errors.Errorf("offset output axis %d is defined more than once: offsetOutputAxes=%v", offsetOutputAxis, offsetOutputAxes)
 		}
 		setOffsetOutputAxes.Insert(offsetOutputAxis)
 	}
@@ -592,44 +591,44 @@ func GatherOp(operand, startIndices shapes.Shape, indexVectorAxis int, offsetOut
 			batchDimsIdx++
 		}
 	}
-	return output
+	return output, nil
 }
 
 // ConcatenateOp calculates the output shape of a Concatenate operation.
 // It takes a slice of input shapes and the dimension along which to concatenate.
-func ConcatenateOp(inputs []shapes.Shape, axis int) shapes.Shape {
+func ConcatenateOp(inputs []shapes.Shape, axis int) (output shapes.Shape, err error) {
 	if len(inputs) == 0 {
-		exceptions.Panicf("ConcatenateOp requires at least one input shape")
+		return shapes.Invalid(), errors.Errorf("ConcatenateOp requires at least one input shape")
 	}
 
 	// Initialize output dimensions with the first shape.
 	firstShape := inputs[0]
 	dtype := firstShape.DType
 	rank := firstShape.Rank()
-	output := firstShape.Clone()
+	output = firstShape.Clone()
 	if dtype == dtypes.InvalidDType {
-		exceptions.Panicf("invalid shape %s for first input of ConcatenateOp", firstShape)
+		return shapes.Invalid(), errors.Errorf("invalid shape %s for first input of ConcatenateOp", firstShape)
 	}
 	if len(inputs) == 1 {
-		return firstShape
+		return firstShape, nil
 	}
 
 	if axis < 0 || axis >= rank {
-		exceptions.Panicf("invalid concatenation axis %d for shapes with rank %d", axis, rank)
+		return shapes.Invalid(), errors.Errorf("invalid concatenation axis %d for shapes with rank %d", axis, rank)
 	}
 
 	// Validate further inputs and accumulate the concatenation axis size.
 	for i := 1; i < len(inputs); i++ {
 		currentShape := inputs[i]
 		if currentShape.DType == dtypes.InvalidDType {
-			exceptions.Panicf("invalid shape %s for input #%d of ConcatenateOp", currentShape, i)
+			return shapes.Invalid(), errors.Errorf("invalid shape %s for input #%d of ConcatenateOp", currentShape, i)
 		}
 		if currentShape.DType != dtype {
-			exceptions.Panicf("mismatched DTypes for ConcatenateOp: input #0 has %s, input #%d has %s",
+			return shapes.Invalid(), errors.Errorf("mismatched DTypes for ConcatenateOp: input #0 has %s, input #%d has %s",
 				dtype, i, currentShape.DType)
 		}
 		if currentShape.Rank() != rank {
-			exceptions.Panicf("mismatched ranks for ConcatenateOp: input #0 has rank %d, input #%d has rank %d",
+			return shapes.Invalid(), errors.Errorf("mismatched ranks for ConcatenateOp: input #0 has rank %d, input #%d has rank %d",
 				rank, i, currentShape.Rank())
 		}
 
@@ -638,33 +637,33 @@ func ConcatenateOp(inputs []shapes.Shape, axis int) shapes.Shape {
 				output.Dimensions[d] += currentShape.Dimensions[d]
 			} else {
 				if currentShape.Dimensions[d] != output.Dimensions[d] {
-					exceptions.Panicf("mismatched dimensions for ConcatenateOp at axis %d (non-concatenation axis): input #0 has %d, input #%d has %d",
+					return shapes.Invalid(), errors.Errorf("mismatched dimensions for ConcatenateOp at axis %d (non-concatenation axis): input #0 has %d, input #%d has %d",
 						d, output.Dimensions[d], i, currentShape.Dimensions[d])
 				}
 			}
 		}
 	}
-	return output
+	return output, nil
 }
 
 // ScatterOp checks that the parameters are consistent. The output shape returned is the unchanged operand -- the scattered
 // updates are applied to the operand, but its shape is unchanged.
 //
 // The Scatter operations indicesAreSorted and uniqueIndices don't play a role in this.
-func ScatterOp(operand, indices, updates shapes.Shape, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int) shapes.Shape {
+func ScatterOp(operand, indices, updates shapes.Shape, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int) (output shapes.Shape, err error) {
 	if operand.DType == dtypes.InvalidDType || indices.DType == dtypes.InvalidDType || updates.DType == dtypes.InvalidDType {
-		exceptions.Panicf("invalid shape for operand (%s), indices (%s) or updates (%s) for ScatterOp", operand, indices, updates)
+		return shapes.Invalid(), errors.Errorf("invalid shape for operand (%s), indices (%s) or updates (%s) for ScatterOp", operand, indices, updates)
 	}
 	if operand.DType != updates.DType {
-		exceptions.Panicf("data types (DType) for ScatterOp operand (%s) and updates (%s) must match", operand, updates)
+		return shapes.Invalid(), errors.Errorf("data types (DType) for ScatterOp operand (%s) and updates (%s) must match", operand, updates)
 	}
 	if !indices.DType.IsInt() {
-		exceptions.Panicf("indices DType (%s) must be an integer type", indices)
+		return shapes.Invalid(), errors.Errorf("indices DType (%s) must be an integer type", indices)
 	}
 
 	// Check indexVectorAxis and get scatter indices dimensions.
 	if indexVectorAxis < 0 || indexVectorAxis > indices.Rank() {
-		exceptions.Panicf("indexVectorAxis=%d must be in range [0, indices.Rank()=%d]", indexVectorAxis, indices.Rank())
+		return shapes.Invalid(), errors.Errorf("indexVectorAxis=%d must be in range [0, indices.Rank()=%d]", indexVectorAxis, indices.Rank())
 	}
 
 	// Validate scatter axes mapping.
@@ -673,17 +672,17 @@ func ScatterOp(operand, indices, updates shapes.Shape, indexVectorAxis int, upda
 		numIndexedAxes = indices.Dimensions[indexVectorAxis]
 	}
 	if len(scatterAxesToOperandAxes) != numIndexedAxes {
-		exceptions.Panicf("scatterAxesToOperandAxes length (%d) must match the size of indices's indexVectorAxis dimension (%d)",
+		return shapes.Invalid(), errors.Errorf("scatterAxesToOperandAxes length (%d) must match the size of indices's indexVectorAxis dimension (%d)",
 			len(scatterAxesToOperandAxes), indices.Dimensions[indexVectorAxis])
 	}
 	for i, axis := range scatterAxesToOperandAxes {
 		if axis < 0 || axis >= operand.Rank() {
-			exceptions.Panicf("scatterAxesToOperandAxes[%d]=%d must be in range [0, operand.Rank()=%d)", i, axis, operand.Rank())
+			return shapes.Invalid(), errors.Errorf("scatterAxesToOperandAxes[%d]=%d must be in range [0, operand.Rank()=%d)", i, axis, operand.Rank())
 		}
 	}
 	for i, axis := range updateWindowAxes {
 		if axis < 0 || axis >= updates.Rank() {
-			exceptions.Panicf("updateWindowAxes[%d]=%d must be in range [0, updates.Rank()=%d)", i, axis, updates.Rank()-1)
+			return shapes.Invalid(), errors.Errorf("updateWindowAxes[%d]=%d must be in range [0, updates.Rank()=%d)", i, axis, updates.Rank()-1)
 		}
 	}
 
@@ -693,19 +692,19 @@ func ScatterOp(operand, indices, updates shapes.Shape, indexVectorAxis int, upda
 		numBatchAxes++
 	}
 	if len(updateWindowAxes)+numBatchAxes != updates.Rank() {
-		exceptions.Panicf("numBatchAxes (%d) + len(updateWindowAxes) (%d) must match updates.Rank() (%d), so it "+
+		return shapes.Invalid(), errors.Errorf("numBatchAxes (%d) + len(updateWindowAxes) (%d) must match updates.Rank() (%d), so it "+
 			"can fully addressed -- where numBatchAxes=indices.Rank() - 1, or if indexVector == indices.Rank(), numBatchAxes=indices.Rank()",
 			numBatchAxes, len(updateWindowAxes), updates.Rank())
 	}
 
 	// Validate update window dimensions.
 	if len(updateWindowAxes)+len(insertedWindowAxes) != operand.Rank() {
-		exceptions.Panicf("operand.Rank() (%d) must match len(updateWindowAxes)(%d)+len(insertedWindowAxes)(%d), so operand indices can be fully defined",
+		return shapes.Invalid(), errors.Errorf("operand.Rank() (%d) must match len(updateWindowAxes)(%d)+len(insertedWindowAxes)(%d), so operand indices can be fully defined",
 			operand.Rank(), len(updateWindowAxes), len(insertedWindowAxes))
 	}
 	for i, axis := range insertedWindowAxes {
 		if axis < 0 || axis >= operand.Rank() {
-			exceptions.Panicf("insertedWindowAxes[%d]=%d must be in range [0, operand.Rank()=%d)", i, axis, operand.Rank())
+			return shapes.Invalid(), errors.Errorf("insertedWindowAxes[%d]=%d must be in range [0, operand.Rank()=%d)", i, axis, operand.Rank())
 		}
 	}
 
@@ -720,34 +719,34 @@ func ScatterOp(operand, indices, updates shapes.Shape, indexVectorAxis int, upda
 	for ii, updatesAxis := range updateWindowAxes {
 		operandAxis := operandUpdatedWindowAxes[ii]
 		if updates.Dimensions[updatesAxis] > operand.Dimensions[operandAxis] {
-			exceptions.Panicf("updates.Dimensions[axis=%d](%d) > operand.Dimensions[axis=%d](%d), updates won't fit into the operand",
+			return shapes.Invalid(), errors.Errorf("updates.Dimensions[axis=%d](%d) > operand.Dimensions[axis=%d](%d), updates won't fit into the operand",
 				updatesAxis, updates.Dimensions[updatesAxis], operandAxis, operand.Dimensions[operandAxis])
 		}
 	}
-	return operand
+	return operand, nil
 }
 
 // SliceOp calculates the output shape for a Slice operation.
 // It checks that starts, limits, and strides have the correct length (matching operand rank),
 // and that the slice parameters are valid for the operand's dimensions.
 // Strides must be positive.
-func SliceOp(operand shapes.Shape, starts, limits, strides []int) shapes.Shape {
+func SliceOp(operand shapes.Shape, starts, limits, strides []int) (output shapes.Shape, err error) {
 	rank := operand.Rank()
 	opName := "SliceOp"
 	if operand.DType == dtypes.InvalidDType {
-		exceptions.Panicf("%s: invalid operand shape %s", opName, operand)
+		return shapes.Invalid(), errors.Errorf("%s: invalid operand shape %s", opName, operand)
 	}
 	if len(starts) != rank {
-		exceptions.Panicf("%s: len(starts)=%d, but operand rank is %d", opName, len(starts), rank)
+		return shapes.Invalid(), errors.Errorf("%s: len(starts)=%d, but operand rank is %d", opName, len(starts), rank)
 	}
 	if len(limits) != rank {
-		exceptions.Panicf("%s: len(limits)=%d, but operand rank is %d", opName, len(limits), rank)
+		return shapes.Invalid(), errors.Errorf("%s: len(limits)=%d, but operand rank is %d", opName, len(limits), rank)
 	}
 	if len(strides) != rank {
-		exceptions.Panicf("%s: len(strides)=%d, but operand rank is %d", opName, len(strides), rank)
+		return shapes.Invalid(), errors.Errorf("%s: len(strides)=%d, but operand rank is %d", opName, len(strides), rank)
 	}
 
-	outputShape := shapes.Shape{
+	output = shapes.Shape{
 		DType:      operand.DType,
 		Dimensions: make([]int, rank),
 	}
@@ -757,29 +756,29 @@ func SliceOp(operand shapes.Shape, starts, limits, strides []int) shapes.Shape {
 		dimSize := operand.Dimensions[axis]
 
 		if stride <= 0 {
-			exceptions.Panicf("%s: stride must be positive, but got stride[%d]=%d for operand shape %s",
+			return shapes.Invalid(), errors.Errorf("%s: stride must be positive, but got stride[%d]=%d for operand shape %s",
 				opName, axis, stride, operand)
 		}
 		if start < 0 || start >= dimSize {
-			exceptions.Panicf("%s: start index %d is out of bounds for axis %d with size %d (operand shape %s)",
+			return shapes.Invalid(), errors.Errorf("%s: start index %d is out of bounds for axis %d with size %d (operand shape %s)",
 				opName, start, axis, dimSize, operand)
 		}
 		// Limit can be equal to dimSize.
 		if limit < start || limit > dimSize {
-			exceptions.Panicf("%s: limit index %d is out of bounds for axis %d (start=%d, size=%d, operand shape %s)",
+			return shapes.Invalid(), errors.Errorf("%s: limit index %d is out of bounds for axis %d (start=%d, size=%d, operand shape %s)",
 				opName, limit, axis, start, dimSize, operand)
 		}
 
 		// The first one is always taken, so we use the ceiling of the division.
 		outputDimSize := (limit - start + (stride - 1)) / stride
-		outputShape.Dimensions[axis] = outputDimSize
+		output.Dimensions[axis] = outputDimSize
 	}
 
-	return outputShape
+	return output, nil
 }
 
 // ArgMinMaxOp calculates the output shape for an ArgMinMax operation.
-// It will be the shape of the operand minus the reduce axis.
+// It will be the shape of the operand minus the "reduce" axis.
 func ArgMinMaxOp(operand shapes.Shape, axis int, outputDType dtypes.DType) (output shapes.Shape, err error) {
 	if !outputDType.IsInt() {
 		err = errors.Errorf("ArgMinMax outputDType must be an integer type, got %s", outputDType)
