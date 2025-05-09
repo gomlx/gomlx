@@ -403,7 +403,11 @@ func (g *Graph) Compile(outputs ...*Node) {
 	}
 
 	outputsOps := xslices.Map(outputs, func(node *Node) backends.Op { return node.outputOps[0] })
-	g.executable = g.builder.Compile(outputsOps...)
+	var err error
+	g.executable, err = g.builder.Compile(outputsOps...)
+	if err != nil {
+		panic(errors.WithMessagef(err, "Graph failed to compile for the backend"))
+	}
 	return
 }
 
@@ -522,13 +526,17 @@ func (g *Graph) RunWithBuffers(inputs []backends.Buffer, donate []bool) (outputs
 	}
 	var start time.Time
 	var results []backends.Buffer
+	var err error
 	if klog.V(1).Enabled() {
 		start = time.Now()
-		results = g.executable.Execute(inputs, donate)
+		results, err = g.executable.Execute(inputs, donate)
 		elapsed := time.Since(start)
 		klog.V(1).Infof("Graph.RunWithBuffers: %s elapsed", elapsed)
 	} else {
-		results = g.executable.Execute(inputs, donate)
+		results, err = g.executable.Execute(inputs, donate)
+	}
+	if err != nil {
+		panic(errors.WithMessagef(err, "Graph failed to execute"))
 	}
 	outputs = xslices.Map(results, func(buf backends.Buffer) *tensors.Tensor { return tensors.FromBuffer(g.backend, buf) })
 	return
