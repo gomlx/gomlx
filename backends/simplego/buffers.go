@@ -5,11 +5,15 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/pkg/errors"
 	"reflect"
 	"strings"
 	"sync"
 	"unsafe"
 )
+
+// Compile-time check:
+var _ backends.DataInterface = (*Backend)(nil)
 
 // Buffer for SimpleGo backend holds a shape and a reference to the flat data.
 //
@@ -88,7 +92,7 @@ func mutableBytesGeneric[T SupportedTypesConstraints](params ...any) any {
 // cloneBuffer using the pool to allocate a new one.
 func (b *Backend) cloneBuffer(buffer *Buffer) *Buffer {
 	if buffer == nil || buffer.flat == nil || !buffer.shape.Ok() || !buffer.valid {
-		// buffer is already empty.
+		// the buffer is already empty.
 		var issues []string
 		if buffer != nil {
 			if buffer.flat == nil {
@@ -123,10 +127,10 @@ func (b *Backend) NewBuffer(shape shapes.Shape) *Buffer {
 // freed immediately.
 //
 // A finalized buffer should never be used again. Preferably, the caller should set its references to it to nil.
-func (b *Backend) BufferFinalize(backendBuffer backends.Buffer) {
+func (b *Backend) BufferFinalize(backendBuffer backends.Buffer) error {
 	buffer := backendBuffer.(*Buffer)
 	if buffer == nil || buffer.flat == nil || !buffer.shape.Ok() || !buffer.valid {
-		// buffer is already empty.
+		// The buffer is already empty.
 		var issues []string
 		if buffer != nil {
 			if buffer.flat == nil {
@@ -141,40 +145,55 @@ func (b *Backend) BufferFinalize(backendBuffer backends.Buffer) {
 		} else {
 			issues = append(issues, "buffer was nil")
 		}
-		exceptions.Panicf("BufferFinalize(%p): %s -- buffer was already finalized!?\n", buffer, strings.Join(issues, ", "))
-		return
+		return errors.Errorf("BufferFinalize(%p): %s -- buffer was already finalized!?\n", buffer, strings.Join(issues, ", "))
 	}
 	//fmt.Printf("> BufferFinalize(%p): shape=%s\n", buffer, buffer.shape)
 	//fmt.Printf("\tStack trace:\n%s\n", debug.Stack())
 	b.putBuffer(buffer)
+	return nil
 }
 
 // BufferShape returns the shape for the buffer.
-func (b *Backend) BufferShape(buffer backends.Buffer) shapes.Shape {
-	buf := buffer.(*Buffer)
-	return buf.shape
+func (b *Backend) BufferShape(buffer backends.Buffer) (shapes.Shape, error) {
+	buf, ok := buffer.(*Buffer)
+	if !ok {
+		return shapes.Invalid(), errors.Errorf("buffer is not a %q backend buffer", BackendName)
+	}
+	return buf.shape, nil
 }
 
 // BufferDeviceNum returns the deviceNum for the buffer.
-func (b *Backend) BufferDeviceNum(buffer backends.Buffer) backends.DeviceNum {
-	return 0
+func (b *Backend) BufferDeviceNum(buffer backends.Buffer) (backends.DeviceNum, error) {
+	_, ok := buffer.(*Buffer)
+	if !ok {
+		return 0, errors.Errorf("buffer is not a %q backend buffer", BackendName)
+	}
+	return 0, nil
 }
 
-// BufferToFlatData transfers the flat values of buffer to the Go flat array.
+// BufferToFlatData transfers the flat values of the buffer to the Go flat array.
 // The slice flat must have the exact number of elements required to store the backends.Buffer shape.
 //
 // See also FlatDataToBuffer, BufferShape, and shapes.Shape.Size.
-func (b *Backend) BufferToFlatData(backendsBuffer backends.Buffer, flat any) {
-	buffer := backendsBuffer.(*Buffer)
-	copyFlat(flat, buffer.flat)
+func (b *Backend) BufferToFlatData(backendBuffer backends.Buffer, flat any) error {
+	buf, ok := backendBuffer.(*Buffer)
+	if !ok {
+		return errors.Errorf("buffer is not a %q backend buffer", BackendName)
+	}
+	copyFlat(flat, buf.flat)
+	return nil
 }
 
 // BufferFromFlatData transfers data from Go given as a flat slice (of the type corresponding to the shape DType)
 // to the deviceNum, and returns the corresponding backends.Buffer.
-func (b *Backend) BufferFromFlatData(deviceNum backends.DeviceNum, flat any, shape shapes.Shape) backends.Buffer {
+func (b *Backend) BufferFromFlatData(deviceNum backends.DeviceNum, flat any, shape shapes.Shape) (backends.Buffer, error) {
+	if deviceNum != 0 {
+		return nil, errors.Errorf("backend (%s) only supports deviceNum 0, cannot create buffer on deviceNum %d (shape=%s)",
+			b.Name(), deviceNum, shape)
+	}
 	buffer := b.NewBuffer(shape)
 	copyFlat(buffer.flat, flat)
-	return buffer
+	return buffer, nil
 }
 
 // HasSharedBuffers returns whether the backend supports "shared buffers": these are buffers
@@ -196,13 +215,13 @@ func (b *Backend) HasSharedBuffers() bool {
 //
 // It returns a handle to the buffer and a slice of the corresponding data type pointing
 // to the shared data.
-func (b *Backend) NewSharedBuffer(deviceNum backends.DeviceNum, shape shapes.Shape) (buffer backends.Buffer, flat any) {
+func (b *Backend) NewSharedBuffer(deviceNum backends.DeviceNum, shape shapes.Shape) (buffer backends.Buffer, flat any, err error) {
 	if deviceNum != 0 {
-		exceptions.Panicf("backend (%s) only supports deviceNum 0, cannot create buffer on deviceNum %d (shape=%s)",
+		return nil, nil, errors.Errorf("backend (%s) only supports deviceNum 0, cannot create buffer on deviceNum %d (shape=%s)",
 			b.Name(), deviceNum, shape)
 	}
 	goBuffer := b.NewBuffer(shape)
-	return goBuffer, goBuffer.flat
+	return goBuffer, goBuffer.flat, nil
 }
 
 // BufferData returns a slice pointing to the buffer storage memory directly.
@@ -211,6 +230,10 @@ func (b *Backend) NewSharedBuffer(deviceNum backends.DeviceNum, shape shapes.Sha
 // shares CPU memory.
 //
 // The returned slice becomes invalid after the buffer is destroyed.
-func (b *Backend) BufferData(buffer backends.Buffer) (flat any) {
-	return buffer.(*Buffer).flat
+func (b *Backend) BufferData(buffer backends.Buffer) (flat any, err error) {
+	buf, ok := buffer.(*Buffer)
+	if !ok {
+		return nil, errors.Errorf("buffer is not a %q backend buffer", BackendName)
+	}
+	return buf.flat, nil
 }

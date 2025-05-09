@@ -8,6 +8,8 @@ import (
 	"sync"
 )
 
+var _ backends.Executable = (*Executable)(nil)
+
 // Executable holds a frozen Builder. It assumes the graph in Builder is valid and has been properly
 // checked that all the shapes and data types are valid.
 //
@@ -142,10 +144,10 @@ func countNodeUses(node *Node, numUses []int) {
 //
 // It is given the buffers for its inputs, and a reserved buffer where to store its output, already
 // with the shape pre-calculated.
-type nodeExecutor func(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer
+type nodeExecutor func(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error)
 
 // nodeMultiOutputExecutor is a version of a node executor when it returns multiple outputs.
-type nodeMultiOutputExecutor func(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) []*Buffer
+type nodeMultiOutputExecutor func(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) ([]*Buffer, error)
 
 var (
 	// nodeExecutors should be populated during initialization (`init` functions) for the ops implemented.
@@ -166,7 +168,7 @@ var (
 //
 // Donated buffers are no longer valid after the call.
 // If donate is nil, it is assumed to be false for all buffers, and no buffer is donated.
-func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) []backends.Buffer {
+func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) ([]backends.Buffer, error) {
 	// Check inputs length
 	if len(inputs) != len(e.builder.inputs) {
 		exceptions.Panicf("Execute: expected %d inputs, got %d", len(e.builder.inputs), len(inputs))
