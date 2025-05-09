@@ -177,7 +177,10 @@ func checkFlat(flat any) (dtypes.DType, int) {
 func (b *Builder) addUnaryOp(opType backends.OpType, operandOp backends.Op) *Node {
 	inputs := b.checkOps(opType.String(), operandOp)
 	operand := inputs[0]
-	shape := shapeinference.UnaryOp(opType, operand.shape)
+	shape, err := shapeinference.UnaryOp(opType, operand.shape)
+	if err != nil {
+		panic(err)
+	}
 	return b.newNode(opType, shape, operand)
 }
 
@@ -185,7 +188,10 @@ func (b *Builder) addUnaryOp(opType backends.OpType, operandOp backends.Op) *Nod
 func (b *Builder) addBinaryOp(opType backends.OpType, lhsOp, rhsOp backends.Op) *Node {
 	inputs := b.checkOps(opType.String(), lhsOp, rhsOp)
 	lhs, rhs := inputs[0], inputs[1]
-	shape := shapeinference.BinaryOp(opType, lhs.shape, rhs.shape)
+	shape, err := shapeinference.BinaryOp(opType, lhs.shape, rhs.shape)
+	if err != nil {
+		panic(err)
+	}
 	return b.newNode(opType, shape, lhs, rhs)
 }
 
@@ -193,6 +199,9 @@ func (b *Builder) addBinaryOp(opType backends.OpType, lhsOp, rhsOp backends.Op) 
 func (b *Builder) addComparisonOp(opType backends.OpType, lhsOp, rhsOp backends.Op) *Node {
 	inputs := b.checkOps(opType.String(), lhsOp, rhsOp)
 	lhs, rhs := inputs[0], inputs[1]
-	shape := shapeinference.ComparisonOp(opType, lhs.shape, rhs.shape)
+	shape, err := shapeinference.ComparisonOp(opType, lhs.shape, rhs.shape)
+	if err != nil {
+		panic(err)
+	}
 	return b.newNode(opType, shape, lhs, rhs)
 }
