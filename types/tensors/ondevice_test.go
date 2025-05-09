@@ -44,9 +44,12 @@ func testOnDeviceInputOutputImpl[T dtypes.Number](t *testing.T, backend backends
 	dtype := dtypes.FromGenericsType[T]()
 	dims := []int{3, 2}
 	builder := backend.Builder(fmt.Sprintf("%s_%s", t.Name(), dtype))
-	x := builder.Parameter("x", shapes.Make(dtype, dims...))
-	x2 := builder.Mul(x, x)
-	exec := builder.Compile(x2)
+	x, err := builder.Parameter("x", shapes.Make(dtype, dims...))
+	require.NoError(t, err)
+	x2, err := builder.Mul(x, x)
+	require.NoError(t, err)
+	exec, err := builder.Compile(x2)
+	require.NoError(t, err)
 
 	// Create local Tensor input.
 	values := []T{0, 1, 2, 3, 4, 11}
@@ -67,11 +70,10 @@ func testOnDeviceInputOutputImpl[T dtypes.Number](t *testing.T, backend backends
 	}
 
 	var outputs []backends.Buffer
-	require.NotPanics(t, func() {
-		outputs = exec.Execute([]backends.Buffer{buffer}, nil)
-	})
+	outputs, err = exec.Execute([]backends.Buffer{buffer}, nil)
+	require.NoError(t, err)
 
-	// Convert buffer to tensor: the converted tensor should not be shared, since buffer comes from the output
+	// Convert the buffer to a tensor: the converted tensor should not be shared, since the buffer comes from the output
 	// of a backend execution.
 	outputTensor := FromBuffer(backend, outputs[0])
 	require.False(t, outputTensor.isShared)
@@ -162,7 +164,7 @@ func BenchmarkHostToDevice(b *testing.B) {
 	}
 }
 
-// Benchmark of local copy of tensors of various sizes.
+// Benchmark local copy of tensors, using various sizes.
 //
 // Results on cpu:
 //

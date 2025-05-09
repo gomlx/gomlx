@@ -3,6 +3,7 @@ package tensors
 import (
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
+	"github.com/pkg/errors"
 	"reflect"
 )
 
@@ -19,9 +20,16 @@ type onDevice struct {
 // This doesn't work for shared buffers, it assumes the buffer is not shared.
 func FromBuffer(backend backends.Backend, buffer backends.Buffer) (t *Tensor) {
 	// Create tensor.
-	t = newTensor(backend.BufferShape(buffer))
+	shape, err := backend.BufferShape(buffer)
+	if err != nil {
+		panic(err)
+	}
+	t = newTensor(shape)
 	t.backend = backend
-	deviceNum := backend.BufferDeviceNum(buffer)
+	deviceNum, err := backend.BufferDeviceNum(buffer)
+	if err != nil {
+		panic(err)
+	}
 	t.onDevices[deviceNum] = &onDevice{
 		t:         t,
 		buffer:    buffer,
@@ -98,7 +106,9 @@ func (d *onDevice) Finalize() {
 	if d.IsFinalized() {
 		return
 	}
-	d.t.backend.BufferFinalize(d.buffer)
+	if err := d.t.backend.BufferFinalize(d.buffer); err != nil {
+		panic(errors.WithMessagef(err, "Tensor.OnDevice.Finalize: failed to finalize buffer on-device"))
+	}
 	d.buffer = nil
 	d.t = nil
 }
@@ -163,13 +173,20 @@ func (t *Tensor) lockedMaterializeOnDevices(backend backends.Backend, share bool
 	}
 
 	var buffer backends.Buffer
+	var err error
 	if share && backend.HasSharedBuffers() {
-		buffer, t.sharedFlat = backend.NewSharedBuffer(deviceNum, t.shape)
+		buffer, t.sharedFlat, err = backend.NewSharedBuffer(deviceNum, t.shape)
+		if err != nil {
+			panic(errors.WithMessagef(err, "Tensor.MaterializeOnDevices: failed to create shared buffer"))
+		}
 		reflect.Copy(reflect.ValueOf(t.sharedFlat), reflect.ValueOf(t.local.flat))
 		t.local = nil // Free local storage.
 		t.isShared = true
 	} else {
-		buffer = t.backend.BufferFromFlatData(deviceNum, t.local.flat, t.shape)
+		buffer, err = t.backend.BufferFromFlatData(deviceNum, t.local.flat, t.shape)
+		if err != nil {
+			panic(errors.WithMessagef(err, "Tensor.MaterializeOnDevices: failed to create buffer"))
+		}
 	}
 	d = &onDevice{
 		t:         t,
@@ -229,14 +246,21 @@ func (t *Tensor) OnDeviceClone(backend backends.Backend, deviceNums ...backends.
 	newT := newTensor(t.Shape())
 	newT.backend = backend
 	var buffer backends.Buffer
+	var err error
 	if backend.HasSharedBuffers() {
-		buffer, newT.sharedFlat = backend.NewSharedBuffer(deviceNum, t.shape)
+		buffer, newT.sharedFlat, err = backend.NewSharedBuffer(deviceNum, t.shape)
+		if err != nil {
+			panic(errors.WithMessagef(err, "Tensor.OnDeviceClone: failed to create shared buffer"))
+		}
 		t.ConstFlatData(func(flat any) {
 			reflect.Copy(reflect.ValueOf(newT.sharedFlat), reflect.ValueOf(flat))
 		})
 	} else {
 		t.ConstFlatData(func(flat any) {
-			buffer = newT.backend.BufferFromFlatData(deviceNum, flat, newT.shape)
+			buffer, err = newT.backend.BufferFromFlatData(deviceNum, flat, newT.shape)
+			if err != nil {
+				panic(errors.WithMessagef(err, "Tensor.OnDeviceClone: failed to create buffer"))
+			}
 		})
 	}
 	d := &onDevice{
@@ -305,7 +329,9 @@ func (t *Tensor) lockedMaterializeLocal() {
 		t:    t,
 		flat: flatV.Interface(),
 	}
-	t.backend.BufferToFlatData(d.buffer, t.local.flat)
+	if err := t.backend.BufferToFlatData(d.buffer, t.local.flat); err != nil {
+		panic(errors.WithMessagef(err, "Tensor(shape=%s).MaterializeLocal() failed to copy from on-device buffer", t.shape))
+	}
 }
 
 // CopyFrom will copy the contents from tFrom. t and tFrom must have the same shape.
@@ -362,7 +388,9 @@ func (t *Tensor) CopyFrom(tFrom *Tensor) {
 		exceptions.Panicf("Tensor(shape=%s).CopyFrom(tFrom) failed because tFrom on-device tensor (deviceNum=%d) is invalid",
 			t.shape, deviceNum)
 	}
-	tFrom.backend.BufferToFlatData(d.buffer, tFlat)
+	if err := tFrom.backend.BufferToFlatData(d.buffer, tFlat); err != nil {
+		panic(errors.WithMessagef(err, "Tensor(shape=%s).CopyFrom(tFrom) failed to copy from on-device buffer", t.shape))
+	}
 }
 
 // IsOnDevice checks whether the Tensor has an on-device copy on the given deviceNum.

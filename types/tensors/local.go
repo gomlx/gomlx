@@ -3,6 +3,7 @@ package tensors
 import (
 	"encoding/gob"
 	"fmt"
+	"k8s.io/klog/v2"
 	"os"
 	"reflect"
 	"strconv"
@@ -114,7 +115,11 @@ func (t *Tensor) lockedConstFlatData(accessFn func(flat any)) {
 		// If local is nil, that means there is a on-device tensor instead,
 		// we take a view (the data) of the first one.
 		for _, tOnDevice := range t.onDevices {
-			accessFn(t.backend.BufferData(tOnDevice.buffer))
+			flat, err := t.backend.BufferData(tOnDevice.buffer)
+			if err != nil {
+				panic(err)
+			}
+			accessFn(flat)
 			break
 		}
 		return
@@ -448,9 +453,7 @@ func GobDeserializeToDevice(decoder *gob.Decoder, backend backends.Backend, devi
 	// Create a shared buffer.
 	var buffer backends.Buffer
 	var flatAny any
-	err = exceptions.TryCatch[error](func() {
-		buffer, flatAny = backend.NewSharedBuffer(deviceNum, shape)
-	})
+	buffer, flatAny, err = backend.NewSharedBuffer(deviceNum, shape)
 	if err != nil {
 		return
 	}
@@ -464,7 +467,10 @@ func GobDeserializeToDevice(decoder *gob.Decoder, backend backends.Backend, devi
 	if err != nil {
 		err = errors.Wrapf(err, "failed to deserialize Tensor data")
 		// Destroy buffer since it's not going to be used.
-		exceptions.Try(func() { backend.BufferFinalize(buffer) })
+		err2 := backend.BufferFinalize(buffer)
+		if err2 != nil {
+			klog.Warningf("failed to destroy buffer for backend %q: %v", backend.Name(), err2)
+		}
 		return
 	}
 
