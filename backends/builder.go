@@ -13,9 +13,12 @@ type Op any
 // Builder defines the set of ops to support building a computation.
 // It is the sub-interface of Backend.
 //
-// Notice that it is ok to return a "not-implemented error": it will just limit
-// the type of models it can support.
-// See Backend.Capabilities and package github.com/gomlx/gomlx/backends/notimplemented
+// Each Builder can also:
+//  1. Not implement standard operations by returning an error -- this restricts what type of models it can support.
+//     See Backend.Capabilities and package github.com/gomlx/gomlx/backends/notimplemented
+//  2. Support specialized operations beyond those defined in this interface -- this requires
+//     careful interface casting by the caller (in package github.com/gomlx/gomlx/graph) and
+//     fallback to backends that don't support these specialized ops.
 type Builder interface {
 	// Compile the computation built. This immediately invalidates the Builder and returns an Executable that
 	// can now be used to run the computation.
