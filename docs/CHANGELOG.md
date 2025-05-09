@@ -8,6 +8,8 @@
   * New ops: `Erf`, `ArgMinMax`.
 * Package `backends/default`:
   * Only include XLA by default on linux/amd64 platforms.
+* Package `shapeinference`:
+  * Changed to return errors instead of exceptions.
 * Package `types/tensors`:
   * Removed dependency to `gopjrt/pjrt` -- otherwise we'll always need to install the C/C++ library.
 * gofmt cleanups by @zjtv

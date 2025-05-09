@@ -101,7 +101,10 @@ func (b *Builder) Where(conditionOp, onTrueOp, onFalseOp backends.Op) backends.O
 // Notice the backends.Reshape doesn't support auto-scaling dimensions (set to -1), as graph.Reshape does.
 func (b *Builder) Reshape(operandOp backends.Op, dims ...int) backends.Op {
 	operand := b.checkOps("Reshape", operandOp)[0]
-	outputShape := shapeinference.ReshapeOp(operand.shape, dims)
+	outputShape, err := shapeinference.ReshapeOp(operand.shape, dims)
+	if err != nil {
+		panic(err)
+	}
 	return b.newNode(backends.OpTypeReshape, outputShape, operand)
 }
 
@@ -110,7 +113,10 @@ func (b *Builder) Reshape(operandOp backends.Op, dims ...int) backends.Op {
 // The output will have: output.Shape.Dimension[ii] = operand.Shape.Dimension[permutations[i]].
 func (b *Builder) Transpose(operandOp backends.Op, permutations ...int) backends.Op {
 	operand := b.checkOps("Transpose", operandOp)[0]
-	outputShape := shapeinference.TransposeOp(operand.shape, permutations)
+	outputShape, err := shapeinference.TransposeOp(operand.shape, permutations)
+	if err != nil {
+		panic(err)
+	}
 	node := b.newNode(backends.OpTypeTranspose, outputShape, operand)
 	node.data = permutations
 	return node
@@ -127,7 +133,10 @@ func (b *Builder) Transpose(operandOp backends.Op, permutations ...int) backends
 //	output[i0, ..., iN, j0, ..., jM] = operand[j0, ..., jM]
 func (b *Builder) Broadcast(operandOp backends.Op, prefixDims ...int) backends.Op {
 	operand := b.checkOps("Transpose", operandOp)[0]
-	outputShape := shapeinference.BroadcastOp(operand.shape, prefixDims)
+	outputShape, err := shapeinference.BroadcastOp(operand.shape, prefixDims)
+	if err != nil {
+		panic(err)
+	}
 	node := b.newNode(backends.OpTypeBroadcast, outputShape, operand)
 	node.data = prefixDims
 	return node
@@ -186,7 +195,10 @@ func (b *Builder) reduceImpls(reduceOpType backends.OpType, operandOp backends.O
 		// Default if no axes are given, is to reduce all axes.
 		axes = xslices.Iota(0, operand.shape.Rank())
 	}
-	outputShape := shapeinference.ReduceOp(operand.shape, axes)
+	outputShape, err := shapeinference.ReduceOp(operand.shape, axes)
+	if err != nil {
+		panic(err)
+	}
 	outputShape.DType = operand.shape.DType
 	node := b.newNode(reduceOpType, outputShape, operand)
 	node.data = axes
@@ -199,7 +211,10 @@ func (b *Builder) Gather(operandOp, startIndicesOp backends.Op, indexVectorAxis 
 	opType := backends.OpTypeGather
 	inputs := b.checkOps(opType.String(), operandOp, startIndicesOp)
 	operand, startIndices := inputs[0], inputs[1]
-	shape := shapeinference.GatherOp(operand.shape, startIndices.shape, indexVectorAxis, offsetOutputAxes, collapsedSliceAxes, startIndexMap, sliceSizes, indicesAreSorted)
+	shape, err := shapeinference.GatherOp(operand.shape, startIndices.shape, indexVectorAxis, offsetOutputAxes, collapsedSliceAxes, startIndexMap, sliceSizes, indicesAreSorted)
+	if err != nil {
+		panic(err)
+	}
 	node := b.newNode(opType, shape, operand, startIndices)
 	node.data = &gatherNode{
 		indexVectorAxis,
@@ -233,7 +248,10 @@ func (b *Builder) Concatenate(axis int, operandOps ...backends.Op) backends.Op {
 	for i, opNode := range operands {
 		inputShapes[i] = opNode.shape
 	}
-	outputShape := shapeinference.ConcatenateOp(inputShapes, axis)
+	outputShape, err := shapeinference.ConcatenateOp(inputShapes, axis)
+	if err != nil {
+		panic(err)
+	}
 	node := b.newNode(backends.OpTypeConcatenate, outputShape, operands...)
 	node.data = axis
 	return node
@@ -277,10 +295,13 @@ func (b *Builder) scatterImpls(scatterOpType backends.OpType,
 	inputs := b.checkOps(scatterOpType.String(), operandOp, scatterIndicesOp, updatesOp)
 	operand, indices, updates := inputs[0], inputs[1], inputs[2]
 	// Check that parameters are valid.
-	shapeinference.ScatterOp(operand.shape, indices.shape, updates.shape, indexVectorAxis, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes)
+	outputShape, err := shapeinference.ScatterOp(operand.shape, indices.shape, updates.shape, indexVectorAxis, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes)
+	if err != nil {
+		panic(err)
+	}
 
 	// The output shape of the scatter is the operand shape.
-	node := b.newNode(scatterOpType, operand.shape, operand, indices, updates)
+	node := b.newNode(scatterOpType, outputShape, operand, indices, updates)
 	node.data = &scatterNode{
 		updateWindowAxes:         updateWindowAxes,
 		insertedWindowAxes:       insertedWindowAxes,
@@ -309,7 +330,10 @@ type scatterNode struct {
 func (b *Builder) Slice(operandOp backends.Op, starts, limits, strides []int) backends.Op {
 	opType := backends.OpTypeSlice
 	operand := b.checkOps(opType.String(), operandOp)[0]
-	outputShape := shapeinference.SliceOp(operand.shape, starts, limits, strides)
+	outputShape, err := shapeinference.SliceOp(operand.shape, starts, limits, strides)
+	if err != nil {
+		panic(err)
+	}
 	node := b.newNode(opType, outputShape, operand)
 	node.data = &sliceNode{
 		starts,
@@ -361,7 +385,10 @@ type argMinMaxNode struct {
 func (b *Builder) ArgMinMax(operandOp backends.Op, axis int, outputDType dtypes.DType, isMin bool) backends.Op {
 	opType := backends.OpTypeArgMinMax
 	operand := b.checkOps(opType.String(), operandOp)[0]
-	outputShape := shapeinference.ArgMinMaxOp(operand.shape, axis, outputDType)
+	outputShape, err := shapeinference.ArgMinMaxOp(operand.shape, axis, outputDType)
+	if err != nil {
+		panic(err)
+	}
 	node := b.newNode(opType, outputShape, operand)
 	node.data = &argMinMaxNode{
 		axis,
