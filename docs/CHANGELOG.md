@@ -10,6 +10,7 @@
   * Only include XLA by default on linux/amd64 platforms.
 * Package `types/tensors`:
   * Removed dependency to `gopjrt/pjrt` -- otherwise we'll always need to install the C/C++ library.
+* gofmt cleanups by @zjtv
 
 # v0.19.1: 2025/04/30 SimpleGo fixes and new ops; New XLA, requires Gopjrt v0.7.0 update.
 
@@ -28,7 +29,7 @@
   * Added sub-package `notimplemented`: helper to implement new backends.
   * Added sub-package `shapeinference`: helper to implement new backends.
   * Added sub-package `default` which includes the default packages.
-  * Added `List()` function to returned the currently registered (compiled-in) backends.
+  * Added `List()` function that returns the currently registered (compiled-in) backends.
 * Package `checkpoints`
   * Added `Config.FromEmbed` that allows loading a checkpoint from an embedded variable.
 * Package `graph`:

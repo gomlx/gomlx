@@ -89,7 +89,10 @@ func (b *Builder) Identity(operandOp backends.Op) backends.Op {
 func (b *Builder) Where(conditionOp, onTrueOp, onFalseOp backends.Op) backends.Op {
 	inputs := b.checkOps("Where", conditionOp, onTrueOp, onFalseOp)
 	condition, onTrue, onFalse := inputs[0], inputs[1], inputs[2]
-	outputShape := shapeinference.WhereOp(condition.shape, onTrue.shape, onFalse.shape)
+	outputShape, err := shapeinference.WhereOp(condition.shape, onTrue.shape, onFalse.shape)
+	if err != nil {
+		panic(err)
+	}
 	return b.newNode(backends.OpTypeWhere, outputShape, condition, onTrue, onFalse)
 }
 
