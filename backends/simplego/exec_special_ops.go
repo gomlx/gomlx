@@ -170,7 +170,7 @@ func execReshape(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []b
 
 // Reduce{Max,Min,Sum,Product}Op ======================================================================================
 
-type genericReduceFn func(operand, output *Buffer, it *reduceOutputIterator, dtype dtypes.DType)
+type genericReduceFn = func(operand, output *Buffer, it *reduceOutputIterator, dtype dtypes.DType)
 
 func execReduce(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	operand := inputs[0]
@@ -1058,16 +1058,19 @@ func execScatter(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []b
 
 	// Dispatch to a type-specific scatter loop based on the operation type.
 	dtype := output.shape.DType
-	type scatterFn = func(opType backends.OpType, output, indices, updates *Buffer, scatterParams *scatterNode)
-	fn := scatterDTypeMap.Get(dtype).(scatterFn)
-	fn(node.opType, output, indices, updates, scatterParams)
+	type scatterFnT = func(opType backends.OpType, output, indices, updates *Buffer, scatterParams *scatterNode) error
+	scatterFn := scatterDTypeMap.Get(dtype).(scatterFnT)
+	err := scatterFn(node.opType, output, indices, updates, scatterParams)
+	if err != nil {
+		return nil, err
+	}
 	return output, nil
 }
 
 var scatterDTypeMap = NewDTypeMap("ScatterMax")
 
 // execScatterGeneric assumes the operand is already copied to the output.
-func execScatterGeneric[T SupportedTypesConstraints](opType backends.OpType, output, indices, updates *Buffer, scatterParams *scatterNode) {
+func execScatterGeneric[T SupportedTypesConstraints](opType backends.OpType, output, indices, updates *Buffer, scatterParams *scatterNode) error {
 	// Get combineFn for operand's dtype.
 	dtype := output.shape.DType
 	type combineFnT = func(a, b T) T
@@ -1080,7 +1083,7 @@ func execScatterGeneric[T SupportedTypesConstraints](opType backends.OpType, out
 	case backends.OpTypeScatterSum:
 		combineFn = combineSumDTypeMap.Get(dtype).(combineFnT)
 	default:
-		return nil, errors.Errorf("unsupported scatter op type %q", opType)
+		return errors.Errorf("unsupported scatter op type %q", opType)
 	}
 	_ = combineFn
 
@@ -1172,6 +1175,7 @@ func execScatterGeneric[T SupportedTypesConstraints](opType backends.OpType, out
 		}
 		updatesIt.Increment()
 	}
+	return nil
 }
 
 type subIndicesIterator struct {
@@ -1390,7 +1394,7 @@ func execRngBitGenerator(backend *Backend, node *Node, inputs []*Buffer, inputsO
 	}
 	stateFlat[0] = binary.LittleEndian.Uint64(rngState[4 : 4+8])
 	stateFlat[1] = binary.LittleEndian.Uint64(rngState[4+8 : 4+16])
-	return []*Buffer{state, rngData}
+	return []*Buffer{state, rngData}, nil
 }
 
 // execArgMinMax ====================================================================================================

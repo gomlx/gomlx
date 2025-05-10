@@ -1,7 +1,6 @@
 package simplego
 
 import (
-	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
@@ -71,7 +70,11 @@ func (b *Builder) DotGeneral(lhsOp backends.Op, lhsContractingAxes, lhsBatchAxes
 	resultingDims = append(resultingDims, lhsBatchDims...)
 	resultingDims = append(resultingDims, lhsCrossDims...)
 	resultingDims = append(resultingDims, rhsCrossDims...)
-	return b.Reshape(dotGeneral, resultingDims...), nil
+	result, err := b.Reshape(dotGeneral, resultingDims...)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 // transposeForDotGeneral transposes and reshapes the lhs or the rhs operand for the DotGeneral
@@ -137,19 +140,27 @@ func (b *Builder) transposeForDotGeneral(operand *Node, operandName string, cont
 	permutations = append(permutations, batchAxes...)
 	permutations = append(permutations, crossAxes...)
 	permutations = append(permutations, contractingAxes...)
-	transposed = b.Transpose(operand, permutations...).(*Node)
-	transposed = b.Reshape(transposed, batchSize, crossSize, contractSize).(*Node)
+	transposedOp, err := b.Transpose(operand, permutations...)
+	if err != nil {
+		return
+	}
+	transposed = transposedOp.(*Node)
+	transposedOp, err = b.Reshape(transposed, batchSize, crossSize, contractSize)
+	if err != nil {
+		return
+	}
+	transposed = transposedOp.(*Node)
 	return
 }
 
 // execNormalizedDotGeneral executes the DotGeneral where the inputs are already shaped [batchSize, crossSize, contractingSize].
-func execNormalizedDotGeneral(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execNormalizedDotGeneral(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	lhs, rhs := inputs[0], inputs[1]
 	outputShape := node.shape
 	output := backend.getBuffer(outputShape.DType, outputShape.Size())
 	output.shape = outputShape
 	dispatchDotGeneral.Dispatch(outputShape.DType, lhs, rhs, output)
-	return output
+	return output, nil
 }
 
 var dispatchDotGeneral = NewDTypeDispatcher("DotGeneral")

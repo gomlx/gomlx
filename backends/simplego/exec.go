@@ -26,7 +26,7 @@ type Executable struct {
 	numNodesToProcess int
 
 	// numUses is the number of times each Node is used during the calculation.
-	// It has the length of numNodesToProcess.
+	// It has the length of numNodesToProcess.z
 	numUses []int
 
 	// executionBuffersPool allow for re-use of executionBuffers.

@@ -191,6 +191,10 @@ func (b *Backend) BufferFromFlatData(deviceNum backends.DeviceNum, flat any, sha
 		return nil, errors.Errorf("backend (%s) only supports deviceNum 0, cannot create buffer on deviceNum %d (shape=%s)",
 			b.Name(), deviceNum, shape)
 	}
+	if dtypes.FromGoType(reflect.TypeOf(flat).Elem()) != shape.DType {
+		return nil, errors.Errorf("flat data type (%s) does not match shape DType (%s)",
+			reflect.TypeOf(flat).Elem(), shape.DType)
+	}
 	buffer := b.NewBuffer(shape)
 	copyFlat(buffer.flat, flat)
 	return buffer, nil
