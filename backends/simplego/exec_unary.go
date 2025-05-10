@@ -48,7 +48,7 @@ func unaryOperandAndOutput(backend *Backend, inputs []*Buffer, inputsOwned []boo
 }
 
 // execNeg executes the unary op Neg.
-func execNeg(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execNeg(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
 	switch input.shape.DType {
 	case dtypes.Int8:
@@ -68,7 +68,7 @@ func execNeg(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool)
 	default:
 		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
 	}
-	return output
+	return output, nil
 }
 
 func execNegGeneric[T PODSignedNumericConstraints](inputs, outputs []T) {
@@ -84,7 +84,7 @@ func execNegBF16(inputs, outputs []bfloat16.BFloat16) {
 }
 
 // execAbs executes the unary op Abs.
-func execAbs(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execAbs(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
 	switch input.shape.DType {
 	case dtypes.Int8:
@@ -112,7 +112,7 @@ func execAbs(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool)
 	default:
 		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
 	}
-	return output
+	return output, nil
 }
 
 func execAbsGeneric[T PODSignedNumericConstraints](inputs, outputs []T) {
@@ -144,7 +144,7 @@ func execAbsBF16(inputs, outputs []bfloat16.BFloat16) {
 }
 
 // execSign executes the unary op Sign.
-func execSign(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execSign(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
 	switch input.shape.DType {
 	case dtypes.Int8:
@@ -172,7 +172,7 @@ func execSign(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool
 	default:
 		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
 	}
-	return output
+	return output, nil
 }
 
 func execSignGeneric[T PODSignedNumericConstraints](inputs, outputs []T) {
@@ -213,7 +213,7 @@ func execSignBF16(inputs, outputs []bfloat16.BFloat16) {
 }
 
 // execLogicalNot executes the unary op LogicalNot.
-func execLogicalNot(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execLogicalNot(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
 	if input.shape.DType != dtypes.Bool {
 		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
@@ -221,11 +221,11 @@ func execLogicalNot(backend *Backend, node *Node, inputs []*Buffer, inputsOwned 
 	for ii, val := range input.flat.([]bool) {
 		output.flat.([]bool)[ii] = !val
 	}
-	return output
+	return output, nil
 }
 
 // execBitwiseNot executes the unary op BitwiseNot.
-func execBitwiseNot(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execBitwiseNot(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
 	switch input.shape.DType {
 	case dtypes.Int8:
@@ -247,7 +247,7 @@ func execBitwiseNot(backend *Backend, node *Node, inputs []*Buffer, inputsOwned 
 	default:
 		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
 	}
-	return output
+	return output, nil
 }
 
 func execBitwiseNotGeneric[T PODIntegerConstraints](inputs, outputs []T) {
@@ -257,7 +257,7 @@ func execBitwiseNotGeneric[T PODIntegerConstraints](inputs, outputs []T) {
 }
 
 // execBitCount executes the unary op BitCount.
-func execBitCount(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execBitCount(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
 	switch input.shape.DType {
 	case dtypes.Int8:
@@ -279,7 +279,7 @@ func execBitCount(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []
 	default:
 		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
 	}
-	return output
+	return output, nil
 }
 
 func execBitCountGeneric8[T int8 | uint8](inputs, outputs []T) {
@@ -307,7 +307,7 @@ func execBitCountGeneric64[T int64 | uint64](inputs, outputs []T) {
 }
 
 // execClz executes the unary op Clz.
-func execClz(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execClz(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
 	switch input.shape.DType {
 	case dtypes.Int8:
@@ -329,7 +329,7 @@ func execClz(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool)
 	default:
 		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
 	}
-	return output
+	return output, nil
 }
 
 func execClzGeneric8[T int8 | uint8](inputs, outputs []T) {
@@ -357,7 +357,7 @@ func execClzGeneric64[T int64 | uint64](inputs, outputs []T) {
 }
 
 // execExp executes the unary op Exp.
-func execExp(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execExp(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
 	switch input.shape.DType {
 	case dtypes.Float32:
@@ -369,7 +369,7 @@ func execExp(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool)
 	default:
 		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
 	}
-	return output
+	return output, nil
 }
 
 func execExpGeneric[T float32 | float64](inputs, outputs []T) {
@@ -385,7 +385,7 @@ func execExpBF16(inputs, outputs []bfloat16.BFloat16) {
 }
 
 // execExpm1 executes the unary op Expm1.
-func execExpm1(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execExpm1(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
 	switch input.shape.DType {
 	case dtypes.Float32:
@@ -397,7 +397,7 @@ func execExpm1(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 	default:
 		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
 	}
-	return output
+	return output, nil
 }
 
 func execExpm1Generic[T float32 | float64](inputs, outputs []T) {
@@ -413,7 +413,7 @@ func execExpm1BF16(inputs, outputs []bfloat16.BFloat16) {
 }
 
 // execLog executes the unary op Log.
-func execLog(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execLog(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
 	switch input.shape.DType {
 	case dtypes.Float32:
@@ -425,7 +425,7 @@ func execLog(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool)
 	default:
 		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
 	}
-	return output
+	return output, nil
 }
 
 func execLogGeneric[T float32 | float64](inputs, outputs []T) {
@@ -441,7 +441,7 @@ func execLogBF16(inputs, outputs []bfloat16.BFloat16) {
 }
 
 // execLog1p executes the unary op Log1p.
-func execLog1p(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execLog1p(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
 	switch input.shape.DType {
 	case dtypes.Float32:
@@ -453,7 +453,7 @@ func execLog1p(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 	default:
 		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
 	}
-	return output
+	return output, nil
 }
 
 func execLog1pGeneric[T float32 | float64](inputs, outputs []T) {
@@ -469,7 +469,7 @@ func execLog1pBF16(inputs, outputs []bfloat16.BFloat16) {
 }
 
 // execCeil executes the unary op Ceil.
-func execCeil(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execCeil(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
 	switch input.shape.DType {
 	case dtypes.Float32:
@@ -481,7 +481,7 @@ func execCeil(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool
 	default:
 		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
 	}
-	return output
+	return output, nil
 }
 
 func execCeilGeneric[T float32 | float64](inputs, outputs []T) {
@@ -497,7 +497,7 @@ func execCeilBF16(inputs, outputs []bfloat16.BFloat16) {
 }
 
 // execFloor executes the unary op Floor.
-func execFloor(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execFloor(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
 	switch input.shape.DType {
 	case dtypes.Float32:
@@ -509,7 +509,7 @@ func execFloor(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 	default:
 		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
 	}
-	return output
+	return output, nil
 }
 
 func execFloorGeneric[T float32 | float64](inputs, outputs []T) {
@@ -525,7 +525,7 @@ func execFloorBF16(inputs, outputs []bfloat16.BFloat16) {
 }
 
 // execRound executes the unary op Round.
-func execRound(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execRound(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
 	switch input.shape.DType {
 	case dtypes.Float32:
@@ -537,7 +537,7 @@ func execRound(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 	default:
 		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
 	}
-	return output
+	return output, nil
 }
 
 func execRoundGeneric[T float32 | float64](inputs, outputs []T) {
@@ -553,7 +553,7 @@ func execRoundBF16(inputs, outputs []bfloat16.BFloat16) {
 }
 
 // execRsqrt executes the unary op Rsqrt.
-func execRsqrt(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execRsqrt(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
 	switch input.shape.DType {
 	case dtypes.Float32:
@@ -565,7 +565,7 @@ func execRsqrt(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 	default:
 		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
 	}
-	return output
+	return output, nil
 }
 
 func execRsqrtGeneric[T float32 | float64](inputs, outputs []T) {
@@ -581,7 +581,7 @@ func execRsqrtBF16(inputs, outputs []bfloat16.BFloat16) {
 }
 
 // execSqrt executes the unary op Sqrt.
-func execSqrt(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execSqrt(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
 	switch input.shape.DType {
 	case dtypes.Float32:
@@ -593,7 +593,7 @@ func execSqrt(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool
 	default:
 		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
 	}
-	return output
+	return output, nil
 }
 
 func execSqrtGeneric[T float32 | float64](inputs, outputs []T) {
@@ -609,7 +609,7 @@ func execSqrtBF16(inputs, outputs []bfloat16.BFloat16) {
 }
 
 // execCos executes the unary op Cos.
-func execCos(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execCos(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
 	switch input.shape.DType {
 	case dtypes.Float32:
@@ -621,7 +621,7 @@ func execCos(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool)
 	default:
 		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
 	}
-	return output
+	return output, nil
 }
 
 func execCosGeneric[T float32 | float64](inputs, outputs []T) {
@@ -637,7 +637,7 @@ func execCosBF16(inputs, outputs []bfloat16.BFloat16) {
 }
 
 // execSin executes the unary op Sin.
-func execSin(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execSin(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
 	switch input.shape.DType {
 	case dtypes.Float32:
@@ -649,7 +649,7 @@ func execSin(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool)
 	default:
 		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
 	}
-	return output
+	return output, nil
 }
 
 func execSinGeneric[T float32 | float64](inputs, outputs []T) {
@@ -665,7 +665,7 @@ func execSinBF16(inputs, outputs []bfloat16.BFloat16) {
 }
 
 // execLogistic executes the unary op Logistic.
-func execLogistic(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execLogistic(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
 	switch input.shape.DType {
 	case dtypes.Float32:
@@ -677,7 +677,7 @@ func execLogistic(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []
 	default:
 		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
 	}
-	return output
+	return output, nil
 }
 
 func execLogisticGeneric[T float32 | float64](inputs, outputs []T) {
@@ -706,7 +706,7 @@ func execLogisticBF16(inputs, outputs []bfloat16.BFloat16) {
 }
 
 // execTanh executes the unary op Tanh.
-func execTanh(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execTanh(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
 	switch input.shape.DType {
 	case dtypes.Float32:
@@ -718,7 +718,7 @@ func execTanh(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool
 	default:
 		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
 	}
-	return output
+	return output, nil
 }
 
 func execTanhGeneric[T float32 | float64](inputs, outputs []T) {
@@ -734,7 +734,7 @@ func execTanhBF16(inputs, outputs []bfloat16.BFloat16) {
 }
 
 // execIsFinite executes the unary op IsFinite.
-func execIsFinite(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execIsFinite(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*Buffer, error) {
 	input := inputs[0]
 	// Output has the same shape as the input, but different dtypes: it is a bool.
 	output := backend.getBuffer(dtypes.Bool, input.shape.Size())
@@ -749,7 +749,7 @@ func execIsFinite(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []
 	default:
 		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
 	}
-	return output
+	return output, nil
 }
 
 func execIsFiniteGeneric[T float32 | float64](inputs []T, outputs []bool) {
@@ -766,7 +766,7 @@ func execIsFiniteBF16(inputs []bfloat16.BFloat16, outputs []bool) {
 }
 
 // execErf executes the unary op Erf.
-func execErf(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execErf(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
 	switch input.shape.DType {
 	case dtypes.Float32:
@@ -778,7 +778,7 @@ func execErf(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool)
 	default:
 		exceptions.Panicf("unsupported data type %s for %s", input.shape.DType, node.opType)
 	}
-	return output
+	return output, nil
 }
 
 func execErfGeneric[T float32 | float64](inputs, outputs []T) {

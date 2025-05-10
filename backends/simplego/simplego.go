@@ -44,8 +44,11 @@ var _ backends.Backend = &Backend{}
 
 // Name returns the short name of the backend. E.g.: "xla" for the Xla/PJRT plugin.
 func (b *Backend) Name() string {
-	return "SimpleGo"
+	return "SimpleGo (go)"
 }
+
+// String implement backends.Backend.
+func (b *Backend) String() string { return BackendName }
 
 // Description is a longer description of the Backend that can be used to pretty-print.
 func (b *Backend) Description() string {

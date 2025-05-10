@@ -12,6 +12,10 @@
   * Changed to return errors instead of exceptions.
 * Package `types/tensors`:
   * Removed dependency to `gopjrt/pjrt` -- otherwise we'll always need to install the C/C++ library.
+* Package `backend`:
+  * `Backend` interface now returns errors instead of panicking.
+* Package `graph`:
+  * Added `NewExecOrError` and `Exec.CallOrError` as error-returning alternatives.
 * gofmt cleanups by @zjtv
 
 # v0.19.1: 2025/04/30 SimpleGo fixes and new ops; New XLA, requires Gopjrt v0.7.0 update.

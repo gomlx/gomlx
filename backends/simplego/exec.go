@@ -2,11 +2,13 @@ package simplego
 
 import (
 	"fmt"
-	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/pkg/errors"
 	"sync"
 )
+
+var _ backends.Executable = (*Executable)(nil)
 
 // Executable holds a frozen Builder. It assumes the graph in Builder is valid and has been properly
 // checked that all the shapes and data types are valid.
@@ -24,7 +26,7 @@ type Executable struct {
 	numNodesToProcess int
 
 	// numUses is the number of times each Node is used during the calculation.
-	// It has the length of numNodesToProcess.
+	// It has the length of numNodesToProcess.z
 	numUses []int
 
 	// executionBuffersPool allow for re-use of executionBuffers.
@@ -142,14 +144,14 @@ func countNodeUses(node *Node, numUses []int) {
 //
 // It is given the buffers for its inputs, and a reserved buffer where to store its output, already
 // with the shape pre-calculated.
-type nodeExecutor func(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer
+type nodeExecutor func(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error)
 
 // nodeMultiOutputExecutor is a version of a node executor when it returns multiple outputs.
-type nodeMultiOutputExecutor func(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) []*Buffer
+type nodeMultiOutputExecutor func(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) ([]*Buffer, error)
 
 var (
 	// nodeExecutors should be populated during initialization (`init` functions) for the ops implemented.
-	// For the nodes not implemented, leave it as nil, and it will throw and exception.
+	// For the nodes not implemented, leave it as nil, and it will return an error.
 	nodeExecutors [backends.OpTypeLast]nodeExecutor
 
 	// multiOutputsNodeExecutors should be populated during initialization for the multi-output ops
@@ -166,31 +168,31 @@ var (
 //
 // Donated buffers are no longer valid after the call.
 // If donate is nil, it is assumed to be false for all buffers, and no buffer is donated.
-func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) []backends.Buffer {
+func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) ([]backends.Buffer, error) {
 	// Check inputs length
 	if len(inputs) != len(e.builder.inputs) {
-		exceptions.Panicf("Execute: expected %d inputs, got %d", len(e.builder.inputs), len(inputs))
+		return nil, errors.Errorf("Execute: expected %d inputs, got %d", len(e.builder.inputs), len(inputs))
 	}
 
 	// Check input shapes
 	for ii, input := range inputs {
 		if input == nil {
-			exceptions.Panicf("Execute: input buffer #%d is nil!?", ii)
+			return nil, errors.Errorf("Execute: input buffer #%d is nil!?", ii)
 		}
 		inputBuffer, ok := input.(*Buffer)
 		if !ok {
-			exceptions.Panicf("Execute: input buffer #%d is not from SimpleGo backend", ii)
+			return nil, errors.Errorf("Execute: input buffer #%d is not from SimpleGo backend", ii)
 		}
 		if !inputBuffer.valid {
-			exceptions.Panicf("Execute: input buffer (%p) #%d is not valid, likely it is being used after being finalized", inputBuffer, ii)
+			return nil, errors.Errorf("Execute: input buffer (%p) #%d is not valid, likely it is being used after being finalized", inputBuffer, ii)
 		}
 		if inputBuffer.flat == nil {
-			exceptions.Panicf("Execute: input buffer #%d flat data is set to nil (!?)", ii)
+			return nil, errors.Errorf("Execute: input buffer #%d flat data is set to nil (!?)", ii)
 		}
 		nodeInput := e.builder.inputs[ii]
 		if !inputBuffer.shape.Equal(nodeInput.shape) {
 			paramName := nodeInput.data.(*nodeParameter).name
-			exceptions.Panicf("Execute: parameter %q (input #%d) for %q: expected shape %s, got %s",
+			return nil, errors.Errorf("Execute: parameter %q (input #%d) for %q: expected shape %s, got %s",
 				paramName, ii, e.builder.name, nodeInput.shape, inputBuffer.shape)
 		}
 	}
@@ -246,13 +248,13 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) []backends
 		if node.IsMultiOutputs() {
 			multiNodeExecutor = multiOutputsNodeExecutors[node.opType]
 			if multiNodeExecutor == nil {
-				exceptions.Panicf("Execute: multi-outputs node executor for op type %s not implemented!?", node.opType)
+				return nil, errors.Errorf("Execute: multi-outputs node executor for op type %s not implemented!?", node.opType)
 			}
 
 		} else {
 			nodeExecutor = nodeExecutors[node.opType]
 			if nodeExecutor == nil {
-				exceptions.Panicf("Execute: node executor for op type %s not implemented!?", node.opType)
+				return nil, errors.Errorf("Execute: node executor for op type %s not implemented!?", node.opType)
 			}
 		}
 		var (
@@ -266,7 +268,7 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) []backends
 			inputNodeIdx := input.builderIdx
 			inputBuffers[ii] = execBuf.results[inputNodeIdx]
 			if inputBuffers[ii] == nil {
-				exceptions.Panicf("Execute: input #%d of node #%d is not calculated yet (!?) -- "+
+				return nil, errors.Errorf("Execute: input #%d of node #%d is not calculated yet (!?) -- "+
 					"this is a bug, it should never have happened", ii, nodeIdx)
 			}
 			execBuf.numUsed[inputNodeIdx]++
@@ -276,12 +278,19 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) []backends
 		// Execute op.
 		if nodeExecutor != nil {
 			// Single output operation:
-			execBuf.results[nodeIdx] = nodeExecutor(e.backend, node, inputBuffers, inputsOwned)
+			var err error
+			execBuf.results[nodeIdx], err = nodeExecutor(e.backend, node, inputBuffers, inputsOwned)
+			if err != nil {
+				return nil, errors.WithMessagef(err, "while executing %q", node.opType)
+			}
 			execBuf.owned[nodeIdx] = true
 
 		} else {
 			// Multi-output operation.
-			outputs := multiNodeExecutor(e.backend, node, inputBuffers, inputsOwned)
+			outputs, err := multiNodeExecutor(e.backend, node, inputBuffers, inputsOwned)
+			if err != nil {
+				return nil, errors.WithMessagef(err, "while executing %q", node.opType)
+			}
 			for outputIdx, outputBuf := range outputs {
 				outputNodeIdx := node.multiOutputsNodes[outputIdx].builderIdx
 				execBuf.results[outputNodeIdx] = outputBuf
@@ -318,12 +327,11 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) []backends
 		outNodeIdx := outputNode.builderIdx
 		outBuf := execBuf.results[outNodeIdx]
 		if outBuf == nil {
-			exceptions.Panicf("Execute: output #%d (%s, nodeIdx=%d) is not calculated yet (!?) -- "+
+			return nil, errors.Errorf("Execute: output #%d (%s, nodeIdx=%d) is not calculated yet (!?) -- "+
 				"this is a bug, it should never have happened", ii, outputNode.opType, outNodeIdx)
-			panic(true) // Help lint.
 		}
 		if !outBuf.shape.Ok() {
-			exceptions.Panicf("Execute: output #%d (%s, nodeIdx=%d) returned an invalid shape (!?) -- "+
+			return nil, errors.Errorf("Execute: output #%d (%s, nodeIdx=%d) returned an invalid shape (!?) -- "+
 				"this is a bug, it should never have happened", ii, outputNode.opType, outNodeIdx)
 		}
 		if !execBuf.owned[outNodeIdx] {
@@ -336,5 +344,5 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) []backends
 
 	// Return buffers to pool
 	e.executionBuffersPool.Put(execBuf)
-	return outputs
+	return outputs, nil
 }

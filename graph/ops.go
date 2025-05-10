@@ -38,6 +38,14 @@ func (ni *nodeInputsParameter) String() string {
 	return fmt.Sprintf("%s(name=%q, shape=%s)", ni.Type(), ni.name, ni.shape)
 }
 
+// mustNoError converts an error to a panic.
+func mustNoError[T any](v T, err error) T {
+	if err != nil {
+		panic(err)
+	}
+	return v
+}
+
 // Parameter registers an input parameter for a computation Graph (e.g: a feature used as input).
 //
 // When created they get a handle (a plain index) but they can also be accessed
@@ -58,11 +66,14 @@ func Parameter(g *Graph, name string, shape shapes.Shape) (node *Node) {
 		shape:  shape,
 		handle: handle,
 	}
-	result := g.builder.Parameter(nodeInputs.name, nodeInputs.shape)
+	result, err := g.builder.Parameter(nodeInputs.name, nodeInputs.shape)
+	if err != nil {
+		panic(errors.WithMessagef(err, "failed to create parameter %q", name))
+	}
 	node = &Node{
 		graph:        g,
 		outputOps:    []backends.Op{result},
-		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		inputs:       nodeInputs,
 	}
 	g.registerNode(node)
@@ -157,13 +168,17 @@ func ConstTensor(g *Graph, t *tensors.Tensor) (node *Node) {
 		nodeInputs.tensor = t.LocalClone()
 	}
 	var result backends.Op
+	var err error
 	t.ConstFlatData(func(flat any) {
-		result = g.builder.Constant(flat, nodeInputs.shape.Dimensions...)
+		result, err = g.builder.Constant(flat, nodeInputs.shape.Dimensions...)
 	})
+	if err != nil {
+		panic(errors.WithMessagef(err, "ConstTensor failed to create a constant in the backend"))
+	}
 	node = &Node{
 		graph:        g,
 		outputOps:    []backends.Op{result},
-		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 		inputs:       nodeInputs,
 	}
 	g.registerNode(node)

@@ -1,11 +1,11 @@
 package simplego
 
 import (
-	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
+	"github.com/pkg/errors"
 	"slices"
 )
 
@@ -33,22 +33,31 @@ func init() {
 // node with normalized inputs. Finally, it reshapes back to the final result.
 //
 // The actual generic dot multiplication happens during execution though.
-func (b *Builder) DotGeneral(lhsOp backends.Op, lhsContractingAxes, lhsBatchAxes []int, rhsOp backends.Op, rhsContractingAxes, rhsBatchAxes []int) backends.Op {
-	inputs := b.checkOps(backends.OpTypeDotGeneral.String(), lhsOp, rhsOp)
+func (b *Builder) DotGeneral(lhsOp backends.Op, lhsContractingAxes, lhsBatchAxes []int, rhsOp backends.Op, rhsContractingAxes, rhsBatchAxes []int) (backends.Op, error) {
+	inputs, err := b.checkOps(backends.OpTypeDotGeneral.String(), lhsOp, rhsOp)
+	if err != nil {
+		return nil, err
+	}
 	lhs, rhs := inputs[0], inputs[1]
 	dtype := lhs.shape.DType
 	if dtype != rhs.shape.DType {
-		exceptions.Panicf("DotGeneral lhs (left-hand-side) and rhs operands don't match data types: %s and %s", dtype, rhs.shape.DType)
+		return nil, errors.Errorf("DotGeneral lhs (left-hand-side) and rhs operands don't match data types: %s and %s", dtype, rhs.shape.DType)
 	}
 
 	// Transpose operands to [batchSize, crossSize, contractingSize].
-	lhsTransposed, lhsBatchDims, lhsCrossDims, lhsContractingDims := b.transposeForDotGeneral(lhs, "lhs", lhsContractingAxes, lhsBatchAxes)
-	rhsTransposed, rhsBatchDims, rhsCrossDims, rhsContractingDims := b.transposeForDotGeneral(rhs, "rhs", rhsContractingAxes, rhsBatchAxes)
+	lhsTransposed, lhsBatchDims, lhsCrossDims, lhsContractingDims, err := b.transposeForDotGeneral(lhs, "lhs", lhsContractingAxes, lhsBatchAxes)
+	if err != nil {
+		return nil, err
+	}
+	rhsTransposed, rhsBatchDims, rhsCrossDims, rhsContractingDims, err := b.transposeForDotGeneral(rhs, "rhs", rhsContractingAxes, rhsBatchAxes)
+	if err != nil {
+		return nil, err
+	}
 	if slices.Compare(lhsBatchDims, rhsBatchDims) != 0 {
-		exceptions.Panicf("DotGeneral batch axes from lhs (left-hand-side) and rhs operands don't match dimenions: lhs.BatchDims=%v, rhs.BatchDims=%v", lhsBatchDims, rhsBatchDims)
+		return nil, errors.Errorf("DotGeneral batch axes from lhs (left-hand-side) and rhs operands don't match dimenions: lhs.BatchDims=%v, rhs.BatchDims=%v", lhsBatchDims, rhsBatchDims)
 	}
 	if slices.Compare(lhsContractingDims, rhsContractingDims) != 0 {
-		exceptions.Panicf("DotGeneral contracting axes from lhs (left-hand-side) and rhs operands don't match dimenions: lhs.ContractingDims=%v, rhs.ContractingDims=%v", lhsContractingDims, rhsContractingDims)
+		return nil, errors.Errorf("DotGeneral contracting axes from lhs (left-hand-side) and rhs operands don't match dimenions: lhs.ContractingDims=%v, rhs.ContractingDims=%v", lhsContractingDims, rhsContractingDims)
 	}
 
 	// DotGeneral on the normalized operands.
@@ -61,7 +70,11 @@ func (b *Builder) DotGeneral(lhsOp backends.Op, lhsContractingAxes, lhsBatchAxes
 	resultingDims = append(resultingDims, lhsBatchDims...)
 	resultingDims = append(resultingDims, lhsCrossDims...)
 	resultingDims = append(resultingDims, rhsCrossDims...)
-	return b.Reshape(dotGeneral, resultingDims...)
+	result, err := b.Reshape(dotGeneral, resultingDims...)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 // transposeForDotGeneral transposes and reshapes the lhs or the rhs operand for the DotGeneral
@@ -69,7 +82,7 @@ func (b *Builder) DotGeneral(lhsOp backends.Op, lhsContractingAxes, lhsBatchAxes
 //
 // It returns the node of the transposed operand, and the dimensions of each set of axes.
 func (b *Builder) transposeForDotGeneral(operand *Node, operandName string, contractingAxes, batchAxes []int) (
-	transposed *Node, batchDims, crossDims, contractingDims []int) {
+	transposed *Node, batchDims, crossDims, contractingDims []int, err error) {
 	shape := operand.shape
 	rank := shape.Rank()
 	axesTypes := make([]int, rank)
@@ -77,10 +90,12 @@ func (b *Builder) transposeForDotGeneral(operand *Node, operandName string, cont
 		contractingDims = make([]int, 0, len(contractingAxes))
 		for _, axis := range contractingAxes {
 			if axis < 0 || axis >= rank {
-				exceptions.Panicf("DotGeneral operand %s has an invalid contracting axis %d (%s rank is %d)", operandName, axis, operandName, rank)
+				err = errors.Errorf("DotGeneral operand %s has an invalid contracting axis %d (%s rank is %d)", operandName, axis, operandName, rank)
+				return
 			}
 			if axesTypes[axis] != 0 {
-				exceptions.Panicf("DotGeneral operand %s contracting axes (%v) have repeated values ", operandName, contractingAxes)
+				err = errors.Errorf("DotGeneral operand %s contracting axes (%v) have repeated values ", operandName, contractingAxes)
+				return
 			}
 			axesTypes[axis] = 1
 			contractingDims = append(contractingDims, shape.Dimensions[axis])
@@ -90,10 +105,12 @@ func (b *Builder) transposeForDotGeneral(operand *Node, operandName string, cont
 		batchDims = make([]int, 0, len(batchAxes))
 		for _, axis := range batchAxes {
 			if axis < 0 || axis >= rank {
-				exceptions.Panicf("DotGeneral operand %s has an invalid batch axis %d (%s rank is %d)", operandName, axis, operandName, rank)
+				err = errors.Errorf("DotGeneral operand %s has an invalid batch axis %d (%s rank is %d)", operandName, axis, operandName, rank)
+				return
 			}
 			if axesTypes[axis] != 0 {
-				exceptions.Panicf("DotGeneral operand %s batch axes (%v) have repeated values (maybe with contracting axes=%v) ", operandName, batchAxes, contractingAxes)
+				err = errors.Errorf("DotGeneral operand %s batch axes (%v) have repeated values (maybe with contracting axes=%v) ", operandName, batchAxes, contractingAxes)
+				return
 			}
 			axesTypes[axis] = 2
 			batchDims = append(batchDims, shape.Dimensions[axis])
@@ -123,19 +140,27 @@ func (b *Builder) transposeForDotGeneral(operand *Node, operandName string, cont
 	permutations = append(permutations, batchAxes...)
 	permutations = append(permutations, crossAxes...)
 	permutations = append(permutations, contractingAxes...)
-	transposed = b.Transpose(operand, permutations...).(*Node)
-	transposed = b.Reshape(transposed, batchSize, crossSize, contractSize).(*Node)
+	transposedOp, err := b.Transpose(operand, permutations...)
+	if err != nil {
+		return
+	}
+	transposed = transposedOp.(*Node)
+	transposedOp, err = b.Reshape(transposed, batchSize, crossSize, contractSize)
+	if err != nil {
+		return
+	}
+	transposed = transposedOp.(*Node)
 	return
 }
 
 // execNormalizedDotGeneral executes the DotGeneral where the inputs are already shaped [batchSize, crossSize, contractingSize].
-func execNormalizedDotGeneral(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execNormalizedDotGeneral(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	lhs, rhs := inputs[0], inputs[1]
 	outputShape := node.shape
 	output := backend.getBuffer(outputShape.DType, outputShape.Size())
 	output.shape = outputShape
 	dispatchDotGeneral.Dispatch(outputShape.DType, lhs, rhs, output)
-	return output
+	return output, nil
 }
 
 var dispatchDotGeneral = NewDTypeDispatcher("DotGeneral")
@@ -232,21 +257,27 @@ func execNormalizedDotGeneralBFloat16(params ...any) any {
 // In practice, it can be used to perform dot products between vectors, vector/matrix multiplications or
 // matrix/matrix multiplications.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-func (b *Builder) Dot(lhsOp, rhsOp backends.Op) backends.Op {
-	inputs := b.checkOps(backends.OpTypeDotGeneral.String(), lhsOp, rhsOp)
+func (b *Builder) Dot(lhsOp, rhsOp backends.Op) (backends.Op, error) {
+	inputs, err := b.checkOps(backends.OpTypeDot.String(), lhsOp, rhsOp)
+	if err != nil {
+		return nil, err
+	}
 	lhs, rhs := inputs[0], inputs[1]
-	var output *Node
+	var output backends.Op
 	if lhs.shape.Rank() == 1 && rhs.shape.Rank() == 1 {
 		// Contracting both vectors.
-		output = b.DotGeneral(lhs, []int{0}, []int{}, rhs, []int{0}, []int{}).(*Node)
+		output, err = b.DotGeneral(lhs, []int{0}, []int{}, rhs, []int{0}, []int{})
 	} else if lhs.shape.Rank() == 2 && rhs.shape.Rank() == 1 {
 		// Contract rhs vector.
-		output = b.DotGeneral(lhs, []int{1}, []int{}, rhs, []int{0}, []int{}).(*Node)
+		output, err = b.DotGeneral(lhs, []int{1}, []int{}, rhs, []int{0}, []int{})
 	} else if lhs.shape.Rank() == 2 && rhs.shape.Rank() == 2 {
 		// Traditional matrix multiplication:
-		output = b.DotGeneral(lhs, []int{1}, []int{}, rhs, []int{0}, []int{}).(*Node)
+		output, err = b.DotGeneral(lhs, []int{1}, []int{}, rhs, []int{0}, []int{})
 	} else {
-		exceptions.Panicf("Dot operands have invalid ranks: lhs=%v, rhs=%v", lhs.shape, rhs.shape)
+		return nil, errors.Errorf("Dot operands have invalid ranks: lhs=%v, rhs=%v", lhs.shape, rhs.shape)
 	}
-	return output
+	if err != nil {
+		return nil, errors.WithMessagef(err, "while building op Dot()")
+	}
+	return output, nil
 }

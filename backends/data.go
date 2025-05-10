@@ -9,29 +9,29 @@ import "github.com/gomlx/gomlx/types/shapes"
 // It is opaque from GoMLX perspective, but one of the backend methods take this value as input, and needs
 type Buffer any
 
-// DataInterface is the sub-interface defines the API to transfer Buffer to/from accelerators for the backend.
+// DataInterface is the Backend's subinterface that defines the API to transfer Buffer to/from accelerators for the backend.
 type DataInterface interface {
-	// BufferFinalize allows client to inform backend that buffer is no longer needed and associated resources can be
-	// freed immediately.
+	// BufferFinalize allows the client to inform backend that buffer is no longer needed and associated resources can be
+	// freed immediately -- as opposed to waiting for a GC.
 	//
 	// A finalized buffer should never be used again. Preferably, the caller should set its references to it to nil.
-	BufferFinalize(buffer Buffer)
+	BufferFinalize(buffer Buffer) error
 
 	// BufferShape returns the shape for the buffer.
-	BufferShape(buffer Buffer) shapes.Shape
+	BufferShape(buffer Buffer) (shapes.Shape, error)
 
 	// BufferDeviceNum returns the deviceNum for the buffer.
-	BufferDeviceNum(buffer Buffer) DeviceNum
+	BufferDeviceNum(buffer Buffer) (DeviceNum, error)
 
 	// BufferToFlatData transfers the flat values of buffer to the Go flat array.
 	// The slice flat must have the exact number of elements required to store the Buffer shape.
 	//
 	// See also FlatDataToBuffer, BufferShape, and shapes.Shape.Size.
-	BufferToFlatData(buffer Buffer, flat any)
+	BufferToFlatData(buffer Buffer, flat any) error
 
 	// BufferFromFlatData transfers data from Go given as a flat slice (of the type corresponding to the shape DType)
 	// to the deviceNum, and returns the corresponding Buffer.
-	BufferFromFlatData(deviceNum DeviceNum, flat any, shape shapes.Shape) Buffer
+	BufferFromFlatData(deviceNum DeviceNum, flat any, shape shapes.Shape) (Buffer, error)
 
 	// HasSharedBuffers returns whether the backend supports "shared buffers": these are buffers
 	// that can be used directly by the engine and has a local address that can be read or mutated
@@ -50,7 +50,7 @@ type DataInterface interface {
 	//
 	// It returns a handle to the buffer and a slice of the corresponding data type pointing
 	// to the shared data.
-	NewSharedBuffer(deviceNum DeviceNum, shape shapes.Shape) (buffer Buffer, flat any)
+	NewSharedBuffer(deviceNum DeviceNum, shape shapes.Shape) (buffer Buffer, flat any, err error)
 
 	// BufferData returns a slice pointing to the buffer storage memory directly.
 	//
@@ -58,5 +58,5 @@ type DataInterface interface {
 	// shares CPU memory.
 	//
 	// The returned slice becomes invalid after the buffer is destroyed.
-	BufferData(buffer Buffer) (flat any)
+	BufferData(buffer Buffer) (flat any, err error)
 }

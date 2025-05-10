@@ -154,10 +154,12 @@ func buildMethodInfo() (methods []*MethodInfo) {
 			mi.HasGraph = len(mi.OpInputSlices) == 0 && len(mi.OpInputs) == 0
 
 		}
-		for _, field := range funcInfo.Type.Results.List {
-			for _, nameIdent := range field.Names {
+		results := funcInfo.Type.Results.List
+		for _, field := range results[:len(results)-1] { // Skip the error.
+			for _, nameIdent := range field.Names[:len(field.Names)] {
 				// Save the names of the outputs: we assume all outputs are of type Op (to be converted to *Node in graphs package).
 				mi.OutputNames = append(mi.OutputNames, nameIdent.Name)
+				fmt.Printf("%s, ", nameIdent.Name)
 			}
 		}
 		if len(mi.OutputNames) > 1 {
@@ -214,13 +216,21 @@ type NodeType int
 const (
 	NodeTypeInvalid NodeType = iota
 	NodeTypeSplitNode
-{{range .}}	NodeType{{.BackendName}}
-{{end}})
+{{- range .}}
+	NodeType{{.BackendName}}
+{{- end}}
+)
 
-{{range .}}{{if not .Excluded}}// nodeInputs{{.BackendName}} holds the inputs used for the call to backends.{{.BackendName}}.
+{{- range .}}
+
+{{- if not .Excluded}}
+
+// nodeInputs{{.BackendName}} holds the inputs used for the call to backends.{{.BackendName}}.
 type nodeInputs{{.BackendName}} struct {
-{{range .Inputs}}	{{.Name}} {{.NodeInputType}}
-{{end}}}
+	{{- range .Inputs}}
+	{{.Name}} {{.NodeInputType}}
+	{{- end}}
+}
 
 // Type implements the interface NodeInputs.
 func (ni *nodeInputs{{.BackendName}}) Type() NodeType {
@@ -235,9 +245,15 @@ func (ni *nodeInputs{{.BackendName}}) String() string {
 {{end}}	)
 }
 
-{{if not .Exported}}// {{.GraphName}} is a Graph wrapper for the backend.Builder.{{.BackendName}} method.
-{{else}}{{range .Comments}}{{.}}
-{{end}}{{end}}func {{/*
+{{- if not .Exported}}
+// {{.GraphName}} is a Graph wrapper for the backend.Builder.{{.BackendName}} method.
+{{- else}}
+{{- range .Comments}}
+{{.}}
+{{- end}}
+{{- end}}
+
+func {{/*
 
 Inputs:  */}}{{.GraphName}}({{if .HasGraph}}g *Graph, {{end}}{{range .Inputs}}{{.Name}} {{.GraphType}}, {{end}}) ({{/*
 
@@ -246,35 +262,57 @@ Outputs: */}}{{if not .HasMultipleOutputs}}node *Node{{/*
 */}}{{end}}) {{/*
 
 Body: */}}{
-{{if .HasGraph}}	g.AssertBuilding()
-{{else}}	inputNodes := []*Node{ {{range .OpInputs}}{{.}}, {{end}} }
-{{range .OpInputSlices}}	inputNodes = append(inputNodes, {{.}}...)
-{{end}}	g := validateBuildingGraphFromInputs(inputNodes...)
-{{end}}	inputs := &nodeInputs{{.BackendName}}{
-{{range .Inputs}}		{{.Name}}: {{.CopyStatement}},		
-{{end}}	}
-{{/*
+{{- if .HasGraph}}
+	g.AssertBuilding()
+{{- else}}
+	inputNodes := []*Node{ {{range .OpInputs}}{{.}}, {{end}} }
+{{- range .OpInputSlices}}
+	inputNodes = append(inputNodes, {{.}}...)
+{{- end}}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+{{- end}}
+	inputs := &nodeInputs{{.BackendName}}{
+{{- range .Inputs}}
+		{{.Name}}: {{.CopyStatement}},		
+{{- end}}
+	}
+{{- /*
 
 Convert result(s) to node(s):
 
-*/}}{{if not .HasMultipleOutputs}}	result := g.builder.{{.BackendName}}({{range .Inputs}}{{.ConvertStatement}}, {{end}})
+*/}}
+{{- if not .HasMultipleOutputs}}
+	result, err := g.builder.{{.BackendName}}({{range .Inputs}}{{.ConvertStatement}}, {{end}})
+	if err != nil {
+		panic(err)
+	}
 	node = &Node{
 		outputOps: []backends.Op{result},
-		outputShapes: []shapes.Shape{g.builder.OpShape(result)},
-{{else}}{{/*
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+{{- else}}
+{{- /*
 
 Version with multiple outputs:
 
-*/}}{{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}v{{$ii}}{{end}} := g.builder.{{.BackendName}}({{range .Inputs}}{{.ConvertStatement}}, {{end}})
+*/}}
+{{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}v{{$ii}}{{end}}, err := g.builder.{{.BackendName}}({{range .Inputs}}{{.ConvertStatement}}, {{end}})
+	if err != nil {
+		panic(err)
+	}
 	node := &Node{
 		outputOps: []backends.Op{ {{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}v{{$ii}}{{end}} },
-		outputShapes: []shapes.Shape{ {{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}g.builder.OpShape(v{{$ii}}){{end}} },
-{{end}}		graph: g,
+		outputShapes: []shapes.Shape{ {{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}mustNoError(g.builder.OpShape(v{{$ii}})){{end}} },
+{{- end}}
+		graph: g,
 		inputs: inputs,
-{{if not .HasGraph}}		inputNodes: inputNodes,
-{{end}}{{/*
-*/}}{{if .StopGradient}}	stopGradient: true,
-{{end}}}
+{{- if not .HasGraph}}
+		inputNodes: inputNodes,
+{{- end}}{{/*
+*/}}
+{{- if .StopGradient}}
+		stopGradient: true,
+{{- end}}
+	}
 	g.registerNode(node)
 {{/*
 

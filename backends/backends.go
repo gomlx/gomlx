@@ -9,13 +9,10 @@
 //
 // It is based on OpenXLA's API for now.
 //
-// A backend that doesn't implement every operation can simply return a "Not implemented" error for any op, and
-// it would still work for computations that don't require those operations.
+// A backend that doesn't implement every operation can simply return an "<op> not implemented" error
+// for any op, and it would still work for computations that don't require those operations.
 // The backend/notimplemented package helps bootstrap any new backend implementation by providing
 // a "Not Implemented" implementation for all methods of the Builder interface.
-//
-// To simplify error handling, all functions are expected to throw (panic) with a stack trace in case of errors.
-// See package github.com/gomlx/exceptions.
 package backends
 
 import (
@@ -36,6 +33,9 @@ type Backend interface {
 	// Name returns the short name of the backend. E.g.: "xla" for the Xla/PJRT plugin.
 	Name() string
 
+	// String returns the same as Name.
+	String() string
+
 	// Description is a longer description of the Backend that can be used to pretty-print.
 	Description() string
 
@@ -52,6 +52,8 @@ type Backend interface {
 	DataInterface
 
 	// Finalize releases all the associated resources immediately and makes the backend invalid.
+	// Any operation on a Backend after Finalize is called is undefined and can lead to memory
+	// corruption.
 	Finalize()
 }
 

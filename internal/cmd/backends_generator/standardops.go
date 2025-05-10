@@ -37,7 +37,7 @@ import (
 
 type StandardOps interface { {{range .}}
 {{range .Comments}}	// {{.}}
-{{end}}	{{.Name}}({{range .Parameters}}{{.Names}} {{.Type}},{{end}}) Op
+{{end}}	{{.Name}}({{range .Parameters}}{{.Names}} {{.Type}},{{end}}) (Op, error)
 {{end}}}
 `))
 )

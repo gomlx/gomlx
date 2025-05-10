@@ -9,10 +9,10 @@ type Executable interface {
 	// Finalize immediately frees resources associated to the executable.
 	Finalize()
 
-	// Inputs returns the list of parameters names and shapes, in order created by the Builder.Parameter calls.
+	// Inputs returns the parameters' names and shapes, in order created by the Builder.Parameter calls.
 	Inputs() (names []string, inputShapes []shapes.Shape)
 
-	// Outputs returns the list of the shapes of the outputs of the computation, in order given to the Builder.Compile call.
+	// Outputs returns the computation's output shapes, in the order given to the Builder.Compile call.
 	Outputs() (outputShapes []shapes.Shape)
 
 	// Execute the executable on the default device (0).
@@ -24,5 +24,5 @@ type Executable interface {
 	//
 	// Donated buffers are no longer valid after the call.
 	// If donate is nil, it is assumed to be false for all buffers, and no buffer is donated.
-	Execute(inputs []Buffer, donate []bool) []Buffer
+	Execute(inputs []Buffer, donate []bool) ([]Buffer, error)
 }

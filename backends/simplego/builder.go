@@ -1,13 +1,13 @@
 package simplego
 
 import (
-	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/notimplemented"
 	"github.com/gomlx/gomlx/backends/shapeinference"
 	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/pkg/errors"
 	"reflect"
 	"slices"
 )
@@ -40,19 +40,23 @@ func (b *Builder) Name() string {
 }
 
 // Compile implements backends.Builder.
-func (b *Builder) Compile(outputs ...backends.Op) backends.Executable {
-	b.outputs = b.checkOps("Compile", outputs...)
+func (b *Builder) Compile(outputs ...backends.Op) (backends.Executable, error) {
+	var err error
+	b.outputs, err = b.checkOps("Compile", outputs...)
+	if err != nil {
+		return nil, err
+	}
 	nodeSet := types.SetWith(b.outputs...)
 	if len(nodeSet) != len(b.outputs) {
-		exceptions.Panicf("*** Repeated outputs: %d outputs, %d unique outputs", len(b.outputs), len(nodeSet))
+		return nil, errors.Errorf("*** Repeated outputs: %d outputs, %d unique outputs", len(b.outputs), len(nodeSet))
 	}
 	for _, node := range b.outputs {
 		if len(node.multiOutputsShapes) != 0 {
-			exceptions.Panicf("%s node %q is internal (with multiple-outputs) and cannot be used for output", b.Name(), node.opType)
+			return nil, errors.Errorf("%s node %q is internal (with multiple-outputs) and cannot be used for output", b.Name(), node.opType)
 		}
 	}
 	b.compiled = true
-	return newExecutable(b)
+	return newExecutable(b), nil
 }
 
 // Finalize immediately release the resources associated with the Builder.
@@ -127,81 +131,97 @@ func (n *Node) IsMultiOutputs() bool {
 
 // checkOps validates that the ops are from SimpleGo and from this builder.
 // It also checks whether the Builder is not yet compiled.
-func (b *Builder) checkOps(opType string, ops ...backends.Op) []*Node {
+func (b *Builder) checkOps(opType string, ops ...backends.Op) ([]*Node, error) {
 	if b == nil {
-		exceptions.Panicf("%s: Builder is nil (!?), cannot build a graph", opType)
+		return nil, errors.Errorf("%s: Builder is nil (!?), cannot build a graph", opType)
 	}
 	if b.compiled {
-		exceptions.Panicf("cannot add new op (%s) to Builder %q, it has already been compiled", opType, b.name)
+		return nil, errors.Errorf("cannot add new op (%s) to Builder %q, it has already been compiled", opType, b.name)
 	}
 	nodes := make([]*Node, len(ops))
 	var ok bool
 	for idx, op := range ops {
 		if op == nil {
-			exceptions.Panicf("%s: input op #%d is nil!?", opType, idx)
+			return nil, errors.Errorf("%s: input op #%d is nil!?", opType, idx)
 		}
 		nodes[idx], ok = op.(*Node)
 		if !ok {
-			exceptions.Panicf("cannot use input op #%d in backend %q that was created on a different backend for %s", idx, b.backend.Name(), opType)
+			return nil, errors.Errorf("cannot use input op #%d in backend %q that was created on a different backend for %s", idx, b.backend.Name(), opType)
 		}
 		if nodes[idx].builder != b {
-			exceptions.Panicf("%s: input op #%d was created with a different builder (%q), cannot use it with builder %q",
+			return nil, errors.Errorf("%s: input op #%d was created with a different builder (%q), cannot use it with builder %q",
 				opType, idx, nodes[idx].builder.name, b.name)
 		}
 	}
-	return nodes
+	return nodes, nil
 }
 
 // OpShape returns the shape of a computation Op.
-func (b *Builder) OpShape(op backends.Op) shapes.Shape {
-	inputs := b.checkOps("OpShape", op)
-	return inputs[0].shape
+func (b *Builder) OpShape(op backends.Op) (shapes.Shape, error) {
+	inputs, err := b.checkOps("OpShape", op)
+	if err != nil {
+		return shapes.Invalid(), err
+	}
+	return inputs[0].shape, nil
 }
 
-// checkFlat throws an exception if flat is not a slice of one of the dtypes supported.
+// checkFlat returns an error if flat is not a slice of one of the dtypes supported.
 // It returns the supported dtype and the length of the flat slice.
-func checkFlat(flat any) (dtypes.DType, int) {
+func checkFlat(flat any) (dtype dtypes.DType, flatLen int, err error) {
 	flatType := reflect.TypeOf(flat)
 	if flatType.Kind() != reflect.Slice {
-		exceptions.Panicf("flat data should be a slice, not %s", flatType.Kind())
+		err = errors.Errorf("flat data should be a slice, not %s", flatType.Kind())
+		return
 	}
-	dtype := dtypes.FromGoType(flatType.Elem())
+	dtype = dtypes.FromGoType(flatType.Elem())
 	if dtype == dtypes.InvalidDType {
-		exceptions.Panicf("flat is a slice of %T, not a valid GoMLX data type", flatType.Elem())
+		err = errors.Errorf("flat is a slice of %T, not a valid GoMLX data type", flatType.Elem())
+		return
 	}
 	flatValue := reflect.ValueOf(flat)
-	return dtype, flatValue.Len()
+	flatLen = flatValue.Len()
+	return
 }
 
 // addUnaryOp adds a generic binary op.
-func (b *Builder) addUnaryOp(opType backends.OpType, operandOp backends.Op) *Node {
-	inputs := b.checkOps(opType.String(), operandOp)
+func (b *Builder) addUnaryOp(opType backends.OpType, operandOp backends.Op) (*Node, error) {
+	inputs, err := b.checkOps(opType.String(), operandOp)
+	if err != nil {
+		return nil, err
+	}
 	operand := inputs[0]
 	shape, err := shapeinference.UnaryOp(opType, operand.shape)
 	if err != nil {
-		panic(err)
+
+		return nil, err
 	}
-	return b.newNode(opType, shape, operand)
+	return b.newNode(opType, shape, operand), nil
 }
 
 // addBinaryOp adds a generic binary op.
-func (b *Builder) addBinaryOp(opType backends.OpType, lhsOp, rhsOp backends.Op) *Node {
-	inputs := b.checkOps(opType.String(), lhsOp, rhsOp)
+func (b *Builder) addBinaryOp(opType backends.OpType, lhsOp, rhsOp backends.Op) (*Node, error) {
+	inputs, err := b.checkOps(opType.String(), lhsOp, rhsOp)
+	if err != nil {
+		return nil, err
+	}
 	lhs, rhs := inputs[0], inputs[1]
 	shape, err := shapeinference.BinaryOp(opType, lhs.shape, rhs.shape)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-	return b.newNode(opType, shape, lhs, rhs)
+	return b.newNode(opType, shape, lhs, rhs), nil
 }
 
 // addComparisonOp adds a generic comparison binary op.
-func (b *Builder) addComparisonOp(opType backends.OpType, lhsOp, rhsOp backends.Op) *Node {
-	inputs := b.checkOps(opType.String(), lhsOp, rhsOp)
+func (b *Builder) addComparisonOp(opType backends.OpType, lhsOp, rhsOp backends.Op) (*Node, error) {
+	inputs, err := b.checkOps(opType.String(), lhsOp, rhsOp)
+	if err != nil {
+		return nil, err
+	}
 	lhs, rhs := inputs[0], inputs[1]
 	shape, err := shapeinference.ComparisonOp(opType, lhs.shape, rhs.shape)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-	return b.newNode(opType, shape, lhs, rhs)
+	return b.newNode(opType, shape, lhs, rhs), nil
 }

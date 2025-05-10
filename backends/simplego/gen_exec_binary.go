@@ -3,11 +3,11 @@
 package simplego
 
 import (
-	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
+	"github.com/pkg/errors"
 	"math"
 )
 
@@ -34,7 +34,7 @@ func init() {
 }
 
 // execAdd executes the binary op Add.
-func execAdd(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execAdd(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	lhs, rhs, output, lhsIsScalarOr1, rhsIsScalarOr1 := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape) // Add is commutative, so if any of the two is scalar, make the rhs the scalar one.
 	if lhsIsScalarOr1 && !rhsIsScalarOr1 {
 		lhs, rhs = rhs, lhs
@@ -76,9 +76,9 @@ func execAdd(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool)
 	case dtypes.BFloat16:
 		execAddNumericBFloat16(lhs.flat.([]bfloat16.BFloat16), rhs.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16), lhs.shape, rhs.shape, output.shape)
 	default:
-		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
+		return nil, errors.Errorf("unsupported data type %s for %s", output.shape.DType, node.opType)
 	}
-	return output
+	return output, nil
 }
 
 func execAddNumericGeneric[T PODNumericConstraints](lhs, rhs []T, output []T,
@@ -147,7 +147,7 @@ func execAddNumericBFloat16(lhs, rhs []bfloat16.BFloat16, output []bfloat16.BFlo
 }
 
 // execMul executes the binary op Mul.
-func execMul(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execMul(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	lhs, rhs, output, lhsIsScalarOr1, rhsIsScalarOr1 := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape) // Add is commutative, so if any of the two is scalar, make the rhs the scalar one.
 	if lhsIsScalarOr1 && !rhsIsScalarOr1 {
 		lhs, rhs = rhs, lhs
@@ -189,9 +189,9 @@ func execMul(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool)
 	case dtypes.BFloat16:
 		execMulNumericBFloat16(lhs.flat.([]bfloat16.BFloat16), rhs.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16), lhs.shape, rhs.shape, output.shape)
 	default:
-		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
+		return nil, errors.Errorf("unsupported data type %s for %s", output.shape.DType, node.opType)
 	}
-	return output
+	return output, nil
 }
 
 func execMulNumericGeneric[T PODNumericConstraints](lhs, rhs []T, output []T,
@@ -260,7 +260,7 @@ func execMulNumericBFloat16(lhs, rhs []bfloat16.BFloat16, output []bfloat16.BFlo
 }
 
 // execSub executes the binary op Sub.
-func execSub(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execSub(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	lhs, rhs, output, lhsIsScalarOr1, rhsIsScalarOr1 := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
 	_, _ = lhsIsScalarOr1, rhsIsScalarOr1
 
@@ -299,9 +299,9 @@ func execSub(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool)
 	case dtypes.BFloat16:
 		execSubNumericBFloat16(lhs.flat.([]bfloat16.BFloat16), rhs.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16), lhs.shape, rhs.shape, output.shape)
 	default:
-		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
+		return nil, errors.Errorf("unsupported data type %s for %s", output.shape.DType, node.opType)
 	}
-	return output
+	return output, nil
 }
 
 func execSubNumericGeneric[T PODNumericConstraints](lhs, rhs []T, output []T,
@@ -385,7 +385,7 @@ func execSubNumericBFloat16(lhs, rhs []bfloat16.BFloat16, output []bfloat16.BFlo
 }
 
 // execDiv executes the binary op Div.
-func execDiv(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execDiv(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	lhs, rhs, output, lhsIsScalarOr1, rhsIsScalarOr1 := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
 	_, _ = lhsIsScalarOr1, rhsIsScalarOr1
 
@@ -424,9 +424,9 @@ func execDiv(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool)
 	case dtypes.BFloat16:
 		execDivNumericBFloat16(lhs.flat.([]bfloat16.BFloat16), rhs.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16), lhs.shape, rhs.shape, output.shape)
 	default:
-		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
+		return nil, errors.Errorf("unsupported data type %s for %s", output.shape.DType, node.opType)
 	}
-	return output
+	return output, nil
 }
 
 func execDivNumericGeneric[T PODNumericConstraints](lhs, rhs []T, output []T,
@@ -510,7 +510,7 @@ func execDivNumericBFloat16(lhs, rhs []bfloat16.BFloat16, output []bfloat16.BFlo
 }
 
 // execRem executes the binary op Rem.
-func execRem(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execRem(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	lhs, rhs, output, lhsIsScalarOr1, rhsIsScalarOr1 := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
 	_, _ = lhsIsScalarOr1, rhsIsScalarOr1
 
@@ -549,9 +549,9 @@ func execRem(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool)
 	case dtypes.BFloat16:
 		execRemFloatBFloat16(lhs.flat.([]bfloat16.BFloat16), rhs.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16), lhs.shape, rhs.shape, output.shape)
 	default:
-		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
+		return nil, errors.Errorf("unsupported data type %s for %s", output.shape.DType, node.opType)
 	}
-	return output
+	return output, nil
 }
 
 func execRemIntegerGeneric[T PODIntegerConstraints](lhs, rhs []T, output []T,
@@ -672,7 +672,7 @@ func execRemFloatBFloat16(lhs, rhs []bfloat16.BFloat16, output []bfloat16.BFloat
 }
 
 // execPow executes the binary op Pow.
-func execPow(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execPow(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	lhs, rhs, output, lhsIsScalarOr1, rhsIsScalarOr1 := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
 	_, _ = lhsIsScalarOr1, rhsIsScalarOr1
 
@@ -711,9 +711,9 @@ func execPow(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool)
 	case dtypes.BFloat16:
 		execPowFloatBFloat16(lhs.flat.([]bfloat16.BFloat16), rhs.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16), lhs.shape, rhs.shape, output.shape)
 	default:
-		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
+		return nil, errors.Errorf("unsupported data type %s for %s", output.shape.DType, node.opType)
 	}
-	return output
+	return output, nil
 }
 
 func execPowIntegerGeneric[T PODIntegerConstraints](lhs, rhs []T, output []T,
@@ -834,7 +834,7 @@ func execPowFloatBFloat16(lhs, rhs []bfloat16.BFloat16, output []bfloat16.BFloat
 }
 
 // execMax executes the binary op Max.
-func execMax(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execMax(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	lhs, rhs, output, lhsIsScalarOr1, rhsIsScalarOr1 := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape) // Add is commutative, so if any of the two is scalar, make the rhs the scalar one.
 	if lhsIsScalarOr1 && !rhsIsScalarOr1 {
 		lhs, rhs = rhs, lhs
@@ -876,9 +876,9 @@ func execMax(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool)
 	case dtypes.BFloat16:
 		execMaxNumericBFloat16(lhs.flat.([]bfloat16.BFloat16), rhs.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16), lhs.shape, rhs.shape, output.shape)
 	default:
-		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
+		return nil, errors.Errorf("unsupported data type %s for %s", output.shape.DType, node.opType)
 	}
-	return output
+	return output, nil
 }
 
 func execMaxNumericGeneric[T PODNumericConstraints](lhs, rhs []T, output []T,
@@ -947,7 +947,7 @@ func execMaxNumericBFloat16(lhs, rhs []bfloat16.BFloat16, output []bfloat16.BFlo
 }
 
 // execMin executes the binary op Min.
-func execMin(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execMin(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	lhs, rhs, output, lhsIsScalarOr1, rhsIsScalarOr1 := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape) // Add is commutative, so if any of the two is scalar, make the rhs the scalar one.
 	if lhsIsScalarOr1 && !rhsIsScalarOr1 {
 		lhs, rhs = rhs, lhs
@@ -989,9 +989,9 @@ func execMin(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool)
 	case dtypes.BFloat16:
 		execMinNumericBFloat16(lhs.flat.([]bfloat16.BFloat16), rhs.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16), lhs.shape, rhs.shape, output.shape)
 	default:
-		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
+		return nil, errors.Errorf("unsupported data type %s for %s", output.shape.DType, node.opType)
 	}
-	return output
+	return output, nil
 }
 
 func execMinNumericGeneric[T PODNumericConstraints](lhs, rhs []T, output []T,
@@ -1060,7 +1060,7 @@ func execMinNumericBFloat16(lhs, rhs []bfloat16.BFloat16, output []bfloat16.BFlo
 }
 
 // execBitwiseAnd executes the binary op BitwiseAnd.
-func execBitwiseAnd(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execBitwiseAnd(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	lhs, rhs, output, lhsIsScalarOr1, rhsIsScalarOr1 := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
 	_, _ = lhsIsScalarOr1, rhsIsScalarOr1
 
@@ -1090,9 +1090,9 @@ func execBitwiseAnd(backend *Backend, node *Node, inputs []*Buffer, inputsOwned 
 	case dtypes.Int64:
 		execBitwiseAndIntegerGeneric[int64](lhs.flat.([]int64), rhs.flat.([]int64), output.flat.([]int64), lhs.shape, rhs.shape, output.shape)
 	default:
-		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
+		return nil, errors.Errorf("unsupported data type %s for %s", output.shape.DType, node.opType)
 	}
-	return output
+	return output, nil
 }
 
 func execBitwiseAndIntegerGeneric[T PODIntegerConstraints](lhs, rhs []T, output []T,
@@ -1133,7 +1133,7 @@ func execBitwiseAndIntegerGeneric[T PODIntegerConstraints](lhs, rhs []T, output 
 }
 
 // execBitwiseOr executes the binary op BitwiseOr.
-func execBitwiseOr(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execBitwiseOr(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	lhs, rhs, output, lhsIsScalarOr1, rhsIsScalarOr1 := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
 	_, _ = lhsIsScalarOr1, rhsIsScalarOr1
 
@@ -1163,9 +1163,9 @@ func execBitwiseOr(backend *Backend, node *Node, inputs []*Buffer, inputsOwned [
 	case dtypes.Int64:
 		execBitwiseOrIntegerGeneric[int64](lhs.flat.([]int64), rhs.flat.([]int64), output.flat.([]int64), lhs.shape, rhs.shape, output.shape)
 	default:
-		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
+		return nil, errors.Errorf("unsupported data type %s for %s", output.shape.DType, node.opType)
 	}
-	return output
+	return output, nil
 }
 
 func execBitwiseOrIntegerGeneric[T PODIntegerConstraints](lhs, rhs []T, output []T,
@@ -1206,7 +1206,7 @@ func execBitwiseOrIntegerGeneric[T PODIntegerConstraints](lhs, rhs []T, output [
 }
 
 // execBitwiseXor executes the binary op BitwiseXor.
-func execBitwiseXor(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execBitwiseXor(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	lhs, rhs, output, lhsIsScalarOr1, rhsIsScalarOr1 := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
 	_, _ = lhsIsScalarOr1, rhsIsScalarOr1
 
@@ -1236,9 +1236,9 @@ func execBitwiseXor(backend *Backend, node *Node, inputs []*Buffer, inputsOwned 
 	case dtypes.Int64:
 		execBitwiseXorIntegerGeneric[int64](lhs.flat.([]int64), rhs.flat.([]int64), output.flat.([]int64), lhs.shape, rhs.shape, output.shape)
 	default:
-		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
+		return nil, errors.Errorf("unsupported data type %s for %s", output.shape.DType, node.opType)
 	}
-	return output
+	return output, nil
 }
 
 func execBitwiseXorIntegerGeneric[T PODIntegerConstraints](lhs, rhs []T, output []T,
@@ -1279,7 +1279,7 @@ func execBitwiseXorIntegerGeneric[T PODIntegerConstraints](lhs, rhs []T, output 
 }
 
 // execLogicalAnd executes the binary op LogicalAnd.
-func execLogicalAnd(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execLogicalAnd(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	lhs, rhs, output, lhsIsScalarOr1, rhsIsScalarOr1 := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
 	_, _ = lhsIsScalarOr1, rhsIsScalarOr1
 
@@ -1289,9 +1289,9 @@ func execLogicalAnd(backend *Backend, node *Node, inputs []*Buffer, inputsOwned 
 		execLogicalAndBooleanGeneric[bool](lhs.flat.([]bool), rhs.flat.([]bool), output.flat.([]bool),
 			lhs.shape, rhs.shape, output.shape)
 	default:
-		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
+		return nil, errors.Errorf("unsupported data type %s for %s", output.shape.DType, node.opType)
 	}
-	return output
+	return output, nil
 }
 
 func execLogicalAndBooleanGeneric[T PODBooleanConstraints](lhs, rhs []T, output []T,
@@ -1332,7 +1332,7 @@ func execLogicalAndBooleanGeneric[T PODBooleanConstraints](lhs, rhs []T, output 
 }
 
 // execLogicalOr executes the binary op LogicalOr.
-func execLogicalOr(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execLogicalOr(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	lhs, rhs, output, lhsIsScalarOr1, rhsIsScalarOr1 := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
 	_, _ = lhsIsScalarOr1, rhsIsScalarOr1
 
@@ -1342,9 +1342,9 @@ func execLogicalOr(backend *Backend, node *Node, inputs []*Buffer, inputsOwned [
 		execLogicalOrBooleanGeneric[bool](lhs.flat.([]bool), rhs.flat.([]bool), output.flat.([]bool),
 			lhs.shape, rhs.shape, output.shape)
 	default:
-		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
+		return nil, errors.Errorf("unsupported data type %s for %s", output.shape.DType, node.opType)
 	}
-	return output
+	return output, nil
 }
 
 func execLogicalOrBooleanGeneric[T PODBooleanConstraints](lhs, rhs []T, output []T,
@@ -1385,7 +1385,7 @@ func execLogicalOrBooleanGeneric[T PODBooleanConstraints](lhs, rhs []T, output [
 }
 
 // execLogicalXor executes the binary op LogicalXor.
-func execLogicalXor(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execLogicalXor(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	lhs, rhs, output, lhsIsScalarOr1, rhsIsScalarOr1 := binaryOperandsAndOutput(backend, inputs, inputsOwned, node.shape)
 	_, _ = lhsIsScalarOr1, rhsIsScalarOr1
 
@@ -1395,9 +1395,9 @@ func execLogicalXor(backend *Backend, node *Node, inputs []*Buffer, inputsOwned 
 		execLogicalXorBooleanGeneric[bool](lhs.flat.([]bool), rhs.flat.([]bool), output.flat.([]bool),
 			lhs.shape, rhs.shape, output.shape)
 	default:
-		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
+		return nil, errors.Errorf("unsupported data type %s for %s", output.shape.DType, node.opType)
 	}
-	return output
+	return output, nil
 }
 
 func execLogicalXorBooleanGeneric[T PODBooleanConstraints](lhs, rhs []T, output []T,
@@ -1438,7 +1438,7 @@ func execLogicalXorBooleanGeneric[T PODBooleanConstraints](lhs, rhs []T, output 
 }
 
 // execEqual executes the binary op Equal.
-func execEqual(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execEqual(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	lhs, rhs := inputs[0], inputs[1]
 	lhsIsScalarOr1, rhsIsScalarOr1 := lhs.shape.Size() == 1, rhs.shape.Size() == 1
 	output := backend.getBuffer(node.shape.DType, node.shape.Size())
@@ -1483,9 +1483,9 @@ func execEqual(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []boo
 	case dtypes.BFloat16:
 		execEqualNumericBFloat16(lhs.flat.([]bfloat16.BFloat16), rhs.flat.([]bfloat16.BFloat16), output.flat.([]bool), lhs.shape, rhs.shape, output.shape)
 	default:
-		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
+		return nil, errors.Errorf("unsupported data type %s for %s", output.shape.DType, node.opType)
 	}
-	return output
+	return output, nil
 }
 
 func execEqualNumericGeneric[T PODNumericConstraints](lhs, rhs []T, output []bool,
@@ -1554,7 +1554,7 @@ func execEqualNumericBFloat16(lhs, rhs []bfloat16.BFloat16, output []bool,
 }
 
 // execGreaterOrEqual executes the binary op GreaterOrEqual.
-func execGreaterOrEqual(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execGreaterOrEqual(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	lhs, rhs := inputs[0], inputs[1]
 	lhsIsScalarOr1, rhsIsScalarOr1 := lhs.shape.Size() == 1, rhs.shape.Size() == 1
 	output := backend.getBuffer(node.shape.DType, node.shape.Size())
@@ -1596,9 +1596,9 @@ func execGreaterOrEqual(backend *Backend, node *Node, inputs []*Buffer, inputsOw
 	case dtypes.BFloat16:
 		execGreaterOrEqualNumericBFloat16(lhs.flat.([]bfloat16.BFloat16), rhs.flat.([]bfloat16.BFloat16), output.flat.([]bool), lhs.shape, rhs.shape, output.shape)
 	default:
-		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
+		return nil, errors.Errorf("unsupported data type %s for %s", output.shape.DType, node.opType)
 	}
-	return output
+	return output, nil
 }
 
 func execGreaterOrEqualNumericGeneric[T PODNumericConstraints](lhs, rhs []T, output []bool,
@@ -1682,7 +1682,7 @@ func execGreaterOrEqualNumericBFloat16(lhs, rhs []bfloat16.BFloat16, output []bo
 }
 
 // execGreaterThan executes the binary op GreaterThan.
-func execGreaterThan(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execGreaterThan(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	lhs, rhs := inputs[0], inputs[1]
 	lhsIsScalarOr1, rhsIsScalarOr1 := lhs.shape.Size() == 1, rhs.shape.Size() == 1
 	output := backend.getBuffer(node.shape.DType, node.shape.Size())
@@ -1724,9 +1724,9 @@ func execGreaterThan(backend *Backend, node *Node, inputs []*Buffer, inputsOwned
 	case dtypes.BFloat16:
 		execGreaterThanNumericBFloat16(lhs.flat.([]bfloat16.BFloat16), rhs.flat.([]bfloat16.BFloat16), output.flat.([]bool), lhs.shape, rhs.shape, output.shape)
 	default:
-		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
+		return nil, errors.Errorf("unsupported data type %s for %s", output.shape.DType, node.opType)
 	}
-	return output
+	return output, nil
 }
 
 func execGreaterThanNumericGeneric[T PODNumericConstraints](lhs, rhs []T, output []bool,
@@ -1810,7 +1810,7 @@ func execGreaterThanNumericBFloat16(lhs, rhs []bfloat16.BFloat16, output []bool,
 }
 
 // execLessOrEqual executes the binary op LessOrEqual.
-func execLessOrEqual(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execLessOrEqual(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	lhs, rhs := inputs[0], inputs[1]
 	lhsIsScalarOr1, rhsIsScalarOr1 := lhs.shape.Size() == 1, rhs.shape.Size() == 1
 	output := backend.getBuffer(node.shape.DType, node.shape.Size())
@@ -1852,9 +1852,9 @@ func execLessOrEqual(backend *Backend, node *Node, inputs []*Buffer, inputsOwned
 	case dtypes.BFloat16:
 		execLessOrEqualNumericBFloat16(lhs.flat.([]bfloat16.BFloat16), rhs.flat.([]bfloat16.BFloat16), output.flat.([]bool), lhs.shape, rhs.shape, output.shape)
 	default:
-		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
+		return nil, errors.Errorf("unsupported data type %s for %s", output.shape.DType, node.opType)
 	}
-	return output
+	return output, nil
 }
 
 func execLessOrEqualNumericGeneric[T PODNumericConstraints](lhs, rhs []T, output []bool,
@@ -1938,7 +1938,7 @@ func execLessOrEqualNumericBFloat16(lhs, rhs []bfloat16.BFloat16, output []bool,
 }
 
 // execLessThan executes the binary op LessThan.
-func execLessThan(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func execLessThan(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 	lhs, rhs := inputs[0], inputs[1]
 	lhsIsScalarOr1, rhsIsScalarOr1 := lhs.shape.Size() == 1, rhs.shape.Size() == 1
 	output := backend.getBuffer(node.shape.DType, node.shape.Size())
@@ -1980,9 +1980,9 @@ func execLessThan(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []
 	case dtypes.BFloat16:
 		execLessThanNumericBFloat16(lhs.flat.([]bfloat16.BFloat16), rhs.flat.([]bfloat16.BFloat16), output.flat.([]bool), lhs.shape, rhs.shape, output.shape)
 	default:
-		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
+		return nil, errors.Errorf("unsupported data type %s for %s", output.shape.DType, node.opType)
 	}
-	return output
+	return output, nil
 }
 
 func execLessThanNumericGeneric[T PODNumericConstraints](lhs, rhs []T, output []bool,

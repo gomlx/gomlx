@@ -31,15 +31,17 @@ package simplego
 
 import (
 	"math"
-	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
+	"github.com/pkg/errors"
 )
 
-func init() { {{range .BinaryOps}}
-	nodeExecutors[backends.OpType{{.Name}}] = exec{{.Name}}{{end}}
+func init() { 
+{{- range .BinaryOps}}
+	nodeExecutors[backends.OpType{{.Name}}] = exec{{.Name}}
+{{- end}}
 }
 
 {{- range .BinaryOps}}
@@ -47,7 +49,7 @@ func init() { {{range .BinaryOps}}
 {{- $is_comparison := .IsComparison }}
 
 // exec{{.Name}} executes the binary op {{.Name}}.
-func exec{{.Name}}(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) *Buffer {
+func exec{{.Name}}(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
 
 {{- if .IsComparison }}
 	lhs, rhs := inputs[0], inputs[1]
@@ -111,9 +113,9 @@ func exec{{.Name}}(backend *Backend, node *Node, inputs []*Buffer, inputsOwned [
 
 {{- end}}
 	default:
-		exceptions.Panicf("unsupported data type %s for %s", output.shape.DType, node.opType)
+		return nil, errors.Errorf("unsupported data type %s for %s", output.shape.DType, node.opType)
 	}
-	return output
+	return output, nil
 }
 
 {{- $is_commutative := .IsCommutative }}

@@ -9,6 +9,7 @@ import (
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"testing"
 )
 
@@ -16,9 +17,12 @@ func TestDotGeneral_transposeForDotGeneral(t *testing.T) {
 	S := shapes.Make
 	F32 := dtypes.Float32
 	builder := backend.Builder("DotGeneral Test").(*Builder)
-	operand := builder.Parameter("lhs", S(F32, 2, 3, 4, 5)).(*Node)
-	transposed, batchDims, crossDims, contractingDims :=
+	operandOp, err := builder.Parameter("lhs", S(F32, 2, 3, 4, 5))
+	require.NoError(t, err)
+	operand := operandOp.(*Node)
+	transposed, batchDims, crossDims, contractingDims, err :=
 		builder.transposeForDotGeneral(operand, "lhs", []int{2, 1}, []int{3, 0})
+	require.NoError(t, err)
 	fmt.Printf("\ttransposed.shape=%s\n", transposed.shape)
 
 	assert.NoError(t, transposed.shape.CheckDims(10, 1, 12))
@@ -31,12 +35,16 @@ func TestDotGeneral_Shape(t *testing.T) {
 	S := shapes.Make
 	F32 := dtypes.Float32
 	builder := backend.Builder("DotGeneral Test").(*Builder)
-	lhs := builder.Parameter("lhs", S(F32, 2, 3, 4, 5)).(*Node)
-	rhs := builder.Parameter("lhs", S(F32, 5, 1, 2, 3)).(*Node)
-	got := builder.DotGeneral(
+	lhs, err := builder.Parameter("lhs", S(F32, 2, 3, 4, 5))
+	require.NoError(t, err)
+	rhs, err := builder.Parameter("lhs", S(F32, 5, 1, 2, 3))
+	require.NoError(t, err)
+	gotOp, err := builder.DotGeneral(
 		lhs, []int{1}, []int{3, 0},
 		rhs, []int{3}, []int{0, 2},
-	).(*Node)
+	)
+	require.NoError(t, err)
+	got := gotOp.(*Node)
 	// Batch dims: 5 , 2
 	// Contracting dims: 3
 	// Cross dims: 4 (lhs) and 1 (rhs)
