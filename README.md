@@ -10,7 +10,7 @@
 ## 📖 About **_GoMLX_**
 <img align="right" src="docs/gomlx_gopher.jpg" alt="GoMLX Gopher" width="220px"/>
 
-**GoMLX** is a fast and easy-to-use set of Machine Learning and generic math libraries and tools. 
+**GoMLX** is an easy-to-use set of Machine Learning and generic math libraries and tools. 
 It can be seen as a **PyTorch/Jax/TensorFlow for Go**.
 
 It can be used to train, fine-tune, modify and combine machine learning models. It provides all
@@ -18,13 +18,13 @@ the tools to make that work easy: from a complete set of differentiable operator
 tools to plot metrics while training in a notebook.
 
 It runs almost everywhere Go runs, using the a pure Go backend (🚀 NEW 🚀). It runs even in the browser with WASM 
-([see demo created with GoMLX](https://janpfeifer.github.io/hiveGo/www/hive/)).
+([see demo created with GoMLX](https://janpfeifer.github.io/hiveGo/www/hive/)). Likely, it will work in embedded devices as well (see [Tamago](https://github.com/usbarmory/tamago)).
 
-It also supports the optimized backend engine based on [OpenXLA/PJRT](https://github.com/openxla/xla) uses just-in-time
+It also supports the very fast optimized backend engine based on [OpenXLA/PJRT](https://github.com/openxla/xla) uses just-in-time
 compilation to CPU and GPU (optionally TPUs also). 
 It's the same engine that powers Google's [Jax](https://github.com/google/jax) and 
-[TensorFlow](https://tensorflow.org/), and it has the same speed in many cases. 
-This only compiles for Linux/amd-64 for now (XLA limitation) 
+[TensorFlow](https://tensorflow.org/), and it has the same speed in many cases. Use this backend to train large models or with large datasets.
+This only compiles for Linux/amd-64 for now (OpenXLA limitation).
 
 > [!Tip]
 > 🎓 Quick Start:
