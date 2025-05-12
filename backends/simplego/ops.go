@@ -468,6 +468,17 @@ func (b *Builder) ArgMinMax(operandOp backends.Op, axis int, outputDType dtypes.
 	return node, nil
 }
 
+// ReduceWindow runs a reduction function of the type given by reductionType,
+// it can be either ReduceMaxNode, ReduceSumNode or ReduceMultiplyNode.
+//
+// The parameter windowDimensions must be set and have a value for each axis.
+// If strides is nil, it's assumed to be the same as windowDimensions -- that is, the strides jump a window at a time.
+// If baseDilations, windowDilations are nil, they are assumed to be 1 (no dilation).
+// If paddings is nil, they are assumed to be 0.
+//func (b *Builder) ReduceWindow(x backends.Op, reductionType backends.ReduceOpType, windowDimensions, strides, baseDilations, windowDilations []int, paddings [][2]int) (backends.Op, error) {
+//	return nil, nil
+//}
+
 //======================================================================================================================
 // Unary Operations ----------------------------------------------------------------------------------------------------
 //======================================================================================================================

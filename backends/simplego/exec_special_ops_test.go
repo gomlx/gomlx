@@ -2,6 +2,7 @@ package simplego
 
 import (
 	"fmt"
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/shapeinference"
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/types/shapes"
@@ -578,4 +579,15 @@ func TestExecSpecialOps_ArgMinMaxOp(t *testing.T) {
 		{{4, 3}, {4, 5}, {4, 2}}})
 	fmt.Printf("\ty3=%s\n", y3.GoStr())
 	require.Equal(t, [][]int32{{0, 0}, {0, 1}}, y3.Value())
+}
+
+func TestExecSpecialOps_ReduceWindowOp(t *testing.T) {
+	// Test Case 1: Simple 1D reduce window.
+	y0 := graph.ExecOnce(backend, func(x *graph.Node) *graph.Node {
+		return graph.BackendReduceWindow(x, backends.ReduceOpSum,
+			[]int{2}, []int{1}, nil, nil,
+			[][2]int{{1, 1}})
+	}, []float32{1, 2, 3, 4, 5})
+	fmt.Printf("\ty0=%s\n", y0.GoStr())
+	require.Equal(t, []float32{1, 3, 5, 7, 9, 5}, y0.Value())
 }
