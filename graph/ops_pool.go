@@ -50,11 +50,11 @@ type PoolBuilder struct {
 	isMean, isConcat     bool // Divide by number of elements later if mean.
 }
 
-// MaxPool prepares a max pooling on x with the given kernel for arbitrary
+// MaxPool prepares a max pooling on x with the given kernel for an arbitrary
 // number of spatial dimensions (1D, 2D, 3D, etc.). It returns the max value
 // for the selected window, on given strides.
 //
-// It is very flexible and to ease configuring of its parameters it returns a
+// It is very flexible. To ease the configuring of its parameters, it returns a
 // PoolBuilder for configuration. Once it is set up
 // call `PoolBuilder.Done` and it will return the pooled
 // x. Browse through PoolBuilder to see the capabilities, and the defaults.
@@ -78,11 +78,11 @@ func MaxPool(x *Node) *PoolBuilder {
 	return makePoolBuilder(x, backends.ReduceOpMax)
 }
 
-// MinPool prepares a min pooling on x with the given kernel for arbitrary
+// MinPool prepares a min pooling on x with the given kernel for an arbitrary
 // number of spatial dimensions (1D, 2D, 3D, etc.). It returns the min value
 // for the selected window, on given strides.
 //
-// It is very flexible and to ease configuring of its parameters it returns a
+// It is very flexible. To ease the configuring of its parameters, it returns a
 // PoolBuilder for configuration. Once it is set up
 // call `PoolBuilder.Done` and it will return the pooled
 // x. Browse through PoolBuilder to see the capabilities, and the defaults.
@@ -106,11 +106,11 @@ func MinPool(x *Node) *PoolBuilder {
 	return makePoolBuilder(x, backends.ReduceOpMin)
 }
 
-// SumPool prepares a sum pooling on x with the given kernel for arbitrary
+// SumPool prepares a sum pooling on x with the given kernel for an arbitrary
 // number of spatial dimensions (1D, 2D, 3D, etc.). It returns the sum value
 // for the selected window, on given strides.
 //
-// It is very flexible and to ease configuring of its parameters it returns a
+// It is very flexible. To ease the configuring of its parameters, it returns a
 // PoolBuilder for configuration. Once it is set up
 // call `PoolBuilder.Done` and it will return the pooled
 // x. Browse through PoolBuilder to see the capabilities, and the defaults.
@@ -134,11 +134,11 @@ func SumPool(x *Node) *PoolBuilder {
 	return makePoolBuilder(x, backends.ReduceOpSum)
 }
 
-// MeanPool prepares a mean pooling on x with the given kernel for arbitrary
+// MeanPool prepares a mean pooling on x with the given kernel for an arbitrary
 // number of spatial dimensions (1D, 2D, 3D, etc.). It returns the mean value
 // for the selected window, on given strides.
 //
-// It is very flexible and to ease configuring of its parameters it returns a
+// It is very flexible. To ease the configuring of its parameters, it returns a
 // PoolBuilder for configuration. Once it is set up
 // call `PoolBuilder.Done` and it will return the pooled
 // x. Browse through PoolBuilder to see the capabilities, and the defaults.
@@ -384,7 +384,7 @@ func (pool *PoolBuilder) Done() *Node {
 		}
 	}
 
-	pooled := checkedReduceWindow(pool.x, pool.reductionType,
+	pooled := BackendReduceWindow(pool.x, pool.reductionType,
 		windowDimensions, strides, nil, nil, paddings)
 
 	// Take the mean.
@@ -407,27 +407,31 @@ func (pool *PoolBuilder) Done() *Node {
 // takeMeanOfContributions divides the pooled sum by the number of contributions at each position.
 func takeMeanOfContributions(x, pooledSum *Node, channelsAxis int, windowDimensions, strides []int, paddings [][2]int) *Node {
 	// We need to normalize the sum by the number of elements that were actually used, ignoring the padding.
-	// We use a similar checkedReduceWindow configuration, but as input a tensor with 1s and dropping the
+	// We use a similar BackendReduceWindow configuration, but as input a tensor with 1s and dropping the
 	// batch and channels axes, since they will are the same.
 	shapeNoBatchOrChannels := x.Shape().Clone()
 	shapeNoBatchOrChannels.Dimensions[0] = 1
 	shapeNoBatchOrChannels.Dimensions[channelsAxis] = 1
 	ones := Ones(x.graph, shapeNoBatchOrChannels)
-	pooledOnes := checkedReduceWindow(ones, backends.ReduceOpSum,
+	pooledOnes := BackendReduceWindow(ones, backends.ReduceOpSum,
 		windowDimensions, strides, nil, nil, paddings)
 	pooledOnes = StopGradient(pooledOnes)
 	return Div(pooledSum, pooledOnes)
 }
 
-// checkedReduceWindow is a checked version of backendReduceWindow.
-func checkedReduceWindow(x *Node, reductionType ReduceOpType, windowDimensions, strides, baseDilations, windowDilations []int, paddings [][2]int) *Node {
+// BackendReduceWindow provides direct access to the backend operator.
+//
+// This is exposed to allow testing, but you probably should avoid using it directly
+// and instead use the pool operations (MaxPool, MinPool, SumPool and MeanPool), which allow
+// almost the same flexibility.
+func BackendReduceWindow(x *Node, reductionType ReduceOpType, windowDimensions, strides, baseDilations, windowDilations []int, paddings [][2]int) *Node {
 	_ = validateBuildingGraphFromInputs(x)
 	rank := x.Rank()
 	if len(windowDimensions) != rank {
 		Panicf("windowDimensions (length %d) must have the same length as the rank of x (rank %d)", len(windowDimensions), rank)
 	}
 	if len(strides) != 0 && len(strides) != rank {
-		Panicf("strides (length %d) if gieven must have the same length as the rank of x (rank %d)", len(strides), rank)
+		Panicf("strides (length %d) if given must have the same length as the rank of x (rank %d)", len(strides), rank)
 	}
 	if len(baseDilations) > 0 && len(baseDilations) != rank {
 		Panicf("baseDilations (length %d) if given must have the same length as the rank of x (rank %d)", len(paddings), rank)
@@ -503,7 +507,7 @@ func reduceWindowVJP(node, v *Node, _ shapes.Shape) []*Node {
 
 // dilateConvolveToMatchSumPooling convolves the `backProp` to match `x`.
 //
-// Since the convolution would be with a kernel of 1s we instead use `graph.Pad` and checkedReduceWindow instead.
+// Since the convolution would be with a kernel of 1s we instead use `graph.Pad` and BackendReduceWindow instead.
 func dilateConvolveToMatchSumPooling(x, backProp *Node, windowDimensions, strides []int, paddings [][2]int) *Node {
 	g := validateBuildingGraphFromInputs(x, backProp)
 	dtype := x.DType()
@@ -545,7 +549,7 @@ func dilateConvolveToMatchSumPooling(x, backProp *Node, windowDimensions, stride
 		padSame[axis][1] = windowSize / 2
 	}
 	stridesOne := xslices.SliceWithValue(rank, 1)
-	expanded = checkedReduceWindow(expanded, backends.ReduceOpSum, windowDimensions, stridesOne, nil, nil, padSame)
+	expanded = BackendReduceWindow(expanded, backends.ReduceOpSum, windowDimensions, stridesOne, nil, nil, padSame)
 
 	// We may need to trim the extra padding that was used originally, since we don't want to re-generate
 	// the original padding. We many also need to pad extra, in case not everything from the input tensor
