@@ -67,10 +67,13 @@ func (b *Backend) Capabilities() backends.Capabilities {
 
 // Builder creates a new builder used to define a new named computation.
 func (b *Backend) Builder(name string) backends.Builder {
-	return &Builder{
+	builder := &Builder{
 		backend: b,
 		name:    name,
 	}
+	// Set the "not implemented" custom message:
+	builder.Builder.ErrMessage = "OP NOT IMPLEMENTED YET -- reach out to github.com/gomlx/gomlx and open an issue if you need this Op, this helps us prioritize"
+	return builder
 }
 
 // Finalize releases all the associated resources immediately, and makes the backend invalid.

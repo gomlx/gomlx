@@ -41,7 +41,7 @@ import (
 {{range .}}
 {{range .Comments}}// {{.}}
 {{end}}func (b Builder) {{.Name}}({{range .Parameters}}{{.Names}} {{.Type}},{{end}}) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method {{.Name}}()")
+	return nil, errors.Wrapf(NotImplementedError, "in method {{.Name}}(): %s", b.ErrMessage)
 }
 {{end}}
 `))
