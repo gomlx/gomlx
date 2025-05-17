@@ -1,15 +1,16 @@
 package simplego
 
 import (
+	"reflect"
+	"strings"
+	"sync"
+	"unsafe"
+
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
-	"reflect"
-	"strings"
-	"sync"
-	"unsafe"
 )
 
 // Compile-time check:
@@ -49,7 +50,10 @@ func (b *Backend) getBufferPool(dtype dtypes.DType, length int) *sync.Pool {
 	return poolInterface.(*sync.Pool)
 }
 
-// getBuffer from backend pool of buffers.
+// getBuffer from the backend pool of buffers.
+// Important: it's not necessarily initialized with zero, since it can reuse old buffers.
+//
+// See also Buffer.Zeros to initialize it with zeros, if needed.
 func (b *Backend) getBuffer(dtype dtypes.DType, length int) *Buffer {
 	pool := b.getBufferPool(dtype, length)
 	buf := pool.Get().(*Buffer)
@@ -76,17 +80,63 @@ func copyFlat(flatDst, flatSrc any) {
 
 // mutableBytes returns the slice of the bytes used by the flat given -- it works with any of the supported data types for buffers.
 func (b *Buffer) mutableBytes() []byte {
-	return dispatchMutableBytes.Dispatch(b.shape.DType, b.flat).([]byte)
+	fn := mutableBytesDTypeMap.Get(b.shape.DType).(func(b *Buffer) []byte)
+	return fn(b)
 }
 
-var dispatchMutableBytes = NewDTypeDispatcher("MutableBytes")
+var mutableBytesDTypeMap = NewDTypeMap("MutableBytes")
 
 // mutableBytesGeneric is the generic implementation of mutableBytes.
-func mutableBytesGeneric[T SupportedTypesConstraints](params ...any) any {
-	flat := params[0].([]T)
+func mutableBytesGeneric[T SupportedTypesConstraints](b *Buffer) []byte {
+	flat := b.flat.([]T)
 	bytePointer := (*byte)(unsafe.Pointer(&flat[0]))
 	var t T
 	return unsafe.Slice(bytePointer, len(flat)*int(unsafe.Sizeof(t)))
+}
+
+// Fill the buffer with the given value.
+// It returns an error if the value type doesn't correspond to the buffer dtype.
+//
+// As a special case, if value is nil, it will fill the buffer with zeroes for the corresponding DType.
+func (b *Buffer) Fill(value any) error {
+	dtype := b.shape.DType
+	if value != nil && dtypes.FromAny(value) != dtype {
+		return errors.Errorf("fillBuffer: invalid value type %T for buffer of dtype %s", value, dtype)
+	}
+	fillFn := fillBufferDTypeMap.Get(dtype).(func(*Buffer, any))
+	fillFn(b, value)
+	return nil
+}
+
+var fillBufferDTypeMap = NewDTypeMap("fillBuffer")
+
+// fillBufferGeneric is the generic implementation of Buffer.Fill.
+func fillBufferGeneric[T SupportedTypesConstraints](b *Buffer, valueAny any) {
+	var value T
+	if valueAny != nil {
+		value = valueAny.(T)
+	}
+	flat := b.flat.([]T)
+	for i := range flat {
+		flat[i] = value
+	}
+}
+
+// Zeros fills the buffer with zeros.
+//
+// It returns a reference to the buffer to allow cascading calls.
+func (b *Buffer) Zeros() *Buffer {
+	_ = b.Fill(nil)
+	return b
+}
+
+// Ones fills the buffer with ones.
+//
+// It returns a reference to the buffer to allow cascading calls.
+func (b *Buffer) Ones() *Buffer {
+	dtype := b.shape.DType
+	_ = b.Fill(shapes.CastAsDType(1, dtype))
+	return b
 }
 
 // cloneBuffer using the pool to allocate a new one.

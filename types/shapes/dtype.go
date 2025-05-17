@@ -17,9 +17,10 @@
 package shapes
 
 import (
-	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"reflect"
 	"unsafe"
+
+	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 
 	"github.com/gomlx/exceptions"
 	. "github.com/gomlx/gopjrt/dtypes"
@@ -161,7 +162,7 @@ func CastAsDType(value any, dtype DType) any {
 			v32 := valueOf.Convert(float32Type).Interface().(float32)
 			return bfloat16.FromFloat32(v32)
 		}
-		// TODO: if adding support for non-native Go types (e.g: B16), we need
+		// TODO: if adding support for non-native Go types (e.g: BFloat16), we need
 		//       to write our own conversion here.
 		return valueOf.Convert(newTypeOf).Interface()
 	}
@@ -175,7 +176,9 @@ func CastAsDType(value any, dtype DType) any {
 }
 
 // typeForSliceDType recursively converts a type that is a (multi-dimension-) slice
-// of some type, to a `reflect.Type` of a (multi-dimension-) slice of `dtype`.
+// of some type, to the same (multi-dimension-) slice of a reflect.Type corresponding to
+// the dtype.
+//
 // Arrays are converted to slices.
 func typeForSliceDType(valueType reflect.Type, dtype DType) reflect.Type {
 	if valueType.Kind() != reflect.Slice && valueType.Kind() != reflect.Array {
