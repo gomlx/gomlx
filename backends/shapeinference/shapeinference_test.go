@@ -2,11 +2,13 @@ package shapeinference
 
 import (
 	"fmt"
+	"testing"
+
 	. "github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 // Aliases
@@ -404,4 +406,260 @@ func TestArgMinMaxOp(t *testing.T) {
 	require.Panics(t, func() {
 		must1(ArgMinMaxOp(operand2, -1, I32))
 	}, "Error Case 3 Failed: Negative axis")
+}
+
+func TestReduceWindowOp(t *testing.T) {
+	type testCase struct {
+		name                 string
+		operandShape         shapes.Shape
+		windowDimensions     []int
+		strides              []int
+		baseDilations        []int
+		windowDilations      []int
+		paddings             [][2]int
+		expectedShape        shapes.Shape
+		expectError          bool
+		errorMessageContains string // Optional: for more specific error checking
+	}
+
+	testCases := []testCase{
+		{
+			name:             "ScalarInput_AllNilParams_Defaults",
+			operandShape:     shapes.Make(dtypes.Float32), // Rank 0
+			windowDimensions: nil,                         // Should be handled as empty for rank 0
+			strides:          nil,                         // Should be handled as empty for rank 0
+			baseDilations:    nil,
+			windowDilations:  nil,
+			paddings:         nil, // Should be handled as empty for rank 0
+			expectedShape:    shapes.Make(dtypes.Float32),
+			expectError:      false,
+		},
+		{
+			name:             "1D_AllNilParams_Defaults",
+			operandShape:     shapes.Make(dtypes.Float32, 10),
+			windowDimensions: nil, // Defaults to {1}
+			strides:          nil, // Defaults to {1}
+			baseDilations:    nil, // Defaults to {1}
+			windowDilations:  nil, // Defaults to {1}
+			paddings:         nil, // Defaults to {{0,0}}
+			// Calculation: EffIn=10, EffWin=1. PaddedEffIn=10. Num=10-1=9. Out=(9/1)+1=10.
+			expectedShape: shapes.Make(dtypes.Float32, 10),
+			expectError:   false,
+		},
+		{
+			name:             "1D_NonDefault_WindowDimensions_NilOthers",
+			operandShape:     shapes.Make(dtypes.Float32, 10),
+			windowDimensions: []int{3}, // EffWin=3
+			strides:          nil,      // Default {1}
+			baseDilations:    nil,      // Default {1}
+			windowDilations:  nil,      // Default {1}
+			paddings:         nil,      // Default {{0,0}}
+			// Calculation: EffIn=10, EffWin=3. PaddedEffIn=10. Num=10-3=7. Out=(7/1)+1=8.
+			expectedShape: shapes.Make(dtypes.Float32, 8),
+			expectError:   false,
+		},
+		{
+			name:             "1D_NonDefault_Strides_NilOthers",
+			operandShape:     shapes.Make(dtypes.Float32, 10),
+			windowDimensions: nil, // Default {1} => EffWin=1
+			strides:          []int{2},
+			baseDilations:    nil,
+			windowDilations:  nil,
+			paddings:         nil,
+			// Calculation: EffIn=10, EffWin=1. PaddedEffIn=10. Num=10-1=9. Out=(9/2)+1=4+1=5.
+			expectedShape: shapes.Make(dtypes.Float32, 5),
+			expectError:   false,
+		},
+		{
+			name:             "1D_NonDefault_Paddings_NilOthers",
+			operandShape:     shapes.Make(dtypes.Float32, 10),
+			windowDimensions: nil, // Default {1} => EffWin=1
+			strides:          nil, // Default {1}
+			baseDilations:    nil,
+			windowDilations:  nil,
+			paddings:         [][2]int{{1, 1}},
+			// Calculation: EffIn=10, EffWin=1. PaddedEffIn=10+1+1=12. Num=12-1=11. Out=(11/1)+1=12.
+			expectedShape: shapes.Make(dtypes.Float32, 12),
+			expectError:   false,
+		},
+		{
+			name:             "1D_NonDefault_BaseDilations",
+			operandShape:     shapes.Make(dtypes.Float32, 5),
+			windowDimensions: []int{3}, // EffWin=3
+			strides:          []int{1},
+			baseDilations:    []int{2}, // EffIn=(5-1)*2+1 = 9
+			windowDilations:  nil,
+			paddings:         nil,
+			// Calculation: PaddedEffIn=9. Num=9-3=6. Out=(6/1)+1=7.
+			expectedShape: shapes.Make(dtypes.Float32, 7),
+			expectError:   false,
+		},
+		{
+			name:             "1D_NonDefault_WindowDilations",
+			operandShape:     shapes.Make(dtypes.Float32, 10),
+			windowDimensions: []int{3},
+			strides:          []int{1},
+			baseDilations:    nil,
+			windowDilations:  []int{2}, // EffWin=(3-1)*2+1=5
+			paddings:         nil,
+			// Calculation: EffIn=10. PaddedEffIn=10. Num=10-5=5. Out=(5/1)+1=6.
+			expectedShape: shapes.Make(dtypes.Float32, 6),
+			expectError:   false,
+		},
+		{
+			name:             "2D_Comprehensive_AllNonDefault",
+			operandShape:     shapes.Make(dtypes.Int32, 10, 12),
+			windowDimensions: []int{3, 4},
+			strides:          []int{2, 3},
+			baseDilations:    []int{2, 1},
+			windowDilations:  []int{1, 2},
+			paddings:         [][2]int{{1, 1}, {0, 2}},
+			// Dim0: In=10,Win=3,Str=2,Pad=[1,1],BD=2,WD=1. EffIn=(10-1)*2+1=19. EffWin=(3-1)*1+1=3. PaddedEffIn=19+1+1=21. Num=21-3=18. Out=18/2+1=10.
+			// Dim1: In=12,Win=4,Str=3,Pad=[0,2],BD=1,WD=2. EffIn=(12-1)*1+1=12. EffWin=(4-1)*2+1=7. PaddedEffIn=12+0+2=14. Num=14-7=7. Out=7/3+1=2+1=3.
+			expectedShape: shapes.Make(dtypes.Int32, 10, 3),
+			expectError:   false,
+		},
+		{
+			name:             "Rank4_Image_NHWC_Style_VariedParams",
+			operandShape:     shapes.Make(dtypes.Float32, 1, 20, 22, 3), // N, H, W, C
+			windowDimensions: []int{1, 3, 3, 1},                         // Window on H, W
+			strides:          []int{1, 2, 2, 1},                         // Stride on H, W
+			baseDilations:    nil,                                       // Default {1,1,1,1}
+			windowDilations:  nil,                                       // Default {1,1,1,1}
+			paddings:         [][2]int{{0, 0}, {1, 0}, {0, 1}, {0, 0}},  // Padding H (low), W (high)
+			// Dim0(N): In=1,Win=1,Str=1,Pad0,BD1,WD1. EffIn=1,EffWin=1.Padded=1.Num=0.Out=1.
+			// Dim1(H): In=20,Win=3,Str=2,PadL=1,PadH=0,BD1,WD1. EffIn=20,EffWin=3.Padded=20+1+0=21.Num=21-3=18.Out=18/2+1=10.
+			// Dim2(W): In=22,Win=3,Str=2,PadL=0,PadH=1,BD1,WD1. EffIn=22,EffWin=3.Padded=22+0+1=23.Num=23-3=20.Out=20/2+1=11.
+			// Dim3(C): In=3,Win=1,Str=1,Pad0,BD1,WD1. EffIn=3,EffWin=1.Padded=3.Num=2.Out=3.
+			expectedShape: shapes.Make(dtypes.Float32, 1, 10, 11, 3),
+			expectError:   false,
+		},
+		{
+			name:                 "Error_WindowTooLarge_NoPadding",
+			operandShape:         shapes.Make(dtypes.Float32, 5),
+			windowDimensions:     []int{6}, // EffWin=6
+			strides:              []int{1},
+			paddings:             nil, // PaddedEffIn=5
+			expectError:          true,
+			errorMessageContains: "effective window dimension 6 for axis 0 is larger than padded effective input dimension 5",
+		},
+		{
+			name:                 "Error_InvalidStrideZero",
+			operandShape:         shapes.Make(dtypes.Float32, 5),
+			windowDimensions:     []int{2},
+			strides:              []int{0},
+			expectError:          true,
+			errorMessageContains: "strides[0]=0 must be >= 1",
+		},
+		{
+			name:                 "Error_InvalidWindowDimZero_FromNonNil",
+			operandShape:         shapes.Make(dtypes.Float32, 5),
+			windowDimensions:     []int{0},
+			strides:              []int{1},
+			expectError:          true,
+			errorMessageContains: "windowDimensions[0]=0 must be >= 1",
+		},
+		{
+			name:                 "Error_NegativePadding_FromNonNil",
+			operandShape:         shapes.Make(dtypes.Float32, 5),
+			windowDimensions:     []int{2},
+			strides:              []int{1},
+			paddings:             [][2]int{{-1, 0}},
+			expectError:          true,
+			errorMessageContains: "paddings[0]=[-1, 0] must be non-negative",
+		},
+		{
+			name:                 "Error_InvalidBaseDilationZero",
+			operandShape:         shapes.Make(dtypes.Float32, 5),
+			windowDimensions:     []int{2},
+			strides:              []int{1},
+			baseDilations:        []int{0},
+			expectError:          true,
+			errorMessageContains: "baseDilations[0]=0 must be >= 1",
+		},
+		{
+			name:                 "Error_InvalidWindowDilationZero",
+			operandShape:         shapes.Make(dtypes.Float32, 5),
+			windowDimensions:     []int{2},
+			strides:              []int{1},
+			windowDilations:      []int{0},
+			expectError:          true,
+			errorMessageContains: "windowDilations[0]=0 must be >= 1",
+		},
+		{
+			name:                 "Error_StridesNotNil_WrongLengthForRank",
+			operandShape:         shapes.Make(dtypes.Float32, 5, 5), // Rank 2
+			windowDimensions:     nil,                               // Defaults to {1,1}
+			strides:              []int{1},                          // Error: len 1, rank 2
+			expectError:          true,
+			errorMessageContains: "len(strides)=1, but operand rank is 2",
+		},
+		{
+			name:                 "Error_WindowDimensionsNotNil_WrongLengthForRank",
+			operandShape:         shapes.Make(dtypes.Float32, 5, 5), // Rank 2
+			windowDimensions:     []int{1},                          // Error: len 1, rank 2
+			strides:              nil,
+			expectError:          true,
+			errorMessageContains: "len(windowDimensions)=1, but operand rank is 2",
+		},
+		{
+			name:                 "Error_PaddingsNotNil_WrongLengthForRank",
+			operandShape:         shapes.Make(dtypes.Float32, 5, 5), // Rank 2
+			windowDimensions:     nil,
+			strides:              nil,
+			paddings:             [][2]int{{0, 0}}, // Error: len 1, rank 2
+			expectError:          true,
+			errorMessageContains: "len(paddings)=1, but operand rank is 2",
+		},
+		{
+			name:                 "Error_BaseDilationsNotNil_WrongLength",
+			operandShape:         shapes.Make(dtypes.Float32, 5, 5), // Rank 2
+			baseDilations:        []int{1},                          // Error: len 1, rank 2
+			expectError:          true,
+			errorMessageContains: "baseDilations is not nil and len(baseDilations)=1, but operand rank is 2",
+		},
+		{
+			name:                 "Error_WindowDilationsNotNil_WrongLength",
+			operandShape:         shapes.Make(dtypes.Float32, 5, 5), // Rank 2
+			windowDilations:      []int{1},                          // Error: len 1, rank 2
+			expectError:          true,
+			errorMessageContains: "windowDilations is not nil and len(windowDilations)=1, but operand rank is 2",
+		},
+		{
+			// This case would lead to outputDim 0 if the formula `(Num/Stride)+1` was used naively with Num < 0.
+			// The pre-check `effectiveWindowDim > paddedEffectiveInputDim` should catch this.
+			name:                 "NearZeroOutputDim_HandledByPreCheck",
+			operandShape:         shapes.Make(dtypes.Float32, 2), // InputDim=2
+			windowDimensions:     []int{3},                       // EffWin=3
+			strides:              []int{1},
+			paddings:             nil, // PaddedEffIn=2
+			expectError:          true,
+			errorMessageContains: "effective window dimension 3 for axis 0 is larger than padded effective input dimension 2",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			outputShape, err := ReduceWindowOp(
+				tc.operandShape,
+				tc.windowDimensions,
+				tc.strides,
+				tc.baseDilations,
+				tc.windowDilations,
+				tc.paddings,
+			)
+
+			if tc.expectError {
+				require.Error(t, err, "Expected an error for test case: %s", tc.name)
+				if tc.errorMessageContains != "" {
+					assert.Contains(t, err.Error(), tc.errorMessageContains, "Error message mismatch for: %s", tc.name)
+				}
+			} else {
+				require.NoError(t, err, "Did not expect an error for test case: %s (error was: %v)", tc.name, err)
+				assert.True(t, tc.expectedShape.Equal(outputShape),
+					"Mismatch in output shape for test case: %s. Expected %s, Got %s",
+					tc.name, tc.expectedShape, outputShape)
+			}
+		})
+	}
 }
