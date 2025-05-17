@@ -34,6 +34,7 @@ func init() {
 	nodeExecutors[backends.OpTypeScatterSum] = execScatter
 	nodeExecutors[backends.OpTypeSlice] = execSlice
 	nodeExecutors[backends.OpTypeArgMinMax] = execArgMinMax
+	nodeExecutors[backends.OpTypeReduceWindow] = execReduceWindow
 
 	// For nodes with multiple outputs:
 	multiOutputsNodeExecutors[backends.OpTypeRngBitGenerator] = execRngBitGenerator
@@ -1567,3 +1568,278 @@ func execArgMinMaxGenericBFloat16(
 	backend.putBuffer(currentBestBuffer)
 	backend.putBuffer(currentArgBestBuffer)
 }
+
+// =================================================================================================================
+// ReduceWindow ----------------------------------------------------------------------------------------------------
+// =================================================================================================================
+func execReduceWindow(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
+	operand := inputs[0]
+	operandShape := operand.shape
+	rank := operandShape.Rank()
+	dtype := operandShape.DType
+	output := backend.getBuffer(node.shape.DType, node.shape.Size())
+	output.shape = node.shape
+	outputShape := node.shape
+	_ = outputShape
+	opData := node.data.(*reduceWindowNode)
+
+	// Resolve effective parameters, assuming shapeinference.ReduceWindowOp handled nils by defaulting them:
+	// - windowDimensions is guaranteed non-nil by the builder.
+	// - strides, paddings, baseDilations, windowDilations default if their opData fields are nil.
+	effWindowDimensions := opData.windowDimensions
+	if effWindowDimensions == nil {
+		effWindowDimensions = xslices.SliceWithValue(rank, 1)
+	}
+	effStrides := opData.strides
+	if effStrides == nil {
+		effStrides = effWindowDimensions
+	}
+	effPaddings := opData.paddings
+	if effPaddings == nil {
+		effPaddings = xslices.SliceWithValue(rank, [2]int{0, 0})
+	}
+	effBaseDilations := opData.baseDilations
+	if opData.baseDilations == nil {
+		effBaseDilations = xslices.SliceWithValue(rank, 1)
+	}
+	effWindowDilations := opData.windowDilations
+	if effWindowDilations == nil {
+		effWindowDilations = xslices.SliceWithValue(rank, 1)
+	}
+
+	// Initialize output according to the reduction type:
+	switch opData.reductionType {
+	case backends.ReduceOpMax:
+		err := output.Fill(dtype.LowestValue())
+		if err != nil {
+			return nil, err
+		}
+	case backends.ReduceOpMin:
+		err := output.Fill(dtype.HighestValue())
+		if err != nil {
+			return nil, err
+		}
+	case backends.ReduceOpProduct:
+		output.Ones()
+	case backends.ReduceOpSum:
+		output.Zeros()
+	default:
+		return nil, errors.Errorf("ReduceWindow: invalid reduction type: %s", opData.reductionType)
+	}
+
+	_ = effBaseDilations
+	return output, nil
+}
+
+/*
+	// Dispatch to type-specific implementation
+	switch operandShape.DType {
+	case dtypes.Float64:
+		execReduceWindowImpl(
+			operand.data.([]float64), output.data.([]float64),
+			operandShape, outputShape, opData.reductionType,
+			effWindowDimensions, effStrides, effPaddings, effBaseDilations, effWindowDilations,
+		)
+	case dtypes.Float32:
+		execReduceWindowImpl(
+			operand.data.([]float32), output.data.([]float32),
+			operandShape, outputShape, opData.reductionType,
+			effWindowDimensions, effStrides, effPaddings, effBaseDilations, effWindowDilations,
+		)
+	case dtypes.Int64:
+		execReduceWindowImpl(
+			operand.data.([]int64), output.data.([]int64),
+			operandShape, outputShape, opData.reductionType,
+			effWindowDimensions, effStrides, effPaddings, effBaseDilations, effWindowDilations,
+		)
+	case dtypes.Int32:
+		execReduceWindowImpl(
+			operand.data.([]int32), output.data.([]int32),
+			operandShape, outputShape, opData.reductionType,
+			effWindowDimensions, effStrides, effPaddings, effBaseDilations, effWindowDilations,
+		)
+	// Add other supported DTypes (e.g., Bool for some reductions like Any/All if mapped)
+	default:
+		return errors.Errorf("ReduceWindow for DType %s not implemented yet in simplego backend", operandShape.DType)
+	}
+	return nil
+}
+
+// execReduceWindowImpl is a generic implementation for various data types.
+// T is the data type (e.g., float32, int64).
+func execReduceWindowImpl[T dtypes.Number](
+	operandData, outputData []T,
+	operandShape, outputShape shapes.Shape,
+	reductionType backends.ReduceOpType,
+	windowDimensions, strides [][2]int, // These should be []int, correcting from copy-paste
+	baseDilations, windowDilations []int,
+) {
+	// Correcting signature based on previous definitions
+	// windowDimensions, strides, baseDilations, windowDilations should be []int
+	// paddings should be [][2]int
+	// This seems to be a copy-paste error in my thought process, let's fix the generic signature.
+	// The calling code from the type switch passes the correct types.
+	// The generic function definition below will be corrected.
+}
+
+// Corrected generic implementation signature and body
+func execReduceWindowImpl[T dtypes.Number](
+	operandData, outputData []T,
+	operandShape, outputShape shapes.Shape,
+	reductionType backends.ReduceOpType,
+	windowDimensions []int, // Corrected
+	strides []int, // Corrected
+	paddings [][2]int, // Corrected
+	baseDilations []int, // Corrected
+	windowDilations []int, // Corrected
+) {
+	rank := outputShape.Rank()
+
+	// Handle scalar output separately: if rank is 0, loop won't run, but logic is complex.
+	// shapes.Loop handles rank 0 by calling the func once with empty indices.
+	if rank == 0 && outputShape.IsScalar() {
+		// This means the window covers the entire (potentially dilated and padded) input,
+		// or the input itself was scalar and window was effectively 1.
+		// The general loop below should handle this if window IterShape is effectively the whole input.
+	}
+
+	shapes.Loop(outputShape, func(outputIndices []int) {
+		outputFlatIdx := outputShape.MultiDimArrayIndex(outputIndices)
+
+		var currentReducedValue T
+		firstValidValueInWindow := true
+
+		// Initialize accumulator based on reduction type
+		// Note: For integer types, Min/Max might need specific large/small values if math.Inf is not applicable.
+		switch reductionType {
+		case backends.ReduceSumOpType:
+			// currentReducedValue is already zero for numeric types by default
+		case backends.ReduceProductOpType:
+			currentReducedValue = T(1)
+		case backends.ReduceMaxOpType:
+			if shapes.IsFloat(currentReducedValue) {
+				currentReducedValue = T(math.Inf(-1))
+			} else if shapes.IsSignedInt(currentReducedValue) { // Assuming Int32/Int64 for now
+				switch any(currentReducedValue).(type) {
+				case int32:
+					currentReducedValue = T(any(int32(math.MinInt32)).(int32))
+				case int64:
+					currentReducedValue = T(any(int64(math.MinInt64)).(int64))
+				default: // Other int types might need specific handling
+					currentReducedValue = T(0) // Fallback, might be incorrect for some int types
+				}
+			} else { // Unsigned ints
+				currentReducedValue = T(0)
+			}
+		case backends.ReduceMinOpType:
+			if shapes.IsFloat(currentReducedValue) {
+				currentReducedValue = T(math.Inf(1))
+			} else if shapes.IsSignedInt(currentReducedValue) {
+				switch any(currentReducedValue).(type) {
+				case int32:
+					currentReducedValue = T(any(int32(math.MaxInt32)).(int32))
+				case int64:
+					currentReducedValue = T(any(int64(math.MaxInt64)).(int64))
+				default:
+					currentReducedValue = T(0) // Fallback
+				}
+			} else { // Unsigned ints (e.g. uint8, uint16, uint32, uint64)
+				// Max value for unsigned type. This requires knowing the specific unsigned type.
+				// For simplicity, this example might need more specific type handling for unsigned min init.
+				// Example: if T is uint8, currentReducedValue = T(math.MaxUint8)
+				// This generic approach has limitations for perfect init values for all integer types.
+				// Fallback to a value that works if the window is guaranteed non-empty or handle empty window explicitly.
+				// For now, assuming firstValidValueInWindow handles initialization correctly if type default is not ideal.
+			}
+		default:
+			// This should ideally be caught earlier or panic.
+			// For safety, initialize to a zero value.
+			// Consider returning an error from the outer execReduceWindow if reductionType is unknown.
+		}
+
+		// Iterate over the window corresponding to this output element
+		windowIterShapeDims := make([]int, rank)
+		for i := 0; i < rank; i++ {
+			windowIterShapeDims[i] = windowDimensions[i]
+		}
+		// Create a dummy shape for iterating over window elements
+		windowIterShape := shapes.Make(operandShape.DType, windowIterShapeDims...) // DType for Make doesn't matter here
+
+		shapes.Loop(windowIterShape, func(windowElementIndices []int) {
+			// windowElementIndices[d] goes from 0 to windowDimensions[d]-1
+
+			inputOriginalIndices := make([]int, rank)
+			skipThisWindowElement := false
+
+			for d := 0; d < rank; d++ {
+				// Calculate coordinate in the (conceptually) base-dilated input space:
+				// Start of window in base-dilated input: outputIndices[d] * strides[d] - paddings[d][0]
+				// Offset within window (considering window dilation): windowElementIndices[d] * windowDilations[d]
+				coordInBaseDilatedInput := (outputIndices[d] * strides[d]) - paddings[d][0] + (windowElementIndices[d] * windowDilations[d])
+
+				// Map from base-dilated conceptual coordinate to original operand coordinate:
+				originalCoord := 0
+				if baseDilations[d] == 1 {
+					originalCoord = coordInBaseDilatedInput
+				} else {
+					if coordInBaseDilatedInput < 0 || coordInBaseDilatedInput%baseDilations[d] != 0 {
+						// If negative, it's out of the conceptual positive dilated space before division.
+						// If not divisible, it falls into a "hole" created by base dilation.
+						skipThisWindowElement = true
+						break
+					}
+					originalCoord = coordInBaseDilatedInput / baseDilations[d]
+				}
+
+				// Check bounds against the original operand dimension
+				if originalCoord < 0 || originalCoord >= operandShape.Dimensions[d] {
+					skipThisWindowElement = true // This window element is out of (padded) bounds
+					break
+				}
+				inputOriginalIndices[d] = originalCoord
+			}
+
+			if !skipThisWindowElement {
+				inputFlatIdx := operandShape.MultiDimArrayIndex(inputOriginalIndices)
+				inputValue := operandData[inputFlatIdx]
+
+				if firstValidValueInWindow {
+					currentReducedValue = inputValue
+					// For Min/Max, this correctly initializes if the default init wasn't perfect (e.g. for some int types)
+					// or if the type's zero value was used as a placeholder.
+					if reductionType == backends.ReduceProductOpType && inputValue == T(0) {
+						// Special handling for product: if first value is 0, product remains 0.
+						// (This might depend on desired behavior for product with zeros)
+					}
+					firstValidValueInWindow = false
+				} else {
+					switch reductionType {
+					case backends.ReduceSumOpType:
+						currentReducedValue += inputValue
+					case backends.ReduceProductOpType:
+						currentReducedValue *= inputValue
+					case backends.ReduceMaxOpType:
+						if inputValue > currentReducedValue {
+							currentReducedValue = inputValue
+						}
+					case backends.ReduceMinOpType:
+						if inputValue < currentReducedValue {
+							currentReducedValue = inputValue
+						}
+						// Other reduction types (e.g., Mean) would need more state (like a counter).
+					}
+				}
+			}
+		}) // End of window loop for one output element
+
+		// If the window had no valid elements (e.g., all out-of-bounds or in base-dilation holes),
+		// currentReducedValue will hold its initialized value. This is often the desired behavior
+		// (e.g., 0 for sum, 1 for product, -Inf for max on floats).
+		// For Min/Max on integers where init might be tricky, if firstValidValueInWindow is still true,
+		// it indicates an empty window. The behavior for this might need to be explicitly defined
+		// (e.g., return a specific value, or error if not allowed). For now, it uses the initialized value.
+
+		outputData[outputFlatIdx] = currentReducedValue
+	}) // End of output loop
+}
+*/
