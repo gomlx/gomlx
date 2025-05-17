@@ -468,16 +468,40 @@ func (b *Builder) ArgMinMax(operandOp backends.Op, axis int, outputDType dtypes.
 	return node, nil
 }
 
-// ReduceWindow runs a reduction function of the type given by reductionType,
-// it can be either ReduceMaxNode, ReduceSumNode or ReduceMultiplyNode.
+type reduceWindowNode struct {
+	reductionType                                             backends.ReduceOpType
+	windowDimensions, strides, baseDilations, windowDilations []int
+	paddings                                                  [][2]int
+}
+
+// ReduceWindow runs a reduction function of reduceType (backends.ReduceOpMax, backends.ReduceOpSum or backends.ReduceOpProduct).
 //
 // The parameter windowDimensions must be set and have a value for each axis.
 // If strides is nil, it's assumed to be the same as windowDimensions -- that is, the strides jump a window at a time.
 // If baseDilations, windowDilations are nil, they are assumed to be 1 (no dilation).
 // If paddings is nil, they are assumed to be 0.
-//func (b *Builder) ReduceWindow(x backends.Op, reductionType backends.ReduceOpType, windowDimensions, strides, baseDilations, windowDilations []int, paddings [][2]int) (backends.Op, error) {
-//	return nil, nil
-//}
+func (b *Builder) ReduceWindow(operandOp backends.Op, reductionType backends.ReduceOpType, windowDimensions, strides, baseDilations, windowDilations []int, paddings [][2]int) (backends.Op, error) {
+	opType := backends.OpTypeArgMinMax
+	inputs, err := b.checkOps(opType.String(), operandOp)
+	if err != nil {
+		return nil, err
+	}
+	operand := inputs[0]
+	outputShape, err := shapeinference.ReduceWindowOp(operand.shape, windowDimensions, strides, baseDilations, windowDilations, paddings)
+	if err != nil {
+		return nil, err
+	}
+	node := b.newNode(opType, outputShape, operand)
+	node.data = &reduceWindowNode{
+		reductionType:    reductionType,
+		windowDimensions: windowDimensions,
+		strides:          strides,
+		baseDilations:    baseDilations,
+		windowDilations:  windowDilations,
+		paddings:         paddings,
+	}
+	return node, nil
+}
 
 //======================================================================================================================
 // Unary Operations ----------------------------------------------------------------------------------------------------
