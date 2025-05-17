@@ -847,7 +847,7 @@ func ReduceWindowOp(operand shapes.Shape, windowDimensions, strides, baseDilatio
 				return shapes.Invalid(), errors.Errorf("ReduceWindowOp: windowDimensions[%d]=%d must be >= 1 for operand shape %s", i, windowDim, operand)
 			}
 		}
-		stride := 1
+		stride := windowDim
 		if len(strides) > 0 {
 			stride = strides[i]
 			if stride < 1 {

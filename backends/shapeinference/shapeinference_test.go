@@ -438,7 +438,7 @@ func TestReduceWindowOp(t *testing.T) {
 			name:             "1D_AllNilParams_Defaults",
 			operandShape:     shapes.Make(dtypes.Float32, 10),
 			windowDimensions: nil, // Defaults to {1}
-			strides:          nil, // Defaults to {1}
+			strides:          nil, // Defaults to windowDimensions, in this case {1}
 			baseDilations:    nil, // Defaults to {1}
 			windowDilations:  nil, // Defaults to {1}
 			paddings:         nil, // Defaults to {{0,0}}
@@ -450,12 +450,12 @@ func TestReduceWindowOp(t *testing.T) {
 			name:             "1D_NonDefault_WindowDimensions_NilOthers",
 			operandShape:     shapes.Make(dtypes.Float32, 10),
 			windowDimensions: []int{3}, // EffWin=3
-			strides:          nil,      // Default {1}
+			strides:          nil,      // Default to windowDimensions, in this case {3}
 			baseDilations:    nil,      // Default {1}
 			windowDilations:  nil,      // Default {1}
 			paddings:         nil,      // Default {{0,0}}
-			// Calculation: EffIn=10, EffWin=3. PaddedEffIn=10. Num=10-3=7. Out=(7/1)+1=8.
-			expectedShape: shapes.Make(dtypes.Float32, 8),
+			// Calculation: EffIn=10, EffWin=3. PaddedEffIn=10. Num=10-3=7. Out=(7/3)+1=3.
+			expectedShape: shapes.Make(dtypes.Float32, 3),
 			expectError:   false,
 		},
 		{
