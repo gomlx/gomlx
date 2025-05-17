@@ -6,19 +6,18 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/pkg/errors"
 )
 
 // Abs returns the Op that represents the output of the corresponding operation.
 func (b Builder) Abs(x backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Abs(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeAbs)
 }
 
 // Add returns the element-wise sum of the two values.
 // Standard broadcasting rules apply (see documentation).
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b Builder) Add(x0, x1 backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Add(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeAdd)
 }
 
 // ArgMinMax calculates the "argmin" or "argmax" across an axis of the given input array x.
@@ -30,7 +29,7 @@ func (b Builder) Add(x0, x1 backends.Op) (backends.Op, error) {
 //	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=1, isMin=true) -> {1, 0}  // (it chooses the 0 and the -3)
 //	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=0, isMin=false) -> {0, 1, 0} // (it choose the 2, 4 and 7)
 func (b Builder) ArgMinMax(x backends.Op, axis int, outputDType dtypes.DType, isMin bool) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method ArgMinMax(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeArgMinMax)
 }
 
 // Bitcast performs an elementwise bit-cast operation from a dtype to another dtype.
@@ -43,30 +42,30 @@ func (b Builder) ArgMinMax(x backends.Op, axis int, outputDType dtypes.DType, is
 // x.DType().Size() / targetDType.Size().
 // E.g: Bitcast([1]uint32{0xdeadbeef}, dtypes.UInt16) -> [1][2]uint16{{0xdead, 0xbeef}}
 func (b Builder) Bitcast(x backends.Op, targetDType dtypes.DType) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Bitcast(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeBitcast)
 }
 
 // BitwiseAnd returns the element-wise bitwise AND operation.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b Builder) BitwiseAnd(x0, x1 backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method BitwiseAnd(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeBitwiseAnd)
 }
 
 // BitwiseNot returns the element-wise bitwise AND operation.
 func (b Builder) BitwiseNot(x backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method BitwiseNot(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeBitwiseNot)
 }
 
 // BitwiseOr returns the element-wise bitwise OR operation.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b Builder) BitwiseOr(x0, x1 backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method BitwiseOr(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeBitwiseOr)
 }
 
 // BitwiseXor returns the element-wise bitwise XOR operator.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b Builder) BitwiseXor(x0, x1 backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method BitwiseXor(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeBitwiseXor)
 }
 
 // Broadcast prefixes dimensions to an array by duplicating the data in the array.
@@ -79,7 +78,7 @@ func (b Builder) BitwiseXor(x0, x1 backends.Op) (backends.Op, error) {
 //
 //	output[i0, ..., iN, j0, ..., jM] = operand[j0, ..., jM]
 func (b Builder) Broadcast(x backends.Op, prefixDims ...int) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Broadcast(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeBroadcast)
 }
 
 // BroadcastInDim broadcasts x to an output with the given shape.
@@ -98,17 +97,17 @@ func (b Builder) Broadcast(x backends.Op, prefixDims ...int) (backends.Op, error
 //     {{1 , 1},
 //     {2 , 2}}
 func (b Builder) BroadcastInDim(x backends.Op, outputShape shapes.Shape, broadcastAxes []int) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method BroadcastInDim(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeBroadcastInDim)
 }
 
 // Ceil returns the Op that represents the output of the corresponding operation.
 func (b Builder) Ceil(x backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Ceil(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeCeil)
 }
 
 // Clz returns element-wise the "count leading zeros" bits of input node x -- for integer values.
 func (b Builder) Clz(x backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Clz(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeClz)
 }
 
 // Complex returns the complex number taking x0 as the real part and x1 as the imaginary part.
@@ -119,7 +118,7 @@ func (b Builder) Clz(x backends.Op) (backends.Op, error) {
 // the value is broadcast to every other value.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b Builder) Complex(x0, x1 backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Complex(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeComplex)
 }
 
 // Concatenate results on the given axis.
@@ -127,12 +126,12 @@ func (b Builder) Complex(x0, x1 backends.Op) (backends.Op, error) {
 // It doesn't work with scalars -- use ExpandDims.
 // If there is only one operand, it is returned and this is a no-op.
 func (b Builder) Concatenate(axis int, operands ...backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Concatenate(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeConcatenate)
 }
 
 // Conj returns the conjugate of a complex number. E.g: Conj(1+3i) = 1-3i
 func (b Builder) Conj(x backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Conj(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeConj)
 }
 
 // ConvGeneralDilated is a generic Convolution operation offered by XLA.
@@ -146,24 +145,24 @@ func (b Builder) Conj(x backends.Op) (backends.Op, error) {
 // (XLA documentation is unfortunately poor, much is guess-work).
 // Also useful, https://arxiv.org/pdf/1603.07285v1.pdf.
 func (b Builder) ConvGeneralDilated(operand, filter backends.Op, axes backends.ConvolveAxesConfig, strides []int, paddings [][2]int, inputDilation, filterDilation []int, filterGroupCount, batchGroupCount int) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method ConvGeneralDilated(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeConvGeneralDilated)
 }
 
 // ConvertDType of x to dtype.
 func (b Builder) ConvertDType(x backends.Op, dtype dtypes.DType) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method ConvertDType(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeConvertDType)
 }
 
 // Cos returns the Op that represents the output of the corresponding operation.
 func (b Builder) Cos(x backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Cos(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeCos)
 }
 
 // Div returns the element-wise division of the two values.
 // Standard broadcasting rules apply (see documentation).
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b Builder) Div(x0, x1 backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Div(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeDiv)
 }
 
 // Dot returns the "dot product" operation.
@@ -180,7 +179,7 @@ func (b Builder) Div(x0, x1 backends.Op) (backends.Op, error) {
 // matrix/matrix multiplications.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b Builder) Dot(x0, x1 backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Dot(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeDot)
 }
 
 // DotGeneral takes as input lhs (left-hand-side) and rhs (right-hand-side) specifications
@@ -196,7 +195,7 @@ func (b Builder) Dot(x0, x1 backends.Op) (backends.Op, error) {
 // non-contracting/non-batch dimension, and finally the 'rhs' non-contracting/non-batch dimension.
 // It provides the basic means of implementing Einsum.
 func (b Builder) DotGeneral(lhs backends.Op, lhsContractingAxes, lhsBatchAxes []int, rhs backends.Op, rhsContractingAxes, rhsBatchAxes []int) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method DotGeneral(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeDotGeneral)
 }
 
 // DynamicSlice extracts a sub-array from the input array at dynamic start_indices.
@@ -205,7 +204,7 @@ func (b Builder) DotGeneral(lhs backends.Op, lhsContractingAxes, lhsBatchAxes []
 // The shape of startIndices must be rank == 1, with dimension size equal to the rank of operand.
 // See description in https://openxla.org/xla/operation_semantics#dynamicslice
 func (b Builder) DynamicSlice(operand backends.Op, startIndices []backends.Op, sliceDims []int) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method DynamicSlice(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeDynamicSlice)
 }
 
 // DynamicUpdateSlice generates a result which is the value of the input array operand, with a slice update overwritten
@@ -214,13 +213,13 @@ func (b Builder) DynamicSlice(operand backends.Op, startIndices []backends.Op, s
 // The shape of startIndices must be rank == 1, with dimension size equal to the rank of operand.
 // See description in https://openxla.org/xla/operation_semantics#dynamicupdateslice
 func (b Builder) DynamicUpdateSlice(operand, update backends.Op, startIndices []backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method DynamicUpdateSlice(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeDynamicUpdateSlice)
 }
 
 // Equal performs element-wise equality check, returns boolean results with the same dimensions as input.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b Builder) Equal(x0, x1 backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Equal(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeEqual)
 }
 
 // EqualTotalOrder returns the element-wise operation.
@@ -228,34 +227,34 @@ func (b Builder) Equal(x0, x1 backends.Op) (backends.Op, error) {
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b Builder) EqualTotalOrder(x0, x1 backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method EqualTotalOrder(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeEqualTotalOrder)
 }
 
 // Erf returns the "error function", defined as erf(x) = 2/Pi * \int_{0}^{x}{e^{-t^2}dt}.
 func (b Builder) Erf(x backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Erf(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeErf)
 }
 
 // Exp returns the Op that represents the output of the corresponding operation.
 func (b Builder) Exp(x backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Exp(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeExp)
 }
 
 // Expm1 returns the Op that represents the output of the corresponding operation.
 func (b Builder) Expm1(x backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Expm1(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeExpm1)
 }
 
 // FFT calls the XLA FFT operation, which implements {Forward, Inverse} x {Complex, Real} versions.
 // See documentation in https://www.tensorflow.org/xla/operation_semantics.
 // Underlying, CPU FFT is backed by Eigen's TensorFFT and GPU FFT uses cuFFT.
 func (b Builder) FFT(operand backends.Op, fftType backends.FFTType, fftLength []int) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method FFT(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeFFT)
 }
 
 // Floor returns the Op that represents the output of the corresponding operation.
 func (b Builder) Floor(x backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Floor(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeFloor)
 }
 
 // Gather is a powerful but cumbersome Gather operation offered by XLA.
@@ -310,13 +309,13 @@ func (b Builder) Floor(x backends.Op) (backends.Op, error) {
 //     after scattering its values according to start_index_map) by the user. This allows for some optimizations
 //     in some platforms.
 func (b Builder) Gather(operand, startIndices backends.Op, indexVectorAxis int, offsetOutputAxes, collapsedSliceAxes, startIndexMap, sliceSizes []int, indicesAreSorted bool) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Gather(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeGather)
 }
 
 // GreaterOrEqual performs element-wise comparison, returns boolean results with the same dimensions as input.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b Builder) GreaterOrEqual(x0, x1 backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method GreaterOrEqual(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeGreaterOrEqual)
 }
 
 // GreaterOrEqualTotalOrder returns the element-wise operation.
@@ -324,13 +323,13 @@ func (b Builder) GreaterOrEqual(x0, x1 backends.Op) (backends.Op, error) {
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b Builder) GreaterOrEqualTotalOrder(x0, x1 backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method GreaterOrEqualTotalOrder(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeGreaterOrEqualTotalOrder)
 }
 
 // GreaterThan performs element-wise comparison, returns boolean results with the same dimensions as input.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b Builder) GreaterThan(x0, x1 backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method GreaterThan(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeGreaterThan)
 }
 
 // GreaterThanTotalOrder returns the element-wise operation.
@@ -338,32 +337,32 @@ func (b Builder) GreaterThan(x0, x1 backends.Op) (backends.Op, error) {
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b Builder) GreaterThanTotalOrder(x0, x1 backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method GreaterThanTotalOrder(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeGreaterThanTotalOrder)
 }
 
 // Imag returns the imaginary part of a complex number. It returns 0 if the x is a float number.
 func (b Builder) Imag(x backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Imag(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeImag)
 }
 
 // Iota creates a constant of the given shape with increasing numbers (starting from 0)
 // on the given axis. So Iota([2,2], 1) returns [[0 1][0 1]], while Iota([2,2], 0)
 // returns [[0 0][1 1]].
 func (b Builder) Iota(shape shapes.Shape, iotaAxis int) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Iota(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeIota)
 }
 
 // IsFinite tests whether each element of operand is finite, i.e., is not positive or negative infinity, and is not NaN.
 // It returns an array of boolean values with the same shape as the input, where each element is true if and only if
 // the corresponding input element is finite.
 func (b Builder) IsFinite(x backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method IsFinite(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeIsFinite)
 }
 
 // LessOrEqual performs element-wise comparison, returns boolean results with the same dimensions as input.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b Builder) LessOrEqual(x0, x1 backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method LessOrEqual(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeLessOrEqual)
 }
 
 // LessOrEqualTotalOrder returns the element-wise operation.
@@ -371,13 +370,13 @@ func (b Builder) LessOrEqual(x0, x1 backends.Op) (backends.Op, error) {
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b Builder) LessOrEqualTotalOrder(x0, x1 backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method LessOrEqualTotalOrder(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeLessOrEqualTotalOrder)
 }
 
 // LessThan performs element-wise comparison, returns boolean results with the same dimensions as input.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b Builder) LessThan(x0, x1 backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method LessThan(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeLessThan)
 }
 
 // LessThanTotalOrder returns the element-wise operation.
@@ -385,75 +384,75 @@ func (b Builder) LessThan(x0, x1 backends.Op) (backends.Op, error) {
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b Builder) LessThanTotalOrder(x0, x1 backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method LessThanTotalOrder(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeLessThanTotalOrder)
 }
 
 // Log returns the Op that represents the output of the corresponding operation.
 func (b Builder) Log(x backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Log(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeLog)
 }
 
 // Log1p returns the expression log(x+1).
 func (b Builder) Log1p(x backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Log1p(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeLog1p)
 }
 
 // LogicalAnd returns the element-wise logical AND operation.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b Builder) LogicalAnd(x0, x1 backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method LogicalAnd(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeLogicalAnd)
 }
 
 // LogicalNot returns the Op that represents the output of the corresponding operation.
 func (b Builder) LogicalNot(x backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method LogicalNot(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeLogicalNot)
 }
 
 // LogicalOr returns the element-wise logical OR operation.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b Builder) LogicalOr(x0, x1 backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method LogicalOr(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeLogicalOr)
 }
 
 // LogicalXor returns the element-wise logical XOR operator.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b Builder) LogicalXor(x0, x1 backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method LogicalXor(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeLogicalXor)
 }
 
 // Logistic returns the element-wise expression 1/(1+exp(-x)). Also known as the Sigmoid function.
 func (b Builder) Logistic(x backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Logistic(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeLogistic)
 }
 
 // Max returns the element-wise highest value among the two.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b Builder) Max(x0, x1 backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Max(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeMax)
 }
 
 // Min returns the element-wise smallest value among the two.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b Builder) Min(x0, x1 backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Min(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeMin)
 }
 
 // Mul returns the element-wise multiplication of the two values.
 // Standard broadcasting rules apply (see documentation).
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b Builder) Mul(x0, x1 backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Mul(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeMul)
 }
 
 // Neg returns the Op that represents the output of the corresponding operation.
 func (b Builder) Neg(x backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Neg(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeNeg)
 }
 
 // NotEqual performs element-wise inequality check, returns boolean results with the same dimensions as input.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b Builder) NotEqual(x0, x1 backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method NotEqual(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeNotEqual)
 }
 
 // NotEqualTotalOrder returns the element-wise operation.
@@ -461,180 +460,180 @@ func (b Builder) NotEqual(x0, x1 backends.Op) (backends.Op, error) {
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b Builder) NotEqualTotalOrder(x0, x1 backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method NotEqualTotalOrder(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeNotEqualTotalOrder)
 }
 
 // Pad injects padding on the start, end or interior (in between each element) of the given operand.
 // There must be at most `operand.Rank()` axesConfig values. Missing PadAxis are assumed to be zeros,
 // that is, no padding for those axes.
 func (b Builder) Pad(x, fillValue backends.Op, axesConfig ...backends.PadAxis) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Pad(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypePad)
 }
 
 // Pow returns the Op that represents the output of the corresponding operation.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b Builder) Pow(x0, x1 backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Pow(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypePow)
 }
 
 // Real return the real part of a complex number. It returns x if the x is a float number.
 func (b Builder) Real(x backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Real(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeReal)
 }
 
 // ReduceBitwiseAnd is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the bitwise/logical And of the reduced axes.
 // If no axes are given, it reduces the full array.
 func (b Builder) ReduceBitwiseAnd(x backends.Op, axes ...int) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method ReduceBitwiseAnd(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeReduceBitwiseAnd)
 }
 
 // ReduceBitwiseOr is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the bitwise/logical Or of the reduced axes.
 // If no axes are given, it reduces the full array.
 func (b Builder) ReduceBitwiseOr(x backends.Op, axes ...int) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method ReduceBitwiseOr(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeReduceBitwiseOr)
 }
 
 // ReduceBitwiseXor is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the bitwise/logical Xor of the reduced axes.
 // If no axes are given, it reduces the full array.
 func (b Builder) ReduceBitwiseXor(x backends.Op, axes ...int) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method ReduceBitwiseXor(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeReduceBitwiseXor)
 }
 
 // ReduceLogicalAnd is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the bitwise/logical And of the reduced axes.
 // If no axes are given, it reduces the full array.
 func (b Builder) ReduceLogicalAnd(x backends.Op, axes ...int) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method ReduceLogicalAnd(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeReduceLogicalAnd)
 }
 
 // ReduceLogicalOr is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the bitwise/logical Or of the reduced axes.
 // If no axes are given, it reduces the full array.
 func (b Builder) ReduceLogicalOr(x backends.Op, axes ...int) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method ReduceLogicalOr(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeReduceLogicalOr)
 }
 
 // ReduceLogicalXor is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the bitwise/logical Xor of the reduced axes.
 // If no axes are given, it reduces the full array.
 func (b Builder) ReduceLogicalXor(x backends.Op, axes ...int) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method ReduceLogicalXor(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeReduceLogicalXor)
 }
 
 // ReduceMax is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the max value.
 // If no axes are given, it reduces the full array.
 func (b Builder) ReduceMax(x backends.Op, axes ...int) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method ReduceMax(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeReduceMax)
 }
 
 // ReduceMin is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the min value.
 // If no axes are given, it reduces the full array.
 func (b Builder) ReduceMin(x backends.Op, axes ...int) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method ReduceMin(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeReduceMin)
 }
 
 // ReduceProduct is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the product of the reduced axes.
 // If no axes are given, it reduces the full array.
 func (b Builder) ReduceProduct(x backends.Op, axes ...int) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method ReduceProduct(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeReduceProduct)
 }
 
 // ReduceSum is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the sum of the reduced axes.
 // If no axes are given, it reduces the full array.
 func (b Builder) ReduceSum(x backends.Op, axes ...int) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method ReduceSum(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeReduceSum)
 }
 
 // Rem returns the remainder operation, also known as modulo (or Mod for short).
 // Notice despite the name XLA implements Mod not IEEE754 Remainder operation.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b Builder) Rem(x0, x1 backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Rem(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeRem)
 }
 
 // Reshape reshapes x to the new dimensions.
 // Total size cannot change, it's just a "reinterpretation" of the same flat data.
 // The dtype remains the same, see ConvertDType to actually convert the values.
 func (b Builder) Reshape(x backends.Op, dimensions ...int) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Reshape(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeReshape)
 }
 
 // Reverse returns x with the values for the given dimensions reversed, that is,
 // the value indexed at `i` will be swapped with the value at indexed `(dimension_size - 1 - i)`.
 // The shape remains the same.
 func (b Builder) Reverse(x backends.Op, axes ...int) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Reverse(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeReverse)
 }
 
 // Round returns the Op that represents the output of the corresponding operation.
 func (b Builder) Round(x backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Round(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeRound)
 }
 
 // Rsqrt returns the element-wise reciprocal of square root operation 1/sqrt(x).
 func (b Builder) Rsqrt(x backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Rsqrt(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeRsqrt)
 }
 
 // ScatterMax scatter values from updates pointed by scatterIndices to operand, by taking the Max.
 func (b Builder) ScatterMax(operand, scatterIndices, updates backends.Op, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method ScatterMax(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeScatterMax)
 }
 
 // ScatterMin scatter values from updates pointed by scatterIndices to operand, by taking the Min.
 func (b Builder) ScatterMin(operand, scatterIndices, updates backends.Op, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method ScatterMin(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeScatterMin)
 }
 
 // ScatterSum values from updates pointed by scatterIndices to operand.
 func (b Builder) ScatterSum(operand, scatterIndices, updates backends.Op, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method ScatterSum(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeScatterSum)
 }
 
 // SelectAndScatterMax runs windows (similar to ReduceWindow) over the operand, selects values to updates the output (like ScatterAdd)
 // It selects the values in the window such that it works as reverse for a PoolMax operation.
 // See details in https://openxla.org/xla/operation_semantics#selectandscatter
 func (b Builder) SelectAndScatterMax(operand, source backends.Op, windowDimensions, windowStrides []int, paddings [][2]int) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method SelectAndScatterMax(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeSelectAndScatterMax)
 }
 
 // SelectAndScatterMin runs windows (similar to ReduceWindow) over the operand, selects values to updates the output (like ScatterAdd)
 // It selects the values in the window such that it works as reverse for a PoolMin operation.
 // See details in https://openxla.org/xla/operation_semantics#selectandscatter
 func (b Builder) SelectAndScatterMin(operand, source backends.Op, windowDimensions, windowStrides []int, paddings [][2]int) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method SelectAndScatterMin(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeSelectAndScatterMin)
 }
 
 // SelectAndScatterSum runs windows (similar to ReduceWindow) over the operand, selects values to updates the output (like ScatterAdd)
 // It selects the values in the window such that it works as reverse for a PoolSum operation.
 // See details in https://openxla.org/xla/operation_semantics#selectandscatter
 func (b Builder) SelectAndScatterSum(operand, source backends.Op, windowDimensions, windowStrides []int, paddings [][2]int) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method SelectAndScatterSum(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeSelectAndScatterSum)
 }
 
 // ShiftLeft n bits. It implicitly preserves the sign bit, if there is no overflow. So ShiftLeft(-1, 1) = -2.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b Builder) ShiftLeft(x0, x1 backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method ShiftLeft(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeShiftLeft)
 }
 
 // ShiftRightArithmetic shifts right by n bits, preserving the sign bit. So ShiftRight(-2, 1) = -1.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b Builder) ShiftRightArithmetic(x0, x1 backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method ShiftRightArithmetic(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeShiftRightArithmetic)
 }
 
 // ShiftRightLogical shifts right by n bits, destroying the sign bit.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b Builder) ShiftRightLogical(x0, x1 backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method ShiftRightLogical(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeShiftRightLogical)
 }
 
 // Sign returns element-wise +1, +/-0 or -1 depending on the sign of x. It returns NaN if the input is NaN.
 func (b Builder) Sign(x backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Sign(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeSign)
 }
 
 // Sin returns the Op that represents the output of the corresponding operation.
 func (b Builder) Sin(x backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Sin(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeSin)
 }
 
 // Slice extracts a sub-array from the input array.
@@ -647,34 +646,34 @@ func (b Builder) Sin(x backends.Op) (backends.Op, error) {
 //	Slice(x={0, 1, 2, 3, 4}, starts={2}, limits={4}, strides=nil) -> {2, 3}
 //	Slice(x={0, 1, 2, 3, 4}, starts={2}, limits={5}, strides={2}) -> {2, 4}
 func (b Builder) Slice(x backends.Op, starts, limits, strides []int) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Slice(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeSlice)
 }
 
 // Sqrt returns the Op that represents the output of the corresponding operation.
 func (b Builder) Sqrt(x backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Sqrt(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeSqrt)
 }
 
 // Sub returns the element-wise subtraction of the two values.
 // Standard broadcasting rules apply (see documentation).
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b Builder) Sub(x0, x1 backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Sub(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeSub)
 }
 
 // Tanh returns the Op that represents the output of the corresponding operation.
 func (b Builder) Tanh(x backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Tanh(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeTanh)
 }
 
 // Transpose axes of x.
 // There should be one value in permutations for each axis in x.
 // The output will have: output.Shape.Dimension[ii] = x.Shape.Dimension[permutations[i]].
 func (b Builder) Transpose(x backends.Op, permutations ...int) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Transpose(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeTranspose)
 }
 
 // Where takes element-wise values from onTrue or onFalse depending on the value of condition (expected to be boolean).
 func (b Builder) Where(condition, onTrue, onFalse backends.Op) (backends.Op, error) {
-	return nil, errors.Wrapf(NotImplementedError, "in method Where(): %s", b.ErrMessage)
+	return nil, b.baseErrFn(backends.OpTypeWhere)
 }
