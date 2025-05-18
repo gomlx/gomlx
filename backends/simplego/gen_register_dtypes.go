@@ -270,6 +270,54 @@ func init() {
 	argMinMaxCopyIntsDTypeMap.RegisterIfNotSet(dtypes.Uint32, buildArgMinMaxCopyIntsFn[uint32])
 	argMinMaxCopyIntsDTypeMap.RegisterIfNotSet(dtypes.Uint64, buildArgMinMaxCopyIntsFn[uint64])
 
+	// DTypeMap: reduceWindowMaxDTypeMap
+	reduceWindowMaxDTypeMap.RegisterIfNotSet(dtypes.Int8, reduceWindowMaxBuildUpdateFn[int8])
+	reduceWindowMaxDTypeMap.RegisterIfNotSet(dtypes.Int16, reduceWindowMaxBuildUpdateFn[int16])
+	reduceWindowMaxDTypeMap.RegisterIfNotSet(dtypes.Int32, reduceWindowMaxBuildUpdateFn[int32])
+	reduceWindowMaxDTypeMap.RegisterIfNotSet(dtypes.Int64, reduceWindowMaxBuildUpdateFn[int64])
+	reduceWindowMaxDTypeMap.RegisterIfNotSet(dtypes.Uint8, reduceWindowMaxBuildUpdateFn[uint8])
+	reduceWindowMaxDTypeMap.RegisterIfNotSet(dtypes.Uint16, reduceWindowMaxBuildUpdateFn[uint16])
+	reduceWindowMaxDTypeMap.RegisterIfNotSet(dtypes.Uint32, reduceWindowMaxBuildUpdateFn[uint32])
+	reduceWindowMaxDTypeMap.RegisterIfNotSet(dtypes.Uint64, reduceWindowMaxBuildUpdateFn[uint64])
+	reduceWindowMaxDTypeMap.RegisterIfNotSet(dtypes.Float32, reduceWindowMaxBuildUpdateFn[float32])
+	reduceWindowMaxDTypeMap.RegisterIfNotSet(dtypes.Float64, reduceWindowMaxBuildUpdateFn[float64])
+
+	// DTypeMap: reduceWindowMinDTypeMap
+	reduceWindowMinDTypeMap.RegisterIfNotSet(dtypes.Int8, reduceWindowMinBuildUpdateFn[int8])
+	reduceWindowMinDTypeMap.RegisterIfNotSet(dtypes.Int16, reduceWindowMinBuildUpdateFn[int16])
+	reduceWindowMinDTypeMap.RegisterIfNotSet(dtypes.Int32, reduceWindowMinBuildUpdateFn[int32])
+	reduceWindowMinDTypeMap.RegisterIfNotSet(dtypes.Int64, reduceWindowMinBuildUpdateFn[int64])
+	reduceWindowMinDTypeMap.RegisterIfNotSet(dtypes.Uint8, reduceWindowMinBuildUpdateFn[uint8])
+	reduceWindowMinDTypeMap.RegisterIfNotSet(dtypes.Uint16, reduceWindowMinBuildUpdateFn[uint16])
+	reduceWindowMinDTypeMap.RegisterIfNotSet(dtypes.Uint32, reduceWindowMinBuildUpdateFn[uint32])
+	reduceWindowMinDTypeMap.RegisterIfNotSet(dtypes.Uint64, reduceWindowMinBuildUpdateFn[uint64])
+	reduceWindowMinDTypeMap.RegisterIfNotSet(dtypes.Float32, reduceWindowMinBuildUpdateFn[float32])
+	reduceWindowMinDTypeMap.RegisterIfNotSet(dtypes.Float64, reduceWindowMinBuildUpdateFn[float64])
+
+	// DTypeMap: reduceWindowSumDTypeMap
+	reduceWindowSumDTypeMap.RegisterIfNotSet(dtypes.Int8, reduceWindowSumBuildUpdateFn[int8])
+	reduceWindowSumDTypeMap.RegisterIfNotSet(dtypes.Int16, reduceWindowSumBuildUpdateFn[int16])
+	reduceWindowSumDTypeMap.RegisterIfNotSet(dtypes.Int32, reduceWindowSumBuildUpdateFn[int32])
+	reduceWindowSumDTypeMap.RegisterIfNotSet(dtypes.Int64, reduceWindowSumBuildUpdateFn[int64])
+	reduceWindowSumDTypeMap.RegisterIfNotSet(dtypes.Uint8, reduceWindowSumBuildUpdateFn[uint8])
+	reduceWindowSumDTypeMap.RegisterIfNotSet(dtypes.Uint16, reduceWindowSumBuildUpdateFn[uint16])
+	reduceWindowSumDTypeMap.RegisterIfNotSet(dtypes.Uint32, reduceWindowSumBuildUpdateFn[uint32])
+	reduceWindowSumDTypeMap.RegisterIfNotSet(dtypes.Uint64, reduceWindowSumBuildUpdateFn[uint64])
+	reduceWindowSumDTypeMap.RegisterIfNotSet(dtypes.Float32, reduceWindowSumBuildUpdateFn[float32])
+	reduceWindowSumDTypeMap.RegisterIfNotSet(dtypes.Float64, reduceWindowSumBuildUpdateFn[float64])
+
+	// DTypeMap: reduceWindowProductDTypeMap
+	reduceWindowProductDTypeMap.RegisterIfNotSet(dtypes.Int8, reduceWindowProductBuildUpdateFn[int8])
+	reduceWindowProductDTypeMap.RegisterIfNotSet(dtypes.Int16, reduceWindowProductBuildUpdateFn[int16])
+	reduceWindowProductDTypeMap.RegisterIfNotSet(dtypes.Int32, reduceWindowProductBuildUpdateFn[int32])
+	reduceWindowProductDTypeMap.RegisterIfNotSet(dtypes.Int64, reduceWindowProductBuildUpdateFn[int64])
+	reduceWindowProductDTypeMap.RegisterIfNotSet(dtypes.Uint8, reduceWindowProductBuildUpdateFn[uint8])
+	reduceWindowProductDTypeMap.RegisterIfNotSet(dtypes.Uint16, reduceWindowProductBuildUpdateFn[uint16])
+	reduceWindowProductDTypeMap.RegisterIfNotSet(dtypes.Uint32, reduceWindowProductBuildUpdateFn[uint32])
+	reduceWindowProductDTypeMap.RegisterIfNotSet(dtypes.Uint64, reduceWindowProductBuildUpdateFn[uint64])
+	reduceWindowProductDTypeMap.RegisterIfNotSet(dtypes.Float32, reduceWindowProductBuildUpdateFn[float32])
+	reduceWindowProductDTypeMap.RegisterIfNotSet(dtypes.Float64, reduceWindowProductBuildUpdateFn[float64])
+
 	// DTypePairMap: convertDTypePairMap
 	convertDTypePairMap.RegisterIfNotSet(dtypes.Int8, dtypes.Int8, execConvertDTypeGeneric[int8, int8])
 	convertDTypePairMap.RegisterIfNotSet(dtypes.Int8, dtypes.Int16, execConvertDTypeGeneric[int8, int16])

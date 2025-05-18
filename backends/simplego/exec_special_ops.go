@@ -2,7 +2,6 @@ package simplego
 
 import (
 	"encoding/binary"
-	"math"
 	"math/rand/v2"
 	"slices"
 
@@ -1610,41 +1609,105 @@ func execReduceWindow(backend *Backend, node *Node, inputs []*Buffer, inputsOwne
 		effWindowDilations = xslices.SliceWithValue(rank, 1)
 	}
 
-	// Initialize output according to the reduction type:
+	// Initialize output and updateFn according to the reduction type
+	var buildUpdateFnMap *DTypeMap
 	switch opData.reductionType {
 	case backends.ReduceOpMax:
 		err := output.Fill(dtype.LowestValue())
 		if err != nil {
 			return nil, err
 		}
+		buildUpdateFnMap = reduceWindowMaxDTypeMap
 	case backends.ReduceOpMin:
 		err := output.Fill(dtype.HighestValue())
 		if err != nil {
 			return nil, err
 		}
+		buildUpdateFnMap = reduceWindowMinDTypeMap
 	case backends.ReduceOpProduct:
 		output.Ones()
+		buildUpdateFnMap = reduceWindowProductDTypeMap
 	case backends.ReduceOpSum:
 		output.Zeros()
+		buildUpdateFnMap = reduceWindowSumDTypeMap
 	default:
 		return nil, errors.Errorf("ReduceWindow: invalid reduction type: %s", opData.reductionType)
 	}
+	// updateFn will aggregate the operand value into the corresponding output value.
+	updateFn := buildUpdateFnMap.Get(dtype).(func(operand, output *Buffer) reduceWindowUpdateFn)(operand, output)
+
+	// Find the window effective sizes, accounting for the diffusion.
+	windowSizes := make([]int, rank)
+	for axis := range rank {
+		windowSizes[axis] = (effWindowDimensions[axis]-1)*effWindowDilations[axis] + 1
+	}
+	//fmt.Printf("windowSizes=%v\n", windowSizes)
+
+	// Find the shift from an output position to the corresponding window start in the operand.
+	operandShifts := make([]int, rank)
+	for axis := range rank {
+		operandShifts[axis] = -effPaddings[axis][0]
+	}
+	//fmt.Printf("operandShifts=%v\n", operandShifts)
+
+	// Find operand strides to convert operand indices to a flat index.
+	operandStrides := make([]int, rank)
+	stride := 1
+	for axis := rank - 1; axis >= 0; axis-- {
+		operandStrides[axis] = stride
+		stride *= operandShape.Dimensions[axis]
 	}
 
+	// Main loop: loop over outputs, then over window, then calculate the corresponding operand position
+	// that needs to be aggregated, and update the output correspondingly.
+	//
+	// TODO(optimizations):
+	// - If the window will break the cache (outer dimensions of the window), probably that part of the window
+	//   can be moved to the outer loop, so instead of having O(N*W) cache misses (random accesses),
+	//   we will have O(W) cache misses and the O(N) part will be sequential or in local cache.
+	//   More specifically we would split windowShape into "nonCachedWindowShape" and "cachedWindowShape", and
+	//   iterate over the nonCachedWindowShape first.
+	// - Can we refactor the test o baseDialation to outside the loop ?
 	outputFlatIdx := 0
+	windowIndices := make([]int, rank)
 	operandIndices := make([]int, rank)
 	for outputIndices := range outputShape.Iter() {
-		for windowIndices := range windowShape.Iter() {
-			var inDilation bool // If set to true, there is nothing to do.
+		//fmt.Printf("Output %v:\n", outputIndices)
+	iterWindowIndices:
+		for windowIndices = range windowShape.IterOn(windowIndices) {
+			//fmt.Printf("\t- window %v\n", windowIndices)
 			for axis := range rank {
-				//dilatedWindowIndex :=
-				//operandIndices[axis] = windowIndices[axis] +
+				operandIdx := outputIndices[axis]*effStrides[axis] + operandShifts[axis]
+				operandIdx += windowIndices[axis] * effWindowDilations[axis]
+				if operandIdx < 0 {
+					// This index is out of the operand values (padding), nothing to update.
+					continue iterWindowIndices
+				}
+				if effBaseDilations[axis] > 1 {
+					if operandIdx%effBaseDilations[axis] != 0 {
+						// This index is not aligned with the baseDilation, nothing to update.
+						continue iterWindowIndices
+					}
+					operandIdx /= effBaseDilations[axis]
+				}
+				if operandIdx >= operandShape.Dimensions[axis] {
+					// This index is out of the operand values (padding), nothing to update.
+					continue iterWindowIndices
+				}
+				operandIndices[axis] = operandIdx
 			}
+			operandFlatIdx := 0
+			for axis, operandIdx := range operandIndices {
+				operandFlatIdx += operandIdx * operandStrides[axis]
+			}
+			updateFn(operandFlatIdx, outputFlatIdx)
 		}
 		outputFlatIdx++
 	}
 	return output, nil
 }
+
+type reduceWindowUpdateFn func(operandFlatIdx, outputFlatIdx int)
 
 var (
 	reduceWindowMaxDTypeMap     = NewDTypeMap("reduceWindowMaxDTypeMap")
@@ -1653,11 +1716,79 @@ var (
 	reduceWindowProductDTypeMap = NewDTypeMap("reduceWindowSumDTypeMap")
 )
 
-// Build a function that will updated the output at outputFlatIdx from the operand at operandFlatIdx.
-func reduceWindowMaxBuildUpdateFn[T PODNumericConstraints](operand, output *Buffer) func(operandFlatIdx, outputFlatIdx int) {
+func init() {
+	reduceWindowMaxDTypeMap.Register(dtypes.BFloat16, reduceWindowMaxBuildUpdateFnBFloat16)
+	reduceWindowMinDTypeMap.Register(dtypes.BFloat16, reduceWindowMinBuildUpdateFnBFloat16)
+	reduceWindowSumDTypeMap.Register(dtypes.BFloat16, reduceWindowSumBuildUpdateFnBFloat16)
+	reduceWindowProductDTypeMap.Register(dtypes.BFloat16, reduceWindowProductBuildUpdateFnBFloat16)
+}
+
+// Generic functions that build a function that will update the output at outputFlatIdx from the operand at operandFlatIdx.
+
+func reduceWindowMaxBuildUpdateFn[T PODNumericConstraints](operand, output *Buffer) reduceWindowUpdateFn {
 	operandFlat := operand.flat.([]T)
 	outputFlat := output.flat.([]T)
 	return func(operandFlatIdx, outputFlatIdx int) {
-		outputFlat[outputFlatIdx] = max(outputFlat[outputFltDix], operandFlat[operandFlatIdx])
+		outputFlat[outputFlatIdx] = max(outputFlat[outputFlatIdx], operandFlat[operandFlatIdx])
+	}
+}
+
+func reduceWindowMaxBuildUpdateFnBFloat16(operand, output *Buffer) reduceWindowUpdateFn {
+	operandFlat := operand.flat.([]bfloat16.BFloat16)
+	outputFlat := output.flat.([]bfloat16.BFloat16)
+	return func(operandFlatIdx, outputFlatIdx int) {
+		outputFlat[outputFlatIdx] = bfloat16.FromFloat32(
+			max(outputFlat[outputFlatIdx].Float32(), operandFlat[operandFlatIdx].Float32()))
+	}
+}
+
+func reduceWindowMinBuildUpdateFn[T PODNumericConstraints](operand, output *Buffer) reduceWindowUpdateFn {
+	operandFlat := operand.flat.([]T)
+	outputFlat := output.flat.([]T)
+	return func(operandFlatIdx, outputFlatIdx int) {
+		outputFlat[outputFlatIdx] = min(outputFlat[outputFlatIdx], operandFlat[operandFlatIdx])
+	}
+}
+
+func reduceWindowMinBuildUpdateFnBFloat16(operand, output *Buffer) reduceWindowUpdateFn {
+	operandFlat := operand.flat.([]bfloat16.BFloat16)
+	outputFlat := output.flat.([]bfloat16.BFloat16)
+	return func(operandFlatIdx, outputFlatIdx int) {
+		outputFlat[outputFlatIdx] = bfloat16.FromFloat32(
+			min(outputFlat[outputFlatIdx].Float32(), operandFlat[operandFlatIdx].Float32()))
+	}
+}
+
+func reduceWindowSumBuildUpdateFn[T PODNumericConstraints](operand, output *Buffer) reduceWindowUpdateFn {
+	operandFlat := operand.flat.([]T)
+	outputFlat := output.flat.([]T)
+	return func(operandFlatIdx, outputFlatIdx int) {
+		outputFlat[outputFlatIdx] = outputFlat[outputFlatIdx] + operandFlat[operandFlatIdx]
+	}
+}
+
+func reduceWindowSumBuildUpdateFnBFloat16(operand, output *Buffer) reduceWindowUpdateFn {
+	operandFlat := operand.flat.([]bfloat16.BFloat16)
+	outputFlat := output.flat.([]bfloat16.BFloat16)
+	return func(operandFlatIdx, outputFlatIdx int) {
+		outputFlat[outputFlatIdx] = bfloat16.FromFloat32(
+			outputFlat[outputFlatIdx].Float32() + operandFlat[operandFlatIdx].Float32())
+	}
+}
+
+func reduceWindowProductBuildUpdateFn[T PODNumericConstraints](operand, output *Buffer) reduceWindowUpdateFn {
+	operandFlat := operand.flat.([]T)
+	outputFlat := output.flat.([]T)
+	return func(operandFlatIdx, outputFlatIdx int) {
+		outputFlat[outputFlatIdx] = outputFlat[outputFlatIdx] * operandFlat[operandFlatIdx]
+	}
+}
+
+func reduceWindowProductBuildUpdateFnBFloat16(operand, output *Buffer) reduceWindowUpdateFn {
+	operandFlat := operand.flat.([]bfloat16.BFloat16)
+	outputFlat := output.flat.([]bfloat16.BFloat16)
+	return func(operandFlatIdx, outputFlatIdx int) {
+		outputFlat[outputFlatIdx] = bfloat16.FromFloat32(
+			outputFlat[outputFlatIdx].Float32() * operandFlat[operandFlatIdx].Float32())
 	}
 }

@@ -481,7 +481,7 @@ type reduceWindowNode struct {
 // If baseDilations, windowDilations are nil, they are assumed to be 1 (no dilation).
 // If paddings is nil, they are assumed to be 0.
 func (b *Builder) ReduceWindow(operandOp backends.Op, reductionType backends.ReduceOpType, windowDimensions, strides, baseDilations, windowDilations []int, paddings [][2]int) (backends.Op, error) {
-	opType := backends.OpTypeArgMinMax
+	opType := backends.OpTypeReduceWindow
 	inputs, err := b.checkOps(opType.String(), operandOp)
 	if err != nil {
 		return nil, err

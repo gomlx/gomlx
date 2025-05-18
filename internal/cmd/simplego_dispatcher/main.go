@@ -61,6 +61,10 @@ var (
 			{"sliceDTypeMap", "execSliceGeneric", makeDTypes(true, true, true, true, true)},
 			{"argMinMaxDTypeMap", "execArgMinMaxGeneric", makeDTypes(true, true, true, false, false)},
 			{"argMinMaxCopyIntsDTypeMap", "buildArgMinMaxCopyIntsFn", makeDTypes(true, true, false, false, false)},
+			{"reduceWindowMaxDTypeMap", "reduceWindowMaxBuildUpdateFn", makeDTypes(true, true, true, false, false)},
+			{"reduceWindowMinDTypeMap", "reduceWindowMinBuildUpdateFn", makeDTypes(true, true, true, false, false)},
+			{"reduceWindowSumDTypeMap", "reduceWindowSumBuildUpdateFn", makeDTypes(true, true, true, false, false)},
+			{"reduceWindowProductDTypeMap", "reduceWindowProductBuildUpdateFn", makeDTypes(true, true, true, false, false)},
 		},
 		PairMaps: []MapPairInfo{
 			// Various ConvertDType instantiations.
