@@ -1667,7 +1667,7 @@ func execReduceWindow(backend *Backend, node *Node, inputs []*Buffer, inputsOwne
 	//   we will have O(W) cache misses and the O(N) part will be sequential or in local cache.
 	//   More specifically we would split windowShape into "nonCachedWindowShape" and "cachedWindowShape", and
 	//   iterate over the nonCachedWindowShape first.
-	// - Can we refactor the test o baseDialation to outside the loop ?
+	// - Can we refactor the check of baseDilation to outside of the loop ?
 	outputFlatIdx := 0
 	windowIndices := make([]int, rank)
 	operandIndices := make([]int, rank)
