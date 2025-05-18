@@ -2,10 +2,11 @@ package main
 
 import (
 	"fmt"
-	"github.com/janpfeifer/must"
 	"os"
 	"os/exec"
 	"text/template"
+
+	"github.com/janpfeifer/must"
 )
 
 type DTypeInfo struct {
@@ -37,7 +38,6 @@ var (
 	// data lists the dispatchers to include, their generic function and with which set of dtypes to support.
 	data = Data{
 		Dispatchers: []DispatcherInfo{
-			{"dispatchMutableBytes", "mutableBytesGeneric", makeDTypes(true, true, true, true, true)},
 			{"dispatchDotGeneral", "execNormalizedDotGeneralGeneric", makeDTypes(true, true, true, false, false)},
 			{"dispatchBroadcast", "execBroadcastGeneric", makeDTypes(true, true, true, true, true)},
 			{"dispatchBroadcastInDim", "execBroadcastInDimGeneric", makeDTypes(true, true, true, true, true)},
@@ -45,6 +45,8 @@ var (
 			{"dispatchGather", "execGatherGeneric", makeDTypes(true, true, false, false, false)},
 		},
 		Maps: []MapInfo{
+			{"mutableBytesDTypeMap", "mutableBytesGeneric", makeDTypes(true, true, true, true, true)},
+			{"fillBufferDTypeMap", "fillBufferGeneric", makeDTypes(true, true, true, true, true)},
 			{"reduceMaxDTypeMap", "execReduceMaxGeneric", makeDTypes(true, true, true, false, false)},
 			{"reduceMinDTypeMap", "execReduceMinGeneric", makeDTypes(true, true, true, false, false)},
 			{"reduceSumDTypeMap", "execReduceSumGeneric", makeDTypes(true, true, true, false, false)},
@@ -59,6 +61,10 @@ var (
 			{"sliceDTypeMap", "execSliceGeneric", makeDTypes(true, true, true, true, true)},
 			{"argMinMaxDTypeMap", "execArgMinMaxGeneric", makeDTypes(true, true, true, false, false)},
 			{"argMinMaxCopyIntsDTypeMap", "buildArgMinMaxCopyIntsFn", makeDTypes(true, true, false, false, false)},
+			{"reduceWindowMaxDTypeMap", "reduceWindowMaxBuildUpdateFn", makeDTypes(true, true, true, false, false)},
+			{"reduceWindowMinDTypeMap", "reduceWindowMinBuildUpdateFn", makeDTypes(true, true, true, false, false)},
+			{"reduceWindowSumDTypeMap", "reduceWindowSumBuildUpdateFn", makeDTypes(true, true, true, false, false)},
+			{"reduceWindowProductDTypeMap", "reduceWindowProductBuildUpdateFn", makeDTypes(true, true, true, false, false)},
 		},
 		PairMaps: []MapPairInfo{
 			// Various ConvertDType instantiations.

@@ -2,6 +2,13 @@ package simplego
 
 import (
 	"fmt"
+	"math"
+	"reflect"
+	"slices"
+	"sort"
+	"testing"
+
+	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/shapeinference"
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/types/shapes"
@@ -11,10 +18,6 @@ import (
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"math"
-	"slices"
-	"sort"
-	"testing"
 )
 
 var (
@@ -578,4 +581,176 @@ func TestExecSpecialOps_ArgMinMaxOp(t *testing.T) {
 		{{4, 3}, {4, 5}, {4, 2}}})
 	fmt.Printf("\ty3=%s\n", y3.GoStr())
 	require.Equal(t, [][]int32{{0, 0}, {0, 1}}, y3.Value())
+}
+
+// =================================================================================================================
+// ReduceWindow ----------------------------------------------------------------------------------------------------
+// =================================================================================================================
+
+func dtypeForSlice(slice any) dtypes.DType {
+	t := reflect.TypeOf(slice)
+	for t.Kind() == reflect.Slice {
+		t = t.Elem()
+	}
+	return dtypes.FromGoType(t)
+}
+
+// Test case structure for ReduceWindow tests.
+type reduceWindowGraphTestCase struct { // T is the Go type for data, e.g., float32, []float32
+	name string
+	// operandData will be the third argument to graph.ExecOnce (inputs ...any)
+	// graph.ExecOnce infers shape and dtype from this.
+	// If specific dtype/shape control is needed beyond inference, it's more complex.
+	// For now, assume operandData's type and structure define the input tensor.
+	operandData      any // e.g., []float32{1,2,3,4,5} or [][]int32{{1,2},{3,4}}
+	reductionType    backends.ReduceOpType
+	windowDimensions []int
+	strides          []int    // Can be nil, graph.BackendReduceWindow should handle defaults.
+	paddings         [][2]int // Can be nil.
+	baseDilations    []int    // Can be nil.
+	windowDilations  []int    // Can be nil.
+	expectedOutput   any      // e.g., []float32{3,5,7,9}
+	expectedShape    []int    // For verifying output shape explicitly
+}
+
+func TestExecSpecialOps_ReduceWindow(t *testing.T) { // Renamed for common Go test naming, or use user's preference
+	// Helper to create BFloat16 slices for test cases
+	bf16Values := func(vals ...float32) []bfloat16.BFloat16 {
+		res := make([]bfloat16.BFloat16, len(vals))
+		for i, v := range vals {
+			res[i] = bfloat16.FromFloat32(v)
+		}
+		return res
+	}
+
+	// --- Test Cases for Float32 ---
+	for _, tc := range []reduceWindowGraphTestCase{
+		{
+			name:             "F32_1D_Sum_Win2_Stride1_DefaultPadDil",
+			operandData:      []float32{1, 2, 3, 4, 5},
+			reductionType:    backends.ReduceOpSum,
+			windowDimensions: []int{2},
+			strides:          []int{1},
+			// Nil for paddings, baseDilations, windowDilations will use graph.BackendReduceWindow defaults
+			expectedOutput: []float32{3, 5, 7, 9},
+			expectedShape:  []int{4},
+		},
+		{
+			name:             "F32_1D_Product_Win2_Stride2_Pad1_1",
+			operandData:      []float32{1, 2, 3, 4},
+			reductionType:    backends.ReduceOpProduct,
+			windowDimensions: []int{2},
+			strides:          []int{2},
+			paddings:         [][2]int{{1, 1}},
+			// Calculation for expectedOutput:
+			// Input: [1,2,3,4], Shape [4], DType F32
+			// Window [2], Stride [2], Padding {{1,1}}
+			// Shape inference: (InputDim + PadLow + PadHigh - WindowDim) / Stride + 1
+			// (4 + 1 + 1 - 2) / 2 + 1 = (6 - 2) / 2 + 1 = 4 / 2 + 1 = 2 + 1 = 3. Output Shape [3]
+			// Output[0]: input indices for window at output_idx 0: (0*stride - PadLow) to (0*stride - PadLow + WindowDim -1)
+			// (0*2 - 1) = -1 to (0*2 - 1 + 2 -1) = 0. Indices: -1, 0. Valid: input[0]=1. Product=1 (init_val for padding/empty assumed 1 for product)
+			// Output[1]: input indices for window at output_idx 1: (1*2 - 1) = 1 to (1*2 - 1 + 2 - 1) = 2. Indices: 1, 2. Valid: input[1]=2, input[2]=3. Prod=2*3=6.
+			// Output[2]: input indices for window at output_idx 2: (2*2 - 1) = 3 to (2*2 - 1 + 2 - 1) = 4. Indices: 3, 4. Valid: input[3]=4. Prod=4.
+			expectedOutput: []float32{1, 6, 4},
+			expectedShape:  []int{3},
+		},
+		{
+			name:             "F32_1D_Max_Win3_WindowDilation2",
+			operandData:      []float32{1, 2, 3, 4, 5, 6, 7},
+			reductionType:    backends.ReduceOpMax,
+			windowDimensions: []int{3},
+			strides:          []int{1},
+			windowDilations:  []int{2}, // Effective window elements indices: k, k+2, k+4 related to input
+			// Effective window span (DilatedWindowDim): (3-1)*2+1 = 5
+			// Output shape: (7 - 5)/1 + 1 = 3.
+			// Out[0]: input indices 0, 0+1*WinDil=2, 0+2*WinDil=4. Max(data[0], data[2], data[4]) = Max(1,3,5) = 5.
+			// Out[1]: input indices 1, 1+1*WinDil=3, 1+2*WinDil=5. Max(data[1], data[3], data[5]) = Max(2,4,6) = 6.
+			// Out[2]: input indices 2, 2+1*WinDil=4, 2+2*WinDil=6. Max(data[2], data[4], data[6]) = Max(3,5,7) = 7.
+			expectedOutput: []float32{5, 6, 7},
+			expectedShape:  []int{3},
+		},
+		{
+			name:             "F32_2D_Sum_NoPadDilStride1",
+			operandData:      [][]float32{{1, 2, 3}, {4, 5, 6}}, // Shape [2,3]
+			reductionType:    backends.ReduceOpSum,
+			windowDimensions: []int{2, 2},
+			strides:          []int{1, 1},
+			// Output shape: Dim0: (2-2)/1+1 = 1. Dim1: (3-2)/1+1 = 2. Shape [1,2]
+			// Out[0,0]: sum of input[0:2, 0:2] = 1+2+4+5 = 12
+			// Out[0,1]: sum of input[0:2, 1:3] = 2+3+5+6 = 16
+			expectedOutput: [][]float32{{12, 16}},
+			expectedShape:  []int{1, 2},
+		},
+		{
+			name:             "I32_1D_Min_Win3_Stride2_BaseDil2",
+			operandData:      []int32{10, 2, 5, 1, 8, 3, 9, 4}, // Shape [8]
+			reductionType:    backends.ReduceOpMin,
+			windowDimensions: []int{3},
+			strides:          []int{2}, // Stride in the conceptually base-dilated input
+			baseDilations:    []int{2}, // Conceptual input len (8-1)*2+1 = 15. Data: 10 H 2 H 5 H 1 H 8 H 3 H 9 H 4
+			// Window takes 3 elements from conceptual input. EffWin=3.
+			// Output shape on conceptual input (len 15): (15-3)/2+1 = 12/2+1=7.
+			expectedOutput: []int32{2, 2, 1, 1, 3, 3, 4},
+			expectedShape:  []int{7},
+		},
+		{
+			name:             "I32_2D_Max",
+			operandData:      [][]int32{{1, 5, 2}, {6, 3, 7}, {4, 9, 0}}, // Shape [3,3]
+			reductionType:    backends.ReduceOpMax,
+			windowDimensions: []int{2, 2},
+			strides:          []int{1, 1},
+			paddings:         [][2]int{{0, 1}, {1, 0}},
+			expectedOutput:   [][]int32{{6, 6, 7}, {6, 9, 9}, {4, 9, 9}},
+			expectedShape:    []int{3, 3},
+		}, {
+			name:             "I32_2D_Max_Win2x2_Stride1x1_NoPadDil",
+			operandData:      [][]int32{{1, 2, 3}, {4, 5, 6}},
+			reductionType:    backends.ReduceOpMax,
+			windowDimensions: []int{2, 2},
+			strides:          []int{1, 1},
+			expectedOutput:   [][]int32{{5, 6}},
+			expectedShape:    []int{1, 2},
+		},
+		{
+			name:             "BF16_1D_Sum_Win2_NoParams",
+			operandData:      bf16Values(1, 2, 3, 4), // Input as []bfloat16.Type
+			reductionType:    backends.ReduceOpSum,
+			windowDimensions: []int{2},
+			strides:          []int{1},            // graph.ReduceWindow likely requires explicit strides
+			expectedOutput:   bf16Values(3, 5, 7), // 1+2, 2+3, 3+4
+			expectedShape:    []int{3},
+		},
+		{
+			name:             "BF16_1D_Product_Win2_BaseDil2_Pad1",
+			operandData:      bf16Values(2, 3, 4), // Shape [3]
+			reductionType:    backends.ReduceOpProduct,
+			windowDimensions: []int{2},
+			strides:          []int{1},
+			paddings:         [][2]int{{1, 0}}, // Pad low by 1
+			baseDilations:    []int{2},         // Conceptual input: [2 H 3 H 4] (len 5). Padded: [PadVal 2 H 3 H 4]
+			// Output shape on conceptual (len 5) with padding (1,0): (5+1+0 - 2)/1 + 1 = (6-2)/1+1 = 5
+			// Assuming PadVal=1 for product identity if outside region
+			// Out[0]: win over conceptual_padded indices [0,1] -> maps to input[0]=2 (via conceptual[1]). Product=2.
+			// Out[1]: win over conceptual_padded indices [1,2] -> maps to input[0]=2 (via conceptual[1]), hole (via conceptual[2]). Product=2.
+			// Out[2]: win over conceptual_padded indices [2,3] -> maps to input[1]=3 (via conceptual[3]), hole. Product=3.
+			// Out[3]: win over conceptual_padded indices [3,4] -> maps to input[1]=3 (via conceptual[3]), hole. Product=3.
+			// Out[4]: win over conceptual_padded indices [4,5] -> maps to input[2]=4 (via conceptual[5]), hole. Product=4.
+			expectedOutput: bf16Values(2, 2, 3, 3, 4),
+			expectedShape:  []int{5},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			y := graph.ExecOnce(backend, func(x *graph.Node) *graph.Node {
+				return graph.BackendReduceWindow(
+					x, tc.reductionType,
+					tc.windowDimensions, tc.strides, tc.baseDilations, tc.windowDilations,
+					tc.paddings)
+			}, tc.operandData)
+			dtype := dtypeForSlice(tc.operandData)
+			require.Equalf(t, dtype, y.DType(), "Unexpected dtype %s for test %q: wanted %s", y.DType(), tc.name, dtype)
+			require.NoErrorf(t, y.Shape().CheckDims(tc.expectedShape...), "Got unexpected shape %s for %q: wanted %s", y.Shape(), tc.name, tc.expectedShape)
+			require.Equal(t, tc.expectedOutput, y.Value(),
+				"ReduceWindow: test %q: expected %v, got %v", tc.name, tc.expectedOutput, y.GoStr())
+		})
+	}
 }

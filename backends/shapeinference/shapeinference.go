@@ -12,12 +12,13 @@
 package shapeinference
 
 import (
+	"slices"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
-	"slices"
 )
 
 var (
@@ -800,4 +801,106 @@ func ArgMinMaxOp(operand shapes.Shape, axis int, outputDType dtypes.DType) (outp
 	newDims = slices.Delete(newDims, axis, axis+1)
 	output = shapes.Make(outputDType, newDims...)
 	return
+}
+
+// ReduceWindowOp returns the output shape for a ReduceWindow op with the given operand shape and parameters.
+//
+// Notice it doesn't take as input the reductionType parameter, since it doesn't affect the output shape.
+func ReduceWindowOp(operand shapes.Shape, windowDimensions, strides, baseDilations, windowDilations []int, paddings [][2]int) (shapes.Shape, error) {
+	if !operand.Ok() {
+		return shapes.Invalid(), errors.Errorf("ReduceWindowOp: invalid operand shape %s", operand)
+	}
+	rank := operand.Rank()
+
+	// Validate lengths of slice parameters against rank.
+	if len(windowDimensions) != 0 && len(windowDimensions) != rank {
+		return shapes.Invalid(), errors.Errorf("ReduceWindowOp: len(windowDimensions)=%d, but operand rank is %d", len(windowDimensions), rank)
+	}
+	if len(strides) != 0 && len(strides) != rank {
+		return shapes.Invalid(), errors.Errorf("ReduceWindowOp: len(strides)=%d, but operand rank is %d", len(strides), rank)
+	}
+	if len(paddings) != 0 && len(paddings) != rank {
+		return shapes.Invalid(), errors.Errorf("ReduceWindowOp: len(paddings)=%d, but operand rank is %d", len(paddings), rank)
+	}
+	if baseDilations != nil && len(baseDilations) != rank {
+		return shapes.Invalid(), errors.Errorf("ReduceWindowOp: baseDilations is not nil and len(baseDilations)=%d, but operand rank is %d", len(baseDilations), rank)
+	}
+	if windowDilations != nil && len(windowDilations) != rank {
+		return shapes.Invalid(), errors.Errorf("ReduceWindowOp: windowDilations is not nil and len(windowDilations)=%d, but operand rank is %d", len(windowDilations), rank)
+	}
+
+	// If operand is a scalar (rank 0), the output is also a scalar of the same type.
+	// All dimension-specific parameters (windowDimensions, strides, etc.) must be empty,
+	// which is enforced by the length checks above (e.g., len(windowDimensions) == rank == 0).
+	if rank == 0 {
+		return operand, nil
+	}
+
+	// Each output dimension is calculated orthogonally to the others.
+	outputDims := make([]int, rank)
+	for i := 0; i < rank; i++ {
+		inputDim := operand.Dimensions[i] // Already validated to be > 0 by shapes.Make
+		windowDim := 1
+		if len(windowDimensions) > 0 {
+			windowDim = windowDimensions[i]
+			if windowDim < 1 {
+				return shapes.Invalid(), errors.Errorf("ReduceWindowOp: windowDimensions[%d]=%d must be >= 1 for operand shape %s", i, windowDim, operand)
+			}
+		}
+		stride := windowDim
+		if len(strides) > 0 {
+			stride = strides[i]
+			if stride < 1 {
+				return shapes.Invalid(), errors.Errorf("ReduceWindowOp: strides[%d]=%d must be >= 1 for operand shape %s", i, stride, operand)
+			}
+		}
+		paddingLow, paddingHigh := 0, 0
+		if len(paddings) > 0 {
+			paddingLow = paddings[i][0]
+			paddingHigh = paddings[i][1]
+			if paddingLow < 0 || paddingHigh < 0 {
+				return shapes.Invalid(), errors.Errorf("ReduceWindowOp: paddings[%d]=[%d, %d] must be non-negative for operand shape %s", i, paddingLow, paddingHigh, operand)
+			}
+		}
+
+		baseDilation := 1
+		if baseDilations != nil {
+			baseDilation = baseDilations[i]
+			if baseDilation < 1 {
+				return shapes.Invalid(), errors.Errorf("ReduceWindowOp: baseDilations[%d]=%d must be >= 1 for operand shape %s", i, baseDilation, operand)
+			}
+		}
+
+		windowDilation := 1
+		if windowDilations != nil {
+			windowDilation = windowDilations[i]
+			if windowDilation < 1 {
+				return shapes.Invalid(), errors.Errorf("ReduceWindowOp: windowDilations[%d]=%d must be >= 1 for operand shape %s", i, windowDilation, operand)
+			}
+		}
+
+		// Effective input dimension after base dilation.
+		// (size - 1) * dilation + 1
+		effectiveInputDim := (inputDim-1)*baseDilation + 1
+
+		// Effective window dimension after window dilation.
+		effectiveWindowDim := (windowDim-1)*windowDilation + 1
+
+		// Padded effective input size for this dimension.
+		paddedEffectiveInputDim := effectiveInputDim + paddingLow + paddingHigh
+
+		// Numerator for the output dimension formula.
+		// output_dim = floor((padded_input_size - effective_window_size) / stride) + 1
+		// The numerator must be non-negative for the output dimension to be at least 1.
+		if effectiveWindowDim > paddedEffectiveInputDim {
+			return shapes.Invalid(), errors.Errorf(
+				"ReduceWindowOp: effective window dimension %d for axis %d is larger than padded effective input dimension %d. (input_dim: %d, base_dilation: %d, window_dim: %d, window_dilation: %d, padding: [%d,%d]) for operand shape %s",
+				effectiveWindowDim, i, paddedEffectiveInputDim, inputDim, baseDilation, windowDim, windowDilation, paddingLow, paddingHigh, operand)
+		}
+
+		numerator := paddedEffectiveInputDim - effectiveWindowDim
+		outputDims[i] = numerator/stride + 1
+	}
+
+	return shapes.Make(operand.DType, outputDims...), nil
 }

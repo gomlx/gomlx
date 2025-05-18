@@ -6,6 +6,9 @@ package simplego
 
 import (
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/backends/notimplemented"
+	"github.com/pkg/errors"
+
 	"sync"
 )
 
@@ -67,10 +70,19 @@ func (b *Backend) Capabilities() backends.Capabilities {
 
 // Builder creates a new builder used to define a new named computation.
 func (b *Backend) Builder(name string) backends.Builder {
-	return &Builder{
+	builder := &Builder{
 		backend: b,
 		name:    name,
 	}
+	// Set the "not implemented" custom message:
+	builder.Builder.ErrFn = notImplementedError
+	return builder
+}
+
+func notImplementedError(opType backends.OpType) error {
+	return errors.Wrapf(notimplemented.NotImplementedError, "sorry, op %q not implemented in SimpleGo yet "+
+		"-- reach out to github.com/gomlx/gomlx and open an issue if you need this op, this helps us prioritize the work",
+		opType)
 }
 
 // Finalize releases all the associated resources immediately, and makes the backend invalid.

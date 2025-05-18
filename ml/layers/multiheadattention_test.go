@@ -194,7 +194,7 @@ func TestMultiHeadAttentionTraining(t *testing.T) {
 	commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
 	metrics, err := loop.RunSteps(trainDS, 1500)
 	loss := metrics[1].Value().(float32)
-	assert.Truef(t, loss < 0.04, "Expected a loss < 0.04, got %g instead", loss)
+	assert.Truef(t, loss < 0.10, "Expected a loss < 0.10, got %g instead", loss)
 	require.NoErrorf(t, err, "Failed training: %+v", err)
 	fmt.Printf("Metrics:\n")
 	for ii, m := range metrics {

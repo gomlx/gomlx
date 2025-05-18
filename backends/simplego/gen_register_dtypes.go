@@ -9,20 +9,6 @@ import (
 
 func init() {
 
-	// DTypeDispatcher: dispatchMutableBytes
-	dispatchMutableBytes.RegisterIfNotSet(dtypes.Int8, mutableBytesGeneric[int8])
-	dispatchMutableBytes.RegisterIfNotSet(dtypes.Int16, mutableBytesGeneric[int16])
-	dispatchMutableBytes.RegisterIfNotSet(dtypes.Int32, mutableBytesGeneric[int32])
-	dispatchMutableBytes.RegisterIfNotSet(dtypes.Int64, mutableBytesGeneric[int64])
-	dispatchMutableBytes.RegisterIfNotSet(dtypes.Uint8, mutableBytesGeneric[uint8])
-	dispatchMutableBytes.RegisterIfNotSet(dtypes.Uint16, mutableBytesGeneric[uint16])
-	dispatchMutableBytes.RegisterIfNotSet(dtypes.Uint32, mutableBytesGeneric[uint32])
-	dispatchMutableBytes.RegisterIfNotSet(dtypes.Uint64, mutableBytesGeneric[uint64])
-	dispatchMutableBytes.RegisterIfNotSet(dtypes.Float32, mutableBytesGeneric[float32])
-	dispatchMutableBytes.RegisterIfNotSet(dtypes.Float64, mutableBytesGeneric[float64])
-	dispatchMutableBytes.RegisterIfNotSet(dtypes.BFloat16, mutableBytesGeneric[bfloat16.BFloat16])
-	dispatchMutableBytes.RegisterIfNotSet(dtypes.Bool, mutableBytesGeneric[bool])
-
 	// DTypeDispatcher: dispatchDotGeneral
 	dispatchDotGeneral.RegisterIfNotSet(dtypes.Int8, execNormalizedDotGeneralGeneric[int8])
 	dispatchDotGeneral.RegisterIfNotSet(dtypes.Int16, execNormalizedDotGeneralGeneric[int16])
@@ -84,6 +70,34 @@ func init() {
 	dispatchGather.RegisterIfNotSet(dtypes.Uint16, execGatherGeneric[uint16])
 	dispatchGather.RegisterIfNotSet(dtypes.Uint32, execGatherGeneric[uint32])
 	dispatchGather.RegisterIfNotSet(dtypes.Uint64, execGatherGeneric[uint64])
+
+	// DTypeMap: mutableBytesDTypeMap
+	mutableBytesDTypeMap.RegisterIfNotSet(dtypes.Int8, mutableBytesGeneric[int8])
+	mutableBytesDTypeMap.RegisterIfNotSet(dtypes.Int16, mutableBytesGeneric[int16])
+	mutableBytesDTypeMap.RegisterIfNotSet(dtypes.Int32, mutableBytesGeneric[int32])
+	mutableBytesDTypeMap.RegisterIfNotSet(dtypes.Int64, mutableBytesGeneric[int64])
+	mutableBytesDTypeMap.RegisterIfNotSet(dtypes.Uint8, mutableBytesGeneric[uint8])
+	mutableBytesDTypeMap.RegisterIfNotSet(dtypes.Uint16, mutableBytesGeneric[uint16])
+	mutableBytesDTypeMap.RegisterIfNotSet(dtypes.Uint32, mutableBytesGeneric[uint32])
+	mutableBytesDTypeMap.RegisterIfNotSet(dtypes.Uint64, mutableBytesGeneric[uint64])
+	mutableBytesDTypeMap.RegisterIfNotSet(dtypes.Float32, mutableBytesGeneric[float32])
+	mutableBytesDTypeMap.RegisterIfNotSet(dtypes.Float64, mutableBytesGeneric[float64])
+	mutableBytesDTypeMap.RegisterIfNotSet(dtypes.BFloat16, mutableBytesGeneric[bfloat16.BFloat16])
+	mutableBytesDTypeMap.RegisterIfNotSet(dtypes.Bool, mutableBytesGeneric[bool])
+
+	// DTypeMap: fillBufferDTypeMap
+	fillBufferDTypeMap.RegisterIfNotSet(dtypes.Int8, fillBufferGeneric[int8])
+	fillBufferDTypeMap.RegisterIfNotSet(dtypes.Int16, fillBufferGeneric[int16])
+	fillBufferDTypeMap.RegisterIfNotSet(dtypes.Int32, fillBufferGeneric[int32])
+	fillBufferDTypeMap.RegisterIfNotSet(dtypes.Int64, fillBufferGeneric[int64])
+	fillBufferDTypeMap.RegisterIfNotSet(dtypes.Uint8, fillBufferGeneric[uint8])
+	fillBufferDTypeMap.RegisterIfNotSet(dtypes.Uint16, fillBufferGeneric[uint16])
+	fillBufferDTypeMap.RegisterIfNotSet(dtypes.Uint32, fillBufferGeneric[uint32])
+	fillBufferDTypeMap.RegisterIfNotSet(dtypes.Uint64, fillBufferGeneric[uint64])
+	fillBufferDTypeMap.RegisterIfNotSet(dtypes.Float32, fillBufferGeneric[float32])
+	fillBufferDTypeMap.RegisterIfNotSet(dtypes.Float64, fillBufferGeneric[float64])
+	fillBufferDTypeMap.RegisterIfNotSet(dtypes.BFloat16, fillBufferGeneric[bfloat16.BFloat16])
+	fillBufferDTypeMap.RegisterIfNotSet(dtypes.Bool, fillBufferGeneric[bool])
 
 	// DTypeMap: reduceMaxDTypeMap
 	reduceMaxDTypeMap.RegisterIfNotSet(dtypes.Int8, execReduceMaxGeneric[int8])
@@ -255,6 +269,54 @@ func init() {
 	argMinMaxCopyIntsDTypeMap.RegisterIfNotSet(dtypes.Uint16, buildArgMinMaxCopyIntsFn[uint16])
 	argMinMaxCopyIntsDTypeMap.RegisterIfNotSet(dtypes.Uint32, buildArgMinMaxCopyIntsFn[uint32])
 	argMinMaxCopyIntsDTypeMap.RegisterIfNotSet(dtypes.Uint64, buildArgMinMaxCopyIntsFn[uint64])
+
+	// DTypeMap: reduceWindowMaxDTypeMap
+	reduceWindowMaxDTypeMap.RegisterIfNotSet(dtypes.Int8, reduceWindowMaxBuildUpdateFn[int8])
+	reduceWindowMaxDTypeMap.RegisterIfNotSet(dtypes.Int16, reduceWindowMaxBuildUpdateFn[int16])
+	reduceWindowMaxDTypeMap.RegisterIfNotSet(dtypes.Int32, reduceWindowMaxBuildUpdateFn[int32])
+	reduceWindowMaxDTypeMap.RegisterIfNotSet(dtypes.Int64, reduceWindowMaxBuildUpdateFn[int64])
+	reduceWindowMaxDTypeMap.RegisterIfNotSet(dtypes.Uint8, reduceWindowMaxBuildUpdateFn[uint8])
+	reduceWindowMaxDTypeMap.RegisterIfNotSet(dtypes.Uint16, reduceWindowMaxBuildUpdateFn[uint16])
+	reduceWindowMaxDTypeMap.RegisterIfNotSet(dtypes.Uint32, reduceWindowMaxBuildUpdateFn[uint32])
+	reduceWindowMaxDTypeMap.RegisterIfNotSet(dtypes.Uint64, reduceWindowMaxBuildUpdateFn[uint64])
+	reduceWindowMaxDTypeMap.RegisterIfNotSet(dtypes.Float32, reduceWindowMaxBuildUpdateFn[float32])
+	reduceWindowMaxDTypeMap.RegisterIfNotSet(dtypes.Float64, reduceWindowMaxBuildUpdateFn[float64])
+
+	// DTypeMap: reduceWindowMinDTypeMap
+	reduceWindowMinDTypeMap.RegisterIfNotSet(dtypes.Int8, reduceWindowMinBuildUpdateFn[int8])
+	reduceWindowMinDTypeMap.RegisterIfNotSet(dtypes.Int16, reduceWindowMinBuildUpdateFn[int16])
+	reduceWindowMinDTypeMap.RegisterIfNotSet(dtypes.Int32, reduceWindowMinBuildUpdateFn[int32])
+	reduceWindowMinDTypeMap.RegisterIfNotSet(dtypes.Int64, reduceWindowMinBuildUpdateFn[int64])
+	reduceWindowMinDTypeMap.RegisterIfNotSet(dtypes.Uint8, reduceWindowMinBuildUpdateFn[uint8])
+	reduceWindowMinDTypeMap.RegisterIfNotSet(dtypes.Uint16, reduceWindowMinBuildUpdateFn[uint16])
+	reduceWindowMinDTypeMap.RegisterIfNotSet(dtypes.Uint32, reduceWindowMinBuildUpdateFn[uint32])
+	reduceWindowMinDTypeMap.RegisterIfNotSet(dtypes.Uint64, reduceWindowMinBuildUpdateFn[uint64])
+	reduceWindowMinDTypeMap.RegisterIfNotSet(dtypes.Float32, reduceWindowMinBuildUpdateFn[float32])
+	reduceWindowMinDTypeMap.RegisterIfNotSet(dtypes.Float64, reduceWindowMinBuildUpdateFn[float64])
+
+	// DTypeMap: reduceWindowSumDTypeMap
+	reduceWindowSumDTypeMap.RegisterIfNotSet(dtypes.Int8, reduceWindowSumBuildUpdateFn[int8])
+	reduceWindowSumDTypeMap.RegisterIfNotSet(dtypes.Int16, reduceWindowSumBuildUpdateFn[int16])
+	reduceWindowSumDTypeMap.RegisterIfNotSet(dtypes.Int32, reduceWindowSumBuildUpdateFn[int32])
+	reduceWindowSumDTypeMap.RegisterIfNotSet(dtypes.Int64, reduceWindowSumBuildUpdateFn[int64])
+	reduceWindowSumDTypeMap.RegisterIfNotSet(dtypes.Uint8, reduceWindowSumBuildUpdateFn[uint8])
+	reduceWindowSumDTypeMap.RegisterIfNotSet(dtypes.Uint16, reduceWindowSumBuildUpdateFn[uint16])
+	reduceWindowSumDTypeMap.RegisterIfNotSet(dtypes.Uint32, reduceWindowSumBuildUpdateFn[uint32])
+	reduceWindowSumDTypeMap.RegisterIfNotSet(dtypes.Uint64, reduceWindowSumBuildUpdateFn[uint64])
+	reduceWindowSumDTypeMap.RegisterIfNotSet(dtypes.Float32, reduceWindowSumBuildUpdateFn[float32])
+	reduceWindowSumDTypeMap.RegisterIfNotSet(dtypes.Float64, reduceWindowSumBuildUpdateFn[float64])
+
+	// DTypeMap: reduceWindowProductDTypeMap
+	reduceWindowProductDTypeMap.RegisterIfNotSet(dtypes.Int8, reduceWindowProductBuildUpdateFn[int8])
+	reduceWindowProductDTypeMap.RegisterIfNotSet(dtypes.Int16, reduceWindowProductBuildUpdateFn[int16])
+	reduceWindowProductDTypeMap.RegisterIfNotSet(dtypes.Int32, reduceWindowProductBuildUpdateFn[int32])
+	reduceWindowProductDTypeMap.RegisterIfNotSet(dtypes.Int64, reduceWindowProductBuildUpdateFn[int64])
+	reduceWindowProductDTypeMap.RegisterIfNotSet(dtypes.Uint8, reduceWindowProductBuildUpdateFn[uint8])
+	reduceWindowProductDTypeMap.RegisterIfNotSet(dtypes.Uint16, reduceWindowProductBuildUpdateFn[uint16])
+	reduceWindowProductDTypeMap.RegisterIfNotSet(dtypes.Uint32, reduceWindowProductBuildUpdateFn[uint32])
+	reduceWindowProductDTypeMap.RegisterIfNotSet(dtypes.Uint64, reduceWindowProductBuildUpdateFn[uint64])
+	reduceWindowProductDTypeMap.RegisterIfNotSet(dtypes.Float32, reduceWindowProductBuildUpdateFn[float32])
+	reduceWindowProductDTypeMap.RegisterIfNotSet(dtypes.Float64, reduceWindowProductBuildUpdateFn[float64])
 
 	// DTypePairMap: convertDTypePairMap
 	convertDTypePairMap.RegisterIfNotSet(dtypes.Int8, dtypes.Int8, execConvertDTypeGeneric[int8, int8])

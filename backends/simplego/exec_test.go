@@ -2,6 +2,8 @@ package simplego
 
 import (
 	"fmt"
+	"testing"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
@@ -9,12 +11,10 @@ import (
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestBuilder_Compile(t *testing.T) {
 	// backend must be exclusive (not shared across tests) for this test to work.
-	backend := New("")
 	builder := backend.Builder("test")
 	x, err := builder.Parameter("x", shapes.Make(dtypes.Float32, 3))
 	require.NoError(t, err)

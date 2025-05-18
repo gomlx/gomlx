@@ -12,6 +12,8 @@
   * Changed to return errors instead of exceptions.
 * Package `types/tensors`:
   * Removed dependency to `gopjrt/pjrt` -- otherwise we'll always need to install the C/C++ library.
+* Package `types/shape`:
+  * Added `Shape.Iter()` and `Shape.IterOn()`.
 * Package `backend`:
   * `Backend` interface now returns errors instead of panicking.
 * Package `graph`:

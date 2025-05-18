@@ -1,10 +1,11 @@
 package simplego
 
 import (
+	"testing"
+
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestBuffers_Bytes(t *testing.T) {
@@ -17,4 +18,17 @@ func TestBuffers_Bytes(t *testing.T) {
 	flatBytes[4] = 7
 	flatBytes[8] = 3
 	require.Equal(t, []int32{1, 7, 3}, buf.flat.([]int32))
+}
+
+func TestBuffers_Fill(t *testing.T) {
+	buf := backend.(*Backend).getBuffer(dtypes.Int32, 3)
+	buf.shape = shapes.Make(dtypes.Int32, 3)
+	require.Len(t, buf.flat.([]int32), 3)
+
+	err := buf.Fill(int32(3))
+	require.NoError(t, err)
+	require.Equal(t, []int32{3, 3, 3}, buf.flat.([]int32))
+
+	buf.Zeros()
+	require.Equal(t, []int32{0, 0, 0}, buf.flat.([]int32))
 }
