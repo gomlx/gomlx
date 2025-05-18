@@ -3,6 +3,8 @@ package shapes
 import (
 	"iter"
 	"slices"
+
+	"github.com/pkg/errors"
 )
 
 // Iter iterates over all possible indices of the given shape.
@@ -17,7 +19,12 @@ func (s Shape) Iter() iter.Seq[[]int] {
 //
 // The iteration updates the indices on the given indices slice.
 // During the iteration the caller shouldn't modify the indices, otherwise it will lead to undefined behavior.
+//
+// It expects len(indices) == s.Rank(). It will panic otherwise.
 func (s Shape) IterOn(indices []int) iter.Seq[[]int] {
+	if len(indices) != s.Rank() {
+		panic(errors.Errorf("Shape.IterOn given len(indices) == %d, want it to be equal to the rank %d", len(indices), s.Rank()))
+	}
 	return func(yield func([]int) bool) {
 		if !s.Ok() || s.IsTuple() {
 			return // Iteration completed (vacuously true as no items were yielded)
