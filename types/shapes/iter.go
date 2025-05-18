@@ -1,6 +1,9 @@
 package shapes
 
-import "iter"
+import (
+	"iter"
+	"slices"
+)
 
 // Iter iterates over all possible indices of the given shape.
 // To avoid allocating the slice of indices, the yielded indices is owned by the Iter() method:
@@ -20,15 +23,69 @@ func (s Shape) Iter() iter.Seq[[]int] {
 
 		// Defensive check: if any dimension is non-positive, treat as an empty iteration.
 		// shapes.Make should prevent this for validly constructed shapes.
+		//
+		// Also count the number of "spatial" axes: axes whose dimensions > 1.
+		numSpatialAxes := 0
 		for _, dimSize := range s.Dimensions {
 			if dimSize <= 0 {
 				return
 			}
+			if dimSize > 1 {
+				numSpatialAxes++
+			}
 		}
 
+		// Version 1: there are no spatial axes, there is only one value to iterate over.
 		currentIndices := make([]int, rank)
-		// Loop until all indices are generated.
-		// This structure simulates an N-dimensional counter for the indices.
+		if numSpatialAxes == 0 {
+			yield(currentIndices)
+			return
+		}
+
+		// Version 2: most axes are spatial, simply iterate over all of them:
+		if rank > numSpatialAxes+2 {
+			// Loop until all indices are generated.
+			// This structure simulates an N-dimensional counter for the indices.
+		v2Yielder:
+			for {
+				if !yield(currentIndices) {
+					return // Consumer requested to stop iteration.
+				}
+
+				// Increment currentIndices to the next set of coordinates
+				// (row-major order: the last index changes fastest).
+				for axis := rank - 1; axis >= 0; axis-- {
+					if s.Dimensions[axis] == 1 {
+						// Nothing to iterate at this axis.
+						continue
+					}
+					currentIndices[axis]++
+					if currentIndices[axis] < s.Dimensions[axis] {
+						// Successfully incremented this dimension; no carry-over needed.
+						continue v2Yielder
+					}
+					// The current axis overflowed; reset it to 0 and
+					// continue to increment the next higher-order dimension (carry-over).
+					currentIndices[axis] = 0
+				}
+
+				// If axis is less than 0, all dimensions have been iterated through
+				// (i.e., the first dimension also overflowed). Iteration is complete.
+				break
+			}
+			return
+		}
+
+		// Version 3: many non-"spatial" axes (dimensions > 1), create an indirection and only
+		// iterate over the spatial axes:
+		spatialAxes := make([]int, 0, numSpatialAxes)
+		for axis, dim := range s.Dimensions {
+			if dim > 1 {
+				spatialAxes = append(spatialAxes, axis)
+			}
+		}
+		slices.Reverse(spatialAxes) // We want to iterate over the last axis first.
+	v3Yielder:
 		for {
 			if !yield(currentIndices) {
 				return // Consumer requested to stop iteration.
@@ -36,28 +93,19 @@ func (s Shape) Iter() iter.Seq[[]int] {
 
 			// Increment currentIndices to the next set of coordinates
 			// (row-major order: the last index changes fastest).
-			axis := rank - 1
-			for ; axis >= 0; axis-- {
-				if s.Dimensions[axis] == 1 {
-					// Nothing to iterate at this axis.
-					continue
-				}
+			for _, axis := range spatialAxes {
 				currentIndices[axis]++
 				if currentIndices[axis] < s.Dimensions[axis] {
 					// Successfully incremented this dimension; no carry-over needed.
-					break
+					continue v3Yielder
 				}
 				// The current axis overflowed; reset it to 0 and
 				// continue to increment the next higher-order dimension (carry-over).
 				currentIndices[axis] = 0
 			}
 
-			// If axis is less than 0, all dimensions have been iterated through
-			// (i.e., the first dimension also overflowed). Iteration is complete.
-			if axis < 0 {
-				break
-			}
+			// That was the last index.
+			break
 		}
-		return // Iteration completed successfully.
 	}
 }
