@@ -1,6 +1,8 @@
 package simplego
 
 import (
+	"crypto/rand"
+	"io"
 	"reflect"
 	"strings"
 	"sync"
@@ -58,9 +60,17 @@ func (b *Backend) getBuffer(dtype dtypes.DType, length int) *Buffer {
 	pool := b.getBufferPool(dtype, length)
 	buf := pool.Get().(*Buffer)
 	buf.valid = true
-	buf.Zeros()
-	//fmt.Printf("> Buffer.Get(%p) - dtype=%s, len=%d\n", buf, dtype, length)
+	//buf.randomize() // Useful to find where zero-initialized is needed but missing.
 	return buf
+}
+
+// randomize fills the buffer with random bits -- useful for testing.
+func (b *Buffer) randomize() {
+	bBuf := b.mutableBytes()
+	_, err := io.ReadFull(rand.Reader, bBuf)
+	if err != nil {
+		panic(errors.Wrapf(err, "failed ot fill buffer with random bits"))
+	}
 }
 
 // putBuffer back into the backend pool of buffers.

@@ -38,13 +38,13 @@ var (
 	// data lists the dispatchers to include, their generic function and with which set of dtypes to support.
 	data = Data{
 		Dispatchers: []DispatcherInfo{
-			{"dispatchDotGeneral", "execNormalizedDotGeneralGeneric", makeDTypes(true, true, true, false, false)},
 			{"dispatchBroadcast", "execBroadcastGeneric", makeDTypes(true, true, true, true, true)},
 			{"dispatchBroadcastInDim", "execBroadcastInDimGeneric", makeDTypes(true, true, true, true, true)},
 			{"dispatchIota", "execIotaGeneric", makeDTypes(true, true, true, false, false)},
 			{"dispatchGather", "execGatherGeneric", makeDTypes(true, true, false, false, false)},
 		},
 		Maps: []MapInfo{
+			{"dotGeneralDTypeMap", "execNormalizedDotGeneralGeneric", makeDTypes(true, true, true, false, false)},
 			{"mutableBytesDTypeMap", "mutableBytesGeneric", makeDTypes(true, true, true, true, true)},
 			{"fillBufferDTypeMap", "fillBufferGeneric", makeDTypes(true, true, true, true, true)},
 			{"reduceMaxDTypeMap", "execReduceMaxGeneric", makeDTypes(true, true, true, false, false)},
