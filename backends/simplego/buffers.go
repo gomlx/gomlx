@@ -60,8 +60,7 @@ func (b *Backend) getBuffer(dtype dtypes.DType, length int) *Buffer {
 	pool := b.getBufferPool(dtype, length)
 	buf := pool.Get().(*Buffer)
 	buf.valid = true
-	buf.randomize() // Useful to find where zero-initialized is needed but missing.
-	//buf.Zeros()
+	//buf.randomize() // Useful to find where zero-initialized is needed but missing.
 	return buf
 }
 
