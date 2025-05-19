@@ -1,12 +1,13 @@
 package simplego
 
 import (
+	"slices"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/pkg/errors"
-	"slices"
 )
 
 func init() {
@@ -23,7 +24,7 @@ func init() {
 //     those dimensions.
 //
 // It follows that the resulting dimension number starts with the batch dimension, then the 'lhs'
-// non-contracting/non-batch dimension, and finally the 'rhs' non-contracting/non-batch dimension.
+// non-contracting/non-batch dimension and finally the 'rhs' non-contracting/non-batch dimension.
 // It provides the basic means of implementing Einsum.
 //
 // This function implements backends.Builder interface.
@@ -32,7 +33,7 @@ func init() {
 // shape with rank=3 ([batchSize, crossSize, contractingSize]), and then it issues the DotGeneral
 // node with normalized inputs. Finally, it reshapes back to the final result.
 //
-// The actual generic dot multiplication happens during execution though.
+// See execNormalizedDotGeneral for the implementation.
 func (b *Builder) DotGeneral(lhsOp backends.Op, lhsContractingAxes, lhsBatchAxes []int, rhsOp backends.Op, rhsContractingAxes, rhsBatchAxes []int) (backends.Op, error) {
 	inputs, err := b.checkOps(backends.OpTypeDotGeneral.String(), lhsOp, rhsOp)
 	if err != nil {
@@ -154,23 +155,25 @@ func (b *Builder) transposeForDotGeneral(operand *Node, operandName string, cont
 }
 
 // execNormalizedDotGeneral executes the DotGeneral where the inputs are already shaped [batchSize, crossSize, contractingSize].
-func execNormalizedDotGeneral(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
+func execNormalizedDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*Buffer, error) {
 	lhs, rhs := inputs[0], inputs[1]
 	outputShape := node.shape
-	output := backend.getBuffer(outputShape.DType, outputShape.Size())
+	dtype := outputShape.DType
+	output := backend.getBuffer(dtype, outputShape.Size())
 	output.shape = outputShape
-	dispatchDotGeneral.Dispatch(outputShape.DType, lhs, rhs, output)
+	output.Zeros()
+	fn := dotGeneralDTypeMap.Get(dtype).(func(lhs, rhs, output *Buffer))
+	fn(lhs, rhs, output)
 	return output, nil
 }
 
-var dispatchDotGeneral = NewDTypeDispatcher("DotGeneral")
+var dotGeneralDTypeMap = NewDTypeMap("DotGeneral")
 
 //go:generate go run ../../internal/cmd/simplego_dispatcher -dispatcher=dispatchDotGeneral -generic=execNormalizedDotGeneralGeneric -int -uint -float
 
 // execNormalizedDotGeneralGeneric operands lhs and rhs are normalized to shape
 // [batchSize, crossSize, contractingSize].
-func execNormalizedDotGeneralGeneric[T PODNumericConstraints](params ...any) any {
-	lhs, rhs, output := params[0].(*Buffer), params[1].(*Buffer), params[2].(*Buffer)
+func execNormalizedDotGeneralGeneric[T PODNumericConstraints](lhs, rhs, output *Buffer) {
 	lhsFlat := lhs.flat.([]T)
 	rhsFlat := rhs.flat.([]T)
 	outputFlat := output.flat.([]T)
@@ -198,14 +201,12 @@ func execNormalizedDotGeneralGeneric[T PODNumericConstraints](params ...any) any
 		}
 		rhsIdx += rhsBatchStride
 	}
-	return nil
 }
 
 // Register the BFloat16 version of DotGeneral.
-func init() { dispatchDotGeneral.Register(dtypes.BFloat16, execNormalizedDotGeneralBFloat16) }
+func init() { dotGeneralDTypeMap.Register(dtypes.BFloat16, execNormalizedDotGeneralBFloat16) }
 
-func execNormalizedDotGeneralBFloat16(params ...any) any {
-	lhs, rhs, output := params[0].(*Buffer), params[1].(*Buffer), params[2].(*Buffer)
+func execNormalizedDotGeneralBFloat16(lhs, rhs, output *Buffer) {
 	lhsFlat := lhs.flat.([]bfloat16.BFloat16)
 	rhsFlat := rhs.flat.([]bfloat16.BFloat16)
 	outputFlat := output.flat.([]bfloat16.BFloat16)
@@ -236,7 +237,7 @@ func execNormalizedDotGeneralBFloat16(params ...any) any {
 		}
 		rhsIdx += rhsBatchStride
 	}
-	return nil
+	return
 }
 
 // Dot ------------------------------------------------------------------------------------------------------

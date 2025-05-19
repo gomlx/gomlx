@@ -9,17 +9,17 @@ import (
 
 func init() {
 
-	// DTypeDispatcher: dispatchDotGeneral
-	dispatchDotGeneral.RegisterIfNotSet(dtypes.Int8, execNormalizedDotGeneralGeneric[int8])
-	dispatchDotGeneral.RegisterIfNotSet(dtypes.Int16, execNormalizedDotGeneralGeneric[int16])
-	dispatchDotGeneral.RegisterIfNotSet(dtypes.Int32, execNormalizedDotGeneralGeneric[int32])
-	dispatchDotGeneral.RegisterIfNotSet(dtypes.Int64, execNormalizedDotGeneralGeneric[int64])
-	dispatchDotGeneral.RegisterIfNotSet(dtypes.Uint8, execNormalizedDotGeneralGeneric[uint8])
-	dispatchDotGeneral.RegisterIfNotSet(dtypes.Uint16, execNormalizedDotGeneralGeneric[uint16])
-	dispatchDotGeneral.RegisterIfNotSet(dtypes.Uint32, execNormalizedDotGeneralGeneric[uint32])
-	dispatchDotGeneral.RegisterIfNotSet(dtypes.Uint64, execNormalizedDotGeneralGeneric[uint64])
-	dispatchDotGeneral.RegisterIfNotSet(dtypes.Float32, execNormalizedDotGeneralGeneric[float32])
-	dispatchDotGeneral.RegisterIfNotSet(dtypes.Float64, execNormalizedDotGeneralGeneric[float64])
+	// DTypeDispatcher: dotGeneralDTypeMap
+	dotGeneralDTypeMap.RegisterIfNotSet(dtypes.Int8, execNormalizedDotGeneralGeneric[int8])
+	dotGeneralDTypeMap.RegisterIfNotSet(dtypes.Int16, execNormalizedDotGeneralGeneric[int16])
+	dotGeneralDTypeMap.RegisterIfNotSet(dtypes.Int32, execNormalizedDotGeneralGeneric[int32])
+	dotGeneralDTypeMap.RegisterIfNotSet(dtypes.Int64, execNormalizedDotGeneralGeneric[int64])
+	dotGeneralDTypeMap.RegisterIfNotSet(dtypes.Uint8, execNormalizedDotGeneralGeneric[uint8])
+	dotGeneralDTypeMap.RegisterIfNotSet(dtypes.Uint16, execNormalizedDotGeneralGeneric[uint16])
+	dotGeneralDTypeMap.RegisterIfNotSet(dtypes.Uint32, execNormalizedDotGeneralGeneric[uint32])
+	dotGeneralDTypeMap.RegisterIfNotSet(dtypes.Uint64, execNormalizedDotGeneralGeneric[uint64])
+	dotGeneralDTypeMap.RegisterIfNotSet(dtypes.Float32, execNormalizedDotGeneralGeneric[float32])
+	dotGeneralDTypeMap.RegisterIfNotSet(dtypes.Float64, execNormalizedDotGeneralGeneric[float64])
 
 	// DTypeDispatcher: dispatchBroadcast
 	dispatchBroadcast.RegisterIfNotSet(dtypes.Int8, execBroadcastGeneric[int8])
