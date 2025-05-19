@@ -58,6 +58,7 @@ func (b *Backend) getBuffer(dtype dtypes.DType, length int) *Buffer {
 	pool := b.getBufferPool(dtype, length)
 	buf := pool.Get().(*Buffer)
 	buf.valid = true
+	buf.Zeros()
 	//fmt.Printf("> Buffer.Get(%p) - dtype=%s, len=%d\n", buf, dtype, length)
 	return buf
 }
