@@ -74,6 +74,10 @@ func TestExecSpecialOps_Reshape(t *testing.T) {
 	assert.NoError(t, y0.Shape().Check(dtypes.Int32, 2, 2))
 }
 
+// =================================================================================================================
+// Reduce* ---------------------------------------------------------------------------------------------------------
+// =================================================================================================================
+
 func TestExecSpecialOps_Reduce(t *testing.T) {
 	y0 := graph.ExecOnce(backend, func(x *graph.Node) *graph.Node {
 		return graph.ReduceMin(x, -1)
@@ -115,6 +119,46 @@ func TestExecSpecialOps_Reduce(t *testing.T) {
 		[][]bfloat16.BFloat16{{bf16(-11), bf16(-17)}, {bf16(8), bf16(21)}})
 	fmt.Printf("\ty5=%s\n", y5.GoStr())
 	assert.Equal(t, bf16(1), y5.Value())
+}
+
+func TestExecSpecialOps_ReduceBitwise(t *testing.T) {
+	y0 := graph.ExecOnce(backend, func(x *graph.Node) *graph.Node {
+		return graph.ReduceBitwiseAnd(x, -1)
+	}, []int32{7, 3, 2})
+	fmt.Printf("\tReduceBitwiseAnd: y0=%s\n", y0.GoStr())
+	assert.Equal(t, int32(2), y0.Value())
+
+	y1 := graph.ExecOnce(backend, func(x *graph.Node) *graph.Node {
+		return graph.ReduceBitwiseOr(x)
+	}, [][]uint8{{3}, {12}, {17}})
+	fmt.Printf("\tReduceBitwiseOr: y1=%s\n", y1.GoStr())
+	assert.Equal(t, uint8(31), y1.Value())
+
+	y2 := graph.ExecOnce(backend, func(x *graph.Node) *graph.Node {
+		return graph.ReduceBitwiseXor(x, 0)
+	}, [][]int64{{3}, {12}, {17}})
+	fmt.Printf("\tReduceBitwiseXor: y2=%s\n", y2.GoStr())
+	assert.Equal(t, []int64{30}, y2.Value())
+}
+
+func TestExecSpecialOps_ReduceLogical(t *testing.T) {
+	y0 := graph.ExecOnce(backend, func(x *graph.Node) *graph.Node {
+		return graph.ReduceLogicalAnd(x, -1)
+	}, [][]bool{{true, false}, {true, true}})
+	fmt.Printf("\tReduceLogicalAnd: y0=%s\n", y0.GoStr())
+	assert.Equal(t, []bool{false, true}, y0.Value())
+
+	y1 := graph.ExecOnce(backend, func(x *graph.Node) *graph.Node {
+		return graph.ReduceLogicalOr(x, 0)
+	}, [][]bool{{true, false}, {false, false}})
+	fmt.Printf("\tReduceLogicalOr: y1=%s\n", y1.GoStr())
+	assert.Equal(t, []bool{true, false}, y1.Value())
+
+	y2 := graph.ExecOnce(backend, func(x *graph.Node) *graph.Node {
+		return graph.ReduceLogicalXor(x, -1)
+	}, [][]bool{{true, false}, {true, true}})
+	fmt.Printf("\tReduceLogicalXor: y2=%s\n", y2.GoStr())
+	assert.Equal(t, []bool{true, false}, y2.Value())
 }
 
 func TestExecSpecialOps_transposeIterator(t *testing.T) {

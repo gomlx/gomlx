@@ -5,7 +5,8 @@
 * Package `simplego`:
   * Fixed `Gather` of scalar values.
   * Fixed `Where` checking of shape.
-  * New ops: `Erf`, `ArgMinMax`.
+  * New ops: `Erf`, `ArgMinMax`, `ReduceWindow`, `ReduceBitwise{And,Or,Xor}` and `ReduceLogical{And,Or,Xor}`
+  * Fixed initialization of re-used buffers where needed.
 * Package `backends/default`:
   * Only include XLA by default on linux/amd64 platforms.
 * Package `shapeinference`:
