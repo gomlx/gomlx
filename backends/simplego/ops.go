@@ -738,6 +738,11 @@ func (b *Builder) Equal(lhsOp, rhsOp backends.Op) (backends.Op, error) {
 	return b.addComparisonOp(backends.OpTypeEqual, lhsOp, rhsOp)
 }
 
+// NotEqual implements the backends.Builder interface.
+func (b *Builder) NotEqual(lhsOp, rhsOp backends.Op) (backends.Op, error) {
+	return b.addComparisonOp(backends.OpTypeNotEqual, lhsOp, rhsOp)
+}
+
 // GreaterOrEqual implements the backends.Builder interface.
 func (b *Builder) GreaterOrEqual(lhsOp, rhsOp backends.Op) (backends.Op, error) {
 	return b.addComparisonOp(backends.OpTypeGreaterOrEqual, lhsOp, rhsOp)
