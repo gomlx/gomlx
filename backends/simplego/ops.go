@@ -243,6 +243,21 @@ func (b *Builder) ReduceBitwiseXor(operandOp backends.Op, axis ...int) (backends
 	return b.reduceImpls(backends.OpTypeReduceBitwiseXor, operandOp, axis...)
 }
 
+// ReduceLogicalAnd implements the backends.Builder interface.
+func (b *Builder) ReduceLogicalAnd(operandOp backends.Op, axis ...int) (backends.Op, error) {
+	return b.reduceImpls(backends.OpTypeReduceLogicalAnd, operandOp, axis...)
+}
+
+// ReduceLogicalOr implements the backends.Builder interface.
+func (b *Builder) ReduceLogicalOr(operandOp backends.Op, axis ...int) (backends.Op, error) {
+	return b.reduceImpls(backends.OpTypeReduceLogicalOr, operandOp, axis...)
+}
+
+// ReduceLogicalXor implements the backends.Builder interface.
+func (b *Builder) ReduceLogicalXor(operandOp backends.Op, axis ...int) (backends.Op, error) {
+	return b.reduceImpls(backends.OpTypeReduceLogicalXor, operandOp, axis...)
+}
+
 func (b *Builder) reduceImpls(reduceOpType backends.OpType, operandOp backends.Op, axes ...int) (backends.Op, error) {
 	inputs, err := b.checkOps("ReduceOp", operandOp)
 	if err != nil {

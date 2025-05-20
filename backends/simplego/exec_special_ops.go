@@ -208,12 +208,14 @@ func execReduce(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bo
 	case backends.OpTypeReduceBitwiseXor:
 		reduceFn = reduceBitwiseXorDTypeMap.Get(dtype).(genericReduceFn)
 	case backends.OpTypeReduceLogicalAnd:
-		reduceFn = reduceLogicalAndDTypeMap.Get(dtype).(genericReduceFn)
+		// Logical reduction only works on boolean variables, so there is no need for a generic implementation.
+		reduceFn = execReduceLogicalAnd
 	case backends.OpTypeReduceLogicalOr:
-		reduceFn = reduceLogicalOrDTypeMap.Get(dtype).(genericReduceFn)
+		// Logical reduction only works on boolean variables, so there is no need for a generic implementation.
+		reduceFn = execReduceLogicalOr
 	case backends.OpTypeReduceLogicalXor:
-		reduceFn = reduceLogicalXorDTypeMap.Get(dtype).(genericReduceFn)
-
+		// Logical reduction only works on boolean variables, so there is no need for a generic implementation.
+		reduceFn = execReduceLogicalXor
 	default:
 		return nil, errors.Errorf("unsupported reduce op %s", node.opType)
 	}
@@ -420,9 +422,6 @@ var (
 	reduceBitwiseAndDTypeMap = NewDTypeMap("ReduceBitwiseAnd")
 	reduceBitwiseOrDTypeMap  = NewDTypeMap("ReduceBitwiseOr")
 	reduceBitwiseXorDTypeMap = NewDTypeMap("ReduceBitwiseXor")
-	reduceLogicalAndDTypeMap = NewDTypeMap("ReduceLogicalAnd")
-	reduceLogicalOrDTypeMap  = NewDTypeMap("ReduceLogicalOr")
-	reduceLogicalXorDTypeMap = NewDTypeMap("ReduceLogicalXor")
 )
 
 func execReduceBitwiseAndGeneric[T PODIntegerConstraints](operand, output *Buffer, it *reduceOutputIterator, dtype dtypes.DType) {
@@ -467,6 +466,48 @@ func execReduceBitwiseXorGeneric[T PODIntegerConstraints](operand, output *Buffe
 	for _, value := range operandFlat {
 		outputIdx := it.next()
 		outputFlat[outputIdx] = outputFlat[outputIdx] ^ value
+	}
+}
+
+func execReduceLogicalAnd(operand, output *Buffer, it *reduceOutputIterator, dtype dtypes.DType) {
+	// Initialize with 1.
+	outputFlat := output.flat.([]bool)
+	for outputIdx := range outputFlat {
+		outputFlat[outputIdx] = true
+	}
+
+	operandFlat := operand.flat.([]bool)
+	for _, value := range operandFlat {
+		outputIdx := it.next()
+		outputFlat[outputIdx] = outputFlat[outputIdx] && value
+	}
+}
+
+func execReduceLogicalOr(operand, output *Buffer, it *reduceOutputIterator, dtype dtypes.DType) {
+	// Initialize with 1.
+	outputFlat := output.flat.([]bool)
+	for outputIdx := range outputFlat {
+		outputFlat[outputIdx] = false
+	}
+
+	operandFlat := operand.flat.([]bool)
+	for _, value := range operandFlat {
+		outputIdx := it.next()
+		outputFlat[outputIdx] = outputFlat[outputIdx] || value
+	}
+}
+
+func execReduceLogicalXor(operand, output *Buffer, it *reduceOutputIterator, dtype dtypes.DType) {
+	// Initialize with 1.
+	outputFlat := output.flat.([]bool)
+	for outputIdx := range outputFlat {
+		outputFlat[outputIdx] = false
+	}
+
+	operandFlat := operand.flat.([]bool)
+	for _, value := range operandFlat {
+		outputIdx := it.next()
+		outputFlat[outputIdx] = outputFlat[outputIdx] != value // a != b is the same as Xor(a,b).
 	}
 }
 
@@ -1484,7 +1525,7 @@ func execArgMinMax(backend *Backend, node *Node, inputs []*Buffer, inputsOwned [
 	output := backend.getBuffer(node.shape.DType, node.shape.Size())
 	output.shape = node.shape
 
-	// There are 3 sizes to iterate over: before and after the reduceAxis, and the size (dimension) of the reduce axis itself.
+	// There are 3 sizes to iterate over: before and after the reduceAxis, and the size (dimension) of the reduced axis itself.
 	operandDims := operand.shape.Dimensions
 	operandRank := len(operandDims)
 	suffixSize := 1
@@ -1542,7 +1583,7 @@ func execArgMinMaxGeneric[T PODNumericConstraints](
 	outputFlatIdx := 0
 	operandFlatIdx := 0
 	for range prefixSize {
-		// Initialize current best with first element of reduce axis:
+		// Initialize the current best with the first element of the reduced axis:
 		for suffixIdx := range suffixSize {
 			currentBest[suffixIdx] = operandFlat[operandFlatIdx]
 			currentArgBest[suffixIdx] = 0
@@ -1601,7 +1642,7 @@ func execArgMinMaxGenericBFloat16(
 	outputFlatIdx := 0
 	operandFlatIdx := 0
 	for range prefixSize {
-		// Initialize current best with first element of reduce axis:
+		// Initialize the current best with the first element of reduced axis:
 		for suffixIdx := range suffixSize {
 			currentBest[suffixIdx] = operandFlat[operandFlatIdx]
 			currentArgBest[suffixIdx] = 0
@@ -1657,7 +1698,7 @@ func execReduceWindow(backend *Backend, node *Node, inputs []*Buffer, inputsOwne
 	_ = outputShape
 	opData := node.data.(*reduceWindowNode)
 
-	// Resolve effective parameters, assuming shapeinference.ReduceWindowOp handled nils by defaulting them:
+	// resolve the effective parameters, assuming shapeinference.ReduceWindowOp handled nils by defaulting them:
 	// - windowDimensions is guaranteed non-nil by the builder.
 	// - strides, paddings, baseDilations, windowDilations default if their opData fields are nil.
 	effWindowDimensions := opData.windowDimensions
