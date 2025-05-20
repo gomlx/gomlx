@@ -1,6 +1,6 @@
 # GoMLX changelog
 
-# Next
+# v0.19.2: 2024/05/20 Many SimpleGo improvements. 
 
 * Package `simplego`:
   * Fixed `Gather` of scalar values.
