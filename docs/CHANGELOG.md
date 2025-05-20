@@ -1,7 +1,8 @@
 # GoMLX changelog
 
-# v0.19.2: 2024/05/20 Many SimpleGo improvements. 
+# v0.19.3: 2024/05/20 Many SimpleGo improvements. 
 
+* v0.19.2 skipped ... issues with the release.
 * Package `simplego`:
   * Fixed `Gather` of scalar values.
   * Fixed `Where` checking of shape.
