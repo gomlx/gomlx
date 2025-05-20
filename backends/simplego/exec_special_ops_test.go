@@ -74,6 +74,10 @@ func TestExecSpecialOps_Reshape(t *testing.T) {
 	assert.NoError(t, y0.Shape().Check(dtypes.Int32, 2, 2))
 }
 
+// =================================================================================================================
+// Reduce* ---------------------------------------------------------------------------------------------------------
+// =================================================================================================================
+
 func TestExecSpecialOps_Reduce(t *testing.T) {
 	y0 := graph.ExecOnce(backend, func(x *graph.Node) *graph.Node {
 		return graph.ReduceMin(x, -1)
@@ -115,6 +119,14 @@ func TestExecSpecialOps_Reduce(t *testing.T) {
 		[][]bfloat16.BFloat16{{bf16(-11), bf16(-17)}, {bf16(8), bf16(21)}})
 	fmt.Printf("\ty5=%s\n", y5.GoStr())
 	assert.Equal(t, bf16(1), y5.Value())
+}
+
+func TestExecSpecialOps_ReduceBitwise(t *testing.T) {
+	y0 := graph.ExecOnce(backend, func(x *graph.Node) *graph.Node {
+		return graph.ReduceBitwiseAnd(x, -1)
+	}, []int32{7, 3, 2})
+	fmt.Printf("\ty0=%s\n", y0.GoStr())
+	assert.Equal(t, int32(2), y0.Value())
 }
 
 func TestExecSpecialOps_transposeIterator(t *testing.T) {

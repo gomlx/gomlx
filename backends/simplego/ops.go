@@ -228,6 +228,11 @@ func (b *Builder) ReduceProduct(operandOp backends.Op, axis ...int) (backends.Op
 	return b.reduceImpls(backends.OpTypeReduceProduct, operandOp, axis...)
 }
 
+// ReduceBitwiseAnd implements the backends.Builder interface.
+func (b *Builder) ReduceBitwiseAnd(operandOp backends.Op, axis ...int) (backends.Op, error) {
+	return b.reduceImpls(backends.OpTypeReduceBitwiseAnd, operandOp, axis...)
+}
+
 func (b *Builder) reduceImpls(reduceOpType backends.OpType, operandOp backends.Op, axes ...int) (backends.Op, error) {
 	inputs, err := b.checkOps("ReduceOp", operandOp)
 	if err != nil {

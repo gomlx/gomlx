@@ -2,6 +2,7 @@ package simplego
 
 import (
 	"encoding/binary"
+	"fmt"
 	"math/rand/v2"
 	"slices"
 
@@ -26,6 +27,12 @@ func init() {
 	nodeExecutors[backends.OpTypeReduceMin] = execReduce
 	nodeExecutors[backends.OpTypeReduceSum] = execReduce
 	nodeExecutors[backends.OpTypeReduceProduct] = execReduce
+	nodeExecutors[backends.OpTypeReduceBitwiseAnd] = execReduce
+	nodeExecutors[backends.OpTypeReduceBitwiseOr] = execReduce
+	nodeExecutors[backends.OpTypeReduceBitwiseXor] = execReduce
+	nodeExecutors[backends.OpTypeReduceLogicalAnd] = execReduce
+	nodeExecutors[backends.OpTypeReduceLogicalOr] = execReduce
+	nodeExecutors[backends.OpTypeReduceLogicalXor] = execReduce
 	nodeExecutors[backends.OpTypeIota] = execIota
 	nodeExecutors[backends.OpTypeGather] = execGather
 	nodeExecutors[backends.OpTypeConcatenate] = execConcatenate
@@ -195,6 +202,19 @@ func execReduce(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bo
 		reduceFn = reduceSumDTypeMap.Get(dtype).(genericReduceFn)
 	case backends.OpTypeReduceProduct:
 		reduceFn = reduceProductDTypeMap.Get(dtype).(genericReduceFn)
+	case backends.OpTypeReduceBitwiseAnd:
+		reduceFn = reduceBitwiseAndDTypeMap.Get(dtype).(genericReduceFn)
+	case backends.OpTypeReduceBitwiseOr:
+		reduceFn = reduceBitwiseOrDTypeMap.Get(dtype).(genericReduceFn)
+	case backends.OpTypeReduceBitwiseXor:
+		reduceFn = reduceBitwiseXorDTypeMap.Get(dtype).(genericReduceFn)
+	case backends.OpTypeReduceLogicalAnd:
+		reduceFn = reduceLogicalAndDTypeMap.Get(dtype).(genericReduceFn)
+	case backends.OpTypeReduceLogicalOr:
+		reduceFn = reduceLogicalOrDTypeMap.Get(dtype).(genericReduceFn)
+	case backends.OpTypeReduceLogicalXor:
+		reduceFn = reduceLogicalXorDTypeMap.Get(dtype).(genericReduceFn)
+
 	default:
 		return nil, errors.Errorf("unsupported reduce op %s", node.opType)
 	}
@@ -394,6 +414,32 @@ func execReduceProductBFloat16(operand, output *Buffer, it *reduceOutputIterator
 		outputIdx := it.next()
 		a, b := outputFlat[outputIdx].Float32(), value.Float32()
 		outputFlat[outputIdx] = bfloat16.FromFloat32(a * b)
+	}
+}
+
+var (
+	reduceBitwiseAndDTypeMap = NewDTypeMap("ReduceBitwiseAnd")
+	reduceBitwiseOrDTypeMap  = NewDTypeMap("ReduceBitwiseOr")
+	reduceBitwiseXorDTypeMap = NewDTypeMap("ReduceBitwiseXor")
+	reduceLogicalAndDTypeMap = NewDTypeMap("ReduceLogicalAnd")
+	reduceLogicalOrDTypeMap  = NewDTypeMap("ReduceLogicalOr")
+	reduceLogicalXorDTypeMap = NewDTypeMap("ReduceLogicalXor")
+)
+
+func execReduceBitwiseAndGeneric[T PODIntegerConstraints](operand, output *Buffer, it *reduceOutputIterator, dtype dtypes.DType) {
+	// Initialize with 1.
+	initialValue := ^T(0)
+	outputFlat := output.flat.([]T)
+	for outputIdx := range outputFlat {
+		outputFlat[outputIdx] = initialValue
+	}
+
+	operandFlat := operand.flat.([]T)
+	fmt.Printf("operandFlat=%v\n", operandFlat)
+	fmt.Printf("outputFlat=%v\n", outputFlat)
+	for _, value := range operandFlat {
+		outputIdx := it.next()
+		outputFlat[outputIdx] = outputFlat[outputIdx] & value
 	}
 }
 

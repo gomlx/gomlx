@@ -147,6 +147,16 @@ func init() {
 	reduceProductDTypeMap.RegisterIfNotSet(dtypes.Float32, execReduceProductGeneric[float32])
 	reduceProductDTypeMap.RegisterIfNotSet(dtypes.Float64, execReduceProductGeneric[float64])
 
+	// DTypeMap: reduceBitwiseAndDTypeMap
+	reduceBitwiseAndDTypeMap.RegisterIfNotSet(dtypes.Int8, execReduceBitwiseAndGeneric[int8])
+	reduceBitwiseAndDTypeMap.RegisterIfNotSet(dtypes.Int16, execReduceBitwiseAndGeneric[int16])
+	reduceBitwiseAndDTypeMap.RegisterIfNotSet(dtypes.Int32, execReduceBitwiseAndGeneric[int32])
+	reduceBitwiseAndDTypeMap.RegisterIfNotSet(dtypes.Int64, execReduceBitwiseAndGeneric[int64])
+	reduceBitwiseAndDTypeMap.RegisterIfNotSet(dtypes.Uint8, execReduceBitwiseAndGeneric[uint8])
+	reduceBitwiseAndDTypeMap.RegisterIfNotSet(dtypes.Uint16, execReduceBitwiseAndGeneric[uint16])
+	reduceBitwiseAndDTypeMap.RegisterIfNotSet(dtypes.Uint32, execReduceBitwiseAndGeneric[uint32])
+	reduceBitwiseAndDTypeMap.RegisterIfNotSet(dtypes.Uint64, execReduceBitwiseAndGeneric[uint64])
+
 	// DTypeMap: transposeDTypeMap
 	transposeDTypeMap.RegisterIfNotSet(dtypes.Int8, execTransposeGeneric[int8])
 	transposeDTypeMap.RegisterIfNotSet(dtypes.Int16, execTransposeGeneric[int16])
