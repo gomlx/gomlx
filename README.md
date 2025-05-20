@@ -104,6 +104,7 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
 
 ## 👥 Support
 
+* [![Join the Gophers Slack Community](https://img.shields.io/badge/Slack-4A154B?style=for-the-badge&logo=slack&logoColor=white)](https://invite.slack.golangbridge.org/): connect with us there. Once you've joined the Gophers slack, find our channel: [`#gomlx`](https://app.slack.com/client/T029RQSE6/C08TX33BX6U).
 * [Q&A and discussions](https://github.com/gomlx/gomlx/discussions/categories/q-a)
 * [Issues](https://github.com/gomlx/gomlx/issues)
 * Random brainstorming on projects: just start a Q&A and I'm happy to meet in discord somewhere or VC.
