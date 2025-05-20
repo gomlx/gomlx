@@ -27,6 +27,7 @@ func init() {
 	nodeExecutors[backends.OpTypeLogicalOr] = execLogicalOr
 	nodeExecutors[backends.OpTypeLogicalXor] = execLogicalXor
 	nodeExecutors[backends.OpTypeEqual] = execEqual
+	nodeExecutors[backends.OpTypeNotEqual] = execNotEqual
 	nodeExecutors[backends.OpTypeGreaterOrEqual] = execGreaterOrEqual
 	nodeExecutors[backends.OpTypeGreaterThan] = execGreaterThan
 	nodeExecutors[backends.OpTypeLessOrEqual] = execLessOrEqual
@@ -1548,6 +1549,122 @@ func execEqualNumericBFloat16(lhs, rhs []bfloat16.BFloat16, output []bool,
 			a := lhs[lhsIdx].Float32()
 			b := rhs[rhsIdx].Float32()
 			output[outputIdx] = a == b
+		}
+	}
+	return
+}
+
+// execNotEqual executes the binary op NotEqual.
+func execNotEqual(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool) (*Buffer, error) {
+	lhs, rhs := inputs[0], inputs[1]
+	lhsIsScalarOr1, rhsIsScalarOr1 := lhs.shape.Size() == 1, rhs.shape.Size() == 1
+	output := backend.getBuffer(node.shape.DType, node.shape.Size())
+	output.shape = node.shape // Add is commutative, so if any of the two is scalar, make the rhs the scalar one.
+	if lhsIsScalarOr1 && !rhsIsScalarOr1 {
+		lhs, rhs = rhs, lhs
+		lhsIsScalarOr1, rhsIsScalarOr1 = rhsIsScalarOr1, lhsIsScalarOr1
+	}
+
+	switch lhs.shape.DType {
+
+	case dtypes.Uint8:
+		execNotEqualNumericGeneric[uint8](lhs.flat.([]uint8), rhs.flat.([]uint8), output.flat.([]bool), lhs.shape, rhs.shape, output.shape)
+
+	case dtypes.Uint16:
+		execNotEqualNumericGeneric[uint16](lhs.flat.([]uint16), rhs.flat.([]uint16), output.flat.([]bool), lhs.shape, rhs.shape, output.shape)
+
+	case dtypes.Uint32:
+		execNotEqualNumericGeneric[uint32](lhs.flat.([]uint32), rhs.flat.([]uint32), output.flat.([]bool), lhs.shape, rhs.shape, output.shape)
+
+	case dtypes.Uint64:
+		execNotEqualNumericGeneric[uint64](lhs.flat.([]uint64), rhs.flat.([]uint64), output.flat.([]bool), lhs.shape, rhs.shape, output.shape)
+
+	case dtypes.Int8:
+		execNotEqualNumericGeneric[int8](lhs.flat.([]int8), rhs.flat.([]int8), output.flat.([]bool), lhs.shape, rhs.shape, output.shape)
+
+	case dtypes.Int16:
+		execNotEqualNumericGeneric[int16](lhs.flat.([]int16), rhs.flat.([]int16), output.flat.([]bool), lhs.shape, rhs.shape, output.shape)
+
+	case dtypes.Int32:
+		execNotEqualNumericGeneric[int32](lhs.flat.([]int32), rhs.flat.([]int32), output.flat.([]bool), lhs.shape, rhs.shape, output.shape)
+
+	case dtypes.Int64:
+		execNotEqualNumericGeneric[int64](lhs.flat.([]int64), rhs.flat.([]int64), output.flat.([]bool), lhs.shape, rhs.shape, output.shape)
+
+	case dtypes.Float32:
+		execNotEqualNumericGeneric[float32](lhs.flat.([]float32), rhs.flat.([]float32), output.flat.([]bool), lhs.shape, rhs.shape, output.shape)
+
+	case dtypes.Float64:
+		execNotEqualNumericGeneric[float64](lhs.flat.([]float64), rhs.flat.([]float64), output.flat.([]bool), lhs.shape, rhs.shape, output.shape)
+
+	case dtypes.BFloat16:
+		execNotEqualNumericBFloat16(lhs.flat.([]bfloat16.BFloat16), rhs.flat.([]bfloat16.BFloat16), output.flat.([]bool), lhs.shape, rhs.shape, output.shape)
+	default:
+		return nil, errors.Errorf("unsupported data type %s for %s", output.shape.DType, node.opType)
+	}
+	return output, nil
+}
+
+func execNotEqualNumericGeneric[T PODNumericConstraints](lhs, rhs []T, output []bool,
+	lhsShape, rhsShape, outputShape shapes.Shape) {
+	if len(rhs) == 1 {
+		// Case 1: One side (rhs) is a scalar: only iterate over the lhs.
+		c := rhs[0]
+		for ii, input := range lhs {
+			output[ii] = input != c
+		}
+		return
+
+	} else if lhsShape.Equal(rhsShape) {
+		// Case 2: Exact same shapes, no broadcasting.
+		for ii, input := range lhs {
+			output[ii] = input != rhs[ii]
+		}
+		return
+
+	} else {
+		// Case 3: with broadcasting non-scalar tensors:
+		lhsIter := newBroadcastIterator(lhsShape, outputShape)
+		rhsIter := newBroadcastIterator(rhsShape, outputShape)
+		for outputIdx := range output {
+			lhsIdx := lhsIter.Next()
+			rhsIdx := rhsIter.Next()
+			output[outputIdx] = lhs[lhsIdx] != rhs[rhsIdx]
+		}
+	}
+	return
+}
+
+func execNotEqualNumericBFloat16(lhs, rhs []bfloat16.BFloat16, output []bool,
+	lhsShape, rhsShape, outputShape shapes.Shape) {
+	if len(rhs) == 1 {
+		// One side (rhs) is a scalar: only iterate over the lhs.
+		c := rhs[0].Float32()
+		for ii, input := range lhs {
+			a := input.Float32()
+			output[ii] = a != c
+		}
+		return
+
+	} else if lhsShape.Equal(rhsShape) {
+		// Case 2: Exact same shapes, no broadcasting.
+		for outputIdx := range output {
+			a := lhs[outputIdx].Float32()
+			b := rhs[outputIdx].Float32()
+			output[outputIdx] = a != b
+		}
+		return
+
+	} else {
+		// Case 3: with broadcasting non-scalar tensors:
+		lhsIter := newBroadcastIterator(lhsShape, outputShape)
+		rhsIter := newBroadcastIterator(rhsShape, outputShape)
+		for outputIdx := range output {
+			lhsIdx := lhsIter.Next()
+			rhsIdx := rhsIter.Next()
+			a := lhs[lhsIdx].Float32()
+			b := rhs[rhsIdx].Float32()
+			output[outputIdx] = a != b
 		}
 	}
 	return

@@ -1,6 +1,9 @@
 package simplego
 
 import (
+	"reflect"
+	"slices"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/notimplemented"
 	"github.com/gomlx/gomlx/backends/shapeinference"
@@ -8,8 +11,6 @@ import (
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
-	"reflect"
-	"slices"
 )
 
 // Builder keeps track of the computation graph being defined.

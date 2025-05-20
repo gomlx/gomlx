@@ -2,11 +2,12 @@ package main
 
 import (
 	"fmt"
-	"github.com/gomlx/gomlx/types"
-	"github.com/janpfeifer/must"
 	"os"
 	"os/exec"
 	"text/template"
+
+	"github.com/gomlx/gomlx/types"
+	"github.com/janpfeifer/must"
 )
 
 const (
@@ -324,6 +325,7 @@ var (
 		}},
 
 		{Name: "Equal", IsComparison: true, IsCommutative: true, Versions: []BinaryOpVersion{{Numeric: true, Name: "Numeric", Format: "%s == %s"}}},
+		{Name: "NotEqual", IsComparison: true, IsCommutative: true, Versions: []BinaryOpVersion{{Numeric: true, Name: "Numeric", Format: "%s != %s"}}},
 		{Name: "GreaterOrEqual", IsComparison: true, Versions: []BinaryOpVersion{{Numeric: true, Name: "Numeric", Format: "%s >= %s"}}},
 		{Name: "GreaterThan", IsComparison: true, Versions: []BinaryOpVersion{{Numeric: true, Name: "Numeric", Format: "%s > %s"}}},
 		{Name: "LessOrEqual", IsComparison: true, Versions: []BinaryOpVersion{{Numeric: true, Name: "Numeric", Format: "%s <= %s"}}},
