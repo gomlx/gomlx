@@ -125,8 +125,21 @@ func TestExecSpecialOps_ReduceBitwise(t *testing.T) {
 	y0 := graph.ExecOnce(backend, func(x *graph.Node) *graph.Node {
 		return graph.ReduceBitwiseAnd(x, -1)
 	}, []int32{7, 3, 2})
-	fmt.Printf("\ty0=%s\n", y0.GoStr())
+	fmt.Printf("\tReduceBitwiseAnd: y0=%s\n", y0.GoStr())
 	assert.Equal(t, int32(2), y0.Value())
+
+	y1 := graph.ExecOnce(backend, func(x *graph.Node) *graph.Node {
+		return graph.ReduceBitwiseOr(x)
+	}, [][]uint8{{3}, {12}, {17}})
+	fmt.Printf("\tReduceBitwiseOr: y1=%s\n", y1.GoStr())
+	assert.Equal(t, uint8(31), y1.Value())
+
+	y2 := graph.ExecOnce(backend, func(x *graph.Node) *graph.Node {
+		return graph.ReduceBitwiseXor(x, 0)
+	}, [][]int64{{3}, {12}, {17}})
+	fmt.Printf("\tReduceBitwiseXor: y2=%s\n", y2.GoStr())
+	assert.Equal(t, []int64{30}, y2.Value())
+
 }
 
 func TestExecSpecialOps_transposeIterator(t *testing.T) {

@@ -52,6 +52,8 @@ var (
 			{"reduceSumDTypeMap", "execReduceSumGeneric", makeDTypes(true, true, true, false, false)},
 			{"reduceProductDTypeMap", "execReduceProductGeneric", makeDTypes(true, true, true, false, false)},
 			{"reduceBitwiseAndDTypeMap", "execReduceBitwiseAndGeneric", makeDTypes(true, true, false, false, false)},
+			{"reduceBitwiseOrDTypeMap", "execReduceBitwiseOrGeneric", makeDTypes(true, true, false, false, false)},
+			{"reduceBitwiseXorDTypeMap", "execReduceBitwiseXorGeneric", makeDTypes(true, true, false, false, false)},
 			{"transposeDTypeMap", "execTransposeGeneric", makeDTypes(true, true, true, true, true)},
 			{"whereDTypeMap", "execWhereGeneric", makeDTypes(true, true, true, true, true)},
 			{"combineMaxDTypeMap", "combineForScatterMaxGeneric", makeDTypes(true, true, true, false, false)},

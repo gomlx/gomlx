@@ -2,7 +2,6 @@ package simplego
 
 import (
 	"encoding/binary"
-	"fmt"
 	"math/rand/v2"
 	"slices"
 
@@ -435,11 +434,39 @@ func execReduceBitwiseAndGeneric[T PODIntegerConstraints](operand, output *Buffe
 	}
 
 	operandFlat := operand.flat.([]T)
-	fmt.Printf("operandFlat=%v\n", operandFlat)
-	fmt.Printf("outputFlat=%v\n", outputFlat)
 	for _, value := range operandFlat {
 		outputIdx := it.next()
 		outputFlat[outputIdx] = outputFlat[outputIdx] & value
+	}
+}
+
+func execReduceBitwiseOrGeneric[T PODIntegerConstraints](operand, output *Buffer, it *reduceOutputIterator, dtype dtypes.DType) {
+	// Initialize with 1.
+	initialValue := T(0)
+	outputFlat := output.flat.([]T)
+	for outputIdx := range outputFlat {
+		outputFlat[outputIdx] = initialValue
+	}
+
+	operandFlat := operand.flat.([]T)
+	for _, value := range operandFlat {
+		outputIdx := it.next()
+		outputFlat[outputIdx] = outputFlat[outputIdx] | value
+	}
+}
+
+func execReduceBitwiseXorGeneric[T PODIntegerConstraints](operand, output *Buffer, it *reduceOutputIterator, dtype dtypes.DType) {
+	// Initialize with 1.
+	initialValue := T(0)
+	outputFlat := output.flat.([]T)
+	for outputIdx := range outputFlat {
+		outputFlat[outputIdx] = initialValue
+	}
+
+	operandFlat := operand.flat.([]T)
+	for _, value := range operandFlat {
+		outputIdx := it.next()
+		outputFlat[outputIdx] = outputFlat[outputIdx] ^ value
 	}
 }
 

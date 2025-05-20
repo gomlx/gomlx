@@ -157,6 +157,26 @@ func init() {
 	reduceBitwiseAndDTypeMap.RegisterIfNotSet(dtypes.Uint32, execReduceBitwiseAndGeneric[uint32])
 	reduceBitwiseAndDTypeMap.RegisterIfNotSet(dtypes.Uint64, execReduceBitwiseAndGeneric[uint64])
 
+	// DTypeMap: reduceBitwiseOrDTypeMap
+	reduceBitwiseOrDTypeMap.RegisterIfNotSet(dtypes.Int8, execReduceBitwiseOrGeneric[int8])
+	reduceBitwiseOrDTypeMap.RegisterIfNotSet(dtypes.Int16, execReduceBitwiseOrGeneric[int16])
+	reduceBitwiseOrDTypeMap.RegisterIfNotSet(dtypes.Int32, execReduceBitwiseOrGeneric[int32])
+	reduceBitwiseOrDTypeMap.RegisterIfNotSet(dtypes.Int64, execReduceBitwiseOrGeneric[int64])
+	reduceBitwiseOrDTypeMap.RegisterIfNotSet(dtypes.Uint8, execReduceBitwiseOrGeneric[uint8])
+	reduceBitwiseOrDTypeMap.RegisterIfNotSet(dtypes.Uint16, execReduceBitwiseOrGeneric[uint16])
+	reduceBitwiseOrDTypeMap.RegisterIfNotSet(dtypes.Uint32, execReduceBitwiseOrGeneric[uint32])
+	reduceBitwiseOrDTypeMap.RegisterIfNotSet(dtypes.Uint64, execReduceBitwiseOrGeneric[uint64])
+
+	// DTypeMap: reduceBitwiseXorDTypeMap
+	reduceBitwiseXorDTypeMap.RegisterIfNotSet(dtypes.Int8, execReduceBitwiseXorGeneric[int8])
+	reduceBitwiseXorDTypeMap.RegisterIfNotSet(dtypes.Int16, execReduceBitwiseXorGeneric[int16])
+	reduceBitwiseXorDTypeMap.RegisterIfNotSet(dtypes.Int32, execReduceBitwiseXorGeneric[int32])
+	reduceBitwiseXorDTypeMap.RegisterIfNotSet(dtypes.Int64, execReduceBitwiseXorGeneric[int64])
+	reduceBitwiseXorDTypeMap.RegisterIfNotSet(dtypes.Uint8, execReduceBitwiseXorGeneric[uint8])
+	reduceBitwiseXorDTypeMap.RegisterIfNotSet(dtypes.Uint16, execReduceBitwiseXorGeneric[uint16])
+	reduceBitwiseXorDTypeMap.RegisterIfNotSet(dtypes.Uint32, execReduceBitwiseXorGeneric[uint32])
+	reduceBitwiseXorDTypeMap.RegisterIfNotSet(dtypes.Uint64, execReduceBitwiseXorGeneric[uint64])
+
 	// DTypeMap: transposeDTypeMap
 	transposeDTypeMap.RegisterIfNotSet(dtypes.Int8, execTransposeGeneric[int8])
 	transposeDTypeMap.RegisterIfNotSet(dtypes.Int16, execTransposeGeneric[int16])
