@@ -77,9 +77,7 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
 > **🚀 NEW 🚀**: `SimpleGo`, a new Go only backend: it is very portable and doesn't require installation of separate 
 > C++ libraries. It is slower and has a limited ops coverage: some 60 ops are already implemented. 
 > It is actively being developed, if you are missing any op, please open an issue in GoMLX GitHub and let us know.
->
-> See [amazing Hive demo running on WASM](https://janpfeifer.github.io/hiveGo/www/hive/): it evaluates game states using **GoMLX** `SimpleGo`
-> compiled to WebAssembly.
+> See [GoMLX compiled to WASM to power the AI for a game of Hive](https://janpfeifer.github.io/hiveGo/www/hive/)
 
 * Converting ONNX models to GoMLX with [onnx-gomlx](https://github.com/gomlx/onnx-gomlx): both as an alternative for `onnxruntime` (leveraging XLA),
   but also to further fine-tune models. See also [go-huggingface](https://github.com/gomlx/go-huggingface) to easily download ONNX model files from HuggingFace.
