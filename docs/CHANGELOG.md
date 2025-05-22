@@ -4,6 +4,8 @@
 
 * Package `xla`
   * Remove dependencies to `gopjrt` internal protos: requires updated `Gopjrt`.
+* Package `tensors`
+  * Fixed pretty-print of booleans.
 
 # v0.19.3: 2024/05/20 Many SimpleGo improvements. 
 
