@@ -5,7 +5,6 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/gopjrt/protos/xla_data"
 	"github.com/gomlx/gopjrt/xlabuilder"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
