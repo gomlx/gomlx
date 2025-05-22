@@ -70,16 +70,14 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
   * 🎉Neural Style Transfer 10 years Celebration🎉: [see a demo written using GoMLX](https://github.com/janpfeifer/styletransfer/blob/main/demo.ipynb) of the [original paper](https://arxiv.org/abs/1508.06576).
   * [Triplet Losses](https://github.com/gomlx/gomlx/blob/main/ml/train/losses/triplet.go): various negative sampling strategies as well as various distance metrics.
   * [AlphaZero AI for the game of Hive](https://github.com/janpfeifer/hiveGo/): it uses a trivial GNN to evaluate
-    positions on the board. It includes a [WASM demo (runs GoMLX in the browser!)](https://janpfeifer.github.io/hiveGo/www/hive/) It includes a command-line UI to test your skills!
+    positions on the board. It includes a [WASM demo (runs GoMLX in the browser!)](https://janpfeifer.github.io/hiveGo/www/hive/) and a command-line UI to test your skills!
 
 **Highlights:**
 
 > **🚀 NEW 🚀**: `SimpleGo`, a new Go only backend: it is very portable and doesn't require installation of separate 
 > C++ libraries. It is slower and has a limited ops coverage: some 60 ops are already implemented. 
 > It is actively being developed, if you are missing any op, please open an issue in GoMLX GitHub and let us know.
->
-> See [amazing Hive demo running on WASM](https://janpfeifer.github.io/hiveGo/www/hive/): it evaluates game states using **GoMLX** `SimpleGo`
-> compiled to WebAssembly.
+> See [GoMLX compiled to WASM to power the AI for a game of Hive](https://janpfeifer.github.io/hiveGo/www/hive/)
 
 * Converting ONNX models to GoMLX with [onnx-gomlx](https://github.com/gomlx/onnx-gomlx): both as an alternative for `onnxruntime` (leveraging XLA),
   but also to further fine-tune models. See also [go-huggingface](https://github.com/gomlx/go-huggingface) to easily download ONNX model files from HuggingFace.
