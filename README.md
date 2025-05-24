@@ -79,6 +79,10 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
 > It is actively being developed, if you are missing any op, please open an issue in GoMLX GitHub and let us know.
 > See [GoMLX compiled to WASM to power the AI for a game of Hive](https://janpfeifer.github.io/hiveGo/www/hive/)
 
+> **🚀 NEW 🚀**: Vector Neural Networks ([arxiv.org/pdf/2104.12229](https://arxiv.org/pdf/2104.12229)): implements
+> rotation (SO(3)) equivariant networks, which can also be made rotation invariant. Great if working with geometric
+> representations or values (Chemistry, use Lidar scans as inputs, etc.)
+
 * Converting ONNX models to GoMLX with [onnx-gomlx](https://github.com/gomlx/onnx-gomlx): both as an alternative for `onnxruntime` (leveraging XLA),
   but also to further fine-tune models. See also [go-huggingface](https://github.com/gomlx/go-huggingface) to easily download ONNX model files from HuggingFace.
 * [Docker "gomlx_jupyterlab"](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab) with integrated JupyterLab and [GoNB](https://github.com/janpfeifer/gonb) (a Go kernel for Jupyter notebooks)
@@ -86,10 +90,11 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
 * Autograd: automatic differentiation -- only gradients for now, no jacobian.
 * Context: automatic variable management for ML models.
 * ML layers library with some of the most popular machine learning "layers": FFN layers,  
-  activation functions, layer and batch normalization, convolutions, pooling, dropout, Multi-Head-Attention
+  various activation functions, layer and batch normalization, convolutions, pooling, dropout, Multi-Head-Attention
   (for transformer layers), LSTM, KAN (B-Splines, [GR-KAN/KAT networks](https://arxiv.org/abs/2409.10594), Discrete-KAN, PiecewiseLinear KAN),
   PiecewiseLinear (for calibration and normalization), various regularizations,
-  FFT (reverse/differentiable), learnable rational functions (both for activations and [GR-KAN/KAT networks](https://arxiv.org/abs/2409.10594)) etc. 
+  FFT (reverse/differentiable), learnable rational functions (both for activations and [GR-KAN/KAT networks](https://arxiv.org/abs/2409.10594)),
+  VNN (Vector Neural Networks) for SO(3)-Equivariant/Invariant layers, etc.
 * Training library, with some pretty-printing. Including plots for Jupyter notebook, using [GoNB, a Go Kernel](https://github.com/janpfeifer/gonb).
   * Also, various debugging tools: collecting values for particular nodes for plotting, simply logging  the value
     of nodes during training, stack-trace of the code where nodes are created.
