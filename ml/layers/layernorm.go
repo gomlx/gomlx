@@ -168,7 +168,7 @@ func (builder *LayerNormBuilder) LearnedOffset(value bool) *LayerNormBuilder {
 	return builder
 }
 
-// LearnedGain defines whether the layer normalization tries apply a multiplying gain the input, a tensor
+// LearnedGain defines whether the layer normalization tries to apply a multiplying gain the input, a tensor
 // with the shape of the combined normalizing axes -- so it changes the direction of the inputs, it's not
 // simply a gain.
 //

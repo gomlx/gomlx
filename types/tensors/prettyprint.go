@@ -3,11 +3,12 @@ package tensors
 import (
 	"bytes"
 	"fmt"
+	"reflect"
+	"strings"
+
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/x448/float16"
-	"reflect"
-	"strings"
 )
 
 var (
@@ -39,6 +40,8 @@ func (t *Tensor) Summary(precision int) string {
 		case reflect.Complex64, reflect.Complex128:
 			c := v.Complex()
 			w("(%.*g+%.*gi)", precision, real(c), precision, imag(c))
+		case reflect.Bool:
+			w("%v", v.Bool())
 		default:
 			w("%.*g", precision, v.Interface())
 		}

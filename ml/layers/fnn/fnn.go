@@ -35,10 +35,10 @@ const (
 	ParamNumHiddenLayers = "fnn_num_hidden_layers"
 
 	// ParamNumHiddenNodes is the hyperparameter that defines the default number of hidden nodes for KAN hidden layers.
-	// Default is 10 (int).
+	// The default is 10 (int).
 	ParamNumHiddenNodes = "fnn_num_hidden_nodes"
 
-	// ParamResidual is the hyperparameter that defines whether to use residual connections between each hidden layers.
+	// ParamResidual is the hyperparameter that defines whether to use residual connections between consecutive hidden layers.
 	// If set, and the feature dimension (the last one) is the same between the input, it also adds a residual to the
 	// input. Same with the outputDimensions.
 	// Default is false (bool).
@@ -86,7 +86,7 @@ type Config struct {
 //
 // E.g: A FNN for a multi-class classification model with NumClasses classes.
 //
-//	func MyMode(ctx *context.Context, inputs []*Node) (outputs []*Node) {
+//	func MyModel(ctx *context.Context, inputs []*Node) (outputs []*Node) {
 //		x := inputs[0]
 //		logits := fnn.New(ctx.In("model"), x, NumClasses).
 //			NumHiddenLayers(3).
