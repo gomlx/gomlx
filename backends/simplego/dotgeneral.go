@@ -177,29 +177,64 @@ func execNormalizedDotGeneralGeneric[T PODNumericConstraints](lhs, rhs, output *
 	lhsFlat := lhs.flat.([]T)
 	rhsFlat := rhs.flat.([]T)
 	outputFlat := output.flat.([]T)
-	var lhsIdx, rhsIdx, outputIdx int
-	batchSize := lhs.shape.Dimensions[0] // same as rhs'.
+
+	batchSize := lhs.shape.Dimensions[0]
 	lhsCrossSize := lhs.shape.Dimensions[1]
 	rhsCrossSize := rhs.shape.Dimensions[1]
-	contractingSize := lhs.shape.Dimensions[2] // same as rhs'.
-	rhsBatchStride := contractingSize * rhsCrossSize
-	for range batchSize {
-		for range lhsCrossSize {
-			rhsBatchStartIdx := rhsIdx
-			for range rhsCrossSize {
-				lhsRowStartIdx := lhsIdx
-				for range contractingSize {
-					outputFlat[outputIdx] += lhsFlat[lhsIdx] * rhsFlat[rhsIdx]
-					lhsIdx++
-					rhsIdx++
+	contractingSize := lhs.shape.Dimensions[2]
+
+	// Pre-compute strides to avoid repeated calculations
+	lhsBatchStride := lhsCrossSize * contractingSize
+	rhsBatchStride := rhsCrossSize * contractingSize
+	outputBatchStride := lhsCrossSize * rhsCrossSize
+
+	// Cache block sizes - adjust based on typical matrix sizes and CPU cache
+	const blockSize = 64 // Tune this based on your typical workload and L1 cache size
+
+	for batchIdx := 0; batchIdx < batchSize; batchIdx++ {
+		lhsBaseIdx := batchIdx * lhsBatchStride
+		rhsBaseIdx := batchIdx * rhsBatchStride
+		outputBaseIdx := batchIdx * outputBatchStride
+
+		// Use blocking to improve cache locality
+		for idxLhsCross := 0; idxLhsCross < lhsCrossSize; idxLhsCross += blockSize {
+			iEnd := min(idxLhsCross+blockSize, lhsCrossSize)
+
+			for idxRhsCross := 0; idxRhsCross < rhsCrossSize; idxRhsCross += blockSize {
+				jEnd := min(idxRhsCross+blockSize, rhsCrossSize)
+
+				for idxContracting := 0; idxContracting < contractingSize; idxContracting += blockSize {
+					kEnd := min(idxContracting+blockSize, contractingSize)
+
+					// Process the current block
+					for i := idxLhsCross; i < iEnd; i++ {
+						lhsRowStartIdx := lhsBaseIdx + i*contractingSize
+						outputRowStartIdx := outputBaseIdx + i*rhsCrossSize
+
+						for j := idxRhsCross; j < jEnd; j++ {
+							rhsColStartIdx := rhsBaseIdx + j*contractingSize
+							sum := outputFlat[outputRowStartIdx+j]
+
+							// Unroll the innermost loop for better vectorization
+							k := idxContracting
+							for ; k+3 < kEnd; k += 4 {
+								sum += lhsFlat[lhsRowStartIdx+k]*rhsFlat[rhsColStartIdx+k] +
+									lhsFlat[lhsRowStartIdx+k+1]*rhsFlat[rhsColStartIdx+k+1] +
+									lhsFlat[lhsRowStartIdx+k+2]*rhsFlat[rhsColStartIdx+k+2] +
+									lhsFlat[lhsRowStartIdx+k+3]*rhsFlat[rhsColStartIdx+k+3]
+							}
+
+							// Handle remaining elements
+							for ; k < kEnd; k++ {
+								sum += lhsFlat[lhsRowStartIdx+k] * rhsFlat[rhsColStartIdx+k]
+							}
+
+							outputFlat[outputRowStartIdx+j] = sum
+						}
+					}
 				}
-				lhsIdx = lhsRowStartIdx
-				outputIdx++
 			}
-			lhsIdx += contractingSize
-			rhsIdx = rhsBatchStartIdx
 		}
-		rhsIdx += rhsBatchStride
 	}
 }
 
