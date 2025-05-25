@@ -2,16 +2,37 @@ package simplego
 
 import (
 	"fmt"
+	"regexp"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/charmbracelet/lipgloss"
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
+	"github.com/muesli/termenv"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
+
+func formatDurationWith2Decimals(d time.Duration) string {
+	s := d.String()
+	re := regexp.MustCompile(`(\d+\.?\d*)([µa-z]+)`)
+	matches := re.FindStringSubmatch(s)
+	if len(matches) != 3 {
+		return s
+	}
+	num, err := strconv.ParseFloat(matches[1], 64)
+	if err != nil {
+		return s
+	}
+	return fmt.Sprintf("%.2f%s", num, matches[2])
+}
 
 func TestDotGeneral_transposeForDotGeneral(t *testing.T) {
 	S := shapes.Make
@@ -107,4 +128,193 @@ func TestDotGeneral_Dot(t *testing.T) {
 	y2 := exec.Call([][]float32{{1, 2, 3}, {2, 4, 6}}, [][]float32{{10}, {11}, {12}})[0]
 	fmt.Printf("\ty2=%s\n", y2.GoStr())
 	assert.Equal(t, [][]float32{{10 + 22 + 36}, {20 + 44 + 72}}, y2.Value())
+}
+
+// dotGeneralBenchmarkDimCase defines the *normalized* dimensions for a benchmark run.
+// Dims are: [Batch, Cross, Contracting]
+type dotGeneralBenchmarkDimCase struct {
+	name    string
+	lhsDims []int
+	rhsDims []int
+}
+
+func TestExecNormalizedDotGeneralPerformanceTable(t *testing.T) {
+	// IMPORTANT: Populate this slice with the *normalized* dimensions you want to benchmark.
+	// lhsDims: [Batch, LhsCross, Contracting]
+	// rhsDims: [Batch, RhsCross, Contracting]
+	// Batch and Contracting dimensions must match between lhs and rhs.
+	benchmarkDimCases := []dotGeneralBenchmarkDimCase{
+		// Shape values taken from the model https://huggingface.co/KnightsAnalytics/distilbert-NER
+		{
+			name:    "KA-Bert#1",
+			lhsDims: []int{24, 7, 7},
+			rhsDims: []int{24, 32, 7},
+		},
+		{
+			name:    "KA-Bert#2",
+			lhsDims: []int{24, 7, 32},
+			rhsDims: []int{24, 7, 32},
+		},
+		{
+			name:    "KA-Bert#3", // This one happens 4x more than the others.
+			lhsDims: []int{1, 14, 384},
+			rhsDims: []int{1, 384, 384},
+		},
+		{
+			name:    "KA-Bert#4",
+			lhsDims: []int{1, 14, 384},
+			rhsDims: []int{1, 1536, 384},
+		},
+		{
+			name:    "KA-Bert#5",
+			lhsDims: []int{1, 14, 1536},
+			rhsDims: []int{1, 384, 1536},
+		},
+		// Add more test cases relevant to your models here
+	}
+
+	dtypesToTest := []dtypes.DType{dtypes.Float32, dtypes.Float64, dtypes.BFloat16}
+
+	simpleGoBackend, ok := backend.(*Backend)
+	if !ok {
+		t.Fatalf("Global backend is not of type *simplego.Backend. It's %T. Ensure GOMLEX_BACKEND is 'go'.", backend)
+	}
+
+	const numWarmupRuns = 2
+	const numTimedRuns = 50 // Adjust for desired precision vs. test duration
+
+	dimsToStr := func(dims []int) string {
+		dimsStr := xslices.Map(dims, func(i int) string { return strconv.Itoa(i) })
+		return fmt.Sprintf("{%s}", strings.Join(dimsStr, ", "))
+	}
+
+	// Colors: tests usually run in batch and that disallows colors. We temporarily force a different profile:
+	originalProfile := lipgloss.ColorProfile()      // Optional: store original
+	lipgloss.SetColorProfile(termenv.ANSI256)       // Or termenv.TrueColor if you prefer
+	defer lipgloss.SetColorProfile(originalProfile) // Optional: reset
+	style1 := lipgloss.NewStyle()
+	style2 := lipgloss.NewStyle().Background(lipgloss.ANSIColor(0))
+
+	// Print table header
+	fmt.Printf("\n--- execNormalizedDotGeneral Performance ---\n")
+	header := fmt.Sprintf("| %-15s | %-20s | %-20s | %-10s | %-10s | %-10s |", "Test Name", "LHS Dims", "RHS Dims", "DType", "Time/Run", "GOps/Sec")
+	fmt.Println(header)
+	fmt.Println(strings.Repeat("-", len(header)))
+
+	for dimCaseIdx, dimCase := range benchmarkDimCases {
+		for _, dtype := range dtypesToTest {
+			// Construct shapes from dimensions and current dtype
+			if len(dimCase.lhsDims) != 3 || len(dimCase.rhsDims) != 3 {
+				fmt.Printf("| %-15s | %-20v | %-20v | %-10s | %-10s | %-10s |\n", dimCase.name, dimCase.lhsDims, dimCase.rhsDims, dtype, "Invalid Dims", "N/A")
+				continue
+			}
+
+			lhsShape := shapes.Make(dtype, dimCase.lhsDims...)
+			rhsShape := shapes.Make(dtype, dimCase.rhsDims...)
+
+			// Validate shapes
+			if lhsShape.Dimensions[0] != rhsShape.Dimensions[0] || // Batch
+				lhsShape.Dimensions[2] != rhsShape.Dimensions[2] { // Contracting
+				errMsg := fmt.Sprintf("Mismatch B(%d!=%d) or C(%d!=%d)",
+					lhsShape.Dimensions[0], rhsShape.Dimensions[0],
+					lhsShape.Dimensions[2], rhsShape.Dimensions[2])
+				fmt.Printf("| %-15s | %-20s | %-20s | %-10s | %-10s | %-10s |\n", dimCase.name, dimsToStr(dimCase.lhsDims), dimsToStr(dimCase.rhsDims), dtype, errMsg, "N/A")
+				continue
+			}
+
+			batchSize := lhsShape.Dimensions[0]
+			lhsCrossSize := lhsShape.Dimensions[1]
+			rhsCrossSize := rhsShape.Dimensions[1]
+			contractingSize := lhsShape.Dimensions[2]
+
+			outputShape := shapes.Make(dtype, batchSize, lhsCrossSize, rhsCrossSize)
+			node := &Node{shape: outputShape} // Minimal Node for execNormalizedDotGeneral
+
+			// Create and initialize input Buffers
+			lhsBuffer := simpleGoBackend.getBuffer(lhsShape.DType, lhsShape.Size())
+			lhsBuffer.shape = lhsShape
+			rhsBuffer := simpleGoBackend.getBuffer(rhsShape.DType, rhsShape.Size())
+			rhsBuffer.shape = rhsShape
+
+			switch dtype {
+			case dtypes.Float32:
+				lhsFlatF32 := make([]float32, lhsShape.Size())
+				rhsFlatF32 := make([]float32, rhsShape.Size())
+				for i := range lhsFlatF32 {
+					lhsFlatF32[i] = float32(i%10 + 1)
+				}
+				for i := range rhsFlatF32 {
+					rhsFlatF32[i] = float32(i%10 + 1)
+				}
+				lhsBuffer.flat = lhsFlatF32
+				rhsBuffer.flat = rhsFlatF32
+			case dtypes.Float64:
+				lhsFlatF64 := make([]float64, lhsShape.Size())
+				rhsFlatF64 := make([]float64, rhsShape.Size())
+				for i := range lhsFlatF64 {
+					lhsFlatF64[i] = float64(i%10 + 1)
+				}
+				for i := range rhsFlatF64 {
+					rhsFlatF64[i] = float64(i%10 + 1)
+				}
+				lhsBuffer.flat = lhsFlatF64
+				rhsBuffer.flat = rhsFlatF64
+			case dtypes.BFloat16:
+				lhsFlatBF16 := make([]bfloat16.BFloat16, lhsShape.Size())
+				rhsFlatBF16 := make([]bfloat16.BFloat16, rhsShape.Size())
+				for i := range lhsFlatBF16 {
+					lhsFlatBF16[i] = bfloat16.FromFloat32(float32(i%10 + 1))
+				}
+				for i := range rhsFlatBF16 {
+					rhsFlatBF16[i] = bfloat16.FromFloat32(float32(i%10 + 1))
+				}
+				lhsBuffer.flat = lhsFlatBF16
+				rhsBuffer.flat = rhsFlatBF16
+			default:
+				fmt.Printf("| %-15s | %-20s | %-20s | %-10s | %-10s | %-10s |\n", dimCase.name, dimsToStr(dimCase.lhsDims), dimsToStr(dimCase.rhsDims), dtype, "Unsupported DType", "N/A")
+				continue
+			}
+			inputs := []*Buffer{lhsBuffer, rhsBuffer}
+
+			// Warm-up runs
+			for i := 0; i < numWarmupRuns; i++ {
+				_, err := execNormalizedDotGeneral(simpleGoBackend, node, inputs, nil)
+				if err != nil {
+					t.Errorf("Warm-up run for %s Dims %v, %s Dims %v, DType %s failed: %v", dimCase.name, dimCase.lhsDims, dimCase.name, dimCase.rhsDims, dtype, err)
+					continue
+				}
+			}
+
+			// Timed runs
+			startTime := time.Now()
+			for i := 0; i < numTimedRuns; i++ {
+				_, err := execNormalizedDotGeneral(simpleGoBackend, node, inputs, nil)
+				if err != nil {
+					t.Errorf("Timed run for %s Dims %v, %s Dims %v, DType %s failed: %v", dimCase.name, dimCase.lhsDims, dimCase.name, dimCase.rhsDims, dtype, err)
+					continue
+				}
+			}
+			duration := time.Since(startTime)
+			avgDurationPerRun := duration / time.Duration(numTimedRuns)
+
+			// Calculate the total number of multiply-add operations.
+			numOps := int64(batchSize) * int64(lhsCrossSize) * int64(rhsCrossSize) * int64(contractingSize) * 2 // 1 mult + 1 add = 2 ops
+			gOpsPerSecond := float64(numOps) / avgDurationPerRun.Seconds() / 1e9                                // Giga Ops
+
+			// Print table row
+			style := style1
+			if dimCaseIdx%2 == 1 {
+				style = style2
+			}
+			row := fmt.Sprintf("| %-15s | %-20s | %-20s | %-10s | %-10s | %-10.1f |",
+				dimCase.name,
+				dimsToStr(dimCase.lhsDims), dimsToStr(dimCase.rhsDims),
+				dtype,
+				formatDurationWith2Decimals(avgDurationPerRun),
+				gOpsPerSecond)
+			fmt.Println(style.Render(row))
+		}
+	}
+	fmt.Println(strings.Repeat("-", len(header)))
+	fmt.Println()
 }

@@ -1,6 +1,7 @@
 package simplego
 
 import (
+	"fmt"
 	"slices"
 
 	"github.com/gomlx/gomlx/backends"
@@ -72,6 +73,11 @@ func (b *Builder) DotGeneral(lhsOp backends.Op, lhsContractingAxes, lhsBatchAxes
 	resultingDims = append(resultingDims, lhsCrossDims...)
 	resultingDims = append(resultingDims, rhsCrossDims...)
 	result, err := b.Reshape(dotGeneral, resultingDims...)
+
+	fmt.Printf("DotGeneral(*lhs*: %s, c:%v, b:%v; *rhs*:  %s, c:%v, b:%v) -> %s\n",
+		lhs.shape, lhsContractingAxes, lhsBatchAxes, rhs.shape, rhsContractingAxes, rhsBatchAxes,
+		result.(*Node).shape)
+
 	if err != nil {
 		return nil, err
 	}
@@ -174,6 +180,7 @@ var dotGeneralDTypeMap = NewDTypeMap("DotGeneral")
 // execNormalizedDotGeneralGeneric operands lhs and rhs are normalized to shape
 // [batchSize, crossSize, contractingSize].
 func execNormalizedDotGeneralGeneric[T PODNumericConstraints](lhs, rhs, output *Buffer) {
+	//fmt.Printf("execNormalizedDotGeneralGeneric(%s, %s) -> %s\n", lhs.shape, rhs.shape, output.shape)
 	lhsFlat := lhs.flat.([]T)
 	rhsFlat := rhs.flat.([]T)
 	outputFlat := output.flat.([]T)
