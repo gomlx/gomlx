@@ -566,21 +566,46 @@ func newTransposeIterator(operand shapes.Shape, permutations []int) *transposeIt
 	return it
 }
 
-func (it *transposeIterator) next() (nextFlatIdx int) {
-	nextFlatIdx = it.flatIdx
+func (it *transposeIterator) next() int {
+	// Store current flatIdx first
+	nextFlatIdx := it.flatIdx
+
+	// Cache rank to avoid repeated len() calls
 	rank := len(it.perAxisIdx)
-	for axis := rank - 1; axis >= 0; axis-- {
-		it.perAxisIdx[axis]++
-		it.flatIdx += it.perAxisStrides[axis]
-		if it.perAxisIdx[axis] < it.dimensions[axis] {
-			// We are done.
+
+	// Use local variables for array access to avoid repeated indirection
+	perAxisIdx := it.perAxisIdx
+	perAxisStrides := it.perAxisStrides
+	dimensions := it.dimensions
+
+	// Start with the innermost axis (usually the hottest path)
+	axis := rank - 1
+
+	// Increment the innermost axis as a special case (most common path)
+	perAxisIdx[axis]++
+	it.flatIdx += perAxisStrides[axis]
+
+	// If we don't need to carry, return immediately (hot path optimization)
+	if perAxisIdx[axis] < dimensions[axis] {
+		return nextFlatIdx
+	}
+
+	// Reset innermost axis
+	perAxisIdx[axis] = 0
+	it.flatIdx -= perAxisStrides[axis] * dimensions[axis]
+
+	// Handle remaining axes only when needed
+	for axis--; axis >= 0; axis-- {
+		perAxisIdx[axis]++
+		it.flatIdx += perAxisStrides[axis]
+		if perAxisIdx[axis] < dimensions[axis] {
 			break
 		}
-		// Otherwise, rewind the current axis and move to the next axis.
-		it.perAxisIdx[axis] = 0
-		it.flatIdx -= it.perAxisStrides[axis] * it.dimensions[axis]
+		perAxisIdx[axis] = 0
+		it.flatIdx -= perAxisStrides[axis] * dimensions[axis]
 	}
-	return
+
+	return nextFlatIdx
 }
 
 var transposeDTypeMap = NewDTypeMap("Transpose")
