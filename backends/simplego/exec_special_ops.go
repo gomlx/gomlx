@@ -578,28 +578,13 @@ func (it *transposeIterator) next() int {
 	perAxisStrides := it.perAxisStrides
 	dimensions := it.dimensions
 
-	// Start with the innermost axis (usually the hottest path)
-	axis := rank - 1
-
-	// Increment the innermost axis as a special case (most common path)
-	perAxisIdx[axis]++
-	it.flatIdx += perAxisStrides[axis]
-
-	// If we don't need to carry, return immediately (hot path optimization)
-	if perAxisIdx[axis] < dimensions[axis] {
-		return nextFlatIdx
-	}
-
-	// Reset innermost axis
-	perAxisIdx[axis] = 0
-	it.flatIdx -= perAxisStrides[axis] * dimensions[axis]
-
 	// Handle remaining axes only when needed
-	for axis--; axis >= 0; axis-- {
+	for axis := rank - 1; axis >= 0; axis-- {
 		perAxisIdx[axis]++
 		it.flatIdx += perAxisStrides[axis]
 		if perAxisIdx[axis] < dimensions[axis] {
-			break
+			// We are done.
+			return nextFlatIdx
 		}
 		perAxisIdx[axis] = 0
 		it.flatIdx -= perAxisStrides[axis] * dimensions[axis]
