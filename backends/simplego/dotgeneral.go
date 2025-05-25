@@ -1,7 +1,6 @@
 package simplego
 
 import (
-	"fmt"
 	"slices"
 
 	"github.com/gomlx/gomlx/backends"
