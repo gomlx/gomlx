@@ -144,7 +144,7 @@ func TestExecNormalizedDotGeneralPerformanceTable(t *testing.T) {
 	// rhsDims: [Batch, RhsCross, Contracting]
 	// Batch and Contracting dimensions must match between lhs and rhs.
 	benchmarkDimCases := []dotGeneralBenchmarkDimCase{
-		// Shape values taken from the model https://huggingface.co/KnightsAnalytics/distilbert-NER
+		// Shape values taken from the model https://huggingface.co/KnightsAnalytics/all-MiniLM-L6-v2
 		{
 			name:    "KA-Bert#1",
 			lhsDims: []int{24, 7, 7},
@@ -180,8 +180,10 @@ func TestExecNormalizedDotGeneralPerformanceTable(t *testing.T) {
 		t.Fatalf("Global backend is not of type *simplego.Backend. It's %T. Ensure GOMLEX_BACKEND is 'go'.", backend)
 	}
 
+	// Adjust for desired precision vs. test duration
 	const numWarmupRuns = 2
-	const numTimedRuns = 50 // Adjust for desired precision vs. test duration
+	const minNumTimedRuns = 50
+	const minTestTime = time.Second
 
 	dimsToStr := func(dims []int) string {
 		dimsStr := xslices.Map(dims, func(i int) string { return strconv.Itoa(i) })
@@ -287,15 +289,18 @@ func TestExecNormalizedDotGeneralPerformanceTable(t *testing.T) {
 
 			// Timed runs
 			startTime := time.Now()
-			for i := 0; i < numTimedRuns; i++ {
+			var numRuns int
+			for numRuns < minNumTimedRuns || time.Since(startTime) < minTestTime { // i := 0; i < numTimedRuns; i++ {
 				_, err := execNormalizedDotGeneral(simpleGoBackend, node, inputs, nil)
+				numRuns++
 				if err != nil {
 					t.Errorf("Timed run for %s Dims %v, %s Dims %v, DType %s failed: %v", dimCase.name, dimCase.lhsDims, dimCase.name, dimCase.rhsDims, dtype, err)
 					continue
 				}
 			}
 			duration := time.Since(startTime)
-			avgDurationPerRun := duration / time.Duration(numTimedRuns)
+			avgDurationPerRun := duration / time.Duration(numRuns)
+			//avgDurationPerRun := duration / time.Duration(numTimedRuns)
 
 			// Calculate the total number of multiply-add operations.
 			numOps := int64(batchSize) * int64(lhsCrossSize) * int64(rhsCrossSize) * int64(contractingSize) * 2 // 1 mult + 1 add = 2 ops
