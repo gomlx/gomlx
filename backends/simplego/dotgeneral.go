@@ -224,12 +224,22 @@ func execNormalizedDotGeneralGeneric[T PODNumericConstraints](lhs, rhs, output *
 
 							// Unroll the innermost loop for better vectorization
 							k := idxContracting
-							for ; k+3 < kEnd; k += 4 {
+							for ; k+7 < kEnd; k += 8 {
 								sum += lhsFlat[lhsRowStartIdx+k]*rhsFlat[rhsColStartIdx+k] +
 									lhsFlat[lhsRowStartIdx+k+1]*rhsFlat[rhsColStartIdx+k+1] +
 									lhsFlat[lhsRowStartIdx+k+2]*rhsFlat[rhsColStartIdx+k+2] +
-									lhsFlat[lhsRowStartIdx+k+3]*rhsFlat[rhsColStartIdx+k+3]
+									lhsFlat[lhsRowStartIdx+k+3]*rhsFlat[rhsColStartIdx+k+3] +
+									lhsFlat[lhsRowStartIdx+k+4]*rhsFlat[rhsColStartIdx+k+4] +
+									lhsFlat[lhsRowStartIdx+k+5]*rhsFlat[rhsColStartIdx+k+5] +
+									lhsFlat[lhsRowStartIdx+k+6]*rhsFlat[rhsColStartIdx+k+6] +
+									lhsFlat[lhsRowStartIdx+k+7]*rhsFlat[rhsColStartIdx+k+7]
 							}
+							//for ; k+3 < kEnd; k += 4 {
+							//	sum += lhsFlat[lhsRowStartIdx+k]*rhsFlat[rhsColStartIdx+k] +
+							//		lhsFlat[lhsRowStartIdx+k+1]*rhsFlat[rhsColStartIdx+k+1] +
+							//		lhsFlat[lhsRowStartIdx+k+2]*rhsFlat[rhsColStartIdx+k+2] +
+							//		lhsFlat[lhsRowStartIdx+k+3]*rhsFlat[rhsColStartIdx+k+3]
+							//}
 
 							// Handle remaining elements
 							for ; k < kEnd; k++ {
