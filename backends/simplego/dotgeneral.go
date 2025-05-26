@@ -508,6 +508,7 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 	return output, nil
 }
 
+// Information passed along the recursive splitting of the dot-general.
 type dotGeneralRecursiveData struct {
 	backend                                           *Backend
 	kernelFn                                          kernelFuncType
@@ -516,6 +517,9 @@ type dotGeneralRecursiveData struct {
 	lhsBatchOffset, rhsBatchOffset, outputBatchOffset int
 }
 
+// apply recursively splits the dot-general into smaller blocks and applies the kernel to each block.
+//
+// At the lowest splitting levels, the kernel is applied to blocks of the form.
 func (r *dotGeneralRecursiveData) apply(
 	lhsCrossStart, lhsCrossEnd,
 	rhsCrossStart, rhsCrossEnd,

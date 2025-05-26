@@ -169,16 +169,17 @@ func TestDotGeneral_Shape(t *testing.T) {
 }
 
 func TestDotGeneral_Exec(t *testing.T) {
-	// Axis transposition example:
-	y1 := graph.ExecOnce(backend, func(g *graph.Graph) *graph.Node {
-		lhs := graph.MulScalar(graph.OnePlus(graph.IotaFull(g, shapes.Make(F32, 2, 1, 3))), 1)
-		rhs := graph.Ones(g, shapes.Make(F32, 1, 3, 2))
-		return graph.DotGeneral(lhs, []int{1}, []int{2, 0}, rhs, []int{0}, []int{1, 2})
+	// A very large example: expected value computed using XLA.
+	y3 := graph.ExecOnce(backend, func(g *graph.Graph) *graph.Node {
+		lhs := graph.MulScalar(graph.OnePlus(graph.IotaFull(g, shapes.Make(dtypes.F64, 16, 13, 384))), 1e-5)
+		rhs := graph.Ones(g, shapes.Make(dtypes.F64, 384, 1536))
+		out := graph.DotGeneral(
+			lhs, []int{2}, nil,
+			rhs, []int{0}, nil)
+		return graph.Gather(out, graph.Const(g, [][]int32{{0, 0, 0}}))
 	})
-	fmt.Printf("\ty1=%s\n", y1)
-	require.NoError(t, y1.Shape().Check(F32, 3, 2))
-	want1 := [][]float32{{1, 4}, {2, 5}, {3, 6}}
-	require.Equal(t, want1, y1.Value())
+	fmt.Printf("\ty3=%s\n", y3)
+	require.InDelta(t, 0.7392, tensors.CopyFlatData[float64](y3)[0], 1e-4)
 
 	// Larger example, with multiple axes.
 	y0 := graph.ExecOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
@@ -206,6 +207,17 @@ func TestDotGeneral_Exec(t *testing.T) {
 			{{8255, 8330, 8405, 8480}},
 		}}
 	require.Equal(t, want, y0.Value())
+
+	// Axis transposition example:
+	y1 := graph.ExecOnce(backend, func(g *graph.Graph) *graph.Node {
+		lhs := graph.MulScalar(graph.OnePlus(graph.IotaFull(g, shapes.Make(F32, 2, 1, 3))), 1)
+		rhs := graph.Ones(g, shapes.Make(F32, 1, 3, 2))
+		return graph.DotGeneral(lhs, []int{1}, []int{2, 0}, rhs, []int{0}, []int{1, 2})
+	})
+	fmt.Printf("\ty1=%s\n", y1)
+	require.NoError(t, y1.Shape().Check(F32, 3, 2))
+	want1 := [][]float32{{1, 4}, {2, 5}, {3, 6}}
+	require.Equal(t, want1, y1.Value())
 
 	// BFloat16 example.
 	/*
