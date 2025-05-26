@@ -5,6 +5,9 @@
 package simplego
 
 import (
+	"runtime"
+	"sync/atomic"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/notimplemented"
 	"github.com/pkg/errors"
@@ -32,14 +35,19 @@ func New(_ string) backends.Backend {
 }
 
 func newBackend() *Backend {
-	return &Backend{}
+	b := &Backend{
+		maxParallelism: runtime.NumCPU(),
+	}
+	return b
 }
 
 // Backend implements the backends.Backend interface.
 type Backend struct {
 	// bufferPools are a map to pools of buffers that can be reused.
 	// The underlying type is map[bufferPoolKey]*sync.Pool.
-	bufferPools sync.Map
+	bufferPools    sync.Map
+	maxParallelism int
+	currentWorkers atomic.Int32
 }
 
 // Compile-time check that simplego.Backend implements backends.Backend.

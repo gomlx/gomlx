@@ -1,8 +1,11 @@
 package simplego
 
 import (
+	"runtime"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/xsync"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/pkg/errors"
@@ -431,6 +434,10 @@ func dgCopyOutputBlockToFlat[T interface {
 	}
 }
 
+// minBatchParallelize is the batchSize threshold above which we parallelize on the batch-level,
+// if backend.maxParallelism unlimited (<0)
+var minBatchParallelize = runtime.NumCPU()
+
 // execDotGeneral executes the DotGeneral by first normalizing and repackaging the tensors into blocks.
 func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*Buffer, error) {
 	lhs, rhs := inputs[0], inputs[1]
@@ -459,6 +466,7 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 	outputBlocks.Zeros()
 
 	var recursive dotGeneralRecursiveData
+	recursive.backend = backend
 
 	// Get the matrix multiplication kernel for a block.
 	kernelBuilder := dotGeneralKernelDTypeMap.Get(dtype).(func(lhs, rhs, output *Buffer, blockDim int) kernelFuncType)
@@ -469,11 +477,26 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 	recursive.rhsCrossBlocks = rhsBlocks.shape.Dimensions[1]
 	recursive.contractBlocks = lhsBlocks.shape.Dimensions[2]
 
-	for batch := 0; batch < params.batchSize; batch++ {
-		recursive.lhsBatchOffset = batch * recursive.lhsCrossBlocks * recursive.contractBlocks
-		recursive.rhsBatchOffset = batch * recursive.rhsCrossBlocks * recursive.contractBlocks
-		recursive.outputBatchOffset = batch * recursive.lhsCrossBlocks * recursive.rhsCrossBlocks
-		recursive.apply(0, recursive.lhsCrossBlocks, 0, recursive.rhsCrossBlocks, 0, recursive.contractBlocks)
+	if (backend.maxParallelism > 0 && params.batchSize > backend.maxParallelism) ||
+		(backend.maxParallelism < 0 && params.batchSize > minBatchParallelize) {
+		// Parallelize at the batch level.
+		recursive.parallizeIfPossible = false // Disable sub-batch parallelization.
+		for batch := 0; batch < params.batchSize; batch++ {
+			batchRecursive := recursive
+			batchRecursive.lhsBatchOffset = batch * recursive.lhsCrossBlocks * recursive.contractBlocks
+			batchRecursive.rhsBatchOffset = batch * recursive.rhsCrossBlocks * recursive.contractBlocks
+			batchRecursive.outputBatchOffset = batch * recursive.lhsCrossBlocks * recursive.rhsCrossBlocks
+			batchRecursive.apply(0, recursive.lhsCrossBlocks, 0, recursive.rhsCrossBlocks, 0, recursive.contractBlocks)
+		}
+	} else {
+		// Parallelize within the batch examples if possible:
+		recursive.parallizeIfPossible = true
+		for batch := 0; batch < params.batchSize; batch++ {
+			recursive.lhsBatchOffset = batch * recursive.lhsCrossBlocks * recursive.contractBlocks
+			recursive.rhsBatchOffset = batch * recursive.rhsCrossBlocks * recursive.contractBlocks
+			recursive.outputBatchOffset = batch * recursive.lhsCrossBlocks * recursive.rhsCrossBlocks
+			recursive.apply(0, recursive.lhsCrossBlocks, 0, recursive.rhsCrossBlocks, 0, recursive.contractBlocks)
+		}
 	}
 	//fmt.Printf("flat output: %v\n", outputBlocks.flat)
 
@@ -486,7 +509,9 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 }
 
 type dotGeneralRecursiveData struct {
+	backend                                           *Backend
 	kernelFn                                          kernelFuncType
+	parallizeIfPossible                               bool
 	lhsCrossBlocks, rhsCrossBlocks, contractBlocks    int
 	lhsBatchOffset, rhsBatchOffset, outputBatchOffset int
 }
@@ -515,18 +540,44 @@ func (r *dotGeneralRecursiveData) apply(
 		}
 		return
 	}
+	parallelize := r.parallizeIfPossible && maxLen >= 2
+	otherDone := xsync.NewLatch()
 	if maxLen == contractingLen {
+		// No parallelization when splitting on the contracting axis because both splits will be writing
+		// to the same output blocks, so there will be memory contention.
 		split := contractStart + contractingLen/2
 		r.apply(lhsCrossStart, lhsCrossEnd, rhsCrossStart, rhsCrossEnd, contractStart, split)
 		r.apply(lhsCrossStart, lhsCrossEnd, rhsCrossStart, rhsCrossEnd, split, contractEnd)
+
 	} else if maxLen == lhsCrossLen {
+		// Split on lhs cross dimension.
 		split := lhsCrossStart + lhsCrossLen/2
-		r.apply(lhsCrossStart, split, rhsCrossStart, rhsCrossEnd, contractStart, contractEnd)
-		r.apply(split, lhsCrossEnd, rhsCrossStart, rhsCrossEnd, contractStart, contractEnd)
+		if parallelize && r.backend.StartWorker(func() {
+			r.apply(lhsCrossStart, split, rhsCrossStart, rhsCrossEnd, contractStart, contractEnd)
+			otherDone.Trigger()
+		}) {
+			r.apply(split, lhsCrossEnd, rhsCrossStart, rhsCrossEnd, contractStart, contractEnd)
+			otherDone.Wait()
+		} else {
+			// Not parallelized:
+			r.apply(lhsCrossStart, split, rhsCrossStart, rhsCrossEnd, contractStart, contractEnd)
+			r.apply(split, lhsCrossEnd, rhsCrossStart, rhsCrossEnd, contractStart, contractEnd)
+		}
+
 	} else {
+		// Split on rhs cross dimension.
 		split := rhsCrossStart + rhsCrossLen/2
-		r.apply(lhsCrossStart, lhsCrossEnd, rhsCrossStart, split, contractStart, contractEnd)
-		r.apply(lhsCrossStart, lhsCrossEnd, split, rhsCrossEnd, contractStart, contractEnd)
+		if parallelize && r.backend.StartWorker(func() {
+			r.apply(lhsCrossStart, lhsCrossEnd, rhsCrossStart, split, contractStart, contractEnd)
+			otherDone.Trigger()
+		}) {
+			r.apply(lhsCrossStart, lhsCrossEnd, split, rhsCrossEnd, contractStart, contractEnd)
+			otherDone.Wait()
+		} else {
+			// Not parallelized:
+			r.apply(lhsCrossStart, lhsCrossEnd, rhsCrossStart, split, contractStart, contractEnd)
+			r.apply(lhsCrossStart, lhsCrossEnd, split, rhsCrossEnd, contractStart, contractEnd)
+		}
 	}
 }
 
