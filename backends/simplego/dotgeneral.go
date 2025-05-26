@@ -199,10 +199,12 @@ func dgFindSizes(shape shapes.Shape, contractingAxes, batchAxes []int) (batchSiz
 }
 
 var (
-	// DotGeneralTargetBlockSize is hardware-specific, it should be aligned with the L1 cache size.
+	// DotGeneralTargetBlockSize is hardware-specific, it should be aligned with the L1 cache size
+	// and maybe page-size.
 	// It should be the number per thread, not necessarily the number per core.
+	// It was empirically optimized in an AMD 9950x3d.
 	// TODO: find out how to initialize this number in runtime.
-	DotGeneralTargetBlockSize = 32 * 1024
+	DotGeneralTargetBlockSize = 4 * 1024
 
 	// DotGeneralTargetBlockLog2Dim is set per dtype, such that it is square and fits DotGeneralTargetBlockSize.
 	// The block dim is 2^(DotGeneralTargetBlockLog2Dim[dtype]).
@@ -218,8 +220,8 @@ func init() {
 			// types.
 			sizePerElem = 4
 		}
-		dim := 1
-		log2Dim := 0
+		dim := 2
+		log2Dim := 1
 		for dim*dim*sizePerElem < DotGeneralTargetBlockSize {
 			dim *= 2
 			log2Dim++
@@ -456,31 +458,22 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 	outputBlocks.shape = params.outputBlockedShape
 	outputBlocks.Zeros()
 
+	var recursive dotGeneralRecursiveData
+
 	// Get the matrix multiplication kernel for a block.
 	kernelBuilder := dotGeneralKernelDTypeMap.Get(dtype).(func(lhs, rhs, output *Buffer, blockDim int) kernelFuncType)
-	kernelFn := kernelBuilder(lhsBlocks, rhsBlocks, outputBlocks, blockDim)
+	recursive.kernelFn = kernelBuilder(lhsBlocks, rhsBlocks, outputBlocks, blockDim)
 
 	// Straight block multiplying (as opposed to recursive)
-	lhsCrossBlocks := lhsBlocks.shape.Dimensions[1]
-	rhsCrossBlocks := rhsBlocks.shape.Dimensions[1]
-	contractBlocks := lhsBlocks.shape.Dimensions[2]
+	recursive.lhsCrossBlocks = lhsBlocks.shape.Dimensions[1]
+	recursive.rhsCrossBlocks = rhsBlocks.shape.Dimensions[1]
+	recursive.contractBlocks = lhsBlocks.shape.Dimensions[2]
 
 	for batch := 0; batch < params.batchSize; batch++ {
-		lhsBatchOffset := batch * lhsCrossBlocks * contractBlocks
-		rhsBatchOffset := batch * rhsCrossBlocks * contractBlocks
-		outputBatchOffset := batch * lhsCrossBlocks * rhsCrossBlocks
-		for lhsCross := 0; lhsCross < lhsCrossBlocks; lhsCross++ {
-			for rhsCross := 0; rhsCross < rhsCrossBlocks; rhsCross++ {
-				outputBlockIdx := outputBatchOffset + lhsCross*rhsCrossBlocks + rhsCross
-				rhsBlockIdx := rhsBatchOffset + rhsCross*contractBlocks
-				lhsBlockIdx := lhsBatchOffset + lhsCross*contractBlocks
-				for contract := 0; contract < contractBlocks; contract++ {
-					kernelFn(lhsBlockIdx, rhsBlockIdx, outputBlockIdx)
-					rhsBlockIdx++
-					lhsBlockIdx++
-				}
-			}
-		}
+		recursive.lhsBatchOffset = batch * recursive.lhsCrossBlocks * recursive.contractBlocks
+		recursive.rhsBatchOffset = batch * recursive.rhsCrossBlocks * recursive.contractBlocks
+		recursive.outputBatchOffset = batch * recursive.lhsCrossBlocks * recursive.rhsCrossBlocks
+		recursive.apply(0, recursive.lhsCrossBlocks, 0, recursive.rhsCrossBlocks, 0, recursive.contractBlocks)
 	}
 	//fmt.Printf("flat output: %v\n", outputBlocks.flat)
 
@@ -490,6 +483,51 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 	copyOutputFn := dotGeneralOutputBlockToFlatDTypeMap.Get(dtype).(func(blockedSource, output *Buffer))
 	copyOutputFn(outputBlocks, output)
 	return output, nil
+}
+
+type dotGeneralRecursiveData struct {
+	kernelFn                                          kernelFuncType
+	lhsCrossBlocks, rhsCrossBlocks, contractBlocks    int
+	lhsBatchOffset, rhsBatchOffset, outputBatchOffset int
+}
+
+func (r *dotGeneralRecursiveData) apply(
+	lhsCrossStart, lhsCrossEnd,
+	rhsCrossStart, rhsCrossEnd,
+	contractStart, contractEnd int) {
+	lhsCrossLen := lhsCrossEnd - lhsCrossStart
+	rhsCrossLen := rhsCrossEnd - rhsCrossStart
+	contractingLen := contractEnd - contractStart
+	maxLen := max(max(lhsCrossLen, rhsCrossLen), contractingLen)
+	// Base case: optimize for L2 size
+	if maxLen <= 4 {
+		for lhsCross := lhsCrossStart; lhsCross < lhsCrossEnd; lhsCross++ {
+			for rhsCross := rhsCrossStart; rhsCross < rhsCrossEnd; rhsCross++ {
+				outputBlockIdx := r.outputBatchOffset + lhsCross*r.rhsCrossBlocks + rhsCross
+				rhsBlockIdx := r.rhsBatchOffset + rhsCross*r.contractBlocks
+				lhsBlockIdx := r.lhsBatchOffset + lhsCross*r.contractBlocks
+				for contract := contractStart; contract < contractEnd; contract++ {
+					r.kernelFn(lhsBlockIdx, rhsBlockIdx, outputBlockIdx)
+					rhsBlockIdx++
+					lhsBlockIdx++
+				}
+			}
+		}
+		return
+	}
+	if maxLen == contractingLen {
+		split := contractStart + contractingLen/2
+		r.apply(lhsCrossStart, lhsCrossEnd, rhsCrossStart, rhsCrossEnd, contractStart, split)
+		r.apply(lhsCrossStart, lhsCrossEnd, rhsCrossStart, rhsCrossEnd, split, contractEnd)
+	} else if maxLen == lhsCrossLen {
+		split := lhsCrossStart + lhsCrossLen/2
+		r.apply(lhsCrossStart, split, rhsCrossStart, rhsCrossEnd, contractStart, contractEnd)
+		r.apply(split, lhsCrossEnd, rhsCrossStart, rhsCrossEnd, contractStart, contractEnd)
+	} else {
+		split := rhsCrossStart + rhsCrossLen/2
+		r.apply(lhsCrossStart, lhsCrossEnd, rhsCrossStart, split, contractStart, contractEnd)
+		r.apply(lhsCrossStart, lhsCrossEnd, split, rhsCrossEnd, contractStart, contractEnd)
+	}
 }
 
 var dotGeneralKernelDTypeMap = NewDTypeMap("DotGeneralKernel")
