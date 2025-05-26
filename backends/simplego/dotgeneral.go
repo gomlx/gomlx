@@ -2,6 +2,7 @@ package simplego
 
 import (
 	"runtime"
+	"sync"
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
@@ -348,7 +349,7 @@ func dgCopyFlatToBlockShape[T interface {
 
 			sourceIdx[axis]++
 			if sourceIdx[axis] < sourceDims[axis] {
-				// Not reached end of this axis.
+				// Not reached the end of this axis.
 				switch axesTypes[axis] {
 				case 0: // Cross
 					outputCrossIdx += sourceStrides[axis]
@@ -528,7 +529,9 @@ func (r *dotGeneralRecursiveData) apply(
 	rhsCrossLen := rhsCrossEnd - rhsCrossStart
 	contractingLen := contractEnd - contractStart
 	maxLen := max(max(lhsCrossLen, rhsCrossLen), contractingLen)
-	// Base case: optimize for L2 size
+
+	// Base case: no splitting, simple go over all the crosses and calculate the matrix multiplication for this
+	// slice.
 	if maxLen <= 2 {
 		for lhsCross := lhsCrossStart; lhsCross < lhsCrossEnd; lhsCross++ {
 			for rhsCross := rhsCrossStart; rhsCross < rhsCrossEnd; rhsCross++ {
@@ -544,6 +547,9 @@ func (r *dotGeneralRecursiveData) apply(
 		}
 		return
 	}
+
+	// Recursively split on the largest axis:
+	// - The opportunity to parallelize the split, if possible.
 	parallelize := r.parallizeIfPossible && maxLen >= 2
 	otherDone := xsync.NewLatch()
 	if maxLen == contractingLen {
@@ -594,7 +600,8 @@ var dotGeneralKernelDTypeMap = NewDTypeMap("DotGeneralKernel")
 // The contracting axis is 1 for both, lhs and rhs.
 type kernelFuncType func(lhsBlockIdx, rhsBlockIdx, outputBlockIdx int)
 
-// buildDotGeneralKernel returns a kernel function that does a dot-product of the lhs/rhs to the output buffer, given the indices of the square blocks.
+// buildDotGeneralKernel returns a kernel function that does a DotGeneral (matrix multiplication) of the lhs/rhs block
+// to the corresponding output buffer block, given the indices of the square blocks.
 func buildDotGeneralKernel[T PODNumericConstraints](lhs, rhs, output *Buffer, blockDim int) kernelFuncType {
 	lhsFlat := lhs.flat.([]T)
 	rhsFlat := rhs.flat.([]T)

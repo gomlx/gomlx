@@ -36,7 +36,7 @@ func New(_ string) backends.Backend {
 
 func newBackend() *Backend {
 	b := &Backend{
-		maxParallelism: runtime.NumCPU(),
+		maxParallelism: 2 * runtime.NumCPU(),
 	}
 	return b
 }
@@ -76,7 +76,7 @@ func (b *Backend) Capabilities() backends.Capabilities {
 	return Capabilities
 }
 
-// Builder creates a new builder used to define a new named computation.
+// Builder creates a new builder used to construct a named computation.
 func (b *Backend) Builder(name string) backends.Builder {
 	builder := &Builder{
 		backend: b,
