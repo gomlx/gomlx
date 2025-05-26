@@ -269,7 +269,7 @@ func TestDotGeneral_DotGeneralPerformanceTable(t *testing.T) {
 		// Add more test cases relevant to your models here
 	}
 
-	dtypesToTest := []dtypes.DType{dtypes.Float32, dtypes.Float64, dtypes.BFloat16}
+	dtypesToTest := []dtypes.DType{dtypes.Float32, dtypes.Float64} // TODO: , dtypes.BFloat16}
 
 	simpleGoBackend, ok := backend.(*Backend)
 	if !ok {

@@ -45,7 +45,7 @@ var (
 		},
 		Maps: []MapInfo{
 			{"dotGeneralFlatToBlockDTypeMap", "dgCopyFlatToBlockShape", makeDTypes(true, true, true, true, false)},
-			{"dotGeneralDTypeMap", "execNormalizedDotGeneralGeneric", makeDTypes(true, true, true, false, false)},
+			{"dotGeneralKernelDTypeMap", "buildDotGeneralKernel", makeDTypes(true, true, true, false, false)},
 			{"mutableBytesDTypeMap", "mutableBytesGeneric", makeDTypes(true, true, true, true, true)},
 			{"fillBufferDTypeMap", "fillBufferGeneric", makeDTypes(true, true, true, true, true)},
 			{"reduceMaxDTypeMap", "execReduceMaxGeneric", makeDTypes(true, true, true, false, false)},
