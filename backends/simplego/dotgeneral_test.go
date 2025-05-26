@@ -169,18 +169,6 @@ func TestDotGeneral_Shape(t *testing.T) {
 }
 
 func TestDotGeneral_Exec(t *testing.T) {
-	// A very large example: expected value computed using XLA.
-	y3 := graph.ExecOnce(backend, func(g *graph.Graph) *graph.Node {
-		lhs := graph.MulScalar(graph.OnePlus(graph.IotaFull(g, shapes.Make(dtypes.F64, 16, 13, 384))), 1e-5)
-		rhs := graph.Ones(g, shapes.Make(dtypes.F64, 384, 1536))
-		out := graph.DotGeneral(
-			lhs, []int{2}, nil,
-			rhs, []int{0}, nil)
-		return graph.Gather(out, graph.Const(g, [][]int32{{0, 0, 0}}))
-	})
-	fmt.Printf("\ty3=%s\n", y3)
-	require.InDelta(t, 0.7392, tensors.CopyFlatData[float64](y3)[0], 1e-4)
-
 	// Larger example, with multiple axes.
 	y0 := graph.ExecOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
 		return graph.DotGeneral(lhs, []int{1}, []int{3, 0}, rhs, []int{1}, []int{0, 2})
@@ -218,6 +206,18 @@ func TestDotGeneral_Exec(t *testing.T) {
 	require.NoError(t, y1.Shape().Check(F32, 3, 2))
 	want1 := [][]float32{{1, 4}, {2, 5}, {3, 6}}
 	require.Equal(t, want1, y1.Value())
+
+	// A very large example: expected value computed using XLA.
+	y3 := graph.ExecOnce(backend, func(g *graph.Graph) *graph.Node {
+		lhs := graph.MulScalar(graph.OnePlus(graph.IotaFull(g, shapes.Make(dtypes.F64, 16, 13, 384))), 1e-5)
+		rhs := graph.Ones(g, shapes.Make(dtypes.F64, 384, 1536))
+		out := graph.DotGeneral(
+			lhs, []int{2}, nil,
+			rhs, []int{0}, nil)
+		return graph.Gather(out, graph.Const(g, [][]int32{{0, 0, 0}}))
+	})
+	fmt.Printf("\ty3=%s\n", y3)
+	require.InDelta(t, 0.7392, tensors.CopyFlatData[float64](y3)[0], 1e-4)
 
 	// BFloat16 example.
 	/*

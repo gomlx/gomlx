@@ -533,8 +533,8 @@ func (r *dotGeneralRecursiveData) apply(
 		for lhsCross := lhsCrossStart; lhsCross < lhsCrossEnd; lhsCross++ {
 			for rhsCross := rhsCrossStart; rhsCross < rhsCrossEnd; rhsCross++ {
 				outputBlockIdx := r.outputBatchOffset + lhsCross*r.rhsCrossBlocks + rhsCross
-				rhsBlockIdx := r.rhsBatchOffset + rhsCross*r.contractBlocks
-				lhsBlockIdx := r.lhsBatchOffset + lhsCross*r.contractBlocks
+				rhsBlockIdx := r.rhsBatchOffset + rhsCross*r.contractBlocks + contractStart
+				lhsBlockIdx := r.lhsBatchOffset + lhsCross*r.contractBlocks + contractStart
 				for contract := contractStart; contract < contractEnd; contract++ {
 					r.kernelFn(lhsBlockIdx, rhsBlockIdx, outputBlockIdx)
 					rhsBlockIdx++
