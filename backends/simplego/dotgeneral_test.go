@@ -187,46 +187,85 @@ func TestDotGeneral_Dot(t *testing.T) {
 	assert.Equal(t, [][]float32{{10 + 22 + 36}, {20 + 44 + 72}}, y2.Value())
 }
 
-// dotGeneralBenchmarkDimCase defines the *normalized* dimensions for a benchmark run.
-// Dims are: [Batch, Cross, Contracting]
-type dotGeneralBenchmarkDimCase struct {
-	name    string
-	lhsDims []int
-	rhsDims []int
+// dotGeneralBenchmarkParamsCase defines input parameters for DotGeneral to be benchmarked.
+type dotGeneralBenchmarkParamsCase struct {
+	name                                       string
+	lhsShape, lhsContractingAxes, lhsBatchAxes []int
+	rhsShape, rhsContractingAxes, rhsBatchAxes []int
 }
 
-func TestExecNormalizedDotGeneralPerformanceTable(t *testing.T) {
-	// IMPORTANT: Populate this slice with the *normalized* dimensions you want to benchmark.
+func dimsToStr(dims []int) string {
+	dimsStr := xslices.Map(dims, func(i int) string { return strconv.Itoa(i) })
+	return fmt.Sprintf("{%s}", strings.Join(dimsStr, ", "))
+}
+
+func TestDotGeneral_DotGeneralPerformanceTable(t *testing.T) {
+	// IMPORTANT: Populate this slice with the shapes and parameters of the dot-product.
 	// lhsDims: [Batch, LhsCross, Contracting]
 	// rhsDims: [Batch, RhsCross, Contracting]
 	// Batch and Contracting dimensions must match between lhs and rhs.
-	benchmarkDimCases := []dotGeneralBenchmarkDimCase{
+	benchmarkCases := []dotGeneralBenchmarkParamsCase{
 		// Shape values taken from the model https://huggingface.co/KnightsAnalytics/all-MiniLM-L6-v2
+		// while running the benchmark `TestBenchRobSentencesXLA` from github.com/gomlx/onnx-gomlx/internal/benchmark
+		// with batch size 16.
 		{
-			name:    "KA-Bert#1",
-			lhsDims: []int{24, 7, 7},
-			rhsDims: []int{24, 32, 7},
+			name:     "KA-Batch-16-#1",
+			lhsShape: []int{16, 12, 13, 13}, lhsContractingAxes: []int{3}, lhsBatchAxes: []int{0, 1},
+			rhsShape: []int{16, 12, 13, 32}, rhsContractingAxes: []int{2}, rhsBatchAxes: []int{0, 1},
 		},
 		{
-			name:    "KA-Bert#2",
-			lhsDims: []int{24, 7, 32},
-			rhsDims: []int{24, 7, 32},
+			name:     "KA-Batch-16-#2",
+			lhsShape: []int{16, 12, 13, 32}, lhsContractingAxes: []int{3}, lhsBatchAxes: []int{0, 1},
+			rhsShape: []int{16, 12, 32, 13}, rhsContractingAxes: []int{2}, rhsBatchAxes: []int{0, 1},
 		},
 		{
-			name:    "KA-Bert#3", // This one happens 4x more than the others.
-			lhsDims: []int{1, 14, 384},
-			rhsDims: []int{1, 384, 384},
+			name:     "KA-Batch-16-#3",
+			lhsShape: []int{16, 13, 1536}, lhsContractingAxes: []int{2}, lhsBatchAxes: []int(nil),
+			rhsShape: []int{1536, 384}, rhsContractingAxes: []int{0}, rhsBatchAxes: []int(nil),
 		},
 		{
-			name:    "KA-Bert#4",
-			lhsDims: []int{1, 14, 384},
-			rhsDims: []int{1, 1536, 384},
+			name:     "KA-Batch-16-#4",
+			lhsShape: []int{16, 13, 384}, lhsContractingAxes: []int{2}, lhsBatchAxes: []int(nil),
+			rhsShape: []int{384, 1536}, rhsContractingAxes: []int{0}, rhsBatchAxes: []int(nil),
 		},
 		{
-			name:    "KA-Bert#5",
-			lhsDims: []int{1, 14, 1536},
-			rhsDims: []int{1, 384, 1536},
+			// This case happens 4x more often than the other parameters.
+			name:     "KA-Batch-16-#5",
+			lhsShape: []int{16, 13, 384}, lhsContractingAxes: []int{2}, lhsBatchAxes: []int(nil),
+			rhsShape: []int{384, 384}, rhsContractingAxes: []int{0}, rhsBatchAxes: []int(nil),
 		},
+
+		// Shape values taken from training github.com/gomlx/gomlx/examples/adult/demo
+		{
+			name:     "adult-#1",
+			lhsShape: []int{128, 4}, lhsContractingAxes: []int{1}, lhsBatchAxes: []int{},
+			rhsShape: []int{4, 1}, rhsContractingAxes: []int{0}, rhsBatchAxes: []int{}},
+		{
+			name:     "adult-#2",
+			lhsShape: []int{128, 69}, lhsContractingAxes: []int{1}, lhsBatchAxes: []int{},
+			rhsShape: []int{69, 4}, rhsContractingAxes: []int{0}, rhsBatchAxes: []int{},
+		},
+		{
+			name:     "adult-#3",
+			lhsShape: []int{25, 4}, lhsContractingAxes: []int{1}, lhsBatchAxes: []int{},
+			rhsShape: []int{4, 1}, rhsContractingAxes: []int{0}, rhsBatchAxes: []int{},
+		},
+		{
+			name:     "adult-#4",
+			lhsShape: []int{25, 69}, lhsContractingAxes: []int{1}, lhsBatchAxes: []int{},
+			rhsShape: []int{69, 4}, rhsContractingAxes: []int{0}, rhsBatchAxes: []int{},
+		},
+		{
+			name:     "adult-#5",
+			lhsShape: []int{49, 4}, lhsContractingAxes: []int{1}, lhsBatchAxes: []int{},
+			rhsShape: []int{4, 1}, rhsContractingAxes: []int{0}, rhsBatchAxes: []int{},
+		},
+		{
+			name:     "adult-#6",
+			lhsShape: []int{49, 69}, lhsContractingAxes: []int{1}, lhsBatchAxes: []int{},
+			rhsShape: []int{69, 4}, rhsContractingAxes: []int{0}, rhsBatchAxes: []int{},
+		},
+
 		// Add more test cases relevant to your models here
 	}
 
@@ -242,11 +281,6 @@ func TestExecNormalizedDotGeneralPerformanceTable(t *testing.T) {
 	const minNumTimedRuns = 50
 	const minTestTime = time.Second
 
-	dimsToStr := func(dims []int) string {
-		dimsStr := xslices.Map(dims, func(i int) string { return strconv.Itoa(i) })
-		return fmt.Sprintf("{%s}", strings.Join(dimsStr, ", "))
-	}
-
 	// Colors: tests usually run in batch and that disallows colors. We temporarily force a different profile:
 	originalProfile := lipgloss.ColorProfile()      // Optional: store original
 	lipgloss.SetColorProfile(termenv.ANSI256)       // Or termenv.TrueColor if you prefer
@@ -255,122 +289,93 @@ func TestExecNormalizedDotGeneralPerformanceTable(t *testing.T) {
 	style2 := lipgloss.NewStyle().Background(lipgloss.ANSIColor(0))
 
 	// Print table header
-	fmt.Printf("\n--- execDotGeneral Performance ---\n")
+	fmt.Printf("\n--- execNormalizedDotGeneral Performance ---\n")
 	header := fmt.Sprintf("| %-15s | %-20s | %-20s | %-10s | %-10s | %-10s |", "Test Name", "LHS Dims", "RHS Dims", "DType", "Time/Run", "GOps/Sec")
 	fmt.Println(header)
 	fmt.Println(strings.Repeat("-", len(header)))
 
-	for dimCaseIdx, dimCase := range benchmarkDimCases {
+	for benchCaseIdx, benchCase := range benchmarkCases {
 		for _, dtype := range dtypesToTest {
 			// Construct shapes from dimensions and current dtype
-			if len(dimCase.lhsDims) != 3 || len(dimCase.rhsDims) != 3 {
-				fmt.Printf("| %-15s | %-20v | %-20v | %-10s | %-10s | %-10s |\n", dimCase.name, dimCase.lhsDims, dimCase.rhsDims, dtype, "Invalid Dims", "N/A")
-				continue
-			}
-
-			lhsShape := shapes.Make(dtype, dimCase.lhsDims...)
-			rhsShape := shapes.Make(dtype, dimCase.rhsDims...)
-
-			// Validate shapes
-			if lhsShape.Dimensions[0] != rhsShape.Dimensions[0] || // Batch
-				lhsShape.Dimensions[2] != rhsShape.Dimensions[2] { // Contracting
-				errMsg := fmt.Sprintf("Mismatch B(%d!=%d) or C(%d!=%d)",
-					lhsShape.Dimensions[0], rhsShape.Dimensions[0],
-					lhsShape.Dimensions[2], rhsShape.Dimensions[2])
-				fmt.Printf("| %-15s | %-20s | %-20s | %-10s | %-10s | %-10s |\n", dimCase.name, dimsToStr(dimCase.lhsDims), dimsToStr(dimCase.rhsDims), dtype, errMsg, "N/A")
-				continue
-			}
-
-			batchSize := lhsShape.Dimensions[0]
-			lhsCrossSize := lhsShape.Dimensions[1]
-			rhsCrossSize := rhsShape.Dimensions[1]
-			contractingSize := lhsShape.Dimensions[2]
-
-			outputShape := shapes.Make(dtype, batchSize, lhsCrossSize, rhsCrossSize)
-			node := &Node{shape: outputShape} // Minimal Node for execDotGeneral
+			lhsShape := shapes.Make(dtype, benchCase.lhsShape...)
+			rhsShape := shapes.Make(dtype, benchCase.rhsShape...)
+			batchSize, lhsCrossSize, contractingSize := dgFindSizes(lhsShape, benchCase.lhsContractingAxes, benchCase.lhsBatchAxes)
+			_, rhsCrossSize, _ := dgFindSizes(rhsShape, benchCase.rhsContractingAxes, benchCase.rhsBatchAxes)
+			numOps := batchSize * lhsCrossSize * rhsCrossSize * contractingSize * 2 // 1 mult + 1 add = 2 ops
 
 			// Create and initialize input Buffers
 			lhsBuffer := simpleGoBackend.getBuffer(lhsShape.DType, lhsShape.Size())
 			lhsBuffer.shape = lhsShape
 			rhsBuffer := simpleGoBackend.getBuffer(rhsShape.DType, rhsShape.Size())
 			rhsBuffer.shape = rhsShape
-
 			switch dtype {
 			case dtypes.Float32:
-				lhsFlatF32 := make([]float32, lhsShape.Size())
-				rhsFlatF32 := make([]float32, rhsShape.Size())
+				lhsFlatF32 := lhsBuffer.flat.([]float32)
+				rhsFlatF32 := rhsBuffer.flat.([]float32)
 				for i := range lhsFlatF32 {
 					lhsFlatF32[i] = float32(i%10 + 1)
 				}
 				for i := range rhsFlatF32 {
 					rhsFlatF32[i] = float32(i%10 + 1)
 				}
-				lhsBuffer.flat = lhsFlatF32
-				rhsBuffer.flat = rhsFlatF32
+
 			case dtypes.Float64:
-				lhsFlatF64 := make([]float64, lhsShape.Size())
-				rhsFlatF64 := make([]float64, rhsShape.Size())
+				lhsFlatF64 := lhsBuffer.flat.([]float64)
+				rhsFlatF64 := rhsBuffer.flat.([]float64)
 				for i := range lhsFlatF64 {
 					lhsFlatF64[i] = float64(i%10 + 1)
 				}
 				for i := range rhsFlatF64 {
 					rhsFlatF64[i] = float64(i%10 + 1)
 				}
-				lhsBuffer.flat = lhsFlatF64
-				rhsBuffer.flat = rhsFlatF64
+
 			case dtypes.BFloat16:
-				lhsFlatBF16 := make([]bfloat16.BFloat16, lhsShape.Size())
-				rhsFlatBF16 := make([]bfloat16.BFloat16, rhsShape.Size())
+				lhsFlatBF16 := lhsBuffer.flat.([]bfloat16.BFloat16)
+				rhsFlatBF16 := rhsBuffer.flat.([]bfloat16.BFloat16)
 				for i := range lhsFlatBF16 {
 					lhsFlatBF16[i] = bfloat16.FromFloat32(float32(i%10 + 1))
 				}
 				for i := range rhsFlatBF16 {
 					rhsFlatBF16[i] = bfloat16.FromFloat32(float32(i%10 + 1))
 				}
-				lhsBuffer.flat = lhsFlatBF16
-				rhsBuffer.flat = rhsFlatBF16
-			default:
-				fmt.Printf("| %-15s | %-20s | %-20s | %-10s | %-10s | %-10s |\n", dimCase.name, dimsToStr(dimCase.lhsDims), dimsToStr(dimCase.rhsDims), dtype, "Unsupported DType", "N/A")
-				continue
 			}
-			inputs := []*Buffer{lhsBuffer, rhsBuffer}
+			lhsTensor := tensors.FromBuffer(backend, lhsBuffer)
+			rhsTensor := tensors.FromBuffer(backend, rhsBuffer)
+
+			// Create the program that does the DotGeneral.
+			testExec := graph.NewExec(backend, func(lhs, rhs *graph.Node) *graph.Node {
+				return graph.DotGeneral(lhs, benchCase.lhsContractingAxes, benchCase.lhsBatchAxes,
+					rhs, benchCase.rhsContractingAxes, benchCase.rhsBatchAxes)
+			})
 
 			// Warm-up runs
 			for i := 0; i < numWarmupRuns; i++ {
-				_, err := execDotGeneral(simpleGoBackend, node, inputs, nil)
-				if err != nil {
-					t.Errorf("Warm-up run for %s Dims %v, %s Dims %v, DType %s failed: %v", dimCase.name, dimCase.lhsDims, dimCase.name, dimCase.rhsDims, dtype, err)
-					continue
-				}
+				output := testExec.Call(lhsTensor, rhsTensor)[0]
+				output.FinalizeAll()
 			}
 
 			// Timed runs
 			startTime := time.Now()
 			var numRuns int
 			for numRuns < minNumTimedRuns || time.Since(startTime) < minTestTime { // i := 0; i < numTimedRuns; i++ {
-				_, err := execDotGeneral(simpleGoBackend, node, inputs, nil)
+				output := testExec.Call(lhsTensor, rhsTensor)[0]
+				output.FinalizeAll()
 				numRuns++
-				if err != nil {
-					t.Errorf("Timed run for %s Dims %v, %s Dims %v, DType %s failed: %v", dimCase.name, dimCase.lhsDims, dimCase.name, dimCase.rhsDims, dtype, err)
-					continue
-				}
 			}
 			duration := time.Since(startTime)
 			avgDurationPerRun := duration / time.Duration(numRuns)
-			//avgDurationPerRun := duration / time.Duration(numTimedRuns)
 
 			// Calculate the total number of multiply-add operations.
-			numOps := int64(batchSize) * int64(lhsCrossSize) * int64(rhsCrossSize) * int64(contractingSize) * 2 // 1 mult + 1 add = 2 ops
-			gOpsPerSecond := float64(numOps) / avgDurationPerRun.Seconds() / 1e9                                // Giga Ops
+			gOpsPerSecond := float64(numOps) / avgDurationPerRun.Seconds() / 1e9 // Giga Ops
 
 			// Print table row
 			style := style1
-			if dimCaseIdx%2 == 1 {
+			if benchCaseIdx%2 == 1 {
 				style = style2
 			}
 			row := fmt.Sprintf("| %-15s | %-20s | %-20s | %-10s | %-10s | %-10.1f |",
-				dimCase.name,
-				dimsToStr(dimCase.lhsDims), dimsToStr(dimCase.rhsDims),
+				benchCase.name,
+				dimsToStr(benchCase.lhsShape), dimsToStr(benchCase.rhsShape),
 				dtype,
 				formatDurationWith2Decimals(avgDurationPerRun),
 				gOpsPerSecond)

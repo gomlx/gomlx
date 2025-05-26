@@ -1,5 +1,9 @@
 # GoMLX changelog
 
+# Next
+
+* Benchmarks for SimpleGo DotGeneral.
+
 # v0.19.4: 2024/05/24 added Vector Neural Networks (VNNs)
 
 * Vector Neural Networks (VNN): allows one to build 3D rotation (SO(3)) equivariant and/or invariant networks. See package `ml/layers/vnn`.

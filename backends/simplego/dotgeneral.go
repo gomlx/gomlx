@@ -1,8 +1,6 @@
 package simplego
 
 import (
-	"fmt"
-
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/xslices"
@@ -152,9 +150,9 @@ func (b *Builder) DotGeneral(lhsOp backends.Op, lhsContractingAxes, lhsBatchAxes
 	resultingDims = append(resultingDims, rhsCrossDims...)
 	result, err := b.Reshape(dotGeneral, resultingDims...)
 
-	fmt.Printf("DotGeneral(*lhs*: %s, c:%v, b:%v; *rhs*:  %s, c:%v, b:%v) -> %s\n",
-		lhs.shape, lhsContractingAxes, lhsBatchAxes, rhs.shape, rhsContractingAxes, rhsBatchAxes,
-		result.(*Node).shape)
+	//fmt.Printf("DotGeneral(*lhs*: %s, c:%v, b:%v; *rhs*:  %s, c:%v, b:%v) -> %s\n",
+	//	lhs.shape, lhsContractingAxes, lhsBatchAxes, rhs.shape, rhsContractingAxes, rhsBatchAxes,
+	//	result.(*Node).shape)
 
 	if err != nil {
 		return nil, err
