@@ -500,7 +500,7 @@ func (r *dotGeneralRecursiveData) apply(
 	contractingLen := contractEnd - contractStart
 	maxLen := max(max(lhsCrossLen, rhsCrossLen), contractingLen)
 	// Base case: optimize for L2 size
-	if maxLen <= 4 {
+	if maxLen <= 2 {
 		for lhsCross := lhsCrossStart; lhsCross < lhsCrossEnd; lhsCross++ {
 			for rhsCross := rhsCrossStart; rhsCross < rhsCrossEnd; rhsCross++ {
 				outputBlockIdx := r.outputBatchOffset + lhsCross*r.rhsCrossBlocks + rhsCross
@@ -550,15 +550,22 @@ func buildDotGeneralKernel[T PODNumericConstraints](lhs, rhs, output *Buffer, bl
 		baseLhsIdx := lhsBlockIdx * blockSize
 		baseRhsIdx := rhsBlockIdx * blockSize
 		outputIdx := outputBlockIdx * blockSize
-		for range blockDim {
+		for range blockDim { // Loop over lhs rows:
 			rhsIdx := baseRhsIdx
-			for range blockDim { // loop over rhs rows:
+			// Loop 2 rows at a time.
+			for rhsRow := 0; rhsRow < blockDim; rhsRow += 4 { // range blockDim { // loop over rhs rows:
 				lhsIdx := baseLhsIdx
 				contractingIdx := 0
-				sum := outputFlat[outputIdx]
+				sum0 := outputFlat[outputIdx]
+				sum1 := outputFlat[outputIdx+1]
+				sum2 := outputFlat[outputIdx+2]
+				sum3 := outputFlat[outputIdx+3]
 				// Loop unrolled 8 at a time.
 				for ; contractingIdx+7 < blockDim; contractingIdx += 8 {
-					sum += lhsFlat[lhsIdx]*rhsFlat[rhsIdx] +
+					rhsIdx1 := rhsIdx + blockDim
+					rhsIdx2 := rhsIdx + 2*blockDim
+					rhsIdx3 := rhsIdx + 3*blockDim
+					sum0 += lhsFlat[lhsIdx]*rhsFlat[rhsIdx] +
 						lhsFlat[lhsIdx+1]*rhsFlat[rhsIdx+1] +
 						lhsFlat[lhsIdx+2]*rhsFlat[rhsIdx+2] +
 						lhsFlat[lhsIdx+3]*rhsFlat[rhsIdx+3] +
@@ -566,18 +573,46 @@ func buildDotGeneralKernel[T PODNumericConstraints](lhs, rhs, output *Buffer, bl
 						lhsFlat[lhsIdx+5]*rhsFlat[rhsIdx+5] +
 						lhsFlat[lhsIdx+6]*rhsFlat[rhsIdx+6] +
 						lhsFlat[lhsIdx+7]*rhsFlat[rhsIdx+7]
+					sum1 += lhsFlat[lhsIdx]*rhsFlat[rhsIdx1] +
+						lhsFlat[lhsIdx+1]*rhsFlat[rhsIdx1+1] +
+						lhsFlat[lhsIdx+2]*rhsFlat[rhsIdx1+2] +
+						lhsFlat[lhsIdx+3]*rhsFlat[rhsIdx1+3] +
+						lhsFlat[lhsIdx+4]*rhsFlat[rhsIdx1+4] +
+						lhsFlat[lhsIdx+5]*rhsFlat[rhsIdx1+5] +
+						lhsFlat[lhsIdx+6]*rhsFlat[rhsIdx1+6] +
+						lhsFlat[lhsIdx+7]*rhsFlat[rhsIdx1+7]
+					sum2 += lhsFlat[lhsIdx]*rhsFlat[rhsIdx2] +
+						lhsFlat[lhsIdx+1]*rhsFlat[rhsIdx2+1] +
+						lhsFlat[lhsIdx+2]*rhsFlat[rhsIdx2+2] +
+						lhsFlat[lhsIdx+3]*rhsFlat[rhsIdx2+3] +
+						lhsFlat[lhsIdx+4]*rhsFlat[rhsIdx2+4] +
+						lhsFlat[lhsIdx+5]*rhsFlat[rhsIdx2+5] +
+						lhsFlat[lhsIdx+6]*rhsFlat[rhsIdx2+6] +
+						lhsFlat[lhsIdx+7]*rhsFlat[rhsIdx2+7]
+					sum3 += lhsFlat[lhsIdx]*rhsFlat[rhsIdx3] +
+						lhsFlat[lhsIdx+1]*rhsFlat[rhsIdx3+1] +
+						lhsFlat[lhsIdx+2]*rhsFlat[rhsIdx3+2] +
+						lhsFlat[lhsIdx+3]*rhsFlat[rhsIdx3+3] +
+						lhsFlat[lhsIdx+4]*rhsFlat[rhsIdx3+4] +
+						lhsFlat[lhsIdx+5]*rhsFlat[rhsIdx3+5] +
+						lhsFlat[lhsIdx+6]*rhsFlat[rhsIdx3+6] +
+						lhsFlat[lhsIdx+7]*rhsFlat[rhsIdx3+7]
 					lhsIdx += 8
 					rhsIdx += 8
 				}
 				// Tail loop.
 				for ; contractingIdx < blockDim; contractingIdx++ {
-					sum += lhsFlat[lhsIdx] * rhsFlat[rhsIdx]
+					sum0 += lhsFlat[lhsIdx] * rhsFlat[rhsIdx]
+					sum1 += lhsFlat[lhsIdx] * rhsFlat[rhsIdx+blockDim]
 					lhsIdx++
 					rhsIdx++
 				}
-				outputFlat[outputIdx] = sum
-				outputIdx++
-			}
+				outputFlat[outputIdx] = sum0
+				outputFlat[outputIdx+1] = sum1
+				outputFlat[outputIdx+2] = sum2
+				outputFlat[outputIdx+3] = sum3
+				outputIdx += 4
+			} // loop over rhs rows
 			baseLhsIdx += blockDim
 		}
 	}
