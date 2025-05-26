@@ -35,78 +35,113 @@ func formatDurationWith2Decimals(d time.Duration) string {
 }
 
 func TestDotGeneral_ShapesAndCopy(t *testing.T) {
-	dtype := dtypes.Float32
-	sourceShape := shapes.Make(dtype, 2, 3, 4, 5)
-	contractingAxes := []int{1, 2}
-	batchAxes := []int{0}
-	batchSize, crossSize, contractingSize := dgFindSizes(sourceShape, contractingAxes, batchAxes)
-	require.Equal(t, 2, batchSize)
-	require.Equal(t, 5, crossSize)
-	require.Equal(t, 12, contractingSize)
+	// Test #1: batch axes are out-of-order.
+	{
+		dtype := dtypes.Float64
+		sourceShape := shapes.Make(dtype, 2, 1, 3)
+		contractingAxes := []int{1}
+		batchAxes := []int{2, 0}
+		batchSize, crossSize, contractingSize, crossDims := dgFindSizes(sourceShape, contractingAxes, batchAxes)
+		require.Equal(t, 6, batchSize)
+		require.Equal(t, 1, crossSize)
+		require.Equal(t, 1, contractingSize)
+		require.Len(t, crossDims, 0)
 
-	// Create the source buffer.
-	sourceAny, sourceFlatAny, err := backend.NewSharedBuffer(0, sourceShape)
-	require.NoError(t, err)
-	source := sourceAny.(*Buffer)
-	sourceFlat := sourceFlatAny.([]float32)
-	for i := range sourceFlat {
-		sourceFlat[i] = float32(i + 1)
+		// Create the source buffer.
+		sourceAny, sourceFlatAny, err := backend.NewSharedBuffer(0, sourceShape)
+		require.NoError(t, err)
+		source := sourceAny.(*Buffer)
+		sourceFlat := sourceFlatAny.([]float64)
+		for i := range sourceFlat {
+			sourceFlat[i] = float64(i + 1)
+		}
+
+		// Create a block shape.
+		blockLog2Dim := 1 // block dim is 2^1 = 2.
+		blockDim := 1 << blockLog2Dim
+		be := backend.(*Backend)
+		outShape := dgCreateBlockedShape(dtype, batchSize, crossSize, contractingSize, blockLog2Dim)
+		// outShape = [6 1 1 2 2]
+		fmt.Printf("\toutShape=%s, size=%d\n", outShape, outShape.Size())
+		require.Equal(t, []int{batchSize, (crossSize + blockDim - 1) / blockDim, (contractingSize + blockDim - 1) / blockDim, blockDim, blockDim}, outShape.Dimensions)
+		outBlocks := be.getBuffer(dtype, outShape.Size())
+		outBlocks.shape = outShape
+		outBlocks.Zeros()
+		copyFlatToBlock := dotGeneralFlatToBlockDTypeMap.Get(dtype).(func(source, blkOutput *Buffer, contractingAxes, batchAxes []int, batchSize, crossSize, contractingSize, blkLog2Dim int))
+		copyFlatToBlock(source, outBlocks, contractingAxes, batchAxes, batchSize, crossSize, contractingSize, blockLog2Dim)
+
+		outFlat := outBlocks.flat.([]float64)
+		// Notice the reversal (transposition) of the batch axes:
+		want := []float64{
+			1, 0, 0, 0,
+			4, 0, 0, 0,
+
+			2, 0, 0, 0,
+			5, 0, 0, 0,
+
+			3, 0, 0, 0,
+			6, 0, 0, 0,
+		}
+		require.Equal(t, want, outFlat)
 	}
 
-	// Create a block shape.
-	blockLog2Dim := 2 // block dim is 2^2 = 4.
-	blockDim := 1 << blockLog2Dim
-	be := backend.(*Backend)
-	outShape := dgCreateBlockedShape(dtype, batchSize, crossSize, contractingSize, blockLog2Dim)
-	// outShape = [2 2 3 4 4]
-	fmt.Printf("\toutShape=%s, size=%d\n", outShape, outShape.Size())
-	require.Equal(t, []int{batchSize, (crossSize + blockDim - 1) / blockDim, (contractingSize + blockDim - 1) / blockDim, blockDim, blockDim}, outShape.Dimensions)
-	outBlocks := be.getBuffer(dtype, outShape.Size())
-	outBlocks.shape = outShape
-	outBlocks.Zeros()
-	copyFlatToBlock := dotGeneralFlatToBlockDTypeMap.Get(dtype).(func(source, blkOutput *Buffer, contractingAxes, batchAxes []int, batchSize, crossSize, contractingSize, blkLog2Dim int))
-	copyFlatToBlock(source, outBlocks, contractingAxes, batchAxes, batchSize, crossSize, contractingSize, blockLog2Dim)
+	{ // Test #2
+		dtype := dtypes.Float32
+		sourceShape := shapes.Make(dtype, 2, 3, 4, 5)
+		contractingAxes := []int{1, 2}
+		batchAxes := []int{0}
+		batchSize, crossSize, contractingSize, crossDims := dgFindSizes(sourceShape, contractingAxes, batchAxes)
+		require.Equal(t, 2, batchSize)
+		require.Equal(t, 5, crossSize)
+		require.Equal(t, 12, contractingSize)
+		require.Equal(t, []int{5}, crossDims)
 
-	outFlat := outBlocks.flat.([]float32)
-	want := []float32{
-		1, 6, 11, 16, // Row 0 of block 0: sourceIdx are {0, 0, [0-3], 0}
-		2, 7, 12, 17, // Row 1 of block 0: sourceIdx are {0, 0, [0-3], 1}
-		3, 8, 13, 18, 4, 9, 14, 19, // Rows 2 and 3 of block 0
+		// Create the source buffer.
+		sourceAny, sourceFlatAny, err := backend.NewSharedBuffer(0, sourceShape)
+		require.NoError(t, err)
+		source := sourceAny.(*Buffer)
+		sourceFlat := sourceFlatAny.([]float32)
+		for i := range sourceFlat {
+			sourceFlat[i] = float32(i + 1)
+		}
 
-		// Block 1: sourceIdx are {0, 1, [0-3], [0-3]}
-		21, 26, 31, 36, 22, 27, 32, 37, 23, 28, 33, 38, 24, 29, 34, 39,
+		// Create a block shape.
+		blockLog2Dim := 2 // block dim is 2^2 = 4.
+		blockDim := 1 << blockLog2Dim
+		be := backend.(*Backend)
+		outShape := dgCreateBlockedShape(dtype, batchSize, crossSize, contractingSize, blockLog2Dim)
+		// outShape = [2 2 3 4 4]
+		fmt.Printf("\toutShape=%s, size=%d\n", outShape, outShape.Size())
+		require.Equal(t, []int{batchSize, (crossSize + blockDim - 1) / blockDim, (contractingSize + blockDim - 1) / blockDim, blockDim, blockDim}, outShape.Dimensions)
+		outBlocks := be.getBuffer(dtype, outShape.Size())
+		outBlocks.shape = outShape
+		outBlocks.Zeros()
+		copyFlatToBlock := dotGeneralFlatToBlockDTypeMap.Get(dtype).(func(source, blkOutput *Buffer, contractingAxes, batchAxes []int, batchSize, crossSize, contractingSize, blkLog2Dim int))
+		copyFlatToBlock(source, outBlocks, contractingAxes, batchAxes, batchSize, crossSize, contractingSize, blockLog2Dim)
 
-		// Block 2: sourceIdx are {0, 2, [0-3], [0-3]}
-		41, 46, 51, 56, 42, 47, 52, 57, 43, 48, 53, 58, 44, 49, 54, 59,
+		outFlat := outBlocks.flat.([]float32)
+		want := []float32{
+			1, 6, 11, 16, // Row 0 of block 0: sourceIdx are {0, 0, [0-3], 0}
+			2, 7, 12, 17, // Row 1 of block 0: sourceIdx are {0, 0, [0-3], 1}
+			3, 8, 13, 18, 4, 9, 14, 19, // Rows 2 and 3 of block 0
 
-		// Block 4: sourceIdx for row 0 are {0, 0, [0-3], 4}, and the rest is padding.
-		5, 10, 15, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			// Block 1: sourceIdx are {0, 1, [0-3], [0-3]}
+			21, 26, 31, 36, 22, 27, 32, 37, 23, 28, 33, 38, 24, 29, 34, 39,
 
-		// ...
-		25, 30, 35, 40, 0,
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 45, 50, 55, 60, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 61, 66, 71, 76, 62, 67, 72, 77, 63, 68, 73, 78, 64, 69, 74, 79, 81,
-		86, 91, 96, 82, 87, 92, 97, 83, 88, 93, 98, 84, 89, 94, 99, 101, 106, 111, 116, 102, 107, 112, 117, 103, 108, 113, 118, 104, 109, 114, 119, 65, 70, 75, 80,
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 85, 90, 95, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 105, 110, 115, 120, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			// Block 2: sourceIdx are {0, 2, [0-3], [0-3]}
+			41, 46, 51, 56, 42, 47, 52, 57, 43, 48, 53, 58, 44, 49, 54, 59,
+
+			// Block 4: sourceIdx for row 0 are {0, 0, [0-3], 4}, and the rest is padding.
+			5, 10, 15, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+
+			// ...
+			25, 30, 35, 40, 0,
+			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 45, 50, 55, 60, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 61, 66, 71, 76, 62, 67, 72, 77, 63, 68, 73, 78, 64, 69, 74, 79, 81,
+			86, 91, 96, 82, 87, 92, 97, 83, 88, 93, 98, 84, 89, 94, 99, 101, 106, 111, 116, 102, 107, 112, 117, 103, 108, 113, 118, 104, 109, 114, 119, 65, 70, 75, 80,
+			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 85, 90, 95, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 105, 110, 115, 120, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		}
+		require.Equal(t, want, outFlat)
 	}
-	require.Equal(t, want, outFlat)
-}
-
-func TestDotGeneral_transposeForDotGeneral(t *testing.T) {
-	S := shapes.Make
-	F32 := dtypes.Float32
-	builder := backend.Builder("DotGeneral Test").(*Builder)
-	operandOp, err := builder.Parameter("lhs", S(F32, 2, 3, 4, 5))
-	require.NoError(t, err)
-	operand := operandOp.(*Node)
-	transposed, batchDims, crossDims, contractingDims, err :=
-		builder.transposeForDotGeneral(operand, "lhs", []int{2, 1}, []int{3, 0})
-	require.NoError(t, err)
-	fmt.Printf("\ttransposed.shape=%s\n", transposed.shape)
-
-	assert.NoError(t, transposed.shape.CheckDims(10, 1, 12))
-	assert.Equal(t, []int{5, 2}, batchDims)
-	assert.Len(t, crossDims, 0)
-	assert.Equal(t, []int{4, 3}, contractingDims)
 }
 
 func TestDotGeneral_Shape(t *testing.T) {
@@ -115,7 +150,7 @@ func TestDotGeneral_Shape(t *testing.T) {
 	builder := backend.Builder("DotGeneral Test").(*Builder)
 	lhs, err := builder.Parameter("lhs", S(F32, 2, 3, 4, 5))
 	require.NoError(t, err)
-	rhs, err := builder.Parameter("lhs", S(F32, 5, 1, 2, 3))
+	rhs, err := builder.Parameter("rhs", S(F32, 5, 1, 2, 3))
 	require.NoError(t, err)
 	gotOp, err := builder.DotGeneral(
 		lhs, []int{1}, []int{3, 0},
@@ -131,6 +166,18 @@ func TestDotGeneral_Shape(t *testing.T) {
 }
 
 func TestDotGeneral_Exec(t *testing.T) {
+	// Axis transposition example:
+	y1 := graph.ExecOnce(backend, func(g *graph.Graph) *graph.Node {
+		lhs := graph.MulScalar(graph.OnePlus(graph.IotaFull(g, shapes.Make(F32, 2, 1, 3))), 1)
+		rhs := graph.Ones(g, shapes.Make(F32, 1, 3, 2))
+		return graph.DotGeneral(lhs, []int{1}, []int{2, 0}, rhs, []int{0}, []int{1, 2})
+	})
+	fmt.Printf("\ty1=%s\n", y1)
+	require.NoError(t, y1.Shape().Check(F32, 3, 2))
+	want1 := [][]float32{{1, 4}, {2, 5}, {3, 6}}
+	require.Equal(t, want1, y1.Value())
+
+	// Larger example, with multiple axes.
 	y0 := graph.ExecOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
 		return graph.DotGeneral(lhs, []int{1}, []int{3, 0}, rhs, []int{1}, []int{0, 2})
 	},
@@ -155,18 +202,19 @@ func TestDotGeneral_Exec(t *testing.T) {
 			{{3230, 3260, 3290, 3320}},
 			{{8255, 8330, 8405, 8480}},
 		}}
-	assert.Equal(t, want, y0.Value())
+	require.Equal(t, want, y0.Value())
 
+	// BFloat16 example.
 	bf16 := bfloat16.FromFloat32
-	y1 := graph.ExecOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
+	y2 := graph.ExecOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
 		return graph.DotGeneral(lhs, []int{1}, []int{}, rhs, []int{0}, []int{})
 	},
 		[][]bfloat16.BFloat16{{bf16(1), bf16(2), bf16(3)}},
 		[][]bfloat16.BFloat16{{bf16(10)}, {bf16(11)}, {bf16(12)}},
 	)
-	fmt.Printf("\ty1=%s\n", y1)
-	assert.NoError(t, y1.Shape().Check(dtypes.BFloat16, 1, 1))
-	assert.Equal(t, float32(10+22+36), tensors.CopyFlatData[bfloat16.BFloat16](y1)[0].Float32())
+	fmt.Printf("\ty2=%s\n", y2)
+	require.NoError(t, y2.Shape().Check(dtypes.BFloat16, 1, 1))
+	require.Equal(t, float32(10+22+36), tensors.CopyFlatData[bfloat16.BFloat16](y2)[0].Float32())
 }
 
 func TestDotGeneral_Dot(t *testing.T) {
@@ -199,7 +247,7 @@ func dimsToStr(dims []int) string {
 	return fmt.Sprintf("{%s}", strings.Join(dimsStr, ", "))
 }
 
-func TestDotGeneral_DotGeneralPerformanceTable(t *testing.T) {
+func TestDotGeneral_PerformanceTable(t *testing.T) {
 	// IMPORTANT: Populate this slice with the shapes and parameters of the dot-product.
 	// lhsDims: [Batch, LhsCross, Contracting]
 	// rhsDims: [Batch, RhsCross, Contracting]
@@ -290,7 +338,7 @@ func TestDotGeneral_DotGeneralPerformanceTable(t *testing.T) {
 
 	// Print table header
 	fmt.Printf("\n--- execNormalizedDotGeneral Performance ---\n")
-	header := fmt.Sprintf("| %-15s | %-20s | %-20s | %-10s | %-10s | %-10s |", "Test Name", "LHS Dims", "RHS Dims", "DType", "Time/Run", "GOps/Sec")
+	header := fmt.Sprintf("| %-15s | %-20s | %-20s | %-10s | %-12s | %-10s | %-10s |", "Test Name", "LHS Dims", "RHS Dims", "DType", "Time/Run", "Num Ops", "GOps/Sec")
 	fmt.Println(header)
 	fmt.Println(strings.Repeat("-", len(header)))
 
@@ -299,8 +347,8 @@ func TestDotGeneral_DotGeneralPerformanceTable(t *testing.T) {
 			// Construct shapes from dimensions and current dtype
 			lhsShape := shapes.Make(dtype, benchCase.lhsShape...)
 			rhsShape := shapes.Make(dtype, benchCase.rhsShape...)
-			batchSize, lhsCrossSize, contractingSize := dgFindSizes(lhsShape, benchCase.lhsContractingAxes, benchCase.lhsBatchAxes)
-			_, rhsCrossSize, _ := dgFindSizes(rhsShape, benchCase.rhsContractingAxes, benchCase.rhsBatchAxes)
+			batchSize, lhsCrossSize, contractingSize, _ := dgFindSizes(lhsShape, benchCase.lhsContractingAxes, benchCase.lhsBatchAxes)
+			_, rhsCrossSize, _, _ := dgFindSizes(rhsShape, benchCase.rhsContractingAxes, benchCase.rhsBatchAxes)
 			numOps := batchSize * lhsCrossSize * rhsCrossSize * contractingSize * 2 // 1 mult + 1 add = 2 ops
 
 			// Create and initialize input Buffers
@@ -373,11 +421,12 @@ func TestDotGeneral_DotGeneralPerformanceTable(t *testing.T) {
 			if benchCaseIdx%2 == 1 {
 				style = style2
 			}
-			row := fmt.Sprintf("| %-15s | %-20s | %-20s | %-10s | %-10s | %-10.1f |",
+			row := fmt.Sprintf("| %-15s | %-20s | %-20s | %-10s | %-12s | %-10d | %-10.1f |",
 				benchCase.name,
 				dimsToStr(benchCase.lhsShape), dimsToStr(benchCase.rhsShape),
 				dtype,
 				formatDurationWith2Decimals(avgDurationPerRun),
+				numOps,
 				gOpsPerSecond)
 			fmt.Println(style.Render(row))
 		}

@@ -72,17 +72,30 @@ func init() {
 	dotGeneralFlatToBlockDTypeMap.RegisterIfNotSet(dtypes.Float64, dgCopyFlatToBlockShape[float64])
 	dotGeneralFlatToBlockDTypeMap.RegisterIfNotSet(dtypes.BFloat16, dgCopyFlatToBlockShape[bfloat16.BFloat16])
 
-	// DTypeMap: dotGeneralDTypeMap
-	dotGeneralDTypeMap.RegisterIfNotSet(dtypes.Int8, execNormalizedDotGeneralGeneric[int8])
-	dotGeneralDTypeMap.RegisterIfNotSet(dtypes.Int16, execNormalizedDotGeneralGeneric[int16])
-	dotGeneralDTypeMap.RegisterIfNotSet(dtypes.Int32, execNormalizedDotGeneralGeneric[int32])
-	dotGeneralDTypeMap.RegisterIfNotSet(dtypes.Int64, execNormalizedDotGeneralGeneric[int64])
-	dotGeneralDTypeMap.RegisterIfNotSet(dtypes.Uint8, execNormalizedDotGeneralGeneric[uint8])
-	dotGeneralDTypeMap.RegisterIfNotSet(dtypes.Uint16, execNormalizedDotGeneralGeneric[uint16])
-	dotGeneralDTypeMap.RegisterIfNotSet(dtypes.Uint32, execNormalizedDotGeneralGeneric[uint32])
-	dotGeneralDTypeMap.RegisterIfNotSet(dtypes.Uint64, execNormalizedDotGeneralGeneric[uint64])
-	dotGeneralDTypeMap.RegisterIfNotSet(dtypes.Float32, execNormalizedDotGeneralGeneric[float32])
-	dotGeneralDTypeMap.RegisterIfNotSet(dtypes.Float64, execNormalizedDotGeneralGeneric[float64])
+	// DTypeMap: dotGeneralOutputBlockToFlatDTypeMap
+	dotGeneralOutputBlockToFlatDTypeMap.RegisterIfNotSet(dtypes.Int8, dgCopyOutputBlockToFlat[int8])
+	dotGeneralOutputBlockToFlatDTypeMap.RegisterIfNotSet(dtypes.Int16, dgCopyOutputBlockToFlat[int16])
+	dotGeneralOutputBlockToFlatDTypeMap.RegisterIfNotSet(dtypes.Int32, dgCopyOutputBlockToFlat[int32])
+	dotGeneralOutputBlockToFlatDTypeMap.RegisterIfNotSet(dtypes.Int64, dgCopyOutputBlockToFlat[int64])
+	dotGeneralOutputBlockToFlatDTypeMap.RegisterIfNotSet(dtypes.Uint8, dgCopyOutputBlockToFlat[uint8])
+	dotGeneralOutputBlockToFlatDTypeMap.RegisterIfNotSet(dtypes.Uint16, dgCopyOutputBlockToFlat[uint16])
+	dotGeneralOutputBlockToFlatDTypeMap.RegisterIfNotSet(dtypes.Uint32, dgCopyOutputBlockToFlat[uint32])
+	dotGeneralOutputBlockToFlatDTypeMap.RegisterIfNotSet(dtypes.Uint64, dgCopyOutputBlockToFlat[uint64])
+	dotGeneralOutputBlockToFlatDTypeMap.RegisterIfNotSet(dtypes.Float32, dgCopyOutputBlockToFlat[float32])
+	dotGeneralOutputBlockToFlatDTypeMap.RegisterIfNotSet(dtypes.Float64, dgCopyOutputBlockToFlat[float64])
+	dotGeneralOutputBlockToFlatDTypeMap.RegisterIfNotSet(dtypes.BFloat16, dgCopyOutputBlockToFlat[bfloat16.BFloat16])
+
+	// DTypeMap: dotGeneralKernelDTypeMap
+	dotGeneralKernelDTypeMap.RegisterIfNotSet(dtypes.Int8, buildDotGeneralKernel[int8])
+	dotGeneralKernelDTypeMap.RegisterIfNotSet(dtypes.Int16, buildDotGeneralKernel[int16])
+	dotGeneralKernelDTypeMap.RegisterIfNotSet(dtypes.Int32, buildDotGeneralKernel[int32])
+	dotGeneralKernelDTypeMap.RegisterIfNotSet(dtypes.Int64, buildDotGeneralKernel[int64])
+	dotGeneralKernelDTypeMap.RegisterIfNotSet(dtypes.Uint8, buildDotGeneralKernel[uint8])
+	dotGeneralKernelDTypeMap.RegisterIfNotSet(dtypes.Uint16, buildDotGeneralKernel[uint16])
+	dotGeneralKernelDTypeMap.RegisterIfNotSet(dtypes.Uint32, buildDotGeneralKernel[uint32])
+	dotGeneralKernelDTypeMap.RegisterIfNotSet(dtypes.Uint64, buildDotGeneralKernel[uint64])
+	dotGeneralKernelDTypeMap.RegisterIfNotSet(dtypes.Float32, buildDotGeneralKernel[float32])
+	dotGeneralKernelDTypeMap.RegisterIfNotSet(dtypes.Float64, buildDotGeneralKernel[float64])
 
 	// DTypeMap: mutableBytesDTypeMap
 	mutableBytesDTypeMap.RegisterIfNotSet(dtypes.Int8, mutableBytesGeneric[int8])
