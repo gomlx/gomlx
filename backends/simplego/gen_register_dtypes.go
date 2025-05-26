@@ -59,6 +59,19 @@ func init() {
 	dispatchGather.RegisterIfNotSet(dtypes.Uint32, execGatherGeneric[uint32])
 	dispatchGather.RegisterIfNotSet(dtypes.Uint64, execGatherGeneric[uint64])
 
+	// DTypeMap: dotGeneralFlatToBlockDTypeMap
+	dotGeneralFlatToBlockDTypeMap.RegisterIfNotSet(dtypes.Int8, dgCopyFlatToBlockShape[int8])
+	dotGeneralFlatToBlockDTypeMap.RegisterIfNotSet(dtypes.Int16, dgCopyFlatToBlockShape[int16])
+	dotGeneralFlatToBlockDTypeMap.RegisterIfNotSet(dtypes.Int32, dgCopyFlatToBlockShape[int32])
+	dotGeneralFlatToBlockDTypeMap.RegisterIfNotSet(dtypes.Int64, dgCopyFlatToBlockShape[int64])
+	dotGeneralFlatToBlockDTypeMap.RegisterIfNotSet(dtypes.Uint8, dgCopyFlatToBlockShape[uint8])
+	dotGeneralFlatToBlockDTypeMap.RegisterIfNotSet(dtypes.Uint16, dgCopyFlatToBlockShape[uint16])
+	dotGeneralFlatToBlockDTypeMap.RegisterIfNotSet(dtypes.Uint32, dgCopyFlatToBlockShape[uint32])
+	dotGeneralFlatToBlockDTypeMap.RegisterIfNotSet(dtypes.Uint64, dgCopyFlatToBlockShape[uint64])
+	dotGeneralFlatToBlockDTypeMap.RegisterIfNotSet(dtypes.Float32, dgCopyFlatToBlockShape[float32])
+	dotGeneralFlatToBlockDTypeMap.RegisterIfNotSet(dtypes.Float64, dgCopyFlatToBlockShape[float64])
+	dotGeneralFlatToBlockDTypeMap.RegisterIfNotSet(dtypes.BFloat16, dgCopyFlatToBlockShape[bfloat16.BFloat16])
+
 	// DTypeMap: dotGeneralDTypeMap
 	dotGeneralDTypeMap.RegisterIfNotSet(dtypes.Int8, execNormalizedDotGeneralGeneric[int8])
 	dotGeneralDTypeMap.RegisterIfNotSet(dtypes.Int16, execNormalizedDotGeneralGeneric[int16])

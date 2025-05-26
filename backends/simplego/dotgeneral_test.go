@@ -34,6 +34,63 @@ func formatDurationWith2Decimals(d time.Duration) string {
 	return fmt.Sprintf("%.2f%s", num, matches[2])
 }
 
+func TestDotGeneral_ShapesAndCopy(t *testing.T) {
+	dtype := dtypes.Float32
+	sourceShape := shapes.Make(dtype, 2, 3, 4, 5)
+	contractingAxes := []int{1, 2}
+	batchAxes := []int{0}
+	batchSize, crossSize, contractingSize := dgFindSizes(sourceShape, contractingAxes, batchAxes)
+	require.Equal(t, 2, batchSize)
+	require.Equal(t, 5, crossSize)
+	require.Equal(t, 12, contractingSize)
+
+	// Create the source buffer.
+	sourceAny, sourceFlatAny, err := backend.NewSharedBuffer(0, sourceShape)
+	require.NoError(t, err)
+	source := sourceAny.(*Buffer)
+	sourceFlat := sourceFlatAny.([]float32)
+	for i := range sourceFlat {
+		sourceFlat[i] = float32(i + 1)
+	}
+
+	// Create a block shape.
+	blockLog2Dim := 2 // block dim is 2^2 = 4.
+	blockDim := 1 << blockLog2Dim
+	be := backend.(*Backend)
+	outShape := dgCreateBlockedShape(dtype, batchSize, crossSize, contractingSize, blockLog2Dim)
+	// outShape = [2 2 3 4 4]
+	fmt.Printf("\toutShape=%s, size=%d\n", outShape, outShape.Size())
+	require.Equal(t, []int{batchSize, (crossSize + blockDim - 1) / blockDim, (contractingSize + blockDim - 1) / blockDim, blockDim, blockDim}, outShape.Dimensions)
+	outBlocks := be.getBuffer(dtype, outShape.Size())
+	outBlocks.shape = outShape
+	outBlocks.Zeros()
+	copyFlatToBlock := dotGeneralFlatToBlockDTypeMap.Get(dtype).(func(source, blkOutput *Buffer, contractingAxes, batchAxes []int, batchSize, crossSize, contractingSize, blkLog2Dim int))
+	copyFlatToBlock(source, outBlocks, contractingAxes, batchAxes, batchSize, crossSize, contractingSize, blockLog2Dim)
+
+	outFlat := outBlocks.flat.([]float32)
+	want := []float32{
+		1, 6, 11, 16, // Row 0 of block 0: sourceIdx are {0, 0, [0-3], 0}
+		2, 7, 12, 17, // Row 1 of block 0: sourceIdx are {0, 0, [0-3], 1}
+		3, 8, 13, 18, 4, 9, 14, 19, // Rows 2 and 3 of block 0
+
+		// Block 1: sourceIdx are {0, 1, [0-3], [0-3]}
+		21, 26, 31, 36, 22, 27, 32, 37, 23, 28, 33, 38, 24, 29, 34, 39,
+
+		// Block 2: sourceIdx are {0, 2, [0-3], [0-3]}
+		41, 46, 51, 56, 42, 47, 52, 57, 43, 48, 53, 58, 44, 49, 54, 59,
+
+		// Block 4: sourceIdx for row 0 are {0, 0, [0-3], 4}, and the rest is padding.
+		5, 10, 15, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+
+		// ...
+		25, 30, 35, 40, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 45, 50, 55, 60, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 61, 66, 71, 76, 62, 67, 72, 77, 63, 68, 73, 78, 64, 69, 74, 79, 81,
+		86, 91, 96, 82, 87, 92, 97, 83, 88, 93, 98, 84, 89, 94, 99, 101, 106, 111, 116, 102, 107, 112, 117, 103, 108, 113, 118, 104, 109, 114, 119, 65, 70, 75, 80,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 85, 90, 95, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 105, 110, 115, 120, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	}
+	require.Equal(t, want, outFlat)
+}
+
 func TestDotGeneral_transposeForDotGeneral(t *testing.T) {
 	S := shapes.Make
 	F32 := dtypes.Float32
@@ -198,7 +255,7 @@ func TestExecNormalizedDotGeneralPerformanceTable(t *testing.T) {
 	style2 := lipgloss.NewStyle().Background(lipgloss.ANSIColor(0))
 
 	// Print table header
-	fmt.Printf("\n--- execNormalizedDotGeneral Performance ---\n")
+	fmt.Printf("\n--- execDotGeneral Performance ---\n")
 	header := fmt.Sprintf("| %-15s | %-20s | %-20s | %-10s | %-10s | %-10s |", "Test Name", "LHS Dims", "RHS Dims", "DType", "Time/Run", "GOps/Sec")
 	fmt.Println(header)
 	fmt.Println(strings.Repeat("-", len(header)))
@@ -230,7 +287,7 @@ func TestExecNormalizedDotGeneralPerformanceTable(t *testing.T) {
 			contractingSize := lhsShape.Dimensions[2]
 
 			outputShape := shapes.Make(dtype, batchSize, lhsCrossSize, rhsCrossSize)
-			node := &Node{shape: outputShape} // Minimal Node for execNormalizedDotGeneral
+			node := &Node{shape: outputShape} // Minimal Node for execDotGeneral
 
 			// Create and initialize input Buffers
 			lhsBuffer := simpleGoBackend.getBuffer(lhsShape.DType, lhsShape.Size())
@@ -280,7 +337,7 @@ func TestExecNormalizedDotGeneralPerformanceTable(t *testing.T) {
 
 			// Warm-up runs
 			for i := 0; i < numWarmupRuns; i++ {
-				_, err := execNormalizedDotGeneral(simpleGoBackend, node, inputs, nil)
+				_, err := execDotGeneral(simpleGoBackend, node, inputs, nil)
 				if err != nil {
 					t.Errorf("Warm-up run for %s Dims %v, %s Dims %v, DType %s failed: %v", dimCase.name, dimCase.lhsDims, dimCase.name, dimCase.rhsDims, dtype, err)
 					continue
@@ -291,7 +348,7 @@ func TestExecNormalizedDotGeneralPerformanceTable(t *testing.T) {
 			startTime := time.Now()
 			var numRuns int
 			for numRuns < minNumTimedRuns || time.Since(startTime) < minTestTime { // i := 0; i < numTimedRuns; i++ {
-				_, err := execNormalizedDotGeneral(simpleGoBackend, node, inputs, nil)
+				_, err := execDotGeneral(simpleGoBackend, node, inputs, nil)
 				numRuns++
 				if err != nil {
 					t.Errorf("Timed run for %s Dims %v, %s Dims %v, DType %s failed: %v", dimCase.name, dimCase.lhsDims, dimCase.name, dimCase.rhsDims, dtype, err)
