@@ -603,7 +603,7 @@ func buildDotGeneralKernel[T PODNumericConstraints](lhs, rhs, output *Buffer, bl
 		outputIdx := outputBlockIdx * blockSize
 		for range blockDim { // Loop over lhs rows:
 			rhsIdx := baseRhsIdx
-			// Loop 2 rows at a time.
+			// Loop 4 rows at a time.
 			for rhsRow := 0; rhsRow < blockDim; rhsRow += 4 { // range blockDim { // loop over rhs rows:
 				lhsIdx := baseLhsIdx
 				contractingIdx := 0
@@ -653,8 +653,13 @@ func buildDotGeneralKernel[T PODNumericConstraints](lhs, rhs, output *Buffer, bl
 				}
 				// Tail loop.
 				for ; contractingIdx < blockDim; contractingIdx++ {
+					rhsIdx1 := rhsIdx + blockDim
+					rhsIdx2 := rhsIdx + 2*blockDim
+					rhsIdx3 := rhsIdx + 3*blockDim
 					sum0 += lhsFlat[lhsIdx] * rhsFlat[rhsIdx]
-					sum1 += lhsFlat[lhsIdx] * rhsFlat[rhsIdx+blockDim]
+					sum1 += lhsFlat[lhsIdx] * rhsFlat[rhsIdx1]
+					sum2 += lhsFlat[lhsIdx] * rhsFlat[rhsIdx2]
+					sum3 += lhsFlat[lhsIdx] * rhsFlat[rhsIdx3]
 					lhsIdx++
 					rhsIdx++
 				}

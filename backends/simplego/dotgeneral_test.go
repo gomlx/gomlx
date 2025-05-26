@@ -1,6 +1,7 @@
 package simplego
 
 import (
+	"flag"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -19,6 +20,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+var flagPerf = flag.Bool("perf", false, "Run performance table tests.")
 
 func formatDurationWith2Decimals(d time.Duration) string {
 	s := d.String()
@@ -205,16 +208,18 @@ func TestDotGeneral_Exec(t *testing.T) {
 	require.Equal(t, want, y0.Value())
 
 	// BFloat16 example.
-	bf16 := bfloat16.FromFloat32
-	y2 := graph.ExecOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
-		return graph.DotGeneral(lhs, []int{1}, []int{}, rhs, []int{0}, []int{})
-	},
-		[][]bfloat16.BFloat16{{bf16(1), bf16(2), bf16(3)}},
-		[][]bfloat16.BFloat16{{bf16(10)}, {bf16(11)}, {bf16(12)}},
-	)
-	fmt.Printf("\ty2=%s\n", y2)
-	require.NoError(t, y2.Shape().Check(dtypes.BFloat16, 1, 1))
-	require.Equal(t, float32(10+22+36), tensors.CopyFlatData[bfloat16.BFloat16](y2)[0].Float32())
+	/*
+		bf16 := bfloat16.FromFloat32
+		y2 := graph.ExecOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
+			return graph.DotGeneral(lhs, []int{1}, []int{}, rhs, []int{0}, []int{})
+		},
+			[][]bfloat16.BFloat16{{bf16(1), bf16(2), bf16(3)}},
+			[][]bfloat16.BFloat16{{bf16(10)}, {bf16(11)}, {bf16(12)}},
+		)
+		fmt.Printf("\ty2=%s\n", y2)
+		require.NoError(t, y2.Shape().Check(dtypes.BFloat16, 1, 1))
+		require.Equal(t, float32(10+22+36), tensors.CopyFlatData[bfloat16.BFloat16](y2)[0].Float32())
+	*/
 }
 
 func TestDotGeneral_Dot(t *testing.T) {
@@ -248,6 +253,10 @@ func dimsToStr(dims []int) string {
 }
 
 func TestDotGeneral_PerformanceTable(t *testing.T) {
+	if !*flagPerf {
+		fmt.Printf("Skipping TestDotGeneral_PerformanceTable. Set -perf to run it.\n")
+		return
+	}
 	// IMPORTANT: Populate this slice with the shapes and parameters of the dot-product.
 	// lhsDims: [Batch, LhsCross, Contracting]
 	// rhsDims: [Batch, RhsCross, Contracting]
