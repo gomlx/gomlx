@@ -10,8 +10,8 @@ func (b *Backend) StartWorker(fn func()) bool {
 	}
 	b.currentWorkers.Add(1)
 	go func() {
-		defer b.currentWorkers.Add(-1)
 		fn()
+		b.currentWorkers.Add(-1)
 	}()
 	return true
 }

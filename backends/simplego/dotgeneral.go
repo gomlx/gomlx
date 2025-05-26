@@ -6,7 +6,6 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/xsync"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/pkg/errors"
@@ -478,6 +477,7 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 	recursive.rhsCrossBlocks = rhsBlocks.shape.Dimensions[1]
 	recursive.contractBlocks = lhsBlocks.shape.Dimensions[2]
 
+	var wg sync.WaitGroup
 	if (backend.maxParallelism > 0 && params.batchSize > backend.maxParallelism) ||
 		(backend.maxParallelism < 0 && params.batchSize > minBatchParallelize) {
 		// Parallelize at the batch level.
@@ -487,7 +487,8 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 			batchRecursive.lhsBatchOffset = batch * recursive.lhsCrossBlocks * recursive.contractBlocks
 			batchRecursive.rhsBatchOffset = batch * recursive.rhsCrossBlocks * recursive.contractBlocks
 			batchRecursive.outputBatchOffset = batch * recursive.lhsCrossBlocks * recursive.rhsCrossBlocks
-			batchRecursive.apply(0, recursive.lhsCrossBlocks, 0, recursive.rhsCrossBlocks, 0, recursive.contractBlocks)
+			wg.Add(1)
+			batchRecursive.apply(0, recursive.lhsCrossBlocks, 0, recursive.rhsCrossBlocks, 0, recursive.contractBlocks, &wg)
 		}
 	} else {
 		// Parallelize within the batch examples if possible:
@@ -496,9 +497,11 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 			recursive.lhsBatchOffset = batch * recursive.lhsCrossBlocks * recursive.contractBlocks
 			recursive.rhsBatchOffset = batch * recursive.rhsCrossBlocks * recursive.contractBlocks
 			recursive.outputBatchOffset = batch * recursive.lhsCrossBlocks * recursive.rhsCrossBlocks
-			recursive.apply(0, recursive.lhsCrossBlocks, 0, recursive.rhsCrossBlocks, 0, recursive.contractBlocks)
+			wg.Add(1)
+			recursive.apply(0, recursive.lhsCrossBlocks, 0, recursive.rhsCrossBlocks, 0, recursive.contractBlocks, &wg)
 		}
 	}
+	wg.Wait()
 	//fmt.Printf("flat output: %v\n", outputBlocks.flat)
 
 	// Copy over outputBlocks to the normal output.
@@ -521,10 +524,17 @@ type dotGeneralRecursiveData struct {
 // apply recursively splits the dot-general into smaller blocks and applies the kernel to each block.
 //
 // At the lowest splitting levels, the kernel is applied to blocks of the form.
+//
+// The function may return before the work is completed -- if it's being processed by a worker on a separate goroutine,
+// but wg.Done() will be called when the work is completed.
+//
+// If the work is further parallelized, wg.Add() is called for each new worker used, and wg.Done() is called when each
+// is completed.
 func (r *dotGeneralRecursiveData) apply(
 	lhsCrossStart, lhsCrossEnd,
 	rhsCrossStart, rhsCrossEnd,
-	contractStart, contractEnd int) {
+	contractStart, contractEnd int,
+	wg *sync.WaitGroup) {
 	lhsCrossLen := lhsCrossEnd - lhsCrossStart
 	rhsCrossLen := rhsCrossEnd - rhsCrossStart
 	contractingLen := contractEnd - contractStart
@@ -545,49 +555,49 @@ func (r *dotGeneralRecursiveData) apply(
 				}
 			}
 		}
+		wg.Done()
 		return
 	}
 
 	// Recursively split on the largest axis:
 	// - The opportunity to parallelize the split, if possible.
 	parallelize := r.parallizeIfPossible && maxLen >= 2
-	otherDone := xsync.NewLatch()
-	if maxLen == contractingLen {
+	if maxLen == lhsCrossLen {
+		// Split on lhs cross dimension.
+		wg.Add(1) // The current plus 1.
+		split := lhsCrossStart + lhsCrossLen/2
+		if !parallelize || !r.backend.StartWorker(func() {
+			// If running in a worker:
+			r.apply(lhsCrossStart, split, rhsCrossStart, rhsCrossEnd, contractStart, contractEnd, wg)
+		}) {
+			// If not parallelizing, just run the work synchronously.
+			r.apply(lhsCrossStart, split, rhsCrossStart, rhsCrossEnd, contractStart, contractEnd, wg)
+		}
+		r.apply(split, lhsCrossEnd, rhsCrossStart, rhsCrossEnd, contractStart, contractEnd, wg)
+
+	} else if maxLen == rhsCrossLen {
+		// Split on rhs cross dimension.
+		wg.Add(1) // The current plus 1.
+		split := rhsCrossStart + rhsCrossLen/2
+		if !parallelize || !r.backend.StartWorker(func() {
+			r.apply(lhsCrossStart, lhsCrossEnd, rhsCrossStart, split, contractStart, contractEnd, wg)
+		}) {
+			// If not parallelizing, just run the work synchronously.
+			r.apply(lhsCrossStart, lhsCrossEnd, rhsCrossStart, split, contractStart, contractEnd, wg)
+		}
+		r.apply(lhsCrossStart, lhsCrossEnd, split, rhsCrossEnd, contractStart, contractEnd, wg)
+
+	} else {
 		// No parallelization when splitting on the contracting axis because both splits will be writing
 		// to the same output blocks, so there will be memory contention.
 		split := contractStart + contractingLen/2
-		r.apply(lhsCrossStart, lhsCrossEnd, rhsCrossStart, rhsCrossEnd, contractStart, split)
-		r.apply(lhsCrossStart, lhsCrossEnd, rhsCrossStart, rhsCrossEnd, split, contractEnd)
-
-	} else if maxLen == lhsCrossLen {
-		// Split on lhs cross dimension.
-		split := lhsCrossStart + lhsCrossLen/2
-		if parallelize && r.backend.StartWorker(func() {
-			r.apply(lhsCrossStart, split, rhsCrossStart, rhsCrossEnd, contractStart, contractEnd)
-			otherDone.Trigger()
-		}) {
-			r.apply(split, lhsCrossEnd, rhsCrossStart, rhsCrossEnd, contractStart, contractEnd)
-			otherDone.Wait()
-		} else {
-			// Not parallelized:
-			r.apply(lhsCrossStart, split, rhsCrossStart, rhsCrossEnd, contractStart, contractEnd)
-			r.apply(split, lhsCrossEnd, rhsCrossStart, rhsCrossEnd, contractStart, contractEnd)
-		}
-
-	} else {
-		// Split on rhs cross dimension.
-		split := rhsCrossStart + rhsCrossLen/2
-		if parallelize && r.backend.StartWorker(func() {
-			r.apply(lhsCrossStart, lhsCrossEnd, rhsCrossStart, split, contractStart, contractEnd)
-			otherDone.Trigger()
-		}) {
-			r.apply(lhsCrossStart, lhsCrossEnd, split, rhsCrossEnd, contractStart, contractEnd)
-			otherDone.Wait()
-		} else {
-			// Not parallelized:
-			r.apply(lhsCrossStart, lhsCrossEnd, rhsCrossStart, split, contractStart, contractEnd)
-			r.apply(lhsCrossStart, lhsCrossEnd, split, rhsCrossEnd, contractStart, contractEnd)
-		}
+		// Create a new working group to force serialization of work here:
+		var newWg sync.WaitGroup
+		newWg.Add(1)
+		r.apply(lhsCrossStart, lhsCrossEnd, rhsCrossStart, rhsCrossEnd, contractStart, split, &newWg)
+		newWg.Wait()
+		r.apply(lhsCrossStart, lhsCrossEnd, rhsCrossStart, rhsCrossEnd, split, contractEnd, wg)
+		return
 	}
 }
 
