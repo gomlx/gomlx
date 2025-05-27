@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/dustin/go-humanize"
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
@@ -317,6 +318,42 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 	// rhsDims: [Batch, RhsCross, Contracting]
 	// Batch and Contracting dimensions must match between lhs and rhs.
 	benchmarkCases := []dotGeneralBenchmarkParamsCase{
+		{
+			name:     "NoBatch-Tiny",
+			lhsShape: []int{128, 4}, lhsContractingAxes: []int{1}, lhsBatchAxes: []int{},
+			rhsShape: []int{4, 1}, rhsContractingAxes: []int{0}, rhsBatchAxes: []int{},
+		},
+		{
+			name:     "NoBatch-Small",
+			lhsShape: []int{16, 128}, lhsContractingAxes: []int{1}, lhsBatchAxes: nil,
+			rhsShape: []int{128, 32}, rhsContractingAxes: []int{0}, rhsBatchAxes: nil,
+		},
+		{
+			name:     "NoBatch-Medium",
+			lhsShape: []int{128, 128}, lhsContractingAxes: []int{1}, lhsBatchAxes: nil,
+			rhsShape: []int{128, 256}, rhsContractingAxes: []int{0}, rhsBatchAxes: nil,
+		},
+		{
+			name:     "LargeBatch-Tiny",
+			lhsShape: []int{1024, 128, 4}, lhsContractingAxes: []int{2}, lhsBatchAxes: []int{0},
+			rhsShape: []int{1024, 4, 1}, rhsContractingAxes: []int{1}, rhsBatchAxes: []int{0},
+		},
+		{
+			name:     "LargeBatch-Small",
+			lhsShape: []int{256, 8, 32}, lhsContractingAxes: []int{2}, lhsBatchAxes: []int{0},
+			rhsShape: []int{256, 32, 16}, rhsContractingAxes: []int{1}, rhsBatchAxes: []int{0},
+		},
+		{
+			name:     "LargeBatch-Medium",
+			lhsShape: []int{64, 64, 128}, lhsContractingAxes: []int{2}, lhsBatchAxes: []int{0},
+			rhsShape: []int{64, 64, 128}, rhsContractingAxes: []int{2}, rhsBatchAxes: []int{0},
+		},
+		{
+			name:     "NoBatch-Large",
+			lhsShape: []int{1536, 1920}, lhsContractingAxes: []int{1}, lhsBatchAxes: nil,
+			rhsShape: []int{1920, 1024}, rhsContractingAxes: []int{0}, rhsBatchAxes: nil,
+		},
+
 		// Shape values taken from the model https://huggingface.co/KnightsAnalytics/all-MiniLM-L6-v2
 		// while running the benchmark `TestBenchRobSentencesXLA` from github.com/gomlx/onnx-gomlx/internal/benchmark
 		// with batch size 16.
@@ -400,7 +437,7 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 
 	// Print table header
 	fmt.Printf("\n--- execNormalizedDotGeneral Performance ---\n")
-	header := fmt.Sprintf("| %-15s | %-20s | %-20s | %-10s | %-12s | %-10s | %-10s |", "Test Name", "LHS Dims", "RHS Dims", "DType", "Time/Run", "Num Ops", "GOps/Sec")
+	header := fmt.Sprintf("| %-20s | %-20s | %-20s | %-10s | %-12s | %-15s | %-10s |", "Test Name", "LHS Dims", "RHS Dims", "DType", "Time/Run", "Num Ops", "GOps/Sec")
 	fmt.Println(header)
 	fmt.Println(strings.Repeat("-", len(header)))
 
@@ -483,12 +520,12 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 			if benchCaseIdx%2 == 1 {
 				style = style2
 			}
-			row := fmt.Sprintf("| %-15s | %-20s | %-20s | %-10s | %-12s | %-10d | %-10.1f |",
+			row := fmt.Sprintf("| %-20s | %-20s | %-20s | %-10s | %-12s | %-15s | %-10.1f |",
 				benchCase.name,
 				dimsToStr(benchCase.lhsShape), dimsToStr(benchCase.rhsShape),
 				dtype,
 				formatDurationWith2Decimals(avgDurationPerRun),
-				numOps,
+				humanize.Comma(int64(numOps)),
 				gOpsPerSecond)
 			fmt.Println(style.Render(row))
 		}
