@@ -3,6 +3,7 @@ package simplego
 import (
 	"flag"
 	"fmt"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -20,64 +21,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-/* ONNX KnightsAnalytics/all-MiniLM-L6-v2 model outputs:
-
-Backend: xla:cpu
-
- {{0.03656, -0.01616, 0.1682, ..., 0.05541, -0.1644, -0.2967},
-  {0.7239, 0.6399, 0.1888, ..., 0.5946, 0.6206, 0.4897},
-  {0.006379, 0.0203, 0.04476, ..., 0.3464, 1.317, -0.167},
-  ...,
-  {0.1479, -0.06426, 0.1457, ..., 0.8837, -0.3316, 0.2975},
-  {0.5212, 0.6563, 0.5607, ..., -0.03989, 0.04121, -1.404},
-  {1.082, 0.714, 0.3986, ..., -0.2301, 0.3243, -1.031}},
- {{0.2802, 0.1165, -0.04179, ..., 0.2711, -0.1685, -0.2961},
-  {0.8729, 0.4545, -0.1091, ..., 0.1365, 0.458, -0.2042},
-  {0.4752, 0.5731, 0.6304, ..., 0.6526, 0.5612, -1.327},
-  ...,
-  {0.6113, 0.792, -0.4685, ..., 0.08543, 1.059, -0.2983},
-  {0.4115, 1.095, 0.2385, ..., 0.8984, 0.3684, -0.7333},
-  {0.1374, 0.5555, 0.2678, ..., 0.5426, 0.4665, -0.5284}}}
-
-Backend: xla:cuda
-
- {{0.03645, -0.01605, 0.1683, ..., 0.05549, -0.1644, -0.2968},
-  {0.7241, 0.6391, 0.1888, ..., 0.5937, 0.6208, 0.4895},
-  {0.006026, 0.02017, 0.04514, ..., 0.3465, 1.316, -0.167},
-  ...,
-  {0.1475, -0.06374, 0.1454, ..., 0.8843, -0.3317, 0.2972},
-  {0.5215, 0.6562, 0.561, ..., -0.03975, 0.04077, -1.404},
-  {1.082, 0.7137, 0.399, ..., -0.2294, 0.3244, -1.031}},
- {{0.2799, 0.1163, -0.04177, ..., 0.271, -0.1684, -0.2963},
-  {0.8731, 0.4541, -0.1088, ..., 0.1363, 0.458, -0.2041},
-  {0.4751, 0.5729, 0.6302, ..., 0.6525, 0.5609, -1.327},
-  ...,
-  {0.6113, 0.7916, -0.468, ..., 0.08592, 1.059, -0.2987},
-  {0.4115, 1.095, 0.2389, ..., 0.8984, 0.3684, -0.7335},
-  {0.1358, 0.5588, 0.27, ..., 0.5427, 0.4699, -0.5304}}}
-
-Backend: go, original version
-
- {{0.03657, -0.01616, 0.1682, ..., 0.05541, -0.1644, -0.2967},
-  {0.7239, 0.6399, 0.1888, ..., 0.5946, 0.6206, 0.4897},
-  {0.006379, 0.02031, 0.04476, ..., 0.3464, 1.317, -0.167},
-  ...,
-  {0.1479, -0.06426, 0.1457, ..., 0.8837, -0.3316, 0.2975},
-  {0.5212, 0.6563, 0.5607, ..., -0.03989, 0.04121, -1.404},
-  {1.082, 0.714, 0.3986, ..., -0.2301, 0.3243, -1.031}},
- {{0.2802, 0.1165, -0.04179, ..., 0.2711, -0.1685, -0.2961},
-  {0.8729, 0.4545, -0.1091, ..., 0.1366, 0.458, -0.2042},
-  {0.4752, 0.5731, 0.6304, ..., 0.6526, 0.5612, -1.327},
-  ...,
-  {0.6113, 0.792, -0.4685, ..., 0.08543, 1.059, -0.2983},
-  {0.4115, 1.095, 0.2385, ..., 0.8984, 0.3684, -0.7333},
-  {0.1374, 0.5555, 0.2678, ..., 0.5426, 0.4665, -0.5284}}}
-
-
-
-
-*/
 
 var flagPerf = flag.Bool("perf", false, "Run performance table tests.")
 
@@ -226,6 +169,31 @@ func TestDotGeneral_Shape(t *testing.T) {
 	assert.NoError(t, got.shape.Check(F32, 5, 2, 4, 1))
 }
 
+func requireSameTensorsFloat32(t *testing.T, want, got *tensors.Tensor, delta float64) {
+	// Make sure shapes are the same.
+	require.True(t, got.Shape().Equal(want.Shape()))
+	flatIdx := 0
+	gotFlat := tensors.CopyFlatData[float32](got)
+	wantFlat := tensors.CopyFlatData[float32](want)
+	var mismatches int
+	for indices := range got.Shape().Iter() {
+		gotValue := gotFlat[flatIdx]
+		wantValue := wantFlat[flatIdx]
+		if math.Abs(float64(gotValue)-float64(wantValue)) > delta {
+			if mismatches < 3 {
+				fmt.Printf("\tIndex %v (flatIdx=%d) has a mismatch: got %f, want %f\n", indices, flatIdx, gotValue, wantValue)
+			} else if mismatches == 4 {
+				fmt.Printf("\t...\n")
+			}
+			mismatches++
+		}
+		flatIdx++
+	}
+	if mismatches > 0 {
+		t.Fatalf("Found %d mismatches in tensors", mismatches)
+	}
+}
+
 func TestDotGeneral_Exec(t *testing.T) {
 	// Large example with batches.
 	{
@@ -235,13 +203,13 @@ func TestDotGeneral_Exec(t *testing.T) {
 		require.NoError(t, err)
 		want, err := tensors.Load("dotgeneral_out_test.bin")
 		require.NoError(t, err)
+		fmt.Printf("\tlhs=%s, rhs=%s\n", lhs.Shape(), rhs.Shape())
 		y := graph.ExecOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
 			return graph.DotGeneral(lhs, []int{2}, []int{0}, rhs, []int{2}, []int{0})
 		}, lhs, rhs)
-		fmt.Printf("\ty=%s\n", y)
+		fmt.Printf("\ty4=%s\n", y)
 		fmt.Printf("\twant=%s\n", want)
-		require.True(t, y.Shape().Equal(want.Shape()))
-		require.InDeltaSlice(t, tensors.CopyFlatData[float32](want), tensors.CopyFlatData[float32](y), 1e-3)
+		requireSameTensorsFloat32(t, want, y, 1e-3)
 	}
 
 	// Larger example, with multiple axes.
@@ -364,7 +332,7 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 		},
 		{
 			name:     "KA-Batch-16-#3",
-			lhsShape: []int{1024, 13, 1536}, lhsContractingAxes: []int{2}, lhsBatchAxes: []int(nil),
+			lhsShape: []int{16, 13, 1536}, lhsContractingAxes: []int{2}, lhsBatchAxes: []int(nil),
 			rhsShape: []int{1536, 384}, rhsContractingAxes: []int{0}, rhsBatchAxes: []int(nil),
 		},
 		{

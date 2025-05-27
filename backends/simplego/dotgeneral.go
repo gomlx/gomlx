@@ -1,8 +1,6 @@
 package simplego
 
 import (
-	"fmt"
-	"reflect"
 	"runtime"
 	"sync"
 
@@ -453,18 +451,12 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 	problemSize := params.rhsCrossSize * params.lhsCrossSize * params.contractingSize
 	_ = problemSize
 	err := execDotGeneralLarge(backend, lhs, rhs, params, output)
-
-	fmt.Printf("\tDotGeneral #%05d - %s: %v\n", printCounter, output.shape, reflect.ValueOf(output.flat).Index(0).Interface())
-	printCounter++
-
 	if err != nil {
 		backend.putBuffer(output)
 		return nil, err
 	}
 	return output, nil
 }
-
-var printCounter int
 
 func execDotGeneralLarge(backend *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) error {
 	dtype := lhs.shape.DType
@@ -526,7 +518,6 @@ func execDotGeneralLarge(backend *Backend, lhs, rhs *Buffer, params *dotGeneralN
 		}
 	}
 	wg.Wait()
-	//fmt.Printf("flat output: %v\n", outputBlocks.flat)
 
 	// Copy over outputBlocks to the normal output.
 	copyOutputFn := dotGeneralOutputBlockToFlatDTypeMap.Get(dtype).(func(blockedSource, output *Buffer))
@@ -564,7 +555,7 @@ func (r *dotGeneralRecursiveData) apply(
 
 	// Base case: no splitting, simple go over all the crosses and calculate the matrix multiplication for this
 	// slice.
-	if maxLen <= 2 || true {
+	if maxLen <= 2 {
 		for lhsCross := lhsCrossStart; lhsCross < lhsCrossEnd; lhsCross++ {
 			for rhsCross := rhsCrossStart; rhsCross < rhsCrossEnd; rhsCross++ {
 				outputBlockIdx := r.outputBatchOffset + lhsCross*r.rhsCrossBlocks + rhsCross
@@ -711,7 +702,12 @@ func buildDotGeneralKernel[T PODNumericConstraints](lhs, rhs, output *Buffer, bl
 				outputFlat[outputIdx+2] = sum2
 				outputFlat[outputIdx+3] = sum3
 				outputIdx += 4
+
+				// We unrolled 4 rows of RHS, so we need to skip the remaining 3 rows:
+				rhsIdx += 3 * blockDim
 			} // loop over rhs rows
+
+			// Start next lhs row.
 			baseLhsIdx += blockDim
 		}
 	}
