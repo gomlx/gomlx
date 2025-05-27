@@ -21,6 +21,64 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+/* ONNX KnightsAnalytics/all-MiniLM-L6-v2 model outputs:
+
+Backend: xla:cpu
+
+ {{0.03656, -0.01616, 0.1682, ..., 0.05541, -0.1644, -0.2967},
+  {0.7239, 0.6399, 0.1888, ..., 0.5946, 0.6206, 0.4897},
+  {0.006379, 0.0203, 0.04476, ..., 0.3464, 1.317, -0.167},
+  ...,
+  {0.1479, -0.06426, 0.1457, ..., 0.8837, -0.3316, 0.2975},
+  {0.5212, 0.6563, 0.5607, ..., -0.03989, 0.04121, -1.404},
+  {1.082, 0.714, 0.3986, ..., -0.2301, 0.3243, -1.031}},
+ {{0.2802, 0.1165, -0.04179, ..., 0.2711, -0.1685, -0.2961},
+  {0.8729, 0.4545, -0.1091, ..., 0.1365, 0.458, -0.2042},
+  {0.4752, 0.5731, 0.6304, ..., 0.6526, 0.5612, -1.327},
+  ...,
+  {0.6113, 0.792, -0.4685, ..., 0.08543, 1.059, -0.2983},
+  {0.4115, 1.095, 0.2385, ..., 0.8984, 0.3684, -0.7333},
+  {0.1374, 0.5555, 0.2678, ..., 0.5426, 0.4665, -0.5284}}}
+
+Backend: xla:cuda
+
+ {{0.03645, -0.01605, 0.1683, ..., 0.05549, -0.1644, -0.2968},
+  {0.7241, 0.6391, 0.1888, ..., 0.5937, 0.6208, 0.4895},
+  {0.006026, 0.02017, 0.04514, ..., 0.3465, 1.316, -0.167},
+  ...,
+  {0.1475, -0.06374, 0.1454, ..., 0.8843, -0.3317, 0.2972},
+  {0.5215, 0.6562, 0.561, ..., -0.03975, 0.04077, -1.404},
+  {1.082, 0.7137, 0.399, ..., -0.2294, 0.3244, -1.031}},
+ {{0.2799, 0.1163, -0.04177, ..., 0.271, -0.1684, -0.2963},
+  {0.8731, 0.4541, -0.1088, ..., 0.1363, 0.458, -0.2041},
+  {0.4751, 0.5729, 0.6302, ..., 0.6525, 0.5609, -1.327},
+  ...,
+  {0.6113, 0.7916, -0.468, ..., 0.08592, 1.059, -0.2987},
+  {0.4115, 1.095, 0.2389, ..., 0.8984, 0.3684, -0.7335},
+  {0.1358, 0.5588, 0.27, ..., 0.5427, 0.4699, -0.5304}}}
+
+Backend: go, original version
+
+ {{0.03657, -0.01616, 0.1682, ..., 0.05541, -0.1644, -0.2967},
+  {0.7239, 0.6399, 0.1888, ..., 0.5946, 0.6206, 0.4897},
+  {0.006379, 0.02031, 0.04476, ..., 0.3464, 1.317, -0.167},
+  ...,
+  {0.1479, -0.06426, 0.1457, ..., 0.8837, -0.3316, 0.2975},
+  {0.5212, 0.6563, 0.5607, ..., -0.03989, 0.04121, -1.404},
+  {1.082, 0.714, 0.3986, ..., -0.2301, 0.3243, -1.031}},
+ {{0.2802, 0.1165, -0.04179, ..., 0.2711, -0.1685, -0.2961},
+  {0.8729, 0.4545, -0.1091, ..., 0.1366, 0.458, -0.2042},
+  {0.4752, 0.5731, 0.6304, ..., 0.6526, 0.5612, -1.327},
+  ...,
+  {0.6113, 0.792, -0.4685, ..., 0.08543, 1.059, -0.2983},
+  {0.4115, 1.095, 0.2385, ..., 0.8984, 0.3684, -0.7333},
+  {0.1374, 0.5555, 0.2678, ..., 0.5426, 0.4665, -0.5284}}}
+
+
+
+
+*/
+
 var flagPerf = flag.Bool("perf", false, "Run performance table tests.")
 
 func formatDurationWith2Decimals(d time.Duration) string {
@@ -289,7 +347,7 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 		},
 		{
 			name:     "KA-Batch-16-#3",
-			lhsShape: []int{16, 13, 1536}, lhsContractingAxes: []int{2}, lhsBatchAxes: []int(nil),
+			lhsShape: []int{1024, 13, 1536}, lhsContractingAxes: []int{2}, lhsBatchAxes: []int(nil),
 			rhsShape: []int{1536, 384}, rhsContractingAxes: []int{0}, rhsBatchAxes: []int(nil),
 		},
 		{
@@ -303,6 +361,9 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 			lhsShape: []int{16, 13, 384}, lhsContractingAxes: []int{2}, lhsBatchAxes: []int(nil),
 			rhsShape: []int{384, 384}, rhsContractingAxes: []int{0}, rhsBatchAxes: []int(nil),
 		},
+
+		// Large batch example
+		//{},
 
 		// Shape values taken from training github.com/gomlx/gomlx/examples/adult/demo
 		{
@@ -340,11 +401,6 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 
 	dtypesToTest := []dtypes.DType{dtypes.Float32, dtypes.Float64} // TODO: , dtypes.BFloat16}
 
-	simpleGoBackend, ok := backend.(*Backend)
-	if !ok {
-		t.Fatalf("Global backend is not of type *simplego.Backend. It's %T. Ensure GOMLEX_BACKEND is 'go'.", backend)
-	}
-
 	// Adjust for desired precision vs. test duration
 	const numWarmupRuns = 2
 	const minNumTimedRuns = 50
@@ -373,14 +429,14 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 			numOps := batchSize * lhsCrossSize * rhsCrossSize * contractingSize * 2 // 1 mult + 1 add = 2 ops
 
 			// Create and initialize input Buffers
-			lhsBuffer := simpleGoBackend.getBuffer(lhsShape.DType, lhsShape.Size())
-			lhsBuffer.shape = lhsShape
-			rhsBuffer := simpleGoBackend.getBuffer(rhsShape.DType, rhsShape.Size())
-			rhsBuffer.shape = rhsShape
+			lhsBuffer, lhsFlatAny, err := backend.NewSharedBuffer(0, lhsShape)
+			require.NoError(t, err)
+			rhsBuffer, rhsFlatAny, err := backend.NewSharedBuffer(0, rhsShape)
+			require.NoError(t, err)
 			switch dtype {
 			case dtypes.Float32:
-				lhsFlatF32 := lhsBuffer.flat.([]float32)
-				rhsFlatF32 := rhsBuffer.flat.([]float32)
+				lhsFlatF32 := lhsFlatAny.([]float32)
+				rhsFlatF32 := rhsFlatAny.([]float32)
 				for i := range lhsFlatF32 {
 					lhsFlatF32[i] = float32(i%10 + 1)
 				}
@@ -389,8 +445,8 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 				}
 
 			case dtypes.Float64:
-				lhsFlatF64 := lhsBuffer.flat.([]float64)
-				rhsFlatF64 := rhsBuffer.flat.([]float64)
+				lhsFlatF64 := lhsFlatAny.([]float64)
+				rhsFlatF64 := rhsFlatAny.([]float64)
 				for i := range lhsFlatF64 {
 					lhsFlatF64[i] = float64(i%10 + 1)
 				}
@@ -399,8 +455,8 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 				}
 
 			case dtypes.BFloat16:
-				lhsFlatBF16 := lhsBuffer.flat.([]bfloat16.BFloat16)
-				rhsFlatBF16 := rhsBuffer.flat.([]bfloat16.BFloat16)
+				lhsFlatBF16 := lhsFlatAny.([]bfloat16.BFloat16)
+				rhsFlatBF16 := rhsFlatAny.([]bfloat16.BFloat16)
 				for i := range lhsFlatBF16 {
 					lhsFlatBF16[i] = bfloat16.FromFloat32(float32(i%10 + 1))
 				}

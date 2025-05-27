@@ -454,12 +454,17 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 	_ = problemSize
 	err := execDotGeneralLarge(backend, lhs, rhs, params, output)
 
+	fmt.Printf("\tDotGeneral #%05d - %s: %v\n", printCounter, output.shape, reflect.ValueOf(output.flat).Index(0).Interface())
+	printCounter++
+
 	if err != nil {
 		backend.putBuffer(output)
 		return nil, err
 	}
 	return output, nil
 }
+
+var printCounter int
 
 func execDotGeneralLarge(backend *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) error {
 	dtype := lhs.shape.DType
