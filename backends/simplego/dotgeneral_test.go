@@ -227,6 +227,23 @@ func TestDotGeneral_Shape(t *testing.T) {
 }
 
 func TestDotGeneral_Exec(t *testing.T) {
+	// Large example with batches.
+	{
+		lhs, err := tensors.Load("dotgeneral_lhs_test.bin")
+		require.NoError(t, err)
+		rhs, err := tensors.Load("dotgeneral_rhs_test.bin")
+		require.NoError(t, err)
+		want, err := tensors.Load("dotgeneral_out_test.bin")
+		require.NoError(t, err)
+		y := graph.ExecOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
+			return graph.DotGeneral(lhs, []int{2}, []int{0}, rhs, []int{2}, []int{0})
+		}, lhs, rhs)
+		fmt.Printf("\ty=%s\n", y)
+		fmt.Printf("\twant=%s\n", want)
+		require.True(t, y.Shape().Equal(want.Shape()))
+		require.InDeltaSlice(t, tensors.CopyFlatData[float32](want), tensors.CopyFlatData[float32](y), 1e-3)
+	}
+
 	// Larger example, with multiple axes.
 	y0 := graph.ExecOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
 		return graph.DotGeneral(lhs, []int{1}, []int{3, 0}, rhs, []int{1}, []int{0, 2})
