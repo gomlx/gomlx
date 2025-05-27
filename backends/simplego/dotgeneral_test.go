@@ -196,23 +196,6 @@ func requireSameTensorsFloat32(t *testing.T, want, got *tensors.Tensor, delta fl
 }
 
 func TestDotGeneral_Exec(t *testing.T) {
-	// Large example with batches.
-	{
-		lhs, err := tensors.Load("dotgeneral_lhs_test.bin")
-		require.NoError(t, err)
-		rhs, err := tensors.Load("dotgeneral_rhs_test.bin")
-		require.NoError(t, err)
-		want, err := tensors.Load("dotgeneral_out_test.bin")
-		require.NoError(t, err)
-		fmt.Printf("\tlhs=%s, rhs=%s\n", lhs.Shape(), rhs.Shape())
-		y := graph.ExecOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
-			return graph.DotGeneral(lhs, []int{2}, []int{0}, rhs, []int{2}, []int{0})
-		}, lhs, rhs)
-		fmt.Printf("\ty4=%s\n", y)
-		fmt.Printf("\twant=%s\n", want)
-		requireSameTensorsFloat32(t, want, y, 1e-3)
-	}
-
 	// Larger example, with multiple axes.
 	y0 := graph.ExecOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
 		return graph.DotGeneral(lhs, []int{1}, []int{3, 0}, rhs, []int{1}, []int{0, 2})
@@ -276,6 +259,40 @@ func TestDotGeneral_Exec(t *testing.T) {
 		require.NoError(t, y2.Shape().Check(dtypes.BFloat16, 1, 1))
 		require.Equal(t, float32(10+22+36), tensors.CopyFlatData[bfloat16.BFloat16](y2)[0].Float32())
 	*/
+
+	// Examples that were broken during development.
+	// Taken from LLM models.
+	{
+		lhs, err := tensors.Load("dotgeneral_lhs_2_test.bin")
+		require.NoError(t, err)
+		rhs, err := tensors.Load("dotgeneral_rhs_2_test.bin")
+		require.NoError(t, err)
+		want, err := tensors.Load("dotgeneral_out_2_test.bin")
+		require.NoError(t, err)
+		fmt.Printf("\tlhs=%s, rhs=%s\n", lhs.Shape(), rhs.Shape())
+		y := graph.ExecOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
+			return graph.DotGeneral(lhs, []int{2}, []int{0}, rhs, []int{2}, []int{0})
+		}, lhs, rhs)
+		fmt.Printf("\ty5=%s\n", y)
+		fmt.Printf("\twant=%s\n", want)
+		requireSameTensorsFloat32(t, want, y, 1e-3)
+	}
+	{
+		lhs, err := tensors.Load("dotgeneral_lhs_test.bin")
+		require.NoError(t, err)
+		rhs, err := tensors.Load("dotgeneral_rhs_test.bin")
+		require.NoError(t, err)
+		want, err := tensors.Load("dotgeneral_out_test.bin")
+		require.NoError(t, err)
+		fmt.Printf("\tlhs=%s, rhs=%s\n", lhs.Shape(), rhs.Shape())
+		y := graph.ExecOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
+			return graph.DotGeneral(lhs, []int{2}, []int{0}, rhs, []int{2}, []int{0})
+		}, lhs, rhs)
+		fmt.Printf("\ty4=%s\n", y)
+		fmt.Printf("\twant=%s\n", want)
+		requireSameTensorsFloat32(t, want, y, 1e-3)
+	}
+
 }
 
 func TestDotGeneral_Dot(t *testing.T) {

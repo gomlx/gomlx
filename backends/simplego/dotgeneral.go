@@ -510,11 +510,12 @@ func execDotGeneralLarge(backend *Backend, lhs, rhs *Buffer, params *dotGeneralN
 		// Parallelize within the batch examples if possible:
 		recursive.parallizeIfPossible = true
 		for batch := 0; batch < params.batchSize; batch++ {
-			recursive.lhsBatchOffset = batch * recursive.lhsCrossBlocks * recursive.contractBlocks
-			recursive.rhsBatchOffset = batch * recursive.rhsCrossBlocks * recursive.contractBlocks
-			recursive.outputBatchOffset = batch * recursive.lhsCrossBlocks * recursive.rhsCrossBlocks
+			batchRecursive := recursive
+			batchRecursive.lhsBatchOffset = batch * recursive.lhsCrossBlocks * recursive.contractBlocks
+			batchRecursive.rhsBatchOffset = batch * recursive.rhsCrossBlocks * recursive.contractBlocks
+			batchRecursive.outputBatchOffset = batch * recursive.lhsCrossBlocks * recursive.rhsCrossBlocks
 			wg.Add(1)
-			recursive.apply(0, recursive.lhsCrossBlocks, 0, recursive.rhsCrossBlocks, 0, recursive.contractBlocks, &wg)
+			batchRecursive.apply(0, recursive.lhsCrossBlocks, 0, recursive.rhsCrossBlocks, 0, recursive.contractBlocks, &wg)
 		}
 	}
 	wg.Wait()
