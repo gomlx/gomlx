@@ -1,6 +1,8 @@
 package simplego
 
 import (
+	"fmt"
+	"reflect"
 	"runtime"
 	"sync"
 
@@ -441,10 +443,26 @@ var minBatchParallelize = runtime.NumCPU()
 // execDotGeneral executes the DotGeneral by first normalizing and repackaging the tensors into blocks.
 func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*Buffer, error) {
 	lhs, rhs := inputs[0], inputs[1]
+	params := node.data.(*dotGeneralNodeData)
 	outputShape := node.shape
 	dtype := lhs.shape.DType
-	params := node.data.(*dotGeneralNodeData)
-	copyFlatToBlock := dotGeneralFlatToBlockDTypeMap.Get(dtype).(func(source, blkOutput *Buffer, contractingAxes, batchAxes []int, batchSize, crossSize, contractingSize, blkLog2Dim int))
+	output := backend.getBuffer(dtype, outputShape.Size())
+	output.shape = outputShape
+
+	// Problem size (per example of the batch):
+	problemSize := params.rhsCrossSize * params.lhsCrossSize * params.contractingSize
+	_ = problemSize
+	err := execDotGeneralLarge(backend, lhs, rhs, params, output)
+
+	if err != nil {
+		backend.putBuffer(output)
+		return nil, err
+	}
+	return output, nil
+}
+
+func execDotGeneralLarge(backend *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) error {
+	dtype := lhs.shape.DType
 
 	// Get block buffers.
 	blkLog2Dim := DotGeneralTargetBlockLog2Dim[dtype]
@@ -452,6 +470,7 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 	lhsBlocks := backend.getBuffer(dtype, params.lhsBlockedShape.Size())
 	lhsBlocks.shape = params.lhsBlockedShape
 	lhsBlocks.Zeros()
+	copyFlatToBlock := dotGeneralFlatToBlockDTypeMap.Get(dtype).(func(source, blkOutput *Buffer, contractingAxes, batchAxes []int, batchSize, crossSize, contractingSize, blkLog2Dim int))
 	copyFlatToBlock(lhs, lhsBlocks, params.lhsContractingAxes, params.lhsBatchAxes,
 		params.batchSize, params.lhsCrossSize, params.contractingSize, blkLog2Dim)
 
@@ -505,11 +524,9 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 	//fmt.Printf("flat output: %v\n", outputBlocks.flat)
 
 	// Copy over outputBlocks to the normal output.
-	output := backend.getBuffer(dtype, outputShape.Size())
-	output.shape = outputShape
 	copyOutputFn := dotGeneralOutputBlockToFlatDTypeMap.Get(dtype).(func(blockedSource, output *Buffer))
 	copyOutputFn(outputBlocks, output)
-	return output, nil
+	return nil
 }
 
 // Information passed along the recursive splitting of the dot-general.
@@ -542,7 +559,7 @@ func (r *dotGeneralRecursiveData) apply(
 
 	// Base case: no splitting, simple go over all the crosses and calculate the matrix multiplication for this
 	// slice.
-	if maxLen <= 2 {
+	if maxLen <= 2 || true {
 		for lhsCross := lhsCrossStart; lhsCross < lhsCrossEnd; lhsCross++ {
 			for rhsCross := rhsCrossStart; rhsCross < rhsCrossEnd; rhsCross++ {
 				outputBlockIdx := r.outputBatchOffset + lhsCross*r.rhsCrossBlocks + rhsCross
