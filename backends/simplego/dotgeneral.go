@@ -1,6 +1,7 @@
 package simplego
 
 import (
+	"math/bits"
 	"runtime"
 	"sync"
 
@@ -559,25 +560,32 @@ func execDotGeneralLarge(backend *Backend, lhs, rhs *Buffer, params *dotGeneralN
 	if (backend.maxParallelism > 0 && params.batchSize > backend.maxParallelism) ||
 		(backend.maxParallelism < 0 && params.batchSize > minBatchParallelize) {
 		// Parallelize at the batch level.
-		recursive.parallizeIfPossible = false // Disable sub-batch parallelization.
+		recursive.maxDepthParallelization = -1 // Disable sub-batch parallelization.
 		for batch := 0; batch < params.batchSize; batch++ {
 			batchRecursive := recursive
 			batchRecursive.lhsBatchOffset = batch * recursive.lhsCrossBlocks * recursive.contractBlocks
 			batchRecursive.rhsBatchOffset = batch * recursive.rhsCrossBlocks * recursive.contractBlocks
 			batchRecursive.outputBatchOffset = batch * recursive.lhsCrossBlocks * recursive.rhsCrossBlocks
 			wg.Add(1)
-			batchRecursive.apply(0, recursive.lhsCrossBlocks, 0, recursive.rhsCrossBlocks, 0, recursive.contractBlocks, &wg)
+			batchRecursive.apply(0, recursive.lhsCrossBlocks, 0, recursive.rhsCrossBlocks, 0, recursive.contractBlocks, 0, &wg)
 		}
 	} else {
 		// Parallelize within the batch examples if possible:
-		recursive.parallizeIfPossible = true
+		recursive.maxDepthParallelization = -1
+		if backend.maxParallelism > 0 {
+			recursive.maxDepthParallelization = bits.Len(uint(2*backend.maxParallelism-1)) - 1 // This is equivalent to a log2 on integers.
+		} else if backend.maxParallelism < 0 {
+			recursive.maxDepthParallelization = 8 // At most 2^8 = 256 goroutines are spawned.
+		}
+
+		recursive.maxDepthParallelization = backend.maxParallelism
 		for batch := 0; batch < params.batchSize; batch++ {
 			batchRecursive := recursive
 			batchRecursive.lhsBatchOffset = batch * recursive.lhsCrossBlocks * recursive.contractBlocks
 			batchRecursive.rhsBatchOffset = batch * recursive.rhsCrossBlocks * recursive.contractBlocks
 			batchRecursive.outputBatchOffset = batch * recursive.lhsCrossBlocks * recursive.rhsCrossBlocks
 			wg.Add(1)
-			batchRecursive.apply(0, recursive.lhsCrossBlocks, 0, recursive.rhsCrossBlocks, 0, recursive.contractBlocks, &wg)
+			batchRecursive.apply(0, recursive.lhsCrossBlocks, 0, recursive.rhsCrossBlocks, 0, recursive.contractBlocks, 0, &wg)
 		}
 	}
 	wg.Wait()
@@ -592,9 +600,9 @@ func execDotGeneralLarge(backend *Backend, lhs, rhs *Buffer, params *dotGeneralN
 type dotGeneralRecursiveData struct {
 	backend                                           *Backend
 	kernelFn                                          kernelFuncType
-	parallizeIfPossible                               bool
 	lhsCrossBlocks, rhsCrossBlocks, contractBlocks    int
 	lhsBatchOffset, rhsBatchOffset, outputBatchOffset int
+	maxDepthParallelization                           int
 }
 
 // apply recursively splits the dot-general into smaller blocks and applies the kernel to each block.
@@ -610,6 +618,7 @@ func (r *dotGeneralRecursiveData) apply(
 	lhsCrossStart, lhsCrossEnd,
 	rhsCrossStart, rhsCrossEnd,
 	contractStart, contractEnd int,
+	depth int,
 	wg *sync.WaitGroup) {
 	lhsCrossLen := lhsCrossEnd - lhsCrossStart
 	rhsCrossLen := rhsCrossEnd - rhsCrossStart
@@ -637,42 +646,45 @@ func (r *dotGeneralRecursiveData) apply(
 
 	// Recursively split on the largest axis:
 	// - The opportunity to parallelize the split, if possible.
-	parallelize := r.parallizeIfPossible && maxLen >= 2
+	parallelize := depth < r.maxDepthParallelization
 	if maxLen == lhsCrossLen {
 		// Split on lhs cross dimension.
 		wg.Add(1) // The current plus 1.
 		split := lhsCrossStart + lhsCrossLen/2
-		if !parallelize || !r.backend.StartWorker(func() {
+		if !parallelize || !r.backend.startWorker(func() {
 			// If running in a worker:
-			r.apply(lhsCrossStart, split, rhsCrossStart, rhsCrossEnd, contractStart, contractEnd, wg)
+			r.apply(lhsCrossStart, split, rhsCrossStart, rhsCrossEnd, contractStart, contractEnd, depth+1, wg)
 		}) {
 			// If not parallelizing, just run the work synchronously.
-			r.apply(lhsCrossStart, split, rhsCrossStart, rhsCrossEnd, contractStart, contractEnd, wg)
+			r.apply(lhsCrossStart, split, rhsCrossStart, rhsCrossEnd, contractStart, contractEnd, depth+1, wg)
 		}
-		r.apply(split, lhsCrossEnd, rhsCrossStart, rhsCrossEnd, contractStart, contractEnd, wg)
+		r.apply(split, lhsCrossEnd, rhsCrossStart, rhsCrossEnd, contractStart, contractEnd, depth+1, wg)
 
 	} else if maxLen == rhsCrossLen {
 		// Split on rhs cross dimension.
 		wg.Add(1) // The current plus 1.
 		split := rhsCrossStart + rhsCrossLen/2
-		if !parallelize || !r.backend.StartWorker(func() {
-			r.apply(lhsCrossStart, lhsCrossEnd, rhsCrossStart, split, contractStart, contractEnd, wg)
+		if !parallelize || !r.backend.startWorker(func() {
+			r.apply(lhsCrossStart, lhsCrossEnd, rhsCrossStart, split, contractStart, contractEnd, depth+1, wg)
 		}) {
 			// If not parallelizing, just run the work synchronously.
-			r.apply(lhsCrossStart, lhsCrossEnd, rhsCrossStart, split, contractStart, contractEnd, wg)
+			r.apply(lhsCrossStart, lhsCrossEnd, rhsCrossStart, split, contractStart, contractEnd, depth+1, wg)
 		}
-		r.apply(lhsCrossStart, lhsCrossEnd, split, rhsCrossEnd, contractStart, contractEnd, wg)
+		r.apply(lhsCrossStart, lhsCrossEnd, split, rhsCrossEnd, contractStart, contractEnd, depth+1, wg)
 
 	} else {
 		// No parallelization when splitting on the contracting axis because both splits will be writing
 		// to the same output blocks, so there will be memory contention.
+		// This also mean we dont' increase the depth of the recursion.
 		split := contractStart + contractingLen/2
 		// Create a new working group to force serialization of work here:
 		var newWg sync.WaitGroup
 		newWg.Add(1)
-		r.apply(lhsCrossStart, lhsCrossEnd, rhsCrossStart, rhsCrossEnd, contractStart, split, &newWg)
+		r.apply(lhsCrossStart, lhsCrossEnd, rhsCrossStart, rhsCrossEnd, contractStart, split, depth, &newWg)
+		r.backend.workerIsAsleep()
 		newWg.Wait()
-		r.apply(lhsCrossStart, lhsCrossEnd, rhsCrossStart, rhsCrossEnd, split, contractEnd, wg)
+		r.backend.workerRestarted()
+		r.apply(lhsCrossStart, lhsCrossEnd, rhsCrossStart, rhsCrossEnd, split, contractEnd, depth, wg)
 		return
 	}
 }

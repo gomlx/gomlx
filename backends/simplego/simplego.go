@@ -36,7 +36,7 @@ func New(_ string) backends.Backend {
 
 func newBackend() *Backend {
 	b := &Backend{
-		maxParallelism: 2 * runtime.NumCPU(),
+		maxParallelism: 4 * runtime.NumCPU(),
 	}
 	return b
 }
