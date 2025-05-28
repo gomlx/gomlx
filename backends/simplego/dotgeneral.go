@@ -567,13 +567,20 @@ func execDotGeneralLarge(backend *Backend, lhs, rhs *Buffer, params *dotGeneralN
 			batchRecursive.rhsBatchOffset = batch * recursive.rhsCrossBlocks * recursive.contractBlocks
 			batchRecursive.outputBatchOffset = batch * recursive.lhsCrossBlocks * recursive.rhsCrossBlocks
 			wg.Add(1)
-			batchRecursive.apply(0, recursive.lhsCrossBlocks, 0, recursive.rhsCrossBlocks, 0, recursive.contractBlocks, 0, &wg)
+			if !backend.startWorkerIfAvailable(func() {
+				// Start in parallel
+				batchRecursive.apply(0, recursive.lhsCrossBlocks, 0, recursive.rhsCrossBlocks, 0, recursive.contractBlocks, 0, &wg)
+			}) {
+				// Start synchronously
+				batchRecursive.apply(0, recursive.lhsCrossBlocks, 0, recursive.rhsCrossBlocks, 0, recursive.contractBlocks, 0, &wg)
+			}
 		}
 	} else {
 		// Parallelize within the batch examples if possible:
 		recursive.maxDepthParallelization = -1
 		if backend.maxParallelism > 0 {
 			recursive.maxDepthParallelization = bits.Len(uint(2*backend.maxParallelism-1)) - 1 // This is equivalent to a log2 on integers.
+			recursive.maxDepthParallelization += 1                                             // We want to allow slightly more fine-grained parallelization.
 		} else if backend.maxParallelism < 0 {
 			recursive.maxDepthParallelization = 8 // At most 2^8 = 256 goroutines are spawned.
 		}
@@ -585,7 +592,13 @@ func execDotGeneralLarge(backend *Backend, lhs, rhs *Buffer, params *dotGeneralN
 			batchRecursive.rhsBatchOffset = batch * recursive.rhsCrossBlocks * recursive.contractBlocks
 			batchRecursive.outputBatchOffset = batch * recursive.lhsCrossBlocks * recursive.rhsCrossBlocks
 			wg.Add(1)
+			//if !backend.startWorkerIfAvailable(func() {
+			//	// Start in parallel
+			//	batchRecursive.apply(0, recursive.lhsCrossBlocks, 0, recursive.rhsCrossBlocks, 0, recursive.contractBlocks, 0, &wg)
+			//}) {
+			// Start synchronously
 			batchRecursive.apply(0, recursive.lhsCrossBlocks, 0, recursive.rhsCrossBlocks, 0, recursive.contractBlocks, 0, &wg)
+			//}
 		}
 	}
 	wg.Wait()
@@ -651,7 +664,7 @@ func (r *dotGeneralRecursiveData) apply(
 		// Split on lhs cross dimension.
 		wg.Add(1) // The current plus 1.
 		split := lhsCrossStart + lhsCrossLen/2
-		if !parallelize || !r.backend.startWorker(func() {
+		if !parallelize || !r.backend.startWorkerIfAvailable(func() {
 			// If running in a worker:
 			r.apply(lhsCrossStart, split, rhsCrossStart, rhsCrossEnd, contractStart, contractEnd, depth+1, wg)
 		}) {
@@ -664,7 +677,7 @@ func (r *dotGeneralRecursiveData) apply(
 		// Split on rhs cross dimension.
 		wg.Add(1) // The current plus 1.
 		split := rhsCrossStart + rhsCrossLen/2
-		if !parallelize || !r.backend.startWorker(func() {
+		if !parallelize || !r.backend.startWorkerIfAvailable(func() {
 			r.apply(lhsCrossStart, lhsCrossEnd, rhsCrossStart, split, contractStart, contractEnd, depth+1, wg)
 		}) {
 			// If not parallelizing, just run the work synchronously.

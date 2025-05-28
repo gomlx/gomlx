@@ -1,11 +1,11 @@
 package simplego
 
-// startWorker runs fn in a separate goroutine, if there is enough workers left.
+// startWorkerIfAvailable runs fn in a separate goroutine, if there is enough workers left.
 // It returns true if it found workers to run the function, false otherwise.
 //
 // It's up to the client to synchronize the end of the function execution.
-func (b *Backend) startWorker(fn func()) bool {
-	if b.maxParallelism > 0 && b.currentWorkers.Load() >= int32(b.maxParallelism) {
+func (b *Backend) startWorkerIfAvailable(fn func()) bool {
+	if b.maxParallelism > 0 && b.currentWorkers.Load() >= int32(4*b.maxParallelism) {
 		return false
 	}
 	b.currentWorkers.Add(1)
