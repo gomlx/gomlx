@@ -1,34 +1,129 @@
 package simplego
 
-// startWorkerIfAvailable runs fn in a separate goroutine, if there is enough workers left.
+import (
+	"runtime"
+	"sync"
+)
+
+type workersPool struct {
+	// maxParallelism is a soft target on the limit of parallel work to do.
+	// The actual number of goroutines is higher than that -- because of waits and such.
+	maxParallelism int
+	mu             sync.Mutex
+	cond           sync.Cond // Should be signaled whenever numRunning is decreased.
+	numRunning     int
+}
+
+// Initialize should be called before use.
+func (w *workersPool) Initialize() {
+	w.maxParallelism = runtime.NumCPU()
+	w.cond = sync.Cond{L: &w.mu}
+}
+
+// IsEnabled returns whether parallelism is enabled (maxParallelism is != 0)
+func (w *workersPool) IsEnabled() bool {
+	return w.maxParallelism != 0
+}
+
+// IsUnlimited returns whether parallelism is unlimited (maxParallelism < 0)
+func (w *workersPool) IsUnlimited() bool {
+	return w.maxParallelism < 0
+}
+
+// MaxParallelism is a soft-target for parallelism (the limit of goroutines is higher that this).
+// If set to 0 parallelism is disabled.
+// If set to -1 parallelism is unlimited.
+func (w *workersPool) MaxParallelism() int {
+	return w.maxParallelism
+}
+
+const goroutineToParallelismRatio = 2
+
+// lockedIsFull returns whether all available workers are in use.
+//
+// It must be called with workerPool.mu acquired.
+func (w *workersPool) lockedIsFull() bool {
+	if w.maxParallelism == 0 {
+		return true
+	} else if w.maxParallelism < 0 {
+		return false
+	}
+	return w.numRunning >= goroutineToParallelismRatio*w.maxParallelism
+}
+
+// WaitToStart waits until there is a worker available to run the task.
+//
+// If parallelism is disabled (maxParallelism is 0), it runs the task inline and returns when it is finished.
+// This is risky if one is relying on concurrency, and it can lead to deadlocks.
+// Avoid using this function if the parallelism is disabled.
+func (w *workersPool) WaitToStart(task func()) {
+	if w.maxParallelism < 0 {
+		// No limits.
+		w.mu.Lock()
+		w.lockedRunTaskInGoroutine(task)
+		w.mu.Unlock()
+		return
+
+	} else if w.maxParallelism == 0 {
+		// No parallelism, run inline -- better avoided.
+		task()
+		return
+	}
+
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for w.lockedIsFull() {
+		w.cond.Wait()
+	}
+	w.lockedRunTaskInGoroutine(task)
+}
+
+// lockedRunTaskInGoroutine and keep tabs on w.numRunning.
+//
+// It must be called with workerPool.mu acquired.
+func (w *workersPool) lockedRunTaskInGoroutine(task func()) {
+	w.numRunning++
+	go func() {
+		task()
+		w.mu.Lock()
+		w.numRunning--
+		w.cond.Signal()
+		w.mu.Unlock()
+	}()
+}
+
+// StartIfAvailable runs the task in a separate goroutine, if there are enough workers left.
 // It returns true if it found workers to run the function, false otherwise.
 //
 // It's up to the client to synchronize the end of the function execution.
-func (b *Backend) startWorkerIfAvailable(fn func()) bool {
-	if b.maxParallelism > 0 && b.currentWorkers.Load() >= int32(4*b.maxParallelism) {
+func (w *workersPool) StartIfAvailable(task func()) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.lockedIsFull() {
 		return false
 	}
-	b.currentWorkers.Add(1)
-	go func() {
-		fn()
-		b.currentWorkers.Add(-1)
-	}()
+	w.lockedRunTaskInGoroutine(task)
 	return true
 }
 
-// workerIsAsleep indicates it is waiting for other workers, and temporarily decrease the
-// number of current workers active.
+// WorkerIsAsleep indicates the worker (the one that called the method) is waiting for other workers,
+// and temporarily decrease the number of current workers active.
 //
-// Call workerRestarted when the worker is ready to run again.
-func (b *Backend) workerIsAsleep() {
-	b.currentWorkers.Add(-1)
+// Call WorkerRestarted when the worker is ready to run again.
+func (w *workersPool) WorkerIsAsleep() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.numRunning--
+	w.cond.Signal()
 }
 
-// workerRestarted indicates the worker is ready to run again.
-// It should only be called after workerIsAsleep.
+// WorkerRestarted indicates the worker (the one that called the method) is ready to run again.
+// It should only be called after WorkerIsAsleep.
 //
 // It increases the number of current workers active.
 // Notice this may lead temporarily to having more workers active than maxParallelism.
-func (b *Backend) workerRestarted() {
-	b.currentWorkers.Add(1)
+func (w *workersPool) WorkerRestarted() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.numRunning++
 }

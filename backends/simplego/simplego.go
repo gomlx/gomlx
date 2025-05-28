@@ -5,9 +5,6 @@
 package simplego
 
 import (
-	"runtime"
-	"sync/atomic"
-
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/notimplemented"
 	"github.com/pkg/errors"
@@ -35,9 +32,8 @@ func New(_ string) backends.Backend {
 }
 
 func newBackend() *Backend {
-	b := &Backend{
-		maxParallelism: runtime.NumCPU(),
-	}
+	b := &Backend{}
+	b.workers.Initialize()
 	return b
 }
 
@@ -46,11 +42,7 @@ type Backend struct {
 	// bufferPools are a map to pools of buffers that can be reused.
 	// The underlying type is map[bufferPoolKey]*sync.Pool.
 	bufferPools sync.Map
-
-	// maxParallelism is a soft target on the limit of parallel work to do.
-	// The actual number of goroutines is higher than that -- because of waits and such.
-	maxParallelism int
-	currentWorkers atomic.Int32
+	workers     workersPool
 }
 
 // Compile-time check that simplego.Backend implements backends.Backend.

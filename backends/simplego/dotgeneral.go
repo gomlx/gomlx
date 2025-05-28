@@ -2,11 +2,10 @@ package simplego
 
 import (
 	"math/bits"
-	"runtime"
-	"sync"
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/xsync"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/pkg/errors"
@@ -184,7 +183,7 @@ func dgFindSizes(shape shapes.Shape, contractingAxes, batchAxes []int) (batchSiz
 		axesTypes[axis] = 2
 	}
 
-	// Calculate sizes by multiplying dimensions according to axis type
+	// Calculate sizes by multiplying dimensions according to the axis type.
 	batchSize, crossSize, contractingSize = 1, 1, 1
 	crossDims = make([]int, 0, rank-len(contractingAxes)-len(batchAxes))
 	for axis, axisType := range axesTypes {
@@ -219,7 +218,7 @@ func init() {
 	for _, dtype := range []dtypes.DType{dtypes.F32, dtypes.F64, dtypes.BFloat16} {
 		sizePerElem := dtype.Size()
 		if dtype == dtypes.BFloat16 || dtype == dtypes.Float16 {
-			// Because for BFloat16/Float16 we store the results in float32, and only later convert to
+			// Because for BFloat16/Float16 we store the results in float32 and only later convert to
 			// BFloat16/Float16. This avoids numeric issues with accumulating sums in small precision
 			// types.
 			sizePerElem = 4
@@ -250,7 +249,7 @@ func dgCreateBlockedShape(dtype dtypes.DType, batchSize, crossSize, contractingS
 
 var dotGeneralFlatToBlockDTypeMap = NewDTypeMap("DotGeneralFlatToBlock")
 
-// dgCopyDataToBlockedShape copies the data from original (with a non-normalized shape, with the contracting axes
+// dgCopyDataToBlockedShape copies the data from the original (with a non-normalized shape, with the contracting axes
 // and batch axes given) to blocked, whose shape is normalized to [batchSize, crossSize, contractingSize] and
 // is organized in blocks (packages) of shape [1, blkDim, blkDim].
 //
@@ -274,7 +273,7 @@ func dgCopyFlatToBlockShape[T interface {
 	}
 	sourceDims := source.shape.Dimensions
 	// sourceStrides stores strides per axis-type: crossStride, contractStride or batchStride.
-	// sourceRewindAmount stores the amount needed to rewind when the axis index goes back to zero (see loop that updates the index below)
+	// sourceRewindAmount stores the amount needed to rewind when the axis index goes back to zero (see the loop that updates the index below)
 	sourceStrides := make([]int, rank)      // Stride is per type of axis.
 	sourceRewindAmount := make([]int, rank) // dim-1 * stride.
 	batchStride, crossStride, contractStride := 1, 1, 1
@@ -497,10 +496,6 @@ func dgCopyOutputBlockToFlatBFloat16(blockSource, output *Buffer) {
 	}
 }
 
-// minBatchParallelize is the batchSize threshold above which we parallelize on the batch-level,
-// if backend.maxParallelism unlimited (<0)
-var minBatchParallelize = runtime.NumCPU()
-
 // execDotGeneral executes the DotGeneral by first normalizing and repackaging the tensors into blocks.
 func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*Buffer, error) {
 	lhs, rhs := inputs[0], inputs[1]
@@ -519,6 +514,12 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 		return nil, err
 	}
 	return output, nil
+}
+
+// log2int return the log2(x) for integer values, rounded down.
+// Only defined for positive values.
+func log2int(x int) int {
+	return bits.Len(uint(x)) - 1
 }
 
 func execDotGeneralLarge(backend *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, output *Buffer) error {
@@ -556,49 +557,45 @@ func execDotGeneralLarge(backend *Backend, lhs, rhs *Buffer, params *dotGeneralN
 	recursive.rhsCrossBlocks = rhsBlocks.shape.Dimensions[1]
 	recursive.contractBlocks = lhsBlocks.shape.Dimensions[2]
 
-	var wg sync.WaitGroup
-	if (backend.maxParallelism > 0 && params.batchSize > backend.maxParallelism) ||
-		(backend.maxParallelism < 0 && params.batchSize > minBatchParallelize) {
-		// Parallelize at the batch level.
-		recursive.maxDepthParallelization = -1 // Disable sub-batch parallelization.
-		for batch := 0; batch < params.batchSize; batch++ {
-			batchRecursive := recursive
-			batchRecursive.lhsBatchOffset = batch * recursive.lhsCrossBlocks * recursive.contractBlocks
-			batchRecursive.rhsBatchOffset = batch * recursive.rhsCrossBlocks * recursive.contractBlocks
-			batchRecursive.outputBatchOffset = batch * recursive.lhsCrossBlocks * recursive.rhsCrossBlocks
-			wg.Add(1)
-			if !backend.startWorkerIfAvailable(func() {
-				// Start in parallel
-				batchRecursive.apply(0, recursive.lhsCrossBlocks, 0, recursive.rhsCrossBlocks, 0, recursive.contractBlocks, 0, &wg)
-			}) {
-				// Start synchronously
-				batchRecursive.apply(0, recursive.lhsCrossBlocks, 0, recursive.rhsCrossBlocks, 0, recursive.contractBlocks, 0, &wg)
-			}
-		}
-	} else {
-		// Parallelize within the batch examples if possible:
-		recursive.maxDepthParallelization = -1
-		if backend.maxParallelism > 0 {
-			recursive.maxDepthParallelization = bits.Len(uint(2*backend.maxParallelism-1)) - 1 // This is equivalent to a log2 on integers.
-			recursive.maxDepthParallelization += 1                                             // We want to allow slightly more fine-grained parallelization.
-		} else if backend.maxParallelism < 0 {
+	// Decide on intra-example parallelism: up to which depth we should use a new worker.
+	maxParallelism := backend.workers.MaxParallelism()
+	recursive.maxDepthParallelization = -1 // Disable sub-batch parallelization.
+	if backend.workers.IsEnabled() {
+		if backend.workers.IsUnlimited() {
 			recursive.maxDepthParallelization = 8 // At most 2^8 = 256 goroutines are spawned.
+		} else {
+			recursive.maxDepthParallelization = log2int(maxParallelism)
+			recursive.maxDepthParallelization += 1 // We want to allow slightly more fine-grained parallelization.
 		}
+	}
 
-		recursive.maxDepthParallelization = backend.maxParallelism
-		for batch := 0; batch < params.batchSize; batch++ {
-			batchRecursive := recursive
-			batchRecursive.lhsBatchOffset = batch * recursive.lhsCrossBlocks * recursive.contractBlocks
-			batchRecursive.rhsBatchOffset = batch * recursive.rhsCrossBlocks * recursive.contractBlocks
-			batchRecursive.outputBatchOffset = batch * recursive.lhsCrossBlocks * recursive.rhsCrossBlocks
-			wg.Add(1)
-			//if !backend.startWorkerIfAvailable(func() {
-			//	// Start in parallel
-			//	batchRecursive.apply(0, recursive.lhsCrossBlocks, 0, recursive.rhsCrossBlocks, 0, recursive.contractBlocks, 0, &wg)
-			//}) {
-			// Start synchronously
-			batchRecursive.apply(0, recursive.lhsCrossBlocks, 0, recursive.rhsCrossBlocks, 0, recursive.contractBlocks, 0, &wg)
-			//}
+	// Decide on using parallelism across the batch -- each example is started on a separate worker.
+	useBatchParallelism := backend.workers.IsEnabled()
+	batchSplitSize := 1
+	if useBatchParallelism && !backend.workers.IsUnlimited() {
+		batchSplitSize = (params.batchSize + maxParallelism - 1) / maxParallelism
+	}
+
+	// Loop over examples in the batch:
+	wg := xsync.NewDynamicWaitGroup() // Control workers started.
+	for outerBatchIdx := 0; outerBatchIdx < params.batchSize; outerBatchIdx += batchSplitSize {
+		wg.Add(1)
+		batchSplitFn := func() {
+			for innerBatchIdx := outerBatchIdx; innerBatchIdx < min(outerBatchIdx+batchSplitSize, params.batchSize); innerBatchIdx++ {
+				var batchRecursive dotGeneralRecursiveData
+				batchRecursive = recursive
+				batchRecursive.lhsBatchOffset = innerBatchIdx * recursive.lhsCrossBlocks * recursive.contractBlocks
+				batchRecursive.rhsBatchOffset = innerBatchIdx * recursive.rhsCrossBlocks * recursive.contractBlocks
+				batchRecursive.outputBatchOffset = innerBatchIdx * recursive.lhsCrossBlocks * recursive.rhsCrossBlocks
+				wg.Add(1)
+				batchRecursive.apply(0, recursive.lhsCrossBlocks, 0, recursive.rhsCrossBlocks, 0, recursive.contractBlocks, 0, wg)
+			}
+			wg.Done()
+		}
+		if useBatchParallelism {
+			backend.workers.WaitToStart(batchSplitFn)
+		} else {
+			batchSplitFn()
 		}
 	}
 	wg.Wait()
@@ -632,7 +629,7 @@ func (r *dotGeneralRecursiveData) apply(
 	rhsCrossStart, rhsCrossEnd,
 	contractStart, contractEnd int,
 	depth int,
-	wg *sync.WaitGroup) {
+	wg *xsync.DynamicWaitGroup) {
 	lhsCrossLen := lhsCrossEnd - lhsCrossStart
 	rhsCrossLen := rhsCrossEnd - rhsCrossStart
 	contractingLen := contractEnd - contractStart
@@ -664,7 +661,7 @@ func (r *dotGeneralRecursiveData) apply(
 		// Split on lhs cross dimension.
 		wg.Add(1) // The current plus 1.
 		split := lhsCrossStart + lhsCrossLen/2
-		if !parallelize || !r.backend.startWorkerIfAvailable(func() {
+		if !parallelize || !r.backend.workers.StartIfAvailable(func() {
 			// If running in a worker:
 			r.apply(lhsCrossStart, split, rhsCrossStart, rhsCrossEnd, contractStart, contractEnd, depth+1, wg)
 		}) {
@@ -677,7 +674,7 @@ func (r *dotGeneralRecursiveData) apply(
 		// Split on rhs cross dimension.
 		wg.Add(1) // The current plus 1.
 		split := rhsCrossStart + rhsCrossLen/2
-		if !parallelize || !r.backend.startWorkerIfAvailable(func() {
+		if !parallelize || !r.backend.workers.StartIfAvailable(func() {
 			r.apply(lhsCrossStart, lhsCrossEnd, rhsCrossStart, split, contractStart, contractEnd, depth+1, wg)
 		}) {
 			// If not parallelizing, just run the work synchronously.
@@ -688,15 +685,15 @@ func (r *dotGeneralRecursiveData) apply(
 	} else {
 		// No parallelization when splitting on the contracting axis because both splits will be writing
 		// to the same output blocks, so there will be memory contention.
-		// This also mean we dont' increase the depth of the recursion.
+		// This also means we don't increase the depth of the recursion.
 		split := contractStart + contractingLen/2
 		// Create a new working group to force serialization of work here:
-		var newWg sync.WaitGroup
+		newWg := xsync.NewDynamicWaitGroup()
 		newWg.Add(1)
-		r.apply(lhsCrossStart, lhsCrossEnd, rhsCrossStart, rhsCrossEnd, contractStart, split, depth, &newWg)
-		r.backend.workerIsAsleep()
+		r.apply(lhsCrossStart, lhsCrossEnd, rhsCrossStart, rhsCrossEnd, contractStart, split, depth, newWg)
+		r.backend.workers.WorkerIsAsleep()
 		newWg.Wait()
-		r.backend.workerRestarted()
+		r.backend.workers.WorkerRestarted()
 		r.apply(lhsCrossStart, lhsCrossEnd, rhsCrossStart, rhsCrossEnd, split, contractEnd, depth, wg)
 		return
 	}

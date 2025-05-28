@@ -350,6 +350,23 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 	// rhsDims: [Batch, RhsCross, Contracting]
 	// Batch and Contracting dimensions must match between lhs and rhs.
 	benchmarkCases := []dotGeneralBenchmarkParamsCase{
+		/*
+			{
+				name:     "KA-Batch-16-#4",
+				lhsShape: []int{16, 13, 384}, lhsContractingAxes: []int{2}, lhsBatchAxes: []int(nil),
+				rhsShape: []int{384, 1536}, rhsContractingAxes: []int{0}, rhsBatchAxes: []int(nil),
+			},
+			{
+				name:     "LargeBatch-Medium",
+				lhsShape: []int{64, 64, 128}, lhsContractingAxes: []int{2}, lhsBatchAxes: []int{0},
+				rhsShape: []int{64, 64, 128}, rhsContractingAxes: []int{2}, rhsBatchAxes: []int{0},
+			},
+			{
+				name:     "NoBatch-Large",
+				lhsShape: []int{1536, 1920}, lhsContractingAxes: []int{1}, lhsBatchAxes: nil,
+				rhsShape: []int{1920, 1024}, rhsContractingAxes: []int{0}, rhsBatchAxes: nil,
+			},
+		*/
 		{
 			name:     "NoBatch-Tiny",
 			lhsShape: []int{128, 4}, lhsContractingAxes: []int{1}, lhsBatchAxes: []int{},
@@ -415,9 +432,6 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 			lhsShape: []int{16, 13, 384}, lhsContractingAxes: []int{2}, lhsBatchAxes: []int(nil),
 			rhsShape: []int{384, 384}, rhsContractingAxes: []int{0}, rhsBatchAxes: []int(nil),
 		},
-
-		// Large batch example
-		//{},
 
 		// Shape values taken from training github.com/gomlx/gomlx/examples/adult/demo
 		{
