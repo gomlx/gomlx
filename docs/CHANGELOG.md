@@ -2,7 +2,13 @@
 
 # Next
 
-* Benchmarks for SimpleGo DotGeneral.
+* Package `simplego`, the pure Go backend:
+  * Added several benchmarks for SimpleGo DotGeneral. Run with:
+    `go test ./backends/simplego/ -test.v -test.run PerformanceTable -perf`
+  * DotGeneral reimplemented in 2 different versions:
+    * Version for small inner matrices, with block iteration and loop unrolling.
+    * Version for larger inner matrices: re-package inputs in ~4K blocks, and recursively partition matrices.
+    * Added parallelization: at batch level and in the partitioning in the larger matrices.
 
 # v0.19.4: 2024/05/24 added Vector Neural Networks (VNNs)
 

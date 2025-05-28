@@ -200,6 +200,7 @@ func execDotGeneralSmall(backend *Backend, lhs, rhs *Buffer, params *dotGeneralN
 	if castToFloat32 {
 		convertFn := convertDTypePairMap.Get(dtypes.Float32, output.shape.DType).(convertFnType)
 		convertFn(tmpOutput, output)
+		backend.putBuffer(tmpOutput) // Return the temporary buffer to the pool.
 	}
 	return nil
 }
