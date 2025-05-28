@@ -64,6 +64,13 @@ func (b *Backend) getBuffer(dtype dtypes.DType, length int) *Buffer {
 	return buf
 }
 
+// getBufferForShape is a wrapper for getShape that also sets the buffer shape accordingly.
+func (b *Backend) getBufferForShape(shape shapes.Shape) *Buffer {
+	buf := b.getBuffer(shape.DType, shape.Size())
+	buf.shape = shape
+	return buf
+}
+
 // randomize fills the buffer with random bits -- useful for testing.
 func (b *Buffer) randomize() {
 	bBuf := b.mutableBytes()

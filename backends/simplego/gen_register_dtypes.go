@@ -96,6 +96,31 @@ func init() {
 	dotGeneralKernelDTypeMap.RegisterIfNotSet(dtypes.Float32, buildDotGeneralKernel[float32])
 	dotGeneralKernelDTypeMap.RegisterIfNotSet(dtypes.Float64, buildDotGeneralKernel[float64])
 
+	// DTypeMap: dotGeneralNormalizeShapeDTypeMap
+	dotGeneralNormalizeShapeDTypeMap.RegisterIfNotSet(dtypes.Int8, dgNormalizeShape[int8])
+	dotGeneralNormalizeShapeDTypeMap.RegisterIfNotSet(dtypes.Int16, dgNormalizeShape[int16])
+	dotGeneralNormalizeShapeDTypeMap.RegisterIfNotSet(dtypes.Int32, dgNormalizeShape[int32])
+	dotGeneralNormalizeShapeDTypeMap.RegisterIfNotSet(dtypes.Int64, dgNormalizeShape[int64])
+	dotGeneralNormalizeShapeDTypeMap.RegisterIfNotSet(dtypes.Uint8, dgNormalizeShape[uint8])
+	dotGeneralNormalizeShapeDTypeMap.RegisterIfNotSet(dtypes.Uint16, dgNormalizeShape[uint16])
+	dotGeneralNormalizeShapeDTypeMap.RegisterIfNotSet(dtypes.Uint32, dgNormalizeShape[uint32])
+	dotGeneralNormalizeShapeDTypeMap.RegisterIfNotSet(dtypes.Uint64, dgNormalizeShape[uint64])
+	dotGeneralNormalizeShapeDTypeMap.RegisterIfNotSet(dtypes.Float32, dgNormalizeShape[float32])
+	dotGeneralNormalizeShapeDTypeMap.RegisterIfNotSet(dtypes.Float64, dgNormalizeShape[float64])
+	dotGeneralNormalizeShapeDTypeMap.RegisterIfNotSet(dtypes.BFloat16, dgNormalizeShape[bfloat16.BFloat16])
+
+	// DTypeMap: dotGeneralNormalizedDTypeMap
+	dotGeneralNormalizedDTypeMap.RegisterIfNotSet(dtypes.Int8, execNormalizedDotGeneralGeneric[int8])
+	dotGeneralNormalizedDTypeMap.RegisterIfNotSet(dtypes.Int16, execNormalizedDotGeneralGeneric[int16])
+	dotGeneralNormalizedDTypeMap.RegisterIfNotSet(dtypes.Int32, execNormalizedDotGeneralGeneric[int32])
+	dotGeneralNormalizedDTypeMap.RegisterIfNotSet(dtypes.Int64, execNormalizedDotGeneralGeneric[int64])
+	dotGeneralNormalizedDTypeMap.RegisterIfNotSet(dtypes.Uint8, execNormalizedDotGeneralGeneric[uint8])
+	dotGeneralNormalizedDTypeMap.RegisterIfNotSet(dtypes.Uint16, execNormalizedDotGeneralGeneric[uint16])
+	dotGeneralNormalizedDTypeMap.RegisterIfNotSet(dtypes.Uint32, execNormalizedDotGeneralGeneric[uint32])
+	dotGeneralNormalizedDTypeMap.RegisterIfNotSet(dtypes.Uint64, execNormalizedDotGeneralGeneric[uint64])
+	dotGeneralNormalizedDTypeMap.RegisterIfNotSet(dtypes.Float32, execNormalizedDotGeneralGeneric[float32])
+	dotGeneralNormalizedDTypeMap.RegisterIfNotSet(dtypes.Float64, execNormalizedDotGeneralGeneric[float64])
+
 	// DTypeMap: mutableBytesDTypeMap
 	mutableBytesDTypeMap.RegisterIfNotSet(dtypes.Int8, mutableBytesGeneric[int8])
 	mutableBytesDTypeMap.RegisterIfNotSet(dtypes.Int16, mutableBytesGeneric[int16])

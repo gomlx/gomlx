@@ -199,22 +199,37 @@ func dgFindSizes(shape shapes.Shape, contractingAxes, batchAxes []int) (batchSiz
 	return
 }
 
+type problemSizeType int
+
+const (
+	unknownProblemSize problemSizeType = iota
+	smallProblemSize
+	largeProblemSize
+)
+
+var forceProblemSize problemSizeType
+
 // execDotGeneral executes the DotGeneral by first normalizing and repackaging the tensors into blocks.
 func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*Buffer, error) {
 	lhs, rhs := inputs[0], inputs[1]
 	params := node.data.(*dotGeneralNodeData)
 	outputShape := node.shape
 	dtype := lhs.shape.DType
-	output := backend.getBuffer(dtype, outputShape.Size())
-	output.shape = outputShape
+	output := backend.getBufferForShape(outputShape)
 
 	// Problem size (per example of the batch):
-	problemSize := params.rhsCrossSize * params.lhsCrossSize
-
+	crossesSize := params.rhsCrossSize * params.lhsCrossSize
 	blockDim := 1 << DotGeneralTargetBlockLog2Dim[dtype]
 	blockSize := blockDim * blockDim
 	var err error
-	if problemSize > blockSize/2 || true {
+	problemSize := smallProblemSize
+	if crossesSize > blockSize/2 {
+		problemSize = largeProblemSize
+	}
+	if forceProblemSize != unknownProblemSize {
+		problemSize = forceProblemSize
+	}
+	if problemSize == largeProblemSize {
 		err = execDotGeneralLarge(backend, lhs, rhs, params, output)
 	} else {
 		err = execDotGeneralSmall(backend, lhs, rhs, params, output)
