@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -377,7 +379,7 @@ func TestDotGeneral_Exec(t *testing.T) {
 			})
 
 			// From DotGeneral parameters taken from LLM models that not working during development:
-			t.Run("LLM_1", func(t *testing.T) {
+			t.Run("LLM_1-parallel-requests", func(t *testing.T) {
 				lhs, err := tensors.Load("dotgeneral_lhs_test.bin")
 				require.NoError(t, err)
 				rhs, err := tensors.Load("dotgeneral_rhs_test.bin")
@@ -385,12 +387,32 @@ func TestDotGeneral_Exec(t *testing.T) {
 				want, err := tensors.Load("dotgeneral_out_test.bin")
 				require.NoError(t, err)
 				fmt.Printf("\tlhs=%s, rhs=%s\n", lhs.Shape(), rhs.Shape())
-				got := graph.ExecOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
+				exec := graph.NewExec(backend, func(lhs, rhs *graph.Node) *graph.Node {
 					return graph.DotGeneral(lhs, []int{2}, []int{0}, rhs, []int{2}, []int{0})
-				}, lhs, rhs)
+				})
+				got := exec.Call(lhs, rhs)[0]
+				requireSameTensorsFloat32(t, want, got, 1e-3)
 				fmt.Printf("\tgot=%s\n", got.Shape())
 				fmt.Printf("\twant=%s\n", want.Shape())
-				requireSameTensorsFloat32(t, want, got, 1e-3)
+
+				// Run 8 workers in parallel, to see if concurrency is a problem:
+				var wg sync.WaitGroup
+				var numCalls atomic.Uint32
+				for runnerIdx := range 16 {
+					wg.Add(1)
+					go func(idx int) {
+						defer wg.Done()
+						const numRepeats = 1000
+						for range numRepeats {
+							got := exec.Call(lhs, rhs)[0]
+							numCalls.Add(1)
+							requireSameTensorsFloat32(t, want, got, 1e-3)
+						}
+					}(runnerIdx)
+				}
+				wg.Wait()
+				n := numCalls.Load()
+				fmt.Printf("\tnumCalls=%d\n", n)
 			})
 			t.Run("LLM_2", func(t *testing.T) {
 				lhs, err := tensors.Load("dotgeneral_lhs_2_test.bin")
