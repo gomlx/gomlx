@@ -625,7 +625,7 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 
 	// Print table header
 	fmt.Printf("\n--- execNormalizedDotGeneral Performance ---\n")
-	header := fmt.Sprintf("| %-20s | %-20s | %-20s | %-10s | %-12s | %-15s | %-10s |", "Test Name", "LHS Dims", "RHS Dims", "DType", "Time/Run", "Num Ops", "GOps/Sec")
+	header := fmt.Sprintf("| %-20s | %-20s | %-20s | %-10s | %-10s | %-12s | %-15s | %-10s |", "Test Name", "LHS Dims", "RHS Dims", "DType", "BatchSize", "Time/Run", "Num Ops", "GOps/Sec")
 	fmt.Println(header)
 	fmt.Println(strings.Repeat("-", len(header)))
 
@@ -708,10 +708,11 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 			if benchCaseIdx%2 == 1 {
 				style = style2
 			}
-			row := fmt.Sprintf("| %-20s | %-20s | %-20s | %-10s | %-12s | %-15s | %-10.1f |",
+			row := fmt.Sprintf("| %-20s | %-20s | %-20s | %-10s | %-10d | %-12s | %-15s | %-10.1f |",
 				benchCase.name,
 				dimsToStr(benchCase.lhsShape), dimsToStr(benchCase.rhsShape),
 				dtype,
+				batchSize,
 				formatDurationWith2Decimals(avgDurationPerRun),
 				humanize.Comma(int64(numOps)),
 				gOpsPerSecond)
