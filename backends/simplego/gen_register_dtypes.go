@@ -83,7 +83,6 @@ func init() {
 	dotGeneralOutputBlockToFlatDTypeMap.RegisterIfNotSet(dtypes.Uint64, dgCopyOutputBlockToFlat[uint64])
 	dotGeneralOutputBlockToFlatDTypeMap.RegisterIfNotSet(dtypes.Float32, dgCopyOutputBlockToFlat[float32])
 	dotGeneralOutputBlockToFlatDTypeMap.RegisterIfNotSet(dtypes.Float64, dgCopyOutputBlockToFlat[float64])
-	dotGeneralOutputBlockToFlatDTypeMap.RegisterIfNotSet(dtypes.BFloat16, dgCopyOutputBlockToFlat[bfloat16.BFloat16])
 
 	// DTypeMap: dotGeneralKernelDTypeMap
 	dotGeneralKernelDTypeMap.RegisterIfNotSet(dtypes.Int8, buildDotGeneralKernel[int8])

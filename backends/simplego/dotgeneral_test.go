@@ -247,37 +247,19 @@ func TestDotGeneral_Exec(t *testing.T) {
 	require.InDelta(t, 0.7392, tensors.CopyFlatData[float64](y3)[0], 1e-4)
 
 	// BFloat16 example.
-	/*
-		bf16 := bfloat16.FromFloat32
-		y2 := graph.ExecOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
-			return graph.DotGeneral(lhs, []int{1}, []int{}, rhs, []int{0}, []int{})
-		},
-			[][]bfloat16.BFloat16{{bf16(1), bf16(2), bf16(3)}},
-			[][]bfloat16.BFloat16{{bf16(10)}, {bf16(11)}, {bf16(12)}},
-		)
-		fmt.Printf("\ty2=%s\n", y2)
-		require.NoError(t, y2.Shape().Check(dtypes.BFloat16, 1, 1))
-		require.Equal(t, float32(10+22+36), tensors.CopyFlatData[bfloat16.BFloat16](y2)[0].Float32())
-	*/
+	bf16 := bfloat16.FromFloat32
+	y2 := graph.ExecOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
+		return graph.DotGeneral(lhs, []int{1}, []int{}, rhs, []int{0}, []int{})
+	},
+		[][]bfloat16.BFloat16{{bf16(1), bf16(2), bf16(3)}},
+		[][]bfloat16.BFloat16{{bf16(10)}, {bf16(11)}, {bf16(12)}},
+	)
+	fmt.Printf("\ty2=%s\n", y2)
+	require.NoError(t, y2.Shape().Check(dtypes.BFloat16, 1, 1))
+	require.Equal(t, float32(10+22+36), tensors.CopyFlatData[bfloat16.BFloat16](y2)[0].Float32())
 
-	// Examples that were broken during development.
-	// Taken from LLM models.
-	{
-		lhs, err := tensors.Load("dotgeneral_lhs_2_test.bin")
-		require.NoError(t, err)
-		rhs, err := tensors.Load("dotgeneral_rhs_2_test.bin")
-		require.NoError(t, err)
-		want, err := tensors.Load("dotgeneral_out_2_test.bin")
-		require.NoError(t, err)
-		fmt.Printf("\tlhs=%s, rhs=%s\n", lhs.Shape(), rhs.Shape())
-		y := graph.ExecOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
-			return graph.DotGeneral(lhs, []int{2}, []int{0}, rhs, []int{2}, []int{0})
-		}, lhs, rhs)
-		fmt.Printf("\ty5=%s\n", y)
-		fmt.Printf("\twant=%s\n", want)
-		requireSameTensorsFloat32(t, want, y, 1e-3)
-	}
-	{
+	// From DotGeneral parameters taken from LLM models that not working during development:
+	t.Run("LLM_1", func(t *testing.T) {
 		lhs, err := tensors.Load("dotgeneral_lhs_test.bin")
 		require.NoError(t, err)
 		rhs, err := tensors.Load("dotgeneral_rhs_test.bin")
@@ -288,11 +270,44 @@ func TestDotGeneral_Exec(t *testing.T) {
 		y := graph.ExecOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
 			return graph.DotGeneral(lhs, []int{2}, []int{0}, rhs, []int{2}, []int{0})
 		}, lhs, rhs)
-		fmt.Printf("\ty4=%s\n", y)
+		fmt.Printf("\tgot=%s\n", y)
 		fmt.Printf("\twant=%s\n", want)
 		requireSameTensorsFloat32(t, want, y, 1e-3)
-	}
-
+	})
+	t.Run("LLM_2", func(t *testing.T) {
+		lhs, err := tensors.Load("dotgeneral_lhs_2_test.bin")
+		require.NoError(t, err)
+		rhs, err := tensors.Load("dotgeneral_rhs_2_test.bin")
+		require.NoError(t, err)
+		want, err := tensors.Load("dotgeneral_out_2_test.bin")
+		require.NoError(t, err)
+		fmt.Printf("\tlhs=%s, rhs=%s\n", lhs.Shape(), rhs.Shape())
+		got := graph.ExecOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
+			return graph.DotGeneral(lhs, []int{2}, []int{0}, rhs, []int{2}, []int{0})
+		}, lhs, rhs)
+		fmt.Printf("\tgot=%s\n", got)
+		fmt.Printf("\twant=%s\n", want)
+		requireSameTensorsFloat32(t, want, got, 1e-3)
+	})
+	t.Run("LLM_2_bfloat16", func(t *testing.T) {
+		lhs, err := tensors.Load("dotgeneral_lhs_2_test.bin")
+		require.NoError(t, err)
+		rhs, err := tensors.Load("dotgeneral_rhs_2_test.bin")
+		require.NoError(t, err)
+		want, err := tensors.Load("dotgeneral_out_2_test.bin")
+		require.NoError(t, err)
+		fmt.Printf("\tlhs=%s, rhs=%s\n", lhs.Shape(), rhs.Shape())
+		got := graph.ExecOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
+			lhs = graph.ConvertDType(lhs, dtypes.BFloat16)
+			rhs = graph.ConvertDType(rhs, dtypes.BFloat16)
+			output := graph.DotGeneral(lhs, []int{2}, []int{0}, rhs, []int{2}, []int{0})
+			return graph.ConvertDType(output, dtypes.F32)
+		}, lhs, rhs)
+		fmt.Printf("\tgot=%s\n", got)
+		fmt.Printf("\twant=%s\n", want)
+		// Much larger delta, since BFloat16 loses precision.
+		requireSameTensorsFloat32(t, want, got, 1e-1)
+	})
 }
 
 func TestDotGeneral_Dot(t *testing.T) {
@@ -438,7 +453,7 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 		// Add more test cases relevant to your models here
 	}
 
-	dtypesToTest := []dtypes.DType{dtypes.Float32, dtypes.Float64} // TODO: , dtypes.BFloat16}
+	dtypesToTest := []dtypes.DType{dtypes.Float32, dtypes.Float64, dtypes.BFloat16}
 
 	// Adjust for desired precision vs. test duration
 	const numWarmupRuns = 2

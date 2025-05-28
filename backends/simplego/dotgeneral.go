@@ -434,6 +434,68 @@ func dgCopyOutputBlockToFlat[T interface {
 	}
 }
 
+func init() {
+	dotGeneralOutputBlockToFlatDTypeMap.Register(dtypes.BFloat16, dgCopyOutputBlockToFlatBFloat16)
+}
+
+// dgCopyOutputBlockToFlatBFloat16 copies the blocked output to a flat output, removing the padding.
+// The blockSource is assumed to be float32 -- matrix multiplication uses float32 to s
+//
+// blockedSource shape: float32[batchSize, lhsCrossBlocks, rhsCrossBlocks, blockDim, blockDim]
+// output shape: bfloat16[batchSize, lhsCrossSize, rhsCrossSize]
+func dgCopyOutputBlockToFlatBFloat16(blockSource, output *Buffer) {
+	sourceDims := blockSource.shape.Dimensions
+	outputDims := output.shape.Dimensions
+
+	batchSize := sourceDims[0]
+	lhsBlockCross := sourceDims[1]
+	rhsBlockCross := sourceDims[2]
+	blockDim := sourceDims[3] // Same as sourceDims[4]
+	lhsCrossSize := outputDims[1]
+	rhsCrossSize := outputDims[2]
+
+	// Pre-calculate strides
+	outputRhsStride := 1
+	outputLhsStride := rhsCrossSize
+	outputBatchStride := lhsCrossSize * rhsCrossSize
+
+	sourceBlockSize := blockDim * blockDim
+	sourceRhsBlockStride := sourceBlockSize
+	sourceLhsBlockStride := rhsBlockCross * sourceBlockSize
+	sourceBatchStride := lhsBlockCross * rhsBlockCross * sourceBlockSize
+
+	sourceData := blockSource.flat.([]float32)
+	outputData := output.flat.([]bfloat16.BFloat16)
+
+	for batch := 0; batch < batchSize; batch++ {
+		sourceBatchOffset := batch * sourceBatchStride
+		outputBatchOffset := batch * outputBatchStride
+
+		for lhsBlock := 0; lhsBlock < lhsBlockCross && lhsBlock*blockDim < lhsCrossSize; lhsBlock++ {
+			lhsStart := lhsBlock * blockDim
+			lhsEnd := min(lhsStart+blockDim, lhsCrossSize)
+			sourceLhsOffset := sourceBatchOffset + lhsBlock*sourceLhsBlockStride
+			outputLhsOffset := outputBatchOffset + lhsStart*outputLhsStride
+
+			for rhsBlock := 0; rhsBlock < rhsBlockCross && rhsBlock*blockDim < rhsCrossSize; rhsBlock++ {
+				rhsStart := rhsBlock * blockDim
+				rhsEnd := min(rhsStart+blockDim, rhsCrossSize)
+				sourceBlockOffset := sourceLhsOffset + rhsBlock*sourceRhsBlockStride
+				outputBlockOffset := outputLhsOffset + rhsStart*outputRhsStride
+
+				// Copy valid elements from the block
+				for blockRow := 0; blockRow < lhsEnd-lhsStart; blockRow++ {
+					sourceRowOffset := sourceBlockOffset + blockRow*blockDim
+					outputRowOffset := outputBlockOffset + blockRow*outputLhsStride
+					for blockCol := range rhsEnd - rhsStart {
+						outputData[outputRowOffset+blockCol] = bfloat16.FromFloat32(sourceData[sourceRowOffset+blockCol])
+					}
+				}
+			}
+		}
+	}
+}
+
 // minBatchParallelize is the batchSize threshold above which we parallelize on the batch-level,
 // if backend.maxParallelism unlimited (<0)
 var minBatchParallelize = runtime.NumCPU()
@@ -695,6 +757,105 @@ func buildDotGeneralKernel[T PODNumericConstraints](lhs, rhs, output *Buffer, bl
 					sum1 += lhsFlat[lhsIdx] * rhsFlat[rhsIdx1]
 					sum2 += lhsFlat[lhsIdx] * rhsFlat[rhsIdx2]
 					sum3 += lhsFlat[lhsIdx] * rhsFlat[rhsIdx3]
+					lhsIdx++
+					rhsIdx++
+				}
+				outputFlat[outputIdx] = sum0
+				outputFlat[outputIdx+1] = sum1
+				outputFlat[outputIdx+2] = sum2
+				outputFlat[outputIdx+3] = sum3
+				outputIdx += 4
+
+				// We unrolled 4 rows of RHS, so we need to skip the remaining 3 rows:
+				rhsIdx += 3 * blockDim
+			} // loop over rhs rows
+
+			// Start next lhs row.
+			baseLhsIdx += blockDim
+		}
+	}
+}
+
+func init() {
+	dotGeneralKernelDTypeMap.Register(dtypes.BFloat16, buildDotGeneralKernelBFloat16)
+}
+
+// buildDotGeneralKernelBFloat16 returns a kernel function that does a DotGeneral (matrix multiplication) of the lhs/rhs block
+// to the corresponding output buffer block, given the indices of the square blocks.
+//
+// This is the version for BFloat16: the inputs are in BFloat16, and the blocked output is in float32 -- to avoid
+// numeric errors when accumulating results in the output -- later it gets converted back to BFloat16.
+//
+// The contracting axis is 1 for both, lhs and rhs.
+func buildDotGeneralKernelBFloat16(lhs, rhs, output *Buffer, blockDim int) kernelFuncType {
+	lhsFlat := lhs.flat.([]bfloat16.BFloat16)
+	rhsFlat := rhs.flat.([]bfloat16.BFloat16)
+	outputFlat := output.flat.([]float32)
+	blockSize := blockDim * blockDim
+
+	return func(lhsBlockIdx, rhsBlockIdx, outputBlockIdx int) {
+		baseLhsIdx := lhsBlockIdx * blockSize
+		baseRhsIdx := rhsBlockIdx * blockSize
+		outputIdx := outputBlockIdx * blockSize
+		for range blockDim { // Loop over lhs rows:
+			rhsIdx := baseRhsIdx
+			// Loop 4 rows at a time.
+			for rhsRow := 0; rhsRow < blockDim; rhsRow += 4 { // range blockDim { // loop over rhs rows:
+				lhsIdx := baseLhsIdx
+				contractingIdx := 0
+				sum0 := outputFlat[outputIdx]
+				sum1 := outputFlat[outputIdx+1]
+				sum2 := outputFlat[outputIdx+2]
+				sum3 := outputFlat[outputIdx+3]
+				// Loop unrolled 8 at a time.
+				for ; contractingIdx+7 < blockDim; contractingIdx += 8 {
+					rhsIdx1 := rhsIdx + blockDim
+					rhsIdx2 := rhsIdx + 2*blockDim
+					rhsIdx3 := rhsIdx + 3*blockDim
+					sum0 += lhsFlat[lhsIdx].Float32()*rhsFlat[rhsIdx].Float32() +
+						lhsFlat[lhsIdx+1].Float32()*rhsFlat[rhsIdx+1].Float32() +
+						lhsFlat[lhsIdx+2].Float32()*rhsFlat[rhsIdx+2].Float32() +
+						lhsFlat[lhsIdx+3].Float32()*rhsFlat[rhsIdx+3].Float32() +
+						lhsFlat[lhsIdx+4].Float32()*rhsFlat[rhsIdx+4].Float32() +
+						lhsFlat[lhsIdx+5].Float32()*rhsFlat[rhsIdx+5].Float32() +
+						lhsFlat[lhsIdx+6].Float32()*rhsFlat[rhsIdx+6].Float32() +
+						lhsFlat[lhsIdx+7].Float32()*rhsFlat[rhsIdx+7].Float32()
+					sum1 += lhsFlat[lhsIdx].Float32()*rhsFlat[rhsIdx1].Float32() +
+						lhsFlat[lhsIdx+1].Float32()*rhsFlat[rhsIdx1+1].Float32() +
+						lhsFlat[lhsIdx+2].Float32()*rhsFlat[rhsIdx1+2].Float32() +
+						lhsFlat[lhsIdx+3].Float32()*rhsFlat[rhsIdx1+3].Float32() +
+						lhsFlat[lhsIdx+4].Float32()*rhsFlat[rhsIdx1+4].Float32() +
+						lhsFlat[lhsIdx+5].Float32()*rhsFlat[rhsIdx1+5].Float32() +
+						lhsFlat[lhsIdx+6].Float32()*rhsFlat[rhsIdx1+6].Float32() +
+						lhsFlat[lhsIdx+7].Float32()*rhsFlat[rhsIdx1+7].Float32()
+					sum2 += lhsFlat[lhsIdx].Float32()*rhsFlat[rhsIdx2].Float32() +
+						lhsFlat[lhsIdx+1].Float32()*rhsFlat[rhsIdx2+1].Float32() +
+						lhsFlat[lhsIdx+2].Float32()*rhsFlat[rhsIdx2+2].Float32() +
+						lhsFlat[lhsIdx+3].Float32()*rhsFlat[rhsIdx2+3].Float32() +
+						lhsFlat[lhsIdx+4].Float32()*rhsFlat[rhsIdx2+4].Float32() +
+						lhsFlat[lhsIdx+5].Float32()*rhsFlat[rhsIdx2+5].Float32() +
+						lhsFlat[lhsIdx+6].Float32()*rhsFlat[rhsIdx2+6].Float32() +
+						lhsFlat[lhsIdx+7].Float32()*rhsFlat[rhsIdx2+7].Float32()
+					sum3 += lhsFlat[lhsIdx].Float32()*rhsFlat[rhsIdx3].Float32() +
+						lhsFlat[lhsIdx+1].Float32()*rhsFlat[rhsIdx3+1].Float32() +
+						lhsFlat[lhsIdx+2].Float32()*rhsFlat[rhsIdx3+2].Float32() +
+						lhsFlat[lhsIdx+3].Float32()*rhsFlat[rhsIdx3+3].Float32() +
+						lhsFlat[lhsIdx+4].Float32()*rhsFlat[rhsIdx3+4].Float32() +
+						lhsFlat[lhsIdx+5].Float32()*rhsFlat[rhsIdx3+5].Float32() +
+						lhsFlat[lhsIdx+6].Float32()*rhsFlat[rhsIdx3+6].Float32() +
+						lhsFlat[lhsIdx+7].Float32()*rhsFlat[rhsIdx3+7].Float32()
+					lhsIdx += 8
+					rhsIdx += 8
+				}
+				// Tail loop.
+				for ; contractingIdx < blockDim; contractingIdx++ {
+					rhsIdx1 := rhsIdx + blockDim
+					rhsIdx2 := rhsIdx + 2*blockDim
+					rhsIdx3 := rhsIdx + 3*blockDim
+					sum0 += lhsFlat[lhsIdx].Float32() * rhsFlat[rhsIdx].Float32()
+					sum1 += lhsFlat[lhsIdx].Float32() * rhsFlat[rhsIdx1].Float32()
+					sum2 += lhsFlat[lhsIdx].Float32() * rhsFlat[rhsIdx2].Float32()
+					sum3 += lhsFlat[lhsIdx].Float32() * rhsFlat[rhsIdx3].Float32()
 					lhsIdx++
 					rhsIdx++
 				}
