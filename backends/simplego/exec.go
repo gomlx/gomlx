@@ -22,8 +22,8 @@ type Executable struct {
 	// builder must have Builder.compiled set to true, so it is no longer active.
 	builder *Builder
 
-	// numNodesToProcess is the max(outputs). We don't need to look or store
-	// information above that.
+	// numNodesToProcess is the max(outputs) -- with the exceptions of multi-output nodes.
+	// We generally don't need to look or store information above that.
 	numNodesToProcess int
 
 	// numUses is the number of times each Node is used during the calculation.
@@ -227,8 +227,12 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) ([]backend
 		execMu         sync.Mutex
 	)
 	readyToExecute = make(chan int, e.numNodesToProcess)
-	completed := 0
+	stopExecution := sync.OnceFunc(func() { close(readyToExecute) }) // Can be called concurrently.
+
+	// expected is the number of nodes that needs executing to complete the computation.
 	expected := 0
+	// completed is the number of required nodes that have been executed.
+	completed := 0
 
 	// Count expected nodes and initialize dependencies
 	for nodeIdx := range e.numNodesToProcess {
@@ -249,18 +253,14 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) ([]backend
 		execBuf.owned[inputNodeIdx] = donate[ii]
 	}
 
-	// Pre-allocate slices:
-	var (
-		inputBuffersPool = make([]*Buffer, e.maxInputs)
-		inputsOwnedPool  = make([]bool, e.maxInputs)
-	)
-
 	// Execute nodes as they become available
 	appendError := func(err error) {
 		execMu.Lock()
 		defer execMu.Unlock()
 		collectErrors = append(collectErrors, err)
-		close(readyToExecute)
+		//klog.Errorf("Failed: %+v", err)
+		//fmt.Printf("\t- stopping execution: %v\n", err)
+		stopExecution()
 	}
 
 	for nodeIdx := range readyToExecute {
@@ -278,37 +278,63 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) ([]backend
 				// Update dependencies and schedule ready nodes
 				completed++
 				if completed == expected {
-					close(readyToExecute)
+					//fmt.Printf("\t- node #%d: all nodes completed, closing channel\n", nodeIdx)
+					stopExecution()
 					return
 				}
+				//if completed > expected {
+				//	fmt.Printf("\t- node #%d: more nodes than expected (%d > %d), stopping execution\n", nodeIdx, completed, expected)
+				//}
 
 				// Check dependent nodes: for current node and for multi-output nodes.
-				for _, depIdx := range e.dependents[nodeIdx] {
-					execBuf.remainingDeps[depIdx]--
-					if execBuf.remainingDeps[depIdx] == 0 && execBuf.results[depIdx] == nil {
-						readyToExecute <- depIdx
-					}
-				}
-				for _, outputNode := range node.multiOutputsNodes {
-					outputIdx := outputNode.builderIdx
-					if e.numUses[outputIdx] > 0 {
+				if node.IsMultiOutputs() {
+					// Multi-output node: process each output, mark them as completed and enqueue their dependencies.
+					for _, outputNode := range node.multiOutputsNodes {
+						outputIdx := outputNode.builderIdx
+						if outputIdx >= e.numNodesToProcess || e.numUses[outputIdx] == 0 {
+							// Ignore, this is a node that is not part of the computation.
+							continue
+						}
+
 						// Mark this output as completed as well.
 						completed++
+						if completed == expected {
+							//fmt.Printf("\t- node #%d: all nodes completed, closing channel\n", nodeIdx)
+							stopExecution()
+							return
+						}
+
+						// Enqueue read dependencies:
 						for _, depIdx := range e.dependents[outputIdx] {
 							execBuf.remainingDeps[depIdx]--
 							if execBuf.remainingDeps[depIdx] == 0 && execBuf.results[depIdx] == nil {
+								//fmt.Printf("\t- node #%d: enqueueing #%d (%s) -- a dependency from it's multi-output node #%d\n", nodeIdx, depIdx, e.builder.nodes[depIdx].opType, outputIdx)
 								readyToExecute <- depIdx
 							}
+						}
+					}
+
+				} else {
+					// Single output node: enqueue all dependent nodes that are ready to execute.
+					for _, depIdx := range e.dependents[nodeIdx] {
+						execBuf.remainingDeps[depIdx]--
+						if execBuf.remainingDeps[depIdx] == 0 {
+							//fmt.Printf("\t- node #%d: enqueueing #%d (%s), since it has no more dependencies and %d uses\n", nodeIdx, depIdx, e.builder.nodes[depIdx].opType, e.numUses[depIdx])
+							readyToExecute <- depIdx
 						}
 					}
 				}
 			}()
 
+			//fmt.Printf("Execute: starting to process node #%d (%s): inputs=%v\n", nodeIdx, node.opType,
+			//	xslices.Map(node.inputs, func(input *Node) int { return input.builderIdx }))
 			if execBuf.results[nodeIdx] != nil {
 				// Parameters and multi-output nodes will have their results pre-filled.
+				//fmt.Printf("\t- node #%d (%s) already calculated, skipping\n", nodeIdx, node.opType)
 				return
 			}
 			if e.numUses[nodeIdx] == 0 {
+				fmt.Printf("\t- node #%d (%s) has no uses, skipping\n", nodeIdx, node.opType)
 				// This node is not used by any of the outputs of this executable.
 				// TODO: these nodes can simply be removed in Builder.Compile().
 				return
@@ -317,8 +343,8 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) ([]backend
 			// Constants have a special treatment, since they have no inputs and their outputs are not owned by
 			// the execBuf.
 			if node.opType == backends.OpTypeConstant {
-				execBuf.results[nodeIdx] = node.data.(*Buffer)
 				execBuf.owned[nodeIdx] = false
+				execBuf.results[nodeIdx] = node.data.(*Buffer)
 				return
 			}
 
@@ -339,23 +365,21 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) ([]backend
 					return
 				}
 			}
-			var (
-				inputBuffers []*Buffer
-				inputsOwned  []bool
-			)
 
-			inputBuffers = inputBuffersPool[:len(node.inputs)]
-			inputsOwned = inputsOwnedPool[:len(node.inputs)]
+			inputBuffers := make([]*Buffer, len(node.inputs))
+			inputsOwned := make([]bool, len(node.inputs))
 			for ii, input := range node.inputs {
 				inputNodeIdx := input.builderIdx
 				inputBuffers[ii] = execBuf.results[inputNodeIdx]
-				if inputBuffers[ii] == nil {
+				if inputBuffers[ii] == nil || !inputBuffers[ii].shape.Ok() {
+					//fmt.Printf("\t- node #%d (%s) input[%d]=#%d (%s -> %s) is not calculated yet!?\n", nodeIdx, node.opType, ii, inputNodeIdx, input.opType, input.shape)
 					appendError(errors.Errorf("Execute: input #%d of node #%d is not calculated yet (!?) -- "+
 						"this is a bug, it should never have happened", ii, nodeIdx))
 					return
 				}
-				execBuf.numUsed[inputNodeIdx]++
-				inputsOwned[ii] = execBuf.owned[inputNodeIdx] && execBuf.numUsed[inputNodeIdx] == e.numUses[inputNodeIdx]
+				// Because of a possible race condition, we just allow the input to be reused if there is only one
+				// node using it.
+				inputsOwned[ii] = execBuf.owned[inputNodeIdx] && e.numUses[inputNodeIdx] == 1
 			}
 
 			// Execute op.
@@ -377,32 +401,25 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) ([]backend
 					return
 				}
 				for outputIdx, outputBuf := range outputs {
-					outputNodeIdx := node.multiOutputsNodes[outputIdx].builderIdx
+					outputNode := node.multiOutputsNodes[outputIdx]
+					outputNodeIdx := outputNode.builderIdx
+					if outputIdx >= e.numNodesToProcess || e.numUses[outputIdx] == 0 {
+						// Ignore, this is a node that is not part of the computation.
+						e.backend.putBuffer(outputBuf)
+						continue
+					}
 					execBuf.results[outputNodeIdx] = outputBuf
 					execBuf.owned[outputNodeIdx] = true
 				}
 			}
 
-			// See if corresponding inputs can be freed.
-			for ii, input := range node.inputs {
+			// If input has been reused, erase it from results.
+			for ii, inputNode := range node.inputs {
+				inputNodeIdx := inputNode.builderIdx
 				if inputBuffers[ii] == nil {
-					// Input was re-used (or consumed) by the nodeExecutor, remove it from results.
-					// This is not strictly necessary, since the input can only be re-used if there are no more
-					// uses of it in the graph, but just in case.
-					execBuf.results[input.builderIdx] = nil
+					execBuf.results[inputNodeIdx] = nil
 					continue
 				}
-
-				// If executor doesn't own buffer, we don't need to free it.
-				if !inputsOwned[ii] || inputBuffers[ii] == nil {
-					continue
-				}
-
-				// inputBuffer no longer used, we can return it to the pool.
-				// Notice that the final outputs will always have numUses >= 1, and they
-				// will never be completely used by the executor, hence they don't get freed here.
-				//e.backend.putBuffer(inputBuffers[ii])
-				//execBuf.results[input.builderIdx] = nil
 			}
 		}
 
@@ -423,6 +440,7 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) ([]backend
 	for ii, outputNode := range e.builder.outputs {
 		outNodeIdx := outputNode.builderIdx
 		outBuf := execBuf.results[outNodeIdx]
+		execBuf.results[outNodeIdx] = nil // Make sure we don't return the same buffer twice.
 		if outBuf == nil {
 			return nil, errors.Errorf("Execute: output #%d (%s, nodeIdx=%d) is not calculated yet (!?) -- "+
 				"this is a bug, it should never have happened", ii, outputNode.opType, outNodeIdx)
@@ -437,6 +455,15 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) ([]backend
 			outBuf = e.backend.cloneBuffer(outBuf)
 		}
 		outputs[ii] = outBuf
+	}
+
+	// Free other intermediate buffers that hasn't been freed yet.
+	for nodeIdx, buf := range execBuf.results {
+		if !execBuf.owned[nodeIdx] {
+			continue
+		}
+		e.backend.putBuffer(buf)
+		execBuf.results[nodeIdx] = nil
 	}
 
 	// Return buffers to pool
