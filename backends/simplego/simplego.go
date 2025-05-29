@@ -52,6 +52,8 @@ func New(config string) backends.Backend {
 			forceProblemSize = smallProblemSize
 		case "force_large":
 			forceProblemSize = largeProblemSize
+		case "force_check":
+			forceProblemSize = checkProblemSize
 		}
 	}
 	return b

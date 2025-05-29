@@ -305,13 +305,20 @@ func TestDotGeneral_Exec(t *testing.T) {
 		forceProblemSize = unknownProblemSize
 	}()
 
-	for _, problemSize := range []problemSizeType{smallProblemSize, largeProblemSize} {
+	for _, problemSize := range []problemSizeType{smallProblemSize, largeProblemSize, checkProblemSize} {
 		// Force a specific problem size: so we exercise the corresponding algorithm irrespective of the actual size:
 		// it may not be efficient for the size, but it should be correct in all sizes.
 		forceProblemSize = problemSize
-		testName := "DotGeneral_small_version"
-		if problemSize == largeProblemSize {
+		var testName string
+		switch problemSize {
+		case smallProblemSize:
+			testName = "DotGeneral_small_version"
+		case largeProblemSize:
 			testName = "DotGeneral_large_version"
+		case checkProblemSize:
+			testName = "DotGeneral_check_version"
+		default:
+			t.Fatalf("Unknown version for problem size: %d", problemSize)
 		}
 		t.Run(testName, func(t *testing.T) {
 			// Larger example, with multiple axes.

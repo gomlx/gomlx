@@ -1,11 +1,15 @@
 package simplego
 
 import (
+	"fmt"
+	"math"
 	"math/bits"
+	"strings"
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/pkg/errors"
 )
 
@@ -205,6 +209,7 @@ const (
 	unknownProblemSize problemSizeType = iota
 	smallProblemSize
 	largeProblemSize
+	checkProblemSize
 )
 
 var forceProblemSize problemSizeType
@@ -229,10 +234,25 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 	if forceProblemSize != unknownProblemSize {
 		problemSize = forceProblemSize
 	}
-	if problemSize == largeProblemSize {
+	switch problemSize {
+	case largeProblemSize:
 		err = execDotGeneralLarge(backend, lhs, rhs, params, output)
-	} else {
+	case smallProblemSize:
 		err = execDotGeneralSmall(backend, lhs, rhs, params, output)
+	case checkProblemSize:
+		output2 := backend.getBufferForShape(outputShape)
+		err = execDotGeneralSmall(backend, lhs, rhs, params, output2)
+		if err != nil {
+			return nil, err
+		}
+		err = execDotGeneralLarge(backend, lhs, rhs, params, output)
+		if err != nil {
+			return nil, err
+		}
+		err = dotGeneralCheckVersions(backend, lhs, rhs, params, output, output2)
+		backend.putBuffer(output2)
+	default:
+		err = errors.Errorf("unknown problem size %d for DotGeneral", problemSize)
 	}
 	if err != nil {
 		backend.putBuffer(output)
@@ -288,4 +308,72 @@ func (b *Builder) Dot(lhsOp, rhsOp backends.Op) (backends.Op, error) {
 		return nil, errors.WithMessagef(err, "while building op Dot()")
 	}
 	return output, nil
+}
+
+var dotGeneralVersionsCheckDelta = 1e-3
+
+func dotGeneralCheckVersions(backend *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, outputLarge, outputSmall *Buffer) error {
+	var value0 float64
+	dtype := outputLarge.shape.DType
+	switch dtype {
+	case dtypes.Float32:
+		value0 = float64(outputLarge.flat.([]float32)[0])
+	case dtypes.Float64:
+		value0 = outputLarge.flat.([]float64)[0]
+	case dtypes.BFloat16:
+		value0 = float64(outputLarge.flat.([]bfloat16.BFloat16)[0].Float32())
+	}
+
+	fmt.Printf("> %s x %s -> %s (output[...0]=%.5f)\n", lhs.shape, rhs.shape, outputLarge.shape, value0)
+	messages, err := dotGeneralCheckVersionsCmp(outputLarge, outputSmall)
+	if err == nil {
+		return nil
+	}
+	fmt.Printf("ERROR: dotGeneral check versions failed:\n")
+	fmt.Printf("\t- lhs=%s, lhsContractingAxes=%v, lhsBatchAxes=%v\n",
+		lhs.shape, params.lhsContractingAxes, params.lhsBatchAxes)
+	fmt.Printf("\t- rhs=%s, rhsContractingAxes=%v, rhsBatchAxes=%v\n",
+		rhs.shape, params.rhsContractingAxes, params.rhsBatchAxes)
+	fmt.Printf("\t- batchSize=%d, lhsCrossSize=%d, rhsCrossAxes=%d, contractingSize=%d\n",
+		params.batchSize, params.lhsCrossSize, params.rhsCrossSize, params.contractingSize)
+	fmt.Printf("\t- output=%s\n", outputLarge.shape)
+	fmt.Printf("%s\n", strings.Join(messages, "\n"))
+	return err
+}
+
+func dotGeneralCheckVersionsCmp(outputLarge, outputSmall *Buffer) (messages []string, err error) {
+	// Make sure shapes are the same.
+	if !outputLarge.shape.Equal(outputSmall.shape) {
+		return nil, errors.Errorf("outputs have different shapes")
+	}
+	flatIdx := 0
+	dtype := outputLarge.shape.DType
+	var mismatches int
+	switch dtype {
+	case dtypes.Float32:
+		largeFlat := outputLarge.flat.([]float32)
+		smallFlat := outputSmall.flat.([]float32)
+		for indices := range outputLarge.shape.Iter() {
+			largeValue := largeFlat[flatIdx]
+			smallValue := smallFlat[flatIdx]
+			if math.Abs(float64(largeValue)-float64(smallValue)) > dotGeneralVersionsCheckDelta {
+				if mismatches < 3 {
+					messages = append(
+						messages,
+						fmt.Sprintf("\tDotGeneral: index %v (flatIdx=%d) has a mismatch on versions: large=%f, small=%f", indices, flatIdx, largeValue, smallValue))
+				} else if mismatches == 4 {
+					fmt.Printf("\t...")
+				}
+				mismatches++
+			}
+			flatIdx++
+		}
+
+	default:
+		// Not checking other dtypes.
+	}
+	if mismatches > 0 {
+		return messages, errors.Errorf("found %d mismatches (out of %d values) between DotGeneral large and small versions", mismatches, outputLarge.shape.Size())
+	}
+	return
 }
