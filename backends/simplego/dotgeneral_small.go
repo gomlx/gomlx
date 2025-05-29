@@ -167,6 +167,7 @@ func execDotGeneralSmall(backend *Backend, lhs, rhs *Buffer, params *dotGeneralN
 		outputDtype = dtypes.Float32
 		outputShape := shapes.Make(outputDtype, params.batchSize, params.lhsCrossSize, params.rhsCrossSize)
 		tmpOutput = backend.getBufferForShape(outputShape)
+		tmpOutput.Zeros()
 	}
 
 	normalizeDotGeneral := dotGeneralNormalizedDTypeMap.Get(dtype).(func(lhs, rhs, output *Buffer, params *dotGeneralNodeData, batchStartIdx, batchEndIdx int))

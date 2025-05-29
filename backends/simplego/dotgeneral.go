@@ -221,6 +221,7 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 	outputShape := node.shape
 	dtype := lhs.shape.DType
 	output := backend.getBufferForShape(outputShape)
+	output.Zeros()
 
 	// Problem size (per example of the batch):
 	crossesSize := params.rhsCrossSize * params.lhsCrossSize
@@ -241,6 +242,7 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 		err = execDotGeneralSmall(backend, lhs, rhs, params, output)
 	case checkProblemSize:
 		output2 := backend.getBufferForShape(outputShape)
+		output2.Zeros()
 		err = execDotGeneralSmall(backend, lhs, rhs, params, output2)
 		if err != nil {
 			return nil, err
