@@ -55,8 +55,12 @@ func New(config string) backends.Backend {
 			// This will force DotGeneral operation to use the version designed for large matrices.
 			forceProblemSize = largeProblemSize
 		case "force_check":
-			// This will force every DotGeneral operation to be executed with both versions, and the outputs compared.
+			// This will force every DotGeneral operation to be executed with both versions and the outputs compared.
 			forceProblemSize = checkProblemSize
+		case "sequential":
+			// This will force the operations to be executed sequentially, as opposed to concurrently as soon as the
+			// ops inputs are available.
+			execForceSequential = true
 		}
 	}
 	return b
