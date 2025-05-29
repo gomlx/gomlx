@@ -228,7 +228,7 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 	blockSize := blockDim * blockDim
 	var err error
 	problemSize := smallProblemSize
-	if crossesSize > 4*blockSize {
+	if crossesSize > 16*blockSize {
 		problemSize = largeProblemSize
 	}
 	if forceProblemSize != unknownProblemSize {

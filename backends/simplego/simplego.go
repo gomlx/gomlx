@@ -49,10 +49,13 @@ func New(config string) backends.Backend {
 			b.workers.SetMaxParallelism(vInt)
 			fmt.Printf("SimpleGo backend: parallelism set to %d\n", vInt)
 		case "force_small":
+			// This will force DotGeneral operation to use the version designed for smaller matrices.
 			forceProblemSize = smallProblemSize
 		case "force_large":
+			// This will force DotGeneral operation to use the version designed for large matrices.
 			forceProblemSize = largeProblemSize
 		case "force_check":
+			// This will force every DotGeneral operation to be executed with both versions, and the outputs compared.
 			forceProblemSize = checkProblemSize
 		}
 	}
