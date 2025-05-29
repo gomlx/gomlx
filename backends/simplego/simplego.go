@@ -5,6 +5,10 @@
 package simplego
 
 import (
+	"fmt"
+	"strconv"
+	"strings"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/notimplemented"
 	"github.com/pkg/errors"
@@ -27,12 +31,41 @@ func init() {
 
 // New constructs a new SimpleGo Backend.
 // There are no configurations, the string is simply ignored.
-func New(_ string) backends.Backend {
-	return newBackend()
+func New(config string) backends.Backend {
+	b := newDefaultBackend()
+	parts := strings.Split(config, ",")
+	for _, part := range parts {
+		key := part
+		var value string
+		if eqPos := strings.Index(part, "="); eqPos != -1 {
+			key, value = part[0:eqPos], part[eqPos+1:]
+		}
+		switch key {
+		case "parallelism":
+			vInt, err := strconv.Atoi(value)
+			if err != nil {
+				panic(errors.Wrapf(err, "invalid value for %q in SimpleGo backend config: needs an int, got %q", key, value))
+			}
+			b.workers.SetMaxParallelism(vInt)
+			fmt.Printf("SimpleGo backend: parallelism set to %d\n", vInt)
+		case "force_small":
+			// This will force DotGeneral operation to use the version designed for smaller matrices.
+			forceProblemSize = smallProblemSize
+		case "force_large":
+			// This will force DotGeneral operation to use the version designed for large matrices.
+			forceProblemSize = largeProblemSize
+		case "force_check":
+			// This will force every DotGeneral operation to be executed with both versions, and the outputs compared.
+			forceProblemSize = checkProblemSize
+		}
+	}
+	return b
 }
 
-func newBackend() *Backend {
-	return &Backend{}
+func newDefaultBackend() *Backend {
+	b := &Backend{}
+	b.workers.Initialize()
+	return b
 }
 
 // Backend implements the backends.Backend interface.
@@ -40,6 +73,7 @@ type Backend struct {
 	// bufferPools are a map to pools of buffers that can be reused.
 	// The underlying type is map[bufferPoolKey]*sync.Pool.
 	bufferPools sync.Map
+	workers     workersPool
 }
 
 // Compile-time check that simplego.Backend implements backends.Backend.
@@ -68,7 +102,7 @@ func (b *Backend) Capabilities() backends.Capabilities {
 	return Capabilities
 }
 
-// Builder creates a new builder used to define a new named computation.
+// Builder creates a new builder used to construct a named computation.
 func (b *Backend) Builder(name string) backends.Builder {
 	builder := &Builder{
 		backend: b,

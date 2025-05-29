@@ -1082,11 +1082,12 @@ func execConvertDType(backend *Backend, node *Node, inputs []*Buffer, inputsOwne
 	_ = inputsOwned // We don't reuse the inputs.
 	output := backend.getBuffer(node.shape.DType, operand.shape.Size())
 	output.shape = node.shape
-	type convertFnT = func(operand, output *Buffer)
-	convertFn := convertDTypePairMap.Get(operand.shape.DType, output.shape.DType).(convertFnT)
+	convertFn := convertDTypePairMap.Get(operand.shape.DType, output.shape.DType).(convertFnType)
 	convertFn(operand, output)
 	return output, nil
 }
+
+type convertFnType = func(operand, output *Buffer)
 
 var convertDTypePairMap = NewDTypePairMap("ConvertDType")
 

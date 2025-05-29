@@ -1,7 +1,10 @@
 package simplego
 
 import (
-	"slices"
+	"fmt"
+	"math"
+	"math/bits"
+	"strings"
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
@@ -11,7 +14,25 @@ import (
 )
 
 func init() {
-	nodeExecutors[backends.OpTypeDotGeneral] = execNormalizedDotGeneral
+	nodeExecutors[backends.OpTypeDotGeneral] = execDotGeneral
+}
+
+type dotGeneralNodeData struct {
+	lhsContractingAxes, lhsBatchAxes                       []int
+	rhsContractingAxes, rhsBatchAxes                       []int
+	batchSize, lhsCrossSize, rhsCrossSize, contractingSize int
+	lhsBlockedShape, rhsBlockedShape, outputBlockedShape   shapes.Shape
+}
+
+// adjustAxisToRank returns a positive axis, adjusting negative numbers to the correct rank.
+func adjustAxisToRank(rank, axis int) (int, error) {
+	if axis < 0 {
+		axis += rank
+	}
+	if axis < 0 || axis >= rank {
+		return -1, errors.Errorf("axis %d is out of range [0, %d)", axis, rank)
+	}
+	return axis, nil
 }
 
 // DotGeneral takes as input lhs (left-hand-side) and rhs (right-hand-side) specifications
@@ -33,7 +54,7 @@ func init() {
 // shape with rank=3 ([batchSize, crossSize, contractingSize]), and then it issues the DotGeneral
 // node with normalized inputs. Finally, it reshapes back to the final result.
 //
-// See execNormalizedDotGeneral for the implementation.
+// See execDotGeneral for the implementation.
 func (b *Builder) DotGeneral(lhsOp backends.Op, lhsContractingAxes, lhsBatchAxes []int, rhsOp backends.Op, rhsContractingAxes, rhsBatchAxes []int) (backends.Op, error) {
 	inputs, err := b.checkOps(backends.OpTypeDotGeneral.String(), lhsOp, rhsOp)
 	if err != nil {
@@ -44,36 +65,105 @@ func (b *Builder) DotGeneral(lhsOp backends.Op, lhsContractingAxes, lhsBatchAxes
 	if dtype != rhs.shape.DType {
 		return nil, errors.Errorf("DotGeneral lhs (left-hand-side) and rhs operands don't match data types: %s and %s", dtype, rhs.shape.DType)
 	}
-
-	// Transpose operands to [batchSize, crossSize, contractingSize].
-	lhsTransposed, lhsBatchDims, lhsCrossDims, lhsContractingDims, err := b.transposeForDotGeneral(lhs, "lhs", lhsContractingAxes, lhsBatchAxes)
-	if err != nil {
-		return nil, err
+	if len(lhsContractingAxes) != len(rhsContractingAxes) {
+		return nil, errors.Errorf("DotGeneral number of contracting axes for lhs (%d) doesn't match rhs (%d)",
+			len(lhsContractingAxes), len(rhsContractingAxes))
 	}
-	rhsTransposed, rhsBatchDims, rhsCrossDims, rhsContractingDims, err := b.transposeForDotGeneral(rhs, "rhs", rhsContractingAxes, rhsBatchAxes)
-	if err != nil {
-		return nil, err
-	}
-	if slices.Compare(lhsBatchDims, rhsBatchDims) != 0 {
-		return nil, errors.Errorf("DotGeneral batch axes from lhs (left-hand-side) and rhs operands don't match dimenions: lhs.BatchDims=%v, rhs.BatchDims=%v", lhsBatchDims, rhsBatchDims)
-	}
-	if slices.Compare(lhsContractingDims, rhsContractingDims) != 0 {
-		return nil, errors.Errorf("DotGeneral contracting axes from lhs (left-hand-side) and rhs operands don't match dimenions: lhs.ContractingDims=%v, rhs.ContractingDims=%v", lhsContractingDims, rhsContractingDims)
+	if len(lhsBatchAxes) != len(rhsBatchAxes) {
+		return nil, errors.Errorf("DotGeneral number of contracting axes for lhs (%d) doesn't match rhs (%d)",
+			len(lhsContractingAxes), len(rhsContractingAxes))
 	}
 
-	// DotGeneral on the normalized operands.
-	batchSize := lhsTransposed.shape.Dimensions[0]
-	dotGeneralShape := shapes.Make(dtype, batchSize, lhsTransposed.shape.Dimensions[1], rhsTransposed.shape.Dimensions[1])
-	dotGeneral := b.newNode(backends.OpTypeDotGeneral, dotGeneralShape, lhsTransposed, rhsTransposed)
+	lhsRank := lhs.shape.Rank()
+	rhsRank := rhs.shape.Rank()
+	params := dotGeneralNodeData{
+		lhsContractingAxes: lhsContractingAxes,
+		lhsBatchAxes:       lhsBatchAxes,
+		rhsContractingAxes: rhsContractingAxes,
+		rhsBatchAxes:       rhsBatchAxes,
+	}
+
+	// Validate and adjust axes.
+	for ii, axis := range lhsContractingAxes {
+		params.lhsContractingAxes[ii], err = adjustAxisToRank(lhsRank, axis)
+		if err != nil {
+			return nil, errors.WithMessagef(err, "while adjusting contractingAxes for DotGeneral(lhs=%s, lhsContractingAxes=%v)", lhs.shape, lhsContractingAxes)
+		}
+	}
+	for ii, axis := range lhsBatchAxes {
+		params.lhsBatchAxes[ii], err = adjustAxisToRank(lhsRank, axis)
+		if err != nil {
+			return nil, errors.WithMessagef(err, "while adjusting batchAxes for DotGeneral(lhs=%s, lhsBatchAxes=%v)", lhs.shape, lhsBatchAxes)
+		}
+	}
+	for ii, axis := range rhsContractingAxes {
+		params.rhsContractingAxes[ii], err = adjustAxisToRank(rhsRank, axis)
+		if err != nil {
+			return nil, errors.WithMessagef(err, "while adjusting contractingAxes for DotGeneral(rhs=%s, rhsContractingAxes=%v)", rhs.shape, rhsContractingAxes)
+		}
+	}
+	for ii, axis := range rhsBatchAxes {
+		params.rhsBatchAxes[ii], err = adjustAxisToRank(rhsRank, axis)
+		if err != nil {
+			return nil, errors.WithMessagef(err, "while adjusting batchAxes for DotGeneral(rhs=%s, rhsBatchAxes=%v)", rhs.shape, rhsBatchAxes)
+		}
+	}
+
+	// Check that batch and contracting dimensions from lhs and rhs match.
+	batchDims := make([]int, len(lhsBatchAxes))
+	contractingDims := make([]int, len(lhsContractingAxes))
+	for ii, lhsAxis := range params.lhsContractingAxes {
+		rhsAxis := params.rhsContractingAxes[ii]
+		if lhs.shape.Dimensions[lhsAxis] != rhs.shape.Dimensions[rhsAxis] {
+			return nil, errors.Errorf("DotGeneral contracting dimensions don't match: lhs[%d]=%d != rhs[%d]=%d",
+				lhsAxis, lhs.shape.Dimensions[lhsAxis], rhsAxis, rhs.shape.Dimensions[rhsAxis])
+		}
+		contractingDims[ii] = lhs.shape.Dimensions[lhsAxis]
+	}
+	for ii, lhsAxis := range params.lhsBatchAxes {
+		rhsAxis := params.rhsBatchAxes[ii]
+		if lhs.shape.Dimensions[lhsAxis] != rhs.shape.Dimensions[rhsAxis] {
+			return nil, errors.Errorf("DotGeneral batch dimensions don't match: lhs[%d]=%d != rhs[%d]=%d",
+				lhsAxis, lhs.shape.Dimensions[lhsAxis], rhsAxis, rhs.shape.Dimensions[rhsAxis])
+		}
+		batchDims[ii] = lhs.shape.Dimensions[lhsAxis]
+	}
+
+	// Find sizes of the normalized operands ([batchSize, crossSize, contractSize]).
+	var lhsCrossDims, rhsCrossDims []int
+	params.batchSize, params.lhsCrossSize, params.contractingSize, lhsCrossDims = dgFindSizes(lhs.shape, lhsContractingAxes, lhsBatchAxes)
+	_, params.rhsCrossSize, _, rhsCrossDims = dgFindSizes(rhs.shape, rhsContractingAxes, rhsBatchAxes)
+
+	// Check that all sizes are positive
+	if params.batchSize <= 0 || params.lhsCrossSize <= 0 || params.contractingSize <= 0 || params.rhsCrossSize <= 0 {
+		return nil, errors.Errorf("DotGeneral sizes must be positive: lhs(batch=%d, cross=%d, contracting=%d), rhs(cross=%d)",
+			params.batchSize, params.lhsCrossSize, params.contractingSize,
+			params.rhsCrossSize)
+	}
+
+	blockLog2Dim := DotGeneralTargetBlockLog2Dim[dtype]
+	params.lhsBlockedShape = dgCreateBlockedShape(dtype, params.batchSize, params.lhsCrossSize, params.contractingSize, blockLog2Dim)
+	params.rhsBlockedShape = dgCreateBlockedShape(dtype, params.batchSize, params.rhsCrossSize, params.contractingSize, blockLog2Dim)
+	outputDType := dtype
+	if dtype == dtypes.BFloat16 || dtype == dtypes.Float16 {
+		// For 16 bits, store the intermediary results as float32 to minimize numerical errors during accumulation.
+		// Notice the blockLog2Dim must be the same, because the block dimensions much match the inputs.
+		outputDType = dtypes.Float32
+	}
+	params.outputBlockedShape = dgCreateBlockedShape(outputDType, params.batchSize, params.lhsCrossSize, params.rhsCrossSize, blockLog2Dim)
+
+	// Create dot-general node: it will generate a normalized output [batchSize, lhsCrossSize, rhsCrossSize].
+	dotGeneral := b.newNode(backends.OpTypeDotGeneral, shapes.Make(dtype, params.batchSize, params.lhsCrossSize, params.rhsCrossSize), lhs, rhs)
+	dotGeneral.data = &params
 
 	// Reshape result to recover batch and cross dimensions.
-	resultingDims := make([]int, 0, len(lhsBatchDims)+len(lhsCrossDims)+len(rhsCrossDims))
-	resultingDims = append(resultingDims, lhsBatchDims...)
+	resultingDims := make([]int, 0, len(batchDims)+len(lhsCrossDims)+len(rhsCrossDims))
+	resultingDims = append(resultingDims, batchDims...)
 	resultingDims = append(resultingDims, lhsCrossDims...)
 	resultingDims = append(resultingDims, rhsCrossDims...)
 	result, err := b.Reshape(dotGeneral, resultingDims...)
 
-	// fmt.Printf("DotGeneral(*lhs*: %s, c:%v, b:%v; *rhs*:  %s, c:%v, b:%v) -> %s\n",
+	//fmt.Printf("DotGeneral(*lhs*: %s, c:%v, b:%v; *rhs*:  %s, c:%v, b:%v) -> %s\n",
 	//	lhs.shape, lhsContractingAxes, lhsBatchAxes, rhs.shape, rhsContractingAxes, rhsBatchAxes,
 	//	result.(*Node).shape)
 
@@ -83,212 +173,100 @@ func (b *Builder) DotGeneral(lhsOp backends.Op, lhsContractingAxes, lhsBatchAxes
 	return result, nil
 }
 
-// transposeForDotGeneral transposes and reshapes the lhs or the rhs operand for the DotGeneral
-// so that it is shaped as [batchSize, crossSize, contractSize].
-//
-// It returns the node of the transposed operand, and the dimensions of each set of axes.
-func (b *Builder) transposeForDotGeneral(operand *Node, operandName string, contractingAxes, batchAxes []int) (
-	transposed *Node, batchDims, crossDims, contractingDims []int, err error) {
-	shape := operand.shape
+func dgFindSizes(shape shapes.Shape, contractingAxes, batchAxes []int) (batchSize, crossSize, contractingSize int, crossDims []int) {
 	rank := shape.Rank()
 	axesTypes := make([]int, rank)
-	if len(contractingAxes) > 0 {
-		contractingDims = make([]int, 0, len(contractingAxes))
-		for _, axis := range contractingAxes {
-			if axis < 0 || axis >= rank {
-				err = errors.Errorf("DotGeneral operand %s has an invalid contracting axis %d (%s rank is %d)", operandName, axis, operandName, rank)
-				return
-			}
-			if axesTypes[axis] != 0 {
-				err = errors.Errorf("DotGeneral operand %s contracting axes (%v) have repeated values ", operandName, contractingAxes)
-				return
-			}
-			axesTypes[axis] = 1
-			contractingDims = append(contractingDims, shape.Dimensions[axis])
-		}
+
+	// Mark axes types: 1 for contracting, 2 for batch
+	for _, axis := range contractingAxes {
+		axesTypes[axis] = 1
 	}
-	if len(batchAxes) > 0 {
-		batchDims = make([]int, 0, len(batchAxes))
-		for _, axis := range batchAxes {
-			if axis < 0 || axis >= rank {
-				err = errors.Errorf("DotGeneral operand %s has an invalid batch axis %d (%s rank is %d)", operandName, axis, operandName, rank)
-				return
-			}
-			if axesTypes[axis] != 0 {
-				err = errors.Errorf("DotGeneral operand %s batch axes (%v) have repeated values (maybe with contracting axes=%v) ", operandName, batchAxes, contractingAxes)
-				return
-			}
-			axesTypes[axis] = 2
-			batchDims = append(batchDims, shape.Dimensions[axis])
-		}
+	for _, axis := range batchAxes {
+		axesTypes[axis] = 2
 	}
 
-	// Calculate the crossAxes and crossDims and each of the main resulting dimensions
-	batchSize, crossSize, contractSize := 1, 1, 1
-	crossAxes := make([]int, 0, rank-len(batchAxes)-len(contractingAxes))
-	crossDims = make([]int, 0, rank-len(batchAxes)-len(contractingAxes))
+	// Calculate sizes by multiplying dimensions according to the axis type.
+	batchSize, crossSize, contractingSize = 1, 1, 1
+	crossDims = make([]int, 0, rank-len(contractingAxes)-len(batchAxes))
 	for axis, axisType := range axesTypes {
 		dim := shape.Dimensions[axis]
 		switch axisType {
-		case 0:
+		case 0: // Cross axes (unmarked)
 			crossSize *= dim
-			crossAxes = append(crossAxes, axis)
 			crossDims = append(crossDims, dim)
-		case 1:
-			contractSize *= dim
-		case 2:
+		case 1: // Contracting axes
+			contractingSize *= dim
+		case 2: // Batch axes
 			batchSize *= dim
 		}
 	}
-
-	// Final permutations: batchAxes, crossAxes, contractingAxes
-	permutations := make([]int, 0, rank)
-	permutations = append(permutations, batchAxes...)
-	permutations = append(permutations, crossAxes...)
-	permutations = append(permutations, contractingAxes...)
-	transposedOp, err := b.Transpose(operand, permutations...)
-	if err != nil {
-		return
-	}
-	transposed = transposedOp.(*Node)
-	transposedOp, err = b.Reshape(transposed, batchSize, crossSize, contractSize)
-	if err != nil {
-		return
-	}
-	transposed = transposedOp.(*Node)
 	return
 }
 
-// execNormalizedDotGeneral executes the DotGeneral where the inputs are already shaped [batchSize, crossSize, contractingSize].
-func execNormalizedDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*Buffer, error) {
+type problemSizeType int
+
+const (
+	unknownProblemSize problemSizeType = iota
+	smallProblemSize
+	largeProblemSize
+	checkProblemSize
+)
+
+var forceProblemSize problemSizeType
+
+// execDotGeneral executes the DotGeneral by first normalizing and repackaging the tensors into blocks.
+func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*Buffer, error) {
 	lhs, rhs := inputs[0], inputs[1]
+	params := node.data.(*dotGeneralNodeData)
 	outputShape := node.shape
-	dtype := outputShape.DType
-	output := backend.getBuffer(dtype, outputShape.Size())
-	output.shape = outputShape
+	dtype := lhs.shape.DType
+	output := backend.getBufferForShape(outputShape)
 	output.Zeros()
-	fn := dotGeneralDTypeMap.Get(dtype).(func(lhs, rhs, output *Buffer))
-	fn(lhs, rhs, output)
+
+	// Problem size (per example of the batch):
+	crossesSize := params.rhsCrossSize * params.lhsCrossSize
+	blockDim := 1 << DotGeneralTargetBlockLog2Dim[dtype]
+	blockSize := blockDim * blockDim
+	var err error
+	problemSize := smallProblemSize
+	if crossesSize > 16*blockSize {
+		problemSize = largeProblemSize
+	}
+	if forceProblemSize != unknownProblemSize {
+		problemSize = forceProblemSize
+	}
+	switch problemSize {
+	case largeProblemSize:
+		err = execDotGeneralLarge(backend, lhs, rhs, params, output)
+	case smallProblemSize:
+		err = execDotGeneralSmall(backend, lhs, rhs, params, output)
+	case checkProblemSize:
+		output2 := backend.getBufferForShape(outputShape)
+		output2.Zeros()
+		err = execDotGeneralSmall(backend, lhs, rhs, params, output2)
+		if err != nil {
+			return nil, err
+		}
+		err = execDotGeneralLarge(backend, lhs, rhs, params, output)
+		if err != nil {
+			return nil, err
+		}
+		err = dotGeneralCheckVersions(backend, lhs, rhs, params, output, output2)
+		backend.putBuffer(output2)
+	default:
+		err = errors.Errorf("unknown problem size %d for DotGeneral", problemSize)
+	}
+	if err != nil {
+		backend.putBuffer(output)
+		return nil, err
+	}
 	return output, nil
 }
 
-var dotGeneralDTypeMap = NewDTypeMap("DotGeneral")
-
-//go:generate go run ../../internal/cmd/simplego_dispatcher -dispatcher=dispatchDotGeneral -generic=execNormalizedDotGeneralGeneric -int -uint -float
-
-// execNormalizedDotGeneralGeneric operands lhs and rhs are normalized to shape
-// [batchSize, crossSize, contractingSize].
-func execNormalizedDotGeneralGeneric[T PODNumericConstraints](lhs, rhs, output *Buffer) {
-	//fmt.Printf("execNormalizedDotGeneralGeneric(%s, %s) -> %s\n", lhs.shape, rhs.shape, output.shape)
-	lhsFlat := lhs.flat.([]T)
-	rhsFlat := rhs.flat.([]T)
-	outputFlat := output.flat.([]T)
-
-	batchSize := lhs.shape.Dimensions[0]
-	lhsCrossSize := lhs.shape.Dimensions[1]
-	rhsCrossSize := rhs.shape.Dimensions[1]
-	contractingSize := lhs.shape.Dimensions[2]
-
-	// Pre-compute strides to avoid repeated calculations
-	lhsBatchStride := lhsCrossSize * contractingSize
-	rhsBatchStride := rhsCrossSize * contractingSize
-	outputBatchStride := lhsCrossSize * rhsCrossSize
-
-	// Cache block sizes - adjust based on typical matrix sizes and CPU cache
-	const blockSize = 64 // Tune this based on your typical workload and L1 cache size
-
-	for batchIdx := 0; batchIdx < batchSize; batchIdx++ {
-		lhsBaseIdx := batchIdx * lhsBatchStride
-		rhsBaseIdx := batchIdx * rhsBatchStride
-		outputBaseIdx := batchIdx * outputBatchStride
-
-		// Use blocking to improve cache locality
-		for idxLhsCross := 0; idxLhsCross < lhsCrossSize; idxLhsCross += blockSize {
-			iEnd := min(idxLhsCross+blockSize, lhsCrossSize)
-
-			for idxRhsCross := 0; idxRhsCross < rhsCrossSize; idxRhsCross += blockSize {
-				jEnd := min(idxRhsCross+blockSize, rhsCrossSize)
-
-				for idxContracting := 0; idxContracting < contractingSize; idxContracting += blockSize {
-					kEnd := min(idxContracting+blockSize, contractingSize)
-
-					// Process the current block
-					for i := idxLhsCross; i < iEnd; i++ {
-						lhsRowStartIdx := lhsBaseIdx + i*contractingSize
-						outputRowStartIdx := outputBaseIdx + i*rhsCrossSize
-
-						for j := idxRhsCross; j < jEnd; j++ {
-							rhsColStartIdx := rhsBaseIdx + j*contractingSize
-							sum := outputFlat[outputRowStartIdx+j]
-
-							// Unroll the innermost loop for better vectorization
-							k := idxContracting
-							for ; k+7 < kEnd; k += 8 {
-								sum += lhsFlat[lhsRowStartIdx+k]*rhsFlat[rhsColStartIdx+k] +
-									lhsFlat[lhsRowStartIdx+k+1]*rhsFlat[rhsColStartIdx+k+1] +
-									lhsFlat[lhsRowStartIdx+k+2]*rhsFlat[rhsColStartIdx+k+2] +
-									lhsFlat[lhsRowStartIdx+k+3]*rhsFlat[rhsColStartIdx+k+3] +
-									lhsFlat[lhsRowStartIdx+k+4]*rhsFlat[rhsColStartIdx+k+4] +
-									lhsFlat[lhsRowStartIdx+k+5]*rhsFlat[rhsColStartIdx+k+5] +
-									lhsFlat[lhsRowStartIdx+k+6]*rhsFlat[rhsColStartIdx+k+6] +
-									lhsFlat[lhsRowStartIdx+k+7]*rhsFlat[rhsColStartIdx+k+7]
-							}
-							//for ; k+3 < kEnd; k += 4 {
-							//	sum += lhsFlat[lhsRowStartIdx+k]*rhsFlat[rhsColStartIdx+k] +
-							//		lhsFlat[lhsRowStartIdx+k+1]*rhsFlat[rhsColStartIdx+k+1] +
-							//		lhsFlat[lhsRowStartIdx+k+2]*rhsFlat[rhsColStartIdx+k+2] +
-							//		lhsFlat[lhsRowStartIdx+k+3]*rhsFlat[rhsColStartIdx+k+3]
-							//}
-
-							// Handle remaining elements
-							for ; k < kEnd; k++ {
-								sum += lhsFlat[lhsRowStartIdx+k] * rhsFlat[rhsColStartIdx+k]
-							}
-
-							outputFlat[outputRowStartIdx+j] = sum
-						}
-					}
-				}
-			}
-		}
-	}
-}
-
-// Register the BFloat16 version of DotGeneral.
-func init() { dotGeneralDTypeMap.Register(dtypes.BFloat16, execNormalizedDotGeneralBFloat16) }
-
-func execNormalizedDotGeneralBFloat16(lhs, rhs, output *Buffer) {
-	lhsFlat := lhs.flat.([]bfloat16.BFloat16)
-	rhsFlat := rhs.flat.([]bfloat16.BFloat16)
-	outputFlat := output.flat.([]bfloat16.BFloat16)
-	var lhsIdx, rhsIdx, outputIdx int
-	batchSize := lhs.shape.Dimensions[0] // same as rhs'.
-	lhsCrossSize := lhs.shape.Dimensions[1]
-	rhsCrossSize := rhs.shape.Dimensions[1]
-	contractingSize := lhs.shape.Dimensions[2] // same as rhs'.
-	rhsBatchStride := contractingSize * rhsCrossSize
-	for range batchSize {
-		for range lhsCrossSize {
-			rhsBatchStartIdx := rhsIdx
-			for range rhsCrossSize {
-				lhsRowStartIdx := lhsIdx
-				// Accumulate result in float32.
-				acc := outputFlat[outputIdx].Float32()
-				for range contractingSize {
-					acc += lhsFlat[lhsIdx].Float32() * rhsFlat[rhsIdx].Float32()
-					lhsIdx++
-					rhsIdx++
-				}
-				outputFlat[outputIdx] = bfloat16.FromFloat32(acc)
-				lhsIdx = lhsRowStartIdx
-				outputIdx++
-			}
-			lhsIdx += contractingSize
-			rhsIdx = rhsBatchStartIdx
-		}
-		rhsIdx += rhsBatchStride
-	}
-	return
+// log2int return the log2(x) for integer values, rounded down.
+// Only defined for positive values.
+func log2int(x int) int {
+	return bits.Len(uint(x)) - 1
 }
 
 // Dot ------------------------------------------------------------------------------------------------------
@@ -332,4 +310,72 @@ func (b *Builder) Dot(lhsOp, rhsOp backends.Op) (backends.Op, error) {
 		return nil, errors.WithMessagef(err, "while building op Dot()")
 	}
 	return output, nil
+}
+
+var dotGeneralVersionsCheckDelta = 1e-3
+
+func dotGeneralCheckVersions(backend *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, outputLarge, outputSmall *Buffer) error {
+	var value0 float64
+	dtype := outputLarge.shape.DType
+	switch dtype {
+	case dtypes.Float32:
+		value0 = float64(outputLarge.flat.([]float32)[0])
+	case dtypes.Float64:
+		value0 = outputLarge.flat.([]float64)[0]
+	case dtypes.BFloat16:
+		value0 = float64(outputLarge.flat.([]bfloat16.BFloat16)[0].Float32())
+	}
+
+	fmt.Printf("> %s x %s -> %s (output[...0]=%.5f)\n", lhs.shape, rhs.shape, outputLarge.shape, value0)
+	messages, err := dotGeneralCheckVersionsCmp(outputLarge, outputSmall)
+	if err == nil {
+		return nil
+	}
+	fmt.Printf("ERROR: dotGeneral check versions failed:\n")
+	fmt.Printf("\t- lhs=%s, lhsContractingAxes=%v, lhsBatchAxes=%v\n",
+		lhs.shape, params.lhsContractingAxes, params.lhsBatchAxes)
+	fmt.Printf("\t- rhs=%s, rhsContractingAxes=%v, rhsBatchAxes=%v\n",
+		rhs.shape, params.rhsContractingAxes, params.rhsBatchAxes)
+	fmt.Printf("\t- batchSize=%d, lhsCrossSize=%d, rhsCrossAxes=%d, contractingSize=%d\n",
+		params.batchSize, params.lhsCrossSize, params.rhsCrossSize, params.contractingSize)
+	fmt.Printf("\t- output=%s\n", outputLarge.shape)
+	fmt.Printf("%s\n", strings.Join(messages, "\n"))
+	return err
+}
+
+func dotGeneralCheckVersionsCmp(outputLarge, outputSmall *Buffer) (messages []string, err error) {
+	// Make sure shapes are the same.
+	if !outputLarge.shape.Equal(outputSmall.shape) {
+		return nil, errors.Errorf("outputs have different shapes")
+	}
+	flatIdx := 0
+	dtype := outputLarge.shape.DType
+	var mismatches int
+	switch dtype {
+	case dtypes.Float32:
+		largeFlat := outputLarge.flat.([]float32)
+		smallFlat := outputSmall.flat.([]float32)
+		for indices := range outputLarge.shape.Iter() {
+			largeValue := largeFlat[flatIdx]
+			smallValue := smallFlat[flatIdx]
+			if math.Abs(float64(largeValue)-float64(smallValue)) > dotGeneralVersionsCheckDelta {
+				if mismatches < 3 {
+					messages = append(
+						messages,
+						fmt.Sprintf("\tDotGeneral: index %v (flatIdx=%d) has a mismatch on versions: large=%f, small=%f", indices, flatIdx, largeValue, smallValue))
+				} else if mismatches == 4 {
+					fmt.Printf("\t...")
+				}
+				mismatches++
+			}
+			flatIdx++
+		}
+
+	default:
+		// Not checking other dtypes.
+	}
+	if mismatches > 0 {
+		return messages, errors.Errorf("found %d mismatches (out of %d values) between DotGeneral large and small versions", mismatches, outputLarge.shape.Size())
+	}
+	return
 }

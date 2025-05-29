@@ -2,10 +2,11 @@ package simplego
 
 import (
 	"fmt"
-	"github.com/gomlx/gomlx/backends"
-	"github.com/janpfeifer/must"
 	"os"
 	"testing"
+
+	"github.com/gomlx/gomlx/backends"
+	"github.com/janpfeifer/must"
 )
 
 var backend backends.Backend
@@ -15,6 +16,8 @@ func setup() {
 	// Perform your setup logic here
 	if os.Getenv(backends.ConfigEnvVar) == "" {
 		must.M(os.Setenv(backends.ConfigEnvVar, "go"))
+	} else {
+		fmt.Printf("\t$%s=%q\n", backends.ConfigEnvVar, os.Getenv(backends.ConfigEnvVar))
 	}
 	backend = backends.New()
 	fmt.Printf("Backend: %s, %s\n", backend.Name(), backend.Description())

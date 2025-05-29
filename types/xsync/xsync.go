@@ -159,6 +159,20 @@ func (s *Semaphore) Acquire() {
 	}
 }
 
+// TryAcquire tries to acquire resource without blocking.
+// It returns true if the resource was acquired, false if the semaphore is full.
+//
+// If acquisition was successful (returned true), the caller must call Semaphore.Release.
+func (s *Semaphore) TryAcquire() bool {
+	s.cond.L.Lock()
+	defer s.cond.L.Unlock()
+	if s.capacity <= 0 || s.current < s.capacity {
+		s.current++
+		return true
+	}
+	return false
+}
+
 // Release resource previously allocated with Semaphore.Acquire.
 func (s *Semaphore) Release() {
 	s.cond.L.Lock()
