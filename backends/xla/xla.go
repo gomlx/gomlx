@@ -35,6 +35,10 @@ package xla
 //go:generate go run ../../internal/cmd/xla_generator
 
 import (
+	"path"
+	"slices"
+	"strings"
+
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types"
@@ -42,24 +46,22 @@ import (
 	"github.com/gomlx/gopjrt/pjrt"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
-	"path"
-	"slices"
-	"strings"
 )
 
 const BackendName = "xla"
 
 // New returns a new Backend using the config as a configuration.
 // The config string should be the name of the PJRT plugin to use.
-func New(pluginName string) backends.Backend {
-	return NewWithOptions(pluginName, nil)
+func New(config string) backends.Backend {
+	return NewWithOptions(config, nil)
 }
 
 // NewWithOptions creates a XlaBackend with the given client options.
 // It allows more control, not available with the default New constructor.
-func NewWithOptions(pluginName string, options pjrt.NamedValuesMap) *Backend {
+func NewWithOptions(config string, options pjrt.NamedValuesMap) *Backend {
+	pluginName := config
 	var pluginOptions []string
-	parts := strings.Split(pluginName, ",")
+	parts := strings.Split(config, ",")
 	if len(parts) > 1 {
 		// Plugin options (exclude empty).
 		pluginOptions = slices.DeleteFunc(parts[1:], func(s string) bool { return s == "" })

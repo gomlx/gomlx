@@ -5,6 +5,10 @@
 package simplego
 
 import (
+	"fmt"
+	"strconv"
+	"strings"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/notimplemented"
 	"github.com/pkg/errors"
@@ -27,11 +31,33 @@ func init() {
 
 // New constructs a new SimpleGo Backend.
 // There are no configurations, the string is simply ignored.
-func New(_ string) backends.Backend {
-	return newBackend()
+func New(config string) backends.Backend {
+	b := newDefaultBackend()
+	parts := strings.Split(config, ",")
+	for _, part := range parts {
+		key := part
+		var value string
+		if eqPos := strings.Index(part, "="); eqPos != -1 {
+			key, value = part[0:eqPos], part[eqPos+1:]
+		}
+		switch key {
+		case "parallelism":
+			vInt, err := strconv.Atoi(value)
+			if err != nil {
+				panic(errors.Wrapf(err, "invalid value for %q in SimpleGo backend config: needs an int, got %q", key, value))
+			}
+			b.workers.SetMaxParallelism(vInt)
+			fmt.Printf("SimpleGo backend: parallelism set to %d\n", vInt)
+		case "force_small":
+			forceProblemSize = smallProblemSize
+		case "force_large":
+			forceProblemSize = largeProblemSize
+		}
+	}
+	return b
 }
 
-func newBackend() *Backend {
+func newDefaultBackend() *Backend {
 	b := &Backend{}
 	b.workers.Initialize()
 	return b
