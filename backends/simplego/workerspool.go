@@ -37,6 +37,14 @@ func (w *workersPool) MaxParallelism() int {
 	return w.maxParallelism
 }
 
+// SetMaxParallelism sets the maxParallelism.
+//
+// You should only change the parallelism before any workers start running. If changed during the execution
+// the behavior is undefined.
+func (w *workersPool) SetMaxParallelism(maxParallelism int) {
+	w.maxParallelism = maxParallelism
+}
+
 const goroutineToParallelismRatio = 2
 
 // lockedIsFull returns whether all available workers are in use.
