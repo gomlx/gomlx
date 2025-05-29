@@ -27,8 +27,7 @@ It's the same engine that powers Google's [Jax](https://github.com/google/jax) a
 This only compiles for Linux/amd-64 for now (OpenXLA limitation).
 
 > [!Tip]
-> 🎓 Quick Start:
-> * See our [**tutorial**](https://gomlx.github.io/gomlx/notebooks/tutorial.html)
+> * See our 🎓 [**tutorial**](https://gomlx.github.io/gomlx/notebooks/tutorial.html) 🎓
 > * See _Eli Bendersky_'s blog post ["GoMLX: ML in Go without Python"](https://eli.thegreenplace.net/2024/gomlx-ml-in-go-without-python/)
 > * A [guided example for Kaggle Dogs Vs Cats](https://gomlx.github.io/gomlx/notebooks/dogsvscats.html).
 > * [Installation here](#installation).
