@@ -10,8 +10,11 @@
     * Version for larger inner matrices: re-package inputs in ~4K blocks, and recursively partition matrices.
     * Added parallelization: at batch level and in the partitioning in the larger matrices.
   * Parallel execution of the Ops: that helps a lot during training (cut the training time almost in half for the adult 
-    dataset), but it may hurt inference if you are running many batches in parallel. In those cases use the `sequential`
-    configuration: `GOMLX_BACKEND=go:sequential`, and it will run the ops sequentially.
+    dataset), but it may hurt inference if you are running many batches in parallel. 
+    So it dynamically decides to run sequentially or in parallel depending on the number of computations
+    being executed concurrently.
+    Added also configurations `GOMLX_BACKEND=go:ops_sequential` and `GOMLX_BACKEND=go:ops_parallel` 
+    to force one type of execution or another.
 
 # v0.19.4: 2024/05/24 added Vector Neural Networks (VNNs)
 
