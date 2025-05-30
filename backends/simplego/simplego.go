@@ -71,7 +71,7 @@ func New(config string) backends.Backend {
 			// No-op, just skip.
 		default:
 			panic(errors.Errorf("unknown configuration option %q for SimpleGo (go) backend -- valid configuration options are: "+
-				"dotgeneral_small, dotgeneral_large, dotgeneral_check, ops_sequential, ops_parallel; see code for documentation", key))
+				"parallelism=#workers, dotgeneral_small, dotgeneral_large, dotgeneral_check, ops_sequential, ops_parallel; see code for documentation", key))
 		}
 	}
 	return b
