@@ -481,10 +481,10 @@ func (r *dotGeneralRecursiveData) apply(
 		// This also means we don't increase the depth of the recursion.
 		split := contractStart + contractingLen/2
 		// Create a new working group to force serialization of work here:
+		r.backend.workers.WorkerIsAsleep() // Add temporary extra worker, because we are going to wait.
 		newWg := xsync.NewDynamicWaitGroup()
 		newWg.Add(1)
 		r.apply(lhsCrossStart, lhsCrossEnd, rhsCrossStart, rhsCrossEnd, contractStart, split, depth, newWg)
-		r.backend.workers.WorkerIsAsleep()
 		newWg.Wait()
 		r.backend.workers.WorkerRestarted()
 		r.apply(lhsCrossStart, lhsCrossEnd, rhsCrossStart, rhsCrossEnd, split, contractEnd, depth, wg)

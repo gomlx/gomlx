@@ -3,6 +3,7 @@ package simplego
 import (
 	"runtime"
 	"sync"
+	"sync/atomic"
 )
 
 type workersPool struct {
@@ -12,6 +13,9 @@ type workersPool struct {
 	mu             sync.Mutex
 	cond           sync.Cond // Should be signaled whenever numRunning is decreased.
 	numRunning     int
+
+	// extraParallelism is temporarily increased when a worked goes to sleep.
+	extraParallelism atomic.Int32
 }
 
 // Initialize should be called before use.
@@ -56,7 +60,7 @@ func (w *workersPool) lockedIsFull() bool {
 	} else if w.maxParallelism < 0 {
 		return false
 	}
-	return w.numRunning >= goroutineToParallelismRatio*w.maxParallelism
+	return w.numRunning >= goroutineToParallelismRatio*w.maxParallelism+int(w.extraParallelism.Load())
 }
 
 // WaitToStart waits until there is a worker available to run the task.
@@ -114,24 +118,18 @@ func (w *workersPool) StartIfAvailable(task func()) bool {
 	return true
 }
 
-// WorkerIsAsleep indicates the worker (the one that called the method) is waiting for other workers,
-// and temporarily decrease the number of current workers active.
+// WorkerIsAsleep indicates the worker (the one that called the method) is going to sleep waiting
+// for other workers, and temporarily increases the available number of workers.
 //
 // Call WorkerRestarted when the worker is ready to run again.
 func (w *workersPool) WorkerIsAsleep() {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	w.numRunning--
-	w.cond.Signal()
+	w.extraParallelism.Add(1)
 }
 
 // WorkerRestarted indicates the worker (the one that called the method) is ready to run again.
 // It should only be called after WorkerIsAsleep.
 //
-// It increases the number of current workers active.
-// Notice this may lead temporarily to having more workers active than maxParallelism.
+// It returns the temporary number of extra available workers.
 func (w *workersPool) WorkerRestarted() {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	w.numRunning++
+	w.extraParallelism.Add(-1)
 }
