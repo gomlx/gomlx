@@ -1,12 +1,14 @@
 package simplego
 
 import (
+	"math"
+	"math/bits"
+	"sync"
+
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
-	"math"
-	"math/bits"
 )
 
 func init() {
@@ -770,9 +772,9 @@ func execErf(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool)
 	input, output := unaryOperandAndOutput(backend, inputs, inputsOwned)
 	switch input.shape.DType {
 	case dtypes.Float32:
-		execErfGeneric[float32](input.flat.([]float32), output.flat.([]float32))
+		execErfGeneric[float32](backend, input.flat.([]float32), output.flat.([]float32))
 	case dtypes.Float64:
-		execErfGeneric[float64](input.flat.([]float64), output.flat.([]float64))
+		execErfGeneric[float64](backend, input.flat.([]float64), output.flat.([]float64))
 	case dtypes.BFloat16:
 		execErfBF16(input.flat.([]bfloat16.BFloat16), output.flat.([]bfloat16.BFloat16))
 	default:
@@ -781,9 +783,30 @@ func execErf(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bool)
 	return output, nil
 }
 
-func execErfGeneric[T float32 | float64](inputs, outputs []T) {
-	for ii, input := range inputs {
-		outputs[ii] = T(math.Erf(float64(input)))
+const unaryMinParallelizeChunk = 4096
+
+func execErfGeneric[T float32 | float64](backend *Backend, inputs, outputs []T) {
+	lenInputs := len(inputs)
+	if backend.workers.IsEnabled() && lenInputs > unaryMinParallelizeChunk {
+		// Parallelize operation into chunks.
+		var wg sync.WaitGroup
+		for ii := 0; ii < lenInputs; ii += unaryMinParallelizeChunk {
+			iiEnd := min(ii+unaryMinParallelizeChunk, lenInputs)
+			wg.Add(1)
+			backend.workers.WaitToStart(func() {
+				for jj := ii; jj < iiEnd; jj++ {
+					outputs[ii] = T(math.Erf(float64(inputs[jj])))
+				}
+				wg.Done()
+			})
+		}
+		wg.Wait()
+
+	} else {
+		// Sequentially processing it.
+		for ii, input := range inputs {
+			outputs[ii] = T(math.Erf(float64(input)))
+		}
 	}
 }
 
