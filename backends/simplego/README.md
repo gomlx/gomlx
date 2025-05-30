@@ -16,16 +16,15 @@ This can be split into 2 parts: implement missing ops, and optimizations.
 
 ### Missing Ops/Functionality
 
-Too many to list now :) But feel free to add a list of priority ops/dtypes to add support to.
+There are still many missing. See file `capabilities.go`. 
+But feel free to create issues if there is an Op that you need and would like to see it prioritized.
 
 ### Optimizations
 
-The initial implementation had almost no optimizations, and was focused on portability and getting it to work.
+The initial implementation was focused on portability and getting it to work.
 
-But there are many relatively "low hanging fruits" for optimization, a few obvious items:
+But there are many relatively "low-hanging fruits" for optimization, a few obvious items:
 
-* Pre-calculate the temporary memory needed -- it is known in graph compiling time -- and use memory pool for these blocks.
-* Do a proper matrix multiplication.
 * Eliminate common sub-expressions.
 * Pre-calculate constant sub-expressions.
 * Fuse unary ops: it's much faster (for larger data blocks) to loop over the data only once and apply various functions than
@@ -33,4 +32,5 @@ But there are many relatively "low hanging fruits" for optimization, a few obvio
 * Fuse binary/unary ops: perform unary functions while traversing the data for binary functions. Again to save
   memory accesses.
 * Parallelization: in-operation, and across operations.
-* Use intrinsics on platforms that allow it.
+  * Only DotGeneral has been parallelized so far: it is usually the one that consumes most of the time.
+* Use intrinsics/SIMD on platforms that allow it. It was announced as experimental in Go 1.25.
