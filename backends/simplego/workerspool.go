@@ -69,11 +69,8 @@ func (w *workersPool) lockedIsFull() bool {
 // This is risky if one is relying on concurrency, and it can lead to deadlocks.
 // Avoid using this function if the parallelism is disabled.
 func (w *workersPool) WaitToStart(task func()) {
-	if w.maxParallelism < 0 {
-		// No limits.
-		w.mu.Lock()
-		w.lockedRunTaskInGoroutine(task)
-		w.mu.Unlock()
+	if w.IsUnlimited() {
+		go task()
 		return
 
 	} else if w.maxParallelism == 0 {
@@ -109,6 +106,10 @@ func (w *workersPool) lockedRunTaskInGoroutine(task func()) {
 //
 // It's up to the client to synchronize the end of the function execution.
 func (w *workersPool) StartIfAvailable(task func()) bool {
+	if w.IsUnlimited() {
+		go task()
+		return true
+	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.lockedIsFull() {
