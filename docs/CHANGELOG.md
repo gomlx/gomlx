@@ -1,6 +1,6 @@
 # GoMLX changelog
 
-# Next
+# v0.19.5: 2024/05/30 SimpleGo (go) backend optimizations
 
 * Package `simplego`, the pure Go backend:
   * Added several benchmarks for SimpleGo DotGeneral. Run with:

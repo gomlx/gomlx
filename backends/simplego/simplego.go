@@ -67,6 +67,11 @@ func New(config string) backends.Backend {
 			// This will force the ops to be executed in parallel where possible.
 			// The default is running parallel if it's the only thing executing, otherwise sequentially.
 			b.opsExecutionType = opsExecutionParallel
+		case "":
+			// No-op, just skip.
+		default:
+			panic(errors.Errorf("unknown configuration option %q for SimpleGo (go) backend -- valid configuration options are: "+
+				"dotgeneral_small, dotgeneral_large, dotgeneral_check, ops_sequential, ops_parallel; see code for documentation", key))
 		}
 	}
 	return b
