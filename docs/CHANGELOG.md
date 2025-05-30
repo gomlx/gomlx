@@ -15,6 +15,8 @@
     being executed concurrently.
     Added also configurations `GOMLX_BACKEND=go:ops_sequential` and `GOMLX_BACKEND=go:ops_parallel` 
     to force one type of execution or another.
+  * Parallelized Erf(x): this will become a model on how to parallelize other unary functions -- probably
+    when SIMD is available.
 
 # v0.19.4: 2024/05/24 added Vector Neural Networks (VNNs)
 
