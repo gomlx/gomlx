@@ -385,6 +385,13 @@ func TestDotGeneral_Exec(t *testing.T) {
 				require.Equal(t, float32(10+22+36), tensors.CopyFlatData[bfloat16.BFloat16](y2)[0].Float32())
 			})
 
+			// Do not run the larger tests if running -test.short: they will break Github
+			// tests:
+			if testing.Short() {
+				fmt.Printf("\tSkipping larger tests for %s in -short mode\n", testName)
+				return
+			}
+
 			// From DotGeneral parameters taken from LLM models that not working during development:
 			t.Run("LLM_1-parallel-requests", func(t *testing.T) {
 				lhs, err := tensors.Load("dotgeneral_lhs_test.bin")
