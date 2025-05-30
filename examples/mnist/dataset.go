@@ -135,7 +135,7 @@ var (
 	_                       image.Image = AssertImageIsImageImage
 )
 
-// NewDataset creates a train.Dataset that yields images from Dogs vs Cats Dataset.
+// NewDataset creates a train.Dataset that yields images from MNIST Dataset.
 //
 // It takes the following arguments:
 //
@@ -163,23 +163,31 @@ func NewDataset(backend backends.Backend, name, baseDir, mode string, dtype dtyp
 	)
 }
 
-// LoadImageFile opens the image file, parses it, and returns the data in order.
-func loadImageFile(filename string) ([]image.Image, error) {
+func openGzippedFile(filename string) (*gzip.Reader, *os.File, error) {
 	f, err := os.Open(filename)
 	if err != nil {
-		return nil, fmt.Errorf("os.Open: %w", err)
+		return nil, nil, fmt.Errorf("os.Open: %w", err)
 	}
-	defer f.Close()
-
 	reader, err := gzip.NewReader(f)
 	if err != nil {
-		return nil, fmt.Errorf("gzip.NewReader: %w", err)
+		f.Close()
+		return nil, nil, fmt.Errorf("gzip.NewReader: %w", err)
 	}
-	defer reader.Close()
+	return reader, f, nil
+}
+
+// LoadImageFile opens the image file, parses it, and returns the data in order.
+func loadImageFile(filename string) ([]image.Image, error) {
+	r, f, err := openGzippedFile(filename)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	defer r.Close()
 
 	header := imageFileHeader{}
 
-	err = binary.Read(reader, binary.BigEndian, &header)
+	err = binary.Read(r, binary.BigEndian, &header)
 	if err != nil {
 		return nil, err
 	}
@@ -191,9 +199,9 @@ func loadImageFile(filename string) ([]image.Image, error) {
 	}
 
 	images := make([]image.Image, header.NumImages)
-	for i := int32(0); i < header.NumImages; i++ {
+	for i := range header.NumImages {
 		var img Image
-		if err := binary.Read(reader, binary.BigEndian, &img); err != nil {
+		if err := binary.Read(r, binary.BigEndian, &img); err != nil {
 			return nil, fmt.Errorf("binary.Read: %w", err)
 		}
 		images[i] = img
@@ -204,16 +212,11 @@ func loadImageFile(filename string) ([]image.Image, error) {
 
 // readImage reads a image from the file and returns it.
 func loadLabelFile(filename string) ([]Label, error) {
-	f, err := os.Open(filename)
+	reader, f, err := openGzippedFile(filename)
 	if err != nil {
-		return nil, fmt.Errorf("os.Open: %w", err)
+		return nil, err
 	}
 	defer f.Close()
-
-	reader, err := gzip.NewReader(f)
-	if err != nil {
-		return nil, fmt.Errorf("gzip.NewReader: %w", err)
-	}
 	defer reader.Close()
 
 	header := labelFileHeader{}
@@ -228,7 +231,7 @@ func loadLabelFile(filename string) ([]Label, error) {
 	}
 
 	labels := make([]Label, header.NumLabels)
-	for i := int32(0); i < header.NumLabels; i++ {
+	for i := range header.NumLabels {
 		err = binary.Read(reader, binary.BigEndian, &labels[i])
 		if err != nil {
 			return nil, err
