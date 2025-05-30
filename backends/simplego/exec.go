@@ -230,31 +230,6 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) ([]backend
 		execBuf.remainingDeps[ii] = 0
 	}
 
-	// Initialize channel for nodes ready to execute and dependency tracking
-	var (
-		readyToExecute chan int // protected by execMu
-		collectErrors  []error  // protected by execMu
-		execMu         sync.Mutex
-	)
-	readyToExecute = make(chan int, e.numNodesToProcess)
-	stopExecution := sync.OnceFunc(func() { close(readyToExecute) }) // Can be called concurrently.
-
-	// expected is the number of nodes that needs executing to complete the computation.
-	expected := 0
-	// completed is the number of required nodes that have been executed.
-	completed := 0
-
-	// Count expected nodes and initialize dependencies
-	for nodeIdx := range e.numNodesToProcess {
-		if e.numUses[nodeIdx] > 0 && execBuf.results[nodeIdx] == nil {
-			expected++
-			execBuf.remainingDeps[nodeIdx] = len(e.builder.nodes[nodeIdx].inputs)
-			if execBuf.remainingDeps[nodeIdx] == 0 {
-				readyToExecute <- nodeIdx
-			}
-		}
-	}
-
 	// Initialize "parameters" results with input buffers.
 	for ii, input := range inputs {
 		inputBuffer := input.(*Buffer)
@@ -276,91 +251,24 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) ([]backend
 		}
 	}
 
-	// Execute nodes as they become available
-	appendError := func(err error) {
-		execMu.Lock()
-		defer execMu.Unlock()
-		collectErrors = append(collectErrors, err)
-		//klog.Errorf("Failed: %+v", err)
-		//fmt.Printf("\t- stopping execution: %v\n", err)
-		stopExecution()
-	}
+	if executionMode == opsExecutionSequential {
+		// Pre-allocate inputBuffers and inputsOwned: they will be
+		// reused by every op.
+		inputBuffers := make([]*Buffer, e.maxInputs)
+		inputsOwned := make([]bool, e.maxInputs)
 
-	for nodeIdx := range readyToExecute {
-		nodeExecFn := func() {
+		// Loop over nodes sequentially: they are already sorted by their dependencies,
+		// so nodes should be always ready to execute.
+		for nodeIdx := range e.numNodesToProcess {
 			node := e.builder.nodes[nodeIdx]
-
-			// On return, update dependencies and check if all outputs are complete.
-			defer func() {
-				execMu.Lock()
-				defer execMu.Unlock()
-				if len(collectErrors) > 0 {
-					// Interrupted anyway.
-					return
-				}
-				// Update dependencies and schedule ready nodes
-				completed++
-				if completed == expected {
-					//fmt.Printf("\t- node #%d: all nodes completed, closing channel\n", nodeIdx)
-					stopExecution()
-					return
-				}
-				//if completed > expected {
-				//	fmt.Printf("\t- node #%d: more nodes than expected (%d > %d), stopping execution\n", nodeIdx, completed, expected)
-				//}
-
-				// Check dependent nodes: for current node and for multi-output nodes.
-				if node.IsMultiOutputs() {
-					// Multi-output node: process each output, mark them as completed and enqueue their dependencies.
-					for _, outputNode := range node.multiOutputsNodes {
-						outputIdx := outputNode.builderIdx
-						if outputIdx >= e.numNodesToProcess || e.numUses[outputIdx] == 0 {
-							// Ignore, this is a node that is not part of the computation.
-							continue
-						}
-
-						// Mark this output as completed as well.
-						completed++
-						if completed == expected {
-							//fmt.Printf("\t- node #%d: all nodes completed, closing channel\n", nodeIdx)
-							stopExecution()
-							return
-						}
-
-						// Enqueue read dependencies:
-						for _, depIdx := range e.dependents[outputIdx] {
-							execBuf.remainingDeps[depIdx]--
-							if execBuf.remainingDeps[depIdx] == 0 && execBuf.results[depIdx] == nil {
-								//fmt.Printf("\t- node #%d: enqueueing #%d (%s) -- a dependency from it's multi-output node #%d\n", nodeIdx, depIdx, e.builder.nodes[depIdx].opType, outputIdx)
-								readyToExecute <- depIdx
-							}
-						}
-					}
-
-				} else {
-					// Single output node: enqueue all dependent nodes that are ready to execute.
-					for _, depIdx := range e.dependents[nodeIdx] {
-						execBuf.remainingDeps[depIdx]--
-						if execBuf.remainingDeps[depIdx] == 0 {
-							//fmt.Printf("\t- node #%d: enqueueing #%d (%s), since it has no more dependencies and %d uses\n", nodeIdx, depIdx, e.builder.nodes[depIdx].opType, e.numUses[depIdx])
-							readyToExecute <- depIdx
-						}
-					}
-				}
-			}()
-
-			//fmt.Printf("Execute: starting to process node #%d (%s): inputs=%v\n", nodeIdx, node.opType,
-			//	xslices.Map(node.inputs, func(input *Node) int { return input.builderIdx }))
 			if execBuf.results[nodeIdx] != nil {
-				// Parameters and multi-output nodes will have their results pre-filled.
-				//fmt.Printf("\t- node #%d (%s) already calculated, skipping\n", nodeIdx, node.opType)
-				return
+				// Inputs, parameters and multi-output nodes will have their results pre-filled.
+				continue
 			}
 			if e.numUses[nodeIdx] == 0 {
-				fmt.Printf("\t- node #%d (%s) has no uses, skipping\n", nodeIdx, node.opType)
 				// This node is not used by any of the outputs of this executable.
 				// TODO: these nodes can simply be removed in Builder.Compile().
-				return
+				continue
 			}
 
 			// Constants have a special treatment, since they have no inputs and their outputs are not owned by
@@ -368,60 +276,34 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) ([]backend
 			if node.opType == backends.OpTypeConstant {
 				execBuf.owned[nodeIdx] = false
 				execBuf.results[nodeIdx] = node.data.(*Buffer)
-				return
+				continue
 			}
 
-			// Call node executor:
-			var nodeExecutor nodeExecutor
-			var multiNodeExecutor nodeMultiOutputExecutor
-			if node.IsMultiOutputs() {
-				multiNodeExecutor = multiOutputsNodeExecutors[node.opType]
-				if multiNodeExecutor == nil {
-					appendError(errors.Errorf("Execute: multi-outputs node executor for op type %s not implemented!?", node.opType))
-					return
-				}
-
-			} else {
-				nodeExecutor = nodeExecutors[node.opType]
-				if nodeExecutor == nil {
-					appendError(errors.Errorf("Execute: node executor for op type %s not implemented!?", node.opType))
-					return
-				}
-			}
-
-			inputBuffers := make([]*Buffer, len(node.inputs))
-			inputsOwned := make([]bool, len(node.inputs))
+			// Prepare inputs:
+			numInputs := len(node.inputs)
+			inputBuffers = inputBuffers[:numInputs]
+			inputsOwned := inputsOwned[:numInputs]
 			for ii, input := range node.inputs {
 				inputNodeIdx := input.builderIdx
 				inputBuffers[ii] = execBuf.results[inputNodeIdx]
 				if inputBuffers[ii] == nil || !inputBuffers[ii].shape.Ok() {
-					//fmt.Printf("\t- node #%d (%s) input[%d]=#%d (%s -> %s) is not calculated yet!?\n", nodeIdx, node.opType, ii, inputNodeIdx, input.opType, input.shape)
-					appendError(errors.Errorf("Execute: input #%d of node #%d is not calculated yet (!?) -- "+
-						"this is a bug, it should never have happened", ii, nodeIdx))
-					return
+					return nil, errors.Errorf("Execute: input #%d of node #%d is not calculated yet (!?) -- "+
+						"this is a bug, it should never have happened", ii, nodeIdx)
 				}
-				// Because of a possible race condition, we just allow the input to be reused if there is only one
-				// node using it.
-				inputsOwned[ii] = execBuf.owned[inputNodeIdx] && e.numUses[inputNodeIdx] == 1
+				execBuf.numUsed[inputNodeIdx]++
+				inputsOwned[ii] = execBuf.owned[inputNodeIdx] && e.numUses[inputNodeIdx] == execBuf.numUsed[inputNodeIdx]
 			}
 
-			// Execute op.
-			if nodeExecutor != nil {
-				// Single output operation:
-				var err error
-				execBuf.results[nodeIdx], err = nodeExecutor(e.backend, node, inputBuffers, inputsOwned)
-				if err != nil {
-					appendError(errors.WithMessagef(err, "while executing %q", node.opType))
-					return
+			// Call node executor:
+			if node.IsMultiOutputs() {
+				// Multi-output node:
+				multiNodeExecutor := multiOutputsNodeExecutors[node.opType]
+				if multiNodeExecutor == nil {
+					return nil, errors.Errorf("Execute: multi-outputs node executor for op type %s not implemented!?", node.opType)
 				}
-				execBuf.owned[nodeIdx] = true
-
-			} else {
-				// Multi-output operation.
 				outputs, err := multiNodeExecutor(e.backend, node, inputBuffers, inputsOwned)
 				if err != nil {
-					appendError(errors.WithMessagef(err, "while executing %q", node.opType))
-					return
+					return nil, errors.WithMessagef(err, "while executing %q", node.opType)
 				}
 				for outputIdx, outputBuf := range outputs {
 					outputNode := node.multiOutputsNodes[outputIdx]
@@ -434,6 +316,19 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) ([]backend
 					execBuf.results[outputNodeIdx] = outputBuf
 					execBuf.owned[outputNodeIdx] = true
 				}
+
+			} else {
+				// Single-output node:
+				nodeExecutor := nodeExecutors[node.opType]
+				if nodeExecutor == nil {
+					return nil, errors.Errorf("Execute: node executor for op type %s not implemented!?", node.opType)
+				}
+				var err error
+				execBuf.results[nodeIdx], err = nodeExecutor(e.backend, node, inputBuffers, inputsOwned)
+				if err != nil {
+					return nil, errors.WithMessagef(err, "while executing %q", node.opType)
+				}
+				execBuf.owned[nodeIdx] = true
 			}
 
 			// If input has been reused, erase it from results.
@@ -442,24 +337,220 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) ([]backend
 				if inputBuffers[ii] == nil {
 					execBuf.results[inputNodeIdx] = nil
 					continue
+				} else if inputsOwned[ii] {
+					// Release immediately input result: we no longer need it.
+					e.backend.putBuffer(inputBuffers[ii])
+					execBuf.results[inputNodeIdx] = nil
+				}
+			}
+		} // Sequential execution loop.
+
+	} else {
+		// Parallel execution: executionMode == opsExecutionParallel
+
+		// Initialize chanel for nodes ready to execute and dependency tracking
+		var (
+			readyToExecute chan int // protected by execMu
+			collectErrors  []error  // protected by execMu
+			execMu         sync.Mutex
+		)
+		readyToExecute = make(chan int, e.numNodesToProcess+10)
+		stopExecution := sync.OnceFunc(func() { close(readyToExecute) }) // Can be called concurrently.
+
+		// expected is the number of nodes that needs executing to complete the computation.
+		expected := 0
+		// completed is the number of required nodes that have been executed.
+		completed := 0
+
+		// Count expected nodes and initialize dependencies
+		for nodeIdx := range e.numNodesToProcess {
+			if e.numUses[nodeIdx] > 0 {
+				expected++
+				execBuf.remainingDeps[nodeIdx] = len(e.builder.nodes[nodeIdx].inputs)
+				if execBuf.remainingDeps[nodeIdx] == 0 {
+					readyToExecute <- nodeIdx
 				}
 			}
 		}
 
-		// Execute sequentially or in parallel:
-		if executionMode == opsExecutionSequential {
-			// Execute ops sequentially:
-			nodeExecFn()
-		} else {
-			// Execute ops in parallel:
+		// Execute nodes as they become available
+		appendError := func(err error) {
+			execMu.Lock()
+			defer execMu.Unlock()
+			collectErrors = append(collectErrors, err)
+			stopExecution()
+		}
+
+		// Loop over nodes that are ready to execute:
+		for nodeIdx := range readyToExecute {
+			nodeExecFn := func() {
+				node := e.builder.nodes[nodeIdx]
+
+				// On return, it updates the dependencies and checks that all outputs are complete.
+				defer func() {
+					execMu.Lock()
+					defer execMu.Unlock()
+					if len(collectErrors) > 0 {
+						// Interrupted anyway.
+						return
+					}
+					// Update dependencies and schedule ready nodes
+					completed++
+					if completed == expected {
+						//fmt.Printf("\t- node #%d: all nodes completed, closing channel\n", nodeIdx)
+						stopExecution()
+						return
+					}
+					//if completed > expected {
+					//	fmt.Printf("\t- node #%d: more nodes than expected (%d > %d), stopping execution\n", nodeIdx, completed, expected)
+					//}
+
+					// Check dependent nodes: for current node and for multi-output nodes.
+					if node.IsMultiOutputs() {
+						// Multi-output node: process each output, mark them as completed and enqueue their dependencies.
+						for _, outputNode := range node.multiOutputsNodes {
+							outputIdx := outputNode.builderIdx
+							if outputIdx >= e.numNodesToProcess || e.numUses[outputIdx] == 0 {
+								// Ignore, this is a node that is not part of the computation.
+								continue
+							}
+
+							// Mark this output as completed as well.
+							completed++
+							if completed == expected {
+								//fmt.Printf("\t- node #%d: all nodes completed, closing channel\n", nodeIdx)
+								stopExecution()
+								return
+							}
+
+							// Enqueue read dependencies:
+							for _, depIdx := range e.dependents[outputIdx] {
+								execBuf.remainingDeps[depIdx]--
+								if execBuf.remainingDeps[depIdx] == 0 && execBuf.results[depIdx] == nil {
+									//fmt.Printf("\t- node #%d: enqueueing #%d (%s) -- a dependency from it's multi-output node #%d\n", nodeIdx, depIdx, e.builder.nodes[depIdx].opType, outputIdx)
+									readyToExecute <- depIdx
+								}
+							}
+						}
+
+					} else {
+						// Single output node: enqueue all dependent nodes that are ready to execute.
+						for _, depIdx := range e.dependents[nodeIdx] {
+							execBuf.remainingDeps[depIdx]--
+							if execBuf.remainingDeps[depIdx] == 0 {
+								//fmt.Printf("\t- node #%d: enqueueing #%d (%s), since it has no more dependencies and %d uses\n", nodeIdx, depIdx, e.builder.nodes[depIdx].opType, e.numUses[depIdx])
+								readyToExecute <- depIdx
+							}
+						}
+					}
+				}()
+
+				//fmt.Printf("Execute: starting to process node #%d (%s): inputs=%v\n", nodeIdx, node.opType,
+				//	xslices.Map(node.inputs, func(input *Node) int { return input.builderIdx }))
+				if execBuf.results[nodeIdx] != nil {
+					// Parameters and multi-output nodes will have their results pre-filled.
+					//fmt.Printf("\t- node #%d (%s) already calculated, skipping\n", nodeIdx, node.opType)
+					return
+				}
+				if e.numUses[nodeIdx] == 0 {
+					// This node is not used by any of the outputs of this executable.
+					// TODO: these nodes can simply be removed in Builder.Compile().
+					return
+				}
+
+				// Constants have a special treatment, since they have no inputs and their outputs are not owned by
+				// the execBuf.
+				if node.opType == backends.OpTypeConstant {
+					execBuf.owned[nodeIdx] = false
+					execBuf.results[nodeIdx] = node.data.(*Buffer)
+					return
+				}
+
+				// Call node executor:
+				var nodeExecutor nodeExecutor
+				var multiNodeExecutor nodeMultiOutputExecutor
+				if node.IsMultiOutputs() {
+					multiNodeExecutor = multiOutputsNodeExecutors[node.opType]
+					if multiNodeExecutor == nil {
+						appendError(errors.Errorf("Execute: multi-outputs node executor for op type %s not implemented!?", node.opType))
+						return
+					}
+
+				} else {
+					nodeExecutor = nodeExecutors[node.opType]
+					if nodeExecutor == nil {
+						appendError(errors.Errorf("Execute: node executor for op type %s not implemented!?", node.opType))
+						return
+					}
+				}
+
+				inputBuffers := make([]*Buffer, len(node.inputs))
+				inputsOwned := make([]bool, len(node.inputs))
+				for ii, input := range node.inputs {
+					inputNodeIdx := input.builderIdx
+					inputBuffers[ii] = execBuf.results[inputNodeIdx]
+					if inputBuffers[ii] == nil || !inputBuffers[ii].shape.Ok() {
+						//fmt.Printf("\t- node #%d (%s) input[%d]=#%d (%s -> %s) is not calculated yet!?\n", nodeIdx, node.opType, ii, inputNodeIdx, input.opType, input.shape)
+						appendError(errors.Errorf("Execute: input #%d of node #%d is not calculated yet (!?) -- "+
+							"this is a bug, it should never have happened", ii, nodeIdx))
+						return
+					}
+					// Because of a possible race condition, we just allow the input to be reused if there is only one
+					// node using it.
+					inputsOwned[ii] = execBuf.owned[inputNodeIdx] && e.numUses[inputNodeIdx] == 1
+				}
+
+				// Execute op.
+				if nodeExecutor != nil {
+					// Single output operation:
+					var err error
+					execBuf.results[nodeIdx], err = nodeExecutor(e.backend, node, inputBuffers, inputsOwned)
+					if err != nil {
+						appendError(errors.WithMessagef(err, "while executing %q", node.opType))
+						return
+					}
+					execBuf.owned[nodeIdx] = true
+
+				} else {
+					// Multi-output operation.
+					outputs, err := multiNodeExecutor(e.backend, node, inputBuffers, inputsOwned)
+					if err != nil {
+						appendError(errors.WithMessagef(err, "while executing %q", node.opType))
+						return
+					}
+					for outputIdx, outputBuf := range outputs {
+						outputNode := node.multiOutputsNodes[outputIdx]
+						outputNodeIdx := outputNode.builderIdx
+						if outputIdx >= e.numNodesToProcess || e.numUses[outputIdx] == 0 {
+							// Ignore, this is a node that is not part of the computation.
+							e.backend.putBuffer(outputBuf)
+							continue
+						}
+						execBuf.results[outputNodeIdx] = outputBuf
+						execBuf.owned[outputNodeIdx] = true
+					}
+				}
+
+				// If input has been reused, erase it from results.
+				for ii, inputNode := range node.inputs {
+					inputNodeIdx := inputNode.builderIdx
+					if inputBuffers[ii] == nil {
+						execBuf.results[inputNodeIdx] = nil
+						continue
+					}
+				}
+			}
+
+			// Schedule this op (nodeIdx) for execution.
 			e.backend.workers.WaitToStart(nodeExecFn)
 		}
-	}
 
-	// If there were errors, return the first.
-	if len(collectErrors) > 0 {
-		return nil, collectErrors[0]
-	}
+		// If there were errors, return the first.
+		if len(collectErrors) > 0 {
+			return nil, collectErrors[0]
+		}
+
+	} // If sequential/parallel execution.
 
 	// Return outputs, copying them if not owned by the executor
 	outputs := make([]backends.Buffer, len(e.builder.outputs))
@@ -483,8 +574,11 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) ([]backend
 		outputs[ii] = outBuf
 	}
 
-	// Free other intermediate buffers that hasn't been freed yet.
+	// Free other intermediate buffers that haven't been freed yet.
 	for nodeIdx, buf := range execBuf.results {
+		if buf == nil {
+			continue
+		}
 		if !execBuf.owned[nodeIdx] {
 			continue
 		}
