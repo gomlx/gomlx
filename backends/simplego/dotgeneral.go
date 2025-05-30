@@ -11,6 +11,7 @@ import (
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/pkg/errors"
+	"k8s.io/klog/v2"
 )
 
 func init() {
@@ -203,16 +204,14 @@ func dgFindSizes(shape shapes.Shape, contractingAxes, batchAxes []int) (batchSiz
 	return
 }
 
-type problemSizeType int
+type dotGeneralProblemSizeType int
 
 const (
-	unknownProblemSize problemSizeType = iota
+	unknownProblemSize dotGeneralProblemSizeType = iota
 	smallProblemSize
 	largeProblemSize
 	checkProblemSize
 )
-
-var forceProblemSize problemSizeType
 
 // execDotGeneral executes the DotGeneral by first normalizing and repackaging the tensors into blocks.
 func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*Buffer, error) {
@@ -232,8 +231,8 @@ func execDotGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (*
 	if crossesSize > 16*blockSize {
 		problemSize = largeProblemSize
 	}
-	if forceProblemSize != unknownProblemSize {
-		problemSize = forceProblemSize
+	if backend.dotGeneralForceProblemSize != unknownProblemSize {
+		problemSize = backend.dotGeneralForceProblemSize
 	}
 	switch problemSize {
 	case largeProblemSize:
@@ -315,18 +314,20 @@ func (b *Builder) Dot(lhsOp, rhsOp backends.Op) (backends.Op, error) {
 var dotGeneralVersionsCheckDelta = 1e-3
 
 func dotGeneralCheckVersions(backend *Backend, lhs, rhs *Buffer, params *dotGeneralNodeData, outputLarge, outputSmall *Buffer) error {
-	var value0 float64
-	dtype := outputLarge.shape.DType
-	switch dtype {
-	case dtypes.Float32:
-		value0 = float64(outputLarge.flat.([]float32)[0])
-	case dtypes.Float64:
-		value0 = outputLarge.flat.([]float64)[0]
-	case dtypes.BFloat16:
-		value0 = float64(outputLarge.flat.([]bfloat16.BFloat16)[0].Float32())
-	}
+	if klog.V(1).Enabled() {
+		var value0 float64
+		dtype := outputLarge.shape.DType
+		switch dtype {
+		case dtypes.Float32:
+			value0 = float64(outputLarge.flat.([]float32)[0])
+		case dtypes.Float64:
+			value0 = outputLarge.flat.([]float64)[0]
+		case dtypes.BFloat16:
+			value0 = float64(outputLarge.flat.([]bfloat16.BFloat16)[0].Float32())
+		}
 
-	fmt.Printf("> %s x %s -> %s (output[...0]=%.5f)\n", lhs.shape, rhs.shape, outputLarge.shape, value0)
+		fmt.Printf("> %s x %s -> %s (output[...0]=%.5f)\n", lhs.shape, rhs.shape, outputLarge.shape, value0)
+	}
 	messages, err := dotGeneralCheckVersionsCmp(outputLarge, outputSmall)
 	if err == nil {
 		return nil

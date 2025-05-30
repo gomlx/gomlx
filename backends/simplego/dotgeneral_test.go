@@ -300,15 +300,22 @@ func requireSameTensorsFloat32(t *testing.T, want, got *tensors.Tensor, delta fl
 }
 
 func TestDotGeneral_Exec(t *testing.T) {
-	// Reset forceProblemSize at exit.
+	goBackend, ok := backend.(*Backend)
+	if !ok {
+		fmt.Printf("Skipping %s, it is meant only for the Go backend, instead backend is ", backend.Name())
+		t.SkipNow()
+		return
+	}
+
+	// Reset dotGeneralForceProblemSize at exit.
 	defer func() {
-		forceProblemSize = unknownProblemSize
+		goBackend.dotGeneralForceProblemSize = unknownProblemSize
 	}()
 
-	for _, problemSize := range []problemSizeType{smallProblemSize, largeProblemSize, checkProblemSize} {
+	for _, problemSize := range []dotGeneralProblemSizeType{smallProblemSize, largeProblemSize, checkProblemSize} {
 		// Force a specific problem size: so we exercise the corresponding algorithm irrespective of the actual size:
 		// it may not be efficient for the size, but it should be correct in all sizes.
-		forceProblemSize = problemSize
+		goBackend.dotGeneralForceProblemSize = problemSize
 		var testName string
 		switch problemSize {
 		case smallProblemSize:

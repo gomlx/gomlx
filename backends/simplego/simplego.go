@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/notimplemented"
@@ -48,19 +49,24 @@ func New(config string) backends.Backend {
 			}
 			b.workers.SetMaxParallelism(vInt)
 			fmt.Printf("SimpleGo backend: parallelism set to %d\n", vInt)
-		case "force_small":
+		case "dotgeneral_small":
 			// This will force DotGeneral operation to use the version designed for smaller matrices.
-			forceProblemSize = smallProblemSize
-		case "force_large":
+			b.dotGeneralForceProblemSize = smallProblemSize
+		case "dotgeneral_large":
 			// This will force DotGeneral operation to use the version designed for large matrices.
-			forceProblemSize = largeProblemSize
-		case "force_check":
+			b.dotGeneralForceProblemSize = largeProblemSize
+		case "dotgeneral_check":
 			// This will force every DotGeneral operation to be executed with both versions and the outputs compared.
-			forceProblemSize = checkProblemSize
-		case "sequential":
-			// This will force the operations to be executed sequentially, as opposed to concurrently, as soon as the
-			// ops' inputs are available.
-			execForceSequential = true
+			// This is used exclusively for debugging purposes.
+			b.dotGeneralForceProblemSize = checkProblemSize
+		case "ops_sequential":
+			// This will force the ops to be executed sequentially.
+			// The default is running parallel if it's the only thing executing, otherwise sequentially.
+			b.opsExecutionType = opsExecutionSequential
+		case "ops_parallel":
+			// This will force the ops to be executed in parallel where possible.
+			// The default is running parallel if it's the only thing executing, otherwise sequentially.
+			b.opsExecutionType = opsExecutionParallel
 		}
 	}
 	return b
@@ -78,6 +84,14 @@ type Backend struct {
 	// The underlying type is map[bufferPoolKey]*sync.Pool.
 	bufferPools sync.Map
 	workers     workersPool
+
+	numLiveExecutions atomic.Int32
+
+	// dotGeneralForceProblemSize allows a DotGeneral algorithm to always be used.
+	dotGeneralForceProblemSize dotGeneralProblemSizeType
+
+	// opsExecutionType defines how to execute the ops of a computation.
+	opsExecutionType opsExecutionType
 }
 
 // Compile-time check that simplego.Backend implements backends.Backend.

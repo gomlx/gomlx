@@ -171,7 +171,13 @@ var (
 	multiOutputsNodeExecutors [backends.OpTypeLast]nodeMultiOutputExecutor
 )
 
-var execForceSequential bool
+type opsExecutionType int
+
+const (
+	opsExecutionDynamic opsExecutionType = iota
+	opsExecutionParallel
+	opsExecutionSequential
+)
 
 // Execute the executable on the default device (0).
 // The number and shapes of the inputs must match those returned by Inputs.
@@ -183,6 +189,10 @@ var execForceSequential bool
 // Donated buffers are no longer valid after the call.
 // If donate is nil, it is assumed to be false for all buffers, and no buffer is donated.
 func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) ([]backends.Buffer, error) {
+	// Keep count of the number of live executions.
+	e.backend.numLiveExecutions.Add(1)
+	defer e.backend.numLiveExecutions.Add(-1)
+
 	// Check inputs length
 	if len(inputs) != len(e.builder.inputs) {
 		return nil, errors.Errorf("Execute: expected %d inputs, got %d", len(e.builder.inputs), len(inputs))
@@ -251,6 +261,19 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) ([]backend
 		inputNodeIdx := e.builder.inputs[ii].builderIdx
 		execBuf.results[inputNodeIdx] = inputBuffer
 		execBuf.owned[inputNodeIdx] = donate[ii]
+	}
+
+	// Decide if we are going to execute ops in parallel or sequentially:
+	executionMode := e.backend.opsExecutionType
+	if executionMode == opsExecutionDynamic {
+		if e.backend.numLiveExecutions.Load() == 1 {
+			// Current execution is the only one, so execute ops in parallel:
+			executionMode = opsExecutionParallel
+		} else {
+			// Parallel execution of ops, while executing parallel execution programs
+			// is less efficient.
+			executionMode = opsExecutionSequential
+		}
 	}
 
 	// Execute nodes as they become available
@@ -423,9 +446,12 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) ([]backend
 			}
 		}
 
-		if execForceSequential {
+		// Execute sequentially or in parallel:
+		if executionMode == opsExecutionSequential {
+			// Execute ops sequentially:
 			nodeExecFn()
 		} else {
+			// Execute ops in parallel:
 			e.backend.workers.WaitToStart(nodeExecFn)
 		}
 	}
