@@ -1,5 +1,9 @@
 # GoMLX changelog
 
+# Next
+
+* Package `types/tensors/numpy` with methods to read and write tensors from/to `.npy` and `.npz` files.
+
 # v0.19.5: 2024/05/30 SimpleGo (go) backend optimizations
 
 * Package `simplego`, the pure Go backend:

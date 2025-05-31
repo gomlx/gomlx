@@ -74,11 +74,12 @@ package shapes
 import (
 	"encoding/gob"
 	"fmt"
+	"slices"
+	"strings"
+
 	"github.com/gomlx/exceptions"
 	. "github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
-	"slices"
-	"strings"
 )
 
 // Shape represents the shape of either a Tensor or the expected shape
@@ -156,7 +157,9 @@ func (s Shape) String() string {
 	return fmt.Sprintf("(%s)%v", s.DType, s.Dimensions)
 }
 
-// Size returns the number of elements of DType are needed for this shape. It's the product of all dimensions.
+// Size returns the number of elements (not bytes) for this shape. It's the product of all dimensions.
+//
+// For the number of bytes used to store this shape, see Shape.Memory.
 func (s Shape) Size() (size int) {
 	size = 1
 	for _, d := range s.Dimensions {
