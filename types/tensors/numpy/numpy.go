@@ -1,4 +1,6 @@
 // Package numpy allows one to read/write tensors to Python's NumPy npy and npz file formats.
+//
+// Experimental: this package (numpy) is fresh from the oven and not well tested. Please open an issue if you find any bugs.
 package numpy
 
 import (
