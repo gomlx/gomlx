@@ -77,7 +77,7 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
 
 > **🚀 NEW 🚀**: Vector Neural Networks ([arxiv.org/pdf/2104.12229](https://arxiv.org/pdf/2104.12229)): implements
 > rotation (SO(3)) equivariant networks, which can also be made rotation invariant. Great if working with geometric
-> representations or values (Chemistry, use Lidar scans as inputs, etc.)
+> representations or values (e.g.: in chemistry, when using lidar scans as inputs, etc.)
 
 * Converting ONNX models to GoMLX with [onnx-gomlx](https://github.com/gomlx/onnx-gomlx): both as an alternative for `onnxruntime` (leveraging XLA),
   but also to further fine-tune models. See also [go-huggingface](https://github.com/gomlx/go-huggingface) to easily download ONNX model files from HuggingFace.
