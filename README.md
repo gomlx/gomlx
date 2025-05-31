@@ -73,19 +73,18 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
 
 **Highlights:**
 
-> **🚀 NEW 🚀**: `SimpleGo`, a new Go only backend: it is very portable and doesn't require installation of separate 
-> C++ libraries. It is slower and has a limited ops coverage: some 60 ops are already implemented. 
-> It is actively being developed, if you are missing any op, please open an issue in GoMLX GitHub and let us know.
-> See [GoMLX compiled to WASM to power the AI for a game of Hive](https://janpfeifer.github.io/hiveGo/www/hive/)
+> **🚀 NEW 🚀**: Read Numpy arrays into GoMLX tensors -- see package `github.com/gomlx/gomlx/types/tensors/numpy`.
 
 > **🚀 NEW 🚀**: Vector Neural Networks ([arxiv.org/pdf/2104.12229](https://arxiv.org/pdf/2104.12229)): implements
 > rotation (SO(3)) equivariant networks, which can also be made rotation invariant. Great if working with geometric
-> representations or values (Chemistry, use Lidar scans as inputs, etc.)
+> representations or values (e.g.: in chemistry, when using lidar scans as inputs, etc.)
 
 * Converting ONNX models to GoMLX with [onnx-gomlx](https://github.com/gomlx/onnx-gomlx): both as an alternative for `onnxruntime` (leveraging XLA),
   but also to further fine-tune models. See also [go-huggingface](https://github.com/gomlx/go-huggingface) to easily download ONNX model files from HuggingFace.
 * [Docker "gomlx_jupyterlab"](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab) with integrated JupyterLab and [GoNB](https://github.com/janpfeifer/gonb) (a Go kernel for Jupyter notebooks)
-* Just-In-Time (JIT) compilation using [OpenXLA](https://github.com/openxla/xla) for CPUs and GPUs -- hopefully soon TPUs.
+* Two backends:
+   1. **`xla`**: [OpenXLA](https://github.com/openxla/xla) backend for CPUs, GPUs and TPUs. State-of-the-art as these things go. Only linux/amd64 for now.
+   2. **`go`**: a pure Go backend (no C/C++ dependencies): slower but very portable (compiles to WASM/Windows/etc.). SIMD support planned for Go 1.25 [when it becomes available](https://github.com/golang/go/issues/73787). See [GoMLX compiled to WASM to power the AI for a game of Hive](https://janpfeifer.github.io/hiveGo/www/hive/)
 * Autograd: automatic differentiation -- only gradients for now, no jacobian.
 * Context: automatic variable management for ML models.
 * ML layers library with some of the most popular machine learning "layers": FFN layers,  
