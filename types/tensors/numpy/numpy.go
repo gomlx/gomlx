@@ -35,7 +35,7 @@ func FromNpyReader(r io.Reader) (*tensors.Tensor, error) {
 	// Read and validate the magic string.
 	magic := make([]byte, 6)
 	if _, err := io.ReadFull(r, magic); err != nil {
-		return nil, errors.Errorf("failed to read magic string: %w", err)
+		return nil, errors.Wrapf(err, "failed to read magic string")
 	}
 	if string(magic) != "\x93NUMPY" {
 		return nil, errors.Errorf("invalid .npy file format: magic string mismatch")
@@ -44,7 +44,7 @@ func FromNpyReader(r io.Reader) (*tensors.Tensor, error) {
 	// Read version.
 	version := make([]byte, 2)
 	if _, err := io.ReadFull(r, version); err != nil {
-		return nil, errors.Errorf("failed to read version: %w", err)
+		return nil, errors.Wrapf(err, "failed to read version")
 	}
 	// major := version[0]
 	// minor := version[1]
@@ -55,13 +55,13 @@ func FromNpyReader(r io.Reader) (*tensors.Tensor, error) {
 	if version[0] == 1 { // Version 1.0
 		lenBytes := make([]byte, 2)
 		if _, err := io.ReadFull(r, lenBytes); err != nil {
-			return nil, errors.Errorf("failed to read header length (v1.0): %w", err)
+			return nil, errors.Wrapf(err, "failed to read header length (v1.0)")
 		}
 		headerLen = binary.LittleEndian.Uint16(lenBytes)
 	} else if version[0] >= 2 { // Version 2.0 and above
 		lenBytes := make([]byte, 4)
 		if _, err := io.ReadFull(r, lenBytes); err != nil {
-			return nil, errors.Errorf("failed to read header length (v2.0+): %w", err)
+			return nil, errors.Wrapf(err, "failed to read header length (v2.0+)")
 		}
 		headerLen32 := binary.LittleEndian.Uint32(lenBytes)
 		if headerLen32 > 0xFFFF {
@@ -75,7 +75,7 @@ func FromNpyReader(r io.Reader) (*tensors.Tensor, error) {
 	// Read the header.
 	headerBytes := make([]byte, headerLen)
 	if _, err := io.ReadFull(r, headerBytes); err != nil {
-		return nil, errors.Errorf("failed to read header: %w", err)
+		return nil, errors.Wrapf(err, "failed to read header")
 	}
 	header := string(headerBytes)
 
@@ -83,7 +83,7 @@ func FromNpyReader(r io.Reader) (*tensors.Tensor, error) {
 	// Example: "{'descr': '<f4', 'fortran_order': False, 'shape': (1, 2, 3), }"
 	dtypeStr, shapeInts, fortranOrder, err := parseNpyHeader(header)
 	if err != nil {
-		return nil, errors.Errorf("failed to parse .npy header: %w", err)
+		return nil, errors.Wrapf(err, "failed to parse .npy header")
 	}
 
 	if fortranOrder {
@@ -105,7 +105,7 @@ func FromNpyReader(r io.Reader) (*tensors.Tensor, error) {
 	tensor.MutableBytes(func(data []byte) {
 		_, err = io.ReadFull(r, data)
 		if err != nil {
-			err = errors.Wrapf(err, "failed to read tensor data (expected %d bytes): %w", len(data), err)
+			err = errors.Wrapf(err, "failed to read tensor data (expected %d bytes)", len(data))
 		}
 	})
 	if err != nil {
@@ -239,7 +239,7 @@ func FromNpzFile(filePath string) (map[string]*tensors.Tensor, error) {
 	// Need file info for zip.NewReader, which requires a ReaderAt and size.
 	info, err := file.Stat()
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to stat .npz file", filePath)
+		return nil, errors.Wrapf(err, "failed to stat .npz file %q", filePath)
 	}
 
 	return FromNpzReader(file, info.Size())
@@ -251,7 +251,7 @@ func FromNpzFile(filePath string) (map[string]*tensors.Tensor, error) {
 func FromNpzReader(r io.ReaderAt, size int64) (map[string]*tensors.Tensor, error) {
 	zipReader, err := zip.NewReader(r, size)
 	if err != nil {
-		return nil, errors.Errorf("failed to create zip reader for .npz: %w", err)
+		return nil, errors.Wrapf(err, "failed to create zip reader for `.npz`")
 	}
 
 	results := make(map[string]*tensors.Tensor)
