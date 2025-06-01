@@ -3,6 +3,8 @@
 # Next
 
 * Package `types/tensors/numpy` with methods to read and write tensors from/to `.npy` and `.npz` files.
+* Package `simplego`:
+  * Fixed bug introduced in parallelize version of Erf(x).
 
 # v0.19.5: 2024/05/30 SimpleGo (go) backend optimizations
 
@@ -19,7 +21,7 @@
     being executed concurrently.
     Added also configurations `GOMLX_BACKEND=go:ops_sequential` and `GOMLX_BACKEND=go:ops_parallel` 
     to force one type of execution or another.
-  * Parallelized Erf(x): this will become a model on how to parallelize other unary functions -- probably
+  * Parallelized Erf(x): this will become a model on how to parallelize other unary functions — probably
     when SIMD is available.
 
 # v0.19.4: 2024/05/24 added Vector Neural Networks (VNNs)

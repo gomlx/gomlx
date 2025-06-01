@@ -795,7 +795,7 @@ func execErfGeneric[T float32 | float64](backend *Backend, inputs, outputs []T) 
 			wg.Add(1)
 			backend.workers.WaitToStart(func() {
 				for jj := ii; jj < iiEnd; jj++ {
-					outputs[ii] = T(math.Erf(float64(inputs[jj])))
+					outputs[jj] = T(math.Erf(float64(inputs[jj])))
 				}
 				wg.Done()
 			})
