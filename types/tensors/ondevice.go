@@ -1,10 +1,11 @@
 package tensors
 
 import (
+	"reflect"
+
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/pkg/errors"
-	"reflect"
 )
 
 // device holds internal information about on-device storage of a Tensor.
@@ -144,8 +145,8 @@ func (t *Tensor) lockedMaterializeOnDevices(backend backends.Backend, share bool
 		t.backend = backend
 	} else if t.backend != backend {
 		exceptions.Panicf("Tensor(shape=%s).MaterilizeOnDevices: cannot have a Tensor be stored by different "+
-			"backend instances (current=%q, provided=%q), use separate Tensors for this",
-			t.shape, t.backend.Name(), backend.Description())
+			"backend instances (current=%q, provided=%q -- even if name matches, they were different instances), use separate Tensors for this",
+			t.shape, t.backend.Name(), backend.Name())
 	}
 	if t.backend == nil {
 		exceptions.Panicf("cannote MaterializeOnDevice with a nil backend")
