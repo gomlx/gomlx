@@ -19,7 +19,7 @@ func setup() {
 	} else {
 		fmt.Printf("\t$%s=%q\n", backends.ConfigEnvVar, os.Getenv(backends.ConfigEnvVar))
 	}
-	backend = backends.New()
+	backend = backends.MustNew()
 	fmt.Printf("Backend: %s, %s\n", backend.Name(), backend.Description())
 }
 

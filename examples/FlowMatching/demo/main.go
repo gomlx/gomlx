@@ -21,7 +21,7 @@ var (
 )
 
 var (
-	backend = backends.New()
+	backend = backends.MustNew()
 )
 
 func main() {

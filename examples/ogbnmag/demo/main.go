@@ -128,7 +128,7 @@ func SetTrainSteps(ctx *context.Context) {
 
 func main() {
 	// Init GoMLX manager and default context.
-	backend := backends.New()
+	backend := backends.MustNew()
 	ctx := createDefaultContext()
 
 	// Flags with context settings.

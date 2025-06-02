@@ -1,10 +1,9 @@
 // Package xla implements the XLA/PJRT (https://openxla.org/) based backend for GoMLX.
 //
-// Simply import it with:
+// To make it available in your program, import it with:
 //
 //	import _ "github.com/gomlx/gomlx/backends/xla"
 //
-// To make it available in your program.
 // It will register itself as an available backend during initialization.
 //
 // By default, XLA/PJRT backend loads requested plugins after the program starts and specifies the desired
@@ -39,7 +38,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/xslices"
@@ -52,13 +50,13 @@ const BackendName = "xla"
 
 // New returns a new Backend using the config as a configuration.
 // The config string should be the name of the PJRT plugin to use.
-func New(config string) backends.Backend {
+func New(config string) (backends.Backend, error) {
 	return NewWithOptions(config, nil)
 }
 
 // NewWithOptions creates a XlaBackend with the given client options.
 // It allows more control, not available with the default New constructor.
-func NewWithOptions(config string, options pjrt.NamedValuesMap) *Backend {
+func NewWithOptions(config string, options pjrt.NamedValuesMap) (*Backend, error) {
 	pluginName := config
 	var pluginOptions []string
 	parts := strings.Split(config, ",")
@@ -72,25 +70,25 @@ func NewWithOptions(config string, options pjrt.NamedValuesMap) *Backend {
 		// Verify the pluginName is available.
 		plugins := GetAvailablePlugins()
 		if len(plugins) == 0 {
-			exceptions.Panicf("no plugins found for backend %q -- either use the absolute "+
+			return nil, errors.Errorf("no plugins found for backend %q -- either use the absolute "+
 				"path to the pluginName as the configuration or set PJRT_PLUGIN_LIBRARY_PATH to the path where to search for "+
 				"PJRT plugins", BackendName)
 		}
 		if pluginName == "" {
 			pluginName = plugins[0]
 		} else if slices.Index(plugins, pluginName) == -1 {
-			exceptions.Panicf("Plugin %q for backend %q not found: available plugins found %q", pluginName, BackendName, plugins)
+			return nil, errors.Errorf("Plugin %q for backend %q not found: available plugins found %q", pluginName, BackendName, plugins)
 		}
 	}
 
 	plugin, err := pjrt.GetPlugin(pluginName)
 	if err != nil {
-		panic(errors.WithMessagef(err, "backend %q:", BackendName))
+		return nil, errors.WithMessagef(err, "backend %q:", BackendName)
 	}
 	var client *pjrt.Client
 	client, err = plugin.NewClient(options)
 	if err != nil {
-		panic(errors.WithMessagef(err, "while creating plugin %s for backend %q", pluginName, BackendName))
+		return nil, errors.WithMessagef(err, "while creating plugin %s for backend %q", pluginName, BackendName)
 	}
 	klog.V(1).Infof("created new plugin %q for backend %q", pluginName, BackendName)
 	backend := &Backend{
@@ -112,7 +110,7 @@ func NewWithOptions(config string, options pjrt.NamedValuesMap) *Backend {
 	if len(pluginOptions) != 0 {
 		klog.Errorf("backend %q: unknown plugin options %q", BackendName, pluginOptions)
 	}
-	return backend
+	return backend, nil
 }
 
 // Registers New() as the default constructor for "xla" backend.

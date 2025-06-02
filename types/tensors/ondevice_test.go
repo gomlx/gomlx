@@ -31,10 +31,10 @@ func setupTest(t *testing.T) {
 		backends.DefaultConfig = *flagBackend
 		if t != nil {
 			require.NotPanics(t, func() {
-				backend = backends.New()
+				backend = backends.MustNew()
 			})
 		} else {
-			backend = backends.New()
+			backend = backends.MustNew()
 		}
 	})()
 }

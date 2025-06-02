@@ -19,7 +19,7 @@ type Univariate func(x *Node) *Node
 
 // Plot univariate function for values between
 func Plot(name string, univariateFunctions ...Univariate) {
-	backend := backends.New()
+	backend := backends.MustNew()
 	numPoints := 1000
 	minX, maxX := -0.1, 1.1
 

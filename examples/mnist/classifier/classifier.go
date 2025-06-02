@@ -39,7 +39,7 @@ type Classifier struct {
 // New creates a new Classifier object that can be used to classify images using a MNIST model.
 func New(checkpointDir string) (*Classifier, error) {
 	c := &Classifier{
-		backend: backends.New(),
+		backend: backends.MustNew(),
 		ctx:     context.New(),
 	}
 

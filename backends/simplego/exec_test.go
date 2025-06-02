@@ -84,7 +84,8 @@ func TestBuilder_Compile(t *testing.T) {
 
 func TestGomlxIntegration(t *testing.T) {
 	// Makes sure we get a SimpleGo backend.
-	backend := backends.NewWithConfig(BackendName)
+	backend, err := backends.NewWithConfig(BackendName)
+	require.NoError(t, err)
 	require.NotPanics(t, func() { _ = backend.(*Backend) })
 
 	// Checks that basic graph building and execution works.
