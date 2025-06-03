@@ -303,7 +303,7 @@ func (ps *Plots) DynamicUpdates() *Plots {
 	if ps.pointsAdded < 3 {
 		// If we are having a dynamically updating plot, we reserve the transient HTML block
 		// upfront -- otherwise it will interfere with the progressbar the first time it is displayed.
-		gonbui.UpdateHtml(ps.gonbID, "(...collecting metrics, minimum 3 required to start plotting...)")
+		gonbui.UpdateHTML(ps.gonbID, "(...collecting metrics, minimum 3 required to start plotting...)")
 	} else {
 		ps.DynamicPlot(false)
 	}
@@ -452,14 +452,14 @@ func (ps *Plots) DynamicPlot(final bool) {
 		return
 	}
 	if final == true {
-		gonbui.UpdateHtml(ps.gonbID, "")
+		gonbui.UpdateHTML(ps.gonbID, "")
 		ps.Plot()
 		ps.gonbID = "" // Only do the final plot once.
 		return
 	}
 
 	// Plot transient version.
-	gonbui.UpdateHtml(ps.gonbID, ps.PlotToHTML())
+	gonbui.UpdateHTML(ps.gonbID, ps.PlotToHTML())
 	return
 }
 

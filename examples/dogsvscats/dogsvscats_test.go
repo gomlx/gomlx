@@ -67,10 +67,9 @@ func BenchmarkDataset(b *testing.B) {
 	trainDS, trainEvalDS, _ := CreateDatasets(config)
 	datasets := []train.Dataset{trainDS, trainEvalDS}
 	for dsIdx, dsType := range []string{"train-augmented", "eval"} {
-		dsIdx := dsIdx
 		for _, useParallelism := range []bool{false, true} {
 			name := dsType
-			ds := train.Dataset(datasets[dsIdx])
+			ds := datasets[dsIdx]
 			ds.Reset()
 			if useParallelism {
 				name = fmt.Sprintf("%s-parallel(%d)", name, runtime.NumCPU())

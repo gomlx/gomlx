@@ -118,7 +118,6 @@ func TestGatherSlices(t *testing.T) {
 			sizes := []int{2}                      // Take two rows per start.
 			output = GatherSlices(input, []int{0}, start, sizes, true)
 			return
-			return
 		}, [][][]float32{{{0, 1, 2}, {3, 4, 5}}, {{3, 4, 5}, {6, 7, 8}}})
 
 	testFuncOneInput(t, "GatherSlices(input, slicedAxes={0,1}, start={1, 1}, sizes={2, 3})",

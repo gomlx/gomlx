@@ -22,6 +22,7 @@ package mnist
 import (
 	"compress/gzip"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
@@ -30,11 +31,12 @@ import (
 	"path"
 
 	"github.com/gomlx/exceptions"
+	"github.com/gomlx/gopjrt/dtypes"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/tensors"
-	"github.com/gomlx/gopjrt/dtypes"
 
 	timage "github.com/gomlx/gomlx/types/tensors/images"
 )
@@ -100,8 +102,8 @@ func (img Image) ColorModel() color.Model {
 // Bounds implements the image.Image interface.
 func (img Image) Bounds() image.Rectangle {
 	return image.Rectangle{
-		Min: image.Point{0, 0},
-		Max: image.Point{Width, Height},
+		Min: image.Point{},
+		Max: image.Point{X: Width, Y: Height},
 	}
 }
 
@@ -111,7 +113,7 @@ func (img Image) At(x, y int) color.Color {
 }
 
 // Set modifies the pixel at (x,y).
-func (img *Image) Set(x, y int, v byte) {
+func (img Image) Set(x, y int, v byte) {
 	img[y*Width+x] = v
 }
 
@@ -170,7 +172,7 @@ func openGzippedFile(filename string) (*gzip.Reader, *os.File, error) {
 	}
 	reader, err := gzip.NewReader(f)
 	if err != nil {
-		f.Close()
+		err = errors.Join(f.Close())
 		return nil, nil, fmt.Errorf("gzip.NewReader: %w", err)
 	}
 	return reader, f, nil
@@ -182,8 +184,8 @@ func loadImageFile(filename string) ([]image.Image, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
-	defer r.Close()
+	defer errors.Join(err, f.Close())
+	defer errors.Join(err, r.Close())
 
 	header := imageFileHeader{}
 
@@ -201,13 +203,13 @@ func loadImageFile(filename string) ([]image.Image, error) {
 	images := make([]image.Image, header.NumImages)
 	for i := range header.NumImages {
 		var img Image
-		if err := binary.Read(r, binary.BigEndian, &img); err != nil {
+		if err = binary.Read(r, binary.BigEndian, &img); err != nil {
 			return nil, fmt.Errorf("binary.Read: %w", err)
 		}
 		images[i] = img
 	}
 
-	return images, nil
+	return images, err
 }
 
 // readImage reads a image from the file and returns it.
@@ -216,8 +218,8 @@ func loadLabelFile(filename string) ([]Label, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
-	defer reader.Close()
+	defer errors.Join(err, f.Close())
+	defer errors.Join(err, reader.Close())
 
 	header := labelFileHeader{}
 
@@ -238,7 +240,7 @@ func loadLabelFile(filename string) ([]Label, error) {
 		}
 	}
 
-	return labels, nil
+	return labels, err
 }
 
 // DatasetsConfiguration holds various parameters on how to transform the input images.

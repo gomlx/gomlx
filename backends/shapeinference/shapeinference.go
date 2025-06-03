@@ -263,6 +263,10 @@ func ComparisonOp(opType backends.OpType, lhsShape, rhsShape shapes.Shape) (outp
 	}
 
 	output, err = binaryOpImpl(opType, lhsShape, rhsShape)
+	if err != nil {
+		return
+	}
+
 	output.DType = dtypes.Bool
 	return
 }

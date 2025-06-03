@@ -2,6 +2,16 @@ package ogbnmag
 
 import (
 	"fmt"
+	"io"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+
+	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/schollz/progressbar/v3"
+	"github.com/stretchr/testify/require"
+
 	"github.com/gomlx/gomlx/examples/ogbnmag/gnn"
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
 	. "github.com/gomlx/gomlx/graph"
@@ -11,18 +21,11 @@ import (
 	mldata "github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activations"
+	"github.com/gomlx/gomlx/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/ml/train/optimizers/cosineschedule"
 	"github.com/gomlx/gomlx/types/tensors"
-	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/schollz/progressbar/v3"
-	"github.com/stretchr/testify/require"
-	"io"
-	"path/filepath"
-	"runtime"
-	"strings"
-	"testing"
 )
 
 func findSmallestDegreeSubgraph(t *testing.T) int32 {
@@ -81,9 +84,9 @@ func configureLayerWiseTestContext(ctx *context.Context) {
 		optimizers.ParamAdamEpsilon:     1e-7,
 		optimizers.ParamAdamDType:       "",
 
-		layers.ParamL2Regularization: 1e-5,
-		layers.ParamDropoutRate:      0.2,
-		activations.ParamActivation:  "swish",
+		regularizers.ParamL2:        1e-5,
+		layers.ParamDropoutRate:     0.2,
+		activations.ParamActivation: "swish",
 
 		gnn.ParamEdgeDropoutRate:       0.0,
 		gnn.ParamNumGraphUpdates:       6, // gnn_num_messages

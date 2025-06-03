@@ -14,7 +14,8 @@ package plotly
 
 import (
 	"fmt"
-	grob "github.com/MetalBlueberry/go-plotly/graph_objects"
+	grob "github.com/MetalBlueberry/go-plotly/generated/v2.34.0/graph_objects"
+	pTypes "github.com/MetalBlueberry/go-plotly/pkg/types"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
@@ -132,9 +133,9 @@ func (pc *PlotConfig) Dynamic() *PlotConfig {
 	if pc.pointsAdded < 3 {
 		// If we are having a dynamically updating plot, we reserve the transient HTML block
 		// upfront -- otherwise it will interfere with the progressbar the first time it is displayed.
-		gonbui.UpdateHtml(pc.gonbId, "(...collecting metrics, minimum 3 required to start plotting...)")
+		gonbui.UpdateHTML(pc.gonbId, "(...collecting metrics, minimum 3 required to start plotting...)")
 	} else {
-		gonbui.UpdateHtml(pc.gonbId, "")
+		gonbui.UpdateHTML(pc.gonbId, "")
 		pc.DynamicPlot(false)
 	}
 	return pc
@@ -320,21 +321,21 @@ func (pc *PlotConfig) AddPoint(pt plots.Point) {
 		pc.figs = append(pc.figs, &grob.Fig{
 			Layout: &grob.Layout{
 				Title: &grob.LayoutTitle{
-					Text: pt.MetricType,
+					Text: pTypes.StringType(pt.MetricType),
 				},
 				Xaxis: &grob.LayoutXaxis{
-					Showgrid: grob.True,
+					Showgrid: pTypes.True,
 					Type:     grob.LayoutXaxisTypeLog,
 				},
 				Yaxis: &grob.LayoutYaxis{
-					Showgrid: grob.True,
+					Showgrid: pTypes.True,
 					Type:     grob.LayoutYaxisTypeLog,
 				},
 				Legend: &grob.LayoutLegend{
-					//Y:       -0.2,
-					//X:       1.0,
-					//X anchor: grob.LayoutLegendX anchorRight,
-					//Y anchor: grob.LayoutLegendY anchorTop,
+					// Y:       -0.2,
+					// X:       1.0,
+					// X anchor: grob.LayoutLegendX anchorRight,
+					// Y anchor: grob.LayoutLegendY anchorTop,
 				},
 			},
 		})
@@ -350,19 +351,18 @@ func (pc *PlotConfig) AddPoint(pt plots.Point) {
 		metricNameToTrace[pt.MetricName] = len(fig.Data)
 		traceIdx = len(fig.Data)
 		fig.Data = append(fig.Data, &grob.Scatter{
-			Name: pt.MetricName,
-			Type: grob.TraceTypeScatter,
+			Name: pTypes.StringType(pt.MetricName),
 			Line: &grob.ScatterLine{
 				Shape: grob.ScatterLineShapeLinear,
 			},
 			Mode: "lines+markers",
-			X:    []float64{},
-			Y:    []float64{},
+			X:    pTypes.DataArray([]float64{}),
+			Y:    pTypes.DataArray([]float64{}),
 		})
 	}
 	trace := fig.Data[traceIdx].(*grob.Scatter)
-	trace.X = append(trace.X.([]float64), pt.Step)
-	trace.Y = append(trace.Y.([]float64), pt.Value)
+	trace.X = pTypes.DataArray(append(trace.X.Value().([]float64), pt.Step))
+	trace.Y = pTypes.DataArray(append(trace.Y.Value().([]float64), pt.Value))
 }
 
 // DynamicSampleDone is called after all the data points recorded for this sample (evaluation at a time step).
@@ -413,7 +413,7 @@ func (pc *PlotConfig) DynamicPlot(final bool) {
 		return
 	}
 	if final == true {
-		gonbui.UpdateHtml(pc.gonbId, "")
+		gonbui.UpdateHTML(pc.gonbId, "")
 		err := pc.Plot()
 		if err != nil {
 			klog.Errorf("Failed to plot: %+v", err)
@@ -422,7 +422,7 @@ func (pc *PlotConfig) DynamicPlot(final bool) {
 	}
 
 	// Plot transient version.
-	//gonbui.UpdateHtml(pc.gonbId, pc.PlotToHTML())
+	// gonbui.UpdateHtml(pc.gonbId, pc.PlotToHTML())
 	elementId := gonbui.UniqueId()
 	gonbui.UpdateHTML(pc.gonbId, fmt.Sprintf("<div id=%q></div>", elementId))
 

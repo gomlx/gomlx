@@ -7,7 +7,6 @@ import (
 	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
 	"os"
-	"sync"
 	"testing"
 
 	_ "github.com/gomlx/gomlx/backends/xla"
@@ -15,7 +14,6 @@ import (
 
 var (
 	flagSettings *string
-	muTrain      sync.Mutex
 )
 
 func init() {

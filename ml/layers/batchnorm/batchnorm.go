@@ -323,14 +323,6 @@ func (builder *Config) directBatchNormGraph(x, scale, offset, mean, variance *No
 	return normalized
 }
 
-// batchNormUpdater implements context.PerStepUpdateHandler, which is called by optimizers at every step
-type batchNormUpdater struct {
-	builder                            *Config
-	meanAverageVar, varianceAverageVar *context.Variable
-	weightVar                          *context.Variable
-	mean, variance                     *Node
-}
-
 // updateMeanAndVariance values that will be used in inference later. It's a moving average, where weight is how many
 // examples have been seen so far -- it's incremented at every step.
 func (builder *Config) updateMeanAndVariance(ctx *context.Context, graph *Graph, batchMean, batchVariance *Node, meanAverageVar, varianceAverageVar, weightVar *context.Variable) {

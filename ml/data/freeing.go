@@ -1,14 +1,16 @@
 package data
 
 import (
+	"io"
+
+	"github.com/pkg/errors"
+
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/tensors"
-	"github.com/pkg/errors"
-	"io"
 )
 
-// freeingDataset implements a `train.Dataset` that frees inputs and labels GPU memory after each use.
-type freeingDataset struct {
+// FreeingDataset implements a `train.Dataset` that frees inputs and labels GPU memory after each use.
+type FreeingDataset struct {
 	name                   string
 	ds                     train.Dataset
 	prevInputs, prevLabels []*tensors.Tensor
@@ -25,15 +27,15 @@ type freeingDataset struct {
 //
 // While you can wrap a parallelized (with [Parallel]) dataset with [Freeing], the other way around will break:
 // [Freeing] will free the yielded tensor before they are actually used.
-func Freeing(ds train.Dataset) *freeingDataset {
-	return &freeingDataset{
+func Freeing(ds train.Dataset) *FreeingDataset {
+	return &FreeingDataset{
 		ds:   ds,
 		name: ds.Name(),
 	}
 }
 
 // freePreviousYield finalize the tensors returned by the previous [Yield] call.
-func (ds *freeingDataset) freePreviousYield() {
+func (ds *FreeingDataset) freePreviousYield() {
 	for _, t := range ds.prevInputs {
 		t.FinalizeAll()
 	}
@@ -45,10 +47,10 @@ func (ds *freeingDataset) freePreviousYield() {
 }
 
 // Name implements train.Dataset.
-func (ds *freeingDataset) Name() string { return ds.name }
+func (ds *FreeingDataset) Name() string { return ds.name }
 
 // Yield implements train.Dataset.
-func (ds *freeingDataset) Yield() (spec any, inputs []*tensors.Tensor, labels []*tensors.Tensor, err error) {
+func (ds *FreeingDataset) Yield() (spec any, inputs []*tensors.Tensor, labels []*tensors.Tensor, err error) {
 	ds.freePreviousYield()
 	spec, inputs, labels, err = ds.ds.Yield()
 	ds.prevInputs = inputs
@@ -68,7 +70,7 @@ func (ds *freeingDataset) Yield() (spec any, inputs []*tensors.Tensor, labels []
 }
 
 // Reset implements train.Dataset.
-func (ds *freeingDataset) Reset() {
+func (ds *FreeingDataset) Reset() {
 	ds.freePreviousYield()
 	ds.ds.Reset()
 }

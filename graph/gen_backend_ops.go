@@ -945,7 +945,7 @@ func (ni *nodeInputsConcatenate) String() string {
 // backendConcatenate is a Graph wrapper for the backend.Builder.Concatenate method.
 
 func backendConcatenate(axis int, operands ...*Node) (node *Node) {
-	inputNodes := []*Node{}
+	var inputNodes []*Node
 	inputNodes = append(inputNodes, operands...)
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsConcatenate{

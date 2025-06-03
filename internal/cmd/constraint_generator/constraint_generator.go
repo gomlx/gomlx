@@ -58,7 +58,7 @@ func GraphExecFnConstraints(withContext bool) {
 		possibleInputs = append(possibleInputs, nodesParams)
 		nodesParams = nodesParams + ", *Node"
 	}
-	possibleOutputs := []string{}
+	var possibleOutputs []string
 	if withContext {
 		possibleOutputs = append(possibleOutputs, "")
 	}

@@ -288,7 +288,7 @@ type BinaryOp struct {
 }
 
 var (
-	binaryOps []BinaryOp = []BinaryOp{
+	binaryOps = []BinaryOp{
 		{Name: "Add", IsCommutative: true, Versions: []BinaryOpVersion{{Numeric: true, Name: "Numeric", Format: "%s + %s"}}},
 		{Name: "Mul", IsCommutative: true, Versions: []BinaryOpVersion{{Numeric: true, Name: "Numeric", Format: "%s * %s"}}},
 		{Name: "Sub", Versions: []BinaryOpVersion{{Numeric: true, Name: "Numeric", Format: "%s - %s"}}},

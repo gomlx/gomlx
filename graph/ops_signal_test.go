@@ -115,7 +115,7 @@ func TestGradientFFT(t *testing.T) {
 		// Notice that GPUs FFT implementation yields significantly different results, so this only works on
 		// the CPU (Eigen presumably) implementation. The results matches results yielded by similar code in
 		// TensorFlow (notice that if using complex64 the numbers differ).
-		[]complex128{(-1 + 0i), (0 + 0i), (0 + 0i), (0 + 0i), (0 + 0i), (0 + 0i), (0 + 0i), (0 + 0i), (0 + 0i), (0 + 0i), (0 + 0i)},
+		[]complex128{-1 + 0i, 0 + 0i, 0 + 0i, 0 + 0i, 0 + 0i, 0 + 0i, 0 + 0i, 0 + 0i, 0 + 0i, 0 + 0i, 0 + 0i},
 	}, 1e-3)
 }
 

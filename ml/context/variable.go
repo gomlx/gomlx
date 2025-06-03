@@ -87,7 +87,7 @@ type VariableInitializer = func(g *graph.Graph, shape shapes.Shape) *Node
 // See package initializers for various standard initializers.
 //
 // It's a uniform random sampler [-0.05 to 0.05] for float and complex numbers, zero otherwise.
-var DefaultInitializer VariableInitializer = func(g *Graph, shape shapes.Shape) *Node {
+var DefaultInitializer = func(g *Graph, shape shapes.Shape) *Node {
 	if !shape.DType.IsFloat() && !shape.DType.IsComplex() {
 		return graph.Zeros(g, shape)
 	}

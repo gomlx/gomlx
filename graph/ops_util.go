@@ -450,12 +450,12 @@ func LogAddExp(x, y *Node) *Node {
 	g := x.Graph()
 	dtype := x.DType()
 
-	max := Max(x, y)
+	maxVal := Max(x, y)
 	delta := Sub(x, y)
 	deltaFiniteMask := IsFinite(delta)
 	safeDelta := Where(deltaFiniteMask, delta, ScalarZero(g, dtype))
 	return Where(deltaFiniteMask,
-		Add(max, Log1p(Exp(Neg(Abs(safeDelta))))),
+		Add(maxVal, Log1p(Exp(Neg(Abs(safeDelta))))),
 		Add(x, y))
 }
 

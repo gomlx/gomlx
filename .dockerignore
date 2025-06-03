@@ -26,7 +26,6 @@ gomlx.code-workspace
 # Links to C-generated code.
 c/.cache
 .cache
-bazel-bin
 c/bazel-c
 c/bazel-out
 c/bazel-mnt

@@ -317,17 +317,17 @@ func (c *Config) DropdownFlowerTypes(cacheKey string, numImages, numDiffusionSte
 		htmlImages := make([]string, numFlowerTypes)
 		noise := c.GenerateNoise(numImages)
 		statusId := "flower_types_status_" + gonbui.UniqueId()
-		gonbui.UpdateHtml(statusId, "Generating flowers ...")
+		gonbui.UpdateHTML(statusId, "Generating flowers ...")
 		for flowerType := 0; flowerType < numFlowerTypes; flowerType++ {
 			flowerIds := tensors.FromValue(xslices.SliceWithValue(numImages, flowerType))
 			generator := c.NewImagesGenerator(noise, flowerIds, numDiffusionSteps)
 			denoisedImages := generator.Generate()
 			htmlImages[flowerType] = ImagesToHtml(timage.ToImage().MaxValue(255.0).Batch(denoisedImages))
-			gonbui.UpdateHtml(statusId, fmt.Sprintf(
+			gonbui.UpdateHTML(statusId, fmt.Sprintf(
 				"Generating flowers: %q<br/>%s", flowers.Names[flowerType],
 				htmlImages[flowerType]))
 		}
-		gonbui.UpdateHtml(statusId, "")
+		gonbui.UpdateHTML(statusId, "")
 		return htmlImages
 	}
 	htmlImages := cache.Cache(cacheKey, generateFn)

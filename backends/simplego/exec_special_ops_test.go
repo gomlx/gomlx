@@ -521,11 +521,11 @@ func computeHistogram(values []float64, numBins int) []int {
 		return nil
 	}
 	sort.Float64s(values)
-	min, max := values[0], values[len(values)-1]
-	binSize := (max - min) / float64(numBins)
+	minVal, maxVal := values[0], values[len(values)-1]
+	binSize := (maxVal - minVal) / float64(numBins)
 	histogram := make([]int, numBins)
 	for _, v := range values {
-		bin := int((v - min) / binSize)
+		bin := int((v - minVal) / binSize)
 		if bin == numBins {
 			bin--
 		}
@@ -793,7 +793,7 @@ func TestExecSpecialOps_ReduceWindow(t *testing.T) { // Renamed for common Go te
 			}, tc.operandData)
 			dtype := dtypeForSlice(tc.operandData)
 			require.Equalf(t, dtype, y.DType(), "Unexpected dtype %s for test %q: wanted %s", y.DType(), tc.name, dtype)
-			require.NoErrorf(t, y.Shape().CheckDims(tc.expectedShape...), "Got unexpected shape %s for %q: wanted %s", y.Shape(), tc.name, tc.expectedShape)
+			require.NoErrorf(t, y.Shape().CheckDims(tc.expectedShape...), "Got unexpected shape %s for %q: wanted %v", y.Shape(), tc.name, tc.expectedShape)
 			require.Equal(t, tc.expectedOutput, y.Value(),
 				"ReduceWindow: test %q: expected %v, got %v", tc.name, tc.expectedOutput, y.GoStr())
 		})

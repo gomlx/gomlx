@@ -2,14 +2,17 @@ package discretekan
 
 import (
 	"fmt"
-	grob "github.com/MetalBlueberry/go-plotly/graph_objects"
-	"github.com/gomlx/gomlx/backends"
-	. "github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/types/shapes"
+	"strings"
+
+	grob "github.com/MetalBlueberry/go-plotly/generated/v2.34.0/graph_objects"
+	"github.com/MetalBlueberry/go-plotly/pkg/types"
 	"github.com/gomlx/gopjrt/dtypes"
 	gonbplotly "github.com/janpfeifer/gonb/gonbui/plotly"
 	"github.com/janpfeifer/must"
-	"strings"
+
+	"github.com/gomlx/gomlx/backends"
+	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/types/shapes"
 
 	_ "github.com/gomlx/gomlx/backends/xla"
 )
@@ -34,14 +37,14 @@ func Plot(name string, univariateFunctions ...Univariate) {
 	fig := &grob.Fig{
 		Layout: &grob.Layout{
 			Title: &grob.LayoutTitle{
-				Text: name,
+				Text: types.StringType(name),
 			},
 			Xaxis: &grob.LayoutXaxis{
-				Showgrid: grob.True,
+				Showgrid: types.True,
 				Type:     grob.LayoutXaxisTypeLinear,
 			},
 			Yaxis: &grob.LayoutYaxis{
-				Showgrid: grob.True,
+				Showgrid: types.True,
 				Type:     grob.LayoutYaxisTypeLinear,
 			},
 		},
@@ -68,15 +71,14 @@ func Plot(name string, univariateFunctions ...Univariate) {
 		}
 		fig.Data = append(fig.Data,
 			&grob.Scatter{
-				Name: fnName,
-				Type: grob.TraceTypeScatter,
+				Name: types.StringType(fnName),
 				Line: &grob.ScatterLine{
 					Shape: grob.ScatterLineShapeLinear,
-					Width: lineWidth,
+					Width: types.N(lineWidth),
 				},
 				Mode: "lines",
-				X:    inputs,
-				Y:    outputs,
+				X:    types.DataArray(inputs),
+				Y:    types.DataArray(outputs),
 			})
 	}
 	must.M(gonbplotly.DisplayFig(fig))

@@ -57,7 +57,7 @@ func main() {
 	// --force_original better set by
 	err := exceptions.TryCatch[error](func() {
 		if *flagPreGenerate {
-			preGenerate(ctx, *flagDataDir)
+			preGenerate(ctx)
 		} else {
 			dogsvscats.TrainModel(ctx, *flagDataDir, *flagCheckpoint, *flagEval, paramsSet)
 		}
@@ -67,7 +67,7 @@ func main() {
 	}
 }
 
-func preGenerate(ctx *context.Context, dataDir string) {
+func preGenerate(ctx *context.Context) {
 	*flagDataDir = data.ReplaceTildeInDir(*flagDataDir)
 	if !data.FileExists(*flagDataDir) {
 		must.M(os.MkdirAll(*flagDataDir, 0777))
