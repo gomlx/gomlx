@@ -7,7 +7,8 @@
     Temporarily the methods `MustNew()` (which panics on errors, like today) and `NewOrErr` (which returns
     an error) were created to have a clear API, and `New()` was marked as deprecated. At the next version
     `New()` will change the API.
-  * Added `IsFinalized()` to the Backend API, to better handle attempts to access finalized backends. 
+  * Added `IsFinalized()` to the Backend API, to better handle attempts to access finalized backends.
+  * Fixed bug in `xla` backend where an error was not being sent when Backend was already finalized.
 * Package `types/tensors/numpy` with methods to read and write tensors from/to `.npy` and `.npz` files.
 * Package `simplego`:
   * Fixed bug introduced in parallelize version of Erf(x).
