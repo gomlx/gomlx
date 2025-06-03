@@ -3,13 +3,14 @@ package xla
 import (
 	"flag"
 	"fmt"
+	"math/rand"
+	"runtime"
+	"testing"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
-	"math/rand"
-	"runtime"
-	"testing"
 )
 
 var flagPlugin = flag.String("plugin", "cpu", "Plugin to use for testing for xla backend")
@@ -17,14 +18,17 @@ var flagPlugin = flag.String("plugin", "cpu", "Plugin to use for testing for xla
 func TestRepeatedClients(t *testing.T) {
 	fmt.Println("Creating and destroying 10 backend clients: one at a time")
 	for range 10 {
-		backend := New(*flagPlugin)
+		backend, err := New(*flagPlugin)
+		require.NoError(t, err)
 		backend.Finalize()
 	}
 
 	fmt.Println("Creating and destroying 10 backend clients: all at once")
 	testBackends := make([]backends.Backend, 0, 10)
 	for range 10 {
-		testBackends = append(testBackends, New(*flagPlugin))
+		backend, err := New(*flagPlugin)
+		require.NoError(t, err)
+		testBackends = append(testBackends, backend)
 	}
 	for _, backend := range testBackends {
 		backend.Finalize()
@@ -32,7 +36,8 @@ func TestRepeatedClients(t *testing.T) {
 
 	fmt.Println("Creating and destroying 10 backend and graphs: one at a time")
 	for ii := range 100 {
-		backend := New(*flagPlugin)
+		backend, err := New(*flagPlugin)
+		require.NoError(t, err)
 		builder := backend.Builder(fmt.Sprintf("builder_#%d", ii))
 		var exec backends.Executable
 		{

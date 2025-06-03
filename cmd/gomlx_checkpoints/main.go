@@ -346,7 +346,7 @@ func ReportMetrics(checkpointPath string, metricsUsed types.Set[string], metrics
 // ListVariables list the variables of a model, with their shape and MAV (max absolute value), RMS (root mean square) and MaxAV (max absolute value) values.
 func ListVariables(ctx *context.Context) {
 	fmt.Println(titleStyle.Render(fmt.Sprintf("Variables in scope %q", ctx.Scope())))
-	metricsFn := NewExec(backends.New(), func(x *Node) (mav, rms, maxAV *Node) {
+	metricsFn := NewExec(backends.MustNew(), func(x *Node) (mav, rms, maxAV *Node) {
 		x = ConvertDType(x, dtypes.Float64)
 		mav = ReduceAllMean(Abs(x))
 		rms = Sqrt(ReduceAllMean(Square(x)))

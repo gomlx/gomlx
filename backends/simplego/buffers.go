@@ -57,6 +57,9 @@ func (b *Backend) getBufferPool(dtype dtypes.DType, length int) *sync.Pool {
 //
 // See also Buffer.Zeros to initialize it with zeros, if needed.
 func (b *Backend) getBuffer(dtype dtypes.DType, length int) *Buffer {
+	if b.isFinalized {
+		return nil
+	}
 	pool := b.getBufferPool(dtype, length)
 	buf := pool.Get().(*Buffer)
 	buf.valid = true
@@ -66,6 +69,9 @@ func (b *Backend) getBuffer(dtype dtypes.DType, length int) *Buffer {
 
 // getBufferForShape is a wrapper for getShape that also sets the buffer shape accordingly.
 func (b *Backend) getBufferForShape(shape shapes.Shape) *Buffer {
+	if b.isFinalized {
+		return nil
+	}
 	buf := b.getBuffer(shape.DType, shape.Size())
 	buf.shape = shape
 	return buf
@@ -83,6 +89,9 @@ func (b *Buffer) randomize() {
 // putBuffer back into the backend pool of buffers.
 // After this any references to buffer should be dropped.
 func (b *Backend) putBuffer(buffer *Buffer) {
+	if b.isFinalized {
+		return
+	}
 	if buffer == nil || !buffer.shape.Ok() {
 		return
 	}
@@ -175,7 +184,7 @@ func (b *Backend) cloneBuffer(buffer *Buffer) *Buffer {
 		} else {
 			issues = append(issues, "buffer was nil")
 		}
-		exceptions.Panicf("cloneBuffer(%p): %s -- buffer was already finalized!?\n", buffer, strings.Join(issues, ", "))
+		exceptions.Panicf("cloneBuffer(%p): %s -- buffer was already isFinalized!?\n", buffer, strings.Join(issues, ", "))
 		return nil
 	}
 	newBuffer := b.getBuffer(buffer.shape.DType, buffer.shape.Size())
@@ -186,6 +195,9 @@ func (b *Backend) cloneBuffer(buffer *Buffer) *Buffer {
 
 // NewBuffer creates the buffer with a newly allocated flat space.
 func (b *Backend) NewBuffer(shape shapes.Shape) *Buffer {
+	if b.isFinalized {
+		return nil
+	}
 	buffer := b.getBuffer(shape.DType, shape.Size())
 	buffer.shape = shape.Clone()
 	return buffer
@@ -194,9 +206,13 @@ func (b *Backend) NewBuffer(shape shapes.Shape) *Buffer {
 // BufferFinalize allows the client to inform backend that buffer is no longer needed and associated resources can be
 // freed immediately.
 //
-// A finalized buffer should never be used again. Preferably, the caller should set its references to it to nil.
+// A isFinalized buffer should never be used again. Preferably, the caller should set its references to it to nil.
 func (b *Backend) BufferFinalize(backendBuffer backends.Buffer) error {
 	buffer := backendBuffer.(*Buffer)
+	if b.isFinalized {
+		buffer.flat = nil // Accelerates GC.
+		return errors.Errorf("BufferFinalize(%p): backend is already finalized", backendBuffer)
+	}
 	if buffer == nil || buffer.flat == nil || !buffer.shape.Ok() || !buffer.valid {
 		// The buffer is already empty.
 		var issues []string
@@ -213,7 +229,7 @@ func (b *Backend) BufferFinalize(backendBuffer backends.Buffer) error {
 		} else {
 			issues = append(issues, "buffer was nil")
 		}
-		return errors.Errorf("BufferFinalize(%p): %s -- buffer was already finalized!?\n", buffer, strings.Join(issues, ", "))
+		return errors.Errorf("BufferFinalize(%p): %s -- buffer was already isFinalized!?\n", buffer, strings.Join(issues, ", "))
 	}
 	//fmt.Printf("> BufferFinalize(%p): shape=%s\n", buffer, buffer.shape)
 	//fmt.Printf("\tStack trace:\n%s\n", debug.Stack())
@@ -255,6 +271,9 @@ func (b *Backend) BufferToFlatData(backendBuffer backends.Buffer, flat any) erro
 // BufferFromFlatData transfers data from Go given as a flat slice (of the type corresponding to the shape DType)
 // to the deviceNum, and returns the corresponding backends.Buffer.
 func (b *Backend) BufferFromFlatData(deviceNum backends.DeviceNum, flat any, shape shapes.Shape) (backends.Buffer, error) {
+	if b.isFinalized {
+		return nil, errors.Errorf("backend is already finalized")
+	}
 	if deviceNum != 0 {
 		return nil, errors.Errorf("backend (%s) only supports deviceNum 0, cannot create buffer on deviceNum %d (shape=%s)",
 			b.Name(), deviceNum, shape)
@@ -288,6 +307,9 @@ func (b *Backend) HasSharedBuffers() bool {
 // It returns a handle to the buffer and a slice of the corresponding data type pointing
 // to the shared data.
 func (b *Backend) NewSharedBuffer(deviceNum backends.DeviceNum, shape shapes.Shape) (buffer backends.Buffer, flat any, err error) {
+	if b.isFinalized {
+		return nil, nil, errors.Errorf("backend is already finalized")
+	}
 	if deviceNum != 0 {
 		return nil, nil, errors.Errorf("backend (%s) only supports deviceNum 0, cannot create buffer on deviceNum %d (shape=%s)",
 			b.Name(), deviceNum, shape)
@@ -303,6 +325,9 @@ func (b *Backend) NewSharedBuffer(deviceNum backends.DeviceNum, shape shapes.Sha
 //
 // The returned slice becomes invalid after the buffer is destroyed.
 func (b *Backend) BufferData(buffer backends.Buffer) (flat any, err error) {
+	if b.isFinalized {
+		return nil, errors.Errorf("backend is already finalized")
+	}
 	buf, ok := buffer.(*Buffer)
 	if !ok {
 		return nil, errors.Errorf("buffer is not a %q backend buffer", BackendName)

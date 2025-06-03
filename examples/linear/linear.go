@@ -111,7 +111,7 @@ var (
 
 func main() {
 	flag.Parse()
-	backend := backends.New()
+	backend := backends.MustNew()
 
 	fmt.Printf("Backend: %s, %s\n", backend.Name(), backend.Description())
 

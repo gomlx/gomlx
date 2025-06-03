@@ -184,7 +184,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, runEval bo
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
-	backend := backends.New()
+	backend := backends.MustNew()
 	var trainer *train.Trainer
 	optimizer := optimizers.FromContext(ctx)
 	if !preTraining {

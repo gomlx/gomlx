@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"testing"
 
-	_ "github.com/gomlx/gomlx/backends/xla"
+	_ "github.com/gomlx/gomlx/backends/default"
 )
 
 // Test sampler constants.

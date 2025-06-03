@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	backend = backends.New()
+	backend = backends.MustNew()
 	DType   = dtypes.Float32
 )
 

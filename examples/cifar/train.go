@@ -52,7 +52,7 @@ func TrainCifar10Model(ctx *context.Context, dataDir, checkpointPath string, eva
 
 	// Backend handles creation of ML computation graphs, accelerator resources, etc.
 	if Backend == nil {
-		Backend = backends.New()
+		Backend = backends.MustNew()
 	}
 	if verbosity >= 1 {
 		fmt.Printf("Backend %q:\t%s\n", Backend.Name(), Backend.Description())

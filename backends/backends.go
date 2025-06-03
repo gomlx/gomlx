@@ -16,10 +16,11 @@
 package backends
 
 import (
-	"github.com/gomlx/exceptions"
-	"golang.org/x/exp/maps"
 	"os"
 	"strings"
+
+	"github.com/gomlx/exceptions"
+	"golang.org/x/exp/maps"
 )
 
 //go:generate go run ../internal/cmd/backends_generator
@@ -52,13 +53,18 @@ type Backend interface {
 	DataInterface
 
 	// Finalize releases all the associated resources immediately and makes the backend invalid.
-	// Any operation on a Backend after Finalize is called is undefined and can lead to memory
-	// corruption.
+	// Any operation on a Backend after Finalize is called is undefined, except IsFinalized.
 	Finalize()
+
+	// IsFinalized returns true if the backend is finalized.
+	//
+	// Tensors stored on a backend may hold a reference to a finalized backend, and when being garbage collected,
+	// check whether it is finalized before requesting the backend to finalize its buffers.
+	IsFinalized() bool
 }
 
 // Constructor takes a config string (optionally empty) and returns a Backend.
-type Constructor func(config string) Backend
+type Constructor func(config string) (Backend, error)
 
 var (
 	registeredConstructors = make(map[string]Constructor)
@@ -93,16 +99,49 @@ const ConfigEnvVar = "GOMLX_BACKEND"
 // Deprecated: use ConfigEnvVar.
 const GOMLX_BACKEND = ConfigEnvVar
 
-// New returns a new default Backend.
+// New returns a new default Backend or panics if it fails.
 //
 // The default is:
 //
-// 1. The environment  $GOMLX_BACKEND (ConfigEnvVar) is used as a configuration if defined.
-// 2. Next the variable DefaultConfig is used as a configuration if defined.
+// 1. The environment $GOMLX_BACKEND (ConfigEnvVar) is used as a configuration if defined.
+// 2. Next, it uses the variable DefaultConfig as the configuration.
 // 3. The first registered backend is used with an empty configuration.
 //
-// It panics if not the backend was registered.
+// It fails if no backends were registered.
+//
+// Deprecated: at the next version this function will be changed to return an error if it fails.
+// Use MustNew instead.
 func New() Backend {
+	return MustNew()
+}
+
+// MustNew returns a new default Backend or panics if it fails.
+//
+// The default is:
+//
+// 1. The environment $GOMLX_BACKEND (ConfigEnvVar) is used as a configuration if defined.
+// 2. Next, it uses the variable DefaultConfig as the configuration.
+// 3. The first registered backend is used with an empty configuration.
+//
+// It fails if no backends were registered.
+func MustNew() Backend {
+	b, err := NewOrErr()
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
+
+// NewOrErr returns a new default Backend or an error if it fails.
+//
+// The default is:
+//
+// 1. The environment $GOMLX_BACKEND (ConfigEnvVar) is used as a configuration if defined.
+// 2. Next, it uses the variable DefaultConfig as the configuration.
+// 3. The first registered backend is used with an empty configuration.
+//
+// It fails if no backends were registered.
+func NewOrErr() (Backend, error) {
 	config, found := os.LookupEnv(ConfigEnvVar)
 	if found {
 		return NewWithConfig(config)
@@ -131,7 +170,7 @@ func splitConfig(config string) (string, string) {
 // The format of config is "<backend_name>:<backend_configuration>".
 // The "<backend_name>" is the name of a registered backend (e.g.: "xla") and
 // "<backend_configuration>" is backend-specific (e.g.: for xla backend, it is the pjrt plugin name).
-func NewWithConfig(config string) Backend {
+func NewWithConfig(config string) (Backend, error) {
 	if len(registeredConstructors) == 0 {
 		exceptions.Panicf(`no registered backends for GoMLX -- maybe import the default ones (XLA and SimpleGo) with import _ "github.com/gomlx/gomlx/backends/default"?`)
 	}

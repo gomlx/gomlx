@@ -32,7 +32,7 @@ func init() {
 
 // New constructs a new SimpleGo Backend.
 // There are no configurations, the string is simply ignored.
-func New(config string) backends.Backend {
+func New(config string) (backends.Backend, error) {
 	b := newDefaultBackend()
 	parts := strings.Split(config, ",")
 	for _, part := range parts {
@@ -45,7 +45,7 @@ func New(config string) backends.Backend {
 		case "parallelism":
 			vInt, err := strconv.Atoi(value)
 			if err != nil {
-				panic(errors.Wrapf(err, "invalid value for %q in SimpleGo backend config: needs an int, got %q", key, value))
+				return nil, errors.Wrapf(err, "invalid value for %q in SimpleGo backend config: needs an int, got %q", key, value)
 			}
 			b.workers.SetMaxParallelism(vInt)
 			fmt.Printf("SimpleGo backend: parallelism set to %d\n", vInt)
@@ -70,11 +70,11 @@ func New(config string) backends.Backend {
 		case "":
 			// No-op, just skip.
 		default:
-			panic(errors.Errorf("unknown configuration option %q for SimpleGo (go) backend -- valid configuration options are: "+
-				"parallelism=#workers, dotgeneral_small, dotgeneral_large, dotgeneral_check, ops_sequential, ops_parallel; see code for documentation", key))
+			return nil, errors.Errorf("unknown configuration option %q for SimpleGo (go) backend -- valid configuration options are: "+
+				"parallelism=#workers, dotgeneral_small, dotgeneral_large, dotgeneral_check, ops_sequential, ops_parallel; see code for documentation", key)
 		}
 	}
-	return b
+	return b, nil
 }
 
 func newDefaultBackend() *Backend {
@@ -97,6 +97,9 @@ type Backend struct {
 
 	// opsExecutionType defines how to execute the ops of a computation.
 	opsExecutionType opsExecutionType
+
+	// isFinalized is true if the backend has been isFinalized.
+	isFinalized bool
 }
 
 // Compile-time check that simplego.Backend implements backends.Backend.
@@ -143,4 +146,12 @@ func notImplementedError(opType backends.OpType) error {
 }
 
 // Finalize releases all the associated resources immediately, and makes the backend invalid.
-func (b *Backend) Finalize() {}
+func (b *Backend) Finalize() {
+	b.isFinalized = true
+	b.bufferPools.Clear()
+}
+
+// IsFinalized returns true if the backend has been isFinalized.
+func (b *Backend) IsFinalized() bool {
+	return b.isFinalized
+}

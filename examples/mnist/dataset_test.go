@@ -35,7 +35,7 @@ func TestDataset(t *testing.T) {
 	}
 
 	modes := []string{"train", "test"}
-	backend := backends.New()
+	backend := backends.MustNew()
 	batchSize := 100
 
 	for _, m := range modes {

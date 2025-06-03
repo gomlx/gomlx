@@ -32,7 +32,7 @@ const margin = 1e-4
 // buildTestBackend and sets backends.DefaultConfig to "xla:cpu" -- it can be overwritten by GOMLX_BACKEND environment variable.
 func buildTestBackend() backends.Backend {
 	backends.DefaultConfig = "xla:cpu"
-	return backends.New()
+	return backends.MustNew()
 }
 
 type graphFnOneInputToTest func(g *Graph) (input, output *Node)

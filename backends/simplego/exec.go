@@ -208,7 +208,7 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) ([]backend
 			return nil, errors.Errorf("Execute: input buffer #%d is not from SimpleGo backend", ii)
 		}
 		if !inputBuffer.valid {
-			return nil, errors.Errorf("Execute: input buffer (%p) #%d is not valid, likely it is being used after being finalized", inputBuffer, ii)
+			return nil, errors.Errorf("Execute: input buffer (%p) #%d is not valid, likely it is being used after being isFinalized", inputBuffer, ii)
 		}
 		if inputBuffer.flat == nil {
 			return nil, errors.Errorf("Execute: input buffer #%d flat data is set to nil (!?)", ii)

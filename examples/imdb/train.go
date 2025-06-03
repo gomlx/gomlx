@@ -133,7 +133,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 	}
 
 	// Backend handles creation of ML computation graphs, accelerator resources, etc.
-	backend := backends.New()
+	backend := backends.MustNew()
 	if verbosity >= 1 {
 		fmt.Printf("Backend %q:\t%s\n", backend.Name(), backend.Description())
 	}

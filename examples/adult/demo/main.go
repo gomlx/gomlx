@@ -137,7 +137,7 @@ func main() {
 }
 
 func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, paramsSet []string) error {
-	backend := backends.New()
+	backend := backends.MustNew()
 	dataDir = data.ReplaceTildeInDir(dataDir)
 	if *flagVerbosity >= 1 {
 		fmt.Printf("Backend: %s\n\t%s\n", backend.Name(), backend.Description())

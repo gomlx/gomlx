@@ -2,6 +2,10 @@ package xla
 
 import (
 	"fmt"
+	"reflect"
+	"runtime"
+	"unsafe"
+
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
@@ -9,9 +13,6 @@ import (
 	"github.com/gomlx/gopjrt/pjrt"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
-	"reflect"
-	"runtime"
-	"unsafe"
 )
 
 // Backend implements the XLA/PJRT backends.Backend for GoMLX.
@@ -35,7 +36,7 @@ func (backend *Backend) CheckValid() error {
 		return errors.Errorf("%q backend is nil", BackendName)
 	}
 	if backend.plugin == nil {
-		errors.Errorf("%q backend's plugin is nil, has it already been finalized?", BackendName)
+		return errors.Errorf("backend %q has already been finalized", BackendName)
 	}
 	return nil
 }
@@ -80,6 +81,11 @@ func (backend *Backend) Finalize() {
 	}
 	backend.plugin = nil
 	return
+}
+
+// IsFinalized returns true if the backend is in an invalid state.
+func (backend *Backend) IsFinalized() bool {
+	return backend == nil || backend.plugin == nil
 }
 
 // castToPJRT casts the buffer to pjrt.Buffer and panics if not possible.
@@ -232,6 +238,9 @@ func (backend *Backend) NewSharedBuffer(deviceNum backends.DeviceNum, shape shap
 // For XLA this means allocating the aligned memory and calling pjrt.Client.CreateViewOfDeviceBuffer
 // to create a buffer that shares the memory.
 func (backend *Backend) BufferData(buffer backends.Buffer) (flat any, err error) {
+	if err := backend.CheckValid(); err != nil {
+		return nil, err
+	}
 	buf := buffer.(*pjrt.Buffer)
 	flat, err = buf.Data()
 	if err != nil {
