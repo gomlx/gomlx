@@ -235,6 +235,7 @@ func (t *Tensor) lockedInvalidateOnDevice() {
 }
 
 // OnDeviceClone creates a clone of the tensor t that has backend storage.
+// It also works to copy tensors to a different backend.
 func (t *Tensor) OnDeviceClone(backend backends.Backend, deviceNums ...backends.DeviceNum) *Tensor {
 	if len(deviceNums) == 0 {
 		deviceNums = defaultDeviceNums
@@ -368,7 +369,6 @@ func (t *Tensor) CopyFrom(tFrom *Tensor) {
 		// Copy from shared buffer.
 		reflect.Copy(reflect.ValueOf(tFlat), reflect.ValueOf(tFrom.sharedFlat))
 		return
-
 	}
 	if tFrom.IsLocal() {
 		// Copy from local.
@@ -377,7 +377,7 @@ func (t *Tensor) CopyFrom(tFrom *Tensor) {
 	}
 
 	// Materialize tFrom onDevice directly to tFrom.
-	// Get on-device version: try default (deviceNum==0) first.
+	// Get the on-device version: try default (deviceNum==0) first.
 	deviceNum := backends.DeviceNum(0)
 	d, found := tFrom.onDevices[deviceNum]
 	if !found {

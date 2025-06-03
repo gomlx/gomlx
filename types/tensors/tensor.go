@@ -17,7 +17,7 @@
 // Package tensors implements a `Tensor`, a representation of a multi-dimensional array.
 //
 // Tensors are multidimensional arrays (from scalar with 0 dimensions, to arbitrarily large dimensions), defined
-// by their shape (a data type and its axes dimensions) and their actual content. As a special case, a Tensor can
+// by their shape (a data type and its axes' dimensions) and their actual content. As a special case, a Tensor can
 // also be a tuple of multiple tensors.
 //
 // The main use of tensors are to be used as input and output of GoMLX computation graphs.
@@ -42,7 +42,7 @@
 //     t := FromValue([][]float{{1,2}, {3, 5}, {7, 11}})`
 //
 //   - FromAnyValue(value any): same as FromValue but non-generic, it takes an anonymous type `any`. The exception
-//     is if `value` is already a tensor, then it is a no-op and it returns the tensor itself.
+//     is if `value` is already a tensor, then it is a no-op, and it returns the tensor itself.
 //
 // Behind the scenes (as much as possible Tensor tries to hide all the details), Tensor is a container that keeps in
 // sync different materialization's of value:
@@ -51,18 +51,26 @@
 //   - `onDevices`: a copy of the values stored in the accelerator device(s) (CPU, GPU, TPU, etc.),
 //     a wrapper for whatever the backend uses as buffer managed by the lower levels (see github.com/gomlx/gopjrt
 //     for the XLA backend).
-//     There can be multiple `Device` backing of a tensor, if there are multiple devices (like a multi-GPU set up).
-//   - And "on-device" Tensor can also be "shared", if the backend allows it, in which case the local
+//     There can be multiple `Device` backing of a tensor if there are multiple devices (like a multi-GPU set up).
+//   - And "on-device" Tensor can also be "shared" if the backend allows it, in which case the local
 //     and "on-device" share the same memory allocation.
 //
 // The Tensor container is lazy in nature: it won't transfer data from local storage to "on device" until needed.
 // And if/when it can, it will make it "shared" (generally, when running on CPUs).
 // If not "shared", when one (local or on-device) is updated, the others are immediately invalidated.
 //
-// Transferring tensors to/from local/device areas has a cost, and should be avoided. For example,
+// Transferring tensors to/from local/device areas has a cost and should be avoided. For example,
 // while training weights of an ML model, one generally does not need to transfer those weights to local -- just at
 // the end of training to save the model weights. But the Tensor will keep the (local/device) copies cached,
 // so they can be used multiple times, and transfer only occurs once.
+//
+// Tensors used across multiple backends:
+// There is not an easy interface to share tensors across backends (instances) yet, even if they are the same
+// type of backends (if you created two instances of `xla:cpu` backend, for instance).
+//
+// The recommendation is to keep tensors used for each backend in separate variables and copy when needed:
+// You can use `Tensor.LocalClone()` to copy a tensor from one backend to a new local tensor.
+// Or you can use `Tensor.OnDeviceClone()` to copy a tensor from one backend directly into another backend.
 package tensors
 
 import (
@@ -74,19 +82,28 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Tensor represents a multidimensional arrays (from scalar with 0 dimensions, to arbitrarily large dimensions), defined
+// Tensor represents a multidimensional array (from scalar with 0 dimensions, to arbitrarily large dimensions), defined
 // by their shape, a data type (dtypes.DType) and its axes' dimensions, and their actual content stored as a flat (1D)
 // array of values.
 //
-// The main use of tensors are to be used as input and output of GoMLX computation graphs.
+// The main use of tensors is to be used as GoMLX computation graphs inputs and outputs.
 //
 // It is a container for "local" (host CPU) and "on-device" backing of the tensor -- they can be the same ("shared") in
 // some cases.
-// It is always stored as flat slice of the underlying DType.
+// It is always stored as a flat slice of the underlying DType.
 //
-// Tensor manages caching of Local and Device copies. There is a transferring cost that one needs to be aware when
-// using it for large data -- LLM models can have 100s of GB in size... There is a cache
-// system to prevent duplicate transfers, but it requires some care from the user (see ConstFlatData and MutableFlatData).
+// Tensor manages caching of Local and Device copies. There is a transferring cost that one needs to be aware of when
+// using it for large data -- LLM models can have hundreds of GB in size.
+// There is a cache system to prevent duplicate transfers, but it requires some care from the user
+// (see ConstFlatData and MutableFlatData).
+//
+// Tensors used across multiple backends:
+// There is not an easy interface to share tensors across backends (instances) yet, even if they are the same
+// type of backends (if you created two instances of `xla:cpu` backend, for instance).
+//
+// The recommendation is to keep tensors used for each backend in separate variables and copy when needed:
+// You can use `Tensor.LocalClone()` to copy a tensor from one backend to a new local tensor.
+// Or you can use `Tensor.OnDeviceClone()` to copy a tensor from one backend directly into another backend.
 //
 // More details in the `tensor` package documentation.
 type Tensor struct {
