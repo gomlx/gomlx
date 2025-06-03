@@ -2,19 +2,24 @@
 // on dynamic plots while training or to quickly plot the results of a previously
 // saved plot results in a checkpoints directory.
 //
-// In either case it allows adding baseline plots of previous checkpoints.
+// In either case, it allows adding baseline plots of previous checkpoints.
 //
-// The advantage of `plotly` over `margaid` plots is that it uses Javascript to make the plot interactive (it displays
+// The advantage of `plotly` over `margaid` plots is that it uses JavaScript to make the plot interactive (it displays
 // information on mouse hover).
 //
-// The disadvantage is that saving of the notebook doesn't include the Javascript -- but exporting to HTML does.
+// The disadvantage is that saving of the notebook doesn't include JavaScript -- but exporting to HTML does.
 //
 // See New to get started and an example.
 package plotly
 
 import (
 	"fmt"
-	grob "github.com/MetalBlueberry/go-plotly/graph_objects"
+	"math"
+	"os"
+	"path"
+
+	grob "github.com/MetalBlueberry/go-plotly/generated/v2.34.0/graph_objects"
+	ptypes "github.com/MetalBlueberry/go-plotly/pkg/types"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
@@ -27,9 +32,6 @@ import (
 	gonbplotly "github.com/janpfeifer/gonb/gonbui/plotly"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
-	"math"
-	"os"
-	"path"
 )
 
 var (
@@ -112,13 +114,13 @@ func (pc *PlotConfig) WithDatasets(datasets ...train.Dataset) *PlotConfig {
 // data dataset, and it can use evaluation batch sizes.
 // If oneEpochDS is nil, it disabled the updating of the averages.
 //
-// If the model is not using batch normalization this is a no-op and nothing is executed.
+// If the model is not using batch normalization, this is a no-op and nothing is executed.
 func (pc *PlotConfig) WithBatchNormalizationAveragesUpdate(oneEpochDS train.Dataset) *PlotConfig {
 	pc.batchNormAveragesDS = oneEpochDS
 	return pc
 }
 
-// Dynamic sets plot to be dynamically updated and new data comes in. It's a no-op if not running in a GoNB notebook.
+// Dynamic sets plot to be dynamically updated, and new data comes in. It's a no-op if not running in a GoNB notebook.
 //
 // It should be followed by a call to [ScheduleExponential] or [SchedulePeriodic] (or both) to schedule capturing
 // points to plot, and [WithCheckpoint] to save the captured points.
@@ -132,9 +134,9 @@ func (pc *PlotConfig) Dynamic() *PlotConfig {
 	if pc.pointsAdded < 3 {
 		// If we are having a dynamically updating plot, we reserve the transient HTML block
 		// upfront -- otherwise it will interfere with the progressbar the first time it is displayed.
-		gonbui.UpdateHtml(pc.gonbId, "(...collecting metrics, minimum 3 required to start plotting...)")
+		gonbui.UpdateHTML(pc.gonbId, "(...collecting metrics, minimum 3 required to start plotting...)")
 	} else {
-		gonbui.UpdateHtml(pc.gonbId, "")
+		gonbui.UpdateHTML(pc.gonbId, "")
 		pc.DynamicPlot(false)
 	}
 	return pc
@@ -150,7 +152,7 @@ func (pc *PlotConfig) ScheduleExponential(loop *train.Loop, startStep int, stepF
 	return pc
 }
 
-// ScheduleNTimes of collection of plot points.
+// ScheduleNTimes collections of plot points.
 //
 // It returns itself to allow cascading configuration method calls.
 func (pc *PlotConfig) ScheduleNTimes(loop *train.Loop, numPoints int) *PlotConfig {
@@ -196,7 +198,7 @@ func (pc *PlotConfig) addMetrics(loop *train.Loop, metrics []*tensors.Tensor) er
 	return plots.AddTrainAndEvalMetrics(pc, loop, metrics, pc.EvalDatasets, pc.batchNormAveragesDS)
 }
 
-// attachOnEnd registers a final call to DynamicPlot when training finishes. After that no more dynamic plots
+// attachOnEnd registers a final call to DynamicPlot when training finishes. After that, no more dynamic plots
 // are allowed.
 func (pc *PlotConfig) attachOnEnd(loop *train.Loop) {
 	if pc.scheduledFinalPlot {
@@ -219,8 +221,8 @@ func (pc *PlotConfig) attachOnEnd(loop *train.Loop) {
 // Usually, used with [PlotConfig.Dynamic].
 // If checkpoint is nil, it's a no-op.
 //
-// New data-points are saved asynchronously -- not to slow down training, with the downside of
-// potentially having I/O issues reported asynchronously.
+// New data-points are saved asynchronously not to slow down training,
+// but with the downside of potentially having I/O issues reported asynchronously.
 //
 // It returns itself to allow cascading configuration method calls.
 func (pc *PlotConfig) WithCheckpoint(checkpoint *checkpoints.Handler) *PlotConfig {
@@ -257,13 +259,13 @@ type PointFilter func(p *plots.Point) bool
 // LoadCheckpointData loads plotting data from a checkpoint path.
 // Notice this only works if the model was trained with plotting, with the metrics saved into the file
 // `training_plot_points.json` ([plots.TrainingPlotFileName]).
-// Notice that if `dataDirOrFile` is a file it reads from that instead.
+// Notice that if `dataDirOrFile` is a file, it reads from that instead.
 //
 // The `filters` are an optional list of filters to apply (in order) to each of the points read: it allows points
-// to be modified arbitrarily -- in particular useful to change names (like adding a prefix) of metrics or metrics
+// to be modified arbitrarily -- in particular, useful to change names (like adding a prefix) of metrics or metrics
 // types.
 //
-// Each filter can also eliminate points by returning false -- only points for which filters returned true are
+// Each filter can also remove points by returning false -- only points for which filters returned true are
 // included.
 func (pc *PlotConfig) LoadCheckpointData(dataDirOrFile string, filters ...PointFilter) error {
 	dataDirOrFile = data.ReplaceTildeInDir(dataDirOrFile)
@@ -295,7 +297,7 @@ nextPoint:
 		}
 		pc.AddPoint(point)
 		if !steps.Has(point.Step) {
-			pc.pointsAdded++ // Count number of points per different value of global step.
+			pc.pointsAdded++ // Count the number of points per different value of the global step.
 			steps.Insert(point.Step)
 		}
 	}
@@ -320,14 +322,14 @@ func (pc *PlotConfig) AddPoint(pt plots.Point) {
 		pc.figs = append(pc.figs, &grob.Fig{
 			Layout: &grob.Layout{
 				Title: &grob.LayoutTitle{
-					Text: pt.MetricType,
+					Text: ptypes.S(pt.MetricType),
 				},
 				Xaxis: &grob.LayoutXaxis{
-					Showgrid: grob.True,
+					Showgrid: ptypes.B(true),
 					Type:     grob.LayoutXaxisTypeLog,
 				},
 				Yaxis: &grob.LayoutYaxis{
-					Showgrid: grob.True,
+					Showgrid: ptypes.B(true),
 					Type:     grob.LayoutYaxisTypeLog,
 				},
 				Legend: &grob.LayoutLegend{
@@ -350,25 +352,28 @@ func (pc *PlotConfig) AddPoint(pt plots.Point) {
 		metricNameToTrace[pt.MetricName] = len(fig.Data)
 		traceIdx = len(fig.Data)
 		fig.Data = append(fig.Data, &grob.Scatter{
-			Name: pt.MetricName,
-			Type: grob.TraceTypeScatter,
+			Name: ptypes.S(pt.MetricName),
 			Line: &grob.ScatterLine{
 				Shape: grob.ScatterLineShapeLinear,
 			},
 			Mode: "lines+markers",
-			X:    []float64{},
-			Y:    []float64{},
+			X:    ptypes.DataArray([]float64{}),
+			Y:    ptypes.DataArray([]float64{}),
 		})
 	}
 	trace := fig.Data[traceIdx].(*grob.Scatter)
-	trace.X = append(trace.X.([]float64), pt.Step)
-	trace.Y = append(trace.Y.([]float64), pt.Value)
+	Xs := trace.X.Value().([]float64)
+	Xs = append(Xs, pt.Step)
+	trace.X = ptypes.DataArray(Xs)
+	Ys := trace.Y.Value().([]float64)
+	Ys = append(Ys, pt.Value)
+	trace.Y = ptypes.DataArray(Ys)
 }
 
 // DynamicSampleDone is called after all the data points recorded for this sample (evaluation at a time step).
 // The value `incomplete` is set to true if any of the evaluations are NaN or infinite.
 //
-// If in a notebook, this would trigger a redraw of the plot.
+// If in a notebook, this would trigger redrawing of the plot.
 //
 // It implements [plot.Plotter]
 func (pc *PlotConfig) DynamicSampleDone(incomplete bool) {
@@ -413,7 +418,7 @@ func (pc *PlotConfig) DynamicPlot(final bool) {
 		return
 	}
 	if final == true {
-		gonbui.UpdateHtml(pc.gonbId, "")
+		gonbui.UpdateHTML(pc.gonbId, "")
 		err := pc.Plot()
 		if err != nil {
 			klog.Errorf("Failed to plot: %+v", err)

@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"testing"
 
-	_ "github.com/gomlx/gomlx/backends/xla"
+	_ "github.com/gomlx/gomlx/backends/default"
 )
 
 var (

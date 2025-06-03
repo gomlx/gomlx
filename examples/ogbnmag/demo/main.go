@@ -20,7 +20,7 @@ import (
 	"os"
 	"time"
 
-	_ "github.com/gomlx/gomlx/backends/xla"
+	_ "github.com/gomlx/gomlx/backends/default"
 )
 
 var (

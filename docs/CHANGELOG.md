@@ -15,6 +15,11 @@
   * Fixed bug introduced in parallelize version of Erf(x).
 * Package `tensors`:
   * Added `Tensor.ToLocal()` to detach a tensor from its backend.
+* Package `ui/gonb/plotly`: 
+  * Update dependencies to new go-plotly v0.7.0 (many changes to the API), while preserving as much as possible
+    the GoMLX api offered.
+* Updated example notebooks to use `github.com/gomlx/gomlx/backends/default` (instead of only `/xla`) and to
+  use the new `backends.MustNew()`.
 
 # v0.19.5: 2024/05/30 SimpleGo (go) backend optimizations
 
