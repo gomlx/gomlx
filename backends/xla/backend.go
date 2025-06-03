@@ -36,7 +36,7 @@ func (backend *Backend) CheckValid() error {
 		return errors.Errorf("%q backend is nil", BackendName)
 	}
 	if backend.plugin == nil {
-		return errors.Errorf("backend %q probably has already been finalized", BackendName)
+		return errors.Errorf("backend %q has already been finalized", BackendName)
 	}
 	return nil
 }
