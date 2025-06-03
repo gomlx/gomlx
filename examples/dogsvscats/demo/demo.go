@@ -34,7 +34,7 @@ import (
 	"k8s.io/klog/v2"
 	"os"
 
-	_ "github.com/gomlx/gomlx/backends/xla"
+	_ "github.com/gomlx/gomlx/backends/default"
 )
 
 var (
