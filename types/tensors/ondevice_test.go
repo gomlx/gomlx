@@ -301,3 +301,22 @@ func TestClones(t *testing.T) {
 		}
 	}
 }
+
+func TestToLocal(t *testing.T) {
+	setupTest(t)
+	refValues := []int32{1, 3, 5, 7, 11}
+
+	for _, shared := range []bool{false, true} {
+		t.Run(fmt.Sprintf("Shared=%v", shared), func(t *testing.T) {
+			tensor := FromValue(refValues)
+			tensor.MaterializeOnDevices(backend, shared)
+			require.NotNil(t, tensor.backend)
+
+			// Move to local: there should be no on-device storage or backend associated,
+			// and the contents should still be the same.
+			tensor.ToLocal()
+			require.Nil(t, tensor.backend)
+			require.Equal(t, refValues, CopyFlatData[int32](tensor))
+		})
+	}
+}

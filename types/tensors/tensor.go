@@ -65,12 +65,17 @@
 // so they can be used multiple times, and transfer only occurs once.
 //
 // Tensors used across multiple backends:
+//
 // There is not an easy interface to share tensors across backends (instances) yet, even if they are the same
 // type of backends (if you created two instances of `xla:cpu` backend, for instance).
 //
 // The recommendation is to keep tensors used for each backend in separate variables and copy when needed:
 // You can use `Tensor.LocalClone()` to copy a tensor from one backend to a new local tensor.
 // Or you can use `Tensor.OnDeviceClone()` to copy a tensor from one backend directly into another backend.
+//
+// Alternatively, after using a tensor as input to a Backend computation, or a tensor returned from the Backend,
+// call Tensor.ToLocal(): it will remove any links to the backend (by copying all the data locally) and
+// it can then be used by other backends.
 package tensors
 
 import (
@@ -98,12 +103,17 @@ import (
 // (see ConstFlatData and MutableFlatData).
 //
 // Tensors used across multiple backends:
+//
 // There is not an easy interface to share tensors across backends (instances) yet, even if they are the same
 // type of backends (if you created two instances of `xla:cpu` backend, for instance).
 //
 // The recommendation is to keep tensors used for each backend in separate variables and copy when needed:
 // You can use `Tensor.LocalClone()` to copy a tensor from one backend to a new local tensor.
 // Or you can use `Tensor.OnDeviceClone()` to copy a tensor from one backend directly into another backend.
+//
+// Alternatively, after using a tensor as input to a Backend computation, or a tensor returned from the Backend,
+// call Tensor.ToLocal(): it will remove any links to the backend (by copying all the data locally) and
+// it can then be used by other backends.
 //
 // More details in the `tensor` package documentation.
 type Tensor struct {
@@ -112,14 +122,16 @@ type Tensor struct {
 
 	// mu protects the local and OnDevices data, but not the shape, which is considered immutable (only changed
 	// when Tensor is finalized).
-	mu    sync.Mutex
+	mu sync.Mutex
+
+	// local storage tensor. Not used for shared buffers.
 	local *local
 
 	// onDevices maps deviceNum -> on device buffer.
 	onDevices map[backends.DeviceNum]*onDevice
 
-	// isShared indicates that the tensor used a shared buffer: it is held "on-device" and the "local" is just
-	// a pointer to the "on-device" one.
+	// isShared indicates that the tensor used a shared buffer: it is held "on-device", but it has
+	// a direct reference to the flat data in Tensor.sharedFlat.
 	//
 	// This is allocated, freed and mutated in ondevice.go, by the corresponding onDevice structure that owns
 	// the shared buffer.
@@ -165,6 +177,7 @@ func (t *Tensor) Memory() uintptr { return t.shape.Memory() }
 
 // Ok returns whether the Tensor is in a valid state: it is not nil, and it hasn't been finalized.
 func (t *Tensor) Ok() bool {
+	// Notice that shared buffers are stored as onDevices.
 	return t != nil && t.shape.Ok() &&
 		(!t.local.IsFinalized() || len(t.onDevices) > 0)
 }
@@ -191,6 +204,7 @@ func (t *Tensor) AssertValid() {
 		panic(errors.New("Tensor shape is invalid"))
 	}
 	if t.local.IsFinalized() && len(t.onDevices) == 0 {
+		// Notice that shared buffers are stored as onDevices.
 		panic(errors.New("Tensor has no local or on-device representation"))
 	}
 }

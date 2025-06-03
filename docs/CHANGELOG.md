@@ -12,6 +12,8 @@
 * Package `types/tensors/numpy` with methods to read and write tensors from/to `.npy` and `.npz` files.
 * Package `simplego`:
   * Fixed bug introduced in parallelize version of Erf(x).
+* Package `tensors`:
+  * Added `Tensor.ToLocal()` to detach a tensor from its backend.
 
 # v0.19.5: 2024/05/30 SimpleGo (go) backend optimizations
 

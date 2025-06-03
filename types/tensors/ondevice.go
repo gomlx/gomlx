@@ -146,8 +146,9 @@ func (t *Tensor) lockedMaterializeOnDevices(backend backends.Backend, share bool
 		t.backend = backend
 	} else if t.backend != backend {
 		exceptions.Panicf("while attempting to Tensor(shape=%s).MaterilizeOnDevices(backend=%s): cannot use the same Tensor across different backend instances, "+
-			"even if they are the same type of backend; see more on the Tensor documentation, but a quick solution is to clone the tensor "+
-			"to a new Tensor with the desired backend: tensor.LocalClone() or tensor.OnDeviceClone(newBackend)",
+			"even if they are the same type of backend; see more on the Tensor documentation, but a couple of quick solutions: (a) call Tensor.ToLocal() to make sure the "+
+			"tensor is moved to local storage and detached from the backend; (b) clone the tensors "+
+			"and keep a tensor copy for each desired backend, with tensor.LocalClone() or tensor.OnDeviceClone(newBackend)",
 			t.shape, backend.Name())
 		t.Clone()
 	}
@@ -241,6 +242,7 @@ func (t *Tensor) lockedInvalidateOnDevice() {
 // OnDeviceClone creates a clone of the tensor t that has backend storage.
 // It also works to copy tensors to a different backend.
 func (t *Tensor) OnDeviceClone(backend backends.Backend, deviceNums ...backends.DeviceNum) *Tensor {
+	t.AssertValid()
 	if len(deviceNums) == 0 {
 		deviceNums = defaultDeviceNums
 	}
@@ -283,6 +285,7 @@ func (t *Tensor) OnDeviceClone(backend backends.Backend, deviceNums ...backends.
 //
 // If you are trying to clone a tensor to use on a different backend, use OnDeviceClone or even LocalClone instead.
 func (t *Tensor) Clone() *Tensor {
+	t.AssertValid()
 	if t.backend == nil || !t.backend.HasSharedBuffers() {
 		return t.LocalClone()
 	}
@@ -340,6 +343,35 @@ func (t *Tensor) lockedMaterializeLocal() {
 	if err := t.backend.BufferToFlatData(d.buffer, t.local.flat); err != nil {
 		panic(errors.WithMessagef(err, "Tensor(shape=%s).MaterializeLocal() failed to copy from on-device buffer", t.shape))
 	}
+}
+
+// ToLocal forces the tensor to move its data to local (host CPU) storage, and detaches itself
+// from the backend.
+//
+// This is useful if using tensors across multiple backends.
+//
+// If the tensor already has a local storage, there is no copy involved.
+// Any on-device storage is freed.
+func (t *Tensor) ToLocal() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.AssertValid()
+	if !t.isShared {
+		t.lockedMaterializeLocal()
+		t.lockedInvalidateOnDevice()
+
+	} else {
+		// Copy shared data.
+		flatV := reflect.MakeSlice(reflect.SliceOf(t.shape.DType.GoType()), t.Size(), t.Size())
+		t.local = &local{
+			t:    t,
+			flat: flatV.Interface(),
+		}
+		reflect.Copy(reflect.ValueOf(t.local.flat), reflect.ValueOf(t.sharedFlat))
+		t.isShared = false
+		t.lockedInvalidateOnDevice()
+	}
+	return
 }
 
 // CopyFrom will copy the contents from tFrom. The tensors t and tFrom must have the same shape.
