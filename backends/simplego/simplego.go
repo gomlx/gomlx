@@ -97,6 +97,9 @@ type Backend struct {
 
 	// opsExecutionType defines how to execute the ops of a computation.
 	opsExecutionType opsExecutionType
+
+	// isFinalized is true if the backend has been isFinalized.
+	isFinalized bool
 }
 
 // Compile-time check that simplego.Backend implements backends.Backend.
@@ -143,4 +146,12 @@ func notImplementedError(opType backends.OpType) error {
 }
 
 // Finalize releases all the associated resources immediately, and makes the backend invalid.
-func (b *Backend) Finalize() {}
+func (b *Backend) Finalize() {
+	b.isFinalized = true
+	b.bufferPools.Clear()
+}
+
+// IsFinalized returns true if the backend has been isFinalized.
+func (b *Backend) IsFinalized() bool {
+	return b.isFinalized
+}

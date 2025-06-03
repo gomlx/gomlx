@@ -53,9 +53,14 @@ type Backend interface {
 	DataInterface
 
 	// Finalize releases all the associated resources immediately and makes the backend invalid.
-	// Any operation on a Backend after Finalize is called is undefined and can lead to memory
-	// corruption.
+	// Any operation on a Backend after Finalize is called is undefined, except IsFinalized.
 	Finalize()
+
+	// IsFinalized returns true if the backend is finalized.
+	//
+	// Tensors stored on a backend may hold a reference to a finalized backend, and when being garbage collected,
+	// check whether it is finalized before requesting the backend to finalize its buffers.
+	IsFinalized() bool
 }
 
 // Constructor takes a config string (optionally empty) and returns a Backend.
