@@ -1,9 +1,10 @@
 # GoMLX changelog
 
-# Next
+# v.0.20.0: Small API change: `backends.NewWithConfig()` changed to return an error. 
 
 * Package `backends`:
-  * Method `New()` and `NewWithConfig()` will be changed to return an error (as opposed to panic).
+  * **API CHANGE**: Method `NewWithConfig()` changed
+  * Method **`New()` will be changed to return an error (as opposed to panic) at next version**.
     Temporarily the methods `MustNew()` (which panics on errors, like today) and `NewOrErr` (which returns
     an error) were created to have a clear API, and `New()` was marked as deprecated. At the next version
     `New()` will change the API.
