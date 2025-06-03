@@ -345,14 +345,15 @@ func (t *Tensor) lockedMaterializeLocal() {
 	}
 }
 
-// ToLocal forces the tensor to move its data to local (host CPU) storage, and detaches itself
+// ToLocal forces the tensor to move its data to local (host CPU) storage and detaches itself
 // from the backend.
+// It returns itself to allow for cascading calls.
 //
 // This is useful if using tensors across multiple backends.
 //
 // If the tensor already has a local storage, there is no copy involved.
 // Any on-device storage is freed.
-func (t *Tensor) ToLocal() {
+func (t *Tensor) ToLocal() *Tensor {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.AssertValid()
@@ -371,7 +372,7 @@ func (t *Tensor) ToLocal() {
 		t.isShared = false
 		t.lockedInvalidateOnDevice()
 	}
-	return
+	return t
 }
 
 // CopyFrom will copy the contents from tFrom. The tensors t and tFrom must have the same shape.
