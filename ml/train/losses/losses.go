@@ -111,6 +111,12 @@ const (
 
 	// TypeTriplet
 	TypeTriplet
+
+	// TypeEuclidean
+	TypeEuclidean
+
+	// TypeEuclideanSquare
+	TypeEuclideanSquare
 )
 
 // LossFromContext takes the value from the ParamLoss hyperparameter as a string and
@@ -148,6 +154,10 @@ func LossFromContext(ctx *context.Context) (LossFn, error) {
 		return SparseCategoricalCrossEntropyLogits, nil
 	case TypeTriplet:
 		return MakeTripletLossFromContext(ctx), nil
+	case TypeEuclidean:
+		return EuclideanDistance, nil
+	case TypeEuclideanSquare:
+		return EuclideanDistanceSquare, nil
 	default:
 		return nil, errors.Errorf("Unknown loss type %q set for hyperparameter %q, known losses are \"%s\"",
 			lossType, ParamLoss, strings.Join(TypeStrings(), "\", \""))
@@ -645,4 +655,75 @@ func MakeAdaptivePowerLossFromContext(ctx *context.Context) LossFn {
 	middleDelta := context.GetParamOr(ctx, ParamAdaptivePowerLossMiddleDelta, 1.0)
 	sharpness := context.GetParamOr(ctx, ParamAdaptivePowerLossSharpness, 1.0)
 	return MakeAdaptivePowerLoss(powerNear, powerFar, middleDelta, sharpness)
+}
+
+// EuclideanDistanceSquare returns the square of the Euclidean distance between labels and predictions
+// vectors (last axis).
+//
+// labels and predictions must have the same shape.
+//
+// Labels can have 2 optional extra values (in any order):
+//
+//   - mask: a boolean mask of shape [batchSize] set to true for values to be used, and false for those to be ignored.
+//     Typically used for padding. The returned mean loss takes into consideration the mask.
+//   - weights: a float value of shape [batchSize] with the relative weights to be applied to each example.
+func EuclideanDistanceSquare(labels, predictions []*Node) (loss *Node) {
+	predictions0 := predictions[0]
+	labels0 := labels[0]
+	if !labels0.Shape().Equal(predictions0.Shape()) {
+		Panicf("labels[0] (%s) and predictions[0] (%s) must have same shape", labels0.Shape(), predictions0.Shape())
+	}
+	loss = Square(Sub(labels0, predictions0))
+	loss = ReduceSum(loss, -1)
+
+	// Factor in weights and mask.
+	weights, mask := CheckExtraLabelsForWeightsAndMask(labels0.Shape(), labels[1:])
+	if weights != nil {
+		loss = Mul(loss, weights)
+	}
+	if mask != nil {
+		loss = Where(mask, loss, ZerosLike(loss))
+		if !loss.IsScalar() {
+			loss = MaskedReduceAllMean(loss, mask)
+		}
+	} else if !loss.IsScalar() {
+		loss = ReduceAllMean(loss)
+	}
+	return loss
+}
+
+// EuclideanDistance returns the Euclidean distance between labels and predictions
+// vectors (last axis).
+//
+// labels and predictions must have the same shape.
+//
+// Labels can have 2 optional extra values (in any order):
+//
+//   - mask: a boolean mask of shape [batchSize] set to true for values to be used, and false for those to be ignored.
+//     Typically used for padding. The returned mean loss takes into consideration the mask.
+//   - weights: a float value of shape [batchSize] with the relative weights to be applied to each example.
+func EuclideanDistance(labels, predictions []*Node) (loss *Node) {
+	predictions0 := predictions[0]
+	labels0 := labels[0]
+	if !labels0.Shape().Equal(predictions0.Shape()) {
+		Panicf("labels[0] (%s) and predictions[0] (%s) must have same shape", labels0.Shape(), predictions0.Shape())
+	}
+	loss = Square(Sub(labels0, predictions0))
+	loss = ReduceSum(loss, -1)
+	loss = Sqrt(loss)
+
+	// Factor in weights and mask.
+	weights, mask := CheckExtraLabelsForWeightsAndMask(labels0.Shape(), labels[1:])
+	if weights != nil {
+		loss = Mul(loss, weights)
+	}
+	if mask != nil {
+		loss = Where(mask, loss, ZerosLike(loss))
+		if !loss.IsScalar() {
+			loss = MaskedReduceAllMean(loss, mask)
+		}
+	} else if !loss.IsScalar() {
+		loss = ReduceAllMean(loss)
+	}
+	return loss
 }

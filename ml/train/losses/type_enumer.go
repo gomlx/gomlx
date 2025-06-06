@@ -8,11 +8,11 @@ import (
 	"strings"
 )
 
-const _TypeName = "maemsehuberaplbin_crossbin_cross_logitscategorical_crosscategorical_cross_logitssparse_cross_logitstriplet"
+const _TypeName = "maemsehuberaplbin_crossbin_cross_logitscategorical_crosscategorical_cross_logitssparse_cross_logitstripleteuclideaneuclidean_square"
 
-var _TypeIndex = [...]uint8{0, 3, 6, 11, 14, 23, 39, 56, 80, 99, 106}
+var _TypeIndex = [...]uint8{0, 3, 6, 11, 14, 23, 39, 56, 80, 99, 106, 115, 131}
 
-const _TypeLowerName = "maemsehuberaplbin_crossbin_cross_logitscategorical_crosscategorical_cross_logitssparse_cross_logitstriplet"
+const _TypeLowerName = "maemsehuberaplbin_crossbin_cross_logitscategorical_crosscategorical_cross_logitssparse_cross_logitstripleteuclideaneuclidean_square"
 
 func (i Type) String() string {
 	if i < 0 || i >= Type(len(_TypeIndex)-1) {
@@ -39,31 +39,37 @@ func _TypeNoOp() {
 	_ = x[TypeCategoricalCrossLogits-(7)]
 	_ = x[TypeSparseCrossLogits-(8)]
 	_ = x[TypeTriplet-(9)]
+	_ = x[TypeEuclidean-(10)]
+	_ = x[TypeEuclideanSquare-(11)]
 }
 
-var _TypeValues = []Type{TypeMAE, TypeMSE, TypeHuber, TypeAPL, TypeBinCross, TypeBinCrossLogits, TypeCategoricalCross, TypeCategoricalCrossLogits, TypeSparseCrossLogits, TypeTriplet}
+var _TypeValues = []Type{TypeMAE, TypeMSE, TypeHuber, TypeAPL, TypeBinCross, TypeBinCrossLogits, TypeCategoricalCross, TypeCategoricalCrossLogits, TypeSparseCrossLogits, TypeTriplet, TypeEuclidean, TypeEuclideanSquare}
 
 var _TypeNameToValueMap = map[string]Type{
-	_TypeName[0:3]:         TypeMAE,
-	_TypeLowerName[0:3]:    TypeMAE,
-	_TypeName[3:6]:         TypeMSE,
-	_TypeLowerName[3:6]:    TypeMSE,
-	_TypeName[6:11]:        TypeHuber,
-	_TypeLowerName[6:11]:   TypeHuber,
-	_TypeName[11:14]:       TypeAPL,
-	_TypeLowerName[11:14]:  TypeAPL,
-	_TypeName[14:23]:       TypeBinCross,
-	_TypeLowerName[14:23]:  TypeBinCross,
-	_TypeName[23:39]:       TypeBinCrossLogits,
-	_TypeLowerName[23:39]:  TypeBinCrossLogits,
-	_TypeName[39:56]:       TypeCategoricalCross,
-	_TypeLowerName[39:56]:  TypeCategoricalCross,
-	_TypeName[56:80]:       TypeCategoricalCrossLogits,
-	_TypeLowerName[56:80]:  TypeCategoricalCrossLogits,
-	_TypeName[80:99]:       TypeSparseCrossLogits,
-	_TypeLowerName[80:99]:  TypeSparseCrossLogits,
-	_TypeName[99:106]:      TypeTriplet,
-	_TypeLowerName[99:106]: TypeTriplet,
+	_TypeName[0:3]:          TypeMAE,
+	_TypeLowerName[0:3]:     TypeMAE,
+	_TypeName[3:6]:          TypeMSE,
+	_TypeLowerName[3:6]:     TypeMSE,
+	_TypeName[6:11]:         TypeHuber,
+	_TypeLowerName[6:11]:    TypeHuber,
+	_TypeName[11:14]:        TypeAPL,
+	_TypeLowerName[11:14]:   TypeAPL,
+	_TypeName[14:23]:        TypeBinCross,
+	_TypeLowerName[14:23]:   TypeBinCross,
+	_TypeName[23:39]:        TypeBinCrossLogits,
+	_TypeLowerName[23:39]:   TypeBinCrossLogits,
+	_TypeName[39:56]:        TypeCategoricalCross,
+	_TypeLowerName[39:56]:   TypeCategoricalCross,
+	_TypeName[56:80]:        TypeCategoricalCrossLogits,
+	_TypeLowerName[56:80]:   TypeCategoricalCrossLogits,
+	_TypeName[80:99]:        TypeSparseCrossLogits,
+	_TypeLowerName[80:99]:   TypeSparseCrossLogits,
+	_TypeName[99:106]:       TypeTriplet,
+	_TypeLowerName[99:106]:  TypeTriplet,
+	_TypeName[106:115]:      TypeEuclidean,
+	_TypeLowerName[106:115]: TypeEuclidean,
+	_TypeName[115:131]:      TypeEuclideanSquare,
+	_TypeLowerName[115:131]: TypeEuclideanSquare,
 }
 
 var _TypeNames = []string{
@@ -77,6 +83,8 @@ var _TypeNames = []string{
 	_TypeName[56:80],
 	_TypeName[80:99],
 	_TypeName[99:106],
+	_TypeName[106:115],
+	_TypeName[115:131],
 }
 
 // TypeString retrieves an enum value from the enum constants string name.

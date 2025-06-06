@@ -19,6 +19,7 @@ package commandline
 
 import (
 	"fmt"
+
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/ml/train"
 )
