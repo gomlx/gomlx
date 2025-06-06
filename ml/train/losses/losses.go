@@ -164,7 +164,7 @@ func LossFromContext(ctx *context.Context) (LossFn, error) {
 	}
 }
 
-// CheckExtraLabelsForWeightsAndMask takes the remainder slice of labels tensor (so without the actual labels values),
+// CheckExtraLabelsForWeightsAndMask takes the remainder labels tensor slice (so without the actual labels values)
 // and separates a mask (bool) and weights (float), which can be provided in any order.
 //
 // `weightsShape` is the expected shape for weights (if present) and the dimensions for a mask (if present), although
@@ -174,7 +174,7 @@ func LossFromContext(ctx *context.Context) (LossFn, error) {
 //
 // It raises an exception (panic) if there are more or unknown shaped labels.
 //
-// This function are used by loss implementations to help handle mask and weights.
+// This function is used by the loss implementations to help handle mask and weights extra label tensors.
 func CheckExtraLabelsForWeightsAndMask(weightsShape shapes.Shape, labels []*Node) (weights, mask *Node) {
 	maskShape := shapes.Make(dtypes.Bool, weightsShape.Dimensions...)
 	for ii, extra := range labels {
