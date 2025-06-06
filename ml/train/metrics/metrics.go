@@ -131,7 +131,7 @@ func (m *baseMetric) PrettyPrint(value *tensors.Tensor) string {
 			} else if dtype == dtypes.BFloat16 {
 				v = v.(bfloat16.BFloat16).Float32()
 			}
-			return fmt.Sprintf("%.3f", v)
+			return fmt.Sprintf("%.3g", v)
 		}
 		return fmt.Sprintf("%s", v)
 	}
