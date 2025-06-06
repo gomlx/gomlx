@@ -2,7 +2,7 @@
 
 # Next
 
-
+* Better handling of loss (without regularization) in metrics.
 
 # v.0.20.0: Small API change: `backends.NewWithConfig()` changed to return an error. 
 
