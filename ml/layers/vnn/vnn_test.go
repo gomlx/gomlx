@@ -65,37 +65,55 @@ func TestLinearLayer(t *testing.T) {
 // TestRelu checks that the Relu activation with a learned projection is equivariant to rotation.
 func TestRelu(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
-	ctx := context.New()
-	ctx.RngStateFromSeed(42)
-	outputs := context.ExecOnceN(backend, ctx, func(ctx *context.Context, g *Graph) []*Node {
-		pi2 := math.Pi * 2.0
+	baseCtx := context.New()
+	baseCtx.RngStateFromSeed(42)
+	testShape := shapes.Make(dtypes.Float64, 20, 2, 3)
+	//testShape := shapes.Make(dtypes.Float64, 1, 2, 3)
+	for _, negativeSlope := range []float64{0, 0.2} {
+		for _, shareNonLinearity := range []bool{false, true} {
+			name := fmt.Sprintf("Leak=%.1f-Shared=%v", negativeSlope, shareNonLinearity)
+			t.Run(name, func(t *testing.T) {
+				ctx := baseCtx.In(name)
+				outputs := context.ExecOnceN(backend, ctx, func(ctx *context.Context, g *Graph) []*Node {
+					pi2 := math.Pi * 2.0
 
-		// Random inputs and rotations:
-		// - Inputs has extra batch dimensions (1, 1, 1), we are also testing that they are preserved.
-		input := ctx.RandomUniform(g, shapes.Make(dtypes.Float64, 20, 2, 3))
-		roll := MulScalar(ctx.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
-		pitch := MulScalar(ctx.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
-		yaw := MulScalar(ctx.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
+					// Random inputs and rotations:
+					// - Inputs has extra batch dimensions (1, 1, 1), we are also testing that they are preserved.
+					input := ctx.RandomUniform(g, testShape)
+					roll := MulScalar(ctx.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
+					pitch := MulScalar(ctx.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
+					yaw := MulScalar(ctx.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
 
-		// Linear function: fix seed so we always have the same values.
-		ctx.SetParam(initializers.ParamInitialSeed, 42)
-		ctx = ctx.Checked(false).WithInitializer(initializers.HeFn(ctx))
+					// Linear function: fix seed so we always have the same values.
+					ctx.SetParam(initializers.ParamInitialSeed, 42)
+					ctx = ctx.Checked(false).WithInitializer(initializers.HeFn(ctx))
 
-		// Outputs: out1 rotates after linear transformation, out2 rotates before linear transformation.
-		out1 := Relu(ctx, input)
-		diffRelu := ReduceAllMax(Abs(Sub(input, out1)))
-		out1 = RotateOnOrigin(out1, roll, pitch, yaw)
-		require.NoError(t, out1.Shape().CheckDims(20, 2, 3))
-		out2 := Relu(ctx, RotateOnOrigin(input, roll, pitch, yaw))
-		require.NoError(t, out2.Shape().CheckDims(20, 2, 3))
-		diff := Abs(Sub(out1, out2))
-		return []*Node{diffRelu, ReduceAllMean(diff)}
-	})
-	reluDiff, rotDiff := outputs[0], outputs[1]
-	fmt.Printf("\tBefore/after relu abs difference: %s\n", reluDiff.GoStr())
-	fmt.Printf("\tRotation (before/after relu) abs difference: %s\n", rotDiff.GoStr())
-	require.Greater(t, tensors.ToScalar[float64](reluDiff), 1e-3)
-	require.Less(t, tensors.ToScalar[float64](rotDiff), 1e-3)
+					// Outputs: out1 rotates after linear transformation, out2 rotates before linear transformation.
+					out1 := Relu(ctx, input).
+						NegativeSlope(negativeSlope).
+						ShareNonLinearity(shareNonLinearity).
+						Done()
+					diffRelu := ReduceAllMax(Abs(Sub(input, out1)))
+					out1 = RotateOnOrigin(out1, roll, pitch, yaw)
+					require.True(t, out1.Shape().Equal(testShape))
+
+					out2 := Relu(ctx, RotateOnOrigin(input, roll, pitch, yaw)).
+						NegativeSlope(negativeSlope).
+						ShareNonLinearity(shareNonLinearity).
+						Done()
+					require.True(t, out2.Shape().Equal(testShape))
+
+					diff := Abs(Sub(out1, out2))
+					return []*Node{diffRelu, ReduceAllMean(diff)}
+				})
+				reluDiff, rotDiff := outputs[0], outputs[1]
+				fmt.Printf("\tBefore/after relu abs difference: %s\n", reluDiff.GoStr())
+				fmt.Printf("\tRotation (before/after relu) abs difference: %s\n", rotDiff.GoStr())
+				require.Greater(t, tensors.ToScalar[float64](reluDiff), 1e-3)
+				require.Less(t, tensors.ToScalar[float64](rotDiff), 1e-3)
+			})
+		}
+	}
 }
 
 // TestLayerNormalization checks that the LayerNormalization normalizes properly -- mean close to
@@ -184,12 +202,12 @@ func TestVNNTrain(t *testing.T) {
 	ctx.RngStateFromSeed(42)
 
 	// Model function
-	numFeatures := 2
+	numFeatures := 4
 	modelFn := func(ctx *context.Context, spec any, inputs []*Node) []*Node {
 		x := inputs[0] // Shape: [batch, 2, 3]
 		ctx = ctx.In("vnn")
 		vnn := New(ctx, x, numFeatures).
-			NumHiddenLayers(2, 10). // 2 hidden layers
+			NumHiddenLayers(1, numFeatures). // 2 hidden layers
 			Activation("relu").
 			Normalization("layer").
 			ConcatenateNormalizedInput(true).
@@ -216,7 +234,7 @@ func TestVNNTrain(t *testing.T) {
 	const numSamples = 65536
 	const numInputs = 2
 	const vecDim = 3
-	const numSteps = 10_000
+	const numSteps = 5_000
 
 	// Generate random input vectors in the range [-1, 1]
 	inputsData := make([]float32, numSamples*numInputs*vecDim)
@@ -242,14 +260,14 @@ func TestVNNTrain(t *testing.T) {
 	// Create a dataset from the generated data.
 	inputsTensor := tensors.FromFlatDataAndDimensions(inputsData, numSamples, numInputs, vecDim)
 	labelsTensor := tensors.FromFlatDataAndDimensions(labelsData, numSamples)
-	ds, err := data.InMemoryFromData(backend, "VNN: opposite quadrants dataset",
+	ds, err := data.InMemoryFromData(backend, "VNN: negative cosine distance",
 		[]any{inputsTensor}, []any{labelsTensor})
 	require.NoError(t, err)
 	dsEval := ds.Copy().BatchSize(1, false)
 	ds.Shuffle().BatchSize(batchSize, true).Infinite(true)
 
 	trainer := train.NewTrainer(
-		backend, ctx, modelFn, losses.BinaryCrossentropyLogits, optimizers.Adam().LearningRate(1e-3).Done(),
+		backend, ctx, modelFn, losses.BinaryCrossentropyLogits, optimizers.Adam().Done(),
 		[]metrics.Interface{metrics.NewMovingAverageBinaryLogitsAccuracy("Moving Accuracy", "~acc", 0.01)},
 		[]metrics.Interface{metrics.NewMeanBinaryLogitsAccuracy("Mean Accuracy", "#acc")})
 
@@ -264,6 +282,6 @@ func TestVNNTrain(t *testing.T) {
 
 	// We expect the VNN to fail to learn this function because it's not rotation-invariant.
 	// Accuracy should be around 50% (random guessing).
-	accuracy := lossAndMetrics[1].Value().(float32)
-	require.GreaterOrEqual(t, accuracy, 0.8, "VNN was not able to learn rotation invariant simple task.")
+	accuracy := lossAndMetrics[2].Value().(float32)
+	require.GreaterOrEqual(t, accuracy, float32(0.8), "VNN was not able to learn rotation invariant simple task, accuracy=%.1f%%.", accuracy*100.0)
 }

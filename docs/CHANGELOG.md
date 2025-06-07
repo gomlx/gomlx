@@ -2,8 +2,14 @@
 
 # Next
 
-* Better handling of loss (without regularization) in metrics.
-
+* Package `train`:
+  * Better handling of loss (without regularization) in metrics. Added `SetLossNoRegularization` and `GetLossNoRegularization`.
+* Pacakge `vnn`:
+  * Added `ConcatenateNormalizedInput()` to allow it to operate on the directions only, discarding the magnitude.
+  * Fixed the `LayerNormalization`.
+  * Fixed `Relu`: added support for non-shared non-linearities and a "leak" parameter ("vnn_relu_negative_slope").
+  * Added `VNN().ActivationFn()` to allow setting arbitrary activation functions.
+  
 # v.0.20.0: Small API change: `backends.NewWithConfig()` changed to return an error. 
 
 * Package `backends`:

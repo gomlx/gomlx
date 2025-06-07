@@ -57,6 +57,9 @@ const (
 	ParamConcatenateNormalizedInput = "vnn_concatenate_normalized_input"
 )
 
+// ActivationFn applies a non-linearity to the operand.
+type ActivationFn func(ctx *context.Context, operand *Node) *Node
+
 // Config is created with New and can be configured with its methods or simply setting the corresponding
 // hyperparameters in the context.
 type Config struct {
@@ -64,7 +67,8 @@ type Config struct {
 	input                           *Node
 	outputChannels                  int
 	numHiddenLayers, numHiddenNodes int
-	activation                      string
+	activationName                  string
+	activationFn                    ActivationFn
 	normalization                   string
 	dropoutRatio                    float64
 	useResidual                     bool
@@ -112,7 +116,7 @@ func New(ctx *context.Context, input *Node, outputChannels int) *Config {
 		outputChannels:             outputChannels,
 		numHiddenLayers:            context.GetParamOr(ctx, ParamNumHiddenLayers, 0),
 		numHiddenNodes:             context.GetParamOr(ctx, ParamNumHiddenNodes, 10),
-		activation:                 context.GetParamOr(ctx, ParamActivation, "relu"),
+		activationName:             context.GetParamOr(ctx, ParamActivation, "relu"),
 		normalization:              context.GetParamOr(ctx, ParamNormalization, ""),
 		regularizer:                regularizers.FromContext(ctx),
 		dropoutRatio:               context.GetParamOr(ctx, ParamDropoutRate, 0.0),
@@ -152,8 +156,17 @@ func (c *Config) NumHiddenLayers(numLayers, numHiddenNodes int) *Config {
 // The default and currently the only rotation-equivariant activation defined is "relu", if not defined as a hyperparameter.
 //
 // Other valid values are "" or "none" for no activation function.
+//
+// See also ActivationFn.
 func (c *Config) Activation(activation string) *Config {
-	c.activation = activation
+	c.activationName = activation
+	return c
+}
+
+// ActivationFn is an alternative way to set the activation, by providing an activation function.
+// It takes precedence over the one set by Config.Activation.
+func (c *Config) ActivationFn(fn ActivationFn) *Config {
+	c.activationFn = fn
 	return c
 }
 
@@ -229,14 +242,16 @@ func (c *Config) Done() *Node {
 	one := ScalarOne(g, dtype)
 
 	// Activation function.
-	var activationFn func(ctx *context.Context, x *Node) *Node
-	switch c.activation {
-	case "", "none":
-		// No activation, leave it as nil.
-	case "relu":
-		activationFn = Relu
-	default:
-		exceptions.Panicf("vnn: invalid activation %q given: valid values are \"relu\", \"\" or \"none\"", c.activation)
+	activationFn := c.activationFn
+	if activationFn == nil {
+		switch c.activationName {
+		case "", "none":
+			// No activation, leave it as nil.
+		case "relu":
+			activationFn = ReluFromContext
+		default:
+			exceptions.Panicf("vnn: invalid activation %q given: valid values are \"relu\", \"\" or \"none\"", c.activationName)
+		}
 	}
 
 	// Normalization function.
