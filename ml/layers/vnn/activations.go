@@ -41,7 +41,7 @@ func Relu(ctx *context.Context, operand *Node) *ReluConfig {
 		exceptions.Panicf("Relu requires that the last axis of operand has dimension 3, got operand.shape=%s", operand.Shape())
 	}
 	if operand.Shape().Dim(-2) < 2 {
-		exceptions.Panicf("Relu requires at least two vectors (channels > 2) as input, got operand.shape=%s", operand.Shape())
+		exceptions.Panicf("Relu requires at least two vectors (channels > 2) as operand, got operand.shape=%s", operand.Shape())
 	}
 	return &ReluConfig{
 		ctx:               ctx,

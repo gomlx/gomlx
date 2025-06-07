@@ -137,8 +137,7 @@ func TestLayerNormalization(t *testing.T) {
 		ctx = ctx.Checked(false).WithInitializer(initializers.HeFn(ctx))
 
 		// Outputs: out1 rotates after linear transformation, out2 rotates before linear transformation.
-
-		epsilon := 1.0e-8
+		epsilon := 1e-5
 		out1 := RotateOnOrigin(LayerNormalization(input, epsilon), roll, pitch, yaw)
 		out1Mean := ReduceMean(out1, 1)
 		meanAbsDiff := ReduceAllSum(Abs(out1Mean))
@@ -210,7 +209,7 @@ func TestVNNTrain(t *testing.T) {
 			NumHiddenLayers(1, numFeatures). // 2 hidden layers
 			Activation("relu").
 			Normalization("layer").
-			ConcatenateNormalizedInput(true).
+			Scaler(true).
 			Regularizer(regularizers.L2(0.001)).
 			Done()
 
@@ -218,11 +217,11 @@ func TestVNNTrain(t *testing.T) {
 		ctx = ctx.In("head")
 		p0 := New(ctx.In("p0"), vnn, 1).
 			NumHiddenLayers(0, 0).
-			ConcatenateNormalizedInput(true).
+			Scaler(true).
 			Done()
 		p1 := New(ctx.In("p1"), vnn, 1).
 			NumHiddenLayers(0, 0).
-			ConcatenateNormalizedInput(true).
+			Scaler(true).
 			Done()
 		logit := InvariantDotProduct(p0, p1)
 		logit = Reshape(logit, -1) // Shape: [batch]
@@ -236,7 +235,7 @@ func TestVNNTrain(t *testing.T) {
 	const vecDim = 3
 	const numSteps = 5_000
 
-	// Generate random input vectors in the range [-1, 1]
+	// Generate random operand vectors in the range [-1, 1]
 	inputsData := make([]float32, numSamples*numInputs*vecDim)
 	rng := rand.New(rand.NewPCG(0, 42))
 	for i := range inputsData {
