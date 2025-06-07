@@ -14,6 +14,7 @@ import (
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 )
 
@@ -50,6 +51,10 @@ const (
 	// It can be "relu" (default), "none" or "" -- the last two mean no activation.
 	// Notice "relu" refers to vnn.Relu, which is a rotation-equivariant activation.
 	ParamActivation = "vnn_activation"
+
+	// ParamConcatenateNormalizedInput is the name of the hyperparameter that defines whether to augment the input
+	// with a normalized version of itself.
+	ParamConcatenateNormalizedInput = "vnn_concatenate_normalized_input"
 )
 
 // Config is created with New and can be configured with its methods or simply setting the corresponding
@@ -63,6 +68,7 @@ type Config struct {
 	normalization                   string
 	dropoutRatio                    float64
 	useResidual                     bool
+	concatenateNormalizedInput      bool
 
 	regularizer regularizers.Regularizer
 }
@@ -101,16 +107,17 @@ func New(ctx *context.Context, input *Node, outputChannels int) *Config {
 	}
 
 	c := &Config{
-		ctx:             ctx,
-		input:           input,
-		outputChannels:  outputChannels,
-		numHiddenLayers: context.GetParamOr(ctx, ParamNumHiddenLayers, 0),
-		numHiddenNodes:  context.GetParamOr(ctx, ParamNumHiddenNodes, 10),
-		activation:      context.GetParamOr(ctx, ParamActivation, "relu"),
-		normalization:   context.GetParamOr(ctx, ParamNormalization, ""),
-		regularizer:     regularizers.FromContext(ctx),
-		dropoutRatio:    context.GetParamOr(ctx, ParamDropoutRate, 0.0),
-		useResidual:     context.GetParamOr(ctx, ParamResidual, false),
+		ctx:                        ctx,
+		input:                      input,
+		outputChannels:             outputChannels,
+		numHiddenLayers:            context.GetParamOr(ctx, ParamNumHiddenLayers, 0),
+		numHiddenNodes:             context.GetParamOr(ctx, ParamNumHiddenNodes, 10),
+		activation:                 context.GetParamOr(ctx, ParamActivation, "relu"),
+		normalization:              context.GetParamOr(ctx, ParamNormalization, ""),
+		regularizer:                regularizers.FromContext(ctx),
+		dropoutRatio:               context.GetParamOr(ctx, ParamDropoutRate, 0.0),
+		useResidual:                context.GetParamOr(ctx, ParamResidual, false),
+		concatenateNormalizedInput: context.GetParamOr(ctx, ParamConcatenateNormalizedInput, false),
 	}
 
 	// Fallback parameters.
@@ -173,6 +180,18 @@ func (c *Config) Normalization(normalization string) *Config {
 	return c
 }
 
+// ConcatenateNormalizedInput configures if the input should be augmented with a normalized version of itself.
+// This is useful to allow the model to manipulate only the directions of the inputs (and ignore magnitude).
+//
+// The default is false, since it has a cost in parameters and flops.
+//
+// It may be configured with the hyperparameter ParamConcatenateNormalizedInput (="concatenate_normalized_input")
+// in the context.
+func (c *Config) ConcatenateNormalizedInput(enabled bool) *Config {
+	c.concatenateNormalizedInput = enabled
+	return c
+}
+
 // Regularizer to be applied to the learned weights.
 // Default is none.
 //
@@ -206,6 +225,8 @@ func (c *Config) Done() *Node {
 	x := c.input
 	g := x.Graph()
 	dtype := x.DType()
+	zero := ScalarZero(g, dtype)
+	one := ScalarOne(g, dtype)
 
 	// Activation function.
 	var activationFn func(ctx *context.Context, x *Node) *Node
@@ -271,6 +292,15 @@ func (c *Config) Done() *Node {
 			residual = x
 		}
 
+		// Concatenate normalized input if requested.
+		if c.concatenateNormalizedInput {
+			l2X := L2Norm(x, -1)
+			l2X = Where(Equal(l2X, zero), one, l2X)
+			l2X = StopGradient(l2X)
+			xUnit := Div(x, l2X)
+			x = Concatenate([]*Node{x, xUnit}, -2)
+		}
+
 		// Output channels: numHiddenNodes for intermediary layers, Config.outputChannels for
 		// the final (output) layer.
 		inputChannels := x.Shape().Dim(1)
@@ -296,4 +326,17 @@ func (c *Config) Done() *Node {
 	dims[len(dims)-2] = x.Shape().Dim(-2)
 	x = Reshape(x, dims...)
 	return x
+}
+
+// InvariantDotProduct does a dot product on the last axis (presumably of dimension 3)
+// of two VNN projections (rotation invariant) from the same tensor of 3d vectors.
+func InvariantDotProduct(v0, v1 *Node) *Node {
+	if !v0.Shape().Equal(v1.Shape()) {
+		exceptions.Panicf("shapes must be the same for InvaiantDotProduct, got v0.shape=%s and v1.shape=%s", v0.Shape(), v1.Shape())
+	}
+	if v0.Shape().Dim(-1) != 3 {
+		exceptions.Panicf("VNNs only work with 3D vectors (the last axis must have dimension 3), got v0.shape = v1.shape =%s", v0.Shape())
+	}
+	batchAxes := xslices.Iota(0, v0.Rank()-1) // Same for both tensors.
+	return DotGeneral(v0, []int{-1}, batchAxes, v1, []int{-1}, batchAxes)
 }

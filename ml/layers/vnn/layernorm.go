@@ -26,10 +26,17 @@ func LayerNormalization(x *Node, epsilon float64) *Node {
 	// Find mean vectors per example.
 	xMean := ReduceAndKeep(x, ReduceMean, 1)
 	variance := ReduceAndKeep(L2NormSquare(Sub(x, xMean), -1), ReduceMean, 1)
+	//variance.SetLoggedf("vnn.LayerNorm: variance")
 
 	// Shift x such that the new mean is the origin.
 	x = Sub(x, xMean)
-	x = Div(x, Sqrt(AddScalar(variance, epsilon)))
+	zero := ScalarZero(x.Graph(), x.DType())
+	one := ScalarOne(x.Graph(), x.DType())
+	variance = Where(Equal(variance, zero), one, variance)
+	//denominator := Sqrt(AddScalar(variance, epsilon))
+	denominator := Sqrt(variance)
+	//denominator.SetLoggedf("vnn.LayerNorm: denominator")
+	x = Div(x, denominator)
 
 	// Denormalize X shape back to the original shape.
 	x = Reshape(x, originalShape.Dimensions...)

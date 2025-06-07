@@ -3,14 +3,22 @@ package vnn
 import (
 	"fmt"
 	"math"
+	"math/rand/v2"
 	"testing"
 
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"
+	"github.com/gomlx/gomlx/ml/data"
+	"github.com/gomlx/gomlx/ml/layers/regularizers"
+	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/ml/train/losses"
+	"github.com/gomlx/gomlx/ml/train/metrics"
+	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
 
@@ -129,8 +137,8 @@ func TestLayerNormalization(t *testing.T) {
 	require.Less(t, tensors.ToScalar[float64](rotDiff), 1e-3)
 }
 
-// TestVNN checks that a fully configured VNN is SO(3) equivariant for rotations.
-func TestVNN(t *testing.T) {
+// TestVNN_Equivariant checks that a fully configured VNN is SO(3) equivariant for rotations.
+func TestVNN_Equivariant(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 	ctx := context.New()
 	ctx.RngStateFromSeed(42)
@@ -166,4 +174,96 @@ func TestVNN(t *testing.T) {
 	})
 	fmt.Printf("\tRotation (before/after relu) abs difference: %s\n", rotDiff.GoStr())
 	require.Less(t, tensors.ToScalar[float64](rotDiff), 1e-3)
+}
+
+// TestVNNTrain checks whether a 2-layer VNN can learn whether 2 3D vectors are pointing to opposite quadrants.
+// The function to learn is not rotation-invariant, so we expect this test to fail.
+func TestVNNTrain(t *testing.T) {
+	backend := graphtest.BuildTestBackend()
+	ctx := context.New()
+	ctx.RngStateFromSeed(42)
+
+	// Model function
+	numFeatures := 2
+	modelFn := func(ctx *context.Context, spec any, inputs []*Node) []*Node {
+		x := inputs[0] // Shape: [batch, 2, 3]
+		ctx = ctx.In("vnn")
+		vnn := New(ctx, x, numFeatures).
+			NumHiddenLayers(2, 10). // 2 hidden layers
+			Activation("relu").
+			Normalization("layer").
+			ConcatenateNormalizedInput(true).
+			Regularizer(regularizers.L2(0.001)).
+			Done()
+
+		// Invariant head for classification
+		ctx = ctx.In("head")
+		p0 := New(ctx.In("p0"), vnn, 1).
+			NumHiddenLayers(0, 0).
+			ConcatenateNormalizedInput(true).
+			Done()
+		p1 := New(ctx.In("p1"), vnn, 1).
+			NumHiddenLayers(0, 0).
+			ConcatenateNormalizedInput(true).
+			Done()
+		logit := InvariantDotProduct(p0, p1)
+		logit = Reshape(logit, -1) // Shape: [batch]
+		return []*Node{logit}
+	}
+
+	// Create Dataset
+	const batchSize = 64
+	const numSamples = 65536
+	const numInputs = 2
+	const vecDim = 3
+	const numSteps = 10_000
+
+	// Generate random input vectors in the range [-1, 1]
+	inputsData := make([]float32, numSamples*numInputs*vecDim)
+	rng := rand.New(rand.NewPCG(0, 42))
+	for i := range inputsData {
+		inputsData[i] = rng.Float32()*2 - 1
+	}
+
+	// Generate labels based on whether the vectors have cos(angle)<0:
+	labelsData := make([]float32, numSamples)
+	for sampleIdx := range numSamples {
+		v0Idx := sampleIdx * numInputs * vecDim
+		v1Idx := v0Idx + vecDim
+		v0x, v0y, v0z := inputsData[v0Idx], inputsData[v0Idx+1], inputsData[v0Idx+2]
+		v1x, v1y, v1z := inputsData[v1Idx], inputsData[v1Idx+1], inputsData[v1Idx+2]
+		if v0x*v1x+v0y*v1y+v0z*v1z < 0 {
+			labelsData[sampleIdx] = 1.0
+		} else {
+			labelsData[sampleIdx] = 0.0
+		}
+	}
+
+	// Create a dataset from the generated data.
+	inputsTensor := tensors.FromFlatDataAndDimensions(inputsData, numSamples, numInputs, vecDim)
+	labelsTensor := tensors.FromFlatDataAndDimensions(labelsData, numSamples)
+	ds, err := data.InMemoryFromData(backend, "VNN: opposite quadrants dataset",
+		[]any{inputsTensor}, []any{labelsTensor})
+	require.NoError(t, err)
+	dsEval := ds.Copy().BatchSize(1, false)
+	ds.Shuffle().BatchSize(batchSize, true).Infinite(true)
+
+	trainer := train.NewTrainer(
+		backend, ctx, modelFn, losses.BinaryCrossentropyLogits, optimizers.Adam().LearningRate(1e-3).Done(),
+		[]metrics.Interface{metrics.NewMovingAverageBinaryLogitsAccuracy("Moving Accuracy", "~acc", 0.01)},
+		[]metrics.Interface{metrics.NewMeanBinaryLogitsAccuracy("Mean Accuracy", "#acc")})
+
+	loop := train.NewLoop(trainer)
+	commandline.AttachProgressBar(loop)
+	_, err = loop.RunSteps(ds, numSteps)
+	require.NoError(t, err)
+	lossAndMetrics := trainer.Eval(dsEval)
+	for metricIdx, metricSpec := range trainer.EvalMetrics() {
+		fmt.Printf("\t%q=%s\n", metricSpec.ShortName(), lossAndMetrics[metricIdx])
+	}
+
+	// We expect the VNN to fail to learn this function because it's not rotation-invariant.
+	// Accuracy should be around 50% (random guessing).
+	accuracy := lossAndMetrics[1].Value().(float32)
+	require.GreaterOrEqual(t, accuracy, 0.8, "VNN was not able to learn rotation invariant simple task.")
 }
