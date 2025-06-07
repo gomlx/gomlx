@@ -17,6 +17,12 @@
 package train
 
 import (
+	"io"
+	"math"
+	"slices"
+	"sort"
+	"time"
+
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
@@ -24,11 +30,6 @@ import (
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
-	"io"
-	"math"
-	"slices"
-	"sort"
-	"time"
 )
 
 // Priority for hooks, the lowest values are run first. Defaults to 0, but negative
@@ -234,17 +235,20 @@ func finalizeYieldedTensors(ds Dataset) bool {
 	return dsOwnership.IsOwnershipTransferred()
 }
 
+var yieldInputTypeNames = []string{"inputs", "labels"}
+
 func checkYield(inputs, labels []*tensors.Tensor) error {
 	// Check inputs and labels are valid.
-	for _, slice := range [][]*tensors.Tensor{inputs, labels} {
-		for _, t := range slice {
+	for inputTypeIdx, slice := range [][]*tensors.Tensor{inputs, labels} {
+		for tensorIdx, t := range slice {
 			if t.DType() == dtypes.InvalidDType {
-				return errors.New(
-					"dataset yielded an invalid tensor -- likely it has already been finalized (freed). " +
-						"The training loop by default immediately frees the yielded tensor after use, so it doesn't " +
-						"wait for the garbage collector. If the dataset is trying to reuse tensors, they will become " +
-						"invalid and cause this error. If that is the case, consider implementing the method " +
-						"FinalizeYieldsAfterUse() in your dataset, and return false.")
+				return errors.Errorf(
+					"dataset yielded an invalid tensor (tensor #%d of %s), -- likely it has already been finalized (freed). "+
+						"The training loop by default immediately frees the yielded tensor after use, so it doesn't "+
+						"wait for the garbage collector. If the dataset is trying to reuse tensors, they will become "+
+						"invalid and cause this error. If that is the case, consider implementing the method "+
+						"FinalizeYieldsAfterUse() in your dataset, and return false.",
+					tensorIdx, yieldInputTypeNames[inputTypeIdx])
 			}
 		}
 	}

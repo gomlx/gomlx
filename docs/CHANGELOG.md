@@ -1,5 +1,16 @@
 # GoMLX changelog
 
+# Next
+
+* Package `train`:
+  * Better handling of loss (without regularization) in metrics. Added `SetLossNoRegularization` and `GetLossNoRegularization`.
+* Pacakge `vnn`:
+  * Added `Config.Scaler` to add a scaler operator just after the linear projection of a layer. It allows the VNN
+    to operate on magnitude independent vectors.
+  * Fixed the `LayerNormalization`, to make it more stable in backprop.
+  * Fixed `Relu`: added support for non-shared non-linearities and a "leak" parameter ("vnn_relu_negative_slope").
+  * Added `VNN().ActivationFn()` to allow setting arbitrary activation functions.
+  
 # v.0.20.0: Small API change: `backends.NewWithConfig()` changed to return an error. 
 
 * Package `backends`:

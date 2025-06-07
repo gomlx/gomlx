@@ -1,4 +1,4 @@
-// Package vnn implements the Vector Neural Networks operators described in https://arxiv.org/abs/2104.12229
+// Package vnn implements the Vector Neuron Networks operators described in https://arxiv.org/abs/2104.12229
 //
 // It operates on 3D vectors -- so most tensors will has the last axis with dimension 3.
 //
@@ -11,9 +11,11 @@ import (
 	"github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
+	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 )
 
@@ -27,8 +29,8 @@ const (
 	ParamNumHiddenNodes = "vnn_num_hidden_nodes"
 
 	// ParamResidual is the hyperparameter that defines whether to use residual connections between consecutive hidden layers.
-	// If set, and the feature dimension (the last one) is the same between the input, it also adds a residual to the
-	// input. Same with the outputDimensions.
+	// If set, and the feature dimension (the last one) is the same between the operand, it also adds a residual to the
+	// operand. Same with the outputDimensions.
 	// Default is false (bool).
 	ParamResidual = "vnn_residual"
 
@@ -50,32 +52,44 @@ const (
 	// It can be "relu" (default), "none" or "" -- the last two mean no activation.
 	// Notice "relu" refers to vnn.Relu, which is a rotation-equivariant activation.
 	ParamActivation = "vnn_activation"
+
+	// ParamScaler hyperparameter sets whether to use a learnable scaler on the output.
+	//
+	// It learns two multipliers α and β such that for a 3D vector x: scaler(x) = αx + β(x/Sqrt(L2(x)^2+epsilon)).
+	//
+	// So if α=0 and β=1, it normalizes x to a unit length.
+	ParamScaler = "vnn_scaler"
 )
+
+// ActivationFn applies a non-linearity to the operand.
+type ActivationFn func(ctx *context.Context, operand *Node) *Node
 
 // Config is created with New and can be configured with its methods or simply setting the corresponding
 // hyperparameters in the context.
 type Config struct {
 	ctx                             *context.Context
-	input                           *Node
+	operand                         *Node
 	outputChannels                  int
 	numHiddenLayers, numHiddenNodes int
-	activation                      string
+	activationName                  string
+	activationFn                    ActivationFn
 	normalization                   string
 	dropoutRatio                    float64
 	useResidual                     bool
+	useScaler                       bool
 
 	regularizer regularizers.Regularizer
 }
 
 // New creates a configuration for a VNN (Vector Neural Network), which is SO(3) invariant,
-// which means that a rotation of the input will yield the same rotation on the output.
+// which means that a rotation of the operand will yield the same rotation on the output.
 //
 // It is initialized with good defaults and with hyperparameters from the given Context.
 // It can then be further configured with its various methods.
 //
 // Once configured, call Config.Done to add the VNN computation graph and get the output.
 //
-// The input is expected to have the shape `[batchSize, ..., inputFeatures, 3]`, and the
+// The operand is expected to have the shape `[batchSize, ..., inputFeatures, 3]`, and the
 // returned output will have the shape `[batchSize, ..., outputChannels, 3]`.
 //
 // E.g.: A VNN for a multi-class classification model with NumClasses classes, rotation invariant.
@@ -89,12 +103,12 @@ type Config struct {
 //		logits := InvariantDotProduct(V, T)  // [batchSize, NumClasses]
 //		return []*Node{logits}
 //	}
-func New(ctx *context.Context, input *Node, outputChannels int) *Config {
-	if input.Rank() < 2 {
-		exceptions.Panicf("vnn: input must be rank at least 2, got input.shape=%s", input.Shape())
+func New(ctx *context.Context, operand *Node, outputChannels int) *Config {
+	if operand.Rank() < 2 {
+		exceptions.Panicf("vnn: operand must be rank at least 2, got operand.shape=%s", operand.Shape())
 	}
-	if input.Shape().Dim(-1) != 3 {
-		exceptions.Panicf("vnn: the input last dimensions must be 3 -- it works with 3D vectors only for now")
+	if operand.Shape().Dim(-1) != 3 {
+		exceptions.Panicf("vnn: the operand last dimensions must be 3 -- it works with 3D vectors only for now")
 	}
 	if outputChannels <= 0 {
 		exceptions.Panicf("vnn: outputChannels must be > 0, got %v", outputChannels)
@@ -102,15 +116,16 @@ func New(ctx *context.Context, input *Node, outputChannels int) *Config {
 
 	c := &Config{
 		ctx:             ctx,
-		input:           input,
+		operand:         operand,
 		outputChannels:  outputChannels,
 		numHiddenLayers: context.GetParamOr(ctx, ParamNumHiddenLayers, 0),
 		numHiddenNodes:  context.GetParamOr(ctx, ParamNumHiddenNodes, 10),
-		activation:      context.GetParamOr(ctx, ParamActivation, "relu"),
+		activationName:  context.GetParamOr(ctx, ParamActivation, "relu"),
 		normalization:   context.GetParamOr(ctx, ParamNormalization, ""),
 		regularizer:     regularizers.FromContext(ctx),
 		dropoutRatio:    context.GetParamOr(ctx, ParamDropoutRate, 0.0),
 		useResidual:     context.GetParamOr(ctx, ParamResidual, false),
+		useScaler:       context.GetParamOr(ctx, ParamScaler, false),
 	}
 
 	// Fallback parameters.
@@ -123,7 +138,7 @@ func New(ctx *context.Context, input *Node, outputChannels int) *Config {
 	return c
 }
 
-// NumHiddenLayers configure the number of hidden layers between the input and the output.
+// NumHiddenLayers configure the number of hidden layers between the operand and the output.
 // Each layer will have numHiddenNodes nodes.
 //
 // The default is 0 (no hidden layers), but it will be overridden if the hyperparameter
@@ -140,13 +155,22 @@ func (c *Config) NumHiddenLayers(numLayers, numHiddenNodes int) *Config {
 }
 
 // Activation sets the activation for the VNN, in between each layer.
-// The input and output layers don't get an activation layer.
+// The operand and output layers don't get an activation layer.
 //
 // The default and currently the only rotation-equivariant activation defined is "relu", if not defined as a hyperparameter.
 //
 // Other valid values are "" or "none" for no activation function.
+//
+// See also ActivationFn.
 func (c *Config) Activation(activation string) *Config {
-	c.activation = activation
+	c.activationName = activation
+	return c
+}
+
+// ActivationFn is an alternative way to set the activation, by providing an activation function.
+// It takes precedence over the one set by Config.Activation.
+func (c *Config) ActivationFn(fn ActivationFn) *Config {
+	c.activationFn = fn
 	return c
 }
 
@@ -160,7 +184,7 @@ func (c *Config) Residual(useResidual bool) *Config {
 }
 
 // Normalization sets the normalization type to use in between layers.
-// The input and output layers don't get a normalization layer.
+// The operand and output layers don't get a normalization layer.
 //
 // The default is "none", but it can be overridden by setting the hyperparameter ParamNormalization (="vnn_normalization")
 // in the context.
@@ -170,6 +194,16 @@ func (c *Config) Normalization(normalization string) *Config {
 			normalization)
 	}
 	c.normalization = normalization
+	return c
+}
+
+// Scaler sets whether to use a learnable scaler on the output.
+//
+// It learns two multipliers α and β such that for a 3D vector x: scaler(x) = αx + β(x/Sqrt(L2(x)^2+epsilon)).
+//
+// So if α=0 and β=1, it normalizes x to a unit length.
+func (c *Config) Scaler(enabled bool) *Config {
+	c.useScaler = enabled
 	return c
 }
 
@@ -203,19 +237,21 @@ func (c *Config) Dropout(ratio float64) *Config {
 // Done takes the configuration and applies the VNN as configured.
 func (c *Config) Done() *Node {
 	ctx := c.ctx
-	x := c.input
-	g := x.Graph()
-	dtype := x.DType()
+	operand := c.operand
+	g := operand.Graph()
+	dtype := operand.DType()
 
 	// Activation function.
-	var activationFn func(ctx *context.Context, x *Node) *Node
-	switch c.activation {
-	case "", "none":
-		// No activation, leave it as nil.
-	case "relu":
-		activationFn = Relu
-	default:
-		exceptions.Panicf("vnn: invalid activation %q given: valid values are \"relu\", \"\" or \"none\"", c.activation)
+	activationFn := c.activationFn
+	if activationFn == nil {
+		switch c.activationName {
+		case "", "none":
+			// No activation, leave it as nil.
+		case "relu":
+			activationFn = ReluFromContext
+		default:
+			exceptions.Panicf("vnn: invalid activation %q given: valid values are \"relu\", \"\" or \"none\"", c.activationName)
+		}
 	}
 
 	// Normalization function.
@@ -228,7 +264,7 @@ func (c *Config) Done() *Node {
 			if x.DType() == dtypes.BFloat16 {
 				return LayerNormalization(x, 1e-4)
 			} else {
-				return LayerNormalization(x, 1e-8)
+				return LayerNormalization(x, 1e-5)
 			}
 		}
 	default:
@@ -236,7 +272,9 @@ func (c *Config) Done() *Node {
 	}
 
 	// Normalize X shape to rank-3: [batchSize, inputFeatures, 3]
-	x = Reshape(x, -1, x.Shape().Dim(-2), x.Shape().Dim(-1))
+	numChannels := operand.Shape().Dim(-2)
+	vecDim := operand.Shape().Dim(-1) // 3
+	operand = Reshape(operand, -1, numChannels, vecDim)
 
 	var dropoutRatio *Node
 	if c.dropoutRatio > 0.0 {
@@ -254,26 +292,26 @@ func (c *Config) Done() *Node {
 			layerCtx = ctx.In("vnn_output_layer")
 		}
 
-		// In between-layers: some don't apply to the input (ii == 0)
+		// In between-layers: some don't apply to the operand (ii == 0)
 		if ii > 0 && activationFn != nil {
-			x = activationFn(layerCtx, x)
+			operand = activationFn(layerCtx, operand)
 		}
 		if dropoutRatio != nil {
-			x = DropoutNormalize(layerCtx, x, dropoutRatio, true)
+			operand = DropoutNormalize(layerCtx, operand, dropoutRatio, true)
 		}
 		if ii > 0 && normalizationFn != nil {
-			x = normalizationFn(layerCtx, x)
+			operand = normalizationFn(layerCtx, operand)
 		}
 		if c.useResidual {
-			if residual != nil && residual.Shape().Equal(x.Shape()) {
-				x = Add(x, residual)
+			if residual != nil && residual.Shape().Equal(operand.Shape()) {
+				operand = Add(operand, residual)
 			}
-			residual = x
+			residual = operand
 		}
 
 		// Output channels: numHiddenNodes for intermediary layers, Config.outputChannels for
 		// the final (output) layer.
-		inputChannels := x.Shape().Dim(1)
+		inputChannels := operand.Shape().Dim(1)
 		outputChannels := c.numHiddenNodes
 		if ii == c.numHiddenLayers {
 			outputChannels = c.outputChannels
@@ -286,14 +324,47 @@ func (c *Config) Done() *Node {
 			c.regularizer(layerCtx, g, weightsVar)
 		}
 		weights := weightsVar.ValueGraph(g)
-		// The output 3D vectors are a linear combination of the input vectors -> they are SO(3) equivariant.
+		// The output 3D vectors are a linear combination of the operand vectors -> they are SO(3) equivariant.
 		// b->batchSize, i->inputChannels, v->3 (vector) o-> outputChannels
-		x = Einsum("biv,io->bov", x, weights)
+		operand = Einsum("biv,io->bov", operand, weights)
+
+		if c.useScaler {
+			const scalerEpsilon = 1e-4
+			// Scalers: alpha (original vector scale) is initialized to 1
+			// and beta (unit vector scale) is initialized to 0.
+			l2Operand := L2NormSquare(operand, -1)
+			l2Operand = Sqrt(AddScalar(l2Operand, scalerEpsilon))
+			operandUnit := Div(operand, l2Operand)
+
+			scalerShape := shapes.Make(dtype, 1, outputChannels, 1)
+			alphaVar := layerCtx.
+				WithInitializer(initializers.One).
+				VariableWithShape("scaler_alpha", scalerShape)
+			betaVar := layerCtx.
+				WithInitializer(initializers.Zero).
+				VariableWithShape("scaler_beta", scalerShape)
+			alpha := alphaVar.ValueGraph(g)
+			beta := betaVar.ValueGraph(g)
+			operand = Add(Mul(operand, alpha), Mul(operandUnit, beta))
+		}
 	}
 
 	// Denormalize X shape back to the original form (except for the outputChannels):
-	dims := slices.Clone(c.input.Shape().Dimensions)
-	dims[len(dims)-2] = x.Shape().Dim(-2)
-	x = Reshape(x, dims...)
-	return x
+	dims := slices.Clone(c.operand.Shape().Dimensions)
+	dims[len(dims)-2] = operand.Shape().Dim(-2)
+	operand = Reshape(operand, dims...)
+	return operand
+}
+
+// InvariantDotProduct does a dot product on the last axis (presumably of dimension 3)
+// of two VNN projections (rotation invariant) from the same tensor of 3d vectors.
+func InvariantDotProduct(v0, v1 *Node) *Node {
+	if !v0.Shape().Equal(v1.Shape()) {
+		exceptions.Panicf("shapes must be the same for InvaiantDotProduct, got v0.shape=%s and v1.shape=%s", v0.Shape(), v1.Shape())
+	}
+	if v0.Shape().Dim(-1) != 3 {
+		exceptions.Panicf("VNNs only work with 3D vectors (the last axis must have dimension 3), got v0.shape = v1.shape =%s", v0.Shape())
+	}
+	batchAxes := xslices.Iota(0, v0.Rank()-1) // Same for both tensors.
+	return DotGeneral(v0, []int{-1}, batchAxes, v1, []int{-1}, batchAxes)
 }

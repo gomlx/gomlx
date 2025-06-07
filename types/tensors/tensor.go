@@ -157,6 +157,9 @@ func (t *Tensor) Shape() shapes.Shape { return t.shape }
 // DType returns the DType of the tensor's shape.
 // It is a shortcut to `Tensor.Shape().DType`.
 func (t *Tensor) DType() dtypes.DType {
+	if t == nil {
+		return dtypes.InvalidDType
+	}
 	return t.shape.DType
 }
 
