@@ -5,8 +5,9 @@
 * Package `train`:
   * Better handling of loss (without regularization) in metrics. Added `SetLossNoRegularization` and `GetLossNoRegularization`.
 * Pacakge `vnn`:
-  * Added `ConcatenateNormalizedInput()` to allow it to operate on the directions only, discarding the magnitude.
-  * Fixed the `LayerNormalization`.
+  * Added `Config.Scaler` to add a scaler operator just after the linear projection of a layer. It allows the VNN
+    to operate on magnitude independent vectors.
+  * Fixed the `LayerNormalization`, to make it more stable in backprop.
   * Fixed `Relu`: added support for non-shared non-linearities and a "leak" parameter ("vnn_relu_negative_slope").
   * Added `VNN().ActivationFn()` to allow setting arbitrary activation functions.
   
