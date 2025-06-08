@@ -1,13 +1,14 @@
 package main
 
 import (
+	"os"
+	"sync"
+	"testing"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/janpfeifer/must"
 	"github.com/stretchr/testify/require"
-	"os"
-	"sync"
-	"testing"
 )
 
 var (
@@ -32,7 +33,6 @@ func TestMainFunc(t *testing.T) {
 	ctx := createDefaultContext()
 	ctx.SetParam("train_steps", 10)
 	paramsSet := must.M1(commandline.ParseContextSettings(ctx, *flagSettings))
-	//cifar.TrainCifar10Model(ctx, *flagDataDir, "", true, 1, paramsSet)
 	err := mainWithContext(ctx, *flagDataDir, *flagCheckpoint, paramsSet)
 	require.NoError(t, err, "failed to train Adult model for 10 steps")
 }
