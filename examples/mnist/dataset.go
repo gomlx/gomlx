@@ -45,12 +45,17 @@ const (
 	TrainLabelsFilename = "train-labels-idx1-ubyte.gz"
 	TestImagesFilename  = "t10k-images-idx3-ubyte.gz"
 	TestLabelsFilename  = "t10k-labels-idx1-ubyte.gz"
-	Width               = 28
-	Height              = 28
-	Depth               = 3
-	NumClasses          = 10
-	TrainExamples       = 60000
-	TestExamples        = 10000
+	TrainImagesHash     = "440fcabf73cc546fa21475e81ea370265605f56be210a4024d2ca8f203523609"
+	TrainLabelsHash     = "3552534a0a558bbed6aed32b30c495cca23d567ec52cac8be1a0730e8010255c"
+	TestImagesHash      = "8d422c7b0a1c1c79245a5bcf07fe86e33eeafee792b84584aec276f5a2dbc4e6"
+	TestLabelsHash      = "f7ae60f92e00ec6debd23a6088c31dbd2371eca3ffa0defaefb259924204aec6"
+
+	Width         = 28
+	Height        = 28
+	Depth         = 3
+	NumClasses    = 10
+	TrainExamples = 60000
+	TestExamples  = 10000
 
 	ImageMagic = 0x00000803
 	LabelMagic = 0x00000801
@@ -119,10 +124,11 @@ func (img *Image) Set(x, y int, v byte) {
 func Download(baseDir string) error {
 	baseDir = data.ReplaceTildeInDir(baseDir)
 	files := []string{TrainImagesFilename, TrainLabelsFilename, TestImagesFilename, TestLabelsFilename}
-	for _, file := range files {
+	checkHashes := []string{TrainImagesHash, TrainLabelsHash, TestImagesHash, TestLabelsHash}
+	for fileIdx, file := range files {
 		downloadURLFile, _ := url.JoinPath(DownloadURL, file)
 		filePath := path.Join(baseDir, file)
-		if err := data.DownloadIfMissing(downloadURLFile, filePath, ""); err != nil {
+		if err := data.DownloadIfMissing(downloadURLFile, filePath, checkHashes[fileIdx]); err != nil {
 			return fmt.Errorf("data.DownloadAndUnzipIfMissing: %w", err)
 		}
 	}
