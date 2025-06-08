@@ -222,14 +222,14 @@ func (o *adam) UpdateGraphWithGradients(ctx *context.Context, grads []*Node, los
 	// Apply gradient one variable at a time.
 	numTrainable := len(grads)
 	varIdx := 0
-	ctx.EnumerateVariables(func(v *context.Variable) {
+	for v := range ctx.IterVariables() {
 		if v.Trainable && v.InUseByGraph(g) {
 			if varIdx < numTrainable {
 				o.applyAdamGraph(ctx, g, v, dtype, grads[varIdx], learningRate, beta1, debiasTermBeta1, beta2, debiasTermBeta2, epsilon)
 			}
 			varIdx++
 		}
-	})
+	}
 	if varIdx != numTrainable {
 		Panicf("Context.BuildTrainableVariablesGradientsGraph returned gradients for %d variables, but "+
 			"Adam only sees %d variables -- were new variables created in between ?",
