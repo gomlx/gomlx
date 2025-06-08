@@ -305,7 +305,6 @@ func (sgd *SGDConfig) UpdateGraphWithGradients(ctx *context.Context, grads []*No
 	if sgd.useDecay {
 		learningRate = Div(learningRate, Sqrt(globalStep)) // Factor global_step into the learning rate.
 	}
-	learningRate.SetLogged("\tlearningRate")
 	addGradientsToVariablesGraph(ctx, grads, learningRate)
 }
 
@@ -328,7 +327,7 @@ func addGradientsToVariablesGraph(ctx *context.Context, grads []*Node, learningR
 	for v := range ctx.IterVariables() {
 		if !v.Trainable || !v.InUseByGraph(g) {
 			// Not interested in this variable.
-			return
+			continue
 		}
 		lrCast := learningRate
 		if lrCast.DType() != grads[ii].DType() {
