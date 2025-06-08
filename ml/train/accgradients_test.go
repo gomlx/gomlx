@@ -1,6 +1,7 @@
 package train
 
 import (
+	"fmt"
 	"testing"
 
 	. "github.com/gomlx/gomlx/graph"
@@ -25,7 +26,9 @@ func TestTrainer_AccumulateGradients(t *testing.T) {
 		return []*Node{predictionVar.ValueGraph(g)}
 	}
 	lossFn := losses.MeanAbsoluteError
-	optimizer := optimizers.StochasticGradientDescent().WithDecay(false).WithLearningRate(0.1).Done()
+	learningRate := 0.1
+	optimizer := optimizers.StochasticGradientDescent().
+		WithDecay(false).WithLearningRate(learningRate).Done()
 	trainer := NewTrainer(backend, ctx, modelFn, lossFn, optimizer, nil, nil)
 	input := tensors.FromScalar(float32(0))
 	label := tensors.FromScalar(float32(10))
@@ -43,6 +46,26 @@ func TestTrainer_AccumulateGradients(t *testing.T) {
 		loss := metrics[0].Value().(float32)
 		require.Equal(t, float32(10), loss)
 
-		_ = ii
+		predictionVar := ctx.GetVariableByScopeAndName("/model", "prediction")
+		require.NotNil(t, predictionVar)
+		accPredictionVar := ctx.GetVariableByScopeAndName("/"+AccumulatedGradientsScope+"/model", "prediction")
+		require.NotNil(t, accPredictionVar)
+
+		prediction := predictionVar.Value().Value().(float32)
+		accPrediction := accPredictionVar.Value().Value().(float32)
+		fmt.Printf("\tIterator #%d: prediction=%g, accumulated gradient=%g\n", ii, prediction, accPrediction)
+
+		if ii < numSteps-1 {
+			// Gradients have not yet been applied:
+			// - prediction is still 0.
+			require.Equal(t, float32(0), prediction)
+			// - gradient is always -1, and it has accumulated ii+1 times:
+			require.Equal(t, float32(-(ii + 1)), accPrediction)
+		} else {
+			// Gradients have been applied, and accumulator is reset to 0.
+			require.Equal(t, float32(0), accPrediction)
+			// The mean gradient was -1, and we took one -learningRate in that direction.
+			require.Equal(t, float32(learningRate), prediction)
+		}
 	}
 }
