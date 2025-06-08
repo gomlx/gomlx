@@ -58,7 +58,7 @@ func (r *Trainer) BatchNormalizationAveragesUpdate(ds Dataset) {
 // batchNormAveragesStep runs one forward step on the model, with the model frozen, except
 // for non-gradient updated variables, like batch normalization moving averages.
 func (r *Trainer) batchNormAveragesStep(phase int, spec any, inputs, labels []*tensors.Tensor) {
-	lossAndMetrics := r.callGraphFn(r.batchNormsAverageStepGraphFn(phase), BatchNormAveragesType, spec, inputs, labels)
+	lossAndMetrics := r.callGraphFn(r.batchNormsAverageStepGraphFn(phase), BatchNormAveragesType, r.batchNormStepExecMap, spec, inputs, labels)
 	for _, t := range lossAndMetrics {
 		t.FinalizeAll()
 	}

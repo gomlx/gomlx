@@ -14,7 +14,7 @@
  *	limitations under the License.
  */
 
-// Package optimizers implements a collection of ML optimizers, that can be used by train.Trainer,
+// Package optimizers implements a collection of ML optimizers that can be used by train.Trainer,
 // or by themselves. They all implement optimizers.Interface.
 package optimizers
 
@@ -28,6 +28,9 @@ import (
 )
 
 // Interface implemented by optimizer implementations.
+//
+// Optionally, an optimizer may also implement the interface trainer.OptimizerWithGradients to allow for
+// updates from accumulated gradients.
 type Interface interface {
 	// UpdateGraph is the function called during computation graph building, it
 	// calculates the updates to the variables (weights) of the model needed for one
@@ -38,12 +41,11 @@ type Interface interface {
 	// and the trainer (train.Trainer) will make sure these values are returned from the graph execution
 	// and the materialized values used to update the variables (Variable.SetValue).
 	//
-	// ctx holds the variables to train (marked as trainable), the hyperparameters
+	// The ctx holds the variables to train (marked as trainable), the hyperparameters
 	// used by the optimizer (in `ctx.Params`) and non-trainable variables
 	// that the optimizer itself may create. One should scope it (context.Context.In("<some scope name>"))
 	// to avoid naming conflicts on the variables created -- notice that
-	// some complex training scheduling scheme may have more than one optimizer
-	// on the same Context object.
+	// some complex training schedule may have more than one optimizer on the same Context object.
 	//
 	// loss must be a scalar value.
 	UpdateGraph(ctx *context.Context, g *Graph, loss *Node)
@@ -84,10 +86,10 @@ var (
 	// Defaults to no clipping, and values are expected to be float64.
 	ParamClipStepByValue = "clip_step_by_value"
 
-	// ParamClipNaN will drop any updates to variables that will lead to NaN.
-	// This is a double-edged option: it keeps training running, but probably will replace NaN by bad training.
+	// ParamClipNaN will drop any updates to variables that leads to NaN.
+	// This is a double-edged option: it keeps training running, but probably it will replace NaNs with bad training results.
 	//
-	// Default  is false.
+	// The default is false.
 	ParamClipNaN = "clip_nan"
 )
 
@@ -108,7 +110,7 @@ func FromContext(ctx *context.Context) Interface {
 }
 
 // ByName returns an optimizer given the name, or panics if one does not exist.
-// It uses  KnownOptimizers -- in case one wants to better handle invalid values.
+// It uses KnownOptimizers -- in case one wants to better handle invalid values.
 //
 // Some optimizers (e.g.: Adam) uses optional hyperparameters set in the context for configuration.
 //
@@ -181,11 +183,11 @@ func IncrementGlobalStepGraph(ctx *context.Context, g *Graph, dtype dtypes.DType
 
 // LearningRateVar returns the learning rate variable -- a scalar value of the given dtype.
 //
-// If variable doesn't exist yet, it will be created using the parameter ParamLearningRate, if it
-// is set, or the provided defaultValue (must be a scalar convertible to dtype) if not.
-func LearningRateVar(ctx *context.Context, dtype dtypes.DType, defaultValue float64) *context.Variable {
-	lrValue := context.GetParamOr(ctx, ParamLearningRate, defaultValue)
-	return LearningRateVarWithValue(ctx, dtype, lrValue)
+// If the variable doesn't exist yet, it is initialized with initialValue.
+//
+// Consider reading the initialValue from context.GetParamOr(ctx, ParamLearningRate, SGDDefaultLearningRate).
+func LearningRateVar(ctx *context.Context, dtype dtypes.DType, initialValue float64) *context.Variable {
+	return LearningRateVarWithValue(ctx, dtype, initialValue)
 }
 
 // LearningRateVarWithValue creates (or reuses) variable for learning rate with the given value.
@@ -225,57 +227,105 @@ func ClipNaNsInUpdates(ctx *context.Context, original, updates *Node) *Node {
 	return Where(IsFinite(updates), updates, original)
 }
 
-// sgd is an empty struct that implements Interface for SGD.
-type sgd struct{}
+// SGDConfig implements a Stochastic Gradient Descent optimizer.
+type SGDConfig struct {
+	initialLearningRate float64
 
-// SgdDefaultLearningRate is the default learning rate used by the StochasticGradientDescent optimizer.
-const SgdDefaultLearningRate = 0.1
+	// Whether to decay the learning rate with the global step.
+	useDecay bool
+}
+
+// SGDDefaultLearningRate is the default learning rate used by the StochasticGradientDescent optimizer.
+const SGDDefaultLearningRate = 0.1
 
 // StochasticGradientDescent creates an optimizer that performs SGD.
 // It looks for "learning_rate" in Context.Params for the initial
-// learning rate, otherwise it defaults to SgdDefaultLearningRate.
+// learning rate, otherwise it defaults to SGDDefaultLearningRate.
 //
-// It has a decay of learning rate given by: `learning_rate = initial_learning_rate / Sqrt(global_step)`
-func StochasticGradientDescent() Interface {
-	return &sgd{}
+// By default, it has a learning rate decay given by: `learning_rate = initial_learning_rate / Sqrt(global_step)`
+func StochasticGradientDescent() *SGDConfig {
+	return &SGDConfig{
+		initialLearningRate: -1, // -1 means not set.
+		useDecay:            true,
+	}
+}
+
+// WithDecay sets whether to use a learning rate decay with the global step.
+//
+// It is enabled by default, but tests may want to disable it.
+//
+// It returns itself to allow chaining.
+func (sgd *SGDConfig) WithDecay(enabled bool) *SGDConfig {
+	sgd.useDecay = enabled
+	return sgd
+}
+
+// WithLearningRate sets the initial learning rate. The default value is SGDDefaultLearningRate.
+//
+// It returns itself to allow chaining.
+func (sgd *SGDConfig) WithLearningRate(initialLearningRate float64) *SGDConfig {
+	sgd.initialLearningRate = initialLearningRate
+	return sgd
+}
+
+// Done returns an optimizer.Interface.
+// It's a no-op since SGDConfig is itself implements optimizer.Interface, but it keeps it consistent with
+// the builder pattern, and the returned Interface is no longer configurable.
+func (sgd *SGDConfig) Done() Interface {
+	return sgd
 }
 
 // UpdateGraph builds the graph to update the weights for one training step.
 // It implements optimizers.Interface.
-func (sgd *sgd) UpdateGraph(ctx *context.Context, g *Graph, loss *Node) {
+func (sgd *SGDConfig) UpdateGraph(ctx *context.Context, g *Graph, loss *Node) {
+	_ = g
 	if !loss.Shape().IsScalar() {
 		Panicf("optimizer requires a scalar loss to optimize, got loss.shape=%s instead", loss.Shape())
 	}
-	dtype := loss.DType()
-	lrVar := LearningRateVar(ctx, dtype, SgdDefaultLearningRate)
+	grads := ctx.BuildTrainableVariablesGradientsGraph(loss)
+	sgd.UpdateGraphWithGradients(ctx, grads, loss.DType())
+}
+
+func (sgd *SGDConfig) UpdateGraphWithGradients(ctx *context.Context, grads []*Node, lossDType dtypes.DType) {
+	if len(grads) == 0 {
+		return
+	}
+	dtype := lossDType
+	g := grads[0].Graph()
+
+	initialLearningRate := sgd.initialLearningRate
+	if initialLearningRate <= 0 {
+		// If the value was not set, read it from the context.
+		initialLearningRate = context.GetParamOr(ctx, ParamLearningRate, SGDDefaultLearningRate)
+	}
+
+	lrVar := LearningRateVar(ctx, dtype, initialLearningRate)
 	learningRate := lrVar.ValueGraph(g)
 	globalStep := IncrementGlobalStepGraph(ctx, g, dtype)
-	learningRate = Div(learningRate, Sqrt(globalStep)) // Factor global_step into the learning rate.
-	addGradientsToVariablesGraph(ctx, loss, learningRate, globalStep)
-	return
+	if sgd.useDecay {
+		learningRate = Div(learningRate, Sqrt(globalStep)) // Factor global_step into the learning rate.
+	}
+	learningRate.SetLogged("\tlearningRate")
+	addGradientsToVariablesGraph(ctx, grads, learningRate)
 }
 
 // Clear all optimizer variables.
-// There are none for SGD, so this is a non-op.
+// There are none for sgd, so this is a non-op.
 // It implements optimizers.Interface.
-func (sgd *sgd) Clear(_ *context.Context) {}
+func (sgd *SGDConfig) Clear(_ *context.Context) {}
 
 // addGradientsToVariablesGraph takes the output of Context.BuildTrainableVariablesGradientsGraph,
 // multiply by (-learningRate) and add to the current value of the variablesMap.
 //
 // It replaces NaNs with zero.
-func addGradientsToVariablesGraph(ctx *context.Context, loss, learningRate, globalStep *Node) {
-	g := loss.Graph()
+func addGradientsToVariablesGraph(ctx *context.Context, grads []*Node, learningRate *Node) {
+	g := learningRate.Graph()
 	if !learningRate.Shape().IsScalar() {
 		Panicf("Context.addGradientsToVariablesGraph require scalar learningRate, instead got %s", learningRate.Shape())
 	}
-	grads := ctx.BuildTrainableVariablesGradientsGraph(loss)
-	if len(grads) == 0 {
-		return
-	}
 	numTrainable := len(grads)
 	ii := 0
-	ctx.EnumerateVariables(func(v *context.Variable) {
+	for v := range ctx.IterVariables() {
 		if !v.Trainable || !v.InUseByGraph(g) {
 			// Not interested in this variable.
 			return
@@ -295,7 +345,7 @@ func addGradientsToVariablesGraph(ctx *context.Context, loss, learningRate, glob
 		updatedValue = ClipNaNsInUpdates(ctx, vNode, updatedValue)
 		v.SetValueGraph(updatedValue)
 		ii++
-	})
+	}
 	if ii != numTrainable {
 		Panicf("number of trainable variables for BuildTrainableVariablesGradientsGraph (%d) and addGradientsToVariablesGraph (%d) "+
 			"are different -- did new trainable variables were created or variables `.Trainable` property "+
@@ -359,7 +409,7 @@ func MonotonicProjection(input *Node, margin *Node, axis int) *Node {
 			diffLeft = Add(adjustedDiff, fixedAdjustment)
 		}
 	}
-	diffLeft = Max(diffLeft, margin) // Make sure its valid, if numIter wasn't enough.
+	diffLeft = Max(diffLeft, margin) // Make sure it's valid if numIter wasn't enough.
 	finalTotalDiff := ReduceAndKeep(diffLeft, ReduceSum, adjustedAxis)
 
 	leftMostInput = SliceAxis(input, adjustedAxis, AxisElem(0))

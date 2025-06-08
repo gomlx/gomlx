@@ -4,6 +4,12 @@
 
 * Package `train`:
   * Better handling of loss (without regularization) in metrics. Added `SetLossNoRegularization` and `GetLossNoRegularization`.
+  * Added `Trainer.AccumulateGradients(n)` to accumulate n steps of gradients before applying them. This is useful if 
+    the desired batch size doesn't fit in memory, so it accumulates the gradients until the virtual batch size gradient
+    is calculated.
+* Package `optimizers`:
+  * Added support for the new `train.OptimizeWithGradients` interface, to support gradient accumulators. 
+  * Cleaned up `StochasticGradientDescent` API. Added option to disable decay for testing.
 * Pacakge `vnn`:
   * Added `Config.Scaler` to add a scaler operator just after the linear projection of a layer. It allows the VNN
     to operate on magnitude independent vectors.
