@@ -16,7 +16,9 @@
   * Fixed the `LayerNormalization`, to make it more stable in backprop.
   * Fixed `Relu`: added support for non-shared non-linearities and a "leak" parameter ("vnn_relu_negative_slope").
   * Added `VNN().ActivationFn()` to allow setting arbitrary activation functions.
-  
+* Package `types/tensors/numpy`
+  * Added support for "Fortran order" files.
+
 # v.0.20.0: Small API change: `backends.NewWithConfig()` changed to return an error. 
 
 * Package `backends`:
