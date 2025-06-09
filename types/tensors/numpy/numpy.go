@@ -86,13 +86,6 @@ func FromNpyReader(r io.Reader) (*tensors.Tensor, error) {
 		return nil, errors.Wrapf(err, "failed to parse .npy header")
 	}
 
-	if fortranOrder {
-		// GoMLX tensors are C-order by default.
-		// Handling Fortran order would require transposing the data or the shape.
-		// Not implemented yet.
-		return nil, errors.Errorf("fortran order .npy files are not supported yet -- please open an issue in GoMLX if you need this")
-	}
-
 	// Create tensor shape.
 	dtype, err := npyDTypeToGomlx(dtypeStr)
 	if err != nil {
@@ -103,9 +96,45 @@ func FromNpyReader(r io.Reader) (*tensors.Tensor, error) {
 	// Create tensor and read data into it.
 	tensor := tensors.FromShape(shape)
 	tensor.MutableBytes(func(data []byte) {
-		_, err = io.ReadFull(r, data)
-		if err != nil {
-			err = errors.Wrapf(err, "failed to read tensor data (expected %d bytes)", len(data))
+		if !fortranOrder || shape.Rank() <= 1 {
+			// Row-major (C-Order) order used by GoMLX: we just copy over the data.
+			_, err = io.ReadFull(r, data)
+			if err != nil {
+				err = errors.Wrapf(err, "failed to read tensor data (expected %d bytes)", len(data))
+			}
+
+		} else {
+			fortranData := make([]byte, len(data))
+			_, err = io.ReadFull(r, data)
+			if err != nil {
+				err = errors.Wrapf(err, "failed to read tensor data (expected %d bytes)", len(data))
+			}
+
+			fortranStrides := make([]int, shape.Rank())
+			{
+				stride := 1
+				for axis, dim := range shape.Dimensions {
+					fortranStrides[axis] = stride
+					stride *= dim
+				}
+			}
+
+			cOrderIdx := 0
+			dtypeSize := dtype.Size()
+			var fortranOrderIdx int
+			for indices := range shape.Iter() {
+				fortranOrderIdx = 0
+				for axis, axisIdx := range indices {
+					fortranOrderIdx += axisIdx * fortranStrides[axis]
+				}
+				fortranOrderIdx *= dtypeSize
+
+				// Copy the data from Fortran order to C-order.
+				copy(data[cOrderIdx:cOrderIdx+dtypeSize], fortranData[fortranOrderIdx:fortranOrderIdx+dtypeSize])
+
+				// cOrder is being scanned linearly, so just increment it by one DType.
+				cOrderIdx += dtypeSize
+			}
 		}
 	})
 	if err != nil {
@@ -122,6 +151,65 @@ func FromNpyReader(r io.Reader) (*tensors.Tensor, error) {
 		return nil, errors.Errorf("big-endian .npy files ('%s') are not fully supported for all dtypes yet -- open a GoMLX issue if you need support for this", dtypeStr)
 	}
 	return tensor, nil
+}
+
+func FortranToCLayout(dtypeSize int, dims []int, fortranData []byte, cData []byte) error {
+	if dtypeSize <= 0 {
+		return fmt.Errorf("dtypeSize must be positive, got %d", dtypeSize)
+	}
+
+	// Calculate the total number of elements and validate buffer sizes.
+	totalElements := 1
+	for _, d := range dims {
+		if d == 0 {
+			// If any dimension is zero, the tensor is empty.
+			totalElements = 0
+			break
+		}
+		totalElements *= d
+	}
+
+	expectedBytes := totalElements * dtypeSize
+	if len(fortranData) != expectedBytes {
+		return fmt.Errorf("fortranData has incorrect size: got %d bytes, want %d", len(fortranData), expectedBytes)
+	}
+	if len(cData) != expectedBytes {
+		return fmt.Errorf("cData has incorrect size: got %d bytes, want %d", len(cData), expectedBytes)
+	}
+	if totalElements == 0 {
+		return nil // Nothing to do for an empty tensor.
+	}
+
+	// coordinates will hold the N-dimensional index of an element, e.g., (row, col)
+	coordinates := make([]int, len(dims))
+
+	// Loop through the destination C-order array sequentially.
+	for cIndex := 0; cIndex < totalElements; cIndex++ {
+		// --- Step 1: Calculate the N-dimensional coordinate from the C-order index ---
+		// This converts a flat row-major index back to its tensor coordinates.
+		tempIndex := cIndex
+		for i := len(dims) - 1; i >= 0; i-- {
+			dim := dims[i]
+			coordinates[i] = tempIndex % dim
+			tempIndex /= dim
+		}
+
+		// --- Step 2: Calculate the Fortran-order index from the N-D coordinate ---
+		// This converts tensor coordinates to a flat column-major index.
+		fortranIndex := 0
+		multiplier := 1
+		for i := 0; i < len(dims); i++ {
+			fortranIndex += coordinates[i] * multiplier
+			multiplier *= dims[i]
+		}
+
+		// --- Step 3: Copy the element bytes ---
+		srcOffset := fortranIndex * dtypeSize
+		dstOffset := cIndex * dtypeSize
+		copy(cData[dstOffset:dstOffset+dtypeSize], fortranData[srcOffset:srcOffset+dtypeSize])
+	}
+
+	return nil
 }
 
 // parseNpyHeader extracts dtype, shape, and fortran_order from the .npy header string.
