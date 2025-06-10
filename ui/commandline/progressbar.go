@@ -2,6 +2,11 @@ package commandline
 
 import (
 	"fmt"
+	"os"
+	"strings"
+	"sync"
+	"time"
+
 	"github.com/charmbracelet/lipgloss"
 	lgtable "github.com/charmbracelet/lipgloss/table"
 	"github.com/gomlx/gomlx/ml/train"
@@ -9,10 +14,6 @@ import (
 	"github.com/gomlx/gomlx/ui/notebooks"
 	"github.com/muesli/termenv"
 	"github.com/schollz/progressbar/v3"
-	"os"
-	"strings"
-	"sync"
-	"time"
 )
 
 // progressBar holds a progressbar being displayed.
