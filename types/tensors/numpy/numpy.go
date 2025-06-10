@@ -105,7 +105,7 @@ func FromNpyReader(r io.Reader) (*tensors.Tensor, error) {
 
 		} else {
 			fortranData := make([]byte, len(data))
-			_, err = io.ReadFull(r, data)
+			_, err = io.ReadFull(r, fortranData)
 			if err != nil {
 				err = errors.Wrapf(err, "failed to read tensor data (expected %d bytes)", len(data))
 			}
