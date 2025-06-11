@@ -841,7 +841,9 @@ func (t *Tensor) FinalizeLocal() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	t.local.flat = nil
-	t.local.t = nil
-	t.local = nil
+	if t.local != nil {
+		t.local.flat = nil
+		t.local.t = nil
+		t.local = nil
+	}
 }

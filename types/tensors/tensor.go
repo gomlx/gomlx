@@ -206,9 +206,14 @@ func (t *Tensor) AssertValid() {
 	if !t.shape.Ok() {
 		panic(errors.New("Tensor shape is invalid"))
 	}
-	if t.local.IsFinalized() && len(t.onDevices) == 0 {
-		// Notice that shared buffers are stored as onDevices.
-		panic(errors.New("Tensor has no local or on-device representation"))
+	if t.local.IsFinalized() {
+		if len(t.onDevices) == 0 {
+			// Notice that shared buffers are stored as onDevices.
+			panic(errors.New("Tensor has no local or on-device representation"))
+		}
+		if t.backend == nil || t.backend.IsFinalized() {
+			panic(errors.New("attempting to access Tensor stored with a nil or finalized backend"))
+		}
 	}
 }
 
