@@ -233,7 +233,7 @@ func TestVNNTrain(t *testing.T) {
 	const numSamples = 65536
 	const numInputs = 2
 	const vecDim = 3
-	const numSteps = 5_000
+	const numSteps = 8_000
 
 	// Generate random operand vectors in the range [-1, 1]
 	inputsData := make([]float32, numSamples*numInputs*vecDim)
@@ -267,7 +267,7 @@ func TestVNNTrain(t *testing.T) {
 
 	trainer := train.NewTrainer(
 		backend, ctx, modelFn, losses.BinaryCrossentropyLogits,
-		optimizers.Adam().LearningRate(1e-4).Done(),
+		optimizers.Adam().LearningRate(3e-5).Done(),
 		[]metrics.Interface{metrics.NewMovingAverageBinaryLogitsAccuracy("Moving Accuracy", "~acc", 0.01)},
 		[]metrics.Interface{metrics.NewMeanBinaryLogitsAccuracy("Mean Accuracy", "#acc")})
 
