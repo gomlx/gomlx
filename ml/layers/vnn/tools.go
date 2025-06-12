@@ -9,35 +9,35 @@ import (
 	"github.com/gomlx/gomlx/types/shapes"
 )
 
-// DropoutNormalize randomly replace the input with zeros if ctx.IsTraining() is true. Otherwise,
-// it's a no op (it returns input). If normalize is set, it scales the output by 1/(1-dropoutRate)
-// to preserve the mean of the input values.
+// DropoutNormalize randomly replace the operand with zeros if ctx.IsTraining() is true. Otherwise,
+// it's a no op (it returns operand). If normalize is set, it scales the output by 1/(1-dropoutRate)
+// to preserve the mean of the operand values.
 //
-// It expects the input to have shape [..., inputFeatures, 3], and the dropout happens on the inputFeatures.
-func DropoutNormalize(ctx *context.Context, input *Node, dropoutRate *Node, normalize bool) *Node {
-	g := input.Graph()
-	if input.Shape().Dim(-1) != 3 {
-		exceptions.Panicf("vnn: the input last dimensions must be 3 -- it works with 3D vectors only for now")
+// It expects the operand to have shape [..., inputFeatures, 3], and the dropout happens on the inputFeatures.
+func DropoutNormalize(ctx *context.Context, operand *Node, dropoutRate *Node, normalize bool) *Node {
+	g := operand.Graph()
+	if operand.Shape().Dim(-1) != 3 {
+		exceptions.Panicf("vnn: the operand last dimensions must be 3 -- it works with 3D vectors only for now")
 	}
-	if input.Rank() < 2 {
-		exceptions.Panicf("vnn: input must be rank at least 2 for Dropout, got input.shape=%s", input.Shape())
+	if operand.Rank() < 2 {
+		exceptions.Panicf("vnn: operand must be rank at least 2 for Dropout, got operand.shape=%s", operand.Shape())
 	}
 	if !dropoutRate.IsScalar() {
 		exceptions.Panicf("vnn: dropoutRate must be a scalar, got dropoutRate.shape=%s", dropoutRate.Shape())
 	}
 	if !ctx.IsTraining(g) {
-		return input
+		return operand
 	}
 
 	// Disable (by multiplying by 0) random entries.
 	dtype := dropoutRate.DType()
-	dims := slices.Clone(input.Shape().Dimensions)
+	dims := slices.Clone(operand.Shape().Dimensions)
 	dims[len(dims)-1] = 1
 	rnd := ctx.RandomUniform(g, shapes.Make(dtype, dims...))
-	result := Where(LessOrEqual(rnd, dropoutRate), ZerosLike(input), input)
+	result := Where(LessOrEqual(rnd, dropoutRate), ZerosLike(operand), operand)
 	if normalize {
-		// Normalize input values, so mean value remains constant.
-		keepRate := ConvertDType(OneMinus(dropoutRate), input.DType())
+		// Normalize operand values, so mean value remains constant.
+		keepRate := ConvertDType(OneMinus(dropoutRate), operand.DType())
 		result = Div(result, keepRate)
 	}
 	return result

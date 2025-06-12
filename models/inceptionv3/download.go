@@ -2,9 +2,10 @@ package inceptionv3
 
 import (
 	"fmt"
+	"path"
+
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/data/hdf5"
-	"path"
 )
 
 const (

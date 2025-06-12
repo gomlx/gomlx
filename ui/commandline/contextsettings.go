@@ -4,13 +4,14 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"os"
+	"slices"
+	"strings"
+
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/pkg/errors"
-	"os"
-	"slices"
-	"strings"
 )
 
 // ParseContextSettings from settings -- typically the contents of a flag set by the user.
@@ -20,7 +21,7 @@ import (
 // in the context `ctx`. The default values are also used to set the type to which the
 // string values will be parsed to.
 //
-// It updates `ctx` parameters accordingly, and returns an error in case a parameter
+// It updates `ctx` parameters accordingly and returns an error in case a parameter
 // is unknown or the parsing failed.
 //
 // Note, one can also provide a scope for the parameters: "layer_1/l2_regularization=0.1"
@@ -29,7 +30,7 @@ import (
 // For integer types, "_" is removed: it allows one to enter large numbers using it as a separator, like
 // in Go. E.g.: 1_000_000 = 1000000.
 //
-// See example in CreateContextSettingsFlag, which will create a flag for the settings.
+// See the example in CreateContextSettingsFlag, which will create a flag for the settings.
 //
 // Example usage:
 //
@@ -112,7 +113,7 @@ func parseContextSetting(ctx *context.Context, setting string, paramsSet []strin
 	}
 
 	// Parse value accordingly.
-	// Is there a better way of doing this using reflection ?
+	// Is there a better way of doing this using reflection?
 	switch v := value.(type) {
 	case int:
 		valueStr = strings.Replace(valueStr, "_", "", -1)

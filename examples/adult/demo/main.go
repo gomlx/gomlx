@@ -22,6 +22,8 @@ package main
 import (
 	"flag"
 	"fmt"
+	"time"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/examples/adult"
 	. "github.com/gomlx/gomlx/graph"
@@ -47,7 +49,6 @@ import (
 	"github.com/janpfeifer/must"
 	"github.com/schollz/progressbar/v3"
 	"k8s.io/klog/v2"
-	"time"
 
 	_ "github.com/gomlx/gomlx/backends/default"
 )
@@ -184,7 +185,7 @@ func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, param
 	trainer := train.NewTrainer(backend, ctx, ModelGraph, losses.BinaryCrossentropyLogits,
 		optimizers.FromContext(ctx),
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
-		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
+		[]metrics.Interface{meanAccuracyMetric}) // evalMetrics
 
 	// Use standard training loop.
 	loop := train.NewLoop(trainer)

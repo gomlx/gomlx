@@ -21,6 +21,7 @@ package main
 import (
 	"flag"
 	"fmt"
+
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
@@ -134,7 +135,7 @@ func main() {
 	// train.Trainer executes a training step.
 	trainer := train.NewTrainer(backend, ctx, modelGraph,
 		losses.MeanSquaredError,
-		optimizers.StochasticGradientDescent(),
+		optimizers.StochasticGradientDescent().Done(),
 		nil, nil) // trainMetrics, evalMetrics
 
 	loop := train.NewLoop(trainer)

@@ -41,9 +41,15 @@ const (
 	// TrainerAbsoluteScope used for Context parameters related to the trainer.
 	TrainerAbsoluteScope = context.ScopeSeparator + "trainer"
 
-	// TrainerLossGraphParamKey is the key to the global params that holds the
-	// losses added to the model.
+	// TrainerLossGraphParamKey is the graph params key that maps to the
+	// node with the accumulated losses in the model
 	TrainerLossGraphParamKey = "trainer_loss"
+
+	// TrainerLossNoRegularizationGraphParamKey is the graph params key that maps to the
+	// node with the loss (resulted from calling the lossFn passed to the trainer) without the regularization.
+	//
+	// If no lossFn was given to the trainer, this will map to nil.
+	TrainerLossNoRegularizationGraphParamKey = "trainer_loss_no_regularization"
 
 	// TrainerPerStepUpdateGraphFnParamKey is used by AddPerStepUpdateGraphFn.
 	TrainerPerStepUpdateGraphFnParamKey = "trainer_per_step_update_graph_fn"
@@ -72,6 +78,13 @@ type Trainer struct {
 	// Training data
 	trainStepExecMap map[any]*context.Exec
 	trainMetrics     []metrics.Interface
+
+	// Accumulate gradients mode:
+	accumulateGradients                bool
+	accumulateGradientsSteps           int
+	accumulateGradientsCurrentStep     int
+	accumulateGradientsExecMap         map[any]*context.Exec
+	accumulateGradientsAndApplyExecMap map[any]*context.Exec
 
 	// Eval data
 	evalStepExecMap map[any]*context.Exec
@@ -165,6 +178,9 @@ func NewTrainer(backend backends.Backend, ctx *context.Context,
 		trainStepExecMap:          make(map[any]*context.Exec),
 		evalStepExecMap:           make(map[any]*context.Exec),
 		batchNormStepExecMap:      make(map[any]*context.Exec),
+
+		accumulateGradientsExecMap:         make(map[any]*context.Exec),
+		accumulateGradientsAndApplyExecMap: make(map[any]*context.Exec),
 	}
 
 	// Delete variables that should forcefully be reinitialized every time the model is retrained.
@@ -184,28 +200,41 @@ func NewTrainer(backend backends.Backend, ctx *context.Context,
 		}
 		return loss
 	}
+	lossNoRegularizationFn := func(ctx *context.Context, labels, predictions []*graph.Node) *graph.Node {
+		g := predictions[0].Graph()
+		loss := GetLossNoRegularization(ctx, g)
+		if loss == nil {
+			return graph.ScalarZero(g, predictions[0].DType())
+		}
+		return loss
+	}
 	lossAndMetrics = append(lossAndMetrics, metrics.NewBaseMetric("Batch Loss+Regularization", "loss+", metrics.LossMetricType, batchLossFn, nil))
-	lossAndMetrics = append(lossAndMetrics, metrics.NewExponentialMovingAverageMetric("Moving Average Loss+Regularization", "~loss+", metrics.LossMetricType, batchLossFn, nil, 0.01))
+	lossAndMetrics = append(lossAndMetrics,
+		metrics.NewExponentialMovingAverageMetric("Moving Average Loss+Regularization", "~loss+", metrics.LossMetricType,
+			batchLossFn, nil, 0.01))
 	if r.lossFn != nil {
-		lossAndMetrics = append(lossAndMetrics, metrics.NewExponentialMovingAverageMetric("Moving Average Loss", "~loss", metrics.LossMetricType, r.lossFnScalarLoss, nil, 0.01))
+		lossAndMetrics = append(lossAndMetrics,
+			metrics.NewExponentialMovingAverageMetric("Moving Average Loss", "~loss", metrics.LossMetricType,
+				lossNoRegularizationFn, nil, 0.01))
 	}
 
 	lossAndMetrics = append(lossAndMetrics, trainMetrics...)
 	r.trainMetrics = lossAndMetrics
 
-	// Create a context executor for EvalStep. Automatically include mean loss metric as the first eval metric.
+	// Create a context executor for EvalStep. Automatically include the mean loss metric as the first eval metric.
 	numMetrics = len(evalMetrics) + 2
 	lossAndMetrics = make([]metrics.Interface, 0, numMetrics)
 	lossAndMetrics = append(lossAndMetrics, metrics.NewMeanMetric("Mean Loss+Regularization", "#loss+", metrics.LossMetricType, batchLossFn, nil))
 	if r.lossFn != nil {
-		lossAndMetrics = append(lossAndMetrics, metrics.NewMeanMetric("Mean Loss", "#loss", metrics.LossMetricType, r.lossFnScalarLoss, nil))
+		lossAndMetrics = append(lossAndMetrics, metrics.NewMeanMetric("Mean Loss", "#loss", metrics.LossMetricType,
+			lossNoRegularizationFn, nil))
 	}
 	lossAndMetrics = append(lossAndMetrics, evalMetrics...)
 	r.evalMetrics = lossAndMetrics
 	return r
 }
 
-// enumerateExec enumerates all executors maintained by the Trainer and call fn on them.
+// enumerateExecs enumerates all executors maintained by the Trainer and call fn on them.
 func (r *Trainer) enumerateExecs(fn func(exec *context.Exec)) {
 	for _, exec := range r.trainStepExecMap {
 		fn(exec)
@@ -214,6 +243,12 @@ func (r *Trainer) enumerateExecs(fn func(exec *context.Exec)) {
 		fn(exec)
 	}
 	for _, exec := range r.batchNormStepExecMap {
+		fn(exec)
+	}
+	for _, exec := range r.accumulateGradientsExecMap {
+		fn(exec)
+	}
+	for _, exec := range r.accumulateGradientsAndApplyExecMap {
 		fn(exec)
 	}
 }
@@ -253,8 +288,8 @@ func (r *Trainer) SetContext(ctx *context.Context) *Trainer {
 // that implement them).
 func (r *Trainer) TrainMetrics() []metrics.Interface { return r.trainMetrics }
 
-// EvalMetrics returns the eval metrics objects (not the actual values just the objects
-// that implement them).
+// EvalMetrics returns the eval metrics objects: not the actual metric values, just the objects
+// that implement them, holds their name and a default pretty-printing function.
 func (r *Trainer) EvalMetrics() []metrics.Interface { return r.evalMetrics }
 
 // createExecutor (train or eval) for the given spec. Returns an error if it failed for
@@ -297,8 +332,6 @@ func (r *Trainer) lossFnScalarLoss(_ *context.Context, labels, predictions []*gr
 
 // trainStepGraph builds the graph to train one step. It is called by the context executor (`r.trainStepExecMap`)
 // everytime a graph needs to be built (typically for new batch sizes).
-// inputsAndLabel[:-1] are the inputs, and inputsAndLabel[-1] is the labels batch.
-// It a slice with the loss and the updates created by the optimizer.
 func (r *Trainer) trainStepGraph(spec any, ctx *context.Context, inputs, labels []*graph.Node) (metrics []*graph.Node) {
 	g := inputs[0].Graph()
 	ctx.SetTraining(g, true) // Some layers behave differently if in training.
@@ -306,7 +339,9 @@ func (r *Trainer) trainStepGraph(spec any, ctx *context.Context, inputs, labels 
 	// AddLoss generated by the given lossFn.
 	predictions := r.modelFn(ctx, spec, inputs)
 	if r.lossFn != nil {
-		AddLoss(ctx, r.lossFnScalarLoss(ctx, labels, predictions))
+		baseLoss := r.lossFnScalarLoss(ctx, labels, predictions)
+		SetLossNoRegularization(ctx, baseLoss)
+		AddLoss(ctx, baseLoss)
 	}
 
 	// Store total loss as a variable, so it can be used by metrics.
@@ -335,8 +370,7 @@ func (r *Trainer) trainStepGraph(spec any, ctx *context.Context, inputs, labels 
 // do standard checks on inputs and labels.
 func (r *Trainer) callGraphFn(
 	graphFn func(spec any, ctx *context.Context, inputs, labels []*graph.Node) (metrics []*graph.Node),
-	graphType GraphType,
-	spec any, inputs, labels []*tensors.Tensor) (metrics []*tensors.Tensor) {
+	graphType GraphType, execMap map[any]*context.Exec, spec any, inputs, labels []*tensors.Tensor) (metrics []*tensors.Tensor) {
 	if len(inputs) == 0 {
 		Panicf("there are no inputs, at least one is required")
 	}
@@ -364,19 +398,10 @@ func (r *Trainer) callGraphFn(
 	}
 
 	// Get the executor for the graphType and input spec.
-	var execsMap map[any]*context.Exec
-	switch graphType {
-	case TrainType:
-		execsMap = r.trainStepExecMap
-	case EvalType:
-		execsMap = r.evalStepExecMap
-	case BatchNormAveragesType:
-		execsMap = r.batchNormStepExecMap
-	}
-	exec, found := execsMap[spec]
+	exec, found := execMap[spec]
 	if !found {
 		exec = r.createExecutor(spec, len(inputs), len(labels), graphFn)
-		execsMap[spec] = exec
+		execMap[spec] = exec
 		for _, handler := range r.onExecCreationHandlers {
 			handler(exec, graphType) // Call handler for training.
 		}
@@ -401,7 +426,8 @@ func (r *Trainer) callGraphFn(
 //
 // see Loop.OnStep to schedule
 func (r *Trainer) ResetComputationGraphs() {
-	for _, execMap := range []map[any]*context.Exec{r.trainStepExecMap, r.evalStepExecMap, r.batchNormStepExecMap} {
+	for _, execMap := range []map[any]*context.Exec{r.trainStepExecMap, r.evalStepExecMap, r.batchNormStepExecMap,
+		r.accumulateGradientsExecMap, r.accumulateGradientsAndApplyExecMap} {
 		for _, e := range execMap {
 			e.Finalize()
 		}
@@ -439,7 +465,11 @@ func (r *Trainer) metricsUpdatesGraph(ctx *context.Context, labels, predictions 
 //
 // Errors are thrown using `panic` -- they are usually informative and include a stack-trace.
 func (r *Trainer) TrainStep(spec any, inputs, labels []*tensors.Tensor) (metrics []*tensors.Tensor) {
-	return r.callGraphFn(r.trainStepGraph, TrainType, spec, inputs, labels)
+	if r.accumulateGradients {
+		// Version that accumulate gradients.
+		return r.trainStepWithAccumulateGradients(spec, inputs, labels)
+	}
+	return r.callGraphFn(r.trainStepGraph, TrainType, r.trainStepExecMap, spec, inputs, labels)
 }
 
 // evalStepGraph builds the graph to eval one step. It is called by the context executor (`r.evalStepExecMap`)
@@ -451,11 +481,9 @@ func (r *Trainer) evalStepGraph(spec any, ctx *context.Context, inputs, labels [
 
 	predictions := r.modelFn(ctx, spec, inputs)
 	if r.lossFn != nil {
-		loss := r.lossFn(labels, predictions)
-		if !loss.Shape().IsScalar() {
-			loss = graph.ReduceAllMean(loss)
-		}
-		AddLoss(ctx, loss)
+		baseLoss := r.lossFnScalarLoss(ctx, labels, predictions)
+		SetLossNoRegularization(ctx, baseLoss)
+		AddLoss(ctx, baseLoss)
 	}
 
 	// Get metrics and updates
@@ -482,7 +510,7 @@ func (r *Trainer) ResetTrainMetrics() error {
 //
 // Errors are thrown using `panic` -- they are usually informative and include a stack-trace.
 func (r *Trainer) EvalStep(spec any, inputs, labels []*tensors.Tensor) (metrics []*tensors.Tensor) {
-	return r.callGraphFn(r.evalStepGraph, EvalType, spec, inputs, labels)
+	return r.callGraphFn(r.evalStepGraph, EvalType, r.evalStepExecMap, spec, inputs, labels)
 }
 
 // resetEvalMetrics call Metrics.Reset on all eval metrics.
@@ -552,9 +580,9 @@ func (r *Trainer) Metrics() []metrics.Interface {
 type OnExecFn func(exec *context.Exec, graphType GraphType)
 
 // OnExecCreation registers a handler to be called each time an executor (`context.Exec`) is created by the trainer.
-// Different executors are create for training and eval (`train` reflect that), and for different
+// Different executors are created for training, eval, BatchNormalization, accumulatation of gradients (`train` reflect that), and for different
 // `spec` values received from the Dataset.
-// The `handler` is also given the mode (TrainGraph or EvalGraph) the executor is created for.
+// The `handler` is also given the type (TrainGraph or EvalGraph) the executor is created for.
 func (r *Trainer) OnExecCreation(handler OnExecFn) {
 	r.onExecCreationHandlers = append(r.onExecCreationHandlers, handler)
 }
@@ -584,10 +612,30 @@ func AddLoss(ctx *context.Context, loss *graph.Node) {
 // GetLosses returns the sum of all loss terms added with AddLoss(), or nil if none was set.
 //
 // Usually this is used by the trainer after all losses are accounted for. But can be used
-// by arbitrary modeling functions. In particular after the optimizer update, see AddPerStepUpdateGraphFn.
+// by arbitrary modeling functions. In particular, after the optimizer update, see AddPerStepUpdateGraphFn.
 func GetLosses(ctx *context.Context, g *graph.Graph) (loss *graph.Node) {
 	ctxTrainer := ctx.InAbsPath(TrainerAbsoluteScope)
 	lossAny, _ := ctxTrainer.GetGraphParam(g, TrainerLossGraphParamKey)
+	return lossAny.(*graph.Node)
+}
+
+// SetLossNoRegularization saves a reference to model loss calculated by the lossFn used in training.
+// This doesn't include regularization losses.
+//
+// This can be used by metrics that need to know the loss without regularization.
+func SetLossNoRegularization(ctx *context.Context, loss *graph.Node) {
+	ctxTrainer := ctx.InAbsPath(TrainerAbsoluteScope)
+	ctxTrainer.SetGraphParam(loss.Graph(), TrainerLossNoRegularizationGraphParamKey, loss)
+}
+
+// GetLossNoRegularization returns the loss of the model not including regularization (usually added with
+// AddLoss), if it has been set with SetLossNoRegularization.
+func GetLossNoRegularization(ctx *context.Context, g *graph.Graph) (loss *graph.Node) {
+	ctxTrainer := ctx.InAbsPath(TrainerAbsoluteScope)
+	lossAny, found := ctxTrainer.GetGraphParam(g, TrainerLossNoRegularizationGraphParamKey)
+	if !found {
+		return nil
+	}
 	return lossAny.(*graph.Node)
 }
 

@@ -108,8 +108,12 @@ func (d *onDevice) Finalize() {
 	if d.IsFinalized() {
 		return
 	}
-	if err := d.t.backend.BufferFinalize(d.buffer); err != nil {
-		panic(errors.WithMessagef(err, "Tensor.OnDevice.Finalize: failed to finalize buffer on-device"))
+	if !d.t.backend.IsFinalized() {
+		// We finalize only if the backend hasn't been finalized yet -- otherwise, we assume all buffers
+		// have been freed/finalized/invalidated by the backend already.
+		if err := d.t.backend.BufferFinalize(d.buffer); err != nil {
+			panic(errors.WithMessagef(err, "Tensor.OnDevice.Finalize: failed to finalize buffer on-device"))
+		}
 	}
 	d.buffer = nil
 	d.t = nil
@@ -140,7 +144,7 @@ var defaultDeviceNums = []backends.DeviceNum{0}
 // lockedMaterializeOnDevices implements Tensor.MaterializeOnDevices
 //
 // If share is true, it will attempt to materialize to a shared buffer if available.
-// In this case it frees the local tensor storage and starts using the shared data instead.
+// In this case, it frees the local tensor storage and starts using the shared data instead.
 func (t *Tensor) lockedMaterializeOnDevices(backend backends.Backend, share bool, deviceNums ...backends.DeviceNum) {
 	if t.backend == nil {
 		t.backend = backend
@@ -152,8 +156,8 @@ func (t *Tensor) lockedMaterializeOnDevices(backend backends.Backend, share bool
 			t.shape, backend.Name())
 		t.Clone()
 	}
-	if t.backend == nil {
-		exceptions.Panicf("cannote MaterializeOnDevice with a nil backend")
+	if t.backend == nil || t.backend.IsFinalized() {
+		exceptions.Panicf("cannote MaterializeOnDevice with a nil or finalized backend")
 	}
 
 	if len(deviceNums) == 0 {
@@ -301,6 +305,9 @@ func (t *Tensor) MaterializeLocal() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.isShared {
+		if t.backend == nil || t.backend.IsFinalized() {
+			exceptions.Panicf("attempting to access a Tensor(shape=%s) with shared buffer with a backend that has been finalized already.", t.shape)
+		}
 		return
 	}
 	t.lockedMaterializeLocal()

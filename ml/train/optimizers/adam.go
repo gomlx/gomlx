@@ -18,6 +18,7 @@ package optimizers
 
 import (
 	"fmt"
+
 	. "github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
@@ -187,9 +188,19 @@ func (o *adam) UpdateGraph(ctx *context.Context, g *Graph, loss *Node) {
 		Panicf("optimizer requires a scalar loss to optimize, got loss.shape=%s instead", loss.Shape())
 		return
 	}
+	grads := ctx.BuildTrainableVariablesGradientsGraph(loss)
+	o.UpdateGraphWithGradients(ctx, grads, loss.DType())
+}
+
+func (o *adam) UpdateGraphWithGradients(ctx *context.Context, grads []*Node, lossDType dtypes.DType) {
+	if len(grads) == 0 {
+		Panicf("Context.BuildTrainableVariablesGradientsGraph returned 0 gradients, are there any trainable variables ?")
+	}
+	g := grads[0].Graph()
+
 	dtype := o.config.dtype
 	if dtype == dtypes.InvalidDType {
-		dtype = loss.DType()
+		dtype = lossDType
 	}
 
 	// Set up learning-rate.
@@ -208,22 +219,17 @@ func (o *adam) UpdateGraph(ctx *context.Context, g *Graph, loss *Node) {
 	debiasTermBeta2 := Inverse(OneMinus(Pow(beta2, adamStep)))
 	epsilon := Const(g, shapes.CastAsDType(o.config.epsilon, dtype))
 
-	grads := ctx.BuildTrainableVariablesGradientsGraph(loss)
-	if len(grads) == 0 {
-		Panicf("Context.BuildTrainableVariablesGradientsGraph returned 0 gradients, are there any trainable variables ?")
-	}
-
 	// Apply gradient one variable at a time.
 	numTrainable := len(grads)
 	varIdx := 0
-	ctx.EnumerateVariables(func(v *context.Variable) {
+	for v := range ctx.IterVariables() {
 		if v.Trainable && v.InUseByGraph(g) {
 			if varIdx < numTrainable {
 				o.applyAdamGraph(ctx, g, v, dtype, grads[varIdx], learningRate, beta1, debiasTermBeta1, beta2, debiasTermBeta2, epsilon)
 			}
 			varIdx++
 		}
-	})
+	}
 	if varIdx != numTrainable {
 		Panicf("Context.BuildTrainableVariablesGradientsGraph returned gradients for %d variables, but "+
 			"Adam only sees %d variables -- were new variables created in between ?",

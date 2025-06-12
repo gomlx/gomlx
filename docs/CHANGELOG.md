@@ -1,5 +1,29 @@
 # GoMLX changelog
 
+# v0.20.1: 2025/06/12 Trainer.AccumulateGradients (when the batch doesn't fit memory); VNN fixes; Numpy improvements. 
+
+* Package `train`:
+  * Better handling of loss (without regularization) in metrics. Added `SetLossNoRegularization` and `GetLossNoRegularization`.
+  * Added `Trainer.AccumulateGradients(n)` to accumulate n steps of gradients before applying them. This is useful if 
+    the desired batch size doesn't fit in memory, so it accumulates the gradients until the virtual batch size gradient
+    is calculated.
+* Package `optimizers`:
+  * Added support for the new `train.OptimizeWithGradients` interface, to support gradient accumulators. 
+  * Cleaned up `StochasticGradientDescent` API. Added option to disable decay for testing.
+* Pacakge `vnn`:
+  * Added `Config.Scaler` to add a scaler operator just after the linear projection of a layer. It allows the VNN
+    to operate on magnitude independent vectors.
+  * Fixed the `LayerNormalization`, to make it more stable in backprop.
+  * Fixed `Relu`: added support for non-shared non-linearities and a "leak" parameter ("vnn_relu_negative_slope").
+  * Added `VNN().ActivationFn()` to allow setting arbitrary activation functions.
+* Package `types/tensors/numpy`:
+  * Added support for "Fortran order" files.
+* Package `tensors`:
+  * Attempting to finalize an "on-device" tensor whose backend has already been finalized is now a no-op -- as opposed to an panic.
+  * Access to a on-device or shared buffer now checks that the backend hasn't been finalized.
+    And if it has, it panics with a meaningful error message.
+  * Added integration tests.
+
 # v.0.20.0: Small API change: `backends.NewWithConfig()` changed to return an error. 
 
 * Package `backends`:

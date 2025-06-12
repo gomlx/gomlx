@@ -19,7 +19,7 @@ package mnist
 import (
 	"testing"
 
-	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gopjrt/dtypes"
 
@@ -27,6 +27,7 @@ import (
 )
 
 func TestDataset(t *testing.T) {
+	// Where the dataset is downloaded -- it only downloads if not yet there.
 	dataDir := "~/tmp/mnist"
 	dataDir = data.ReplaceTildeInDir(dataDir)
 	if err := Download(dataDir); err != nil {
@@ -35,7 +36,7 @@ func TestDataset(t *testing.T) {
 	}
 
 	modes := []string{"train", "test"}
-	backend := backends.MustNew()
+	backend := graphtest.BuildTestBackend()
 	batchSize := 100
 
 	for _, m := range modes {
