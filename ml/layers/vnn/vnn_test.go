@@ -266,7 +266,8 @@ func TestVNNTrain(t *testing.T) {
 	ds.Shuffle().BatchSize(batchSize, true).Infinite(true)
 
 	trainer := train.NewTrainer(
-		backend, ctx, modelFn, losses.BinaryCrossentropyLogits, optimizers.Adam().Done(),
+		backend, ctx, modelFn, losses.BinaryCrossentropyLogits,
+		optimizers.Adam().LearningRate(1e-4).Done(),
 		[]metrics.Interface{metrics.NewMovingAverageBinaryLogitsAccuracy("Moving Accuracy", "~acc", 0.01)},
 		[]metrics.Interface{metrics.NewMeanBinaryLogitsAccuracy("Mean Accuracy", "#acc")})
 
