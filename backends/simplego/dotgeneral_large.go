@@ -21,7 +21,7 @@ var (
 	// It should be the number per thread, not necessarily the number per core.
 	// It was empirically optimized in an AMD 9950x3d.
 	// TODO: find out how to initialize this number in runtime.
-	DotGeneralTargetBlockSize = 4 * 1024
+	DotGeneralTargetBlockSize = 16 * 1024
 
 	// DotGeneralTargetBlockLog2Dim is set per dtype, such that it is square and fits DotGeneralTargetBlockSize.
 	// The block dim is 2^(DotGeneralTargetBlockLog2Dim[dtype]).

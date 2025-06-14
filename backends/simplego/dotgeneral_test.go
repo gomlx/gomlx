@@ -416,7 +416,7 @@ func TestDotGeneral_Exec(t *testing.T) {
 				fmt.Printf("\tgot=%s\n", got.Shape())
 				fmt.Printf("\twant=%s\n", want.Shape())
 
-				// Run 8 workers in parallel, to see if concurrency is a problem:
+				// Run 8 workers in parallel to see if concurrency is a problem:
 				var wg sync.WaitGroup
 				var numCalls atomic.Uint32
 				for runnerIdx := range 16 {
@@ -513,6 +513,11 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 	// rhsDims: [Batch, RhsCross, Contracting]
 	// Batch and Contracting dimensions must match between lhs and rhs.
 	benchmarkCases := []dotGeneralBenchmarkParamsCase{
+		{
+			name:     "NoBatch-Large",
+			lhsShape: []int{1536, 1920}, lhsContractingAxes: []int{1}, lhsBatchAxes: nil,
+			rhsShape: []int{1920, 1024}, rhsContractingAxes: []int{0}, rhsBatchAxes: nil,
+		},
 		/*
 			{
 				name:     "KA-Batch-16-#4",
