@@ -16,6 +16,10 @@ import (
 	"github.com/schollz/progressbar/v3"
 )
 
+// ExtraMetricFn is any function that will give extra values to display along the progress bar.
+// It is called at each time the progress bar is updated and it should return a name and the current value when it is called.
+type ExtraMetricFn func() (name, value string)
+
 // progressBar holds a progressbar being displayed.
 type progressBar struct {
 	numSteps         int
@@ -32,6 +36,8 @@ type progressBar struct {
 	isFirstOutput    bool
 	updates          chan progressBarUpdate
 	asyncUpdatesDone sync.WaitGroup
+
+	extraMetricFns []ExtraMetricFn
 }
 
 // ProgressbarStyle to use. Defaults to ASCII version.
@@ -144,9 +150,14 @@ const maxUpdateFrequency = time.Millisecond * 200
 // everytime Loop is run it will display a progress bar with progression and metrics.
 //
 // The associated data will be attached to the train.Loop, so nothing is returned.
-func AttachProgressBar(loop *train.Loop) {
+//
+// Optionally, one can provide extraMetrics: functions that are called at every update of
+// the progress bar and should return a name (title) and a value to be included in the
+// updated print-out.
+func AttachProgressBar(loop *train.Loop, extraMetrics ...ExtraMetricFn) {
 	pBar := &progressBar{
-		inNotebook: notebooks.IsNotebook(),
+		inNotebook:     notebooks.IsNotebook(),
+		extraMetricFns: extraMetrics,
 	}
 	if !pBar.inNotebook {
 		pBar.isFirstOutput = true
@@ -185,7 +196,7 @@ func AttachProgressBar(loop *train.Loop) {
 
 				// For command-line, we clear the previous lines that will be overwritten.
 				if !pBar.isFirstOutput {
-					pBar.termenv.ClearLines(len(update.metrics) + 1 + 2)
+					pBar.termenv.ClearLines(len(update.metrics) + 1 + 2 + len(pBar.extraMetricFns))
 				}
 				pBar.isFirstOutput = false
 
@@ -196,6 +207,10 @@ func AttachProgressBar(loop *train.Loop) {
 				pBar.statsTable.Row("Global Step", update.metrics[0])
 				for metricIdx, metricObj := range loop.Trainer.TrainMetrics() {
 					pBar.statsTable.Row(metricObj.Name(), update.metrics[1+metricIdx])
+				}
+				for _, extraMetric := range pBar.extraMetricFns {
+					name, value := extraMetric()
+					pBar.statsTable.Row(name, value)
 				}
 				fmt.Println(pBar.statsStyle.Render(pBar.statsTable.String()))
 				time.Sleep(maxUpdateFrequency)

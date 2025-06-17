@@ -18,6 +18,7 @@ import (
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/types/xslices"
+	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/muesli/termenv"
@@ -26,20 +27,6 @@ import (
 )
 
 var flagPerf = flag.Bool("perf", false, "Run performance table tests.")
-
-func formatDurationWith2Decimals(d time.Duration) string {
-	s := d.String()
-	re := regexp.MustCompile(`(\d+\.?\d*)([µa-z]+)`)
-	matches := re.FindStringSubmatch(s)
-	if len(matches) != 3 {
-		return s
-	}
-	num, err := strconv.ParseFloat(matches[1], 64)
-	if err != nil {
-		return s
-	}
-	return fmt.Sprintf("%.2f%s", num, matches[2])
-}
 
 func TestDotGeneral_LargeShapesAndCopy(t *testing.T) {
 	if _, ok := backend.(*Backend); !ok {
@@ -739,7 +726,7 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 				dimsToStr(benchCase.lhsShape), dimsToStr(benchCase.rhsShape),
 				dtype,
 				batchSize,
-				formatDurationWith2Decimals(avgDurationPerRun),
+				commandline.FormatDuration(avgDurationPerRun),
 				humanize.Comma(int64(numOps)),
 				gOpsPerSecond)
 			fmt.Println(style.Render(row))
