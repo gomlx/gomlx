@@ -7,6 +7,8 @@
 * Package `ui/commandline`:
   * Added optional extra arbitrary metrics to print in the command-line with `AttachProgressBar`.
   * Added `FormatDuration` to pretty-print duration.
+* Package `graph`
+  * Added gradients of `Cos` and `Sin` that were missing.
 
 # v0.20.1: 2025/06/12 Trainer.AccumulateGradients (when the batch doesn't fit memory); VNN fixes; Numpy improvements. 
 

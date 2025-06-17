@@ -192,7 +192,7 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 			var ok bool
 			vjpFn, ok = VJPRegistration[node.Type()]
 			if !ok {
-				Panicf("graph has node %s, for which no gradient is defined yet, cannot generate graph gradient", node)
+				Panicf("graph has node %s with type %q, for which no gradient is defined yet, cannot generate graph gradient", node, node.Type())
 			}
 		}
 
@@ -367,6 +367,8 @@ var VJPRegistration = map[NodeType]VJP{
 	NodeTypeExp:                  vjpForSingleOutput(expVJP),
 	NodeTypeLog:                  vjpForSingleOutput(logVJP),
 	NodeTypeLog1p:                vjpForSingleOutput(log1pVJP),
+	NodeTypeCos:                  vjpForSingleOutput(cosVJP),
+	NodeTypeSin:                  vjpForSingleOutput(sinVJP),
 	NodeTypeTanh:                 vjpForSingleOutput(tanhVJP),
 	NodeTypeAdd:                  vjpForSingleOutput(addVJP),
 	NodeTypeSub:                  vjpForSingleOutput(subVJP),
@@ -524,6 +526,16 @@ func logVJP(node, v *Node, _ shapes.Shape) []*Node {
 func log1pVJP(node, v *Node, _ shapes.Shape) []*Node {
 	one := ScalarOne(node.Graph(), node.inputNodes[0].DType())
 	return []*Node{Mul(v, Inverse(Add(one, node.inputNodes[0])))}
+}
+
+func sinVJP(node, v *Node, _ shapes.Shape) []*Node {
+	x := node.inputNodes[0]
+	return []*Node{Mul(v, Cos(x))}
+}
+
+func cosVJP(node, v *Node, _ shapes.Shape) []*Node {
+	x := node.inputNodes[0]
+	return []*Node{Mul(v, Neg(Sin(x)))}
 }
 
 func tanhVJP(node, v *Node, _ shapes.Shape) []*Node {
