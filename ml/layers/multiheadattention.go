@@ -18,19 +18,20 @@ package layers
 
 import (
 	"fmt"
+	"math"
+	"reflect"
+
 	. "github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/xslices"
-	"math"
-	"reflect"
 )
 
 // This file contains all parts of the layers.MultiHeadAttention implementation.
 
 // MultiHeadAttentionBuilder is a helper to build a multi-head-attention computation.
-// Create it with MultiHeadAttention, set the desired parameters and when all is set, call Done.
+// Create it with MultiHeadAttention, set the desired parameters, and when all is set, call Done.
 type MultiHeadAttentionBuilder struct {
 	ctx               *context.Context
 	g                 *Graph
@@ -57,7 +58,7 @@ type MultiHeadAttentionBuilder struct {
 // by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez,
 // Lukasz Kaiser, Illia Polosukhin.
 //
-// It takes query, key and value and project them numHead times, to a headDim sized embeddings.
+// It takes query, key, and value and project them numHead times, to a headDim sized embeddings.
 // Then it uses the dot-product of query and key as weights, and returns a softmax sum
 // of value, for each head.
 //
@@ -325,6 +326,8 @@ func (b *MultiHeadAttentionBuilder) DoneWithCoefficients() (attentionOutput, att
 	// Attention logits: outer product of key/query inner dimensions, with a dot-product of their projections.
 	// Shape: [batch, <query_elements>, num_heads, <key_elements>]
 	attentionLogits := Einsum(attentionEquation, projectedQuery, projectedKey)
+	normalizingFactor := math.Sqrt(float64(b.keyQueryDim))
+	attentionLogits = DivScalar(attentionLogits, normalizingFactor)
 	//fmt.Printf("\tattentionLogits: %s\n", attentionLogits.Shape())
 
 	mask := b.buildMask()
