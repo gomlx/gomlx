@@ -123,7 +123,10 @@ type LossFn = losses.LossFn
 
 // DefaultMaxExecutors used for Trainer objects. Each different `spec` value from a Dataset triggers
 // the creation of a new executor.
-var DefaultMaxExecutors = 20
+//
+// If using AccumulateGradients, there will be 2 graphs per shape of input data: one to accumulate the gradients
+// and another to accumulate and apply the gradients.
+var DefaultMaxExecutors = 50
 
 // GraphType can be TrainGraph or EvalGraph, when there needs to be a distinction.
 type GraphType int
@@ -135,13 +138,13 @@ const (
 )
 
 // NewTrainer constructs a trainer that can be used for training steps and evaluation. It also creates a new Context
-// for model, which will hold the variables, hyperparameters and other information. It can be changed by the user.
+// for model, which will hold the variables, hyperparameters, and other information. It can be changed by the user.
 //
 // Its arguments are:
 //
 //   - backend needed to create and compile computation graphs.
 //
-//   - ctx (will) hold the variables, hyperparameters and related information for the model.
+//   - ctx (will) hold the variables, hyperparameters, and related information for the model.
 //
 //   - modelFn builds the graph that transforms inputs into predictions (or logits).
 //
@@ -284,6 +287,18 @@ func (r *Trainer) SetContext(ctx *context.Context) *Trainer {
 	return r
 }
 
+// WithMaxExecutors configure the Trainer to allow these many different executors to be created before failing.
+//
+// One executor is created per each different shape of input, times one for training, and one for evaluation (if
+// Trainer.Eval is being used).
+// The default is DefaultMaxExecutors.
+//
+// It returns the Trainer itself.
+func (r *Trainer) WithMaxExecutors(maxExecutors int) *Trainer {
+	r.maxExecutors = maxExecutors
+	return r
+}
+
 // TrainMetrics returns the train metrics objects (not the actual values just the objects
 // that implement them).
 func (r *Trainer) TrainMetrics() []metrics.Interface { return r.trainMetrics }
@@ -296,13 +311,15 @@ func (r *Trainer) EvalMetrics() []metrics.Interface { return r.evalMetrics }
 // any reason, including exceeding maxExecutors.
 func (r *Trainer) createExecutor(spec any, inputsLen, labelsLen int,
 	graphFn func(spec any, ctx *context.Context, inputs, labels []*graph.Node) (metrics []*graph.Node)) *context.Exec {
-	numExecs := len(r.trainStepExecMap) + len(r.evalStepExecMap)
+	numExecs := len(r.trainStepExecMap) + len(r.evalStepExecMap) +
+		len(r.accumulateGradientsExecMap) + len(r.accumulateGradientsAndApplyExecMap) +
+		len(r.batchNormStepExecMap)
 	if numExecs > r.maxExecutors {
 		Panicf("Max number of executors reached: one is created for each "+
 			"different value of `spec` returned by Dataset, triggering a different JIT-compiled "+
 			"computation graph. Probably you want to limit the number of different datasets configuration "+
-			"(spec) supported, or increase train.DefaultMaxExecutor if this is what you want. Value of spec "+
-			"passed at this iteration: %+v", spec)
+			"(spec) or shapes supported, or increase the allowed number of executors (see Train.WithMaxExecutors) "+
+			" if this is what you want. Value of spec passed at this iteration: %+v", spec)
 	}
 	if numExecs > 0 {
 		r.context = r.context.Checked(false) // Only check for duplicate variables at the first graph creation.

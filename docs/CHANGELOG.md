@@ -9,6 +9,9 @@
   * Added `FormatDuration` to pretty-print duration.
 * Package `graph`
   * Added gradients of `Cos` and `Sin` that were missing.
+* Package `ml/trainer`
+  * Fixed evaluation (context reuse) for when using accumulated gradients.
+  * Added `Trainer.WithMaxExecutors`.
 
 # v0.20.1: 2025/06/12 Trainer.AccumulateGradients (when the batch doesn't fit memory); VNN fixes; Numpy improvements. 
 
