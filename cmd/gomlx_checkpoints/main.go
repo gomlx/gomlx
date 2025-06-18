@@ -7,6 +7,12 @@ package main
 import (
 	"flag"
 	"fmt"
+	"os"
+	"path"
+	"slices"
+	"strings"
+	"time"
+
 	"github.com/charmbracelet/lipgloss"
 	lgtable "github.com/charmbracelet/lipgloss/table"
 	"github.com/dustin/go-humanize"
@@ -22,11 +28,6 @@ import (
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
-	"os"
-	"path"
-	"slices"
-	"strings"
-	"time"
 
 	_ "github.com/gomlx/gomlx/backends/default"
 )
@@ -332,7 +333,7 @@ func ReportMetrics(checkpointPath string, metricsUsed types.Set[string], metrics
 			case "accuracy":
 				value = fmt.Sprintf("%.2f%%", 100.0*point.Value)
 			default:
-				value = fmt.Sprintf("%.3f", point.Value)
+				value = fmt.Sprintf("%.3g", point.Value)
 			}
 			currentRow[idx] = value
 		}
