@@ -4,6 +4,13 @@ package plots
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"math"
+	"os"
+	"path"
+	"slices"
+	"sort"
+
 	"github.com/charmbracelet/lipgloss"
 	lgtable "github.com/charmbracelet/lipgloss/table"
 	"github.com/gomlx/exceptions"
@@ -16,13 +23,7 @@ import (
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/pkg/errors"
 	"golang.org/x/exp/maps"
-	"io"
 	"k8s.io/klog/v2"
-	"math"
-	"os"
-	"path"
-	"slices"
-	"sort"
 )
 
 // TrainingPlotFileName is the default file name within a checkpoint directory to store
@@ -85,7 +86,7 @@ func AddTrainAndEvalMetrics(plotter Plotter, loop *train.Loop, trainMetrics []*t
 	}
 
 	// Training metrics are pre-generated and given.
-	step := float64(loop.LoopStep)
+	step := float64(loop.Trainer.GlobalStep())
 	var incomplete bool
 	for ii, desc := range loop.Trainer.TrainMetrics() {
 		if desc.Name() == "Batch Loss" {

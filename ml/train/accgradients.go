@@ -25,6 +25,9 @@ type OptimizeWithGradients interface {
 
 // AccumulateGradients configures the trainer to accumulate numAccumulatingSteps of gradients before actually applying them.
 // globalStep will only be updated after numAccumulatingSteps are fed with Trainer.TrainStep.
+//
+// Notice that setting this makes the concept of "TrainStep" and "GlobalStep" diverge: there will now be numAccumulatingSteps "train steps"
+// per "global step".
 func (r *Trainer) AccumulateGradients(numAccumulatingSteps int) error {
 	if r.optimizer == nil {
 		return errors.New("optimizer is nil!?")
@@ -36,6 +39,12 @@ func (r *Trainer) AccumulateGradients(numAccumulatingSteps int) error {
 	r.accumulateGradientsSteps = numAccumulatingSteps
 	r.accumulateGradientsCurrentStep = 0
 	return nil
+}
+
+// NumAccumulatingSteps return the number of accumulating steps, if AccumulateGradients is being used.
+// Otherwise, it returns 0.
+func (r *Trainer) NumAccumulatingSteps() int {
+	return r.accumulateGradientsSteps
 }
 
 // iterTrainableAndAccumulatorVariables iterates over all the trainable variables (in the current graph g) and yields

@@ -109,14 +109,20 @@ func (pBar *progressBar) onStep(loop *train.Loop, metrics []*tensors.Tensor) err
 			amount:  amount,
 			metrics: make([]string, 0, len(trainMetrics)+1),
 		}
-		update.metrics = append(update.metrics, fmt.Sprintf("%d / %d", loop.LoopStep, loop.EndStep))
+		if loop.Trainer.NumAccumulatingSteps() > 1 {
+			// GlobalStep and TrainingStep are different
+			update.metrics = append(update.metrics, fmt.Sprintf("%d / %d of %d", loop.Trainer.GlobalStep(), loop.LoopStep, loop.EndStep))
+		} else {
+			// GlobalStep and TrainingStep are the same.
+			update.metrics = append(update.metrics, fmt.Sprintf("%d of %d", loop.LoopStep, loop.EndStep))
+		}
 		for metricIdx, metricObj := range trainMetrics {
 			update.metrics = append(update.metrics, metricObj.PrettyPrint(metrics[metricIdx]))
 		}
 		pBar.updates <- update
 	}
 
-	// Add amount run since last time.
+	// Add the amount of steps run since last time.
 	pBar.totalAmount += amount
 	pBar.lastStepReported = loop.LoopStep + 1
 	return nil
@@ -204,7 +210,11 @@ func AttachProgressBar(loop *train.Loop, extraMetrics ...ExtraMetricFn) {
 				_ = pBar.bar.Add(amount) // Prints progress bar line.
 				pBar.statsTable.Data(lgtable.NewStringData())
 				fmt.Println()
-				pBar.statsTable.Row("Global Step", update.metrics[0])
+				if loop.Trainer.NumAccumulatingSteps() > 1 {
+					pBar.statsTable.Row("Global/Train Steps", update.metrics[0])
+				} else {
+					pBar.statsTable.Row("Global Step", update.metrics[0])
+				}
 				for metricIdx, metricObj := range loop.Trainer.TrainMetrics() {
 					pBar.statsTable.Row(metricObj.Name(), update.metrics[1+metricIdx])
 				}

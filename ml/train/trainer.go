@@ -592,6 +592,11 @@ func (r *Trainer) Metrics() []metrics.Interface {
 	return r.evalMetrics
 }
 
+// GlobalStep is an alias for optimizers.GetGlobalStep using Trainer.Context().
+func (r *Trainer) GlobalStep() int64 {
+	return optimizers.GetGlobalStep(r.context)
+}
+
 // OnExecFn is a handler that can be called when executors are created.
 // See Train.OnExecCreation.
 type OnExecFn func(exec *context.Exec, graphType GraphType)
