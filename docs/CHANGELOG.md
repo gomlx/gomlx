@@ -1,6 +1,6 @@
 # GoMLX changelog
 
-# Next
+# Next: MultiHeadAttention implementation slightly changed!
 
 * Package `simplego`:
   * Added `GetBackend` that returns a singleton backend, created with the default configuration at the first request.
@@ -12,6 +12,10 @@
 * Package `ml/trainer`
   * Improved support for accumulated gradients. Fixed evaluation (context reuse) for when using accumulated gradients.
   * Added `Trainer.WithMaxExecutors`.
+* Package `ml/layers`
+  * Added normalizing 1/sqrt(d_k) factor to attention logits in the MultiHeadAttention layer: this will break current
+    models using it.
+  * Added `RMSNorm` normalizer.
 
 # v0.20.1: 2025/06/12 Trainer.AccumulateGradients (when the batch doesn't fit memory); VNN fixes; Numpy improvements. 
 
