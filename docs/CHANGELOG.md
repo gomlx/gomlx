@@ -18,6 +18,7 @@
   * Added `RMSNorm` normalizer.
 * `gomlx_checkpoints` command-line tool:
   * Added support for multiple models to allow comparing models.
+  * Fixed the printing of metrics with tiny values.
 
 # v0.20.1: 2025/06/12 Trainer.AccumulateGradients (when the batch doesn't fit memory); VNN fixes; Numpy improvements. 
 
