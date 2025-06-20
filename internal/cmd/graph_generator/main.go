@@ -3,16 +3,17 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/gomlx/gomlx/internal/cmd/graph_generator/parsebackends"
-	"github.com/gomlx/gomlx/types"
-	"github.com/gomlx/gomlx/types/xslices"
-	"github.com/janpfeifer/must"
 	"go/ast"
 	"os"
 	"os/exec"
 	"slices"
 	"strings"
 	"text/template"
+
+	"github.com/gomlx/gomlx/internal/cmd/graph_generator/parsebackends"
+	"github.com/gomlx/gomlx/types"
+	"github.com/gomlx/gomlx/types/xslices"
+	"github.com/janpfeifer/must"
 )
 
 func main() {
@@ -252,7 +253,6 @@ func (ni *nodeInputs{{.BackendName}}) String() string {
 {{.}}
 {{- end}}
 {{- end}}
-
 func {{/*
 
 Inputs:  */}}{{.GraphName}}({{if .HasGraph}}g *Graph, {{end}}{{range .Inputs}}{{.Name}} {{.GraphType}}, {{end}}) ({{/*
