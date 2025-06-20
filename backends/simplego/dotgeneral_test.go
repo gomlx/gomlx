@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"math"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
