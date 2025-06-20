@@ -9,6 +9,8 @@
   * Added `FormatDuration` to pretty-print duration.
 * Package `graph`
   * Added gradients of `Cos` and `Sin` that were missing.
+  * Fixed extra empty line in auto-generate functions comments that was preventing the documentation
+    to be generated.
 * Package `ml/trainer`
   * Improved support for accumulated gradients. Fixed evaluation (context reuse) for when using accumulated gradients.
   * Added `Trainer.WithMaxExecutors`.
