@@ -61,8 +61,8 @@ type Interface interface {
 	// PrettyPrint is used to pretty-print a metric value, usually in a short form.
 	PrettyPrint(value *tensors.Tensor) string
 
-	// Reset metrics internal counters, when starting a new evaluation.
-	// Notice this may be called before UpdateGraph, the metric should handle this without errors.
+	// Reset metrics internal counters when starting a new evaluation.
+	// Notice this may be called before UpdateGraph, and the metric should handle this without errors.
 	Reset(ctx *context.Context)
 }
 
@@ -149,16 +149,32 @@ func NewBaseMetric(name, shortName, metricType string, metricFn BaseMetricGraph,
 		metricFn: metricFn, pPrintFn: pPrintFn}
 }
 
-// meanMetric implements a metric that keeps the mean of a metric.
-type meanMetric struct {
+// MeanMetric implements a metric that keeps the mean of a metric.
+type MeanMetric struct {
 	baseMetric
+	dynamicBatch bool
 }
 
-// NewMeanMetric creates a metric from any BaseMetricGraph function. It assumes the batch size (to weight the
-// mean with each new result) is given by the first dimension of the labels' node.
+// NewMeanMetric creates a metric from any BaseMetricGraph function.
+//
+// It assumes the batch size (to weight the mean with each new result) is given by the first dimension of the labels' node.
+// If you want all batches to count the same, sed WithDynamicBatch(false).
+//
 // `prettyPrintFn` can be left as nil, and a default will be used.
-func NewMeanMetric(name, shortName, metricType string, metricFn BaseMetricGraph, prettyPrintFn PrettyPrintFn) Interface {
-	return &meanMetric{baseMetric: baseMetric{name: name, shortName: shortName, metricType: metricType, metricFn: metricFn, pPrintFn: prettyPrintFn}}
+func NewMeanMetric(name, shortName, metricType string, metricFn BaseMetricGraph, prettyPrintFn PrettyPrintFn) *MeanMetric {
+	return &MeanMetric{
+		baseMetric:   baseMetric{name: name, shortName: shortName, metricType: metricType, metricFn: metricFn, pPrintFn: prettyPrintFn},
+		dynamicBatch: true,
+	}
+}
+
+// WithDynamicBatch sets whether the mean should attempt to weight each batch by its size, defined as the dimension
+// of the first axis. Default is true.
+//
+// If set to false, each batch counts as 1, independent of its shape.
+func (m *MeanMetric) WithDynamicBatch(dynamicBatch bool) *MeanMetric {
+	m.dynamicBatch = dynamicBatch
+	return m
 }
 
 // BatchSize returns the batch size (assumed first dimension) of the data node, casting
@@ -184,7 +200,7 @@ func upPrecision(x *Node) *Node {
 	return x
 }
 
-func (m *meanMetric) UpdateGraph(ctx *context.Context, labels, predictions []*Node) (metric *Node) {
+func (m *MeanMetric) UpdateGraph(ctx *context.Context, labels, predictions []*Node) (metric *Node) {
 	g := predictions[0].Graph()
 	var result *Node
 	err := TryCatch[error](func() { result = m.metricFn(ctx, labels, predictions) })
@@ -214,7 +230,13 @@ func (m *meanMetric) UpdateGraph(ctx *context.Context, labels, predictions []*No
 
 	total := totalVar.ValueGraph(g)
 	previousWeight := weightVar.ValueGraph(g)
-	resultWeight := upPrecision(BatchSize(predictions[0]))
+	var resultWeight *Node
+	if m.dynamicBatch {
+		resultWeight = BatchSize(predictions[0])
+	} else {
+		resultWeight = ScalarOne(g, weightVar.Shape().DType)
+	}
+	resultWeight = upPrecision(resultWeight)
 
 	total = Add(total, Mul(result, resultWeight))
 	weight := Add(previousWeight, resultWeight)
@@ -226,7 +248,7 @@ func (m *meanMetric) UpdateGraph(ctx *context.Context, labels, predictions []*No
 	return mean
 }
 
-func (m *meanMetric) Reset(ctx *context.Context) {
+func (m *MeanMetric) Reset(ctx *context.Context) {
 	ctx = ctx.Reuse().In(Scope).In(m.ScopeName())
 	totalVar := ctx.GetVariableByScopeAndName(ctx.Scope(), "total")
 	if totalVar == nil {
@@ -244,10 +266,10 @@ func (m *meanMetric) Reset(ctx *context.Context) {
 
 // movingAverageMetric implements a metric that keeps the mean of a metric.
 //
-// It behaves just like a meanMetric, but each new batch has weight of newExampleWeight, and
+// It behaves just like a MeanMetric, but each new batch has weight of newExampleWeight, and
 // the stored weight is capped at (1-newExampleWeight).
 type movingAverageMetric struct {
-	meanMetric
+	MeanMetric
 	newExampleWeight float64
 }
 
@@ -260,7 +282,7 @@ type movingAverageMetric struct {
 // This doesn't have a set prior, it will start being a normal average until there are enough terms, and it becomes
 // an exponential moving average.
 func NewExponentialMovingAverageMetric(name, shortName, metricType string, metricFn BaseMetricGraph, pPrintFn PrettyPrintFn, newExampleWeight float64) Interface {
-	return &movingAverageMetric{meanMetric: meanMetric{baseMetric: baseMetric{
+	return &movingAverageMetric{MeanMetric: MeanMetric{baseMetric: baseMetric{
 		name: name, shortName: shortName, metricType: metricType,
 		metricFn: metricFn, pPrintFn: pPrintFn}}, newExampleWeight: newExampleWeight}
 }
@@ -330,7 +352,7 @@ func accuracyPPrint(value *tensors.Tensor) string {
 }
 
 // NewMeanBinaryAccuracy returns a new binary accuracy metric with the given names.
-func NewMeanBinaryAccuracy(name, shortName string) Interface {
+func NewMeanBinaryAccuracy(name, shortName string) *MeanMetric {
 	return NewMeanMetric(name, shortName, AccuracyMetricType, BinaryAccuracyGraph, accuracyPPrint)
 }
 
@@ -380,7 +402,7 @@ func BinaryLogitsAccuracyGraph(_ *context.Context, labels, logits []*Node) *Node
 }
 
 // NewMeanBinaryLogitsAccuracy returns a new binary accuracy metric with the given names.
-func NewMeanBinaryLogitsAccuracy(name, shortName string) Interface {
+func NewMeanBinaryLogitsAccuracy(name, shortName string) *MeanMetric {
 	return NewMeanMetric(name, shortName, AccuracyMetricType, BinaryLogitsAccuracyGraph, accuracyPPrint)
 }
 
@@ -449,7 +471,7 @@ func SparseCategoricalAccuracyGraph(_ *context.Context, labels, logits []*Node) 
 // The accuracy is defined as the fraction of times argmax(logits) is the true label.
 // It works for both probabilities or logits. Ties are considered misses.
 // Labels is expected to be some integer type. And the returned dtype is the same as logits.
-func NewSparseCategoricalAccuracy(name, shortName string) Interface {
+func NewSparseCategoricalAccuracy(name, shortName string) *MeanMetric {
 	return NewMeanMetric(name, shortName, AccuracyMetricType, SparseCategoricalAccuracyGraph, accuracyPPrint)
 }
 
