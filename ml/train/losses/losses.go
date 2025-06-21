@@ -34,12 +34,12 @@ import (
 // LossFn is the interface used bye train.Trainer to train models.
 //
 // It takes as inputs the labels and predictions:
-//   - labels comes from the dataset.
-//   - predictions comes from the model.
+//   - labels come from the dataset.
+//   - predictions come from the model.
 //   - the returned loss will be graph.ReduceAllMean by train.Trainer to a scalar, before being used for gradient descent.
 //     That means that the loss function is free to return a loss per example or an already reduced scalar loss.
 //
-// Most of the predefined losses in package `gomlx/ml/train/losses` assume labels and predictions are
+// Most of the predefined losses in the package `gomlx/ml/train/losses` assume labels and predictions are
 // both of length one. For multi-head models, it's very easy to write a small custom LossFn that splits
 // the slice and send each label/prediction pair to a predefined loss.
 type LossFn func(labels, predictions []*Node) (loss *Node)
@@ -82,40 +82,40 @@ type Type int
 //go:generate enumer -type=Type -trimprefix=Type -transform=snake -values -text -json -yaml losses.go
 
 const (
-	// TypeMAE represent the MeanAbsoluteError loss.
+	// TypeMAE corresponds to MeanAbsoluteError.
 	TypeMAE Type = iota
 
-	// TypeMSE represents the MeanSquaredError loss.
+	// TypeMSE corresponds to MeanSquaredError.
 	TypeMSE
 
-	// TypeHuber represents the Huber loss, see MakeHuberLoss.
+	// TypeHuber corresponds to a Huber-loss, see MakeHuberLoss.
 	TypeHuber
 
-	// TypeAPL represents the Adaptive-Power-Loss, see MakeAdaptivePowerLoss.
+	// TypeAPL corresponds to an Adaptive-Power-Loss, see MakeAdaptivePowerLoss.
 	TypeAPL
 
-	// TypeBinCross represents BinaryCrossentropy.
+	// TypeBinCross corresponds to BinaryCrossentropy.
 	TypeBinCross
 
-	// TypeBinCrossLogits represents BinaryCrossentropyLogits.
+	// TypeBinCrossLogits corresponds to BinaryCrossentropyLogits.
 	TypeBinCrossLogits
 
-	// TypeSparseCross represents CategoricalCrossEntropy.
+	// TypeCategoricalCross corresponds to CategoricalCrossEntropy.
 	TypeCategoricalCross
 
-	// TypeBinCrossLogits represents CategoricalCrossEntropyLogits.
+	// TypeCategoricalCrossLogits corresponds to CategoricalCrossEntropyLogits.
 	TypeCategoricalCrossLogits
 
-	// TypeSparseCrossLogits represents SparseCategoricalCrossEntropyLogits
+	// TypeSparseCrossLogits corresponds to SparseCategoricalCrossEntropyLogits.
 	TypeSparseCrossLogits
 
-	// TypeTriplet
+	// TypeTriplet corresponds to TripletLoss.
 	TypeTriplet
 
-	// TypeEuclidean
+	// TypeEuclidean corresponds to EuclideanDistance.
 	TypeEuclidean
 
-	// TypeEuclideanSquare
+	// TypeEuclideanSquare corresponds to EuclideanDistanceSquare.
 	TypeEuclideanSquare
 )
 
