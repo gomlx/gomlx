@@ -550,6 +550,16 @@ func (r *Trainer) Eval(ds Dataset) (lossAndMetrics []*tensors.Tensor) {
 	r.resetEvalMetrics()
 	count := 0
 	finalizeInputs := finalizeYieldedTensors(ds)
+
+	// Check for metrics with Go updates: these are update functions not written as a computation graph.
+	goUpdateFns := make([]metrics.UpdateGo, len(r.evalMetrics))
+	for ii, metric := range r.evalMetrics {
+		if fn, ok := metric.(metrics.UpdateGo); ok {
+			goUpdateFns[ii] = fn
+		}
+	}
+
+	// Loop over dataset:
 	for {
 		spec, inputs, labels, err := ds.Yield()
 		if err == io.EOF {
@@ -565,6 +575,11 @@ func (r *Trainer) Eval(ds Dataset) (lossAndMetrics []*tensors.Tensor) {
 		}
 
 		lossAndMetrics = r.EvalStep(spec, inputs, labels)
+		for i, goUpdateFn := range goUpdateFns {
+			if goUpdateFn != nil {
+				goUpdateFn.UpdateGo(lossAndMetrics[i])
+			}
+		}
 
 		// Free inputs and labels after usage.
 		if finalizeInputs {
@@ -579,6 +594,14 @@ func (r *Trainer) Eval(ds Dataset) (lossAndMetrics []*tensors.Tensor) {
 	if count == 0 {
 		Panicf("evaluation dataset yielded no batches, no data to evaluate")
 	}
+
+	// Read out the go-generate metrics:
+	for i, goUpdateFn := range goUpdateFns {
+		if goUpdateFn != nil {
+			lossAndMetrics[i] = goUpdateFn.ReadGo()
+		}
+	}
+
 	// Free lossAndMetrics on device, it will be consumed presumably only locally.
 	for _, metric := range lossAndMetrics {
 		metric.MaterializeLocal()
