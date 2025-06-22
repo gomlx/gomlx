@@ -66,6 +66,22 @@ type Interface interface {
 	Reset(ctx *context.Context)
 }
 
+// UpdateGo interface can be implemented by metrics that prefer to update their values during
+// evaluation of a dataset in Go (as opposed to using a computation graph).
+//
+// These may be easier for calculating things like running quantiles where it's simpler
+// to handle one element at a time, as opposed to process them as vectors (tensors).
+type UpdateGo interface {
+	Interface
+
+	// UpdateGo is called for each batch with the resulting metric returned by UpdateGraph()
+	UpdateGo(value *tensors.Tensor)
+
+	// ReadGo can be called whenever one wants the current value of the target metric.
+	// Typically it is called after UpdateGo is called for all batches of the dataset.
+	ReadGo() *tensors.Tensor
+}
+
 const (
 	// LossMetricType is the type of loss metrics.
 	// Used to aggregate metrics of the same  type in the same plot.
