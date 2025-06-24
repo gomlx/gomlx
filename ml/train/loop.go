@@ -25,7 +25,6 @@ import (
 
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
@@ -65,6 +64,9 @@ type Loop struct {
 
 	// LoopStep currently being executed.
 	// Defaults to the current context's `GlobalStep`, which will be 0 for a new context.
+	//
+	// Notice if using Trainer.AccumulateGradients: this is a measure of "train steps", and "global steps"
+	// will be incremented only every "numAccumulatedGradients" train steps are made.
 	LoopStep int
 
 	// StartStep is the value of LoopStep at the start of a run (RunSteps or RunEpochs).
@@ -98,14 +100,18 @@ type Loop struct {
 
 // NewLoop creates a new training loop trainer.
 func NewLoop(trainer *Trainer) *Loop {
-	return &Loop{
+	loop := &Loop{
 		Trainer:    trainer,
 		SharedData: make(map[string]any),
 		onStart:    newPriorityHooks[*hookWithName[OnStartFn]](),
 		onStep:     newPriorityHooks[*hookWithName[OnStepFn]](),
 		onEnd:      newPriorityHooks[*hookWithName[OnEndFn]](),
-		LoopStep:   int(optimizers.GetGlobalStep(trainer.Context())),
+		LoopStep:   int(trainer.GlobalStep()),
 	}
+	if trainer.NumAccumulatingSteps() > 1 {
+		loop.LoopStep = loop.LoopStep * trainer.NumAccumulatingSteps()
+	}
+	return loop
 }
 
 // TrainLastStepVarName is the name of the variable that holds the number of the target last GlobalStep.

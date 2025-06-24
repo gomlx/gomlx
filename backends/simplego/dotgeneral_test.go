@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"math"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -18,6 +17,7 @@ import (
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/types/xslices"
+	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/muesli/termenv"
@@ -26,20 +26,6 @@ import (
 )
 
 var flagPerf = flag.Bool("perf", false, "Run performance table tests.")
-
-func formatDurationWith2Decimals(d time.Duration) string {
-	s := d.String()
-	re := regexp.MustCompile(`(\d+\.?\d*)([µa-z]+)`)
-	matches := re.FindStringSubmatch(s)
-	if len(matches) != 3 {
-		return s
-	}
-	num, err := strconv.ParseFloat(matches[1], 64)
-	if err != nil {
-		return s
-	}
-	return fmt.Sprintf("%.2f%s", num, matches[2])
-}
 
 func TestDotGeneral_LargeShapesAndCopy(t *testing.T) {
 	if _, ok := backend.(*Backend); !ok {
@@ -416,7 +402,7 @@ func TestDotGeneral_Exec(t *testing.T) {
 				fmt.Printf("\tgot=%s\n", got.Shape())
 				fmt.Printf("\twant=%s\n", want.Shape())
 
-				// Run 8 workers in parallel, to see if concurrency is a problem:
+				// Run 8 workers in parallel to see if concurrency is a problem:
 				var wg sync.WaitGroup
 				var numCalls atomic.Uint32
 				for runnerIdx := range 16 {
@@ -513,6 +499,11 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 	// rhsDims: [Batch, RhsCross, Contracting]
 	// Batch and Contracting dimensions must match between lhs and rhs.
 	benchmarkCases := []dotGeneralBenchmarkParamsCase{
+		{
+			name:     "NoBatch-Large",
+			lhsShape: []int{1536, 1920}, lhsContractingAxes: []int{1}, lhsBatchAxes: nil,
+			rhsShape: []int{1920, 1024}, rhsContractingAxes: []int{0}, rhsBatchAxes: nil,
+		},
 		/*
 			{
 				name:     "KA-Batch-16-#4",
@@ -734,7 +725,7 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 				dimsToStr(benchCase.lhsShape), dimsToStr(benchCase.rhsShape),
 				dtype,
 				batchSize,
-				formatDurationWith2Decimals(avgDurationPerRun),
+				commandline.FormatDuration(avgDurationPerRun),
 				humanize.Comma(int64(numOps)),
 				gOpsPerSecond)
 			fmt.Println(style.Render(row))

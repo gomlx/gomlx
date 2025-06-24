@@ -30,6 +30,18 @@ func init() {
 	backends.Register(BackendName, New)
 }
 
+// GetBackend returns a singleton backend for SimpleGo, created with the default configuration.
+// The backend is only created at the first call of the function.
+//
+// The singleton is never destroyed.
+var GetBackend = sync.OnceValue(func() backends.Backend {
+	backend, err := New("")
+	if err != nil {
+		panic(err)
+	}
+	return backend
+})
+
 // New constructs a new SimpleGo Backend.
 // There are no configurations, the string is simply ignored.
 func New(config string) (backends.Backend, error) {

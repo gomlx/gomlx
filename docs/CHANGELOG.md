@@ -1,5 +1,31 @@
 # GoMLX changelog
 
+# Next: MultiHeadAttention implementation slightly changed!
+
+* Package `simplego`:
+  * Added `GetBackend` that returns a singleton backend, created with the default configuration at the first request.
+* Package `ui/commandline`:
+  * Added optional extra arbitrary metrics to print in the command-line with `AttachProgressBar`.
+  * Added `FormatDuration` to pretty-print duration.
+* Package `graph`
+  * Added gradients of `Cos` and `Sin` that were missing.
+  * Fixed extra empty line in auto-generate functions comments that was preventing the documentation
+    to be generated.
+* Package `ml/trainer`
+  * Improved support for accumulated gradients. Fixed evaluation (context reuse) for when using accumulated gradients.
+  * Added `Trainer.WithMaxExecutors`.
+* Package `ml/trainer/metrics`:
+  * `MeanMetric` allows for disabling dynamic batch weighting.
+  * Added `StreamingMedianMetric`.
+* Package `ml/layers`
+  * Added normalizing 1/sqrt(d_k) factor to attention logits in the MultiHeadAttention layer: this will break current
+    models using it.
+  * Added `RMSNorm` normalizer.
+* `gomlx_checkpoints` command-line tool:
+  * Added support for multiple models to allow comparing models.
+  * Fixed the printing of metrics with tiny values.
+* 
+
 # v0.20.1: 2025/06/12 Trainer.AccumulateGradients (when the batch doesn't fit memory); VNN fixes; Numpy improvements. 
 
 * Package `train`:

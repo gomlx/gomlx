@@ -137,7 +137,6 @@ func (ni *nodeInputsAbs) String() string {
 }
 
 // Abs returns the Op that represents the output of the corresponding operation.
-
 func Abs(x *Node) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -182,7 +181,6 @@ func (ni *nodeInputsAdd) String() string {
 // Add returns the element-wise sum of the two values.
 // Standard broadcasting rules apply (see documentation).
 // The op is created on the same XlaBuilder as used for x0 and x1.
-
 func Add(x0 *Node, x1 *Node) (node *Node) {
 	inputNodes := []*Node{x0, x1}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -230,7 +228,6 @@ func (ni *nodeInputsArgMinMax) String() string {
 }
 
 // backendArgMinMax is a Graph wrapper for the backend.Builder.ArgMinMax method.
-
 func backendArgMinMax(x *Node, axis int, outputDType dtypes.DType, isMin bool) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -286,7 +283,6 @@ func (ni *nodeInputsBatchNormForInference) String() string {
 }
 
 // backendBatchNormForInference is a Graph wrapper for the backend.Builder.BatchNormForInference method.
-
 func backendBatchNormForInference(operand *Node, scale *Node, offset *Node, mean *Node, variance *Node, epsilon float32, axis int) (node *Node) {
 	inputNodes := []*Node{operand, scale, offset, mean, variance}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -341,7 +337,6 @@ func (ni *nodeInputsBatchNormForTraining) String() string {
 }
 
 // backendBatchNormForTraining is a Graph wrapper for the backend.Builder.BatchNormForTraining method.
-
 func backendBatchNormForTraining(operand *Node, scale *Node, offset *Node, epsilon float32, axis int) (normalized, batchMean, batchVariance *Node) {
 	inputNodes := []*Node{operand, scale, offset}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -400,7 +395,6 @@ func (ni *nodeInputsBatchNormGradient) String() string {
 }
 
 // backendBatchNormGradient is a Graph wrapper for the backend.Builder.BatchNormGradient method.
-
 func backendBatchNormGradient(operand *Node, scale *Node, mean *Node, variance *Node, gradOutput *Node, epsilon float32, axis int) (gradOperand, gradScale, gradOffset *Node) {
 	inputNodes := []*Node{operand, scale, mean, variance, gradOutput}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -449,7 +443,6 @@ func (ni *nodeInputsBitCount) String() string {
 }
 
 // BitCount returns the number of bits that are set to one.
-
 func BitCount(operand *Node) (node *Node) {
 	inputNodes := []*Node{operand}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -500,7 +493,6 @@ func (ni *nodeInputsBitcast) String() string {
 // If targetDType.Size() < x.DType().Size(), the returned shape will have an extra axis in the end, with dimension of
 // x.DType().Size() / targetDType.Size().
 // E.g: Bitcast([1]uint32{0xdeadbeef}, dtypes.UInt16) -> [1][2]uint16{{0xdead, 0xbeef}}
-
 func Bitcast(x *Node, targetDType dtypes.DType) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -545,7 +537,6 @@ func (ni *nodeInputsBitwiseAnd) String() string {
 
 // BitwiseAnd returns the element-wise bitwise AND operation.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-
 func BitwiseAnd(x0 *Node, x1 *Node) (node *Node) {
 	inputNodes := []*Node{x0, x1}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -587,7 +578,6 @@ func (ni *nodeInputsBitwiseNot) String() string {
 }
 
 // BitwiseNot returns the element-wise bitwise AND operation.
-
 func BitwiseNot(x *Node) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -631,7 +621,6 @@ func (ni *nodeInputsBitwiseOr) String() string {
 
 // BitwiseOr returns the element-wise bitwise OR operation.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-
 func BitwiseOr(x0 *Node, x1 *Node) (node *Node) {
 	inputNodes := []*Node{x0, x1}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -676,7 +665,6 @@ func (ni *nodeInputsBitwiseXor) String() string {
 
 // BitwiseXor returns the element-wise bitwise XOR operator.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-
 func BitwiseXor(x0 *Node, x1 *Node) (node *Node) {
 	inputNodes := []*Node{x0, x1}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -720,7 +708,6 @@ func (ni *nodeInputsBroadcast) String() string {
 }
 
 // backendBroadcast is a Graph wrapper for the backend.Builder.Broadcast method.
-
 func backendBroadcast(x *Node, prefixDims ...int) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -766,7 +753,6 @@ func (ni *nodeInputsBroadcastInDim) String() string {
 }
 
 // backendBroadcastInDim is a Graph wrapper for the backend.Builder.BroadcastInDim method.
-
 func backendBroadcastInDim(x *Node, outputShape shapes.Shape, broadcastAxes []int) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -809,7 +795,6 @@ func (ni *nodeInputsCeil) String() string {
 }
 
 // Ceil returns the Op that represents the output of the corresponding operation.
-
 func Ceil(x *Node) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -850,7 +835,6 @@ func (ni *nodeInputsClz) String() string {
 }
 
 // Clz returns element-wise the "count leading zeros" bits of input node x -- for integer values.
-
 func Clz(x *Node) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -899,7 +883,6 @@ func (ni *nodeInputsComplex) String() string {
 // The shapes of `real` or `imaginary` must be the same, or one must be a scalar, in which case
 // the value is broadcast to every other value.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-
 func Complex(x0 *Node, x1 *Node) (node *Node) {
 	inputNodes := []*Node{x0, x1}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -943,7 +926,6 @@ func (ni *nodeInputsConcatenate) String() string {
 }
 
 // backendConcatenate is a Graph wrapper for the backend.Builder.Concatenate method.
-
 func backendConcatenate(axis int, operands ...*Node) (node *Node) {
 	inputNodes := []*Node{}
 	inputNodes = append(inputNodes, operands...)
@@ -986,7 +968,6 @@ func (ni *nodeInputsConj) String() string {
 }
 
 // Conj returns the conjugate of a complex number. E.g: Conj(1+3i) = 1-3i
-
 func Conj(x *Node) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -1043,7 +1024,6 @@ func (ni *nodeInputsConvGeneralDilated) String() string {
 }
 
 // backendConvGeneralDilated is a Graph wrapper for the backend.Builder.ConvGeneralDilated method.
-
 func backendConvGeneralDilated(operand *Node, filter *Node, axes backends.ConvolveAxesConfig, strides []int, paddings [][2]int, inputDilation []int, filterDilation []int, filterGroupCount int, batchGroupCount int) (node *Node) {
 	inputNodes := []*Node{operand, filter}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -1094,7 +1074,6 @@ func (ni *nodeInputsConvertDType) String() string {
 }
 
 // backendConvertDType is a Graph wrapper for the backend.Builder.ConvertDType method.
-
 func backendConvertDType(x *Node, dtype dtypes.DType) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -1136,7 +1115,6 @@ func (ni *nodeInputsCos) String() string {
 }
 
 // Cos returns the Op that represents the output of the corresponding operation.
-
 func Cos(x *Node) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -1181,7 +1159,6 @@ func (ni *nodeInputsDiv) String() string {
 // Div returns the element-wise division of the two values.
 // Standard broadcasting rules apply (see documentation).
 // The op is created on the same XlaBuilder as used for x0 and x1.
-
 func Div(x0 *Node, x1 *Node) (node *Node) {
 	inputNodes := []*Node{x0, x1}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -1237,7 +1214,6 @@ func (ni *nodeInputsDot) String() string {
 // In practice, it can be used to perform dot products between vectors, vector/matrix multiplications or
 // matrix/matrix multiplications.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-
 func Dot(x0 *Node, x1 *Node) (node *Node) {
 	inputNodes := []*Node{x0, x1}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -1289,7 +1265,6 @@ func (ni *nodeInputsDotGeneral) String() string {
 }
 
 // backendDotGeneral is a Graph wrapper for the backend.Builder.DotGeneral method.
-
 func backendDotGeneral(lhs *Node, lhsContractingAxes []int, lhsBatchAxes []int, rhs *Node, rhsContractingAxes []int, rhsBatchAxes []int) (node *Node) {
 	inputNodes := []*Node{lhs, rhs}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -1343,7 +1318,6 @@ func (ni *nodeInputsDynamicSlice) String() string {
 // intervals for each axis: [start, start + size).
 // The shape of startIndices must be rank == 1, with dimension size equal to the rank of operand.
 // See description in https://openxla.org/xla/operation_semantics#dynamicslice
-
 func DynamicSlice(operand *Node, startIndices []*Node, sliceDims []int) (node *Node) {
 	inputNodes := []*Node{operand}
 	inputNodes = append(inputNodes, startIndices...)
@@ -1395,7 +1369,6 @@ func (ni *nodeInputsDynamicUpdateSlice) String() string {
 // The shape of update determines the shape of the sub-array of the result which is updated.
 // The shape of startIndices must be rank == 1, with dimension size equal to the rank of operand.
 // See description in https://openxla.org/xla/operation_semantics#dynamicupdateslice
-
 func DynamicUpdateSlice(operand *Node, update *Node, startIndices []*Node) (node *Node) {
 	inputNodes := []*Node{operand, update}
 	inputNodes = append(inputNodes, startIndices...)
@@ -1442,7 +1415,6 @@ func (ni *nodeInputsEqual) String() string {
 
 // Equal performs element-wise equality check, returns boolean results with the same dimensions as input.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-
 func Equal(x0 *Node, x1 *Node) (node *Node) {
 	inputNodes := []*Node{x0, x1}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -1490,7 +1462,6 @@ func (ni *nodeInputsEqualTotalOrder) String() string {
 // Standard broadcasting rules apply (see documentation).
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-
 func EqualTotalOrder(x0 *Node, x1 *Node) (node *Node) {
 	inputNodes := []*Node{x0, x1}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -1533,7 +1504,6 @@ func (ni *nodeInputsErf) String() string {
 }
 
 // Erf returns the "error function", defined as erf(x) = 2/Pi * \int_{0}^{x}{e^{-t^2}dt}.
-
 func Erf(x *Node) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -1574,7 +1544,6 @@ func (ni *nodeInputsExp) String() string {
 }
 
 // Exp returns the Op that represents the output of the corresponding operation.
-
 func Exp(x *Node) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -1615,7 +1584,6 @@ func (ni *nodeInputsExpm1) String() string {
 }
 
 // Expm1 returns the Op that represents the output of the corresponding operation.
-
 func Expm1(x *Node) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -1660,7 +1628,6 @@ func (ni *nodeInputsFFT) String() string {
 }
 
 // backendFFT is a Graph wrapper for the backend.Builder.FFT method.
-
 func backendFFT(operand *Node, fftType backends.FFTType, fftLength []int) (node *Node) {
 	inputNodes := []*Node{operand}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -1703,7 +1670,6 @@ func (ni *nodeInputsFloor) String() string {
 }
 
 // Floor returns the Op that represents the output of the corresponding operation.
-
 func Floor(x *Node) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -1758,7 +1724,6 @@ func (ni *nodeInputsGather) String() string {
 }
 
 // backendGather is a Graph wrapper for the backend.Builder.Gather method.
-
 func backendGather(operand *Node, startIndices *Node, indexVectorAxis int, offsetOutputAxes []int, collapsedSliceAxes []int, startIndexMap []int, sliceSizes []int, indicesAreSorted bool) (node *Node) {
 	inputNodes := []*Node{operand, startIndices}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -1809,7 +1774,6 @@ func (ni *nodeInputsGreaterOrEqual) String() string {
 
 // GreaterOrEqual performs element-wise comparison, returns boolean results with the same dimensions as input.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-
 func GreaterOrEqual(x0 *Node, x1 *Node) (node *Node) {
 	inputNodes := []*Node{x0, x1}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -1857,7 +1821,6 @@ func (ni *nodeInputsGreaterOrEqualTotalOrder) String() string {
 // Standard broadcasting rules apply (see documentation).
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-
 func GreaterOrEqualTotalOrder(x0 *Node, x1 *Node) (node *Node) {
 	inputNodes := []*Node{x0, x1}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -1903,7 +1866,6 @@ func (ni *nodeInputsGreaterThan) String() string {
 
 // GreaterThan performs element-wise comparison, returns boolean results with the same dimensions as input.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-
 func GreaterThan(x0 *Node, x1 *Node) (node *Node) {
 	inputNodes := []*Node{x0, x1}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -1951,7 +1913,6 @@ func (ni *nodeInputsGreaterThanTotalOrder) String() string {
 // Standard broadcasting rules apply (see documentation).
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-
 func GreaterThanTotalOrder(x0 *Node, x1 *Node) (node *Node) {
 	inputNodes := []*Node{x0, x1}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -1995,7 +1956,6 @@ func (ni *nodeInputsIdentity) String() string {
 
 // Identity returns an Op whose output is the same as its input.
 // It's a no-op that can serve as a place-holder.
-
 func Identity(x *Node) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -2036,7 +1996,6 @@ func (ni *nodeInputsImag) String() string {
 }
 
 // Imag returns the imaginary part of a complex number. It returns 0 if the x is a float number.
-
 func Imag(x *Node) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -2079,7 +2038,6 @@ func (ni *nodeInputsIota) String() string {
 }
 
 // backendIota is a Graph wrapper for the backend.Builder.Iota method.
-
 func backendIota(g *Graph, shape shapes.Shape, iotaAxis int) (node *Node) {
 	g.AssertBuilding()
 	inputs := &nodeInputsIota{
@@ -2121,7 +2079,6 @@ func (ni *nodeInputsIsFinite) String() string {
 // IsFinite tests whether each element of operand is finite, i.e., is not positive or negative infinity, and is not NaN.
 // It returns an array of boolean values with the same shape as the input, where each element is true if and only if
 // the corresponding input element is finite.
-
 func IsFinite(x *Node) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -2165,7 +2122,6 @@ func (ni *nodeInputsLessOrEqual) String() string {
 
 // LessOrEqual performs element-wise comparison, returns boolean results with the same dimensions as input.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-
 func LessOrEqual(x0 *Node, x1 *Node) (node *Node) {
 	inputNodes := []*Node{x0, x1}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -2213,7 +2169,6 @@ func (ni *nodeInputsLessOrEqualTotalOrder) String() string {
 // Standard broadcasting rules apply (see documentation).
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-
 func LessOrEqualTotalOrder(x0 *Node, x1 *Node) (node *Node) {
 	inputNodes := []*Node{x0, x1}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -2259,7 +2214,6 @@ func (ni *nodeInputsLessThan) String() string {
 
 // LessThan performs element-wise comparison, returns boolean results with the same dimensions as input.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-
 func LessThan(x0 *Node, x1 *Node) (node *Node) {
 	inputNodes := []*Node{x0, x1}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -2307,7 +2261,6 @@ func (ni *nodeInputsLessThanTotalOrder) String() string {
 // Standard broadcasting rules apply (see documentation).
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-
 func LessThanTotalOrder(x0 *Node, x1 *Node) (node *Node) {
 	inputNodes := []*Node{x0, x1}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -2350,7 +2303,6 @@ func (ni *nodeInputsLog) String() string {
 }
 
 // Log returns the Op that represents the output of the corresponding operation.
-
 func Log(x *Node) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -2391,7 +2343,6 @@ func (ni *nodeInputsLog1p) String() string {
 }
 
 // Log1p returns the expression log(x+1).
-
 func Log1p(x *Node) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -2435,7 +2386,6 @@ func (ni *nodeInputsLogicalAnd) String() string {
 
 // LogicalAnd returns the element-wise logical AND operation.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-
 func LogicalAnd(x0 *Node, x1 *Node) (node *Node) {
 	inputNodes := []*Node{x0, x1}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -2477,7 +2427,6 @@ func (ni *nodeInputsLogicalNot) String() string {
 }
 
 // LogicalNot returns the Op that represents the output of the corresponding operation.
-
 func LogicalNot(x *Node) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -2522,7 +2471,6 @@ func (ni *nodeInputsLogicalOr) String() string {
 
 // LogicalOr returns the element-wise logical OR operation.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-
 func LogicalOr(x0 *Node, x1 *Node) (node *Node) {
 	inputNodes := []*Node{x0, x1}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -2567,7 +2515,6 @@ func (ni *nodeInputsLogicalXor) String() string {
 
 // LogicalXor returns the element-wise logical XOR operator.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-
 func LogicalXor(x0 *Node, x1 *Node) (node *Node) {
 	inputNodes := []*Node{x0, x1}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -2609,7 +2556,6 @@ func (ni *nodeInputsLogistic) String() string {
 }
 
 // Logistic returns the element-wise expression 1/(1+exp(-x)). Also known as the Sigmoid function.
-
 func Logistic(x *Node) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -2653,7 +2599,6 @@ func (ni *nodeInputsMax) String() string {
 
 // Max returns the element-wise highest value among the two.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-
 func Max(x0 *Node, x1 *Node) (node *Node) {
 	inputNodes := []*Node{x0, x1}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -2698,7 +2643,6 @@ func (ni *nodeInputsMin) String() string {
 
 // Min returns the element-wise smallest value among the two.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-
 func Min(x0 *Node, x1 *Node) (node *Node) {
 	inputNodes := []*Node{x0, x1}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -2744,7 +2688,6 @@ func (ni *nodeInputsMul) String() string {
 // Mul returns the element-wise multiplication of the two values.
 // Standard broadcasting rules apply (see documentation).
 // The op is created on the same XlaBuilder as used for x0 and x1.
-
 func Mul(x0 *Node, x1 *Node) (node *Node) {
 	inputNodes := []*Node{x0, x1}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -2786,7 +2729,6 @@ func (ni *nodeInputsNeg) String() string {
 }
 
 // Neg returns the Op that represents the output of the corresponding operation.
-
 func Neg(x *Node) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -2830,7 +2772,6 @@ func (ni *nodeInputsNotEqual) String() string {
 
 // NotEqual performs element-wise inequality check, returns boolean results with the same dimensions as input.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-
 func NotEqual(x0 *Node, x1 *Node) (node *Node) {
 	inputNodes := []*Node{x0, x1}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -2878,7 +2819,6 @@ func (ni *nodeInputsNotEqualTotalOrder) String() string {
 // Standard broadcasting rules apply (see documentation).
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-
 func NotEqualTotalOrder(x0 *Node, x1 *Node) (node *Node) {
 	inputNodes := []*Node{x0, x1}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -2927,7 +2867,6 @@ func (ni *nodeInputsPad) String() string {
 // Pad injects padding on the start, end or interior (in between each element) of the given operand.
 // There must be at most `operand.Rank()` axesConfig values. Missing PadAxis are assumed to be zeros,
 // that is, no padding for those axes.
-
 func Pad(x *Node, fillValue *Node, axesConfig ...backends.PadAxis) (node *Node) {
 	inputNodes := []*Node{x, fillValue}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -2973,7 +2912,6 @@ func (ni *nodeInputsPow) String() string {
 
 // Pow returns the Op that represents the output of the corresponding operation.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-
 func Pow(x0 *Node, x1 *Node) (node *Node) {
 	inputNodes := []*Node{x0, x1}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -3015,7 +2953,6 @@ func (ni *nodeInputsReal) String() string {
 }
 
 // Real return the real part of a complex number. It returns x if the x is a float number.
-
 func Real(x *Node) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -3058,7 +2995,6 @@ func (ni *nodeInputsReduceBitwiseAnd) String() string {
 }
 
 // backendReduceBitwiseAnd is a Graph wrapper for the backend.Builder.ReduceBitwiseAnd method.
-
 func backendReduceBitwiseAnd(x *Node, axes ...int) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -3102,7 +3038,6 @@ func (ni *nodeInputsReduceBitwiseOr) String() string {
 }
 
 // backendReduceBitwiseOr is a Graph wrapper for the backend.Builder.ReduceBitwiseOr method.
-
 func backendReduceBitwiseOr(x *Node, axes ...int) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -3146,7 +3081,6 @@ func (ni *nodeInputsReduceBitwiseXor) String() string {
 }
 
 // backendReduceBitwiseXor is a Graph wrapper for the backend.Builder.ReduceBitwiseXor method.
-
 func backendReduceBitwiseXor(x *Node, axes ...int) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -3190,7 +3124,6 @@ func (ni *nodeInputsReduceLogicalAnd) String() string {
 }
 
 // backendReduceLogicalAnd is a Graph wrapper for the backend.Builder.ReduceLogicalAnd method.
-
 func backendReduceLogicalAnd(x *Node, axes ...int) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -3234,7 +3167,6 @@ func (ni *nodeInputsReduceLogicalOr) String() string {
 }
 
 // backendReduceLogicalOr is a Graph wrapper for the backend.Builder.ReduceLogicalOr method.
-
 func backendReduceLogicalOr(x *Node, axes ...int) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -3278,7 +3210,6 @@ func (ni *nodeInputsReduceLogicalXor) String() string {
 }
 
 // backendReduceLogicalXor is a Graph wrapper for the backend.Builder.ReduceLogicalXor method.
-
 func backendReduceLogicalXor(x *Node, axes ...int) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -3322,7 +3253,6 @@ func (ni *nodeInputsReduceMax) String() string {
 }
 
 // backendReduceMax is a Graph wrapper for the backend.Builder.ReduceMax method.
-
 func backendReduceMax(x *Node, axes ...int) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -3366,7 +3296,6 @@ func (ni *nodeInputsReduceMin) String() string {
 }
 
 // backendReduceMin is a Graph wrapper for the backend.Builder.ReduceMin method.
-
 func backendReduceMin(x *Node, axes ...int) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -3410,7 +3339,6 @@ func (ni *nodeInputsReduceProduct) String() string {
 }
 
 // backendReduceProduct is a Graph wrapper for the backend.Builder.ReduceProduct method.
-
 func backendReduceProduct(x *Node, axes ...int) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -3454,7 +3382,6 @@ func (ni *nodeInputsReduceSum) String() string {
 }
 
 // backendReduceSum is a Graph wrapper for the backend.Builder.ReduceSum method.
-
 func backendReduceSum(x *Node, axes ...int) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -3508,7 +3435,6 @@ func (ni *nodeInputsReduceWindow) String() string {
 }
 
 // backendReduceWindow is a Graph wrapper for the backend.Builder.ReduceWindow method.
-
 func backendReduceWindow(x *Node, reductionType ReduceOpType, windowDimensions []int, strides []int, baseDilations []int, windowDilations []int, paddings [][2]int) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -3559,7 +3485,6 @@ func (ni *nodeInputsRem) String() string {
 // Rem returns the remainder operation, also known as modulo (or Mod for short).
 // Notice despite the name XLA implements Mod not IEEE754 Remainder operation.
 // The op is created on the same XlaBuilder as used for x0 and x1.
-
 func Rem(x0 *Node, x1 *Node) (node *Node) {
 	inputNodes := []*Node{x0, x1}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -3603,7 +3528,6 @@ func (ni *nodeInputsReshape) String() string {
 }
 
 // backendReshape is a Graph wrapper for the backend.Builder.Reshape method.
-
 func backendReshape(x *Node, dimensions ...int) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -3647,7 +3571,6 @@ func (ni *nodeInputsReverse) String() string {
 }
 
 // backendReverse is a Graph wrapper for the backend.Builder.Reverse method.
-
 func backendReverse(x *Node, axes ...int) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -3691,7 +3614,6 @@ func (ni *nodeInputsRngBitGenerator) String() string {
 }
 
 // backendRngBitGenerator is a Graph wrapper for the backend.Builder.RngBitGenerator method.
-
 func backendRngBitGenerator(state *Node, shape shapes.Shape) (newState, values *Node) {
 	inputNodes := []*Node{state}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -3735,7 +3657,6 @@ func (ni *nodeInputsRound) String() string {
 }
 
 // Round returns the Op that represents the output of the corresponding operation.
-
 func Round(x *Node) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -3776,7 +3697,6 @@ func (ni *nodeInputsRsqrt) String() string {
 }
 
 // Rsqrt returns the element-wise reciprocal of square root operation 1/sqrt(x).
-
 func Rsqrt(x *Node) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -3833,7 +3753,6 @@ func (ni *nodeInputsScatterMax) String() string {
 }
 
 // backendScatterMax is a Graph wrapper for the backend.Builder.ScatterMax method.
-
 func backendScatterMax(operand *Node, scatterIndices *Node, updates *Node, indexVectorAxis int, updateWindowAxes []int, insertedWindowAxes []int, scatterAxesToOperandAxes []int, indicesAreSorted bool, uniqueIndices bool) (node *Node) {
 	inputNodes := []*Node{operand, scatterIndices, updates}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -3898,7 +3817,6 @@ func (ni *nodeInputsScatterMin) String() string {
 }
 
 // backendScatterMin is a Graph wrapper for the backend.Builder.ScatterMin method.
-
 func backendScatterMin(operand *Node, scatterIndices *Node, updates *Node, indexVectorAxis int, updateWindowAxes []int, insertedWindowAxes []int, scatterAxesToOperandAxes []int, indicesAreSorted bool, uniqueIndices bool) (node *Node) {
 	inputNodes := []*Node{operand, scatterIndices, updates}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -3963,7 +3881,6 @@ func (ni *nodeInputsScatterSum) String() string {
 }
 
 // backendScatterSum is a Graph wrapper for the backend.Builder.ScatterSum method.
-
 func backendScatterSum(operand *Node, scatterIndices *Node, updates *Node, indexVectorAxis int, updateWindowAxes []int, insertedWindowAxes []int, scatterAxesToOperandAxes []int, indicesAreSorted bool, uniqueIndices bool) (node *Node) {
 	inputNodes := []*Node{operand, scatterIndices, updates}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -4020,7 +3937,6 @@ func (ni *nodeInputsSelectAndScatterMax) String() string {
 }
 
 // backendSelectAndScatterMax is a Graph wrapper for the backend.Builder.SelectAndScatterMax method.
-
 func backendSelectAndScatterMax(operand *Node, source *Node, windowDimensions []int, windowStrides []int, paddings [][2]int) (node *Node) {
 	inputNodes := []*Node{operand, source}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -4073,7 +3989,6 @@ func (ni *nodeInputsSelectAndScatterMin) String() string {
 }
 
 // backendSelectAndScatterMin is a Graph wrapper for the backend.Builder.SelectAndScatterMin method.
-
 func backendSelectAndScatterMin(operand *Node, source *Node, windowDimensions []int, windowStrides []int, paddings [][2]int) (node *Node) {
 	inputNodes := []*Node{operand, source}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -4126,7 +4041,6 @@ func (ni *nodeInputsSelectAndScatterSum) String() string {
 }
 
 // backendSelectAndScatterSum is a Graph wrapper for the backend.Builder.SelectAndScatterSum method.
-
 func backendSelectAndScatterSum(operand *Node, source *Node, windowDimensions []int, windowStrides []int, paddings [][2]int) (node *Node) {
 	inputNodes := []*Node{operand, source}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -4173,7 +4087,6 @@ func (ni *nodeInputsShiftLeft) String() string {
 }
 
 // backendShiftLeft is a Graph wrapper for the backend.Builder.ShiftLeft method.
-
 func backendShiftLeft(x0 *Node, x1 *Node) (node *Node) {
 	inputNodes := []*Node{x0, x1}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -4217,7 +4130,6 @@ func (ni *nodeInputsShiftRightArithmetic) String() string {
 }
 
 // backendShiftRightArithmetic is a Graph wrapper for the backend.Builder.ShiftRightArithmetic method.
-
 func backendShiftRightArithmetic(x0 *Node, x1 *Node) (node *Node) {
 	inputNodes := []*Node{x0, x1}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -4261,7 +4173,6 @@ func (ni *nodeInputsShiftRightLogical) String() string {
 }
 
 // backendShiftRightLogical is a Graph wrapper for the backend.Builder.ShiftRightLogical method.
-
 func backendShiftRightLogical(x0 *Node, x1 *Node) (node *Node) {
 	inputNodes := []*Node{x0, x1}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -4303,7 +4214,6 @@ func (ni *nodeInputsSign) String() string {
 }
 
 // backendSign is a Graph wrapper for the backend.Builder.Sign method.
-
 func backendSign(x *Node) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -4344,7 +4254,6 @@ func (ni *nodeInputsSin) String() string {
 }
 
 // Sin returns the Op that represents the output of the corresponding operation.
-
 func Sin(x *Node) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -4391,7 +4300,6 @@ func (ni *nodeInputsSlice) String() string {
 }
 
 // backendSlice is a Graph wrapper for the backend.Builder.Slice method.
-
 func backendSlice(x *Node, starts []int, limits []int, strides []int) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -4435,7 +4343,6 @@ func (ni *nodeInputsSqrt) String() string {
 }
 
 // Sqrt returns the Op that represents the output of the corresponding operation.
-
 func Sqrt(x *Node) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -4480,7 +4387,6 @@ func (ni *nodeInputsSub) String() string {
 // Sub returns the element-wise subtraction of the two values.
 // Standard broadcasting rules apply (see documentation).
 // The op is created on the same XlaBuilder as used for x0 and x1.
-
 func Sub(x0 *Node, x1 *Node) (node *Node) {
 	inputNodes := []*Node{x0, x1}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -4522,7 +4428,6 @@ func (ni *nodeInputsTanh) String() string {
 }
 
 // Tanh returns the Op that represents the output of the corresponding operation.
-
 func Tanh(x *Node) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -4565,7 +4470,6 @@ func (ni *nodeInputsTranspose) String() string {
 }
 
 // backendTranspose is a Graph wrapper for the backend.Builder.Transpose method.
-
 func backendTranspose(x *Node, permutations ...int) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -4611,7 +4515,6 @@ func (ni *nodeInputsWhere) String() string {
 }
 
 // backendWhere is a Graph wrapper for the backend.Builder.Where method.
-
 func backendWhere(condition *Node, onTrue *Node, onFalse *Node) (node *Node) {
 	inputNodes := []*Node{condition, onTrue, onFalse}
 	g := validateBuildingGraphFromInputs(inputNodes...)

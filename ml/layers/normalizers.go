@@ -17,12 +17,13 @@
 package layers
 
 import (
+	"log"
+
 	. "github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/types/xslices"
-	"log"
 )
 
 var (
@@ -43,6 +44,9 @@ var (
 		"layer": func(ctx *context.Context, input *Node) *Node {
 			return LayerNormalization(ctx, input, -1).Done()
 		},
+		"rms": func(ctx *context.Context, input *Node) *Node {
+			return RMSNorm(ctx, input).Done()
+		},
 		"none": func(ctx *context.Context, input *Node) *Node {
 			return input
 		},
@@ -55,11 +59,12 @@ var (
 	// between layers.
 	// This is usually applied after a residual sum (but model choices varies).
 	//
-	// Valid values are "layer" for [LayerNormalization], "batch" for [batchnorm.New] or "none"".
+	// Valid values are "layer" for LayerNormalization, "batch" for batchnorm.New,
+	// "rms" for RMSNorm or "none".
 	//
 	// Notice that this won't work for special shapes setups.
-	// [New] will normalize on the batch axis (assumed to be axis-0), and
-	// [LayerNormalization] will normalize across the layer values, assumed to be the last.
+	// New will normalize on the batch axis (assumed to be axis-0), and
+	// LayerNormalization and RMSNorm will normalize across the layer values, assumed to be the last.
 	//
 	// The default is `layer`.
 	ParamNormalization = "normalization"
@@ -111,7 +116,7 @@ func NormalizeFromContext(ctx *context.Context, input *Node) *Node {
 
 // MaskedNormalizeFromContext applies a normalization (or none) according to the hyperparameter
 // ParamNormalization configured in the context.
-// The `mask` is actually optional, and can be set to nil if not using a mask.
+// The `mask` is actually optional and can be set to nil if not using a mask.
 //
 // This is not recommended for images, since one may want to normalize over specific axes.
 func MaskedNormalizeFromContext(ctx *context.Context, input, mask *Node) *Node {
@@ -121,6 +126,8 @@ func MaskedNormalizeFromContext(ctx *context.Context, input, mask *Node) *Node {
 		return input
 	case "layer":
 		return LayerNormalization(ctx, input, -1).Mask(mask).Done()
+	case "rms":
+		return RMSNorm(ctx, input).Done()
 	case "batch":
 		if mask != nil {
 			Panicf("'batch' normalization set in context parameter %q does not support usage of mask yet, please open a feature request",

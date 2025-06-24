@@ -2,9 +2,11 @@ package train // nTimes is used to implement NTimesDuringLoop.
 
 import (
 	"fmt"
-	"github.com/gomlx/gomlx/types/tensors"
 	"math"
 	"time"
+
+	"github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/types/tensors"
 )
 
 type nTimes struct {
@@ -128,6 +130,9 @@ func PeriodicCallback(loop *Loop, period time.Duration, callOnEnd bool, name str
 //	ExponentialCallback(loop, 100, 1.2, "my_callback", 100, myCallback)
 func ExponentialCallback(loop *Loop, startStep int, exponentialFactor float64, callOnEnd bool,
 	name string, priority Priority, fn OnStepFn) {
+	if startStep == 0 || exponentialFactor <= 1 {
+		exceptions.Panicf("Invalid parameters for ExponentialCallback(startStep=%d, exponentialFactor=%f), startStep must be > 0 and exponentialFactor must be > 1", startStep, exponentialFactor)
+	}
 	e := &exponentialCallback{
 		startStep:         startStep,
 		exponentialFactor: exponentialFactor,
