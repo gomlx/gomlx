@@ -24,10 +24,6 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
-	"github.com/gomlx/gomlx/ml/data"
-	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/types/tensors"
-	"github.com/pkg/errors"
 	"io"
 	"math/rand"
 	"os"
@@ -38,6 +34,11 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gomlx/gomlx/ml/data"
+	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -270,7 +271,7 @@ type Example struct {
 func NewExample(contents []byte, vocab *Vocab) *Example {
 	e := &Example{}
 	// Remove line breaks <br/>.
-	contents = bytes.Replace(contents, []byte("<br />"), []byte(" "), -1)
+	contents = bytes.ReplaceAll(contents, []byte("<br />"), []byte(" "))
 	partsIndices := reWords.FindAllIndex(contents, -1)
 	appendTokenFn := func(token string) {
 		id := vocab.RegisterToken(token)
@@ -487,7 +488,7 @@ func (ds *Dataset) Yield() (spec any, inputs, labels []*tensors.Tensor, err erro
 	// Build input tensor.
 	input := tensors.FromScalarAndDimensions(TokenId(0), batchSize, ds.MaxLen)
 	labelsData := make([]int8, batchSize)
-	tensors.MutableFlatData[TokenId](input, func(inputData []TokenId) {
+	tensors.MutableFlatData(input, func(inputData []TokenId) {
 		for batchIdx, exampleIdx := range batchIndices {
 			ex := LoadedExamples[exampleIdx]
 			labelsData[batchIdx] = int8(ex.Label)
@@ -535,7 +536,7 @@ func InputToString(input *tensors.Tensor, batchIdx int) string {
 	}
 	maxLen := input.Shape().Dimensions[1]
 	parts := make([]string, 0, maxLen)
-	tensors.ConstFlatData[TokenId](input, func(inputData []TokenId) {
+	tensors.ConstFlatData(input, func(inputData []TokenId) {
 		start := batchIdx * maxLen
 		for _, tokenId := range inputData[start : start+maxLen] {
 			if tokenId == 0 {
