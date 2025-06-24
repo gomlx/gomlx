@@ -51,8 +51,8 @@ func TestStreamingMedian(t *testing.T) {
 		require.InDelta(t, want, median, 0.1)
 	})
 
-	t.Run("From samples", func(t *testing.T) {
-		const samplesFileName = "/tmp/b"
+	const samplesFileName = "median_test_dataset.txt"
+	t.Run("From samples in "+samplesFileName, func(t *testing.T) {
 		samplesFile := must1(os.Open(samplesFileName))
 		defer samplesFile.Close()
 		var samples []float64
