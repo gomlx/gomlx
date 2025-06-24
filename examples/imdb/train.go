@@ -2,7 +2,9 @@ package imdb
 
 import (
 	"fmt"
-	"github.com/charmbracelet/lipgloss"
+	"os"
+	"time"
+
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/ml/context"
@@ -22,10 +24,10 @@ import (
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
 	"github.com/gomlx/gopjrt/dtypes"
+
+	"github.com/charmbracelet/lipgloss"
 	"github.com/janpfeifer/must"
 	"golang.org/x/exp/maps"
-	"os"
-	"time"
 )
 
 var (
