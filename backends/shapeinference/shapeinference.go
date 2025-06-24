@@ -58,6 +58,7 @@ var (
 		backends.OpTypeSign,
 
 		backends.OpTypeEqual,
+		backends.OpTypeNotEqual,
 		backends.OpTypeGreaterOrEqual,
 		backends.OpTypeGreaterThan,
 		backends.OpTypeLessOrEqual,
@@ -127,6 +128,7 @@ var (
 	// a comparison.
 	ComparisonOperations = types.SetWith(
 		backends.OpTypeEqual,
+		backends.OpTypeNotEqual,
 		backends.OpTypeEqualTotalOrder,
 		backends.OpTypeGreaterOrEqual,
 		backends.OpTypeGreaterOrEqualTotalOrder,
