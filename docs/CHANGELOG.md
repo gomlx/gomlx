@@ -9,13 +9,14 @@
   * Added `FormatDuration` to pretty-print duration.
 * Package `graph`
   * Added gradients of `Cos` and `Sin` that were missing.
-  * Fixed extra empty line in auto-generate functions comments that was preventing the documentation
-    to be generated.
+  * Fixed (removed) the extra empty line in auto-generate functions comments that was preventing the documentation
+     from being assigned to the functions.
 * Package `ml/trainer`
   * Improved support for accumulated gradients. Fixed evaluation (context reuse) for when using accumulated gradients.
   * Added `Trainer.WithMaxExecutors`.
 * Package `ml/trainer/metrics`:
-  * `MeanMetric` allows for disabling dynamic batch weighting.
+  * `MeanMetric` allows for disabling dynamic batch weighting.  API slightly changed: `NewMeanMetric` now
+    returns a `MeanMetric` struct, not an interface.
   * Added `StreamingMedianMetric`.
 * Package `ml/layers`
   * Added normalizing 1/sqrt(d_k) factor to attention logits in the MultiHeadAttention layer: this will break current
@@ -24,7 +25,6 @@
 * `gomlx_checkpoints` command-line tool:
   * Added support for multiple models to allow comparing models.
   * Fixed the printing of metrics with tiny values.
-* 
 
 # v0.20.1: 2025/06/12 Trainer.AccumulateGradients (when the batch doesn't fit memory); VNN fixes; Numpy improvements. 
 
