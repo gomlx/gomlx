@@ -342,18 +342,69 @@ func IndicesForShape(g *Graph, shape shapes.Shape) *Node {
 //
 // In the simplest form, [indices] is shaped `[num_updates, 1]`, [updates] is shaped `[num_updates, update_size]` and
 // [shapes] is of the form `[output_size, update_size]`. The indices values should be in between 0 and `output_size-1`.
-func Scatter(indices, updates *Node, shape shapes.Shape) *Node {
+//
+// Args:
+//   - indices: the positions where to set the new values.
+//   - updates: the values that are going to be set.
+//   - shape: output shape, it must have the same dtype as updates.
+//   - sorted: the indices must be in order.
+//     If set to true for some backends it is faster, but if the indices are not sorted, results may be unstable.
+//     If in doubt, leave it false.
+//   - unique: Whether the indices are unique.
+//     If set to true for some backends it is faster, but if the indices are not unique, results may be unstable.
+//     If in doubt, leave it false.
+func Scatter(indices, updates *Node, shape shapes.Shape, sorted, unique bool) *Node {
 	g := validateBuildingGraphFromInputs(indices, updates)
 	zeros := Zeros(g, shape)
-	return ScatterSum(zeros, indices, updates, false, false)
+	return ScatterSum(zeros, indices, updates, sorted, true)
+}
+
+// ScatterUpdate replaces values in the operand with values from updates, at the locations pointed by indices.
+//
+// Only implemented for `unique=true` for now: it doesn't handle the case with overlapping updates.
+//
+// Args:
+//   - operand: input values that are going to be modified.
+//   - indices: the positions where to set the new values.
+//   - updates: the values that are going to be set.
+//   - sorted: the indices must be in order.
+//     If set to true for some backends it is faster, but if the indices are not sorted, results may be unstable.
+//     If in doubt, leave it false.
+//   - unique: Only **true** is implemented for now, if set to **false** it will panic.
+//     Whether the indices are unique.
+//     If set to true for some backends it is faster, but if the indices are not unique, results may be unstable.
+//     If in doubt, leave it false.
+func ScatterUpdate(operand, indices, updates *Node, sorted, unique bool) *Node {
+	if !unique {
+		Panicf("Scatter only implemented for unique indices -- ScatterSum/Max/Min support non-unique indices though")
+	}
+	g := operand.Graph()
+	dtype := operand.DType()
+	shape := operand.Shape()
+
+	// Set operand positions being updated to 0.
+	zero := ScalarZero(g, dtype)
+	maskShape := shape.Clone()
+	maskShape.DType = dtypes.Bool
+	maskUpdates := ConvertDType(OnesLike(updates), dtypes.Bool)
+	updateMask := Scatter(indices, maskUpdates, maskShape, sorted, unique)
+	operand = Where(updateMask, zero, operand)
+	return ScatterSum(operand, indices, updates, sorted, true)
 }
 
 // ScatterSum adds up the slices in updates into the given operand tensor, at the locations pointed by indices.
 // It does the opposite of Gather.
 //
 // Args:
-// - [sorted]: the indices must be in order. In some cases it is faster, but if indices are not in order results may be unstable.
-// - [unique]: the indices must be unique. In some cases it is faster, but if indices are not unique results may be unstable.
+//   - operand: input values to which new values will be added.
+//   - indices: the positions where add the new values.
+//   - updates: the values to add.
+//   - sorted: the indices must be in order.
+//     If set to true for some backends it is faster, but if the indices are not sorted, results may be unstable.
+//     If in doubt, leave it false.
+//   - unique: Whether the indices are unique.
+//     If set to true for some backends it is faster, but if the indices are not unique, results may be unstable.
+//     If in doubt, leave it false.
 func ScatterSum(operand, indices, updates *Node, sorted, unique bool) *Node {
 	_ = validateBuildingGraphFromInputs(operand, indices, updates)
 	return genericScatter(operand, indices, updates, sorted, unique, backendScatterSum)

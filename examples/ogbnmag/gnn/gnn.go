@@ -5,6 +5,9 @@ package gnn
 
 import (
 	"fmt"
+	"slices"
+	"strings"
+
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
 	. "github.com/gomlx/gomlx/graph"
@@ -17,8 +20,6 @@ import (
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
-	"slices"
-	"strings"
 )
 
 var (
@@ -393,13 +394,13 @@ func poolMessagesWithAdjacency(ctx *context.Context, source, edgesSource, edgesT
 			if dtypePool != dtype {
 				values = ConvertDType(values, dtypePool)
 			}
-			pooled = Scatter(edgesTarget, values, shapes.Make(dtypePool, targetSize, embSize))
+			pooled = Scatter(edgesTarget, values, shapes.Make(dtypePool, targetSize, embSize), false, false)
 
 			var pooledCount *Node
 			if poolType == "mean" || degree != nil {
 				// Get count of items pooled and take the mean.
 				ones := Ones(g, shapes.Make(dtypePool, numEdges, 1))
-				pooledCount = Scatter(edgesTarget, ones, shapes.Make(dtypePool, targetSize, 1))
+				pooledCount = Scatter(edgesTarget, ones, shapes.Make(dtypePool, targetSize, 1), false, false)
 				pooledCount = MaxScalar(pooledCount, 1) // To avoid division by 0.
 				pooled = Div(pooled, pooledCount)
 			}

@@ -11,6 +11,8 @@
   * Added gradients of `Cos` and `Sin` that were missing.
   * Fixed (removed) the extra empty line in auto-generate functions comments that was preventing the documentation
      from being assigned to the functions.
+  * Added parameters `sorted` and `unique` to `Scatter` (like the other functions `Scatter*`) -- **Small API change**.
+  * Added `ScatterUpdate`, for now only for `unique=true`.
 * Package `ml/trainer`
   * Improved support for accumulated gradients. Fixed evaluation (context reuse) for when using accumulated gradients.
   * Added `Trainer.WithMaxExecutors`.
