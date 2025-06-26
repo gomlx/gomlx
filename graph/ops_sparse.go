@@ -376,7 +376,7 @@ func Scatter(indices, updates *Node, shape shapes.Shape, sorted, unique bool) *N
 //     If in doubt, leave it false.
 func ScatterUpdate(operand, indices, updates *Node, sorted, unique bool) *Node {
 	if !unique {
-		Panicf("Scatter only implemented for unique indices -- ScatterSum/Max/Min support non-unique indices though")
+		Panicf("ScatterUpdate only implemented for unique indices -- ScatterSum/Max/Min support non-unique indices though")
 	}
 	g := operand.Graph()
 	dtype := operand.DType()
