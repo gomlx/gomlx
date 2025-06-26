@@ -18,6 +18,10 @@ package graph_test
 
 import (
 	"fmt"
+	"math"
+	"slices"
+	"testing"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/types/shapes"
@@ -25,9 +29,6 @@ import (
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/rand"
-	"math"
-	"slices"
-	"testing"
 )
 
 func TestIndicesForShape(t *testing.T) {
@@ -133,23 +134,23 @@ func TestGatherSlices(t *testing.T) {
 
 func TestScatter(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
-	{ // Trivial scalar scatter.
-		fmt.Println("\tScatter(): trivial scalar scatter.")
-		g := NewGraph(backend, "Scatter(): trivial scalar scatter")
+	t.Run("Scatter(): trivial scalar scatter", func(t *testing.T) {
+		// Trivial scalar scatter.
+		g := NewGraph(backend, t.Name())
 		// numbers=(Float64)[3]: [2 3 4]
 		numbers := Add(IotaFull(g, MakeShape(F64, 3)), Const(g, float64(2)))
 		indices := Const(g, 1)
-		scatter := Scatter(indices, numbers, MakeShape(F64, 2, 3))
+		scatter := Scatter(indices, numbers, MakeShape(F64, 2, 3), true, true)
 		g.Compile(scatter)
 		got := g.Run()[0]
 		fmt.Printf("\t\tscatter=%v\n", got)
 		want := [][]float64{{0, 0, 0}, {2, 3, 4}}
 		require.Equalf(t, want, got.Value(), "Scatter: want %v, got %v", want, got)
-	}
+	})
 
-	{ // Simple leading indices dimension.
-		fmt.Println("\tScatterSum(): leading indices dimension, and deeper slice dimension.")
-		g := NewGraph(backend, "ScatterSum(): leading indices dimension, and deeper slice dimension.")
+	t.Run("ScatterSum(): leading indices dimension, and deeper slice dimension.", func(t *testing.T) {
+		fmt.Println("\tScatterSum(): ")
+		g := NewGraph(backend, t.Name())
 		// numbers=(Float64)[5 3, 1]: [[[0] [1] [2]] [[3] [4] [5]]]
 		numbers := IotaFull(g, MakeShape(F64, 2, 3, 1))
 		indices := Const(g, [][]int{{2}, {0}})
@@ -157,10 +158,25 @@ func TestScatter(t *testing.T) {
 		scatter := ScatterSum(operand, indices, numbers, false, true)
 		g.Compile(scatter)
 		got := g.Run()[0]
-		fmt.Printf("\t\tscatter=%v\n", got)
+		fmt.Printf("\t\tscatter=%s\n", got)
 		want := [][][]float64{{{4}, {5}, {6}}, {{1}, {1}, {1}}, {{1}, {2}, {3}}}
 		require.Equalf(t, want, got.Value(), "Scatter: want %v, got %v", want, got)
-	}
+	})
+
+	t.Run("ScatterUpdate()", func(t *testing.T) {
+		graphtest.RunTestGraphFn(t, t.Name(), func(g *Graph) (inputs, outputs []*Node) {
+			operand := OnePlus(IotaFull(g, MakeShape(F32, 4, 3)))
+			indices := Const(g, [][]int32{{0, 0}, {0, 2}, {1, 1}, {2, 0}, {3, 2}})
+			updates := Const(g, []float32{100, 200, 300, 400, 500})
+			inputs = []*Node{operand, indices, updates}
+			outputs = []*Node{
+				ScatterUpdate(operand, indices, updates, false, true),
+			}
+			return
+		}, []any{
+			[][]float32{{100, 2, 200}, {4, 300, 6}, {400, 8, 9}, {10, 11, 500}},
+		}, -1)
+	})
 }
 
 // BenchmarkScatter tests the various scatter combinations: sorted or unique and different dtypes.

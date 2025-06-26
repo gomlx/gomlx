@@ -200,16 +200,8 @@ func AttachProgressBar(loop *train.Loop, extraMetrics ...ExtraMetricFn) {
 
 				}
 
-				// For command-line, we clear the previous lines that will be overwritten.
-				if !pBar.isFirstOutput {
-					pBar.termenv.ClearLines(len(update.metrics) + 1 + 2 + len(pBar.extraMetricFns))
-				}
-				pBar.isFirstOutput = false
-
-				// Print update.
-				_ = pBar.bar.Add(amount) // Prints progress bar line.
+				// Create table to be printed.
 				pBar.statsTable.Data(lgtable.NewStringData())
-				fmt.Println()
 				if loop.Trainer.NumAccumulatingSteps() > 1 {
 					pBar.statsTable.Row("Global/Train Steps", update.metrics[0])
 				} else {
@@ -222,6 +214,16 @@ func AttachProgressBar(loop *train.Loop, extraMetrics ...ExtraMetricFn) {
 					name, value := extraMetric()
 					pBar.statsTable.Row(name, value)
 				}
+
+				// For command-line, we clear the previous lines that will be overwritten.
+				if !pBar.isFirstOutput {
+					pBar.termenv.ClearLines(len(update.metrics) + 1 + 2 + len(pBar.extraMetricFns))
+				}
+				pBar.isFirstOutput = false
+
+				// Print update.
+				_ = pBar.bar.Add(amount) // Prints progress bar line.
+				fmt.Println()
 				fmt.Println(pBar.statsStyle.Render(pBar.statsTable.String()))
 				time.Sleep(maxUpdateFrequency)
 			}
