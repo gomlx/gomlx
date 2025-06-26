@@ -39,7 +39,7 @@
 //
 //	func ModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
 //		…
-//		for ii := 0; ii < numBlocks; ii++ {
+//		for ii := range numBlocks {
 //			x = ResidualBlock(ctx.In(name), x, lastNumChannels)
 //			nanLogger.Trace(x, fmt.Sprintf("Residual-%d", ii+1))
 //		}
@@ -49,6 +49,8 @@ package nanlogger
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/train"
@@ -56,19 +58,18 @@ import (
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
-	"strings"
 )
 
 const UniqueMessageId = "#nanlogger"
 
 // NanLogger uses the logger infrastructure to monitor for NaN (and Inf) values in your graph.
 // You manually select the nodes you want to monitor, and it saves the stack where it was called
-// along with user provided scope information.
+// along with user-provided scope information.
 // If during the execution any NaN appears, it panics with the stack trace where the monitor was
 // set, along with the scope. Alternatively, instead of panicking, one can set a handler to be
 // called if/when a NaN is observed.
 //
-// See example in package documentation.
+// See an example in the package documentation.
 type NanLogger struct {
 	prevLoggerFn graph.LoggerFn
 	handler      HandlerFn
@@ -84,12 +85,12 @@ type stackTracer interface {
 }
 
 // Trace information of a node that is set to monitor.
-// This is what printed out when a `NaN` is found, or passed to a handler function, if one is set.
+// This is what is printed out when a `NaN` is found or passed to a handler function if one is set.
 type Trace struct {
 	// StackTrace of where the monitored node was created, stored as an error that can be printed.
 	StackTrace errors.StackTrace
 
-	// Scope saved when monitor node was created.
+	// Scope saved when the monitor node was created.
 	Scope []string
 }
 
@@ -111,7 +112,7 @@ func New() *NanLogger {
 
 // AttachToExec will set the NanLogger as the default logger in exec.
 // NanLogger acts as a pass-through logger, anything that is not marked as nanlogger.UniqueMessageId is passed
-// through to whatever was the previous logger configured in exec.
+// through to whatever the previous logger configured in exec was.
 //
 // A nil NanLogger is valid, and it will simply be a no-op.
 func (l *NanLogger) AttachToExec(exec ExecWithLogger) {
@@ -135,7 +136,7 @@ func (l *NanLogger) AttachToTrainer(trainer *train.Trainer) {
 }
 
 // Trace the given node.
-// This means the node is monitored and whenever a NaN is observed, the trace is printed and the program exit.
+// This means the node is monitored, and whenever a NaN is observed, the trace is printed and the program exits.
 // Alternatively, a handler is called, see SetHandler.
 //
 // A user-provided extra scope can be given: it's appended to the current NanLogger scope.
@@ -146,7 +147,7 @@ func (l *NanLogger) Trace(node *graph.Node, scope ...string) {
 		return
 	}
 	node.AssertValid()
-	node.SetLoggedf("Traced: %v", node)
+	//	node.SetLoggedf("Traced: %v", node)
 
 	// Check whether any of the values are finite.
 	var tracedNode *graph.Node
@@ -181,7 +182,7 @@ func (l *NanLogger) Trace(node *graph.Node, scope ...string) {
 	graphMap[tracedNode.Id()] = trace
 }
 
-// PushScope to current scope stack.
+// PushScope to the current scope stack.
 // These values are added by default to any new Trace.
 //
 // A nil NanLogger is valid, and it will simply be a no-op.
