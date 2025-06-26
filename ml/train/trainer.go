@@ -602,7 +602,7 @@ func (r *Trainer) Eval(ds Dataset) (lossAndMetrics []*tensors.Tensor) {
 		}
 	}
 
-	// Free lossAndMetrics on device, it will be consumed presumably only locally.
+	// Free lossAndMetrics on the device, it will be consumed presumably only locally.
 	for _, metric := range lossAndMetrics {
 		metric.MaterializeLocal()
 		metric.InvalidateOnDevice()
