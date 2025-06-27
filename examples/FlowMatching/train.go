@@ -213,14 +213,14 @@ func BuildTrainingModelGraph(config *diffusion.Config) train.ModelFn {
 		images = diffusion.AugmentImages(ctx, images)
 
 		// Convert to the corresponding image size.
-		config.NanLogger.Trace(images, "RawImages")
+		config.NanLogger.TraceFirstNaN(images, "RawImages")
 		images = config.PreprocessImages(images, true)
-		config.NanLogger.Trace(images, "NormalizedImages")
+		config.NanLogger.TraceFirstNaN(images, "NormalizedImages")
 		images = ConvertDType(images, dtype)
 
 		// Gaussian noise to be transposed to the images.
 		noises := ctx.RandomNormal(g, images.Shape())
-		config.NanLogger.Trace(noises, "noises")
+		config.NanLogger.TraceFirstNaN(noises, "noises")
 
 		// Cosine schedule, if enabled.
 		cosineschedule.New(ctx, g, dtype).FromContext().Done()
@@ -238,13 +238,13 @@ func BuildTrainingModelGraph(config *diffusion.Config) train.ModelFn {
 		noisyImages := Add(
 			Mul(images, t),
 			Mul(noises, OneMinus(t)))
-		config.NanLogger.Trace(noisyImages, "noisyImages (A)")
+		config.NanLogger.TraceFirstNaN(noisyImages, "noisyImages (A)")
 		noisyImages = StopGradient(noisyImages)
 
 		// Target and predicted velocity (aka. u(X,t)).
 		targetVelocity := Sub(images, noises)
 		predictedVelocity := diffusion.UNetModelGraph(ctx, config.NanLogger, noisyImages, t, flowerIds)
-		config.NanLogger.Trace(predictedVelocity, "predictedVelocity")
+		config.NanLogger.TraceFirstNaN(predictedVelocity, "predictedVelocity")
 
 		// Calculate our loss inside the model: use losses.ParamLoss to define the loss, and if not set,
 		// back-off to "diffusion_loss" hyperparam (for backward compatibility).

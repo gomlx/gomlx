@@ -13,6 +13,10 @@
      from being assigned to the functions.
   * Added parameters `sorted` and `unique` to `Scatter` (like the other functions `Scatter*`) -- **Small API change**.
   * Added `ScatterUpdate`, for now only for `unique=true`.
+  * Package `nanlogger`:
+    * Allow traces that only report also.
+    * Created context parameter `optimizer.ParamNanLogger`: if set to NanLogger, it will trace all occurrences of
+      of NaN values in gradient: great to debug where are the NaN appearing in the model first.
 * Package `ml/trainer`
   * Improved support for accumulated gradients. Fixed evaluation (context reuse) for when using accumulated gradients.
   * Added `Trainer.WithMaxExecutors`.

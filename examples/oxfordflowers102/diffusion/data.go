@@ -152,7 +152,7 @@ func (c *Config) PreprocessImages(images *Node, normalize bool) *Node {
 
 	// ReduceAllMax(images).SetLogged("Max(uint8):")
 	images = ConvertDType(images, dtypes.Float32)
-	c.NanLogger.Trace(images, "PreprocessImages:input")
+	c.NanLogger.TraceFirstNaN(images, "PreprocessImages:input")
 	if !normalize {
 
 		return images
@@ -168,7 +168,7 @@ func (c *Config) PreprocessImages(images *Node, normalize bool) *Node {
 		Sub(images, mean),
 		data.ReplaceZerosByOnes(stddev))
 	images = ConvertDType(images, c.DType)
-	c.NanLogger.Trace(images, "PreprocessImages:"+c.DType.String())
+	c.NanLogger.TraceFirstNaN(images, "PreprocessImages:"+c.DType.String())
 	return images
 }
 
