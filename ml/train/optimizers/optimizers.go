@@ -61,11 +61,10 @@ var (
 	// This provides an easy quick start point. One can hyperparameter-tune the optimizers
 	// for usually slightly better results.
 	KnownOptimizers = map[string]func(ctx *context.Context) Interface{
-		"sgd":     func(ctx *context.Context) Interface { return StochasticGradientDescent() },
-		"adam":    func(ctx *context.Context) Interface { return Adam().FromContext(ctx).Done() },
-		"adamax":  func(ctx *context.Context) Interface { return Adam().Adamax().FromContext(ctx).Done() },
-		"adamw":   func(ctx *context.Context) Interface { return Adam().WeightDecay(0.004).FromContext(ctx).Done() },
-		"rmsprop": func(ctx *context.Context) Interface { return RMSProp().FromContext(ctx).Done() },
+		"sgd":    func(ctx *context.Context) Interface { return StochasticGradientDescent() },
+		"adam":   func(ctx *context.Context) Interface { return Adam().FromContext(ctx).Done() },
+		"adamax": func(ctx *context.Context) Interface { return Adam().Adamax().FromContext(ctx).Done() },
+		"adamw":  func(ctx *context.Context) Interface { return Adam().WeightDecay(0.004).FromContext(ctx).Done() },
 	}
 
 	// ParamOptimizer is the context parameter with the name of the optimizer.

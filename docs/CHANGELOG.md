@@ -20,12 +20,10 @@
 * Package `ml/trainer`
   * Improved support for accumulated gradients. Fixed evaluation (context reuse) for when using accumulated gradients.
   * Added `Trainer.WithMaxExecutors`.
-* Package `ml/train/metrics`:
+* Package `ml/trainer/metrics`:
   * `MeanMetric` allows for disabling dynamic batch weighting.  API slightly changed: `NewMeanMetric` now
     returns a `MeanMetric` struct, not an interface.
   * Added `StreamingMedianMetric`.
-* Package `ml/train/optimizers`:
-  * Added `RMSProp` optimizer.
 * Package `ml/layers`
   * Added normalizing 1/sqrt(d_k) factor to attention logits in the MultiHeadAttention layer: this will break current
     models using it.
