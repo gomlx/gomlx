@@ -1,6 +1,6 @@
 # GoMLX changelog
 
-# Next: MultiHeadAttention implementation slightly changed!
+# Next: MultiHeadAttention implementation slightly changed! Added RMSProp optimizers; Added RMSNorm normalizer.
 
 * Package `simplego`:
   * Added `GetBackend` that returns a singleton backend, created with the default configuration at the first request.
@@ -17,13 +17,15 @@
     * Allow traces that only report also.
     * Created context parameter `optimizer.ParamNanLogger`: if set to NanLogger, it will trace all occurrences of
       of NaN values in gradient: great to debug where are the NaN appearing in the model first.
-* Package `ml/trainer`
+* Package `ml/train`:
   * Improved support for accumulated gradients. Fixed evaluation (context reuse) for when using accumulated gradients.
   * Added `Trainer.WithMaxExecutors`.
-* Package `ml/trainer/metrics`:
+* Package `ml/train/metrics`:
   * `MeanMetric` allows for disabling dynamic batch weighting.  API slightly changed: `NewMeanMetric` now
     returns a `MeanMetric` struct, not an interface.
   * Added `StreamingMedianMetric`.
+* Package `ml/train/optimizers`:
+  * Added `RMSProp()` optimizer.
 * Package `ml/layers`
   * Added normalizing 1/sqrt(d_k) factor to attention logits in the MultiHeadAttention layer: this will break current
     models using it.
