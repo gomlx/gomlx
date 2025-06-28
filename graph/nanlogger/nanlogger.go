@@ -32,6 +32,7 @@
 //	func train() {
 //		…
 //		nanLogger := nanlogger.New()
+//		ctx.SetParam(optimizers.ParamNanLogger, nanLogger)  // Gradients with NaNs get reported.
 //		trainer := train.NewTrainer(…)
 //		nanLogger.AttachToTrainer(trainer)
 //		…
@@ -41,7 +42,7 @@
 //		…
 //		for ii := range numBlocks {
 //			x = ResidualBlock(ctx.In(name), x, lastNumChannels)
-//			nanLogger.Trace(x, fmt.Sprintf("Residual-%d", ii+1))
+//			nanLogger.TraceFirstNaN(x, fmt.Sprintf("Residual-%d", ii+1))
 //		}
 //		…
 //	}
@@ -49,7 +50,9 @@ package nanlogger
 
 import (
 	"fmt"
+	"slices"
 	"strings"
+	"sync/atomic"
 
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
@@ -60,19 +63,27 @@ import (
 	"k8s.io/klog/v2"
 )
 
-const UniqueMessageId = "#nanlogger"
+const (
+	TracedMessageId = "#nanlogger(%d)"
+)
+
+// uniqueCounter is a thread-safe counter used to generate unique IDs for traced nodes
+var uniqueCounter atomic.Int64
 
 // NanLogger uses the logger infrastructure to monitor for NaN (and Inf) values in your graph.
 // You manually select the nodes you want to monitor, and it saves the stack where it was called
 // along with user-provided scope information.
-// If during the execution any NaN appears, it panics with the stack trace where the monitor was
-// set, along with the scope. Alternatively, instead of panicking, one can set a handler to be
-// called if/when a NaN is observed.
+//
+// If during the execution any NaN appears, it calls your handler with the stack trace where the monitor was
+// set, along with the scope.
+//
+// Alternatively, instead of panicking, one can set a custom handler to be called if/when a NaN is observed.
 //
 // See an example in the package documentation.
 type NanLogger struct {
-	prevLoggerFn graph.LoggerFn
-	handler      HandlerFn
+	uniqueMessageID        string
+	prevLoggerFn           graph.LoggerFn
+	handler, reportHandler HandlerFn
 
 	traces map[graph.GraphId]map[graph.NodeId]*Trace
 
@@ -92,6 +103,10 @@ type Trace struct {
 
 	// Scope saved when the monitor node was created.
 	Scope []string
+
+	// FirstOnly traces only the first occurrence of a NaN: that means if more than one traced node
+	// is or has a NaN/Inf value, only the handler is called only for the first one.
+	FirstOnly bool
 }
 
 // ExecWithLogger represents any of the executors in GoMLX (or future): `graph.Exec` and `context.Exec`.
@@ -102,16 +117,26 @@ type ExecWithLogger interface {
 }
 
 // New creates a NanLogger that can be used to debug where NaN happen in graphs.
-// See NanLogger for details.
+//
+// You manually select the nodes you want to monitor, and it saves the stack where it was called
+// along with user-provided scope information.
+//
+// If during the execution any NaN appears, it calls your handler with the stack trace where the monitor was
+// set, along with the scope.
+//
+// Alternatively, instead of panicking, one can set a custom handler to be called if/when a NaN is observed.
+//
+// See an example in the package documentation.
 func New() *NanLogger {
 	return &NanLogger{
-		handler: DefaultHandler,
-		traces:  make(map[graph.GraphId]map[graph.NodeId]*Trace),
+		uniqueMessageID: fmt.Sprintf(TracedMessageId, uniqueCounter.Add(1)),
+		handler:         DefaultBreakHandler,
+		traces:          make(map[graph.GraphId]map[graph.NodeId]*Trace),
 	}
 }
 
 // AttachToExec will set the NanLogger as the default logger in exec.
-// NanLogger acts as a pass-through logger, anything that is not marked as nanlogger.UniqueMessageId is passed
+// NanLogger acts as a pass-through logger, anything that is not marked as nanlogger.TracedMessageId is passed
 // through to whatever the previous logger configured in exec was.
 //
 // A nil NanLogger is valid, and it will simply be a no-op.
@@ -135,28 +160,42 @@ func (l *NanLogger) AttachToTrainer(trainer *train.Trainer) {
 	})
 }
 
-// Trace the given node.
-// This means the node is monitored, and whenever a NaN is observed, the trace is printed and the program exits.
-// Alternatively, a handler is called, see SetHandler.
+// TraceFirstNaN sets a trace on the given node, and if it ever becomes NaN, the trace of the first node
+// the graph (closer to the input in graph ordering) is logged (if the DefaultHandler is used).
 //
-// A user-provided extra scope can be given: it's appended to the current NanLogger scope.
+// Remember to attach the NanLogger once to the train.Trainer or to the graph.Exec/context.Exec you are running.
+//
+// A nil NanLogger is valid, and it will simply be a no-op.
+func (l *NanLogger) TraceFirstNaN(node *graph.Node, scope ...string) {
+	l.traceImpl(true, node, scope...)
+}
+
+// Trace sets a trace on the given node, and if it ever becomes NaN, the scope is printed -- but the execution
+// continues normally.
+//
+// Args:
+//
+// Remember to attach the NanLogger once to the train.Trainer or to the graph.Exec/context.Exec you are running.
 //
 // A nil NanLogger is valid, and it will simply be a no-op.
 func (l *NanLogger) Trace(node *graph.Node, scope ...string) {
+	l.traceImpl(false, node, scope...)
+}
+
+func (l *NanLogger) traceImpl(firstOnly bool, node *graph.Node, scope ...string) {
 	if l == nil {
 		return
 	}
 	node.AssertValid()
-	//	node.SetLoggedf("Traced: %v", node)
 
 	// Check whether any of the values are finite.
 	var tracedNode *graph.Node
-	if node.Rank() == 0 {
+	if node.IsScalar() {
 		tracedNode = graph.IsFinite(node)
 	} else {
 		tracedNode = graph.LogicalAll(graph.IsFinite(node))
 	}
-	tracedNode.SetLogged(UniqueMessageId)
+	tracedNode.SetLogged(l.uniqueMessageID)
 
 	// Create trace, stripping this function from it:
 	tracer := errors.Errorf("Stack-trace").(stackTracer)
@@ -164,9 +203,10 @@ func (l *NanLogger) Trace(node *graph.Node, scope ...string) {
 	stackTrace = stackTrace[1:]
 	trace := &Trace{
 		StackTrace: stackTrace,
+		FirstOnly:  firstOnly,
 	}
 	if len(scope) == 0 {
-		trace.Scope = xslices.Copy(l.currentScope)
+		trace.Scope = slices.Clone(l.currentScope)
 	} else {
 		trace.Scope = make([]string, 0, len(l.currentScope)+len(scope))
 		trace.Scope = append(trace.Scope, l.currentScope...)
@@ -212,49 +252,65 @@ func (l *NanLogger) PopScope() {
 // monitor for NaNs.
 func (l *NanLogger) loggerFn(g *graph.Graph, messages []string, values []*tensors.Tensor, nodes []graph.NodeId) {
 	// Filtered logged values/messages: the ones not handled by NanLogger:
-	filteredMessages := make([]string, 0, len(messages))
-	filteredValues := make([]*tensors.Tensor, 0, len(values))
-	filteredNodes := make([]graph.NodeId, 0, len(nodes))
-	firstNan := graph.InvalidNodeId
-	for ii, msg := range messages {
-		if msg != UniqueMessageId {
+	firstNodeId := graph.InvalidNodeId
+	var firstTrace *Trace
+	var shiftIdx int
+
+	tracesMap, found := l.traces[g.GraphId()]
+	if !found {
+		klog.Warningf("NanLogger (%q) received traced node for unknown Graph %d (%q)!?", l.uniqueMessageID, g.GraphId(), g.Name())
+		if l.prevLoggerFn != nil {
+			// Call previous logger on remaining messages.
+			l.prevLoggerFn(g, messages, values, nodes)
+		}
+	}
+
+	for idx, msg := range messages {
+		if msg != l.uniqueMessageID {
 			// Not managed by NanLogger.
-			filteredMessages = append(filteredMessages, msg)
-			filteredValues = append(filteredValues, values[ii])
-			filteredNodes = append(filteredNodes, nodes[ii])
+			if shiftIdx == idx {
+				// Nothing to do.
+				continue
+			}
+			messages[shiftIdx] = messages[idx]
+			values[shiftIdx] = values[idx]
+			nodes[shiftIdx] = nodes[idx]
+			shiftIdx++
 			continue
 		}
-		isAllFinite := tensors.ToScalar[bool](values[ii])
+		isAllFinite := tensors.ToScalar[bool](values[idx])
 		if !isAllFinite {
-			nodeId := nodes[ii]
-			if firstNan == graph.InvalidNodeId || nodeId < firstNan {
-				firstNan = nodeId
+			nodeId := nodes[idx]
+			trace, found := tracesMap[nodeId]
+			if !found {
+				klog.Warningf("NanLogger (%q) received traced node (id=%d, graph=%s) that it hasn't traced!?", l.uniqueMessageID, nodeId, g.Name())
+				continue
+			}
+			if trace.FirstOnly {
+				// Find the first traced node.
+				if firstNodeId == graph.InvalidNodeId || nodeId < firstNodeId {
+					firstNodeId = nodeId
+					firstTrace = trace
+				}
+			} else {
+				// Call handler on the traced node.
+				l.handler(trace)
 			}
 		}
+	}
+	messages = messages[:shiftIdx]
+	values = values[:shiftIdx]
+	nodes = nodes[:shiftIdx]
+
+	// Report the first NaN node, if only those that require only the first.
+	if firstTrace != nil {
+		l.handler(firstTrace)
 	}
 
 	// Report other values first, since they may help debug.
-	if l.prevLoggerFn != nil && len(filteredMessages) > 0 {
+	if l.prevLoggerFn != nil && len(messages) > 0 {
 		// Call previous logger on remaining messages.
-		l.prevLoggerFn(g, filteredMessages, filteredValues, filteredNodes)
-	}
-
-	// Report about firstNan:
-	if firstNan != graph.InvalidNodeId {
-		// Report first NaN.
-		gId := g.GraphId()
-		graphMap, found := l.traces[gId]
-		if !found {
-			klog.Warningf("NanLogger received trace for unknown Graph %d!?", gId)
-		} else {
-			var trace *Trace
-			trace, found = graphMap[firstNan]
-			if found {
-				l.handler(trace)
-			} else {
-				klog.Warningf("NanLogger received trace for node that was not marked as traced: did you attach the wrong NanLogger to the executor?")
-			}
-		}
+		l.prevLoggerFn(g, messages, values, nodes)
 	}
 	return
 }
@@ -262,21 +318,48 @@ func (l *NanLogger) loggerFn(g *graph.Graph, messages []string, values []*tensor
 // HandlerFn is the type of function to handle NaN traces.
 type HandlerFn func(info *Trace)
 
-// SetHandler sets the function called when a `NaN` is observed.
-// The default is DefaultHandler that prints out all information on the node and exits.
-func (l *NanLogger) SetHandler(handler HandlerFn) {
+// WithHandler sets the function called when a `NaN` is observed.
+//
+// The default is DefaultHandler, that is initialized with ReportScopeHandler.
+// There are also ReportAllHandler and ReportAndPanicHandler handler predefined that can be used.
+//
+// If the handler is nil, set it to the default value.
+func (l *NanLogger) WithHandler(handler HandlerFn) *NanLogger {
 	if l == nil {
-		return
+		handler = DefaultHandler
 	}
 	l.handler = handler
+	return l
 }
 
-// DefaultHandler when a `NaN` or `Inf` is observed: it prints all out all the information about the `NaN` trace.
-func DefaultHandler(info *Trace) {
+// DefaultBreakHandler is the default handler called when a `NaN` or `Inf` is observed in a break traced
+// node.
+//
+// It prints all out all the information about the `NaN` trace.
+func DefaultBreakHandler(info *Trace) {
 	var scopeTxt string
 	if len(info.Scope) > 0 {
 		scopeTxt = fmt.Sprintf("Scope:\n\t%s\n", strings.Join(info.Scope, "\n\t"))
 	}
-	klog.Errorf("NaNLogger observed NaN or Inf values during execution of graph:\n%sStack-trace of node:\n%+v\n",
+	klog.Errorf("NaNLogger observed a NaN or Inf values during execution of graph:\n%sStack-trace of node:\n%+v\n",
 		scopeTxt, info.StackTrace)
+}
+
+// DefaultHandler for a new NanLogger.
+var DefaultHandler = ReportScopeHandler
+
+// ReportScopeHandler reports the scope when a traced node with NaN/Inf values is found.
+func ReportScopeHandler(info *Trace) {
+	klog.Infof("NaN/Inf observed for scope %q", info.Scope)
+}
+
+// ReportAllHandler is a handler that reports the stack trace and scope of a traced node, and then panic.
+func ReportAllHandler(info *Trace) {
+	klog.Errorf("NaN/Inf observed for scope %q:\n%+v\n", info.Scope, info.StackTrace)
+}
+
+// ReportAndPanicHandler is a handler that reports the stack trace and scope of a traced node, and then panic.
+func ReportAndPanicHandler(info *Trace) {
+	klog.Errorf("NaN/Inf observed for scope %q:\n%+v\n", info.Scope, info.StackTrace)
+	panic(errors.Errorf("NaN/Inf observer in scope %q", info.Scope))
 }

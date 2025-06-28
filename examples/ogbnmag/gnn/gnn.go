@@ -277,7 +277,7 @@ func edgeMessageGraph(ctx *context.Context, gatheredStates, gatheredMask *Node) 
 		messages = activations.ApplyFromContext(ctx, messages)
 	}
 	if NanLogger != nil {
-		NanLogger.Trace(messages, fmt.Sprintf("(KAN)edgeMessageGraph(%s)", ctx.Scope()))
+		NanLogger.TraceFirstNaN(messages, fmt.Sprintf("(KAN)edgeMessageGraph(%s)", ctx.Scope()))
 	}
 
 	mask = gatheredMask
@@ -486,7 +486,7 @@ func updateState(ctx *context.Context, prevState, input, mask *Node) *Node {
 	}
 	state = layers.MaskedNormalizeFromContext(ctx.In("normalization"), state, mask)
 	if NanLogger != nil {
-		NanLogger.Trace(state, fmt.Sprintf("UpdateState(%s)", ctx.Scope()))
+		NanLogger.TraceFirstNaN(state, fmt.Sprintf("UpdateState(%s)", ctx.Scope()))
 	}
 	return state
 }
@@ -546,7 +546,7 @@ func kanUpdateState(ctx *context.Context, prevState, input, mask *Node) *Node {
 		state = Add(state, prevState)
 	}
 	if NanLogger != nil {
-		NanLogger.Trace(state, fmt.Sprintf("(KAN)UpdateState(%s)", ctx.Scope()))
+		NanLogger.TraceFirstNaN(state, fmt.Sprintf("(KAN)UpdateState(%s)", ctx.Scope()))
 	}
 	return state
 }
