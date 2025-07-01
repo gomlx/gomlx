@@ -1,8 +1,6 @@
 # GoMLX changelog
 
-# Next: MultiHeadAttention implementation slightly changed!
-
-Hightlights:  Added RMSProp optimizers; Added RMSNorm normalizer; Default variable initializer set to He.
+# v0.21.0: 2025/07/01 🌞 Summer Edition 🌞
 
 * Package `simplego`:
   * Added `GetBackend` that returns a singleton backend, created with the default configuration at the first request.
@@ -41,6 +39,7 @@ Hightlights:  Added RMSProp optimizers; Added RMSNorm normalizer; Default variab
   * Package `initializers`:
     * They now use the `context` random number generator state, which simplifies things. 
     * `ParamInitialSeed` removed, since the RNG is initialized by `Context.RngStateWithSeed()`.
+* Fixed some flaky tests.
 
 # v0.20.1: 2025/06/12 Trainer.AccumulateGradients (when the batch doesn't fit memory); VNN fixes; Numpy improvements. 
 
