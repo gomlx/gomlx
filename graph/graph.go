@@ -91,6 +91,10 @@ package graph
 
 import (
 	"fmt"
+	"strings"
+	"sync"
+	"time"
+
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types"
@@ -100,9 +104,6 @@ import (
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
-	"strings"
-	"sync"
-	"time"
 )
 
 // Graph with the operations and dependencies needed to run a computation.
