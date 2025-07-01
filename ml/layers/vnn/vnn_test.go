@@ -9,7 +9,6 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/ml/train"
@@ -18,7 +17,6 @@ import (
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
-	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
 
@@ -41,8 +39,7 @@ func TestLinearLayer(t *testing.T) {
 		yaw := MulScalar(ctx.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
 
 		// Linear function: fix seed so we always have the same values.
-		ctx.SetParam(initializers.ParamInitialSeed, 42)
-		ctx = ctx.Checked(false).WithInitializer(initializers.HeFn(ctx))
+		ctx = ctx.Checked(false)
 		linearFn := func(x *Node) *Node {
 			return New(ctx, x, 2).
 				NumHiddenLayers(0, 0).
@@ -85,8 +82,7 @@ func TestRelu(t *testing.T) {
 					yaw := MulScalar(ctx.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
 
 					// Linear function: fix seed so we always have the same values.
-					ctx.SetParam(initializers.ParamInitialSeed, 42)
-					ctx = ctx.Checked(false).WithInitializer(initializers.HeFn(ctx))
+					ctx = ctx.Checked(false)
 
 					// Outputs: out1 rotates after linear transformation, out2 rotates before linear transformation.
 					out1 := Relu(ctx, input).
@@ -133,8 +129,7 @@ func TestLayerNormalization(t *testing.T) {
 		yaw := MulScalar(ctx.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
 
 		// Linear function: fix seed so we always have the same values.
-		ctx.SetParam(initializers.ParamInitialSeed, 42)
-		ctx = ctx.Checked(false).WithInitializer(initializers.HeFn(ctx))
+		ctx = ctx.Checked(false)
 
 		// Outputs: out1 rotates after linear transformation, out2 rotates before linear transformation.
 		epsilon := 1e-5
@@ -170,8 +165,7 @@ func TestVNN_Equivariant(t *testing.T) {
 		yaw := MulScalar(ctx.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
 
 		// vnn layer: fix seed so we always have the same values.
-		ctx.SetParam(initializers.ParamInitialSeed, 42)
-		ctx = ctx.Checked(false).WithInitializer(initializers.HeFn(ctx))
+		ctx = ctx.Checked(false)
 		vnnFn := func(x *Node) *Node {
 			return New(ctx, x, 5).
 				NumHiddenLayers(3, 10).
@@ -211,6 +205,7 @@ func TestVNNTrain(t *testing.T) {
 			Normalization("layer").
 			Scaler(true).
 			Regularizer(regularizers.L2(0.001)).
+			Dropout(0).
 			Done()
 
 		// Invariant head for classification
@@ -263,7 +258,8 @@ func TestVNNTrain(t *testing.T) {
 		[]any{inputsTensor}, []any{labelsTensor})
 	require.NoError(t, err)
 	dsEval := ds.Copy().BatchSize(1, false)
-	ds.Shuffle().BatchSize(batchSize, true).Infinite(true)
+	//ds.Shuffle().BatchSize(batchSize, true).Infinite(true)
+	ds.BatchSize(batchSize, true).Infinite(true)
 
 	trainer := train.NewTrainer(
 		backend, ctx, modelFn, losses.BinaryCrossentropyLogits,
@@ -272,7 +268,7 @@ func TestVNNTrain(t *testing.T) {
 		[]metrics.Interface{metrics.NewMeanBinaryLogitsAccuracy("Mean Accuracy", "#acc")})
 
 	loop := train.NewLoop(trainer)
-	commandline.AttachProgressBar(loop)
+	//commandline.AttachProgressBar(loop)
 	_, err = loop.RunSteps(ds, numSteps)
 	require.NoError(t, err)
 	lossAndMetrics := trainer.Eval(dsEval)
@@ -284,4 +280,9 @@ func TestVNNTrain(t *testing.T) {
 	// Accuracy should be around 50% (random guessing).
 	accuracy := lossAndMetrics[2].Value().(float32)
 	require.GreaterOrEqual(t, accuracy, float32(0.8), "VNN was not able to learn rotation invariant simple task, accuracy=%.1f%%.", accuracy*100.0)
+
+	sample := context.ExecOnce(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
+		return ctx.RandomUniform(g, shapes.Make(dtypes.Float64))
+	})
+	fmt.Printf("Context random sample: %s\n", sample.GoStr())
 }

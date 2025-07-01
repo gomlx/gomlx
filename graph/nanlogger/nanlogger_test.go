@@ -17,11 +17,12 @@
 package nanlogger
 
 import (
+	"testing"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"testing"
 
 	_ "github.com/gomlx/gomlx/backends/xla"
 )
@@ -37,16 +38,15 @@ func TestNanLogger(t *testing.T) {
 	}
 
 	// Create a NanLogger and a trivial executor that will trigger NaN and Inf.
-	l := New()
-	l.SetHandler(handler)
+	l := New().WithHandler(handler)
 	e := NewExec(backend, func(values *Node) *Node {
 		l.PushScope("scope1")
 		v1 := Sqrt(values)
-		l.Trace(v1)
+		l.TraceFirstNaN(v1)
 		l.PopScope()
 		l.PushScope("base")
 		v2 := Inverse(values)
-		l.Trace(v2, "scope2")
+		l.TraceFirstNaN(v2, "scope2")
 		l.PopScope()
 		return Add(v1, v2)
 	})

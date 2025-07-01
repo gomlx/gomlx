@@ -18,12 +18,13 @@ package context
 
 import (
 	"fmt"
+	"strings"
+
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/types/xsync"
-	"strings"
 )
 
 // Variable is a value shared among computation graphs, or across multiple executions of the same graph.
@@ -75,29 +76,6 @@ func (v *Variable) CloneToContext(toCtx *Context) *Variable {
 	}
 	toCtx.InAbsPath(v.scope).setVariableInScope(v.name, newV)
 	return newV
-}
-
-// VariableInitializer builds a valueNode that returns a value to initialize a variable of the given
-// shape. It is defined in the Context.
-type VariableInitializer = func(g *graph.Graph, shape shapes.Shape) *Node
-
-// DefaultInitializer is used whenever a new context is created.
-// You can always set your own initializer with Context.WithInitializer.
-//
-// See package initializers for various standard initializers.
-//
-// It's a uniform random sampler [-0.05 to 0.05] for float and complex numbers, zero otherwise.
-var DefaultInitializer VariableInitializer = func(g *Graph, shape shapes.Shape) *Node {
-	if !shape.DType.IsFloat() && !shape.DType.IsComplex() {
-		return graph.Zeros(g, shape)
-	}
-	rngState := graph.Const(g, graph.RngState())
-	_, uniform := graph.RandomUniform(rngState, shape)
-	minValue, maxValue := -0.05, 0.05
-	values := graph.MulScalar(uniform, maxValue-minValue)
-	values = graph.AddScalar(values, minValue)
-	return values
-
 }
 
 // variableNodes is used to store the variable parameter node (fed to the graph) and current value Node for a given graph.

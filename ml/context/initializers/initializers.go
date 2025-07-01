@@ -14,32 +14,30 @@
  *	limitations under the License.
  */
 
-// Package initializers include several weight initializers, to be used with context.
-// They implement computation.VariableInitializer type.
+// Package initializers include several weight initializers, to be used with a context.Context.
+//
+// They construct computation.VariableInitializer closures.
 package initializers
 
 import (
+	"math"
+	"slices"
+
 	. "github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
-	"math"
-	"slices"
-	"sync"
 )
 
 var (
 	// ParamInitialSeed is the key for the hyperparameter to use for initial seed (int64). The default is 0,
-	// which makes it non-deterministic. Set it to a value different from 0 for a deterministic (as long
-	// as the model doesn't change) initialization.
+	// which makes it non-deterministic. Set it to a value different from 0 for a deterministic initialization
+	// (as long as the model doesn't change).
 	//
-	// If you set this hyperparameter, remember to configure a new default initializer in your context (context.Context.WithInitializer),
-	// so that it is used.
-	//
-	// More details in initializers.UseRngState.
-	ParamInitialSeed = "initializers_seed"
+	// It is an alias to context.ParamInitialSeed.
+	ParamInitialSeed = context.ParamInitialSeed
 )
 
 // VariableInitializer builds a node that returns a value to initialize a variable of the given
@@ -56,59 +54,6 @@ func One(graph *Graph, shape shapes.Shape) *Node {
 	return Ones(graph, shape)
 }
 
-var (
-	muRngStates sync.Mutex
-	rngStates   = make(map[GraphId]*Node)
-)
-
-// Finalize will clear the global state kept alive and free up the memory.
-// Namely, the random number generator states.
-//
-// Used for testing and debugging.
-func Finalize() {
-	muRngStates.Lock()
-	defer muRngStates.Unlock()
-	rngStates = make(map[GraphId]*Node)
-}
-
-// UseRngState will provide a random-number generator state for the current graph, to be used for initialization.
-//
-// If all initializers of a model uses random from this, in a deterministic order, then the initialization
-// of the model will be deterministic and can be replicated exactly.
-//
-// The initialSeed is only used the first time the function is called for a Graph. If the initialSeed is 0,
-// a random seed is generated -- in which case initialization is not deterministic.
-// the returned updated state.
-//
-// See examples usage in RandomNormalFn and RandomUniformFn.
-//
-// It locks the state, so only one call to it will be happening at a time.
-func UseRngState(g *Graph, initialSeed int64, fn func(rngState *Node) (newRngState *Node)) {
-	g.AssertValid()
-	muRngStates.Lock()
-	defer muRngStates.Unlock()
-
-	graphId := g.GraphId()
-	rngState, found := rngStates[graphId]
-	if !found {
-		if initialSeed != NoSeed {
-			rngState = Const(g, RngStateFromSeed(initialSeed))
-		} else {
-			rngState = Const(g, RngState())
-		}
-	}
-	newRngState := fn(rngState)
-	if !rngState.Shape().Equal(newRngState.Shape()) {
-		Panicf("updated rngState for the random number generator has invalid shape: %s (should be %s)",
-			newRngState.Shape(), rngState.Shape())
-	}
-	rngStates[graphId] = newRngState
-}
-
-// NoSeed is the default seed value for ParamInitialSeed, and it means a seed is randomly generated -- which
-// also means initialization is not deterministic.
-const NoSeed = int64(0)
-
 // RandomNormalFn returns an initializer that generates random normal values with the given standard deviation
 // and mean set to 0.
 //
@@ -118,21 +63,16 @@ const NoSeed = int64(0)
 //
 // Non-float and non-complex variables are initialized with zero instead.
 func RandomNormalFn(ctx *context.Context, stddev float64) VariableInitializer {
-	initialSeed := context.GetParamOr(ctx, ParamInitialSeed, NoSeed)
 	return func(g *Graph, shape shapes.Shape) *Node {
 		if shape.DType != dtypes.Float32 && shape.DType != dtypes.Float64 {
 			return Zeros(g, shape)
 		}
-		var values *Node
-		UseRngState(g, initialSeed, func(rngState *Node) (newRngState *Node) {
-			newRngState, values = RandomNormal(rngState, shape)
-			return newRngState
-		})
+		values := ctx.RandomNormal(g, shape)
 		return MulScalar(values, stddev)
 	}
 }
 
-// RandomUniformFn return an initializer that generates a random uniform values from [min, max).
+// RandomUniformFn return an initializer that generates random uniform values from [min, max).
 //
 // It uses the context's ParamInitialSeed hyperparameter to initialize the random number generator --
 // only the first time it is used for a graph.
@@ -140,16 +80,11 @@ func RandomNormalFn(ctx *context.Context, stddev float64) VariableInitializer {
 //
 // Non-float and non-complex variables are initialized with zero instead.
 func RandomUniformFn(ctx *context.Context, min, max float64) VariableInitializer {
-	initialSeed := context.GetParamOr(ctx, ParamInitialSeed, NoSeed)
 	return func(g *Graph, shape shapes.Shape) *Node {
 		if !shape.DType.IsFloat() && !shape.DType.IsComplex() {
 			return Zeros(g, shape)
 		}
-		var values *Node
-		UseRngState(g, initialSeed, func(rngState *Node) (newRngState *Node) {
-			newRngState, values = RandomUniform(rngState, shape)
-			return newRngState
-		})
+		values := ctx.RandomUniform(g, shape)
 		values = MulScalar(values, max-min)
 		values = AddScalar(values, min)
 		return values
@@ -178,7 +113,6 @@ func RandomUniformFn(ctx *context.Context, min, max float64) VariableInitializer
 //
 // Non-float and non-complex variables are initialized with zero instead.
 func GlorotUniformFn(ctx *context.Context) VariableInitializer {
-	initialSeed := context.GetParamOr(ctx, ParamInitialSeed, NoSeed)
 	return func(g *Graph, shape shapes.Shape) *Node {
 		if !shape.DType.IsFloat() && !shape.DType.IsComplex() {
 			return Zeros(g, shape)
@@ -190,19 +124,15 @@ func GlorotUniformFn(ctx *context.Context) VariableInitializer {
 		fanIn, fanOut := computeFanInFanOut(shape)
 		scale := max(1.0, float64(fanIn+fanOut)/2.0)
 		limit := math.Sqrt(3.0 / scale)
-		var values *Node
-		UseRngState(g, initialSeed, func(rngState *Node) (newRngState *Node) {
-			newRngState, values = RandomUniform(rngState, shape)
-			return newRngState
-		})
+		values := ctx.RandomUniform(g, shape)
 		values = MulScalar(values, 2*limit)
 		values = AddScalar(values, -limit)
 		return values
 	}
 }
 
-// computeFanInFanOut of a variable that is expected to be the parameters of
-// either a [layers.Dense] or [layers.Convolution].
+// computeFanInFanOut of a variable expected to be the parameters of
+// either layers.Dense or layers.Convolution.
 func computeFanInFanOut(shape shapes.Shape) (fanIn, fanOut int) {
 	rank := shape.Rank()
 	switch rank {
@@ -226,7 +156,7 @@ func computeFanInFanOut(shape shapes.Shape) (fanIn, fanOut int) {
 	return
 }
 
-// XavierUniformFn returns an initializer that generates random values with an uniform distribution with a range
+// XavierUniformFn returns an initializer that generates random values with a uniform distribution with a range
 // defined by +/- sqrt(6 / (fanIn+fanOut)). See description in https://paperswithcode.com/method/xavier-initialization
 //
 // It uses the context's ParamInitialSeed hyperparameter to initialize the random number generator --
@@ -237,7 +167,6 @@ func computeFanInFanOut(shape shapes.Shape) (fanIn, fanOut int) {
 //
 // Non-float and non-complex variables are initialized with zero instead.
 func XavierUniformFn(ctx *context.Context) VariableInitializer {
-	initialSeed := context.GetParamOr(ctx, ParamInitialSeed, NoSeed)
 	return func(g *Graph, shape shapes.Shape) *Node {
 		if !shape.DType.IsFloat() && !shape.DType.IsComplex() {
 			return Zeros(g, shape)
@@ -249,11 +178,7 @@ func XavierUniformFn(ctx *context.Context) VariableInitializer {
 		fanIn, fanOut := computeFanInFanOut(shape)
 		scale := max(1.0, float64(fanIn+fanOut))
 		limit := math.Sqrt(6.0 / scale)
-		var values *Node
-		UseRngState(g, initialSeed, func(rngState *Node) (newRngState *Node) {
-			newRngState, values = RandomUniform(rngState, shape)
-			return newRngState
-		})
+		values := ctx.RandomUniform(g, shape)
 		values = MulScalar(values, 2*limit)
 		values = AddScalar(values, -limit)
 		return values
@@ -271,7 +196,6 @@ func XavierUniformFn(ctx *context.Context) VariableInitializer {
 //
 // Non-float and non-complex variables are initialized with zero instead.
 func XavierNormalFn(ctx *context.Context) VariableInitializer {
-	initialSeed := context.GetParamOr(ctx, ParamInitialSeed, NoSeed)
 	return func(g *Graph, shape shapes.Shape) *Node {
 		if !shape.DType.IsFloat() && !shape.DType.IsComplex() {
 			return Zeros(g, shape)
@@ -283,11 +207,7 @@ func XavierNormalFn(ctx *context.Context) VariableInitializer {
 		fanIn, fanOut := computeFanInFanOut(shape)
 		scale := max(1.0, float64(fanIn+fanOut))
 		stddev := math.Sqrt(2.0 / scale)
-		var values *Node
-		UseRngState(g, initialSeed, func(rngState *Node) (newRngState *Node) {
-			newRngState, values = RandomNormal(rngState, shape)
-			return newRngState
-		})
+		values := ctx.RandomNormal(g, shape)
 		return MulScalar(values, stddev)
 	}
 }
@@ -303,7 +223,6 @@ func XavierNormalFn(ctx *context.Context) VariableInitializer {
 // [1] https://medium.com/@tylernisonoff/weight-initialization-for-cnns-a-deep-dive-into-he-initialization-50b03f37f53d
 // [2] https://arxiv.org/pdf/1502.01852
 func HeFn(ctx *context.Context) VariableInitializer {
-	initialSeed := context.GetParamOr(ctx, ParamInitialSeed, NoSeed)
 	return func(g *Graph, shape shapes.Shape) *Node {
 		if !shape.DType.IsFloat() && !shape.DType.IsComplex() {
 			return Zeros(g, shape)
@@ -315,20 +234,16 @@ func HeFn(ctx *context.Context) VariableInitializer {
 		fanIn, _ := computeFanInFanOut(shape)
 		scale := max(1.0, float64(fanIn))
 		stddev := math.Sqrt(2.0 / scale)
-		var values *Node
-		UseRngState(g, initialSeed, func(rngState *Node) (newRngState *Node) {
-			newRngState, values = RandomNormal(rngState, shape)
-			return newRngState
-		})
+		values := ctx.RandomNormal(g, shape)
 		return MulScalar(values, stddev)
 	}
 }
 
-// BroadcastTensorToShape is an initializer that takes a constant tensor as baseValue and during initialization
+// BroadcastTensorToShape is an initializer that takes a constant tensor as baseValue, and during initialization
 // it broadcast it to the requested variable shape.
 //
-// The broadcasting happens only on the prefix dimensions (using graph.BroadcastPrefix), so the shape of the
-// baseValue tensor mush match the last dimensions of the variables shape.
+// The broadcasting happens only on the prefix dimensions (using graph.BroadcastPrefix), so the
+// baseValue tensor's shape must match the last dimensions of the variable's shape.
 //
 // The baseValue can have a different dtype, in which case it is converted (using graph.ConvertDType) to the
 // requested variable dtype.

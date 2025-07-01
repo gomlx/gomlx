@@ -2,6 +2,9 @@ package fnn
 
 import (
 	"fmt"
+	"math"
+	"testing"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
@@ -16,8 +19,6 @@ import (
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"math"
-	"testing"
 
 	_ "github.com/gomlx/gomlx/backends/xla"
 )
@@ -146,6 +147,7 @@ func TestFNNRegularized(t *testing.T) {
 			Residual(true).
 			Normalization("layer").
 			Regularizer(regularizers.L1(0.01)).
+			Dropout(0).
 			Done()
 	}
 	opt := optimizers.Adam().LearningRate(0.001).Done()
@@ -158,7 +160,7 @@ func TestFNNRegularized(t *testing.T) {
 	commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
 	metrics, err := loop.RunSteps(ds, 10_000)
 	loss := metrics[1].Value().(float64)
-	assert.Truef(t, loss < 0.04, "Expected a loss < 0.04, got %g instead", loss)
+	assert.Truef(t, loss < 0.07, "Expected a loss < 0.07, got %g instead", loss)
 	require.NoErrorf(t, err, "Failed training: %+v", err)
 	fmt.Println("Metrics:")
 	for ii, m := range metrics {

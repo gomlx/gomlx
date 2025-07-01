@@ -3,17 +3,37 @@ package context
 import (
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/tensors"
 	"k8s.io/klog/v2"
 )
 
 const (
+	// RngStateVariableName is the name of a Context internal variable the holds the current
+	// random number generator state.
 	RngStateVariableName = "#rngState"
+)
+
+var (
+	// ParamInitialSeed is the key for the hyperparameter to use for initial seed (int64). The default is 0,
+	// which makes it non-deterministic. Set it to a value different from 0 for a deterministic (as long
+	// as the model doesn't change) initialization.
+	ParamInitialSeed = "initializers_seed"
 )
 
 func (ctx *Context) getRngStateVar() *Variable {
 	rngStateVar := ctx.GetVariableByScopeAndName(RootScope, RngStateVariableName)
 	if rngStateVar == nil {
-		randomState := graph.RngState()
+		var randomState *tensors.Tensor
+		seedAny, found := ctx.GetParam(ParamInitialSeed)
+		if !found {
+			randomState = graph.RngState()
+		} else {
+			seed, ok := seedAny.(int64)
+			if !ok {
+				klog.Errorf("Seed in %q not an int64, using 0 instead", ParamInitialSeed)
+			}
+			randomState = graph.RngStateFromSeed(seed)
+		}
 		rngStateVar = ctx.InAbsPath(RootScope).Checked(false).
 			VariableWithValue(RngStateVariableName, randomState).SetTrainable(false)
 	} else if rngStateVar.Trainable {
@@ -26,11 +46,14 @@ func (ctx *Context) getRngStateVar() *Variable {
 // RngStateReset resets the default context random number generator (RNG) to a random seed based on
 // the nanosecond clock.
 //
-// This is done automatically for new contexts, but if the context was loaded from a checkpoint, and one
-// wants to reset it (as opposed to continue the previous state), one can call this.
+// This is done automatically for new contexts (or ParamInitialSeed parameter is used if set).
+// But if the context is loaded from a checkpoint, and one wants to reset it (as opposed to continue
+// with the previous state), one can call this.
 //
 // The random number generator (RNG) state is stored in a variable on the root scope
 // of the context, called "#rngState" (RngStateVariableName).
+//
+// This overrides the seed used in ParamInitialSeed.
 func (ctx *Context) RngStateReset() {
 	v := ctx.getRngStateVar()
 	v.SetValue(graph.RngState())
@@ -41,6 +64,8 @@ func (ctx *Context) RngStateReset() {
 //
 // The random number generator (RNG) state is stored in a variable on the root scope
 // of the context, called "#rngState" (RngStateVariableName).
+//
+// This overrides the seed used in ParamInitialSeed.
 func (ctx *Context) RngStateFromSeed(seed int64) {
 	initialState := graph.RngStateFromSeed(seed)
 	v := ctx.getRngStateVar()

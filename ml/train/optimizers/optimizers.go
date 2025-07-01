@@ -61,10 +61,11 @@ var (
 	// This provides an easy quick start point. One can hyperparameter-tune the optimizers
 	// for usually slightly better results.
 	KnownOptimizers = map[string]func(ctx *context.Context) Interface{
-		"sgd":    func(ctx *context.Context) Interface { return StochasticGradientDescent() },
-		"adam":   func(ctx *context.Context) Interface { return Adam().FromContext(ctx).Done() },
-		"adamax": func(ctx *context.Context) Interface { return Adam().Adamax().FromContext(ctx).Done() },
-		"adamw":  func(ctx *context.Context) Interface { return Adam().WeightDecay(0.004).FromContext(ctx).Done() },
+		"sgd":     func(ctx *context.Context) Interface { return StochasticGradientDescent() },
+		"adam":    func(ctx *context.Context) Interface { return Adam().FromContext(ctx).Done() },
+		"adamax":  func(ctx *context.Context) Interface { return Adam().Adamax().FromContext(ctx).Done() },
+		"adamw":   func(ctx *context.Context) Interface { return Adam().WeightDecay(0.004).FromContext(ctx).Done() },
+		"rmsprop": func(ctx *context.Context) Interface { return RMSProp().FromContext(ctx).Done() },
 	}
 
 	// ParamOptimizer is the context parameter with the name of the optimizer.
@@ -86,11 +87,29 @@ var (
 	// Defaults to no clipping, and values are expected to be float64.
 	ParamClipStepByValue = "clip_step_by_value"
 
-	// ParamClipNaN will drop any updates to variables that leads to NaN.
+	// ParamClipNaN will drop any updates with NaNs.
 	// This is a double-edged option: it keeps training running, but probably it will replace NaNs with bad training results.
+	// It works well to handle spurious results.
+	//
+	// See also ParamNanLogger to help debug it.
 	//
 	// The default is false.
 	ParamClipNaN = "clip_nan"
+
+	// ParamNanLogger configures a nanlogger to use to report NaNs in gradients updates for example. See TraceNaNInGradients.
+	// This value is not saved in a checkpoint.
+	// It should be set to a Tracer (which a *nanlogger.NanLogger is).
+	//
+	// Typical use:
+	//
+	//	var nanLogger *nanlogger.NanLogger
+	//	if debugNaNs {
+	//		nanLogger = nanlogger.New()
+	//		ctx.SetParam(optimizers.ParamNanLogger, nanLogger)
+	//	}
+	//	trainer := train.NewTrainer(…)
+	//	nanLogger.AttachToTrainer(trainer)
+	ParamNanLogger = "nanlogger"
 )
 
 const (
@@ -203,6 +222,25 @@ func ClipStepByValue(ctx *context.Context, step *Node) *Node {
 		return step
 	}
 	return ClipScalar(step, -clipByValue, clipByValue)
+}
+
+// Tracer can trace a node with a scope. Used to represent a nanlogger.NanLogger.
+type Tracer interface {
+	Trace(node *Node, scopes ...string)
+}
+
+// TraceNaNInGradients will report a NaN/Inf value in a gradient for the given variable, is a "Tracer" (typically a nanlogger.NanLogger)
+// has been configured in the context.
+func TraceNaNInGradients(ctx *context.Context, variable *context.Variable, gradients *Node) {
+	lAny, found := ctx.GetParam(ParamNanLogger)
+	if !found {
+		return
+	}
+	l, ok := lAny.(Tracer)
+	if !ok {
+		return
+	}
+	l.Trace(gradients, "Gradients", variable.ScopeAndName())
 }
 
 // ClipNaNsInGradients will replace the gradient tensor by zeros if there are any NaNs or +/-Inf values.
@@ -339,6 +377,8 @@ func addGradientsToVariablesGraph(ctx *context.Context, grads []*Node, learningR
 		}
 		scaledGradient := Mul(grads[ii], lrCast)
 		scaledGradient = ClipStepByValue(ctx, scaledGradient)
+		TraceNaNInGradients(ctx, v, scaledGradient)
+
 		vNode := v.ValueGraph(g)
 		updatedValue := Sub(vNode, scaledGradient)
 		updatedValue = ClipNaNsInUpdates(ctx, vNode, updatedValue)
