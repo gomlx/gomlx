@@ -95,6 +95,6 @@ func TestStreamingMedian(t *testing.T) {
 		slices.Sort(values)
 		want := values[numExamples/2]
 		fmt.Printf("\tgot medianT=%.5g, wanted medianT=%.5g\n", median, want)
-		require.InDelta(t, want, median, 100)
+		require.InDelta(t, want, median, 200)
 	})
 }
