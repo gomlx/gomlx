@@ -18,7 +18,6 @@ import (
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
-	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
 
@@ -211,6 +210,7 @@ func TestVNNTrain(t *testing.T) {
 			Normalization("layer").
 			Scaler(true).
 			Regularizer(regularizers.L2(0.001)).
+			Dropout(0).
 			Done()
 
 		// Invariant head for classification
@@ -263,7 +263,8 @@ func TestVNNTrain(t *testing.T) {
 		[]any{inputsTensor}, []any{labelsTensor})
 	require.NoError(t, err)
 	dsEval := ds.Copy().BatchSize(1, false)
-	ds.Shuffle().BatchSize(batchSize, true).Infinite(true)
+	//ds.Shuffle().BatchSize(batchSize, true).Infinite(true)
+	ds.BatchSize(batchSize, true).Infinite(true)
 
 	trainer := train.NewTrainer(
 		backend, ctx, modelFn, losses.BinaryCrossentropyLogits,
@@ -272,7 +273,7 @@ func TestVNNTrain(t *testing.T) {
 		[]metrics.Interface{metrics.NewMeanBinaryLogitsAccuracy("Mean Accuracy", "#acc")})
 
 	loop := train.NewLoop(trainer)
-	commandline.AttachProgressBar(loop)
+	//commandline.AttachProgressBar(loop)
 	_, err = loop.RunSteps(ds, numSteps)
 	require.NoError(t, err)
 	lossAndMetrics := trainer.Eval(dsEval)
@@ -284,4 +285,9 @@ func TestVNNTrain(t *testing.T) {
 	// Accuracy should be around 50% (random guessing).
 	accuracy := lossAndMetrics[2].Value().(float32)
 	require.GreaterOrEqual(t, accuracy, float32(0.8), "VNN was not able to learn rotation invariant simple task, accuracy=%.1f%%.", accuracy*100.0)
+
+	sample := context.ExecOnce(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
+		return ctx.RandomUniform(g, shapes.Make(dtypes.Float64))
+	})
+	fmt.Printf("Context random sample: %s\n", sample.GoStr())
 }

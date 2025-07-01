@@ -1,6 +1,8 @@
 # GoMLX changelog
 
-# Next: MultiHeadAttention implementation slightly changed! Added RMSProp optimizers; Added RMSNorm normalizer.
+# Next: MultiHeadAttention implementation slightly changed!
+
+Hightlights:  Added RMSProp optimizers; Added RMSNorm normalizer; Default variable initializer set to He.
 
 * Package `simplego`:
   * Added `GetBackend` that returns a singleton backend, created with the default configuration at the first request.
@@ -33,6 +35,9 @@
 * `gomlx_checkpoints` command-line tool:
   * Added support for multiple models to allow comparing models.
   * Fixed the printing of metrics with tiny values.
+* Package `context`
+  * Allow VariableInitializers to use the `context.Context` itself, with its own random initializer.
+  * `DefaultInitializer` now creates an initializer. The new default uses He initializer, the same used in PyTorch.
 
 # v0.20.1: 2025/06/12 Trainer.AccumulateGradients (when the batch doesn't fit memory); VNN fixes; Numpy improvements. 
 

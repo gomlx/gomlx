@@ -173,18 +173,23 @@ type Exec struct {
 	ctxGraphFn, graphFn                       any
 	inputIsGraph, inputAsSlice, outputAsSlice bool
 
-	// changedVars is map of the GraphId of the graphs built to their list
+	// changedVars maps GraphId of the graphs built to their list
 	// of modified variables: we assume that building the graph for different
 	// shapes may
 	changedVars   map[graph.GraphId][]*Variable
 	muChangedVars sync.Mutex
+
+	// isInitializeVariablesExec indicates this executor is being used to initialize variables.
+	// Initializing variables within the cxtGraphFn would lead to an infinite recursion.
+	// This checks for that.
+	isInitializeVariablesExec bool
 }
 
 // NewExecAny constructs an Exec object that uses the given ctxGraphFn to build
 // computation graphs with a Context. ctxGraphFn must take a *Context input
 // parameter followed by one or more *Node parameters as input and return one
-// or more *Node. Alternatively it can, instead of *Node inputs, take a *Graph
-// object -- if effectively no tensors will be used as input.
+// or more *Node. Alternatively, it can, instead of *Node inputs, take a *Graph
+// object -- if effectively, no tensors will be used as input.
 //
 // The Context ctx passed will be passed to all computation graph construction calls
 // (ctxGraphFn), as well as during the graph execution later. If set to nil, it automatically
@@ -284,10 +289,10 @@ func (e *Exec) buildGraphFn() {
 	// Build input types for new graphFn: same as ctxGraphFn, but without the Context.
 	var inT []reflect.Type
 	if e.inputIsGraph {
-		// Only input is a graph.
+		// The only input is a graph.
 		inT = []reflect.Type{graphT}
 	} else if e.inputAsSlice {
-		// Only input is a []*Node.
+		// The only input is a []*Node.
 		inT = []reflect.Type{nodeSliceT}
 	} else {
 		inT = make([]reflect.Type, numIn)
@@ -383,7 +388,7 @@ func (e *Exec) Finalize() {
 func (e *Exec) setSideParams(g *Graph, inputBuffers []backends.Buffer, donate []bool) {
 	// Initialize variables if needed.
 	ctx := e.context
-	if ctx.NeedsInitialization() {
+	if !e.isInitializeVariablesExec && ctx.NeedsInitialization() {
 		ctx.InitializeVariables(e.backend)
 	}
 
@@ -405,6 +410,14 @@ func (e *Exec) setSideParams(g *Graph, inputBuffers []backends.Buffer, donate []
 			v.value = nil
 			donate[handle] = true
 		} else {
+			if v.value == nil {
+				if e.isInitializeVariablesExec {
+					Panicf("variable %q used and not initialized during variable initialization, this would lead to "+
+						"recursive initialization of variables, and is not supported", v.ScopeAndName())
+				} else {
+					Panicf("variable %q failed to initialize", v.ScopeAndName())
+				}
+			}
 			inputBuffers[handle] = v.Value().Buffer(e.backend, e.exec.DeviceNum())
 			donate[handle] = false
 		}

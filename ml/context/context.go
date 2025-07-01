@@ -166,7 +166,11 @@ type Loader interface {
 	DeleteVariable(ctx *Context, scope, name string)
 }
 
-// New returns an empty context, associated with a freshly created data.
+// New returns an empty context, associated with freshly created data.
+//
+// Something to be mindful: the default variable initializer is a random uniform noise from [-0.05, 0.05].
+// You can change the default by importing ml/context/default, or you can
+// set your own with Context.WithInitializer. See available initializers in ml/context/initializers.
 func New() *Context {
 	ctx := &Context{
 		scope:   RootScope,
@@ -177,7 +181,7 @@ func New() *Context {
 			variablesMap: make(map[string]scopedVariableMap),
 		},
 	}
-	ctx.initializer = DefaultInitializer
+	ctx.initializer = DefaultInitializer(ctx)
 	return ctx
 }
 
@@ -591,20 +595,21 @@ func (ctx *Context) InitializeVariables(backend backends.Backend) {
 		// Nothing to do.
 		return
 	}
-	g := graph.NewGraph(backend, "InitializeVariables")
-	valuesNodes := make([]*Node, 0, len(variablesToInitialize))
-	for _, variable := range variablesToInitialize {
-		if variable.initializer == nil {
-			Panicf("failed to initialize variable %q: initializer was not configured (maybe it was read from"+
-				" disk and an initialzier was not set)", variable.ScopeAndName())
+	e := NewExec(backend, ctx, func(ctx *Context, g *Graph) []*Node {
+		initialValues := make([]*Node, 0, len(variablesToInitialize))
+		for _, variable := range variablesToInitialize {
+			if variable.initializer == nil {
+				Panicf("failed to initialize variable %q: initializer was not configured (maybe it was read from"+
+					" disk and an initialzier was not set)", variable.ScopeAndName())
+			}
+			initialValues = append(initialValues, variable.initializer(g, variable.shape))
 		}
-		valuesNodes = append(valuesNodes, variable.initializer(g, variable.shape))
-	}
-
+		return initialValues
+	})
+	e.isInitializeVariablesExec = true // Disallow recursive creation of variables within variable initialization.
 	var values []*tensors.Tensor
 	err := TryCatch[error](func() {
-		g.Compile(valuesNodes...)
-		values = g.Run()
+		values = e.Call()
 	})
 	if err != nil {
 		panic(errors.WithMessagef(err, "failed to compile/run variable initialization graph"))
@@ -1049,11 +1054,11 @@ func (ctx *Context) Loader() Loader {
 	return ctx.data.loader
 }
 
-// SetLoader configures given loader to be used as the default Loader for this Context.
+// SetLoader configures loader to be used as the default Loader for this Context.
 //
 // Loader is used just after any new variable is created, either with VariableWithValue or VariableWithShape.
-// If the Loader has a value of the variable created, it will override the value given in VariableWithValue, or
-// skip the initializer for VariableWithShape.
+// If the Loader has a value of the variable created, it will override the value given in VariableWithValue,
+// or  skip the initializer for VariableWithShape.
 //
 // An example of a loader in gomlx/context/checkpoints.
 //
@@ -1105,7 +1110,7 @@ const GraphParamIsTraining = "training"
 // with [Context.GetGraphParam] and [GraphParamIsTraining] for the current scope.
 // See [SetTraining] to change this value.
 //
-// Notice that graph parameters is part of the "reference" component of a Context, so this change
+// Notice that graph parameters are part of the "reference" component of a Context, so this change
 // won't affect other connected context references.
 func (ctx *Context) IsTraining(g *Graph) bool {
 	return GetGraphParamOr(ctx, g, GraphParamIsTraining, false)
@@ -1124,7 +1129,7 @@ func (ctx *Context) SetTraining(g *Graph, value bool) {
 // Finalize releases all variables and finalizes its values.
 // Make sure to only call this is you are no longer using the context in any executor.
 //
-// After calling this the context is left in an unusable state.
+// After calling this, the context is left in an unusable state.
 func (ctx *Context) Finalize() {
 	for v := range ctx.IterVariables() {
 		v.Finalize()

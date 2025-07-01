@@ -19,6 +19,7 @@ package context_test
 import (
 	"fmt"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/gomlx/gomlx/graph/graphtest"
@@ -167,7 +168,13 @@ func TestEnumerateVariables(t *testing.T) {
 
 	// Checks EnumerateVariables lists all variables:
 	got := types.MakeSet[string]()
-	setGotFn := func(v *Variable) { got.Insert(v.Name()) }
+	setGotFn := func(v *Variable) {
+		if strings.HasPrefix(v.Name(), "#") {
+			// Skip internal variables, like #rngstate.
+			return
+		}
+		got.Insert(v.Name())
+	}
 	ctx.EnumerateVariables(setGotFn)
 	assert.Equal(t, 3, len(got))
 	assert.True(t, got.Has("x") && got.Has("y") && got.Has("z"))
@@ -200,6 +207,10 @@ func TestIterVariables(t *testing.T) {
 	// Checks IterVariables lists all variables:
 	got := types.MakeSet[string]()
 	for v := range ctx.IterVariables() {
+		if strings.HasPrefix(v.Name(), "#") {
+			// Skip internal variables, like #rngstate.
+			continue
+		}
 		got.Insert(v.Name())
 	}
 	assert.Equal(t, 3, len(got))
@@ -208,6 +219,10 @@ func TestIterVariables(t *testing.T) {
 	// Checks IterVariables lists all variables, even if starting from a different scope:
 	got = types.MakeSet[string]()
 	for v := range ctx.IterVariables() {
+		if strings.HasPrefix(v.Name(), "#") {
+			// Skip internal variables, like #rngstate.
+			continue
+		}
 		got.Insert(v.Name())
 	}
 	assert.Equal(t, 3, len(got))
@@ -216,6 +231,10 @@ func TestIterVariables(t *testing.T) {
 	// Checks IterVariablesInScope:
 	got = types.MakeSet[string]()
 	for v := range ctx1.IterVariablesInScope() {
+		if strings.HasPrefix(v.Name(), "#") {
+			// Skip internal variables, like #rngstate.
+			continue
+		}
 		got.Insert(v.Name())
 	}
 	assert.Equal(t, 2, len(got))

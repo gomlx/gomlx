@@ -19,15 +19,16 @@
 package initializers
 
 import (
+	"math"
+	"slices"
+	"sync"
+
 	. "github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
-	"math"
-	"slices"
-	"sync"
 )
 
 var (
@@ -73,7 +74,7 @@ func Finalize() {
 
 // UseRngState will provide a random-number generator state for the current graph, to be used for initialization.
 //
-// If all initializers of a model uses random from this, in a deterministic order, then the initialization
+// If all initializers of a model use random values from this, in a deterministic order, then the initialization
 // of the model will be deterministic and can be replicated exactly.
 //
 // The initialSeed is only used the first time the function is called for a Graph. If the initialSeed is 0,
@@ -201,8 +202,8 @@ func GlorotUniformFn(ctx *context.Context) VariableInitializer {
 	}
 }
 
-// computeFanInFanOut of a variable that is expected to be the parameters of
-// either a [layers.Dense] or [layers.Convolution].
+// computeFanInFanOut of a variable expected to be the parameters of
+// either layers.Dense or layers.Convolution.
 func computeFanInFanOut(shape shapes.Shape) (fanIn, fanOut int) {
 	rank := shape.Rank()
 	switch rank {
