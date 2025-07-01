@@ -1,6 +1,8 @@
 package kan
 
 import (
+	"math"
+
 	"github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
@@ -12,7 +14,6 @@ import (
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	"k8s.io/klog/v2"
-	"math"
 )
 
 // Discrete-KAN is a variation of KAN that uses a piecewise-constant function (PCF for short) as
@@ -284,20 +285,15 @@ func (c *Config) discreteLayer(ctx *context.Context, x *Node, numOutputNodes int
 	}
 
 	// Create control points for piecewise-constant function (PCF)
-	initialSeed := context.GetParamOr(ctx, initializers.ParamInitialSeed, initializers.NoSeed)
 	controlPointsInitializer := func(graph *Graph, shape shapes.Shape) *Node {
 		// Values initialized from -1.0 to 1.0 linearly.
 		v := Iota(graph, shape, -1)
 		v = MulScalar(v, 2.0/float64(shape.Dim(-1)-1))
 		v = AddScalar(v, -1.0)
 		// Apply a random constant.
-		var slope *Node
 		slopeShape := shape.Clone()
-		slopeShape.Dimensions[slopeShape.Rank()-1] = 1 // Same multiplier for all control points, so it's linear.
-		initializers.UseRngState(graph, initialSeed, func(rngState *Node) (newRngState *Node) {
-			newRngState, slope = RandomNormal(rngState, slopeShape)
-			return newRngState
-		})
+		slopeShape.Dimensions[slopeShape.Rank()-1] = 1 // The same multiplier for all control points, so it's linear.
+		slope := ctx.RandomNormal(graph, slopeShape)
 		slope = MulScalar(slope, 0.1)
 		v = Mul(v, slope)
 		return v

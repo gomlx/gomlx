@@ -9,7 +9,6 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/ml/train"
@@ -40,8 +39,7 @@ func TestLinearLayer(t *testing.T) {
 		yaw := MulScalar(ctx.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
 
 		// Linear function: fix seed so we always have the same values.
-		ctx.SetParam(initializers.ParamInitialSeed, 42)
-		ctx = ctx.Checked(false).WithInitializer(initializers.HeFn(ctx))
+		ctx = ctx.Checked(false)
 		linearFn := func(x *Node) *Node {
 			return New(ctx, x, 2).
 				NumHiddenLayers(0, 0).
@@ -84,8 +82,7 @@ func TestRelu(t *testing.T) {
 					yaw := MulScalar(ctx.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
 
 					// Linear function: fix seed so we always have the same values.
-					ctx.SetParam(initializers.ParamInitialSeed, 42)
-					ctx = ctx.Checked(false).WithInitializer(initializers.HeFn(ctx))
+					ctx = ctx.Checked(false)
 
 					// Outputs: out1 rotates after linear transformation, out2 rotates before linear transformation.
 					out1 := Relu(ctx, input).
@@ -132,8 +129,7 @@ func TestLayerNormalization(t *testing.T) {
 		yaw := MulScalar(ctx.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
 
 		// Linear function: fix seed so we always have the same values.
-		ctx.SetParam(initializers.ParamInitialSeed, 42)
-		ctx = ctx.Checked(false).WithInitializer(initializers.HeFn(ctx))
+		ctx = ctx.Checked(false)
 
 		// Outputs: out1 rotates after linear transformation, out2 rotates before linear transformation.
 		epsilon := 1e-5
@@ -169,8 +165,7 @@ func TestVNN_Equivariant(t *testing.T) {
 		yaw := MulScalar(ctx.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
 
 		// vnn layer: fix seed so we always have the same values.
-		ctx.SetParam(initializers.ParamInitialSeed, 42)
-		ctx = ctx.Checked(false).WithInitializer(initializers.HeFn(ctx))
+		ctx = ctx.Checked(false)
 		vnnFn := func(x *Node) *Node {
 			return New(ctx, x, 5).
 				NumHiddenLayers(3, 10).

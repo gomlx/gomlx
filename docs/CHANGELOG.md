@@ -35,9 +35,12 @@ Hightlights:  Added RMSProp optimizers; Added RMSNorm normalizer; Default variab
 * `gomlx_checkpoints` command-line tool:
   * Added support for multiple models to allow comparing models.
   * Fixed the printing of metrics with tiny values.
-* Package `context`
+* Package `context`:
   * Allow VariableInitializers to use the `context.Context` itself, with its own random initializer.
   * `DefaultInitializer` now creates an initializer. The new default uses He initializer, the same used in PyTorch.
+  * Package `initializers`:
+    * They now use the `context` random number generator state, which simplifies things. 
+    * `ParamInitialSeed` removed, since the RNG is initialized by `Context.RngStateWithSeed()`.
 
 # v0.20.1: 2025/06/12 Trainer.AccumulateGradients (when the batch doesn't fit memory); VNN fixes; Numpy improvements. 
 
