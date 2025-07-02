@@ -139,6 +139,22 @@ func New() (Backend, error) {
 	return NewWithConfig("")
 }
 
+// NewOrErr returns a new default Backend or an error if it fails.
+//
+// The default is:
+//
+// 1. The environment $GOMLX_BACKEND (ConfigEnvVar) is used as a configuration if defined.
+// 2. Next, it uses the variable DefaultConfig as the configuration.
+// 3. The first registered backend is used with an empty configuration.
+//
+// It fails if no backends were registered.
+//
+// Deprecated: at the next version this function will be removed.
+// Use New instead.
+func NewOrErr() (Backend, error) {
+	return New()
+}
+
 func splitConfig(config string) (string, string) {
 	backendName := config
 	var backendConfig string
