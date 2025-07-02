@@ -99,22 +99,6 @@ const ConfigEnvVar = "GOMLX_BACKEND"
 // Deprecated: use ConfigEnvVar.
 const GOMLX_BACKEND = ConfigEnvVar
 
-// New returns a new default Backend or panics if it fails.
-//
-// The default is:
-//
-// 1. The environment $GOMLX_BACKEND (ConfigEnvVar) is used as a configuration if defined.
-// 2. Next, it uses the variable DefaultConfig as the configuration.
-// 3. The first registered backend is used with an empty configuration.
-//
-// It fails if no backends were registered.
-//
-// Deprecated: at the next version this function will be changed to return an error if it fails.
-// Use MustNew instead.
-func New() Backend {
-	return MustNew()
-}
-
 // MustNew returns a new default Backend or panics if it fails.
 //
 // The default is:
@@ -125,14 +109,14 @@ func New() Backend {
 //
 // It fails if no backends were registered.
 func MustNew() Backend {
-	b, err := NewOrErr()
+	b, err := New()
 	if err != nil {
 		panic(err)
 	}
 	return b
 }
 
-// NewOrErr returns a new default Backend or an error if it fails.
+// New returns a new default Backend or an error if it fails.
 //
 // The default is:
 //
@@ -141,7 +125,7 @@ func MustNew() Backend {
 // 3. The first registered backend is used with an empty configuration.
 //
 // It fails if no backends were registered.
-func NewOrErr() (Backend, error) {
+func New() (Backend, error) {
 	config, found := os.LookupEnv(ConfigEnvVar)
 	if found {
 		return NewWithConfig(config)
@@ -153,6 +137,22 @@ func NewOrErr() (Backend, error) {
 		}
 	}
 	return NewWithConfig("")
+}
+
+// NewOrErr returns a new default Backend or an error if it fails.
+//
+// The default is:
+//
+// 1. The environment $GOMLX_BACKEND (ConfigEnvVar) is used as a configuration if defined.
+// 2. Next, it uses the variable DefaultConfig as the configuration.
+// 3. The first registered backend is used with an empty configuration.
+//
+// It fails if no backends were registered.
+//
+// Deprecated: at the next version this function will be removed.
+// Use New instead.
+func NewOrErr() (Backend, error) {
+	return New()
 }
 
 func splitConfig(config string) (string, string) {
