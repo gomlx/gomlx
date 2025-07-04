@@ -1838,7 +1838,7 @@ var (
 	reduceWindowMaxDTypeMap     = NewDTypeMap("reduceWindowMaxDTypeMap")
 	reduceWindowMinDTypeMap     = NewDTypeMap("reduceWindowMinDTypeMap")
 	reduceWindowSumDTypeMap     = NewDTypeMap("reduceWindowSumDTypeMap")
-	reduceWindowProductDTypeMap = NewDTypeMap("reduceWindowSumDTypeMap")
+	reduceWindowProductDTypeMap = NewDTypeMap("reduceWindowProductDTypeMap")
 )
 
 func init() {
