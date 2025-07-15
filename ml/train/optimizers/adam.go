@@ -46,6 +46,11 @@ const (
 
 	// ParamAdamWeightDecay defaults to 0.0. See AdamConfig.WeightDecay.
 	ParamAdamWeightDecay = "adam_weight_decay"
+
+	// ParamAdamBackoffSteps default to 0. Values > 0 prevents any gradient steps to be taken
+	// for those many steps, to allow a better estimate of the momentum and variance.
+	// See AdamConfig.WithBackoffSteps.
+	ParamAdamBackoffSteps = "adam_backoff"
 )
 
 // Adam optimization is a stochastic gradient descent method based on an adaptive estimation of first-order and
@@ -109,6 +114,7 @@ type AdamConfig struct {
 	adamax       bool    // Works as Adamax.
 	weightDecay  float64 // Works as AdamW.
 	rmsProp      bool    // Works as RMSProp.
+	backoffSteps int
 }
 
 // FromContext will configure Adam with hyperparameters set in the given context.
@@ -156,20 +162,23 @@ func (c *AdamConfig) LearningRate(value float64) *AdamConfig {
 	return c
 }
 
-// Betas sets the two moving averages constants (exponential decays). They default to 0.9 and 0.999.
+// Betas set the two moving averages constants (exponential decays). They default to 0.9 and 0.999.
+//
+// The first is for the gradient momentum (the numerator of the step taken), and the second
+// is for the variance of the gradients (denominator).
 func (c *AdamConfig) Betas(beta1, beta2 float64) *AdamConfig {
 	c.beta1, c.beta2 = beta1, beta2
 	return c
 }
 
 // Epsilon used on the denominator as a small constant for stability.
-// For low precision numbers like float16, try a larger value here, like 1e-3.
+// For low-precision numbers like float16, try a larger value here, like 1e-3.
 func (c *AdamConfig) Epsilon(epsilon float64) *AdamConfig {
 	c.epsilon = epsilon
 	return c
 }
 
-// Adamax configure Adam to use a L-infinity (== max, which gives the name) for
+// Adamax configure Adam to use an L-infinity (== max, which gives the name) for
 // the second moment, instead of L2, as described in the same Adam paper.
 func (c *AdamConfig) Adamax() *AdamConfig {
 	c.adamax = true
@@ -184,6 +193,18 @@ func (c *AdamConfig) Adamax() *AdamConfig {
 // TODO: (1) Allow certain variables to be excluded from weight decay (e.g: biases); (2) Allow dynamically calculated weight decay.
 func (c *AdamConfig) WeightDecay(weightDecay float64) *AdamConfig {
 	c.weightDecay = weightDecay
+	return c
+}
+
+// WithBackoffSteps prevents any gradient steps to be taken, until numSteps steps have been taken
+// to allow for a better estimate of the gradient momentums (numerator) and variance of gradients (denominator)
+// before the optimization start.
+//
+// If set to <= 0, no backoff is configured.
+//
+// The default is 0, or the value with
+func (c *AdamConfig) WithBackoffSteps(numSteps int) *AdamConfig {
+	c.backoffSteps = numSteps
 	return c
 }
 
@@ -238,8 +259,22 @@ func (o *adam) UpdateGraphWithGradients(ctx *context.Context, grads []*Node, los
 	lrVar := LearningRateVar(ctx, dtype, lrValue)
 	learningRate := lrVar.ValueGraph(g)
 
+	// Increment the global step, but keep a separate step count for the Adam optimizer -- it can be
+	// reset separately.
 	_ = IncrementGlobalStepGraph(ctx, g, dtype) // LoopStep, not used by this optimizer, but updated.
 	adamStep := IncrementGlobalStepGraph(ctx.In(o.config.scopeName), g, dtype)
+
+	// Back-off steps to allow a better estimate of momentum and variance, before actually taking
+	// a gradient step.
+	if o.config.backoffSteps > 0 {
+		backoffSteps := ConstAsDType(g, adamStep.DType(), o.config.backoffSteps)
+		learningRate = Where(
+			GreaterThan(adamStep, backoffSteps),
+			learningRate,
+			ScalarZero(g, learningRate.DType()))
+	}
+
+	// Calculate the debias moving average coefficients (betas)
 	beta1 := Const(g, shapes.CastAsDType(o.config.beta1, dtype))
 	debiasTermBeta1 := Inverse(OneMinus(Pow(beta1, adamStep)))
 	beta2 := Const(g, shapes.CastAsDType(o.config.beta2, dtype))
