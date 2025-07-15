@@ -21,13 +21,14 @@
 package cosineschedule
 
 import (
+	"math"
+
 	. "github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gopjrt/dtypes"
-	"math"
 )
 
 var (
@@ -144,9 +145,6 @@ func (opt *Config) Done() {
 	if !ctx.IsTraining(opt.graph) || opt.periodNumSteps == 0 {
 		return
 	}
-	//if opt.periodNumSteps < 0 {
-	//	Panicf("period of the New in number of steps was not set, or set to < 0")
-	//}
 
 	lrValue := opt.learningRate
 	if lrValue == 0 {
@@ -163,7 +161,7 @@ func (opt *Config) Done() {
 	cosineStep := optimizers.IncrementGlobalStepGraph(ctx.In(optimizers.Scope).In(Scope), graph, opt.dtype)
 	cosineStep = MinusOne(cosineStep) // Since the count starts at 1.
 
-	// Calculate fraction of the cycle we are in.
+	// Calculate the fraction of the cycle we are in.
 	var cycle *Node
 	if opt.periodNumSteps > 0 {
 		cycle = DivScalar(cosineStep, float64(opt.periodNumSteps))
