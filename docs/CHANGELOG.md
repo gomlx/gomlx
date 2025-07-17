@@ -8,6 +8,8 @@
   * New `AdamConfig.WithBackoffSteps()` (or the hyperparameter `adam_backoff`) that prevents gradient steps
     from being taken until the given number of steps has executed. This allows a better estimate (moving average) of
     the gradients ("momentum") and their variances to be calculated before applying them. 
+* Package `context`:
+  * Added `Variable.DType()`.
 
 # v0.21.0: 2025/07/01 🌞 Summer Edition 🌞
 
