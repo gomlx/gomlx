@@ -1,6 +1,7 @@
 # GoMLX changelog
 
 # Next
+
 * Package `backends`:
   * Method **`New()` will return an error (as opposed to panic)**.
     The temporarily `NewOrErr` was marked as deprecated, use `New` instead.
@@ -10,6 +11,8 @@
     the gradients ("momentum") and their variances to be calculated before applying them. 
 * Package `context`:
   * Added `Variable.DType()`.
+* `gomlx_checkpoints`:
+  * Added `-perturb`.
 
 # v0.21.0: 2025/07/01 🌞 Summer Edition 🌞
 
