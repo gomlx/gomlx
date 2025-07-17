@@ -47,6 +47,14 @@ const (
 	// ParamAdamWeightDecay defaults to 0.0. See AdamConfig.WeightDecay.
 	ParamAdamWeightDecay = "adam_weight_decay"
 
+	// ParamAdamBeta1 is the moving average coefficient for the gradient (momentum), the numerator.
+	// The default value is 0.9
+	ParamAdamBeta1 = "adam_beta1"
+
+	// ParamAdamBeta2 is the moving average coefficient for the variance, the denominator.
+	// The default value is 0.999
+	ParamAdamBeta2 = "adam_beta2"
+
 	// ParamAdamBackoffSteps default to 0. Values > 0 prevents any gradient steps to be taken
 	// for those many steps, to allow a better estimate of the momentum and variance.
 	// See AdamConfig.WithBackoffSteps.
@@ -130,6 +138,8 @@ func (c *AdamConfig) FromContext(ctx *context.Context) *AdamConfig {
 		c.DType(dtype)
 	}
 	c.WeightDecay(context.GetParamOr(ctx, ParamAdamWeightDecay, 0.0))
+	c.beta1 = context.GetParamOr(ctx, ParamAdamBeta1, 0.9)
+	c.beta2 = context.GetParamOr(ctx, ParamAdamBeta2, 0.999)
 	return c
 }
 
