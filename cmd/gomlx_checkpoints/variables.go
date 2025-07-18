@@ -107,7 +107,7 @@ func DeleteVars(checkpointPath string, scopes ...string) {
 	fmt.Printf("%d deleted vars under scopes %v, new checkpoint saved.\n", len(varsToDelete), scopes)
 }
 
-func PerturbVars(checkpointPath string) {
+func PerturbVars(checkpointPath string, x float64) {
 	backend := must.M1(simplego.New(""))
 	ctx := context.New()
 	checkpoint := must.M1(checkpoints.Build(ctx).
@@ -121,8 +121,8 @@ func PerturbVars(checkpointPath string) {
 			value := v.ValueGraph(g)
 			// Perturbation from -1 to 1
 			perturbation := OneMinus(MulScalar(ctx.RandomUniform(g, value.Shape()), 2))
-			perturbation = MulScalar(perturbation, *flagPerturbVars) // [-x, +x], -perturb=x
-			perturbation = OnePlus(perturbation)                     // [1-x, 1+x]
+			perturbation = MulScalar(perturbation, x) // [-x, +x], -perturb=x
+			perturbation = OnePlus(perturbation)      // [1-x, 1+x]
 			return Mul(value, perturbation)
 		})
 		v.SetValue(newValue)

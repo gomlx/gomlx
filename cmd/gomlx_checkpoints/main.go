@@ -76,7 +76,7 @@ func main() {
 	}
 
 	if *flagPerturbVars > 0 {
-		PerturbVars(args[0])
+		PerturbVars(args[0], *flagPerturbVars)
 	}
 
 	if *flagAll {
