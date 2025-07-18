@@ -119,9 +119,10 @@ func PerturbVars(checkpointPath string) {
 		}
 		newValue := context.ExecOnce(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
 			value := v.ValueGraph(g)
-			perturbation := ctx.RandomUniform(g, value.Shape())
-			perturbation = MulScalar(perturbation, 2*(*flagPerturbVars))
-			perturbation = AddScalar(perturbation, -(*flagPerturbVars))
+			// Perturbation from -1 to 1
+			perturbation := OneMinus(MulScalar(ctx.RandomUniform(g, value.Shape()), 2))
+			perturbation = MulScalar(perturbation, *flagPerturbVars) // [-x, +x], -perturb=x
+			perturbation = OnePlus(perturbation)                     // [1-x, 1+x]
 			return Mul(value, perturbation)
 		})
 		v.SetValue(newValue)
