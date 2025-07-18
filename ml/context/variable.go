@@ -25,6 +25,7 @@ import (
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/types/xsync"
+	"github.com/gomlx/gopjrt/dtypes"
 )
 
 // Variable is a value shared among computation graphs, or across multiple executions of the same graph.
@@ -144,6 +145,14 @@ func (v *Variable) Shape() shapes.Shape {
 		return shapes.Shape{}
 	}
 	return v.shape
+}
+
+// DType returns the variable DType.
+func (v *Variable) DType() dtypes.DType {
+	if v == nil {
+		return dtypes.InvalidDType
+	}
+	return v.shape.DType
 }
 
 // VariableParameterPrefix is used to prefix Graph parameter names for variablesMap.

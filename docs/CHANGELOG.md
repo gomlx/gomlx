@@ -1,13 +1,21 @@
 # GoMLX changelog
 
 # Next
+
 * Package `backends`:
   * Method **`New()` will return an error (as opposed to panic)**.
     The temporarily `NewOrErr` was marked as deprecated, use `New` instead.
 * Package `optimizers`:
   * New `AdamConfig.WithBackoffSteps()` (or the hyperparameter `adam_backoff`) that prevents gradient steps
     from being taken until the given number of steps has executed. This allows a better estimate (moving average) of
-    the gradients ("momentum") and their variances to be calculated before applying them. 
+    the gradients ("momentum") and their variances to be calculated before applying them.
+  * New `optimizers.ParamAdamBeta1` and `optimizers.ParamAdamBeta2` hyperparameters to control Adam beta1 and beta2
+    hyperparameters.
+* Package `context`:
+  * Added `Variable.DType()`.
+  * Variable `#rngstate` marked as non-trainable during creation.
+* `gomlx_checkpoints`:
+  * Added `-perturb`.
 
 # v0.21.0: 2025/07/01 🌞 Summer Edition 🌞
 

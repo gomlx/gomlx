@@ -9,19 +9,14 @@ import (
 	"fmt"
 	"os"
 	"path"
-	"slices"
 	"strings"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/dustin/go-humanize"
-	"github.com/gomlx/gomlx/backends"
-	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
 	"github.com/gomlx/gomlx/ui/plots"
-	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
 
@@ -37,15 +32,13 @@ var (
 	flagSummary = flag.Bool("summary", false, "Display a summary of the model sizes (for variables"+
 		" under --scope and the global step.")
 	flagParams  = flag.Bool("params", false, "Lists the hyperparameters.")
-	flagVars    = flag.Bool("vars", false, "Lists the variables under --scope.")
 	flagMetrics = flag.Bool("metrics", false,
 		fmt.Sprintf("Lists the metrics collected for plotting in file %q", plots.TrainingPlotFileName))
 	flagMetricsLabels = flag.Bool("metrics_labels", false,
 		fmt.Sprintf("Lists the metrics labels (short names) with their full description from file %q", plots.TrainingPlotFileName))
 
-	flagBackup     = flag.Bool("backup", false, "Set to true to make a backup of the most recent checkpoint, under the 'backup' subdirectory.")
-	flagDeleteVars = flag.String("delete_vars", "", "Delete variables under the given scope(s). Useful for instance to remove training temporary data.")
-	flagGlossary   = flag.Bool("glossary", true, "Whether to list glossary of abbreviation on the bottom of tables.")
+	flagBackup   = flag.Bool("backup", false, "Set to true to make a backup of the most recent checkpoint, under the 'backup' subdirectory.")
+	flagGlossary = flag.Bool("glossary", true, "Whether to list glossary of abbreviation on the bottom of tables.")
 
 	flagLoop = flag.Duration("loop", 0, "Sets looping with the given period. "+
 		"This is used to monitor the training of a program, usually used in conjunction with --metrics. "+
@@ -80,6 +73,10 @@ func main() {
 
 	if *flagDeleteVars != "" {
 		DeleteVars(args[0], strings.Split(*flagDeleteVars, ",")...)
+	}
+
+	if *flagPerturbVars > 0 {
+		PerturbVars(args[0], *flagPerturbVars)
 	}
 
 	if *flagAll {
@@ -152,88 +149,6 @@ func Reports(checkpointPaths []string) {
 		ListVariables(scopedCtxs[0])
 	}
 
-}
-
-// ListVariables list the variables of a model, with their shape and MAV (max absolute value), RMS (root mean square) and MaxAV (max absolute value) values.
-func ListVariables(ctx *context.Context) {
-	fmt.Println(titleStyle.Render(fmt.Sprintf("Variables in scope %q", ctx.Scope())))
-	metricsFn := NewExec(backends.MustNew(), func(x *Node) (mav, rms, maxAV *Node) {
-		x = ConvertDType(x, dtypes.Float64)
-		mav = ReduceAllMean(Abs(x))
-		rms = Sqrt(ReduceAllMean(Square(x)))
-		maxAV = ReduceAllMax(Abs(x))
-		return
-	}).SetMaxCache(-1)
-	table := newPlainTable(true)
-	table.Headers("Scope", "Name", "Shape", "Size", "Bytes", "Scalar/MAV", "RMS", "MaxAV")
-	var rows [][]string
-	ctx.EnumerateVariablesInScope(func(v *context.Variable) {
-		if !v.IsValid() {
-			rows = append(rows, []string{v.Scope(), v.Name(), "<invalid>", "", "", "", "", ""})
-			return
-		}
-		shape := v.Shape()
-		var mav, rms, maxAV string
-		if shape.Size() == 1 {
-			mav = fmt.Sprintf("%8v", v.Value().Value())
-		} else if shape.DType.IsFloat() {
-			metrics := metricsFn.Call(v.Value())
-			mav = fmt.Sprintf("%.3g", metrics[0].Value().(float64))
-			rms = fmt.Sprintf("%.3g", metrics[1].Value().(float64))
-			maxAV = fmt.Sprintf("%.3g", metrics[2].Value().(float64))
-		}
-		rows = append(rows, []string{
-			v.Scope(), v.Name(), shape.String(),
-			humanize.Comma(int64(shape.Size())),
-			humanize.Bytes(uint64(shape.Memory())),
-			mav, rms, maxAV,
-		})
-	})
-	slices.SortFunc(rows, func(a, b []string) int {
-		cmp := strings.Compare(a[0], b[0])
-		if cmp != 0 {
-			return cmp
-		}
-		return strings.Compare(a[1], b[1])
-	})
-	for _, row := range rows {
-		table.Row(row...)
-	}
-	fmt.Println(table.Render())
-	if *flagGlossary {
-		fmt.Printf("  %s:\n", sectionStyle.Render("Glossary"))
-		fmt.Printf("   ◦ %s: %s\n", emphasisStyle.Render("Scalar/MAV"), italicStyle.Render("If variable is a scalar then the value itself, else the Mean Absolute Value"))
-		fmt.Printf("   ◦ %s: %s\n", emphasisStyle.Render("RMS"), italicStyle.Render("Root Mean Square"))
-		fmt.Printf("   ◦ %s: %s\n", emphasisStyle.Render("MaxAV"), italicStyle.Render("Max Absolute Value"))
-	}
-}
-
-// DeleteVars on the given scopes.
-func DeleteVars(checkpointPath string, scopes ...string) {
-	ctx := context.New()
-	checkpoint := must.M1(checkpoints.Build(ctx).
-		Dir(checkpointPath).Keep(-1).Immediate().Done())
-	var varsToDelete []*context.Variable
-	for _, scope := range scopes {
-		if scope == "" {
-			continue
-		}
-		scopePrefix := scope + context.ScopeSeparator
-		ctx.EnumerateVariables(func(v *context.Variable) {
-			if v.Scope() == scope || strings.HasPrefix(v.Scope(), scopePrefix) {
-				varsToDelete = append(varsToDelete, v)
-			}
-		})
-	}
-	if len(varsToDelete) == 0 {
-		// No changes needed.
-		return
-	}
-	for _, v := range varsToDelete {
-		ctx.DeleteVariable(v.Scope(), v.Name())
-	}
-	must.M(checkpoint.Save())
-	fmt.Printf("%d deleted vars under scopes %v, new checkpoint saved.\n", len(varsToDelete), scopes)
 }
 
 func Backup(checkpointPath string) {
