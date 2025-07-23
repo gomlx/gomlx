@@ -225,6 +225,8 @@ In the future we plan to also export models to ONNX or StableHLO and one could u
   - `PJRT_PLUGIN_LIBRARY_PATH`: the underlying XLA backend uses this variable as an extra directory to search for plugin locations.
     It searches for the systems library paths (`$LD_LIBRARY_PATH`, `/etc/ld.so.conf`), the default `/usr/local/lib/gomlx/pjrt` and
     `$PJRT_PLUGIN_LIBRARY_PATH` if set.
+  - `XLA_FLAGS`: optional controls for XLA backend. It should be set to a semi-colon (";") separated list of options. If you set to `--help` 
+    the backend will print out some help for all options. There is also a description in the page [XLA Flags Guidance](https://openxla.org/xla/flags_guidance).
 - **What backends to include when using GoMLX ?**
   - The recommendation is to use `import _ "github.com/gomlx/gomlx/backends/default"` which will import `XLA` and
     `SimpleGo` backends. If you add `-tags=noxla` to the compiler it won't include *XLA*.
