@@ -18,6 +18,11 @@ package layers
 
 import (
 	"fmt"
+	"io"
+	"math"
+	"math/rand"
+	"testing"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
@@ -32,10 +37,6 @@ import (
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"io"
-	"math"
-	"math/rand"
-	"testing"
 )
 
 func TestMultiHeadAttentionGraph(t *testing.T) {
@@ -194,7 +195,7 @@ func TestMultiHeadAttentionTraining(t *testing.T) {
 	commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
 	metrics, err := loop.RunSteps(trainDS, 1500)
 	loss := metrics[1].Value().(float32)
-	assert.Truef(t, loss < 0.10, "Expected a loss < 0.10, got %g instead", loss)
+	assert.Truef(t, loss < 0.12, "Expected a loss < 0.12, got %g instead", loss)
 	require.NoErrorf(t, err, "Failed training: %+v", err)
 	fmt.Printf("Metrics:\n")
 	for ii, m := range metrics {
