@@ -1,4 +1,4 @@
-package train // nTimes is used to implement NTimesDuringLoop.
+package train
 
 import (
 	"fmt"
@@ -9,6 +9,7 @@ import (
 	"github.com/gomlx/gomlx/types/tensors"
 )
 
+// nTimes is used to implement NTimesDuringLoop.
 type nTimes struct {
 	n, nUsed int
 	fn       OnStepFn
