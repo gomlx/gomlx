@@ -16,6 +16,8 @@
   * Variable `#rngstate` marked as non-trainable during creation.
 * `gomlx_checkpoints`:
   * Added `-perturb`.
+* Docker:
+  * Included `openssh-client` (ssh) and `dlv` (Go debugger) by default. 
 
 # v0.21.0: 2025/07/01 🌞 Summer Edition 🌞
 
