@@ -15,7 +15,8 @@ USER root
 RUN apt-get update --yes \
     && apt-get upgrade --yes \
     && apt-get install --yes --no-install-recommends \
-      sudo wget vim micro unzip hdf5-tools libc6-dev curl gcc g++ git
+      sudo wget vim micro unzip hdf5-tools libc6-dev curl gcc g++ git \
+      openssh-client
 
 # Create NB_USER (jovyan) and its home directory.
 ARG NB_USER="jupyter"
@@ -63,6 +64,8 @@ RUN go install github.com/janpfeifer/gonb@latest \
     && go install golang.org/x/tools/gopls@latest \
     && gonb --install --alsologtostderr
 
+# Install dlv for debugging.
+RUN go install github.com/go-delve/delve/cmd/dlv@latest
 
 # Clone and install gopjrt.
 USER ${NB_USER}
