@@ -1,7 +1,6 @@
 package simplego
 
 import (
-	"fmt"
 	"sync"
 
 	"github.com/gomlx/gomlx/backends"
@@ -287,7 +286,7 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) ([]backend
 				inputNodeIdx := input.builderIdx
 				inputBuffers[ii] = execBuf.results[inputNodeIdx]
 				if inputBuffers[ii] == nil || !inputBuffers[ii].shape.Ok() {
-					return nil, errors.Errorf("Execute: input #%d of node #%d is not calculated yet (!?) -- "+
+					return nil, errors.Errorf("SimpleGo execute: input #%d of node #%d is not calculated yet (!?) -- "+
 						"this is a bug, it should never have happened", ii, nodeIdx)
 				}
 				execBuf.numUsed[inputNodeIdx]++
@@ -299,7 +298,7 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) ([]backend
 				// Multi-output node:
 				multiNodeExecutor := multiOutputsNodeExecutors[node.opType]
 				if multiNodeExecutor == nil {
-					return nil, errors.Errorf("Execute: multi-outputs node executor for op type %s not implemented!?", node.opType)
+					return nil, errors.Errorf("SimpleGo execute: multi-outputs node executor for op type %s not implemented!?", node.opType)
 				}
 				outputs, err := multiNodeExecutor(e.backend, node, inputBuffers, inputsOwned)
 				if err != nil {
@@ -308,7 +307,7 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) ([]backend
 				for outputIdx, outputBuf := range outputs {
 					outputNode := node.multiOutputsNodes[outputIdx]
 					outputNodeIdx := outputNode.builderIdx
-					if outputIdx >= e.numNodesToProcess || e.numUses[outputIdx] == 0 {
+					if outputNodeIdx >= e.numNodesToProcess || e.numUses[outputNodeIdx] == 0 {
 						// Ignore, this is a node that is not part of the computation.
 						e.backend.putBuffer(outputBuf)
 						continue
@@ -568,7 +567,6 @@ func (e *Executable) Execute(inputs []backends.Buffer, donate []bool) ([]backend
 		}
 		if !execBuf.owned[outNodeIdx] {
 			// Make a copy of the buffer since we don't own it
-			fmt.Printf("\tcloning output #%d (%s) @ %p\n", ii, outputNode.opType, outBuf)
 			outBuf = e.backend.cloneBuffer(outBuf)
 		}
 		outputs[ii] = outBuf

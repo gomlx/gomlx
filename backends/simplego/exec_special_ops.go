@@ -1506,8 +1506,8 @@ func execRngBitGenerator(backend *Backend, node *Node, inputs []*Buffer, inputsO
 		// We re-use the current state.
 		inputs[0] = nil
 	} else {
-		state = backend.getBuffer(node.multiOutputsShapes[0].DType, node.multiOutputsShapes[0].Size())
 		state.shape = node.multiOutputsShapes[0]
+		state = backend.getBuffer(state.shape.DType, state.shape.Size())
 	}
 	stateFlat = state.flat.([]uint64)
 
