@@ -18,6 +18,10 @@ package graph_test
 
 import (
 	"fmt"
+	"math"
+	"reflect"
+	"testing"
+
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/graph"
@@ -28,9 +32,6 @@ import (
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"math"
-	"reflect"
-	"testing"
 )
 
 func EuclideanDistance(a, b *Node) *Node {
@@ -259,12 +260,31 @@ func TestExecWithLogger(t *testing.T) {
 }
 
 func TestExecWithNoInputs(t *testing.T) {
-	manager := graphtest.BuildTestBackend()
-	matrixInitFn := NewExec(manager, func(g *Graph) *Node {
+	backend := graphtest.BuildTestBackend()
+	matrixInitFn := NewExec(backend, func(g *Graph) *Node {
 		return IotaFull(g, shapes.Make(dtypes.Int64, 3, 3))
 	})
 	results := matrixInitFn.Call()
 	got := results[0].Value()
 	want := [][]int64{{0, 1, 2}, {3, 4, 5}, {6, 7, 8}}
 	assert.Equal(t, want, got)
+}
+
+// TestExecUnusedInput checks that it should work if an input is not used in the computation.
+func TestExecUnusedInput(t *testing.T) {
+	backend := graphtest.BuildTestBackend()
+
+	// One of two variables is not used.
+	unusedInputFn := NewExec(backend, func(x, y *Node) *Node {
+		return OnePlus(x)
+	})
+	_, err := unusedInputFn.CallOrError(0, 1)
+	require.NoError(t, err)
+
+	// x is only used to get the Graph object, but not its value.
+	unusedInputFn = NewExec(backend, func(x *Node) *Node {
+		return IotaFull(x.Graph(), shapes.Make(dtypes.Int32, 3))
+	})
+	_, err = unusedInputFn.CallOrError(0)
+	require.NoError(t, err)
 }

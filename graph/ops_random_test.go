@@ -2,13 +2,14 @@ package graph_test
 
 import (
 	"fmt"
+	"math"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/x448/float16"
-	"math"
 
 	"testing"
 )
