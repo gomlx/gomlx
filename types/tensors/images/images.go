@@ -3,6 +3,10 @@
 package images
 
 import (
+	"image"
+	"log"
+	"math"
+
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
@@ -10,13 +14,10 @@ import (
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/x448/float16"
-	"image"
 	"k8s.io/klog/v2"
-	"log"
-	"math"
 )
 
-// ChannelsAxisConfig indicates if a tensor with an image has the channels axis
+// ChannelsAxisConfig indicates if a tensor with an image has the channel axis
 // coming last (last axis) or first (first axis after batch axis).
 type ChannelsAxisConfig uint8
 

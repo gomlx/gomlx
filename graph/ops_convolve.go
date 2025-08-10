@@ -109,7 +109,7 @@ func gatherSlice(indices, params []int) (slice []int) {
 // ChannelsAxis configures the axis for the channels (aka. "depth" or "features") dimension. The default is
 // `timage.ChannelsLast`, meaning the "channels" dimension comes last.
 //
-// Note: `timage` refers to package `github.com/gomlx/gomlx/types/tensor/image`.
+// Note: `timage` refers to the package github.com/gomlx/gomlx/types/tensor/image
 //
 // For more fine-control, see AxesConfig.
 //
@@ -351,7 +351,7 @@ func (conv *ConvolutionBuilder) Done() *Node {
 		}
 	}
 
-	// Check only one of "strides" or "dilations" are set.
+	// Check only one of the "strides" or "dilations" are set.
 	var dilationsSet, stridesSet bool
 	if conv.strides != nil {
 		for _, stride := range conv.strides {
@@ -380,7 +380,7 @@ func (conv *ConvolutionBuilder) Done() *Node {
 				inputChannels, conv.filterGroupCount)
 		}
 
-		// Validate that kernel input channel axis matches the feature group count
+		// Validate that the kernel input channel axis matches the feature group count.
 		kernelInputChannels := conv.kernel.Shape().Dimensions[conv.axes.KernelInputChannel]
 		if kernelInputChannels != inputChannels/conv.filterGroupCount {
 			Panicf("kernel input channels (%d) must equal input channels (%d) divided by FeatureGroupCount (%d)",
@@ -388,7 +388,7 @@ func (conv *ConvolutionBuilder) Done() *Node {
 		}
 	}
 
-	// Validate batch group count
+	// Validate batch group count.
 	if conv.batchGroupCount > 1 {
 		batchSize := conv.x.Shape().Dimensions[conv.axes.InputBatch]
 		if batchSize%conv.batchGroupCount != 0 {
@@ -595,7 +595,7 @@ func convVJPWrtKernel(node, x, kernel, v *Node, numSpatialDims int, axes Convolv
 	reverseAxes.KernelSpatial = axes.OutputSpatial
 
 	// Strides in the original convolution become dilations for the backward convolution to the kernel.
-	reverseDialations := strides
+	reverseDilations := strides
 	reverseStrides := filterDilation
 
 	// (2) we need to pad the reverse convolution to match get the original input.
@@ -640,8 +640,8 @@ func convVJPWrtKernel(node, x, kernel, v *Node, numSpatialDims int, axes Convolv
 		// original convolution strides)
 		revKernelDimSize := outputDimSize
 		revDimDilation := 1
-		if len(reverseDialations) > 0 {
-			revDimDilation = reverseDialations[axisIdx]
+		if len(reverseDilations) > 0 {
+			revDimDilation = reverseDilations[axisIdx]
 		}
 		revDimStride := 1
 		if len(reverseStrides) > 0 {
@@ -670,8 +670,8 @@ func convVJPWrtKernel(node, x, kernel, v *Node, numSpatialDims int, axes Convolv
 	if len(reverseStrides) > 0 {
 		revConv.StridePerDim(reverseStrides...)
 	}
-	if len(reverseDialations) > 0 {
-		revConv.DilationPerDim(reverseDialations...)
+	if len(reverseDilations) > 0 {
+		revConv.DilationPerDim(reverseDilations...)
 	}
 	output := revConv.Done()
 	//fmt.Printf("convVJPWrtKernel output:\n")

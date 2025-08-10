@@ -1,10 +1,10 @@
 package graph_test
 
 import (
-	_ "github.com/gomlx/gomlx/backends/xla" // Make sure xla backend is linked.
+	"testing"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
-	"testing"
 )
 
 func TestBitwiseShifts(t *testing.T) {

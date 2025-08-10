@@ -1,6 +1,7 @@
 package simplego
 
 import (
+	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 )
 
@@ -38,7 +39,7 @@ type broadcastIterator struct {
 	strides     []int
 }
 
-// newBroadcastIterator returns an iterator that allows one to iterate over the flat indices of tensor that is being broadcast,
+// newBroadcastIterator returns an iterator that allows one to iterate over the flat indices of a tensor that is being broadcast,
 // where some dimensions will grow.
 //
 // Pre-requisite: fromShape.Rank() == toShape.Rank().
@@ -46,6 +47,9 @@ type broadcastIterator struct {
 // It is used by implicit broadcasting in binaryOps as well as by the the execBroadcastInDim.
 func newBroadcastIterator(fromShape, toShape shapes.Shape) *broadcastIterator {
 	rank := fromShape.Rank() // == toShape.Rank()
+	if rank != toShape.Rank() {
+		exceptions.Panicf("broadcastIterator: rank mismatch fromShape=%s, toShape=%s", fromShape, toShape)
+	}
 	bi := &broadcastIterator{
 		perAxesIdx:  make([]int, rank),
 		targetDims:  toShape.Dimensions,
@@ -53,7 +57,7 @@ func newBroadcastIterator(fromShape, toShape shapes.Shape) *broadcastIterator {
 		strides:     make([]int, rank),
 	}
 	stride := 1
-	for axis := fromShape.Rank() - 1; axis >= 0; axis-- {
+	for axis := rank - 1; axis >= 0; axis-- {
 		bi.strides[axis] = stride
 		stride *= fromShape.Dimensions[axis]
 		bi.isBroadcast[axis] = fromShape.Dimensions[axis] != toShape.Dimensions[axis]

@@ -23,7 +23,6 @@ import (
 	"testing"
 
 	"github.com/gomlx/gomlx/backends"
-	_ "github.com/gomlx/gomlx/backends/xla" // Make sure xla backend is linked.
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/types/shapes"
