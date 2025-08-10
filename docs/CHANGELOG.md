@@ -17,7 +17,10 @@
 * `gomlx_checkpoints`:
   * Added `-perturb`.
 * Docker:
-  * Included `openssh-client` (ssh) and `dlv` (Go debugger) by default. 
+  * Included `openssh-client` (ssh) and `dlv` (Go debugger) by default.
+* `SimpleGo` ("go") backend:
+  * Fixed mishandling of multi-output operations and race condition on parallel execution (#197)
+  * Refactoring and clean up of execution loops.
 
 # v0.21.0: 2025/07/01 🌞 Summer Edition 🌞
 
