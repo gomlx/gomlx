@@ -161,9 +161,11 @@ func TestRandomIntN(t *testing.T) {
 	}
 }
 
-// Test to cover issue #197, about the execution nodes with multi-outputs (random number generator).
+// TestMultiOutputs covers issue #197, about the execution nodes with multi-outputs (random number generator) on
+// the SimpleGo backend.
+//
 // Kept here to eventually test new backends.
-func TestI197(t *testing.T) {
+func TestMultiOutputs(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 	_, err := NewExec(backend, func(x *Node) *Node {
 		g := x.Graph()
