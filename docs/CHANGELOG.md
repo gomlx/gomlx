@@ -21,6 +21,7 @@
 * `SimpleGo` ("go") backend:
   * Fixed mishandling of multi-output operations and race condition on parallel execution (#197)
   * Refactoring and clean up of execution loops.
+  * Separated `TestDotGeneral_PerformanceTable` behind the build tag `perf`.
 
 # v0.21.0: 2025/07/01 🌞 Summer Edition 🌞
 
