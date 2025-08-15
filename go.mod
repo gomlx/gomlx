@@ -15,7 +15,7 @@ require (
 	github.com/go-gota/gota v0.12.0
 	github.com/gomlx/bsplines v0.2.0
 	github.com/gomlx/exceptions v0.0.3
-	github.com/gomlx/gopjrt v0.7.3
+	github.com/gomlx/gopjrt v0.7.4
 	github.com/google/uuid v1.6.0
 	github.com/janpfeifer/gonb v0.11.1
 	github.com/janpfeifer/must v0.2.0
