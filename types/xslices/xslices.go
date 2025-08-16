@@ -78,11 +78,11 @@ func Copy[T any](slice []T) []T {
 // If delta <= 0, it checks for equality.
 func SlicesInDelta(s0, s1 any, delta float64) bool {
 	cmpFn := func(e0, e1 any) bool {
-		// First they must have both the same type.
+		// First, they must have both the same type.
 		if reflect.TypeOf(e0).Kind() != reflect.TypeOf(e0).Kind() {
 			return false
 		}
-		// If they are equal return true.
+		// If they are equal, return true.
 		if reflect.DeepEqual(e0, e1) {
 			return true
 		}
