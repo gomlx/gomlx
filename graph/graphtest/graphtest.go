@@ -24,6 +24,7 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/stretchr/testify/require"
@@ -55,7 +56,12 @@ func BuildTestBackend() backends.Backend {
 func RunTestGraphFn(t *testing.T, testName string, graphFn TestGraphFn, want []any, delta float64) {
 	t.Run(testName, func(t *testing.T) {
 		backend := BuildTestBackend()
-		wantTensors := xslices.Map(want, func(value any) *tensors.Tensor { return tensors.FromAnyValue(value) })
+		wantTensors := xslices.Map(want, func(value any) *tensors.Tensor {
+			if s, ok := value.(shapes.Shape); ok {
+				return tensors.FromShape(s)
+			}
+			return tensors.FromAnyValue(value)
+		})
 
 		var numInputs, numOutputs int
 		wrapperFn := func(g *graph.Graph) []*graph.Node {
