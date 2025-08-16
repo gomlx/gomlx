@@ -64,6 +64,11 @@ RUN go install github.com/janpfeifer/gonb@latest \
     && go install golang.org/x/tools/gopls@latest \
     && gonb --install --alsologtostderr
 
+# Download gomlx_checkpoints tool.
+# Notice it will take the latest released (tagged) version, not the one in
+# the current sub-directory.
+RUN go install github.com/gomlx/gomlx/cmd/gomlx_checkpoints@latest
+
 # Install dlv for debugging.
 RUN go install github.com/go-delve/delve/cmd/dlv@latest
 
