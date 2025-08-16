@@ -5,7 +5,7 @@ go 1.24.5
 require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/dustin/go-humanize v1.0.1
-	github.com/gomlx/gomlx v0.21.0
+	github.com/gomlx/gomlx v0.21.1
 	github.com/gomlx/gopjrt v0.7.4
 	github.com/janpfeifer/must v0.2.0
 	github.com/stretchr/testify v1.10.0
