@@ -18,13 +18,13 @@
   * Variable `#rngstate` marked as non-trainable during creation.
 * `gomlx_checkpoints`:
   * Added `-perturb`.
+  * Now it has its own `go.mod`, so it separated the dependencies.
 * Docker:
   * Included `openssh-client` (ssh) and `dlv` (Go debugger) by default.
 * `SimpleGo` ("go") backend:
   * Fixed mishandling of multi-output operations and race condition on parallel execution (#197)
   * Refactoring and clean up of execution loops.
   * Separated `TestDotGeneral_PerformanceTable` behind the build tag `perf`.
-* `gomlx_checkpoints`: now it has its own `go.mod`, so it separated the dependencies.
 
 # v0.21.0: 2025/07/01 🌞 Summer Edition 🌞
 
