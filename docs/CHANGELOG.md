@@ -24,6 +24,7 @@
   * Fixed mishandling of multi-output operations and race condition on parallel execution (#197)
   * Refactoring and clean up of execution loops.
   * Separated `TestDotGeneral_PerformanceTable` behind the build tag `perf`.
+* `gomlx_checkpoints`: now it has its own `go.mod`, so it separated the dependencies.
 
 # v0.21.0: 2025/07/01 🌞 Summer Edition 🌞
 
