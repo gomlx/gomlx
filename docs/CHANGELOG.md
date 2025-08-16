@@ -1,7 +1,9 @@
 # GoMLX changelog
 
-# Next
+# v0.21.1: 2025/08/16 Added Zero-dim tensors support and other small improvements. 
 
+* Package `tensors` and `graph`:
+  * Added support for zero-dim tensors.
 * Package `backends`:
   * Method **`New()` will return an error (as opposed to panic)**.
     The temporarily `NewOrErr` was marked as deprecated, use `New` instead.
