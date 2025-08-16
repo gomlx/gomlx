@@ -3,11 +3,12 @@ package tensors
 import (
 	"encoding/gob"
 	"fmt"
-	"k8s.io/klog/v2"
 	"os"
 	"reflect"
 	"strconv"
 	"unsafe"
+
+	"k8s.io/klog/v2"
 
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
@@ -720,7 +721,7 @@ func shapeForValueRecursive(shape *shapes.Shape, v reflect.Value, t reflect.Type
 
 		// The first element is the reference
 		if v.Len() == 0 {
-			exceptions.Panicf("value with empty slice not valid for Tensor conversion: %T: %v", v.Interface(), v)
+			exceptions.Panicf("value with empty slice not valid for Tensor conversion: %T: %v -- notice it's impossible to represent tensors with zero-dimensions generically using Go slices - try shapes.Make maybe ?", v.Interface(), v)
 		}
 		v0 := v.Index(0)
 		err := shapeForValueRecursive(shape, v0, t)
@@ -811,6 +812,11 @@ func (t *Tensor) InDelta(otherTensor *Tensor, delta float64) bool {
 	if !t.shape.Equal(otherTensor.shape) {
 		return false
 	}
+	if t.shape.IsZeroSize() {
+		// If any of the axes is zero-dimensional, there is no data to compare.
+		return true
+	}
+
 	inDelta := true // Set to false at the first difference.
 	t.ConstFlatData(func(flat0 any) {
 		otherTensor.ConstFlatData(func(flat1 any) {

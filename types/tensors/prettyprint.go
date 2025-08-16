@@ -16,9 +16,13 @@ var (
 	typeBFloat16 = reflect.TypeOf(bfloat16.BFloat16(0))
 )
 
-// Summary returns a multi-line summary of the contents of the Tensor.
+// Summary returns a multi-line summary of the Tensor's content.
 // Inspired by numpy output.
 func (t *Tensor) Summary(precision int) string {
+	if t.Shape().IsZeroSize() {
+		return t.Shape().String()
+	}
+
 	// Easy string building.
 	var buf bytes.Buffer
 	w := func(format string, args ...any) { _, _ = fmt.Fprintf(&buf, format, args...) }
@@ -179,6 +183,10 @@ func (t *Tensor) Summary(precision int) string {
 // GoStr converts to string, using a Go-syntax representation that can be copied&pasted back to code.
 func (t *Tensor) GoStr() string {
 	t.AssertValid()
+	if t.Shape().IsZeroSize() {
+		// For zero-dimensioned tensors (for some axis), we simply return the shape.
+		return t.shape.String()
+	}
 	value := t.Value()
 	if t.IsScalar() {
 		return fmt.Sprintf("%s(%v)", t.shape.DType.GoStr(), value)

@@ -19,13 +19,15 @@ package graphtest
 
 import (
 	"fmt"
+	"sync"
+	"testing"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/stretchr/testify/require"
-	"sync"
-	"testing"
 )
 
 // TestGraphFn should build its own inputs, and return both inputs and outputs
@@ -52,46 +54,53 @@ func BuildTestBackend() backends.Backend {
 // delta is the margin of value on the difference of output and want values that are acceptable.
 // Values of delta <= 0 means only exact equality is accepted.
 func RunTestGraphFn(t *testing.T, testName string, graphFn TestGraphFn, want []any, delta float64) {
-	backend := BuildTestBackend()
-	wantTensors := xslices.Map(want, func(value any) *tensors.Tensor { return tensors.FromAnyValue(value) })
+	t.Run(testName, func(t *testing.T) {
+		backend := BuildTestBackend()
+		wantTensors := xslices.Map(want, func(value any) *tensors.Tensor {
+			if s, ok := value.(shapes.Shape); ok {
+				return tensors.FromShape(s)
+			}
+			return tensors.FromAnyValue(value)
+		})
 
-	var numInputs, numOutputs int
-	wrapperFn := func(g *graph.Graph) []*graph.Node {
-		i, o := graphFn(g)
-		numInputs, numOutputs = len(i), len(o)
-		all := append(i, o...)
-		return all
-	}
-	exec := graph.NewExec(backend, wrapperFn)
-	var inputsAndOutputs []*tensors.Tensor
-	require.NotPanicsf(t, func() { inputsAndOutputs = exec.Call() }, "%s: failed to execute graph", testName)
-	inputs := inputsAndOutputs[:numInputs]
-	for ii, input := range inputs {
-		if input == nil {
-			t.Fatalf("%q: inputs[%d] is nil!?", testName, ii)
+		var numInputs, numOutputs int
+		wrapperFn := func(g *graph.Graph) []*graph.Node {
+			i, o := graphFn(g)
+			numInputs, numOutputs = len(i), len(o)
+			all := append(i, o...)
+			return all
 		}
-	}
-	outputs := inputsAndOutputs[numInputs:]
-	for ii, input := range inputs {
-		if input == nil {
-			t.Fatalf("%q: outputs[%d] is nil!?", testName, ii)
+		exec := graph.NewExec(backend, wrapperFn)
+		var inputsAndOutputs []*tensors.Tensor
+		require.NotPanicsf(t, func() { inputsAndOutputs = exec.Call() }, "%s: failed to execute graph", testName)
+		inputs := inputsAndOutputs[:numInputs]
+		for ii, input := range inputs {
+			if input == nil {
+				t.Fatalf("%q: inputs[%d] is nil!?", testName, ii)
+			}
 		}
-	}
+		outputs := inputsAndOutputs[numInputs:]
+		for ii, input := range inputs {
+			if input == nil {
+				t.Fatalf("%q: outputs[%d] is nil!?", testName, ii)
+			}
+		}
 
-	fmt.Printf("\n%s:\n", testName)
-	for ii, input := range inputs {
-		fmt.Printf("\tInput %d: %s\n", ii, input.GoStr())
-	}
-	if numInputs > 0 {
-		fmt.Printf("\t======\n")
-	}
-	for ii, output := range outputs {
-		fmt.Printf("\tOutput %d: %s\n", ii, output.GoStr())
-	}
-	require.Equalf(t, len(want), numOutputs, "%s: number of wanted results different from number of outputs", testName)
+		fmt.Printf("\n%s:\n", testName)
+		for ii, input := range inputs {
+			fmt.Printf("\tInput %d: %s\n", ii, input.GoStr())
+		}
+		if numInputs > 0 {
+			fmt.Printf("\t======\n")
+		}
+		for ii, output := range outputs {
+			fmt.Printf("\tOutput %d: %s\n", ii, output.GoStr())
+		}
+		require.Equalf(t, len(want), numOutputs, "%s: number of wanted results different from number of outputs", testName)
 
-	for ii, output := range outputs {
-		require.Truef(t, wantTensors[ii].InDelta(output, delta), "%s: output #%d doesn't match wanted value %v",
-			testName, ii, want[ii])
-	}
+		for ii, output := range outputs {
+			require.Truef(t, wantTensors[ii].InDelta(output, delta), "%s: output #%d doesn't match wanted value %v",
+				testName, ii, want[ii])
+		}
+	})
 }

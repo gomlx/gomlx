@@ -168,6 +168,20 @@ func (s Shape) Size() (size int) {
 	return
 }
 
+// IsZeroSize returns whether any of the dimensions is zero, in which case
+// it's an empty shape, with no data attached to it.
+//
+// Notice scalars are not zero in size -- they have size one, but rank zero.
+func (s Shape) IsZeroSize() bool {
+	for _, d := range s.Dimensions {
+		if d == 0 {
+			return true
+		}
+	}
+	return false
+
+}
+
 // Memory returns the memory used to store an array of the given shape, the same as the size in bytes.
 // Careful, so far all types in Go and on device seem to use the same sizes, but future type this is not guaranteed.
 func (s Shape) Memory() uintptr {
