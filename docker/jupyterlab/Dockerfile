@@ -64,11 +64,6 @@ RUN go install github.com/janpfeifer/gonb@latest \
     && go install golang.org/x/tools/gopls@latest \
     && gonb --install --alsologtostderr
 
-# Download gomlx_checkpoints tool.
-# Notice it will take the latest released (tagged) version, not the one in
-# the current sub-directory.
-RUN go install github.com/gomlx/gomlx/cmd/gomlx_checkpoints@latest
-
 # Install dlv for debugging.
 RUN go install github.com/go-delve/delve/cmd/dlv@latest
 
@@ -110,6 +105,14 @@ ln "./gomlx/examples/tutorial/"*.jpg "${HOME}/"
 cd gomlx
 go test ./types/... ./graph/... ./ml/... ./backends/...
 go build ./examples/... ./models/...
+
+# Use local modules, so they can be edited by the user, if they want.
+go work init
+go work use . ../gopjrt ./cmd/gomlx_checkpoints
+
+# Install gomlx_checkpoints tool.
+go install ./cmd/gomlx_checkpoints && gomlx_checkpoints -help
+
 EOF
 
 #######################################################################################################
