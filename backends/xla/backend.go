@@ -157,6 +157,10 @@ func (backend *Backend) BufferToFlatData(buffer backends.Buffer, flat any) error
 	if err != nil {
 		return err
 	}
+	if shape.IsZeroSize() {
+		// No data to transfer.
+		return nil
+	}
 
 	flatV := reflect.ValueOf(flat)
 	if flatV.Kind() != reflect.Slice {
