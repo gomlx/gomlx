@@ -1,8 +1,9 @@
 package backends
 
 import (
-	"github.com/gomlx/gomlx/types/shapes"
 	"slices"
+
+	"github.com/gomlx/gomlx/types/shapes"
 )
 
 // Op represents the output of an operation, during the computation graph building time.
@@ -114,8 +115,8 @@ type ConvolveAxesConfig struct {
 	InputBatch, InputChannel int
 	InputSpatial             []int
 
-	KernelInputChannel, KernelOutputChannel int
-	KernelSpatial                           []int
+	FilterInputChannel, FilterOutputChannel int
+	FilterSpatial                           []int
 
 	OutputBatch, OutputChannel int
 	OutputSpatial              []int
@@ -126,7 +127,7 @@ func (c ConvolveAxesConfig) Clone() ConvolveAxesConfig {
 	var c2 ConvolveAxesConfig
 	c2 = c
 	c2.InputSpatial = slices.Clone(c.InputSpatial)
-	c2.KernelSpatial = slices.Clone(c.KernelSpatial)
+	c2.FilterSpatial = slices.Clone(c.FilterSpatial)
 	c2.OutputSpatial = slices.Clone(c.OutputSpatial)
 	return c2
 }

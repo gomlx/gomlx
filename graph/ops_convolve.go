@@ -122,18 +122,18 @@ func (conv *ConvolutionBuilder) ChannelsAxis(channelsAxisConfig timage.ChannelsA
 
 	switch channelsAxisConfig {
 	case timage.ChannelsFirst:
-		conv.axes.KernelInputChannel = 0
-		conv.axes.KernelSpatial = xslices.Iota(1, conv.numSpatialDims)
-		conv.axes.KernelOutputChannel = conv.numSpatialDims + 1
+		conv.axes.FilterInputChannel = 0
+		conv.axes.FilterSpatial = xslices.Iota(1, conv.numSpatialDims)
+		conv.axes.FilterOutputChannel = conv.numSpatialDims + 1
 
 		conv.axes.OutputBatch = 0
 		conv.axes.OutputChannel = 1
 		conv.axes.OutputSpatial = xslices.Iota(2, conv.numSpatialDims)
 
 	case timage.ChannelsLast:
-		conv.axes.KernelInputChannel = conv.numSpatialDims
-		conv.axes.KernelOutputChannel = conv.numSpatialDims + 1
-		conv.axes.KernelSpatial = xslices.Iota(0, conv.numSpatialDims)
+		conv.axes.FilterInputChannel = conv.numSpatialDims
+		conv.axes.FilterOutputChannel = conv.numSpatialDims + 1
+		conv.axes.FilterSpatial = xslices.Iota(0, conv.numSpatialDims)
 
 		conv.axes.OutputBatch = 0
 		conv.axes.OutputSpatial = xslices.Iota(1, conv.numSpatialDims)
@@ -332,7 +332,7 @@ func (conv *ConvolutionBuilder) InputDilationPerDim(dilations ...int) *Convoluti
 // Node.
 func (conv *ConvolutionBuilder) Done() *Node {
 	// Select the kernel spatial dimensions.
-	kernelSpatialDims := gatherSlice(conv.axes.KernelSpatial, conv.kernel.Shape().Dimensions)
+	kernelSpatialDims := gatherSlice(conv.axes.FilterSpatial, conv.kernel.Shape().Dimensions)
 
 	// paddings can only be calculated after we are sure about the channels positioning.
 	paddings := conv.paddings
@@ -381,7 +381,7 @@ func (conv *ConvolutionBuilder) Done() *Node {
 		}
 
 		// Validate that the kernel input channel axis matches the feature group count.
-		kernelInputChannels := conv.kernel.Shape().Dimensions[conv.axes.KernelInputChannel]
+		kernelInputChannels := conv.kernel.Shape().Dimensions[conv.axes.FilterInputChannel]
 		if kernelInputChannels != inputChannels/conv.filterGroupCount {
 			Panicf("kernel input channels (%d) must equal input channels (%d) divided by FeatureGroupCount (%d)",
 				kernelInputChannels, inputChannels, conv.filterGroupCount)
@@ -427,9 +427,9 @@ func ConvGeneralDilated(input, kernel *Node, axes ConvolveAxesConfig,
 	filterGroupCount, batchGroupCount int) *Node {
 	_ = validateBuildingGraphFromInputs(input, kernel)
 	numSpatialDims := input.Rank() - 2
-	if len(axes.InputSpatial) != numSpatialDims || len(axes.OutputSpatial) != numSpatialDims || len(axes.KernelSpatial) != numSpatialDims {
+	if len(axes.InputSpatial) != numSpatialDims || len(axes.OutputSpatial) != numSpatialDims || len(axes.FilterSpatial) != numSpatialDims {
 		Panicf("ConvGeneralDilated: input has %d spatial dimensions, but axes configuration has %d, %d, %d spatial axes configured "+
-			"for input/kernel/output", numSpatialDims, len(axes.InputSpatial), len(axes.KernelSpatial), len(axes.OutputSpatial))
+			"for input/kernel/output", numSpatialDims, len(axes.InputSpatial), len(axes.FilterSpatial), len(axes.OutputSpatial))
 	}
 	return backendConvGeneralDilated(input, kernel, axes, strides, paddings, inputDilation, filterDilation, filterGroupCount, batchGroupCount)
 }
@@ -471,20 +471,20 @@ func convVJPWrtX(node, x, kernel, v *Node, numSpatialDims int, axes ConvolveAxes
 	// Get output and input spatial dimensions.
 	inputSpatialDims := gatherSlice(axes.InputSpatial, x.Shape().Dimensions)
 	outputSpatialDims := gatherSlice(axes.OutputSpatial, node.Shape().Dimensions)
-	kernelSpatialDims := gatherSlice(axes.KernelSpatial, kernel.Shape().Dimensions)
+	kernelSpatialDims := gatherSlice(axes.FilterSpatial, kernel.Shape().Dimensions)
 	//fmt.Printf("\tinputSpatialDims=%v\n", inputSpatialDims)
 	//fmt.Printf("\toutputSpatialDims=%v\n", outputSpatialDims)
 
 	// Gradient of the output with respect to x:
 	// (1) we need to reverse the convolution, which involves the reverse kernel: spatial dimensions are reversed,
 	//     and input/output channel weights are transposed.
-	reverseKernel := Reverse(kernel, axes.KernelSpatial...)
+	reverseKernel := Reverse(kernel, axes.FilterSpatial...)
 
 	// Instead of transposing output/input channels, just swap their indices in the reverseAxes. Effectively this does:
-	//     reverseKernel = Transpose(reverseKernel, axes.KernelOutputChannel, axes.KernelInputChannel)
+	//     reverseKernel = Transpose(reverseKernel, axes.FilterOutputChannel, axes.FilterInputChannel)
 
 	reverseAxes := axes
-	reverseAxes.KernelInputChannel, reverseAxes.KernelOutputChannel = axes.KernelOutputChannel, axes.KernelInputChannel
+	reverseAxes.FilterInputChannel, reverseAxes.FilterOutputChannel = axes.FilterOutputChannel, axes.FilterInputChannel
 
 	// (2) we need to pad the reverse convolution to match get the original input.
 	reversePaddings := make([][2]int, numSpatialDims)
@@ -587,12 +587,12 @@ func convVJPWrtKernel(node, x, kernel, v *Node, numSpatialDims int, axes Convolv
 	// The output of the reverse convolve is the original kernel shapes. The kernel input channels axis
 	// is the reverse output batch axis. The output channel of the reverse convolve will goes into
 	// the original kernel output channel.
-	reverseAxes.OutputBatch, reverseAxes.OutputChannel = axes.KernelInputChannel, axes.KernelOutputChannel
-	reverseAxes.OutputSpatial = axes.KernelSpatial
+	reverseAxes.OutputBatch, reverseAxes.OutputChannel = axes.FilterInputChannel, axes.FilterOutputChannel
+	reverseAxes.OutputSpatial = axes.FilterSpatial
 
 	// The kernel of the reverse node is shaped like the output of the original convolution.
-	reverseAxes.KernelInputChannel, reverseAxes.KernelOutputChannel = axes.OutputBatch, axes.OutputChannel
-	reverseAxes.KernelSpatial = axes.OutputSpatial
+	reverseAxes.FilterInputChannel, reverseAxes.FilterOutputChannel = axes.OutputBatch, axes.OutputChannel
+	reverseAxes.FilterSpatial = axes.OutputSpatial
 
 	// Strides in the original convolution become dilations for the backward convolution to the kernel.
 	reverseDilations := strides
@@ -609,7 +609,7 @@ func convVJPWrtKernel(node, x, kernel, v *Node, numSpatialDims int, axes Convolv
 	// Get output and input spatial dimensions.
 	inputSpatialDims := gatherSlice(axes.InputSpatial, x.Shape().Dimensions)
 	outputSpatialDims := gatherSlice(axes.OutputSpatial, node.Shape().Dimensions)
-	kernelSpatialDims := gatherSlice(axes.KernelSpatial, kernel.Shape().Dimensions)
+	kernelSpatialDims := gatherSlice(axes.FilterSpatial, kernel.Shape().Dimensions)
 	for axisIdx := 0; axisIdx < numSpatialDims; axisIdx++ {
 		//fmt.Printf("\taxis %d\n", axisIdx)
 		// Get all meetrics for this spatial dimension..
