@@ -141,7 +141,7 @@ func MeanPool(x *Node) *PoolBuilder {
 // Example: x.shape=[batch_size, height, width, 3] and Window(3): the output depth will be 9x3=27,
 // with the concatenation of the surrounding pixels' channels.
 //
-// The implementation actually uses a convolution with a fixed filter, but it can be seen as a concatenating
+// The implementation actually uses a convolution with a fixed kernel, but it can be seen as a concatenating
 // pool operation.
 func ConcatPool(x *Node) *PoolBuilder {
 	pool := makePoolBuilder(x, backends.ReduceOpUndefined)
@@ -567,12 +567,12 @@ func (pool *PoolBuilder) doConcat() *Node {
 	outputChannelsSize *= inputChannelsSize
 	kernel := Iota(g, shapes.Make(dtypes.Int32, outputChannelsSize), 0)
 
-	// Filter order depends on the channels' position.
+	// Kernel order depends on the channels' position.
 	if pool.channelsAxisConfig == images.ChannelsLast {
-		// Filter so far shaped [<spatial_dims...>, inputChannelsSize],
+		// Kernel so far shaped [<spatial_dims...>, inputChannelsSize],
 		kernelDims = append(kernelDims, inputChannelsSize)
 	} else {
-		// Filter so far shaped [inputChannelsSize, <spatial_dims...>],
+		// Kernel so far shaped [inputChannelsSize, <spatial_dims...>],
 		kernelDims = append([]int{inputChannelsSize}, kernelDims...)
 	}
 	kernel = Reshape(kernel, kernelDims...)
