@@ -999,7 +999,7 @@ func ConvGeneralOp(input, kernel shapes.Shape, axes backends.ConvolveAxesConfig,
 	}
 
 	if filterGroupCount > 1 && batchGroupCount > 1 {
-		return errorf("at most one of filterGround (%d) or batchGroupCount (%d) can be set to > 1", filterGroupCount, batchGroupCount)
+		return errorf("at most one of filterGroupCount (%d) or batchGroupCount (%d) can be set to > 1", filterGroupCount, batchGroupCount)
 	}
 
 	// Check that channels (feature dimensions) are valid.
