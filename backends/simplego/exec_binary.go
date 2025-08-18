@@ -21,8 +21,7 @@ func binaryOperandsAndOutput(backend *Backend, inputs []*Buffer, inputsOwned []b
 		output = lhs
 		inputs[0] = nil
 	} else {
-		output = backend.getBuffer(outputShape.DType, outputShape.Size())
-		output.shape = outputShape
+		output = backend.getBufferForShape(outputShape)
 	}
 	return
 }
