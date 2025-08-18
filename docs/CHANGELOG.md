@@ -2,9 +2,10 @@
 
 # Next
 
-* Package `backends`:
-  * Normalized name of parameters (and axes) for the filter (aka. "kernel") of convolution.
-    This is a break in the API for anyone using the `backend` directly. The `graph` API remains unchanged.
+* Package `backends/shapeinference`:
+  * Added `ConvGeneralDilatedOp` to infer the output shape of a convolution.
+* Package `backends/simplego`:
+  * Implemented `ConvGeneralDilated` operation.
 
 # v0.21.1: 2025/08/16 Added Zero-dim tensors support and other small improvements. 
 

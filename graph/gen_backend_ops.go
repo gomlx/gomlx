@@ -1009,7 +1009,7 @@ func (ni *nodeInputsConvGeneralDilated) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsConvGeneralDilated) String() string {
-	return fmt.Sprintf("%s(operand=[#%d], filter=[#%d], axes=%+v, strides=%v, paddings=%v, inputDilation=%v, filterDilation=%v, filterGroupCount=%v, batchGroupCount=%v)",
+	return fmt.Sprintf("%s(operand=[#%d], filter=[#%d], axes=%+v, strides=%v, paddings=%v, inputDilation=%v, kernelDilation=%v, filterGroupCount=%v, batchGroupCount=%v)",
 		ni.Type(),
 		ni.operand.Id(),
 		ni.filter.Id(),

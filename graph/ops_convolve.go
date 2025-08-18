@@ -31,19 +31,19 @@ import (
 // when set, call `IsNil()`.
 type ConvolutionBuilder struct {
 	graph                             *Graph
-	x, filters                        *Node
+	x, kernel                         *Node
 	numSpatialDims                    int
 	strides                           []int
 	paddings                          [][2]int
 	padSame                           bool
-	inputDilation, filterDilation     []int
+	inputDilation, kernelDilation     []int
 	filterGroupCount, batchGroupCount int
 
 	channelsAxisConfig timage.ChannelsAxisConfig
 	axes               ConvolveAxesConfig
 }
 
-// Convolve prepares a convolution on x with the given filters for an arbitrary
+// Convolve prepares a convolution on x with the given kernel for an arbitrary
 // number of spatial dimensions (1D, 2D, 3D, etc.).
 //
 // It returns a ConvolutionBuilder object that can be further configured. Once the
@@ -61,28 +61,28 @@ type ConvolutionBuilder struct {
 // Note: package timage refers to package github.com/gomlx/gomlx/types/tensor/image.
 //
 // Alternatively, it provides the method ConvolutionBuilder.AxesConfig which allows arbitrary shape (axes order)
-// configuration of x and the filters.
+// configuration of x and the kernel.
 //
-// The shape of the filters should be [<spatial_dimensions...>, input_channels, output_channels] if
+// The shape of the kernel should be [<spatial_dimensions...>, input_channels, output_channels] if
 // configured with ConvolutionBuilder.ChannelsAxis(timage.ChannelsLast), the default. If one
 // sets ConvolutionBuilder.ChannelsAxis(timage.ChannelsFirst), the shape should be
 // [input_channels, <spatial_dimensions...>, output_channels] instead.
 //
-// Notice x and filters must have the same rank.
+// Notice x and kernel must have the same rank.
 //
 // We follow the Keras convention of calling the "depth" or "feature" or "channels" dimension
-// "channels". The "filters" are also called the "kernel" in keras.
+// "channels". The "kernel" is also called the "filters" by some.
 //
 // Additional features:
 //   - Group operations: Use ConvolutionBuilder.FeatureGroupCount to split channels
 //     or BatchGroupCount to split batches into independent processing groups.
-//     When using either feature, the filters' shape changes and back-propagation
+//     When using either feature, the kernel's shape changes and back-propagation
 //     is not yet supported.
-func Convolve(x, filters *Node) *ConvolutionBuilder {
+func Convolve(x, kernel *Node) *ConvolutionBuilder {
 	conv := &ConvolutionBuilder{
-		graph:            validateBuildingGraphFromInputs(x, filters),
+		graph:            validateBuildingGraphFromInputs(x, kernel),
 		x:                x,
-		filters:          filters,
+		kernel:           kernel,
 		filterGroupCount: 1,
 		batchGroupCount:  1,
 	}
@@ -93,9 +93,9 @@ func Convolve(x, filters *Node) *ConvolutionBuilder {
 			"but x rank is %d", x.Rank())
 	}
 
-	if filters.Rank() != x.Rank() {
-		Panicf("the filters (rank %d) must have the same rank as the input x (rank %d) -- x has a batch dimension, "+
-			"and filters has an output_channels dimension", filters.Rank(), x.Rank())
+	if kernel.Rank() != x.Rank() {
+		Panicf("the kernel (rank %d) must have the same rank as the input x (rank %d) -- x has a batch dimension, "+
+			"and kernel has an output_channels dimension", kernel.Rank(), x.Rank())
 	}
 
 	return conv.ChannelsAxis(timage.ChannelsLast).NoPadding()
@@ -122,32 +122,32 @@ func gatherSlice(indices, params []int) (slice []int) {
 func (conv *ConvolutionBuilder) ChannelsAxis(channelsAxisConfig timage.ChannelsAxisConfig) *ConvolutionBuilder {
 	conv.channelsAxisConfig = channelsAxisConfig
 	conv.axes.InputBatch = 0
-	conv.axes.InputChannel = timage.GetChannelsAxis(conv.x, channelsAxisConfig)
+	conv.axes.InputChannels = timage.GetChannelsAxis(conv.x, channelsAxisConfig)
 	conv.axes.InputSpatial = timage.GetSpatialAxes(conv.x, channelsAxisConfig)
 
 	switch channelsAxisConfig {
 	case timage.ChannelsFirst:
-		conv.axes.FilterInputChannel = 0
-		conv.axes.FilterSpatial = xslices.Iota(1, conv.numSpatialDims)
-		conv.axes.FilterOutputChannel = conv.numSpatialDims + 1
+		conv.axes.KernelInputChannels = 0
+		conv.axes.KernelSpatial = xslices.Iota(1, conv.numSpatialDims)
+		conv.axes.KernelOutputChannels = conv.numSpatialDims + 1
 
 		conv.axes.OutputBatch = 0
-		conv.axes.OutputChannel = 1
+		conv.axes.OutputChannels = 1
 		conv.axes.OutputSpatial = xslices.Iota(2, conv.numSpatialDims)
 
 	case timage.ChannelsLast:
-		conv.axes.FilterInputChannel = conv.numSpatialDims
-		conv.axes.FilterOutputChannel = conv.numSpatialDims + 1
-		conv.axes.FilterSpatial = xslices.Iota(0, conv.numSpatialDims)
+		conv.axes.KernelInputChannels = conv.numSpatialDims
+		conv.axes.KernelOutputChannels = conv.numSpatialDims + 1
+		conv.axes.KernelSpatial = xslices.Iota(0, conv.numSpatialDims)
 
 		conv.axes.OutputBatch = 0
 		conv.axes.OutputSpatial = xslices.Iota(1, conv.numSpatialDims)
-		conv.axes.OutputChannel = conv.numSpatialDims + 1
+		conv.axes.OutputChannels = conv.numSpatialDims + 1
 	}
 	return conv
 }
 
-// AxesConfig specify the exact configuration of the axes on the input (x/input and filters) and output of
+// AxesConfig specify the exact configuration of the axes on the input (x/input and kernel) and output of
 // the Convolve operation. This is advanced (and may not be supported in every backend), but it's powerful.
 // Consider using `ConvolutionBuilder.ChannelsAxis` instead.
 //
@@ -190,8 +190,8 @@ func (conv *ConvolutionBuilder) StridePerDim(strides ...int) *ConvolutionBuilder
 // FeatureGroupCount splits input/output channels into independent groups.
 // Equivalent to TensorFlow's "groups" parameter in tf.nn.convNd operations.
 //
-// When FeatureGroupCount != 1, the filters' shape changes: the input channels
-// dimension of the filters must equal (input_channels / group_count).
+// When FeatureGroupCount != 1, the kernel's shape changes: the input channels
+// dimension of the kernel must equal (input_channels / group_count).
 // This effectively creates separate convolution groups where each group
 // processes a subset of input channels and produces a subset of output channels.
 //
@@ -200,11 +200,11 @@ func (conv *ConvolutionBuilder) StridePerDim(strides ...int) *ConvolutionBuilder
 // but with channel dimensions affected by the grouping.
 //
 // Side effects:
-//   - Kernel shape: The filters' input channel dimension becomes (input_channels / group_count)
+//   - Kernel shape: The kernel's input channel dimension becomes (input_channels / group_count)
 //   - Output shape: The output maintains the same spatial dimensions as regular convolution,
 //     but each group independently maps its input channels to output channels
 //   - Performance: Can reduce computation cost by limiting connections between channels
-//   - Memory usage: Reduces the number of parameters in the filters
+//   - Memory usage: Reduces the number of parameters in the kernel
 //
 // Note: Back-propagation is not yet implemented for this feature.
 //
@@ -221,7 +221,7 @@ func (conv *ConvolutionBuilder) FeatureGroupCount(groupCount int) *ConvolutionBu
 // BatchGroupCount splits batches into independent processing groups.
 // Used for cross-batch interactions like ShuffleNet's channel shuffle.
 //
-// When BatchGroupCount != 1, the filters' shape changes: the batch dimension
+// When BatchGroupCount != 1, the kernel's shape changes: the batch dimension
 // of the input is divided by the group count, creating separate convolution
 // groups where each group processes a subset of the batch.
 //
@@ -250,7 +250,7 @@ func (conv *ConvolutionBuilder) PadSame() *ConvolutionBuilder {
 	return conv
 }
 
-// NoPadding removes any paddings, so if the filters spatial dimensions > 1,
+// NoPadding removes any paddings, so if the kernel spatial dimensions > 1,
 // the output shapes will be reduced on the edges. This is the default.
 //
 // See also PadSame and PaddingPerDim.
@@ -283,10 +283,10 @@ func (conv *ConvolutionBuilder) PaddingPerDim(paddings [][2]int) *ConvolutionBui
 //
 // The default is 1. A value > 1 is also called "atrous convolution".
 //
-// It specifies the filters' up-sampling rate. In the literature, the same parameter
-// is sometimes called input stride or dilation. The effective filters size used for the convolution
+// It specifies the kernel's up-sampling rate. In the literature, the same parameter
+// is sometimes called input stride or dilation. The effective kernel size used for the convolution
 // will be `kernel_shape + (kernel_shape - 1) * (dilation - 1)`, obtained by inserting (dilation-1) zeros
-// between consecutive elements of the original filters in the spatial dimension.
+// between consecutive elements of the original kernel in the spatial dimension.
 //
 // One cannot use strides and dilation at the same time.
 func (conv *ConvolutionBuilder) Dilations(dilation int) *ConvolutionBuilder {
@@ -294,26 +294,26 @@ func (conv *ConvolutionBuilder) Dilations(dilation int) *ConvolutionBuilder {
 	return conv.DilationPerDim(dilationsPerDim...)
 }
 
-// DilationPerDim sets the filters' dilations for each spatial dimension of the convolution.
+// DilationPerDim sets the kernel's dilations for each spatial dimension of the convolution.
 //
 // The default is 1 for every axis. A value > 1 is also called "atrous convolution".
 //
-// It specifies the filters' up-sampling rate. In the literature, the same parameter
-// is sometimes called input stride or dilation. The effective filters size used for the convolution
+// It specifies the kernel's up-sampling rate. In the literature, the same parameter
+// is sometimes called input stride or dilation. The effective kernel size used for the convolution
 // will be `kernel_shape + (kernel_shape - 1) * (dilation - 1)`, obtained by inserting (dilation-1) zeros
-// between consecutive elements of the original filters in the spatial dimension.
+// between consecutive elements of the original kernel in the spatial dimension.
 //
 // One cannot use strides and dilation at the same time.
 func (conv *ConvolutionBuilder) DilationPerDim(dilations ...int) *ConvolutionBuilder {
 	if len(dilations) == 0 {
-		conv.filterDilation = nil
+		conv.kernelDilation = nil
 		return conv
 	}
 	if len(dilations) != conv.numSpatialDims {
 		Panicf("received %d dilations in DilationPerDim, but x has %d spatial dimensions",
 			len(dilations), conv.numSpatialDims)
 	}
-	conv.filterDilation = dilations
+	conv.kernelDilation = dilations
 	return conv
 }
 
@@ -338,8 +338,8 @@ func (conv *ConvolutionBuilder) InputDilationPerDim(dilations ...int) *Convoluti
 // it updates the computation graph with convolution and returns the resulting
 // Node.
 func (conv *ConvolutionBuilder) Done() *Node {
-	// Select the filters spatial dimensions.
-	filtersSpatialDims := gatherSlice(conv.axes.FilterSpatial, conv.filters.Shape().Dimensions)
+	// Select the kernel spatial dimensions.
+	kernelSpatialDims := gatherSlice(conv.axes.KernelSpatial, conv.kernel.Shape().Dimensions)
 
 	// paddings can only be calculated after we are sure about the channels positioning.
 	paddings := conv.paddings
@@ -348,13 +348,13 @@ func (conv *ConvolutionBuilder) Done() *Node {
 		paddings = make([][2]int, conv.numSpatialDims)
 		dilation := 1
 		for dim := range paddings {
-			filtersSize := filtersSpatialDims[dim] // for this dimension.
-			if conv.filterDilation != nil {
-				dilation = conv.filterDilation[dim]
+			kernelSize := kernelSpatialDims[dim] // for this dimension.
+			if conv.kernelDilation != nil {
+				dilation = conv.kernelDilation[dim]
 			}
-			filtersSize = (filtersSize-1)*dilation + 1
-			paddings[dim][0] = (filtersSize - 1) / 2 // For even-sized filters, the padding is asymmetric.
-			paddings[dim][1] = filtersSize / 2
+			kernelSize = (kernelSize-1)*dilation + 1
+			paddings[dim][0] = (kernelSize - 1) / 2 // For an even-sized kernel, the padding is asymmetric.
+			paddings[dim][1] = kernelSize / 2
 		}
 	}
 
@@ -367,8 +367,8 @@ func (conv *ConvolutionBuilder) Done() *Node {
 			}
 		}
 	}
-	if conv.filterDilation != nil {
-		for _, dilation := range conv.filterDilation {
+	if conv.kernelDilation != nil {
+		for _, dilation := range conv.kernelDilation {
 			if dilation != 1 {
 				dilationsSet = true
 			}
@@ -376,21 +376,21 @@ func (conv *ConvolutionBuilder) Done() *Node {
 	}
 	if dilationsSet && stridesSet {
 		Panicf("both strides (%v) and dilations (%v) are set, but only one can be used at a time",
-			conv.strides, conv.filterDilation)
+			conv.strides, conv.kernelDilation)
 	}
 
 	// Validate feature group count
 	if conv.filterGroupCount > 1 {
-		inputChannels := conv.x.Shape().Dimensions[conv.axes.InputChannel]
+		inputChannels := conv.x.Shape().Dimensions[conv.axes.InputChannels]
 		if inputChannels%conv.filterGroupCount != 0 {
 			Panicf("input channels (%d) not divisible by FeatureGroupCount (%d)",
 				inputChannels, conv.filterGroupCount)
 		}
 
-		// Validate that the filters' input channel axis matches the feature group count.
-		kernelInputChannels := conv.filters.Shape().Dimensions[conv.axes.FilterInputChannel]
+		// Validate that the kernel's input channel axis matches the feature group count.
+		kernelInputChannels := conv.kernel.Shape().Dimensions[conv.axes.KernelInputChannels]
 		if kernelInputChannels != inputChannels/conv.filterGroupCount {
-			Panicf("filters input channels (%d) must equal input channels (%d) divided by FeatureGroupCount (%d)",
+			Panicf("kernel input channels (%d) must equal input channels (%d) divided by FeatureGroupCount (%d)",
 				kernelInputChannels, inputChannels, conv.filterGroupCount)
 		}
 	}
@@ -404,41 +404,46 @@ func (conv *ConvolutionBuilder) Done() *Node {
 		}
 	}
 
-	return ConvGeneralDilated(conv.x, conv.filters,
+	return ConvGeneralDilated(conv.x, conv.kernel,
 		conv.axes, conv.strides,
-		paddings, conv.inputDilation, conv.filterDilation,
+		paddings, conv.inputDilation, conv.kernelDilation,
 		conv.filterGroupCount, conv.batchGroupCount)
 }
 
-// ConvolveAxesConfig defines the interpretation of the input/filters/output tensor axes.
+// ConvolveAxesConfig defines the interpretation of the input/kernel/output tensor axes.
 // There must be the same number of spatial dimensions (axes) for each of the 3 tensors.
 // Input and output have batch and channels axes. Filters have "inputChannels" and "outputChannels" axes.
 type ConvolveAxesConfig = backends.ConvolveAxesConfig
 
-// ConvGeneralDilated is a generic Convolution operation. See Convolve for the simpler version.
-// featureAxisAfter defines whether the features (aka. channels or depth) axis comes after the
-// spatial dimension. Example: a 2D input can be one of the two:
+// ConvGeneralDilated provides direct access to the backend implementation of convolutions.
+// Consider using Convolve instead since this is mostly used for testing.
 //
-//   - featureAxisAfter=false: input=[batch_size, features, height, width], filters=[output_features, input_features, height, width]
-//   - featureAxisAfter=true: input=[batch_size, height, width, features], filters=[output_features, height, width, input_features]
+// It implements a generic convolution operation with support for:
+//
+// - Arbitrary number of spatial axes.
+// - Arbitrary transposition of axes.
+// - Strides and padding.
+// - Dilations of the input.
+// - Dilations of the kernel, aka. atrous convolution.
+// - Filter grouping (on the input channels).
+// - Batch grouping.
 //
 // Some details in https://www.tensorflow.org/xla/operation_semantics#convwithgeneralpadding_convolution.
-// (XLA documentation is really poor here, much is guess-work).
-// See also https://arxiv.org/pdf/1603.07285v1.pdf.
-// Not exported for now, hopefully Convolve will suffice.
+// There operand and filter are called lhs and rhs.
+// (XLA documentation is unfortunately poor, much is guess-work).
+// Also useful, https://arxiv.org/pdf/1603.07285v1.pdf.
 //
-// filterGroupCount and batchGroupCount are not supported yet for backpropagation. Please create an
-// issue if you come to need that.
-func ConvGeneralDilated(input, filters *Node, axes ConvolveAxesConfig,
-	strides []int, paddings [][2]int, inputDilation, filterDilation []int,
+// Note: input is aka. operand; kernel is aka. "filters". The input and output "channels" are also known as "features dimensions".
+func ConvGeneralDilated(input, kernel *Node, axes ConvolveAxesConfig,
+	strides []int, paddings [][2]int, inputDilations, kernelDilations []int,
 	filterGroupCount, batchGroupCount int) *Node {
-	_ = validateBuildingGraphFromInputs(input, filters)
+	_ = validateBuildingGraphFromInputs(input, kernel)
 	numSpatialDims := input.Rank() - 2
-	if len(axes.InputSpatial) != numSpatialDims || len(axes.OutputSpatial) != numSpatialDims || len(axes.FilterSpatial) != numSpatialDims {
+	if len(axes.InputSpatial) != numSpatialDims || len(axes.OutputSpatial) != numSpatialDims || len(axes.KernelSpatial) != numSpatialDims {
 		Panicf("ConvGeneralDilated: input has %d spatial dimensions, but axes configuration has %d, %d, %d spatial axes configured "+
-			"for input/filters/output", numSpatialDims, len(axes.InputSpatial), len(axes.FilterSpatial), len(axes.OutputSpatial))
+			"for input/kernel/output", numSpatialDims, len(axes.InputSpatial), len(axes.KernelSpatial), len(axes.OutputSpatial))
 	}
-	return backendConvGeneralDilated(input, filters, axes, strides, paddings, inputDilation, filterDilation, filterGroupCount, batchGroupCount)
+	return backendConvGeneralDilated(input, kernel, axes, strides, paddings, inputDilations, kernelDilations, filterGroupCount, batchGroupCount)
 }
 
 func convGeneralDilatedVJP(node, v *Node, _ shapes.Shape) []*Node {
@@ -460,9 +465,6 @@ func convGeneralDilatedVJP(node, v *Node, _ shapes.Shape) []*Node {
 	if params.batchGroupCount != 1 {
 		Panicf("gradient of ConvGeneralDialated using batchGroupCount != 1 is not yet implemented, got batchGroupCount=%d", params.batchGroupCount)
 	}
-	//fmt.Printf("\tx.shapes=%s\n", x.Shape())
-	//fmt.Printf("\tfilters.shapes=%s\n", filters.Shape())
-	//fmt.Printf("\tnode.shapes=%s\n", node.Shape())
 
 	vjpX := convVJPWrtX(node, x, kernel, v, numSpatialDims, params.axes,
 		params.strides, params.paddings, params.filterDilation)
@@ -474,34 +476,32 @@ func convGeneralDilatedVJP(node, v *Node, _ shapes.Shape) []*Node {
 // convVJPWrtX creates the Vector-Jacobian (for backpropagation) of the
 // output with respect to (==wrt) the input (x). See also convVJPWrtKernel.
 func convVJPWrtX(node, x, kernel, v *Node, numSpatialDims int, axes ConvolveAxesConfig,
-	strides []int, paddings [][2]int, filterDilation []int) *Node {
+	strides []int, paddings [][2]int, kernelDilations []int) *Node {
 	// Get output and input spatial dimensions.
 	inputSpatialDims := gatherSlice(axes.InputSpatial, x.Shape().Dimensions)
 	outputSpatialDims := gatherSlice(axes.OutputSpatial, node.Shape().Dimensions)
-	kernelSpatialDims := gatherSlice(axes.FilterSpatial, kernel.Shape().Dimensions)
-	//fmt.Printf("\tinputSpatialDims=%v\n", inputSpatialDims)
-	//fmt.Printf("\toutputSpatialDims=%v\n", outputSpatialDims)
+	kernelSpatialDims := gatherSlice(axes.KernelSpatial, kernel.Shape().Dimensions)
 
 	// Gradient of the output with respect to x:
-	// (1) we need to reverse the convolution, which involves the reverse filters: spatial dimensions are reversed,
+	// (1) we need to reverse the convolution, which involves the reverse kernel: spatial dimensions are reversed,
 	//     and input/output channel weights are transposed.
-	reverseKernel := Reverse(kernel, axes.FilterSpatial...)
+	reverseKernel := Reverse(kernel, axes.KernelSpatial...)
 
 	// Instead of transposing output/input channels, just swap their indices in the reverseAxes. Effectively this does:
-	//     reverseKernel = Transpose(reverseKernel, axes.FilterOutputChannel, axes.FilterInputChannel)
+	//     reverseKernel = Transpose(reverseKernel, axes.KernelOutputChannels, axes.KernelInputChannels)
 
 	reverseAxes := axes
-	reverseAxes.FilterInputChannel, reverseAxes.FilterOutputChannel = axes.FilterOutputChannel, axes.FilterInputChannel
+	reverseAxes.KernelInputChannels, reverseAxes.KernelOutputChannels = axes.KernelOutputChannels, axes.KernelInputChannels
 
 	// (2) we need to pad the reverse convolution to match get the original input.
 	reversePaddings := make([][2]int, numSpatialDims)
 	dilation := 1
 	for axis := 0; axis < numSpatialDims; axis++ {
 		//fmt.Printf("\taxis %d\n", axis)
-		// Effective filters size.
+		// Effective kernel size.
 		kernelSize := kernelSpatialDims[axis]
-		if len(filterDilation) > 0 {
-			dilation = filterDilation[axis]
+		if len(kernelDilations) > 0 {
+			dilation = kernelDilations[axis]
 		}
 		kernelSize = (kernelSize-1)*dilation + 1
 		inputDimSize := inputSpatialDims[axis]
@@ -518,7 +518,6 @@ func convVJPWrtX(node, x, kernel, v *Node, numSpatialDims int, axes ConvolveAxes
 		}
 		inputDimStart := (kernelSize-1)/2 - dimPadding[0]
 		inputDimEnd := inputDimSize - kernelSize/2 + dimPadding[1]
-		//fmt.Printf("\t\tinput start/end: %d, %d\n", inputDimStart, inputDimEnd)
 
 		if (inputDimEnd-inputDimStart+(dimStride-1))/dimStride != outputDimSize {
 			Panicf("failed to set up reverse Convolve() for gradient in spatial dimension %d: "+
@@ -538,23 +537,19 @@ func convVJPWrtX(node, x, kernel, v *Node, numSpatialDims int, axes ConvolveAxes
 		outputDimEnd := inputDimSize - inputDimStart + kernelSize/2
 		// So far outputDimEnd and outputDimStart haven't considered the strides converted to input dilation
 		// on the reverse convolution -- effectively injecting zeros.
-		//fmt.Printf("\t\tno strides output start/end: %d, %d\n", outputDimStart, outputDimEnd)
 		numInjectedZeros := (outputDimSize - 1) * (dimStride - 1)
 		outputDimEnd -= numInjectedZeros
 		if outputDimEnd < outputDimSize {
 			Panicf("failed to set up reverse Convolve() for gradient: spatial dimension %d "+
 				"outputDimEnd=%d < outputDimSize=%d, which is out-of-bounds", axis, outputDimEnd, outputDimSize)
 		}
-		//fmt.Printf("\t\toutput start/end: %d, %d\n", outputDimStart, outputDimEnd)
 
 		// Set padding to the output to match its start/end positions.
 		reversePaddings[axis][0] = -outputDimStart
 		reversePaddings[axis][1] = outputDimEnd - outputDimSize
 	}
 	// (3) Run2 the reverse convolution of the VJP.
-	//fmt.Printf("\treversePaddings=%v\n", reversePaddings)
-	//fmt.Printf("\tfilterDilation=%v\n", filterDilation)
-	revConv := Convolve(v, reverseKernel).PaddingPerDim(reversePaddings).DilationPerDim(filterDilation...).AxesConfig(reverseAxes)
+	revConv := Convolve(v, reverseKernel).PaddingPerDim(reversePaddings).DilationPerDim(kernelDilations...).AxesConfig(reverseAxes)
 	if len(strides) > 0 {
 		revConv.InputDilationPerDim(strides...)
 	}
@@ -570,40 +565,35 @@ func expectedOutputSize(inputSize, kernelSize, dilation, stride int, padding [2]
 }
 
 // convVJPWrtX creates the Vector-Jacobian (for backpropagation) of the
-// output with respect to (==wrt) the filters (aka filters). See also convVJPWrtX.
+// output with respect to (==wrt) the kernel (aka kernel). See also convVJPWrtX.
 func convVJPWrtKernel(node, x, kernel, v *Node, numSpatialDims int, axes ConvolveAxesConfig,
-	strides []int, paddings [][2]int, filterDilation []int) *Node {
-	//fmt.Printf("\nconvVJPWrtKernel input:\n")
-	//fmt.Printf("\tnode.shapes=%s, x.shapes=%s, filters.shapes=%s, v.shapes=%s\n", node.Shape(), x.Shape(), filters.Shape(), v.Shape())
-	//fmt.Printf("\tnumSpatialDims=%d, axes=%+v\n", numSpatialDims, axes)
-	//fmt.Printf("\tstrides=%v, paddings=%v, filterDilation=%v\n", strides, paddings, filterDilation)
-
-	// (1) For the Gradient of the output with respect to filters, we need a reverse convolution of
+	strides []int, paddings [][2]int, kernelDilations []int) *Node {
+	// (1) For the Gradient of the output with respect to kernel, we need a reverse convolution of
 	// the original input using v (the term from VJP, shaped as the original output) as the
 	// "reverseKernel". Since we need to multiply it by most of the inputNodes to get the VJP wrt
-	// to the filters. The output of this reverse convolution will be shaped like the original
-	// convolution filters if we correctly adjust the axes. See below.
+	// to the kernel. The output of this reverse convolution will be shaped like the original
+	// convolution kernel if we correctly adjust the axes. See below.
 	reverseKernel := v
 
 	// The batch dimension becomes like a channel: since they must be all added. But the channels that need
 	// to be generated separately become a batch dimension.
 	var reverseAxes ConvolveAxesConfig
-	reverseAxes.InputBatch, reverseAxes.InputChannel = axes.InputChannel, axes.InputBatch
+	reverseAxes.InputBatch, reverseAxes.InputChannels = axes.InputChannels, axes.InputBatch
 	reverseAxes.InputSpatial = axes.InputSpatial
 
-	// The output of the reverse convolve is the original filters shapes. The filters' input channels axis
+	// The output of the reverse convolve is the original kernel shapes. The kernel's input channels axis
 	// is the reverse output batch axis. The output channel of the reverse convolve goes into
-	// the original filters output channel.
-	reverseAxes.OutputBatch, reverseAxes.OutputChannel = axes.FilterInputChannel, axes.FilterOutputChannel
-	reverseAxes.OutputSpatial = axes.FilterSpatial
+	// the original kernel output channel.
+	reverseAxes.OutputBatch, reverseAxes.OutputChannels = axes.KernelInputChannels, axes.KernelOutputChannels
+	reverseAxes.OutputSpatial = axes.KernelSpatial
 
-	// The filters of the reverse node are shaped like the output of the original convolution.
-	reverseAxes.FilterInputChannel, reverseAxes.FilterOutputChannel = axes.OutputBatch, axes.OutputChannel
-	reverseAxes.FilterSpatial = axes.OutputSpatial
+	// The kernel of the reverse node is shaped like the output of the original convolution.
+	reverseAxes.KernelInputChannels, reverseAxes.KernelOutputChannels = axes.OutputBatch, axes.OutputChannels
+	reverseAxes.KernelSpatial = axes.OutputSpatial
 
-	// Strides in the original convolution become dilations for the backward convolution to the filters.
+	// Strides in the original convolution become dilations for the backward convolution to the kernel.
 	reverseDilations := strides
-	reverseStrides := filterDilation
+	reverseStrides := kernelDilations
 
 	// (2) we need to pad the reverse convolution to match get the original input.
 	reversePaddings := make([][2]int, numSpatialDims)
@@ -616,14 +606,13 @@ func convVJPWrtKernel(node, x, kernel, v *Node, numSpatialDims int, axes Convolv
 	// Get output and input spatial dimensions.
 	inputSpatialDims := gatherSlice(axes.InputSpatial, x.Shape().Dimensions)
 	outputSpatialDims := gatherSlice(axes.OutputSpatial, node.Shape().Dimensions)
-	kernelSpatialDims := gatherSlice(axes.FilterSpatial, kernel.Shape().Dimensions)
+	kernelSpatialDims := gatherSlice(axes.KernelSpatial, kernel.Shape().Dimensions)
 	for axisIdx := 0; axisIdx < numSpatialDims; axisIdx++ {
-		//fmt.Printf("\taxis %d\n", axisIdx)
-		// Get all meetrics for this spatial dimension..
+		// Get all the metrics for this spatial dimension.
 		kernelDimSize := kernelSpatialDims[axisIdx]
 		dimFilterDilation := 1
-		if len(filterDilation) > 0 {
-			dimFilterDilation = filterDilation[axisIdx]
+		if len(kernelDilations) > 0 {
+			dimFilterDilation = kernelDilations[axisIdx]
 		}
 		inputDimSize := inputSpatialDims[axisIdx]
 		outputDimSize := outputSpatialDims[axisIdx]
@@ -643,7 +632,7 @@ func convVJPWrtKernel(node, x, kernel, v *Node, numSpatialDims int, axes Convolv
 				axisIdx, outputDimSize, inputDimSize, kernelDimSize, dimFilterDilation, dimStride)
 		}
 
-		// Reverse filters size: the output of the original, modified by the filterDilation (set to the
+		// Reverse kernel size: the output of the original, modified by the kernelDilations (set to the
 		// original convolution strides)
 		revKernelDimSize := outputDimSize
 		revDimDilation := 1
@@ -656,17 +645,13 @@ func convVJPWrtKernel(node, x, kernel, v *Node, numSpatialDims int, axes Convolv
 		}
 		revDimPadding := reversePaddings[axisIdx]
 		revExpectedOutputDimSize := expectedOutputSize(inputDimSize, revKernelDimSize, revDimDilation, revDimStride, revDimPadding)
-		//fmt.Printf("\t\trevOut=%d, kernelSize=%d\n", revExpectedOutputDimSize, kernelDimSize)
 
 		// Adjust revPadding to make revOutputSize to match the original
 		revDimExtraPadding := (kernelDimSize - revExpectedOutputDimSize) * revDimStride
-		//fmt.Printf("\t\textraPad=%d\n", revDimExtraPadding)
 		reversePaddings[axisIdx][1] += revDimExtraPadding // Adjustment made to the end.
 	}
 
-	// (3) Run2 the reverse convolution of the VJP.
-	//fmt.Printf("\treversePaddings=%v\n", reversePaddings)
-	//fmt.Printf("\tfilterDilation=%v\n", filterDilation)
+	// (3) Run the reverse convolution of the VJP.
 	revConv := Convolve(x, reverseKernel).
 		AxesConfig(reverseAxes)
 	if len(reversePaddings) > 0 {
@@ -681,10 +666,5 @@ func convVJPWrtKernel(node, x, kernel, v *Node, numSpatialDims int, axes Convolv
 		revConv.DilationPerDim(reverseDilations...)
 	}
 	output := revConv.Done()
-	//fmt.Printf("convVJPWrtKernel output:\n")
-	//fmt.Printf("\trev: x.shapes=%s, filters.shapes=%s, output.shapes=%s\n", x.Shape(), reverseKernel.Shape(), output.Shape())
-	//fmt.Printf("\tnumSpatialDims=%d, axes=%+v\n", revConv.numSpatialDims, revConv.axes)
-	//fmt.Printf("\tstrides=%v, paddings=%v, filterDilation=%v\n", revConv.strides, revConv.paddings, revConv.filterDilation)
-	//fmt.Printf("\n")
 	return output
 }

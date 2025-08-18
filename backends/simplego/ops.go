@@ -537,38 +537,45 @@ func (b *Builder) ReduceWindow(operandOp backends.Op, reductionType backends.Red
 	return node, nil
 }
 
-// ConvGeneralDilated is a generic Convolution operation offered by XLA.
-// featureAxisAfter defines whether the features (aka. channels or depth) axis comes after the
-// spatial dimension. Example: a 2D input can be one of the two:
-//   - featureAxisAfter=false: input=[batch_size, features, height, width], filter=[output_features, input_features, height, width]
-//   - featureAxisAfter=true:  input=[batch_size, height, width, features], filter=[output_features, height, width, input_features]
+// ConvGeneralDilated is a generic Convolution operation with support for:
+//
+// - Arbitrary number of spatial axes.
+// - Arbitrary transposition of axes.
+// - Strides and padding.
+// - Dilations of the input.
+// - Dilations of the kernel, aka. atrous convolution.
+// - Filter grouping (on the input channels).
+// - Batch grouping.
 //
 // Some details in https://www.tensorflow.org/xla/operation_semantics#convwithgeneralpadding_convolution.
 // There operand and filter are called lhs and rhs.
 // (XLA documentation is unfortunately poor, much is guess-work).
 // Also useful, https://arxiv.org/pdf/1603.07285v1.pdf.
 //
-// Note: input is aka. operand; filter is aka. kernel. The input and output "channels" are also known as "features dimensions".
-func (b *Builder) ConvGeneralDilated(inputOp, filterOp backends.Op, axes backends.ConvolveAxesConfig, strides []int, paddings [][2]int, inputDilations, filterDilations []int, filterGroupCount, batchGroupCount int) (backends.Op, error) {
+// Note: input is aka. operand; kernel is aka. "filters". The input and output "channels" are also known as "features dimensions".
+func (b *Builder) ConvGeneralDilated(inputOp, kernelOp backends.Op, axes backends.ConvolveAxesConfig,
+	strides []int, paddings [][2]int,
+	inputDilations, kernelDilations []int,
+	filterGroupCount, batchGroupCount int) (backends.Op, error) {
 	opType := backends.OpTypeConvGeneralDilated
-	inputs, err := b.checkOps(opType.String(), inputOp, filterOp)
+	inputs, err := b.checkOps(opType.String(), inputOp, kernelOp)
 	if err != nil {
 		return nil, err
 	}
-	input, filter := inputs[0], inputs[1]
+	input, kernel := inputs[0], inputs[1]
 
-	outputShape, err := shapeinference.ConvGeneralDilatedOp(input.shape, filter.shape, axes, strides, paddings, inputDilations, filterDilations, filterGroupCount, batchGroupCount)
+	outputShape, err := shapeinference.ConvGeneralDilatedOp(input.shape, kernel.shape, axes, strides, paddings, inputDilations, kernelDilations, filterGroupCount, batchGroupCount)
 	if err != nil {
 		return nil, err
 	}
 
-	node := b.newNode(opType, outputShape, input, filter)
+	node := b.newNode(opType, outputShape, input, kernel)
 	node.data = &convNode{
 		axes:             axes.Clone(),
 		strides:          slices.Clone(strides),
 		paddings:         slices.Clone(paddings),
 		inputDilation:    slices.Clone(inputDilations),
-		filterDilation:   slices.Clone(filterDilations),
+		filterDilation:   slices.Clone(kernelDilations),
 		filterGroupCount: filterGroupCount,
 		batchGroupCount:  batchGroupCount,
 	}

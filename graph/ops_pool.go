@@ -337,7 +337,7 @@ func (pool *PoolBuilder) Done() *Node {
 		spatialPaddings = make([][2]int, pool.numSpatialDims)
 		for dim := range spatialPaddings {
 			windowSize := pool.windowSizes[dim]            // for this dimension.
-			spatialPaddings[dim][0] = (windowSize - 1) / 2 // For even-sized filters, the padding is asymmetric.
+			spatialPaddings[dim][0] = (windowSize - 1) / 2 // For even-sized kernel, the padding is asymmetric.
 			spatialPaddings[dim][1] = windowSize / 2
 		}
 	}
@@ -477,7 +477,7 @@ func reduceWindowVJP(node, v *Node, _ shapes.Shape) []*Node {
 
 // dilateConvolveToMatchSumPooling convolves the `backProp` to match `x`.
 //
-// Since the convolution would be with a filter of ones, we instead use `graph.Pad` and BackendReduceWindow instead.
+// Since the convolution would be with a kernel filled with ones, we instead use `graph.Pad` and BackendReduceWindow instead.
 func dilateConvolveToMatchSumPooling(x, backProp *Node, windowDimensions, strides []int, paddings [][2]int) *Node {
 	g := validateBuildingGraphFromInputs(x, backProp)
 	dtype := x.DType()
@@ -565,7 +565,7 @@ func (pool *PoolBuilder) doConcat() *Node {
 		outputChannelsSize *= size
 	}
 	outputChannelsSize *= inputChannelsSize
-	filter := Iota(g, shapes.Make(dtypes.Int32, outputChannelsSize), 0)
+	kernel := Iota(g, shapes.Make(dtypes.Int32, outputChannelsSize), 0)
 
 	// Filter order depends on the channels' position.
 	if pool.channelsAxisConfig == images.ChannelsLast {
@@ -575,10 +575,10 @@ func (pool *PoolBuilder) doConcat() *Node {
 		// Filter so far shaped [inputChannelsSize, <spatial_dims...>],
 		kernelDims = append([]int{inputChannelsSize}, kernelDims...)
 	}
-	filter = Reshape(filter, kernelDims...)
+	kernel = Reshape(kernel, kernelDims...)
 
-	// Add the last axis to filter of outputChannelsSize, a one-hot encoding:
-	filter = OneHot(filter, outputChannelsSize, dtype)
+	// Add the last axis to kernel of outputChannelsSize, a one-hot encoding:
+	kernel = OneHot(kernel, outputChannelsSize, dtype)
 
 	// strides default to pooling window sizes.
 	strides := pool.strides
@@ -592,8 +592,8 @@ func (pool *PoolBuilder) doConcat() *Node {
 		}
 	}
 
-	// Convolve with the given filter.
-	convConfig := Convolve(x, filter).ChannelsAxis(pool.channelsAxisConfig).StridePerDim(strides...)
+	// Convolve with the given kernel.
+	convConfig := Convolve(x, kernel).ChannelsAxis(pool.channelsAxisConfig).StridePerDim(strides...)
 	if pool.paddings != nil {
 		convConfig.PaddingPerDim(pool.paddings)
 	}

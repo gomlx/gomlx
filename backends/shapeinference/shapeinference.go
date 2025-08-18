@@ -908,7 +908,10 @@ func ReduceWindowOp(operand shapes.Shape, windowDimensions, strides, baseDilatio
 }
 
 // ConvGeneralDilatedOp returns the expected output shape for the operation.
-func ConvGeneralDilatedOp(input, filter shapes.Shape, axes backends.ConvolveAxesConfig, strides []int, paddings [][2]int, inputDilations, filterDilations []int, filterGroupCount, batchGroupCount int) (shapes.Shape, error) {
+func ConvGeneralDilatedOp(input, kernel shapes.Shape, axes backends.ConvolveAxesConfig,
+	strides []int, paddings [][2]int,
+	inputDilations, kernelDilations []int,
+	filterGroupCount, batchGroupCount int) (shapes.Shape, error) {
 	// Convenient error returns.
 	errorf := func(format string, args ...any) (shapes.Shape, error) {
 		return shapes.Invalid(), errors.Errorf("ConvGeneralDilatedOp:  "+format, args...)
@@ -917,8 +920,8 @@ func ConvGeneralDilatedOp(input, filter shapes.Shape, axes backends.ConvolveAxes
 	if !input.Ok() {
 		return errorf("invalid input (operand) shape %s", input)
 	}
-	if !filter.Ok() {
-		return errorf("invalid filter shape %s", filter)
+	if !kernel.Ok() {
+		return errorf("invalid kernel shape %s", kernel)
 	}
 
 	// Check ranks.
@@ -927,8 +930,8 @@ func ConvGeneralDilatedOp(input, filter shapes.Shape, axes backends.ConvolveAxes
 	if rank < 3 {
 		return errorf("input (operand) needs to be at least rank-3 with axes (in any order) batch, channels and spatial -- input shape is %s", input)
 	}
-	if filter.Rank() != rank {
-		return errorf("input (operand) and filter have different rank!? -- input shape is %s and filter shape is %s", input, filter)
+	if kernel.Rank() != rank {
+		return errorf("input (operand) and kernel have different rank!? -- input shape is %s and kernel shape is %s", input, kernel)
 	}
 
 	// Check axes configuration:
@@ -936,38 +939,38 @@ func ConvGeneralDilatedOp(input, filter shapes.Shape, axes backends.ConvolveAxes
 		return errorf("axes.InputSpatial (%v) must either be nil or provide one value for each spatial axis (%d), input shape is %s",
 			axes.InputSpatial, spatialRank, input.Shape())
 	}
-	inputAxes := types.SetWith(axes.InputBatch, axes.InputChannel)
+	inputAxes := types.SetWith(axes.InputBatch, axes.InputChannels)
 	for _, inputAxis := range axes.InputSpatial {
 		inputAxes.Insert(inputAxis)
 	}
 	if len(inputAxes) != rank {
-		return errorf("duplicate input axes configuration: batch=%d, channel=%d, spatial=%v", axes.InputBatch, axes.InputChannel, axes.InputSpatial)
+		return errorf("duplicate input axes configuration: batch=%d, channel=%d, spatial=%v", axes.InputBatch, axes.InputChannels, axes.InputSpatial)
 	}
 	for inputAxis := range inputAxes {
 		if inputAxis < 0 || inputAxis >= rank {
-			return errorf("invalid input axes configuration (axis %d is out-of-bounds): batch=%d, channel=%d, spatial=%v", inputAxis, axes.InputBatch, axes.InputChannel, axes.InputSpatial)
+			return errorf("invalid input axes configuration (axis %d is out-of-bounds): batch=%d, channel=%d, spatial=%v", inputAxis, axes.InputBatch, axes.InputChannels, axes.InputSpatial)
 		}
 	}
-	if len(axes.FilterSpatial) != spatialRank {
+	if len(axes.KernelSpatial) != spatialRank {
 		return shapes.Invalid(), errors.Errorf("ConvGeneralDilatedOp: axes.InputSpatial (%v) must either be nil or provide one value for each spatial axis (%d), input shape is %s",
 			axes.InputSpatial, spatialRank, input.Shape())
 	}
-	filterAxes := types.SetWith(axes.FilterInputChannel, axes.FilterOutputChannel)
-	for _, filterAxis := range axes.FilterSpatial {
-		filterAxes.Insert(filterAxis)
+	kernelAxes := types.SetWith(axes.KernelInputChannels, axes.KernelOutputChannels)
+	for _, filterAxis := range axes.KernelSpatial {
+		kernelAxes.Insert(filterAxis)
 	}
-	if len(filterAxes) != rank {
-		return errorf("duplicate filter axes configuration: input channel=%d, output channel=%d, spatial=%v",
-			axes.FilterInputChannel, axes.FilterOutputChannel, axes.FilterSpatial)
+	if len(kernelAxes) != rank {
+		return errorf("duplicate kernel axes configuration: input channel=%d, output channel=%d, spatial=%v",
+			axes.KernelInputChannels, axes.KernelOutputChannels, axes.KernelSpatial)
 	}
-	for filterAxis := range filterAxes {
-		if filterAxis < 0 || filterAxis >= rank {
-			return errorf("invalid filter axes configuration (axis %d is out-of-bounds): input channel=%d, output channel=%d, spatial=%v",
-				filterAxis, axes.FilterInputChannel, axes.FilterOutputChannel, axes.FilterSpatial)
+	for kernelAxis := range kernelAxes {
+		if kernelAxis < 0 || kernelAxis >= rank {
+			return errorf("invalid kernel axes configuration (axis %d is out-of-bounds): input channel=%d, output channel=%d, spatial=%v",
+				kernelAxis, axes.KernelInputChannels, axes.KernelOutputChannels, axes.KernelSpatial)
 		}
 	}
 
-	// Check strides, paddings, inputDilations and filterDilations.
+	// Check strides, paddings, inputDilations and kernelDilations.
 	if len(strides) != 0 && len(strides) != spatialRank {
 		return errorf("strides (%v) must either be nil or provide one value for each spatial axis (%d), input shape is %s",
 			strides, spatialRank, input.Shape())
@@ -985,13 +988,13 @@ func ConvGeneralDilatedOp(input, filter shapes.Shape, axes backends.ConvolveAxes
 			return errorf("inputDilations[%d]=%d must be >= 1 for input shape %s", i, dilation, input)
 		}
 	}
-	if len(filterDilations) != 0 && len(filterDilations) != spatialRank {
-		return errorf("filterDilations (%v) must either be nil or provide one value for each spatial axis (%d), input shape is %s",
-			filterDilations, spatialRank, input.Shape())
+	if len(kernelDilations) != 0 && len(kernelDilations) != spatialRank {
+		return errorf("kernelDilations (%v) must either be nil or provide one value for each spatial axis (%d), input shape is %s",
+			kernelDilations, spatialRank, input.Shape())
 	}
-	for i, dilation := range filterDilations {
+	for i, dilation := range kernelDilations {
 		if dilation < 1 {
-			return errorf("filterDilations[%d]=%d must be >= 1 for input shape %s", i, dilation, input)
+			return errorf("kernelDilations[%d]=%d must be >= 1 for input shape %s", i, dilation, input)
 		}
 	}
 
@@ -1005,8 +1008,8 @@ func ConvGeneralDilatedOp(input, filter shapes.Shape, axes backends.ConvolveAxes
 	}
 
 	// Check that channels (feature dimensions) are valid.
-	inputChannels := input.Dim(axes.InputChannel)
-	outputChannels := filter.Dim(axes.FilterOutputChannel)
+	inputChannels := input.Dim(axes.InputChannels)
+	outputChannels := kernel.Dim(axes.KernelOutputChannels)
 	if filterGroupCount < 1 {
 		return errorf("filterGroupCount=%d must be >= 1 for input shape %s", filterGroupCount, input)
 	}
@@ -1014,23 +1017,23 @@ func ConvGeneralDilatedOp(input, filter shapes.Shape, axes backends.ConvolveAxes
 		return errorf("input channels dimension %d must be divisible by filterGroupCount %d", inputChannels, filterGroupCount)
 	}
 	if outputChannels%filterGroupCount != 0 {
-		return errorf("filter output channels dimension %d must be divisible by filterGroupCount %d", outputChannels, filterGroupCount)
+		return errorf("kernel output channels dimension %d must be divisible by filterGroupCount %d", outputChannels, filterGroupCount)
 	}
-	filterInputChannels := filter.Dim(axes.FilterInputChannel)
-	if inputChannels != filterInputChannels*filterGroupCount {
-		return errorf("we must have inputChannels (=%d) = filterInputChannels (=%d) * filterGroupCount (=%d) -- input shape is %s, filter shape is %s",
-			inputChannels, filterInputChannels, filterGroupCount, input, filter)
+	kernelInputChannels := kernel.Dim(axes.KernelInputChannels)
+	if inputChannels != kernelInputChannels*filterGroupCount {
+		return errorf("we must have inputChannels (=%d) = kernelInputChannels (=%d) * filterGroupCount (=%d) -- input shape is %s, kernel shape is %s",
+			inputChannels, kernelInputChannels, filterGroupCount, input, kernel)
 	}
 
 	// Find the output shape.
 	output := input.Clone()
 	output.Dimensions[axes.InputBatch] = inputBatch / batchGroupCount
-	output.Dimensions[axes.InputChannel] = outputChannels
+	output.Dimensions[axes.InputChannels] = outputChannels
 
 	for spatialAxisIdx, inputAxis := range axes.InputSpatial {
 		inputDim := input.Dim(inputAxis)
-		filterAxis := axes.FilterSpatial[spatialAxisIdx]
-		filterDim := filter.Dim(filterAxis)
+		filterAxis := axes.KernelSpatial[spatialAxisIdx]
+		filterDim := kernel.Dim(filterAxis)
 		var (
 			stride  int
 			padding [2]int
@@ -1045,8 +1048,8 @@ func ConvGeneralDilatedOp(input, filter shapes.Shape, axes backends.ConvolveAxes
 		if inputDilations != nil {
 			inputDilation = inputDilations[spatialAxisIdx]
 		}
-		if filterDilations != nil {
-			filterDilation = filterDilations[spatialAxisIdx]
+		if kernelDilations != nil {
+			filterDilation = kernelDilations[spatialAxisIdx]
 		}
 
 		// Calculate outputDim of the convolution.
@@ -1063,7 +1066,7 @@ func ConvGeneralDilatedOp(input, filter shapes.Shape, axes backends.ConvolveAxes
 
 		// Calculate output dimension
 		if effectiveFilterDim > paddedEffectiveInputDim {
-			return errorf("effective filter dimension %d for axis %d is larger than padded effective input dimension %d. "+
+			return errorf("effective kernel dimension %d for axis %d is larger than padded effective input dimension %d. "+
 				"(input_dim: %d, input_dilation: %d, filter_dim: %d, filter_dilation: %d, padding: [%d,%d]) for input shape %s",
 				effectiveFilterDim, inputAxis, paddedEffectiveInputDim, inputDim, inputDilation, filterDim, filterDilation,
 				padding[0], padding[1], input)
