@@ -998,13 +998,8 @@ func ConvGeneralOp(input, kernel shapes.Shape, axes backends.ConvolveAxesConfig,
 		}
 	}
 
-	// Check batchGroupCount.
-	inputBatch := input.Dim(axes.InputBatch)
-	if batchGroupCount < 1 {
-		return errorf("batchGroupCount=%d must be >= 1 for input shape %s", batchGroupCount, input)
-	}
-	if inputBatch%batchGroupCount != 0 {
-		return errorf("input batch dimension %d must be divisible by batchGroupCount %d", inputBatch, batchGroupCount)
+	if filterGroupCount > 1 && batchGroupCount > 1 {
+		return errorf("at most one of filterGround (%d) or batchGroupCount (%d) can be set to > 1", filterGroupCount, batchGroupCount)
 	}
 
 	// Check that channels (feature dimensions) are valid.
@@ -1025,10 +1020,22 @@ func ConvGeneralOp(input, kernel shapes.Shape, axes backends.ConvolveAxesConfig,
 			inputChannels, kernelInputChannels, filterGroupCount, input, kernel)
 	}
 
+	// Check batchGroupCount.
+	inputBatch := input.Dim(axes.InputBatch)
+	if batchGroupCount < 1 {
+		return errorf("batchGroupCount=%d must be >= 1 for input shape %s", batchGroupCount, input)
+	}
+	if inputBatch%batchGroupCount != 0 {
+		return errorf("input batch dimension %d must be divisible by batchGroupCount %d", inputBatch, batchGroupCount)
+	}
+	if outputChannels%batchGroupCount != 0 {
+		return errorf("output channels dimension %d must be divisible by batchGroupCount %d", outputChannels, batchGroupCount)
+	}
+
 	// Find the output shape.
 	output := input.Clone()
-	output.Dimensions[axes.InputBatch] = inputBatch / batchGroupCount
-	output.Dimensions[axes.InputChannels] = outputChannels
+	output.Dimensions[axes.OutputBatch] = inputBatch / batchGroupCount
+	output.Dimensions[axes.OutputChannels] = outputChannels
 
 	for spatialAxisIdx, inputAxis := range axes.InputSpatial {
 		inputDim := input.Dim(inputAxis)
@@ -1072,7 +1079,8 @@ func ConvGeneralOp(input, kernel shapes.Shape, axes backends.ConvolveAxesConfig,
 				padding[0], padding[1], input)
 		}
 		outputDim := (paddedEffectiveInputDim-effectiveFilterDim)/stride + 1
-		output.Dimensions[inputAxis] = outputDim
+		outputSpatialAxis := axes.OutputSpatial[spatialAxisIdx]
+		output.Dimensions[outputSpatialAxis] = outputDim
 	}
 
 	return output, nil
