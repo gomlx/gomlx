@@ -3,7 +3,8 @@
 # Next
 
 * Package `backends/shapeinference`:
-  * Added `ConvGeneralDilatedOp` to infer the output shape of a convolution.
+  * `ConvGeneralDilated` renamed to `ConvGeneral`
+  * Added `ConvGeneralOp` to infer the output shape of a convolution.
 * Package `backends/simplego`:
   * Implemented `ConvGeneralDilated` operation.
 

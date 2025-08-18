@@ -537,7 +537,7 @@ func (b *Builder) ReduceWindow(operandOp backends.Op, reductionType backends.Red
 	return node, nil
 }
 
-// ConvGeneralDilated is a generic Convolution operation with support for:
+// ConvGeneral is a generic Convolution operation with support for:
 //
 // - Arbitrary number of spatial axes.
 // - Arbitrary transposition of axes.
@@ -553,7 +553,7 @@ func (b *Builder) ReduceWindow(operandOp backends.Op, reductionType backends.Red
 // Also useful, https://arxiv.org/pdf/1603.07285v1.pdf.
 //
 // Note: input is aka. operand; kernel is aka. "filters". The input and output "channels" are also known as "features dimensions".
-func (b *Builder) ConvGeneralDilated(inputOp, kernelOp backends.Op, axes backends.ConvolveAxesConfig,
+func (b *Builder) ConvGeneral(inputOp, kernelOp backends.Op, axes backends.ConvolveAxesConfig,
 	strides []int, paddings [][2]int,
 	inputDilations, kernelDilations []int,
 	filterGroupCount, batchGroupCount int) (backends.Op, error) {
@@ -564,7 +564,7 @@ func (b *Builder) ConvGeneralDilated(inputOp, kernelOp backends.Op, axes backend
 	}
 	input, kernel := inputs[0], inputs[1]
 
-	outputShape, err := shapeinference.ConvGeneralDilatedOp(input.shape, kernel.shape, axes, strides, paddings, inputDilations, kernelDilations, filterGroupCount, batchGroupCount)
+	outputShape, err := shapeinference.ConvGeneralOp(input.shape, kernel.shape, axes, strides, paddings, inputDilations, kernelDilations, filterGroupCount, batchGroupCount)
 	if err != nil {
 		return nil, err
 	}
@@ -590,6 +590,16 @@ type convNode struct {
 	filterDilation   []int
 	filterGroupCount int
 	batchGroupCount  int
+}
+
+// ConvGeneralDilated is a deprecated an alias to ConvGeneral.
+//
+// Deprecated: use ConvGeneral instead.
+func (b *Builder) ConvGeneralDilated(inputOp, kernelOp backends.Op, axes backends.ConvolveAxesConfig,
+	strides []int, paddings [][2]int,
+	inputDilations, kernelDilations []int,
+	filterGroupCount, batchGroupCount int) (backends.Op, error) {
+	return b.ConvGeneral(inputOp, kernelOp, axes, strides, paddings, inputDilations, kernelDilations, filterGroupCount, batchGroupCount)
 }
 
 //======================================================================================================================

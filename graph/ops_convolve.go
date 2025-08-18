@@ -404,7 +404,7 @@ func (conv *ConvolutionBuilder) Done() *Node {
 		}
 	}
 
-	return ConvGeneralDilated(conv.x, conv.kernel,
+	return ConvGeneral(conv.x, conv.kernel,
 		conv.axes, conv.strides,
 		paddings, conv.inputDilations, conv.kernelDilations,
 		conv.filterGroupCount, conv.batchGroupCount)
@@ -415,7 +415,7 @@ func (conv *ConvolutionBuilder) Done() *Node {
 // Input and output have batch and channels axes. Filters have "inputChannels" and "outputChannels" axes.
 type ConvolveAxesConfig = backends.ConvolveAxesConfig
 
-// ConvGeneralDilated provides direct access to the backend implementation of convolutions.
+// ConvGeneral provides direct access to the backend implementation of convolutions.
 // Consider using Convolve instead since this is mostly used for testing.
 //
 // It implements a generic convolution operation with support for:
@@ -434,7 +434,7 @@ type ConvolveAxesConfig = backends.ConvolveAxesConfig
 // Also useful, https://arxiv.org/pdf/1603.07285v1.pdf.
 //
 // Note: input is aka. operand; kernel is aka. "filters". The input and output "channels" are also known as "features dimensions".
-func ConvGeneralDilated(input, kernel *Node, axes ConvolveAxesConfig,
+func ConvGeneral(input, kernel *Node, axes ConvolveAxesConfig,
 	strides []int, paddings [][2]int, inputDilations, kernelDilations []int,
 	filterGroupCount, batchGroupCount int) *Node {
 	_ = validateBuildingGraphFromInputs(input, kernel)
@@ -445,6 +445,11 @@ func ConvGeneralDilated(input, kernel *Node, axes ConvolveAxesConfig,
 	}
 	return backendConvGeneralDilated(input, kernel, axes, strides, paddings, inputDilations, kernelDilations, filterGroupCount, batchGroupCount)
 }
+
+// ConvGeneralDilated is a deprecated an alias to ConvGeneral.
+//
+// Deprecated: use ConvGeneral instead.
+var ConvGeneralDilated = ConvGeneral
 
 func convGeneralDilatedVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// TODO: backward propagation is not working in this function
