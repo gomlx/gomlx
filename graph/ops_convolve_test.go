@@ -55,7 +55,7 @@ func TestConvolve(t *testing.T) {
 			return
 		}, [][][][]float32{{{{2.2, 3.3, 2.2}, {6.6, 9.9, 6.6}, {6.6, 9.9, 6.6}}}})
 
-	testFuncOneInput(t, "Convolve(...kernel=[2,2])",
+	testFuncOneInput(t, "Convolve(...filters=[2,2])",
 		func(g *Graph) (input, output *Node) {
 			channelA := Iota(g, MakeShape(dtypes.Float64, 1, 3, 3, 1), 1)
 			channelB := Mul(channelA, Const(g, 0.1))
@@ -247,7 +247,7 @@ func TestConvolveWithGroupCount(t *testing.T) {
 			// Input with 2 channels (matches FeatureGroupCount)
 			input = IotaFull(g, MakeShape(dtypes.Float32, 1, 2, 3, 3))
 
-			// Create kernel for grouped convolution (1 input channel per group)
+			// Create filters for grouped convolution (1 input channel per group)
 			kernel := Const(g, [][][][]float32{{{{0, 0}, {0, 0}, {0, 0}}, {{0, 0}, {1, 2}, {0, 0}}, {{0, 0}, {0, 0}, {0, 0}}}})
 
 			output = Convolve(input, kernel).
@@ -263,7 +263,7 @@ func TestConvolveWithGroupCount(t *testing.T) {
 		func(g *Graph) (input, output *Node) {
 			input = IotaFull(g, MakeShape(dtypes.Float32, 2, 1, 3, 3))
 
-			// Create kernel for grouped convolution (1 input channel per group)
+			// Create filters for grouped convolution (1 input channel per group)
 			kernel := Const(g, [][][][]float32{{{{0, 0}, {0, 0}, {0, 0}}, {{0, 0}, {1, 2}, {0, 0}}, {{0, 0}, {0, 0}, {0, 0}}}})
 
 			output = Convolve(input, kernel).
