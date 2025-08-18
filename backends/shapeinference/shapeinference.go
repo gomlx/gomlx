@@ -907,8 +907,8 @@ func ReduceWindowOp(operand shapes.Shape, windowDimensions, strides, baseDilatio
 	return shapes.Make(operand.DType, outputDims...), nil
 }
 
-// ConvGeneralDilatedOp returns the expected output shape for the operation.
-func ConvGeneralDilatedOp(input, kernel shapes.Shape, axes backends.ConvolveAxesConfig,
+// ConvGeneralOp returns the expected output shape for the ConvGeneral operation.
+func ConvGeneralOp(input, kernel shapes.Shape, axes backends.ConvolveAxesConfig,
 	strides []int, paddings [][2]int,
 	inputDilations, kernelDilations []int,
 	filterGroupCount, batchGroupCount int) (shapes.Shape, error) {
