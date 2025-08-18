@@ -1,8 +1,6 @@
 package simplego
 
 import (
-	"slices"
-
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/shapeinference"
 	"github.com/gomlx/gomlx/graph"
@@ -535,71 +533,6 @@ func (b *Builder) ReduceWindow(operandOp backends.Op, reductionType backends.Red
 		paddings:         paddings,
 	}
 	return node, nil
-}
-
-// ConvGeneral is a generic Convolution operation with support for:
-//
-// - Arbitrary number of spatial axes.
-// - Arbitrary transposition of axes.
-// - Strides and padding.
-// - Dilations of the input.
-// - Dilations of the kernel, aka. atrous convolution.
-// - Filter grouping (on the input channels).
-// - Batch grouping.
-//
-// Some details in https://www.tensorflow.org/xla/operation_semantics#convwithgeneralpadding_convolution.
-// There operand and filter are called lhs and rhs.
-// (XLA documentation is unfortunately poor, much is guess-work).
-// Also useful, https://arxiv.org/pdf/1603.07285v1.pdf.
-//
-// Note: input is aka. operand; kernel is aka. "filters". The input and output "channels" are also known as "features dimensions".
-func (b *Builder) ConvGeneral(inputOp, kernelOp backends.Op, axes backends.ConvolveAxesConfig,
-	strides []int, paddings [][2]int,
-	inputDilations, kernelDilations []int,
-	filterGroupCount, batchGroupCount int) (backends.Op, error) {
-	opType := backends.OpTypeConvGeneralDilated
-	inputs, err := b.checkOps(opType.String(), inputOp, kernelOp)
-	if err != nil {
-		return nil, err
-	}
-	input, kernel := inputs[0], inputs[1]
-
-	outputShape, err := shapeinference.ConvGeneralOp(input.shape, kernel.shape, axes, strides, paddings, inputDilations, kernelDilations, filterGroupCount, batchGroupCount)
-	if err != nil {
-		return nil, err
-	}
-
-	node := b.newNode(opType, outputShape, input, kernel)
-	node.data = &convNode{
-		axes:             axes.Clone(),
-		strides:          slices.Clone(strides),
-		paddings:         slices.Clone(paddings),
-		inputDilation:    slices.Clone(inputDilations),
-		filterDilation:   slices.Clone(kernelDilations),
-		filterGroupCount: filterGroupCount,
-		batchGroupCount:  batchGroupCount,
-	}
-	return node, nil
-}
-
-type convNode struct {
-	axes             backends.ConvolveAxesConfig
-	strides          []int
-	paddings         [][2]int
-	inputDilation    []int
-	filterDilation   []int
-	filterGroupCount int
-	batchGroupCount  int
-}
-
-// ConvGeneralDilated is a deprecated an alias to ConvGeneral.
-//
-// Deprecated: use ConvGeneral instead.
-func (b *Builder) ConvGeneralDilated(inputOp, kernelOp backends.Op, axes backends.ConvolveAxesConfig,
-	strides []int, paddings [][2]int,
-	inputDilations, kernelDilations []int,
-	filterGroupCount, batchGroupCount int) (backends.Op, error) {
-	return b.ConvGeneral(inputOp, kernelOp, axes, strides, paddings, inputDilations, kernelDilations, filterGroupCount, batchGroupCount)
 }
 
 //======================================================================================================================

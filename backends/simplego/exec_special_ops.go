@@ -1703,10 +1703,8 @@ func execReduceWindow(backend *Backend, node *Node, inputs []*Buffer, inputsOwne
 	operandShape := operand.shape
 	rank := operandShape.Rank()
 	dtype := operandShape.DType
-	output := backend.getBuffer(node.shape.DType, node.shape.Size())
-	output.shape = node.shape
 	outputShape := node.shape
-	_ = outputShape
+	output := backend.getBufferForShape(outputShape)
 	opData := node.data.(*reduceWindowNode)
 
 	// resolve the effective parameters, assuming shapeinference.ReduceWindowOp handled nils by defaulting them:
