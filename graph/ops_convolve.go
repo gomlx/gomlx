@@ -36,7 +36,7 @@ type ConvolutionBuilder struct {
 	strides                           []int
 	paddings                          [][2]int
 	padSame                           bool
-	inputDilation, kernelDilation     []int
+	inputDilations, kernelDilations   []int
 	filterGroupCount, batchGroupCount int
 
 	channelsAxisConfig timage.ChannelsAxisConfig
@@ -306,14 +306,14 @@ func (conv *ConvolutionBuilder) Dilations(dilation int) *ConvolutionBuilder {
 // One cannot use strides and dilation at the same time.
 func (conv *ConvolutionBuilder) DilationPerDim(dilations ...int) *ConvolutionBuilder {
 	if len(dilations) == 0 {
-		conv.kernelDilation = nil
+		conv.kernelDilations = nil
 		return conv
 	}
 	if len(dilations) != conv.numSpatialDims {
 		Panicf("received %d dilations in DilationPerDim, but x has %d spatial dimensions",
 			len(dilations), conv.numSpatialDims)
 	}
-	conv.kernelDilation = dilations
+	conv.kernelDilations = dilations
 	return conv
 }
 
@@ -323,14 +323,14 @@ func (conv *ConvolutionBuilder) DilationPerDim(dilations ...int) *ConvolutionBui
 // The gradient of Convolve with input dilation is not implemented yet, be careful.
 func (conv *ConvolutionBuilder) InputDilationPerDim(dilations ...int) *ConvolutionBuilder {
 	if len(dilations) == 0 {
-		conv.inputDilation = nil
+		conv.inputDilations = nil
 		return conv
 	}
 	if len(dilations) != conv.numSpatialDims {
 		Panicf("received %d dilations in inputDilationPerDim, but x has %d spatial dimensions",
 			len(dilations), conv.numSpatialDims)
 	}
-	conv.inputDilation = dilations
+	conv.inputDilations = dilations
 	return conv
 }
 
@@ -349,8 +349,8 @@ func (conv *ConvolutionBuilder) Done() *Node {
 		dilation := 1
 		for dim := range paddings {
 			kernelSize := kernelSpatialDims[dim] // for this dimension.
-			if conv.kernelDilation != nil {
-				dilation = conv.kernelDilation[dim]
+			if conv.kernelDilations != nil {
+				dilation = conv.kernelDilations[dim]
 			}
 			kernelSize = (kernelSize-1)*dilation + 1
 			paddings[dim][0] = (kernelSize - 1) / 2 // For an even-sized kernel, the padding is asymmetric.
@@ -367,8 +367,8 @@ func (conv *ConvolutionBuilder) Done() *Node {
 			}
 		}
 	}
-	if conv.kernelDilation != nil {
-		for _, dilation := range conv.kernelDilation {
+	if conv.kernelDilations != nil {
+		for _, dilation := range conv.kernelDilations {
 			if dilation != 1 {
 				dilationsSet = true
 			}
@@ -376,7 +376,7 @@ func (conv *ConvolutionBuilder) Done() *Node {
 	}
 	if dilationsSet && stridesSet {
 		Panicf("both strides (%v) and dilations (%v) are set, but only one can be used at a time",
-			conv.strides, conv.kernelDilation)
+			conv.strides, conv.kernelDilations)
 	}
 
 	// Validate feature group count
@@ -406,7 +406,7 @@ func (conv *ConvolutionBuilder) Done() *Node {
 
 	return ConvGeneralDilated(conv.x, conv.kernel,
 		conv.axes, conv.strides,
-		paddings, conv.inputDilation, conv.kernelDilation,
+		paddings, conv.inputDilations, conv.kernelDilations,
 		conv.filterGroupCount, conv.batchGroupCount)
 }
 
@@ -528,7 +528,7 @@ func convVJPWrtX(node, x, kernel, v *Node, numSpatialDims int, axes ConvolveAxes
 		// Start/End positions on the output for the reverse convolution.
 		// Values below 0 or above outputDimSize means padding. It has to be such that it will regenerate
 		// the original input spatial shapes.
-		// Stride in the input becomes inputDilation in the reverse convolution.
+		// Stride in the input becomes inputDilations in the reverse convolution.
 		outputDimStart := -inputDimStart - ((kernelSize - 1) / 2)
 		if outputDimStart > 0 {
 			Panicf("failed to set up reverse Convolve() for gradient: spatial dimension %d "+
