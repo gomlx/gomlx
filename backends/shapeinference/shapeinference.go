@@ -936,38 +936,50 @@ func ConvGeneralOp(input, kernel shapes.Shape, axes backends.ConvolveAxesConfig,
 
 	// Check axes configuration:
 	if len(axes.InputSpatial) != spatialRank {
-		return errorf("axes.InputSpatial (%v) must either be nil or provide one value for each spatial axis (%d), input shape is %s",
-			axes.InputSpatial, spatialRank, input.Shape())
+		return errorf("axes.InputSpatial (%v) must provide one value for each spatial axis (%d), input shape is %s",
+			axes.InputSpatial, spatialRank, input)
 	}
 	inputAxes := types.SetWith(axes.InputBatch, axes.InputChannels)
 	for _, inputAxis := range axes.InputSpatial {
+		if inputAxis < 0 || inputAxis >= rank {
+			return errorf("invalid input axes configuration (axis %d is out-of-bounds): batch=%d, channel=%d, spatial=%v", inputAxis, axes.InputBatch, axes.InputChannels, axes.InputSpatial)
+		}
 		inputAxes.Insert(inputAxis)
 	}
 	if len(inputAxes) != rank {
 		return errorf("duplicate input axes configuration: batch=%d, channel=%d, spatial=%v", axes.InputBatch, axes.InputChannels, axes.InputSpatial)
 	}
-	for inputAxis := range inputAxes {
-		if inputAxis < 0 || inputAxis >= rank {
-			return errorf("invalid input axes configuration (axis %d is out-of-bounds): batch=%d, channel=%d, spatial=%v", inputAxis, axes.InputBatch, axes.InputChannels, axes.InputSpatial)
-		}
-	}
+
 	if len(axes.KernelSpatial) != spatialRank {
-		return shapes.Invalid(), errors.Errorf("ConvGeneralDilatedOp: axes.InputSpatial (%v) must either be nil or provide one value for each spatial axis (%d), input shape is %s",
-			axes.InputSpatial, spatialRank, input.Shape())
+		return shapes.Invalid(), errors.Errorf("ConvGeneralDilatedOp: axes.KernelSpatial (%v) must provide one value for each spatial axis (%d), kernel shape is %s",
+			axes.InputSpatial, spatialRank, kernel)
 	}
 	kernelAxes := types.SetWith(axes.KernelInputChannels, axes.KernelOutputChannels)
-	for _, filterAxis := range axes.KernelSpatial {
-		kernelAxes.Insert(filterAxis)
+	for _, kernelAxis := range axes.KernelSpatial {
+		if kernelAxis < 0 || kernelAxis >= rank {
+			return errorf("invalid kernel axes configuration (axis %d is out-of-bounds): input channel=%d, output channel=%d, spatial=%v",
+				kernelAxis, axes.KernelInputChannels, axes.KernelOutputChannels, axes.KernelSpatial)
+		}
+		kernelAxes.Insert(kernelAxis)
 	}
 	if len(kernelAxes) != rank {
 		return errorf("duplicate kernel axes configuration: input channel=%d, output channel=%d, spatial=%v",
 			axes.KernelInputChannels, axes.KernelOutputChannels, axes.KernelSpatial)
 	}
-	for kernelAxis := range kernelAxes {
-		if kernelAxis < 0 || kernelAxis >= rank {
-			return errorf("invalid kernel axes configuration (axis %d is out-of-bounds): input channel=%d, output channel=%d, spatial=%v",
-				kernelAxis, axes.KernelInputChannels, axes.KernelOutputChannels, axes.KernelSpatial)
+
+	if len(axes.OutputSpatial) != spatialRank {
+		return errorf("axes.OutputSpatial (%v) must have one value for each spatial axis (%d), input shape is %s",
+			axes.OutputSpatial, spatialRank, input)
+	}
+	outputAxes := types.SetWith(axes.OutputBatch, axes.OutputChannels)
+	for _, outputAxis := range axes.OutputSpatial {
+		if outputAxis < 0 || outputAxis >= rank {
+			return errorf("invalid output axes configuration (axis %d is out-of-bounds): batch=%d, channels=%d, spatial=%v", outputAxis, axes.OutputBatch, axes.OutputChannels, axes.OutputSpatial)
 		}
+		outputAxes.Insert(outputAxis)
+	}
+	if len(outputAxes) != rank {
+		return errorf("duplicate output axes configuration: batch=%d, channel=%d, spatial=%v", axes.OutputBatch, axes.OutputChannels, axes.OutputSpatial)
 	}
 
 	// Check strides, paddings, inputDilations and kernelDilations.
