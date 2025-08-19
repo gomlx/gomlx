@@ -9,6 +9,7 @@
   * Implemented `ConvGeneralDilated` operation.
 * Package `types/shapes`: 
   * `Shape.Iter()` and `Shape.IterOn()` also yields the flat index being iterated.
+  * Added `Shape.Strides()` and `Shape.IterOnAxes()`.
 
 # v0.21.1: 2025/08/16 Added Zero-dim tensors support and other small improvements. 
 
