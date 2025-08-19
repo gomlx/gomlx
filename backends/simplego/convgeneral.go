@@ -7,6 +7,7 @@ import (
 	"github.com/gomlx/gomlx/backends/shapeinference"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/pkg/errors"
 )
 
@@ -164,7 +165,7 @@ func execConvNoDilationGeneric[T PODNumericConstraints](plan convGeneralExecPlan
 	// Indices we'll be iterating over.
 	var outputFlatIdx int
 
-	// Indices and strides: note we don't use an inputIndices because we only keep a inputFlatIndex.
+	// Indices and strides: note we don't use an inputIndices because we only keep an inputFlatIndex.
 	outputIndices := make([]int, rank)
 	kernelIndices := make([]int, rank)
 
@@ -212,6 +213,91 @@ func execConvNoDilationGeneric[T PODNumericConstraints](plan convGeneralExecPlan
 
 		// Update output with accumulated value from the convolution of the kernel at this position.
 		outputFlat[outputFlatIdx] = outputValue
+	}
+	return nil
+}
+
+func init() {
+	convNoDilationDTypeMap.Register(dtypes.BFloat16, execConvNoDilationBFloat16)
+}
+
+func execConvNoDilationBFloat16(plan convGeneralExecPlan) error {
+	// Shortcuts (and maybe move these values to the stack for faster access)
+	inputFlat := plan.inputFlat.([]bfloat16.BFloat16)
+	inputShape := plan.inputShape
+	kernelFlat := plan.kernelFlat.([]bfloat16.BFloat16)
+	kernelShape := plan.kernelShape
+	outputFlat := plan.outputFlat.([]bfloat16.BFloat16)
+	outputShape := plan.outputShape
+	rank := outputShape.Rank() // same rank for input and kernel.
+	//spatialRank := rank - 2
+	params := plan.params
+	axes := params.axes
+	paddings := params.paddings
+	convStrides := params.strides
+
+	inputBatchAxis := axes.InputBatch
+	inputChannelsAxis := axes.InputChannels
+	inputSpatialAxes := axes.InputSpatial
+	outputBatchAxis := axes.OutputBatch
+	outputChannelsAxis := axes.OutputChannels
+	outputSpatialAxes := axes.OutputSpatial
+	kernelInputChannelsAxis := axes.KernelInputChannels
+	kernelOutputChannelsAxis := axes.KernelOutputChannels
+	kernelSpatialAxes := axes.KernelSpatial
+	numInputChannels := kernelShape.Dimensions[kernelInputChannelsAxis]
+
+	// Indices we'll be iterating over.
+	var outputFlatIdx int
+
+	// Indices and strides: note we don't use an inputIndices because we only keep an inputFlatIndex.
+	outputIndices := make([]int, rank)
+	kernelIndices := make([]int, rank)
+
+	inputStrides := inputShape.Strides()
+	kernelStrides := kernelShape.Strides()
+
+	// Loop sequentially over all output positions:
+	for outputFlatIdx, outputIndices = range outputShape.IterOn(outputIndices) {
+		batchIdx := outputIndices[outputBatchAxis]
+		outputChannel := outputIndices[outputChannelsAxis]
+		baseInputFlatIdx := batchIdx * inputStrides[inputBatchAxis]
+
+		// Loop over the kernel spatial axes, with the outputChannel given by the output loop.
+		kernelIndices[kernelOutputChannelsAxis] = outputChannel
+		var outputValue float32
+		var kernelFlatIdx int
+	kernelLoop:
+		for kernelFlatIdx, kernelIndices = range kernelShape.IterOnAxes(kernelSpatialAxes, kernelStrides, kernelIndices) {
+			// Calculate the corresponding position in the input.
+			inputFlatIdx := baseInputFlatIdx
+			for spatialIdx, outputSpatialAxis := range outputSpatialAxes {
+				inputSpatialAxis := inputSpatialAxes[spatialIdx]
+				kernelSpatialAxes := axes.KernelSpatial[spatialIdx]
+				outputIdx := outputIndices[outputSpatialAxis]
+				kernelIdx := kernelIndices[kernelSpatialAxes]
+				inputIdx := outputIdx*convStrides[spatialIdx] + kernelIdx - paddings[spatialIdx][0]
+				if inputIdx < 0 || inputIdx >= inputShape.Dimensions[inputSpatialAxis] {
+					// Index is in the padded area, we can move to the next kernel position.
+					continue kernelLoop
+				}
+				inputFlatIdx += inputIdx * inputStrides[inputSpatialAxis]
+			}
+
+			// Accumulate over all the kernel/input channels.
+			inputChannelStride := inputStrides[inputChannelsAxis]
+			kernelChannelStride := kernelStrides[kernelInputChannelsAxis]
+			for range numInputChannels {
+				inputValue := inputFlat[inputFlatIdx]
+				kernelValue := kernelFlat[kernelFlatIdx]
+				outputValue += inputValue.Float32() * kernelValue.Float32()
+				inputFlatIdx += inputChannelStride
+				kernelFlatIdx += kernelChannelStride
+			}
+		}
+
+		// Update output with accumulated value from the convolution of the kernel at this position.
+		outputFlat[outputFlatIdx] = bfloat16.FromFloat32(outputValue)
 	}
 	return nil
 }

@@ -6,6 +6,7 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
 )
@@ -230,9 +231,9 @@ func TestConvGeneral(t *testing.T) {
 						{{6280, 6380}, {5624, 5708}, {6680, 6780}, {5960, 6044}, {7080, 7180}, {6296, 6380}, {7480, 7580}, {6632, 6716}},
 						{{9480, 9580}, {8312, 8396}, {9880, 9980}, {8648, 8732}, {10280, 10380}, {8984, 9068}, {10680, 10780}, {9320, 9404}},
 					}, {
-					{{8904, 9068}, {8248, 8396}, {9560, 9724}, {8840, 8988}, {10216, 10380}, {9432, 9580}, {10872, 11036}, {10024, 10172}},
-					{{14152, 14316}, {12984, 13132}, {14808, 14972}, {13576, 13724}, {15464, 15628}, {14168, 14316}, {16120, 16284}, {14760, 14908}},
-				},
+						{{8904, 9068}, {8248, 8396}, {9560, 9724}, {8840, 8988}, {10216, 10380}, {9432, 9580}, {10872, 11036}, {10024, 10172}},
+						{{14152, 14316}, {12984, 13132}, {14808, 14972}, {13576, 13724}, {15464, 15628}, {14168, 14316}, {16120, 16284}, {14760, 14908}},
+					},
 				},
 			},
 		},
@@ -269,7 +270,7 @@ func TestConvGeneral(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// The result should be the same for the all dtypes:
-			for _, dtype := range []dtypes.DType{dtypes.Float32} { // , dtypes.Float64, dtypes.Int32, dtypes.Uint64} {
+			for _, dtype := range []dtypes.DType{dtypes.Float32, dtypes.BFloat16} { // , dtypes.Float64, dtypes.Int32, dtypes.Uint64} {
 				output, err := graph.ExecOnceOrErr(backend, func(g *graph.Graph) *graph.Node {
 					tc.input.DType = dtype
 					input := graph.IotaFull(g, tc.input)
@@ -283,8 +284,17 @@ func TestConvGeneral(t *testing.T) {
 					return graph.ConvertDType(output, dtypes.Float64)
 				})
 				require.NoError(t, err)
-				outputValue := output.Value()
-				require.Equal(t, tc.want, outputValue, "Output mismatch for test case %q, got %s, wanted %#v", tc.name, output.GoStr(), tc.want)
+				if dtype != dtypes.BFloat16 {
+					outputValue := output.Value()
+					require.Equal(t, tc.want, outputValue, "Output mismatch for test case %q, got %s, wanted %#v", tc.name, output.GoStr(), tc.want)
+				} else {
+					wantT := tensors.FromAnyValue(tc.want)
+					// BFloat16 precision is too small to hold the exact values.
+					if !wantT.InDelta(output, 100.0) {
+						t.Fatalf("Output mismatch for test case %q with dtype %s:\n\tgot %s\n\twanted %#v", tc.name, dtype,
+							output.GoStr(), tc.want)
+					}
+				}
 			}
 		})
 	}
