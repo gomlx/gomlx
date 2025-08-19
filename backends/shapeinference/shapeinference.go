@@ -1052,7 +1052,7 @@ func ConvGeneralOp(input, kernel shapes.Shape, axes backends.ConvolveAxesConfig,
 	for spatialAxisIdx, inputAxis := range axes.InputSpatial {
 		inputDim := input.Dim(inputAxis)
 		filterAxis := axes.KernelSpatial[spatialAxisIdx]
-		filterDim := kernel.Dim(filterAxis)
+		kernelDim := kernel.Dim(filterAxis)
 		var (
 			stride  int
 			padding [2]int
@@ -1063,12 +1063,12 @@ func ConvGeneralOp(input, kernel shapes.Shape, axes backends.ConvolveAxesConfig,
 		if paddings != nil {
 			padding = paddings[spatialAxisIdx]
 		}
-		inputDilation, filterDilation := 1, 1
+		inputDilation, kernelDilation := 1, 1
 		if inputDilations != nil {
 			inputDilation = inputDilations[spatialAxisIdx]
 		}
 		if kernelDilations != nil {
-			filterDilation = kernelDilations[spatialAxisIdx]
+			kernelDilation = kernelDilations[spatialAxisIdx]
 		}
 
 		// Calculate outputDim of the convolution.
@@ -1078,19 +1078,19 @@ func ConvGeneralOp(input, kernel shapes.Shape, axes backends.ConvolveAxesConfig,
 
 		// Calculate effective dimensions after dilations
 		effectiveInputDim := (inputDim-1)*inputDilation + 1
-		effectiveFilterDim := (filterDim-1)*filterDilation + 1
+		effectiveKernelDim := (kernelDim-1)*kernelDilation + 1
 
 		// Calculate padded input size
 		paddedEffectiveInputDim := effectiveInputDim + padding[0] + padding[1]
 
 		// Calculate output dimension
-		if effectiveFilterDim > paddedEffectiveInputDim {
+		if effectiveKernelDim > paddedEffectiveInputDim {
 			return errorf("effective kernel dimension %d for axis %d is larger than padded effective input dimension %d. "+
 				"(input_dim: %d, input_dilation: %d, filter_dim: %d, filter_dilation: %d, padding: [%d,%d]) for input shape %s",
-				effectiveFilterDim, inputAxis, paddedEffectiveInputDim, inputDim, inputDilation, filterDim, filterDilation,
+				effectiveKernelDim, inputAxis, paddedEffectiveInputDim, inputDim, inputDilation, kernelDim, kernelDilation,
 				padding[0], padding[1], input)
 		}
-		outputDim := (paddedEffectiveInputDim-effectiveFilterDim)/stride + 1
+		outputDim := (paddedEffectiveInputDim-effectiveKernelDim)/stride + 1
 		outputSpatialAxis := axes.OutputSpatial[spatialAxisIdx]
 		output.Dimensions[outputSpatialAxis] = outputDim
 	}

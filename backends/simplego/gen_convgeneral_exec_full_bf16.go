@@ -47,7 +47,8 @@ func execConvBFloat16(plan convGeneralExecPlan) error { //alt:full_bf16
 	inputChannelsAxis := axes.InputChannels
 	inputSpatialDims := params.dilatedInputSpatialDims
 	inputSpatialStrides := params.inputSpatialStrides
-	inputDilations := params.inputDilations //alt:full|full_bf16
+	inputDilations := params.inputDilations   //alt:full|full_bf16
+	kernelDilations := params.kernelDilations //alt:full|full_bf16
 
 	outputBatchAxis := axes.OutputBatch
 	outputChannelsAxis := axes.OutputChannels
@@ -82,10 +83,14 @@ func execConvBFloat16(plan convGeneralExecPlan) error { //alt:full_bf16
 		for kernelFlatIdx, kernelIndices = range kernelShape.IterOnAxes(kernelSpatialAxes, kernelStrides, kernelIndices) {
 			// Calculate the corresponding position in the input.
 			inputFlatIdx := baseInputFlatIdx
-			for spatialIdx, outputSpatialAxis := range outputSpatialAxes {
-				kernelSpatialAxis := axes.KernelSpatial[spatialIdx]
-				outputIdx := outputIndices[outputSpatialAxis]
+			for spatialIdx, kernelSpatialAxis := range axes.KernelSpatial {
 				kernelIdx := kernelIndices[kernelSpatialAxis]
+				kernelDilation := kernelDilations[spatialIdx] //alt:full|full_bf16
+				if kernelDilation > 1 {                       //alt:full|full_bf16
+					kernelIdx = kernelIdx * kernelDilation //alt:full|full_bf16
+				} //alt:full|full_bf16
+				outputSpatialAxis := outputSpatialAxes[spatialIdx]
+				outputIdx := outputIndices[outputSpatialAxis]
 				inputIdx := outputIdx*convStrides[spatialIdx] + kernelIdx - paddings[spatialIdx][0]
 				inputDilation := inputDilations[spatialIdx] //alt:full|full_bf16
 				//alt:base|bf16 if inputIdx < 0 || inputIdx >= inputSpatialDims[spatialIdx] {

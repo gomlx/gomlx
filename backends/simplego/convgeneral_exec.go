@@ -47,6 +47,7 @@ func execConvNoDilationGeneric[T PODNumericConstraints](plan convGeneralExecPlan
 	inputSpatialDims := params.dilatedInputSpatialDims
 	inputSpatialStrides := params.inputSpatialStrides
 	//alt:full|full_bf16 inputDilations := params.inputDilations
+	//alt:full|full_bf16 kernelDilations := params.kernelDilations
 
 	outputBatchAxis := axes.OutputBatch
 	outputChannelsAxis := axes.OutputChannels
@@ -81,10 +82,14 @@ func execConvNoDilationGeneric[T PODNumericConstraints](plan convGeneralExecPlan
 		for kernelFlatIdx, kernelIndices = range kernelShape.IterOnAxes(kernelSpatialAxes, kernelStrides, kernelIndices) {
 			// Calculate the corresponding position in the input.
 			inputFlatIdx := baseInputFlatIdx
-			for spatialIdx, outputSpatialAxis := range outputSpatialAxes {
-				kernelSpatialAxis := axes.KernelSpatial[spatialIdx]
-				outputIdx := outputIndices[outputSpatialAxis]
+			for spatialIdx, kernelSpatialAxis := range axes.KernelSpatial {
 				kernelIdx := kernelIndices[kernelSpatialAxis]
+				//alt:full|full_bf16 kernelDilation := kernelDilations[spatialIdx]
+				//alt:full|full_bf16 if kernelDilation > 1 {
+				//alt:full|full_bf16   kernelIdx = kernelIdx*kernelDilation
+				//alt:full|full_bf16 }
+				outputSpatialAxis := outputSpatialAxes[spatialIdx]
+				outputIdx := outputIndices[outputSpatialAxis]
 				inputIdx := outputIdx*convStrides[spatialIdx] + kernelIdx - paddings[spatialIdx][0]
 				//alt:full|full_bf16 inputDilation := inputDilations[spatialIdx]
 				if inputIdx < 0 || inputIdx >= inputSpatialDims[spatialIdx] { //alt:base|bf16
