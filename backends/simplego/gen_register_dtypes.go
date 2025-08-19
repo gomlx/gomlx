@@ -410,6 +410,18 @@ func init() {
 	convNoDilationDTypeMap.RegisterIfNotSet(dtypes.Float32, execConvNoDilationGeneric[float32])
 	convNoDilationDTypeMap.RegisterIfNotSet(dtypes.Float64, execConvNoDilationGeneric[float64])
 
+	// DTypeMap: convDTypeMap
+	convDTypeMap.RegisterIfNotSet(dtypes.Int8, execConvGeneric[int8])
+	convDTypeMap.RegisterIfNotSet(dtypes.Int16, execConvGeneric[int16])
+	convDTypeMap.RegisterIfNotSet(dtypes.Int32, execConvGeneric[int32])
+	convDTypeMap.RegisterIfNotSet(dtypes.Int64, execConvGeneric[int64])
+	convDTypeMap.RegisterIfNotSet(dtypes.Uint8, execConvGeneric[uint8])
+	convDTypeMap.RegisterIfNotSet(dtypes.Uint16, execConvGeneric[uint16])
+	convDTypeMap.RegisterIfNotSet(dtypes.Uint32, execConvGeneric[uint32])
+	convDTypeMap.RegisterIfNotSet(dtypes.Uint64, execConvGeneric[uint64])
+	convDTypeMap.RegisterIfNotSet(dtypes.Float32, execConvGeneric[float32])
+	convDTypeMap.RegisterIfNotSet(dtypes.Float64, execConvGeneric[float64])
+
 	// DTypePairMap: convertDTypePairMap
 	convertDTypePairMap.RegisterIfNotSet(dtypes.Int8, dtypes.Int8, execConvertDTypeGeneric[int8, int8])
 	convertDTypePairMap.RegisterIfNotSet(dtypes.Int8, dtypes.Int16, execConvertDTypeGeneric[int8, int16])
