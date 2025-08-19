@@ -5,6 +5,7 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/shapeinference"
+	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 )
@@ -85,6 +86,9 @@ func execConvGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (
 	outputShape := node.shape
 	dtype := input.shape.DType
 	output := backend.getBufferForShape(outputShape)
+	if output == nil {
+		return nil, errors.Errorf("failed allocating (out-of-memory?) output buffer shaped %s", outputShape)
+	}
 	output.Zeros()
 
 	// TODO(optimizations):
@@ -95,22 +99,23 @@ func execConvGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (
 	// - We iterate the axes in order they are laid out in memory for the **output**: so we prioritize visiting the output
 	//   sequentially, and each output position is visited only once -- minimizing the number of cache flushes -- cache
 	//   misses will only happen in the input (or kernel, if it is large).
-	rank := input.shape.Rank()
 	plan := convGeneralExecPlan{
-		backend:         backend,
-		dtype:           dtype,
-		inputFlat:       input.flat,
-		kernelFlat:      kernel.flat,
-		outputFlat:      output.flat,
-		params:          params,
-		inputAxesStarts: make([]int, rank),
+		backend:     backend,
+		dtype:       dtype,
+		inputFlat:   input.flat,
+		inputShape:  input.shape,
+		kernelFlat:  kernel.flat,
+		kernelShape: kernel.shape,
+		outputFlat:  output.flat,
+		outputShape: outputShape,
+		params:      params,
 	}
 
 	if slices.Max(params.inputDilations) > 1 || slices.Max(params.kernelDilations) > 1 || params.filterGroupCount > 1 || params.batchGroupCount > 1 {
 		return nil, errors.Errorf("SimpleGo backend doesn't yet support convolution (ConvGeneral) with dilations or groupings (filter or batch) -- please open a bug report if needed")
 	}
-	convFn := convNoDilationDTypeMap.Get(dtype).(func(plan *convGeneralExecPlan) error)
-	err := convFn(&plan)
+	convFn := convNoDilationDTypeMap.Get(dtype).(func(plan convGeneralExecPlan) error)
+	err := convFn(plan)
 	if err != nil {
 		backend.putBuffer(output)
 		return nil, err
@@ -119,21 +124,94 @@ func execConvGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (
 }
 
 type convGeneralExecPlan struct {
-	backend                           backends.Backend
-	inputFlat, kernelFlat, outputFlat any
-	params                            *convNode
-	dtype                             dtypes.DType
-	inputAxesStarts                   []int // For each axis,
+	backend                              backends.Backend
+	inputFlat, kernelFlat, outputFlat    any
+	inputShape, kernelShape, outputShape shapes.Shape
+	params                               *convNode
+	dtype                                dtypes.DType
 }
 
 var (
 	convNoDilationDTypeMap = NewDTypeMap("ConvNoDilation")
 )
 
-func execConvNoDilationGeneric[T PODIntegerConstraints](plan *convGeneralExecPlan) error {
+func execConvNoDilationGeneric[T PODNumericConstraints](plan convGeneralExecPlan) error {
+	// Shortcuts (and maybe move these values to the stack for faster access)
 	inputFlat := plan.inputFlat.([]T)
+	inputShape := plan.inputShape
 	kernelFlat := plan.kernelFlat.([]T)
+	kernelShape := plan.kernelShape
 	outputFlat := plan.outputFlat.([]T)
-	_, _, _ = inputFlat, kernelFlat, outputFlat
+	outputShape := plan.outputShape
+	rank := outputShape.Rank() // same rank for input and kernel.
+	//spatialRank := rank - 2
+	params := plan.params
+	axes := params.axes
+	paddings := params.paddings
+	convStrides := params.strides
+
+	inputBatchAxis := axes.InputBatch
+	inputChannelsAxis := axes.InputChannels
+	inputSpatialAxes := axes.InputSpatial
+	outputBatchAxis := axes.OutputBatch
+	outputChannelsAxis := axes.OutputChannels
+	outputSpatialAxes := axes.OutputSpatial
+	kernelInputChannelsAxis := axes.KernelInputChannels
+	kernelOutputChannelsAxis := axes.KernelOutputChannels
+	kernelSpatialAxes := axes.KernelSpatial
+	numInputChannels := kernelShape.Dimensions[kernelInputChannelsAxis]
+
+	// Indices we'll be iterating over.
+	var outputFlatIdx int
+
+	// Indices and strides: note we don't use an inputIndices because we only keep a inputFlatIndex.
+	outputIndices := make([]int, rank)
+	kernelIndices := make([]int, rank)
+
+	inputStrides := inputShape.Strides()
+	kernelStrides := kernelShape.Strides()
+
+	// Loop sequentially over all output positions:
+	for outputFlatIdx, outputIndices = range outputShape.IterOn(outputIndices) {
+		batchIdx := outputIndices[outputBatchAxis]
+		outputChannel := outputIndices[outputChannelsAxis]
+		baseInputFlatIdx := batchIdx * inputStrides[inputBatchAxis]
+
+		// Loop over the kernel spatial axes, with the outputChannel given by the output loop.
+		kernelIndices[kernelOutputChannelsAxis] = outputChannel
+		var outputValue T
+		var kernelFlatIdx int
+	kernelLoop:
+		for kernelFlatIdx, kernelIndices = range kernelShape.IterOnAxes(kernelSpatialAxes, kernelStrides, kernelIndices) {
+			// Calculate the corresponding position in the input.
+			inputFlatIdx := baseInputFlatIdx
+			for spatialIdx, outputSpatialAxis := range outputSpatialAxes {
+				inputSpatialAxis := inputSpatialAxes[spatialIdx]
+				kernelSpatialAxes := axes.KernelSpatial[spatialIdx]
+				outputIdx := outputIndices[outputSpatialAxis]
+				kernelIdx := kernelIndices[kernelSpatialAxes]
+				inputIdx := outputIdx*convStrides[spatialIdx] + kernelIdx - paddings[spatialIdx][0]
+				if inputIdx < 0 || inputIdx >= inputShape.Dimensions[inputSpatialAxis] {
+					// Index is in the padded area, we can move to the next kernel position.
+					continue kernelLoop
+				}
+				inputFlatIdx += inputIdx * inputStrides[inputSpatialAxis]
+			}
+
+			// Accumulate over all the kernel/input channels.
+			inputChannelStride := inputStrides[inputChannelsAxis]
+			kernelChannelStride := kernelStrides[kernelInputChannelsAxis]
+			for range numInputChannels {
+				inputValue := inputFlat[inputFlatIdx]
+				kernelValue := kernelFlat[kernelFlatIdx]
+				outputValue += inputValue * kernelValue
+				inputFlatIdx += inputChannelStride
+				kernelFlatIdx += kernelChannelStride
+			}
+		}
+
+		// Update output with accumulated value from the convolution of the kernel at this position.
+		outputFlat[outputFlatIdx] = outputValue
+	}
 	return nil
 }

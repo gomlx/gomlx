@@ -398,6 +398,18 @@ func init() {
 	reduceWindowProductDTypeMap.RegisterIfNotSet(dtypes.Float32, reduceWindowProductBuildUpdateFn[float32])
 	reduceWindowProductDTypeMap.RegisterIfNotSet(dtypes.Float64, reduceWindowProductBuildUpdateFn[float64])
 
+	// DTypeMap: convNoDilationDTypeMap
+	convNoDilationDTypeMap.RegisterIfNotSet(dtypes.Int8, execConvNoDilationGeneric[int8])
+	convNoDilationDTypeMap.RegisterIfNotSet(dtypes.Int16, execConvNoDilationGeneric[int16])
+	convNoDilationDTypeMap.RegisterIfNotSet(dtypes.Int32, execConvNoDilationGeneric[int32])
+	convNoDilationDTypeMap.RegisterIfNotSet(dtypes.Int64, execConvNoDilationGeneric[int64])
+	convNoDilationDTypeMap.RegisterIfNotSet(dtypes.Uint8, execConvNoDilationGeneric[uint8])
+	convNoDilationDTypeMap.RegisterIfNotSet(dtypes.Uint16, execConvNoDilationGeneric[uint16])
+	convNoDilationDTypeMap.RegisterIfNotSet(dtypes.Uint32, execConvNoDilationGeneric[uint32])
+	convNoDilationDTypeMap.RegisterIfNotSet(dtypes.Uint64, execConvNoDilationGeneric[uint64])
+	convNoDilationDTypeMap.RegisterIfNotSet(dtypes.Float32, execConvNoDilationGeneric[float32])
+	convNoDilationDTypeMap.RegisterIfNotSet(dtypes.Float64, execConvNoDilationGeneric[float64])
+
 	// DTypePairMap: convertDTypePairMap
 	convertDTypePairMap.RegisterIfNotSet(dtypes.Int8, dtypes.Int8, execConvertDTypeGeneric[int8, int8])
 	convertDTypePairMap.RegisterIfNotSet(dtypes.Int8, dtypes.Int16, execConvertDTypeGeneric[int8, int16])
