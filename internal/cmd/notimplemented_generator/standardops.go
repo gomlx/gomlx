@@ -95,7 +95,7 @@ func GenerateStandardOpsInterface(extractor *parsexlabuilder.NodeTextExtractor, 
 				pi.Type = "[]backends.Op"
 			} else if pi.Type == "Shape" {
 				pi.Type = "shapes.Shape"
-			} else if pi.Type == "xla_data.FftType" {
+			} else if pi.Type == "xla_data.FftType" || pi.Type == "FFTType" {
 				pi.Type = "backends.FFTType"
 			} else if pi.Type == "ConvolveAxesConfig" {
 				pi.Type = "backends.ConvolveAxesConfig"
