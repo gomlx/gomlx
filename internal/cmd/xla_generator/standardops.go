@@ -3,16 +3,17 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"github.com/gomlx/gomlx/internal/cmd/backends_generator/parsexlabuilder"
-	"github.com/gomlx/gomlx/types"
-	"github.com/gomlx/gomlx/types/xslices"
-	"github.com/janpfeifer/must"
 	"go/ast"
 	"os"
 	"os/exec"
 	"slices"
 	"strings"
 	"text/template"
+
+	"github.com/gomlx/gomlx/internal/cmd/backends_generator/parsexlabuilder"
+	"github.com/gomlx/gomlx/types"
+	"github.com/gomlx/gomlx/types/xslices"
+	"github.com/janpfeifer/must"
 )
 
 const (
@@ -152,7 +153,7 @@ func GenerateStandardOpsImplementation(extractor *parsexlabuilder.NodeTextExtrac
 				pi.Type = "backends.ConvolveAxesConfig"
 			} else if pi.Type == "...PadAxis" {
 				pi.Type = "...backends.PadAxis"
-			} else if pi.Type == "xla_data.FftType" {
+			} else if pi.Type == "xla_data.FftType" || pi.Type == "FFTType" {
 				pi.Type = "backends.FFTType"
 			}
 			fi.Parameters = append(fi.Parameters, pi)

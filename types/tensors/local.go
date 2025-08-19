@@ -315,17 +315,7 @@ type MultiDimensionSlice interface {
 
 // LayoutStrides return the strides for each axis. This can be handy when manipulating the flat data.
 func (t *Tensor) LayoutStrides() (strides []int) {
-	rank := t.shape.Rank()
-	if rank == 0 {
-		return
-	}
-	strides = make([]int, rank)
-	currentStride := 1
-	for dim := rank - 1; dim >= 0; dim-- {
-		strides[dim] = currentStride
-		currentStride *= t.shape.Dimensions[dim]
-	}
-	return
+	return t.shape.Strides()
 }
 
 // Value returns a multidimensional slice (except if shape is a scalar) containing a copy of the values stored

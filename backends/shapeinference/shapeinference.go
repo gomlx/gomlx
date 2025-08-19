@@ -805,7 +805,7 @@ func ArgMinMaxOp(operand shapes.Shape, axis int, outputDType dtypes.DType) (outp
 	return
 }
 
-// ReduceWindowOp returns the output shape for a ReduceWindow op with the given operand shape and parameters.
+// ReduceWindowOp returns the expected output shape for the operation.
 //
 // Notice it doesn't take as input the reductionType parameter, since it doesn't affect the output shape.
 func ReduceWindowOp(operand shapes.Shape, windowDimensions, strides, baseDilations, windowDilations []int, paddings [][2]int) (shapes.Shape, error) {
@@ -905,4 +905,195 @@ func ReduceWindowOp(operand shapes.Shape, windowDimensions, strides, baseDilatio
 	}
 
 	return shapes.Make(operand.DType, outputDims...), nil
+}
+
+// ConvGeneralOp returns the expected output shape for the ConvGeneral operation.
+func ConvGeneralOp(input, kernel shapes.Shape, axes backends.ConvolveAxesConfig,
+	strides []int, paddings [][2]int,
+	inputDilations, kernelDilations []int,
+	featureGroupCount, batchGroupCount int) (shapes.Shape, error) {
+	// Convenient error returns.
+	errorf := func(format string, args ...any) (shapes.Shape, error) {
+		return shapes.Invalid(), errors.Errorf("ConvGeneralDilatedOp:  "+format, args...)
+	}
+
+	if !input.Ok() {
+		return errorf("invalid input (operand) shape %s", input)
+	}
+	if !kernel.Ok() {
+		return errorf("invalid kernel shape %s", kernel)
+	}
+
+	// Check ranks.
+	rank := input.Rank()
+	spatialRank := rank - 2
+	if rank < 3 {
+		return errorf("input (operand) needs to be at least rank-3 with axes (in any order) batch, channels and spatial -- input shape is %s", input)
+	}
+	if kernel.Rank() != rank {
+		return errorf("input (operand) and kernel have different rank!? -- input shape is %s and kernel shape is %s", input, kernel)
+	}
+
+	// Check axes configuration:
+	if len(axes.InputSpatial) != spatialRank {
+		return errorf("axes.InputSpatial (%v) must provide one value for each spatial axis (%d), input shape is %s",
+			axes.InputSpatial, spatialRank, input)
+	}
+	inputAxes := types.SetWith(axes.InputBatch, axes.InputChannels)
+	for _, inputAxis := range axes.InputSpatial {
+		if inputAxis < 0 || inputAxis >= rank {
+			return errorf("invalid input axes configuration (axis %d is out-of-bounds): batch=%d, channel=%d, spatial=%v", inputAxis, axes.InputBatch, axes.InputChannels, axes.InputSpatial)
+		}
+		inputAxes.Insert(inputAxis)
+	}
+	if len(inputAxes) != rank {
+		return errorf("duplicate input axes configuration: batch=%d, channel=%d, spatial=%v", axes.InputBatch, axes.InputChannels, axes.InputSpatial)
+	}
+
+	if len(axes.KernelSpatial) != spatialRank {
+		return shapes.Invalid(), errors.Errorf("ConvGeneralDilatedOp: axes.KernelSpatial (%v) must provide one value for each spatial axis (%d), kernel shape is %s",
+			axes.InputSpatial, spatialRank, kernel)
+	}
+	kernelAxes := types.SetWith(axes.KernelInputChannels, axes.KernelOutputChannels)
+	for _, kernelAxis := range axes.KernelSpatial {
+		if kernelAxis < 0 || kernelAxis >= rank {
+			return errorf("invalid kernel axes configuration (axis %d is out-of-bounds): input channel=%d, output channel=%d, spatial=%v",
+				kernelAxis, axes.KernelInputChannels, axes.KernelOutputChannels, axes.KernelSpatial)
+		}
+		kernelAxes.Insert(kernelAxis)
+	}
+	if len(kernelAxes) != rank {
+		return errorf("duplicate kernel axes configuration: input channel=%d, output channel=%d, spatial=%v",
+			axes.KernelInputChannels, axes.KernelOutputChannels, axes.KernelSpatial)
+	}
+
+	if len(axes.OutputSpatial) != spatialRank {
+		return errorf("axes.OutputSpatial (%v) must have one value for each spatial axis (%d), input shape is %s",
+			axes.OutputSpatial, spatialRank, input)
+	}
+	outputAxes := types.SetWith(axes.OutputBatch, axes.OutputChannels)
+	for _, outputAxis := range axes.OutputSpatial {
+		if outputAxis < 0 || outputAxis >= rank {
+			return errorf("invalid output axes configuration (axis %d is out-of-bounds): batch=%d, channels=%d, spatial=%v", outputAxis, axes.OutputBatch, axes.OutputChannels, axes.OutputSpatial)
+		}
+		outputAxes.Insert(outputAxis)
+	}
+	if len(outputAxes) != rank {
+		return errorf("duplicate output axes configuration: batch=%d, channel=%d, spatial=%v", axes.OutputBatch, axes.OutputChannels, axes.OutputSpatial)
+	}
+
+	// Check strides, paddings, inputDilations and kernelDilations.
+	if len(strides) != 0 && len(strides) != spatialRank {
+		return errorf("strides (%v) must either be nil or provide one value for each spatial axis (%d), input shape is %s",
+			strides, spatialRank, input.Shape())
+	}
+	if len(paddings) != 0 && len(paddings) != spatialRank {
+		return errorf("paddings (%v) must either be nil or provide one value for each spatial axis (%d), input shape is %s",
+			paddings, spatialRank, input.Shape())
+	}
+	if len(inputDilations) != 0 && len(inputDilations) != spatialRank {
+		return errorf("inputDilations (%v) must either be nil or provide one value for each spatial axis (%d), input shape is %s",
+			inputDilations, spatialRank, input.Shape())
+	}
+	for i, dilation := range inputDilations {
+		if dilation < 1 {
+			return errorf("inputDilations[%d]=%d must be >= 1 for input shape %s", i, dilation, input)
+		}
+	}
+	if len(kernelDilations) != 0 && len(kernelDilations) != spatialRank {
+		return errorf("kernelDilations (%v) must either be nil or provide one value for each spatial axis (%d), input shape is %s",
+			kernelDilations, spatialRank, input.Shape())
+	}
+	for i, dilation := range kernelDilations {
+		if dilation < 1 {
+			return errorf("kernelDilations[%d]=%d must be >= 1 for input shape %s", i, dilation, input)
+		}
+	}
+
+	if featureGroupCount > 1 && batchGroupCount > 1 {
+		return errorf("at most one of featureGroupCount (%d) or batchGroupCount (%d) can be set to > 1", featureGroupCount, batchGroupCount)
+	}
+
+	// Check that channels (feature dimensions) are valid.
+	inputChannels := input.Dim(axes.InputChannels)
+	outputChannels := kernel.Dim(axes.KernelOutputChannels)
+	if featureGroupCount < 1 {
+		return errorf("featureGroupCount=%d must be >= 1 for input shape %s", featureGroupCount, input)
+	}
+	if inputChannels%featureGroupCount != 0 {
+		return errorf("input channels dimension %d must be divisible by featureGroupCount %d", inputChannels, featureGroupCount)
+	}
+	if outputChannels%featureGroupCount != 0 {
+		return errorf("kernel output channels dimension %d must be divisible by featureGroupCount %d", outputChannels, featureGroupCount)
+	}
+	kernelInputChannels := kernel.Dim(axes.KernelInputChannels)
+	if inputChannels != kernelInputChannels*featureGroupCount {
+		return errorf("we must have inputChannels (=%d) = kernelInputChannels (=%d) * featureGroupCount (=%d) -- input shape is %s, kernel shape is %s",
+			inputChannels, kernelInputChannels, featureGroupCount, input, kernel)
+	}
+
+	// Check batchGroupCount.
+	inputBatch := input.Dim(axes.InputBatch)
+	if batchGroupCount < 1 {
+		return errorf("batchGroupCount=%d must be >= 1 for input shape %s", batchGroupCount, input)
+	}
+	if inputBatch%batchGroupCount != 0 {
+		return errorf("input batch dimension %d must be divisible by batchGroupCount %d", inputBatch, batchGroupCount)
+	}
+	if outputChannels%batchGroupCount != 0 {
+		return errorf("output channels dimension %d must be divisible by batchGroupCount %d", outputChannels, batchGroupCount)
+	}
+
+	// Find the output shape.
+	output := input.Clone()
+	output.Dimensions[axes.OutputBatch] = inputBatch / batchGroupCount
+	output.Dimensions[axes.OutputChannels] = outputChannels
+
+	for spatialAxisIdx, inputAxis := range axes.InputSpatial {
+		inputDim := input.Dim(inputAxis)
+		filterAxis := axes.KernelSpatial[spatialAxisIdx]
+		kernelDim := kernel.Dim(filterAxis)
+		var (
+			stride  int
+			padding [2]int
+		)
+		if strides != nil {
+			stride = strides[spatialAxisIdx]
+		}
+		if paddings != nil {
+			padding = paddings[spatialAxisIdx]
+		}
+		inputDilation, kernelDilation := 1, 1
+		if inputDilations != nil {
+			inputDilation = inputDilations[spatialAxisIdx]
+		}
+		if kernelDilations != nil {
+			kernelDilation = kernelDilations[spatialAxisIdx]
+		}
+
+		// Calculate outputDim of the convolution.
+		if stride < 1 {
+			return errorf("stride[%d]=%d must be >= 1 for input shape %s", spatialAxisIdx, stride, input)
+		}
+
+		// Calculate effective dimensions after dilations
+		effectiveInputDim := (inputDim-1)*inputDilation + 1
+		effectiveKernelDim := (kernelDim-1)*kernelDilation + 1
+
+		// Calculate padded input size
+		paddedEffectiveInputDim := effectiveInputDim + padding[0] + padding[1]
+
+		// Calculate output dimension
+		if effectiveKernelDim > paddedEffectiveInputDim {
+			return errorf("effective kernel dimension %d for axis %d is larger than padded effective input dimension %d. "+
+				"(input_dim: %d, input_dilation: %d, filter_dim: %d, filter_dilation: %d, padding: [%d,%d]) for input shape %s",
+				effectiveKernelDim, inputAxis, paddedEffectiveInputDim, inputDim, inputDilation, kernelDim, kernelDilation,
+				padding[0], padding[1], input)
+		}
+		outputDim := (paddedEffectiveInputDim-effectiveKernelDim)/stride + 1
+		outputSpatialAxis := axes.OutputSpatial[spatialAxisIdx]
+		output.Dimensions[outputSpatialAxis] = outputDim
+	}
+
+	return output, nil
 }

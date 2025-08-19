@@ -1,8 +1,9 @@
 package backends
 
 import (
-	"github.com/gomlx/gomlx/types/shapes"
 	"slices"
+
+	"github.com/gomlx/gomlx/types/shapes"
 )
 
 // Op represents the output of an operation, during the computation graph building time.
@@ -107,18 +108,18 @@ type Builder interface {
 
 // ConvolveAxesConfig defines the interpretation of the input/kernel/output tensor axes.
 // There must be the same number of spatial dimensions (axes) for each of the 3 tensors.
-// Input and output has batch and channel axes. Kernel has inputChannel and outputChannel axes.
+// Input and output have batch and channel axes. Kernel has inputChannel and outputChannel axes.
 //
 // See Builder.ConvGeneralDilated
 type ConvolveAxesConfig struct {
-	InputBatch, InputChannel int
-	InputSpatial             []int
+	InputBatch, InputChannels int
+	InputSpatial              []int
 
-	KernelInputChannel, KernelOutputChannel int
-	KernelSpatial                           []int
+	KernelInputChannels, KernelOutputChannels int
+	KernelSpatial                             []int
 
-	OutputBatch, OutputChannel int
-	OutputSpatial              []int
+	OutputBatch, OutputChannels int
+	OutputSpatial               []int
 }
 
 // Clone returns a deep copy of the structure.

@@ -1,5 +1,19 @@
 # GoMLX changelog
 
+# Next
+
+* Package `backends/shapeinference`:
+  * `ConvGeneral` renamed to `ConvGeneral`
+  * Added `ConvGeneralOp` to infer the output shape of a convolution.
+* Package `backends/simplego`:
+  * Implemented `ConvGeneral` operation: supporting all types of convolutions.
+* Package `types/shapes`: 
+  * `Shape.Iter()` and `Shape.IterOn()` also yields the flat index being iterated.
+  * Added `Shape.Strides()` and `Shape.IterOnAxes()`.
+* Package `graph`:
+  * `graph.ConvGeneralDilated` is being aliased to `graph.ConvGeneral` and the former will be deprecated on
+    a future version.
+
 # v0.21.1: 2025/08/16 Added Zero-dim tensors support and other small improvements. 
 
 * Package `tensors` and `graph`:

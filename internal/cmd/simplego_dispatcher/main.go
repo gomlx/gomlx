@@ -72,6 +72,8 @@ var (
 			{"reduceWindowMinDTypeMap", "reduceWindowMinBuildUpdateFn", makeDTypes(true, true, true, false, false)},
 			{"reduceWindowSumDTypeMap", "reduceWindowSumBuildUpdateFn", makeDTypes(true, true, true, false, false)},
 			{"reduceWindowProductDTypeMap", "reduceWindowProductBuildUpdateFn", makeDTypes(true, true, true, false, false)},
+			{"convNoDilationDTypeMap", "execConvNoDilationGeneric", makeDTypes(true, true, true, false, false)},
+			{"convDTypeMap", "execConvGeneric", makeDTypes(true, true, true, false, false)},
 		},
 		PairMaps: []MapPairInfo{
 			// Various ConvertDType instantiations.
@@ -211,6 +213,5 @@ func init() {
 	cmd := exec.Command("gofmt", "-w", fileName)
 	fmt.Printf("\t%s\n", cmd)
 	must.M(cmd.Run())
-	fmt.Printf("\t\tgenerated %q\n", fileName)
-
+	fmt.Printf("✅ Successfully generated %s\n", fileName)
 }

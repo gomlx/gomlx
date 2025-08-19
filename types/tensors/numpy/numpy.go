@@ -122,7 +122,7 @@ func FromNpyReader(r io.Reader) (*tensors.Tensor, error) {
 			cOrderIdx := 0
 			dtypeSize := dtype.Size()
 			var fortranOrderIdx int
-			for indices := range shape.Iter() {
+			for _, indices := range shape.Iter() {
 				fortranOrderIdx = 0
 				for axis, axisIdx := range indices {
 					fortranOrderIdx += axisIdx * fortranStrides[axis]

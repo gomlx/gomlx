@@ -17,7 +17,7 @@ type nodeParameter struct {
 }
 
 // Parameter creates an input parameter for the computation.
-// During execution of the computation this value will need to be fed, in the same order it is created.
+// During execution of the computation, this value will need to be fed in the same order it is created.
 func (b *Builder) Parameter(name string, shape shapes.Shape) (backends.Op, error) {
 	dtype := shape.DType
 	if dtype == dtypes.InvalidDType {
@@ -36,7 +36,7 @@ func (b *Builder) Parameter(name string, shape shapes.Shape) (backends.Op, error
 	return n, nil
 }
 
-// Constant creates a constant in the graph with the given flat values, and the shape defined by dims.
+// Constant creates a constant in the graph with the given flat values, and the shape defined by the parameter dims.
 //
 // flat must be a slice of a basic type supported -- that can be converted to a DType.
 //
@@ -152,7 +152,7 @@ func (b *Builder) Transpose(operandOp backends.Op, permutations ...int) (backend
 // See BroadcastInDim for a broadcast in between the axes.
 // The new dimensions dims are inserted on the left, i.e., if
 // prefixDims has values `{a0, ..., aN}` and the operand shape
-// has dimensions {b0, ..., bM} then the shape of the output has
+// has dimensions {b0, ..., bM}, then the shape of the output has
 // dimensions {a0, ..., aN, b0, ..., bM}.
 // The new dimensions id into copies of the operand, i.e.
 //
@@ -336,7 +336,7 @@ func (b *Builder) Concatenate(axis int, operandOps ...backends.Op) (backends.Op,
 	return node, nil
 }
 
-// ConvertDType converts operandOp to the given dtype. It implement the backends.Builder interface.
+// ConvertDType converts operandOp to the given dtype. It implements the backends.Builder interface.
 func (b *Builder) ConvertDType(operandOp backends.Op, dtype dtypes.DType) (backends.Op, error) {
 	opType := backends.OpTypeConvertDType
 	inputs, err := b.checkOps(opType.String(), operandOp)
@@ -395,6 +395,8 @@ func (b *Builder) scatterImpls(scatterOpType backends.OpType,
 		insertedWindowAxes:       insertedWindowAxes,
 		scatterAxesToOperandAxes: scatterAxesToOperandAxes,
 		indexVectorAxis:          indexVectorAxis,
+		indicesAreSorted:         indicesAreSorted,
+		uniqueIndices:            uniqueIndices,
 	}
 	return node, nil
 }
@@ -406,11 +408,11 @@ type scatterNode struct {
 	indicesAreSorted, uniqueIndices                                bool
 }
 
-// Slice extracts a sub-array from the input array.
-// The sub-array is of the same rank as the input and contains the values inside a bounding box within the input array
+// Slice extracts a subarray from the input array.
+// The subarray is of the same rank as the input and contains the values inside a bounding box within the input array
 // where the dimensions and indices of the bounding box are given as arguments to the slice operation.
 // The strides set the input stride of the slice in each axis and must be >= 1.
-// It is optional, and if missing it is assumed to be 1 for every dimension.
+// It is optional, and if missing, it is assumed to be 1 for every dimension.
 // Examples:
 //
 //	Slice(x={0, 1, 2, 3, 4}, starts={2}, limits={4}, strides=nil) -> {2, 3}
@@ -637,7 +639,7 @@ func (b *Builder) Tanh(operand backends.Op) (backends.Op, error) {
 	return b.addUnaryOp(backends.OpTypeTanh, operand)
 }
 
-// Tanh implements the backends.Builder interface.
+// Erf implements the backends.Builder interface.
 func (b *Builder) Erf(operand backends.Op) (backends.Op, error) {
 	return b.addUnaryOp(backends.OpTypeErf, operand)
 }

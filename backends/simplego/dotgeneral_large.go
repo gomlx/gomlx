@@ -494,8 +494,6 @@ func (r *dotGeneralRecursiveData) apply(
 
 var dotGeneralKernelDTypeMap = NewDTypeMap("DotGeneralKernel")
 
-//go:generate go run ../../internal/cmd/simplego_dispatcher -dispatcher=dispatchDotGeneral -generic=execNormalizedDotGeneralGeneric -int -uint -float
-
 // kernelFuncType is a function that does a matrix mult of the lhs/rhs and adds it to the output buffer, given the indices of the square blocks.
 // So output[outputIdx] += lhs[lhsIdx] * rhs[rhsIdx], a block at a time.
 // The contracting axis is 1 for both, lhs and rhs.

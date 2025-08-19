@@ -283,13 +283,13 @@ func (b *Builder) BatchNormGradient(operand, scale, mean, variance, gradOutput b
 func convertConvolveAxesConfig(c backends.ConvolveAxesConfig) (xlaConfig xlabuilder.ConvolveAxesConfig) {
 	xlaConfig = xlabuilder.ConvolveAxesConfig{
 		InputBatch:          c.InputBatch,
-		InputChannel:        c.InputChannel,
+		InputChannel:        c.InputChannels,
 		InputSpatial:        c.InputSpatial,
-		KernelInputChannel:  c.KernelInputChannel,
-		KernelOutputChannel: c.KernelOutputChannel,
+		KernelInputChannel:  c.KernelInputChannels,
+		KernelOutputChannel: c.KernelOutputChannels,
 		KernelSpatial:       c.KernelSpatial,
 		OutputBatch:         c.OutputBatch,
-		OutputChannel:       c.OutputChannel,
+		OutputChannel:       c.OutputChannels,
 		OutputSpatial:       c.OutputSpatial,
 	}
 	return
