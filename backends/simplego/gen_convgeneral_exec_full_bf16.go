@@ -22,9 +22,9 @@ type _ = bfloat16.BFloat16
 // execConvBFloat16: `full_bf16` tag
 //
 //alt:base func execConvNoDilationGeneric[T PODNumericConstraints](plan convGeneralExecPlan) error {
-func execConvNoDilationBFloat16(plan convGeneralExecPlan) error { //alt:bf16
-	//alt:full func execConvGeneric[T PODNumericConstraints](plan convGeneralExecPlan) error {
-	//alt:full_bf16 func execConvBFloat16(plan convGeneralExecPlan) error {
+//alt:bf16 func execConvNoDilationBFloat16(plan convGeneralExecPlan) error {
+//alt:full func execConvGeneric[T PODNumericConstraints](plan convGeneralExecPlan) error {
+func execConvBFloat16(plan convGeneralExecPlan) error { //alt:full_bf16
 
 	// Shortcuts (and maybe move these values to the stack for faster access)
 	//alt:base|full inputFlat := plan.inputFlat.([]T)
@@ -47,7 +47,7 @@ func execConvNoDilationBFloat16(plan convGeneralExecPlan) error { //alt:bf16
 	inputChannelsAxis := axes.InputChannels
 	inputSpatialDims := params.dilatedInputSpatialDims
 	inputSpatialStrides := params.inputSpatialStrides
-	//alt:full|full_bf16 inputDilations := params.inputDilations
+	inputDilations := params.inputDilations //alt:full|full_bf16
 
 	outputBatchAxis := axes.OutputBatch
 	outputChannelsAxis := axes.OutputChannels
@@ -87,13 +87,13 @@ func execConvNoDilationBFloat16(plan convGeneralExecPlan) error { //alt:bf16
 				outputIdx := outputIndices[outputSpatialAxis]
 				kernelIdx := kernelIndices[kernelSpatialAxis]
 				inputIdx := outputIdx*convStrides[spatialIdx] + kernelIdx - paddings[spatialIdx][0]
-				//alt:full|full_bf16 inputDilation := inputDilations[spatialIdx]
-				if inputIdx < 0 || inputIdx >= inputSpatialDims[spatialIdx] { //alt:base|bf16
-					//alt:full|full_bf16 if inputIdx < 0 || inputIdx >= inputSpatialDims[spatialIdx] || (inputDilation > 1 && inputIdx%inputDilation != 0) {
+				inputDilation := inputDilations[spatialIdx] //alt:full|full_bf16
+				//alt:base|bf16 if inputIdx < 0 || inputIdx >= inputSpatialDims[spatialIdx] {
+				if inputIdx < 0 || inputIdx >= inputSpatialDims[spatialIdx] || (inputDilation > 1 && inputIdx%inputDilation != 0) { //alt:full|full_bf16
 					// Index is in the padded area, we can move to the next kernel position.
 					continue kernelLoop
 				}
-				//alt:full|full_bf16 inputIdx /= inputDilation // Make the dilated index back to the original input.
+				inputIdx /= inputDilation // Make the dilated index back to the original input. //alt:full|full_bf16
 				inputFlatIdx += inputIdx * inputSpatialStrides[spatialIdx]
 			}
 

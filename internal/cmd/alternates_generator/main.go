@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -121,7 +122,12 @@ func processFileForTag(tag string, baseName string, lines []string) {
 
 	if err := writer.Flush(); err != nil {
 		klog.Fatalf("🚨 Failed to write to %s: %v", outputFileName, err)
-	} else {
-		fmt.Printf("✅ Successfully generated %s\n", outputFileName)
 	}
+
+	// Run go fmt on the generated file
+	cmd := exec.Command("go", "fmt", outputFileName)
+	if err := cmd.Run(); err != nil {
+		klog.Warningf("Failed to run go fmt on %s: %v", outputFileName, err)
+	}
+	fmt.Printf("✅ Successfully generated %s\n", outputFileName)
 }

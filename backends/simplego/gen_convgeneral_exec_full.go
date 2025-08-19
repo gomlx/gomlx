@@ -17,19 +17,22 @@ type _ = bfloat16.BFloat16
 // The functions are generated for the following tags:
 //
 // execConvNoDilationGeneric: `base` tag; generics for native Go numeric types, no dilation or grouping handling, but faster.
-// execConvBFloat16: `bfloat16` tag; supports BFloat16 , fast but no dilation or grouping handling.
+// execConvBFloat16: `bf16` tag; supports BFloat16 , fast but no dilation or grouping handling.
 // execConvGeneric: `full`; support dilation and grouping, with a latency penalty.
+// execConvBFloat16: `full_bf16` tag
+//
 //alt:base func execConvNoDilationGeneric[T PODNumericConstraints](plan convGeneralExecPlan) error {
 //alt:bf16 func execConvNoDilationBFloat16(plan convGeneralExecPlan) error {
 func execConvGeneric[T PODNumericConstraints](plan convGeneralExecPlan) error { //alt:full
+	//alt:full_bf16 func execConvBFloat16(plan convGeneralExecPlan) error {
 
 	// Shortcuts (and maybe move these values to the stack for faster access)
-inputFlat := plan.inputFlat.([]T) //alt:base|full
-kernelFlat := plan.kernelFlat.([]T) //alt:base|full
-outputFlat := plan.outputFlat.([]T) //alt:base|full
-//alt:bf16 inputFlat := plan.inputFlat.([]bfloat16.BFloat16)
-//alt:bf16 kernelFlat := plan.kernelFlat.([]bfloat16.BFloat16)
-//alt:bf16 outputFlat := plan.outputFlat.([]bfloat16.BFloat16)
+	inputFlat := plan.inputFlat.([]T)   //alt:base|full
+	kernelFlat := plan.kernelFlat.([]T) //alt:base|full
+	outputFlat := plan.outputFlat.([]T) //alt:base|full
+	//alt:bf16|full_bf16 inputFlat := plan.inputFlat.([]bfloat16.BFloat16)
+	//alt:bf16|full_bf16 kernelFlat := plan.kernelFlat.([]bfloat16.BFloat16)
+	//alt:bf16|full_bf16 outputFlat := plan.outputFlat.([]bfloat16.BFloat16)
 	inputShape := plan.inputShape
 	kernelShape := plan.kernelShape
 	outputShape := plan.outputShape
@@ -44,6 +47,7 @@ outputFlat := plan.outputFlat.([]T) //alt:base|full
 	inputChannelsAxis := axes.InputChannels
 	inputSpatialDims := params.dilatedInputSpatialDims
 	inputSpatialStrides := params.inputSpatialStrides
+	inputDilations := params.inputDilations //alt:full|full_bf16
 
 	outputBatchAxis := axes.OutputBatch
 	outputChannelsAxis := axes.OutputChannels
@@ -71,8 +75,8 @@ outputFlat := plan.outputFlat.([]T) //alt:base|full
 
 		// Loop over the kernel spatial axes, with the outputChannel given by the output loop.
 		kernelIndices[kernelOutputChannelsAxis] = outputChannel
-var outputValue T //alt:base|full
-//alt:bf16 var outputValue float32
+		var outputValue T //alt:base|full
+		//alt:bf16|full_bf16 var outputValue float32
 		var kernelFlatIdx int
 	kernelLoop:
 		for kernelFlatIdx, kernelIndices = range kernelShape.IterOnAxes(kernelSpatialAxes, kernelStrides, kernelIndices) {
@@ -83,10 +87,13 @@ var outputValue T //alt:base|full
 				outputIdx := outputIndices[outputSpatialAxis]
 				kernelIdx := kernelIndices[kernelSpatialAxis]
 				inputIdx := outputIdx*convStrides[spatialIdx] + kernelIdx - paddings[spatialIdx][0]
-				if inputIdx < 0 || inputIdx >= inputSpatialDims[spatialIdx] {
+				inputDilation := inputDilations[spatialIdx] //alt:full|full_bf16
+				//alt:base|bf16 if inputIdx < 0 || inputIdx >= inputSpatialDims[spatialIdx] {
+				if inputIdx < 0 || inputIdx >= inputSpatialDims[spatialIdx] || (inputDilation > 1 && inputIdx%inputDilation != 0) { //alt:full|full_bf16
 					// Index is in the padded area, we can move to the next kernel position.
 					continue kernelLoop
 				}
+				inputIdx /= inputDilation // Make the dilated index back to the original input. //alt:full|full_bf16
 				inputFlatIdx += inputIdx * inputSpatialStrides[spatialIdx]
 			}
 
@@ -96,16 +103,16 @@ var outputValue T //alt:base|full
 			for range numInputChannels {
 				inputValue := inputFlat[inputFlatIdx]
 				kernelValue := kernelFlat[kernelFlatIdx]
-outputValue += inputValue * kernelValue //alt:base|full
-//alt:bf16 outputValue += inputValue.Float32() * kernelValue.Float32()
+				outputValue += inputValue * kernelValue //alt:base|full
+				//alt:bf16|full_bf16 outputValue += inputValue.Float32() * kernelValue.Float32()
 				inputFlatIdx += inputChannelStride
 				kernelFlatIdx += kernelChannelStride
 			}
 		}
 
 		// Update output with accumulated value from the convolution of the kernel at this position.
-outputFlat[outputFlatIdx] = outputValue //alt:base|full
-//alt:bf16 outputFlat[outputFlatIdx] = bfloat16.FromFloat32(outputValue)
+		outputFlat[outputFlatIdx] = outputValue //alt:base|full
+		//alt:bf16|full_bf16 outputFlat[outputFlatIdx] = bfloat16.FromFloat32(outputValue)
 	}
 	return nil
 }
