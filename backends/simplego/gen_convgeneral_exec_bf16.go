@@ -49,6 +49,8 @@ func execConvNoDilationBFloat16(plan convGeneralExecPlan) error { //alt:bf16
 	inputSpatialStrides := params.inputSpatialStrides
 	//alt:full|full_bf16 inputDilations := params.inputDilations
 	//alt:full|full_bf16 kernelDilations := params.kernelDilations
+	//alt:full|full_bf16 batchGroupCount := params.batchGroupCount
+	//alt:full|full_bf16 outputBatchSize := outputShape.Dimensions[inputBatchAxis]
 
 	outputBatchAxis := axes.OutputBatch
 	outputChannelsAxis := axes.OutputChannels
@@ -72,6 +74,10 @@ func execConvNoDilationBFloat16(plan convGeneralExecPlan) error { //alt:bf16
 	for outputFlatIdx, outputIndices = range outputShape.IterOn(outputIndices) {
 		batchIdx := outputIndices[outputBatchAxis]
 		outputChannel := outputIndices[outputChannelsAxis]
+		//alt:full|full_bf16 if batchGroupCount > 1 {
+		//alt:full|full_bf16 subBatchIdx := outputChannel / batchGroupCount
+		//alt:full|full_bf16 batchIdx = subBatchIdx*outputBatchSize + batchIdx
+		//alt:full|full_bf16 }
 		baseInputFlatIdx := batchIdx * inputStrides[inputBatchAxis]
 
 		// Loop over the kernel spatial axes, with the outputChannel given by the output loop.
@@ -86,9 +92,7 @@ func execConvNoDilationBFloat16(plan convGeneralExecPlan) error { //alt:bf16
 			for spatialIdx, kernelSpatialAxis := range axes.KernelSpatial {
 				kernelIdx := kernelIndices[kernelSpatialAxis]
 				//alt:full|full_bf16 kernelDilation := kernelDilations[spatialIdx]
-				//alt:full|full_bf16 if kernelDilation > 1 {
-				//alt:full|full_bf16 kernelIdx = kernelIdx*kernelDilation
-				//alt:full|full_bf16 }
+				//alt:full|full_bf16 kernelIdx *= kernelDilation
 				outputSpatialAxis := outputSpatialAxes[spatialIdx]
 				outputIdx := outputIndices[outputSpatialAxis]
 				inputIdx := outputIdx*convStrides[spatialIdx] + kernelIdx - paddings[spatialIdx][0]

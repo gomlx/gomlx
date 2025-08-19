@@ -47,8 +47,10 @@ func execConvBFloat16(plan convGeneralExecPlan) error { //alt:full_bf16
 	inputChannelsAxis := axes.InputChannels
 	inputSpatialDims := params.dilatedInputSpatialDims
 	inputSpatialStrides := params.inputSpatialStrides
-	inputDilations := params.inputDilations   //alt:full|full_bf16
-	kernelDilations := params.kernelDilations //alt:full|full_bf16
+	inputDilations := params.inputDilations                   //alt:full|full_bf16
+	kernelDilations := params.kernelDilations                 //alt:full|full_bf16
+	batchGroupCount := params.batchGroupCount                 //alt:full|full_bf16
+	outputBatchSize := outputShape.Dimensions[inputBatchAxis] //alt:full|full_bf16
 
 	outputBatchAxis := axes.OutputBatch
 	outputChannelsAxis := axes.OutputChannels
@@ -72,6 +74,10 @@ func execConvBFloat16(plan convGeneralExecPlan) error { //alt:full_bf16
 	for outputFlatIdx, outputIndices = range outputShape.IterOn(outputIndices) {
 		batchIdx := outputIndices[outputBatchAxis]
 		outputChannel := outputIndices[outputChannelsAxis]
+		if batchGroupCount > 1 { //alt:full|full_bf16
+			subBatchIdx := outputChannel / batchGroupCount    //alt:full|full_bf16
+			batchIdx = subBatchIdx*outputBatchSize + batchIdx //alt:full|full_bf16
+		} //alt:full|full_bf16
 		baseInputFlatIdx := batchIdx * inputStrides[inputBatchAxis]
 
 		// Loop over the kernel spatial axes, with the outputChannel given by the output loop.
@@ -86,9 +92,7 @@ func execConvBFloat16(plan convGeneralExecPlan) error { //alt:full_bf16
 			for spatialIdx, kernelSpatialAxis := range axes.KernelSpatial {
 				kernelIdx := kernelIndices[kernelSpatialAxis]
 				kernelDilation := kernelDilations[spatialIdx] //alt:full|full_bf16
-				if kernelDilation > 1 {                       //alt:full|full_bf16
-					kernelIdx = kernelIdx * kernelDilation //alt:full|full_bf16
-				} //alt:full|full_bf16
+				kernelIdx *= kernelDilation                   //alt:full|full_bf16
 				outputSpatialAxis := outputSpatialAxes[spatialIdx]
 				outputIdx := outputIndices[outputSpatialAxis]
 				inputIdx := outputIdx*convStrides[spatialIdx] + kernelIdx - paddings[spatialIdx][0]
