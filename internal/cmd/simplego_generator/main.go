@@ -8,6 +8,6 @@ import (
 )
 
 func main() {
-	fmt.Println("simplego_generator:")
+	fmt.Println("\tinternal/cmd/simplego_generator:")
 	GenerateExecBinary()
 }

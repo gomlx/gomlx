@@ -213,6 +213,5 @@ func init() {
 	cmd := exec.Command("gofmt", "-w", fileName)
 	fmt.Printf("\t%s\n", cmd)
 	must.M(cmd.Run())
-	fmt.Printf("\t\tgenerated %q\n", fileName)
-
+	fmt.Printf("✅ Successfully generated %s\n", fileName)
 }

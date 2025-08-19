@@ -6,8 +6,8 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/shapeinference"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/pkg/errors"
 )
 
@@ -48,15 +48,62 @@ func (b *Builder) ConvGeneral(inputOp, kernelOp backends.Op, axes backends.Convo
 	}
 
 	node := b.newNode(opType, outputShape, input, kernel)
-	node.data = &convNode{
-		axes:             axes.Clone(),
-		strides:          slices.Clone(strides),
-		paddings:         slices.Clone(paddings),
-		inputDilations:   slices.Clone(inputDilations),
-		kernelDilations:  slices.Clone(kernelDilations),
-		filterGroupCount: filterGroupCount,
-		batchGroupCount:  batchGroupCount,
+
+	// Sanitize parameters.
+	spatialRank := outputShape.Rank() - 2
+	if strides == nil {
+		strides = xslices.SliceWithValue(spatialRank, 1)
+	} else {
+		strides = slices.Clone(strides)
 	}
+	if paddings == nil {
+		paddings = make([][2]int, spatialRank)
+	} else {
+		paddings = slices.Clone(paddings)
+	}
+	if len(inputDilations) > 0 {
+		inputDilations = slices.Clone(inputDilations)
+		for i, dilation := range inputDilations {
+			if dilation <= 0 {
+				inputDilations[i] = 1
+			}
+		}
+	}
+	if len(kernelDilations) > 0 {
+		kernelDilations = slices.Clone(kernelDilations)
+		for i, dilation := range kernelDilations {
+			if dilation <= 0 {
+				kernelDilations[i] = 1
+			}
+		}
+	}
+	params := &convNode{
+		axes:             axes.Clone(),
+		strides:          strides,
+		paddings:         paddings,
+		inputDilations:   inputDilations,
+		kernelDilations:  kernelDilations,
+		filterGroupCount: max(filterGroupCount, 1),
+		batchGroupCount:  max(batchGroupCount, 1),
+
+		hasInputDilations:       len(inputDilations) > 0 && slices.Max(inputDilations) > 1,
+		hasKernelDilations:      len(kernelDilations) > 0 && slices.Max(kernelDilations) > 1,
+		inputStrides:            input.shape.Strides(),
+		kernelStrides:           kernel.shape.Strides(),
+		dilatedInputSpatialDims: outputShape.Dimensions,
+	}
+
+	// Generate static derived data that will be used during execution.
+	params.dilatedInputSpatialDims = make([]int, spatialRank)
+	params.inputSpatialStrides = make([]int, spatialRank)
+	for spatialIdx, inputAxis := range axes.InputSpatial {
+		params.inputSpatialStrides[spatialIdx] = params.inputStrides[inputAxis]
+		dim := input.shape.Dimensions[inputAxis]
+		if dim > 0 {
+			params.dilatedInputSpatialDims[spatialIdx] = (dim-1)*inputDilations[spatialIdx] + 1
+		}
+	}
+	node.data = params
 	return node, nil
 }
 
@@ -68,6 +115,13 @@ type convNode struct {
 	kernelDilations  []int
 	filterGroupCount int
 	batchGroupCount  int
+
+	hasInputDilations, hasKernelDilations            bool
+	inputStrides, inputSpatialStrides, kernelStrides []int
+
+	// dilatedInputSpatialDims holds the dimensions of the input spatial axes after applying the dilations.
+	// For non-dilated dimensions it's the same as the original dimension.
+	dilatedInputSpatialDims []int
 }
 
 // ConvGeneralDilated is a deprecated an alias to ConvGeneral.
@@ -111,11 +165,14 @@ func execConvGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (
 		outputShape: outputShape,
 		params:      params,
 	}
-
-	if slices.Max(params.inputDilations) > 1 || slices.Max(params.kernelDilations) > 1 || params.filterGroupCount > 1 || params.batchGroupCount > 1 {
-		return nil, errors.Errorf("SimpleGo backend doesn't yet support convolution (ConvGeneral) with dilations or groupings (filter or batch) -- please open a bug report if needed")
+	var convFn func(convGeneralExecPlan) error
+	if params.hasInputDilations || params.hasKernelDilations || params.filterGroupCount > 1 || params.batchGroupCount > 1 {
+		// Full version.
+		convFn = convDTypeMap.Get(dtype).(func(convGeneralExecPlan) error)
+	} else {
+		// Faster, but no dilation or grouping version.
+		convFn = convNoDilationDTypeMap.Get(dtype).(func(plan convGeneralExecPlan) error)
 	}
-	convFn := convNoDilationDTypeMap.Get(dtype).(func(plan convGeneralExecPlan) error)
 	err := convFn(plan)
 	if err != nil {
 		backend.putBuffer(output)
@@ -137,178 +194,13 @@ var (
 	convDTypeMap           = NewDTypeMap("ConvGeneral")
 )
 
-// execConvNoDilationGeneric executes a ConvGeneral without any dilation or grouping, for generic Go native numeric types,
-// so this excludes BFloat16.
-func execConvNoDilationGeneric[T PODNumericConstraints](plan convGeneralExecPlan) error {
-	// Shortcuts (and maybe move these values to the stack for faster access)
-	inputFlat := plan.inputFlat.([]T)
-	inputShape := plan.inputShape
-	kernelFlat := plan.kernelFlat.([]T)
-	kernelShape := plan.kernelShape
-	outputFlat := plan.outputFlat.([]T)
-	outputShape := plan.outputShape
-	rank := outputShape.Rank() // same rank for input and kernel.
-	//spatialRank := rank - 2
-	params := plan.params
-	axes := params.axes
-	paddings := params.paddings
-	convStrides := params.strides
-
-	inputBatchAxis := axes.InputBatch
-	inputChannelsAxis := axes.InputChannels
-	inputSpatialAxes := axes.InputSpatial
-	outputBatchAxis := axes.OutputBatch
-	outputChannelsAxis := axes.OutputChannels
-	outputSpatialAxes := axes.OutputSpatial
-	kernelInputChannelsAxis := axes.KernelInputChannels
-	kernelOutputChannelsAxis := axes.KernelOutputChannels
-	kernelSpatialAxes := axes.KernelSpatial
-	numInputChannels := kernelShape.Dimensions[kernelInputChannelsAxis]
-
-	// Indices we'll be iterating over.
-	var outputFlatIdx int
-
-	// Indices and strides: note we don't use an inputIndices because we only keep an inputFlatIndex.
-	outputIndices := make([]int, rank)
-	kernelIndices := make([]int, rank)
-
-	inputStrides := inputShape.Strides()
-	kernelStrides := kernelShape.Strides()
-
-	// Loop sequentially over all output positions:
-	for outputFlatIdx, outputIndices = range outputShape.IterOn(outputIndices) {
-		batchIdx := outputIndices[outputBatchAxis]
-		outputChannel := outputIndices[outputChannelsAxis]
-		baseInputFlatIdx := batchIdx * inputStrides[inputBatchAxis]
-
-		// Loop over the kernel spatial axes, with the outputChannel given by the output loop.
-		kernelIndices[kernelOutputChannelsAxis] = outputChannel
-		var outputValue T
-		var kernelFlatIdx int
-	kernelLoop:
-		for kernelFlatIdx, kernelIndices = range kernelShape.IterOnAxes(kernelSpatialAxes, kernelStrides, kernelIndices) {
-			// Calculate the corresponding position in the input.
-			inputFlatIdx := baseInputFlatIdx
-			for spatialIdx, outputSpatialAxis := range outputSpatialAxes {
-				inputSpatialAxis := inputSpatialAxes[spatialIdx]
-				kernelSpatialAxes := axes.KernelSpatial[spatialIdx]
-				outputIdx := outputIndices[outputSpatialAxis]
-				kernelIdx := kernelIndices[kernelSpatialAxes]
-				inputIdx := outputIdx*convStrides[spatialIdx] + kernelIdx - paddings[spatialIdx][0]
-				if inputIdx < 0 || inputIdx >= inputShape.Dimensions[inputSpatialAxis] {
-					// Index is in the padded area, we can move to the next kernel position.
-					continue kernelLoop
-				}
-				inputFlatIdx += inputIdx * inputStrides[inputSpatialAxis]
-			}
-
-			// Accumulate over all the kernel/input channels.
-			inputChannelStride := inputStrides[inputChannelsAxis]
-			kernelChannelStride := kernelStrides[kernelInputChannelsAxis]
-			for range numInputChannels {
-				inputValue := inputFlat[inputFlatIdx]
-				kernelValue := kernelFlat[kernelFlatIdx]
-				outputValue += inputValue * kernelValue
-				inputFlatIdx += inputChannelStride
-				kernelFlatIdx += kernelChannelStride
-			}
-		}
-
-		// Update output with accumulated value from the convolution of the kernel at this position.
-		outputFlat[outputFlatIdx] = outputValue
-	}
-	return nil
-}
-
 func init() {
 	convNoDilationDTypeMap.Register(dtypes.BFloat16, execConvNoDilationBFloat16)
 }
 
-// execConvNoDilation for BFloat16.
-func execConvNoDilationBFloat16(plan convGeneralExecPlan) error {
-	// Shortcuts (and maybe move these values to the stack for faster access)
-	inputFlat := plan.inputFlat.([]bfloat16.BFloat16)
-	inputShape := plan.inputShape
-	kernelFlat := plan.kernelFlat.([]bfloat16.BFloat16)
-	kernelShape := plan.kernelShape
-	outputFlat := plan.outputFlat.([]bfloat16.BFloat16)
-	outputShape := plan.outputShape
-	rank := outputShape.Rank() // same rank for input and kernel.
-	//spatialRank := rank - 2
-	params := plan.params
-	axes := params.axes
-	paddings := params.paddings
-	convStrides := params.strides
-
-	inputBatchAxis := axes.InputBatch
-	inputChannelsAxis := axes.InputChannels
-	inputSpatialAxes := axes.InputSpatial
-	outputBatchAxis := axes.OutputBatch
-	outputChannelsAxis := axes.OutputChannels
-	outputSpatialAxes := axes.OutputSpatial
-	kernelInputChannelsAxis := axes.KernelInputChannels
-	kernelOutputChannelsAxis := axes.KernelOutputChannels
-	kernelSpatialAxes := axes.KernelSpatial
-	numInputChannels := kernelShape.Dimensions[kernelInputChannelsAxis]
-
-	// Indices we'll be iterating over.
-	var outputFlatIdx int
-
-	// Indices and strides: note we don't use an inputIndices because we only keep an inputFlatIndex.
-	outputIndices := make([]int, rank)
-	kernelIndices := make([]int, rank)
-
-	inputStrides := inputShape.Strides()
-	kernelStrides := kernelShape.Strides()
-
-	// Loop sequentially over all output positions:
-	for outputFlatIdx, outputIndices = range outputShape.IterOn(outputIndices) {
-		batchIdx := outputIndices[outputBatchAxis]
-		outputChannel := outputIndices[outputChannelsAxis]
-		baseInputFlatIdx := batchIdx * inputStrides[inputBatchAxis]
-
-		// Loop over the kernel spatial axes, with the outputChannel given by the output loop.
-		kernelIndices[kernelOutputChannelsAxis] = outputChannel
-		var outputValue float32
-		var kernelFlatIdx int
-	kernelLoop:
-		for kernelFlatIdx, kernelIndices = range kernelShape.IterOnAxes(kernelSpatialAxes, kernelStrides, kernelIndices) {
-			// Calculate the corresponding position in the input.
-			inputFlatIdx := baseInputFlatIdx
-			for spatialIdx, outputSpatialAxis := range outputSpatialAxes {
-				inputSpatialAxis := inputSpatialAxes[spatialIdx]
-				kernelSpatialAxes := axes.KernelSpatial[spatialIdx]
-				outputIdx := outputIndices[outputSpatialAxis]
-				kernelIdx := kernelIndices[kernelSpatialAxes]
-				inputIdx := outputIdx*convStrides[spatialIdx] + kernelIdx - paddings[spatialIdx][0]
-				if inputIdx < 0 || inputIdx >= inputShape.Dimensions[inputSpatialAxis] {
-					// Index is in the padded area, we can move to the next kernel position.
-					continue kernelLoop
-				}
-				inputFlatIdx += inputIdx * inputStrides[inputSpatialAxis]
-			}
-
-			// Accumulate over all the kernel/input channels.
-			inputChannelStride := inputStrides[inputChannelsAxis]
-			kernelChannelStride := kernelStrides[kernelInputChannelsAxis]
-			for range numInputChannels {
-				inputValue := inputFlat[inputFlatIdx]
-				kernelValue := kernelFlat[kernelFlatIdx]
-				outputValue += inputValue.Float32() * kernelValue.Float32()
-				inputFlatIdx += inputChannelStride
-				kernelFlatIdx += kernelChannelStride
-			}
-		}
-
-		// Update output with accumulated value from the convolution of the kernel at this position.
-		outputFlat[outputFlatIdx] = bfloat16.FromFloat32(outputValue)
-	}
-	return nil
-}
-
 // execConv executes a ConvGeneral with support for dilation and grouping (and slower for that).
 // This is the generic version for Go native numeric types -- so this excludes BFloat16.
-func execConvGeneric[T PODNumericConstraints](plan convGeneralExecPlan) error {
+func execConvGeneric2[T PODNumericConstraints](plan convGeneralExecPlan) error {
 	// Shortcuts (and maybe move these values to the stack for faster access)
 	inputFlat := plan.inputFlat.([]T)
 	inputShape := plan.inputShape
@@ -322,6 +214,9 @@ func execConvGeneric[T PODNumericConstraints](plan convGeneralExecPlan) error {
 	axes := params.axes
 	paddings := params.paddings
 	convStrides := params.strides
+
+	inputDilations := params.inputDilations
+	dilatedInputDims := params.dilatedInputSpatialDims
 
 	inputBatchAxis := axes.InputBatch
 	inputChannelsAxis := axes.InputChannels
@@ -364,10 +259,14 @@ func execConvGeneric[T PODNumericConstraints](plan convGeneralExecPlan) error {
 				outputIdx := outputIndices[outputSpatialAxis]
 				kernelIdx := kernelIndices[kernelSpatialAxes]
 				inputIdx := outputIdx*convStrides[spatialIdx] + kernelIdx - paddings[spatialIdx][0]
-				if inputIdx < 0 || inputIdx >= inputShape.Dimensions[inputSpatialAxis] {
-					// Index is in the padded area, we can move to the next kernel position.
+				inputDilation := inputDilations[spatialIdx]
+				// TODO(optimizations): we could limit the kernel iterator to never go outside the bounds of the input, removing this
+				// 	condition from the innermost loop.
+				if inputIdx < 0 || inputIdx >= dilatedInputDims[inputSpatialAxis] || (inputDilation > 1 && inputIdx%inputDilation != 0) {
+					// Index is in the padded area or dilation, we can move to the next kernel position.
 					continue kernelLoop
 				}
+				inputIdx /= inputDilation // Make the dilated index back to the original input.
 				inputFlatIdx += inputIdx * inputStrides[inputSpatialAxis]
 			}
 
