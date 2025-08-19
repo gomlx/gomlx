@@ -30,14 +30,14 @@ import (
 // Create it with Convolve, set the desired parameters and
 // when set, call `IsNil()`.
 type ConvolutionBuilder struct {
-	graph                             *Graph
-	x, kernel                         *Node
-	numSpatialDims                    int
-	strides                           []int
-	paddings                          [][2]int
-	padSame                           bool
-	inputDilations, kernelDilations   []int
-	filterGroupCount, batchGroupCount int
+	graph                              *Graph
+	x, kernel                          *Node
+	numSpatialDims                     int
+	strides                            []int
+	paddings                           [][2]int
+	padSame                            bool
+	inputDilations, kernelDilations    []int
+	featureGroupCount, batchGroupCount int
 
 	channelsAxisConfig timage.ChannelsAxisConfig
 	axes               ConvolveAxesConfig
@@ -80,11 +80,11 @@ type ConvolutionBuilder struct {
 //     is not yet supported.
 func Convolve(x, kernel *Node) *ConvolutionBuilder {
 	conv := &ConvolutionBuilder{
-		graph:            validateBuildingGraphFromInputs(x, kernel),
-		x:                x,
-		kernel:           kernel,
-		filterGroupCount: 1,
-		batchGroupCount:  1,
+		graph:             validateBuildingGraphFromInputs(x, kernel),
+		x:                 x,
+		kernel:            kernel,
+		featureGroupCount: 1,
+		batchGroupCount:   1,
 	}
 
 	conv.numSpatialDims = x.Rank() - 2
@@ -214,7 +214,7 @@ func (conv *ConvolutionBuilder) FeatureGroupCount(groupCount int) *ConvolutionBu
 		Panicf("FeatureGroupCount must be >= 1, got %d", groupCount)
 	}
 
-	conv.filterGroupCount = groupCount
+	conv.featureGroupCount = groupCount
 	return conv
 }
 
@@ -380,18 +380,18 @@ func (conv *ConvolutionBuilder) Done() *Node {
 	}
 
 	// Validate feature group count
-	if conv.filterGroupCount > 1 {
+	if conv.featureGroupCount > 1 {
 		inputChannels := conv.x.Shape().Dimensions[conv.axes.InputChannels]
-		if inputChannels%conv.filterGroupCount != 0 {
+		if inputChannels%conv.featureGroupCount != 0 {
 			Panicf("input channels (%d) not divisible by FeatureGroupCount (%d)",
-				inputChannels, conv.filterGroupCount)
+				inputChannels, conv.featureGroupCount)
 		}
 
 		// Validate that the kernel's input channel axis matches the feature group count.
 		kernelInputChannels := conv.kernel.Shape().Dimensions[conv.axes.KernelInputChannels]
-		if kernelInputChannels != inputChannels/conv.filterGroupCount {
+		if kernelInputChannels != inputChannels/conv.featureGroupCount {
 			Panicf("kernel input channels (%d) must equal input channels (%d) divided by FeatureGroupCount (%d)",
-				kernelInputChannels, inputChannels, conv.filterGroupCount)
+				kernelInputChannels, inputChannels, conv.featureGroupCount)
 		}
 	}
 
@@ -407,7 +407,7 @@ func (conv *ConvolutionBuilder) Done() *Node {
 	return ConvGeneral(conv.x, conv.kernel,
 		conv.axes, conv.strides,
 		paddings, conv.inputDilations, conv.kernelDilations,
-		conv.filterGroupCount, conv.batchGroupCount)
+		conv.featureGroupCount, conv.batchGroupCount)
 }
 
 // ConvolveAxesConfig defines the interpretation of the input/kernel/output tensor axes.
@@ -436,14 +436,14 @@ type ConvolveAxesConfig = backends.ConvolveAxesConfig
 // Note: input is aka. operand; kernel is aka. "filters". The input and output "channels" are also known as "features dimensions".
 func ConvGeneral(input, kernel *Node, axes ConvolveAxesConfig,
 	strides []int, paddings [][2]int, inputDilations, kernelDilations []int,
-	filterGroupCount, batchGroupCount int) *Node {
+	featureGroupCount, batchGroupCount int) *Node {
 	_ = validateBuildingGraphFromInputs(input, kernel)
 	numSpatialDims := input.Rank() - 2
 	if len(axes.InputSpatial) != numSpatialDims || len(axes.OutputSpatial) != numSpatialDims || len(axes.KernelSpatial) != numSpatialDims {
 		Panicf("ConvGeneralDilated: input has %d spatial dimensions, but axes configuration has %d, %d, %d spatial axes configured "+
 			"for input/kernel/output", numSpatialDims, len(axes.InputSpatial), len(axes.KernelSpatial), len(axes.OutputSpatial))
 	}
-	return backendConvGeneralDilated(input, kernel, axes, strides, paddings, inputDilations, kernelDilations, filterGroupCount, batchGroupCount)
+	return backendConvGeneralDilated(input, kernel, axes, strides, paddings, inputDilations, kernelDilations, featureGroupCount, batchGroupCount)
 }
 
 // ConvGeneralDilated is a deprecated an alias to ConvGeneral.
@@ -465,7 +465,7 @@ func convGeneralDilatedVJP(node, v *Node, _ shapes.Shape) []*Node {
 			"this may occur when trying to do the gradient of a gradient.")
 	}
 	if params.filterGroupCount != 1 {
-		Panicf("gradient of ConvGeneralDialated using filterGroupCount != 1 is not yet implemented, got filterGroupCount=%d", params.filterGroupCount)
+		Panicf("gradient of ConvGeneralDialated using featureGroupCount != 1 is not yet implemented, got featureGroupCount=%d", params.filterGroupCount)
 	}
 	if params.batchGroupCount != 1 {
 		Panicf("gradient of ConvGeneralDialated using batchGroupCount != 1 is not yet implemented, got batchGroupCount=%d", params.batchGroupCount)

@@ -22,7 +22,7 @@ func init() {
 // - Strides and padding.
 // - Dilations of the input.
 // - Dilations of the kernel, aka. atrous convolution.
-// - Filter grouping (on the input channels).
+// - Feature grouping (on the input channels).
 // - Batch grouping.
 //
 // Some details in https://www.tensorflow.org/xla/operation_semantics#convwithgeneralpadding_convolution.
@@ -34,7 +34,7 @@ func init() {
 func (b *Builder) ConvGeneral(inputOp, kernelOp backends.Op, axes backends.ConvolveAxesConfig,
 	strides []int, paddings [][2]int,
 	inputDilations, kernelDilations []int,
-	filterGroupCount, batchGroupCount int) (backends.Op, error) {
+	featureGroupCount, batchGroupCount int) (backends.Op, error) {
 	opType := backends.OpTypeConvGeneralDilated
 	inputs, err := b.checkOps(opType.String(), inputOp, kernelOp)
 	if err != nil {
@@ -42,7 +42,7 @@ func (b *Builder) ConvGeneral(inputOp, kernelOp backends.Op, axes backends.Convo
 	}
 	input, kernel := inputs[0], inputs[1]
 
-	outputShape, err := shapeinference.ConvGeneralOp(input.shape, kernel.shape, axes, strides, paddings, inputDilations, kernelDilations, filterGroupCount, batchGroupCount)
+	outputShape, err := shapeinference.ConvGeneralOp(input.shape, kernel.shape, axes, strides, paddings, inputDilations, kernelDilations, featureGroupCount, batchGroupCount)
 	if err != nil {
 		return nil, err
 	}
@@ -78,13 +78,13 @@ func (b *Builder) ConvGeneral(inputOp, kernelOp backends.Op, axes backends.Convo
 		}
 	}
 	params := &convNode{
-		axes:             axes.Clone(),
-		strides:          strides,
-		paddings:         paddings,
-		inputDilations:   inputDilations,
-		kernelDilations:  kernelDilations,
-		filterGroupCount: max(filterGroupCount, 1),
-		batchGroupCount:  max(batchGroupCount, 1),
+		axes:              axes.Clone(),
+		strides:           strides,
+		paddings:          paddings,
+		inputDilations:    inputDilations,
+		kernelDilations:   kernelDilations,
+		featureGroupCount: max(featureGroupCount, 1),
+		batchGroupCount:   max(batchGroupCount, 1),
 
 		hasInputDilations:       len(inputDilations) > 0 && slices.Max(inputDilations) > 1,
 		hasKernelDilations:      len(kernelDilations) > 0 && slices.Max(kernelDilations) > 1,
@@ -108,13 +108,13 @@ func (b *Builder) ConvGeneral(inputOp, kernelOp backends.Op, axes backends.Convo
 }
 
 type convNode struct {
-	axes             backends.ConvolveAxesConfig
-	strides          []int
-	paddings         [][2]int
-	inputDilations   []int
-	kernelDilations  []int
-	filterGroupCount int
-	batchGroupCount  int
+	axes              backends.ConvolveAxesConfig
+	strides           []int
+	paddings          [][2]int
+	inputDilations    []int
+	kernelDilations   []int
+	featureGroupCount int
+	batchGroupCount   int
 
 	hasInputDilations, hasKernelDilations            bool
 	inputStrides, inputSpatialStrides, kernelStrides []int
@@ -130,8 +130,8 @@ type convNode struct {
 func (b *Builder) ConvGeneralDilated(inputOp, kernelOp backends.Op, axes backends.ConvolveAxesConfig,
 	strides []int, paddings [][2]int,
 	inputDilations, kernelDilations []int,
-	filterGroupCount, batchGroupCount int) (backends.Op, error) {
-	return b.ConvGeneral(inputOp, kernelOp, axes, strides, paddings, inputDilations, kernelDilations, filterGroupCount, batchGroupCount)
+	featureGroupCount, batchGroupCount int) (backends.Op, error) {
+	return b.ConvGeneral(inputOp, kernelOp, axes, strides, paddings, inputDilations, kernelDilations, featureGroupCount, batchGroupCount)
 }
 
 // execConvGeneral executes the DotGeneral by first normalizing and repackaging the tensors into blocks.
@@ -166,7 +166,7 @@ func execConvGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (
 		params:      params,
 	}
 	var convFn func(convGeneralExecPlan) error
-	if params.hasInputDilations || params.hasKernelDilations || params.filterGroupCount > 1 || params.batchGroupCount > 1 {
+	if params.hasInputDilations || params.hasKernelDilations || params.featureGroupCount > 1 || params.batchGroupCount > 1 {
 		// Full version.
 		convFn = convDTypeMap.Get(dtype).(func(convGeneralExecPlan) error)
 	} else {

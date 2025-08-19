@@ -911,7 +911,7 @@ func ReduceWindowOp(operand shapes.Shape, windowDimensions, strides, baseDilatio
 func ConvGeneralOp(input, kernel shapes.Shape, axes backends.ConvolveAxesConfig,
 	strides []int, paddings [][2]int,
 	inputDilations, kernelDilations []int,
-	filterGroupCount, batchGroupCount int) (shapes.Shape, error) {
+	featureGroupCount, batchGroupCount int) (shapes.Shape, error) {
 	// Convenient error returns.
 	errorf := func(format string, args ...any) (shapes.Shape, error) {
 		return shapes.Invalid(), errors.Errorf("ConvGeneralDilatedOp:  "+format, args...)
@@ -1010,26 +1010,26 @@ func ConvGeneralOp(input, kernel shapes.Shape, axes backends.ConvolveAxesConfig,
 		}
 	}
 
-	if filterGroupCount > 1 && batchGroupCount > 1 {
-		return errorf("at most one of filterGroupCount (%d) or batchGroupCount (%d) can be set to > 1", filterGroupCount, batchGroupCount)
+	if featureGroupCount > 1 && batchGroupCount > 1 {
+		return errorf("at most one of featureGroupCount (%d) or batchGroupCount (%d) can be set to > 1", featureGroupCount, batchGroupCount)
 	}
 
 	// Check that channels (feature dimensions) are valid.
 	inputChannels := input.Dim(axes.InputChannels)
 	outputChannels := kernel.Dim(axes.KernelOutputChannels)
-	if filterGroupCount < 1 {
-		return errorf("filterGroupCount=%d must be >= 1 for input shape %s", filterGroupCount, input)
+	if featureGroupCount < 1 {
+		return errorf("featureGroupCount=%d must be >= 1 for input shape %s", featureGroupCount, input)
 	}
-	if inputChannels%filterGroupCount != 0 {
-		return errorf("input channels dimension %d must be divisible by filterGroupCount %d", inputChannels, filterGroupCount)
+	if inputChannels%featureGroupCount != 0 {
+		return errorf("input channels dimension %d must be divisible by featureGroupCount %d", inputChannels, featureGroupCount)
 	}
-	if outputChannels%filterGroupCount != 0 {
-		return errorf("kernel output channels dimension %d must be divisible by filterGroupCount %d", outputChannels, filterGroupCount)
+	if outputChannels%featureGroupCount != 0 {
+		return errorf("kernel output channels dimension %d must be divisible by featureGroupCount %d", outputChannels, featureGroupCount)
 	}
 	kernelInputChannels := kernel.Dim(axes.KernelInputChannels)
-	if inputChannels != kernelInputChannels*filterGroupCount {
-		return errorf("we must have inputChannels (=%d) = kernelInputChannels (=%d) * filterGroupCount (=%d) -- input shape is %s, kernel shape is %s",
-			inputChannels, kernelInputChannels, filterGroupCount, input, kernel)
+	if inputChannels != kernelInputChannels*featureGroupCount {
+		return errorf("we must have inputChannels (=%d) = kernelInputChannels (=%d) * featureGroupCount (=%d) -- input shape is %s, kernel shape is %s",
+			inputChannels, kernelInputChannels, featureGroupCount, input, kernel)
 	}
 
 	// Check batchGroupCount.
