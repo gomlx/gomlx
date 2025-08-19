@@ -1791,13 +1791,12 @@ func execReduceWindow(backend *Backend, node *Node, inputs []*Buffer, inputsOwne
 	//   More specifically we would split windowShape into "nonCachedWindowShape" and "cachedWindowShape", and
 	//   iterate over the nonCachedWindowShape first.
 	// - Can we refactor the check of baseDilation to outside of the loop ?
-	outputFlatIdx := 0
 	windowIndices := make([]int, rank)
 	operandIndices := make([]int, rank)
-	for outputIndices := range outputShape.Iter() {
+	for outputFlatIdx, outputIndices := range outputShape.Iter() {
 		//fmt.Printf("Output %v:\n", outputIndices)
 	iterWindowIndices:
-		for windowIndices = range windowShape.IterOn(windowIndices) {
+		for _, windowIndices = range windowShape.IterOn(windowIndices) {
 			//fmt.Printf("\t- window %v\n", windowIndices)
 			for axis := range rank {
 				operandIdx := outputIndices[axis]*effStrides[axis] + operandShifts[axis]
@@ -1825,7 +1824,6 @@ func execReduceWindow(backend *Backend, node *Node, inputs []*Buffer, inputsOwne
 			}
 			updateFn(operandFlatIdx, outputFlatIdx)
 		}
-		outputFlatIdx++
 	}
 	return output, nil
 }
