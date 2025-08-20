@@ -6,6 +6,7 @@ import (
 	"go/ast"
 	"os"
 	"os/exec"
+	"path"
 	"slices"
 	"strings"
 	"text/template"
@@ -224,5 +225,5 @@ func GenerateStandardOpsImplementation(extractor *parsexlabuilder.NodeTextExtrac
 	fmt.Printf("\t%s\n", cmd)
 	cmd.Stderr = os.Stderr
 	must.M(cmd.Run())
-	fmt.Printf("\tGenerated %q based on github.com/gomlx/gopjrt/xlabuilder\n", fileName)
+	fmt.Printf("✅ Successfully generated %s\n", path.Join(must.M1(os.Getwd()), fileName))
 }

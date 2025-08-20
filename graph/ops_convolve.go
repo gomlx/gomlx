@@ -37,7 +37,7 @@ type ConvolutionBuilder struct {
 	paddings                           [][2]int
 	padSame                            bool
 	inputDilations, kernelDilations    []int
-	featureGroupCount, batchGroupCount int
+	channelGroupCount, batchGroupCount int
 
 	channelsAxisConfig timage.ChannelsAxisConfig
 	axes               ConvolveAxesConfig
@@ -70,11 +70,11 @@ type ConvolutionBuilder struct {
 //
 // Notice x and kernel must have the same rank.
 //
-// We follow the Keras convention of calling the "depth" or "feature" or "channels" dimension
-// "channels". The "kernel" is also called the "filters" by some.
+// We follow the Keras convention of calling "channels" the axis that is sometimes referred to by "features" or "depth".
+// The "kernel" is also referred as "filters" by some.
 //
 // Additional features:
-//   - Group operations: Use ConvolutionBuilder.FeatureGroupCount to split channels
+//   - Group operations: Use ConvolutionBuilder.ChannelGroupCount to split channels
 //     or BatchGroupCount to split batches into independent processing groups.
 //     When using either feature, the kernel's shape changes and back-propagation
 //     is not yet supported.
@@ -83,7 +83,7 @@ func Convolve(x, kernel *Node) *ConvolutionBuilder {
 		graph:             validateBuildingGraphFromInputs(x, kernel),
 		x:                 x,
 		kernel:            kernel,
-		featureGroupCount: 1,
+		channelGroupCount: 1,
 		batchGroupCount:   1,
 	}
 
@@ -187,10 +187,10 @@ func (conv *ConvolutionBuilder) StridePerDim(strides ...int) *ConvolutionBuilder
 	return conv
 }
 
-// FeatureGroupCount splits input/output channels into independent groups.
+// ChannelGroupCount splits input/output channels into independent groups.
 // Equivalent to TensorFlow's "groups" parameter in tf.nn.convNd operations.
 //
-// When FeatureGroupCount != 1, the kernel's shape changes: the input channels
+// When groupCount != 1, the kernel's shape changes: the input channels
 // dimension of the kernel must equal (input_channels / group_count).
 // This effectively creates separate convolution groups where each group
 // processes a subset of input channels and produces a subset of output channels.
@@ -209,12 +209,24 @@ func (conv *ConvolutionBuilder) StridePerDim(strides ...int) *ConvolutionBuilder
 // Note: Back-propagation is not yet implemented for this feature.
 //
 // Reference: https://www.tensorflow.org/api_docs/python/tf/data/Dataset#group_by_window
+func (conv *ConvolutionBuilder) ChannelGroupCount(groupCount int) *ConvolutionBuilder {
+	if groupCount < 1 {
+		Panicf("FeatureGroupCount must be >= 1, got %d", groupCount)
+	}
+
+	conv.channelGroupCount = groupCount
+	return conv
+}
+
+// FeatureGroupCount is an alias for ChannelGroupCount.
+//
+// Deprecated: Use ChannelGroupCount instead.
 func (conv *ConvolutionBuilder) FeatureGroupCount(groupCount int) *ConvolutionBuilder {
 	if groupCount < 1 {
 		Panicf("FeatureGroupCount must be >= 1, got %d", groupCount)
 	}
 
-	conv.featureGroupCount = groupCount
+	conv.channelGroupCount = groupCount
 	return conv
 }
 
@@ -380,18 +392,18 @@ func (conv *ConvolutionBuilder) Done() *Node {
 	}
 
 	// Validate feature group count
-	if conv.featureGroupCount > 1 {
+	if conv.channelGroupCount > 1 {
 		inputChannels := conv.x.Shape().Dimensions[conv.axes.InputChannels]
-		if inputChannels%conv.featureGroupCount != 0 {
+		if inputChannels%conv.channelGroupCount != 0 {
 			Panicf("input channels (%d) not divisible by FeatureGroupCount (%d)",
-				inputChannels, conv.featureGroupCount)
+				inputChannels, conv.channelGroupCount)
 		}
 
 		// Validate that the kernel's input channel axis matches the feature group count.
 		kernelInputChannels := conv.kernel.Shape().Dimensions[conv.axes.KernelInputChannels]
-		if kernelInputChannels != inputChannels/conv.featureGroupCount {
+		if kernelInputChannels != inputChannels/conv.channelGroupCount {
 			Panicf("kernel input channels (%d) must equal input channels (%d) divided by FeatureGroupCount (%d)",
-				kernelInputChannels, inputChannels, conv.featureGroupCount)
+				kernelInputChannels, inputChannels, conv.channelGroupCount)
 		}
 	}
 
@@ -407,7 +419,7 @@ func (conv *ConvolutionBuilder) Done() *Node {
 	return ConvGeneral(conv.x, conv.kernel,
 		conv.axes, conv.strides,
 		paddings, conv.inputDilations, conv.kernelDilations,
-		conv.featureGroupCount, conv.batchGroupCount)
+		conv.channelGroupCount, conv.batchGroupCount)
 }
 
 // ConvolveAxesConfig defines the interpretation of the input/kernel/output tensor axes.
@@ -436,14 +448,14 @@ type ConvolveAxesConfig = backends.ConvolveAxesConfig
 // Note: input is aka. operand; kernel is aka. "filters". The input and output "channels" are also known as "features dimensions".
 func ConvGeneral(input, kernel *Node, axes ConvolveAxesConfig,
 	strides []int, paddings [][2]int, inputDilations, kernelDilations []int,
-	featureGroupCount, batchGroupCount int) *Node {
+	channelGroupCount, batchGroupCount int) *Node {
 	_ = validateBuildingGraphFromInputs(input, kernel)
 	numSpatialDims := input.Rank() - 2
 	if len(axes.InputSpatial) != numSpatialDims || len(axes.OutputSpatial) != numSpatialDims || len(axes.KernelSpatial) != numSpatialDims {
-		Panicf("ConvGeneralDilated: input has %d spatial dimensions, but axes configuration has %d, %d, %d spatial axes configured "+
+		Panicf("ConvGeneral: input has %d spatial dimensions, but axes configuration has %d, %d, %d spatial axes configured "+
 			"for input/kernel/output", numSpatialDims, len(axes.InputSpatial), len(axes.KernelSpatial), len(axes.OutputSpatial))
 	}
-	return backendConvGeneralDilated(input, kernel, axes, strides, paddings, inputDilations, kernelDilations, featureGroupCount, batchGroupCount)
+	return backendConvGeneral(input, kernel, axes, strides, paddings, inputDilations, kernelDilations, channelGroupCount, batchGroupCount)
 }
 
 // ConvGeneralDilated is a deprecated an alias to ConvGeneral.
@@ -451,30 +463,30 @@ func ConvGeneral(input, kernel *Node, axes ConvolveAxesConfig,
 // Deprecated: use ConvGeneral instead.
 var ConvGeneralDilated = ConvGeneral
 
-func convGeneralDilatedVJP(node, v *Node, _ shapes.Shape) []*Node {
+func convGeneralVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// TODO: backward propagation is not working in this function
 
 	// Recover parameters from serialized node.
 	x := node.inputNodes[0]
 	kernel := node.inputNodes[1]
-	params := node.inputs.(*nodeInputsConvGeneralDilated)
+	params := node.inputs.(*nodeInputsConvGeneral)
 	numSpatialDims := x.Rank() - 2
-	if len(params.inputDilation) > 0 {
+	if len(params.inputDilations) > 0 {
 		Panicf("gradient of Convolve with input dilation not defined, " +
 			"usually it's only used to calculate the gradient of a convolution, so " +
 			"this may occur when trying to do the gradient of a gradient.")
 	}
-	if params.filterGroupCount != 1 {
-		Panicf("gradient of ConvGeneralDialated using featureGroupCount != 1 is not yet implemented, got featureGroupCount=%d", params.filterGroupCount)
+	if params.channelGroupCount != 1 {
+		Panicf("gradient of ConvGeneral using channelGroupCount != 1 is not yet implemented, got channelGroupCount=%d", params.channelGroupCount)
 	}
 	if params.batchGroupCount != 1 {
 		Panicf("gradient of ConvGeneralDialated using batchGroupCount != 1 is not yet implemented, got batchGroupCount=%d", params.batchGroupCount)
 	}
 
 	vjpX := convVJPWrtX(node, x, kernel, v, numSpatialDims, params.axes,
-		params.strides, params.paddings, params.filterDilation)
+		params.strides, params.paddings, params.kernelDilations)
 	vjpKernel := convVJPWrtKernel(node, x, kernel, v, numSpatialDims, params.axes,
-		params.strides, params.paddings, params.filterDilation)
+		params.strides, params.paddings, params.kernelDilations)
 	return []*Node{vjpX, vjpKernel}
 }
 

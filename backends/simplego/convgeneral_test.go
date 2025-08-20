@@ -24,7 +24,7 @@ func TestConvGeneral(t *testing.T) {
 		strides                            []int
 		paddings                           [][2]int
 		inputDilations, kernelDilations    []int
-		featureGroupCount, batchGroupCount int
+		channelGroupCount, batchGroupCount int
 
 		expectedError string
 
@@ -51,7 +51,7 @@ func TestConvGeneral(t *testing.T) {
 			paddings:          [][2]int{{0, 1}},
 			inputDilations:    []int{1},
 			kernelDilations:   []int{1},
-			featureGroupCount: 1,
+			channelGroupCount: 1,
 			batchGroupCount:   1,
 			want: [][][]float64{{
 				{442, 544, 296},
@@ -82,7 +82,7 @@ func TestConvGeneral(t *testing.T) {
 			paddings:          [][2]int{{0, 0}},
 			inputDilations:    []int{1},
 			kernelDilations:   []int{1},
-			featureGroupCount: 1,
+			channelGroupCount: 1,
 			batchGroupCount:   1,
 			want:              [][][]float64{{{86, 114, 142}, {114, 158, 202}, {142, 202, 262}}},
 		},
@@ -105,7 +105,7 @@ func TestConvGeneral(t *testing.T) {
 			paddings:          [][2]int{{0, 0}},
 			inputDilations:    []int{2},
 			kernelDilations:   []int{1},
-			featureGroupCount: 1,
+			channelGroupCount: 1,
 			batchGroupCount:   1,
 			want:              [][][]float64{{{24, 36, 30, 44, 36, 52}, {32, 48, 42, 60, 52, 72}, {40, 60, 54, 76, 68, 92}}},
 		},
@@ -128,7 +128,7 @@ func TestConvGeneral(t *testing.T) {
 			paddings:          [][2]int{{0, 0}},
 			inputDilations:    []int{1},
 			kernelDilations:   []int{2},
-			featureGroupCount: 1,
+			channelGroupCount: 1,
 			batchGroupCount:   1,
 			want:              [][][]float64{{{94, 108, 122, 136}, {126, 148, 170, 192}, {158, 188, 218, 248}}},
 		},
@@ -151,7 +151,7 @@ func TestConvGeneral(t *testing.T) {
 			paddings:          [][2]int{{0, 0}},
 			inputDilations:    []int{1},
 			kernelDilations:   []int{1},
-			featureGroupCount: 2,
+			channelGroupCount: 2,
 			batchGroupCount:   1,
 			want:              [][][]float64{{{442, 493, 544, 595}, {508, 571, 634, 697}, {1699, 1774, 1849, 1924}, {1945, 2032, 2119, 2206}}},
 		},
@@ -174,7 +174,7 @@ func TestConvGeneral(t *testing.T) {
 			paddings:          [][2]int{{0, 0}},
 			inputDilations:    []int{1},
 			kernelDilations:   []int{1},
-			featureGroupCount: 1,
+			channelGroupCount: 1,
 			batchGroupCount:   2,
 			want: [][][]float64{
 				{{95, 113, 131, 149}, {119, 145, 171, 197}, {823, 857, 891, 925}, {1007, 1049, 1091, 1133}},
@@ -200,7 +200,7 @@ func TestConvGeneral(t *testing.T) {
 			paddings:          [][2]int{{0, 0}, {0, 0}},
 			inputDilations:    []int{1, 1},
 			kernelDilations:   []int{1, 1},
-			featureGroupCount: 1,
+			channelGroupCount: 1,
 			batchGroupCount:   1,
 			want:              [][][][]float64{{{{3160, 3274, 3388}, {3616, 3730, 3844}, {4072, 4186, 4300}}, {{4048, 4210, 4372}, {4696, 4858, 5020}, {5344, 5506, 5668}}}},
 		},
@@ -223,7 +223,7 @@ func TestConvGeneral(t *testing.T) {
 			paddings:          [][2]int{{0, 0}, {1, 1}, {0, 0}},
 			inputDilations:    []int{1, 2, 1},
 			kernelDilations:   []int{1, 1, 2},
-			featureGroupCount: 1,
+			channelGroupCount: 1,
 			batchGroupCount:   1,
 			want: [][][][][]float64{
 				{
@@ -256,7 +256,7 @@ func TestConvGeneral(t *testing.T) {
 			paddings:          [][2]int{{0, 0}, {0, 0}},
 			inputDilations:    []int{1, 1},
 			kernelDilations:   []int{1, 1},
-			featureGroupCount: 1,
+			channelGroupCount: 1,
 			batchGroupCount:   1,
 			want: [][][][]float64{
 				{
@@ -278,7 +278,7 @@ func TestConvGeneral(t *testing.T) {
 					kernel := graph.IotaFull(g, tc.kernel)
 					output := graph.ConvGeneral(input, kernel, tc.axes,
 						tc.strides, tc.paddings, tc.inputDilations, tc.kernelDilations,
-						tc.featureGroupCount, tc.batchGroupCount)
+						tc.channelGroupCount, tc.batchGroupCount)
 
 					// We convert the result to float64 to make it easy to check.
 					return graph.ConvertDType(output, dtypes.Float64)

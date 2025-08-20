@@ -12,7 +12,7 @@ import (
 )
 
 func init() {
-	nodeExecutors[backends.OpTypeConvGeneralDilated] = execConvGeneral
+	nodeExecutors[backends.OpTypeConvGeneral] = execConvGeneral
 }
 
 // ConvGeneral is a generic Convolution operation with support for:
@@ -34,15 +34,15 @@ func init() {
 func (b *Builder) ConvGeneral(inputOp, kernelOp backends.Op, axes backends.ConvolveAxesConfig,
 	strides []int, paddings [][2]int,
 	inputDilations, kernelDilations []int,
-	featureGroupCount, batchGroupCount int) (backends.Op, error) {
-	opType := backends.OpTypeConvGeneralDilated
+	channelGroupCount, batchGroupCount int) (backends.Op, error) {
+	opType := backends.OpTypeConvGeneral
 	inputs, err := b.checkOps(opType.String(), inputOp, kernelOp)
 	if err != nil {
 		return nil, err
 	}
 	input, kernel := inputs[0], inputs[1]
 
-	outputShape, err := shapeinference.ConvGeneralOp(input.shape, kernel.shape, axes, strides, paddings, inputDilations, kernelDilations, featureGroupCount, batchGroupCount)
+	outputShape, err := shapeinference.ConvGeneralOp(input.shape, kernel.shape, axes, strides, paddings, inputDilations, kernelDilations, channelGroupCount, batchGroupCount)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +83,7 @@ func (b *Builder) ConvGeneral(inputOp, kernelOp backends.Op, axes backends.Convo
 		paddings:          paddings,
 		inputDilations:    inputDilations,
 		kernelDilations:   kernelDilations,
-		featureGroupCount: max(featureGroupCount, 1),
+		channelGroupCount: max(channelGroupCount, 1),
 		batchGroupCount:   max(batchGroupCount, 1),
 
 		hasInputDilations:       len(inputDilations) > 0 && slices.Max(inputDilations) > 1,
@@ -113,7 +113,7 @@ type convNode struct {
 	paddings          [][2]int
 	inputDilations    []int
 	kernelDilations   []int
-	featureGroupCount int
+	channelGroupCount int
 	batchGroupCount   int
 
 	hasInputDilations, hasKernelDilations            bool
@@ -130,8 +130,8 @@ type convNode struct {
 func (b *Builder) ConvGeneralDilated(inputOp, kernelOp backends.Op, axes backends.ConvolveAxesConfig,
 	strides []int, paddings [][2]int,
 	inputDilations, kernelDilations []int,
-	featureGroupCount, batchGroupCount int) (backends.Op, error) {
-	return b.ConvGeneral(inputOp, kernelOp, axes, strides, paddings, inputDilations, kernelDilations, featureGroupCount, batchGroupCount)
+	channelGroupCount, batchGroupCount int) (backends.Op, error) {
+	return b.ConvGeneral(inputOp, kernelOp, axes, strides, paddings, inputDilations, kernelDilations, channelGroupCount, batchGroupCount)
 }
 
 // execConvGeneral executes the DotGeneral by first normalizing and repackaging the tensors into blocks.
@@ -166,7 +166,7 @@ func execConvGeneral(backend *Backend, node *Node, inputs []*Buffer, _ []bool) (
 		params:      params,
 	}
 	var convFn func(convGeneralExecPlan) error
-	if params.hasInputDilations || params.hasKernelDilations || params.featureGroupCount > 1 || params.batchGroupCount > 1 {
+	if params.hasInputDilations || params.hasKernelDilations || params.channelGroupCount > 1 || params.batchGroupCount > 1 {
 		// Full version.
 		convFn = convDTypeMap.Get(dtype).(func(convGeneralExecPlan) error)
 	} else {

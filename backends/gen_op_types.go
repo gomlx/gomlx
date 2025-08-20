@@ -36,7 +36,7 @@ const (
 	OpTypeComplex
 	OpTypeConcatenate
 	OpTypeConj
-	OpTypeConvGeneralDilated
+	OpTypeConvGeneral
 	OpTypeConvertDType
 	OpTypeCos
 	OpTypeDiv

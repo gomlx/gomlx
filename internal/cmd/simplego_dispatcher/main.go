@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
 	"text/template"
 
 	"github.com/janpfeifer/must"
@@ -213,5 +214,5 @@ func init() {
 	cmd := exec.Command("gofmt", "-w", fileName)
 	fmt.Printf("\t%s\n", cmd)
 	must.M(cmd.Run())
-	fmt.Printf("✅ Successfully generated %s\n", fileName)
+	fmt.Printf("✅ Successfully generated %s\n", path.Join(must.M1(os.Getwd()), fileName))
 }
