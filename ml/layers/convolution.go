@@ -28,7 +28,7 @@ import (
 
 // This file contains all parts of the layers.Convolve implementation.
 
-// ConvBuilder is a helper to build a convolution computation. Create it with Convolution, set the desired parameters
+// ConvBuilder is a helper to build a convolution computation. Create it with Convolution, set the desired parameters,
 // and when all is set, call Done.
 type ConvBuilder struct {
 	ctx                *context.Context
@@ -36,7 +36,7 @@ type ConvBuilder struct {
 	x                  *Node
 	numSpatialDims     int
 	channelsAxisConfig images.ChannelsAxisConfig
-	filters            int
+	outputChannels     int
 	kernelSize         []int
 	bias               bool
 	strides            []int
@@ -46,20 +46,26 @@ type ConvBuilder struct {
 	regularizer        regularizers.Regularizer
 }
 
-// Convolution prepares one convolution on x with the given kernel for arbitrary
+// Convolution prepares one convolution on x with the given kernel for an arbitrary
 // number of spatial dimensions (1D, 2D, 3D, etc.).
 //
-// It is very flexible and to ease setting its parameters it returns a ConvBuilder object for configuration. Once it is
-// set up call `ConvBuilder.Done` and it will return the convolved x. Browse through ConvBuilder to see the
-// capabilities, and the defaults.
+// It returns a ConvBuilder object for configuration.
+// Once it is set up, call `ConvBuilder.Done` and it will return the convolved x.
 //
-// Two parameters need setting: Filters (or channels) and KernelSize. It will fail
+// It includes support for padding, strides, dilations, grouping, and an added bias.
+// Browse through ConvBuilder to see the capabilities, and their defaults.
+//
+// Two parameters need setting: Channels (or channels) and KernelSize. It will fail
 // if they are not set.
 //
 // The shape of x should be `[batch, <spatial_dimensions...>, input_channels]` if
-// configured with `ConvBuilder.ChannelsAxis(images.ChannelsLast)`, the default. If one
-// sets `ConvBuilder.ChannelsAxis(images.ChannelsFirst)`, the shape should be
+// configured with `ConvBuilder.ChannelsAxis(images.ChannelsLast)`, the default.
+//
+// If one sets `ConvBuilder.ChannelsAxis(images.ChannelsFirst)`, the shape should be
 // `[batch, input_channels, <spatial_dimensions...>]` instead.
+//
+// The output rank and order of the output axes are the same as the input's.
+// Their dimensions depend on the configuration options.
 func Convolution(ctx *context.Context, x *Node) *ConvBuilder {
 	conv := &ConvBuilder{
 		ctx:         ctx,
@@ -76,37 +82,51 @@ func Convolution(ctx *context.Context, x *Node) *ConvBuilder {
 	return conv.ChannelsAxis(images.ChannelsLast).NoPadding().UseBias(true).Strides(1)
 }
 
-// Filters sets the number of filters -- specifies the number of output channels. There is no default
-// and this number must be set, before Done is called.
-func (conv *ConvBuilder) Filters(filters int) *ConvBuilder {
-	conv.filters = filters
+// Channels sets the number of output channels.
+// There is no default, and this number must be set before Done is called.
+func (conv *ConvBuilder) Channels(filters int) *ConvBuilder {
+	conv.outputChannels = filters
 	if filters <= 0 {
-		Panicf("number of filters must be > 0, it was set to %d", filters)
+		Panicf("number of outputChannels must be > 0, it was set to %d", filters)
 	}
 	return conv
 }
 
-// KernelSize sets the kernel size for every axis. There is no default
-// and this number must be set, before Done is called.
+// Filters is a deprecated alias for Channels.
 //
-// You can also use KernelSizePerDim to set the kernel size per dimension (axis) individually.
+// Deprecated: Use Channels instead.
+func (conv *ConvBuilder) Filters(channels int) *ConvBuilder {
+	return conv.Channels(channels)
+}
+
+// KernelSize sets the kernel size for every axis.
+// There is no default, and this value must be set before Done is called.
+//
+// You can also use KernelSizePerAxis to set the kernel size per axis individually.
 func (conv *ConvBuilder) KernelSize(size int) *ConvBuilder {
 	perDim := xslices.SliceWithValue(conv.numSpatialDims, size)
-	return conv.KernelSizePerDim(perDim...)
+	return conv.KernelSizePerAxis(perDim...)
 }
 
-// KernelSizePerDim sets the kernel size for each dimension(axis). There is no default
-// and this number must be set, before Done is called.
+// KernelSizePerAxis sets the kernel size for each axis (axis).
+// There is no default, and this value must be set before Done is called.
 //
 // You can also use KernelSize to set the kernel size the same for all dimensions.
-func (conv *ConvBuilder) KernelSizePerDim(sizes ...int) *ConvBuilder {
-	if len(sizes) != conv.numSpatialDims {
-		Panicf("received %d kernel sizes, but x has %d spatial dimensions",
-			len(sizes), conv.numSpatialDims)
+func (conv *ConvBuilder) KernelSizePerAxis(dimensions ...int) *ConvBuilder {
+	if len(dimensions) != conv.numSpatialDims {
+		Panicf("received %d kernel dimensions, but x has %d spatial dimensions",
+			len(dimensions), conv.numSpatialDims)
 		return conv
 	}
-	conv.kernelSize = sizes
+	conv.kernelSize = dimensions
 	return conv
+}
+
+// KernelSizePerDim is a deprecated alias for KernelSizePerAxis.
+//
+// Deprecated: Use KernelSizePerAxis instead.
+func (conv *ConvBuilder) KernelSizePerDim(dimensions ...int) *ConvBuilder {
+	return conv.KernelSizePerAxis(dimensions...)
 }
 
 // UseBias sets whether to add a trainable bias term to the convolution. Default is true.
@@ -238,7 +258,7 @@ func (conv *ConvBuilder) Done() *Node {
 		ctxInScope = ctxInScope.In("conv")
 	}
 
-	if len(conv.kernelSize) == 0 || conv.filters <= 0 {
+	if len(conv.kernelSize) == 0 || conv.outputChannels <= 0 {
 		Panicf("layers.Convolution requires Filters and KernelSize to be set")
 	}
 	if conv.numSpatialDims <= 0 {
@@ -275,12 +295,12 @@ func (conv *ConvBuilder) Done() *Node {
 	inputChannels := xShape.Dimensions[channelsAxis]
 	if conv.channelsAxisConfig == images.ChannelsFirst {
 		kernelShape.Dimensions = append(kernelShape.Dimensions, inputChannels)
+		kernelShape.Dimensions = append(kernelShape.Dimensions, conv.outputChannels)
 		kernelShape.Dimensions = append(kernelShape.Dimensions, conv.kernelSize...)
-		kernelShape.Dimensions = append(kernelShape.Dimensions, conv.filters)
 	} else {
 		kernelShape.Dimensions = append(kernelShape.Dimensions, conv.kernelSize...)
 		kernelShape.Dimensions = append(kernelShape.Dimensions, inputChannels)
-		kernelShape.Dimensions = append(kernelShape.Dimensions, conv.filters)
+		kernelShape.Dimensions = append(kernelShape.Dimensions, conv.outputChannels)
 	}
 	kernelVar := ctxInScope.VariableWithShape("weights", kernelShape)
 	if conv.regularizer != nil {
@@ -300,11 +320,11 @@ func (conv *ConvBuilder) Done() *Node {
 
 	// Create and apply bias.
 	if conv.bias {
-		biasVar := ctxInScope.VariableWithShape("biases", shapes.Make(dtype, conv.filters))
+		biasVar := ctxInScope.VariableWithShape("biases", shapes.Make(dtype, conv.outputChannels))
 		bias := biasVar.ValueGraph(conv.graph)
 		expandedDims := xslices.SliceWithValue(output.Rank(), 1)
 		outputChannelsAxis := images.GetChannelsAxis(output, conv.channelsAxisConfig)
-		expandedDims[outputChannelsAxis] = conv.filters
+		expandedDims[outputChannelsAxis] = conv.outputChannels
 		bias = Reshape(bias, expandedDims...)
 		output = Add(output, bias)
 	}
@@ -313,8 +333,7 @@ func (conv *ConvBuilder) Done() *Node {
 	if l2any, found := ctxInScope.GetParam(ParamL2Regularization); found {
 		l2 := l2any.(float64)
 		if l2 > 0 {
-			l2Node := Const(conv.graph, shapes.CastAsDType(l2, dtype))
-			AddL2Regularization(ctxInScope, l2Node, kernel)
+			regularizers.L2(l2)(ctxInScope, conv.graph, kernelVar)
 		}
 	}
 	return output

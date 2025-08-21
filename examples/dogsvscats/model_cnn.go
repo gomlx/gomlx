@@ -36,7 +36,7 @@ func CnnEmbeddings(ctx *context.Context, images *Node) *Node {
 		dropoutNode = Scalar(images.Graph(), images.DType(), dropoutRate)
 	}
 
-	filterSize := 16
+	numChannels := 16
 	logits := images
 	imgSize := logits.Shape().Dimensions[1]
 	for convIdx := range numConvolutions {
@@ -47,7 +47,7 @@ func CnnEmbeddings(ctx *context.Context, images *Node) *Node {
 		for repeat := range 2 {
 			ctx := ctx.Inf("repeat_%02d", repeat)
 			residual := logits
-			logits = layers.Convolution(ctx, logits).Filters(filterSize).KernelSize(3).PadSame().Done()
+			logits = layers.Convolution(ctx, logits).Channels(numChannels).KernelSize(3).PadSame().Done()
 			logits = activations.ApplyFromContext(ctx, logits)
 			if dropoutNode != nil {
 				logits = layers.Dropout(ctx, logits, dropoutNode)
@@ -61,7 +61,7 @@ func CnnEmbeddings(ctx *context.Context, images *Node) *Node {
 			logits = MaxPool(logits).Window(2).Done()
 			imgSize = logits.Shape().Dimensions[1]
 		}
-		logits.AssertDims(batchSize, imgSize, imgSize, filterSize)
+		logits.AssertDims(batchSize, imgSize, imgSize, numChannels)
 	}
 
 	// Flatten the resulting image, and treat the convolved values as tabular.

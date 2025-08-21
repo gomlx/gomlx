@@ -69,14 +69,14 @@ func CnnEmbeddings(ctx *context.Context, images *Node) *Node {
 		dropoutNode = Scalar(g, dtype, dropoutRate)
 	}
 
-	images = layers.Convolution(nextCtx("conv"), images).Filters(32).KernelSize(3).PadSame().Done()
+	images = layers.Convolution(nextCtx("conv"), images).Channels(32).KernelSize(3).PadSame().Done()
 	images.AssertDims(batchSize, 28, 28, 32)
 	images = activations.Relu(images)
 	images = normalizeCNN(nextCtx("norm"), images)
 	images = MaxPool(images).Window(2).Done()
 	images.AssertDims(batchSize, 14, 14, 32)
 
-	images = layers.Convolution(nextCtx("conv"), images).Filters(64).KernelSize(3).PadSame().Done()
+	images = layers.Convolution(nextCtx("conv"), images).Channels(64).KernelSize(3).PadSame().Done()
 	images.AssertDims(batchSize, 14, 14, 64)
 	images = activations.Relu(images)
 	images = normalizeCNN(nextCtx("norm"), images)
