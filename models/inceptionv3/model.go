@@ -511,7 +511,7 @@ func (cfg *Config) conv2DWithBatchNorm(ctx *context.Context, x *Node, kernelFilt
 	convCfg := layers.Convolution(ctxWithWeights, x).CurrentScope().ChannelsAxis(cfg.channelsAxisConfig).
 		Channels(kernelFilters).UseBias(false).KernelSizePerAxis(kernelHeight, kernelWidth)
 	if len(strides) > 0 {
-		convCfg = convCfg.StridePerDim(strides...)
+		convCfg = convCfg.StridePerAxis(strides...)
 	}
 	if padding {
 		convCfg = convCfg.PadSame()

@@ -171,10 +171,17 @@ func (conv *ConvolutionBuilder) AxesConfig(axes ConvolveAxesConfig) *Convolution
 // One cannot use strides and dilation at the same time.
 func (conv *ConvolutionBuilder) Strides(strides int) *ConvolutionBuilder {
 	perDim := xslices.SliceWithValue(conv.numSpatialDims, strides)
-	return conv.StridePerDim(perDim...)
+	return conv.StridePerAxis(perDim...)
 }
 
 // StridePerDim sets the strides for each spatial dimension of the convolution.
+//
+// Deprecated: Use StridePerAxis instead.
+func (conv *ConvolutionBuilder) StridePerDim(strides ...int) *ConvolutionBuilder {
+	return conv.StridePerAxis(strides...)
+}
+
+// StridePerAxis sets the strides for each spatial dimension of the convolution.
 // The default is 1 for every dimension.
 //
 // The stride is how many steps to move after a convolution.
@@ -182,7 +189,7 @@ func (conv *ConvolutionBuilder) Strides(strides int) *ConvolutionBuilder {
 // It can be defined separately per dimension.
 //
 // One cannot use strides and dilation at the same time.
-func (conv *ConvolutionBuilder) StridePerDim(strides ...int) *ConvolutionBuilder {
+func (conv *ConvolutionBuilder) StridePerAxis(strides ...int) *ConvolutionBuilder {
 	if len(strides) != conv.numSpatialDims {
 		Panicf("received %d strides in StridePerAxis, but x has %d spatial dimensions",
 			len(strides), conv.numSpatialDims)
@@ -300,17 +307,17 @@ func (conv *ConvolutionBuilder) PaddingPerDim(paddings [][2]int) *ConvolutionBui
 // The default is 1. A value > 1 is also called "atrous convolution".
 //
 // It specifies the kernel's up-sampling rate. In the literature, the same parameter
-// is sometimes called input stride or dilation. The effective kernel size used for the convolution
+// is sometimes called input stride or kernel dilation. The effective kernel size used for the convolution
 // will be `kernel_shape + (kernel_shape - 1) * (dilation - 1)`, obtained by inserting (dilation-1) zeros
 // between consecutive elements of the original kernel in the spatial dimension.
 //
 // One cannot use strides and dilation at the same time.
 func (conv *ConvolutionBuilder) Dilations(dilation int) *ConvolutionBuilder {
 	dilationsPerDim := xslices.SliceWithValue(conv.numSpatialDims, dilation)
-	return conv.DilationPerDim(dilationsPerDim...)
+	return conv.DilationPerAxis(dilationsPerDim...)
 }
 
-// DilationPerDim sets the kernel's dilations for each spatial dimension of the convolution.
+// DilationPerAxis sets the kernel's dilations for each spatial dimension of the convolution.
 //
 // The default is 1 for every axis. A value > 1 is also called "atrous convolution".
 //
@@ -320,17 +327,24 @@ func (conv *ConvolutionBuilder) Dilations(dilation int) *ConvolutionBuilder {
 // between consecutive elements of the original kernel in the spatial dimension.
 //
 // One cannot use strides and dilation at the same time.
-func (conv *ConvolutionBuilder) DilationPerDim(dilations ...int) *ConvolutionBuilder {
+func (conv *ConvolutionBuilder) DilationPerAxis(dilations ...int) *ConvolutionBuilder {
 	if len(dilations) == 0 {
 		conv.kernelDilations = nil
 		return conv
 	}
 	if len(dilations) != conv.numSpatialDims {
-		Panicf("received %d dilations in DilationPerDim, but x has %d spatial dimensions",
+		Panicf("received %d dilations in DilationPerAxis, but x has %d spatial dimensions",
 			len(dilations), conv.numSpatialDims)
 	}
 	conv.kernelDilations = dilations
 	return conv
+}
+
+// DilationPerDim sets the kernel's dilations for each spatial dimension of the convolution.
+//
+// Deprecated: Use DilationPerAxis instead.
+func (conv *ConvolutionBuilder) DilationPerDim(dilations ...int) *ConvolutionBuilder {
+	return conv.DilationPerAxis(dilations...)
 }
 
 // InputDilationPerDim is used when generating the gradient of a convolution with strides.
@@ -570,7 +584,7 @@ func convVJPWrtX(node, x, kernel, v *Node, numSpatialDims int, axes ConvolveAxes
 		reversePaddings[axis][1] = outputDimEnd - outputDimSize
 	}
 	// (3) Run2 the reverse convolution of the VJP.
-	revConv := Convolve(v, reverseKernel).PaddingPerDim(reversePaddings).DilationPerDim(kernelDilations...).AxesConfig(reverseAxes)
+	revConv := Convolve(v, reverseKernel).PaddingPerDim(reversePaddings).DilationPerAxis(kernelDilations...).AxesConfig(reverseAxes)
 	if len(strides) > 0 {
 		revConv.InputDilationPerDim(strides...)
 	}
@@ -681,10 +695,10 @@ func convVJPWrtKernel(node, x, kernel, v *Node, numSpatialDims int, axes Convolv
 		revConv.NoPadding()
 	}
 	if len(reverseStrides) > 0 {
-		revConv.StridePerDim(reverseStrides...)
+		revConv.StridePerAxis(reverseStrides...)
 	}
 	if len(reverseDilations) > 0 {
-		revConv.DilationPerDim(reverseDilations...)
+		revConv.DilationPerAxis(reverseDilations...)
 	}
 	output := revConv.Done()
 	return output

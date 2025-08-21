@@ -31,19 +31,20 @@ import (
 // ConvBuilder is a helper to build a convolution computation. Create it with Convolution, set the desired parameters,
 // and when all is set, call Done.
 type ConvBuilder struct {
-	ctx                *context.Context
-	graph              *Graph
-	x                  *Node
-	numSpatialDims     int
-	channelsAxisConfig images.ChannelsAxisConfig
-	outputChannels     int
-	kernelSize         []int
-	bias               bool
-	strides            []int
-	padSame            bool
-	dilations          []int
-	newScope           bool
-	regularizer        regularizers.Regularizer
+	ctx                                *context.Context
+	graph                              *Graph
+	x                                  *Node
+	numSpatialDims                     int
+	channelsAxisConfig                 images.ChannelsAxisConfig
+	outputChannels                     int
+	kernelSize                         []int
+	bias                               bool
+	strides                            []int
+	padSame                            bool
+	dilations                          []int
+	newScope                           bool
+	regularizer                        regularizers.Regularizer
+	channelGroupCount, batchGroupCount int
 }
 
 // Convolution prepares one convolution on x with the given kernel for an arbitrary
@@ -68,11 +69,13 @@ type ConvBuilder struct {
 // Their dimensions depend on the configuration options.
 func Convolution(ctx *context.Context, x *Node) *ConvBuilder {
 	conv := &ConvBuilder{
-		ctx:         ctx,
-		graph:       x.Graph(),
-		x:           x,
-		newScope:    true,
-		regularizer: regularizers.FromContext(ctx),
+		ctx:               ctx,
+		graph:             x.Graph(),
+		x:                 x,
+		newScope:          true,
+		regularizer:       regularizers.FromContext(ctx),
+		channelGroupCount: 1,
+		batchGroupCount:   1,
 	}
 	conv.numSpatialDims = x.Rank() - 2
 	if conv.numSpatialDims < 0 {
@@ -174,10 +177,10 @@ func (conv *ConvBuilder) NoPadding() *ConvBuilder {
 // One cannot use strides and dilation at the same time.
 func (conv *ConvBuilder) Strides(strides int) *ConvBuilder {
 	perDim := xslices.SliceWithValue(conv.numSpatialDims, strides)
-	return conv.StridePerDim(perDim...)
+	return conv.StridePerAxis(perDim...)
 }
 
-// StridePerDim sets the strides for each spatial dimension of the convolution.
+// StridePerAxis sets the strides for each spatial dimension of the convolution.
 // The default is 1 for every dimension.
 //
 // The stride is how many steps to move after a convolution. A value of 2 will half the input
@@ -185,7 +188,7 @@ func (conv *ConvBuilder) Strides(strides int) *ConvBuilder {
 // separately per dimension.
 //
 // One cannot use strides and dilation at the same time.
-func (conv *ConvBuilder) StridePerDim(strides ...int) *ConvBuilder {
+func (conv *ConvBuilder) StridePerAxis(strides ...int) *ConvBuilder {
 	if len(strides) != conv.numSpatialDims {
 		Panicf("received %d strides in StridePerAxis, but x has %d spatial dimensions",
 			len(strides), conv.numSpatialDims)
@@ -195,22 +198,30 @@ func (conv *ConvBuilder) StridePerDim(strides ...int) *ConvBuilder {
 	return conv
 }
 
+// StridePerDim is a deprecated alias for StridePerAxis.
+//
+// Deprecated: Use StridePerAxis instead.
+func (conv *ConvBuilder) StridePerDim(strides ...int) *ConvBuilder {
+	return conv.StridePerAxis(strides...)
+}
+
 // Dilations sets the dilations of the convolution. It sets the same value for every dimension.
-// The default is 1.
+//
+// The default is 1. A value > 1 is also called "atrous convolution".
 //
 // It specifies the kernel up-sampling rate. In the literature, the same parameter
-// is sometimes called input stride or dilation. The effective kernel size used for the convolution
+// is sometimes called input stride or kernel dilation. The effective kernel size used for the convolution
 // will be `kernel_shape + (kernel_shape - 1) * (dilation - 1)`, obtained by inserting (dilation-1) zeros
 // between consecutive elements of the original filter in the spatial dimension.
 //
 // One cannot use strides and dilation at the same time.
 func (conv *ConvBuilder) Dilations(dilation int) *ConvBuilder {
 	dilationsPerDim := xslices.SliceWithValue(conv.numSpatialDims, dilation)
-	return conv.DilationPerDim(dilationsPerDim...)
+	return conv.DilationPerAxis(dilationsPerDim...)
 }
 
-// DilationPerDim sets the kernel dilations for each spatial dimension of the convolution.
-// The default is 1 for every dimension.
+// DilationPerAxis sets the kernel dilations for each spatial axis of the convolution.
+// The default is 1 for every axis.
 //
 // Specifies the kernel up-sampling rate. In the literature, the same parameter
 // is sometimes called input stride or dilation. The effective kernel size used for the convolution
@@ -218,14 +229,21 @@ func (conv *ConvBuilder) Dilations(dilation int) *ConvBuilder {
 // between consecutive elements of the original filter in the spatial dimension.
 //
 // One cannot use strides and dilation at the same time.
-func (conv *ConvBuilder) DilationPerDim(dilations ...int) *ConvBuilder {
+func (conv *ConvBuilder) DilationPerAxis(dilations ...int) *ConvBuilder {
 	if len(dilations) != conv.numSpatialDims {
-		Panicf("received %d dilations in DilationPerDim, but x has %d spatial dimensions",
+		Panicf("received %d dilations in DilationPerAxis, but x has %d spatial dimensions",
 			len(dilations), conv.numSpatialDims)
 		return conv
 	}
 	conv.dilations = dilations
 	return conv
+}
+
+// DilationPerDim is a deprecated alias for DilationPerAxis.
+//
+// Deprecated: Use DilationPerAxis instead.
+func (conv *ConvBuilder) DilationPerDim(dilations ...int) *ConvBuilder {
+	return conv.DilationPerAxis(dilations...)
 }
 
 // CurrentScope configures the convolution not to create a sub-scope for the kernel weights it needs,
@@ -234,6 +252,59 @@ func (conv *ConvBuilder) DilationPerDim(dilations ...int) *ConvBuilder {
 // By default, Convolution will create a sub-scope named "conv".
 func (conv *ConvBuilder) CurrentScope() *ConvBuilder {
 	conv.newScope = false
+	return conv
+}
+
+// ChannelGroupCount splits input/output channels into independent groups.
+// Equivalent to TensorFlow's "groups" parameter in tf.nn.convNd operations.
+//
+// When groupCount != 1, the kernel's shape changes: the input channels
+// dimension of the kernel must equal (input_channels / group_count).
+// This effectively creates separate convolution groups where each group
+// processes a subset of input channels and produces a subset of output channels.
+//
+// For depthwise convolution, set groups = input_channels (see tf.nn.depthwise_conv2d).
+// The output shape will have the same spatial dimensions as a regular convolution
+// but with channel dimensions affected by the grouping.
+//
+// Side effects:
+//   - Kernel shape: The kernel's input channel dimension becomes (input_channels / group_count)
+//   - Output shape: The output maintains the same spatial dimensions as regular convolution,
+//     but each group independently maps its input channels to output channels
+//   - Performance: Can reduce computation cost by limiting connections between channels
+//   - Memory usage: Reduces the number of parameters in the kernel
+//
+// Note: Back-propagation is not yet implemented for this feature.
+//
+// Reference: https://www.tensorflow.org/api_docs/python/tf/data/Dataset#group_by_window
+func (conv *ConvBuilder) ChannelGroupCount(groupCount int) *ConvBuilder {
+	if groupCount < 1 {
+		Panicf("FeatureGroupCount must be >= 1, got %d", groupCount)
+	}
+
+	conv.channelGroupCount = groupCount
+	return conv
+}
+
+// BatchGroupCount splits batches into independent processing groups.
+// Used for cross-batch interactions like ShuffleNet's channel shuffle.
+//
+// When BatchGroupCount != 1, the kernel's shape changes: the batch dimension
+// of the input is divided by the group count, creating separate convolution
+// groups where each group processes a subset of the batch.
+//
+// The output shape will have the same spatial dimensions as a regular convolution
+// but with the batch dimension affected by the grouping.
+//
+// Note: Back-propagation is not yet implemented for this feature.
+//
+// Reference: https://www.tensorflow.org/api_docs/python/tf/data/Dataset#batch
+func (conv *ConvBuilder) BatchGroupCount(groupCount int) *ConvBuilder {
+	if groupCount < 1 {
+		Panicf("BatchGroupCount must be >= 1, got %d", groupCount)
+	}
+
+	conv.batchGroupCount = groupCount
 	return conv
 }
 
@@ -307,9 +378,13 @@ func (conv *ConvBuilder) Done() *Node {
 		conv.regularizer(ctxInScope, conv.graph, kernelVar)
 	}
 	kernel := kernelVar.ValueGraph(conv.graph)
-	convOpts := Convolve(conv.x, kernel).StridePerDim(conv.strides...).ChannelsAxis(conv.channelsAxisConfig)
+	convOpts := Convolve(conv.x, kernel).
+		StridePerAxis(conv.strides...).
+		ChannelsAxis(conv.channelsAxisConfig).
+		ChannelGroupCount(conv.channelGroupCount).
+		BatchGroupCount(conv.batchGroupCount)
 	if len(conv.dilations) > 0 {
-		convOpts.DilationPerDim(conv.dilations...)
+		convOpts.DilationPerAxis(conv.dilations...)
 	}
 	if conv.padSame {
 		convOpts.PadSame()

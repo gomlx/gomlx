@@ -598,7 +598,7 @@ func (pool *PoolBuilder) doConcat() *Node {
 	}
 
 	// Convolve with the given kernel.
-	convConfig := Convolve(x, kernel).ChannelsAxis(pool.channelsAxisConfig).StridePerDim(strides...)
+	convConfig := Convolve(x, kernel).ChannelsAxis(pool.channelsAxisConfig).StridePerAxis(strides...)
 	if pool.paddings != nil {
 		convConfig.PaddingPerDim(pool.paddings)
 	}
