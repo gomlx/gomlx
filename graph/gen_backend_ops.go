@@ -4,12 +4,13 @@ package graph
 
 import (
 	"fmt"
+	"slices"
+	"strings"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
-	"slices"
-	"strings"
 )
 
 type NodeType int
@@ -37,7 +38,7 @@ const (
 	NodeTypeConcatenate
 	NodeTypeConj
 	NodeTypeConstant
-	NodeTypeConvGeneralDilated
+	NodeTypeConvGeneral
 	NodeTypeConvertDType
 	NodeTypeCos
 	NodeTypeDiv
@@ -989,56 +990,56 @@ func Conj(x *Node) (node *Node) {
 	return
 }
 
-// nodeInputsConvGeneralDilated holds the inputs used for the call to backends.ConvGeneralDilated.
-type nodeInputsConvGeneralDilated struct {
-	operand          *Node
-	filter           *Node
-	axes             backends.ConvolveAxesConfig
-	strides          []int
-	paddings         [][2]int
-	inputDilation    []int
-	filterDilation   []int
-	filterGroupCount int
-	batchGroupCount  int
+// nodeInputsConvGeneral holds the inputs used for the call to backends.ConvGeneral.
+type nodeInputsConvGeneral struct {
+	input             *Node
+	kernel            *Node
+	axes              backends.ConvolveAxesConfig
+	strides           []int
+	paddings          [][2]int
+	inputDilations    []int
+	kernelDilations   []int
+	channelGroupCount int
+	batchGroupCount   int
 }
 
 // Type implements the interface NodeInputs.
-func (ni *nodeInputsConvGeneralDilated) Type() NodeType {
-	return NodeTypeConvGeneralDilated
+func (ni *nodeInputsConvGeneral) Type() NodeType {
+	return NodeTypeConvGeneral
 }
 
 // String implements the interface NodeInputs.
-func (ni *nodeInputsConvGeneralDilated) String() string {
-	return fmt.Sprintf("%s(operand=[#%d], filter=[#%d], axes=%+v, strides=%v, paddings=%v, inputDilation=%v, filterDilation=%v, filterGroupCount=%v, batchGroupCount=%v)",
+func (ni *nodeInputsConvGeneral) String() string {
+	return fmt.Sprintf("%s(input=[#%d], kernel=[#%d], axes=%+v, strides=%v, paddings=%v, inputDilations=%v, kernelDilations=%v, channelGroupCount=%v, batchGroupCount=%v)",
 		ni.Type(),
-		ni.operand.Id(),
-		ni.filter.Id(),
+		ni.input.Id(),
+		ni.kernel.Id(),
 		ni.axes,
 		ni.strides,
 		ni.paddings,
-		ni.inputDilation,
-		ni.filterDilation,
-		ni.filterGroupCount,
+		ni.inputDilations,
+		ni.kernelDilations,
+		ni.channelGroupCount,
 		ni.batchGroupCount,
 	)
 }
 
-// backendConvGeneralDilated is a Graph wrapper for the backend.Builder.ConvGeneralDilated method.
-func backendConvGeneralDilated(operand *Node, filter *Node, axes backends.ConvolveAxesConfig, strides []int, paddings [][2]int, inputDilation []int, filterDilation []int, filterGroupCount int, batchGroupCount int) (node *Node) {
-	inputNodes := []*Node{operand, filter}
+// backendConvGeneral is a Graph wrapper for the backend.Builder.ConvGeneral method.
+func backendConvGeneral(input *Node, kernel *Node, axes backends.ConvolveAxesConfig, strides []int, paddings [][2]int, inputDilations []int, kernelDilations []int, channelGroupCount int, batchGroupCount int) (node *Node) {
+	inputNodes := []*Node{input, kernel}
 	g := validateBuildingGraphFromInputs(inputNodes...)
-	inputs := &nodeInputsConvGeneralDilated{
-		operand:          operand,
-		filter:           filter,
-		axes:             axes.Clone(),
-		strides:          strides,
-		paddings:         paddings,
-		inputDilation:    inputDilation,
-		filterDilation:   filterDilation,
-		filterGroupCount: filterGroupCount,
-		batchGroupCount:  batchGroupCount,
+	inputs := &nodeInputsConvGeneral{
+		input:             input,
+		kernel:            kernel,
+		axes:              axes.Clone(),
+		strides:           strides,
+		paddings:          paddings,
+		inputDilations:    inputDilations,
+		kernelDilations:   kernelDilations,
+		channelGroupCount: channelGroupCount,
+		batchGroupCount:   batchGroupCount,
 	}
-	result, err := g.builder.ConvGeneralDilated(operand.outputOps[0], filter.outputOps[0], inputs.axes, inputs.strides, inputs.paddings, inputs.inputDilation, inputs.filterDilation, inputs.filterGroupCount, inputs.batchGroupCount)
+	result, err := g.builder.ConvGeneral(input.outputOps[0], kernel.outputOps[0], inputs.axes, inputs.strides, inputs.paddings, inputs.inputDilations, inputs.kernelDilations, inputs.channelGroupCount, inputs.batchGroupCount)
 	if err != nil {
 		panic(err)
 	}

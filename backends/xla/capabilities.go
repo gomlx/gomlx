@@ -36,7 +36,7 @@ var CPUCapabilities = backends.Capabilities{
 		backends.OpTypeComplex:                  true,
 		backends.OpTypeConcatenate:              true,
 		backends.OpTypeConj:                     true,
-		backends.OpTypeConvGeneralDilated:       true,
+		backends.OpTypeConvGeneral:              true,
 		backends.OpTypeConvertDType:             true,
 		backends.OpTypeCos:                      true,
 		backends.OpTypeDiv:                      true,

@@ -11,8 +11,13 @@
   * `Shape.Iter()` and `Shape.IterOn()` also yields the flat index being iterated.
   * Added `Shape.Strides()` and `Shape.IterOnAxes()`.
 * Package `graph`:
-  * `graph.ConvGeneralDilated` is being aliased to `graph.ConvGeneral` and the former will be deprecated on
+  * `ConvGeneralDilated` is being aliased to `ConvGeneral` and the former will be deprecated on
     a future version.
+  * Names of parameters for `ConvGeneral` were standardized to "input," "kernel" and "channels."
+* Package `layers`:
+  * Updated the configuration names for `Convolution`, to match the standards in the `graph` package.
+  * Added `ChannelGroupCount()` and `BatchGroupCount()` to `Convolution` configuration.
+* Updated to gopjrt v0.8.0, with the changes to the convolution API.
 
 # v0.21.1: 2025/08/16 Added Zero-dim tensors support and other small improvements. 
 

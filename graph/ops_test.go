@@ -49,17 +49,18 @@ type graphFnOneInputToTest func(g *Graph) (input, output *Node)
 // compiles and executes the given graph building function graphFn and checks that the
 // result is as expected.
 func testFuncOneInput(t *testing.T, testName string, graphFn graphFnOneInputToTest, want any) {
-	fmt.Printf("%s\n", testName)
-	wantTensor := tensors.FromAnyValue(want)
-	backend := graphtest.BuildTestBackend()
-	g := NewGraph(backend, testName)
-	inputNode, outputNode := graphFn(g)
-	g.Compile(inputNode, outputNode)
-	results := g.Run()
-	input, got := results[0], results[1]
-	if !wantTensor.InDelta(got, Epsilon) {
-		t.Errorf("%s(%#v):\n\twant=%v, got=%s", testName, input, wantTensor.GoStr(), got.GoStr())
-	}
+	t.Run(testName, func(t *testing.T) {
+		wantTensor := tensors.FromAnyValue(want)
+		backend := graphtest.BuildTestBackend()
+		g := NewGraph(backend, testName)
+		inputNode, outputNode := graphFn(g)
+		g.Compile(inputNode, outputNode)
+		results := g.Run()
+		input, got := results[0], results[1]
+		if !wantTensor.InDelta(got, Epsilon) {
+			t.Errorf("%s(%#v):\n\twant=%v, got=%s", testName, input, wantTensor.GoStr(), got.GoStr())
+		}
+	})
 }
 
 func TestConstant(t *testing.T) {

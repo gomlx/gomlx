@@ -1,6 +1,8 @@
 package xla
 
 import (
+	"reflect"
+
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
@@ -8,7 +10,6 @@ import (
 	"github.com/gomlx/gopjrt/xlabuilder"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
-	"reflect"
 )
 
 // Builder implements the backends.Builder interface using github.com/gomlx/gopjrt/xlabuilder
@@ -282,15 +283,15 @@ func (b *Builder) BatchNormGradient(operand, scale, mean, variance, gradOutput b
 
 func convertConvolveAxesConfig(c backends.ConvolveAxesConfig) (xlaConfig xlabuilder.ConvolveAxesConfig) {
 	xlaConfig = xlabuilder.ConvolveAxesConfig{
-		InputBatch:          c.InputBatch,
-		InputChannel:        c.InputChannels,
-		InputSpatial:        c.InputSpatial,
-		KernelInputChannel:  c.KernelInputChannels,
-		KernelOutputChannel: c.KernelOutputChannels,
-		KernelSpatial:       c.KernelSpatial,
-		OutputBatch:         c.OutputBatch,
-		OutputChannel:       c.OutputChannels,
-		OutputSpatial:       c.OutputSpatial,
+		InputBatch:           c.InputBatch,
+		InputChannels:        c.InputChannels,
+		InputSpatial:         c.InputSpatial,
+		KernelInputChannels:  c.KernelInputChannels,
+		KernelOutputChannels: c.KernelOutputChannels,
+		KernelSpatial:        c.KernelSpatial,
+		OutputBatch:          c.OutputBatch,
+		OutputChannels:       c.OutputChannels,
+		OutputSpatial:        c.OutputSpatial,
 	}
 	return
 }
