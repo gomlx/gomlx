@@ -64,14 +64,14 @@ type ConvolutionBuilder struct {
 // configuration of x and the kernel.
 //
 // The shape of the kernel should be [<spatial_dimensions...>, input_channels, output_channels] if
-// configured with ConvolutionBuilder.ChannelsAxis(timage.ChannelsLast), the default. If one
-// sets ConvolutionBuilder.ChannelsAxis(timage.ChannelsFirst), the shape should be
-// [input_channels, <spatial_dimensions...>, output_channels] instead.
+// configured with ConvolutionBuilder.ChannelsAxis(timage.ChannelsLast), the default.
+// If one sets ConvolutionBuilder.ChannelsAxis(timage.ChannelsFirst), the shape should be
+// [input_channels, output_channels, <spatial_dimensions...>] instead.
 //
 // Notice x and kernel must have the same rank.
 //
 // We follow the Keras convention of calling "channels" the axis that is sometimes referred to by "features" or "depth".
-// The "kernel" is also referred as "filters" by some.
+// The "kernel" is also referred to as "filters" by some.
 //
 // Additional features:
 //   - Group operations: Use ConvolutionBuilder.ChannelGroupCount to split channels
@@ -121,21 +121,25 @@ func gatherSlice(indices, params []int) (slice []int) {
 // It returns the modified Config object, so calls can be cascaded.
 func (conv *ConvolutionBuilder) ChannelsAxis(channelsAxisConfig timage.ChannelsAxisConfig) *ConvolutionBuilder {
 	conv.channelsAxisConfig = channelsAxisConfig
-	conv.axes.InputBatch = 0
-	conv.axes.InputChannels = timage.GetChannelsAxis(conv.x, channelsAxisConfig)
-	conv.axes.InputSpatial = timage.GetSpatialAxes(conv.x, channelsAxisConfig)
-
 	switch channelsAxisConfig {
 	case timage.ChannelsFirst:
+		conv.axes.InputBatch = 0
+		conv.axes.InputChannels = 1
+		conv.axes.InputSpatial = xslices.Iota(2, conv.numSpatialDims)
+
 		conv.axes.KernelInputChannels = 0
-		conv.axes.KernelSpatial = xslices.Iota(1, conv.numSpatialDims)
-		conv.axes.KernelOutputChannels = conv.numSpatialDims + 1
+		conv.axes.KernelOutputChannels = 1
+		conv.axes.KernelSpatial = xslices.Iota(2, conv.numSpatialDims)
 
 		conv.axes.OutputBatch = 0
 		conv.axes.OutputChannels = 1
 		conv.axes.OutputSpatial = xslices.Iota(2, conv.numSpatialDims)
 
 	case timage.ChannelsLast:
+		conv.axes.InputBatch = 0
+		conv.axes.InputSpatial = xslices.Iota(1, conv.numSpatialDims)
+		conv.axes.InputChannels = conv.numSpatialDims + 1
+
 		conv.axes.KernelInputChannels = conv.numSpatialDims
 		conv.axes.KernelOutputChannels = conv.numSpatialDims + 1
 		conv.axes.KernelSpatial = xslices.Iota(0, conv.numSpatialDims)

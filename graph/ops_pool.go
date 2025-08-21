@@ -577,8 +577,13 @@ func (pool *PoolBuilder) doConcat() *Node {
 	}
 	kernel = Reshape(kernel, kernelDims...)
 
-	// Add the last axis to kernel of outputChannelsSize, a one-hot encoding:
+	// Add the last axis to the kernel of outputChannelsSize, a one-hot encoding:
 	kernel = OneHot(kernel, outputChannelsSize, dtype)
+	if pool.channelsAxisConfig == images.ChannelsFirst {
+		// Kernel should be shaped [in_channels, out_channels, <spatial_dims...>],
+		// so we transpose outputChannels axis from the end to the second axis.
+		kernel = Transpose(kernel, 1, -1)
+	}
 
 	// strides default to pooling window sizes.
 	strides := pool.strides
