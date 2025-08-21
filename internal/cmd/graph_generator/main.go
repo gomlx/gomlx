@@ -6,6 +6,7 @@ import (
 	"go/ast"
 	"os"
 	"os/exec"
+	"path"
 	"slices"
 	"strings"
 	"text/template"
@@ -29,7 +30,7 @@ var (
 	methodsNotExported = types.SetWith(
 		"ArgMinMax", "Broadcast", "BroadcastInDim",
 		"BatchNormForInference", "BatchNormForTraining", "BatchNormGradient",
-		"Concatenate", "ConvertDType", "ConvGeneralDilated", "DotGeneral", "FFT", "Gather", "Iota",
+		"Concatenate", "ConvertDType", "ConvGeneral", "DotGeneral", "FFT", "Gather", "Iota",
 		"ReduceMax", "ReduceMin", "ReduceProduct", "ReduceSum", "ReduceWindow",
 
 		// Reduce of logical/bitwise operators:
@@ -160,7 +161,7 @@ func buildMethodInfo() (methods []*MethodInfo) {
 			for _, nameIdent := range field.Names[:len(field.Names)] {
 				// Save the names of the outputs: we assume all outputs are of type Op (to be converted to *Node in graphs package).
 				mi.OutputNames = append(mi.OutputNames, nameIdent.Name)
-				fmt.Printf("%s, ", nameIdent.Name)
+				//fmt.Printf("%s, ", nameIdent.Name)
 			}
 		}
 		if len(mi.OutputNames) > 1 {
@@ -335,13 +336,11 @@ func GenerateBackendOps(methods []*MethodInfo) {
 	fileName := backendsOpsFile
 	f := must.M1(os.Create(fileName))
 	must.M(backendOpsTemplate.Execute(f, methods))
-	cmd := exec.Command("gofmt", "-w", fileName)
+	cmd := exec.Command("go", "fmt", fileName)
 	fmt.Printf("\t%s\n", cmd)
 	must.M(cmd.Run())
-	fmt.Printf("\tGenerated %q based on backends.Builder interface\n", fileName)
-
 	cmd = exec.Command("enumer", "-type=NodeType", "-trimprefix=NodeType", "-yaml", "-json", "-text", "-values", fileName)
 	fmt.Printf("\t%s\n", cmd)
 	must.M(cmd.Run())
-
+	fmt.Printf("✅ Successfully generated %s\n", path.Join(must.M1(os.Getwd()), fileName))
 }

@@ -134,18 +134,23 @@ func (b Builder) Conj(x backends.Op) (backends.Op, error) {
 	return nil, b.baseErrFn(backends.OpTypeConj)
 }
 
-// ConvGeneralDilated is a generic Convolution operation offered by XLA.
-// featureAxisAfter defines whether the features (aka. channels or depth) axis comes after the
-// spatial dimension. Example: a 2D input can be one of the two:
-//   - featureAxisAfter=false: input=[batch_size, features, height, width], filter=[output_features, input_features, height, width]
-//   - featureAxisAfter=true:  input=[batch_size, height, width, features], filter=[output_features, height, width, input_features]
-//
+// ConvGeneral is a generic Convolution operation with support for:
+// - Arbitrary number of spatial axes.
+// - Arbitrary transposition of axes.
+// - Strides and padding.
+// - Dilations of the input.
+// - Dilations of the kernel, aka. atrous convolution.
+// - Channels grouping (on the input channels).
+// - Batch grouping.
 // Some details in https://www.tensorflow.org/xla/operation_semantics#convwithgeneralpadding_convolution.
 // There operand and filter are called lhs and rhs.
 // (XLA documentation is unfortunately poor, much is guess-work).
 // Also useful, https://arxiv.org/pdf/1603.07285v1.pdf.
-func (b Builder) ConvGeneralDilated(operand, filter backends.Op, axes backends.ConvolveAxesConfig, strides []int, paddings [][2]int, inputDilation, filterDilation []int, filterGroupCount, batchGroupCount int) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeConvGeneralDilated)
+// Note:
+//   - Another common term for "channels" is "features".
+//   - "Kernel" is also commonly called "weights" or "filters".
+func (b Builder) ConvGeneral(input, kernel backends.Op, axes backends.ConvolveAxesConfig, strides []int, paddings [][2]int, inputDilations, kernelDilations []int, channelGroupCount, batchGroupCount int) (backends.Op, error) {
+	return nil, b.baseErrFn(backends.OpTypeConvGeneral)
 }
 
 // ConvertDType of x to dtype.

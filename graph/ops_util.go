@@ -242,7 +242,9 @@ func ClipScalar(x *Node, min, max float64) *Node {
 // OneHot converts an integer numbers representing indices to it's "one-hot" representation, that is an expanded
 // tensor with the indices position set to 1, and the other positions set to 0. The returned tensor has one extra
 // dimension at the end.
-// For example `OneHot([][]INT64{1, 0, 3}, 4, types.Float32)` returns  `[][]F32{{0, 1, 0, 0}, {1, 0, 0, 0}, {0, 0, 0, 1}}`
+// For example:
+//
+//	OneHot([]int64{1, 0, 3}, 4, types.Float32) // -> `[][]float32{{0, 1, 0, 0}, {1, 0, 0, 0}, {0, 0, 0, 1}}`
 func OneHot(indices *Node, depth int, dtype dtypes.DType) *Node {
 	g := indices.Graph()
 	if !indices.DType().IsInt() {

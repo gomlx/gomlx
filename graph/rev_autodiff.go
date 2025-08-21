@@ -410,7 +410,7 @@ var VJPRegistration = map[NodeType]VJP{
 	NodeTypeScatterMax:         vjpForSingleOutput(scatterMaxOrMinVJP),
 	NodeTypeScatterMin:         vjpForSingleOutput(scatterMaxOrMinVJP),
 	NodeTypeConcatenate:        vjpForSingleOutput(concatenateVJP),
-	NodeTypeConvGeneralDilated: vjpForSingleOutput(convGeneralDilatedVJP),
+	NodeTypeConvGeneral:        vjpForSingleOutput(convGeneralVJP),
 	NodeTypeReduceWindow:       vjpForSingleOutput(reduceWindowVJP),
 	NodeTypeTranspose:          vjpForSingleOutput(transposeVJP),
 	NodeTypeBroadcastInDim:     vjpForSingleOutput(broadcastInDimVJP),

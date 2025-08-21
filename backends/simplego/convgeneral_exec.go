@@ -50,8 +50,8 @@ func execConvNoDilationGeneric[T PODNumericConstraints](plan convGeneralExecPlan
 	//alt:full|full_bf16 kernelDilations := params.kernelDilations
 	//alt:full|full_bf16 batchGroupCount := params.batchGroupCount
 	//alt:full|full_bf16 outputBatchSize := outputShape.Dimensions[inputBatchAxis]
-	//alt:full|full_bf16 featureGroupCount := params.featureGroupCount
-	//alt:full|full_bf16 numOutputChannelsPerGroup := outputShape.Dimensions[axes.OutputChannels] / featureGroupCount
+	//alt:full|full_bf16 channelGroupCount := params.channelGroupCount
+	//alt:full|full_bf16 numOutputChannelsPerGroup := outputShape.Dimensions[axes.OutputChannels] / channelGroupCount
 
 	outputBatchAxis := axes.OutputBatch
 	outputChannelsAxis := axes.OutputChannels
@@ -110,7 +110,7 @@ func execConvNoDilationGeneric[T PODNumericConstraints](plan convGeneralExecPlan
 			// Accumulate over all the kernel/input channels.
 			inputChannelStride := inputStrides[inputChannelsAxis]
 			kernelChannelStride := kernelStrides[kernelInputChannelsAxis]
-			//alt:full|full_bf16 if featureGroupCount > 1 {
+			//alt:full|full_bf16 if channelGroupCount > 1 {
 			//alt:full|full_bf16 featureGroup := outputChannel / numOutputChannelsPerGroup
 			//alt:full|full_bf16 inputFlatIdx += inputChannelStride * (featureGroup*kernelNumInputChannels)
 			//alt:full|full_bf16 }

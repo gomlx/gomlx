@@ -13,6 +13,10 @@ package diffusion
 import (
 	"flag"
 	"fmt"
+	"math"
+	"strconv"
+	"strings"
+
 	"github.com/gomlx/exceptions"
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
 	. "github.com/gomlx/gomlx/graph"
@@ -29,9 +33,6 @@ import (
 	timages "github.com/gomlx/gomlx/types/tensors/images"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/janpfeifer/must"
-	"math"
-	"strconv"
-	"strings"
 )
 
 var nanLogger *nanlogger.NanLogger
@@ -124,17 +125,17 @@ func ResidualBlock(ctx *context.Context, nanLogger *nanlogger.NanLogger, x *Node
 	version := context.GetParamOr(ctx, "diffusion_residual_version", 1)
 	switch version {
 	case 1: // Version 1: the original.
-		x = layers.Convolution(nextCtx("conv"), x).Filters(outputChannels).KernelSize(3).PadSame().Done()
+		x = layers.Convolution(nextCtx("conv"), x).Channels(outputChannels).KernelSize(3).PadSame().Done()
 		x = layers.DropBlock(ctx, x).ChannelsAxis(timages.ChannelsLast).Done()
 		x = activations.ApplyFromContext(ctx, x)
-		x = layers.Convolution(nextCtx("conv"), x).Filters(outputChannels).KernelSize(3).PadSame().Done()
+		x = layers.Convolution(nextCtx("conv"), x).Channels(outputChannels).KernelSize(3).PadSame().Done()
 		x = layers.DropBlock(ctx, x).ChannelsAxis(timages.ChannelsLast).Done()
 		nanLogger.TraceFirstNaN(x, "x (Version 1)")
 
 	case 2: // Version 2: slimmer.
 		residual = activations.ApplyFromContext(ctx, residual)
 		convCtx := nextCtx("conv").WithInitializer(initializers.Zero)
-		x = layers.Convolution(convCtx, x).Filters(outputChannels).KernelSize(3).PadSame().Done()
+		x = layers.Convolution(convCtx, x).Channels(outputChannels).KernelSize(3).PadSame().Done()
 		x = layers.DropBlock(ctx, x).ChannelsAxis(timages.ChannelsLast).Done()
 		nanLogger.TraceFirstNaN(x, "x (Version 2)")
 

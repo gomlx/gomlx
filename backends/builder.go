@@ -110,7 +110,7 @@ type Builder interface {
 // There must be the same number of spatial dimensions (axes) for each of the 3 tensors.
 // Input and output have batch and channel axes. Kernel has inputChannel and outputChannel axes.
 //
-// See Builder.ConvGeneralDilated
+// See Builder.ConvGeneral
 type ConvolveAxesConfig struct {
 	InputBatch, InputChannels int
 	InputSpatial              []int

@@ -61,6 +61,9 @@ package inceptionv3
 
 import (
 	"fmt"
+	"path"
+	"strings"
+
 	. "github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
@@ -72,8 +75,6 @@ import (
 	"github.com/gomlx/gomlx/types/tensors/images"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
-	"path"
-	"strings"
 )
 
 // ClassificationImageSize if using the Inception V3's model for classification.
@@ -508,9 +509,9 @@ func (cfg *Config) conv2DWithBatchNorm(ctx *context.Context, x *Node, kernelFilt
 	// 2D Convolution:
 	ctxWithWeights := cfg.readNextConv2D(ctx, g) // Create a new context scope and read weights from `.h5` file.
 	convCfg := layers.Convolution(ctxWithWeights, x).CurrentScope().ChannelsAxis(cfg.channelsAxisConfig).
-		Filters(kernelFilters).UseBias(false).KernelSizePerDim(kernelHeight, kernelWidth)
+		Channels(kernelFilters).UseBias(false).KernelSizePerAxis(kernelHeight, kernelWidth)
 	if len(strides) > 0 {
-		convCfg = convCfg.StridePerDim(strides...)
+		convCfg = convCfg.StridePerAxis(strides...)
 	}
 	if padding {
 		convCfg = convCfg.PadSame()

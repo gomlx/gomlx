@@ -17,7 +17,7 @@ func TestConvGeneralOp(t *testing.T) {
 		strides                            []int
 		paddings                           [][2]int
 		inputDilations, kernelDilations    []int
-		featureGroupCount, batchGroupCount int
+		channelGroupCount, batchGroupCount int
 
 		expectedError string
 		output        shapes.Shape
@@ -42,7 +42,7 @@ func TestConvGeneralOp(t *testing.T) {
 			paddings:          [][2]int{{0, 1}},
 			inputDilations:    []int{1},
 			kernelDilations:   []int{1},
-			featureGroupCount: 1,
+			channelGroupCount: 1,
 			batchGroupCount:   1,
 
 			output: S(F32, 2, 4, 3),
@@ -66,7 +66,7 @@ func TestConvGeneralOp(t *testing.T) {
 			paddings:          [][2]int{{0, 0}},
 			inputDilations:    []int{1},
 			kernelDilations:   []int{1},
-			featureGroupCount: 1,
+			channelGroupCount: 1,
 			batchGroupCount:   1,
 
 			output: S(F32, 1, 3, 3),
@@ -90,7 +90,7 @@ func TestConvGeneralOp(t *testing.T) {
 			paddings:          [][2]int{{0, 0}},
 			inputDilations:    []int{2},
 			kernelDilations:   []int{1},
-			featureGroupCount: 1,
+			channelGroupCount: 1,
 			batchGroupCount:   1,
 
 			output: S(F32, 1, 3, 6),
@@ -114,7 +114,7 @@ func TestConvGeneralOp(t *testing.T) {
 			paddings:          [][2]int{{0, 0}},
 			inputDilations:    []int{1},
 			kernelDilations:   []int{2},
-			featureGroupCount: 1,
+			channelGroupCount: 1,
 			batchGroupCount:   1,
 
 			output: S(F32, 1, 3, 4),
@@ -138,7 +138,7 @@ func TestConvGeneralOp(t *testing.T) {
 			paddings:          [][2]int{{0, 0}},
 			inputDilations:    []int{1},
 			kernelDilations:   []int{1},
-			featureGroupCount: 2,
+			channelGroupCount: 2,
 			batchGroupCount:   1,
 
 			output: S(F32, 1, 4, 4),
@@ -162,7 +162,7 @@ func TestConvGeneralOp(t *testing.T) {
 			paddings:          [][2]int{{0, 0}},
 			inputDilations:    []int{1},
 			kernelDilations:   []int{1},
-			featureGroupCount: 1,
+			channelGroupCount: 1,
 			batchGroupCount:   2,
 			output:            S(F32, 2, 4, 4),
 		},
@@ -185,7 +185,7 @@ func TestConvGeneralOp(t *testing.T) {
 			paddings:          [][2]int{{0, 0}, {0, 0}},
 			inputDilations:    []int{1, 1},
 			kernelDilations:   []int{1, 1},
-			featureGroupCount: 1,
+			channelGroupCount: 1,
 			batchGroupCount:   1,
 
 			output: S(F32, 1, 2, 3, 3),
@@ -209,7 +209,7 @@ func TestConvGeneralOp(t *testing.T) {
 			paddings:          [][2]int{{0, 0}, {0, 0}, {0, 0}},
 			inputDilations:    []int{1, 1, 1},
 			kernelDilations:   []int{1, 1, 1},
-			featureGroupCount: 1,
+			channelGroupCount: 1,
 			batchGroupCount:   1,
 
 			output: S(F32, 1, 2, 3, 3, 3),
@@ -233,7 +233,7 @@ func TestConvGeneralOp(t *testing.T) {
 			paddings:          [][2]int{{0, 0}, {0, 0}},
 			inputDilations:    []int{1, 1},
 			kernelDilations:   []int{1, 1},
-			featureGroupCount: 1,
+			channelGroupCount: 1,
 			batchGroupCount:   1,
 
 			output: S(F32, 2, 4, 1, 3),
@@ -243,7 +243,7 @@ func TestConvGeneralOp(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			output, err := ConvGeneralOp(tc.input, tc.kernel, tc.axes,
 				tc.strides, tc.paddings, tc.inputDilations, tc.kernelDilations,
-				tc.featureGroupCount, tc.batchGroupCount)
+				tc.channelGroupCount, tc.batchGroupCount)
 			if tc.expectedError != "" {
 				require.ErrorContains(t, err, tc.expectedError)
 				return

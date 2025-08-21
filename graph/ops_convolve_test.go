@@ -17,11 +17,12 @@
 package graph_test
 
 import (
+	"testing"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/types/tensors/images"
 	"github.com/gomlx/gopjrt/dtypes"
-	"testing"
 )
 
 func TestConvolve(t *testing.T) {
@@ -30,7 +31,7 @@ func TestConvolve(t *testing.T) {
 			channelA := Iota(g, MakeShape(dtypes.Float32, 1, 1, 3, 3), 2)
 			channelB := Mul(channelA, Const(g, float32(0.1)))
 			input = Concatenate([]*Node{channelA, channelB}, 1)
-			kernel := Ones(g, MakeShape(dtypes.Float32, 2, 3, 3, 1))
+			kernel := Ones(g, MakeShape(dtypes.Float32, 2, 1, 3, 3))
 			output = Convolve(input, kernel).ChannelsAxis(images.ChannelsFirst).NoPadding().Done()
 			return
 		}, [][][][]float32{{{{9.9}}}})
@@ -50,7 +51,7 @@ func TestConvolve(t *testing.T) {
 			channelA := Iota(g, MakeShape(dtypes.Float32, 1, 1, 3, 3), 2)
 			channelB := Mul(channelA, Const(g, float32(0.1)))
 			input = Concatenate([]*Node{channelA, channelB}, 1)
-			kernel := Ones(g, MakeShape(dtypes.Float32, 2, 3, 3, 1))
+			kernel := Ones(g, MakeShape(dtypes.Float32, 2, 1, 3, 3))
 			output = Convolve(input, kernel).ChannelsAxis(images.ChannelsFirst).PadSame().Done()
 			return
 		}, [][][][]float32{{{{2.2, 3.3, 2.2}, {6.6, 9.9, 6.6}, {6.6, 9.9, 6.6}}}})
@@ -103,7 +104,7 @@ func TestConvolve(t *testing.T) {
 		func(g *Graph) (input, output *Node) {
 			input = Add(IotaFull(g, MakeShape(dtypes.Float64, 1, 2, 1)), Const(g, 1.0))
 			kernel := Add(IotaFull(g, MakeShape(dtypes.Float64, 3, 1, 1)), Const(g, 1.0))
-			output = Convolve(input, kernel).PaddingPerDim([][2]int{{2, 2}}).InputDilationPerDim(2).Done()
+			output = Convolve(input, kernel).PaddingPerDim([][2]int{{2, 2}}).InputDilationPerAxis(2).Done()
 			return
 		}, [][][]float64{{{3}, {2}, {7}, {4}, {2}}})
 }
@@ -241,30 +242,32 @@ func TestGradientConvolve(t *testing.T) {
 		})
 }
 
-func TestConvolveWithGroupCount(t *testing.T) {
-	testFuncOneInput(t, "SUCCESS: Convolution with FeatureGroupCount=2",
+func TestConvolveWithGrouping(t *testing.T) {
+	testFuncOneInput(t, "ChannelGroupCount=2",
 		func(g *Graph) (input, output *Node) {
 			// Input with 2 channels (matches FeatureGroupCount)
 			input = IotaFull(g, MakeShape(dtypes.Float32, 1, 2, 3, 3))
 
 			// Create kernel for grouped convolution (1 input channel per group)
 			kernel := Const(g, [][][][]float32{{{{0, 0}, {0, 0}, {0, 0}}, {{0, 0}, {1, 2}, {0, 0}}, {{0, 0}, {0, 0}, {0, 0}}}})
+			kernel = Transpose(kernel, 1, 3) // kernel shape should be [in_channels, out_channels, height, width]
 
 			output = Convolve(input, kernel).
 				ChannelsAxis(images.ChannelsFirst).
 				NoPadding().
-				FeatureGroupCount(2).
+				ChannelGroupCount(2).
 				Done()
 			return
 		},
 		[][][][]float32{{{{4.0}}, {{26.0}}}})
 
-	testFuncOneInput(t, "SUCCESS: Convolution with BatchGroupCount=2",
+	testFuncOneInput(t, "BatchGroupCount=2",
 		func(g *Graph) (input, output *Node) {
 			input = IotaFull(g, MakeShape(dtypes.Float32, 2, 1, 3, 3))
 
 			// Create kernel for grouped convolution (1 input channel per group)
 			kernel := Const(g, [][][][]float32{{{{0, 0}, {0, 0}, {0, 0}}, {{0, 0}, {1, 2}, {0, 0}}, {{0, 0}, {0, 0}, {0, 0}}}})
+			kernel = Transpose(kernel, 1, 3) // kernel shape should be [in_channels, out_channels, height, width]
 
 			output = Convolve(input, kernel).
 				ChannelsAxis(images.ChannelsFirst).
