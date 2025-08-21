@@ -1,6 +1,7 @@
 package simplego
 
 import (
+	"fmt"
 	"slices"
 
 	"github.com/gomlx/gomlx/backends"
@@ -35,6 +36,10 @@ func (b *Builder) ConvGeneral(inputOp, kernelOp backends.Op, axes backends.Convo
 	strides []int, paddings [][2]int,
 	inputDilations, kernelDilations []int,
 	channelGroupCount, batchGroupCount int) (backends.Op, error) {
+	// Sanitize group count.
+	channelGroupCount = max(channelGroupCount, 1)
+	batchGroupCount = max(batchGroupCount, 1)
+
 	opType := backends.OpTypeConvGeneral
 	inputs, err := b.checkOps(opType.String(), inputOp, kernelOp)
 	if err != nil {
@@ -46,6 +51,9 @@ func (b *Builder) ConvGeneral(inputOp, kernelOp backends.Op, axes backends.Convo
 	if err != nil {
 		return nil, err
 	}
+
+	fmt.Printf("ConvGeneral: input=%s, kernel=%s, output=%s, axes=%+v, strides=%v, paddings=%v, inputDilations=%v, kernelDilations=%v, channelGroupCount=%d, batchGroupCount=%d\n",
+		input.shape, kernel.shape, outputShape, axes, strides, paddings, inputDilations, kernelDilations, channelGroupCount, batchGroupCount)
 
 	node := b.newNode(opType, outputShape, input, kernel)
 
@@ -68,6 +76,8 @@ func (b *Builder) ConvGeneral(inputOp, kernelOp backends.Op, axes backends.Convo
 				inputDilations[i] = 1
 			}
 		}
+	} else {
+		inputDilations = xslices.SliceWithValue(spatialRank, 1)
 	}
 	if len(kernelDilations) > 0 {
 		kernelDilations = slices.Clone(kernelDilations)
