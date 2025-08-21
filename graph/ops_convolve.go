@@ -347,11 +347,11 @@ func (conv *ConvolutionBuilder) DilationPerDim(dilations ...int) *ConvolutionBui
 	return conv.DilationPerAxis(dilations...)
 }
 
-// InputDilationPerDim is used when generating the gradient of a convolution with strides.
+// InputDilationPerAxis is used when generating the gradient of a convolution with strides.
 // It effectively inserts zeros in the input, making it effectively larger than it actually is.
 //
 // The gradient of Convolve with input dilation is not implemented yet, be careful.
-func (conv *ConvolutionBuilder) InputDilationPerDim(dilations ...int) *ConvolutionBuilder {
+func (conv *ConvolutionBuilder) InputDilationPerAxis(dilations ...int) *ConvolutionBuilder {
 	if len(dilations) == 0 {
 		conv.inputDilations = nil
 		return conv
@@ -586,7 +586,7 @@ func convVJPWrtX(node, x, kernel, v *Node, numSpatialDims int, axes ConvolveAxes
 	// (3) Run2 the reverse convolution of the VJP.
 	revConv := Convolve(v, reverseKernel).PaddingPerDim(reversePaddings).DilationPerAxis(kernelDilations...).AxesConfig(reverseAxes)
 	if len(strides) > 0 {
-		revConv.InputDilationPerDim(strides...)
+		revConv.InputDilationPerAxis(strides...)
 	}
 	return revConv.Done()
 }

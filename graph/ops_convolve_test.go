@@ -104,7 +104,7 @@ func TestConvolve(t *testing.T) {
 		func(g *Graph) (input, output *Node) {
 			input = Add(IotaFull(g, MakeShape(dtypes.Float64, 1, 2, 1)), Const(g, 1.0))
 			kernel := Add(IotaFull(g, MakeShape(dtypes.Float64, 3, 1, 1)), Const(g, 1.0))
-			output = Convolve(input, kernel).PaddingPerDim([][2]int{{2, 2}}).InputDilationPerDim(2).Done()
+			output = Convolve(input, kernel).PaddingPerDim([][2]int{{2, 2}}).InputDilationPerAxis(2).Done()
 			return
 		}, [][][]float64{{{3}, {2}, {7}, {4}, {2}}})
 }
