@@ -186,7 +186,7 @@ func TestExecSpecialOps_transposeIterator(t *testing.T) {
 func TestExecSpecialOps_Transpose(t *testing.T) {
 	operand := tensors.FromFlatDataAndDimensions(xslices.Iota(float32(0), 24), 2, 3, 4)
 	y0 := graph.ExecOnce(backend, func(x *graph.Node) *graph.Node {
-		return graph.TransposeAllDims(x, 2, 0, 1)
+		return graph.TransposeAllAxes(x, 2, 0, 1)
 	}, operand)
 	fmt.Printf("\ty0=%s\n", y0.GoStr())
 	assert.NoError(t, y0.Shape().Check(dtypes.Float32, 4, 2, 3))

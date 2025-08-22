@@ -173,9 +173,9 @@ func TestGradDotGeneralBatchContracting(t *testing.T) {
 			testFn := func(g *Graph) []*Node { // It returns: lhs, rhs, dot, grad_lhs, grad_rhs
 				lhs := IotaFull(g, shapes.Make(dtypes.Float32, dimensions...))
 				lhs = OnePlus(lhs)
-				lhs = TransposeAllDims(lhs, lhsPermutation...)
+				lhs = TransposeAllAxes(lhs, lhsPermutation...)
 				rhs := MulScalar(Ones(g, shapes.Make(dtypes.Float32, dimensions...)), 0.1)
-				rhs = TransposeAllDims(rhs, rhsPermutation...)
+				rhs = TransposeAllAxes(rhs, rhsPermutation...)
 
 				lhsBatchAxes := gatherSlice([]int{0}, revLhsPermutation)
 				lhsContractingAxes := gatherSlice([]int{1, 2}, revLhsPermutation)
@@ -191,8 +191,8 @@ func TestGradDotGeneralBatchContracting(t *testing.T) {
 				incremental := OnePlus(IotaFull(g, dot.Shape()))
 				loss := ReduceAllSum(Mul(incremental, dot))
 				grads := Gradient(loss, lhs, rhs)
-				grads[0] = TransposeAllDims(grads[0], revLhsPermutation...)
-				grads[1] = TransposeAllDims(grads[1], revRhsPermutation...)
+				grads[0] = TransposeAllAxes(grads[0], revLhsPermutation...)
+				grads[1] = TransposeAllAxes(grads[1], revRhsPermutation...)
 				fmt.Printf("\tDone graph\n")
 				return []*Node{lhs, rhs, dot, grads[0], grads[1]}
 			}
@@ -248,9 +248,9 @@ func TestGradDotGeneralBatchContractingCrossing(t *testing.T) {
 			testFn := func(g *Graph) []*Node { // It returns: lhs, rhs, dot, grad_lhs, grad_rhs
 				lhs := IotaFull(g, shapes.Make(dtypes.Float32, lhsDimensions...))
 				lhs = OnePlus(lhs)
-				lhs = TransposeAllDims(lhs, lhsPermutation...)
+				lhs = TransposeAllAxes(lhs, lhsPermutation...)
 				rhs := MulScalar(Ones(g, shapes.Make(dtypes.Float32, rhsDimensions...)), 0.1)
-				rhs = TransposeAllDims(rhs, rhsPermutation...)
+				rhs = TransposeAllAxes(rhs, rhsPermutation...)
 
 				lhsBatchAxes := gatherSlice([]int{0}, revLhsPermutation)
 				lhsContractingAxes := gatherSlice([]int{2}, revLhsPermutation)
@@ -267,8 +267,8 @@ func TestGradDotGeneralBatchContractingCrossing(t *testing.T) {
 				incremental := OnePlus(IotaFull(g, dot.Shape()))
 				loss := ReduceAllSum(Mul(incremental, dot))
 				grads := Gradient(loss, lhs, rhs)
-				grads[0] = TransposeAllDims(grads[0], revLhsPermutation...)
-				grads[1] = TransposeAllDims(grads[1], revRhsPermutation...)
+				grads[0] = TransposeAllAxes(grads[0], revLhsPermutation...)
+				grads[1] = TransposeAllAxes(grads[1], revRhsPermutation...)
 				return []*Node{lhs, rhs, dot, grads[0], grads[1]}
 			}
 

@@ -204,7 +204,7 @@ func (e *evalData) Extrapolate() (where, value *Node) {
 	transposeAndBroadcastControlPoints := func(control *Node) *Node {
 		// Input shape: [numInputs, numOutputs, 1]
 		// Output shape: [batchSize, numOutputs, numInputs]
-		control = TransposeAllDims(control, 2, 1, 0)
+		control = TransposeAllAxes(control, 2, 1, 0)
 		control = BroadcastToDims(control, e.batchSize, e.numOutputs, e.numInputs)
 		return control
 	}

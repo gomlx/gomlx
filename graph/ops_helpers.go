@@ -103,7 +103,7 @@ func dotGeneralVJP(node, v *Node, _ shapes.Shape) []*Node {
 				}
 			}
 			if changed {
-				otherProjected = TransposeAllDims(otherProjected, permutations...)
+				otherProjected = TransposeAllAxes(otherProjected, permutations...)
 			}
 			// Add placeholder axes (of dimension 1) for the crosses from "this".
 			if len(thisCrossAxes) > 0 {
@@ -141,7 +141,7 @@ func dotGeneralVJP(node, v *Node, _ shapes.Shape) []*Node {
 			for ii, axis := range thisContractingAxes {
 				permutation[axis] = ii + numBatchAxes + len(thisCrossAxes)
 			}
-			thisVJP = TransposeAllDims(thisVJP, permutation...)
+			thisVJP = TransposeAllAxes(thisVJP, permutation...)
 		}
 		return thisVJP
 	}
