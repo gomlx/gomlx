@@ -365,8 +365,8 @@ func (conv *ConvBuilder) Done() *Node {
 	channelsAxis := images.GetChannelsAxis(xShape, conv.channelsAxisConfig)
 	inputChannels := xShape.Dimensions[channelsAxis]
 	if conv.channelsAxisConfig == images.ChannelsFirst {
-		kernelShape.Dimensions = append(kernelShape.Dimensions, inputChannels)
 		kernelShape.Dimensions = append(kernelShape.Dimensions, conv.outputChannels)
+		kernelShape.Dimensions = append(kernelShape.Dimensions, inputChannels)
 		kernelShape.Dimensions = append(kernelShape.Dimensions, conv.kernelSize...)
 	} else {
 		kernelShape.Dimensions = append(kernelShape.Dimensions, conv.kernelSize...)

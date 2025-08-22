@@ -127,8 +127,8 @@ func (conv *ConvolutionBuilder) ChannelsAxis(channelsAxisConfig timage.ChannelsA
 		conv.axes.InputChannels = 1
 		conv.axes.InputSpatial = xslices.Iota(2, conv.numSpatialDims)
 
-		conv.axes.KernelInputChannels = 0
-		conv.axes.KernelOutputChannels = 1
+		conv.axes.KernelOutputChannels = 0
+		conv.axes.KernelInputChannels = 1
 		conv.axes.KernelSpatial = xslices.Iota(2, conv.numSpatialDims)
 
 		conv.axes.OutputBatch = 0
