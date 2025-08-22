@@ -555,6 +555,7 @@ func dilateConvolveToMatchSumPooling(x, backProp *Node, windowDimensions, stride
 
 func (pool *PoolBuilder) doConcat() *Node {
 	x := pool.x
+	rank := x.Rank()
 	g := x.Graph()
 	dtype := x.DType()
 	shape := x.Shape()
@@ -580,9 +581,14 @@ func (pool *PoolBuilder) doConcat() *Node {
 	// Add the last axis to the kernel of outputChannelsSize, a one-hot encoding:
 	kernel = OneHot(kernel, outputChannelsSize, dtype)
 	if pool.channelsAxisConfig == images.ChannelsFirst {
-		// Kernel should be shaped [in_channels, out_channels, <spatial_dims...>],
-		// so we transpose outputChannels axis from the end to the second axis.
-		kernel = Transpose(kernel, 1, -1)
+		// Transposing from [in_channels, ... spatial .., out_channels] to [out_channels, in_channels, height, width]
+		permutations := make([]int, rank)
+		permutations[0] = rank - 1
+		permutations[1] = 0
+		for ii := 2; ii < rank; ii++ {
+			permutations[ii] = ii - 1
+		}
+		kernel = TransposeAllAxes(kernel, permutations...)
 	}
 
 	// strides default to pooling window sizes.

@@ -17,7 +17,6 @@
 package graph_test
 
 import (
-	"fmt"
 	"testing"
 
 	. "github.com/gomlx/gomlx/graph"
@@ -251,10 +250,8 @@ func TestConvolveWithGrouping(t *testing.T) {
 
 			// Create a kernel for grouped convolution (1 input channel per group)
 			kernel := Const(g, [][][][]float32{{{{0, 0}, {0, 0}, {0, 0}}, {{0, 0}, {1, 2}, {0, 0}}, {{0, 0}, {0, 0}, {0, 0}}}})
-			fmt.Printf("kernel=%s\n", kernel.Shape())
 			// Transposing from [in_channels, in_height, in_width, out_channels] to [out_channels, in_channels, height, width]
-			kernel = TransposeAllDims(kernel, 3, 0, 1, 2)
-			fmt.Printf("kernel(perm)=%s\n", kernel.Shape())
+			kernel = TransposeAllAxes(kernel, 3, 0, 1, 2)
 
 			output = Convolve(input, kernel).
 				ChannelsAxis(images.ChannelsFirst).
@@ -272,7 +269,7 @@ func TestConvolveWithGrouping(t *testing.T) {
 			// Create kernel for grouped convolution (1 input channel per group)
 			kernel := Const(g, [][][][]float32{{{{0, 0}, {0, 0}, {0, 0}}, {{0, 0}, {1, 2}, {0, 0}}, {{0, 0}, {0, 0}, {0, 0}}}})
 			// Transposing from [in_channels, in_height, in_width, out_channels] to [out_channels, in_channels, height, width]
-			kernel = TransposeAllDims(kernel, 3, 0, 1, 2)
+			kernel = TransposeAllAxes(kernel, 3, 0, 1, 2)
 
 			output = Convolve(input, kernel).
 				ChannelsAxis(images.ChannelsFirst).
