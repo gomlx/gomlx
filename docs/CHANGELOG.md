@@ -15,6 +15,7 @@
   * `ConvGeneralDilated` is being aliased to `ConvGeneral` and the former will be deprecated on
     a future version.
   * Fixed shape of the kernel for `images.ChannelFirst` configuration.
+  * Added `Split`.
 * Package `layers`:
   * Updated the configuration names for `Convolution`, to match the standards in the `graph` package.
   * Added `ChannelGroupCount()` and `BatchGroupCount()` to `Convolution` configuration.

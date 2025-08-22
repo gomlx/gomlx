@@ -1286,3 +1286,26 @@ func TestMatMul(t *testing.T) {
 		require.NoError(t, got.Shape().CheckDims(dims[2]...))
 	}
 }
+
+func TestSplit(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "2x3", func(g *Graph) (inputs, outputs []*Node) {
+		x := IotaFull(g, shapes.Make(dtypes.Int32, 2, 3))
+		inputs = []*Node{x}
+		splitsAxis0 := Split(x, 0, 2)
+		splitsAxis1 := Split(x, -1, 3)
+		outputs = []*Node{
+			splitsAxis0[0], splitsAxis0[1],
+			splitsAxis1[0], splitsAxis1[1], splitsAxis1[2],
+		}
+		return
+	}, []any{
+		// Splits along axis 0:
+		[][]int32{{0, 1, 2}},
+		[][]int32{{3, 4, 5}},
+
+		// Splits along axis 1:
+		[][]int32{{0}, {3}},
+		[][]int32{{1}, {4}},
+		[][]int32{{2}, {5}},
+	}, 0)
+}
