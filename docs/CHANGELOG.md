@@ -21,6 +21,7 @@
   * `ConvGeneral`: added gradient for grouped (by channels or by batch) convolutions.
   * Fixed shape of the kernel for `images.ChannelFirst` configuration.
   * Added `Split`.
+  * `TransposeAllDims` -> `TransposeAllAxes`.
 * Package `layers`:
   * Updated the configuration names for `Convolution`, to match the standards in the `graph` package.
   * Added `ChannelGroupCount()` and `BatchGroupCount()` to `Convolution` configuration.
