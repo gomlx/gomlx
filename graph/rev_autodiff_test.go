@@ -18,14 +18,15 @@ package graph_test
 
 import (
 	"fmt"
+	"math"
+	"testing"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
-	"math"
-	"testing"
 )
 
 func TestGradientAdd(t *testing.T) {
@@ -198,26 +199,32 @@ func testGradients(t *testing.T, name string, testFn gradTestFunc, wantForGrad [
 //
 // It will print out the inputNodes and outputs to help debugging.
 func testGradientsInDelta(t *testing.T, name string, testFn gradTestFunc, wantForGrad []any, delta float64) {
-	backend := graphtest.BuildTestBackend()
-	fmt.Printf("%s:\n", name)
-	// Create a function that can be used by computation.Exec.
-	fn := func(g *Graph) []*Node {
-		output, nodesForGrad := testFn(g)
-		grads := Gradient(ReduceAllSum(output), nodesForGrad...)
-		return append([]*Node{output}, grads...)
-	}
-	exec := NewExec(backend, fn)
-	results := exec.Call()
-	fmt.Printf("\toutput=%v\n", results[0].GoStr())
-	gradients := results[1:]
-	for ii, output := range gradients {
-		fmt.Printf("\tGradient #%d: %s\n", ii, output.GoStr())
-	}
-	require.Equalf(t, len(wantForGrad), len(gradients), "%s: number of wanted results different from number of gradients", name)
-	for ii, output := range gradients {
-		require.Truef(t, tensors.FromAnyValue(wantForGrad[ii]).InDelta(output, delta),
-			"%s: gradient #%d doesn't match wanted value (withing %g delta/margin)\n\t%v", name, ii, delta, wantForGrad[ii])
-	}
+	t.Run(name, func(t *testing.T) {
+		backend := graphtest.BuildTestBackend()
+		// Create a function that can be used by computation.Exec.
+		fn := func(g *Graph) []*Node {
+			output, nodesForGrad := testFn(g)
+			grads := Gradient(ReduceAllSum(output), nodesForGrad...)
+			return append([]*Node{output}, grads...)
+		}
+		exec := NewExec(backend, fn)
+		results := exec.Call()
+		fmt.Printf("\toutput=%v\n", results[0].GoStr())
+		gradients := results[1:]
+		for ii, output := range gradients {
+			fmt.Printf("\tGradient #%d: %s\n", ii, output.GoStr())
+		}
+		require.Equalf(t, len(wantForGrad), len(gradients), "%s: number of wanted results different from number of gradients", name)
+		for ii, output := range gradients {
+			if wantShape, ok := wantForGrad[ii].(shapes.Shape); ok {
+				// Simply checking the shape:
+				require.Truef(t, output.Shape().Equal(wantShape), "Wanted shape %s, got %s", wantShape, output.Shape())
+			} else {
+				require.Truef(t, tensors.FromAnyValue(wantForGrad[ii]).InDelta(output, delta),
+					"%s: gradient #%d doesn't match wanted value (withing %g delta/margin)\n\t%v", name, ii, delta, wantForGrad[ii])
+			}
+		}
+	})
 }
 
 // testGradientsExact run testFn to build a graph, calculates the gradients of the

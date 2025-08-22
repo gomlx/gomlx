@@ -1220,6 +1220,39 @@ func SliceAxis(x *Node, axis int, axisSpec SliceAxisSpec) *Node {
 	return Slice(x, specs...)
 }
 
+// Split splits x on the given axis in numSplits equally shaped values.
+// x.Shape().Dimensions[axis] must be divisible by numSplits.
+//
+// Example:
+//
+//	x := IotaFull(g, shapes.Make(dtypes.Int32, 2, 3)) // Creates [[0 1 2][3 4 5]]
+//	splits := Split(x, 1, 3) // Split along axis 1 into 3 parts
+//	// Now splits[0] is [[0][3]], splits[1] is [[1][4]], splits[2] is [[2][5]]
+func Split(x *Node, axis int, numSplits int) []*Node {
+	axis = AdjustAxisToOperandRank(x, axis)
+	dim := x.Shape().Dimensions[axis]
+	if dim%numSplits != 0 {
+		exceptions.Panicf("Split: x.Shape().Dimensions[%d] (=%d) must be divisible by numSplits (=%d)", axis, dim, numSplits)
+	}
+
+	// Trivial case of one split:
+	if numSplits == 1 {
+		return []*Node{x}
+	}
+
+	splits := make([]*Node, numSplits)
+	splitDim := dim / numSplits
+	for ii := 0; ii < numSplits; ii++ {
+		start := ii * splitDim
+		end := start + splitDim
+		if ii == numSplits-1 {
+			end = dim
+		}
+		splits[ii] = SliceAxis(x, axis, AxisRange(start, end))
+	}
+	return splits
+}
+
 // Concatenate results on the given axis. A negative axis will be counted from
 // the end -- so `axis==-1` means the last axis.
 //
