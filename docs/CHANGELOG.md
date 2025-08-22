@@ -14,6 +14,7 @@
   * Names of parameters for `ConvGeneral` were standardized to "input," "kernel" and "channels."
   * `ConvGeneralDilated` is being aliased to `ConvGeneral` and the former will be deprecated on
     a future version.
+  * `ConvGeneral`: added gradient for grouped (by channels or by batch) convolutions.
   * Fixed shape of the kernel for `images.ChannelFirst` configuration.
   * Added `Split`.
 * Package `layers`:

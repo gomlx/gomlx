@@ -217,8 +217,6 @@ func (conv *ConvolutionBuilder) StridePerAxis(strides ...int) *ConvolutionBuilde
 //   - Performance: Can reduce computation cost by limiting connections between channels
 //   - Memory usage: Reduces the number of parameters in the kernel
 //
-// Note: Back-propagation is not yet implemented for this feature.
-//
 // Reference: https://www.tensorflow.org/api_docs/python/tf/data/Dataset#group_by_window
 func (conv *ConvolutionBuilder) ChannelGroupCount(groupCount int) *ConvolutionBuilder {
 	if groupCount < 1 {
@@ -247,11 +245,11 @@ func (conv *ConvolutionBuilder) FeatureGroupCount(groupCount int) *ConvolutionBu
 // When BatchGroupCount != 1, the kernel's shape changes: the batch dimension
 // of the input is divided by the group count, creating separate convolution
 // groups where each group processes a subset of the batch.
+// The kernel output channels dimensions must be divisible by the batch group count,
+// each slice applies to one batch, and they are concatenated in the end.
 //
 // The output shape will have the same spatial dimensions as a regular convolution
-// but with the batch dimension affected by the grouping.
-//
-// Note: Back-propagation is not yet implemented for this feature.
+// but with the batch dimension divided by groupCount.
 //
 // Reference: https://www.tensorflow.org/api_docs/python/tf/data/Dataset#batch
 func (conv *ConvolutionBuilder) BatchGroupCount(groupCount int) *ConvolutionBuilder {
@@ -494,24 +492,81 @@ func convGeneralVJP(node, v *Node, _ shapes.Shape) []*Node {
 			"usually it's only used to calculate the gradient of a convolution, so " +
 			"this may occur when trying to do the gradient of a gradient.")
 	}
-	if params.channelGroupCount != 1 {
-		Panicf("gradient of ConvGeneral using channelGroupCount != 1 is not yet implemented, got channelGroupCount=%d", params.channelGroupCount)
-	}
-	if params.batchGroupCount != 1 {
-		Panicf("gradient of ConvGeneralDialated using batchGroupCount != 1 is not yet implemented, got batchGroupCount=%d", params.batchGroupCount)
-	}
 
-	vjpX := convVJPWrtX(node, x, kernel, v, numSpatialDims, params.axes,
-		params.strides, params.paddings, params.kernelDilations)
-	vjpKernel := convVJPWrtKernel(node, x, kernel, v, numSpatialDims, params.axes,
-		params.strides, params.paddings, params.kernelDilations)
+	// Notice one can't have batch and channel grouping at the same time.
+	var vjpX, vjpKernel *Node
+	if params.channelGroupCount > 1 {
+		vjpX, vjpKernel = convGeneralWithChannelGroupingVJP(node, x, kernel, v, numSpatialDims, params.axes,
+			params.strides, params.paddings, params.kernelDilations, params.channelGroupCount)
+	} else if params.batchGroupCount > 1 {
+		vjpX, vjpKernel = convGeneralWithBatchGroupingVJP(node, x, kernel, v, numSpatialDims, params.axes,
+			params.strides, params.paddings, params.kernelDilations, params.batchGroupCount)
+	} else {
+		vjpX = convVJPWrtX(node, x, kernel, v, numSpatialDims, params.axes,
+			params.strides, params.paddings, params.kernelDilations)
+		vjpKernel = convVJPWrtKernel(node, x, kernel, v, numSpatialDims, params.axes,
+			params.strides, params.paddings, params.kernelDilations)
+	}
 	return []*Node{vjpX, vjpKernel}
+}
+
+func convGeneralWithChannelGroupingVJP(node, x, kernel, v *Node, numSpatialDims int, axes ConvolveAxesConfig,
+	strides []int, paddings [][2]int, kernelDilations []int, channelGroupCount int) (vjpX, vjpKernel *Node) {
+	// Split v, x and kernel into groups.
+	outputChannelsAxis := axes.OutputChannels
+	vSlices := Split(v, outputChannelsAxis, channelGroupCount)
+	inputChannelsAxis := axes.InputChannels
+	xSlices := Split(x, inputChannelsAxis, channelGroupCount)
+	kernelOutputChannelsAxis := axes.KernelOutputChannels
+	kernelSlices := Split(kernel, kernelOutputChannelsAxis, channelGroupCount)
+
+	// Compute the gradients for each slice of the input (x).
+	var xGradSlices []*Node
+	for i := 0; i < channelGroupCount; i++ {
+		gradSlice := convVJPWrtX(node, xSlices[i], kernelSlices[i], vSlices[i], numSpatialDims, axes, strides, paddings, kernelDilations)
+		xGradSlices = append(xGradSlices, gradSlice)
+	}
+	vjpX = Concatenate(xGradSlices, inputChannelsAxis)
+
+	// Compute the gradients for each slice of the kernel.
+	var kernelGradSlices []*Node
+	for i := 0; i < channelGroupCount; i++ {
+		gradSlice := convVJPWrtKernel(vSlices[i], xSlices[i], kernelSlices[i], vSlices[i], numSpatialDims, axes, strides, paddings, kernelDilations)
+		kernelGradSlices = append(kernelGradSlices, gradSlice)
+	}
+	vjpKernel = Concatenate(kernelGradSlices, kernelOutputChannelsAxis)
+	return
+}
+
+// convGeneralWithBatchGroupingVJP handles the gradient calculation when using batch grouping.
+func convGeneralWithBatchGroupingVJP(node, x, kernel, v *Node, numSpatialDims int, axes ConvolveAxesConfig,
+	strides []int, paddings [][2]int, kernelDilations []int, batchGroupCount int) (vjpX, vjpKernel *Node) {
+	// Split v, x and kernel into batch groups.
+	vSlices := Split(v, axes.OutputChannels, batchGroupCount)
+	xSlices := Split(x, axes.InputBatch, batchGroupCount)
+	kernelSlices := Split(kernel, axes.KernelOutputChannels, batchGroupCount)
+
+	// Compute the gradients for each slice of the input (x).
+	var xGradSlices []*Node
+	for i := 0; i < batchGroupCount; i++ {
+		gradSlice := convVJPWrtX(node, xSlices[i], kernelSlices[i], vSlices[i], numSpatialDims, axes, strides, paddings, kernelDilations)
+		xGradSlices = append(xGradSlices, gradSlice)
+	}
+	vjpX = Concatenate(xGradSlices, axes.InputBatch)
+
+	// Compute the gradients for each slice of the kernel.
+	var kernelGradSlices []*Node
+	for i := 0; i < batchGroupCount; i++ {
+		gradSlice := convVJPWrtKernel(vSlices[i], xSlices[i], kernelSlices[i], vSlices[i], numSpatialDims, axes, strides, paddings, kernelDilations)
+		kernelGradSlices = append(kernelGradSlices, gradSlice)
+	}
+	vjpKernel = Concatenate(kernelGradSlices, axes.KernelOutputChannels)
+	return
 }
 
 // convVJPWrtX creates the Vector-Jacobian (for backpropagation) of the
 // output with respect to (==wrt) the input (x). See also convVJPWrtKernel.
-func convVJPWrtX(node, x, kernel, v *Node, numSpatialDims int, axes ConvolveAxesConfig,
-	strides []int, paddings [][2]int, kernelDilations []int) *Node {
+func convVJPWrtX(node, x, kernel, v *Node, numSpatialDims int, axes ConvolveAxesConfig, strides []int, paddings [][2]int, kernelDilations []int) *Node {
 	// Get output and input spatial dimensions.
 	inputSpatialDims := gatherSlice(axes.InputSpatial, x.Shape().Dimensions)
 	outputSpatialDims := gatherSlice(axes.OutputSpatial, node.Shape().Dimensions)
@@ -599,8 +654,9 @@ func expectedOutputSize(inputSize, kernelSize, dilation, stride int, padding [2]
 	return (inputEnd - inputStart + (stride - 1)) / stride
 }
 
-// convVJPWrtX creates the Vector-Jacobian (for backpropagation) of the
+// convVJPWrtKernel creates the Vector-Jacobian (for backpropagation) of the
 // output with respect to (==wrt) the kernel (aka kernel). See also convVJPWrtX.
+// It works for one group of convolution.
 func convVJPWrtKernel(node, x, kernel, v *Node, numSpatialDims int, axes ConvolveAxesConfig,
 	strides []int, paddings [][2]int, kernelDilations []int) *Node {
 	// (1) For the Gradient of the output with respect to kernel, we need a reverse convolution of

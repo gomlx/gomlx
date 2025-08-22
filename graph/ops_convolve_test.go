@@ -21,7 +21,6 @@ import (
 
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/types/tensors/images"
 	"github.com/gomlx/gopjrt/dtypes"
 )
@@ -238,23 +237,8 @@ func TestGradientConvolve(t *testing.T) {
 			output = Convolve(input, kernel).NoPadding().Dilations(2).Done()
 			return output, []*Node{input, kernel}
 		}, []any{
-			tensors.FromScalarAndDimensions(0.0, 2, 5, 5, 3).Value(),
-			tensors.FromScalarAndDimensions(0.0, 2, 2, 3, 6).Value(),
-		})
-
-	testGradients(t, "2D.ChannelGroupCount(2)",
-		func(g *Graph) (output *Node, nodesForGrad []*Node) {
-			input := Const(g, [][][][]float64{{{{1, 10}}}})
-			kernel := Const(g, [][][][]float64{{{{2, 20}}}})
-			convNode := Convolve(input, kernel).
-				ChannelGroupCount(2).
-				NoPadding().
-				Done()
-			output = ReduceAllSum(convNode)
-			return output, []*Node{input, kernel}
-		}, []any{
-			[][][][]float64{{{{2, 20}}}},
-			[][][][]float64{{{{1, 10}}}},
+			shapes.Make(dtypes.Float64, 2, 5, 5, 3),
+			shapes.Make(dtypes.Float64, 2, 2, 3, 6),
 		})
 }
 
@@ -293,4 +277,90 @@ func TestConvolveWithGrouping(t *testing.T) {
 			return
 		},
 		[][][][]float32{{{{4.0}}, {{26.0}}}})
+
+	testGradients(t, "Gradient-Input:ChannelGroupCount(2)",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			input := Ones(g, MakeShape(F32, 1, 5, 2))
+			kernel := IotaFull(g, MakeShape(F32, 3, 1, 4))
+			convNode := Convolve(input, kernel).
+				ChannelGroupCount(2).
+				Strides(1).
+				NoPadding().
+				Done()
+			output = ReduceAllSum(convNode)
+			return output, []*Node{input}
+		}, []any{
+			[][][]float32{{
+				{1., 5.},
+				{10., 18.},
+				{27., 39.},
+				{26., 34.},
+				{17., 21.},
+			}},
+		})
+
+	testGradients(t, "Gradient-Kernel:ChannelGroupCount(2)",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			input := IotaFull(g, MakeShape(F32, 1, 5, 2))
+			kernel := Ones(g, MakeShape(F32, 3, 1, 4))
+			convNode := Convolve(input, kernel).
+				ChannelGroupCount(2).
+				Strides(1).
+				NoPadding().
+				Done()
+			output = ReduceAllSum(convNode)
+			return output, []*Node{kernel}
+		}, []any{
+			[][][]float32{
+				{{6., 6., 9., 9.}},
+				{{12., 12., 15., 15.}},
+				{{18., 18., 21., 21.}},
+			},
+		})
+
+	testGradients(t, "Gradient-Input:BatchGroupCount(2)",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			input := Ones(g, MakeShape(F32, 2, 5, 1))
+			kernel := IotaFull(g, MakeShape(F32, 3, 1, 4))
+			convNode := Convolve(input, kernel).
+				BatchGroupCount(2).
+				Strides(1).
+				NoPadding().
+				Done()
+			output = ReduceAllSum(convNode)
+			return output, []*Node{input}
+		}, []any{
+			[][][]float32{{
+				{1.},
+				{10.},
+				{27.},
+				{26.},
+				{17.},
+			}, {
+				{5.},
+				{18.},
+				{39.},
+				{34.},
+				{21.},
+			}},
+		})
+
+	testGradients(t, "Gradient-Kernel:BatchGroupCount(2)",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			input := IotaFull(g, MakeShape(F32, 2, 5, 1))
+			kernel := Ones(g, MakeShape(F32, 3, 1, 4))
+			convNode := Convolve(input, kernel).
+				BatchGroupCount(2).
+				Strides(1).
+				NoPadding().
+				Done()
+			output = ReduceAllSum(convNode)
+			return output, []*Node{kernel}
+		}, []any{
+			[][][]float32{
+				{{3., 3., 18., 18.}},
+				{{6., 6., 21., 21.}},
+				{{9., 9., 24., 24.}},
+			},
+		})
 }
