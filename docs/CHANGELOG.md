@@ -1,9 +1,12 @@
 # GoMLX changelog
 
-# v0.22.0: 2025/08/22 🌀 Convolutions 🌀 
+# v0.22.1: 2025/08/22 🌀 Convolutions 🌀 
 
+(release v0.22.0 was skipped due to a bug notice slightly after release)
+
+* Package `backends`:
+  * `ConvGeneralDilated` renamed to `ConvGeneral`
 * Package `backends/shapeinference`:
-  * `ConvGeneral` renamed to `ConvGeneral`
   * Added `ConvGeneralOp` to infer the output shape of a convolution.
 * Package `backends/simplego`:
   * Implemented `ConvGeneral` operation: supporting strides, padding, dilations (input and kernel),
@@ -18,6 +21,7 @@
   * `ConvGeneral`: added gradient for grouped (by channels or by batch) convolutions.
   * Fixed shape of the kernel for `images.ChannelFirst` configuration.
   * Added `Split`.
+  * `TransposeAllDims` -> `TransposeAllAxes`.
 * Package `layers`:
   * Updated the configuration names for `Convolution`, to match the standards in the `graph` package.
   * Added `ChannelGroupCount()` and `BatchGroupCount()` to `Convolution` configuration.

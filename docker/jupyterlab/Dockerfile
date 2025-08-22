@@ -67,6 +67,13 @@ RUN go install github.com/janpfeifer/gonb@latest \
 # Install dlv for debugging.
 RUN go install github.com/go-delve/delve/cmd/dlv@latest
 
+
+
+#######################################################################################################
+# Install Gopjrt: this include NVidia libraries, and hence in a separate sub-docker.
+#######################################################################################################
+FROM gomlx_jupyterlab_base AS gomlx_jupyterlab_gopjrt
+
 # Clone and install gopjrt.
 USER ${NB_USER}
 WORKDIR ${HOME}
@@ -86,13 +93,12 @@ USER ${NB_USER}
 WORKDIR ${HOME}/Projects/gopjrt
 RUN go test ./...
 
-
 #######################################################################################################
 # Install GOMLX libraries and code
 #
 # As a separate docker target so it can be easily cache busted.
 #######################################################################################################
-FROM gomlx_jupyterlab_base AS gomlx_jupyterlab
+FROM gomlx_jupyterlab_gopjrt AS gomlx_jupyterlab
 
 # Clone and test GoMLX
 arg GOMLX_REPOSITORY_BRANCH="main"

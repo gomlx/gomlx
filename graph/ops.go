@@ -1383,16 +1383,16 @@ func Transpose(x *Node, axisA, axisB int) *Node {
 		permutation[dimIdx] = dimIdx
 	}
 	permutation[dims[0]], permutation[dims[1]] = dims[1], dims[0]
-	return TransposeAllDims(x, permutation...)
+	return TransposeAllAxes(x, permutation...)
 }
 
-// TransposeAllDims allows one to transpose any or all dimensions.
+// TransposeAllAxes allows one to transpose any or all dimensions.
 // It permutes the operand axes with the given permutation, so ∀ i, 0 ≤ i < rank ⇒ input_dimensions[permutations[i]] = output_dimensions[i].
-func TransposeAllDims(x *Node, permutations ...int) *Node {
+func TransposeAllAxes(x *Node, permutations ...int) *Node {
 	_ = validateBuildingGraphFromInputs(x)
 	rank := x.Rank()
 	if len(permutations) != rank {
-		exceptions.Panicf("in TransposeAllDims(x, %v), there must be one permutations per dimension in x, but x rank %d",
+		exceptions.Panicf("in TransposeAllAxes(x, %v), there must be one permutations per dimension in x, but x rank %d",
 			permutations, rank)
 	}
 	used := make([]bool, rank)
@@ -1402,13 +1402,20 @@ func TransposeAllDims(x *Node, permutations ...int) *Node {
 			permutations[ii] = idx
 		}
 		if idx >= rank || idx < 0 {
-			exceptions.Panicf("in TransposeAllDims(x, %v), element %d id is %d which is out-of-limits for x rank %d", permutations, ii, idx, rank)
+			exceptions.Panicf("in TransposeAllAxes(x, %v), element %d id is %d which is out-of-limits for x rank %d", permutations, ii, idx, rank)
 		}
 		if used[idx] {
-			exceptions.Panicf("in TransposeAllDims(x, %v), id %d appears more than once", permutations, idx)
+			exceptions.Panicf("in TransposeAllAxes(x, %v), id %d appears more than once", permutations, idx)
 		}
 	}
 	return backendTranspose(x, permutations...)
+}
+
+// TransposeAllDims is a deprecated alias to TransposeAllAxes.
+//
+// Deprecated: use TransposeAllDims instead.
+func TransposeAllDims(x *Node, permutations ...int) *Node {
+	return TransposeAllAxes(x, permutations...)
 }
 
 // Einsum evaluates the "Einstein summation" various types of products (inner/outer/batched)
@@ -1552,7 +1559,7 @@ func Einsum(equation string, lhs, rhs *Node) *Node {
 		}
 	}
 	if hasPermutation {
-		output = TransposeAllDims(output, permutation...)
+		output = TransposeAllAxes(output, permutation...)
 	}
 	return output
 }

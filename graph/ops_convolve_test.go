@@ -31,7 +31,7 @@ func TestConvolve(t *testing.T) {
 			channelA := Iota(g, MakeShape(dtypes.Float32, 1, 1, 3, 3), 2)
 			channelB := Mul(channelA, Const(g, float32(0.1)))
 			input = Concatenate([]*Node{channelA, channelB}, 1)
-			kernel := Ones(g, MakeShape(dtypes.Float32, 2, 1, 3, 3))
+			kernel := Ones(g, MakeShape(dtypes.Float32, 1, 2, 3, 3))
 			output = Convolve(input, kernel).ChannelsAxis(images.ChannelsFirst).NoPadding().Done()
 			return
 		}, [][][][]float32{{{{9.9}}}})
@@ -51,7 +51,7 @@ func TestConvolve(t *testing.T) {
 			channelA := Iota(g, MakeShape(dtypes.Float32, 1, 1, 3, 3), 2)
 			channelB := Mul(channelA, Const(g, float32(0.1)))
 			input = Concatenate([]*Node{channelA, channelB}, 1)
-			kernel := Ones(g, MakeShape(dtypes.Float32, 2, 1, 3, 3))
+			kernel := Ones(g, MakeShape(dtypes.Float32, 1, 2, 3, 3))
 			output = Convolve(input, kernel).ChannelsAxis(images.ChannelsFirst).PadSame().Done()
 			return
 		}, [][][][]float32{{{{2.2, 3.3, 2.2}, {6.6, 9.9, 6.6}, {6.6, 9.9, 6.6}}}})
@@ -248,9 +248,10 @@ func TestConvolveWithGrouping(t *testing.T) {
 			// Input with 2 channels (matches FeatureGroupCount)
 			input = IotaFull(g, MakeShape(dtypes.Float32, 1, 2, 3, 3))
 
-			// Create kernel for grouped convolution (1 input channel per group)
+			// Create a kernel for grouped convolution (1 input channel per group)
 			kernel := Const(g, [][][][]float32{{{{0, 0}, {0, 0}, {0, 0}}, {{0, 0}, {1, 2}, {0, 0}}, {{0, 0}, {0, 0}, {0, 0}}}})
-			kernel = Transpose(kernel, 1, 3) // kernel shape should be [in_channels, out_channels, height, width]
+			// Transposing from [in_channels, in_height, in_width, out_channels] to [out_channels, in_channels, height, width]
+			kernel = TransposeAllAxes(kernel, 3, 0, 1, 2)
 
 			output = Convolve(input, kernel).
 				ChannelsAxis(images.ChannelsFirst).
@@ -267,7 +268,8 @@ func TestConvolveWithGrouping(t *testing.T) {
 
 			// Create kernel for grouped convolution (1 input channel per group)
 			kernel := Const(g, [][][][]float32{{{{0, 0}, {0, 0}, {0, 0}}, {{0, 0}, {1, 2}, {0, 0}}, {{0, 0}, {0, 0}, {0, 0}}}})
-			kernel = Transpose(kernel, 1, 3) // kernel shape should be [in_channels, out_channels, height, width]
+			// Transposing from [in_channels, in_height, in_width, out_channels] to [out_channels, in_channels, height, width]
+			kernel = TransposeAllAxes(kernel, 3, 0, 1, 2)
 
 			output = Convolve(input, kernel).
 				ChannelsAxis(images.ChannelsFirst).

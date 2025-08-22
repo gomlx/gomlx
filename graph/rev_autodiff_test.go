@@ -494,7 +494,7 @@ func TestGradientTranspose(t *testing.T) {
 	testGradients(t, "Transpose",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			input := Ones(g, MakeShape(F64, 2, 3, 1))
-			output = TransposeAllDims(input, 1, 2, 0) // Rotate axes left.
+			output = TransposeAllAxes(input, 1, 2, 0) // Rotate axes left.
 			scale := OnePlus(IotaFull(g, MakeShape(F64, 3, 1, 2)))
 			output = ReduceAllSum(Mul(output, scale))
 			return output, []*Node{input}

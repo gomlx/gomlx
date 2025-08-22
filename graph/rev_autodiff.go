@@ -944,7 +944,7 @@ func transposeVJP(node, v *Node, _ shapes.Shape) []*Node {
 	for to, from := range params.permutations {
 		reversePermutations[from] = to
 	}
-	vjp := TransposeAllDims(v, reversePermutations...)
+	vjp := TransposeAllAxes(v, reversePermutations...)
 	return []*Node{vjp}
 }
 

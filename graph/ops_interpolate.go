@@ -295,6 +295,6 @@ func (c *InterpolationConfig) Done() (output *Node) {
 			unchangedAxis++
 		}
 	}
-	output = TransposeAllDims(output, transposeDims...)
+	output = TransposeAllAxes(output, transposeDims...)
 	return
 }
