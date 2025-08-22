@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/types/tensors/images"
 	"github.com/gomlx/gopjrt/dtypes"
@@ -110,7 +111,7 @@ func TestConvolve(t *testing.T) {
 }
 
 func TestGradientConvolve(t *testing.T) {
-	testGradients(t, "Gradient 1D Convolve().NoPadding() -- scaled output",
+	testGradients(t, "1D.NoPadding()",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			input := Add(IotaFull(g, MakeShape(dtypes.Float64, 1, 5, 1)), Const(g, 1.0))
 			kernel := Add(IotaFull(g, MakeShape(dtypes.Float64, 3, 1, 1)), Const(g, 1.0))
@@ -124,7 +125,7 @@ func TestGradientConvolve(t *testing.T) {
 			[][][]float64{{{14}}, {{20}}, {{26}}},
 		})
 
-	testGradients(t, "Gradient 2D Convolve().NoPadding()",
+	testGradients(t, "2D.NoPadding()",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			channelA := IotaFull(g, MakeShape(dtypes.Float64, 1, 5, 5, 1))
 			channelB := Mul(channelA, Const(g, 0.001))
@@ -149,7 +150,7 @@ func TestGradientConvolve(t *testing.T) {
 			},
 		})
 
-	testGradients(t, "Gradient Convolve().PadSame()",
+	testGradients(t, "2D.PadSame()",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			channelA := IotaFull(g, MakeShape(dtypes.Float64, 1, 3, 3, 1))
 			channelB := Mul(channelA, Const(g, 0.1))
@@ -171,7 +172,7 @@ func TestGradientConvolve(t *testing.T) {
 			},
 		})
 
-	testGradients(t, "Gradient Convolve().NoPadding().Dilations(2)",
+	testGradients(t, "2D.NoPadding().Dilations(2)",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			channelA := IotaFull(g, MakeShape(dtypes.Float64, 1, 5, 5, 1))
 			channelB := Mul(channelA, Const(g, 0.001))
@@ -195,7 +196,7 @@ func TestGradientConvolve(t *testing.T) {
 			},
 		})
 
-	testGradients(t, "Gradient 2D Convolve().NoPadding().Strides(2)",
+	testGradients(t, "2D.NoPadding().Strides(2)",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			channelA := IotaFull(g, MakeShape(dtypes.Float64, 1, 5, 5, 1))
 			channelB := Mul(channelA, Const(g, 0.001))
@@ -219,18 +220,18 @@ func TestGradientConvolve(t *testing.T) {
 			},
 		})
 
-	testGradients(t, "Gradient 2D Convolve().NoPadding().Strides(2): shape check",
+	testGradients(t, "2D.NoPadding().Strides(2): shape check",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			input := Zeros(g, MakeShape(dtypes.Float64, 2, 8, 7, 3))
 			kernel := Zeros(g, MakeShape(dtypes.Float64, 1, 1, 3, 6))
 			output = Convolve(input, kernel).NoPadding().Strides(2).Done()
 			return output, []*Node{input, kernel}
 		}, []any{
-			tensors.FromScalarAndDimensions(0.0, 2, 8, 7, 3).Value(),
-			tensors.FromScalarAndDimensions(0.0, 1, 1, 3, 6).Value(),
+			shapes.Make(dtypes.Float64, 2, 8, 7, 3),
+			shapes.Make(dtypes.Float64, 1, 1, 3, 6),
 		})
 
-	testGradients(t, "Gradient 2D Convolve().NoPadding().Dilations(2): shape check",
+	testGradients(t, "2D.NoPadding().Dilations(2): shape check",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			input := Zeros(g, MakeShape(dtypes.Float64, 2, 5, 5, 3))
 			kernel := Zeros(g, MakeShape(dtypes.Float64, 2, 2, 3, 6))
@@ -239,6 +240,21 @@ func TestGradientConvolve(t *testing.T) {
 		}, []any{
 			tensors.FromScalarAndDimensions(0.0, 2, 5, 5, 3).Value(),
 			tensors.FromScalarAndDimensions(0.0, 2, 2, 3, 6).Value(),
+		})
+
+	testGradients(t, "2D.ChannelGroupCount(2)",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			input := Const(g, [][][][]float64{{{{1, 10}}}})
+			kernel := Const(g, [][][][]float64{{{{2, 20}}}})
+			convNode := Convolve(input, kernel).
+				ChannelGroupCount(2).
+				NoPadding().
+				Done()
+			output = ReduceAllSum(convNode)
+			return output, []*Node{input, kernel}
+		}, []any{
+			[][][][]float64{{{{2, 20}}}},
+			[][][][]float64{{{{1, 10}}}},
 		})
 }
 
