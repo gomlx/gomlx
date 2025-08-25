@@ -74,7 +74,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 )
@@ -95,7 +94,7 @@ func Make(dtype dtypes.DType, dimensions ...int) Shape {
 	s := Shape{Dimensions: slices.Clone(dimensions), DType: dtype}
 	for _, dim := range dimensions {
 		if dim < 0 {
-			exceptions.Panicf("shapes.Make(%s): cannot create a shape with an axis with dimension < 0", s)
+			panic(errors.Errorf("shapes.Make(%s): cannot create a shape with an axis with dimension < 0", s))
 		}
 	}
 	return s
@@ -131,7 +130,7 @@ func (s Shape) Dim(axis int) int {
 		adjustedAxis += s.Rank()
 	}
 	if adjustedAxis < 0 || adjustedAxis > s.Rank() {
-		exceptions.Panicf("Shape.Dim(%d) out-of-bounds for rank %d (shape=%s)", axis, s.Rank(), s)
+		panic(errors.Errorf("Shape.Dim(%d) out-of-bounds for rank %d (shape=%s)", axis, s.Rank(), s))
 	}
 	return s.Dimensions[adjustedAxis]
 }
