@@ -1,5 +1,10 @@
 # GoMLX changelog
 
+# Next
+
+* Package `shapes`:
+  * Added `FromAnyValue`: extract shape from a Go type.
+
 # v0.22.1: 2025/08/22 🌀 Convolutions 🌀 
 
 (release v0.22.0 was skipped due to a bug notice slightly after release)
