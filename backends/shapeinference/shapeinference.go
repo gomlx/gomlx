@@ -1,4 +1,4 @@
-// Package shapeinference calculates the shape resulting from operations, and validates its inputs.
+// Package shapeinference calculates the shape resulting from operations and validates its inputs.
 //
 // This can be useful for new backends to test and help plan for buffer space for temporary or output buffers.
 //
@@ -265,6 +265,9 @@ func ComparisonOp(opType backends.OpType, lhsShape, rhsShape shapes.Shape) (outp
 	}
 
 	output, err = binaryOpImpl(opType, lhsShape, rhsShape)
+	if err != nil {
+		return
+	}
 	output.DType = dtypes.Bool
 	return
 }
