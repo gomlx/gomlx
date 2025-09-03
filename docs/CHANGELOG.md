@@ -4,6 +4,7 @@
 
 * Package `shapes`:
   * Added `FromAnyValue`: extract shape from a Go type.
+* New backend: `stablehlo` (or simply "_hlo_" for short).
 
 # v0.22.1: 2025/08/22 🌀 Convolutions 🌀 
 
