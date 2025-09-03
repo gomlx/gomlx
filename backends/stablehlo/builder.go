@@ -4,7 +4,6 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/notimplemented"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gopjrt/xlabuilder"
 	"github.com/gomlx/stablehlo"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
@@ -61,7 +60,7 @@ func (b *Builder) verifyAndCastOp(op backends.Op, opName string) (*Node, error) 
 	if err := b.CheckValid(); err != nil {
 		return nil, err
 	}
-	if node == nil {
+	if op == nil {
 		return nil, errors.Errorf("nil Op given as an input to %q", opName)
 	}
 	node, ok := op.(*Node)
@@ -120,18 +119,22 @@ func (b *Builder) Identity(x backends.Op) (backends.Op, error) {
 	return node, nil
 }
 
-// Constant creates a constant in the graph with the given flat values, and the shape defined by dims.
+// Constant creates a constant in the graph with the given flat values and the shape defined by the dimensions.
 //
 // The flat value must be a slice of a basic type supported -- that can be converted to a DType.
 //
 // The value is copied into the graph. It's recommended that for very large tensors,
 // even if constants, that they are passed as side inputNodes (or variables, see context package) instead.
-func (b *Builder) Constant(flat any, dims ...int) (backends.Op, error) {
+func (b *Builder) Constant(flat any, dimensions ...int) (backends.Op, error) {
 	if err := b.CheckValid(); err != nil {
 		return nil, err
 	}
 	if flat == nil {
 		return nil, errors.Errorf("nil value given to Constant")
 	}
-	b.fn.NewConstant()
+	value, err := b.fn.ConstantFromFlatAndDimensions(flat, dimensions...)
+	if err != nil {
+		return nil, errors.WithMessagef(err, "while building op Constant()")
+	}
+	return b.newNode(value), nil
 }
