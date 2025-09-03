@@ -11,8 +11,10 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types"
+	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/pjrt"
+	stablehloshapes "github.com/gomlx/stablehlo/types/shapes"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )
@@ -138,4 +140,20 @@ func GetAvailablePlugins() []string {
 		availablePluginsList = append(availablePluginsList, pluginName)
 	}
 	return availablePluginsList
+}
+
+// ShapeToStableHLO converts a GomlX shape to a StableHLO shape.
+func ShapeToStableHLO(shape shapes.Shape) stablehloshapes.Shape {
+	if !shape.Ok() || shape.IsTuple() {
+		return stablehloshapes.Invalid()
+	}
+	return stablehloshapes.Make(shape.DType, slices.Clone(shape.Dimensions)...)
+}
+
+// ShapeFromStableHLO converts a StableHLO shape to a GomlX shape.
+func ShapeFromStableHLO(shape stablehloshapes.Shape) shapes.Shape {
+	if !shape.Ok() || shape.IsTuple() {
+		return shapes.Invalid()
+	}
+	return shapes.Make(shape.DType, slices.Clone(shape.Dimensions)...)
 }
