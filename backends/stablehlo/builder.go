@@ -19,6 +19,9 @@ type Builder struct {
 
 	builder *stablehlo.Builder
 	fn      *stablehlo.Function
+
+	parameterNames  []string
+	parameterShapes []shapes.Shape
 }
 
 var _ backends.Builder = (*Builder)(nil)
@@ -102,6 +105,8 @@ func (b *Builder) Parameter(name string, shape shapes.Shape) (backends.Op, error
 	if err := b.CheckValid(); err != nil {
 		return nil, err
 	}
+	b.parameterNames = append(b.parameterNames, name)
+	b.parameterShapes = append(b.parameterShapes, shape)
 	value := b.fn.NewNamedInput(name, ShapeToStableHLO(shape))
 	return b.newNode(value), nil
 }
