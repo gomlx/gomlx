@@ -19,6 +19,8 @@ import (
 	"k8s.io/klog/v2"
 )
 
+//go:generate go run ../../internal/cmd/stablehlo_generator
+
 // BackendName is the name of the backend.
 //
 // The stablehlo backend also accepts the "hlo" and "pjrt" aliases.

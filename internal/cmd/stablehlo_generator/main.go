@@ -1,20 +1,14 @@
-// xla_generator generates the xla.Backend implementation based on the github.com/gomlx/gopjrt/xlabuilder implementation.
-//
-// Although GoMLX can support more than one backend, the XlaBuilder is the reference implementation for now.
-//
-// If the environment variable GOPJRT_SRC is set, it parses the ops from there.
-// Otherwise it clones the gopjrt repository to a temporary sub-directory.
+// stablehlo_generator generates stablehlo.Backend implementations based on backend.Builder API.
 package main
 
 import (
-	"fmt"
-	"github.com/gomlx/gomlx/internal/cmd/backends_generator/parsexlabuilder"
+	"github.com/gomlx/gomlx/internal/backendparser"
+	"github.com/janpfeifer/must"
+	"k8s.io/klog/v2"
 )
 
 func main() {
-	fmt.Println("xla_generator:")
-	opsInfo := parsexlabuilder.ReadOpsInfo()
-	_ = opsInfo
-	extractor, xlaBuilderAst := parsexlabuilder.Parse()
-	GenerateStandardOpsImplementation(extractor, xlaBuilderAst)
+	klog.V(1).Info("stablehlo_generator:")
+	methods := must.M1(backendparser.ParseBuilder())
+	GenerateBinaryOps(methods)
 }

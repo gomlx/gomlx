@@ -12,25 +12,6 @@ import (
 	"github.com/janpfeifer/must"
 )
 
-// findModuleRoot returns the absolute path to the module root directory
-// by walking up the directory tree looking for the go.mod file.
-func findModuleRoot() (string, error) {
-	dir, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-	for {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			return dir, nil
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return "", fmt.Errorf("could not find module root (no go.mod file found)")
-		}
-		dir = parent
-	}
-}
-
 // Method represents a single method from the backends.Builder interface
 // with all its signature information as strings.
 type Method struct {
@@ -38,11 +19,15 @@ type Method struct {
 	Name string
 	// Comment is the method documentation comment
 	Comments []string
-	// ParameterNames, ParameterType of the method.
-	ParameterNames, ParameterTypes []string
-	// OutputNames, OutputTypes of the method.
-	// OutputNames may contain all empty strings if they are not defined.
-	OutputNames, OutputTypes []string
+	// Parameters of the method.
+	Parameters []NameAndType
+	// Outputs of the method.
+	// Outputs names may contain all empty strings if they are not defined.
+	Outputs []NameAndType
+}
+
+type NameAndType struct {
+	Name, Type string
 }
 
 // ParseBuilder returns all methods defined in the backends.Builder interface,
@@ -124,8 +109,8 @@ func ParseBuilder() ([]Method, error) {
 							for _, param := range funcType.Params.List {
 								paramType := getText(param.Type)
 								for _, name := range param.Names {
-									m.ParameterNames = append(m.ParameterNames, name.Name)
-									m.ParameterTypes = append(m.ParameterTypes, paramType)
+									param := NameAndType{Name: name.Name, Type: paramType}
+									m.Parameters = append(m.Parameters, param)
 								}
 							}
 						}
@@ -135,12 +120,11 @@ func ParseBuilder() ([]Method, error) {
 							for _, result := range funcType.Results.List {
 								resultType := getText(result.Type)
 								if len(result.Names) == 0 {
-									m.OutputNames = append(m.OutputNames, "")
-									m.OutputTypes = append(m.OutputTypes, resultType)
+									m.Outputs = append(m.Outputs, NameAndType{Type: resultType})
 								} else {
 									for _, name := range result.Names {
-										m.OutputNames = append(m.OutputNames, name.Name)
-										m.OutputTypes = append(m.OutputTypes, resultType)
+										param := NameAndType{Name: name.Name, Type: resultType}
+										m.Outputs = append(m.Outputs, param)
 									}
 								}
 							}
@@ -158,4 +142,23 @@ func ParseBuilder() ([]Method, error) {
 	extractMethods(standardOpsFile)
 
 	return methods, nil
+}
+
+// findModuleRoot returns the absolute path to the module root directory
+// by walking up the directory tree looking for the go.mod file.
+func findModuleRoot() (string, error) {
+	dir, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", fmt.Errorf("could not find module root (no go.mod file found)")
+		}
+		dir = parent
+	}
 }
