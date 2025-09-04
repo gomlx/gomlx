@@ -36,20 +36,13 @@ func IsBinaryOp(method backendparser.Method) bool {
 var (
 	// BinaryOpAliases map GoMLX backend binary ops to StableHLO equivalent ops.
 	BinaryOpAliases = map[string]string{
-		"Mul":      "Multiply",
-		"Div":      "Divide",
-		"Sin":      "Sine",
-		"Cos":      "Cosine",
-		"Clz":      "CountLeadingZeros",
-		"BitCount": "Popcnt",
-		"Expm1":    "ExponentialMinusOne",
-		"Log1p":    "LogPlusOne",
-		"Max":      "Maximum",
-		"Min":      "Minimum",
-		"Pow":      "Power",
-		"Rem":      "Remainder",
-		"Round":    "RoundNearestEven",
-		"Sub":      "Subtract",
+		"Mul": "Multiply",
+		"Div": "Divide",
+		"Max": "Maximum",
+		"Min": "Minimum",
+		"Pow": "Power",
+		"Rem": "Remainder",
+		"Sub": "Subtract",
 
 		"BitwiseAnd": "And",
 		"BitwiseOr":  "Or",

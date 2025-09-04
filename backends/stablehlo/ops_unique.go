@@ -159,6 +159,31 @@ func (b *Builder) LessOrEqualTotalOrder(lhs, rhs backends.Op) (backends.Op, erro
 	return b.comparison(backends.OpTypeLessOrEqualTotalOrder, lhs, rhs)
 }
 
+// Conj returns the conjugate of a complex number. E.g: Conj(1+3i) = 1-3i
+func (b *Builder) Conj(operand backends.Op) (backends.Op, error) {
+	operandNode, err := b.verifyAndCastOp(operand, backends.OpTypeConj.String())
+	if err != nil {
+		return nil, err
+	}
+	realValue, err := b.fn.Real(operandNode.value)
+	if err != nil {
+		return nil, err
+	}
+	imagValue, err := b.fn.Imag(operandNode.value)
+	if err != nil {
+		return nil, err
+	}
+	imagValue, err = b.fn.Negate(imagValue)
+	if err != nil {
+		return nil, err
+	}
+	value, err := b.fn.Complex(realValue, imagValue)
+	if err != nil {
+		return nil, err
+	}
+	return b.newNode(value), nil
+}
+
 // Dot returns the "dot product" operation.
 // The exact semantics of this operation depend on the ranks of the operands:
 // | Input | Output | Semantics |

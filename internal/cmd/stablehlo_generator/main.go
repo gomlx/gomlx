@@ -11,4 +11,5 @@ func main() {
 	klog.V(1).Info("stablehlo_generator:")
 	methods := must.M1(backendparser.ParseBuilder())
 	GenerateBinaryOps(methods)
+	GenerateUnaryOps(methods)
 }
