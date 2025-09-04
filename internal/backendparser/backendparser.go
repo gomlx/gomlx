@@ -37,7 +37,7 @@ type Method struct {
 	// Name is the method name
 	Name string
 	// Comment is the method documentation comment
-	Comment string
+	Comments []string
 	// ParameterNames, ParameterType of the method.
 	ParameterNames, ParameterTypes []string
 	// OutputNames, OutputTypes of the method.
@@ -113,7 +113,10 @@ func ParseBuilder() ([]Method, error) {
 
 						// Get method comment if any
 						if method.Doc != nil {
-							m.Comment = method.Doc.Text()
+							m.Comments = make([]string, 0, len(method.Doc.List))
+							for _, comment := range method.Doc.List {
+								m.Comments = append(m.Comments, comment.Text)
+							}
 						}
 
 						// Get parameters
