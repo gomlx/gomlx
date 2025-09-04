@@ -41,6 +41,9 @@ func (backend *Backend) Builder(name string) backends.Builder {
 		builder: stablehlo.New(name),
 		name:    name,
 	}
+	b.Builder.ErrFn = func(op backends.OpType) error {
+		return errors.Errorf("StableHLO hasn't implemented operation %q yet, pls open an issue in https://github.com/gomlx/gomlx", op)
+	}
 	b.fn = b.builder.Main()
 	return b
 }
