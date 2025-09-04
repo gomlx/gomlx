@@ -2,8 +2,162 @@ package stablehlo
 
 import (
 	"github.com/gomlx/gomlx/backends"
+	stablehlotypes "github.com/gomlx/stablehlo/types"
 	"github.com/pkg/errors"
 )
+
+// comparison generic operation.
+func (b *Builder) comparison(opType backends.OpType, lhs, rhs backends.Op) (backends.Op, error) {
+	lhsNode, rhsNode, err := b.broadcastForBinaryOps(opType, lhs, rhs)
+	if err != nil {
+		return nil, err
+	}
+
+	// Find compareType
+	dtype := lhsNode.shape.DType
+	compareType := stablehlotypes.CompareFloat
+	if !dtype.IsFloat() {
+		if dtype.IsUnsigned() {
+			compareType = stablehlotypes.CompareUnsigned
+		} else {
+			compareType = stablehlotypes.CompareSigned
+		}
+	}
+
+	var direction stablehlotypes.ComparisonDirection
+	switch opType {
+	case backends.OpTypeEqual:
+		direction = stablehlotypes.CompareEQ
+	case backends.OpTypeNotEqual:
+		direction = stablehlotypes.CompareNE
+	case backends.OpTypeGreaterThan:
+		direction = stablehlotypes.CompareGT
+	case backends.OpTypeGreaterOrEqual:
+		direction = stablehlotypes.CompareGE
+	case backends.OpTypeLessThan:
+		direction = stablehlotypes.CompareLT
+	case backends.OpTypeLessOrEqual:
+		direction = stablehlotypes.CompareLE
+
+	case backends.OpTypeEqualTotalOrder:
+		direction = stablehlotypes.CompareEQ
+		compareType = stablehlotypes.CompareTotalOrder
+	case backends.OpTypeNotEqualTotalOrder:
+		direction = stablehlotypes.CompareNE
+		compareType = stablehlotypes.CompareTotalOrder
+	case backends.OpTypeGreaterThanTotalOrder:
+		direction = stablehlotypes.CompareGT
+		compareType = stablehlotypes.CompareTotalOrder
+	case backends.OpTypeGreaterOrEqualTotalOrder:
+		direction = stablehlotypes.CompareGE
+		compareType = stablehlotypes.CompareTotalOrder
+	case backends.OpTypeLessThanTotalOrder:
+		direction = stablehlotypes.CompareLT
+		compareType = stablehlotypes.CompareTotalOrder
+	case backends.OpTypeLessOrEqualTotalOrder:
+		direction = stablehlotypes.CompareLE
+		compareType = stablehlotypes.CompareTotalOrder
+
+	default:
+		return nil, errors.Errorf("unsupported comparison operation %v", opType)
+	}
+
+	value, err := b.fn.Compare(lhsNode.value, rhsNode.value, direction, compareType)
+	if err != nil {
+		return nil, err
+	}
+	return b.newNode(value), nil
+}
+
+// Equal returns the element-wise operation.
+// Standard broadcasting rules apply (see documentation).
+func (b *Builder) Equal(lhs, rhs backends.Op) (backends.Op, error) {
+	return b.comparison(backends.OpTypeEqual, lhs, rhs)
+}
+
+// NotEqual returns the element-wise operation.
+// Standard broadcasting rules apply (see documentation).
+func (b *Builder) NotEqual(lhs, rhs backends.Op) (backends.Op, error) {
+	return b.comparison(backends.OpTypeNotEqual, lhs, rhs)
+}
+
+// GreaterThan returns the element-wise operation.
+// Standard broadcasting rules apply (see documentation).
+func (b *Builder) GreaterThan(lhs, rhs backends.Op) (backends.Op, error) {
+	return b.comparison(backends.OpTypeGreaterThan, lhs, rhs)
+}
+
+// GreaterOrEqual returns the element-wise operation.
+// Standard broadcasting rules apply (see documentation).
+func (b *Builder) GreaterOrEqual(lhs, rhs backends.Op) (backends.Op, error) {
+	return b.comparison(backends.OpTypeGreaterOrEqual, lhs, rhs)
+}
+
+// LessThan returns the element-wise operation.
+// Standard broadcasting rules apply (see documentation).
+func (b *Builder) LessThan(lhs, rhs backends.Op) (backends.Op, error) {
+	return b.comparison(backends.OpTypeLessThan, lhs, rhs)
+}
+
+// LessOrEqual returns the element-wise operation.
+// Standard broadcasting rules apply (see documentation).
+func (b *Builder) LessOrEqual(lhs, rhs backends.Op) (backends.Op, error) {
+	return b.comparison(backends.OpTypeLessOrEqual, lhs, rhs)
+}
+
+// EqualTotalOrder returns the element-wise operation.
+// Standard broadcasting rules apply (see documentation).
+//
+// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func (b *Builder) EqualTotalOrder(lhs, rhs backends.Op) (backends.Op, error) {
+	return b.comparison(backends.OpTypeEqualTotalOrder, lhs, rhs)
+}
+
+// NotEqualTotalOrder returns the element-wise operation.
+// Standard broadcasting rules apply (see documentation).
+//
+// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func (b *Builder) NotEqualTotalOrder(lhs, rhs backends.Op) (backends.Op, error) {
+	return b.comparison(backends.OpTypeNotEqualTotalOrder, lhs, rhs)
+}
+
+// GreaterThanTotalOrder returns the element-wise operation.
+// Standard broadcasting rules apply (see documentation).
+//
+// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func (b *Builder) GreaterThanTotalOrder(lhs, rhs backends.Op) (backends.Op, error) {
+	return b.comparison(backends.OpTypeGreaterThanTotalOrder, lhs, rhs)
+}
+
+// GreaterOrEqualTotalOrder returns the element-wise operation.
+// Standard broadcasting rules apply (see documentation).
+//
+// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func (b *Builder) GreaterOrEqualTotalOrder(lhs, rhs backends.Op) (backends.Op, error) {
+	return b.comparison(backends.OpTypeGreaterOrEqualTotalOrder, lhs, rhs)
+}
+
+// LessThanTotalOrder returns the element-wise operation.
+// Standard broadcasting rules apply (see documentation).
+//
+// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func (b *Builder) LessThanTotalOrder(lhs, rhs backends.Op) (backends.Op, error) {
+	return b.comparison(backends.OpTypeLessThanTotalOrder, lhs, rhs)
+}
+
+// LessOrEqualTotalOrder returns the element-wise operation.
+// Standard broadcasting rules apply (see documentation).
+//
+// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func (b *Builder) LessOrEqualTotalOrder(lhs, rhs backends.Op) (backends.Op, error) {
+	return b.comparison(backends.OpTypeLessOrEqualTotalOrder, lhs, rhs)
+}
 
 // Dot returns the "dot product" operation.
 // The exact semantics of this operation depend on the ranks of the operands:

@@ -97,156 +97,6 @@ func (b *Builder) Div(lhs, rhs backends.Op) (backends.Op, error) {
 	return b.newNode(value), nil
 }
 
-// Equal performs element-wise equality check, returns boolean results with the same dimensions as input.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func (b *Builder) Equal(lhs, rhs backends.Op) (backends.Op, error) {
-	lhsNode, rhsNode, err := b.broadcastForBinaryOps(backends.OpTypeEqual, lhs, rhs)
-	if err != nil {
-		return nil, err
-	}
-	value, err := b.fn.Compare(lhsNode.value, rhsNode.value)
-	if err != nil {
-		return nil, err
-	}
-	return b.newNode(value), nil
-}
-
-// EqualTotalOrder returns the element-wise operation.
-// Standard broadcasting rules apply (see documentation).
-// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func (b *Builder) EqualTotalOrder(lhs, rhs backends.Op) (backends.Op, error) {
-	lhsNode, rhsNode, err := b.broadcastForBinaryOps(backends.OpTypeEqualTotalOrder, lhs, rhs)
-	if err != nil {
-		return nil, err
-	}
-	value, err := b.fn.EqualTotalOrder(lhsNode.value, rhsNode.value)
-	if err != nil {
-		return nil, err
-	}
-	return b.newNode(value), nil
-}
-
-// GreaterOrEqual performs element-wise comparison, returns boolean results with the same dimensions as input.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func (b *Builder) GreaterOrEqual(lhs, rhs backends.Op) (backends.Op, error) {
-	lhsNode, rhsNode, err := b.broadcastForBinaryOps(backends.OpTypeGreaterOrEqual, lhs, rhs)
-	if err != nil {
-		return nil, err
-	}
-	value, err := b.fn.Compare(lhsNode.value, rhsNode.value)
-	if err != nil {
-		return nil, err
-	}
-	return b.newNode(value), nil
-}
-
-// GreaterOrEqualTotalOrder returns the element-wise operation.
-// Standard broadcasting rules apply (see documentation).
-// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func (b *Builder) GreaterOrEqualTotalOrder(lhs, rhs backends.Op) (backends.Op, error) {
-	lhsNode, rhsNode, err := b.broadcastForBinaryOps(backends.OpTypeGreaterOrEqualTotalOrder, lhs, rhs)
-	if err != nil {
-		return nil, err
-	}
-	value, err := b.fn.GreaterOrEqualTotalOrder(lhsNode.value, rhsNode.value)
-	if err != nil {
-		return nil, err
-	}
-	return b.newNode(value), nil
-}
-
-// GreaterThan performs element-wise comparison, returns boolean results with the same dimensions as input.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func (b *Builder) GreaterThan(lhs, rhs backends.Op) (backends.Op, error) {
-	lhsNode, rhsNode, err := b.broadcastForBinaryOps(backends.OpTypeGreaterThan, lhs, rhs)
-	if err != nil {
-		return nil, err
-	}
-	value, err := b.fn.Compare(lhsNode.value, rhsNode.value)
-	if err != nil {
-		return nil, err
-	}
-	return b.newNode(value), nil
-}
-
-// GreaterThanTotalOrder returns the element-wise operation.
-// Standard broadcasting rules apply (see documentation).
-// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func (b *Builder) GreaterThanTotalOrder(lhs, rhs backends.Op) (backends.Op, error) {
-	lhsNode, rhsNode, err := b.broadcastForBinaryOps(backends.OpTypeGreaterThanTotalOrder, lhs, rhs)
-	if err != nil {
-		return nil, err
-	}
-	value, err := b.fn.GreaterThanTotalOrder(lhsNode.value, rhsNode.value)
-	if err != nil {
-		return nil, err
-	}
-	return b.newNode(value), nil
-}
-
-// LessOrEqual performs element-wise comparison, returns boolean results with the same dimensions as input.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func (b *Builder) LessOrEqual(lhs, rhs backends.Op) (backends.Op, error) {
-	lhsNode, rhsNode, err := b.broadcastForBinaryOps(backends.OpTypeLessOrEqual, lhs, rhs)
-	if err != nil {
-		return nil, err
-	}
-	value, err := b.fn.Compare(lhsNode.value, rhsNode.value)
-	if err != nil {
-		return nil, err
-	}
-	return b.newNode(value), nil
-}
-
-// LessOrEqualTotalOrder returns the element-wise operation.
-// Standard broadcasting rules apply (see documentation).
-// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func (b *Builder) LessOrEqualTotalOrder(lhs, rhs backends.Op) (backends.Op, error) {
-	lhsNode, rhsNode, err := b.broadcastForBinaryOps(backends.OpTypeLessOrEqualTotalOrder, lhs, rhs)
-	if err != nil {
-		return nil, err
-	}
-	value, err := b.fn.LessOrEqualTotalOrder(lhsNode.value, rhsNode.value)
-	if err != nil {
-		return nil, err
-	}
-	return b.newNode(value), nil
-}
-
-// LessThan performs element-wise comparison, returns boolean results with the same dimensions as input.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func (b *Builder) LessThan(lhs, rhs backends.Op) (backends.Op, error) {
-	lhsNode, rhsNode, err := b.broadcastForBinaryOps(backends.OpTypeLessThan, lhs, rhs)
-	if err != nil {
-		return nil, err
-	}
-	value, err := b.fn.Compare(lhsNode.value, rhsNode.value)
-	if err != nil {
-		return nil, err
-	}
-	return b.newNode(value), nil
-}
-
-// LessThanTotalOrder returns the element-wise operation.
-// Standard broadcasting rules apply (see documentation).
-// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func (b *Builder) LessThanTotalOrder(lhs, rhs backends.Op) (backends.Op, error) {
-	lhsNode, rhsNode, err := b.broadcastForBinaryOps(backends.OpTypeLessThanTotalOrder, lhs, rhs)
-	if err != nil {
-		return nil, err
-	}
-	value, err := b.fn.LessThanTotalOrder(lhsNode.value, rhsNode.value)
-	if err != nil {
-		return nil, err
-	}
-	return b.newNode(value), nil
-}
-
 // LogicalAnd returns the element-wise logical AND operation.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) LogicalAnd(lhs, rhs backends.Op) (backends.Op, error) {
@@ -332,36 +182,6 @@ func (b *Builder) Mul(lhs, rhs backends.Op) (backends.Op, error) {
 	return b.newNode(value), nil
 }
 
-// NotEqual performs element-wise inequality check, returns boolean results with the same dimensions as input.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func (b *Builder) NotEqual(lhs, rhs backends.Op) (backends.Op, error) {
-	lhsNode, rhsNode, err := b.broadcastForBinaryOps(backends.OpTypeNotEqual, lhs, rhs)
-	if err != nil {
-		return nil, err
-	}
-	value, err := b.fn.Compare(lhsNode.value, rhsNode.value)
-	if err != nil {
-		return nil, err
-	}
-	return b.newNode(value), nil
-}
-
-// NotEqualTotalOrder returns the element-wise operation.
-// Standard broadcasting rules apply (see documentation).
-// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func (b *Builder) NotEqualTotalOrder(lhs, rhs backends.Op) (backends.Op, error) {
-	lhsNode, rhsNode, err := b.broadcastForBinaryOps(backends.OpTypeNotEqualTotalOrder, lhs, rhs)
-	if err != nil {
-		return nil, err
-	}
-	value, err := b.fn.NotEqualTotalOrder(lhsNode.value, rhsNode.value)
-	if err != nil {
-		return nil, err
-	}
-	return b.newNode(value), nil
-}
-
 // Pow returns the Op that represents the output of the corresponding operation.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) Pow(lhs, rhs backends.Op) (backends.Op, error) {
@@ -391,7 +211,7 @@ func (b *Builder) Rem(lhs, rhs backends.Op) (backends.Op, error) {
 	return b.newNode(value), nil
 }
 
-// ShiftLeft n bits. It implicitly preserves the sign bit if there is no overflow. So ShiftLeft(-1, 1) = -2.
+// ShiftLeft n bits. It implicitly preserves the sign bit, if there is no overflow. So ShiftLeft(-1, 1) = -2.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) ShiftLeft(lhs, rhs backends.Op) (backends.Op, error) {
 	lhsNode, rhsNode, err := b.broadcastForBinaryOps(backends.OpTypeShiftLeft, lhs, rhs)
