@@ -31,4 +31,18 @@ func TestBinaryOp(t *testing.T) {
 		[][]float64{{-1}, {-2}},
 		[][]float64{{1, 5}},
 		[][]float64{{0, 4}, {-1, 3}})
+
+	t.Run("booleans", func(t *testing.T) {
+		result, err := graph.ExecOnceOrErr(backend, func(lhs, rhs *graph.Node) *graph.Node {
+			return graph.LogicalAnd(lhs, rhs)
+		},
+			[][]bool{{false}, {true}},
+			[][]bool{{false, true}},
+		)
+		require.NoError(t, err)
+		require.Equal(t,
+			[][]bool{{false, false}, {false, true}},
+			result.Value())
+
+	})
 }
