@@ -246,18 +246,3 @@ func (b *Builder) broadcastForBinaryOps(opType backends.OpType, lhs, rhs backend
 	}
 	return
 }
-
-// Add returns the element-wise sum of the two values.
-// Standard broadcasting rules apply (see documentation).
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func (b *Builder) Add(lhs, rhs backends.Op) (backends.Op, error) {
-	lhsNode, rhsNode, err := b.broadcastForBinaryOps(backends.OpTypeAdd, lhs, rhs)
-	if err != nil {
-		return nil, err
-	}
-	value, err := b.fn.Add(lhsNode.value, rhsNode.value)
-	if err != nil {
-		return nil, err
-	}
-	return b.newNode(value), nil
-}
