@@ -28,6 +28,7 @@ func setup() {
 	}
 	backend = backends.MustNew()
 	fmt.Printf("Backend: %s, %s\n", backend.Name(), backend.Description())
+	fmt.Printf("\t- Add flag -vmodule=executable=2 to log the StableHLO program being executed.\n")
 }
 
 func teardown() {

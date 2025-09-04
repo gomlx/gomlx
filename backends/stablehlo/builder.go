@@ -1,9 +1,13 @@
 package stablehlo
 
 import (
+	"slices"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/notimplemented"
+	"github.com/gomlx/gomlx/backends/shapeinference"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/stablehlo"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
@@ -41,7 +45,7 @@ func (backend *Backend) Builder(name string) backends.Builder {
 	return b
 }
 
-// Node represents the output of an operation and implements a backends.Op
+// Node represents the output of an operation and implements a "backends.Op" interface.
 type Node struct {
 	value   *stablehlo.Value
 	shape   shapes.Shape
@@ -105,7 +109,15 @@ func (b *Builder) Parameter(name string, shape shapes.Shape) (backends.Op, error
 	if err := b.CheckValid(); err != nil {
 		return nil, err
 	}
-	b.parameterNames = append(b.parameterNames, name)
+	normalizedName := stablehlo.NormalizeIdentifier(name)
+	if slices.Index(b.parameterNames, normalizedName) != -1 {
+		if name == normalizedName {
+			return nil, errors.Errorf("parameter named %q already exists", name)
+		}
+		return nil, errors.Errorf("parameter named %q (normalized to %q) already exists",
+			name, normalizedName)
+	}
+	b.parameterNames = append(b.parameterNames, normalizedName)
 	b.parameterShapes = append(b.parameterShapes, shape)
 	value := b.fn.NewNamedInput(name, ShapeToStableHLO(shape))
 	return b.newNode(value), nil
@@ -140,6 +152,112 @@ func (b *Builder) Constant(flat any, dimensions ...int) (backends.Op, error) {
 	value, err := b.fn.ConstantFromFlatAndDimensions(flat, dimensions...)
 	if err != nil {
 		return nil, errors.WithMessagef(err, "while building op Constant()")
+	}
+	return b.newNode(value), nil
+}
+
+// BroadcastInDim broadcasts x to an output with the given shape.
+// broadcastAxes has an output axes value for each x axes (len(broadcastAxes) == x.Shape.Rank()).
+// The i-th axis of x is mapped to the broadcastAxes[i]-th dimension of the output.
+// broadcastAxes must be also increasing: this operation cannot be used to transpose axes, it will only
+// broadcast and introduce new axes in-between.
+// This also requires that the i-th input axis is either 1 or is the same as the
+// output dimension it's broadcasting into.
+// For example, say operand `x = (s32)[2]{1, 2}`; outputShape = `(s32)[2,2]`:
+//   - Specifying []int{1} as broadcastAxes will generate output
+//     {{1, 2},
+//     {1, 2}}
+//   - On the other hand, specifying []int{0} as broadcastAxes
+//     will generate output
+//     {{1 , 1},
+//     {2 , 2}}
+func (b *Builder) BroadcastInDim(x backends.Op, outputShape shapes.Shape, broadcastAxes []int) (backends.Op, error) {
+	node, err := b.verifyAndCastOp(x, "BroadcastInDim")
+	if err != nil {
+		return nil, err
+	}
+	value, err := b.fn.BroadcastInDim(node.value, ShapeToStableHLO(outputShape), broadcastAxes)
+	if err != nil {
+		return nil, err
+	}
+	return b.newNode(value), nil
+}
+
+// broadcastForBinaryOps returns the broadcasted versions of the two ops,
+// converting them to Nodes in the process.
+func (b *Builder) broadcastForBinaryOps(opType backends.OpType, lhs, rhs backends.Op) (lhsNode, rhsNode *Node, err error) {
+	opName := opType.String()
+	lhsNode, err = b.verifyAndCastOp(lhs, opName)
+	if err != nil {
+		return
+	}
+	rhsNode, err = b.verifyAndCastOp(rhs, opName)
+	if err != nil {
+		return
+	}
+	if lhsNode.shape.DType != rhsNode.shape.DType {
+		return nil, nil, errors.Errorf("cannot broadcast %s and %s for %q: they have different dtypes",
+			lhsNode.shape.DType, rhsNode.shape.DType, opType)
+	}
+	if rhsNode.shape.Equal(lhsNode.shape) {
+		// No casting needed.
+		return
+	}
+
+	// If any is a scalar, just broadcast it to the other one.
+	if lhsNode.shape.IsScalar() {
+		var value *stablehlo.Value
+		value, err = b.fn.BroadcastInDim(lhsNode.value, rhsNode.value.Shape(), nil)
+		if err != nil {
+			return nil, nil, errors.WithMessagef(err, "while building op %q", opType)
+		}
+		lhsNode = b.newNode(value)
+		return
+	} else if rhsNode.shape.IsScalar() {
+		var value *stablehlo.Value
+		value, err = b.fn.BroadcastInDim(rhsNode.value, lhsNode.value.Shape(), nil)
+		if err != nil {
+			return nil, nil, errors.WithMessagef(err, "while building op %s", opName)
+		}
+		rhsNode = b.newNode(value)
+		return
+	}
+
+	// Find the larger shape that fits both operands.
+	newShape, err := shapeinference.BinaryOp(opType, lhsNode.shape, rhsNode.shape)
+	if err != nil {
+		return nil, nil, err
+	}
+	newShapeStableHLO := ShapeToStableHLO(newShape)
+	broadcastAxes := xslices.Iota(0, newShape.Rank())
+	if !newShape.Equal(lhsNode.shape) {
+		value, err := b.fn.BroadcastInDim(lhsNode.value, newShapeStableHLO, broadcastAxes)
+		if err != nil {
+			return nil, nil, errors.WithMessagef(err, "while broadcasting lhs for op %q", opType)
+		}
+		lhsNode = b.newNode(value)
+	}
+	if !newShape.Equal(rhsNode.shape) {
+		value, err := b.fn.BroadcastInDim(rhsNode.value, newShapeStableHLO, broadcastAxes)
+		if err != nil {
+			return nil, nil, errors.WithMessagef(err, "while broadcasting rhs for op %q", opType)
+		}
+		rhsNode = b.newNode(value)
+	}
+	return
+}
+
+// Add returns the element-wise sum of the two values.
+// Standard broadcasting rules apply (see documentation).
+// The op is created on the same XlaBuilder as used for x0 and x1.
+func (b *Builder) Add(lhs, rhs backends.Op) (backends.Op, error) {
+	lhsNode, rhsNode, err := b.broadcastForBinaryOps(backends.OpTypeAdd, lhs, rhs)
+	if err != nil {
+		return nil, err
+	}
+	value, err := b.fn.Add(lhsNode.value, rhsNode.value)
+	if err != nil {
+		return nil, err
 	}
 	return b.newNode(value), nil
 }
