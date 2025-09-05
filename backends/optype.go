@@ -31,6 +31,7 @@ const (
 	OpTypeBitwiseXor
 	OpTypeBroadcast
 	OpTypeBroadcastInDim
+	OpTypeClamp
 	OpTypeCeil
 	OpTypeClz
 	OpTypeComplex

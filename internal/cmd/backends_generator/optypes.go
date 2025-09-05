@@ -2,18 +2,19 @@ package main
 
 import (
 	"fmt"
-	"github.com/gomlx/gomlx/internal/cmd/backends_generator/parsexlabuilder"
-	"github.com/janpfeifer/must"
 	"go/ast"
 	"os"
 	"os/exec"
 	"slices"
 	"strings"
 	"text/template"
+
+	"github.com/gomlx/gomlx/internal/cmd/backends_generator/parsexlabuilder"
+	"github.com/janpfeifer/must"
 )
 
 const (
-	opTypesEnumFile = "gen_op_types.go"
+	opTypesEnumFile = "gen_optypes.go"
 )
 
 var (
