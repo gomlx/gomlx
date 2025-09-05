@@ -1,5 +1,7 @@
 package stablehlo
 
+// This file contains manually implemented operations.
+
 import (
 	"github.com/gomlx/gomlx/backends"
 	stablehlotypes "github.com/gomlx/stablehlo/types"
