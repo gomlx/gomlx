@@ -120,7 +120,7 @@ func GenerateSingleOp(method backendparser.Method) {
 			w(", ")
 		}
 		if param.Type == "Op" {
-			w("%sNode.value", opsParams[i])
+			w("%sNode.value", param.Name)
 		} else {
 			w("%s", param.Name)
 		}
