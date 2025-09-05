@@ -129,6 +129,6 @@ func GenerateSingleOp(method backendparser.Method) {
 	w("\tif err != nil {\n\t\treturn nil, err\n\t}\n")
 
 	// Return the node.
-	w("\treturn b.newNode(value)\n")
+	w("\treturn b.newNode(value), nil\n")
 	w("}\n")
 }
