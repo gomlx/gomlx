@@ -8,6 +8,7 @@ package main
 
 import (
 	"fmt"
+
 	"github.com/gomlx/gomlx/internal/cmd/backends_generator/parsexlabuilder"
 )
 
@@ -16,6 +17,9 @@ func main() {
 	opsInfo := parsexlabuilder.ReadOpsInfo()
 	_ = opsInfo
 	extractor, xlaBuilderAst := parsexlabuilder.Parse()
-	GenerateStandardOpsInterface(extractor, xlaBuilderAst)
 	GenerateOpTypesEnum(extractor, xlaBuilderAst)
+
+	// Standard ops are now manually maintained, as we are moving away from the XlaBuilder.
+	// Left here for reference, until StableHLO becomes the new default backend.
+	//GenerateStandardOpsInterface(extractor, xlaBuilderAst)
 }

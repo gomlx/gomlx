@@ -46,7 +46,7 @@ func ParseBuilder() ([]Method, error) {
 	if err != nil {
 		return nil, err
 	}
-	standardOpsFile, err := parser.ParseFile(fileSet, filepath.Join(root, "backends", "gen_standard_ops.go"), nil, parser.ParseComments)
+	standardOpsFile, err := parser.ParseFile(fileSet, filepath.Join(root, "backends", "standard_ops.go"), nil, parser.ParseComments)
 	if err != nil {
 		return nil, err
 	}
