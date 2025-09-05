@@ -1,4 +1,4 @@
-// go:build perf
+//go:build perf
 
 package simplego
 
@@ -48,8 +48,9 @@ var (
 //
 // Examples:
 //
-//	$ GOMLX_BACKEND=go go test -tags=perf ./backends/simplego/ -test.run TestDotGeneral_PerformanceTable -test.v
-//	$ GOMLX_BACKEND=xla:cuda go test -tags=xla,perf ./backends/simplego/ -test.run TestDotGeneral_PerformanceTable -test.v
+//	$ GOMLX_BACKEND=go go test -tags=perf ./backends/simplego/ -test.run=TestDotGeneral_PerformanceTable -test.v -test.count=1
+//	$ GOMLX_BACKEND=xla:cuda go test -tags=xla,perf ./backends/simplego/ -test.run=TestDotGeneral_PerformanceTable -test.v -test.count=1
+//	$ GOMLX_BACKEND=stablehlo:cpu go test -tags=stablehlo,perf ./backends/simplego/ -test.run=TestDotGeneral_PerformanceTable -test.v -test.count=1
 func TestDotGeneral_PerformanceTable(t *testing.T) {
 	filterPerfs := *flagPerfTests != ""
 	perfsToRun := types.SetWith(strings.Split(*flagPerfTests, ",")...)
