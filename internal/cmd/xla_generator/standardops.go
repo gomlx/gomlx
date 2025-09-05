@@ -11,10 +11,11 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/gomlx/gomlx/internal/cmd/backends_generator/parsexlabuilder"
+	"github.com/gomlx/gomlx/internal/xlabuilderparser"
 	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/janpfeifer/must"
+	"k8s.io/klog/v2"
 )
 
 const (
@@ -116,9 +117,9 @@ func execTemplate(tmpl *template.Template, data any) string {
 // GenerateStandardOpsImplementation generates the XLA implementation for the various standard ops, that just calls
 // the underlying xlabuilder function.
 // The rest of the ops are maintained manually.
-func GenerateStandardOpsImplementation(extractor *parsexlabuilder.NodeTextExtractor, xlaBuilderPkg *ast.Package) {
+func GenerateStandardOpsImplementation(extractor *xlabuilderparser.NodeTextExtractor, xlaBuilderPkg *ast.Package) {
 	var standardOps []FuncInfo
-	parsexlabuilder.EnumerateStandardOpsFunctions(extractor, xlaBuilderPkg, func(funcDecl *ast.FuncDecl) {
+	xlabuilderparser.EnumerateStandardOpsFunctions(extractor, xlaBuilderPkg, func(funcDecl *ast.FuncDecl) {
 		if methodsToExclude.Has(funcDecl.Name.Name) {
 			return
 		}
@@ -217,13 +218,13 @@ func GenerateStandardOpsImplementation(extractor *parsexlabuilder.NodeTextExtrac
 	})
 	slices.SortFunc(standardOps, func(a, b FuncInfo) int { return strings.Compare(a.Name, b.Name) })
 
-	fileName := standardOpsXlaFile
+	fileName := path.Join(must.M1(os.Getwd()), standardOpsXlaFile)
 	f := must.M1(os.Create(fileName))
 
 	must.M(standardOpsTemplate.Execute(f, standardOps))
-	cmd := exec.Command("gofmt", "-w", fileName)
-	fmt.Printf("\t%s\n", cmd)
+	cmd := exec.Command("go", "fmt", fileName)
+	klog.V(1).Infof("\t%s\n", cmd)
 	cmd.Stderr = os.Stderr
 	must.M(cmd.Run())
-	fmt.Printf("✅ Successfully generated %s\n", path.Join(must.M1(os.Getwd()), fileName))
+	fmt.Printf("✅ xla_generator:         \tsuccessfully generated %s\n", fileName)
 }

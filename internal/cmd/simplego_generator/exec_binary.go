@@ -361,5 +361,5 @@ func GenerateExecBinary() {
 	cmd := exec.Command("gofmt", "-w", fileName)
 	klog.V(1).Infof("\t%s\n", cmd)
 	must.M(cmd.Run())
-	fmt.Printf("✅ Successfully generated %s\n", fileName)
+	fmt.Printf("✅ simplego_generator:  \tsuccessfully generated %s\n", fileName)
 }

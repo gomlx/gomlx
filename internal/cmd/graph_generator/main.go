@@ -13,11 +13,13 @@ import (
 	"github.com/gomlx/gomlx/internal/backendparser"
 	"github.com/gomlx/gomlx/types"
 	"github.com/janpfeifer/must"
+	"k8s.io/klog/v2"
 )
 
 func main() {
+	klog.InitFlags(nil)
 	flag.Parse()
-	fmt.Println("graph_generator:")
+	klog.V(1).Info("graph_generator:")
 	methods := buildMethodInfo()
 	GenerateBackendOps(methods)
 }
@@ -332,14 +334,14 @@ func GenerateBackendOps(methods []*MethodInfo) {
 	// Sort by backend method name:
 	slices.SortFunc(methods, func(a, b *MethodInfo) int { return strings.Compare(a.BackendName, b.BackendName) })
 
-	fileName := backendsOpsFile
+	fileName := path.Join(must.M1(os.Getwd()), backendsOpsFile)
 	f := must.M1(os.Create(fileName))
 	must.M(backendOpsTemplate.Execute(f, methods))
 	cmd := exec.Command("go", "fmt", fileName)
-	fmt.Printf("\t%s\n", cmd)
+	klog.V(1).Infof("\t%s\n", cmd)
 	must.M(cmd.Run())
-	cmd = exec.Command("enumer", "-type=NodeType", "-trimprefix=NodeType", "-yaml", "-json", "-text", "-values", fileName)
-	fmt.Printf("\t%s\n", cmd)
+	cmd = exec.Command("go", "tool", "enumer", "-type=NodeType", "-trimprefix=NodeType", "-yaml", "-json", "-text", "-values", fileName)
+	klog.V(1).Infof("\t%s\n", cmd)
 	must.M(cmd.Run())
-	fmt.Printf("✅ Successfully generated %s\n", path.Join(must.M1(os.Getwd()), fileName))
+	fmt.Printf("✅ graph_generator:       \tsuccessfully generated %s\n", fileName)
 }

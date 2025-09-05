@@ -95,5 +95,5 @@ func GenerateStandardOpsInterface(methods []backendparser.Method) {
 	cmd := exec.Command("go", "fmt", fileName)
 	klog.V(1).Infof("\t%s\n", cmd)
 	must.M(cmd.Run())
-	fmt.Printf("✅ Successfully generated %s\n", fileName)
+	fmt.Printf("✅ notimplemented_generator:\tsuccessfully generated %s\n", fileName)
 }

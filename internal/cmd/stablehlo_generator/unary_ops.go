@@ -107,5 +107,5 @@ func GenerateUnaryOps(methods []backendparser.Method) {
 	klog.V(1).Infof("\t%s\n", cmd)
 	cmd.Stderr = os.Stderr
 	must.M(cmd.Run())
-	fmt.Printf("✅ Successfully generated %s\n", fileName)
+	fmt.Printf("✅ stablehlo_generator:  \tsuccessfully generated %s\n", fileName)
 }

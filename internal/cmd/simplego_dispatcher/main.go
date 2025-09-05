@@ -157,7 +157,7 @@ func makeDTypes(ints, uints, floats, bfloat16, boolean bool) []DTypeInfo {
 func main() {
 	klog.InitFlags(nil)
 	flag.Parse()
-	
+
 	registerTemplate := template.Must(
 		template.
 			New(fileName).
@@ -219,5 +219,5 @@ func init() {
 	cmd := exec.Command("gofmt", "-w", fullPath)
 	klog.V(1).Infof("\t%s\n", cmd)
 	must.M(cmd.Run())
-	fmt.Printf("✅ Successfully generated %s\n", fullPath)
+	fmt.Printf("✅ simplego_dispatcher:  \tsuccessfully generated %s\n", fullPath)
 }

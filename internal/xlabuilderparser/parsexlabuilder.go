@@ -8,9 +8,6 @@ package parsexlabuilder
 import (
 	"bufio"
 	"fmt"
-	"github.com/gomlx/exceptions"
-	"github.com/gomlx/gomlx/types"
-	"github.com/janpfeifer/must"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -19,6 +16,10 @@ import (
 	"path"
 	"strings"
 	"sync"
+
+	"github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/types"
+	"github.com/janpfeifer/must"
 )
 
 const GopjrtEnv = "GOPJRT_SRC"
