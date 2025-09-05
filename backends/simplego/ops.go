@@ -767,7 +767,7 @@ func (b *Builder) LessThan(lhsOp, rhsOp backends.Op) (backends.Op, error) {
 
 // Clamp returns the element-wise clamping operation.
 //
-// All must have the same shape.
+// The values max and min can either be a scalar or have the same shape as x.
 func (b *Builder) Clamp(min, x, max backends.Op) (backends.Op, error) {
 	clamped, err := b.Max(min, x)
 	if err != nil {

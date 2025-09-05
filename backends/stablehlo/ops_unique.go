@@ -218,7 +218,7 @@ func (b *Builder) Dot(lhs, rhs backends.Op) (backends.Op, error) {
 
 // Clamp returns the element-wise clamping operation.
 //
-// All must have the same shape.
+// The values max and min can either be a scalar or have the same shape as x.
 func (b *Builder) Clamp(min, a backends.Op, max backends.Op) (backends.Op, error) {
 	nodes, err := b.verifyAndCastValues("Clamp", min, a, max)
 	if err != nil {
