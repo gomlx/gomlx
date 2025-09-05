@@ -81,21 +81,26 @@ func GenerateSingleOp(method backendparser.Method) {
 	}
 	w(")")
 	if len(method.Outputs) > 0 {
-		if len(method.Outputs) == 1 && method.Outputs[0].Name == "" {
-			w(" %s", method.Outputs[0].Type)
-		} else {
-			w(" (")
-			for i, output := range method.Outputs {
-				if i > 0 {
-					w(", ")
-				}
-				if output.Name == "" {
-					w("%s", output.Type)
-				} else {
-					w("%s %s", output.Name, output.Type)
-				}
+		w(" ")
+		if len(method.Outputs) > 1 || method.Outputs[0].Name != "" {
+			w("(")
+		}
+		for i, output := range method.Outputs {
+			if i > 0 {
+				w(", ")
 			}
-			w(")")
+			outputType := output.Type
+			if outputType == "Op" {
+				outputType = "backends.Op"
+			}
+			if output.Name == "" {
+				w("%s", outputType)
+			} else {
+				w("%s %s", output.Name, output.Type)
+			}
+		}
+		if len(method.Outputs) > 1 || method.Outputs[0].Name != "" {
+			w(")\n")
 		}
 	}
 	w(" {\n")
@@ -107,8 +112,8 @@ func GenerateSingleOp(method backendparser.Method) {
 			opsParams = append(opsParams, param.Name)
 		}
 	}
-	w("\tnodes, err := b.verifyAndCastValues(\"Dot\", %s)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n",
-		strings.Join(opsParams, ", "))
+	w("\tnodes, err := b.verifyAndCastValues(\"%s\", %s)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n",
+		method.Name, strings.Join(opsParams, ", "))
 	for i, opsParam := range opsParams {
 		w("\t%sNode := nodes[%d]\n", opsParam, i)
 	}
