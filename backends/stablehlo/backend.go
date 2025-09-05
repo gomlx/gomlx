@@ -22,6 +22,7 @@ type Backend struct {
 	pluginName       string
 	hasSharedBuffers bool
 	capabilities     backends.Capabilities
+	DotGeneralConfig
 }
 
 // Compile-time check:

@@ -85,6 +85,14 @@ func NewWithOptions(config string, options pjrt.NamedValuesMap) (*Backend, error
 		backend.hasSharedBuffers = false
 		pluginOptions = slices.Delete(pluginOptions, idx, idx+1)
 	}
+
+	// Support for tf32 DotGeneral.
+	if idx := slices.Index(pluginOptions, "tf32"); idx != -1 {
+		backend.DotGeneralConfig.UseTF32 = true
+		pluginOptions = slices.Delete(pluginOptions, idx, idx+1)
+	}
+
+	// Any leftover plugin options are unknown.
 	if len(pluginOptions) != 0 {
 		klog.Errorf("backend %q: unknown plugin options %q", BackendName, pluginOptions)
 	}
