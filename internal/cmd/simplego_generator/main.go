@@ -4,10 +4,14 @@
 package main
 
 import (
-	"fmt"
+	"flag"
+
+	"k8s.io/klog/v2"
 )
 
 func main() {
-	fmt.Println("\tinternal/cmd/simplego_generator:")
+	klog.InitFlags(nil)
+	flag.Parse()
+	klog.V(1).Info("\tinternal/cmd/simplego_generator:")
 	GenerateExecBinary()
 }

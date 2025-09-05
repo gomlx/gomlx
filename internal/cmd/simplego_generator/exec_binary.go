@@ -9,6 +9,7 @@ import (
 
 	"github.com/gomlx/gomlx/types"
 	"github.com/janpfeifer/must"
+	"k8s.io/klog/v2"
 )
 
 const (
@@ -352,13 +353,13 @@ func GenerateExecBinary() {
 		BooleanTypes:  BooleanDataTypes,
 	}
 
-	fileName := execBinaryFile
+	fileName := path.Join(must.M1(os.Getwd()), execBinaryFile)
 	f := must.M1(os.Create(fileName))
 	must.M(execBinaryTemplate.Execute(f, data))
 	must.M(f.Close())
 
 	cmd := exec.Command("gofmt", "-w", fileName)
-	fmt.Printf("\t%s\n", cmd)
+	klog.V(1).Infof("\t%s\n", cmd)
 	must.M(cmd.Run())
-	fmt.Printf("✅ Successfully generated %s\n", path.Join(must.M1(os.Getwd()), fileName))
+	fmt.Printf("✅ Successfully generated %s\n", fileName)
 }
