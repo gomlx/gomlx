@@ -116,7 +116,7 @@ func (b Builder) Ceil(x backends.Op) (backends.Op, error) {
 // Clamp returns the element-wise clamping operation.
 //
 // The values max and min can either be a scalar or have the same shape as x.
-func (b Builder) Clamp(min backends.Op, a backends.Op, max backends.Op) (backends.Op, error) {
+func (b Builder) Clamp(min backends.Op, x backends.Op, max backends.Op) (backends.Op, error) {
 	return nil, b.baseErrFn(backends.OpTypeClamp)
 }
 

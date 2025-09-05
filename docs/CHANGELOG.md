@@ -5,6 +5,10 @@
 * Package `shapes`:
   * Added `FromAnyValue`: extract shape from a Go type.
 * New backend: `stablehlo` (or simply "_hlo_" for short).
+  * Large clean up of generators: most no longer depending on `gopjrt/xlabuilder`.
+* Package `graph`:
+  * Fix of `ArgMin` now accepting negative axes.
+  * `Clip` now uses the backend operation Clamp.
 
 # v0.22.1: 2025/08/22 🌀 Convolutions 🌀 
 

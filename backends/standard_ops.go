@@ -87,7 +87,7 @@ type StandardOps interface {
 	// Clamp returns the element-wise clamping operation.
 	//
 	// The values max and min can either be a scalar or have the same shape as x.
-	Clamp(min, a, max Op) (Op, error)
+	Clamp(min, x, max Op) (Op, error)
 
 	// Clz returns element-wise the "count leading zeros" bits of input node x -- for integer values.
 	Clz(x Op) (Op, error)

@@ -821,7 +821,7 @@ func Ceil(x *Node) (node *Node) {
 // nodeInputsClamp holds the inputs used for the call to backends.Clamp.
 type nodeInputsClamp struct {
 	min *Node
-	a   *Node
+	x   *Node
 	max *Node
 }
 
@@ -832,10 +832,10 @@ func (ni *nodeInputsClamp) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsClamp) String() string {
-	return fmt.Sprintf("%s(min=[#%d], a=[#%d], max=[#%d])",
+	return fmt.Sprintf("%s(min=[#%d], x=[#%d], max=[#%d])",
 		ni.Type(),
 		ni.min.Id(),
-		ni.a.Id(),
+		ni.x.Id(),
 		ni.max.Id(),
 	)
 }
@@ -843,15 +843,15 @@ func (ni *nodeInputsClamp) String() string {
 // Clamp returns the element-wise clamping operation.
 //
 // The values max and min can either be a scalar or have the same shape as x.
-func Clamp(min *Node, a *Node, max *Node) (node *Node) {
-	inputNodes := []*Node{min, a, max}
+func Clamp(min *Node, x *Node, max *Node) (node *Node) {
+	inputNodes := []*Node{min, x, max}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsClamp{
 		min: min,
-		a:   a,
+		x:   x,
 		max: max,
 	}
-	result, err := g.builder.Clamp(min.outputOps[0], a.outputOps[0], max.outputOps[0])
+	result, err := g.builder.Clamp(min.outputOps[0], x.outputOps[0], max.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
