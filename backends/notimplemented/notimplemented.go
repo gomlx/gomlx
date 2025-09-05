@@ -84,3 +84,7 @@ func (b Builder) BatchNormGradient(operand, scale, mean, variance, gradOutput ba
 func (b Builder) BitCount(operand backends.Op) (backends.Op, error) {
 	return nil, b.baseErrFn(backends.OpTypeBitCount)
 }
+
+func (b Builder) Clamp(min, x, max backends.Op) (backends.Op, error) {
+	return nil, b.baseErrFn(backends.OpTypeClamp)
+}

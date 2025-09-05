@@ -764,3 +764,18 @@ func (b *Builder) LessOrEqual(lhsOp, rhsOp backends.Op) (backends.Op, error) {
 func (b *Builder) LessThan(lhsOp, rhsOp backends.Op) (backends.Op, error) {
 	return b.addComparisonOp(backends.OpTypeLessThan, lhsOp, rhsOp)
 }
+
+// Clamp returns the element-wise clamping operation.
+//
+// All must have the same shape.
+func (b *Builder) Clamp(min, x, max backends.Op) (backends.Op, error) {
+	clamped, err := b.Max(min, x)
+	if err != nil {
+		return nil, errors.WithMessagef(err, "Backend %q: failed Clamp", BackendName)
+	}
+	clamped, err = b.Min(clamped, max)
+	if err != nil {
+		return nil, errors.WithMessagef(err, "Backend %q: failed Clamp", BackendName)
+	}
+	return clamped, nil
+}
