@@ -42,13 +42,13 @@ func (b *Builder) DotGeneral(lhs backends.Op, lhsContractingAxes, lhsBatchAxes [
 	dotGeneralBuilder := b.fn.DotGeneral(lhsNode.value, lhsContractingAxes, lhsBatchAxes, rhsNode.value, rhsContractingAxes, rhsBatchAxes)
 	if config.UseTF32 && dtype == dtypes.Float32 {
 		dotGeneralBuilder.Algorithm(&stablehlotypes.DotGeneralAlgorithm{
-			LhsPrecisionType:           stablehlotypes.FloatPrecisionType{DType: dtype},
-			RhsPrecisionType:           stablehlotypes.FloatPrecisionType{DType: dtype},
-			AccumulationType:           stablehlotypes.FloatPrecisionType{TF32: true},
+			LhsPrecisionType:           stablehlotypes.FloatPrecisionType{TF32: true},
+			RhsPrecisionType:           stablehlotypes.FloatPrecisionType{TF32: true},
+			AccumulationType:           stablehlotypes.FloatPrecisionType{DType: dtype},
 			LhsComponentCount:          1,
 			RhsComponentCount:          1,
 			NumPrimitiveOperations:     1,
-			AllowImpreciseAccumulation: true,
+			AllowImpreciseAccumulation: false,
 		})
 	}
 	value, err := dotGeneralBuilder.Done()

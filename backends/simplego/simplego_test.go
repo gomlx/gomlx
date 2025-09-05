@@ -15,7 +15,7 @@ var backend backends.Backend
 func init() {
 	klog.InitFlags(nil)
 }
-	
+
 func setup() {
 	fmt.Printf("Available backends: %q\n", backends.List())
 	// Perform your setup logic here
