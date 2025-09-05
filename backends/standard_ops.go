@@ -13,42 +13,46 @@ type StandardOps interface {
 
 	// Add returns the element-wise sum of the two values.
 	// Standard broadcasting rules apply (see documentation).
-	// The op is created on the same XlaBuilder as used for x0 and x1.
 	Add(lhs, rhs Op) (Op, error)
 
 	// ArgMinMax calculates the "argmin" or "argmax" across an axis of the given input array x.
+	//
 	// outputDType defines the output of the argmin/argmax, it doesn't need to be the same as the input.
-	// It's a form of reduction on the given axis, and that axis goes away. So the rank of the result is one less than
-	// the rank of x.
+	// It's a form of reduction on the given axis, and that axis goes away.
+	// So the rank of the result is one less than the rank of x.
+	//
 	// Examples:
-	// 	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=1, isMin=true) -> {1, 0}  // (it chooses the 0 and the -3)
-	// 	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=0, isMin=false) -> {0, 1, 0} // (it choose the 2, 4 and 7)
+	//
+	//	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=1, isMin=true) -> {1, 0}  // (it chooses the 0 and the -3)
+	//	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=0, isMin=false) -> {0, 1, 0} // (it choose the 2, 4 and 7)
 	ArgMinMax(x Op, axis int, outputDType dtypes.DType, isMin bool) (Op, error)
 
 	// Bitcast performs an elementwise bit-cast operation from a dtype to another dtype.
-	// The bitcast doesn't "convert" anything, it just reinterprets the bits from x.DType() to the targetDType.
-	// If x.DType() and targetDType use the same number of bytes (targetDType.Size() = x.DType().Size()),
+	//
+	// The bitcast doesn't "convert", rather it just reinterprets the bits from x.DType() to the targetDType.
+	//
+	// If x.DType() and targetDType use the same number of bytes (targetDType.Size() == x.DType().Size()),
 	// the dimensions are not changed, simply the dtype is changed.
-	// If targetDType.Size() > x.DType().Size(), it requires that x last axis to have a dimension of targetDType.Size() / x.DType().Size(),
-	// and the returned shape will trim the last axis.
+	//
+	// If targetDType.Size() > x.DType().Size(), it requires x last axis to have a dimension of
+	// targetDType.Size() / x.DType().Size(), and the returned shape will trim the last axis.
+	//
 	// If targetDType.Size() < x.DType().Size(), the returned shape will have an extra axis in the end, with dimension of
 	// x.DType().Size() / targetDType.Size().
+	//
 	// E.g: Bitcast([1]uint32{0xdeadbeef}, dtypes.UInt16) -> [1][2]uint16{{0xdead, 0xbeef}}
 	Bitcast(x Op, targetDType dtypes.DType) (Op, error)
 
 	// BitwiseAnd returns the element-wise bitwise AND operation.
-	// The op is created on the same XlaBuilder as used for x0 and x1.
 	BitwiseAnd(lhs, rhs Op) (Op, error)
 
 	// BitwiseNot returns the element-wise bitwise AND operation.
 	BitwiseNot(x Op) (Op, error)
 
 	// BitwiseOr returns the element-wise bitwise OR operation.
-	// The op is created on the same XlaBuilder as used for x0 and x1.
 	BitwiseOr(lhs, rhs Op) (Op, error)
 
 	// BitwiseXor returns the element-wise bitwise XOR operator.
-	// The op is created on the same XlaBuilder as used for x0 and x1.
 	BitwiseXor(lhs, rhs Op) (Op, error)
 
 	// Broadcast prefixes dimensions to an array by duplicating the data in the array.
@@ -90,7 +94,6 @@ type StandardOps interface {
 	// The output will be either `dtypes.Complex64` or `dtypes.Complex128`, depending on x0 and x1 dtypes.
 	// The shapes of `real` or `imaginary` must be the same, or one must be a scalar, in which case
 	// the value is broadcast to every other value.
-	// The op is created on the same XlaBuilder as used for x0 and x1.
 	Complex(lhs, rhs Op) (Op, error)
 
 	// Concatenate results on the given axis.
@@ -127,7 +130,6 @@ type StandardOps interface {
 
 	// Div returns the element-wise division of the two values.
 	// Standard broadcasting rules apply (see documentation).
-	// The op is created on the same XlaBuilder as used for x0 and x1.
 	Div(lhs, rhs Op) (Op, error)
 
 	// Dot returns the "dot product" operation.
@@ -140,46 +142,47 @@ type StandardOps interface {
 	// the first dimension of x1.
 	// These are the "contracted" dimensions.
 	// The contracted dimensions of x0 and x1 must be of the same size.
-	// In practice, it can be used to perform dot products between vectors, vector/matrix multiplications or
+	// In practice, it can be used to perform dot products between vectors, vector/matrix multiplications, or
 	// matrix/matrix multiplications.
-	// The op is created on the same XlaBuilder as used for x0 and x1.
 	Dot(lhs, rhs Op) (Op, error)
 
 	// DotGeneral takes as input lhs (left-hand-side) and rhs (right-hand-side) specifications
 	// for a general vector product -- a generalized "Einsum". Each axis can be:
+	//
 	//   - Just aligned (batch axes), so the output has the same axes as the inputs. The dimensions
 	//     must match in lhs and rhs.
 	//   - Crossed (default), in which case the output is the combination (concatenation) of the
 	//     dimensions.
 	//   - Contracted (contracting axes), where the output does multiply the values and reduce sum
 	//     those dimensions.
+	//
 	// It follows that the resulting dimension number starts with the batch dimension, then the 'lhs'
 	// non-contracting/non-batch dimension, and finally the 'rhs' non-contracting/non-batch dimension.
 	// It provides the basic means of implementing Einsum.
 	DotGeneral(lhs Op, lhsContractingAxes, lhsBatchAxes []int, rhs Op, rhsContractingAxes, rhsBatchAxes []int) (Op, error)
 
-	// DynamicSlice extracts a sub-array from the input array at dynamic start_indices.
+	// DynamicSlice extracts a subarray from the input array at dynamic start_indices.
 	// The size of the slice in each axis is passed in sliceDims, which specify the slice
 	// intervals for each axis: [start, start + size).
 	// The shape of startIndices must be rank == 1, with dimension size equal to the rank of operand.
 	// See description in https://openxla.org/xla/operation_semantics#dynamicslice
 	DynamicSlice(operand Op, startIndices []Op, sliceDims []int) (Op, error)
 
-	// DynamicUpdateSlice generates a result which is the value of the input array operand, with a slice update overwritten
+	// DynamicUpdateSlice returns the operand with slice updates from update overwritten
 	// at startIndices.
-	// The shape of update determines the shape of the sub-array of the result which is updated.
+	//
+	// The shape of update determines the shape of result's updated slices.
+	//
 	// The shape of startIndices must be rank == 1, with dimension size equal to the rank of operand.
 	// See description in https://openxla.org/xla/operation_semantics#dynamicupdateslice
 	DynamicUpdateSlice(operand, update Op, startIndices []Op) (Op, error)
 
 	// Equal performs element-wise equality check, returns boolean results with the same dimensions as input.
-	// The op is created on the same XlaBuilder as used for x0 and x1.
 	Equal(lhs, rhs Op) (Op, error)
 
 	// EqualTotalOrder returns the element-wise operation.
 	// Standard broadcasting rules apply (see documentation).
 	// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-	// The op is created on the same XlaBuilder as used for x0 and x1.
 	EqualTotalOrder(lhs, rhs Op) (Op, error)
 
 	// Erf returns the "error function", defined as erf(x) = 2/Pi * \int_{0}^{x}{e^{-t^2}dt}.
@@ -287,23 +290,19 @@ type StandardOps interface {
 	IsFinite(x Op) (Op, error)
 
 	// LessOrEqual performs element-wise comparison, returns boolean results with the same dimensions as input.
-	// The op is created on the same XlaBuilder as used for x0 and x1.
 	LessOrEqual(lhs, rhs Op) (Op, error)
 
 	// LessOrEqualTotalOrder returns the element-wise operation.
 	// Standard broadcasting rules apply (see documentation).
 	// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-	// The op is created on the same XlaBuilder as used for x0 and x1.
 	LessOrEqualTotalOrder(lhs, rhs Op) (Op, error)
 
 	// LessThan performs element-wise comparison, returns boolean results with the same dimensions as input.
-	// The op is created on the same XlaBuilder as used for x0 and x1.
 	LessThan(lhs, rhs Op) (Op, error)
 
 	// LessThanTotalOrder returns the element-wise operation.
 	// Standard broadcasting rules apply (see documentation).
 	// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-	// The op is created on the same XlaBuilder as used for x0 and x1.
 	LessThanTotalOrder(lhs, rhs Op) (Op, error)
 
 	// Log returns the Op that represents the output of the corresponding operation.
@@ -313,56 +312,47 @@ type StandardOps interface {
 	Log1p(x Op) (Op, error)
 
 	// LogicalAnd returns the element-wise logical AND operation.
-	// The op is created on the same XlaBuilder as used for x0 and x1.
 	LogicalAnd(lhs, rhs Op) (Op, error)
 
 	// LogicalNot returns the Op that represents the output of the corresponding operation.
 	LogicalNot(x Op) (Op, error)
 
 	// LogicalOr returns the element-wise logical OR operation.
-	// The op is created on the same XlaBuilder as used for x0 and x1.
 	LogicalOr(lhs, rhs Op) (Op, error)
 
 	// LogicalXor returns the element-wise logical XOR operator.
-	// The op is created on the same XlaBuilder as used for x0 and x1.
 	LogicalXor(lhs, rhs Op) (Op, error)
 
 	// Logistic returns the element-wise expression 1/(1+exp(-x)). Also known as the Sigmoid function.
 	Logistic(x Op) (Op, error)
 
 	// Max returns the element-wise highest value among the two.
-	// The op is created on the same XlaBuilder as used for x0 and x1.
 	Max(lhs, rhs Op) (Op, error)
 
 	// Min returns the element-wise smallest value among the two.
-	// The op is created on the same XlaBuilder as used for x0 and x1.
 	Min(lhs, rhs Op) (Op, error)
 
 	// Mul returns the element-wise multiplication of the two values.
 	// Standard broadcasting rules apply (see documentation).
-	// The op is created on the same XlaBuilder as used for x0 and x1.
 	Mul(lhs, rhs Op) (Op, error)
 
 	// Neg returns the Op that represents the output of the corresponding operation.
 	Neg(x Op) (Op, error)
 
 	// NotEqual performs element-wise inequality check, returns boolean results with the same dimensions as input.
-	// The op is created on the same XlaBuilder as used for x0 and x1.
 	NotEqual(lhs, rhs Op) (Op, error)
 
 	// NotEqualTotalOrder returns the element-wise operation.
 	// Standard broadcasting rules apply (see documentation).
 	// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-	// The op is created on the same XlaBuilder as used for x0 and x1.
 	NotEqualTotalOrder(lhs, rhs Op) (Op, error)
 
-	// Pad injects padding on the start, end or interior (in between each element) of the given operand.
+	// Pad injects padding on the start, end, or interior (in between each element) of the given operand.
 	// There must be at most `operand.Rank()` axesConfig values. Missing PadAxis are assumed to be zeros,
 	// that is, no padding for those axes.
 	Pad(x, fillValue Op, axesConfig ...PadAxis) (Op, error)
 
 	// Pow returns the Op that represents the output of the corresponding operation.
-	// The op is created on the same XlaBuilder as used for x0 and x1.
 	Pow(lhs, rhs Op) (Op, error)
 
 	// Real return the real part of a complex number. It returns x if the x is a float number.
@@ -410,7 +400,6 @@ type StandardOps interface {
 
 	// Rem returns the remainder operation, also known as modulo (or Mod for short).
 	// Notice despite the name XLA implements Mod not IEEE754 Remainder operation.
-	// The op is created on the same XlaBuilder as used for x0 and x1.
 	Rem(lhs, rhs Op) (Op, error)
 
 	// Reshape reshapes x to the new dimensions.
@@ -454,15 +443,12 @@ type StandardOps interface {
 	SelectAndScatterSum(operand, source Op, windowDimensions, windowStrides []int, paddings [][2]int) (Op, error)
 
 	// ShiftLeft n bits. It implicitly preserves the sign bit, if there is no overflow. So ShiftLeft(-1, 1) = -2.
-	// The op is created on the same XlaBuilder as used for x0 and x1.
 	ShiftLeft(lhs, rhs Op) (Op, error)
 
 	// ShiftRightArithmetic shifts right by n bits, preserving the sign bit. So ShiftRight(-2, 1) = -1.
-	// The op is created on the same XlaBuilder as used for x0 and x1.
 	ShiftRightArithmetic(lhs, rhs Op) (Op, error)
 
 	// ShiftRightLogical shifts right by n bits, destroying the sign bit.
-	// The op is created on the same XlaBuilder as used for x0 and x1.
 	ShiftRightLogical(lhs, rhs Op) (Op, error)
 
 	// Sign returns element-wise +1, +/-0 or -1 depending on the sign of x. It returns NaN if the input is NaN.
@@ -486,7 +472,6 @@ type StandardOps interface {
 
 	// Sub returns the element-wise subtraction of the two values.
 	// Standard broadcasting rules apply (see documentation).
-	// The op is created on the same XlaBuilder as used for x0 and x1.
 	Sub(lhs, rhs Op) (Op, error)
 
 	// Tanh returns the Op that represents the output of the corresponding operation.
