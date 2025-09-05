@@ -67,11 +67,11 @@ import (
 {{.}}
 {{- end}}
 func (b *Builder) {{.Method.Name}}(operand backends.Op) (backends.Op, error) {
-	operandNode, err := b.verifyAndCastOp(operand, backends.OpType{{.Method.Name}}.String())
+	nodes, err := b.verifyAndCastValues("{{.Method.Name}}", operand)
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.{{.Alias}}(operandNode.value)
+	value, err := b.fn.{{.Alias}}(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}

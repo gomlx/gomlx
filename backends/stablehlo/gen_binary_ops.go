@@ -8,7 +8,6 @@ import (
 
 // Add returns the element-wise sum of the two values.
 // Standard broadcasting rules apply (see documentation).
-// The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) Add(lhs, rhs backends.Op) (backends.Op, error) {
 	lhsNode, rhsNode, err := b.broadcastForBinaryOps(backends.OpTypeAdd, lhs, rhs)
 	if err != nil {
@@ -22,7 +21,6 @@ func (b *Builder) Add(lhs, rhs backends.Op) (backends.Op, error) {
 }
 
 // BitwiseAnd returns the element-wise bitwise AND operation.
-// The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) BitwiseAnd(lhs, rhs backends.Op) (backends.Op, error) {
 	lhsNode, rhsNode, err := b.broadcastForBinaryOps(backends.OpTypeBitwiseAnd, lhs, rhs)
 	if err != nil {
@@ -36,7 +34,6 @@ func (b *Builder) BitwiseAnd(lhs, rhs backends.Op) (backends.Op, error) {
 }
 
 // BitwiseOr returns the element-wise bitwise OR operation.
-// The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) BitwiseOr(lhs, rhs backends.Op) (backends.Op, error) {
 	lhsNode, rhsNode, err := b.broadcastForBinaryOps(backends.OpTypeBitwiseOr, lhs, rhs)
 	if err != nil {
@@ -50,7 +47,6 @@ func (b *Builder) BitwiseOr(lhs, rhs backends.Op) (backends.Op, error) {
 }
 
 // BitwiseXor returns the element-wise bitwise XOR operator.
-// The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) BitwiseXor(lhs, rhs backends.Op) (backends.Op, error) {
 	lhsNode, rhsNode, err := b.broadcastForBinaryOps(backends.OpTypeBitwiseXor, lhs, rhs)
 	if err != nil {
@@ -69,7 +65,6 @@ func (b *Builder) BitwiseXor(lhs, rhs backends.Op) (backends.Op, error) {
 // The output will be either `dtypes.Complex64` or `dtypes.Complex128`, depending on x0 and x1 dtypes.
 // The shapes of `real` or `imaginary` must be the same, or one must be a scalar, in which case
 // the value is broadcast to every other value.
-// The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) Complex(lhs, rhs backends.Op) (backends.Op, error) {
 	lhsNode, rhsNode, err := b.broadcastForBinaryOps(backends.OpTypeComplex, lhs, rhs)
 	if err != nil {
@@ -84,7 +79,6 @@ func (b *Builder) Complex(lhs, rhs backends.Op) (backends.Op, error) {
 
 // Div returns the element-wise division of the two values.
 // Standard broadcasting rules apply (see documentation).
-// The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) Div(lhs, rhs backends.Op) (backends.Op, error) {
 	lhsNode, rhsNode, err := b.broadcastForBinaryOps(backends.OpTypeDiv, lhs, rhs)
 	if err != nil {
@@ -98,7 +92,6 @@ func (b *Builder) Div(lhs, rhs backends.Op) (backends.Op, error) {
 }
 
 // LogicalAnd returns the element-wise logical AND operation.
-// The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) LogicalAnd(lhs, rhs backends.Op) (backends.Op, error) {
 	lhsNode, rhsNode, err := b.broadcastForBinaryOps(backends.OpTypeLogicalAnd, lhs, rhs)
 	if err != nil {
@@ -112,7 +105,6 @@ func (b *Builder) LogicalAnd(lhs, rhs backends.Op) (backends.Op, error) {
 }
 
 // LogicalOr returns the element-wise logical OR operation.
-// The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) LogicalOr(lhs, rhs backends.Op) (backends.Op, error) {
 	lhsNode, rhsNode, err := b.broadcastForBinaryOps(backends.OpTypeLogicalOr, lhs, rhs)
 	if err != nil {
@@ -126,7 +118,6 @@ func (b *Builder) LogicalOr(lhs, rhs backends.Op) (backends.Op, error) {
 }
 
 // LogicalXor returns the element-wise logical XOR operator.
-// The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) LogicalXor(lhs, rhs backends.Op) (backends.Op, error) {
 	lhsNode, rhsNode, err := b.broadcastForBinaryOps(backends.OpTypeLogicalXor, lhs, rhs)
 	if err != nil {
@@ -140,7 +131,6 @@ func (b *Builder) LogicalXor(lhs, rhs backends.Op) (backends.Op, error) {
 }
 
 // Max returns the element-wise highest value among the two.
-// The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) Max(lhs, rhs backends.Op) (backends.Op, error) {
 	lhsNode, rhsNode, err := b.broadcastForBinaryOps(backends.OpTypeMax, lhs, rhs)
 	if err != nil {
@@ -154,7 +144,6 @@ func (b *Builder) Max(lhs, rhs backends.Op) (backends.Op, error) {
 }
 
 // Min returns the element-wise smallest value among the two.
-// The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) Min(lhs, rhs backends.Op) (backends.Op, error) {
 	lhsNode, rhsNode, err := b.broadcastForBinaryOps(backends.OpTypeMin, lhs, rhs)
 	if err != nil {
@@ -169,7 +158,6 @@ func (b *Builder) Min(lhs, rhs backends.Op) (backends.Op, error) {
 
 // Mul returns the element-wise multiplication of the two values.
 // Standard broadcasting rules apply (see documentation).
-// The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) Mul(lhs, rhs backends.Op) (backends.Op, error) {
 	lhsNode, rhsNode, err := b.broadcastForBinaryOps(backends.OpTypeMul, lhs, rhs)
 	if err != nil {
@@ -183,7 +171,6 @@ func (b *Builder) Mul(lhs, rhs backends.Op) (backends.Op, error) {
 }
 
 // Pow returns the Op that represents the output of the corresponding operation.
-// The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) Pow(lhs, rhs backends.Op) (backends.Op, error) {
 	lhsNode, rhsNode, err := b.broadcastForBinaryOps(backends.OpTypePow, lhs, rhs)
 	if err != nil {
@@ -198,7 +185,6 @@ func (b *Builder) Pow(lhs, rhs backends.Op) (backends.Op, error) {
 
 // Rem returns the remainder operation, also known as modulo (or Mod for short).
 // Notice despite the name XLA implements Mod not IEEE754 Remainder operation.
-// The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) Rem(lhs, rhs backends.Op) (backends.Op, error) {
 	lhsNode, rhsNode, err := b.broadcastForBinaryOps(backends.OpTypeRem, lhs, rhs)
 	if err != nil {
@@ -212,7 +198,6 @@ func (b *Builder) Rem(lhs, rhs backends.Op) (backends.Op, error) {
 }
 
 // ShiftLeft n bits. It implicitly preserves the sign bit, if there is no overflow. So ShiftLeft(-1, 1) = -2.
-// The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) ShiftLeft(lhs, rhs backends.Op) (backends.Op, error) {
 	lhsNode, rhsNode, err := b.broadcastForBinaryOps(backends.OpTypeShiftLeft, lhs, rhs)
 	if err != nil {
@@ -226,7 +211,6 @@ func (b *Builder) ShiftLeft(lhs, rhs backends.Op) (backends.Op, error) {
 }
 
 // ShiftRightArithmetic shifts right by n bits, preserving the sign bit. So ShiftRight(-2, 1) = -1.
-// The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) ShiftRightArithmetic(lhs, rhs backends.Op) (backends.Op, error) {
 	lhsNode, rhsNode, err := b.broadcastForBinaryOps(backends.OpTypeShiftRightArithmetic, lhs, rhs)
 	if err != nil {
@@ -240,7 +224,6 @@ func (b *Builder) ShiftRightArithmetic(lhs, rhs backends.Op) (backends.Op, error
 }
 
 // ShiftRightLogical shifts right by n bits, destroying the sign bit.
-// The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) ShiftRightLogical(lhs, rhs backends.Op) (backends.Op, error) {
 	lhsNode, rhsNode, err := b.broadcastForBinaryOps(backends.OpTypeShiftRightLogical, lhs, rhs)
 	if err != nil {
@@ -255,7 +238,6 @@ func (b *Builder) ShiftRightLogical(lhs, rhs backends.Op) (backends.Op, error) {
 
 // Sub returns the element-wise subtraction of the two values.
 // Standard broadcasting rules apply (see documentation).
-// The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) Sub(lhs, rhs backends.Op) (backends.Op, error) {
 	lhsNode, rhsNode, err := b.broadcastForBinaryOps(backends.OpTypeSub, lhs, rhs)
 	if err != nil {

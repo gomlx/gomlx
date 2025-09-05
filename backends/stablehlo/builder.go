@@ -65,24 +65,29 @@ func (b *Builder) CheckValid() error {
 	return b.backend.CheckValid()
 }
 
-// verifyAndCastOp sanity checks that the op is valid and created with this builder.
-func (b *Builder) verifyAndCastOp(op backends.Op, opName string) (*Node, error) {
+// verifyAndCastValues sanity checks that the values (backends.Op) are valid and created with this builder.
+// It returns the underlying *Node of the values.
+func (b *Builder) verifyAndCastValues(name string, values ...backends.Op) ([]*Node, error) {
 	if err := b.CheckValid(); err != nil {
 		return nil, err
 	}
-	if op == nil {
-		return nil, errors.Errorf("nil Op given as an input to %q", opName)
+	nodes := make([]*Node, len(values))
+	for i, input := range values {
+		if input == nil {
+			return nil, errors.Errorf("nil Op given as an input to %q", name)
+		}
+		node, ok := input.(*Node)
+		if !ok {
+			return nil, errors.Errorf("nil or invalid Op (%T: %v) given as an input to %q, it must be an input created by the same backend builder (%s:%s)",
+				input, input, name, b.backend.Name(), b.name)
+		}
+		if node.builder != b {
+			return nil, errors.Errorf("input given to parameter %q was created with a different builder (%s) than the builder (%s) it is being used in -- Ops cannot cross to different builders",
+				name, node.builder.Name(), b.Name())
+		}
+		nodes[i] = node
 	}
-	node, ok := op.(*Node)
-	if !ok {
-		return nil, errors.Errorf("nil or invalid Op (%T: %v) given as an input to %q, it must be an Op created by the same backend builder (%s:%s)",
-			op, op, opName, b.backend.Name(), b.name)
-	}
-	if node.builder != b {
-		return nil, errors.Errorf("op given to parameter %s was created with a different builder (%s) than the builder (%s) it is being used in -- Ops cannot cross to different builders",
-			opName, node.builder.Name(), b.Name())
-	}
-	return node, nil
+	return nodes, nil
 }
 
 // OpShape returns the shape of a computation Op.
@@ -90,11 +95,11 @@ func (b *Builder) OpShape(op backends.Op) (shapes.Shape, error) {
 	if err := b.CheckValid(); err != nil {
 		return shapes.Invalid(), err
 	}
-	node, err := b.verifyAndCastOp(op, "OpShape")
+	nodes, err := b.verifyAndCastValues("OpShape", op)
 	if err != nil {
 		return shapes.Invalid(), err
 	}
-	return node.shape, nil
+	return nodes[0].shape, nil
 }
 
 func (b *Builder) newNode(value *stablehlo.Value) *Node {
@@ -132,11 +137,11 @@ func (b *Builder) Identity(x backends.Op) (backends.Op, error) {
 	if err := b.CheckValid(); err != nil {
 		return nil, err
 	}
-	node, err := b.verifyAndCastOp(x, "OpShape")
+	nodes, err := b.verifyAndCastValues("OpShape", x)
 	if err != nil {
 		return nil, err
 	}
-	return node, nil
+	return nodes[0], nil
 }
 
 // Constant creates a constant in the graph with the given flat values and the shape defined by the dimensions.
@@ -175,11 +180,11 @@ func (b *Builder) Constant(flat any, dimensions ...int) (backends.Op, error) {
 //     {{1 , 1},
 //     {2 , 2}}
 func (b *Builder) BroadcastInDim(x backends.Op, outputShape shapes.Shape, broadcastAxes []int) (backends.Op, error) {
-	node, err := b.verifyAndCastOp(x, "BroadcastInDim")
+	nodes, err := b.verifyAndCastValues("BroadcastInDim", x)
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.BroadcastInDim(node.value, ShapeToStableHLO(outputShape), broadcastAxes)
+	value, err := b.fn.BroadcastInDim(nodes[0].value, ShapeToStableHLO(outputShape), broadcastAxes)
 	if err != nil {
 		return nil, err
 	}
@@ -190,14 +195,11 @@ func (b *Builder) BroadcastInDim(x backends.Op, outputShape shapes.Shape, broadc
 // converting them to Nodes in the process.
 func (b *Builder) broadcastForBinaryOps(opType backends.OpType, lhs, rhs backends.Op) (lhsNode, rhsNode *Node, err error) {
 	opName := opType.String()
-	lhsNode, err = b.verifyAndCastOp(lhs, opName)
+	nodes, err := b.verifyAndCastValues(opName, lhs, rhs)
 	if err != nil {
 		return
 	}
-	rhsNode, err = b.verifyAndCastOp(rhs, opName)
-	if err != nil {
-		return
-	}
+	lhsNode, rhsNode = nodes[0], nodes[1]
 	if lhsNode.shape.DType != rhsNode.shape.DType {
 		return nil, nil, errors.Errorf("cannot broadcast %s and %s for %q: they have different dtypes",
 			lhsNode.shape.DType, rhsNode.shape.DType, opType)

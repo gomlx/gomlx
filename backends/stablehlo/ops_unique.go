@@ -109,7 +109,6 @@ func (b *Builder) LessOrEqual(lhs, rhs backends.Op) (backends.Op, error) {
 // Standard broadcasting rules apply (see documentation).
 //
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-// The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) EqualTotalOrder(lhs, rhs backends.Op) (backends.Op, error) {
 	return b.comparison(backends.OpTypeEqualTotalOrder, lhs, rhs)
 }
@@ -118,7 +117,6 @@ func (b *Builder) EqualTotalOrder(lhs, rhs backends.Op) (backends.Op, error) {
 // Standard broadcasting rules apply (see documentation).
 //
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-// The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) NotEqualTotalOrder(lhs, rhs backends.Op) (backends.Op, error) {
 	return b.comparison(backends.OpTypeNotEqualTotalOrder, lhs, rhs)
 }
@@ -127,7 +125,6 @@ func (b *Builder) NotEqualTotalOrder(lhs, rhs backends.Op) (backends.Op, error) 
 // Standard broadcasting rules apply (see documentation).
 //
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-// The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) GreaterThanTotalOrder(lhs, rhs backends.Op) (backends.Op, error) {
 	return b.comparison(backends.OpTypeGreaterThanTotalOrder, lhs, rhs)
 }
@@ -136,7 +133,6 @@ func (b *Builder) GreaterThanTotalOrder(lhs, rhs backends.Op) (backends.Op, erro
 // Standard broadcasting rules apply (see documentation).
 //
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-// The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) GreaterOrEqualTotalOrder(lhs, rhs backends.Op) (backends.Op, error) {
 	return b.comparison(backends.OpTypeGreaterOrEqualTotalOrder, lhs, rhs)
 }
@@ -145,7 +141,6 @@ func (b *Builder) GreaterOrEqualTotalOrder(lhs, rhs backends.Op) (backends.Op, e
 // Standard broadcasting rules apply (see documentation).
 //
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-// The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) LessThanTotalOrder(lhs, rhs backends.Op) (backends.Op, error) {
 	return b.comparison(backends.OpTypeLessThanTotalOrder, lhs, rhs)
 }
@@ -154,17 +149,17 @@ func (b *Builder) LessThanTotalOrder(lhs, rhs backends.Op) (backends.Op, error) 
 // Standard broadcasting rules apply (see documentation).
 //
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-// The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) LessOrEqualTotalOrder(lhs, rhs backends.Op) (backends.Op, error) {
 	return b.comparison(backends.OpTypeLessOrEqualTotalOrder, lhs, rhs)
 }
 
 // Conj returns the conjugate of a complex number. E.g: Conj(1+3i) = 1-3i
 func (b *Builder) Conj(operand backends.Op) (backends.Op, error) {
-	operandNode, err := b.verifyAndCastOp(operand, backends.OpTypeConj.String())
+	nodes, err := b.verifyAndCastValues("Conj", operand)
 	if err != nil {
 		return nil, err
 	}
+	operandNode := nodes[0]
 	realValue, err := b.fn.Real(operandNode.value)
 	if err != nil {
 		return nil, err
@@ -196,12 +191,12 @@ func (b *Builder) Conj(operand backends.Op) (backends.Op, error) {
 // The contracted dimensions of x0 and x1 must be of the same size.
 // In practice, it can be used to perform dot products between vectors, vector/matrix multiplications or
 // matrix/matrix multiplications.
-// The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) Dot(lhs, rhs backends.Op) (backends.Op, error) {
-	lhsNode, rhsNode, err := b.broadcastForBinaryOps(backends.OpTypeDot, lhs, rhs)
+	nodes, err := b.verifyAndCastValues("Dot", lhs, rhs)
 	if err != nil {
 		return nil, err
 	}
+	lhsNode, rhsNode := nodes[0], nodes[1]
 	var output backends.Op
 	if lhsNode.shape.Rank() == 1 && rhsNode.shape.Rank() == 1 {
 		// Contracting both vectors.

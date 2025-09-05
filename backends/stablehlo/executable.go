@@ -27,17 +27,16 @@ func (b *Builder) Compile(outputs ...backends.Op) (backends.Executable, error) {
 	if len(outputs) == 0 {
 		return nil, errors.Errorf("backend %q, computation %q: you must have at least one output to a computation", BackendName, b.name)
 	}
-	outputNodes := make([]*Node, len(outputs))
+
+	outputNodes, err := b.verifyAndCastValues("Compile", outputs...)
+	if err != nil {
+		return nil, err
+	}
 	outputValues := make([]*stablehlo.Value, len(outputs))
 	outputShapes := make([]shapes.Shape, len(outputs))
-	var err error
-	for ii, output := range outputs {
-		outputNodes[ii], err = b.verifyAndCastOp(output, "Compile")
-		if err != nil {
-			return nil, errors.WithMessagef(err, "Compile(), while parsing the output #%d", ii)
-		}
-		outputValues[ii] = outputNodes[ii].value
-		outputShapes[ii] = outputNodes[ii].shape
+	for ii, outputNode := range outputNodes {
+		outputValues[ii] = outputNode.value
+		outputShapes[ii] = outputNode.shape
 	}
 
 	// Finish StableHLO "main" function:

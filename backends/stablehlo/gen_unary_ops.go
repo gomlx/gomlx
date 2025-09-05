@@ -8,11 +8,11 @@ import (
 
 // BitCount returns the number of bits that are set to one.
 func (b *Builder) BitCount(operand backends.Op) (backends.Op, error) {
-	operandNode, err := b.verifyAndCastOp(operand, backends.OpTypeBitCount.String())
+	nodes, err := b.verifyAndCastValues("BitCount", operand)
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Popcnt(operandNode.value)
+	value, err := b.fn.Popcnt(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -21,11 +21,11 @@ func (b *Builder) BitCount(operand backends.Op) (backends.Op, error) {
 
 // Abs returns the Op that represents the output of the corresponding operation.
 func (b *Builder) Abs(operand backends.Op) (backends.Op, error) {
-	operandNode, err := b.verifyAndCastOp(operand, backends.OpTypeAbs.String())
+	nodes, err := b.verifyAndCastValues("Abs", operand)
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Abs(operandNode.value)
+	value, err := b.fn.Abs(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -34,11 +34,11 @@ func (b *Builder) Abs(operand backends.Op) (backends.Op, error) {
 
 // BitwiseNot returns the element-wise bitwise AND operation.
 func (b *Builder) BitwiseNot(operand backends.Op) (backends.Op, error) {
-	operandNode, err := b.verifyAndCastOp(operand, backends.OpTypeBitwiseNot.String())
+	nodes, err := b.verifyAndCastValues("BitwiseNot", operand)
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Not(operandNode.value)
+	value, err := b.fn.Not(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -47,11 +47,11 @@ func (b *Builder) BitwiseNot(operand backends.Op) (backends.Op, error) {
 
 // Ceil returns the Op that represents the output of the corresponding operation.
 func (b *Builder) Ceil(operand backends.Op) (backends.Op, error) {
-	operandNode, err := b.verifyAndCastOp(operand, backends.OpTypeCeil.String())
+	nodes, err := b.verifyAndCastValues("Ceil", operand)
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Ceil(operandNode.value)
+	value, err := b.fn.Ceil(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -60,11 +60,11 @@ func (b *Builder) Ceil(operand backends.Op) (backends.Op, error) {
 
 // Clz returns element-wise the "count leading zeros" bits of input node x -- for integer values.
 func (b *Builder) Clz(operand backends.Op) (backends.Op, error) {
-	operandNode, err := b.verifyAndCastOp(operand, backends.OpTypeClz.String())
+	nodes, err := b.verifyAndCastValues("Clz", operand)
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.CountLeadingZeros(operandNode.value)
+	value, err := b.fn.CountLeadingZeros(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -73,11 +73,11 @@ func (b *Builder) Clz(operand backends.Op) (backends.Op, error) {
 
 // Cos returns the Op that represents the output of the corresponding operation.
 func (b *Builder) Cos(operand backends.Op) (backends.Op, error) {
-	operandNode, err := b.verifyAndCastOp(operand, backends.OpTypeCos.String())
+	nodes, err := b.verifyAndCastValues("Cos", operand)
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Cosine(operandNode.value)
+	value, err := b.fn.Cosine(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -86,11 +86,11 @@ func (b *Builder) Cos(operand backends.Op) (backends.Op, error) {
 
 // Erf returns the "error function", defined as erf(x) = 2/Pi * \int_{0}^{x}{e^{-t^2}dt}.
 func (b *Builder) Erf(operand backends.Op) (backends.Op, error) {
-	operandNode, err := b.verifyAndCastOp(operand, backends.OpTypeErf.String())
+	nodes, err := b.verifyAndCastValues("Erf", operand)
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Erf(operandNode.value)
+	value, err := b.fn.Erf(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -99,11 +99,11 @@ func (b *Builder) Erf(operand backends.Op) (backends.Op, error) {
 
 // Exp returns the Op that represents the output of the corresponding operation.
 func (b *Builder) Exp(operand backends.Op) (backends.Op, error) {
-	operandNode, err := b.verifyAndCastOp(operand, backends.OpTypeExp.String())
+	nodes, err := b.verifyAndCastValues("Exp", operand)
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Exponential(operandNode.value)
+	value, err := b.fn.Exponential(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -112,11 +112,11 @@ func (b *Builder) Exp(operand backends.Op) (backends.Op, error) {
 
 // Expm1 returns the Op that represents the output of the corresponding operation.
 func (b *Builder) Expm1(operand backends.Op) (backends.Op, error) {
-	operandNode, err := b.verifyAndCastOp(operand, backends.OpTypeExpm1.String())
+	nodes, err := b.verifyAndCastValues("Expm1", operand)
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.ExponentialMinusOne(operandNode.value)
+	value, err := b.fn.ExponentialMinusOne(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -125,11 +125,11 @@ func (b *Builder) Expm1(operand backends.Op) (backends.Op, error) {
 
 // Floor returns the Op that represents the output of the corresponding operation.
 func (b *Builder) Floor(operand backends.Op) (backends.Op, error) {
-	operandNode, err := b.verifyAndCastOp(operand, backends.OpTypeFloor.String())
+	nodes, err := b.verifyAndCastValues("Floor", operand)
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Floor(operandNode.value)
+	value, err := b.fn.Floor(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -138,11 +138,11 @@ func (b *Builder) Floor(operand backends.Op) (backends.Op, error) {
 
 // Imag returns the imaginary part of a complex number. It returns 0 if the x is a float number.
 func (b *Builder) Imag(operand backends.Op) (backends.Op, error) {
-	operandNode, err := b.verifyAndCastOp(operand, backends.OpTypeImag.String())
+	nodes, err := b.verifyAndCastValues("Imag", operand)
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Imag(operandNode.value)
+	value, err := b.fn.Imag(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -153,11 +153,11 @@ func (b *Builder) Imag(operand backends.Op) (backends.Op, error) {
 // It returns an array of boolean values with the same shape as the input, where each element is true if and only if
 // the corresponding input element is finite.
 func (b *Builder) IsFinite(operand backends.Op) (backends.Op, error) {
-	operandNode, err := b.verifyAndCastOp(operand, backends.OpTypeIsFinite.String())
+	nodes, err := b.verifyAndCastValues("IsFinite", operand)
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.IsFinite(operandNode.value)
+	value, err := b.fn.IsFinite(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -166,11 +166,11 @@ func (b *Builder) IsFinite(operand backends.Op) (backends.Op, error) {
 
 // Log returns the Op that represents the output of the corresponding operation.
 func (b *Builder) Log(operand backends.Op) (backends.Op, error) {
-	operandNode, err := b.verifyAndCastOp(operand, backends.OpTypeLog.String())
+	nodes, err := b.verifyAndCastValues("Log", operand)
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Log(operandNode.value)
+	value, err := b.fn.Log(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -179,11 +179,11 @@ func (b *Builder) Log(operand backends.Op) (backends.Op, error) {
 
 // Log1p returns the expression log(x+1).
 func (b *Builder) Log1p(operand backends.Op) (backends.Op, error) {
-	operandNode, err := b.verifyAndCastOp(operand, backends.OpTypeLog1p.String())
+	nodes, err := b.verifyAndCastValues("Log1p", operand)
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.LogPlusOne(operandNode.value)
+	value, err := b.fn.LogPlusOne(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -192,11 +192,11 @@ func (b *Builder) Log1p(operand backends.Op) (backends.Op, error) {
 
 // LogicalNot returns the Op that represents the output of the corresponding operation.
 func (b *Builder) LogicalNot(operand backends.Op) (backends.Op, error) {
-	operandNode, err := b.verifyAndCastOp(operand, backends.OpTypeLogicalNot.String())
+	nodes, err := b.verifyAndCastValues("LogicalNot", operand)
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Not(operandNode.value)
+	value, err := b.fn.Not(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -205,11 +205,11 @@ func (b *Builder) LogicalNot(operand backends.Op) (backends.Op, error) {
 
 // Logistic returns the element-wise expression 1/(1+exp(-x)). Also known as the Sigmoid function.
 func (b *Builder) Logistic(operand backends.Op) (backends.Op, error) {
-	operandNode, err := b.verifyAndCastOp(operand, backends.OpTypeLogistic.String())
+	nodes, err := b.verifyAndCastValues("Logistic", operand)
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Logistic(operandNode.value)
+	value, err := b.fn.Logistic(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -218,11 +218,11 @@ func (b *Builder) Logistic(operand backends.Op) (backends.Op, error) {
 
 // Neg returns the Op that represents the output of the corresponding operation.
 func (b *Builder) Neg(operand backends.Op) (backends.Op, error) {
-	operandNode, err := b.verifyAndCastOp(operand, backends.OpTypeNeg.String())
+	nodes, err := b.verifyAndCastValues("Neg", operand)
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Negate(operandNode.value)
+	value, err := b.fn.Negate(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -231,11 +231,11 @@ func (b *Builder) Neg(operand backends.Op) (backends.Op, error) {
 
 // Real return the real part of a complex number. It returns x if the x is a float number.
 func (b *Builder) Real(operand backends.Op) (backends.Op, error) {
-	operandNode, err := b.verifyAndCastOp(operand, backends.OpTypeReal.String())
+	nodes, err := b.verifyAndCastValues("Real", operand)
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Real(operandNode.value)
+	value, err := b.fn.Real(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -244,11 +244,11 @@ func (b *Builder) Real(operand backends.Op) (backends.Op, error) {
 
 // Round returns the Op that represents the output of the corresponding operation.
 func (b *Builder) Round(operand backends.Op) (backends.Op, error) {
-	operandNode, err := b.verifyAndCastOp(operand, backends.OpTypeRound.String())
+	nodes, err := b.verifyAndCastValues("Round", operand)
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.RoundNearestEven(operandNode.value)
+	value, err := b.fn.RoundNearestEven(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -257,11 +257,11 @@ func (b *Builder) Round(operand backends.Op) (backends.Op, error) {
 
 // Rsqrt returns the element-wise reciprocal of square root operation 1/sqrt(x).
 func (b *Builder) Rsqrt(operand backends.Op) (backends.Op, error) {
-	operandNode, err := b.verifyAndCastOp(operand, backends.OpTypeRsqrt.String())
+	nodes, err := b.verifyAndCastValues("Rsqrt", operand)
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Rsqrt(operandNode.value)
+	value, err := b.fn.Rsqrt(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -270,11 +270,11 @@ func (b *Builder) Rsqrt(operand backends.Op) (backends.Op, error) {
 
 // Sign returns element-wise +1, +/-0 or -1 depending on the sign of x. It returns NaN if the input is NaN.
 func (b *Builder) Sign(operand backends.Op) (backends.Op, error) {
-	operandNode, err := b.verifyAndCastOp(operand, backends.OpTypeSign.String())
+	nodes, err := b.verifyAndCastValues("Sign", operand)
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Sign(operandNode.value)
+	value, err := b.fn.Sign(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -283,11 +283,11 @@ func (b *Builder) Sign(operand backends.Op) (backends.Op, error) {
 
 // Sin returns the Op that represents the output of the corresponding operation.
 func (b *Builder) Sin(operand backends.Op) (backends.Op, error) {
-	operandNode, err := b.verifyAndCastOp(operand, backends.OpTypeSin.String())
+	nodes, err := b.verifyAndCastValues("Sin", operand)
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Sine(operandNode.value)
+	value, err := b.fn.Sine(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -296,11 +296,11 @@ func (b *Builder) Sin(operand backends.Op) (backends.Op, error) {
 
 // Sqrt returns the Op that represents the output of the corresponding operation.
 func (b *Builder) Sqrt(operand backends.Op) (backends.Op, error) {
-	operandNode, err := b.verifyAndCastOp(operand, backends.OpTypeSqrt.String())
+	nodes, err := b.verifyAndCastValues("Sqrt", operand)
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Sqrt(operandNode.value)
+	value, err := b.fn.Sqrt(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -309,11 +309,11 @@ func (b *Builder) Sqrt(operand backends.Op) (backends.Op, error) {
 
 // Tanh returns the Op that represents the output of the corresponding operation.
 func (b *Builder) Tanh(operand backends.Op) (backends.Op, error) {
-	operandNode, err := b.verifyAndCastOp(operand, backends.OpTypeTanh.String())
+	nodes, err := b.verifyAndCastValues("Tanh", operand)
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Tanh(operandNode.value)
+	value, err := b.fn.Tanh(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
