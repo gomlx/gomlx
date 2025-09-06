@@ -100,9 +100,10 @@ type StandardOps interface {
 	// the value is broadcast to every other value.
 	Complex(lhs, rhs Op) (Op, error)
 
-	// Concatenate results on the given axis.
-	// All axes that are not being concatenated must match dimensions.
-	// It doesn't work with scalars -- use ExpandDims.
+	// Concatenate operands on the given axis.
+	//
+	// All axes that are not being concatenated must match dimensions, except on the axes being concatenated.
+	// It doesn't work with scalars -- use ExpandAxes.
 	// If there is only one operand, it is returned and this is a no-op.
 	Concatenate(axis int, operands ...Op) (Op, error)
 

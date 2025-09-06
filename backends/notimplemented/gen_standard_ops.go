@@ -135,9 +135,10 @@ func (b Builder) Complex(lhs backends.Op, rhs backends.Op) (backends.Op, error) 
 	return nil, b.baseErrFn(backends.OpTypeComplex)
 }
 
-// Concatenate results on the given axis.
-// All axes that are not being concatenated must match dimensions.
-// It doesn't work with scalars -- use ExpandDims.
+// Concatenate operands on the given axis.
+//
+// All axes that are not being concatenated must match dimensions, except on the axes being concatenated.
+// It doesn't work with scalars -- use ExpandAxes.
 // If there is only one operand, it is returned and this is a no-op.
 func (b Builder) Concatenate(axis int, operands ...backends.Op) (backends.Op, error) {
 	return nil, b.baseErrFn(backends.OpTypeConcatenate)
