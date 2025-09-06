@@ -2119,8 +2119,8 @@ func (ni *nodeInputsIsFinite) String() string {
 	)
 }
 
-// IsFinite tests whether each element of operand is finite, i.e., is not positive or negative infinity, and is not NaN.
-// It returns an array of boolean values with the same shape as the input, where each element is true if and only if
+// IsFinite tests whether each element of operand is finite, i.e., if it is not positive nor negative infinity, and it is not NaN.
+// It returns the same shape as the input, but with boolean values where each element is true if and only if
 // the corresponding input element is finite.
 func IsFinite(x *Node) (node *Node) {
 	inputNodes := []*Node{x}

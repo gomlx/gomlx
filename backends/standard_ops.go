@@ -263,6 +263,8 @@ type StandardOps interface {
 	//   - indicesAreSorted: can be set to true if it's guaranteed that startIndices are sorted (in ascending order,
 	//     after scattering its values according to start_index_map) by the user. This allows for some optimizations
 	//     in some platforms.
+	//
+	// TODO: Add batch support: operandBatchingAxes and startIndicesBatchingAxes.
 	Gather(operand, startIndices Op, indexVectorAxis int, offsetOutputAxes, collapsedSliceAxes, startIndexMap, sliceSizes []int, indicesAreSorted bool) (Op, error)
 
 	// GreaterOrEqual performs element-wise comparison, returns boolean results with the same dimensions as input.
@@ -289,8 +291,8 @@ type StandardOps interface {
 	// returns [[0 0][1 1]].
 	Iota(shape shapes.Shape, iotaAxis int) (Op, error)
 
-	// IsFinite tests whether each element of operand is finite, i.e., is not positive or negative infinity, and is not NaN.
-	// It returns an array of boolean values with the same shape as the input, where each element is true if and only if
+	// IsFinite tests whether each element of operand is finite, i.e., if it is not positive nor negative infinity, and it is not NaN.
+	// It returns the same shape as the input, but with boolean values where each element is true if and only if
 	// the corresponding input element is finite.
 	IsFinite(x Op) (Op, error)
 
