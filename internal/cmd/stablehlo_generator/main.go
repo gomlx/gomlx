@@ -58,6 +58,7 @@ func GenerateSingleOp(method backendparser.Method) {
 	}
 
 	// Comments:
+	w("\n") // Separate from previous content.
 	for _, comment := range method.Comments {
 		w("%s\n", comment)
 	}
@@ -75,6 +76,10 @@ func GenerateSingleOp(method backendparser.Method) {
 		}
 		if param.Type == "Op" {
 			w(" backends.Op")
+		} else if param.Type == "...Op" {
+			w(" ...backends.Op")
+		} else if param.Type == "[]Op" {
+			w(" []backends.Op")
 		} else {
 			w(" %s", param.Type)
 		}
