@@ -235,3 +235,24 @@ func (b *Builder) Clamp(min, a backends.Op, max backends.Op) (backends.Op, error
 	}
 	return b.newNode(value), nil
 }
+
+// Gather is a powerful but cumbersome Gather operation. See details in the backend.
+//
+// Notice GoMLX backend Gather operation doesn't support batching axes, which StableHLO does.
+// For compatibility, we simply leave them empty.
+func (b *Builder) Gather(operand, startIndices backends.Op, indexVectorAxis int, offsetOutputAxes, collapsedSliceAxes, startIndexMap, sliceSizes []int, indicesAreSorted bool) (backends.Op, error) {
+	nodes, err := b.verifyAndCastValues("Gather", operand, startIndices)
+	if err != nil {
+		return nil, err
+	}
+	operandNode := nodes[0]
+	startIndicesNode := nodes[1]
+	var operandBatchingAxes, startIndicesBatchingAxes []int
+	value, err := b.fn.Gather(operandNode.value, startIndicesNode.value, indexVectorAxis,
+		offsetOutputAxes, collapsedSliceAxes, operandBatchingAxes,
+		startIndicesBatchingAxes, startIndexMap, sliceSizes, indicesAreSorted)
+	if err != nil {
+		return nil, err
+	}
+	return b.newNode(value), nil
+}

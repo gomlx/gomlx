@@ -480,10 +480,10 @@ func ReduceOp(operand shapes.Shape, axes []int) (output shapes.Shape, err error)
 	return
 }
 
-// GatherOp returns the output shape of a Gather operation.
-func GatherOp(operand, startIndices shapes.Shape, indexVectorAxis int, offsetOutputAxes, collapsedSliceAxes,
+// Gather returns the output shape of a Gather operation.
+func Gather(operand, startIndices shapes.Shape, indexVectorAxis int, offsetOutputAxes, collapsedSliceAxes,
 	startIndexMap, sliceSizes []int, indicesAreSorted bool) (output shapes.Shape, err error) {
-	//fmt.Printf("GatherOp parameters:\n"+
+	//fmt.Printf("Gather parameters:\n"+
 	//	"  operand: %v\n"+
 	//	"  startIndices: %v\n"+
 	//	"  indexVectorAxis: %d\n"+

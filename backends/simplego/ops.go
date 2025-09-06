@@ -287,7 +287,7 @@ func (b *Builder) Gather(operandOp, startIndicesOp backends.Op, indexVectorAxis 
 		return nil, err
 	}
 	operand, startIndices := inputs[0], inputs[1]
-	shape, err := shapeinference.GatherOp(operand.shape, startIndices.shape, indexVectorAxis, offsetOutputAxes, collapsedSliceAxes, startIndexMap, sliceSizes, indicesAreSorted)
+	shape, err := shapeinference.Gather(operand.shape, startIndices.shape, indexVectorAxis, offsetOutputAxes, collapsedSliceAxes, startIndexMap, sliceSizes, indicesAreSorted)
 	if err != nil {
 		return nil, err
 	}

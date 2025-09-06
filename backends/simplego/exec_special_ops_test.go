@@ -249,7 +249,7 @@ func TestExecSpecialOps_gatherIterator(t *testing.T) {
 	collapsedSliceAxes := []int{0, 2}
 	startIndexMap := []int{0, 2, 3}
 	sliceSizes := []int{1, 3, 1, 1}
-	outputShape, err := shapeinference.GatherOp(operandShape, startIndicesShape, startVectorAxis,
+	outputShape, err := shapeinference.Gather(operandShape, startIndicesShape, startVectorAxis,
 		offsetOutputAxes, collapsedSliceAxes, startIndexMap, sliceSizes, false)
 	require.NoError(t, err)
 	fmt.Printf("\toutputShape=%s\n", outputShape)
