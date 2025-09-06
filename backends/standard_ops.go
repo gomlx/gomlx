@@ -223,7 +223,7 @@ type StandardOps interface {
 	// So in general output.Rank() = startIndices.Rank() - 1 + len(offsetAxes).
 	//
 	// (*) One exception is if indexVectorAxis == startIndices.Rank(), in which case we assume there is an
-	// extra virtual axis in startIndices of size 1, in which case output.Rank() = startIndices.Rank() + len(offsetAxes).
+	// extra implicit axis in startIndices of size 1, in which case output.Rank() = startIndices.Rank() + len(offsetAxes).
 	//
 	// Arguments:
 	//   - operand: the values from where we are gathering. The output DType will follow the operand one.
@@ -236,29 +236,30 @@ type StandardOps interface {
 	//     It is typically the last axis of startIndices, so startIndices.Shape.Rank()-1.
 	//     There is a special case where indexVectorAxis == startIndices.Rank() in which case we assume there is an
 	//     extra virtual axis in startIndices of size 1, in which case output.Rank() = startIndices.Rank() + len(offsetAxes).
-	//   - offsetOutputAxes: axes in the _output_ (not on the operand) that will hold the "offset slices", slices that are not
-	//     collapsed. It points in which position (axis) in the output these slices should show up. Any axis in sliceSizes
-	//     that is > 1 must feature here.
-	//     Notice all axes in the operand will either become an "offset axis" in the output, if their slice size > 1,
-	//     of optionally collapsed (or "squeezed") in the output, if their slice size == 1. We map the axes in the output
-	//     (given in offsetAxes) to the axes in the operand (the axes not present in collapsedSliceAxes) sequentially.
+	//   - offsetOutputAxes: _output_ axes (not the operand's) that will hold the "offset slices", slices that are not
+	//     collapsed. It points in which position (axis) in the output these slices should show up.
+	//     The len(offsetOutputAxes) must match the dimension of indexVectorAxis (== startIndices.Dimensions[indexVectorAxis]).
+	//     Notice all axes in the operand will either become an "offset axis" in the output,
+	//     of optionally collapsed (or "squeezed") in the output, if included in collapsedSliceAxes.
+	//     The axes in the output (given in offsetAxes) to the axes in the operand (the axes not present in collapsedSliceAxes) sequentially.
 	//     One must have Rank(operand) == len(collapsedSliceAxes) + len(offsetAxes).
-	//   - collapsedSliceAxes: for sliceSizes that are 1 in the operand, one may not want to include them in the output.
-	//     The _operand_ axes included here are marked to be collapsed (removed) in the output. Notice, the corresponding
-	//     value in sliceSizes must be 1.
-	//     One must have Rank(operand) == len(collapsedSliceAxes) + len(offsetOutputAxes).
-	//   - startIndexMap: this maps which value in startIndices is used for which axis index in the slice to be gathered.
-	//     Notice len(startIndexMap) must match the startIndices.Shape().Dimensions[indexVectorAxis].
+	//   - collapsedSliceAxes: _operand_ axes (for which sliceSizes are 1) not to be included in the output.
+	//     One must have sliceSizes[collapsedSliceAxes[i]] == 1 for all i.
+	//     Also, one must have Rank(operand) == len(collapsedSliceAxes) + len(offsetOutputAxes).
+	//   - startIndexMap: this maps which value in startIndices is used for which axis in the operand, select the slice to be gathered.
+	//     Notice len(startIndexMap) must match the startIndices.Dimensions[indexVectorAxis].
+	//     Also, len(startIndexMap) == len(offsetOutputAxes) -- offsetOutputAxes maps the same axes in the output.
 	//     E.g.: if startIndices.shape=(2, 3), indexVectorAxis=1, and operand.rank=4 and startIndexMap=[]int{0, 1, 2},
-	//     this means each row of the startIndices will point to the first 3 axes (0,1 and 2) in operand.
+	//     this means each row of the startIndices will point to the first 3 axes (0,1 and 2) in the operand.
 	//     In many cases this is [0, 1, 2, ..., operand.Shape.Rank()-1], that is, each "index vector" fully defines
 	//     an element on the operand. In some this is only a prefix of the operand's rank.
 	//     For those axes in the operand not explicitly set (so if len(startIndexMap) < operand.Rank()), the corresponding
 	//     axis start index is considered to be 0, and one sets the sliceSizes to take the slice one wants (typically the
 	//     full slice).
-	//   - sliceSizes: once the start index from where to gather is resolved, this defines how much data in each axis
-	//     to gather. The "offset" output axes (see above) will have dimensions equal to this number for not axes that
-	//     are not collapsed.
+	//   - sliceSizes: a size for each operand's axis, so len(sliceSize) = operand.Rank().
+	//     once the start index from where to gather is resolved, this defines how much data in each axis
+	//     to gather.
+	//     Constraints: sliceSizes[collapsedSliceAxes[i]] == 1, for all i.
 	//   - indicesAreSorted: can be set to true if it's guaranteed that startIndices are sorted (in ascending order,
 	//     after scattering its values according to start_index_map) by the user. This allows for some optimizations
 	//     in some platforms.
