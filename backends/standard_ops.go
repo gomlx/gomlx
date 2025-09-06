@@ -28,7 +28,7 @@ type StandardOps interface {
 
 	// Bitcast performs an elementwise bit-cast operation from a dtype to another dtype.
 	//
-	// The bitcast doesn't "convert", rather it just reinterprets the bits from x.DType() to the targetDType.
+	// The Bitcast doesn't "convert", rather it just reinterprets the bits from x.DType() to the targetDType.
 	//
 	// If x.DType() and targetDType use the same number of bytes (targetDType.Size() == x.DType().Size()),
 	// the dimensions are not changed, simply the dtype is changed.
@@ -58,7 +58,7 @@ type StandardOps interface {
 	// See BroadcastInDim for a broadcast in between the axes.
 	// The new dimensions dims are inserted on the left, i.e., if
 	// prefixDims has values `{a0, ..., aN}` and the operand shape
-	// has dimensions {b0, ..., bM} then the shape of the output has
+	// has dimensions {b0, ..., bM}, then the shape of the output has
 	// dimensions {a0, ..., aN, b0, ..., bM}.
 	// The new dimensions id into copies of the operand, i.e.
 	// 	output[i0, ..., iN, j0, ..., jM] = operand[j0, ..., jM]
@@ -175,7 +175,7 @@ type StandardOps interface {
 	// DynamicUpdateSlice returns the operand with slice updates from update overwritten
 	// at startIndices.
 	//
-	// The shape of update determines the shape of result's updated slices.
+	// The shape of the update determines the shape of the result's updated slices.
 	//
 	// The shape of startIndices must be rank == 1, with dimension size equal to the rank of operand.
 	// See description in https://openxla.org/xla/operation_semantics#dynamicupdateslice
@@ -200,15 +200,15 @@ type StandardOps interface {
 
 	// FFT calls the XLA FFT operation, which implements {Forward, Inverse} x {Complex, Real} versions.
 	// See documentation in https://www.tensorflow.org/xla/operation_semantics.
-	// Underlying, CPU FFT is backed by Eigen's TensorFFT and GPU FFT uses cuFFT.
+	// Underlying, CPU FFT is backed by Eigen's TensorFFT, and GPU FFT uses cuFFT.
 	FFT(operand Op, fftType FFTType, fftLength []int) (Op, error)
 
 	// Floor returns the Op that represents the output of the corresponding operation.
 	Floor(x Op) (Op, error)
 
 	// Gather is a powerful but cumbersome Gather operation offered by XLA.
-	// Full details in https://www.tensorflow.org/xla/operation_semantics#gather.
-	// (Warning: it's circular and cumbersome)
+	// Full details in https://www.tensorflow.org/xla/operation_semantics#gather or
+	// in https://openxla.org/stablehlo/spec#gather
 	//
 	// The output of Gather has the same DType of the operand, from where we are pulling the data.
 	//
@@ -249,17 +249,17 @@ type StandardOps interface {
 	//     One must have Rank(operand) == len(collapsedSliceAxes) + len(offsetOutputAxes).
 	//   - startIndexMap: this maps which value in startIndices is used for which axis index in the slice to be gathered.
 	//     Notice len(startIndexMap) must match the startIndices.Shape().Dimensions[indexVectorAxis].
-	//     E.g: if startIndices.shape=(2, 3), indexVectorAxis=1, and operand.rank=4 and startIndexMap=[]int{0, 1, 2},
-	//     this mean each row of the startIndices will point to the first 3 axis (0,1 and 2) in operand.
+	//     E.g.: if startIndices.shape=(2, 3), indexVectorAxis=1, and operand.rank=4 and startIndexMap=[]int{0, 1, 2},
+	//     this means each row of the startIndices will point to the first 3 axes (0,1 and 2) in operand.
 	//     In many cases this is [0, 1, 2, ..., operand.Shape.Rank()-1], that is, each "index vector" fully defines
 	//     an element on the operand. In some this is only a prefix of the operand's rank.
-	//     For those axis in the operand not explicitly set (so if len(startIndexMap) < operand.Rank()), the corresponding
+	//     For those axes in the operand not explicitly set (so if len(startIndexMap) < operand.Rank()), the corresponding
 	//     axis start index is considered to be 0, and one sets the sliceSizes to take the slice one wants (typically the
 	//     full slice).
 	//   - sliceSizes: once the start index from where to gather is resolved, this defines how much data in each axis
 	//     to gather. The "offset" output axes (see above) will have dimensions equal to this number for not axes that
 	//     are not collapsed.
-	//   - indicesAreSorted: can be set to true if its guaranteed that startIndices are sorted (in ascending order,
+	//   - indicesAreSorted: can be set to true if it's guaranteed that startIndices are sorted (in ascending order,
 	//     after scattering its values according to start_index_map) by the user. This allows for some optimizations
 	//     in some platforms.
 	Gather(operand, startIndices Op, indexVectorAxis int, offsetOutputAxes, collapsedSliceAxes, startIndexMap, sliceSizes []int, indicesAreSorted bool) (Op, error)
@@ -431,22 +431,22 @@ type StandardOps interface {
 	// ScatterSum values from updates pointed by scatterIndices to operand.
 	ScatterSum(operand, scatterIndices, updates Op, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) (Op, error)
 
-	// SelectAndScatterMax runs windows (similar to ReduceWindow) over the operand, selects values to updates the output (like ScatterAdd)
+	// SelectAndScatterMax runs windows (similar to ReduceWindow) over the operand, selects values to update the output (like ScatterAdd)
 	// It selects the values in the window such that it works as reverse for a PoolMax operation.
 	// See details in https://openxla.org/xla/operation_semantics#selectandscatter
 	SelectAndScatterMax(operand, source Op, windowDimensions, windowStrides []int, paddings [][2]int) (Op, error)
 
-	// SelectAndScatterMin runs windows (similar to ReduceWindow) over the operand, selects values to updates the output (like ScatterAdd)
+	// SelectAndScatterMin runs windows (similar to ReduceWindow) over the operand, selects values to update the output (like ScatterAdd)
 	// It selects the values in the window such that it works as reverse for a PoolMin operation.
 	// See details in https://openxla.org/xla/operation_semantics#selectandscatter
 	SelectAndScatterMin(operand, source Op, windowDimensions, windowStrides []int, paddings [][2]int) (Op, error)
 
-	// SelectAndScatterSum runs windows (similar to ReduceWindow) over the operand, selects values to updates the output (like ScatterAdd)
+	// SelectAndScatterSum runs windows (similar to ReduceWindow) over the operand, selects values to update the output (like ScatterAdd)
 	// It selects the values in the window such that it works as reverse for a PoolSum operation.
 	// See details in https://openxla.org/xla/operation_semantics#selectandscatter
 	SelectAndScatterSum(operand, source Op, windowDimensions, windowStrides []int, paddings [][2]int) (Op, error)
 
-	// ShiftLeft n bits. It implicitly preserves the sign bit, if there is no overflow. So ShiftLeft(-1, 1) = -2.
+	// ShiftLeft n bits. It implicitly preserves the sign bit if there is no overflow. So ShiftLeft(-1, 1) = -2.
 	ShiftLeft(lhs, rhs Op) (Op, error)
 
 	// ShiftRightArithmetic shifts right by n bits, preserving the sign bit. So ShiftRight(-2, 1) = -1.
@@ -461,11 +461,11 @@ type StandardOps interface {
 	// Sin returns the Op that represents the output of the corresponding operation.
 	Sin(x Op) (Op, error)
 
-	// Slice extracts a sub-array from the input array.
-	// The sub-array is of the same rank as the input and contains the values inside a bounding box within the input array
+	// Slice extracts a subarray from the input array.
+	// The subarray is of the same rank as the input and contains the values inside a bounding box within the input array
 	// where the dimensions and indices of the bounding box are given as arguments to the slice operation.
 	// The strides set the input stride of the slice in each axis and must be >= 1.
-	// It is optional, and if missing it is assumed to be 1 for every dimension.
+	// It is optional, and if missing, it is assumed to be 1 for every dimension.
 	// Examples:
 	// 	Slice(x={0, 1, 2, 3, 4}, starts={2}, limits={4}, strides=nil) -> {2, 3}
 	// 	Slice(x={0, 1, 2, 3, 4}, starts={2}, limits={5}, strides={2}) -> {2, 4}
@@ -486,6 +486,6 @@ type StandardOps interface {
 	// The output will have: output.Shape.Dimension[ii] = x.Shape.Dimension[permutations[i]].
 	Transpose(x Op, permutations ...int) (Op, error)
 
-	// Where takes element-wise values from onTrue or onFalse depending on the value of condition (expected to be boolean).
+	// Where takes element-wise values from onTrue or onFalse depending on the value of the condition (expected to be boolean).
 	Where(condition, onTrue, onFalse Op) (Op, error)
 }
