@@ -5,6 +5,7 @@ package stablehlo
 import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/stablehlo"
 	stablehlotypes "github.com/gomlx/stablehlo/types"
 	stablehloshapes "github.com/gomlx/stablehlo/types/shapes"
 	"github.com/pkg/errors"
@@ -293,6 +294,27 @@ func (b *Builder) Gather(operand, startIndices backends.Op, indexVectorAxis int,
 	value, err := b.fn.Gather(operandNode.value, startIndicesNode.value, indexVectorAxis,
 		offsetOutputAxes, collapsedSliceAxes, operandBatchingAxes,
 		startIndicesBatchingAxes, startIndexMap, sliceSizes, indicesAreSorted)
+	if err != nil {
+		return nil, err
+	}
+	return b.newNode(value), nil
+}
+
+// Concatenate operands on the given axis.
+//
+// All axes that are not being concatenated must match dimensions, except on the axes being concatenated.
+// It doesn't work with scalars -- use ExpandAxes.
+// If there is only one operand, it is returned and this is a no-op.
+func (b *Builder) Concatenate(axis int, operands ...backends.Op) (backends.Op, error) {
+	operandsNodes, err := b.verifyAndCastValues("Concatenate", operands...)
+	if err != nil {
+		return nil, err
+	}
+	operandsValues := make([]*stablehlo.Value, len(operandsNodes))
+	for i, node := range operandsNodes {
+		operandsValues[i] = node.value
+	}
+	value, err := b.fn.Concatenate(axis, operandsValues...)
 	if err != nil {
 		return nil, err
 	}
