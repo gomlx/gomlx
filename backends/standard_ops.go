@@ -208,7 +208,7 @@ type StandardOps interface {
 
 	// Gather is a powerful but cumbersome Gather operation offered by XLA.
 	// Full details in https://www.tensorflow.org/xla/operation_semantics#gather or
-	// in https://openxla.org/stablehlo/spec#gather
+	// in https://openxla.org/stablehlo/spec#gather (StableHLO also adds batch axes).
 	//
 	// The output of Gather has the same DType of the operand, from where we are pulling the data.
 	//
