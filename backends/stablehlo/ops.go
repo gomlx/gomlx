@@ -4,9 +4,37 @@ package stablehlo
 
 import (
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/types/shapes"
 	stablehlotypes "github.com/gomlx/stablehlo/types"
+	stablehloshapes "github.com/gomlx/stablehlo/types/shapes"
 	"github.com/pkg/errors"
 )
+
+// Iota implements backends.Builder interface.
+func (b *Builder) Iota(shape shapes.Shape, iotaAxis int) (backends.Op, error) {
+	value, err := b.fn.Iota(ShapeToStableHLO(shape), iotaAxis)
+	if err != nil {
+		return nil, err
+	}
+	return b.newNode(value), nil
+
+}
+
+// Reshape implements backends.Builder interface.
+func (b *Builder) Reshape(x backends.Op, dimensions ...int) (backends.Op, error) {
+	nodes, err := b.verifyAndCastValues("Reshape", x)
+	if err != nil {
+		return nil, err
+	}
+	xNode := nodes[0]
+	dtype := xNode.shape.DType
+	shape := stablehloshapes.Make(dtype, dimensions...)
+	value, err := b.fn.Reshape(xNode.value, shape)
+	if err != nil {
+		return nil, err
+	}
+	return b.newNode(value), nil
+}
 
 // comparison generic operation.
 func (b *Builder) comparison(opType backends.OpType, lhs, rhs backends.Op) (backends.Op, error) {
