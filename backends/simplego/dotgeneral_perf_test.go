@@ -3,6 +3,7 @@
 package simplego
 
 import (
+	"flag"
 	"fmt"
 	"strconv"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/dustin/go-humanize"
 	"github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/types/xslices"
@@ -34,6 +36,11 @@ func dimsToStr(dims []int) string {
 	return fmt.Sprintf("{%s}", strings.Join(dimsStr, ", "))
 }
 
+var (
+	flagPerfTests  = flag.String("perf_names", "", "Comma-separated list of performance tests (part of TestDotGeneral_PerformanceTable) to run. If empty, it will run all the perf tests.")
+	flagPerfDTypes = flag.String("perf_dtypes", "", "Comma-separated list of dtypes to run performance test (part of TestDotGeneral_PerformanceTable). If empty, it will run for all supported dtypes.")
+)
+
 // TestDotGeneral_PerformanceTable generates a performance table for differently
 // sized matrices.
 //
@@ -41,36 +48,20 @@ func dimsToStr(dims []int) string {
 //
 // Examples:
 //
-//	$ GOMLX_BACKEND=go go test -tags perf ./backends/simplego/ -test.run TestDotGeneral_PerformanceTable -test.v
-//	$ GOMLX_BACKEND=xla:cuda go test -tags xla,perf ./backends/simplego/ -test.run TestDotGeneral_PerformanceTable -test.v
+//	$ GOMLX_BACKEND=go go test -tags=perf ./backends/simplego/ -test.run=TestDotGeneral_PerformanceTable -test.v -test.count=1
+//	$ GOMLX_BACKEND=xla:cuda go test -tags=xla,perf ./backends/simplego/ -test.run=TestDotGeneral_PerformanceTable -test.v -test.count=1
+//	$ GOMLX_BACKEND=stablehlo:cpu go test -tags=stablehlo,perf ./backends/simplego/ -test.run=TestDotGeneral_PerformanceTable -test.v -test.count=1
 func TestDotGeneral_PerformanceTable(t *testing.T) {
+	filterPerfs := *flagPerfTests != ""
+	perfsToRun := types.SetWith(strings.Split(*flagPerfTests, ",")...)
+	filterDTypes := *flagPerfDTypes != ""
+	dtypesToRun := types.SetWith(strings.Split(*flagPerfDTypes, ",")...)
+
 	// IMPORTANT: Populate this slice with the shapes and parameters of the dot-product.
 	// lhsDims: [Batch, LhsCross, Contracting]
 	// rhsDims: [Batch, RhsCross, Contracting]
 	// Batch and Contracting dimensions must match between lhs and rhs.
 	benchmarkCases := []dotGeneralBenchmarkParamsCase{
-		{
-			name:     "NoBatch-Large",
-			lhsShape: []int{1536, 1920}, lhsContractingAxes: []int{1}, lhsBatchAxes: nil,
-			rhsShape: []int{1920, 1024}, rhsContractingAxes: []int{0}, rhsBatchAxes: nil,
-		},
-		/*
-			{
-				name:     "KA-Batch-16-#4",
-				lhsShape: []int{16, 13, 384}, lhsContractingAxes: []int{2}, lhsBatchAxes: []int(nil),
-				rhsShape: []int{384, 1536}, rhsContractingAxes: []int{0}, rhsBatchAxes: []int(nil),
-			},
-			{
-				name:     "LargeBatch-Medium",
-				lhsShape: []int{64, 64, 128}, lhsContractingAxes: []int{2}, lhsBatchAxes: []int{0},
-				rhsShape: []int{64, 64, 128}, rhsContractingAxes: []int{2}, rhsBatchAxes: []int{0},
-			},
-			{
-				name:     "NoBatch-Large",
-				lhsShape: []int{1536, 1920}, lhsContractingAxes: []int{1}, lhsBatchAxes: nil,
-				rhsShape: []int{1920, 1024}, rhsContractingAxes: []int{0}, rhsBatchAxes: nil,
-			},
-		*/
 		{
 			name:     "NoBatch-Tiny",
 			lhsShape: []int{128, 4}, lhsContractingAxes: []int{1}, lhsBatchAxes: []int{},
@@ -192,7 +183,13 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 	fmt.Println(strings.Repeat("-", len(header)))
 
 	for benchCaseIdx, benchCase := range benchmarkCases {
+		if filterPerfs && !perfsToRun.Has(benchCase.name) {
+			continue
+		}
 		for _, dtype := range dtypesToTest {
+			if filterDTypes && !dtypesToRun.Has(dtype.String()) {
+				continue
+			}
 			// Construct shapes from dimensions and current dtype
 			lhsShape := shapes.Make(dtype, benchCase.lhsShape...)
 			rhsShape := shapes.Make(dtype, benchCase.rhsShape...)

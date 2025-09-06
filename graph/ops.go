@@ -788,6 +788,7 @@ func ArgMin(x *Node, axis int, outputDType ...dtypes.DType) (output *Node) {
 	} else if len(outputDType) == 1 {
 		dtype = outputDType[0]
 	}
+	axis = adjustAxisToRank(axis, x.Rank())
 	return backendArgMinMax(x, axis, dtype, true)
 }
 

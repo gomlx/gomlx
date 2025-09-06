@@ -560,7 +560,7 @@ func (e *Exec) createAndCacheGraph(argsShapes []shapes.Shape) (entry *execGraphC
 		argsV = make([]reflect.Value, 0, len(argsShapes))
 	}
 	for ii, shape := range argsShapes {
-		arg := Parameter(g, fmt.Sprintf("arg#%d", ii), shape)
+		arg := Parameter(g, fmt.Sprintf("arg%d", ii), shape)
 		if e.inputAsSlice {
 			args = append(args, arg)
 		} else {

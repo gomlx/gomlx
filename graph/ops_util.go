@@ -229,7 +229,7 @@ func MirroredLog1p(x *Node) *Node {
 // Clip is a shortcut to `Min(max, Max(x, min))`, which returns the values of x clipped between
 // min and max.
 func Clip(x, min, max *Node) *Node {
-	return Min(max, Max(x, min))
+	return Clamp(min, x, max) // Min(max, Max(x, min))
 }
 
 // ClipScalar is a shortcut to `Min(max, Max(x, min))`, which returns the values of x clipped between

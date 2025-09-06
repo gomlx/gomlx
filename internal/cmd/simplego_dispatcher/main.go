@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -8,6 +9,7 @@ import (
 	"text/template"
 
 	"github.com/janpfeifer/must"
+	"k8s.io/klog/v2"
 )
 
 type DTypeInfo struct {
@@ -153,6 +155,9 @@ func makeDTypes(ints, uints, floats, bfloat16, boolean bool) []DTypeInfo {
 }
 
 func main() {
+	klog.InitFlags(nil)
+	flag.Parse()
+
 	registerTemplate := template.Must(
 		template.
 			New(fileName).
@@ -206,13 +211,13 @@ func init() {
 
 }	
 `))
-
-	f := must.M1(os.Create(fileName))
+	fullPath := path.Join(must.M1(os.Getwd()), fileName)
+	f := must.M1(os.Create(fullPath))
 	must.M(registerTemplate.Execute(f, data))
 	must.M(f.Close())
 
-	cmd := exec.Command("gofmt", "-w", fileName)
-	fmt.Printf("\t%s\n", cmd)
+	cmd := exec.Command("gofmt", "-w", fullPath)
+	klog.V(1).Infof("\t%s\n", cmd)
 	must.M(cmd.Run())
-	fmt.Printf("✅ Successfully generated %s\n", path.Join(must.M1(os.Getwd()), fileName))
+	fmt.Printf("✅ simplego_dispatcher:  \tsuccessfully generated %s\n", fullPath)
 }

@@ -51,14 +51,14 @@ func castToXlaOp(op backends.Op) *xlabuilder.Op {
 	return xop
 }
 
-// CheckValid panics if the backend or the builder are not ok -- e.g.: if they have been finalized or the builder
-// has already been compiled.
+// CheckValid returns an error if the backend or the builder are not ok.
+//
+// E.g.: they have been finalized or the builder has already been compiled.
 func (b *Builder) CheckValid() error {
 	if b == nil || b.builder == nil {
 		return errors.Errorf("builder is nil or undefined for %q", BackendName)
 	}
 	return b.backend.CheckValid()
-
 }
 
 func xshapeToShape(xshape xlabuilder.Shape) shapes.Shape {

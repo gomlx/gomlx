@@ -1,16 +1,12 @@
-// Package parsexlabuilder parses the xlabuilder API to enumerate graph building functions, and the `op_types.txt`
+// Package xlabuilderparser parses the xlabuilder API to enumerate graph building functions, and the `op_types.txt`
 // file to get a list of the supported ops.
 //
 // It will clone a temporary copy of gopjrt (github.com/gomlx/gopjrt) repository by default, or use the one under
 // GOPJRT_SRC if it is set.
-package parsexlabuilder
+package xlabuilderparser
 
 import (
 	"bufio"
-	"fmt"
-	"github.com/gomlx/exceptions"
-	"github.com/gomlx/gomlx/types"
-	"github.com/janpfeifer/must"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -19,6 +15,11 @@ import (
 	"path"
 	"strings"
 	"sync"
+
+	"github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/types"
+	"github.com/janpfeifer/must"
+	"k8s.io/klog/v2"
 )
 
 const GopjrtEnv = "GOPJRT_SRC"
@@ -26,7 +27,7 @@ const GopjrtEnv = "GOPJRT_SRC"
 var (
 	// DefaultGopjrtSource is the directory where to clone the gopjrt (github.com/gomlx/gopjrt) source code.
 	// If not an absolute directory, it will be prefixed by os.TempDir().
-	DefaultGopjrtSource = "parsexlabuilder"
+	DefaultGopjrtSource = "xlabuilderparser"
 
 	// GopjrtSourcePath is the cached path used for the source code.
 	GopjrtSourcePath = ""
@@ -47,7 +48,7 @@ func GetGopjrt() string {
 		return GopjrtSourcePath
 	}
 
-	// Create/find temporary repository directory.
+	// Create/find a temporary repository directory.
 	basePath := DefaultGopjrtSource
 	if !path.IsAbs(basePath) {
 		basePath = path.Join(os.TempDir(), basePath)
@@ -66,14 +67,13 @@ func GetGopjrt() string {
 		must.M(os.MkdirAll(basePath, 0755))
 		cmd := exec.Command("git", "clone", "https://github.com/gomlx/gopjrt.git")
 		cmd.Dir = basePath
-		fmt.Printf("Downloading gopjrt under %s:\n\t%s\n", cmd.Dir, cmd)
+		klog.V(1).Infof("Downloading gopjrt under %s:\n\t%s\n", cmd.Dir, cmd)
 		must.M(cmd.Run())
-
 	} else {
 		// Repository already cloned, just in case sync repository for latest updates.
 		cmd := exec.Command("git", "pull")
 		cmd.Dir = GopjrtSourcePath
-		fmt.Printf("Sync'ing gopjrt in %s:\n\t%s\n", GopjrtSourcePath, cmd)
+		klog.V(1).Infof("Sync'ing gopjrt in %s:\n\t%s\n", GopjrtSourcePath, cmd)
 		must.M(cmd.Run())
 	}
 	return GopjrtSourcePath

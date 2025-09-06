@@ -23,7 +23,7 @@ import (
 	"golang.org/x/exp/maps"
 )
 
-//go:generate go run ../internal/cmd/backends_generator
+// No longer used: go:generate go run ../internal/cmd/backends_generator
 
 // DeviceNum represents which device holds a buffer or should execute a computation.
 // It's up to the backend to interpret it, but it should be between 0 and Backend.NumDevices.

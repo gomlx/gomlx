@@ -603,7 +603,7 @@ func FromAnyValue(value any) (t *Tensor) {
 		// Input is already a Tensor.
 		return valueT
 	}
-	shape, err := shapeForValue(value)
+	shape, err := shapes.FromAnyValue(value)
 	if err != nil {
 		panic(errors.Wrapf(err, "cannot create shape from %T", value))
 	}

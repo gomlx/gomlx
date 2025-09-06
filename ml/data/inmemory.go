@@ -499,7 +499,7 @@ func (mds *InMemoryDataset) Yield() (spec any, inputs []*tensors.Tensor, labels 
 	for _, data := range mds.inputsAndLabelsData {
 		indicesAndData = append(indicesAndData, data)
 	}
-	err = TryCatch[error](func() { inputsAndLabels = mds.gatherExec.Call(indicesAndData...) })
+	inputsAndLabels, err = mds.gatherExec.CallOrError(indicesAndData...)
 	if err != nil {
 		err = errors.WithMessagef(err, "failed gathering examples from mds data, indices=%v", indices)
 		return

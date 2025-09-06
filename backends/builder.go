@@ -8,7 +8,7 @@ import (
 
 // Op represents the output of an operation, during the computation graph building time.
 //
-// It is opaque from GoMLX perspective: it passes Op as input to the other methods.
+// It is opaque from the GoMLX perspective: it passes Op as input to the other methods.
 type Op any
 
 // Builder defines the set of ops to support building a computation.

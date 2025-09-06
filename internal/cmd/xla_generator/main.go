@@ -7,14 +7,18 @@
 package main
 
 import (
-	"fmt"
-	"github.com/gomlx/gomlx/internal/cmd/backends_generator/parsexlabuilder"
+	"flag"
+
+	"github.com/gomlx/gomlx/internal/xlabuilderparser"
+	"k8s.io/klog/v2"
 )
 
 func main() {
-	fmt.Println("xla_generator:")
-	opsInfo := parsexlabuilder.ReadOpsInfo()
+	klog.InitFlags(nil)
+	flag.Parse()
+	klog.V(1).Info("xla_generator:")
+	opsInfo := xlabuilderparser.ReadOpsInfo()
 	_ = opsInfo
-	extractor, xlaBuilderAst := parsexlabuilder.Parse()
+	extractor, xlaBuilderAst := xlabuilderparser.Parse()
 	GenerateStandardOpsImplementation(extractor, xlaBuilderAst)
 }

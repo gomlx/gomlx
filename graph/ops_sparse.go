@@ -17,6 +17,8 @@
 package graph
 
 import (
+	"slices"
+
 	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/shapes"
@@ -25,21 +27,21 @@ import (
 )
 
 // Gather values in params from the pointers in indices.
-// The outputs are slices of `params` selected by `indices`, stitched together.
+// The outputs are slices of params selected by indices, stitched together.
 //
-// Let's assume params has shapes `[i_1, ..., i_N, s_1, ..., s_S]`, where:
+// Let's assume params has shapes [i_1, ..., i_N, s_1, ..., s_S], where:
 //
-//   - `i_1, ..., i_N` are the N "indexed axes", that is, the axes that are indexed by `indices`.
+//   - `i_1, ..., i_N` are the N "indexed axes", that is, the axes that are indexed by indices.
 //   - `s_1, ..., s_S` are the S dimensions of the slices that are going to be "gathered" (copied over).
 //
-// And let's assume indices has shapes `[o_1,...,o_O, N]`, where:
+// And let's assume indices has shapes [o_1,...,o_O, N], where:
 //
 //   - `o_1, ..., o_O` are "batch dimensions" of the slices from `params` to gather, that will be included in the output.
 //     E.g.: let's say O=1, and o_1=3, that means there will be 3 slices to gather.
 //   - Last dimension `N`: this is the number of indices in `params` to point to. `N` is the number of
 //     dimensions indexed `i_1, ..., i_N` in `params` above.
 //
-// The output will have shapes `[o_1,...,o_O, s_1, ... s_S]`, where:
+// The output will have shapes [o_1,...,o_O, s_1, ... s_S], where:
 //
 //   - `o_1, ..., o_O` come from indices, and are enumerations of the slices from params to gather.
 //   - `s_1, ..., s_S` are the slice sizes copied from params.
@@ -53,8 +55,8 @@ import (
 //	indices := [][]int{{1}, {0}}
 //	Gather(params, indices) would return {{3, 4, 5}, {0, 1, 2}}
 //
-// In the case above params shapes is interpreted as `[i_1=3, s_1=3]`, and indices' shapes is
-// `[o_1=2, N=1]`. The output shapes is `[o_1=2, s_1=3]`.
+// In the case above params shapes is interpreted as [i_1=3, s_1=3], and indices shapes is
+// [o_1=2, N=1]. The output shapes is [o_1=2, s_1=3].
 func Gather(params, indices *Node, indicesAreSorted ...bool) *Node {
 	_ = validateBuildingGraphFromInputs(params, indices)
 	if params.IsScalar() {
@@ -86,13 +88,13 @@ func Gather(params, indices *Node, indicesAreSorted ...bool) *Node {
 	// Construct call to gatherXLA:
 	// * indexVectorDim is always the last one.
 	indexVectorDim := indicesRank - 1
-	// * startIndexMap is sequential and sorted
+	// * startIndexMap is sequential and sorted: it always points to the first axes of params.
 	startIndexMap := make([]int, indexedSubRank)
 	for ii := 0; ii < indexedSubRank; ii++ {
 		startIndexMap[ii] = ii
 	}
-	// * sliceSizes are 1 everywhere but on the sliced dimensions.
-	// * collapsedSliceDims is set to collapse all dimensions set to 1.
+	// * sliceSizes are 1 where we indexed (indexedSubRank), and the full params size else where (the slices we are gathering).
+	// * collapsedSliceDims sets to collapse all the indexed params dimensions (the first indexedSubRank).
 	sliceSizes := make([]int, paramsRank)
 	collapsedSliceDims := make([]int, indexedSubRank)
 	for ii := 0; ii < paramsRank; ii++ {
@@ -103,15 +105,15 @@ func Gather(params, indices *Node, indicesAreSorted ...bool) *Node {
 			sliceSizes[ii] = params.Shape().Dimensions[ii]
 		}
 	}
-	// * offsetDims are the dimensions indexed.
-	offsetDims := make([]int, paramsRank-indexedSubRank)
-	for ii := range offsetDims {
-		offsetDims[ii] = outputSubRank + ii
+	// * offsetOutputAxes are set for all params axes not collapsed, and they point to where those axes go in the output shape.
+	offsetOutputAxes := make([]int, paramsRank-indexedSubRank)
+	for ii := range offsetOutputAxes {
+		offsetOutputAxes[ii] = outputSubRank + ii
 	}
 
 	// Make no assumptions about indices being sorted or unique.
 	// TODO: add version where these can be set.
-	return backendGather(params, indices, indexVectorDim, offsetDims, collapsedSliceDims, startIndexMap, sliceSizes,
+	return backendGather(params, indices, indexVectorDim, offsetOutputAxes, collapsedSliceDims, startIndexMap, sliceSizes,
 		len(indicesAreSorted) == 1 && indicesAreSorted[0])
 }
 
@@ -170,7 +172,7 @@ func GatherSlices(input *Node, slicedAxes []int, start *Node, sizes []int, indic
 			"so it takes one index value per axis to be sliced -- slicedAxes=%v, start.Shape()=%s",
 			slicedAxes, start.Shape())
 	}
-	outputPrefixRank := startRank - 1
+	outputPrefixRank := startRank - 1 // The start axes will
 
 	// AssertValid slicedAxes and normalizes it (replacing negative axis to their corresponding ones).
 	{
@@ -199,14 +201,15 @@ func GatherSlices(input *Node, slicedAxes []int, start *Node, sizes []int, indic
 		slicedAxes = normalized
 	}
 
-	// Construct call to gatherXLA:
+	// Construct call to the backend.
 	// * indexVectorDim indicates the axis in the start that has the indices: it's always the last one.
 	indexVectorDim := startRank - 1
-	// * startIndexMap holds the axis in the input that are pointed by `start`. These are exactly the normalized slicedAxes.
+	// * startIndexMap is the list of input axes that are pointed by `start`. These are exactly the normalized slicedAxes.
+	//   len(startIndexMap) == len(sizes)
 	startIndexMap := slicedAxes
 	// * sliceSizes must be defined for each input axis, and are either given in `sizes` or are assumed to be the full dimension
-	//   of the input.
-	sliceSizes := input.Shape().Clone().Dimensions // Start with a copy of the input's dimensions.
+	//   of the input. The sliceSize is the full size (dimension) of the input for axes not being sliced.
+	sliceSizes := slices.Clone(input.Shape().Dimensions) // Start with a copy of the input's dimensions.
 	for ii, size := range sizes {
 		axis := slicedAxes[ii]
 		sliceSizes[axis] = size
@@ -221,17 +224,14 @@ func GatherSlices(input *Node, slicedAxes []int, start *Node, sizes []int, indic
 		axis := ii + outputPrefixRank
 		offsetOutputAxes = append(offsetOutputAxes, axis)
 	}
-
-	// Make no assumptions about indices being sorted or unique.
-	// TODO: add version where these can be set.
 	return backendGather(input, start, indexVectorDim, offsetOutputAxes, collapsedSliceDims, startIndexMap, sliceSizes, indicesAreSorted)
 }
 
 // BackendGather exposes the raw backend Gather operator.
 //
-// This should be internal and it is exposed only for debugging purposes, please don't rely on it. If it turns out you
-// need some functionality here that is not provided in Gather or GatherSlices, open an issue in GoMLX and we'll figure
-// a betterAPI.
+// This is internal, and it is exposed only for debugging purposes, please don't rely on it.
+// If it turns out you need some functionality here that is not provided in Gather or GatherSlices,
+// open an issue in GoMLX and we'll figure a betterAPI.
 //
 // See convoluted and circular description in
 // https://openxla.org/xla/operation_semantics#gather
