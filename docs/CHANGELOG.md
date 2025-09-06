@@ -4,11 +4,14 @@
 
 * Package `shapes`:
   * Added `FromAnyValue`: extract shape from a Go type.
-* New backend: `stablehlo` (or simply "_hlo_" for short).
-  * Large clean up of generators: most no longer depending on `gopjrt/xlabuilder`.
+* New backend: `stablehlo` (or simply _"hlo"_ for short) using https://github.com/gomlx/stablehlo.
+  * All standard binary and unary ops implemented.
+  * A handful of the standard ops also implemented.
+  * If `backends/default` is compiled with `-tags=stablehlo` it will include the `stablehlo` backend.
+  * Large cleanup of generators: most no longer depending on `gopjrt/xlabuilder`.
 * Package `graph`:
   * Fix of `ArgMin` now accepting negative axes.
-  * `Clip` now uses the backend operation Clamp.
+  * `Clip` now uses the backend operation `Clamp`.
 
 # v0.22.1: 2025/08/22 🌀 Convolutions 🌀 
 
