@@ -197,7 +197,7 @@ func (b *Builder) Rem(lhs, rhs backends.Op) (backends.Op, error) {
 	return b.newNode(value), nil
 }
 
-// ShiftLeft n bits. It implicitly preserves the sign bit, if there is no overflow. So ShiftLeft(-1, 1) = -2.
+// ShiftLeft n bits. It implicitly preserves the sign bit if there is no overflow. So ShiftLeft(-1, 1) = -2.
 func (b *Builder) ShiftLeft(lhs, rhs backends.Op) (backends.Op, error) {
 	lhsNode, rhsNode, err := b.broadcastForBinaryOps(backends.OpTypeShiftLeft, lhs, rhs)
 	if err != nil {

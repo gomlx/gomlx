@@ -486,7 +486,7 @@ func (ni *nodeInputsBitcast) String() string {
 
 // Bitcast performs an elementwise bit-cast operation from a dtype to another dtype.
 //
-// The bitcast doesn't "convert", rather it just reinterprets the bits from x.DType() to the targetDType.
+// The Bitcast doesn't "convert", rather it just reinterprets the bits from x.DType() to the targetDType.
 //
 // If x.DType() and targetDType use the same number of bytes (targetDType.Size() == x.DType().Size()),
 // the dimensions are not changed, simply the dtype is changed.
@@ -1414,7 +1414,7 @@ func (ni *nodeInputsDynamicUpdateSlice) String() string {
 // DynamicUpdateSlice returns the operand with slice updates from update overwritten
 // at startIndices.
 //
-// The shape of update determines the shape of result's updated slices.
+// The shape of the update determines the shape of the result's updated slices.
 //
 // The shape of startIndices must be rank == 1, with dimension size equal to the rank of operand.
 // See description in https://openxla.org/xla/operation_semantics#dynamicupdateslice
