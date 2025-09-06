@@ -105,7 +105,7 @@ func GenerateSingleOp(method backendparser.Method) {
 			}
 		}
 		if len(method.Outputs) > 1 || method.Outputs[0].Name != "" {
-			w(")\n")
+			w(")")
 		}
 	}
 	w(" {\n")
