@@ -36,6 +36,20 @@ func (b *Builder) Reshape(x backends.Op, dimensions ...int) (backends.Op, error)
 	return b.newNode(value), nil
 }
 
+// Slice implements backends.Builder interface.
+func (b *Builder) Slice(x backends.Op, starts, limits, strides []int) (backends.Op, error) {
+	nodes, err := b.verifyAndCastValues("Slice", x)
+	if err != nil {
+		return nil, err
+	}
+	xNode := nodes[0]
+	value, err := b.fn.Slice(xNode.value, starts, limits, strides)
+	if err != nil {
+		return nil, err
+	}
+	return b.newNode(value), nil
+}
+
 // comparison generic operation.
 func (b *Builder) comparison(opType backends.OpType, lhs, rhs backends.Op) (backends.Op, error) {
 	lhsNode, rhsNode, err := b.broadcastForBinaryOps(opType, lhs, rhs)
