@@ -16,7 +16,7 @@ require (
 	github.com/gomlx/bsplines v0.2.0
 	github.com/gomlx/exceptions v0.0.3
 	github.com/gomlx/gopjrt v0.8.0
-	github.com/gomlx/stablehlo v0.0.0-20250906072654-12db254ffda7
+	github.com/gomlx/stablehlo v0.0.0-20250907175129-ae0daa17b6f7
 	github.com/google/uuid v1.6.0
 	github.com/janpfeifer/gonb v0.11.1
 	github.com/janpfeifer/must v0.2.0
