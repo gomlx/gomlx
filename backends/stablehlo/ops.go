@@ -11,6 +11,60 @@ import (
 	"github.com/pkg/errors"
 )
 
+// BroadcastInDim broadcasts x to an output with the given shape.
+// broadcastAxes has an output axes value for each x axes (len(broadcastAxes) == x.Shape.Rank()).
+// The i-th axis of x is mapped to the broadcastAxes[i]-th dimension of the output.
+// broadcastAxes must be also increasing: this operation cannot be used to transpose axes, it will only
+// broadcast and introduce new axes in-between.
+// This also requires that the i-th input axis is either 1 or is the same as the
+// output dimension it's broadcasting into.
+// For example, say operand `x = (s32)[2]{1, 2}`; outputShape = `(s32)[2,2]`:
+//   - Specifying []int{1} as broadcastAxes will generate output
+//     {{1, 2},
+//     {1, 2}}
+//   - On the other hand, specifying []int{0} as broadcastAxes
+//     will generate output
+//     {{1 , 1},
+//     {2 , 2}}
+func (b *Builder) BroadcastInDim(x backends.Op, outputShape shapes.Shape, broadcastAxes []int) (backends.Op, error) {
+	nodes, err := b.verifyAndCastValues("BroadcastInDim", x)
+	if err != nil {
+		return nil, err
+	}
+	value, err := b.fn.BroadcastInDim(nodes[0].value, ShapeToStableHLO(outputShape), broadcastAxes)
+	if err != nil {
+		return nil, err
+	}
+	return b.newNode(value), nil
+}
+
+// Broadcast implements the backends.Builder interface.
+func (b *Builder) Broadcast(x backends.Op, prefixDims ...int) (backends.Op, error) {
+	nodes, err := b.verifyAndCastValues("Broadcast", x)
+	if err != nil {
+		return nil, err
+	}
+	if len(prefixDims) == 0 {
+		return x, nil
+	}
+
+	xNode := nodes[0]
+	shape := xNode.shape
+	newDims := make([]int, shape.Rank()+len(prefixDims))
+	copy(newDims, prefixDims)
+	copy(newDims[len(prefixDims):], shape.Dimensions)
+	outputShape := shapes.Make(shape.DType, newDims...)
+	broadcastAxes := make([]int, shape.Rank())
+	for i := range shape.Rank() {
+		broadcastAxes[i] = i + len(prefixDims)
+	}
+	value, err := b.fn.BroadcastInDim(xNode.value, ShapeToStableHLO(outputShape), broadcastAxes)
+	if err != nil {
+		return nil, err
+	}
+	return b.newNode(value), nil
+}
+
 // Iota implements backends.Builder interface.
 func (b *Builder) Iota(shape shapes.Shape, iotaAxis int) (backends.Op, error) {
 	value, err := b.fn.Iota(ShapeToStableHLO(shape), iotaAxis)

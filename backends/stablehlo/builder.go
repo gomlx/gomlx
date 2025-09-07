@@ -8,6 +8,7 @@ import (
 	"github.com/gomlx/gomlx/backends/shapeinference"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/xslices"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/stablehlo"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
@@ -26,6 +27,15 @@ type Builder struct {
 
 	parameterNames  []string
 	parameterShapes []shapes.Shape
+
+	// Various caches.
+	cacheReductions map[reductionKey]*stablehlo.Function
+}
+
+// reductionKey for the cache of inlined functions for reductions.
+type reductionKey struct {
+	dtype  dtypes.DType
+	opType backends.OpType
 }
 
 var _ backends.Builder = (*Builder)(nil)
@@ -37,9 +47,10 @@ func (backend *Backend) Builder(name string) backends.Builder {
 		return nil
 	}
 	b := &Builder{
-		backend: backend,
-		builder: stablehlo.New(name),
-		name:    name,
+		backend:         backend,
+		builder:         stablehlo.New(name),
+		name:            name,
+		cacheReductions: make(map[reductionKey]*stablehlo.Function),
 	}
 	b.Builder.ErrFn = func(op backends.OpType) error {
 		return errors.Errorf("StableHLO hasn't implemented operation %q yet, pls open an issue in https://github.com/gomlx/gomlx", op)
@@ -160,33 +171,6 @@ func (b *Builder) Constant(flat any, dimensions ...int) (backends.Op, error) {
 	value, err := b.fn.ConstantFromFlatAndDimensions(flat, dimensions...)
 	if err != nil {
 		return nil, errors.WithMessagef(err, "while building op Constant()")
-	}
-	return b.newNode(value), nil
-}
-
-// BroadcastInDim broadcasts x to an output with the given shape.
-// broadcastAxes has an output axes value for each x axes (len(broadcastAxes) == x.Shape.Rank()).
-// The i-th axis of x is mapped to the broadcastAxes[i]-th dimension of the output.
-// broadcastAxes must be also increasing: this operation cannot be used to transpose axes, it will only
-// broadcast and introduce new axes in-between.
-// This also requires that the i-th input axis is either 1 or is the same as the
-// output dimension it's broadcasting into.
-// For example, say operand `x = (s32)[2]{1, 2}`; outputShape = `(s32)[2,2]`:
-//   - Specifying []int{1} as broadcastAxes will generate output
-//     {{1, 2},
-//     {1, 2}}
-//   - On the other hand, specifying []int{0} as broadcastAxes
-//     will generate output
-//     {{1 , 1},
-//     {2 , 2}}
-func (b *Builder) BroadcastInDim(x backends.Op, outputShape shapes.Shape, broadcastAxes []int) (backends.Op, error) {
-	nodes, err := b.verifyAndCastValues("BroadcastInDim", x)
-	if err != nil {
-		return nil, err
-	}
-	value, err := b.fn.BroadcastInDim(nodes[0].value, ShapeToStableHLO(outputShape), broadcastAxes)
-	if err != nil {
-		return nil, err
 	}
 	return b.newNode(value), nil
 }
