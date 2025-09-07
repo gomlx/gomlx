@@ -366,43 +366,73 @@ type StandardOps interface {
 	// Real return the real part of a complex number. It returns x if the x is a float number.
 	Real(x Op) (Op, error)
 
-	// ReduceBitwiseAnd is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the bitwise/logical And of the reduced axes.
+	// ReduceBitwiseAnd reduces x over the axes selected, performing a BitwiseAnd on the slices reduced.
+	//
+	// The returned result rank is decreased by len(axes).
+	//
 	// If no axes are given, it reduces the full array.
 	ReduceBitwiseAnd(x Op, axes ...int) (Op, error)
 
-	// ReduceBitwiseOr is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the bitwise/logical Or of the reduced axes.
+	// ReduceBitwiseOr reduces x over the axes selected, performing a BitwiseOr on the slices reduced.
+	//
+	// The returned result rank is decreased by len(axes).
+	//
 	// If no axes are given, it reduces the full array.
 	ReduceBitwiseOr(x Op, axes ...int) (Op, error)
 
-	// ReduceBitwiseXor is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the bitwise/logical Xor of the reduced axes.
+	// ReduceBitwiseXor reduces x over the axes selected, performing a BitwiseXor on the slices reduced.
+	//
+	// The returned result rank is decreased by len(axes).
+	//
 	// If no axes are given, it reduces the full array.
 	ReduceBitwiseXor(x Op, axes ...int) (Op, error)
 
-	// ReduceLogicalAnd is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the bitwise/logical And of the reduced axes.
+	// ReduceLogicalAnd reduces x over the axes selected, performing a LogicalAnd on the slices reduced.
+	//
+	// The returned result rank is decreased by len(axes).
+	//
 	// If no axes are given, it reduces the full array.
 	ReduceLogicalAnd(x Op, axes ...int) (Op, error)
 
-	// ReduceLogicalOr is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the bitwise/logical Or of the reduced axes.
+	// ReduceLogicalOr reduces x over the axes selected, performing a LogicalOr on the slices reduced.
+	//
+	// The returned result rank is decreased by len(axes).
+	//
 	// If no axes are given, it reduces the full array.
 	ReduceLogicalOr(x Op, axes ...int) (Op, error)
 
-	// ReduceLogicalXor is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the bitwise/logical Xor of the reduced axes.
+	// ReduceLogicalXor reduces x over the axes selected, performing a LogicalXor on the slices reduced.
+	//
+	// The returned result rank is decreased by len(axes).
+	//
 	// If no axes are given, it reduces the full array.
 	ReduceLogicalXor(x Op, axes ...int) (Op, error)
 
-	// ReduceMax is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the max value.
+	// ReduceMax reduces x over the axes selected, taking the Max value of the slices reduced.
+	//
+	// The returned result rank is decreased by len(axes).
+	//
 	// If no axes are given, it reduces the full array.
 	ReduceMax(x Op, axes ...int) (Op, error)
 
-	// ReduceMin is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the min value.
+	// ReduceMin reduces x over the axes selected, taking the Min value of the slices reduced.
+	//
+	// The returned result rank is decreased by len(axes).
+	//
 	// If no axes are given, it reduces the full array.
 	ReduceMin(x Op, axes ...int) (Op, error)
 
-	// ReduceProduct is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the product of the reduced axes.
+	// ReduceProduct reduces x over the axes selected, taking the product of the slices reduced.
+	//
+	// The returned result rank is decreased by len(axes).
+	//
 	// If no axes are given, it reduces the full array.
 	ReduceProduct(x Op, axes ...int) (Op, error)
 
-	// ReduceSum is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the sum of the reduced axes.
+	// ReduceSum reduces x over the axes selected, taking the sum of the slices reduced.
+	//
+	// The returned result rank is decreased by len(axes).
+	//
 	// If no axes are given, it reduces the full array.
 	ReduceSum(x Op, axes ...int) (Op, error)
 

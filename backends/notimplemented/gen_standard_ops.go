@@ -491,61 +491,91 @@ func (b Builder) Real(x backends.Op) (backends.Op, error) {
 	return nil, b.baseErrFn(backends.OpTypeReal)
 }
 
-// ReduceBitwiseAnd is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the bitwise/logical And of the reduced axes.
+// ReduceBitwiseAnd reduces x over the axes selected, performing a BitwiseAnd on the slices reduced.
+//
+// The returned result rank is decreased by len(axes).
+//
 // If no axes are given, it reduces the full array.
 func (b Builder) ReduceBitwiseAnd(x backends.Op, axes ...int) (backends.Op, error) {
 	return nil, b.baseErrFn(backends.OpTypeReduceBitwiseAnd)
 }
 
-// ReduceBitwiseOr is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the bitwise/logical Or of the reduced axes.
+// ReduceBitwiseOr reduces x over the axes selected, performing a BitwiseOr on the slices reduced.
+//
+// The returned result rank is decreased by len(axes).
+//
 // If no axes are given, it reduces the full array.
 func (b Builder) ReduceBitwiseOr(x backends.Op, axes ...int) (backends.Op, error) {
 	return nil, b.baseErrFn(backends.OpTypeReduceBitwiseOr)
 }
 
-// ReduceBitwiseXor is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the bitwise/logical Xor of the reduced axes.
+// ReduceBitwiseXor reduces x over the axes selected, performing a BitwiseXor on the slices reduced.
+//
+// The returned result rank is decreased by len(axes).
+//
 // If no axes are given, it reduces the full array.
 func (b Builder) ReduceBitwiseXor(x backends.Op, axes ...int) (backends.Op, error) {
 	return nil, b.baseErrFn(backends.OpTypeReduceBitwiseXor)
 }
 
-// ReduceLogicalAnd is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the bitwise/logical And of the reduced axes.
+// ReduceLogicalAnd reduces x over the axes selected, performing a LogicalAnd on the slices reduced.
+//
+// The returned result rank is decreased by len(axes).
+//
 // If no axes are given, it reduces the full array.
 func (b Builder) ReduceLogicalAnd(x backends.Op, axes ...int) (backends.Op, error) {
 	return nil, b.baseErrFn(backends.OpTypeReduceLogicalAnd)
 }
 
-// ReduceLogicalOr is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the bitwise/logical Or of the reduced axes.
+// ReduceLogicalOr reduces x over the axes selected, performing a LogicalOr on the slices reduced.
+//
+// The returned result rank is decreased by len(axes).
+//
 // If no axes are given, it reduces the full array.
 func (b Builder) ReduceLogicalOr(x backends.Op, axes ...int) (backends.Op, error) {
 	return nil, b.baseErrFn(backends.OpTypeReduceLogicalOr)
 }
 
-// ReduceLogicalXor is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the bitwise/logical Xor of the reduced axes.
+// ReduceLogicalXor reduces x over the axes selected, performing a LogicalXor on the slices reduced.
+//
+// The returned result rank is decreased by len(axes).
+//
 // If no axes are given, it reduces the full array.
 func (b Builder) ReduceLogicalXor(x backends.Op, axes ...int) (backends.Op, error) {
 	return nil, b.baseErrFn(backends.OpTypeReduceLogicalXor)
 }
 
-// ReduceMax is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the max value.
+// ReduceMax reduces x over the axes selected, taking the Max value of the slices reduced.
+//
+// The returned result rank is decreased by len(axes).
+//
 // If no axes are given, it reduces the full array.
 func (b Builder) ReduceMax(x backends.Op, axes ...int) (backends.Op, error) {
 	return nil, b.baseErrFn(backends.OpTypeReduceMax)
 }
 
-// ReduceMin is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the min value.
+// ReduceMin reduces x over the axes selected, taking the Min value of the slices reduced.
+//
+// The returned result rank is decreased by len(axes).
+//
 // If no axes are given, it reduces the full array.
 func (b Builder) ReduceMin(x backends.Op, axes ...int) (backends.Op, error) {
 	return nil, b.baseErrFn(backends.OpTypeReduceMin)
 }
 
-// ReduceProduct is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the product of the reduced axes.
+// ReduceProduct reduces x over the axes selected, taking the product of the slices reduced.
+//
+// The returned result rank is decreased by len(axes).
+//
 // If no axes are given, it reduces the full array.
 func (b Builder) ReduceProduct(x backends.Op, axes ...int) (backends.Op, error) {
 	return nil, b.baseErrFn(backends.OpTypeReduceProduct)
 }
 
-// ReduceSum is a shortcut for Reduce with the proper computation and initial value to reduce x on the given axes, by taking the sum of the reduced axes.
+// ReduceSum reduces x over the axes selected, taking the sum of the slices reduced.
+//
+// The returned result rank is decreased by len(axes).
+//
 // If no axes are given, it reduces the full array.
 func (b Builder) ReduceSum(x backends.Op, axes ...int) (backends.Op, error) {
 	return nil, b.baseErrFn(backends.OpTypeReduceSum)
