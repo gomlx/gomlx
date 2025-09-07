@@ -163,3 +163,94 @@ func (b *Builder) ReduceMin(x backends.Op, axes ...int) (backends.Op, error) {
 	}
 	return b.reduce(opType, (*stablehlo.Function).Minimum, initialValue.(*Node), x, axes...)
 }
+
+// ReduceBitwiseAnd implements the corresponding method of the backends.Builder interface.
+func (b *Builder) ReduceBitwiseAnd(x backends.Op, axes ...int) (backends.Op, error) {
+	opType := backends.OpTypeReduceBitwiseAnd
+	dtype := x.(*Node).shape.DType
+	flat := scalarToFlat(0, dtype)
+	if flat == nil {
+		return nil, errors.Errorf("unsupported scalar for dtype %s", dtype)
+	}
+	initialValue, err := b.Constant(flat)
+	if err != nil {
+		return nil, err
+	}
+	initialValue, err = b.BitwiseNot(initialValue)
+	return b.reduce(opType, (*stablehlo.Function).And, initialValue.(*Node), x, axes...)
+}
+
+// ReduceBitwiseOr implements the corresponding method of the backends.Builder interface.
+func (b *Builder) ReduceBitwiseOr(x backends.Op, axes ...int) (backends.Op, error) {
+	opType := backends.OpTypeReduceBitwiseOr
+	dtype := x.(*Node).shape.DType
+	flat := scalarToFlat(0, dtype)
+	if flat == nil {
+		return nil, errors.Errorf("unsupported scalar for dtype %s", dtype)
+	}
+	initialValue, err := b.Constant(flat)
+	if err != nil {
+		return nil, err
+	}
+	return b.reduce(opType, (*stablehlo.Function).Or, initialValue.(*Node), x, axes...)
+}
+
+// ReduceBitwiseXor implements the corresponding method of the backends.Builder interface.
+func (b *Builder) ReduceBitwiseXor(x backends.Op, axes ...int) (backends.Op, error) {
+	opType := backends.OpTypeReduceBitwiseXor
+	dtype := x.(*Node).shape.DType
+	flat := scalarToFlat(0, dtype)
+	if flat == nil {
+		return nil, errors.Errorf("unsupported scalar for dtype %s", dtype)
+	}
+	initialValue, err := b.Constant(flat)
+	if err != nil {
+		return nil, err
+	}
+	return b.reduce(opType, (*stablehlo.Function).Xor, initialValue.(*Node), x, axes...)
+}
+
+// ReduceLogicalAnd implements the corresponding method of the backends.Builder interface.
+func (b *Builder) ReduceLogicalAnd(x backends.Op, axes ...int) (backends.Op, error) {
+	opType := backends.OpTypeReduceLogicalAnd
+	dtype := x.(*Node).shape.DType
+	flat := scalarToFlat(1, dtype)
+	if flat == nil {
+		return nil, errors.Errorf("unsupported scalar for dtype %s", dtype)
+	}
+	initialValue, err := b.Constant(flat)
+	if err != nil {
+		return nil, err
+	}
+	return b.reduce(opType, (*stablehlo.Function).And, initialValue.(*Node), x, axes...)
+}
+
+// ReduceLogicalOr implements the corresponding method of the backends.Builder interface.
+func (b *Builder) ReduceLogicalOr(x backends.Op, axes ...int) (backends.Op, error) {
+	opType := backends.OpTypeReduceLogicalOr
+	dtype := x.(*Node).shape.DType
+	flat := scalarToFlat(0, dtype)
+	if flat == nil {
+		return nil, errors.Errorf("unsupported scalar for dtype %s", dtype)
+	}
+	initialValue, err := b.Constant(flat)
+	if err != nil {
+		return nil, err
+	}
+	return b.reduce(opType, (*stablehlo.Function).Or, initialValue.(*Node), x, axes...)
+}
+
+// ReduceLogicalXor implements the corresponding method of the backends.Builder interface.
+func (b *Builder) ReduceLogicalXor(x backends.Op, axes ...int) (backends.Op, error) {
+	opType := backends.OpTypeReduceLogicalXor
+	dtype := x.(*Node).shape.DType
+	flat := scalarToFlat(0, dtype)
+	if flat == nil {
+		return nil, errors.Errorf("unsupported scalar for dtype %s", dtype)
+	}
+	initialValue, err := b.Constant(flat)
+	if err != nil {
+		return nil, err
+	}
+	return b.reduce(opType, (*stablehlo.Function).Xor, initialValue.(*Node), x, axes...)
+}

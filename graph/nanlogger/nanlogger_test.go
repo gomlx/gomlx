@@ -45,7 +45,7 @@ func TestNanLogger(t *testing.T) {
 		l.TraceFirstNaN(v1)
 		l.PopScope()
 		l.PushScope("base")
-		v2 := Inverse(values)
+		v2 := Reciprocal(values)
 		l.TraceFirstNaN(v2, "scope2")
 		l.PopScope()
 		return Add(v1, v2)

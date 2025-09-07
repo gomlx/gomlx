@@ -569,6 +569,40 @@ func TestReduce(t *testing.T) {
 		}
 	})
 
+	// Test bitwise reduction operations
+	graphtest.RunTestGraphFn(t, "BitwiseReduceOps", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = []*Node{
+			Const(g, [][]uint32{{1, 3, 7}, {2, 4, 8}}),
+		}
+		outputs = []*Node{
+			ReduceBitwiseAnd(inputs[0], -1),
+			ReduceBitwiseOr(inputs[0], -1),
+			ReduceBitwiseXor(inputs[0], -1),
+		}
+		return
+	}, []any{
+		[]uint32{1, 0},  // AND: 1&3&7=1, 2&4&8=0
+		[]uint32{7, 14}, // OR: 1|3|7=7, 2|4|8=14
+		[]uint32{5, 14}, // XOR: 1^3^7=5, 2^4^8=14
+	}, -1)
+
+	// Test logical reduction operations
+	graphtest.RunTestGraphFn(t, "LogicalReduceOps", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = []*Node{
+			Const(g, [][]bool{{true, true, false}, {true, false, false}}),
+		}
+		outputs = []*Node{
+			ReduceLogicalAnd(inputs[0], -1),
+			ReduceLogicalOr(inputs[0], -1),
+			ReduceLogicalXor(inputs[0], -1),
+		}
+		return
+	}, []any{
+		[]bool{false, false}, // AND: true&true&false=false, true&false&false=false
+		[]bool{true, true},   // OR: true|true|false=true, true|false|false=true
+		[]bool{false, true},  // XOR: true^true^false=false, true^false^false=true
+	}, -1)
+
 	graphtest.RunTestGraphFn(t, "ReduceProduct", func(g *Graph) (inputs, outputs []*Node) {
 		inputs = append(inputs, IotaFull(g, shapes.Make(dtypes.Float32, 2, 3)))
 		outputs = append(outputs, ReduceMultiply(inputs[0], -1))
