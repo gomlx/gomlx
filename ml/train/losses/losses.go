@@ -582,13 +582,13 @@ func MakeAdaptivePowerLoss(powerNear, powerFar, middleDelta, sharpness float64) 
 			// version1 is stable (not infinite) for positive scaledLnDelta.
 			version1 := AddScalar(
 				MulScalar(
-					Inverse(OnePlus(Exp(Neg(scaledLnDelta)))),
+					Reciprocal(OnePlus(Exp(Neg(scaledLnDelta)))),
 					powerFar-powerNear),
 				powerNear)
 			// version2 is stable (not infinite) for negative scaledLnDelta)
 			version2 := AddScalar(
 				MulScalar(
-					Inverse(OnePlus(Exp(scaledLnDelta))),
+					Reciprocal(OnePlus(Exp(scaledLnDelta))),
 					powerNear-powerFar),
 				powerFar)
 			power := Where(GreaterThan(scaledLnDelta, ScalarZero(g, dtype)),

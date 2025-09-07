@@ -174,10 +174,17 @@ func OnePlus(x *Node) *Node {
 	return Add(ScalarOne(g, x.DType()), x)
 }
 
-// Inverse returns (1/x), the multiplicative inverse. Also known as the reciprocal.
-func Inverse(x *Node) *Node {
+// Reciprocal returns (1/x) element-wise, the multiplicative inverse.
+func Reciprocal(x *Node) *Node {
 	g := validateBuildingGraphFromInputs(x)
 	return Div(ScalarOne(g, x.DType()), x)
+}
+
+// Inverse is an alias to Reciprocal and returns (1/x).
+//
+// Deprecated: use Reciprocal instead.
+func Inverse(x *Node) *Node {
+	return Reciprocal(x)
 }
 
 // SignPlusOrMinus return +1 or -1 whether x >= 0 or x < 0. It's similar to Sign, but

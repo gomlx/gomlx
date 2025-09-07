@@ -12,6 +12,8 @@
 * Package `graph`:
   * Fix of `ArgMin` now accepting negative axes.
   * `Clip` now uses the backend operation `Clamp`.
+  * `Inverse` renamed to `Reciprocal` -- `Inverse` is now a deprecated alias to `Reciprocal`.
+  * Added tests to various reduce operations.
 
 # v0.22.1: 2025/08/22 🌀 Convolutions 🌀 
 
