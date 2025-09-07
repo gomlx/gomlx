@@ -548,24 +548,51 @@ func reduceSumGraph(t *testing.T, backend backends.Backend, reduceDims []int) *G
 	return g
 }
 
-func TestReduceSum(t *testing.T) {
+func TestReduce(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
-	cases := []struct {
-		dims []int
-		want any
-	}{
-		{want: 16.0},
-		{dims: []int{0}, want: []float64{12, 4}},
-		{dims: []int{1}, want: []float64{8, 8}},
-	}
-	for _, testCase := range cases {
-		g := reduceSumGraph(t, backend, testCase.dims)
-		got := g.Run()[0]
-		wantT := tensors.FromAnyValue(testCase.want)
-		if !wantT.InDelta(got, Epsilon) {
-			t.Errorf("Wanted %v, got %v", testCase.want, got)
+	t.Run("ReduceSum", func(t *testing.T) {
+		cases := []struct {
+			dims []int
+			want any
+		}{
+			{want: 16.0},
+			{dims: []int{0}, want: []float64{12, 4}},
+			{dims: []int{1}, want: []float64{8, 8}},
 		}
-	}
+		for _, testCase := range cases {
+			g := reduceSumGraph(t, backend, testCase.dims)
+			got := g.Run()[0]
+			wantT := tensors.FromAnyValue(testCase.want)
+			if !wantT.InDelta(got, Epsilon) {
+				t.Errorf("Wanted %v, got %v", testCase.want, got)
+			}
+		}
+	})
+
+	graphtest.RunTestGraphFn(t, "ReduceProduct", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = append(inputs, IotaFull(g, shapes.Make(dtypes.Float32, 2, 3)))
+		outputs = append(outputs, ReduceMultiply(inputs[0], -1))
+		return
+	}, []any{
+		[]float32{0, 60},
+	}, 0)
+
+	graphtest.RunTestGraphFn(t, "ReduceMax", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = append(inputs, IotaFull(g, shapes.Make(dtypes.Float32, 2, 3)))
+		outputs = append(outputs, ReduceMax(inputs[0], -1))
+		return
+	}, []any{
+		[]float32{2, 5},
+	}, 0)
+
+	graphtest.RunTestGraphFn(t, "ReduceMin", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = append(inputs, IotaFull(g, shapes.Make(dtypes.Float32, 2, 3)))
+		outputs = append(outputs, ReduceMin(inputs[0], -1))
+		return
+	}, []any{
+		[]float32{0, 3},
+	}, 0)
+
 }
 
 func TestReduceMean(t *testing.T) {

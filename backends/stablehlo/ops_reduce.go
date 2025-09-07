@@ -1,6 +1,8 @@
 package stablehlo
 
 import (
+	"reflect"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
@@ -90,6 +92,18 @@ func scalarToFlat[T interface{ float64 | int | int64 }](value T, dtype dtypes.DT
 	}
 }
 
+// scalarAnyToFlat converts a scalar value to a flat array with one element of the given dtype.
+func scalarAnyToFlat(valueAny any) any {
+	if valueAny == nil {
+		return nil
+	}
+	valueR := reflect.ValueOf(valueAny)
+	sliceT := reflect.SliceOf(valueR.Type())
+	sliceR := reflect.MakeSlice(sliceT, 1, 1)
+	sliceR.Index(0).Set(valueR)
+	return sliceR.Interface()
+}
+
 // ReduceSum implements the corresponding method of the backends.Builder interface.
 func (b *Builder) ReduceSum(x backends.Op, axes ...int) (backends.Op, error) {
 	opType := backends.OpTypeReduceSum
@@ -103,4 +117,49 @@ func (b *Builder) ReduceSum(x backends.Op, axes ...int) (backends.Op, error) {
 		return nil, err
 	}
 	return b.reduce(opType, (*stablehlo.Function).Add, initialValue.(*Node), x, axes...)
+}
+
+// ReduceProduct implements the corresponding method of the backends.Builder interface.
+func (b *Builder) ReduceProduct(x backends.Op, axes ...int) (backends.Op, error) {
+	opType := backends.OpTypeReduceProduct
+	dtype := x.(*Node).shape.DType
+	flat := scalarToFlat(1, dtype)
+	if flat == nil {
+		return nil, errors.Errorf("unsupported scalar for dtype %s", dtype)
+	}
+	initialValue, err := b.Constant(flat)
+	if err != nil {
+		return nil, err
+	}
+	return b.reduce(opType, (*stablehlo.Function).Multiply, initialValue.(*Node), x, axes...)
+}
+
+// ReduceMax implements the corresponding method of the backends.Builder interface.
+func (b *Builder) ReduceMax(x backends.Op, axes ...int) (backends.Op, error) {
+	opType := backends.OpTypeReduceMax
+	dtype := x.(*Node).shape.DType
+	flat := scalarAnyToFlat(dtype.LowestValue())
+	if flat == nil {
+		return nil, errors.Errorf("unsupported scalar for dtype %s", dtype)
+	}
+	initialValue, err := b.Constant(flat)
+	if err != nil {
+		return nil, err
+	}
+	return b.reduce(opType, (*stablehlo.Function).Maximum, initialValue.(*Node), x, axes...)
+}
+
+// ReduceMin implements the corresponding method of the backends.Builder interface.
+func (b *Builder) ReduceMin(x backends.Op, axes ...int) (backends.Op, error) {
+	opType := backends.OpTypeReduceMin
+	dtype := x.(*Node).shape.DType
+	flat := scalarAnyToFlat(dtype.HighestValue())
+	if flat == nil {
+		return nil, errors.Errorf("unsupported scalar for dtype %s", dtype)
+	}
+	initialValue, err := b.Constant(flat)
+	if err != nil {
+		return nil, err
+	}
+	return b.reduce(opType, (*stablehlo.Function).Minimum, initialValue.(*Node), x, axes...)
 }
