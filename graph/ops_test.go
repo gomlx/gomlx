@@ -137,7 +137,7 @@ func TestAdd(t *testing.T) {
 		}
 	}
 	{
-		// Test multi-dimension arrays of same rank with broadcast.
+		// Test multi-dimension arrays of the same rank with broadcast.
 		g := NewGraph(backend, "[2, 2] Graph")
 		x := Const(g, [][]float32{{1.1, 1.2}, {1.3, 1.4}})
 		y := Const(g, [][]float32{{1}, {10}})
@@ -156,7 +156,7 @@ func TestAdd(t *testing.T) {
 		}
 	}
 	{
-		// Test add multi-dimension array with a scalar (different ranks).
+		// Test adding a multi-dimension array with a scalar (different ranks).
 		g := NewGraph(backend, "[2, 2] Graph")
 		x := Const(g, [][]float32{{1.1, 1.2}, {1.3, 1.4}})
 		y := Const(g, float32(1))
@@ -426,7 +426,7 @@ func TestDot(t *testing.T) {
 	// Layer 0: outputShapes [3, 2], that is the inputNodes have dim=3, and should output dims=2
 	w0 := Const(g, [][]float32{{1, 0}, {1, -1}, {-1, 1}})
 	// Dot(inputNodes, w0) -> outputShapes [batch=4, dims=2]
-	Dot(inputs, w0) // Last node created in the graph is taken as output by default.
+	Dot(inputs, w0) // The last node created in the graph is taken as output by default.
 	got := compileRunAndTakeFirst(t, g)
 	want := tensors.FromValue([][]float32{{0, 1.1}, {0, 11}, {0, 111}, {0, 1111}})
 	if !want.InDelta(got, Epsilon) {
@@ -441,7 +441,7 @@ func TestBroadcast(t *testing.T) {
 	{
 		g := NewGraph(backend, "BroadcastToDims")
 		input := Const(g, 7)
-		BroadcastToDims(input, 2, 3) // Last node created in the graph is taken as output by default.
+		BroadcastToDims(input, 2, 3) // The last node created in the graph is taken as output by default.
 		got := compileRunAndTakeFirst(t, g)
 		want := [][]int64{{7, 7, 7}, {7, 7, 7}}
 		assert.Equal(t, want, got.Value())
@@ -673,14 +673,13 @@ func TestReduceMax(t *testing.T) {
 	// float64 NaN
 	backend := graphtest.BuildTestBackend()
 
-	// float32 NaN:
 	// It works if input is passed as a constant:
 	{
 		gotT := ExecOnce(backend, func(g *Graph) *Node {
 			return ReduceMax(Const(g, []float64{math.NaN(), 1}))
 		})
 		got := tensors.ToScalar[float64](gotT)
-		require.Truef(t, math.IsNaN(float64(got)), "ReduceMax({NaN, 1}) of NaN values should be NaN, got %v", got)
+		require.Truef(t, math.IsNaN(got), "ReduceMax({NaN, 1}) of NaN values should be NaN, got %v", got)
 	}
 
 	// But it doesn't if tensor to reduce is passed as a parameter.
@@ -985,7 +984,7 @@ func TestTranspose(t *testing.T) {
 func TestInternalBatchNormForInference(t *testing.T) {
 	testFuncOneInput(t, "BatchNormInference()",
 		func(g *Graph) (input, output *Node) {
-			input = Iota(g, MakeShape(dtypes.Float32, 7, 3), 0) // Values from 0.0 to 6.0 on batch axis.
+			input = Iota(g, MakeShape(dtypes.Float32, 7, 3), 0) // Values from 0.0 to 6.0 on the batch axis.
 			scale := Const(g, []float32{1.0, 2.0, 3.0})
 			offset := Const(g, []float32{10.0, 100.0, 1000.0})
 			mean := Const(g, []float32{0.5, 0.5, 1.0})
@@ -1006,7 +1005,7 @@ func TestInternalBatchNormForInference(t *testing.T) {
 func TestInternalBatchNormForTraining(t *testing.T) {
 	graphtest.RunTestGraphFn(t, "BatchNormInference()",
 		func(g *Graph) (inputs, outputs []*Node) {
-			input := Iota(g, MakeShape(dtypes.Float32, 7, 3), 0) // Values from 0.0 to 6.0 on batch axis.
+			input := Iota(g, MakeShape(dtypes.Float32, 7, 3), 0) // Values from 0.0 to 6.0 on the batch axis.
 			inputs = []*Node{input}
 			scale := Const(g, []float32{1.0, 2.0, 3.0})
 			offset := Const(g, []float32{10.0, 100.0, 1000.0})
@@ -1360,7 +1359,7 @@ func TestMatMul(t *testing.T) {
 		{{3, 5}, {5}, {3}},
 		{{3, 5}, {5, 4}, {3, 4}},
 
-		// Notice that the complex ordering of the axes in numpy's MatMul
+		// Notice the complex ordering of the axes in numpy's MatMul.
 		{{3, 5}, {7, 5, 4}, {7, 3, 4}},
 		{{7, 3, 5}, {4, 7, 5, 4}, {4, 7, 3, 4}},
 
