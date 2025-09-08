@@ -71,7 +71,8 @@ func RunTestGraphFn(t *testing.T, testName string, graphFn TestGraphFn, want []a
 			return all
 		}
 		exec := graph.NewExec(backend, wrapperFn)
-		var inputsAndOutputs []*tensors.Tensor
+		inputsAndOutputs, err := exec.CallOrError()
+		require.NoErrorf(t, err, "%s: failed to execute graph", testName)
 		require.NotPanicsf(t, func() { inputsAndOutputs = exec.Call() }, "%s: failed to execute graph", testName)
 		inputs := inputsAndOutputs[:numInputs]
 		for ii, input := range inputs {

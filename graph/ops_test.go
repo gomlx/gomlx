@@ -1086,9 +1086,9 @@ func TestSqueeze(t *testing.T) {
 		}, -1)
 }
 
-func TestArgMax(t *testing.T) {
+func TestArgMinMax(t *testing.T) {
 	for _, dtype := range []dtypes.DType{dtypes.Float64, dtypes.Float32, dtypes.Int64, dtypes.Int32} {
-		graphtest.RunTestGraphFn(t, fmt.Sprintf("ArgMax()/ArgMin() for dtype %q", dtype),
+		graphtest.RunTestGraphFn(t, fmt.Sprintf("DType %q", dtype),
 			func(g *Graph) (inputs, outputs []*Node) {
 				inputs = []*Node{
 					IotaFull(g, shapes.Make(dtype, 3, 5)),

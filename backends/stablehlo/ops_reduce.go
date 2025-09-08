@@ -8,6 +8,7 @@ import (
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/gomlx/stablehlo"
+	stablehlotypes "github.com/gomlx/stablehlo/types"
 	stablehloshapes "github.com/gomlx/stablehlo/types/shapes"
 	"github.com/pkg/errors"
 	"github.com/x448/float16"
@@ -260,7 +261,6 @@ func (b *Builder) ReduceLogicalXor(x backends.Op, axes ...int) (backends.Op, err
 	return b.reduce(opType, stablehlo.Xor, initialValue.(*Node), x, axes...)
 }
 
-/*
 // ArgMinMax calculates the "argmin" or "argmax" across an axis of the given input array x.
 //
 // outputDType defines the output of the argmin/argmax, it doesn't need to be the same as the input.
@@ -293,32 +293,93 @@ func (b *Builder) ArgMinMax(x backends.Op, axis int, outputDType dtypes.DType, i
 	}
 	reduceFn, ok := b.cacheArgMinMax[cacheKey]
 	if !ok {
+		compareType := stablehlotypes.CompareFloat
+		if !valuesDType.IsFloat() {
+			compareType = stablehlotypes.CompareSigned
+		}
 		// Create a new reduction function for this valuesDType/op.
 		reduceFn = b.fn.Closure()
 		lhsIndex := reduceFn.NamedInput("lhs_idx", stablehloshapes.Make(outputDType))
 		lhsValue := reduceFn.NamedInput("lhs_v", stablehloshapes.Make(valuesDType))
 		rhsIndex := reduceFn.NamedInput("rhs_idx", stablehloshapes.Make(outputDType))
 		rhsValue := reduceFn.NamedInput("rhs_v", stablehloshapes.Make(valuesDType))
+		var isLeft *stablehlo.Value
 		if isMin {
-
+			isLeft, err = stablehlo.Compare(lhsValue, rhsValue, stablehlotypes.CompareLT, compareType)
+		} else {
+			isLeft, err = stablehlo.Compare(lhsValue, rhsValue, stablehlotypes.CompareGT, compareType)
 		}
-		result, err := (reduceFn, lhsIndex, lhsValue, rhsIndex, rhsValue)
 		if err != nil {
 			return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
 		}
-		reduceFn.Return(result)
-		b.cacheReductions[cacheKey] = reduceFn
+		if valuesDType.IsFloat() {
+			// Set left to true if rhs is NaN, doesn't matter what.
+			// Notice that if lhs is NaN, it will already be set to false anyway.
+			rhsIsNan, err := stablehlo.Compare(rhsValue, rhsValue, stablehlotypes.CompareNE, stablehlotypes.CompareFloat)
+			if err != nil {
+				return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
+			}
+			isLeft, err = stablehlo.Or(isLeft, rhsIsNan)
+			if err != nil {
+				return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
+			}
+		}
+		index, err := stablehlo.Select(isLeft, lhsIndex, rhsIndex)
+		if err != nil {
+			return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
+		}
+		value, err := stablehlo.Select(isLeft, lhsValue, rhsValue)
+		if err != nil {
+			return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
+		}
+		err = reduceFn.Return(index, value)
+		if err != nil {
+			return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
+		}
 	}
+	b.cacheArgMinMax[cacheKey] = reduceFn
 
-	// If no axes are given, reduce over all axes.
-	if len(axes) == 0 {
-		axes = xslices.Iota(0, rank)
-	}
-
-	value, err := b.fn.Reduce(xNode.value, initialValue.value, reduceFn, axes...)
+	// Create indices and its initial value.
+	indicesShape := xNode.shape.Clone()
+	indicesShape.DType = outputDType
+	indices, err := b.fn.Iota(ShapeToStableHLO(indicesShape), adjustedAxis)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
 	}
-	return b.newNode(value), nil
+	flat := scalarToFlat(0, outputDType)
+	initialIndex, err := b.fn.ConstantFromFlatAndDimensions(flat)
+	if err != nil {
+		return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
+	}
+
+	var initialValue *stablehlo.Value
+	if isMin {
+		flat := scalarAnyToFlat(valuesDType.HighestValue())
+		if flat == nil {
+			return nil, errors.Errorf("unsupported scalar for dtype %s", outputDType)
+		}
+		initialValue, err = b.fn.ConstantFromFlatAndDimensions(flat)
+		if err != nil {
+			return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
+		}
+	} else {
+		flat := scalarAnyToFlat(valuesDType.LowestValue())
+		if flat == nil {
+			return nil, errors.Errorf("unsupported scalar for dtype %s", outputDType)
+		}
+		initialValue, err = b.fn.ConstantFromFlatAndDimensions(flat)
+		if err != nil {
+			return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
+		}
+	}
+
+	// Create the indices and its initial value.
+	results, err := stablehlo.MultiReduce(
+		[]*stablehlo.Value{indices, xNode.value},
+		[]*stablehlo.Value{initialIndex, initialValue},
+		reduceFn, adjustedAxis)
+	if err != nil {
+		return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
+	}
+	return b.newNode(results[0]), nil
 }
-*/
