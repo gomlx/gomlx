@@ -74,6 +74,7 @@ var Capabilities = backends.Capabilities{
 		backends.OpTypeReal:    true,
 
 		// Other operations:
+		backends.OpTypeArgMinMax:        true,
 		backends.OpTypeBroadcast:        true,
 		backends.OpTypeBroadcastInDim:   true,
 		backends.OpTypeClamp:            true,
@@ -97,7 +98,6 @@ var Capabilities = backends.Capabilities{
 		backends.OpTypeSlice:            true,
 		backends.OpTypeWhere:            true,
 
-		//backends.OpTypeArgMinMax:        true,
 		//backends.OpTypeTranspose:        true,
 		//backends.OpTypeBitcast: true,
 		//backends.OpTypeRngBitGenerator:  true,
