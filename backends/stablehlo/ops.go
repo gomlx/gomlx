@@ -5,6 +5,7 @@ package stablehlo
 import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/stablehlo"
 	stablehlotypes "github.com/gomlx/stablehlo/types"
 	stablehloshapes "github.com/gomlx/stablehlo/types/shapes"
@@ -401,7 +402,7 @@ func (b *Builder) Concatenate(axis int, operands ...backends.Op) (backends.Op, e
 
 // Where implements backends.Builder interface.
 func (b *Builder) Where(condition, onTrue, onFalse backends.Op) (backends.Op, error) {
-	operandsNodes, err := b.verifyAndCastValues("Concatenate", condition, onTrue, onFalse)
+	operandsNodes, err := b.verifyAndCastValues("Where", condition, onTrue, onFalse)
 	if err != nil {
 		return nil, err
 	}
@@ -446,4 +447,16 @@ func (b *Builder) IsNaN(x backends.Op) (backends.Op, error) {
 		return nil, errors.WithMessage(err, "while building op IsNaN")
 	}
 	return result, nil
+}
+
+func (b *Builder) Bitcast(x backends.Op, targetDType dtypes.DType) (backends.Op, error) {
+	nodes, err := b.verifyAndCastValues("Bitcast", x)
+	if err != nil {
+		return nil, err
+	}
+	value, err := stablehlo.BitcastConvert(nodes[0].value, targetDType)
+	if err != nil {
+		return nil, err
+	}
+	return b.newNode(value), nil
 }

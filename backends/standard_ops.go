@@ -41,7 +41,7 @@ type StandardOps interface {
 	// If targetDType.Size() < x.DType().Size(), the returned shape will have an extra axis in the end, with dimension of
 	// x.DType().Size() / targetDType.Size().
 	//
-	// E.g: Bitcast([1]uint32{0xdeadbeef}, dtypes.UInt16) -> [1][2]uint16{{0xdead, 0xbeef}}
+	// E.g: Bitcast([1]uint32{0xdeadbeef}, dtypes.UInt16) -> [1][2]uint16{{0xbeef, 0xdead}} // Little-endian encoding.
 	Bitcast(x Op, targetDType dtypes.DType) (Op, error)
 
 	// BitwiseAnd returns the element-wise bitwise AND operation.

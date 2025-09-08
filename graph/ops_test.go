@@ -1397,3 +1397,21 @@ func TestSplit(t *testing.T) {
 		[][]int32{{2}, {5}},
 	}, 0)
 }
+
+func TestBitcast(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "Bitcast", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = append(inputs,
+			Const(g, [][]uint16{{0xbeef, 0xdead}}),
+			Const(g, uint32(0xdeadbeef)),
+			Const(g, uint32(0x7F800000)))
+		outputs = append(outputs,
+			Bitcast(inputs[0], dtypes.Uint32),
+			Bitcast(inputs[1], dtypes.Uint16),
+			Bitcast(inputs[2], dtypes.Float32))
+		return
+	}, []any{
+		[]uint32{0xdeadbeef},
+		[]uint16{0xbeef, 0xdead},
+		float32(math.Inf(1)),
+	}, -1)
+}
