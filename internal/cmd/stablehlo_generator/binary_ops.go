@@ -65,6 +65,7 @@ package stablehlo
 
 import (
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/stablehlo"
 )
 
 {{- range .}}
@@ -76,7 +77,7 @@ func (b *Builder) {{.Method.Name}}(lhs, rhs backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.{{.Alias}}(lhsNode.value, rhsNode.value)
+	value, err := stablehlo.{{.Alias}}(lhsNode.value, rhsNode.value)
 	if err != nil {
 		return nil, err
 	}

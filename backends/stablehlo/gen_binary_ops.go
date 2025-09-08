@@ -4,6 +4,7 @@ package stablehlo
 
 import (
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/stablehlo"
 )
 
 // Add returns the element-wise sum of the two values.
@@ -13,7 +14,7 @@ func (b *Builder) Add(lhs, rhs backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Add(lhsNode.value, rhsNode.value)
+	value, err := stablehlo.Add(lhsNode.value, rhsNode.value)
 	if err != nil {
 		return nil, err
 	}
@@ -26,7 +27,7 @@ func (b *Builder) BitwiseAnd(lhs, rhs backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.And(lhsNode.value, rhsNode.value)
+	value, err := stablehlo.And(lhsNode.value, rhsNode.value)
 	if err != nil {
 		return nil, err
 	}
@@ -39,7 +40,7 @@ func (b *Builder) BitwiseOr(lhs, rhs backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Or(lhsNode.value, rhsNode.value)
+	value, err := stablehlo.Or(lhsNode.value, rhsNode.value)
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +53,7 @@ func (b *Builder) BitwiseXor(lhs, rhs backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Xor(lhsNode.value, rhsNode.value)
+	value, err := stablehlo.Xor(lhsNode.value, rhsNode.value)
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +71,7 @@ func (b *Builder) Complex(lhs, rhs backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Complex(lhsNode.value, rhsNode.value)
+	value, err := stablehlo.Complex(lhsNode.value, rhsNode.value)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +85,7 @@ func (b *Builder) Div(lhs, rhs backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Divide(lhsNode.value, rhsNode.value)
+	value, err := stablehlo.Divide(lhsNode.value, rhsNode.value)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +98,7 @@ func (b *Builder) LogicalAnd(lhs, rhs backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.And(lhsNode.value, rhsNode.value)
+	value, err := stablehlo.And(lhsNode.value, rhsNode.value)
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +111,7 @@ func (b *Builder) LogicalOr(lhs, rhs backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Or(lhsNode.value, rhsNode.value)
+	value, err := stablehlo.Or(lhsNode.value, rhsNode.value)
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +124,7 @@ func (b *Builder) LogicalXor(lhs, rhs backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Xor(lhsNode.value, rhsNode.value)
+	value, err := stablehlo.Xor(lhsNode.value, rhsNode.value)
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +137,7 @@ func (b *Builder) Max(lhs, rhs backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Maximum(lhsNode.value, rhsNode.value)
+	value, err := stablehlo.Maximum(lhsNode.value, rhsNode.value)
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +150,7 @@ func (b *Builder) Min(lhs, rhs backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Minimum(lhsNode.value, rhsNode.value)
+	value, err := stablehlo.Minimum(lhsNode.value, rhsNode.value)
 	if err != nil {
 		return nil, err
 	}
@@ -163,7 +164,7 @@ func (b *Builder) Mul(lhs, rhs backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Multiply(lhsNode.value, rhsNode.value)
+	value, err := stablehlo.Multiply(lhsNode.value, rhsNode.value)
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +177,7 @@ func (b *Builder) Pow(lhs, rhs backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Power(lhsNode.value, rhsNode.value)
+	value, err := stablehlo.Power(lhsNode.value, rhsNode.value)
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +191,7 @@ func (b *Builder) Rem(lhs, rhs backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Remainder(lhsNode.value, rhsNode.value)
+	value, err := stablehlo.Remainder(lhsNode.value, rhsNode.value)
 	if err != nil {
 		return nil, err
 	}
@@ -203,7 +204,7 @@ func (b *Builder) ShiftLeft(lhs, rhs backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.ShiftLeft(lhsNode.value, rhsNode.value)
+	value, err := stablehlo.ShiftLeft(lhsNode.value, rhsNode.value)
 	if err != nil {
 		return nil, err
 	}
@@ -216,7 +217,7 @@ func (b *Builder) ShiftRightArithmetic(lhs, rhs backends.Op) (backends.Op, error
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.ShiftRightArithmetic(lhsNode.value, rhsNode.value)
+	value, err := stablehlo.ShiftRightArithmetic(lhsNode.value, rhsNode.value)
 	if err != nil {
 		return nil, err
 	}
@@ -229,7 +230,7 @@ func (b *Builder) ShiftRightLogical(lhs, rhs backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.ShiftRightLogical(lhsNode.value, rhsNode.value)
+	value, err := stablehlo.ShiftRightLogical(lhsNode.value, rhsNode.value)
 	if err != nil {
 		return nil, err
 	}
@@ -243,7 +244,7 @@ func (b *Builder) Sub(lhs, rhs backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Subtract(lhsNode.value, rhsNode.value)
+	value, err := stablehlo.Subtract(lhsNode.value, rhsNode.value)
 	if err != nil {
 		return nil, err
 	}

@@ -15,7 +15,7 @@ import (
 
 // reduce helper for all Reduce* methods.
 func (b *Builder) reduce(opType backends.OpType,
-	method func(*stablehlo.Function, *stablehlo.Value, *stablehlo.Value) (*stablehlo.Value, error),
+	reductionOpFn func(*stablehlo.Value, *stablehlo.Value) (*stablehlo.Value, error),
 	initialValue *Node, x backends.Op, axes ...int) (backends.Op, error) {
 	nodes, err := b.verifyAndCastValues(opType.String(), x)
 	if err != nil {
@@ -36,7 +36,7 @@ func (b *Builder) reduce(opType backends.OpType,
 		reductionFn = b.fn.Closure()
 		lhs := reductionFn.NamedInput("lhs", stablehloshapes.Make(dtype))
 		rhs := reductionFn.NamedInput("rhs", stablehloshapes.Make(dtype))
-		result, err := method(reductionFn, lhs, rhs)
+		result, err := reductionOpFn(lhs, rhs)
 		if err != nil {
 			return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
 		}
@@ -52,7 +52,7 @@ func (b *Builder) reduce(opType backends.OpType,
 		axes = xslices.Iota(0, rank)
 	}
 
-	value, err := b.fn.Reduce(xNode.value, initialValue.value, reductionFn, axes...)
+	value, err := stablehlo.Reduce(xNode.value, initialValue.value, reductionFn, axes...)
 	if err != nil {
 		return nil, err
 	}
@@ -90,6 +90,8 @@ func scalarToFlat[T interface{ float64 | int | int64 }](value T, dtype dtypes.DT
 		return []bfloat16.BFloat16{bfloat16.FromFloat32(float32(value))}
 	case dtypes.Float16:
 		return []float16.Float16{float16.Fromfloat32(float32(value))}
+	case dtypes.Bool:
+		return []bool{value != 0}
 	default:
 		return nil
 	}
@@ -119,7 +121,7 @@ func (b *Builder) ReduceSum(x backends.Op, axes ...int) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	return b.reduce(opType, (*stablehlo.Function).Add, initialValue.(*Node), x, axes...)
+	return b.reduce(opType, stablehlo.Add, initialValue.(*Node), x, axes...)
 }
 
 // ReduceProduct implements the corresponding method of the backends.Builder interface.
@@ -134,7 +136,7 @@ func (b *Builder) ReduceProduct(x backends.Op, axes ...int) (backends.Op, error)
 	if err != nil {
 		return nil, err
 	}
-	return b.reduce(opType, (*stablehlo.Function).Multiply, initialValue.(*Node), x, axes...)
+	return b.reduce(opType, stablehlo.Multiply, initialValue.(*Node), x, axes...)
 }
 
 // ReduceMax implements the corresponding method of the backends.Builder interface.
@@ -149,7 +151,7 @@ func (b *Builder) ReduceMax(x backends.Op, axes ...int) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	return b.reduce(opType, (*stablehlo.Function).Maximum, initialValue.(*Node), x, axes...)
+	return b.reduce(opType, stablehlo.Maximum, initialValue.(*Node), x, axes...)
 }
 
 // ReduceMin implements the corresponding method of the backends.Builder interface.
@@ -164,7 +166,7 @@ func (b *Builder) ReduceMin(x backends.Op, axes ...int) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	return b.reduce(opType, (*stablehlo.Function).Minimum, initialValue.(*Node), x, axes...)
+	return b.reduce(opType, stablehlo.Minimum, initialValue.(*Node), x, axes...)
 }
 
 // ReduceBitwiseAnd implements the corresponding method of the backends.Builder interface.
@@ -180,7 +182,7 @@ func (b *Builder) ReduceBitwiseAnd(x backends.Op, axes ...int) (backends.Op, err
 		return nil, err
 	}
 	initialValue, err = b.BitwiseNot(initialValue)
-	return b.reduce(opType, (*stablehlo.Function).And, initialValue.(*Node), x, axes...)
+	return b.reduce(opType, stablehlo.And, initialValue.(*Node), x, axes...)
 }
 
 // ReduceBitwiseOr implements the corresponding method of the backends.Builder interface.
@@ -195,7 +197,7 @@ func (b *Builder) ReduceBitwiseOr(x backends.Op, axes ...int) (backends.Op, erro
 	if err != nil {
 		return nil, err
 	}
-	return b.reduce(opType, (*stablehlo.Function).Or, initialValue.(*Node), x, axes...)
+	return b.reduce(opType, stablehlo.Or, initialValue.(*Node), x, axes...)
 }
 
 // ReduceBitwiseXor implements the corresponding method of the backends.Builder interface.
@@ -210,7 +212,7 @@ func (b *Builder) ReduceBitwiseXor(x backends.Op, axes ...int) (backends.Op, err
 	if err != nil {
 		return nil, err
 	}
-	return b.reduce(opType, (*stablehlo.Function).Xor, initialValue.(*Node), x, axes...)
+	return b.reduce(opType, stablehlo.Xor, initialValue.(*Node), x, axes...)
 }
 
 // ReduceLogicalAnd implements the corresponding method of the backends.Builder interface.
@@ -225,7 +227,7 @@ func (b *Builder) ReduceLogicalAnd(x backends.Op, axes ...int) (backends.Op, err
 	if err != nil {
 		return nil, err
 	}
-	return b.reduce(opType, (*stablehlo.Function).And, initialValue.(*Node), x, axes...)
+	return b.reduce(opType, stablehlo.And, initialValue.(*Node), x, axes...)
 }
 
 // ReduceLogicalOr implements the corresponding method of the backends.Builder interface.
@@ -240,7 +242,7 @@ func (b *Builder) ReduceLogicalOr(x backends.Op, axes ...int) (backends.Op, erro
 	if err != nil {
 		return nil, err
 	}
-	return b.reduce(opType, (*stablehlo.Function).Or, initialValue.(*Node), x, axes...)
+	return b.reduce(opType, stablehlo.Or, initialValue.(*Node), x, axes...)
 }
 
 // ReduceLogicalXor implements the corresponding method of the backends.Builder interface.
@@ -255,7 +257,7 @@ func (b *Builder) ReduceLogicalXor(x backends.Op, axes ...int) (backends.Op, err
 	if err != nil {
 		return nil, err
 	}
-	return b.reduce(opType, (*stablehlo.Function).Xor, initialValue.(*Node), x, axes...)
+	return b.reduce(opType, stablehlo.Xor, initialValue.(*Node), x, axes...)
 }
 
 /*

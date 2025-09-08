@@ -55,7 +55,7 @@ func (b *Builder) BroadcastInDim(x backends.Op, outputShape shapes.Shape, broadc
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.BroadcastInDim(nodes[0].value, ShapeToStableHLO(outputShape), broadcastAxes)
+	value, err := stablehlo.BroadcastInDim(nodes[0].value, ShapeToStableHLO(outputShape), broadcastAxes)
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +82,7 @@ func (b *Builder) Broadcast(x backends.Op, prefixDims ...int) (backends.Op, erro
 	for i := range shape.Rank() {
 		broadcastAxes[i] = i + len(prefixDims)
 	}
-	value, err := b.fn.BroadcastInDim(xNode.value, ShapeToStableHLO(outputShape), broadcastAxes)
+	value, err := stablehlo.BroadcastInDim(xNode.value, ShapeToStableHLO(outputShape), broadcastAxes)
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +108,7 @@ func (b *Builder) Reshape(x backends.Op, dimensions ...int) (backends.Op, error)
 	xNode := nodes[0]
 	dtype := xNode.shape.DType
 	shape := stablehloshapes.Make(dtype, dimensions...)
-	value, err := b.fn.Reshape(xNode.value, shape)
+	value, err := stablehlo.Reshape(xNode.value, shape)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +122,7 @@ func (b *Builder) Slice(x backends.Op, starts, limits, strides []int) (backends.
 		return nil, err
 	}
 	xNode := nodes[0]
-	value, err := b.fn.Slice(xNode.value, starts, limits, strides)
+	value, err := stablehlo.Slice(xNode.value, starts, limits, strides)
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +185,7 @@ func (b *Builder) comparison(opType backends.OpType, lhs, rhs backends.Op) (back
 		return nil, errors.Errorf("unsupported comparison operation %v", opType)
 	}
 
-	value, err := b.fn.Compare(lhsNode.value, rhsNode.value, direction, compareType)
+	value, err := stablehlo.Compare(lhsNode.value, rhsNode.value, direction, compareType)
 	if err != nil {
 		return nil, err
 	}
@@ -283,19 +283,19 @@ func (b *Builder) Conj(operand backends.Op) (backends.Op, error) {
 		return nil, err
 	}
 	operandNode := nodes[0]
-	realValue, err := b.fn.Real(operandNode.value)
+	realValue, err := stablehlo.Real(operandNode.value)
 	if err != nil {
 		return nil, err
 	}
-	imagValue, err := b.fn.Imag(operandNode.value)
+	imagValue, err := stablehlo.Imag(operandNode.value)
 	if err != nil {
 		return nil, err
 	}
-	imagValue, err = b.fn.Negate(imagValue)
+	imagValue, err = stablehlo.Negate(imagValue)
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Complex(realValue, imagValue)
+	value, err := stablehlo.Complex(realValue, imagValue)
 	if err != nil {
 		return nil, err
 	}
@@ -350,7 +350,7 @@ func (b *Builder) Clamp(min, a backends.Op, max backends.Op) (backends.Op, error
 	minNode := nodes[0]
 	aNode := nodes[1]
 	maxNode := nodes[2]
-	value, err := b.fn.Clamp(minNode.value, aNode.value, maxNode.value)
+	value, err := stablehlo.Clamp(minNode.value, aNode.value, maxNode.value)
 	if err != nil {
 		return nil, err
 	}
@@ -369,7 +369,7 @@ func (b *Builder) Gather(operand, startIndices backends.Op, indexVectorAxis int,
 	operandNode := nodes[0]
 	startIndicesNode := nodes[1]
 	var operandBatchingAxes, startIndicesBatchingAxes []int
-	value, err := b.fn.Gather(operandNode.value, startIndicesNode.value, indexVectorAxis,
+	value, err := stablehlo.Gather(operandNode.value, startIndicesNode.value, indexVectorAxis,
 		offsetOutputAxes, collapsedSliceAxes, operandBatchingAxes,
 		startIndicesBatchingAxes, startIndexMap, sliceSizes, indicesAreSorted)
 	if err != nil {
@@ -392,7 +392,7 @@ func (b *Builder) Concatenate(axis int, operands ...backends.Op) (backends.Op, e
 	for i, node := range operandsNodes {
 		operandsValues[i] = node.value
 	}
-	value, err := b.fn.Concatenate(axis, operandsValues...)
+	value, err := stablehlo.Concatenate(axis, operandsValues...)
 	if err != nil {
 		return nil, err
 	}

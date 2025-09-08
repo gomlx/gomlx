@@ -191,7 +191,7 @@ func (b *Builder) broadcastForBinaryOps(opType backends.OpType, lhs, rhs backend
 	// If any is a scalar, just broadcast it to the other one.
 	if lhsNode.shape.IsScalar() {
 		var value *stablehlo.Value
-		value, err = b.fn.BroadcastInDim(lhsNode.value, rhsNode.value.Shape(), nil)
+		value, err = stablehlo.BroadcastInDim(lhsNode.value, rhsNode.value.Shape(), nil)
 		if err != nil {
 			return nil, nil, errors.WithMessagef(err, "while building op %q", opType)
 		}
@@ -199,7 +199,7 @@ func (b *Builder) broadcastForBinaryOps(opType backends.OpType, lhs, rhs backend
 		return
 	} else if rhsNode.shape.IsScalar() {
 		var value *stablehlo.Value
-		value, err = b.fn.BroadcastInDim(rhsNode.value, lhsNode.value.Shape(), nil)
+		value, err = stablehlo.BroadcastInDim(rhsNode.value, lhsNode.value.Shape(), nil)
 		if err != nil {
 			return nil, nil, errors.WithMessagef(err, "while building op %s", opName)
 		}
@@ -215,14 +215,14 @@ func (b *Builder) broadcastForBinaryOps(opType backends.OpType, lhs, rhs backend
 	newShapeStableHLO := ShapeToStableHLO(newShape)
 	broadcastAxes := xslices.Iota(0, newShape.Rank())
 	if !newShape.Equal(lhsNode.shape) {
-		value, err := b.fn.BroadcastInDim(lhsNode.value, newShapeStableHLO, broadcastAxes)
+		value, err := stablehlo.BroadcastInDim(lhsNode.value, newShapeStableHLO, broadcastAxes)
 		if err != nil {
 			return nil, nil, errors.WithMessagef(err, "while broadcasting lhs for op %q", opType)
 		}
 		lhsNode = b.newNode(value)
 	}
 	if !newShape.Equal(rhsNode.shape) {
-		value, err := b.fn.BroadcastInDim(rhsNode.value, newShapeStableHLO, broadcastAxes)
+		value, err := stablehlo.BroadcastInDim(rhsNode.value, newShapeStableHLO, broadcastAxes)
 		if err != nil {
 			return nil, nil, errors.WithMessagef(err, "while broadcasting rhs for op %q", opType)
 		}

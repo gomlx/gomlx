@@ -3,6 +3,7 @@ package stablehlo
 import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/stablehlo"
 	stablehlotypes "github.com/gomlx/stablehlo/types"
 )
 
@@ -39,7 +40,7 @@ func (b *Builder) DotGeneral(lhs backends.Op, lhsContractingAxes, lhsBatchAxes [
 	config := b.backend.DotGeneralConfig
 	dtype := lhsNode.shape.DType
 
-	dotGeneralBuilder := b.fn.DotGeneral(lhsNode.value, lhsContractingAxes, lhsBatchAxes, rhsNode.value, rhsContractingAxes, rhsBatchAxes)
+	dotGeneralBuilder := stablehlo.DotGeneral(lhsNode.value, lhsContractingAxes, lhsBatchAxes, rhsNode.value, rhsContractingAxes, rhsBatchAxes)
 	if config.UseTF32 && dtype == dtypes.Float32 {
 		dotGeneralBuilder.Algorithm(&stablehlotypes.DotGeneralAlgorithm{
 			LhsPrecisionType:           stablehlotypes.FloatPrecisionType{TF32: true},

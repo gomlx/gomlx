@@ -4,6 +4,7 @@ package stablehlo
 
 import (
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/stablehlo"
 )
 
 // BitCount returns the number of bits that are set to one.
@@ -12,7 +13,7 @@ func (b *Builder) BitCount(operand backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Popcnt(nodes[0].value)
+	value, err := stablehlo.Popcnt(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -25,7 +26,7 @@ func (b *Builder) Abs(operand backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Abs(nodes[0].value)
+	value, err := stablehlo.Abs(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +39,7 @@ func (b *Builder) BitwiseNot(operand backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Not(nodes[0].value)
+	value, err := stablehlo.Not(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +52,7 @@ func (b *Builder) Ceil(operand backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Ceil(nodes[0].value)
+	value, err := stablehlo.Ceil(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +65,7 @@ func (b *Builder) Clz(operand backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.CountLeadingZeros(nodes[0].value)
+	value, err := stablehlo.CountLeadingZeros(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +78,7 @@ func (b *Builder) Cos(operand backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Cosine(nodes[0].value)
+	value, err := stablehlo.Cosine(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +91,7 @@ func (b *Builder) Erf(operand backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Erf(nodes[0].value)
+	value, err := stablehlo.Erf(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +104,7 @@ func (b *Builder) Exp(operand backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Exponential(nodes[0].value)
+	value, err := stablehlo.Exponential(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +117,7 @@ func (b *Builder) Expm1(operand backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.ExponentialMinusOne(nodes[0].value)
+	value, err := stablehlo.ExponentialMinusOne(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +130,7 @@ func (b *Builder) Floor(operand backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Floor(nodes[0].value)
+	value, err := stablehlo.Floor(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +143,7 @@ func (b *Builder) Imag(operand backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Imag(nodes[0].value)
+	value, err := stablehlo.Imag(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -157,7 +158,7 @@ func (b *Builder) IsFinite(operand backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.IsFinite(nodes[0].value)
+	value, err := stablehlo.IsFinite(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +171,7 @@ func (b *Builder) Log(operand backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Log(nodes[0].value)
+	value, err := stablehlo.Log(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -183,7 +184,7 @@ func (b *Builder) Log1p(operand backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.LogPlusOne(nodes[0].value)
+	value, err := stablehlo.LogPlusOne(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -196,7 +197,7 @@ func (b *Builder) LogicalNot(operand backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Not(nodes[0].value)
+	value, err := stablehlo.Not(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -209,7 +210,7 @@ func (b *Builder) Logistic(operand backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Logistic(nodes[0].value)
+	value, err := stablehlo.Logistic(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -222,7 +223,7 @@ func (b *Builder) Neg(operand backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Negate(nodes[0].value)
+	value, err := stablehlo.Negate(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -235,7 +236,7 @@ func (b *Builder) Real(operand backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Real(nodes[0].value)
+	value, err := stablehlo.Real(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -248,7 +249,7 @@ func (b *Builder) Round(operand backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.RoundNearestEven(nodes[0].value)
+	value, err := stablehlo.RoundNearestEven(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -261,7 +262,7 @@ func (b *Builder) Rsqrt(operand backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Rsqrt(nodes[0].value)
+	value, err := stablehlo.Rsqrt(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -274,7 +275,7 @@ func (b *Builder) Sign(operand backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Sign(nodes[0].value)
+	value, err := stablehlo.Sign(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -287,7 +288,7 @@ func (b *Builder) Sin(operand backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Sine(nodes[0].value)
+	value, err := stablehlo.Sine(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -300,7 +301,7 @@ func (b *Builder) Sqrt(operand backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Sqrt(nodes[0].value)
+	value, err := stablehlo.Sqrt(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
@@ -313,7 +314,7 @@ func (b *Builder) Tanh(operand backends.Op) (backends.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	value, err := b.fn.Tanh(nodes[0].value)
+	value, err := stablehlo.Tanh(nodes[0].value)
 	if err != nil {
 		return nil, err
 	}
