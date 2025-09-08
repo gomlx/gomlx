@@ -10,7 +10,9 @@
   * If `backends/default` is compiled with `-tags=stablehlo` it will include the `stablehlo` backend.
   * Large cleanup of generators: most no longer depending on `gopjrt/xlabuilder`.
 * Package `graph`:
-  * Fix of `ArgMin` now accepting negative axes.
+  * `ArgMin`, `ArgMax`:
+    * Fix of `ArgMin` now accepting negative axes.
+    * For `stablehlo` and `go` backends NaNs will be deliberately selected (inline with Jax/TensorFlow/PyTorch)
   * `Clip` now uses the backend operation `Clamp`.
   * `Inverse` renamed to `Reciprocal` -- `Inverse` is now a deprecated alias to `Reciprocal`.
   * Added tests to various reduce operations.

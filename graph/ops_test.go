@@ -1105,6 +1105,21 @@ func TestArgMinMax(t *testing.T) {
 				[]uint8{0, 0, 0},
 			}, -1)
 	}
+
+	graphtest.RunTestGraphFn(t, "NaNs",
+		func(g *Graph) (inputs, outputs []*Node) {
+			inputs = []*Node{
+				Const(g, []float64{3, -2, 7, math.NaN(), -1}),
+			}
+			outputs = []*Node{
+				ArgMax(inputs[0], 0),
+				ArgMin(inputs[0], 0, dtypes.Uint8),
+			}
+			return
+		}, []any{
+			int32(3),
+			uint8(3),
+		}, -1)
 }
 
 func TestComplex(t *testing.T) {

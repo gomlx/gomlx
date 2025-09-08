@@ -1608,7 +1608,8 @@ func execArgMinMaxGeneric[T PODNumericConstraints](
 				for suffixIdx := range suffixSize {
 					operandValue := operandFlat[operandFlatIdx]
 					operandFlatIdx++
-					if operandValue < currentBest[suffixIdx] {
+					operandValueIsNaN := operandValue != operandValue
+					if operandValue < currentBest[suffixIdx] || operandValueIsNaN {
 						currentBest[suffixIdx] = operandValue
 						currentArgBest[suffixIdx] = int32(reduceIdx)
 					}
@@ -1620,7 +1621,8 @@ func execArgMinMaxGeneric[T PODNumericConstraints](
 				for suffixIdx := range suffixSize {
 					operandValue := operandFlat[operandFlatIdx]
 					operandFlatIdx++
-					if operandValue > currentBest[suffixIdx] {
+					operandValueIsNaN := operandValue != operandValue
+					if operandValue > currentBest[suffixIdx] || operandValueIsNaN {
 						currentBest[suffixIdx] = operandValue
 						currentArgBest[suffixIdx] = int32(reduceIdx)
 					}

@@ -313,13 +313,14 @@ func (b *Builder) ArgMinMax(x backends.Op, axis int, outputDType dtypes.DType, i
 			return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
 		}
 		if valuesDType.IsFloat() {
-			// Set left to true if rhs is NaN, doesn't matter what.
-			// Notice that if lhs is NaN, it will already be set to false anyway.
-			rhsIsNan, err := stablehlo.Compare(rhsValue, rhsValue, stablehlotypes.CompareNE, stablehlotypes.CompareFloat)
+			// We want to make sure to select NaNs if either side is NaN.
+			// - if Rhs is NaN, then isLeft is false already, so we don't need to do anything.
+			// - If Lhs is NaN, we must set it to true.
+			lhsIsNan, err := stablehlo.Compare(lhsValue, lhsValue, stablehlotypes.CompareNE, stablehlotypes.CompareFloat)
 			if err != nil {
 				return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
 			}
-			isLeft, err = stablehlo.Or(isLeft, rhsIsNan)
+			isLeft, err = stablehlo.Or(isLeft, lhsIsNan)
 			if err != nil {
 				return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
 			}

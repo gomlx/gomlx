@@ -20,6 +20,8 @@ type StandardOps interface {
 	// It's a form of reduction on the given axis, and that axis goes away.
 	// So the rank of the result is one less than the rank of x.
 	//
+	// If there is a NaN in the slice being examined, it is chosen for ArgMinMax -- this is inline with Jax, TensorFlow and PyTorch.
+	//
 	// Examples:
 	//
 	//	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=1, isMin=true) -> {1, 0}  // (it chooses the 0 and the -3)
