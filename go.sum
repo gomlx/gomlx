@@ -118,6 +118,8 @@ github.com/gomlx/stablehlo v0.0.0-20250906072654-12db254ffda7 h1:Ll6FBc/d7u5qybE
 github.com/gomlx/stablehlo v0.0.0-20250906072654-12db254ffda7/go.mod h1:j6jzBFCJQYbeW3eZyDq0MsToVkIEIj3zxkQ4YyNUfXg=
 github.com/gomlx/stablehlo v0.0.0-20250907175129-ae0daa17b6f7 h1:IwJNn4lEgMxkrzSC+JgLzi2aPJ9fo9pfDPy+wikkGqY=
 github.com/gomlx/stablehlo v0.0.0-20250907175129-ae0daa17b6f7/go.mod h1:j6jzBFCJQYbeW3eZyDq0MsToVkIEIj3zxkQ4YyNUfXg=
+github.com/gomlx/stablehlo v0.0.0-20250908060038-e6ca59ac0cbe h1:KueMMikzPWHUvnFOC7dxq0OCrpznt/osbUxxEOLl93U=
+github.com/gomlx/stablehlo v0.0.0-20250908060038-e6ca59ac0cbe/go.mod h1:j6jzBFCJQYbeW3eZyDq0MsToVkIEIj3zxkQ4YyNUfXg=
 github.com/google/go-cmp v0.6.0 h1:ofyhxvXcZhMsU5ulbFiLKl/XBFqE1GSq7atu8tAmTRI=
 github.com/google/go-cmp v0.6.0/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
 github.com/google/pprof v0.0.0-20240424215950-a892ee059fd6 h1:k7nVchz72niMH6YLQNvHSdIE7iqsQxK1P41mySCvssg=
