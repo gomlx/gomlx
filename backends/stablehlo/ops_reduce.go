@@ -33,14 +33,17 @@ func (b *Builder) reduce(opType backends.OpType,
 	reductionFn, ok := b.cacheReductions[rKey]
 	if !ok {
 		// Create a new reduction function for this dtype/op.
-		reductionFn = b.fn.Builder.NewInlineFunction()
-		lhs := reductionFn.NewNamedInput("lhs", stablehloshapes.Make(dtype))
-		rhs := reductionFn.NewNamedInput("rhs", stablehloshapes.Make(dtype))
+		reductionFn = b.fn.Closure()
+		lhs := reductionFn.NamedInput("lhs", stablehloshapes.Make(dtype))
+		rhs := reductionFn.NamedInput("rhs", stablehloshapes.Make(dtype))
 		result, err := method(reductionFn, lhs, rhs)
 		if err != nil {
 			return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
 		}
-		reductionFn.Return(result)
+		err = reductionFn.Return(result)
+		if err != nil {
+			return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
+		}
 		b.cacheReductions[rKey] = reductionFn
 	}
 
@@ -254,3 +257,66 @@ func (b *Builder) ReduceLogicalXor(x backends.Op, axes ...int) (backends.Op, err
 	}
 	return b.reduce(opType, (*stablehlo.Function).Xor, initialValue.(*Node), x, axes...)
 }
+
+/*
+// ArgMinMax calculates the "argmin" or "argmax" across an axis of the given input array x.
+//
+// outputDType defines the output of the argmin/argmax, it doesn't need to be the same as the input.
+// It's a form of reduction on the given axis, and that axis goes away.
+// So the rank of the result is one less than the rank of x.
+//
+// Examples:
+//
+//	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=1, isMin=true) -> {1, 0}  // (it chooses the 0 and the -3)
+//	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=0, isMin=false) -> {0, 1, 0} // (it choose the 2, 4 and 7)
+func (b *Builder) ArgMinMax(x backends.Op, axis int, outputDType dtypes.DType, isMin bool) (backends.Op, error) {
+	opType := backends.OpTypeArgMinMax
+	nodes, err := b.verifyAndCastValues(opType.String(), x)
+	if err != nil {
+		return nil, err
+	}
+	xNode := nodes[0]
+	valuesDType := xNode.shape.DType
+	rank := xNode.shape.Rank()
+	adjustedAxis, err := adjustAxisToRank(axis, rank)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create the reduction function for this valuesDType/op, use cache if possible.
+	cacheKey := argMinMaxKey{
+		valuesDType: valuesDType,
+		outputDType: outputDType,
+		isMin:       isMin,
+	}
+	reduceFn, ok := b.cacheArgMinMax[cacheKey]
+	if !ok {
+		// Create a new reduction function for this valuesDType/op.
+		reduceFn = b.fn.Closure()
+		lhsIndex := reduceFn.NamedInput("lhs_idx", stablehloshapes.Make(outputDType))
+		lhsValue := reduceFn.NamedInput("lhs_v", stablehloshapes.Make(valuesDType))
+		rhsIndex := reduceFn.NamedInput("rhs_idx", stablehloshapes.Make(outputDType))
+		rhsValue := reduceFn.NamedInput("rhs_v", stablehloshapes.Make(valuesDType))
+		if isMin {
+
+		}
+		result, err := (reduceFn, lhsIndex, lhsValue, rhsIndex, rhsValue)
+		if err != nil {
+			return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
+		}
+		reduceFn.Return(result)
+		b.cacheReductions[cacheKey] = reduceFn
+	}
+
+	// If no axes are given, reduce over all axes.
+	if len(axes) == 0 {
+		axes = xslices.Iota(0, rank)
+	}
+
+	value, err := b.fn.Reduce(xNode.value, initialValue.value, reduceFn, axes...)
+	if err != nil {
+		return nil, err
+	}
+	return b.newNode(value), nil
+}
+*/

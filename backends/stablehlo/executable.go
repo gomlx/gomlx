@@ -40,7 +40,10 @@ func (b *Builder) Compile(outputs ...backends.Op) (backends.Executable, error) {
 	}
 
 	// Finish StableHLO "main" function:
-	b.fn.Return(outputValues[0], outputValues[1:]...)
+	err = b.fn.Return(outputValues[0], outputValues[1:]...)
+	if err != nil {
+		return nil, errors.WithMessagef(err, "backend %q: failed to finish StableHLO program %q", BackendName, b.name)
+	}
 	program, err := b.builder.Build()
 	if err != nil {
 		return nil, errors.WithMessagef(err, "backend %q: failed to build StableHLO from computation %q", BackendName, b.name)

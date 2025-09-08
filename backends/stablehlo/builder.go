@@ -30,12 +30,19 @@ type Builder struct {
 
 	// Various caches.
 	cacheReductions map[reductionKey]*stablehlo.Function
+	cacheArgMinMax  map[argMinMaxKey]*stablehlo.Function
 }
 
 // reductionKey for the cache of inlined functions for reductions.
 type reductionKey struct {
 	dtype  dtypes.DType
 	opType backends.OpType
+}
+
+// argMinMaxKey for the cache of inlined functions for ArgMinMax.
+type argMinMaxKey struct {
+	valuesDType, outputDType dtypes.DType
+	isMin                    bool
 }
 
 var _ backends.Builder = (*Builder)(nil)
@@ -51,6 +58,7 @@ func (backend *Backend) Builder(name string) backends.Builder {
 		builder:         stablehlo.New(name),
 		name:            name,
 		cacheReductions: make(map[reductionKey]*stablehlo.Function),
+		cacheArgMinMax:  make(map[argMinMaxKey]*stablehlo.Function),
 	}
 	b.Builder.ErrFn = func(op backends.OpType) error {
 		return errors.Errorf("StableHLO hasn't implemented operation %q yet, pls open an issue in https://github.com/gomlx/gomlx", op)
@@ -138,21 +146,8 @@ func (b *Builder) Parameter(name string, shape shapes.Shape) (backends.Op, error
 	}
 	b.parameterNames = append(b.parameterNames, normalizedName)
 	b.parameterShapes = append(b.parameterShapes, shape)
-	value := b.fn.NewNamedInput(name, ShapeToStableHLO(shape))
+	value := b.fn.NamedInput(name, ShapeToStableHLO(shape))
 	return b.newNode(value), nil
-}
-
-// Identity returns an Op whose output is the same as its input.
-// It's a no-op that can serve as a place-holder.
-func (b *Builder) Identity(x backends.Op) (backends.Op, error) {
-	if err := b.CheckValid(); err != nil {
-		return nil, err
-	}
-	nodes, err := b.verifyAndCastValues("OpShape", x)
-	if err != nil {
-		return nil, err
-	}
-	return nodes[0], nil
 }
 
 // Constant creates a constant in the graph with the given flat values and the shape defined by the dimensions.

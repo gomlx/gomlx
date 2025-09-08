@@ -11,6 +11,30 @@ import (
 	"github.com/pkg/errors"
 )
 
+// adjustAxisToRank returns a positive axis, adjusting negative numbers to the correct rank.
+func adjustAxisToRank(axis, rank int) (int, error) {
+	if axis < -rank || axis >= rank {
+		return -1, errors.Errorf("axis %d is out of range for the rank %d", axis, rank)
+	}
+	if axis < 0 {
+		axis += rank
+	}
+	return axis, nil
+}
+
+// Identity returns an Op whose output is the same as its input.
+// It's a no-op that can serve as a place-holder.
+func (b *Builder) Identity(x backends.Op) (backends.Op, error) {
+	if err := b.CheckValid(); err != nil {
+		return nil, err
+	}
+	nodes, err := b.verifyAndCastValues("OpShape", x)
+	if err != nil {
+		return nil, err
+	}
+	return nodes[0], nil
+}
+
 // BroadcastInDim broadcasts x to an output with the given shape.
 // broadcastAxes has an output axes value for each x axes (len(broadcastAxes) == x.Shape.Rank()).
 // The i-th axis of x is mapped to the broadcastAxes[i]-th dimension of the output.
