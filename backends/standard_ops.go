@@ -520,6 +520,10 @@ type StandardOps interface {
 	// The output will have: output.Shape.Dimension[ii] = x.Shape.Dimension[permutations[i]].
 	Transpose(x Op, permutations ...int) (Op, error)
 
-	// Where takes element-wise values from onTrue or onFalse depending on the value of the condition (expected to be boolean).
+	// Where takes element-wise values from onTrue or onFalse depending on the value of the condition (must be boolean).
+	//
+	// The condition must be boolean, and onTrue and onFalse must have the same dtype.
+	//
+	// If either condition, onTrue or onFalse is a scalar, it will be broadcasted to the shape of the other operands.
 	Where(condition, onTrue, onFalse Op) (Op, error)
 }

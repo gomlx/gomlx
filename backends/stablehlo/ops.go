@@ -398,3 +398,43 @@ func (b *Builder) Concatenate(axis int, operands ...backends.Op) (backends.Op, e
 	}
 	return b.newNode(value), nil
 }
+
+// Where implements backends.Builder interface.
+func (b *Builder) Where(condition, onTrue, onFalse backends.Op) (backends.Op, error) {
+	operandsNodes, err := b.verifyAndCastValues("Concatenate", condition, onTrue, onFalse)
+	if err != nil {
+		return nil, err
+	}
+	conditionN, onTrueN, onFalseN := operandsNodes[0], operandsNodes[1], operandsNodes[2]
+
+	// Where allows onTrue and onFalse to be broadcast automatically if they are scalars, while stablehlo.Select doesn't.
+	// We perform their broadcasting here but leave the condition broadcasting to be handled by stablehlo.Select.
+	outputDims := conditionN.shape.Dimensions
+	if !onTrueN.shape.IsScalar() {
+		outputDims = onTrueN.shape.Dimensions
+	}
+	if !onFalseN.shape.IsScalar() {
+		outputDims = onFalseN.shape.Dimensions
+	}
+	if onTrueN.shape.IsScalar() && len(outputDims) > 0 {
+		onTrue, err = b.Broadcast(onTrue, outputDims...)
+		if err != nil {
+			return nil, errors.WithMessage(err, "while broadcasting onTrue for op Where()")
+		}
+		onTrueN = onTrue.(*Node)
+	}
+	if onFalseN.shape.IsScalar() && len(outputDims) > 0 {
+		onFalse, err = b.Broadcast(onFalse, outputDims...)
+		if err != nil {
+			return nil, errors.WithMessage(err, "while broadcasting onFalse for op Where()")
+		}
+		onFalseN = onFalse.(*Node)
+	}
+
+	// Where operation is called Select in stablehlo.
+	value, err := stablehlo.Select(conditionN.value, onTrueN.value, onFalseN.value)
+	if err != nil {
+		return nil, err
+	}
+	return b.newNode(value), nil
+}

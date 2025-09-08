@@ -94,10 +94,10 @@ var Capabilities = backends.Capabilities{
 		backends.OpTypeReduceSum:        true,
 		backends.OpTypeReshape:          true,
 		backends.OpTypeSlice:            true,
+		backends.OpTypeWhere:            true,
 
 		//backends.OpTypeArgMinMax:        true,
 		//backends.OpTypeTranspose:        true,
-		//backends.OpTypeWhere:            true,
 		//backends.OpTypeBitcast: true,
 		//backends.OpTypeRngBitGenerator:  true,
 
