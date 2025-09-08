@@ -96,15 +96,14 @@ var Capabilities = backends.Capabilities{
 		backends.OpTypeReduceProduct:    true,
 		backends.OpTypeReduceSum:        true,
 		backends.OpTypeReshape:          true,
+		backends.OpTypeRngBitGenerator:  true,
 		backends.OpTypeSlice:            true,
+		backends.OpTypeTranspose:        true,
 		backends.OpTypeWhere:            true,
 
-		//backends.OpTypeTranspose:        true,
-		//backends.OpTypeRngBitGenerator:  true,
 		//backends.OpTypeScatterSum:       true,
 		//backends.OpTypeScatterMax:       true,
 		//backends.OpTypeScatterMin:       true,
-
 		//backends.OpTypeBatchNormForInference: true,
 		//backends.OpTypeBatchNormForTraining: true,
 		//backends.OpTypeBatchNormGradient: true,

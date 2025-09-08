@@ -63,10 +63,10 @@ type Builder interface {
 	ReduceWindow(x Op, reductionType ReduceOpType, windowDimensions, strides, baseDilations, windowDilations []int, paddings [][2]int) (Op, error)
 
 	// RngBitGenerator generates the given shape filled with random bits.
-	// It takes the current random number generator (RNG) state, see RngState or RngStateFromSeed.
-	// The algorithm is hard-coded to use Philox algorithm for now.
 	//
-	// It returns the new state of the RNG and the generated values (with random bits) with the given shape.
+	// It takes as input a state (usually [3]uint64) and returns the updated state and the generated values (with random bits).
+	//
+	// Currently, the backend only supports the Philox algorithm. See https://dl.acm.org/doi/10.1145/2063384.2063405
 	RngBitGenerator(state Op, shape shapes.Shape) (newState Op, values Op, err error)
 
 	// BatchNormForInference implements Batch Norm for inference. See details in
