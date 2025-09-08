@@ -53,7 +53,7 @@ func (b Builder) BitCount(operand backends.Op) (backends.Op, error) {
 // If targetDType.Size() < x.DType().Size(), the returned shape will have an extra axis in the end, with dimension of
 // x.DType().Size() / targetDType.Size().
 //
-// E.g: Bitcast([1]uint32{0xdeadbeef}, dtypes.UInt16) -> [1][2]uint16{{0xdead, 0xbeef}}
+// E.g: Bitcast([1]uint32{0xdeadbeef}, dtypes.UInt16) -> [1][2]uint16{{0xbeef, 0xdead}} // Little-endian encoding.
 func (b Builder) Bitcast(x backends.Op, targetDType dtypes.DType) (backends.Op, error) {
 	return nil, b.baseErrFn(backends.OpTypeBitcast)
 }
@@ -711,7 +711,7 @@ func (b Builder) Tanh(x backends.Op) (backends.Op, error) {
 // Transpose axes of x.
 // There should be one value in permutations for each axis in x.
 // The output will have: output.Shape.Dimension[ii] = x.Shape.Dimension[permutations[i]].
-func (b Builder) Transpose(x backends.Op, permutations ...int) (backends.Op, error) {
+func (b Builder) Transpose(x backends.Op, permutation ...int) (backends.Op, error) {
 	return nil, b.baseErrFn(backends.OpTypeTranspose)
 }
 

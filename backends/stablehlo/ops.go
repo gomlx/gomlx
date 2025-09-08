@@ -449,12 +449,27 @@ func (b *Builder) IsNaN(x backends.Op) (backends.Op, error) {
 	return result, nil
 }
 
+// Bitcast implements backends.Builder interface.
 func (b *Builder) Bitcast(x backends.Op, targetDType dtypes.DType) (backends.Op, error) {
 	nodes, err := b.verifyAndCastValues("Bitcast", x)
 	if err != nil {
 		return nil, err
 	}
 	value, err := stablehlo.BitcastConvert(nodes[0].value, targetDType)
+	if err != nil {
+		return nil, err
+	}
+	return b.newNode(value), nil
+}
+
+// Transpose implements backends.Builder interface.
+// It transposes input tensor x according to the given permutation axes.
+func (b *Builder) Transpose(x backends.Op, permutation ...int) (backends.Op, error) {
+	nodes, err := b.verifyAndCastValues("Transpose", x)
+	if err != nil {
+		return nil, err
+	}
+	value, err := stablehlo.Transpose(nodes[0].value, permutation...)
 	if err != nil {
 		return nil, err
 	}

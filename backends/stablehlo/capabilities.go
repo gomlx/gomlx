@@ -75,6 +75,7 @@ var Capabilities = backends.Capabilities{
 
 		// Other operations:
 		backends.OpTypeArgMinMax:        true,
+		backends.OpTypeBitcast:          true,
 		backends.OpTypeBroadcast:        true,
 		backends.OpTypeBroadcastInDim:   true,
 		backends.OpTypeClamp:            true,
@@ -99,8 +100,10 @@ var Capabilities = backends.Capabilities{
 		backends.OpTypeWhere:            true,
 
 		//backends.OpTypeTranspose:        true,
-		//backends.OpTypeBitcast: true,
 		//backends.OpTypeRngBitGenerator:  true,
+		//backends.OpTypeScatterSum:       true,
+		//backends.OpTypeScatterMax:       true,
+		//backends.OpTypeScatterMin:       true,
 
 		//backends.OpTypeBatchNormForInference: true,
 		//backends.OpTypeBatchNormForTraining: true,
@@ -113,9 +116,6 @@ var Capabilities = backends.Capabilities{
 		//backends.OpTypePad: true,
 		//backends.OpTypeReduceWindow:     true,
 		//backends.OpTypeReverse: true,
-		//backends.OpTypeScatterMax:       true,
-		//backends.OpTypeScatterMin:       true,
-		//backends.OpTypeScatterSum:       true,
 		//backends.OpTypeSelectAndScatterMax: true,
 		//backends.OpTypeSelectAndScatterMin: true,
 		//backends.OpTypeSelectAndScatterSum: true,

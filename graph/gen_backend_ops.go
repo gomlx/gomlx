@@ -498,7 +498,7 @@ func (ni *nodeInputsBitcast) String() string {
 // If targetDType.Size() < x.DType().Size(), the returned shape will have an extra axis in the end, with dimension of
 // x.DType().Size() / targetDType.Size().
 //
-// E.g: Bitcast([1]uint32{0xdeadbeef}, dtypes.UInt16) -> [1][2]uint16{{0xdead, 0xbeef}}
+// E.g: Bitcast([1]uint32{0xdeadbeef}, dtypes.UInt16) -> [1][2]uint16{{0xbeef, 0xdead}} // Little-endian encoding.
 func Bitcast(x *Node, targetDType dtypes.DType) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -4520,8 +4520,8 @@ func Tanh(x *Node) (node *Node) {
 
 // nodeInputsTranspose holds the inputs used for the call to backends.Transpose.
 type nodeInputsTranspose struct {
-	x            *Node
-	permutations []int
+	x           *Node
+	permutation []int
 }
 
 // Type implements the interface NodeInputs.
@@ -4531,22 +4531,22 @@ func (ni *nodeInputsTranspose) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsTranspose) String() string {
-	return fmt.Sprintf("%s(x=[#%d], permutations=%v)",
+	return fmt.Sprintf("%s(x=[#%d], permutation=%v)",
 		ni.Type(),
 		ni.x.Id(),
-		ni.permutations,
+		ni.permutation,
 	)
 }
 
 // backendTranspose is a Graph wrapper for the backend.Builder.Transpose method.
-func backendTranspose(x *Node, permutations ...int) (node *Node) {
+func backendTranspose(x *Node, permutation ...int) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsTranspose{
-		x:            x,
-		permutations: slices.Clone(permutations),
+		x:           x,
+		permutation: slices.Clone(permutation),
 	}
-	result, err := g.builder.Transpose(x.outputOps[0], inputs.permutations...)
+	result, err := g.builder.Transpose(x.outputOps[0], inputs.permutation...)
 	if err != nil {
 		panic(err)
 	}

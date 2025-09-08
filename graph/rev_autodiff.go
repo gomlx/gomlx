@@ -940,11 +940,11 @@ func batchNormForTrainingVJP(node *Node, vjps []*Node, _ shapes.Shape) []*Node {
 // simply the transpose of the incoming vector.
 func transposeVJP(node, v *Node, _ shapes.Shape) []*Node {
 	params := node.inputs.(*nodeInputsTranspose)
-	reversePermutations := make([]int, len(params.permutations))
-	for to, from := range params.permutations {
-		reversePermutations[from] = to
+	reversePermutation := make([]int, len(params.permutation))
+	for to, from := range params.permutation {
+		reversePermutation[from] = to
 	}
-	vjp := TransposeAllAxes(v, reversePermutations...)
+	vjp := TransposeAllAxes(v, reversePermutation...)
 	return []*Node{vjp}
 }
 
