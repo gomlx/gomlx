@@ -333,3 +333,12 @@ func (b *Builder) BitCount(x backends.Op) (backends.Op, error) {
 	}
 	return xlaResult, nil
 }
+
+// IsNaN implements backends.Builder interface.
+func (b *Builder) IsNaN(x backends.Op) (backends.Op, error) {
+	result, err := b.NotEqual(x, x)
+	if err != nil {
+		return nil, errors.WithMessage(err, "while building op IsNaN")
+	}
+	return result, nil
+}

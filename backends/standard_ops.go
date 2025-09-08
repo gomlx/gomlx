@@ -297,6 +297,9 @@ type StandardOps interface {
 	// the corresponding input element is finite.
 	IsFinite(x Op) (Op, error)
 
+	// IsNaN tests whether each element of operand is NaN, i.e., if it is not a finite number.
+	IsNaN(x Op) (Op, error)
+
 	// LessOrEqual performs element-wise comparison, returns boolean results with the same dimensions as input.
 	LessOrEqual(lhs, rhs Op) (Op, error)
 

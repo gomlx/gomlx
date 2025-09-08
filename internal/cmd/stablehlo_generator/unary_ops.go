@@ -50,7 +50,7 @@ var (
 	}
 
 	UnaryOpsToExclude = types.SetWith(
-		"Identity", "Conj",
+		"Identity", "Conj", "IsNaN",
 	)
 
 	unaryOpsTemplate = template.Must(template.New(unaryOpsFile).Parse(`

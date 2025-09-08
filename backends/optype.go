@@ -60,6 +60,7 @@ const (
 	OpTypeImag
 	OpTypeIota
 	OpTypeIsFinite
+	OpTypeIsNaN
 	OpTypeLessOrEqual
 	OpTypeLessOrEqualTotalOrder
 	OpTypeLessThan

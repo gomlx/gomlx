@@ -14,6 +14,11 @@
   * `Clip` now uses the backend operation `Clamp`.
   * `Inverse` renamed to `Reciprocal` -- `Inverse` is now a deprecated alias to `Reciprocal`.
   * Added tests to various reduce operations.
+  * Added `IsNaN`
+* Package `backends`:
+  * Ops no longer auto-generated: now it is its own source of truth (as opposite to following XLA)
+  * Added `IsNaN`
+  * Many comments improvements.
 
 # v0.22.1: 2025/08/22 🌀 Convolutions 🌀 
 

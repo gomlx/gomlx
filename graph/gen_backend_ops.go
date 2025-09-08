@@ -62,6 +62,7 @@ const (
 	NodeTypeImag
 	NodeTypeIota
 	NodeTypeIsFinite
+	NodeTypeIsNaN
 	NodeTypeLessOrEqual
 	NodeTypeLessOrEqualTotalOrder
 	NodeTypeLessThan
@@ -2129,6 +2130,46 @@ func IsFinite(x *Node) (node *Node) {
 		x: x,
 	}
 	result, err := g.builder.IsFinite(x.outputOps[0])
+	if err != nil {
+		panic(err)
+	}
+	node = &Node{
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsIsNaN holds the inputs used for the call to backends.IsNaN.
+type nodeInputsIsNaN struct {
+	x *Node
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsIsNaN) Type() NodeType {
+	return NodeTypeIsNaN
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsIsNaN) String() string {
+	return fmt.Sprintf("%s(x=[#%d])",
+		ni.Type(),
+		ni.x.Id(),
+	)
+}
+
+// IsNaN tests whether each element of operand is NaN, i.e., if it is not a finite number.
+func IsNaN(x *Node) (node *Node) {
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsIsNaN{
+		x: x,
+	}
+	result, err := g.builder.IsNaN(x.outputOps[0])
 	if err != nil {
 		panic(err)
 	}

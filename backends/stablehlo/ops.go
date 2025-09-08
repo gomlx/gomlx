@@ -438,3 +438,12 @@ func (b *Builder) Where(condition, onTrue, onFalse backends.Op) (backends.Op, er
 	}
 	return b.newNode(value), nil
 }
+
+// IsNaN implements backends.Builder interface.
+func (b *Builder) IsNaN(x backends.Op) (backends.Op, error) {
+	result, err := b.NotEqual(x, x)
+	if err != nil {
+		return nil, errors.WithMessage(err, "while building op IsNaN")
+	}
+	return result, nil
+}

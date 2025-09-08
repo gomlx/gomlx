@@ -1284,6 +1284,18 @@ func TestIsFinite(t *testing.T) {
 	}, 0)
 }
 
+func TestIsNaN(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "IsNaN", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = []*Node{
+			Const(g, []float64{0.0, math.NaN(), -1, math.Inf(-1), 1, math.Inf(1)}),
+		}
+		outputs = []*Node{IsNaN(inputs[0])}
+		return
+	}, []any{
+		[]bool{false, true, false, false, false, false}, // Number of bits set.
+	}, 0)
+}
+
 func TestMatMul(t *testing.T) {
 	graphtest.RunTestGraphFn(t, "MatMul 1:", func(g *Graph) (inputs, outputs []*Node) {
 		inputs = []*Node{

@@ -30,6 +30,7 @@ var Capabilities = backends.Capabilities{
 		backends.OpTypeExpm1:      true,
 		backends.OpTypeFloor:      true,
 		backends.OpTypeIsFinite:   true,
+		backends.OpTypeIsNaN:      true,
 		backends.OpTypeLog1p:      true,
 		backends.OpTypeLog:        true,
 		backends.OpTypeLogicalNot: true,

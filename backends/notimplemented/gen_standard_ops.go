@@ -382,6 +382,11 @@ func (b Builder) IsFinite(x backends.Op) (backends.Op, error) {
 	return nil, b.baseErrFn(backends.OpTypeIsFinite)
 }
 
+// IsNaN tests whether each element of operand is NaN, i.e., if it is not a finite number.
+func (b Builder) IsNaN(x backends.Op) (backends.Op, error) {
+	return nil, b.baseErrFn(backends.OpTypeIsNaN)
+}
+
 // LessOrEqual performs element-wise comparison, returns boolean results with the same dimensions as input.
 func (b Builder) LessOrEqual(lhs backends.Op, rhs backends.Op) (backends.Op, error) {
 	return nil, b.baseErrFn(backends.OpTypeLessOrEqual)
@@ -708,7 +713,11 @@ func (b Builder) Transpose(x backends.Op, permutations ...int) (backends.Op, err
 	return nil, b.baseErrFn(backends.OpTypeTranspose)
 }
 
-// Where takes element-wise values from onTrue or onFalse depending on the value of the condition (expected to be boolean).
+// Where takes element-wise values from onTrue or onFalse depending on the value of the condition (must be boolean).
+//
+// The condition must be boolean, and onTrue and onFalse must have the same dtype.
+//
+// If either condition, onTrue or onFalse is a scalar, it will be broadcasted to the shape of the other operands.
 func (b Builder) Where(condition backends.Op, onTrue backends.Op, onFalse backends.Op) (backends.Op, error) {
 	return nil, b.baseErrFn(backends.OpTypeWhere)
 }
