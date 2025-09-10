@@ -492,3 +492,16 @@ func (b *Builder) RngBitGenerator(state backends.Op, shape shapes.Shape) (newSta
 	}
 	return b.newNode(newStateV), b.newNode(valueV), nil
 }
+
+// ConvertDType implements backends.Builder interface.
+func (b *Builder) ConvertDType(x backends.Op, dtype dtypes.DType) (backends.Op, error) {
+	nodes, err := b.verifyAndCastValues("ConvertDType", x)
+	if err != nil {
+		return nil, err
+	}
+	output, err := stablehlo.Convert(nodes[0].value, dtype)
+	if err != nil {
+		return nil, err
+	}
+	return b.newNode(output), nil
+}
