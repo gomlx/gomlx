@@ -15,8 +15,8 @@ require (
 	github.com/go-gota/gota v0.12.0
 	github.com/gomlx/bsplines v0.2.0
 	github.com/gomlx/exceptions v0.0.3
-	github.com/gomlx/gopjrt v0.8.0
-	github.com/gomlx/stablehlo v0.0.0-20250908063319-f039b4aebbc0
+	github.com/gomlx/gopjrt v0.8.1-0.20250908142721-c860188f1599
+	github.com/gomlx/stablehlo v0.0.0-20250909065055-f7c89537a184
 	github.com/google/uuid v1.6.0
 	github.com/janpfeifer/gonb v0.11.1
 	github.com/janpfeifer/must v0.2.0
@@ -88,7 +88,7 @@ require (
 	golang.org/x/text v0.28.0 // indirect
 	golang.org/x/tools v0.36.0 // indirect
 	gonum.org/v1/gonum v0.16.0 // indirect
-	google.golang.org/protobuf v1.36.8 // indirect
+	google.golang.org/protobuf v1.36.9 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 

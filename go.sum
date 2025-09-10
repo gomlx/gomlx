@@ -112,6 +112,8 @@ github.com/gomlx/exceptions v0.0.3 h1:HKnTgEjj4jlmhr8zVFkTP9qmV1ey7ypYYosQ8GzXWu
 github.com/gomlx/exceptions v0.0.3/go.mod h1:uHL0TQwJ0xaV2/snJOJV6hSE4yRmhhfymuYgNredGxU=
 github.com/gomlx/gopjrt v0.8.0 h1:0VeyRh9p3yLfAB1/8ULkVt2gmrK9gN2xJ4X7pS2KZOY=
 github.com/gomlx/gopjrt v0.8.0/go.mod h1:VswjttDY1uSllQ+Vs69P4kgsH3EkFEHADUCdDbfgh0Y=
+github.com/gomlx/gopjrt v0.8.1-0.20250908142721-c860188f1599 h1:BK0TPibbAFCv6ot3SiaU1P5c97DF1evBj56fpxiIlcM=
+github.com/gomlx/gopjrt v0.8.1-0.20250908142721-c860188f1599/go.mod h1:xun0TwXFWanNgHW/E6GMqPmMT4XsGBi1mAQbGwPRMro=
 github.com/gomlx/stablehlo v0.0.0-20250904073625-eb51920d20a5 h1:b4Sx9fiuxwDGKFhmAt15ENBQXNfzMwxvDW2Z/Nsxa8E=
 github.com/gomlx/stablehlo v0.0.0-20250904073625-eb51920d20a5/go.mod h1:j6jzBFCJQYbeW3eZyDq0MsToVkIEIj3zxkQ4YyNUfXg=
 github.com/gomlx/stablehlo v0.0.0-20250906072654-12db254ffda7 h1:Ll6FBc/d7u5qybEUeQCDCHxTK1ScLhe7Whd0ED+86Ik=
@@ -122,6 +124,8 @@ github.com/gomlx/stablehlo v0.0.0-20250908060038-e6ca59ac0cbe h1:KueMMikzPWHUvnF
 github.com/gomlx/stablehlo v0.0.0-20250908060038-e6ca59ac0cbe/go.mod h1:j6jzBFCJQYbeW3eZyDq0MsToVkIEIj3zxkQ4YyNUfXg=
 github.com/gomlx/stablehlo v0.0.0-20250908063319-f039b4aebbc0 h1:FCuMmO+rzex54765lmyGyGNeFestyRSSmkf9rMJr6DM=
 github.com/gomlx/stablehlo v0.0.0-20250908063319-f039b4aebbc0/go.mod h1:j6jzBFCJQYbeW3eZyDq0MsToVkIEIj3zxkQ4YyNUfXg=
+github.com/gomlx/stablehlo v0.0.0-20250909065055-f7c89537a184 h1:wSsXLo4Ay44c72CfG0PN1MbcuKE8vvb7pdu0MUIhWGc=
+github.com/gomlx/stablehlo v0.0.0-20250909065055-f7c89537a184/go.mod h1:DN79mY/omfrS+4S+1jHtExgx6WAgJu7VBuGL3Y+Gbgw=
 github.com/google/go-cmp v0.6.0 h1:ofyhxvXcZhMsU5ulbFiLKl/XBFqE1GSq7atu8tAmTRI=
 github.com/google/go-cmp v0.6.0/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
 github.com/google/pprof v0.0.0-20240424215950-a892ee059fd6 h1:k7nVchz72niMH6YLQNvHSdIE7iqsQxK1P41mySCvssg=
@@ -281,6 +285,8 @@ gonum.org/v1/plot v0.15.2 h1:Tlfh/jBk2tqjLZ4/P8ZIwGrLEWQSPDLRm/SNWKNXiGI=
 gonum.org/v1/plot v0.15.2/go.mod h1:DX+x+DWso3LTha+AdkJEv5Txvi+Tql3KAGkehP0/Ubg=
 google.golang.org/protobuf v1.36.8 h1:xHScyCOEuuwZEc6UtSOvPbAT4zRh0xcNRYekJwfqyMc=
 google.golang.org/protobuf v1.36.8/go.mod h1:fuxRtAxBytpl4zzqUh6/eyUujkJdNiuEkXntxiD/uRU=
+google.golang.org/protobuf v1.36.9 h1:w2gp2mA27hUeUzj9Ex9FBjsBm40zfaDtEWow293U7Iw=
+google.golang.org/protobuf v1.36.9/go.mod h1:fuxRtAxBytpl4zzqUh6/eyUujkJdNiuEkXntxiD/uRU=
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
 gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f h1:BLraFXnmrev5lT+xlilqcH8XK9/i0At2xKjWk4p6zsU=
 gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
