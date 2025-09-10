@@ -509,3 +509,33 @@ func (b *Builder) ConvertDType(x backends.Op, dtype dtypes.DType) (backends.Op, 
 	}
 	return b.newNode(output), nil
 }
+
+// Pad injects padding on the start, end, or interior (in between each element) of the given operand.
+// There must be at most `operand.Rank()` axesConfig values. Missing PadAxis are assumed to be zeros,
+// that is, no padding for those axes.
+func (b *Builder) Pad(x, fillValue backends.Op, axesConfig ...backends.PadAxis) (backends.Op, error) {
+	nodes, err := b.verifyAndCastValues("ConvertDType", x, fillValue)
+	if err != nil {
+		return nil, err
+	}
+	xN := nodes[0]
+	if xN.shape.IsScalar() {
+		// No axes to be padded.
+		return x, nil
+	}
+	rank := xN.shape.Rank()
+	if len(axesConfig) > rank {
+		return nil, errors.Errorf("Pad: too many axesConfig values: %d > x.Rank()=%d", len(axesConfig), rank)
+	}
+	padStart, padEnd, padInterior := make([]int, rank), make([]int, rank), make([]int, rank)
+	for i, axisConfig := range axesConfig {
+		padStart[i] = axisConfig.Start
+		padEnd[i] = axisConfig.End
+		padInterior[i] = axisConfig.Interior
+	}
+	output, err := stablehlo.Pad(xN.value, nodes[1].value, padStart, padEnd, padInterior)
+	if err != nil {
+		return nil, err
+	}
+	return b.newNode(output), nil
+}
