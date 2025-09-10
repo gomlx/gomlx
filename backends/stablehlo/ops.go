@@ -486,7 +486,11 @@ func (b *Builder) RngBitGenerator(state backends.Op, shape shapes.Shape) (newSta
 	if err != nil {
 		return nil, nil, err
 	}
-	newStateV, valueV, err := stablehlo.RngBitGenerator(nodes[0].value, ShapeToStableHLO(shape), stablehlotypes.RngPhilox)
+	shloShape := ShapeToStableHLO(shape)
+	if !shloShape.Ok() {
+		return nil, nil, errors.Errorf("RngBitGenerator: invalid shape: %s", shape)
+	}
+	newStateV, valueV, err := stablehlo.RngBitGenerator(nodes[0].value, shloShape, stablehlotypes.RngPhilox)
 	if err != nil {
 		return nil, nil, err
 	}
