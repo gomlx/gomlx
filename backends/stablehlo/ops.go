@@ -561,3 +561,17 @@ func (b *Builder) ConvGeneral(input, kernel backends.Op,
 	}
 	return b.newNode(output), nil
 }
+
+// Reverse implements the backends.Builder interface.
+func (b *Builder) Reverse(x backends.Op, axes ...int) (backends.Op, error) {
+	nodes, err := b.verifyAndCastValues("ConvGeneral", x)
+	if err != nil {
+		return nil, err
+	}
+	xN := nodes[0]
+	output, err := stablehlo.Reverse(xN.value, axes...)
+	if err != nil {
+		return nil, err
+	}
+	return b.newNode(output), nil
+}
