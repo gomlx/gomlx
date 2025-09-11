@@ -539,3 +539,25 @@ func (b *Builder) Pad(x, fillValue backends.Op, axesConfig ...backends.PadAxis) 
 	}
 	return b.newNode(output), nil
 }
+
+// ConvGeneral implements the backends.Builder interface.
+func (b *Builder) ConvGeneral(input, kernel backends.Op,
+	axes backends.ConvolveAxesConfig, strides []int, paddings [][2]int,
+	inputDilations, kernelDilations []int, channelGroupCount, batchGroupCount int) (backends.Op, error) {
+	nodes, err := b.verifyAndCastValues("ConvGeneral", input, kernel)
+	if err != nil {
+		return nil, err
+	}
+	inputN, kernelN := nodes[0], nodes[1]
+	output, err := stablehlo.Convolution(inputN.value, kernelN.value,
+		strides, paddings, inputDilations, kernelDilations,
+		axes.InputBatch, axes.InputChannels, axes.InputSpatial,
+		axes.KernelInputChannels, axes.KernelOutputChannels, axes.KernelSpatial,
+		axes.OutputBatch, axes.OutputChannels, axes.OutputSpatial,
+		channelGroupCount, batchGroupCount,
+		stablehlotypes.DotGeneralPrecisionDefault, stablehlotypes.DotGeneralPrecisionDefault)
+	if err != nil {
+		return nil, err
+	}
+	return b.newNode(output), nil
+}
