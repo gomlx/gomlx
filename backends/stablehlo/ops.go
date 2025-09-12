@@ -277,6 +277,50 @@ func (b *Builder) LessOrEqualTotalOrder(lhs, rhs backends.Op) (backends.Op, erro
 	return b.comparison(backends.OpTypeLessOrEqualTotalOrder, lhs, rhs)
 }
 
+// Abs returns the Op that represents the output of the corresponding operation.
+//
+// It is special-cased here because StableHLO doesn't define the Abs() of complex numbers.
+func (b *Builder) Abs(operand backends.Op) (backends.Op, error) {
+	nodes, err := b.verifyAndCastValues("Abs", operand)
+	if err != nil {
+		return nil, err
+	}
+	if nodes[0].shape.DType.IsComplex() {
+		realV, err := b.Real(operand)
+		if err != nil {
+			return nil, err
+		}
+		imagV, err := b.Imag(operand)
+		if err != nil {
+			return nil, err
+		}
+		realV2, err := b.Mul(realV, realV)
+		if err != nil {
+			return nil, err
+		}
+		imagV2, err := b.Mul(imagV, imagV)
+		if err != nil {
+			return nil, err
+		}
+		lenV2, err := b.Add(realV2, imagV2)
+		if err != nil {
+			return nil, err
+		}
+		lenV, err := b.Sqrt(lenV2)
+		if err != nil {
+			return nil, err
+		}
+		return lenV, nil
+	}
+
+	// Normal absolute value.
+	value, err := stablehlo.Abs(nodes[0].value)
+	if err != nil {
+		return nil, err
+	}
+	return b.newNode(value), nil
+}
+
 // Conj returns the conjugate of a complex number. E.g: Conj(1+3i) = 1-3i
 func (b *Builder) Conj(operand backends.Op) (backends.Op, error) {
 	nodes, err := b.verifyAndCastValues("Conj", operand)
@@ -574,4 +618,20 @@ func (b *Builder) Reverse(x backends.Op, axes ...int) (backends.Op, error) {
 		return nil, err
 	}
 	return b.newNode(output), nil
+}
+
+// FFT implements the Fast Fourier Transform operation.
+// fftType specifies the type of FFT operation to perform.
+// fftLength specifies the length of the transform for each axis.
+func (b *Builder) FFT(x backends.Op, fftType backends.FFTType, fftLength []int) (backends.Op, error) {
+	nodes, err := b.verifyAndCastValues("FFT", x)
+	if err != nil {
+		return nil, err
+	}
+	xNode := nodes[0]
+	value, err := stablehlo.FFT(xNode.value, stablehlotypes.FFTType(fftType), fftLength...)
+	if err != nil {
+		return nil, err
+	}
+	return b.newNode(value), nil
 }

@@ -20,19 +20,6 @@ func (b *Builder) BitCount(operand backends.Op) (backends.Op, error) {
 	return b.newNode(value), nil
 }
 
-// Abs returns the Op that represents the output of the corresponding operation.
-func (b *Builder) Abs(operand backends.Op) (backends.Op, error) {
-	nodes, err := b.verifyAndCastValues("Abs", operand)
-	if err != nil {
-		return nil, err
-	}
-	value, err := stablehlo.Abs(nodes[0].value)
-	if err != nil {
-		return nil, err
-	}
-	return b.newNode(value), nil
-}
-
 // BitwiseNot returns the element-wise bitwise AND operation.
 func (b *Builder) BitwiseNot(operand backends.Op) (backends.Op, error) {
 	nodes, err := b.verifyAndCastValues("BitwiseNot", operand)

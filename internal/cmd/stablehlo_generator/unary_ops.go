@@ -51,6 +51,7 @@ var (
 
 	UnaryOpsToExclude = types.SetWith(
 		"Identity", "Conj", "IsNaN",
+		"Abs", // Abs is excluded because we special-handle values of complex types.
 	)
 
 	unaryOpsTemplate = template.Must(template.New(unaryOpsFile).Parse(`
