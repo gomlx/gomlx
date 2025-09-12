@@ -12,9 +12,14 @@ import (
 // to be complex.
 // The FFT is computed on the last dimension, in case `operand.Rank() > 1`.
 //
-// The resulting tensor (Node) has the same shapes as the input, and has the values on the frequency
-// domain. Use InverseFFT to reverse the result.
-func FFT(operand *Node) *Node {
+// If no lengths are specified, the resulting tensor (Node) has the same shapes as the operand and has the
+// values on the frequency domain calculated at the last axis.
+//
+// Optionally, one can provide the FFT lengths, in which case the output shape depends on the lengths provided.
+// Note: gradients are not defined for different FFT lengths yet.
+//
+// Use InverseFFT to reverse the result.
+func FFT(operand *Node, fftLengths ...int) *Node {
 	_ = validateBuildingGraphFromInputs(operand)
 	if !operand.DType().IsComplex() {
 		Panicf("FFT requires a complex input, got %s for dtype instead", operand.DType())
@@ -22,7 +27,10 @@ func FFT(operand *Node) *Node {
 	if operand.Shape().IsScalar() {
 		Panicf("FFT requires a complex input with rank > 1, got scalar %s instead", operand.DType())
 	}
-	return backendFFT(operand, backends.FFTForward, []int{xslices.Last(operand.Shape().Dimensions)})
+	if len(fftLengths) == 0 {
+		fftLengths = []int{operand.Shape().Dim(-1)}
+	}
+	return backendFFT(operand, backends.FFTForward, fftLengths)
 }
 
 // InverseFFT computes an inverse fast-fourier transformation of the operand, which is expected to be complex.
