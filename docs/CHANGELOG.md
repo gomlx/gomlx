@@ -25,6 +25,8 @@
   * `Loop.EveryNSteps` takes into account the current global step (as opposed to always start the counting from 0).
 * Package `losses`:
   * `MeanSquaredError`: fixed weights/mask expected mask.
+* Package `commandline`:
+* Exposed `PeriodRefresh` with frequency of command-line updates.
 
 # v0.22.1: 2025/08/22 🌀 Convolutions 🌀 
 
