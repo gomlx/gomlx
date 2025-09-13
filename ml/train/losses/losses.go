@@ -212,7 +212,8 @@ func MeanSquaredError(labels, predictions []*Node) (loss *Node) {
 	loss = Mul(loss, loss)
 
 	// Factor in weights and mask.
-	weights, mask := CheckExtraLabelsForWeightsAndMask(labels0.Shape(), labels[1:])
+	weightsShape := shapes.Make(labels0.DType(), labels0.Shape().Dimensions[:1]...)
+	weights, mask := CheckExtraLabelsForWeightsAndMask(weightsShape, labels[1:])
 	if weights != nil {
 		loss = Mul(loss, weights)
 	}
