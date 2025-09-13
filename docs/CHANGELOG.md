@@ -26,7 +26,7 @@
 * Package `losses`:
   * `MeanSquaredError`: fixed weights/mask expected mask.
 * Package `commandline`:
-* Exposed `PeriodRefresh` with frequency of command-line updates.
+  * Exposed `PeriodRefresh` with frequency of command-line updates.
 
 # v0.22.1: 2025/08/22 🌀 Convolutions 🌀 
 
