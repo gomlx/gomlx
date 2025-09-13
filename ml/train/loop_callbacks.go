@@ -69,11 +69,11 @@ func (eN *everyNSteps) onStep(loop *Loop, metrics []*tensors.Tensor) error {
 	return eN.fn(loop, metrics)
 }
 
-// EveryNSteps registers a OnStep hook on the loop that is called every N times.
+// EveryNSteps registers an OnStep hook on the loop that is called every N times.
 //
-// Notice that it does not call `fn` at the last step (except by coincidence).
+// Notice that it does not call `fn` at the last step (except if by coincidence).
 func EveryNSteps(loop *Loop, n int, name string, priority Priority, fn OnStepFn) {
-	eN := &everyNSteps{n: n, fn: fn}
+	eN := &everyNSteps{n: n, fn: fn, count: loop.LoopStep}
 	fullName := fmt.Sprintf("EveryNSteps(%d): %s", n, name)
 	loop.OnStep(fullName, priority, eN.onStep)
 }

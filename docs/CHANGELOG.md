@@ -21,6 +21,8 @@
   * Ops no longer auto-generated: now it is its own source of truth (as opposite to following XLA)
   * Added `IsNaN`
   * Many comments improvements.
+* Package `train`:
+  * `Loop.EveryNSteps` takes into account the current global step (as opposed to always start the counting from 0).
 
 # v0.22.1: 2025/08/22 🌀 Convolutions 🌀 
 
