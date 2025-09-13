@@ -23,6 +23,8 @@
   * Many comments improvements.
 * Package `train`:
   * `Loop.EveryNSteps` takes into account the current global step (as opposed to always start the counting from 0).
+* Package `losses`:
+  * `MeanSquaredError`: fixed weights/mask expected mask.
 
 # v0.22.1: 2025/08/22 🌀 Convolutions 🌀 
 
