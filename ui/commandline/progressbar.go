@@ -20,8 +20,8 @@ import (
 // It is called at each time the progress bar is updated and it should return a name and the current value when it is called.
 type ExtraMetricFn func() (name, value string)
 
-// PeriodRefresh is the time between updates in th terminal.
-var PeriodRefresh = time.Second * 3
+// RefreshPeriod is the time between updates in th terminal.
+var RefreshPeriod = time.Second * 3
 
 // progressBar holds a progressbar being displayed.
 type progressBar struct {
@@ -236,6 +236,6 @@ func AttachProgressBar(loop *train.Loop, extraMetrics ...ExtraMetricFn) {
 	loop.OnStart(ProgressBarName, 0, pBar.onStart)
 	// RunWithMap at least 1000 during loop or at least every 3 seconds.
 	train.NTimesDuringLoop(loop, 1000, ProgressBarName, 0, pBar.onStep)
-	train.PeriodicCallback(loop, PeriodRefresh, false, ProgressBarName, 0, pBar.onStep)
+	train.PeriodicCallback(loop, RefreshPeriod, false, ProgressBarName, 0, pBar.onStep)
 	loop.OnEnd(ProgressBarName, 0, pBar.onEnd)
 }
