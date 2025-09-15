@@ -62,15 +62,16 @@ func (pBar *progressBar) Write(data []byte) (n int, err error) {
 
 func (pBar *progressBar) onStart(loop *train.Loop, _ train.Dataset) error {
 	pBar.lastStepReported = loop.LoopStep
-	var stepsMsg string
+	//var stepsMsg string
 	if loop.EndStep < 0 {
 		pBar.numSteps = 1000 // Guess for now.
 	} else {
 		pBar.numSteps = loop.EndStep - loop.StartStep
-		stepsMsg = fmt.Sprintf(" (%d steps)", pBar.numSteps)
+		//stepsMsg = fmt.Sprintf(" (%d steps)", pBar.numSteps)
 	}
 	pBar.bar = progressbar.NewOptions(pBar.numSteps,
-		progressbar.OptionSetDescription(fmt.Sprintf("Training%s: ", stepsMsg)),
+		//progressbar.OptionSetDescription(fmt.Sprintf("[dim]Training%s: [reset]", stepsMsg)),
+		progressbar.OptionSetDescription("      [bold]"),
 		progressbar.OptionUseANSICodes(true),
 		progressbar.OptionEnableColorCodes(true),
 		progressbar.OptionShowIts(),
@@ -146,6 +147,7 @@ const ProgressBarName = "gomlx.ml.train.commandline.progressBar"
 var (
 	normalStyle       = lipgloss.NewStyle().Padding(0, 1)
 	rightAlignedStyle = lipgloss.NewStyle().Align(lipgloss.Right).Padding(0, 1)
+	tableBorderColor  = "#705090"
 )
 
 type progressBarUpdate struct {
@@ -175,8 +177,9 @@ func AttachProgressBar(loop *train.Loop, extraMetrics ...ExtraMetricFn) {
 		pBar.statsStyle = lipgloss.NewStyle().PaddingLeft(8)
 		pBar.statsTable = lgtable.New().
 			Border(lipgloss.RoundedBorder()).
-			BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("#705090"))).
+			BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color(tableBorderColor))).
 			StyleFunc(func(row, col int) lipgloss.Style {
+
 				if col == 0 {
 					return rightAlignedStyle
 				}
@@ -225,13 +228,14 @@ func AttachProgressBar(loop *train.Loop, extraMetrics ...ExtraMetricFn) {
 					pBar.termenv.HideCursor()
 					numLinesToClear := len(update.metrics) + 1 + 2 + len(pBar.extraMetricFns)
 					pBar.termenv.CursorPrevLine(numLinesToClear)
-					//pBar.termenv.ClearLines(numLinesToClear)
 				}
 				pBar.isFirstOutput = false
 
 				// Print update.
+				pBar.termenv.SetForegroundColor(termenv.RGBColor("#303090"))
 				_ = pBar.bar.Add(amount) // Prints progress bar line.
 				fmt.Println()
+				pBar.termenv.SetForegroundColor(termenv.ForegroundColor())
 				fmt.Println(pBar.statsStyle.Render(pBar.statsTable.String()))
 				pBar.termenv.ShowCursor()
 				time.Sleep(maxUpdateFrequency)
