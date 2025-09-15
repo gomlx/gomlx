@@ -241,9 +241,9 @@ func AttachProgressBar(loop *train.Loop, extraMetrics ...ExtraMetricFn) {
 				pBar.isFirstOutput = false
 
 				// Print update.
+				fmt.Println(pBar.statsStyle.Render(pBar.statsTable.String()))
 				_ = pBar.bar.Add(amount) // Prints progress bar line.
 				fmt.Println()
-				fmt.Println(pBar.statsStyle.Render(pBar.statsTable.String()))
 				pBar.termenv.ShowCursor()
 				time.Sleep(maxUpdateFrequency)
 			}
