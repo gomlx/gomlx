@@ -28,6 +28,7 @@
 * Package `commandline`:
   * Exposed `RefreshPeriod` with frequency of command-line updates.
   * Fixed flickering of the progress bar / table of metrics.
+  * Improved colors, "humanize" steps printing.
 
 # v0.22.1: 2025/08/22 🌀 Convolutions 🌀 
 
