@@ -107,7 +107,7 @@ func (pBar *progressBar) onStep(loop *train.Loop, metrics []*tensors.Tensor) err
 		_ = pBar.bar.Add(amount) // Triggers print, see [pBar.Write] method.
 
 	} else {
-		// For command line instead we create and enqueue an update to be asynchronously printed.
+		// For the command-line instead we create and enqueue an update to be asynchronously printed.
 		update := progressBarUpdate{
 			amount:  amount,
 			metrics: make([]string, 0, len(trainMetrics)+1),
@@ -125,7 +125,7 @@ func (pBar *progressBar) onStep(loop *train.Loop, metrics []*tensors.Tensor) err
 		pBar.updates <- update
 	}
 
-	// Add the amount of steps run since last time.
+	// Add the number of steps run since last time.
 	pBar.totalAmount += amount
 	pBar.lastStepReported = loop.LoopStep + 1
 	return nil
@@ -136,6 +136,7 @@ func (pBar *progressBar) onEnd(_ *train.Loop, _ []*tensors.Tensor) error {
 		close(pBar.updates)
 	}
 	pBar.asyncUpdatesDone.Wait()
+	pBar.termenv.ShowCursor()
 	fmt.Println()
 	return nil
 }
@@ -156,7 +157,7 @@ type progressBarUpdate struct {
 const maxUpdateFrequency = time.Millisecond * 200
 
 // AttachProgressBar creates a commandline progress bar and attaches it to the Loop, so that
-// everytime Loop is run it will display a progress bar with progression and metrics.
+// everytime Loop is run, it will display a progress bar with progression and metrics.
 //
 // The associated data will be attached to the train.Loop, so nothing is returned.
 //
@@ -174,6 +175,7 @@ func AttachProgressBar(loop *train.Loop, extraMetrics ...ExtraMetricFn) {
 		pBar.statsStyle = lipgloss.NewStyle().PaddingLeft(8)
 		pBar.statsTable = lgtable.New().
 			Border(lipgloss.RoundedBorder()).
+			BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("#705090"))).
 			StyleFunc(func(row, col int) lipgloss.Style {
 				if col == 0 {
 					return rightAlignedStyle
@@ -186,7 +188,7 @@ func AttachProgressBar(loop *train.Loop, extraMetrics ...ExtraMetricFn) {
 			// Asynchronously draw updates: this is handy if the training is faster than the terminal, in particular
 			// if running on cloud, with a relatively slow network connection.
 			for update := range pBar.updates {
-				// Exhaust the updates in buffer:
+				// Exhaust the updates in the buffer:
 				amount := update.amount
 			exhaust:
 				for {
@@ -203,7 +205,7 @@ func AttachProgressBar(loop *train.Loop, extraMetrics ...ExtraMetricFn) {
 
 				}
 
-				// Create table to be printed.
+				// Create the table to be printed.
 				pBar.statsTable.Data(lgtable.NewStringData())
 				if loop.Trainer.NumAccumulatingSteps() > 1 {
 					pBar.statsTable.Row("Global/Train Steps", update.metrics[0])
@@ -220,7 +222,10 @@ func AttachProgressBar(loop *train.Loop, extraMetrics ...ExtraMetricFn) {
 
 				// For command-line, we clear the previous lines that will be overwritten.
 				if !pBar.isFirstOutput {
-					pBar.termenv.ClearLines(len(update.metrics) + 1 + 2 + len(pBar.extraMetricFns))
+					pBar.termenv.HideCursor()
+					numLinesToClear := len(update.metrics) + 1 + 2 + len(pBar.extraMetricFns)
+					pBar.termenv.CursorPrevLine(numLinesToClear)
+					//pBar.termenv.ClearLines(numLinesToClear)
 				}
 				pBar.isFirstOutput = false
 
@@ -228,13 +233,14 @@ func AttachProgressBar(loop *train.Loop, extraMetrics ...ExtraMetricFn) {
 				_ = pBar.bar.Add(amount) // Prints progress bar line.
 				fmt.Println()
 				fmt.Println(pBar.statsStyle.Render(pBar.statsTable.String()))
+				pBar.termenv.ShowCursor()
 				time.Sleep(maxUpdateFrequency)
 			}
 			pBar.asyncUpdatesDone.Done()
 		}()
 	}
 	loop.OnStart(ProgressBarName, 0, pBar.onStart)
-	// RunWithMap at least 1000 during loop or at least every 3 seconds.
+	// RunWithMap at least 1000 during the loop or at least every 3 seconds.
 	train.NTimesDuringLoop(loop, 1000, ProgressBarName, 0, pBar.onStep)
 	train.PeriodicCallback(loop, RefreshPeriod, false, ProgressBarName, 0, pBar.onStep)
 	loop.OnEnd(ProgressBarName, 0, pBar.onEnd)

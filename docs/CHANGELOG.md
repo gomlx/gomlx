@@ -27,6 +27,7 @@
   * `MeanSquaredError`: fixed weights/mask expected mask.
 * Package `commandline`:
   * Exposed `RefreshPeriod` with frequency of command-line updates.
+  * Fixed flickering of the progress bar / table of metrics.
 
 # v0.22.1: 2025/08/22 🌀 Convolutions 🌀 
 
