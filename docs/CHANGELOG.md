@@ -17,6 +17,7 @@
   * `Inverse` renamed to `Reciprocal` -- `Inverse` is now a deprecated alias to `Reciprocal`.
   * Added tests to various reduce operations.
   * Added `IsNaN`
+  * Fixed `MaskedReduceMean`, when the mask provided is only a prefix rank to the input.
 * Package `backends`:
   * Ops no longer auto-generated: now it is its own source of truth (as opposite to following XLA)
   * Added `IsNaN`

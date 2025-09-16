@@ -697,7 +697,7 @@ func TestReduceMax(t *testing.T) {
 	}
 }
 
-func TestMaskedReduceMax(t *testing.T) {
+func TestMaskedReduce(t *testing.T) {
 	graphtest.RunTestGraphFn(t, "MaskedReduceMax()",
 		func(g *Graph) (inputs, outputs []*Node) {
 			x := IotaFull(g, MakeShape(dtypes.Float32, 4, 3))
@@ -710,7 +710,17 @@ func TestMaskedReduceMax(t *testing.T) {
 			inputs = []*Node{x, mask}
 			outputs = []*Node{output}
 			return
-		}, []any{[]float32{0, 4, 8, 11}}, xslices.Epsilon)
+		}, []any{[]float32{0, 4, 8, 11}}, -1)
+
+	graphtest.RunTestGraphFn(t, "MaskedReduceMean with prefix rank mask",
+		func(g *Graph) (inputs, outputs []*Node) {
+			x := OnePlus(IotaFull(g, MakeShape(dtypes.Float32, 4, 3)))
+			mask := Const(g, []bool{true, false, false, false})
+			output := MaskedReduceMean(x, mask)
+			inputs = []*Node{x, mask}
+			outputs = []*Node{output}
+			return
+		}, []any{float32(2)}, -1)
 }
 
 func TestLogicalAllAndAny(t *testing.T) {
