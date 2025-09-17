@@ -8,8 +8,11 @@ import (
 	"html/template"
 	"io"
 	"os"
+	"os/exec"
 	"path"
+	"runtime"
 	"slices"
+	"strings"
 
 	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/xslices"
@@ -21,10 +24,18 @@ import (
 	ptypes "github.com/MetalBlueberry/go-plotly/pkg/types"
 )
 
+// TODO:
+//  - Fix mouse-over tooltip to be over the legend, and not over the points themselves. There is no support for this
+//    in Plotly, but one can code one using javascript.
+//  - Remove model index from legends, if there is only one model
+
 var (
 	flagPlot = flag.Bool("plot", false,
 		fmt.Sprintf("Plots the metrics collected for plotting in file %q. "+
 			"You can control which metrics to plot with -metrics_names and -metrics_types", plots.TrainingPlotFileName))
+	flagBrowser    = flag.Bool("browser", true, "Opens the generated plots file in the default browser.")
+	flagPlotOutput = flag.String("plot_output", "", "File to generate HTML file with plots. "+
+		"If empty (the default) it will create a temporary file.")
 )
 
 // createModelNamesToIndex collects all model names (base name of the their directory), sort them, and returns a
@@ -85,10 +96,13 @@ func createPlotLines(metricType string, modelNames []string, points [][]plots.Po
 			}
 			info, exists := metricPoints[pt.MetricName]
 			if !exists {
-				shortName := fmt.Sprintf("#%d %s", modelNum, pt.Short)
-				info = &plotLineInfo{
-					short: shortName,
-					desc:  fmt.Sprintf("%s: %s for model %q", shortName, pt.MetricName, modelName),
+				info = &plotLineInfo{}
+				if len(modelNames) == 1 {
+					info.short = pt.Short
+					info.desc = fmt.Sprintf("%s: %s", pt.Short, pt.MetricName)
+				} else {
+					info.short = fmt.Sprintf("#%d %s", modelNum, pt.Short)
+					info.desc = fmt.Sprintf("%s: %s for model %q", info.short, pt.MetricName, modelName)
 				}
 			}
 			info.steps = append(info.steps, pt.Step)
@@ -98,7 +112,7 @@ func createPlotLines(metricType string, modelNames []string, points [][]plots.Po
 
 		// Sort points by steps.
 		for _, info := range metricPoints {
-			// Create indices array.
+			// Create the indices array.
 			indices := xslices.Iota(0, len(info.steps))
 			// Sort indices.
 			slices.SortFunc(indices, func(i, j int) int {
@@ -157,6 +171,7 @@ func BuildPlots(modelNames []string, metricsOrder map[ModelNameAndMetric]int, po
 					//X anchor: grob.LayoutLegendX anchorRight,
 					//Y anchor: grob.LayoutLegendY anchorTop,
 				},
+				Template: plotly.PlotlyDarkTheme,
 			},
 		}
 		// Add scatter lines to the plot.
@@ -181,18 +196,34 @@ func BuildPlots(modelNames []string, metricsOrder map[ModelNameAndMetric]int, po
 		serializedPlots = append(serializedPlots, figAsJSON)
 	}
 
-	// Create temporary file for serializedPlots
-	tmpFile, err := os.CreateTemp("", "gomlx-serializedPlots-*.html")
-	if err != nil {
-		panic(errors.Wrap(err, "failed to create temporary file for serializedPlots"))
+	// Set the title.
+	var title string
+	if len(modelNames) == 1 {
+		title = modelNames[0]
+	} else {
+		baseNames := xslices.Map(modelNames, path.Base)
+		title = fmt.Sprintf("Models: %s", strings.Join(baseNames, ", "))
+	}
+
+	// Create a temporary file for the serializedPlots if needed.
+	outputFilePath := *flagPlotOutput
+	if outputFilePath == "" {
+		tmpFile, err := os.CreateTemp("", "gomlx-serializedPlots-*.html")
+		if err != nil {
+			panic(errors.Wrap(err, "failed to create temporary file for serializedPlots"))
+		}
+		outputFilePath = tmpFile.Name()
 	}
 
 	// Write serializedPlots to a temporary file
-	if err := PlotlyToHTMLFile(tmpFile.Name(), serializedPlots...); err != nil {
+	if err := PlotlyToHTMLFile(outputFilePath, title, serializedPlots...); err != nil {
 		panic(errors.Wrap(err, "failed to write serializedPlots to temporary file"))
 	}
 
-	fmt.Printf("\nPlots written to:\t%s\n\n", tmpFile.Name())
+	fmt.Printf("\nPlots written to:\t%s\n\n", outputFilePath)
+	if *flagBrowser {
+		openBrowser(outputFilePath)
+	}
 }
 
 var (
@@ -200,18 +231,53 @@ var (
 	<head>
 		<meta charset="utf-8">
 		<script src="{{ .CDN }}"></script>
+		<style>
+			body {
+				background-color: #1a1a1a;
+				color: #ffffff;
+				font-family: 'Segoe UI', 'Arial', sans-serif;
+				margin: 0;
+				padding: 20px;
+			}
+			h1 {
+				color: #00ffcc;
+				text-align: center;
+				font-weight: 300;
+				margin-bottom: 40px;
+			}
+			hr {
+				border: none;
+				height: 1px;
+				background: linear-gradient(90deg, transparent, #404040, transparent);
+				margin: 30px 0;
+			}
+			.plot-container {
+				background-color: #222222;
+				border-radius: 8px;
+				padding: 20px;
+				margin: 20px 0;
+				box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+			}
+		</style>
 	</head>
-	<body style="background-color: black;">
+	<body>
+		<h1>{{ .Title }}</h1>
 {{- range $i, $f := .Figures }}
-		<div id="plot{{ $i }}"></div>
+		<div class="plot-container">
+			<div id="plot{{ $i }}"></div>
+		</div>
 		{{ if not (eq $i (lastIdx $.Figures)) }}
-		<hr style="border-color: gray;">
+		<hr>
 		{{ end }}
 {{- end }}
 	<script>
 {{- range $i, $f := .Figures }}
 		data = JSON.parse(atob('{{ $f }}'))
-		Plotly.newPlot('plot{{ $i }}', data);
+		Plotly.newPlot('plot{{ $i }}', data, {
+			paper_bgcolor: '#222222',
+			plot_bgcolor: '#222222',
+			font: { color: '#ffffff' }
+		});
 {{- end }}
 	</script>
 	</body>
@@ -223,12 +289,14 @@ var (
 
 // WritePlotlyAsHTML renders the Plotly figures (given as JSON) to an HTML page that can be
 // served or saved to a file.
-func WritePlotlyAsHTML(w io.Writer, figuresAsJSON ...[]byte) error {
+func WritePlotlyAsHTML(w io.Writer, title string, figuresAsJSON ...[]byte) error {
 	data := &struct {
 		CDN     string
+		Title   string
 		Figures []string
 	}{
 		CDN:     plotly.PlotlySrc,
+		Title:   title,
 		Figures: xslices.Map(figuresAsJSON, func(fig []byte) string { return base64.StdEncoding.EncodeToString(fig) }),
 	}
 	err := singleFileHTMLTmpl.Execute(w, data)
@@ -239,11 +307,29 @@ func WritePlotlyAsHTML(w io.Writer, figuresAsJSON ...[]byte) error {
 }
 
 // PlotlyToHTMLFile renders the Plotly figure (given as JSON) to an HTML file.
-func PlotlyToHTMLFile(fileName string, figuresAsJSon ...[]byte) error {
+func PlotlyToHTMLFile(fileName, title string, figuresAsJSon ...[]byte) error {
 	f, err := os.Create(fileName)
 	if err != nil {
 		return errors.Wrapf(err, "failed to create file %q", fileName)
 	}
 	defer func() { _ = f.Close() }()
-	return WritePlotlyAsHTML(f, figuresAsJSon...)
+	return WritePlotlyAsHTML(f, title, figuresAsJSon...)
+}
+
+// openBrowser opens the given file in the default browser.
+func openBrowser(fileName string) {
+	var err error
+	switch runtime.GOOS {
+	case "linux":
+		err = exec.Command("xdg-open", fileName).Start()
+	case "windows":
+		err = exec.Command("cmd", "/c", "start", fileName).Start()
+	case "darwin":
+		err = exec.Command("open", fileName).Start()
+	default:
+		err = fmt.Errorf("unsupported platform")
+	}
+	if err != nil {
+		fmt.Printf("Error opening browser: %v\n", err)
+	}
 }

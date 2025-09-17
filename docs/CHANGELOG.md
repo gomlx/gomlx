@@ -30,6 +30,9 @@
   * Exposed `RefreshPeriod` with frequency of command-line updates.
   * Fixed flickering of the progress bar / table of metrics.
   * Improved colors, "humanize" steps printing.
+* `gomlx_checkpoints` CLI tool:
+  * Added `-plot` to generate plots for all metrics. It accepts various models, so one can use it to compare models.
+
 
 # v0.22.1: 2025/08/22 🌀 Convolutions 🌀 
 
