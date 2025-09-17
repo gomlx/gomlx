@@ -19,12 +19,16 @@ import (
 )
 
 var (
+	flagMetrics = flag.Bool("metrics", false,
+		fmt.Sprintf("Lists the metrics collected for plotting in file %q", plots.TrainingPlotFileName))
+	flagMetricsLabels = flag.Bool("metrics_labels", false,
+		fmt.Sprintf("Lists the metrics labels (short names) with their full description from file %q", plots.TrainingPlotFileName))
 	flagMetricsNames = flag.String("metrics_names", "", "Regular expression that if matches the name or short name, the metric is included.")
 	flagMetricsTypes = flag.String("metrics_types", "", "Comma-separate list of metric types to include in metrics Reports. ")
 )
 
-func metrics(checkpointPaths, names []string) {
-	numCheckpoints := len(names)
+func metrics(checkpointPaths, modelNames []string) {
+	numCheckpoints := len(modelNames)
 	_ = numCheckpoints
 
 	// Load metrics points from the checkpointPath.
@@ -59,30 +63,31 @@ func metrics(checkpointPaths, names []string) {
 	}
 	nameToShort := make(map[string]string)
 	shortToName := make(map[string]string)
-	metricsUsed := types.MakeSet[NameMetric]()
+	metricsUsed := types.MakeSet[ModelNameAndMetric]()
 	for modelIdx, pointsPerModel := range points {
 		for _, point := range pointsPerModel {
 			nameToShort[point.MetricName] = point.Short
 			shortToName[point.Short] = point.MetricName
 			if metricsNamesMatcher != nil || metricsTypes != nil {
-				foundName := metricsNamesMatcher.MatchString(point.MetricName) || metricsNamesMatcher.MatchString(point.Short)
+				// Filter by name or type.
+				foundName := metricsNamesMatcher != nil && (metricsNamesMatcher.MatchString(point.MetricName) || metricsNamesMatcher.MatchString(point.Short))
 				foundType := metricsTypes != nil && metricsTypes.Has(point.MetricType)
 				if !foundName && !foundType {
 					continue
 				}
 			}
-			metricsUsed.Insert(NameMetric{names[modelIdx], point.Short})
+			metricsUsed.Insert(ModelNameAndMetric{modelNames[modelIdx], point.Short, point.MetricType})
 		}
 	}
 
 	// Map the metrics to the column number, starting from 1 (column 0 is for the global step)
-	metricsInOrder := slices.SortedFunc(maps.Keys(metricsUsed), func(a, b NameMetric) int {
-		if c := strings.Compare(a.Metric, b.Metric); c != 0 {
+	metricsInOrder := slices.SortedFunc(maps.Keys(metricsUsed), func(a, b ModelNameAndMetric) int {
+		if c := strings.Compare(a.MetricName, b.MetricName); c != 0 {
 			return c
 		}
-		return strings.Compare(a.Name, b.Name)
+		return strings.Compare(a.ModelName, b.ModelName)
 	})
-	metricsOrder := make(map[NameMetric]int, len(metricsInOrder))
+	metricsOrder := make(map[ModelNameAndMetric]int, len(metricsInOrder))
 	for idx, nameMetric := range metricsInOrder {
 		metricsOrder[nameMetric] = idx + 1
 	}
@@ -92,12 +97,16 @@ func metrics(checkpointPaths, names []string) {
 	}
 
 	if *flagMetrics {
-		ReportMetrics(names, metricsOrder, points)
+		ReportMetrics(modelNames, metricsOrder, points)
+	}
+
+	if *flagPlot {
+		BuildPlots(modelNames, metricsOrder, points)
 	}
 }
 
-// NameMetric hold the pair of information.
-type NameMetric struct{ Name, Metric string }
+// ModelNameAndMetric holds information on the model name and one of its metric.
+type ModelNameAndMetric struct{ ModelName, MetricName, MetricType string }
 
 // ReportMetricsLabels list all metrics short and long names.
 func ReportMetricsLabels(shortToName map[string]string) {
@@ -115,7 +124,7 @@ func ReportMetricsLabels(shortToName map[string]string) {
 }
 
 // ReportMetrics of the model.
-func ReportMetrics(names []string, metricsOrder map[NameMetric]int, points [][]plots.Point) {
+func ReportMetrics(names []string, metricsOrder map[ModelNameAndMetric]int, points [][]plots.Point) {
 	numCheckpoints := len(names)
 	fmt.Println(titleStyle.Render("Metrics Table"))
 	table := newPlainTable(true, lipgloss.Right)
@@ -123,9 +132,9 @@ func ReportMetrics(names []string, metricsOrder map[NameMetric]int, points [][]p
 	header[0] = "Global Step"
 	for nameMetric, idx := range metricsOrder {
 		if numCheckpoints == 1 {
-			header[idx] = nameMetric.Metric
+			header[idx] = nameMetric.MetricName
 		} else {
-			header[idx] = fmt.Sprintf("%s: %s", nameMetric.Name, nameMetric.Metric)
+			header[idx] = fmt.Sprintf("%s: %s", nameMetric.ModelName, nameMetric.MetricName)
 		}
 	}
 	table.Headers(header...)
@@ -162,7 +171,7 @@ func ReportMetrics(names []string, metricsOrder map[NameMetric]int, points [][]p
 		row[0] = humanize.Comma(currentGlobalStep)
 		for modelIdx, pointsPerModel := range points {
 			// Consume all points for the currentGlobalStep.
-			nameMetric := NameMetric{Name: names[modelIdx]}
+			nameMetric := ModelNameAndMetric{ModelName: names[modelIdx]}
 			for pointsIndices[modelIdx] < len(pointsPerModel) {
 				point := pointsPerModel[pointsIndices[modelIdx]]
 				if int64(point.Step) != currentGlobalStep {
@@ -170,7 +179,7 @@ func ReportMetrics(names []string, metricsOrder map[NameMetric]int, points [][]p
 					break
 				}
 				pointsIndices[modelIdx]++ // We'll consume this point, move the head forward.
-				nameMetric.Metric = point.Short
+				nameMetric.MetricName = point.Short
 				colIdx, found := metricsOrder[nameMetric]
 				if !found {
 					// We are not printing this metric.

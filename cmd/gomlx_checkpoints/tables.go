@@ -8,7 +8,6 @@ import (
 var (
 	headerRowStyle = lipgloss.NewStyle().Reverse(true).
 			Padding(0, 2, 0, 2).Align(lipgloss.Center)
-
 	oddRowStyle = lipgloss.NewStyle().Faint(false).
 			PaddingLeft(1).PaddingRight(1)
 	evenRowStyle = lipgloss.NewStyle().Faint(true).
