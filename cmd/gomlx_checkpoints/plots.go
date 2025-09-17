@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gomlx/ui/plots"
@@ -148,6 +149,7 @@ func BuildPlots(modelNames []string, metricsOrder map[ModelNameAndMetric]int, po
 	metricTypes := createSortedMetricTypes(metricsOrder)
 	numPlots := len(metricTypes)
 	modelNamesToIndex := createModelNamesToIndex(metricsOrder)
+	legendsHoverTexts := make([][]string, 0, numPlots)
 
 	// Create one plot per metric type.
 	serializedPlots := make([][]byte, 0, numPlots)
@@ -160,6 +162,9 @@ func BuildPlots(modelNames []string, metricsOrder map[ModelNameAndMetric]int, po
 				Xaxis: &grob.LayoutXaxis{
 					Showgrid: ptypes.B(true),
 					Type:     grob.LayoutXaxisTypeLog,
+					Title: &grob.LayoutXaxisTitle{
+						Text: ptypes.S("Step"),
+					},
 				},
 				Yaxis: &grob.LayoutYaxis{
 					Showgrid: ptypes.B(true),
@@ -176,6 +181,7 @@ func BuildPlots(modelNames []string, metricsOrder map[ModelNameAndMetric]int, po
 		}
 		// Add scatter lines to the plot.
 		lines := createPlotLines(metricType, modelNames, points, modelNamesToIndex)
+		lineHovers := make([]string, 0, len(lines))
 		for _, line := range lines {
 			fig.Data = append(fig.Data, &grob.Scatter{
 				Name: ptypes.S(line.short),
@@ -186,6 +192,7 @@ func BuildPlots(modelNames []string, metricsOrder map[ModelNameAndMetric]int, po
 				X:    ptypes.DataArray(line.steps),
 				Y:    ptypes.DataArray(line.values),
 			})
+			lineHovers = append(lineHovers, line.desc)
 		}
 
 		// Convert the plot to JSON and serialize it.
@@ -194,6 +201,7 @@ func BuildPlots(modelNames []string, metricsOrder map[ModelNameAndMetric]int, po
 			panic(errors.Wrapf(err, "failed to marshal plotly figure for metric type %q", metricType))
 		}
 		serializedPlots = append(serializedPlots, figAsJSON)
+		legendsHoverTexts = append(legendsHoverTexts, lineHovers)
 	}
 
 	// Set the title.
@@ -207,6 +215,7 @@ func BuildPlots(modelNames []string, metricsOrder map[ModelNameAndMetric]int, po
 
 	// Create a temporary file for the serializedPlots if needed.
 	outputFilePath := *flagPlotOutput
+	outputFilePath = data.ReplaceTildeInDir(outputFilePath)
 	if outputFilePath == "" {
 		tmpFile, err := os.CreateTemp("", "gomlx-serializedPlots-*.html")
 		if err != nil {
@@ -216,7 +225,7 @@ func BuildPlots(modelNames []string, metricsOrder map[ModelNameAndMetric]int, po
 	}
 
 	// Write serializedPlots to a temporary file
-	if err := PlotlyToHTMLFile(outputFilePath, title, serializedPlots...); err != nil {
+	if err := PlotlyToHTMLFile(outputFilePath, title, serializedPlots, legendsHoverTexts); err != nil {
 		panic(errors.Wrap(err, "failed to write serializedPlots to temporary file"))
 	}
 
@@ -258,25 +267,75 @@ var (
 				margin: 20px 0;
 				box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 			}
+			#custom-tooltip {
+				position: absolute; /* Allows us to position it with JS */
+				display: none;      /* Start hidden */
+				top: 0;
+				left: 0;
+				padding: 8px;
+				background-color: #2a2a2a;
+				color: #fff;
+				border: 1px solid #555;
+				border-radius: 4px;
+				/* font-family: sans-serif; */
+				font-size: 12px;
+				z-index: 1000;      /* Ensure it appears on top of everything */
+				pointer-events: none; /* VERY IMPORTANT: Prevents the tooltip from blocking mouse events on elements underneath it */
+			}
 		</style>
 	</head>
 	<body>
 		<h1>{{ .Title }}</h1>
+	    <div id="custom-tooltip"></div>
 {{- range $i, $f := .Figures }}
 		<div class="plot-container">
 			<div id="plot{{ $i }}"></div>
 		</div>
-		{{ if not (eq $i (lastIdx $.Figures)) }}
 		<hr>
-		{{ end }}
 {{- end }}
 	<script>
+{{- range .Figures }}
+const {{.LegendsVar}} = [
+{{- range .LegendsHover }}
+	"{{ . }}",
+{{- end }}
+];
+{{- end }}
+
 {{- range $i, $f := .Figures }}
-		data = JSON.parse(atob('{{ $f }}'))
+		data = JSON.parse(atob('{{ $f.Figure }}'))
 		Plotly.newPlot('plot{{ $i }}', data, {
 			paper_bgcolor: '#222222',
 			plot_bgcolor: '#222222',
 			font: { color: '#ffffff' }
+		}).then(() => {
+			const tooltip = document.getElementById('custom-tooltip');
+			const legendItems = document.querySelectorAll('#plot{{ $i }} .legend .traces');
+			legendItems.forEach((item, index) => {
+
+				// When the mouse enters the legend item...
+				item.addEventListener('mouseover', (event) => {
+					// Set the tooltip's text
+					tooltip.innerHTML = {{$f.LegendsVar}}[index];
+					// Make it visible
+					tooltip.style.display = 'block';
+				});
+		
+				// When the mouse moves over the legend item...
+				item.addEventListener('mousemove', (event) => {
+					// Update the tooltip's position to follow the cursor
+					// The 10px offset prevents the tooltip from flickering
+					tooltip.style.left = (event.pageX - tooltip.offsetWidth - 10) + 'px';
+					//tooltip.style.left = (event.pageX + 10) + 'px';
+					tooltip.style.top = (event.pageY + 10) + 'px';
+				});
+		
+				// When the mouse leaves the legend item...
+				item.addEventListener('mouseout', () => {
+					// Hide the tooltip
+					tooltip.style.display = 'none';
+				});
+			});
 		});
 {{- end }}
 	</script>
@@ -289,16 +348,28 @@ var (
 
 // WritePlotlyAsHTML renders the Plotly figures (given as JSON) to an HTML page that can be
 // served or saved to a file.
-func WritePlotlyAsHTML(w io.Writer, title string, figuresAsJSON ...[]byte) error {
-	data := &struct {
+func WritePlotlyAsHTML(w io.Writer, title string, figuresAsJSON [][]byte, legendHoverTests [][]string) error {
+	type FigureData struct {
+		Figure       string
+		LegendsVar   template.JS
+		LegendsHover []string
+	}
+	type RootData struct {
 		CDN     string
 		Title   string
-		Figures []string
-	}{
+		Figures []FigureData
+	}
+	data := &RootData{
 		CDN:     plotly.PlotlySrc,
 		Title:   title,
-		Figures: xslices.Map(figuresAsJSON, func(fig []byte) string { return base64.StdEncoding.EncodeToString(fig) }),
+		Figures: make([]FigureData, len(figuresAsJSON)),
 	}
+	for i, fig := range figuresAsJSON {
+		data.Figures[i].Figure = base64.StdEncoding.EncodeToString(fig)
+		data.Figures[i].LegendsVar = template.JS(fmt.Sprintf("legendsHover%d", i))
+		data.Figures[i].LegendsHover = legendHoverTests[i]
+	}
+
 	err := singleFileHTMLTmpl.Execute(w, data)
 	if err != nil {
 		return errors.Wrap(err, "failed to render plotly")
@@ -307,13 +378,13 @@ func WritePlotlyAsHTML(w io.Writer, title string, figuresAsJSON ...[]byte) error
 }
 
 // PlotlyToHTMLFile renders the Plotly figure (given as JSON) to an HTML file.
-func PlotlyToHTMLFile(fileName, title string, figuresAsJSon ...[]byte) error {
+func PlotlyToHTMLFile(fileName, title string, figuresAsJSon [][]byte, legendHoverTests [][]string) error {
 	f, err := os.Create(fileName)
 	if err != nil {
 		return errors.Wrapf(err, "failed to create file %q", fileName)
 	}
 	defer func() { _ = f.Close() }()
-	return WritePlotlyAsHTML(f, title, figuresAsJSon...)
+	return WritePlotlyAsHTML(f, title, figuresAsJSon, legendHoverTests)
 }
 
 // openBrowser opens the given file in the default browser.

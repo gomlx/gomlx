@@ -327,6 +327,9 @@ func (pc *PlotConfig) AddPoint(pt plots.Point) {
 				Xaxis: &grob.LayoutXaxis{
 					Showgrid: ptypes.B(true),
 					Type:     grob.LayoutXaxisTypeLog,
+					Title: &grob.LayoutXaxisTitle{
+						Text: "Steps",
+					},
 				},
 				Yaxis: &grob.LayoutYaxis{
 					Showgrid: ptypes.B(true),
