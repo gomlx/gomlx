@@ -183,7 +183,6 @@ func ReportMetrics(names []string, metricsOrder map[ModelNameAndMetric]int, poin
 				nameMetric.MetricType = point.MetricType
 				colIdx, found := metricsOrder[nameMetric]
 				if !found {
-					fmt.Printf("Warning: metric %+v not found in metricsOrder\n", nameMetric)
 					// We are not printing this metric.
 					continue
 				}
