@@ -120,9 +120,13 @@ func AddTrainAndEvalMetrics(plotter Plotter, loop *train.Loop, trainMetrics []*t
 				continue
 			}
 			metricType := desc.MetricType()
+			dsShort := ds.Name()[:3]
+			if sn, ok := ds.(train.HasShortName); ok {
+				dsShort = sn.ShortName()
+			}
 			plotter.AddPoint(Point{
-				MetricName: fmt.Sprintf("Eval on %s: %s", ds.Name(), desc.Name()),
-				Short:      fmt.Sprintf("E(%3s)/%s", ds.Name()[:3], desc.ShortName()),
+				MetricName: fmt.Sprintf("%s on %s", desc.Name(), ds.Name()),
+				Short:      fmt.Sprintf("%s(%s)", desc.ShortName(), dsShort),
 				MetricType: metricType,
 				Step:       step,
 				Value:      metric})

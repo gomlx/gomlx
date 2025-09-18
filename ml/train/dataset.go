@@ -79,6 +79,15 @@ type Dataset interface {
 	Reset()
 }
 
+// HasShortName allows a dataset to specify a short name (used when displaying a short version of metric names).
+// It defaults to the first 3 letters of the dataset name.
+//
+// It's optional.
+type HasShortName interface {
+	// ShortName returns the short name of the dataset.
+	ShortName() string
+}
+
 // DatasetCustomOwnership allows a dataset to specify whether the ownership of the yielded tensors are transferred
 // to the caller (the training loop). The training loops can finalize the yielded values after use.
 // It defaults to yes.

@@ -47,7 +47,8 @@ type InMemoryDataset struct {
 	backend backends.Backend
 
 	// name of the original dataset used to populate the InMemoryDataset.
-	name string
+	name      string
+	shortName string
 
 	// spec is saved from the original dataset.
 	spec any
@@ -117,6 +118,11 @@ func InMemory(backend backends.Backend, ds train.Dataset, dsIsBatched bool) (mds
 		gatherExec:            NewExec(backend, gatherFromDataTensorsGraph),
 		name:                  ds.Name(),
 	}
+	if sn, ok := ds.(train.HasShortName); ok {
+		mds.shortName = sn.ShortName()
+	} else {
+		mds.shortName = mds.name[:3]
+	}
 	err = mds.readDataset(ds, dsIsBatched)
 	if err != nil {
 		return
@@ -142,6 +148,7 @@ func InMemoryFromData(backend backends.Backend, name string, inputs []any, label
 		randomNumberGenerator: rand.New(rand.NewSource(time.Now().UnixNano())),
 		gatherExec:            NewExec(backend, gatherFromDataTensorsGraph),
 		name:                  name,
+		shortName:             name[:3],
 		inputsAndLabelsData:   make([]*tensors.Tensor, 0, len(inputs)+len(labels)),
 		numInputsTensors:      len(inputs),
 	}
@@ -385,9 +392,19 @@ func (mds *InMemoryDataset) Name() string {
 	return mds.name
 }
 
-// SetName sets the name of the dataset, and returns the updated dataset.
-func (mds *InMemoryDataset) SetName(name string) *InMemoryDataset {
+// ShortName implements `train.HasShortName`
+func (mds *InMemoryDataset) ShortName() string {
+	return mds.shortName
+}
+
+// SetName sets the name of the dataset and optionally its ShortName, and returns the updated dataset.
+func (mds *InMemoryDataset) SetName(name string, shortName ...string) *InMemoryDataset {
 	mds.name = name
+	if len(shortName) > 0 {
+		mds.shortName = shortName[0]
+	} else {
+		mds.shortName = name[:3]
+	}
 	return mds
 }
 
