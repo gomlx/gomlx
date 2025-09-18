@@ -101,7 +101,7 @@ func metrics(checkpointPaths, modelNames []string) {
 	}
 
 	if *flagPlot {
-		BuildPlots(modelNames, metricsOrder, points)
+		BuildPlots(checkpointPaths, modelNames, metricsOrder, points)
 	}
 }
 

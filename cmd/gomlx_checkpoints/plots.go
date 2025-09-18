@@ -25,17 +25,13 @@ import (
 	ptypes "github.com/MetalBlueberry/go-plotly/pkg/types"
 )
 
-// TODO:
-//  - Fix mouse-over tooltip to be over the legend, and not over the points themselves. There is no support for this
-//    in Plotly, but one can code one using javascript.
-//  - Remove model index from legends, if there is only one model
-
 var (
 	flagPlot = flag.Bool("plot", false,
 		fmt.Sprintf("Plots the metrics collected for plotting in file %q. "+
 			"You can control which metrics to plot with -metrics_names and -metrics_types", plots.TrainingPlotFileName))
 	flagBrowser    = flag.Bool("browser", true, "Opens the generated plots file in the default browser.")
 	flagPlotOutput = flag.String("plot_output", "", "File to generate HTML file with plots. "+
+		"**It is relative to the first dataset directory given**. "+
 		"If empty (the default) it will create a temporary file.")
 )
 
@@ -145,7 +141,7 @@ func createPlotLines(metricType string, modelNames []string, points [][]plots.Po
 }
 
 // BuildPlots from the models' metrics points.
-func BuildPlots(modelNames []string, metricsOrder map[ModelNameAndMetric]int, points [][]plots.Point) {
+func BuildPlots(checkpointPaths []string, modelNames []string, metricsOrder map[ModelNameAndMetric]int, points [][]plots.Point) {
 	metricTypes := createSortedMetricTypes(metricsOrder)
 	numPlots := len(metricTypes)
 	modelNamesToIndex := createModelNamesToIndex(metricsOrder)
@@ -215,8 +211,12 @@ func BuildPlots(modelNames []string, metricsOrder map[ModelNameAndMetric]int, po
 
 	// Create a temporary file for the serializedPlots if needed.
 	outputFilePath := *flagPlotOutput
-	outputFilePath = data.ReplaceTildeInDir(outputFilePath)
-	if outputFilePath == "" {
+	if outputFilePath != "" {
+		outputFilePath = data.ReplaceTildeInDir(outputFilePath)
+		if !path.IsAbs(outputFilePath) {
+			outputFilePath = path.Join(checkpointPaths[0], outputFilePath)
+		}
+	} else {
 		tmpFile, err := os.CreateTemp("", "gomlx-serializedPlots-*.html")
 		if err != nil {
 			panic(errors.Wrap(err, "failed to create temporary file for serializedPlots"))
