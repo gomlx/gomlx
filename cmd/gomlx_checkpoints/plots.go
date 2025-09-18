@@ -61,7 +61,7 @@ type plotLineInfo struct {
 // It returns one plotLineInfo per model x metric of the given metric type.
 //
 // The returned values and steps are sorted by steps.
-func createPlotLines(metricType string, modelNames []string, points [][]plots.Point, modelNamesToIndex map[string]int) []*plotLineInfo {
+func createPlotLines(metricType string, modelNames []string, metricsOrder map[ModelNameAndMetric]int, points [][]plots.Point, modelNamesToIndex map[string]int) []*plotLineInfo {
 	var lines []*plotLineInfo
 	for modelIdx, modelPoints := range points {
 		modelName := modelNames[modelIdx]
@@ -71,6 +71,15 @@ func createPlotLines(metricType string, modelNames []string, points [][]plots.Po
 		metricPoints := make(map[string]*plotLineInfo)
 		for _, pt := range modelPoints {
 			if pt.MetricType != metricType {
+				continue
+			}
+			metricKey := ModelNameAndMetric{
+				ModelName:  modelName,
+				MetricName: pt.Short,
+				MetricType: pt.MetricType,
+			}
+			if _, ok := metricsOrder[metricKey]; !ok {
+				// Metric not selected, skip..
 				continue
 			}
 			info, exists := metricPoints[pt.MetricName]
@@ -161,7 +170,7 @@ func BuildPlots(checkpointPaths []string, modelNames []string, metricsOrder map[
 			},
 		}
 		// Add scatter lines to the plot.
-		lines := createPlotLines(metricType, modelNames, points, modelNamesToIndex)
+		lines := createPlotLines(metricType, modelNames, metricsOrder, points, modelNamesToIndex)
 		lineHovers := make([]string, 0, len(lines))
 		for _, line := range lines {
 			fig.Data = append(fig.Data, &grob.Scatter{
