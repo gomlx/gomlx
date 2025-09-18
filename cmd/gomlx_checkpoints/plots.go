@@ -79,7 +79,7 @@ func createPlotLines(metricType string, modelNames []string, metricsOrder map[Mo
 				MetricType: pt.MetricType,
 			}
 			if _, ok := metricsOrder[metricKey]; !ok {
-				// Metric not selected, skip..
+				// Metric was not selected, skip.
 				continue
 			}
 			info, exists := metricPoints[pt.MetricName]
