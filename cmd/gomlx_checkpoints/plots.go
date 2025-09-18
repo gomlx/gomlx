@@ -35,24 +35,6 @@ var (
 		"If empty (the default) it will create a temporary file.")
 )
 
-// createModelNamesToIndex collects all model names (base name of the their directory), sort them, and returns a
-// map from model name to their sorted index.
-func createModelNamesToIndex(metricsOrder map[ModelNameAndMetric]int) (modelNamesToIndex map[string]int) {
-	modelNamesToIndex = make(map[string]int)
-	for info := range metricsOrder {
-		name := path.Base(info.ModelName)
-		modelNamesToIndex[name] = 0
-	}
-	{
-		// Sort modelNames and generate index by sort order.
-		sortedNames := xslices.SortedKeys(modelNamesToIndex)
-		for idx, name := range sortedNames {
-			modelNamesToIndex[name] = idx + 1
-		}
-	}
-	return
-}
-
 // createSortedMetricTypes collects all metric types and sort them.
 func createSortedMetricTypes(metricsOrder map[ModelNameAndMetric]int) []string {
 	metricTypesSet := types.MakeSet[string]()
@@ -82,7 +64,7 @@ type plotLineInfo struct {
 func createPlotLines(metricType string, modelNames []string, points [][]plots.Point, modelNamesToIndex map[string]int) []*plotLineInfo {
 	var lines []*plotLineInfo
 	for modelIdx, modelPoints := range points {
-		modelName := path.Base(modelNames[modelIdx])
+		modelName := modelNames[modelIdx]
 		modelNum := modelNamesToIndex[modelName]
 
 		// Group points by metric name.
@@ -144,7 +126,10 @@ func createPlotLines(metricType string, modelNames []string, points [][]plots.Po
 func BuildPlots(checkpointPaths []string, modelNames []string, metricsOrder map[ModelNameAndMetric]int, points [][]plots.Point) {
 	metricTypes := createSortedMetricTypes(metricsOrder)
 	numPlots := len(metricTypes)
-	modelNamesToIndex := createModelNamesToIndex(metricsOrder)
+	modelNamesToIndex := make(map[string]int)
+	for idx, name := range modelNames {
+		modelNamesToIndex[name] = idx + 1
+	}
 	legendsHoverTexts := make([][]string, 0, numPlots)
 
 	// Create one plot per metric type.
@@ -205,8 +190,7 @@ func BuildPlots(checkpointPaths []string, modelNames []string, metricsOrder map[
 	if len(modelNames) == 1 {
 		title = modelNames[0]
 	} else {
-		baseNames := xslices.Map(modelNames, path.Base)
-		title = fmt.Sprintf("Models: %s", strings.Join(baseNames, ", "))
+		title = fmt.Sprintf("Models: %s", strings.Join(modelNames, ", "))
 	}
 
 	// Create a temporary file for the serializedPlots if needed.
