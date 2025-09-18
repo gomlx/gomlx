@@ -1,6 +1,6 @@
 # GoMLX changelog
 
-# Next
+# Next: alpha StableHLO release
 
 * Package `shapes`:
   * Added `FromAnyValue`: extract shape from a Go type.
@@ -19,11 +19,13 @@
   * Added `IsNaN`
   * Fixed `MaskedReduceMean`, when the mask provided is only a prefix rank to the input.
 * Package `backends`:
-  * Ops no longer auto-generated: now it is its own source of truth (as opposite to following XLA)
+  * Ops are no longer auto-generated: now it is its own source of truth (as opposite to being generated from XLA code)
   * Added `IsNaN`
   * Many comments improvements.
 * Package `train`:
   * `Loop.EveryNSteps` takes into account the current global step (as opposed to always start the counting from 0).
+  * Datasets implementing `train.Dataset` can now also implement `ShortName() string` to provide a short name to be
+    used in metrics.
 * Package `losses`:
   * `MeanSquaredError`: fixed weights/mask expected mask.
 * Package `commandline`:
