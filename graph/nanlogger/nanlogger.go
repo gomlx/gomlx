@@ -206,6 +206,9 @@ func (l *NanLogger) TraceAndContinue(node *graph.Node, scope ...string) {
 //
 // A nil NanLogger is valid, and it will simply be a no-op.
 func (l *NanLogger) Trace(node *graph.Node, scope ...string) {
+	if l == nil {
+		return
+	}
 	l.traceImpl(l.stopAtFirst, node, scope...)
 }
 
