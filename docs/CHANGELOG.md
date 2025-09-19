@@ -18,6 +18,8 @@
   * Added tests to various reduce operations.
   * Added `IsNaN`
   * Fixed `MaskedReduceMean`, when the mask provided is only a prefix rank to the input.
+  * Package `nanlogger`:
+    * `NanLogger.WithStopAtFirst` now can be used to control the default behavior of NanLogger.Trace.
 * Package `backends`:
   * Ops are no longer auto-generated: now it is its own source of truth (as opposite to being generated from XLA code)
   * Added `IsNaN`
@@ -34,7 +36,6 @@
   * Improved colors, "humanize" steps printing.
 * `gomlx_checkpoints` CLI tool:
   * Added `-plot` to generate plots for all metrics. It accepts various models, so one can use it to compare models.
-
 
 # v0.22.1: 2025/08/22 🌀 Convolutions 🌀 
 

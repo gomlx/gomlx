@@ -59,6 +59,7 @@ import (
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/types/xslices"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )
@@ -88,6 +89,8 @@ type NanLogger struct {
 	traces map[graph.GraphId]map[graph.NodeId]*Trace
 
 	currentScope []string
+
+	stopAtFirst bool
 }
 
 // stackTracer is implemented by the github.com/pkg/errors package.
@@ -132,6 +135,7 @@ func New() *NanLogger {
 		uniqueMessageID: fmt.Sprintf(TracedMessageId, uniqueCounter.Add(1)),
 		handler:         DefaultBreakHandler,
 		traces:          make(map[graph.GraphId]map[graph.NodeId]*Trace),
+		stopAtFirst:     true,
 	}
 }
 
@@ -160,6 +164,19 @@ func (l *NanLogger) AttachToTrainer(trainer *train.Trainer) {
 	})
 }
 
+// WithStopAtFirst defines the behavior of Trace.
+//
+// If stopAtFirst is true, traces will stop at the first NaN occurrence.
+// Otherwise, they report the NaN, but keep on running.
+//
+// The default is true.
+//
+// A nil NanLogger is valid, and it will simply be a no-op.
+func (l *NanLogger) WithStopAtFirst(stopAtFirst bool) *NanLogger {
+	l.stopAtFirst = stopAtFirst
+	return l
+}
+
 // TraceFirstNaN sets a trace on the given node, and if it ever becomes NaN, the trace of the first node
 // the graph (closer to the input in graph ordering) is logged (if the DefaultHandler is used).
 //
@@ -170,7 +187,17 @@ func (l *NanLogger) TraceFirstNaN(node *graph.Node, scope ...string) {
 	l.traceImpl(true, node, scope...)
 }
 
-// Trace sets a trace on the given node, and if it ever becomes NaN, the scope is printed -- but the execution
+// TraceAndContinue sets a trace on the given node, and if it ever becomes NaN, the scope is printed -- but the execution
+// continues normally.
+//
+// Remember to attach the NanLogger once to the train.Trainer or to the graph.Exec/context.Exec you are running.
+//
+// A nil NanLogger is valid, and it will simply be a no-op.
+func (l *NanLogger) TraceAndContinue(node *graph.Node, scope ...string) {
+	l.traceImpl(false, node, scope...)
+}
+
+// Trace sets a trace on the given node.  and if it ever becomes NaN, the scope is printed -- but the execution
 // continues normally.
 //
 // Args:
@@ -179,7 +206,7 @@ func (l *NanLogger) TraceFirstNaN(node *graph.Node, scope ...string) {
 //
 // A nil NanLogger is valid, and it will simply be a no-op.
 func (l *NanLogger) Trace(node *graph.Node, scope ...string) {
-	l.traceImpl(false, node, scope...)
+	l.traceImpl(l.stopAtFirst, node, scope...)
 }
 
 func (l *NanLogger) traceImpl(firstOnly bool, node *graph.Node, scope ...string) {
@@ -187,6 +214,12 @@ func (l *NanLogger) traceImpl(firstOnly bool, node *graph.Node, scope ...string)
 		return
 	}
 	node.AssertValid()
+
+	// Skip integer and boolean values, for which there are no infinities or NaNs.
+	if node.DType().IsInt() || node.DType() == dtypes.Bool {
+		// Nothing to do.
+		return
+	}
 
 	// Check whether any of the values are finite.
 	var tracedNode *graph.Node
