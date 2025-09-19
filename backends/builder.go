@@ -53,15 +53,6 @@ type Builder interface {
 	// It's a no-op that can serve as a place-holder.
 	Identity(x Op) (Op, error)
 
-	// ReduceWindow runs a reduction function of the type given by reductionType,
-	// it can be either ReduceMaxNode, ReduceSumNode or ReduceMultiplyNode.
-	//
-	// The parameter windowDimensions must be set and have a value for each axis.
-	// If strides is nil, it's assumed to be the same as windowDimensions -- that is, the strides jump a window at a time.
-	// If baseDilations, windowDilations are nil, they are assumed to be 1 (no dilation).
-	// If paddings is nil, they are assumed to be 0.
-	ReduceWindow(x Op, reductionType ReduceOpType, windowDimensions, strides, baseDilations, windowDilations []int, paddings [][2]int) (Op, error)
-
 	// RngBitGenerator generates the given shape filled with random bits.
 	//
 	// It takes as input a state (usually [3]uint64) and returns the updated state and the generated values (with random bits).

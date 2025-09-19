@@ -441,6 +441,15 @@ type StandardOps interface {
 	// If no axes are given, it reduces the full array.
 	ReduceSum(x Op, axes ...int) (Op, error)
 
+	// ReduceWindow runs a reduction function of the type given by reductionType,
+	// it can be either ReduceMaxNode, ReduceSumNode or ReduceMultiplyNode.
+	//
+	// The parameter windowDimensions must be set and have a value for each axis.
+	// If strides is nil, it's assumed to be the same as windowDimensions -- that is, the strides jump a window at a time.
+	// If baseDilations, windowDilations are nil, they are assumed to be 1 (no dilation).
+	// If paddings is nil, they are assumed to be 0.
+	ReduceWindow(x Op, reductionType ReduceOpType, windowDimensions, strides, baseDilations, windowDilations []int, paddings [][2]int) (Op, error)
+
 	// Rem returns the remainder operation, also known as modulo (or Mod for short).
 	// Notice despite the name XLA implements Mod not IEEE754 Remainder operation.
 	Rem(lhs, rhs Op) (Op, error)

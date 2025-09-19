@@ -64,8 +64,119 @@ func (b *Builder) getReductionFn(dtype dtypes.DType, opType backends.OpType) (*s
 	return reductionFn, nil
 }
 
+func (b *Builder) getInitialValue(dtype dtypes.DType, opType backends.OpType) (*stablehlo.Value, error) {
+	switch opType {
+	case backends.OpTypeReduceSum:
+		flat := scalarToFlat(0, dtype)
+		if flat == nil {
+			return nil, errors.Errorf("unsupported scalar for dtype %s", dtype)
+		}
+		initialValue, err := b.Constant(flat)
+		if err != nil {
+			return nil, err
+		}
+		return initialValue.(*Node).value, nil
+	case backends.OpTypeReduceProduct:
+		flat := scalarToFlat(1, dtype)
+		if flat == nil {
+			return nil, errors.Errorf("unsupported scalar for dtype %s", dtype)
+		}
+		initialValue, err := b.Constant(flat)
+		if err != nil {
+			return nil, err
+		}
+		return initialValue.(*Node).value, nil
+	case backends.OpTypeReduceMax:
+		flat := scalarAnyToFlat(dtype.LowestValue())
+		if flat == nil {
+			return nil, errors.Errorf("unsupported scalar for dtype %s", dtype)
+		}
+		initialValue, err := b.Constant(flat)
+		if err != nil {
+			return nil, err
+		}
+		return initialValue.(*Node).value, nil
+	case backends.OpTypeReduceMin:
+		flat := scalarAnyToFlat(dtype.HighestValue())
+		if flat == nil {
+			return nil, errors.Errorf("unsupported scalar for dtype %s", dtype)
+		}
+		initialValue, err := b.Constant(flat)
+		if err != nil {
+			return nil, err
+		}
+		return initialValue.(*Node).value, nil
+	case backends.OpTypeReduceBitwiseAnd:
+		flat := scalarToFlat(0, dtype)
+		if flat == nil {
+			return nil, errors.Errorf("unsupported scalar for dtype %s", dtype)
+		}
+		initialValue, err := b.Constant(flat)
+		if err != nil {
+			return nil, err
+		}
+		initialValue, err = b.BitwiseNot(initialValue)
+		if err != nil {
+			return nil, err
+		}
+		return initialValue.(*Node).value, nil
+	case backends.OpTypeReduceBitwiseOr:
+		flat := scalarToFlat(0, dtype)
+		if flat == nil {
+			return nil, errors.Errorf("unsupported scalar for dtype %s", dtype)
+		}
+		initialValue, err := b.Constant(flat)
+		if err != nil {
+			return nil, err
+		}
+		return initialValue.(*Node).value, nil
+	case backends.OpTypeReduceBitwiseXor:
+		flat := scalarToFlat(0, dtype)
+		if flat == nil {
+			return nil, errors.Errorf("unsupported scalar for dtype %s", dtype)
+		}
+		initialValue, err := b.Constant(flat)
+		if err != nil {
+			return nil, err
+		}
+		return initialValue.(*Node).value, nil
+	case backends.OpTypeReduceLogicalAnd:
+		flat := scalarToFlat(1, dtype)
+		if flat == nil {
+			return nil, errors.Errorf("unsupported scalar for dtype %s", dtype)
+		}
+		initialValue, err := b.Constant(flat)
+		if err != nil {
+			return nil, err
+		}
+		return initialValue.(*Node).value, nil
+	case backends.OpTypeReduceLogicalOr:
+		flat := scalarToFlat(0, dtype)
+		if flat == nil {
+			return nil, errors.Errorf("unsupported scalar for dtype %s", dtype)
+		}
+		initialValue, err := b.Constant(flat)
+		if err != nil {
+			return nil, err
+		}
+		return initialValue.(*Node).value, nil
+	case backends.OpTypeReduceLogicalXor:
+		flat := scalarToFlat(0, dtype)
+		if flat == nil {
+			return nil, errors.Errorf("unsupported scalar for dtype %s", dtype)
+		}
+		initialValue, err := b.Constant(flat)
+		if err != nil {
+			return nil, err
+		}
+		return initialValue.(*Node).value, nil
+	default:
+		return nil, errors.Errorf("unsupported (getInitialValue) reduce operation type %s", opType)
+	}
+}
+
 // reduce helper for all Reduce* methods.
-func (b *Builder) reduce(opType backends.OpType, initialValue *Node, x backends.Op, axes ...int) (backends.Op, error) {
+func (b *Builder) reduce(opType backends.OpType, x backends.Op, axes ...int) (backends.Op, error) {
 	nodes, err := b.verifyAndCastValues(opType.String(), x)
 	if err != nil {
 		return nil, err
@@ -78,13 +189,17 @@ func (b *Builder) reduce(opType backends.OpType, initialValue *Node, x backends.
 	if err != nil {
 		return nil, err
 	}
+	initialValue, err := b.getInitialValue(dtype, opType)
+	if err != nil {
+		return nil, err
+	}
 
 	// If no axes are given, reduce over all axes.
 	if len(axes) == 0 {
 		axes = xslices.Iota(0, rank)
 	}
 
-	value, err := stablehlo.Reduce(xNode.value, initialValue.value, reductionFn, axes...)
+	value, err := stablehlo.Reduce(xNode.value, initialValue, reductionFn, axes...)
 	if err != nil {
 		return nil, err
 	}
@@ -144,152 +259,61 @@ func scalarAnyToFlat(valueAny any) any {
 // ReduceSum implements the corresponding method of the backends.Builder interface.
 func (b *Builder) ReduceSum(x backends.Op, axes ...int) (backends.Op, error) {
 	opType := backends.OpTypeReduceSum
-	dtype := x.(*Node).shape.DType
-	flat := scalarToFlat(0, dtype)
-	if flat == nil {
-		return nil, errors.Errorf("unsupported scalar for dtype %s", dtype)
-	}
-	initialValue, err := b.Constant(flat)
-	if err != nil {
-		return nil, err
-	}
-	return b.reduce(opType, initialValue.(*Node), x, axes...)
+	return b.reduce(opType, x, axes...)
 }
 
 // ReduceProduct implements the corresponding method of the backends.Builder interface.
 func (b *Builder) ReduceProduct(x backends.Op, axes ...int) (backends.Op, error) {
 	opType := backends.OpTypeReduceProduct
-	dtype := x.(*Node).shape.DType
-	flat := scalarToFlat(1, dtype)
-	if flat == nil {
-		return nil, errors.Errorf("unsupported scalar for dtype %s", dtype)
-	}
-	initialValue, err := b.Constant(flat)
-	if err != nil {
-		return nil, err
-	}
-	return b.reduce(opType, initialValue.(*Node), x, axes...)
+	return b.reduce(opType, x, axes...)
 }
 
 // ReduceMax implements the corresponding method of the backends.Builder interface.
 func (b *Builder) ReduceMax(x backends.Op, axes ...int) (backends.Op, error) {
 	opType := backends.OpTypeReduceMax
-	dtype := x.(*Node).shape.DType
-	flat := scalarAnyToFlat(dtype.LowestValue())
-	if flat == nil {
-		return nil, errors.Errorf("unsupported scalar for dtype %s", dtype)
-	}
-	initialValue, err := b.Constant(flat)
-	if err != nil {
-		return nil, err
-	}
-	return b.reduce(opType, initialValue.(*Node), x, axes...)
+	return b.reduce(opType, x, axes...)
 }
 
 // ReduceMin implements the corresponding method of the backends.Builder interface.
 func (b *Builder) ReduceMin(x backends.Op, axes ...int) (backends.Op, error) {
 	opType := backends.OpTypeReduceMin
-	dtype := x.(*Node).shape.DType
-	flat := scalarAnyToFlat(dtype.HighestValue())
-	if flat == nil {
-		return nil, errors.Errorf("unsupported scalar for dtype %s", dtype)
-	}
-	initialValue, err := b.Constant(flat)
-	if err != nil {
-		return nil, err
-	}
-	return b.reduce(opType, initialValue.(*Node), x, axes...)
+	return b.reduce(opType, x, axes...)
 }
 
 // ReduceBitwiseAnd implements the corresponding method of the backends.Builder interface.
 func (b *Builder) ReduceBitwiseAnd(x backends.Op, axes ...int) (backends.Op, error) {
 	opType := backends.OpTypeReduceBitwiseAnd
-	dtype := x.(*Node).shape.DType
-	flat := scalarToFlat(0, dtype)
-	if flat == nil {
-		return nil, errors.Errorf("unsupported scalar for dtype %s", dtype)
-	}
-	initialValue, err := b.Constant(flat)
-	if err != nil {
-		return nil, err
-	}
-	initialValue, err = b.BitwiseNot(initialValue)
-	return b.reduce(opType, initialValue.(*Node), x, axes...)
+	return b.reduce(opType, x, axes...)
 }
 
 // ReduceBitwiseOr implements the corresponding method of the backends.Builder interface.
 func (b *Builder) ReduceBitwiseOr(x backends.Op, axes ...int) (backends.Op, error) {
 	opType := backends.OpTypeReduceBitwiseOr
-	dtype := x.(*Node).shape.DType
-	flat := scalarToFlat(0, dtype)
-	if flat == nil {
-		return nil, errors.Errorf("unsupported scalar for dtype %s", dtype)
-	}
-	initialValue, err := b.Constant(flat)
-	if err != nil {
-		return nil, err
-	}
-	return b.reduce(opType, initialValue.(*Node), x, axes...)
+	return b.reduce(opType, x, axes...)
 }
 
 // ReduceBitwiseXor implements the corresponding method of the backends.Builder interface.
 func (b *Builder) ReduceBitwiseXor(x backends.Op, axes ...int) (backends.Op, error) {
 	opType := backends.OpTypeReduceBitwiseXor
-	dtype := x.(*Node).shape.DType
-	flat := scalarToFlat(0, dtype)
-	if flat == nil {
-		return nil, errors.Errorf("unsupported scalar for dtype %s", dtype)
-	}
-	initialValue, err := b.Constant(flat)
-	if err != nil {
-		return nil, err
-	}
-	return b.reduce(opType, initialValue.(*Node), x, axes...)
+	return b.reduce(opType, x, axes...)
 }
 
 // ReduceLogicalAnd implements the corresponding method of the backends.Builder interface.
 func (b *Builder) ReduceLogicalAnd(x backends.Op, axes ...int) (backends.Op, error) {
 	opType := backends.OpTypeReduceLogicalAnd
-	dtype := x.(*Node).shape.DType
-	flat := scalarToFlat(1, dtype)
-	if flat == nil {
-		return nil, errors.Errorf("unsupported scalar for dtype %s", dtype)
-	}
-	initialValue, err := b.Constant(flat)
-	if err != nil {
-		return nil, err
-	}
-	return b.reduce(opType, initialValue.(*Node), x, axes...)
+	return b.reduce(opType, x, axes...)
 }
 
 // ReduceLogicalOr implements the corresponding method of the backends.Builder interface.
 func (b *Builder) ReduceLogicalOr(x backends.Op, axes ...int) (backends.Op, error) {
 	opType := backends.OpTypeReduceLogicalOr
-	dtype := x.(*Node).shape.DType
-	flat := scalarToFlat(0, dtype)
-	if flat == nil {
-		return nil, errors.Errorf("unsupported scalar for dtype %s", dtype)
-	}
-	initialValue, err := b.Constant(flat)
-	if err != nil {
-		return nil, err
-	}
-	return b.reduce(opType, initialValue.(*Node), x, axes...)
+	return b.reduce(opType, x, axes...)
 }
 
 // ReduceLogicalXor implements the corresponding method of the backends.Builder interface.
 func (b *Builder) ReduceLogicalXor(x backends.Op, axes ...int) (backends.Op, error) {
 	opType := backends.OpTypeReduceLogicalXor
-	dtype := x.(*Node).shape.DType
-	flat := scalarToFlat(0, dtype)
-	if flat == nil {
-		return nil, errors.Errorf("unsupported scalar for dtype %s", dtype)
-	}
-	initialValue, err := b.Constant(flat)
-	if err != nil {
-		return nil, err
-	}
-	return b.reduce(opType, initialValue.(*Node), x, axes...)
+	return b.reduce(opType, x, axes...)
 }
 
 // ArgMinMax calculates the "argmin" or "argmax" across an axis of the given input array x.
@@ -414,4 +438,50 @@ func (b *Builder) ArgMinMax(x backends.Op, axis int, outputDType dtypes.DType, i
 		return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
 	}
 	return b.newNode(results[0]), nil
+}
+
+// ReduceWindow runs a reduction function of the type given by reductionType,
+// it can be either ReduceMaxNode, ReduceSumNode or ReduceMultiplyNode.
+//
+// The parameter windowDimensions must be set and have a value for each axis.
+// If strides is nil, it's assumed to be the same as windowDimensions -- that is, the strides jump a window at a time.
+// If baseDilations, windowDilations are nil, they are assumed to be 1 (no dilation).
+// If paddings is nil, they are assumed to be 0.
+func (b *Builder) ReduceWindow(x backends.Op, reductionType backends.ReduceOpType, windowDimensions, strides, baseDilations, windowDilations []int, paddings [][2]int) (backends.Op, error) {
+	opType := backends.OpTypeReduceWindow
+	nodes, err := b.verifyAndCastValues(opType.String(), x)
+	if err != nil {
+		return nil, err
+	}
+	xNode := nodes[0]
+	dtype := xNode.shape.DType
+
+	var reduceOpType backends.OpType
+	switch reductionType {
+	case backends.ReduceOpMax:
+		reduceOpType = backends.OpTypeReduceMax
+	case backends.ReduceOpMin:
+		reduceOpType = backends.OpTypeReduceMin
+	case backends.ReduceOpSum:
+		reduceOpType = backends.OpTypeReduceSum
+	case backends.ReduceOpProduct:
+		reduceOpType = backends.OpTypeReduceProduct
+	default:
+		return nil, errors.Errorf("unsupported reduction type %s", reductionType)
+	}
+	reductionFn, err := b.getReductionFn(dtype, reduceOpType)
+	if err != nil {
+		return nil, err
+	}
+	initialValue, err := b.getInitialValue(dtype, reduceOpType)
+	if err != nil {
+		return nil, err
+	}
+
+	value, err := stablehlo.ReduceWindow(xNode.value, initialValue, reductionFn,
+		windowDimensions, strides, baseDilations, windowDilations, paddings)
+	if err != nil {
+		return nil, err
+	}
+	return b.newNode(value), nil
 }
