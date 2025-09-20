@@ -219,22 +219,33 @@ func (b Builder) DotGeneral(lhs backends.Op, lhsContractingAxes []int, lhsBatchA
 	return nil, b.baseErrFn(backends.OpTypeDotGeneral)
 }
 
-// DynamicSlice extracts a subarray from the input array at dynamic start_indices.
-// The size of the slice in each axis is passed in sliceDims, which specify the slice
-// intervals for each axis: [start, start + size).
-// The shape of startIndices must be rank == 1, with dimension size equal to the rank of operand.
+// DynamicSlice extracts a slice from the operand at the startIndices position and the given sliceSizes.
+//
+// - operand: tensor from where to take the slice.
+// - startIndices: scalar tensors, one per axis of operand: len(startIndices) == operand.Rank().
+// - sliceSizes: static values and fixed to keep the shape of the output static.
+//
+// The startIndices are adjusted as follows:
+//
+//	adjustedStartIndices[i] = clamp(0, StartIndices[i], operand.Dimensions[i] - sliceSizes[i])
+//
 // See description in https://openxla.org/xla/operation_semantics#dynamicslice
 func (b Builder) DynamicSlice(operand backends.Op, startIndices []backends.Op, sliceDims []int) (backends.Op, error) {
 	return nil, b.baseErrFn(backends.OpTypeDynamicSlice)
 }
 
-// DynamicUpdateSlice returns the operand with slice updates from update overwritten
-// at startIndices.
+// DynamicUpdateSlice updates the operand with the values given in update, at the position given by startIndices.
 //
-// The shape of the update determines the shape of the result's updated slices.
+// - operand: original value that to be updated.
+// - update: values to "paste" on top of operand, at position startIndices.
+// - startIndices: scalar tensors, one per axis of operand: len(startIndices) == operand.Rank().
+// - sliceSizes: static values and fixed to keep the shape of the output static.
 //
-// The shape of startIndices must be rank == 1, with dimension size equal to the rank of operand.
-// See description in https://openxla.org/xla/operation_semantics#dynamicupdateslice
+// It returns a value with the same shape as the operand, with the values updated.
+//
+// The startIndices are adjusted as follows:
+//
+//	adjustedStartIndices[i] = clamp(0, StartIndices[i], operand.Dimensions[i] - update.Dimensions[i])
 func (b Builder) DynamicUpdateSlice(operand backends.Op, update backends.Op, startIndices []backends.Op) (backends.Op, error) {
 	return nil, b.baseErrFn(backends.OpTypeDynamicUpdateSlice)
 }

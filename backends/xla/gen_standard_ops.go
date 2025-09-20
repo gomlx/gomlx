@@ -1156,7 +1156,7 @@ func (b *Builder) NotEqualTotalOrder(x0, x1 backends.Op) (backends.Op, error) {
 	return xla_result, nil
 }
 
-// Pad injects padding on the start, end or interior (in between each element) of the given operand.
+// Pad injects padding on the start, end, or interior (in between each element) of the given operand.
 // There must be at most `operand.Rank()` axesConfig values. Missing PadAxis are assumed to be zeros,
 // that is, no padding for those axes.
 func (b *Builder) Pad(x, fillValue backends.Op, axesConfig ...backends.PadAxis) (backends.Op, error) {

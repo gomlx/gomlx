@@ -611,7 +611,7 @@ func (b *Builder) ConvGeneral(input, kernel backends.Op,
 
 // Reverse implements the backends.Builder interface.
 func (b *Builder) Reverse(x backends.Op, axes ...int) (backends.Op, error) {
-	nodes, err := b.verifyAndCastValues("ConvGeneral", x)
+	nodes, err := b.verifyAndCastValues("Reverse", x)
 	if err != nil {
 		return nil, err
 	}
@@ -633,6 +633,90 @@ func (b *Builder) FFT(x backends.Op, fftType backends.FFTType, fftLength []int) 
 	}
 	xNode := nodes[0]
 	value, err := stablehlo.FFT(xNode.value, stablehlotypes.FFTType(fftType), fftLength...)
+	if err != nil {
+		return nil, err
+	}
+	return b.newNode(value), nil
+}
+
+// extractStartIndexValues extracts start index values from nodes, handling both 1D tensor and scalar cases
+func (b *Builder) extractStartIndexValues(startIndexNodes []*Node, rank int) ([]*stablehlo.Value, error) {
+	var startIndexValues []*stablehlo.Value
+	if len(startIndexNodes) == 1 && !startIndexNodes[0].shape.IsScalar() && startIndexNodes[0].shape.Rank() == 1 {
+		// Special case: single 1D start indices tensor
+		for i := 0; i < rank; i++ {
+			sliced, err := stablehlo.Slice(startIndexNodes[0].value, []int{i}, []int{i + 1}, []int{1})
+			if err != nil {
+				return nil, err
+			}
+			reshaped, err := stablehlo.Reshape(sliced, stablehloshapes.Make(startIndexNodes[0].shape.DType))
+			if err != nil {
+				return nil, err
+			}
+			startIndexValues = append(startIndexValues, reshaped)
+		}
+	} else {
+		// Normal case: one scalar tensor per axis
+		startIndexValues = make([]*stablehlo.Value, len(startIndexNodes))
+		for i, node := range startIndexNodes {
+			startIndexValues[i] = node.value
+		}
+	}
+	return startIndexValues, nil
+}
+
+// DynamicSlice extracts a slice from the operand at the startIndices position and the given sliceSizes.
+//
+// - operand: tensor from where to take the slice.
+// - startIndices: scalar tensors, one per axis of operand: len(startIndices) == operand.Rank().
+// - sliceSizes: static values and fixed to keep the shape of the output static.
+//
+// The startIndices are adjusted as follows:
+//
+//	adjustedStartIndices[i] = clamp(0, StartIndices[i], operand.Dimensions[i] - sliceSizes[i])
+//
+// See description in https://openxla.org/xla/operation_semantics#dynamicslice
+func (b *Builder) DynamicSlice(operand backends.Op, startIndices []backends.Op, sliceDims []int) (backends.Op, error) {
+	nodes, err := b.verifyAndCastValues("DynamicSlice", append([]backends.Op{operand}, startIndices...)...)
+	if err != nil {
+		return nil, err
+	}
+	operandNode := nodes[0]
+	startIndexValues, err := b.extractStartIndexValues(nodes[1:], operandNode.shape.Rank())
+	if err != nil {
+		return nil, err
+	}
+	value, err := stablehlo.DynamicSlice(operandNode.value, startIndexValues, sliceDims)
+	if err != nil {
+		return nil, err
+	}
+	return b.newNode(value), nil
+}
+
+// DynamicUpdateSlice updates the operand with the values given in update, at the position given by startIndices.
+//
+// - operand: original value that to be updated.
+// - update: values to "paste" on top of operand, at position startIndices.
+// - startIndices: scalar tensors, one per axis of operand: len(startIndices) == operand.Rank().
+// - sliceSizes: static values and fixed to keep the shape of the output static.
+//
+// It returns a value with the same shape as the operand, with the values updated.
+//
+// The startIndices are adjusted as follows:
+//
+//	adjustedStartIndices[i] = clamp(0, StartIndices[i], operand.Dimensions[i] - update.Dimensions[i])
+func (b *Builder) DynamicUpdateSlice(operand, update backends.Op, startIndices []backends.Op) (backends.Op, error) {
+	nodes, err := b.verifyAndCastValues("DynamicUpdateSlice", append([]backends.Op{operand, update}, startIndices...)...)
+	if err != nil {
+		return nil, err
+	}
+	operandNode := nodes[0]
+	updateNode := nodes[1]
+	startIndexValues, err := b.extractStartIndexValues(nodes[2:], operandNode.shape.Rank())
+	if err != nil {
+		return nil, err
+	}
+	value, err := stablehlo.DynamicUpdateSlice(operandNode.value, updateNode.value, startIndexValues)
 	if err != nil {
 		return nil, err
 	}
