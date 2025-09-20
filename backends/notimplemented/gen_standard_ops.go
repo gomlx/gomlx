@@ -647,13 +647,6 @@ func (b Builder) SelectAndScatterMin(operand backends.Op, source backends.Op, wi
 	return nil, b.baseErrFn(backends.OpTypeSelectAndScatterMin)
 }
 
-// SelectAndScatterSum runs windows (similar to ReduceWindow) over the operand, selects values to update the output (like ScatterAdd)
-// It selects the values in the window such that it works as reverse for a PoolSum operation.
-// See details in https://openxla.org/xla/operation_semantics#selectandscatter
-func (b Builder) SelectAndScatterSum(operand backends.Op, source backends.Op, windowDimensions []int, windowStrides []int, paddings [][2]int) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeSelectAndScatterSum)
-}
-
 // ShiftLeft n bits. It implicitly preserves the sign bit if there is no overflow. So ShiftLeft(-1, 1) = -2.
 func (b Builder) ShiftLeft(lhs backends.Op, rhs backends.Op) (backends.Op, error) {
 	return nil, b.baseErrFn(backends.OpTypeShiftLeft)

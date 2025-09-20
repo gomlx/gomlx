@@ -435,8 +435,6 @@ func checkedSelectAndScatter(x, source *Node, reduceOp ReduceOpType, windowDimen
 		return backendSelectAndScatterMax(x, source, windowDimensions, strides, paddings)
 	case backends.ReduceOpMin:
 		return backendSelectAndScatterMin(x, source, windowDimensions, strides, paddings)
-	case backends.ReduceOpSum:
-		return backendSelectAndScatterSum(x, source, windowDimensions, strides, paddings)
 	default:
 		Panicf("SelectAndScatter not defined for original reduce operation %s", reduceOp)
 		panic(nil) // Disable lint warning.

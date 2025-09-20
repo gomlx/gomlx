@@ -1560,27 +1560,6 @@ func (b *Builder) SelectAndScatterMin(operand, source backends.Op, windowDimensi
 	return xla_result, nil
 }
 
-// SelectAndScatterSum runs windows (similar to ReduceWindow) over the operand, selects values to updates the output (like ScatterAdd)
-// It selects the values in the window such that it works as reverse for ScatterSum.
-// See details in https://openxla.org/xla/operation_semantics#selectandscatter
-func (b *Builder) SelectAndScatterSum(operand, source backends.Op, windowDimensions, windowStrides []int, paddings [][2]int) (backends.Op, error) {
-	xla_operand, err := b.verifyAndCastOp(operand, "operand")
-	if err != nil {
-		return nil, errors.WithMessagef(err, "Backend %q: failed SelectAndScatterSum", BackendName)
-	}
-
-	xla_source, err := b.verifyAndCastOp(source, "source")
-	if err != nil {
-		return nil, errors.WithMessagef(err, "Backend %q: failed SelectAndScatterSum", BackendName)
-	}
-
-	xla_result, err := xlabuilder.SelectAndScatterSum(xla_operand, xla_source, windowDimensions, windowStrides, paddings)
-	if err != nil {
-		return nil, errors.WithMessagef(err, "Backend %q: failed SelectAndScatterSum", BackendName)
-	}
-	return xla_result, nil
-}
-
 // ShiftLeft n bits. It implicitly preserves the sign bit, if there is no overflow. So ShiftLeft(-1, 1) = -2.
 // The op is created on the same XlaBuilder as used for x0 and x1.
 func (b *Builder) ShiftLeft(x0, x1 backends.Op) (backends.Op, error) {

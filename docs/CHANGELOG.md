@@ -24,6 +24,7 @@
   * Ops are no longer auto-generated: now it is its own source of truth (as opposite to being generated from XLA code)
   * Added `IsNaN`
   * Many comments improvements.
+  * Removed `SelectAndScatterSum`, which was wrong, and now is deprecated in `gopjrt`.
 * Package `train`:
   * `Loop.EveryNSteps` takes into account the current global step (as opposed to always start the counting from 0).
   * Datasets implementing `train.Dataset` can now also implement `ShortName() string` to provide a short name to be

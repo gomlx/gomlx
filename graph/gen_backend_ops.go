@@ -106,7 +106,6 @@ const (
 	NodeTypeScatterSum
 	NodeTypeSelectAndScatterMax
 	NodeTypeSelectAndScatterMin
-	NodeTypeSelectAndScatterSum
 	NodeTypeShiftLeft
 	NodeTypeShiftRightArithmetic
 	NodeTypeShiftRightLogical
@@ -4070,58 +4069,6 @@ func backendSelectAndScatterMin(operand *Node, source *Node, windowDimensions []
 		paddings:         paddings,
 	}
 	result, err := g.builder.SelectAndScatterMin(operand.outputOps[0], source.outputOps[0], inputs.windowDimensions, inputs.windowStrides, inputs.paddings)
-	if err != nil {
-		panic(err)
-	}
-	node = &Node{
-		outputOps:    []backends.Op{result},
-		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
-		graph:        g,
-		inputs:       inputs,
-		inputNodes:   inputNodes,
-	}
-	g.registerNode(node)
-	return
-}
-
-// nodeInputsSelectAndScatterSum holds the inputs used for the call to backends.SelectAndScatterSum.
-type nodeInputsSelectAndScatterSum struct {
-	operand          *Node
-	source           *Node
-	windowDimensions []int
-	windowStrides    []int
-	paddings         [][2]int
-}
-
-// Type implements the interface NodeInputs.
-func (ni *nodeInputsSelectAndScatterSum) Type() NodeType {
-	return NodeTypeSelectAndScatterSum
-}
-
-// String implements the interface NodeInputs.
-func (ni *nodeInputsSelectAndScatterSum) String() string {
-	return fmt.Sprintf("%s(operand=[#%d], source=[#%d], windowDimensions=%v, windowStrides=%v, paddings=%v)",
-		ni.Type(),
-		ni.operand.Id(),
-		ni.source.Id(),
-		ni.windowDimensions,
-		ni.windowStrides,
-		ni.paddings,
-	)
-}
-
-// backendSelectAndScatterSum is a Graph wrapper for the backend.Builder.SelectAndScatterSum method.
-func backendSelectAndScatterSum(operand *Node, source *Node, windowDimensions []int, windowStrides []int, paddings [][2]int) (node *Node) {
-	inputNodes := []*Node{operand, source}
-	g := validateBuildingGraphFromInputs(inputNodes...)
-	inputs := &nodeInputsSelectAndScatterSum{
-		operand:          operand,
-		source:           source,
-		windowDimensions: windowDimensions,
-		windowStrides:    windowStrides,
-		paddings:         paddings,
-	}
-	result, err := g.builder.SelectAndScatterSum(operand.outputOps[0], source.outputOps[0], inputs.windowDimensions, inputs.windowStrides, inputs.paddings)
 	if err != nil {
 		panic(err)
 	}

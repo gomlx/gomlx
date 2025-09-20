@@ -219,7 +219,7 @@ func TestSumPool(t *testing.T) {
 // TestGradientSumPool only tests that the correct gradient for the reduction is applied. More fine-grained testing
 // is done in TestGradientMeanPool, which we can verify the result with Tensorflow.
 func TestGradientSumPool(t *testing.T) {
-	testGradients(t, "Gradient 2D SumPool(...).Window(3).PadSame().Strides(1)",
+	testGradients(t, "1D Window(3).PadSame().Strides(1)",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			input := IotaFull(g, MakeShape(dtypes.Float32, 1, 3, 1))
 			output = SumPool(input).Window(3).PadSame().Strides(1).Done()
@@ -228,7 +228,18 @@ func TestGradientSumPool(t *testing.T) {
 			[][][]float32{{{2}, {3}, {2}}},
 		})
 
-	testGradients(t, "Gradient 2D Even Spatial Dimensions SumPool(...).Window(2)",
+	testGradients(t, "2D.NoPadding",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			input := IotaFull(g, MakeShape(dtypes.Float32, 4, 4))
+			output = SumPool(input).FullShape().Window(2).NoPadding().Strides(2).Done()
+			output = MulScalar(output, 3)
+			output.SetLogged("output")
+			return output, []*Node{input}
+		}, []any{
+			[][]float32{{3, 3, 3, 3}, {3, 3, 3, 3}, {3, 3, 3, 3}, {3, 3, 3, 3}},
+		})
+
+	testGradients(t, "1D Window(2)",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			input := IotaFull(g, MakeShape(dtypes.Float64, 1, 5, 1))
 			output = SumPool(input).Window(2).Strides(3).
@@ -239,7 +250,7 @@ func TestGradientSumPool(t *testing.T) {
 			[][][]float64{{{1}, {1}, {0}, {2}, {2}}},
 		})
 
-	testGradients(t, "Gradient 2D Even Spatial Dimensions SumPool(...).Window(2)",
+	testGradients(t, "2D Window(2) Even Spatial Dimensions",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			input := IotaFull(g, MakeShape(dtypes.Float64, 1, 4, 4, 1))
 			output = SumPool(input).Window(2).Done()
@@ -254,7 +265,7 @@ func TestGradientSumPool(t *testing.T) {
 			}},
 		})
 
-	testGradients(t, "Gradient 1D SumPool() -- scaled output",
+	testGradients(t, "1D scaled output",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			input := Add(IotaFull(g, MakeShape(dtypes.Float32, 1, 6, 1)), Const(g, float32(1.0)))
 			output = SumPool(input).NoPadding().Window(3).Strides(1).Done()

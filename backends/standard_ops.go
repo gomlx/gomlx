@@ -489,11 +489,6 @@ type StandardOps interface {
 	// See details in https://openxla.org/xla/operation_semantics#selectandscatter
 	SelectAndScatterMin(operand, source Op, windowDimensions, windowStrides []int, paddings [][2]int) (Op, error)
 
-	// SelectAndScatterSum runs windows (similar to ReduceWindow) over the operand, selects values to update the output (like ScatterAdd)
-	// It selects the values in the window such that it works as reverse for a PoolSum operation.
-	// See details in https://openxla.org/xla/operation_semantics#selectandscatter
-	SelectAndScatterSum(operand, source Op, windowDimensions, windowStrides []int, paddings [][2]int) (Op, error)
-
 	// ShiftLeft n bits. It implicitly preserves the sign bit if there is no overflow. So ShiftLeft(-1, 1) = -2.
 	ShiftLeft(lhs, rhs Op) (Op, error)
 
