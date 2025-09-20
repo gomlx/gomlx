@@ -5,7 +5,6 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/notimplemented"
-	"github.com/gomlx/gomlx/backends/shapeinference"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
@@ -31,6 +30,7 @@ type Builder struct {
 	// Various caches.
 	cacheReductions map[reductionKey]*stablehlo.Function
 	cacheArgMinMax  map[argMinMaxKey]*stablehlo.Function
+	cacheSelections map[reductionKey]*stablehlo.Function
 }
 
 // reductionKey for the cache of inlined functions for reductions.
@@ -59,6 +59,7 @@ func (backend *Backend) Builder(name string) backends.Builder {
 		name:            name,
 		cacheReductions: make(map[reductionKey]*stablehlo.Function),
 		cacheArgMinMax:  make(map[argMinMaxKey]*stablehlo.Function),
+		cacheSelections: make(map[reductionKey]*stablehlo.Function),
 	}
 	b.Builder.ErrFn = func(op backends.OpType) error {
 		return errors.Errorf("StableHLO hasn't implemented operation %q yet, pls open an issue in https://github.com/gomlx/gomlx", op)
@@ -170,6 +171,35 @@ func (b *Builder) Constant(flat any, dimensions ...int) (backends.Op, error) {
 	return b.newNode(value), nil
 }
 
+func broadcastShapeForBinaryOps(opType backends.OpType, lhsShape, rhsShape shapes.Shape) (output shapes.Shape, err error) {
+	if lhsShape.IsScalar() {
+		return rhsShape, nil
+	}
+	if rhsShape.IsScalar() {
+		return lhsShape, nil
+	}
+
+	// Other cases, either the dimensions match or one of them is 1.
+	if lhsShape.Rank() != rhsShape.Rank() {
+		err = errors.Errorf("if operands are not scalars, their rank must match for BinaryOp (%s), got shapes %s and %s",
+			opType, lhsShape, rhsShape)
+		return
+	}
+	output = lhsShape.Clone()
+	for axis := range output.Rank() {
+		lhsDim := lhsShape.Dimensions[axis]
+		rhsDim := rhsShape.Dimensions[axis]
+		if lhsDim != 1 && rhsDim != 1 && lhsDim != rhsDim {
+			err = errors.Errorf("dimension of axis #%d doesn't match and cannot be broadcast for BinaryOp (%s), got shapes %s and %s",
+				axis, opType, lhsShape, rhsShape)
+			return
+		}
+		output.Dimensions[axis] = max(lhsDim, rhsDim)
+	}
+	return
+
+}
+
 // broadcastForBinaryOps returns the broadcasted versions of the two ops,
 // converting them to Nodes in the process.
 func (b *Builder) broadcastForBinaryOps(opType backends.OpType, lhs, rhs backends.Op) (lhsNode, rhsNode *Node, err error) {
@@ -208,20 +238,20 @@ func (b *Builder) broadcastForBinaryOps(opType backends.OpType, lhs, rhs backend
 	}
 
 	// Find the larger shape that fits both operands.
-	newShape, err := shapeinference.BinaryOp(opType, lhsNode.shape, rhsNode.shape)
+	broadcastShape, err := broadcastShapeForBinaryOps(opType, lhsNode.shape, rhsNode.shape)
 	if err != nil {
 		return nil, nil, err
 	}
-	newShapeStableHLO := ShapeToStableHLO(newShape)
-	broadcastAxes := xslices.Iota(0, newShape.Rank())
-	if !newShape.Equal(lhsNode.shape) {
+	newShapeStableHLO := ShapeToStableHLO(broadcastShape)
+	broadcastAxes := xslices.Iota(0, broadcastShape.Rank())
+	if !broadcastShape.Equal(lhsNode.shape) {
 		value, err := stablehlo.BroadcastInDim(lhsNode.value, newShapeStableHLO, broadcastAxes)
 		if err != nil {
 			return nil, nil, errors.WithMessagef(err, "while broadcasting lhs for op %q", opType)
 		}
 		lhsNode = b.newNode(value)
 	}
-	if !newShape.Equal(rhsNode.shape) {
+	if !broadcastShape.Equal(rhsNode.shape) {
 		value, err := stablehlo.BroadcastInDim(rhsNode.value, newShapeStableHLO, broadcastAxes)
 		if err != nil {
 			return nil, nil, errors.WithMessagef(err, "while broadcasting rhs for op %q", opType)

@@ -485,3 +485,98 @@ func (b *Builder) ReduceWindow(x backends.Op, reductionType backends.ReduceOpTyp
 	}
 	return b.newNode(value), nil
 }
+
+func (b *Builder) getSelectFn(dtype dtypes.DType, opType backends.OpType) (*stablehlo.Function, error) {
+	// Create the reduction function for this dtype/op, use cache if possible.
+	rKey := reductionKey{
+		dtype:  dtype,
+		opType: opType,
+	}
+	selectionFn, ok := b.cacheSelections[rKey]
+	if ok {
+		return selectionFn, nil
+	}
+	selectionFn = b.fn.Closure()
+	lhs := selectionFn.NamedInput("lhs", stablehloshapes.Make(dtype))
+	rhs := selectionFn.NamedInput("rhs", stablehloshapes.Make(dtype))
+	var result *stablehlo.Value
+	var err error
+	compareType := compareTypeForDType(dtype)
+	switch opType {
+	case backends.OpTypeSelectAndScatterMax:
+		result, err = stablehlo.Compare(lhs, rhs, stablehlotypes.CompareGE, compareType)
+	case backends.OpTypeSelectAndScatterMin:
+		result, err = stablehlo.Compare(lhs, rhs, stablehlotypes.CompareLE, compareType)
+	default:
+		return nil, errors.Errorf("unsupported op type %s for selection function", opType)
+	}
+	if err != nil {
+		return nil, errors.WithMessagef(err, "while building selection function for %s", opType)
+	}
+	err = selectionFn.Return(result)
+	if err != nil {
+		return nil, errors.WithMessagef(err, "while building selection function for %s", opType)
+	}
+	b.cacheReductions[rKey] = selectionFn
+	return selectionFn, nil
+}
+
+// SelectAndScatterMax runs windows (similar to ReduceWindow) over the operand and
+// selects the lowest values to update the output (like ScatterSum)
+//
+// It selects the values in the window such that it works as reverse for a PoolMax operation.
+//
+// Note: "Max" refers to the selection. After selected, the values are added into the output position.
+//
+// See details in https://openxla.org/xla/operation_semantics#selectandscatter
+func (b *Builder) SelectAndScatterMax(operand, source backends.Op, windowDimensions, windowStrides []int, paddings [][2]int) (backends.Op, error) {
+	return b.selectAndScatterImpl(backends.OpTypeSelectAndScatterMax,
+		operand, source, windowDimensions, windowStrides, paddings)
+}
+
+// SelectAndScatterMin runs windows (similar to ReduceWindow) over the operand and
+// selects the lowest values to update the output (like ScatterSum)
+//
+// It selects the values in the window such that it works as reverse for a PoolMax operation.
+//
+// Note: "Min" refers to the selection. After selected, values are added into the output position.
+//
+// See details in https://openxla.org/xla/operation_semantics#selectandscatter
+func (b *Builder) SelectAndScatterMin(operand, source backends.Op, windowDimensions, windowStrides []int, paddings [][2]int) (backends.Op, error) {
+	return b.selectAndScatterImpl(backends.OpTypeSelectAndScatterMin,
+		operand, source, windowDimensions, windowStrides, paddings)
+}
+
+// selectAndScatterImpl implements SelectAndScatterMax and SelectAndScatterMin.
+//
+// See details in https://openxla.org/xla/operation_semantics#selectandscatter
+func (b *Builder) selectAndScatterImpl(opType backends.OpType, operand, source backends.Op, windowDimensions, windowStrides []int, paddings [][2]int) (backends.Op, error) {
+	nodes, err := b.verifyAndCastValues(opType.String(), operand, source)
+	if err != nil {
+		return nil, err
+	}
+	operandN, sourceN := nodes[0], nodes[1]
+	dtype := operandN.shape.DType
+
+	selectFn, err := b.getSelectFn(dtype, opType)
+	if err != nil {
+		return nil, err
+	}
+	reductionFn, err := b.getReductionFn(dtype, backends.OpTypeReduceSum)
+	if err != nil {
+		return nil, err
+	}
+
+	initialValue, err := b.fn.ConstantFromFlatAndDimensions(scalarToFlat(0, dtype))
+	if err != nil {
+		return nil, errors.WithMessagef(err, "while building zero constant for %q", opType)
+	}
+
+	value, err := stablehlo.SelectAndScatter(operandN.value, sourceN.value, initialValue,
+		selectFn, reductionFn,
+		windowDimensions, windowStrides, paddings)
+	if err != nil {
+		return nil, err
+	}
+	return b.newNode(value), nil
+}

@@ -230,6 +230,7 @@ func binaryOpImpl(opType backends.OpType, lhsShape, rhsShape shapes.Shape) (outp
 	if lhsShape.Rank() != rhsShape.Rank() {
 		err = errors.Errorf("if operands are not scalars, their rank must match for BinaryOp (%s), got shapes %s and %s",
 			opType, lhsShape, rhsShape)
+		return
 	}
 	output = lhsShape.Clone()
 	for axis := range output.Rank() {

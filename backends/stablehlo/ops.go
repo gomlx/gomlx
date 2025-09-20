@@ -130,15 +130,8 @@ func (b *Builder) Slice(x backends.Op, starts, limits, strides []int) (backends.
 	return b.newNode(value), nil
 }
 
-// comparison generic operation.
-func (b *Builder) comparison(opType backends.OpType, lhs, rhs backends.Op) (backends.Op, error) {
-	lhsNode, rhsNode, err := b.broadcastForBinaryOps(opType, lhs, rhs)
-	if err != nil {
-		return nil, err
-	}
-
+func compareTypeForDType(dtype dtypes.DType) stablehlotypes.ComparisonType {
 	// Find compareType
-	dtype := lhsNode.shape.DType
 	compareType := stablehlotypes.CompareFloat
 	if !dtype.IsFloat() {
 		if dtype.IsUnsigned() {
@@ -147,7 +140,17 @@ func (b *Builder) comparison(opType backends.OpType, lhs, rhs backends.Op) (back
 			compareType = stablehlotypes.CompareSigned
 		}
 	}
+	return compareType
+}
 
+// comparison generic operation.
+func (b *Builder) comparison(opType backends.OpType, lhs, rhs backends.Op) (backends.Op, error) {
+	lhsNode, rhsNode, err := b.broadcastForBinaryOps(opType, lhs, rhs)
+	if err != nil {
+		return nil, err
+	}
+
+	compareType := compareTypeForDType(lhsNode.shape.DType)
 	var direction stablehlotypes.ComparisonDirection
 	switch opType {
 	case backends.OpTypeEqual:

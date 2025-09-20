@@ -17,6 +17,7 @@
 package graph
 
 import (
+	"fmt"
 	"slices"
 
 	. "github.com/gomlx/exceptions"
@@ -337,7 +338,7 @@ func (pool *PoolBuilder) Done() *Node {
 		spatialPaddings = make([][2]int, pool.numSpatialDims)
 		for dim := range spatialPaddings {
 			windowSize := pool.windowSizes[dim]            // for this dimension.
-			spatialPaddings[dim][0] = (windowSize - 1) / 2 // For even-sized kernel, the padding is asymmetric.
+			spatialPaddings[dim][0] = (windowSize - 1) / 2 // For an even-sized kernel, the padding is asymmetric.
 			spatialPaddings[dim][1] = windowSize / 2
 		}
 	}
@@ -448,27 +449,19 @@ func reduceWindowVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// Recover parameters from serialized node.
 	params := node.inputs.(*nodeInputsReduceWindow)
 	if !vjpReductionTypes.Has(params.reductionType) {
-		Panicf("ReduceWindow gradient only defined for %q operations, instead got %q", vjpReductionTypes, params.reductionType)
+		Panicf("ReduceWindow gradient only defined for the operations %q, instead got %q", vjpReductionTypes, params.reductionType)
 	}
 
 	if len(params.baseDilations) > 0 || len(params.windowDilations) > 0 {
 		Panicf("gradient of ReduceWindow with base or window dilations is not defined")
 	}
-
-	//fmt.Printf("Grad(reduceWindow(%s):\n", params.reductionType)
-	//fmt.Printf("\tx.shape=%s\n", params.x.Shape())
-	//fmt.Printf("\tnode.shape=%s\n", node.Shape())
-	//fmt.Printf("\tv.shape=%s\n", v.Shape())
-	//fmt.Printf("\twindowDimensions=%v\n", params.windowDimensions)
-	//fmt.Printf("\tstrides=%v\n", params.strides)
-	//fmt.Printf("\tpaddings=%v\n", params.paddings)
-
 	var vjpX *Node
 	if params.reductionType == backends.ReduceOpMax || params.reductionType == backends.ReduceOpMin {
 		vjpX = checkedSelectAndScatter(params.x, v, params.reductionType, params.windowDimensions, params.strides, params.paddings)
-	} else {
-		// params.reductionType == backends.ReduceOpSum
+	} else if params.reductionType == backends.ReduceOpSum {
 		vjpX = dilateConvolveToMatchSumPooling(params.x, v, params.windowDimensions, params.strides, params.paddings)
+	} else {
+		Panicf("ReduceWindow gradient not defined for reduction %q, pls create an issue in github if you need this", params.reductionType)
 	}
 	return []*Node{vjpX}
 }
@@ -544,6 +537,7 @@ func dilateConvolveToMatchSumPooling(x, backProp *Node, windowDimensions, stride
 	}
 	var grad *Node
 	if requiresAdjustment {
+		fmt.Printf("dilateConvolveToMatchSumPooling: padConfig=%+v\n", padConfig)
 		grad = Pad(expanded, zero, padConfig...)
 	} else {
 		grad = expanded

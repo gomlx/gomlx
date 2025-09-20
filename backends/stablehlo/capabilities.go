@@ -106,6 +106,8 @@ var Capabilities = backends.Capabilities{
 		backends.OpTypeScatterSum:           true,
 		backends.OpTypeScatterMax:           true,
 		backends.OpTypeScatterMin:           true,
+		backends.OpTypeSelectAndScatterMax:  true,
+		backends.OpTypeSelectAndScatterMin:  true,
 		backends.OpTypeShiftLeft:            true,
 		backends.OpTypeShiftRightArithmetic: true,
 		backends.OpTypeShiftRightLogical:    true,
@@ -118,9 +120,6 @@ var Capabilities = backends.Capabilities{
 		//backends.OpTypeBatchNormGradient: true,
 		//backends.OpTypeDynamicSlice: true,
 		//backends.OpTypeDynamicUpdateSlice: true,
-		//backends.OpTypeSelectAndScatterMax: true,
-		//backends.OpTypeSelectAndScatterMin: true,
-		//backends.OpTypeSelectAndScatterSum: true,
 	},
 
 	DTypes: map[dtypes.DType]bool{
