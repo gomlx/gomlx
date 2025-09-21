@@ -5,5 +5,5 @@
 
 PACKAGE_COVERAGE="./graph/...,./ml/...,./models/...,./types/...,./backends,./backends/xla/...,./backends/shapeinference/...,./backends/simplego/..."
 go test -cover -coverprofile docs/coverage.out -coverpkg "${PACKAGE_COVERAGE}" ./... -test.count=1
-GOMLX_BACKEND=stablehlo:cpu go test -cover -coverprofile docs/coverage.out ./graph -test.count=1
+GOMLX_BACKEND=stablehlo:cpu go test -tags=stablehlo -cover -coverprofile docs/coverage.out ./graph -test.count=1
 go tool cover -func docs/coverage.out -o docs/coverage.out
