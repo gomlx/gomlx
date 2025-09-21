@@ -1,15 +1,16 @@
 package data
 
 import (
+	"io"
+	"log"
+	"runtime"
+	"sync"
+
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/types/xsync"
 	"github.com/pkg/errors"
-	"io"
 	"k8s.io/klog/v2"
-	"log"
-	"runtime"
-	"sync"
 )
 
 // ParallelDataset is a wrapper around a `train.Dataset` that parallelize calls to Yield.
@@ -18,7 +19,7 @@ type ParallelDataset struct {
 	Dataset train.Dataset
 
 	// name is set by default to the underlying dataset name.
-	name string
+	name, shortName string
 
 	// parallelism is the number of goroutines started generating examples.
 	parallelism int
@@ -99,6 +100,11 @@ func CustomParallel(ds train.Dataset) *ParallelDataset {
 		name:    ds.Name(),
 		Dataset: ds,
 	}
+	if sn, ok := ds.(train.HasShortName); ok {
+		pd.shortName = sn.ShortName()
+	} else {
+		pd.shortName = pd.name[:3]
+	}
 	pd.Parallelism(0) // 0 here means it will take the number of cores available.
 	return pd
 }
@@ -124,12 +130,15 @@ func (pd *ParallelDataset) Parallelism(n int) *ParallelDataset {
 	return pd
 }
 
-// WithName sets the name of the parallel dataset.
+// WithName sets the name of the parallel dataset, and optionally its short name.
 // It defaults to the original dataset name.
 //
 // It returns the updated ParallelDataset, so calls can be cascaded.
-func (pd *ParallelDataset) WithName(name string) *ParallelDataset {
+func (pd *ParallelDataset) WithName(name string, shortName ...string) *ParallelDataset {
 	pd.name = name
+	if len(shortName) > 0 {
+		pd.shortName = shortName[0]
+	}
 	return pd
 }
 
@@ -248,6 +257,11 @@ func (impl *parallelDatasetImpl) startGoRoutines() {
 // Name implements train.Dataset.
 func (pd *ParallelDataset) Name() string {
 	return pd.name
+}
+
+// ShortName returns a short version of the dataset name, it implements train.HasShortName.
+func (pd *ParallelDataset) ShortName() string {
+	return pd.shortName
 }
 
 // Done stops all the parallel dataset and wait them to finish.

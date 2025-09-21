@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"go/ast"
 	"os"
 	"os/exec"
 	"path"
@@ -11,15 +10,16 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/gomlx/gomlx/internal/cmd/graph_generator/parsebackends"
+	"github.com/gomlx/gomlx/internal/backendparser"
 	"github.com/gomlx/gomlx/types"
-	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/janpfeifer/must"
+	"k8s.io/klog/v2"
 )
 
 func main() {
+	klog.InitFlags(nil)
 	flag.Parse()
-	fmt.Println("graph_generator:")
+	klog.V(1).Info("graph_generator:")
 	methods := buildMethodInfo()
 	GenerateBackendOps(methods)
 }
@@ -46,8 +46,14 @@ var (
 		"Slice",
 		"Transpose", "Where")
 
-	// methodsToExclude from writing, but the corresponding will be written and maintained manually.
-	methodsToExclude = types.SetWith("Constant", "Parameter")
+	// methodsNotGenerated but for which there is still a NodeType.
+	methodsNotGenerated = types.SetWith(
+		"Constant", "Parameter")
+
+	// methodsExcluded from generating and even from having a NodeType.
+	// These are utility methods, not part of building a graph.
+	methodsExcluded = types.SetWith(
+		"Name", "Compile", "OpShape")
 
 	// methodsNoGradient will add a stop gradient to the node.
 	methodsNoGradient = types.SetWith(
@@ -57,112 +63,107 @@ var (
 )
 
 func buildMethodInfo() (methods []*MethodInfo) {
-	extractor, funcs := parsebackends.ParseBuilder()
-	for name, funcInfo := range funcs {
+	rawMethods := must.M1(backendparser.ParseBuilder())
+	for _, raw := range rawMethods {
+		name := raw.Name
+		if methodsExcluded.Has(name) {
+			continue
+		}
 		mi := &MethodInfo{
 			BackendName:  name,
 			GraphName:    name,
 			Exported:     !methodsNotExported.Has(name),
-			Excluded:     methodsToExclude.Has(name),
-			Comments:     funcInfo.Comments,
+			Excluded:     methodsNotGenerated.Has(name),
+			Comments:     raw.Comments,
 			StopGradient: methodsNoGradient.Has(name),
 		}
 		methods = append(methods, mi)
 		if !mi.Exported {
 			mi.GraphName = "backend" + name
 		}
-		for _, param := range funcInfo.Type.Params.List {
-			paramNames := xslices.Map(param.Names, func(ident *ast.Ident) string { return ident.Name })
-			for _, paramName := range paramNames {
-				pi := &ParameterInfo{
-					Name:        paramName,
-					BackendType: extractor.Get(param.Type),
-				}
-				mi.Inputs = append(mi.Inputs, pi)
-				switch pi.BackendType {
-				case "Op":
-					pi.BackendType = "backends.Op"
-					pi.GraphType = "*Node"
-					pi.ConvertStatement = fmt.Sprintf("%s.outputOps[0]", paramName)
-					mi.OpInputs = append(mi.OpInputs, paramName)
-					pi.Format = "[#%d]"
-					pi.FormatValue = fmt.Sprintf("ni.%s.Id()", paramName)
-				case "...Op":
-					pi.BackendType = "...backends.Op"
-					pi.GraphType = "...*Node"
-					mi.OpInputSlices = append(mi.OpInputSlices, paramName)
-					pi.NodeInputType = "[]*Node"
-					pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", paramName)
-					pi.ConvertStatement = fmt.Sprintf("xslices.Map(%s, func(node *Node) backends.Op { return node.outputOps[0] })...", paramName)
-					pi.Format = "[#%s]"
-					pi.FormatValue = fmt.Sprintf(
-						`strings.Join(xslices.Map(ni.%s, func (node *Node) string { return fmt.Sprintf("#%%d", node.Id()) }), ", ")`,
-						paramName)
-				case "[]Op":
-					pi.BackendType = "[]backends.Op"
-					pi.GraphType = "[]*Node"
-					mi.OpInputSlices = append(mi.OpInputSlices, paramName)
-					pi.NodeInputType = "[]*Node"
-					pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", paramName)
-					pi.ConvertStatement = fmt.Sprintf("xslices.Map(%s, func(node *Node) backends.Op { return node.outputOps[0] })", paramName)
-					pi.Format = "[#%s]"
-					pi.FormatValue = fmt.Sprintf(
-						`strings.Join(xslices.Map(ni.%s, func (node *Node) string { return fmt.Sprintf("#%%d", node.Id()) }), ", ")`,
-						paramName)
-				case "ConvolveAxesConfig":
-					pi.BackendType = "backends." + pi.BackendType
-					pi.CopyStatement = fmt.Sprintf("%s.Clone()", paramName)
-					pi.Format = "%+v"
-				case "PadAxis":
-					pi.BackendType = "backends." + pi.BackendType
-					pi.Format = "%+v"
-				case "...PadAxis":
-					pi.BackendType = "...backends." + pi.BackendType[3:]
+		for _, param := range raw.Parameters {
+			pi := &ParameterInfo{
+				Name:        param.Name,
+				BackendType: param.Type,
+			}
+			mi.Inputs = append(mi.Inputs, pi)
+			switch pi.BackendType {
+			case "Op":
+				pi.BackendType = "backends.Op"
+				pi.GraphType = "*Node"
+				pi.ConvertStatement = fmt.Sprintf("%s.outputOps[0]", param.Name)
+				mi.OpInputs = append(mi.OpInputs, param.Name)
+				pi.Format = "[#%d]"
+				pi.FormatValue = fmt.Sprintf("ni.%s.Id()", param.Name)
+			case "...Op":
+				pi.BackendType = "...backends.Op"
+				pi.GraphType = "...*Node"
+				mi.OpInputSlices = append(mi.OpInputSlices, param.Name)
+				pi.NodeInputType = "[]*Node"
+				pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", param.Name)
+				pi.ConvertStatement = fmt.Sprintf("xslices.Map(%s, func(node *Node) backends.Op { return node.outputOps[0] })...", param.Name)
+				pi.Format = "[#%s]"
+				pi.FormatValue = fmt.Sprintf(
+					`strings.Join(xslices.Map(ni.%s, func (node *Node) string { return fmt.Sprintf("#%%d", node.Id()) }), ", ")`,
+					param.Name)
+			case "[]Op":
+				pi.BackendType = "[]backends.Op"
+				pi.GraphType = "[]*Node"
+				mi.OpInputSlices = append(mi.OpInputSlices, param.Name)
+				pi.NodeInputType = "[]*Node"
+				pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", param.Name)
+				pi.ConvertStatement = fmt.Sprintf("xslices.Map(%s, func(node *Node) backends.Op { return node.outputOps[0] })", param.Name)
+				pi.Format = "[#%s]"
+				pi.FormatValue = fmt.Sprintf(
+					`strings.Join(xslices.Map(ni.%s, func (node *Node) string { return fmt.Sprintf("#%%d", node.Id()) }), ", ")`,
+					param.Name)
+			case "ConvolveAxesConfig":
+				pi.BackendType = "backends." + pi.BackendType
+				pi.CopyStatement = fmt.Sprintf("%s.Clone()", param.Name)
+				pi.Format = "%+v"
+			case "PadAxis":
+				pi.BackendType = "backends." + pi.BackendType
+				pi.Format = "%+v"
+			case "...PadAxis":
+				pi.BackendType = "...backends." + pi.BackendType[3:]
+				pi.NodeInputType = "[]" + pi.BackendType[3:]
+				pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", param.Name)
+				pi.ConvertStatement = fmt.Sprintf("inputs.%s...", param.Name)
+				pi.Format = "%+v"
+			case "FFTType":
+				pi.BackendType = "backends." + pi.BackendType
+				pi.Format = "%s"
+			default:
+				if strings.HasPrefix(pi.BackendType, "...") {
 					pi.NodeInputType = "[]" + pi.BackendType[3:]
-					pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", paramName)
-					pi.ConvertStatement = fmt.Sprintf("inputs.%s...", paramName)
-					pi.Format = "%+v"
-				case "FFTType":
-					pi.BackendType = "backends." + pi.BackendType
-					pi.Format = "%s"
-				default:
-					if strings.HasPrefix(pi.BackendType, "...") {
-						pi.NodeInputType = "[]" + pi.BackendType[3:]
-						pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", paramName)
-						pi.ConvertStatement = fmt.Sprintf("inputs.%s...", paramName)
-					} else if strings.HasPrefix(pi.GraphType, "[]") {
-						pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", paramName)
-					}
+					pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", param.Name)
+					pi.ConvertStatement = fmt.Sprintf("inputs.%s...", param.Name)
+				} else if strings.HasPrefix(pi.GraphType, "[]") {
+					pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", param.Name)
 				}
-				if pi.GraphType == "" {
-					pi.GraphType = pi.BackendType
-				}
-				if pi.NodeInputType == "" {
-					pi.NodeInputType = pi.GraphType
-				}
-				if pi.CopyStatement == "" {
-					pi.CopyStatement = pi.Name
-				}
-				if pi.ConvertStatement == "" {
-					pi.ConvertStatement = "inputs." + pi.Name
-				}
-				if pi.Format == "" {
-					pi.Format = "%v"
-				}
-				if pi.FormatValue == "" {
-					pi.FormatValue = "ni." + pi.Name
-				}
+			}
+			if pi.GraphType == "" {
+				pi.GraphType = pi.BackendType
+			}
+			if pi.NodeInputType == "" {
+				pi.NodeInputType = pi.GraphType
+			}
+			if pi.CopyStatement == "" {
+				pi.CopyStatement = pi.Name
+			}
+			if pi.ConvertStatement == "" {
+				pi.ConvertStatement = "inputs." + pi.Name
+			}
+			if pi.Format == "" {
+				pi.Format = "%v"
+			}
+			if pi.FormatValue == "" {
+				pi.FormatValue = "ni." + pi.Name
 			}
 			mi.HasGraph = len(mi.OpInputSlices) == 0 && len(mi.OpInputs) == 0
-
 		}
-		results := funcInfo.Type.Results.List
-		for _, field := range results[:len(results)-1] { // Skip the error.
-			for _, nameIdent := range field.Names[:len(field.Names)] {
-				// Save the names of the outputs: we assume all outputs are of type Op (to be converted to *Node in graphs package).
-				mi.OutputNames = append(mi.OutputNames, nameIdent.Name)
-				//fmt.Printf("%s, ", nameIdent.Name)
-			}
+		for _, output := range raw.Outputs[:len(raw.Outputs)-1] { // Skip the error.
+			mi.OutputNames = append(mi.OutputNames, output.Name)
 		}
 		if len(mi.OutputNames) > 1 {
 			mi.HasMultipleOutputs = true
@@ -333,14 +334,14 @@ func GenerateBackendOps(methods []*MethodInfo) {
 	// Sort by backend method name:
 	slices.SortFunc(methods, func(a, b *MethodInfo) int { return strings.Compare(a.BackendName, b.BackendName) })
 
-	fileName := backendsOpsFile
+	fileName := path.Join(must.M1(os.Getwd()), backendsOpsFile)
 	f := must.M1(os.Create(fileName))
 	must.M(backendOpsTemplate.Execute(f, methods))
 	cmd := exec.Command("go", "fmt", fileName)
-	fmt.Printf("\t%s\n", cmd)
+	klog.V(1).Infof("\t%s\n", cmd)
 	must.M(cmd.Run())
-	cmd = exec.Command("enumer", "-type=NodeType", "-trimprefix=NodeType", "-yaml", "-json", "-text", "-values", fileName)
-	fmt.Printf("\t%s\n", cmd)
+	cmd = exec.Command("go", "tool", "enumer", "-type=NodeType", "-trimprefix=NodeType", "-yaml", "-json", "-text", "-values", fileName)
+	klog.V(1).Infof("\t%s\n", cmd)
 	must.M(cmd.Run())
-	fmt.Printf("✅ Successfully generated %s\n", path.Join(must.M1(os.Getwd()), fileName))
+	fmt.Printf("✅ graph_generator:       \tsuccessfully generated %s\n", fileName)
 }

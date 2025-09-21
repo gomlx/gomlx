@@ -286,9 +286,9 @@ func (o *adam) UpdateGraphWithGradients(ctx *context.Context, grads []*Node, los
 
 	// Calculate the debias moving average coefficients (betas)
 	beta1 := Const(g, shapes.CastAsDType(o.config.beta1, dtype))
-	debiasTermBeta1 := Inverse(OneMinus(Pow(beta1, adamStep)))
+	debiasTermBeta1 := Reciprocal(OneMinus(Pow(beta1, adamStep)))
 	beta2 := Const(g, shapes.CastAsDType(o.config.beta2, dtype))
-	debiasTermBeta2 := Inverse(OneMinus(Pow(beta2, adamStep)))
+	debiasTermBeta2 := Reciprocal(OneMinus(Pow(beta2, adamStep)))
 	epsilon := Const(g, shapes.CastAsDType(o.config.epsilon, dtype))
 
 	// Apply gradient one variable at a time.

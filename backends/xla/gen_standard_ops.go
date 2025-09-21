@@ -1156,7 +1156,7 @@ func (b *Builder) NotEqualTotalOrder(x0, x1 backends.Op) (backends.Op, error) {
 	return xla_result, nil
 }
 
-// Pad injects padding on the start, end or interior (in between each element) of the given operand.
+// Pad injects padding on the start, end, or interior (in between each element) of the given operand.
 // There must be at most `operand.Rank()` axesConfig values. Missing PadAxis are assumed to be zeros,
 // that is, no padding for those axes.
 func (b *Builder) Pad(x, fillValue backends.Op, axesConfig ...backends.PadAxis) (backends.Op, error) {
@@ -1556,27 +1556,6 @@ func (b *Builder) SelectAndScatterMin(operand, source backends.Op, windowDimensi
 	xla_result, err := xlabuilder.SelectAndScatterMin(xla_operand, xla_source, windowDimensions, windowStrides, paddings)
 	if err != nil {
 		return nil, errors.WithMessagef(err, "Backend %q: failed SelectAndScatterMin", BackendName)
-	}
-	return xla_result, nil
-}
-
-// SelectAndScatterSum runs windows (similar to ReduceWindow) over the operand, selects values to updates the output (like ScatterAdd)
-// It selects the values in the window such that it works as reverse for ScatterSum.
-// See details in https://openxla.org/xla/operation_semantics#selectandscatter
-func (b *Builder) SelectAndScatterSum(operand, source backends.Op, windowDimensions, windowStrides []int, paddings [][2]int) (backends.Op, error) {
-	xla_operand, err := b.verifyAndCastOp(operand, "operand")
-	if err != nil {
-		return nil, errors.WithMessagef(err, "Backend %q: failed SelectAndScatterSum", BackendName)
-	}
-
-	xla_source, err := b.verifyAndCastOp(source, "source")
-	if err != nil {
-		return nil, errors.WithMessagef(err, "Backend %q: failed SelectAndScatterSum", BackendName)
-	}
-
-	xla_result, err := xlabuilder.SelectAndScatterSum(xla_operand, xla_source, windowDimensions, windowStrides, paddings)
-	if err != nil {
-		return nil, errors.WithMessagef(err, "Backend %q: failed SelectAndScatterSum", BackendName)
 	}
 	return xla_result, nil
 }

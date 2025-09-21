@@ -4,13 +4,12 @@ package graph
 
 import (
 	"fmt"
-	"slices"
-	"strings"
-
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
+	"slices"
+	"strings"
 )
 
 type NodeType int
@@ -33,6 +32,7 @@ const (
 	NodeTypeBroadcast
 	NodeTypeBroadcastInDim
 	NodeTypeCeil
+	NodeTypeClamp
 	NodeTypeClz
 	NodeTypeComplex
 	NodeTypeConcatenate
@@ -62,6 +62,7 @@ const (
 	NodeTypeImag
 	NodeTypeIota
 	NodeTypeIsFinite
+	NodeTypeIsNaN
 	NodeTypeLessOrEqual
 	NodeTypeLessOrEqualTotalOrder
 	NodeTypeLessThan
@@ -105,7 +106,6 @@ const (
 	NodeTypeScatterSum
 	NodeTypeSelectAndScatterMax
 	NodeTypeSelectAndScatterMin
-	NodeTypeSelectAndScatterSum
 	NodeTypeShiftLeft
 	NodeTypeShiftRightArithmetic
 	NodeTypeShiftRightLogical
@@ -161,8 +161,8 @@ func Abs(x *Node) (node *Node) {
 
 // nodeInputsAdd holds the inputs used for the call to backends.Add.
 type nodeInputsAdd struct {
-	x0 *Node
-	x1 *Node
+	lhs *Node
+	rhs *Node
 }
 
 // Type implements the interface NodeInputs.
@@ -172,24 +172,23 @@ func (ni *nodeInputsAdd) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsAdd) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
+	return fmt.Sprintf("%s(lhs=[#%d], rhs=[#%d])",
 		ni.Type(),
-		ni.x0.Id(),
-		ni.x1.Id(),
+		ni.lhs.Id(),
+		ni.rhs.Id(),
 	)
 }
 
 // Add returns the element-wise sum of the two values.
 // Standard broadcasting rules apply (see documentation).
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func Add(x0 *Node, x1 *Node) (node *Node) {
-	inputNodes := []*Node{x0, x1}
+func Add(lhs *Node, rhs *Node) (node *Node) {
+	inputNodes := []*Node{lhs, rhs}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsAdd{
-		x0: x0,
-		x1: x1,
+		lhs: lhs,
+		rhs: rhs,
 	}
-	result, err := g.builder.Add(x0.outputOps[0], x1.outputOps[0])
+	result, err := g.builder.Add(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -444,6 +443,7 @@ func (ni *nodeInputsBitCount) String() string {
 }
 
 // BitCount returns the number of bits that are set to one.
+// Also known as Population Count ("Popcnt") or Hamming Weight.
 func BitCount(operand *Node) (node *Node) {
 	inputNodes := []*Node{operand}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -486,14 +486,19 @@ func (ni *nodeInputsBitcast) String() string {
 }
 
 // Bitcast performs an elementwise bit-cast operation from a dtype to another dtype.
-// The bitcast doesn't "convert" anything, it just reinterprets the bits from x.DType() to the targetDType.
-// If x.DType() and targetDType use the same number of bytes (targetDType.Size() = x.DType().Size()),
+//
+// The Bitcast doesn't "convert", rather it just reinterprets the bits from x.DType() to the targetDType.
+//
+// If x.DType() and targetDType use the same number of bytes (targetDType.Size() == x.DType().Size()),
 // the dimensions are not changed, simply the dtype is changed.
-// If targetDType.Size() > x.DType().Size(), it requires that x last axis to have a dimension of targetDType.Size() / x.DType().Size(),
-// and the returned shape will trim the last axis.
+//
+// If targetDType.Size() > x.DType().Size(), it requires x last axis to have a dimension of
+// targetDType.Size() / x.DType().Size(), and the returned shape will trim the last axis.
+//
 // If targetDType.Size() < x.DType().Size(), the returned shape will have an extra axis in the end, with dimension of
 // x.DType().Size() / targetDType.Size().
-// E.g: Bitcast([1]uint32{0xdeadbeef}, dtypes.UInt16) -> [1][2]uint16{{0xdead, 0xbeef}}
+//
+// E.g: Bitcast([1]uint32{0xdeadbeef}, dtypes.UInt16) -> [1][2]uint16{{0xbeef, 0xdead}} // Little-endian encoding.
 func Bitcast(x *Node, targetDType dtypes.DType) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -518,8 +523,8 @@ func Bitcast(x *Node, targetDType dtypes.DType) (node *Node) {
 
 // nodeInputsBitwiseAnd holds the inputs used for the call to backends.BitwiseAnd.
 type nodeInputsBitwiseAnd struct {
-	x0 *Node
-	x1 *Node
+	lhs *Node
+	rhs *Node
 }
 
 // Type implements the interface NodeInputs.
@@ -529,23 +534,22 @@ func (ni *nodeInputsBitwiseAnd) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsBitwiseAnd) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
+	return fmt.Sprintf("%s(lhs=[#%d], rhs=[#%d])",
 		ni.Type(),
-		ni.x0.Id(),
-		ni.x1.Id(),
+		ni.lhs.Id(),
+		ni.rhs.Id(),
 	)
 }
 
 // BitwiseAnd returns the element-wise bitwise AND operation.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func BitwiseAnd(x0 *Node, x1 *Node) (node *Node) {
-	inputNodes := []*Node{x0, x1}
+func BitwiseAnd(lhs *Node, rhs *Node) (node *Node) {
+	inputNodes := []*Node{lhs, rhs}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsBitwiseAnd{
-		x0: x0,
-		x1: x1,
+		lhs: lhs,
+		rhs: rhs,
 	}
-	result, err := g.builder.BitwiseAnd(x0.outputOps[0], x1.outputOps[0])
+	result, err := g.builder.BitwiseAnd(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -602,8 +606,8 @@ func BitwiseNot(x *Node) (node *Node) {
 
 // nodeInputsBitwiseOr holds the inputs used for the call to backends.BitwiseOr.
 type nodeInputsBitwiseOr struct {
-	x0 *Node
-	x1 *Node
+	lhs *Node
+	rhs *Node
 }
 
 // Type implements the interface NodeInputs.
@@ -613,23 +617,22 @@ func (ni *nodeInputsBitwiseOr) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsBitwiseOr) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
+	return fmt.Sprintf("%s(lhs=[#%d], rhs=[#%d])",
 		ni.Type(),
-		ni.x0.Id(),
-		ni.x1.Id(),
+		ni.lhs.Id(),
+		ni.rhs.Id(),
 	)
 }
 
 // BitwiseOr returns the element-wise bitwise OR operation.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func BitwiseOr(x0 *Node, x1 *Node) (node *Node) {
-	inputNodes := []*Node{x0, x1}
+func BitwiseOr(lhs *Node, rhs *Node) (node *Node) {
+	inputNodes := []*Node{lhs, rhs}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsBitwiseOr{
-		x0: x0,
-		x1: x1,
+		lhs: lhs,
+		rhs: rhs,
 	}
-	result, err := g.builder.BitwiseOr(x0.outputOps[0], x1.outputOps[0])
+	result, err := g.builder.BitwiseOr(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -646,8 +649,8 @@ func BitwiseOr(x0 *Node, x1 *Node) (node *Node) {
 
 // nodeInputsBitwiseXor holds the inputs used for the call to backends.BitwiseXor.
 type nodeInputsBitwiseXor struct {
-	x0 *Node
-	x1 *Node
+	lhs *Node
+	rhs *Node
 }
 
 // Type implements the interface NodeInputs.
@@ -657,23 +660,22 @@ func (ni *nodeInputsBitwiseXor) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsBitwiseXor) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
+	return fmt.Sprintf("%s(lhs=[#%d], rhs=[#%d])",
 		ni.Type(),
-		ni.x0.Id(),
-		ni.x1.Id(),
+		ni.lhs.Id(),
+		ni.rhs.Id(),
 	)
 }
 
 // BitwiseXor returns the element-wise bitwise XOR operator.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func BitwiseXor(x0 *Node, x1 *Node) (node *Node) {
-	inputNodes := []*Node{x0, x1}
+func BitwiseXor(lhs *Node, rhs *Node) (node *Node) {
+	inputNodes := []*Node{lhs, rhs}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsBitwiseXor{
-		x0: x0,
-		x1: x1,
+		lhs: lhs,
+		rhs: rhs,
 	}
-	result, err := g.builder.BitwiseXor(x0.outputOps[0], x1.outputOps[0])
+	result, err := g.builder.BitwiseXor(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -817,6 +819,54 @@ func Ceil(x *Node) (node *Node) {
 	return
 }
 
+// nodeInputsClamp holds the inputs used for the call to backends.Clamp.
+type nodeInputsClamp struct {
+	min *Node
+	x   *Node
+	max *Node
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsClamp) Type() NodeType {
+	return NodeTypeClamp
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsClamp) String() string {
+	return fmt.Sprintf("%s(min=[#%d], x=[#%d], max=[#%d])",
+		ni.Type(),
+		ni.min.Id(),
+		ni.x.Id(),
+		ni.max.Id(),
+	)
+}
+
+// Clamp returns the element-wise clamping operation.
+//
+// The values max and min can either be a scalar or have the same shape as x.
+func Clamp(min *Node, x *Node, max *Node) (node *Node) {
+	inputNodes := []*Node{min, x, max}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsClamp{
+		min: min,
+		x:   x,
+		max: max,
+	}
+	result, err := g.builder.Clamp(min.outputOps[0], x.outputOps[0], max.outputOps[0])
+	if err != nil {
+		panic(err)
+	}
+	node = &Node{
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
 // nodeInputsClz holds the inputs used for the call to backends.Clz.
 type nodeInputsClz struct {
 	x *Node
@@ -859,8 +909,8 @@ func Clz(x *Node) (node *Node) {
 
 // nodeInputsComplex holds the inputs used for the call to backends.Complex.
 type nodeInputsComplex struct {
-	x0 *Node
-	x1 *Node
+	lhs *Node
+	rhs *Node
 }
 
 // Type implements the interface NodeInputs.
@@ -870,10 +920,10 @@ func (ni *nodeInputsComplex) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsComplex) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
+	return fmt.Sprintf("%s(lhs=[#%d], rhs=[#%d])",
 		ni.Type(),
-		ni.x0.Id(),
-		ni.x1.Id(),
+		ni.lhs.Id(),
+		ni.rhs.Id(),
 	)
 }
 
@@ -883,15 +933,14 @@ func (ni *nodeInputsComplex) String() string {
 // The output will be either `dtypes.Complex64` or `dtypes.Complex128`, depending on x0 and x1 dtypes.
 // The shapes of `real` or `imaginary` must be the same, or one must be a scalar, in which case
 // the value is broadcast to every other value.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func Complex(x0 *Node, x1 *Node) (node *Node) {
-	inputNodes := []*Node{x0, x1}
+func Complex(lhs *Node, rhs *Node) (node *Node) {
+	inputNodes := []*Node{lhs, rhs}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsComplex{
-		x0: x0,
-		x1: x1,
+		lhs: lhs,
+		rhs: rhs,
 	}
-	result, err := g.builder.Complex(x0.outputOps[0], x1.outputOps[0])
+	result, err := g.builder.Complex(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -1139,8 +1188,8 @@ func Cos(x *Node) (node *Node) {
 
 // nodeInputsDiv holds the inputs used for the call to backends.Div.
 type nodeInputsDiv struct {
-	x0 *Node
-	x1 *Node
+	lhs *Node
+	rhs *Node
 }
 
 // Type implements the interface NodeInputs.
@@ -1150,24 +1199,23 @@ func (ni *nodeInputsDiv) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsDiv) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
+	return fmt.Sprintf("%s(lhs=[#%d], rhs=[#%d])",
 		ni.Type(),
-		ni.x0.Id(),
-		ni.x1.Id(),
+		ni.lhs.Id(),
+		ni.rhs.Id(),
 	)
 }
 
 // Div returns the element-wise division of the two values.
 // Standard broadcasting rules apply (see documentation).
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func Div(x0 *Node, x1 *Node) (node *Node) {
-	inputNodes := []*Node{x0, x1}
+func Div(lhs *Node, rhs *Node) (node *Node) {
+	inputNodes := []*Node{lhs, rhs}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsDiv{
-		x0: x0,
-		x1: x1,
+		lhs: lhs,
+		rhs: rhs,
 	}
-	result, err := g.builder.Div(x0.outputOps[0], x1.outputOps[0])
+	result, err := g.builder.Div(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -1184,8 +1232,8 @@ func Div(x0 *Node, x1 *Node) (node *Node) {
 
 // nodeInputsDot holds the inputs used for the call to backends.Dot.
 type nodeInputsDot struct {
-	x0 *Node
-	x1 *Node
+	lhs *Node
+	rhs *Node
 }
 
 // Type implements the interface NodeInputs.
@@ -1195,10 +1243,10 @@ func (ni *nodeInputsDot) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsDot) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
+	return fmt.Sprintf("%s(lhs=[#%d], rhs=[#%d])",
 		ni.Type(),
-		ni.x0.Id(),
-		ni.x1.Id(),
+		ni.lhs.Id(),
+		ni.rhs.Id(),
 	)
 }
 
@@ -1212,17 +1260,16 @@ func (ni *nodeInputsDot) String() string {
 // the first dimension of x1.
 // These are the "contracted" dimensions.
 // The contracted dimensions of x0 and x1 must be of the same size.
-// In practice, it can be used to perform dot products between vectors, vector/matrix multiplications or
+// In practice, it can be used to perform dot products between vectors, vector/matrix multiplications, or
 // matrix/matrix multiplications.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func Dot(x0 *Node, x1 *Node) (node *Node) {
-	inputNodes := []*Node{x0, x1}
+func Dot(lhs *Node, rhs *Node) (node *Node) {
+	inputNodes := []*Node{lhs, rhs}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsDot{
-		x0: x0,
-		x1: x1,
+		lhs: lhs,
+		rhs: rhs,
 	}
-	result, err := g.builder.Dot(x0.outputOps[0], x1.outputOps[0])
+	result, err := g.builder.Dot(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -1314,10 +1361,16 @@ func (ni *nodeInputsDynamicSlice) String() string {
 	)
 }
 
-// DynamicSlice extracts a sub-array from the input array at dynamic start_indices.
-// The size of the slice in each axis is passed in sliceDims, which specify the slice
-// intervals for each axis: [start, start + size).
-// The shape of startIndices must be rank == 1, with dimension size equal to the rank of operand.
+// DynamicSlice extracts a slice from the operand at the startIndices position and the given sliceSizes.
+//
+// - operand: tensor from where to take the slice.
+// - startIndices: scalar tensors, one per axis of operand: len(startIndices) == operand.Rank().
+// - sliceSizes: static values and fixed to keep the shape of the output static.
+//
+// The startIndices are adjusted as follows:
+//
+//	adjustedStartIndices[i] = clamp(0, StartIndices[i], operand.Dimensions[i] - sliceSizes[i])
+//
 // See description in https://openxla.org/xla/operation_semantics#dynamicslice
 func DynamicSlice(operand *Node, startIndices []*Node, sliceDims []int) (node *Node) {
 	inputNodes := []*Node{operand}
@@ -1365,11 +1418,18 @@ func (ni *nodeInputsDynamicUpdateSlice) String() string {
 	)
 }
 
-// DynamicUpdateSlice generates a result which is the value of the input array operand, with a slice update overwritten
-// at startIndices.
-// The shape of update determines the shape of the sub-array of the result which is updated.
-// The shape of startIndices must be rank == 1, with dimension size equal to the rank of operand.
-// See description in https://openxla.org/xla/operation_semantics#dynamicupdateslice
+// DynamicUpdateSlice updates the operand with the values given in update, at the position given by startIndices.
+//
+// - operand: original value that to be updated.
+// - update: values to "paste" on top of operand, at position startIndices.
+// - startIndices: scalar tensors, one per axis of operand: len(startIndices) == operand.Rank().
+// - sliceSizes: static values and fixed to keep the shape of the output static.
+//
+// It returns a value with the same shape as the operand, with the values updated.
+//
+// The startIndices are adjusted as follows:
+//
+//	adjustedStartIndices[i] = clamp(0, StartIndices[i], operand.Dimensions[i] - update.Dimensions[i])
 func DynamicUpdateSlice(operand *Node, update *Node, startIndices []*Node) (node *Node) {
 	inputNodes := []*Node{operand, update}
 	inputNodes = append(inputNodes, startIndices...)
@@ -1396,8 +1456,8 @@ func DynamicUpdateSlice(operand *Node, update *Node, startIndices []*Node) (node
 
 // nodeInputsEqual holds the inputs used for the call to backends.Equal.
 type nodeInputsEqual struct {
-	x0 *Node
-	x1 *Node
+	lhs *Node
+	rhs *Node
 }
 
 // Type implements the interface NodeInputs.
@@ -1407,23 +1467,22 @@ func (ni *nodeInputsEqual) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsEqual) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
+	return fmt.Sprintf("%s(lhs=[#%d], rhs=[#%d])",
 		ni.Type(),
-		ni.x0.Id(),
-		ni.x1.Id(),
+		ni.lhs.Id(),
+		ni.rhs.Id(),
 	)
 }
 
 // Equal performs element-wise equality check, returns boolean results with the same dimensions as input.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func Equal(x0 *Node, x1 *Node) (node *Node) {
-	inputNodes := []*Node{x0, x1}
+func Equal(lhs *Node, rhs *Node) (node *Node) {
+	inputNodes := []*Node{lhs, rhs}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsEqual{
-		x0: x0,
-		x1: x1,
+		lhs: lhs,
+		rhs: rhs,
 	}
-	result, err := g.builder.Equal(x0.outputOps[0], x1.outputOps[0])
+	result, err := g.builder.Equal(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -1441,8 +1500,8 @@ func Equal(x0 *Node, x1 *Node) (node *Node) {
 
 // nodeInputsEqualTotalOrder holds the inputs used for the call to backends.EqualTotalOrder.
 type nodeInputsEqualTotalOrder struct {
-	x0 *Node
-	x1 *Node
+	lhs *Node
+	rhs *Node
 }
 
 // Type implements the interface NodeInputs.
@@ -1452,25 +1511,24 @@ func (ni *nodeInputsEqualTotalOrder) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsEqualTotalOrder) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
+	return fmt.Sprintf("%s(lhs=[#%d], rhs=[#%d])",
 		ni.Type(),
-		ni.x0.Id(),
-		ni.x1.Id(),
+		ni.lhs.Id(),
+		ni.rhs.Id(),
 	)
 }
 
 // EqualTotalOrder returns the element-wise operation.
 // Standard broadcasting rules apply (see documentation).
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func EqualTotalOrder(x0 *Node, x1 *Node) (node *Node) {
-	inputNodes := []*Node{x0, x1}
+func EqualTotalOrder(lhs *Node, rhs *Node) (node *Node) {
+	inputNodes := []*Node{lhs, rhs}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsEqualTotalOrder{
-		x0: x0,
-		x1: x1,
+		lhs: lhs,
+		rhs: rhs,
 	}
-	result, err := g.builder.EqualTotalOrder(x0.outputOps[0], x1.outputOps[0])
+	result, err := g.builder.EqualTotalOrder(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -1755,8 +1813,8 @@ func backendGather(operand *Node, startIndices *Node, indexVectorAxis int, offse
 
 // nodeInputsGreaterOrEqual holds the inputs used for the call to backends.GreaterOrEqual.
 type nodeInputsGreaterOrEqual struct {
-	x0 *Node
-	x1 *Node
+	lhs *Node
+	rhs *Node
 }
 
 // Type implements the interface NodeInputs.
@@ -1766,23 +1824,22 @@ func (ni *nodeInputsGreaterOrEqual) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsGreaterOrEqual) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
+	return fmt.Sprintf("%s(lhs=[#%d], rhs=[#%d])",
 		ni.Type(),
-		ni.x0.Id(),
-		ni.x1.Id(),
+		ni.lhs.Id(),
+		ni.rhs.Id(),
 	)
 }
 
 // GreaterOrEqual performs element-wise comparison, returns boolean results with the same dimensions as input.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func GreaterOrEqual(x0 *Node, x1 *Node) (node *Node) {
-	inputNodes := []*Node{x0, x1}
+func GreaterOrEqual(lhs *Node, rhs *Node) (node *Node) {
+	inputNodes := []*Node{lhs, rhs}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsGreaterOrEqual{
-		x0: x0,
-		x1: x1,
+		lhs: lhs,
+		rhs: rhs,
 	}
-	result, err := g.builder.GreaterOrEqual(x0.outputOps[0], x1.outputOps[0])
+	result, err := g.builder.GreaterOrEqual(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -1800,8 +1857,8 @@ func GreaterOrEqual(x0 *Node, x1 *Node) (node *Node) {
 
 // nodeInputsGreaterOrEqualTotalOrder holds the inputs used for the call to backends.GreaterOrEqualTotalOrder.
 type nodeInputsGreaterOrEqualTotalOrder struct {
-	x0 *Node
-	x1 *Node
+	lhs *Node
+	rhs *Node
 }
 
 // Type implements the interface NodeInputs.
@@ -1811,25 +1868,24 @@ func (ni *nodeInputsGreaterOrEqualTotalOrder) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsGreaterOrEqualTotalOrder) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
+	return fmt.Sprintf("%s(lhs=[#%d], rhs=[#%d])",
 		ni.Type(),
-		ni.x0.Id(),
-		ni.x1.Id(),
+		ni.lhs.Id(),
+		ni.rhs.Id(),
 	)
 }
 
 // GreaterOrEqualTotalOrder returns the element-wise operation.
 // Standard broadcasting rules apply (see documentation).
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func GreaterOrEqualTotalOrder(x0 *Node, x1 *Node) (node *Node) {
-	inputNodes := []*Node{x0, x1}
+func GreaterOrEqualTotalOrder(lhs *Node, rhs *Node) (node *Node) {
+	inputNodes := []*Node{lhs, rhs}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsGreaterOrEqualTotalOrder{
-		x0: x0,
-		x1: x1,
+		lhs: lhs,
+		rhs: rhs,
 	}
-	result, err := g.builder.GreaterOrEqualTotalOrder(x0.outputOps[0], x1.outputOps[0])
+	result, err := g.builder.GreaterOrEqualTotalOrder(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -1847,8 +1903,8 @@ func GreaterOrEqualTotalOrder(x0 *Node, x1 *Node) (node *Node) {
 
 // nodeInputsGreaterThan holds the inputs used for the call to backends.GreaterThan.
 type nodeInputsGreaterThan struct {
-	x0 *Node
-	x1 *Node
+	lhs *Node
+	rhs *Node
 }
 
 // Type implements the interface NodeInputs.
@@ -1858,23 +1914,22 @@ func (ni *nodeInputsGreaterThan) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsGreaterThan) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
+	return fmt.Sprintf("%s(lhs=[#%d], rhs=[#%d])",
 		ni.Type(),
-		ni.x0.Id(),
-		ni.x1.Id(),
+		ni.lhs.Id(),
+		ni.rhs.Id(),
 	)
 }
 
 // GreaterThan performs element-wise comparison, returns boolean results with the same dimensions as input.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func GreaterThan(x0 *Node, x1 *Node) (node *Node) {
-	inputNodes := []*Node{x0, x1}
+func GreaterThan(lhs *Node, rhs *Node) (node *Node) {
+	inputNodes := []*Node{lhs, rhs}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsGreaterThan{
-		x0: x0,
-		x1: x1,
+		lhs: lhs,
+		rhs: rhs,
 	}
-	result, err := g.builder.GreaterThan(x0.outputOps[0], x1.outputOps[0])
+	result, err := g.builder.GreaterThan(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -1892,8 +1947,8 @@ func GreaterThan(x0 *Node, x1 *Node) (node *Node) {
 
 // nodeInputsGreaterThanTotalOrder holds the inputs used for the call to backends.GreaterThanTotalOrder.
 type nodeInputsGreaterThanTotalOrder struct {
-	x0 *Node
-	x1 *Node
+	lhs *Node
+	rhs *Node
 }
 
 // Type implements the interface NodeInputs.
@@ -1903,25 +1958,24 @@ func (ni *nodeInputsGreaterThanTotalOrder) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsGreaterThanTotalOrder) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
+	return fmt.Sprintf("%s(lhs=[#%d], rhs=[#%d])",
 		ni.Type(),
-		ni.x0.Id(),
-		ni.x1.Id(),
+		ni.lhs.Id(),
+		ni.rhs.Id(),
 	)
 }
 
 // GreaterThanTotalOrder returns the element-wise operation.
 // Standard broadcasting rules apply (see documentation).
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func GreaterThanTotalOrder(x0 *Node, x1 *Node) (node *Node) {
-	inputNodes := []*Node{x0, x1}
+func GreaterThanTotalOrder(lhs *Node, rhs *Node) (node *Node) {
+	inputNodes := []*Node{lhs, rhs}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsGreaterThanTotalOrder{
-		x0: x0,
-		x1: x1,
+		lhs: lhs,
+		rhs: rhs,
 	}
-	result, err := g.builder.GreaterThanTotalOrder(x0.outputOps[0], x1.outputOps[0])
+	result, err := g.builder.GreaterThanTotalOrder(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -2077,8 +2131,8 @@ func (ni *nodeInputsIsFinite) String() string {
 	)
 }
 
-// IsFinite tests whether each element of operand is finite, i.e., is not positive or negative infinity, and is not NaN.
-// It returns an array of boolean values with the same shape as the input, where each element is true if and only if
+// IsFinite tests whether each element of operand is finite, i.e., if it is not positive nor negative infinity, and it is not NaN.
+// It returns the same shape as the input, but with boolean values where each element is true if and only if
 // the corresponding input element is finite.
 func IsFinite(x *Node) (node *Node) {
 	inputNodes := []*Node{x}
@@ -2101,10 +2155,50 @@ func IsFinite(x *Node) (node *Node) {
 	return
 }
 
+// nodeInputsIsNaN holds the inputs used for the call to backends.IsNaN.
+type nodeInputsIsNaN struct {
+	x *Node
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsIsNaN) Type() NodeType {
+	return NodeTypeIsNaN
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsIsNaN) String() string {
+	return fmt.Sprintf("%s(x=[#%d])",
+		ni.Type(),
+		ni.x.Id(),
+	)
+}
+
+// IsNaN tests whether each element of operand is NaN, i.e., if it is not a finite number.
+func IsNaN(x *Node) (node *Node) {
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsIsNaN{
+		x: x,
+	}
+	result, err := g.builder.IsNaN(x.outputOps[0])
+	if err != nil {
+		panic(err)
+	}
+	node = &Node{
+		outputOps:    []backends.Op{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
 // nodeInputsLessOrEqual holds the inputs used for the call to backends.LessOrEqual.
 type nodeInputsLessOrEqual struct {
-	x0 *Node
-	x1 *Node
+	lhs *Node
+	rhs *Node
 }
 
 // Type implements the interface NodeInputs.
@@ -2114,23 +2208,22 @@ func (ni *nodeInputsLessOrEqual) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsLessOrEqual) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
+	return fmt.Sprintf("%s(lhs=[#%d], rhs=[#%d])",
 		ni.Type(),
-		ni.x0.Id(),
-		ni.x1.Id(),
+		ni.lhs.Id(),
+		ni.rhs.Id(),
 	)
 }
 
 // LessOrEqual performs element-wise comparison, returns boolean results with the same dimensions as input.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func LessOrEqual(x0 *Node, x1 *Node) (node *Node) {
-	inputNodes := []*Node{x0, x1}
+func LessOrEqual(lhs *Node, rhs *Node) (node *Node) {
+	inputNodes := []*Node{lhs, rhs}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsLessOrEqual{
-		x0: x0,
-		x1: x1,
+		lhs: lhs,
+		rhs: rhs,
 	}
-	result, err := g.builder.LessOrEqual(x0.outputOps[0], x1.outputOps[0])
+	result, err := g.builder.LessOrEqual(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -2148,8 +2241,8 @@ func LessOrEqual(x0 *Node, x1 *Node) (node *Node) {
 
 // nodeInputsLessOrEqualTotalOrder holds the inputs used for the call to backends.LessOrEqualTotalOrder.
 type nodeInputsLessOrEqualTotalOrder struct {
-	x0 *Node
-	x1 *Node
+	lhs *Node
+	rhs *Node
 }
 
 // Type implements the interface NodeInputs.
@@ -2159,25 +2252,24 @@ func (ni *nodeInputsLessOrEqualTotalOrder) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsLessOrEqualTotalOrder) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
+	return fmt.Sprintf("%s(lhs=[#%d], rhs=[#%d])",
 		ni.Type(),
-		ni.x0.Id(),
-		ni.x1.Id(),
+		ni.lhs.Id(),
+		ni.rhs.Id(),
 	)
 }
 
 // LessOrEqualTotalOrder returns the element-wise operation.
 // Standard broadcasting rules apply (see documentation).
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func LessOrEqualTotalOrder(x0 *Node, x1 *Node) (node *Node) {
-	inputNodes := []*Node{x0, x1}
+func LessOrEqualTotalOrder(lhs *Node, rhs *Node) (node *Node) {
+	inputNodes := []*Node{lhs, rhs}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsLessOrEqualTotalOrder{
-		x0: x0,
-		x1: x1,
+		lhs: lhs,
+		rhs: rhs,
 	}
-	result, err := g.builder.LessOrEqualTotalOrder(x0.outputOps[0], x1.outputOps[0])
+	result, err := g.builder.LessOrEqualTotalOrder(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -2195,8 +2287,8 @@ func LessOrEqualTotalOrder(x0 *Node, x1 *Node) (node *Node) {
 
 // nodeInputsLessThan holds the inputs used for the call to backends.LessThan.
 type nodeInputsLessThan struct {
-	x0 *Node
-	x1 *Node
+	lhs *Node
+	rhs *Node
 }
 
 // Type implements the interface NodeInputs.
@@ -2206,23 +2298,22 @@ func (ni *nodeInputsLessThan) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsLessThan) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
+	return fmt.Sprintf("%s(lhs=[#%d], rhs=[#%d])",
 		ni.Type(),
-		ni.x0.Id(),
-		ni.x1.Id(),
+		ni.lhs.Id(),
+		ni.rhs.Id(),
 	)
 }
 
 // LessThan performs element-wise comparison, returns boolean results with the same dimensions as input.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func LessThan(x0 *Node, x1 *Node) (node *Node) {
-	inputNodes := []*Node{x0, x1}
+func LessThan(lhs *Node, rhs *Node) (node *Node) {
+	inputNodes := []*Node{lhs, rhs}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsLessThan{
-		x0: x0,
-		x1: x1,
+		lhs: lhs,
+		rhs: rhs,
 	}
-	result, err := g.builder.LessThan(x0.outputOps[0], x1.outputOps[0])
+	result, err := g.builder.LessThan(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -2240,8 +2331,8 @@ func LessThan(x0 *Node, x1 *Node) (node *Node) {
 
 // nodeInputsLessThanTotalOrder holds the inputs used for the call to backends.LessThanTotalOrder.
 type nodeInputsLessThanTotalOrder struct {
-	x0 *Node
-	x1 *Node
+	lhs *Node
+	rhs *Node
 }
 
 // Type implements the interface NodeInputs.
@@ -2251,25 +2342,24 @@ func (ni *nodeInputsLessThanTotalOrder) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsLessThanTotalOrder) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
+	return fmt.Sprintf("%s(lhs=[#%d], rhs=[#%d])",
 		ni.Type(),
-		ni.x0.Id(),
-		ni.x1.Id(),
+		ni.lhs.Id(),
+		ni.rhs.Id(),
 	)
 }
 
 // LessThanTotalOrder returns the element-wise operation.
 // Standard broadcasting rules apply (see documentation).
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func LessThanTotalOrder(x0 *Node, x1 *Node) (node *Node) {
-	inputNodes := []*Node{x0, x1}
+func LessThanTotalOrder(lhs *Node, rhs *Node) (node *Node) {
+	inputNodes := []*Node{lhs, rhs}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsLessThanTotalOrder{
-		x0: x0,
-		x1: x1,
+		lhs: lhs,
+		rhs: rhs,
 	}
-	result, err := g.builder.LessThanTotalOrder(x0.outputOps[0], x1.outputOps[0])
+	result, err := g.builder.LessThanTotalOrder(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -2367,8 +2457,8 @@ func Log1p(x *Node) (node *Node) {
 
 // nodeInputsLogicalAnd holds the inputs used for the call to backends.LogicalAnd.
 type nodeInputsLogicalAnd struct {
-	x0 *Node
-	x1 *Node
+	lhs *Node
+	rhs *Node
 }
 
 // Type implements the interface NodeInputs.
@@ -2378,23 +2468,22 @@ func (ni *nodeInputsLogicalAnd) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsLogicalAnd) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
+	return fmt.Sprintf("%s(lhs=[#%d], rhs=[#%d])",
 		ni.Type(),
-		ni.x0.Id(),
-		ni.x1.Id(),
+		ni.lhs.Id(),
+		ni.rhs.Id(),
 	)
 }
 
 // LogicalAnd returns the element-wise logical AND operation.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func LogicalAnd(x0 *Node, x1 *Node) (node *Node) {
-	inputNodes := []*Node{x0, x1}
+func LogicalAnd(lhs *Node, rhs *Node) (node *Node) {
+	inputNodes := []*Node{lhs, rhs}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsLogicalAnd{
-		x0: x0,
-		x1: x1,
+		lhs: lhs,
+		rhs: rhs,
 	}
-	result, err := g.builder.LogicalAnd(x0.outputOps[0], x1.outputOps[0])
+	result, err := g.builder.LogicalAnd(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -2452,8 +2541,8 @@ func LogicalNot(x *Node) (node *Node) {
 
 // nodeInputsLogicalOr holds the inputs used for the call to backends.LogicalOr.
 type nodeInputsLogicalOr struct {
-	x0 *Node
-	x1 *Node
+	lhs *Node
+	rhs *Node
 }
 
 // Type implements the interface NodeInputs.
@@ -2463,23 +2552,22 @@ func (ni *nodeInputsLogicalOr) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsLogicalOr) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
+	return fmt.Sprintf("%s(lhs=[#%d], rhs=[#%d])",
 		ni.Type(),
-		ni.x0.Id(),
-		ni.x1.Id(),
+		ni.lhs.Id(),
+		ni.rhs.Id(),
 	)
 }
 
 // LogicalOr returns the element-wise logical OR operation.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func LogicalOr(x0 *Node, x1 *Node) (node *Node) {
-	inputNodes := []*Node{x0, x1}
+func LogicalOr(lhs *Node, rhs *Node) (node *Node) {
+	inputNodes := []*Node{lhs, rhs}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsLogicalOr{
-		x0: x0,
-		x1: x1,
+		lhs: lhs,
+		rhs: rhs,
 	}
-	result, err := g.builder.LogicalOr(x0.outputOps[0], x1.outputOps[0])
+	result, err := g.builder.LogicalOr(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -2496,8 +2584,8 @@ func LogicalOr(x0 *Node, x1 *Node) (node *Node) {
 
 // nodeInputsLogicalXor holds the inputs used for the call to backends.LogicalXor.
 type nodeInputsLogicalXor struct {
-	x0 *Node
-	x1 *Node
+	lhs *Node
+	rhs *Node
 }
 
 // Type implements the interface NodeInputs.
@@ -2507,23 +2595,22 @@ func (ni *nodeInputsLogicalXor) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsLogicalXor) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
+	return fmt.Sprintf("%s(lhs=[#%d], rhs=[#%d])",
 		ni.Type(),
-		ni.x0.Id(),
-		ni.x1.Id(),
+		ni.lhs.Id(),
+		ni.rhs.Id(),
 	)
 }
 
 // LogicalXor returns the element-wise logical XOR operator.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func LogicalXor(x0 *Node, x1 *Node) (node *Node) {
-	inputNodes := []*Node{x0, x1}
+func LogicalXor(lhs *Node, rhs *Node) (node *Node) {
+	inputNodes := []*Node{lhs, rhs}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsLogicalXor{
-		x0: x0,
-		x1: x1,
+		lhs: lhs,
+		rhs: rhs,
 	}
-	result, err := g.builder.LogicalXor(x0.outputOps[0], x1.outputOps[0])
+	result, err := g.builder.LogicalXor(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -2580,8 +2667,8 @@ func Logistic(x *Node) (node *Node) {
 
 // nodeInputsMax holds the inputs used for the call to backends.Max.
 type nodeInputsMax struct {
-	x0 *Node
-	x1 *Node
+	lhs *Node
+	rhs *Node
 }
 
 // Type implements the interface NodeInputs.
@@ -2591,23 +2678,22 @@ func (ni *nodeInputsMax) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsMax) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
+	return fmt.Sprintf("%s(lhs=[#%d], rhs=[#%d])",
 		ni.Type(),
-		ni.x0.Id(),
-		ni.x1.Id(),
+		ni.lhs.Id(),
+		ni.rhs.Id(),
 	)
 }
 
 // Max returns the element-wise highest value among the two.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func Max(x0 *Node, x1 *Node) (node *Node) {
-	inputNodes := []*Node{x0, x1}
+func Max(lhs *Node, rhs *Node) (node *Node) {
+	inputNodes := []*Node{lhs, rhs}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsMax{
-		x0: x0,
-		x1: x1,
+		lhs: lhs,
+		rhs: rhs,
 	}
-	result, err := g.builder.Max(x0.outputOps[0], x1.outputOps[0])
+	result, err := g.builder.Max(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -2624,8 +2710,8 @@ func Max(x0 *Node, x1 *Node) (node *Node) {
 
 // nodeInputsMin holds the inputs used for the call to backends.Min.
 type nodeInputsMin struct {
-	x0 *Node
-	x1 *Node
+	lhs *Node
+	rhs *Node
 }
 
 // Type implements the interface NodeInputs.
@@ -2635,23 +2721,22 @@ func (ni *nodeInputsMin) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsMin) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
+	return fmt.Sprintf("%s(lhs=[#%d], rhs=[#%d])",
 		ni.Type(),
-		ni.x0.Id(),
-		ni.x1.Id(),
+		ni.lhs.Id(),
+		ni.rhs.Id(),
 	)
 }
 
 // Min returns the element-wise smallest value among the two.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func Min(x0 *Node, x1 *Node) (node *Node) {
-	inputNodes := []*Node{x0, x1}
+func Min(lhs *Node, rhs *Node) (node *Node) {
+	inputNodes := []*Node{lhs, rhs}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsMin{
-		x0: x0,
-		x1: x1,
+		lhs: lhs,
+		rhs: rhs,
 	}
-	result, err := g.builder.Min(x0.outputOps[0], x1.outputOps[0])
+	result, err := g.builder.Min(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -2668,8 +2753,8 @@ func Min(x0 *Node, x1 *Node) (node *Node) {
 
 // nodeInputsMul holds the inputs used for the call to backends.Mul.
 type nodeInputsMul struct {
-	x0 *Node
-	x1 *Node
+	lhs *Node
+	rhs *Node
 }
 
 // Type implements the interface NodeInputs.
@@ -2679,24 +2764,23 @@ func (ni *nodeInputsMul) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsMul) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
+	return fmt.Sprintf("%s(lhs=[#%d], rhs=[#%d])",
 		ni.Type(),
-		ni.x0.Id(),
-		ni.x1.Id(),
+		ni.lhs.Id(),
+		ni.rhs.Id(),
 	)
 }
 
 // Mul returns the element-wise multiplication of the two values.
 // Standard broadcasting rules apply (see documentation).
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func Mul(x0 *Node, x1 *Node) (node *Node) {
-	inputNodes := []*Node{x0, x1}
+func Mul(lhs *Node, rhs *Node) (node *Node) {
+	inputNodes := []*Node{lhs, rhs}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsMul{
-		x0: x0,
-		x1: x1,
+		lhs: lhs,
+		rhs: rhs,
 	}
-	result, err := g.builder.Mul(x0.outputOps[0], x1.outputOps[0])
+	result, err := g.builder.Mul(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -2753,8 +2837,8 @@ func Neg(x *Node) (node *Node) {
 
 // nodeInputsNotEqual holds the inputs used for the call to backends.NotEqual.
 type nodeInputsNotEqual struct {
-	x0 *Node
-	x1 *Node
+	lhs *Node
+	rhs *Node
 }
 
 // Type implements the interface NodeInputs.
@@ -2764,23 +2848,22 @@ func (ni *nodeInputsNotEqual) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsNotEqual) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
+	return fmt.Sprintf("%s(lhs=[#%d], rhs=[#%d])",
 		ni.Type(),
-		ni.x0.Id(),
-		ni.x1.Id(),
+		ni.lhs.Id(),
+		ni.rhs.Id(),
 	)
 }
 
 // NotEqual performs element-wise inequality check, returns boolean results with the same dimensions as input.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func NotEqual(x0 *Node, x1 *Node) (node *Node) {
-	inputNodes := []*Node{x0, x1}
+func NotEqual(lhs *Node, rhs *Node) (node *Node) {
+	inputNodes := []*Node{lhs, rhs}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsNotEqual{
-		x0: x0,
-		x1: x1,
+		lhs: lhs,
+		rhs: rhs,
 	}
-	result, err := g.builder.NotEqual(x0.outputOps[0], x1.outputOps[0])
+	result, err := g.builder.NotEqual(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -2798,8 +2881,8 @@ func NotEqual(x0 *Node, x1 *Node) (node *Node) {
 
 // nodeInputsNotEqualTotalOrder holds the inputs used for the call to backends.NotEqualTotalOrder.
 type nodeInputsNotEqualTotalOrder struct {
-	x0 *Node
-	x1 *Node
+	lhs *Node
+	rhs *Node
 }
 
 // Type implements the interface NodeInputs.
@@ -2809,25 +2892,24 @@ func (ni *nodeInputsNotEqualTotalOrder) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsNotEqualTotalOrder) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
+	return fmt.Sprintf("%s(lhs=[#%d], rhs=[#%d])",
 		ni.Type(),
-		ni.x0.Id(),
-		ni.x1.Id(),
+		ni.lhs.Id(),
+		ni.rhs.Id(),
 	)
 }
 
 // NotEqualTotalOrder returns the element-wise operation.
 // Standard broadcasting rules apply (see documentation).
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func NotEqualTotalOrder(x0 *Node, x1 *Node) (node *Node) {
-	inputNodes := []*Node{x0, x1}
+func NotEqualTotalOrder(lhs *Node, rhs *Node) (node *Node) {
+	inputNodes := []*Node{lhs, rhs}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsNotEqualTotalOrder{
-		x0: x0,
-		x1: x1,
+		lhs: lhs,
+		rhs: rhs,
 	}
-	result, err := g.builder.NotEqualTotalOrder(x0.outputOps[0], x1.outputOps[0])
+	result, err := g.builder.NotEqualTotalOrder(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -2865,7 +2947,7 @@ func (ni *nodeInputsPad) String() string {
 	)
 }
 
-// Pad injects padding on the start, end or interior (in between each element) of the given operand.
+// Pad injects padding on the start, end, or interior (in between each element) of the given operand.
 // There must be at most `operand.Rank()` axesConfig values. Missing PadAxis are assumed to be zeros,
 // that is, no padding for those axes.
 func Pad(x *Node, fillValue *Node, axesConfig ...backends.PadAxis) (node *Node) {
@@ -2893,8 +2975,8 @@ func Pad(x *Node, fillValue *Node, axesConfig ...backends.PadAxis) (node *Node) 
 
 // nodeInputsPow holds the inputs used for the call to backends.Pow.
 type nodeInputsPow struct {
-	x0 *Node
-	x1 *Node
+	lhs *Node
+	rhs *Node
 }
 
 // Type implements the interface NodeInputs.
@@ -2904,23 +2986,22 @@ func (ni *nodeInputsPow) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsPow) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
+	return fmt.Sprintf("%s(lhs=[#%d], rhs=[#%d])",
 		ni.Type(),
-		ni.x0.Id(),
-		ni.x1.Id(),
+		ni.lhs.Id(),
+		ni.rhs.Id(),
 	)
 }
 
 // Pow returns the Op that represents the output of the corresponding operation.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func Pow(x0 *Node, x1 *Node) (node *Node) {
-	inputNodes := []*Node{x0, x1}
+func Pow(lhs *Node, rhs *Node) (node *Node) {
+	inputNodes := []*Node{lhs, rhs}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsPow{
-		x0: x0,
-		x1: x1,
+		lhs: lhs,
+		rhs: rhs,
 	}
-	result, err := g.builder.Pow(x0.outputOps[0], x1.outputOps[0])
+	result, err := g.builder.Pow(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -3465,8 +3546,8 @@ func backendReduceWindow(x *Node, reductionType ReduceOpType, windowDimensions [
 
 // nodeInputsRem holds the inputs used for the call to backends.Rem.
 type nodeInputsRem struct {
-	x0 *Node
-	x1 *Node
+	lhs *Node
+	rhs *Node
 }
 
 // Type implements the interface NodeInputs.
@@ -3476,24 +3557,23 @@ func (ni *nodeInputsRem) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsRem) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
+	return fmt.Sprintf("%s(lhs=[#%d], rhs=[#%d])",
 		ni.Type(),
-		ni.x0.Id(),
-		ni.x1.Id(),
+		ni.lhs.Id(),
+		ni.rhs.Id(),
 	)
 }
 
 // Rem returns the remainder operation, also known as modulo (or Mod for short).
 // Notice despite the name XLA implements Mod not IEEE754 Remainder operation.
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func Rem(x0 *Node, x1 *Node) (node *Node) {
-	inputNodes := []*Node{x0, x1}
+func Rem(lhs *Node, rhs *Node) (node *Node) {
+	inputNodes := []*Node{lhs, rhs}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsRem{
-		x0: x0,
-		x1: x1,
+		lhs: lhs,
+		rhs: rhs,
 	}
-	result, err := g.builder.Rem(x0.outputOps[0], x1.outputOps[0])
+	result, err := g.builder.Rem(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -4015,62 +4095,10 @@ func backendSelectAndScatterMin(operand *Node, source *Node, windowDimensions []
 	return
 }
 
-// nodeInputsSelectAndScatterSum holds the inputs used for the call to backends.SelectAndScatterSum.
-type nodeInputsSelectAndScatterSum struct {
-	operand          *Node
-	source           *Node
-	windowDimensions []int
-	windowStrides    []int
-	paddings         [][2]int
-}
-
-// Type implements the interface NodeInputs.
-func (ni *nodeInputsSelectAndScatterSum) Type() NodeType {
-	return NodeTypeSelectAndScatterSum
-}
-
-// String implements the interface NodeInputs.
-func (ni *nodeInputsSelectAndScatterSum) String() string {
-	return fmt.Sprintf("%s(operand=[#%d], source=[#%d], windowDimensions=%v, windowStrides=%v, paddings=%v)",
-		ni.Type(),
-		ni.operand.Id(),
-		ni.source.Id(),
-		ni.windowDimensions,
-		ni.windowStrides,
-		ni.paddings,
-	)
-}
-
-// backendSelectAndScatterSum is a Graph wrapper for the backend.Builder.SelectAndScatterSum method.
-func backendSelectAndScatterSum(operand *Node, source *Node, windowDimensions []int, windowStrides []int, paddings [][2]int) (node *Node) {
-	inputNodes := []*Node{operand, source}
-	g := validateBuildingGraphFromInputs(inputNodes...)
-	inputs := &nodeInputsSelectAndScatterSum{
-		operand:          operand,
-		source:           source,
-		windowDimensions: windowDimensions,
-		windowStrides:    windowStrides,
-		paddings:         paddings,
-	}
-	result, err := g.builder.SelectAndScatterSum(operand.outputOps[0], source.outputOps[0], inputs.windowDimensions, inputs.windowStrides, inputs.paddings)
-	if err != nil {
-		panic(err)
-	}
-	node = &Node{
-		outputOps:    []backends.Op{result},
-		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
-		graph:        g,
-		inputs:       inputs,
-		inputNodes:   inputNodes,
-	}
-	g.registerNode(node)
-	return
-}
-
 // nodeInputsShiftLeft holds the inputs used for the call to backends.ShiftLeft.
 type nodeInputsShiftLeft struct {
-	x0 *Node
-	x1 *Node
+	lhs *Node
+	rhs *Node
 }
 
 // Type implements the interface NodeInputs.
@@ -4080,22 +4108,22 @@ func (ni *nodeInputsShiftLeft) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsShiftLeft) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
+	return fmt.Sprintf("%s(lhs=[#%d], rhs=[#%d])",
 		ni.Type(),
-		ni.x0.Id(),
-		ni.x1.Id(),
+		ni.lhs.Id(),
+		ni.rhs.Id(),
 	)
 }
 
 // backendShiftLeft is a Graph wrapper for the backend.Builder.ShiftLeft method.
-func backendShiftLeft(x0 *Node, x1 *Node) (node *Node) {
-	inputNodes := []*Node{x0, x1}
+func backendShiftLeft(lhs *Node, rhs *Node) (node *Node) {
+	inputNodes := []*Node{lhs, rhs}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsShiftLeft{
-		x0: x0,
-		x1: x1,
+		lhs: lhs,
+		rhs: rhs,
 	}
-	result, err := g.builder.ShiftLeft(x0.outputOps[0], x1.outputOps[0])
+	result, err := g.builder.ShiftLeft(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -4112,8 +4140,8 @@ func backendShiftLeft(x0 *Node, x1 *Node) (node *Node) {
 
 // nodeInputsShiftRightArithmetic holds the inputs used for the call to backends.ShiftRightArithmetic.
 type nodeInputsShiftRightArithmetic struct {
-	x0 *Node
-	x1 *Node
+	lhs *Node
+	rhs *Node
 }
 
 // Type implements the interface NodeInputs.
@@ -4123,22 +4151,22 @@ func (ni *nodeInputsShiftRightArithmetic) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsShiftRightArithmetic) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
+	return fmt.Sprintf("%s(lhs=[#%d], rhs=[#%d])",
 		ni.Type(),
-		ni.x0.Id(),
-		ni.x1.Id(),
+		ni.lhs.Id(),
+		ni.rhs.Id(),
 	)
 }
 
 // backendShiftRightArithmetic is a Graph wrapper for the backend.Builder.ShiftRightArithmetic method.
-func backendShiftRightArithmetic(x0 *Node, x1 *Node) (node *Node) {
-	inputNodes := []*Node{x0, x1}
+func backendShiftRightArithmetic(lhs *Node, rhs *Node) (node *Node) {
+	inputNodes := []*Node{lhs, rhs}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsShiftRightArithmetic{
-		x0: x0,
-		x1: x1,
+		lhs: lhs,
+		rhs: rhs,
 	}
-	result, err := g.builder.ShiftRightArithmetic(x0.outputOps[0], x1.outputOps[0])
+	result, err := g.builder.ShiftRightArithmetic(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -4155,8 +4183,8 @@ func backendShiftRightArithmetic(x0 *Node, x1 *Node) (node *Node) {
 
 // nodeInputsShiftRightLogical holds the inputs used for the call to backends.ShiftRightLogical.
 type nodeInputsShiftRightLogical struct {
-	x0 *Node
-	x1 *Node
+	lhs *Node
+	rhs *Node
 }
 
 // Type implements the interface NodeInputs.
@@ -4166,22 +4194,22 @@ func (ni *nodeInputsShiftRightLogical) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsShiftRightLogical) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
+	return fmt.Sprintf("%s(lhs=[#%d], rhs=[#%d])",
 		ni.Type(),
-		ni.x0.Id(),
-		ni.x1.Id(),
+		ni.lhs.Id(),
+		ni.rhs.Id(),
 	)
 }
 
 // backendShiftRightLogical is a Graph wrapper for the backend.Builder.ShiftRightLogical method.
-func backendShiftRightLogical(x0 *Node, x1 *Node) (node *Node) {
-	inputNodes := []*Node{x0, x1}
+func backendShiftRightLogical(lhs *Node, rhs *Node) (node *Node) {
+	inputNodes := []*Node{lhs, rhs}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsShiftRightLogical{
-		x0: x0,
-		x1: x1,
+		lhs: lhs,
+		rhs: rhs,
 	}
-	result, err := g.builder.ShiftRightLogical(x0.outputOps[0], x1.outputOps[0])
+	result, err := g.builder.ShiftRightLogical(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -4367,8 +4395,8 @@ func Sqrt(x *Node) (node *Node) {
 
 // nodeInputsSub holds the inputs used for the call to backends.Sub.
 type nodeInputsSub struct {
-	x0 *Node
-	x1 *Node
+	lhs *Node
+	rhs *Node
 }
 
 // Type implements the interface NodeInputs.
@@ -4378,24 +4406,23 @@ func (ni *nodeInputsSub) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsSub) String() string {
-	return fmt.Sprintf("%s(x0=[#%d], x1=[#%d])",
+	return fmt.Sprintf("%s(lhs=[#%d], rhs=[#%d])",
 		ni.Type(),
-		ni.x0.Id(),
-		ni.x1.Id(),
+		ni.lhs.Id(),
+		ni.rhs.Id(),
 	)
 }
 
 // Sub returns the element-wise subtraction of the two values.
 // Standard broadcasting rules apply (see documentation).
-// The op is created on the same XlaBuilder as used for x0 and x1.
-func Sub(x0 *Node, x1 *Node) (node *Node) {
-	inputNodes := []*Node{x0, x1}
+func Sub(lhs *Node, rhs *Node) (node *Node) {
+	inputNodes := []*Node{lhs, rhs}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsSub{
-		x0: x0,
-		x1: x1,
+		lhs: lhs,
+		rhs: rhs,
 	}
-	result, err := g.builder.Sub(x0.outputOps[0], x1.outputOps[0])
+	result, err := g.builder.Sub(lhs.outputOps[0], rhs.outputOps[0])
 	if err != nil {
 		panic(err)
 	}
@@ -4452,8 +4479,8 @@ func Tanh(x *Node) (node *Node) {
 
 // nodeInputsTranspose holds the inputs used for the call to backends.Transpose.
 type nodeInputsTranspose struct {
-	x            *Node
-	permutations []int
+	x           *Node
+	permutation []int
 }
 
 // Type implements the interface NodeInputs.
@@ -4463,22 +4490,22 @@ func (ni *nodeInputsTranspose) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsTranspose) String() string {
-	return fmt.Sprintf("%s(x=[#%d], permutations=%v)",
+	return fmt.Sprintf("%s(x=[#%d], permutation=%v)",
 		ni.Type(),
 		ni.x.Id(),
-		ni.permutations,
+		ni.permutation,
 	)
 }
 
 // backendTranspose is a Graph wrapper for the backend.Builder.Transpose method.
-func backendTranspose(x *Node, permutations ...int) (node *Node) {
+func backendTranspose(x *Node, permutation ...int) (node *Node) {
 	inputNodes := []*Node{x}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsTranspose{
-		x:            x,
-		permutations: slices.Clone(permutations),
+		x:           x,
+		permutation: slices.Clone(permutation),
 	}
-	result, err := g.builder.Transpose(x.outputOps[0], inputs.permutations...)
+	result, err := g.builder.Transpose(x.outputOps[0], inputs.permutation...)
 	if err != nil {
 		panic(err)
 	}

@@ -1,5 +1,43 @@
 # GoMLX changelog
 
+# v0.23.0: 2025/09/21: beta `stablehlo` backend release
+
+* Package `shapes`:
+  * Added `FromAnyValue`: extract shape from a Go type.
+* New backend: `stablehlo` (or simply _"hlo"_ for short) using https://github.com/gomlx/stablehlo.
+  * All standard binary and unary ops implemented.
+  * A handful of the standard ops also implemented.
+  * If `backends/default` is compiled with `-tags=stablehlo` it will include the `stablehlo` backend.
+  * Large cleanup of generators: most no longer depending on `gopjrt/xlabuilder`.
+* Package `graph`:
+  * `ArgMin`, `ArgMax`:
+    * Fix of `ArgMin` now accepting negative axes.
+    * For `stablehlo` and `go` backends NaNs will be deliberately selected (inline with Jax/TensorFlow/PyTorch)
+  * `Clip` now uses the backend operation `Clamp`.
+  * `Inverse` renamed to `Reciprocal` -- `Inverse` is now a deprecated alias to `Reciprocal`.
+  * Added tests to various reduce operations.
+  * Added `IsNaN`
+  * Fixed `MaskedReduceMean`, when the mask provided is only a prefix rank to the input.
+  * Package `nanlogger`:
+    * `NanLogger.WithStopAtFirst` now can be used to control the default behavior of NanLogger.Trace.
+* Package `backends`:
+  * Ops are no longer auto-generated: now it is its own source of truth (as opposite to being generated from XLA code)
+  * Added `IsNaN`
+  * Many comments improvements.
+  * Removed `SelectAndScatterSum`, which was wrong, and now is deprecated in `gopjrt`.
+* Package `train`:
+  * `Loop.EveryNSteps` takes into account the current global step (as opposed to always start the counting from 0).
+  * Datasets implementing `train.Dataset` can now also implement `ShortName() string` to provide a short name to be
+    used in metrics.
+* Package `losses`:
+  * `MeanSquaredError`: fixed weights/mask expected mask.
+* Package `commandline`:
+  * Exposed `RefreshPeriod` with frequency of command-line updates.
+  * Fixed flickering of the progress bar / table of metrics.
+  * Improved colors, "humanize" steps printing.
+* `gomlx_checkpoints` CLI tool:
+  * Added `-plot` to generate plots for all metrics. It accepts various models, so one can use it to compare models.
+
 # v0.22.1: 2025/08/22 🌀 Convolutions 🌀 
 
 (release v0.22.0 was skipped due to a bug notice slightly after release)

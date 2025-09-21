@@ -520,12 +520,12 @@ func expVJP(node, v *Node, _ shapes.Shape) []*Node {
 }
 
 func logVJP(node, v *Node, _ shapes.Shape) []*Node {
-	return []*Node{Mul(v, Inverse(node.inputNodes[0]))}
+	return []*Node{Mul(v, Reciprocal(node.inputNodes[0]))}
 }
 
 func log1pVJP(node, v *Node, _ shapes.Shape) []*Node {
 	one := ScalarOne(node.Graph(), node.inputNodes[0].DType())
-	return []*Node{Mul(v, Inverse(Add(one, node.inputNodes[0])))}
+	return []*Node{Mul(v, Reciprocal(Add(one, node.inputNodes[0])))}
 }
 
 func sinVJP(node, v *Node, _ shapes.Shape) []*Node {
@@ -553,7 +553,7 @@ func erfVJP(node, v *Node, _ shapes.Shape) []*Node {
 
 func sqrtVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// d(x^0.5)/dx = 0.5 * x^(-0.5) = 0.5/sqrt(x)
-	return []*Node{Mul(v, MulScalar(Inverse(node), 0.5))}
+	return []*Node{Mul(v, MulScalar(Reciprocal(node), 0.5))}
 }
 
 // realVJP projects v back to a complex number -- the gradient on the imaginary
@@ -940,11 +940,11 @@ func batchNormForTrainingVJP(node *Node, vjps []*Node, _ shapes.Shape) []*Node {
 // simply the transpose of the incoming vector.
 func transposeVJP(node, v *Node, _ shapes.Shape) []*Node {
 	params := node.inputs.(*nodeInputsTranspose)
-	reversePermutations := make([]int, len(params.permutations))
-	for to, from := range params.permutations {
-		reversePermutations[from] = to
+	reversePermutation := make([]int, len(params.permutation))
+	for to, from := range params.permutation {
+		reversePermutation[from] = to
 	}
-	vjp := TransposeAllAxes(v, reversePermutations...)
+	vjp := TransposeAllAxes(v, reversePermutation...)
 	return []*Node{vjp}
 }
 

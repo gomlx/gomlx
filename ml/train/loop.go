@@ -63,19 +63,23 @@ type Loop struct {
 	Trainer *Trainer
 
 	// LoopStep currently being executed.
-	// Defaults to the current context's `GlobalStep`, which will be 0 for a new context.
+	// It is initialized with the current context's `GlobalStep`, which will be 0 for a new context.
 	//
 	// Notice if using Trainer.AccumulateGradients: this is a measure of "train steps", and "global steps"
 	// will be incremented only every "numAccumulatedGradients" train steps are made.
 	LoopStep int
 
 	// StartStep is the value of LoopStep at the start of a run (RunSteps or RunEpochs).
+	//
+	// It is only set and valid during a run (Loop.RunSteps or Loop.RunEpochs).
 	StartStep int
 
 	// EndStep is one-past the last step to be executed. If -1 the end step is not known (if
 	// running till the end of the dataset). When running for multiple epochs (Loop.RunEpochs) it can
 	// change during the run (after the first epoch, the value is extrapolated based on how many steps
 	// have been run so far).
+	//
+	// It is only set and valid during a run (Loop.RunSteps or Loop.RunEpochs).
 	EndStep int
 
 	// Epoch is set when running Loop.RunEpochs() to the current running epoch, starting from 0.

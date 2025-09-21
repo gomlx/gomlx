@@ -16,7 +16,6 @@ import (
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
-	"github.com/gomlx/gomlx/ui/plots"
 	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
 
@@ -31,11 +30,7 @@ var (
 	flagAll     = flag.Bool("all", false, "Display all information. The same as -summary -params -vars -metrics -metrics_labels.")
 	flagSummary = flag.Bool("summary", false, "Display a summary of the model sizes (for variables"+
 		" under --scope and the global step.")
-	flagParams  = flag.Bool("params", false, "Lists the hyperparameters.")
-	flagMetrics = flag.Bool("metrics", false,
-		fmt.Sprintf("Lists the metrics collected for plotting in file %q", plots.TrainingPlotFileName))
-	flagMetricsLabels = flag.Bool("metrics_labels", false,
-		fmt.Sprintf("Lists the metrics labels (short names) with their full description from file %q", plots.TrainingPlotFileName))
+	flagParams = flag.Bool("params", false, "Lists the hyperparameters.")
 
 	flagBackup   = flag.Bool("backup", false, "Set to true to make a backup of the most recent checkpoint, under the 'backup' subdirectory.")
 	flagGlossary = flag.Bool("glossary", true, "Whether to list glossary of abbreviation on the bottom of tables.")
@@ -139,7 +134,7 @@ func Reports(checkpointPaths []string) {
 	if *flagParams {
 		Params(ctxs, scopedCtxs, names)
 	}
-	if *flagMetrics || *flagMetricsLabels {
+	if *flagMetrics || *flagMetricsLabels || *flagPlot {
 		metrics(checkpointPaths, names)
 	}
 	if *flagVars {

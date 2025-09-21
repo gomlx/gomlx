@@ -1,23 +1,15 @@
 package simplego
 
 import (
+	"math"
+	"testing"
+
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"math"
-	"testing"
 )
 
-func TestExampleFunction1(t *testing.T) {
-	println("Running TestExampleFunction1")
-	// Your test logic here
-}
-
-func TestExampleFunction2(t *testing.T) {
-	println("Running TestExampleFunction2")
-	// Your test logic here
-}
 func TestBackendIsSimpleGo(t *testing.T) {
 	assert.NotPanics(t, func() { _ = backend.(*Backend) })
 }

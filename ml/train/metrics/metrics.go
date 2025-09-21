@@ -333,7 +333,7 @@ func (m *movingAverageMetric) UpdateGraph(ctx *context.Context, labels, predicti
 	count = Add(count, OnesLike(count))
 	countVar.SetValueGraph(count)
 
-	weight := Max(Const(g, shapes.CastAsDType(m.newExampleWeight, dtype)), Inverse(count))
+	weight := Max(Const(g, shapes.CastAsDType(m.newExampleWeight, dtype)), Reciprocal(count))
 	mean = Add(Mul(mean, OneMinus(weight)), Mul(result, weight)) // total are the values multiplied by weights, and then summed.
 	meanVar.SetValueGraph(mean)
 

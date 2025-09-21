@@ -343,7 +343,7 @@ func (builder *Config) updateMeanAndVariance(ctx *context.Context, graph *Graph,
 
 	weight := OnePlus(weightVar.ValueGraph(graph))
 	weightVar.SetValueGraph(weight)
-	debiasedMomentum := Min(momentum, OneMinus(Inverse(weight)))
+	debiasedMomentum := Min(momentum, OneMinus(Reciprocal(weight)))
 
 	meanAverage := meanAverageVar.ValueGraph(graph)
 	meanAverage = Add(

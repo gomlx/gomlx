@@ -137,7 +137,7 @@ func TestAdd(t *testing.T) {
 		}
 	}
 	{
-		// Test multi-dimension arrays of same rank with broadcast.
+		// Test multi-dimension arrays of the same rank with broadcast.
 		g := NewGraph(backend, "[2, 2] Graph")
 		x := Const(g, [][]float32{{1.1, 1.2}, {1.3, 1.4}})
 		y := Const(g, [][]float32{{1}, {10}})
@@ -156,7 +156,7 @@ func TestAdd(t *testing.T) {
 		}
 	}
 	{
-		// Test add multi-dimension array with a scalar (different ranks).
+		// Test adding a multi-dimension array with a scalar (different ranks).
 		g := NewGraph(backend, "[2, 2] Graph")
 		x := Const(g, [][]float32{{1.1, 1.2}, {1.3, 1.4}})
 		y := Const(g, float32(1))
@@ -426,7 +426,7 @@ func TestDot(t *testing.T) {
 	// Layer 0: outputShapes [3, 2], that is the inputNodes have dim=3, and should output dims=2
 	w0 := Const(g, [][]float32{{1, 0}, {1, -1}, {-1, 1}})
 	// Dot(inputNodes, w0) -> outputShapes [batch=4, dims=2]
-	Dot(inputs, w0) // Last node created in the graph is taken as output by default.
+	Dot(inputs, w0) // The last node created in the graph is taken as output by default.
 	got := compileRunAndTakeFirst(t, g)
 	want := tensors.FromValue([][]float32{{0, 1.1}, {0, 11}, {0, 111}, {0, 1111}})
 	if !want.InDelta(got, Epsilon) {
@@ -441,7 +441,7 @@ func TestBroadcast(t *testing.T) {
 	{
 		g := NewGraph(backend, "BroadcastToDims")
 		input := Const(g, 7)
-		BroadcastToDims(input, 2, 3) // Last node created in the graph is taken as output by default.
+		BroadcastToDims(input, 2, 3) // The last node created in the graph is taken as output by default.
 		got := compileRunAndTakeFirst(t, g)
 		want := [][]int64{{7, 7, 7}, {7, 7, 7}}
 		assert.Equal(t, want, got.Value())
@@ -548,24 +548,85 @@ func reduceSumGraph(t *testing.T, backend backends.Backend, reduceDims []int) *G
 	return g
 }
 
-func TestReduceSum(t *testing.T) {
+func TestReduce(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
-	cases := []struct {
-		dims []int
-		want any
-	}{
-		{want: 16.0},
-		{dims: []int{0}, want: []float64{12, 4}},
-		{dims: []int{1}, want: []float64{8, 8}},
-	}
-	for _, testCase := range cases {
-		g := reduceSumGraph(t, backend, testCase.dims)
-		got := g.Run()[0]
-		wantT := tensors.FromAnyValue(testCase.want)
-		if !wantT.InDelta(got, Epsilon) {
-			t.Errorf("Wanted %v, got %v", testCase.want, got)
+	t.Run("ReduceSum", func(t *testing.T) {
+		cases := []struct {
+			dims []int
+			want any
+		}{
+			{want: 16.0},
+			{dims: []int{0}, want: []float64{12, 4}},
+			{dims: []int{1}, want: []float64{8, 8}},
 		}
-	}
+		for _, testCase := range cases {
+			g := reduceSumGraph(t, backend, testCase.dims)
+			got := g.Run()[0]
+			wantT := tensors.FromAnyValue(testCase.want)
+			if !wantT.InDelta(got, Epsilon) {
+				t.Errorf("Wanted %v, got %v", testCase.want, got)
+			}
+		}
+	})
+
+	// Test bitwise reduction operations
+	graphtest.RunTestGraphFn(t, "BitwiseReduceOps", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = []*Node{
+			Const(g, [][]uint32{{1, 3, 7}, {2, 4, 8}}),
+		}
+		outputs = []*Node{
+			ReduceBitwiseAnd(inputs[0], -1),
+			ReduceBitwiseOr(inputs[0], -1),
+			ReduceBitwiseXor(inputs[0], -1),
+		}
+		return
+	}, []any{
+		[]uint32{1, 0},  // AND: 1&3&7=1, 2&4&8=0
+		[]uint32{7, 14}, // OR: 1|3|7=7, 2|4|8=14
+		[]uint32{5, 14}, // XOR: 1^3^7=5, 2^4^8=14
+	}, -1)
+
+	// Test logical reduction operations
+	graphtest.RunTestGraphFn(t, "LogicalReduceOps", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = []*Node{
+			Const(g, [][]bool{{true, true, false}, {true, false, false}}),
+		}
+		outputs = []*Node{
+			ReduceLogicalAnd(inputs[0], -1),
+			ReduceLogicalOr(inputs[0], -1),
+			ReduceLogicalXor(inputs[0], -1),
+		}
+		return
+	}, []any{
+		[]bool{false, false}, // AND: true&true&false=false, true&false&false=false
+		[]bool{true, true},   // OR: true|true|false=true, true|false|false=true
+		[]bool{false, true},  // XOR: true^true^false=false, true^false^false=true
+	}, -1)
+
+	graphtest.RunTestGraphFn(t, "ReduceProduct", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = append(inputs, IotaFull(g, shapes.Make(dtypes.Float32, 2, 3)))
+		outputs = append(outputs, ReduceMultiply(inputs[0], -1))
+		return
+	}, []any{
+		[]float32{0, 60},
+	}, 0)
+
+	graphtest.RunTestGraphFn(t, "ReduceMax", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = append(inputs, IotaFull(g, shapes.Make(dtypes.Float32, 2, 3)))
+		outputs = append(outputs, ReduceMax(inputs[0], -1))
+		return
+	}, []any{
+		[]float32{2, 5},
+	}, 0)
+
+	graphtest.RunTestGraphFn(t, "ReduceMin", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = append(inputs, IotaFull(g, shapes.Make(dtypes.Float32, 2, 3)))
+		outputs = append(outputs, ReduceMin(inputs[0], -1))
+		return
+	}, []any{
+		[]float32{0, 3},
+	}, 0)
+
 }
 
 func TestReduceMean(t *testing.T) {
@@ -612,14 +673,13 @@ func TestReduceMax(t *testing.T) {
 	// float64 NaN
 	backend := graphtest.BuildTestBackend()
 
-	// float32 NaN:
 	// It works if input is passed as a constant:
 	{
 		gotT := ExecOnce(backend, func(g *Graph) *Node {
 			return ReduceMax(Const(g, []float64{math.NaN(), 1}))
 		})
 		got := tensors.ToScalar[float64](gotT)
-		require.Truef(t, math.IsNaN(float64(got)), "ReduceMax({NaN, 1}) of NaN values should be NaN, got %v", got)
+		require.Truef(t, math.IsNaN(got), "ReduceMax({NaN, 1}) of NaN values should be NaN, got %v", got)
 	}
 
 	// But it doesn't if tensor to reduce is passed as a parameter.
@@ -637,7 +697,7 @@ func TestReduceMax(t *testing.T) {
 	}
 }
 
-func TestMaskedReduceMax(t *testing.T) {
+func TestMaskedReduce(t *testing.T) {
 	graphtest.RunTestGraphFn(t, "MaskedReduceMax()",
 		func(g *Graph) (inputs, outputs []*Node) {
 			x := IotaFull(g, MakeShape(dtypes.Float32, 4, 3))
@@ -650,7 +710,17 @@ func TestMaskedReduceMax(t *testing.T) {
 			inputs = []*Node{x, mask}
 			outputs = []*Node{output}
 			return
-		}, []any{[]float32{0, 4, 8, 11}}, xslices.Epsilon)
+		}, []any{[]float32{0, 4, 8, 11}}, -1)
+
+	graphtest.RunTestGraphFn(t, "MaskedReduceMean with prefix rank mask",
+		func(g *Graph) (inputs, outputs []*Node) {
+			x := OnePlus(IotaFull(g, MakeShape(dtypes.Float32, 4, 3)))
+			mask := Const(g, []bool{true, false, false, false})
+			output := MaskedReduceMean(x, mask)
+			inputs = []*Node{x, mask}
+			outputs = []*Node{output}
+			return
+		}, []any{float32(2)}, -1)
 }
 
 func TestLogicalAllAndAny(t *testing.T) {
@@ -924,7 +994,7 @@ func TestTranspose(t *testing.T) {
 func TestInternalBatchNormForInference(t *testing.T) {
 	testFuncOneInput(t, "BatchNormInference()",
 		func(g *Graph) (input, output *Node) {
-			input = Iota(g, MakeShape(dtypes.Float32, 7, 3), 0) // Values from 0.0 to 6.0 on batch axis.
+			input = Iota(g, MakeShape(dtypes.Float32, 7, 3), 0) // Values from 0.0 to 6.0 on the batch axis.
 			scale := Const(g, []float32{1.0, 2.0, 3.0})
 			offset := Const(g, []float32{10.0, 100.0, 1000.0})
 			mean := Const(g, []float32{0.5, 0.5, 1.0})
@@ -945,7 +1015,7 @@ func TestInternalBatchNormForInference(t *testing.T) {
 func TestInternalBatchNormForTraining(t *testing.T) {
 	graphtest.RunTestGraphFn(t, "BatchNormInference()",
 		func(g *Graph) (inputs, outputs []*Node) {
-			input := Iota(g, MakeShape(dtypes.Float32, 7, 3), 0) // Values from 0.0 to 6.0 on batch axis.
+			input := Iota(g, MakeShape(dtypes.Float32, 7, 3), 0) // Values from 0.0 to 6.0 on the batch axis.
 			inputs = []*Node{input}
 			scale := Const(g, []float32{1.0, 2.0, 3.0})
 			offset := Const(g, []float32{10.0, 100.0, 1000.0})
@@ -1025,9 +1095,9 @@ func TestSqueeze(t *testing.T) {
 		}, -1)
 }
 
-func TestArgMax(t *testing.T) {
+func TestArgMinMax(t *testing.T) {
 	for _, dtype := range []dtypes.DType{dtypes.Float64, dtypes.Float32, dtypes.Int64, dtypes.Int32} {
-		graphtest.RunTestGraphFn(t, fmt.Sprintf("ArgMax()/ArgMin() for dtype %q", dtype),
+		graphtest.RunTestGraphFn(t, fmt.Sprintf("DType %q", dtype),
 			func(g *Graph) (inputs, outputs []*Node) {
 				inputs = []*Node{
 					IotaFull(g, shapes.Make(dtype, 3, 5)),
@@ -1044,6 +1114,25 @@ func TestArgMax(t *testing.T) {
 				[]uint8{0, 0, 0},
 			}, -1)
 	}
+
+	/* TODO: re-enable when switched to stablehlo backend by default.
+	   XLA backend does not support NaNs in ArgMax/ArgMin correctly.
+
+	graphtest.RunTestGraphFn(t, "NaNs",
+		func(g *Graph) (inputs, outputs []*Node) {
+			inputs = []*Node{
+				Const(g, []float64{3, -2, 7, math.NaN(), -1}),
+			}
+			outputs = []*Node{
+				ArgMax(inputs[0], 0),
+				ArgMin(inputs[0], 0, dtypes.Uint8),
+			}
+			return
+		}, []any{
+			int32(3),
+			uint8(3),
+		}, -1)
+	*/
 }
 
 func TestComplex(t *testing.T) {
@@ -1223,6 +1312,18 @@ func TestIsFinite(t *testing.T) {
 	}, 0)
 }
 
+func TestIsNaN(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "IsNaN", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = []*Node{
+			Const(g, []float64{0.0, math.NaN(), -1, math.Inf(-1), 1, math.Inf(1)}),
+		}
+		outputs = []*Node{IsNaN(inputs[0])}
+		return
+	}, []any{
+		[]bool{false, true, false, false, false, false}, // Number of bits set.
+	}, 0)
+}
+
 func TestMatMul(t *testing.T) {
 	graphtest.RunTestGraphFn(t, "MatMul 1:", func(g *Graph) (inputs, outputs []*Node) {
 		inputs = []*Node{
@@ -1268,7 +1369,7 @@ func TestMatMul(t *testing.T) {
 		{{3, 5}, {5}, {3}},
 		{{3, 5}, {5, 4}, {3, 4}},
 
-		// Notice that the complex ordering of the axes in numpy's MatMul
+		// Notice the complex ordering of the axes in numpy's MatMul.
 		{{3, 5}, {7, 5, 4}, {7, 3, 4}},
 		{{7, 3, 5}, {4, 7, 5, 4}, {4, 7, 3, 4}},
 
@@ -1278,12 +1379,14 @@ func TestMatMul(t *testing.T) {
 		{{1, 2, 6, 5}, {1, 3, 1, 5, 4}, {1, 3, 2, 6, 4}},
 	}
 	fmt.Println("Shape checking:")
-	for _, dims := range testShapes {
-		fmt.Printf("\tMatMul(%v, %v) -> %v\n", dims[0], dims[1], dims[2])
-		lhs := Ones(g, shapes.Make(dtypes.F32, dims[0]...))
-		rhs := Ones(g, shapes.Make(dtypes.F32, dims[1]...))
-		got := MatMul(lhs, rhs)
-		require.NoError(t, got.Shape().CheckDims(dims[2]...))
+	for i, dims := range testShapes {
+		t.Run(fmt.Sprintf("Shapes_%03d-%v", i, dims), func(t *testing.T) {
+			fmt.Printf("\tMatMul(%v, %v) -> %v\n", dims[0], dims[1], dims[2])
+			lhs := Ones(g, shapes.Make(dtypes.F32, dims[0]...))
+			rhs := Ones(g, shapes.Make(dtypes.F32, dims[1]...))
+			got := MatMul(lhs, rhs)
+			require.NoError(t, got.Shape().CheckDims(dims[2]...))
+		})
 	}
 }
 
@@ -1308,4 +1411,22 @@ func TestSplit(t *testing.T) {
 		[][]int32{{1}, {4}},
 		[][]int32{{2}, {5}},
 	}, 0)
+}
+
+func TestBitcast(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "Bitcast", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = append(inputs,
+			Const(g, [][]uint16{{0xbeef, 0xdead}}),
+			Const(g, uint32(0xdeadbeef)),
+			Const(g, uint32(0x7F800000)))
+		outputs = append(outputs,
+			Bitcast(inputs[0], dtypes.Uint32),
+			Bitcast(inputs[1], dtypes.Uint16),
+			Bitcast(inputs[2], dtypes.Float32))
+		return
+	}, []any{
+		[]uint32{0xdeadbeef},
+		[]uint16{0xbeef, 0xdead},
+		float32(math.Inf(1)),
+	}, -1)
 }

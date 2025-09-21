@@ -621,7 +621,7 @@ func PiecewiseConstantFunctionWithInputPerturbation(input, controlPoints, splitP
 //
 // See math derivation in the notebook saved along the discretekan package.
 func triangleDistributionCDF(x, halfBase *Node) *Node {
-	triangleHeight := Inverse(halfBase) // That will make the area under the triangle = 1.
+	triangleHeight := Reciprocal(halfBase) // That will make the area under the triangle = 1.
 	leftSide := MulScalar(Square(OnePlus(Mul(x, triangleHeight))), 0.5)
 	rightSide := OneMinus(MulScalar(Square(OneMinus(Mul(x, triangleHeight))), 0.5))
 	return Where(LessThan(x, Neg(halfBase)),

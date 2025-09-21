@@ -8,7 +8,7 @@ import (
 
 // Op represents the output of an operation, during the computation graph building time.
 //
-// It is opaque from GoMLX perspective: it passes Op as input to the other methods.
+// It is opaque from the GoMLX perspective: it passes Op as input to the other methods.
 type Op any
 
 // Builder defines the set of ops to support building a computation.
@@ -49,60 +49,7 @@ type Builder interface {
 	// even if constants, that they are passed as side inputNodes (or variables, see context package) instead.
 	Constant(flat any, dims ...int) (Op, error)
 
-	// Identity returns an Op whose output is the same as its input.
-	// It's a no-op that can serve as a place-holder.
-	Identity(x Op) (Op, error)
-
-	// ReduceWindow runs a reduction function of the type given by reductionType,
-	// it can be either ReduceMaxNode, ReduceSumNode or ReduceMultiplyNode.
-	//
-	// The parameter windowDimensions must be set and have a value for each axis.
-	// If strides is nil, it's assumed to be the same as windowDimensions -- that is, the strides jump a window at a time.
-	// If baseDilations, windowDilations are nil, they are assumed to be 1 (no dilation).
-	// If paddings is nil, they are assumed to be 0.
-	ReduceWindow(x Op, reductionType ReduceOpType, windowDimensions, strides, baseDilations, windowDilations []int, paddings [][2]int) (Op, error)
-
-	// RngBitGenerator generates the given shape filled with random bits.
-	// It takes the current random number generator (RNG) state, see RngState or RngStateFromSeed.
-	// The algorithm is hard-coded to use Philox algorithm for now.
-	//
-	// It returns the new state of the RNG and the generated values (with random bits) with the given shape.
-	RngBitGenerator(state Op, shape shapes.Shape) (newState Op, values Op, err error)
-
-	// BatchNormForInference implements Batch Norm for inference. See details in
-	// https://www.tensorflow.org/xla/operation_semantics#batchnorminference.
-	//
-	// Based on paper "Batch Normalization: Accelerating Deep Network Training by Reducing
-	// Internal Covariate Shift" (Sergey Ioffe, Christian Szegedy), https://arxiv.org/abs/1502.03167.
-	BatchNormForInference(operand, scale, offset, mean, variance Op, epsilon float32, axis int) (Op, error)
-
-	// BatchNormForTraining implements Batch Norm for training. See details in
-	// https://www.tensorflow.org/xla/operation_semantics#batchnormtraining.
-	//
-	// It returns the normalized tensor, the batchMean and the batchVariance.
-	//
-	// Based on paper "Batch Normalization: Accelerating Deep Network Training by Reducing
-	// Internal Covariate Shift" (Sergey Ioffe, Christian Szegedy), https://arxiv.org/abs/1502.03167.
-	BatchNormForTraining(operand, scale, offset Op, epsilon float32, axis int) (normalized Op, batchMean Op, batchVariance Op, err error)
-
-	// BatchNormGradient calculates the BatchNorm gradient. See details in
-	// https://openxla.org/xla/operation_semantics#batchnormgrad
-	//
-	// The gradOutput is the adjoint gradient, that is, the gradient with respect to the output of the
-	// batch normalization.
-	//
-	// It returns  as a tuple with the 3 elements.
-	//
-	// Based on paper "Batch Normalization: Accelerating Deep Network Training by Reducing
-	// Internal Covariate Shift" (Sergey Ioffe, Christian Szegedy), https://arxiv.org/abs/1502.03167.
-	BatchNormGradient(operand, scale, mean, variance, gradOutput Op, epsilon float32, axis int) (gradOperand Op, gradScale Op, gradOffset Op, err error)
-
-	// BitCount returns the number of bits that are set to one.
-	BitCount(operand Op) (Op, error)
-
-	// StandardOps include automatically generated list of operations for the Builder.
-	// Note: If StandardOps is an interface with methods, those methods would also need to be updated
-	// to return an error. However, without its definition, I can only modify the explicitly listed methods.
+	// StandardOps include all other standard math (or ML) operations.
 	StandardOps
 }
 
@@ -155,7 +102,7 @@ const (
 	FFTInverseReal
 )
 
-//go:generate go tool enumer -type FFTType -trimprefix=FFT builder.go
+//go:generate go tool enumer -type FFTType -trimprefix=FFT -output=gen_ffttype_enumer.go builder.go
 
 // ReduceOpType select among the basic types of reduction supported, see XlaBuilder.ReduceComputation.
 type ReduceOpType int
@@ -177,4 +124,4 @@ const (
 	ReduceOpMin
 )
 
-//go:generate go tool enumer -type ReduceOpType -trimprefix=ReduceOp builder.go
+//go:generate go tool enumer -type ReduceOpType -trimprefix=ReduceOp -output=gen_reduceoptype_enumer.go builder.go

@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 
+	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
 )
 
@@ -102,6 +104,7 @@ func main() {
 func processFileForTag(tag string, baseName string, lines []string) {
 	// Create the output file.
 	outputFileName := fmt.Sprintf("gen_%s_%s.go", baseName, tag)
+	outputFileName = path.Join(must.M1(os.Getwd()), outputFileName)
 	outFile, err := os.Create(outputFileName)
 	if err != nil {
 		klog.Fatalf("🚨 Failed to create output file %s: %v", outputFileName, err)
@@ -129,5 +132,5 @@ func processFileForTag(tag string, baseName string, lines []string) {
 	if err := cmd.Run(); err != nil {
 		klog.Warningf("Failed to run go fmt on %s: %v", outputFileName, err)
 	}
-	fmt.Printf("✅ Successfully generated %s\n", outputFileName)
+	fmt.Printf("✅ alternates_generator:\tsuccessfully generated %s\n", outputFileName)
 }

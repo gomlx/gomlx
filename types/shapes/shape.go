@@ -16,9 +16,8 @@
 
 // Package shapes defines Shape and DType and associated tools.
 //
-// Shape represents the shape (rank, dimensions and DType) of either a Tensor or the expected
-// shape of a node in a computation Graph. DType indicates the type of the unit element of
-// a Tensor (or its representation as a node in a computation Graph).
+// Shape represents the shape (rank, dimensions, and DType) of either a Tensor or the expected
+// shape of a node in a computation Graph. DType indicates the type of a Tensor's unit element.
 //
 // Shape and DType are used both by the concrete tensor values (see tensor package) and when
 // working on the computation graph (see graph package).
@@ -32,7 +31,7 @@
 //   - Axis: is the index of a dimension on a multidimensional Tensor. Sometimes used
 //     interchangeably with Dimension, but here we try to refer to a dimension index as "axis"
 //     (plural axes), and its size as its dimension.
-//   - Dimension: the size of a multi-dimensions Tensor in one of its axes. See example below:
+//   - Dimension: the size of a multi-dimension Tensor in one of its axes. See the example below.
 //   - DType: the data type of the unit element in a tensor. Enumeration defined in github.com/gomlx/gopjrt/dtypes
 //   - Scalar: is a shape where there are no axes (or dimensions), only a single value
 //     of the associated DType.
@@ -45,24 +44,21 @@
 // ## Asserts
 //
 // When coding ML models, one delicate part is keeping tabs on the shape of
-// the nodes of the graphs -- unfortunately there is no compile-time checking of values,
-// so validation only happens in runtime. To facilitate, and also to serve as code documentation,
+// graph nodes -- unfortunately, there is no compile-time checking of values,
+// so validation only happens in runtime. To facilitate and also to serve as code documentation,
 // this package provides two variations of _assert_ functionality. Examples:
 //
-// `AssertRank` and `AssertDims` checks that the rank and dimensions of the given
-//
-//	object (that has a `Shape` method) match, otherwise it panics. The `-1` means
-//	the dimension is unchecked (it can be anything).
-//
-// ```
+// AssertRank and AssertDims check that the rank and dimensions of the given
+// object (that has a `Shape` method) match, otherwise it panics. The `-1` means
+// the dimension is unchecked (it can be anything).
 //
 //	func modelGraph(ctx *context.Context, spec any, inputs []*Node) ([]*Node) {
-//	   _ = spec  // Not needed here, we know the dataset.
-//	   shapes.AssertRank(inputs, 2)
-//	   batchSize := inputs.Shape().Dimensions[0]
-//	   logits := layers.Dense(ctx, inputs[0], /* useBias= */ true, /* outputDim= */ 1)
-//	   shapes.AssertDims(logits, batchSize, -1)
-//	   return []*Node{logits}
+//		_ = spec  // Not needed here, we know the dataset.
+//		shapes.AssertRank(inputs, 2)
+//		batchSize := inputs.Shape().Dimensions[0]
+//		logits := layers.Dense(ctx, inputs[0], /* useBias= */ true, /* outputDim= */ 1)
+//		shapes.AssertDims(logits, batchSize, -1)
+//		return []*Node{logits}
 //	}
 //
 // ```
@@ -74,11 +70,11 @@ package shapes
 import (
 	"encoding/gob"
 	"fmt"
+	"reflect"
 	"slices"
 	"strings"
 
-	"github.com/gomlx/exceptions"
-	. "github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 )
 
@@ -87,37 +83,37 @@ import (
 //
 // Use Make to create a new shape. See example in package shapes documentation.
 type Shape struct {
-	DType       DType
+	DType       dtypes.DType
 	Dimensions  []int
 	TupleShapes []Shape // Shapes of the tuple, if this is a tuple.
 }
 
 // Make returns a Shape structure filled with the values given.
 // See MakeTuple for tuple shapes.
-func Make(dtype DType, dimensions ...int) Shape {
+func Make(dtype dtypes.DType, dimensions ...int) Shape {
 	s := Shape{Dimensions: slices.Clone(dimensions), DType: dtype}
 	for _, dim := range dimensions {
 		if dim < 0 {
-			exceptions.Panicf("shapes.Make(%s): cannot create a shape with an axis with dimension < 0", s)
+			panic(errors.Errorf("shapes.Make(%s): cannot create a shape with an axis with dimension < 0", s))
 		}
 	}
 	return s
 }
 
 // Scalar returns a scalar Shape for the given type.
-func Scalar[T Number]() Shape {
-	return Shape{DType: FromGenericsType[T]()}
+func Scalar[T dtypes.Number]() Shape {
+	return Shape{DType: dtypes.FromGenericsType[T]()}
 }
 
 // Invalid returns an invalid shape.
 //
 // Invalid().IsOk() == false.
 func Invalid() Shape {
-	return Shape{DType: InvalidDType}
+	return Shape{DType: dtypes.InvalidDType}
 }
 
 // Ok returns whether this is a valid Shape. A "zero" shape, that is just instantiating it with Shape{} will be invalid.
-func (s Shape) Ok() bool { return s.DType != InvalidDType || len(s.TupleShapes) > 0 }
+func (s Shape) Ok() bool { return s.DType != dtypes.InvalidDType || len(s.TupleShapes) > 0 }
 
 // Rank of the shape, that is, the number of dimensions.
 func (s Shape) Rank() int { return len(s.Dimensions) }
@@ -134,7 +130,7 @@ func (s Shape) Dim(axis int) int {
 		adjustedAxis += s.Rank()
 	}
 	if adjustedAxis < 0 || adjustedAxis > s.Rank() {
-		exceptions.Panicf("Shape.Dim(%d) out-of-bounds for rank %d (shape=%s)", axis, s.Rank(), s)
+		panic(errors.Errorf("Shape.Dim(%d) out-of-bounds for rank %d (shape=%s)", axis, s.Rank(), s))
 	}
 	return s.Dimensions[adjustedAxis]
 }
@@ -190,12 +186,12 @@ func (s Shape) Memory() uintptr {
 
 // MakeTuple returns a shape representing a tuple of elements with the given shapes.
 func MakeTuple(elements []Shape) Shape {
-	return Shape{DType: InvalidDType, Dimensions: nil, TupleShapes: elements}
+	return Shape{DType: dtypes.InvalidDType, Dimensions: nil, TupleShapes: elements}
 }
 
 // IsTuple returns whether the shape represents a tuple.
 func (s Shape) IsTuple() bool {
-	return s.DType == InvalidDType
+	return s.DType == dtypes.InvalidDType
 }
 
 // TupleSize returns the number of elements in the tuple, if it is a tuple.
@@ -329,7 +325,7 @@ func ConcatenateDimensions(s1, s2 Shape) (shape Shape) {
 	if s1.IsTuple() || s2.IsTuple() {
 		return
 	}
-	if s1.DType == InvalidDType || s2.DType == InvalidDType {
+	if s1.DType == dtypes.InvalidDType || s2.DType == dtypes.InvalidDType {
 		return
 	}
 	if s1.DType != s2.DType {
@@ -345,4 +341,56 @@ func ConcatenateDimensions(s1, s2 Shape) (shape Shape) {
 	copy(shape.Dimensions, s1.Dimensions)
 	copy(shape.Dimensions[s1.Rank():], s2.Dimensions)
 	return
+}
+
+// FromAnyValue attempts to convert a Go "any" value to its expected shape.
+// Accepted values are plain-old-data (POD) types (ints, floats, complex), slices (or multiple level of slices) of POD.
+//
+// It returns the expected shape.
+//
+// Example:
+//
+//	shape := shapes.FromAnyValue([][]float64{{0, 0}}) // Returns shape (Float64)[1 2]
+func FromAnyValue(v any) (shape Shape, err error) {
+	err = shapeForAnyValueRecursive(&shape, reflect.ValueOf(v), reflect.TypeOf(v))
+	return
+}
+
+func shapeForAnyValueRecursive(shape *Shape, v reflect.Value, t reflect.Type) error {
+	if t.Kind() != reflect.Slice {
+		// If it's not a slice, it must be one of the supported scalar types.
+		shape.DType = dtypes.FromGoType(t)
+		if shape.DType == dtypes.InvalidDType {
+			return errors.Errorf("cannot convert type %q to a valid GoMLX shape (maybe type not supported yet?)", t)
+		}
+		return nil
+	}
+
+	// Slice: recurse into its element type (again slices or a supported POD).
+	t = t.Elem()
+	shape.Dimensions = append(shape.Dimensions, v.Len())
+	shapePrefix := shape.Clone()
+
+	// The first element is the reference
+	if v.Len() == 0 {
+		return errors.Errorf("value with empty slice not valid for shape conversion: %T: %v -- it wouldn't be possible to figure out the inner dimensions", v.Interface(), v)
+	}
+	v0 := v.Index(0)
+	err := shapeForAnyValueRecursive(shape, v0, t)
+	if err != nil {
+		return err
+	}
+
+	// Test that other elements have the same shape as the first one.
+	for ii := 1; ii < v.Len(); ii++ {
+		shapeTest := shapePrefix.Clone()
+		err = shapeForAnyValueRecursive(&shapeTest, v.Index(ii), t)
+		if err != nil {
+			return err
+		}
+		if !shape.Equal(shapeTest) {
+			return fmt.Errorf("sub-slices have irregular shapes, found shapes %q, and %q", shape, shapeTest)
+		}
+	}
+	return nil
 }

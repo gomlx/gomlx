@@ -788,6 +788,7 @@ func ArgMin(x *Node, axis int, outputDType ...dtypes.DType) (output *Node) {
 	} else if len(outputDType) == 1 {
 		dtype = outputDType[0]
 	}
+	axis = adjustAxisToRank(axis, x.Rank())
 	return backendArgMinMax(x, axis, dtype, true)
 }
 
@@ -885,11 +886,15 @@ func MaskedReduceMean(x, mask *Node, reduceAxes ...int) *Node {
 	if mask == nil {
 		return ReduceMean(x, reduceAxes...)
 	}
+
+	if mask.Rank() < x.Rank() {
+		// Mask must have a prefix rank to X, in which case we need to expand it to get the count of masked elements right.
+		mask = BroadcastToDims(mask, x.Shape().Dimensions...)
+	}
 	zeros := ZerosLike(x)
-	ones := OnesLike(x)
 	maskedX := Where(mask, x, zeros)
 	sum := ReduceSum(maskedX, reduceAxes...)
-	denominator := Where(mask, ones, zeros)
+	denominator := ConvertDType(mask, x.DType())
 	denominator = ReduceSum(denominator, reduceAxes...)
 	denominator = Max(denominator, OnesLike(denominator))
 	denominator.stopGradient = true
