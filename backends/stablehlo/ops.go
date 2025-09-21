@@ -360,7 +360,7 @@ func (b *Builder) Conj(operand backends.Op) (backends.Op, error) {
 // the first dimension of x1.
 // These are the "contracted" dimensions.
 // The contracted dimensions of x0 and x1 must be of the same size.
-// In practice, it can be used to perform dot products between vectors, vector/matrix multiplications or
+// In practice, it can be used to perform dot products between vectors, vector/matrix multiplications, or
 // matrix/matrix multiplications.
 func (b *Builder) Dot(lhs, rhs backends.Op) (backends.Op, error) {
 	nodes, err := b.verifyAndCastValues("Dot", lhs, rhs)
@@ -721,4 +721,46 @@ func (b *Builder) DynamicUpdateSlice(operand, update backends.Op, startIndices [
 		return nil, err
 	}
 	return b.newNode(value), nil
+}
+
+// BatchNormForInference implements backends.Builder interface.
+func (b *Builder) BatchNormForInference(input, scale, offset, mean, variance backends.Op, epsilon float32, featureAxis int) (backends.Op, error) {
+	nodes, err := b.verifyAndCastValues("BatchNormForInference", input, scale, offset, mean, variance)
+	if err != nil {
+		return nil, err
+	}
+	inputN, scaleN, offsetN, meanN, varN := nodes[0], nodes[1], nodes[2], nodes[3], nodes[4]
+	value, err := stablehlo.BatchNormInference(inputN.value, scaleN.value, offsetN.value, meanN.value, varN.value, epsilon, featureAxis)
+	if err != nil {
+		return nil, err
+	}
+	return b.newNode(value), nil
+}
+
+// BatchNormForTraining implements backends.Builder interface.
+func (b *Builder) BatchNormForTraining(input, scale, offset backends.Op, epsilon float32, featureAxis int) (output, batchMean, batchVar backends.Op, err error) {
+	nodes, err := b.verifyAndCastValues("BatchNormForTraining", input, scale, offset)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	inputN, scaleN, offsetN := nodes[0], nodes[1], nodes[2]
+	outputV, batchMeanV, batchVarV, err := stablehlo.BatchNormTraining(inputN.value, scaleN.value, offsetN.value, epsilon, featureAxis)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return b.newNode(outputV), b.newNode(batchMeanV), b.newNode(batchVarV), nil
+}
+
+// BatchNormGradient implements backends.Builder interface.
+func (b *Builder) BatchNormGradient(gradOutput, input, scale, mean, variance backends.Op, epsilon float32, featureAxis int) (gradInput, gradScale, gradOffset backends.Op, err error) {
+	nodes, err := b.verifyAndCastValues("BatchNormGradient", gradOutput, input, scale, mean, variance)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	gradOutputN, inputN, scaleN, meanN, varN := nodes[0], nodes[1], nodes[2], nodes[3], nodes[4]
+	gradInputV, gradScaleV, gradOffsetV, err := stablehlo.BatchNormGradient(gradOutputN.value, inputN.value, scaleN.value, meanN.value, varN.value, epsilon, featureAxis)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return b.newNode(gradInputV), b.newNode(gradScaleV), b.newNode(gradOffsetV), nil
 }

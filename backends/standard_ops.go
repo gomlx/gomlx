@@ -30,20 +30,22 @@ type StandardOps interface {
 	ArgMinMax(x Op, axis int, outputDType dtypes.DType, isMin bool) (Op, error)
 
 	// BatchNormForInference implements batch normalization for inference.
+	//
 	// See details in https://www.tensorflow.org/xla/operation_semantics#batchnorminference.
 	//
 	// Based on the paper "Batch Normalization: Accelerating Deep Network Training by Reducing
 	// Internal Covariate Shift" (Sergey Ioffe, Christian Szegedy), https://arxiv.org/abs/1502.03167.
-	BatchNormForInference(operand, scale, offset, mean, variance Op, epsilon float32, axis int) (Op, error)
+	BatchNormForInference(operand, scale, offset, mean, variance Op, epsilon float32, featureAxis int) (Op, error)
 
-	// BatchNormForTraining implements batch normalization for training. See details in
-	// https://www.tensorflow.org/xla/operation_semantics#batchnormtraining.
+	// BatchNormForTraining implements batch normalization for training.
+	//
+	// See details in https://www.tensorflow.org/xla/operation_semantics#batchnormtraining.
 	//
 	// It returns the normalized tensor, the batchMean, and the batchVariance.
 	//
 	// Based on the paper "Batch Normalization: Accelerating Deep Network Training by Reducing
 	// Internal Covariate Shift" (Sergey Ioffe, Christian Szegedy), https://arxiv.org/abs/1502.03167.
-	BatchNormForTraining(operand, scale, offset Op, epsilon float32, axis int) (normalized Op, batchMean Op, batchVariance Op, err error)
+	BatchNormForTraining(operand, scale, offset Op, epsilon float32, featureAxis int) (normalized Op, batchMean Op, batchVariance Op, err error)
 
 	// BatchNormGradient calculates the batch normalization gradients with respect to the input, scale, and offset.
 	//
@@ -54,7 +56,7 @@ type StandardOps interface {
 	//
 	// Based on the paper "Batch Normalization: Accelerating Deep Network Training by Reducing
 	// Internal Covariate Shift" (Sergey Ioffe, Christian Szegedy), https://arxiv.org/abs/1502.03167.
-	BatchNormGradient(operand, scale, mean, variance, gradOutput Op, epsilon float32, axis int) (gradOperand Op, gradScale Op, gradOffset Op, err error)
+	BatchNormGradient(operand, scale, mean, variance, gradOutput Op, epsilon float32, featureAxis int) (gradOperand Op, gradScale Op, gradOffset Op, err error)
 
 	// Bitcast performs an elementwise bit-cast operation from a dtype to another dtype.
 	//
