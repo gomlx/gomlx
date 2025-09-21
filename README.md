@@ -9,7 +9,7 @@
 
 
 ## 📖 About **_GoMLX_**
-<img align="right" src="docs/gomlx_gopher.jpg" alt="GoMLX Gopher" width="220px"/>
+<img align="right" src="docs/gomlx_gopher2.png" alt="GoMLX Gopher" width="220px"/>
 
 **GoMLX** is an easy-to-use set of Machine Learning and generic math libraries and tools. 
 It can be seen as a **PyTorch/Jax/TensorFlow for Go**.
