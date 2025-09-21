@@ -375,6 +375,9 @@ func (b *Builder) Dot(lhs, rhs backends.Op) (backends.Op, error) {
 	} else if lhsNode.shape.Rank() == 2 && rhsNode.shape.Rank() == 1 {
 		// Contract rhs vector.
 		output, err = b.DotGeneral(lhsNode, []int{1}, []int{}, rhsNode, []int{0}, []int{})
+	} else if lhsNode.shape.Rank() == 1 && rhsNode.shape.Rank() == 2 {
+		// Contract lhs vector.
+		output, err = b.DotGeneral(lhsNode, []int{0}, []int{}, rhsNode, []int{0}, []int{})
 	} else if lhsNode.shape.Rank() == 2 && rhsNode.shape.Rank() == 2 {
 		// Traditional matrix multiplication:
 		output, err = b.DotGeneral(lhsNode, []int{1}, []int{}, rhsNode, []int{0}, []int{})

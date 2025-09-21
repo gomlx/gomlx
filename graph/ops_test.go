@@ -1379,12 +1379,14 @@ func TestMatMul(t *testing.T) {
 		{{1, 2, 6, 5}, {1, 3, 1, 5, 4}, {1, 3, 2, 6, 4}},
 	}
 	fmt.Println("Shape checking:")
-	for _, dims := range testShapes {
-		fmt.Printf("\tMatMul(%v, %v) -> %v\n", dims[0], dims[1], dims[2])
-		lhs := Ones(g, shapes.Make(dtypes.F32, dims[0]...))
-		rhs := Ones(g, shapes.Make(dtypes.F32, dims[1]...))
-		got := MatMul(lhs, rhs)
-		require.NoError(t, got.Shape().CheckDims(dims[2]...))
+	for i, dims := range testShapes {
+		t.Run(fmt.Sprintf("Shapes_%03d-%v", i, dims), func(t *testing.T) {
+			fmt.Printf("\tMatMul(%v, %v) -> %v\n", dims[0], dims[1], dims[2])
+			lhs := Ones(g, shapes.Make(dtypes.F32, dims[0]...))
+			rhs := Ones(g, shapes.Make(dtypes.F32, dims[1]...))
+			got := MatMul(lhs, rhs)
+			require.NoError(t, got.Shape().CheckDims(dims[2]...))
+		})
 	}
 }
 
