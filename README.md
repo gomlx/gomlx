@@ -83,6 +83,9 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
 > - Simpler installation (only PJRT plugins needed)
 > - Wider hardware compatibility (ROCm, Apple Metal, Intel)
 > - Access to new functionality, only made available to StableHLO (and not the older "XlaBuilder")
+> - It can be included by importing `_ "github.com/gomlx/gomlx/backends/stablehlo"`, or if you are already importing
+>   the default `_ "github.com/gomlx/gomlx/backends/default"` backends, add the `-tags=stablehlo` to your Go build/run
+>   command, and it will also be included.
 
 * Converting ONNX models to GoMLX with [onnx-gomlx](https://github.com/gomlx/onnx-gomlx): both as an alternative for `onnxruntime` (leveraging XLA),
   but also to further fine-tune models. See also [go-huggingface](https://github.com/gomlx/go-huggingface) to easily download ONNX model files from HuggingFace.
