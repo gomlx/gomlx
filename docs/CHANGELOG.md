@@ -1,6 +1,6 @@
 # GoMLX changelog
 
-# Next: alpha StableHLO release
+# v0.23.0: 2025/09/21: beta `stablehlo` backend release
 
 * Package `shapes`:
   * Added `FromAnyValue`: extract shape from a Go type.

@@ -15,15 +15,15 @@ require (
 	github.com/go-gota/gota v0.12.0
 	github.com/gomlx/bsplines v0.2.0
 	github.com/gomlx/exceptions v0.0.3
-	github.com/gomlx/gopjrt v0.8.1-0.20250908142721-c860188f1599
-	github.com/gomlx/stablehlo v0.0.0-20250909065055-f7c89537a184
+	github.com/gomlx/gopjrt v0.8.1
+	github.com/gomlx/stablehlo v0.0.1
 	github.com/google/uuid v1.6.0
 	github.com/janpfeifer/gonb v0.11.1
 	github.com/janpfeifer/must v0.2.0
 	github.com/muesli/termenv v0.16.0
 	github.com/pkg/errors v0.9.1
 	github.com/schollz/progressbar/v3 v3.18.0
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.1
 	github.com/x448/float16 v0.8.4
 	golang.org/x/exp v0.0.0-20250819193227-8b4c13bb791b
 	gonum.org/v1/plot v0.15.2
