@@ -133,7 +133,7 @@ func (b *Builder) Slice(x backends.Op, starts, limits, strides []int) (backends.
 func compareTypeForDType(dtype dtypes.DType) stablehlotypes.ComparisonType {
 	// Find compareType
 	compareType := stablehlotypes.CompareFloat
-	if !dtype.IsFloat() {
+	if !dtype.IsFloat() && !dtype.IsComplex() {
 		if dtype.IsUnsigned() {
 			compareType = stablehlotypes.CompareUnsigned
 		} else {
