@@ -364,9 +364,7 @@ func (b *Builder) ArgMinMax(x backends.Op, axis int, outputDType dtypes.DType, i
 		} else {
 			isLeft, err = stablehlo.Compare(lhsValue, rhsValue, stablehlotypes.CompareGT, compareType)
 		}
-		if err != nil {
-			return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
-		}
+
 		if valuesDType.IsFloat() {
 			// We want to make sure to select NaNs if either side is NaN.
 			// - if Rhs is NaN, then isLeft is false already, so we don't need to do anything.
@@ -380,14 +378,40 @@ func (b *Builder) ArgMinMax(x backends.Op, axis int, outputDType dtypes.DType, i
 				return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
 			}
 		}
-		index, err := stablehlo.Select(isLeft, lhsIndex, rhsIndex)
+
+		// Ties breaking if values are the same.
+		isEqual, err := stablehlo.Compare(lhsValue, rhsValue, stablehlotypes.CompareEQ, compareType)
 		if err != nil {
 			return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
 		}
-		value, err := stablehlo.Select(isLeft, lhsValue, rhsValue)
+
+		idxIfEqual, err := stablehlo.Minimum(lhsIndex, rhsIndex)
 		if err != nil {
 			return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
 		}
+
+		// NEW: Nested select to implement the full logic:
+		// If isLeft is true, lhs wins.
+		// Otherwise, check if it's a tie. If so, use the minimum index.
+		// Otherwise, rhs must be the winner.
+		indexIfRightOrTie, err := stablehlo.Select(isEqual, idxIfEqual, rhsIndex)
+		if err != nil {
+			return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
+		}
+		index, err := stablehlo.Select(isLeft, lhsIndex, indexIfRightOrTie)
+		if err != nil {
+			return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
+		}
+		var value *stablehlo.Value
+		if isMin {
+			value, err = stablehlo.Minimum(lhsValue, rhsValue)
+		} else {
+			value, err = stablehlo.Maximum(lhsValue, rhsValue)
+		}
+		if err != nil {
+			return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
+		}
+
 		err = reduceFn.Return(index, value)
 		if err != nil {
 			return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
