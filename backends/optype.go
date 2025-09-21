@@ -7,7 +7,7 @@ package backends
 // github.com/gomlx/gomlx/graph) and fallback to backends that don't support the specialized op.
 type OpType int
 
-//go:generate go tool enumer -type=OpType -trimprefix=OpType optype.go
+//go:generate go tool enumer -type=OpType -trimprefix=OpType -output=gen_optype_enumer.go optype.go
 
 const (
 	OpTypeInvalid OpType = iota

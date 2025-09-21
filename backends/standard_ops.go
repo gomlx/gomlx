@@ -7,6 +7,7 @@ import (
 
 // StandardOps lists the bulk of the operations that a backends.Builder must support.
 type StandardOps interface {
+
 	// Abs returns the Op that represents the output of the corresponding operation.
 	Abs(x Op) (Op, error)
 
@@ -28,6 +29,34 @@ type StandardOps interface {
 	//	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=0, isMin=false) -> {0, 1, 0} // (it choose the 2, 4 and 7)
 	ArgMinMax(x Op, axis int, outputDType dtypes.DType, isMin bool) (Op, error)
 
+	// BatchNormForInference implements Batch Norm for inference. See details in
+	// https://www.tensorflow.org/xla/operation_semantics#batchnorminference.
+	//
+	// Based on paper "Batch Normalization: Accelerating Deep Network Training by Reducing
+	// Internal Covariate Shift" (Sergey Ioffe, Christian Szegedy), https://arxiv.org/abs/1502.03167.
+	BatchNormForInference(operand, scale, offset, mean, variance Op, epsilon float32, axis int) (Op, error)
+
+	// BatchNormForTraining implements Batch Norm for training. See details in
+	// https://www.tensorflow.org/xla/operation_semantics#batchnormtraining.
+	//
+	// It returns the normalized tensor, the batchMean and the batchVariance.
+	//
+	// Based on paper "Batch Normalization: Accelerating Deep Network Training by Reducing
+	// Internal Covariate Shift" (Sergey Ioffe, Christian Szegedy), https://arxiv.org/abs/1502.03167.
+	BatchNormForTraining(operand, scale, offset Op, epsilon float32, axis int) (normalized Op, batchMean Op, batchVariance Op, err error)
+
+	// BatchNormGradient calculates the BatchNorm gradient. See details in
+	// https://openxla.org/xla/operation_semantics#batchnormgrad
+	//
+	// The gradOutput is the adjoint gradient, that is, the gradient with respect to the output of the
+	// batch normalization.
+	//
+	// It returns  as a tuple with the 3 elements.
+	//
+	// Based on paper "Batch Normalization: Accelerating Deep Network Training by Reducing
+	// Internal Covariate Shift" (Sergey Ioffe, Christian Szegedy), https://arxiv.org/abs/1502.03167.
+	BatchNormGradient(operand, scale, mean, variance, gradOutput Op, epsilon float32, axis int) (gradOperand Op, gradScale Op, gradOffset Op, err error)
+
 	// Bitcast performs an elementwise bit-cast operation from a dtype to another dtype.
 	//
 	// The Bitcast doesn't "convert", rather it just reinterprets the bits from x.DType() to the targetDType.
@@ -44,6 +73,10 @@ type StandardOps interface {
 	// E.g: Bitcast([1]uint32{0xdeadbeef}, dtypes.UInt16) -> [1][2]uint16{{0xbeef, 0xdead}} // Little-endian encoding.
 	Bitcast(x Op, targetDType dtypes.DType) (Op, error)
 
+	// BitCount returns the number of bits that are set to one.
+	// Also known as Population Count ("Popcnt") or Hamming Weight.
+	BitCount(operand Op) (Op, error)
+	
 	// BitwiseAnd returns the element-wise bitwise AND operation.
 	BitwiseAnd(lhs, rhs Op) (Op, error)
 
@@ -297,6 +330,10 @@ type StandardOps interface {
 	// The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
 	GreaterThanTotalOrder(lhs, rhs Op) (Op, error)
 
+	// Identity returns an Op whose output is the same as its input.
+	// It's a no-op that can serve as a place-holder.
+	Identity(x Op) (Op, error)
+
 	// Imag returns the imaginary part of a complex number. It returns 0 if the x is a float number.
 	Imag(x Op) (Op, error)
 
@@ -474,6 +511,13 @@ type StandardOps interface {
 	// the value indexed at `i` will be swapped with the value at indexed `(dimension_size - 1 - i)`.
 	// The shape remains the same.
 	Reverse(x Op, axes ...int) (Op, error)
+
+	// RngBitGenerator generates the given shape filled with random bits.
+	//
+	// It takes as input a state (usually [3]uint64) and returns the updated state and the generated values (with random bits).
+	//
+	// Currently, the backend only supports the Philox algorithm. See https://dl.acm.org/doi/10.1145/2063384.2063405
+	RngBitGenerator(state Op, shape shapes.Shape) (newState Op, values Op, err error)
 
 	// Round returns the Op that represents the output of the corresponding operation.
 	Round(x Op) (Op, error)
