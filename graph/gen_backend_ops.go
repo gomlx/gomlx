@@ -443,6 +443,7 @@ func (ni *nodeInputsBitCount) String() string {
 }
 
 // BitCount returns the number of bits that are set to one.
+// Also known as Population Count ("Popcnt") or Hamming Weight.
 func BitCount(operand *Node) (node *Node) {
 	inputNodes := []*Node{operand}
 	g := validateBuildingGraphFromInputs(inputNodes...)

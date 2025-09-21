@@ -8,6 +8,7 @@ import (
 )
 
 // BitCount returns the number of bits that are set to one.
+// Also known as Population Count ("Popcnt") or Hamming Weight.
 func (b *Builder) BitCount(operand backends.Op) (backends.Op, error) {
 	nodes, err := b.verifyAndCastValues("BitCount", operand)
 	if err != nil {

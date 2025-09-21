@@ -21,39 +21,38 @@ type StandardOps interface {
 	// It's a form of reduction on the given axis, and that axis goes away.
 	// So the rank of the result is one less than the rank of x.
 	//
-	// If there is a NaN in the slice being examined, it is chosen for ArgMinMax -- this is inline with Jax, TensorFlow and PyTorch.
+	// If there is a NaN in the slice being examined, it is chosen for ArgMinMax -- this is inline with Jax, TensorFlow, and PyTorch.
 	//
 	// Examples:
 	//
 	//	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=1, isMin=true) -> {1, 0}  // (it chooses the 0 and the -3)
-	//	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=0, isMin=false) -> {0, 1, 0} // (it choose the 2, 4 and 7)
+	//	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=0, isMin=false) -> {0, 1, 0} // (it chooses the 2, 4, and 7)
 	ArgMinMax(x Op, axis int, outputDType dtypes.DType, isMin bool) (Op, error)
 
-	// BatchNormForInference implements Batch Norm for inference. See details in
-	// https://www.tensorflow.org/xla/operation_semantics#batchnorminference.
+	// BatchNormForInference implements batch normalization for inference.
+	// See details in https://www.tensorflow.org/xla/operation_semantics#batchnorminference.
 	//
-	// Based on paper "Batch Normalization: Accelerating Deep Network Training by Reducing
+	// Based on the paper "Batch Normalization: Accelerating Deep Network Training by Reducing
 	// Internal Covariate Shift" (Sergey Ioffe, Christian Szegedy), https://arxiv.org/abs/1502.03167.
 	BatchNormForInference(operand, scale, offset, mean, variance Op, epsilon float32, axis int) (Op, error)
 
-	// BatchNormForTraining implements Batch Norm for training. See details in
+	// BatchNormForTraining implements batch normalization for training. See details in
 	// https://www.tensorflow.org/xla/operation_semantics#batchnormtraining.
 	//
-	// It returns the normalized tensor, the batchMean and the batchVariance.
+	// It returns the normalized tensor, the batchMean, and the batchVariance.
 	//
-	// Based on paper "Batch Normalization: Accelerating Deep Network Training by Reducing
+	// Based on the paper "Batch Normalization: Accelerating Deep Network Training by Reducing
 	// Internal Covariate Shift" (Sergey Ioffe, Christian Szegedy), https://arxiv.org/abs/1502.03167.
 	BatchNormForTraining(operand, scale, offset Op, epsilon float32, axis int) (normalized Op, batchMean Op, batchVariance Op, err error)
 
-	// BatchNormGradient calculates the BatchNorm gradient. See details in
-	// https://openxla.org/xla/operation_semantics#batchnormgrad
+	// BatchNormGradient calculates the batch normalization gradients with respect to the input, scale, and offset.
 	//
-	// The gradOutput is the adjoint gradient, that is, the gradient with respect to the output of the
+	// See details in https://openxla.org/xla/operation_semantics#batchnormgrad
+	//
+	// The gradOutput is the adjoint gradient (the "V" in "VJP"), that is, the gradient with respect to the output of the
 	// batch normalization.
 	//
-	// It returns  as a tuple with the 3 elements.
-	//
-	// Based on paper "Batch Normalization: Accelerating Deep Network Training by Reducing
+	// Based on the paper "Batch Normalization: Accelerating Deep Network Training by Reducing
 	// Internal Covariate Shift" (Sergey Ioffe, Christian Szegedy), https://arxiv.org/abs/1502.03167.
 	BatchNormGradient(operand, scale, mean, variance, gradOutput Op, epsilon float32, axis int) (gradOperand Op, gradScale Op, gradOffset Op, err error)
 
@@ -76,7 +75,7 @@ type StandardOps interface {
 	// BitCount returns the number of bits that are set to one.
 	// Also known as Population Count ("Popcnt") or Hamming Weight.
 	BitCount(operand Op) (Op, error)
-	
+
 	// BitwiseAnd returns the element-wise bitwise AND operation.
 	BitwiseAnd(lhs, rhs Op) (Op, error)
 
@@ -490,7 +489,7 @@ type StandardOps interface {
 	ReduceSum(x Op, axes ...int) (Op, error)
 
 	// ReduceWindow runs a reduction function of the type given by reductionType,
-	// it can be either ReduceMaxNode, ReduceSumNode or ReduceMultiplyNode.
+	// it can be either ReduceMaxNode, ReduceSumNode, or ReduceMultiplyNode.
 	//
 	// The parameter windowDimensions must be set and have a value for each axis.
 	// If strides is nil, it's assumed to be the same as windowDimensions -- that is, the strides jump a window at a time.

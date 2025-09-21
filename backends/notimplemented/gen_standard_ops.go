@@ -25,17 +25,18 @@ func (b Builder) Add(lhs backends.Op, rhs backends.Op) (backends.Op, error) {
 // It's a form of reduction on the given axis, and that axis goes away.
 // So the rank of the result is one less than the rank of x.
 //
-// If there is a NaN in the slice being examined, it is chosen for ArgMinMax -- this is inline with Jax, TensorFlow and PyTorch.
+// If there is a NaN in the slice being examined, it is chosen for ArgMinMax -- this is inline with Jax, TensorFlow, and PyTorch.
 //
 // Examples:
 //
 //	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=1, isMin=true) -> {1, 0}  // (it chooses the 0 and the -3)
-//	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=0, isMin=false) -> {0, 1, 0} // (it choose the 2, 4 and 7)
+//	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=0, isMin=false) -> {0, 1, 0} // (it choose the 2, 4, and 7)
 func (b Builder) ArgMinMax(x backends.Op, axis int, outputDType dtypes.DType, isMin bool) (backends.Op, error) {
 	return nil, b.baseErrFn(backends.OpTypeArgMinMax)
 }
 
 // BitCount returns the number of bits that are set to one.
+// Also known as Population Count ("Popcnt") or Hamming Weight.
 func (b Builder) BitCount(operand backends.Op) (backends.Op, error) {
 	return nil, b.baseErrFn(backends.OpTypeBitCount)
 }
