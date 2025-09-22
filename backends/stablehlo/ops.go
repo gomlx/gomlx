@@ -441,14 +441,14 @@ func (b *Builder) Where(condition, onTrue, onFalse backends.Op) (backends.Op, er
 		outputDims = onFalseN.shape.Dimensions
 	}
 	if onTrueN.shape.IsScalar() && len(outputDims) > 0 {
-		onTrue, err = b.Broadcast(onTrue, outputDims...)
+		onTrue, err = b.BroadcastInDim(onTrue, shapes.Make(onTrueN.shape.DType, outputDims...), nil)
 		if err != nil {
 			return nil, errors.WithMessage(err, "while broadcasting onTrue for op Where()")
 		}
 		onTrueN = onTrue.(*Node)
 	}
 	if onFalseN.shape.IsScalar() && len(outputDims) > 0 {
-		onFalse, err = b.Broadcast(onFalse, outputDims...)
+		onFalse, err = b.BroadcastInDim(onFalse, shapes.Make(onTrueN.shape.DType, outputDims...), nil)
 		if err != nil {
 			return nil, errors.WithMessage(err, "while broadcasting onFalse for op Where()")
 		}
