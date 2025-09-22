@@ -63,33 +63,6 @@ func (b *Builder) BroadcastInDim(x backends.Op, outputShape shapes.Shape, broadc
 	return b.newNode(value), nil
 }
 
-// Broadcast implements the backends.Builder interface.
-func (b *Builder) Broadcast(x backends.Op, prefixDims ...int) (backends.Op, error) {
-	nodes, err := b.verifyAndCastValues("Broadcast", x)
-	if err != nil {
-		return nil, err
-	}
-	if len(prefixDims) == 0 {
-		return x, nil
-	}
-
-	xNode := nodes[0]
-	shape := xNode.shape
-	newDims := make([]int, shape.Rank()+len(prefixDims))
-	copy(newDims, prefixDims)
-	copy(newDims[len(prefixDims):], shape.Dimensions)
-	outputShape := shapes.Make(shape.DType, newDims...)
-	broadcastAxes := make([]int, shape.Rank())
-	for i := range shape.Rank() {
-		broadcastAxes[i] = i + len(prefixDims)
-	}
-	value, err := stablehlo.BroadcastInDim(xNode.value, ShapeToStableHLO(outputShape), broadcastAxes)
-	if err != nil {
-		return nil, err
-	}
-	return b.newNode(value), nil
-}
-
 // Iota implements backends.Builder interface.
 func (b *Builder) Iota(shape shapes.Shape, iotaAxis int) (backends.Op, error) {
 	value, err := b.fn.Iota(ShapeToStableHLO(shape), iotaAxis)

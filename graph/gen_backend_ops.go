@@ -29,7 +29,6 @@ const (
 	NodeTypeBitwiseNot
 	NodeTypeBitwiseOr
 	NodeTypeBitwiseXor
-	NodeTypeBroadcast
 	NodeTypeBroadcastInDim
 	NodeTypeCeil
 	NodeTypeClamp
@@ -254,13 +253,13 @@ func backendArgMinMax(x *Node, axis int, outputDType dtypes.DType, isMin bool) (
 
 // nodeInputsBatchNormForInference holds the inputs used for the call to backends.BatchNormForInference.
 type nodeInputsBatchNormForInference struct {
-	operand  *Node
-	scale    *Node
-	offset   *Node
-	mean     *Node
-	variance *Node
-	epsilon  float32
-	axis     int
+	operand     *Node
+	scale       *Node
+	offset      *Node
+	mean        *Node
+	variance    *Node
+	epsilon     float32
+	featureAxis int
 }
 
 // Type implements the interface NodeInputs.
@@ -270,7 +269,7 @@ func (ni *nodeInputsBatchNormForInference) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsBatchNormForInference) String() string {
-	return fmt.Sprintf("%s(operand=[#%d], scale=[#%d], offset=[#%d], mean=[#%d], variance=[#%d], epsilon=%v, axis=%v)",
+	return fmt.Sprintf("%s(operand=[#%d], scale=[#%d], offset=[#%d], mean=[#%d], variance=[#%d], epsilon=%v, featureAxis=%v)",
 		ni.Type(),
 		ni.operand.Id(),
 		ni.scale.Id(),
@@ -278,24 +277,24 @@ func (ni *nodeInputsBatchNormForInference) String() string {
 		ni.mean.Id(),
 		ni.variance.Id(),
 		ni.epsilon,
-		ni.axis,
+		ni.featureAxis,
 	)
 }
 
 // backendBatchNormForInference is a Graph wrapper for the backend.Builder.BatchNormForInference method.
-func backendBatchNormForInference(operand *Node, scale *Node, offset *Node, mean *Node, variance *Node, epsilon float32, axis int) (node *Node) {
+func backendBatchNormForInference(operand *Node, scale *Node, offset *Node, mean *Node, variance *Node, epsilon float32, featureAxis int) (node *Node) {
 	inputNodes := []*Node{operand, scale, offset, mean, variance}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsBatchNormForInference{
-		operand:  operand,
-		scale:    scale,
-		offset:   offset,
-		mean:     mean,
-		variance: variance,
-		epsilon:  epsilon,
-		axis:     axis,
+		operand:     operand,
+		scale:       scale,
+		offset:      offset,
+		mean:        mean,
+		variance:    variance,
+		epsilon:     epsilon,
+		featureAxis: featureAxis,
 	}
-	result, err := g.builder.BatchNormForInference(operand.outputOps[0], scale.outputOps[0], offset.outputOps[0], mean.outputOps[0], variance.outputOps[0], inputs.epsilon, inputs.axis)
+	result, err := g.builder.BatchNormForInference(operand.outputOps[0], scale.outputOps[0], offset.outputOps[0], mean.outputOps[0], variance.outputOps[0], inputs.epsilon, inputs.featureAxis)
 	if err != nil {
 		panic(err)
 	}
@@ -312,11 +311,11 @@ func backendBatchNormForInference(operand *Node, scale *Node, offset *Node, mean
 
 // nodeInputsBatchNormForTraining holds the inputs used for the call to backends.BatchNormForTraining.
 type nodeInputsBatchNormForTraining struct {
-	operand *Node
-	scale   *Node
-	offset  *Node
-	epsilon float32
-	axis    int
+	operand     *Node
+	scale       *Node
+	offset      *Node
+	epsilon     float32
+	featureAxis int
 }
 
 // Type implements the interface NodeInputs.
@@ -326,28 +325,28 @@ func (ni *nodeInputsBatchNormForTraining) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsBatchNormForTraining) String() string {
-	return fmt.Sprintf("%s(operand=[#%d], scale=[#%d], offset=[#%d], epsilon=%v, axis=%v)",
+	return fmt.Sprintf("%s(operand=[#%d], scale=[#%d], offset=[#%d], epsilon=%v, featureAxis=%v)",
 		ni.Type(),
 		ni.operand.Id(),
 		ni.scale.Id(),
 		ni.offset.Id(),
 		ni.epsilon,
-		ni.axis,
+		ni.featureAxis,
 	)
 }
 
 // backendBatchNormForTraining is a Graph wrapper for the backend.Builder.BatchNormForTraining method.
-func backendBatchNormForTraining(operand *Node, scale *Node, offset *Node, epsilon float32, axis int) (normalized, batchMean, batchVariance *Node) {
+func backendBatchNormForTraining(operand *Node, scale *Node, offset *Node, epsilon float32, featureAxis int) (normalized, batchMean, batchVariance *Node) {
 	inputNodes := []*Node{operand, scale, offset}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsBatchNormForTraining{
-		operand: operand,
-		scale:   scale,
-		offset:  offset,
-		epsilon: epsilon,
-		axis:    axis,
+		operand:     operand,
+		scale:       scale,
+		offset:      offset,
+		epsilon:     epsilon,
+		featureAxis: featureAxis,
 	}
-	v0, v1, v2, err := g.builder.BatchNormForTraining(operand.outputOps[0], scale.outputOps[0], offset.outputOps[0], inputs.epsilon, inputs.axis)
+	v0, v1, v2, err := g.builder.BatchNormForTraining(operand.outputOps[0], scale.outputOps[0], offset.outputOps[0], inputs.epsilon, inputs.featureAxis)
 	if err != nil {
 		panic(err)
 	}
@@ -366,13 +365,13 @@ func backendBatchNormForTraining(operand *Node, scale *Node, offset *Node, epsil
 
 // nodeInputsBatchNormGradient holds the inputs used for the call to backends.BatchNormGradient.
 type nodeInputsBatchNormGradient struct {
-	operand    *Node
-	scale      *Node
-	mean       *Node
-	variance   *Node
-	gradOutput *Node
-	epsilon    float32
-	axis       int
+	operand     *Node
+	scale       *Node
+	mean        *Node
+	variance    *Node
+	gradOutput  *Node
+	epsilon     float32
+	featureAxis int
 }
 
 // Type implements the interface NodeInputs.
@@ -382,7 +381,7 @@ func (ni *nodeInputsBatchNormGradient) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsBatchNormGradient) String() string {
-	return fmt.Sprintf("%s(operand=[#%d], scale=[#%d], mean=[#%d], variance=[#%d], gradOutput=[#%d], epsilon=%v, axis=%v)",
+	return fmt.Sprintf("%s(operand=[#%d], scale=[#%d], mean=[#%d], variance=[#%d], gradOutput=[#%d], epsilon=%v, featureAxis=%v)",
 		ni.Type(),
 		ni.operand.Id(),
 		ni.scale.Id(),
@@ -390,24 +389,24 @@ func (ni *nodeInputsBatchNormGradient) String() string {
 		ni.variance.Id(),
 		ni.gradOutput.Id(),
 		ni.epsilon,
-		ni.axis,
+		ni.featureAxis,
 	)
 }
 
 // backendBatchNormGradient is a Graph wrapper for the backend.Builder.BatchNormGradient method.
-func backendBatchNormGradient(operand *Node, scale *Node, mean *Node, variance *Node, gradOutput *Node, epsilon float32, axis int) (gradOperand, gradScale, gradOffset *Node) {
+func backendBatchNormGradient(operand *Node, scale *Node, mean *Node, variance *Node, gradOutput *Node, epsilon float32, featureAxis int) (gradOperand, gradScale, gradOffset *Node) {
 	inputNodes := []*Node{operand, scale, mean, variance, gradOutput}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsBatchNormGradient{
-		operand:    operand,
-		scale:      scale,
-		mean:       mean,
-		variance:   variance,
-		gradOutput: gradOutput,
-		epsilon:    epsilon,
-		axis:       axis,
+		operand:     operand,
+		scale:       scale,
+		mean:        mean,
+		variance:    variance,
+		gradOutput:  gradOutput,
+		epsilon:     epsilon,
+		featureAxis: featureAxis,
 	}
-	v0, v1, v2, err := g.builder.BatchNormGradient(operand.outputOps[0], scale.outputOps[0], mean.outputOps[0], variance.outputOps[0], gradOutput.outputOps[0], inputs.epsilon, inputs.axis)
+	v0, v1, v2, err := g.builder.BatchNormGradient(operand.outputOps[0], scale.outputOps[0], mean.outputOps[0], variance.outputOps[0], gradOutput.outputOps[0], inputs.epsilon, inputs.featureAxis)
 	if err != nil {
 		panic(err)
 	}
@@ -676,49 +675,6 @@ func BitwiseXor(lhs *Node, rhs *Node) (node *Node) {
 		rhs: rhs,
 	}
 	result, err := g.builder.BitwiseXor(lhs.outputOps[0], rhs.outputOps[0])
-	if err != nil {
-		panic(err)
-	}
-	node = &Node{
-		outputOps:    []backends.Op{result},
-		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
-		graph:        g,
-		inputs:       inputs,
-		inputNodes:   inputNodes,
-	}
-	g.registerNode(node)
-	return
-}
-
-// nodeInputsBroadcast holds the inputs used for the call to backends.Broadcast.
-type nodeInputsBroadcast struct {
-	x          *Node
-	prefixDims []int
-}
-
-// Type implements the interface NodeInputs.
-func (ni *nodeInputsBroadcast) Type() NodeType {
-	return NodeTypeBroadcast
-}
-
-// String implements the interface NodeInputs.
-func (ni *nodeInputsBroadcast) String() string {
-	return fmt.Sprintf("%s(x=[#%d], prefixDims=%v)",
-		ni.Type(),
-		ni.x.Id(),
-		ni.prefixDims,
-	)
-}
-
-// backendBroadcast is a Graph wrapper for the backend.Builder.Broadcast method.
-func backendBroadcast(x *Node, prefixDims ...int) (node *Node) {
-	inputNodes := []*Node{x}
-	g := validateBuildingGraphFromInputs(inputNodes...)
-	inputs := &nodeInputsBroadcast{
-		x:          x,
-		prefixDims: slices.Clone(prefixDims),
-	}
-	result, err := g.builder.Broadcast(x.outputOps[0], inputs.prefixDims...)
 	if err != nil {
 		panic(err)
 	}

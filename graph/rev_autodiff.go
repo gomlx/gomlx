@@ -932,7 +932,7 @@ func batchNormForTrainingVJP(node *Node, vjps []*Node, _ shapes.Shape) []*Node {
 	//variance.SetLogged("variance")
 	//fmt.Printf("batchNormForTrainingVJP: epsilon=%g\n", params.epsilon)
 	gradOperand, gradScale, gradOffset := InternalBatchNormGradient(
-		params.operand, params.scale, mean, variance, gradOutput, params.epsilon, params.axis)
+		params.operand, params.scale, mean, variance, gradOutput, params.epsilon, params.featureAxis)
 	return []*Node{gradOperand, gradScale, gradOffset}
 }
 
@@ -948,7 +948,7 @@ func transposeVJP(node, v *Node, _ shapes.Shape) []*Node {
 	return []*Node{vjp}
 }
 
-// broadcastInDimVJP generates the "vector dot jacobian" w.r.t. the input of broadcast.
+// broadcastInDimVJP generates the "vector dot jacobian" w.r.t. the input of BroadcastInDim.
 // One just needs to reduce the broadcast dimensions.
 func broadcastInDimVJP(node, v *Node, _ shapes.Shape) []*Node {
 	params := node.inputs.(*nodeInputsBroadcastInDim)

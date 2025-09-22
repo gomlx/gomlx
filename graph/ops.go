@@ -372,8 +372,17 @@ func Mod(x, y *Node) *Node {
 // The new dimensions id into copies of the operand, i.e.
 //
 //	output[i0, ..., iN, j0, ..., jM] = operand[j0, ..., jM]
-func BroadcastPrefix(x *Node, dims ...int) *Node {
-	return backendBroadcast(x, dims...)
+func BroadcastPrefix(x *Node, prefixDims ...int) *Node {
+	shape := x.Shape()
+	newDims := make([]int, shape.Rank()+len(prefixDims))
+	copy(newDims, prefixDims)
+	copy(newDims[len(prefixDims):], shape.Dimensions)
+	broadcastAxes := make([]int, shape.Rank())
+	for i := range shape.Rank() {
+		broadcastAxes[i] = i + len(prefixDims)
+	}
+	outputShape := shapes.Make(x.DType(), newDims...)
+	return backendBroadcastInDim(x, outputShape, broadcastAxes)
 }
 
 // ExpandAndBroadcast combines ExpandAxes and broadcast of axes of `x`, the returned shape will be newDimensions.
