@@ -6,6 +6,8 @@
   * Removed op `Broadcast`: it was not needed, since `BroadcastInDim` is a superset.
 * Package `graph`:
   * Backprop of `BroadcastPrefix` was not defined. Now that is uses `BroadcastInDim` instead, it works.
+* Package `simplego`:
+  * Only log ConvGeneral statistics on error.
 
 # v0.23.0: 2025/09/21: beta `stablehlo` backend release
 
