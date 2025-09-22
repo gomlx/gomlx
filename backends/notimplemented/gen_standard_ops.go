@@ -30,7 +30,7 @@ func (b Builder) Add(lhs backends.Op, rhs backends.Op) (backends.Op, error) {
 // Examples:
 //
 //	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=1, isMin=true) -> {1, 0}  // (it chooses the 0 and the -3)
-//	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=0, isMin=false) -> {0, 1, 0} // (it choose the 2, 4, and 7)
+//	ArgMinMax(x={{2, 0, 7}, {-3, 4, 2}}, axis=0, isMin=false) -> {0, 1, 0} // (it chooses the 2, 4, and 7)
 func (b Builder) ArgMinMax(x backends.Op, axis int, outputDType dtypes.DType, isMin bool) (backends.Op, error) {
 	return nil, b.baseErrFn(backends.OpTypeArgMinMax)
 }
@@ -77,19 +77,6 @@ func (b Builder) BitwiseOr(lhs backends.Op, rhs backends.Op) (backends.Op, error
 // BitwiseXor returns the element-wise bitwise XOR operator.
 func (b Builder) BitwiseXor(lhs backends.Op, rhs backends.Op) (backends.Op, error) {
 	return nil, b.baseErrFn(backends.OpTypeBitwiseXor)
-}
-
-// Broadcast prefixes dimensions to an array by duplicating the data in the array.
-// See BroadcastInDim for a broadcast in between the axes.
-// The new dimensions dims are inserted on the left, i.e., if
-// prefixDims has values `{a0, ..., aN}` and the operand shape
-// has dimensions {b0, ..., bM}, then the shape of the output has
-// dimensions {a0, ..., aN, b0, ..., bM}.
-// The new dimensions id into copies of the operand, i.e.
-//
-//	output[i0, ..., iN, j0, ..., jM] = operand[j0, ..., jM]
-func (b Builder) Broadcast(x backends.Op, prefixDims ...int) (backends.Op, error) {
-	return nil, b.baseErrFn(backends.OpTypeBroadcast)
 }
 
 // BroadcastInDim broadcasts x to an output with the given shape.

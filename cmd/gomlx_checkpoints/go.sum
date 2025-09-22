@@ -32,6 +32,7 @@ github.com/gomlx/gopjrt v0.8.1 h1:Zks8sRqnYFMugQsF9nb1Q9E5qEHoZHCn5HPijQgfliw=
 github.com/gomlx/gopjrt v0.8.1/go.mod h1:PFS2tITbe94NfjY1mZkhCpGogn8R0bKi90aIr3g8dHw=
 github.com/gomlx/stablehlo v0.0.1 h1:j+euaFYW74Z78gOMM7Bn2Cv7sLBiXXRywZBo1qaCLEA=
 github.com/gomlx/stablehlo v0.0.1/go.mod h1:Lfc0mOGeR3NzeXMk3zeuKvegUC7UbG3gSjy32Rs9FRs=
+github.com/gomlx/stablehlo v0.0.2/go.mod h1:Lfc0mOGeR3NzeXMk3zeuKvegUC7UbG3gSjy32Rs9FRs=
 github.com/google/go-cmp v0.6.0 h1:ofyhxvXcZhMsU5ulbFiLKl/XBFqE1GSq7atu8tAmTRI=
 github.com/google/go-cmp v0.6.0/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=

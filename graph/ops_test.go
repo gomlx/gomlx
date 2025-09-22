@@ -437,41 +437,40 @@ func TestDot(t *testing.T) {
 }
 
 func TestBroadcast(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
-	{
-		g := NewGraph(backend, "BroadcastToDims")
-		input := Const(g, 7)
-		BroadcastToDims(input, 2, 3) // The last node created in the graph is taken as output by default.
-		got := compileRunAndTakeFirst(t, g)
-		want := [][]int64{{7, 7, 7}, {7, 7, 7}}
-		assert.Equal(t, want, got.Value())
-	}
+	graphtest.RunTestGraphFn(t, "BroadcastToDims()", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = append(inputs, Const(g, 7))
+		outputs = append(outputs, BroadcastToDims(inputs[0], 2, 3))
+		return
+	}, []any{
+		[][]int64{{7, 7, 7}, {7, 7, 7}},
+	}, -1)
 
-	{
-		g := NewGraph(backend, "BroadcastPrefix")
-		input := Const(g, []float32{1.1, 1.2})
-		BroadcastPrefix(input, 2, 1) // The last node created in the graph is taken as output by default.
-		got := compileRunAndTakeFirst(t, g)
-		want := [][][]float32{{{1.1, 1.2}}, {{1.1, 1.2}}} // Shape [2, 1, 2].
-		assert.Equal(t, want, got.Value())
-	}
+	graphtest.RunTestGraphFn(t, "BroadcastPrefix()", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = append(inputs, Const(g, []float32{1.1, 1.2}))
+		outputs = append(outputs, BroadcastPrefix(inputs[0], 2, 1))
+		return
+	}, []any{
+		[][][]float32{{{1.1, 1.2}}, {{1.1, 1.2}}},
+	}, -1)
 
-	// Using now the new testFuncOneInput testing tool:
-	testFuncOneInput(t, "ExpandAndBroadcast()",
-		func(g *Graph) (input, output *Node) {
-			input = Const(g, []int32{10, 20})
-			output = ExpandAndBroadcast(input, []int{2, 2}, []int{0})
-			return
-		}, [][]int32{{10, 20}, {10, 20}})
-	testFuncOneInput(t, "ExpandAndBroadcast()",
-		func(g *Graph) (input, output *Node) {
-			input = Const(g, []int32{10, 20})
-			output = ExpandAndBroadcast(input, []int{2, 2}, []int{1})
-			return
-		}, [][]int32{{10, 10}, {20, 20}})
+	graphtest.RunTestGraphFn(t, "ExpandAndBroadcast(axis=0)", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = append(inputs, Const(g, []int32{10, 20}))
+		outputs = append(outputs, ExpandAndBroadcast(inputs[0], []int{2, 2}, []int{0}))
+		return
+	}, []any{
+		[][]int32{{10, 20}, {10, 20}},
+	}, -1)
+
+	graphtest.RunTestGraphFn(t, "ExpandAndBroadcast(axis=1)", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = append(inputs, Const(g, []int32{10, 20}))
+		outputs = append(outputs, ExpandAndBroadcast(inputs[0], []int{2, 2}, []int{1}))
+		return
+	}, []any{
+		[][]int32{{10, 10}, {20, 20}},
+	}, -1)
 
 	// Test broadcasting new axes as well as existing axes with dimension 1.
-	graphtest.RunTestGraphFn(t, "ExpandAndBroadcast() 2", func(g *Graph) (inputs, outputs []*Node) {
+	graphtest.RunTestGraphFn(t, "ExpandAndBroadcast(3D)", func(g *Graph) (inputs, outputs []*Node) {
 		inputs = []*Node{Const(g, [][]float32{{1, 2}})}
 		outputs = []*Node{ExpandAndBroadcast(inputs[0], []int{3, 2, 2}, []int{0})}
 		return
@@ -483,10 +482,6 @@ func TestBroadcast(t *testing.T) {
 		},
 	}, -1)
 
-}
-
-// TestBroadcastToDims and BroadcastToShape.
-func TestBroadcastToDims(t *testing.T) {
 	graphtest.RunTestGraphFn(t, "BroadcastToDims: scalar", func(g *Graph) (inputs, outputs []*Node) {
 		inputs = []*Node{Scalar(g, dtypes.Float32, 3.0)}
 		outputs = []*Node{BroadcastToDims(inputs[0], 1, 3)}
@@ -512,7 +507,6 @@ func TestBroadcastToDims(t *testing.T) {
 	}, []any{
 		[][]float32{{3}, {3}, {3}},
 	}, -1)
-
 }
 
 func TestFill(t *testing.T) {

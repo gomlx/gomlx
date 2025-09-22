@@ -1,5 +1,12 @@
 # GoMLX changelog
 
+# Next:
+
+* Package `backends`:
+  * Removed op `Broadcast`: it was not needed, since `BroadcastInDim` is a superset.
+* Package `graph`:
+  * Backprop of `BroadcastPrefix` was not defined. Now that is uses `BroadcastInDim` instead, it works.
+
 # v0.23.0: 2025/09/21: beta `stablehlo` backend release
 
 * Package `shapes`:

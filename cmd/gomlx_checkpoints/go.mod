@@ -28,7 +28,7 @@ require (
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/gofrs/uuid v4.4.0+incompatible // indirect
 	github.com/gomlx/exceptions v0.0.3 // indirect
-	github.com/gomlx/stablehlo v0.0.1 // indirect
+	github.com/gomlx/stablehlo v0.0.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect

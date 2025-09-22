@@ -90,16 +90,6 @@ type StandardOps interface {
 	// BitwiseXor returns the element-wise bitwise XOR operator.
 	BitwiseXor(lhs, rhs Op) (Op, error)
 
-	// Broadcast prefixes dimensions to an array by duplicating the data in the array.
-	// See BroadcastInDim for a broadcast in between the axes.
-	// The new dimensions dims are inserted on the left, i.e., if
-	// prefixDims has values `{a0, ..., aN}` and the operand shape
-	// has dimensions {b0, ..., bM}, then the shape of the output has
-	// dimensions {a0, ..., aN, b0, ..., bM}.
-	// The new dimensions id into copies of the operand, i.e.
-	// 	output[i0, ..., iN, j0, ..., jM] = operand[j0, ..., jM]
-	Broadcast(x Op, prefixDims ...int) (Op, error)
-
 	// BroadcastInDim broadcasts x to an output with the given shape.
 	// broadcastAxes has an output axes value for each x axes (len(broadcastAxes) == x.Shape.Rank()).
 	// The i-th axis of x is mapped to the broadcastAxes[i]-th dimension of the output.
