@@ -9,7 +9,7 @@ import (
 	"github.com/gomlx/gomlx/examples/imdb"
 	"github.com/gomlx/gomlx/ui/commandline"
 
-	"github.com/janpfeifer/must"
+	"github.com/gomlx/gomlx/internal/must"
 	"github.com/stretchr/testify/require"
 	"k8s.io/klog/v2"
 )

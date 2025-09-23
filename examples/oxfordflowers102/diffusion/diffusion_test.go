@@ -5,11 +5,11 @@ import (
 	"fmt"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
+	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/janpfeifer/must"
 	"github.com/stretchr/testify/assert"
 	"testing"
 

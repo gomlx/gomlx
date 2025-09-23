@@ -13,10 +13,10 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
-	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
 
 	_ "github.com/gomlx/gomlx/backends/default"

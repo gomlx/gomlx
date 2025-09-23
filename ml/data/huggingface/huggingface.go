@@ -4,7 +4,7 @@
 // Example: Download (only the first time) and enumerate all the tensors from Google's Gemma v2 model:
 //
 //	import (
-//		"github.com/janpfeifer/must"
+//		"github.com/gomlx/gomlx/internal/must"
 //		hfd "github.com/gomlx/gomlx/ml/data"
 //		hfd "github.com/gomlx/gomlx/ml/data/huggingface"
 //	)

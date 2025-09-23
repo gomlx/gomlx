@@ -26,7 +26,7 @@ import (
 	"github.com/gomlx/gopjrt/dtypes"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/janpfeifer/must"
+	"github.com/gomlx/gomlx/internal/must"
 	"golang.org/x/exp/maps"
 )
 

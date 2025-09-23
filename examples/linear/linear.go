@@ -24,6 +24,7 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"
@@ -34,7 +35,6 @@ import (
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
 
 	_ "github.com/gomlx/gomlx/backends/default"

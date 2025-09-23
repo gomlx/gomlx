@@ -26,7 +26,7 @@ import (
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gopjrt/dtypes"
 
-	"github.com/janpfeifer/must"
+	"github.com/gomlx/gomlx/internal/must"
 	"k8s.io/klog/v2"
 )
 

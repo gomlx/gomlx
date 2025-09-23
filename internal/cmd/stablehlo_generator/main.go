@@ -10,7 +10,7 @@ import (
 
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/internal/backendparser"
-	"github.com/janpfeifer/must"
+	"github.com/gomlx/gomlx/internal/must"
 	"k8s.io/klog/v2"
 )
 

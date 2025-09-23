@@ -11,10 +11,10 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/internal/xlabuilderparser"
 	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/xslices"
-	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
 )
 

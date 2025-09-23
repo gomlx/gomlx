@@ -27,10 +27,10 @@ import (
 	"flag"
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/examples/dogsvscats"
+	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ui/commandline"
-	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
 	"os"
 

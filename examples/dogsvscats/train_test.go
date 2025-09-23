@@ -2,9 +2,9 @@ package dogsvscats
 
 import (
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ui/commandline"
-	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
 	"os"
 	"sync"

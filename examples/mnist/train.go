@@ -26,6 +26,7 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/graph/nanlogger"
+	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/ml/data"
@@ -41,7 +42,6 @@ import (
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
 	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/janpfeifer/must"
 )
 
 var ModelList = []string{"linear", "cnn"}

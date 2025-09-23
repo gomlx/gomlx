@@ -2,12 +2,12 @@ package dogsvscats
 
 import (
 	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/ml/layers/fnn"
 	"github.com/gomlx/gomlx/models/inceptionv3"
 	timage "github.com/gomlx/gomlx/types/tensors/images"
-	"github.com/janpfeifer/must"
 )
 
 // InceptionV3ModelPrep is executed before training: it downloads the inceptionv3 weights.
