@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"iter"
 	"os"
+	"path"
 
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/internal/must"
@@ -36,7 +37,8 @@ func iterConfig() iter.Seq2[int, config] {
 }
 
 func main() {
-	f := must.M1(os.Create(outputFile))
+	outputPath := path.Join(must.M1(os.Getwd()), outputFile)
+	f := must.M1(os.Create(outputPath))
 	defer func() { must.M(f.Close()) }()
 
 	w := func(format string, args ...any) {
@@ -181,16 +183,19 @@ func main() {
 	}
 
 	// Write converter of a model to a generic
-	w("// ConvertToBuilderFn converts a model object to a BuilderFn, matching the corresponding parameters.\n")
-	w("func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {\n")
+	w("// ConvertToBuilderFn converts a model object to a BuilderFn, matching the corresponding parameters.\n" +
+		"// It also returns the number of inputs and outputs of the underlying Builder.\n")
+	w("func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutputs int, err error) {\n")
 	for _, c := range iterConfig() {
 		w("\tif builder, ok := builderAny.(")
 		wName(c)
 		w("); ok {\n")
 		w("\t\treturn func (g *graph.Graph, inputs []*graph.Node) ([]*graph.Node) {\n")
 		wInvocation("\t\t\t", c)
-		w("\t\t}, nil\n")
+		w("\t\t}, %d, %d, nil\n", c.numInputs, c.numOutputs)
 		w("\t}\n\n")
 	}
-	w("\treturn nil, errors.Errorf(\"model object passed (%T) doesn't implement any of the valid Build methods signatures supported, see documentation in models.NewExec for details\", builderAny)\n}\n\n")
+	w("\treturn nil, 0, 0, errors.Errorf(\"model object passed (%T) doesn't implement any of the valid Build methods signatures supported, see documentation in models.NewExec for details\", builderAny)\n}\n\n")
+
+	fmt.Printf("✅ builderif_generator:  \tsuccessfully generated %s\n", outputPath)
 }

@@ -276,7 +276,8 @@ type BuilderGManyOutMany interface {
 }
 
 // ConvertToBuilderFn converts a model object to a BuilderFn, matching the corresponding parameters.
-func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
+// It also returns the number of inputs and outputs of the underlying Builder.
+func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutputs int, err error) {
 	if builder, ok := builderAny.(Builder1N); ok {
 		return func (g *graph.Graph, inputs []*graph.Node) ([]*graph.Node) {
 			if len(inputs) != 1 {
@@ -284,7 +285,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			}
 			builder.Build(inputs[0])
 			return nil
-		}, nil
+		}, 1, 0, nil
 	}
 
 	if builder, ok := builderAny.(Builder1NOut1N); ok {
@@ -295,7 +296,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 1)
 			outputs[0] = builder.Build(inputs[0])
 			return outputs
-		}, nil
+		}, 1, 1, nil
 	}
 
 	if builder, ok := builderAny.(Builder1NOut2N); ok {
@@ -306,7 +307,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 2)
 			outputs[0], outputs[1] = builder.Build(inputs[0])
 			return outputs
-		}, nil
+		}, 1, 2, nil
 	}
 
 	if builder, ok := builderAny.(Builder1NOut3N); ok {
@@ -317,7 +318,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 3)
 			outputs[0], outputs[1], outputs[2] = builder.Build(inputs[0])
 			return outputs
-		}, nil
+		}, 1, 3, nil
 	}
 
 	if builder, ok := builderAny.(Builder1NOut4N); ok {
@@ -328,7 +329,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 4)
 			outputs[0], outputs[1], outputs[2], outputs[3] = builder.Build(inputs[0])
 			return outputs
-		}, nil
+		}, 1, 4, nil
 	}
 
 	if builder, ok := builderAny.(Builder1NOutMany); ok {
@@ -337,7 +338,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 				panic(errors.Errorf("wrong number of inputs for model, expected 1, got %d", len(inputs)))
 			}
 			return builder.Build(inputs[0])
-		}, nil
+		}, 1, -1, nil
 	}
 
 	if builder, ok := builderAny.(Builder2N); ok {
@@ -347,7 +348,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			}
 			builder.Build(inputs[0], inputs[1])
 			return nil
-		}, nil
+		}, 2, 0, nil
 	}
 
 	if builder, ok := builderAny.(Builder2NOut1N); ok {
@@ -358,7 +359,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 1)
 			outputs[0] = builder.Build(inputs[0], inputs[1])
 			return outputs
-		}, nil
+		}, 2, 1, nil
 	}
 
 	if builder, ok := builderAny.(Builder2NOut2N); ok {
@@ -369,7 +370,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 2)
 			outputs[0], outputs[1] = builder.Build(inputs[0], inputs[1])
 			return outputs
-		}, nil
+		}, 2, 2, nil
 	}
 
 	if builder, ok := builderAny.(Builder2NOut3N); ok {
@@ -380,7 +381,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 3)
 			outputs[0], outputs[1], outputs[2] = builder.Build(inputs[0], inputs[1])
 			return outputs
-		}, nil
+		}, 2, 3, nil
 	}
 
 	if builder, ok := builderAny.(Builder2NOut4N); ok {
@@ -391,7 +392,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 4)
 			outputs[0], outputs[1], outputs[2], outputs[3] = builder.Build(inputs[0], inputs[1])
 			return outputs
-		}, nil
+		}, 2, 4, nil
 	}
 
 	if builder, ok := builderAny.(Builder2NOutMany); ok {
@@ -400,7 +401,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 				panic(errors.Errorf("wrong number of inputs for model, expected 2, got %d", len(inputs)))
 			}
 			return builder.Build(inputs[0], inputs[1])
-		}, nil
+		}, 2, -1, nil
 	}
 
 	if builder, ok := builderAny.(Builder3N); ok {
@@ -410,7 +411,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			}
 			builder.Build(inputs[0], inputs[1], inputs[2])
 			return nil
-		}, nil
+		}, 3, 0, nil
 	}
 
 	if builder, ok := builderAny.(Builder3NOut1N); ok {
@@ -421,7 +422,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 1)
 			outputs[0] = builder.Build(inputs[0], inputs[1], inputs[2])
 			return outputs
-		}, nil
+		}, 3, 1, nil
 	}
 
 	if builder, ok := builderAny.(Builder3NOut2N); ok {
@@ -432,7 +433,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 2)
 			outputs[0], outputs[1] = builder.Build(inputs[0], inputs[1], inputs[2])
 			return outputs
-		}, nil
+		}, 3, 2, nil
 	}
 
 	if builder, ok := builderAny.(Builder3NOut3N); ok {
@@ -443,7 +444,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 3)
 			outputs[0], outputs[1], outputs[2] = builder.Build(inputs[0], inputs[1], inputs[2])
 			return outputs
-		}, nil
+		}, 3, 3, nil
 	}
 
 	if builder, ok := builderAny.(Builder3NOut4N); ok {
@@ -454,7 +455,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 4)
 			outputs[0], outputs[1], outputs[2], outputs[3] = builder.Build(inputs[0], inputs[1], inputs[2])
 			return outputs
-		}, nil
+		}, 3, 4, nil
 	}
 
 	if builder, ok := builderAny.(Builder3NOutMany); ok {
@@ -463,7 +464,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 				panic(errors.Errorf("wrong number of inputs for model, expected 3, got %d", len(inputs)))
 			}
 			return builder.Build(inputs[0], inputs[1], inputs[2])
-		}, nil
+		}, 3, -1, nil
 	}
 
 	if builder, ok := builderAny.(Builder4N); ok {
@@ -473,7 +474,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			}
 			builder.Build(inputs[0], inputs[1], inputs[2], inputs[3])
 			return nil
-		}, nil
+		}, 4, 0, nil
 	}
 
 	if builder, ok := builderAny.(Builder4NOut1N); ok {
@@ -484,7 +485,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 1)
 			outputs[0] = builder.Build(inputs[0], inputs[1], inputs[2], inputs[3])
 			return outputs
-		}, nil
+		}, 4, 1, nil
 	}
 
 	if builder, ok := builderAny.(Builder4NOut2N); ok {
@@ -495,7 +496,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 2)
 			outputs[0], outputs[1] = builder.Build(inputs[0], inputs[1], inputs[2], inputs[3])
 			return outputs
-		}, nil
+		}, 4, 2, nil
 	}
 
 	if builder, ok := builderAny.(Builder4NOut3N); ok {
@@ -506,7 +507,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 3)
 			outputs[0], outputs[1], outputs[2] = builder.Build(inputs[0], inputs[1], inputs[2], inputs[3])
 			return outputs
-		}, nil
+		}, 4, 3, nil
 	}
 
 	if builder, ok := builderAny.(Builder4NOut4N); ok {
@@ -517,7 +518,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 4)
 			outputs[0], outputs[1], outputs[2], outputs[3] = builder.Build(inputs[0], inputs[1], inputs[2], inputs[3])
 			return outputs
-		}, nil
+		}, 4, 4, nil
 	}
 
 	if builder, ok := builderAny.(Builder4NOutMany); ok {
@@ -526,14 +527,14 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 				panic(errors.Errorf("wrong number of inputs for model, expected 4, got %d", len(inputs)))
 			}
 			return builder.Build(inputs[0], inputs[1], inputs[2], inputs[3])
-		}, nil
+		}, 4, -1, nil
 	}
 
 	if builder, ok := builderAny.(BuilderMany); ok {
 		return func (g *graph.Graph, inputs []*graph.Node) ([]*graph.Node) {
 			builder.Build(inputs...)
 			return nil
-		}, nil
+		}, -1, 0, nil
 	}
 
 	if builder, ok := builderAny.(BuilderManyOut1N); ok {
@@ -541,7 +542,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 1)
 			outputs[0] = builder.Build(inputs...)
 			return outputs
-		}, nil
+		}, -1, 1, nil
 	}
 
 	if builder, ok := builderAny.(BuilderManyOut2N); ok {
@@ -549,7 +550,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 2)
 			outputs[0], outputs[1] = builder.Build(inputs...)
 			return outputs
-		}, nil
+		}, -1, 2, nil
 	}
 
 	if builder, ok := builderAny.(BuilderManyOut3N); ok {
@@ -557,7 +558,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 3)
 			outputs[0], outputs[1], outputs[2] = builder.Build(inputs...)
 			return outputs
-		}, nil
+		}, -1, 3, nil
 	}
 
 	if builder, ok := builderAny.(BuilderManyOut4N); ok {
@@ -565,13 +566,13 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 4)
 			outputs[0], outputs[1], outputs[2], outputs[3] = builder.Build(inputs...)
 			return outputs
-		}, nil
+		}, -1, 4, nil
 	}
 
 	if builder, ok := builderAny.(BuilderManyOutMany); ok {
 		return func (g *graph.Graph, inputs []*graph.Node) ([]*graph.Node) {
 			return builder.Build(inputs...)
-		}, nil
+		}, -1, -1, nil
 	}
 
 	if builder, ok := builderAny.(BuilderG0N); ok {
@@ -581,7 +582,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			}
 			builder.Build(g)
 			return nil
-		}, nil
+		}, 0, 0, nil
 	}
 
 	if builder, ok := builderAny.(BuilderG0NOut1N); ok {
@@ -592,7 +593,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 1)
 			outputs[0] = builder.Build(g)
 			return outputs
-		}, nil
+		}, 0, 1, nil
 	}
 
 	if builder, ok := builderAny.(BuilderG0NOut2N); ok {
@@ -603,7 +604,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 2)
 			outputs[0], outputs[1] = builder.Build(g)
 			return outputs
-		}, nil
+		}, 0, 2, nil
 	}
 
 	if builder, ok := builderAny.(BuilderG0NOut3N); ok {
@@ -614,7 +615,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 3)
 			outputs[0], outputs[1], outputs[2] = builder.Build(g)
 			return outputs
-		}, nil
+		}, 0, 3, nil
 	}
 
 	if builder, ok := builderAny.(BuilderG0NOut4N); ok {
@@ -625,7 +626,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 4)
 			outputs[0], outputs[1], outputs[2], outputs[3] = builder.Build(g)
 			return outputs
-		}, nil
+		}, 0, 4, nil
 	}
 
 	if builder, ok := builderAny.(BuilderG0NOutMany); ok {
@@ -634,7 +635,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 				panic(errors.Errorf("wrong number of inputs for model, expected 0, got %d", len(inputs)))
 			}
 			return builder.Build(g)
-		}, nil
+		}, 0, -1, nil
 	}
 
 	if builder, ok := builderAny.(BuilderG1N); ok {
@@ -644,7 +645,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			}
 			builder.Build(g, inputs[0])
 			return nil
-		}, nil
+		}, 1, 0, nil
 	}
 
 	if builder, ok := builderAny.(BuilderG1NOut1N); ok {
@@ -655,7 +656,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 1)
 			outputs[0] = builder.Build(g, inputs[0])
 			return outputs
-		}, nil
+		}, 1, 1, nil
 	}
 
 	if builder, ok := builderAny.(BuilderG1NOut2N); ok {
@@ -666,7 +667,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 2)
 			outputs[0], outputs[1] = builder.Build(g, inputs[0])
 			return outputs
-		}, nil
+		}, 1, 2, nil
 	}
 
 	if builder, ok := builderAny.(BuilderG1NOut3N); ok {
@@ -677,7 +678,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 3)
 			outputs[0], outputs[1], outputs[2] = builder.Build(g, inputs[0])
 			return outputs
-		}, nil
+		}, 1, 3, nil
 	}
 
 	if builder, ok := builderAny.(BuilderG1NOut4N); ok {
@@ -688,7 +689,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 4)
 			outputs[0], outputs[1], outputs[2], outputs[3] = builder.Build(g, inputs[0])
 			return outputs
-		}, nil
+		}, 1, 4, nil
 	}
 
 	if builder, ok := builderAny.(BuilderG1NOutMany); ok {
@@ -697,7 +698,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 				panic(errors.Errorf("wrong number of inputs for model, expected 1, got %d", len(inputs)))
 			}
 			return builder.Build(g, inputs[0])
-		}, nil
+		}, 1, -1, nil
 	}
 
 	if builder, ok := builderAny.(BuilderG2N); ok {
@@ -707,7 +708,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			}
 			builder.Build(g, inputs[0], inputs[1])
 			return nil
-		}, nil
+		}, 2, 0, nil
 	}
 
 	if builder, ok := builderAny.(BuilderG2NOut1N); ok {
@@ -718,7 +719,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 1)
 			outputs[0] = builder.Build(g, inputs[0], inputs[1])
 			return outputs
-		}, nil
+		}, 2, 1, nil
 	}
 
 	if builder, ok := builderAny.(BuilderG2NOut2N); ok {
@@ -729,7 +730,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 2)
 			outputs[0], outputs[1] = builder.Build(g, inputs[0], inputs[1])
 			return outputs
-		}, nil
+		}, 2, 2, nil
 	}
 
 	if builder, ok := builderAny.(BuilderG2NOut3N); ok {
@@ -740,7 +741,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 3)
 			outputs[0], outputs[1], outputs[2] = builder.Build(g, inputs[0], inputs[1])
 			return outputs
-		}, nil
+		}, 2, 3, nil
 	}
 
 	if builder, ok := builderAny.(BuilderG2NOut4N); ok {
@@ -751,7 +752,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 4)
 			outputs[0], outputs[1], outputs[2], outputs[3] = builder.Build(g, inputs[0], inputs[1])
 			return outputs
-		}, nil
+		}, 2, 4, nil
 	}
 
 	if builder, ok := builderAny.(BuilderG2NOutMany); ok {
@@ -760,7 +761,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 				panic(errors.Errorf("wrong number of inputs for model, expected 2, got %d", len(inputs)))
 			}
 			return builder.Build(g, inputs[0], inputs[1])
-		}, nil
+		}, 2, -1, nil
 	}
 
 	if builder, ok := builderAny.(BuilderG3N); ok {
@@ -770,7 +771,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			}
 			builder.Build(g, inputs[0], inputs[1], inputs[2])
 			return nil
-		}, nil
+		}, 3, 0, nil
 	}
 
 	if builder, ok := builderAny.(BuilderG3NOut1N); ok {
@@ -781,7 +782,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 1)
 			outputs[0] = builder.Build(g, inputs[0], inputs[1], inputs[2])
 			return outputs
-		}, nil
+		}, 3, 1, nil
 	}
 
 	if builder, ok := builderAny.(BuilderG3NOut2N); ok {
@@ -792,7 +793,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 2)
 			outputs[0], outputs[1] = builder.Build(g, inputs[0], inputs[1], inputs[2])
 			return outputs
-		}, nil
+		}, 3, 2, nil
 	}
 
 	if builder, ok := builderAny.(BuilderG3NOut3N); ok {
@@ -803,7 +804,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 3)
 			outputs[0], outputs[1], outputs[2] = builder.Build(g, inputs[0], inputs[1], inputs[2])
 			return outputs
-		}, nil
+		}, 3, 3, nil
 	}
 
 	if builder, ok := builderAny.(BuilderG3NOut4N); ok {
@@ -814,7 +815,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 4)
 			outputs[0], outputs[1], outputs[2], outputs[3] = builder.Build(g, inputs[0], inputs[1], inputs[2])
 			return outputs
-		}, nil
+		}, 3, 4, nil
 	}
 
 	if builder, ok := builderAny.(BuilderG3NOutMany); ok {
@@ -823,7 +824,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 				panic(errors.Errorf("wrong number of inputs for model, expected 3, got %d", len(inputs)))
 			}
 			return builder.Build(g, inputs[0], inputs[1], inputs[2])
-		}, nil
+		}, 3, -1, nil
 	}
 
 	if builder, ok := builderAny.(BuilderG4N); ok {
@@ -833,7 +834,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			}
 			builder.Build(g, inputs[0], inputs[1], inputs[2], inputs[3])
 			return nil
-		}, nil
+		}, 4, 0, nil
 	}
 
 	if builder, ok := builderAny.(BuilderG4NOut1N); ok {
@@ -844,7 +845,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 1)
 			outputs[0] = builder.Build(g, inputs[0], inputs[1], inputs[2], inputs[3])
 			return outputs
-		}, nil
+		}, 4, 1, nil
 	}
 
 	if builder, ok := builderAny.(BuilderG4NOut2N); ok {
@@ -855,7 +856,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 2)
 			outputs[0], outputs[1] = builder.Build(g, inputs[0], inputs[1], inputs[2], inputs[3])
 			return outputs
-		}, nil
+		}, 4, 2, nil
 	}
 
 	if builder, ok := builderAny.(BuilderG4NOut3N); ok {
@@ -866,7 +867,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 3)
 			outputs[0], outputs[1], outputs[2] = builder.Build(g, inputs[0], inputs[1], inputs[2], inputs[3])
 			return outputs
-		}, nil
+		}, 4, 3, nil
 	}
 
 	if builder, ok := builderAny.(BuilderG4NOut4N); ok {
@@ -877,7 +878,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 4)
 			outputs[0], outputs[1], outputs[2], outputs[3] = builder.Build(g, inputs[0], inputs[1], inputs[2], inputs[3])
 			return outputs
-		}, nil
+		}, 4, 4, nil
 	}
 
 	if builder, ok := builderAny.(BuilderG4NOutMany); ok {
@@ -886,14 +887,14 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 				panic(errors.Errorf("wrong number of inputs for model, expected 4, got %d", len(inputs)))
 			}
 			return builder.Build(g, inputs[0], inputs[1], inputs[2], inputs[3])
-		}, nil
+		}, 4, -1, nil
 	}
 
 	if builder, ok := builderAny.(BuilderGMany); ok {
 		return func (g *graph.Graph, inputs []*graph.Node) ([]*graph.Node) {
 			builder.Build(g, inputs...)
 			return nil
-		}, nil
+		}, -1, 0, nil
 	}
 
 	if builder, ok := builderAny.(BuilderGManyOut1N); ok {
@@ -901,7 +902,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 1)
 			outputs[0] = builder.Build(g, inputs...)
 			return outputs
-		}, nil
+		}, -1, 1, nil
 	}
 
 	if builder, ok := builderAny.(BuilderGManyOut2N); ok {
@@ -909,7 +910,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 2)
 			outputs[0], outputs[1] = builder.Build(g, inputs...)
 			return outputs
-		}, nil
+		}, -1, 2, nil
 	}
 
 	if builder, ok := builderAny.(BuilderGManyOut3N); ok {
@@ -917,7 +918,7 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 3)
 			outputs[0], outputs[1], outputs[2] = builder.Build(g, inputs...)
 			return outputs
-		}, nil
+		}, -1, 3, nil
 	}
 
 	if builder, ok := builderAny.(BuilderGManyOut4N); ok {
@@ -925,15 +926,15 @@ func ConvertToBuilderFn(builderAny any) (BuilderFn, error) {
 			outputs := make([]*graph.Node, 4)
 			outputs[0], outputs[1], outputs[2], outputs[3] = builder.Build(g, inputs...)
 			return outputs
-		}, nil
+		}, -1, 4, nil
 	}
 
 	if builder, ok := builderAny.(BuilderGManyOutMany); ok {
 		return func (g *graph.Graph, inputs []*graph.Node) ([]*graph.Node) {
 			return builder.Build(g, inputs...)
-		}, nil
+		}, -1, -1, nil
 	}
 
-	return nil, errors.Errorf("model object passed (%!T(MISSING)) doesn't implement any of the valid Build methods signatures supported, see documentation in models.NewExec for details", builderAny)
+	return nil, 0, 0, errors.Errorf("model object passed (%!T(MISSING)) doesn't implement any of the valid Build methods signatures supported, see documentation in models.NewExec for details", builderAny)
 }
 

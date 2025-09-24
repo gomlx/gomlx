@@ -11,7 +11,11 @@
 // Example:
 package models
 
-import "github.com/gomlx/gomlx/ml/models/builderif"
+import (
+	"github.com/gomlx/gomlx/ml/models/builderif"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/pkg/errors"
+)
 
 // Exec is an executor of models.
 //
@@ -19,8 +23,9 @@ import "github.com/gomlx/gomlx/ml/models/builderif"
 // it calls model.Build to rebuild the computation graph for that particular combination of inputs, JIT-compiles it and then executes it.
 // If the combination of shapes has already been seen before, it will reuses the pre-compiled graph -- up to a certain cache size.
 type Exec struct {
-	model     any
-	builderFn builderif.BuilderFn
+	model                               any
+	builderFn                           builderif.BuilderFn
+	numBuilderInputs, numBuilderOutputs int
 }
 
 // NewExec creates a new Exec object using the model object passed.
@@ -28,12 +33,20 @@ type Exec struct {
 //
 // It returns an error if the model object does not have a valid Builder API.
 func NewExec(model any) (*Exec, error) {
-	builderFn, err := builderif.ConvertToBuilderFn(model)
+	e := &Exec{
+		model: model,
+	}
+	var err error
+	e.builderFn, e.numBuilderInputs, e.numBuilderOutputs, err = builderif.ConvertToBuilderFn(model)
 	if err != nil {
 		return nil, err
 	}
-	return &Exec{
-		model:     model,
-		builderFn: builderFn,
-	}, nil
+	return e, nil
+}
+
+// Call executes the model with the given inputs.
+//
+// The number of inputs must match the number of inputs of the model builder.
+func (e *Exec) Call(inputs ...any) ([]*tensors.Tensor, error) {
+	return nil, errors.New("not implemented")
 }

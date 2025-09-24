@@ -161,8 +161,10 @@ type ExecGraphFnOneOutput interface {
 //
 // Errors in Call are returned inside the returned tensors.
 //
-// There is concurrency safety with the cache of Graphs, but XLA concurrency is
-// not documented. TODO: figure it out.
+// Exec.Call can be called concurrently: both the backends can execute computations in parallel, and Exec is safe to
+// build graphs in parallel, where needed.
+// Within the building of one Graph, it should be sequential, even if one can be building different instances of
+// the graph (for different input shapes) at the same time.
 type Exec struct {
 	backend backends.Backend
 	context *Context
