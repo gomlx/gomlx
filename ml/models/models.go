@@ -1,5 +1,8 @@
 // Package models provide helpers to build, execute, save and load models and their weights.
 //
+// Note: This package aims to replace the `ml/context` package, and all the layers libraries.
+// **It's still in beta**. Any feedback is very welcome.
+//
 // It hinges on the following abstraction of "model":
 //
 //   - Fields with static "hyperparameters" (e.g.: learning rate, batch size, number of layers, etc.)
