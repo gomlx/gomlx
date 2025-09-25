@@ -87,6 +87,12 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
 >   the default `_ "github.com/gomlx/gomlx/backends/default"` backends, add the `-tags=stablehlo` to your Go build/run
 >   command, and it will also be included.
 
+> **🚀 NEW 🚀**: `gomlx_checkpoints`, the command line tool to inspect checkpoints of train(-ing) models,
+> now also generate plots with loss and arbitrary evaluation metrics using Plotly.
+> See [example of training session](https://gomlx.github.io/gomlx/notebooks/gomlx_checkpoints_plot_example.html),
+> with the effects of a change of learning rate during the training.
+
+
 * Converting ONNX models to GoMLX with [onnx-gomlx](https://github.com/gomlx/onnx-gomlx): both as an alternative for `onnxruntime` (leveraging XLA),
   but also to further fine-tune models. See also [go-huggingface](https://github.com/gomlx/go-huggingface) to easily download ONNX model files from HuggingFace.
 * [Docker "gomlx_jupyterlab"](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab) with integrated JupyterLab and [GoNB](https://github.com/janpfeifer/gonb) (a Go kernel for Jupyter notebooks)
