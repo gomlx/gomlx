@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func runTestModel(t *testing.T, testName string, model any, inputs []any, want []any, delta float64) {
+func runTestModel[M any](t *testing.T, testName string, model *M, buildFn any, inputs []any, want []any, delta float64) {
 	backend := graphtest.BuildTestBackend()
 	t.Run(testName, func(t *testing.T) {
 		// Convert the want values to tensors.
@@ -32,7 +32,7 @@ func runTestModel(t *testing.T, testName string, model any, inputs []any, want [
 		}
 
 		// Build and compile model.
-		e, err := NewExec(backend, model)
+		e, err := NewExec(backend, model, buildFn)
 		require.NoError(t, err, "while building/compiling model")
 
 		// Execute model, print outputs.
@@ -57,16 +57,14 @@ func runTestModel(t *testing.T, testName string, model any, inputs []any, want [
 	})
 }
 
-type addBias struct {
-	Bias float64
-}
-
-func (m *addBias) Build(x *graph.Node) *graph.Node {
-	return graph.AddScalar(x, m.Bias)
-}
-
 func TestExec(t *testing.T) {
-	model := &addBias{Bias: 7}
-	runTestModel(t, "NoVariables-int32", model, []any{int32(4)}, []any{int32(11)}, -1)
-	runTestModel(t, "NoVariables-float32", model, []any{float32(6)}, []any{float32(13)}, -1)
+	type biasModel struct {
+		Bias float64
+	}
+	addBiasFn := func(m *biasModel, x *graph.Node) *graph.Node {
+		return graph.AddScalar(x, m.Bias)
+	}
+	model := &biasModel{Bias: 7}
+	runTestModel(t, "NoVariables-int32", model, addBiasFn, []any{int32(4)}, []any{int32(11)}, -1)
+	runTestModel(t, "NoVariables-float32", model, addBiasFn, []any{float32(6)}, []any{float32(13)}, -1)
 }

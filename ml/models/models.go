@@ -40,21 +40,24 @@ type Exec struct {
 	sideInputs, sideOutputs map[graph.GraphId][]*Variable
 }
 
-// NewExec creates a new Exec object using the model object passed.
+// NewExec creates a new Exec object using the model object, and the buildFn function that builds the computation graph
+// for this executor.
 //
-// The model must have a valid Build method: it may take a *graph.Graph as a first argument, plus zero to four *Node arguments or a "...*Node" argument,
-// and it must return 0 to 4 *Node values, or a []*Node. Examples of valid Build methods:
+// The buildFn function takes first a pointer to the model object as input; it may take a *graph.Graph as a first argument,
+// plus zero to four *Node arguments or a "...*Node" argument.
+// It must return either 0 to 4 *Node values or a []*Node.
+// Examples of valid buildFn functions for various fictitious models:
 //
-//	func (m *MyModel) Build(g *graph.Graph) []*Node {...}
-//	func (m *MyModel) Build(x *Node) (mean, variance *Node) {...}
-//	func (m *MyModel) Build(x, y *Node) (distance *Node) {...}
-//	func (m *MyModel) Build(inputs ...*Node) (outputs []*Node) {...}
-//	func (m *MyModel) Build(gradients ...*Node)  {...} // No outputs, this Build method may only update the weights.
+//	func Predict(model *RandomModel, g *graph.Graph) []*Node {...}
+//	func Predict(model *DistributionModel, x *Node) (predictedMean, predictedVariance *Node) {...}
+//	func Distance(model *NonEuclideanSpace, x, y *Node) (distance *Node) {...}
+//	func ComplexModel(model *ComplexModel, inputs ...*Node) (outputs []*Node) {...}
+//	func ApplyGradients(model *MyModel, gradients ...*Node)  {...} // No outputs, this graph updates the weights directly.
 //
-// It keeps a reference to the model object, and it will use it every time it needs to build a new computation graph.
+// The returned Exec keeps a reference to the model object, and it will use it every time it needs to build a new computation graph.
 //
 // It returns an error if the model object does not have a valid Builder API.
-func NewExec(backend backends.Backend, model any) (*Exec, error) {
+func NewExec[M any](backend backends.Backend, model *M, buildFn any) (*Exec, error) {
 	e := &Exec{
 		backend:     backend,
 		model:       model,
