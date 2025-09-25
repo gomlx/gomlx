@@ -1,9 +1,9 @@
 # GoMLX changelog
 
-# Next:
+# v0.23.1: 2025/09/25: Small bug fixes.
 
 * Package `backends`:
-  * Removed op `Broadcast`: it was not needed, since `BroadcastInDim` is a superset.
+  * Removed op `Broadcast`: it was unnecessary, since `BroadcastInDim` is a superset.
 * Package `graph`:
   * Backprop of `BroadcastPrefix` was not defined. Now that is uses `BroadcastInDim` instead, it works.
 * Package `simplego`:
