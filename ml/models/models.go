@@ -41,6 +41,16 @@ type Exec struct {
 }
 
 // NewExec creates a new Exec object using the model object passed.
+//
+// The model must have a valid Build method: it may take a *graph.Graph as a first argument, plus zero to four *Node arguments or a "...*Node" argument,
+// and it must return 0 to 4 *Node values, or a []*Node. Examples of valid Build methods:
+//
+//	func (m *MyModel) Build(g *graph.Graph) []*Node {...}
+//	func (m *MyModel) Build(x *Node) (mean, variance *Node) {...}
+//	func (m *MyModel) Build(x, y *Node) (distance *Node) {...}
+//	func (m *MyModel) Build(inputs ...*Node) (outputs []*Node) {...}
+//	func (m *MyModel) Build(gradients ...*Node)  {...} // No outputs, this Build method may only update the weights.
+//
 // It keeps a reference to the model object, and it will use it every time it needs to build a new computation graph.
 //
 // It returns an error if the model object does not have a valid Builder API.
