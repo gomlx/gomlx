@@ -56,7 +56,8 @@ func main() {
 	w(")\n\n")
 
 	w("// BuilderFn is the function actually used by the models.Exec object.\n")
-	w("// But this method provide a converter from various Builder methods to a BuilderFn, see ConvertToBuilderFn().\n")
+	w("//\n// This module provides a converter from the various accepted Builder function types (collected in BuilderIf)\n")
+	w("// to a BuilderFn, see ConvertToBuilderFn().\n")
 	w("type BuilderFn func (g *graph.Graph, inputs []*graph.Node) ([]*graph.Node)\n\n")
 
 	// A negative value of numInputs or numOutputs mean "many".
@@ -80,11 +81,11 @@ func main() {
 		}
 	}
 
-	wInterface := func(c config) {
+	wFuncType := func(c config) {
 		w("type ")
 		wName(c)
 
-		w(" interface {\n\tBuild(")
+		w(" func (")
 		if c.hasGraph {
 			w("g *graph.Graph")
 			if c.numInputs != 0 {
@@ -119,13 +120,24 @@ func main() {
 			}
 			w(")")
 		}
-		w("\n}\n\n")
+		w("\n")
 	}
 
-	// Write individual interfaces.
+	// Write individual build function types.
 	for _, c := range iterConfig() {
-		wInterface(c)
+		wFuncType(c)
 	}
+	w("\n")
+
+	// Write constraint for any of the build types.
+	w("type BuilderIf interface {\n\t")
+	for i, c := range iterConfig() {
+		if i > 0 {
+			w(" |\n\t")
+		}
+		wName(c)
+	}
+	w("\n}\n\n")
 
 	// wInvocation writes the invocation of the builder object, given g, inputs and outputs parameters.
 	wInvocation := func(indent string, c config) {
@@ -153,7 +165,7 @@ func main() {
 		}
 
 		// Write invocation.
-		w("builder.Build(")
+		w("builder(")
 		if c.hasGraph {
 			w("g")
 			if c.numInputs != 0 {
@@ -183,9 +195,12 @@ func main() {
 	}
 
 	// Write converter of a model to a generic
-	w("// ConvertToBuilderFn converts a model object to a BuilderFn, matching the corresponding parameters.\n" +
+	w("// ConvertToBuilderFn converts a build closure compatible with BuilderIf to a BuilderFn, matching the corresponding parameters.\n" +
 		"// It also returns the number of inputs and outputs of the underlying Builder.\n")
-	w("func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutputs int, err error) {\n")
+	w("func ConvertToBuilderFn[B BuilderIf] (builder B) (builderFn BuilderFn, numInputs, numOutputs int, err error) {\n")
+	w("\treturn convertToBuilderImpl(builder)\n}\n\n")
+
+	w("func convertToBuilderImpl(builderAny any) (builderFn BuilderFn, numInputs, numOutputs int, err error) {\n")
 	for _, c := range iterConfig() {
 		w("\tif builder, ok := builderAny.(")
 		wName(c)

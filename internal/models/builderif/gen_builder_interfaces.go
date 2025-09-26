@@ -8,282 +8,160 @@ import (
 )
 
 // BuilderFn is the function actually used by the models.Exec object.
-// But this method provide a converter from various Builder methods to a BuilderFn, see ConvertToBuilderFn().
+//
+// This module provides a converter from the various accepted Builder function types (collected in BuilderIf)
+// to a BuilderFn, see ConvertToBuilderFn().
 type BuilderFn func (g *graph.Graph, inputs []*graph.Node) ([]*graph.Node)
 
-type Builder1N interface {
-	Build(input0 *graph.Node)
-}
-
-type Builder1NOut1N interface {
-	Build(input0 *graph.Node) (*graph.Node)
-}
-
-type Builder1NOut2N interface {
-	Build(input0 *graph.Node) (*graph.Node, *graph.Node)
-}
-
-type Builder1NOut3N interface {
-	Build(input0 *graph.Node) (*graph.Node, *graph.Node, *graph.Node)
-}
-
-type Builder1NOut4N interface {
-	Build(input0 *graph.Node) (*graph.Node, *graph.Node, *graph.Node, *graph.Node)
-}
-
-type Builder1NOutMany interface {
-	Build(input0 *graph.Node) (outputs []*graph.Node)
-}
-
-type Builder2N interface {
-	Build(input0, input1 *graph.Node)
-}
-
-type Builder2NOut1N interface {
-	Build(input0, input1 *graph.Node) (*graph.Node)
-}
-
-type Builder2NOut2N interface {
-	Build(input0, input1 *graph.Node) (*graph.Node, *graph.Node)
-}
-
-type Builder2NOut3N interface {
-	Build(input0, input1 *graph.Node) (*graph.Node, *graph.Node, *graph.Node)
-}
-
-type Builder2NOut4N interface {
-	Build(input0, input1 *graph.Node) (*graph.Node, *graph.Node, *graph.Node, *graph.Node)
-}
-
-type Builder2NOutMany interface {
-	Build(input0, input1 *graph.Node) (outputs []*graph.Node)
-}
-
-type Builder3N interface {
-	Build(input0, input1, input2 *graph.Node)
-}
-
-type Builder3NOut1N interface {
-	Build(input0, input1, input2 *graph.Node) (*graph.Node)
-}
-
-type Builder3NOut2N interface {
-	Build(input0, input1, input2 *graph.Node) (*graph.Node, *graph.Node)
-}
-
-type Builder3NOut3N interface {
-	Build(input0, input1, input2 *graph.Node) (*graph.Node, *graph.Node, *graph.Node)
-}
-
-type Builder3NOut4N interface {
-	Build(input0, input1, input2 *graph.Node) (*graph.Node, *graph.Node, *graph.Node, *graph.Node)
-}
-
-type Builder3NOutMany interface {
-	Build(input0, input1, input2 *graph.Node) (outputs []*graph.Node)
-}
-
-type Builder4N interface {
-	Build(input0, input1, input2, input3 *graph.Node)
-}
-
-type Builder4NOut1N interface {
-	Build(input0, input1, input2, input3 *graph.Node) (*graph.Node)
-}
-
-type Builder4NOut2N interface {
-	Build(input0, input1, input2, input3 *graph.Node) (*graph.Node, *graph.Node)
-}
-
-type Builder4NOut3N interface {
-	Build(input0, input1, input2, input3 *graph.Node) (*graph.Node, *graph.Node, *graph.Node)
-}
-
-type Builder4NOut4N interface {
-	Build(input0, input1, input2, input3 *graph.Node) (*graph.Node, *graph.Node, *graph.Node, *graph.Node)
-}
-
-type Builder4NOutMany interface {
-	Build(input0, input1, input2, input3 *graph.Node) (outputs []*graph.Node)
-}
-
-type BuilderMany interface {
-	Build(inputs ...*graph.Node)
-}
-
-type BuilderManyOut1N interface {
-	Build(inputs ...*graph.Node) (*graph.Node)
-}
-
-type BuilderManyOut2N interface {
-	Build(inputs ...*graph.Node) (*graph.Node, *graph.Node)
-}
-
-type BuilderManyOut3N interface {
-	Build(inputs ...*graph.Node) (*graph.Node, *graph.Node, *graph.Node)
-}
-
-type BuilderManyOut4N interface {
-	Build(inputs ...*graph.Node) (*graph.Node, *graph.Node, *graph.Node, *graph.Node)
-}
-
-type BuilderManyOutMany interface {
-	Build(inputs ...*graph.Node) (outputs []*graph.Node)
-}
-
-type BuilderG0N interface {
-	Build(g *graph.Graph)
-}
-
-type BuilderG0NOut1N interface {
-	Build(g *graph.Graph) (*graph.Node)
-}
-
-type BuilderG0NOut2N interface {
-	Build(g *graph.Graph) (*graph.Node, *graph.Node)
-}
-
-type BuilderG0NOut3N interface {
-	Build(g *graph.Graph) (*graph.Node, *graph.Node, *graph.Node)
-}
-
-type BuilderG0NOut4N interface {
-	Build(g *graph.Graph) (*graph.Node, *graph.Node, *graph.Node, *graph.Node)
-}
-
-type BuilderG0NOutMany interface {
-	Build(g *graph.Graph) (outputs []*graph.Node)
-}
-
-type BuilderG1N interface {
-	Build(g *graph.Graph, input0 *graph.Node)
-}
-
-type BuilderG1NOut1N interface {
-	Build(g *graph.Graph, input0 *graph.Node) (*graph.Node)
-}
-
-type BuilderG1NOut2N interface {
-	Build(g *graph.Graph, input0 *graph.Node) (*graph.Node, *graph.Node)
-}
-
-type BuilderG1NOut3N interface {
-	Build(g *graph.Graph, input0 *graph.Node) (*graph.Node, *graph.Node, *graph.Node)
-}
-
-type BuilderG1NOut4N interface {
-	Build(g *graph.Graph, input0 *graph.Node) (*graph.Node, *graph.Node, *graph.Node, *graph.Node)
-}
-
-type BuilderG1NOutMany interface {
-	Build(g *graph.Graph, input0 *graph.Node) (outputs []*graph.Node)
-}
-
-type BuilderG2N interface {
-	Build(g *graph.Graph, input0, input1 *graph.Node)
-}
-
-type BuilderG2NOut1N interface {
-	Build(g *graph.Graph, input0, input1 *graph.Node) (*graph.Node)
-}
-
-type BuilderG2NOut2N interface {
-	Build(g *graph.Graph, input0, input1 *graph.Node) (*graph.Node, *graph.Node)
-}
-
-type BuilderG2NOut3N interface {
-	Build(g *graph.Graph, input0, input1 *graph.Node) (*graph.Node, *graph.Node, *graph.Node)
-}
-
-type BuilderG2NOut4N interface {
-	Build(g *graph.Graph, input0, input1 *graph.Node) (*graph.Node, *graph.Node, *graph.Node, *graph.Node)
-}
-
-type BuilderG2NOutMany interface {
-	Build(g *graph.Graph, input0, input1 *graph.Node) (outputs []*graph.Node)
-}
-
-type BuilderG3N interface {
-	Build(g *graph.Graph, input0, input1, input2 *graph.Node)
-}
-
-type BuilderG3NOut1N interface {
-	Build(g *graph.Graph, input0, input1, input2 *graph.Node) (*graph.Node)
-}
-
-type BuilderG3NOut2N interface {
-	Build(g *graph.Graph, input0, input1, input2 *graph.Node) (*graph.Node, *graph.Node)
-}
-
-type BuilderG3NOut3N interface {
-	Build(g *graph.Graph, input0, input1, input2 *graph.Node) (*graph.Node, *graph.Node, *graph.Node)
-}
-
-type BuilderG3NOut4N interface {
-	Build(g *graph.Graph, input0, input1, input2 *graph.Node) (*graph.Node, *graph.Node, *graph.Node, *graph.Node)
-}
-
-type BuilderG3NOutMany interface {
-	Build(g *graph.Graph, input0, input1, input2 *graph.Node) (outputs []*graph.Node)
-}
-
-type BuilderG4N interface {
-	Build(g *graph.Graph, input0, input1, input2, input3 *graph.Node)
-}
-
-type BuilderG4NOut1N interface {
-	Build(g *graph.Graph, input0, input1, input2, input3 *graph.Node) (*graph.Node)
-}
-
-type BuilderG4NOut2N interface {
-	Build(g *graph.Graph, input0, input1, input2, input3 *graph.Node) (*graph.Node, *graph.Node)
-}
-
-type BuilderG4NOut3N interface {
-	Build(g *graph.Graph, input0, input1, input2, input3 *graph.Node) (*graph.Node, *graph.Node, *graph.Node)
-}
-
-type BuilderG4NOut4N interface {
-	Build(g *graph.Graph, input0, input1, input2, input3 *graph.Node) (*graph.Node, *graph.Node, *graph.Node, *graph.Node)
-}
-
-type BuilderG4NOutMany interface {
-	Build(g *graph.Graph, input0, input1, input2, input3 *graph.Node) (outputs []*graph.Node)
-}
-
-type BuilderGMany interface {
-	Build(g *graph.Graph, inputs ...*graph.Node)
-}
-
-type BuilderGManyOut1N interface {
-	Build(g *graph.Graph, inputs ...*graph.Node) (*graph.Node)
-}
-
-type BuilderGManyOut2N interface {
-	Build(g *graph.Graph, inputs ...*graph.Node) (*graph.Node, *graph.Node)
-}
-
-type BuilderGManyOut3N interface {
-	Build(g *graph.Graph, inputs ...*graph.Node) (*graph.Node, *graph.Node, *graph.Node)
-}
-
-type BuilderGManyOut4N interface {
-	Build(g *graph.Graph, inputs ...*graph.Node) (*graph.Node, *graph.Node, *graph.Node, *graph.Node)
-}
-
-type BuilderGManyOutMany interface {
-	Build(g *graph.Graph, inputs ...*graph.Node) (outputs []*graph.Node)
-}
-
-// ConvertToBuilderFn converts a model object to a BuilderFn, matching the corresponding parameters.
+type Builder1N func (input0 *graph.Node)
+type Builder1NOut1N func (input0 *graph.Node) (*graph.Node)
+type Builder1NOut2N func (input0 *graph.Node) (*graph.Node, *graph.Node)
+type Builder1NOut3N func (input0 *graph.Node) (*graph.Node, *graph.Node, *graph.Node)
+type Builder1NOut4N func (input0 *graph.Node) (*graph.Node, *graph.Node, *graph.Node, *graph.Node)
+type Builder1NOutMany func (input0 *graph.Node) (outputs []*graph.Node)
+type Builder2N func (input0, input1 *graph.Node)
+type Builder2NOut1N func (input0, input1 *graph.Node) (*graph.Node)
+type Builder2NOut2N func (input0, input1 *graph.Node) (*graph.Node, *graph.Node)
+type Builder2NOut3N func (input0, input1 *graph.Node) (*graph.Node, *graph.Node, *graph.Node)
+type Builder2NOut4N func (input0, input1 *graph.Node) (*graph.Node, *graph.Node, *graph.Node, *graph.Node)
+type Builder2NOutMany func (input0, input1 *graph.Node) (outputs []*graph.Node)
+type Builder3N func (input0, input1, input2 *graph.Node)
+type Builder3NOut1N func (input0, input1, input2 *graph.Node) (*graph.Node)
+type Builder3NOut2N func (input0, input1, input2 *graph.Node) (*graph.Node, *graph.Node)
+type Builder3NOut3N func (input0, input1, input2 *graph.Node) (*graph.Node, *graph.Node, *graph.Node)
+type Builder3NOut4N func (input0, input1, input2 *graph.Node) (*graph.Node, *graph.Node, *graph.Node, *graph.Node)
+type Builder3NOutMany func (input0, input1, input2 *graph.Node) (outputs []*graph.Node)
+type Builder4N func (input0, input1, input2, input3 *graph.Node)
+type Builder4NOut1N func (input0, input1, input2, input3 *graph.Node) (*graph.Node)
+type Builder4NOut2N func (input0, input1, input2, input3 *graph.Node) (*graph.Node, *graph.Node)
+type Builder4NOut3N func (input0, input1, input2, input3 *graph.Node) (*graph.Node, *graph.Node, *graph.Node)
+type Builder4NOut4N func (input0, input1, input2, input3 *graph.Node) (*graph.Node, *graph.Node, *graph.Node, *graph.Node)
+type Builder4NOutMany func (input0, input1, input2, input3 *graph.Node) (outputs []*graph.Node)
+type BuilderMany func (inputs ...*graph.Node)
+type BuilderManyOut1N func (inputs ...*graph.Node) (*graph.Node)
+type BuilderManyOut2N func (inputs ...*graph.Node) (*graph.Node, *graph.Node)
+type BuilderManyOut3N func (inputs ...*graph.Node) (*graph.Node, *graph.Node, *graph.Node)
+type BuilderManyOut4N func (inputs ...*graph.Node) (*graph.Node, *graph.Node, *graph.Node, *graph.Node)
+type BuilderManyOutMany func (inputs ...*graph.Node) (outputs []*graph.Node)
+type BuilderG0N func (g *graph.Graph)
+type BuilderG0NOut1N func (g *graph.Graph) (*graph.Node)
+type BuilderG0NOut2N func (g *graph.Graph) (*graph.Node, *graph.Node)
+type BuilderG0NOut3N func (g *graph.Graph) (*graph.Node, *graph.Node, *graph.Node)
+type BuilderG0NOut4N func (g *graph.Graph) (*graph.Node, *graph.Node, *graph.Node, *graph.Node)
+type BuilderG0NOutMany func (g *graph.Graph) (outputs []*graph.Node)
+type BuilderG1N func (g *graph.Graph, input0 *graph.Node)
+type BuilderG1NOut1N func (g *graph.Graph, input0 *graph.Node) (*graph.Node)
+type BuilderG1NOut2N func (g *graph.Graph, input0 *graph.Node) (*graph.Node, *graph.Node)
+type BuilderG1NOut3N func (g *graph.Graph, input0 *graph.Node) (*graph.Node, *graph.Node, *graph.Node)
+type BuilderG1NOut4N func (g *graph.Graph, input0 *graph.Node) (*graph.Node, *graph.Node, *graph.Node, *graph.Node)
+type BuilderG1NOutMany func (g *graph.Graph, input0 *graph.Node) (outputs []*graph.Node)
+type BuilderG2N func (g *graph.Graph, input0, input1 *graph.Node)
+type BuilderG2NOut1N func (g *graph.Graph, input0, input1 *graph.Node) (*graph.Node)
+type BuilderG2NOut2N func (g *graph.Graph, input0, input1 *graph.Node) (*graph.Node, *graph.Node)
+type BuilderG2NOut3N func (g *graph.Graph, input0, input1 *graph.Node) (*graph.Node, *graph.Node, *graph.Node)
+type BuilderG2NOut4N func (g *graph.Graph, input0, input1 *graph.Node) (*graph.Node, *graph.Node, *graph.Node, *graph.Node)
+type BuilderG2NOutMany func (g *graph.Graph, input0, input1 *graph.Node) (outputs []*graph.Node)
+type BuilderG3N func (g *graph.Graph, input0, input1, input2 *graph.Node)
+type BuilderG3NOut1N func (g *graph.Graph, input0, input1, input2 *graph.Node) (*graph.Node)
+type BuilderG3NOut2N func (g *graph.Graph, input0, input1, input2 *graph.Node) (*graph.Node, *graph.Node)
+type BuilderG3NOut3N func (g *graph.Graph, input0, input1, input2 *graph.Node) (*graph.Node, *graph.Node, *graph.Node)
+type BuilderG3NOut4N func (g *graph.Graph, input0, input1, input2 *graph.Node) (*graph.Node, *graph.Node, *graph.Node, *graph.Node)
+type BuilderG3NOutMany func (g *graph.Graph, input0, input1, input2 *graph.Node) (outputs []*graph.Node)
+type BuilderG4N func (g *graph.Graph, input0, input1, input2, input3 *graph.Node)
+type BuilderG4NOut1N func (g *graph.Graph, input0, input1, input2, input3 *graph.Node) (*graph.Node)
+type BuilderG4NOut2N func (g *graph.Graph, input0, input1, input2, input3 *graph.Node) (*graph.Node, *graph.Node)
+type BuilderG4NOut3N func (g *graph.Graph, input0, input1, input2, input3 *graph.Node) (*graph.Node, *graph.Node, *graph.Node)
+type BuilderG4NOut4N func (g *graph.Graph, input0, input1, input2, input3 *graph.Node) (*graph.Node, *graph.Node, *graph.Node, *graph.Node)
+type BuilderG4NOutMany func (g *graph.Graph, input0, input1, input2, input3 *graph.Node) (outputs []*graph.Node)
+type BuilderGMany func (g *graph.Graph, inputs ...*graph.Node)
+type BuilderGManyOut1N func (g *graph.Graph, inputs ...*graph.Node) (*graph.Node)
+type BuilderGManyOut2N func (g *graph.Graph, inputs ...*graph.Node) (*graph.Node, *graph.Node)
+type BuilderGManyOut3N func (g *graph.Graph, inputs ...*graph.Node) (*graph.Node, *graph.Node, *graph.Node)
+type BuilderGManyOut4N func (g *graph.Graph, inputs ...*graph.Node) (*graph.Node, *graph.Node, *graph.Node, *graph.Node)
+type BuilderGManyOutMany func (g *graph.Graph, inputs ...*graph.Node) (outputs []*graph.Node)
+
+type BuilderIf interface {
+	Builder1N |
+	Builder1NOut1N |
+	Builder1NOut2N |
+	Builder1NOut3N |
+	Builder1NOut4N |
+	Builder1NOutMany |
+	Builder2N |
+	Builder2NOut1N |
+	Builder2NOut2N |
+	Builder2NOut3N |
+	Builder2NOut4N |
+	Builder2NOutMany |
+	Builder3N |
+	Builder3NOut1N |
+	Builder3NOut2N |
+	Builder3NOut3N |
+	Builder3NOut4N |
+	Builder3NOutMany |
+	Builder4N |
+	Builder4NOut1N |
+	Builder4NOut2N |
+	Builder4NOut3N |
+	Builder4NOut4N |
+	Builder4NOutMany |
+	BuilderMany |
+	BuilderManyOut1N |
+	BuilderManyOut2N |
+	BuilderManyOut3N |
+	BuilderManyOut4N |
+	BuilderManyOutMany |
+	BuilderG0N |
+	BuilderG0NOut1N |
+	BuilderG0NOut2N |
+	BuilderG0NOut3N |
+	BuilderG0NOut4N |
+	BuilderG0NOutMany |
+	BuilderG1N |
+	BuilderG1NOut1N |
+	BuilderG1NOut2N |
+	BuilderG1NOut3N |
+	BuilderG1NOut4N |
+	BuilderG1NOutMany |
+	BuilderG2N |
+	BuilderG2NOut1N |
+	BuilderG2NOut2N |
+	BuilderG2NOut3N |
+	BuilderG2NOut4N |
+	BuilderG2NOutMany |
+	BuilderG3N |
+	BuilderG3NOut1N |
+	BuilderG3NOut2N |
+	BuilderG3NOut3N |
+	BuilderG3NOut4N |
+	BuilderG3NOutMany |
+	BuilderG4N |
+	BuilderG4NOut1N |
+	BuilderG4NOut2N |
+	BuilderG4NOut3N |
+	BuilderG4NOut4N |
+	BuilderG4NOutMany |
+	BuilderGMany |
+	BuilderGManyOut1N |
+	BuilderGManyOut2N |
+	BuilderGManyOut3N |
+	BuilderGManyOut4N |
+	BuilderGManyOutMany
+}
+
+// ConvertToBuilderFn converts a build closure compatible with BuilderIf to a BuilderFn, matching the corresponding parameters.
 // It also returns the number of inputs and outputs of the underlying Builder.
-func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutputs int, err error) {
+func ConvertToBuilderFn[B BuilderIf] (builder B) (builderFn BuilderFn, numInputs, numOutputs int, err error) {
+	return convertToBuilderImpl(builder)
+}
+
+func convertToBuilderImpl(builderAny any) (builderFn BuilderFn, numInputs, numOutputs int, err error) {
 	if builder, ok := builderAny.(Builder1N); ok {
 		return func (g *graph.Graph, inputs []*graph.Node) ([]*graph.Node) {
 			if len(inputs) != 1 {
 				panic(errors.Errorf("wrong number of inputs for model, expected 1, got %d", len(inputs)))
 			}
-			builder.Build(inputs[0])
+			builder(inputs[0])
 			return nil
 		}, 1, 0, nil
 	}
@@ -294,7 +172,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 				panic(errors.Errorf("wrong number of inputs for model, expected 1, got %d", len(inputs)))
 			}
 			outputs := make([]*graph.Node, 1)
-			outputs[0] = builder.Build(inputs[0])
+			outputs[0] = builder(inputs[0])
 			return outputs
 		}, 1, 1, nil
 	}
@@ -305,7 +183,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 				panic(errors.Errorf("wrong number of inputs for model, expected 1, got %d", len(inputs)))
 			}
 			outputs := make([]*graph.Node, 2)
-			outputs[0], outputs[1] = builder.Build(inputs[0])
+			outputs[0], outputs[1] = builder(inputs[0])
 			return outputs
 		}, 1, 2, nil
 	}
@@ -316,7 +194,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 				panic(errors.Errorf("wrong number of inputs for model, expected 1, got %d", len(inputs)))
 			}
 			outputs := make([]*graph.Node, 3)
-			outputs[0], outputs[1], outputs[2] = builder.Build(inputs[0])
+			outputs[0], outputs[1], outputs[2] = builder(inputs[0])
 			return outputs
 		}, 1, 3, nil
 	}
@@ -327,7 +205,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 				panic(errors.Errorf("wrong number of inputs for model, expected 1, got %d", len(inputs)))
 			}
 			outputs := make([]*graph.Node, 4)
-			outputs[0], outputs[1], outputs[2], outputs[3] = builder.Build(inputs[0])
+			outputs[0], outputs[1], outputs[2], outputs[3] = builder(inputs[0])
 			return outputs
 		}, 1, 4, nil
 	}
@@ -337,7 +215,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 			if len(inputs) != 1 {
 				panic(errors.Errorf("wrong number of inputs for model, expected 1, got %d", len(inputs)))
 			}
-			return builder.Build(inputs[0])
+			return builder(inputs[0])
 		}, 1, -1, nil
 	}
 
@@ -346,7 +224,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 			if len(inputs) != 2 {
 				panic(errors.Errorf("wrong number of inputs for model, expected 2, got %d", len(inputs)))
 			}
-			builder.Build(inputs[0], inputs[1])
+			builder(inputs[0], inputs[1])
 			return nil
 		}, 2, 0, nil
 	}
@@ -357,7 +235,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 				panic(errors.Errorf("wrong number of inputs for model, expected 2, got %d", len(inputs)))
 			}
 			outputs := make([]*graph.Node, 1)
-			outputs[0] = builder.Build(inputs[0], inputs[1])
+			outputs[0] = builder(inputs[0], inputs[1])
 			return outputs
 		}, 2, 1, nil
 	}
@@ -368,7 +246,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 				panic(errors.Errorf("wrong number of inputs for model, expected 2, got %d", len(inputs)))
 			}
 			outputs := make([]*graph.Node, 2)
-			outputs[0], outputs[1] = builder.Build(inputs[0], inputs[1])
+			outputs[0], outputs[1] = builder(inputs[0], inputs[1])
 			return outputs
 		}, 2, 2, nil
 	}
@@ -379,7 +257,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 				panic(errors.Errorf("wrong number of inputs for model, expected 2, got %d", len(inputs)))
 			}
 			outputs := make([]*graph.Node, 3)
-			outputs[0], outputs[1], outputs[2] = builder.Build(inputs[0], inputs[1])
+			outputs[0], outputs[1], outputs[2] = builder(inputs[0], inputs[1])
 			return outputs
 		}, 2, 3, nil
 	}
@@ -390,7 +268,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 				panic(errors.Errorf("wrong number of inputs for model, expected 2, got %d", len(inputs)))
 			}
 			outputs := make([]*graph.Node, 4)
-			outputs[0], outputs[1], outputs[2], outputs[3] = builder.Build(inputs[0], inputs[1])
+			outputs[0], outputs[1], outputs[2], outputs[3] = builder(inputs[0], inputs[1])
 			return outputs
 		}, 2, 4, nil
 	}
@@ -400,7 +278,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 			if len(inputs) != 2 {
 				panic(errors.Errorf("wrong number of inputs for model, expected 2, got %d", len(inputs)))
 			}
-			return builder.Build(inputs[0], inputs[1])
+			return builder(inputs[0], inputs[1])
 		}, 2, -1, nil
 	}
 
@@ -409,7 +287,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 			if len(inputs) != 3 {
 				panic(errors.Errorf("wrong number of inputs for model, expected 3, got %d", len(inputs)))
 			}
-			builder.Build(inputs[0], inputs[1], inputs[2])
+			builder(inputs[0], inputs[1], inputs[2])
 			return nil
 		}, 3, 0, nil
 	}
@@ -420,7 +298,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 				panic(errors.Errorf("wrong number of inputs for model, expected 3, got %d", len(inputs)))
 			}
 			outputs := make([]*graph.Node, 1)
-			outputs[0] = builder.Build(inputs[0], inputs[1], inputs[2])
+			outputs[0] = builder(inputs[0], inputs[1], inputs[2])
 			return outputs
 		}, 3, 1, nil
 	}
@@ -431,7 +309,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 				panic(errors.Errorf("wrong number of inputs for model, expected 3, got %d", len(inputs)))
 			}
 			outputs := make([]*graph.Node, 2)
-			outputs[0], outputs[1] = builder.Build(inputs[0], inputs[1], inputs[2])
+			outputs[0], outputs[1] = builder(inputs[0], inputs[1], inputs[2])
 			return outputs
 		}, 3, 2, nil
 	}
@@ -442,7 +320,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 				panic(errors.Errorf("wrong number of inputs for model, expected 3, got %d", len(inputs)))
 			}
 			outputs := make([]*graph.Node, 3)
-			outputs[0], outputs[1], outputs[2] = builder.Build(inputs[0], inputs[1], inputs[2])
+			outputs[0], outputs[1], outputs[2] = builder(inputs[0], inputs[1], inputs[2])
 			return outputs
 		}, 3, 3, nil
 	}
@@ -453,7 +331,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 				panic(errors.Errorf("wrong number of inputs for model, expected 3, got %d", len(inputs)))
 			}
 			outputs := make([]*graph.Node, 4)
-			outputs[0], outputs[1], outputs[2], outputs[3] = builder.Build(inputs[0], inputs[1], inputs[2])
+			outputs[0], outputs[1], outputs[2], outputs[3] = builder(inputs[0], inputs[1], inputs[2])
 			return outputs
 		}, 3, 4, nil
 	}
@@ -463,7 +341,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 			if len(inputs) != 3 {
 				panic(errors.Errorf("wrong number of inputs for model, expected 3, got %d", len(inputs)))
 			}
-			return builder.Build(inputs[0], inputs[1], inputs[2])
+			return builder(inputs[0], inputs[1], inputs[2])
 		}, 3, -1, nil
 	}
 
@@ -472,7 +350,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 			if len(inputs) != 4 {
 				panic(errors.Errorf("wrong number of inputs for model, expected 4, got %d", len(inputs)))
 			}
-			builder.Build(inputs[0], inputs[1], inputs[2], inputs[3])
+			builder(inputs[0], inputs[1], inputs[2], inputs[3])
 			return nil
 		}, 4, 0, nil
 	}
@@ -483,7 +361,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 				panic(errors.Errorf("wrong number of inputs for model, expected 4, got %d", len(inputs)))
 			}
 			outputs := make([]*graph.Node, 1)
-			outputs[0] = builder.Build(inputs[0], inputs[1], inputs[2], inputs[3])
+			outputs[0] = builder(inputs[0], inputs[1], inputs[2], inputs[3])
 			return outputs
 		}, 4, 1, nil
 	}
@@ -494,7 +372,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 				panic(errors.Errorf("wrong number of inputs for model, expected 4, got %d", len(inputs)))
 			}
 			outputs := make([]*graph.Node, 2)
-			outputs[0], outputs[1] = builder.Build(inputs[0], inputs[1], inputs[2], inputs[3])
+			outputs[0], outputs[1] = builder(inputs[0], inputs[1], inputs[2], inputs[3])
 			return outputs
 		}, 4, 2, nil
 	}
@@ -505,7 +383,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 				panic(errors.Errorf("wrong number of inputs for model, expected 4, got %d", len(inputs)))
 			}
 			outputs := make([]*graph.Node, 3)
-			outputs[0], outputs[1], outputs[2] = builder.Build(inputs[0], inputs[1], inputs[2], inputs[3])
+			outputs[0], outputs[1], outputs[2] = builder(inputs[0], inputs[1], inputs[2], inputs[3])
 			return outputs
 		}, 4, 3, nil
 	}
@@ -516,7 +394,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 				panic(errors.Errorf("wrong number of inputs for model, expected 4, got %d", len(inputs)))
 			}
 			outputs := make([]*graph.Node, 4)
-			outputs[0], outputs[1], outputs[2], outputs[3] = builder.Build(inputs[0], inputs[1], inputs[2], inputs[3])
+			outputs[0], outputs[1], outputs[2], outputs[3] = builder(inputs[0], inputs[1], inputs[2], inputs[3])
 			return outputs
 		}, 4, 4, nil
 	}
@@ -526,13 +404,13 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 			if len(inputs) != 4 {
 				panic(errors.Errorf("wrong number of inputs for model, expected 4, got %d", len(inputs)))
 			}
-			return builder.Build(inputs[0], inputs[1], inputs[2], inputs[3])
+			return builder(inputs[0], inputs[1], inputs[2], inputs[3])
 		}, 4, -1, nil
 	}
 
 	if builder, ok := builderAny.(BuilderMany); ok {
 		return func (g *graph.Graph, inputs []*graph.Node) ([]*graph.Node) {
-			builder.Build(inputs...)
+			builder(inputs...)
 			return nil
 		}, -1, 0, nil
 	}
@@ -540,7 +418,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 	if builder, ok := builderAny.(BuilderManyOut1N); ok {
 		return func (g *graph.Graph, inputs []*graph.Node) ([]*graph.Node) {
 			outputs := make([]*graph.Node, 1)
-			outputs[0] = builder.Build(inputs...)
+			outputs[0] = builder(inputs...)
 			return outputs
 		}, -1, 1, nil
 	}
@@ -548,7 +426,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 	if builder, ok := builderAny.(BuilderManyOut2N); ok {
 		return func (g *graph.Graph, inputs []*graph.Node) ([]*graph.Node) {
 			outputs := make([]*graph.Node, 2)
-			outputs[0], outputs[1] = builder.Build(inputs...)
+			outputs[0], outputs[1] = builder(inputs...)
 			return outputs
 		}, -1, 2, nil
 	}
@@ -556,7 +434,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 	if builder, ok := builderAny.(BuilderManyOut3N); ok {
 		return func (g *graph.Graph, inputs []*graph.Node) ([]*graph.Node) {
 			outputs := make([]*graph.Node, 3)
-			outputs[0], outputs[1], outputs[2] = builder.Build(inputs...)
+			outputs[0], outputs[1], outputs[2] = builder(inputs...)
 			return outputs
 		}, -1, 3, nil
 	}
@@ -564,14 +442,14 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 	if builder, ok := builderAny.(BuilderManyOut4N); ok {
 		return func (g *graph.Graph, inputs []*graph.Node) ([]*graph.Node) {
 			outputs := make([]*graph.Node, 4)
-			outputs[0], outputs[1], outputs[2], outputs[3] = builder.Build(inputs...)
+			outputs[0], outputs[1], outputs[2], outputs[3] = builder(inputs...)
 			return outputs
 		}, -1, 4, nil
 	}
 
 	if builder, ok := builderAny.(BuilderManyOutMany); ok {
 		return func (g *graph.Graph, inputs []*graph.Node) ([]*graph.Node) {
-			return builder.Build(inputs...)
+			return builder(inputs...)
 		}, -1, -1, nil
 	}
 
@@ -580,7 +458,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 			if len(inputs) != 0 {
 				panic(errors.Errorf("wrong number of inputs for model, expected 0, got %d", len(inputs)))
 			}
-			builder.Build(g)
+			builder(g)
 			return nil
 		}, 0, 0, nil
 	}
@@ -591,7 +469,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 				panic(errors.Errorf("wrong number of inputs for model, expected 0, got %d", len(inputs)))
 			}
 			outputs := make([]*graph.Node, 1)
-			outputs[0] = builder.Build(g)
+			outputs[0] = builder(g)
 			return outputs
 		}, 0, 1, nil
 	}
@@ -602,7 +480,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 				panic(errors.Errorf("wrong number of inputs for model, expected 0, got %d", len(inputs)))
 			}
 			outputs := make([]*graph.Node, 2)
-			outputs[0], outputs[1] = builder.Build(g)
+			outputs[0], outputs[1] = builder(g)
 			return outputs
 		}, 0, 2, nil
 	}
@@ -613,7 +491,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 				panic(errors.Errorf("wrong number of inputs for model, expected 0, got %d", len(inputs)))
 			}
 			outputs := make([]*graph.Node, 3)
-			outputs[0], outputs[1], outputs[2] = builder.Build(g)
+			outputs[0], outputs[1], outputs[2] = builder(g)
 			return outputs
 		}, 0, 3, nil
 	}
@@ -624,7 +502,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 				panic(errors.Errorf("wrong number of inputs for model, expected 0, got %d", len(inputs)))
 			}
 			outputs := make([]*graph.Node, 4)
-			outputs[0], outputs[1], outputs[2], outputs[3] = builder.Build(g)
+			outputs[0], outputs[1], outputs[2], outputs[3] = builder(g)
 			return outputs
 		}, 0, 4, nil
 	}
@@ -634,7 +512,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 			if len(inputs) != 0 {
 				panic(errors.Errorf("wrong number of inputs for model, expected 0, got %d", len(inputs)))
 			}
-			return builder.Build(g)
+			return builder(g)
 		}, 0, -1, nil
 	}
 
@@ -643,7 +521,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 			if len(inputs) != 1 {
 				panic(errors.Errorf("wrong number of inputs for model, expected 1, got %d", len(inputs)))
 			}
-			builder.Build(g, inputs[0])
+			builder(g, inputs[0])
 			return nil
 		}, 1, 0, nil
 	}
@@ -654,7 +532,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 				panic(errors.Errorf("wrong number of inputs for model, expected 1, got %d", len(inputs)))
 			}
 			outputs := make([]*graph.Node, 1)
-			outputs[0] = builder.Build(g, inputs[0])
+			outputs[0] = builder(g, inputs[0])
 			return outputs
 		}, 1, 1, nil
 	}
@@ -665,7 +543,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 				panic(errors.Errorf("wrong number of inputs for model, expected 1, got %d", len(inputs)))
 			}
 			outputs := make([]*graph.Node, 2)
-			outputs[0], outputs[1] = builder.Build(g, inputs[0])
+			outputs[0], outputs[1] = builder(g, inputs[0])
 			return outputs
 		}, 1, 2, nil
 	}
@@ -676,7 +554,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 				panic(errors.Errorf("wrong number of inputs for model, expected 1, got %d", len(inputs)))
 			}
 			outputs := make([]*graph.Node, 3)
-			outputs[0], outputs[1], outputs[2] = builder.Build(g, inputs[0])
+			outputs[0], outputs[1], outputs[2] = builder(g, inputs[0])
 			return outputs
 		}, 1, 3, nil
 	}
@@ -687,7 +565,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 				panic(errors.Errorf("wrong number of inputs for model, expected 1, got %d", len(inputs)))
 			}
 			outputs := make([]*graph.Node, 4)
-			outputs[0], outputs[1], outputs[2], outputs[3] = builder.Build(g, inputs[0])
+			outputs[0], outputs[1], outputs[2], outputs[3] = builder(g, inputs[0])
 			return outputs
 		}, 1, 4, nil
 	}
@@ -697,7 +575,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 			if len(inputs) != 1 {
 				panic(errors.Errorf("wrong number of inputs for model, expected 1, got %d", len(inputs)))
 			}
-			return builder.Build(g, inputs[0])
+			return builder(g, inputs[0])
 		}, 1, -1, nil
 	}
 
@@ -706,7 +584,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 			if len(inputs) != 2 {
 				panic(errors.Errorf("wrong number of inputs for model, expected 2, got %d", len(inputs)))
 			}
-			builder.Build(g, inputs[0], inputs[1])
+			builder(g, inputs[0], inputs[1])
 			return nil
 		}, 2, 0, nil
 	}
@@ -717,7 +595,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 				panic(errors.Errorf("wrong number of inputs for model, expected 2, got %d", len(inputs)))
 			}
 			outputs := make([]*graph.Node, 1)
-			outputs[0] = builder.Build(g, inputs[0], inputs[1])
+			outputs[0] = builder(g, inputs[0], inputs[1])
 			return outputs
 		}, 2, 1, nil
 	}
@@ -728,7 +606,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 				panic(errors.Errorf("wrong number of inputs for model, expected 2, got %d", len(inputs)))
 			}
 			outputs := make([]*graph.Node, 2)
-			outputs[0], outputs[1] = builder.Build(g, inputs[0], inputs[1])
+			outputs[0], outputs[1] = builder(g, inputs[0], inputs[1])
 			return outputs
 		}, 2, 2, nil
 	}
@@ -739,7 +617,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 				panic(errors.Errorf("wrong number of inputs for model, expected 2, got %d", len(inputs)))
 			}
 			outputs := make([]*graph.Node, 3)
-			outputs[0], outputs[1], outputs[2] = builder.Build(g, inputs[0], inputs[1])
+			outputs[0], outputs[1], outputs[2] = builder(g, inputs[0], inputs[1])
 			return outputs
 		}, 2, 3, nil
 	}
@@ -750,7 +628,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 				panic(errors.Errorf("wrong number of inputs for model, expected 2, got %d", len(inputs)))
 			}
 			outputs := make([]*graph.Node, 4)
-			outputs[0], outputs[1], outputs[2], outputs[3] = builder.Build(g, inputs[0], inputs[1])
+			outputs[0], outputs[1], outputs[2], outputs[3] = builder(g, inputs[0], inputs[1])
 			return outputs
 		}, 2, 4, nil
 	}
@@ -760,7 +638,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 			if len(inputs) != 2 {
 				panic(errors.Errorf("wrong number of inputs for model, expected 2, got %d", len(inputs)))
 			}
-			return builder.Build(g, inputs[0], inputs[1])
+			return builder(g, inputs[0], inputs[1])
 		}, 2, -1, nil
 	}
 
@@ -769,7 +647,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 			if len(inputs) != 3 {
 				panic(errors.Errorf("wrong number of inputs for model, expected 3, got %d", len(inputs)))
 			}
-			builder.Build(g, inputs[0], inputs[1], inputs[2])
+			builder(g, inputs[0], inputs[1], inputs[2])
 			return nil
 		}, 3, 0, nil
 	}
@@ -780,7 +658,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 				panic(errors.Errorf("wrong number of inputs for model, expected 3, got %d", len(inputs)))
 			}
 			outputs := make([]*graph.Node, 1)
-			outputs[0] = builder.Build(g, inputs[0], inputs[1], inputs[2])
+			outputs[0] = builder(g, inputs[0], inputs[1], inputs[2])
 			return outputs
 		}, 3, 1, nil
 	}
@@ -791,7 +669,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 				panic(errors.Errorf("wrong number of inputs for model, expected 3, got %d", len(inputs)))
 			}
 			outputs := make([]*graph.Node, 2)
-			outputs[0], outputs[1] = builder.Build(g, inputs[0], inputs[1], inputs[2])
+			outputs[0], outputs[1] = builder(g, inputs[0], inputs[1], inputs[2])
 			return outputs
 		}, 3, 2, nil
 	}
@@ -802,7 +680,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 				panic(errors.Errorf("wrong number of inputs for model, expected 3, got %d", len(inputs)))
 			}
 			outputs := make([]*graph.Node, 3)
-			outputs[0], outputs[1], outputs[2] = builder.Build(g, inputs[0], inputs[1], inputs[2])
+			outputs[0], outputs[1], outputs[2] = builder(g, inputs[0], inputs[1], inputs[2])
 			return outputs
 		}, 3, 3, nil
 	}
@@ -813,7 +691,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 				panic(errors.Errorf("wrong number of inputs for model, expected 3, got %d", len(inputs)))
 			}
 			outputs := make([]*graph.Node, 4)
-			outputs[0], outputs[1], outputs[2], outputs[3] = builder.Build(g, inputs[0], inputs[1], inputs[2])
+			outputs[0], outputs[1], outputs[2], outputs[3] = builder(g, inputs[0], inputs[1], inputs[2])
 			return outputs
 		}, 3, 4, nil
 	}
@@ -823,7 +701,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 			if len(inputs) != 3 {
 				panic(errors.Errorf("wrong number of inputs for model, expected 3, got %d", len(inputs)))
 			}
-			return builder.Build(g, inputs[0], inputs[1], inputs[2])
+			return builder(g, inputs[0], inputs[1], inputs[2])
 		}, 3, -1, nil
 	}
 
@@ -832,7 +710,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 			if len(inputs) != 4 {
 				panic(errors.Errorf("wrong number of inputs for model, expected 4, got %d", len(inputs)))
 			}
-			builder.Build(g, inputs[0], inputs[1], inputs[2], inputs[3])
+			builder(g, inputs[0], inputs[1], inputs[2], inputs[3])
 			return nil
 		}, 4, 0, nil
 	}
@@ -843,7 +721,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 				panic(errors.Errorf("wrong number of inputs for model, expected 4, got %d", len(inputs)))
 			}
 			outputs := make([]*graph.Node, 1)
-			outputs[0] = builder.Build(g, inputs[0], inputs[1], inputs[2], inputs[3])
+			outputs[0] = builder(g, inputs[0], inputs[1], inputs[2], inputs[3])
 			return outputs
 		}, 4, 1, nil
 	}
@@ -854,7 +732,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 				panic(errors.Errorf("wrong number of inputs for model, expected 4, got %d", len(inputs)))
 			}
 			outputs := make([]*graph.Node, 2)
-			outputs[0], outputs[1] = builder.Build(g, inputs[0], inputs[1], inputs[2], inputs[3])
+			outputs[0], outputs[1] = builder(g, inputs[0], inputs[1], inputs[2], inputs[3])
 			return outputs
 		}, 4, 2, nil
 	}
@@ -865,7 +743,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 				panic(errors.Errorf("wrong number of inputs for model, expected 4, got %d", len(inputs)))
 			}
 			outputs := make([]*graph.Node, 3)
-			outputs[0], outputs[1], outputs[2] = builder.Build(g, inputs[0], inputs[1], inputs[2], inputs[3])
+			outputs[0], outputs[1], outputs[2] = builder(g, inputs[0], inputs[1], inputs[2], inputs[3])
 			return outputs
 		}, 4, 3, nil
 	}
@@ -876,7 +754,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 				panic(errors.Errorf("wrong number of inputs for model, expected 4, got %d", len(inputs)))
 			}
 			outputs := make([]*graph.Node, 4)
-			outputs[0], outputs[1], outputs[2], outputs[3] = builder.Build(g, inputs[0], inputs[1], inputs[2], inputs[3])
+			outputs[0], outputs[1], outputs[2], outputs[3] = builder(g, inputs[0], inputs[1], inputs[2], inputs[3])
 			return outputs
 		}, 4, 4, nil
 	}
@@ -886,13 +764,13 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 			if len(inputs) != 4 {
 				panic(errors.Errorf("wrong number of inputs for model, expected 4, got %d", len(inputs)))
 			}
-			return builder.Build(g, inputs[0], inputs[1], inputs[2], inputs[3])
+			return builder(g, inputs[0], inputs[1], inputs[2], inputs[3])
 		}, 4, -1, nil
 	}
 
 	if builder, ok := builderAny.(BuilderGMany); ok {
 		return func (g *graph.Graph, inputs []*graph.Node) ([]*graph.Node) {
-			builder.Build(g, inputs...)
+			builder(g, inputs...)
 			return nil
 		}, -1, 0, nil
 	}
@@ -900,7 +778,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 	if builder, ok := builderAny.(BuilderGManyOut1N); ok {
 		return func (g *graph.Graph, inputs []*graph.Node) ([]*graph.Node) {
 			outputs := make([]*graph.Node, 1)
-			outputs[0] = builder.Build(g, inputs...)
+			outputs[0] = builder(g, inputs...)
 			return outputs
 		}, -1, 1, nil
 	}
@@ -908,7 +786,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 	if builder, ok := builderAny.(BuilderGManyOut2N); ok {
 		return func (g *graph.Graph, inputs []*graph.Node) ([]*graph.Node) {
 			outputs := make([]*graph.Node, 2)
-			outputs[0], outputs[1] = builder.Build(g, inputs...)
+			outputs[0], outputs[1] = builder(g, inputs...)
 			return outputs
 		}, -1, 2, nil
 	}
@@ -916,7 +794,7 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 	if builder, ok := builderAny.(BuilderGManyOut3N); ok {
 		return func (g *graph.Graph, inputs []*graph.Node) ([]*graph.Node) {
 			outputs := make([]*graph.Node, 3)
-			outputs[0], outputs[1], outputs[2] = builder.Build(g, inputs...)
+			outputs[0], outputs[1], outputs[2] = builder(g, inputs...)
 			return outputs
 		}, -1, 3, nil
 	}
@@ -924,14 +802,14 @@ func ConvertToBuilderFn(builderAny any) (builderFn BuilderFn, numInputs, numOutp
 	if builder, ok := builderAny.(BuilderGManyOut4N); ok {
 		return func (g *graph.Graph, inputs []*graph.Node) ([]*graph.Node) {
 			outputs := make([]*graph.Node, 4)
-			outputs[0], outputs[1], outputs[2], outputs[3] = builder.Build(g, inputs...)
+			outputs[0], outputs[1], outputs[2], outputs[3] = builder(g, inputs...)
 			return outputs
 		}, -1, 4, nil
 	}
 
 	if builder, ok := builderAny.(BuilderGManyOutMany); ok {
 		return func (g *graph.Graph, inputs []*graph.Node) ([]*graph.Node) {
-			return builder.Build(g, inputs...)
+			return builder(g, inputs...)
 		}, -1, -1, nil
 	}
 
