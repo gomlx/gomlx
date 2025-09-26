@@ -19,7 +19,7 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/ml/models/builderif"
+	"github.com/gomlx/gomlx/models/builderif"
 	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/pkg/errors"

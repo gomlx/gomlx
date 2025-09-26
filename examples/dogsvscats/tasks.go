@@ -18,16 +18,17 @@ package dogsvscats
 
 import (
 	"fmt"
-	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/ml/data"
-	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/models/inceptionv3"
-	"github.com/gomlx/gopjrt/dtypes"
 	"log"
 	"math/rand"
 	"os"
 	"path"
 	"time"
+
+	"github.com/gomlx/gomlx/examples/inceptionv3"
+	"github.com/gomlx/gomlx/ml/context"
+	"github.com/gomlx/gomlx/ml/data"
+	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gopjrt/dtypes"
 )
 
 // This file implements high level tasks: pre-generating augment dataset.

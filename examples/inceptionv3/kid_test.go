@@ -2,6 +2,11 @@ package inceptionv3
 
 import (
 	"fmt"
+	"image"
+	"os"
+	"sync"
+	"testing"
+
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
@@ -10,10 +15,6 @@ import (
 	"github.com/gomlx/gomlx/types/tensors/images"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
-	"image"
-	"os"
-	"sync"
-	"testing"
 
 	_ "github.com/gomlx/gomlx/backends/xla"
 )

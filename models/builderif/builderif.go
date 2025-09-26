@@ -4,4 +4,4 @@
 // model passed to models.NewExec has a valid Builder API.
 package builderif
 
-//go:generate go run ../../../internal/cmd/builderif/
+//go:generate go run ../../internal/cmd/builderif/

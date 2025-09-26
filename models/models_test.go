@@ -7,7 +7,7 @@ import (
 	_ "github.com/gomlx/gomlx/backends/default"
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
-	"github.com/gomlx/gomlx/ml/models/builderif"
+	"github.com/gomlx/gomlx/models/builderif"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/types/xslices"

@@ -3,6 +3,11 @@ package inceptionv3
 import (
 	"flag"
 	"fmt"
+	"image"
+	_ "image/png"
+	"os"
+	"testing"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
@@ -11,10 +16,6 @@ import (
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"image"
-	_ "image/png"
-	"os"
-	"testing"
 
 	_ "github.com/gomlx/gomlx/backends/xla"
 )

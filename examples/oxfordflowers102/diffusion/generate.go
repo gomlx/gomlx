@@ -4,24 +4,6 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
-	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
-	. "github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/internal/exceptions"
-	"github.com/gomlx/gomlx/internal/must"
-	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/ml/data"
-	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/ml/train/metrics"
-	"github.com/gomlx/gomlx/models/inceptionv3"
-	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensors"
-	timage "github.com/gomlx/gomlx/types/tensors/images"
-	"github.com/gomlx/gomlx/types/xslices"
-	"github.com/gomlx/gomlx/types/xsync"
-	"github.com/janpfeifer/gonb/cache"
-	"github.com/janpfeifer/gonb/gonbui"
-	"github.com/janpfeifer/gonb/gonbui/dom"
-	"github.com/janpfeifer/gonb/gonbui/widgets"
 	"image"
 	"io"
 	"math"
@@ -32,6 +14,25 @@ import (
 	"strconv"
 	"strings"
 	"text/template"
+
+	inceptionv4 "github.com/gomlx/gomlx/examples/inceptionv3"
+	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
+	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/internal/must"
+	"github.com/gomlx/gomlx/ml/context"
+	"github.com/gomlx/gomlx/ml/data"
+	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/ml/train/metrics"
+	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/tensors"
+	timage "github.com/gomlx/gomlx/types/tensors/images"
+	"github.com/gomlx/gomlx/types/xslices"
+	"github.com/gomlx/gomlx/types/xsync"
+	"github.com/janpfeifer/gonb/cache"
+	"github.com/janpfeifer/gonb/gonbui"
+	"github.com/janpfeifer/gonb/gonbui/dom"
+	"github.com/janpfeifer/gonb/gonbui/widgets"
 )
 
 // PlotImagesTensor plots images in tensor format, all in one row.
@@ -496,13 +497,13 @@ func (c *Config) NewKidGenerator(evalDS train.Dataset, numDiffusionStep int) *Ki
 	noise := c.GenerateNoise(c.EvalBatchSize)
 	flowerIds := c.GenerateFlowerIds(c.EvalBatchSize)
 	i3Path := path.Join(c.DataDir, "inceptionV3")
-	must.M(inceptionv3.DownloadAndUnpackWeights(i3Path))
+	must.M(inceptionv4.DownloadAndUnpackWeights(i3Path))
 	kg := &KidGenerator{
 		config:         c,
 		ctxInceptionV3: context.New().Checked(false),
 		ds:             evalDS,
 		generator:      c.NewImagesGenerator(noise, flowerIds, numDiffusionStep),
-		kid:            inceptionv3.KidMetric(i3Path, inceptionv3.MinimumImageSize, 255.0, timage.ChannelsLast),
+		kid:            inceptionv4.KidMetric(i3Path, inceptionv4.MinimumImageSize, 255.0, timage.ChannelsLast),
 	}
 	kg.evalExec = context.NewExec(c.Backend, kg.ctxInceptionV3, kg.EvalStepGraph)
 	return kg
