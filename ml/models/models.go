@@ -1,6 +1,6 @@
 // Package models provide helpers to build, execute, save and load models and their weights.
 //
-// Note: This package aims to replace the `ml/context` package, and all the layers libraries.
+// Note: This package aims to replace the `ml/context` package and all the layers libraries.
 // **It's still in beta**. Any feedback is very welcome.
 //
 // It hinges on the following abstraction of "model":
@@ -15,9 +15,12 @@
 package models
 
 import (
+	"sync"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/internal/models/builderif"
+	"github.com/gomlx/gomlx/ml/models/builderif"
+	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/pkg/errors"
 )
@@ -29,49 +32,56 @@ import (
 // If the combination of shapes has already been seen before, it will reuse the pre-compiled graph -- up to a certain cache size.
 type Exec struct {
 	backend backends.Backend
-	model   any
 
 	// Basic graph executor and the wrapper function with a fixed signature that wraps the model's Build function.
 	exec                                *graph.Exec
-	builderFn                           builderif.BuilderFn
 	numBuilderInputs, numBuilderOutputs int
+
+	// mu protects per-graph information: since there may be different concurrent executions,
+	// creating different graphs.
+	mu sync.Mutex
+
+	// Graphs created by this executor.
+	graphs types.Set[graph.GraphId]
 
 	// List of variables that have been used per graph built, both as input and as output (if they were modified):
 	sideInputs, sideOutputs map[graph.GraphId][]*Variable
 }
 
-// NewExec creates a new Exec object using the model object, and the buildFn function that builds the computation graph
-// for this executor.
+// NewExec creates a new Exec (executor) object taking the closure buildFn that builds the model's computation graph.
 //
-// The buildFn function takes first a pointer to the model object as input; it may take a *graph.Graph as a first argument,
+// The buildFn closure may take a *graph.Graph as a first argument,
 // plus zero to four *Node arguments or a "...*Node" argument.
 // It must return either 0 to 4 *Node values or a []*Node.
-// Examples of valid buildFn functions for various fictitious models:
 //
-//	func Predict(model *RandomModel, g *graph.Graph) []*Node {...}
-//	func Predict(model *DistributionModel, x *Node) (predictedMean, predictedVariance *Node) {...}
-//	func Distance(model *NonEuclideanSpace, x, y *Node) (distance *Node) {...}
-//	func ComplexModel(model *ComplexModel, inputs ...*Node) (outputs []*Node) {...}
-//	func ApplyGradients(model *MyModel, gradients ...*Node)  {...} // No outputs, this graph updates the weights directly.
+// Examples of valid buildFn functions or methods (methods can be passed and Go will create a closure for them) for
+// various fictitious models:
+//
+//	func (m *ComplexModel) ComplexModel(inputs ...*Node) (outputs []*Node) {...}
+//	func (m *MyModel) ApplyGradients(gradients ...*Node)  {...} // No outputs, this graph updates the weights directly.
+//	func (rng *RngState) RandomUniform(g *graph.Graph) *Node {...}
+//	func Statistics(x *Node) (mean, variance *Node) {...}
+//	func (space *NonEuclideanSpace) Distance(x, y *Node) (distance *Node) {...}
 //
 // The returned Exec keeps a reference to the model object, and it will use it every time it needs to build a new computation graph.
 //
 // It returns an error if the model object does not have a valid Builder API.
-func NewExec[M any](backend backends.Backend, model *M, buildFn any) (*Exec, error) {
+func NewExec[B builderif.BuilderIf](backend backends.Backend, builderFn B) (*Exec, error) {
 	e := &Exec{
 		backend:     backend,
-		model:       model,
+		graphs:      types.MakeSet[graph.GraphId](),
 		sideInputs:  make(map[graph.GraphId][]*Variable),
 		sideOutputs: make(map[graph.GraphId][]*Variable),
 	}
 	var err error
-	e.builderFn, e.numBuilderInputs, e.numBuilderOutputs, err = builderif.ConvertToBuilderFn(model)
+	var canonicalBuilderFn builderif.BuilderFn
+	canonicalBuilderFn, e.numBuilderInputs, e.numBuilderOutputs, err = builderif.ConvertToBuilderFn(builderFn)
 	if err != nil {
 		return nil, err
 	}
 
-	// Build graph executor based on the model's signature (in e.builderFn).
-	// Notice that variable values are passed as "side inputs" to the graph.
+	// Build graph executor using the canonicalized builderFn.
+	// Notice that variable values will be passed as "side inputs" to the graph.
 	if e.numBuilderInputs != 0 {
 		// If the model has inputs, we take the graph from them first.
 		e.exec, err = graph.NewExecOrError(backend, func(inputs []*graph.Node) []*graph.Node {
@@ -79,12 +89,14 @@ func NewExec[M any](backend backends.Backend, model *M, buildFn any) (*Exec, err
 				panic(errors.Errorf("wrong number of inputs for model, expected %d, got %d", e.numBuilderInputs, len(inputs)))
 			}
 			g := inputs[0].Graph()
-			return e.builderFn(g, inputs)
+			e.registerGraphId(g.GraphId())
+			return canonicalBuilderFn(g, inputs)
 		})
 	} else {
 		// If the model has no input values (nodes), so we must provide the graph as an input.
 		e.exec, err = graph.NewExecOrError(backend, func(g *graph.Graph) []*graph.Node {
-			return e.builderFn(g, nil)
+			e.registerGraphId(g.GraphId())
+			return canonicalBuilderFn(g, nil)
 		})
 	}
 	if err != nil {
