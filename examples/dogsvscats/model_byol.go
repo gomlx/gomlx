@@ -4,7 +4,7 @@ package dogsvscats
 // https://arxiv.org/abs/2006.07733
 
 import (
-	inceptionv4 "github.com/gomlx/gomlx/examples/inceptionv3"
+	"github.com/gomlx/gomlx/examples/inceptionv3"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/ml/context"
@@ -24,9 +24,9 @@ func byolModelEmbedding(ctx *context.Context, images *Node, baseTrainable bool) 
 	isInceptionV3 := context.GetParamOr(ctx, "byol_inception", false)
 	if isInceptionV3 {
 		channelsConfig := timage.ChannelsLast
-		images = inceptionv4.PreprocessImage(images, 1.0, channelsConfig) // Adjust image to format used by Inception.
-		embeddings = inceptionv4.BuildGraph(ctx, images).
-			SetPooling(inceptionv4.MaxPooling).
+		images = inceptionv3.PreprocessImage(images, 1.0, channelsConfig) // Adjust image to format used by Inception.
+		embeddings = inceptionv3.BuildGraph(ctx, images).
+			SetPooling(inceptionv3.MaxPooling).
 			Trainable(baseTrainable).Done()
 	} else {
 		// Simple CNN model -- we need an extra FNN on top, so we discard the original prediction.
