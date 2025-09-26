@@ -1,5 +1,18 @@
 # GoMLX changelog
 
+# Next
+
+* Copied external trivial `must` and `exceptions` packages to `/internal/...`, to remove external dependencies.
+* Package `models`:
+  * Experimental package that aims at replacing the `context` package.
+* Package `xla`:  **DEPRECATED**, in the majority of the cases stablehlo will take over without the need of any changes, but you may need changes.
+  * Now registered as backend "oldxla". 
+  * Only included in `github.com/gomlx/gomlx/backends/default` if compiled with the tag `oldxla`.
+* Package `stablehlo`:
+  * Now replacing `xla`. Using `xla` backend will actually use the "stablehlo" backend.
+  * Added `github.com/gomlx/gomlx/backends/stablehlo/cpu/dynamic` and `github.com/gomlx/gomlx/backends/stablehlo/cpu/static`
+    to optionally force dynamic/static linking of the CPU PJRT plugin.
+
 # v0.23.1: 2025/09/25: Small bug fixes.
 
 * Package `backends`:
