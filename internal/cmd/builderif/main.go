@@ -62,32 +62,8 @@ func main() {
 	w("// to a BuilderFn, see ConvertToBuilderFn().\n")
 	w("type BuilderFn func (g *graph.Graph, inputs []*graph.Node) ([]*graph.Node)\n\n")
 
-	// A negative value of numInputs or numOutputs mean "many".
-	wName := func(c config) {
-		w("Builder")
-		if c.hasGraph {
-			w("G")
-		}
-		if c.numInputs < 0 {
-			w("Many")
-		} else {
-			w("%dN", c.numInputs)
-		}
-		if c.numOutputs != 0 {
-			w("Out")
-			if c.numOutputs < 0 {
-				w("Many")
-			} else {
-				w("%dN", c.numOutputs)
-			}
-		}
-	}
-
 	wFuncType := func(c config) {
-		w("type ")
-		wName(c)
-
-		w(" func (")
+		w("func (")
 		if c.hasGraph {
 			w("g *graph.Graph")
 			if c.numInputs != 0 {
@@ -122,14 +98,7 @@ func main() {
 			}
 			w(")")
 		}
-		w("\n")
 	}
-
-	// Write individual build function types.
-	for _, c := range iterConfig() {
-		wFuncType(c)
-	}
-	w("\n")
 
 	// Write constraint for any of the build types.
 	w("type BuilderIf interface {\n\t")
@@ -137,7 +106,7 @@ func main() {
 		if i > 0 {
 			w(" |\n\t")
 		}
-		wName(c)
+		wFuncType(c)
 	}
 	w("\n}\n\n")
 
@@ -203,16 +172,18 @@ func main() {
 	w("\treturn convertToBuilderImpl(builder)\n}\n\n")
 
 	w("func convertToBuilderImpl(builderAny any) (builderFn BuilderFn, numInputs, numOutputs int, err error) {\n")
+	w("\tswitch builder := builderAny.(type) {\n")
 	for _, c := range iterConfig() {
-		w("\tif builder, ok := builderAny.(")
-		wName(c)
-		w("); ok {\n")
+		w("\tcase ")
+		wFuncType(c)
+		w(":\n")
 		w("\t\treturn func (g *graph.Graph, inputs []*graph.Node) ([]*graph.Node) {\n")
 		wInvocation("\t\t\t", c)
-		w("\t\t}, %d, %d, nil\n", c.numInputs, c.numOutputs)
-		w("\t}\n\n")
+		w("\t\t}, %d, %d, nil\n\n", c.numInputs, c.numOutputs)
 	}
-	w("\treturn nil, 0, 0, errors.Errorf(\"model object passed (%%T) doesn't implement any of the valid Build methods signatures supported, see documentation in models.NewExec for details\", builderAny)\n}\n\n")
+	w("\tdefault:\n")
+	w("\t\treturn nil, 0, 0, errors.Errorf(\"model object passed (%%T) doesn't implement any of the valid Build methods signatures supported, see documentation in models.NewExec for details\", builderAny)\n")
+	w("\t}\n}\n")
 
 	must.M(f.Close())
 	cmd := exec.Command("go", "fmt", outputPath)
