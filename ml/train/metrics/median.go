@@ -4,8 +4,8 @@ import (
 	"math/rand/v2"
 	"slices"
 
-	. "github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
+	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gopjrt/dtypes"

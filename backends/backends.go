@@ -19,7 +19,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/internal/exceptions"
 	"golang.org/x/exp/maps"
 )
 

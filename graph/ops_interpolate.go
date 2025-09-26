@@ -3,7 +3,7 @@ package graph
 import (
 	"cmp"
 
-	. "github.com/gomlx/exceptions"
+	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 )

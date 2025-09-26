@@ -3,10 +3,10 @@ package fnn
 
 import (
 	"fmt"
-	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	mag "github.com/gomlx/gomlx/examples/ogbnmag"
 	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	mldata "github.com/gomlx/gomlx/ml/data"

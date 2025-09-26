@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"path"
 
-	"github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/internal/must"
 	"k8s.io/klog/v2"
 )

@@ -20,9 +20,9 @@ package main
 import (
 	"flag"
 
-	"github.com/gomlx/exceptions"
 	_ "github.com/gomlx/gomlx/backends/default"
 	"github.com/gomlx/gomlx/examples/imdb"
+	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gopjrt/dtypes"
 

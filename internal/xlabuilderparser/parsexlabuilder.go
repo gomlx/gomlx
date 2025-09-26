@@ -16,7 +16,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/types"
 	"k8s.io/klog/v2"

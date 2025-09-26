@@ -3,10 +3,10 @@ package diffusion
 import (
 	"encoding/gob"
 	"fmt"
-	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/nanlogger"
+	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/types/tensors"

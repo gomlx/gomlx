@@ -17,10 +17,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gomlx/exceptions"
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/nanlogger"
+	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"

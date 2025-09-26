@@ -3,8 +3,8 @@ package tensors
 import (
 	"reflect"
 
-	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/pkg/errors"
 )
 

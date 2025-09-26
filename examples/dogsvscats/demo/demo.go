@@ -25,8 +25,8 @@ package main
 
 import (
 	"flag"
-	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/examples/dogsvscats"
+	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/data"
