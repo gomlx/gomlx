@@ -35,3 +35,15 @@ func removeGraphIds(ids ...graph.GraphId) {
 		delete(graphToExec, id)
 	}
 }
+
+// registerGraphId to executor and also the global mapping (registerGraphIdToExec).
+func (e *Exec) registerGraphId(id graph.GraphId) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if e.graphs.Has(id) {
+		return
+	}
+	registerGraphIdToExec(id, e)
+	e.graphs.Insert(id)
+}
