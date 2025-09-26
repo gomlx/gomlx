@@ -5,7 +5,7 @@ import (
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"testing"
 
-	_ "github.com/gomlx/gomlx/backends/xla"
+	_ "github.com/gomlx/gomlx/backends/default"
 )
 
 func TestMonotonicProjection(t *testing.T) {

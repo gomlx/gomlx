@@ -9,7 +9,7 @@ import (
 	"github.com/gomlx/gopjrt/dtypes"
 	"testing"
 
-	_ "github.com/gomlx/gomlx/backends/xla"
+	_ "github.com/gomlx/gomlx/backends/default"
 )
 
 func TestConfig_Approximate(t *testing.T) {

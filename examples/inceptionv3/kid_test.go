@@ -16,7 +16,7 @@ import (
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
 
-	_ "github.com/gomlx/gomlx/backends/xla"
+	_ "github.com/gomlx/gomlx/backends/default"
 )
 
 func loadImage(filePath string) (img image.Image, err error) {

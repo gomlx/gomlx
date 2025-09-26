@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/gomlx/gomlx/backends"
-	_ "github.com/gomlx/gomlx/backends/xla" // Use xla backend.
+	_ "github.com/gomlx/gomlx/backends/default" // Use xla backend.
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"

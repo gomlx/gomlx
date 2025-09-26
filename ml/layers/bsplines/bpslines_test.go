@@ -10,7 +10,7 @@ import (
 	"math/rand/v2"
 	"testing"
 
-	_ "github.com/gomlx/gomlx/backends/xla"
+	_ "github.com/gomlx/gomlx/backends/default"
 )
 
 func TestEvaluateSimple(t *testing.T) {

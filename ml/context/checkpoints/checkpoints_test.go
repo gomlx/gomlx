@@ -35,7 +35,7 @@ import (
 	"path"
 	"testing"
 
-	_ "github.com/gomlx/gomlx/backends/xla"
+	_ "github.com/gomlx/gomlx/backends/default"
 )
 
 func TestCheckpoints(t *testing.T) {

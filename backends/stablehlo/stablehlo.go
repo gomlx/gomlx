@@ -11,7 +11,7 @@
 //     but allows one to build a static binary that can be deployed without extra dependencies (except the standard C and C++ libraries,
 //     usually available in most machines).
 //     To enable, build using the tag `pjrt_cpu_static` (e.g.: `go build --tags pjrt_cpu_static ...`),
-//     or import `github.com/gomlx/gomlx/backends/xla/cpu/static`. Both methods have the same effect.
+//     or import `github.com/gomlx/gomlx/backends/stablehlo/cpu/static`. Both methods have the same effect.
 //   - Pre-link the CPU PJRT plugin dynamically: build with the build tag `pjrt_cpu_dynamic` (e.g.: `go test --tags pjrt_cpu_dynamic ...`),
 //     or import `github.com/gomlx/gomlx/backends/stablehlo/cpu/dynamic`. Not much difference from linking the PJRT plugin
 //     after the program starts, as default.
