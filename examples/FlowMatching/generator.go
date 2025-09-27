@@ -14,7 +14,7 @@ import (
 	"strings"
 	"text/template"
 
-	inceptionv4 "github.com/gomlx/gomlx/examples/inceptionv3"
+	"github.com/gomlx/gomlx/examples/inceptionv3"
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
 	"github.com/gomlx/gomlx/examples/oxfordflowers102/diffusion"
 	. "github.com/gomlx/gomlx/graph"
@@ -544,13 +544,13 @@ func NewKidGenerator(cfg *diffusion.Config, evalDS train.Dataset, numDiffusionSt
 	noise := cfg.GenerateNoise(cfg.EvalBatchSize)
 	flowerIds := cfg.GenerateFlowerIds(cfg.EvalBatchSize)
 	i3Path := path.Join(cfg.DataDir, "inceptionV3")
-	must.M(inceptionv4.DownloadAndUnpackWeights(i3Path))
+	must.M(inceptionv3.DownloadAndUnpackWeights(i3Path))
 	kg := &KidGenerator{
 		config:         cfg,
 		ctxInceptionV3: context.New().Checked(false),
 		ds:             evalDS,
 		generator:      NewImagesGenerator(cfg, noise, flowerIds, numDiffusionStep),
-		kid:            inceptionv4.KidMetric(i3Path, inceptionv4.MinimumImageSize, 255.0, timage.ChannelsLast),
+		kid:            inceptionv3.KidMetric(i3Path, inceptionv3.MinimumImageSize, 255.0, timage.ChannelsLast),
 	}
 	kg.evalExec = context.NewExec(cfg.Backend, kg.ctxInceptionV3, kg.EvalStepGraph)
 	return kg

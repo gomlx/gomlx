@@ -1,7 +1,7 @@
 package dogsvscats
 
 import (
-	inceptionv4 "github.com/gomlx/gomlx/examples/inceptionv3"
+	"github.com/gomlx/gomlx/examples/inceptionv3"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/ml/context"
@@ -14,7 +14,7 @@ import (
 func InceptionV3ModelPrep(ctx *context.Context, dataDir string, checkpoint *checkpoints.Handler) {
 	ctx.SetParam("data_dir", dataDir)
 	if context.GetParamOr(ctx, "inception_pretrained", true) {
-		must.M(inceptionv4.DownloadAndUnpackWeights(dataDir))
+		must.M(inceptionv3.DownloadAndUnpackWeights(dataDir))
 	}
 }
 
@@ -32,16 +32,16 @@ func InceptionV3ModelGraph(ctx *context.Context, spec any, inputs []*Node) []*No
 	_ = spec              // Not needed.
 	images := inputs[0]   // Images scaled from 0.0 to 1.0
 	channelsConfig := timage.ChannelsLast
-	images = inceptionv4.PreprocessImage(images, 1.0, channelsConfig) // Adjust image to format used by Inception.
+	images = inceptionv3.PreprocessImage(images, 1.0, channelsConfig) // Adjust image to format used by Inception.
 	dataDir := context.GetParamOr(ctx, "data_dir", ".")
 	var preTrainedPath string
 	if context.GetParamOr(ctx, "inception_pretrained", true) {
 		// Use pre-trained
 		preTrainedPath = dataDir
 	}
-	logits := inceptionv4.BuildGraph(ctx, images).
+	logits := inceptionv3.BuildGraph(ctx, images).
 		PreTrained(preTrainedPath).
-		SetPooling(inceptionv4.MaxPooling).
+		SetPooling(inceptionv3.MaxPooling).
 		Trainable(context.GetParamOr(ctx, "inception_finetuning", false)).
 		Done()
 	logits = fnn.New(ctx.In("fnn"), logits, 1).Done()
