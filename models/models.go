@@ -19,7 +19,7 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/models/builderif"
+	"github.com/gomlx/gomlx/models/builderiface"
 	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/pkg/errors"
@@ -66,7 +66,7 @@ type Exec struct {
 // The returned Exec keeps a reference to the model object, and it will use it every time it needs to build a new computation graph.
 //
 // It returns an error if the model object does not have a valid Builder API.
-func NewExec[B builderif.BuilderIf](backend backends.Backend, builderFn B) (*Exec, error) {
+func NewExec[B builderiface.FnSet](backend backends.Backend, builderFn B) (*Exec, error) {
 	e := &Exec{
 		backend:     backend,
 		graphs:      types.MakeSet[graph.GraphId](),
@@ -74,8 +74,8 @@ func NewExec[B builderif.BuilderIf](backend backends.Backend, builderFn B) (*Exe
 		sideOutputs: make(map[graph.GraphId][]*Variable),
 	}
 	var err error
-	var canonicalBuilderFn builderif.BuilderFn
-	canonicalBuilderFn, e.numBuilderInputs, e.numBuilderOutputs, err = builderif.ConvertToBuilderFn(builderFn)
+	var canonicalBuilderFn builderiface.BuilderFn
+	canonicalBuilderFn, e.numBuilderInputs, e.numBuilderOutputs, err = builderiface.ConvertToBuilderFn(builderFn)
 	if err != nil {
 		return nil, err
 	}
