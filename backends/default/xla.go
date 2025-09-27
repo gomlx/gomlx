@@ -5,4 +5,4 @@
 
 package _default
 
-import _ "github.com/gomlx/gomlx/backends/default"
+import _ "github.com/gomlx/gomlx/backends/xla"
