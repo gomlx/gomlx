@@ -9,6 +9,7 @@ import (
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/types/xsync"
 	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/pkg/errors"
 )
 
 // Variable (or weights) of a model, typically learned during training, but can also be used as large constants.
@@ -44,8 +45,55 @@ type VariableInitializer = func(g *graph.Graph, shape shapes.Shape) *graph.Node
 
 // variableNodes is used to store the variable parameter node (fed to the graph) and current value Node for a given graph.
 // They can be different if the variable value is changed during the graph building with Variable.SetValueGraph.
+//
+// Notice that valueNode is never nil -- it is initialized with paramNode if the variable is read.
+// The paramNode can be nil if the variable was written to only (Variable.SetValueGraph) before any use.
 type variableNodes struct {
 	paramNode, valueNode *graph.Node
+}
+
+// anyValueToTensor converts a value to a tensor, it it's not yet a tensor.
+//
+// See tensors.FromAnyValue for conversion.
+//
+// A graph *Node does not work here, this is assumed to be a concrete tensor value.
+// See VariableWithValueGraph instead, to create a variable with a graph *Node.
+func anyValueToTensor(value any) *tensors.Tensor {
+	if tensorValue, ok := value.(*tensors.Tensor); ok {
+		return tensorValue
+	}
+	if node, ok := value.(*graph.Node); ok {
+		Panicf(
+			"trying to feed a computation graph node (`*computation.Node`) as a concrete value will not work, "+
+				"you have to provide a Go value or a tensor here -- *Node provided: %s", node)
+	}
+	return tensors.FromAnyValue(value)
+}
+
+// VariableWithValue creates or returns a variable initialized with the given value.
+//
+// By default, variables are marked as trainable.
+//
+// The value given must be concrete: either a tensor or a normal Go value that can be converted to a tensor. See tensors.FromAnyValue.
+//
+// A graph *Node does not work here, this is assumed to be a concrete tensor value.
+// See VariableWithValueGraph instead, to create a variable with a graph *Node.
+//
+// See Variable.SetValue if you want to overwrite the value of an existing variable -- it cannot change its shape though.
+func VariableWithValue(name string, value any) (*Variable, error) {
+	var valueT *tensors.Tensor
+	err := TryCatch[error](func() { valueT = anyValueToTensor(value) })
+	if err != nil {
+		return nil, errors.WithMessagef(err, "failed to parse value %v for variable %q", value, name)
+	}
+
+	// New variable: check, create and register it in Context and return.
+	return &Variable{
+		name:      name,
+		shape:     valueT.Shape(),
+		value:     valueT,
+		trainable: true, // By default variables are trainable.
+	}, nil
 }
 
 // Name of the variable within the scope.
@@ -146,9 +194,14 @@ func (v *Variable) Value() *tensors.Tensor {
 
 // SetValue updates the tensor holding the variable value.
 //
+// This does not allow changes in shape -- you will need to create a new variable for that.
+//
 // NOTE: Because often variables are large, the previous value is immediately freed (as opposed to
 // waiting for a garbage collection). If the previous value is used somewhere else, use SetValuePreservingPrevious.
 func (v *Variable) SetValue(value *tensors.Tensor) {
+	if !value.Shape().Equal(v.shape) {
+		Panicf("variable %q cannot have its value (%s) changed to a new shape (%s)", v, v.shape, value.Shape())
+	}
 	if v.value != nil {
 		v.value.FinalizeAll()
 	}
@@ -249,9 +302,15 @@ func (v *Variable) SetValueGraph(value *graph.Node) {
 	g.AssertValid()
 	gID := g.GraphId()
 
+	if !value.Shape().Equal(v.shape) {
+		Panicf("variable %q cannot have its value (%s) changed to a new shape (%s)", v, v.shape, value.Shape())
+	}
 	nodes, found := v.graphToNodes.Load(g.GraphId())
-	if found && nodes.paramNode != nodes.valueNode {
-		// The variable has already been set for this graph, we just need to updated its value.
+	if !found || nodes == nil {
+		nodes = &variableNodes{}
+		v.graphToNodes.Store(gID, nodes)
+	} else if nodes.paramNode != nodes.valueNode && nodes.valueNode != nil {
+		// The variable has already been set for this graph, we just need to update its value.
 		nodes.valueNode = value
 		v.graphToNodes.Store(gID, nodes)
 		return
@@ -265,14 +324,13 @@ func (v *Variable) SetValueGraph(value *graph.Node) {
 		panic(nil)
 	}
 
-	// Store variable as side input to this graph.
+	// Store variable as side output to this graph.
 	e.mu.Lock()
 	e.sideOutputs[gID] = append(e.sideOutputs[gID], v)
 	e.mu.Unlock()
 
 	// Notice that nodes.paramNode may be nil, in case the value of the variable was never used as input.
 	nodes.valueNode = value
-	v.graphToNodes.Store(gID, nodes)
 }
 
 // Finalize the variable immediately freeing associated value.

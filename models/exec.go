@@ -6,6 +6,7 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/models/builderiface"
 	"github.com/gomlx/gomlx/types"
@@ -91,13 +92,15 @@ func NewExec[B builderiface.FnSet](backend backends.Backend, builderFn B) (*Exec
 			}
 			g := inputs[0].Graph()
 			e.registerGraphId(g.GraphId())
-			return canonicalBuilderFn(g, inputs)
+			outputs := canonicalBuilderFn(g, inputs)
+			return e.appendSideOutputs(g, outputs)
 		})
 	} else {
 		// If the model has no input values (nodes), so we must provide the graph as an input.
 		e.exec, err = graph.NewExecOrError(backend, func(g *graph.Graph) []*graph.Node {
 			e.registerGraphId(g.GraphId())
-			return canonicalBuilderFn(g, nil)
+			outputs := canonicalBuilderFn(g, nil)
+			return e.appendSideOutputs(g, outputs)
 		})
 	}
 	if err != nil {
@@ -112,6 +115,88 @@ func NewExec[B builderiface.FnSet](backend backends.Backend, builderFn B) (*Exec
 		}
 	}, e.graphs)
 	return e, nil
+}
+
+// Exec executes the model with the given inputs.
+//
+// The number of inputs must match the number of inputs of the model builder.
+//
+// It returns an error in case of any issues (either building/JIT-compiling the graph or during the execution).
+func (e *Exec) Exec(inputs ...any) ([]*tensors.Tensor, error) {
+	if len(inputs) != e.numBuilderInputs {
+		return nil, errors.Errorf("wrong number of inputs for model, expected %d, got %d", e.numBuilderInputs, len(inputs))
+	}
+	var outputs []*tensors.Tensor
+	var g *graph.Graph
+	err := exceptions.TryCatch[error](func() {
+		outputs, g = e.exec.CallWithGraph(inputs...)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return e.extractVariableOutputs(g.GraphId(), outputs), nil
+}
+
+func (e *Exec) setSideParams(g *graph.Graph, inputBuffers []backends.Buffer, donate []bool) {
+	// TODO: Initialize variables if needed.
+	gID := g.GraphId()
+	sideInputs := e.sideInputs[gID]
+	for _, v := range sideInputs {
+		nodes, found := v.graphToNodes.Load(gID)
+		if !found || nodes == nil || nodes.paramNode == nil {
+			exceptions.Panicf("models.Exec input variable %q was marked as needed by the model builder, but "+
+				"it has no associated parameter "+
+				"in graph #%d-- this is likely a bug in the models system, please report it in github.com/gomlx/gomlx",
+				v, gID)
+			panic(nil)
+		}
+		if nodes.paramNode.Type() != graph.NodeTypeParameter {
+			exceptions.Panicf("invalid paramNode type %q for variable %q in graph #%d", nodes.paramNode.Type(), v, gID)
+		}
+		handle := nodes.paramNode.GetParameterHandle()
+		if v.ChangedInGraph(g) {
+			// We donate the buffer, since we are getting a new one on the output.
+			inputBuffers[handle] = v.Value().DonateBuffer(e.backend, e.exec.DeviceNum())
+			v.Value().FinalizeAll()
+			v.value = nil
+			donate[handle] = true
+		} else {
+			if v.value == nil {
+				//if e.isInitializeVariablesExec {
+				//	Panicf("variable %q used and not initialized during variable initialization, this would lead to "+
+				//		"recursive initialization of variables, and is not supported", v.ScopeAndName())
+				//} else {
+				exceptions.Panicf("variable %q failed to initialize for graph #%d", v, gID)
+				panic(nil)
+				//}
+			}
+			inputBuffers[handle] = v.Value().Buffer(e.backend, e.exec.DeviceNum())
+			donate[handle] = false
+		}
+	}
+}
+
+// appendSideOutputs at the end of the computation graph building.
+func (e *Exec) appendSideOutputs(g *graph.Graph, outputs []*graph.Node) []*graph.Node {
+	sideOutputs := e.sideOutputs[g.GraphId()]
+	for _, v := range sideOutputs {
+		outputs = append(outputs, v.ValueGraph(g))
+	}
+	return outputs
+}
+
+// extractVariableOutputs extract variable updates
+func (e *Exec) extractVariableOutputs(gID graph.GraphId, outputs []*tensors.Tensor) []*tensors.Tensor {
+	sideOutputs := e.sideOutputs[gID]
+	if len(sideOutputs) == 0 {
+		return outputs
+	}
+	varValues := outputs[len(outputs)-len(sideOutputs):]
+	outputs = outputs[:len(outputs)-len(sideOutputs)]
+	for idx, v := range sideOutputs {
+		v.SetValue(varValues[idx])
+	}
+	return outputs
 }
 
 // Finalize frees all resources used by the executor -- and doesn't wait for the garbage collector to do it.
@@ -133,22 +218,6 @@ func (e *Exec) Finalize() {
 	clear(e.sideOutputs)
 	e.exec.Finalize()
 	e.exec = nil
-}
-
-// Exec executes the model with the given inputs.
-//
-// The number of inputs must match the number of inputs of the model builder.
-//
-// It returns an error in case of any issues (either building/JIT-compiling the graph or during the execution).
-func (e *Exec) Exec(inputs ...any) ([]*tensors.Tensor, error) {
-	if len(inputs) != e.numBuilderInputs {
-		return nil, errors.Errorf("wrong number of inputs for model, expected %d, got %d", e.numBuilderInputs, len(inputs))
-	}
-	return e.exec.CallOrError(inputs...)
-}
-
-func (e *Exec) setSideParams(graph *graph.Graph, inputBuffers []backends.Buffer, donate []bool) {
-	return
 }
 
 // Exec1 executes the model with the given inputs and returns the output directly (as opposed to a slice of tensors).

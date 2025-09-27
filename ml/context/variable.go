@@ -211,7 +211,7 @@ func (v *Variable) Value() *tensors.Tensor {
 
 // SetValue updates the tensor holding the variable value.
 // NOTE: Because often variables are large, the previous value is immediately freed (as opposed to
-// wait for garbage collection). If the previous value is used somewhere else, use SetValuePreservingOld.
+// waiting for garbage collection). If the previous value is used somewhere else, use SetValuePreservingOld.
 func (v *Variable) SetValue(value *tensors.Tensor) {
 	if v.value != nil {
 		v.value.FinalizeAll()
@@ -219,8 +219,8 @@ func (v *Variable) SetValue(value *tensors.Tensor) {
 	v.SetValuePreservingOld(value)
 }
 
-// SetValuePreservingOld updates the tensor holding the variable value, and dont' free old value. If previous
-// value is not used, use SetValue instead that will free it immediately.
+// SetValuePreservingOld updates the tensor holding the variable value and doesn't free the old value.
+// If the previous value is not used, use SetValue instead that will free it immediately.
 func (v *Variable) SetValuePreservingOld(value *tensors.Tensor) {
 	v.value = value
 	v.shape = value.Shape()
