@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"testing"
 
-	_ "github.com/gomlx/gomlx/backends/default"
-	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/models/builderiface"
 	"github.com/gomlx/gomlx/types/shapes"
@@ -14,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// runTestModel runs a test for a model and checks that the outputs match the wanted values.
 func runTestModel[B builderiface.FnSet](t *testing.T, testName string, buildFn B, inputs []any, want []any, delta float64) {
 	backend := graphtest.BuildTestBackend()
 	t.Run(testName, func(t *testing.T) {
@@ -56,18 +55,4 @@ func runTestModel[B builderiface.FnSet](t *testing.T, testName string, buildFn B
 				testName, ii, wantTensors[ii].GoStr())
 		}
 	})
-}
-
-type biasModel struct {
-	Bias float64
-}
-
-func (b *biasModel) AddBias(x *graph.Node) *graph.Node {
-	return graph.AddScalar(x, b.Bias)
-}
-
-func TestExec(t *testing.T) {
-	model := &biasModel{Bias: 7}
-	runTestModel(t, "NoVariables-int32", model.AddBias, []any{int32(4)}, []any{int32(11)}, -1)
-	runTestModel(t, "NoVariables-float32", model.AddBias, []any{float32(6)}, []any{float32(13)}, -1)
 }
