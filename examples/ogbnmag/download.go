@@ -8,9 +8,12 @@ package ogbnmag
 
 import (
 	"fmt"
+	"os"
+	"path"
+	"strconv"
+
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/internal/exceptions"
 	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
@@ -19,9 +22,6 @@ import (
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
-	"os"
-	"path"
-	"strconv"
 )
 
 var (
@@ -471,7 +471,7 @@ func PapersSeedDatasets(manager backends.Backend) (trainDS, validDS, testDS *mld
 		err = errors.New("data is not loaded yet, please call ogbnmag.Download() first")
 	}
 	var trainLabels, validLabels, testLabels *tensors.Tensor
-	err = exceptions.TryCatch[error](func() {
+	err = TryCatch[error](func() {
 		getLabels := NewExec(manager, getLabelsGraph)
 		trainLabels = getLabels.Call(TrainSplit, PapersLabels)[0]
 		validLabels = getLabels.Call(ValidSplit, PapersLabels)[0]
