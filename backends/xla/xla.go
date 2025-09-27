@@ -1,5 +1,8 @@
 // Package xla implements the XLA/PJRT (https://openxla.org/) based backend for GoMLX.
 //
+// Deprecated: use the new `stablehlo` backend, a new "intermediate representation" to execute computation graphs
+// on the same XLA's PJRT executors -- it's much better supported.
+//
 // To make it available in your program, import it with:
 //
 //	import _ "github.com/gomlx/gomlx/backends/xla"
@@ -27,7 +30,7 @@
 // XLA/PJRT for CPU allows the "device buffer" (where device=CPU) to be addressed directly, which
 // saves the copy from "host/local tensor" to the "on-device tensor" when executing a computation.
 // This is enabled by default if the plugin is called "cpu". To force advertising support for this
-// for other PJRTs provide the "shared_buffers" option, e.g.: GOMLX_BACKEND="xla:my_pjrt,shared_buffers".
+// for other PJRTs provide the "shared_buffers" option, e.g.: GOMLX_BACKEND="oldxla:my_pjrt,shared_buffers".
 // Or to force disabling the support, provide the "noshared_buffers" option.
 package xla
 
@@ -46,7 +49,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-const BackendName = "xla"
+const BackendName = "oldxla"
 
 // New returns a new Backend using the config as a configuration.
 // The config string should be the name of the PJRT plugin to use.
@@ -113,7 +116,7 @@ func NewWithOptions(config string, options pjrt.NamedValuesMap) (*Backend, error
 	return backend, nil
 }
 
-// Registers New() as the default constructor for "xla" backend.
+// Registers New() as the default constructor for "oldxla" backend.
 func init() {
 	backends.Register(BackendName, New)
 }

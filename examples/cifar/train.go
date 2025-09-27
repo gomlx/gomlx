@@ -2,8 +2,9 @@ package cifar
 
 import (
 	"fmt"
-	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/ml/data"
@@ -16,7 +17,6 @@ import (
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
 	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/janpfeifer/must"
 	"github.com/pkg/errors"
 	"os"
 	"slices"

@@ -22,7 +22,7 @@ import (
 
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 
-	"github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/internal/exceptions"
 	. "github.com/gomlx/gopjrt/dtypes"
 	"github.com/x448/float16"
 )

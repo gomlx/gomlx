@@ -1,10 +1,11 @@
 package inceptionv3
 
 import (
-	"github.com/gomlx/exceptions"
-	. "github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/types/tensors/images"
 	"math"
+
+	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/types/tensors/images"
 )
 
 // PreprocessImage makes the image in a format usable to InceptionV3 model.

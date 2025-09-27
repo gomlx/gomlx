@@ -19,7 +19,7 @@ package graph
 import (
 	"slices"
 
-	. "github.com/gomlx/exceptions"
+	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/xslices"

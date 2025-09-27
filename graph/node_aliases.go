@@ -2,7 +2,7 @@ package graph
 
 import (
 	"fmt"
-	"github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/internal/exceptions"
 	"iter"
 	"slices"
 	"strings"

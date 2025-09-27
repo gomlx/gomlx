@@ -25,7 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"testing"
 
-	_ "github.com/gomlx/gomlx/backends/xla"
+	_ "github.com/gomlx/gomlx/backends/default"
 )
 
 // takeFirstFn wraps the given `metricFn` with a function that takes a single node for labels and predictions as

@@ -19,8 +19,8 @@ package layers
 import (
 	"log"
 
-	. "github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
+	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/types/xslices"

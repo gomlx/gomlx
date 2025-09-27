@@ -4,7 +4,7 @@ import (
 	"encoding/gob"
 	"fmt"
 	humanize "github.com/dustin/go-humanize"
-	. "github.com/gomlx/exceptions"
+	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"

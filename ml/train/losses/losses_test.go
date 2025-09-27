@@ -24,7 +24,7 @@ import (
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/stretchr/testify/require"
 
-	_ "github.com/gomlx/gomlx/backends/xla"
+	_ "github.com/gomlx/gomlx/backends/default"
 )
 
 // gradTestFunc takes a graph and returns the output being tested, along the nodes that

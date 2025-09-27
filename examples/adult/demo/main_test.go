@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/ui/commandline"
-	"github.com/janpfeifer/must"
 	"github.com/stretchr/testify/require"
 )
 

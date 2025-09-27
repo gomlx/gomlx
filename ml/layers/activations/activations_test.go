@@ -6,7 +6,7 @@ import (
 	"github.com/gomlx/gomlx/types/xslices"
 	"testing"
 
-	_ "github.com/gomlx/gomlx/backends/xla"
+	_ "github.com/gomlx/gomlx/backends/default"
 )
 
 func TestRelu(t *testing.T) {

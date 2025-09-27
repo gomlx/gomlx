@@ -25,9 +25,9 @@ import (
 	"reflect"
 	"strings"
 
-	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/graph"
+	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/pkg/errors"
@@ -851,7 +851,7 @@ func valueToTensor(value any) *tensors.Tensor {
 	return tensors.FromAnyValue(value)
 }
 
-// VariableWithValue creates or returns a variable that is initialized with the given value in the current scope.
+// VariableWithValue creates or returns a variable initialized with the given value in the current scope.
 // If the variable already exists, its value is not overwritten.
 //
 // By default, variables are marked as trainable.

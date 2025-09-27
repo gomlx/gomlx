@@ -20,7 +20,7 @@ package commandline
 import (
 	"fmt"
 
-	. "github.com/gomlx/exceptions"
+	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/ml/train"
 )
 

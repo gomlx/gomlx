@@ -35,7 +35,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	_ "github.com/gomlx/gomlx/backends/xla"
+	_ "github.com/gomlx/gomlx/backends/default"
 )
 
 type testDS struct {

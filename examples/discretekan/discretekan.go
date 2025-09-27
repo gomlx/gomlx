@@ -9,10 +9,10 @@ import (
 	ptypes "github.com/MetalBlueberry/go-plotly/pkg/types"
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	gonbplotly "github.com/janpfeifer/gonb/gonbui/plotly"
-	"github.com/janpfeifer/must"
 
 	_ "github.com/gomlx/gomlx/backends/default"
 )
