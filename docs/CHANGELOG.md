@@ -6,7 +6,7 @@
   * Deprecating backend "xla" (now called "oldxla") in favour of "stablehlo" (aliased to "xla" as well): 
     in most cases nothing needs to be done (the `backends/default` will replace one by the other automatically),
     but in special cases there may require small changes.
-  * Experimental **models** package: it aims at replacing the `context` package, and get rid of the `context.Contex` 
+  * Experimental **models** package: it aims at replacing the `context` package, and get rid of the `context.Context` 
     object: it will let the user organize their own model state in their own Go structs, without requiring the
     somewhat complex/confusing `Context object.
     * This will be a profound change, and all the ml/ libraries will be changed to reflect that.
