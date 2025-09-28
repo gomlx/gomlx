@@ -107,7 +107,7 @@ func compareTypeForDType(dtype dtypes.DType) stablehlotypes.ComparisonType {
 	// Find compareType
 	compareType := stablehlotypes.CompareFloat
 	if !dtype.IsFloat() && !dtype.IsComplex() {
-		if dtype.IsUnsigned() {
+		if dtype.IsUnsigned() || dtype == dtypes.Bool {
 			compareType = stablehlotypes.CompareUnsigned
 		} else {
 			compareType = stablehlotypes.CompareSigned
