@@ -16,6 +16,8 @@
 * Copied external trivial `must` and `exceptions` packages to `/internal/...`, to remove external dependencies.
 * Package `models`:
   * Experimental package that aims at replacing the `context` package.
+  * All packages under `github.com/gomlx/gomlx/ml` have been rewritten to the new `models` framework, under
+    `github.com/gomlx/gomlx/models`
 * Package `inceptionv3` moved to `examples`
 * Package `xla`:  **DEPRECATED**, in the majority of the cases stablehlo will take over without the need of any changes, but you may need changes.
   * Now registered as backend "oldxla". 
