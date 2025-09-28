@@ -348,10 +348,8 @@ func (b *Builder) ArgMinMax(x backends.Op, axis int, outputDType dtypes.DType, i
 	}
 	reduceFn, ok := b.cacheArgMinMax[cacheKey]
 	if !ok {
-		compareType := stablehlotypes.CompareFloat
-		if !valuesDType.IsFloat() {
-			compareType = stablehlotypes.CompareSigned
-		}
+		compareType := compareTypeForDType(valuesDType)
+
 		// Create a new reduction function for this valuesDType/op.
 		reduceFn = b.fn.Closure()
 		lhsIndex := reduceFn.NamedInput("lhs_idx", stablehloshapes.Make(outputDType))
@@ -363,6 +361,9 @@ func (b *Builder) ArgMinMax(x backends.Op, axis int, outputDType dtypes.DType, i
 			isLeft, err = stablehlo.Compare(lhsValue, rhsValue, stablehlotypes.CompareLT, compareType)
 		} else {
 			isLeft, err = stablehlo.Compare(lhsValue, rhsValue, stablehlotypes.CompareGT, compareType)
+		}
+		if err != nil {
+			return nil, errors.WithMessagef(err, "while building reduction function for %s", opType)
 		}
 
 		if valuesDType.IsFloat() {
