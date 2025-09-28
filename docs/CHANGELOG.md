@@ -24,6 +24,12 @@
   * Now replacing `xla`. Using `xla` backend will actually use the "stablehlo" backend.
   * Added `github.com/gomlx/gomlx/backends/stablehlo/cpu/dynamic` and `github.com/gomlx/gomlx/backends/stablehlo/cpu/static`
     to optionally force dynamic/static linking of the CPU PJRT plugin.
+* Package `graph`:
+  * `Exec.Call*` methods now panic on failure.
+  * `Exec.Exec*` methods now return errors instead of panicking.
+    The `ExecOnce` and `ExecOnceN` changed!
+  * `NewExec` and `NewExecAny` now returns an error if the input is invalid.
+    Added `MustNewExec` and `MustNewExecAny` for variations that panics on error.
 
 # v0.23.1: 2025/09/25: Small bug fixes.
 

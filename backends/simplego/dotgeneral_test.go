@@ -305,7 +305,7 @@ func TestDotGeneral_Exec(t *testing.T) {
 		}
 		t.Run(testName, func(t *testing.T) {
 			// Larger example, with multiple axes.
-			y0 := graph.ExecOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
+			y0 := graph.CallOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
 				return graph.DotGeneral(lhs, []int{1}, []int{3, 0}, rhs, []int{1}, []int{0, 2})
 			},
 				tensors.FromFlatDataAndDimensions(xslices.Iota(float32(1), 2*3*1*5), 2, 3, 1, 5),
@@ -332,7 +332,7 @@ func TestDotGeneral_Exec(t *testing.T) {
 			require.Equal(t, want, y0.Value())
 
 			// Axis transposition example:
-			y1 := graph.ExecOnce(backend, func(g *graph.Graph) *graph.Node {
+			y1 := graph.CallOnce(backend, func(g *graph.Graph) *graph.Node {
 				lhs := graph.MulScalar(graph.OnePlus(graph.IotaFull(g, shapes.Make(F32, 2, 1, 3))), 1)
 				rhs := graph.Ones(g, shapes.Make(F32, 1, 3, 2))
 				return graph.DotGeneral(lhs, []int{1}, []int{2, 0}, rhs, []int{0}, []int{1, 2})
@@ -343,7 +343,7 @@ func TestDotGeneral_Exec(t *testing.T) {
 			require.Equal(t, want1, y1.Value())
 
 			// A very large example: expected value computed using XLA.
-			y3 := graph.ExecOnce(backend, func(g *graph.Graph) *graph.Node {
+			y3 := graph.CallOnce(backend, func(g *graph.Graph) *graph.Node {
 				lhs := graph.MulScalar(graph.OnePlus(graph.IotaFull(g, shapes.Make(dtypes.F64, 16, 13, 384))), 1e-5)
 				rhs := graph.Ones(g, shapes.Make(dtypes.F64, 384, 1536))
 				out := graph.DotGeneral(
@@ -357,7 +357,7 @@ func TestDotGeneral_Exec(t *testing.T) {
 			// BFloat16 example.
 			t.Run("BFloat16", func(t *testing.T) {
 				bf16 := bfloat16.FromFloat32
-				y2 := graph.ExecOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
+				y2 := graph.CallOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
 					return graph.DotGeneral(lhs, []int{1}, []int{}, rhs, []int{0}, []int{})
 				},
 					[][]bfloat16.BFloat16{{bf16(1), bf16(2), bf16(3)}},
@@ -384,7 +384,7 @@ func TestDotGeneral_Exec(t *testing.T) {
 				want, err := tensors.Load("dotgeneral_out_test.bin")
 				require.NoError(t, err)
 				fmt.Printf("\tlhs=%s, rhs=%s\n", lhs.Shape(), rhs.Shape())
-				exec := graph.NewExec(backend, func(lhs, rhs *graph.Node) *graph.Node {
+				exec := graph.MustNewExec(backend, func(lhs, rhs *graph.Node) *graph.Node {
 					return graph.DotGeneral(lhs, []int{2}, []int{0}, rhs, []int{2}, []int{0})
 				})
 				got := exec.Call(lhs, rhs)[0]
@@ -419,7 +419,7 @@ func TestDotGeneral_Exec(t *testing.T) {
 				want, err := tensors.Load("dotgeneral_out_2_test.bin")
 				require.NoError(t, err)
 				fmt.Printf("\tlhs=%s, rhs=%s\n", lhs.Shape(), rhs.Shape())
-				got := graph.ExecOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
+				got := graph.CallOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
 					return graph.DotGeneral(lhs, []int{2}, []int{0}, rhs, []int{2}, []int{0})
 				}, lhs, rhs)
 				fmt.Printf("\tgot=%s\n", got.Shape())
@@ -434,7 +434,7 @@ func TestDotGeneral_Exec(t *testing.T) {
 				want, err := tensors.Load("dotgeneral_out_2_test.bin")
 				require.NoError(t, err)
 				fmt.Printf("\tlhs=%s, rhs=%s\n", lhs.Shape(), rhs.Shape())
-				got := graph.ExecOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
+				got := graph.CallOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
 					lhs = graph.ConvertDType(lhs, dtypes.BFloat16)
 					rhs = graph.ConvertDType(rhs, dtypes.BFloat16)
 					output := graph.DotGeneral(lhs, []int{2}, []int{0}, rhs, []int{2}, []int{0})
@@ -450,7 +450,7 @@ func TestDotGeneral_Exec(t *testing.T) {
 }
 
 func TestDotGeneral_Dot(t *testing.T) {
-	exec := graph.NewExec(backend, func(lhs, rhs *graph.Node) *graph.Node {
+	exec := graph.MustNewExec(backend, func(lhs, rhs *graph.Node) *graph.Node {
 		return graph.Dot(lhs, rhs)
 	})
 

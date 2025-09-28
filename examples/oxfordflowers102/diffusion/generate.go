@@ -366,7 +366,7 @@ func (c *Config) GenerateImagesOfAllFlowerTypes(numDiffusionSteps int) (predicte
 	numImages := flowers.NumLabels
 	ctx.RngStateReset()
 	imageSize := c.ImageSize
-	noise := NewExec(c.Backend, func(g *Graph) *Node {
+	noise := MustNewExec(c.Backend, func(g *Graph) *Node {
 		state := Const(g, RngState())
 		_, noise := RandomNormal(state, shapes.Make(c.DType, 1, imageSize, imageSize, 3))
 		noise = BroadcastToDims(noise, numImages, imageSize, imageSize, 3)
@@ -410,7 +410,7 @@ func (c *Config) NewImagesGenerator(noise, flowerIds *tensors.Tensor, numDiffusi
 		numImages:         numImages,
 		numDiffusionSteps: numDiffusionSteps,
 		diffusionStepExec: context.NewExec(c.Backend, ctx, DenoiseStepGraph),
-		denormalizerExec: NewExec(c.Backend, func(image *Node) *Node {
+		denormalizerExec: MustNewExec(c.Backend, func(image *Node) *Node {
 			return c.DenormalizeImages(image)
 		}),
 	}
@@ -463,7 +463,7 @@ func (g *ImagesGenerator) Generate() (batchedImages *tensors.Tensor) {
 
 // GenerateNoise generates random noise that can be used to generate images.
 func (c *Config) GenerateNoise(numImages int) *tensors.Tensor {
-	return NewExec(c.Backend, func(g *Graph) *Node {
+	return MustNewExec(c.Backend, func(g *Graph) *Node {
 		state := Const(g, RngState())
 		_, noise := RandomNormal(state, shapes.Make(c.DType, numImages, c.ImageSize, c.ImageSize, 3))
 		return noise

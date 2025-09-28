@@ -50,7 +50,7 @@ const (
 // initCoefficients chooses random coefficients and bias. These are the true values the model will
 // attempt to learn.
 func initCoefficients(backend backends.Backend, numVariables int) (coefficients, bias *tensors.Tensor) {
-	e := NewExec(backend, func(g *Graph) (coefficients, bias *Node) {
+	e := MustNewExec(backend, func(g *Graph) (coefficients, bias *Node) {
 		rngState := Const(g, RngState())
 		rngState, coefficients = RandomNormal(rngState, shapes.Make(dtypes.Float64, numVariables))
 		coefficients = AddScalar(
@@ -66,7 +66,7 @@ func initCoefficients(backend backends.Backend, numVariables int) (coefficients,
 }
 
 func buildExamples(backend backends.Backend, coef, bias *tensors.Tensor, numExamples int, noise float64) (inputs, labels *tensors.Tensor) {
-	e := NewExec(backend, func(coef, bias *Node) (inputs, labels *Node) {
+	e := MustNewExec(backend, func(coef, bias *Node) (inputs, labels *Node) {
 		g := coef.Graph()
 		numFeatures := coef.Shape().Dimensions[0]
 

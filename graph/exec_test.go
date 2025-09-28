@@ -40,7 +40,7 @@ func EuclideanDistance(a, b *Node) *Node {
 
 func TestExec(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
-	dist := NewExec(backend, EuclideanDistance).SetMaxCache(10)
+	dist := MustNewExec(backend, EuclideanDistance).SetMaxCache(10)
 	fmt.Printf("\tExec name: %s\n", dist.Name())
 	testForDim := func(dim int) {
 		a := make([]float32, dim)
@@ -99,7 +99,7 @@ func TestExec(t *testing.T) {
 		return Add(a, b), Sub(a, b)
 	}
 
-	addAndSub := NewExec(backend, addAndSubGraph)
+	addAndSub := MustNewExec(backend, addAndSubGraph)
 	{
 		a := []float32{2, 2}
 		b := []float32{1, 1}
@@ -112,7 +112,7 @@ func TestExec(t *testing.T) {
 		require.Equalf(t, wantSub, sub, "%q(%v:%v, %v:%v) got (%v, %v), but wanted (%v, %v)", addAndSub.Name(), reflect.TypeOf(a), a, reflect.TypeOf(b), b, add, sub, wantAdd, wantSub)
 	}
 
-	iotaMatrix := ExecOnce(backend, func(g *Graph) *Node { return IotaFull(g, shapes.Make(dtypes.Int8, 2, 2)) })
+	iotaMatrix := CallOnce(backend, func(g *Graph) *Node { return IotaFull(g, shapes.Make(dtypes.Int8, 2, 2)) })
 	require.Equal(t, [][]int8{{0, 1}, {2, 3}}, iotaMatrix.Value())
 }
 
@@ -167,7 +167,7 @@ func TestExecWithSideParams(t *testing.T) {
 		donate[handle] = false
 	}
 
-	addScalar := NewExec(backend, addScalarTest).SetSideParamsHook(setSideParams)
+	addScalar := MustNewExec(backend, addScalarTest).SetSideParamsHook(setSideParams)
 	x := []float64{1, 2}
 	want := []float64{4, 5}
 	got := addScalar.Call(x)[0]
@@ -197,7 +197,7 @@ func addSubGraph(a, b *Node) []*Node {
 
 func TestExecWithSlices(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
-	concat := NewExecAny(backend, concatGraph)
+	concat := MustNewExecAny(backend, concatGraph)
 
 	a := [][]float64{{1, 2}, {3, 4}}
 	b := [][]float64{{10}, {20}}
@@ -214,7 +214,7 @@ func TestExecWithSlices(t *testing.T) {
 		require.Equalf(t, want, got.Value(), "concat([%v, %v, %v]): got %v, wanted %v", a, b, c, got, want)
 	}
 
-	addSub := NewExecAny(backend, addSubGraph)
+	addSub := MustNewExecAny(backend, addSubGraph)
 	{
 		got := addSub.Call(c, a)
 		want0 := [][]float64{{101, 103}, {203, 205}}
@@ -237,7 +237,7 @@ func concatWithLoggedFirstNodeGraph(nodes []*Node) *Node {
 func TestExecWithLogger(t *testing.T) {
 	manager := graphtest.BuildTestBackend()
 
-	concat := NewExecAny(manager, concatWithLoggedFirstNodeGraph)
+	concat := MustNewExecAny(manager, concatWithLoggedFirstNodeGraph)
 	var firstNodeValue *tensors.Tensor
 	concat.SetNodeLogger(func(_ *Graph, messages []string, values []*tensors.Tensor, nodes []NodeId) {
 		if len(messages) != 1 {
@@ -261,7 +261,7 @@ func TestExecWithLogger(t *testing.T) {
 
 func TestExecWithNoInputs(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
-	matrixInitFn := NewExec(backend, func(g *Graph) *Node {
+	matrixInitFn := MustNewExec(backend, func(g *Graph) *Node {
 		return IotaFull(g, shapes.Make(dtypes.Int64, 3, 3))
 	})
 	results := matrixInitFn.Call()
@@ -275,16 +275,16 @@ func TestExecUnusedInput(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 
 	// One of two variables is not used.
-	unusedInputFn := NewExec(backend, func(x, y *Node) *Node {
+	unusedInputFn := MustNewExec(backend, func(x, y *Node) *Node {
 		return OnePlus(x)
 	})
-	_, err := unusedInputFn.CallOrError(0, 1)
+	_, err := unusedInputFn.Exec(0, 1)
 	require.NoError(t, err)
 
 	// x is only used to get the Graph object, but not its value.
-	unusedInputFn = NewExec(backend, func(x *Node) *Node {
+	unusedInputFn = MustNewExec(backend, func(x *Node) *Node {
 		return IotaFull(x.Graph(), shapes.Make(dtypes.Int32, 3))
 	})
-	_, err = unusedInputFn.CallOrError(0)
+	_, err = unusedInputFn.Exec(0)
 	require.NoError(t, err)
 }

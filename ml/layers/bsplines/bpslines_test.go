@@ -40,7 +40,7 @@ func TestEvaluateSimple(t *testing.T) {
 	}
 
 	backend := graphtest.BuildTestBackend()
-	exec := NewExec(backend, func(x, controlPoints *Node) *Node {
+	exec := MustNewExec(backend, func(x, controlPoints *Node) *Node {
 		values := Evaluate(b,
 			x,
 			InsertAxes(controlPoints, 1))
@@ -116,7 +116,7 @@ func TestExtrapolation(t *testing.T) {
 	xs := []float64{-0.1, 0.0, 1.0, 1.1}
 	evalFn := func() []float64 {
 		got := make([]float64, len(xs))
-		exec := NewExec(backend, func(x, controlPoints *Node) *Node {
+		exec := MustNewExec(backend, func(x, controlPoints *Node) *Node {
 			return Evaluate(b, x, controlPoints)
 		})
 		for ii, x := range xs {

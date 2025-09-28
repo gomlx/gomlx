@@ -10,13 +10,13 @@ import (
 // TestBinaryOp covers the different types of automatic broadcasting for binary operations.
 func TestBinaryOp(t *testing.T) {
 	// Just return a constant.
-	exec := graph.NewExec(backend, func(lhs, rhs *graph.Node) *graph.Node {
+	exec := graph.MustNewExec(backend, func(lhs, rhs *graph.Node) *graph.Node {
 		return graph.Add(lhs, rhs)
 	})
 
 	runTestCase := func(name string, lhs, rhs, want any) {
 		t.Run(name, func(t *testing.T) {
-			results, err := exec.CallOrError(lhs, rhs)
+			results, err := exec.Exec(lhs, rhs)
 			require.NoError(t, err)
 			require.Len(t, results, 1)
 			require.Equal(t, want, results[0].Value())
@@ -33,7 +33,7 @@ func TestBinaryOp(t *testing.T) {
 		[][]float64{{0, 4}, {-1, 3}})
 
 	t.Run("booleans", func(t *testing.T) {
-		result, err := graph.ExecOnceOrErr(backend, func(lhs, rhs *graph.Node) *graph.Node {
+		result, err := graph.ExecOnce(backend, func(lhs, rhs *graph.Node) *graph.Node {
 			return graph.LogicalAnd(lhs, rhs)
 		},
 			[][]bool{{false}, {true}},

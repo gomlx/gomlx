@@ -44,7 +44,7 @@ func TestMain(m *testing.M) {
 
 func TestCompileAndRun(t *testing.T) {
 	// Just return a constant.
-	exec := graph.NewExec(backend, func(g *graph.Graph) *graph.Node { return graph.Const(g, float32(-7)) })
+	exec := graph.MustNewExec(backend, func(g *graph.Graph) *graph.Node { return graph.Const(g, float32(-7)) })
 	y0 := exec.Call()[0]
 	assert.Equal(t, float32(-7), y0.Value())
 }

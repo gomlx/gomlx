@@ -112,7 +112,7 @@ type ExecGraphFnOneOutput interface {
 // And then with Exec one can do:
 //
 //	 ctx := context.New(backend)
-//		var logitsFn = context.NewExec(backend, ctx, LogitsGraph)
+//		var logitsFn = context.MustNewExec(backend, ctx, LogitsGraph)
 //		batch := [][]float32{ {1, 2, 3}, {4, 5, 6} } // 2 examples with 3 features (shape=[2,3])
 //		fmt.Printf("Logits(%v) = %v\n", batch, logitsFn.Call(batch)[0].Value())
 //
@@ -133,7 +133,7 @@ type ExecGraphFnOneOutput interface {
 // ```
 //
 //	 ctx := context.New(backend)
-//	 counter := context.NewExec(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
+//	 counter := context.MustNewExec(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
 //		  dtype := types.Int64
 //		  counterVar := ctx.WithInitializer(initializers.Zeros).VariableWithShape("counter", types.MakeShape(dtype))
 //		  counterNode := counterVar.ValueGraph(graph)
@@ -267,7 +267,7 @@ func NewExecAny(backend backends.Backend, ctx *Context, ctxGraphFn any) (*Exec, 
 	}
 
 	e.buildGraphFn()
-	e.exec = graph.NewExecAny(backend, e.graphFn)
+	e.exec = graph.MustNewExecAny(backend, e.graphFn)
 	funcName := runtime.FuncForPC(reflect.ValueOf(ctxGraphFn).Pointer()).Name()
 	e.exec.SetName(fmt.Sprintf("Context.Exec:%s", funcName))
 	e.exec.SetSideParamsHook(e.setSideParams)

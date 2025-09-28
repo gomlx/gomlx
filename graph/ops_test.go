@@ -311,7 +311,7 @@ func TestTwoArgsOps(t *testing.T) {
 			{LogicalXor, func(x, y bool) bool { return x != y }, "LogicalXor"},
 		}
 		for _, boolCase := range casesBool {
-			exec := NewExec(backend, boolCase.fnGraph)
+			exec := MustNewExec(backend, boolCase.fnGraph)
 			for _, x := range []bool{true, false} {
 				for _, y := range []bool{true, false} {
 					got := tensors.ToScalar[bool](exec.Call(x, y)[0])
@@ -669,7 +669,7 @@ func TestReduceMax(t *testing.T) {
 
 	// It works if input is passed as a constant:
 	{
-		gotT := ExecOnce(backend, func(g *Graph) *Node {
+		gotT := CallOnce(backend, func(g *Graph) *Node {
 			return ReduceMax(Const(g, []float64{math.NaN(), 1}))
 		})
 		got := tensors.ToScalar[float64](gotT)
@@ -678,7 +678,7 @@ func TestReduceMax(t *testing.T) {
 
 	// But it doesn't if tensor to reduce is passed as a parameter.
 	{
-		gotT := ExecOnce(backend, func(x *Node) *Node {
+		gotT := CallOnce(backend, func(x *Node) *Node {
 			return ReduceMax(x)
 		}, []float64{math.NaN(), 1})
 		got := tensors.ToScalar[float64](gotT)

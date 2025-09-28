@@ -53,20 +53,20 @@ type Exec struct {
 // various fictitious models:
 //
 //	func (m *ComplexModel) Predict(inputs ...*Node) (outputs []*Node) {...}
-//	predictExec, err := NewExec(backend, m.Predict)
+//	predictExec, err := MustNewExec(backend, m.Predict)
 //
-//	NewExec(backend, func(gradients ...*Node) { applyGradients(model, gradients...) })
+//	MustNewExec(backend, func(gradients ...*Node) { applyGradients(model, gradients...) })
 //
 //	func (rng *RngState) RandomUniform(g *graph.Graph) *Node {...}
-//	uniformExec, err := NewExec(backend, rng.RandomUniform)
+//	uniformExec, err := MustNewExec(backend, rng.RandomUniform)
 //
 //	func Statistics(x *Node) (mean, variance *Node) {...}
-//	statsExec, err := NewExec(backend, Statistics)
+//	statsExec, err := MustNewExec(backend, Statistics)
 //
 //	func (space *NonEuclideanSpace) Distance(x, y *Node) (distance *Node) {...}
-//	myDistanceExec, err := NewExec(backend, space.Distance)
+//	myDistanceExec, err := MustNewExec(backend, space.Distance)
 //
-// If you are only going to execute the model/function once, you can use ExecOnce
+// If you are only going to execute the model/function once, you can use CallOnce
 func NewExec[B builderiface.FnSet](backend backends.Backend, builderFn B) (*Exec, error) {
 	graphsSet := types.MakeSet[graph.GraphId]()
 	e := &Exec{
@@ -86,7 +86,7 @@ func NewExec[B builderiface.FnSet](backend backends.Backend, builderFn B) (*Exec
 	// Notice that variable values will be passed as "side inputs" to the graph.
 	if e.numBuilderInputs != 0 {
 		// If the model has inputs, we take the graph from them first.
-		e.exec, err = graph.NewExecOrError(backend, func(inputs []*graph.Node) []*graph.Node {
+		e.exec, err = graph.NewExec(backend, func(inputs []*graph.Node) []*graph.Node {
 			if len(inputs) != e.numBuilderInputs {
 				panic(errors.Errorf("wrong number of inputs for model, expected %d, got %d", e.numBuilderInputs, len(inputs)))
 			}
@@ -97,7 +97,7 @@ func NewExec[B builderiface.FnSet](backend backends.Backend, builderFn B) (*Exec
 		})
 	} else {
 		// If the model has no input values (nodes), so we must provide the graph as an input.
-		e.exec, err = graph.NewExecOrError(backend, func(g *graph.Graph) []*graph.Node {
+		e.exec, err = graph.NewExec(backend, func(g *graph.Graph) []*graph.Node {
 			e.registerGraphId(g.GraphId())
 			outputs := canonicalBuilderFn(g, nil)
 			return e.appendSideOutputs(g, outputs)

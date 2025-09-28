@@ -783,7 +783,7 @@ func (h *Handler) takeMean(baseNames []string) error {
 	}
 
 	// Create merger graph executor.
-	h.mergeExec = graph.NewExec(h.config.backend, func(a, b, bWeight *graph.Node) *graph.Node {
+	h.mergeExec = graph.MustNewExec(h.config.backend, func(a, b, bWeight *graph.Node) *graph.Node {
 		return graph.Add(
 			graph.Mul(a, graph.OneMinus(bWeight)),
 			graph.Mul(b, bWeight))

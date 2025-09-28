@@ -70,8 +70,8 @@ func RunTestGraphFn(t *testing.T, testName string, graphFn TestGraphFn, want []a
 			all := append(i, o...)
 			return all
 		}
-		exec := graph.NewExec(backend, wrapperFn)
-		inputsAndOutputs, err := exec.CallOrError()
+		exec := graph.MustNewExec(backend, wrapperFn)
+		inputsAndOutputs, err := exec.Exec()
 		require.NoErrorf(t, err, "%s: failed to execute graph", testName)
 		require.NotPanicsf(t, func() { inputsAndOutputs = exec.Call() }, "%s: failed to execute graph", testName)
 		inputs := inputsAndOutputs[:numInputs]

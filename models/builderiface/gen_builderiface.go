@@ -683,6 +683,6 @@ func convertToBuilderImpl(builderAny any) (builderFn BuilderFn, numInputs, numOu
 		}, -1, -1, nil
 
 	default:
-		return nil, 0, 0, errors.Errorf("model object passed (%T) doesn't implement any of the valid Build methods signatures supported, see documentation in models.NewExec for details", builderAny)
+		return nil, 0, 0, errors.Errorf("model object passed (%T) doesn't implement any of the valid Build methods signatures supported, see documentation in models.MustNewExec for details", builderAny)
 	}
 }

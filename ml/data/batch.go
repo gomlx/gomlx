@@ -77,7 +77,7 @@ func Batch(backend backends.Backend, ds train.Dataset, batchSize int, createLead
 		createLeadingAxis:   createLeadingAxis,
 		dropIncompleteBatch: dropIncompleteBatch,
 	}
-	batched.batchExec = NewExec(backend, batched.batchTensorsGraph)
+	batched.batchExec = MustNewExec(backend, batched.batchTensorsGraph)
 	return batched
 }
 

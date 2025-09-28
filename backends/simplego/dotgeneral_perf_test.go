@@ -237,7 +237,7 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 			rhsTensor := tensors.FromBuffer(backend, rhsBuffer)
 
 			// Create the program that does the DotGeneral.
-			testExec := graph.NewExec(backend, func(lhs, rhs *graph.Node) *graph.Node {
+			testExec := graph.MustNewExec(backend, func(lhs, rhs *graph.Node) *graph.Node {
 				return graph.DotGeneral(lhs, benchCase.lhsContractingAxes, benchCase.lhsBatchAxes,
 					rhs, benchCase.rhsContractingAxes, benchCase.rhsBatchAxes)
 			})

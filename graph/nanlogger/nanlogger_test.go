@@ -39,7 +39,7 @@ func TestNanLogger(t *testing.T) {
 
 	// Create a NanLogger and a trivial executor that will trigger NaN and Inf.
 	l := New().WithHandler(handler)
-	e := NewExec(backend, func(values *Node) *Node {
+	e := MustNewExec(backend, func(values *Node) *Node {
 		l.PushScope("scope1")
 		v1 := Sqrt(values)
 		l.TraceFirstNaN(v1)

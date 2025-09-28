@@ -115,7 +115,7 @@ func InMemory(backend backends.Backend, ds train.Dataset, dsIsBatched bool) (mds
 	mds = &InMemoryDataset{
 		backend:               backend,
 		randomNumberGenerator: rand.New(rand.NewSource(time.Now().UnixNano())),
-		gatherExec:            NewExec(backend, gatherFromDataTensorsGraph),
+		gatherExec:            MustNewExec(backend, gatherFromDataTensorsGraph),
 		name:                  ds.Name(),
 	}
 	if sn, ok := ds.(train.HasShortName); ok {
@@ -146,7 +146,7 @@ func InMemoryFromData(backend backends.Backend, name string, inputs []any, label
 	mds = &InMemoryDataset{
 		backend:               backend,
 		randomNumberGenerator: rand.New(rand.NewSource(time.Now().UnixNano())),
-		gatherExec:            NewExec(backend, gatherFromDataTensorsGraph),
+		gatherExec:            MustNewExec(backend, gatherFromDataTensorsGraph),
 		name:                  name,
 		shortName:             name[:3],
 		inputsAndLabelsData:   make([]*tensors.Tensor, 0, len(inputs)+len(labels)),
@@ -305,7 +305,7 @@ func (mds *InMemoryDataset) readDataset(ds train.Dataset, dsIsBatched bool) (err
 		// Batch dimension is by convention the very first.
 		return Concatenate(parts, 0)
 	}
-	concatenateExec := NewExec(mds.backend, concatenateFn)
+	concatenateExec := MustNewExec(mds.backend, concatenateFn)
 	// Configure a large cache, since there can be quite a few cycles times the number of elements.
 	concatenateExec.SetMaxCache(512)
 
@@ -516,7 +516,7 @@ func (mds *InMemoryDataset) Yield() (spec any, inputs []*tensors.Tensor, labels 
 	for _, data := range mds.inputsAndLabelsData {
 		indicesAndData = append(indicesAndData, data)
 	}
-	inputsAndLabels, err = mds.gatherExec.CallOrError(indicesAndData...)
+	inputsAndLabels, err = mds.gatherExec.Exec(indicesAndData...)
 	if err != nil {
 		err = errors.WithMessagef(err, "failed gathering examples from mds data, indices=%v", indices)
 		return
@@ -717,7 +717,7 @@ func GobDeserializeInMemory(backend backends.Backend, deviceNums []backends.Devi
 	mds = &InMemoryDataset{
 		backend:               backend,
 		randomNumberGenerator: rand.New(rand.NewSource(time.Now().UnixNano())),
-		gatherExec:            NewExec(backend, gatherFromDataTensorsGraph),
+		gatherExec:            MustNewExec(backend, gatherFromDataTensorsGraph),
 	}
 
 	var numInputsAndLabels int32

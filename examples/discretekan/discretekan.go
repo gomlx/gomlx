@@ -54,7 +54,7 @@ func Plot(name string, univariateFunctions ...Univariate) {
 		lineWidth = 1.0
 	}
 	for fnIdx, fn := range univariateFunctions {
-		exec := NewExec(backend, func(g *Graph) []*Node {
+		exec := MustNewExec(backend, func(g *Graph) []*Node {
 			inputs := Iota(g, shapes.Make(dtypes.Float64, numPoints), 0)
 			inputs = MulScalar(inputs, (maxX-minX)/float64(numPoints-1))
 			inputs = AddScalar(inputs, minX)

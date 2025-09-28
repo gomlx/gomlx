@@ -37,7 +37,7 @@ import (
 
 // GenerateNoise generates random noise that can be used to generate images.
 func GenerateNoise(cfg *diffusion.Config, numImages int) *tensors.Tensor {
-	return ExecOnce(cfg.Backend, func(g *Graph) *Node {
+	return CallOnce(cfg.Backend, func(g *Graph) *Node {
 		state := Const(g, RngState())
 		_, noise := RandomNormal(state, shapes.Make(cfg.DType, numImages, cfg.ImageSize, cfg.ImageSize, 3))
 		return noise
@@ -117,7 +117,7 @@ func NewImagesGenerator(cfg *diffusion.Config, noise, flowerIds *tensors.Tensor,
 		numImages: numImages,
 		numSteps:  numSteps,
 		stepExec:  context.NewExec(cfg.Backend, ctx, MidPointODEStep),
-		denormalizerExec: NewExec(cfg.Backend, func(image *Node) *Node {
+		denormalizerExec: MustNewExec(cfg.Backend, func(image *Node) *Node {
 			return cfg.DenormalizeImages(image)
 		}),
 	}
@@ -515,7 +515,7 @@ func GenerateImagesOfAllFlowerTypes(cfg *diffusion.Config, numDiffusionSteps int
 	numImages := flowers.NumLabels
 	ctx.RngStateReset()
 	imageSize := cfg.ImageSize
-	noise := NewExec(cfg.Backend, func(g *Graph) *Node {
+	noise := MustNewExec(cfg.Backend, func(g *Graph) *Node {
 		state := Const(g, RngState())
 		_, noise := RandomNormal(state, shapes.Make(cfg.DType, 1, imageSize, imageSize, 3))
 		noise = BroadcastToDims(noise, numImages, imageSize, imageSize, 3)

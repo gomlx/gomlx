@@ -73,7 +73,7 @@ func TestBuildGraph(t *testing.T) {
 	require.NoError(t, err)
 	want := wantT.Value().([][]float32)[0] // The last [0] takes the first element of the batch of 1.
 
-	diffStats := NewExec(backend, func(a, b *Node) (max, mean *Node) {
+	diffStats := MustNewExec(backend, func(a, b *Node) (max, mean *Node) {
 		diff := Abs(Sub(a, b))
 		max, mean = ReduceAllMax(diff), ReduceAllMean(diff)
 		return

@@ -39,7 +39,7 @@ var (
 // value from -127.5 in the top left to 127.5 in the bottom right. It's deterministic.
 func noisyImages(t *testing.T, manager backends.Backend, batch *tensors.Tensor) *tensors.Tensor {
 	noisyImagesExecOnce.Do(func() {
-		noisyImagesExec = NewExec(manager, func(batch *Node) *Node {
+		noisyImagesExec = MustNewExec(manager, func(batch *Node) *Node {
 			g := batch.Graph()
 			oneImage := batch.Shape().Clone()
 			oneImage.Dimensions[0] = 1

@@ -251,7 +251,7 @@ func ConvertToGoImage(images *tensors.Tensor, exampleNum int) *image.NRGBA {
 
 // partitionImagesAndLabels into train and test partitions.
 func partitionImagesAndLabels(backend backends.Backend, images, labels *tensors.Tensor) (partitioned PartitionedImagesAndLabels) {
-	parts := ExecOnceN(backend, func(images, labels *Node) []*Node {
+	parts := CallOnceN(backend, func(images, labels *Node) []*Node {
 		imagesTrain := Slice(images, AxisRange(0, NumTrainExamples))
 		labelsTrain := Slice(labels, AxisRange(0, NumTrainExamples))
 		imagesTest := Slice(images, AxisRange(NumTrainExamples))
