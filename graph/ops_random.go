@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
@@ -14,10 +15,10 @@ import (
 )
 
 var (
-	// RngStateShape is the shapes of the random number generator state, used
+	// RngStateShape is the default shape for random number generators state, used
 	// in all Random* functions.
-	// This is dependent on the algorithm, that for now is fixed.
-	RngStateShape = shapes.Make(dtypes.Uint64, 3)
+	// It dependents on the algorithm, but for now we use the Philox algorithm only.
+	RngStateShape = backends.RngStateShape
 )
 
 // RngStateFromSeed creates a random number generator (RNG) state based on the static seed.
