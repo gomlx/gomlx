@@ -4,6 +4,7 @@ import (
 	"slices"
 
 	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gopjrt/dtypes"
 )
 
 // Op represents the output of an operation, during the computation graph building time.
@@ -123,5 +124,9 @@ const (
 	// ReduceOpMin reduces by taking the minimum value.
 	ReduceOpMin
 )
+
+// RngStateShape is the default shape for the random number generator state.
+// It dependents on the algorithm, but for now we are using Philox.
+var RngStateShape = shapes.Make(dtypes.Uint64, 3)
 
 //go:generate go tool enumer -type ReduceOpType -trimprefix=ReduceOp -output=gen_reduceoptype_enumer.go builder.go
