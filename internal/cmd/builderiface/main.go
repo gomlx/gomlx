@@ -58,7 +58,7 @@ func main() {
 	w(")\n\n")
 
 	w("// BuilderFn is the canonical function used internally by the models.Exec object.\n")
-	w("//\n// This module provides a converter from the various accepted Builder function types (collected in BuilderIf)\n")
+	w("//\n// This module provides a converter from the various accepted Builder function types (collected in FnSet)\n")
 	w("// to a BuilderFn, see ConvertToBuilderFn().\n")
 	w("type BuilderFn func (g *graph.Graph, inputs []*graph.Node) ([]*graph.Node)\n\n")
 
@@ -166,7 +166,7 @@ func main() {
 	}
 
 	// Write converter of a model to a generic
-	w("// ConvertToBuilderFn converts a build closure compatible with BuilderIf to a canonical BuilderFn matching the corresponding parameters.\n" +
+	w("// ConvertToBuilderFn converts a build closure compatible with FnSet to a canonical BuilderFn matching the corresponding parameters.\n" +
 		"// It also returns the number of inputs and outputs of the underlying Builder.\n")
 	w("func ConvertToBuilderFn[B FnSet] (builder B) (builderFn BuilderFn, numInputs, numOutputs int, err error) {\n")
 	w("\treturn convertToBuilderImpl(builder)\n}\n\n")

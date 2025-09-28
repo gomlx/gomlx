@@ -10,7 +10,7 @@ import (
 
 // BuilderFn is the canonical function used internally by the models.Exec object.
 //
-// This module provides a converter from the various accepted Builder function types (collected in BuilderIf)
+// This module provides a converter from the various accepted Builder function types (collected in FnSet)
 // to a BuilderFn, see ConvertToBuilderFn().
 type BuilderFn func(g *graph.Graph, inputs []*graph.Node) []*graph.Node
 
@@ -83,7 +83,7 @@ type FnSet interface {
 		func(g *graph.Graph, inputs ...*graph.Node) (outputs []*graph.Node)
 }
 
-// ConvertToBuilderFn converts a build closure compatible with BuilderIf to a canonical BuilderFn matching the corresponding parameters.
+// ConvertToBuilderFn converts a build closure compatible with FnSet to a canonical BuilderFn matching the corresponding parameters.
 // It also returns the number of inputs and outputs of the underlying Builder.
 func ConvertToBuilderFn[B FnSet](builder B) (builderFn BuilderFn, numInputs, numOutputs int, err error) {
 	return convertToBuilderImpl(builder)
