@@ -1,12 +1,12 @@
 # GoMLX changelog
 
-# Next: In short: s/xla/stablehlo; s/context/models 
+# Next: In short: s/xla/stablehlo; s/context/models
 
-* **Highlights** of this release, it may require changes: 
-  * Deprecating backend "xla" (now called "oldxla") in favour of "stablehlo" (aliased to "xla" as well): 
+* **Highlights** of this release, it may require changes:
+  * Deprecating backend "xla" (now called "oldxla") in favour of "stablehlo" (aliased to "xla" as well):
     in most cases nothing needs to be done (the `backends/default` will replace one by the other automatically),
     but in special cases there may require small changes.
-  * Experimental **models** package: it aims at replacing the `context` package, and get rid of the `context.Context` 
+  * Experimental **models** package: it aims at replacing the `context` package, and get rid of the `context.Context`
     object: it will let the user organize their own model state in their own Go structs, without requiring the
     somewhat complex/confusing `Context object.
     * This will be a profound change, and all the ml/ libraries will be changed to reflect that.
@@ -20,7 +20,7 @@
     `github.com/gomlx/gomlx/models`
 * Package `inceptionv3` moved to `examples`
 * Package `xla`:  **DEPRECATED**, in the majority of the cases stablehlo will take over without the need of any changes, but you may need changes.
-  * Now registered as backend "oldxla". 
+  * Now registered as backend "oldxla".
   * Only included in `github.com/gomlx/gomlx/backends/default` if compiled with the tag `oldxla`.
 * Package `stablehlo`:
   * Now replacing `xla`. Using `xla` backend will actually use the "stablehlo" backend.
@@ -32,6 +32,13 @@
     The `ExecOnce` and `ExecOnceN` changed!
   * `NewExec` and `NewExecAny` now returns an error if the input is invalid.
     Added `MustNewExec` and `MustNewExecAny` for variations that panics on error.
+
+# v0.23.2: 2025/10/01: Updated dependencies on `github.com/gomlx/stablehlo@v0.0.5` and `github.com/gomlx/gopjrt@v0.8.2`.
+
+- Updated dependency to new Gopjrt v0.8.2 -- issues with the CUDA PJRT backward compatibility (lack of).
+- Package `stablehlo`:
+  - Added support for comparison of bool values, and added corresponding tests.
+  - Fixed wrong checking for during shapeinference.Gather
 
 # v0.23.1: 2025/09/25: Small bug fixes.
 
