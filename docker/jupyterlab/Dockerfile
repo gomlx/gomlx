@@ -83,10 +83,10 @@ cd Projects
 git clone https://github.com/gomlx/gopjrt.git
 EOF
 
-# Install gopjrt libraries.
+# Install gopjrt libraries and CUDA 13 PJRT.
 USER root
 WORKDIR ${HOME}/Projects/gopjrt
-RUN ./cmd/install_linux_amd64.sh && ./cmd/install_cuda.sh
+RUN ./cmd/install_linux_amd64.sh && ./cmd/install_cuda13.sh
 
 # Test gopjrt
 USER ${NB_USER}

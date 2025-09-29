@@ -1,5 +1,12 @@
 # GoMLX changelog
 
+# v0.23.2: 2025/10/01: Updated dependencies on `github.com/gomlx/stablehlo@v0.0.5` and `github.com/gomlx/gopjrt@v0.8.2`.
+
+- Updated dependency to new Gopjrt v0.8.2 -- issues with the CUDA PJRT backward compatibility (lack of).
+- Package `stablehlo`:
+  - Added support for comparison of bool values, and added corresponding tests.
+  - Fixed wrong checking for during shapeinference.Gather
+
 # v0.23.1: 2025/09/25: Small bug fixes.
 
 * Package `backends`:
