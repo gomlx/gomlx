@@ -45,7 +45,7 @@ EOF
 #######################################################################################################
 # Go, GoNB and gopjrt
 #######################################################################################################
-ARG GO_VERSION="1.24.4"
+ARG GO_VERSION="1.25.1"
 ENV LD_LIBRARY_PATH /usr/local/lib:${LD_LIBRARY_PATH}
 
 # Download Go in users home directory.
