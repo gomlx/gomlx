@@ -27,11 +27,11 @@
   * Added `github.com/gomlx/gomlx/backends/stablehlo/cpu/dynamic` and `github.com/gomlx/gomlx/backends/stablehlo/cpu/static`
     to optionally force dynamic/static linking of the CPU PJRT plugin.
 * Package `graph`:
-  * `Exec.Call*` methods now panic on failure.
-  * `Exec.Exec*` methods now return errors instead of panicking.
-    The `ExecOnce` and `ExecOnceN` changed!
-  * `NewExec` and `NewExecAny` now returns an error if the input is invalid.
-    Added `MustNewExec` and `MustNewExecAny` for variations that panics on error.
+  * `NewExec`, `NewExecAny` `Exec`, `ExecOnce` and `ExecOnceN` now return an error on failure.
+  * `MustNewExec`, `MustNewExecAny`, `Call`, `CallOnce` and `CallOnceN` panic on failure.
+* Package `context`:
+  * `NewExec`, `NewExecAny` `Exec`, `ExecOnce` and `ExecOnceN` now return an error on failure.
+  * `MustNewExec`, `Call`, `CallOnce` and `CallOnceN` panic on failure.
 
 # v0.23.2: 2025/10/01: Updated dependencies on `github.com/gomlx/stablehlo@v0.0.5` and `github.com/gomlx/gopjrt@v0.8.2`.
 
