@@ -45,7 +45,7 @@ func TestBuildGraph(t *testing.T) {
 
 	// InceptionV3 classification.
 	ctx := context.New()
-	inceptionV3Exec := context.NewExec(backend, ctx, func(ctx *context.Context, img *Node) *Node {
+	inceptionV3Exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, img *Node) *Node {
 		img = InsertAxes(img, 0) // Add batch dimension
 		img = PreprocessImage(img, 255.0, images.ChannelsLast)
 		output := BuildGraph(ctx, img).

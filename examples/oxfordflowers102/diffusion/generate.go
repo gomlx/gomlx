@@ -409,7 +409,7 @@ func (c *Config) NewImagesGenerator(noise, flowerIds *tensors.Tensor, numDiffusi
 		flowerIds:         flowerIds,
 		numImages:         numImages,
 		numDiffusionSteps: numDiffusionSteps,
-		diffusionStepExec: context.NewExec(c.Backend, ctx, DenoiseStepGraph),
+		diffusionStepExec: context.MustNewExec(c.Backend, ctx, DenoiseStepGraph),
 		denormalizerExec: MustNewExec(c.Backend, func(image *Node) *Node {
 			return c.DenormalizeImages(image)
 		}),
@@ -505,7 +505,7 @@ func (c *Config) NewKidGenerator(evalDS train.Dataset, numDiffusionStep int) *Ki
 		generator:      c.NewImagesGenerator(noise, flowerIds, numDiffusionStep),
 		kid:            inceptionv3.KidMetric(i3Path, inceptionv3.MinimumImageSize, 255.0, timage.ChannelsLast),
 	}
-	kg.evalExec = context.NewExec(c.Backend, kg.ctxInceptionV3, kg.EvalStepGraph)
+	kg.evalExec = context.MustNewExec(c.Backend, kg.ctxInceptionV3, kg.EvalStepGraph)
 	return kg
 }
 

@@ -40,7 +40,7 @@ func TestModel(t *testing.T) {
 	testGraphFn := func(ctx *context.Context, inputs []*Node) []*Node {
 		return MagModelGraph(ctx, spec, inputs)
 	}
-	testGraphExec := context.NewExec(backend, ctx, testGraphFn)
+	testGraphExec := context.MustNewExec(backend, ctx, testGraphFn)
 
 	var inputs []*tensors.Tensor
 	spec, inputs, _, err = trainDS.Yield()

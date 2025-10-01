@@ -67,7 +67,7 @@ func New(checkpointDir string) (*Classifier, error) {
 	}
 
 	// Create model executor.
-	c.exec = context.NewExec(c.backend, c.ctx.In("model"), func(ctx *context.Context, image *graph.Node) (choice *graph.Node) {
+	c.exec = context.MustNewExec(c.backend, c.ctx.In("model"), func(ctx *context.Context, image *graph.Node) (choice *graph.Node) {
 		// We take the first result from the modelFn -- it returns a slice.
 		image = graph.ExpandAxes(image, 0) // Create a batch dimension of size 1.
 		logits := modelFn(ctx, nil, []*graph.Node{image})[0]

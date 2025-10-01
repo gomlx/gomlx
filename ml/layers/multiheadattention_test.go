@@ -213,7 +213,7 @@ func TestMultiHeadAttentionTraining(t *testing.T) {
 		inferenceFn := func(ctx *context.Context, inputs []*Node) *Node {
 			return modelFn(ctx, nil, inputs)[0]
 		}
-		inferenceExec := context.NewExec(backend, ctx.Reuse(), inferenceFn)
+		inferenceExec := context.MustNewExec(backend, ctx.Reuse(), inferenceFn)
 		for ii := 0; ii < 3; ii++ {
 			_, inputs, labels, err := evalDS.Yield()
 			require.NoErrorf(t, err, "Failed datasets: %+v", err)

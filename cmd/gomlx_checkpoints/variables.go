@@ -117,7 +117,7 @@ func PerturbVars(checkpointPath string, x float64) {
 		if !v.Trainable || !(v.DType().IsFloat() || v.DType().IsComplex()) {
 			continue
 		}
-		newValue := context.ExecOnce(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
+		newValue := context.CallOnce(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
 			value := v.ValueGraph(g)
 			// Perturbation from -1 to 1
 			perturbation := OneMinus(MulScalar(ctx.RandomUniform(g, value.Shape()), 2))

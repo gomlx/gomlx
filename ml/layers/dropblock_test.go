@@ -23,7 +23,7 @@ func TestDropBlock(t *testing.T) {
 	shape := shapes.Make(dtypes.Float32, batchSize, width, height, numChannels)
 	for _, dropRate := range []float64{0.1, 0.2} {
 		for _, blockSize := range []int{1, 3, 4} {
-			gotT := context.ExecOnce(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
+			gotT := context.CallOnce(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
 				ctx.SetTraining(g, true)
 				batch := ctx.RandomUniform(g, shape)
 				batch = DropBlock(ctx, batch).
@@ -50,7 +50,7 @@ func TestDropPath(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 	ctx := context.New()
 	ctx.RngStateFromSeed(42) // Always the same result.
-	gotT := context.ExecOnce(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
+	gotT := context.CallOnce(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
 		ctx.SetTraining(g, true)
 		ones := Ones(g, shapes.Make(dtypes.Float32, 10_000, 10, 10))
 		masked := DropPath(ctx, ones, Const(g, 0.07))

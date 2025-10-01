@@ -18,7 +18,7 @@ func TestConvolution(t *testing.T) {
 	ctx := context.New()
 
 	t.Run("2D-PadSame", func(t *testing.T) {
-		gotT := context.ExecOnce(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
+		gotT := context.CallOnce(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
 			x := Ones(g, shapes.Make(dtypes.F32, 5, 4, 4, 3))
 			ctx = ctx.In(path.Base(t.Name()))
 			conv := Convolution(ctx, x).
@@ -32,7 +32,7 @@ func TestConvolution(t *testing.T) {
 	})
 
 	t.Run("3D-Strides", func(t *testing.T) {
-		gotT := context.ExecOnce(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
+		gotT := context.CallOnce(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
 			x := Ones(g, shapes.Make(dtypes.F32, 5, 3, 8, 8, 8))
 			ctx = ctx.In(path.Base(t.Name()))
 			conv := Convolution(ctx, x).

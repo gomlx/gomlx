@@ -35,7 +35,7 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 	periodInSteps := 100
 	ctx := context.New().Checked(false)
-	cosineExec := context.NewExec(backend, ctx, func(ctx *context.Context, graph *Graph) *Node {
+	cosineExec := context.MustNewExec(backend, ctx, func(ctx *context.Context, graph *Graph) *Node {
 		ctx.SetTraining(graph, true)
 		New(ctx, graph, dtypes.Float32).
 			PeriodInSteps(periodInSteps).
@@ -69,7 +69,7 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 		fmt.Printf("Step %d: %f\n", ii, wantLR)
 	}
 
-	cosineExec = context.NewExec(backend, ctx, func(ctx *context.Context, graph *Graph) *Node {
+	cosineExec = context.MustNewExec(backend, ctx, func(ctx *context.Context, graph *Graph) *Node {
 		ctx.SetTraining(graph, false)
 		New(ctx, graph, dtypes.Float32).
 			PeriodInSteps(50).

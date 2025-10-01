@@ -14,7 +14,7 @@ import (
 func TestRMSNorm(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 	ctx := context.New()
-	exec := context.NewExec(backend, ctx, func(ctx *context.Context, x *Node) *Node {
+	exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, x *Node) *Node {
 		return RMSNorm(ctx, x).
 			WithNormalizationAxes(-1, -2).
 			Done()

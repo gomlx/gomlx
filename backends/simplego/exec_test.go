@@ -85,7 +85,7 @@ func TestGomlxIntegration(t *testing.T) {
 	require.Equal(t, float32(-7), y.Value())
 
 	ctx := context.New()
-	exec := context.NewExec(backend, ctx, func(ctx *context.Context, g *graph.Graph) *graph.Node {
+	exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, g *graph.Graph) *graph.Node {
 		counterVar := ctx.WithInitializer(initializers.Zero).VariableWithShape("counter", shapes.Make(dtypes.Int64))
 		counter := counterVar.ValueGraph(g)
 		counterVar.SetValueGraph(graph.OnePlus(counter))

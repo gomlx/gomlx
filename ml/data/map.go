@@ -68,7 +68,7 @@ func (mapDS *mapGraphFnDataset) Yield() (spec any, inputs []*tensors.Tensor, lab
 		// Build execution of MapGraphFn
 		mapDS.numInputs = len(inputs)
 		mapDS.numLabels = len(labels)
-		mapDS.mapGraphFnExec = context.NewExec(mapDS.backend, mapDS.ctx,
+		mapDS.mapGraphFnExec = context.MustNewExec(mapDS.backend, mapDS.ctx,
 			func(ctx *context.Context, inputsAndLabels []*Node) []*Node {
 				var inputs, labels []*Node
 				if mapDS.numInputs > 0 {

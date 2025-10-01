@@ -46,7 +46,7 @@ func takeLabelsMaskWeightPredictionsFn(metricFn func(ctx *context.Context, label
 func TestBinaryAccuracyGraph(t *testing.T) {
 	manager := graphtest.BuildTestBackend()
 	ctx := context.New()
-	accuracyExec := context.NewExec(manager, ctx, takeFirstFn(BinaryAccuracyGraph))
+	accuracyExec := context.MustNewExec(manager, ctx, takeFirstFn(BinaryAccuracyGraph))
 	labels, probs := []float32{0, 1, 0, 1, 0, 1}, []float32{0.1, 0.1, 0.5, 0.5, 0.8, 0.8}
 	results := accuracyExec.Call(labels, probs)
 	got := results[0].Value().(float32)
@@ -59,7 +59,7 @@ func TestNewMeanBinaryAccuracy(t *testing.T) {
 	manager := graphtest.BuildTestBackend()
 	ctx := context.New().Checked(false)
 	accMetric := NewMeanBinaryAccuracy("accuracy", "acc")
-	accExec := context.NewExec(manager, ctx, func(ctx *context.Context, labels, predictions *Node) *Node {
+	accExec := context.MustNewExec(manager, ctx, func(ctx *context.Context, labels, predictions *Node) *Node {
 		return accMetric.UpdateGraph(ctx, []*Node{labels}, []*Node{predictions})
 	})
 
@@ -105,7 +105,7 @@ func TestNewMeanBinaryAccuracy(t *testing.T) {
 func TestBinaryLogitsAccuracyGraph(t *testing.T) {
 	manager := graphtest.BuildTestBackend()
 	ctx := context.New()
-	accuracyExec := context.NewExec(manager, ctx, takeFirstFn(BinaryLogitsAccuracyGraph))
+	accuracyExec := context.MustNewExec(manager, ctx, takeFirstFn(BinaryLogitsAccuracyGraph))
 	labels, logits := []float32{0, 1, 0, 1, 0, 1}, []float32{-0.1, -0.1, 0, 0, 0.2, 10.0}
 	results := accuracyExec.Call(labels, logits)
 	got, _ := results[0].Value().(float32)
@@ -116,7 +116,7 @@ func TestSparseCategoricalAccuracyGraph(t *testing.T) {
 	manager := graphtest.BuildTestBackend()
 	ctx := context.New()
 	{
-		accuracyExec := context.NewExec(manager, ctx, takeFirstFn(SparseCategoricalAccuracyGraph))
+		accuracyExec := context.MustNewExec(manager, ctx, takeFirstFn(SparseCategoricalAccuracyGraph))
 		labels, logits := [][]int{{0}, {1}, {2}}, [][]float32{
 			{0, 0, 1},     // Tie, should be a miss.
 			{-2, -1, -3},  // Correct, even if negative.
@@ -127,7 +127,7 @@ func TestSparseCategoricalAccuracyGraph(t *testing.T) {
 		assert.Equal(t, float32(1.0/3.0), got, "TestSparseCategoricalAccuracyGraph")
 	}
 	{
-		accuracyExec := context.NewExec(manager, ctx, takeLabelsMaskWeightPredictionsFn(SparseCategoricalAccuracyGraph))
+		accuracyExec := context.MustNewExec(manager, ctx, takeLabelsMaskWeightPredictionsFn(SparseCategoricalAccuracyGraph))
 		labels := [][]int{{0}, {1}, {0}, {2}}
 		mask := []bool{true, true, false, true}
 		weights := []float32{1.0, 2.0, 100.0, 0.5}

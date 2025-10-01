@@ -346,7 +346,7 @@ func convertPapersEmbeddings(backend backends.Backend, ctx *context.Context) {
 		return
 	}
 
-	e := context.NewExec(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
+	e := context.MustNewExec(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
 		return ConvertDType(papersVar.ValueGraph(g), dtype)
 	})
 	converted := e.Call()[0]

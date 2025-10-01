@@ -22,7 +22,7 @@ import (
 // LayerWiseEvaluation returns the train, validation and test accuracy of the model, using layer-wise inference.
 func LayerWiseEvaluation(backend backends.Backend, ctx *context.Context, strategy *sampler.Strategy) (train, validation, test float64) {
 	var predictionsT *tensors.Tensor
-	exec := context.NewExec(backend, ctx.Reuse(), BuildLayerWiseInferenceModel(strategy, true))
+	exec := context.MustNewExec(backend, ctx.Reuse(), BuildLayerWiseInferenceModel(strategy, true))
 
 	if klog.V(1).Enabled() {
 		// Report timings.
@@ -61,7 +61,7 @@ func layerWiseCalculateAccuracies(predictions []int16, labels []int32) (train, v
 }
 
 func BuildLayerWiseCustomMetricFn(backend backends.Backend, ctx *context.Context, strategy *sampler.Strategy) plots.CustomMetricFn {
-	exec := context.NewExec(backend, ctx.Reuse(), BuildLayerWiseInferenceModel(strategy, true))
+	exec := context.MustNewExec(backend, ctx.Reuse(), BuildLayerWiseInferenceModel(strategy, true))
 	ctx = ctx.Reuse()
 	labels := tensors.CopyFlatData[int32](PapersLabels)
 	return func(plotter plots.Plotter, step float64) error {
@@ -84,7 +84,7 @@ func BuildLayerWiseCustomMetricFn(backend backends.Backend, ctx *context.Context
 // BuildLayerWiseInferenceModel returns a function that builds the OGBN-MAG GNN inference model,
 // that expects to run inference on the whole dataset in one go.
 //
-// It takes as input the [sampler.Strategy], and returns a function that can be used with `context.NewExec`
+// It takes as input the [sampler.Strategy], and returns a function that can be used with `context.MustNewExec`
 // and executed with the values of the MAG graph. Batch size is irrelevant.
 //
 // The returned function returns the predictions for all seeds shaped `Int16[NumSeedNodes]` if `predictions == true`,

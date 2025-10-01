@@ -329,7 +329,7 @@ func (r *Trainer) createExecutor(spec any, inputsLen, labelsLen int,
 	if _, found := spec.(fmt.Stringer); found {
 		trainerName = fmt.Sprintf("Trainer: spec=%s", spec)
 	}
-	return context.NewExec(r.backend, r.context,
+	return context.MustNewExec(r.backend, r.context,
 		func(ctx *context.Context, inputsAndLabels []*graph.Node) (metrics []*graph.Node) {
 			inputs := inputsAndLabels[:inputsLen]
 			labels := inputsAndLabels[inputsLen:]

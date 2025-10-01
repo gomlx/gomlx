@@ -348,7 +348,7 @@ func TestContext_SetLoader(t *testing.T) {
 	ctx = ctx.Reuse()
 
 	backend := graphtest.BuildTestBackend()
-	e := NewExec(backend, ctx, func(ctx *Context, g *Graph) (*Node, *Node) {
+	e := MustNewExec(backend, ctx, func(ctx *Context, g *Graph) (*Node, *Node) {
 		v0 := ctx.WithInitializer(initializers.Zero).VariableWithShape("x", shapes.Make(dtypes.Float32))
 		v1 := ctx.VariableWithValue("y", 1)
 		return v0.ValueGraph(g), v1.ValueGraph(g)

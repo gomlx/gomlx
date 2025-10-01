@@ -28,7 +28,7 @@ func TestLinearLayer(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 	ctx := context.New()
 	ctx.RngStateFromSeed(42)
-	y0 := context.ExecOnce(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
+	y0 := context.CallOnce(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
 		pi2 := math.Pi * 2.0
 
 		// Random inputs and rotations:
@@ -71,7 +71,7 @@ func TestRelu(t *testing.T) {
 			name := fmt.Sprintf("Leak=%.1f-Shared=%v", negativeSlope, shareNonLinearity)
 			t.Run(name, func(t *testing.T) {
 				ctx := baseCtx.In(name)
-				outputs := context.ExecOnceN(backend, ctx, func(ctx *context.Context, g *Graph) []*Node {
+				outputs := context.CallOnceN(backend, ctx, func(ctx *context.Context, g *Graph) []*Node {
 					pi2 := math.Pi * 2.0
 
 					// Random inputs and rotations:
@@ -118,7 +118,7 @@ func TestLayerNormalization(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 	ctx := context.New()
 	ctx.RngStateFromSeed(42)
-	outputs := context.ExecOnceN(backend, ctx, func(ctx *context.Context, g *Graph) []*Node {
+	outputs := context.CallOnceN(backend, ctx, func(ctx *context.Context, g *Graph) []*Node {
 		pi2 := math.Pi * 2.0
 
 		// Random inputs and rotations:
@@ -154,7 +154,7 @@ func TestVNN_Equivariant(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 	ctx := context.New()
 	ctx.RngStateFromSeed(42)
-	rotDiff := context.ExecOnce(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
+	rotDiff := context.CallOnce(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
 		pi2 := math.Pi * 2.0
 
 		// Random inputs and rotations:
@@ -281,7 +281,7 @@ func TestVNNTrain(t *testing.T) {
 	accuracy := lossAndMetrics[2].Value().(float32)
 	require.GreaterOrEqual(t, accuracy, float32(0.8), "VNN was not able to learn rotation invariant simple task, accuracy=%.1f%%.", accuracy*100.0)
 
-	sample := context.ExecOnce(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
+	sample := context.CallOnce(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
 		return ctx.RandomUniform(g, shapes.Make(dtypes.Float64))
 	})
 	fmt.Printf("Context random sample: %s\n", sample.GoStr())

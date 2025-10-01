@@ -595,7 +595,7 @@ func (ctx *Context) InitializeVariables(backend backends.Backend) {
 		// Nothing to do.
 		return
 	}
-	e := NewExec(backend, ctx, func(ctx *Context, g *Graph) []*Node {
+	e := MustNewExec(backend, ctx, func(ctx *Context, g *Graph) []*Node {
 		initialValues := make([]*Node, 0, len(variablesToInitialize))
 		for _, variable := range variablesToInitialize {
 			if variable.initializer == nil {

@@ -80,7 +80,7 @@ func TestKidMetric(t *testing.T) {
 
 	kidBuilder := NewKidBuilder(*flagDataDir, 75, 255.0, images.ChannelsLast)
 	ctx := context.New()
-	kidExec := context.NewExec(manager, ctx, func(ctx *context.Context, imagesPair []*Node) *Node {
+	kidExec := context.MustNewExec(manager, ctx, func(ctx *context.Context, imagesPair []*Node) *Node {
 		return kidBuilder.BuildGraph(ctx, []*Node{imagesPair[0]}, []*Node{imagesPair[1]})
 	})
 	kid := kidExec.Call(imagesBatch, noisyBatch)[0].Value().(float32)
