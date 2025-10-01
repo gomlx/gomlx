@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
+	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/models/builderiface"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
@@ -55,6 +57,30 @@ func runTestModel[B builderiface.FnSet](t *testing.T, testName string, buildFn B
 				testName, ii, wantTensors[ii].GoStr())
 		}
 	})
+}
+
+// TestExample in the package documentation.
+//
+// If this breaks, please update the documentation.
+func TestExample(t *testing.T) {
+	backend := graphtest.BuildTestBackend()
+	myModel := &struct {
+		counter *Variable
+	}{
+		counter: must.M1(VariableWithValue("counter", int32(0))),
+	}
+	incFn := func(g *graph.Graph) *graph.Node {
+		currentValue := myModel.counter.ValueGraph(g)
+		nextValue := graph.AddScalar(currentValue, 1)
+		myModel.counter.SetValueGraph(nextValue) // Updates the counter.
+		return currentValue
+	}
+	incExec := must.M1(NewExec(backend, incFn)) // Executor that increments the counter.
+	got := incExec.Call1()
+	require.Equal(t, int32(0), tensors.ToScalar[int32](got))
+	got = incExec.Call1()
+	require.Equal(t, int32(1), tensors.ToScalar[int32](got))
+	require.Equal(t, int32(2), tensors.ToScalar[int32](myModel.counter.Value()))
 }
 
 func TestIterVariables(t *testing.T) {
