@@ -70,16 +70,19 @@ func anyValueToTensor(value any) *tensors.Tensor {
 	return tensors.FromAnyValue(value)
 }
 
-// VariableWithValue creates or returns a variable initialized with the given value.
-//
-// By default, variables are marked as trainable.
+// VariableWithValue creates or variable initialized with the given value.
 //
 // The value given must be concrete: either a tensor or a normal Go value that can be converted to a tensor. See tensors.FromAnyValue.
 //
-// A graph *Node does not work here, this is assumed to be a concrete tensor value.
-// See VariableWithValueGraph instead, to create a variable with a graph *Node.
+// If used in a graph building function, the variable value will be the initialization value of the
+// variable; future executions of the graph will not set again the value -- e.g.: a value created in this way can be
+// trained, the initialization only happens once.
 //
-// See Variable.SetValue if you want to overwrite the value of an existing variable -- it cannot change its shape though.
+// If used outside a graph building function, the variable value will be initialized with the given value.
+//
+// By default, variables are marked as trainable.
+//
+// See also VariableWithShape.
 func VariableWithValue(name string, value any) (*Variable, error) {
 	var valueT *tensors.Tensor
 	err := TryCatch[error](func() { valueT = anyValueToTensor(value) })
@@ -94,6 +97,25 @@ func VariableWithValue(name string, value any) (*Variable, error) {
 		value:     valueT,
 		trainable: true, // By default variables are trainable.
 	}, nil
+}
+
+// VariableWithShape creates a variable with the given shape in the current scope.
+// It is initialized with the current variable initializer set for the context.
+// By default, variables are marked as trainable.
+//
+// If a Loader is configured (see SetLoader), and the value is available to load, it will override
+// the value given here -- e.g.: the value could be actually loaded from the last checkpoint.
+//
+// Notice that variables information is stored in the "data" component of Context objects, and is shared
+// among all connected context references.
+//
+// If Context is set with Context.Checked(true), this may panic if:
+//
+// - Context.Unique() and variable already exists (or was loaded);
+// - Context.Reuse() and variable didn't exist (or was not loaded);
+func VariableWithShape(name string, shape shapes.Shape, initializer VariableInitializer) *Variable {
+	//TODO: implement initializers.
+	return nil
 }
 
 // Name of the variable within the scope.
