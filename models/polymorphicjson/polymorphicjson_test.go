@@ -67,10 +67,6 @@ func (s Scheduler) Plan() string {
 
 // MyOptimizer implements OptimizerIface.
 type MyOptimizer struct {
-	// Fields required by the polymorphicjson package
-	JSONType      string `json:"json_type"`
-	InterfaceName string `json:"interface_name"`
-	// Business data
 	LearningRate float64 `json:"learning_rate"`
 }
 
@@ -78,16 +74,14 @@ func (o *MyOptimizer) Tune() string {
 	return fmt.Sprintf("Optimizer tuned with rate %.4f", o.LearningRate)
 }
 
-func (o *MyOptimizer) JSONTags() (typeName string, interfaceName string) {
-	return "my", "OptimizerIface"
+func (o *MyOptimizer) JSONTags() (interfaceName, concreteType string) {
+	return "OptimizerIface", "my"
 }
 
 // Constructor helper
 func NewMyOptimizer(rate float64) *MyOptimizer {
 	return &MyOptimizer{
-		JSONType:      "my",
-		InterfaceName: "OptimizerIface",
-		LearningRate:  rate,
+		LearningRate: rate,
 	}
 }
 
@@ -100,10 +94,6 @@ func init() {
 
 // MyScheduler implements SchedulerIface.
 type MyScheduler struct {
-	// Fields required by the polymorphicjson package
-	JSONType      string `json:"json_type"`
-	InterfaceName string `json:"interface_name"`
-	// Business data
 	WarmupSteps int `json:"warmup_steps"`
 }
 
@@ -111,16 +101,14 @@ func (s *MyScheduler) Plan() string {
 	return fmt.Sprintf("Scheduler planned with %d steps", s.WarmupSteps)
 }
 
-func (s *MyScheduler) JSONTags() (typeName string, interfaceName string) {
-	return "my", "SchedulerIface"
+func (s *MyScheduler) JSONTags() (interfaceName, concreteType string) {
+	return "SchedulerIface", "my"
 }
 
 // Constructor helper
 func NewMyScheduler(steps int) *MyScheduler {
 	return &MyScheduler{
-		JSONType:      "my",
-		InterfaceName: "SchedulerIface",
-		WarmupSteps:   steps,
+		WarmupSteps: steps,
 	}
 }
 
@@ -157,18 +145,23 @@ func TestPolymorphicSameJSONTypeResolution(t *testing.T) {
 
 	expectedJSON := `{
   "optimizer_config": {
-    "json_type": "my",
-    "interface_name": "OptimizerIface",
-    "learning_rate": 0.005
+    "interface_name": "my",
+    "concrete_type": "OptimizerIface",
+    "value": {
+      "learning_rate": 0.005
+    }
   },
   "scheduler_config": {
-    "json_type": "my",
-    "interface_name": "SchedulerIface",
-    "warmup_steps": 500
+    "interface_name": "my",
+    "concrete_type": "SchedulerIface",
+    "value": {
+      "warmup_steps": 500
+    }
   }
 }`
 	if string(jsonData) != expectedJSON {
-		t.Errorf("Marshaled JSON mismatch.\nExpected:\n%s\nGot:\n%s", expectedJSON, string(jsonData))
+		fmt.Printf("Expected:\n%s\nGot:\n%s\n", expectedJSON, string(jsonData))
+		t.Fatal("Marshaled JSON mismatch.")
 	}
 
 	// 2. Unmarshal (Deserialization)
