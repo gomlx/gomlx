@@ -50,7 +50,7 @@ type Variable struct {
 	Trainable bool
 
 	shape       shapes.Shape
-	initializer VariableInitializer // Set if variable is not yet initialized.
+	initializer VariableInitializer // Set if the variable is not yet initialized.
 	value       *tensors.Tensor     // Value of the variable.
 
 	// graphToNodes maps graph ids in which this variable was used to its parameter Node and
