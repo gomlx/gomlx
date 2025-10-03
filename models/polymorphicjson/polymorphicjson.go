@@ -82,7 +82,7 @@ Usage example:
 
 	model := ModelConfig{
 		Name: "VGG",
-		Optimizer: Optimizer{ NewAdagradOptimizer() },
+		Optimizer: NewOptimizer(NewAdagradOptimizer()),
 	}
 	jsonData, _ := json.Marshal(model)
 	// ... jsonData can be unmarshaled back into a Model struct.

@@ -145,8 +145,6 @@ type TestModel struct {
 
 func TestPolymorphicSameJSONTypeResolution(t *testing.T) {
 	originalModel := TestModel{
-		//OptCfg:   Optimizer{Wrapper[OptimizerIface]{NewMyOptimizer(0.005)}},
-		//SchedCfg: Scheduler{Wrapper[SchedulerIface]{NewMyScheduler(500)}},
 		OptCfg:   NewOptimizer(NewMyOptimizer(0.005)),
 		SchedCfg: NewScheduler(NewMyScheduler(500)),
 	}
