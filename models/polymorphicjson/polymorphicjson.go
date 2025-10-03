@@ -235,8 +235,3 @@ func (w *Wrapper[I]) UnmarshalJSON(b []byte) error {
 	w.Value = instance.(I)
 	return nil
 }
-
-// Get returns the wrapped interface value.
-func (w *Wrapper[I]) Get() I {
-	return w.Value
-}
