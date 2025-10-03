@@ -29,8 +29,14 @@ The application interface must embed JSONIdentifiable.
 This type wraps the generic polymorphicjson.Wrapper, inherits the JSON methods, and adds proxy methods
 to eliminate the need for users to access the internal '.Value' field.
 
-	// Optimizer is the clean type users embed in their models.
+	// Optimizer is a wraper of OptimizerIface that is serializable/deserializable.
 	type Optimizer polymorphicjson.Wrapper[OptimizerIface]
+
+	// NewOptimizer from an OptimizerIface.
+	func NewOptimizer(opt OptimizerIface) Optimizer {
+		// This uses positional initialization for the anonymous embedded field.
+		return Optimizer{polymorphicjson.Wrapper[OptimizerIface]{Value: opt}}
+	}
 
 	// Tune proxies the call from the clean type to the underlying interface value.
 	func (o Optimizer) Tune(epochs int) error {
@@ -85,8 +91,9 @@ package polymorphicjson
 
 import (
 	"encoding/json"
-	"fmt"
 	"sync"
+
+	"github.com/pkg/errors"
 )
 
 // JSONIdentifiable is the constraint interface. Any concrete type must implement
@@ -174,18 +181,18 @@ func UnmarshalPolymorphic[I JSONIdentifiable](b []byte, target *I) error {
 	// Pass 1: Extract the type tags
 	var wrapper TypeWrapper
 	if err := json.Unmarshal(b, &wrapper); err != nil {
-		return fmt.Errorf("polymorphic unmarshal failed to read tags: %w", err)
+		return errors.Wrapf(err, "polymorphic unmarshal failed to read tags")
 	}
 
 	// Look up the concrete type constructor using the extracted InterfaceName and JSONType.
 	typeMap, ok := registry[wrapper.InterfaceName]
 	if !ok {
-		return fmt.Errorf("polymorphic unmarshal error: interface '%s' not registered", wrapper.InterfaceName)
+		return errors.Errorf("polymorphic unmarshal error: interface '%s' not registered", wrapper.InterfaceName)
 	}
 
 	constructor, ok := typeMap[wrapper.JSONType]
 	if !ok {
-		return fmt.Errorf("polymorphic unmarshal error: unknown concrete type '%s' for interface '%s'", wrapper.JSONType, wrapper.InterfaceName)
+		return errors.Errorf("polymorphic unmarshal error: unknown concrete type '%s' for interface '%s'", wrapper.JSONType, wrapper.InterfaceName)
 	}
 
 	// Create an empty instance of the concrete type.
@@ -193,7 +200,7 @@ func UnmarshalPolymorphic[I JSONIdentifiable](b []byte, target *I) error {
 
 	// Pass 2: Unmarshal the full JSON into the concrete instance.
 	if err := json.Unmarshal(b, instance); err != nil {
-		return fmt.Errorf("polymorphic unmarshal failed to load data into concrete type %T: %w", instance, err)
+		return errors.Wrapf(err, "polymorphic unmarshal failed to load data into concrete type %T", instance)
 	}
 
 	// Assign the concrete instance to the target pointer-to-interface.

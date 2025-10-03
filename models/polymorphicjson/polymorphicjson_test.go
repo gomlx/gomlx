@@ -19,7 +19,15 @@ type OptimizerIface interface {
 
 // Optimizer is the final, clean, exported type the user puts in their structs.
 // It wraps the interface with code to properly encode/decode to JSON.
-type Optimizer Wrapper[OptimizerIface]
+type Optimizer struct {
+	Wrapper[OptimizerIface]
+}
+
+// NewOptimizer convert an OptimizerIface to the JSON handling proxy.
+func NewOptimizer(opt OptimizerIface) Optimizer {
+	// This uses positional initialization for the anonymous embedded field.
+	return Optimizer{Wrapper[OptimizerIface]{Value: opt}}
+}
 
 // Tune proxies the call to the underlying interface value.
 func (o Optimizer) Tune() string {
@@ -37,7 +45,15 @@ type SchedulerIface interface {
 }
 
 // Scheduler is the final, clean, exported type for schedulers.
-type Scheduler Wrapper[SchedulerIface]
+type Scheduler struct {
+	Wrapper[SchedulerIface]
+}
+
+// NewScheduler from a SchedulerIface
+func NewScheduler(opt SchedulerIface) Scheduler {
+	// This uses positional initialization for the anonymous embedded field.
+	return Scheduler{Wrapper[SchedulerIface]{Value: opt}}
+}
 
 // Plan proxies the call to the underlying interface value.
 func (s Scheduler) Plan() string {
@@ -129,12 +145,10 @@ type TestModel struct {
 
 func TestPolymorphicSameJSONTypeResolution(t *testing.T) {
 	originalModel := TestModel{
-		OptCfg: Optimizer{
-			Value: NewMyOptimizer(0.005),
-		},
-		SchedCfg: Scheduler{
-			Value: NewMyScheduler(500),
-		},
+		//OptCfg:   Optimizer{Wrapper[OptimizerIface]{NewMyOptimizer(0.005)}},
+		//SchedCfg: Scheduler{Wrapper[SchedulerIface]{NewMyScheduler(500)}},
+		OptCfg:   NewOptimizer(NewMyOptimizer(0.005)),
+		SchedCfg: NewScheduler(NewMyScheduler(500)),
 	}
 
 	// 1. Marshal (Serialization)
@@ -163,7 +177,7 @@ func TestPolymorphicSameJSONTypeResolution(t *testing.T) {
 	var loadedModel TestModel
 	err = json.Unmarshal(jsonData, &loadedModel)
 	if err != nil {
-		t.Fatalf("Unmarshal failed: %v", err)
+		t.Fatalf("Unmarshal failed: %+v", err)
 	}
 
 	// 3. Validation: Test the clean API access using the proxy methods
