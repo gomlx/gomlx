@@ -4,13 +4,14 @@ package downloader
 import (
 	"context"
 	"fmt"
-	"github.com/gomlx/gomlx/ml/data"
-	"github.com/gomlx/gomlx/types/xsync"
-	"github.com/pkg/errors"
 	"io"
 	"net/http"
 	"os"
 	"path"
+
+	"github.com/gomlx/gomlx/ml/data"
+	"github.com/gomlx/gomlx/pkg/support/xsync"
+	"github.com/pkg/errors"
 )
 
 // ProgressCallback is called as download progresses.
