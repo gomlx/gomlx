@@ -13,9 +13,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Generate ExecFnSet interface, and a conversion tool to a canonical form.
-//go:generate go run ../internal/cmd/builderiface/
-
 // Exec is an executor of models.
 //
 // It holds the "model" object (passed in NewExec), and for each different shaped inputs of the Call() (or MustCall) method,

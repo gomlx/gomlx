@@ -1,23 +1,25 @@
 # GoMLX changelog
 
-# Next: In short: s/xla/stablehlo; s/context/models
+# Next: Backend xla->stablehlo; Big refactoring started: exported packages to /pkg; New `ml` API
 
 * **Highlights** of this release, it may require changes:
-  * Deprecating backend "xla" (now called "oldxla") in favour of "stablehlo" (aliased to "xla" as well):
+  * Deprecating backend "xla" (now called "oldxla") in favor of "stablehlo" (aliased to "xla" as well):
     in most cases nothing needs to be done (the `backends/default` will replace one by the other automatically),
     but in special cases there may require small changes.
-  * Experimental **models** package: it aims at replacing the `context` package, and get rid of the `context.Context`
+  * New **models** API for machine learning: it aims at replacing the `context` package, and get rid of the `context.Context`
     object: it will let the user organize their own model state in their own Go structs, without requiring the
     somewhat complex/confusing `Context object.
     * This will be a profound change, and all the ml/ libraries will be changed to reflect that.
     * The `context.Context` based libraries will be marked as deprecated and maintained for a few versions,
       until they are sunset.
+  * Big refactoring: exported packages are going to be moved to `/pkg`, plus long-standing reorganization needs.
+    This will happen in phases, with "shims" (proxies) being left on the previous package location) for one version.
 
 * Copied external trivial `must` and `exceptions` packages to `/internal/...`, to remove external dependencies.
-* Package `models`:
+* Package `pkg/ml/models`:
   * Experimental package that aims at replacing the `context` package.
   * All packages under `github.com/gomlx/gomlx/ml` have been rewritten to the new `models` framework, under
-    `github.com/gomlx/gomlx/models`
+    `github.com/gomlx/gomlx/pkg/ml`
 * Package `inceptionv3` moved to `examples`
 * Package `xla`:  **DEPRECATED**, in the majority of the cases stablehlo will take over without the need of any changes, but you may need changes.
   * Now registered as backend "oldxla".

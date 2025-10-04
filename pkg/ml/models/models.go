@@ -49,6 +49,9 @@ import (
 	"github.com/pkg/errors"
 )
 
+// Generate ExecFnSet interface, and a conversion tool to a canonical form.
+//go:generate go run ../../../internal/cmd/builderiface/
+
 // PathAndVariable refers to a variable within a struct, at the "Path" location.
 // See details in IterVariables.
 type PathAndVariable struct {
