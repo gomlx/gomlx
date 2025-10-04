@@ -23,8 +23,8 @@ import (
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/ui/plots"
 	"github.com/janpfeifer/gonb/gonbui"
@@ -283,7 +283,7 @@ func (pc *PlotConfig) LoadCheckpointData(dataDirOrFile string, filters ...PointF
 		return errors.WithMessagef(err, "plotly.LoadCheckpointData(%q) failed to load points", dataDirOrFile)
 	}
 
-	steps := types.MakeSet[float64]()
+	steps := sets.Make[float64]()
 	enableWriting := pc.enablePointsWriting
 	pc.enablePointsWriting = false
 	defer func() { pc.enablePointsWriting = enableWriting }()

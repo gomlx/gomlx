@@ -12,8 +12,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/dustin/go-humanize"
 	"github.com/gomlx/gomlx/internal/must"
+	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/ui/plots"
 	"k8s.io/klog/v2"
 )
@@ -54,16 +54,16 @@ func metrics(checkpointPaths, modelNames []string) {
 		}
 	}
 
-	var metricsTypes types.Set[string]
+	var metricsTypes sets.Set[string]
 	if *flagMetricsTypes != "" {
-		metricsTypes = types.MakeSet[string]()
+		metricsTypes = sets.Make[string]()
 		for _, name := range strings.Split(*flagMetricsTypes, ",") {
 			metricsTypes.Insert(name)
 		}
 	}
 	nameToShort := make(map[string]string)
 	shortToName := make(map[string]string)
-	metricsUsed := types.MakeSet[ModelNameAndMetric]()
+	metricsUsed := sets.Make[ModelNameAndMetric]()
 	for modelIdx, pointsPerModel := range points {
 		for _, point := range pointsPerModel {
 			nameToShort[point.MetricName] = point.Short

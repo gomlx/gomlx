@@ -12,7 +12,7 @@ import (
 
 	"github.com/gomlx/gomlx/internal/backendparser"
 	"github.com/gomlx/gomlx/internal/must"
-	"github.com/gomlx/gomlx/types"
+	"github.com/gomlx/gomlx/pkg/support/sets"
 	"k8s.io/klog/v2"
 )
 
@@ -22,14 +22,14 @@ const (
 
 var (
 	// methodsNotGenerated because they are maintained manually.
-	methodsNotGenerated = types.SetWith(
+	methodsNotGenerated = sets.MakeWith(
 		"Constant", "Parameter", "Identity", "ReduceWindow",
 		"BatchNormForInference", "BatchNormForTraining", "BatchNormGradient",
 		"And", "Or", "Xor", "Not", "ReduceAnd", "ReduceOr", "ReduceXor", "ScatterAdd")
 
 	// methodsExcluded from generating and even from having a NodeType.
 	// These are utility methods, not part of building a graph.
-	methodsExcluded = types.SetWith(
+	methodsExcluded = sets.MakeWith(
 		"Name", "Compile", "OpShape")
 
 	standardOpsTemplate = template.Must(template.New(standardOpsInterfaceFile).Parse(

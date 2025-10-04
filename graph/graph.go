@@ -97,8 +97,8 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
@@ -386,7 +386,7 @@ func (g *Graph) Compile(outputs ...*Node) {
 	}
 
 	// Create "identities" for duplicate outputs, and create a mapping if there are any:
-	outputsSet := types.MakeSet[*Node]()
+	outputsSet := sets.Make[*Node]()
 	for ii, node := range outputs {
 		if outputsSet.Has(node) {
 			outputs[ii] = Identity(node)

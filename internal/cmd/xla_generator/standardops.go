@@ -13,8 +13,8 @@ import (
 
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/internal/xlabuilderparser"
+	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/gomlx/types"
 	"k8s.io/klog/v2"
 )
 
@@ -24,7 +24,7 @@ const (
 
 var (
 	// methodsToExclude from support. Typically, deprecated functions.
-	methodsToExclude = types.SetWith(
+	methodsToExclude = sets.MakeWith(
 		"And", "Or", "Xor", "Not", "ReduceAnd", "ReduceOr", "ReduceXor", "ScatterAdd",
 		"SelectAndScatterSum", // SelectAndScatterSum is deprecated and doesn't work.
 	)

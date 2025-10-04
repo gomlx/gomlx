@@ -7,7 +7,7 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/notimplemented"
 	"github.com/gomlx/gomlx/backends/shapeinference"
-	"github.com/gomlx/gomlx/types"
+	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
@@ -47,7 +47,7 @@ func (b *Builder) Compile(outputs ...backends.Op) (backends.Executable, error) {
 	if err != nil {
 		return nil, err
 	}
-	nodeSet := types.SetWith(b.outputs...)
+	nodeSet := sets.MakeWith(b.outputs...)
 	if len(nodeSet) != len(b.outputs) {
 		return nil, errors.Errorf("*** Repeated outputs: %d outputs, %d unique outputs", len(b.outputs), len(nodeSet))
 	}

@@ -8,7 +8,7 @@ import (
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/internal/must"
-	"github.com/gomlx/gomlx/types"
+	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/pkg/errors"
 )
@@ -28,7 +28,7 @@ type Exec struct {
 
 	// Graphs created by this executor: it is a pointer to a map, so we can clean up on garbage collection
 	// (runtime.AddCleanUp requires a pointer)
-	graphs *types.Set[graph.GraphId]
+	graphs *sets.Set[graph.GraphId]
 
 	// List of variables that have been used per graph built, both as input and as output (if they were modified):
 	sideInputs, sideOutputs map[graph.GraphId][]*Variable
@@ -64,7 +64,7 @@ type Exec struct {
 //
 // If you are only going to execute the model/function once, you can use CallOnce
 func NewExec[B BuilderFnSet](backend backends.Backend, builderFn B) (*Exec, error) {
-	graphsSet := types.MakeSet[graph.GraphId]()
+	graphsSet := sets.Make[graph.GraphId]()
 	e := &Exec{
 		backend:     backend,
 		graphs:      &graphsSet,
@@ -105,7 +105,7 @@ func NewExec[B BuilderFnSet](backend backends.Backend, builderFn B) (*Exec, erro
 	e.exec.SetSideParamsHook(e.setSideParams)
 
 	// Add cleanup functions to resources that would not be otherwise released.
-	runtime.AddCleanup(e, func(registeredGraphIDs *types.Set[graph.GraphId]) {
+	runtime.AddCleanup(e, func(registeredGraphIDs *sets.Set[graph.GraphId]) {
 		for gID := range *registeredGraphIDs {
 			removeGraphIds(gID)
 		}

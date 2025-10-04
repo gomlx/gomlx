@@ -1,24 +1,21 @@
-// Package types is mostly a top level directory for GoMLX important types. See
-// sub-packages `shapes`, `tensor` and `slices`.
-//
-// This package also provides the types: Set.
-package types
+// Package sets implement a set type as a `map[T]struct{}` but with better ergonomics.
+package sets
 
 // Set implements a Set for the key type T.
 type Set[T comparable] map[T]struct{}
 
-// MakeSet returns an empty Set of the given type. Size is optional, and if given
+// Make returns an empty Set of the given type. Size is optional, and if given
 // will reserve the expected size.
-func MakeSet[T comparable](size ...int) Set[T] {
+func Make[T comparable](size ...int) Set[T] {
 	if len(size) == 0 {
 		return make(Set[T])
 	}
 	return make(Set[T], size[0])
 }
 
-// SetWith creates a Set[T] with the given elements inserted.
-func SetWith[T comparable](elements ...T) Set[T] {
-	s := MakeSet[T](len(elements))
+// MakeWith creates a Set[T] with the given elements inserted.
+func MakeWith[T comparable](elements ...T) Set[T] {
+	s := Make[T](len(elements))
 	for _, element := range elements {
 		s.Insert(element)
 	}
@@ -40,7 +37,7 @@ func (s Set[T]) Insert(keys ...T) {
 
 // Sub returns `s - s2`, that is, all elements in `s` that are not in `s2`.
 func (s Set[T]) Sub(s2 Set[T]) Set[T] {
-	sub := MakeSet[T]()
+	sub := Make[T]()
 	for k := range s {
 		if !s2.Has(k) {
 			sub.Insert(k)

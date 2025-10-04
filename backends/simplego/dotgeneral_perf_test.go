@@ -13,8 +13,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/dustin/go-humanize"
 	"github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/ui/commandline"
@@ -53,9 +53,9 @@ var (
 //	$ GOMLX_BACKEND=stablehlo:cpu go test -tags=stablehlo,perf ./backends/simplego/ -test.run=TestDotGeneral_PerformanceTable -test.v -test.count=1
 func TestDotGeneral_PerformanceTable(t *testing.T) {
 	filterPerfs := *flagPerfTests != ""
-	perfsToRun := types.SetWith(strings.Split(*flagPerfTests, ",")...)
+	perfsToRun := sets.MakeWith(strings.Split(*flagPerfTests, ",")...)
 	filterDTypes := *flagPerfDTypes != ""
-	dtypesToRun := types.SetWith(strings.Split(*flagPerfDTypes, ",")...)
+	dtypesToRun := sets.MakeWith(strings.Split(*flagPerfDTypes, ",")...)
 
 	// IMPORTANT: Populate this slice with the shapes and parameters of the dot-product.
 	// lhsDims: [Batch, LhsCross, Contracting]

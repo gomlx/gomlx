@@ -35,17 +35,18 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/dustin/go-humanize"
-	"github.com/gomlx/gomlx/ml/data"
-	"github.com/gomlx/gomlx/ml/data/downloader"
-	"github.com/gomlx/gomlx/types"
-	"github.com/pkg/errors"
 	"iter"
 	"os"
 	"path"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/dustin/go-humanize"
+	"github.com/gomlx/gomlx/ml/data"
+	"github.com/gomlx/gomlx/ml/data/downloader"
+	"github.com/gomlx/gomlx/pkg/support/sets"
+	"github.com/pkg/errors"
 )
 
 type Model struct {
@@ -208,7 +209,7 @@ func (hfm *Model) EnumerateFileNames() iter.Seq2[FileNameAndPath, error] {
 // It then downloads any files not available locally yet -- files are downloaded to a ".downloading" suffix, and moved
 // to the final destination once they finished to download.
 func (hfm *Model) Download() error {
-	requireDownload := types.MakeSet[string](10)
+	requireDownload := sets.Make[string](10)
 	for f, err := range hfm.EnumerateFileNames() {
 		if err != nil {
 			return err

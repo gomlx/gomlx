@@ -18,7 +18,7 @@ import (
 
 	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/internal/must"
-	"github.com/gomlx/gomlx/types"
+	"github.com/gomlx/gomlx/pkg/support/sets"
 	"k8s.io/klog/v2"
 )
 
@@ -179,7 +179,7 @@ func (e *NodeTextExtractor) Get(node ast.Node) string {
 	return string(fileContent[pos.Offset:endOffset])
 }
 
-var FunctionsBlackList = types.SetWith("Parameter", "ScalarZero", "ScalarOne", "PopulationCount")
+var FunctionsBlackList = sets.MakeWith("Parameter", "ScalarZero", "ScalarOne", "PopulationCount")
 
 // EnumerateStandardOpsFunctions calls callback for every "standard" op declaring function of the xlaBuilder package AST,
 // that can be automatically converted to a backends.Backend API, and implemented in the xla.Backend.

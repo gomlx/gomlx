@@ -20,8 +20,8 @@ import (
 	"slices"
 
 	. "github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 )
@@ -176,7 +176,7 @@ func GatherSlices(input *Node, slicedAxes []int, start *Node, sizes []int, indic
 
 	// AssertValid slicedAxes and normalizes it (replacing negative axis to their corresponding ones).
 	{
-		seen := types.MakeSet[int](numSlicedAxes)
+		seen := sets.Make[int](numSlicedAxes)
 		normalized := make([]int, 0, numSlicedAxes)
 		for ii, axis := range slicedAxes {
 			if axis < 0 {

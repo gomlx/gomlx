@@ -7,8 +7,8 @@ import (
 	"reflect"
 	"slices"
 
+	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/gomlx/types"
 	"github.com/pkg/errors"
 )
 
@@ -40,7 +40,7 @@ type PathAndVariable struct {
 // invalid map keys (only maps with string and numbers are accepted).
 func IterVariables(model any) iter.Seq2[PathAndVariable, error] {
 	return func(yield func(PathAndVariable, error) bool) {
-		seen := types.MakeSet[uintptr]()
+		seen := sets.Make[uintptr]()
 		var iterStruct func(v reflect.Value, path string) bool
 		var iterSliceOrArray func(v reflect.Value, pathPrefix string) bool
 		var iterMap func(v reflect.Value, pathPrefix string) bool

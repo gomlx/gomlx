@@ -7,8 +7,8 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
@@ -407,7 +407,7 @@ func ExpandAndBroadcast(x *Node, newDimensions []int, expandedAxes []int) (outpu
 	}
 
 	// Verify that the values of expandedAxis and create a map of the expanded axis.
-	expandedSet := types.MakeSet[int](len(expandedAxes))
+	expandedSet := sets.Make[int](len(expandedAxes))
 	for ii, axis := range expandedAxes {
 		axis = adjustAxisToRank(axis, len(newDimensions))
 		if axis < 0 || axis >= len(newDimensions) {
@@ -1642,8 +1642,8 @@ func EinsumAxes(lhs, rhs *Node, contractingAxes, batchAxes [][2]int) (output *No
 	rhsRank := rhs.Rank()
 
 	// Create function to process both, contractingAxes and batchAxes.
-	lhsSeen := types.MakeSet[int](lhsRank)
-	rhsSeen := types.MakeSet[int](rhsRank)
+	lhsSeen := sets.Make[int](lhsRank)
+	rhsSeen := sets.Make[int](rhsRank)
 	normalizePairs := func(name string, pairs [][2]int) (lhsAxes, rhsAxes []int) {
 		if len(pairs) == 0 {
 			return

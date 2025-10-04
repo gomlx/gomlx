@@ -5,11 +5,11 @@ import (
 	"math/rand/v2"
 	"slices"
 
+	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/pkg/errors"
 
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
@@ -785,7 +785,7 @@ func execGather(backend *Backend, node *Node, inputs []*Buffer, inputsOwned []bo
 		//   since these are not incremented.
 		mapSliceToOutputAxes := make([]int, operandRank)
 		offsetOutputAxesIdx := 0
-		collapsedAxes := types.SetWith(gatherParams.collapsedSlicesAxes...)
+		collapsedAxes := sets.MakeWith(gatherParams.collapsedSlicesAxes...)
 		for sliceAxis := range operandRank {
 			if collapsedAxes.Has(sliceAxis) {
 				// Collapsed, we only care about the offset axes.
@@ -1242,7 +1242,7 @@ func execScatterGeneric[T SupportedTypesConstraints](opType backends.OpType, out
 		numBatchAxes++
 	}
 	updatesBatchAxes := make([]int, 0, numBatchAxes)
-	updatesWindowAxesSet := types.SetWith(scatterParams.updateWindowAxes...)
+	updatesWindowAxesSet := sets.MakeWith(scatterParams.updateWindowAxes...)
 	for axis := range updatesShape.Rank() {
 		if !updatesWindowAxesSet.Has(axis) {
 			updatesBatchAxes = append(updatesBatchAxes, axis)

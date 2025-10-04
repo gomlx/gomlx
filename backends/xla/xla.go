@@ -42,8 +42,8 @@ import (
 	"strings"
 
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gopjrt/pjrt"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
@@ -146,7 +146,7 @@ func GetAvailablePlugins() []string {
 	}
 
 	availablePluginsMap := pjrt.AvailablePlugins()
-	pluginNames := types.SetWith(xslices.Keys(availablePluginsMap)...)
+	pluginNames := sets.MakeWith(xslices.Keys(availablePluginsMap)...)
 	klog.V(1).Infof("Available plugins: %v\n", pluginNames)
 	availablePluginsList = make([]string, 0, len(pluginNames))
 

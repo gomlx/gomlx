@@ -12,7 +12,7 @@ import (
 
 	"github.com/gomlx/gomlx/internal/backendparser"
 	"github.com/gomlx/gomlx/internal/must"
-	"github.com/gomlx/gomlx/types"
+	"github.com/gomlx/gomlx/pkg/support/sets"
 	"k8s.io/klog/v2"
 )
 
@@ -27,7 +27,7 @@ func main() {
 var (
 	// methodsNotExported list methods that will have a non-exported "backend<Method>" function written, that can
 	// be used by the public graphs implementation.
-	methodsNotExported = types.SetWith(
+	methodsNotExported = sets.MakeWith(
 		"ArgMinMax", "Broadcast", "BroadcastInDim",
 		"BatchNormForInference", "BatchNormForTraining", "BatchNormGradient",
 		"Concatenate", "ConvertDType", "ConvGeneral", "DotGeneral", "FFT", "Gather", "Iota",
@@ -47,16 +47,16 @@ var (
 		"Transpose", "Where")
 
 	// methodsNotGenerated but for which there is still a NodeType.
-	methodsNotGenerated = types.SetWith(
+	methodsNotGenerated = sets.MakeWith(
 		"Constant", "Parameter")
 
 	// methodsExcluded from generating and even from having a NodeType.
 	// These are utility methods, not part of building a graph.
-	methodsExcluded = types.SetWith(
+	methodsExcluded = sets.MakeWith(
 		"Name", "Compile", "OpShape")
 
 	// methodsNoGradient will add a stop gradient to the node.
-	methodsNoGradient = types.SetWith(
+	methodsNoGradient = sets.MakeWith(
 		"And", "Or", "Xor", "LogicalNot",
 		"Equal", "NotEqual", "GreaterOrEqual", "GreaterThan", "LessOrEqual", "LessThan",
 		"EqualTotalOrder", "NotEqualTotalOrder", "GreaterOrEqualTotalOrder", "GreaterThanTotalOrder", "LessOrEqualTotalOrder", "LessThanTotalOrder")

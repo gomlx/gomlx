@@ -9,7 +9,7 @@ import (
 
 	"github.com/gomlx/gomlx/internal/backendparser"
 	"github.com/gomlx/gomlx/internal/must"
-	"github.com/gomlx/gomlx/types"
+	"github.com/gomlx/gomlx/pkg/support/sets"
 	"k8s.io/klog/v2"
 )
 
@@ -52,7 +52,7 @@ var (
 		"LogicalXor": "Xor",
 	}
 
-	BinaryOpsToExclude = types.SetWith("Dot",
+	BinaryOpsToExclude = sets.MakeWith("Dot",
 		// Comparison ops.
 		"Equal", "GreaterThan", "GreaterOrEqual", "LessThan", "LessOrEqual", "NotEqual",
 		"EqualTotalOrder", "GreaterThanTotalOrder", "GreaterOrEqualTotalOrder", "LessThanTotalOrder", "LessOrEqualTotalOrder", "NotEqualTotalOrder",

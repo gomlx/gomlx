@@ -2,11 +2,12 @@ package graph_test
 
 import (
 	"fmt"
+	"testing"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
-	"github.com/gomlx/gomlx/types"
+	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gopjrt/dtypes"
-	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -37,7 +38,7 @@ func TestNodeAliases(t *testing.T) {
 	assert.True(t, n1 == g.GetNodeByAlias("/n1")) // But it still exists in the global scope.
 
 	// Test IterAliasedNodes:
-	aliases := types.MakeSet[string]()
+	aliases := sets.Make[string]()
 	for alias, node := range g.IterAliasedNodes() {
 		fmt.Printf("\tGraph[%q] = %s\n", alias, node)
 		aliases.Insert(alias)

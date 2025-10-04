@@ -90,8 +90,8 @@ import (
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
@@ -121,13 +121,13 @@ type Config struct {
 	keep      int
 	mustLoad  bool
 
-	includeParams   bool              // whether to includeParams in loading/saving.
-	paramsToExclude types.Set[string] // specific parameter names to exclude from loading.
+	includeParams   bool             // whether to includeParams in loading/saving.
+	paramsToExclude sets.Set[string] // specific parameter names to exclude from loading.
 
 	backend  backends.Backend // used when taking the mean.
 	takeMean int
 
-	varsToExclude types.Set[*context.Variable]
+	varsToExclude sets.Set[*context.Variable]
 }
 
 // Build a configuration for building a checkpoints.Handler. After configuring the
@@ -151,8 +151,8 @@ func Build(ctx *context.Context) *Config {
 		includeParams:   true,
 		keep:            1,
 		takeMean:        1,
-		paramsToExclude: types.MakeSet[string](),
-		varsToExclude:   types.MakeSet[*context.Variable](),
+		paramsToExclude: sets.Make[string](),
+		varsToExclude:   sets.Make[*context.Variable](),
 	}
 	return c
 }

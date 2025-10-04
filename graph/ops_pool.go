@@ -22,8 +22,8 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors/images"
 	"github.com/gomlx/gopjrt/dtypes"
@@ -442,7 +442,7 @@ func checkedSelectAndScatter(x, source *Node, reduceOp ReduceOpType, windowDimen
 	}
 }
 
-var vjpReductionTypes = types.SetWith(backends.ReduceOpMax, backends.ReduceOpMin, backends.ReduceOpSum)
+var vjpReductionTypes = sets.MakeWith(backends.ReduceOpMax, backends.ReduceOpMin, backends.ReduceOpSum)
 
 // reduceWindowVJP calculates v*d(reduceWindow(x))/{dx, d_kernel).
 func reduceWindowVJP(node, v *Node, _ shapes.Shape) []*Node {
