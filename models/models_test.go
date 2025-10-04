@@ -7,7 +7,6 @@ import (
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/internal/must"
-	"github.com/gomlx/gomlx/models/builderiface"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/types/xslices"
@@ -15,7 +14,7 @@ import (
 )
 
 // runTestModel runs a test for a model and checks that the outputs match the wanted values.
-func runTestModel[B builderiface.FnSet](t *testing.T, testName string, buildFn B, inputs []any, want []any, delta float64) {
+func runTestModel[B BuilderFnSet](t *testing.T, testName string, buildFn B, inputs []any, want []any, delta float64) {
 	backend := graphtest.BuildTestBackend()
 	t.Run(testName, func(t *testing.T) {
 		// Convert the want values to tensors.

@@ -8,11 +8,13 @@ import (
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/internal/must"
-	"github.com/gomlx/gomlx/models/builderiface"
 	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/pkg/errors"
 )
+
+// Generate ExecFnSet interface, and a conversion tool to a canonical form.
+//go:generate go run ../internal/cmd/builderiface/
 
 // Exec is an executor of models.
 //
@@ -67,7 +69,7 @@ type Exec struct {
 //	myDistanceExec, err := MustNewExec(backend, space.Distance)
 //
 // If you are only going to execute the model/function once, you can use CallOnce
-func NewExec[B builderiface.FnSet](backend backends.Backend, builderFn B) (*Exec, error) {
+func NewExec[B BuilderFnSet](backend backends.Backend, builderFn B) (*Exec, error) {
 	graphsSet := types.MakeSet[graph.GraphId]()
 	e := &Exec{
 		backend:     backend,
@@ -76,8 +78,8 @@ func NewExec[B builderiface.FnSet](backend backends.Backend, builderFn B) (*Exec
 		sideOutputs: make(map[graph.GraphId][]*Variable),
 	}
 	var err error
-	var canonicalBuilderFn builderiface.BuilderFn
-	canonicalBuilderFn, e.numBuilderInputs, e.numBuilderOutputs, err = builderiface.ConvertToBuilderFn(builderFn)
+	var canonicalBuilderFn normalizedBuilderFn
+	canonicalBuilderFn, e.numBuilderInputs, e.numBuilderOutputs, err = convertToNormalizedBuilderFn(builderFn)
 	if err != nil {
 		return nil, err
 	}
