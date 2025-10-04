@@ -24,23 +24,25 @@ The application interface must embed JSONIdentifiable.
 		Tune(epochs int) error
 	}
 
+	const OptimizerIfaceName = "OptimizerIface" // The unique name for the interface.
+
 2. Define the Clean, User-Facing Proxy Type
 
 This type wraps the generic polymorphicjson.Wrapper, inherits the JSON methods, and adds proxy methods
 to eliminate the need for users to access the internal '.Value' field.
 
 	// Optimizer holds a serializable OptimizerIface.
-	type Optimizer polymorphicjson.Wrapper[OptimizerIface]
+	type Optimizer struct {
+		polymorphicjson.Wrapper[OptimizerIface]
+	}
 
 	// NewOptimizer from an OptimizerIface.
 	func NewOptimizer(opt OptimizerIface) Optimizer {
-		// This uses positional initialization for the anonymous embedded field.
 		return Optimizer{polymorphicjson.Wrapper[OptimizerIface]{Value: opt}}
 	}
 
 	// Tune proxies the OptimizerIface method.
 	func (o Optimizer) Tune(epochs int) error {
-		// Safely check for nil before calling the method.
 		if any(o.Value) == nil {
 			return errors.New("cannot tune: optimizer is nil")
 		}
@@ -53,17 +55,12 @@ The concrete struct must implement all methods, including the required JSONTags(
 
 	// AdagradOptimizer implements OptimizerIface.
 	type AdagradOptimizer struct {
-		// Fields required by the polymorphicjson package
-		ConcreteType      string `json:"concrete_type"`
-		InterfaceName string `json:"interface_name"`
-
-		// Application fields
 		LearningRate float64 `json:"learning_rate"`
 	}
 
 	func (a *AdagradOptimizer) JSONTags() (interfaceName, concreteType string) {
-		// Report the unique type name and the interface name.
-		return "OptimizerIface", "Adagrad",
+		// Report the interface name and the unique type name.
+		return OptimizerIfaceName, "Adagrad",
 	}
 
 	func (a *AdagradOptimizer) Tune(epochs int) error { return nil } // Implementation goes here.
