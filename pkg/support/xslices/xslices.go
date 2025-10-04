@@ -15,7 +15,8 @@
  */
 
 // Package xslices provide missing functionality to the slices package.
-// It was actually created before the standard slices package, so some functionality may be duplicate.
+//
+// It was created before the standard slices package, so some functionality may be duplicate.
 package xslices
 
 import (

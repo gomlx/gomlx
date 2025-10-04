@@ -13,7 +13,8 @@
     * The `context.Context` based libraries will be marked as deprecated and maintained for a few versions,
       until they are sunset.
   * Big refactoring: exported packages are going to be moved to `/pkg`, plus long-standing reorganization needs.
-    This will happen in phases, with "shims" (proxies) being left on the previous package location) for one version.
+    Exception to the 'ml/'--being replaced by the new `models` version, and `backends`, it will move to its own
+    repository later in the year.
 
 * Copied external trivial `must` and `exceptions` packages to `/internal/...`, to remove external dependencies.
 * Package `pkg/ml/models`:
