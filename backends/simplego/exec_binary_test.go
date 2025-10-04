@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/stretchr/testify/assert"

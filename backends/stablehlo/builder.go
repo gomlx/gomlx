@@ -5,8 +5,8 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/notimplemented"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/stablehlo"
 	"github.com/pkg/errors"

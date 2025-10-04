@@ -10,7 +10,7 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/internal/must"
-	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	gonbplotly "github.com/janpfeifer/gonb/gonbui/plotly"
 

@@ -4,7 +4,6 @@ import (
 	"iter"
 	"slices"
 
-	shapes2 "github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/pkg/errors"
 )
 
@@ -12,7 +11,7 @@ import (
 // in memory, the one used everywhere in GoMLX.
 //
 // Notice the strides are **not in bytes**, but in indices.
-func (s shapes2.Shape) Strides() (strides []int) {
+func (s Shape) Strides() (strides []int) {
 	rank := s.Rank()
 	if rank == 0 {
 		return
@@ -36,7 +35,7 @@ func (s shapes2.Shape) Strides() (strides []int) {
 //
 // To avoid allocating the slice of indices, the yielded indices is owned by the Iter() method:
 // don't change it inside the loop.
-func (s shapes2.Shape) Iter() iter.Seq2[int, []int] {
+func (s Shape) Iter() iter.Seq2[int, []int] {
 	indices := make([]int, s.Rank())
 	return s.IterOn(indices)
 }
@@ -49,7 +48,7 @@ func (s shapes2.Shape) Iter() iter.Seq2[int, []int] {
 // During the iteration the caller shouldn't modify the slice of indices, otherwise it will lead to undefined behavior.
 //
 // It expects len(indices) == s.Rank(). It will panic otherwise.
-func (s shapes2.Shape) IterOn(indices []int) iter.Seq2[int, []int] {
+func (s Shape) IterOn(indices []int) iter.Seq2[int, []int] {
 	if len(indices) != s.Rank() {
 		panic(errors.Errorf("Shape.IterOn given len(indices) == %d, want it to be equal to the rank %d", len(indices), s.Rank()))
 	}
@@ -192,7 +191,7 @@ func (s shapes2.Shape) IterOn(indices []int) iter.Seq2[int, []int] {
 //	for flatIdx, indices := range shape.IterOnAxes(axesToIterate, nil, indices) {
 //	    fmt.Printf("flatIdx=%d, indices=%v\n", flatIdx, indices)
 //	}
-func (s shapes2.Shape) IterOnAxes(axesToIterate, strides, indices []int) iter.Seq2[int, []int] {
+func (s Shape) IterOnAxes(axesToIterate, strides, indices []int) iter.Seq2[int, []int] {
 	rank := s.Rank()
 
 	// Validate and initialize strides

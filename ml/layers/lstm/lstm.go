@@ -23,7 +23,7 @@ package lstm
 import (
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 )
 
 // LSTM holds an LSTM configuration. It can be created with New (or NewWithWeights),

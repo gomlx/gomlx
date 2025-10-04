@@ -4,6 +4,8 @@ package ogbnmag
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/examples/ogbnmag/gnn"
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
@@ -11,12 +13,11 @@ import (
 	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"
-	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/ui/plots"
 	"github.com/gomlx/gopjrt/dtypes"
 	"k8s.io/klog/v2"
-	"time"
 )
 
 // LayerWiseEvaluation returns the train, validation and test accuracy of the model, using layer-wise inference.

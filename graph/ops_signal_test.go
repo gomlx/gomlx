@@ -1,15 +1,16 @@
 package graph_test
 
 import (
-	"github.com/gomlx/gomlx/backends"
-	. "github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/graph/graphtest"
-	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensors"
-	"github.com/gomlx/gopjrt/dtypes"
 	"math"
 	"runtime"
 	"testing"
+
+	"github.com/gomlx/gomlx/backends"
+	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/graph/graphtest"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gopjrt/dtypes"
 )
 
 func TestFFT(t *testing.T) {

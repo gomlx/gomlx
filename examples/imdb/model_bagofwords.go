@@ -5,7 +5,7 @@ import (
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/fnn"
-	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 )
 

@@ -19,7 +19,6 @@ package shapes
 import (
 	"testing"
 
-	shapes2 "github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
 )
@@ -39,10 +38,10 @@ func TestCastAsDType(t *testing.T) {
 }
 
 func TestShape(t *testing.T) {
-	invalidShape := shapes2.Invalid()
+	invalidShape := Invalid()
 	require.False(t, invalidShape.Ok())
 
-	shape0 := shapes2.Make(dtypes.Float64)
+	shape0 := Make(dtypes.Float64)
 	require.True(t, shape0.Ok())
 	require.True(t, shape0.IsScalar())
 	require.False(t, shape0.IsTuple())
@@ -51,7 +50,7 @@ func TestShape(t *testing.T) {
 	require.Equal(t, 1, shape0.Size())
 	require.Equal(t, 8, int(shape0.Memory()))
 
-	shape1 := shapes2.Make(dtypes.Float32, 4, 3, 2)
+	shape1 := Make(dtypes.Float32, 4, 3, 2)
 	require.True(t, shape1.Ok())
 	require.False(t, shape1.IsScalar())
 	require.False(t, shape1.IsTuple())
@@ -62,7 +61,7 @@ func TestShape(t *testing.T) {
 }
 
 func TestDim(t *testing.T) {
-	shape := shapes2.Make(dtypes.Float32, 4, 3, 2)
+	shape := Make(dtypes.Float32, 4, 3, 2)
 	require.Equal(t, 4, shape.Dim(0))
 	require.Equal(t, 3, shape.Dim(1))
 	require.Equal(t, 2, shape.Dim(2))
@@ -74,15 +73,15 @@ func TestDim(t *testing.T) {
 }
 
 func TestFromAnyValue(t *testing.T) {
-	shape, err := shapes2.FromAnyValue([]int32{1, 2, 3})
+	shape, err := FromAnyValue([]int32{1, 2, 3})
 	require.NoError(t, err)
 	require.NotPanics(t, func() { shape.Assert(dtypes.Int32, 3) })
 
-	shape, err = shapes2.FromAnyValue([][][]complex64{{{1, 2, -3}, {3, 4 + 2i, -7 - 1i}}})
+	shape, err = FromAnyValue([][][]complex64{{{1, 2, -3}, {3, 4 + 2i, -7 - 1i}}})
 	require.NoError(t, err)
 	require.NotPanics(t, func() { shape.Assert(dtypes.Complex64, 1, 2, 3) })
 
 	// Irregular shape is not accepted:
-	shape, err = shapes2.FromAnyValue([][]float32{{1, 2, 3}, {4, 5}})
+	shape, err = FromAnyValue([][]float32{{1, 2, 3}, {4, 5}})
 	require.Errorf(t, err, "irregular shape should have returned an error, instead got shape %s", shape)
 }

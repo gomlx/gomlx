@@ -1,6 +1,8 @@
 package kan
 
 import (
+	"math"
+
 	"github.com/gomlx/bsplines"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/internal/exceptions"
@@ -9,9 +11,8 @@ import (
 	"github.com/gomlx/gomlx/ml/layers/activations"
 	xbsplines "github.com/gomlx/gomlx/ml/layers/bsplines"
 	"github.com/gomlx/gomlx/ml/layers/regularizers"
-	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"k8s.io/klog/v2"
-	"math"
 )
 
 // This file implements the B-Spline based KAN model, the original one described in https://arxiv.org/pdf/2404.19756.

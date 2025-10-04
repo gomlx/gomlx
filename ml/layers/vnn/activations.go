@@ -5,7 +5,7 @@ import (
 	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"
-	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 )
 
 const (

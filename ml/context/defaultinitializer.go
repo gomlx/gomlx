@@ -4,7 +4,7 @@ import (
 	"math"
 
 	"github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 )
 
 // VariableInitializer builds a valueNode that returns a value to initialize a variable of the given

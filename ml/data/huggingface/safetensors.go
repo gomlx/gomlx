@@ -3,13 +3,14 @@ package huggingface
 import (
 	"encoding/binary"
 	"encoding/json"
-	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensors"
-	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/pkg/errors"
 	"io"
 	"iter"
 	"slices"
+
+	"github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/pkg/errors"
 )
 
 // NamedTensor represents a tensor and its name in a ".safetensors" file.

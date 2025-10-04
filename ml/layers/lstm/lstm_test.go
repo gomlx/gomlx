@@ -2,11 +2,12 @@ package lstm
 
 import (
 	"fmt"
+	"testing"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
-	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
-	"testing"
 
 	_ "github.com/gomlx/gomlx/backends/default"
 )

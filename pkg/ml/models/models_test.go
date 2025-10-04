@@ -7,8 +7,8 @@ import (
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/internal/must"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/stretchr/testify/require"
 )

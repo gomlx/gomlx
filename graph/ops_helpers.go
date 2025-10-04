@@ -18,8 +18,8 @@ package graph
 
 import (
 	. "github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/gomlx/types/shapes"
 )
 
 // AdjustAxisToOperandRank returns the positive axis to the operand shapes, adjusting in case the axis given is negative.

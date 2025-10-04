@@ -10,7 +10,7 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/exceptions"
-	"github.com/gomlx/gomlx/types/shapes"
+	shapes2 "github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 )
@@ -23,7 +23,7 @@ var _ backends.DataInterface = (*Backend)(nil)
 // The flat data may be shared -- for temporary buffers from compiled graphs they are
 // taken from larger blobs of bytes allocated in one Go -- or owned by the buffer.
 type Buffer struct {
-	shape shapes.Shape
+	shape shapes2.Shape
 	valid bool
 
 	// flat is always a slice of the underlying data type (shape.DType).
@@ -44,7 +44,7 @@ func (b *Backend) getBufferPool(dtype dtypes.DType, length int) *sync.Pool {
 			New: func() interface{} {
 				return &Buffer{
 					flat:  reflect.MakeSlice(reflect.SliceOf(dtype.GoType()), length, length).Interface(),
-					shape: shapes.Make(dtype, length),
+					shape: shapes2.Make(dtype, length),
 				}
 			},
 		})
@@ -68,7 +68,7 @@ func (b *Backend) getBuffer(dtype dtypes.DType, length int) *Buffer {
 }
 
 // getBufferForShape is a wrapper for getShape that also sets the buffer shape accordingly.
-func (b *Backend) getBufferForShape(shape shapes.Shape) *Buffer {
+func (b *Backend) getBufferForShape(shape shapes2.Shape) *Buffer {
 	if b.isFinalized {
 		return nil
 	}
@@ -162,7 +162,7 @@ func (b *Buffer) Zeros() *Buffer {
 // It returns a reference to the buffer to allow cascading calls.
 func (b *Buffer) Ones() *Buffer {
 	dtype := b.shape.DType
-	_ = b.Fill(shapes.CastAsDType(1, dtype))
+	_ = b.Fill(shapes2.CastAsDType(1, dtype))
 	return b
 }
 
@@ -194,7 +194,7 @@ func (b *Backend) cloneBuffer(buffer *Buffer) *Buffer {
 }
 
 // NewBuffer creates the buffer with a newly allocated flat space.
-func (b *Backend) NewBuffer(shape shapes.Shape) *Buffer {
+func (b *Backend) NewBuffer(shape shapes2.Shape) *Buffer {
 	if b.isFinalized {
 		return nil
 	}
@@ -238,10 +238,10 @@ func (b *Backend) BufferFinalize(backendBuffer backends.Buffer) error {
 }
 
 // BufferShape returns the shape for the buffer.
-func (b *Backend) BufferShape(buffer backends.Buffer) (shapes.Shape, error) {
+func (b *Backend) BufferShape(buffer backends.Buffer) (shapes2.Shape, error) {
 	buf, ok := buffer.(*Buffer)
 	if !ok {
-		return shapes.Invalid(), errors.Errorf("buffer is not a %q backend buffer", BackendName)
+		return shapes2.Invalid(), errors.Errorf("buffer is not a %q backend buffer", BackendName)
 	}
 	return buf.shape, nil
 }
@@ -270,7 +270,7 @@ func (b *Backend) BufferToFlatData(backendBuffer backends.Buffer, flat any) erro
 
 // BufferFromFlatData transfers data from Go given as a flat slice (of the type corresponding to the shape DType)
 // to the deviceNum, and returns the corresponding backends.Buffer.
-func (b *Backend) BufferFromFlatData(deviceNum backends.DeviceNum, flat any, shape shapes.Shape) (backends.Buffer, error) {
+func (b *Backend) BufferFromFlatData(deviceNum backends.DeviceNum, flat any, shape shapes2.Shape) (backends.Buffer, error) {
 	if b.isFinalized {
 		return nil, errors.Errorf("backend is already finalized")
 	}
@@ -306,7 +306,7 @@ func (b *Backend) HasSharedBuffers() bool {
 //
 // It returns a handle to the buffer and a slice of the corresponding data type pointing
 // to the shared data.
-func (b *Backend) NewSharedBuffer(deviceNum backends.DeviceNum, shape shapes.Shape) (buffer backends.Buffer, flat any, err error) {
+func (b *Backend) NewSharedBuffer(deviceNum backends.DeviceNum, shape shapes2.Shape) (buffer backends.Buffer, flat any, err error) {
 	if b.isFinalized {
 		return nil, nil, errors.Errorf("backend is already finalized")
 	}

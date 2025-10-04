@@ -9,7 +9,7 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	_ "github.com/gomlx/gomlx/backends/default" // Use xla backend.
-	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
 	"k8s.io/klog/v2"

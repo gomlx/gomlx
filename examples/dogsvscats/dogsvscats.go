@@ -20,14 +20,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"github.com/gomlx/gomlx/ml/data"
-	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensors"
-	timage "github.com/gomlx/gomlx/types/tensors/images"
-	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/pkg/errors"
-	"github.com/schollz/progressbar/v3"
 	"hash/crc32"
 	"image"
 	"image/color"
@@ -43,6 +35,15 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gomlx/gomlx/ml/data"
+	"github.com/gomlx/gomlx/ml/train"
+	shapes2 "github.com/gomlx/gomlx/pkg/core/shapes"
+	"github.com/gomlx/gomlx/types/tensors"
+	timage "github.com/gomlx/gomlx/types/tensors/images"
+	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/pkg/errors"
+	"github.com/schollz/progressbar/v3"
 
 	"github.com/disintegration/imaging"
 )
@@ -469,7 +470,7 @@ func (ds *Dataset) Yield() (spec any, inputs, labels []*tensors.Tensor, err erro
 		// No paired image.
 		inputs = []*tensors.Tensor{ds.toTensor.Batch(images), tensors.FromValue(indices)}
 	}
-	labels = []*tensors.Tensor{tensors.FromAnyValue(shapes.CastAsDType(labelsAsTypes, ds.dtype))}
+	labels = []*tensors.Tensor{tensors.FromAnyValue(shapes2.CastAsDType(labelsAsTypes, ds.dtype))}
 	return
 }
 
@@ -802,7 +803,7 @@ func (pds *PreGeneratedDataset) Yield() (spec any, inputs, labels []*tensors.Ten
 		for ii := 0; ii < pds.batchSize; ii++ {
 			pds.labelsAsTypes[ii] = DogOrCat(pds.buffer[ii*entrySize])
 		}
-		labels = []*tensors.Tensor{tensors.FromAnyValue(shapes.CastAsDType(pds.labelsAsTypes, pds.dtype))}
+		labels = []*tensors.Tensor{tensors.FromAnyValue(shapes2.CastAsDType(pds.labelsAsTypes, pds.dtype))}
 		var t, pairT *tensors.Tensor
 		switch pds.dtype {
 		case dtypes.Float32:
@@ -859,7 +860,7 @@ func BytesToTensor[T interface {
 }](
 	buffer []byte, numImages, width, height int) (t *tensors.Tensor) {
 	var zero T
-	t = tensors.FromShape(shapes.Make(dtypes.FromGoType(reflect.TypeOf(zero)), numImages, height, width, 4))
+	t = tensors.FromShape(shapes2.Make(dtypes.FromGoType(reflect.TypeOf(zero)), numImages, height, width, 4))
 	t.MutableFlatData(func(flatAny any) {
 		tensorData := flatAny.([]T)
 		dataPos := 0

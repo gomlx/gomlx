@@ -19,7 +19,6 @@ package shapes
 import (
 	"fmt"
 
-	shapes2 "github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 )
@@ -32,14 +31,14 @@ const UncheckedAxis = int(-1)
 // `tensor.Tensor` (concrete tensor) and `graph.Node` (tensor representations in a
 // computation graph), `context.Variable` and Shape itself implement the interface.
 type HasShape interface {
-	Shape() shapes2.Shape
+	Shape() Shape
 }
 
 // CheckDims checks that the shape has the given dimensions and rank. A value of -1 in
 // dimensions means it can take any value and is not checked.
 //
 // It returns an error if the rank is different or if any of the dimensions don't match.
-func (s shapes2.Shape) CheckDims(dimensions ...int) error {
+func (s Shape) CheckDims(dimensions ...int) error {
 	if s.Rank() != len(dimensions) {
 		return errors.Errorf("shape (%s) has incompatible rank %d (wanted %d)", s, s.Rank(), len(dimensions))
 	}
@@ -55,7 +54,7 @@ func (s shapes2.Shape) CheckDims(dimensions ...int) error {
 // dimensions means it can take any value and is not checked.
 //
 // It returns an error if the dtype or rank is different or if any of the dimensions don't match.
-func (s shapes2.Shape) Check(dtype dtypes.DType, dimensions ...int) error {
+func (s Shape) Check(dtype dtypes.DType, dimensions ...int) error {
 	if dtype != s.DType {
 		return errors.Errorf("shape (%s) has incompatible dtype %s (wanted %s)", s, s.DType, dtype)
 	}
@@ -68,7 +67,7 @@ func (s shapes2.Shape) Check(dtype dtypes.DType, dimensions ...int) error {
 // It panics if it doesn't match.
 //
 // See usage example in package shapes documentation.
-func (s shapes2.Shape) AssertDims(dimensions ...int) {
+func (s Shape) AssertDims(dimensions ...int) {
 	err := s.CheckDims(dimensions...)
 	if err != nil {
 		panic(fmt.Sprintf("shapes.AssertDims(%v): %+v", dimensions, err))
@@ -79,7 +78,7 @@ func (s shapes2.Shape) AssertDims(dimensions ...int) {
 // dimensions means it can take any value and is not checked.
 //
 // It panics if it doesn't match.
-func (s shapes2.Shape) Assert(dtype dtypes.DType, dimensions ...int) {
+func (s Shape) Assert(dtype dtypes.DType, dimensions ...int) {
 	err := s.Check(dtype, dimensions...)
 	if err != nil {
 		panic(fmt.Sprintf("shapes.Assert(%s, %v): %+v", dtype, dimensions, err))
@@ -115,7 +114,7 @@ func Assert(shaped HasShape, dtype dtypes.DType, dimensions ...int) {
 // CheckRank checks that the shape has the given rank.
 //
 // It returns an error if the rank is different.
-func (s shapes2.Shape) CheckRank(rank int) error {
+func (s Shape) CheckRank(rank int) error {
 	if s.Rank() != rank {
 		return errors.Errorf("shape (%s) has incompatible rank %d -- wanted %d", s, s.Rank(), rank)
 	}
@@ -127,7 +126,7 @@ func (s shapes2.Shape) CheckRank(rank int) error {
 // It panics if it doesn't match.
 //
 // See usage example in package shapes documentation.
-func (s shapes2.Shape) AssertRank(rank int) {
+func (s Shape) AssertRank(rank int) {
 	err := s.CheckRank(rank)
 	if err != nil {
 		panic(fmt.Sprintf("assertRank(%d): %+v", rank, err))
@@ -153,7 +152,7 @@ func AssertRank(shaped HasShape, rank int) {
 // CheckScalar checks that the shape is a scalar.
 //
 // It returns an error if shape is not a scalar.
-func (s shapes2.Shape) CheckScalar() error {
+func (s Shape) CheckScalar() error {
 	if !s.IsScalar() {
 		return errors.Errorf("shape (%s) is not a scalar", s)
 	}
@@ -165,7 +164,7 @@ func (s shapes2.Shape) CheckScalar() error {
 // It panics if it doesn't match.
 //
 // See usage example in package shapes documentation.
-func (s shapes2.Shape) AssertScalar() {
+func (s Shape) AssertScalar() {
 	err := s.CheckScalar()
 	if err != nil {
 		panic(fmt.Sprintf("AssertScalar(): %+v", err))

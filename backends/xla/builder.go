@@ -5,7 +5,7 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/internal/exceptions"
-	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/xlabuilder"
 	"github.com/pkg/errors"

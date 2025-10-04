@@ -18,7 +18,7 @@ import (
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	mldata "github.com/gomlx/gomlx/ml/data"
-	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"

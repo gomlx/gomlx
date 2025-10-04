@@ -1,13 +1,14 @@
 package rational
 
 import (
+	"testing"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/ctxtest"
 	"github.com/gomlx/gomlx/ml/layers/activations"
-	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
-	"testing"
 
 	_ "github.com/gomlx/gomlx/backends/default"
 )

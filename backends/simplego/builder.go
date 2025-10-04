@@ -7,8 +7,8 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/backends/notimplemented"
 	"github.com/gomlx/gomlx/backends/shapeinference"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/sets"
-	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/pkg/errors"
 )

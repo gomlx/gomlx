@@ -13,7 +13,7 @@ import (
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
-	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gopjrt/dtypes"

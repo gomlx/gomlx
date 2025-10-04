@@ -20,16 +20,17 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
-	"github.com/gomlx/gomlx/types/shapes"
+	"os"
+	"strconv"
+	"testing"
+	"unsafe"
+
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/x448/float16"
-	"os"
-	"strconv"
-	"testing"
-	"unsafe"
 )
 
 func cmpShapes(t *testing.T, shape, wantShape shapes.Shape, err error) {

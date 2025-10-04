@@ -24,8 +24,8 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/ml/context"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/gomlx/types/shapes"
 )
 
 // This file contains all parts of the layers.MultiHeadAttention implementation.

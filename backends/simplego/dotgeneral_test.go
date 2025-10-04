@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"

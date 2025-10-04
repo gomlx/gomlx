@@ -6,7 +6,7 @@ import (
 
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
-	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
 )

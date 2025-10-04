@@ -2,13 +2,14 @@ package ogbnmag
 
 import (
 	"fmt"
+	"os"
+	"path"
+
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
 	mldata "github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
-	"os"
-	"path"
 )
 
 var (

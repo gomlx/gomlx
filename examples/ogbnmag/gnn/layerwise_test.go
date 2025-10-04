@@ -2,17 +2,18 @@ package gnn
 
 import (
 	"fmt"
+	"testing"
+
 	samplerPkg "github.com/gomlx/gomlx/examples/ogbnmag/sampler"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activations"
-	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
-	"testing"
 
 	_ "github.com/gomlx/gomlx/backends/default"
 )

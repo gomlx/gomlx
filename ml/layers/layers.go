@@ -30,7 +30,7 @@ import (
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/types/shapes"
+	shapes2 "github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 )
 
@@ -101,7 +101,7 @@ func Dense(ctx *context.Context, input *Node, useBias bool, outputDimensions ...
 	weightsDims := make([]int, 1+len(outputDimensions))
 	weightsDims[0] = inputLastDimension
 	copy(weightsDims[1:], outputDimensions)
-	weightsVar := ctx.VariableWithShape("weights", shapes.Make(inputShape.DType, weightsDims...))
+	weightsVar := ctx.VariableWithShape("weights", shapes2.Make(inputShape.DType, weightsDims...))
 	if regularizer != nil {
 		// Only for the weights, not for the bias.
 		regularizer(ctx, g, weightsVar)
@@ -133,7 +133,7 @@ func Dense(ctx *context.Context, input *Node, useBias bool, outputDimensions ...
 
 	// Add bias: it takes no regularizer by default.
 	if useBias {
-		biasVar := ctx.VariableWithShape("biases", shapes.Make(inputShape.DType, outputDimensions...))
+		biasVar := ctx.VariableWithShape("biases", shapes2.Make(inputShape.DType, outputDimensions...))
 		bias := biasVar.ValueGraph(g)
 		expandedBiasShape := output.Shape().Clone()
 		for ii := range expandedBiasShape.Dimensions[:output.Rank()-len(outputDimensions)] {
@@ -169,7 +169,7 @@ func Embedding(ctx *context.Context, input *Node, dtype dtypes.DType, vocabSize,
 		// and index of size 1.
 		input = InsertAxes(input, -1)
 	}
-	embeddingTable := ctx.VariableWithShape("embeddings", shapes.Make(dtype, vocabSize, dimension))
+	embeddingTable := ctx.VariableWithShape("embeddings", shapes2.Make(dtype, vocabSize, dimension))
 	return Gather(embeddingTable.ValueGraph(input.Graph()), input, indicesAreSorted...)
 }
 
@@ -238,7 +238,7 @@ func PieceWiseLinearCalibration(ctx *context.Context, input, keypoints *Node, ou
 	for ii := range outputKeypoints {
 		outputKeypoints[ii] = float64(ii) / float64(numKeypoints-1)
 	}
-	outKPValue := shapes.CastAsDType(outputKeypoints, dtype)
+	outKPValue := shapes2.CastAsDType(outputKeypoints, dtype)
 	var outputKeypointsNode *Node
 	if outputTrainable {
 		outputKeypointsNode = ctx.VariableWithValue("output_keypoints", outKPValue).ValueGraph(g)
@@ -320,7 +320,7 @@ func PieceWiseLinearCalibrationCascaded(ctx *context.Context, input, keypoints *
 		outputKeypoints[ii] = target - cumulative
 		cumulative = target
 	}
-	outKPValue := shapes.CastAsDType(outputKeypoints, dtype)
+	outKPValue := shapes2.CastAsDType(outputKeypoints, dtype)
 	var outputKeypointsNode *Node
 	if outputTrainable {
 		outputKeypointsNode = ctx.VariableWithValue("output_keypoints", outKPValue).ValueGraph(g)
@@ -340,7 +340,7 @@ func PieceWiseLinearCalibrationCascaded(ctx *context.Context, input, keypoints *
 
 	//  We need to concatenate a weight of 1 for keypoint[0] as bias.
 	weights = Concatenate([]*Node{
-		Ones(g, shapes.Make(weights.DType(), numInputs, 1)),
+		Ones(g, shapes2.Make(weights.DType(), numInputs, 1)),
 		weights}, -1) // Now weights has shape [numInputs, numKeypoints]
 
 	// The calibrated value is the weighted sum of the output keypoints.
@@ -377,7 +377,7 @@ func DropoutNormalize(ctx *context.Context, input *Node, dropoutRate *Node, norm
 	// Disable (by multiplying by 0) random entries.
 	dtype := dropoutRate.DType()
 	dims := input.Shape().Dimensions
-	rnd := ctx.RandomUniform(g, shapes.Make(dtype, dims...))
+	rnd := ctx.RandomUniform(g, shapes2.Make(dtype, dims...))
 	broadcastRate := BroadcastToDims(dropoutRate, dims...)
 	result := Where(LessOrEqual(rnd, broadcastRate), ZerosLike(input), input)
 	if normalize {

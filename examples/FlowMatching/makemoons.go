@@ -1,12 +1,13 @@
 package fm
 
 import (
+	"math"
+
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
-	"math"
 )
 
 var (

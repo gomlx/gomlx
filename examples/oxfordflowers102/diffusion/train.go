@@ -2,6 +2,10 @@ package diffusion
 
 import (
 	"fmt"
+	"os"
+	"path"
+	"time"
+
 	"github.com/gomlx/gomlx/backends"
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
 	. "github.com/gomlx/gomlx/graph"
@@ -14,7 +18,7 @@ import (
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
-	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/margaid"
@@ -22,9 +26,6 @@ import (
 	stdplots "github.com/gomlx/gomlx/ui/plots"
 	"github.com/gomlx/gopjrt/dtypes"
 	"k8s.io/klog/v2"
-	"os"
-	"path"
-	"time"
 )
 
 const (

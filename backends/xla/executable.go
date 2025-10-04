@@ -2,8 +2,8 @@ package xla
 
 import (
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/pjrt"
 	"github.com/gomlx/gopjrt/xlabuilder"
 	"github.com/pkg/errors"

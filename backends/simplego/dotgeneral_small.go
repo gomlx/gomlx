@@ -3,7 +3,7 @@ package simplego
 import (
 	"sync"
 
-	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/pkg/errors"

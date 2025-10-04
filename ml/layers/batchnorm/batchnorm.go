@@ -31,8 +31,8 @@ import (
 	"github.com/gomlx/gomlx/ml/context/initializers"
 	"github.com/gomlx/gomlx/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/pkg/core/shapes"
 	"github.com/gomlx/gomlx/pkg/support/xslices"
-	"github.com/gomlx/gomlx/types/shapes"
 )
 
 // Config for a batch normalization layer.
