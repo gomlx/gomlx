@@ -20,11 +20,11 @@ import (
 	"fmt"
 	"strings"
 
-	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/graph"
+	. "github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/support/xsync"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
-	"github.com/gomlx/gomlx/types/xsync"
 	"github.com/gomlx/gopjrt/dtypes"
 )
 
@@ -50,7 +50,7 @@ type Variable struct {
 	Trainable bool
 
 	shape       shapes.Shape
-	initializer VariableInitializer // Set if variable is not yet initialized.
+	initializer VariableInitializer // Set if the variable is not yet initialized.
 	value       *tensors.Tensor     // Value of the variable.
 
 	// graphToNodes maps graph ids in which this variable was used to its parameter Node and
@@ -211,7 +211,7 @@ func (v *Variable) Value() *tensors.Tensor {
 
 // SetValue updates the tensor holding the variable value.
 // NOTE: Because often variables are large, the previous value is immediately freed (as opposed to
-// wait for garbage collection). If the previous value is used somewhere else, use SetValuePreservingOld.
+// waiting for garbage collection). If the previous value is used somewhere else, use SetValuePreservingOld.
 func (v *Variable) SetValue(value *tensors.Tensor) {
 	if v.value != nil {
 		v.value.FinalizeAll()
@@ -219,8 +219,8 @@ func (v *Variable) SetValue(value *tensors.Tensor) {
 	v.SetValuePreservingOld(value)
 }
 
-// SetValuePreservingOld updates the tensor holding the variable value, and dont' free old value. If previous
-// value is not used, use SetValue instead that will free it immediately.
+// SetValuePreservingOld updates the tensor holding the variable value and doesn't free the old value.
+// If the previous value is not used, use SetValue instead that will free it immediately.
 func (v *Variable) SetValuePreservingOld(value *tensors.Tensor) {
 	v.value = value
 	v.shape = value.Shape()

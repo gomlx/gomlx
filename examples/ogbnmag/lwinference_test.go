@@ -156,7 +156,7 @@ func TestLayerWiseInferenceLogits(t *testing.T) {
 		}
 
 		// Execute normal inference model for the inputs.
-		executor := context.NewExec(backend, ctx, func(ctx *context.Context, inputs []*Node) *Node {
+		executor := context.MustNewExec(backend, ctx, func(ctx *context.Context, inputs []*Node) *Node {
 			predictionsAndMask := MagModelGraph(ctx, strategy, inputs)
 			return ConvertDType(predictionsAndMask[0], dtypes.Float32)
 		})
@@ -167,7 +167,7 @@ func TestLayerWiseInferenceLogits(t *testing.T) {
 
 		// Layer-Wise inference
 		modelFn := BuildLayerWiseInferenceModel(strategy, false) // Function that builds the LW inference model.
-		executor = context.NewExec(backend, ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
+		executor = context.MustNewExec(backend, ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
 			allPredictions := modelFn(ctx, g)
 			return ConvertDType(
 				Slice(allPredictions, AxisElem(seedId), AxisRange()),
@@ -215,7 +215,7 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 	ctx = ctx.Reuse()
 
 	// Execute normal inference model for the inputs.
-	executor := context.NewExec(backend, ctx, func(ctx *context.Context, inputs []*Node) []*Node {
+	executor := context.MustNewExec(backend, ctx, func(ctx *context.Context, inputs []*Node) []*Node {
 		labels := inputs[len(inputs)-1]
 		inputs = inputs[:len(inputs)-1]
 		predictionsAndMask := MagModelGraph(ctx, strategy, inputs)
@@ -258,7 +258,7 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 	// Layer-Wise inference
 	modelFn := BuildLayerWiseInferenceModel(strategy, false) // Function that builds the LW inference model.
 	numToCompare := len(predictionsGNN)
-	executor = context.NewExec(backend, ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
+	executor = context.MustNewExec(backend, ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
 		logits := modelFn(ctx, g)
 		predictions := ArgMax(logits, -1, dtypes.Int32)
 		predictions = Slice(predictions, AxisRange(0, numToCompare))

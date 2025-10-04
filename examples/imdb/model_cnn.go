@@ -1,8 +1,8 @@
 package imdb
 
 import (
-	"github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activations"

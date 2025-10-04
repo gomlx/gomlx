@@ -20,22 +20,23 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
-	. "github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/graph/graphtest"
-	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensors"
-	"github.com/gomlx/gomlx/types/xslices"
-	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"io"
 	"math"
 	"math/rand"
 	"sync/atomic"
 	"testing"
 
-	_ "github.com/gomlx/gomlx/backends/xla"
+	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/graph/graphtest"
+	"github.com/gomlx/gomlx/ml/context"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
+	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	_ "github.com/gomlx/gomlx/backends/default"
 )
 
 type testDS struct {

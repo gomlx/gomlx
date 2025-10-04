@@ -8,8 +8,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/gomlx/exceptions"
-	"github.com/janpfeifer/must"
+	"github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/internal/must"
 )
 
 // Method represents a single method from the backends.Builder interface

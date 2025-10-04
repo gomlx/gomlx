@@ -18,13 +18,14 @@ package graph
 
 import (
 	"fmt"
+	"testing"
+
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
-	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 const margin = 1e-4
@@ -197,7 +198,7 @@ func TestGradDotGeneralBatchContracting(t *testing.T) {
 				return []*Node{lhs, rhs, dot, grads[0], grads[1]}
 			}
 
-			exec := NewExec(backend, testFn)
+			exec := MustNewExec(backend, testFn)
 			fmt.Printf("Executing GradDotGeneralBatchContracting:\n")
 			parts := exec.Call()
 			for ii, name := range []string{"lhs", "rhs", "dot", "grad_lhs", "grad_rhs"} {
@@ -272,7 +273,7 @@ func TestGradDotGeneralBatchContractingCrossing(t *testing.T) {
 				return []*Node{lhs, rhs, dot, grads[0], grads[1]}
 			}
 
-			exec := NewExec(backend, testFn)
+			exec := MustNewExec(backend, testFn)
 			parts := exec.Call()
 			fmt.Printf("Executing TestGradDotGeneral:\n")
 			for ii, name := range []string{"lhs", "rhs", "dot", "grad_lhs", "grad_rhs"} {

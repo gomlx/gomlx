@@ -4,12 +4,13 @@ package graph
 
 import (
 	"fmt"
-	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/xslices"
-	"github.com/gomlx/gopjrt/dtypes"
 	"slices"
 	"strings"
+
+	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
+	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gopjrt/dtypes"
 )
 
 type NodeType int

@@ -1,5 +1,41 @@
 # GoMLX changelog
 
+# Next: Backend xla->stablehlo; Big refactoring started: exported packages to /pkg; New `ml` API
+
+* **Highlights** of this release, it may require changes:
+  * Deprecating backend "xla" (now called "oldxla") in favor of "stablehlo" (aliased to "xla" as well):
+    in most cases nothing needs to be done (the `backends/default` will replace one by the other automatically),
+    but in special cases there may require small changes.
+  * New **models** API for machine learning: it aims at replacing the `context` package, and get rid of the `context.Context`
+    object: it will let the user organize their own model state in their own Go structs, without requiring the
+    somewhat complex/confusing `Context object.
+    * This will be a profound change, and all the ml/ libraries will be changed to reflect that.
+    * The `context.Context` based libraries will be marked as deprecated and maintained for a few versions,
+      until they are sunset.
+  * Big refactoring: exported packages are going to be moved to `/pkg`, plus long-standing reorganization needs.
+    Exception to the 'ml/'--being replaced by the new `models` version, and `backends`, it will move to its own
+    repository later in the year.
+
+* Copied external trivial `must` and `exceptions` packages to `/internal/...`, to remove external dependencies.
+* Package `pkg/ml/models`:
+  * Experimental package that aims at replacing the `context` package.
+  * All packages under `github.com/gomlx/gomlx/ml` have been rewritten to the new `models` framework, under
+    `github.com/gomlx/gomlx/pkg/ml`
+* Package `inceptionv3` moved to `examples`
+* Package `xla`:  **DEPRECATED**, in the majority of the cases stablehlo will take over without the need of any changes, but you may need changes.
+  * Now registered as backend "oldxla".
+  * Only included in `github.com/gomlx/gomlx/backends/default` if compiled with the tag `oldxla`.
+* Package `stablehlo`:
+  * Now replacing `xla`. Using `xla` backend will actually use the "stablehlo" backend.
+  * Added `github.com/gomlx/gomlx/backends/stablehlo/cpu/dynamic` and `github.com/gomlx/gomlx/backends/stablehlo/cpu/static`
+    to optionally force dynamic/static linking of the CPU PJRT plugin.
+* Package `graph`:
+  * `NewExec`, `NewExecAny` `Exec`, `ExecOnce` and `ExecOnceN` now return an error on failure.
+  * `MustNewExec`, `MustNewExecAny`, `Call`, `CallOnce` and `CallOnceN` panic on failure.
+* Package `context`:
+  * `NewExec`, `NewExecAny` `Exec`, `ExecOnce` and `ExecOnceN` now return an error on failure.
+  * `MustNewExec`, `Call`, `CallOnce` and `CallOnceN` panic on failure.
+
 # v0.23.2: 2025/10/01: Updated dependencies on `github.com/gomlx/stablehlo@v0.0.5` and `github.com/gomlx/gopjrt@v0.8.2`.
 
 - Updated dependency to new Gopjrt v0.8.2 -- issues with the CUDA PJRT backward compatibility (lack of).

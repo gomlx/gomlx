@@ -13,14 +13,14 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	lgtable "github.com/charmbracelet/lipgloss/table"
-	"github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/ml/train"
-	types "github.com/gomlx/gomlx/types"
+	types "github.com/gomlx/gomlx/pkg/support/sets"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
-	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/pkg/errors"
 	"golang.org/x/exp/maps"
 	"k8s.io/klog/v2"
@@ -283,7 +283,7 @@ func (points Points) Add(otherPoints Points) {
 // MetricsNames return the list of metrics names in the whole collection, sorted alphabetically by their type and
 // then by their name.
 func (points Points) MetricsNames() []string {
-	metricNames := types.MakeSet[string]()
+	metricNames := types.Make[string]()
 	nameToType := make(map[string]string)
 	points.Map(func(p *Point) {
 		metricNames.Insert(p.MetricName)

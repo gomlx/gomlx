@@ -1,12 +1,13 @@
 package activations
 
 import (
-	. "github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/graph/graphtest"
-	"github.com/gomlx/gomlx/types/xslices"
 	"testing"
 
-	_ "github.com/gomlx/gomlx/backends/xla"
+	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/graph/graphtest"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
+
+	_ "github.com/gomlx/gomlx/backends/default"
 )
 
 func TestRelu(t *testing.T) {

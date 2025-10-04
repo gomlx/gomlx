@@ -122,7 +122,7 @@ func TestGradientFFT(t *testing.T) {
 // realFftExample returns (x, y) where: x is a sinusoidal curve with numPoints points,
 // and with `frequency` full cycles; y is the RealFFT(x).
 func realFftExample(backend backends.Backend, realDType dtypes.DType, numPoints int, frequency float64) (x, y *tensors.Tensor) {
-	e := NewExec(backend, func(g *Graph) (x, y *Node) {
+	e := MustNewExec(backend, func(g *Graph) (x, y *Node) {
 		x = Iota(g, shapes.Make(realDType, 1, numPoints), 1)
 		x = MulScalar(x, 2.0*math.Pi*frequency/float64(numPoints))
 		x = Sin(x)

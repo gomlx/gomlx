@@ -207,7 +207,7 @@ func testGradientsInDelta(t *testing.T, name string, testFn gradTestFunc, wantFo
 			grads := Gradient(ReduceAllSum(output), nodesForGrad...)
 			return append([]*Node{output}, grads...)
 		}
-		exec := NewExec(backend, fn)
+		exec := MustNewExec(backend, fn)
 		results := exec.Call()
 		fmt.Printf("\toutput=%v\n", results[0].GoStr())
 		gradients := results[1:]
@@ -241,7 +241,7 @@ func testGradientsExact(t *testing.T, name string, testFn gradTestFunc, wantForG
 		grads := Gradient(ReduceAllSum(output), nodesForGrad...)
 		return append([]*Node{output}, grads...)
 	}
-	exec := NewExec(backend, fn)
+	exec := MustNewExec(backend, fn)
 	results := exec.Call()
 	fmt.Printf("\tgradient=%v\n", results[0].GoStr())
 	gradients := results[1:]

@@ -1,13 +1,13 @@
 package data
 
 import (
-	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gomlx/types/tensors"
-	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/pkg/errors"
 )
 
@@ -68,7 +68,7 @@ func (mapDS *mapGraphFnDataset) Yield() (spec any, inputs []*tensors.Tensor, lab
 		// Build execution of MapGraphFn
 		mapDS.numInputs = len(inputs)
 		mapDS.numLabels = len(labels)
-		mapDS.mapGraphFnExec = context.NewExec(mapDS.backend, mapDS.ctx,
+		mapDS.mapGraphFnExec = context.MustNewExec(mapDS.backend, mapDS.ctx,
 			func(ctx *context.Context, inputsAndLabels []*Node) []*Node {
 				var inputs, labels []*Node
 				if mapDS.numInputs > 0 {

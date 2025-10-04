@@ -20,7 +20,7 @@ package context
 //
 // Usually one would simply import the full `graph` with a period (".") so
 // the ops don't need a package qualifier. But we can't do this in `context`
-// package because we have conflicting symbols (`Exec`, `NewExec`).
+// package because we have conflicting symbols (`Exec`, `MustNewExec`).
 
 import (
 	"github.com/gomlx/gomlx/backends"

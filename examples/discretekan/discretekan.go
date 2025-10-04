@@ -9,10 +9,10 @@ import (
 	ptypes "github.com/MetalBlueberry/go-plotly/pkg/types"
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gopjrt/dtypes"
 	gonbplotly "github.com/janpfeifer/gonb/gonbui/plotly"
-	"github.com/janpfeifer/must"
 
 	_ "github.com/gomlx/gomlx/backends/default"
 )
@@ -54,7 +54,7 @@ func Plot(name string, univariateFunctions ...Univariate) {
 		lineWidth = 1.0
 	}
 	for fnIdx, fn := range univariateFunctions {
-		exec := NewExec(backend, func(g *Graph) []*Node {
+		exec := MustNewExec(backend, func(g *Graph) []*Node {
 			inputs := Iota(g, shapes.Make(dtypes.Float64, numPoints), 0)
 			inputs = MulScalar(inputs, (maxX-minX)/float64(numPoints-1))
 			inputs = AddScalar(inputs, minX)

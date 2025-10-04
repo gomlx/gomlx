@@ -5,8 +5,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/ml/data"
@@ -26,7 +26,7 @@ import (
 	"github.com/gomlx/gopjrt/dtypes"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/janpfeifer/must"
+	"github.com/gomlx/gomlx/internal/must"
 	"golang.org/x/exp/maps"
 )
 

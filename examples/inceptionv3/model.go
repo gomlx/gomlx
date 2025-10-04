@@ -1,5 +1,5 @@
 /*
-Package inceptionv3 provides a pre-trained InceptionV3 model, or simply it's structure.
+Package inceptionv3 provides a pre-trained (or only its structure) InceptionV3 model.
 
 This library creates the model architecture and optionally loads the pre-trained weights from Google.
 It can be used with or without the top-layer.
@@ -64,8 +64,8 @@ import (
 	"path"
 	"strings"
 
-	. "github.com/gomlx/exceptions"
 	. "github.com/gomlx/gomlx/graph"
+	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/data"
 	"github.com/gomlx/gomlx/ml/layers"

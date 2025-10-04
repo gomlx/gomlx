@@ -38,22 +38,23 @@ package fyneui
 import (
 	stderrors "errors"
 	"fmt"
+	"os"
+	"os/signal"
+	"sync"
+	"time"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
-	"github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/pkg/support/xsync"
 	"github.com/gomlx/gomlx/types/tensors"
-	"github.com/gomlx/gomlx/types/xsync"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
-	"os"
-	"os/signal"
-	"sync"
-	"time"
 )
 
 var (

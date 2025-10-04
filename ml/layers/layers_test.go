@@ -19,22 +19,23 @@ package layers
 import (
 	"flag"
 	"fmt"
+	"strings"
+	"testing"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
-	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
 	"gonum.org/v1/plot"
 	"gonum.org/v1/plot/plotter"
 	"gonum.org/v1/plot/vg"
-	"strings"
-	"testing"
 
-	_ "github.com/gomlx/gomlx/backends/xla"
+	_ "github.com/gomlx/gomlx/backends/default"
 )
 
 var (
@@ -56,7 +57,7 @@ func testSimpleFunc(t *testing.T, name string, input any,
 	fn func(ctx *context.Context, input *Node) *Node, want any) {
 	backend := graphtest.BuildTestBackend()
 	ctx := context.New().WithInitializer(IotaP1Initializer)
-	exec := context.NewExec(backend, ctx, fn)
+	exec := context.MustNewExec(backend, ctx, fn)
 	var outputs []*tensors.Tensor
 	require.NotPanicsf(t, func() { outputs = exec.Call(input) }, "%s: failed to exec graph", name)
 	fmt.Printf("\t%s(%v) = %s\n", name, input, outputs[0].GoStr())
@@ -68,7 +69,7 @@ func testSimpleFuncMany(t *testing.T, name string, inputs []any,
 	fn func(ctx *context.Context, inputs []*Node) *Node, want any) {
 	backend := graphtest.BuildTestBackend()
 	ctx := context.New().WithInitializer(IotaP1Initializer)
-	exec := context.NewExec(backend, ctx, fn)
+	exec := context.MustNewExec(backend, ctx, fn)
 	var outputs []*tensors.Tensor
 	require.NotPanicsf(t, func() { outputs = exec.Call(inputs...) }, "%s: failed to exec graph", name)
 	parts := make([]string, len(inputs))

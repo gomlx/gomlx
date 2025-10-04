@@ -3,6 +3,11 @@ package inceptionv3
 import (
 	"flag"
 	"fmt"
+	"image"
+	_ "image/png"
+	"os"
+	"testing"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
@@ -11,12 +16,8 @@ import (
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"image"
-	_ "image/png"
-	"os"
-	"testing"
 
-	_ "github.com/gomlx/gomlx/backends/xla"
+	_ "github.com/gomlx/gomlx/backends/default"
 )
 
 var flagDataDir = flag.String("data", "/tmp/gomlx_inceptionv3", "Directory where to save and load model data.")
@@ -44,7 +45,7 @@ func TestBuildGraph(t *testing.T) {
 
 	// InceptionV3 classification.
 	ctx := context.New()
-	inceptionV3Exec := context.NewExec(backend, ctx, func(ctx *context.Context, img *Node) *Node {
+	inceptionV3Exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, img *Node) *Node {
 		img = InsertAxes(img, 0) // Add batch dimension
 		img = PreprocessImage(img, 255.0, images.ChannelsLast)
 		output := BuildGraph(ctx, img).
@@ -72,7 +73,7 @@ func TestBuildGraph(t *testing.T) {
 	require.NoError(t, err)
 	want := wantT.Value().([][]float32)[0] // The last [0] takes the first element of the batch of 1.
 
-	diffStats := NewExec(backend, func(a, b *Node) (max, mean *Node) {
+	diffStats := MustNewExec(backend, func(a, b *Node) (max, mean *Node) {
 		diff := Abs(Sub(a, b))
 		max, mean = ReduceAllMax(diff), ReduceAllMean(diff)
 		return

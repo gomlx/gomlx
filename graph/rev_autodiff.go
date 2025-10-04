@@ -21,9 +21,9 @@ import (
 	"math"
 	"os"
 
-	. "github.com/gomlx/exceptions"
+	. "github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/pkg/errors"
 )
 

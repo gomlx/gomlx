@@ -7,7 +7,7 @@ set -e
 # You should run this from the root of the repository.
 
 # Normal tests:
-PACKAGE_COVERAGE_1="./graph/...,./ml/...,./models/...,./types/...,./backends,./backends/xla/...,./backends/shapeinference/...,./backends/simplego/..."
+PACKAGE_COVERAGE_1="./graph/...,./ml/...,./pkg/...,./types/...,./backends,./backends/xla/...,./backends/shapeinference/...,./backends/simplego/..."
 go test -cover -coverprofile docs/coverage1.out -coverpkg "${PACKAGE_COVERAGE_1}" ./... -test.count=1
 
 # Tests using the stablehlo backend.

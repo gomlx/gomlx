@@ -167,13 +167,13 @@ func TestRandomIntN(t *testing.T) {
 // Kept here to eventually test new backends.
 func TestMultiOutputs(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
-	_, err := NewExec(backend, func(x *Node) *Node {
+	_, err := MustNewExec(backend, func(x *Node) *Node {
 		g := x.Graph()
 		rngState := Const(g, RngStateFromSeed(42))
 		rngState, ws := RandomNormal(rngState, x.Shape())
 		fmt.Printf("Graph:\n%s\n", g)
 		return ws // Add(x, ws)
-	}).CallOrError(0.0)
+	}).Exec(0.0)
 	if err != nil {
 		fmt.Printf("Error: %+v\n", err)
 		t.Fail()

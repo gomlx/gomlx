@@ -1,7 +1,7 @@
 package graph
 
 import (
-	"github.com/gomlx/gomlx/types"
+	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/types/tensors"
 )
 
@@ -33,10 +33,10 @@ func (n *Node) ConstantValue() *tensors.Tensor {
 // IsConstantExpression returns whether the Node is a Constant or an expression that depends only on constant values.
 // It traverses all the node dependencies and checks that all leaf nodes are constants.
 func (n *Node) IsConstantExpression() bool {
-	return isConstantTraverseSubGraph(n, types.MakeSet[*Node]())
+	return isConstantTraverseSubGraph(n, sets.Make[*Node]())
 }
 
-func isConstantTraverseSubGraph(node *Node, visited types.Set[*Node]) bool {
+func isConstantTraverseSubGraph(node *Node, visited sets.Set[*Node]) bool {
 	if visited.Has(node) {
 		return true
 	}

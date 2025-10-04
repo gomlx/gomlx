@@ -8,10 +8,10 @@
 package classifier
 
 import (
-	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/examples/cifar"
 	"github.com/gomlx/gomlx/graph"
+	"github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/checkpoints"
 	"github.com/gomlx/gomlx/types/tensors"
@@ -58,7 +58,7 @@ func New(checkpointDir string) (*Classifier, error) {
 	}
 
 	// Create model executor.
-	c.exec = context.NewExec(c.backend, c.ctx.In("model"), func(ctx *context.Context, image *graph.Node) (choice *graph.Node) {
+	c.exec = context.MustNewExec(c.backend, c.ctx.In("model"), func(ctx *context.Context, image *graph.Node) (choice *graph.Node) {
 		// We take the first result from the modelFn -- it returns a slice.
 		image = graph.ExpandAxes(image, 0) // Create a batch dimension of size 1.
 		logits := modelFn(ctx, nil, []*graph.Node{image})[0]

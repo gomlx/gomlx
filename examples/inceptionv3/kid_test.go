@@ -2,6 +2,11 @@ package inceptionv3
 
 import (
 	"fmt"
+	"image"
+	"os"
+	"sync"
+	"testing"
+
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
@@ -10,12 +15,8 @@ import (
 	"github.com/gomlx/gomlx/types/tensors/images"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
-	"image"
-	"os"
-	"sync"
-	"testing"
 
-	_ "github.com/gomlx/gomlx/backends/xla"
+	_ "github.com/gomlx/gomlx/backends/default"
 )
 
 func loadImage(filePath string) (img image.Image, err error) {
@@ -38,7 +39,7 @@ var (
 // value from -127.5 in the top left to 127.5 in the bottom right. It's deterministic.
 func noisyImages(t *testing.T, manager backends.Backend, batch *tensors.Tensor) *tensors.Tensor {
 	noisyImagesExecOnce.Do(func() {
-		noisyImagesExec = NewExec(manager, func(batch *Node) *Node {
+		noisyImagesExec = MustNewExec(manager, func(batch *Node) *Node {
 			g := batch.Graph()
 			oneImage := batch.Shape().Clone()
 			oneImage.Dimensions[0] = 1
@@ -79,7 +80,7 @@ func TestKidMetric(t *testing.T) {
 
 	kidBuilder := NewKidBuilder(*flagDataDir, 75, 255.0, images.ChannelsLast)
 	ctx := context.New()
-	kidExec := context.NewExec(manager, ctx, func(ctx *context.Context, imagesPair []*Node) *Node {
+	kidExec := context.MustNewExec(manager, ctx, func(ctx *context.Context, imagesPair []*Node) *Node {
 		return kidBuilder.BuildGraph(ctx, []*Node{imagesPair[0]}, []*Node{imagesPair[1]})
 	})
 	kid := kidExec.Call(imagesBatch, noisyBatch)[0].Value().(float32)

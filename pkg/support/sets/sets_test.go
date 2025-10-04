@@ -1,13 +1,14 @@
-package types
+package sets
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestSet(t *testing.T) {
 	// Sets are created empty.
-	s := MakeSet[int](10)
+	s := Make[int](10)
 	assert.Len(t, s, 0)
 
 	// Check inserting and recovery.
@@ -17,7 +18,7 @@ func TestSet(t *testing.T) {
 	assert.True(t, s.Has(7))
 	assert.False(t, s.Has(5))
 
-	s2 := SetWith(5, 7)
+	s2 := MakeWith(5, 7)
 	assert.Len(t, s2, 2)
 	assert.True(t, s2.Has(5))
 	assert.True(t, s2.Has(7))
@@ -33,6 +34,6 @@ func TestSet(t *testing.T) {
 	assert.False(t, s.Has(7))
 	assert.True(t, s.Equal(s3))
 	assert.False(t, s.Equal(s2))
-	s4 := SetWith(-3)
+	s4 := MakeWith(-3)
 	assert.False(t, s.Equal(s4))
 }

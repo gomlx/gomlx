@@ -25,14 +25,14 @@ import (
 	"github.com/gomlx/gomlx/graph/graphtest"
 	. "github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/context/initializers"
-	"github.com/gomlx/gomlx/types"
+	"github.com/gomlx/gomlx/pkg/support/sets"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	_ "github.com/gomlx/gomlx/backends/xla"
+	_ "github.com/gomlx/gomlx/backends/default"
 )
 
 func TestContextVariables(t *testing.T) {
@@ -167,7 +167,7 @@ func TestEnumerateVariables(t *testing.T) {
 	ctx.InitializeVariables(backend)
 
 	// Checks EnumerateVariables lists all variables:
-	got := types.MakeSet[string]()
+	got := sets.Make[string]()
 	setGotFn := func(v *Variable) {
 		if strings.HasPrefix(v.Name(), "#") {
 			// Skip internal variables, like #rngstate.
@@ -180,13 +180,13 @@ func TestEnumerateVariables(t *testing.T) {
 	assert.True(t, got.Has("x") && got.Has("y") && got.Has("z"))
 
 	// Checks EnumerateVariables lists all variables, even if starting from a different scope:
-	got = types.MakeSet[string]()
+	got = sets.Make[string]()
 	ctx0.EnumerateVariables(setGotFn)
 	assert.Equal(t, 3, len(got))
 	assert.True(t, got.Has("x") && got.Has("y") && got.Has("z"))
 
 	// Checks EnumerateVariablesInScope:
-	got = types.MakeSet[string]()
+	got = sets.Make[string]()
 	ctx1.EnumerateVariablesInScope(setGotFn)
 	assert.Equal(t, 2, len(got))
 	assert.True(t, got.Has("y") && got.Has("z"))
@@ -205,7 +205,7 @@ func TestIterVariables(t *testing.T) {
 	ctx.InitializeVariables(backend)
 
 	// Checks IterVariables lists all variables:
-	got := types.MakeSet[string]()
+	got := sets.Make[string]()
 	for v := range ctx.IterVariables() {
 		if strings.HasPrefix(v.Name(), "#") {
 			// Skip internal variables, like #rngstate.
@@ -217,7 +217,7 @@ func TestIterVariables(t *testing.T) {
 	assert.True(t, got.Has("x") && got.Has("y") && got.Has("z"))
 
 	// Checks IterVariables lists all variables, even if starting from a different scope:
-	got = types.MakeSet[string]()
+	got = sets.Make[string]()
 	for v := range ctx.IterVariables() {
 		if strings.HasPrefix(v.Name(), "#") {
 			// Skip internal variables, like #rngstate.
@@ -229,7 +229,7 @@ func TestIterVariables(t *testing.T) {
 	assert.True(t, got.Has("x") && got.Has("y") && got.Has("z"))
 
 	// Checks IterVariablesInScope:
-	got = types.MakeSet[string]()
+	got = sets.Make[string]()
 	for v := range ctx1.IterVariablesInScope() {
 		if strings.HasPrefix(v.Name(), "#") {
 			// Skip internal variables, like #rngstate.
@@ -348,7 +348,7 @@ func TestContext_SetLoader(t *testing.T) {
 	ctx = ctx.Reuse()
 
 	backend := graphtest.BuildTestBackend()
-	e := NewExec(backend, ctx, func(ctx *Context, g *Graph) (*Node, *Node) {
+	e := MustNewExec(backend, ctx, func(ctx *Context, g *Graph) (*Node, *Node) {
 		v0 := ctx.WithInitializer(initializers.Zero).VariableWithShape("x", shapes.Make(dtypes.Float32))
 		v1 := ctx.VariableWithValue("y", 1)
 		return v0.ValueGraph(g), v1.ValueGraph(g)

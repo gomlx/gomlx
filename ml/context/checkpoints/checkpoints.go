@@ -73,21 +73,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	. "github.com/gomlx/exceptions"
-	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/ml/data"
-	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/ml/train/optimizers"
-	"github.com/gomlx/gomlx/types"
-	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/tensors"
-	"github.com/gomlx/gomlx/types/xslices"
-	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/pkg/errors"
 	"io"
-	"k8s.io/klog/v2"
 	"os"
 	"path"
 	"path/filepath"
@@ -96,6 +82,21 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/graph"
+	. "github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/ml/context"
+	"github.com/gomlx/gomlx/ml/data"
+	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/pkg/support/sets"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
+	"github.com/gomlx/gomlx/types/shapes"
+	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/pkg/errors"
+	"k8s.io/klog/v2"
 )
 
 var (
@@ -120,13 +121,13 @@ type Config struct {
 	keep      int
 	mustLoad  bool
 
-	includeParams   bool              // whether to includeParams in loading/saving.
-	paramsToExclude types.Set[string] // specific parameter names to exclude from loading.
+	includeParams   bool             // whether to includeParams in loading/saving.
+	paramsToExclude sets.Set[string] // specific parameter names to exclude from loading.
 
 	backend  backends.Backend // used when taking the mean.
 	takeMean int
 
-	varsToExclude types.Set[*context.Variable]
+	varsToExclude sets.Set[*context.Variable]
 }
 
 // Build a configuration for building a checkpoints.Handler. After configuring the
@@ -150,8 +151,8 @@ func Build(ctx *context.Context) *Config {
 		includeParams:   true,
 		keep:            1,
 		takeMean:        1,
-		paramsToExclude: types.MakeSet[string](),
-		varsToExclude:   types.MakeSet[*context.Variable](),
+		paramsToExclude: sets.Make[string](),
+		varsToExclude:   sets.Make[*context.Variable](),
 	}
 	return c
 }
@@ -783,7 +784,7 @@ func (h *Handler) takeMean(baseNames []string) error {
 	}
 
 	// Create merger graph executor.
-	h.mergeExec = graph.NewExec(h.config.backend, func(a, b, bWeight *graph.Node) *graph.Node {
+	h.mergeExec = graph.MustNewExec(h.config.backend, func(a, b, bWeight *graph.Node) *graph.Node {
 		return graph.Add(
 			graph.Mul(a, graph.OneMinus(bWeight)),
 			graph.Mul(b, bWeight))

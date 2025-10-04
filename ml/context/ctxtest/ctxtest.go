@@ -20,13 +20,14 @@ package ctxtest
 
 import (
 	"fmt"
+	"testing"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/context"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gomlx/types/tensors"
-	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 // TestContextGraphFn should build its own inputs, and return both inputs and outputs
@@ -48,7 +49,7 @@ func RunTestGraphFn(t *testing.T, testName string, graphFn TestContextGraphFn, w
 	}
 
 	backend := graphtest.BuildTestBackend()
-	exec := context.NewExec(backend, ctx, wrapperFn)
+	exec := context.MustNewExec(backend, ctx, wrapperFn)
 	var inputsAndOutputs []*tensors.Tensor
 	require.NotPanicsf(t, func() { inputsAndOutputs = exec.Call() },
 		"%s: failed to run graph", testName)

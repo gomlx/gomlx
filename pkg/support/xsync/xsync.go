@@ -6,7 +6,7 @@ import "sync"
 // Latch implements a "latch" synchronization mechanism.
 //
 // A Latch is a signal that can be waited for until it is triggered.
-// Once triggered it never changes state, it's forever triggered.
+// Once triggered, it never changes state, it's forever triggered.
 type Latch struct {
 	muTrigger sync.Mutex
 	wait      chan struct{}
@@ -53,10 +53,10 @@ func (l *Latch) WaitChan() <-chan struct{} {
 	return l.wait
 }
 
-// LatchWithValue implements a "latch" synchronization mechanism, with a value associated with the
+// LatchWithValue implements a "latch" synchronization mechanism with a value associated with the
 // triggering of the latch.
 //
-// A LatchWithValue is a signal that can be waited for until it is triggered. Once triggered it never
+// A LatchWithValue is a signal that can be waited for until it is triggered. Once triggered, it never
 // changes state, it's forever triggered.
 type LatchWithValue[T any] struct {
 	value T
@@ -105,8 +105,9 @@ func TrySend[T any](c chan T, value T) (ok bool) {
 	return
 }
 
-// SendNoBlock tries to send value through the channel.
-// It returns 0 if the value was sent, 1 if sending it would block (channel buffer full)
+// SendNoBlock tries to send a value through the channel.
+//
+// It returns 0 if the value was sent, 1 if sending it blocks (channel buffer full)
 // or 2 if the channel `c` was closed.
 func SendNoBlock[T any](c chan T, value T) (status int) {
 	defer func() {
@@ -126,8 +127,8 @@ func SendNoBlock[T any](c chan T, value T) (status int) {
 
 // Semaphore that allows dynamic resizing.
 //
-// It uses a sync.Cond, to allow dynamic resizing, so it will be slower than a pure channel version
-// of a semaphore, with a fixed capacity. This shouldn't matter for more coarse resource control.
+// It uses a sync.Cond to allow dynamic resizing, so it will be slower than a pure channel semaphore version
+// with a fixed capacity. This shouldn't matter for more coarse resource control.
 type Semaphore struct {
 	cond              sync.Cond
 	capacity, current int // Tracks capacity and current usage.
@@ -184,12 +185,12 @@ func (s *Semaphore) Release() {
 	s.cond.Signal()
 }
 
-// Resize number of available resources in the Semaphore.
+// Resize the number of available resources in the Semaphore.
 //
-// If newCapacity is larger than previous one, this may immediately allow pending Semaphore.Acquire to proceed.
+// If the newCapacity is larger than the previous one, this may immediately allow pending Semaphore.Acquire to proceed.
 // Notice since all waiting Semaphore.Acquire are awoken (broadcast), the queue order may be lost.
 //
-// If newCapacity is smaller than previous one, it doesn't have any effect on current acquisitions. So if the Semaphore
+// If the newCapacity is smaller than the previous one, it doesn't have any effect on current acquisitions. So if the Semaphore
 // is being used to control a worker pool, reducing its size won't stop workers currently executing.
 func (s *Semaphore) Resize(newCapacity int) {
 	s.cond.L.Lock()
@@ -203,7 +204,7 @@ func (s *Semaphore) Resize(newCapacity int) {
 		return
 	}
 
-	// Wake-up everyone -- to preserve the queue order we would need to call s.cond.Signal() for the amount of
+	// Wake-up everyone -- to preserve the queue order, we would need to call s.cond.Signal() for the amount of
 	// increased capacity, but that would make this call O(capacity), potentially slow for large capacities.
 	s.capacity = newCapacity
 	s.cond.Broadcast()
@@ -211,13 +212,13 @@ func (s *Semaphore) Resize(newCapacity int) {
 
 // SyncMap is a trivial wrapper to sync.Map that casts the key and value types accordingly.
 //
-// As sync.Map, it can be created ready to go, but should not be copied once it is used.
+// As sync.Map, it can be created ready to go but should not be copied once it is used.
 type SyncMap[K comparable, V any] struct {
 	Map sync.Map
 }
 
-// Load returns the value stored in the map for a key, or nil if no value is present.
-// The ok result indicates whether value was found in the map.
+// Load returns the value stored in the map for a key or nil if no value is present.
+// The ok result indicates whether a value was found in the map.
 func (m *SyncMap[K, V]) Load(key K) (value V, ok bool) {
 	v, ok := m.Map.Load(key)
 	if !ok {
