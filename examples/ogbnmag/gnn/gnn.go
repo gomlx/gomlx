@@ -17,8 +17,8 @@ import (
 	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/ml/layers/fnn"
 	"github.com/gomlx/gomlx/ml/layers/kan"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 )
 

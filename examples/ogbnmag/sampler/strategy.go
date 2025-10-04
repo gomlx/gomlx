@@ -2,12 +2,13 @@ package sampler
 
 import (
 	"fmt"
+	"strings"
+
 	. "github.com/gomlx/gomlx/internal/exceptions"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
-	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
-	"strings"
 )
 
 // Strategy is created by [Sampler]. A [Sampler] can create multiple [Strategy]s, a typical

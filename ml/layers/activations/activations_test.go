@@ -1,10 +1,11 @@
 package activations
 
 import (
+	"testing"
+
 	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/graph/graphtest"
-	"github.com/gomlx/gomlx/types/xslices"
-	"testing"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 
 	_ "github.com/gomlx/gomlx/backends/default"
 )

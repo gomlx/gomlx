@@ -3,15 +3,6 @@ package oxfordflowers102
 import (
 	"encoding/gob"
 	"fmt"
-	"github.com/disintegration/imaging"
-	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/ml/data"
-	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/types/tensors"
-	timage "github.com/gomlx/gomlx/types/tensors/images"
-	"github.com/gomlx/gomlx/types/xslices"
-	"github.com/gomlx/gopjrt/dtypes"
-	"github.com/pkg/errors"
 	"image"
 	"io"
 	"math"
@@ -20,6 +11,16 @@ import (
 	"path"
 	"sync"
 	"time"
+
+	"github.com/disintegration/imaging"
+	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/ml/data"
+	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
+	"github.com/gomlx/gomlx/types/tensors"
+	timage "github.com/gomlx/gomlx/types/tensors/images"
+	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/pkg/errors"
 )
 
 // Dataset implements train.Dataset, and yields one image at a time.

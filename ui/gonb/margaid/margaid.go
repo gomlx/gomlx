@@ -41,19 +41,20 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	mg "github.com/erkkah/margaid"
-	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/types/tensors"
-	"github.com/gomlx/gomlx/types/xslices"
-	stdplots "github.com/gomlx/gomlx/ui/plots"
-	"github.com/janpfeifer/gonb/gonbui"
-	"github.com/pkg/errors"
 	"io"
-	"k8s.io/klog/v2"
 	"math"
 	"os"
 	"path"
 	"strings"
+
+	mg "github.com/erkkah/margaid"
+	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
+	"github.com/gomlx/gomlx/types/tensors"
+	stdplots "github.com/gomlx/gomlx/ui/plots"
+	"github.com/janpfeifer/gonb/gonbui"
+	"github.com/pkg/errors"
+	"k8s.io/klog/v2"
 )
 
 var (

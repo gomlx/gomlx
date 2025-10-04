@@ -5,12 +5,12 @@ import (
 	"math/rand/v2"
 	"slices"
 
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/pkg/errors"
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 )

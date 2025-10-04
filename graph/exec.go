@@ -28,9 +28,9 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/internal/must"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
-	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )

@@ -12,8 +12,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/dustin/go-humanize"
 	"github.com/gomlx/gomlx/internal/must"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gomlx/types"
-	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gomlx/ui/plots"
 	"k8s.io/klog/v2"
 )

@@ -18,13 +18,14 @@ package graph
 
 import (
 	"fmt"
+	"testing"
+
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gomlx/types/shapes"
 	"github.com/gomlx/gomlx/types/tensors"
-	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 const margin = 1e-4

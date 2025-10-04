@@ -15,8 +15,8 @@ import (
 	"strings"
 
 	"github.com/gomlx/gomlx/ml/data"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gomlx/types"
-	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gomlx/ui/plots"
 	"github.com/janpfeifer/gonb/gonbui/plotly"
 	"github.com/pkg/errors"

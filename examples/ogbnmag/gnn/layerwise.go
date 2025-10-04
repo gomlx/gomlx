@@ -5,7 +5,7 @@ import (
 	. "github.com/gomlx/gomlx/graph"
 	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/types/xslices"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/pkg/errors"
 )
 

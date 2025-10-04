@@ -44,8 +44,8 @@ import (
 	"reflect"
 	"slices"
 
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gomlx/types"
-	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/pkg/errors"
 )
 

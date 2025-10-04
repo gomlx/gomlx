@@ -13,11 +13,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Exec is an executor of models.
-//
-// It holds the "model" object (passed in NewExec), and for each different shaped inputs of the Call() (or MustCall) method,
-// it calls model.Build to rebuild the computation graph for that particular combination of inputs, JIT-compiles it and then executes it.
-// If the combination of shapes has already been seen before, it will reuse the pre-compiled graph -- up to a certain cache size.
+// Exec is an executor of models. It works like graph.Exec, but it handles models variables, passing them
+// automatically as "side inputs" to the graph -- or as "side outputs" if they are updated in the graph.
 type Exec struct {
 	backend backends.Backend
 
@@ -37,18 +34,18 @@ type Exec struct {
 	sideInputs, sideOutputs map[graph.GraphId][]*Variable
 }
 
-// NewExec creates a new Exec (executor) object taking a closure buildFn that builds the model's computation graph.
+// NewExec creates a new Exec (executor) object taking a builderFn that builds the model's computation graph.
 //
 // Once the model executor is built, use it with Exec.Exec (or Exec.Call to panic on errors).
 // Or their variations Exec.Exec1, Exec.Exec2, ..., Exec.Call1, Exec.Call2, etc.
 //
-// The buildFn closure must be a function or a method of the model object.
+// The builderFn closure must be a function or a method of the model object.
 //
-// The buildFn closure may take a *graph.Graph as a first argument,
+// The builderFn closure may take a *graph.Graph as a first argument,
 // plus zero to four *Node arguments or a "...*Node" argument.
 // It must return either 0 to 4 *Node values or a []*Node.
 //
-// Examples of valid buildFn functions or methods (methods can be passed and Go will create a closure for them) for
+// Examples of valid builderFn functions or methods (methods can be passed and Go will create a closure for them) for
 // various fictitious models:
 //
 //	func (m *ComplexModel) Predict(inputs ...*Node) (outputs []*Node) {...}

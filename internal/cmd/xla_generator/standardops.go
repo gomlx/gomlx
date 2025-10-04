@@ -13,8 +13,8 @@ import (
 
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/internal/xlabuilderparser"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gomlx/types"
-	"github.com/gomlx/gomlx/types/xslices"
 	"k8s.io/klog/v2"
 )
 

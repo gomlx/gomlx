@@ -4,7 +4,7 @@ import (
 	"reflect"
 
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/types/xslices"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/gomlx/stablehlo"

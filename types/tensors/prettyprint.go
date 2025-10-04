@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/gomlx/gomlx/types/xslices"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gopjrt/dtypes/bfloat16"
 	"github.com/x448/float16"
 )

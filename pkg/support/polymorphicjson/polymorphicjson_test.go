@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	. "github.com/gomlx/gomlx/models/polymorphicjson" // Import the library being tested
+	. "github.com/gomlx/gomlx/pkg/support/polymorphicjson" // Import the library being tested
 )
 
 // --- Test Interfaces (Core Business Logic) ---

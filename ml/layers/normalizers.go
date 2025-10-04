@@ -23,7 +23,7 @@ import (
 	. "github.com/gomlx/gomlx/internal/exceptions"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/layers/batchnorm"
-	"github.com/gomlx/gomlx/types/xslices"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 )
 
 var (

@@ -31,9 +31,9 @@ import (
 	"strings"
 
 	"github.com/gomlx/gomlx/backends"
+	"github.com/gomlx/gomlx/pkg/support/xslices"
 	"github.com/gomlx/gomlx/types"
 	"github.com/gomlx/gomlx/types/shapes"
-	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/gopjrt/pjrt"
 	stablehloshapes "github.com/gomlx/stablehlo/types/shapes"
 	"github.com/pkg/errors"
